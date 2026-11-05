@@ -41,6 +41,9 @@ func EvaluateSourceURL(rawURL string, policy SourceURLPolicy) SourceURLDecision 
 	}
 
 	host := strings.ToLower(strings.TrimSuffix(parsed.Hostname(), "."))
+	if ip := net.ParseIP(host); ip != nil {
+		host = ip.String()
+	}
 	if host == "" || strings.Contains(host, "%") || !validSourceHost(host) {
 		return sourceURLDenied("news.source_url.host_invalid")
 	}
