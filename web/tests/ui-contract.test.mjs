@@ -1476,11 +1476,11 @@ test("新增市场、数据中心与研究区块保持 12px 辅助文字基线",
   }
 });
 
-test("研究与设置分区导航会移动键盘焦点并按全部可见区块同步高亮", () => {
-  assert.match(
-    app,
-    /function bindSectionNavigation\([\s\S]*?focusTarget\.focus\(\{ preventScroll: true \}\)[\s\S]*?const current = targets[\s\S]*?getBoundingClientRect\(\)/
-  );
+test("研究与设置分区导航会移动键盘焦点并按全部可见区块同步高亮", async () => {
+  const sectionNavigation = await readFile(new URL("../src/section-navigation.js", import.meta.url), "utf8");
+  assert.match(sectionNavigation, /focusTarget\.focus\(\{ preventScroll: true \}\)/);
+  assert.match(sectionNavigation, /const current = targets[\s\S]*?getBoundingClientRect\(\)/);
+  assert.match(sectionNavigation, /window\.matchMedia/);
 });
 
 test("分区导航的程序化焦点在研究和设置页中可见", () => {
