@@ -355,3 +355,14 @@ Data 最新 HEAD 更新为 `c22470bec87beb89961b76ad9856d5c8709aac73`。相较 O
 详细审查和 DATA-CONTRACT-003-B 见 [Data OpenAPI 与 Go 模型契约修正清单](./Data-OpenAPI与Go模型契约修正清单.md) 第 11.12 节。
 
 **GOV-004 阻断计数修正**：不得再把 122 项作为 122 个独立契约错误。阻断应聚焦于明确承诺 null 却实际省略的字段、required 差异、23 个潜在 null 字段、无来源 Schema 字段和缺失的 Handler Golden/双向契约测试。
+
+
+## 15. Data 最新审查基线更新（2026-11-05）
+
+Data 分支最新 HEAD 为 `bc55db99fc6908c77c3c0ec6a213651373a857b2`（`docs(api): 同步 BaoStock 历史探测窗口计划与契约`），相较上一核查点 c22470b ahead 2 / behind 0。变更涉及文档和 BaoStock Live Probe 测试，没有修改 OpenAPI、HTTP Handler 或 Model，故本轮静态契约判断仍适用。
+
+最新 CI：WebUI checks、Go-Python parity、Live provider probe 已 completed / success；Go test suite run `42017149908` 在本次核查时仍为 in_progress，不能视为通过。
+
+最新基线、Workflow 状态及 11.9/11.11/11.12 复核细节见 [Data OpenAPI 与 Go 模型契约修正清单](./Data-OpenAPI与Go模型契约修正清单.md)。
+
+GOV-004 仍为 NO-GO。不得因非契约文档更新或部分 Workflow 成功关闭 Data 契约门禁。
