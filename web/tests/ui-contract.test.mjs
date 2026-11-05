@@ -2800,3 +2800,29 @@ test("UIR-2 行情质量标记与指标辅助文字由组件基础规则控制",
   assert.match(stylesheet, /\.quality-invalid \{[^}]*color:[^}]*background:/);
   assert.match(stylesheet, /@media \(max-width: 600px\) \{[\s\S]*?\.metric-grid \{ grid-template-columns: repeat\(2, minmax\(0, 1fr\)\);/);
 });
+
+
+test("UIR-2 页面眉题、查询辅助与设置提示字号由组件基础规则控制", () => {
+  const expectedSizes = [
+    [".eyebrow", /font-size:\s*12px\s*;/],
+    [".panel-muted", /font-size:\s*12px\s*;/],
+    [".query-hint", /font-size:\s*12px\s*;/],
+    [".security-note", /font-size:\s*12px\s*;/],
+    [".settings-feedback", /font-size:\s*12px\s*;/]
+  ];
+  for (const [selector, sizePattern] of expectedSizes) {
+    const declaration = baseCssDeclarationBlock(selector);
+    assert.match(declaration, sizePattern, selector + " must own its readable base font size");
+    assert.doesNotMatch(declaration, /!important/);
+  }
+  assert.doesNotMatch(stylesheet, /\.eyebrow \{[^}]*!important/);
+  assert.doesNotMatch(stylesheet, /\.panel-muted \{[^}]*!important/);
+  assert.doesNotMatch(stylesheet, /\.query-hint \{[^}]*!important/);
+  assert.doesNotMatch(stylesheet, /\.security-note \{[^}]*!important/);
+  assert.doesNotMatch(stylesheet, /\.settings-feedback \{[^}]*!important/);
+  assert.match(stylesheet, /\.settings-feedback \{[^}]*color: #f0a2a9/);
+  assert.match(stylesheet, /:root\[data-theme="light"\] \.settings-feedback[^}]*color: #b92f41/);
+  assert.match(stylesheet, /\.security-note \{[\s\S]*?color: #c0aa85/);
+  assert.match(stylesheet, /\.query-hint \{[^}]*padding-left: 150px/);
+  assert.match(stylesheet, /@media \(max-width: 1200px\) \{[\s\S]*?\.query-hint \{ padding-left: 0; \}/);
+});

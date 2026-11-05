@@ -1596,3 +1596,10 @@ JSR-6L 补充：连接配置变更取消草稿检查后，旧代际 finally 按�
 #### 第四十四批 CI 失败原因与修正
 
 第四十四批首次 WebUI Checks 的 JavaScript 语法检查、Compose 校验均通过，485 项单元测试中 484 项通过。唯一失败来自新增 UI contract：测试误将仍然有效的组合选择器 `.section-heading p, .panel-heading p` 当作被删除的独立规则。实际 CSS 中组合规则仍保留，删除的是重复的独立覆盖。已将断言修正为验证组合规则保留，不修改 CSS 行为。Browser Smoke 已通过；修正后的最终提交需重新以精确 SHA 验证。
+
+
+### UIR-2 第四十五批：页面眉题与辅助提示字号收敛（2026-11-05）
+
+将 `.eyebrow`、`.panel-muted`、`.query-hint`、`.security-note`、`.settings-feedback` 的最终字号迁回组件基础规则，统一为 12px，删除全局可读性规则中对应 5 条重复 `!important`。保留设置安全提示的警示色、设置反馈错误色及浅色主题错误色，保留查询辅助文字在 1200px 以下取消左侧缩进的响应式布局。新增 UI contract 锁定字号、语义颜色和响应式行为。
+
+第四十四批修正提交 `0a6e05375c0fa1c0358365108aa9a914d75bf3e2` 的 WebUI Checks 已通过（语法检查、Compose 校验、485 项单元测试和 Nginx 镜像构建均通过）；Chromium Browser Smoke 当时仍在运行，最终状态以该提交的 workflow 记录为准。

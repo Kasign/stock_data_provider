@@ -1836,3 +1836,13 @@ CI 复核记录：本批首次 Chromium Browser Smoke 在个股研究数据质�
 - [x] 新增 UI contract 锁定基础字号、无强制优先级及状态颜色。
 - [ ] 在本批最终提交 SHA 上运行 WebUI Checks、JS 语法检查、Compose 校验和 Nginx 镜像构建。
 - [ ] 执行 Chromium Browser Smoke；人工核验行情质量标记和指标卡片在多分辨率下的可读性。
+
+
+## 2026-11-05 UIR-2 第四十五批：页面眉题与辅助提示字号收敛
+
+- [x] 页面眉题、面板辅助文字、查询提示、安全提示和设置反馈字号统一迁回组件基础规则（12px）。
+- [x] 删除 5 条重复字号 `!important`。
+- [x] 保留设置错误反馈及安全提示语义颜色、浅色主题错误色和查询提示响应式缩进。
+- [x] 新增 UI contract 锁定字号、状态颜色和响应式行为。
+- [ ] 在本批最终提交 SHA 上运行 WebUI Checks、JS 语法检查、Compose 校验和 Nginx 镜像构建。
+- [ ] 执行 Chromium Browser Smoke；人工核验设置、安全提示及页面辅助信息在多分辨率下的可读性。
