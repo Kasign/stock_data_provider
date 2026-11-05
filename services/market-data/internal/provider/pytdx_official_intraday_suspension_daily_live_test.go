@@ -17,19 +17,18 @@ type pytdxOfficialSuspensionDailyReport struct {
 }
 
 type pytdxOfficialSuspensionDailyItem struct {
-	Symbol        string   `json:"symbol"`
-	TradeDate     string   `json:"trade_date"`
-	OfficialURL   string   `json:"official_url"`
-	Rows          int      `json:"rows"`
-	QualityStatus string   `json:"quality_status,omitempty"`
-	QualityReasons []string `json:"quality_reasons,omitempty"`
-	Close         float64  `json:"close,omitempty"`
-	Volume        *int64   `json:"volume,omitempty"`
-	Amount        *float64 `json:"amount,omitempty"`
-	Status        string   `json:"status"`
-	Error         string   `json:"error,omitempty"`
+	Symbol          string   `json:"symbol"`
+	TradeDate       string   `json:"trade_date"`
+	OfficialURL     string   `json:"official_url"`
+	Rows            int      `json:"rows"`
+	QualityStatus   string   `json:"quality_status,omitempty"`
+	QualityReasons  []string `json:"quality_reasons,omitempty"`
+	Close           float64  `json:"close,omitempty"`
+	Volume          *int64   `json:"volume,omitempty"`
+	Amount          *float64 `json:"amount,omitempty"`
+	Status          string   `json:"status"`
+	Error           string   `json:"error,omitempty"`
 }
-
 // TestLivePytdxOfficialIntradaySuspensionDailyBars verifies that public daily
 // K-line endpoints return a full-day candle for exchange-announced intraday
 // suspensions. It deliberately does not call Tushare or consume API credits.
