@@ -91,10 +91,10 @@ func (u *IngestCandidate) execute(ctx context.Context, sourceID, idempotencyKey 
 		}
 	}
 	observation := domain.Observation{
-		ID:             strings.TrimSpace(u.newID()),
-		IdempotencyKey: idempotencyKey,
-		SourceID:       sourceID,
-		ProviderCode:   candidate.ProviderCode,
+		ID:                      strings.TrimSpace(u.newID()),
+		IdempotencyKey:          idempotencyKey,
+		SourceID:                sourceID,
+		ProviderCode:            candidate.ProviderCode,
 		QueryDimension:          candidate.QueryDimension,
 		SourcePolicyVersionID:   trace.SourcePolicyVersionID,
 		EndpointPolicyVersionID: trace.EndpointPolicyVersionID,
