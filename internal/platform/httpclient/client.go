@@ -180,6 +180,9 @@ func (c *Client) Do(ctx context.Context, request *http.Request, policy Destinati
 	if (request.Host != "" && !strings.EqualFold(request.Host, request.URL.Host)) || request.Header.Get("Host") != "" {
 		return nil, c.newFault(fault.ClassValidation, "platform.httpclient.custom_host_rejected", "custom Host header is not allowed", errPolicyRejected, policy.Dependency, false)
 	}
+	if hasHeaderFold(request.Header, "Accept-Encoding") {
+		return nil, c.newFault(fault.ClassValidation, "platform.httpclient.accept_encoding_rejected", "custom Accept-Encoding header is not allowed", errPolicyRejected, policy.Dependency, false)
+	}
 	if err := validateURL(request.URL, policy); err != nil {
 		return nil, c.faultFor(err, policy.Dependency)
 	}
@@ -359,6 +362,15 @@ func (c *Client) newFault(class fault.Class, code, message string, cause error, 
 		Class: class, Code: code, SafeMessage: message,
 		Dependency: dependency, Retryable: retryable, Cause: cause,
 	}
+}
+
+func hasHeaderFold(header http.Header, name string) bool {
+	for key := range header {
+		if strings.EqualFold(key, name) {
+			return true
+		}
+	}
+	return false
 }
 
 func validDependency(value string) bool {
