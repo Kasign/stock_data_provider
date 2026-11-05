@@ -97,3 +97,21 @@ N1 核查后逐项填写，未核查前不填推测结果。
 旧实现已经有来源管理、dry-run、单来源/批量采集、自动刷新、分页读取、URL/DNS 校验和重定向限制；但 IntelligenceRepository.upsert_items 对同一条目是覆盖更新，不保留修订历史。Go 迁移需要保留这些有效业务能力，同时补足内容版本、可追溯去重证据和更清晰的采集阶段状态。
 
 已核实旧 API 路由位于 api/v1/endpoints/intelligence.py，覆盖 sources CRUD/list/templates/defaults/test/fetch、fetch-enabled 和 items list；旧 Bot /research 入口会构造 ResearchAgent 并调用 Tool Registry。MarketAnalyzer 会自动刷新并查询 market scope 的 intelligence_items；Agent search tools 则写入 news_intel。两套旧持久化语义不能未经映射直接合并。
+
+---
+
+## 8. N1 Python 调用链与存储迁移补充（2026-11-05）
+
+固定旧上游提交 `Kasign/daily_stock_analysis@7a21cd76952c7fe44a7fc5a6113a5b2b8a16bb32` 的调用链：
+- API：`/api/v1/intelligence/**` 来源管理、dry-run、采集、条目查询；`POST /api/v1/agent/research` 间接调用 Agent 搜索工具。
+- Bot：`/research` 调用 ResearchAgent；Agent ToolRegistry 注册搜索工具。
+- 个股分析：`src/core/pipeline.py` 直接调用多维 SearchService，写入 `news_intel`；分析前可刷新并读取 `intelligence_items`。
+- 大盘复盘：`src/market_analyzer.py` 搜索市场新闻，刷新并读取 market scope 资讯。
+- 定时任务并非单独的新闻 Provider；当其触发上述分析流程时，可能间接触发自动刷新。该能力由 `NEWS_INTEL_AUTO_FETCH_ENABLED` 控制，默认关闭。
+
+旧存储默认配置为 SQLite 文件 `./data/stock_analysis.db`，使用 SQLAlchemy ORM；`src/storage.py` 定义 `NewsIntel`、`IntelligenceSource`、`IntelligenceItem`。旧表含用户/会话请求上下文和本地作用域，不能只迁移标题/URL 而忽略其查询证据关系。Go 新库为 MariaDB，迁移应单独设计 SQLite 导出、幂等导入、冲突报告、计数校验和回滚，不在运行时双写两个数据库。
+
+旧模型：
+- `news_intel`：搜索证据及请求上下文，URL 全局唯一。
+- `intelligence_sources`：可配置 RSS/Atom/NewsNow 来源。
+- `intelligence_items`：来源采集条目，按 source/url/scope/market 组合唯一，保留 raw_payload。

@@ -67,3 +67,9 @@
 现有任务事件查询使用 after_sequence 和 limit，但这不是通用新闻列表分页规范。新闻列表应在 N1 最终评审时明确稳定排序键、游标/offset 方案和最大页大小。
 
 候选 /api/v1/news、/search、/{id}、/sources、/diagnostics 仍为设计候选，不是现有路由，也未冻结。尤其要明确 /search 是否只返回候选、是否触发采集入库、外部 Provider 部分失败如何返回，以及调用权限和配额策略。
+
+---
+
+## 8. N1 HTTP 安全边界补充（2026-11-05）
+
+根 Go `internal/platform/httpapi.Server.Handler()` 当前挂载 request-id、请求日志和 panic recoverer，但未发现 API 认证中间件。若新闻 API 落到根分析 API，来源 CRUD、外部 URL dry-run/fetch、手动采集和管理诊断不能直接作为无认证接口暴露。需在 API 方案中明确反向代理鉴权或服务鉴权，以及读、管理、主动抓取权限的区分。新闻 API 目标服务仍待用户确认。

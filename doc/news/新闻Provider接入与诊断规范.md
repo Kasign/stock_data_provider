@@ -86,3 +86,11 @@ market-data 已有公告 Provider 和公告 HTTP 能力，Go Core 通过 StockAn
 market-data Probe 的 connectivity、contract、quality、freshness、cross_provider、storage 检查，以及 Validator/Reporter/Freshness/Probe History 可作为诊断架构参考。其数据结构和检查函数目前面向行情 Provider，不能直接拿来报告新闻抓取/解析/去重/持久化质量。新闻阶段应独立记录结果，并尽量复用底层日志、脱敏、超时、状态分类和观测方式。
 
 现有 Searcher 只对有效发布时间候选排序，当前无原始正文采集和内容版本存储。新采集链路必须区分搜索候选返回、原文抓取、解析标准化、去重版本、持久化各阶段，不可把搜索 API 成功作为新闻入库成功。
+
+---
+
+## 9. N1 来源策略与安全边界补充（2026-11-05）
+
+旧 Python 采集服务已有 HTTP(S) URL 校验、凭据 URL 拒绝、私网/保留 IP 拦截、DNS rebinding 防护、重定向校验、代理禁用、超时/响应体大小限制和错误脱敏。这些是网络安全措施，不代表来源授权合规。
+
+当前没有发现逐来源 license/terms URL、robots 策略、允许抓取内容范围、全文保留期限、删除请求和政策复核时间等字段/执行机制。RSS/Atom/NewsNow 模板只能视为候选来源配置，不可自动视为允许全文抓取或长期保存。新模块应增加来源策略元数据和审核状态；在许可未确认前只保留必要元数据、短摘要和原始链接，并为删除/到期清理留接口。
