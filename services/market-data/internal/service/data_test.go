@@ -3024,6 +3024,7 @@ func TestDailyBarsCacheDegradesForwardSeriesWithoutReferenceDate(t *testing.T) {
 func TestNormalizeStoredDailyBarSeriesPreservesValidationWarnings(t *testing.T) {
 	invalid := dailyBarForVersionContractTest("eastmoney-bars-v1", "2026-10-20")
 	invalid.AdjustmentBasis = model.AdjustmentNone
+	invalid.NormalizationVer = normalize.Version
 	invalid.Open, invalid.High, invalid.Low, invalid.Close = 10, 8, 7, 7.5
 	valid := invalid
 	valid.Open, valid.High, valid.Low, valid.Close = 10, 11, 9, 10.5
@@ -3063,6 +3064,7 @@ func TestDailyBarsCacheRetainsStoredWarningsWhenHit(t *testing.T) {
 	mem := newMemoryCache()
 	invalid := dailyBarForVersionContractTest("eastmoney-bars-v1", "2026-10-20")
 	invalid.FetchedAt, invalid.NormalizedAt = time.Now().UTC(), time.Now().UTC()
+	invalid.NormalizationVer = normalize.Version
 	invalid.Open, invalid.High, invalid.Low, invalid.Close = 10, 8, 7, 7.5
 	valid := invalid
 	valid.Open, valid.High, valid.Low, valid.Close = 10, 11, 9, 10.5
