@@ -15,9 +15,7 @@ Provider 的接入成功不代表新闻内容权威，也不代表正文完整�
 
 ## 2. 复用原则
 
-必须优先复用现有 `go-core/internal/adapters/newssearch/` 能力；在根模块新闻业务中通过适配端口接入，不复制 Provider。公共 HTTP 客户端、统一限流、通用诊断等若属于公共服务能力，待公共服务提供后接入。
-
-不复制已有 Provider，不为了统一接口而重写稳定实现。只有存在明确契约缺口时才扩展。
+Provider Adapter 直接实现于根模块 `internal/news/adapters/provider/`。`go-core/internal/adapters/newssearch/` 仅作为协议和历史行为参考，不作为新模块依赖；只迁移必要的请求/响应协议处理，并按新领域契约重构。不得复制旧 Searcher 的缓存、聚合、Python fallback 或旧 DTO 结构。
 
 ## 3. 统一适配结果
 
@@ -115,7 +113,7 @@ Provider 的接入成功不代表新闻内容权威，也不代表正文完整�
 
 ---
 
-## 8. N1 现有能力复用核对（2026-11-05）
+## 8. N1 现有能力盘点（历史参考，2026-11-05）
 
 当前 Go 新闻搜索实现位于可选迁移路径的 go-core/internal/adapters/newssearch，包括 Bocha、Tavily、Brave News、显式 SearXNG、进程内缓存、查询计划、过滤排序和 Python fallback。新闻模块应通过适配器复用，不复制这些 Provider，也不在 N1 搬迁该包。
 
@@ -145,7 +143,7 @@ market-data Probe 的 connectivity、contract、quality、freshness、cross_prov
 新闻模块仍必须实现业务层错误与质量表达，包括来源授权不允许、候选字段缺失、发布时间未知、正文抓取/解析失败、身份冲突、重复/转载、证券未匹配等。它们是业务结果，不应伪装成通用诊断状态。未来由公共服务把新闻业务结果纳入统一诊断体系。
 
 
-## 12. Provider provenance 与共享适配器约束（2026-11-05）
+## 12. Provider provenance 与共享适配器历史方案（已废弃，2026-11-05）
 
 当前 go-core 的 Searcher 会把多个 Provider 结果合并并映射为旧 NewsItem，最终 DTO 不保留搜索 Provider 身份；NewsItem.Source 是发布来源字段，不是 Provider。当前 10 分钟缓存也会缓存混合 Provider 输出。因此现有 Searcher 不能直接作为新闻持久化入口。
 
