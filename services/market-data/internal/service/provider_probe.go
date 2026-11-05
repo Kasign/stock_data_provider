@@ -1104,7 +1104,7 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 	}
 	if selectedChecks["cross_provider"] {
 		if selected["daily_bars"] {
-			run.CheckResults = append(run.CheckResults, buildCrossProviderProbeCheckResults(dailySnapshots, run.FinishedAt)...)
+			run.CheckResults = append(run.CheckResults, buildCrossProviderProbeCheckResults(dailySnapshots, run.Items, run.FinishedAt)...)
 		} else {
 			run.CheckResults = append(run.CheckResults, model.ProviderProbeCheckResult{
 				Check:        "cross_provider",
@@ -1358,6 +1358,21 @@ func buildProviderProbeCheckResults(items []model.ProviderProbeItem, requestedCh
 	return results
 }
 
+func crossProviderProbeFailureCode(item model.ProviderProbeItem) string {
+	switch item.ErrorStage {
+	case "connect", "timeout", "http", "provider":
+		return "provider_unavailable"
+	case "rate_limit":
+		return "provider_rate_limited"
+	case "provider_auth", "provider_permission":
+		return "provider_access_denied"
+	case "contract":
+		return "provider_contract_failed"
+	default:
+		return "provider_probe_failed"
+	}
+}
+
 func firstCrossProviderAdjustmentMethod(snapshot *provider.CrossProviderDailySnapshot) string {
 	if snapshot == nil || len(snapshot.Bars) == 0 {
 		return ""
@@ -1372,7 +1387,7 @@ func firstCrossProviderAdjustmentRefDate(snapshot *provider.CrossProviderDailySn
 	return snapshot.Bars[0].AdjustmentRefDate
 }
 
-func buildCrossProviderProbeCheckResults(snapshots []*provider.CrossProviderDailySnapshot, checkedAt time.Time) []model.ProviderProbeCheckResult {
+func buildCrossProviderProbeCheckResults(snapshots []*provider.CrossProviderDailySnapshot, items []model.ProviderProbeItem, checkedAt time.Time) []model.ProviderProbeCheckResult {
 	results := make([]model.ProviderProbeCheckResult, 0)
 	validSnapshots := make([]*provider.CrossProviderDailySnapshot, 0, len(snapshots))
 	for _, snapshot := range snapshots {
@@ -1444,6 +1459,38 @@ func buildCrossProviderProbeCheckResults(snapshots []*provider.CrossProviderDail
 				result.FieldComparisons = append(result.FieldComparisons, fieldEvidence)
 			}
 			results = append(results, result)
+		}
+	}
+	// 成功快照两两比较之外，保留“另一侧 Provider 探测失败”的配对证据。
+	// 单 Provider 检查仍是原始失败事实；这里将其关联到可用快照，避免跨源结果只剩系统级泛化 skipped。
+	for _, item := range items {
+		if item.Capability != "daily_bars" || item.Status != "failed" || item.Provider == "" || item.Provider == "system" {
+			continue
+		}
+		for _, snapshot := range validSnapshots {
+			if snapshot.Provider == item.Provider || string(item.AdjustmentBasis) != snapshot.AdjustmentBasis {
+				continue
+			}
+			message := "provider=" + item.Provider + " status=" + item.Status
+			if item.ErrorCode != "" {
+				message += " error_code=" + item.ErrorCode
+			}
+			if item.ErrorStage != "" {
+				message += " error_stage=" + item.ErrorStage
+			}
+			if item.ErrorMessage != "" {
+				message += " error=" + item.ErrorMessage
+			}
+			results = append(results, model.ProviderProbeCheckResult{
+				Check: "cross_provider", Provider: snapshot.Provider + "+" + item.Provider,
+				Capability: "daily_bars", Status: "failed", ErrorCode: crossProviderProbeFailureCode(item),
+				ErrorMessage: message, CheckedAt: checkedAt,
+				ComparedSymbol: snapshot.Symbol,
+				LeftProvider: snapshot.Provider, RightProvider: item.Provider,
+				LeftSourceVersion: snapshot.SourceVersion, RightSourceVersion: item.SourceVersion,
+				AdjustmentBasis: snapshot.AdjustmentBasis,
+				LeftQualityStatus: model.QualityStatus(snapshot.QualityStatus),
+			})
 		}
 	}
 	if len(results) == 0 {

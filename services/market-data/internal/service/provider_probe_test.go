@@ -933,6 +933,33 @@ func TestProviderProbeDailyBarCrossComparisonEnforcesAdjustmentMetadata(t *testi
 	}
 }
 
+func TestBuildCrossProviderProbeCheckResultsReportsUnavailableProvider(t *testing.T) {
+	snapshot := &provider.CrossProviderDailySnapshot{
+		Provider: "pytdx", SourceVersion: "pytdx-v1", Symbol: "600036.SH",
+		AdjustmentBasis: "none", QualityStatus: "valid",
+		Bars: []provider.CrossProviderDailyBar{{
+			TradeDate: "2025-07-07", Open: 10, High: 11, Low: 9, Close: 10,
+			Volume: 100, VolumeUnit: "shares", VolumeGranularity: 1,
+		}},
+	}
+	items := []model.ProviderProbeItem{{
+		Provider: "baostock", Capability: "daily_bars", AdjustmentBasis: model.AdjustmentNone,
+		Status: "failed", ErrorCode: "network_error", ErrorStage: "connect", ErrorMessage: "connection timeout",
+	}}
+	results := buildCrossProviderProbeCheckResults([]*provider.CrossProviderDailySnapshot{snapshot}, items, time.Now().UTC())
+	if len(results) != 1 {
+		t.Fatalf("expected one provider-unavailable pair result, got %+v", results)
+	}
+	result := results[0]
+	if result.Status != "failed" || result.ErrorCode != "provider_unavailable" ||
+		result.LeftProvider != "pytdx" || result.RightProvider != "baostock" ||
+		result.ComparedSymbol != "600036.SH" || result.AdjustmentBasis != "none" ||
+		!strings.Contains(result.ErrorMessage, "error_code=network_error") ||
+		!strings.Contains(result.ErrorMessage, "error_stage=connect") {
+		t.Fatalf("provider failure must remain explicit and attributable: %+v", result)
+	}
+}
+
 func TestBuildCrossProviderProbeCheckResultsPreservesAdjustmentEvidence(t *testing.T) {
 	left := &provider.CrossProviderDailySnapshot{
 		Provider: "left", SourceVersion: "left-v1", Symbol: "600036.SH",
@@ -944,7 +971,7 @@ func TestBuildCrossProviderProbeCheckResultsPreservesAdjustmentEvidence(t *testi
 		AdjustmentBasis: "backward_adjusted", QualityStatus: "valid",
 		Bars: []provider.CrossProviderDailyBar{{TradeDate: "2026-10-29", Open: 10, High: 11, Low: 9, Close: 10, Volume: 100, VolumeUnit: "shares", VolumeGranularity: 1, AdjustmentMethod: "right_hfq", AdjustmentRefDate: "2026-11-03"}},
 	}
-	results := buildCrossProviderProbeCheckResults([]*provider.CrossProviderDailySnapshot{left, right}, time.Now().UTC())
+	results := buildCrossProviderProbeCheckResults([]*provider.CrossProviderDailySnapshot{left, right}, nil, time.Now().UTC())
 	if len(results) != 1 {
 		t.Fatalf("expected one adjusted comparison result, got %+v", results)
 	}
@@ -967,7 +994,7 @@ func TestBuildCrossProviderProbeCheckResultsRejectsDegradedSnapshots(t *testing.
 		AdjustmentBasis: "none", QualityStatus: "valid",
 		Bars: []provider.CrossProviderDailyBar{{TradeDate: "2026-10-29", Open: 10, High: 11, Low: 9, Close: 10, Volume: 100, VolumeUnit: "shares", VolumeGranularity: 1}},
 	}
-	results := buildCrossProviderProbeCheckResults([]*provider.CrossProviderDailySnapshot{left, right}, time.Now().UTC())
+	results := buildCrossProviderProbeCheckResults([]*provider.CrossProviderDailySnapshot{left, right}, nil, time.Now().UTC())
 	if len(results) != 1 || results[0].Status != "skipped" || results[0].ErrorCode != "comparison_not_comparable" {
 		t.Fatalf("degraded snapshots must not be reported as cross-provider pass: %+v", results)
 	}
@@ -1020,7 +1047,7 @@ func TestBuildCrossProviderProbeCheckResultsIncludesFieldLevelEvidence(t *testin
 			Volume: 100, VolumeUnit: "shares", VolumeGranularity: 1,
 		}},
 	}
-	results := buildCrossProviderProbeCheckResults([]*provider.CrossProviderDailySnapshot{left, right}, time.Now().UTC())
+	results := buildCrossProviderProbeCheckResults([]*provider.CrossProviderDailySnapshot{left, right}, nil, time.Now().UTC())
 	if len(results) != 1 {
 		t.Fatalf("expected one comparison result, got %+v", results)
 	}
@@ -1071,7 +1098,7 @@ func TestBuildCrossProviderProbeCheckResultsExposesMismatchValuesAndTolerance(t 
 			Volume: 100, VolumeUnit: "shares", VolumeGranularity: 1,
 		}},
 	}
-	results := buildCrossProviderProbeCheckResults([]*provider.CrossProviderDailySnapshot{left, right}, time.Now().UTC())
+	results := buildCrossProviderProbeCheckResults([]*provider.CrossProviderDailySnapshot{left, right}, nil, time.Now().UTC())
 	if len(results) != 1 {
 		t.Fatalf("expected one comparison result, got %+v", results)
 	}
