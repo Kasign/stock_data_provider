@@ -26,6 +26,26 @@ func TestDailyBarsAsOfRejectsFutureTimestampWithoutProviderFallback(t *testing.T
 	}
 }
 
+func TestDailyBarsAsOfRejectsInvalidDateBoundsBeforeStorageLookup(t *testing.T) {
+	svc := &DataService{defaultBars: 200, maxBars: 2000}
+	asOf := time.Date(2026, 10, 28, 12, 0, 0, 0, time.UTC)
+	cases := []struct {
+		name, start, end string
+	}{
+		{name: "invalid start date", start: "2026-10-2", end: "2026-10-28"},
+		{name: "invalid end date", start: "2026-10-01", end: "2026-10-2"},
+		{name: "reversed date range", start: "2026-10-29", end: "2026-10-28"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, _, err := svc.DailyBarsAsOf(context.Background(), "600519.SH", tc.start, tc.end, 100, model.AdjustmentNone, asOf)
+			if err == nil || errors.Is(err, ErrDailyBarsAsOfUnavailable) {
+				t.Fatalf("invalid date bounds must fail before storage lookup, got %v", err)
+			}
+		})
+	}
+}
+
 func TestRebuildAdjustedDailyBarsUsesAsOfFactorReferenceAndProvenance(t *testing.T) {
 	observed := time.Date(2026, 10, 1, 8, 0, 0, 0, time.UTC)
 	bars := []model.DailyBar{{Symbol: "600519.SH", TradeDate: "2026-09-29", Open: 100, High: 110, Low: 90, Close: 100, AdjustmentBasis: model.AdjustmentNone}, {Symbol: "600519.SH", TradeDate: "2026-09-30", Open: 110, High: 120, Low: 100, Close: 110, AdjustmentBasis: model.AdjustmentNone}}

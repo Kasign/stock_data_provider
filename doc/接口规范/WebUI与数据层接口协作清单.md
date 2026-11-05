@@ -120,7 +120,7 @@
 | API-03 | 全市场分页与批量行情的范围、总数下限、覆盖率、MA 和复权语义 | 待当前 HEAD 复核 | 双方 | 服务端分页与字段质量可验证，WebUI 不将页内结果解释为全市场排名 |
 | API-04 | 市场情绪当前快照与历史快照的持久化、缺失交易日和覆盖语义 | 待真实验收 | 数据侧主责，WebUI 配合 | 有真实历史数据、数据库读写证据和无数据/缺日契约 |
 | API-05 | 市场级资金流真实数据与 Provider 权限验收 | 依赖凭据/权限 | 数据侧主责 | 真实请求可复现；权限缺失、Provider 不可用和空数据状态可区分 |
-| API-06 | 开发中 | Provider 静态清单、被动诊断、主动 Probe、Probe 历史均有 API；WebUI 已封装；已修复日内停牌缺失日 K 被错误排除的问题；本轮补齐 DailyBar 开始日期越界告警与倒置区间结构化错误，未改变 API 路由/Schema | 当前提交 CI 通过后，继续 Reporter 聚合计数与 MariaDB/PIT/缓存日期边界审计；补充真实日内停牌样本；Eastmoney/Tencent 复权锚点仍需有限真实样本 | TickFlow `/v1/klines` 成交量单位仍待真实样本证明；日内停牌真实样本未验；Eastmoney/Tencent 响应未提供可独立确认的 ref date；Tushare adj_factor/dividend 40203 权限阻塞 | `850d3b26931685a2bee7e704ac90d8caddb3a3db`（本轮变更前基线） | 基线 Go suite Runs `41963474550`、`41963482209` 通过；Parity `41963482323`、WebUI `41963482255` 通过；Live Probe `41963482213` 工作流成功但实际 Provider 测试全部 Skip；本轮新增回归测试 CI 待验收 | BaoStock/Pytdx 既有样本证据保持；Eastmoney/Tencent 锚点未验证；日内停牌缺失日 K 仅自动化规则已修复，真实样本待验 | 接口层已接入，待真实验收 |
+| API-06 | 开发中 | Provider 静态清单、被动诊断、主动 Probe、Probe 历史均有 API；WebUI 已封装；DailyBar 交易上下文与日期边界诊断复用现有 Validator/Reporter/TradingCalendar/SecurityTradingStatus；已补开始日期越界告警、倒置区间拒绝、重复无效行优先级、请求级参数单次计数与 Reporter 截断计数回归；本轮未改变路由/Schema | 当前提交 CI 通过后，继续缓存/DB fallback 警告保留与真实日内停牌样本；Eastmoney/Tencent 复权锚点仍需有限真实样本 | TickFlow `/v1/klines` 成交量单位仍待真实样本证明；日内停牌真实样本未验；Eastmoney/Tencent 响应未提供可独立确认的 ref date；Tushare adj_factor/dividend 40203 权限阻塞 | `79c99fdfe8f40536a10c560f4d6052b2c9267837`（本轮变更前基线） | 变更前基线 Go suite Run `41964722861` 最终通过（含 race/vet、MariaDB migration/PIT、Compose 与 Docker 镜像构建）；Parity Run `41964722766`、WebUI checks Run `41964722732` 通过；Live Probe Run `41964722845` 工作流成功但真实 Provider 测试全部 Skip；本轮新增测试 CI 待验收 | BaoStock/Pytdx 既有样本证据保持；Eastmoney/Tencent 锚点未验证；日内停牌缺失日 K 仅自动化规则已修复，真实样本待验 | 接口层已接入，待真实验收 |
 | API-07 | 板块多维排行（近 5 日涨幅、资金净流入等） | 待能力评估 | 数据侧主责，WebUI 配合 | 有真实来源、完整候选范围、排序/分页契约及质量证据；不以成交额冒充净流入 |
 | API-08 | 通知渠道、订阅、发送测试与投递记录服务端能力 | 未提供服务端接口 | 数据侧主责；WebUI 后续接入 | 服务端安全存储、鉴权、审计、重试和投递查询契约完整 |
 | API-09 | 服务端选股策略、全市场扫描、候选理由与历史记录 | 待产品/API 设计 | 双方 | 明确策略 schema、扫描范围、异步任务、结果快照和可追溯理由 |
@@ -287,3 +287,13 @@
 - 新增 Normalize 与 DataService 回归测试；未改变 OpenAPI、HTTP 路由、请求/响应字段或 WebUI 调用，WebUI 无需同步代码。
 - 变更前基线 Go suite Runs `41963474550`、`41963482209`、Parity `41963482323`、WebUI checks `41963482255` 通过；Live Probe `41963482213` 工作流成功但真实 Provider 测试全部 Skip。本轮提交 CI 待验收。
 - 跨端状态仍为“接口层已接入，待真实数据验收”；真实停牌样本和 Provider 复权锚点未完成。
+
+
+## 13. 2026-11-05 DailyBar 请求级诊断与 MariaDB 日期边界同步
+
+- 数据侧变更前 HEAD：`79c99fdfe8f40536a10c560f4d6052b2c9267837`。
+- 重复日期判断移至行字段校验之后；无效重复行保留 OHLC/字段错误，不再被普通 warnings 单独归类为 duplicate；普通与结构化结果保持一致。
+- 非法 start/end、倒置区间及非法 requested symbol 在结构化路径按请求级错误处理，每项一次，不按 Bar 行数重复计数。
+- 增加 Reporter 120 行错误样本，验证明细截断时聚合计数不丢失。
+- 复核 MariaDB 当前表和版本表均使用 start/end 闭区间；新增数据库集成测试验证闭区间和 PIT recorded_at 截止。未修改 SQL 查询、API 路由或 Schema。
+- WebUI 无需改动；真实 Provider 日内停牌样本和复权锚点仍未验收。新提交 CI 待验证。

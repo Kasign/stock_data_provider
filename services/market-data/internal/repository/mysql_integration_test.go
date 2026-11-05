@@ -118,6 +118,37 @@ func TestMariaDBRevisionPersistenceAndPointInTimeQueries(t *testing.T) {
 		t.Fatalf("corporate-action query must return v2: rows=%+v err=%v", newActions, err)
 	}
 
+	barVolume := int64(1000)
+	barAmount := 10000.0
+	barFetchedAt := time.Now().UTC()
+	makeIntegrationBar := func(tradeDate string) model.DailyBar {
+		return model.DailyBar{
+			Symbol: symbol, TradeDate: tradeDate, Period: "1d", AdjustmentBasis: model.AdjustmentNone,
+			Source: "integration-fixture", SourceVersion: "integration-bars-v1",
+			Open: 10, High: 11, Low: 9, Close: 10.5, Volume: &barVolume, Amount: &barAmount,
+			VolumeUnit: "shares", AmountUnit: "CNY", FetchedAt: barFetchedAt, NormalizedAt: barFetchedAt,
+			QualityStatus: model.QualityDegraded, NormalizationVer: "4",
+		}
+	}
+	if err := store.UpsertBars(ctx, []model.DailyBar{
+		makeIntegrationBar("2026-10-19"), makeIntegrationBar("2026-10-20"),
+		makeIntegrationBar("2026-10-21"), makeIntegrationBar("2026-10-22"),
+	}); err != nil {
+		t.Fatalf("save daily-bar range fixtures: %v", err)
+	}
+	boundedBars, err := store.ListBars(ctx, symbol, "2026-10-20", "2026-10-21", model.AdjustmentNone, 0)
+	if err != nil || len(boundedBars) != 2 || boundedBars[0].TradeDate != "2026-10-21" || boundedBars[1].TradeDate != "2026-10-20" {
+		t.Fatalf("current daily-bar query must use inclusive date bounds: bars=%+v err=%v", boundedBars, err)
+	}
+	barsAsOf, err := store.ListBarsAsOf(ctx, symbol, "2026-10-20", "2026-10-21", model.AdjustmentNone, time.Now().UTC().Add(time.Second), 0)
+	if err != nil || len(barsAsOf) != 2 {
+		t.Fatalf("PIT daily-bar query must use the same inclusive date bounds: bars=%+v err=%v", barsAsOf, err)
+	}
+	barsBeforeObservation, err := store.ListBarsAsOf(ctx, symbol, "2026-10-20", "2026-10-21", model.AdjustmentNone, barFetchedAt.Add(-time.Second), 0)
+	if err != nil || len(barsBeforeObservation) != 0 {
+		t.Fatalf("PIT daily-bar query must exclude revisions recorded after as_of: bars=%+v err=%v", barsBeforeObservation, err)
+	}
+
 	if err := store.Close(); err != nil {
 		t.Fatalf("close MariaDB connection: %v", err)
 	}

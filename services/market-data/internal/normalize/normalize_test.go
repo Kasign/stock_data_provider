@@ -378,6 +378,76 @@ func TestValidateAndSortBarsRejectsReversedDateRangeConsistently(t *testing.T) {
 	}
 }
 
+func TestValidateAndSortBarsDuplicateDateDoesNotHideInvalidRow(t *testing.T) {
+	valid := validDailyBarForNormalizationTest()
+	invalidDuplicate := valid
+	invalidDuplicate.High = 8
+
+	for _, rows := range [][]model.DailyBar{
+		{valid, invalidDuplicate},
+		{invalidDuplicate, valid},
+	} {
+		legacyBars, legacyWarnings := ValidateAndSortBars("600519.SH", rows, "", "", 0)
+		reportedBars, reportedWarnings, report := ValidateAndSortBarsWithReport("600519.SH", rows, "", "", 0)
+		if len(legacyBars) != 1 || len(reportedBars) != 1 || legacyBars[0].TradeDate != reportedBars[0].TradeDate {
+			t.Fatalf("duplicate handling changed valid-row retention: legacy=%+v reported=%+v", legacyBars, reportedBars)
+		}
+		if !containsWarning(legacyWarnings, "invalid_ohlc_bar_dropped") ||
+			!containsWarning(reportedWarnings, "invalid_ohlc_bar_dropped") {
+			t.Fatalf("invalid duplicate row must retain its OHLC warning: legacy=%v reported=%v", legacyWarnings, reportedWarnings)
+		}
+		if containsWarning(legacyWarnings, "duplicate_trade_date_dropped") ||
+			containsWarning(reportedWarnings, "duplicate_trade_date_dropped") {
+			t.Fatalf("invalid duplicate row must not be double-classified as a valid duplicate: legacy=%v reported=%v", legacyWarnings, reportedWarnings)
+		}
+		if report.ErrorCount != 1 || report.WarningCount != 0 || report.TotalCount != 1 ||
+			!containsValidationIssue(report.Issues, "open,high,low,close", "ohlc_relationship") {
+			t.Fatalf("structured diagnostics must count the invalid OHLC row once: %+v", report)
+		}
+	}
+}
+
+func TestValidateAndSortBarsWithReportCountsInvalidRequestParametersOnce(t *testing.T) {
+	bars := []model.DailyBar{validDailyBarForNormalizationTest(), validDailyBarForNormalizationTest()}
+	cases := []struct {
+		name, symbol, start, end, warning, field, code string
+	}{
+		{name: "invalid start date", symbol: "600519.SH", start: "2026-10-2", end: "2026-10-20", warning: "invalid_start_date", field: "start_date", code: "invalid_date"},
+		{name: "invalid end date", symbol: "600519.SH", start: "2026-10-19", end: "2026-10-2", warning: "invalid_end_date", field: "end_date", code: "invalid_date"},
+		{name: "invalid requested symbol", symbol: "AAPL", start: "2026-10-19", end: "2026-10-20", warning: "invalid_requested_symbol", field: "requested_symbol", code: "invalid_symbol"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			legacyBars, legacyWarnings := ValidateAndSortBars(tc.symbol, bars, tc.start, tc.end, 0)
+			reportedBars, reportedWarnings, report := ValidateAndSortBarsWithReport(tc.symbol, bars, tc.start, tc.end, 0)
+			if len(legacyBars) != 0 || len(reportedBars) != 0 ||
+				!containsWarning(legacyWarnings, tc.warning) || !containsWarning(reportedWarnings, tc.warning) {
+				t.Fatalf("invalid request must be rejected consistently: legacy=%+v/%v reported=%+v/%v", legacyBars, legacyWarnings, reportedBars, reportedWarnings)
+			}
+			if report.TotalCount != 1 || report.ErrorCount != 1 || report.WarningCount != 0 || len(report.Issues) != 1 || report.Issues[0].Field != tc.field || report.Issues[0].Code != tc.code || report.Issues[0].RowIndex != nil {
+				t.Fatalf("request-level validation must be counted once without a row index: %+v", report)
+			}
+		})
+	}
+}
+
+func TestValidateAndSortBarsWithReportCountsAllRowsWhenIssueDetailsAreTruncated(t *testing.T) {
+	const rowCount = 120
+	bars := make([]model.DailyBar, 0, rowCount)
+	baseDate := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	for i := 0; i < rowCount; i++ {
+		bar := validDailyBarForNormalizationTest()
+		bar.TradeDate = baseDate.AddDate(0, 0, i).Format("2006-01-02")
+		bar.High = 8
+		bars = append(bars, bar)
+	}
+	_, _, report := ValidateAndSortBarsWithReport("600519.SH", bars, "", "", 0)
+	if report.TotalCount != rowCount || report.ErrorCount != rowCount || report.WarningCount != 0 ||
+		len(report.Issues) != validation.DefaultMaxIssues || !report.Truncated {
+		t.Fatalf("issue detail truncation must not lose aggregate row counts: %+v", report)
+	}
+}
+
 func validDailyBarForNormalizationTest() model.DailyBar {
 	volume := int64(1000)
 	amount := 10000.0
