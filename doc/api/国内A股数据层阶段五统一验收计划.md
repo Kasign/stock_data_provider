@@ -339,3 +339,21 @@
 - 代码 SHA `cce59e8de493813a4b04f7d0bd24211e1e919bb1` 的 Push Go suite Run `42018395454` 全部 Job success。
 - Live Probe Run `42018395554` 外层 workflow success，但 BaoStock 专项步骤失败：600601.SH、600036.SH、002982.SZ 取得因子和主窗口 OHLC 样本，mismatch=0，首因子日等于上市日，`not_applicable`；另外五只登录 TCP timeout，`unavailable`，不计真实通过。
 - 上一完整报告 SHA `687b49a1` 已覆盖八证券 2025 主窗口。当前不连续重复探测，保留完整报告作为主窗口证据，使用本次 3 个可用样本验证上市日分类。PIT 与生产 fail-closed 不变。
+
+
+## 2026-11-05 P0 批次 42：DailyBar 复权 Provider 能力矩阵
+
+| Provider | qfq/hfq 实现 | AdjustmentMethod | AdjustmentRefDate | 当前跨源比较结论 |
+|---|---|---|---|---|
+| BaoStock | 上游 adjustFlag 2/1 | `baostock_pct_change` | 缺失 | adjusted not_comparable |
+| Pytdx | GBBQ 本地重建 | `pytdx_qfq/hfq` | 请求末日/首日 | 需同方法、同参考日证据 |
+| Eastmoney | 上游 fqt 1/2 | `eastmoney_fqt_1/2` | 缺失 | adjusted not_comparable |
+| Tencent | 上游 qfqday/hfqday | `tencent_qfqday/hfqday` | 缺失 | adjusted not_comparable |
+| HiThink | API forward/backward | `hithink_api_forward/backward` | 缺失 | adjusted not_comparable |
+| Tushare | daily raw + adj_factor 换算 | `tushare_adj_factor_qfq_v1/hfq_v1` | qfq 请求因子最大日；hfq 不声明 | qfq 仍需方法语义对齐；hfq 不可比较 |
+| Yahoo | adjclose ratio rebased | `yahoo_adjclose_ratio_rebased_to_end/start` | 请求末日/首日 | 需同方法、同参考日证据 |
+| Netease/Sina | raw only | raw method | 不适用 | raw 可比较；不支持 qfq/hfq |
+
+- Cross-provider adjusted comparator 要求相同 basis、quality valid、相同 method 与非空且一致 ref date。缺字段或不一致返回 not_comparable，符合当前证据边界。
+- 本轮没有跨 Provider adjusted 真实样本；BaoStock 同源 8 证券对账不能代替跨源验收，Pytdx 专项在 Run `42017059794` skipped，Tushare 受 40203 权限阻塞。
+- 不补造 ref date、不放宽 method equality、不新增字段/API。待有可证明的共同基准和真实双源样本后再做 canonical method 评估。

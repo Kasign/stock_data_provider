@@ -120,7 +120,7 @@
 | API-03 | 全市场分页与批量行情的范围、总数下限、覆盖率、MA 和复权语义 | 待当前 HEAD 复核 | 双方 | 服务端分页与字段质量可验证，WebUI 不将页内结果解释为全市场排名 |
 | API-04 | 市场情绪当前快照与历史快照的持久化、缺失交易日和覆盖语义 | 待真实验收 | 数据侧主责，WebUI 配合 | 有真实历史数据、数据库读写证据和无数据/缺日契约 |
 | API-05 | 市场级资金流真实数据与 Provider 权限验收 | 依赖凭据/权限 | 数据侧主责 | 真实请求可复现；权限缺失、Provider 不可用和空数据状态可区分 |
-| API-06 | 开发中 | Provider 清单、诊断、Probe 与 Probe 历史已有 API；DailyBar 日期边界、交易上下文和 MariaDB fallback warnings 已有回归；BaoStock 八证券 2025 主窗口真实对账通过（SHA `687b49a1`）；上市日期分类代码已由新专项 3/8 个真实样本验证，其余 5 个登录超时不计通过 | 不扩大同类候选、不开放生产 fallback；Current helper 无生产调用场景，暂不新增 Current 因子 API；继续复核 DailyBar 复权 Provider 能力矩阵、TickFlow 成交量单位、日内停牌真实样本、MariaDB Probe 历史部署及 Eastmoney/Tencent 参考日期独立锚点 | BaoStock AvailableAt 未知，PIT 继续排除；八只样本无首事件前交易日，fallback 未被验证；本次重跑 5 只 TCP timeout；TickFlow 单位和日内停牌真实样本未验；Tushare adj_factor/dividend 40203 权限阻塞 | `cce59e8de493813a4b04f7d0bd24211e1e919bb1` | Push Go suite `42018395454` success；Push Live Probe `42018395554` 外层 success 但 BaoStock 专项步骤 failure（3/8 有真实响应，5/8 TCP timeout） | 完整八证券主窗口证据沿用 `687b49a1`；新上市日分类只对 3 个本轮成功响应复核 | 接口层已接入，待真实验收 |
+| API-06 | 开发中 | Provider 清单、诊断、Probe 与 Probe 历史已有 API；DailyBar 复权能力矩阵已复核：BaoStock/Eastmoney/Tencent/HiThink 无可信 ref date；Pytdx/Yahoo 使用请求窗口首末日；Tushare qfq 使用请求因子最大日；Netease/Sina raw only；cross-provider adjusted comparator 缺元数据时 not_comparable | 不补造 ref date、不放宽 method equality；Current helper 无生产调用场景，暂不新增 Current 因子 API；待有共同复权基准和真实双源样本再评估 canonical method；继续 TickFlow 成交量单位、日内停牌真实样本、MariaDB Probe 历史部署及 Tushare 权限阻塞 | BaoStock AvailableAt 未知，PIT 继续排除；八只样本无首事件前交易日，fallback 未验证；本次重跑 5 只 TCP timeout；adjusted 跨源比较缺共同 method/ref date 证据；Tushare 40203 权限阻塞 | `cce59e8de493813a4b04f7d0bd24211e1e919bb1` | Push Go suite `42018395454` success；Live Probe `42018395554` 外层 success 但 BaoStock 专项 3/8 有真实响应、5/8 TCP timeout | BaoStock 同源 8 证券主窗口一致；没有跨 Provider adjusted 真实验收 | 接口层已接入，待真实验收 |
 | API-07 | 板块多维排行（近 5 日涨幅、资金净流入等） | 待能力评估 | 数据侧主责，WebUI 配合 | 有真实来源、完整候选范围、排序/分页契约及质量证据；不以成交额冒充净流入 |
 | API-08 | 通知渠道、订阅、发送测试与投递记录服务端能力 | 未提供服务端接口 | 数据侧主责；WebUI 后续接入 | 服务端安全存储、鉴权、审计、重试和投递查询契约完整 |
 | API-09 | 服务端选股策略、全市场扫描、候选理由与历史记录 | 待产品/API 设计 | 双方 | 明确策略 schema、扫描范围、异步任务、结果快照和可追溯理由 |
@@ -335,3 +335,10 @@
 
 - 代码 SHA `cce59e8de493813a4b04f7d0bd24211e1e919bb1` 的 Go suite `42018395454` success。Live Probe `42018395554` 外层 success，但 BaoStock 专项步骤 failure；3/8 样本有真实因子响应并验证 `not_applicable`，5/8 因登录 TCP timeout 为 unavailable。
 - 完整八证券主窗口真实证据仍引用 SHA `687b49a1` 的报告；本次不将 5 个网络失败计为通过。无 WebUI/API 契约变化，Current helper 仍无生产调用场景，不新增接口。
+
+
+## 19. 2026-11-05 API-06 DailyBar 复权能力矩阵复核
+
+- 已核对 Provider 实现及 cross-provider comparator。adjusted 跨源比较需要 basis、quality、method、reference date 全部可比较；缺失或不一致返回 `not_comparable`，保持现有契约。
+- 多个 Provider 未提供可信 `AdjustmentRefDate`，不允许用请求 end date 或当前日期推断。Provider method 标识不同也不能仅凭 qfq/hfq 名称相同而归并。
+- 本轮无 WebUI/API 变化，无需 WebUI 修改；真实跨源 adjusted 样本不足，API-06 继续等待真实数据验收。
