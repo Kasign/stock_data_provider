@@ -36,7 +36,7 @@ func EvaluateSourceURL(rawURL string, policy SourceURLPolicy) SourceURLDecision 
 	}
 
 	scheme := strings.ToLower(parsed.Scheme)
-	if !containsPolicyValue(normalizeSchemes(policy.AllowedSchemes), scheme) {
+	if (scheme != "http" && scheme != "https") || !containsPolicyValue(normalizeSchemes(policy.AllowedSchemes), scheme) {
 		return sourceURLDenied("news.source_url.scheme_denied")
 	}
 

@@ -72,6 +72,17 @@ func TestEvaluateSourceURLNormalizesIPv6Literal(t *testing.T) {
 	}
 }
 
+func TestEvaluateSourceURLNeverAllowsNonHTTPProtocols(t *testing.T) {
+	policy := SourceURLPolicy{
+		AllowedSchemes: []string{"ftp", "https"},
+		AllowedHosts:   []string{"news.example.com"},
+	}
+	decision := EvaluateSourceURL("ftp://news.example.com/archive", policy)
+	if decision.Allowed || decision.ReasonCode != "news.source_url.scheme_denied" {
+		t.Fatalf("decision=%+v", decision)
+	}
+}
+
 func TestEvaluateSourceURLRejectsEmptyAllowlist(t *testing.T) {
 	decision := EvaluateSourceURL("https://news.example.com/a", SourceURLPolicy{
 		AllowedSchemes: []string{"https"},
