@@ -1815,3 +1815,13 @@ CI 复核记录：本批首次 Chromium Browser Smoke 在个股研究数据质�
 - [x] UI contract 锁定字号、优先级和状态颜色。
 - [ ] 在本批最终提交 SHA 上运行 WebUI Checks、JS 语法检查、Compose 校验和 Nginx 镜像构建。
 - [ ] 执行 Chromium Browser Smoke；人工核验 Run Flow 事件列表、状态标签和窄屏布局。
+
+
+## 2026-11-05 UIR-2 第四十三批：Provider 数据源卡片字号收敛
+
+- [x] 数据源摘要、版本、名称、辅助说明和启停状态字号迁回组件基础规则。
+- [x] 删除 5 处重复字号 `!important`，保留省略和单行布局。
+- [x] 保留浅色主题启用/停用语义颜色。
+- [x] 新增 UI contract 锁定字号和状态颜色。
+- [ ] 在本批最终提交 SHA 上运行 WebUI Checks、JS 语法检查、Compose 校验和 Nginx 镜像构建。
+- [ ] 执行 Chromium Browser Smoke；人工核验 Provider 卡片及窄屏布局。

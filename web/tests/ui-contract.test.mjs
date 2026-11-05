@@ -2758,3 +2758,22 @@ test("UIR-2 Run Flow 事件标题与事件区辅助文字由组件选择器控�
   assert.match(stylesheet, /\.run-flow-dialog \.event-row-pending \.event-state-label \{[\s\S]*?color:\s*var\(--warning\);/);
   assert.match(stylesheet, /@media \(max-width: 600px\) \{[\s\S]*?\.run-flow-dialog \.event-heading \{ align-items: flex-start; flex-direction: column;/);
 });
+
+
+test("UIR-2 Provider 数据源卡片字号由组件基础规则控制", () => {
+  const expectedSizes = [
+    [".source-summary", /font-size:\s*12px\s*;/],
+    [".source-version", /font-size:\s*12px\s*;/],
+    [".source-main strong", /font-size:\s*13px\s*;/],
+    [".source-main small", /font-size:\s*12px\s*;/],
+    [".source-state", /font-size:\s*12px\s*;/]
+  ];
+  for (const [selector, sizePattern] of expectedSizes) {
+    const declaration = baseCssDeclarationBlock(selector);
+    assert.match(declaration, sizePattern, selector + " must own its readable base font size");
+    assert.doesNotMatch(declaration, /!important/);
+  }
+  assert.match(stylesheet, /:root\[data-theme="light"\] \.source-state-on, :root\[data-theme="light"\] \.mini-quality-valid \{ color: #08765e; background: #e3f6ef; \}/);
+  assert.match(stylesheet, /:root\[data-theme="light"\] \.source-state-off, :root\[data-theme="light"\] \.mini-quality-unknown \{ color: #607383; background: #eef2f5; \}/);
+  assert.match(stylesheet, /\.source-main strong \{[^}]*text-overflow:\s*ellipsis;[^}]*white-space:\s*nowrap;/);
+});
