@@ -2,6 +2,21 @@ package parser
 
 import "example.com/stock-analysis-flow/internal/news/domain"
 
+// ToCandidate 将 Feed 条目映射为来源候选；发布者身份必须由已登记 Source 配置显式传入。
+// entry.ID 是来源原始条目 ID，entry.Author 是作者，不得与发布者身份混用。
+func (entry FeedEntry) ToCandidate(publisherName, publisherDomain string) domain.Candidate {
+	candidate := domain.Candidate{
+		SourceItemID: entry.ID, PublisherName: publisherName, PublisherDomain: publisherDomain,
+		Author: entry.Author, Title: entry.Title, RawURL: entry.Link,
+		PublishedAtRaw: entry.PublishedAtRaw,
+	}
+	if entry.PublishedAt != nil {
+		publishedAt := entry.PublishedAt.UTC()
+		candidate.PublishedAt = &publishedAt
+	}
+	return candidate
+}
+
 // ContentLayers 将 Feed 的 Provider 摘要、来源摘要和正文映射到独立层。
 // Feed 内容格式尚未可靠识别时标记 unknown，不擅自按全文或 HTML 处理。
 func (entry FeedEntry) ContentLayers(providerSummary string) domain.ContentLayers {

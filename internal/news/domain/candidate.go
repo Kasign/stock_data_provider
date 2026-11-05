@@ -10,7 +10,9 @@ import (
 func NormalizeCandidate(candidate Candidate, observedAt time.Time, queryDimension string) Candidate {
 	candidate.ProviderCode = strings.TrimSpace(candidate.ProviderCode)
 	candidate.ProviderItemID = strings.TrimSpace(candidate.ProviderItemID)
+	candidate.SourceItemID = strings.TrimSpace(candidate.SourceItemID)
 	candidate.PublisherName = strings.TrimSpace(candidate.PublisherName)
+	candidate.Author = normalizeCandidateText(candidate.Author)
 	candidate.PublisherDomain = strings.ToLower(strings.TrimSpace(candidate.PublisherDomain))
 	candidate.Title = normalizeCandidateText(candidate.Title)
 	candidate.ProviderSummary = normalizeCandidateText(candidate.ProviderSummary)

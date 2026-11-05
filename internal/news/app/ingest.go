@@ -73,11 +73,11 @@ func (u *IngestCandidate) Execute(ctx context.Context, sourceID, idempotencyKey 
 	}
 
 	credentials := []domain.IdentityCredential(nil)
-	if strings.TrimSpace(candidate.ProviderItemID) == "" && strings.TrimSpace(candidate.RawURL) == "" {
+	if strings.TrimSpace(candidate.SourceItemID) == "" && strings.TrimSpace(candidate.RawURL) == "" {
 		observation.IdentityStatus = domain.ObservationUnidentified
 		observation.ReasonCode = "news.identity.credential_required"
 	} else {
-		built, err := domain.BuildIdentityCredentials(sourceID, candidate.ProviderItemID, candidate.RawURL, policy)
+		built, err := domain.BuildIdentityCredentials(sourceID, candidate.SourceItemID, candidate.RawURL, policy)
 		if err != nil {
 			observation.IdentityStatus = domain.ObservationConflict
 			observation.ReasonCode = "news.identity.credential_rejected"

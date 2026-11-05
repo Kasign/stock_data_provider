@@ -17,7 +17,8 @@ func BuildVersionFingerprint(candidate Candidate, content ContentLayers) string 
 	writeFingerprintField(digest, normalizeCandidateText(candidate.Title))
 	writeFingerprintField(digest, strings.TrimSpace(candidate.PublisherName))
 	writeFingerprintField(digest, strings.ToLower(strings.TrimSpace(candidate.PublisherDomain)))
-	// 规范 URL 是新闻版本元数据；ProviderItemID 属于身份凭据，不参与内容指纹。
+	writeFingerprintField(digest, normalizeCandidateText(candidate.Author))
+	// 规范 URL 是新闻版本元数据；ProviderItemID / SourceItemID 属于身份凭据，不参与内容指纹。
 	writeFingerprintField(digest, normalizeCandidateURL(candidate.RawURL))
 	writeFingerprintField(digest, publishedTimeFingerprint(candidate))
 	writeFingerprintField(digest, normalizeCandidateText(content.SourceSummary))

@@ -8,13 +8,13 @@ import (
 func TestNormalizeCandidateNormalizesFieldsAndUsesFallbackContext(t *testing.T) {
 	observedAt := time.Date(2026, 11, 5, 10, 0, 0, 0, time.FixedZone("CST", 8*60*60))
 	candidate := Candidate{
-		ProviderCode: "  tavily ", ProviderItemID: " item-1 ",
+		ProviderCode: "  tavily ", ProviderItemID: " provider-item-1 ", SourceItemID: " source-item-1 ", Author: "  编辑   甲  ",
 		PublisherName: "  媒体名称  ", PublisherDomain: " EXAMPLE.COM ",
 		Title: "  市场   新闻\n标题 ", ProviderSummary: " 摘要  内容 ",
 		RawURL: " https://publisher.example/a ", PublishedAtRaw: "Wed, 04 Nov 2026 10:30:00 +0800",
 	}
 	got := NormalizeCandidate(candidate, observedAt, " market ")
-	if got.ProviderCode != "tavily" || got.ProviderItemID != "item-1" || got.PublisherName != "媒体名称" {
+	if got.ProviderCode != "tavily" || got.ProviderItemID != "provider-item-1" || got.SourceItemID != "source-item-1" || got.Author != "编辑 甲" || got.PublisherName != "媒体名称" {
 		t.Fatalf("identity fields=%+v", got)
 	}
 	if got.PublisherDomain != "example.com" || got.Title != "市场 新闻 标题" || got.ProviderSummary != "摘要 内容" {

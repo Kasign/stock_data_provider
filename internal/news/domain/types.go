@@ -6,7 +6,9 @@ import "time"
 type Candidate struct {
 	ProviderCode    string
 	ProviderItemID  string
+	SourceItemID    string
 	PublisherName   string
+	Author          string
 	PublisherDomain string
 	Title           string
 	ProviderSummary string

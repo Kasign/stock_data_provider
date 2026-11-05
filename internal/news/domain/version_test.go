@@ -79,6 +79,14 @@ func TestBuildVersionFingerprintTreatsEmptyBodyAsAbsent(t *testing.T) {
 	}
 }
 
+func TestBuildVersionFingerprintChangesWithAuthor(t *testing.T) {
+	first := Candidate{Title: "标题", Author: "编辑甲"}
+	second := Candidate{Title: "标题", Author: "编辑乙"}
+	if BuildVersionFingerprint(first, ContentLayers{}) == BuildVersionFingerprint(second, ContentLayers{}) {
+		t.Fatal("author metadata change must produce a new version fingerprint")
+	}
+}
+
 func TestBuildVersionFingerprintChangesWithCanonicalURL(t *testing.T) {
 	first := Candidate{Title: "标题", RawURL: "https://news.example/article"}
 	second := Candidate{Title: "标题", RawURL: "https://news.example/article-revised"}
@@ -88,10 +96,11 @@ func TestBuildVersionFingerprintChangesWithCanonicalURL(t *testing.T) {
 }
 
 func TestBuildVersionFingerprintIgnoresProviderItemID(t *testing.T) {
-	first := Candidate{Title: "标题", RawURL: "https://news.example/article", ProviderItemID: "provider-id-1"}
+	first := Candidate{Title: "标题", RawURL: "https://news.example/article", ProviderItemID: "provider-id-1", SourceItemID: "source-id-1"}
 	second := first
 	second.ProviderItemID = "provider-id-2"
+	second.SourceItemID = "source-id-2"
 	if BuildVersionFingerprint(first, ContentLayers{}) != BuildVersionFingerprint(second, ContentLayers{}) {
-		t.Fatal("provider identity credential must not create a content version")
+		t.Fatal("provider/source identity credentials must not create a content version")
 	}
 }

@@ -109,6 +109,25 @@ func TestParseFeedDoesNotInferTimezoneForRFCDate(t *testing.T) {
 	}
 }
 
+func TestFeedEntryToCandidateKeepsSourceIdentityAndAuthorSeparate(t *testing.T) {
+	payload := []byte(`<feed xmlns="http://www.w3.org/2005/Atom"><entry>
+		<id>source-entry-7</id><title>新闻标题</title><link href="https://publisher.example/article"/>
+		<author><name>作者甲</name></author><published>2026-11-04T09:30:00+08:00</published>
+	</entry></feed>`)
+	doc, err := ParseFeed(payload, time.Now())
+	if err != nil { t.Fatal(err) }
+	candidate := doc.Entries[0].ToCandidate("登记媒体", "publisher.example")
+	if candidate.SourceItemID != "source-entry-7" || candidate.ProviderItemID != "" {
+		t.Fatalf("identity mapping=%+v", candidate)
+	}
+	if candidate.PublisherName != "登记媒体" || candidate.PublisherDomain != "publisher.example" || candidate.Author != "作者甲" {
+		t.Fatalf("publisher/author mapping=%+v", candidate)
+	}
+	if candidate.Title != "新闻标题" || candidate.RawURL != "https://publisher.example/article" || candidate.PublishedAt == nil {
+		t.Fatalf("candidate mapping=%+v", candidate)
+	}
+}
+
 func TestFeedEntryContentLayersKeepSummaryAndBodySeparate(t *testing.T) {
 	doc, err := ParseFeed([]byte(`<rss><channel><item>
 		<title>标题</title><description>来源摘要</description>

@@ -108,7 +108,7 @@ func (u *ApplyResearchUpdate) Execute(ctx context.Context, request ResearchUpdat
 				ID: versionID, NewsID: request.NewsID, VersionNo: versionNo,
 				Fingerprint: fingerprint, Title: candidate.Title,
 				PublisherName: candidate.PublisherName, PublisherDomain: candidate.PublisherDomain,
-				PublishedAt: candidate.PublishedAt, Content: content,
+				Author: candidate.Author, PublishedAt: candidate.PublishedAt, Content: content,
 				ObservedAt: observedAt, ObservationID: request.ObservationID,
 			}
 			if err := tx.AppendNewsItemVersion(ctx, version); err != nil {

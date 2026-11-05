@@ -11,6 +11,7 @@ type NewsItemVersion struct {
 	Title           string
 	PublisherName   string
 	PublisherDomain string
+	Author          string
 	PublishedAt     *time.Time
 	Content         ContentLayers
 	ObservedAt      time.Time

@@ -78,7 +78,7 @@ func TestIngestCandidateCreatesNewsItemAndObservation(t *testing.T) {
 	repository := &memoryIdentityRepository{}
 	usecase := NewIngestCandidate(repository, func() string { return "observation-1" })
 	observation, err := usecase.Execute(context.Background(), "source-1", "run-1/provider-a/item-1", domain.Candidate{
-		ProviderCode: "provider-a", ProviderItemID: "item-1", Title: " headline ",
+		ProviderCode: "provider-a", ProviderItemID: "provider-result-1", SourceItemID: "item-1", Title: " headline ",
 	}, domain.SourceURLPolicy{})
 	if err != nil {
 		t.Fatal(err)
@@ -99,7 +99,7 @@ func TestIngestCandidateMatchesExistingItemAndAddsOnlyNewAlias(t *testing.T) {
 	repository := &memoryIdentityRepository{credentials: []domain.IdentityCredential{existing}}
 	usecase := NewIngestCandidate(repository, func() string { return "observation-2" })
 	observation, err := usecase.Execute(context.Background(), "source-1", "run-1/provider-a/item-1", domain.Candidate{
-		ProviderItemID: "item-1", RawURL: "https://news.example/new-url",
+		ProviderItemID: "provider-result-2", SourceItemID: "item-1", RawURL: "https://news.example/new-url",
 	}, domain.SourceURLPolicy{AllowedSchemes: []string{"https"}, AllowedHosts: []string{"news.example"}})
 	if err != nil {
 		t.Fatal(err)
@@ -137,7 +137,7 @@ func TestIngestCandidateConflictOnlyAppendsObservation(t *testing.T) {
 	repository := &memoryIdentityRepository{credentials: []domain.IdentityCredential{native, url}}
 	usecase := NewIngestCandidate(repository, func() string { return "observation-4" })
 	observation, err := usecase.Execute(context.Background(), "source-1", "run-1/provider-a/item-1", domain.Candidate{
-		ProviderItemID: "item-1", RawURL: "https://news.example/item",
+		ProviderItemID: "provider-result-3", SourceItemID: "item-1", RawURL: "https://news.example/item",
 	}, domain.SourceURLPolicy{AllowedSchemes: []string{"https"}, AllowedHosts: []string{"news.example"}})
 	if err != nil {
 		t.Fatal(err)
@@ -158,7 +158,7 @@ func identityHashForTest(value string) string {
 func TestIngestCandidateRollsBackWhenObservationAppendFails(t *testing.T) {
 	repository := &memoryIdentityRepository{failAppend: true}
 	usecase := NewIngestCandidate(repository, func() string { return "observation-5" })
-	_, err := usecase.Execute(context.Background(), "source-1", "run-1/provider-a/item-1", domain.Candidate{ProviderItemID: "item-1"}, domain.SourceURLPolicy{})
+	_, err := usecase.Execute(context.Background(), "source-1", "run-1/provider-a/item-1", domain.Candidate{SourceItemID: "item-1"}, domain.SourceURLPolicy{})
 	if !errors.Is(err, ErrIdentityTransaction) {
 		t.Fatalf("err=%v", err)
 	}
@@ -174,7 +174,7 @@ func TestIngestCandidateRetriesIdempotently(t *testing.T) {
 		nextID++
 		return "observation-" + string(rune('0'+nextID))
 	})
-	candidate := domain.Candidate{ProviderCode: "provider-a", ProviderItemID: "item-1", Title: "headline"}
+	candidate := domain.Candidate{ProviderCode: "provider-a", ProviderItemID: "provider-result-1", SourceItemID: "source-item-1", Title: "headline"}
 	first, err := usecase.Execute(context.Background(), "source-1", "run-1/provider-a/item-1", candidate, domain.SourceURLPolicy{})
 	if err != nil {
 		t.Fatal(err)
@@ -191,7 +191,7 @@ func TestIngestCandidateRetriesIdempotently(t *testing.T) {
 func TestIngestCandidateRejectsIdempotencyKeyPayloadReuse(t *testing.T) {
 	repository := &memoryIdentityRepository{}
 	usecase := NewIngestCandidate(repository, func() string { return "observation-fixed" })
-	_, err := usecase.Execute(context.Background(), "source-1", "same-key", domain.Candidate{ProviderItemID: "item-1"}, domain.SourceURLPolicy{})
+	_, err := usecase.Execute(context.Background(), "source-1", "same-key", domain.Candidate{ProviderItemID: "provider-result-1"}, domain.SourceURLPolicy{})
 	if err != nil {
 		t.Fatal(err)
 	}
