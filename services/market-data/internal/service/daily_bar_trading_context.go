@@ -117,8 +117,13 @@ func assessDailyBarTradingContext(calendar *model.TradingCalendarSnapshot, bars 
 			continue
 		}
 		switch status.SuspensionStatus {
-		case model.SuspensionStatusSuspended, model.SuspensionStatusIntraday:
+		case model.SuspensionStatusSuspended:
 			result.Reasons = appendDailyBarContextReason(result.Reasons, "daily_bar_excluded_suspended:"+day.Date)
+		case model.SuspensionStatusIntraday:
+			// An intraday suspension does not explain a missing full-day bar:
+			// the security was not suspended for the entire trading session.
+			result.QualityStatus = model.QualityDegraded
+			result.Reasons = appendDailyBarContextReason(result.Reasons, "daily_bar_missing_during_intraday_suspension:"+day.Date)
 		case model.SuspensionStatusNoEvent, model.SuspensionStatusResumed:
 			result.QualityStatus = model.QualityDegraded
 			result.Reasons = appendDailyBarContextReason(result.Reasons, "daily_bar_missing_on_confirmed_trading_day:"+day.Date)

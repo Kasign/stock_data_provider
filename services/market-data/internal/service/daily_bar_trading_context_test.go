@@ -85,6 +85,21 @@ func TestAssessDailyBarTradingContextFlagsBarOnNonTradingDate(t *testing.T) {
 	}
 }
 
+func TestAssessDailyBarTradingContextDoesNotExcludeMissingBarDuringIntradaySuspension(t *testing.T) {
+	calendar := &model.TradingCalendarSnapshot{Items: []model.TradingCalendarDay{
+		{Date: "2026-10-20", IsTradingDay: true},
+	}}
+	statuses := map[string]*model.SecurityTradingStatusSnapshot{
+		"2026-10-20": dailyBarContextStatus("2026-10-20", "2026-10-01", true, model.SuspensionStatusIntraday),
+	}
+	result := assessDailyBarTradingContext(calendar, nil, statuses, nil)
+	if result.QualityStatus != model.QualityDegraded ||
+		!hasDailyBarContextReason(result.Reasons, "daily_bar_missing_during_intraday_suspension:2026-10-20") ||
+		hasDailyBarContextReason(result.Reasons, "daily_bar_excluded_suspended:2026-10-20") {
+		t.Fatalf("intraday suspension must not mask a missing full-day bar: %+v", result)
+	}
+}
+
 func TestAssessDailyBarTradingContextMissingCalendarIsUnknown(t *testing.T) {
 	result := assessDailyBarTradingContext(nil, nil, nil, nil)
 	if result.QualityStatus != model.QualityDegraded ||
