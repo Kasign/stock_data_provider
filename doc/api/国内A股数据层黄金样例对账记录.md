@@ -493,3 +493,11 @@ Live Provider Probe Run `41788725692` 的 workflow conclusion 为 success，但�
 - 新报告 Artifact `13410008325`：600601.SH、600036.SH、002982.SZ 成功取回 29/30/8 条因子，raw/qfq/hfq 各 9 行、OHLC mismatch=0；三只首因子日均与独立上市日期相同，`pre_first_event_status=not_applicable`。
 - 000001.SZ、000002.SZ、000858.SZ、600000.SH、600016.SH 登录 BaoStock 时发生 TCP timeout，报告为 `factor_count=0`，属于 `unavailable`，不计验收通过。不得把外层 workflow success 解释为八证券专项通过。
 - 八证券主窗口完整真实对账仍以 Run `42017059794` / Artifact `13409567542` 为证据。本次仅补充验证新分类逻辑，不覆盖或替代原完整报告。
+
+
+## 26. 2026-11-05：BaoStock/Pytdx raw 双源成交量精度重评
+
+- 真实原始样本来自 Pytdx/BaoStock live report Artifact `13410429933`，证券 `600036.SH`、`002982.SZ`，窗口 2025-07-07 至 2025-07-17，各 9 个交易日。原始报告 OHLC 全匹配，成交量和成交额因原始比较器固定容差分别出现 mismatch。
+- 按源粒度重新评估成交量：TDX `VOL` 以手为单位（1 手=100 股），BaoStock provider 原始量单位为 shares。600036 最大差 84 股、002982 最大差 96 股，均在 100 股粒度内。新增内部 `VolumeGranularity` 后，成交量字段可判 matched；未更改原始成交量数据。
+- 成交额单位均为 CNY，当前 1 CNY 容差保持不变。600036 9/9、002982 8/9 行成交额差异超过 1 CNY；最大差 120.74/7.90 CNY。相对误差虽小，但没有足够源精度证据放宽阈值，双源整体状态仍 mismatch。
+- 本轮不是新的完整实时双源重跑；Run `42021978339` 的 BaoStock 请求超时，报告为 not_comparable。新粒度结论来自前次真实原始值离线重评和单测，不计新的实时验收。

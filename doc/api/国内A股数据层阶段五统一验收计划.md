@@ -364,3 +364,12 @@
 - Pytdx qfq reference date 是完整加载历史最新交易日，可晚于请求 end；hfq reference date 是完整历史最早交易日，必须完成历史扫描。既有单测已覆盖这两种边界。Yahoo 则使用请求结果末/首日，Tushare qfq 使用请求因子窗口最大日，不能混为同一语义。
 - 600036.SH 的 Sina/Tencent raw 黄金样例中 OHLC 一致、成交量差值 3/3/46 股；但两边 amount 缺失/unknown，Sina K 线未回显证券代码，QualityStatus 均 degraded。Comparator 返回 not_comparable，不是 matched。
 - 下一项 P0：使用现有 Pytdx/BaoStock live probe 窗口建立 raw K 线真实双源对账，按 matched/partial/mismatch/not_comparable/provider unavailable 分别记录；不放宽质量门槛。
+
+
+## 2026-11-05 P0 批次 44：跨 Provider 成交量粒度
+
+- `CrossProviderDailyBar.VolumeGranularity` 为内部比较字段，来源 `DailyBar.RawVolumeUnit`：hands/hands_inferred=100 shares，shares=1，未知=0（not_comparable）。不进入公共 API、数据库或 WebUI。
+- 成交量容差改为 `max(50, 两侧源粒度)`；TDX 官方说明 VOL 单位为手、AMOUNT 单位为元（https://help.tdx.com.cn/gspt/docs/markdown/redword/functionlist.html）。BaoStock provider 原始 volume unit 为 shares。
+- 既有真实双源样本离线重评：600036 最大成交量差 84 股、002982 最大差 96 股，均在 100 股粒度内；OHLC 全匹配。成交额仍有 17/18 行超过 1 CNY 容差，整体仍 mismatch。
+- 新增单测覆盖 96/101 股边界和未知粒度不可比较；服务层 Probe 透传 RawVolumeUnit。Push Go suite `42022406352` success，PR Parity `42022414959` success；PR Go suite `42022415449` 待最终状态。
+- 下一项核查成交额来源精度与聚合口径，不放宽 amount tolerance。

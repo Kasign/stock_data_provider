@@ -120,7 +120,7 @@
 | API-03 | 全市场分页与批量行情的范围、总数下限、覆盖率、MA 和复权语义 | 待当前 HEAD 复核 | 双方 | 服务端分页与字段质量可验证，WebUI 不将页内结果解释为全市场排名 |
 | API-04 | 市场情绪当前快照与历史快照的持久化、缺失交易日和覆盖语义 | 待真实验收 | 数据侧主责，WebUI 配合 | 有真实历史数据、数据库读写证据和无数据/缺日契约 |
 | API-05 | 市场级资金流真实数据与 Provider 权限验收 | 依赖凭据/权限 | 数据侧主责 | 真实请求可复现；权限缺失、Provider 不可用和空数据状态可区分 |
-| API-06 | 开发中 | Provider 清单、诊断、Probe 与 Probe 历史已有 API；DailyBar 复权能力矩阵已复核：Pytdx qfq=完整加载历史最新日（可晚于请求 end）、hfq=完整历史最早日；Yahoo qfq/hfq=请求结果末/首日；Tushare qfq=请求因子最大日；BaoStock/Eastmoney/Tencent/HiThink 无可信 ref date；Netease/Sina raw only | 下一项 P0 使用 BaoStock/Pytdx 同证券同日期 raw K 线真实双源对账；按 matched/partial/mismatch/not_comparable/provider unavailable 分类；不补造 ref date、不放宽质量门槛；Current helper 无生产调用场景，不新增 Current 因子 API | BaoStock AvailableAt 未知，PIT 继续排除；八只样本无首事件前交易日，fallback 未验证；调整后跨源比较缺共同 method/ref date；600036 Sina/Tencent raw 样例因 amount 缺失及 Sina symbol 未回显而 degraded/not_comparable；Tushare 40203 权限阻塞 | `cce59e8de493813a4b04f7d0bd24211e1e919bb1` | Go suite `42018395454` success；Live Probe `42018395554` 外层 success 但 BaoStock 专项 3/8 有真实响应、5/8 TCP timeout | BaoStock 同源 8 证券主窗口一致；Sina/Tencent raw 样例不计可信跨源通过 | 接口层已接入，待真实验收 |
+| API-06 | 开发中 | Provider 清单、诊断、Probe 与 Probe 历史已有 API；BaoStock 八证券复权主窗口真实样本通过；跨 Provider raw comparator 已按 `RawVolumeUnit` 传递内部 `VolumeGranularity`（hands=100 shares、shares=1、unknown=0），成交量容差按源粒度计算；成交额仍存在真实差异 | 下一项核查 TDX/BaoStock amount 字段精度和聚合口径，保持 1 CNY 容差；完成后再评估是否可比较；Current helper 无生产调用场景，不新增 Current 因子 API | BaoStock AvailableAt 未知，PIT 继续排除；八只样本无首事件前交易日，fallback 未验证；raw 双源 OHLC 一致、成交量在源粒度内，但成交额 17/18 行超 1 CNY，整体 mismatch；新鲜重跑 BaoStock TCP timeout | `982f46a936a5e62e4c510e5ab1402ca324bd40d5` | Push Go suite `42022406352` success；PR Parity `42022414959` success；WebUI `42022415185` success；PR Go suite `42022415449` 待最终状态 | BaoStock 同源 8 证券主窗口一致；BaoStock/Pytdx raw 双源未通过（amount mismatch） | 接口层已接入，待真实验收 |
 | API-07 | 板块多维排行（近 5 日涨幅、资金净流入等） | 待能力评估 | 数据侧主责，WebUI 配合 | 有真实来源、完整候选范围、排序/分页契约及质量证据；不以成交额冒充净流入 |
 | API-08 | 通知渠道、订阅、发送测试与投递记录服务端能力 | 未提供服务端接口 | 数据侧主责；WebUI 后续接入 | 服务端安全存储、鉴权、审计、重试和投递查询契约完整 |
 | API-09 | 服务端选股策略、全市场扫描、候选理由与历史记录 | 待产品/API 设计 | 双方 | 明确策略 schema、扫描范围、异步任务、结果快照和可追溯理由 |
@@ -349,3 +349,10 @@
 - Pytdx qfq/hfq 参考日期按完整加载历史确定，而非请求返回窗口：qfq 可晚于请求 end，hfq 为完整历史最早日。Yahoo、Tushare 的参考日期定义不同，不能推断或统一覆盖。
 - 600036.SH Sina/Tencent raw 样例存在 amount 缺失与 Sina symbol 未回显，质量降级，比较结果 not_comparable；不作为跨源验收通过。
 - 下一项为 BaoStock/Pytdx raw K 真实双源对账诊断，无 WebUI/API 契约变更；PIT fail-closed 保持。
+
+
+## 21. 2026-11-05 API-06 raw 双源成交量粒度与成交额差异
+
+- 内部比较输入新增 `VolumeGranularity`，来源 `RawVolumeUnit`，hands=100 shares、shares=1、unknown=0；仅用于 comparator，不改变公共 API/数据库契约。
+- 真实 raw 双源样本离线重评后，成交量差异在 100 股 TDX 粒度内；成交额仍有 17/18 行超过 1 CNY，整体 mismatch。下一项核查 amount precision/aggregation，不放宽容差。
+- WebUI 无需修改；API-06 继续等待真实跨 Provider 数据验收。
