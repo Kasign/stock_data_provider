@@ -838,7 +838,7 @@ func TestCoherentStoredSeriesUsesStableTieBreakers(t *testing.T) {
 	// 同一采集时刻和覆盖度仍打平时，按分组 key 字典序稳定决胜。
 	equalFetchTencent := makeSeries("tencent", "tencent-bars-v1", newFetch)
 	equalFetchEastmoney := makeSeries("eastmoney", "eastmoney-bars-v1", newFetch)
-	got, reason := coherentStoredSeries(append(equalFetchTencent, equalFetchEastmoney...), model.AdjustmentNone)
+	got, reason = coherentStoredSeries(append(equalFetchTencent, equalFetchEastmoney...), model.AdjustmentNone)
 	source := ""
 	if len(got) > 0 {
 		source = got[0].Source
