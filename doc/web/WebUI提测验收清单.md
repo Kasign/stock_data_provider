@@ -1788,3 +1788,12 @@ CI 复核记录：本批首次 Chromium Browser Smoke 在个股研究数据质�
 - [x] UI contract 锁定五组组件字号及移动端/浅色主题规则。
 - [ ] 在本批最终提交 SHA 上运行 WebUI Checks、JS 语法检查、Compose 校验和 Nginx 镜像构建。
 - [ ] 执行 Chromium Browser Smoke；人工核验表格横向滚动、质量标记和底部辅助信息在多分辨率下的实际可读性。
+
+## 2026-11-05 UIR-2 第四十批：任务空态、标识与边界说明字号收敛
+
+- [x] 任务空态、任务标识、任务错误、操作辅助文字、服务边界、空态行和提示文字迁移至组件基础字号。
+- [x] 删除 11 条重复 `!important` 字号覆盖；保留主题语义色、ID 溢出省略和布局。
+- [x] 保留 Run Flow `.task-facts` 的紧凑标签和值字号，不将其强行统一。
+- [x] UI contract 锁定基础字号、错误/警示颜色及 Run Flow 紧凑字号边界。
+- [ ] 在本批最终提交 SHA 上运行 WebUI Checks、JS 语法检查、Compose 校验和 Nginx 镜像构建。
+- [ ] 执行 Chromium Browser Smoke；人工核验任务空态、任务详情、服务边界说明和表单提示在多分辨率下的实际可读性。

@@ -2696,3 +2696,30 @@ test("UIR-2 表格元信息、质量标记与页面辅助区域使用组件基�
   assert.match(stylesheet, /@media \(max-width: 600px\) \{[\s\S]*?\.chart-foot, \.table-footer, \.page-footer \{ align-items: flex-start; flex-direction: column; gap: 6px; \}/);
   assert.match(stylesheet, /:root\[data-theme="light"\] \.soft-badge \{ color: #245d95; background: #eaf3ff; \}/);
 });
+
+
+test("UIR-2 任务空态、任务标识与边界说明使用组件基础字号", () => {
+  const expectedSizes = [
+    [".task-empty strong", /font-size:\s*13px\s*;/],
+    [".task-empty span", /font-size:\s*12px\s*;/],
+    [".task-id-row > span", /font-size:\s*12px\s*;/],
+    [".task-id-row code", /font-size:\s*12px\s*;/],
+    [".task-error", /font-size:\s*12px\s*;/],
+    [".task-actions > span", /font-size:\s*12px\s*;/],
+    [".boundary-grid span", /font-size:\s*12px\s*;/],
+    [".boundary-grid strong", /font-size:\s*13px\s*;/],
+    [".boundary-grid p", /font-size:\s*12px\s*;/],
+    [".empty-row", /font-size:\s*12px\s*;/],
+    [".inline-callout", /font-size:\s*12px\s*;/]
+  ];
+  for (const [selector, sizePattern] of expectedSizes) {
+    const declaration = baseCssDeclarationBlock(selector);
+    assert.match(declaration, sizePattern, selector + " must own its readable base font size");
+    assert.doesNotMatch(declaration, /!important/);
+  }
+  assert.match(stylesheet, /:root\[data-theme="light"\] \.task-error/);
+  assert.match(stylesheet, /:root\[data-theme="light"\] \.inline-callout strong \{ color: #80540b; \}/);
+  assert.match(stylesheet, /\.task-id-row code \{[^}]*overflow:\s*hidden;[^}]*text-overflow:\s*ellipsis;/);
+  assert.match(stylesheet, /\.task-facts small \{[^}]*font-size:\s*9px;/, "Run Flow compact fact labels retain their component-specific sizing");
+  assert.match(stylesheet, /\.run-flow-dialog \.task-facts strong \{\s*font-size:\s*12px;/, "Run Flow compact fact values retain their component-specific sizing");
+});
