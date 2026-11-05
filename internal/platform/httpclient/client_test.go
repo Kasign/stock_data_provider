@@ -417,3 +417,166 @@ func TestClientPropagatesRequestIDFromContext(t *testing.T) {
 	}
 	_ = response.Body.Close()
 }
+
+
+func TestResolveRejectsMixedIPv4AndIPv6Answers(t *testing.T) {
+	client, err := New(Config{Resolver: staticResolver{addresses: []netip.Addr{
+		netip.MustParseAddr("8.8.8.8"),
+		netip.MustParseAddr("fd00::1"),
+	}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	policy := DestinationPolicy{Dependency: "news.fetch", AllowedHosts: []string{"example.com"}}
+	if _, err := client.resolveAndValidate(context.Background(), "example.com", "443", policy); !errors.Is(err, errPolicyRejected) {
+		t.Fatalf("expected mixed IPv4/IPv6 DNS answers to be rejected, got %v", err)
+	}
+}
+
+func TestClientDoesNotDialWhenAnyDNSAnswerIsPrivate(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("unexpected"))
+	}))
+	defer server.Close()
+
+	client := newLocalTestClient(t, server, staticResolver{addresses: []netip.Addr{
+		netip.MustParseAddr("8.8.8.8"),
+		netip.MustParseAddr("10.0.0.8"),
+	}}, 1024, 0)
+	var dialCalls atomic.Int32
+	client.dial = func(context.Context, string, string) (net.Conn, error) {
+		dialCalls.Add(1)
+		return nil, errors.New("dial must not be called for rejected DNS answers")
+	}
+
+	_, err := client.Do(context.Background(), localRequest(t, server, "/blocked"), localPolicy(server))
+	var platformFault *fault.Fault
+	if !errors.As(err, &platformFault) || platformFault.Code != "platform.httpclient.destination_rejected" {
+		t.Fatalf("expected destination rejection, got %v", err)
+	}
+	if dialCalls.Load() != 0 {
+		t.Fatalf("expected no network dial, got %d", dialCalls.Load())
+	}
+}
+
+func TestClientRevalidatesDNSForRedirectTargetBeforeDial(t *testing.T) {
+	var requests atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+		requests.Add(1)
+		if request.URL.Path == "/start" {
+			http.Redirect(w, request, "http://redirect.example:"+request.URL.Query().Get("port")+"/private", http.StatusFound)
+			return
+		}
+		t.Fatal("redirect target must not be reached")
+	}))
+	defer server.Close()
+
+	serverURL, err := url.Parse(server.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resolver := &sequenceResolver{addresses: [][]netip.Addr{
+		{netip.MustParseAddr("8.8.8.8")},
+		{netip.MustParseAddr("10.0.0.8")},
+	}}
+	client := newLocalTestClient(t, server, resolver, 1024, 0)
+	var dialCalls atomic.Int32
+	client.dial = func(ctx context.Context, network, _ string) (net.Conn, error) {
+		dialCalls.Add(1)
+		return (&net.Dialer{}).DialContext(ctx, network, server.Listener.Addr().String())
+	}
+
+	request, err := http.NewRequest(http.MethodGet, "http://example.com:"+serverURL.Port()+"/start?port="+serverURL.Port(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	policy := localPolicy(server)
+	policy.AllowedHosts = []string{"example.com", "redirect.example"}
+	policy.AllowRedirects = true
+	policy.MaxRedirects = 1
+
+	_, err = client.Do(context.Background(), request, policy)
+	var platformFault *fault.Fault
+	if !errors.As(err, &platformFault) || platformFault.Code != "platform.httpclient.destination_rejected" {
+		t.Fatalf("expected redirect target DNS rejection, got %v", err)
+	}
+	if requests.Load() != 1 {
+		t.Fatalf("expected only the initial request to reach the server, got %d", requests.Load())
+	}
+	if dialCalls.Load() != 1 {
+		t.Fatalf("expected only the initial validated connection to dial, got %d", dialCalls.Load())
+	}
+	if resolver.index != 2 {
+		t.Fatalf("expected DNS to be resolved for both hops, got %d lookups", resolver.index)
+	}
+}
+
+func TestClientRejectsRedirectToHostOutsideAllowlist(t *testing.T) {
+	var requests atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+		requests.Add(1)
+		http.Redirect(w, request, "http://not-allowed.example:"+request.URL.Query().Get("port")+"/private", http.StatusFound)
+	}))
+	defer server.Close()
+
+	serverURL, err := url.Parse(server.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := newLocalTestClient(t, server, staticResolver{addresses: []netip.Addr{
+		netip.MustParseAddr("8.8.8.8"),
+	}}, 1024, 0)
+	var dialCalls atomic.Int32
+	client.dial = func(ctx context.Context, network, _ string) (net.Conn, error) {
+		dialCalls.Add(1)
+		return (&net.Dialer{}).DialContext(ctx, network, server.Listener.Addr().String())
+	}
+
+	request, err := http.NewRequest(http.MethodGet, "http://example.com:"+serverURL.Port()+"/start?port="+serverURL.Port(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	policy := localPolicy(server)
+	policy.AllowRedirects = true
+	policy.MaxRedirects = 1
+	_, err = client.Do(context.Background(), request, policy)
+	var platformFault *fault.Fault
+	if !errors.As(err, &platformFault) || platformFault.Code != "platform.httpclient.destination_rejected" {
+		t.Fatalf("expected unlisted redirect host to be rejected, got %v", err)
+	}
+	if requests.Load() != 1 || dialCalls.Load() != 1 {
+		t.Fatalf("unexpected follow-up network activity: requests=%d dials=%d", requests.Load(), dialCalls.Load())
+	}
+}
+
+func TestValidatePolicyRejectsWildcardAndInvalidPorts(t *testing.T) {
+	for _, policy := range []DestinationPolicy{
+		{Dependency: "news.fetch", AllowedHosts: []string{"*.example.com"}},
+		{Dependency: "news.fetch", AllowedHosts: []string{"example.com"}, AllowedPorts: []uint16{0}},
+		{Dependency: "news.fetch", AllowedHosts: []string{"example.com"}, MaxRedirects: 1},
+		{Dependency: "news.fetch", AllowedHosts: []string{"example.com"}, AllowRedirects: true, MaxRedirects: 4},
+	} {
+		if err := validatePolicy(policy); !errors.Is(err, errPolicyRejected) {
+			t.Errorf("expected policy rejection for %+v, got %v", policy, err)
+		}
+	}
+}
+
+func TestDialContextRequiresRequestPolicyContext(t *testing.T) {
+	client, err := New(Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var dialCalls atomic.Int32
+	client.dial = func(context.Context, string, string) (net.Conn, error) {
+		dialCalls.Add(1)
+		return nil, errors.New("dial must not be called")
+	}
+	_, err = client.dialContext(context.Background(), "tcp", "example.com:443")
+	if !errors.Is(err, errPolicyRejected) {
+		t.Fatalf("expected missing policy to be rejected, got %v", err)
+	}
+	if dialCalls.Load() != 0 {
+		t.Fatalf("expected no dial, got %d", dialCalls.Load())
+	}
+}
