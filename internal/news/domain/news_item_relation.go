@@ -22,19 +22,19 @@ const (
 
 // NewsItemRelation 是不可变的转载关系断言。修订或撤销必须追加新断言并指向被替代断言。
 type NewsItemRelation struct {
-	ID                  string
-	FromNewsID          string
-	FromSourceID        string
-	ToNewsID            string
-	ToSourceID          string
-	Kind                NewsItemRelationKind
-	Status              NewsItemRelationStatus
+	ID                   string
+	FromNewsID           string
+	FromSourceID         string
+	ToNewsID             string
+	ToSourceID           string
+	Kind                 NewsItemRelationKind
+	Status               NewsItemRelationStatus
 	SupersedesRelationID string
-	EvidenceObservation string
-	FromVersionID       string
-	ToVersionID         string
-	AssertedAt          time.Time
-	ObservedAt          time.Time
+	EvidenceObservation  string
+	FromVersionID        string
+	ToVersionID          string
+	AssertedAt           time.Time
+	ObservedAt           time.Time
 }
 
 type NewsItemRelationEvidenceStatus string
@@ -72,7 +72,7 @@ func ValidateNewsItemRelation(relation NewsItemRelation) error {
 }
 
 // ValidateNewsItemRelationHistory 校验追加式断言链和当前确认关系构成的 DAG。
-// 同一转载主体可以指向多个原始主体；只拒绝重复当前边、替代链异常和有向环。
+// proposed 替代断言尚未生效；只有 confirmed/retracted 后继才改变当前关系图。
 func ValidateNewsItemRelationHistory(relations []NewsItemRelation) error {
 	byID := make(map[string]NewsItemRelation, len(relations))
 	successor := make(map[string]string, len(relations))
@@ -115,10 +115,17 @@ func ValidateNewsItemRelationHistory(relations []NewsItemRelation) error {
 		}
 	}
 
+	effectiveSuccessor := make(map[string]string, len(successor))
+	for parentID, childID := range successor {
+		child := byID[childID]
+		if child.Status == NewsItemRelationConfirmed || child.Status == NewsItemRelationRetracted {
+			effectiveSuccessor[parentID] = childID
+		}
+	}
 	edges := make(map[string]struct{})
 	adjacency := make(map[string][]string)
 	for id, relation := range byID {
-		if _, replaced := successor[id]; replaced || relation.Status != NewsItemRelationConfirmed {
+		if _, replaced := effectiveSuccessor[id]; replaced || relation.Status != NewsItemRelationConfirmed {
 			continue
 		}
 		key := relation.FromNewsID + "\x00" + relation.ToNewsID

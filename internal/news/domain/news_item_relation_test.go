@@ -139,3 +139,19 @@ func TestValidateNewsItemRelationHistoryRejectsMissingParentAndMultipleSuccessor
 		t.Fatal("an assertion must have at most one direct successor")
 	}
 }
+
+func TestValidateNewsItemRelationHistoryProposedReplacementDoesNotWithdrawCurrentEdge(t *testing.T) {
+	old := relationFixture("rel-old", "news-repost", "news-original-a")
+	proposal := relationFixture("rel-proposal", "news-repost", "news-original-b")
+	proposal.Status = NewsItemRelationProposed
+	proposal.SupersedesRelationID = old.ID
+	if err := ValidateNewsItemRelationHistory([]NewsItemRelation{old, proposal}); err != nil {
+		t.Fatal(err)
+	}
+	// proposed 尚未确认，旧边仍然是当前有效关系；不能把同一旧断言的替代关系提前生效。
+	confirmed := relationFixture("rel-confirmed", "news-repost", "news-original-b")
+	confirmed.SupersedesRelationID = old.ID
+	if !errors.Is(ValidateNewsItemRelationHistory([]NewsItemRelation{old, proposal, confirmed}), ErrNewsItemRelationInvalid) {
+		t.Fatal("one historical assertion cannot have multiple direct successors")
+	}
+}
