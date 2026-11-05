@@ -253,7 +253,7 @@ Migration 状态为 `running` 或 `failed` 时，Runner 不会自动重跑。处
 - semaphore map 在 Client 构造时按配置一次性初始化，运行期间只读；其大小严格等于显式配置的依赖数量。
 - 未配置依赖共享 fallback 池，动态依赖名不会导致 map 增长。调用方仍应使用固定低基数 Dependency；fallback 只是资源安全兜底，不代表推荐动态命名。
 - 已配置依赖仍拥有独立并发额度，不会被未配置依赖占用；未配置依赖之间共享全局 fallback 容量。
-- `DependencyLimits` 的配置项数量由启动配置控制，禁止从请求或远端响应动态追加；配置应在启动时完成校验。
+- `DependencyLimits` 最多允许 64 个配置项；配置项数量由启动配置控制，禁止从请求或远端响应动态追加，并在 Client 构造时完成数量与单项校验。
 - 不采用 LRU/TTL 淘汰 semaphore：淘汰仍被请求持有的 channel 会创建同名新池，破坏同一依赖的并发上限。
 
 该设计将运行期 semaphore 数量从“请求期间出现过的不同 Dependency 数量”收敛为“启动时配置的 Dependency 数量 + 1”，避免高基数输入导致无界内存增长。
