@@ -49,7 +49,7 @@ Provider Adapter 直接实现于根模块 `internal/news/adapters/provider/`。`
 
 根仓库 `services/market-data` 已有 Provider Probe、Validator/Reporter、Freshness Evaluator、Probe History 和存储检查。它们面向行情 Provider 和行情质量，不应由新闻模块直接依赖其内部 model/service/repository 包，也不能把行情 Probe 的结果直接解释为新闻诊断。
 
-新闻模块当前只实现自身业务规则：来源授权判断、候选字段完整度、时间可信度、身份匹配质量、内容完整度和证券关联证据。通用超时/限流/脱敏/诊断框架及执行证据持久化由公共服务统一提供，新闻模块不通过根 Store 自行保存诊断记录。
+新闻模块当前只实现自身业务规则：Provider 输出权利与 Source/Endpoint 来源授权交集、离线 URL allowlist、候选字段完整度、时间可信度、身份匹配质量、内容完整度和证券关联证据。通用超时/限流/脱敏/诊断框架及执行证据持久化由公共服务统一提供，新闻模块不通过根 Store 自行保存诊断记录。
 
 ### 诊断层次
 
