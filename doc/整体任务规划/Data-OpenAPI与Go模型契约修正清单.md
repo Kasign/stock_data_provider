@@ -775,3 +775,52 @@ Data 最新 HEAD 已从 `0afec7ead92672ce9c68a7a8f419990471e01620` 前进至 `13
 Data 最新 HEAD 已从 `13588476d000ebeee801e8b7a782fc6678f25dd4` 前进到 `7abd5078e85ec7e6a5785ec9a4253d862af2a39c`，提交为 DailyBar 复权 Provider 能力矩阵文档完善。Compare ahead 1 / behind 0，仅修改 `doc/api/**` 与 WebUI 接口协作文档，没有修改 OpenAPI、Handler、Model 或 Service；11.18、11.20 的静态代码结论继续适用。
 
 最新 SHA 的 WebUI checks、Live provider probe success；Go test suite 和 Go-Python parity 均 in_progress。不能标记 CI 全绿。
+
+
+### 11.24 Data 契约修复实施拆分与顺序（2026-11-05）
+
+本节把 11.11～11.20 的静态发现转为可执行任务。**本规划分支只冻结任务与验收口径，不直接修改 Data 业务分支。**
+
+#### 实施前置：DATA-CONTRACT-000 CI 基线恢复
+
+Data 最新 HEAD：`8c0136fdcdc5ae6a0d0d293371685d7f684a9f20`。新增 `pytdx_live_probe_test.go` 后 Go test suite 失败，原因是该文件未通过 gofmt；market-data gofmt 门禁失败后，依赖步骤（测试、race、vet）被跳过。Docker market-data image build 也失败，根模块镜像构建通过。该问题是当前 Data 分支第一优先级，先修格式并重跑最新 SHA 的完整 CI，再开始契约修复，避免把格式失败与契约测试结果混淆。
+
+最新 SHA 的 Workflow：
+- Go test suite：failure（run 42019904471）
+- Live provider probe：success（run 42019904545）
+- WebUI checks：success（run 42019904604）
+- Go-Python data quality parity：success（run 42019904555）
+
+失败定位：`services/market-data/internal/provider/pytdx_live_probe_test.go` gofmt diff；不是该测试的业务断言失败。Docker image build 失败由同一格式门禁导致。
+
+#### 任务拆分
+
+| 任务 | 内容 | 关键验收 |
+|---|---|---|
+| DATA-CONTRACT-001 | 修复 Data 当前 gofmt 门禁并恢复完整 CI | market-data gofmt、test、race、vet、Docker image build 在同一 SHA 全部完成；记录精确 SHA |
+| DATA-CONTRACT-002 | 修复 13 个真实 Go 响应字段的 OpenAPI Schema | 6 个 Schema 的字段类型、nullable、required、单位和时间语义与 11.18 一致；不推断缺失 PIT 时间 |
+| DATA-CONTRACT-003 | 清理 9 个 OpenAPI-only 字段 | 删除 Quote 6 项、StockBoard 2 项、PriceLimitEventEvidence 1 项；若未来要恢复，必须先有 Response DTO 和赋值路径 |
+| DATA-CONTRACT-004 | 清理 2 个无生产来源的 Go Model 字段 | 删除 SectorRanking.provider_report_date 与 SectorRankingSnapshot.excluded_non_a_share_count；编译/JSON 测试确认无其他构造方依赖 |
+| DATA-CONTRACT-005 | 修复 JSON 集合和 required 字段输出语义 | Bundle.warnings 必须输出 []；处理 11 个 nil slice 风险及 3 个边界字段；明确空数组、null、字段缺席的差别 |
+| DATA-CONTRACT-006 | 裁决 nullable + omitempty 的逐字段语义 | 修正 Quote.volume_ratio“不支持时 null”与实际省略不一致；其余字段逐项保留或调整，不做全局机械修改 |
+| DATA-CONTRACT-007 | 建立 Go JSON ↔ OpenAPI 双向契约测试 | 自动检查公开 JSON 字段和 Schema 属性；显式白名单处理 inline/internal/retired；检查 required、nullable、format 和 JSON Tag |
+| DATA-CONTRACT-008 | 增加真实 Handler Golden | 覆盖 Quote、StockBoard、PriceLimitRule、Probe、MarketBreadth、LimitPool、Fundamentals、IndexConstituents、DataSources 等真实 Handler；包括有值、缺值、零值、空数组和错误响应 |
+
+#### 推荐实施顺序
+
+1. 先执行 DATA-CONTRACT-001，恢复可用 CI 基线。
+2. 同一批修复响应结构：Bundle.warnings、集合 nil/empty 规范化、Quote.volume_ratio 语义；这一步先确定实际 JSON，再写 Golden。
+3. 同一批更新 OpenAPI 与 Go Model：补 13 项、删 9 项 Schema 属性、删 2 个无来源 Model 字段。
+4. 落地双向契约测试和真实 Handler Golden；测试必须针对 Handler 实际 JSON，不得仅 marshal 单个 Model 后宣称端到端契约通过。
+5. 对所有受影响 Operation 做 OpenAPI response schema 绑定检查，并运行 market-data 单测、race、vet、Migration/PIT integration、镜像构建和相关 parity。
+
+#### 不能作为验收的做法
+
+- 只把 OpenAPI 文件解析成功视为契约通过。
+- 只反射 Go struct 字段，不验证 JSON Tag 和真实序列化行为。
+- 只做 Model marshal，不走 Handler/Service 路径。
+- 将 nil slice 自动改成空数组，却不检查该字段是否允许缺席或是否 required。
+- 为了满足 Schema 填充 available_at、effective_from 等不可验证的 PIT 时间。
+- 将 HTTP 200、Provider Probe success 或 CI 其他 Workflow success 解释为全部字段质量合格。
+
+DATA-CONTRACT-001～008 全部未在 Data 业务分支实施，状态均为待实施；本节不是完成声明。
