@@ -188,7 +188,6 @@ func TestNewAuthenticatorRejectsWeakDuplicateAndUnknownScopes(t *testing.T) {
 	}
 }
 
-
 func TestAuthenticateRejectsInvalidTokenSyntaxAndOversizedToken(t *testing.T) {
 	auth := newTestAuthenticator(t)
 	for _, token := range []string{
