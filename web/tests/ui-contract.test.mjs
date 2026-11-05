@@ -1329,7 +1329,11 @@ test("market overview and activity use readable secondary text and touch-sized c
   assert.match(stockResearchFootnoteBase, /margin:\s*9px 0 0\s*;/);
   assert.match(stockResearchFootnoteBase, /color:\s*var\(--text-dim\)\s*;/);
   assert.doesNotMatch(stylesheet, /market-widget-meta,[\\s\\S]{0,120}stock-research-footnote/);
-  assert.match(finalCssRuleBody(".market-breadth-metric small"), /font-size: 12px/);
+  const marketBreadthMetricLabelBase = baseCssDeclarationBlock(".market-breadth-metric small");
+  assert.match(marketBreadthMetricLabelBase, /font-size:\s*12px\s*;/);
+  assert.match(marketBreadthMetricLabelBase, /line-height:\s*1\.45\s*;?/);
+  assert.match(marketBreadthMetricLabelBase, /color:\s*var\(--text-dim\)\s*;/);
+  assert.equal((stylesheet.match(/\.market-breadth-metric small\s*\{/g) || []).length, 1, "market breadth metric labels should have one base rule");
   assert.match(finalCssRuleBody(".market-table-primary"), /font-size: 12px/);
   assert.match(finalCssRuleBody(".market-table-secondary"), /font-size: 12px/);
   assert.match(finalCssRuleBody(".market-touch-time"), /font-size: 12px/);
