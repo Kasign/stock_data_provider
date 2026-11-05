@@ -61,6 +61,7 @@ type SecurityRelationSubject struct {
 // IndustryRelationSubject 保留分类体系和行业代码/名称快照，不依赖尚未统一的 industry_id。
 type IndustryRelationSubject struct {
 	ClassificationSystem string
+	ClassificationVersion string
 	IndustryCode         string
 	IndustryName         string
 }
@@ -118,6 +119,7 @@ func ValidateRelationAssertion(assertion RelationAssertion) error {
 	case RelationSubjectIndustry:
 		if assertion.Industry == nil || assertion.Security != nil ||
 			strings.TrimSpace(assertion.Industry.ClassificationSystem) == "" ||
+			strings.TrimSpace(assertion.Industry.ClassificationVersion) == "" ||
 			(strings.TrimSpace(assertion.Industry.IndustryCode) == "" && strings.TrimSpace(assertion.Industry.IndustryName) == "") {
 			return ErrRelationInvalid
 		}
