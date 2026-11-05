@@ -1403,7 +1403,8 @@ test("market overview and activity use readable secondary text and touch-sized c
   const mobileOverrideStart = stylesheet.indexOf("@media (max-width: 700px)", readabilityStart);
   assert.ok(readabilityStart >= 0 && mobileOverrideStart > readabilityStart, "the general readability pass should precede responsive overrides");
   const generalRules = stylesheet.slice(readabilityStart, mobileOverrideStart);
-  assert.match(generalRules, /\.market-activity-controls label \{[^}]*font-size: 12px;/, "desktop labels need a readable baseline");
+  assert.match(marketActivityControlLabelBase, /font-size:\s*12px\s*;/, "desktop labels need a readable base font size");
+  assert.match(marketActivityControlLabelBase, /line-height:\s*1\.4\s*;?/, "desktop labels need a readable base line height");
   assert.match(generalRules, /\.market-activity-controls input \{ min-height: 38px; \}/, "desktop date inputs need a 38px target");
   assert.match(generalRules, /\.market-activity-controls \.button \{ min-height: 38px; font-size: 12px; \}/, "desktop buttons need a readable 38px baseline");
   assert.match(finalCssRuleBody(".activity-stock-link"), /min-height: 38px/);
