@@ -20,19 +20,19 @@ import (
 )
 
 const (
-	defaultTimeout              = 15 * time.Second
-	defaultDialTimeout          = 5 * time.Second
+	defaultTimeout               = 15 * time.Second
+	defaultDialTimeout           = 5 * time.Second
 	defaultResponseHeaderTimeout = 8 * time.Second
-	defaultMaxResponseBytes     = int64(2 << 20)
-	maxResponseBytesLimit       = int64(16 << 20)
-	defaultMaxConcurrent        = 4
-	maxConcurrentLimit          = 32
-	maxRetryLimit               = 2
+	defaultMaxResponseBytes      = int64(2 << 20)
+	maxResponseBytesLimit        = int64(16 << 20)
+	defaultMaxConcurrent         = 4
+	maxConcurrentLimit           = 32
+	maxRetryLimit                = 2
 )
 
 var (
-	errPolicyRejected  = errors.New("destination policy rejected")
-	errDNSResolution   = errors.New("destination DNS resolution failed")
+	errPolicyRejected   = errors.New("destination policy rejected")
+	errDNSResolution    = errors.New("destination DNS resolution failed")
 	errRedirectRejected = errors.New("redirect rejected")
 	errResponseTooLarge = errors.New("response body exceeds configured limit")
 )
@@ -48,7 +48,7 @@ type Config struct {
 	ResponseHeaderTimeout time.Duration
 	MaxResponseBytes      int64
 	MaxRetries            int
-	MaxConcurrent          int
+	MaxConcurrent         int
 	DependencyLimits      map[string]int
 	Resolver              Resolver
 }

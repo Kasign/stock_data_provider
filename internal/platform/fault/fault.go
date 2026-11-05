@@ -6,14 +6,14 @@ import "fmt"
 type Class string
 
 const (
-	ClassValidation       Class = "validation"
-	ClassUnauthenticated  Class = "unauthenticated"
-	ClassForbidden        Class = "forbidden"
-	ClassNotFound         Class = "not_found"
-	ClassConflict         Class = "conflict"
-	ClassUnavailable      Class = "unavailable"
-	ClassTimeout          Class = "timeout"
-	ClassInternal         Class = "internal"
+	ClassValidation      Class = "validation"
+	ClassUnauthenticated Class = "unauthenticated"
+	ClassForbidden       Class = "forbidden"
+	ClassNotFound        Class = "not_found"
+	ClassConflict        Class = "conflict"
+	ClassUnavailable     Class = "unavailable"
+	ClassTimeout         Class = "timeout"
+	ClassInternal        Class = "internal"
 )
 
 // Fault 是可安全序列化的错误结构；Cause 仅用于内部错误链，不输出到 JSON。
