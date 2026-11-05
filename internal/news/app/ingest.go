@@ -54,12 +54,15 @@ func (u *IngestCandidate) Execute(ctx context.Context, sourceID string, candidat
 	observedAt := u.now().UTC()
 	candidate = domain.NormalizeCandidate(candidate, observedAt, candidate.QueryDimension)
 	observation := domain.Observation{
-		ID:             u.newID(),
+		ID:             strings.TrimSpace(u.newID()),
 		SourceID:       sourceID,
 		ProviderCode:   candidate.ProviderCode,
 		QueryDimension: candidate.QueryDimension,
 		Candidate:      candidate,
 		ObservedAt:     observedAt,
+	}
+	if observation.ID == "" {
+		return domain.Observation{}, ErrInvalidRequest
 	}
 
 	credentials := []domain.IdentityCredential(nil)
@@ -108,11 +111,14 @@ func (u *IngestCandidate) Execute(ctx context.Context, sourceID string, candidat
 		}
 
 		if observation.IdentityStatus == domain.ObservationNew || observation.IdentityStatus == domain.ObservationMatched {
-			for i := range credentials {
-				credentials[i].NewsID = observation.NewsID
+			toSave := credentialsNotYetStored(credentials, existing)
+			for i := range toSave {
+				toSave[i].NewsID = observation.NewsID
 			}
-			if err := tx.SaveIdentityCredentials(ctx, credentials); err != nil {
-				return err
+			if len(toSave) > 0 {
+				if err := tx.SaveIdentityCredentials(ctx, toSave); err != nil {
+					return err
+				}
 			}
 		}
 		return tx.AppendObservation(ctx, observation)
@@ -121,4 +127,23 @@ func (u *IngestCandidate) Execute(ctx context.Context, sourceID string, candidat
 		return domain.Observation{}, errors.Join(ErrIdentityTransaction, err)
 	}
 	return observation, nil
+}
+
+func credentialsNotYetStored(candidates, existing []domain.IdentityCredential) []domain.IdentityCredential {
+	result := make([]domain.IdentityCredential, 0, len(candidates))
+	for _, candidate := range candidates {
+		found := false
+		for _, stored := range existing {
+			if stored.SourceID == candidate.SourceID && stored.Type == candidate.Type &&
+				stored.Hash == candidate.Hash && stored.Value == candidate.Value &&
+				(stored.Status == domain.IdentifierActive || stored.Status == domain.IdentifierHistorical) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			result = append(result, candidate)
+		}
+	}
+	return result
 }

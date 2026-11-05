@@ -23,7 +23,15 @@ func (r *memoryIdentityRepository) WithinIdentityTransaction(ctx context.Context
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	return fn(memoryIdentityTransaction{repository: r})
+	working := *r
+	working.credentials = append([]domain.IdentityCredential(nil), r.credentials...)
+	working.observations = append([]domain.Observation(nil), r.observations...)
+	working.items = append([]string(nil), r.items...)
+	if err := fn(memoryIdentityTransaction{repository: &working}); err != nil {
+		return err
+	}
+	*r = working
+	return nil
 }
 
 func (tx memoryIdentityTransaction) FindIdentityCredentials(_ context.Context, sourceID string, candidates []domain.IdentityCredential) ([]domain.IdentityCredential, error) {
@@ -74,13 +82,8 @@ func TestIngestCandidateCreatesNewsItemAndObservation(t *testing.T) {
 	}
 }
 
-func TestIngestCandidateMatchesExistingItemAndAddsNewAlias(t *testing.T) {
+func TestIngestCandidateMatchesExistingItemAndAddsOnlyNewAlias(t *testing.T) {
 	existing := domain.IdentityCredential{
-		SourceID: "source-1", Type: domain.IdentifierSourceNativeID,
-		Value: "item-1", Hash: "c5f2f6f3c7e5b4b5", Status: domain.IdentifierActive, NewsID: "news-existing",
-	}
-	// 使用真实 hash，避免测试替身绕过 Domain 的 hash 校验。
-	existing = domain.IdentityCredential{
 		SourceID: "source-1", Type: domain.IdentifierSourceNativeID,
 		Value: "item-1", Hash: identityHashForTest("item-1"), Status: domain.IdentifierActive, NewsID: "news-existing",
 	}
@@ -95,7 +98,7 @@ func TestIngestCandidateMatchesExistingItemAndAddsNewAlias(t *testing.T) {
 	if observation.IdentityStatus != domain.ObservationMatched || observation.NewsID != "news-existing" {
 		t.Fatalf("observation=%+v", observation)
 	}
-	if len(repository.items) != 0 || len(repository.credentials) != 3 {
+	if len(repository.items) != 0 || len(repository.credentials) != 2 {
 		t.Fatalf("repository=%+v", repository)
 	}
 }
@@ -143,11 +146,14 @@ func identityHashForTest(value string) string {
 	return credential[0].Hash
 }
 
-func TestIngestCandidateReturnsTransactionError(t *testing.T) {
+func TestIngestCandidateRollsBackWhenObservationAppendFails(t *testing.T) {
 	repository := &memoryIdentityRepository{failAppend: true}
 	usecase := NewIngestCandidate(repository, func() string { return "observation-5" })
-	_, err := usecase.Execute(context.Background(), "source-1", domain.Candidate{Title: "no identity"}, domain.SourceURLPolicy{})
+	_, err := usecase.Execute(context.Background(), "source-1", domain.Candidate{ProviderItemID: "item-1"}, domain.SourceURLPolicy{})
 	if !errors.Is(err, ErrIdentityTransaction) {
 		t.Fatalf("err=%v", err)
+	}
+	if len(repository.items) != 0 || len(repository.credentials) != 0 || len(repository.observations) != 0 {
+		t.Fatalf("transaction was not rolled back: %+v", repository)
 	}
 }
