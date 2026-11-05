@@ -4929,6 +4929,12 @@ button:disabled {
 #research-view #historical-bars-panel,
 #research-view [id^="research-detail-"] { scroll-margin-top: 82px; }
 #research-view .research-overview-panel { scroll-margin-top: 82px; }
+#research-view #daily-chart-panel,
+#research-view #technical-indicators-panel,
+#research-view #historical-bars-panel {
+  scroll-margin-top: 82px;
+}
+
 @media (max-width: 800px) {
   .research-workspace-nav { top: 4px; }
 }

@@ -2968,3 +2968,16 @@ test("UIR-2 technical chart legends wrap without forcing narrow chart panels wid
   assert.match(stylesheet, /\.technical-chart\s*\{[^}]*width:\s*100%;[^}]*height:\s*auto;/);
   assert.match(html, /class="technical-chart-legend"><span class="technical-legend-dif">DIF<\/span><span class="technical-legend-signal">DEA<\/span><span>柱体<\/span>/);
 });
+
+
+test("UIR-2 research chart anchors clear the sticky section navigation", () => {
+  assert.ok(stylesheet.includes(`#research-view #daily-chart-panel,
+#research-view #technical-indicators-panel,
+#research-view #historical-bars-panel {
+  scroll-margin-top: 82px;
+}`));
+  assert.ok(stylesheet.includes(".research-workspace-nav { position: sticky;"));
+  assert.match(html, /data-research-detail-target="daily-chart-panel"/);
+  assert.match(html, /data-research-detail-target="technical-indicators-panel"/);
+  assert.match(html, /data-research-detail-target="historical-bars-panel"/);
+});

@@ -1973,3 +1973,12 @@ CI 复核记录：本批首次 Chromium Browser Smoke 在个股研究数据质�
 - [x] 为技术指标图例增加换行能力，保持桌面端右对齐、项目顺序和颜色语义不变。
 - [x] 新增 UI contract，锁定图例换行、图表面板 `min-width: 0` 及 SVG 自适应宽度。
 - [ ] 当前提交 SHA 的 WebUI Checks 与 Chromium Browser Smoke 尚待运行；图表触控、缩放及真实 iOS Safari 手势仍需设备验收。
+
+## 2026-11-05 UIR-2 第五十八批：个股研究图表锚点偏移
+
+- [x] 扩大复核图表键盘焦点、SVG 原生标题提示、移动均线控件、K 线切换和研究分区导航。
+- [x] 确认研究分区导航采用 sticky 定位且窄屏仍保持吸顶；日 K、技术指标、历史日 K 三个目标原先只继承 18px 的滚动偏移，低于导航占位高度，存在标题被遮挡风险。
+- [x] 为三个图表目标统一设置 82px `scroll-margin-top`，与行情摘要和研究详情锚点保持一致。
+- [x] 新增 UI contract，锁定三处锚点偏移和对应导航入口。
+- [x] 复核图表交互现状：收盘线命中点和 K 线节点已有键盘焦点与原生 SVG title；暂未发现可证明需要替换现有交互实现的缺陷。
+- [ ] 当前提交 SHA 的 WebUI Checks 与 Chromium Browser Smoke 尚待完成；实际吸顶遮挡、触屏手势和 iOS Safari 仍需设备验收。
