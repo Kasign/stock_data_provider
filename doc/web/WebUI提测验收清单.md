@@ -2222,3 +2222,17 @@ CI 复核记录：本批首次 Chromium Browser Smoke 在个股研究数据质�
 - [x] 保留真实用户交互路径，继续通过遮罩按钮关闭移动导航，不使用 DOM 强制派发事件。
 - [x] 将自动化点击点移动到视口最右侧、侧栏覆盖区域之外，并保留 aria-expanded 状态复位断言。
 - [ ] 新提交 Browser Smoke 需确认 320px 和 600px 两种宽度均通过；若仍失败，再根据截图与命中测试定位，不调整产品 CSS 规避测试。
+
+
+## 2026-11-05 Chromium 截图 Artifact 人工核验
+
+提交 02b07ba8454e55565c9de452f3c08e1db8137e14 的 WebUI Checks 与 Browser Smoke 均已成功。Browser Smoke job 的全部步骤通过，截图 Artifact `webui-browser-screenshots` 已上传（约 37.4 MB，保留 7 天）。
+
+Artifact 核验结果：
+- [x] 首页与 Run Flow 截图覆盖 320/375/600/768/900/1280/1600px。
+- [x] UI Review 截图覆盖 320/600/768/900/1280/1600px；首页亮色主题截图六种宽度齐全。
+- [x] 320px、375px、600px 移动导航展开截图齐全；遮罩关闭交互及状态复位已由 Browser Smoke 通过。
+- [x] 各业务视图、Run Flow 交互/结果、研究数据、Provider 探测和本地选股截图均存在。
+- [ ] 当前 GitHub Actions Ubuntu Chromium 截图环境未提供可用的中文字体，截图中的中文字符呈方框/缺字。当前 Artifact 可用于检查布局、间距、主题表面、导航遮罩和组件位置，但不能作为中文字体、字重、文案换行的视觉验收依据。
+
+处理原则：不将字体缺失误判为产品 CSS 问题，不通过调整字号/宽度掩盖 CI 字体环境缺陷。若要建立完整视觉回归基线，后续需在受控浏览器环境提供 Noto CJK 等中文字体，并重新采集截图；在此之前仅将现有截图作为布局结构参考，不执行全图像素 diff，也不据此启动 CSS 物理拆分。
