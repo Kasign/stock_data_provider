@@ -53,7 +53,8 @@ type Config struct {
 	Resolver              Resolver
 }
 
-// DestinationPolicy 必须随每个请求提供。AllowedHosts 使用精确匹配，明确不支持通配符。
+// DestinationPolicy must be supplied for every request. Hosts are exact-match
+// allowlist entries; wildcard hosts are intentionally unsupported.
 type DestinationPolicy struct {
 	Dependency     string
 	AllowedHosts   []string
@@ -150,7 +151,8 @@ func New(config Config) (*Client, error) {
 	return client, nil
 }
 
-// Do 在校验目标地址后执行请求，并将响应体限制在配置大小内存缓冲区中。调用方必须关闭返回的响应体。
+// Do executes one request after validating its destination and bounds its
+// response body in memory. The caller must close the returned response body.
 func (c *Client) Do(ctx context.Context, request *http.Request, policy DestinationPolicy) (*http.Response, error) {
 	if ctx == nil || request == nil {
 		return nil, fault.New(fault.ClassValidation, "platform.httpclient.invalid_request", "invalid HTTP request", nil)
@@ -170,17 +172,17 @@ func (c *Client) Do(ctx context.Context, request *http.Request, policy Destinati
 		return nil, c.faultFor(err, policy.Dependency)
 	}
 
+	requestCtx, cancel := context.WithTimeout(ctx, c.config.Timeout)
+	defer cancel()
+	requestCtx = context.WithValue(requestCtx, policyContextKey{}, policy)
+
 	semaphore := c.semaphore(policy.Dependency)
 	select {
 	case semaphore <- struct{}{}:
 		defer func() { <-semaphore }()
-	case <-ctx.Done():
-		return nil, c.faultFor(ctx.Err(), policy.Dependency)
+	case <-requestCtx.Done():
+		return nil, c.faultFor(requestCtx.Err(), policy.Dependency)
 	}
-
-	requestCtx, cancel := context.WithTimeout(ctx, c.config.Timeout)
-	defer cancel()
-	requestCtx = context.WithValue(requestCtx, policyContextKey{}, policy)
 
 	retryEnabled := policy.Idempotent && c.config.MaxRetries > 0 && (request.Body == nil || request.GetBody != nil)
 	for attempt := 0; attempt <= c.config.MaxRetries; attempt++ {
@@ -209,8 +211,6 @@ func (c *Client) Do(ctx context.Context, request *http.Request, policy Destinati
 			_ = response.Body.Close()
 			if waitErr := waitRetry(requestCtx, attempt); waitErr == nil {
 				continue
-			} else {
-				return nil, c.faultFor(waitErr, policy.Dependency)
 			}
 		}
 

@@ -88,7 +88,7 @@ func TestRunnerRejectsDuplicateIDs(t *testing.T) {
 	}
 }
 
-func TestRunnerTotalDeadlineSkipsQueuedOptionalCheck(t *testing.T) {
+func TestRunnerTotalDeadlineMarksQueuedOptionalCheckUnavailable(t *testing.T) {
 	checks := []Check{
 		{ID: "blocking", Required: true, Run: func(ctx context.Context) (Observation, error) {
 			<-ctx.Done()
@@ -103,7 +103,7 @@ func TestRunnerTotalDeadlineSkipsQueuedOptionalCheck(t *testing.T) {
 	if report.Results[0].Observation.Status != StatusUnavailable {
 		t.Fatalf("expected required check unavailable, got %s", report.Results[0].Observation.Status)
 	}
-	if report.Results[1].Observation.Status != StatusSkipped {
-		t.Fatalf("expected queued optional check skipped, got %s", report.Results[1].Observation.Status)
+	if report.Results[1].Observation.Status != StatusUnavailable {
+		t.Fatalf("expected queued optional check unavailable, got %s", report.Results[1].Observation.Status)
 	}
 }

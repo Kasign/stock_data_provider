@@ -87,7 +87,7 @@ func execute(parent context.Context, check Check) (result Result) {
 	result.Required = check.Required
 
 	if err := parent.Err(); err != nil {
-		result.Observation = notStartedObservation(check.Required, err)
+		result.Observation = notStartedObservation(err)
 		return result
 	}
 
@@ -111,6 +111,9 @@ func execute(parent context.Context, check Check) (result Result) {
 	}()
 
 	elapsed := time.Since(started)
+	if runErr == nil && ctx.Err() != nil {
+		runErr = ctx.Err()
+	}
 	if runErr != nil {
 		f := normalizeFault(runErr, check.ID, ctx.Err())
 		result.Fault = f
@@ -188,20 +191,14 @@ func normalizeFault(err error, dependency string, contextErr error) *fault.Fault
 	}
 }
 
-func notStartedObservation(required bool, cause error) Observation {
-	status := StatusSkipped
-	code := "platform.diagnostics.not_started"
-	message := "optional check was not started"
-	if required {
-		status = StatusUnavailable
-		code = "platform.diagnostics.deadline_exceeded"
-		message = "required check was not completed"
-	}
+func notStartedObservation(cause error) Observation {
+	code := "platform.diagnostics.deadline_exceeded"
+	message := "check was not completed before the execution deadline"
 	if errors.Is(cause, context.Canceled) {
 		code = "platform.diagnostics.canceled"
 		message = "check was canceled before execution"
 	}
 	return Observation{
-		Status: status, ReasonCode: code, SafeMessage: message, CheckedAt: time.Now().UTC(),
+		Status: StatusUnavailable, ReasonCode: code, SafeMessage: message, CheckedAt: time.Now().UTC(),
 	}
 }
