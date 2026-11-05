@@ -692,3 +692,23 @@ API client 会把调用方 AbortSignal 与超时 controller 合并，再传给 f
 `runHealthCheck(check, settings, timeoutMs, externalSignal)` 的外部 signal 仅用于 owner 取消，不替代内部 timeout。取消会立即结束包装 Promise 并清理 timeout/listener；请求回调在启动前也会检查内部 signal，避免已取消的检查继续发起请求。数据中心 generation 仍作为第二道 UI 写入保护。
 
 验收证据：WebUI Checks #41954110738（464/464）；Chromium Browser Smoke #41954110757 全部步骤通过。代码提交 `385b73364287217f847c7290645326ab3bb94af0`，契约修订提交 `bfe4495f630f36fb6276e5bb4f640359291b65a9`。
+
+
+### 12.32 JSR-6M 应用入口与模块边界收尾 Review（2026-11-05，审查完成，无运行时代码迁移）
+
+审查基线：`cd7b67287455a368e925f4b1696feeac07ccb8f5`。
+当前规模：`web/src/app.js` 约 5,531 行；应用入口直接装配 47 个 ES Module。当前模块已覆盖市场、行情、个股研究、自选股、选股、Task/Run、数据中心、设置、通知、告警、研究记录及展示 adapter。
+
+审查结论：
+1. `app.js` 仍承担 composition root 职责：全局状态初始化、模块 bind/依赖注入、页面路由、全局事件、跨领域事务、连接配置应用及 Task/Run 协调。上述职责需要访问多个领域 owner，不能整体迁入任一业务模块。
+2. 领域模块已经承接大部分可独立管理的请求和数据状态；纯 ViewModel/DOM adapter 已覆盖任务事件、Run 结果、选股结果、自选股行、证券搜索等边界。继续抽取应以闭合依赖和明确 owner 为前提。
+3. `app.js` 中仍有高复用的应用级辅助函数（例如文本写入、错误描述、通知/反馈和设置应用步骤）。这些函数被多个页面协调流程共同使用；当前未发现可以在不引入反向依赖或全局工具模块的前提下稳定迁移的完整闭包。
+4. 页面切换、storage event、连接变更、Task/Run 轮询及跨页自选/研究事务属于跨域协调，不应为降低文件行数拆成独立 controller。
+5. 本次静态架构盘点未发现足以支持继续迁移的明确边界缺陷；不因 `app.js` 行数或 import 数量本身继续拆分。后续只针对可复现的状态冲突、重复请求、依赖环或测试缺口处理。
+
+风险与后续约束：
+- 新增页面业务时优先在现有领域模块内扩展；只有出现独立状态所有权、独立生命周期和可独立测试的闭合能力时才新增模块。
+- 不新增全局 AppStateStore、EventBus 或第二套路由。
+- 不把 app.js 的全局 helper 直接搬入新建 common.js；先确认输入/输出、DOM 访问和错误语义均可显式化。
+- 模块依赖方向保持 app.js 装配领域模块；领域模块不反向 import app.js。
+- JSR-6M 为只读审查，无运行时代码变更。JSR 主线收尾，后续开发重心转入 UIR-2。

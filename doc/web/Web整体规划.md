@@ -1,6 +1,6 @@
 # WebUI 整体规划
 
-更新时间：2026-11-05（当前代码/测试基线：`bfe4495f630f36fb6276e5bb4f640359291b65a9`）
+更新时间：2026-11-05（当前代码/测试基线：`cd7b67287455a368e925f4b1696feeac07ccb8f5`）
 目标分支：`feat/webui-market-data-console`
 适用范围：仅规划和管理 WebUI（`web/**`）及其专属文档（`doc/web/**`）。除明确获批的文档路径修正外，不修改 Go、Provider、数据库、服务端 API、OpenAPI 实现和部署配置。
 
@@ -292,7 +292,7 @@ localStorage + storage event 方案能解决“另一个标签页完成写入后
 
 ## 7. 当前下一步
 
-**当前主线：JSR-6 请求生命周期与模块边界收尾；随后转入 UIR-2 全站样式统一。**
+**当前主线：JSR-6L/6M 已完成；主要开发精力转入 UIR-2 全站样式统一。**
 
 已完成：
 - JSR-5A～5E：任务事件筛选投影、流程摘要、详情/节点展示边界及 Task/Run 请求生命周期审查。确认不迁移轮询、请求取消、代际、分页游标和身份校验。
@@ -300,9 +300,9 @@ localStorage + storage event 方案能解决“另一个标签页完成写入后
 - JSR-6A：Run 结果结构化展示 DOM adapter 已迁至 `task-result-view.js`；app.js 保留 Run 状态协调与自选股联动。WebUI Checks #41831466097、Chromium Browser Smoke #41831466212 均通过。
 
 **下一批：**
-1. 完成 JSR-6L 请求与按钮状态所有权审查；已发现并修复设置中心两类连接检查缺少主动取消的问题，等待 CI 验收。
-2. 进行 JSR-6M 架构收尾 Review，只处理有证据的问题，不再按函数长度机械拆分。
-3. 将主要开发精力转向 UIR-2：统一布局、间距、卡片、表格、表单和文字规范；JSR 与 UIR 分开提交。
+1. JSR-6L 已完成：设置中心已保存连接检查/草稿检查主动取消、controller identity 收尾和按钮恢复均已补齐；最终提交 `cd7b6728` 的 WebUI Checks #41956881054、Chromium Browser Smoke #41956881062 均通过。
+2. JSR-6M 已完成只读架构 Review：app.js 继续作为 composition root，未发现值得为行数而拆分的闭合边界；保留跨域协调、共享请求生命周期和状态 owner，不新增全局 store/event bus。
+3. 当前进入 UIR-2：先将既有基础间距值迁移到语义 token，保持计算样式不变；随后按共享组件族逐批统一尺寸与响应式表现。JSR 与 UIR 分开提交。
 
 **状态所有权门禁：**
 - app.js 继续持有跨页面 state、当前页行情快照校验、选中证券集合、批量操作、导出、请求生命周期和 storage 事件。
