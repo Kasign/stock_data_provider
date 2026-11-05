@@ -80,3 +80,19 @@
 - 日志不得输出 Authorization 和 Secret。
 - 测试覆盖有效/无效凭证、身份混用、伪造 Header、路由默认拒绝、常量时间比较调用路径和日志脱敏。
 
+
+
+## 9. 平台认证原语实现补充（2026-11-05）
+
+实现位于根 Module 的 `internal/platform/security`：
+
+- owner 与 service 凭证通过 `config.Secret` 注入；owner 和每个 service 使用不同 Token。
+- Token 至少 32 字节；服务启动时拒绝空值、弱长度、重复凭证和重复 service 名。部署侧应使用密码学安全随机数生成至少 256 bit 随机熵的 URL-safe Token；长度检查不能替代随机熵生成。
+- 服务端只保存 SHA-256 摘要用于匹配；每次认证遍历全部凭证摘要并执行固定长度常量时间比较。高熵随机 Token 使摘要被离线猜测的风险保持在可接受边界。
+- service 必须配置至少一个固定 Scope；拒绝未知 Scope、重复 Scope 和 owner 专属 `platform:admin` Scope。
+- `Guard` 只信任 Bearer 凭证生成的 Principal，忽略客户端身份 Header；Principal 通过 Context 提供给 handler。
+- `Router.Handle/HandleFunc` 要求每条注册路由显式传入策略；未配置策略不能注册，未注册路由由 ServeMux 返回 404。
+- `OwnerOrServiceAccess` 表示 owner 被路由显式允许，service 必须同时满足该路由声明的全部 Scope。owner 不会被自动映射成 service，也不会隐式继承业务 Scope。
+- 匿名路由仅使用 `AnonymousAccess()`；若匿名请求携带错误 Bearer 凭证，仍返回 401，避免错误凭证被静默忽略。
+
+该包不负责启动入口和现有服务路由改造。集成方必须将所有路由统一注册到受策略约束的 Router，不能保留旁路 ServeMux 或未保护的 Handler 注册路径。
