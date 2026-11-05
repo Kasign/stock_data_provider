@@ -124,6 +124,23 @@ func TestValidateNewsItemRelationHistoryRequiresAppendOnlyReplacement(t *testing
 	}
 }
 
+func TestValidateNewsItemRelationHistoryRetractionReplacesConfirmedEdge(t *testing.T) {
+	old := relationFixture("rel-old", "news-repost", "news-original-a")
+	retracted := relationFixture("rel-retracted", "news-repost", "news-original-a")
+	retracted.Status = NewsItemRelationRetracted
+	retracted.SupersedesRelationID = old.ID
+	if err := ValidateNewsItemRelationHistory([]NewsItemRelation{old, retracted}); err != nil {
+		t.Fatalf("retraction must withdraw the confirmed edge: %v", err)
+	}
+
+	// 撤销断言是终态，不能再被后继断言重新激活。
+	replacement := relationFixture("rel-after-retraction", "news-repost", "news-original-b")
+	replacement.SupersedesRelationID = retracted.ID
+	if !errors.Is(ValidateNewsItemRelationHistory([]NewsItemRelation{old, retracted, replacement}), ErrNewsItemRelationInvalid) {
+		t.Fatal("a retracted assertion must not be superseded")
+	}
+}
+
 func TestValidateNewsItemRelationHistoryConfirmedDescendantReplacesProposedChain(t *testing.T) {
 	old := relationFixture("rel-old", "news-repost", "news-original")
 	proposal := relationFixture("rel-proposal", "news-repost", "news-original")

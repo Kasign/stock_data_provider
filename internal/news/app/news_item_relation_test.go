@@ -104,14 +104,14 @@ func relationAppFixture() (*memoryNewsRelationRepository, *ApplyNewsItemRelation
 
 func relationAppRequest() NewsItemRelationRequest {
 	return NewsItemRelationRequest{Relation: domain.NewsItemRelation{
-		FromNewsID:         "news-from",
-		FromSourceID:       "source-from",
-		ToNewsID:           "news-to",
-		ToSourceID:         "source-to",
-		Kind:               domain.NewsItemRelationRepostOf,
-		Status:             domain.NewsItemRelationConfirmed,
+		FromNewsID:          "news-from",
+		FromSourceID:        "source-from",
+		ToNewsID:            "news-to",
+		ToSourceID:          "source-to",
+		Kind:                domain.NewsItemRelationRepostOf,
+		Status:              domain.NewsItemRelationConfirmed,
 		EvidenceObservation: "from-obs",
-		FromVersionID:      "from-v1",
+		FromVersionID:       "from-v1",
 		ToVersionID:        "to-v1",
 	}}
 }
