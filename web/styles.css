@@ -1912,8 +1912,9 @@ button:disabled, input:disabled, select:disabled, textarea:disabled { cursor: no
 }
 .market-table-primary {
   color:var(--text);
-  font-size:11px;
-  font-weight:650
+  font-size:12px;
+  font-weight:650;
+  line-height:1.5
 }
 .market-table-secondary {
   margin-top:4px;
@@ -3289,7 +3290,6 @@ button:disabled, input:disabled, select:disabled, textarea:disabled { cursor: no
 .market-overview-updated { max-width: 340px; font-size: 12px; line-height: 1.6; }
 
 
-.market-table-primary { font-size: 12px; line-height: 1.5; }
 .market-table-secondary { font-size: 12px; line-height: 1.45; }
 .market-touch-time { font-size: 12px; line-height: 1.5; }
 .market-quality-reasons { font-size: 12px; line-height: 1.7; }
