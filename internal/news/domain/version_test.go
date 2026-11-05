@@ -120,3 +120,11 @@ func TestBuildVersionFingerprintIgnoresProviderItemID(t *testing.T) {
 		t.Fatal("provider/source identity credentials must not create a content version")
 	}
 }
+
+func TestBuildVersionFingerprintChangesWithRawBodyDeclaration(t *testing.T) {
+	first := ContentLayers{BodyDeclaredTypeRaw: "text/html"}
+	second := ContentLayers{BodyDeclaredTypeRaw: "text/plain"}
+	if BuildVersionFingerprint(Candidate{Title: "标题"}, first) == BuildVersionFingerprint(Candidate{Title: "标题"}, second) {
+		t.Fatal("raw body content-type declaration change must produce a new version fingerprint")
+	}
+}

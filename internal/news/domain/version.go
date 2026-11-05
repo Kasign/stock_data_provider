@@ -14,7 +14,7 @@ import (
 // 仅纳入来源侧可形成版本的元数据与内容；Provider 摘要、采集时间和查询上下文不参与。
 func BuildVersionFingerprint(candidate Candidate, content ContentLayers) string {
 	digest := sha256.New()
-	writeFingerprintField(digest, "news-version-v1")
+	writeFingerprintField(digest, "news-version-v2")
 	writeFingerprintField(digest, normalizeCandidateText(candidate.Title))
 	writeFingerprintField(digest, strings.TrimSpace(candidate.PublisherName))
 	writeFingerprintField(digest, strings.ToLower(strings.TrimSpace(candidate.PublisherDomain)))
