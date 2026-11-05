@@ -173,3 +173,11 @@
 - live-provider-smoke 的 push / pull_request 路径过滤新增 DataService.DailyBars、复权重建和日 K 交易上下文相关 Service 文件。
 - 公开 Provider 实时请求仍由提交标记 `[include_public]` 显式开启；普通 PR 不自动消耗线上接口额度。
 - 本批触发两只样本证券 `600036.SH`、`002982.SZ` 在 2025-07-07 至 2025-07-17 的公开 Provider 日 K/复权探测，真实结果待核验。
+
+
+## 2026-11-05 P0 批次 26：修复完整 Live Probe 多证券样本覆盖
+
+- 真实运行发现完整探测路径忽略 `LIVE_PROBE_DAILY_SYMBOLS` 中第二只证券，只在 public-daily-only 分支遍历样本列表。
+- 完整路径现对全部配置样本执行 Sina raw、Tencent none/qfq/hfq、Eastmoney qfq/hfq、BaoStock qfq/hfq、Yahoo qfq/hfq；可选 NetEase raw 同样遍历。Quote、公告等非日 K 能力仍只使用首只样本。
+- 增加样本证券列表解析测试，验证多证券、默认值、空项与重复项。
+- 新 SHA 待两只样本真实探测和完整 CI 验证。
