@@ -2781,22 +2781,22 @@ test("UIR-2 Provider 数据源卡片字号由组件基础规则控制", () => {
 
 test("UIR-2 行情质量标记与指标辅助文字由组件基础规则控制", () => {
   const expectedSizes = [
-    [".quality-pill", /font-size:\\s*12px\\s*;/],
-    [".metric-label", /font-size:\\s*12px\\s*;/],
-    [".metric-foot", /font-size:\\s*12px\\s*;/]
+    [".quality-pill", /font-size:\s*12px\s*;/],
+    [".metric-label", /font-size:\s*12px\s*;/],
+    [".metric-foot", /font-size:\s*12px\s*;/]
   ];
   for (const [selector, sizePattern] of expectedSizes) {
     const declaration = baseCssDeclarationBlock(selector);
     assert.match(declaration, sizePattern, selector + " must own its readable base font size");
     assert.doesNotMatch(declaration, /!important/);
   }
-  assert.doesNotMatch(stylesheet, /\\.quality-pill \\{[^}]*!important/);
-  assert.doesNotMatch(stylesheet, /\\.metric-label \\{[^}]*!important/);
-  assert.doesNotMatch(stylesheet, /\\.metric-foot \\{[^}]*!important/);
-  assert.doesNotMatch(stylesheet, /\\.panel-heading p \\{[^}]*!important/);
-  assert.match(stylesheet, /\\.quality-valid \\{[^}]*color:[^}]*background:/);
-  assert.match(stylesheet, /\\.quality-degraded \\{[^}]*color:[^}]*background:/);
-  assert.match(stylesheet, /\\.quality-stale \\{[^}]*color:[^}]*background:/);
-  assert.match(stylesheet, /\\.quality-invalid \\{[^}]*color:[^}]*background:/);
-  assert.match(stylesheet, /@media \\(max-width: 600px\\) \\{[\\s\\S]*?\\.metric-grid \\{ grid-template-columns: repeat\\(2, minmax\\(0, 1fr\\)\\);/);
+  assert.doesNotMatch(stylesheet, /\.quality-pill \{[^}]*!important/);
+  assert.doesNotMatch(stylesheet, /\.metric-label \{[^}]*!important/);
+  assert.doesNotMatch(stylesheet, /\.metric-foot \{[^}]*!important/);
+  assert.doesNotMatch(stylesheet, /\.panel-heading p \{[^}]*!important/);
+  assert.match(stylesheet, /\.quality-valid \{[^}]*color:[^}]*background:/);
+  assert.match(stylesheet, /\.quality-degraded \{[^}]*color:[^}]*background:/);
+  assert.match(stylesheet, /\.quality-stale \{[^}]*color:[^}]*background:/);
+  assert.match(stylesheet, /\.quality-invalid \{[^}]*color:[^}]*background:/);
+  assert.match(stylesheet, /@media \(max-width: 600px\) \{[\s\S]*?\.metric-grid \{ grid-template-columns: repeat\(2, minmax\(0, 1fr\)\);/);
 });
