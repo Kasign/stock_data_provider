@@ -52,8 +52,8 @@ func rebuildAdjustedDailyBars(raw []model.DailyBar, factors []model.AdjustmentFa
 	}
 	sort.Slice(keys, func(i, j int) bool {
 		if keys[i].source == keys[j].source {
-			if keys[i].version == keys[j].version {
-				return keys[i].basis == factorBasisForAdjustment(basis) && keys[j].basis == model.AdjustmentFactorShared
+			if keys[i].basis != keys[j].basis {
+				return keys[i].basis == factorBasisForAdjustment(basis)
 			}
 			return keys[i].version < keys[j].version
 		}
