@@ -2844,3 +2844,12 @@ test("UIR-2 page timestamp and panel kicker typography use component baselines",
   assert.match(stylesheet, /:root\[data-theme="light"\] \.last-updated strong[^}]*color: var\(--text\)/);
   assert.match(stylesheet, /:root\[data-theme="light"\] h2, :root\[data-theme="light"\] \.panel-kicker/);
 });;
+
+
+test("UIR-2 form field labels use a readable component baseline without forced priority", () => {
+  const field = baseCssDeclarationBlock(".field");
+  assert.match(field, /font-size:\s*12px\s*;/);
+  assert.doesNotMatch(field, /!important/);
+  assert.match(stylesheet, /\.field > span \{\s*font-size: 12px;\s*line-height: 1\.5;/);
+  assert.match(stylesheet, /:root\[data-theme="light"\] \.field \{ color: #536879; \}/);
+});
