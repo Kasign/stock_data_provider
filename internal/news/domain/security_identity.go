@@ -10,7 +10,7 @@ import (
 type SecuritySymbolStatus string
 
 const (
-	SecuritySymbolActive    SecuritySymbolStatus = "active"
+	SecuritySymbolActive     SecuritySymbolStatus = "active"
 	SecuritySymbolHistorical SecuritySymbolStatus = "historical"
 )
 
@@ -53,7 +53,7 @@ type SecurityIdentityResolution struct {
 }
 
 var (
-	ErrSecurityIdentityInvalid = errors.New("news.security_identity.invalid")
+	ErrSecurityIdentityInvalid  = errors.New("news.security_identity.invalid")
 	ErrSecurityIdentityConflict = errors.New("news.security_identity.conflict")
 )
 

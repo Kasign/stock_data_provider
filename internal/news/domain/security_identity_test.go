@@ -9,16 +9,16 @@ import (
 func securityIdentityRecord(symbol, name, symbolStatus string, from, to time.Time) SecurityIdentityRecord {
 	record := SecurityIdentityRecord{
 		IdentityNamespace: "exchange-security-master",
-		IdentityValue: "instrument-600000",
-		Market: "XSHG",
-		Symbol: symbol,
-		Name: name,
-		SymbolStatus: SecuritySymbolStatus(symbolStatus),
-		LifecycleStatus: SecurityLifecycleListed,
-		ValidFrom: from,
-		ObservedAt: time.Date(2026, 11, 5, 10, 0, 0, 0, time.UTC),
-		Source: "official-security-master",
-		EvidenceRef: "snapshot-2026-11-05",
+		IdentityValue:     "instrument-600000",
+		Market:            "XSHG",
+		Symbol:            symbol,
+		Name:              name,
+		SymbolStatus:      SecuritySymbolStatus(symbolStatus),
+		LifecycleStatus:   SecurityLifecycleListed,
+		ValidFrom:         from,
+		ObservedAt:        time.Date(2026, 11, 5, 10, 0, 0, 0, time.UTC),
+		Source:            "official-security-master",
+		EvidenceRef:       "snapshot-2026-11-05",
 	}
 	if !to.IsZero() {
 		record.ValidTo = &to
