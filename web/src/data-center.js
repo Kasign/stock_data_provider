@@ -732,6 +732,7 @@ function showProviderProbeHistoryFailure(error, skipped = false) {
 export function bindDataCenter(getSettings) {
   let checking = false;
   let generation = 0;
+  let refreshController = null;
   let probing = false;
   let probeGeneration = 0;
   let probeController = null;
@@ -864,6 +865,9 @@ export function bindDataCenter(getSettings) {
     if (checking) return;
     checking = true;
     const current = ++generation;
+    refreshController?.abort();
+    const controller = new AbortController();
+    refreshController = controller;
     let settings = null;
     try {
       settings = typeof getSettings === "function" ? getSettings() : null;
@@ -898,16 +902,16 @@ export function bindDataCenter(getSettings) {
       }
 
       const checks = await Promise.all([
-        runHealthCheck(checkWebUI, settings),
-        runHealthCheck(marketLiveness, settings),
-        runHealthCheck(marketHealth, settings),
-        runHealthCheck(analysisLiveness, settings),
-        runHealthCheck(analysisHealth, settings),
+        runHealthCheck(checkWebUI, settings, 6000, controller.signal),
+        runHealthCheck(marketLiveness, settings, 6000, controller.signal),
+        runHealthCheck(marketHealth, settings, 6000, controller.signal),
+        runHealthCheck(analysisLiveness, settings, 6000, controller.signal),
+        runHealthCheck(analysisHealth, settings, 6000, controller.signal),
         settings?.apiKey
-          ? runHealthCheck(getDataSources, settings)
+          ? runHealthCheck(getDataSources, settings, 6000, controller.signal)
           : Promise.resolve({ ok: false, skipped: true, error: new Error("需先配置行情 API Key"), durationMs: 0 }),
         settings?.apiKey
-          ? runHealthCheck(getDataSourceDiagnostics, settings)
+          ? runHealthCheck(getDataSourceDiagnostics, settings, 6000, controller.signal)
           : Promise.resolve({ ok: false, skipped: true, error: new Error("需先配置行情 API Key"), durationMs: 0 })
       ]);
       if (current !== generation) return;
@@ -1014,6 +1018,7 @@ export function bindDataCenter(getSettings) {
     } finally {
       if (current === generation) {
         checking = false;
+        if (refreshController === controller) refreshController = null;
         try {
           if (button) {
             button.disabled = false;
@@ -1030,6 +1035,8 @@ export function bindDataCenter(getSettings) {
   function invalidate(message = "连接配置已变更，之前的检查结果已作废。请重新检查。") {
     generation += 1;
     checking = false;
+    refreshController?.abort();
+    refreshController = null;
     probeGeneration += 1;
     historyGeneration += 1;
     probing = false;

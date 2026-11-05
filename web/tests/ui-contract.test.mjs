@@ -730,13 +730,17 @@ test("task polling and saved task references are scoped to the analysis API base
 });
 
 test("topbar service health checks have bounded timeouts and pass abort signals", () => {
-  assert.ok(healthCheck.includes("export async function runHealthCheck(check, settings, timeoutMs = 6000)"));
+  assert.ok(healthCheck.includes("export async function runHealthCheck(check, settings, timeoutMs = 6000, externalSignal = null)"));
+  assert.match(healthCheck, /externalSignal\.addEventListener\("abort", abortListener, \{ once: true \}\)/);
   assert.ok(healthCheck.includes("controller.abort()"));
   assert.match(app, /async function refreshServices\(\)[\s\S]*?Promise\.all\(\[[\s\S]*?runHealthCheck\(marketHealth, settings\)[\s\S]*?runHealthCheck\(analysisHealth, settings\)/);
 });
 
 test("data-center checks are invalidated when a saved API connection changes", () => {
-  assert.match(dataCenter, /let generation = 0;/);
+  assert.match(dataCenter, /let generation = 0;[\s\S]*?let refreshController = null;/);
+  assert.match(dataCenter, /const controller = new AbortController\(\);[\s\S]*?refreshController = controller;/);
+  assert.match(dataCenter, /runHealthCheck\(marketHealth, settings, 6000, controller\.signal\)/);
+  assert.match(dataCenter, /refreshController\?\.abort\(\);[\s\S]*?refreshController = null;/);
   assert.match(dataCenter, /if \(current !== generation\) return;/);
   assert.match(dataCenter, /function invalidate\(message = "连接配置已变更，之前的检查结果已作废。请重新检查。"\) \{[\s\S]*?generation \+= 1;[\s\S]*?checking = false;[\s\S]*?setBadge\("#data-center-summary-status", "unknown", "需重新检查"\)/);
   assert.match(dataCenter, /finally \{[\s\S]*?if \(current === generation\) \{[\s\S]*?checking = false;/);
