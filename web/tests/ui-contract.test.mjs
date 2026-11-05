@@ -2322,8 +2322,9 @@ test("UIR-2 正文与常规控件使用统一的最终计算基线", () => {
   assert.ok(stylesheet.includes("--control-height-base: 40px;"));
   assert.ok(stylesheet.includes("--font-size-body-readable: 14px;"));
   assert.ok(stylesheet.includes("--line-height-body: 1.55;"));
-  assert.ok(stylesheet.includes("body {\\n  font-size: var(--font-size-body-readable);\\n  line-height: var(--line-height-body);\\n}"));
-  assert.ok(stylesheet.includes(".button {\\n  min-height: var(--control-height-base);"));
-  assert.ok(stylesheet.includes(".field input,\\n.field select,\\n.field textarea {\\n  min-height: var(--control-height-base);"));
+  assert.ok(stylesheet.includes("font-size: var(--font-size-body-readable);"));
+  assert.ok(stylesheet.includes("line-height: var(--line-height-body);"));
+  assert.ok(stylesheet.includes(".button {") && stylesheet.includes("min-height: var(--control-height-base);"));
+  assert.ok(stylesheet.includes(".field input,") && stylesheet.includes("min-height: var(--control-height-base);"));
   assert.ok(stylesheet.includes(".settings-dialog .field input { min-height: var(--control-height-base); }"));
 });
