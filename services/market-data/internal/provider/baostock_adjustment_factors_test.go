@@ -4,18 +4,17 @@ import (
 	"context"
 	"errors"
 	"testing"
-	"time"
 
 	"github.com/Kasign/stock_data_provider/services/market-data/internal/baostock"
 	"github.com/Kasign/stock_data_provider/services/market-data/internal/model"
 )
 
 type fakeBaoStockFactorClient struct {
-	rows      []baostock.AdjustmentFactor
-	err       error
-	gotCode   string
-	gotStart  string
-	gotEnd    string
+	rows     []baostock.AdjustmentFactor
+	err      error
+	gotCode  string
+	gotStart string
+	gotEnd   string
 }
 
 func (f *fakeBaoStockFactorClient) QueryDailyKLines(context.Context, string, string, string, string) ([]baostock.DailyKLine, error) {
@@ -108,5 +107,4 @@ func TestParseBaoStockFactorDateRejectsNonCanonicalDate(t *testing.T) {
 	if _, err := parseBaoStockFactorDate("2025-07-11"); err != nil {
 		t.Fatalf("valid date rejected: %v", err)
 	}
-	_ = time.UTC
 }

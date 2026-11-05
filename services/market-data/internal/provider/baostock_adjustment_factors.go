@@ -88,7 +88,7 @@ func (p *Baostock) FetchAdjustmentFactors(ctx context.Context, rawSymbol, startD
 			out = append(out, model.AdjustmentFactor{
 				Symbol: symbol, TradeDate: date, Factor: item.factor, Basis: item.basis,
 				Source: p.Name(), SourceVersion: baostockVersion, FetchedAt: fetchedAt,
-				QualityStatus: model.QualityDegraded,
+				QualityStatus:  model.QualityDegraded,
 				QualityReasons: []string{"provider_available_at_not_exposed_by_query_adjust_factor"},
 			})
 		}
