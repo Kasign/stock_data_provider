@@ -63,7 +63,7 @@ func TestLivePytdxHistoricalDailyBars(t *testing.T) {
 	report := pytdxHistoricalProbeReport{
 		GeneratedAt: time.Now().UTC().Format(time.RFC3339),
 		StartDate:   startDate, EndDate: endDate,
-		Items:       make([]pytdxHistoricalProbeItem, 0, len(symbols)*3),
+		Items: make([]pytdxHistoricalProbeItem, 0, len(symbols)*3),
 	}
 	var failures []string
 	for _, rawSymbol := range symbols {
