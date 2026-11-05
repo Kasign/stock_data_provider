@@ -2214,3 +2214,11 @@ CI 复核记录：本批首次 Chromium Browser Smoke 在个股研究数据质�
 - [x] 将测试关闭动作改为点击 #mobile-nav-overlay，与产品实际交互一致。
 - [x] 保留 aria-expanded=true/false 状态等待，验证打开与关闭均完成。
 - [ ] 修正后的 Browser Smoke 及 WebUI Checks 需等待新提交 CI 结果。
+
+## 2026-11-05 移动导航遮罩点击命中区域修正
+
+最新 Browser Smoke 已确认移动导航截图关闭仍失败，失败原因不是遮罩未响应，而是 Playwright 默认点击遮罩中心点时，该位置仍被 z-index 更高的侧栏覆盖，导致侧栏内的“问股”导航项拦截指针事件。
+
+- [x] 保留真实用户交互路径，继续通过遮罩按钮关闭移动导航，不使用 DOM 强制派发事件。
+- [x] 将自动化点击点移动到视口最右侧、侧栏覆盖区域之外，并保留 aria-expanded 状态复位断言。
+- [ ] 新提交 Browser Smoke 需确认 320px 和 600px 两种宽度均通过；若仍失败，再根据截图与命中测试定位，不调整产品 CSS 规避测试。
