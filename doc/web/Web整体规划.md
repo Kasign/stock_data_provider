@@ -2192,6 +2192,6 @@ CSS AST 检查器进一步扩展：
 
 - [x] CSSOM 基线规范化后，`ad32b90d` 的 8 场景、6 节点比较通过。
 - [x] 将 Screening 批量工具栏局部规则迁移至 `web/screening-local-batch.css`，由 `index.html` 在 `/styles.css` 后加载。
-- [x] 公共 `.field`、`.button`、主题变量和其他页面规则继续留在 `styles.css`；反馈提示及结果 checkbox 规则保留在原文件，避免扩大首轮拆分边界。
+- [x] 公共 `.field`、`.button`、主题变量、批量反馈提示、结果 checkbox 和其他页面规则继续留在 `styles.css`，避免扩大首轮拆分边界。
 - [x] 保持原有 CSS 声明与媒体查询内容，仅调整文件归属；新样式表后置加载，维持组件局部规则相对公共控件规则的级联优先级。
 - [ ] 等待 Chromium CSSOM fixture 回归，确认 8 场景计算样式和宽高与迁移前一致。

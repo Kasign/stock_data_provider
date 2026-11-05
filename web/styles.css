@@ -4995,6 +4995,9 @@ button:disabled {
 
 
 
+#screening-local-batch-feedback { min-height: 1.5em; margin: 4px 0 8px; }
+#screening-local-results-body input[type="checkbox"] { accent-color: var(--accent); }
+
 /* UIR-2：按真实页面截图修复缺少内边距的内容面板。 */
 #market-stocks-panel,
 #research-view > .research-notes-panel,
