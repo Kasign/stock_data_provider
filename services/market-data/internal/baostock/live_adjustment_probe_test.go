@@ -19,12 +19,15 @@ type liveBaoStockAdjustmentReport struct {
 	EndDate            string                       `json:"end_date"`
 	DateSemanticsNote  string                       `json:"date_semantics_note"`
 	AvailabilityAtNote string                       `json:"available_at_note"`
+	ListingDateNote    string                       `json:"listing_date_note"`
 	Items              []liveBaoStockAdjustmentItem `json:"items"`
 }
 
 type liveBaoStockAdjustmentItem struct {
-	Symbol       string                   `json:"symbol"`
-	FactorCount  int                      `json:"factor_count"`
+	Symbol            string                   `json:"symbol"`
+	ListingDate       string                   `json:"listing_date"`
+	ListingDateSource string                   `json:"listing_date_source"`
+	FactorCount       int                      `json:"factor_count"`
 	Factors      []AdjustmentFactor       `json:"factors,omitempty"`
 	RawRows      int                      `json:"raw_rows"`
 	ForwardRows  int                      `json:"forward_rows"`
@@ -72,12 +75,27 @@ func TestLiveBaoStockAdjustmentFactorConsistency(t *testing.T) {
 		EndDate:            endDate,
 		DateSemanticsNote:  "OperateDate is tested as a candidate effective date by matching raw, forward-adjusted and backward-adjusted K-lines; a successful price match is evidence for reconstruction semantics, not proof of the upstream field's legal/business definition.",
 		AvailabilityAtNote: "BaoStock query_adjust_factor does not expose a verified first-publication timestamp in this response; AvailableAt must remain unknown.",
+		ListingDateNote:    "ListingDate is a manually verified A-share listing date from the cited exchange, issuer filing or company profile source; it is used only to classify whether any pre-first-factor trading session could exist.",
 		Items:              make([]liveBaoStockAdjustmentItem, 0, 8),
 	}
 	var failures []string
-	// Include older listed securities so the probe can find a genuine raw-K window before the first factor event.
-	for _, symbol := range []string{"sz.000001", "sz.000002", "sz.000858", "sh.600000", "sh.600016", "sh.600601", "sh.600036", "sz.002982"} {
-		item := liveBaoStockAdjustmentItem{Symbol: symbol}
+	// Listing dates are independently checked against exchange, issuer filing or company-profile sources.
+	// These dates are test evidence only; they are not inferred from BaoStock adjustment factors.
+	candidates := []struct {
+		symbol, listingDate, listingDateSource string
+	}{
+		{"sz.000001", "1991-04-03", "https://money.finance.sina.com.cn/corp/go.php/vCI_CorpInfo/stockid/000001.phtml"},
+		{"sz.000002", "1991-01-29", "https://static.cninfo.com.cn/finalpage/enpage/000002_1.pdf"},
+		{"sz.000858", "1998-04-27", "https://basic.10jqka.com.cn/000858/company.html"},
+		{"sh.600000", "1999-11-10", "https://www.sse.com.cn/assortment/stock/list/info/company/index.shtml?COMPANY_CODE=600000"},
+		{"sh.600016", "2000-12-19", "https://finance.sina.com.cn/stock/company/sh/600016/34.shtml"},
+		{"sh.600601", "1990-12-19", "https://www.sse.com.cn/assortment/stock/list/info/company/index.shtml?COMPANY_CODE=600601"},
+		{"sh.600036", "2002-04-09", "https://www1.hkexnews.hk/listedco/listconews/sehk/2013/0822/ltn20130822798_c.pdf"},
+		{"sz.002982", "2020-04-24", "https://www.szse.cn/disclosure/notice/t20200422_576348.html"},
+	}
+	for _, candidate := range candidates {
+		symbol := candidate.symbol
+		item := liveBaoStockAdjustmentItem{Symbol: symbol, ListingDate: candidate.listingDate, ListingDateSource: candidate.listingDateSource}
 		factors, factorErr := client.QueryAdjustmentFactors(ctx, symbol, historyStartDate, factorEndDate)
 		if factorErr != nil {
 			item.Error = "query adjustment factors: " + factorErr.Error()
@@ -154,7 +172,7 @@ func TestLiveBaoStockAdjustmentFactorConsistency(t *testing.T) {
 				item.PreFirstEventError = "invalid first factor event date: " + parseErr.Error()
 			} else {
 				preEnd = preEnd.AddDate(0, 0, -1)
-				status, reason := classifyLivePreFirstEventWindow(firstFactor.OperateDate, historyStartDate)
+				status, reason := classifyLivePreFirstEventWindowWithListingDate(firstFactor.OperateDate, candidate.listingDate, historyStartDate)
 				if status != "" {
 					item.PreFirstEventStatus = status
 					item.PreFirstEventError = reason
@@ -244,6 +262,29 @@ func TestLiveBaoStockAdjustmentFactorConsistency(t *testing.T) {
 	}
 }
 
+func TestClassifyLivePreFirstEventWindowWithListingDate(t *testing.T) {
+	tests := []struct {
+		name           string
+		firstEventDate string
+		listingDate    string
+		historyStart   string
+		wantStatus     string
+	}{
+		{name: "first event on listing date", firstEventDate: "2002-04-09", listingDate: "2002-04-09", historyStart: "1990-01-01", wantStatus: "not_applicable"},
+		{name: "first event after listing date", firstEventDate: "2002-04-09", listingDate: "2000-01-01", historyStart: "1990-01-01", wantStatus: ""},
+		{name: "first event before listing date", firstEventDate: "1999-12-31", listingDate: "2000-01-01", historyStart: "1990-01-01", wantStatus: "mismatch"},
+		{name: "event before requested history", firstEventDate: "1989-12-31", listingDate: "1989-01-01", historyStart: "1990-01-01", wantStatus: "not_applicable"},
+		{name: "invalid listing date", firstEventDate: "2002-04-09", listingDate: "invalid", historyStart: "1990-01-01", wantStatus: "unavailable"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, _ := classifyLivePreFirstEventWindowWithListingDate(tt.firstEventDate, tt.listingDate, tt.historyStart)
+			if got != tt.wantStatus {
+				t.Fatalf("classifyLivePreFirstEventWindowWithListingDate(%q, %q, %q) status = %q, want %q", tt.firstEventDate, tt.listingDate, tt.historyStart, got, tt.wantStatus)
+			}
+		})
+	}
+}
 func TestClassifyLivePreFirstEventWindow(t *testing.T) {
 	tests := []struct {
 		name           string
@@ -306,6 +347,24 @@ func TestLatestLiveAdjustmentFactorUsesLatestEffectiveEvent(t *testing.T) {
 	}
 }
 
+func classifyLivePreFirstEventWindowWithListingDate(firstEventDate, listingDate, historyStartDate string) (string, string) {
+	firstEvent, firstErr := time.Parse("2006-01-02", firstEventDate)
+	listing, listingErr := time.Parse("2006-01-02", listingDate)
+	start, startErr := time.Parse("2006-01-02", historyStartDate)
+	if firstErr != nil || listingErr != nil || startErr != nil {
+		return "unavailable", "invalid first-event, listing or history-start date"
+	}
+	if firstEvent.Before(listing) {
+		return "mismatch", "first factor event predates the independently verified A-share listing date"
+	}
+	if firstEvent.Equal(listing) {
+		return "not_applicable", "first factor event is on the A-share listing date; no listed trading session exists before it"
+	}
+	if !firstEvent.After(start) {
+		return "not_applicable", "first factor event is on or before the earliest requested history date"
+	}
+	return "", ""
+}
 func classifyLivePreFirstEventWindow(firstEventDate, historyStartDate string) (string, string) {
 	firstEvent, firstErr := time.Parse("2006-01-02", firstEventDate)
 	start, startErr := time.Parse("2006-01-02", historyStartDate)
