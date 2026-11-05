@@ -372,6 +372,11 @@
 
 ## 23. 2026-11-05 API-06 raw 双源成交额精度闭合
 
-- 内部 comparator 增加 `AmountGranularity`，Probe 从 DailyBar 的 Provider 来源、RawAmountUnit、RawAmountField、RawAmount 传递精度。Pytdx 按 float32 协议字段的 ULP（最小 0.001 CNY），BaoStock 按 API 文档 amount 小数点后 4 位（0.0001 CNY）；容差为两侧步长之和的一半。未知来源/字段/单位仍 not_comparable。
+- 内部 comparator 增加 `AmountErrorBound`，Probe 从 DailyBar 的 Provider 来源、RawAmountUnit、RawAmountField、RawAmount 传递精度。Pytdx 按半个 float32 ULP 加 0.001 CNY Price 截断误差计算，BaoStock 按 4 位小数保守取 0.0001 CNY；容差为两侧绝对误差上界之和。未知来源/字段/单位仍 not_comparable。
 - 真实 artifact `13410429933` 离线重评：600036.SH 与 002982.SZ 各 9 个共同交易日，OHLC/volume/amount 各项全部匹配，两只证券分别 54/54 字段 matched。成交量最大差 84/96 股，均在 TDX 100 股粒度内；成交额最大差 120.74/7.90 CNY，均在对应金额量级的动态量化容差内。
 - 不新增公共 API、数据库字段或 WebUI 展示；仅服务端内部对账逻辑与测试变化。此次不是新鲜实时重跑，PR Live Probe 专项步骤 skipped；PIT fail-closed 规则不变。
+
+## 2026-11-05 API-06 成交额误差上界修正
+
+- Pytdx 先解码 float32，再将 CNY 乘以 1000 转为 `Price`（厘），存在不足 0.001 CNY 的截断误差；故误差上界为半个 ULP + 0.001 CNY。BaoStock 4 位小数未明确舍入方式，保守取完整 0.0001 CNY。
+- `AmountGranularity` 更名为 `AmountErrorBound`，容差按两侧误差上界相加；新增 100,000 CNY 小额边界测试。公共 API、数据库、WebUI 无变化，PIT fail-closed 不变。
