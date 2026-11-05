@@ -3,7 +3,7 @@
 - 所属仓库：Kasign/stock_data_provider
 - 所属分支：feat/platform-foundation
 - 文档负责人：公共平台开发线
-- 当前基线：待本次契约提交后更新
+- 当前基线：以 feat/platform-foundation 最新分支 HEAD 为准，不在索引中重复维护 SHA
 - 文档状态：PLAT-001 静态盘点完成；PLAT-002 契约评审中
 - 任务总入口：本文 + 01-开发路线图与任务清单.md
 
