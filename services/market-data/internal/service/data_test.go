@@ -352,6 +352,26 @@ func TestDailyBarsMarksMissingProviderSymbolAsDegraded(t *testing.T) {
 	}
 }
 
+func TestDailyBarsAcceptsForwardReferenceAfterRequestedEnd(t *testing.T) {
+	bar := dailyBarForVersionContractTest("pytdx-daily-bars-v1", "2026-10-20")
+	bar.AdjustmentMethod = "pytdx_qfq"
+	bar.AdjustmentRefDate = "2026-10-22"
+	bar.QualityStatus = model.QualityValid
+	svc := New([]provider.Provider{fakeProvider{name: "pytdx", bars: []model.DailyBar{bar}}},
+		cache.NewDisabled(), nil, time.Second, time.Minute, 120, slog.New(slog.NewTextHandler(io.Discard, nil)))
+
+	bars, hit, _, err := svc.DailyBars(context.Background(), "600519.SH", "2026-10-20", "2026-10-21", 1, model.AdjustmentForward)
+	if err != nil || hit {
+		t.Fatalf("DailyBars returned hit=%v err=%v", hit, err)
+	}
+	if len(bars) != 1 || bars[0].AdjustmentRefDate != "2026-10-22" || bars[0].AdjustmentMethod != "pytdx_qfq" {
+		t.Fatalf("Service must preserve a valid forward reference date after the requested end: %+v", bars)
+	}
+	if bars[0].QualityStatus != model.QualityValid {
+		t.Fatalf("a valid reference date after the requested end must not degrade the bar: %+v", bars[0])
+	}
+}
+
 func TestQuoteFallbackDoesNotOverrideInvalidProviderQuality(t *testing.T) {
 	invalid := validQuote("tencent")
 	invalid.Symbol = ""

@@ -160,3 +160,9 @@
 - Live provider probe 的外层 workflow success 不代表真实请求全部执行；日志显示通用实时探测及 Tushare、同花顺、TickFlow 可选实时探测均因环境开关未配置而 SKIP。
 - 前复权参考日晚于请求结束日的合法场景和未来参考日拒绝场景已纳入单测，并随当前 SHA 的 market-data Go tests 通过。
 - PR #1 仍为 Open / Draft，未合并。批次 22 验收关闭，阶段 B 继续 in_progress。
+
+
+## 2026-11-05 P0 批次 24：补充前复权参考日 Service 调用链回归
+
+- 新增 DataService.DailyBars 级测试，验证 Pytdx 风格前复权参考日 `2026-10-22` 晚于请求结束日 `2026-10-21` 时，Service 仍返回结果并保留复权 method/reference date，不错误降级。
+- 该测试补足 helper 单测与真实 Service 调用路径之间的回归覆盖；本批待新 SHA CI 验证。
