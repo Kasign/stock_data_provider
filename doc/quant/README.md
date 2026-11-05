@@ -1,31 +1,30 @@
-# Quant 任务拆分与验收
+# Quant 模块
 
-所有任务初始完成：否。
+- 分支：`feat/quant`
+- 代码：`internal/quant/**`
+- 任务前缀：QNT
+- 状态：规划中，尚未开始模块分支开发
 
-| 编号 | 优先级 | 任务 | 依赖 | 验收 |
-|---|---|---|---|---|
-| QNT-001 | P0 | 计算上下文和契约 | GOV-003/004 | 时间、快照、单位、空值、质量、算法版本 Schema |
-| QNT-002 | P0 | Indicator 框架 | QNT-001 | 固定样本、窗口边界、精度、空值、复权测试 |
-| QNT-003 | P0 | Factor 引擎 | QNT-001/002 | 横截面母体、标准化、异常值和版本测试 |
-| QNT-004 | P1 | 多周期 Trend | QNT-002/003 | 方向/阶段分离、周期冲突和 unknown 测试 |
-| QNT-005 | P1 | Market 环境 | QNT-002/003、DATA-010 | 全市场分母、覆盖率、涨跌分布、量能、波动 |
-| QNT-006 | P1 | Industry 分析 | QNT-003、DATA-011 | 历史分类/成分、贡献、持续性和轮动 |
-| QNT-007 | P1 | Stock 分析 | QNT-002~004、Data 契约 | 多周期、量价、波动、相对强度、PIT 和交易状态 |
-| QNT-008 | P1 | Strategy 信号 | QNT-004~007 | 版本、入场/失效/退出、候选与拒绝语义 |
-| QNT-009 | P1 | Backtest | QNT-008 | T+1、涨跌停、停牌、ST、费用滑点、公司行动、样本外 |
-| QNT-010 | P1 | Risk | QNT-007~009 | 硬规则优先、unknown 不默认通过、拒绝原因完整 |
-| QNT-011 | P2 | Evaluation/概率 | QNT-009/010 | 收益分布、MAE/MFE、概率校准和漂移 |
-| QNT-012 | P2 | 组合研究 | QNT-009/010 | 相关性、集中度、风险预算、回撤、模拟和归因 |
+Quant 负责确定性、可复算的数值分析：Indicator、Factor、Trend、Market、Industry、Stock、Strategy、Backtest、Risk、Evaluation。不得调用 LLM，不负责研究编排，不直接访问 Provider/HTTP/SQL/Redis。
 
-## 执行批次
-1. P0：QNT-001~003。
-2. P1：QNT-004~010；市场/行业/个股按契约并行，策略和回测后置。
-3. P2：QNT-011/012，等待足够历史样本和回测验收。
+输入由 Data 提供证券、行情、财务、估值、交易日历、行业历史成分、PIT 和质量契约；输出由 Researchflow 消费。禁止依赖 Research、Researchflow、LLM、Notification。
 
-## 完成门禁
-- 单测覆盖公式、窗口边界、缺失/异常、单位、精度和时区。
-- 固定样本可重复运行，差异有解释。
-- PIT/复权有独立测试。
-- 回测交易制度和成本假设有边界测试。
-- 真实数据验收记录 Provider、证券、日期、样本数、快照和质量。
-- CI 精确关联当前 SHA；Mock/Fixture/构建通过不能代替真实数据验收。
+目标结构：
+
+```text
+internal/quant/
+  indicator/
+  factor/
+  trend/
+  market/
+  industry/
+  stock/
+  strategy/
+  backtest/
+  risk/
+  evaluation/
+```
+
+设计文档：[01-量化引擎总体设计](01-量化引擎总体设计.md)。
+
+详细任务见 [02-任务拆分与验收](02-任务拆分与验收.md)。
