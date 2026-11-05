@@ -796,7 +796,6 @@ func TestClientUsesBoundedSemaphorePoolsForUnknownDependencies(t *testing.T) {
 	}
 }
 
-
 func TestClientHoldsDependencySlotWhileReadingResponseBody(t *testing.T) {
 	bodyStarted := make(chan struct{})
 	releaseBody := make(chan struct{})
@@ -922,4 +921,113 @@ func TestClientCloseIdleConnectionsDoesNotCancelActiveOrFutureRequests(t *testin
 		t.Fatalf("client could not issue a request after CloseIdleConnections: %v", err)
 	}
 	_ = response.Body.Close()
+}
+
+
+func TestClientReleasesDependencySlotAfterResponseReadFailure(t *testing.T) {
+	var calls atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+		calls.Add(1)
+		if request.URL.Path == "/large" {
+			_, _ = w.Write([]byte("12345"))
+			return
+		}
+		_, _ = w.Write([]byte("ok"))
+	}))
+	defer server.Close()
+
+	client, err := New(Config{
+		Resolver:         staticResolver{addresses: []netip.Addr{netip.MustParseAddr("8.8.8.8")}},
+		MaxResponseBytes: 4,
+		DependencyLimits: map[string]int{"news.provider.bocha": 1},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	client.dial = func(ctx context.Context, network, _ string) (net.Conn, error) {
+		return (&net.Dialer{}).DialContext(ctx, network, server.Listener.Addr().String())
+	}
+	t.Cleanup(client.CloseIdleConnections)
+
+	policy := localPolicy(server)
+	policy.Dependency = "news.provider.bocha"
+	_, err = client.Do(context.Background(), localRequest(t, server, "/large"), policy)
+	var platformFault *fault.Fault
+	if !errors.As(err, &platformFault) || platformFault.Code != "platform.httpclient.response_too_large" {
+		t.Fatalf("expected response size fault, got %v", err)
+	}
+
+	response, err := client.Do(context.Background(), localRequest(t, server, "/after-large"), policy)
+	if err != nil {
+		t.Fatalf("dependency slot was not released after response read failure: %v", err)
+	}
+	_ = response.Body.Close()
+	if calls.Load() != 2 {
+		t.Fatalf("expected both requests to reach the server, got %d", calls.Load())
+	}
+}
+
+func TestClientReleasesDependencySlotAfterResponseReadCancellation(t *testing.T) {
+	bodyStarted := make(chan struct{})
+	var calls atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+		calls.Add(1)
+		if request.URL.Path == "/cancel" {
+			w.WriteHeader(http.StatusOK)
+			if flusher, ok := w.(http.Flusher); ok {
+				flusher.Flush()
+			}
+			close(bodyStarted)
+			<-request.Context().Done()
+			return
+		}
+		_, _ = w.Write([]byte("ok"))
+	}))
+	defer server.Close()
+
+	client, err := New(Config{
+		Resolver:         staticResolver{addresses: []netip.Addr{netip.MustParseAddr("8.8.8.8")}},
+		Timeout:          2 * time.Second,
+		DependencyLimits: map[string]int{"news.provider.bocha": 1},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	client.dial = func(ctx context.Context, network, _ string) (net.Conn, error) {
+		return (&net.Dialer{}).DialContext(ctx, network, server.Listener.Addr().String())
+	}
+	t.Cleanup(client.CloseIdleConnections)
+
+	policy := localPolicy(server)
+	policy.Dependency = "news.provider.bocha"
+	ctx, cancel := context.WithCancel(context.Background())
+	cancelDone := make(chan error, 1)
+	go func() {
+		_, requestErr := client.Do(ctx, localRequest(t, server, "/cancel"), policy)
+		cancelDone <- requestErr
+	}()
+	select {
+	case <-bodyStarted:
+	case <-time.After(time.Second):
+		t.Fatal("cancelable response body did not start")
+	}
+	cancel()
+
+	select {
+	case requestErr := <-cancelDone:
+		if requestErr == nil {
+			t.Fatal("expected response body read to fail after cancellation")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("canceled response body read did not return")
+	}
+
+	response, err := client.Do(context.Background(), localRequest(t, server, "/after-cancel"), policy)
+	if err != nil {
+		t.Fatalf("dependency slot was not released after response read cancellation: %v", err)
+	}
+	_ = response.Body.Close()
+	if calls.Load() != 2 {
+		t.Fatalf("expected canceled and follow-up requests to reach the server, got %d", calls.Load())
+	}
 }
