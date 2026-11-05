@@ -33,7 +33,9 @@ function formValue(form, root) {
 
 export function validateNotificationPreferences(value, { allowEqualQuietHours = false } = {}) {
   if (!value || typeof value !== "object" || !Array.isArray(value.events)) return "invalid";
-  if (value.events.some((event) => !EVENTS.has(event))) return "invalid-events";
+  if (value.events.length > EVENTS.size
+    || value.events.some((event) => !EVENTS.has(event))
+    || new Set(value.events).size !== value.events.length) return "invalid-events";
   const timePattern = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
   if (!timePattern.test(String(value.quietStart || "")) || !timePattern.test(String(value.quietEnd || ""))) return "invalid-time";
   if (!allowEqualQuietHours && value.quietStart === value.quietEnd) return "equal-quiet-hours";
