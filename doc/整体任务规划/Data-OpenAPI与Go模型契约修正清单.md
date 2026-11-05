@@ -481,3 +481,16 @@ Go `model.AdjustmentBasis` 响应值为 `none`、`forward_adjusted`、`backward_
 6. **DATA-CONTRACT-006：CI 门禁**。把双向契约测试和 Golden 加入 Data Module CI，差异报告归零；任何例外需有带理由的显式 allowlist，不能静默忽略。
 
 **本节核查结论**：Operation 与主要 Handler 输出边界已建立；三组无来源字段已落到真实响应链路；集合 nil/empty 仍需要逐项构造路径核验和运行时 Golden。当前只是静态审查，不代表 Data Schema 已修复、测试已通过或 GOV-004 已冻结。
+
+
+### 11.10 Data 最新 HEAD 与 CI 复核（2026-11-05）
+
+在 11.9 映射核查后，Data 分支又前进一个提交，最新 HEAD 为 `c22470bec87beb89961b76ad9856d5c8709aac73`（`fix(market-data): 修复 BaoStock 历史探测循环语法`）。相较映射核查基线 `4ff4359178be7a055fb81756a5099adb9fcf3f31` ahead 1 / behind 0；Compare 仅涉及两份 `doc/api/**` 文档和 `services/market-data/internal/baostock/live_adjustment_probe_test.go`，没有改动 OpenAPI、HTTP Handler 或 Model。因此本清单的 Operation/Schema 字段差异仍适用于最新 HEAD。
+
+最新 SHA 关联的 GitHub Actions：
+- Go test suite：run `42012445022`，completed / success。包括 `services/market-data` 的 gofmt、tests、race、vet，根模块和 go-core 测试，以及 MariaDB Migration/PIT、DataService PIT fallback、Probe HTTP + MariaDB 集成、Docker market-data image build。
+- Go-Python data quality parity：run `42012445049`，completed / success。
+- WebUI checks：run `42012444875`，completed / success。
+- Live provider probe：run `42012444966`，workflow completed / success；但 BaoStock historical adjustment-factor consistency 专项步骤为 **skipped**，因此本次没有八只候选证券的 BaoStock matched/mismatch/not_applicable/unavailable 结果。报告打印/上传步骤 success 不能替代实际专项探测。
+
+这次 CI 证明最新 HEAD 已恢复 Go 语法并通过当前执行的测试/build 门禁；**不证明 OpenAPI ↔ Go JSON 双向契约已修复**，因为本轮提交没有修改相关 Schema/Model，也没有新增契约测试。Data Schema 阻断继续打开。
