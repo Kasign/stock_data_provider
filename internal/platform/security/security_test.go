@@ -299,7 +299,7 @@ func TestAuthenticatorCredentialSnapshotIsImmutableToCallers(t *testing.T) {
 
 	serviceScopes := []string{ScopeDataRead}
 	auth, err := NewAuthenticator(makeSecret(ownerToken), []ServiceCredential{{
-		Name: "snapshot-service",
+		Name:   "snapshot-service",
 		Secret: makeSecret(dataToken),
 		Scopes: serviceScopes,
 	}})
