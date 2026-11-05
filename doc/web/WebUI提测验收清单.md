@@ -2363,3 +2363,21 @@ Artifact 核验结果：
 - [x] Browser Smoke 全部步骤通过，包含 CSS AST 分析。
 - [x] WebUI Checks 全部通过。
 - [ ] 下一步补齐 at-rule 条件、selector specificity 和源码顺序联合审查，再确定低耦合 feature 迁移单元。
+
+
+## 2026-11-05 Selector Specificity 与同条件覆盖候选分析
+
+CSS AST 检查器进一步扩展：
+
+- 为每个规范化 selector 计算 specificity 三元组（ID、class/attribute/pseudo-class、type/pseudo-element）。
+- 处理 `:where()` 的零权重，以及 `:is()`、`:not()`、`:has()` 的参数最大 specificity；`nth-child` / `nth-last-child` 计入伪类本身及参数选择器权重。
+- 对同一规范化 selector、完全相同 at-rule 条件上下文内的规则，按源码顺序比较同名属性的不同值，记录行号、值、`!important` 和预期优先规则。
+- 该候选分析只覆盖同一 selector + 完全相同条件的规则；不声称解决跨 selector 的 DOM 重叠、层叠层（@layer）、作用域、继承、动画/过渡或浏览器支持差异。它是定位线索，不是完整 CSS cascade 引擎。
+- 同一规则内重复属性按最后一次声明参与候选比较，避免把 fallback 声明误当成多个独立规则。
+
+下一步根据 CI 输出筛选共享壳层的同条件覆盖候选，再对跨 selector 重叠规则做人工审查。任何清理仍需确认 DOM 命中关系和 computed style，不以 specificity 数值单独决定删除。
+
+- [x] Selector specificity 计算已加入 AST 检查器。
+- [x] 同 selector、同 at-rule 上下文的属性覆盖候选已加入报告。
+- [ ] 等待新 CI 实际结果，检查伪类 specificity 解析与候选数量。
+- [ ] 人工审查跨 selector 重叠和 @layer / 主题 / 响应式关系。
