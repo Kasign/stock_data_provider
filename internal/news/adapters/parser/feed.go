@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/xml"
 	"errors"
+	"io"
 	"strings"
 	"time"
 )
@@ -89,6 +90,35 @@ type atomEntry struct {
 	} `xml:"author"`
 }
 
+// parseRootName 同时验证 XML 只有一个根元素，避免 xml.Unmarshal 忽略尾随的第二份文档。
+func parseRootName(data []byte) (xml.Name, error) {
+	decoder := xml.NewDecoder(bytes.NewReader(data))
+	var root struct {
+		XMLName xml.Name
+	}
+	if err := decoder.Decode(&root); err != nil {
+		return xml.Name{}, ErrInvalidFeed
+	}
+	for {
+		token, err := decoder.Token()
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if err != nil {
+			return xml.Name{}, ErrInvalidFeed
+		}
+		switch value := token.(type) {
+		case xml.StartElement:
+			return xml.Name{}, ErrInvalidFeed
+		case xml.CharData:
+			if len(bytes.TrimSpace(value)) > 0 {
+				return xml.Name{}, ErrInvalidFeed
+			}
+		}
+	}
+	return root.XMLName, nil
+}
+
 // ParseFeed 解析 RSS 2.0 或 Atom 1.0。函数不访问网络、不抓取 HTML 正文，也不判断授权。
 func ParseFeed(data []byte, observedAt time.Time) (FeedDocument, error) {
 	if observedAt.IsZero() || len(bytes.TrimSpace(data)) == 0 {
@@ -96,14 +126,12 @@ func ParseFeed(data []byte, observedAt time.Time) (FeedDocument, error) {
 	}
 	data = bytes.TrimPrefix(data, []byte{0xEF, 0xBB, 0xBF})
 
-	var root struct {
-		XMLName xml.Name
-	}
-	if err := xml.Unmarshal(data, &root); err != nil {
+	rootName, err := parseRootName(data)
+	if err != nil {
 		return FeedDocument{}, ErrInvalidFeed
 	}
 
-	switch root.XMLName.Local {
+	switch rootName.Local {
 	case "rss":
 		var parsed rssDocument
 		if err := xml.Unmarshal(data, &parsed); err != nil || parsed.Channel == nil {
