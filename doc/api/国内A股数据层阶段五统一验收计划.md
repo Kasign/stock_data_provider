@@ -166,3 +166,10 @@
 
 - 新增 DataService.DailyBars 级测试，验证 Pytdx 风格前复权参考日 `2026-10-22` 晚于请求结束日 `2026-10-21` 时，Service 仍返回结果并保留复权 method/reference date，不错误降级。
 - 该测试补足 helper 单测与真实 Service 调用路径之间的回归覆盖；本批待新 SHA CI 验证。
+
+
+## 2026-11-05 P0 批次 25：扩展 DailyBars 变更触发公开 Provider 探测
+
+- live-provider-smoke 的 push / pull_request 路径过滤新增 DataService.DailyBars、复权重建和日 K 交易上下文相关 Service 文件。
+- 公开 Provider 实时请求仍由提交标记 `[include_public]` 显式开启；普通 PR 不自动消耗线上接口额度。
+- 本批触发两只样本证券 `600036.SH`、`002982.SZ` 在 2025-07-07 至 2025-07-17 的公开 Provider 日 K/复权探测，真实结果待核验。
