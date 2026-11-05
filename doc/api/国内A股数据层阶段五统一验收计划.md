@@ -112,3 +112,10 @@
 - Service 层现有三时间校验继续保留，作为 SQL 结果的第二道防线；AvailableAt=nil 的 BaoStock 因子仍不会进入 PIT。
 - MariaDB 集成测试新增因子与公司行动两组回退场景：v1 已可用，v2 已观察但 AvailableAt 在 as_of 之后，必须返回 v1。
 - 该修复只影响 PIT 历史版本选择，不改变当前值表、Provider 采集或对外 API。待最新 SHA 的 MariaDB migration/PIT 集成与完整 CI 验证。
+
+## 2026-11-05 P0 批次 18：Service 层 PIT 版本回退集成覆盖
+
+- 新增真实 MariaDB 驱动的 Service 层回归测试，分别覆盖复权因子和公司行动。
+- 两类数据均构造 v1 已在 as_of 前可见、v2 已被系统观察但供应商 available_at 晚于 as_of 的场景；Service 必须返回 v1。
+- 该测试补足 Repository SQL 回退与 Service 三时间二次校验之间的调用链验证。MariaDB 未配置时测试 Skip，不能将 Skip 当作成功验收。
+- 不改变 PIT 时间语义、版本键、API 或 BaoStock nil AvailableAt 处理规则。待新 SHA CI 验证后再更新批次状态。
