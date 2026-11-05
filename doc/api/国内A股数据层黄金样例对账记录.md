@@ -414,3 +414,16 @@ Live Provider Probe Run `41788725692` 的 workflow conclusion 为 success，但�
 - 四家 Provider 各返回 9 条；Eastmoney 本轮成功。每只股票 10 项 degraded、2 项 Sina adjusted not_supported、0 failed。
 - BaoStock 日历参与上下文检查但 quality degraded；跨源比较按 valid 门禁 skipped。
 - 本次服务链路通过不改变数据质量结论，Probe run 状态仍为 degraded。
+
+
+## 19. 2026-11-05：BaoStock 历史复权因子与日 K 内部一致性
+
+- GitHub Actions Live Provider Probe Run：`41958045930`，BaoStock 专项步骤 success。
+- 样本窗口 2025-07-07..2025-07-17，600036.SH、002982.SZ 各 9 个交易日。
+- 600036 返回 30 条历史因子，002982 返回 8 条；因子覆盖从 2002-04-09 / 2020-04-24 延续到 2026 年最近事件。
+- 对每个交易日的 open/high/low/close 核验：
+  - `raw × foreAdjustFactor` 与 BaoStock `adjustflag=2` qfq OHLC 一致；
+  - `raw × backAdjustFactor` 与 BaoStock `adjustflag=1` hfq OHLC 一致。
+- 两只股票各 9×4×2 个价格字段均未报告 mismatch。600036 的 2025-07-11 事件处于窗口中，事件因子生效日期选择通过。
+- 该结论仅证明 BaoStock 自身因子与自身复权 K 线内部一致，不证明与 Pytdx/Tushare 基准相同；不能作为跨源 matched。
+- 当前 Tushare adj_factor/dividend 仍权限不足；Pytdx GBBQ 对账继续进行。

@@ -1033,3 +1033,29 @@ Go suite 覆盖根模块、go-core、market-data 的格式/测试/race/vet、Mar
 - none 的 OHLC 样本跨源一致性仍保持样本级结论。
 - qfq/hfq 的绝对基准仍未被独立公司行为/因子证据确认；Tushare 当前权限不足。
 - 阶段 B 保持 in_progress；不放宽比较器、不将权限不足记作 Provider 网络失败。
+
+
+## 61. 2026-11-05 BaoStock 历史复权因子与日 K 一致性实测
+
+### 61.1 GitHub Actions 执行
+
+- Live Provider Probe Push Run：`41958045930`，BaoStock 专项步骤 success。
+- 专项测试窗口：2025-07-07 至 2025-07-17；股票 `sh.600036`、`sz.002982`。
+- 两只股票均返回 9 条 none、9 条 qfq、9 条 hfq 日 K。
+- 全历史复权因子：600036 返回 30 条（2002-04-09 至 2026-07-10）；002982 返回 8 条（2020-04-24 至 2026-05-29）。
+- 对窗口内每个交易日的 open/high/low/close 执行逐字段核验：`raw × foreAdjustFactor == qfq`，`raw × backAdjustFactor == hfq`；报告未出现 mismatch，也无查询/解析错误。
+- 600036 的复权事件日 2025-07-11 落在本次窗口中，事件前后按生效日期选择因子，9 个交易日均通过；002982 使用 2025-05-30 的最近有效事件因子，9 个交易日均通过。
+
+### 61.2 结论与边界
+
+- BaoStock 的历史因子查询协议、分页结果解析、事件日期排序，以及因子与其自身 qfq/hfq OHLC 的折算一致性，获得本次真实服务样本验证。
+- 这验证的是 BaoStock 自身 raw/因子/adjustflag 三套返回之间的一致性，不代表 BaoStock 因子等同于 Tushare/Pytdx 的基准，也不构成跨 Provider matched。
+- 该测试只核对 OHLC，不核对成交量/成交额，也不验证公司行为公告完整性、除权参考价外部权威性。
+- Tushare `adj_factor`/`dividend` 仍为 40203 permission_required；不重复请求。
+- 阶段 B 继续 in_progress：下一步核对 Pytdx GBBQ 事件与 BaoStock 因子事件的日期/比例语义；如不能证明同一基准，保持 not_comparable，不放宽质量门禁。
+
+### 61.3 CI 格式修正
+
+- 初始 Go test suite Run `41957200038` 因 BaoStock 两个常量块未 gofmt 而失败；不是单元测试或业务断言失败。
+- 已修正 `internal/baostock/client.go`、`internal/baostock/protocol.go` 格式，并增加复权事件生效日期单元测试。
+- 最新 Go test suite Run `41958045915` 正在执行，最终结果待完整 Run 完成后记录。
