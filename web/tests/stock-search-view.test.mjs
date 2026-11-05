@@ -21,6 +21,7 @@ class FakeElement {
   append(...nodes) { this.children.push(...nodes); }
   replaceChildren(...nodes) { this.children = nodes; }
   setAttribute(name, value) { this.attributes[name] = value; }
+  removeAttribute(name) { delete this.attributes[name]; }
   getAttribute(name) { return this.attributes[name] ?? null; }
   querySelectorAll(selector) {
     return selector === "[data-stock-search-index]" ? this.children.filter(node => node.dataset.stockSearchIndex !== undefined) : [];
