@@ -117,6 +117,33 @@ ToolDefinition 是 Researchflow Registry 筛选后的只读声明。LLM 只序�
 
 OutputItem 首批类型：message、function_call、refusal、unknown。ContentPart 首批支持 output_text/refusal；未知 item 保留类型和安全元数据，不丢弃，也不伪装成空文本。
 
+### 5.3 OutputItem / ContentPart / ModelToolCall
+
+| 对象 | 字段 | 类型 | 约束 |
+|---|---|---|---|
+| OutputItem | type | enum | message / function_call / refusal / unknown |
+| OutputItem | item_id | string? | 上游 item id，缺失允许 |
+| OutputItem | status | string? | 原样保留上游状态；不映射成成功/失败的唯一依据 |
+| OutputItem | content_parts | ContentPart[] | message 的有序内容片段 |
+| OutputItem | tool_call | ModelToolCall? | 仅 function_call 类型可设置 |
+| ContentPart | type | enum | output_text / refusal / unknown |
+| ContentPart | text | string? | output_text 文本 |
+| ContentPart | annotations | Annotation[]? | 仅保留已识别且安全的引用元数据 |
+| ModelToolCall | call_id | string | 上游调用 ID；缺失时标记协议异常 |
+| ModelToolCall | output_item_id | string? | 关联的 OutputItem ID |
+| ModelToolCall | name | string | 工具名；不直接执行 |
+| ModelToolCall | arguments_json | string | 原始参数 JSON 文本，解析前保留原值 |
+| ModelToolCall | status | string? | 上游 function_call 状态 |
+
+未知 OutputItem/ContentPart 必须保留 type 与有界安全元数据；不能把未知内容丢弃后仍报告完整成功。ToolCall arguments_json 需在 Researchflow 的 Tool Registry/Schema 下重新验证。
+
+### 5.4 条件必需字段
+
+- status=completed：response_id 应存在；output_items 结构必须可解析。
+- status=incomplete：保留 incomplete_reason；若上游给出 incomplete_details.reason 则必须透传。
+- status=failed：error 必须存在，且只包含稳定错误码与安全摘要。
+- response_id、model_actual、gateway_request_id 在上游未提供时可空；不得从 request_id 伪造 response_id。
+
 ### 5.1 Usage
 
 | 字段 | 类型 | 语义 |
@@ -161,7 +188,7 @@ ModelEvent 字段：type、sequence_number?、response_id?、output_index?、con
 
 ModelErrorKind：invalid_request、unauthorized、rate_limited、overloaded、timeout、cancelled、upstream_unavailable、upstream_error、invalid_response、incomplete_response、schema_validation_failed、unsupported_capability、stream_interrupted。
 
-ModelErrorInfo 仅暴露 kind、stable_code、retryable、http_status?、retry_after?、request_id 和安全摘要；底层 Cause 仅内部日志，不序列化给调用方。
+ModelErrorInfo 字段为 kind、stable_code、retryable、http_status?、retry_after?、request_id?、safe_message；底层 Cause 仅内部日志，不序列化给调用方。
 
 - 一次调用只能由一个层负责业务重试；首批建议由 Researchflow Run/Stage 策略决定，LLM Adapter 默认不自动重试。
 - 429/503 可返回 retry_after 提示，是否重试由调用方 deadline/预算决定。
@@ -173,7 +200,7 @@ ModelErrorInfo 仅暴露 kind、stable_code、retryable、http_status?、retry_a
 
 - API Key 只通过 SecretRef 读取；不得进入 ModelRequest、DTO、错误摘要或日志。
 - 不接受任意 Base URL、任意 Header 或请求方指定 Provider endpoint。
-- 输入/Schema/Tool 数量和字节数设上限；非流式响应限制最大字节数；SSE 单事件/单行设上限。
+- 输入/Schema/Tool 数量和字节数设上限；非流式响应限制最大字节数；SSE 单事件/单行设上限，并限制累计事件数/累计字节数。
 - 默认不保存完整 Prompt/Response 和原始 SSE；只记录 request_id、provider/model、参数指纹、耗时、Usage、状态、稳定错误码和 Gateway request ID。
 - 若开启内容诊断，必须显式开关、脱敏、大小上限和保留期限。
 - deadline 贯穿 DNS/TLS/请求/读取/Stream callback；Context cancel 必须中止网络读取。
