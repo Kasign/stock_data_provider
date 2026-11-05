@@ -1171,7 +1171,6 @@ button:disabled, input:disabled, select:disabled, textarea:disabled { cursor: no
 }
 .task-events-read-status[hidden] { display: none !important; }
 .event-diagnostic { margin: 7px 0 0; color: var(--danger); font-size: 12px; overflow-wrap: anywhere; }
-.run-flow-dialog .event-row > small { max-width: 150px; line-height: 1.6; text-align: right; overflow-wrap: anywhere; }
 :root[data-theme="light"] .run-flow-dialog .task-status-panel { box-shadow: -18px 0 46px rgba(26, 47, 61, .1); }
 @media (max-width: 600px) {
   .run-flow-dialog { width: auto; max-width: none; }

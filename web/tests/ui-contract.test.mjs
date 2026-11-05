@@ -1563,8 +1563,7 @@ test("market overview and activity use readable secondary text and touch-sized c
   assert.match(tradingCalendarDayLabelBase, /text-align:\s*center\s*;?/);
   assert.match(tradingCalendarDayLabelBase, /overflow-wrap:\s*anywhere\s*;?/);
   assert.equal((stylesheet.match(/(?:^|})\s*\.trading-calendar-day span\s*\{/g) || []).length, 2, "trading calendar day label should have one base rule and one mobile override");
-  assert.match(finalCssRuleBody(".trading-calendar-day"), /min-height:\s*50px/);
-  assert.match(finalCssRuleBody(".trading-calendar-day"), /padding:\s*5px 1px/);
+  assert.match(stylesheet, /\.trading-calendar-day \{ min-height: 50px; padding: 5px 1px; \}/, "mobile calendar day sizing must remain in the exact responsive rule");
   assert.match(finalCssRuleBody(".trading-calendar-day span"), /font-size:\s*10px/);
   assert.match(stylesheet, /@media \(max-width: 700px\) \{[\s\S]*?\.market-overview-actions \.button \{ width: 100%; min-height: 40px; \}/);
   assert.match(stylesheet, /@media \(max-width: 600px\) \{[\s\S]*?\.trading-calendar-day span \{ font-size: 10px; \}/);
@@ -2632,8 +2631,7 @@ test("UIR-2 settings feedback layout constraints are consolidated", () => {
   assert.match(inlineStatus, /color:\s*var\(--text-dim\)\s*;/);
   assert.match(inlineStatus, /font-size:\s*12px\s*;/);
   assert.doesNotMatch(inlineStatus, /!important/);
-  const browserStatus = exactCssDeclarationBlock(".settings-browser-data-panel > .settings-inline-status");
-  assert.match(browserStatus, /margin:\s*0\s*;/);
+  assert.match(stylesheet, /\.settings-browser-data-panel > \.settings-inline-status,\s*\.settings-browser-data-panel > \.field-hint \{[^}]*margin:\s*0\s*;/, "browser data panel status and field hint share the zero-margin grid rule");
   const browserErrorStatus = exactCssDeclarationBlock(".settings-browser-data-panel .settings-inline-status.is-error");
   assert.match(browserErrorStatus, /color:\s*var\(--danger\)\s*;/);
 });

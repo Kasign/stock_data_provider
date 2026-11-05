@@ -1762,3 +1762,11 @@ CI 复核记录：本批首次 Chromium Browser Smoke 在个股研究数据质�
 - [x] UI contract 锁定 7 组基础字号、无 !important 及主题/响应式规则。
 - [ ] 在本批最终提交 SHA 上运行 UI contract、图表单测、JS 语法检查、Compose 校验和 Nginx 镜像构建。
 - [ ] 执行 Chromium Browser Smoke，并核验 320/375/600/768/900/1280/1600px 下折线图、日 K、RSI、成交量提示、空态和深浅主题 SVG 文字实际渲染。
+
+
+## 2026-11-05 UIR-2 CI 契约校正
+
+- [x] 删除被后续组件规则完全覆盖的 Run Flow 旧 small 声明，保留当前 11px 组件字号及移动端规则。
+- [x] 日历移动端尺寸断言精确匹配 700px 响应式声明，修正子选择器前缀误匹配。
+- [x] 设置浏览器数据面板状态断言匹配真实的组合选择器声明，不再要求其作为独立选择器存在。
+- [ ] 在修正提交 SHA 上重新运行 WebUI Checks、Chromium Browser Smoke。
