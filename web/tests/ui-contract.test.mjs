@@ -2251,3 +2251,12 @@ test("task flow summary projection is pure and render adapter only applies its o
   assert.match(summaryViewModel, /export function buildTaskFlowSummaryViewModel\(/);
   assert.doesNotMatch(summaryViewModel, /\bstate\.|localStorage|document\.|addEventListener|fetch\(/);
 });
+
+
+test("section navigation is a closed DOM behavior module and app only configures it", async () => {
+  const sectionNavigation = await readFile(new URL("../src/section-navigation.js", import.meta.url), "utf8");
+  assert.match(appSource, /setupSectionNavigation\(\{ document, window, IntersectionObserver: window\.IntersectionObserver, linkSelector:/);
+  assert.doesNotMatch(appSource, /function bindSectionNavigation\(/);
+  assert.match(sectionNavigation, /export function setupSectionNavigation\(/);
+  assert.doesNotMatch(sectionNavigation, /\bstate\.|localStorage|fetch\(|\$\(/);
+});

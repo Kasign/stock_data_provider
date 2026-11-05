@@ -2,6 +2,7 @@ import { applyTheme, persistTheme, readTheme, THEME_STORAGE_KEY } from "./theme.
 import { DEFAULT_PREFERENCES, PREFERENCES_KEY, WATCHLIST_DISPLAY_FIELDS, normalizeImportedPreferences, readPreferences, readPreferencesState, resetPreferences, savePreferences } from "./preferences.js";
 import { connectionDraftChanged, mergeConnectionDraft } from "./settings-draft.js";
 import { setupSettingsNavigation } from "./settings-navigation.js";
+import { setupSectionNavigation } from "./section-navigation.js";
 import { syncPreferencesControls } from "./settings-preferences-view.js";
 import { resolveNotificationViewState } from "./notification-state.js";
 import { resolveChatViewState } from "./chat-state.js";
@@ -1966,54 +1967,6 @@ function openResearchStock(symbol, name = "") {
   setView("research");
   if (!quoteMatches || !barsMatch) void runQuoteQuery();
 }
-function bindSectionNavigation(linkSelector, dataKey) {
-  const links = Array.from(document.querySelectorAll(linkSelector));
-  if (!links.length) return;
-
-  const setActive = (targetId) => {
-    links.forEach((link) => {
-      const active = link.dataset[dataKey] === targetId;
-      link.classList.toggle("is-active", active);
-      if (active) link.setAttribute("aria-current", "location");
-      else link.removeAttribute("aria-current");
-    });
-  };
-
-  const targets = links.map((link) => document.getElementById(link.dataset[dataKey] || "")).filter(Boolean);
-
-  links.forEach((link) => {
-    link.addEventListener("click", () => {
-      const targetId = link.dataset[dataKey] || "";
-      const target = targetId ? document.getElementById(targetId) : null;
-      if (!target) return;
-      setActive(targetId);
-      const reduceMotion = Boolean(window.matchMedia?.("(prefers-reduced-motion: reduce)").matches);
-      target.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "start" });
-
-      // 将键盘焦点移动到目标标题，使导航不只改变滚动位置。
-      const focusTarget = target.matches("h2, h3, h4")
-        ? target
-        : target.querySelector("h2, h3, h4") || target;
-      if (!focusTarget.hasAttribute("tabindex")) focusTarget.setAttribute("tabindex", "-1");
-      focusTarget.focus({ preventScroll: true });
-    });
-  });
-
-  if (typeof IntersectionObserver === "undefined" || !targets.length) return;
-  const observer = new IntersectionObserver(() => {
-    // entries 只包含本次跨越观察阈值的元素；根据全部可见目标重算，避免高亮回跳。
-    const referenceLine = Math.min(window.innerHeight * 0.28, 220);
-    const current = targets
-      .map((target) => ({ target, rect: target.getBoundingClientRect() }))
-      .filter(({ target, rect }) => target.getClientRects().length > 0
-        && rect.bottom >= 120
-        && rect.top <= window.innerHeight - 120)
-      .sort((a, b) => Math.abs(a.rect.top - referenceLine) - Math.abs(b.rect.top - referenceLine))[0];
-    if (current) setActive(current.target.id);
-  }, { rootMargin: "-120px 0px -120px 0px", threshold: 0 });
-  targets.forEach((target) => observer.observe(target));
-}
-
 function openResearchChartView() {
   let symbol;
   try { symbol = getQuerySymbol(); } catch (error) { setNotice(error.message, "danger"); return; }
@@ -5084,9 +5037,9 @@ $("#browser-data-file").addEventListener("change", async (event) => {
     input.value = "";
   }
 });
-bindSectionNavigation("[data-settings-target]", "settingsTarget");
+setupSectionNavigation({ document, window, IntersectionObserver: window.IntersectionObserver, linkSelector: "[data-settings-target]", dataKey: "settingsTarget" });
 setupSettingsNavigation(document);
-bindSectionNavigation("[data-research-detail-target]", "researchDetailTarget");
+setupSectionNavigation({ document, window, IntersectionObserver: window.IntersectionObserver, linkSelector: "[data-research-detail-target]", dataKey: "researchDetailTarget" });
 document.querySelectorAll("[data-theme-value]").forEach((button) => {
   button.addEventListener("click", () => {
     const result = persistTheme(button.dataset.themeValue);
