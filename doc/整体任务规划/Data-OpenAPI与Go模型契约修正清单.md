@@ -666,3 +666,57 @@ Data 分支最新 HEAD 已推进至 `266ac21f5c840207f79aae8984021dac74185652`�
 - Go-Python parity run `42017963237`：in_progress。
 
 此处的 Workflow 状态属于 SHA 587f276；不能混用前一个 SHA 266ac21 的状态。静态契约核查基线已更新为 587f276，待其 CI 完成后再记录最终结果。
+
+
+### 11.18 15 个 Go 有字段、OpenAPI 缺字段：Operation → Handler → Model 逐项追踪（2026-11-05）
+
+本轮以 Data 当前代码为准，追踪 `services/market-data/internal/httpapi/server.go` 路由、Handler 实际写出的对象、Service/Provider 赋值点和 OpenAPI response Schema。结果不是机械地把 15 个字段全部补进 Schema：其中 **13 个字段有真实或明确设计中的响应语义，应补 OpenAPI；另 2 个字段没有生产赋值路径且属于重复/未实现字段，建议从 Go Model 删除，不应制造 API 契约。**
+
+| Go Model 字段 | Operation → Handler → 响应位置 | 赋值/可达性证据 | 结论 |
+|---|---|---|---|
+| `ProviderProbeCheckResult.left_adjustment_method` | `POST /api/v1/data-sources/probe` → `dataSourceProbe`；`GET /api/v1/data-sources/probe/history` → `dataSourceProbeHistory`；`ProviderProbeRun.check_results[]` | `service/provider_probe.go` 的跨 Provider 对比结果构造处填充 `firstCrossProviderAdjustmentMethod(left)` | **补 Schema**：optional string |
+| `ProviderProbeCheckResult.right_adjustment_method` | 同上 | 填充 `firstCrossProviderAdjustmentMethod(right)` | **补 Schema**：optional string |
+| `ProviderProbeCheckResult.left_adjustment_reference_date` | 同上 | 填充 `firstCrossProviderAdjustmentRefDate(left)` | **补 Schema**：optional date/string；保留源端原值语义 |
+| `ProviderProbeCheckResult.right_adjustment_reference_date` | 同上 | 填充 `firstCrossProviderAdjustmentRefDate(right)` | **补 Schema**：optional date/string；保留源端原值语义 |
+| `SectorRanking.provider_report_date` | `GET /api/v1/market/sectors` → `sectorRankings` → `SectorRankingSnapshot.items[]` | 当前 Provider/Service 构造 `SectorRanking` 时没有赋值点；报告日已由 Snapshot 层的 `provider_report_date` 表达 | **从 Go Model 删除**：避免每个排名项重复一个始终缺席的报告日字段 |
+| `SectorRankingSnapshot.excluded_non_a_share_count` | 同上 | 当前行业/概念排名 Provider 和 Service 没有赋值点；全仓生产赋值只见 MarketBreadth 与 LimitPool 路径 | **从 Go Model 删除**：当前没有来源证据，不新增 Schema |
+| `MarketBreadthSnapshot.excluded_non_a_share_count` | `GET /api/v1/market/breadth` → `marketBreadth` → `MarketBreadthSnapshot` | `provider/tickflow.go` 用 `len(excluded)` 赋值；Handler 直接序列化 snapshot | **补 Schema**：optional integer，minimum 0 |
+| `LimitPoolItem.seal_money` | `GET /api/v1/market/limit-pools` → `limitPool` → `LimitPoolSnapshot.items[]` | `provider/hithink.go` 仅对涨停池解析非负 `seal_money`，填入 `SealMoney` | **补 Schema**：optional nullable number；单位遵循同一 Item 的 `provider_amount_unit` |
+| `LimitPoolItem.max_seal_money` | 同上 | 同一 Hithink Provider 路径解析非负 `max_seal_money` | **补 Schema**：optional nullable number；单位遵循 `provider_amount_unit` |
+| `FundamentalSection.available_at` | `GET /api/v1/stocks/{symbol}/fundamentals` → `fundamentals` → `FundamentalsSnapshot.sections[]` | Provider 当前没有赋值；Service Validator 和 PIT 过滤逻辑会读取该字段；Model 注释明确其为市场参与者可用的精确时间，不等于报告期或采集时间 | **补 Schema**：optional nullable date-time；仅在来源提供可验证时间时返回。当前 Provider 不填时允许省略 |
+| `IndexConstituent.effective_from` | `GET /api/v1/market/indices/{symbol}/constituents` → `indexConstituents` → `IndexConstituentSnapshot.items[]` | Hithink/Tushare 当前构造只填 Symbol/Code/Name/Weight；Service 的历史区间质量门禁检查该字段 | **补 Schema**：optional date；不得用报告日推断 |
+| `IndexConstituent.effective_to` | 同上 | 同上 | **补 Schema**：optional date；不得用报告日推断 |
+| `IndexConstituent.available_at` | 同上 | 当前 Provider 不赋值；历史区间质量门禁要求可验证时间 | **补 Schema**：optional nullable date-time；有来源证据才返回 |
+| `IndexConstituent.system_observed_at` | 同上 | 当前 Provider 不赋值；历史区间质量门禁要求系统观察时间 | **补 Schema**：optional nullable date-time；有持久化观察证据才返回 |
+| `SourceStatus.market_capital_flow_capable` | `GET /api/v1/data-sources` → `dataSources` → `DataSourcesResponse.sources[]` | Server 从 `svc.MarketCapitalFlowProviders()` 构建 capability map，并填入 `SourceStatus`；false 因 `omitempty` 省略 | **补 Schema**：optional boolean |
+
+#### Schema 修正建议
+
+1. `ProviderProbeCheckResult` 增加 `left_adjustment_method`、`right_adjustment_method`、`left_adjustment_reference_date`、`right_adjustment_reference_date` 四个 optional 属性。Reference date 若最终统一保证 YYYY-MM-DD，应加 `format: date`；否则先按普通 string 并保留源端值，不能在文档中提前承诺未验证格式。
+2. `MarketBreadthSnapshot` 增加 `excluded_non_a_share_count: integer, minimum: 0`，optional；0 因 omitempty 会缺席，Schema 不得标 required。
+3. `LimitPoolItem` 增加 `seal_money`、`max_seal_money`，均为 optional nullable number。描述必须明确单位取自 `provider_amount_unit`；当前 Hithink 将单位标为 `provider_defined`，不能写成 CNY。
+4. `FundamentalSection` 增加 `available_at`，optional nullable date-time。描述为来源可验证的市场可用时间，不得用 report_date、publication_date 或 fetched_at 自动补值。
+5. `IndexConstituent` 增加 `effective_from`、`effective_to`（optional date）、`available_at`、`system_observed_at`（optional nullable date-time）。当前 Provider 未提供这些字段，历史快照应继续降级；不能为了填充 Schema 而推断时间。
+6. `SourceStatus` 增加 `market_capital_flow_capable: boolean`，optional，描述为 Provider 是否实现市场级资金流能力。
+7. 从 `SectorRanking` 删除未赋值且与 Snapshot 报告日重复的 `ProviderReportDate`；从 `SectorRankingSnapshot` 删除无生产来源的 `ExcludedNonAShareCount`。删除前在 Data 分支确认没有外部构造方依赖，并补充 Model JSON/编译测试。
+
+#### 本轮结论与剩余门禁
+
+- 13 个应补 Schema 的字段分布在 7 个 Schema：ProviderProbeCheckResult（4）、MarketBreadthSnapshot（1）、LimitPoolItem（2）、FundamentalSection（1）、IndexConstituent（4）、SourceStatus（1）——实际为 **6 个 Schema、13 个字段**。其中 4 + 1 + 2 + 1 + 4 + 1 = 13。
+- 2 个无赋值/重复字段建议从 Go Model 删除，不应新增 OpenAPI 属性。
+- 当前 HTTP Handler 对上述父响应对象均直接调用 `writeJSON`，没有独立 Response DTO 转换层；因此 Model 的 JSON Tag 就是实际 HTTP 输出结构的一部分。
+- 这仍是静态追踪，没有修改 Data 代码，也没有为这 13 个字段运行真实 Handler Golden。应在 Data 分支实施时补 Schema、删除死字段，并覆盖有值/缺值/零值的 JSON 输出。
+- Operation → Handler → Model 的追踪解决了“字段是否有实际路由”的问题，但还没有替代完整自动化双向契约测试。
+
+### 11.19 Data 最新 HEAD 与 CI 结果更新（2026-11-05）
+
+Data 分支最新 HEAD 已从 `587f27683c8422810d2f7fc917a2c9324eb147b0` 前进到：
+
+- SHA：`cce59e8de493813a4b04f7d0bd24211e1e919bb1`
+- 提交：`style(baostock): 修正专项报告结构体格式 [historical_baostock_factors]`
+- Compare：ahead 1 / behind 0；唯一文件是 `services/market-data/internal/baostock/live_adjustment_probe_test.go`，修复 gofmt 排版，没有业务逻辑变化。
+- 最新 SHA 的 Go test suite、Live provider probe、WebUI checks、Go-Python parity 均 completed / success。
+
+前一 SHA `587f276` 的 Go test suite 曾失败：`internal/baostock/live_adjustment_probe_test.go` 未通过 gofmt，导致 market-data 单测、race、vet 步骤跳过；Docker market-data image build 因同一 gofmt 检查失败。MariaDB Migration/PIT integration、go-core 和根模块测试当时通过。新 SHA 的格式修正后，四个 Workflow 全部成功。
+
+本轮 11.18 的静态字段追踪以 cce59e8 为基线；Compare 证明该提交只改了上述测试文件格式，未改 OpenAPI、Handler、Model 或 Service。CI 全绿不代表字段级契约已修复，GOV-004 仍 NO-GO。
