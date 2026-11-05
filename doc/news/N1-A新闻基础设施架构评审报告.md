@@ -215,9 +215,11 @@ Source 策略默认作用于所有 endpoint；Endpoint 策略默认只能收紧�
 | N2 | Domain、Application ports、Provider Adapter | 固定响应样本/fake HTTP server；不依赖真实 Key，不做持久化 |
 | N3 | 来源抓取、解析、标准化和时间处理 | 仅对已批准来源；未确认授权的来源保持 skipped/restricted |
 | N4 | 身份、去重、版本、证券/行业关联 | fake Repository/内存测试替身；不声称生产存储 |
-| N5 | 历史 Python 数据价值评估 | 可选；未经单独批准不导入 |
-| N6 | 公共 DB/Redis/通用诊断接入 | 等公共服务契约和实现稳定 |
-| N7 | 持久化、迁移和全链路验收 | 依赖 N6 |
+| N5 | 公共运行能力接入 | 等 PLAT-002 冻结及 PLAT-005/006/008 实现验收 |
+| N6 | 新闻持久化 | 等公共存储能力可用；News 自有 Repository/SQL/Migration |
+| N7 | Diagnostics 与可选 Task | PLAT-007 可用后接入；Task 按真实异步需求决定 |
+| N8 | 跨模块集成与验收 | PLAT-011 业务接入；PLAT-012 故障演练 |
+| H1 | 历史 Python 数据价值评估 | 可选；未经单独批准不导入 |
 
 N1-A 评审通过并获得用户确认后才进入 N2。当前不修改业务代码，不运行 Provider Live Probe，不执行数据库迁移。
 
@@ -273,9 +275,9 @@ N1-A 评审通过并获得用户确认后才进入 N2。当前不修改业务代
 | PLAT-008 HTTP Client | Provider/Source Adapter 使用统一 Factory/Doer | 实际网络调用需平台实现可用；需另行确认 Redirect、DNS/IP 防护和每依赖并发策略 |
 | PLAT-009 Storage/Migration | 平台提供 DB/Redis 生命周期与 Migration Runner | News 自己实现 SQL Repository、新闻表和 Migration 内容；Redis 非首期必需 |
 | PLAT-010 Task | 仅在定时/长耗时/可恢复采集确有需求时使用 | 不强制把同步用例异步化；Task 不替代 Observation |
-| PLAT-011 Metrics | 提供低基数指标导出 | 不将 symbol、URL、news_id 作为默认指标标签 |
-| PLAT-012 Audit | 来源策略等敏感管理操作需要审计时使用 | 当前没有新闻管理 API，不预建新闻审计设施 |
-| PLAT-013/014 Integration/Drill | 跨模块接入、故障演练和治理验收 | 由平台与根服务集成分支组织，News 提供契约测试和接入证据 |
+| PLAT-011 Business Integration | 按真实依赖接入 Data/News/Research | News 提供契约测试和接入证据 |
+| PLAT-012 Fault Drill | 关键故障演练和运行手册 | News 集成后参与必要演练 |
+| Metrics / Audit | 平台文档提及但无独立 PLAT 编号 | 不作为新闻首期依赖，按真实需求评估 |
 
 ### 13.3 状态和错误边界
 
@@ -299,8 +301,18 @@ Provider 部分失败、空结果和策略跳过属于 Application 结构化业�
 - N4：身份、去重、版本和证券/行业关系；使用 fake Repository，不实现 SQL/连接池。
 - N5：接入 PLAT-005/006/008；不引入新闻专属认证或通用 HTTP/日志/配置实现。
 - N6：接入 PLAT-009 的连接和 Migration 能力；News 实现自己的 SQL Repository/表/Migration；MariaDB 优先，Redis 按需。
-- N7：接入 PLAT-007 的领域 Check；PLAT-010/012 只在定时任务/管理审计需求明确后接入。
-- N8：通过 PLAT-013 完成跨模块验收；按 PLAT-014 演练关键故障。
+- N7：接入 PLAT-007 的领域 Check；PLAT-010 只在定时任务等异步需求明确后接入。
+- N8：按 PLAT-011 完成跨模块验收；按 PLAT-012 演练关键故障。
+- H1：历史 Python 数据价值单独评估，不属于主路径。
 - 历史 Python 数据价值评估独立列为可选 H1，不阻塞主路径。
 
 以上调整不要求等待整套公共平台全部完成后才开始纯 Domain/离线协议和解析工作；真实网络调用、持久化和诊断接入必须遵守对应平台门禁。
+
+
+## 9. 本版评审修订说明
+
+本版已对齐公共平台最新提交 `98f561ec812b8b27fee5b4fb9d35b1accade93d8`，并统一以下口径：
+- PLAT-011 为业务接入，PLAT-012 为故障演练；Metrics/Audit 无独立任务编号。
+- N5/N6/N7/N8 的阶段含义与《新闻模块开发任务与验收清单》一致；历史数据评估独立列为可选 H1。
+- 首期证券关联采用 canonical symbol + market/exchange；不假设现存统一 security_id/industry_id。
+- N1-A 内部架构、来源授权规则、Application 契约及平台契约对齐已完成；最终仍等待用户确认。
