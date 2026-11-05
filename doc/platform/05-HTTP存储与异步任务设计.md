@@ -158,7 +158,8 @@ HTTP Client 必须区分固定 Provider API Endpoint 与不可信来源 URL。�
 
 ### 9.2 Redis 生命周期
 
-- `OpenRedis(ctx, options, pingTimeout)` 接收调用方构造的 go-redis Options，校验地址、DB、连接池规模和超时参数，启动前 Ping。
+- `OpenRedis(ctx, options, pingTimeout)` 接收调用方构造的 go-redis Options，统一归一化连接池参数：默认 PoolSize 20、MaxActiveConns 128、MaxIdleConns 20；最大活动连接数是硬上限，不能把 PoolSize 误认为总连接数上限。
+- PoolSize/MaxIdleConns/MinIdleConns 必须满足容量关系，最大活动连接数不超过 128；Dial/Read/Write/Pool/连接空闲及生命周期超时拒绝负值，Ping 超时不超过 30 秒。
 - Ping 失败自动关闭客户端；成功后生命周期由调用方持有，必须显式 Close。
 - `PingRedis` 统一返回安全 Fault。Redis 是缓存/短期辅助状态，不得成为任务、业务事实或审计的唯一持久化来源。
 
@@ -168,8 +169,9 @@ HTTP Client 必须区分固定 Provider API Endpoint 与不可信来源 URL。�
 - `ApplyMigrations(ctx, db, namespace, migrations)` 必须由服务启动/部署的显式迁移步骤调用；OpenSQL 不自动执行 Migration。
 - namespace 限制为小写字母、数字、点、下划线和连字符，最多 64 字符。
 - 通过同一专用 SQL Conn 执行 MariaDB/MySQL `GET_LOCK`、Migration 和 `RELEASE_LOCK`，避免数据库连接池切换会话导致 advisory lock 失效。
-- 历史表 `platform_schema_migrations` 按 namespace/version 唯一记录 description、SQL SHA-256 checksum、status、失败语句序号和 applied_at。
-- Migration 先写入 running，再逐条执行 SQL，成功后更新 applied；SQL 失败时尽最大努力写入 failed 和失败语句序号。历史中存在 running/failed 时拒绝自动重跑，必须先人工检查部分 DDL 结果并恢复。
+- 历史表 `platform_schema_migrations` 按 namespace/version 唯一记录 description、SQL SHA-256 checksum、status、失败语句序号、started_at、finished_at 和固定 failure_code。保留旧 applied_at 字段以兼容既有表结构，不再将其作为迁移完成时间。
+- Runner 启动时通过 MariaDB `ADD COLUMN IF NOT EXISTS` 补齐新增元数据列，兼容此前创建的历史表；旧记录不伪造 finished_at，只有本次执行的迁移写入准确开始/结束时间。
+- Migration 先写入 running 和 started_at，再逐条执行 SQL；成功后更新 applied、finished_at；SQL 失败时尽最大努力写入 failed、failure_statement、finished_at 和固定 failure_code。不得持久化原始 SQL 错误文本。历史中存在 running/failed 时拒绝自动重跑，必须先人工检查部分 DDL 结果并恢复。
 - 执行前验证完整 Migration 清单；拒绝重复版本、空 SQL、无效 namespace、历史 checksum 漂移、数据库存在未登记版本和历史版本缺口。
 - 每条 SQL 单独执行；MariaDB DDL 可能隐式提交，因此不能假设整个 Migration 可事务回滚。失败记录写入本身也可能因数据库不可用而失败，此时错误仍保持安全摘要，但需要通过数据库侧检查确认实际执行状态。修复应采用新的前向 Migration，不得修改已发布版本。
 
@@ -325,3 +327,12 @@ Migration 状态为 `running` 或 `failed` 时，Runner 不会自动重跑。处
 - 本次 CI 是平台包级专项验证，不代表整个仓库、其他服务或生产环境验收通过。
 
 结论：PLAT-008 平台 HTTP Client 原语达到当前代码与专项 CI 验收要求，可以进入领域组合根接入阶段；生产抓取开放仍受上述部署与集成门禁约束。
+
+
+### 9.7 PLAT-009 Redis 连接上限与 Migration 时间元数据修复（2026-11-05）
+
+- Redis 的 `PoolSize` 仅表示基础池容量，不能作为活动连接总上限；`MaxActiveConns` 才是硬上限。平台默认设置 PoolSize=20、MaxActiveConns=128、MaxIdleConns=20，并验证 PoolSize <= MaxActiveConns、MinIdleConns <= MaxIdleConns <= MaxActiveConns。
+- Redis 池容量和连接超时参数拒绝非法负值，MaxActiveConns 不允许超过 128；这保证 go-redis 运行时的连接总量受到显式限制。
+- Migration 历史新增 started_at、finished_at、failure_code；保留旧 applied_at 兼容既有历史表。通过 MariaDB `ADD COLUMN IF NOT EXISTS` 补齐旧表字段，不为旧记录推断或伪造完成时间。
+- 新迁移开始时写 started_at，成功/失败结束时写 finished_at；失败码使用固定 `platform.storage.migration_apply_failed`，只存失败语句序号和稳定错误码，不保存 SQL Driver 原始错误。
+- fake Driver 测试覆盖池配置边界、迁移开始/完成时间、失败元数据和历史表列升级。真实 MariaDB/Redis 运行时集成仍待部署验收。

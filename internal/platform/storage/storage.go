@@ -27,6 +27,8 @@ const (
 	defaultSQLConnMaxIdleTime = 5 * time.Minute
 	defaultPingTimeout        = 5 * time.Second
 	maxSQLMaxOpenConns        = 128
+	defaultRedisPoolSize      = 20
+	maxRedisPoolSize          = 128
 	maxPingTimeout            = 30 * time.Second
 	migrationLockWaitSeconds  = 10
 )
@@ -95,10 +97,12 @@ func PingSQL(ctx context.Context, db *sql.DB) error {
 // OpenRedis opens a Redis client and verifies connectivity before returning it.
 // The caller owns the returned client's lifecycle and must call Close.
 func OpenRedis(ctx context.Context, options redis.Options, pingTimeout time.Duration) (*redis.Client, error) {
-	if ctx == nil || strings.TrimSpace(options.Addr) == "" || options.DB < 0 ||
-		options.PoolSize < 0 || options.PoolSize > maxSQLMaxOpenConns ||
-		options.DialTimeout < 0 || options.ReadTimeout < 0 || options.WriteTimeout < 0 {
+	if ctx == nil {
 		return nil, fault.New(fault.ClassValidation, "platform.storage.invalid_redis_config", "Redis connection configuration is invalid", nil)
+	}
+	options, err := normalizeRedisOptions(options)
+	if err != nil {
+		return nil, fault.New(fault.ClassValidation, "platform.storage.invalid_redis_config", "Redis connection configuration is invalid", err)
 	}
 	pingTimeout, err := normalizePingTimeout(pingTimeout)
 	if err != nil {
@@ -154,6 +158,26 @@ func normalizeSQLConfig(config SQLConfig) (SQLConfig, error) {
 		return config, errors.New("SQL ping timeout exceeds 30 seconds")
 	}
 	return config, nil
+}
+
+func normalizeRedisOptions(options redis.Options) (redis.Options, error) {
+	if strings.TrimSpace(options.Addr) == "" || options.DB < 0 ||
+		options.PoolSize < 0 || options.PoolSize > maxRedisPoolSize ||
+		options.MaxActiveConns < 0 || options.MaxActiveConns > maxRedisPoolSize ||
+		options.MinIdleConns < 0 || options.MaxIdleConns < 0 ||
+		options.DialTimeout < 0 || options.ReadTimeout < 0 || options.WriteTimeout < 0 ||
+		options.PoolTimeout < 0 || options.ConnMaxIdleTime < 0 || options.ConnMaxLifetime < 0 {
+		return options, errors.New("Redis pool and timeout settings are invalid")
+	}
+	if options.PoolSize == 0 { options.PoolSize = defaultRedisPoolSize }
+	if options.MaxActiveConns == 0 { options.MaxActiveConns = maxRedisPoolSize }
+	if options.MaxIdleConns == 0 { options.MaxIdleConns = options.PoolSize }
+	if options.PoolSize > options.MaxActiveConns ||
+		options.MaxIdleConns > options.MaxActiveConns ||
+		options.MinIdleConns > options.MaxIdleConns {
+		return options, errors.New("Redis connection pool limits are inconsistent")
+	}
+	return options, nil
 }
 
 func normalizePingTimeout(timeout time.Duration) (time.Duration, error) {
@@ -243,10 +267,24 @@ func ApplyMigrations(ctx context.Context, db *sql.DB, namespace string, migratio
 		status VARCHAR(16) NOT NULL DEFAULT 'applied',
 		failure_statement INT UNSIGNED NOT NULL DEFAULT 0,
 		applied_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+		started_at DATETIME(6) NULL,
+		finished_at DATETIME(6) NULL,
+		failure_code VARCHAR(64) NOT NULL DEFAULT '',
 		PRIMARY KEY (namespace, version)
 	) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`
 	if _, err := conn.ExecContext(ctx, createHistory); err != nil {
 		return dependencyFault("sql", "platform.storage.migration_history_failed", "migration history storage is unavailable", err)
+	}
+	// Upgrade history tables created by earlier platform versions without changing
+	// the meaning of the legacy applied_at column.
+	for _, statement := range []string{
+		"ALTER TABLE platform_schema_migrations ADD COLUMN IF NOT EXISTS started_at DATETIME(6) NULL",
+		"ALTER TABLE platform_schema_migrations ADD COLUMN IF NOT EXISTS finished_at DATETIME(6) NULL",
+		"ALTER TABLE platform_schema_migrations ADD COLUMN IF NOT EXISTS failure_code VARCHAR(64) NOT NULL DEFAULT ''",
+	} {
+		if _, err := conn.ExecContext(ctx, statement); err != nil {
+			return dependencyFault("sql", "platform.storage.migration_history_failed", "migration history schema could not be upgraded", err)
+		}
 	}
 
 	applied := make(map[uint64]string)
@@ -308,8 +346,8 @@ func ApplyMigrations(ctx context.Context, db *sql.DB, namespace string, migratio
 			continue
 		}
 		if _, err := conn.ExecContext(ctx, `INSERT INTO platform_schema_migrations
-			(namespace, version, description, checksum, status, failure_statement)
-			VALUES (?, ?, ?, ?, 'running', 0)`,
+			(namespace, version, description, checksum, status, failure_statement, started_at, finished_at, failure_code)
+			VALUES (?, ?, ?, ?, 'running', 0, CURRENT_TIMESTAMP(6), NULL, '')`,
 			namespace, migration.Version, migration.Description, checksum); err != nil {
 			return dependencyFault("sql", "platform.storage.migration_history_failed", "migration execution could not be recorded", err)
 		}
@@ -317,7 +355,9 @@ func ApplyMigrations(ctx context.Context, db *sql.DB, namespace string, migratio
 			if _, err := conn.ExecContext(ctx, statement); err != nil {
 				recordCtx, recordCancel := context.WithTimeout(context.Background(), defaultPingTimeout)
 				_, recordErr := conn.ExecContext(recordCtx, `UPDATE platform_schema_migrations
-					SET status = 'failed', failure_statement = ?
+					SET status = 'failed', failure_statement = ?,
+						failure_code = 'platform.storage.migration_apply_failed',
+						finished_at = CURRENT_TIMESTAMP(6)
 					WHERE namespace = ? AND version = ? AND status = 'running'`,
 					index+1, namespace, migration.Version)
 				recordCancel()
@@ -333,7 +373,8 @@ func ApplyMigrations(ctx context.Context, db *sql.DB, namespace string, migratio
 			}
 		}
 		if _, err := conn.ExecContext(ctx, `UPDATE platform_schema_migrations
-			SET status = 'applied', failure_statement = 0
+			SET status = 'applied', failure_statement = 0, failure_code = '',
+				finished_at = CURRENT_TIMESTAMP(6)
 			WHERE namespace = ? AND version = ? AND status = 'running'`,
 			namespace, migration.Version); err != nil {
 			return &fault.Fault{

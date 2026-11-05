@@ -244,11 +244,15 @@ type migrationTestState struct {
 	applied        map[uint64]string
 	pending        map[uint64]string
 	failed         map[uint64]int
+	failureCode    map[uint64]string
+	started        map[uint64]bool
+	finished       map[uint64]bool
 	failStatement  bool
 	statements     []string
 	lockAcquired   bool
 	lockReleased   bool
 	historyCreated bool
+	historyColumnsUpgraded bool
 }
 
 type migrationTestConnector struct {
@@ -323,6 +327,8 @@ func (c migrationTestConn) ExecContext(_ context.Context, query string, args []d
 	switch {
 	case strings.HasPrefix(query, "CREATE TABLE IF NOT EXISTS platform_schema_migrations"):
 		c.state.historyCreated = true
+	case strings.HasPrefix(query, "ALTER TABLE platform_schema_migrations ADD COLUMN IF NOT EXISTS"):
+		c.state.historyColumnsUpgraded = true
 	case strings.Contains(query, "INSERT INTO platform_schema_migrations"):
 		version, ok := args[1].Value.(int64)
 		if !ok {
@@ -333,16 +339,22 @@ func (c migrationTestConn) ExecContext(_ context.Context, query string, args []d
 			return nil, fmt.Errorf("unexpected migration checksum argument: %T", args[3].Value)
 		}
 		c.state.pending[uint64(version)] = checksum
+		if c.state.started == nil { c.state.started = make(map[uint64]bool) }
+		c.state.started[uint64(version)] = strings.Contains(query, "started_at")
 	case strings.Contains(query, "UPDATE platform_schema_migrations"):
 		versionArg := args[len(args)-1].Value.(int64)
 		version := uint64(versionArg)
 		if strings.Contains(query, "status = 'failed'") {
 			c.state.failed[version] = int(args[0].Value.(int64))
+			if c.state.failureCode == nil { c.state.failureCode = make(map[uint64]string) }
+			c.state.failureCode[version] = "platform.storage.migration_apply_failed"
 		} else if strings.Contains(query, "status = 'applied'") {
 			c.state.applied[version] = c.state.pending[version]
 			delete(c.state.pending, version)
 			delete(c.state.failed, version)
 		}
+		if c.state.finished == nil { c.state.finished = make(map[uint64]bool) }
+		c.state.finished[version] = strings.Contains(query, "finished_at")
 	default:
 		if c.state.failStatement && strings.Contains(query, "CREATE TABLE failing_table") {
 			return nil, errors.New("private migration SQL failure detail")
@@ -380,8 +392,11 @@ func TestApplyMigrationsAppliesInOrderAndIsIdempotent(t *testing.T) {
 	if err := ApplyMigrations(context.Background(), db, "analysis", migrations); err != nil {
 		t.Fatal(err)
 	}
-	if !state.historyCreated || !state.lockReleased {
-		t.Fatalf("migration lifecycle incomplete: history=%t lockReleased=%t", state.historyCreated, state.lockReleased)
+	if !state.historyCreated || !state.historyColumnsUpgraded || !state.lockReleased {
+		t.Fatalf("migration lifecycle incomplete: history=%t columnsUpgraded=%t lockReleased=%t", state.historyCreated, state.historyColumnsUpgraded, state.lockReleased)
+	}
+	if !state.started[1] || !state.finished[1] || !state.finished[2] {
+		t.Fatalf("migration execution timestamps were not recorded: started=%v finished=%v", state.started, state.finished)
 	}
 	if len(state.statements) != 2 || !strings.HasPrefix(state.statements[0], "CREATE TABLE") || !strings.HasPrefix(state.statements[1], "CREATE INDEX") {
 		t.Fatalf("migrations were not applied in version order: %v", state.statements)
@@ -489,6 +504,9 @@ func TestApplyMigrationsRecordsFailureAndRequiresManualRecovery(t *testing.T) {
 	if state.failed[1] != 1 {
 		t.Fatalf("expected failed migration statement 1 to be recorded, got %+v", state.failed)
 	}
+	if state.failureCode[1] != "platform.storage.migration_apply_failed" || !state.started[1] || !state.finished[1] {
+		t.Fatalf("failed migration metadata is incomplete: code=%q started=%t finished=%t", state.failureCode[1], state.started[1], state.finished[1])
+	}
 	state.failStatement = false
 	err = ApplyMigrations(context.Background(), db, "analysis", migrations)
 	if !errors.As(err, &platformFault) || platformFault.Code != "platform.storage.migration_requires_recovery" {
@@ -496,6 +514,33 @@ func TestApplyMigrationsRecordsFailureAndRequiresManualRecovery(t *testing.T) {
 	}
 	if len(state.statements) != 0 {
 		t.Fatalf("failed migration must not be retried automatically: %v", state.statements)
+	}
+}
+
+func TestNormalizeRedisOptionsAppliesBoundedDefaults(t *testing.T) {
+	options, err := normalizeRedisOptions(redis.Options{Addr: "redis:6379"})
+	if err != nil { t.Fatal(err) }
+	if options.PoolSize != defaultRedisPoolSize || options.MaxActiveConns != maxRedisPoolSize || options.MaxIdleConns != defaultRedisPoolSize {
+		t.Fatalf("Redis options did not receive bounded defaults: %+v", options)
+	}
+}
+
+func TestNormalizeRedisOptionsRejectsInvalidLimitsAndTimeouts(t *testing.T) {
+	tests := []struct { name string; options redis.Options }{
+		{"pool size above maximum", redis.Options{Addr: "redis:6379", PoolSize: maxRedisPoolSize + 1}},
+		{"active connections above maximum", redis.Options{Addr: "redis:6379", MaxActiveConns: maxRedisPoolSize + 1}},
+		{"pool size exceeds active connections", redis.Options{Addr: "redis:6379", PoolSize: 20, MaxActiveConns: 10}},
+		{"idle exceeds active", redis.Options{Addr: "redis:6379", PoolSize: 10, MaxActiveConns: 20, MaxIdleConns: 21}},
+		{"minimum idle exceeds maximum idle", redis.Options{Addr: "redis:6379", PoolSize: 10, MinIdleConns: 11, MaxIdleConns: 10}},
+		{"negative minimum idle", redis.Options{Addr: "redis:6379", MinIdleConns: -1}},
+		{"negative pool timeout", redis.Options{Addr: "redis:6379", PoolTimeout: -time.Second}},
+		{"negative idle timeout", redis.Options{Addr: "redis:6379", ConnMaxIdleTime: -time.Second}},
+		{"negative lifetime", redis.Options{Addr: "redis:6379", ConnMaxLifetime: -time.Second}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if _, err := normalizeRedisOptions(test.options); err == nil { t.Fatal("expected invalid Redis options to fail") }
+		})
 	}
 }
 
