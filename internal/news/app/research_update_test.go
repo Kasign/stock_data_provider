@@ -25,9 +25,9 @@ func (r *memoryResearchRepository) WithinResearchUpdateTransaction(ctx context.C
 		return err
 	}
 	working := &memoryResearchRepository{
-		versions: map[string][]domain.NewsItemVersion{},
-		relations: map[string][]domain.RelationAssertion{},
-		evidence: map[string][][]domain.RelationEvidence{},
+		versions:   map[string][]domain.NewsItemVersion{},
+		relations:  map[string][]domain.RelationAssertion{},
+		evidence:   map[string][][]domain.RelationEvidence{},
 		failAppend: r.failAppend,
 	}
 	for key, values := range r.versions {
@@ -102,7 +102,7 @@ func baseResearchRequest() ResearchUpdateRequest {
 	return ResearchUpdateRequest{
 		NewsID: "news-1", ObservationID: "obs-1",
 		Candidate: domain.Candidate{Title: "标题", PublisherName: "媒体"},
-		Content: domain.ContentLayers{SourceSummary: "来源摘要", SourceSummaryOrigin: domain.ContentOriginFeedSummary},
+		Content:   domain.ContentLayers{SourceSummary: "来源摘要", SourceSummaryOrigin: domain.ContentOriginFeedSummary},
 	}
 }
 
@@ -146,7 +146,7 @@ func TestApplyResearchUpdateAddsConfirmedSecurityRelationWithEvidence(t *testing
 	request.Relations = []domain.RelationAssertion{{
 		ID: "relation-1", SubjectType: domain.RelationSubjectSecurity,
 		Security: &domain.SecurityRelationSubject{Market: "XSHG", Symbol: "600000", Name: "浦发银行"},
-		Kind: domain.RelationMentions, Method: domain.RelationSourceExplicit, Status: domain.RelationConfirmed,
+		Kind:     domain.RelationMentions, Method: domain.RelationSourceExplicit, Status: domain.RelationConfirmed,
 	}}
 	request.Evidence = map[string][]domain.RelationEvidence{
 		"relation-1": {{Type: domain.RelationEvidenceSourceField, FieldPath: "related_securities"}},
@@ -169,7 +169,7 @@ func TestApplyResearchUpdateModelProposalMustBeManuallySuperseded(t *testing.T) 
 	model := domain.RelationAssertion{
 		ID: "model-1", SubjectType: domain.RelationSubjectSecurity,
 		Security: &domain.SecurityRelationSubject{Market: "XSHG", Symbol: "600000"},
-		Kind: domain.RelationMentions, Method: domain.RelationModel, Status: domain.RelationProposed,
+		Kind:     domain.RelationMentions, Method: domain.RelationModel, Status: domain.RelationProposed,
 	}
 	request.Relations = []domain.RelationAssertion{model}
 	request.Evidence = map[string][]domain.RelationEvidence{"model-1": {{Type: domain.RelationEvidenceModelOutput, ModelVersion: "model-v1"}}}
@@ -186,7 +186,7 @@ func TestApplyResearchUpdateModelProposalMustBeManuallySuperseded(t *testing.T) 
 	confirm.Relations = []domain.RelationAssertion{{
 		ID: "manual-1", SubjectType: domain.RelationSubjectSecurity,
 		Security: &domain.SecurityRelationSubject{Market: "XSHG", Symbol: "600000"},
-		Kind: domain.RelationMentions, Method: domain.RelationManual, Status: domain.RelationConfirmed,
+		Kind:     domain.RelationMentions, Method: domain.RelationManual, Status: domain.RelationConfirmed,
 		SupersedesRelationID: "model-1",
 	}}
 	confirm.Evidence = map[string][]domain.RelationEvidence{"manual-1": {{Type: domain.RelationEvidenceManual}}}
@@ -205,7 +205,7 @@ func TestApplyResearchUpdateRejectsInvalidRelationAndRollsBackVersion(t *testing
 	request.Relations = []domain.RelationAssertion{{
 		ID: "invalid", SubjectType: domain.RelationSubjectSecurity,
 		Security: &domain.SecurityRelationSubject{Symbol: "600000"},
-		Kind: domain.RelationMentions, Method: domain.RelationSourceExplicit, Status: domain.RelationConfirmed,
+		Kind:     domain.RelationMentions, Method: domain.RelationSourceExplicit, Status: domain.RelationConfirmed,
 	}}
 	request.Evidence = map[string][]domain.RelationEvidence{"invalid": {{Type: domain.RelationEvidenceSourceField, FieldPath: "related_securities"}}}
 	_, err := newResearchUseCase(repository).Execute(context.Background(), request)

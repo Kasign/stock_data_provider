@@ -39,8 +39,8 @@ type ResearchUpdateRequest struct {
 
 // ResearchUpdateResult 返回版本是否追加及当前有效关系。
 type ResearchUpdateResult struct {
-	Version        domain.NewsItemVersion
-	VersionCreated bool
+	Version          domain.NewsItemVersion
+	VersionCreated   bool
 	CurrentRelations []domain.RelationAssertion
 }
 
