@@ -1,0 +1,148 @@
+openapi: 3.0.3
+info:
+  title: News Data API
+  version: 0.1.0-draft
+  description: |
+    新闻模块 API 草案。当前仅用于 N1 契约讨论，尚未与现有路由和 DTO 完成核对，
+    不代表接口已经实现。冻结前必须与服务现有认证、分页、错误响应规范保持一致。
+servers:
+  - url: /
+tags:
+  - name: News
+    description: 新闻查询与来源诊断
+paths:
+  /api/v1/news:
+    get:
+      tags: [News]
+      summary: 查询已入库新闻
+      operationId: listNews
+      parameters:
+        - name: from
+          in: query
+          description: 查询起始时间，时区和使用的时间字段须在契约冻结时明确
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          description: 查询结束时间，时区和使用的时间字段须在契约冻结时明确
+          schema:
+            type: string
+            format: date-time
+        - name: security_id
+          in: query
+          description: 现有证券主数据标准 ID
+          schema:
+            type: string
+        - name: source_id
+          in: query
+          schema:
+            type: string
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: page_size
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        '200':
+          description: 查询成功；具体 envelope 待与现有 API 规范统一
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '400':
+          description: 参数错误
+        '401':
+          description: 未授权
+        '500':
+          description: 服务内部错误
+  /api/v1/news/search:
+    get:
+      tags: [News]
+      summary: 搜索候选新闻
+      operationId: searchNews
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema:
+            type: string
+            minLength: 1
+        - name: from
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          schema:
+            type: string
+            format: date-time
+      responses:
+        '200':
+          description: 搜索结果；部分 Provider 失败语义待冻结
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '400':
+          description: 参数错误
+        '500':
+          description: 服务内部错误
+  /api/v1/news/{id}:
+    get:
+      tags: [News]
+      summary: 获取新闻详情
+      operationId: getNews
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 新闻详情
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '404':
+          description: 新闻不存在
+  /api/v1/news/sources:
+    get:
+      tags: [News]
+      summary: 查询新闻来源
+      operationId: listNewsSources
+      responses:
+        '200':
+          description: 来源列表和状态
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+  /api/v1/news/diagnostics:
+    get:
+      tags: [News]
+      summary: 查询新闻来源诊断
+      operationId: getNewsDiagnostics
+      responses:
+        '200':
+          description: 来源可用性和质量诊断
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
