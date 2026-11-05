@@ -261,7 +261,7 @@ func Guard(authenticator *Authenticator, policy RoutePolicy, next http.Handler) 
 			return
 		}
 		principal, err := authenticator.Authenticate(request)
-		if err != nil {
+		if err != nil || (len(request.Header.Values("Authorization")) == 0 && !policy.allowAnonymous) {
 			w.Header().Set("WWW-Authenticate", "Bearer")
 			writeAuthError(w, http.StatusUnauthorized, "unauthorized", "valid bearer credentials are required")
 			return

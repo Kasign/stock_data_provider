@@ -97,6 +97,12 @@ func TestGuardEnforcesIdentityAndScope(t *testing.T) {
 	handler := Guard(auth, ServiceAccess(ScopeDataRead), next)
 
 	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, requestWithToken(""))
+	if response.Code != http.StatusUnauthorized || called {
+		t.Fatalf("missing credentials must return 401: status=%d called=%v", response.Code, called)
+	}
+
+	response = httptest.NewRecorder()
 	handler.ServeHTTP(response, requestWithToken(dataToken))
 	if response.Code != http.StatusNoContent || !called {
 		t.Fatalf("service access status=%d called=%v", response.Code, called)
