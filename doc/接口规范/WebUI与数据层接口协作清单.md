@@ -399,3 +399,11 @@
 - 每只证券已产生 14 条 BaoStock/Eastmoney 缺失侧 `provider_unavailable` 配对诊断；另 5 条因成功侧质量 degraded 而 skipped。P0-49 诊断修复在真实生产服务链路中生效，但没有一致性通过结论。
 - Pytdx 专项被前序生产 Probe 失败通过默认 success() 隐式跳过；数据侧修正 Live Provider workflow 的独立专项条件为 `always() && ...`，后续仅运行 Pytdx/GGBQ 专项，不重复生产 Probe。该修正不改变 API、Schema、数据库或 WebUI 契约。
 - 当前 WebUI 无需改动；API-06 继续标记“接口层已接入，待真实数据验收”，PIT fail-closed 不变。
+
+
+## 25. 2026-11-05 API-06 P0-51 Review：跨 Provider 失败配对按证券约束
+
+- Review 发现 P0-49 失败侧 Builder 未将 `ProviderProbeItem.SampleSymbol` 与成功快照 `Symbol` 匹配，存在多证券 Probe 错配风险。已修复为仅当 SampleSymbol 非空且完全相同时配对；空 symbol 不生成猜测结果。无 API、Schema、数据库或 WebUI 变化。
+- P0-50 Pytdx Artifact `13416024033`：600036.SH、002982.SZ 的 raw/qfq/hfq 各返回 9 行，quality valid；qfq ref date=2026-11-05，hfq ref date 分别 2002-04-09、2020-04-24。Pytdx 日 K 专项通过；BaoStock TCP timeout 导致 raw cross-provider not_comparable，BaoStock 因子/公司行为一致性测试失败，不能宣称跨源复权通过。
+- 生产 Probe Artifact `13416895510` 已完成 MariaDB 持久化和回读，但 Provider 返回数据均为 degraded 或 failed；storage 通过不等于业务行情质量通过。P0-49 旧 Run 配对条数不再作为准确证券级统计，修复后待重新验证。
+- API-06 继续“接口层已接入，待真实数据验收”；WebUI 无需修改；PIT fail-closed 不变。阶段 B 继续，不进入 Fundamentals。

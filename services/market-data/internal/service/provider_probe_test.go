@@ -944,7 +944,8 @@ func TestBuildCrossProviderProbeCheckResultsReportsUnavailableProvider(t *testin
 	}
 	items := []model.ProviderProbeItem{{
 		Provider: "baostock", Capability: "daily_bars", AdjustmentBasis: model.AdjustmentNone,
-		Status: "failed", ErrorCode: "network_error", ErrorStage: "connect", ErrorMessage: "connection timeout",
+		Status: "failed", SampleSymbol: "600036.SH",
+		ErrorCode: "network_error", ErrorStage: "connect", ErrorMessage: "connection timeout",
 	}}
 	results := buildCrossProviderProbeCheckResults([]*provider.CrossProviderDailySnapshot{snapshot}, items, time.Now().UTC())
 	if len(results) != 1 {
@@ -957,6 +958,32 @@ func TestBuildCrossProviderProbeCheckResultsReportsUnavailableProvider(t *testin
 		!strings.Contains(result.ErrorMessage, "error_code=network_error") ||
 		!strings.Contains(result.ErrorMessage, "error_stage=connect") {
 		t.Fatalf("provider failure must remain explicit and attributable: %+v", result)
+	}
+}
+
+
+func TestBuildCrossProviderProbeCheckResultsMatchesFailedProviderBySymbol(t *testing.T) {
+	snapshots := []*provider.CrossProviderDailySnapshot{
+		{
+			Provider: "pytdx", SourceVersion: "pytdx-v1", Symbol: "600036.SH",
+			AdjustmentBasis: "none", QualityStatus: "valid",
+		},
+		{
+			Provider: "pytdx", SourceVersion: "pytdx-v1", Symbol: "002982.SZ",
+			AdjustmentBasis: "none", QualityStatus: "valid",
+		},
+	}
+	items := []model.ProviderProbeItem{{
+		Provider: "baostock", Capability: "daily_bars", AdjustmentBasis: model.AdjustmentNone,
+		Status: "failed", SampleSymbol: "600036.SH", ErrorCode: "network_error",
+		ErrorStage: "connect", ErrorMessage: "connection timeout",
+	}}
+	results := buildCrossProviderProbeCheckResults(snapshots, items, time.Now().UTC())
+	if len(results) != 1 {
+		t.Fatalf("failed provider must only pair with its requested symbol, got %+v", results)
+	}
+	if results[0].ComparedSymbol != "600036.SH" || results[0].RightProvider != "baostock" {
+		t.Fatalf("failed provider was paired with the wrong symbol: %+v", results[0])
 	}
 }
 

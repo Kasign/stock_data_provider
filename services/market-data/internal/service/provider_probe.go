@@ -1468,7 +1468,7 @@ func buildCrossProviderProbeCheckResults(snapshots []*provider.CrossProviderDail
 			continue
 		}
 		for _, snapshot := range validSnapshots {
-			if snapshot.Provider == item.Provider || string(item.AdjustmentBasis) != snapshot.AdjustmentBasis {
+			if snapshot.Provider == item.Provider || item.SampleSymbol == "" || item.SampleSymbol != snapshot.Symbol || string(item.AdjustmentBasis) != snapshot.AdjustmentBasis {
 				continue
 			}
 			message := "provider=" + item.Provider + " status=" + item.Status
