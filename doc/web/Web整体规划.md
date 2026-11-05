@@ -2157,3 +2157,15 @@ CSS AST 检查器进一步扩展：
 - [ ] 如快照稳定，再将选定属性整理为受控 baseline fixture，并加入迁移前后比较；在完成该步骤前不启动 CSS 物理拆分。
 
 **本轮范围：** 仅新增测试脚本、workflow 步骤和文档；不修改 `web/styles.css`、`web/index.html`、页面运行逻辑及其他业务目录。
+
+## 2026-11-05 Screening CSSOM 基线复核与回归门禁
+
+- [x] CI 的 CSSOM 采集步骤通过，Artifact `webui-cssom-baseline` 已生成并下载复核：8 个场景、每场景 6 个节点。
+- [x] 亮/暗主题下共观察到 33 项颜色相关 computed-style 差异；两种主题布局尺寸一致。
+- [x] 320px 下工具栏控件纵向铺满，工具栏高度约 230.94px；768/1280/1600px 下工具栏横向排列，高度约 88.94px。各断点尺寸差异符合现有移动媒体规则。
+- [x] 确认首个迁移候选的 CSS 边界：`.screening-local-batch-toolbar`、其 `.field` 子规则、`.screening-select-all`、`#screening-local-select-count`、`#screening-local-batch-feedback`、结果 checkbox accent-color 及对应 max-width:640px 规则。共享 `.field` / `.button` 基础样式仍归 shared-controls，不随候选迁移。
+- [x] 新增压缩受控 fixture `web/tests/fixtures/screening-local-batch.cssom.json.gz`；测试比较 8 场景下选定 computed properties 和元素宽高，排除页面流位置 x/y 与字体度量，避免内容高度和 CI 字体环境引入无关噪声。
+- [x] CSSOM 脚本在采集后执行 fixture 比较；样式变更需先 review，再有意识更新 fixture。
+- [ ] 等待回归门禁 CI 验证。通过后再对该组件做一次迁移前评审，确认样式规则顺序和 shared-controls 依赖，不直接批量拆分。
+
+**结论：** CSSOM 观察基线已稳定到可回归比较的粒度；尚未迁移 CSS 文件，不改变当前视觉。

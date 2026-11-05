@@ -3,6 +3,7 @@ import { createServer } from "node:http";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { gunzipSync } from "node:zlib";
 import { chromium } from "playwright";
 
 const webRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -127,9 +128,42 @@ try {
       await context.close();
     }
   }
+  const fixturePath = path.join(webRoot, "tests", "fixtures", "screening-local-batch.cssom.json.gz");
+  const fixture = JSON.parse(gunzipSync(await readFile(fixturePath)).toString("utf8"));
+  assert.equal(fixture.schemaVersion, 1, "CSSOM fixture schema must be supported");
+  assert.equal(fixture.scope, snapshot.scope, "CSSOM fixture scope must match the capture");
+  const comparison = {
+    schemaVersion: fixture.schemaVersion,
+    scope: fixture.scope,
+    properties: fixture.properties,
+    scenarios: snapshot.scenarios.map((scenario) => ({
+      theme: scenario.theme,
+      viewport: {
+        name: scenario.viewport.name,
+        width: scenario.viewport.width,
+        height: scenario.viewport.height
+      },
+      elements: scenario.elements.map((element) => ({
+        name: element.name,
+        computed: Object.fromEntries(fixture.properties.map((property) =>
+          [property, element.computed[property]])),
+        rect: {
+          width: element.rect.width,
+          height: element.rect.height
+        }
+      }))
+    }))
+  };
+  assert.deepEqual(comparison, {
+    schemaVersion: fixture.schemaVersion,
+    scope: fixture.scope,
+    properties: fixture.properties,
+    scenarios: fixture.scenarios
+  }, "Screening CSSOM regression baseline changed; review and update the fixture intentionally");
   await mkdir(path.dirname(outputPath), { recursive: true });
   await writeFile(outputPath, JSON.stringify(snapshot, null, 2) + "\n", "utf8");
-  console.log("CSSOM baseline captured:", outputPath);
+  console.log("CSSOM regression baseline passed:", fixturePath);
+  console.log("CSSOM observation captured:", outputPath);
   console.log("Scenarios:", snapshot.scenarios.length, "| targets per scenario:", targets.length);
 } finally {
   if (browser) await browser.close();

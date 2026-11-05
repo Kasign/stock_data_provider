@@ -2392,3 +2392,14 @@ CSS AST 检查器进一步扩展：
 - [ ] 验收新 CI 成功且 artifact 包含 8 个场景、每场景 6 个节点；确认移动断点布局与主题颜色差异均按场景记录。
 - [ ] 当前 artifact 仅是观测快照，不等于视觉设计验收，也不是自动比较的 golden baseline；中文字体、截图像素差异继续排除在本轮范围之外。
 - [ ] CSS 仍不物理拆分；待快照复核后再建立稳定 fixture 和单组件迁移评审。
+
+## 2026-11-05 Screening CSSOM 回归基线复核
+
+- [x] CSSOM Artifact 成功生成并复核：8 组主题/视口场景，每组 6 个节点。
+- [x] 暗/亮主题颜色差异已确认；主题不会改变该组件的布局尺寸。
+- [x] 320px 移动布局与 768px 以上横向布局差异已确认；元素宽高符合当前响应式规则。
+- [x] 受控 fixture 已加入 `web/tests/fixtures/screening-local-batch.cssom.json.gz`，回归测试比较计算样式及宽高，不比较 x/y、font-size、font-weight、line-height。
+- [ ] 验收 fixture 比较步骤在 Chromium CI 通过；后续 CSS 迁移前后必须通过同一 fixture。
+- [ ] 迁移前复核候选 CSS 规则与 shared-controls 的边界；未完成评审前不拆分。
+
+说明：fixture 是当前实现的回归基线，不代表产品视觉设计稿或设计正确性。
