@@ -34,3 +34,18 @@ func TestLoadMissingDotEnvIsOK(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestLoadDotEnvRejectsInvalidConfigurationKey(t *testing.T) {
+	key := "PLATFORM_CONFIG_INVALID/KEY"
+	_ = os.Unsetenv(key)
+	path := filepath.Join(t.TempDir(), ".env")
+	if err := os.WriteFile(path, []byte(key+"=value\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := LoadDotEnvIfExists(path); err == nil {
+		t.Fatal("expected invalid configuration key to be rejected")
+	}
+	if _, exists := os.LookupEnv(key); exists {
+		t.Fatal("invalid configuration key must not be loaded")
+	}
+}

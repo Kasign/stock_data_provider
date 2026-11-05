@@ -35,7 +35,7 @@ func LoadDotEnvIfExists(path string) error {
 		line = strings.TrimPrefix(line, "export ")
 		key, value, ok := strings.Cut(line, "=")
 		key = strings.TrimSpace(key)
-		if !ok || key == "" || strings.ContainsAny(key, " \t\r\n") {
+		if !ok || !validKey(key) {
 			return fmt.Errorf("invalid .env entry at line %d", lineNo)
 		}
 		value = strings.TrimSpace(value)
@@ -83,7 +83,7 @@ func stripInlineComment(s string) string {
 func unquote(s string) (string, error) {
 	if len(s) >= 2 {
 		if s[0] == '"' && s[len(s)-1] == '"' {
-			return strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(s[1:len(s)-1], `\n`, "\n"), `\t`, "\t"), `\"`, "\""), nil
+			return strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(s[1:len(s)-1], `\\n`, "\n"), `\\t`, "\t"), `\\"`, "\""), nil
 		}
 		if s[0] == '\'' && s[len(s)-1] == '\'' {
 			return s[1 : len(s)-1], nil
