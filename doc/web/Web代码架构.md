@@ -619,3 +619,23 @@ app.js 继续负责结果集合与活动索引状态、输入防抖、请求 Abo
 4. 不新增 AppStateStore、全局 EventBus 或第二套 Router。后续 review 以可复现的旧请求回写、重复请求、状态冲突或测试缺口为切入点。
 
 本次为只读架构盘点，无运行时代码变更。下一阶段建议做连接代际与模块请求失效一致性 review，重点检查连接设置应用、API client 连接快照、领域模块 generation/AbortController 的取消时序，以及页面恢复时的旧响应保护。
+
+
+### 12.28 JSR-6H 连接配置切换与请求失效一致性审查
+
+连接配置变更由 app.js `applySettings(nextSettings)` 协调，先更新当前 settings，再按变更维度失效请求：
+
+| 请求域 | 行情连接变更 | 分析连接变更 | 失效机制 |
+|---|---|---|---|
+| 自选批量行情 | 是 | 否 | generation 递增、AbortController abort、清空旧快照 |
+| 市场总览/资金流/历史情绪 | 是 | 否 | 各请求 generation 递增、controller abort、旧结果清除 |
+| 全市场分页 | 是 | 否 | `marketStocks.invalidate()`，清除分页快照并复位 busy |
+| 龙虎榜/交易日历 | 是 | 否 | `marketActivity.invalidateConnection()` |
+| 行情查询/证券搜索 | 是 | 否 | 取消 controller/timer、generation 递增、清空旧结果 |
+| 个股研究 | 是 | 否 | 各面板 generation 递增、controller abort、标记旧结果失效 |
+| 数据中心检查/探测/历史 | 是 | 是 | 检查、探测和历史读取各自 generation 递增并 abort |
+| Task/Run | 否 | 是 | Task 上下文与连接 generation 递增，停止轮询、取消 Run 结果读取，清空活动任务状态 |
+
+API client 会把调用方 AbortSignal 与超时 controller 合并，再传给 fetch。各模块在响应后还会检查 signal/generation；Task/Run 额外检查 taskId、runId 和 analysisBase 等身份。
+
+审查未发现旧连接响应回写当前 UI 的明确漏洞。保持现有按领域分开的取消机制，不抽象成单一全局连接管理器；否则会模糊市场/分析两个独立 endpoint 的失效范围。
