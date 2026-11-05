@@ -124,3 +124,38 @@ HTTP Client 必须区分固定 Provider API Endpoint 与不可信来源 URL。�
 首批实现位于 `internal/platform/httpclient`，包含目的地址策略、精确 Host/Port allowlist、受控 DNS 解析与 IP literal Dial、重定向逐跳检查、禁用环境代理、请求/响应上限和 dependency 并发控制。重试仅在调用方显式声明幂等且配置了 MaxRetries 时启用，最多 2 次。
 
 专项 CI 已通过 gofmt、go test、go test -race 和 go vet；已增加基于本地 HTTP Server 的 Transport 连接路径测试，覆盖受控 IP Dial、Host 保留、重定向策略、DNS 结果变化、响应体上限和幂等重试。真实生产网络出口与完整 SSRF 攻击矩阵仍待验收，未完成前不得开放任意来源抓取。
+
+
+## 9. PLAT-009 平台存储原语首批实现
+
+包位置：`internal/platform/storage`。
+
+### 9.1 SQL 生命周期
+
+- `SQLConfig` 统一 MaxOpenConns、MaxIdleConns、ConnMaxLifetime、ConnMaxIdleTime 和 PingTimeout。
+- `DefaultSQLConfig()` 提供单实例保守默认值：最大连接 20、最大空闲 5、连接最大生命周期 30 分钟、最大空闲时间 5 分钟、Ping 5 秒。
+- 最大连接数上限 128；空闲连接不能大于最大连接；负数参数拒绝。
+- `OpenSQL(ctx, connector, config)` 不拼接 DSN、不读取环境变量；数据库驱动和凭证配置由调用方负责。Ping 失败自动关闭 DB。
+- `PingSQL` 统一验证依赖可用性，Fault 对外使用安全摘要。
+
+### 9.2 Redis 生命周期
+
+- `OpenRedis(ctx, options, pingTimeout)` 接收调用方构造的 go-redis Options，校验地址、DB、连接池规模和超时参数，启动前 Ping。
+- Ping 失败自动关闭客户端；成功后生命周期由调用方持有，必须显式 Close。
+- `PingRedis` 统一返回安全 Fault。Redis 是缓存/短期辅助状态，不得成为任务、业务事实或审计的唯一持久化来源。
+
+### 9.3 Migration Runner
+
+- `Migration{Version, Description, Statements}` 是领域提供的不可变迁移清单；平台不拥有领域 SQL 和表结构。
+- `ApplyMigrations(ctx, db, namespace, migrations)` 必须由服务启动/部署的显式迁移步骤调用；OpenSQL 不自动执行 Migration。
+- namespace 限制为小写字母、数字、点、下划线和连字符，最多 64 字符。
+- 通过同一专用 SQL Conn 执行 MariaDB/MySQL `GET_LOCK`、Migration 和 `RELEASE_LOCK`，避免数据库连接池切换会话导致 advisory lock 失效。
+- 历史表 `platform_schema_migrations` 按 namespace/version 唯一记录 description、SQL SHA-256 checksum 和 applied_at。
+- 执行前验证完整 Migration 清单；拒绝重复版本、空 SQL、无效 namespace、历史 checksum 漂移和数据库存在未登记版本。
+- 每条 SQL 单独执行；MariaDB DDL 可能隐式提交，因此不能假设整个 Migration 可事务回滚。部分失败不写成功记录，迁移 SQL 必须可重入或通过新的前向 Migration 修复。
+
+### 9.4 当前验收边界
+
+代码提交 `70e780bcbaaf8c3a084534ba5214a6fcec35ee7c` 对应 Platform Go checks 已通过 gofmt、平台包单测、race test 和 vet，CI：[41997989479](https://github.com/Kasign/stock_data_provider/actions/runs/41997989479)。
+
+测试使用 fake SQL Connector/Driver 和注入 Redis Dialer，不依赖外部数据库服务。真实 MariaDB/Redis 集成、故障恢复和现有分析 Store 的平台化接入尚未验收；服务入口和领域 Migration 总注册仍由集成分支负责。
