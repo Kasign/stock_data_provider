@@ -577,3 +577,23 @@ Go `model.AdjustmentBasis` 响应值为 `none`、`forward_adjusted`、`backward_
 建议把原任务“修正 122 个过宽 nullable”改为 **DATA-CONTRACT-003-B：nullable/省略语义裁决**，逐字段输出三种结果：保留 nullable + 允许省略、改为明确 null 输出、移除 nullable 并仅允许省略。Quote.volume_ratio 优先处理。
 
 **修正后的判断**：122 项不应作为 122 个独立阻断缺陷计数。真正的阻断是其中明确承诺 null 却被 omitempty 省略的语义冲突、required 差异和真实 Handler 输出未被 Golden 验证。此前“122 个过宽 nullable”属于过度归因，本节予以纠正。
+
+
+### 11.13 Data 分支最新提交与当前 CI 状态（2026-11-05）
+
+本轮继续审查期间，Data 分支从 c22470bec87beb89961b76ad9856d5c8709aac73 前进到最新 HEAD：
+
+- SHA：`bc55db99fc6908c77c3c0ec6a213651373a857b2`
+- 提交：`docs(api): 同步 BaoStock 历史探测窗口计划与契约`
+- Compare：相较 c22470b ahead 2 / behind 0。
+- 文件变化：两份 doc/api 规划文档、一份 WebUI/数据接口协作文档，以及 BaoStock Live Probe 测试；没有修改 OpenAPI、HTTP Handler 或 Model。因此 11.9、11.11、11.12 的静态代码结论仍适用于最新实现。
+
+该 SHA 的 Workflow 状态：
+- WebUI checks run 42017149949：completed / success。
+- Go-Python data quality parity run 42017149954：completed / success。
+- Live provider probe run 42017149934：completed / success。
+- Go test suite run 42017149908：本次复核时仍为 in_progress，不能提前写成通过。
+
+Live provider probe 整体 success 仅表示 Workflow 成功；如需确认专项 BaoStock 历史复权步骤，仍需检查该 Run 的具体 Job Steps，不能用整体结论代替专项结果。
+
+**当前核查基线**：静态代码结论跟随 bc55db9；最新 Go test suite 尚未完成。规划分支仍只记录审查和待办，不修改 Data 业务代码。
