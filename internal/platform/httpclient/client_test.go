@@ -418,7 +418,6 @@ func TestClientPropagatesRequestIDFromContext(t *testing.T) {
 	_ = response.Body.Close()
 }
 
-
 func TestResolveRejectsMixedIPv4AndIPv6Answers(t *testing.T) {
 	client, err := New(Config{Resolver: staticResolver{addresses: []netip.Addr{
 		netip.MustParseAddr("8.8.8.8"),
