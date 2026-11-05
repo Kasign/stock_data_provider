@@ -961,7 +961,6 @@ func TestBuildCrossProviderProbeCheckResultsReportsUnavailableProvider(t *testin
 	}
 }
 
-
 func TestBuildCrossProviderProbeCheckResultsMatchesFailedProviderBySymbol(t *testing.T) {
 	snapshots := []*provider.CrossProviderDailySnapshot{
 		{
