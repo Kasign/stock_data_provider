@@ -57,6 +57,7 @@ func TestLiveHistoricalProviderProbe(t *testing.T) {
 			t.Fatalf("production historical Probe failed for %s: %v", symbol, err)
 		}
 		reports = append(reports, run)
+		t.Logf("LIVE_HISTORICAL_PROBE_SUMMARY symbol=%s status=%s total=%d returned=%d degraded=%d failed=%d not_supported=%d persisted=%t", symbol, run.Status, run.Total, run.Returned, run.Degraded, run.Failed, run.NotSupported, run.Persisted)
 		if run.Failed > 0 {
 			failures = append(failures, symbol+": "+strings.Join(probeRunFailureSummaries(run), "; "))
 		}
