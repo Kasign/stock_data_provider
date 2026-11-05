@@ -16,6 +16,8 @@ var (
 )
 
 // NewsItemRelationRepository 必须在单一事务内读取双方证据、完整历史并追加断言。
+// WithinNewsItemRelationTransaction 必须在执行 fn 前取得跨进程/跨实例有效的关系图写锁，
+// 并在锁保护范围内完成读取、校验、追加和提交；锁释放前不得让其他事务通过旧快照并发写入。
 type NewsItemRelationRepository interface {
 	WithinNewsItemRelationTransaction(context.Context, func(NewsItemRelationTransaction) error) error
 }

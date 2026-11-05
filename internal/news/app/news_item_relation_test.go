@@ -112,7 +112,7 @@ func relationAppRequest() NewsItemRelationRequest {
 		Status:              domain.NewsItemRelationConfirmed,
 		EvidenceObservation: "from-obs",
 		FromVersionID:       "from-v1",
-		ToVersionID:        "to-v1",
+		ToVersionID:         "to-v1",
 	}}
 }
 
