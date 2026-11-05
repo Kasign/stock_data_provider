@@ -292,7 +292,7 @@ localStorage + storage event 方案能解决“另一个标签页完成写入后
 
 ## 7. 当前下一步
 
-**当前主线：JSR-6 渐进式收敛 app.js 的剩余页面展示职责。**
+**当前主线：JSR-6 请求生命周期与模块边界收尾；随后转入 UIR-2 全站样式统一。**
 
 已完成：
 - JSR-5A～5E：任务事件筛选投影、流程摘要、详情/节点展示边界及 Task/Run 请求生命周期审查。确认不迁移轮询、请求取消、代际、分页游标和身份校验。
@@ -300,9 +300,9 @@ localStorage + storage event 方案能解决“另一个标签页完成写入后
 - JSR-6A：Run 结果结构化展示 DOM adapter 已迁至 `task-result-view.js`；app.js 保留 Run 状态协调与自选股联动。WebUI Checks #41831466097、Chromium Browser Smoke #41831466212 均通过。
 
 **下一批：**
-1. JSR-6B 预审：检查当前页选股结果列表 `renderScreeningLocalResultRows`。重点识别 DOM row 构建、筛选快照有效性、勾选集合和批量按钮状态的边界。
-2. 只在确认 row builder 可以通过显式参数独立且不接管状态后，才抽离 DOM builder；不迁移筛选快照、选中集合、导出和加入自选的事务。
-3. 随后再复核市场行情/个股研究展示层，不按函数长度机械拆分。
+1. 完成 JSR-6L 请求与按钮状态所有权审查；已发现并修复设置中心两类连接检查缺少主动取消的问题，等待 CI 验收。
+2. 进行 JSR-6M 架构收尾 Review，只处理有证据的问题，不再按函数长度机械拆分。
+3. 将主要开发精力转向 UIR-2：统一布局、间距、卡片、表格、表单和文字规范；JSR 与 UIR 分开提交。
 
 **状态所有权门禁：**
 - app.js 继续持有跨页面 state、当前页行情快照校验、选中证券集合、批量操作、导出、请求生命周期和 storage 事件。
@@ -1199,3 +1199,29 @@ app.js 仅负责两处初始化装配；页面路由 `setView`、hashchange、�
 - Chromium Browser Smoke #41954110757：响应式布局、跨标签页、Run Flow、个股研究、数据中心、选股和全市场分页等全部步骤通过。
 
 下一步：JSR-6L 对 app.js 剩余请求入口做按钮 busy 与 controller owner 一致性专项审查，重点覆盖服务健康检查、行情查询、证券搜索、自选批量行情、数据源能力刷新和 Run 结果重读；先检查证据，不为拆分而拆分。
+
+
+### 2026-11-05 JSR-6L：连接检查请求与按钮状态所有权审查（已修复，待 CI 验收）
+
+审查范围：
+- 服务健康检查、行情查询、证券搜索、自选批量行情、数据源能力刷新及 Run 结果重读。
+- 检查 generation、AbortController、按钮 busy 状态和 finally 的 owner 一致性。
+- 检查连接配置切换、重复触发、请求取消及旧请求晚到时的状态恢复。
+
+审查结论：
+- 行情查询以 quoteQueryGeneration/quoteQueryController 保护结果写入和按钮释放；同一请求键重复触发会直接返回，不同请求先取消旧请求。
+- 证券搜索在输入变化时清理 debounce timer 并取消旧 controller，结果同时校验 generation 和当前输入；finally 只清理当前代际 controller。
+- 自选批量行情按 generation/controller identity 保护快照写入与 finally，成员集合变化时拒绝旧快照；连接变化会主动失效并恢复按钮。
+- 数据源能力刷新按 generation/controller identity 保护结果与按钮收尾，重复刷新和连接变化均取消旧请求。
+- Run 结果重读按任务、Run、分析连接代际和 controller identity 保护结果写入；旧任务 finally 不会释放新任务按钮。
+- 发现设置中心已保存连接检查和草稿连接检查仅通过 generation 丢弃旧结果，未取消底层健康请求；现有 runHealthCheck 已支持外部 AbortSignal，可直接复用。
+
+修正：
+- 为已保存配置检查与草稿配置检查分别增加独立 controller owner。
+- 重复触发同类检查时先取消旧请求；连接配置变化时同时递增代际并取消两类检查。
+- 两类检查均将外部 signal 传入现有 runHealthCheck；finally 仅由 controller identity 匹配的 owner 清理引用，按钮仍由 generation owner 负责恢复。
+- 更新 UI contract，覆盖 signal 传递、controller identity 收尾及连接变更取消。
+- 不修改 runHealthCheck 实现，不新增通用请求管理器，不改变服务健康状态展示语义。
+
+验收：
+- 代码、契约测试及本文档集中提交；等待当前提交对应 WebUI Checks 与 Chromium Browser Smoke。

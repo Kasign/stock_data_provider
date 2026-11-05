@@ -290,8 +290,14 @@ test("已保存连接检查与草稿检查的初始化/解锁异常不会产生�
   const saved = app.match(/async function checkConnectionFromSettings\(\) \{[\s\S]*?\n\}/)?.[0] || "";
   const draft = app.match(/async function checkDraftConnectionFromSettings\(\) \{[\s\S]*?\n\}/)?.[0] || "";
   assert.match(saved, /generation !== savedConnectionCheckGeneration/);
+  assert.match(saved, /savedConnectionCheckController = controller/);
+  assert.match(saved, /runHealthCheck\(marketHealth, settingsToCheck, 6000, controller\.signal\)/);
+  assert.match(saved, /finally[\s\S]*?savedConnectionCheckController === controller/);
   assert.match(saved, /finally[\s\S]*?releaseSettingsCheckButtonSafely/);
   assert.match(draft, /generation !== draftConnectionCheckGeneration/);
+  assert.match(draft, /draftConnectionCheckController = controller/);
+  assert.match(draft, /runHealthCheck\(marketHealth, settingsToCheck, 6000, controller\.signal\)/);
+  assert.match(draft, /finally[\s\S]*?draftConnectionCheckController === controller/);
   assert.match(draft, /finally[\s\S]*?releaseSettingsCheckButtonSafely/);
   assert.match(draft, /testedDraft = readConnectionDraft\(\)/);
 });
@@ -302,6 +308,8 @@ test("applySettings 的单项清理失败不会阻断其余配置应用步骤", 
   assert.ok(apply);
   assert.match(apply, /runSettingsApplyStep\("清理旧分析任务失败："/);
   assert.match(apply, /runSettingsApplyStep\("失效市场总览请求失败："/);
+  assert.match(apply, /savedConnectionCheckController\?\.abort\(\)/);
+  assert.match(apply, /draftConnectionCheckController\?\.abort\(\)/);
   assert.match(apply, /runSettingsApplyStep\("刷新服务健康状态失败："/);
   assert.match(apply, /reportSettingsApplyFailures\(failures\)/);
 });

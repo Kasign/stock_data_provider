@@ -105,7 +105,9 @@ let serviceRefreshGeneration = 0;
 let sourceRefreshGeneration = 0;
 let sourceRefreshController = null;
 let savedConnectionCheckGeneration = 0;
+let savedConnectionCheckController = null;
 let draftConnectionCheckGeneration = 0;
+let draftConnectionCheckController = null;
 let pendingBrowserImport = null;
 
 const state = {
@@ -2394,7 +2396,10 @@ function releaseSettingsCheckButtonSafely(button, label) {
 }
 
 async function checkConnectionFromSettings() {
+  try { savedConnectionCheckController?.abort(); } catch {}
   const generation = ++savedConnectionCheckGeneration;
+  const controller = new AbortController();
+  savedConnectionCheckController = controller;
   let button = null;
   let output = null;
   let settingsToCheck = null;
@@ -2408,8 +2413,8 @@ async function checkConnectionFromSettings() {
     writeSettingsCheckOutputSafely(output, "正在检查当前已保存的行情与分析 API 地址…", "settings-inline-status");
 
     const [marketResult, analysisResult] = await Promise.all([
-      runHealthCheck(marketHealth, settingsToCheck),
-      runHealthCheck(analysisHealth, settingsToCheck)
+      runHealthCheck(marketHealth, settingsToCheck, 6000, controller.signal),
+      runHealthCheck(analysisHealth, settingsToCheck, 6000, controller.signal)
     ]);
     if (generation !== savedConnectionCheckGeneration) return;
     const currentSettings = state.settings;
@@ -2450,6 +2455,7 @@ async function checkConnectionFromSettings() {
     }
     writeSettingsCheckOutputSafely(output, message, "settings-inline-status is-warning");
   } finally {
+    if (savedConnectionCheckController === controller) savedConnectionCheckController = null;
     if (generation === savedConnectionCheckGeneration) {
       if (!button) {
         try { button = $("#settings-check-connection"); } catch {}
@@ -2460,7 +2466,10 @@ async function checkConnectionFromSettings() {
 }
 
 async function checkDraftConnectionFromSettings() {
+  try { draftConnectionCheckController?.abort(); } catch {}
   const generation = ++draftConnectionCheckGeneration;
+  const controller = new AbortController();
+  draftConnectionCheckController = controller;
   let button = null;
   let output = null;
   let testedDraft = null;
@@ -2481,8 +2490,8 @@ async function checkDraftConnectionFromSettings() {
     // 草稿检查只验证设置页中的未保存配置，不写入全局设置。
     settingsToCheck = mergeConnectionDraft(testedDraft, state.settings);
     const [marketResult, analysisResult] = await Promise.all([
-      runHealthCheck(marketHealth, settingsToCheck),
-      runHealthCheck(analysisHealth, settingsToCheck)
+      runHealthCheck(marketHealth, settingsToCheck, 6000, controller.signal),
+      runHealthCheck(analysisHealth, settingsToCheck, 6000, controller.signal)
     ]);
     if (generation !== draftConnectionCheckGeneration) return;
     const currentDraft = readConnectionDraft();
@@ -2540,6 +2549,7 @@ async function checkDraftConnectionFromSettings() {
     }
     writeSettingsCheckOutputSafely(output, message, "settings-inline-status is-warning");
   } finally {
+    if (draftConnectionCheckController === controller) draftConnectionCheckController = null;
     if (generation === draftConnectionCheckGeneration) {
       if (!button) {
         try { button = $("#settings-check-draft-connection"); } catch {}
@@ -4344,8 +4354,13 @@ function applySettings(nextSettings, { persistPreviousActiveTask = true } = {}) 
   }
 
   if (analysisBaseChanged || marketConnectionChanged) {
-    // 先让在途连接检查失效，再分别恢复按钮、结果提示和数据中心状态。
+    // 先让在途连接检查失效并取消底层请求，再分别恢复按钮、结果提示和数据中心状态。
     savedConnectionCheckGeneration += 1;
+    try { savedConnectionCheckController?.abort(); } catch {}
+    savedConnectionCheckController = null;
+    draftConnectionCheckGeneration += 1;
+    try { draftConnectionCheckController?.abort(); } catch {}
+    draftConnectionCheckController = null;
     runSettingsApplyStep("恢复连接检查按钮失败：", () => {
       const button = $("#settings-check-connection");
       button.disabled = false;
