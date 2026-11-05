@@ -13,23 +13,23 @@ import (
 )
 
 type pytdxHistoricalProbeItem struct {
-	Symbol             string             `json:"symbol"`
+	Symbol             string                `json:"symbol"`
 	Adjustment         model.AdjustmentBasis `json:"adjustment"`
-	Status             string             `json:"status"`
-	Rows               int                `json:"rows,omitempty"`
-	FirstDate          string             `json:"first_date,omitempty"`
-	LastDate           string             `json:"last_date,omitempty"`
-	AdjustmentMethods  []string           `json:"adjustment_methods,omitempty"`
-	AdjustmentRefDates []string           `json:"adjustment_reference_dates,omitempty"`
-	QualityCounts      map[string]int     `json:"quality_counts,omitempty"`
-	Error              string             `json:"error,omitempty"`
-	Bars               []model.DailyBar   `json:"bars,omitempty"`
+	Status             string                `json:"status"`
+	Rows               int                   `json:"rows,omitempty"`
+	FirstDate          string                `json:"first_date,omitempty"`
+	LastDate           string                `json:"last_date,omitempty"`
+	AdjustmentMethods  []string              `json:"adjustment_methods,omitempty"`
+	AdjustmentRefDates []string              `json:"adjustment_reference_dates,omitempty"`
+	QualityCounts      map[string]int        `json:"quality_counts,omitempty"`
+	Error              string                `json:"error,omitempty"`
+	Bars               []model.DailyBar      `json:"bars,omitempty"`
 }
 
 type pytdxHistoricalProbeReport struct {
-	GeneratedAt string                    `json:"generated_at"`
-	StartDate   string                    `json:"start_date"`
-	EndDate     string                    `json:"end_date"`
+	GeneratedAt string                     `json:"generated_at"`
+	StartDate   string                     `json:"start_date"`
+	EndDate     string                     `json:"end_date"`
 	Items       []pytdxHistoricalProbeItem `json:"items"`
 }
 
@@ -62,8 +62,8 @@ func TestLivePytdxHistoricalDailyBars(t *testing.T) {
 	defer cancel()
 	report := pytdxHistoricalProbeReport{
 		GeneratedAt: time.Now().UTC().Format(time.RFC3339),
-		StartDate: startDate, EndDate: endDate,
-		Items: make([]pytdxHistoricalProbeItem, 0, len(symbols)*3),
+		StartDate:   startDate, EndDate: endDate,
+		Items:       make([]pytdxHistoricalProbeItem, 0, len(symbols)*3),
 	}
 	var failures []string
 	for _, rawSymbol := range symbols {
