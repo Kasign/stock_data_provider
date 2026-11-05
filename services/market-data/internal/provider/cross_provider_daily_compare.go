@@ -39,6 +39,30 @@ func CrossProviderVolumeGranularity(rawVolumeUnit string) int64 {
 	}
 }
 
+// CrossProviderAmountGranularity 根据已验证的 Provider 原始字段契约计算成交额量化步长。
+// Pytdx 使用 float32 成交额并经 Price(厘)转换；BaoStock 文档声明 amount 精度为 4 位小数。
+// 未知来源或字段语义返回 0，调用方必须将成交额标记为 not_comparable。
+func CrossProviderAmountGranularity(source, rawAmountUnit, rawAmountField string, rawAmount *float64) float64 {
+	if rawAmount == nil || strings.TrimSpace(rawAmountUnit) != "CNY" || strings.TrimSpace(rawAmountField) != "amount" {
+		return 0
+	}
+	switch strings.ToLower(strings.TrimSpace(source)) {
+	case "pytdx":
+		value := float32(*rawAmount)
+		if math.IsNaN(float64(value)) || math.IsInf(float64(value), 0) || value < 0 {
+			return 0
+		}
+		step := float64(math.Nextafter32(value, float32(math.Inf(1))) - value)
+		if step < 0.001 {
+			step = 0.001
+		}
+		return step
+	case "baostock":
+		return 0.0001
+	default:
+		return 0
+	}
+}
 // CrossProviderDailyBar 表示一个交易日的标准化日 K。
 type CrossProviderDailyBar struct {
 	TradeDate         string
@@ -49,9 +73,10 @@ type CrossProviderDailyBar struct {
 	Volume            int64
 	VolumeUnit        string
 	VolumeGranularity int64
-	Amount            *float64
-	AmountUnit        string
-	AdjustmentMethod  string
+	Amount              *float64
+	AmountUnit          string
+	AmountGranularity   float64
+	AdjustmentMethod    string
 	AdjustmentRefDate string
 }
 
@@ -180,17 +205,25 @@ func CompareCrossProviderDailyBars(left, right CrossProviderDailySnapshot) Cross
 			})
 			continue
 		}
+		if a.AmountGranularity <= 0 || b.AmountGranularity <= 0 {
+			result.Fields = append(result.Fields, CrossProviderFieldResult{
+				Field: date + ".amount", Status: "not_comparable",
+				Reason: "amount_precision_unknown",
+			})
+			continue
+		}
 		difference := math.Abs(*a.Amount - *b.Amount)
+		tolerance := (a.AmountGranularity + b.AmountGranularity) / 2
 		status := "matched"
 		if math.IsNaN(*a.Amount) || math.IsInf(*a.Amount, 0) ||
 			math.IsNaN(*b.Amount) || math.IsInf(*b.Amount, 0) {
 			status = "not_comparable"
-		} else if difference > 1 {
+		} else if difference > tolerance {
 			status = "mismatch"
 		}
 		result.Fields = append(result.Fields, CrossProviderFieldResult{
 			Field: date + ".amount", Status: status, Left: *a.Amount, Right: *b.Amount,
-			Difference: difference, Tolerance: 1,
+			Difference: difference, Tolerance: tolerance,
 		})
 	}
 
