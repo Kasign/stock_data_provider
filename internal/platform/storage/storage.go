@@ -169,9 +169,15 @@ func normalizeRedisOptions(options redis.Options) (redis.Options, error) {
 		options.PoolTimeout < 0 || options.ConnMaxIdleTime < 0 || options.ConnMaxLifetime < 0 {
 		return options, errors.New("Redis pool and timeout settings are invalid")
 	}
-	if options.PoolSize == 0 { options.PoolSize = defaultRedisPoolSize }
-	if options.MaxActiveConns == 0 { options.MaxActiveConns = maxRedisPoolSize }
-	if options.MaxIdleConns == 0 { options.MaxIdleConns = options.PoolSize }
+	if options.PoolSize == 0 {
+		options.PoolSize = defaultRedisPoolSize
+	}
+	if options.MaxActiveConns == 0 {
+		options.MaxActiveConns = maxRedisPoolSize
+	}
+	if options.MaxIdleConns == 0 {
+		options.MaxIdleConns = options.PoolSize
+	}
 	if options.PoolSize > options.MaxActiveConns ||
 		options.MaxIdleConns > options.MaxActiveConns ||
 		options.MinIdleConns > options.MaxIdleConns {

@@ -241,17 +241,17 @@ var _ driver.Pinger = (*testConn)(nil)
 var _ driver.Connector = (*testConnector)(nil)
 
 type migrationTestState struct {
-	applied        map[uint64]string
-	pending        map[uint64]string
-	failed         map[uint64]int
-	failureCode    map[uint64]string
-	started        map[uint64]bool
-	finished       map[uint64]bool
-	failStatement  bool
-	statements     []string
-	lockAcquired   bool
-	lockReleased   bool
-	historyCreated bool
+	applied                map[uint64]string
+	pending                map[uint64]string
+	failed                 map[uint64]int
+	failureCode            map[uint64]string
+	started                map[uint64]bool
+	finished               map[uint64]bool
+	failStatement          bool
+	statements             []string
+	lockAcquired           bool
+	lockReleased           bool
+	historyCreated         bool
 	historyColumnsUpgraded bool
 }
 
@@ -339,21 +339,27 @@ func (c migrationTestConn) ExecContext(_ context.Context, query string, args []d
 			return nil, fmt.Errorf("unexpected migration checksum argument: %T", args[3].Value)
 		}
 		c.state.pending[uint64(version)] = checksum
-		if c.state.started == nil { c.state.started = make(map[uint64]bool) }
+		if c.state.started == nil {
+			c.state.started = make(map[uint64]bool)
+		}
 		c.state.started[uint64(version)] = strings.Contains(query, "started_at")
 	case strings.Contains(query, "UPDATE platform_schema_migrations"):
 		versionArg := args[len(args)-1].Value.(int64)
 		version := uint64(versionArg)
 		if strings.Contains(query, "status = 'failed'") {
 			c.state.failed[version] = int(args[0].Value.(int64))
-			if c.state.failureCode == nil { c.state.failureCode = make(map[uint64]string) }
+			if c.state.failureCode == nil {
+				c.state.failureCode = make(map[uint64]string)
+			}
 			c.state.failureCode[version] = "platform.storage.migration_apply_failed"
 		} else if strings.Contains(query, "status = 'applied'") {
 			c.state.applied[version] = c.state.pending[version]
 			delete(c.state.pending, version)
 			delete(c.state.failed, version)
 		}
-		if c.state.finished == nil { c.state.finished = make(map[uint64]bool) }
+		if c.state.finished == nil {
+			c.state.finished = make(map[uint64]bool)
+		}
 		c.state.finished[version] = strings.Contains(query, "finished_at")
 	default:
 		if c.state.failStatement && strings.Contains(query, "CREATE TABLE failing_table") {
@@ -519,14 +525,19 @@ func TestApplyMigrationsRecordsFailureAndRequiresManualRecovery(t *testing.T) {
 
 func TestNormalizeRedisOptionsAppliesBoundedDefaults(t *testing.T) {
 	options, err := normalizeRedisOptions(redis.Options{Addr: "redis:6379"})
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	if options.PoolSize != defaultRedisPoolSize || options.MaxActiveConns != maxRedisPoolSize || options.MaxIdleConns != defaultRedisPoolSize {
 		t.Fatalf("Redis options did not receive bounded defaults: %+v", options)
 	}
 }
 
 func TestNormalizeRedisOptionsRejectsInvalidLimitsAndTimeouts(t *testing.T) {
-	tests := []struct { name string; options redis.Options }{
+	tests := []struct {
+		name    string
+		options redis.Options
+	}{
 		{"pool size above maximum", redis.Options{Addr: "redis:6379", PoolSize: maxRedisPoolSize + 1}},
 		{"active connections above maximum", redis.Options{Addr: "redis:6379", MaxActiveConns: maxRedisPoolSize + 1}},
 		{"pool size exceeds active connections", redis.Options{Addr: "redis:6379", PoolSize: 20, MaxActiveConns: 10}},
@@ -539,7 +550,9 @@ func TestNormalizeRedisOptionsRejectsInvalidLimitsAndTimeouts(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			if _, err := normalizeRedisOptions(test.options); err == nil { t.Fatal("expected invalid Redis options to fail") }
+			if _, err := normalizeRedisOptions(test.options); err == nil {
+				t.Fatal("expected invalid Redis options to fail")
+			}
 		})
 	}
 }
