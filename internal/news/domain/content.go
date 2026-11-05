@@ -16,6 +16,7 @@ const (
 type ContentFormat string
 
 const (
+	ContentFormatUnknown      ContentFormat = "unknown"
 	ContentFormatPlainText    ContentFormat = "plain_text"
 	ContentFormatHTMLFragment ContentFormat = "html_fragment"
 )
@@ -31,8 +32,9 @@ type ContentPayload struct {
 // ContentLayers 将搜索 Provider 摘要、发布来源摘要和正文载荷分开保存。
 type ContentLayers struct {
 	ProviderSummary string
-	SourceSummary   string
-	Body            *ContentPayload
+	SourceSummary       string
+	SourceSummaryOrigin ContentOrigin
+	Body                *ContentPayload
 }
 
 // ContentLayersFromCandidate 只把 Provider 的搜索摘要放入 Provider 层，不提升为来源摘要或正文。

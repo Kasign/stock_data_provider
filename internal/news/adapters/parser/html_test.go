@@ -47,6 +47,21 @@ func TestParseHTMLDocumentExtractsArticleAndMetadata(t *testing.T) {
 	}
 }
 
+func TestHTMLDocumentContentLayersDoNotPromoteDescriptionToBody(t *testing.T) {
+	doc, err := ParseHTMLDocument([]byte(`<html><head><meta name="description" content="页面摘要"></head>
+	<body><article><p>文章正文</p></article></body></html>`), "text/html", time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	layers := doc.ContentLayers("搜索摘要")
+	if layers.ProviderSummary != "搜索摘要" || layers.SourceSummary != "页面摘要" || layers.SourceSummaryOrigin != "html_meta" {
+		t.Fatalf("layers=%+v", layers)
+	}
+	if layers.Body == nil || layers.Body.Text != "文章正文" || layers.Body.Origin != "html_article" || layers.Body.Format != "plain_text" {
+		t.Fatalf("body=%+v", layers.Body)
+	}
+}
+
 func TestParseHTMLDocumentConvertsDeclaredLegacyCharset(t *testing.T) {
 	payload := []byte("<html><body><article><p>caf\xe9</p></article></body></html>")
 	doc, err := ParseHTMLDocument(payload, "text/html; charset=windows-1252", time.Now())

@@ -107,6 +107,23 @@ func TestParseFeedDoesNotInferTimezoneForRFCDate(t *testing.T) {
 	}
 }
 
+func TestFeedEntryContentLayersKeepSummaryAndBodySeparate(t *testing.T) {
+	doc, err := ParseFeed([]byte(`<rss><channel><item>
+		<title>标题</title><description>来源摘要</description>
+		<content:encoded xmlns:content="http://purl.org/rss/1.0/modules/content/"><![CDATA[<p>Feed 正文</p>]]></content:encoded>
+	</item></channel></rss>`), time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	layers := doc.Entries[0].ContentLayers("Provider 搜索摘要")
+	if layers.ProviderSummary != "Provider 搜索摘要" || layers.SourceSummary != "来源摘要" || layers.SourceSummaryOrigin != "feed_summary" {
+		t.Fatalf("layers=%+v", layers)
+	}
+	if layers.Body == nil || layers.Body.Text != "<p>Feed 正文</p>" || layers.Body.Origin != "feed_body" || layers.Body.Format != "unknown" || layers.Body.Kind != "" {
+		t.Fatalf("body=%+v", layers.Body)
+	}
+}
+
 func TestParseFeedAllowsValidEmptyFeed(t *testing.T) {
 	doc, err := ParseFeed([]byte(`<rss version="2.0"><channel><title>Empty</title></channel></rss>`), time.Now())
 	if err != nil {
