@@ -1,44 +1,19 @@
-# Go 原生研究分析引擎专项设计
+# Go 原生研究分析系统：跨模块架构与集成文档
 
-- 所属仓库：`Kasign/stock_data_provider`
-- 所属分支：`feat/research-analysis-flow-native-go`
-- 项目级总览：`doc/整体任务规划/整体任务规划总览.md`
-- 规划日期：2026-11-05
-- 状态：目标架构评审稿；尚未授权进入业务代码实现
+本目录只维护五模块共同的架构原则、跨模块流程、契约边界和集成策略。模块内部设计、任务和验收以对应模块目录为准。
 
-## 1. 文档目的
+## 模块文档
+- [Quant](../quant/README.md)：`feat/quant`，`internal/quant/**`
+- [Research](../research/README.md)：`feat/research`，`internal/research/**`
+- [Researchflow](../researchflow/README.md)：`feat/researchflow`，`internal/researchflow/**`
+- [LLM](../llm/README.md)：`feat/llm`，`internal/llm/**`
+- [Notification](../notification/README.md)：`feat/notification`，`internal/notification/**`
 
-本目录定义 Go 原生研究分析引擎的目标架构、完整研究流程、模块职责、领域契约、任务拆分和迁移验收规则。项目级任务编号与跨分支边界以总览文档为准；本目录负责分析分支的详细设计。
+## 本目录现有文档
+- [01-总体架构与分析流程](01-总体架构与分析流程.md)：跨模块完整流程。
+- [02-Quant量化引擎设计](02-Quant量化引擎设计.md)：早期设计稿；细节以 `doc/quant/` 为准。
+- [03-Research研究与证据模型设计](03-Research研究与证据模型设计.md)：早期设计稿；细节以 `doc/research/` 为准。
+- [04-Research-Orchestrator与运行诊断设计](04-Research-Orchestrator与运行诊断设计.md)：早期设计稿；细节以 `doc/researchflow/`、`doc/llm/`、`doc/notification/` 为准。
+- [05-任务拆分与迁移验收计划](05-任务拆分与迁移验收计划.md)：旧 ANA 拆分参考；当前编号以 QNT/RSC/FLOW/LLM/NTF/GOV 为准。
 
-本设计不以现有 Go 分析代码为架构约束。现有实现允许重写，保留项必须经过算法正确性、边界处理、数据契约、测试证据和维护价值评估。
-
-## 2. 文档索引
-
-| 文档 | 内容 |
-|---|---|
-| [01-总体架构与分析流程](01-总体架构与分析流程.md) | 分析目标、完整流程、任务模板、阶段门禁、模块边界 |
-| [02-Quant量化引擎设计](02-Quant量化引擎设计.md) | 指标、因子、趋势、市场/行业/个股、策略、回测、风险 |
-| [03-Research研究与证据模型设计](03-Research研究与证据模型设计.md) | Context、Evidence、Event、假设、情景与事实边界 |
-| [04-Research-Orchestrator与运行诊断设计](04-Research-Orchestrator与运行诊断设计.md) | 状态机、编排、LLM、持久化、诊断、通知 |
-| [05-任务拆分与迁移验收计划](05-任务拆分与迁移验收计划.md) | ANA-001~018、依赖、批次、代码迁移和验收 |
-
-## 3. 设计决策
-
-1. Quant、Research、Research Orchestrator 分离；不得循环依赖。
-2. Quant 负责确定性、可复算的数值事实；LLM 不参与数值事实计算。
-3. Research 负责事实、来源、证据、事件、假设、情景和解释；事实与推断必须分开。
-4. Orchestrator 负责任务和阶段状态，不内嵌具体量化算法或新闻采集逻辑。
-5. Data、News、Platform 保留各自领域所有权；本分支通过契约调用，不复制底层能力。
-6. 复用现有独立 LLM 服务，不重建模型推理 Gateway。
-7. MariaDB 保存事实状态；Redis 不作为唯一事实源。
-8. 硬风险门禁不可被评分、LLM 或综合结论覆盖。
-9. 首期模块化 Go 单体，不因目录拆分提前微服务化。
-10. 所有结论保留输入快照、来源、算法/模型版本、质量状态和可复查证据。
-
-## 4. 状态与变更规则
-
-- 当前仅完成规划和文档评审，不代表任何 ANA 任务完成。
-- ANA 任务完成必须具备设计/实现、测试和该任务要求的集成或真实数据证据。
-- 对其他分支的文档只读参考；不得在本目录复制维护 Data、News、Platform、WebUI 的专项规划。
-- 共享入口、公共平台、API、根 Migration 和部署装配集中到 ANA-018。
-- 新增任务编号不得复用；调整依赖时同步更新总览和本目录任务表。
+模块分支只更新自己的 `doc/<module>/**`。跨模块边界、共同契约或集成顺序变化，先更新项目总览和本目录。Data/News/Platform/WebUI 专项文档继续由原分支维护，不在这里复制进度。
