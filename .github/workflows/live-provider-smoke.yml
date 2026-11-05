@@ -82,7 +82,7 @@ jobs:
           MARKET_DATA_LIVE_PUBLIC_DAILY_ONLY: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '[public_daily_only]') && '1' || '0' }}
           LIVE_PROVIDER_REPORT_PATH: ${{ github.workspace }}/live-provider-report.json
           LIVE_PROBE_QUOTE_SYMBOL: ${{ github.event.inputs.quote_symbol || '600519.SH' }}
-          LIVE_PROBE_DAILY_SYMBOL: ${{ github.event.inputs.daily_symbol || '600036.SH' }}
+          LIVE_PROBE_DAILY_SYMBOL: ${{ (github.event_name == 'push' && contains(github.event.head_commit.message, '[historical_daily_002982]')) && '002982.SZ' || github.event.inputs.daily_symbol || '600036.SH' }}
           LIVE_PROBE_DAILY_START_DATE: ${{ (github.event_name == 'push' && contains(github.event.head_commit.message, '[historical_daily_2025]')) && '2025-07-07' || '' }}
           LIVE_PROBE_DAILY_END_DATE: ${{ (github.event_name == 'push' && contains(github.event.head_commit.message, '[historical_daily_2025]')) && '2025-07-17' || '' }}
           MARKET_DATA_LIVE_MX_TESTS: ${{ ((github.event_name == 'workflow_dispatch' && inputs.include_mx) || (github.event_name == 'push' && contains(github.event.head_commit.message, '[include_mx]'))) && '1' || '0' }}
