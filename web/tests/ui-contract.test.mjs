@@ -58,6 +58,12 @@ function baseCssDeclarationBlock(selector) {
   return rule?.[2] || "";
 }
 
+function exactCssDeclarationBlock(selector) {
+  const rules = [...stylesheet.matchAll(/([^{}]+)[{]([^{}]*)[}]/g)];
+  const rule = rules.find((match) => match[1].trim() === selector);
+  return rule?.[2] || "";
+}
+
 function sourceBetween(source, startMarker, endMarker, label) {
   const start = source.indexOf(startMarker);
   const end = source.indexOf(endMarker, start + startMarker.length);
@@ -1347,7 +1353,7 @@ test("market overview and activity use readable secondary text and touch-sized c
   assert.match(marketBreadthMetricLabelBase, /line-height:\s*1\.45\s*;?/);
   assert.match(marketBreadthMetricLabelBase, /color:\s*var\(--text-dim\)\s*;/);
   assert.equal((stylesheet.match(/\.market-breadth-metric small\s*\{/g) || []).length, 1, "market breadth metric labels should have one base rule");
-  const marketTablePrimaryBase = baseCssDeclarationBlock(".market-table-primary");
+  const marketTablePrimaryBase = exactCssDeclarationBlock(".market-table-primary");
   assert.match(marketTablePrimaryBase, /font-size:\s*12px\s*;/);
   assert.match(marketTablePrimaryBase, /line-height:\s*1\.5\s*;?/);
   assert.match(marketTablePrimaryBase, /font-weight:\s*650\s*;?/);
