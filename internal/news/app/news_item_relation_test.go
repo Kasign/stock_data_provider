@@ -164,7 +164,7 @@ func TestApplyNewsItemRelationRejectsForeignVersionAndRollsBack(t *testing.T) {
 }
 
 func TestApplyNewsItemRelationRejectsDuplicateEdgeAndCycle(t *testing.T) {
-	r, u := relationAppFixture()
+	_, u := relationAppFixture()
 	req := relationAppRequest()
 	if _, err := u.Execute(context.Background(), req); err != nil {
 		t.Fatal(err)
