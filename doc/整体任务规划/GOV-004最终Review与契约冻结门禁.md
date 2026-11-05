@@ -575,3 +575,24 @@ Platform 最新 HEAD 仍为 `235cebe61465a5b60d2578fc75c38ea1e40882c5`，其 Pla
 - Platform：`30bcc92434d8c0eb5e9beabd82f6ceee2c055d61`。相较 235cebe ahead 7 / behind 0，新增 HTTP Client 生命周期测试并提交格式修正；该 SHA 对应 Platform Go checks 为 cancelled，尚无最新 SHA 的成功验收证据。此前 235cebe 的 Platform Go checks 因 `client_test.go` gofmt 失败。
 
 当前三分支仍无完整、最新 SHA 的 CI 全绿证据。不得把格式修正提交或 cancelled Workflow 视为通过。GOV-004 继续 NO-GO。
+
+
+## 29. 最新 Data 编译阻断与 News/Platform 基线（2026-11-05）
+
+### Data
+
+最新 HEAD：`e21447e46b5c2c7e0b50336e4fbbe67885b268fb`。相较此前 125720fe 又新增 3 个提交，涉及跨源日 K 对账测试和 Pytdx 测试。
+
+最新 Go test suite 已通过 gofmt，但 market-data Provider 测试编译失败：`cross_provider_daily_compare_test.go:20:43` 对 `CrossProviderDailyBar` 设置了不存在的 `VolumeGranularity` 字段。race/vet 跳过，Docker market-data 镜像失败。Go-Python parity 中样例比较工具和 parity contract tests 成功，但 market-data Go tests 因同一编译错误失败。根模块、go-core、MariaDB Migration/PIT integration、Live provider probe 和 WebUI checks 成功。
+
+DATA-CONTRACT-001 的 gofmt 子项已恢复；完整 CI 阻断转为测试编译错误，必须先修正该测试与类型定义的契约，再重跑完整 CI。
+
+### News
+
+最新 HEAD：`ff08b35d40ef71e6c96b8b13378c8f2c3bdfa675`。相较 855bac2 ahead 1 / behind 0，修正异常 Atom 正文载荷保留逻辑。最新 Go test suite failure 仍由 Data 子模块 market-data 测试构建失败触发；News 自身根模块测试在该 Workflow 中通过，go-core 通过，分析 API 镜像构建成功。News 新增代码的单独验收仍应以其独立包测试和后续整仓成功 Workflow 为准。
+
+### Platform
+
+最新 HEAD：`d93134def4ac9a4b0632f6fb98675a890b835a2a`。相较 30bcc92 又有 4 个提交，主要更新 HTTP Client 生命周期测试、实现和接入文档；当前 SHA 没有可用的 Workflow run 记录。此前 235cebe Go checks 曾因 gofmt 失败，30bcc92 的检查为 cancelled。故最新 Platform 代码尚无最新 SHA 的成功 CI 证据。
+
+当前三个分支仍未形成完整、最新 SHA 的全绿验收链。GOV-004 继续 NO-GO。
