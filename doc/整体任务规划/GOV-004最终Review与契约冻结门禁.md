@@ -194,3 +194,21 @@ GOV-005 可以先做**规划设计**，包括：
 - 不把 Data/News/Platform 当前分支 HEAD 自动视为共同集成点。
 
 **最终结论：GOV-004 设计审查已有明显进展，但实现与集成门禁未通过，当前 NO-GO，不冻结，不创建模块分支。**
+
+
+## 7. Quant / Research DTO 字段级设计进展（2026-11-05）
+
+新增字段级草案：[Quant / Research 公开 DTO 字段级契约](./Quant-Research公开DTO字段级契约.md)。
+
+本次补齐 QuantAnalysisRequest、QuantResultRef、QuantMetric、TrendResult、RiskDecision，以及 ResearchContext、Evidence、Event、Claim/Hypothesis、Scenario 的主要字段、状态、时间和依赖边界。因此，原第 3.5 节所述“尚无字段级 DTO 草案”的设计缺口已有文档级进展。
+
+但以下内容仍未通过模块 Owner Review，不能将该阻断项标记为完成：
+- 价格/金额 decimal 精度与 JSON 表达方式；
+- 每个 Quant Use Case 的独立参数结构及 Schema；
+- ContextSectionRef、OmittedSection、ScenarioCondition、RiskReason 等复合对象完整字段；
+- Evidence 对 Data/Quant/Research 来源的授权审计引用语义；
+- Event 多来源时间冲突的来源级表达；
+- Quant/Research 示例 JSON、JSON Schema、Go JSON Tag 和 golden 测试；
+- Quant/Research 与 Researchflow 的接口级契约测试。
+
+本次仅补齐规划设计，不修改业务模块。GOV-004 仍为 **NO-GO**；Data、News、Platform 的实现/集成阻断项也未因此改变。
