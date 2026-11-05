@@ -141,3 +141,70 @@
 - [ ] 对应提交 SHA、自动化 CI 和部署环境记录可追溯。
 
 本记录只证明静态审查覆盖到的代码与文档事实，不替代上述未完成的运行验收。
+
+
+## 7. 第二轮安全审计：Analysis HTTP 错误与日志泄漏路径
+
+审查对象为当前分支中的历史 Analysis HTTP 实现。以下是源码中可直接确认的风险点，不代表 Platform 公共包自身存在相同缺陷。责任归属为 Server/Analysis 集成方；Platform 分支只记录证据，不修改领域 Handler。
+
+### 7.1 高风险：内部错误文本直接进入 HTTP 响应
+
+**internal/platform/httpapi/server.go**：
+- handleReady 将 s.store.Health(ctx) 的原始错误传给 writeError，HTTP 503 的 message 直接使用 err.Error()。
+- handleCreateRun 将 Runner 的 err.Error() 同时写入日志和 HTTP 502 响应。
+- handleGetRun 的 events/result 查询失败分支将 Store 错误直接写入 HTTP 500 响应。
+- writeJSON 序列化失败时记录原始序列化错误。
+
+风险：底层驱动、上游服务或领域错误可能包含 DSN、主机名、SQL、文件路径、上游响应片段或其他内部实现细节。当前代码没有在这些边界统一转换为 Fault 的稳定 Code 和 SafeMessage。
+
+整改要求：
+1. 面向客户端只返回固定安全消息和稳定错误码；详细错误仅进入受控内部诊断，并且先做字段级脱敏。
+2. 对 errors.Is / errors.As 的已知错误进行显式映射；未知错误统一映射 internal。
+3. Readiness 只返回依赖标识和固定状态，不返回底层错误字符串。
+4. 日志记录错误类型、稳定错误码、request_id 和依赖名；不得以截断 err.Error() 代替脱敏。
+
+### 7.2 中高风险：启动与关闭日志记录原始错误
+
+**cmd/analysis-api/main.go**：
+- 数据库/缓存关闭失败、HTTP 优雅关闭失败、HTTP 停止错误均直接记录 err.Error()。
+- logStartupError 也直接记录传入错误文本。
+- 启动日志输出 market_data_base_url；该 URL 若意外包含用户信息或敏感 Query，可能进入日志。
+
+整改要求：
+- 先将启动配置错误映射为配置键、错误类别和固定描述。
+- URL 日志只允许记录规范化后的 scheme/host/port，不记录 userinfo、query、fragment、path 中的凭证。
+- Driver 错误仅保留内部受控诊断，禁止直接输出原始文本。
+
+### 7.3 中风险：Adapter Secret 仍使用普通 string
+
+已确认字段：
+- **internal/adapters/storage/mysqlredis/config.go**：DBPassword、RedisPassword。
+- **internal/adapters/pythonapi/config.go**：BearerToken、Cookie。
+- **internal/adapters/marketdata/config.go**：APIKey。
+
+这些配置由 Adapter 自行调用 os.Getenv / os.LookupEnv 读取。普通 string 本身不必然造成泄漏，但无法获得平台 config.Secret 的格式化脱敏保护，也绕开了统一 bootstrap 配置边界。
+
+整改要求：
+- 由服务 bootstrap 统一读取配置并注入 Adapter Config。
+- Secret 字段使用 config.Secret 或等价的不可意外格式化类型；仅在构造连接/请求认证头时显式取值。
+- 禁止将 Cookie、BearerToken、APIKey、DB/Redis 密码写入日志、错误或诊断 Attributes。
+
+### 7.4 中风险：历史 Request ID Middleware 与平台契约不一致
+
+**internal/platform/httpapi/server.go** 的 requestIDMiddleware 使用 Header.Get("X-Request-ID")，没有像平台 observability.Middleware 一样拒绝重复 Header 值。重复值可能导致代理、日志和应用对同一请求关联 ID 的解释不一致。
+
+整改要求：
+- 服务入口统一使用 observability.Middleware，不保留第二套 Request ID Context。
+- 信任边界由公网 Gateway 定义；客户端传入 ID 只作为关联标识，不作为身份或授权依据。
+- 验证重复 Header、非法字符、超长值和跨服务传播行为。
+
+### 7.5 本轮优先级与验收门禁
+
+| 优先级 | 整改项 | 责任方 | 验收方式 |
+|---|---|---|---|
+| P1 | HTTP 错误响应不暴露底层错误 | Server/Analysis | 注入包含 DSN、SQL、Token 的错误，响应只含固定消息和稳定 Code |
+| P1 | 启停日志不输出原始错误和敏感 URL | Server | 日志捕获测试与部署日志抽查 |
+| P1 | Adapter Secret 类型和配置注入统一 | Server/Adapter | 配置快照、格式化、日志和 JSON 脱敏测试 |
+| P2 | Request ID Middleware 收敛到平台实现 | Server | 重复 Header 与跨服务传播测试 |
+
+以上属于当前代码可复现的静态风险，优先级高于新增平台抽象。修复应在 Server/Analysis 集成分支完成；Platform 分支不越界修改领域 Handler、Adapter 或启动装配。
