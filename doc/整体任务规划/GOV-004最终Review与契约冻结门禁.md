@@ -540,3 +540,27 @@ Data 最新 HEAD 为 `7abd5078e85ec7e6a5785ec9a4253d862af2a39c`，相较 1358847
 4. Quant/Research DTO 与三方契约尚未通过模块 Owner Review 和真实 Schema/Golden 验证。
 
 因此 GOV-004 仍为 **NO-GO**。当前可以继续推进 Data/News 的纯领域和契约工作；不得冻结五模块公共契约，不创建五个模块开发分支，不宣称整体模块开发已可启动。
+
+
+## 27. Data / News 分支 HEAD 继续前进后的复核（2026-11-05）
+
+在本轮文档更新期间，Data 和 News 分支均再次前进，重新读取最新 HEAD 后修正基线：
+
+### Data
+
+- 最新 HEAD：`80cf2e9a05b1bf89dcd9eef9851a14682c2e647a`。
+- 相较 8c0136f ahead 1 / behind 0；只改动 `pytdx_live_probe_test.go`。
+- 格式修正提交后 Go test suite 仍 failure，market-data gofmt 仍未通过；Docker market-data image build failure；market-data tests/race/vet 被跳过。
+- 根模块、go-core、MariaDB Migration/PIT integration 成功；Live provider probe、WebUI、Go-Python parity 成功。
+- 因此 DATA-CONTRACT-001 仍未关闭。
+
+### News
+
+- 最新 HEAD：`3755431b1c8ed9effe447a19c62a5ccede08dc81`。
+- 相较 9ece502 ahead 2 / behind 0；新增 Atom 正文与附件隔离测试。
+- 最新 Go test suite failure 的直接原因是 `services/market-data/internal/service/provider_probe_live_test.go` 未 gofmt；market-data 测试/race/vet 被跳过。该问题属于 Data 子模块，不是 News Feed 测试断言失败。
+- News 新增 Feed 测试后，本 SHA 的 Workflow 未提供可独立证明 News 包测试全套通过的结果；不能从旧 SHA 或根模块旧结果推断最新 News SHA 已通过。
+
+Platform 最新 HEAD 仍为 `235cebe61465a5b60d2578fc75c38ea1e40882c5`，其 Platform Go checks 仍因 `internal/platform/httpclient/client_test.go` gofmt 失败，测试/race/vet 被跳过。
+
+当前三个分支都不能标记为整体 CI 全绿。后续必须以每个最新 SHA 的实际 Workflow 结果为准。
