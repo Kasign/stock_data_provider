@@ -188,3 +188,13 @@
 - Pytdx 前复权参考日测试改名并补充契约注释，明确参考日可晚于请求结束日，但输出 K 线仍受请求日期范围约束。
 - 通过 live-provider-smoke 提交标记触发 Pytdx 两只证券 raw/qfq/hfq + GBBQ 真实探测，以及生产 DataService Probe 两证券、三复权口径的 MariaDB 持久化诊断。
 - 结果待真实运行完成后核验。
+
+
+## 2026-11-05 P0 批次 27：Pytdx 与生产 DataService 历史探测结果
+
+- SHA：`2477e92d5fd439f4ed97bae971ad0ffe9ae2085b`。Push Go tests Run `42003400135`、Push Live probe Run `42003400131`、PR Go tests `42003411612`、Parity `42003411993`、WebUI `42003411698`、PR Live probe `42003411518` 均 success；均对应当前 SHA。PR #1 仍 Open/Draft、未合并。
+- Pytdx 两只样本 `600036.SH`、`002982.SZ` 的 raw/qfq/hfq 在 2025-07-07 至 2025-07-17 均返回 9 根、quality valid；qfq reference date 均为 2026-11-05（晚于请求结束日），hfq reference date 分别为 2002-04-09、2020-04-24。
+- GBBQ/BaoStock 公司行动三条事件全部 matched；`002982.SZ/2025-05-30` 的理论除权价差 0.0042857 元、factor ratio 差 0.0004050，低于现行阈值但接近 factor 容差上限，列为边界样本待评估，不据此扩大容差。
+- 生产 DataService Probe 两只证券各 15 项：13 degraded、2 not_supported、0 failed，均持久化且读回通过。Sina qfq/hfq 为 not_supported；两只证券 Eastmoney+BaoStock raw 交叉比较各 9 日期、54 字段全部匹配；每只 storage check passed。
+- 全部返回项附加 `daily_bar_context_calendar_degraded`，源于当前只配置 BaoStock 日历，日历快照缺少 Provider snapshot timestamp；这表示交易日上下文质量降级，不代表 K 线 OHLC 全部错误。Sina/Tencent/Yahoo 另缺成交额；Tencent/Eastmoney/BaoStock qfq 参考日未验证。
+- 本批专项完成，但生产 Probe 总体仍 degraded，不关闭数据质量验收。下一步审查日历降级语义：区分日历日期覆盖/来源冲突与快照时间戳缺失，确定何时应影响 K 线质量、何时只作为上下文 warning；禁止伪造时间戳或强制 valid。
