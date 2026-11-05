@@ -115,7 +115,7 @@ func TestIngestCandidateMatchesExistingItemAndAddsOnlyNewAlias(t *testing.T) {
 func TestIngestCandidateDoesNotCreateItemWithoutIdentity(t *testing.T) {
 	repository := &memoryIdentityRepository{}
 	usecase := NewIngestCandidate(repository, func() string { return "observation-3" })
-	observation, err := usecase.Execute(context.Background(), "source-1", "run-1/provider-a/unknown-1", domain.Candidate{Title: "unidentified"}, domain.SourceURLPolicy{})
+	observation, err := usecase.Execute(context.Background(), "source-1", "run-1/provider-a/unknown-1", domain.Candidate{ProviderItemID: "provider-only-1", Title: "unidentified"}, domain.SourceURLPolicy{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -195,7 +195,7 @@ func TestIngestCandidateRejectsIdempotencyKeyPayloadReuse(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = usecase.Execute(context.Background(), "source-1", "same-key", domain.Candidate{ProviderItemID: "item-2"}, domain.SourceURLPolicy{})
+	_, err = usecase.Execute(context.Background(), "source-1", "same-key", domain.Candidate{ProviderItemID: "provider-result-2", SourceItemID: "source-item-2"}, domain.SourceURLPolicy{})
 	if !errors.Is(err, ErrIdentityTransaction) || !errors.Is(err, ErrObservationIdempotencyConflict) {
 		t.Fatalf("err=%v", err)
 	}

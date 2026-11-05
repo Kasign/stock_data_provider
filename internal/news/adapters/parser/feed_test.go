@@ -115,7 +115,9 @@ func TestFeedEntryToCandidateKeepsSourceIdentityAndAuthorSeparate(t *testing.T) 
 		<author><name>作者甲</name></author><published>2026-11-04T09:30:00+08:00</published>
 	</entry></feed>`)
 	doc, err := ParseFeed(payload, time.Now())
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	candidate := doc.Entries[0].ToCandidate("登记媒体", "publisher.example")
 	if candidate.SourceItemID != "source-entry-7" || candidate.ProviderItemID != "" {
 		t.Fatalf("identity mapping=%+v", candidate)
