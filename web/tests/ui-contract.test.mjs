@@ -776,7 +776,7 @@ test("provider capability refresh clears old connection data and owns its loadin
   assert.match(refreshSources, /button\.disabled = true;[\s\S]*?button\.setAttribute\("aria-busy", "true"\)/);
   assert.match(refreshSources, /正在读取当前连接配置对应的数据源能力/);
   assert.match(refreshSources, /showMessage\(message, "empty-row error-text"\)/);
-  assert.match(refreshSources, /finally \\{[\\s\\S]*?if \\(generation === sourceRefreshGeneration && sourceRefreshController === controller\\) \\{[\\s\\S]*?sourceRefreshController = null;[\\s\\S]*?if \\(!button\\) button = \\$\\("#reload-sources"\\);[\\s\\S]*?button\\.disabled = false;[\\s\\S]*?button\\.removeAttribute\\("aria-busy"\\)/);
+  assert.match(refreshSources, /finally \{[\s\S]*?if \(generation === sourceRefreshGeneration && sourceRefreshController === controller\) \{[\s\S]*?sourceRefreshController = null;[\s\S]*?if \(!button\) button = \$("#reload-sources"\);[\s\S]*?button\.disabled = false;[\s\S]*?button\.removeAttribute\("aria-busy"\)/);
 });
 
 test("filter changes clear stale errors even when a prior query returned no data", () => {
