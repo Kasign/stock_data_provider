@@ -227,3 +227,13 @@
 - 多余字段：按当前列表为 9 项。
 
 因此，**当前不能宣称上述字段级差异已完全穷尽**。本文件先把已知项显式化，并要求 Data 分支通过自动化工具重新生成最终差异报告。只有报告与人工 Review 对齐后，才允许冻结。
+
+
+## 追加：Data 最新分支快照复核（2026-11-05）
+
+- 当前 Data HEAD：`fd39c663c4ad59836acdf963d5fb8b2f9227abe8`，提交 `docs(market-data): 记录 BaoStock 首事件前探测结果`。
+- 相较上次 Schema 核查基线 `4732f14d8998bcd06ffb1118846535b626865b2d`，compare ahead 7 / behind 0。
+- Compare 变化文件仅为两份 `doc/api/**` 文档和 `services/market-data/internal/baostock/live_adjustment_probe_test.go`；没有修改 `services/market-data/openapi.yaml` 或 `internal/model/**`。
+- 因此本清单既有 OpenAPI ↔ Go JSON 字段、required/nullable 和多余字段差异仍未被本次提交修复；此前字段级结论在该 SHA 上仍适用。
+
+本次新增的 BaoStock 实测说明两只证券首个因子事件日前没有 raw 日 K，`pre_first_event_status=not_applicable`，所以没有验证 latest-factor fallback；生产逻辑继续 fail closed，不采用未来因子。因子 `AvailableAt` 仍未知，当前 qfq/hfq OHLC 匹配不能证明历史 PIT 可见性。该实测是复权重建样本证据，不应被误读为 OpenAPI Schema 修复或 Data 全量 PIT 验收。
