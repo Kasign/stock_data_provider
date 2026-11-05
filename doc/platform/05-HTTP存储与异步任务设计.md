@@ -117,3 +117,10 @@ HTTP Client 必须区分固定 Provider API Endpoint 与不可信来源 URL。�
 覆盖 IPv4/IPv6 私网、loopback、link-local、保留地址、IPv4-mapped IPv6、混合公网/私网 DNS 结果、DNS 结果变化/rebinding、重定向到私网/其他 host/HTTP 降级、userinfo、非标准端口、代理环境变量、重定向循环和连接超时。
 
 固定 Provider API 也必须使用明确的 endpoint 策略；Source Fetch 的来源授权策略不能被通用 HTTP Client 代替。未完成上述安全测试前，不开放任意来源真实抓取。
+
+
+## 8. PLAT-008 首批代码实现状态（2026-11-05）
+
+首批实现位于 `internal/platform/httpclient`，包含目的地址策略、精确 Host/Port allowlist、受控 DNS 解析与 IP literal Dial、重定向逐跳检查、禁用环境代理、请求/响应上限和 dependency 并发控制。重试仅在调用方显式声明幂等且配置了 MaxRetries 时启用，最多 2 次。
+
+代码测试覆盖已添加，但本轮尚未在 Go 环境运行。当前测试仍需补齐/执行真实 Transport 连接路径验证，特别是 DNS rebinding、重定向到私网/未授权 host、超时取消、代理环境变量和响应体限制。安全验收完成前，不得开放任意来源抓取。
