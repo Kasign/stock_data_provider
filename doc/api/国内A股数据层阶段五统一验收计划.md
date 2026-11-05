@@ -369,7 +369,7 @@
 ## 2026-11-05 P0 批次 44：跨 Provider 成交量粒度
 
 - `CrossProviderDailyBar.VolumeGranularity` 为内部比较字段，来源 `DailyBar.RawVolumeUnit`：hands/hands_inferred=100 shares，shares=1，未知=0（not_comparable）。不进入公共 API、数据库或 WebUI。
-- 成交量容差改为 `max(50, 两侧源粒度)`；TDX 官方说明 VOL 单位为手、AMOUNT 单位为元（https://help.tdx.com.cn/gspt/docs/markdown/redword/functionlist.html）。BaoStock provider 原始 volume unit 为 shares。
+- 成交量容差为 `max(1, 两侧源粒度)`：两侧 shares 容差 1 股；含 TDX hands 时容差 100 股；未知粒度不可比较。此前固定 50 股下限已移除；TDX 官方说明 VOL 单位为手、AMOUNT 单位为元（https://help.tdx.com.cn/gspt/docs/markdown/redword/functionlist.html）。BaoStock provider 原始 volume unit 为 shares。
 - 既有真实双源样本离线重评：600036 最大成交量差 84 股、002982 最大差 96 股，均在 100 股粒度内；OHLC 全匹配。成交额仍有 17/18 行超过 1 CNY 容差，整体仍 mismatch。
 - 新增单测覆盖 96/101 股边界和未知粒度不可比较；服务层 Probe 透传 RawVolumeUnit。Push Go suite `42022406352` success，PR Parity `42022414959` success；PR Go suite `42022415449` 待最终状态。
 - 下一项核查成交额来源精度与聚合口径，不放宽 amount tolerance。
@@ -380,3 +380,10 @@
 - TDX 协议 Kline.Amount 经 Price（内部毫元）解码为整数 CNY，官方字段 AMOUNT 单位为元；BaoStock adapter 的原始 amount 单位为 CNY，但官方资料未承诺小数精度。
 - 真实双源样本成交额差最大 120.74/7.90 CNY，17/18 行超过当前 1 CNY 容差；相对差约 3.19e-8/4.13e-8。不能仅凭相对差小就放宽验收。
 - 不改 amount tolerance、不新增字段；下一步扩大不同成交额量级的真实样本，调查供应商聚合口径。
+
+
+## 2026-11-05 P0 批次 46：成交量容差与源精度一致
+
+- 代码 SHA `5adb663ca41d6083847c7d497ca387a2931e2422` 将固定 50 股容差下限改为 1 股，再取两侧来源粒度最大值。shares/shares=1 股，hands/shares=100 股，unknown=not_comparable。
+- 新增 shares 两侧差 2 股必须 mismatch 的测试；原 1 股差异通过、TDX 100 股粒度下 96 股通过/101 股 mismatch 继续覆盖。成交额 1 CNY 容差保持不变。
+- 新 SHA Push/PR CI 待验；WebUI 无需修改。
