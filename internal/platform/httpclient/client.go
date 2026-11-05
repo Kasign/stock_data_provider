@@ -409,6 +409,12 @@ func validateRedirect(request *http.Request, via []*http.Request) error {
 	if previous.URL.Scheme == "https" && request.URL.Scheme != "https" {
 		return errRedirectRejected
 	}
+	// Redirects may carry Authorization, Cookie, or provider-specific headers.
+	// Keep them within the original origin until cross-origin credential
+	// forwarding has an explicit, separately reviewed policy.
+	if !sameOrigin(previous.URL, request.URL) {
+		return errRedirectRejected
+	}
 	if err := validateURL(request.URL, policy); err != nil {
 		return errRedirectRejected
 	}
@@ -418,6 +424,29 @@ func validateRedirect(request *http.Request, via []*http.Request) error {
 		}
 	}
 	return nil
+}
+
+func sameOrigin(left, right *url.URL) bool {
+	if left == nil || right == nil || !strings.EqualFold(left.Scheme, right.Scheme) {
+		return false
+	}
+	leftPort := left.Port()
+	if leftPort == "" {
+		if strings.EqualFold(left.Scheme, "https") {
+			leftPort = "443"
+		} else if strings.EqualFold(left.Scheme, "http") {
+			leftPort = "80"
+		}
+	}
+	rightPort := right.Port()
+	if rightPort == "" {
+		if strings.EqualFold(right.Scheme, "https") {
+			rightPort = "443"
+		} else if strings.EqualFold(right.Scheme, "http") {
+			rightPort = "80"
+		}
+	}
+	return normalizeHost(left.Hostname()) == normalizeHost(right.Hostname()) && leftPort == rightPort
 }
 
 func validatePolicy(policy DestinationPolicy) error {

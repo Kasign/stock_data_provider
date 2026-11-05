@@ -120,7 +120,7 @@ HTTP Client 必须区分固定 Provider API Endpoint 与不可信来源 URL。�
 - 默认禁止自动重定向。
 - 需要重定向的 Source Fetch 必须显式启用有限跳数策略（首期建议最多 3 跳）。
 - 每一跳重新校验 scheme、userinfo、host、port、来源 allowlist 和 DNS/IP；最终连接仍通过上述受控 DialContext。
-- 不允许 HTTPS 降级到 HTTP；跨 host 跳转必须再次满足来源策略，不继承原 host 的授权。
+- 不允许 HTTPS 降级到 HTTP；首期只允许同源重定向（scheme、host、port 均一致），防止 Authorization、Cookie 或 Provider 自定义凭据随跳转发送到其他主机。即使目标 host 也在 allowlist 中，跨 host 跳转仍拒绝；未来确有需求时，必须单独设计凭据剥离和目标授权策略。
 - 重定向循环、超限、目标不合规时立即失败，不跟随。
 - 不能通过自定义 CheckRedirect 校验后，再让默认 Dialer 独立解析目标地址。
 
@@ -199,3 +199,8 @@ Migration 状态为 `running` 或 `failed` 时，Runner 不会自动重跑。处
 6. 记录恢复人、时间、数据库实例、namespace/version、执行的修复 SQL 和验证结果，再恢复服务启动流程。
 
 不得在未检查真实 Schema 的情况下直接删除失败记录或将状态改为 applied。若历史行无法写入（例如数据库在失败时不可用），先检查 Schema，再决定补建历史状态；不能假设该版本完全未执行。
+
+
+### 7.6 同源重定向与凭据隔离补充（2026-11-05）
+
+当前 HTTP Client 的 CheckRedirect 采用同源限制：scheme、规范化 hostname 和有效 port 必须与上一跳一致。跨主机跳转即使目标在 AllowedHosts 中也拒绝，避免标准库对同主域名子域跳转保留 Authorization 等敏感 Header 时造成凭据扩散。若未来需要跨主机 CDN 跳转，必须明确哪些凭据可剥离、哪些自定义凭据不允许转发，并以独立策略和集成测试证明安全性；不能仅依赖 Host allowlist。

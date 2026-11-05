@@ -606,3 +606,38 @@ func TestClientReturnsTimeoutWhenRetryBackoffExceedsDeadline(t *testing.T) {
 		t.Fatalf("expected timeout fault after retry deadline, got %v", err)
 	}
 }
+
+
+func TestRedirectRejectsCrossOriginEvenWhenBothHostsAreAllowed(t *testing.T) {
+	previousURL, _ := url.Parse("https://api.example.com/start")
+	nextURL, _ := url.Parse("https://cdn.example.com/next")
+	policy := DestinationPolicy{
+		Dependency: "news.fetch",
+		AllowedHosts: []string{"api.example.com", "cdn.example.com"},
+		AllowRedirects: true,
+		MaxRedirects: 1,
+	}
+	ctx := context.WithValue(context.Background(), policyContextKey{}, policy)
+	previous := &http.Request{URL: previousURL, Header: make(http.Header)}
+	next := (&http.Request{URL: nextURL, Header: make(http.Header)}).WithContext(ctx)
+	if err := validateRedirect(next, []*http.Request{previous}); !errors.Is(err, errRedirectRejected) {
+		t.Fatalf("expected cross-origin redirect rejection, got %v", err)
+	}
+}
+
+func TestRedirectAllowsSameOriginPathChange(t *testing.T) {
+	previousURL, _ := url.Parse("https://api.example.com/start")
+	nextURL, _ := url.Parse("https://api.example.com/next")
+	policy := DestinationPolicy{
+		Dependency: "news.fetch",
+		AllowedHosts: []string{"api.example.com"},
+		AllowRedirects: true,
+		MaxRedirects: 1,
+	}
+	ctx := context.WithValue(context.Background(), policyContextKey{}, policy)
+	previous := &http.Request{URL: previousURL, Header: make(http.Header)}
+	next := (&http.Request{URL: nextURL, Header: make(http.Header)}).WithContext(ctx)
+	if err := validateRedirect(next, []*http.Request{previous}); err != nil {
+		t.Fatalf("expected same-origin redirect to pass, got %v", err)
+	}
+}
