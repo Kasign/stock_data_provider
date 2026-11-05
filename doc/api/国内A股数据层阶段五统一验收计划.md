@@ -119,3 +119,11 @@
 - 两类数据均构造 v1 已在 as_of 前可见、v2 已被系统观察但供应商 available_at 晚于 as_of 的场景；Service 必须返回 v1。
 - 该测试补足 Repository SQL 回退与 Service 三时间二次校验之间的调用链验证。MariaDB 未配置时测试 Skip，不能将 Skip 当作成功验收。
 - 不改变 PIT 时间语义、版本键、API 或 BaoStock nil AvailableAt 处理规则。待新 SHA CI 验证后再更新批次状态。
+
+
+## 2026-11-05 P0 批次 19：Service PIT 回退测试纳入真实 MariaDB CI
+
+- 发现批次 18 两项 Service PIT 集成测试此前未纳入专用 MariaDB Job；普通 Go suite 因未设置 `MARKET_DATA_TEST_MYSQL_DSN` 会 Skip，不能作为真实数据库验收。
+- 已新增独立 CI 步骤，注入 MariaDB DSN，精确执行因子和公司行动两项 Service PIT 版本回退测试。
+- 新 SHA 验收要求两条测试日志明确 PASS，不接受 Skip 或仅凭 workflow success 推断通过。
+- 本批只调整自动化验收，不改变业务代码和 PIT 语义；阶段 B 仍为 in_progress，等待新 SHA CI。
