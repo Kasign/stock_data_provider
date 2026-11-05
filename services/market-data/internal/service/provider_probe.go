@@ -455,6 +455,8 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 				if options.DailyBarStartDate != "" {
 					dailyBarLimit = 2000
 				}
+				// 请求前先记录目标证券，保证 Provider 在网络/登录阶段失败时仍能形成准确的失败侧配对。
+				recordProviderProbeEvidence(probeCtx, barsSymbol, "", 0, 0, nil)
 				bars, err := p.FetchDailyBars(probeCtx, barsSymbol, options.DailyBarStartDate, options.DailyBarEndDate, dailyBarLimit, adjustment)
 				if err != nil {
 					return model.QualityUnknown, "", nil, err
