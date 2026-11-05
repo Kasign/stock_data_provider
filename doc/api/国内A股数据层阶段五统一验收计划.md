@@ -91,3 +91,15 @@
 - 适配器保持按上游日期顺序输出，每个日期先 forward 后 backward；修正越界夹具范围，未放宽校验。
 - MariaDB 集成测试新增同证券/日期/来源下两种 basis 并存验证，并确认无 `AvailableAt` 的 BaoStock 观测可以持久化且保留 `SystemObservedAt`，不伪造可用时间。
 - 当前 SHA 后续 CI 必须重新验证 market-data 单测、MariaDB PIT 集成、race/vet 和 Docker 构建；此前失败 SHA 不得算作通过。
+
+
+## 2026-11-05 P0 批次 16：当前重建与历史 PIT 消费语义隔离
+
+- 已确认 rebuildAdjustedDailyBars 的实际生产调用点只有 DataService.DailyBarsAsOf；普通 DailyBars 目前直接请求 Provider 对应复权口径，不会调用因子重建器。因此不能把“当前重建”误说成已经接入普通行情 API。
+- 重建器拆分为显式入口：rebuildAdjustedDailyBarsCurrent 与 rebuildAdjustedDailyBarsPIT。两者共用同一套来源/版本/口径一致性和价格计算逻辑。
+- 当前重建允许 AvailableAt=nil，但仍要求 SystemObservedAt 非空、非零且不晚于当前系统时间，表示因子已经由本系统持久化观察；BaoStock 的 degraded 状态和 provider_available_at_not_exposed_by_query_adjust_factor 原因会继续传播到重建后的日 K。
+- 历史 PIT 重建继续强制要求 Provider 明确提供非空 AvailableAt，并通过 AdjustmentFactorsAsOf 限制 FetchedAt、SystemObservedAt、AvailableAt 均不晚于查询时点。BaoStock 因子不会进入 PIT。
+- DailyBarsAsOf 已改为显式调用 PIT 专用入口；保留旧私有函数名作为 PIT 语义包装，避免未来调用者无意切换到宽松模式。
+- 普通 DailyBars 仍使用 Provider 原生 qfq/hfq 数据；本次不新增 API、不自动跨 Provider 拼接 raw bars 与因子。只有后续出现明确的“当前本地因子重建”产品需求时，才增加受控 service 入口，并要求 raw bars 与因子来源/版本可验证匹配。
+- 验收覆盖：BaoStock 无 AvailableAt、有 SystemObservedAt 的因子可用于 current helper，重建结果保留 degraded；同一因子在 PIT helper 中被拒绝；缺少 SystemObservedAt 的临时 Provider 结果在 current helper 中也被拒绝。
+- 当前状态：语义隔离代码与单测已实现，待最新 SHA 的 CI 验证；不代表普通 DailyBars 已启用本地因子重建。阶段 B 继续 in_progress。

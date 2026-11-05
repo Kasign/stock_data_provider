@@ -111,3 +111,49 @@ func dailyBarsPITContainsQualityReason(reasons []string, want string) bool {
 	}
 	return false
 }
+
+
+func TestRebuildAdjustedDailyBarsCurrentAcceptsObservedBaoStockFactorWithoutAvailableAt(t *testing.T) {
+	observed := time.Date(2025, 7, 8, 8, 0, 0, 0, time.UTC)
+	bars := []model.DailyBar{{
+		Symbol: "600036.SH", TradeDate: "2025-07-07",
+		Open: 10, High: 11, Low: 9, Close: 10,
+		QualityStatus: model.QualityValid,
+	}}
+	factors := []model.AdjustmentFactor{{
+		Symbol: "600036.SH", TradeDate: "2025-07-07", Factor: 2,
+		Basis: model.AdjustmentFactorForward, Source: "baostock", SourceVersion: "baostock-public-tcp-v1",
+		AvailableAt: nil, SystemObservedAt: &observed,
+		QualityStatus: model.QualityDegraded,
+		QualityReasons: []string{"provider_available_at_not_exposed_by_query_adjust_factor"},
+	}}
+
+	got, err := rebuildAdjustedDailyBarsCurrent(bars, factors, model.AdjustmentForward, "2025-07-07")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got[0].Close != 10 || got[0].AdjustmentFactorSource != "baostock" {
+		t.Fatalf("unexpected current rebuild result: %+v", got[0])
+	}
+	if got[0].QualityStatus != model.QualityDegraded ||
+		!dailyBarsPITContainsQualityReason(got[0].QualityReasons, "adjustment_factor_bar_quality_degraded") ||
+		!dailyBarsPITContainsQualityReason(got[0].QualityReasons, "adjustment_factor_bar:provider_available_at_not_exposed_by_query_adjust_factor") {
+		t.Fatalf("BaoStock factor degradation was not preserved: %+v", got[0])
+	}
+
+	if _, err := rebuildAdjustedDailyBarsPIT(bars, factors, model.AdjustmentForward, "2025-07-07"); err == nil {
+		t.Fatal("PIT rebuild must reject BaoStock factor without provider available_at")
+	}
+}
+
+func TestRebuildAdjustedDailyBarsCurrentStillRequiresSystemObservation(t *testing.T) {
+	bars := []model.DailyBar{{Symbol: "600036.SH", TradeDate: "2025-07-07", Open: 10, High: 11, Low: 9, Close: 10}}
+	factors := []model.AdjustmentFactor{{
+		Symbol: "600036.SH", TradeDate: "2025-07-07", Factor: 2,
+		Basis: model.AdjustmentFactorForward, Source: "baostock", SourceVersion: "v1",
+		QualityStatus: model.QualityDegraded,
+	}}
+	if _, err := rebuildAdjustedDailyBarsCurrent(bars, factors, model.AdjustmentForward, "2025-07-07"); err == nil {
+		t.Fatal("current rebuild must reject factors that have not been observed by this system")
+	}
+}
