@@ -1511,3 +1511,12 @@ JSR-6L 补充：连接配置变更取消草稿检查后，旧代际 finally 按�
 
 
 第三十六批回读复核补充：将 `.supplemental-feedback` 基础字号明确调整为 13px，与原全局可读性规则一致；UI contract 对该值有精确断言，避免移除全局覆盖后回退到原始 11px。
+
+
+### UIR-2 第三十七批：图表 HTML / SVG 文字字号级联收敛（2026-11-05）
+
+复核日 K 图表、收盘价折线图、成交量柱状图及 RSI 图表的 SVG 构建逻辑。确认 .chart-axis-label 由 chart.js 动态创建为 SVG text 节点，.chart-volume-unavailable 同样是 SVG 文本；图例、摘要、空态、底部说明和视图切换按钮则是 HTML 内容。两类文字均由对应 CSS 类控制字号，不存在 JS 内联字号属性，适合迁移到组件基础声明。
+
+本批将图例、摘要辅助文字、SVG 轴标签和成交量缺失提示统一为 12px，图表空态和视图切换按钮为 13px，底部说明为 12px。删除全局可读性区段对应的 7 条 !important 字号覆盖。保留浅色主题 SVG 填充色、视图按钮交互态、800px 图表操作区排列和 600px 双按钮等宽布局；不调整图表尺寸、坐标、行高或绘图逻辑。
+
+新增 UI contract 精确锁定 7 组组件基础字号、无 !important，并检查浅色主题颜色和响应式规则仍存在。源码回读确认 SVG 文本由 CSS 类控制；本批未运行 UI contract、图表单测、JS 语法检查、Compose 校验、Nginx 构建或 Chromium Browser Smoke，实际 SVG 计算样式和多分辨率视觉表现仍待验收。

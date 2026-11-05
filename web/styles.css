@@ -280,20 +280,20 @@ h2 { margin: 0; color: #e5edf3; font-size: 14px; font-weight: 650; letter-spacin
   overflow-wrap: anywhere;
 }
 .panel-heading p { font-size: 10px; }
-.chart-legend { display: flex; align-items: center; gap: 7px; color: var(--text-dim); font-size: 10px; }
+.chart-legend { display: flex; align-items: center; gap: 7px; color: var(--text-dim); font-size: 12px; }
 .chart-legend > span:first-child { width: 14px; height: 2px; border-radius: 3px; background: var(--accent); }
 .chart-summary { display: flex; align-items: baseline; gap: 10px; margin-top: 17px; }
 .chart-summary strong { color: #dce8ee; font-size: 21px; font-weight: 650; }
-.chart-summary span { color: #70869b; font-size: 10px; }
+.chart-summary span { color: #70869b; font-size: 12px; }
 .chart-wrap { position: relative; min-height: 220px; margin-top: 3px; }
 #close-chart { display: block; width: 100%; height: auto; min-height: 200px; overflow: visible; }
 .chart-grid-line { stroke: #253341; stroke-width: 1; stroke-dasharray: 3 5; }
-.chart-axis-label { fill: var(--text-dim); font-size: 10px; }
+.chart-axis-label { fill: var(--text-dim); font-size: 12px; }
 .chart-close-line { fill: none; stroke: #47d6ad; stroke-width: 2.3; stroke-linejoin: round; stroke-linecap: round; }
 .chart-last-guide { stroke: rgba(71, 214, 173, .45); stroke-width: 1; stroke-dasharray: 3 4; }
 .chart-last-point { fill: #b7ffe8; stroke: #23be94; stroke-width: 2; }
-.chart-empty { position: absolute; inset: 40px 0 22px; display: grid; place-items: center; color: var(--text-dim); font-size: 11px; pointer-events: none; }
-.chart-foot { display: flex; justify-content: space-between; gap: 10px; padding-top: 10px; border-top: 1px solid #1c2935; color: var(--text-dim); font-size: 9px; }
+.chart-empty { position: absolute; inset: 40px 0 22px; display: grid; place-items: center; color: var(--text-dim); font-size: 13px; pointer-events: none; }
+.chart-foot { display: flex; justify-content: space-between; gap: 10px; padding-top: 10px; border-top: 1px solid #1c2935; color: var(--text-dim); font-size: 12px; }
 .source-summary { display: flex; align-items: baseline; flex-wrap: wrap; gap: 7px; padding: 17px 0 10px; color: var(--text-dim); font-size: 10px; }
 .source-summary strong { color: var(--text); font-size: 23px; font-weight: 650; }
 .source-version { margin-left: auto; color: var(--text-dim); font-size: 9px; }
@@ -578,7 +578,7 @@ tbody tr:hover { background: rgba(79, 112, 135, .06); }
 .chart-panel-heading { align-items: center; }
 .chart-heading-actions { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 12px; }
 .chart-view-toggle { display: inline-flex; gap: 3px; padding: 3px; border: 1px solid #293a47; border-radius: 8px; background: #0d151e; }
-.chart-view-button { min-height: 29px; padding: 5px 9px; border: 1px solid transparent; border-radius: 6px; color: #8da2b4; background: transparent; font-size: 11px; cursor: pointer; }
+.chart-view-button { min-height: 29px; padding: 5px 9px; border: 1px solid transparent; border-radius: 6px; color: #8da2b4; background: transparent; font-size: 13px; cursor: pointer; }
 .chart-view-button:hover { color: #d2e0e8; background: #17232e; }
 .chart-view-button.is-active { border-color: #315b55; color: #b8f0df; background: rgba(67, 214, 174, .10); }
 .chart-legend-candles > span:first-child { height: 7px; border-radius: 2px; background: linear-gradient(90deg, #f07178 0 50%, #4ed0a2 50% 100%); }
@@ -589,7 +589,7 @@ tbody tr:hover { background: rgba(79, 112, 135, .06); }
 .chart-volume-up { fill: #f07178; }
 .chart-volume-down { fill: #4ed0a2; }
 .chart-volume-flat { fill: #8294a3; }
-.chart-volume-unavailable { fill: #788da0; font-size: 10px; }
+.chart-volume-unavailable { fill: #788da0; font-size: 12px; }
 .chart-candle { cursor: crosshair; outline: none; }
 .chart-candle-wick { stroke-width: 1.3; }
 .chart-candle-up .chart-candle-wick { stroke: #f07178; }
@@ -727,11 +727,6 @@ body { font-size: var(--font-size-body-readable); line-height: var(--line-height
 .metric-label { font-size: var(--font-size-support) !important; }
 .metric-foot { font-size: var(--font-size-support) !important; }
 .panel-heading p { font-size: 12px !important; }
-.chart-legend { font-size: 12px !important; }
-.chart-summary span { font-size: 12px !important; }
-.chart-axis-label { font-size: 12px !important; }
-.chart-empty { font-size: 13px !important; }
-.chart-foot { font-size: 12px !important; }
 .source-summary { font-size: 12px !important; }
 .source-version { font-size: 12px !important; }
 .source-main strong { font-size: 13px !important; }
@@ -762,8 +757,6 @@ td { font-size: 12px !important; }
 .security-note { font-size: 12px !important; }
 .settings-feedback { font-size: 12px !important; }
 .quote-heading-actions .button { font-size: 12px !important; }
-.chart-view-button { font-size: 13px !important; }
-.chart-volume-unavailable { font-size: 12px !important; }
 .recent-analysis-search { font-size: 13px !important; }
 .recent-analysis-feedback { font-size: 13px !important; }
 .recent-analysis-remove { font-size: 12px !important; }

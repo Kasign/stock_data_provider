@@ -2637,3 +2637,25 @@ test("UIR-2 settings feedback layout constraints are consolidated", () => {
   const browserErrorStatus = exactCssDeclarationBlock(".settings-browser-data-panel .settings-inline-status.is-error");
   assert.match(browserErrorStatus, /color:\s*var\(--danger\)\s*;/);
 });
+
+
+test("UIR-2 图表 HTML 与 SVG 文字字号归并到组件基础规则", () => {
+  const expectedSizes = [
+    [".chart-legend", /font-size:\s*12px\s*;/],
+    [".chart-summary span", /font-size:\s*12px\s*;/],
+    [".chart-axis-label", /font-size:\s*12px\s*;/],
+    [".chart-empty", /font-size:\s*13px\s*;/],
+    [".chart-foot", /font-size:\s*12px\s*;/],
+    [".chart-view-button", /font-size:\s*13px\s*;/],
+    [".chart-volume-unavailable", /font-size:\s*12px\s*;/]
+  ];
+  for (const [selector, sizePattern] of expectedSizes) {
+    const declaration = baseCssDeclarationBlock(selector);
+    assert.match(declaration, sizePattern, selector + " must own its readable base font size");
+    assert.doesNotMatch(declaration, /!important/);
+  }
+  assert.match(stylesheet, /:root\[data-theme="light"\] \.chart-axis-label, :root\[data-theme="light"\] \.chart-volume-unavailable \{ fill: var\(--text-dim\); \}/);
+  assert.match(stylesheet, /:root\[data-theme="light"\] \.chart-view-button\.is-active/);
+  assert.match(stylesheet, /@media \(max-width: 800px\) \{[\s\S]*?\.chart-heading-actions/);
+  assert.match(stylesheet, /@media \(max-width: 600px\) \{[\s\S]*?\.chart-view-button \{ flex: 1 1 50%; \}/);
+});
