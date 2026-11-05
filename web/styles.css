@@ -1691,8 +1691,8 @@ button:disabled, input:disabled, select:disabled, textarea:disabled { cursor: no
 .market-overview-subheading p,.market-overview-widget-heading p {
   margin:5px 0 0;
   color:var(--text-dim);
-  font-size:11px;
-  line-height:1.6
+  font-size:12px;
+  line-height:1.65
 }
 .market-index-grid {
   display:grid;
@@ -3287,8 +3287,6 @@ button:disabled, input:disabled, select:disabled, textarea:disabled { cursor: no
 
 /* 2026-10-27 readability pass: market overview, activity table, and calendar. */
 .market-overview-updated { max-width: 340px; font-size: 12px; line-height: 1.6; }
-.market-overview-subheading p,
-.market-overview-widget-heading p { font-size: 12px; line-height: 1.65; }
 
 
 .market-table-primary { font-size: 12px; line-height: 1.5; }

@@ -1310,7 +1310,13 @@ test("stock research toolbar controls use readable labels and touch-sized target
 
 test("market overview and activity use readable secondary text and touch-sized controls", () => {
   assert.match(finalCssRuleBody(".market-overview-updated"), /font-size: 12px/);
-  assert.match(finalCssRuleBody(".market-overview-subheading p"), /font-size: 12px/);
+  const marketOverviewHeadingDescriptionBase = baseCssDeclarationBlock(".market-overview-subheading p,.market-overview-widget-heading p");
+  assert.match(marketOverviewHeadingDescriptionBase, /font-size:\s*12px\s*;/);
+  assert.match(marketOverviewHeadingDescriptionBase, /line-height:\s*1\.65\s*;/);
+  assert.match(marketOverviewHeadingDescriptionBase, /margin:\s*5px 0 0\s*;/);
+  assert.match(marketOverviewHeadingDescriptionBase, /color:\s*var\(--text-dim\)\s*;/);
+  assert.equal((stylesheet.match(/\.market-overview-subheading p,\.market-overview-widget-heading p\s*\{/g) || []).length, 1, "market overview heading descriptions should share one base rule");
+  assert.doesNotMatch(stylesheet, /market-overview-subheading p,\s*\.market-overview-widget-heading p\s*\{\s*font-size:\s*12px/);
   const marketIndexSecondaryBase = baseCssDeclarationBlock(".market-index-identity small");
   assert.match(marketIndexSecondaryBase, /font-size:\s*12px\s*;/);
   assert.match(marketIndexSecondaryBase, /line-height:\s*1\.5\s*;?/);
