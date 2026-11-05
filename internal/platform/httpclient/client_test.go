@@ -800,6 +800,11 @@ func TestClientUsesBoundedSemaphorePoolsForUnknownDependencies(t *testing.T) {
 func TestClientHoldsDependencySlotWhileReadingResponseBody(t *testing.T) {
 	bodyStarted := make(chan struct{})
 	releaseBody := make(chan struct{})
+	var releaseOnce sync.Once
+	release := func() {
+		releaseOnce.Do(func() { close(releaseBody) })
+	}
+	defer release()
 	secondReached := make(chan struct{}, 1)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
 		if request.URL.Path == "/first" {
@@ -817,39 +822,54 @@ func TestClientHoldsDependencySlotWhileReadingResponseBody(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := newLocalTestClient(t, server, staticResolver{addresses: []netip.Addr{netip.MustParseAddr("8.8.8.8")}}, 1024, 0)
+	client, err := New(Config{
+		Resolver:         staticResolver{addresses: []netip.Addr{netip.MustParseAddr("8.8.8.8")}},
+		MaxResponseBytes: 1024,
+		DependencyLimits: map[string]int{"news.provider.bocha": 1},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	client.dial = func(ctx context.Context, network, _ string) (net.Conn, error) {
+		return (&net.Dialer{}).DialContext(ctx, network, server.Listener.Addr().String())
+	}
+	t.Cleanup(client.CloseIdleConnections)
+
 	policy := localPolicy(server)
 	policy.Dependency = "news.provider.bocha"
-	client.config.DependencyLimits = map[string]int{"news.provider.bocha": 1}
-	client.semaphores = map[string]chan struct{}{"news.provider.bocha": make(chan struct{}, 1)}
-
+	firstRequest := localRequest(t, server, "/first")
 	firstDone := make(chan error, 1)
 	go func() {
-		response, err := client.Do(context.Background(), localRequest(t, server, "/first"), policy)
-		if err == nil {
+		response, requestErr := client.Do(context.Background(), firstRequest, policy)
+		if requestErr == nil {
 			_ = response.Body.Close()
 		}
-		firstDone <- err
+		firstDone <- requestErr
 	}()
-	<-bodyStarted
+	select {
+	case <-bodyStarted:
+	case <-time.After(time.Second):
+		t.Fatal("first response body did not start")
+	}
 
+	secondRequest := localRequest(t, server, "/second")
 	secondDone := make(chan error, 1)
 	go func() {
-		response, err := client.Do(context.Background(), localRequest(t, server, "/second"), policy)
-		if err == nil {
+		response, requestErr := client.Do(context.Background(), secondRequest, policy)
+		if requestErr == nil {
 			_ = response.Body.Close()
 		}
-		secondDone <- err
+		secondDone <- requestErr
 	}()
 	select {
 	case <-secondReached:
 		t.Fatal("second request reached the server before the first response body was consumed")
-	case err := <-secondDone:
-		t.Fatalf("second request should wait for the dependency slot, got %v", err)
+	case requestErr := <-secondDone:
+		t.Fatalf("second request should wait for the dependency slot, got %v", requestErr)
 	case <-time.After(80 * time.Millisecond):
 	}
 
-	close(releaseBody)
+	release()
 	if err := <-firstDone; err != nil {
 		t.Fatalf("first request failed: %v", err)
 	}
@@ -885,7 +905,11 @@ func TestClientCloseIdleConnectionsDoesNotCancelActiveOrFutureRequests(t *testin
 		}
 		firstDone <- err
 	}()
-	<-entered
+	select {
+	case <-entered:
+	case <-time.After(time.Second):
+		t.Fatal("active request did not reach the server")
+	}
 
 	client.CloseIdleConnections()
 	close(release)
