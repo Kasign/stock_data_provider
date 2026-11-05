@@ -265,7 +265,7 @@ Migration namespace 由模块固定且唯一，如 quant/research/researchflow/n
 
 **发现的 Schema 缺口**
 
-1. 自动字段名对照进一步发现 8 组 OpenAPI 缺口：`ProviderProbeCheckResult` 缺 `left_adjustment_method`、`right_adjustment_method`、`left_adjustment_reference_date`、`right_adjustment_reference_date`；`SectorRanking` 缺 `provider_report_date`；`SectorRankingSnapshot` 与 `MarketBreadthSnapshot` 各缺 `excluded_non_a_share_count`；`LimitPoolItem` 缺 `seal_money`、`max_seal_money`；`FundamentalSection` 缺 `available_at`；`IndexConstituent` 缺 `effective_from`、`effective_to`、`available_at`、`system_observed_at`。这些字段均存在 Go JSON tag，若对应响应对外序列化，OpenAPI 必须补齐；不得静默丢弃。
+1. 在本轮最新 Data HEAD `c1ae8bb1f02a10a7f8c73a40f125fce3f1e4da3c` 上重跑静态对照后，确认 **9 组、15 个字段**存在 Go JSON Tag 已定义但 OpenAPI 未声明的情况：`ProviderProbeCheckResult` 缺 `left_adjustment_method`、`right_adjustment_method`、`left_adjustment_reference_date`、`right_adjustment_reference_date`；`SectorRanking` 缺 `provider_report_date`；`SectorRankingSnapshot` 与 `MarketBreadthSnapshot` 各缺 `excluded_non_a_share_count`；`LimitPoolItem` 缺 `seal_money`、`max_seal_money`；`FundamentalSection` 缺 `available_at`；`IndexConstituent` 缺 `effective_from`、`effective_to`、`available_at`、`system_observed_at`；`SourceStatus` 缺 `market_capital_flow_capable`。这些对象均可由当前 HTTP API 路径或响应引用到达，应视为真实 OpenAPI 缺口，而不是内部字段。
 2. `ProviderProbeCheckResult.calendar_known`、`is_trading_day`、`age_seconds`、`freshness_max_age_seconds` 在 Go 中为指针并 omitempty，OpenAPI 应保持可选；若字段存在，布尔 false/整数 0 都是有效值，不能用 omitempty 的客户端语义误判为未知。
 3. `ProviderProbeItem.coverage_ratio` 在 Go 中是 `*float64`，且仅在分母可证明时输出；OpenAPI 的 nullable 语义是必要的。Coverage 缺失不等于 0%。
 4. Probe 的 `status`、`error_stage` 和 `error_code` 是不同层级：status 描述探测结果，error_stage 描述失败阶段，error_code 是稳定机器分类。客户端不可把三者合并为一个通用失败状态。
@@ -374,8 +374,8 @@ Quant 首期只建立自己的 Adapter DTO，不复制整个 Data Model：
 - Platform 核心包导出 API 与依赖限制核对。
 
 **仍未完成：**
-1. 对 Data 所有业务响应 DTO（证券、财务、交易制度、指数、资金流、市场宽度、公告等）逐个完成 Go JSON tag ↔ OpenAPI 的全量自动化对照；本轮只做了 Quant 首期数据面和 Probe/Validation/Coverage 的重点审查。
-2. 补齐 Data OpenAPI 已识别的 8 组字段缺口，并确认未按同名 Schema 匹配的 6 个 Go 结构体是否对外暴露；增加能捕获 Go JSON tag 漂移的契约测试。
+1. 已完成 11 个 Model 文件的结构体字段名静态对照，但仍需对 51 个同名 Schema 匹配项完成字段类型、required/nullable、枚举、嵌套引用和条件语义全量核验；并将对照检查固化为自动化测试。
+2. 补齐 Data OpenAPI 已识别的 9 组、15 个字段缺口；6 个未按同名 Schema 匹配的结构体已完成内外部归类；增加能捕获 Go JSON Tag 漂移的契约测试。
 3. 为 News 增加可供 Research 调用的只读查询 Facade、明确可获得时间和采集时间语义、策略版本引用及授权内容引用；等待 N6 Repository/Migration 实现。
 4. 对 Platform Storage 执行真实 MariaDB/Redis 集成和故障演练；对 HTTP Client 执行部署环境出口安全验收。
 5. 结合以上结果修订模块 DTO，完成 Quant/Research 的公开契约字段表与 Schema 版本策略。
