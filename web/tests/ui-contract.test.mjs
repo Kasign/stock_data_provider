@@ -1371,6 +1371,14 @@ test("market overview and activity use readable secondary text and touch-sized c
   assert.match(marketTouchTimeBase, /line-height:\s*1\.5\s*;?/);
   assert.match(marketTouchTimeBase, /color:\s*var\(--text-soft\)\s*;?/);
   assert.equal((stylesheet.match(/(?:^|})\s*\.market-touch-time\s*\{/g) || []).length, 1, "market touch time should have one exact base rule");
+  const marketQualityReasonsBase = exactCssDeclarationBlock(".market-quality-reasons");
+  assert.match(marketQualityReasonsBase, /margin-top:\s*9px\s*;?/);
+  assert.match(marketQualityReasonsBase, /color:\s*var\(--text-dim\)\s*;?/);
+  assert.match(marketQualityReasonsBase, /font-size:\s*12px\s*;/);
+  assert.match(marketQualityReasonsBase, /line-height:\s*1\.7\s*;?/);
+  assert.equal((stylesheet.match(/(?:^|})\s*\.market-quality-reasons\s*\{/g) || []).length, 1, "market quality reasons should have one exact base rule");
+  assert.match(finalCssRuleBody(".market-quality-reasons li"), /overflow-wrap:\s*anywhere/);
+  assert.match(finalCssRuleBody(".market-activity-widget .market-quality-reasons"), /padding-left:\s*18px/);
   assert.match(finalCssRuleBody(".market-activity-heading p"), /font-size: 12px/);
   assert.match(finalCssRuleBody(".market-activity-controls label"), /font-size: 12px/);
   assert.match(finalCssRuleBody(".market-activity-controls input"), /min-height: 38px/);

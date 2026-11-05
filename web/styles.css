@@ -1935,8 +1935,8 @@ button:disabled, input:disabled, select:disabled, textarea:disabled { cursor: no
 .market-quality-reasons {
   margin-top:9px;
   color:var(--text-dim);
-  font-size:11px;
-  line-height:1.6
+  font-size:12px;
+  line-height:1.7
 }
 .market-quality-reasons summary {
   cursor:pointer
@@ -3292,7 +3292,6 @@ button:disabled, input:disabled, select:disabled, textarea:disabled { cursor: no
 .market-overview-updated { max-width: 340px; font-size: 12px; line-height: 1.6; }
 
 
-.market-quality-reasons { font-size: 12px; line-height: 1.7; }
 .market-overview-actions .button { min-height: 38px; font-size: 12px; }
 
 .market-activity-heading p { font-size: 12px; line-height: 1.65; }
