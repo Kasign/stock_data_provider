@@ -35,7 +35,6 @@ type ContentAttachmentMetadata struct {
 
 // ContentPayload 保存来源正文/片段。Kind 未确定时保持空值，不推断为全文。
 type ContentPayload struct {
-	DeclaredTypeRaw string
 	Origin ContentOrigin
 	Format ContentFormat
 	Kind   ContentKind

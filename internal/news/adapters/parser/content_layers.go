@@ -44,7 +44,6 @@ func (entry FeedEntry) ContentLayers(providerSummary string) domain.ContentLayer
 			Origin: domain.ContentOriginFeedBody,
 			Format: feedContentFormat(entry),
 			Text:   entry.Content,
-			DeclaredTypeRaw: entry.ContentTypeRaw,
 		}
 	}
 	return domain.NormalizeContentLayers(layers)
