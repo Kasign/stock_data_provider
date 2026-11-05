@@ -1749,3 +1749,5 @@ CI 复核记录：本批首次 Chromium Browser Smoke 在个股研究数据质�
 - [x] UI contract 锁定 10 组组件基础字号及响应式布局规则。
 - [ ] 在本批最终提交 SHA 上运行 UI contract、JS 语法检查、Compose 校验和 Nginx 镜像构建。
 - [ ] 执行 Chromium Browser Smoke，并人工核验个股补充资料卡片在 320/375/600/768/900/1280/1600px 下的字号、字段换行、反馈状态及深浅主题表现。
+
+- [x] 回读修正 `.supplemental-feedback` 基础字号为 13px，避免删除全局覆盖后回退至 11px。

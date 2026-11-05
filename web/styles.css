@@ -630,7 +630,7 @@ tbody tr:hover { background: rgba(79, 112, 135, .06); }
    border-radius: 7px;
    color: #a4bac9;
    background: rgba(13, 21, 30, .65);
-   font-size: 11px;
+   font-size: 13px;
    line-height: 1.65;
    overflow-wrap: anywhere;
 }
