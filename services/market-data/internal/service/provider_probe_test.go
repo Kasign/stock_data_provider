@@ -604,13 +604,16 @@ func (p providerProbeDailyBarsFake) Name() string { return p.name }
 func (p providerProbeDailyBarsFake) FetchDailyBars(_ context.Context, symbol, _, _ string, _ int, adjustment model.AdjustmentBasis) ([]model.DailyBar, error) {
 	volume := int64(10000)
 	amount := 100000.0
+	rawAmount := amount
 	now := time.Now().UTC()
 	return []model.DailyBar{{
 		Symbol: symbol, TradeDate: "2026-10-29", Period: "1d",
 		Open: 10, High: 11, Low: 9, Close: p.close, Volume: &volume, Amount: &amount,
 		AdjustmentBasis: adjustment, Source: p.name, SourceVersion: p.name + "-v1",
 		ProviderTime: &now, FetchedAt: now, NormalizedAt: now,
-		VolumeUnit: "shares", RawVolumeUnit: "shares", AmountUnit: "CNY", QualityStatus: p.quality,
+		VolumeUnit: "shares", RawVolumeUnit: "shares",
+		RawAmount: &rawAmount, RawAmountUnit: "CNY", RawAmountField: "amount",
+		AmountUnit: "CNY", QualityStatus: p.quality,
 	}}, nil
 }
 
@@ -857,8 +860,8 @@ func TestProviderProbeDoesNotDuplicateAdapterDailyBarIssues(t *testing.T) {
 }
 
 func TestProviderProbeRunsCrossProviderDailyBarComparison(t *testing.T) {
-	left := providerProbeDailyBarsFake{name: "probe-left", close: 10.5, quality: model.QualityValid}
-	right := providerProbeDailyBarsFake{name: "probe-right", close: 10.5, quality: model.QualityValid}
+	left := providerProbeDailyBarsFake{name: "pytdx", close: 10.5, quality: model.QualityValid}
+	right := providerProbeDailyBarsFake{name: "baostock", close: 10.5, quality: model.QualityValid}
 	ds := NewWithCapabilities(
 		[]provider.NamedProvider{left, right}, nil, []provider.DailyBarProvider{left, right},
 		cache.NewDisabled(), nil, time.Second, time.Minute, 120, 2000, ResilienceConfig{}, nil,
@@ -873,7 +876,7 @@ func TestProviderProbeRunsCrossProviderDailyBarComparison(t *testing.T) {
 		t.Fatalf("expected one cross-provider result, got %+v", run.CheckResults)
 	}
 	result := run.CheckResults[0]
-	if result.Status != "passed" || result.Provider != "probe-left+probe-right" || result.FieldCount != 6 || len(result.ComparedDates) != 1 {
+	if result.Status != "passed" || result.Provider != "baostock+pytdx" || result.FieldCount != 6 || len(result.ComparedDates) != 1 {
 		t.Fatalf("unexpected cross-provider comparison result: %+v", result)
 	}
 }
@@ -896,11 +899,11 @@ func TestProviderProbeDailyBarCrossComparisonEnforcesAdjustmentMetadata(t *testi
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {
 			left := providerProbeAdjustedDailyBarsFake{
-				providerProbeDailyBarsFake: providerProbeDailyBarsFake{name: "probe-adjusted-left", close: 10.5, quality: model.QualityValid},
+				providerProbeDailyBarsFake: providerProbeDailyBarsFake{name: "pytdx", close: 10.5, quality: model.QualityValid},
 				method:                     test.leftMethod, refDate: test.leftRefDate,
 			}
 			right := providerProbeAdjustedDailyBarsFake{
-				providerProbeDailyBarsFake: providerProbeDailyBarsFake{name: "probe-adjusted-right", close: 10.5, quality: model.QualityValid},
+				providerProbeDailyBarsFake: providerProbeDailyBarsFake{name: "baostock", close: 10.5, quality: model.QualityValid},
 				method:                     test.rightMethod, refDate: test.rightRefDate,
 			}
 			ds := NewWithCapabilities(
