@@ -279,3 +279,14 @@ Migration 状态为 `running` 或 `failed` 时，Runner 不会自动重跑。处
 - IANA 注册表会更新；新增特殊用途分配或前缀变化时，必须重新核对地址表和测试。生产网络出口仍应叠加部署层 egress 防火墙，代码内静态列表不是唯一安全边界。
 
 参考：IANA [IPv4 Special-Purpose Address Registry](https://www.iana.org/assignments/iana-ipv4-special-registry)（Last Updated 2025-10-09）与 [IPv6 Special-Purpose Address Registry](https://www.iana.org/assignments/iana-ipv6-special-registry)（Last Updated 2025-10-09）。
+
+
+### 7.12 压缩响应与响应体上限（2026-11-05）
+
+`MaxResponseBytes` 必须约束 HTTP Client 实际交付给调用方的响应体字节数，而不只是网络上传输的压缩字节数。Go Transport 在调用方未指定 `Accept-Encoding` 时会自行协商 gzip，并在返回响应体前透明解压；此时平台对解压后的数据执行有界读取。
+
+- 调用方不得自行设置 `Accept-Encoding`。Client 对该 Header 名称执行大小写不敏感检查，发现任何显式设置均拒绝请求，避免显式 gzip 让 Transport 跳过透明解压，导致大小限制只覆盖压缩数据。
+- Client 保留 Transport 默认压缩协商行为；响应体缓冲读取限制作用于 Transport 交付的字节流。gzip 解压后的超限内容必须返回 `platform.httpclient.response_too_large`。
+- 不要将 `Content-Length` 当作唯一大小依据；压缩响应、分块传输和缺失长度都必须通过实际读取字节数限制。
+- 若未来需要支持调用方控制压缩算法，必须引入受控的解压层，并对解压后字节数、解压 CPU/时间和嵌套编码制定上限；不能简单放开该 Header。
+
