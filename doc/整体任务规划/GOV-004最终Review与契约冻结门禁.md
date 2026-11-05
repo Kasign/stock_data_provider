@@ -375,3 +375,16 @@ GOV-004 仍为 NO-GO。不得因非契约文档更新或部分 Workflow 成功�
 此前 23 项应修正为：22 个 slice/map 字段按第 13 节和 Data 修正清单 11.11 继续处理；LimitPoolItem.change_percent 保留 Validator nil 拒绝测试即可。若将来出现绕过 DataService Validator 的 Handler 路径，必须重新审查。
 
 详见 Data 修正清单第 11.14 节。此结论同样说明 Go 类型静态可空不等于 HTTP 响应可达 null。
+
+
+## 17. required 差异可达性复核（2026-11-05）
+
+原始 15 处 Go/OpenAPI required 差异经重新交叉扫描后，不能全部计为运行时违约。51 个同名 Go/OpenAPI 类型中，发现 3 项 OpenAPI required 但 Go Tag 带 omitempty：
+
+- Bundle.warnings：**真实违约风险**。Service 虽显式构造非 nil 空 slice，但 encoding/json 对 omitempty 的空 slice 仍会省略，OpenAPI 又将其列为 required。建议移除 Go JSON Tag 的 omitempty，确保无警告时输出 []。
+- HotRankingItem.source_version：Validator 要求与 Snapshot.SourceVersion 一致，且 Snapshot SourceVersion 必须可识别非空；正常成功路径不可达缺失。
+- HotRankingSnapshot.source_version：Validator 强制可识别非空；正常成功路径不可达缺失。
+
+其余 12 处是 Go 无 omitempty、OpenAPI optional；Go 输出字段比 Schema 最低要求更严格，不构成违约。指针字段在 nil 时输出 null，相关 Schema 已允许 nullable。
+
+详细分析与 DATA-CONTRACT-003-C 见 Data 修正清单第 11.15 节。required 阻断应聚焦 Bundle.warnings，并为 HotRanking 的 Validator 约束补测试，不应将 15 项全部视为缺陷。
