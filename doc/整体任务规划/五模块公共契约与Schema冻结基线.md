@@ -507,3 +507,24 @@ type ResearchEvidenceQuery interface {
 文档明确 Secret 注入、Header 覆盖、固定 DestinationPolicy、健康接口、环境隔离、轮换/撤销、日志脱敏和未来统一服务身份的迁移门槛。Data 独立 Go Module 不 import 根模块 Platform internal。
 
 本轮只更新规划文档，不修改 Data/Platform/Server 代码。该设计待 Server/Data 负责人确认后成为实现契约；GOV-004 仍未冻结。
+
+
+### 13.9 GOV-004 最终 Review 结论：NO-GO
+
+新增审查结论文档：[GOV-004 最终 Review 与契约冻结门禁](./GOV-004最终Review与契约冻结门禁.md)。
+
+当前可作为稳定设计基线的部分：
+- 五模块职责、依赖 DAG 和禁止 import 方向；
+- Data 单位/质量/复权/PIT 语义；
+- News/Research 所有权和 Evidence 语义；
+- Researchflow Run/Stage/Attempt 与 LLM/Notification 边界；
+- Repository/Migration 领域所有权。
+
+当前阻断冻结的实现/验收项：
+1. Data OpenAPI/Go JSON 字段、required/nullable/枚举差异修正和双向契约测试；
+2. News ResearchEvidenceQuery Facade、Repository/Migration、system_as_of 历史查询、授权快照和稳定分页；
+3. Platform 真实 MariaDB/Redis、Migration 故障演练、生产出口 SSRF；
+4. Data Key 服务端注入、轮换/撤销和脱敏验收；
+5. Quant/Research 逐字段公开 DTO、Schema 示例和版本策略。
+
+**结论：GOV-004 当前 NO-GO，不冻结共同契约，不创建五个模块分支。** GOV-005 可先做规划设计，但不能冻结共同基线 SHA 或启动模块并行实现。
