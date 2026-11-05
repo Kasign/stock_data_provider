@@ -2065,3 +2065,18 @@ CI 复核记录：本批首次 Chromium Browser Smoke 在个股研究数据质�
 - [x] 从报告创建笔记时不再静默截断股票代码和 Task ID；超长关联字段交由笔记归一化统一拒绝，避免研究关联被悄悄改写。
 - [x] 保留历史时间字符串兼容，不强制 ISO 日期格式；新增超长字段拒绝和历史格式保留测试。
 - [ ] 当前提交 SHA 的 WebUI Checks 与 Chromium Browser Smoke 待运行。
+
+
+## 2026-11-05 P0 研究报告 JSON 深层序列化完整性
+
+- [x] 报告结果仅接受 JSON 原生数据结构：有限数字、字符串、布尔、null、稠密数组和普通对象；拒绝 undefined、函数、Symbol、BigInt、非有限数字、Date/类实例、访问器、toJSON 改写、稀疏数组及循环引用。
+- [x] 允许对象图中重复引用同一普通对象；重复引用经 JSON 编码后会成为独立副本，不视为循环引用。
+- [x] 保存入口在克隆前验证，避免 JSON.stringify 静默丢字段或改写值；本地归档读写入口复用相同校验。
+- [x] 保持结果深层业务字段可选：报告渲染器已有“未报告/格式无效”处理，不以臆测的完整 schema 拒绝服务端新增字段。
+- [ ] 当前提交 SHA 的 WebUI Checks 与 Chromium Browser Smoke 待运行。
+
+## 2026-11-05 Web 静态结构拆分评估
+
+- [x] JavaScript JSR-6 结构性拆分完成；app.js 保留 Composition Root 与跨域状态/请求协调职责，不以行数为目标继续拆分。
+- [x] HTML 入口审查：web/index.html 约 149 KB、1188 行，包含约 40 个页面/面板 section，无 HTML template、无内嵌业务脚本，使用两个外部 ES Module。当前主要是静态页面骨架，拆分会引入模板装配/构建机制，暂不拆分。
+- [x] CSS web/styles.css 当前约 5,110 行、35 处 !important；剩余项继续按隐藏/语义状态/组件优先级等用途逐项审查，不追求机械归零。
