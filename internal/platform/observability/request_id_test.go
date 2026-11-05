@@ -73,3 +73,23 @@ func TestRequestIDValidation(t *testing.T) {
 		}
 	}
 }
+
+func TestMiddlewareReplacesDuplicateRequestIDHeaders(t *testing.T) {
+	var contextID string
+	handler := Middleware(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		contextID = FromContext(r.Context())
+	}))
+
+	request := httptest.NewRequest(http.MethodGet, "/", nil)
+	request.Header.Add(RequestIDHeader, "client-id-one")
+	request.Header.Add(RequestIDHeader, "client-id-two")
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+
+	if !ValidRequestID(contextID) || contextID == "client-id-one" || contextID == "client-id-two" {
+		t.Fatalf("duplicate request IDs were not replaced: %q", contextID)
+	}
+	if got := response.Header().Get(RequestIDHeader); got != contextID {
+		t.Fatalf("response request ID = %q, want %q", got, contextID)
+	}
+}
