@@ -90,3 +90,22 @@ func TestResolveSecurityIdentityReturnsDelistedSnapshotForHistoricalLookup(t *te
 		t.Fatalf("got=%+v err=%v", got, err)
 	}
 }
+
+func TestResolveSecurityIdentitySupportsNameOnlyHistory(t *testing.T) {
+	start := time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
+	change := time.Date(2023, 8, 1, 0, 0, 0, 0, time.UTC)
+	oldName := securityIdentityRecord("600000", "旧简称", string(SecuritySymbolActive), start, change)
+	newName := securityIdentityRecord("600000", "新简称", string(SecuritySymbolActive), change, time.Time{})
+
+	before, err := ResolveSecurityIdentity([]SecurityIdentityRecord{oldName, newName}, "XSHG", "600000", change.Add(-time.Second))
+	if err != nil || before.Status != SecurityIdentityResolved || before.Record.Name != "旧简称" {
+		t.Fatalf("before=%+v err=%v", before, err)
+	}
+	after, err := ResolveSecurityIdentity([]SecurityIdentityRecord{oldName, newName}, "XSHG", "600000", change)
+	if err != nil || after.Status != SecurityIdentityResolved || after.Record.Name != "新简称" {
+		t.Fatalf("after=%+v err=%v", after, err)
+	}
+	if before.Record.IdentityValue != after.Record.IdentityValue {
+		t.Fatal("name-only history must preserve the same external security identity")
+	}
+}
