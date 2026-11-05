@@ -1,6 +1,6 @@
 # 新闻模块专项文档
 
-> 状态：N1-A 已评审确认；N2 首批 Domain/Application/Provider Adapter 已实现并进入验证阶段  
+> 状态：N1-A 已评审确认；N2 根模块验证通过；N3 来源授权策略评估开始实施  
 > 开发分支：`feat/research-news-ingestion`  
 > 基线分支：`feat/full-go-data-providers-api-switch`
 
@@ -32,18 +32,18 @@
 - [x] 创建独立开发分支
 - [x] 建立专项设计文档骨架
 - [x] N1-A：完成新闻领域模型、时间/身份/版本/关联证据、Provider 与 Application 契约及跨文档内部评审
-- [x] N2 首批：Domain、Application Port、Bocha/Tavily/Brave/SearXNG Adapter 与 fake 测试代码已提交；完整验证仍待执行
-- [ ] N3：实现来源采集、正文解析和标准化
+- [x] N2：Domain、Application Port、Bocha/Tavily/Brave/SearXNG Adapter 与 fake 测试已提交；根模块 gofmt、test、race、vet 和分析服务镜像构建通过
+- [ ] N3：来源授权策略评估、URL 安全约束、正文解析和标准化（当前先实施纯 Domain 规则）
 - [ ] N4：实现身份识别、去重、版本和证券关联业务规则
 - [ ] N5：按冻结契约接入 Config/Secret、Logger/Error/Trace、HTTP Client
 - [ ] N6：公共存储能力就绪后实现新闻自有 Repository/SQL/Migration；Redis 按需
 - [ ] N7：接入公共 Diagnostics；Task/Audit/Metrics 按真实需求评估
 - [ ] N8：完成 News 与公共平台集成验收
-- [x] N1-A 用户评审确认；已进入 N2
+- [x] N1-A 用户评审确认；N2 已完成并进入 N3
 
 ## 公共平台协作说明
 
-公共平台分支 feat/platform-foundation 的 PLAT-002 仍处于待评审状态；平台已在提交 `98f561e` 接受 News 提出的 HTTP/SSRF、Diagnostics、Fault 契约意见。News 只读跟踪平台分支，不直接依赖未冻结的内部实现。PLAT-011 为业务接入、PLAT-012 为故障演练；Metrics/Audit 和 Redis 不作为新闻首期门禁。具体差异见《N1-A 公共平台规划对齐补充评审》和《新闻模块与公共平台接入矩阵》。
+公共平台分支 feat/platform-foundation 的 PLAT-002 仍处于待评审状态；只读检查平台分支最新 HEAD `ac06a544`，当前已出现 PLAT-007 Diagnostics 首批代码，但尚无 PLAT-008 HTTP Client 实现。平台已接受 News 提出的 HTTP/SSRF、Diagnostics、Fault 契约意见。News 只读跟踪平台分支，不直接依赖未冻结的内部实现。PLAT-011 为业务接入、PLAT-012 为故障演练；Metrics/Audit 和 Redis 不作为新闻首期门禁。具体差异见《N1-A 公共平台规划对齐补充评审》和《新闻模块与公共平台接入矩阵》。
 
 ## 重要说明
 
