@@ -42,7 +42,7 @@ func TestLiveHistoricalProviderProbe(t *testing.T) {
 	}
 	var reports []*model.ProviderProbeRun
 	var failures []string
-	for _, symbol := range []string{"600036.SH"} {
+	for _, symbol := range []string{"600036.SH", "002982.SZ"} {
 		run, err := ds.ProbeProviderCapabilitiesWithOptions(ctx, ProviderProbeOptions{
 			Scope: "all",
 			Capabilities: []string{"daily_bars"},
