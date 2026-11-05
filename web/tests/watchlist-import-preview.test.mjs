@@ -41,3 +41,10 @@ test("removes BOM, ignores blank lines and retains source line numbering semanti
   assert.deepEqual(preview.rows.map((row) => row.line), [2, 3]);
   assert.deepEqual(preview.rows.map((row) => row.status), ["ready", "invalid"]);
 });
+
+test("rejects rows with unclosed CSV quotes instead of accepting truncated names", () => {
+  const preview = buildWatchlistImportPreview('600519.SH,"贵州茅台\n000858.SZ,五粮液', validState());
+  assert.deepEqual(preview.rows.map((row) => row.status), ["invalid", "ready"]);
+  assert.equal(preview.rows[0].message, "CSV 引号未闭合");
+  assert.deepEqual(preview.accepted, [{ symbol: "000858.SZ", name: "五粮液" }]);
+});

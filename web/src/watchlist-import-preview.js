@@ -3,7 +3,7 @@ import { MAX_WATCHLIST_ITEMS } from "./watchlist.js";
 
 function parseWatchlistImportLine(line) {
   const cells = [];
-  let value = "", quoted = false;
+  let value = "", quoted = false, valid = true;
   for (let index = 0; index < line.length; index += 1) {
     const char = line[index];
     if (char === '"') {
@@ -13,8 +13,9 @@ function parseWatchlistImportLine(line) {
       cells.push(value.trim()); value = "";
     } else value += char;
   }
+  if (quoted) valid = false;
   cells.push(value.trim());
-  return cells;
+  return { cells, valid };
 }
 
 export function buildWatchlistImportPreview(rawText, existingState) {
@@ -29,9 +30,14 @@ export function buildWatchlistImportPreview(rawText, existingState) {
   const remaining = Math.max(0, MAX_WATCHLIST_ITEMS - existingItems.length);
   let capacity = remaining;
   lines.forEach((line, index) => {
-    const cells = parseWatchlistImportLine(line);
+    const parsed = parseWatchlistImportLine(line);
+    const cells = parsed.cells;
     const rawSymbol = String(cells[0] || "").trim().toUpperCase();
     const rawName = String(cells[1] || "").trim();
+    if (!parsed.valid) {
+      rows.push({ line: index + 1, symbol: rawSymbol, name: rawName, status: "invalid", message: "CSV 引号未闭合" });
+      return;
+    }
     if (index === 0 && /^(代码|股票代码|symbol|code)$/i.test(rawSymbol)) return;
     let symbol = rawSymbol;
     if (/^\d{6}$/.test(symbol)) {
