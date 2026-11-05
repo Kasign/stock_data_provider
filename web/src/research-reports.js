@@ -3,6 +3,37 @@ export const RESEARCH_REPORTS_KEY = "stock-provider-webui.research-reports.v1";
 export const MAX_RESEARCH_REPORTS = 30;
 const MAX_REPORT_CHARS = 700000, MAX_TOTAL_CHARS = 4000000;
 function safeStorage(storage) { if (storage) return storage; try { return globalThis.localStorage; } catch { return null; } }
+function isJsonValue(value, ancestors = new WeakSet()) {
+  if (value === null || typeof value === "string" || typeof value === "boolean") return true;
+  if (typeof value === "number") return Number.isFinite(value) && !Object.is(value, -0);
+  if (typeof value !== "object" || ancestors.has(value)) return false;
+  ancestors.add(value);
+  try {
+    const array = Array.isArray(value);
+    const prototype = Object.getPrototypeOf(value);
+    if (array ? prototype !== Array.prototype : prototype !== Object.prototype && prototype !== null) return false;
+    const keys = Reflect.ownKeys(value);
+    if (keys.some(key => typeof key !== "string")) return false;
+    if (array) {
+      if (keys.length !== value.length + 1 || !keys.includes("length")) return false;
+      for (let index = 0; index < value.length; index++) {
+        if (!Object.prototype.hasOwnProperty.call(value, index)) return false;
+      }
+    }
+    for (const key of keys) {
+      if (array && key === "length") continue;
+      if (array && (!/^(0|[1-9]\d*)$/.test(key) || Number(key) >= value.length)) return false;
+      const descriptor = Object.getOwnPropertyDescriptor(value, key);
+      if (!descriptor || !descriptor.enumerable || !Object.prototype.hasOwnProperty.call(descriptor, "value") ||
+          !isJsonValue(descriptor.value, ancestors)) return false;
+    }
+    return true;
+  } catch {
+    return false;
+  } finally {
+    ancestors.delete(value);
+  }
+}
 function normalizeReport(item) {
   if (!item || typeof item !== "object" || Array.isArray(item) ||
       !item.result || typeof item.result !== "object" || Array.isArray(item.result)) return null;
@@ -20,7 +51,10 @@ function normalizeReport(item) {
       typeof createdAt !== "string" || createdAt.length > 64 || !Array.isArray(symbols) || symbols.length > 50 ||
       symbols.some(value => typeof value !== "string" || !value.trim() || value.trim().length > 32) ||
       (item.corePass !== undefined && item.corePass !== null && typeof item.corePass !== "boolean")) return null;
-  let serialized; try { serialized = JSON.stringify(item.result); } catch { return null; }
+  let serialized; try {
+    if (!isJsonValue(item.result)) return null;
+    serialized = JSON.stringify(item.result);
+  } catch { return null; }
   if (!serialized || serialized.length > MAX_REPORT_CHARS) return null;
   return { id: item.id.trim(), runId: item.runId.trim(), taskId, analysisBase: analysisBase.trim(),
     symbols: symbols.map(value => value.trim()), status, corePass: item.corePass ?? null,
@@ -52,7 +86,8 @@ export function writeResearchReports(items, storage) {
   } catch { return { ok: false, reason: "unavailable" }; }
 }
 export function saveResearchReport(result, context = {}, storage) {
-  if (!result || typeof result !== "object" || typeof result.run_id !== "string" || !result.run_id.trim()) return { ok: false, reason: "invalid-result" };
+  if (!result || typeof result !== "object" || Array.isArray(result) || !isJsonValue(result) ||
+      typeof result.run_id !== "string" || !result.run_id.trim()) return { ok: false, reason: "invalid-result" };
   let cloned; try { cloned = JSON.parse(JSON.stringify(result)); } catch { return { ok: false, reason: "invalid-result" }; }
   const current = readResearchReports(storage); if (!current.readable || !current.valid) return { ok: false, reason: "invalid-storage" };
   const analysisBase = String(context.analysisBase || "").trim();

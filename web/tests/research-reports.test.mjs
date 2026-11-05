@@ -66,3 +66,51 @@ test("归档创建时间有长度上限，不强制单一日期格式", () => {
   assert.equal(s.getItem(RESEARCH_REPORTS_KEY), null);
   assert.equal(writeResearchReports([{ ...base, createdAt: "legacy-date" }], s).ok, true);
 });
+
+
+test("拒绝会被 JSON 序列化静默丢弃或改写的报告字段", () => {
+  const make = extra => ({ ...result("run-json"), extra });
+  const circular = result("run-cycle");
+  circular.self = circular;
+  const invalidResults = [
+    make({ missing: undefined }),
+    make({ date: new Date("2026-01-01T00:00:00Z") }),
+    make({ notFinite: Number.NaN }),
+    make({ infinity: Number.POSITIVE_INFINITY }),
+    make({ negativeZero: -0 }),
+    Object.assign(result("run-symbol-key"), { [Symbol("hidden")]: true }),
+    make({ callback() {} }),
+    make({ token: Symbol("hidden") }),
+    make({ amount: 1n }),
+    circular,
+    Object.assign(result("run-tojson"), { toJSON() { return { run_id: "rewritten" }; } })
+  ];
+  for (const invalid of invalidResults) {
+    const s = memory();
+    assert.equal(saveResearchReport(invalid, {}, s).reason, "invalid-result");
+    assert.equal(s.getItem(RESEARCH_REPORTS_KEY), null);
+    assert.equal(writeResearchReports([{
+      id: "report-json",
+      runId: invalid.run_id,
+      result: invalid
+    }], s).reason, "invalid");
+    assert.equal(s.getItem(RESEARCH_REPORTS_KEY), null);
+  }
+});
+
+test("JSON 报告允许共享引用，但不允许稀疏数组或访问器字段", () => {
+  const shared = { value: 1 };
+  const valid = result("run-shared");
+  valid.extra = { first: shared, second: shared };
+  assert.equal(saveResearchReport(valid, {}, memory()).ok, true);
+
+  const sparse = result("run-sparse");
+  sparse.extra = [];
+  sparse.extra.length = 2;
+  sparse.extra[1] = "present";
+  assert.equal(saveResearchReport(sparse, {}, memory()).reason, "invalid-result");
+
+  const accessor = result("run-accessor");
+  Object.defineProperty(accessor, "secret", { enumerable: true, get() { return "hidden"; } });
+  assert.equal(saveResearchReport(accessor, {}, memory()).reason, "invalid-result");
+});
