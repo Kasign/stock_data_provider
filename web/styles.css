@@ -308,7 +308,7 @@ h2 { margin: 0; color: #e5edf3; font-size: 14px; font-weight: 650; letter-spacin
 .source-state { padding: 4px 6px; border-radius: 5px; font-size: 9px; white-space: nowrap; }
 .source-state-on { color: #70dcb7; background: rgba(71, 214, 173, .08); }
 .source-state-off { color: #91a1b0; background: rgba(145, 161, 176, .08); }
-.text-button { padding: 4px 0; border: 0; color: #70cfb2; background: transparent; cursor: pointer; font-size: 10px; }
+.text-button { min-height: 32px; padding: 4px 0; border: 0; color: #70cfb2; background: transparent; cursor: pointer; font-size: 10px; }
 .text-button:hover { color: #9cebd4; }
 .bars-panel { margin-top: 15px; }
 .table-meta { color: #8499ac; font-size: 10px; }
@@ -3434,10 +3434,6 @@ td {
   line-height: 1.5;
 }
 
-.text-button {
-  min-height: 32px;
-  font-size: 12px;
-}
 
 @media (max-width: 900px) {
   

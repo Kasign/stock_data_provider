@@ -2364,3 +2364,12 @@ test("UIR-2 settings section heading final values are consolidated", () => {
   assert.ok(stylesheet.includes("@media (max-width:640px) {"));
   assert.ok(stylesheet.includes(".settings-section-heading { align-items:flex-start; }"));
 });
+
+test("UIR-2 text button height is consolidated with responsive and task-action exceptions", () => {
+  const newline = String.fromCharCode(10);
+  assert.ok(stylesheet.includes(".text-button { min-height: 32px;"));
+  assert.ok(!stylesheet.includes([".text-button {", "  min-height: 32px;", "  font-size: 12px;", "}"].join(newline)));
+  assert.ok(stylesheet.includes(["  .text-button {", "    min-height: 36px;", "  }"].join(newline)));
+  assert.ok(stylesheet.includes(".task-result-actions .text-button { min-height: 30px; font-size: 11px; }"));
+  assert.ok(stylesheet.includes(".task-result-actions .text-button { font-size: 13px !important; }"));
+});
