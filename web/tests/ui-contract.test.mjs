@@ -2924,3 +2924,15 @@ test("UIR-2 local alert draft text wraps inside flex cards", () => {
   assert.match(localAlertDrafts, /const copy = document\.createElement\("div"\);[\s\S]*?title\.textContent = item\.name;/);
   assert.match(localAlertDrafts, /name\.length > 80/);
 });
+
+
+test("UIR-2 dialogs and Run Flow contain scrolling and long content on narrow viewports", () => {
+  assert.match(html, /<dialog class="run-flow-dialog" id="run-flow-dialog"/);
+  assert.match(stylesheet, /\.settings-dialog \{[^}]*max-height:\s*calc\(100vh - 24px\);[^}]*overflow-y:\s*auto;/);
+  assert.match(stylesheet, /\.run-flow-dialog \{[^}]*position:\s*fixed;[^}]*inset:\s*2vh 2vw;[^}]*overflow:\s*hidden;/);
+  assert.match(stylesheet, /\.run-flow-dialog \.task-status-panel \{[^}]*height:\s*100%;[^}]*max-height:\s*100%;[^}]*overflow-y:\s*auto;[^}]*overscroll-behavior:\s*contain;/);
+  assert.match(stylesheet, /\.event-body p \{[^}]*overflow-wrap:\s*anywhere;/);
+  assert.match(stylesheet, /\.raw-result pre \{[^}]*max-height:\s*320px;[^}]*overflow:\s*auto;[\s\S]*?white-space:\s*pre-wrap;[^}]*overflow-wrap:\s*anywhere;/);
+  assert.match(stylesheet, /#close-chart \{[^}]*width:\s*100%;[^}]*height:\s*auto;/);
+  assert.match(stylesheet, /@media \(max-width: 600px\) \{[\s\S]*?\.run-flow-header \{ flex-direction: column; \}[\s\S]*?\.run-flow-dialog \.task-facts \{ grid-template-columns: repeat\(2, minmax\(0, 1fr\)\); \}/);
+});
