@@ -200,3 +200,20 @@ func TestEvaluateCandidateCollectionPolicyRequiresProviderPolicyForCrossRequestC
 		t.Fatalf("decision=%+v", decision)
 	}
 }
+
+func TestCollectionPolicyRejectsContentStorageMismatch(t *testing.T) {
+	request := validCollectionRequest()
+	request.ContentKind = ContentFullText
+	request.StorageMode = StoragePersistentMetadata
+	decision := EvaluateSourceCollectionPolicy(validSourcePolicy(), nil, request, time.Now().UTC())
+	if decision.Allowed || decision.ReasonCode != "news.policy.content_storage_mismatch" {
+		t.Fatalf("source decision=%+v", decision)
+	}
+
+	provider := validProviderOutputPolicy()
+	request.Purpose = PurposeInternalPersonalResearch
+	decision = EvaluateProviderOutputPolicy(provider, request, time.Now().UTC())
+	if decision.Allowed || decision.ReasonCode != "news.policy.content_storage_mismatch" {
+		t.Fatalf("provider decision=%+v", decision)
+	}
+}

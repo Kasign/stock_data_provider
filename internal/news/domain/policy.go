@@ -123,6 +123,9 @@ func EvaluateSourceCollectionPolicy(source SourcePolicy, endpoint *EndpointPolic
 	if now.IsZero() || request.AccessMethod == "" || request.Purpose == "" || request.ContentKind == "" || request.StorageMode == "" || request.Retention < 0 || (request.CrossRequestCache && request.StorageMode != StorageTransient) {
 		return denied("news.policy.invalid_request")
 	}
+	if !contentCompatibleWithStorage(request.ContentKind, request.StorageMode) {
+		return denied("news.policy.content_storage_mismatch")
+	}
 	if source.Status != AuthorizationApproved && source.Status != AuthorizationRestricted {
 		if source.Status == AuthorizationPending {
 			return denied("news.policy.source_pending")
@@ -237,8 +240,11 @@ func EvaluateSourceCollectionPolicy(source SourcePolicy, endpoint *EndpointPolic
 // EvaluateProviderOutputPolicy evaluates the separate rights granted by a search Provider.
 // It does not imply that the original publisher permits fetching or retaining the article.
 func EvaluateProviderOutputPolicy(policy ProviderOutputPolicy, request CollectionPolicyRequest, now time.Time) PolicyDecision {
-	if now.IsZero() || request.Purpose == "" || request.StorageMode == "" || request.Retention < 0 || (request.CrossRequestCache && request.StorageMode != StorageTransient) {
+	if now.IsZero() || request.Purpose == "" || request.ContentKind == "" || request.StorageMode == "" || request.Retention < 0 || (request.CrossRequestCache && request.StorageMode != StorageTransient) {
 		return denied("news.policy.invalid_request")
+	}
+	if !contentCompatibleWithStorage(request.ContentKind, request.StorageMode) {
+		return denied("news.policy.content_storage_mismatch")
 	}
 	if policy.Status != AuthorizationApproved && policy.Status != AuthorizationRestricted {
 		if policy.Status == AuthorizationPending {
@@ -333,6 +339,21 @@ func EvaluateCandidateCollectionPolicy(provider *ProviderOutputPolicy, source So
 		return denied("news.policy.retention_intersection_exceeded")
 	}
 	return allowed(maxRetention)
+}
+
+func contentCompatibleWithStorage(content ContentKind, storage StorageMode) bool {
+	switch storage {
+	case StorageNone, StorageTransient:
+		return true
+	case StoragePersistentMetadata:
+		return content == ContentMetadata || content == ContentTitle
+	case StoragePersistentExcerpt:
+		return content == ContentSnippet || content == ContentAbstract
+	case StoragePersistentFullText:
+		return content == ContentFullText || content == ContentAttachment
+	default:
+		return false
+	}
 }
 
 func isPersistentStorageMode(mode StorageMode) bool {
