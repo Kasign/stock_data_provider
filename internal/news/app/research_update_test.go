@@ -140,7 +140,7 @@ func TestApplyResearchUpdateUsesPersistedObservationURLForFingerprint(t *testing
 			"obs-1": {
 				ID: "obs-1", NewsID: "news-1",
 				Candidate: domain.Candidate{
-					RawURL: "https://publisher.example/raw?tracking=1",
+					RawURL:       "https://publisher.example/raw?tracking=1",
 					CanonicalURL: "https://publisher.example/article",
 				},
 			},
