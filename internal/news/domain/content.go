@@ -31,7 +31,7 @@ type ContentPayload struct {
 
 // ContentLayers 将搜索 Provider 摘要、发布来源摘要和正文载荷分开保存。
 type ContentLayers struct {
-	ProviderSummary string
+	ProviderSummary     string
 	SourceSummary       string
 	SourceSummaryOrigin ContentOrigin
 	Body                *ContentPayload

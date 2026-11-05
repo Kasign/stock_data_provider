@@ -34,7 +34,7 @@
 - [x] N1-A：完成新闻领域模型、时间/身份/版本/关联证据、Provider 与 Application 契约及跨文档内部评审
 - [x] N2：Domain、Application Port、Bocha/Tavily/Brave/SearXNG Adapter 与 fake 测试已提交；根模块 gofmt、test、race、vet 和分析服务镜像构建通过
 - [x] N3 首批：Provider/Source/Endpoint 授权交集评估、用途/保留期限限制、内容类型与存储模式一致性、HTTP(S) URL 规范化与精确主机/端口 allowlist；固定测试通过
-- [ ] N3 后续：RSS/Atom 与离线 HTML 解析首批完成；DNS/IP 与重定向安全由 PLAT-008 执行，正文标准化、附件元信息和在线 Feed 获取继续开发
+- [ ] N3 后续：RSS/Atom、离线 HTML、候选标准化及摘要/正文分层映射首批完成；DNS/IP 与重定向安全由 PLAT-008 执行，Feed 内容格式识别、附件元信息和在线 Feed 获取继续开发
 - [ ] N4：实现身份识别、去重、版本和证券关联业务规则
 - [ ] N5：按冻结契约接入 Config/Secret、Logger/Error/Trace、HTTP Client
 - [ ] N6：公共存储能力就绪后实现新闻自有 Repository/SQL/Migration；Redis 按需
