@@ -597,3 +597,19 @@ Go `model.AdjustmentBasis` 响应值为 `none`、`forward_adjusted`、`backward_
 Live provider probe 整体 success 仅表示 Workflow 成功；如需确认专项 BaoStock 历史复权步骤，仍需检查该 Run 的具体 Job Steps，不能用整体结论代替专项结果。
 
 **当前核查基线**：静态代码结论跟随 bc55db9；最新 Go test suite 尚未完成。规划分支仍只记录审查和待办，不修改 Data 业务代码。
+
+
+### 11.14 LimitPoolItem.change_percent 的可达性复核（2026-11-05）
+
+此前 23 个“Go Model 可能输出 null、OpenAPI 未声明 nullable”的字段中，除 22 个 slice/map 外，另有 LimitPoolItem.change_percent（Go 类型 *float64，JSON Tag 不带 omitempty）。
+
+本轮追踪其真实 Service Validator 后，修正该项风险判断：
+
+- LimitPoolSnapshot.HasData=true 时，validateLimitPoolSnapshot 对每个 Item 强制要求 ChangePercent != nil；缺失时 Provider 快照被拒绝，不会进入成功响应或正常缓存。
+- HasData=false 时，Validator 要求 Total=0 且 len(Items)=0；不存在携带 ChangePercent=nil 的 Item。
+- 因而在当前 DataService → Handler 的可达成功路径上，LimitPoolItem.change_percent 不会以 JSON null 输出；OpenAPI 不声明 nullable 与当前运行时约束一致。
+- 这项结论以所有该 Operation Handler 都经 DataService.Validator 为前提；未来新增旁路、直接 Model 序列化入口时需重新审查。
+
+因此此前 23 项“可能 null”应拆分为：22 个 slice/map 字段继续按 11.11 逐项验证；LimitPoolItem.change_percent 从当前可达运行时阻断清单中移除。它仍可保留单元测试，明确 nil 必须被 Validator 拒绝。
+
+**修正结论**：不能只看 Go 指针类型就判定 API 一定输出 null；必须结合 omitempty、Validator、Handler 和实际可达分支。
