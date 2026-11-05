@@ -564,3 +564,14 @@ Data 最新 HEAD 为 `7abd5078e85ec7e6a5785ec9a4253d862af2a39c`，相较 1358847
 Platform 最新 HEAD 仍为 `235cebe61465a5b60d2578fc75c38ea1e40882c5`，其 Platform Go checks 仍因 `internal/platform/httpclient/client_test.go` gofmt 失败，测试/race/vet 被跳过。
 
 当前三个分支都不能标记为整体 CI 全绿。后续必须以每个最新 SHA 的实际 Workflow 结果为准。
+
+
+## 28. 最新 HEAD 再校准（2026-11-05）
+
+分支在上节记录后再次推进，当前复核基线如下：
+
+- Data：`125720fe045bb7a5f68a873ddec5e9d2a46cf65f`。第二次 Pytdx gofmt 修正后，最新 Go test suite 仍 failure；market-data gofmt 仍失败，tests/race/vet 跳过，Docker market-data image build 失败。根模块、go-core、MariaDB Migration/PIT integration、WebUI 和 parity 成功；另一个 Live probe run 尚在进行。
+- News：`855bac22ecf4b039ccd572f0b9144d5f6e3d4475`。相较 3755431 ahead 3 / behind 0，新增 Feed 附件测试格式修正；最新 Go test suite 仍因 `services/market-data/internal/service/provider_probe_live_test.go` gofmt 失败，News 整仓 Workflow 不能视为通过。
+- Platform：`30bcc92434d8c0eb5e9beabd82f6ceee2c055d61`。相较 235cebe ahead 7 / behind 0，新增 HTTP Client 生命周期测试并提交格式修正；该 SHA 对应 Platform Go checks 为 cancelled，尚无最新 SHA 的成功验收证据。此前 235cebe 的 Platform Go checks 因 `client_test.go` gofmt 失败。
+
+当前三分支仍无完整、最新 SHA 的 CI 全绿证据。不得把格式修正提交或 cancelled Workflow 视为通过。GOV-004 继续 NO-GO。
