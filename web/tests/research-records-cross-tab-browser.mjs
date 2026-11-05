@@ -71,8 +71,33 @@ try {
 
   await second.evaluate(({ key, item }) => localStorage.setItem(key, JSON.stringify([item])), { key: reportKey, item: report() });
   await first.locator(".research-report-card").filter({ hasText: "run-1" }).waitFor();
+  await first.locator('[data-note-action="edit"][data-note-id="' + recreated[0].id + '"]').click();
+  await first.locator("#research-note-title").fill("冲突中的旧草稿");
+  await second.evaluate(({ key, item }) => localStorage.setItem(key, JSON.stringify([item])), {
+    key: noteKey, item: { ...recreated[0], title: "远端更新后的笔记", updatedAt: "2026-11-05T03:00:00.000Z" }
+  });
+  await first.locator(".research-note-card").filter({ hasText: "远端更新后的笔记" }).waitFor();
+  await first.locator("#research-note-save").click();
+  await first.locator("#research-note-feedback").filter({ hasText: "已被其他标签页修改" }).waitFor();
+  assert.equal(await first.locator(".research-note-conflict-actions").isVisible(), true);
+
+  await second.evaluate(({ key, item }) => localStorage.setItem(key, JSON.stringify([item])), { key: reportKey, item: report() });
+  await first.locator(".research-report-card").filter({ hasText: "run-1" }).waitFor();
+  await first.locator('[data-report-action="create-note"]').click();
+  assert.equal(await first.locator(".research-note-conflict-actions").isVisible(), false,
+    "creating a note from a report must clear the previous note conflict actions");
+  assert.equal(await first.locator("#research-note-title").inputValue(), "Run run-1 研究记录");
+  await first.locator("#research-note-content").fill("基于报告形成的独立研究判断");
+  await first.locator("#research-note-save").click();
+  const reportLinkedNotes = await first.evaluate(key => JSON.parse(localStorage.getItem(key)), noteKey);
+  assert.equal(reportLinkedNotes[0].runId, "run-1");
+  assert.equal(reportLinkedNotes[0].taskId, "task-1");
+  assert.equal(reportLinkedNotes[0].symbol, "600519.SH");
+
   await second.evaluate(key => localStorage.removeItem(key), reportKey);
   await first.locator("#research-report-list").getByText("尚无归档报告。").waitFor();
+  assert.equal(await first.evaluate(key => JSON.parse(localStorage.getItem(key)).length, noteKey), 2,
+    "deleting a report must not cascade-delete independent research notes");
 
   const clearNote = note("clear-note", "待清理笔记", "内容");
   const clearReport = report();

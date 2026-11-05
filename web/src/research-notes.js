@@ -156,6 +156,8 @@ export function bindResearchNotes({root=document, getContext=()=>({}), storage}=
       const linked = buildResearchNoteContextFromReport(report);
       if (!linked) return false;
       editingId = "";
+      editingSnapshot = "";
+      hideConflictActions();
       form.reset();
       $("#research-note-title").value = "Run " + linked.runId + " 研究记录";
       $("#research-note-symbol").value = linked.symbol;
