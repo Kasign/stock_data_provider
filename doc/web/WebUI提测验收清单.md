@@ -1947,3 +1947,13 @@ CI 复核记录：本批首次 Chromium Browser Smoke 在个股研究数据质�
 - [x] 复核折线图 SVG 按容器宽度缩放；图表不额外增加横向滚动，避免破坏图表交互。
 - [x] 未发现需要新增 CSS 修复的确定性缺陷；新增 UI contract 锁定弹窗、Run Flow、原始结果和图表边界。
 - [ ] 在本批最终提交 SHA 上运行 WebUI Checks 与 Chromium Browser Smoke；CI 通过不替代真实 iOS Safari / 触屏设备验收。
+
+
+## 2026-11-05 UIR-2 第五十五批：窄屏 Run Flow 工作区高度分配
+
+- [x] 复核最终级联规则，而非只检查早期 `.run-flow-dialog` 基础规则；确认 900px 以下原有事件栏 `max-height:42dvh/46dvh` 与结果栏 `min-height:38dvh` 会叠加占用有限视口高度。
+- [x] 在 900px 以下将 Run Flow 工作区改为两行弹性网格，按 1:1.2 分配剩余高度；事件栏和结果栏各自滚动，取消互相冲突的固定视口高度上下限。
+- [x] 为浏览器数据导入预览弹窗增加视口高度上限和内部纵向滚动，避免较长导入摘要在矮屏设备上超出可视区域。
+- [x] 保留桌面双栏布局、600px 以下任务信息布局及独立滚动行为。
+- [x] 新增 UI contract，锁定最终级联中的窄屏网格行分配和导入弹窗滚动约束。
+- [ ] 在本批最终提交 SHA 上运行 WebUI Checks 与 Chromium Browser Smoke；仍需真实 iOS Safari / 触屏设备验收。

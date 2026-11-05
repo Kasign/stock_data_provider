@@ -2936,3 +2936,12 @@ test("UIR-2 dialogs and Run Flow contain scrolling and long content on narrow vi
   assert.match(stylesheet, /#close-chart \{[^}]*width:\s*100%;[^}]*height:\s*auto;/);
   assert.match(stylesheet, /@media \(max-width: 600px\) \{[\s\S]*?\.run-flow-header \{ flex-direction: column; \}[\s\S]*?\.run-flow-dialog \.task-facts \{ grid-template-columns: repeat\(2, minmax\(0, 1fr\)\); \}/);
 });
+
+
+test("UIR-2 narrow Run Flow workspace allocates remaining height to independent panes", () => {
+  assert.match(stylesheet, /@media\s*\(max-width:\s*900px\)\s*\{[\s\S]*?\.run-flow-dialog \.run-flow-workspace\s*\{[^}]*grid-template-columns:\s*minmax\(0,1fr\);[^}]*grid-template-rows:\s*minmax\(0,1fr\) minmax\(0,1\.2fr\);/);
+  assert.match(stylesheet, /\.run-flow-dialog \.run-flow-events-column, \.run-flow-dialog \.run-flow-result-column\s*\{[^}]*max-height:\s*none;[^}]*min-height:\s*0;/);
+  assert.doesNotMatch(stylesheet.slice(stylesheet.lastIndexOf("@media (max-width:900px)"), stylesheet.length), /\.run-flow-events-column\s*\{[^}]*max-height:\s*4[26]dvh/);
+  assert.match(stylesheet, /\.browser-data-import-dialog\{[^}]*max-height:calc\(100dvh - 24px\);overflow-y:auto;/);
+  assert.match(html, /<dialog class="browser-data-import-dialog" id="browser-data-import-dialog"/);
+});

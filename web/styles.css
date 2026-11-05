@@ -4697,7 +4697,7 @@ button:disabled {
 .watchlist-field-order-item>div{display:flex;gap:6px}
 .watchlist-field-order-item button{border:1px solid var(--line);border-radius:6px;padding:4px 8px;color:var(--muted);background:var(--surface);cursor:pointer}
 .watchlist-field-order-item button:disabled{opacity:.35;cursor:not-allowed}
-.browser-data-import-dialog{width:min(560px,calc(100vw - 32px));max-width:none;padding:0;border:1px solid var(--line);border-radius:16px;color:var(--text);background:var(--panel);box-shadow:0 24px 80px rgba(0,0,0,.35)}
+.browser-data-import-dialog{width:min(560px,calc(100vw - 32px));max-width:none;max-height:calc(100dvh - 24px);overflow-y:auto;padding:0;border:1px solid var(--line);border-radius:16px;color:var(--text);background:var(--panel);box-shadow:0 24px 80px rgba(0,0,0,.35)}
 .browser-data-import-dialog::backdrop{background:rgba(5,12,24,.62);backdrop-filter:blur(3px)}
 .browser-data-import-card{display:grid;gap:14px;padding:22px}
 .browser-data-import-strategies{display:flex;flex-wrap:wrap;gap:8px}
@@ -4749,9 +4749,8 @@ button:disabled {
 .run-flow-dialog .event-raw pre { max-height:28dvh; }
 .run-flow-dialog .task-actions { flex:0 0 auto; padding-top:8px; border-top:1px solid var(--border); }
 @media (max-width:900px) {
-  .run-flow-dialog .run-flow-workspace { grid-template-columns:minmax(0,1fr); }
-  .run-flow-dialog .run-flow-events-column { max-height:42dvh; }
-  .run-flow-dialog .run-flow-result-column { min-height:38dvh; }
+  .run-flow-dialog .run-flow-workspace { grid-template-columns:minmax(0,1fr); grid-template-rows:minmax(0,1fr) minmax(0,1.2fr); }
+  .run-flow-dialog .run-flow-events-column, .run-flow-dialog .run-flow-result-column { max-height:none; min-height:0; }
   .run-flow-dialog .run-flow-meta-content .task-facts { grid-template-columns:repeat(3,minmax(0,1fr)); }
 }
 @media (max-width:600px) {
@@ -4760,7 +4759,6 @@ button:disabled {
   .run-flow-dialog .run-flow-header-actions { max-width:55%; }
   .run-flow-dialog .run-flow-summary { grid-template-columns:repeat(2,minmax(0,1fr)); }
   .run-flow-dialog .run-flow-meta-content .task-facts { grid-template-columns:repeat(2,minmax(0,1fr)); }
-  .run-flow-dialog .run-flow-events-column { max-height:46dvh; }
 }
 
 
