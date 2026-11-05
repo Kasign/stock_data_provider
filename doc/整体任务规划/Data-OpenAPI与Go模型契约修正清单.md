@@ -757,3 +757,14 @@ Data 分支最新 HEAD 已从 `cce59e8de493813a4b04f7d0bd24211e1e919bb1` 前进�
 - 因此 11.18 和 11.20 的代码静态结论继续适用于最新实现。
 
 该 SHA 最新 Workflow 状态：Go test suite in_progress；Go-Python parity cancelled；WebUI checks success；Live provider probe success。Parity cancelled 不是成功，Go test suite 也尚不能判定通过。最新 SHA 的 CI 尚未全部完成。
+
+
+### 11.22 Data 最新 HEAD 再次更新（2026-11-05）
+
+Data 最新 HEAD 已从 `0afec7ead92672ce9c68a7a8f419990471e01620` 前进至 `13588476d000ebeee801e8b7a782fc6678f25dd4`：
+
+- 提交：`docs(api): 记录 BaoStock 上市日期分类重跑结果`
+- Compare：ahead 1 / behind 0；仅修改 `doc/api/**` 与 `doc/接口规范/**` 文档，没有修改 OpenAPI、Handler、Model 或 Service。
+- 因此 11.18、11.20 的 Operation/Handler/Model 静态结论仍适用。
+
+最新 SHA 的 WebUI checks、Live provider probe、Go-Python parity 已 completed / success；Go test suite run `42018997889` 仍 in_progress。不能把该 SHA 记录为全套 CI 通过。
