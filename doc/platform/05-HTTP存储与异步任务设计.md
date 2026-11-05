@@ -290,3 +290,38 @@ Migration 状态为 `running` 或 `failed` 时，Runner 不会自动重跑。处
 - 不要将 `Content-Length` 当作唯一大小依据；压缩响应、分块传输和缺失长度都必须通过实际读取字节数限制。
 - 若未来需要支持调用方控制压缩算法，必须引入受控的解压层，并对解压后字节数、解压 CPU/时间和嵌套编码制定上限；不能简单放开该 Header。
 
+
+### 7.13 PLAT-008 HTTP Client 最终代码审查记录（2026-11-05）
+
+审查基线：`f019223e409072da71577c51b1312e1a8ff9f030`。
+
+本轮对 `internal/platform/httpclient`、`BoundDoer`、地址策略、重试/并发控制和响应体处理进行静态复核，并结合 Platform Go checks 专项 CI 结果确认包级验证。
+
+**代码审查结论：**
+
+- 目标 URL 在请求执行前校验精确 Host/Port、Scheme、UserInfo 和自定义 Host；DNS 解析结果必须全部通过 IP 策略校验，混合公网/非公网答案整体拒绝。
+- 新建连接时由受控 DialContext 直接连接已校验 IP，不再把原始域名交给第二次系统解析；DNS 校验语义是“每次新建连接”，不是“每个 HTTP 请求”。连接复用是预期行为，当前策略没有按依赖区分的 IP allowlist。
+- 禁用环境代理；HTTPS 最低 TLS 1.2；HTTP/2 连接池按当前 Go 1.22 标准库实现审查。生产 Go 运行时版本仍须由部署环境确认，升级运行时后重新审查 Transport/HTTP2 连接池行为。
+- 重定向默认关闭；启用时限制同源、禁止 HTTPS 降级，并限制跳数与循环。跨主机跳转即使目标也在 allowlist 中仍拒绝，避免 Authorization、Cookie 和 Provider 自定义凭据跨 Origin 传播。
+- BoundDoer 固定持有私有 DestinationPolicy；构造时复制 Host/Port 切片，调用方无法通过修改原始切片扩大目标范围。Provider 应只接收 BoundDoer，不注入裸 Client。
+- 重试要求调用方显式声明幂等，最多 2 次；仅处理受控传输错误及 502/503/504，不自动处理 429。重试退避期间释放依赖槽位，结束后重新竞争。
+- 响应体读取使用实际字节数限制；显式 Accept-Encoding 被拒绝，Transport 自动 gzip 解压后的字节流仍受 MaxResponseBytes 限制。响应体读取完成、失败、超限或取消均关闭上游 Body 并释放槽位。
+- Dependency semaphore 仅由启动配置创建；未配置依赖共用 fallback 池，配置项最多 64 个，运行期不会因动态依赖名扩张 map。
+- IANA 特殊用途地址拒绝列表覆盖当前核对的 IPv4/IPv6 注册条目；策略刻意保守，对部分专用协议地址和注册表父网段采取整体拒绝。注册表更新时需要重新核对，部署层仍必须配置 egress 防火墙。
+
+**专项 CI 证据：**
+
+- 提交：`f019223e409072da71577c51b1312e1a8ff9f030`
+- Actions Run：`42025170211`
+- gofmt：通过
+- `go test ./internal/platform/...`：通过
+- `go test -race ./internal/platform/...`：通过
+- `go vet ./internal/platform/...`：通过
+
+**仍未完成的生产接入验收：**
+
+- 生产环境 DNS、路由和出口防火墙规则尚未进行真实部署验证。
+- News Provider 尚无生产组合根注入证据；各 endpoint 的 BoundDoer 装配、真实凭证、配额与服务退出生命周期仍由集成分支验收。
+- 本次 CI 是平台包级专项验证，不代表整个仓库、其他服务或生产环境验收通过。
+
+结论：PLAT-008 平台 HTTP Client 原语达到当前代码与专项 CI 验收要求，可以进入领域组合根接入阶段；生产抓取开放仍受上述部署与集成门禁约束。
