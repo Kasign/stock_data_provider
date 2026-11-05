@@ -1313,7 +1313,12 @@ test("market overview and activity use readable secondary text and touch-sized c
   assert.match(finalCssRuleBody(".market-overview-subheading p"), /font-size: 12px/);
   assert.match(finalCssRuleBody(".market-index-identity small"), /font-size: 12px/);
   assert.match(finalCssRuleBody(".market-index-changes span"), /font-size: 12px/);
-  assert.match(finalCssRuleBody(".market-widget-meta"), /font-size: 12px/);
+  const marketWidgetMetaBase = baseCssDeclarationBlock(".market-widget-meta");
+  assert.match(marketWidgetMetaBase, /font-size:\s*12px\s*;/);
+  assert.match(marketWidgetMetaBase, /line-height:\s*1\.65\s*;/);
+  assert.match(marketWidgetMetaBase, /margin:10px 0 0/);
+  assert.match(marketWidgetMetaBase, /overflow-wrap:anywhere/);
+  assert.equal((stylesheet.match(/\.market-widget-meta\s*\{/g) || []).length, 1, "market widget metadata should have one base rule");
   const stockResearchFootnoteBase = baseCssDeclarationBlock(".stock-research-footnote");
   assert.match(stockResearchFootnoteBase, /font-size:\s*12px\s*;/);
   assert.match(stockResearchFootnoteBase, /line-height:\s*1\.65\s*;?/);
