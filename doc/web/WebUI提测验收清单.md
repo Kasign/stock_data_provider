@@ -1599,3 +1599,12 @@ CI 复核记录：本批首次 Chromium Browser Smoke 在个股研究数据质�
 - [x] Chromium Browser Smoke #41950184912：全部浏览器步骤通过。
 - [x] 实施提交 `84d057b5a7e89756baa14098c1d3b1a9ee9efc06`；最终修正提交 `e9829c9157131d7b7318d2c952588f0122a9f063`。
 - [x] 首轮测试替身缺少 `removeAttribute` 的问题已修正，最终提交全量通过。
+
+
+## 2026-11-05 JSR-6G：前端状态所有权与模块边界总盘点（只读审查）
+
+- [x] 盘点 50 个 JS 源文件、app.js 约 5.4k 行和 46 组 import。
+- [x] 盘点 app.js 顶层 69 个 state 字段并按应用壳层、行情查询、Task/Run、证券搜索和跨域数据归类。
+- [x] 核对现有领域模块的状态闭包、请求生命周期和展示 adapter 边界。
+- [x] 确认不整体迁移 app state，不创建 AppStateStore、全局 EventBus 或第二套 Router。
+- [x] 本轮无运行时代码变更；后续 review 转向连接代际、请求失效和旧响应回写风险。

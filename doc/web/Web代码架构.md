@@ -597,3 +597,25 @@ app.js 继续负责结果集合与活动索引状态、输入防抖、请求 Abo
 测试覆盖记录规范化、畸形记录过滤、generation ID、DOM 文本、ARIA 属性、活动项滚动及清除活动项。最终验收：WebUI Checks #41950184865（458/458 tests、语法、Compose、镜像构建通过）；Chromium Browser Smoke #41950184912（所有浏览器步骤通过）。实施提交 `84d057b5a7e89756baa14098c1d3b1a9ee9efc06`，测试替身修正提交 `e9829c9157131d7b7318d2c952588f0122a9f063`。
 
 本次测试首轮失败仅由 FakeElement 缺少 `removeAttribute` 造成，已补齐测试替身；不涉及运行时代码缺陷。
+
+
+### 12.27 JSR-6G Web 前端状态所有权与模块边界总盘点
+
+当前 `web/src/` 有 50 个 JS 文件；app.js 约 5.4k 行、46 组 import，顶层 app state 69 个字段。按责任归类：
+
+| 状态域 | app.js 负责的内容 | 现有领域模块 |
+|---|---|---|
+| 应用壳层 | 连接设置、当前 view、跨页面刷新/路由 | theme、preferences、settings-draft、settings-navigation、section-navigation |
+| 行情查询/图表 | 当前证券查询状态、查询 generation/controller、页面图表状态 | api、chart、market-overview、market-stocks、market-activity |
+| Task/Run | 当前 Task/Run 身份、事件分页、轮询与 Run 结果请求生命周期 | task-workflow、task-event-*、task-flow-summary-view-model、task-result-view、recent-tasks |
+| 证券搜索 | 输入防抖、AbortController、generation、键盘索引、选择事务 | stock-search-view（纯规范化/DOM/ARIA adapter） |
+| 个股研究/数据中心 | 跨页跳转与 app 级入口 | stock-research、data-center、health-check、existing-api-tools |
+| 自选/选股/告警/研究记录 | 跨页面批量事务与共享入口 | watchlist*、screening-*、local-alert-drafts、research-notes、research-reports、notification-preferences |
+
+状态所有权原则：
+1. app.js 作为 composition root 保留跨域事务、页面路由和共享请求生命周期；不能仅凭 state 字段数量把对象整体迁移。
+2. 领域模块持有各自数据集合、请求 generation/AbortController 和持久化语义；app.js 只在明确需要跨域协调时访问。
+3. 纯 ViewModel/DOM adapter 只接收显式输入，不读取全局 state/storage/API，也不拥有事件总线。
+4. 不新增 AppStateStore、全局 EventBus 或第二套 Router。后续 review 以可复现的旧请求回写、重复请求、状态冲突或测试缺口为切入点。
+
+本次为只读架构盘点，无运行时代码变更。下一阶段建议做连接代际与模块请求失效一致性 review，重点检查连接设置应用、API client 连接快照、领域模块 generation/AbortController 的取消时序，以及页面恢复时的旧响应保护。
