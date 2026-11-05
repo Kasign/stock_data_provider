@@ -84,17 +84,3 @@ N1 核查后逐项填写，未核查前不填推测结果。
 3. 市场复盘会读取已持久化的市场情报，需继续追踪其 repository/schema 和刷新来源。
 4. 当前 Bridge 两个搜索路由的成功状态不代表来源采集、内容解析或持久化成功。
 5. 旧 Python API/Bot/Scheduler 的直接调用方尚未穷尽；N1 需要完成全仓调用引用与触发入口盘点后才能制定退役条件。
-
-
----
-
-## 7. 固定旧 Python 上游的持久化与入口补充（2026-11-05）
-
-固定提交 daily_stock_analysis@7a21cd76952c7fe44a7fc5a6113a5b2b8a16bb32 中发现三类新闻/情报持久化对象：
-- news_intel：Agent 搜索结果，唯一键为 URL，包含 query/provider/dimension、证券代码、查询来源与请求上下文。
-- intelligence_sources：RSS/Atom/NewsNow 来源配置、作用范围、启停和最近采集状态。
-- intelligence_items：已采集的来源条目，唯一键按来源、URL、scope、market 组合，保存 raw_payload；Repository 有分页查询、upsert 和 fetched_at 保留期清理。
-
-旧实现已经有来源管理、dry-run、单来源/批量采集、自动刷新、分页读取、URL/DNS 校验和重定向限制；但 IntelligenceRepository.upsert_items 对同一条目是覆盖更新，不保留修订历史。Go 迁移需要保留这些有效业务能力，同时补足内容版本、可追溯去重证据和更清晰的采集阶段状态。
-
-已核实旧 API 路由位于 api/v1/endpoints/intelligence.py，覆盖 sources CRUD/list/templates/defaults/test/fetch、fetch-enabled 和 items list；旧 Bot /research 入口会构造 ResearchAgent 并调用 Tool Registry。MarketAnalyzer 会自动刷新并查询 market scope 的 intelligence_items；Agent search tools 则写入 news_intel。两套旧持久化语义不能未经映射直接合并。
