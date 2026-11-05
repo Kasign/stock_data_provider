@@ -73,7 +73,7 @@ func TestLiveBaoStockAdjustmentFactorConsistency(t *testing.T) {
 	}
 	var failures []string
 	// Include older listed securities so the probe can find a genuine raw-K window before the first factor event.
-\tfor _, symbol := range []string{"sz.000001", "sz.000002", "sz.000858", "sh.600000", "sh.600016", "sh.600601", "sh.600036", "sz.002982"} {
+	for _, symbol := range []string{"sz.000001", "sz.000002", "sz.000858", "sh.600000", "sh.600016", "sh.600601", "sh.600036", "sz.002982"} {
 		item := liveBaoStockAdjustmentItem{Symbol: symbol}
 		factors, factorErr := client.QueryAdjustmentFactors(ctx, symbol, "2000-01-01", factorEndDate)
 		if factorErr != nil {

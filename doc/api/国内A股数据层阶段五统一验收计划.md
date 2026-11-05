@@ -294,3 +294,11 @@
 - 对每只候选仍查询 2000-01-01 至探测当天的因子历史，并查询首个因子事件日前 raw/qfq 日 K；只有存在真实 raw 交易日且日期严格早于首事件，才进入 latest-factor × raw OHLC 对账。
 - 每只证券独立输出 matched/mismatch/not_applicable/unavailable；网络或数据不可用不得记为 not_applicable，not_applicable 不计为通过。至少两个独立证券得到 matched，才进入公式评审；任何 mismatch 都维持 fail-closed 并调查。
 - 本批仅扩展测试候选，不新增 API、字段、数据库结构，不修改生产复权算法。真实运行结果以带 `[historical_baostock_factors]` 标记的 Push Live Probe 报告为准。
+
+
+## 2026-11-05 P0 批次 36：修复 BaoStock 探测候选扩展的转义字符
+
+- 批次 35 的 SHA `4ff4359178be7a055fb81756a5099adb9fcf3f31` 在新增候选证券循环前误写入字面量反斜杠，导致 Go parser 报 `illegal character U+005C`；gofmt、market-data Go tests、Docker market-data build、Parity 中的 market-data tests 失败。该错误由本批候选扩展引入，不是 Provider 网络或 Docker 环境问题。
+- 已将循环恢复为正常 Go 缩进语法，不改探测逻辑、候选集合、生产复权算法或数据契约。
+- 该 SHA 的通用 Go suite、race/vet、MariaDB PIT/fallback 集成和 WebUI checks 通过；但因 market-data 包无法解析，不能将整体验收视为通过。Push Live BaoStock 专项未能执行到请求阶段，因此没有八只证券的真实报告；不得将空报告或 workflow 后续打印步骤成功解释为 matched/not_applicable。
+- 修复后的新 SHA 必须重新通过 gofmt、market-data tests、race/vet、Docker build 与 parity；Push Live Probe 必须实际产出 BaoStock 报告后，才评估八只证券的 matched/mismatch/not_applicable/unavailable。阶段 B 继续 in_progress，生产 helper 继续 fail-closed。
