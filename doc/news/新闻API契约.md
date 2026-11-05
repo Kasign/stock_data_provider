@@ -86,3 +86,19 @@
 - 当前新闻模块不提供 `/api/v1/news/diagnostics` 或其他新闻专属诊断 HTTP 路由；本文第 2 节诊断候选明确为未来评估项，且诊断能力归公共服务统一建设。
 - 当前新闻业务只通过同进程 Application 接口提供能力，不因公共诊断需求新增新闻 HTTP API。
 - DB/Redis 接入和持久化查询实现同样等待公共服务；本文查询字段仅作为业务查询契约输入，不代表当前已经有持久化查询实现。
+
+
+## 10. 当前同进程 Application 契约（替代未来 HTTP API 草案作为实施入口）
+
+当前只定义内部业务用例，不注册 HTTP 路由：
+
+| 用例 | 输入重点 | 输出重点 | 当前是否实施 |
+|---|---|---|---|
+| SearchCandidates | query、canonical symbol、维度、时间窗口、limit | 带 provider_code/publisher_source 的候选、Provider 部分失败 | N2 |
+| CollectSource | 已登记 source/endpoint ID、时间范围、采集选项 | 解析后的业务对象、授权和质量原因 | N3 |
+| NormalizeCandidate | 候选原始字段、时间文本和来源上下文 | 标准字段、时间解析证据、缺失字段 | N3 |
+| IdentifyCandidate | 来源身份、原始 ID/URL、内容指纹 | 身份候选、匹配/冲突原因 | N4 |
+| ResolveSecurityRelations | 新闻候选、canonical symbol/行业线索 | 关联候选和证据 | N4 |
+| QueryPersistedNews | 查询过滤、稳定排序/游标 | 持久化新闻页 | N6，等待公共 DB |
+
+当前不定义对外 HTTP DTO，不要求所有用例立即实现。业务端口按用例最小化，禁止暴露 SQL、Redis、诊断 Run/Step 等基础设施类型。
