@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"example.com/stock-analysis-flow/internal/news/domain"
 )
 
 var (
@@ -39,6 +41,9 @@ type FeedEntry struct {
 	Link           string
 	Summary        string
 	Content        string
+	ContentFormat  domain.ContentFormat
+	ContentTypeRaw string
+	ContentSrc     string
 	Attachments    []FeedAttachment
 	Author         string
 	PublishedAtRaw string
@@ -58,13 +63,13 @@ type rssDocument struct {
 }
 
 type rssItem struct {
-	GUID        string `xml:"guid"`
-	Title       string `xml:"title"`
-	Link        string `xml:"link"`
-	Description string `xml:"description"`
-	Content     string `xml:"http://purl.org/rss/1.0/modules/content/ encoded"`
-	Author      string `xml:"author"`
-	Creator     string `xml:"http://purl.org/dc/elements/1.1/ creator"`
+	GUID        string         `xml:"guid"`
+	Title       string         `xml:"title"`
+	Link        string         `xml:"link"`
+	Description string         `xml:"description"`
+	Content     string         `xml:"http://purl.org/rss/1.0/modules/content/ encoded"`
+	Author      string         `xml:"author"`
+	Creator     string         `xml:"http://purl.org/dc/elements/1.1/ creator"`
 	PubDate     string         `xml:"pubDate"`
 	Enclosures  []rssEnclosure `xml:"enclosure"`
 }
@@ -100,12 +105,19 @@ type FeedAttachment struct {
 	Title        string
 }
 
+type atomContent struct {
+	Type     string `xml:"type,attr"`
+	Src      string `xml:"src,attr"`
+	Text     string `xml:",chardata"`
+	InnerXML string `xml:",innerxml"`
+}
+
 type atomEntry struct {
 	ID        string     `xml:"id"`
 	Title     string     `xml:"title"`
 	Links     []atomLink `xml:"link"`
 	Summary   string     `xml:"summary"`
-	Content   string     `xml:"content"`
+	Content   atomContent `xml:"content"`
 	Published string     `xml:"published"`
 	Updated   string     `xml:"updated"`
 	Authors   []struct {
@@ -172,6 +184,10 @@ func ParseFeed(data []byte, observedAt time.Time) (FeedDocument, error) {
 			}
 			content := item.Content
 			entry := newFeedEntry(item.GUID, item.Title, item.Link, item.Description, content, author, item.PubDate, "")
+			if strings.TrimSpace(content) != "" {
+				entry.ContentFormat = domain.ContentFormatHTMLFragment
+				entry.ContentTypeRaw = "text/html"
+			}
 			for _, enclosure := range item.Enclosures {
 				entry.Attachments = append(entry.Attachments, newFeedAttachment(enclosure.URL, enclosure.Type, enclosure.Length, ""))
 			}
@@ -193,7 +209,11 @@ func ParseFeed(data []byte, observedAt time.Time) (FeedDocument, error) {
 			if len(item.Authors) > 0 {
 				author = item.Authors[0].Name
 			}
-			entry := newFeedEntry(item.ID, item.Title, selectAtomLink(item.Links), item.Summary, item.Content, author, item.Published, item.Updated)
+			contentText, contentFormat := normalizeAtomContent(item.Content)
+			entry := newFeedEntry(item.ID, item.Title, selectAtomLink(item.Links), item.Summary, contentText, author, item.Published, item.Updated)
+			entry.ContentFormat = contentFormat
+			entry.ContentTypeRaw = strings.TrimSpace(item.Content.Type)
+			entry.ContentSrc = strings.TrimSpace(item.Content.Src)
 			for _, link := range item.Links {
 				if strings.EqualFold(strings.TrimSpace(link.Rel), "enclosure") {
 					entry.Attachments = append(entry.Attachments, newFeedAttachment(link.Href, link.Type, link.Length, link.Title))
@@ -204,6 +224,30 @@ func ParseFeed(data []byte, observedAt time.Time) (FeedDocument, error) {
 		return doc, nil
 	default:
 		return FeedDocument{}, ErrUnsupportedFeed
+	}
+}
+
+func normalizeAtomContent(content atomContent) (string, domain.ContentFormat) {
+	if strings.TrimSpace(content.Src) != "" {
+		return "", domain.ContentFormatUnknown
+	}
+	typeValue := strings.ToLower(strings.TrimSpace(content.Type))
+	switch typeValue {
+	case "", "text":
+		return strings.TrimSpace(content.Text), domain.ContentFormatPlainText
+	case "html":
+		return strings.TrimSpace(content.Text), domain.ContentFormatHTMLFragment
+	case "xhtml":
+		return strings.TrimSpace(content.InnerXML), domain.ContentFormatHTMLFragment
+	default:
+		mediaType, _, err := mime.ParseMediaType(typeValue)
+		if err == nil && mediaType == "text/html" {
+			return strings.TrimSpace(content.Text), domain.ContentFormatHTMLFragment
+		}
+		if err == nil && mediaType == "text/plain" {
+			return strings.TrimSpace(content.Text), domain.ContentFormatPlainText
+		}
+		return strings.TrimSpace(content.Text), domain.ContentFormatUnknown
 	}
 }
 

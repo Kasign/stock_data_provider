@@ -13,7 +13,7 @@ func (entry FeedEntry) ContentLayers(providerSummary string) domain.ContentLayer
 	if entry.Content != "" {
 		layers.Body = &domain.ContentPayload{
 			Origin: domain.ContentOriginFeedBody,
-			Format: domain.ContentFormatUnknown,
+			Format: feedContentFormat(entry),
 			Text:   entry.Content,
 		}
 	}
@@ -35,4 +35,11 @@ func (doc HTMLDocument) ContentLayers(providerSummary string) domain.ContentLaye
 		}
 	}
 	return domain.NormalizeContentLayers(layers)
+}
+
+func feedContentFormat(entry FeedEntry) domain.ContentFormat {
+	if entry.ContentFormat != "" {
+		return entry.ContentFormat
+	}
+	return domain.ContentFormatUnknown
 }

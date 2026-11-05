@@ -4,6 +4,8 @@ import (
 	"errors"
 	"testing"
 	"time"
+
+	"example.com/stock-analysis-flow/internal/news/domain"
 )
 
 func TestParseRSSFeed(t *testing.T) {
@@ -197,4 +199,24 @@ func TestParseAtomFeedExtractsEnclosureAndIgnoresInvalidLength(t *testing.T) {
 	if got.URL != "https://publisher.example/audio.mp3" || got.MediaType != "audio/mpeg" || got.RawMediaType != "audio/mpeg" || got.Length != nil || got.RawLength != "-1" || got.Title != "音频" {
 		t.Fatalf("attachment=%+v", got)
 	}
+}
+
+func TestAtomContentFormatMapping(t *testing.T) {
+	cases := []struct { name, content, want string; format domain.ContentFormat }{
+		{name: "default text", content: `<content>纯文本</content>`, want: "纯文本", format: domain.ContentFormatPlainText},
+		{name: "html", content: `<content type="html">&lt;p&gt;HTML&lt;/p&gt;</content>`, want: "<p>HTML</p>", format: domain.ContentFormatHTMLFragment},
+		{name: "xhtml", content: `<content type="xhtml"><div xmlns="http://www.w3.org/1999/xhtml"><p>XHTML</p></div></content>`, want: `<div xmlns="http://www.w3.org/1999/xhtml"><p>XHTML</p></div>`, format: domain.ContentFormatHTMLFragment},
+		{name: "external", content: `<content type="html" src="https://publisher.example/body"/>`, want: "", format: domain.ContentFormatUnknown},
+		{name: "unsupported media", content: `<content type="application/pdf">opaque</content>`, want: "opaque", format: domain.ContentFormatUnknown},
+	}
+	for _, tc := range cases { t.Run(tc.name, func(t *testing.T) {
+		payload := []byte(`<feed xmlns="http://www.w3.org/2005/Atom"><entry><id>id</id><title>标题</title>`+tc.content+`</entry></feed>`)
+		doc, err := ParseFeed(payload, time.Now())
+		if err != nil { t.Fatal(err) }
+		entry := doc.Entries[0]
+		if entry.Content != tc.want || entry.ContentFormat != tc.format { t.Fatalf("content=%q format=%q", entry.Content, entry.ContentFormat) }
+		layers := entry.ContentLayers("")
+		if tc.want == "" { if layers.Body != nil { t.Fatalf("unexpected body: %+v", layers.Body) }; return }
+		if layers.Body == nil || layers.Body.Format != tc.format { t.Fatalf("body=%+v", layers.Body) }
+	}) }
 }
