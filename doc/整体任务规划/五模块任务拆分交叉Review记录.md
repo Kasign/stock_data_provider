@@ -122,3 +122,26 @@ Domain/Contract 不得因为无关模块的 Adapter/Integration 未完成而被�
 - doc/notification/02-任务拆分与验收.md
 
 **最终结论：五模块任务拆分的依赖边界已按 Domain / Contract / Adapter / Integration 分层修正。模块仍处于 Design Ready；Owner Review 通过后按模块确认 Module Ready。没有理由要求五个模块等待其他业务分支同时编译。**
+
+
+## 7. Quant / Research 字段级契约 Review（2026-11-05）
+
+本轮继续细化 CONTRACT-001~005，结果写入《Quant-Research公开DTO字段级契约.md》第 11 节，状态均为建议稿，待 Owner 确认。
+
+| 决策 | 本轮建议 | 当前门禁 |
+|---|---|---|
+| CONTRACT-001 | 价格/金额 decimal string；计数 integer；比例/收益率等统计量 number；按 metric_code 固定 JSON Schema、精度和误差 | 待 Quant Owner 确认 |
+| CONTRACT-002 | 首批 SMA、EMA、Return、Volatility、RSI、MACD、ATR、Bollinger；每个指标独立 typed 参数 Schema | 待 Quant Owner 确认 |
+| CONTRACT-003 | 首批优先 momentum_20d、momentum_60d、volatility_20d；Factor 与 Indicator 解耦，横截面母体和覆盖率必须固定 | 待 Quant Owner 确认 |
+| CONTRACT-004 | Evidence 保存统一不透明 AuthorizationRef；来源 Owner 负责当前授权复核；历史授权快照不可覆盖当前决策 | 待 Research/News Owner 确认 |
+| CONTRACT-005 | ResearchRun 固定唯一 system_as_of；所有 Stage 和下游模块沿用，不允许重试时刷新 | 待 Research/Researchflow Owner 确认 |
+
+同时修正 QuantMetric 原字段表中 value/bounds 的类型矛盾：数值类型由 metric_code 对应 Schema 固定；value 与区间边界按 required 字段显式输出 null 或有效值，禁止省略来隐藏未知状态。Quant 与 Research 的任务验收表已同步加入对应要求。
+
+### 本轮仍需注意
+
+- Indicator 八项是候选首批清单，不意味着八项都必须同时进入 MVP；Owner 可根据固定样本和业务优先级缩减。
+- Factor 的首批三个指标建议优先，其他候选需先验证数据覆盖率和 PIT 可用性。
+- decimal string 是 JSON 边界表达，不要求所有内部算法使用字符串运算；内部必须选择可证明精度的十进制/定点策略，统计算法可用浮点但必须给出误差预算。
+- AuthorizationRef 是审计引用，不是访问令牌；历史允许不代表当前允许。
+- system_as_of 是知识截止时间，不得伪造 observed_at，也不能替代 trade_date。
