@@ -32,8 +32,8 @@ const properties = [
   "padding-top", "padding-right", "padding-bottom", "padding-left",
   "border-top-width", "border-right-width", "border-bottom-width", "border-left-width",
   "border-top-style", "border-top-color", "border-right-color", "border-bottom-color",
-  "border-left-color", "border-radius", "background-color", "color", "font-size",
-  "font-weight", "line-height", "text-align", "white-space", "overflow-wrap"
+  "border-left-color", "border-radius", "background-color", "color",
+  "text-align", "white-space", "overflow-wrap"
 ];
 const contentTypes = {
   ".html": "text/html; charset=utf-8", ".css": "text/css; charset=utf-8",

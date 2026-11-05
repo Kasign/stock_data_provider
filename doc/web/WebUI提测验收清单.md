@@ -2399,7 +2399,7 @@ CSS AST 检查器进一步扩展：
 - [x] 暗/亮主题颜色差异已确认；主题不会改变该组件的布局尺寸。
 - [x] 320px 移动布局与 768px 以上横向布局差异已确认；元素宽高符合当前响应式规则。
 - [x] 受控 fixture 已加入 `web/tests/fixtures/screening-local-batch.cssom.json.gz`，回归测试比较计算样式及宽高，不比较 x/y、font-size、font-weight、line-height。
-- [ ] 验收 fixture 比较步骤在 Chromium CI 通过；后续 CSS 迁移前后必须通过同一 fixture。
+- [x] `e3bc7594` 对应 Chromium Browser Smoke 全部通过，CSSOM fixture 解压及 8 场景比较通过；后续 CSS 迁移前后必须通过同一 fixture。
 - [ ] 迁移前复核候选 CSS 规则与 shared-controls 的边界；未完成评审前不拆分。
 
 说明：fixture 是当前实现的回归基线，不代表产品视觉设计稿或设计正确性。
@@ -2409,4 +2409,8 @@ CSS AST 检查器进一步扩展：
 
 - [x] 已定位首次回归失败为 gzip fixture 字节损坏（`Z_DATA_ERROR`），不是页面样式变化。
 - [x] 使用已成功采集的 CSSOM Artifact 重建 gzip fixture。
-- [ ] 重新验收 Chromium CI 中的 fixture 解压、8 场景比较及 artifact 上传。
+- [x] `e3bc7594` 对应 CI 中 fixture 解压、8 场景比较及 Artifact 上传均通过。
+
+### 字体度量排除项校正
+
+- [x] 对照 CI Artifact 校正采集属性与 fixture，移除 `font-size`、`font-weight`、`line-height`，避免环境字体度量差异造成回归误报；调整后需由下一次 CI 验证。

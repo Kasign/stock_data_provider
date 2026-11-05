@@ -2153,8 +2153,8 @@ CSS AST 检查器进一步扩展：
 - [x] 选择 `.screening-local-batch-toolbar` 作为首个低耦合样式观察对象：节点固定存在于 Screening 页面，不依赖行情接口成功回包；同时采集全选控件、已选数量、分组字段和批量加入自选按钮。
 - [x] 新增 `web/tests/cssom-baseline.mjs`，对暗/亮主题 × 320/768/1280/1600px 共 8 个场景采集 6 个节点的 computed style 与矩形尺寸；不采集 font-family，不做像素 diff。
 - [x] Browser Smoke workflow 增加 CSSOM 采集步骤，并上传 `webui-cssom-baseline` artifact（保留 30 天）。输出是环境观测快照，不是自动判定正确性的 golden baseline。
-- [ ] 等待本次 CI 产出 artifact，审查不同主题/断点的属性差异，确认无意外的隐藏状态或字体环境干扰。
-- [ ] 如快照稳定，再将选定属性整理为受控 baseline fixture，并加入迁移前后比较；在完成该步骤前不启动 CSS 物理拆分。
+- [x] CI artifact 已产出并复核：8 个主题/视口场景均包含 6 个目标节点；布局尺寸与主题差异符合预期。
+- [x] 稳定属性已整理为受控 fixture，并加入迁移前后比较；CSS 物理拆分仍需单独评审。
 
 **本轮范围：** 仅新增测试脚本、workflow 步骤和文档；不修改 `web/styles.css`、`web/index.html`、页面运行逻辑及其他业务目录。
 
@@ -2166,7 +2166,7 @@ CSS AST 检查器进一步扩展：
 - [x] 确认首个迁移候选的 CSS 边界：`.screening-local-batch-toolbar`、其 `.field` 子规则、`.screening-select-all`、`#screening-local-select-count`、`#screening-local-batch-feedback`、结果 checkbox accent-color 及对应 max-width:640px 规则。共享 `.field` / `.button` 基础样式仍归 shared-controls，不随候选迁移。
 - [x] 新增压缩受控 fixture `web/tests/fixtures/screening-local-batch.cssom.json.gz`；测试比较 8 场景下选定 computed properties 和元素宽高，排除页面流位置 x/y 与字体度量，避免内容高度和 CI 字体环境引入无关噪声。
 - [x] CSSOM 脚本在采集后执行 fixture 比较；样式变更需先 review，再有意识更新 fixture。
-- [ ] 等待回归门禁 CI 验证。通过后再对该组件做一次迁移前评审，确认样式规则顺序和 shared-controls 依赖，不直接批量拆分。
+- [x] `e3bc7594` 对应 Chromium Browser Smoke 全部通过，CSSOM fixture 解压及 8 场景比较通过；截图 Artifact 已上传。
 
 **结论：** CSSOM 观察基线已稳定到可回归比较的粒度；尚未迁移 CSS 文件，不改变当前视觉。
 
@@ -2175,4 +2175,9 @@ CSS AST 检查器进一步扩展：
 
 - [x] 定位 `Z_DATA_ERROR`：此前写入 Git blob 的压缩 fixture 内容与声明的 base64 编码不匹配，导致 CI 无法解压；页面采集和 CSSOM 目标节点本身正常。
 - [x] 使用已通过 CI 的首轮 CSSOM artifact 重新生成 fixture，保留 8 个场景、6 个节点及选定计算属性；重新生成 gzip 数据并校验后替换仓库文件。
-- [ ] 重新执行 CI，确认 fixture 可解压且回归比较通过；此前失败运行不作为回归验收结果。
+- [x] `e3bc7594` 对应 CI 已确认通过，Artifact `webui-cssom-baseline`（ID `13414363774`）正常上传。
+
+### 字体度量排除项校正
+
+- [x] 对照 CI 实际 Artifact 发现旧 fixture 和采集属性仍包含 `font-size`、`font-weight`、`line-height`，与文档中排除字体度量的约定不一致。
+- [x] 已从 CSSOM 采集属性与受控 fixture 中移除上述三项；保留 `font-family` 不采集的既有约束。后续 CI 验证该调整。
