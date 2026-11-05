@@ -3,7 +3,7 @@ package app
 import (
 	"context"
 	"errors"
-	"testing",
+	"testing"
 	"time"
 
 	"example.com/stock-analysis-flow/internal/news/domain"
