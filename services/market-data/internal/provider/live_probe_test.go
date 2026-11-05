@@ -640,12 +640,23 @@ func TestLiveProviderProbe(t *testing.T) {
 	if dailySymbol == "" {
 		dailySymbol = "600036.SH"
 	}
+	dailySymbols := []string{dailySymbol}
+	if configuredSymbols := strings.TrimSpace(os.Getenv("LIVE_PROBE_DAILY_SYMBOLS")); configuredSymbols != "" {
+		dailySymbols = strings.Split(configuredSymbols, ",")
+		for index := range dailySymbols {
+			dailySymbols[index] = strings.TrimSpace(dailySymbols[index])
+			if dailySymbols[index] == "" {
+				t.Fatal("LIVE_PROBE_DAILY_SYMBOLS must not contain empty symbols")
+			}
+		}
+		dailySymbol = dailySymbols[0]
+	}
 
 	report := liveProbeReport{
 		GeneratedAt: now.Format(time.RFC3339),
 		Runner:      "GitHub Actions hosted runner",
 		QuoteSymbol: quoteSymbol,
-		DailySymbol: dailySymbol,
+		DailySymbol: strings.Join(dailySymbols, ","),
 		StartDate:   startDate,
 		EndDate:     endDate,
 		Results:     make([]liveProbeResult, 0, 15),
@@ -1043,21 +1054,23 @@ func TestLiveProviderProbe(t *testing.T) {
 	// public-daily-only 对 Sina、Tencent、Eastmoney、Yahoo 各执行一次未复权日 K 请求；跳过 quote、复权、Universe、新闻及其他高成本能力。
 	if os.Getenv("MARKET_DATA_LIVE_PUBLIC_DAILY_ONLY") == "1" {
 		sina := NewSina(12*time.Second, "")
-		runDaily("sina", "sina", dailySymbol, model.AdjustmentNone, sina.client, func(ctx context.Context) ([]model.DailyBar, error) {
-			return sina.FetchDailyBars(ctx, dailySymbol, startDate, endDate, dailyLimit, model.AdjustmentNone)
-		})
 		tencent := NewTencent(12 * time.Second)
-		runDaily("tencent", "tencent", dailySymbol, model.AdjustmentNone, tencent.client, func(ctx context.Context) ([]model.DailyBar, error) {
-			return tencent.FetchDailyBars(ctx, dailySymbol, startDate, endDate, dailyLimit, model.AdjustmentNone)
-		})
 		eastmoney := NewEastmoney(12*time.Second, "", "")
-		runDaily("eastmoney", "eastmoney", dailySymbol, model.AdjustmentNone, eastmoney.client, func(ctx context.Context) ([]model.DailyBar, error) {
-			return eastmoney.FetchDailyBars(ctx, dailySymbol, startDate, endDate, dailyLimit, model.AdjustmentNone)
-		})
 		yahoo := NewYahooFinance(12*time.Second, "")
-		runDaily("yahoo", "yahoo", dailySymbol, model.AdjustmentNone, yahoo.client, func(ctx context.Context) ([]model.DailyBar, error) {
-			return yahoo.FetchDailyBars(ctx, dailySymbol, startDate, endDate, dailyLimit, model.AdjustmentNone)
-		})
+		for _, symbol := range dailySymbols {
+			runDaily("sina", "sina", symbol, model.AdjustmentNone, sina.client, func(ctx context.Context) ([]model.DailyBar, error) {
+				return sina.FetchDailyBars(ctx, symbol, startDate, endDate, dailyLimit, model.AdjustmentNone)
+			})
+			runDaily("tencent", "tencent", symbol, model.AdjustmentNone, tencent.client, func(ctx context.Context) ([]model.DailyBar, error) {
+				return tencent.FetchDailyBars(ctx, symbol, startDate, endDate, dailyLimit, model.AdjustmentNone)
+			})
+			runDaily("eastmoney", "eastmoney", symbol, model.AdjustmentNone, eastmoney.client, func(ctx context.Context) ([]model.DailyBar, error) {
+				return eastmoney.FetchDailyBars(ctx, symbol, startDate, endDate, dailyLimit, model.AdjustmentNone)
+			})
+			runDaily("yahoo", "yahoo", symbol, model.AdjustmentNone, yahoo.client, func(ctx context.Context) ([]model.DailyBar, error) {
+				return yahoo.FetchDailyBars(ctx, symbol, startDate, endDate, dailyLimit, model.AdjustmentNone)
+			})
+		}
 		report.Failures = failures
 		encoded, marshalErr := json.MarshalIndent(report, "", "  ")
 		if marshalErr != nil {
