@@ -78,20 +78,31 @@ func TestCorporateActionHashIgnoresObservationMetadata(t *testing.T) {
 	}
 }
 
-
 func TestAdjustmentFactorHashIncludesBasis(t *testing.T) {
 	value := model.AdjustmentFactor{Symbol: "600036.SH", TradeDate: "2025-06-30", Factor: 1.25, Source: "baostock", Basis: model.AdjustmentFactorForward}
 	forwardHash, err := adjustmentFactorHash(value)
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	value.Basis = model.AdjustmentFactorBackward
 	backwardHash, err := adjustmentFactorHash(value)
-	if err != nil { t.Fatal(err) }
-	if forwardHash == backwardHash { t.Fatal("different factor bases must create independent content revisions") }
+	if err != nil {
+		t.Fatal(err)
+	}
+	if forwardHash == backwardHash {
+		t.Fatal("different factor bases must create independent content revisions")
+	}
 	value.Basis = ""
 	emptyHash, err := adjustmentFactorHash(value)
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	value.Basis = model.AdjustmentFactorShared
 	sharedHash, err := adjustmentFactorHash(value)
-	if err != nil { t.Fatal(err) }
-	if emptyHash != sharedHash { t.Fatal("an omitted single-factor basis must normalize to shared") }
+	if err != nil {
+		t.Fatal(err)
+	}
+	if emptyHash != sharedHash {
+		t.Fatal("an omitted single-factor basis must normalize to shared")
+	}
 }

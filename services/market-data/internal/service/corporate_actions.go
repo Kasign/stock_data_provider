@@ -13,6 +13,12 @@ import (
 	"github.com/Kasign/stock_data_provider/services/market-data/internal/provider"
 )
 
+func validAdjustmentFactorBasis(value model.AdjustmentFactorBasis) bool {
+	return value == model.AdjustmentFactorShared ||
+		value == model.AdjustmentFactorForward ||
+		value == model.AdjustmentFactorBackward
+}
+
 var (
 	ErrAdjustmentFactorsAsOfNotFound = errors.New("no adjustment-factor revision with proven availability was recorded by as_of")
 	ErrCorporateActionsAsOfNotFound  = errors.New("no corporate-action revision with proven availability was recorded by as_of")

@@ -36,12 +36,16 @@ func TestRebuildAdjustedDailyBarsPrefersMatchingFactorBasis(t *testing.T) {
 		factor("2025-07-01", 10, model.AdjustmentFactorBackward),
 	}
 	forward, err := rebuildAdjustedDailyBars(raw, factors, model.AdjustmentForward, "2025-07-01")
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	if forward[0].Close != 5 || forward[1].Close != 20 {
 		t.Fatalf("forward rebuild used wrong factor basis: got closes %.4f, %.4f", forward[0].Close, forward[1].Close)
 	}
 	backward, err := rebuildAdjustedDailyBars(raw, factors, model.AdjustmentBackward, "2025-07-01")
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	if backward[0].Close != 50 || backward[1].Close != 200 {
 		t.Fatalf("backward rebuild used wrong factor basis: got closes %.4f, %.4f", backward[0].Close, backward[1].Close)
 	}
@@ -62,6 +66,10 @@ func TestRebuildAdjustedDailyBarsKeepsSharedFactorFallback(t *testing.T) {
 		QualityStatus:    model.QualityValid,
 	}}
 	got, err := rebuildAdjustedDailyBars(raw, factors, model.AdjustmentForward, "2025-07-01")
-	if err != nil { t.Fatal(err) }
-	if got[0].Close != 10 { t.Fatalf("shared factor fallback produced close %.4f, want 10", got[0].Close) }
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got[0].Close != 10 {
+		t.Fatalf("shared factor fallback produced close %.4f, want 10", got[0].Close)
+	}
 }

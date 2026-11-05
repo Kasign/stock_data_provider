@@ -50,6 +50,16 @@
 - MariaDB `market_data_adjustment_factor_versions` 增加 `factor_basis` 列，版本查重、最新版本选择和索引均纳入口径维度。同证券/日期/来源的 forward 与 backward 因子可独立追加、独立 PIT 查询。
 - DataService 重复行校验改为交易日 + 口径；相同日期的 forward/backward 两行不再互相视为重复。
 - 复权重建按请求方向筛选匹配口径，优先使用方向专属因子；Tushare shared 因子仍可作为通用因子来源。不同口径不会进入同一因子序列。
-- 新增因子哈希口径隔离测试；复权重建方向选择与 shared 回退测试随下一次补充提交加入。
+- 新增因子哈希口径隔离测试，以及复权重建方向选择和 shared 回退测试。
 - 本阶段只完成统一模型/存储/选择规则，不代表 BaoStock 已接入。BaoStock 仍需基于真实样本核验 foreAdjustFactor/backAdjustFactor 的数值公式和参考基准后再适配；AvailableAt 仍不得从 dividiOperateDate 推断。
 - 当前状态：代码已提交待 CI；真实 Provider 验收未执行。阶段 B 继续 in_progress。
+
+
+## 2026-11-05 P0 批次 16：口径维度首轮 CI 问题修复
+
+- 验证基线：`e7d7d0726decd73f920b7fa967baaf45a3fabb66`。该 SHA 的 Go test suite、Go-Python parity 均失败；WebUI checks 与 Live provider probe 外层工作流成功。PR #1 保持 Open / Draft，未合并。
+- Go suite 失败包含三项可复现问题：模型与新增测试文件未通过 gofmt；service 包错误引用 repository 包内不可见的 `validAdjustmentFactorBasis`；MariaDB 集成测试中 `Store.Migrate` 内嵌建表 SQL 漏加 `factor_basis`，导致查询时报 Unknown column。
+- 本轮修复将 basis 校验函数放入 service 包、补齐 Store.Migrate 内嵌 schema 的 `factor_basis` 列和对应索引，并修正新增 Go 文件格式。
+- Go-Python parity 的样本比较契约测试本身通过；其后 market-data Go 测试因上述编译错误失败。报告中发现的 fixture 差异（close 精度、quality_status、记录覆盖）属于现有 parity 样本报告，不作为本轮复权因子改造的根因，也不应通过放宽容差掩盖。
+- 下一 SHA 必须重新执行 gofmt、market-data unit/race/vet、MariaDB migration/PIT、Docker build 和 parity。当前尚未获得修复后 SHA 的 CI 结果，不得标记通过。
+- BaoStock Provider adapter 继续暂缓，直到本轮基础模型、存储及重建测试全绿，并完成因子公式/日期语义证据核验。

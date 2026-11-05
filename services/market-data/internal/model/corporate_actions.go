@@ -22,18 +22,18 @@ func NormalizeAdjustmentFactorBasis(value AdjustmentFactorBasis) AdjustmentFacto
 // AdjustmentFactor 是某证券某交易日、某复权口径的源端累计复权因子观测。
 // SystemObservedAt 由本系统写入历史版本时生成，不由 Provider 提供。
 type AdjustmentFactor struct {
-	Symbol           string                 `json:"symbol"`
-	TradeDate        string                 `json:"trade_date"`
-	Factor           float64                `json:"factor"`
-	Basis            AdjustmentFactorBasis  `json:"basis"`
-	Source           string                 `json:"source"`
-	SourceVersion    string                 `json:"source_version,omitempty"`
-	ProviderTime     *time.Time             `json:"provider_time,omitempty"`
-	AvailableAt      *time.Time             `json:"available_at,omitempty"`
-	FetchedAt        time.Time              `json:"fetched_at"`
-	SystemObservedAt *time.Time             `json:"system_observed_at,omitempty"`
-	QualityStatus    QualityStatus          `json:"quality_status"`
-	QualityReasons   []string               `json:"quality_reasons,omitempty"`
+	Symbol           string                `json:"symbol"`
+	TradeDate        string                `json:"trade_date"`
+	Factor           float64               `json:"factor"`
+	Basis            AdjustmentFactorBasis `json:"basis"`
+	Source           string                `json:"source"`
+	SourceVersion    string                `json:"source_version,omitempty"`
+	ProviderTime     *time.Time            `json:"provider_time,omitempty"`
+	AvailableAt      *time.Time            `json:"available_at,omitempty"`
+	FetchedAt        time.Time             `json:"fetched_at"`
+	SystemObservedAt *time.Time            `json:"system_observed_at,omitempty"`
+	QualityStatus    QualityStatus         `json:"quality_status"`
+	QualityReasons   []string              `json:"quality_reasons,omitempty"`
 }
 
 // CorporateAction 是公司行动事件。金额单位为人民币元/股，比例为每股变动数量。
