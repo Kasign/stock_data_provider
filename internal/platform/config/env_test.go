@@ -17,9 +17,9 @@ func testEnv(values map[string]string) Env {
 
 func TestEnvTypedValues(t *testing.T) {
 	env := testEnv(map[string]string{
-		"APP_NAME": "stock-api",
-		"APP_PORT": "8092",
-		"APP_DEBUG": "true",
+		"APP_NAME":    "stock-api",
+		"APP_PORT":    "8092",
+		"APP_DEBUG":   "true",
 		"APP_TIMEOUT": "5m",
 	})
 
@@ -43,8 +43,8 @@ func TestEnvTypedValues(t *testing.T) {
 func TestEnvInvalidValuesDoNotLeak(t *testing.T) {
 	const secretValue = "super-secret-value"
 	env := testEnv(map[string]string{
-		"APP_PORT": secretValue,
-		"APP_DEBUG": secretValue,
+		"APP_PORT":    secretValue,
+		"APP_DEBUG":   secretValue,
 		"APP_TIMEOUT": secretValue,
 	})
 
@@ -109,7 +109,7 @@ func TestValidationHelpers(t *testing.T) {
 
 func TestInvalidConfigurationKeyIsIgnored(t *testing.T) {
 	env := testEnv(map[string]string{"APP TOKEN": "unexpected"})
-	if _, ok := env.Lookup("APP TOKEN"); ok {
-		t.Fatal("invalid configuration key must not be read")
+	if got := env.String("APP TOKEN", "fallback"); got != "fallback" {
+		t.Fatalf("invalid configuration key returned %q", got)
 	}
 }

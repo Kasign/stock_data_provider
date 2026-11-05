@@ -31,8 +31,8 @@ func NewEnvWithLookup(lookup func(string) (string, bool)) Env {
 	return Env{lookup: lookup}
 }
 
-// Lookup returns the raw configured value and whether the key exists.
-func (e Env) Lookup(key string) (string, bool) {
+// lookupValue returns a raw value only inside this package so callers use Secret for sensitive keys.
+func (e Env) lookupValue(key string) (string, bool) {
 	if !validKey(key) || e.lookup == nil {
 		return "", false
 	}
@@ -42,7 +42,7 @@ func (e Env) Lookup(key string) (string, bool) {
 // String returns the configured value or fallback. An explicitly configured
 // empty value is treated as empty rather than silently replaced.
 func (e Env) String(key, fallback string) string {
-	value, ok := e.Lookup(key)
+	value, ok := e.lookupValue(key)
 	if !ok {
 		return fallback
 	}
@@ -52,7 +52,7 @@ func (e Env) String(key, fallback string) string {
 // RequiredString returns a non-empty value. Errors contain the key, never the
 // configured value.
 func (e Env) RequiredString(key string) (string, error) {
-	value, ok := e.Lookup(key)
+	value, ok := e.lookupValue(key)
 	if !ok || strings.TrimSpace(value) == "" {
 		return "", fmt.Errorf("configuration %s is required", key)
 	}
@@ -61,7 +61,7 @@ func (e Env) RequiredString(key string) (string, error) {
 
 // Bool parses a boolean value using strconv.ParseBool.
 func (e Env) Bool(key string, fallback bool) (bool, error) {
-	value, ok := e.Lookup(key)
+	value, ok := e.lookupValue(key)
 	if !ok {
 		return fallback, nil
 	}
@@ -75,7 +75,7 @@ func (e Env) Bool(key string, fallback bool) (bool, error) {
 // Int parses a base-10 integer. Range validation remains the responsibility
 // of the service-specific Config.Validate method.
 func (e Env) Int(key string, fallback int) (int, error) {
-	value, ok := e.Lookup(key)
+	value, ok := e.lookupValue(key)
 	if !ok {
 		return fallback, nil
 	}
@@ -88,7 +88,7 @@ func (e Env) Int(key string, fallback int) (int, error) {
 
 // Duration parses a Go duration such as 5s or 2m.
 func (e Env) Duration(key string, fallback time.Duration) (time.Duration, error) {
-	value, ok := e.Lookup(key)
+	value, ok := e.lookupValue(key)
 	if !ok {
 		return fallback, nil
 	}
@@ -101,7 +101,7 @@ func (e Env) Duration(key string, fallback time.Duration) (time.Duration, error)
 
 // Secret reads an optional secret. The zero value means not configured.
 func (e Env) Secret(key string) Secret {
-	value, ok := e.Lookup(key)
+	value, ok := e.lookupValue(key)
 	if !ok {
 		return Secret{}
 	}
@@ -111,7 +111,7 @@ func (e Env) Secret(key string) Secret {
 // RequiredSecret reads a mandatory secret without including its value in
 // errors.
 func (e Env) RequiredSecret(key string) (Secret, error) {
-	value, ok := e.Lookup(key)
+	value, ok := e.lookupValue(key)
 	if !ok || strings.TrimSpace(value) == "" {
 		return Secret{}, fmt.Errorf("configuration %s is required", key)
 	}
@@ -170,6 +170,11 @@ func (Secret) Format(state fmt.State, _ rune) {
 // MarshalJSON serializes only a redaction marker, never the secret.
 func (Secret) MarshalJSON() ([]byte, error) {
 	return json.Marshal("[REDACTED]")
+}
+
+// MarshalText redacts the secret for text-based serializers.
+func (Secret) MarshalText() ([]byte, error) {
+	return []byte("[REDACTED]"), nil
 }
 
 // IsZero supports configuration validation without exposing the value.
