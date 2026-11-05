@@ -151,7 +151,7 @@ ResearchAttempt {
 ModelRequest {
   request_id, purpose_code, model, instructions, input_text,
   max_output_tokens, temperature?, top_p?, reasoning_effort?,
-  response_schema?, tools[], deadline_at, correlation_id?, trace_id?
+  response_schema?, tools[], tool_choice?, deadline_at, correlation_id?, trace_id?
 }
 ModelResponse {
   request_id, provider_id, response_id?, status, output_items[], output_text?,
@@ -160,11 +160,15 @@ ModelResponse {
   started_at, finished_at, duration_ms
 }
 ModelEvent {
-  type, sequence_number?, response_id?, output_index?,
+  type, sequence_number?, response_id?, output_index?, content_index?,
   item_id?, call_id?, delta?, usage?, error?, received_at
 }
 Usage {
-  input_tokens?, output_tokens?, total_tokens?, source
+  input_tokens?, output_tokens?, total_tokens?, input_cached_tokens?, output_reasoning_tokens?, source
+}
+CapabilityState {
+  provider_id, model_id, gateway_version, capability_code,
+  state: supported|unsupported|unknown, checked_at, evidence_ref?
 }
 ```
 

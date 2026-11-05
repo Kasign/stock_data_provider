@@ -785,3 +785,11 @@ Workflow Template 按 stage_code + template_version 固定 on_degraded、on_skip
 - 上游合法 incomplete/failed 由 ModelResponse.status/error 表达；Adapter 执行错误由 Go error 表达；EOF 无 terminal event 返回部分 Response + stream_interrupted。
 - 本轮只形成规划侧建议，待 LLM/Platform Owner 签字；validator 库/许可证、真实 Gateway ID header 映射、本地模型 Responses/Schema/Tool/Reasoning/SSE E2E 尚未完成。
 - LLM-001 仍 partial；LLM-002 仅契约草案；不宣称 LLM-004/005 能力通过，不创建 feat/llm 分支，GOV-004 继续 NO-GO。
+
+
+## 36. LLM-002 JSON/SSE Fixture 验收准备
+
+- 已形成 Fixture 设计清单，覆盖 Responses JSON output item、status、Usage、Schema 校验和异常响应，以及 SSE terminal、未知事件、sequence_number 异常、EOF、callback error 和 Context cancel。
+- Fixture 验收必须断言原始 wire payload 到内部 DTO 的映射、状态与 typed error、Usage 来源、序号诊断及 completed 判定；不能仅断言 parser 不 panic。
+- Fixture 仅证明 Adapter 协议解析与归一化行为，不证明当前 Gateway/本地模型具备 Structured Output、Tool Call、Reasoning 或稳定 SSE 能力。
+- 本轮仍为规划设计；没有实现 Fixture 或执行测试。Owner Review、validator 选型和真实 Gateway E2E 仍未完成，GOV-004 NO-GO。

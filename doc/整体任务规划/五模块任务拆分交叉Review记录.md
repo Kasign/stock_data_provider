@@ -218,3 +218,12 @@ Domain/Contract 不得因为无关模块的 Adapter/Integration 未完成而被�
 - SSE 若全流提供 sequence_number，必须连续递增；缺号/重号/倒退不能标记 completed。若整流均不提供可继续但记录序号能力 unavailable；混合有无按协议异常。
 - ModelResponse.status 表达上游合法终态；Go error 表达传输、HTTP、协议、Schema、callback 和 Context 错误。无 terminal EOF 返回部分 Response + stream_interrupted。
 - 以上为规划侧建议，待 LLM/Platform Owner Review；不构成签字冻结。详细字段和决议见 doc/llm/04-ProviderPort与DTO字段级契约.md。
+
+
+## 12. LLM-002 JSON/SSE Fixture 设计
+
+- Fixture 不以 Mock 通过代替真实上游能力验证；其目标是锁定 Adapter 的输入解析、归一化输出、错误和事件语义。
+- JSON 必须覆盖 completed/incomplete/failed、message/function_call/refusal/unknown item、Usage nullable/derived/mismatch、Schema invalid 和结构异常。
+- SSE 必须覆盖 terminal、unknown event、sequence 连续/缺号/重复/倒退/混合缺失、断流、callback error 和取消。
+- 每个 fixture 应断言 wire 原文、DTO、终态、错误类型、usage.source、sequence 诊断及可否认定 completed。
+- 样例和建议命名见 doc/llm/05-JSON与SSE契约Fixture清单.md；样例是契约测试设计，不代表本地 llama.cpp/Qwen 已支持对应能力。
