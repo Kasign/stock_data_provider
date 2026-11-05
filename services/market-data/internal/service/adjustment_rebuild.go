@@ -214,8 +214,8 @@ func rebuildAdjustedDailyBarsWithMode(raw []model.DailyBar, factors []model.Adju
 		bar.AdjustmentBasis = basis
 		bar.AdjustmentMethod = "cumulative_adj_factor_v1"
 		if basis == model.AdjustmentForward {
-			// 前复权必须暴露实际采用的最近有效事件因子日期，不冒充请求结束日。
-			bar.AdjustmentRefDate = reference.TradeDate
+			// AdjustmentRefDate 是价格序列的参考锚点；reference.TradeDate 是内部命中的最近因子事件日，两者不能混为一谈。
+			bar.AdjustmentRefDate = requestedReferenceDate
 		} else {
 			bar.AdjustmentRefDate = ""
 		}

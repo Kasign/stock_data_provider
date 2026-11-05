@@ -235,3 +235,6 @@
 
 
 - CI 格式修正：SHA `ac743f19cdbed45d2b0d44c5c163fb3be2cec7a2` 的首次 Go suite 在新增测试函数前多出一行空行，`Check gofmt` 失败；仅修正格式，不改变逻辑。下一 SHA 重新执行完整 CI。
+
+
+- 参考锚点语义修正：`AdjustmentRefDate` 表示复权价格序列的参考锚点，应记录 `requestedReferenceDate`；内部用于查找累计因子的最近 `OperateDate` 是事件日期，不得冒充价格参考锚点。测试覆盖两者不同的情况。

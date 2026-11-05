@@ -89,7 +89,7 @@ func TestRebuildAdjustedDailyBarsRejectsCrossProviderOrSymbolFactors(t *testing.
 		Source: "baostock", SourceVersion: "baostock-test-v1", FetchedAt: available,
 		AvailableAt: &available, SystemObservedAt: &observed, QualityStatus: model.QualityValid,
 	}
-	if _, err := rebuildAdjustedDailyBarsPIT(raw, []model.AdjustmentFactor{factor}, model.AdjustmentForward, "2025-07-01"); err == nil {
+	if _, err := rebuildAdjustedDailyBarsPIT(raw, []model.AdjustmentFactor{factor}, model.AdjustmentForward, "2025-07-02"); err == nil {
 		t.Fatal("cross-Provider adjustment factors must never be applied to raw bars")
 	}
 	factor.Source, factor.SourceVersion = "eastmoney", "eastmoney-test-v1"
@@ -130,11 +130,11 @@ func TestRebuildAdjustedDailyBarsCurrentAllowsUnknownAvailabilityButKeepsDegrade
 		SystemObservedAt: &observed, QualityStatus: model.QualityValid,
 		QualityReasons: []string{"provider_available_at_not_exposed_by_query_adjust_factor"},
 	}
-	got, err := rebuildAdjustedDailyBarsCurrent(raw, []model.AdjustmentFactor{factor}, model.AdjustmentForward, "2025-07-01")
+	got, err := rebuildAdjustedDailyBarsCurrent(raw, []model.AdjustmentFactor{factor}, model.AdjustmentForward, "2025-07-02")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got[0].Close != 10 || got[0].AdjustmentRefDate != "2025-07-01" ||
+	if got[0].Close != 10 || got[0].AdjustmentRefDate != "2025-07-02" ||
 		got[0].QualityStatus != model.QualityDegraded ||
 		!containsReason(got[0].QualityReasons, "adjustment_factor_reference_quality_degraded") ||
 		!containsReason(got[0].QualityReasons, "adjustment_factor_reference:provider_available_at_unknown") {
