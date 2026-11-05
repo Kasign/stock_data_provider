@@ -11,10 +11,10 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
-	"time"
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"example.com/stock-analysis-flow/internal/platform/fault"
 )
