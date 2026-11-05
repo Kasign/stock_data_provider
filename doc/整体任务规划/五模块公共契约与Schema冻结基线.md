@@ -236,7 +236,7 @@ Migration namespace 由模块固定且唯一，如 quant/research/researchflow/n
 
 | 分支 | 本次核查 HEAD | 提交信息 |
 |---|---|---|
-| `feat/full-go-data-providers-api-switch` | `40c2a63656ad83c756b3ef12ce69eabc89275b07` | `docs(market-data): 记录历史日历质量边界复验` |
+| `feat/full-go-data-providers-api-switch` | `c1ae8bb1f02a10a7f8c73a40f125fce3f1e4da3c` | `fix(market-data): 区分方向因子与共享因子公式` |
 | `feat/research-news-ingestion` | `0eb727b4c6a42f568818bdf9a7161afd09db5284` | `fix(news): 补齐版本更新代码格式` |
 | `feat/platform-foundation` | `b7896ea7cc49d925d896f770c479b84c04688c67` | `docs(platform): record policy-bound HTTP adapter validation` |
 
@@ -374,8 +374,8 @@ Quant 首期只建立自己的 Adapter DTO，不复制整个 Data Model：
 - Platform 核心包导出 API 与依赖限制核对。
 
 **仍未完成：**
-1. 已完成 11 个 Model 文件的结构体字段名静态对照，但仍需对 51 个同名 Schema 匹配项完成字段类型、required/nullable、枚举、嵌套引用和条件语义全量核验；并将对照检查固化为自动化测试。
-2. 补齐 Data OpenAPI 已识别的 9 组、15 个字段缺口；6 个未按同名 Schema 匹配的结构体已完成内外部归类；增加能捕获 Go JSON Tag 漂移的契约测试。
+1. 已完成 11 个 Model 文件的字段名和主要类型静态对照；已发现 required 不一致 15 处、nullable 不准确 10 处、OpenAPI 多余字段 9 个。仍需人工确认全部 Schema 的格式/范围/枚举/嵌套引用，并把 Go JSON Tag 与 OpenAPI 的双向对照固化为自动化测试。
+2. 修正 Data OpenAPI 已识别的 9 组、15 个字段缺口、15 处 required 不一致、10 处 nullable 不准确及 9 个多余字段；6 个未按同名 Schema 匹配的结构体已完成内外部归类；增加双向契约测试。
 3. 为 News 增加可供 Research 调用的只读查询 Facade、明确可获得时间和采集时间语义、策略版本引用及授权内容引用；等待 N6 Repository/Migration 实现。
 4. 对 Platform Storage 执行真实 MariaDB/Redis 集成和故障演练；对 HTTP Client 执行部署环境出口安全验收。
 5. 结合以上结果修订模块 DTO，完成 Quant/Research 的公开契约字段表与 Schema 版本策略。
