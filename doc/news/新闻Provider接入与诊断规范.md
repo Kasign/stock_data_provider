@@ -177,3 +177,12 @@ Provider 输出策略必须在缓存和持久化之前执行。Brave 只允许�
 - 不为旧 go-core/Python 调用方设置兼容验收；删除旧新闻集成前先核实仓库内引用，不触碰无关模块。
 
 实施时由根模块自己的构建、测试和部署流程负责，不为兼容旧嵌套模块改变仓库布局。
+
+## 14. 公共平台 HTTP/Diagnostics 接入约束（2026-11-05）
+
+- Provider/Source Adapter 只依赖注入的 Transport Port；不自行创建生产级通用 HTTP Client、连接池、统一重试器或通用诊断 Runner。
+- Provider API 配额、业务并发、请求成本和 Provider-specific retryability 属于 News/Provider Adapter；连接、TLS、总 Deadline、响应体上限、通用重试预算和 Trace 传播由公共 HTTP Client 承担。
+- Source URL 的许可、域名策略、DNS/IP 私网阻断、重定向目标逐跳复核和 DNS rebinding 防护属于新闻采集安全策略；必须与平台 HTTP Client 的底层拨号/重定向能力共同实现，不能只做初始 URL 字符串检查。
+- 平台契约未明确 DNS/IP/Redirect 安全钩子前，不执行任意来源真实抓取；固定样本解析和 fake Transport 测试不受此限制。
+- News 业务质量状态和 Platform Diagnostics 状态分开保留。News Check Adapter 只把领域结果作为受控摘要/Reason Code 映射给公共 Runner，不把新闻正文、Provider snippet、原始响应或 Secret 放入 Check Attributes。
+- 平台 failed 表示 Check 执行器/实现自身异常；新闻内容 invalid 应作为领域质量结果呈现，不得伪装为 Check 内部失败。

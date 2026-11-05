@@ -247,3 +247,60 @@ N1-A 评审通过并获得用户确认后才进入 N2。当前不修改业务代
 6. 是否同意 N2 先实现无 DB/Redis 的 Domain、Application 和 Provider Adapter，N3/N4 再逐步补齐采集与业务规则。
 
 **确认后才进入 N2。** 如有不同意见，应在本报告对应章节调整后再冻结，不以先写代码的方式倒逼架构接受。
+
+
+## 13. 与公共平台规划的对齐结论（只读评审，2026-11-05）
+
+本节依据 feat/platform-foundation 分支公共平台文档进行只读对齐；新闻分支不修改平台分支。核对基线：平台分支 HEAD 9fa99985709661b189a330c6d0a576e30a72b654。平台契约 doc/platform/08-公共平台契约规范.md 当前为 v1.0.0-review，仍待 Data、News、Research、Server 接入方评审，不能视为正式冻结或已实现。
+
+### 13.1 所有权结论
+
+- Platform 拥有通用配置装载/Secret Provider、身份与安全中间件、日志/错误/Trace、HTTP Client Policy、Diagnostics Runner/Registry/聚合、DB/Redis 连接生命周期、Migration Runner、通用 Task 生命周期和 Audit Writer。
+- News 拥有新闻领域模型、Provider 与 Source Adapter、来源/Provider 授权规则、URL/来源级 SSRF 约束、新闻质量、身份解析、版本、关系证据、新闻 Repository/SQL/业务表和 News Migration 定义。
+- Platform 不实现新闻 Repository、不持有新闻业务表、不负责新闻质量算法。平台提供连接与执行治理；新闻业务 Repository 仍由 News 实现。
+- 根服务集成分支负责平台组件最终 DI/启动装配、管理路由和 Migration 注册入口；新闻分支只提供模块 Adapter/注册信息，不与平台分支争抢组合根。
+- 当前新闻没有独立 HTTP 路由，因此不需要为同进程 Application 调用创建 Service Key。未来若由既有 Server API 暴露新闻能力，由该 API 执行认证和 Scope 授权。
+
+### 13.2 平台能力映射与接入门禁
+
+| 平台任务 | News 使用方式 | 新闻侧前置/门禁 |
+|---|---|---|
+| PLAT-002 契约 | 所有公共 package 的稳定依赖基线 | v1.0.0 正式冻结并完成 News 评审前，不导入平台内部实现路径 |
+| PLAT-003/004 Security/Service Key | 仅未来 HTTP 服务间调用/管理路由需要 | 当前同进程调用不使用 Service Key |
+| PLAT-005 Config/Secret | News 定义 Provider/Source 业务配置；Secret 只通过注入读取 | 组件实现可用后接入；不把 Provider Key 存 DB 或日志 |
+| PLAT-006 Logger/Fault/Trace | 注入 slog，传播 Request ID/Trace，适配平台 Fault | 保留新闻业务错误 Code 和部分成功结果 |
+| PLAT-007 Diagnostics | News 提供领域 Check，平台负责注册、执行、聚合和受保护查询 | 平台 Check 不替代 News 质量/授权判断 |
+| PLAT-008 HTTP Client | Provider/Source Adapter 使用统一 Factory/Doer | 实际网络调用需平台实现可用；需另行确认 Redirect、DNS/IP 防护和每依赖并发策略 |
+| PLAT-009 Storage/Migration | 平台提供 DB/Redis 生命周期与 Migration Runner | News 自己实现 SQL Repository、新闻表和 Migration 内容；Redis 非首期必需 |
+| PLAT-010 Task | 仅在定时/长耗时/可恢复采集确有需求时使用 | 不强制把同步用例异步化；Task 不替代 Observation |
+| PLAT-011 Metrics | 提供低基数指标导出 | 不将 symbol、URL、news_id 作为默认指标标签 |
+| PLAT-012 Audit | 来源策略等敏感管理操作需要审计时使用 | 当前没有新闻管理 API，不预建新闻审计设施 |
+| PLAT-013/014 Integration/Drill | 跨模块接入、故障演练和治理验收 | 由平台与根服务集成分支组织，News 提供契约测试和接入证据 |
+
+### 13.3 状态和错误边界
+
+News 业务质量 valid/degraded/invalid/unknown、Freshness fresh/stale/unknown/not_applicable、授权 approved/restricted/pending/revoked，与 Platform Diagnostics 的 healthy/degraded/unavailable/skipped/failed 是不同维度。News Check 应保留领域质量状态和 reason code；平台 failed 表示 Check 自身执行异常，不表示新闻内容质量 invalid。必要时通过白名单 Attributes 携带低敏感领域状态，不能把正文、snippet 或完整响应放入诊断结果。
+
+Provider 部分失败、空结果和策略跳过属于 Application 结构化业务结果，不应压成一个 Platform Fault。平台 Fault 只用于调用级错误映射；News 保留稳定领域 Code，并在适配层映射通用 Class。
+
+### 13.4 平台契约待澄清项
+
+在 PLAT-002 正式冻结前，建议由平台分支评审确认以下差异；新闻分支不擅自修改平台文档或实现：
+
+1. **HTTP 安全策略缺口**：平台详细设计提到 Proxy/TLS/Redirect/并发等 Policy，但 v1.0.0-review 的 httpclient.Policy 示例未明确重定向控制、DNS 解析与私网/保留 IP 阻断、DNS rebinding 防护及每依赖并发。新闻 Source Fetcher 需要这些能力，尤其每次重定向必须重新验证目标；未确认前不开放真实网页抓取。
+2. **Diagnostics 结果字段差异**：平台详细设计提到 reason_code、safe_message、evidence_ref；契约示例 diagnostics.Observation 当前只列 status/summary/checked_at/duration/attributes。News 需要稳定 reason code 和受控 evidence reference，需明确最终契约，不把大段领域证据塞进 Attributes。
+3. **Fault 语义差异**：详细设计提到 retryable/dependency，契约 fault.Error 示例尚未包含这些字段。News 的 Provider 重试决策仍由 ProviderOutcome/HTTP Policy 明确表达，不等待通用 Fault 代替业务重试语义。
+4. **契约与实现状态**：平台当前代码树已有 dotenv、局部 HTTP API、taskqueue 等历史实现，但 PLAT-002 仍待接入方评审，PLAT-003~014 的任务表仍未开始/未验收。不得把局部旧实现视为正式平台 API 已可用。
+
+### 13.5 调整后的新闻阶段路线
+
+- N2：Domain、Application Ports、Provider DTO/协议 Adapter；注入 Transport Port，固定样本/fake 测试，不自建生产 Client，不要求实时请求。
+- N3：来源授权、URL/DNS/重定向安全、Feed/HTML 解析和标准化；离线解析可先做，真实抓取等待 PLAT-008 和许可门禁。
+- N4：身份、去重、版本和证券/行业关系；使用 fake Repository，不实现 SQL/连接池。
+- N5：接入 PLAT-005/006/008；不引入新闻专属认证或通用 HTTP/日志/配置实现。
+- N6：接入 PLAT-009 的连接和 Migration 能力；News 实现自己的 SQL Repository/表/Migration；MariaDB 优先，Redis 按需。
+- N7：接入 PLAT-007 的领域 Check；PLAT-010/012 只在定时任务/管理审计需求明确后接入。
+- N8：通过 PLAT-013 完成跨模块验收；按 PLAT-014 演练关键故障。
+- 历史 Python 数据价值评估独立列为可选 H1，不阻塞主路径。
+
+以上调整不要求等待整套公共平台全部完成后才开始纯 Domain/离线协议和解析工作；真实网络调用、持久化和诊断接入必须遵守对应平台门禁。
