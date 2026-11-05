@@ -10,14 +10,14 @@ func TestNormalizeCandidateNormalizesFieldsAndUsesFallbackContext(t *testing.T) 
 	candidate := Candidate{
 		ProviderCode: "  tavily ", ProviderItemID: " item-1 ",
 		PublisherName: "  媒体名称  ", PublisherDomain: " EXAMPLE.COM ",
-		Title: "  市场   新闻\n标题 ", Summary: " 摘要  内容 ",
+		Title: "  市场   新闻\n标题 ", ProviderSummary: " 摘要  内容 ",
 		RawURL: " https://publisher.example/a ", PublishedAtRaw: "Wed, 04 Nov 2026 10:30:00 +0800",
 	}
 	got := NormalizeCandidate(candidate, observedAt, " market ")
 	if got.ProviderCode != "tavily" || got.ProviderItemID != "item-1" || got.PublisherName != "媒体名称" {
 		t.Fatalf("identity fields=%+v", got)
 	}
-	if got.PublisherDomain != "example.com" || got.Title != "市场 新闻 标题" || got.Summary != "摘要 内容" {
+	if got.PublisherDomain != "example.com" || got.Title != "市场 新闻 标题" || got.ProviderSummary != "摘要 内容" {
 		t.Fatalf("normalized text=%+v", got)
 	}
 	if got.RawURL != "https://publisher.example/a" || got.QueryDimension != "market" {

@@ -1,0 +1,57 @@
+package domain
+
+import "strings"
+
+// ContentOrigin 标识内容片段来自哪个采集层，不代表来源授权状态。
+type ContentOrigin string
+
+const (
+	ContentOriginFeedSummary ContentOrigin = "feed_summary"
+	ContentOriginFeedBody    ContentOrigin = "feed_body"
+	ContentOriginHTMLMeta    ContentOrigin = "html_meta"
+	ContentOriginHTMLArticle ContentOrigin = "html_article"
+)
+
+// ContentFormat 描述载荷的实际编码形式。
+type ContentFormat string
+
+const (
+	ContentFormatPlainText    ContentFormat = "plain_text"
+	ContentFormatHTMLFragment ContentFormat = "html_fragment"
+)
+
+// ContentPayload 保存来源正文/片段。Kind 未确定时保持空值，不推断为全文。
+type ContentPayload struct {
+	Origin ContentOrigin
+	Format ContentFormat
+	Kind   ContentKind
+	Text   string
+}
+
+// ContentLayers 将搜索 Provider 摘要、发布来源摘要和正文载荷分开保存。
+type ContentLayers struct {
+	ProviderSummary string
+	SourceSummary   string
+	Body            *ContentPayload
+}
+
+// ContentLayersFromCandidate 只把 Provider 的搜索摘要放入 Provider 层，不提升为来源摘要或正文。
+func ContentLayersFromCandidate(candidate Candidate) ContentLayers {
+	return NormalizeContentLayers(ContentLayers{ProviderSummary: candidate.ProviderSummary})
+}
+
+// NormalizeContentLayers 规范化摘要空白并仅裁剪正文首尾空白，保留正文段落和重复内容。
+func NormalizeContentLayers(layers ContentLayers) ContentLayers {
+	layers.ProviderSummary = normalizeCandidateText(layers.ProviderSummary)
+	layers.SourceSummary = normalizeCandidateText(layers.SourceSummary)
+	if layers.Body != nil {
+		body := *layers.Body
+		body.Text = strings.TrimSpace(body.Text)
+		if body.Text == "" {
+			layers.Body = nil
+		} else {
+			layers.Body = &body
+		}
+	}
+	return layers
+}

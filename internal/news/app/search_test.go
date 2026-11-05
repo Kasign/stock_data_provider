@@ -48,7 +48,7 @@ func TestSearchCandidatesNormalizesProviderCandidates(t *testing.T) {
 	publishedAt := time.Date(2026, 11, 4, 10, 0, 0, 0, time.FixedZone("CST", 8*60*60))
 	usecase := NewSearchCandidates(StaticProviderSet{Providers: []Provider{
 		fakeProvider{code: " provider-a ", items: []domain.Candidate{{
-			Title: "  标题  ", Summary: " 摘要  内容 ", RawURL: " https://publisher.example/a ",
+			Title: "  标题  ", ProviderSummary: " 摘要  内容 ", RawURL: " https://publisher.example/a ",
 			PublisherName: " 媒体 ", PublishedAt: &publishedAt,
 		}}},
 	}})
@@ -57,7 +57,7 @@ func TestSearchCandidatesNormalizesProviderCandidates(t *testing.T) {
 		t.Fatalf("candidates=%+v", result.Candidates)
 	}
 	got := result.Candidates[0]
-	if got.ProviderCode != "provider-a" || got.Title != "标题" || got.Summary != "摘要 内容" {
+	if got.ProviderCode != "provider-a" || got.Title != "标题" || got.ProviderSummary != "摘要 内容" {
 		t.Fatalf("candidate=%+v", got)
 	}
 	if got.QueryDimension != "news" || got.ObservedAt.IsZero() || got.PublishedAt.Location() != time.UTC {

@@ -9,7 +9,7 @@ type Candidate struct {
 	PublisherName   string
 	PublisherDomain string
 	Title           string
-	Summary         string
+	ProviderSummary string
 	RawURL          string
 	PublishedAtRaw  string
 	PublishedAt     *time.Time
