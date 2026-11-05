@@ -261,12 +261,23 @@ func localPolicy(server *httptest.Server) DestinationPolicy {
 }
 
 func TestClientExecutesRequestThroughValidatedIPDial(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	expectedHost := ""
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+		if request.Host != expectedHost {
+			t.Errorf("expected Host %q, got %q", expectedHost, request.Host)
+		}
 		_, _ = w.Write([]byte("ok"))
 	}))
 	defer server.Close()
 
+	parsedServerURL, _ := url.Parse(server.URL)
+	expectedHost = "example.com:" + parsedServerURL.Port()
 	client := newLocalTestClient(t, server, staticResolver{addresses: []netip.Addr{netip.MustParseAddr("8.8.8.8")}}, 1024, 0)
+	var dialAddress string
+	client.dial = func(ctx context.Context, network, address string) (net.Conn, error) {
+		dialAddress = address
+		return (&net.Dialer{}).DialContext(ctx, network, server.Listener.Addr().String())
+	}
 	response, err := client.Do(context.Background(), localRequest(t, server, "/ok"), localPolicy(server))
 	if err != nil {
 		t.Fatal(err)
@@ -275,6 +286,9 @@ func TestClientExecutesRequestThroughValidatedIPDial(t *testing.T) {
 	body, err := io.ReadAll(response.Body)
 	if err != nil || string(body) != "ok" {
 		t.Fatalf("unexpected response body %q, err=%v", body, err)
+	}
+	if dialAddress != "8.8.8.8:"+parsedServerURL.Port() {
+		t.Fatalf("expected dial to validated IP, got %q", dialAddress)
 	}
 }
 
