@@ -194,7 +194,6 @@ func normalizeFault(err error, contextErr error) *fault.Fault {
 	}
 }
 
-
 func validFaultClass(class fault.Class) bool {
 	switch class {
 	case fault.ClassValidation, fault.ClassUnauthenticated, fault.ClassForbidden,
