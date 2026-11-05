@@ -252,3 +252,22 @@ News 分支当前 HEAD：`cefbbbb10ef418f8bca1d2ff3d6a1fef8ce203b6`，提交 `te
 因此 News 阻断仍为：Facade/DTO、Repository/Migration、Observation/Version/Identity/Classification/Relation 的知识时间过滤、授权决策快照、当前撤销检查、稳定分页和受控内容读取。最新写入校验测试不能替代上述查询与历史复现验收。
 
 **状态不变：GOV-004 NO-GO。** 本轮未修改 News 业务分支，也未创建模块分支。
+
+
+## 10. Data / Platform 最新分支快照复核（2026-11-05）
+
+### Data
+
+- HEAD：`fd39c663c4ad59836acdf963d5fb8b2f9227abe8`（`docs(market-data): 记录 BaoStock 首事件前探测结果`）。
+- 相较 Schema 核查基线 `4732f14d8998bcd06ffb1118846535b626865b2d`，ahead 7 / behind 0。
+- Compare 仅变更 `doc/api/**` 两份文档和 BaoStock 复权探测测试文件；OpenAPI 与 `internal/model/**` 未变更。已知 Schema 差异未由这批提交修复。
+- BaoStock 首事件前无 raw 日 K，fallback 实测状态为 not_applicable；AvailableAt 仍未知。该结果不能作为 PIT 可见性或 OpenAPI 契约通过证据。
+
+### Platform
+
+- HEAD：`eb5361172c524f098fc9b26c08e9c45753b76d23`（`docs(platform/diagnostics): define route access matrix`）。
+- 相较前次基线 `a30ee12130d2a50bc3db672d9d12d1e14040e34f`，ahead 9 / behind 0。
+- Diagnostics Runner 增加总 Deadline、Check 数量上限、重复 ID 校验、panic 捕获和 required skipped 防护；Security 增加显式 RoutePolicy/Router、服务凭据最小长度与 Scope 校验。
+- 这些是公共原语进展；真实服务路由、领域 Adapter、真实 MariaDB/Redis、Migration 故障演练和生产出口 SSRF 验收仍未完成。
+
+详细差异分别见 [Data OpenAPI 与 Go 模型契约修正清单](./Data-OpenAPI与Go模型契约修正清单.md) 和 [Platform 五模块公共依赖与集成验收清单](./Platform-五模块公共依赖与集成验收清单.md)。GOV-004 保持 NO-GO。
