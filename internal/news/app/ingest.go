@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"errors"
+	"reflect"
 	"strings"
 	"time"
 
@@ -10,8 +11,8 @@ import (
 )
 
 var (
-	ErrIdentityTransaction = errors.New("news: identity transaction failed")
-	ErrObservationAppend   = errors.New("news: append observation failed")
+	ErrIdentityTransaction            = errors.New("news: identity transaction failed")
+	ErrObservationIdempotencyConflict = errors.New("news: observation idempotency key reused with different payload")
 )
 
 // IdentityRepository 要求在单一事务中读取身份、创建主体/凭据并追加 Observation。
@@ -25,7 +26,8 @@ type IdentityTransaction interface {
 	FindIdentityCredentials(context.Context, string, []domain.IdentityCredential) ([]domain.IdentityCredential, error)
 	CreateNewsItem(context.Context, string) (string, error)
 	SaveIdentityCredentials(context.Context, []domain.IdentityCredential) error
-	AppendObservation(context.Context, domain.Observation) error
+	// AppendObservation 对同一 IdempotencyKey + 相同候选载荷必须返回既有记录；载荷不同则返回冲突。
+	AppendObservation(context.Context, domain.Observation) (domain.Observation, error)
 }
 
 // IngestCandidate 负责将一个已发现候选写入身份处理流程；不负责真实抓取或跨来源去重。
@@ -40,14 +42,15 @@ func NewIngestCandidate(repository IdentityRepository, newID func() string) *Ing
 	return &IngestCandidate{repository: repository, now: time.Now, newID: newID}
 }
 
-// Execute 在同一事务内解析身份、必要时创建主体、保存身份凭据并追加 Observation。
-// 无身份凭据的候选只形成 Observation；冲突候选只追加冲突 Observation，绝不创建主体。
-func (u *IngestCandidate) Execute(ctx context.Context, sourceID string, candidate domain.Candidate, policy domain.SourceURLPolicy) (domain.Observation, error) {
+// Execute 在同一事务内解析身份、必要时创建主体、保存身份凭据并幂等追加 Observation。
+// IdempotencyKey 必须由上游按一次采集操作稳定生成；重试同一操作必须复用该值。
+func (u *IngestCandidate) Execute(ctx context.Context, sourceID, idempotencyKey string, candidate domain.Candidate, policy domain.SourceURLPolicy) (domain.Observation, error) {
 	if u == nil || u.repository == nil || u.newID == nil || ctx == nil {
 		return domain.Observation{}, ErrInvalidRequest
 	}
 	sourceID = strings.TrimSpace(sourceID)
-	if sourceID == "" {
+	idempotencyKey = strings.TrimSpace(idempotencyKey)
+	if sourceID == "" || idempotencyKey == "" {
 		return domain.Observation{}, ErrInvalidRequest
 	}
 
@@ -55,6 +58,7 @@ func (u *IngestCandidate) Execute(ctx context.Context, sourceID string, candidat
 	candidate = domain.NormalizeCandidate(candidate, observedAt, candidate.QueryDimension)
 	observation := domain.Observation{
 		ID:             strings.TrimSpace(u.newID()),
+		IdempotencyKey: idempotencyKey,
 		SourceID:       sourceID,
 		ProviderCode:   candidate.ProviderCode,
 		QueryDimension: candidate.QueryDimension,
@@ -79,9 +83,12 @@ func (u *IngestCandidate) Execute(ctx context.Context, sourceID string, candidat
 		}
 	}
 
+	var persisted domain.Observation
 	err := u.repository.WithinIdentityTransaction(ctx, func(tx IdentityTransaction) error {
 		if len(credentials) == 0 {
-			return tx.AppendObservation(ctx, observation)
+			var appendErr error
+			persisted, appendErr = tx.AppendObservation(ctx, observation)
+			return appendErr
 		}
 
 		existing, err := tx.FindIdentityCredentials(ctx, sourceID, credentials)
@@ -121,12 +128,14 @@ func (u *IngestCandidate) Execute(ctx context.Context, sourceID string, candidat
 				}
 			}
 		}
-		return tx.AppendObservation(ctx, observation)
+		var appendErr error
+		persisted, appendErr = tx.AppendObservation(ctx, observation)
+		return appendErr
 	})
 	if err != nil {
 		return domain.Observation{}, errors.Join(ErrIdentityTransaction, err)
 	}
-	return observation, nil
+	return persisted, nil
 }
 
 func credentialsNotYetStored(candidates, existing []domain.IdentityCredential) []domain.IdentityCredential {
@@ -146,4 +155,16 @@ func credentialsNotYetStored(candidates, existing []domain.IdentityCredential) [
 		}
 	}
 	return result
+}
+
+// SameObservationPayload 判断同一幂等键的候选载荷是否一致；不比较生成 ID、采集时间和解析结果。
+func SameObservationPayload(a, b domain.Observation) bool {
+	aCandidate, bCandidate := a.Candidate, b.Candidate
+	aCandidate.ObservedAt = time.Time{}
+	bCandidate.ObservedAt = time.Time{}
+	return a.IdempotencyKey == b.IdempotencyKey &&
+		a.SourceID == b.SourceID &&
+		a.ProviderCode == b.ProviderCode &&
+		a.QueryDimension == b.QueryDimension &&
+		reflect.DeepEqual(aCandidate, bCandidate)
 }
