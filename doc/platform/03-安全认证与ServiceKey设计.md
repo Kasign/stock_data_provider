@@ -1,168 +1,90 @@
-# 安全认证与 Service Key 详细设计
+# 安全认证与 Service Key 设计
 
-## 1. 安全目标与威胁模型
+## 1. 目标与威胁模型
 
-保护服务间 API、平台管理 API 和敏感操作，防止未授权调用、权限越界、凭证泄露、身份伪造、重放和审计缺失。首期以当前单体/少量内部服务部署为前提，不建设完整 IAM。
+系统由单一所有者使用，但仍可能通过公网入口、反向代理或内部服务调用暴露 API。个人使用不等于可以省略认证。
 
-主要威胁：
-- 公网或不可信来源伪造内部服务请求。
-- 客户端伪造 X-Service-ID、X-User-ID 等身份 Header。
-- Service Key 泄露后被长期复用。
-- 认证通过但 Scope 过大造成横向越权。
-- Key 出现在日志、Trace、错误、URL、CI 输出或配置回显。
-- Key 轮换期间旧 Key 长期有效。
-- 管理 API 被误开放公网或错误地豁免认证。
+首期重点防止：
+- 未授权来源调用管理和研究写入接口；
+- 客户端伪造身份 Header；
+- Service Key 泄露后长期有效；
+- 凭证进入日志、错误或诊断输出；
+- 管理路由被错误地当作公开路由。
 
-## 2. 身份类型
+不建设完整用户中心、组织、租户、OAuth/OIDC 或动态权限策略引擎。
 
-| Principal Type | 用途 | 建立方式 |
+## 2. 首期身份模型
+
+只区分三种访问模式：
+
+| 模式 | 用途 | 建立方式 |
 |---|---|---|
-| user | 外部用户访问业务 API | 由实际用户认证系统或可信上游建立 |
-| admin | 平台敏感管理操作 | 独立管理会话/管理凭证 |
-| service | 服务到服务调用 | Service Key 认证成功后建立 |
-| provider | 外部 Provider 访问凭证 | 由 Provider Adapter 的 Secret 配置持有，不作为请求主体 |
-| job | 后台任务执行主体 | 从任务创建时可信保存的 Actor 快照恢复 |
+| anonymous | 明确允许公开的 liveness 等少数接口 | 路由显式白名单 |
+| owner | 所有者管理操作 | 独立管理凭证/可信管理入口；不得由普通 Service Key 冒充 |
+| service | 服务间调用 | Service Key 验证成功后建立 |
 
-Service Key 不可用于用户登录；Provider Token 不可用于内部服务认证；任务身份不得因异步执行丢失原始 Actor 和授权来源。
+暂不实现 user 注册/登录体系和 job 独立身份体系。后台任务保存创建来源、Request ID 和任务 ID，恢复执行时使用服务端记录，不接受客户端自报身份。
 
-## 3. Service Key 格式和存储
+## 3. Service Key
 
-建议明文格式包含可公开的 Key ID 和高熵 Secret，例如 sk_<环境标识>_<随机 Key ID>_<随机 Secret>。实际前缀和长度在实现前通过安全评审冻结。
+格式采用可区分 Key ID 和高熵 Secret 的不透明凭证。Secret 使用 crypto/rand 生成，至少 256 bit 随机熵。
 
-- Secret 使用 crypto/rand 生成，至少 256 bit 随机熵。
-- Key ID 用于索引凭证记录，不是认证秘密。
-- 数据库只保存 Secret 的 HMAC-SHA-256 摘要或经评审的不可逆摘要；若采用 HMAC，服务端 pepper 必须来自部署 Secret，不能与 DB 一起保存。
-- 使用常量时间比较。
-- 明文只在创建或轮换时返回一次，服务端不提供再次查看接口。
-- DB 唯一约束保证 Key ID 唯一；存储状态包括 active、disabled、revoked、expired。
-- 保存服务身份、环境、audience、scopes、创建者、创建时间、过期时间、最后使用时间和轮换关系。
-- 不记录完整 Key、Secret、Authorization Header 或摘要值到普通日志。
+存储要求：
+- 数据库只保存 Secret 摘要；若使用 HMAC，pepper 从部署 Secret 注入。
+- Key ID 唯一；摘要校验使用常量时间比较。
+- 明文仅创建/轮换时返回一次。
+- 保存 service_id、用途、权限、状态、创建时间、过期时间和轮换关系。
+- 日志、错误、诊断和管理列表不输出 Secret 或摘要。
+- 过期、禁用和撤销必须拒绝认证。
 
-## 4. 认证与授权流程
+首期不建设 Key 管理门户，不做复杂的缓存层。凭证数量很少时优先直接查 DB；只有性能测量证明有必要时才加缓存，并定义撤销传播上限。
 
-    Request
-      |
-    Extract credential
-      |
-    Validate format / Key ID
-      |
-    Load credential metadata
-      |
-    Verify digest in constant time
-      |
-    Check active / expiry / environment / audience
-      |
-    Build trusted Principal in request context
-      |
-    Route policy lookup
-      |
-    Scope authorization
-      |
-    Handler
+## 4. 授权模型
 
-认证失败统一返回不泄露凭证是否存在的错误。授权失败返回权限不足，不返回 Key 元数据。任何客户端传入的身份 Header 在认证前均不可信。
+首期采用少量固定权限组，避免把每个 URL 都设计成细粒度权限体系。建议初始权限：
+- `platform:admin`：所有者管理接口；
+- `data:read`：行情读取；
+- `data:diagnose`：行情诊断；
+- `research:run`：触发研究任务；
+- `research:read`：读取研究结果。
 
-## 5. Scope 设计原则
+实际启用前按路由矩阵裁剪。无权限、无凭证和未声明路由默认拒绝。权限字符串不支持通配符和隐式继承。
 
-Scope 以资源和动作表达，不按 URL 字符串随意拼接。建议首批：
+## 5. 路由访问策略
 
-- platform:diagnose:read
-- platform:service-key:read
-- platform:service-key:manage
-- platform:audit:read
-- data:read、data:diagnose
-- news:read、news:search、news:ingest
-- research:run、research:read
-- notification:send、notification:manage
+| 路由 | 访问要求 |
+|---|---|
+| liveness | 可匿名，仅返回进程存活 |
+| readiness | 受部署边界保护；只返回最小依赖状态 |
+| 普通业务读取 | 按实际是否对外开放，明确 owner/service |
+| 业务写入、研究任务 | owner 或具备对应权限的 service |
+| 管理和诊断明细 | owner；必要时允许指定 service 权限 |
 
-最终 Scope 必须以实际路由和操作矩阵冻结。一个 Key 只获得调用方完成工作所需的最小权限；不能默认赋予 platform:* 或所有业务 Scope。
+所有路由显式声明策略；未声明默认拒绝。不能通过 URL 前缀、内网 IP 或自定义身份 Header 绕过认证。
 
-## 6. 路由策略和 Middleware
+## 6. Key 生命周期
 
-每条路由必须声明访问策略：
+- 创建：生成 Key，保存摘要和元数据，明文仅返回一次。
+- 轮换：新旧 Key 可有短暂明确的过渡窗口；必须设置截止时间。
+- 禁用：可恢复的临时停用。
+- 撤销：不可恢复终态。
+- 过期：到期自动拒绝。
+- 撤销/禁用的生效时间必须有测试；首期直接 DB 校验优先于复杂缓存。
 
-| 路由类型 | 认证 | 授权 | 说明 |
-|---|---|---|---|
-| liveness | 可匿名 | 无 | 仅表示进程存活，不检查敏感依赖 |
-| readiness | 依部署边界 | 无或运维身份 | 仅返回最小依赖状态，不泄露连接信息 |
-| public business | user | 对应用户权限 | 明确标记公开，不默认开放 |
-| internal service | service | Scope | 服务间调用 |
-| admin management | admin | 管理 Scope | Service Key 管理、配置、审计 |
-| diagnostic detail | admin/service | diagnose Scope | 不向匿名调用方暴露内部错误细节 |
+若仅一个固定内部调用方，部署 Secret 注入可作为初始凭证来源；但跨服务长期使用前应纳入可轮换的 Service Key 机制，不把 Provider Token 复用为内部凭证。
 
-建议 Middleware 链：
-1. Request ID / Trace Context。
-2. Recovery。
-3. 请求体、Header、超时限制。
-4. 安全访问日志和敏感字段脱敏。
-5. Authentication。
-6. Authorization。
-7. Rate Limit / Concurrency Limit。
-8. Idempotency（适用写接口）。
-9. Handler。
+## 7. 管理入口与审计
 
-CORS 不是认证手段。内部路由不能仅因路径包含 internal/admin 就跳过认证。
+管理操作只允许 owner 身份。首期通过受保护的管理 API 或明确的部署操作完成 Key 创建、禁用、轮换和撤销，不建设用户管理 UI。
 
-## 7. Key 生命周期
+只审计敏感管理动作：凭证创建/轮换/禁用/撤销、权限变更和关键配置修改。记录主体、动作、对象 ID、结果、时间和 Request ID；不记录凭证明文或摘要。普通业务读取不做逐请求审计。
 
-### 创建
-- 管理员通过受保护的管理接口创建 Key。
-- 指定 service_id、environment、audience、scopes、expires_at。
-- 服务端生成 Key，保存摘要和元数据，返回一次性明文。
-- 创建动作写入审计记录。
+## 8. 失败策略与测试
 
-### 轮换
-- 创建新 Key，设置短期 overlap。
-- 调用方部署新 Key 并完成验证。
-- 观察新 Key 使用情况，确认旧 Key 不再被调用。
-- 撤销旧 Key，清除缓存并审计。
-- overlap 必须有明确截止时间，禁止无限期双 Key。
+- 凭证缺失、错误、过期、禁用、撤销：拒绝。
+- Key 存储不可用：受保护接口 fail-closed。
+- 权限缺失：拒绝，不自动提升权限。
+- 日志脱敏失败：禁止输出原始敏感内容。
+- 管理操作审计无法可靠写入：该敏感操作失败，不静默成功。
 
-### 禁用/撤销
-- disabled 可临时停用并允许管理员恢复；revoked 为不可恢复终态。
-- 过期 Key 不可认证。
-- 撤销应尽快传播；若有缓存，缓存 TTL 必须受安全要求限制。
-- Key 存储不可用且无有效可信缓存时 fail closed。
-
-## 8. 管理 API 契约草案
-
-实际路径由服务端集成阶段确定，以下是逻辑操作，不是已存在接口：
-
-| 操作 | 输入 | 输出 |
-|---|---|---|
-| 创建 | service_id、environment、audience、scopes、expires_at | credential_id、明文 key（一次） |
-| 列表 | 过滤条件、分页 | 元数据，不含 Secret/摘要 |
-| 详情 | credential_id | 元数据、状态和 last_used_at |
-| 禁用 | credential_id、reason | 新状态 |
-| 轮换 | credential_id、overlap_until | 新 Key 一次性明文和旧 Key 过渡状态 |
-| 撤销 | credential_id、reason | revoked 状态 |
-| 验证 | 内部诊断使用，不回显凭证 | 最小结果 |
-
-所有管理接口要求 admin 身份、对应 Scope 和审计；禁止通过普通业务 Service Key 管理其他 Key。
-
-## 9. 数据模型草案
-
-service_credentials：
-- id、key_id、secret_digest、service_id、environment、audience
-- status、scopes_json、expires_at、created_at、created_by
-- last_used_at、rotated_from_id、overlap_until、revoked_at、revoked_by
-
-约束：
-- key_id 唯一。
-- secret_digest 不可查询回明文。
-- scopes 结构化校验，不接受任意权限字符串。
-- last_used_at 更新应避免每次请求同步写 DB，可采用有界异步/批量策略，但不能因此影响撤销生效。
-- 审计事件与凭证生命周期写入同一可靠事务边界，或采用可恢复 Outbox。
-
-## 10. 安全失败策略
-
-- 认证配置缺失：受保护路由启动失败或拒绝所有请求。
-- Key Store 不可用：无有效缓存时拒绝；不能降级匿名。
-- Scope 缺失或无法解析：拒绝。
-- 审计写入失败：Key 创建、轮换、撤销等敏感操作失败关闭。
-- 日志脱敏失败：不得回退到原始敏感内容输出。
-- 外部代理身份头只有在可信代理边界内由代理覆盖后才可使用。
-
-## 11. 安全测试矩阵
-
-必须覆盖：有效 Key、无 Key、格式错误、未知 Key ID、Secret 错误、过期、禁用、撤销、环境不匹配、audience 不匹配、Scope 不足、身份 Header 伪造、大小写/空白绕过、路径编码、HTTP Method 绕过、并发撤销、缓存过期、Key Store 故障、审计故障、日志脱敏和轮换 overlap。
+测试覆盖有效/无效凭证、过期、撤销、权限不足、身份 Header 伪造、路由默认拒绝、日志脱敏和撤销生效。
