@@ -705,16 +705,16 @@ tbody tr:hover { background: rgba(79, 112, 135, .06); }
 /* Global readability pass: minimum 12px support text, 13px secondary copy. */
 body { font-size: var(--font-size-body-readable); line-height: var(--line-height-body); }
 
-.breadcrumb { font-size: var(--font-size-secondary) !important; }
-.environment-chip { font-size: var(--font-size-support) !important; }
-.page-subtitle { font-size: var(--font-size-secondary) !important; }
-.button { font-size: var(--font-size-control) !important; }
-.section-heading h2 span { font-size: var(--font-size-secondary) !important; }
-.section-heading p, .panel-heading p { font-size: var(--font-size-support) !important; }
-.text-button { font-size: 12px !important; }
-.task-facts small { font-size: 12px !important; }
-.task-facts strong { font-size: 13px !important; }
-.dialog-intro { font-size: 13px !important; }
+.breadcrumb { font-size: var(--font-size-secondary); }
+.environment-chip { font-size: var(--font-size-support); }
+.page-subtitle { font-size: var(--font-size-secondary); }
+.button { font-size: var(--font-size-control); }
+.section-heading h2 span { font-size: var(--font-size-secondary); }
+.section-heading p, .panel-heading p { font-size: var(--font-size-support); }
+.text-button { font-size: 12px; }
+.task-facts small { font-size: 12px; }
+.task-facts strong { font-size: 13px; }
+.dialog-intro { font-size: 13px; }
 
 .field input, .field select, .field textarea, .recent-analysis-search input { font-size: var(--font-size-input); }
 .button { font-size: 13px; }
