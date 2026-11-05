@@ -1969,3 +1969,11 @@ JSR-6L 补充：连接配置变更取消草稿检查后，旧代际 finally 按�
 - [x] 将三处断言改为验证对应语义 token 与字号声明，不再将 !important 当成实现契约。
 - [x] 不修改 CSS 运行样式，不扩大本轮样式优先级清理范围。
 - [ ] 修正后的 WebUI Checks 和当前 Browser Smoke 仍需 CI 结果确认。
+
+## 2026-11-05 移动导航截图测试交互修正
+
+首次运行新增移动导航展开截图时，Chromium Browser Smoke 在截图后尝试再次点击菜单按钮关闭导航，因菜单展开后遮罩层覆盖按钮而超时。实际交互设计是点击遮罩关闭导航。
+
+- [x] 将测试关闭动作改为点击 #mobile-nav-overlay，与产品实际交互一致。
+- [x] 保留 aria-expanded=true/false 状态等待，验证打开与关闭均完成。
+- [ ] 修正后的 Browser Smoke 及 WebUI Checks 需等待新提交 CI 结果。

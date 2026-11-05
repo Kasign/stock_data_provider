@@ -1692,7 +1692,7 @@ try {
         fullPage: false,
         animations: "disabled"
       });
-      await menu.click();
+      await page.locator("#mobile-nav-overlay").click();
       await page.waitForFunction(() => document.querySelector("#mobile-menu-toggle")?.getAttribute("aria-expanded") === "false");
     }
     for (const entry of viewNavigation) {
