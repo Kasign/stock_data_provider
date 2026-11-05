@@ -571,3 +571,14 @@ app.js 继续拥有筛选条件和结果快照、`isCurrentScreeningSnapshot`、
 | `chart.js` | 日 K 归一化、技术指标和 SVG 图表构建 | 已是独立图表领域模块，不重复拆分 |
 
 本轮审查没有迁移运行时代码。后续只有在出现可独立测试、参数边界稳定且不接管请求/页面状态的纯计算或 DOM builder 时才实施拆分；不以文件长度或函数长度作为拆分依据。
+
+
+### 12.24 JSR-6D 通用区块导航交互模块
+
+新增 `section-navigation.js`，导出 `setupSectionNavigation({ document, window, IntersectionObserver, linkSelector, dataKey })`。模块负责一组区块链接的点击定位、减少动态效果偏好、目标标题键盘焦点和 IntersectionObserver 导航高亮。
+
+该模块被设置页和个股研究页共用，分别使用既有 `[data-settings-target]` / `settingsTarget` 与 `[data-research-detail-target]` / `researchDetailTarget`。app.js 只负责传入依赖和初始化，不再保留通用区块导航实现。模块不访问全局 state、localStorage、API 或 app 内部函数。
+
+页面级路由 `setView`、hashchange、移动端导航、全局 Escape/Tab 处理和业务事件仍由 app.js 持有；本次只迁移闭合的区块导航行为，不改变页面状态和业务请求。
+
+单测覆盖导航点击后的滚动/焦点/aria-current、减少动态效果、目标缺失安全退出，以及根据全部可见目标重算当前高亮。最终验收：WebUI Checks #41949111706（455/455 tests、语法、Compose、镜像构建通过）；Chromium Browser Smoke #41949111694（所有步骤通过）。

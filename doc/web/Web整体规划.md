@@ -1,6 +1,6 @@
 # WebUI 整体规划
 
-更新时间：2026-11-05（当前代码基线：`98ad08b4bedd53294c7923a4752b38509d86d423`；JSR-6B 验收证据对应此提交）
+更新时间：2026-11-05（当前代码/测试基线：`581f4bddc1d8eaa3eaa2241b4eb571502c1f9ff2`）
 目标分支：`feat/webui-market-data-console`
 适用范围：仅规划和管理 WebUI（`web/**`）及其专属文档（`doc/web/**`）。除明确获批的文档路径修正外，不修改 Go、Provider、数据库、服务端 API、OpenAPI 实现和部署配置。
 
@@ -1050,3 +1050,21 @@ app.js 的 `renderTaskResult` 同时承担两类职责：更新当前 Run 状态
 
 下一步：对 app.js 剩余全局事件、页面切换和跨业务域协调进行一次职责盘点；只迁移可验证的纯逻辑或闭合 DOM 行为，不迁移状态所有权、请求生命周期和跨页事务。真实 Provider 联调仍以数据侧可用环境和真实凭据为前提，不使用模拟响应代替验收。
 
+
+
+### 2026-11-05 JSR-6D：通用区块导航 DOM 交互模块（已验收）
+
+将 app.js 内闭合的 `bindSectionNavigation` 迁入 `section-navigation.js`，供设置页和个股研究页共用。模块通过参数接收 document、window、IntersectionObserver、链接选择器和数据属性名，负责导航点击、平滑/减少动态效果滚动、键盘焦点移动，以及基于全部可见区块位置更新当前导航高亮。
+
+app.js 仅负责两处初始化装配；页面路由 `setView`、hashchange、全局键盘/移动端导航、业务事件及跨页状态仍由 app.js 管理。模块不访问 app state、localStorage 或 API。
+
+- [x] 新增 `section-navigation.js`，不改变设置页和研究页现有导航选择器及 data 属性。
+- [x] 新增单测覆盖点击滚动/焦点、高亮、减少动态效果、目标缺失和 IntersectionObserver 可见区块选择。
+- [x] 更新 UI contract：导航行为检查改为验证新模块职责，不再要求实现留在 app.js。
+- [x] WebUI Checks #41949111706 通过：455/455 tests、语法检查、Compose 校验和 Nginx 镜像构建通过。
+- [x] Chromium Browser Smoke #41949111694 通过：设置、研究记录、告警、自选股、Run Flow、个股研究、数据中心、选股及全市场分页回归全部通过。
+- [x] 实施提交：`c6f3ef778aa9e76a01da6dfa1f7da9143a9bb631`；契约修正提交：`581f4bddc1d8eaa3eaa2241b4eb571502c1f9ff2`。
+
+首轮 WebUI Checks 的 455 项测试中有 1 项失败，原因是原 UI contract 仍检查 app.js 内联函数；已改为检查 `section-navigation.js` 的真实行为边界。修正后的最终提交对应 455/455 全通过。首轮失败记录保留，不作为最终验收依据。
+
+下一步：盘点 app.js 剩余页面初始化和全局事件绑定，区分真正闭合的 DOM 行为与依赖全局状态/事务的协调入口；不迁移 `setView`、storage event 总路由、连接配置应用或 Task/Run 请求生命周期。

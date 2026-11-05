@@ -1574,3 +1574,15 @@ CI 复核记录：本批首次 Chromium Browser Smoke 在个股研究数据质�
 - [x] 复核 `stock-research.js` 多面板的标的身份校验、generation、AbortController、格式化与展示边界；不创建 Controller。
 - [x] 确认 `chart.js` 已独立负责指标计算与 SVG 构建。
 - [x] 本轮无运行时代码变更；未发现收益足以抵消参数耦合与回归风险的拆分点。
+
+
+## 2026-11-05 JSR-6D：通用区块导航 DOM 交互模块（已验收）
+
+- [x] 设置页和个股研究页共用的区块导航交互迁入 `section-navigation.js`。
+- [x] app.js 仅保留模块装配；页面路由、hashchange、全局键盘与移动端导航仍由 app.js 管理。
+- [x] 单测覆盖滚动定位、键盘焦点、aria-current、高亮、减少动态效果、目标缺失和 IntersectionObserver。
+- [x] UI contract 改为验证新模块行为边界；不再锁定 app.js 内联函数。
+- [x] WebUI Checks #41949111706：455/455 tests、语法检查、Compose 校验和 Nginx 镜像构建通过。
+- [x] Chromium Browser Smoke #41949111694：所有浏览器步骤通过。
+- [x] 实施提交 `c6f3ef778aa9e76a01da6dfa1f7da9143a9bb631`；最终契约修正提交 `581f4bddc1d8eaa3eaa2241b4eb571502c1f9ff2`。
+- [x] 首轮静态契约失败已修正；最终提交的全量测试和浏览器回归均通过。
