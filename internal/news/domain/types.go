@@ -4,18 +4,18 @@ import "time"
 
 // Candidate 保留搜索 Provider 实际返回的事实，不将发布者身份等同于 Provider 身份。
 type Candidate struct {
-	ProviderCode       string
-	ProviderItemID     string
-	PublisherName      string
-	PublisherDomain    string
-	Title              string
-	Summary            string
-	RawURL             string
-	PublishedAtRaw     string
-	PublishedAt        *time.Time
-	ObservedAt         time.Time
-	QueryDimension     string
-	MissingFields      []string
+	ProviderCode    string
+	ProviderItemID  string
+	PublisherName   string
+	PublisherDomain string
+	Title           string
+	Summary         string
+	RawURL          string
+	PublishedAtRaw  string
+	PublishedAt     *time.Time
+	ObservedAt      time.Time
+	QueryDimension  string
+	MissingFields   []string
 }
 
 // SearchRequest 描述一次 Provider 查询；凭证和 endpoint 不由外部请求控制。
@@ -37,13 +37,14 @@ const (
 
 // ProviderOutcome 不把 Provider 部分失败压缩成一个全局 error。
 type ProviderOutcome struct {
-	ProviderCode string
-	Status       ProviderStatus
+	ProviderCode   string
+	QueryDimension string
+	Status         ProviderStatus
 	CandidateCount int
-	ErrorCode    string
-	Retryable    bool
-	Duration     time.Duration
-	ObservedAt   time.Time
+	ErrorCode      string
+	Retryable      bool
+	Duration       time.Duration
+	ObservedAt     time.Time
 }
 
 // SearchStatus 表示一次搜索的聚合状态。
@@ -59,7 +60,8 @@ const (
 
 // SearchResult 同时保留候选和每个 Provider 的执行结果。
 type SearchResult struct {
-	Status    SearchStatus
-	Candidates []Candidate
-	Outcomes  []ProviderOutcome
+	Status      SearchStatus
+	FailureCode string
+	Candidates  []Candidate
+	Outcomes    []ProviderOutcome
 }

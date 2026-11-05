@@ -1,6 +1,6 @@
 # 新闻模块专项文档
 
-> 状态：N1-A 内部架构、平台契约对齐及跨文档 Review 已完成，等待用户最终确认；确认后进入 N2  
+> 状态：N1-A 已评审确认；N2 首批 Domain/Application/Provider Adapter 已实现并进入验证阶段  
 > 开发分支：`feat/research-news-ingestion`  
 > 基线分支：`feat/full-go-data-providers-api-switch`
 
@@ -32,14 +32,14 @@
 - [x] 创建独立开发分支
 - [x] 建立专项设计文档骨架
 - [x] N1-A：完成新闻领域模型、时间/身份/版本/关联证据、Provider 与 Application 契约及跨文档内部评审
-- [ ] N2：实现根模块独立领域模型与原生搜索 Provider Adapter
+- [x] N2 首批：Domain、Application Port、Bocha/Tavily/Brave/SearXNG Adapter 与 fake 测试代码已提交；完整验证仍待执行
 - [ ] N3：实现来源采集、正文解析和标准化
 - [ ] N4：实现身份识别、去重、版本和证券关联业务规则
 - [ ] N5：按冻结契约接入 Config/Secret、Logger/Error/Trace、HTTP Client
 - [ ] N6：公共存储能力就绪后实现新闻自有 Repository/SQL/Migration；Redis 按需
 - [ ] N7：接入公共 Diagnostics；Task/Audit/Metrics 按真实需求评估
 - [ ] N8：完成 News 与公共平台集成验收
-- [ ] 等待用户最终评审并确认 N1-A；确认后进入 N2
+- [x] N1-A 用户评审确认；已进入 N2
 
 ## 公共平台协作说明
 
@@ -59,7 +59,7 @@ N1 已追加核对固定旧 Python 上游的三类新闻/情报持久化对象�
 
 ### N1-A 最终收口（2026-11-05）
 
-已完成旧 Python 主要调用链和历史表语义盘点、证券主数据核验、Provider/来源公开条款首轮核查、领域模型与 Application 契约设计。平台分支已接受 News 提出的 SSRF、Diagnostics、Fault 三项契约意见（平台 HEAD `98f561e`）；PLAT-002 仍待正式冻结，PLAT-008 尚需实现和安全测试。未获明确许可的来源保持 pending/restricted。N1-A 当前等待用户最终评审确认。
+已完成旧 Python 主要调用链和历史表语义盘点、证券主数据核验、Provider/来源公开条款首轮核查、领域模型与 Application 契约设计。平台分支已接受 News 提出的 SSRF、Diagnostics、Fault 三项契约意见（平台 HEAD `98f561e`）；PLAT-002 仍待正式冻结，PLAT-008 尚需实现和安全测试。未获明确许可的来源保持 pending/restricted。N1-A 已经用户评审确认；N2 已启动，首批代码已提交，测试执行仍待验证。
 
 ## N1 已确认的架构决策（2026-11-05）
 

@@ -13,6 +13,21 @@ var (
 	ErrProviderConfig = errors.New("news: invalid provider configuration")
 )
 
+// ProviderError 表达 Provider 层可安全透传的业务错误分类。
+// Retryable 仅是技术重试候选，不代表 Application 会自动重试。
+type ProviderError struct {
+	Code      string
+	Retryable bool
+	Skipped   bool
+}
+
+func (e *ProviderError) Error() string {
+	if e == nil || e.Code == "" {
+		return "news: provider request failed"
+	}
+	return "news: provider " + e.Code
+}
+
 // HTTPDoer 是窄传输端口；生产 Client 由公共平台在后续阶段注入。
 type HTTPDoer interface {
 	Do(*http.Request) (*http.Response, error)

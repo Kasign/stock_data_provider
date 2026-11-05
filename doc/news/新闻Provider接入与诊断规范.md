@@ -186,3 +186,18 @@ Provider 输出策略必须在缓存和持久化之前执行。Brave 只允许�
 - 平台契约未明确 DNS/IP/Redirect 安全钩子前，不执行任意来源真实抓取；固定样本解析和 fake Transport 测试不受此限制。
 - News 业务质量状态和 Platform Diagnostics 状态分开保留。News Check Adapter 只把领域结果作为受控摘要/Reason Code 映射给公共 Runner，不把新闻正文、Provider snippet、原始响应或 Secret 放入 Check Attributes。
 - 平台 failed 表示 Check 执行器/实现自身异常；新闻内容 invalid 应作为领域质量结果呈现，不得伪装为 Check 内部失败。
+
+
+## 15. N2 首批 Provider Adapter 实施状态（2026-11-05）
+
+根模块 `internal/news/adapters/provider` 已建立 Bocha、Tavily、Brave News、SearXNG 的首版协议 Adapter，统一通过 Application 定义的窄 HTTPDoer 注入传输能力。
+
+- Bocha：使用 Bearer 鉴权；仅接受响应业务码 200；保留原始 item ID、siteName、siteDomain（仅当 Provider 明确返回）及 datePublished 原文。
+- Tavily：使用 Authorization Bearer Header；请求 news topic 和基础搜索深度；保留 published_date 原文。日期只有日粒度且无时区时，不强行转换为精确时间点。
+- Brave News：使用 X-Subscription-Token；published_date 才作为发布时间候选；page_age 不作为发布时间。
+- SearXNG：只支持显式配置实例；保留 Provider 身份和原始时间字段，不把 engine 名称当作发布者。
+- 所有 Adapter 保留 provider_code；publisher_name/publisher_domain 与 Provider 身份分离。publisher_domain 不从结果 URL 推断。
+- 未知时间原文为空时保持未知；可解析的 RFC3339 时间才填充 PublishedAt，其他格式保留原文供后续标准化阶段处理。
+- HTTPDoer 由外部注入；当前没有生产 HTTP Client、连接池、通用重试器、通用限流器、跨请求缓存或真实网络验收。传输层响应大小、Deadline、TLS、重定向和 DNS/IP 安全由公共平台能力负责。
+
+当前已有 fake Transport 测试代码覆盖各 Provider 的基本字段/鉴权语义、429 Retryable 候选、响应结构错误路径等；测试尚未执行，不得据此报告编译或 CI 通过。
