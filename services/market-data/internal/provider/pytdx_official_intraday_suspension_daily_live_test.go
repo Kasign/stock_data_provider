@@ -28,7 +28,9 @@ type pytdxOfficialSuspensionDailyItem struct {
 	Amount         *float64 `json:"amount,omitempty"`
 	Status         string   `json:"status"`
 	Error          string   `json:"error,omitempty"`
-}// TestLivePytdxOfficialIntradaySuspensionDailyBars verifies that public daily
+}
+
+// TestLivePytdxOfficialIntradaySuspensionDailyBars verifies that public daily
 // K-line endpoints return a full-day candle for exchange-announced intraday
 // suspensions. It deliberately does not call Tushare or consume API credits.
 func TestLivePytdxOfficialIntradaySuspensionDailyBars(t *testing.T) {
