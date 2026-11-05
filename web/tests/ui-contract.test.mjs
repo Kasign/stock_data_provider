@@ -1314,6 +1314,12 @@ test("market overview and activity use readable secondary text and touch-sized c
   assert.match(finalCssRuleBody(".market-index-identity small"), /font-size: 12px/);
   assert.match(finalCssRuleBody(".market-index-changes span"), /font-size: 12px/);
   assert.match(finalCssRuleBody(".market-widget-meta"), /font-size: 12px/);
+  const stockResearchFootnoteBase = baseCssDeclarationBlock(".stock-research-footnote");
+  assert.match(stockResearchFootnoteBase, /font-size:\s*12px\s*;/);
+  assert.match(stockResearchFootnoteBase, /line-height:\s*1\.65\s*;?/);
+  assert.match(stockResearchFootnoteBase, /margin:\s*9px 0 0\s*;/);
+  assert.match(stockResearchFootnoteBase, /color:\s*var\(--text-dim\)\s*;/);
+  assert.doesNotMatch(stylesheet, /market-widget-meta,[\\s\\S]{0,120}stock-research-footnote/);
   assert.match(finalCssRuleBody(".market-breadth-metric small"), /font-size: 12px/);
   assert.match(finalCssRuleBody(".market-table-primary"), /font-size: 12px/);
   assert.match(finalCssRuleBody(".market-table-secondary"), /font-size: 12px/);

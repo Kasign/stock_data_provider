@@ -2115,8 +2115,8 @@ button:disabled, input:disabled, select:disabled, textarea:disabled { cursor: no
 .stock-research-footnote {
   margin:9px 0 0;
   color:var(--text-dim);
-  font-size:10px;
-  line-height:1.6
+  font-size:12px;
+  line-height:1.65
 }
 .stock-announcement-list {
   display:grid;
@@ -3399,8 +3399,7 @@ body {
 .query-hint,
 .field-hint,
 .supplemental-feedback,
-.market-widget-meta,
-.stock-research-footnote {
+.market-widget-meta {
   font-size: 12px;
   line-height: 1.65;
 }
