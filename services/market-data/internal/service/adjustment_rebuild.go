@@ -18,9 +18,9 @@ func rebuildAdjustedDailyBars(raw []model.DailyBar, factors []model.AdjustmentFa
 	}
 
 	type factorKey struct {
-		source string
+		source  string
 		version string
-		basis model.AdjustmentFactorBasis
+		basis   model.AdjustmentFactorBasis
 	}
 	groups := make(map[factorKey]map[string]model.AdjustmentFactor)
 	for _, factor := range factors {

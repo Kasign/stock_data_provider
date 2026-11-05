@@ -16,10 +16,15 @@ func TestRebuildAdjustedDailyBarsPrefersMatchingFactorBasis(t *testing.T) {
 	}
 	factor := func(date string, value float64, factorBasis model.AdjustmentFactorBasis) model.AdjustmentFactor {
 		return model.AdjustmentFactor{
-			Symbol: "600036.SH", TradeDate: date, Factor: value, Basis: factorBasis,
-			Source: "baostock", SourceVersion: "baostock-test-v1",
-			AvailableAt: &available, SystemObservedAt: &observed,
-			QualityStatus: model.QualityValid,
+			Symbol:           "600036.SH",
+			TradeDate:        date,
+			Factor:           value,
+			Basis:            factorBasis,
+			Source:           "baostock",
+			SourceVersion:    "baostock-test-v1",
+			AvailableAt:      &available,
+			SystemObservedAt: &observed,
+			QualityStatus:    model.QualityValid,
 		}
 	}
 	factors := []model.AdjustmentFactor{
@@ -47,9 +52,14 @@ func TestRebuildAdjustedDailyBarsKeepsSharedFactorFallback(t *testing.T) {
 	observed := available.Add(time.Hour)
 	raw := []model.DailyBar{{Symbol: "600036.SH", TradeDate: "2025-07-01", Open: 10, High: 10, Low: 10, Close: 10}}
 	factors := []model.AdjustmentFactor{{
-		Symbol: "600036.SH", TradeDate: "2025-07-01", Factor: 2,
-		Source: "tushare", SourceVersion: "tushare-test-v1",
-		AvailableAt: &available, SystemObservedAt: &observed, QualityStatus: model.QualityValid,
+		Symbol:           "600036.SH",
+		TradeDate:        "2025-07-01",
+		Factor:           2,
+		Source:           "tushare",
+		SourceVersion:    "tushare-test-v1",
+		AvailableAt:      &available,
+		SystemObservedAt: &observed,
+		QualityStatus:    model.QualityValid,
 	}}
 	got, err := rebuildAdjustedDailyBars(raw, factors, model.AdjustmentForward, "2025-07-01")
 	if err != nil { t.Fatal(err) }
