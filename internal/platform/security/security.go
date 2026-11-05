@@ -69,6 +69,9 @@ func (r *Router) Handle(pattern string, authenticator *Authenticator, policy Rou
 	if r == nil || r.mux == nil || authenticator == nil || handler == nil || !policy.valid() {
 		return errors.New("route, authenticator, handler and explicit access policy are required")
 	}
+	if isRootCatchAllPattern(pattern) {
+		return errors.New("root catch-all routes are not allowed; register explicit route patterns")
+	}
 	defer func() {
 		if recovered := recover(); recovered != nil {
 			err = errors.New("route pattern is invalid or already registered")
@@ -76,6 +79,17 @@ func (r *Router) Handle(pattern string, authenticator *Authenticator, policy Rou
 	}()
 	r.mux.Handle(pattern, Guard(authenticator, policy, handler))
 	return nil
+}
+
+// isRootCatchAllPattern rejects ServeMux root patterns that would capture every
+// otherwise-unmatched path, bypassing the router's intended default 404 boundary.
+func isRootCatchAllPattern(pattern string) bool {
+	parts := strings.Fields(pattern)
+	if len(parts) == 0 {
+		return false
+	}
+	route := parts[len(parts)-1]
+	return route == "/" || (strings.HasSuffix(route, "/") && strings.Count(route, "/") == 1)
 }
 
 // HandleFunc registers a handler function with an explicit access policy.

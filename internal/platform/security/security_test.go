@@ -257,6 +257,29 @@ func TestRouterRequiresExplicitPolicyAndDefaultsUnknownRoutesToNotFound(t *testi
 	}
 }
 
+func TestRouterRejectsRootCatchAllPatterns(t *testing.T) {
+	auth := newTestAuthenticator(t)
+	for _, pattern := range []string{"/", "GET /", "example.com/", "GET example.com/"} {
+		router := NewRouter()
+		if err := router.Handle(pattern, auth, AnonymousAccess(), http.HandlerFunc(func(http.ResponseWriter, *http.Request) {})); err == nil {
+			t.Errorf("pattern %q must not register a root catch-all route", pattern)
+		}
+	}
+
+	// An exact root route remains valid and does not capture other paths.
+	router := NewRouter()
+	if err := router.Handle("GET /{$}", auth, AnonymousAccess(), http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	})); err != nil {
+		t.Fatalf("exact root route should be allowed: %v", err)
+	}
+	response := httptest.NewRecorder()
+	router.Handler().ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/other", nil))
+	if response.Code != http.StatusNotFound {
+		t.Fatalf("unregistered path status=%d, want 404", response.Code)
+	}
+}
+
 func TestRouterRejectsDuplicatePatterns(t *testing.T) {
 	auth := newTestAuthenticator(t)
 	router := NewRouter()
