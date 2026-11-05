@@ -7,7 +7,7 @@
 
 Research 负责 Context、Evidence、Event、Claim、Hypothesis、Scenario 等研究语义模型。News 负责采集/原文/去重/检索；Data 负责行情/财务/PIT；Quant 负责数值计算。Research 不依赖 Quant 或 Researchflow。
 
-目标结构：
+设计文档：[01-研究领域模型与证据体系](01-研究领域模型与证据体系.md)。\n\n目标结构：
 ```text
 internal/research/
   context/ evidence/ event/ claim/ hypothesis/ scenario/

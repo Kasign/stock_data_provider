@@ -7,7 +7,7 @@
 
 只负责 Go 侧模型服务协议适配，复用现有独立模型服务；不重建推理 Gateway，不管理研究状态机、工具权限或业务结论。
 
-目标结构：
+设计文档：[01-模型适配与工具边界设计](01-模型适配与工具边界设计.md)。\n\n目标结构：
 ```text
 internal/llm/
   adapter/ protocol/ output/ streaming/

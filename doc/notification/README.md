@@ -7,7 +7,7 @@
 
 独立通知业务模块，可供 Researchflow 和其他模块调用。负责 Subscription、Template、Channel、Dispatcher、Delivery、Attempt、幂等、重试和投递诊断；不计算业务告警条件，不依赖 Researchflow 内部实现。
 
-目标结构：
+设计文档：[01-通知领域与投递设计](01-通知领域与投递设计.md)。\n\n目标结构：
 ```text
 internal/notification/
   domain/ application/ delivery/ channels/ persistence/ diagnostics/
