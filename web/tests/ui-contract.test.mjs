@@ -2793,7 +2793,7 @@ test("UIR-2 行情质量标记与指标辅助文字由组件基础规则控制",
   assert.doesNotMatch(stylesheet, /\.quality-pill \{[^}]*!important/);
   assert.doesNotMatch(stylesheet, /\.metric-label \{[^}]*!important/);
   assert.doesNotMatch(stylesheet, /\.metric-foot \{[^}]*!important/);
-  assert.doesNotMatch(stylesheet, /\.panel-heading p \{[^}]*!important/);
+  assert.match(stylesheet, /\.section-heading p, \.panel-heading p \{ font-size: var\(--font-size-support\) !important; \}/);
   assert.match(stylesheet, /\.quality-valid \{[^}]*color:[^}]*background:/);
   assert.match(stylesheet, /\.quality-degraded \{[^}]*color:[^}]*background:/);
   assert.match(stylesheet, /\.quality-stale \{[^}]*color:[^}]*background:/);

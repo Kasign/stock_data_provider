@@ -1591,3 +1591,8 @@ JSR-6L 补充：连接配置变更取消草稿检查后，旧代际 finally 按�
 复核行情质量标记、指标卡片标签和指标辅助信息。三个组件原始字号分别为 10px、10px、9px，最终显示值由全局可读性规则的 `!important` 强制覆盖为 12px；将最终字号迁回组件基础规则并删除三条重复覆盖。同时移除全局区段中重复声明的 `.panel-heading p` 字号覆盖，该选择器已包含在前一条 `.section-heading p, .panel-heading p` 规则中，且两者目标字号一致。
 
 保留质量状态的正常/降级/过期/无效语义颜色、指标卡片窄屏双列布局、指标值字号与省略行为。新增 UI contract 锁定三组基础字号、无强制优先级和状态颜色。第四十三批提交 `8dcbb2b9229aa98fe7861e63b1e7bb5e278e5c1d` 的 WebUI Checks #41991208882 与 Chromium Browser Smoke #41991208879 均通过。
+
+
+#### 第四十四批 CI 失败原因与修正
+
+第四十四批首次 WebUI Checks 的 JavaScript 语法检查、Compose 校验均通过，485 项单元测试中 484 项通过。唯一失败来自新增 UI contract：测试误将仍然有效的组合选择器 `.section-heading p, .panel-heading p` 当作被删除的独立规则。实际 CSS 中组合规则仍保留，删除的是重复的独立覆盖。已将断言修正为验证组合规则保留，不修改 CSS 行为。Browser Smoke 已通过；修正后的最终提交需重新以精确 SHA 验证。
