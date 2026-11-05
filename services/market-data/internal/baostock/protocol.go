@@ -21,8 +21,10 @@ const (
 	messageLogoutRequest     = "02"
 	messageLogoutResponse    = "03"
 	messageException         = "04"
-	messageTradeDateRequest  = "33"
-	messageTradeDateResponse = "34"
+	messageTradeDateRequest         = "33"
+	messageTradeDateResponse        = "34"
+	messageAdjustmentFactorRequest  = "15"
+	messageAdjustmentFactorResponse = "16"
 	messageHistoryRequest    = "95"
 	messageCompressed        = "96"
 )

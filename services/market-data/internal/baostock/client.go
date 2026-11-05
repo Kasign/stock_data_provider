@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"net"
 	"strconv"
 	"strings"
@@ -21,6 +22,7 @@ const (
 	defaultPageSize  = 10000
 	maxQueryRows     = 100000
 	dailyKLineFields = "date,code,open,high,low,close,preclose,volume,amount,adjustflag,turn,tradestatus,pctChg,isST"
+	adjustmentFactorFields = "code,dividOperateDate,foreAdjustFactor,backAdjustFactor,adjustFactor"
 )
 
 // Config controls the BaoStock TCP session. The anonymous credentials are the
@@ -57,6 +59,14 @@ type DailyKLine struct {
 type TradeDate struct {
 	Date         string
 	IsTradingDay bool
+}
+
+type AdjustmentFactor struct {
+	Code             string
+	OperateDate      string
+	ForwardFactor    float64
+	BackwardFactor   float64
+	AdjustmentFactor float64
 }
 
 // QuarterlyFinancialRecord stores one BaoStock financial row without changing numeric scale.
@@ -431,6 +441,161 @@ func (c *Client) QueryTradeDates(ctx context.Context, startDate, endDate string)
 		}
 	}
 	return nil, errors.New("BaoStock exceeded maximum 100-page trading-calendar query limit")
+}
+
+// QueryAdjustmentFactors retrieves BaoStock's date-effective forward/backward adjustment factors.
+func (c *Client) QueryAdjustmentFactors(ctx context.Context, code, startDate, endDate string) ([]AdjustmentFactor, error) {
+	code = strings.ToLower(strings.TrimSpace(code))
+	parts := strings.Split(code, ".")
+	if len(parts) != 2 || (parts[0] != "sh" && parts[0] != "sz") || len(parts[1]) != 6 {
+		return nil, fmt.Errorf("invalid BaoStock adjustment-factor security code %q", code)
+	}
+	if _, err := time.Parse("2006-01-02", startDate); err != nil {
+		return nil, fmt.Errorf("invalid BaoStock adjustment-factor start date %q", startDate)
+	}
+	if _, err := time.Parse("2006-01-02", endDate); err != nil {
+		return nil, fmt.Errorf("invalid BaoStock adjustment-factor end date %q", endDate)
+	}
+	if startDate > endDate {
+		return nil, errors.New("BaoStock adjustment-factor start date must not be after end date")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := c.acquire(ctx); err != nil {
+		return nil, err
+	}
+	defer c.release()
+	if err := c.ensureLoggedInLocked(ctx); err != nil {
+		return nil, err
+	}
+
+	rows := make([]AdjustmentFactor, 0, 32)
+	seen := make(map[string]struct{})
+	for pageNumber := 1; pageNumber <= 100; pageNumber++ {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		requestBody := strings.Join([]string{
+			"query_adjust_factor", c.userID, strconv.Itoa(pageNumber),
+			strconv.Itoa(defaultPageSize), code, startDate, endDate,
+		}, messageSplit)
+		messageType, responseBody, err := c.exchangeLocked(ctx, messageAdjustmentFactorRequest, requestBody)
+		if err != nil {
+			return nil, fmt.Errorf("BaoStock adjustment-factor page %d: %w", pageNumber, err)
+		}
+		if messageType == messageException {
+			return nil, protocolExceptionError(responseBody)
+		}
+		if messageType != messageAdjustmentFactorResponse {
+			c.dropConnectionLocked()
+			return nil, fmt.Errorf("unexpected BaoStock adjustment-factor response type %q", messageType)
+		}
+		page, err := parseAdjustmentFactorPage(responseBody, c.userID, code, startDate, endDate)
+		if err != nil {
+			c.dropConnectionLocked()
+			return nil, fmt.Errorf("decode BaoStock adjustment-factor page %d: %w", pageNumber, err)
+		}
+		if page.errorCode != "0" {
+			return nil, fmt.Errorf("BaoStock adjustment-factor query rejected: code=%s message=%s", page.errorCode, page.errorMessage)
+		}
+		for _, row := range page.rows {
+			if _, exists := seen[row.OperateDate]; exists {
+				return nil, fmt.Errorf("BaoStock returned duplicate adjustment-factor date %s", row.OperateDate)
+			}
+			if len(rows) > 0 && row.OperateDate <= rows[len(rows)-1].OperateDate {
+				return nil, fmt.Errorf("BaoStock adjustment-factor rows are duplicate or unsorted at %s", row.OperateDate)
+			}
+			seen[row.OperateDate] = struct{}{}
+			rows = append(rows, row)
+		}
+		if len(rows) > maxQueryRows {
+			return nil, fmt.Errorf("BaoStock adjustment-factor query exceeded safety row limit %d", maxQueryRows)
+		}
+		pageSize := page.pageSize
+		if pageSize <= 0 {
+			pageSize = defaultPageSize
+		}
+		if len(page.rows) < pageSize {
+			return rows, nil
+		}
+	}
+	return nil, errors.New("BaoStock exceeded maximum 100-page adjustment-factor query limit")
+}
+
+type adjustmentFactorPage struct {
+	errorCode    string
+	errorMessage string
+	pageSize     int
+	rows         []AdjustmentFactor
+}
+
+func parseAdjustmentFactorPage(body, userID, code, startDate, endDate string) (adjustmentFactorPage, error) {
+	parts := strings.Split(body, messageSplit)
+	if len(parts) < 2 {
+		return adjustmentFactorPage{}, errors.New("adjustment-factor response has fewer than two status fields")
+	}
+	page := adjustmentFactorPage{errorCode: parts[0], errorMessage: parts[1]}
+	if page.errorCode != "0" {
+		return page, nil
+	}
+	if len(parts) < 11 {
+		return adjustmentFactorPage{}, fmt.Errorf("successful adjustment-factor response has only %d fields", len(parts))
+	}
+	if parts[2] != "query_adjust_factor" || parts[3] != userID || strings.TrimSpace(parts[7]) != code ||
+		strings.TrimSpace(parts[8]) != startDate || strings.TrimSpace(parts[9]) != endDate {
+		return adjustmentFactorPage{}, errors.New("adjustment-factor response metadata mismatch")
+	}
+	page.pageSize, _ = strconv.Atoi(strings.TrimSpace(parts[5]))
+	if !equalFields(strings.Split(parts[10], ","), strings.Split(adjustmentFactorFields, ",")) {
+		return adjustmentFactorPage{}, fmt.Errorf("BaoStock adjustment-factor fields mismatch: got %q", parts[10])
+	}
+	var payload map[string]json.RawMessage
+	if raw := strings.TrimSpace(parts[6]); raw != "" {
+		decoder := json.NewDecoder(strings.NewReader(raw))
+		decoder.UseNumber()
+		if err := decoder.Decode(&payload); err != nil {
+			return adjustmentFactorPage{}, fmt.Errorf("parse adjustment-factor record JSON: %w", err)
+		}
+	}
+	var records [][]json.RawMessage
+	if raw := payload["record"]; len(raw) > 0 {
+		if err := json.Unmarshal(raw, &records); err != nil {
+			return adjustmentFactorPage{}, fmt.Errorf("parse adjustment-factor rows: %w", err)
+		}
+	}
+	for index, raw := range records {
+		if len(raw) != 5 {
+			return adjustmentFactorPage{}, fmt.Errorf("adjustment-factor row %d has %d columns, expected 5", index, len(raw))
+		}
+		values := make([]string, len(raw))
+		for column := range raw {
+			value, err := decodeCell(raw[column])
+			if err != nil {
+				return adjustmentFactorPage{}, fmt.Errorf("adjustment-factor row %d column %s: %w", index, strings.Split(adjustmentFactorFields, ",")[column], err)
+			}
+			values[column] = strings.TrimSpace(value)
+		}
+		if values[0] != code {
+			return adjustmentFactorPage{}, fmt.Errorf("adjustment-factor row %d code mismatch: requested %s, got %q", index, code, values[0])
+		}
+		if _, err := time.Parse("2006-01-02", values[1]); err != nil || values[1] < startDate || values[1] > endDate {
+			return adjustmentFactorPage{}, fmt.Errorf("adjustment-factor row %d has invalid/out-of-range operate date %q", index, values[1])
+		}
+		factorValues := make([]float64, 3)
+		for i := range factorValues {
+			value, err := strconv.ParseFloat(values[i+2], 64)
+			if err != nil || value <= 0 || math.IsNaN(value) || math.IsInf(value, 0) {
+				return adjustmentFactorPage{}, fmt.Errorf("adjustment-factor row %d has invalid factor %q", index, values[i+2])
+			}
+			factorValues[i] = value
+		}
+		page.rows = append(page.rows, AdjustmentFactor{
+			Code: values[0], OperateDate: values[1],
+			ForwardFactor: factorValues[0], BackwardFactor: factorValues[1], AdjustmentFactor: factorValues[2],
+		})
+	}
+	return page, nil
 }
 
 type tradeDatePage struct {
