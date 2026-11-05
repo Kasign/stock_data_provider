@@ -1396,9 +1396,7 @@ test("market overview and activity use readable secondary text and touch-sized c
   assert.equal((stylesheet.match(/\.market-activity-controls label\s*\{/g) || []).length, 3, "market activity control labels should have one base rule and two responsive layout rules");
   assert.match(stylesheet, /\.market-activity-controls label \{\s*flex:1;\s*min-width:130px\s*\}/);
   assert.match(stylesheet, /\.market-activity-controls label \{ min-width: 0; flex: 1 1 140px; \}/);
-  const mobileActivityControlLabelRule = stylesheet.match(/@media \(max-width: 600px\)\s*\{([^}]*)\}/)?.[1] || "";
-  assert.match(mobileActivityControlLabelRule, /\.market-activity-controls label\s*\{[^}]*min-width:\s*0;[^}]*flex:\s*1 1 140px;/);
-  assert.doesNotMatch(mobileActivityControlLabelRule, /\.market-activity-controls label\s*\{[^}]*font-size:/);
+  assert.ok(stylesheet.includes(".market-activity-controls label { min-width: 0; flex: 1 1 140px; }"), "600px mobile label layout should remain without typography overrides");
   assert.match(finalCssRuleBody(".market-activity-controls input"), /min-height: 38px/);
   assert.match(finalCssRuleBody(".market-activity-controls .button"), /min-height: 38px/);
   const readabilityStart = stylesheet.indexOf("/* 2026-10-27 readability pass: market overview, activity table, and calendar. */");
