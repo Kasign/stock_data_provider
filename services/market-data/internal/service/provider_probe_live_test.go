@@ -11,8 +11,8 @@ import (
 	"github.com/Kasign/stock_data_provider/services/market-data/internal/baostock"
 	"github.com/Kasign/stock_data_provider/services/market-data/internal/cache"
 	"github.com/Kasign/stock_data_provider/services/market-data/internal/model"
-	"github.com/Kasign/stock_data_provider/services/market-data/internal/repository"
 	"github.com/Kasign/stock_data_provider/services/market-data/internal/provider"
+	"github.com/Kasign/stock_data_provider/services/market-data/internal/repository"
 )
 
 // TestLiveHistoricalProviderProbe exercises the production Probe service path

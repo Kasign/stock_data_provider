@@ -253,19 +253,19 @@ func TestLiveTushareCapabilities(t *testing.T) {
 }
 
 type liveTushareAdjustmentEvidenceItem struct {
-	Symbol             string                  `json:"symbol"`
-	AdjustmentFactors  []model.AdjustmentFactor `json:"adjustment_factors,omitempty"`
-	CorporateActions   []model.CorporateAction  `json:"corporate_actions,omitempty"`
-	FactorStatus       string                  `json:"factor_status"`
-	FactorError        string                  `json:"factor_error,omitempty"`
-	CorporateActionStatus string               `json:"corporate_action_status"`
-	CorporateActionError  string               `json:"corporate_action_error,omitempty"`
+	Symbol                string                   `json:"symbol"`
+	AdjustmentFactors     []model.AdjustmentFactor `json:"adjustment_factors,omitempty"`
+	CorporateActions      []model.CorporateAction  `json:"corporate_actions,omitempty"`
+	FactorStatus          string                   `json:"factor_status"`
+	FactorError           string                   `json:"factor_error,omitempty"`
+	CorporateActionStatus string                   `json:"corporate_action_status"`
+	CorporateActionError  string                   `json:"corporate_action_error,omitempty"`
 }
 
 type liveTushareAdjustmentEvidenceReport struct {
-	GeneratedAt string                             `json:"generated_at"`
-	StartDate   string                             `json:"start_date"`
-	EndDate     string                             `json:"end_date"`
+	GeneratedAt string                              `json:"generated_at"`
+	StartDate   string                              `json:"start_date"`
+	EndDate     string                              `json:"end_date"`
 	Items       []liveTushareAdjustmentEvidenceItem `json:"items"`
 }
 
@@ -311,7 +311,7 @@ func TestLiveTushareHistoricalAdjustmentEvidence(t *testing.T) {
 
 	report := liveTushareAdjustmentEvidenceReport{
 		GeneratedAt: time.Now().UTC().Format(time.RFC3339),
-		StartDate: startDate, EndDate: endDate,
+		StartDate:   startDate, EndDate: endDate,
 		Items: make([]liveTushareAdjustmentEvidenceItem, 0, len(symbols)),
 	}
 	var failures []string
