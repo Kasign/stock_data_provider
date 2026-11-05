@@ -1310,7 +1310,9 @@ test("stock research toolbar controls use readable labels and touch-sized target
 
 test("market overview and activity use readable secondary text and touch-sized controls", () => {
   assert.match(finalCssRuleBody(".market-overview-updated"), /font-size: 12px/);
-  const marketOverviewHeadingDescriptionBase = baseCssDeclarationBlock(".market-overview-subheading p,.market-overview-widget-heading p");
+  const marketOverviewHeadingDescriptionBase = baseCssDeclarationBlock(".market-overview-subheading p");
+  const marketOverviewWidgetDescriptionBase = baseCssDeclarationBlock(".market-overview-widget-heading p");
+  assert.equal(marketOverviewHeadingDescriptionBase, marketOverviewWidgetDescriptionBase, "both heading description selectors should share one base declaration block");
   assert.match(marketOverviewHeadingDescriptionBase, /font-size:\s*12px\s*;/);
   assert.match(marketOverviewHeadingDescriptionBase, /line-height:\s*1\.65\s*;/);
   assert.match(marketOverviewHeadingDescriptionBase, /margin:\s*5px 0 0\s*;/);
