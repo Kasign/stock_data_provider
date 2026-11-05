@@ -30,10 +30,12 @@ type pytdxBaoStockEventItem struct {
 	PreviousClose      float64 `json:"previous_close"`
 	ExpectedPreClose   float64 `json:"pytdx_theoretical_preclose"`
 	BaoStockPreClose   float64 `json:"baostock_preclose"`
-	FactorDelta        float64 `json:"baostock_back_factor_delta"`
-	ImpliedRatio       float64 `json:"pytdx_implied_adjustment_ratio"`
-	PreCloseDiff       float64 `json:"preclose_diff"`
-	FactorRatioDiff    float64 `json:"factor_ratio_diff"`
+	FactorDelta          float64 `json:"baostock_back_factor_delta"`
+	ForwardFactorDelta   float64 `json:"baostock_forward_factor_delta"`
+	ImpliedRatio         float64 `json:"pytdx_implied_adjustment_ratio"`
+	PreCloseDiff         float64 `json:"preclose_diff"`
+	FactorRatioDiff      float64 `json:"factor_ratio_diff"`
+	ForwardBackDeltaDiff float64 `json:"forward_back_factor_delta_diff"`
 	Status             string  `json:"status"`
 	Error              string  `json:"error,omitempty"`
 }
@@ -136,11 +138,12 @@ func TestLivePytdxBaoStockCorporateActionConsistency(t *testing.T) {
 			}
 
 			factor := factors[factorIndex]
-			previousBackFactor := 1.0
+			previousBackFactor, previousForwardFactor := 1.0, 1.0
 			if factorIndex > 0 {
 				previousBackFactor = factors[factorIndex-1].BackwardFactor
+				previousForwardFactor = factors[factorIndex-1].ForwardFactor
 			}
-			if previousBackFactor <= 0 {
+			if previousBackFactor <= 0 || previousForwardFactor <= 0 {
 				item.Status = "invalid"
 				item.Error = "BaoStock previous cumulative back factor is not positive"
 				report.Items = append(report.Items, item)
@@ -148,6 +151,7 @@ func TestLivePytdxBaoStockCorporateActionConsistency(t *testing.T) {
 				continue
 			}
 			item.FactorDelta = factor.BackwardFactor / previousBackFactor
+			item.ForwardFactorDelta = factor.ForwardFactor / previousForwardFactor
 
 			date, parseErr := time.ParseInLocation("2006-01-02", eventDate, location)
 			if parseErr != nil {
@@ -204,11 +208,19 @@ func TestLivePytdxBaoStockCorporateActionConsistency(t *testing.T) {
 			}
 			item.PreviousClose = previousClose
 			item.ExpectedPreClose = (previousClose - c) / m
+			if item.ExpectedPreClose <= 0 || math.IsNaN(item.ExpectedPreClose) || math.IsInf(item.ExpectedPreClose, 0) {
+				item.Status = "invalid"
+				item.Error = "Pytdx event terms produced a non-positive theoretical ex-date preclose"
+				report.Items = append(report.Items, item)
+				failures = append(failures, symbol+"/"+eventDate+": "+item.Error)
+				continue
+			}
 			item.BaoStockPreClose = baostockPreClose
 			item.ImpliedRatio = previousClose / item.ExpectedPreClose
 			item.PreCloseDiff = math.Abs(item.ExpectedPreClose - item.BaoStockPreClose)
 			item.FactorRatioDiff = math.Abs(item.FactorDelta - item.ImpliedRatio)
-			if item.PreCloseDiff > 0.01 || item.FactorRatioDiff > 0.0005 {
+			item.ForwardBackDeltaDiff = math.Abs(item.ForwardFactorDelta - item.FactorDelta)
+			if item.PreCloseDiff > 0.01 || item.FactorRatioDiff > 0.0005 || item.ForwardBackDeltaDiff > 0.0005 {
 				item.Status = "mismatch"
 				item.Error = "Pytdx event terms, BaoStock ex-date preclose, and BaoStock factor delta do not reconcile"
 				failures = append(failures, symbol+"/"+eventDate+": "+item.Error)
