@@ -18,21 +18,20 @@ type liveTushareIntradaySuspensionReport struct {
 }
 
 type liveTushareIntradaySuspensionSample struct {
-	Symbol             string `json:"symbol"`
-	TradeDate          string `json:"trade_date"`
-	OfficialURL        string `json:"official_url"`
-	OfficialTiming     string `json:"official_timing"`
-	ProviderStatus     string `json:"provider_status,omitempty"`
-	ProviderTiming     string `json:"provider_timing,omitempty"`
-	ProviderType       string `json:"provider_type,omitempty"`
-	TimingMatches      bool   `json:"timing_matches_official"`
-	DailyBarRows       int    `json:"daily_bar_rows"`
-	DailyBarQuality    string `json:"daily_bar_quality,omitempty"`
+	Symbol          string `json:"symbol"`
+	TradeDate       string `json:"trade_date"`
+	OfficialURL     string `json:"official_url"`
+	OfficialTiming  string `json:"official_timing"`
+	ProviderStatus  string `json:"provider_status,omitempty"`
+	ProviderTiming  string `json:"provider_timing,omitempty"`
+	ProviderType    string `json:"provider_type,omitempty"`
+	TimingMatches   bool   `json:"timing_matches_official"`
+	DailyBarRows    int    `json:"daily_bar_rows"`
+	DailyBarQuality string `json:"daily_bar_quality,omitempty"`
 	DailyBarError   string `json:"daily_bar_error,omitempty"`
-	Status             string `json:"status"`
+	Status          string `json:"status"`
 	Error           string `json:"error,omitempty"`
 }
-
 // TestLiveTushareIntradaySuspensionSamples checks official exchange intraday
 // suspension announcements against Tushare suspend_d and the same-day Pytdx bar.
 // The test performs at most four suspend_d requests and stops immediately on 40203.
