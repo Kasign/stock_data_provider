@@ -385,3 +385,99 @@ Go `model.AdjustmentBasis` 响应值为 `none`、`forward_adjusted`、`backward_
 6. 把测试加入 Data Module CI；以最终自动生成报告归零作为验收依据。
 
 **本节是当前 HEAD 的静态字段核对结果，不是 Data 分支已修复或 CI 已通过的声明。** 本次未在 Data 分支修改任何文件，也未执行 Go 测试；Data OpenAPI 契约仍为未冻结状态。
+
+
+### 11.9 Operation → Handler → Response Schema 映射复核（2026-11-05）
+
+本节将静态字段比对提升到真实 HTTP 输出边界。核查基线：
+
+- Data 分支 HEAD：`4ff4359178be7a055fb81756a5099adb9fcf3f31`，提交 `test(market-data): 扩展 BaoStock 首事件前真实探测样本 [historical_baostock_factors]`。
+- 相较 `4732f14d8998bcd06ffb1118846535b626865b2d`：ahead 8 / behind 0。
+- Compare 仅包含 `doc/api/**` 两份文档和 `internal/baostock/live_adjustment_probe_test.go`；没有修改 `services/market-data/openapi.yaml`、HTTP Handler 或 Model 文件。因此本轮的 Operation/Handler/Schema 观察与前一静态字段核查使用同一份 API/Model 实现。
+- 当前 OpenAPI 文件 blob：`9a15f7810a07c60887a574d82e1f84d56a8c9964`；`internal/httpapi/server.go` blob：`310036ea140bd1d38ec2c99e0595f09712a235e1`。
+
+#### 11.9.1 路由与 200 Response 映射
+
+路由注册集中在 `internal/httpapi/server.go:190-227`。以下列出 OpenAPI 的成功响应 Schema 与真实路由 Handler。标注“内联”表示 OpenAPI 未引用同名顶层 Schema；“包装”表示 Handler 构造了 map 或包装 DTO，而非直接返回单个领域 Model。
+
+| Operation | Handler | 200 Response Schema / 实际输出形态 |
+|---|---|---|
+| `GET /api/v1/market/quotes` | `batchQuotes`（`batch_quotes.go`） | 内联批量对象；`items[]` 使用私有 `batchQuoteItem`，其中 `quote *model.Quote` |
+| `GET /api/v1/quotes/{symbol}` | `quote`（`server.go`） | `Quote`；直接序列化 `DataService.Quote` 返回的 `*model.Quote` |
+| `GET /api/v1/bars/{symbol}/daily` | `bars`（`server.go`） | `DailyBarsResponse`；Handler 构造包装对象，`bars[]` 为 `[]model.DailyBar` |
+| `GET /api/v1/bundles/{symbol}` | `bundle`（`server.go`） | `Bundle`；直接序列化 `*model.Bundle` |
+| `POST /api/v1/data-sources/probe` | `dataSourceProbe`（`provider_probe.go`） | `ProviderProbeRun`；直接序列化 Probe Application 返回值 |
+| `GET /api/v1/data-sources/probe/history` | `dataSourceProbeHistory`（`provider_probe.go`） | `ProviderProbeHistory`；直接序列化历史查询结果 |
+| `GET /api/v1/data-sources/diagnostics` | `dataSourceDiagnostics`（`server.go`） | 内联对象；`items` 来自 `ProviderDiagnostics()`，无 Service 时返回空数组 |
+| `GET /api/v1/data-sources` | `dataSources`（`server.go`） | `DataSourcesResponse`；Handler 包装 `[]model.SourceStatus` 和 normalization version |
+| `GET /api/v1/stocks/search` | `searchStocks`（`server.go`） | `StockSearchSnapshot`；直接序列化 Service 返回值 |
+| `GET /api/v1/stocks/{symbol}/announcements` | `stockAnnouncements`（`server.go`） | `StockAnnouncementSnapshot`；直接序列化 Service 返回值 |
+| `GET /api/v1/stocks/{symbol}/profile` | `stockBasic`（`server.go`） | `StockBasic`；直接序列化 Service 返回值 |
+| `GET /api/v1/stocks/{symbol}/price-limit-rule` | `priceLimitRule`（`price_limit_rule.go`） | 内联响应对象；Handler 调用 `ResolvePriceLimitRuleFromTradingStatus` 后直接序列化结果，嵌入 `*model.PriceLimitEventEvidence` |
+| `GET /api/v1/stocks/{symbol}/trading-status` | `securityTradingStatus`（`security_trading_status.go`） | `SecurityTradingStatusSnapshot`；直接序列化 `*model.SecurityTradingStatusSnapshot` |
+| `GET /api/v1/stocks/{symbol}/fundamentals` | `fundamentals`（`fundamentals.go`） | `FundamentalsSnapshot`；普通和 PIT 分支均直接序列化 Service 返回对象 |
+| `GET /api/v1/stocks/{symbol}/chip-distribution` | `chipDistribution`（`server.go`） | `ChipDistribution`；直接序列化 Service 返回值 |
+| `GET /api/v1/stocks/{symbol}/capital-flow` | `capitalFlow`（`server.go`） | `CapitalFlow`；直接序列化 Service 返回值 |
+| `GET /api/v1/stocks/{symbol}/boards` | `stockBoards`（`server.go`） | `StockBoardSnapshot`；直接序列化 Service 返回值，子项为 `StockBoard` |
+| `GET /api/v1/market/valuations` | `valuations`（`valuations.go`） | `ValuationSnapshot`；直接序列化 Service 返回值 |
+| `GET /api/v1/market/sectors` | `sectorRankings`（`server.go`） | `SectorRankingSnapshot`；直接序列化 Service 返回值 |
+| `GET /api/v1/market/index-catalog` | `indexCatalog`（`index_catalog.go`） | `IndexCatalogSnapshot`；直接序列化 Service 返回值 |
+| `GET /api/v1/market/indices/{symbol}/constituents` | `indexConstituents`（`index_catalog.go`） | `IndexConstituentSnapshot`；当前/历史分支均直接序列化 Service 返回值 |
+| `GET /api/v1/market/indices/{symbol}/daily` | `indexDailyBars`（`index_catalog.go`） | `IndexDailyBarsSnapshot`；直接序列化 Service 返回值 |
+| `GET /api/v1/market/indices` | `indexQuotes`（`server.go`） | `IndexQuoteSnapshot`；直接序列化 Service 返回值 |
+| `GET /api/v1/market/trading-calendar` | `tradingCalendar`（`trading_calendar.go`） | `TradingCalendarSnapshot`；直接序列化 Service 返回值 |
+| `GET /api/v1/market/session` | `marketSession`（`market_session.go`） | `MarketSessionSnapshot`；直接序列化 Service 返回值 |
+| `GET /api/v1/market/stocks` | `marketStocks`（`market_stocks.go`） | `MarketStocksSnapshot`；直接序列化 Service 返回值，内部包含行情/证券概览子项 |
+| `GET /api/v1/market/capital-flow` | `marketCapitalFlow`（`market_capital_flow.go`） | `MarketCapitalFlowSnapshot`；直接序列化 Service 返回值 |
+| `GET /api/v1/market/sentiment` | `marketSentiment`（`market_sentiment.go`） | `MarketSentimentSnapshot`；直接序列化 Service 返回值 |
+| `GET /api/v1/market/sentiment/history` | `marketSentimentHistory`（`market_sentiment.go`） | `MarketSentimentHistory`；直接序列化 Service 返回值 |
+| `GET /api/v1/market/breadth` | `marketBreadth`（`server.go`） | `MarketBreadthSnapshot`；直接序列化 Service 返回值 |
+| `GET /api/v1/market/hot-stocks` | `hotStocks`（路由注册于 `server.go`） | `HotRankingSnapshot`；需纳入真实 Handler JSON golden |
+| `GET /api/v1/market/dragon-tiger` | `dragonTiger`（`server.go`） | `DragonTigerSnapshot`；直接序列化 Service 返回值 |
+| `GET /api/v1/market/limit-pools` | `limitPool`（`server.go`） | `LimitPoolSnapshot`；直接序列化 Service 返回值 |
+
+说明：以上映射以当前路由注册、OpenAPI 200 Response 和本轮已读取的 Handler 实现为依据。对于本轮未逐行展开的 Handler，映射先用于确定 Golden 测试清单，不代替对其完整序列化分支、异常分支和零值行为的逐项测试。健康检查 `/health/live`、`/health/ready` 也有 200 响应，但其响应是简单运行状态对象，不属于领域 Model Schema 对照范围。
+
+#### 11.9.2 三组字段异常已定位到真实响应边界
+
+1. **Quote 的 6 个多余 Schema 字段**：`GET /api/v1/quotes/{symbol}` 的 Handler 直接写出 `*model.Quote`；批量行情也把同一 `*model.Quote` 放入 `batchQuoteItem.quote`。因此 `Quote.validation_total_count`、`validation_error_count`、`validation_warning_count`、`validation_info_count`、`validation_truncated`、`validation_issues` 在当前 Go Model 响应中没有来源。应删除 Schema 字段，或先实现有明确业务来源的响应 DTO，再同步测试；不能仅为匹配 OpenAPI 在 Handler 中伪造值。
+2. **StockBoard 的 2 个多余 Schema 字段**：`GET /api/v1/stocks/{symbol}/boards` 返回 `StockBoardSnapshot`，其 `items` 是 `StockBoard`。`change_percent_5d`、`provider_report_date` 在 Go 子项模型没有来源，不能作为当前响应承诺。
+3. **PriceLimitEventEvidence 的多余字段**：`GET /api/v1/stocks/{symbol}/price-limit-rule` 通过 `priceLimitRule` Handler 获取 `*model.PriceLimitEventEvidence`，再由规则 Resolver 生成响应。当前 Go Evidence 模型没有 `adjustment_basis`，但 OpenAPI 内联响应的 Evidence 子对象声明了该字段。必须删除该 Schema 字段或实现可验证来源；不能从请求 adjustment 或默认复权口径推导。
+
+此外，`LimitPoolSnapshot` 由 `limitPool` Handler 直接输出，`LimitPoolItem.change_percent` 的 Go 指针在 nil 时会输出 JSON null；Schema 应明确 nullable，或者 Handler/Service 必须保证该字段非 nil。当前契约不能继续保持“Go 可输出 null、Schema 禁止 null”的状态。
+
+#### 11.9.3 包装 DTO、内联对象和非 Model 输出边界
+
+本轮确认以下对象不能按“同名 Go Model ↔ 顶层 Schema”方式机械核对：
+
+- 批量行情：Handler 私有 `batchQuoteItem` 与 map 包装对象，嵌套复用 Quote。
+- 日 K：Handler map 包装 `DailyBarsResponse`，并在 PIT 分支额外写出 `point_in_time`、`as_of`。
+- Data Sources、Diagnostics：Handler 组装 map；Diagnostics 的 `items` 由 `ProviderDiagnostics()` 动态返回。
+- Price Limit Rule：Handler 通过 Resolver 构造规则响应，OpenAPI 使用内联响应结构。
+- `MarketStockOverviewItem`、`ProviderProbeFieldComparison`：作为父 Schema 的内联/嵌套对象核对，不要求独立顶层 Schema。
+- `StockUniverseSnapshot`、`AdjustmentFactor`、`CorporateAction`：按此前静态追踪属于内部中间/历史模型，不因其存在于 Model 包就自动要求暴露为 HTTP Schema。
+
+#### 11.9.4 nil / empty 集合审查的结论边界
+
+本轮已确认 `writeJSON` 使用标准 `json.Marshal` 序列化，不存在统一的 nil slice/map 归一化层。因此：
+
+- Go 非 `omitempty` 的 nil slice/map 会序列化为 JSON null；OpenAPI 若只允许 array/object，则存在真实契约风险。
+- `omitempty` 的 nil slice/map 会被省略；若 OpenAPI 声明字段必需，则同样不匹配。
+- 不能仅因某个 Service 逻辑“通常会返回空数组”就认定字段始终非 nil；需要从每个 Provider 返回、缓存反序列化、降级分支和 Handler 输出分支验证。
+- Bundle 已看到明确初始化：`DailyBars: bars`、`Sources: map[string]string{}`、`Warnings: append([]string{}, warnings...)`。但这只覆盖 Bundle 的这些字段，不可推广到其他 Snapshot。
+- 对 22 个非 `omitempty` slice/map 字段，下一步必须逐项检查生产构造、缓存命中、Provider 降级和空数据路径，并通过真实 Handler JSON Golden 证明输出为 `[]` / `{}`；若设计允许 null，则显式标注 nullable。
+- 对 122 个 Schema nullable=true 但 Go JSON Tag 使用 `omitempty` 的字段，也必须结合真实 Handler 输出确定“省略”还是“null”，不能单纯按 Go 指针类型推断。
+- 本轮没有运行 Data Go 测试或真实 HTTP Handler 测试，以上 nil/empty 结论属于静态序列化规则与代码路径核查，不是运行时验收结果。
+
+#### 11.9.5 下一批实施任务拆分
+
+按依赖顺序执行，仍由 Data 分支 Owner 实施，本规划分支不代替修改：
+
+1. **DATA-CONTRACT-001：Operation/Handler/DTO 清单固化**。为全部 33 个业务 Operation 固化成功响应类型、包装 DTO、嵌套类型、错误响应和 Handler 路径；为健康检查单独定义运行状态响应。
+2. **DATA-CONTRACT-002：修正无来源 Schema 字段**。处理 Quote 6 项、StockBoard 2 项、PriceLimitEventEvidence 1 项；若选择新增 DTO，必须有真实来源、Handler 使用和 JSON Golden。
+3. **DATA-CONTRACT-003：修正字段集合和 required/nullable**。按真实 Operation 可达类型过滤此前 15 个 Go-only 字段、15 个 required 差异、122 个过宽 nullable 和 23 个潜在 null 字段；内部模型不得误纳入 HTTP Schema 计数。
+4. **DATA-CONTRACT-004：集合字段归一化**。逐一确定 22 个 slice/map 字段的空集合策略，保证空集合输出 `[]` / `{}`，或在允许 null 时明确声明；覆盖 Provider 返回 nil、空结果、缓存反序列化、降级和存储读取。
+5. **DATA-CONTRACT-005：自动化契约测试**。从 Handler 路由表建立 Operation → Handler → Response DTO 显式映射；反射 Go JSON Tag 并与 OpenAPI properties/required/nullable/enum/format 双向对照；为包装 DTO、嵌套 DTO、nil 指针、nil slice/map 和 PIT 分支增加真实 Handler JSON Golden。
+6. **DATA-CONTRACT-006：CI 门禁**。把双向契约测试和 Golden 加入 Data Module CI，差异报告归零；任何例外需有带理由的显式 allowlist，不能静默忽略。
+
+**本节核查结论**：Operation 与主要 Handler 输出边界已建立；三组无来源字段已落到真实响应链路；集合 nil/empty 仍需要逐项构造路径核验和运行时 Golden。当前只是静态审查，不代表 Data Schema 已修复、测试已通过或 GOV-004 已冻结。
