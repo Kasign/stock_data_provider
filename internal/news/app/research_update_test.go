@@ -309,3 +309,32 @@ func TestApplyResearchUpdateRejectsInvalidRelationAndRollsBackVersion(t *testing
 		t.Fatalf("partial version persisted: %+v", repository.versions)
 	}
 }
+
+func TestApplyResearchUpdateRejectsForeignRequestObservation(t *testing.T) {
+	repository := &memoryResearchRepository{
+		versions: map[string][]domain.NewsItemVersion{},
+		observations: map[string]domain.Observation{
+			"foreign-observation": {ID: "foreign-observation", NewsID: "news-foreign"},
+		},
+	}
+	request := baseResearchRequest()
+	request.ObservationID = "foreign-observation"
+	if _, err := newResearchUseCase(repository).Execute(context.Background(), request); !errors.Is(err, ErrResearchUpdateTransaction) {
+		t.Fatalf("expected foreign request observation rejection, got %v", err)
+	}
+	if len(repository.versions["news-1"]) != 0 {
+		t.Fatalf("foreign observation must not create a version: %+v", repository.versions)
+	}
+}
+
+func TestApplyResearchUpdateRejectsUnknownRequestObservation(t *testing.T) {
+	repository := &memoryResearchRepository{versions: map[string][]domain.NewsItemVersion{}}
+	request := baseResearchRequest()
+	request.ObservationID = "missing-observation"
+	if _, err := newResearchUseCase(repository).Execute(context.Background(), request); !errors.Is(err, ErrResearchUpdateTransaction) {
+		t.Fatalf("expected missing request observation rejection, got %v", err)
+	}
+	if len(repository.versions["news-1"]) != 0 {
+		t.Fatalf("missing observation must not create a version: %+v", repository.versions)
+	}
+}

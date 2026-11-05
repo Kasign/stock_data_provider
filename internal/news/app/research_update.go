@@ -15,6 +15,11 @@ var (
 )
 
 // ResearchUpdateRepository 将版本追加、关系读取和关系证据追加放在同一事务内。
+//
+// 生产实现必须在读取 LatestNewsItemVersion 前取得按 NewsID 协调的跨实例写锁，
+// 并持有至事务提交。否则并发更新可能基于同一旧版本生成相同 VersionNo。
+// 数据库还应对 (news_id, version_no) 建立唯一约束；唯一约束是最终防线，
+// 不能替代锁和事务内重新读取最新版本。
 type ResearchUpdateRepository interface {
 	WithinResearchUpdateTransaction(context.Context, func(ResearchUpdateTransaction) error) error
 }
@@ -72,6 +77,14 @@ func (u *ApplyResearchUpdate) Execute(ctx context.Context, request ResearchUpdat
 
 	var result ResearchUpdateResult
 	err := u.repository.WithinResearchUpdateTransaction(ctx, func(tx ResearchUpdateTransaction) error {
+		observation, observationExists, err := tx.ObservationByID(ctx, request.ObservationID)
+		if err != nil {
+			return err
+		}
+		if !observationExists || observation.ID != request.ObservationID || observation.NewsID != request.NewsID {
+			return ErrVersionHistoryInvalid
+		}
+
 		current, exists, err := tx.LatestNewsItemVersion(ctx, request.NewsID)
 		if err != nil {
 			return err
