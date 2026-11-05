@@ -17,7 +17,7 @@ func crossProviderSnapshot(provider, adjustment, quality string, bars ...CrossPr
 func crossProviderBar(date string) CrossProviderDailyBar {
 	return CrossProviderDailyBar{
 		TradeDate: date, Open: 42.3, High: 43.06, Low: 42.04, Close: 42.99,
-		Volume: 86728303, VolumeUnit: "shares",
+		Volume: 86728303, VolumeUnit: "shares", VolumeGranularity: 1,
 	}
 }
 
