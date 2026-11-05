@@ -768,3 +768,10 @@ Data 最新 HEAD 已从 `0afec7ead92672ce9c68a7a8f419990471e01620` 前进至 `13
 - 因此 11.18、11.20 的 Operation/Handler/Model 静态结论仍适用。
 
 最新 SHA 的 WebUI checks、Live provider probe、Go-Python parity 已 completed / success；Go test suite run `42018997889` 仍 in_progress。不能把该 SHA 记录为全套 CI 通过。
+
+
+### 11.23 Data 最新 HEAD 更新至 7abd507（2026-11-05）
+
+Data 最新 HEAD 已从 `13588476d000ebeee801e8b7a782fc6678f25dd4` 前进到 `7abd5078e85ec7e6a5785ec9a4253d862af2a39c`，提交为 DailyBar 复权 Provider 能力矩阵文档完善。Compare ahead 1 / behind 0，仅修改 `doc/api/**` 与 WebUI 接口协作文档，没有修改 OpenAPI、Handler、Model 或 Service；11.18、11.20 的静态代码结论继续适用。
+
+最新 SHA 的 WebUI checks、Live provider probe success；Go test suite 和 Go-Python parity 均 in_progress。不能标记 CI 全绿。
