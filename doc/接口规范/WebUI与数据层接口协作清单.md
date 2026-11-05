@@ -390,3 +390,12 @@
 - 首轮 Push Go suite Run `42030476834` 的 market-data gofmt 检查发现新增结构体字面量两行字段未对齐，尚未进入测试阶段；已按 gofmt 输出修正，不涉及逻辑变化。PR Go suite `42030490186`、Parity `42030489938`、WebUI checks `42030490023`、PR Live Probe `42030489937` 当时仍在执行；修正后的 SHA 需重新验收。
 - 修正提交 SHA `6d62617973f106cf4eb8690ea76d5c663f47928e` 已通过 gofmt、market-data package tests 与 MariaDB PIT 集成；race/vet、Docker build、Parity 待最终状态，WebUI checks success。PR Live Probe 未执行专项真实请求。
 
+
+
+## 24. 2026-11-05 API-06 P0-50 生产 Probe 实时验收结果
+
+- 生产 Probe Run `42031080952`（Artifact `13416895510`）对 `600036.SH`、`002982.SZ` 的 2025-07-07 至 2025-07-17 none/qfq/hfq 请求均完成 MariaDB 持久化与历史回读；每只证券 total=15、returned=0、returned_degraded=7、failed=6、not_supported=2。storage 通过，但生产测试因 Provider 失败而失败；Workflow 外层 success 由 job 的 continue-on-error 产生，不代表真实数据验收通过。
+- BaoStock 登录 TCP timeout，Eastmoney 历史 K 线请求 EOF；Sina/Tencent/Yahoo 虽返回 9 行，但因 amount 缺失、日历上下文不可用等原因质量为 degraded。Tencent forward-adjusted 的参考日期也未验证。跨源比较因此按质量门禁 skipped，qfq/hfq 不得视为已验收。
+- 每只证券已产生 14 条 BaoStock/Eastmoney 缺失侧 `provider_unavailable` 配对诊断；另 5 条因成功侧质量 degraded 而 skipped。P0-49 诊断修复在真实生产服务链路中生效，但没有一致性通过结论。
+- Pytdx 专项被前序生产 Probe 失败通过默认 success() 隐式跳过；数据侧修正 Live Provider workflow 的独立专项条件为 `always() && ...`，后续仅运行 Pytdx/GGBQ 专项，不重复生产 Probe。该修正不改变 API、Schema、数据库或 WebUI 契约。
+- 当前 WebUI 无需改动；API-06 继续标记“接口层已接入，待真实数据验收”，PIT fail-closed 不变。
