@@ -186,7 +186,6 @@ func ParseFeed(data []byte, observedAt time.Time) (FeedDocument, error) {
 			entry := newFeedEntry(item.GUID, item.Title, item.Link, item.Description, content, author, item.PubDate, "")
 			if strings.TrimSpace(content) != "" {
 				entry.ContentFormat = domain.ContentFormatHTMLFragment
-				entry.ContentTypeRaw = "text/html"
 			}
 			for _, enclosure := range item.Enclosures {
 				entry.Attachments = append(entry.Attachments, newFeedAttachment(enclosure.URL, enclosure.Type, enclosure.Length, ""))
@@ -238,6 +237,12 @@ func normalizeAtomContent(content atomContent) (string, domain.ContentFormat) {
 	case "html":
 		return strings.TrimSpace(content.Text), domain.ContentFormatHTMLFragment
 	case "xhtml":
+		var root struct {
+			XMLName xml.Name
+		}
+		if err := xml.Unmarshal([]byte(content.InnerXML), &root); err != nil || root.XMLName.Space != "http://www.w3.org/1999/xhtml" || root.XMLName.Local != "div" {
+			return strings.TrimSpace(content.InnerXML), domain.ContentFormatUnknown
+		}
 		return strings.TrimSpace(content.InnerXML), domain.ContentFormatHTMLFragment
 	default:
 		mediaType, _, err := mime.ParseMediaType(typeValue)

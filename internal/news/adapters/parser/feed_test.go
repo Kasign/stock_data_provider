@@ -204,12 +204,14 @@ func TestParseAtomFeedExtractsEnclosureAndIgnoresInvalidLength(t *testing.T) {
 func TestAtomContentFormatMapping(t *testing.T) {
 	cases := []struct {
 		name, content, want string
+		wantSrc             string
 		format              domain.ContentFormat
 	}{
 		{name: "default text", content: `<content>纯文本</content>`, want: "纯文本", format: domain.ContentFormatPlainText},
 		{name: "html", content: `<content type="html">&lt;p&gt;HTML&lt;/p&gt;</content>`, want: "<p>HTML</p>", format: domain.ContentFormatHTMLFragment},
 		{name: "xhtml", content: `<content type="xhtml"><div xmlns="http://www.w3.org/1999/xhtml"><p>XHTML</p></div></content>`, want: `<div xmlns="http://www.w3.org/1999/xhtml"><p>XHTML</p></div>`, format: domain.ContentFormatHTMLFragment},
-		{name: "external", content: `<content type="html" src="https://publisher.example/body"/>`, want: "", format: domain.ContentFormatUnknown},
+		{name: "invalid xhtml root", content: `<content type="xhtml"><span xmlns="http://www.w3.org/1999/xhtml">bad</span></content>`, want: `<span xmlns="http://www.w3.org/1999/xhtml">bad</span>`, format: domain.ContentFormatUnknown},
+		{name: "external", content: `<content type="html" src="https://publisher.example/body"/>`, want: "", wantSrc: "https://publisher.example/body", format: domain.ContentFormatUnknown},
 		{name: "unsupported media", content: `<content type="application/pdf">opaque</content>`, want: "opaque", format: domain.ContentFormatUnknown},
 	}
 	for _, tc := range cases {
@@ -220,8 +222,8 @@ func TestAtomContentFormatMapping(t *testing.T) {
 				t.Fatal(err)
 			}
 			entry := doc.Entries[0]
-			if entry.Content != tc.want || entry.ContentFormat != tc.format {
-				t.Fatalf("content=%q format=%q", entry.Content, entry.ContentFormat)
+			if entry.Content != tc.want || entry.ContentFormat != tc.format || entry.ContentSrc != tc.wantSrc {
+				t.Fatalf("content=%q format=%q src=%q", entry.Content, entry.ContentFormat, entry.ContentSrc)
 			}
 			layers := entry.ContentLayers("")
 			if tc.want == "" {
