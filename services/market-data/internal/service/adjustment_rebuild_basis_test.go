@@ -41,8 +41,8 @@ func TestRebuildAdjustedDailyBarsPrefersMatchingFactorBasis(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if forward[0].Close != 5 || forward[1].Close != 20 || forward[2].Close != 30 {
-		t.Fatalf("forward rebuild must carry the latest event factor across dates: got closes %.4f, %.4f, %.4f", forward[0].Close, forward[1].Close, forward[2].Close)
+	if forward[0].Close != 20 || forward[1].Close != 80 || forward[2].Close != 120 {
+		t.Fatalf("BaoStock forward event factors are direct multipliers and must not be divided by a reference factor: got closes %.4f, %.4f, %.4f", forward[0].Close, forward[1].Close, forward[2].Close)
 	}
 	backward, err := rebuildAdjustedDailyBars(raw, factors, model.AdjustmentBackward, "2025-07-02")
 	if err != nil {
@@ -56,24 +56,28 @@ func TestRebuildAdjustedDailyBarsPrefersMatchingFactorBasis(t *testing.T) {
 func TestRebuildAdjustedDailyBarsKeepsSharedFactorFallback(t *testing.T) {
 	available := time.Date(2025, 7, 1, 0, 0, 0, 0, time.UTC)
 	observed := available.Add(time.Hour)
-	raw := []model.DailyBar{{Symbol: "600036.SH", TradeDate: "2025-07-01", Open: 10, High: 10, Low: 10, Close: 10, Source: "tushare", SourceVersion: "tushare-test-v1", AdjustmentBasis: model.AdjustmentNone, QualityStatus: model.QualityValid}}
-	factors := []model.AdjustmentFactor{{
-		Symbol:           "600036.SH",
-		TradeDate:        "2025-07-01",
-		Factor:           2,
-		Source:           "tushare",
-		SourceVersion:    "tushare-test-v1",
-		FetchedAt:        available,
-		AvailableAt:      &available,
-		SystemObservedAt: &observed,
-		QualityStatus:    model.QualityValid,
-	}}
+	raw := []model.DailyBar{
+		{Symbol: "600036.SH", TradeDate: "2025-07-01", Open: 10, High: 10, Low: 10, Close: 10, Source: "tushare", SourceVersion: "tushare-test-v1", AdjustmentBasis: model.AdjustmentNone, QualityStatus: model.QualityValid},
+		{Symbol: "600036.SH", TradeDate: "2025-07-02", Open: 20, High: 20, Low: 20, Close: 20, Source: "tushare", SourceVersion: "tushare-test-v1", AdjustmentBasis: model.AdjustmentNone, QualityStatus: model.QualityValid},
+	}
+	factors := []model.AdjustmentFactor{
+		{
+			Symbol: "600036.SH", TradeDate: "2025-07-01", Factor: 2,
+			Source: "tushare", SourceVersion: "tushare-test-v1", FetchedAt: available,
+			AvailableAt: &available, SystemObservedAt: &observed, QualityStatus: model.QualityValid,
+		},
+		{
+			Symbol: "600036.SH", TradeDate: "2025-07-02", Factor: 4,
+			Source: "tushare", SourceVersion: "tushare-test-v1", FetchedAt: available,
+			AvailableAt: &available, SystemObservedAt: &observed, QualityStatus: model.QualityValid,
+		},
+	}
 	got, err := rebuildAdjustedDailyBars(raw, factors, model.AdjustmentForward, "2025-07-02")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got[0].Close != 10 {
-		t.Fatalf("shared factor fallback produced close %.4f, want 10", got[0].Close)
+	if got[0].Close != 5 || got[1].Close != 20 {
+		t.Fatalf("shared Tushare factors must normalize against the reference-date factor: got %.4f, %.4f; want 5, 20", got[0].Close, got[1].Close)
 	}
 }
 
@@ -125,7 +129,7 @@ func TestRebuildAdjustedDailyBarsCurrentAllowsUnknownAvailabilityButKeepsDegrade
 		QualityStatus: model.QualityValid,
 	}}
 	factor := model.AdjustmentFactor{
-		Symbol: "600036.SH", TradeDate: "2025-07-01", Factor: 2, Basis: model.AdjustmentFactorForward,
+		Symbol: "600036.SH", TradeDate: "2025-07-01", Factor: 2, Basis: model.AdjustmentFactorShared,
 		Source: "baostock", SourceVersion: "baostock-test-v1", FetchedAt: fetched,
 		SystemObservedAt: &observed, QualityStatus: model.QualityValid,
 		QualityReasons: []string{"provider_available_at_not_exposed_by_query_adjust_factor"},

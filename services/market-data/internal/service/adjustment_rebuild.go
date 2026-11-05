@@ -147,6 +147,7 @@ func rebuildAdjustedDailyBarsWithMode(raw []model.DailyBar, factors []model.Adju
 	})
 
 	var selected map[string]model.AdjustmentFactor
+	var selectedBasis model.AdjustmentFactorBasis
 	var reference model.AdjustmentFactor
 	for _, key := range keys {
 		series := groups[key]
@@ -171,7 +172,11 @@ func rebuildAdjustedDailyBarsWithMode(raw []model.DailyBar, factors []model.Adju
 		}
 
 		var referenceCandidate model.AdjustmentFactor
-		if basis == model.AdjustmentForward {
+		// Shared factors (for example Tushare adj_factor) need normalization
+		// against the reference-date factor. Direction-specific factors (BaoStock
+		// fore/back) are already direct multipliers and must not be divided again.
+		needsReferenceFactor := basis == model.AdjustmentForward && key.basis == model.AdjustmentFactorShared
+		if needsReferenceFactor {
 			for _, factor := range series {
 				if factor.TradeDate <= requestedReferenceDate &&
 					(referenceCandidate.TradeDate == "" || factor.TradeDate > referenceCandidate.TradeDate) {
@@ -183,6 +188,7 @@ func rebuildAdjustedDailyBarsWithMode(raw []model.DailyBar, factors []model.Adju
 			}
 		}
 		selected = candidateBars
+		selectedBasis = key.basis
 		reference = referenceCandidate
 		break
 	}
@@ -198,7 +204,7 @@ func rebuildAdjustedDailyBarsWithMode(raw []model.DailyBar, factors []model.Adju
 	for i, bar := range raw {
 		factor := selected[bar.TradeDate]
 		scale := factor.Factor
-		if basis == model.AdjustmentForward {
+		if basis == model.AdjustmentForward && selectedBasis == model.AdjustmentFactorShared {
 			scale /= reference.Factor
 		}
 		bar.Open *= scale
@@ -223,7 +229,7 @@ func rebuildAdjustedDailyBarsWithMode(raw []model.DailyBar, factors []model.Adju
 		bar.AdjustmentFactorSourceVersion = factor.SourceVersion
 		applyAdjustmentFactorQuality(&bar, factor, "bar")
 		observed := *factor.SystemObservedAt
-		if basis == model.AdjustmentForward {
+		if basis == model.AdjustmentForward && selectedBasis == model.AdjustmentFactorShared {
 			applyAdjustmentFactorQuality(&bar, reference, "reference")
 			if reference.SystemObservedAt.After(observed) {
 				observed = *reference.SystemObservedAt
