@@ -145,7 +145,6 @@ func TestRunnerRejectsUnknownFaultClass(t *testing.T) {
 	}
 }
 
-
 func TestRunnerDoesNotRetainPanicPayload(t *testing.T) {
 	const secret = "panic-payload-secret"
 	check := Check{ID: "panic", Required: true, Run: func(context.Context) (Observation, error) {

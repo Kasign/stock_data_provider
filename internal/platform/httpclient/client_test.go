@@ -430,7 +430,7 @@ func TestClientReleasesDependencySlotDuringRetryBackoff(t *testing.T) {
 	defer server.Close()
 
 	client, err := New(Config{
-		Resolver: staticResolver{addresses: []netip.Addr{netip.MustParseAddr("8.8.8.8")}},
+		Resolver:   staticResolver{addresses: []netip.Addr{netip.MustParseAddr("8.8.8.8")}},
 		MaxRetries: 1, MaxConcurrent: 1, DependencyLimits: map[string]int{"news.fetch": 1},
 	})
 	if err != nil {
@@ -495,7 +495,7 @@ func TestClientCancellationWhileWaitingForDependencySlotDoesNotLeak(t *testing.T
 	defer server.Close()
 
 	client, err := New(Config{
-		Resolver: staticResolver{addresses: []netip.Addr{netip.MustParseAddr("8.8.8.8")}},
+		Resolver:      staticResolver{addresses: []netip.Addr{netip.MustParseAddr("8.8.8.8")}},
 		MaxConcurrent: 1, DependencyLimits: map[string]int{"news.fetch": 1},
 	})
 	if err != nil {
@@ -770,15 +770,14 @@ func TestClientReturnsTimeoutWhenRetryBackoffExceedsDeadline(t *testing.T) {
 	}
 }
 
-
 func TestRedirectRejectsCrossOriginEvenWhenBothHostsAreAllowed(t *testing.T) {
 	previousURL, _ := url.Parse("https://api.example.com/start")
 	nextURL, _ := url.Parse("https://cdn.example.com/next")
 	policy := DestinationPolicy{
-		Dependency: "news.fetch",
-		AllowedHosts: []string{"api.example.com", "cdn.example.com"},
+		Dependency:     "news.fetch",
+		AllowedHosts:   []string{"api.example.com", "cdn.example.com"},
 		AllowRedirects: true,
-		MaxRedirects: 1,
+		MaxRedirects:   1,
 	}
 	ctx := context.WithValue(context.Background(), policyContextKey{}, policy)
 	previous := &http.Request{URL: previousURL, Header: make(http.Header)}
@@ -792,10 +791,10 @@ func TestRedirectAllowsSameOriginPathChange(t *testing.T) {
 	previousURL, _ := url.Parse("https://api.example.com/start")
 	nextURL, _ := url.Parse("https://api.example.com/next")
 	policy := DestinationPolicy{
-		Dependency: "news.fetch",
-		AllowedHosts: []string{"api.example.com"},
+		Dependency:     "news.fetch",
+		AllowedHosts:   []string{"api.example.com"},
 		AllowRedirects: true,
-		MaxRedirects: 1,
+		MaxRedirects:   1,
 	}
 	ctx := context.WithValue(context.Background(), policyContextKey{}, policy)
 	previous := &http.Request{URL: previousURL, Header: make(http.Header)}
@@ -1072,7 +1071,6 @@ func TestClientReleasesDependencySlotAfterResponseReadCancellation(t *testing.T)
 		t.Fatalf("expected canceled and follow-up requests to reach the server, got %d", calls.Load())
 	}
 }
-
 
 func TestNewRejectsTooManyDependencyLimits(t *testing.T) {
 	limits := make(map[string]int, maxDependencyLimitEntries+1)

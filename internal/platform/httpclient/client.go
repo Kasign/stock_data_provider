@@ -27,7 +27,7 @@ const (
 	maxResponseBytesLimit        = int64(16 << 20)
 	defaultMaxConcurrent         = 4
 	maxConcurrentLimit           = 32
-	maxDependencyLimitEntries   = 64
+	maxDependencyLimitEntries    = 64
 	maxRetryLimit                = 2
 )
 
@@ -133,7 +133,7 @@ func New(config Config) (*Client, error) {
 	client := &Client{
 		config:           config,
 		resolver:         resolver,
-		dial:              dialer.DialContext,
+		dial:             dialer.DialContext,
 		defaultSemaphore: make(chan struct{}, config.MaxConcurrent),
 		semaphores:       semaphores,
 	}
