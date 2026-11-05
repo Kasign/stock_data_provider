@@ -63,7 +63,7 @@ func TestLiveBaoStockAdjustmentFactorConsistency(t *testing.T) {
 		EndDate:            endDate,
 		DateSemanticsNote:  "OperateDate is tested as a candidate effective date by matching raw, forward-adjusted and backward-adjusted K-lines; a successful price match is evidence for reconstruction semantics, not proof of the upstream field's legal/business definition.",
 		AvailabilityAtNote: "BaoStock query_adjust_factor does not expose a verified first-publication timestamp in this response; AvailableAt must remain unknown.",
-		Items:       make([]liveBaoStockAdjustmentItem, 0, 2),
+		Items:              make([]liveBaoStockAdjustmentItem, 0, 2),
 	}
 	var failures []string
 	for _, symbol := range []string{"sh.600036", "sz.002982"} {
