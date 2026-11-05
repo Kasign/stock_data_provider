@@ -1032,3 +1032,19 @@ func TestClientReleasesDependencySlotAfterResponseReadCancellation(t *testing.T)
 		t.Fatalf("expected canceled and follow-up requests to reach the server, got %d", calls.Load())
 	}
 }
+
+
+func TestNewRejectsTooManyDependencyLimits(t *testing.T) {
+	limits := make(map[string]int, maxDependencyLimitEntries+1)
+	for index := 0; index <= maxDependencyLimitEntries; index++ {
+		limits["dependency."+strconv.Itoa(index)] = 1
+	}
+
+	_, err := New(Config{DependencyLimits: limits})
+	if err == nil {
+		t.Fatalf("expected more than %d dependency limits to be rejected", maxDependencyLimitEntries)
+	}
+	if !strings.Contains(err.Error(), "dependency limits cannot exceed") {
+		t.Fatalf("unexpected validation error: %v", err)
+	}
+}
