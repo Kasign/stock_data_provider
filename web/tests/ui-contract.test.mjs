@@ -2945,3 +2945,13 @@ test("UIR-2 narrow Run Flow workspace allocates remaining height to independent 
   assert.match(stylesheet, /\.browser-data-import-dialog\{[^}]*max-height:calc\(100dvh - 24px\);overflow-y:auto;/);
   assert.match(html, /<dialog class="browser-data-import-dialog" id="browser-data-import-dialog"/);
 });
+
+
+test("UIR-2 settings navigation uses a two-column grid on narrow screens", () => {
+  const mobileStart = stylesheet.indexOf("@media (max-width: 600px) {\n  .settings-nav");
+  assert.notEqual(mobileStart, -1);
+  const mobileSettingsNav = stylesheet.slice(mobileStart, mobileStart + 360);
+  assert.match(mobileSettingsNav, /\.settings-nav \{[^}]*display:\s*grid;[^}]*grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\);/);
+  assert.match(stylesheet, /\.settings-nav \{[^}]*display:\s*flex;[^}]*flex-direction:\s*column;/);
+  assert.match(html, /<nav class="settings-nav" aria-label="设置分组">[\s\S]*?data-settings-target="settings-security-section"/);
+});

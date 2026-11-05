@@ -1717,3 +1717,11 @@ JSR-6L 补充：连接配置变更取消草稿检查后，旧代际 finally 按�
 - [x] 保留桌面双栏布局、600px 以下任务信息布局及独立滚动行为。
 - [x] 新增 UI contract，锁定最终级联中的窄屏网格行分配和导入弹窗滚动约束。
 - [ ] 在本批最终提交 SHA 上运行 WebUI Checks 与 Chromium Browser Smoke；仍需真实 iOS Safari / 触屏设备验收。
+
+## 2026-11-05 UIR-2 第五十六批：设置中心窄屏分组导航布局
+
+- [x] 复核设置中心 10 个分组导航的基础布局与窄屏最终级联。
+- [x] 确认 600px 以下已有双列 `grid-template-columns`，但导航容器仍继承基础 `display:flex`，该网格声明实际不生效，导致分组导航仍纵向占用整列高度。
+- [x] 在 600px 以下明确切换为 CSS Grid 双列布局；桌面端和 900px 以下平板端仍保留纵向导航。
+- [x] 新增 UI contract，锁定移动端导航布局模式及 10 个设置分组的导航入口。
+- [ ] 当前提交 SHA 的 WebUI Checks 与 Chromium Browser Smoke 尚待运行；真实 iOS Safari / 触屏设备仍需人工验收。
