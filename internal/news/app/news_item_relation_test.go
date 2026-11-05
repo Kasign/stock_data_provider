@@ -38,7 +38,11 @@ func (tx memoryNewsRelationTx) LatestNewsItemVersion(_ context.Context,newsID st
 	for _,v:=range tx.data.versions { if v.NewsID==newsID && v.VersionNo>latest.VersionNo { latest=v } }
 	return latest,latest.ID!="",nil
 }
-func (tx memoryNewsRelationTx) ListNewsItemRelations(_ context.Context,newsID string)([]domain.NewsItemRelation,error){return append([]domain.NewsItemRelation(nil),tx.data.relations[newsID]...),nil}
+func (tx memoryNewsRelationTx) ListAllNewsItemRelations(_ context.Context)([]domain.NewsItemRelation,error){
+	var all []domain.NewsItemRelation
+	for _, items := range tx.data.relations { all=append(all,items...) }
+	return all,nil
+}
 func (tx memoryNewsRelationTx) AppendNewsItemRelation(_ context.Context,r domain.NewsItemRelation)error{
 	if tx.data.failAppend{return errors.New("append failed")}
 	tx.data.relations[r.FromNewsID]=append(tx.data.relations[r.FromNewsID],r)

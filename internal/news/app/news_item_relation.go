@@ -25,7 +25,7 @@ type NewsItemRelationTransaction interface {
 	ObservationByID(context.Context, string) (domain.Observation, bool, error)
 	NewsItemVersionByID(context.Context, string) (domain.NewsItemVersion, bool, error)
 	LatestNewsItemVersion(context.Context, string) (domain.NewsItemVersion, bool, error)
-	ListNewsItemRelations(context.Context, string) ([]domain.NewsItemRelation, error)
+	ListAllNewsItemRelations(context.Context) ([]domain.NewsItemRelation, error)
 	AppendNewsItemRelation(context.Context, domain.NewsItemRelation) error
 }
 
@@ -89,8 +89,18 @@ func (u *ApplyNewsItemRelation) Execute(ctx context.Context, request NewsItemRel
 		if err := validateRelationVersionOwnership(ctx, tx, relation.ToVersionID, relation.ToNewsID, relation.ToSourceID); err != nil {
 			return err
 		}
+		if relation.FromVersionID != "" {
+			latest, ok, err := tx.LatestNewsItemVersion(ctx, relation.FromNewsID)
+			if err != nil { return err }
+			if !ok || latest.ID != relation.FromVersionID { return ErrNewsItemRelationEvidence }
+		}
+		if relation.ToVersionID != "" {
+			latest, ok, err := tx.LatestNewsItemVersion(ctx, relation.ToNewsID)
+			if err != nil { return err }
+			if !ok || latest.ID != relation.ToVersionID { return ErrNewsItemRelationEvidence }
+		}
 
-		history, err := tx.ListNewsItemRelations(ctx, relation.FromNewsID)
+		history, err := tx.ListAllNewsItemRelations(ctx)
 		if err != nil {
 			return err
 		}
