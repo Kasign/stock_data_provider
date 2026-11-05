@@ -2678,3 +2678,21 @@ test("UIR-2 侧栏品牌、分组标签与服务状态文字使用组件基础�
   assert.match(stylesheet, /@media \(max-width: 900px\) \{[\s\S]*?\.brand-copy, \.side-label[\s\S]*?\.sidebar-footnote \{ display: none; \}/);
   assert.match(stylesheet, /@media \(max-width: 600px\) \{[\s\S]*?\.sidebar \.side-label, \.sidebar \.sidebar-footnote \{ display: block; \}/);
 });
+
+
+test("UIR-2 表格元信息、质量标记与页面辅助区域使用组件基础字号", () => {
+  const expectedSizes = [
+    [".table-meta", /font-size:\s*12px\s*;/],
+    [".mini-quality", /font-size:\s*12px\s*;/],
+    [".table-footer", /font-size:\s*12px\s*;/],
+    [".page-footer", /font-size:\s*12px\s*;/],
+    [".soft-badge", /font-size:\s*12px\s*;/]
+  ];
+  for (const [selector, sizePattern] of expectedSizes) {
+    const declaration = baseCssDeclarationBlock(selector);
+    assert.match(declaration, sizePattern, selector + " must own its readable base font size");
+    assert.doesNotMatch(declaration, /!important/);
+  }
+  assert.match(stylesheet, /@media \(max-width: 600px\) \{[\s\S]*?\.chart-foot, \.table-footer, \.page-footer \{ align-items: flex-start; flex-direction: column; gap: 6px; \}/);
+  assert.match(stylesheet, /:root\[data-theme="light"\] \.soft-badge \{ color: #245d95; background: #eaf3ff; \}/);
+});
