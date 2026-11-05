@@ -2935,7 +2935,7 @@ func TestDailyBarAdjustmentMetadataDegradesUnverifiedForwardReference(t *testing
 		AdjustmentMethod: "eastmoney_fqt_1",
 		QualityStatus:    model.QualityValid,
 	}}
-	warnings, err := applyDailyBarAdjustmentMetadataQuality(bars, model.AdjustmentForward, "2026-10-20")
+	warnings, err := applyDailyBarAdjustmentMetadataQuality(bars, model.AdjustmentForward)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2954,24 +2954,35 @@ func TestDailyBarAdjustmentMetadataRejectsMixedMethodsAndReferences(t *testing.T
 	other := base
 	other.TradeDate = "2026-10-21"
 	other.AdjustmentMethod = "method-b"
-	if _, err := applyDailyBarAdjustmentMetadataQuality([]model.DailyBar{base, other}, model.AdjustmentForward, "2026-10-22"); err == nil {
+	if _, err := applyDailyBarAdjustmentMetadataQuality([]model.DailyBar{base, other}, model.AdjustmentForward); err == nil {
 		t.Fatal("mixed adjustment methods must reject the provider response")
 	}
 	other = base
 	other.TradeDate = "2026-10-21"
 	other.AdjustmentRefDate = "2026-10-23"
-	if _, err := applyDailyBarAdjustmentMetadataQuality([]model.DailyBar{base, other}, model.AdjustmentForward, "2026-10-23"); err == nil {
+	if _, err := applyDailyBarAdjustmentMetadataQuality([]model.DailyBar{base, other}, model.AdjustmentForward); err == nil {
 		t.Fatal("mixed adjustment reference dates must reject the provider response")
 	}
 }
 
-func TestDailyBarAdjustmentMetadataRejectsReferenceOutsideRequestedRange(t *testing.T) {
+func TestDailyBarAdjustmentMetadataAllowsReferenceAfterRequestedEnd(t *testing.T) {
 	bar := model.DailyBar{
 		TradeDate: "2026-10-20", AdjustmentBasis: model.AdjustmentForward,
-		AdjustmentMethod: "method-a", AdjustmentRefDate: "2026-10-22", QualityStatus: model.QualityValid,
+		AdjustmentMethod: "pytdx_qfq", AdjustmentRefDate: "2026-10-22", QualityStatus: model.QualityValid,
 	}
-	if _, err := applyDailyBarAdjustmentMetadataQuality([]model.DailyBar{bar}, model.AdjustmentForward, "2026-10-21"); err == nil {
-		t.Fatal("forward adjustment reference date after requested end must be rejected")
+	warnings, err := applyDailyBarAdjustmentMetadataQuality([]model.DailyBar{bar}, model.AdjustmentForward)
+	if err != nil || len(warnings) != 0 || bar.QualityStatus != model.QualityValid {
+		t.Fatalf("a valid provider reference date after the requested end must be accepted: warnings=%v err=%v bar=%+v", warnings, err, bar)
+	}
+}
+
+func TestDailyBarAdjustmentMetadataRejectsFutureReferenceDate(t *testing.T) {
+	bar := model.DailyBar{
+		TradeDate: "2026-10-20", AdjustmentBasis: model.AdjustmentForward,
+		AdjustmentMethod: "pytdx_qfq", AdjustmentRefDate: "2999-01-01", QualityStatus: model.QualityValid,
+	}
+	if _, err := applyDailyBarAdjustmentMetadataQuality([]model.DailyBar{bar}, model.AdjustmentForward); err == nil {
+		t.Fatal("a future adjustment reference date must be rejected")
 	}
 }
 
@@ -2980,7 +2991,7 @@ func TestDailyBarAdjustmentMetadataAllowsCumulativeHFQWithoutReferenceDate(t *te
 		TradeDate: "2026-10-20", AdjustmentBasis: model.AdjustmentBackward,
 		AdjustmentMethod: "tushare_adj_factor_hfq_v1", QualityStatus: model.QualityValid,
 	}}
-	warnings, err := applyDailyBarAdjustmentMetadataQuality(bars, model.AdjustmentBackward, "2026-10-20")
+	warnings, err := applyDailyBarAdjustmentMetadataQuality(bars, model.AdjustmentBackward)
 	if err != nil || len(warnings) != 0 || bars[0].QualityStatus != model.QualityValid {
 		t.Fatalf("cumulative-factor HFQ without reference date: bars=%+v warnings=%v err=%v", bars, warnings, err)
 	}

@@ -143,3 +143,11 @@
 - 测试证券代码夹具已修正为合法的 `600519.SH`；生产代码的证券校验保持不变。
 - 同一 SHA 的 5 个 workflow 全部完成且 success：Go test suite push `41997386635`、Go test suite PR `41997394765`、Go-Python parity `41997394676`、Live provider probe `41997394766`、WebUI checks `41997394719`。
 - PR #1 保持 Open / Draft，未合并。Service PIT 回退验收通过；阶段 B 仍 in_progress，后续继续复权口径、交易边界和诊断计数审查。
+
+
+## 2026-11-05 P0 批次 22：修正前复权参考日与请求结束日混淆
+
+- Pytdx 的前复权参考日来自完整加载历史的最新交易日，可能晚于请求区间结束日；请求结束日只限定返回 K 线，不应限制复权计算基准日。
+- Service 校验改为：前复权参考日不得早于任一 K 线日期；参考日不得晚于当前 Asia/Shanghai 日期；同一序列 method/reference date 必须一致。移除“参考日不得晚于请求结束日”的错误限制。
+- 新增晚于请求结束日的参考日可接受、未来参考日拒绝两项回归测试。
+- 本批待新 SHA 完整 CI 验证，阶段 B 继续 in_progress。
