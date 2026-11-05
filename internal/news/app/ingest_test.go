@@ -191,7 +191,7 @@ func TestIngestCandidateRetriesIdempotently(t *testing.T) {
 func TestIngestCandidateRejectsIdempotencyKeyPayloadReuse(t *testing.T) {
 	repository := &memoryIdentityRepository{}
 	usecase := NewIngestCandidate(repository, func() string { return "observation-fixed" })
-	_, err := usecase.Execute(context.Background(), "source-1", "same-key", domain.Candidate{ProviderItemID: "provider-result-1", SourceItemID: "source-item-1"}, domain.SourceURLPolicy{}})
+	_, err := usecase.Execute(context.Background(), "source-1", "same-key", domain.Candidate{ProviderItemID: "provider-result-1", SourceItemID: "source-item-1"}, domain.SourceURLPolicy{})
 	if err != nil {
 		t.Fatal(err)
 	}
