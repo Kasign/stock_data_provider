@@ -261,7 +261,7 @@ LLM-001 先盘点现有 Gateway 协议，不在调查前冻结完整 DTO。盘�
 - Generate(ctx, ModelRequest) -> ModelResponse
 - Stream(ctx, ModelRequest) -> Stream[ModelEvent]
 
-若当前 Gateway 不支持真正流式，Stream 应标记 unsupported，不得通过一次性响应伪装增量事件。Tool Call 作为结构化输出返回，不由 LLM 执行。
+当前 Gateway 已有 Responses JSON/SSE 转发代码与远程 Provider Mock 测试，但当前部署的本地 llama.cpp Responses 真实链路未验收。静态协议盘点见 doc/llm/03-现有模型Gateway协议盘点.md。Stream 的生产可用状态必须由实际本地上游 E2E 决定；若不支持应标记 unsupported，不得通过一次性响应伪装增量事件。Tool Call 作为结构化输出返回，不由 LLM 执行。
 
 ## 6. Notification 首批 Application Port
 

@@ -91,8 +91,10 @@ Domain/Contract 不得因为无关模块的 Adapter/Integration 未完成而被�
 
 ### 4.4 LLM
 
-- LLM-001 需明确 Gateway 是否真正支持 Responses/Chat Completions、结构化输出、流式和工具调用；不能按兼容宣称设计能力。
-- 模型返回 tool call 只是待执行意图；Researchflow 必须独立做白名单、参数 Schema、权限和预算检查。
+- LLM-001 已完成现有 Gateway 的静态源码/测试盘点：客户端主协议为 Responses，/v1/responses 支持 JSON/SSE 转发；本地 llama.cpp 会改写 instructions/input，且真实本地 E2E 尚未执行，不能将远程 Provider Mock 通过等同于当前部署验收。
+- text.format 目前只是透传条件，Gateway 未做 Responses JSON Schema 语义保证；本地模型 structured output 仍待验证，LLM Adapter 必须本地 Schema 校验。
+- Responses tools 可透传但 Gateway 不执行；模型返回 tool call 只是待执行意图，Researchflow 必须独立做白名单、参数 Schema、权限和预算检查。
+- Responses usage 可解析 input/output tokens；流式审计能提取 usage，但 Responses 文本 delta 当前未形成统一内容 delta/TTFT 事件；LLM Adapter 需独立解析 Responses SSE。
 - Prompt/Response 日志必须脱敏并限制保存；调用元数据与内容正文分开管理。
 
 ### 4.5 Notification
@@ -108,7 +110,7 @@ Domain/Contract 不得因为无关模块的 Adapter/Integration 未完成而被�
 - Quant 数值精度、Indicator/Factor 首批参数仍待 CONTRACT-001~003。
 - Research AuthorizationRef 与统一 system_as_of 仍待 CONTRACT-004/005。
 - Researchflow partial/degraded 和 cancel 迁移细节仍待 CONTRACT-006/007。
-- LLM 真实 Gateway 协议仍待 LLM-001。
+- LLM-001 静态盘点已完成，当前部署本地 llama.cpp Responses JSON/SSE 在线 E2E、structured output 和工具调用能力仍待真实验收。
 - Notification recipient_scope、幂等唯一键和 Payload Schema 注册仍待 CONTRACT-009/010。
 - 根 DI、HTTP、Worker、Migration 注册及真实 DB/渠道验收均属于 Integration，不在本轮完成。
 
@@ -183,3 +185,14 @@ Domain/Contract 不得因为无关模块的 Adapter/Integration 未完成而被�
 - 数据库 CAS、租约和 fencing token 的具体字段/唯一约束属于 FLOW-007 Repository/Schema 评审，当前为逻辑契约建议。
 
 **本轮结论：规划侧 CONTRACT-006/007 建议决议已形成，文档间状态语义已统一；仍待 Researchflow Owner Review，不代表实现、契约冻结或 L2 Module Ready。**
+
+
+## 9. LLM-001 现有 Gateway 协议盘点（2026-11-05）
+
+- 只读核验 Kasign/llm-gateway dev @ 3cd5aacced882143628c23ee00e06243616d1a5f；未修改 Gateway 仓库。
+- 客户端协议确认采用 OpenAI Responses：POST /v1/responses；调用方 Gateway Key 使用 Authorization: Bearer 或 X-API-Key。Admin Key、Web Session 和上游 Provider Key 均独立。
+- 本地路径会合并 instructions/system/developer，保留 tools，并在流式请求中补 stream_options.include_usage；远程 Provider 路径主要透传请求并重写服务端 model。
+- Gateway 有 Responses JSON/SSE Mock 测试和 opt-in 真实 Provider E2E 测试；后者默认跳过。当前部署的本地 llama.cpp/Qwen 真实链路尚未验证。
+- 本地 Responses SSE 中断后未发现专用 event:error 补发；Responses output_text.delta 也未被当前 Chat delta 审计解析器识别为内容/TTFT。Usage 的 response.usage 可解析。
+- LLM-001 静态盘点完成、在线验收未执行，整体状态 partial。LLM-002 Port/Fixture 可继续；LLM-004/005 只能先做独立解析/校验准备，不能宣称真实模型能力已通过。
+- 详细证据与测试矩阵见 doc/llm/03-现有模型Gateway协议盘点.md。

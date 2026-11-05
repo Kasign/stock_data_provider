@@ -708,7 +708,7 @@ DATA-CONTRACT-001 的 gofmt 子项已恢复；完整 CI 阻断转为测试编译
 | Research Context/Evidence | Research + Researchflow | 待 Review | system_as_of、AuthorizationRef、内容策略 |
 | News Evidence Query Port | News + Research + Researchflow | 目标契约已写，待确认 | DTO、知识时间过滤、当前授权、Cursor、错误 |
 | Researchflow Run/Stage/Attempt | Researchflow + Platform | 规划侧 CONTRACT-006/007 Review 已完成，待 Owner Review | 传播矩阵、硬风险门禁标记、取消宽限期、租约/并发参数、Repository CAS/fencing 约束 |
-| LLM Model Adapter | LLM + Platform | 协议盘点前 | 先完成 LLM-001 |
+| LLM Model Adapter | LLM + Platform | LLM-001 静态盘点完成，在线 E2E 未验收 | Responses Adapter Port/Fixture 可开始；真实本地链路、Structured Output、SSE 能力待验证 |
 | Notification Event/Delivery | Notification + Platform | 待 Review | payload Schema、recipient_scope、幂等和 Attempt |
 | Data Snapshot Input | Data + Quant | 总体语义已定义，字段映射待 Review | PIT、单位、复权、quality、source version |
 
@@ -717,7 +717,7 @@ DATA-CONTRACT-001 的 gofmt 子项已恢复；完整 CI 阻断转为测试编译
 ### 31.8 当前结论
 
 - 五模块均已达到 Design Ready；是否达到 Module Ready 必须按模块、按首批任务分别确认。
-- LLM-001 是当前唯一无需等待其他模块接口实现即可直接推进的首批任务。
+- LLM-001 静态协议盘点已完成，当前本地 llama.cpp 在线 E2E 未执行；LLM-002 的 Port/Fixture 可独立开始，真实模型能力验收仍需补齐。
 - Quant、Research、Researchflow、Notification 可继续完善各自不依赖未决字段的领域设计和测试方案；相关跨模块 Adapter/调用点待 Owner Review 后实现。
 - Data/News/Platform 的真实实现、真实环境和 CI 仅在对应 Adapter/Integration 批次验收，不作为无关模块的共同前置条件。
 - 本节不宣称 GOV-004 已冻结，不自动创建任何模块分支。
@@ -755,3 +755,14 @@ Workflow Template 按 stage_code + template_version 固定 on_degraded、on_skip
 - GOV-004 整体仍为 NO-GO；不冻结共同契约，不创建模块分支。
 
 **本轮结论：Researchflow 的状态机草案已达到可供 Owner 逐项确认的粒度；FLOW-001~003 仍可独立进行领域开发准备，FLOW-004 需在 Executor 资源与租约契约确认后进入实现。**
+
+
+## 33. LLM-001 现有 Gateway 协议盘点更新（2026-11-05）
+
+- 核验对象：Kasign/llm-gateway，dev 分支提交 3cd5aacced882143628c23ee00e06243616d1a5f；本轮仅读取，不修改该仓库。
+- 当前客户端主协议为 OpenAI Responses，POST /v1/responses；Gateway 调用方认证支持 Bearer 与 X-API-Key，调用方凭据与管理员凭据、上游 Provider 凭据分离。
+- Gateway 本地 llama.cpp 路径会改写 instructions/input 中 system/developer 内容，并对流式请求补 include_usage；Responses bridge 不转为 Chat Completions。远程 Provider 有 JSON/SSE Mock 透传测试。
+- Structured Output 仅能确认请求字段可透传，不能确认当前本地模型具备完整 JSON Schema/strict 能力。Tool definitions 可透传但不执行。
+- Responses usage 的 JSON/SSE 解析已存在；Responses 文本增量的 TTFT/内容审计存在缺口。本地 SSE 中断后的 Responses error event 行为未与远程 Provider 对齐。
+- LLM-001 静态盘点完成；真实本地 llama.cpp Responses JSON/SSE、Structured Output、Tool Call 在线验收未执行，故总体状态 partial。详细结果见 doc/llm/03-现有模型Gateway协议盘点.md。
+- LLM-002 的 Port/Fixture 可基于已确认协议先行；不得据此把 LLM-004/005 的真实模型能力标记通过。GOV-004 仍未冻结，不创建模块分支。
