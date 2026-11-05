@@ -1,4 +1,5 @@
 import { applyTheme, persistTheme, readTheme, THEME_STORAGE_KEY } from "./theme.js";
+import { bindTaskPollingLifecycle } from "./task-poll-lifecycle.js";
 import { DEFAULT_PREFERENCES, PREFERENCES_KEY, WATCHLIST_DISPLAY_FIELDS, normalizeImportedPreferences, readPreferences, readPreferencesState, resetPreferences, savePreferences } from "./preferences.js";
 import { connectionDraftChanged, mergeConnectionDraft } from "./settings-draft.js";
 import { setupSettingsNavigation } from "./settings-navigation.js";
@@ -151,6 +152,7 @@ const state = {
   pollTimer: null,
   pollGeneration: 0,
   pollController: null,
+  pollPausedForVisibility: false,
   runResultController: null,
   isQuerying: false,
   quoteQueryGeneration: 0,
@@ -3386,6 +3388,23 @@ function abortRunResultRequest() {
   }
 }
 
+function pauseTaskPollingForHiddenPage() {
+  if (!state.taskId || (!state.pollTimer && !state.pollController)) return;
+  state.pollPausedForVisibility = true;
+  stopTaskPolling();
+}
+
+function resumeTaskPollingAfterVisiblePage() {
+  if (!state.pollPausedForVisibility) return;
+  state.pollPausedForVisibility = false;
+  if (!state.taskId) return;
+  if (document.hidden) {
+    state.pollPausedForVisibility = true;
+    return;
+  }
+  void pollTaskSafely(state.pollGeneration);
+}
+
 function stopTaskPolling() {
   const timer = state.pollTimer;
   const controller = state.pollController;
@@ -3614,6 +3633,13 @@ async function pollTask(generation = state.pollGeneration) {
 
 
 function pollTaskSafely(generation = state.pollGeneration) {
+  if (document.hidden) {
+    if (generation === state.pollGeneration && state.taskId) {
+      state.pollPausedForVisibility = true;
+      stopTaskPolling();
+    }
+    return Promise.resolve();
+  }
   return pollTask(generation).catch((error) => {
     // 将异常恢复也视为不可信路径：其中任一 UI 更新失败都不能再次拒绝 Promise。
     try {
@@ -5455,6 +5481,13 @@ $("#copy-task-id").addEventListener("click", async () => {
     button.textContent = "复制失败";
   }
   window.setTimeout(() => { button.textContent = "复制"; }, 1600);
+});
+
+bindTaskPollingLifecycle({
+  documentRef: document,
+  windowRef: window,
+  onPause: pauseTaskPollingForHiddenPage,
+  onResume: resumeTaskPollingAfterVisiblePage
 });
 
 renderNotificationState({ supported: false });
