@@ -2828,3 +2828,19 @@ test("UIR-2 页面眉题、查询辅助与设置提示字号由组件基础规�
   assert.match(stylesheet, /\.query-hint \{[^}]*padding-left: 150px/);
   assert.match(stylesheet, /@media \(max-width: 1200px\) \{[\s\S]*?\.query-hint \{ padding-left: 0; \}/);
 });
+
+
+test("UIR-2 page timestamp and panel kicker typography use component baselines", () => {
+  const lastUpdated = baseCssDeclarationBlock(".last-updated");
+  const lastUpdatedValue = baseCssDeclarationBlock(".last-updated strong");
+  const panelKicker = baseCssDeclarationBlock(".panel-kicker");
+  assert.match(lastUpdated, /font-size:\\s*12px\\s*;/);
+  assert.match(lastUpdatedValue, /font-size:\\s*12px\\s*;/);
+  assert.match(panelKicker, /font-size:\\s*var\\(--font-size-secondary\\)\\s*;/);
+  assert.doesNotMatch(lastUpdated, /!important/);
+  assert.doesNotMatch(lastUpdatedValue, /!important/);
+  assert.doesNotMatch(panelKicker, /!important/);
+  assert.match(stylesheet, /@media \\(max-width: 640px\\) \\{[\\s\\S]*?\\.last-updated \\{[\\s\\S]*?white-space: normal;/);
+  assert.match(stylesheet, /:root\\[data-theme="light"\\] \\.last-updated strong[^}]*color: var\\(--text\\)/);
+  assert.match(stylesheet, /:root\\[data-theme="light"\\] h2, :root\\[data-theme="light"\\] \\.panel-kicker/);
+});

@@ -165,8 +165,8 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .eyebrow { margin: 0 0 10px; color: var(--accent); font-size: 12px; font-weight: 750; letter-spacing: 1.7px; }
 h1 { margin: 0; color: #eef4f8; font-size: clamp(24px, 2.4vw, 31px); font-weight: 660; letter-spacing: -.9px; }
 .page-subtitle { max-width: 690px; margin: 9px 0 0; color: var(--text-soft); font-size: 12px; line-height: 1.75; }
-.last-updated { display: flex; align-items: center; gap: 7px; padding-bottom: 3px; color: var(--text-dim); white-space: nowrap; font-size: 10px; }
-.last-updated strong { margin-left: 2px; color: #a9bac9; font-size: 10px; font-weight: 550; }
+.last-updated { display: flex; align-items: center; gap: 7px; padding-bottom: 3px; color: var(--text-dim); white-space: nowrap; font-size: 12px; }
+.last-updated strong { margin-left: 2px; color: #a9bac9; font-size: 12px; font-weight: 550; }
 .panel {
    min-width: 0;
    border: 1px solid var(--border);
@@ -177,7 +177,7 @@ h1 { margin: 0; color: #eef4f8; font-size: clamp(24px, 2.4vw, 31px); font-weight
 }
 .search-panel { display: flex; align-items: center; gap: var(--space-6); padding: 19px 21px 15px; flex-wrap: wrap; }
 .search-intro { min-width: 125px; }
-.panel-kicker { margin-bottom: 5px; color: #e1e9ef; font-size: 12px; font-weight: 650; }
+.panel-kicker { margin-bottom: 5px; color: #e1e9ef; font-size: var(--font-size-secondary); font-weight: 650; }
 .panel-muted { color: var(--text-dim); font-size: 12px; }
 .query-form { display: flex; flex: 1; align-items: flex-end; gap: 11px; min-width: 280px; }
 .field { display: flex; flex-direction: column; gap: 7px; min-width: 0; color: #93a7b9; font-size: 10px; }
@@ -708,9 +708,6 @@ body { font-size: var(--font-size-body-readable); line-height: var(--line-height
 .breadcrumb { font-size: var(--font-size-secondary) !important; }
 .environment-chip { font-size: var(--font-size-support) !important; }
 .page-subtitle { font-size: var(--font-size-secondary) !important; }
-.last-updated { font-size: 12px !important; }
-.last-updated strong { font-size: 12px !important; }
-.panel-kicker { font-size: var(--font-size-secondary) !important; }
 .field { font-size: var(--font-size-support) !important; }
 .button { font-size: var(--font-size-control) !important; }
 .section-heading h2 span { font-size: var(--font-size-secondary) !important; }

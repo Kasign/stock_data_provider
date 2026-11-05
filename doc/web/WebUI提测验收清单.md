@@ -1847,3 +1847,13 @@ CI 复核记录：本批首次 Chromium Browser Smoke 在个股研究数据质�
 - [x] 新增 UI contract 锁定字号、状态颜色和响应式行为。
 - [ ] 在本批最终提交 SHA 上运行 WebUI Checks、JS 语法检查、Compose 校验和 Nginx 镜像构建。
 - [ ] 执行 Chromium Browser Smoke；人工核验设置、安全提示及页面辅助信息在多分辨率下的可读性。
+
+
+## 2026-11-05 UIR-2 第四十六批：页面更新时间与面板眉题字号收敛
+
+- [x] 页面更新时间及其强调值从 10px 提升并固定为 12px，迁回组件基础规则。
+- [x] 面板眉题字号迁回组件基础规则，沿用 13px 次级文字 token。
+- [x] 删除 3 条全局字号 `!important` 覆盖；保留浅色主题文字颜色及 640px 以下更新时间换行行为。
+- [x] UI contract 锁定组件基础字号、无强制优先级、主题颜色和窄屏换行。
+- [ ] 在本批最终提交 SHA 上运行 WebUI Checks、JS 语法检查、Compose 校验和 Nginx 镜像构建。
+- [ ] 执行 Chromium Browser Smoke；人工核验更新时间及面板眉题在深浅主题和多分辨率下的可读性。
