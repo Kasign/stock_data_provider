@@ -195,3 +195,22 @@ func TestValidateNewsItemRelationHistoryProposedReplacementDoesNotWithdrawCurren
 		t.Fatal("one historical assertion cannot have multiple direct successors")
 	}
 }
+
+func TestValidateNewsItemRelationRejectsNonCanonicalIdentifiers(t *testing.T) {
+	relation := relationFixture("rel-1", "news-repost", "news-original")
+	relation.ToNewsID = " news-repost "
+	if !errors.Is(ValidateNewsItemRelation(relation), ErrNewsItemRelationInvalid) {
+		t.Fatal("whitespace-padded self relation must be rejected")
+	}
+
+	relation = relationFixture("rel-1", "news-repost", "news-original")
+	relation.ToSourceID = " " + relation.FromSourceID
+	if !errors.Is(ValidateNewsItemRelation(relation), ErrNewsItemRelationInvalid) {
+		t.Fatal("whitespace-padded same-source relation must be rejected")
+	}
+
+	relation = relationFixture(" rel-1 ", "news-repost", "news-original")
+	if !errors.Is(ValidateNewsItemRelation(relation), ErrNewsItemRelationInvalid) {
+		t.Fatal("non-canonical relation ID must be rejected")
+	}
+}

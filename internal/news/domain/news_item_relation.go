@@ -50,22 +50,36 @@ var ErrNewsItemRelationInvalid = errors.New("news.item_relation.invalid")
 func ValidateNewsItemRelation(relation NewsItemRelation) error {
 	fromVersionID := strings.TrimSpace(relation.FromVersionID)
 	toVersionID := strings.TrimSpace(relation.ToVersionID)
-	if strings.TrimSpace(relation.ID) == "" ||
-		strings.TrimSpace(relation.FromNewsID) == "" ||
-		strings.TrimSpace(relation.ToNewsID) == "" ||
-		relation.FromNewsID == relation.ToNewsID ||
-		strings.TrimSpace(relation.FromSourceID) == "" ||
-		strings.TrimSpace(relation.ToSourceID) == "" ||
+	// Domain 接口也必须拒绝非规范 ID，不能只依赖 Application 入口清洗。
+	identifiers := []string{
+		relation.ID, relation.FromNewsID, relation.FromSourceID,
+		relation.ToNewsID, relation.ToSourceID,
+	}
+	for _, identifier := range identifiers {
+		if identifier == "" || identifier != strings.TrimSpace(identifier) {
+			return ErrNewsItemRelationInvalid
+		}
+	}
+	optionalIdentifiers := []string{
+		relation.SupersedesRelationID, relation.EvidenceObservation,
+		relation.FromVersionID, relation.ToVersionID,
+	}
+	for _, identifier := range optionalIdentifiers {
+		if identifier != strings.TrimSpace(identifier) {
+			return ErrNewsItemRelationInvalid
+		}
+	}
+	if relation.FromNewsID == relation.ToNewsID ||
 		relation.FromSourceID == relation.ToSourceID ||
 		relation.Kind != NewsItemRelationRepostOf ||
 		(relation.Status != NewsItemRelationProposed && relation.Status != NewsItemRelationConfirmed && relation.Status != NewsItemRelationRetracted) ||
 		relation.AssertedAt.IsZero() || relation.ObservedAt.IsZero() ||
-		(relation.Status == NewsItemRelationRetracted && strings.TrimSpace(relation.SupersedesRelationID) == "") ||
-		(strings.TrimSpace(relation.EvidenceObservation) == "" && (fromVersionID == "" || toVersionID == "")) ||
+		(relation.Status == NewsItemRelationRetracted && relation.SupersedesRelationID == "") ||
+		(relation.EvidenceObservation == "" && (fromVersionID == "" || toVersionID == "")) ||
 		((fromVersionID == "") != (toVersionID == "")) {
 		return ErrNewsItemRelationInvalid
 	}
-	if strings.TrimSpace(relation.SupersedesRelationID) == relation.ID {
+	if relation.SupersedesRelationID == relation.ID {
 		return ErrNewsItemRelationInvalid
 	}
 	return nil
