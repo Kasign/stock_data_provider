@@ -123,4 +123,4 @@ HTTP Client 必须区分固定 Provider API Endpoint 与不可信来源 URL。�
 
 首批实现位于 `internal/platform/httpclient`，包含目的地址策略、精确 Host/Port allowlist、受控 DNS 解析与 IP literal Dial、重定向逐跳检查、禁用环境代理、请求/响应上限和 dependency 并发控制。重试仅在调用方显式声明幂等且配置了 MaxRetries 时启用，最多 2 次。
 
-代码测试覆盖已添加，但本轮尚未在 Go 环境运行。当前测试仍需补齐/执行真实 Transport 连接路径验证，特别是 DNS rebinding、重定向到私网/未授权 host、超时取消、代理环境变量和响应体限制。安全验收完成前，不得开放任意来源抓取。
+专项 CI 已通过 gofmt、go test、go test -race 和 go vet；已增加基于本地 HTTP Server 的 Transport 连接路径测试，覆盖受控 IP Dial、Host 保留、重定向策略、DNS 结果变化、响应体上限和幂等重试。真实生产网络出口与完整 SSRF 攻击矩阵仍待验收，未完成前不得开放任意来源抓取。
