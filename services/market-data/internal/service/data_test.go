@@ -862,6 +862,26 @@ func TestDailyBarsRejectsProviderAdjustmentMismatchAndUsesFallback(t *testing.T)
 	}
 }
 
+func TestDailyBarsWarnsWhenProviderReturnsRowsBeforeStartDate(t *testing.T) {
+	volume := int64(1000)
+	amount := 10500.0
+	p := fakeProvider{name: "eastmoney", bars: []model.DailyBar{
+		{SourceVersion: "test-v1", Symbol: "600519.SH", TradeDate: "2026-10-19", Period: "1d", Open: 10, High: 11, Low: 9, Close: 10.5, Volume: &volume, Amount: &amount, AdjustmentBasis: model.AdjustmentForward, Source: "eastmoney", VolumeUnit: "shares", AmountUnit: "CNY", QualityStatus: model.QualityValid},
+		{SourceVersion: "test-v1", Symbol: "600519.SH", TradeDate: "2026-10-20", Period: "1d", Open: 10, High: 11, Low: 9, Close: 10.5, Volume: &volume, Amount: &amount, AdjustmentBasis: model.AdjustmentForward, Source: "eastmoney", VolumeUnit: "shares", AmountUnit: "CNY", QualityStatus: model.QualityValid},
+	}}
+	s := New([]provider.Provider{p}, cache.NewDisabled(), nil, time.Second, time.Minute, 120, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	bars, _, warnings, err := s.DailyBars(context.Background(), "600519.SH", "2026-10-20", "2026-10-20", 1, model.AdjustmentForward)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(bars) != 1 || bars[0].TradeDate != "2026-10-20" {
+		t.Fatalf("provider row before requested start must be dropped: %+v", bars)
+	}
+	if !containsTestWarning(warnings, "bar_before_start_date_dropped") {
+		t.Fatalf("provider start-bound violation must be surfaced to API callers: %v", warnings)
+	}
+}
+
 func TestDailyBarsRejectsStartAfterEnd(t *testing.T) {
 	s := New(nil, cache.NewDisabled(), nil, time.Second, time.Minute, 120, nil)
 	_, _, _, err := s.DailyBars(context.Background(), "600519", "2026-10-21", "2026-10-20", 20, model.AdjustmentForward)

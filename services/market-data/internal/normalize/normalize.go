@@ -197,6 +197,9 @@ func ValidateAndSortBars(symbol string, bars []model.DailyBar, start, end string
 			return nil, []string{"invalid_end_date"}
 		}
 	}
+	if start != "" && end != "" && start > end {
+		return nil, []string{"invalid_date_range"}
+	}
 	canonicalRequestedSymbol, symbolErr := NormalizeSymbol(symbol)
 	if symbolErr != nil || canonicalRequestedSymbol != symbol {
 		return nil, []string{"invalid_requested_symbol"}
@@ -225,6 +228,7 @@ func ValidateAndSortBars(symbol string, bars []model.DailyBar, start, end string
 			continue
 		}
 		if start != "" && b.TradeDate < start {
+			warnings = append(warnings, "bar_before_start_date_dropped")
 			continue
 		}
 		if end != "" && b.TradeDate > end {
@@ -378,6 +382,14 @@ func ValidateQuoteWithReport(q *model.Quote) (validation.Report, error) {
 // Count is the number of affected rows for aggregate issues; Issues remains bounded.
 func ValidateAndSortBarsWithReport(symbolValue string, bars []model.DailyBar, start, end string, limit int) ([]model.DailyBar, []string, validation.Report) {
 	report := validation.NewReport(validation.DefaultMaxIssues)
+	if start != "" && end != "" && validISOTradeDate(start) && validISOTradeDate(end) && start > end {
+		report.Add(validation.FieldIssue{
+			Stage: validation.StageValidate, Field: "date_range", Code: "invalid_date_range",
+			Expected: "start_date must be on or before end_date", Severity: validation.SeverityError,
+			Message: "requested daily-bar date range is reversed",
+		})
+		return nil, []string{"invalid_date_range"}, report
+	}
 	ctx := validation.DailyBarContext{RequestedSymbol: symbolValue, StartDate: start, EndDate: end, Period: "1d"}
 	rowHasErrors := make([]bool, len(bars))
 	for index, bar := range bars {

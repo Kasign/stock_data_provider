@@ -120,7 +120,7 @@
 | API-03 | 全市场分页与批量行情的范围、总数下限、覆盖率、MA 和复权语义 | 待当前 HEAD 复核 | 双方 | 服务端分页与字段质量可验证，WebUI 不将页内结果解释为全市场排名 |
 | API-04 | 市场情绪当前快照与历史快照的持久化、缺失交易日和覆盖语义 | 待真实验收 | 数据侧主责，WebUI 配合 | 有真实历史数据、数据库读写证据和无数据/缺日契约 |
 | API-05 | 市场级资金流真实数据与 Provider 权限验收 | 依赖凭据/权限 | 数据侧主责 | 真实请求可复现；权限缺失、Provider 不可用和空数据状态可区分 |
-| API-06 | 开发中 | Provider 静态清单、被动诊断、主动 Probe、Probe 历史均有 API；WebUI 已封装；历史窗口 Probe 复用既有 Provider/Validator/Reporter/TradingCalendar/SecurityTradingStatus/CrossProviderDailyCompare；已补充 BaoStock/Pytdx 复权因子与公司行为真实证据；本轮核验了四家 Provider 的复权元数据生产路径 | 使用现有 BaoStock 因子接口继续核验 qfq/hfq 绝对基准；对 Eastmoney/Tencent 做有限真实样本核验；随后完成 DailyBar 交易边界和 MariaDB Probe 历史部署验收 | BaoStock K 线参考日期与因子归一点仍需样本闭环；Eastmoney/Tencent 没有独立参考日期字段/正式契约；Tushare 当前账号 adj_factor/dividend 返回 40203 权限不足 | `cf69ccc4e8d81cfa44b11a9a61cde3666ee4d50f` | Go suite Run `41960803425`、Parity Run `41960803760`、WebUI Run `41960803407`、Live Probe Run `41960803434` 均通过 | BaoStock：两只股票各 9 条 raw/qfq/hfq，内部 OHLC 因子一致；Pytdx/BaoStock 2025 公司行为 3/3 matched；Pytdx 锚点 Live Run `41960406846` 通过。Eastmoney/Tencent 参考日期未验证；Tushare 40203 阻塞。事件 matched 不等于跨源 OHLC matched | 接口层已接入，待真实验收 |
+| API-06 | 开发中 | Provider 静态清单、被动诊断、主动 Probe、Probe 历史均有 API；WebUI 已封装；已修复日内停牌缺失日 K 被错误排除的问题；本轮补齐 DailyBar 开始日期越界告警与倒置区间结构化错误，未改变 API 路由/Schema | 当前提交 CI 通过后，继续 Reporter 聚合计数与 MariaDB/PIT/缓存日期边界审计；补充真实日内停牌样本；Eastmoney/Tencent 复权锚点仍需有限真实样本 | TickFlow `/v1/klines` 成交量单位仍待真实样本证明；日内停牌真实样本未验；Eastmoney/Tencent 响应未提供可独立确认的 ref date；Tushare adj_factor/dividend 40203 权限阻塞 | `850d3b26931685a2bee7e704ac90d8caddb3a3db`（本轮变更前基线） | 基线 Go suite Runs `41963474550`、`41963482209` 通过；Parity `41963482323`、WebUI `41963482255` 通过；Live Probe `41963482213` 工作流成功但实际 Provider 测试全部 Skip；本轮新增回归测试 CI 待验收 | BaoStock/Pytdx 既有样本证据保持；Eastmoney/Tencent 锚点未验证；日内停牌缺失日 K 仅自动化规则已修复，真实样本待验 | 接口层已接入，待真实验收 |
 | API-07 | 板块多维排行（近 5 日涨幅、资金净流入等） | 待能力评估 | 数据侧主责，WebUI 配合 | 有真实来源、完整候选范围、排序/分页契约及质量证据；不以成交额冒充净流入 |
 | API-08 | 通知渠道、订阅、发送测试与投递记录服务端能力 | 未提供服务端接口 | 数据侧主责；WebUI 后续接入 | 服务端安全存储、鉴权、审计、重试和投递查询契约完整 |
 | API-09 | 服务端选股策略、全市场扫描、候选理由与历史记录 | 待产品/API 设计 | 双方 | 明确策略 schema、扫描范围、异步任务、结果快照和可追溯理由 |
@@ -277,3 +277,13 @@
 - Eastmoney `fqt=1/2`、Tencent `qfq/hfq` 的请求映射已在代码测试覆盖，但响应不提供独立参考日期；保持 `not_comparable` 门禁，不从请求日期推断。
 - Tushare qfq 使用实际因子集合最大交易日作为参考日期；hfq 不填参考日期。当前账号 `adj_factor`/分红权限 40203，不重复请求。
 - 跨端状态仍为“接口层已接入，待真实验收”；本轮无新增 WebUI 工作项。
+
+
+## 12. 2026-11-05 DailyBar 日期边界诊断同步
+
+- 数据侧本轮变更前 HEAD：`850d3b26931685a2bee7e704ac90d8caddb3a3db`。
+- 发现并修复开始日期之前的 Provider Bar 在普通标准化 warnings 中静默丢弃的问题；新增 `bar_before_start_date_dropped`，与结束日期越界告警对称。
+- 标准化层对倒置日期区间返回 `invalid_date_range`；结构化 Reporter 返回一条请求级 Error，避免按每行重复累计。
+- 新增 Normalize 与 DataService 回归测试；未改变 OpenAPI、HTTP 路由、请求/响应字段或 WebUI 调用，WebUI 无需同步代码。
+- 变更前基线 Go suite Runs `41963474550`、`41963482209`、Parity `41963482323`、WebUI checks `41963482255` 通过；Live Probe `41963482213` 工作流成功但真实 Provider 测试全部 Skip。本轮提交 CI 待验收。
+- 跨端状态仍为“接口层已接入，待真实数据验收”；真实停牌样本和 Provider 复权锚点未完成。

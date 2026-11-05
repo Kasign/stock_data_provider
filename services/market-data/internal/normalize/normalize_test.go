@@ -327,6 +327,57 @@ func TestValidateAndSortBarsUsesInclusiveDateBoundsDeduplicatesAndKeepsNewestLim
 	}
 }
 
+func TestValidateAndSortBarsReportsBothDateRangeBoundaries(t *testing.T) {
+	before := validDailyBarForNormalizationTest()
+	before.TradeDate = "2026-10-19"
+	inside := validDailyBarForNormalizationTest()
+	inside.TradeDate = "2026-10-20"
+	after := validDailyBarForNormalizationTest()
+	after.TradeDate = "2026-10-21"
+	bars := []model.DailyBar{before, inside, after}
+
+	legacyBars, legacyWarnings := ValidateAndSortBars("600519.SH", bars, "2026-10-20", "2026-10-20", 0)
+	if len(legacyBars) != 1 || legacyBars[0].TradeDate != "2026-10-20" {
+		t.Fatalf("date range must retain only the inclusive in-range bar: %+v", legacyBars)
+	}
+	if !containsWarning(legacyWarnings, "bar_before_start_date_dropped") ||
+		!containsWarning(legacyWarnings, "bar_after_end_date_dropped") {
+		t.Fatalf("both date-bound violations must be visible in legacy warnings: %v", legacyWarnings)
+	}
+
+	reportedBars, reportedWarnings, report := ValidateAndSortBarsWithReport("600519.SH", bars, "2026-10-20", "2026-10-20", 0)
+	if len(reportedBars) != len(legacyBars) || reportedBars[0].TradeDate != legacyBars[0].TradeDate {
+		t.Fatalf("structured reporting changed normalized rows: legacy=%+v reported=%+v", legacyBars, reportedBars)
+	}
+	if len(reportedWarnings) != len(legacyWarnings) {
+		t.Fatalf("structured reporting changed warning shape: legacy=%v reported=%v", legacyWarnings, reportedWarnings)
+	}
+	if report.WarningCount != 2 || report.TotalCount != 2 {
+		t.Fatalf("out-of-range rows must be counted once each: %+v", report)
+	}
+	for _, issue := range report.Issues {
+		if issue.Code != "out_of_range" || issue.Field != "trade_date" || issue.Severity != validation.SeverityWarning {
+			t.Fatalf("unexpected date-boundary issue: %+v", issue)
+		}
+	}
+}
+
+func TestValidateAndSortBarsRejectsReversedDateRangeConsistently(t *testing.T) {
+	bar := validDailyBarForNormalizationTest()
+	got, warnings := ValidateAndSortBars("600519.SH", []model.DailyBar{bar}, "2026-10-21", "2026-10-20", 10)
+	if len(got) != 0 || !containsWarning(warnings, "invalid_date_range") {
+		t.Fatalf("legacy normalization must reject a reversed range: bars=%+v warnings=%v", got, warnings)
+	}
+	reportedBars, reportedWarnings, report := ValidateAndSortBarsWithReport("600519.SH", []model.DailyBar{bar}, "2026-10-21", "2026-10-20", 10)
+	if len(reportedBars) != 0 || !containsWarning(reportedWarnings, "invalid_date_range") {
+		t.Fatalf("structured normalization must reject a reversed range: bars=%+v warnings=%v", reportedBars, reportedWarnings)
+	}
+	if report.ErrorCount != 1 || report.TotalCount != 1 || len(report.Issues) != 1 ||
+		report.Issues[0].Code != "invalid_date_range" || report.Issues[0].Field != "date_range" {
+		t.Fatalf("reversed range must produce one structured request-level error: %+v", report)
+	}
+}
+
 func validDailyBarForNormalizationTest() model.DailyBar {
 	volume := int64(1000)
 	amount := 10000.0
