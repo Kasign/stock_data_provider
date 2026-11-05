@@ -103,3 +103,12 @@
 - 普通 DailyBars 仍使用 Provider 原生 qfq/hfq 数据；本次不新增 API、不自动跨 Provider 拼接 raw bars 与因子。只有后续出现明确的“当前本地因子重建”产品需求时，才增加受控 service 入口，并要求 raw bars 与因子来源/版本可验证匹配。
 - 验收覆盖：BaoStock 无 AvailableAt、有 SystemObservedAt 的因子可用于 current helper，重建结果保留 degraded；同一因子在 PIT helper 中被拒绝；缺少 SystemObservedAt 的临时 Provider 结果在 current helper 中也被拒绝。
 - 当前状态：语义隔离代码与单测已实现，待最新 SHA 的 CI 验证；不代表普通 DailyBars 已启用本地因子重建。阶段 B 继续 in_progress。
+
+
+## 2026-11-05 P0 批次 17：PIT 版本选择必须按可见版本回退
+
+- 复核 AdjustmentFactor 与 CorporateAction 的 MariaDB as_of SQL，发现原查询先按系统记录时间选最新 revision，再由 Service 过滤 Provider AvailableAt。若最新 revision 已被系统观察、但 Provider AvailableAt 晚于 as_of，旧的已可用 revision 会被新 revision 遮蔽，造成历史 PIT 误报缺失。
+- 两类查询现统一将 recorded_at、fetched_at、available_at 三个时间条件放入候选版本与 NOT EXISTS 子查询；只在“as_of 时点三项时间均可见”的候选集合内选最新版本。
+- Service 层现有三时间校验继续保留，作为 SQL 结果的第二道防线；AvailableAt=nil 的 BaoStock 因子仍不会进入 PIT。
+- MariaDB 集成测试新增因子与公司行动两组回退场景：v1 已可用，v2 已观察但 AvailableAt 在 as_of 之后，必须返回 v1。
+- 该修复只影响 PIT 历史版本选择，不改变当前值表、Provider 采集或对外 API。待最新 SHA 的 MariaDB migration/PIT 集成与完整 CI 验证。

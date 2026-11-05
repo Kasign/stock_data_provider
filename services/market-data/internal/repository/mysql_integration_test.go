@@ -83,6 +83,37 @@ func TestMariaDBRevisionPersistenceAndPointInTimeQueries(t *testing.T) {
 		t.Fatalf("as_of before revision must restore v1: rows=%+v err=%v", historicalFactors, err)
 	}
 
+	// 新版本已被系统观察，但 Provider 声明它在 as_of 之后才可用；
+	// PIT 必须回退到此前已可用的旧版本，而不是将整条记录过滤掉。
+	fallbackSymbol := fmt.Sprintf("F%014d", time.Now().UnixNano()%100000000000000)
+	fallbackFetched := time.Now().UTC()
+	fallbackAvailable := fallbackFetched.Add(-time.Minute)
+	fallbackFactor := model.AdjustmentFactor{
+		Symbol: fallbackSymbol, TradeDate: "2026-10-29", Factor: 1.1,
+		Source: "integration-fallback", SourceVersion: "v1",
+		AvailableAt: &fallbackAvailable, FetchedAt: fallbackFetched, QualityStatus: model.QualityValid,
+	}
+	if err := store.SaveAdjustmentFactors(ctx, []model.AdjustmentFactor{fallbackFactor}); err != nil {
+		store.Close()
+		t.Fatalf("save available fallback factor: %v", err)
+	}
+	time.Sleep(3 * time.Millisecond)
+	fallbackFactor.Factor = 1.2
+	fallbackFactor.SourceVersion = "v2"
+	fallbackFactor.FetchedAt = time.Now().UTC()
+	futureAvailable := fallbackFactor.FetchedAt.Add(time.Hour)
+	fallbackFactor.AvailableAt = &futureAvailable
+	if err := store.SaveAdjustmentFactors(ctx, []model.AdjustmentFactor{fallbackFactor}); err != nil {
+		store.Close()
+		t.Fatalf("save not-yet-available factor revision: %v", err)
+	}
+	fallbackAsOf := time.Now().UTC()
+	fallbackFactors, err := store.ListAdjustmentFactorsAsOf(ctx, fallbackSymbol, "", "", fallbackAsOf)
+	if err != nil || len(fallbackFactors) != 1 || fallbackFactors[0].Factor != 1.1 || fallbackFactors[0].SourceVersion != "v1" {
+		store.Close()
+		t.Fatalf("PIT must fall back to latest provider-available factor revision: rows=%+v err=%v", fallbackFactors, err)
+	}
+
 	// 同一证券、交易日和来源允许 forward/backward 两种独立因子口径并存；
 	// BaoStock 未提供 AvailableAt 时仍应保存原始观测，但 PIT 服务层不得将其视为可见。
 	basisSymbol := fmt.Sprintf("B%014d", time.Now().UnixNano()%100000000000000)
@@ -151,6 +182,48 @@ func TestMariaDBRevisionPersistenceAndPointInTimeQueries(t *testing.T) {
 	if err != nil || len(newActions) != 1 || newActions[0].CashDividendCNY == nil || *newActions[0].CashDividendCNY != 0.8 {
 		store.Close()
 		t.Fatalf("corporate-action query must return v2: rows=%+v err=%v", newActions, err)
+	}
+
+	// 公司行动采用相同的 PIT 可见性规则：未到供应商可用时间的修订不能遮蔽旧版本。
+	actionFallback := model.CorporateAction{
+		Symbol: symbol, ProviderEventID: "integration-future-availability",
+		EventType: "cash_dividend", EventStatus: "implementation",
+		AnnouncementDate: "2026-08-02", ExDate: "2026-10-30",
+		Source: "integration-fallback", SourceVersion: "v1",
+		AvailableAt: &fallbackAvailable, FetchedAt: time.Now().UTC(), QualityStatus: model.QualityValid,
+	}
+	actionFallback.CashDividendCNY = &cashV1
+	if err := store.SaveCorporateActions(ctx, []model.CorporateAction{actionFallback}); err != nil {
+		store.Close()
+		t.Fatalf("save available corporate-action fallback: %v", err)
+	}
+	time.Sleep(3 * time.Millisecond)
+	actionFallback.SourceVersion = "v2"
+	actionFallback.CashDividendCNY = &cashV2
+	actionFallback.FetchedAt = time.Now().UTC()
+	actionFutureAvailable := actionFallback.FetchedAt.Add(time.Hour)
+	actionFallback.AvailableAt = &actionFutureAvailable
+	if err := store.SaveCorporateActions(ctx, []model.CorporateAction{actionFallback}); err != nil {
+		store.Close()
+		t.Fatalf("save not-yet-available corporate-action revision: %v", err)
+	}
+	actionFallbackAsOf := time.Now().UTC()
+	actionFallbackRows, err := store.ListCorporateActionsAsOf(ctx, symbol, "", "", actionFallbackAsOf)
+	if err != nil {
+		store.Close()
+		t.Fatalf("query corporate-action fallback: %v", err)
+	}
+	var selectedFallback *model.CorporateAction
+	for i := range actionFallbackRows {
+		if actionFallbackRows[i].ProviderEventID == "integration-future-availability" {
+			selectedFallback = &actionFallbackRows[i]
+			break
+		}
+	}
+	if selectedFallback == nil || selectedFallback.SourceVersion != "v1" ||
+		selectedFallback.CashDividendCNY == nil || *selectedFallback.CashDividendCNY != cashV1 {
+		store.Close()
+		t.Fatalf("PIT must fall back to latest provider-available corporate-action revision: rows=%+v", actionFallbackRows)
 	}
 
 	barVolume := int64(1000)
