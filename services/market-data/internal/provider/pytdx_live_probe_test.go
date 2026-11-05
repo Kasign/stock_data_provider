@@ -123,7 +123,7 @@ func crossProviderSnapshotFromDailyBars(bars []model.DailyBar) CrossProviderDail
 			TradeDate: bar.TradeDate, Open: bar.Open, High: bar.High, Low: bar.Low, Close: bar.Close,
 			Volume: valueOrZero(bar.Volume), VolumeUnit: bar.VolumeUnit, VolumeGranularity: CrossProviderVolumeGranularity(bar.RawVolumeUnit), Amount: bar.Amount, AmountUnit: bar.AmountUnit,
 			AmountErrorBound: CrossProviderAmountErrorBound(bar.Source, bar.RawAmountUnit, bar.RawAmountField, bar.RawAmount),
-			AdjustmentMethod:  bar.AdjustmentMethod, AdjustmentRefDate: bar.AdjustmentRefDate,
+			AdjustmentMethod: bar.AdjustmentMethod, AdjustmentRefDate: bar.AdjustmentRefDate,
 		})
 	}
 	return snapshot
