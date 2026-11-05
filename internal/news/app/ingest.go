@@ -59,6 +59,8 @@ func (u *IngestCandidate) Execute(ctx context.Context, sourceID, idempotencyKey 
 
 	observedAt := u.now().UTC()
 	candidate = domain.NormalizeCandidate(candidate, observedAt, candidate.QueryDimension)
+	// CanonicalURL 是策略决策产物，不能信任调用方预填值。
+	candidate.CanonicalURL = ""
 	if candidate.RawURL != "" {
 		decision := domain.EvaluateSourceURL(candidate.RawURL, policy)
 		if decision.Allowed {
