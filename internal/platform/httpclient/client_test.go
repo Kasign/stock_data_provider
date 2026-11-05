@@ -923,7 +923,6 @@ func TestClientCloseIdleConnectionsDoesNotCancelActiveOrFutureRequests(t *testin
 	_ = response.Body.Close()
 }
 
-
 func TestClientReleasesDependencySlotAfterResponseReadFailure(t *testing.T) {
 	var calls atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
@@ -1001,9 +1000,11 @@ func TestClientReleasesDependencySlotAfterResponseReadCancellation(t *testing.T)
 	policy := localPolicy(server)
 	policy.Dependency = "news.provider.bocha"
 	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	cancelRequest := localRequest(t, server, "/cancel")
 	cancelDone := make(chan error, 1)
 	go func() {
-		_, requestErr := client.Do(ctx, localRequest(t, server, "/cancel"), policy)
+		_, requestErr := client.Do(ctx, cancelRequest, policy)
 		cancelDone <- requestErr
 	}()
 	select {
