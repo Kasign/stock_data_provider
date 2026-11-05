@@ -332,3 +332,10 @@
 - PIT 路径要求 `AvailableAt` 已知且不晚于 `as_of`，`DailyBarsAsOf` 通过 `AdjustmentFactorsAsOf` + `rebuildAdjustedDailyBarsPIT` 重建，并按 raw K 的 source/version 匹配因子；未知 AvailableAt 不进入 PIT，保持正确。
 - Current helper 没有生产调用者，`RefreshAdjustmentFactors` 返回对象没有 `SystemObservedAt`，且当前无未知 AvailableAt 的 Current Repository 读取方法。由于当前 DailyBars 使用 Provider 原生复权 K 线，暂不存在调用场景；不新增接口/字段，待自建复权重建正式接入时再设计。
 - 本批无代码修改；PIT fail-closed 不变。
+
+
+## 2026-11-05 P0 批次 41：上市日期分类专项重跑
+
+- 代码 SHA `cce59e8de493813a4b04f7d0bd24211e1e919bb1` 的 Push Go suite Run `42018395454` 全部 Job success。
+- Live Probe Run `42018395554` 外层 workflow success，但 BaoStock 专项步骤失败：600601.SH、600036.SH、002982.SZ 取得因子和主窗口 OHLC 样本，mismatch=0，首因子日等于上市日，`not_applicable`；另外五只登录 TCP timeout，`unavailable`，不计真实通过。
+- 上一完整报告 SHA `687b49a1` 已覆盖八证券 2025 主窗口。当前不连续重复探测，保留完整报告作为主窗口证据，使用本次 3 个可用样本验证上市日分类。PIT 与生产 fail-closed 不变。

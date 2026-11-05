@@ -485,3 +485,11 @@ Live Provider Probe Run `41788725692` 的 workflow conclusion 为 success，但�
 - 八只证券首因子日期均与独立上市日期核验一致：000001（公司资料）、000002（巨潮/发行人文件）、000858（公司资料）、600000/600601（上交所公司概况）、600016（公司资料）、600036（发行人上市文件）、002982（深交所上市公告）。上市日期是独立证据，不由 BaoStock 因子推断。
 - 旧报告八只 `pre_first_event_status=unavailable`，因为 1990 至首事件前一天 raw 查询为空。结合上市日期证据，这八只均不存在上市交易日前的交易日，适用性应为 `not_applicable`，不能计为 matched，也不能据此证明 fallback 公式。
 - 本批仅证明 2025 主窗口 BaoStock 自身 raw × 因子与自身 qfq/hfq OHLC 一致；不证明跨 Provider parity、AvailableAt 或 PIT 可见性。生产 helper 继续 fail-closed。
+
+
+## 24. 2026-11-05：上市日期分类代码专项重跑
+
+- 代码 SHA：`cce59e8de493813a4b04f7d0bd24211e1e919bb1`；Push Go suite Run `42018395454` success；Push Live Probe Run `42018395554` 外层 success，但 BaoStock 专项测试步骤 failure。
+- 新报告 Artifact `13410008325`：600601.SH、600036.SH、002982.SZ 成功取回 29/30/8 条因子，raw/qfq/hfq 各 9 行、OHLC mismatch=0；三只首因子日均与独立上市日期相同，`pre_first_event_status=not_applicable`。
+- 000001.SZ、000002.SZ、000858.SZ、600000.SH、600016.SH 登录 BaoStock 时发生 TCP timeout，报告为 `factor_count=0`，属于 `unavailable`，不计验收通过。不得把外层 workflow success 解释为八证券专项通过。
+- 八证券主窗口完整真实对账仍以 Run `42017059794` / Artifact `13409567542` 为证据。本次仅补充验证新分类逻辑，不覆盖或替代原完整报告。

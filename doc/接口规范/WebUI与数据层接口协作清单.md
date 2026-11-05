@@ -120,7 +120,7 @@
 | API-03 | 全市场分页与批量行情的范围、总数下限、覆盖率、MA 和复权语义 | 待当前 HEAD 复核 | 双方 | 服务端分页与字段质量可验证，WebUI 不将页内结果解释为全市场排名 |
 | API-04 | 市场情绪当前快照与历史快照的持久化、缺失交易日和覆盖语义 | 待真实验收 | 数据侧主责，WebUI 配合 | 有真实历史数据、数据库读写证据和无数据/缺日契约 |
 | API-05 | 市场级资金流真实数据与 Provider 权限验收 | 依赖凭据/权限 | 数据侧主责 | 真实请求可复现；权限缺失、Provider 不可用和空数据状态可区分 |
-| API-06 | 开发中 | Provider 清单、诊断、Probe 与 Probe 历史已有 API；DailyBar 日期边界、交易上下文和 MariaDB fallback warnings 已有回归；BaoStock 八只证券 2025 主窗口真实因子复权对账通过（raw/qfq/hfq 各 9 行、OHLC mismatch=0）；首因子日与独立上市日一致，首事件前 fallback 对本批样本 not_applicable | 不扩大同类候选、不开放生产 fallback；Current helper 无生产调用场景，暂不新增 Current 因子 API；继续复核 DailyBar 复权 Provider 能力矩阵、TickFlow 成交量单位、日内停牌真实样本、MariaDB Probe 历史部署及 Eastmoney/Tencent 参考日期独立锚点 | BaoStock AvailableAt 未知，PIT 继续排除；八只样本无首事件前交易日，fallback 未被验证；TickFlow 单位和日内停牌真实样本未验；Tushare adj_factor/dividend 40203 权限阻塞 | `cce59e8de493813a4b04f7d0bd24211e1e919bb1` | 代码 SHA `687b49a1` Push Go suite `42017059947`、Live Probe `42017059794` success；当前 SHA `cce59e8d` Push Go suite `42018395454`、Live Probe `42018395554` 待最终状态 | 八只真实样本主窗口一致；首事件前 fallback 不适用，不计 matched | 接口层已接入，待真实验收 |
+| API-06 | 开发中 | Provider 清单、诊断、Probe 与 Probe 历史已有 API；DailyBar 日期边界、交易上下文和 MariaDB fallback warnings 已有回归；BaoStock 八证券 2025 主窗口真实对账通过（SHA `687b49a1`）；上市日期分类代码已由新专项 3/8 个真实样本验证，其余 5 个登录超时不计通过 | 不扩大同类候选、不开放生产 fallback；Current helper 无生产调用场景，暂不新增 Current 因子 API；继续复核 DailyBar 复权 Provider 能力矩阵、TickFlow 成交量单位、日内停牌真实样本、MariaDB Probe 历史部署及 Eastmoney/Tencent 参考日期独立锚点 | BaoStock AvailableAt 未知，PIT 继续排除；八只样本无首事件前交易日，fallback 未被验证；本次重跑 5 只 TCP timeout；TickFlow 单位和日内停牌真实样本未验；Tushare adj_factor/dividend 40203 权限阻塞 | `cce59e8de493813a4b04f7d0bd24211e1e919bb1` | Push Go suite `42018395454` success；Push Live Probe `42018395554` 外层 success 但 BaoStock 专项步骤 failure（3/8 有真实响应，5/8 TCP timeout） | 完整八证券主窗口证据沿用 `687b49a1`；新上市日分类只对 3 个本轮成功响应复核 | 接口层已接入，待真实验收 |
 | API-07 | 板块多维排行（近 5 日涨幅、资金净流入等） | 待能力评估 | 数据侧主责，WebUI 配合 | 有真实来源、完整候选范围、排序/分页契约及质量证据；不以成交额冒充净流入 |
 | API-08 | 通知渠道、订阅、发送测试与投递记录服务端能力 | 未提供服务端接口 | 数据侧主责；WebUI 后续接入 | 服务端安全存储、鉴权、审计、重试和投递查询契约完整 |
 | API-09 | 服务端选股策略、全市场扫描、候选理由与历史记录 | 待产品/API 设计 | 双方 | 明确策略 schema、扫描范围、异步任务、结果快照和可追溯理由 |
@@ -329,3 +329,9 @@
 - 当前代码基线 `cce59e8de493813a4b04f7d0bd24211e1e919bb1`。PIT 因子读取继续要求 Provider `AvailableAt` 有证明，系统 `SystemObservedAt` 从数据库 `recorded_at` 恢复；DailyBarsAsOf 使用 PIT 专用重建，不混用 Current helper。
 - Current helper 当前没有生产调用者，普通 DailyBars 仍消费 Provider 原生复权 K 线。没有明确业务调用场景前不增加 Current 因子读取 API 或字段。
 - 本批没有 WebUI 契约变化，WebUI 无需修改。BaoStock AvailableAt 未知，PIT fail-closed 不变。
+
+
+## 18. 2026-11-05 API-06 上市日期分类重跑状态
+
+- 代码 SHA `cce59e8de493813a4b04f7d0bd24211e1e919bb1` 的 Go suite `42018395454` success。Live Probe `42018395554` 外层 success，但 BaoStock 专项步骤 failure；3/8 样本有真实因子响应并验证 `not_applicable`，5/8 因登录 TCP timeout 为 unavailable。
+- 完整八证券主窗口真实证据仍引用 SHA `687b49a1` 的报告；本次不将 5 个网络失败计为通过。无 WebUI/API 契约变化，Current helper 仍无生产调用场景，不新增接口。
