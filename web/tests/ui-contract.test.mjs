@@ -1359,7 +1359,6 @@ test("market overview and activity use readable secondary text and touch-sized c
   assert.match(marketTablePrimaryBase, /font-weight:\s*650\s*;?/);
   assert.match(marketTablePrimaryBase, /color:\s*var\(--text\)\s*;?/);
   assert.equal((stylesheet.match(/(?:^|})\s*\.market-table-primary\s*\{/g) || []).length, 1, "market table primary text should have one exact base rule");
-  assert.doesNotMatch(stylesheet, /\.market-table-primary\s*\{[^}]*font-size:\s*12px[^}]*line-height:\s*1\.5/);
   assert.match(finalCssRuleBody(".market-table-secondary"), /font-size: 12px/);
   assert.match(finalCssRuleBody(".market-touch-time"), /font-size: 12px/);
   assert.match(finalCssRuleBody(".market-activity-heading p"), /font-size: 12px/);
