@@ -1899,7 +1899,8 @@ CI 复核记录：本批首次 Chromium Browser Smoke 在个股研究数据质�
 - [x] 删除市场活动表格重复的触控惯性滚动声明；保留其 `overscroll-behavior: contain`，继续隔离横纵向滚动链。
 - [x] 新增 UI contract 锁定共享滚动行为及市场活动容器的额外隔离规则。
 - [ ] 在本批最终提交 SHA 上运行 WebUI Checks、JavaScript 语法检查、Compose 校验和 Nginx 镜像构建。
-- [ ] 执行 Chromium Browser Smoke，并在触屏设备及 320/375/600px 视口检查行情总览、全市场列表、研究列表、数据中心结果表格的横向滚动与页面纵向滚动是否互不干扰。
+- [x] Chromium Browser Smoke #41996193945：320/375/600/768/900/1280/1600px 七个视口均通过页面 overflow 检查；全市场分页生命周期及其他交互专项通过。
+- [ ] 在真实 iOS Safari / 触屏设备检查行情总览、全市场列表、研究列表、数据中心结果表格的横向滚动与页面纵向滚动是否互不干扰。
 
 
 ## 2026-11-05 UIR-2 第五十批 CI 断言修正
@@ -1908,3 +1909,14 @@ CI 复核记录：本批首次 Chromium Browser Smoke 在个股研究数据质�
 - [x] 将旧断言改为验证共享 `.table-scroll` 触控滚动基线；将市场活动附加隔离规则改为精确 CSS 规则匹配。
 - [ ] 在修正后的最终提交 SHA 上重新运行全部单元测试、Compose 校验、JavaScript 语法检查与 Nginx 镜像构建。
 - [ ] 复核 Chromium Browser Smoke 结果；当前提交的首轮浏览器验收仍在运行。
+
+
+## 2026-11-05 UIR-2 第五十一批：表格父级宽度约束审查
+
+- [x] 复核 `.main-area`、`.view`、`.panel` 的 `min-width: 0` 约束，页面内容宽度按可用空间收缩。
+- [x] 确认全市场行情表格 `980px` 与行情总览表格 `500px` 的最小宽度均由局部滚动容器承载，不向页面根节点扩张。
+- [x] 确认研究列表沿用共享 `.table-scroll`，数据中心结果卡片设置 `min-width: 0`，900px 以下结果区切换单列。
+- [x] 没有发现需要追加父级 `min-width: 0` 或全局 `overflow-x: hidden` 的证据；避免用裁切掩盖真实溢出。
+- [x] 新增 UI contract 锁定页面收缩约束、宽表格局部滚动及数据中心窄屏单列规则。
+- [x] Chromium Browser Smoke #41996193945 的 320/375/600/768/900/1280/1600px 七个视口均通过页面 overflow、导航、焦点、控制台、网络及 Run Flow 布局检查。
+- [ ] 仍需在真实 iOS Safari / 触屏设备确认横向滚动手势与页面纵向滚动体验；CI Chromium 不替代设备验收。

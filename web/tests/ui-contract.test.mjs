@@ -2890,3 +2890,20 @@ test("UIR-2 shared table scrollers contain horizontal chaining and enable touch 
   assert.match(stylesheet, /\.market-activity-table \{\s*overscroll-behavior: contain;\s*\}/);
   assert.doesNotMatch(stylesheet, /\.market-activity-table \{[^}]*-webkit-overflow-scrolling:/);
 });
+
+
+test("UIR-2 table viewport constraints keep wide data inside local scrollers", () => {
+  assert.match(stylesheet, /body \{[^}]*min-width:\s*320px/);
+  assert.match(stylesheet, /\.main-area \{[^}]*min-width:\s*0/);
+  assert.match(stylesheet, /\.view \{[^}]*width:\s*100%[^}]*min-width:\s*0/);
+  assert.match(stylesheet, /\.panel \{[^}]*min-width:\s*0/);
+  assert.match(stylesheet, /\.table-scroll \{[^}]*overflow-x:\s*auto/);
+  assert.match(stylesheet, /\.market-overview-table-scroll \{[^}]*overflow:\s*auto/);
+  assert.match(stylesheet, /\.market-overview-table-scroll table \{\s*min-width:\s*500px\s*\}/);
+  assert.match(stylesheet, /\.market-stocks-table-scroll table\{min-width:980px\}/);
+  assert.match(stylesheet, /\.existing-api-results-grid > section \{ min-width: 0;/);
+  assert.match(stylesheet, /@media \(max-width: 900px\) \{ \.existing-api-results-grid \{ grid-template-columns: minmax\(0, 1fr\); \} \}/);
+  assert.match(html, /class="table-scroll research-list-table-scroll"/);
+  assert.match(html, /class="table-scroll market-stocks-table-scroll"/);
+  assert.match(html, /class="existing-api-results-grid"/);
+});
