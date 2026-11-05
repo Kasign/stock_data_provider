@@ -274,3 +274,6 @@
 
 
 - CI 格式修正：SHA `e73cffa6dbc145814f49dea57c32ee4df92d1e0c` 的首次 Go suite 仅因新报告字段对齐及 pre-event 循环缩进未通过 gofmt；本提交重排该结构并再次触发真实 BaoStock 探测。旧 SHA 不计通过。
+
+
+- CI 语法修正：SHA `6537f685d0c0ca6c14c6636d840b72f8b1fce40d` 暴露 pre-event 探测嵌套分支少一个闭合括号，已按完整 if/else 结构重写该段；上一 SHA 不作为通过依据。

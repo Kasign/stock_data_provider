@@ -175,37 +175,38 @@ func TestLiveBaoStockAdjustmentFactorConsistency(t *testing.T) {
 						if start < 0 {
 							start = 0
 						}
-					item.PreFirstEventRows = len(preRaw) - start
-					item.PreFirstEventFactorDate = latestFactor.OperateDate
-					for index := start; index < len(preRaw); index++ {
-						if preRaw[index].Date != preForward[index].Date || preRaw[index].Date >= firstFactor.OperateDate {
-							item.PreFirstEventStatus = "mismatch"
-							item.PreFirstEventError = "pre-first-event raw/qfq dates are inconsistent with the first factor event"
-							break
-						}
-						for _, field := range []string{"open", "high", "low", "close"} {
-							rawValue, rawValueErr := parseLiveBaoStockPrice(preRaw[index], field)
-							forwardValue, forwardValueErr := parseLiveBaoStockPrice(preForward[index], field)
-							if rawValueErr != nil || forwardValueErr != nil {
-								item.PreFirstEventStatus = "unavailable"
-								item.PreFirstEventError = strings.TrimSpace(strings.Join([]string{
-									formatLiveBaoStockError("pre-first-event raw price", rawValueErr),
-									formatLiveBaoStockError("pre-first-event qfq price", forwardValueErr),
-								}, "; "))
+						item.PreFirstEventRows = len(preRaw) - start
+						item.PreFirstEventFactorDate = latestFactor.OperateDate
+						for index := start; index < len(preRaw); index++ {
+							if preRaw[index].Date != preForward[index].Date || preRaw[index].Date >= firstFactor.OperateDate {
+								item.PreFirstEventStatus = "mismatch"
+								item.PreFirstEventError = "pre-first-event raw/qfq dates are inconsistent with the first factor event"
 								break
 							}
-							compareLiveAdjustment(&probeItem, preRaw[index].Date, "qfq_pre_first_event_latest_factor_fallback", field, rawValue*latestFactor.ForwardFactor, forwardValue)
+							for _, field := range []string{"open", "high", "low", "close"} {
+								rawValue, rawValueErr := parseLiveBaoStockPrice(preRaw[index], field)
+								forwardValue, forwardValueErr := parseLiveBaoStockPrice(preForward[index], field)
+								if rawValueErr != nil || forwardValueErr != nil {
+									item.PreFirstEventStatus = "unavailable"
+									item.PreFirstEventError = strings.TrimSpace(strings.Join([]string{
+										formatLiveBaoStockError("pre-first-event raw price", rawValueErr),
+										formatLiveBaoStockError("pre-first-event qfq price", forwardValueErr),
+									}, "; "))
+									break
+								}
+								compareLiveAdjustment(&probeItem, preRaw[index].Date, "qfq_pre_first_event_latest_factor_fallback", field, rawValue*latestFactor.ForwardFactor, forwardValue)
+							}
+							if item.PreFirstEventError != "" {
+								break
+							}
 						}
-						if item.PreFirstEventError != "" {
-							break
-						}
-					}
-					item.PreFirstEventMismatches = probeItem.Mismatches
-					if item.PreFirstEventStatus == "" {
-						if len(item.PreFirstEventMismatches) > 0 {
-							item.PreFirstEventStatus = "mismatch"
-						} else {
-							item.PreFirstEventStatus = "matched"
+						item.PreFirstEventMismatches = probeItem.Mismatches
+						if item.PreFirstEventStatus == "" {
+							if len(item.PreFirstEventMismatches) > 0 {
+								item.PreFirstEventStatus = "mismatch"
+							} else {
+								item.PreFirstEventStatus = "matched"
+							}
 						}
 					}
 				}
