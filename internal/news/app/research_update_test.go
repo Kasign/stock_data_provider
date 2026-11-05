@@ -11,10 +11,10 @@ import (
 
 type memoryResearchRepository struct {
 	observations map[string]domain.Observation
-	versions   map[string][]domain.NewsItemVersion
-	relations  map[string][]domain.RelationAssertion
-	evidence   map[string][][]domain.RelationEvidence
-	failAppend bool
+	versions     map[string][]domain.NewsItemVersion
+	relations    map[string][]domain.RelationAssertion
+	evidence     map[string][][]domain.RelationEvidence
+	failAppend   bool
 }
 
 type memoryResearchTransaction struct {
@@ -27,10 +27,10 @@ func (r *memoryResearchRepository) WithinResearchUpdateTransaction(ctx context.C
 	}
 	working := &memoryResearchRepository{
 		observations: map[string]domain.Observation{},
-		versions:   map[string][]domain.NewsItemVersion{},
-		relations:  map[string][]domain.RelationAssertion{},
-		evidence:   map[string][][]domain.RelationEvidence{},
-		failAppend: r.failAppend,
+		versions:     map[string][]domain.NewsItemVersion{},
+		relations:    map[string][]domain.RelationAssertion{},
+		evidence:     map[string][][]domain.RelationEvidence{},
+		failAppend:   r.failAppend,
 	}
 	for key, value := range r.observations {
 		working.observations[key] = value
@@ -237,7 +237,7 @@ func TestApplyResearchUpdateRejectsEvidenceFromAnotherNewsItem(t *testing.T) {
 	request.Relations = []domain.RelationAssertion{{
 		ID: "relation-foreign", SubjectType: domain.RelationSubjectSecurity,
 		Security: &domain.SecurityRelationSubject{Market: "XSHG", Symbol: "600000"},
-		Kind: domain.RelationMentions, Method: domain.RelationSourceExplicit, Status: domain.RelationConfirmed,
+		Kind:     domain.RelationMentions, Method: domain.RelationSourceExplicit, Status: domain.RelationConfirmed,
 	}}
 	request.Evidence = map[string][]domain.RelationEvidence{
 		"relation-foreign": {{Type: domain.RelationEvidenceSourceField, FieldPath: "related_securities", ObservationID: "foreign-observation"}},
@@ -256,7 +256,7 @@ func TestApplyResearchUpdateRejectsUnknownVersionEvidence(t *testing.T) {
 	request.Relations = []domain.RelationAssertion{{
 		ID: "relation-missing-version", SubjectType: domain.RelationSubjectSecurity,
 		Security: &domain.SecurityRelationSubject{Market: "XSHG", Symbol: "600000"},
-		Kind: domain.RelationMentions, Method: domain.RelationContentMatch, Status: domain.RelationConfirmed,
+		Kind:     domain.RelationMentions, Method: domain.RelationContentMatch, Status: domain.RelationConfirmed,
 	}}
 	request.Evidence = map[string][]domain.RelationEvidence{
 		"relation-missing-version": {{Type: domain.RelationEvidenceContentSpan, SourceVersionID: "missing-version"}},
@@ -266,6 +266,29 @@ func TestApplyResearchUpdateRejectsUnknownVersionEvidence(t *testing.T) {
 	}
 	if len(repository.versions["news-1"]) != 0 {
 		t.Fatalf("invalid evidence must rollback version append: %+v", repository.versions)
+	}
+}
+
+func TestApplyResearchUpdateRejectsVersionEvidenceFromAnotherNewsItem(t *testing.T) {
+	repository := &memoryResearchRepository{
+		versions: map[string][]domain.NewsItemVersion{
+			"news-foreign": {{ID: "foreign-version", NewsID: "news-foreign", VersionNo: 1, Fingerprint: "fingerprint"}},
+		},
+	}
+	request := baseResearchRequest()
+	request.Relations = []domain.RelationAssertion{{
+		ID: "relation-foreign-version", SubjectType: domain.RelationSubjectSecurity,
+		Security: &domain.SecurityRelationSubject{Market: "XSHG", Symbol: "600000"},
+		Kind: domain.RelationMentions, Method: domain.RelationContentMatch, Status: domain.RelationConfirmed,
+	}}
+	request.Evidence = map[string][]domain.RelationEvidence{
+		"relation-foreign-version": {{Type: domain.RelationEvidenceContentSpan, SourceVersionID: "foreign-version"}},
+	}
+	if _, err := newResearchUseCase(repository).Execute(context.Background(), request); !errors.Is(err, ErrResearchUpdateTransaction) {
+		t.Fatalf("expected foreign version rejection, got %v", err)
+	}
+	if len(repository.versions["news-1"]) != 0 || len(repository.relations["news-1"]) != 0 {
+		t.Fatalf("foreign version evidence must rollback all writes: %+v", repository)
 	}
 }
 

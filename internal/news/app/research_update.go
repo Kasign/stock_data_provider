@@ -164,7 +164,6 @@ func (u *ApplyResearchUpdate) Execute(ctx context.Context, request ResearchUpdat
 	return result, nil
 }
 
- 
 // validateRelationEvidenceOwnership 确保证据引用真实存在且属于当前新闻主体。
 // 引用归属读取与版本/关系写入处于同一事务，避免跨新闻证据污染。
 func validateRelationEvidenceOwnership(
