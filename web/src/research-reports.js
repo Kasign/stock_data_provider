@@ -6,15 +6,16 @@ function safeStorage(storage) { if (storage) return storage; try { return global
 function normalizeReport(item) {
   if (!item || typeof item !== "object" || Array.isArray(item) ||
       !item.result || typeof item.result !== "object" || Array.isArray(item.result)) return null;
-  if (typeof item.id !== "string" || !item.id.trim() ||
-      typeof item.runId !== "string" || !item.runId.trim() || item.result.run_id !== item.runId.trim()) return null;
+  if (typeof item.id !== "string" || !item.id.trim() || item.id.trim().length > 160 ||
+      typeof item.runId !== "string" || !item.runId.trim() || item.runId.trim().length > 160 ||
+      item.result.run_id !== item.runId.trim()) return null;
   const analysisBase = item.analysisBase === undefined ? "" : item.analysisBase;
   const taskId = item.taskId === undefined ? "" : item.taskId;
   const status = item.status === undefined ? (item.result.status || "") : item.status;
   const asOf = item.asOf === undefined ? "" : item.asOf;
   const createdAt = item.createdAt === undefined ? "" : item.createdAt;
   const symbols = item.symbols === undefined ? [] : item.symbols;
-  if (typeof analysisBase !== "string" || typeof taskId !== "string" || taskId.length > 160 ||
+  if (typeof analysisBase !== "string" || analysisBase.length > 2048 || typeof taskId !== "string" || taskId.length > 160 ||
       typeof status !== "string" || status.length > 80 || typeof asOf !== "string" || asOf.length > 80 ||
       typeof createdAt !== "string" || !Array.isArray(symbols) || symbols.length > 50 ||
       symbols.some(value => typeof value !== "string" || !value.trim() || value.trim().length > 32) ||

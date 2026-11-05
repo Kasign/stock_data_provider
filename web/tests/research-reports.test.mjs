@@ -31,3 +31,6 @@ test("读取时同样执行归档总容量限制，超限原始内容不被覆�
   assert.equal(writeResearchReports([], s).reason, "invalid-storage");
   assert.equal(s.getItem(RESEARCH_REPORTS_KEY), raw);
 });
+
+
+test("归档 ID、Run ID 与分析服务地址长度有上限",()=>{const s=memory();const base={id:"report-a",runId:"run-a",result:result("run-a")};for(const item of [{...base,id:"i".repeat(161)},{...base,runId:"r".repeat(161),result:result("r".repeat(161))},{...base,analysisBase:"https://a/".padEnd(2049,"x")}]){assert.equal(writeResearchReports([item],s).reason,"invalid");assert.equal(s.getItem(RESEARCH_REPORTS_KEY),null);}});
