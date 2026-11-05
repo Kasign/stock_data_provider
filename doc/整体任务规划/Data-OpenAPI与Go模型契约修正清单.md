@@ -824,3 +824,16 @@ Data 最新 HEAD：`8c0136fdcdc5ae6a0d0d293371685d7f684a9f20`。新增 `pytdx_li
 - 将 HTTP 200、Provider Probe success 或 CI 其他 Workflow success 解释为全部字段质量合格。
 
 DATA-CONTRACT-001～008 全部未在 Data 业务分支实施，状态均为待实施；本节不是完成声明。
+
+
+### 11.25 Data 最新 HEAD 复核：gofmt 修复提交仍未通过门禁（2026-11-05）
+
+Data 分支在 8c0136f 后新增格式修正提交，最新 HEAD 为：
+
+- SHA：`80cf2e9a05b1bf89dcd9eef9851a14682c2e647a`
+- 提交：`style(provider): 修正 Pytdx 双源探测报告格式 [historical_pytdx_gbbq]`
+- Compare：相较 8c0136f ahead 1 / behind 0；仅修改 `services/market-data/internal/provider/pytdx_live_probe_test.go`。
+- 最新 Go test suite run `42020198037` 仍 failure；market-data gofmt 步骤继续失败，测试/race/vet 被跳过。Docker market-data image build 失败。
+- 根模块测试成功、go-core 测试成功、MariaDB Migration/PIT integration 成功；Live provider probe、WebUI checks、Go-Python parity 成功。
+
+注意：格式修正提交仍未消除该文件全部 gofmt 差异。当前失败 diff 仍指向 `pytdx_live_probe_test.go` 中结构体字段对齐，不能把“已提交 style 修复”写成格式门禁已恢复。DATA-CONTRACT-001 仍是第一优先级，要求同一最新 SHA 的 market-data gofmt/test/race/vet 和镜像构建全部完成。
