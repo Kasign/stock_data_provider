@@ -388,3 +388,12 @@ GOV-004 仍为 NO-GO。不得因非契约文档更新或部分 Workflow 成功�
 其余 12 处是 Go 无 omitempty、OpenAPI optional；Go 输出字段比 Schema 最低要求更严格，不构成违约。指针字段在 nil 时输出 null，相关 Schema 已允许 nullable。
 
 详细分析与 DATA-CONTRACT-003-C 见 Data 修正清单第 11.15 节。required 阻断应聚焦 Bundle.warnings，并为 HotRanking 的 Validator 约束补测试，不应将 15 项全部视为缺陷。
+
+
+## 18. Data 最新 HEAD 与 CI 状态更新（2026-11-05）
+
+Data 最新 HEAD 为 `266ac21f5c840207f79aae8984021dac74185652`，相较上一基线 bc55db9 ahead 2 / behind 0。新增的是 BaoStock 八证券复权证据文档和 Live Probe 测试，没有修改 OpenAPI、HTTP Handler 或 Model；本轮字段级静态结论仍适用。
+
+最新 SHA 的 Live provider probe（run `42017899688`）、WebUI checks（`42017899766`）、Go test suite（`42017899888`）均在本次复核时 in_progress；Go-Python parity（`42017899832`）为 pending。不得沿用上一 SHA 的 CI success 作为最新 SHA 的验收证据。
+
+当前 GOV-004 仍 NO-GO；最新 CI 完成后再更新验收状态。
