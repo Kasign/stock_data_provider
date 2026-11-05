@@ -198,3 +198,10 @@
 - 生产 DataService Probe 两只证券各 15 项：13 degraded、2 not_supported、0 failed，均持久化且读回通过。Sina qfq/hfq 为 not_supported；两只证券 Eastmoney+BaoStock raw 交叉比较各 9 日期、54 字段全部匹配；每只 storage check passed。
 - 全部返回项附加 `daily_bar_context_calendar_degraded`，源于当前只配置 BaoStock 日历，日历快照缺少 Provider snapshot timestamp；这表示交易日上下文质量降级，不代表 K 线 OHLC 全部错误。Sina/Tencent/Yahoo 另缺成交额；Tencent/Eastmoney/BaoStock qfq 参考日未验证。
 - 本批专项完成，但生产 Probe 总体仍 degraded，不关闭数据质量验收。下一步审查日历降级语义：区分日历日期覆盖/来源冲突与快照时间戳缺失，确定何时应影响 K 线质量、何时只作为上下文 warning；禁止伪造时间戳或强制 valid。
+
+
+## 2026-11-05 P0 批次 28：历史交易日历时间戳缺口分级
+
+- 对完整历史日历，若唯一质量缺口是 Provider 未暴露/缺少快照发布时间，且日历结束日期早于当前 Asia/Shanghai 日期，则保留 `daily_bar_context_calendar_snapshot_time_unverified` warning，但不单独降级历史 K 线质量。
+- 当前/未来日历、日历来源冲突、仅返回交易日而推断非交易日、其他质量缺口继续 degraded；缺少日历仍 degraded。
+- 该修复不伪造上游时间、不放宽日期覆盖校验。新增三项回归测试，等待新 SHA CI 与真实 Probe 复验。
