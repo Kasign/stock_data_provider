@@ -240,12 +240,11 @@ func TestApplyMigrationsRejectsMissingDatabase(t *testing.T) {
 var _ driver.Pinger = (*testConn)(nil)
 var _ driver.Connector = (*testConnector)(nil)
 
-
 type migrationTestState struct {
-	applied       map[uint64]string
-	statements    []string
-	lockAcquired  bool
-	lockReleased  bool
+	applied        map[uint64]string
+	statements     []string
+	lockAcquired   bool
+	lockReleased   bool
 	historyCreated bool
 }
 
