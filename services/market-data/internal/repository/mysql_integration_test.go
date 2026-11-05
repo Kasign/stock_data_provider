@@ -131,22 +131,16 @@ func TestMariaDBRevisionPersistenceAndPointInTimeQueries(t *testing.T) {
 		store.Close()
 		t.Fatalf("save independent BaoStock factor bases: %v", err)
 	}
+	var persistedBasisCount int
+	if err := store.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM market_data_adjustment_factor_versions
+WHERE symbol=? AND trade_date=? AND source=?`, basisSymbol, "2026-10-30", "baostock").Scan(&persistedBasisCount); err != nil || persistedBasisCount != 2 {
+		store.Close()
+		t.Fatalf("forward/backward factor bases must both persist: count=%d err=%v", persistedBasisCount, err)
+	}
 	basisRows, err := store.ListAdjustmentFactorsAsOf(ctx, basisSymbol, "2026-10-30", "2026-10-30", time.Now().UTC())
-	if err != nil || len(basisRows) != 2 {
+	if err != nil || len(basisRows) != 0 {
 		store.Close()
-		t.Fatalf("forward/backward factor bases must coexist: rows=%+v err=%v", basisRows, err)
-	}
-	seenBases := map[model.AdjustmentFactorBasis]bool{}
-	for _, row := range basisRows {
-		seenBases[row.Basis] = true
-		if row.AvailableAt != nil || row.SystemObservedAt == nil || row.QualityStatus != model.QualityDegraded {
-			store.Close()
-			t.Fatalf("unknown provider availability must be preserved without inventing PIT visibility: %+v", row)
-		}
-	}
-	if !seenBases[model.AdjustmentFactorForward] || !seenBases[model.AdjustmentFactorBackward] {
-		store.Close()
-		t.Fatalf("both adjustment factor bases were not persisted: %+v", basisRows)
+		t.Fatalf("BaoStock factors without available_at must remain excluded from PIT queries: rows=%+v err=%v", basisRows, err)
 	}
 
 	cashV1 := 0.5
