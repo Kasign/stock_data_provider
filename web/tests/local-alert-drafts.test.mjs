@@ -15,3 +15,24 @@ test("本地存储中的异常规则字段标记为损坏且不覆盖原值",()=
 
 test("底层写入与读取同样拒绝缺少单股代码或价格阈值非正数的规则",()=>{for(const item of [{...draft("missing-symbol"),symbol:""},{...draft("zero-price"),threshold:0},{...draft("negative-price"),threshold:-1}]){const s=storage();assert.equal(writeLocalAlertDrafts([item],s).reason,"invalid");assert.equal(s.getItem(LOCAL_ALERT_DRAFTS_KEY),null);const raw=JSON.stringify([item]);s.setItem(LOCAL_ALERT_DRAFTS_KEY,raw);assert.equal(readLocalAlertDrafts(s).valid,false);assert.equal(writeLocalAlertDrafts([draft("safe")],s).reason,"invalid-storage");assert.equal(s.getItem(LOCAL_ALERT_DRAFTS_KEY),raw);}});
 test("自选股范围允许空股票代码，涨跌幅负阈值仍有效",()=>{const s=storage();const item={...draft("watchlist"),symbol:"",scope:"watchlist",type:"change_above",threshold:-3};assert.equal(writeLocalAlertDrafts([item],s).ok,true);assert.equal(readLocalAlertDrafts(s).items[0].threshold,-3);});
+
+
+test("拒绝非布尔启用状态、超长 ID 和超长时间字段，且不覆盖原始存储", () => {
+  const invalidItems = [
+    { ...draft("enabled-string"), enabled: "true" },
+    { ...draft("enabled-null"), enabled: null },
+    { ...draft("id-long"), id: "i".repeat(161) },
+    { ...draft("created-long"), createdAt: "c".repeat(65) },
+    { ...draft("updated-long"), updatedAt: "u".repeat(65) }
+  ];
+  for (const item of invalidItems) {
+    const storageValue = JSON.stringify([item]);
+    const target = storage();
+    assert.equal(writeLocalAlertDrafts([item], target).reason, "invalid");
+    assert.equal(target.getItem(LOCAL_ALERT_DRAFTS_KEY), null);
+    target.setItem(LOCAL_ALERT_DRAFTS_KEY, storageValue);
+    assert.equal(readLocalAlertDrafts(target).valid, false);
+    assert.equal(writeLocalAlertDrafts([draft("safe")], target).reason, "invalid-storage");
+    assert.equal(target.getItem(LOCAL_ALERT_DRAFTS_KEY), storageValue);
+  }
+});

@@ -27,18 +27,22 @@ function normalize(item) {
   const symbol = item.symbol == null ? "" : item.symbol;
   const scope = item.scope == null || item.scope === "" ? "symbol" : item.scope;
   const severity = item.severity == null || item.severity === "" ? "info" : item.severity;
-  if (!id || !name || name.length > 80 || !TYPES[type] || !Number.isFinite(threshold)
+  const createdAt = String(item.createdAt || "");
+  const updatedAt = String(item.updatedAt || "");
+  if (!id || id.length > 160 || !name || name.length > 80 || !TYPES[type] || !Number.isFinite(threshold)
     || threshold < 0 && type !== "change_above" && type !== "change_below"
     || typeof symbol !== "string" || symbol.length > 32
     || !["symbol", "watchlist"].includes(scope)
-    || !["info", "warning", "critical"].includes(severity)) return null;
+    || !["info", "warning", "critical"].includes(severity)
+    || typeof item.enabled !== "boolean"
+    || createdAt.length > 64 || updatedAt.length > 64) return null;
   if ((type === "change_above" || type === "change_below") && (threshold < -100 || threshold > 100)) return null;
   if (validateLocalAlertDraft({ name, type, threshold, symbol, scope })) return null;
   return {
     id, name, type, threshold, symbol, scope, severity,
     enabled: item.enabled === true,
-    createdAt: String(item.createdAt || ""),
-    updatedAt: String(item.updatedAt || "")
+    createdAt,
+    updatedAt
   };
 }
 
