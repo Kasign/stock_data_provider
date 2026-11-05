@@ -10,11 +10,12 @@ import (
 	"time"
 
 	"github.com/Kasign/stock_data_provider/services/market-data/internal/model"
+	"github.com/Kasign/stock_data_provider/services/market-data/internal/validation"
 )
 
 const tickflowVolumeFixture = 1234567.0
 
-func TestTickFlowFetchQuoteKeepsVolumeInShares(t *testing.T) {
+func TestTickFlowFetchQuoteNormalizesVolumeFromHands(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/v1/quotes" || r.URL.Query().Get("symbols") != "600519.SH" {
 			t.Errorf("unexpected quote request: %s %s", r.Method, r.URL.String())
@@ -26,7 +27,7 @@ func TestTickFlowFetchQuoteKeepsVolumeInShares(t *testing.T) {
 			"symbol": "600519.SH", "name": "贵州茅台",
 			"last_price": 101.0, "prev_close": 100.0,
 			"open": 100.0, "high": 102.0, "low": 99.0,
-			"volume": tickflowVolumeFixture, "amount": 123456789.0,
+			"volume": tickflowVolumeFixture, "amount": 12345678900.0,
 			"timestamp": time.Now().UTC().Add(-time.Minute).UnixMilli(),
 			"ext":       map[string]any{"change_amount": 1.0, "change_pct": 0.01},
 		}
@@ -39,11 +40,11 @@ func TestTickFlowFetchQuoteKeepsVolumeInShares(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.Volume == nil || *got.Volume != int64(tickflowVolumeFixture) {
-		t.Fatalf("TickFlow quote volume should stay in shares: %+v", got.Volume)
+	if got.Volume == nil || *got.Volume != int64(tickflowVolumeFixture*100) {
+		t.Fatalf("TickFlow quote volume should convert hands to shares: %+v", got.Volume)
 	}
 	if got.RawVolume == nil || *got.RawVolume != tickflowVolumeFixture ||
-		got.RawVolumeUnit != "shares" || got.VolumeUnit != "shares" {
+		got.RawVolumeUnit != "hands" || got.VolumeUnit != "shares" {
 		t.Fatalf("TickFlow quote volume metadata is inconsistent: raw=%v raw_unit=%q unit=%q", got.RawVolume, got.RawVolumeUnit, got.VolumeUnit)
 	}
 	if got.QualityStatus != model.QualityValid {
@@ -51,7 +52,7 @@ func TestTickFlowFetchQuoteKeepsVolumeInShares(t *testing.T) {
 	}
 }
 
-func TestTickFlowFetchDailyBarsKeepsVolumeInShares(t *testing.T) {
+func TestTickFlowFetchDailyBarsNormalizesVolumeFromHands(t *testing.T) {
 	location, err := time.LoadLocation("Asia/Shanghai")
 	if err != nil {
 		t.Fatal(err)
@@ -72,7 +73,7 @@ func TestTickFlowFetchDailyBarsKeepsVolumeInShares(t *testing.T) {
 		_ = json.NewEncoder(w).Encode(map[string]any{"code": 0, "data": map[string]any{
 			"timestamp": []int64{timestamp},
 			"open":      []float64{100}, "high": []float64{102}, "low": []float64{99}, "close": []float64{101},
-			"volume": []float64{tickflowVolumeFixture}, "amount": []float64{123456789}, "prev_close": []float64{100},
+			"volume": []float64{tickflowVolumeFixture}, "amount": []float64{12345678900}, "prev_close": []float64{100},
 		}})
 	}))
 	defer server.Close()
@@ -85,11 +86,11 @@ func TestTickFlowFetchDailyBarsKeepsVolumeInShares(t *testing.T) {
 	if len(bars) != 1 {
 		t.Fatalf("expected one daily bar, got %+v", bars)
 	}
-	if bars[0].Volume == nil || *bars[0].Volume != int64(tickflowVolumeFixture) {
-		t.Fatalf("TickFlow daily volume should stay in shares: %+v", bars[0].Volume)
+	if bars[0].Volume == nil || *bars[0].Volume != int64(tickflowVolumeFixture*100) {
+		t.Fatalf("TickFlow daily volume should convert hands to shares: %+v", bars[0].Volume)
 	}
 	if bars[0].RawVolume == nil || *bars[0].RawVolume != tickflowVolumeFixture ||
-		bars[0].RawVolumeUnit != "shares" || bars[0].VolumeUnit != "shares" {
+		bars[0].RawVolumeUnit != "hands" || bars[0].VolumeUnit != "shares" {
 		t.Fatalf("TickFlow daily volume metadata is inconsistent: raw=%v raw_unit=%q unit=%q", bars[0].RawVolume, bars[0].RawVolumeUnit, bars[0].VolumeUnit)
 	}
 	if bars[0].QualityStatus != model.QualityValid {
@@ -113,7 +114,7 @@ func TestTickFlowDailyBarsDerivesChangeAfterChronologicalSort(t *testing.T) {
 		_ = json.NewEncoder(w).Encode(map[string]any{"code": 0, "data": map[string]any{
 			"timestamp": []int64{latestDay.UnixMilli(), previousDay.UnixMilli()},
 			"open":      []float64{108, 99}, "high": []float64{112, 102}, "low": []float64{107, 98}, "close": []float64{110, 100},
-			"volume": []float64{1000, 2000}, "amount": []float64{110000, 100000},
+			"volume": []float64{1000, 2000}, "amount": []float64{11000000, 20000000},
 		}})
 	}))
 	defer server.Close()
@@ -176,5 +177,46 @@ func TestTickFlowDailyBarsRejectsMismatchedOptionalArrays(t *testing.T) {
 				t.Fatalf("mismatched optional %s array must be rejected, got %v", tc.field, err)
 			}
 		})
+	}
+}
+
+func TestTickFlowFetchDailyBarsReportsNormalizationRejections(t *testing.T) {
+	location, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil {
+		t.Fatal(err)
+	}
+	date := time.Now().In(location).AddDate(0, 0, -1)
+	dateISO := date.Format("2006-01-02")
+	timestamp := time.Date(date.Year(), date.Month(), date.Day(), 12, 0, 0, 0, location).UnixMilli()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{"code": 0, "data": map[string]any{
+			"timestamp": []int64{timestamp},
+			"open":      []float64{100}, "high": []float64{102}, "low": []float64{99}, "close": []float64{101},
+			"volume": []float64{tickflowVolumeFixture}, "amount": []float64{123456789},
+			"prev_close": []float64{100},
+		}})
+	}))
+	defer server.Close()
+
+	provider := NewTickFlowConfigured(2*time.Second, server.URL, "", "test-api-key")
+	reporter := validation.NewReporter(validation.DefaultMaxIssues)
+	ctx := validation.WithReporter(context.Background(), reporter)
+	_, err = provider.FetchDailyBars(ctx, "600519.SH", dateISO, dateISO, 8, model.AdjustmentNone)
+	if err == nil || !strings.Contains(err.Error(), "no valid daily bars after normalization") {
+		t.Fatalf("expected all rows to be rejected by normalization, got %v", err)
+	}
+	report := reporter.Snapshot()
+	if report.ErrorCount == 0 || report.TotalCount == 0 {
+		t.Fatalf("normalization rejection must reach request reporter, got %+v", report)
+	}
+	found := false
+	for _, issue := range report.Issues {
+		if issue.Field == "amount,volume" && issue.Code == "unit_mismatch" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected amount/volume unit mismatch diagnostic, got %+v", report.Issues)
 	}
 }

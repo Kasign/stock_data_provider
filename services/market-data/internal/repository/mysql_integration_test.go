@@ -83,6 +83,41 @@ func TestMariaDBRevisionPersistenceAndPointInTimeQueries(t *testing.T) {
 		t.Fatalf("as_of before revision must restore v1: rows=%+v err=%v", historicalFactors, err)
 	}
 
+	// 同一证券、交易日和来源允许 forward/backward 两种独立因子口径并存；
+	// BaoStock 未提供 AvailableAt 时仍应保存原始观测，但 PIT 服务层不得将其视为可见。
+	basisSymbol := fmt.Sprintf("B%014d", time.Now().UnixNano()%100000000000000)
+	basisFetchedAt := time.Now().UTC()
+	forwardFactor := model.AdjustmentFactor{
+		Symbol: basisSymbol, TradeDate: "2026-10-30", Factor: 0.95,
+		Basis: model.AdjustmentFactorForward, Source: "baostock", SourceVersion: "baostock-public-tcp-v1",
+		FetchedAt: basisFetchedAt, QualityStatus: model.QualityDegraded,
+		QualityReasons: []string{"provider_available_at_not_exposed_by_query_adjust_factor"},
+	}
+	backwardFactor := forwardFactor
+	backwardFactor.Basis = model.AdjustmentFactorBackward
+	backwardFactor.Factor = 5.4
+	if err := store.SaveAdjustmentFactors(ctx, []model.AdjustmentFactor{forwardFactor, backwardFactor}); err != nil {
+		store.Close()
+		t.Fatalf("save independent BaoStock factor bases: %v", err)
+	}
+	basisRows, err := store.ListAdjustmentFactorsAsOf(ctx, basisSymbol, "2026-10-30", "2026-10-30", time.Now().UTC())
+	if err != nil || len(basisRows) != 2 {
+		store.Close()
+		t.Fatalf("forward/backward factor bases must coexist: rows=%+v err=%v", basisRows, err)
+	}
+	seenBases := map[model.AdjustmentFactorBasis]bool{}
+	for _, row := range basisRows {
+		seenBases[row.Basis] = true
+		if row.AvailableAt != nil || row.SystemObservedAt == nil || row.QualityStatus != model.QualityDegraded {
+			store.Close()
+			t.Fatalf("unknown provider availability must be preserved without inventing PIT visibility: %+v", row)
+		}
+	}
+	if !seenBases[model.AdjustmentFactorForward] || !seenBases[model.AdjustmentFactorBackward] {
+		store.Close()
+		t.Fatalf("both adjustment factor bases were not persisted: %+v", basisRows)
+	}
+
 	cashV1 := 0.5
 	action := model.CorporateAction{
 		Symbol: symbol, ProviderEventID: "integration-dividend-1",
@@ -118,6 +153,37 @@ func TestMariaDBRevisionPersistenceAndPointInTimeQueries(t *testing.T) {
 		t.Fatalf("corporate-action query must return v2: rows=%+v err=%v", newActions, err)
 	}
 
+	barVolume := int64(1000)
+	barAmount := 10000.0
+	barFetchedAt := time.Now().UTC()
+	makeIntegrationBar := func(tradeDate string) model.DailyBar {
+		return model.DailyBar{
+			Symbol: symbol, TradeDate: tradeDate, Period: "1d", AdjustmentBasis: model.AdjustmentNone,
+			Source: "integration-fixture", SourceVersion: "integration-bars-v1",
+			Open: 10, High: 11, Low: 9, Close: 10.5, Volume: &barVolume, Amount: &barAmount,
+			VolumeUnit: "shares", AmountUnit: "CNY", FetchedAt: barFetchedAt, NormalizedAt: barFetchedAt,
+			QualityStatus: model.QualityDegraded, NormalizationVer: "4",
+		}
+	}
+	if err := store.UpsertBars(ctx, []model.DailyBar{
+		makeIntegrationBar("2026-10-19"), makeIntegrationBar("2026-10-20"),
+		makeIntegrationBar("2026-10-21"), makeIntegrationBar("2026-10-22"),
+	}); err != nil {
+		t.Fatalf("save daily-bar range fixtures: %v", err)
+	}
+	boundedBars, err := store.ListBars(ctx, symbol, "2026-10-20", "2026-10-21", model.AdjustmentNone, 0)
+	if err != nil || len(boundedBars) != 2 || boundedBars[0].TradeDate != "2026-10-21" || boundedBars[1].TradeDate != "2026-10-20" {
+		t.Fatalf("current daily-bar query must use inclusive date bounds: bars=%+v err=%v", boundedBars, err)
+	}
+	barsAsOf, err := store.ListBarsAsOf(ctx, symbol, "2026-10-20", "2026-10-21", model.AdjustmentNone, time.Now().UTC().Add(time.Second), 0)
+	if err != nil || len(barsAsOf) != 2 {
+		t.Fatalf("PIT daily-bar query must use the same inclusive date bounds: bars=%+v err=%v", barsAsOf, err)
+	}
+	barsBeforeObservation, err := store.ListBarsAsOf(ctx, symbol, "2026-10-20", "2026-10-21", model.AdjustmentNone, barFetchedAt.Add(-time.Second), 0)
+	if err != nil || len(barsBeforeObservation) != 0 {
+		t.Fatalf("PIT daily-bar query must exclude revisions recorded after as_of: bars=%+v err=%v", barsBeforeObservation, err)
+	}
+
 	if err := store.Close(); err != nil {
 		t.Fatalf("close MariaDB connection: %v", err)
 	}
@@ -130,8 +196,82 @@ func TestMariaDBRevisionPersistenceAndPointInTimeQueries(t *testing.T) {
 	if err != nil || len(persisted) != 1 || persisted[0].Factor != 1.5 {
 		t.Fatalf("revision must persist across connection restart: rows=%+v err=%v", persisted, err)
 	}
+	probeRun := &model.ProviderProbeRun{
+		RunID: fmt.Sprintf("probe-%d", time.Now().UnixNano()),
+		Scope: "all", Status: "completed", Persisted: true,
+		StartedAt: time.Now().UTC().Add(-time.Second), FinishedAt: time.Now().UTC(),
+		RequestedCapabilities: []string{"daily_bars"},
+		RequestedChecks:       []string{"cross_provider"},
+		CheckResults: []model.ProviderProbeCheckResult{{
+			Check: "cross_provider", Status: "skipped",
+			AdjustmentBasis: "backward_adjusted",
+			LeftProvider:    "eastmoney", RightProvider: "baostock",
+			LeftAdjustmentMethod:   "eastmoney_fqt_2",
+			RightAdjustmentMethod:  "baostock_pct_change",
+			LeftAdjustmentRefDate:  "2026-11-03",
+			RightAdjustmentRefDate: "2026-11-03",
+			NotComparableCount:     1,
+			FieldComparisons: []model.ProviderProbeFieldComparison{{
+				Field: "close", Status: "not_comparable",
+				Reason: "adjustment_method_mismatch",
+			}},
+			CheckedAt: time.Now().UTC(),
+		}},
+		Items: []model.ProviderProbeItem{{
+			Provider: "eastmoney", Capability: "daily_bars",
+			Status: "returned", AdjustmentBasis: model.AdjustmentBackward,
+			QualityStatus: model.QualityValid, CheckedAt: time.Now().UTC(),
+		}},
+	}
+	if err := reopened.SaveProviderProbeRun(ctx, probeRun); err != nil {
+		t.Fatalf("save provider-probe run: %v", err)
+	}
+	probeHistory, err := reopened.ListProviderProbeRuns(ctx, 10)
+	if err != nil {
+		t.Fatalf("read provider-probe history: %v", err)
+	}
+	assertProbeAdjustmentEvidence := func(items []model.ProviderProbeRun) {
+		t.Helper()
+		for _, item := range items {
+			if item.RunID != probeRun.RunID {
+				continue
+			}
+			if len(item.CheckResults) != 1 {
+				t.Fatalf("persisted probe check results were lost: %+v", item)
+			}
+			check := item.CheckResults[0]
+			if check.LeftAdjustmentMethod != "eastmoney_fqt_2" ||
+				check.RightAdjustmentMethod != "baostock_pct_change" ||
+				check.LeftAdjustmentRefDate != "2026-11-03" ||
+				check.RightAdjustmentRefDate != "2026-11-03" ||
+				len(check.FieldComparisons) != 1 ||
+				check.FieldComparisons[0].Reason != "adjustment_method_mismatch" {
+				t.Fatalf("persisted adjustment evidence changed: %+v", check)
+			}
+			if len(item.Items) != 1 || item.Items[0].AdjustmentBasis != model.AdjustmentBackward {
+				t.Fatalf("persisted provider probe items changed: %+v", item.Items)
+			}
+			return
+		}
+		t.Fatalf("provider-probe run %q was not returned in history: %+v", probeRun.RunID, items)
+	}
+	assertProbeAdjustmentEvidence(probeHistory)
+
 	if err := reopened.Close(); err != nil {
 		t.Fatalf("close MariaDB before unavailable check: %v", err)
+	}
+	probeReopened, err := OpenMySQL(ctx, dsn)
+	if err != nil {
+		t.Fatalf("reopen MariaDB for provider-probe history: %v", err)
+	}
+	persistedProbeHistory, err := probeReopened.ListProviderProbeRuns(ctx, 10)
+	if err != nil {
+		probeReopened.Close()
+		t.Fatalf("read provider-probe history after connection restart: %v", err)
+	}
+	assertProbeAdjustmentEvidence(persistedProbeHistory)
+	if err := probeReopened.Close(); err != nil {
+		t.Fatalf("close MariaDB after provider-probe history verification: %v", err)
 	}
 	if _, err := reopened.ListAdjustmentFactorsAsOf(ctx, symbol, "", "", secondAsOf); err == nil {
 		t.Fatal("closed database connection must return an explicit storage error")

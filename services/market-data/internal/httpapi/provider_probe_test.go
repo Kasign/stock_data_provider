@@ -101,6 +101,10 @@ func TestProviderProbeEndpointRejectsInvalidRequests(t *testing.T) {
 		{name: "adjustments without daily bars", body: `{"capabilities":["quote"],"daily_bar_adjustments":["none"]}`},
 		{name: "unsupported adjustment", body: `{"capabilities":["daily_bars"],"daily_bar_adjustments":["unknown"]}`},
 		{name: "duplicate adjustment", body: `{"capabilities":["daily_bars"],"daily_bar_adjustments":["none","none"]}`},
+		{name: "date range without daily bars", body: `{"capabilities":["quote"],"daily_bar_start_date":"2025-07-07","daily_bar_end_date":"2025-07-17"}`},
+		{name: "incomplete date range", body: `{"capabilities":["daily_bars"],"daily_bar_start_date":"2025-07-07"}`},
+		{name: "invalid date range", body: `{"capabilities":["daily_bars"],"daily_bar_start_date":"bad","daily_bar_end_date":"2025-07-17"}`},
+		{name: "date range too wide", body: `{"capabilities":["daily_bars"],"daily_bar_start_date":"2025-07-01","daily_bar_end_date":"2025-08-05"}`},
 		{name: "capability outside core", body: `{"scope":"core","capabilities":["stock_universe"]}`},
 		{name: "timeout zero", body: `{"timeout_seconds":0}`},
 		{name: "timeout too small", body: `{"timeout_seconds":0.5}`},
@@ -133,6 +137,18 @@ func TestProviderProbeEndpointAcceptsMarketAndSymbolFilters(t *testing.T) {
 	for _, expected := range []string{`"requested_markets":["CHINEXT"]`, `"requested_symbols":["300750.SZ"]`} {
 		if !strings.Contains(response.Body.String(), expected) {
 			t.Fatalf("filtered probe response missing %s: %s", expected, response.Body.String())
+		}
+	}
+}
+
+func TestProviderProbeEndpointAcceptsExplicitHistoricalDailyBarRange(t *testing.T) {
+	response := performProviderProbeRequest(newProviderProbeHTTPTestHandler(), `{"scope":"all","capabilities":["daily_bars"],"symbols":["600036.SH"],"daily_bar_adjustments":["none"],"daily_bar_start_date":"2025-07-07","daily_bar_end_date":"2025-07-17"}`, true)
+	if response.Code != http.StatusOK {
+		t.Fatalf("historical daily-bar Probe status=%d body=%s", response.Code, response.Body.String())
+	}
+	for _, expected := range []string{`"requested_daily_bar_start_date":"2025-07-07"`, `"requested_daily_bar_end_date":"2025-07-17"`} {
+		if !strings.Contains(response.Body.String(), expected) {
+			t.Fatalf("historical range missing from response: %s", response.Body.String())
 		}
 	}
 }

@@ -296,7 +296,13 @@ func sinaDailyDateRange(startDate, endDate string, limit int, now time.Time) (ti
 }
 
 func sinaKlineDataLength(start, end time.Time, limit int) int {
-	calendarDays := int(math.Ceil(end.Sub(start).Hours()/24)) + 1
+	// Sina K-line API 仅提供 datalen，不支持指定结束日期。请求历史窗口时，
+	// 必须从目标起始日期一直取到当前最新数据，再由下游按 end 日期过滤。
+	requestEnd := time.Now().In(end.Location())
+	if end.After(requestEnd) {
+		requestEnd = end
+	}
+	calendarDays := int(math.Ceil(requestEnd.Sub(start).Hours()/24)) + 1
 	estimate := calendarDays*7/5 + 20
 	if estimate < limit {
 		estimate = limit

@@ -3,7 +3,10 @@ package provider
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"math"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -36,6 +39,35 @@ func logOptionalProviderProbe(t *testing.T, results []optionalProviderProbeResul
 	}
 }
 
+func isTusharePermissionRequired(err error) bool {
+	if err == nil {
+		return false
+	}
+	message := strings.ToLower(err.Error())
+	return strings.Contains(message, "code=40203") || strings.Contains(message, "权限不足") || strings.Contains(message, "无接口访问权限")
+}
+
+func TestIsTusharePermissionRequired(t *testing.T) {
+	cases := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{name: "permission code", err: errors.New("Tushare daily 错误 code=40203: 接口权限不足"), want: true},
+		{name: "permission message", err: errors.New("当前账号无接口访问权限"), want: true},
+		{name: "invalid token", err: errors.New("Tushare token invalid"), want: false},
+		{name: "network error", err: errors.New("connection timeout"), want: false},
+	}
+	for _, item := range cases {
+		t.Run(item.name, func(t *testing.T) {
+			if got := isTusharePermissionRequired(item.err); got != item.want {
+				t.Fatalf("isTusharePermissionRequired()=%v want %v", got, item.want)
+			}
+		})
+	}
+}
+
+// 最小权限探测通过提交标记 [include_tushare] [tushare_daily_only] 显式触发。
 func TestLiveTushareCapabilities(t *testing.T) {
 	if os.Getenv("MARKET_DATA_LIVE_TUSHARE_TESTS") != "1" {
 		t.Skip("set MARKET_DATA_LIVE_TUSHARE_TESTS=1 to call Tushare Pro endpoints")
@@ -68,51 +100,60 @@ func TestLiveTushareCapabilities(t *testing.T) {
 		item := optionalProviderProbeResult{Provider: "tushare", Capability: capability, Status: "passed", ElapsedMS: time.Since(started).Milliseconds(), Rows: rows, Quality: string(quality), QualityNote: notes}
 		if err != nil {
 			_, safeMessage := liveProbeErrorSummary(err)
-			item.Status, item.Error = "failed", safeMessage
-			failures = append(failures, capability+": "+safeMessage)
+			item.Error = safeMessage
+			if isTusharePermissionRequired(err) {
+				// Tushare 接口权限受账号积分档位和单接口权限约束；权限不足不能等同于 Token 无效或 Provider 不可用。
+				item.Status = "permission_required"
+			} else {
+				item.Status = "failed"
+				failures = append(failures, capability+": "+safeMessage)
+			}
 		}
 		results = append(results, item)
 	}
 
-	run("stock_basic", func() (int, model.QualityStatus, []string, error) {
-		item, err := client.FetchStockBasic(ctx, symbol)
-		if err != nil {
-			return 0, "", nil, err
-		}
-		if item == nil || item.Symbol != symbol || item.Source != "tushare" || item.FetchedAt.IsZero() {
-			return 0, "", nil, errLiveProbeContract("stock_basic identity/source/fetched_at mismatch")
-		}
-		return 1, item.QualityStatus, item.QualityReasons, nil
-	})
-
-	calendarStart := now.AddDate(0, 0, -14).Format("2006-01-02")
-	calendar, calendarErr := client.FetchTradingCalendar(ctx, calendarStart, endDate)
-	run("trading_calendar", func() (int, model.QualityStatus, []string, error) {
-		if calendarErr != nil {
-			return 0, "", nil, calendarErr
-		}
-		if calendar == nil || calendar.Market != "cn_a_share" || calendar.StartDate != calendarStart ||
-			calendar.EndDate != endDate || calendar.Source != "tushare" || calendar.FetchedAt.IsZero() {
-			return 0, "", nil, errLiveProbeContract("trading_calendar identity/source/date-range/fetched_at mismatch")
-		}
-		start, startErr := time.Parse("2006-01-02", calendarStart)
-		end, endErr := time.Parse("2006-01-02", endDate)
-		if startErr != nil || endErr != nil {
-			return 0, "", nil, errLiveProbeContract("trading_calendar probe date range invalid")
-		}
-		expectedDays := int(end.Sub(start)/(24*time.Hour)) + 1
-		if calendar.TotalDays != expectedDays || len(calendar.Items) != expectedDays {
-			return len(calendar.Items), "", nil, errLiveProbeContract("trading_calendar returned incomplete natural-day coverage")
-		}
-		return len(calendar.Items), calendar.QualityStatus, calendar.QualityReasons, nil
-	})
-
 	tradeDate := endDate
-	if calendarErr == nil && calendar != nil {
-		for i := len(calendar.Items) - 1; i >= 0; i-- {
-			if calendar.Items[i].IsTradingDay {
-				tradeDate = calendar.Items[i].Date
-				break
+	if os.Getenv("MARKET_DATA_LIVE_TUSHARE_DAILY_ONLY") != "1" {
+		run("stock_basic", func() (int, model.QualityStatus, []string, error) {
+			item, err := client.FetchStockBasic(ctx, symbol)
+			if err != nil {
+				return 0, "", nil, err
+			}
+			if item == nil || item.Symbol != symbol || item.Source != "tushare" || item.FetchedAt.IsZero() {
+				return 0, "", nil, errLiveProbeContract("stock_basic identity/source/fetched_at mismatch")
+			}
+			return 1, item.QualityStatus, item.QualityReasons, nil
+		})
+
+		calendarStart := now.AddDate(0, 0, -14).Format("2006-01-02")
+		calendar, calendarErr := client.FetchTradingCalendar(ctx, calendarStart, endDate)
+		run("trading_calendar", func() (int, model.QualityStatus, []string, error) {
+			if calendarErr != nil {
+				return 0, "", nil, calendarErr
+			}
+			if calendar == nil || calendar.Market != "cn_a_share" || calendar.StartDate != calendarStart ||
+				calendar.EndDate != endDate || calendar.Source != "tushare" || calendar.FetchedAt.IsZero() {
+				return 0, "", nil, errLiveProbeContract("trading_calendar identity/source/date-range/fetched_at mismatch")
+			}
+			start, startErr := time.Parse("2006-01-02", calendarStart)
+			end, endErr := time.Parse("2006-01-02", endDate)
+			if startErr != nil || endErr != nil {
+				return 0, "", nil, errLiveProbeContract("trading_calendar probe date range invalid")
+			}
+			expectedDays := int(end.Sub(start)/(24*time.Hour)) + 1
+			if calendar.TotalDays != expectedDays || len(calendar.Items) != expectedDays {
+				return len(calendar.Items), "", nil, errLiveProbeContract("trading_calendar returned incomplete natural-day coverage")
+			}
+			return len(calendar.Items), calendar.QualityStatus, calendar.QualityReasons, nil
+		})
+
+		tradeDate = endDate
+		if calendarErr == nil && calendar != nil {
+			for i := len(calendar.Items) - 1; i >= 0; i-- {
+				if calendar.Items[i].IsTradingDay {
+					tradeDate = calendar.Items[i].Date
+					break
+				}
 			}
 		}
 	}
@@ -131,82 +172,227 @@ func TestLiveTushareCapabilities(t *testing.T) {
 		return len(bars), bars[len(bars)-1].QualityStatus, bars[len(bars)-1].QualityReasons, nil
 	})
 
-	run("security_trading_status", func() (int, model.QualityStatus, []string, error) {
-		item, err := client.FetchSecurityTradingStatus(ctx, symbol, tradeDate)
-		if err != nil {
-			return 0, "", nil, err
-		}
-		if item == nil || item.Symbol != symbol || item.TradeDate != tradeDate || item.Source != "tushare" || item.FetchedAt.IsZero() {
-			return 0, "", nil, errLiveProbeContract("security_trading_status identity/source/fetched_at mismatch")
-		}
-		return 1, item.QualityStatus, item.QualityReasons, nil
-	})
+	if os.Getenv("MARKET_DATA_LIVE_TUSHARE_DAILY_ONLY") != "1" {
+		run("security_trading_status", func() (int, model.QualityStatus, []string, error) {
+			item, err := client.FetchSecurityTradingStatus(ctx, symbol, tradeDate)
+			if err != nil {
+				return 0, "", nil, err
+			}
+			if item == nil || item.Symbol != symbol || item.TradeDate != tradeDate || item.Source != "tushare" || item.FetchedAt.IsZero() {
+				return 0, "", nil, errLiveProbeContract("security_trading_status identity/source/fetched_at mismatch")
+			}
+			return 1, item.QualityStatus, item.QualityReasons, nil
+		})
 
-	run("fundamentals", func() (int, model.QualityStatus, []string, error) {
-		item, err := client.FetchFundamentals(ctx, symbol, 2025, 4)
-		if err != nil {
-			return 0, "", nil, err
-		}
-		if item == nil || item.Symbol != symbol || item.Year != 2025 || item.Quarter != 4 || item.Source != "tushare" || item.FetchedAt.IsZero() {
-			return 0, "", nil, errLiveProbeContract("fundamentals identity/period/source/fetched_at mismatch")
-		}
-		return len(item.Sections), item.QualityStatus, item.QualityReasons, nil
-	})
+		run("fundamentals", func() (int, model.QualityStatus, []string, error) {
+			item, err := client.FetchFundamentals(ctx, symbol, 2025, 4)
+			if err != nil {
+				return 0, "", nil, err
+			}
+			if item == nil || item.Symbol != symbol || item.Year != 2025 || item.Quarter != 4 || item.Source != "tushare" || item.FetchedAt.IsZero() {
+				return 0, "", nil, errLiveProbeContract("fundamentals identity/period/source/fetched_at mismatch")
+			}
+			return len(item.Sections), item.QualityStatus, item.QualityReasons, nil
+		})
 
-	run("valuations", func() (int, model.QualityStatus, []string, error) {
-		item, err := client.FetchValuations(ctx, []string{symbol})
-		if err != nil {
-			return 0, "", nil, err
-		}
-		if item == nil || item.Source != "tushare" || item.FetchedAt.IsZero() || len(item.RequestedSymbols) != 1 || item.RequestedSymbols[0] != symbol {
-			return 0, "", nil, errLiveProbeContract("valuations request/source/fetched_at mismatch")
-		}
-		return len(item.Items), item.QualityStatus, item.QualityReasons, nil
-	})
+		run("valuations", func() (int, model.QualityStatus, []string, error) {
+			item, err := client.FetchValuations(ctx, []string{symbol})
+			if err != nil {
+				return 0, "", nil, err
+			}
+			if item == nil || item.Source != "tushare" || item.FetchedAt.IsZero() || len(item.RequestedSymbols) != 1 || item.RequestedSymbols[0] != symbol {
+				return 0, "", nil, errLiveProbeContract("valuations request/source/fetched_at mismatch")
+			}
+			return len(item.Items), item.QualityStatus, item.QualityReasons, nil
+		})
 
-	run("index_catalog", func() (int, model.QualityStatus, []string, error) {
-		item, err := client.FetchIndexCatalog(ctx, "tushare")
-		if err != nil {
-			return 0, "", nil, err
-		}
-		if item == nil || item.Tag != "tushare" || item.Source != "tushare" || item.FetchedAt.IsZero() ||
-			item.Total != len(item.Items) || len(item.Items) == 0 {
-			return 0, "", nil, errLiveProbeContract("index_catalog identity/source/count/fetched_at mismatch")
-		}
-		return len(item.Items), item.QualityStatus, item.QualityReasons, nil
-	})
+		run("index_catalog", func() (int, model.QualityStatus, []string, error) {
+			item, err := client.FetchIndexCatalog(ctx, "tushare")
+			if err != nil {
+				return 0, "", nil, err
+			}
+			if item == nil || item.Tag != "tushare" || item.Source != "tushare" || item.FetchedAt.IsZero() ||
+				item.Total != len(item.Items) || len(item.Items) == 0 {
+				return 0, "", nil, errLiveProbeContract("index_catalog identity/source/count/fetched_at mismatch")
+			}
+			return len(item.Items), item.QualityStatus, item.QualityReasons, nil
+		})
 
-	run("index_constituents", func() (int, model.QualityStatus, []string, error) {
-		item, err := client.FetchIndexConstituents(ctx, "000300.SH")
-		if err != nil {
-			return 0, "", nil, err
-		}
-		if item == nil || item.IndexSymbol != "000300.SH" || item.Source != "tushare" || item.FetchedAt.IsZero() ||
-			item.ProviderReportDate == "" || item.Total != len(item.Items) || len(item.Items) == 0 {
-			return 0, "", nil, errLiveProbeContract("index_constituents identity/report-date/count/fetched_at mismatch")
-		}
-		return len(item.Items), item.QualityStatus, item.QualityReasons, nil
-	})
+		run("index_constituents", func() (int, model.QualityStatus, []string, error) {
+			item, err := client.FetchIndexConstituents(ctx, "000300.SH")
+			if err != nil {
+				return 0, "", nil, err
+			}
+			if item == nil || item.IndexSymbol != "000300.SH" || item.Source != "tushare" || item.FetchedAt.IsZero() ||
+				item.ProviderReportDate == "" || item.Total != len(item.Items) || len(item.Items) == 0 {
+				return 0, "", nil, errLiveProbeContract("index_constituents identity/report-date/count/fetched_at mismatch")
+			}
+			return len(item.Items), item.QualityStatus, item.QualityReasons, nil
+		})
 
-	run("index_daily_bars", func() (int, model.QualityStatus, []string, error) {
-		item, err := client.FetchIndexDailyBars(ctx, "000300.SH", startDate, endDate)
-		if err != nil {
-			return 0, "", nil, err
+		run("index_daily_bars", func() (int, model.QualityStatus, []string, error) {
+			item, err := client.FetchIndexDailyBars(ctx, "000300.SH", startDate, endDate)
+			if err != nil {
+				return 0, "", nil, err
+			}
+			if item == nil || item.IndexSymbol != "000300.SH" || item.Source != "tushare" || item.FetchedAt.IsZero() ||
+				item.StartDate != startDate || item.EndDate != endDate || item.Total != len(item.Items) || len(item.Items) == 0 {
+				return 0, "", nil, errLiveProbeContract("index_daily_bars identity/date-range/count/fetched_at mismatch")
+			}
+			for _, bar := range item.Items {
+				if bar.IndexSymbol != "000300.SH" || bar.TradeDate < startDate || bar.TradeDate > endDate ||
+					bar.Open <= 0 || bar.High <= 0 || bar.Low <= 0 || bar.Close <= 0 || bar.Low > bar.High ||
+					bar.Open < bar.Low || bar.Open > bar.High || bar.Close < bar.Low || bar.Close > bar.High {
+					return len(item.Items), "", nil, errLiveProbeContract("index_daily_bars row contract mismatch")
+				}
+			}
+			return len(item.Items), item.QualityStatus, item.QualityReasons, nil
+		})
+	}
+	logOptionalProviderProbe(t, results, failures)
+}
+
+type liveTushareAdjustmentEvidenceItem struct {
+	Symbol                string                   `json:"symbol"`
+	AdjustmentFactors     []model.AdjustmentFactor `json:"adjustment_factors,omitempty"`
+	CorporateActions      []model.CorporateAction  `json:"corporate_actions,omitempty"`
+	FactorStatus          string                   `json:"factor_status"`
+	FactorError           string                   `json:"factor_error,omitempty"`
+	CorporateActionStatus string                   `json:"corporate_action_status"`
+	CorporateActionError  string                   `json:"corporate_action_error,omitempty"`
+}
+
+type liveTushareAdjustmentEvidenceReport struct {
+	GeneratedAt string                              `json:"generated_at"`
+	StartDate   string                              `json:"start_date"`
+	EndDate     string                              `json:"end_date"`
+	Items       []liveTushareAdjustmentEvidenceItem `json:"items"`
+}
+
+// TestLiveTushareHistoricalAdjustmentEvidence checks whether the existing Tushare
+// token can supply historical adjustment factors and dividend/corporate-action
+// evidence for the same golden windows used by the public daily-bar probes.
+func TestLiveTushareHistoricalAdjustmentEvidence(t *testing.T) {
+	if os.Getenv("MARKET_DATA_LIVE_TUSHARE_ADJUSTMENT_TESTS") != "1" {
+		t.Skip("set MARKET_DATA_LIVE_TUSHARE_ADJUSTMENT_TESTS=1 to query Tushare historical adjustment evidence")
+	}
+	token := strings.TrimSpace(os.Getenv("MARKET_DATA_TUSHARE_TOKEN"))
+	if token == "" {
+		token = strings.TrimSpace(os.Getenv("TUSHARE_TOKEN"))
+	}
+	if token == "" {
+		t.Skip("Tushare adjustment evidence probe skipped: token is not configured")
+	}
+	startDate := strings.TrimSpace(os.Getenv("LIVE_PROBE_DAILY_START_DATE"))
+	if startDate == "" {
+		startDate = "2025-07-07"
+	}
+	endDate := strings.TrimSpace(os.Getenv("LIVE_PROBE_DAILY_END_DATE"))
+	if endDate == "" {
+		endDate = "2025-07-17"
+	}
+	if _, err := time.Parse("2006-01-02", startDate); err != nil {
+		t.Fatalf("invalid LIVE_PROBE_DAILY_START_DATE: %v", err)
+	}
+	if _, err := time.Parse("2006-01-02", endDate); err != nil {
+		t.Fatalf("invalid LIVE_PROBE_DAILY_END_DATE: %v", err)
+	}
+	if startDate > endDate {
+		t.Fatalf("historical adjustment range is reversed: %s..%s", startDate, endDate)
+	}
+	symbols := []string{"600036.SH", "002982.SZ"}
+	if configured := strings.TrimSpace(os.Getenv("LIVE_PROBE_DAILY_SYMBOLS")); configured != "" {
+		symbols = strings.Split(configured, ",")
+	}
+	endpoint := strings.TrimSpace(os.Getenv("MARKET_DATA_TUSHARE_API_URL"))
+	client := NewTushareConfigured(25*time.Second, endpoint, token)
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	defer cancel()
+
+	report := liveTushareAdjustmentEvidenceReport{
+		GeneratedAt: time.Now().UTC().Format(time.RFC3339),
+		StartDate:   startDate, EndDate: endDate,
+		Items: make([]liveTushareAdjustmentEvidenceItem, 0, len(symbols)),
+	}
+	var failures []string
+	for _, rawSymbol := range symbols {
+		symbol := strings.ToUpper(strings.TrimSpace(rawSymbol))
+		if symbol == "" {
+			t.Fatalf("LIVE_PROBE_DAILY_SYMBOLS contains an empty symbol")
 		}
-		if item == nil || item.IndexSymbol != "000300.SH" || item.Source != "tushare" || item.FetchedAt.IsZero() ||
-			item.StartDate != startDate || item.EndDate != endDate || item.Total != len(item.Items) || len(item.Items) == 0 {
-			return 0, "", nil, errLiveProbeContract("index_daily_bars identity/date-range/count/fetched_at mismatch")
-		}
-		for _, bar := range item.Items {
-			if bar.IndexSymbol != "000300.SH" || bar.TradeDate < startDate || bar.TradeDate > endDate ||
-				bar.Open <= 0 || bar.High <= 0 || bar.Low <= 0 || bar.Close <= 0 || bar.Low > bar.High ||
-				bar.Open < bar.Low || bar.Open > bar.High || bar.Close < bar.Low || bar.Close > bar.High {
-				return len(item.Items), "", nil, errLiveProbeContract("index_daily_bars row contract mismatch")
+		item := liveTushareAdjustmentEvidenceItem{Symbol: symbol}
+		factors, factorErr := client.FetchAdjustmentFactors(ctx, symbol, startDate, endDate)
+		if factorErr != nil {
+			_, safe := liveProbeErrorSummary(factorErr)
+			item.FactorError = safe
+			if isTusharePermissionRequired(factorErr) {
+				item.FactorStatus = "permission_required"
+			} else {
+				item.FactorStatus = "failed"
+				failures = append(failures, symbol+" adjustment_factors: "+safe)
+			}
+		} else {
+			item.AdjustmentFactors = factors
+			item.FactorStatus = "returned"
+			if len(factors) == 0 {
+				item.FactorStatus = "returned_empty"
+			}
+			for _, factor := range factors {
+				if factor.Symbol != symbol || factor.TradeDate < startDate || factor.TradeDate > endDate ||
+					factor.Factor <= 0 || math.IsNaN(factor.Factor) || math.IsInf(factor.Factor, 0) ||
+					factor.Source != "tushare" || factor.FetchedAt.IsZero() {
+					failures = append(failures, symbol+" adjustment_factors: row contract invalid at "+factor.TradeDate)
+					item.FactorStatus = "contract_invalid"
+					break
+				}
 			}
 		}
-		return len(item.Items), item.QualityStatus, item.QualityReasons, nil
-	})
-	logOptionalProviderProbe(t, results, failures)
+
+		actions, actionErr := client.FetchCorporateActions(ctx, symbol, startDate, endDate)
+		if actionErr != nil {
+			_, safe := liveProbeErrorSummary(actionErr)
+			item.CorporateActionError = safe
+			if isTusharePermissionRequired(actionErr) {
+				item.CorporateActionStatus = "permission_required"
+			} else {
+				item.CorporateActionStatus = "failed"
+				failures = append(failures, symbol+" corporate_actions: "+safe)
+			}
+		} else {
+			item.CorporateActions = actions
+			item.CorporateActionStatus = "returned"
+			if len(actions) == 0 {
+				item.CorporateActionStatus = "returned_empty"
+			}
+			for _, action := range actions {
+				eventDate := action.ExDate
+				if eventDate == "" {
+					eventDate = action.AnnouncementDate
+				}
+				if action.Symbol != symbol || eventDate < startDate || eventDate > endDate ||
+					action.Source != "tushare" || action.FetchedAt.IsZero() {
+					failures = append(failures, symbol+" corporate_actions: row contract invalid at "+eventDate)
+					item.CorporateActionStatus = "contract_invalid"
+					break
+				}
+			}
+		}
+		report.Items = append(report.Items, item)
+	}
+
+	encoded, err := json.MarshalIndent(report, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal Tushare historical adjustment evidence report: %v", err)
+	}
+	t.Logf("LIVE_TUSHARE_ADJUSTMENT_REPORT_BEGIN\n%s\nLIVE_TUSHARE_ADJUSTMENT_REPORT_END", encoded)
+	if outputPath := strings.TrimSpace(os.Getenv("LIVE_TUSHARE_ADJUSTMENT_REPORT_PATH")); outputPath != "" {
+		if writeErr := os.WriteFile(outputPath, append(encoded, '\n'), 0o644); writeErr != nil {
+			t.Errorf("write Tushare historical adjustment evidence report: %v", writeErr)
+		}
+	}
+	if len(failures) > 0 {
+		t.Errorf("Tushare historical adjustment evidence failed: %s", strings.Join(failures, " | "))
+	}
 }
 
 func TestLiveHithinkCapabilities(t *testing.T) {
@@ -241,6 +427,25 @@ func TestLiveHithinkCapabilities(t *testing.T) {
 			failures = append(failures, capability+": "+safeMessage)
 		}
 		results = append(results, item)
+	}
+
+	// daily-only 仅运行一次日线能力探测；客户端仍按接口返回条数递增 offset 读取分页，记录首次/重复 page、offset、row，发现重复即拒绝整次结果，不自动去重。
+	if os.Getenv("MARKET_DATA_LIVE_HITHINK_DAILY_ONLY") == "1" {
+		run("daily_bars_none", func() (int, model.QualityStatus, []string, error) {
+			bars, err := client.FetchDailyBars(ctx, symbol, startDate, endDate, 40, model.AdjustmentNone)
+			if err != nil {
+				return 0, "", nil, err
+			}
+			if len(bars) == 0 {
+				return 0, "", nil, errLiveProbeContract("daily_bars_none returned no rows in the recent date range")
+			}
+			if message := liveProbeDailyContractError(bars, "hithink", "hithink", symbol, model.AdjustmentNone, startDate, endDate, 40); message != "" {
+				return len(bars), "", nil, errLiveProbeContract(message)
+			}
+			return len(bars), bars[len(bars)-1].QualityStatus, bars[len(bars)-1].QualityReasons, nil
+		})
+		logOptionalProviderProbe(t, results, failures)
+		return
 	}
 
 	run("quote", func() (int, model.QualityStatus, []string, error) {

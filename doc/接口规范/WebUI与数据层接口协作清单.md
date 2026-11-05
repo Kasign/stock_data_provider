@@ -1,6 +1,6 @@
 # WebUI 与数据层接口协作清单
 
-更新时间：2026-11-03
+更新时间：2026-11-05
 适用分支：
 - WebUI：feat/webui-market-data-console
 - 数据侧：feat/full-go-data-providers-api-switch
@@ -120,7 +120,7 @@
 | API-03 | 全市场分页与批量行情的范围、总数下限、覆盖率、MA 和复权语义 | 待当前 HEAD 复核 | 双方 | 服务端分页与字段质量可验证，WebUI 不将页内结果解释为全市场排名 |
 | API-04 | 市场情绪当前快照与历史快照的持久化、缺失交易日和覆盖语义 | 待真实验收 | 数据侧主责，WebUI 配合 | 有真实历史数据、数据库读写证据和无数据/缺日契约 |
 | API-05 | 市场级资金流真实数据与 Provider 权限验收 | 依赖凭据/权限 | 数据侧主责 | 真实请求可复现；权限缺失、Provider 不可用和空数据状态可区分 |
-| API-06 | Provider 静态清单、被动诊断、主动 Probe、诊断历史的边界与字段对齐 | 待当前 HEAD 复核 | 数据侧主责，WebUI 配合 | 三类能力分离；OpenAPI、Handler、状态分类和持久化证据一致 |
+| API-06 | 开发中 | Provider 静态清单、被动诊断、主动 Probe、Probe 历史均有 API；WebUI 已封装；DailyBar 交易上下文与日期边界诊断复用现有 Validator/Reporter/TradingCalendar/SecurityTradingStatus；重复无效行优先级、请求级参数单次计数、Reporter 截断计数已补回归；MariaDB fallback 标准化 warnings 已保留，来源序列选择改为最新交易日优先；缓存历史 warnings 与本次标准化 warnings 已补回归 | 本轮提交 CI 通过后，继续真实 MariaDB fallback / 日内停牌样本验收；Eastmoney/Tencent 复权锚点仍需有限真实样本 | TickFlow `/v1/klines` 成交量单位仍待真实样本证明；日内停牌真实样本未验；Eastmoney/Tencent 响应未提供可独立确认的 ref date；Tushare adj_factor/dividend 40203 权限阻塞 | `6b46bf0c4fa8388468a48105fbb4cd7fe7a7e8d6`（本轮变更前基线） | 基线 Go suite、Parity、WebUI checks 通过；Live Probe 工作流成功但真实 Provider 测试状态需查看本轮 job 日志；本轮新增测试 CI 待验收 | BaoStock/Pytdx 既有样本证据保持；Eastmoney/Tencent 锚点未验证；日内停牌缺失日 K 仅自动化规则已修复，真实样本待验 | 接口层已接入，待真实验收 |
 | API-07 | 板块多维排行（近 5 日涨幅、资金净流入等） | 待能力评估 | 数据侧主责，WebUI 配合 | 有真实来源、完整候选范围、排序/分页契约及质量证据；不以成交额冒充净流入 |
 | API-08 | 通知渠道、订阅、发送测试与投递记录服务端能力 | 未提供服务端接口 | 数据侧主责；WebUI 后续接入 | 服务端安全存储、鉴权、审计、重试和投递查询契约完整 |
 | API-09 | 服务端选股策略、全市场扫描、候选理由与历史记录 | 待产品/API 设计 | 双方 | 明确策略 schema、扫描范围、异步任务、结果快照和可追溯理由 |
@@ -139,7 +139,7 @@
 
 ### 6.2 数据侧 API 开发进度（由数据侧维护）
 
-本节是数据侧更新 API 开发进度的固定区域。数据侧每完成一个开发节点、测试节点或真实数据验证节点，都应更新对应行；不需要等待 WebUI 联调完成才更新。
+本节是数据侧更新 API 开发进度的固定区域。当前数据侧业务代码复核基线为 `cf69ccc4e8d81cfa44b11a9a61cde3666ee4d50f`（2026-11-05）。该代码基线的 Go suite Run `41960803425`、Parity Run `41960803760`、WebUI checks Run `41960803407`、Live Provider Probe Run `41960803434` 均通过。Live Provider Probe 的工作流成功不代表每个 Provider 的每种复权口径均已真实验收。数据侧每完成一个开发节点、测试节点或真实数据验证节点，都应更新对应行；不需要等待 WebUI 联调完成才更新。
 
 **填写规则：**
 1. 只更新自己负责的 API 任务行，不覆盖 WebUI 接入状态。
@@ -153,18 +153,20 @@
 
 **跨端状态枚举：** 待 WebUI 接入、待联调、联调中、联调通过、待真实数据验收、阻塞、暂不适用。
 
+历史日 K Probe 日期窗口契约：`daily_bar_start_date` 与 `daily_bar_end_date` 必须成对提供，仅作用于 `daily_bars`，按 Asia/Shanghai 的闭区间日期解释，最多 31 个自然日且结束日期不能晚于今日；省略时保持原有近期 5 条探测行为。响应中的 `requested_daily_bar_start_date/end_date` 仅回显请求参数，不代表 Provider 数据时间或 PIT available_at。WebUI 当前不依赖这两个字段，也无需因此改变页面请求；数据侧历史验收可直接使用该能力。
+
 | 编号 | 数据侧开发状态 | 已完成内容 / 当前进度 | 未完成内容 / 下一步 | 阻塞与依赖 | 数据侧 HEAD / 提交 SHA | 自动化测试证据 | 真实数据验证 | 跨端状态 |
 |---|---|---|---|---|---|---|---|---|
-| API-01 | 待开始 | 待数据侧核实当前接口覆盖 | 建立 OpenAPI、路由、Handler、JSON 输出对账结果 | 待核实 | 待填写 | 未执行 | 未执行 | 待 WebUI 接入 |
-| API-02 | 待开始 | 待核实 | 核对指数目录、成分、指数日线、交易时段和交易规则 | 待核实 | 待填写 | 未执行 | 未执行 | 待联调 |
-| API-03 | 待开始 | 待核实 | 核对全市场分页、批量行情、覆盖率、MA 和复权语义 | 待核实 | 待填写 | 未执行 | 未执行 | 待联调 |
-| API-04 | 待开始 | 待核实 | 验证市场情绪历史快照持久化、缺失交易日和覆盖语义 | 数据库及真实历史数据 | 待填写 | 未执行 | 未执行 | 待真实数据验收 |
-| API-05 | 待开始 | 待核实 | 验证市场级资金流数据源、权限、单位和错误分类 | Tushare 权限及凭据 | 待填写 | 未执行 | 跳过/未配置 | 阻塞 |
-| API-06 | 待开始 | 待核实 | 核对 Provider 清单、被动诊断、主动 Probe 和探测历史 | Provider 凭据及真实环境 | 待填写 | 未执行 | 未执行 | 待联调 |
-| API-07 | 待开始 | 待核实 | 评估板块多维排行的数据源、范围和排序契约 | 数据源及字段能力待评估 | 待填写 | 未执行 | 未执行 | 待能力评估 |
-| API-08 | 暂缓 | 当前未登记服务端接口实现 | 评估通知渠道、订阅、测试发送和投递记录能力 | 需先完成服务端方案及安全设计 | 待填写 | 不适用 | 不适用 | 暂不适用 |
-| API-09 | 暂缓 | 当前未确认服务端策略 API 方案 | 设计策略 schema、全市场扫描、异步任务和结果追溯 | 需先确认产品及 API 设计 | 待填写 | 不适用 | 不适用 | 暂不适用 |
-| API-10 | 暂缓 | 国内 A 股主线优先 | 评估全球市场指数、日历、币种及时区能力 | 数据源授权和国内主线优先级 | 待填写 | 不适用 | 不适用 | 暂不适用 |
+| API-01 | 开发中 | 当前 HEAD 已有 OpenAPI、HTTP 路由和 WebUI API 清单；已补齐 `SectorRanking.change_percent_5d`、`ProviderProbeItem.validation_*` Schema；`coverage_dimensions` 原已存在 | 继续完成所有端点的 OpenAPI Schema、Handler、JSON 字段逐项核对 | 剩余差异待逐接口复核 | `8decb2a8d796f54d6f1552928bb599889aa93c0a` | Go test suite Run `41755222811` 通过；Schema 契约测试检查字段归属 | 未执行全量真实接口对账 | 进行中 |
+| API-02 | 已完成 | 指数目录、成分、指数日线、指数行情、交易日历、交易时段、证券交易状态、涨跌幅规则均有路由和 OpenAPI 定义；WebUI 已有对应请求封装 | 逐 Provider 补充真实数据覆盖和边界证据 | Provider 能力按源不同 | `05949306eba5c4cbb5b9c62bc2d656a1efc24db9` | Go test suite Run `41622693853`；WebUI checks Run `41622693832` 均通过 | 未完成逐 Provider 真实验收 | 待真实数据验收 |
+| API-03 | 已完成 | `/api/v1/market/stocks` 提供分页行情与 MA 参数；批量 quote 最多 50 只；WebUI 已封装并用于当前分页选股及自选股批量刷新 | 补全分页总数/覆盖边界、均线复权语义及真实样本质量验证；明确当前选股仅作用于已加载分页 | 不具备全市场筛选策略执行 API | `05949306eba5c4cbb5b9c62bc2d656a1efc24db9` | Go test suite Run `41622693853`；WebUI checks Run `41622693832` 均通过 | 未执行全市场真实覆盖验收 | 待真实数据验收 |
+| API-04 | 开发中 | 市场情绪快照/历史和市场级资金流历史接口及 WebUI 请求封装已存在 | 核实市场情绪历史缺失交易日、幂等写入、保留策略和真实数据库数据；补专门集成证据 | 需要 MariaDB 持久化与真实历史数据 | `05949306eba5c4cbb5b9c62bc2d656a1efc24db9` | Go test suite Run `41622693853` 的 MariaDB migration/PIT 集成通过；未证明 sentiment 专项全链路 | 未执行生产数据历史验收 | 待真实数据验收 |
+| API-05 | 已完成 | `/api/v1/market/capital-flow` 已提供，使用 Tushare `moneyflow_mkt_dc`；WebUI 已封装 | 核对 Token 权限、字段单位、交易日覆盖、源端时间和历史数据准确性 | 依赖 Tushare 权限与凭据 | `05949306eba5c4cbb5b9c62bc2d656a1efc24db9` | Go test suite Run `41622693853` 通过 | 真实权限/历史值验收未完成；未配置凭据时应跳过 | 阻塞真实验收 |
+| API-06 | 开发中 | Provider 静态清单、被动诊断、主动 Probe、Probe 历史均有 API；WebUI 已封装；DailyBar 交易上下文关联诊断复用现有 TradingCalendar/SecurityTradingStatus；已修复日内停牌被错误当作全天停牌而掩盖缺失日 K 的诊断缺陷，新增回归测试；未新增 API 路由或响应契约字段 | 本轮修复提交 CI 通过后，继续补齐真实 Provider none/qfq/hfq 请求证据；为日内停牌补充真实样本；完成 MariaDB Probe 历史部署验收 | TickFlow `/v1/klines` 成交量单位仍待真实样本证明；交易日历冲突、证券状态缺失/未知只降级不可比较 | `bed1abe510527aead4c8c125f8fa894117f168c2` | Go test suite Run `41823327737`、Live provider probe Run `41823327752` 正在执行；Parity / WebUI checks 尚待确认 | TickFlow 成交量单位仍待真实样本证明；日内停牌缺失日 K 的规则已补回归但真实样本待验；Probe 历史部署验收未完成 | 接口层已接入，待真实验收 |
+| API-07 | 开发中 | 板块排行支持涨幅、成交额、近 5 日涨幅排序；`change_percent_5d` OpenAPI Schema 已补齐；WebUI 已封装并支持排序切换 | 评估真实资金净流入来源和完整候选集；补领涨股标准证券代码字段前不开放跳转 | 当前没有独立资金净流入 API；`leading_stock_symbol` 缺失 | `8decb2a8d796f54d6f1552928bb599889aa93c0a` | Go test suite Run `41755222811`、WebUI checks Run `41755222944` 通过 | 板块资金净流入真实来源未验收 | 部分联调完成 |
+| API-08 | 暂缓 | 当前没有服务端通知渠道、订阅和投递记录闭环 | 需要先形成服务端安全设计与 API 方案 | 用户确认复杂方案后再实施 | `05949306eba5c4cbb5b9c62bc2d656a1efc24db9` | 不适用 | 不适用 | 暂不适用 |
+| API-09 | 暂缓 | 当前分页行情不等同于服务端策略执行或全市场扫描 | 先定义策略 schema、异步任务、结果快照和可追溯理由 | 需先确认产品/API 设计 | `05949306eba5c4cbb5b9c62bc2d656a1efc24db9` | 不适用 | 不适用 | 暂不适用 |
+| API-10 | 暂缓 | 国内 A 股主线优先 | 国内主线稳定后评估全球市场指数、日历、币种及时区 | 数据源授权和优先级 | `05949306eba5c4cbb5b9c62bc2d656a1efc24db9` | 不适用 | 不适用 | 暂不适用 |
 
 **单项进度更新示例：**
 
@@ -214,3 +216,93 @@
 - 原有重点接口、单位/时间/质量语义、市场资金流、诊断、通知等内容按当前协作主题重新归类。
 - 原文中的历史提交 SHA 和“最新 CI 待结果”等快照状态不再作为当前结论；所有任务要求在当前 HEAD 重新复核。
 - 本次不修改 Go、Provider、数据库、OpenAPI 或 WebUI 业务代码。
+
+
+## 10. 2026-11-03 当前 HEAD 进度复核
+
+- 当前分支 HEAD：`8decb2a8d796f54d6f1552928bb599889aa93c0a`；业务 Schema/测试变更提交 `064707e2`、`428878fc`。
+- Go test suite Run `41755222811`：根模块、go-core、market-data 的 gofmt/go test/race/vet，MariaDB migration/PIT 集成，Compose 校验、部署脚本语法和两个 Go 镜像构建均通过；三个模块任务中的旧 Go 模块路径扫描均通过。
+- WebUI checks Run `41755222944`、Live provider probe Run `41755222948` 均通过；Live workflow 通过不代表所有 Provider/能力真实验收通过。
+- Go-Python parity Run `41755222861` 在当前 HEAD 通过；旧文档路径问题已由 `437af45c` 修复。
+- 已发现 OpenAPI Schema 缺口：`SectorRanking.change_percent_5d` 及 `ProviderProbeItem.validation_*`、`coverage_dimensions`。数据侧按协作清单和整体规划优先补齐，WebUI 不复制服务端质量规则。
+
+
+## 11. 2026-11-04 DailyBar 复权专项测试进度
+
+- 数据侧当前 HEAD：`24f6e24da44dd81d541f84b56316b65503534ea8`；本轮新增代码/测试基线：`e245c100a9d94a4c41a01f97327561b14ab0f1b8`。
+- 已增加 Eastmoney、BaoStock、HiThink、TickFlow 的三种复权参数与 metadata 对应测试；Pytdx 增加 GBBQ 公司行动事件驱动的 QFQ/HFQ 协议级样例。
+- Probe 错误分类增加 Eastmoney、BaoStock、HiThink、TickFlow、Pytdx 和 Tushare 的失败负向样例，避免 HTTP、鉴权、连接、超时和因子缺失误报 `not_supported`。
+- `e771284b` Go test suite Run `41757355037` 通过；当前 HEAD `e245c100` 的 Go test suite Run `41757748059` 尚待结果。
+- 真实 Provider × 复权口径请求未执行；Pytdx 适配器的 GetGbbq 网络失败端到端模拟仍未完成。WebUI 本轮未修改业务代码，跨端状态保持待真实数据验收。
+
+
+## 11. 2026-11-04 数据侧 DailyBar 诊断进度
+
+- 数据侧 HEAD：`ed18e0642f777646eb778f8b9521abb7fed4d518`。
+- 当前 HEAD 的 Go test suite Run `41758382946`、Go-Python parity Run `41758383176`、Live provider probe Run `41758383404`、WebUI checks Run `41758382953` 均通过。
+- 已有 Normalize 测试覆盖日期包含边界、非法日期、重复交易日过滤和 limit 截断；已有 DailyBar Validator/Reporter 基础测试。当前首轮审计发现重复记录与 limit 截断尚未完整映射为结构化 Reporter 计数，开始日期前记录存在静默过滤路径。
+- Pytdx GetGbbq 失败路径尚无确定性端到端测试；生产代码直接依赖具体 `*tdx.Client`。下一步先评估最小内部客户端注入方案，不改变公开 API 或生产请求行为。
+- 本轮未执行真实 Provider × 复权口径请求；CI Live Probe 通过不替代真实逐口径验收。
+
+## 12. 2026-11-04 DailyBar 诊断实现进度（历史快照，以第 13 节为准）
+
+- 数据侧本轮代码集中提交 1160d221，包含 DailyBar Reporter 计数、Probe 字段映射、OpenAPI Schema、Pytdx 日线客户端注入及回归测试。
+- Reporter 已支持 FieldIssue.count 聚合计数；Normalize 阶段重复日期和 limit 截断已纳入结构化报告，日期范围问题由 Validate 阶段 out_of_range 统一表达，避免双计。
+- limit 截断使用 Info 级诊断，count 为实际截断行数；诊断明细仍受报告 maxIssues 限制，总计数不受明细截断影响。
+- Pytdx 日线复权客户端新增内部注入接口，覆盖 GBBQ 超时、连接失败和空事件列表；Probe 测试锁定网络超时不能被分类为 not_supported。
+- 本轮没有执行 Go 测试命令，所有新增测试等待当前分支 CI 验证；真实 Provider × 复权口径请求仍未执行。WebUI 无需修改业务代码，当前接口响应的 validation_issues[].count 仅为诊断聚合字段，不改变既有路由或业务参数。
+
+- 2026-11-04：诊断 FieldIssue 增加可选 count 聚合字段并同步 OpenAPI Schema；首次 CI 检查发现新增文件 gofmt 格式问题，已按日志修正，最新 SHA 的 Go test suite 待重新验证。WebUI checks 在 SHA 24013849、eefdeb19 均通过；其余工作流状态以最新 SHA 的 Actions 为准。
+
+- 本轮代码功能按批次集中提交为 1160d221；PR #1 仍为 Open / Draft。最新 Go test suite、Parity 和 Live Probe 的结果以该 SHA 对应 Actions 为准；当前 Go test suite / Parity 尚未完成，WebUI checks 已通过。
+
+
+## 13. 2026-11-04 DailyBar Reporter 回归修复
+
+- 当前数据侧 HEAD：`c4438a9d1822c292eae4d4313011718ce2fd0c0a`。
+- 修复 `Report.Add` 未按 `FieldIssue.Count` 加权累计的问题；Count 缺省/非正数按 1 兼容，TotalCount 与 Error/Warning/Info 计数保持一致。
+- 修复 `Report.Merge` 将聚合记录数量误判为明细 Truncated 的问题；只传播显式截断或合并时实际触发的明细截断。
+- 修复 Pytdx Probe 测试使用不存在的 `SetDailyBarProviders`；改为在 `NewWithCapabilities` 构造时传入 DailyBarProvider，不增加生产 API。
+- 新增聚合 Merge 和兼容回退测试。父提交 `e1e61f68` 的 Go suite、Parity 失败；修复后 HEAD 尚无 Actions 运行记录，当前 CI 状态为未验证。
+- WebUI 请求封装、响应字段和路由未变化，无需 WebUI 修改；API-06 跨端状态仍为“接口层已接入，待真实验收”。
+- 真实 Provider × 复权口径请求和 MariaDB Probe 历史部署验收未执行。
+
+
+## 14. 2026-11-05 数据侧 API-06 复权元数据进度更新
+
+- 当前业务代码复核基线：`cf69ccc4e8d81cfa44b11a9a61cde3666ee4d50f`。
+- 该代码基线的 Go suite Run `41960803425`、Go-Python parity Run `41960803760`、WebUI checks Run `41960803407`、Live Provider Probe Run `41960803434` 均通过。
+- 本批次仅核验 Provider 实现、已有测试和源端公开资料；没有修改 API 路由、请求/响应 Schema 或 WebUI 调用，因此 WebUI 不需要调整。
+- BaoStock 的复权因子算法和 qfq/hfq 基准定义有官方资料；当前 K 线 Bar 仍未填 `AdjustmentRefDate`，须通过因子历史与实际 K 线样本建立可重复证据后再决定是否填充。
+- Eastmoney `fqt=1/2`、Tencent `qfq/hfq` 的请求映射已在代码测试覆盖，但响应不提供独立参考日期；保持 `not_comparable` 门禁，不从请求日期推断。
+- Tushare qfq 使用实际因子集合最大交易日作为参考日期；hfq 不填参考日期。当前账号 `adj_factor`/分红权限 40203，不重复请求。
+- 跨端状态仍为“接口层已接入，待真实验收”；本轮无新增 WebUI 工作项。
+
+
+## 12. 2026-11-05 DailyBar 日期边界诊断同步
+
+- 数据侧本轮变更前 HEAD：`850d3b26931685a2bee7e704ac90d8caddb3a3db`。
+- 发现并修复开始日期之前的 Provider Bar 在普通标准化 warnings 中静默丢弃的问题；新增 `bar_before_start_date_dropped`，与结束日期越界告警对称。
+- 标准化层对倒置日期区间返回 `invalid_date_range`；结构化 Reporter 返回一条请求级 Error，避免按每行重复累计。
+- 新增 Normalize 与 DataService 回归测试；未改变 OpenAPI、HTTP 路由、请求/响应字段或 WebUI 调用，WebUI 无需同步代码。
+- 变更前基线 Go suite Runs `41963474550`、`41963482209`、Parity `41963482323`、WebUI checks `41963482255` 通过；Live Probe `41963482213` 工作流成功但真实 Provider 测试全部 Skip。本轮提交 CI 待验收。
+- 跨端状态仍为“接口层已接入，待真实数据验收”；真实停牌样本和 Provider 复权锚点未完成。
+
+
+## 13. 2026-11-05 DailyBar 请求级诊断与 MariaDB 日期边界同步
+
+- 数据侧变更前 HEAD：`79c99fdfe8f40536a10c560f4d6052b2c9267837`。
+- 重复日期判断移至行字段校验之后；无效重复行保留 OHLC/字段错误，不再被普通 warnings 单独归类为 duplicate；普通与结构化结果保持一致。
+- 非法 start/end、倒置区间及非法 requested symbol 在结构化路径按请求级错误处理，每项一次，不按 Bar 行数重复计数。
+- 增加 Reporter 120 行错误样本，验证明细截断时聚合计数不丢失。
+- 复核 MariaDB 当前表和版本表均使用 start/end 闭区间；新增数据库集成测试验证闭区间和 PIT recorded_at 截止。未修改 SQL 查询、API 路由或 Schema。
+- WebUI 无需改动；真实 Provider 日内停牌样本和复权锚点仍未验收。新提交 CI 待验证。
+
+
+## 14. 2026-11-05 DailyBar 缓存与 MariaDB fallback 诊断保留
+
+- 数据侧变更前 HEAD：`6b46bf0c4fa8388468a48105fbb4cd7fe7a7e8d6`。
+- MariaDB fallback 不再丢弃 `ValidateAndSortBars` 返回的 warnings；最终响应合并来源降级、单来源/复权约束和行过滤原因。
+- MariaDB 来源组选择调整为最新交易日优先，其次比较覆盖行数、采集时间和稳定 key；仍禁止跨来源、版本、复权 method/ref date 或 normalization version 混合。
+- 缓存命中路径增加回归覆盖，确保缓存写入时 warnings 与本次重新标准化 warnings 均保留。
+- 无 API、Schema、数据库结构、Provider 请求或 WebUI 变更；本轮 CI 待验收。

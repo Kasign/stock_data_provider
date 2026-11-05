@@ -14,6 +14,10 @@ import (
 var tickflowBreadthFixtureSymbols = []string{"600000.SH", "000001.SZ", "300001.SZ"}
 
 func newTickFlowBreadthFixture(t *testing.T, quoteSymbols []string, omitAmountFor, omitNameFor string, timestampSkew ...time.Duration) *httptest.Server {
+	return newTickFlowBreadthFixtureWithUniverse(t, quoteSymbols, omitAmountFor, omitNameFor, tickflowBreadthFixtureSymbols, timestampSkew...)
+}
+
+func newTickFlowBreadthFixtureWithUniverse(t *testing.T, quoteSymbols []string, omitAmountFor, omitNameFor string, universeSymbols []string, timestampSkew ...time.Duration) *httptest.Server {
 	t.Helper()
 	now := time.Now().UTC()
 	timestampTime := now.Add(-time.Minute)
@@ -47,8 +51,8 @@ func newTickFlowBreadthFixture(t *testing.T, quoteSymbols []string, omitAmountFo
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"code": 0,
 				"data": map[string]any{
-					"id": "CN_Equity_A", "symbol_count": len(tickflowBreadthFixtureSymbols),
-					"symbols": tickflowBreadthFixtureSymbols,
+					"id": "CN_Equity_A", "symbol_count": len(universeSymbols),
+					"symbols": universeSymbols,
 				},
 			})
 		case "/v1/quotes":
@@ -101,6 +105,28 @@ func newTickFlowBreadthFixture(t *testing.T, quoteSymbols []string, omitAmountFo
 			http.NotFound(w, r)
 		}
 	}))
+}
+
+func TestTickFlowFetchMarketBreadthExcludesUnsupportedUniverseMembersWithEvidence(t *testing.T) {
+	universeSymbols := []string{"600000.SH", "000001.SZ", "300001.SZ", "302132.SZ"}
+	server := newTickFlowBreadthFixtureWithUniverse(t, universeSymbols, "", "", universeSymbols)
+	defer server.Close()
+
+	client := NewTickFlowConfigured(2*time.Second, server.URL, "", "test-api-key")
+	got, err := client.FetchMarketBreadth(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.TotalSecurities != 4 || got.CoveredSecurities != 3 || got.ExcludedNonAShareCount != 1 {
+		t.Fatalf("unsupported universe member must be counted separately: %+v", got)
+	}
+	if got.QualityStatus != model.QualityDegraded ||
+		!containsTickFlowReason(got.QualityReasons, "provider_universe_contains_non_common_equities_excluded") {
+		t.Fatalf("excluded universe member must degrade quality with an explicit reason: %+v", got)
+	}
+	if got.TotalAmountCNY != nil {
+		t.Fatalf("market-wide amount must remain unknown when any universe member is excluded: %+v", got)
+	}
 }
 
 func TestTickFlowFetchMarketBreadthCalculatesCompleteSnapshot(t *testing.T) {

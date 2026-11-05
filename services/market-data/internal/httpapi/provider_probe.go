@@ -19,6 +19,8 @@ type providerProbeRequest struct {
 	Markets             []string                `json:"markets"`
 	Symbols             []string                `json:"symbols"`
 	DailyBarAdjustments []model.AdjustmentBasis `json:"daily_bar_adjustments"`
+	DailyBarStartDate   string                  `json:"daily_bar_start_date"`
+	DailyBarEndDate     string                  `json:"daily_bar_end_date"`
 	TimeoutSeconds      *int                    `json:"timeout_seconds"`
 }
 
@@ -109,7 +111,7 @@ func (s *Server) dataSourceProbe(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	run, err := s.svc.ProbeProviderCapabilitiesWithOptions(r.Context(), service.ProviderProbeOptions{
-		Scope: request.Scope, Capabilities: request.Capabilities, Checks: request.Checks, Markets: request.Markets, Symbols: request.Symbols, DailyBarAdjustments: request.DailyBarAdjustments, TimeoutSeconds: timeoutSeconds,
+		Scope: request.Scope, Capabilities: request.Capabilities, Checks: request.Checks, Markets: request.Markets, Symbols: request.Symbols, DailyBarAdjustments: request.DailyBarAdjustments, DailyBarStartDate: request.DailyBarStartDate, DailyBarEndDate: request.DailyBarEndDate, TimeoutSeconds: timeoutSeconds,
 	})
 	if err != nil {
 		writeErr(w, http.StatusBadRequest, "VALIDATION_ERROR", err.Error(), requestID(r))

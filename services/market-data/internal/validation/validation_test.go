@@ -149,3 +149,41 @@ func TestReporterIsContextScopedAndMergesConcurrentReports(t *testing.T) {
 		t.Fatal("reporter leaked into unrelated context")
 	}
 }
+
+func TestReportAddCountsAggregatedRows(t *testing.T) {
+	report := NewReport(1)
+	report.Add(FieldIssue{Stage: StageNormalize, Code: "bars_truncated_to_limit", Severity: SeverityInfo, Count: 7})
+	report.Add(FieldIssue{Stage: StageNormalize, Code: "duplicate_trade_date_dropped", Severity: SeverityWarning})
+	if report.TotalCount != 8 || report.InfoCount != 7 || report.WarningCount != 1 || len(report.Issues) != 1 || !report.Truncated {
+		t.Fatalf("unexpected aggregated report: %+v", report)
+	}
+}
+
+func TestReportMergePreservesAggregatedCountsWithoutMarkingTruncated(t *testing.T) {
+	left := NewReport(10)
+	left.Add(FieldIssue{Stage: StageNormalize, Code: "bars_truncated_to_limit", Severity: SeverityInfo, Count: 7})
+	right := NewReport(10)
+	right.Add(FieldIssue{Stage: StageNormalize, Code: "duplicate_trade_date_dropped", Severity: SeverityWarning, Count: 3})
+
+	merged := left.Merge(right)
+	if merged.TotalCount != 10 || merged.InfoCount != 7 || merged.WarningCount != 3 {
+		t.Fatalf("aggregated severity counts were not preserved: %+v", merged)
+	}
+	if merged.Truncated || len(merged.Issues) != 2 {
+		t.Fatalf("aggregated rows must not imply issue-detail truncation: %+v", merged)
+	}
+}
+
+func TestReportSeverityCountsFallbackUsesAggregatedIssueCounts(t *testing.T) {
+	report := Report{
+		TotalCount: 8,
+		Issues: []FieldIssue{
+			{Severity: SeverityInfo, Count: 7},
+			{Severity: SeverityWarning},
+		},
+	}
+	errors, warnings, info := report.severityCounts()
+	if errors != 0 || warnings != 1 || info != 7 {
+		t.Fatalf("fallback severity counts ignored FieldIssue.Count: error=%d warning=%d info=%d", errors, warnings, info)
+	}
+}

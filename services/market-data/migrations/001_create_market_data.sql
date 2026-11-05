@@ -142,6 +142,7 @@ CREATE TABLE IF NOT EXISTS market_data_adjustment_factor_versions (
   symbol VARCHAR(16) NOT NULL,
   trade_date DATE NOT NULL,
   source VARCHAR(64) NOT NULL,
+  factor_basis VARCHAR(16) NOT NULL,
   revision_hash CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
   recorded_at DATETIME(6) NOT NULL,
   fetched_at DATETIME(6) NOT NULL,
@@ -149,7 +150,7 @@ CREATE TABLE IF NOT EXISTS market_data_adjustment_factor_versions (
   quality_status VARCHAR(16) NOT NULL,
   metadata JSON NOT NULL,
   PRIMARY KEY (id),
-  KEY idx_market_adjustment_factor_asof (symbol, trade_date, source, recorded_at, id),
+  KEY idx_market_adjustment_factor_asof (symbol, trade_date, source, factor_basis, recorded_at, id),
   KEY idx_market_adjustment_factor_observed (recorded_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 

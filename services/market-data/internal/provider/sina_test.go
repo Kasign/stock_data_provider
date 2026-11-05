@@ -277,6 +277,28 @@ func TestSinaFetchDailyBarsNormalizesUnadjustedRows(t *testing.T) {
 	}
 }
 
+func TestSinaFetchDailyBarsHistoricalWindowRequestsThroughLatestRows(t *testing.T) {
+	payload := []byte(`[{"day":"2025-07-07","open":"47.07","high":"47.20","low":"46.70","close":"47.20","volume":"567427"},{"day":"2026-11-04","open":"42.50","high":"43.00","low":"42.20","close":"42.54","volume":"100000"}]`)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		datalen, err := strconv.Atoi(r.URL.Query().Get("datalen"))
+		if err != nil || datalen < 300 || datalen > maxSinaKlineBars {
+			t.Errorf("historical Sina query must request enough rows to reach the requested start date, datalen=%q err=%v", r.URL.Query().Get("datalen"), err)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write(payload)
+	}))
+	defer server.Close()
+
+	provider := NewSinaConfigured(0, "http://127.0.0.1:1/unused", server.URL)
+	bars, err := provider.FetchDailyBars(context.Background(), "600036.SH", "2025-07-07", "2025-07-17", 40, model.AdjustmentNone)
+	if err != nil {
+		t.Fatalf("FetchDailyBars historical window returned error: %v", err)
+	}
+	if len(bars) != 1 || bars[0].TradeDate != "2025-07-07" {
+		t.Fatalf("historical window should retain only requested rows, got %+v", bars)
+	}
+}
+
 func TestSinaDailyDateRangeRejectsFutureEndDate(t *testing.T) {
 	now := time.Now()
 	future := now.In(sinaChinaLocation()).AddDate(0, 0, 1).Format("2006-01-02")

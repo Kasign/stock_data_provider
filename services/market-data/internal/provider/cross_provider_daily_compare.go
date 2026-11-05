@@ -3,6 +3,7 @@ package provider
 import (
 	"math"
 	"sort"
+	"strings"
 	"time"
 )
 
@@ -26,15 +27,17 @@ type CrossProviderDailySnapshot struct {
 
 // CrossProviderDailyBar 表示一个交易日的标准化日 K。
 type CrossProviderDailyBar struct {
-	TradeDate  string
-	Open       float64
-	High       float64
-	Low        float64
-	Close      float64
-	Volume     int64
-	VolumeUnit string
-	Amount     *float64
-	AmountUnit string
+	TradeDate         string
+	Open              float64
+	High              float64
+	Low               float64
+	Close             float64
+	Volume            int64
+	VolumeUnit        string
+	Amount            *float64
+	AmountUnit        string
+	AdjustmentMethod  string
+	AdjustmentRefDate string
 }
 
 // CrossProviderFieldResult 记录字段级对账结果。
@@ -78,6 +81,10 @@ func CompareCrossProviderDailyBars(left, right CrossProviderDailySnapshot) Cross
 	}
 	if left.QualityStatus != "valid" || right.QualityStatus != "valid" {
 		result.Reason = "quality_status_must_be_valid"
+		return result
+	}
+	if reason := validateCrossProviderAdjustmentCompatibility(left, right); reason != "" {
+		result.Reason = reason
 		return result
 	}
 	leftBars, leftDates, reason := indexCrossProviderBars(left.Bars)
@@ -175,6 +182,49 @@ func CompareCrossProviderDailyBars(left, right CrossProviderDailySnapshot) Cross
 		result.Status = CrossProviderDailyMatched
 	}
 	return result
+}
+
+func validateCrossProviderAdjustmentCompatibility(left, right CrossProviderDailySnapshot) string {
+	if left.AdjustmentBasis == "none" {
+		return ""
+	}
+	if left.AdjustmentBasis != "forward_adjusted" && left.AdjustmentBasis != "backward_adjusted" {
+		return "adjustment_basis_unsupported"
+	}
+	leftMethod, leftRefDate, reason := crossProviderAdjustmentMetadata(left)
+	if reason != "" {
+		return "left_" + reason
+	}
+	rightMethod, rightRefDate, reason := crossProviderAdjustmentMetadata(right)
+	if reason != "" {
+		return "right_" + reason
+	}
+	if leftMethod != rightMethod {
+		return "adjustment_method_mismatch"
+	}
+	if leftRefDate != rightRefDate {
+		return "adjustment_reference_date_mismatch"
+	}
+	return ""
+}
+
+func crossProviderAdjustmentMetadata(snapshot CrossProviderDailySnapshot) (string, string, string) {
+	if len(snapshot.Bars) == 0 {
+		return "", "", "adjustment_metadata_missing"
+	}
+	method, refDate := strings.TrimSpace(snapshot.Bars[0].AdjustmentMethod), strings.TrimSpace(snapshot.Bars[0].AdjustmentRefDate)
+	if method == "" {
+		return "", "", "adjustment_method_missing"
+	}
+	if refDate == "" {
+		return "", "", "adjustment_reference_date_missing"
+	}
+	for _, bar := range snapshot.Bars[1:] {
+		if strings.TrimSpace(bar.AdjustmentMethod) != method || strings.TrimSpace(bar.AdjustmentRefDate) != refDate {
+			return "", "", "adjustment_metadata_inconsistent"
+		}
+	}
+	return method, refDate, ""
 }
 
 func validateCrossProviderDailyBar(bar CrossProviderDailyBar) string {

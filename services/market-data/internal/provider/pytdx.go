@@ -29,11 +29,12 @@ const (
 // Pytdx 使用通达信协议的 Go 客户端获取国内 A 股行情和日 K。
 // 使用原生 Go 客户端，不在生产请求路径中启动 Python。
 type Pytdx struct {
-	timeout   time.Duration
-	rateMu    sync.Mutex
-	lastCall  time.Time
-	hosts     []string
-	hostIndex int
+	timeout            time.Duration
+	dailyClientFactory func(context.Context) (pytdxDailyClient, error)
+	rateMu             sync.Mutex
+	lastCall           time.Time
+	hosts              []string
+	hostIndex          int
 }
 
 func NewPytdx(timeout time.Duration, configuredHosts ...string) *Pytdx {
@@ -53,6 +54,20 @@ func NewPytdx(timeout time.Duration, configuredHosts ...string) *Pytdx {
 }
 
 func (p *Pytdx) Name() string { return "pytdx" }
+
+// pytdxDailyClient 仅抽象日线复权链路依赖的方法，生产环境仍使用原生 tdx.Client。
+type pytdxDailyClient interface {
+	Close() error
+	GetKlineDay(code string, start, count uint16) (*protocol.KlineResp, error)
+	GetGbbq(code string) (*protocol.GbbqResp, error)
+}
+
+func (p *Pytdx) dailyClient(ctx context.Context) (pytdxDailyClient, error) {
+	if p.dailyClientFactory != nil {
+		return p.dailyClientFactory(ctx)
+	}
+	return p.dial(ctx)
+}
 
 func (p *Pytdx) dial(ctx context.Context) (*tdx.Client, error) {
 	if ctx == nil {
@@ -221,7 +236,7 @@ func (p *Pytdx) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endDat
 		return nil, err
 	}
 
-	client, err := p.dial(ctx)
+	client, err := p.dailyClient(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -313,6 +328,14 @@ func (p *Pytdx) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endDat
 		}
 	}
 
+	adjustmentRefDate := ""
+	switch adjustment {
+	case model.AdjustmentForward:
+		adjustmentRefDate = all[len(all)-1].Time.In(loc).Format("2006-01-02")
+	case model.AdjustmentBackward:
+		adjustmentRefDate = all[0].Time.In(loc).Format("2006-01-02")
+	}
+
 	fetchedAt := time.Now().UTC()
 	out := make([]model.DailyBar, 0, min(limit, len(adjusted)))
 	for i, item := range adjusted {
@@ -356,32 +379,33 @@ func (p *Pytdx) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endDat
 		}
 		rawVolumeCopy := rawVolume
 		out = append(out, model.DailyBar{
-			Symbol:           symbol,
-			TradeDate:        tradeDate,
-			Period:           "1d",
-			Open:             open,
-			High:             high,
-			Low:              low,
-			Close:            closePrice,
-			Volume:           &volume,
-			Amount:           amountInfo.Amount,
-			ChangePercent:    changePercent,
-			AdjustmentBasis:  adjustment,
-			AdjustmentMethod: adjustmentMethod,
-			Source:           p.Name(),
-			SourceVersion:    pytdxVersion,
-			FetchedAt:        fetchedAt,
-			NormalizedAt:     time.Now().UTC(),
-			RawVolume:        &rawVolumeCopy,
-			RawVolumeUnit:    "hands",
-			RawAmount:        amountInfo.RawAmount,
-			RawAmountUnit:    amountInfo.RawAmountUnit,
-			RawAmountField:   amountInfo.RawAmountField,
-			VolumeUnit:       "shares",
-			AmountUnit:       amountInfo.AmountUnit,
-			QualityStatus:    quality,
-			QualityReasons:   reasons,
-			NormalizationVer: normalize.Version,
+			Symbol:            symbol,
+			TradeDate:         tradeDate,
+			Period:            "1d",
+			Open:              open,
+			High:              high,
+			Low:               low,
+			Close:             closePrice,
+			Volume:            &volume,
+			Amount:            amountInfo.Amount,
+			ChangePercent:     changePercent,
+			AdjustmentBasis:   adjustment,
+			AdjustmentMethod:  adjustmentMethod,
+			AdjustmentRefDate: adjustmentRefDate,
+			Source:            p.Name(),
+			SourceVersion:     pytdxVersion,
+			FetchedAt:         fetchedAt,
+			NormalizedAt:      time.Now().UTC(),
+			RawVolume:         &rawVolumeCopy,
+			RawVolumeUnit:     "hands",
+			RawAmount:         amountInfo.RawAmount,
+			RawAmountUnit:     amountInfo.RawAmountUnit,
+			RawAmountField:    amountInfo.RawAmountField,
+			VolumeUnit:        "shares",
+			AmountUnit:        amountInfo.AmountUnit,
+			QualityStatus:     quality,
+			QualityReasons:    reasons,
+			NormalizationVer:  normalize.Version,
 		})
 	}
 	return normalizeProviderDailyBarsWithReport(ctx, symbol, start.Format("2006-01-02"), end.Format("2006-01-02"), limit, out, 0)

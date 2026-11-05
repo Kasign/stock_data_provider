@@ -15,6 +15,10 @@ import (
 var tickflowSectorTestSymbols = []string{"600000.SH", "000001.SZ", "300001.SZ"}
 
 func newTickFlowSectorFixture(t *testing.T, quoteSymbols []string, invalidQuoteSymbols ...string) *httptest.Server {
+	return newTickFlowSectorFixtureWithUniverse(t, tickflowSectorTestSymbols, quoteSymbols, invalidQuoteSymbols...)
+}
+
+func newTickFlowSectorFixtureWithUniverse(t *testing.T, universeSymbols, quoteSymbols []string, invalidQuoteSymbols ...string) *httptest.Server {
 	t.Helper()
 	invalidQuotes := make(map[string]struct{}, len(invalidQuoteSymbols))
 	for _, symbol := range invalidQuoteSymbols {
@@ -31,14 +35,14 @@ func newTickFlowSectorFixture(t *testing.T, quoteSymbols []string, invalidQuoteS
 				t.Errorf("universe-list method = %s, want GET", r.Method)
 			}
 			_ = json.NewEncoder(w).Encode(map[string]any{"code": 0, "data": []map[string]any{
-				{"id": "CN_Equity_A", "name": "A股", "symbol_count": len(tickflowSectorTestSymbols)},
+				{"id": "CN_Equity_A", "name": "A股", "symbol_count": len(universeSymbols)},
 				{"id": "CN_Equity_SW1_BANK", "name": "SW1银行", "symbol_count": 2},
 				{"id": "CN_Equity_SW1_FOOD", "name": "SW1食品饮料", "symbol_count": 1},
 			}})
 		case "/v1/universes/CN_Equity_A":
 			_ = json.NewEncoder(w).Encode(map[string]any{"code": 0, "data": map[string]any{
-				"id": "CN_Equity_A", "symbol_count": len(tickflowSectorTestSymbols),
-				"symbols": tickflowSectorTestSymbols,
+				"id": "CN_Equity_A", "symbol_count": len(universeSymbols),
+				"symbols": universeSymbols,
 			}})
 		case "/v1/universes/batch":
 			if r.Method != http.MethodPost {
@@ -131,6 +135,28 @@ func TestTickFlowFetchSectorRankingsBuildsSW1IndustryRanking(t *testing.T) {
 	}
 	if !containsTickFlowReason(got.QualityReasons, "sector_change_percent_is_average_of_constituent_changes") {
 		t.Fatalf("average-based ranking quality reason is missing: %+v", got.QualityReasons)
+	}
+}
+
+func TestTickFlowFetchSectorRankingsExcludesKnownNonAShareUniverseMembers(t *testing.T) {
+	universeSymbols := []string{"600000.SH", "000001.SZ", "300001.SZ", "302132.SZ"}
+	server := newTickFlowSectorFixtureWithUniverse(t, universeSymbols, universeSymbols)
+	defer server.Close()
+
+	provider := NewTickFlowConfigured(2*time.Second, server.URL, "", "test-api-key")
+	got, err := provider.FetchSectorRankings(context.Background(), "industry", 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Total != 2 || len(got.Items) != 2 || got.ExcludedNonAShareCount != 1 {
+		t.Fatalf("unsupported A-share universe member must be counted separately: %+v", got)
+	}
+	if got.ProviderReturned != 2 || got.ExcludedRows != 0 {
+		t.Fatalf("industry coverage ledger must remain explicit: %+v", got)
+	}
+	if got.QualityStatus != model.QualityDegraded ||
+		!containsTickFlowReason(got.QualityReasons, "provider_universe_contains_non_common_equities_excluded") {
+		t.Fatalf("excluded universe member must degrade sector ranking quality: %+v", got)
 	}
 }
 

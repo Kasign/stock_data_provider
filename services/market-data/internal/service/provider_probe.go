@@ -171,7 +171,40 @@ type ProviderProbeOptions struct {
 	Markets             []string
 	Symbols             []string
 	DailyBarAdjustments []model.AdjustmentBasis
+	DailyBarStartDate   string
+	DailyBarEndDate     string
 	TimeoutSeconds      int
+}
+
+// normalizeDailyBarProbeRange 校验显式历史日 K 探测窗口；日期按 Asia/Shanghai 交易日解释。
+func normalizeDailyBarProbeRange(startText, endText string) (string, string, error) {
+	startText = strings.TrimSpace(startText)
+	endText = strings.TrimSpace(endText)
+	if startText == "" && endText == "" {
+		return "", "", nil
+	}
+	if startText == "" || endText == "" {
+		return "", "", errors.New("provider-probe daily_bar_start_date and daily_bar_end_date must be provided together")
+	}
+	start, err := time.ParseInLocation("2006-01-02", startText, marketLocation())
+	if err != nil {
+		return "", "", fmt.Errorf("provider-probe daily_bar_start_date must use YYYY-MM-DD: %w", err)
+	}
+	end, err := time.ParseInLocation("2006-01-02", endText, marketLocation())
+	if err != nil {
+		return "", "", fmt.Errorf("provider-probe daily_bar_end_date must use YYYY-MM-DD: %w", err)
+	}
+	if start.After(end) {
+		return "", "", errors.New("provider-probe daily_bar_start_date must not be after daily_bar_end_date")
+	}
+	if end.Format("2006-01-02") > time.Now().In(marketLocation()).Format("2006-01-02") {
+		return "", "", errors.New("provider-probe daily_bar_end_date must not be after today in Asia/Shanghai")
+	}
+	// 最多 31 个自然日（首尾均包含），限制历史 Probe 的 Provider 请求成本。
+	if end.Sub(start) > 30*24*time.Hour {
+		return "", "", errors.New("provider-probe daily-bar date range must not exceed 31 calendar days")
+	}
+	return start.Format("2006-01-02"), end.Format("2006-01-02"), nil
 }
 
 // ProbeProviderCapabilities 保留旧调用方式，默认执行全部诊断能力。
@@ -272,6 +305,16 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 	} else if len(options.DailyBarAdjustments) > 0 {
 		return nil, errors.New("provider-probe daily_bar_adjustments requires daily_bars capability")
 	}
+	if options.DailyBarStartDate != "" || options.DailyBarEndDate != "" {
+		if !selected["daily_bars"] {
+			return nil, errors.New("provider-probe daily_bar_start_date and daily_bar_end_date require daily_bars capability")
+		}
+		startDate, endDate, rangeErr := normalizeDailyBarProbeRange(options.DailyBarStartDate, options.DailyBarEndDate)
+		if rangeErr != nil {
+			return nil, rangeErr
+		}
+		options.DailyBarStartDate, options.DailyBarEndDate = startDate, endDate
+	}
 	if len(options.Markets) > 1 || len(options.Symbols) > 1 {
 		return nil, errors.New("provider-probe currently accepts at most one market and one symbol per request")
 	}
@@ -324,7 +367,7 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 		requested = append(requested, capability)
 	}
 	sort.Strings(requested)
-	run := &model.ProviderProbeRun{RunID: newFetchID(), Scope: options.Scope, RequestedCapabilities: requested, RequestedChecks: requestedChecks, RequestedMarkets: append([]string(nil), options.Markets...), RequestedSymbols: append([]string(nil), options.Symbols...), RequestedDailyBarAdjustments: append([]model.AdjustmentBasis(nil), options.DailyBarAdjustments...), TimeoutSeconds: options.TimeoutSeconds, StartedAt: startedAt, Items: make([]model.ProviderProbeItem, 0)}
+	run := &model.ProviderProbeRun{RunID: newFetchID(), Scope: options.Scope, RequestedCapabilities: requested, RequestedChecks: requestedChecks, RequestedMarkets: append([]string(nil), options.Markets...), RequestedSymbols: append([]string(nil), options.Symbols...), RequestedDailyBarAdjustments: append([]model.AdjustmentBasis(nil), options.DailyBarAdjustments...), RequestedDailyBarStartDate: options.DailyBarStartDate, RequestedDailyBarEndDate: options.DailyBarEndDate, TimeoutSeconds: options.TimeoutSeconds, StartedAt: startedAt, Items: make([]model.ProviderProbeItem, 0)}
 	jobs := make([]providerProbeJob, 0)
 	add := func(name, capability string, fn providerProbeFunc, adjustment ...model.AdjustmentBasis) {
 		job := providerProbeJob{provider: name, capability: capability, run: fn}
@@ -333,6 +376,14 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 		}
 		jobs = append(jobs, job)
 	}
+
+	loc := marketLocation()
+	nowLocal := time.Now().In(loc)
+	probeDate := nowLocal.Format("2006-01-02")
+	dailyBarEndDate := nowLocal.AddDate(0, 0, -1).Format("2006-01-02")
+	calendarStart := nowLocal.AddDate(0, 0, -14).Format("2006-01-02")
+	calendarEnd := nowLocal.AddDate(0, 0, 14).Format("2006-01-02")
+
 	quoteSymbol := "600519.SH"
 	barsSymbol := "600036.SH"
 	searchSymbol := "600519"
@@ -400,7 +451,11 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 		for _, adjustment := range options.DailyBarAdjustments {
 			adjustment := adjustment
 			add(p.Name(), "daily_bars", func(probeCtx context.Context) (model.QualityStatus, string, []string, error) {
-				bars, err := p.FetchDailyBars(probeCtx, barsSymbol, "", "", 5, adjustment)
+				dailyBarLimit := 5
+				if options.DailyBarStartDate != "" {
+					dailyBarLimit = 2000
+				}
+				bars, err := p.FetchDailyBars(probeCtx, barsSymbol, options.DailyBarStartDate, options.DailyBarEndDate, dailyBarLimit, adjustment)
 				if err != nil {
 					return model.QualityUnknown, "", nil, err
 				}
@@ -409,10 +464,10 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 				// 仅当 Adapter 已上报 Validate 阶段结果时复用该报告；Parse-only 报告不能跳过公共字段校验。
 				reporter := validation.ReporterFromContext(probeCtx)
 				if reporter != nil && reporter.Snapshot().HasStage(validation.StageValidate) {
-					validated, warnings = normalize.ValidateAndSortBars(barsSymbol, bars, "", "", 5)
+					validated, warnings = normalize.ValidateAndSortBars(barsSymbol, bars, options.DailyBarStartDate, options.DailyBarEndDate, dailyBarLimit)
 				} else {
 					var report validation.Report
-					validated, warnings, report = normalize.ValidateAndSortBarsWithReport(barsSymbol, bars, "", "", 5)
+					validated, warnings, report = normalize.ValidateAndSortBarsWithReport(barsSymbol, bars, options.DailyBarStartDate, options.DailyBarEndDate, dailyBarLimit)
 					validation.AddContextReport(probeCtx, report)
 				}
 				latestDate := ""
@@ -424,7 +479,22 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 				}
 				recordProviderProbeEvidence(probeCtx, barsSymbol, latestDate, len(bars), len(validated), providerTime)
 				if len(validated) == 0 {
-					return model.QualityInvalid, "", warnings, errors.New("daily-bars probe returned no valid bars")
+					if len(bars) > 0 {
+						return model.QualityInvalid, "", warnings, errors.New("daily-bars probe returned rows but none passed validation")
+					}
+					contextStartDate, contextEndDate := options.DailyBarStartDate, options.DailyBarEndDate
+					if contextStartDate == "" {
+						contextStartDate, contextEndDate = calendarStart, dailyBarEndDate
+					}
+					contextResult := s.assessDailyBarTradingContext(probeCtx, barsSymbol, validated, contextStartDate, contextEndDate)
+					reasons := []string{"daily_bar_empty_response"}
+					for _, reason := range contextResult.Reasons {
+						reasons = appendReason(reasons, reason)
+					}
+					if contextResult.QualityStatus == model.QualityValid {
+						reasons = appendReason(reasons, "daily_bar_empty_response_explained_by_security_context")
+					}
+					return model.QualityUnknown, "", reasons, nil
 				}
 				quality := model.QualityValid
 				version := ""
@@ -443,6 +513,20 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 				if len(warnings) > 0 {
 					quality = model.QualityDegraded
 				}
+				barDataQuality := quality
+				if len(validated) > 0 {
+					contextStartDate, contextEndDate := options.DailyBarStartDate, options.DailyBarEndDate
+					if contextStartDate == "" {
+						contextStartDate, contextEndDate = validated[0].TradeDate, dailyBarEndDate
+					}
+					contextResult := s.assessDailyBarTradingContext(probeCtx, barsSymbol, validated, contextStartDate, contextEndDate)
+					if contextResult.QualityStatus != model.QualityValid {
+						quality = model.QualityDegraded
+					}
+					for _, reason := range contextResult.Reasons {
+						reasons = appendReason(reasons, reason)
+					}
+				}
 				if version == "" {
 					return model.QualityInvalid, "", reasons, errors.New("daily-bars source version missing")
 				}
@@ -455,12 +539,13 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 					snapshotBars = append(snapshotBars, provider.CrossProviderDailyBar{
 						TradeDate: bar.TradeDate, Open: bar.Open, High: bar.High, Low: bar.Low, Close: bar.Close,
 						Volume: *bar.Volume, VolumeUnit: bar.VolumeUnit, Amount: bar.Amount, AmountUnit: bar.AmountUnit,
+						AdjustmentMethod: bar.AdjustmentMethod, AdjustmentRefDate: bar.AdjustmentRefDate,
 					})
 				}
 				if len(snapshotBars) == len(validated) {
 					recordProviderProbeDailySnapshot(probeCtx, &provider.CrossProviderDailySnapshot{
 						Provider: p.Name(), SourceVersion: version, Symbol: barsSymbol,
-						AdjustmentBasis: string(adjustment), QualityStatus: string(quality), Bars: snapshotBars,
+						AdjustmentBasis: string(adjustment), QualityStatus: string(barDataQuality), Bars: snapshotBars,
 					})
 				}
 				return quality, version, reasons, nil
@@ -582,11 +667,6 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 	}
 
 	// 以下检查覆盖非行情类的重要业务能力。探测只校验返回契约，不把空数据自动视为成功。
-	loc := marketLocation()
-	nowLocal := time.Now().In(loc)
-	probeDate := nowLocal.Format("2006-01-02")
-	calendarStart := nowLocal.AddDate(0, 0, -14).Format("2006-01-02")
-	calendarEnd := nowLocal.AddDate(0, 0, 14).Format("2006-01-02")
 	for _, p := range s.indexCatalogProviders {
 		p := p
 		add(p.Name(), "index_catalog", func(probeCtx context.Context) (model.QualityStatus, string, []string, error) {
@@ -939,7 +1019,7 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 					Stage: string(issue.Stage), Field: issue.Field, ProviderField: issue.ProviderField,
 					Code: issue.Code, Expected: issue.Expected, ActualType: issue.ActualType,
 					ActualPreview: issue.ActualPreview, Severity: string(issue.Severity), Message: issue.Message,
-					RowIndex: issue.RowIndex, Symbol: issue.Symbol, TradeDate: issue.TradeDate,
+					RowIndex: issue.RowIndex, Symbol: issue.Symbol, TradeDate: issue.TradeDate, Count: issue.Count,
 				})
 			}
 			if err != nil {
@@ -1278,6 +1358,20 @@ func buildProviderProbeCheckResults(items []model.ProviderProbeItem, requestedCh
 	return results
 }
 
+func firstCrossProviderAdjustmentMethod(snapshot *provider.CrossProviderDailySnapshot) string {
+	if snapshot == nil || len(snapshot.Bars) == 0 {
+		return ""
+	}
+	return snapshot.Bars[0].AdjustmentMethod
+}
+
+func firstCrossProviderAdjustmentRefDate(snapshot *provider.CrossProviderDailySnapshot) string {
+	if snapshot == nil || len(snapshot.Bars) == 0 {
+		return ""
+	}
+	return snapshot.Bars[0].AdjustmentRefDate
+}
+
 func buildCrossProviderProbeCheckResults(snapshots []*provider.CrossProviderDailySnapshot, checkedAt time.Time) []model.ProviderProbeCheckResult {
 	results := make([]model.ProviderProbeCheckResult, 0)
 	validSnapshots := make([]*provider.CrossProviderDailySnapshot, 0, len(snapshots))
@@ -1294,20 +1388,24 @@ func buildCrossProviderProbeCheckResults(snapshots []*provider.CrossProviderDail
 			}
 			comparison := provider.CompareCrossProviderDailyBars(*left, *right)
 			result := model.ProviderProbeCheckResult{
-				Check:              "cross_provider",
-				Provider:           left.Provider + "+" + right.Provider,
-				Capability:         "daily_bars",
-				CheckedAt:          checkedAt,
-				ComparedSymbol:     left.Symbol,
-				LeftProvider:       left.Provider,
-				RightProvider:      right.Provider,
-				LeftSourceVersion:  left.SourceVersion,
-				RightSourceVersion: right.SourceVersion,
-				AdjustmentBasis:    left.AdjustmentBasis,
-				LeftQualityStatus:  model.QualityStatus(left.QualityStatus),
-				RightQualityStatus: model.QualityStatus(right.QualityStatus),
-				ComparedDates:      append([]string(nil), comparison.ComparedDates...),
-				FieldCount:         len(comparison.Fields),
+				Check:                  "cross_provider",
+				Provider:               left.Provider + "+" + right.Provider,
+				Capability:             "daily_bars",
+				CheckedAt:              checkedAt,
+				ComparedSymbol:         left.Symbol,
+				LeftProvider:           left.Provider,
+				RightProvider:          right.Provider,
+				LeftSourceVersion:      left.SourceVersion,
+				RightSourceVersion:     right.SourceVersion,
+				AdjustmentBasis:        left.AdjustmentBasis,
+				LeftAdjustmentMethod:   firstCrossProviderAdjustmentMethod(left),
+				RightAdjustmentMethod:  firstCrossProviderAdjustmentMethod(right),
+				LeftAdjustmentRefDate:  firstCrossProviderAdjustmentRefDate(left),
+				RightAdjustmentRefDate: firstCrossProviderAdjustmentRefDate(right),
+				LeftQualityStatus:      model.QualityStatus(left.QualityStatus),
+				RightQualityStatus:     model.QualityStatus(right.QualityStatus),
+				ComparedDates:          append([]string(nil), comparison.ComparedDates...),
+				FieldCount:             len(comparison.Fields),
 			}
 			switch comparison.Status {
 			case provider.CrossProviderDailyMatched:

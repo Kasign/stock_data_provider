@@ -35,6 +35,7 @@ type FieldIssue struct {
 	RowIndex      *int     `json:"row_index,omitempty"`
 	Symbol        string   `json:"symbol,omitempty"`
 	TradeDate     string   `json:"trade_date,omitempty"`
+	Count         int      `json:"count,omitempty"`
 }
 
 type Report struct {
@@ -60,14 +61,15 @@ func (r *Report) Add(item FieldIssue) {
 	if r == nil {
 		return
 	}
-	r.TotalCount++
+	count := issueCount(item)
+	r.TotalCount += count
 	switch item.Severity {
 	case SeverityError:
-		r.ErrorCount++
+		r.ErrorCount += count
 	case SeverityWarning:
-		r.WarningCount++
+		r.WarningCount += count
 	case SeverityInfo:
-		r.InfoCount++
+		r.InfoCount += count
 	}
 	if r.maxIssues <= 0 {
 		r.maxIssues = DefaultMaxIssues
@@ -119,7 +121,7 @@ func (r Report) Merge(other Report) Report {
 	merged.ErrorCount = leftErrors + rightErrors
 	merged.WarningCount = leftWarnings + rightWarnings
 	merged.InfoCount = leftInfo + rightInfo
-	merged.Truncated = merged.Truncated || r.Truncated || other.Truncated || merged.TotalCount > len(merged.Issues)
+	merged.Truncated = merged.Truncated || r.Truncated || other.Truncated
 	return merged
 }
 
@@ -128,16 +130,24 @@ func (r Report) severityCounts() (errors, warnings, info int) {
 		return r.ErrorCount, r.WarningCount, r.InfoCount
 	}
 	for _, item := range r.Issues {
+		count := issueCount(item)
 		switch item.Severity {
 		case SeverityError:
-			errors++
+			errors += count
 		case SeverityWarning:
-			warnings++
+			warnings += count
 		case SeverityInfo:
-			info++
+			info += count
 		}
 	}
 	return errors, warnings, info
+}
+
+func issueCount(item FieldIssue) int {
+	if item.Count > 0 {
+		return item.Count
+	}
+	return 1
 }
 
 func issue(stage Stage, field, code, expected, message string, severity Severity) FieldIssue {

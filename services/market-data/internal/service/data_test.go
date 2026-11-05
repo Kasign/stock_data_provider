@@ -820,10 +820,25 @@ func TestCoherentStoredSeriesUsesStableTieBreakers(t *testing.T) {
 		}
 	}
 
+	// 最新交易日优先于单纯的行数：较长但明显过期的序列不能遮蔽较新的来源序列。
+	olderLong := []model.DailyBar{
+		{Source: "eastmoney", SourceVersion: "eastmoney-bars-v1", TradeDate: "2026-10-18", FetchedAt: oldFetch, AdjustmentBasis: model.AdjustmentNone, NormalizationVer: normalize.Version},
+		{Source: "eastmoney", SourceVersion: "eastmoney-bars-v1", TradeDate: "2026-10-19", FetchedAt: oldFetch, AdjustmentBasis: model.AdjustmentNone, NormalizationVer: normalize.Version},
+		{Source: "eastmoney", SourceVersion: "eastmoney-bars-v1", TradeDate: "2026-10-20", FetchedAt: oldFetch, AdjustmentBasis: model.AdjustmentNone, NormalizationVer: normalize.Version},
+	}
+	newerShort := []model.DailyBar{
+		{Source: "tencent", SourceVersion: "tencent-bars-v1", TradeDate: "2026-10-21", FetchedAt: newFetch, AdjustmentBasis: model.AdjustmentNone, NormalizationVer: normalize.Version},
+		{Source: "tencent", SourceVersion: "tencent-bars-v1", TradeDate: "2026-10-22", FetchedAt: newFetch, AdjustmentBasis: model.AdjustmentNone, NormalizationVer: normalize.Version},
+	}
+	got, reason := coherentStoredSeries(append(append([]model.DailyBar(nil), olderLong...), newerShort...), model.AdjustmentNone)
+	if reason != "" || len(got) != 2 || got[0].Source != "tencent" {
+		t.Fatalf("newest coherent series must win over older series with more rows: bars=%+v reason=%s", got, reason)
+	}
+
 	// 同一采集时刻和覆盖度仍打平时，按分组 key 字典序稳定决胜。
 	equalFetchTencent := makeSeries("tencent", "tencent-bars-v1", newFetch)
 	equalFetchEastmoney := makeSeries("eastmoney", "eastmoney-bars-v1", newFetch)
-	got, reason := coherentStoredSeries(append(equalFetchTencent, equalFetchEastmoney...), model.AdjustmentNone)
+	got, reason = coherentStoredSeries(append(equalFetchTencent, equalFetchEastmoney...), model.AdjustmentNone)
 	source := ""
 	if len(got) > 0 {
 		source = got[0].Source
@@ -859,6 +874,26 @@ func TestDailyBarsRejectsProviderAdjustmentMismatchAndUsesFallback(t *testing.T)
 	}
 	if hit || len(bars) != 1 || bars[0].Source != "tencent" || bars[0].QualityStatus != model.QualityDegraded {
 		t.Fatalf("wrong-basis source should fail over and be marked degraded: hit=%t bars=%+v", hit, bars)
+	}
+}
+
+func TestDailyBarsWarnsWhenProviderReturnsRowsBeforeStartDate(t *testing.T) {
+	volume := int64(1000)
+	amount := 10500.0
+	p := fakeProvider{name: "eastmoney", bars: []model.DailyBar{
+		{SourceVersion: "test-v1", Symbol: "600519.SH", TradeDate: "2026-10-19", Period: "1d", Open: 10, High: 11, Low: 9, Close: 10.5, Volume: &volume, Amount: &amount, AdjustmentBasis: model.AdjustmentForward, Source: "eastmoney", VolumeUnit: "shares", AmountUnit: "CNY", QualityStatus: model.QualityValid},
+		{SourceVersion: "test-v1", Symbol: "600519.SH", TradeDate: "2026-10-20", Period: "1d", Open: 10, High: 11, Low: 9, Close: 10.5, Volume: &volume, Amount: &amount, AdjustmentBasis: model.AdjustmentForward, Source: "eastmoney", VolumeUnit: "shares", AmountUnit: "CNY", QualityStatus: model.QualityValid},
+	}}
+	s := New([]provider.Provider{p}, cache.NewDisabled(), nil, time.Second, time.Minute, 120, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	bars, _, warnings, err := s.DailyBars(context.Background(), "600519.SH", "2026-10-20", "2026-10-20", 1, model.AdjustmentForward)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(bars) != 1 || bars[0].TradeDate != "2026-10-20" {
+		t.Fatalf("provider row before requested start must be dropped: %+v", bars)
+	}
+	if !containsTestWarning(warnings, "bar_before_start_date_dropped") {
+		t.Fatalf("provider start-bound violation must be surfaced to API callers: %v", warnings)
 	}
 }
 
@@ -2863,13 +2898,9 @@ func TestCoherentStoredSeriesSeparatesAdjustmentMethods(t *testing.T) {
 	third.TradeDate = "2026-10-22"
 	third.AdjustmentMethod = "yahoo_adjclose_ratio_rebased_to_end_v2"
 	series, reason := coherentStoredSeries([]model.DailyBar{first, second, third}, model.AdjustmentForward)
-	if reason != "" || len(series) != 2 {
-		t.Fatalf("different adjustment methods must not be merged: series=%+v reason=%s", series, reason)
-	}
-	for _, bar := range series {
-		if bar.AdjustmentMethod != first.AdjustmentMethod {
-			t.Fatalf("coherent series contains a mixed adjustment method: %+v", series)
-		}
+	if reason != "" || len(series) != 1 || series[0].TradeDate != third.TradeDate ||
+		series[0].AdjustmentMethod != third.AdjustmentMethod {
+		t.Fatalf("newest trade-date group must win without mixing adjustment methods: series=%+v reason=%s", series, reason)
 	}
 }
 
@@ -2983,5 +3014,69 @@ func TestDailyBarsCacheDegradesForwardSeriesWithoutReferenceDate(t *testing.T) {
 		!containsTestWarning(bars[0].QualityReasons, "daily_bar_adjustment_reference_date_unverified") ||
 		!containsTestWarning(warnings, "daily_bar_adjustment_reference_date_unverified") {
 		t.Fatalf("cached forward bars without a verified reference date must be degraded: hit=%t bars=%+v warnings=%v", hit, bars, warnings)
+	}
+}
+
+func TestNormalizeStoredDailyBarSeriesPreservesValidationWarnings(t *testing.T) {
+	invalid := dailyBarForVersionContractTest("eastmoney-bars-v1", "2026-10-20")
+	invalid.AdjustmentBasis = model.AdjustmentNone
+	invalid.NormalizationVer = normalize.Version
+	invalid.Open, invalid.High, invalid.Low, invalid.Close = 10, 8, 7, 7.5
+	valid := invalid
+	valid.Open, valid.High, valid.Low, valid.Close = 10, 11, 9, 10.5
+
+	bars, warnings, reason, contractMismatch := normalizeStoredDailyBarSeries(
+		"600519.SH", []model.DailyBar{invalid, valid}, "2026-10-20", "2026-10-20", 1, model.AdjustmentNone,
+	)
+	if reason != "" || contractMismatch || len(bars) != 1 || bars[0].Close != 10.5 {
+		t.Fatalf("expected valid stored row after rejecting malformed row: bars=%+v reason=%q mismatch=%t", bars, reason, contractMismatch)
+	}
+	if !containsTestWarning(warnings, "invalid_ohlc_bar_dropped") {
+		t.Fatalf("stored-bar normalization warnings must be preserved for fallback response: %v", warnings)
+	}
+	if containsTestWarning(warnings, "duplicate_trade_date_dropped") {
+		t.Fatalf("invalid row must not occupy the trade date before the valid row: %v", warnings)
+	}
+}
+
+func TestCoherentStoredSeriesPrefersNewestTradeDateBeforeCoverage(t *testing.T) {
+	fetched := time.Date(2026, 10, 28, 8, 0, 0, 0, time.UTC)
+	older := []model.DailyBar{
+		{Source: "eastmoney", SourceVersion: "eastmoney-v1", TradeDate: "2026-10-18", FetchedAt: fetched, AdjustmentBasis: model.AdjustmentNone, NormalizationVer: normalize.Version},
+		{Source: "eastmoney", SourceVersion: "eastmoney-v1", TradeDate: "2026-10-19", FetchedAt: fetched, AdjustmentBasis: model.AdjustmentNone, NormalizationVer: normalize.Version},
+		{Source: "eastmoney", SourceVersion: "eastmoney-v1", TradeDate: "2026-10-20", FetchedAt: fetched, AdjustmentBasis: model.AdjustmentNone, NormalizationVer: normalize.Version},
+	}
+	newer := []model.DailyBar{
+		{Source: "tencent", SourceVersion: "tencent-v1", TradeDate: "2026-10-21", FetchedAt: fetched, AdjustmentBasis: model.AdjustmentNone, NormalizationVer: normalize.Version},
+		{Source: "tencent", SourceVersion: "tencent-v1", TradeDate: "2026-10-22", FetchedAt: fetched, AdjustmentBasis: model.AdjustmentNone, NormalizationVer: normalize.Version},
+	}
+	got, reason := coherentStoredSeries(append(append([]model.DailyBar(nil), older...), newer...), model.AdjustmentNone)
+	if reason != "" || len(got) != 2 || got[0].Source != "tencent" {
+		t.Fatalf("newest source series must win before row-count comparison: bars=%+v reason=%q", got, reason)
+	}
+}
+
+func TestDailyBarsCacheRetainsStoredWarningsWhenHit(t *testing.T) {
+	mem := newMemoryCache()
+	invalid := dailyBarForVersionContractTest("eastmoney-bars-v1", "2026-10-20")
+	invalid.FetchedAt, invalid.NormalizedAt = time.Now().UTC(), time.Now().UTC()
+	invalid.NormalizationVer = normalize.Version
+	invalid.Open, invalid.High, invalid.Low, invalid.Close = 10, 8, 7, 7.5
+	valid := invalid
+	valid.Open, valid.High, valid.Low, valid.Close = 10, 11, 9, 10.5
+	valid.AdjustmentMethod = "eastmoney_qfq"
+	valid.AdjustmentRefDate = "2026-10-20"
+	payload, err := json.Marshal(map[string]any{"bars": []model.DailyBar{invalid, valid}, "warnings": []string{"provider_cache_original_warning"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	mem.values["md:v5:bars:600519.SH:2026-10-20:2026-10-20:forward_adjusted:1"] = payload
+	svc := New(nil, mem, nil, time.Second, time.Minute, 1, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	bars, hit, warnings, err := svc.DailyBars(context.Background(), "600519.SH", "2026-10-20", "2026-10-20", 1, model.AdjustmentForward)
+	if err != nil || !hit || len(bars) != 1 {
+		t.Fatalf("expected validated cache hit: hit=%t bars=%+v err=%v", hit, bars, err)
+	}
+	if !containsTestWarning(warnings, "provider_cache_original_warning") || !containsTestWarning(warnings, "invalid_ohlc_bar_dropped") {
+		t.Fatalf("cache hit must merge stored warnings and current normalization warnings: %v", warnings)
 	}
 }

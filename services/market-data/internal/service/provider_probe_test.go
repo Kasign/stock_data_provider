@@ -392,6 +392,11 @@ func TestProviderProbeOptionsValidateScopeCapabilityAndTimeout(t *testing.T) {
 		{Scope: "all", Capabilities: []string{"unknown"}, TimeoutSeconds: 5},
 		{Scope: "all", Capabilities: []string{"quote", "quote"}, TimeoutSeconds: 5},
 		{Scope: "all", Capabilities: []string{"quote"}, TimeoutSeconds: 31},
+		{Scope: "all", Capabilities: []string{"quote"}, DailyBarStartDate: "2025-07-07", DailyBarEndDate: "2025-07-17", TimeoutSeconds: 5},
+		{Scope: "all", Capabilities: []string{"daily_bars"}, DailyBarStartDate: "2025-07-07", TimeoutSeconds: 5},
+		{Scope: "all", Capabilities: []string{"daily_bars"}, DailyBarStartDate: "bad-date", DailyBarEndDate: "2025-07-17", TimeoutSeconds: 5},
+		{Scope: "all", Capabilities: []string{"daily_bars"}, DailyBarStartDate: "2025-07-07", DailyBarEndDate: "2025-08-08", TimeoutSeconds: 5},
+		{Scope: "all", Capabilities: []string{"daily_bars"}, DailyBarStartDate: "2027-01-01", DailyBarEndDate: "2027-01-02", TimeoutSeconds: 5},
 	}
 	for i, options := range cases {
 		if _, err := ds.ProbeProviderCapabilitiesWithOptions(context.Background(), options); err == nil {
@@ -609,6 +614,24 @@ func (p providerProbeDailyBarsFake) FetchDailyBars(_ context.Context, symbol, _,
 	}}, nil
 }
 
+type providerProbeAdjustedDailyBarsFake struct {
+	providerProbeDailyBarsFake
+	method  string
+	refDate string
+}
+
+func (p providerProbeAdjustedDailyBarsFake) FetchDailyBars(ctx context.Context, symbol, startDate, endDate string, limit int, adjustment model.AdjustmentBasis) ([]model.DailyBar, error) {
+	bars, err := p.providerProbeDailyBarsFake.FetchDailyBars(ctx, symbol, startDate, endDate, limit, adjustment)
+	if err != nil {
+		return nil, err
+	}
+	for i := range bars {
+		bars[i].AdjustmentMethod = p.method
+		bars[i].AdjustmentRefDate = p.refDate
+	}
+	return bars, nil
+}
+
 type providerProbeDailyBarsReportedFake struct {
 	providerProbeDailyBarsFake
 }
@@ -657,6 +680,47 @@ func (p providerProbeParseOnlyDailyBarsFake) FetchDailyBars(ctx context.Context,
 	return bars, nil
 }
 
+type providerProbeHistoricalDailyBarsFake struct {
+	name      string
+	startDate string
+	endDate   string
+	limit     int
+}
+
+func (p *providerProbeHistoricalDailyBarsFake) Name() string { return p.name }
+func (p *providerProbeHistoricalDailyBarsFake) FetchDailyBars(_ context.Context, symbol, startDate, endDate string, limit int, adjustment model.AdjustmentBasis) ([]model.DailyBar, error) {
+	p.startDate, p.endDate, p.limit = startDate, endDate, limit
+	now := time.Now().UTC()
+	volume := int64(10000)
+	amount := 100000.0
+	return []model.DailyBar{{
+		Symbol: symbol, TradeDate: startDate, Period: "1d", Open: 10, High: 11, Low: 9, Close: 10.5,
+		Volume: &volume, Amount: &amount, AdjustmentBasis: adjustment, AdjustmentMethod: "historical-test-none",
+		Source: p.name, SourceVersion: p.name + "-v1", ProviderTime: &now, FetchedAt: now, NormalizedAt: now,
+		VolumeUnit: "shares", AmountUnit: "CNY", QualityStatus: model.QualityValid,
+	}}, nil
+}
+
+func TestProviderProbePassesExplicitHistoricalRangeToDailyBarProvider(t *testing.T) {
+	p := &providerProbeHistoricalDailyBarsFake{name: "historical-bars"}
+	ds := NewWithCapabilities([]provider.NamedProvider{p}, nil, []provider.DailyBarProvider{p}, cache.NewDisabled(), nil, time.Second, time.Minute, 120, 2000, ResilienceConfig{}, nil)
+	run, err := ds.ProbeProviderCapabilitiesWithOptions(context.Background(), ProviderProbeOptions{
+		Scope: "all", Capabilities: []string{"daily_bars"}, Symbols: []string{"600036.SH"},
+		DailyBarAdjustments: []model.AdjustmentBasis{model.AdjustmentNone},
+		DailyBarStartDate:   "2025-07-07", DailyBarEndDate: "2025-07-17",
+		Checks: []string{"quality"}, TimeoutSeconds: 5,
+	})
+	if err != nil {
+		t.Fatalf("historical Probe failed: %v", err)
+	}
+	if p.startDate != "2025-07-07" || p.endDate != "2025-07-17" || p.limit != 2000 {
+		t.Fatalf("historical range not passed to Provider: start=%q end=%q limit=%d", p.startDate, p.endDate, p.limit)
+	}
+	if run.RequestedDailyBarStartDate != "2025-07-07" || run.RequestedDailyBarEndDate != "2025-07-17" {
+		t.Fatalf("historical request range not echoed in run: %+v", run)
+	}
+}
+
 func TestProviderProbeRunsRequestedDailyBarAdjustmentsIndependently(t *testing.T) {
 	p := providerProbeDailyBarsFake{name: "probe-adjustment-bars", close: 10.5, quality: model.QualityValid}
 	ds := NewWithCapabilities([]provider.NamedProvider{p}, nil, []provider.DailyBarProvider{p}, cache.NewDisabled(), nil, time.Second, time.Minute, 120, 2000, ResilienceConfig{}, nil)
@@ -673,7 +737,7 @@ func TestProviderProbeRunsRequestedDailyBarAdjustmentsIndependently(t *testing.T
 	}
 	seen := map[model.AdjustmentBasis]bool{}
 	for _, item := range run.Items {
-		if item.Status != "returned" || item.AdjustmentBasis == "" || seen[item.AdjustmentBasis] {
+		if item.Status != "returned_degraded" || item.AdjustmentBasis == "" || seen[item.AdjustmentBasis] {
 			t.Fatalf("unexpected or duplicate adjustment result: %+v", item)
 		}
 		seen[item.AdjustmentBasis] = true
@@ -725,8 +789,19 @@ func TestProviderProbeClassifiesExplicitUnsupportedAdjustment(t *testing.T) {
 			t.Errorf("expected unsupported adjustment classification for %q", message)
 		}
 	}
-	if isUnsupportedDailyBarAdjustmentError(errors.New("upstream timeout")) {
-		t.Fatal("ordinary upstream failures must not be classified as unsupported")
+	for _, message := range []string{
+		"upstream timeout",
+		"Eastmoney daily-bars provider error rc=-1",
+		"BaoStock adjustment mismatch: requested flag 2, got \"3\"",
+		"TickFlow daily K-line request: HTTP status 503",
+		"同花顺历史 K 线区间请求失败: HTTP 状态码 401",
+		"Pytdx ex-rights/ex-dividend data required for forward_adjusted: connection refused",
+		"Pytdx ex-rights/ex-dividend data required for backward_adjusted: context deadline exceeded",
+		"adj_factor missing for requested date range",
+	} {
+		if isUnsupportedDailyBarAdjustmentError(errors.New(message)) {
+			t.Errorf("provider/network/data failures must not be classified as unsupported: %q", message)
+		}
 	}
 }
 
@@ -800,6 +875,81 @@ func TestProviderProbeRunsCrossProviderDailyBarComparison(t *testing.T) {
 	result := run.CheckResults[0]
 	if result.Status != "passed" || result.Provider != "probe-left+probe-right" || result.FieldCount != 6 || len(result.ComparedDates) != 1 {
 		t.Fatalf("unexpected cross-provider comparison result: %+v", result)
+	}
+}
+
+func TestProviderProbeDailyBarCrossComparisonEnforcesAdjustmentMetadata(t *testing.T) {
+	cases := []struct {
+		name         string
+		leftMethod   string
+		rightMethod  string
+		leftRefDate  string
+		rightRefDate string
+		wantStatus   string
+		wantReason   string
+	}{
+		{name: "different methods", leftMethod: "eastmoney_fqt_2", rightMethod: "baostock_pct_change", leftRefDate: "2026-11-03", rightRefDate: "2026-11-03", wantStatus: "skipped", wantReason: "adjustment_method_mismatch"},
+		{name: "missing reference date", leftMethod: "same_hfq_v1", rightMethod: "same_hfq_v1", leftRefDate: "2026-11-03", wantStatus: "skipped", wantReason: "right_adjustment_reference_date_missing"},
+		{name: "different reference dates", leftMethod: "same_hfq_v1", rightMethod: "same_hfq_v1", leftRefDate: "2026-11-03", rightRefDate: "2026-10-30", wantStatus: "skipped", wantReason: "adjustment_reference_date_mismatch"},
+		{name: "compatible metadata", leftMethod: "shared_hfq_v1", rightMethod: "shared_hfq_v1", leftRefDate: "2026-11-03", rightRefDate: "2026-11-03", wantStatus: "passed"},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			left := providerProbeAdjustedDailyBarsFake{
+				providerProbeDailyBarsFake: providerProbeDailyBarsFake{name: "probe-adjusted-left", close: 10.5, quality: model.QualityValid},
+				method:                     test.leftMethod, refDate: test.leftRefDate,
+			}
+			right := providerProbeAdjustedDailyBarsFake{
+				providerProbeDailyBarsFake: providerProbeDailyBarsFake{name: "probe-adjusted-right", close: 10.5, quality: model.QualityValid},
+				method:                     test.rightMethod, refDate: test.rightRefDate,
+			}
+			ds := NewWithCapabilities(
+				[]provider.NamedProvider{left, right}, nil, []provider.DailyBarProvider{left, right},
+				cache.NewDisabled(), nil, time.Second, time.Minute, 120, 2000, ResilienceConfig{}, nil,
+			)
+			run, err := ds.ProbeProviderCapabilitiesWithOptions(context.Background(), ProviderProbeOptions{
+				Scope: "all", Capabilities: []string{"daily_bars"},
+				DailyBarAdjustments: []model.AdjustmentBasis{model.AdjustmentBackward},
+				Checks:              []string{"cross_provider"}, TimeoutSeconds: 5,
+			})
+			if err != nil {
+				t.Fatalf("ProbeProviderCapabilitiesWithOptions() error = %v", err)
+			}
+			if len(run.CheckResults) != 1 {
+				t.Fatalf("expected one cross-provider result, got %+v", run.CheckResults)
+			}
+			result := run.CheckResults[0]
+			if result.Status != test.wantStatus || result.ErrorMessage != test.wantReason {
+				t.Fatalf("unexpected adjustment gate result: %+v", result)
+			}
+			if result.LeftAdjustmentMethod != test.leftMethod || result.RightAdjustmentMethod != test.rightMethod ||
+				result.LeftAdjustmentRefDate != test.leftRefDate || result.RightAdjustmentRefDate != test.rightRefDate {
+				t.Fatalf("probe did not preserve both providers' adjustment evidence: %+v", result)
+			}
+		})
+	}
+}
+
+func TestBuildCrossProviderProbeCheckResultsPreservesAdjustmentEvidence(t *testing.T) {
+	left := &provider.CrossProviderDailySnapshot{
+		Provider: "left", SourceVersion: "left-v1", Symbol: "600036.SH",
+		AdjustmentBasis: "backward_adjusted", QualityStatus: "valid",
+		Bars: []provider.CrossProviderDailyBar{{TradeDate: "2026-10-29", Open: 10, High: 11, Low: 9, Close: 10, Volume: 100, VolumeUnit: "shares", AdjustmentMethod: "left_hfq", AdjustmentRefDate: "2026-11-03"}},
+	}
+	right := &provider.CrossProviderDailySnapshot{
+		Provider: "right", SourceVersion: "right-v1", Symbol: "600036.SH",
+		AdjustmentBasis: "backward_adjusted", QualityStatus: "valid",
+		Bars: []provider.CrossProviderDailyBar{{TradeDate: "2026-10-29", Open: 10, High: 11, Low: 9, Close: 10, Volume: 100, VolumeUnit: "shares", AdjustmentMethod: "right_hfq", AdjustmentRefDate: "2026-11-03"}},
+	}
+	results := buildCrossProviderProbeCheckResults([]*provider.CrossProviderDailySnapshot{left, right}, time.Now().UTC())
+	if len(results) != 1 {
+		t.Fatalf("expected one adjusted comparison result, got %+v", results)
+	}
+	result := results[0]
+	if result.Status != "skipped" || result.ErrorMessage != "adjustment_method_mismatch" ||
+		result.LeftAdjustmentMethod != "left_hfq" || result.RightAdjustmentMethod != "right_hfq" ||
+		result.LeftAdjustmentRefDate != "2026-11-03" || result.RightAdjustmentRefDate != "2026-11-03" {
+		t.Fatalf("adjustment evidence missing or incorrectly passed: %+v", result)
 	}
 }
 
@@ -1097,5 +1247,251 @@ func TestRecordProviderProbeFetchedAtKeepsCollectionTimeSeparateFromSourceTime(t
 	recordProviderProbeFetchedAt(ctx, time.Time{})
 	if evidence.fetchedAt == nil || !evidence.fetchedAt.Equal(fetchedAt) {
 		t.Fatalf("zero collection timestamp must not erase valid evidence: %+v", evidence)
+	}
+}
+
+func containsProbeReason(reasons []string, expected string) bool {
+	for _, reason := range reasons {
+		if reason == expected {
+			return true
+		}
+	}
+	return false
+}
+
+type providerProbeEmptyDailyBarsFake struct{}
+
+func (providerProbeEmptyDailyBarsFake) Name() string { return "probe-empty-bars" }
+
+func (providerProbeEmptyDailyBarsFake) FetchDailyBars(context.Context, string, string, string, int, model.AdjustmentBasis) ([]model.DailyBar, error) {
+	return nil, nil
+}
+
+func TestProviderProbeKeepsEmptyDailyBarResponseUnknownWhenContextUnavailable(t *testing.T) {
+	p := providerProbeEmptyDailyBarsFake{}
+	ds := NewWithCapabilities([]provider.NamedProvider{p}, nil, []provider.DailyBarProvider{p}, cache.NewDisabled(), nil, time.Second, time.Minute, 120, 2000, ResilienceConfig{}, nil)
+	run, err := ds.ProbeProviderCapabilitiesWithOptions(context.Background(), ProviderProbeOptions{
+		Scope: "all", Capabilities: []string{"daily_bars"}, Checks: []string{"quality"}, TimeoutSeconds: 5,
+	})
+	if err != nil {
+		t.Fatalf("ProbeProviderCapabilitiesWithOptions() error = %v", err)
+	}
+	item, found := findProbeItem(run.Items, p.Name(), "daily_bars")
+	if !found || item.Status != "returned_unknown" {
+		t.Fatalf("empty response without context must remain unknown, not failed: %+v", run.Items)
+	}
+	if !containsProbeReason(item.QualityReasons, "daily_bar_empty_response") ||
+		!containsProbeReason(item.QualityReasons, "daily_bar_context_calendar_unavailable") {
+		t.Fatalf("empty response context reasons are missing: %+v", item)
+	}
+}
+
+type providerProbePytdxDailyBarFailureFake struct {
+	err error
+}
+
+func (p providerProbePytdxDailyBarFailureFake) Name() string { return "pytdx" }
+
+func (p providerProbePytdxDailyBarFailureFake) FetchDailyBars(context.Context, string, string, string, int, model.AdjustmentBasis) ([]model.DailyBar, error) {
+	return nil, p.err
+}
+
+func TestProviderProbeDoesNotClassifyPytdxTransportFailureAsNotSupported(t *testing.T) {
+	transportErr := errors.New("Pytdx ex-rights/ex-dividend data required for forward_adjusted adjustment: dial tcp 127.0.0.1:7709: i/o timeout")
+	p := providerProbePytdxDailyBarFailureFake{err: transportErr}
+	ds := NewWithCapabilities([]provider.NamedProvider{p}, nil, []provider.DailyBarProvider{p}, cache.NewDisabled(), nil, time.Second, time.Minute, 120, 2000, ResilienceConfig{}, nil)
+
+	run, err := ds.ProbeProviderCapabilitiesWithOptions(context.Background(), ProviderProbeOptions{
+		Scope: "all", Capabilities: []string{"daily_bars"}, Symbols: []string{"600519.SH"},
+		DailyBarAdjustments: []model.AdjustmentBasis{model.AdjustmentForward}, Checks: []string{"connectivity", "contract"},
+		TimeoutSeconds: 5,
+	})
+	if err != nil {
+		t.Fatalf("ProbeProviderCapabilitiesWithOptions() error = %v", err)
+	}
+	item, found := findProbeItem(run.Items, p.Name(), "daily_bars")
+	if !found {
+		t.Fatalf("missing Pytdx daily-bar probe item: %+v", run.Items)
+	}
+	if item.Status == "not_supported" || item.Status != "failed" {
+		t.Fatalf("transport failure must remain failed, not not_supported: %+v", item)
+	}
+}
+
+type providerProbeContextCalendarFake struct {
+	quality         model.QualityStatus
+	reasons         []string
+	conflictDate    string
+	conflictTrading bool
+}
+
+func (p providerProbeContextCalendarFake) Name() string { return "probe-context-calendar" }
+
+func (p providerProbeContextCalendarFake) FetchTradingCalendar(_ context.Context, startDate, endDate string) (*model.TradingCalendarSnapshot, error) {
+	start, err := time.Parse("2006-01-02", startDate)
+	if err != nil {
+		return nil, err
+	}
+	end, err := time.Parse("2006-01-02", endDate)
+	if err != nil {
+		return nil, err
+	}
+	items := make([]model.TradingCalendarDay, 0, int(end.Sub(start).Hours()/24)+1)
+	tradingDays := 0
+	for day := start; !day.After(end); day = day.AddDate(0, 0, 1) {
+		isTrading := day.Weekday() != time.Saturday && day.Weekday() != time.Sunday
+		if p.conflictDate == day.Format("2006-01-02") {
+			isTrading = p.conflictTrading
+		}
+		items = append(items, model.TradingCalendarDay{Date: day.Format("2006-01-02"), IsTradingDay: isTrading})
+		if isTrading {
+			tradingDays++
+		}
+	}
+	return &model.TradingCalendarSnapshot{
+		Market: "cn_a_share", StartDate: startDate, EndDate: endDate,
+		TotalDays: len(items), TradingDays: tradingDays, Items: items,
+		Source: p.Name(), SourceVersion: "calendar-v1", FetchedAt: time.Now().UTC(),
+		QualityStatus: p.quality, QualityReasons: append([]string(nil), p.reasons...),
+	}, nil
+}
+
+type providerProbeContextDailyBarsFake struct{ tradeDate string }
+
+func (providerProbeContextDailyBarsFake) Name() string { return "probe-context-bars" }
+
+func (p providerProbeContextDailyBarsFake) FetchDailyBars(_ context.Context, symbol, _, _ string, _ int, adjustment model.AdjustmentBasis) ([]model.DailyBar, error) {
+	volume, amount := int64(10000), 100000.0
+	now := time.Now().UTC()
+	return []model.DailyBar{{
+		Symbol: symbol, TradeDate: p.tradeDate, Period: "1d",
+		Open: 10, High: 11, Low: 9, Close: 10.5, Volume: &volume, Amount: &amount,
+		AdjustmentBasis: adjustment, Source: p.Name(), SourceVersion: "bars-v1",
+		ProviderTime: &now, FetchedAt: now, NormalizedAt: now,
+		VolumeUnit: "shares", AmountUnit: "CNY", QualityStatus: model.QualityValid,
+	}}, nil
+}
+
+type providerProbeContextSecurityStatusFake struct {
+	status model.SuspensionStatus
+	fail   bool
+}
+
+func (p providerProbeContextSecurityStatusFake) Name() string { return "probe-context-security-status" }
+
+func (p providerProbeContextSecurityStatusFake) FetchSecurityTradingStatus(_ context.Context, symbol, tradeDate string) (*model.SecurityTradingStatusSnapshot, error) {
+	if p.fail {
+		return nil, errors.New("security status unavailable")
+	}
+	return &model.SecurityTradingStatusSnapshot{
+		Symbol: symbol, TradeDate: tradeDate, SecurityName: "测试证券",
+		NameEffectiveFrom: "2020-01-01", ListingDate: "2020-01-01", ListingTradingDayNumber: 1,
+		ListingStatusKnown: true, RiskWarningStatus: model.RiskWarningNormal,
+		DelistingStatus: model.DelistingStatusNormal, IsTradingDay: true, TradingDayKnown: true,
+		SuspensionStatus: p.status, Source: p.Name(), SourceVersion: "security-status-v1",
+		FetchedAt: time.Now().UTC(), QualityStatus: model.QualityValid,
+	}, nil
+}
+
+func TestProviderProbeDailyBarsReusesTradingContextDiagnosticsEndToEnd(t *testing.T) {
+	location := marketLocation()
+	barDay := time.Now().In(location).AddDate(0, 0, -7)
+	for barDay.Weekday() == time.Saturday || barDay.Weekday() == time.Sunday {
+		barDay = barDay.AddDate(0, 0, -1)
+	}
+	barDate := barDay.Format("2006-01-02")
+	cases := []struct {
+		name            string
+		calendarQuality model.QualityStatus
+		calendarReasons []string
+		status          model.SuspensionStatus
+		statusFail      bool
+		conflict        bool
+		wantStatus      string
+		wantReasons     []string
+		forbidReasons   []string
+	}{
+		{
+			name:            "suspended missing dates are excluded",
+			calendarQuality: model.QualityValid, status: model.SuspensionStatusSuspended,
+			wantStatus: "returned", wantReasons: []string{"daily_bar_excluded_suspended:"},
+			forbidReasons: []string{"daily_bar_missing_on_confirmed_trading_day:"},
+		},
+		{
+			name:            "confirmed trading dates missing bars are diagnosed",
+			calendarQuality: model.QualityValid, status: model.SuspensionStatusNoEvent,
+			wantStatus: "returned_degraded", wantReasons: []string{"daily_bar_missing_on_confirmed_trading_day:"},
+		},
+		{
+			name:            "unavailable security status remains unknown",
+			calendarQuality: model.QualityValid, statusFail: true,
+			wantStatus: "returned_degraded", wantReasons: []string{"daily_bar_context_security_status_unavailable:"},
+			forbidReasons: []string{"daily_bar_missing_on_confirmed_trading_day:"},
+		},
+		{
+			name:            "degraded calendar degrades context but retains suspension evidence",
+			calendarQuality: model.QualityDegraded, status: model.SuspensionStatusSuspended,
+			wantStatus: "returned_degraded", wantReasons: []string{"daily_bar_context_calendar_degraded", "daily_bar_excluded_suspended:"},
+		},
+		{
+			name:            "conflicting calendars do not confirm missing bars",
+			calendarQuality: model.QualityValid, status: model.SuspensionStatusNoEvent, conflict: true,
+			wantStatus: "returned_degraded", wantReasons: []string{"daily_bar_context_calendar_sources_disagree"},
+			forbidReasons: []string{"daily_bar_missing_on_confirmed_trading_day:"},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			calendar := providerProbeContextCalendarFake{quality: tc.calendarQuality, reasons: tc.calendarReasons}
+			calendars := []provider.TradingCalendarProvider{calendar}
+			if tc.conflict {
+				conflictDay := barDay.AddDate(0, 0, 1)
+				for conflictDay.Weekday() == time.Saturday || conflictDay.Weekday() == time.Sunday {
+					conflictDay = conflictDay.AddDate(0, 0, 1)
+				}
+				conflictDate := conflictDay.Format("2006-01-02")
+				calendars = append(calendars, providerProbeContextCalendarFake{
+					quality: model.QualityValid, conflictDate: conflictDate, conflictTrading: false,
+				})
+			}
+			p := providerProbeContextDailyBarsFake{tradeDate: barDate}
+			ds := NewWithCapabilities([]provider.NamedProvider{p}, nil, []provider.DailyBarProvider{p},
+				cache.NewDisabled(), nil, time.Second, time.Minute, 120, 2000, ResilienceConfig{}, nil)
+			ds.SetTradingCalendarProviders(calendars)
+			ds.SetSecurityTradingStatusProviders([]provider.SecurityTradingStatusProvider{
+				providerProbeContextSecurityStatusFake{status: tc.status, fail: tc.statusFail},
+			})
+			run, err := ds.ProbeProviderCapabilitiesWithOptions(context.Background(), ProviderProbeOptions{
+				Scope: "all", Capabilities: []string{"daily_bars"}, Symbols: []string{"600036.SH"},
+				DailyBarAdjustments: []model.AdjustmentBasis{model.AdjustmentNone},
+				Checks:              []string{"quality"}, TimeoutSeconds: 5,
+			})
+			if err != nil {
+				t.Fatalf("ProbeProviderCapabilitiesWithOptions() error = %v", err)
+			}
+			item, found := findProbeItem(run.Items, p.Name(), "daily_bars")
+			if !found || item.Status != tc.wantStatus {
+				t.Fatalf("unexpected daily-bars probe status: found=%v item=%+v", found, item)
+			}
+			for _, expected := range tc.wantReasons {
+				matched := false
+				for _, actual := range item.QualityReasons {
+					if strings.HasPrefix(actual, expected) {
+						matched = true
+						break
+					}
+				}
+				if !matched {
+					t.Errorf("missing reason prefix %q in %+v", expected, item.QualityReasons)
+				}
+			}
+			for _, forbidden := range tc.forbidReasons {
+				for _, actual := range item.QualityReasons {
+					if strings.HasPrefix(actual, forbidden) {
+						t.Errorf("unexpected reason prefix %q in %+v", forbidden, item.QualityReasons)
+					}
+				}
+			}
+		})
 	}
 }

@@ -123,18 +123,50 @@ func TestProviderProbeValidationSchemaIsDocumented(t *testing.T) {
 		t.Fatalf("read OpenAPI specification: %v", err)
 	}
 	text := string(spec)
-	for _, required := range []string{
-		"    ProviderProbeFieldIssue:",
-		"        validation_total_count:",
-		"        validation_error_count:",
-		"        validation_warning_count:",
-		"        validation_info_count:",
-		"        validation_truncated:",
-		"        validation_issues:",
+	itemStart := strings.Index(text, "    ProviderProbeItem:")
+	if itemStart < 0 {
+		t.Fatal("ProviderProbeItem schema missing")
+	}
+	itemEnd := strings.Index(text[itemStart+len("    ProviderProbeItem:"):], "\n    ProviderProbeRequest:")
+	if itemEnd < 0 {
+		t.Fatal("ProviderProbeItem schema boundary missing")
+	}
+	itemSchema := text[itemStart : itemStart+len("    ProviderProbeItem:")+itemEnd]
+	for _, field := range []string{
+		"validation_total_count:",
+		"validation_error_count:",
+		"validation_warning_count:",
+		"validation_info_count:",
+		"validation_truncated:",
+		"validation_issues:",
+		"coverage_dimensions:",
 		"maxItems: 100",
 	} {
-		if !strings.Contains(text, required) {
-			t.Errorf("Provider Probe validation schema is missing %q", required)
+		if !strings.Contains(itemSchema, field) {
+			t.Errorf("ProviderProbeItem schema is missing %q", field)
 		}
+	}
+	if !strings.Contains(text, "    ProviderProbeFieldIssue:") {
+		t.Fatal("ProviderProbeFieldIssue schema missing")
+	}
+}
+
+func TestSectorRankingFiveDayChangeSchemaIsDocumented(t *testing.T) {
+	spec, err := os.ReadFile("../../openapi.yaml")
+	if err != nil {
+		t.Fatalf("read OpenAPI specification: %v", err)
+	}
+	text := string(spec)
+	start := strings.Index(text, "    SectorRanking:")
+	if start < 0 {
+		t.Fatal("SectorRanking schema missing")
+	}
+	end := strings.Index(text[start+len("    SectorRanking:"):], "\n    SectorRankingSnapshot:")
+	if end < 0 {
+		t.Fatal("SectorRanking schema boundary missing")
+	}
+	schema := text[start : start+len("    SectorRanking:")+end]
+	if !strings.Contains(schema, "change_percent_5d:") {
+		t.Error("SectorRanking schema must document change_percent_5d")
 	}
 }

@@ -25,6 +25,75 @@ import (
 
 const liveProbeBodySampleLimit = 2048
 
+type tickflowDailyRawRowDiagnostic struct {
+	Index     int    `json:"index"`
+	Timestamp string `json:"timestamp,omitempty"`
+	Open      string `json:"open,omitempty"`
+	High      string `json:"high,omitempty"`
+	Low       string `json:"low,omitempty"`
+	Close     string `json:"close,omitempty"`
+	Volume    string `json:"volume,omitempty"`
+	Amount    string `json:"amount,omitempty"`
+	PrevClose string `json:"prev_close,omitempty"`
+}
+
+type tickflowDailyRawDiagnostic struct {
+	TimestampCount int                             `json:"timestamp_count"`
+	OpenCount      int                             `json:"open_count"`
+	HighCount      int                             `json:"high_count"`
+	LowCount       int                             `json:"low_count"`
+	CloseCount     int                             `json:"close_count"`
+	VolumeCount    int                             `json:"volume_count"`
+	AmountCount    int                             `json:"amount_count"`
+	PrevCloseCount int                             `json:"prev_close_count"`
+	BodyTruncated  bool                            `json:"body_truncated"`
+	SampleRows     []tickflowDailyRawRowDiagnostic `json:"sample_rows,omitempty"`
+}
+
+func summarizeTickFlowDailyRawResponse(body string, truncated bool) *tickflowDailyRawDiagnostic {
+	result := &tickflowDailyRawDiagnostic{BodyTruncated: truncated}
+	var envelope struct {
+		Data struct {
+			Timestamp []json.RawMessage `json:"timestamp"`
+			Open      []json.RawMessage `json:"open"`
+			High      []json.RawMessage `json:"high"`
+			Low       []json.RawMessage `json:"low"`
+			Close     []json.RawMessage `json:"close"`
+			Volume    []json.RawMessage `json:"volume"`
+			Amount    []json.RawMessage `json:"amount"`
+			PrevClose []json.RawMessage `json:"prev_close"`
+		} `json:"data"`
+	}
+	if json.Unmarshal([]byte(body), &envelope) != nil {
+		return result
+	}
+	d := envelope.Data
+	result.TimestampCount, result.OpenCount, result.HighCount = len(d.Timestamp), len(d.Open), len(d.High)
+	result.LowCount, result.CloseCount, result.VolumeCount = len(d.Low), len(d.Close), len(d.Volume)
+	result.AmountCount, result.PrevCloseCount = len(d.Amount), len(d.PrevClose)
+	valueAt := func(values []json.RawMessage, index int) string {
+		if index < 0 || index >= len(values) || string(bytesTrim(values[index])) == "null" {
+			return ""
+		}
+		return string(bytesTrim(values[index]))
+	}
+	indices := make([]int, 0, 4)
+	for index := 0; index < len(d.Timestamp) && index < 3; index++ {
+		indices = append(indices, index)
+	}
+	if len(d.Timestamp) > 3 {
+		indices = append(indices, len(d.Timestamp)-1)
+	}
+	for _, index := range indices {
+		result.SampleRows = append(result.SampleRows, tickflowDailyRawRowDiagnostic{
+			Index: index, Timestamp: valueAt(d.Timestamp, index), Open: valueAt(d.Open, index),
+			High: valueAt(d.High, index), Low: valueAt(d.Low, index), Close: valueAt(d.Close, index),
+			Volume: valueAt(d.Volume, index), Amount: valueAt(d.Amount, index), PrevClose: valueAt(d.PrevClose, index),
+		})
+	}
+	return result
+}
+
 var liveProbeURLQuery = regexp.MustCompile(`(?i)(https?://[^\s"?]+)\?[^\s"']*`)
 
 func liveProbeErrorSummary(err error) (string, string) {
@@ -110,16 +179,20 @@ type liveProbeResult struct {
 }
 
 type liveProbeHTTPResponse struct {
-	Endpoint          string   `json:"endpoint"`
-	StatusCode        int      `json:"status_code,omitempty"`
-	ContentType       string   `json:"content_type,omitempty"`
-	TransportError    string   `json:"transport_error,omitempty"`
-	RedirectEndpoint  string   `json:"redirect_endpoint,omitempty"`
-	RedirectQueryKeys []string `json:"redirect_query_keys,omitempty"`
-	BodyBytesObserved int64    `json:"body_bytes_observed,omitempty"`
-	BodyTruncated     bool     `json:"body_truncated,omitempty"`
-	BodySample        string   `json:"body_sample,omitempty"`
-	rawSample         []byte
+	Endpoint            string   `json:"endpoint"`
+	RequestMethod       string   `json:"request_method,omitempty"`
+	RequestContentType  string   `json:"request_content_type,omitempty"`
+	RequestBodyBytes    int64    `json:"request_body_bytes,omitempty"`
+	APIKeyHeaderPresent bool     `json:"api_key_header_present,omitempty"`
+	StatusCode          int      `json:"status_code,omitempty"`
+	ContentType         string   `json:"content_type,omitempty"`
+	TransportError      string   `json:"transport_error,omitempty"`
+	RedirectEndpoint    string   `json:"redirect_endpoint,omitempty"`
+	RedirectQueryKeys   []string `json:"redirect_query_keys,omitempty"`
+	BodyBytesObserved   int64    `json:"body_bytes_observed,omitempty"`
+	BodyTruncated       bool     `json:"body_truncated,omitempty"`
+	BodySample          string   `json:"body_sample,omitempty"`
+	rawSample           []byte
 }
 
 type liveProbeCapture struct {
@@ -156,7 +229,13 @@ type liveProbeCaptureTransport struct {
 
 func (t liveProbeCaptureTransport) RoundTrip(request *http.Request) (*http.Response, error) {
 	// Never record RawQuery: provider URLs may include public tokens or request parameters.
-	record := &liveProbeHTTPResponse{Endpoint: request.URL.Host + request.URL.EscapedPath()}
+	record := &liveProbeHTTPResponse{
+		Endpoint:            request.URL.Host + request.URL.EscapedPath(),
+		RequestMethod:       request.Method,
+		RequestContentType:  request.Header.Get("Content-Type"),
+		RequestBodyBytes:    request.ContentLength,
+		APIKeyHeaderPresent: strings.TrimSpace(request.Header.Get("apikey")) != "" || strings.TrimSpace(request.Header.Get("x-api-key")) != "",
+	}
 	t.capture.add(record)
 
 	response, err := t.base.RoundTrip(request)
@@ -256,6 +335,20 @@ func liveProbeDailyContractError(bars []model.DailyBar, providerLabel, sourceNam
 	return ""
 }
 
+func TestSummarizeTickFlowDailyRawResponse(t *testing.T) {
+	body := `{"code":0,"data":{"timestamp":[1000,2000],"open":[10,11],"high":[12,13],"low":[9,10],"close":[11,12],"volume":[100,200],"amount":[1100,2400],"prev_close":[10,11]}}`
+	got := summarizeTickFlowDailyRawResponse(body, false)
+	if got.TimestampCount != 2 || got.VolumeCount != 2 || got.AmountCount != 2 || got.BodyTruncated {
+		t.Fatalf("unexpected daily raw summary counts: %+v", got)
+	}
+	if len(got.SampleRows) != 2 || got.SampleRows[0].Volume != "100" || got.SampleRows[1].Amount != "2400" {
+		t.Fatalf("unexpected daily raw sample rows: %+v", got.SampleRows)
+	}
+	if !summarizeTickFlowDailyRawResponse(body, true).BodyTruncated {
+		t.Fatal("truncated body marker must be retained")
+	}
+}
+
 func TestLiveProbeDailyContractRejectsLimitAndUnsortedBars(t *testing.T) {
 	volume := int64(1000)
 	makeBar := func(date string) model.DailyBar {
@@ -293,6 +386,48 @@ func TestLiveProbeDailyContractSeparatesDisplayLabelFromSource(t *testing.T) {
 	const startDate, endDate = "2026-10-28", "2026-10-30"
 	if got := liveProbeDailyContractError([]model.DailyBar{bar}, "sina-chinext", "sina", "300750.SZ", model.AdjustmentNone, startDate, endDate, 8); got != "" {
 		t.Fatalf("display label must not be compared with canonical source, got %q", got)
+	}
+}
+
+func TestLiveProbeCaptureRecordsRequestMetadataWithoutSecrets(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"status":0}`)
+	}))
+	defer server.Close()
+
+	capture := &liveProbeCapture{}
+	client := &http.Client{Transport: capture.transport()}
+	request, err := http.NewRequest(http.MethodPost, server.URL+"/query", strings.NewReader(`{"toolQuery":"600519 最新价"}`))
+	if err != nil {
+		t.Fatalf("build request: %v", err)
+	}
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("apikey", "must-never-appear-in-report")
+	request.Header.Set("x-api-key", "must-also-never-appear-in-report")
+	response, err := client.Do(request)
+	if err != nil {
+		t.Fatalf("send request: %v", err)
+	}
+	_ = response.Body.Close()
+
+	responses := capture.snapshot()
+	if len(responses) != 1 {
+		t.Fatalf("captured response count=%d, want 1", len(responses))
+	}
+	got := responses[0]
+	if got.RequestMethod != http.MethodPost || got.RequestContentType != "application/json" {
+		t.Fatalf("request metadata mismatch: %+v", got)
+	}
+	if !got.APIKeyHeaderPresent {
+		t.Fatal("API key header presence should be recorded")
+	}
+	if got.RequestBodyBytes <= 0 {
+		t.Fatalf("request body length should be recorded: %+v", got)
+	}
+	encoded, _ := json.Marshal(got)
+	if strings.Contains(string(encoded), "must-never-appear-in-report") || strings.Contains(string(encoded), "must-also-never-appear-in-report") {
+		t.Fatalf("API key value leaked into probe report: %s", encoded)
 	}
 }
 
@@ -483,17 +618,45 @@ func TestLiveProviderProbe(t *testing.T) {
 	now := time.Now().In(loc)
 	startDate := now.AddDate(0, 0, -35).Format("2006-01-02")
 	endDate := now.AddDate(0, 0, -1).Format("2006-01-02")
+	dailyLimit := 8
+	if configuredStart := strings.TrimSpace(os.Getenv("LIVE_PROBE_DAILY_START_DATE")); configuredStart != "" {
+		startDate = configuredStart
+		dailyLimit = 40
+	}
+	if configuredEnd := strings.TrimSpace(os.Getenv("LIVE_PROBE_DAILY_END_DATE")); configuredEnd != "" {
+		endDate = configuredEnd
+		dailyLimit = 40
+	}
+	parsedStart, startErr := time.ParseInLocation("2006-01-02", startDate, loc)
+	parsedEnd, endErr := time.ParseInLocation("2006-01-02", endDate, loc)
+	if startErr != nil || endErr != nil || parsedStart.After(parsedEnd) || parsedEnd.After(now) {
+		t.Fatalf("invalid live probe daily date range: %s..%s", startDate, endDate)
+	}
 	quoteSymbol := strings.TrimSpace(os.Getenv("LIVE_PROBE_QUOTE_SYMBOL"))
 	if quoteSymbol == "" {
 		quoteSymbol = "600519.SH"
 	}
-	dailySymbol := "600036.SH"
+	dailySymbol := strings.TrimSpace(os.Getenv("LIVE_PROBE_DAILY_SYMBOL"))
+	if dailySymbol == "" {
+		dailySymbol = "600036.SH"
+	}
+	dailySymbols := []string{dailySymbol}
+	if configuredSymbols := strings.TrimSpace(os.Getenv("LIVE_PROBE_DAILY_SYMBOLS")); configuredSymbols != "" {
+		dailySymbols = strings.Split(configuredSymbols, ",")
+		for index := range dailySymbols {
+			dailySymbols[index] = strings.TrimSpace(dailySymbols[index])
+			if dailySymbols[index] == "" {
+				t.Fatal("LIVE_PROBE_DAILY_SYMBOLS must not contain empty symbols")
+			}
+		}
+		dailySymbol = dailySymbols[0]
+	}
 
 	report := liveProbeReport{
 		GeneratedAt: now.Format(time.RFC3339),
 		Runner:      "GitHub Actions hosted runner",
 		QuoteSymbol: quoteSymbol,
-		DailySymbol: dailySymbol,
+		DailySymbol: strings.Join(dailySymbols, ","),
 		StartDate:   startDate,
 		EndDate:     endDate,
 		Results:     make([]liveProbeResult, 0, 15),
@@ -858,7 +1021,7 @@ func TestLiveProviderProbe(t *testing.T) {
 		}
 		contractError := ""
 		if callErr == nil && len(bars) > 0 {
-			contractError = liveProbeDailyContractError(bars, providerName, sourceName, symbol, basis, startDate, endDate, 8)
+			contractError = liveProbeDailyContractError(bars, providerName, sourceName, symbol, basis, startDate, endDate, dailyLimit)
 		}
 		switch {
 		case callErr != nil:
@@ -876,10 +1039,13 @@ func TestLiveProviderProbe(t *testing.T) {
 			result.SampleBars = append([]model.DailyBar(nil), bars...)
 		default:
 			result.Status = "returned"
-			// Providers normally return rows in ascending date order. Keep the newest three samples in the report.
-			first := len(bars) - 3
-			if first < 0 {
-				first = 0
+			// 历史窗口探测保留完整样本以便离线对账；常规近期探测仍只保留最新三条。
+			first := 0
+			if dailyLimit <= 8 {
+				first = len(bars) - 3
+				if first < 0 {
+					first = 0
+				}
 			}
 			result.SampleBars = append([]model.DailyBar(nil), bars[first:]...)
 		}
@@ -888,6 +1054,64 @@ func TestLiveProviderProbe(t *testing.T) {
 		t.Logf("LIVE_PROVIDER_RESULT %s", encoded)
 	}
 
+	// public-daily-only 对 Sina、Tencent、Eastmoney、Yahoo 各执行一次未复权日 K 请求；跳过 quote、复权、Universe、新闻及其他高成本能力。
+	if os.Getenv("MARKET_DATA_LIVE_PUBLIC_DAILY_ONLY") == "1" {
+		sina := NewSina(12*time.Second, "")
+		tencent := NewTencent(12 * time.Second)
+		eastmoney := NewEastmoney(12*time.Second, "", "")
+		yahoo := NewYahooFinance(12*time.Second, "")
+		for _, symbol := range dailySymbols {
+			runDaily("sina", "sina", symbol, model.AdjustmentNone, sina.client, func(ctx context.Context) ([]model.DailyBar, error) {
+				return sina.FetchDailyBars(ctx, symbol, startDate, endDate, dailyLimit, model.AdjustmentNone)
+			})
+			runDaily("tencent", "tencent", symbol, model.AdjustmentNone, tencent.client, func(ctx context.Context) ([]model.DailyBar, error) {
+				return tencent.FetchDailyBars(ctx, symbol, startDate, endDate, dailyLimit, model.AdjustmentNone)
+			})
+			runDaily("eastmoney", "eastmoney", symbol, model.AdjustmentNone, eastmoney.client, func(ctx context.Context) ([]model.DailyBar, error) {
+				return eastmoney.FetchDailyBars(ctx, symbol, startDate, endDate, dailyLimit, model.AdjustmentNone)
+			})
+			runDaily("yahoo", "yahoo", symbol, model.AdjustmentNone, yahoo.client, func(ctx context.Context) ([]model.DailyBar, error) {
+				return yahoo.FetchDailyBars(ctx, symbol, startDate, endDate, dailyLimit, model.AdjustmentNone)
+			})
+		}
+		if os.Getenv("MARKET_DATA_LIVE_PUBLIC_ADJUSTED") == "1" {
+			for _, symbol := range dailySymbols {
+				for _, adjustment := range []model.AdjustmentBasis{model.AdjustmentForward, model.AdjustmentBackward} {
+					// Sina 明确只支持 none；不发送无效的 adjusted 请求。
+					report.Results = append(report.Results, liveProbeResult{
+						Provider: "sina", Capability: "daily_bars", Symbol: symbol,
+						Adjustment: adjustment, Status: "not_supported",
+						Error: "Sina K-line endpoint only supports none adjustment; adjusted request intentionally skipped",
+					})
+					runDaily("tencent", "tencent", symbol, adjustment, tencent.client, func(ctx context.Context) ([]model.DailyBar, error) {
+						return tencent.FetchDailyBars(ctx, symbol, startDate, endDate, dailyLimit, adjustment)
+					})
+					runDaily("eastmoney", "eastmoney", symbol, adjustment, eastmoney.client, func(ctx context.Context) ([]model.DailyBar, error) {
+						return eastmoney.FetchDailyBars(ctx, symbol, startDate, endDate, dailyLimit, adjustment)
+					})
+					runDaily("yahoo", "yahoo", symbol, adjustment, yahoo.client, func(ctx context.Context) ([]model.DailyBar, error) {
+						return yahoo.FetchDailyBars(ctx, symbol, startDate, endDate, dailyLimit, adjustment)
+					})
+				}
+			}
+		}
+		report.Failures = failures
+		encoded, marshalErr := json.MarshalIndent(report, "", "  ")
+		if marshalErr != nil {
+			t.Errorf("marshal public daily-only report: %v", marshalErr)
+		} else {
+			t.Logf("LIVE_PROVIDER_REPORT_BEGIN\n%s\nLIVE_PROVIDER_REPORT_END", encoded)
+			if outputPath := strings.TrimSpace(os.Getenv("LIVE_PROVIDER_REPORT_PATH")); outputPath != "" {
+				if writeErr := os.WriteFile(outputPath, append(encoded, '\n'), 0o644); writeErr != nil {
+					t.Errorf("write public daily-only report: %v", writeErr)
+				}
+			}
+		}
+		if len(failures) > 0 {
+			t.Errorf("%d public daily-only probe(s) failed; inspect LIVE_PROVIDER_RESULT records", len(failures))
+		}
+		return
+	}
 	runChip := func(mx *MiaoXiang, symbol string) {
 		capture := &liveProbeCapture{}
 		mx.client.Transport = capture.transport()
@@ -1006,7 +1230,7 @@ func TestLiveProviderProbe(t *testing.T) {
 		return sina.FetchQuote(ctx, quoteSymbol)
 	})
 	runDaily("sina", "sina", dailySymbol, model.AdjustmentNone, sina.client, func(ctx context.Context) ([]model.DailyBar, error) {
-		return sina.FetchDailyBars(ctx, dailySymbol, startDate, endDate, 8, model.AdjustmentNone)
+		return sina.FetchDailyBars(ctx, dailySymbol, startDate, endDate, dailyLimit, model.AdjustmentNone)
 	})
 
 	tencent := NewTencent(12 * time.Second)
@@ -1014,10 +1238,13 @@ func TestLiveProviderProbe(t *testing.T) {
 		return tencent.FetchQuote(ctx, quoteSymbol)
 	})
 	runDaily("tencent", "tencent", dailySymbol, model.AdjustmentNone, tencent.client, func(ctx context.Context) ([]model.DailyBar, error) {
-		return tencent.FetchDailyBars(ctx, dailySymbol, startDate, endDate, 8, model.AdjustmentNone)
+		return tencent.FetchDailyBars(ctx, dailySymbol, startDate, endDate, dailyLimit, model.AdjustmentNone)
 	})
 	runDaily("tencent", "tencent", dailySymbol, model.AdjustmentForward, tencent.client, func(ctx context.Context) ([]model.DailyBar, error) {
-		return tencent.FetchDailyBars(ctx, dailySymbol, startDate, endDate, 8, model.AdjustmentForward)
+		return tencent.FetchDailyBars(ctx, dailySymbol, startDate, endDate, dailyLimit, model.AdjustmentForward)
+	})
+	runDaily("tencent", "tencent", dailySymbol, model.AdjustmentBackward, tencent.client, func(ctx context.Context) ([]model.DailyBar, error) {
+		return tencent.FetchDailyBars(ctx, dailySymbol, startDate, endDate, dailyLimit, model.AdjustmentBackward)
 	})
 
 	// Cross-market coverage: Shenzhen ChiNext and Shanghai STAR Market are probed
@@ -1037,10 +1264,10 @@ func TestLiveProviderProbe(t *testing.T) {
 			return tencent.FetchQuote(ctx, symbol)
 		})
 		runDaily("sina-"+marketSample.name, "sina", symbol, model.AdjustmentNone, sina.client, func(ctx context.Context) ([]model.DailyBar, error) {
-			return sina.FetchDailyBars(ctx, symbol, startDate, endDate, 8, model.AdjustmentNone)
+			return sina.FetchDailyBars(ctx, symbol, startDate, endDate, dailyLimit, model.AdjustmentNone)
 		})
 		runDaily("tencent-"+marketSample.name, "tencent", symbol, model.AdjustmentNone, tencent.client, func(ctx context.Context) ([]model.DailyBar, error) {
-			return tencent.FetchDailyBars(ctx, symbol, startDate, endDate, 8, model.AdjustmentNone)
+			return tencent.FetchDailyBars(ctx, symbol, startDate, endDate, dailyLimit, model.AdjustmentNone)
 		})
 	}
 
@@ -1078,19 +1305,31 @@ func TestLiveProviderProbe(t *testing.T) {
 		return eastmoneyDelay.FetchQuote(ctx, dailySymbol)
 	})
 	runDaily("eastmoney", "eastmoney", dailySymbol, model.AdjustmentForward, eastmoney.client, func(ctx context.Context) ([]model.DailyBar, error) {
-		return eastmoney.FetchDailyBars(ctx, dailySymbol, startDate, endDate, 8, model.AdjustmentForward)
+		return eastmoney.FetchDailyBars(ctx, dailySymbol, startDate, endDate, dailyLimit, model.AdjustmentForward)
+	})
+	runDaily("eastmoney", "eastmoney", dailySymbol, model.AdjustmentBackward, eastmoney.client, func(ctx context.Context) ([]model.DailyBar, error) {
+		return eastmoney.FetchDailyBars(ctx, dailySymbol, startDate, endDate, dailyLimit, model.AdjustmentBackward)
 	})
 
 	baostockClient := baostock.NewClient(baostock.Config{ConnectTimeout: 8 * time.Second, RequestTimeout: 20 * time.Second})
 	baostockProvider := NewBaostock(baostockClient)
 	beforeBaoStockDaily := len(report.Results)
 	runDaily("baostock", "baostock", dailySymbol, model.AdjustmentForward, nil, func(ctx context.Context) ([]model.DailyBar, error) {
-		return baostockProvider.FetchDailyBars(ctx, dailySymbol, startDate, endDate, 8, model.AdjustmentForward)
+		return baostockProvider.FetchDailyBars(ctx, dailySymbol, startDate, endDate, dailyLimit, model.AdjustmentForward)
 	})
-	dailyProbePassed := len(report.Results) > beforeBaoStockDaily &&
-		report.Results[len(report.Results)-1].Provider == "baostock" &&
-		report.Results[len(report.Results)-1].Capability == "daily_bars" &&
-		report.Results[len(report.Results)-1].Status == "returned"
+	runDaily("baostock", "baostock", dailySymbol, model.AdjustmentBackward, nil, func(ctx context.Context) ([]model.DailyBar, error) {
+		return baostockProvider.FetchDailyBars(ctx, dailySymbol, startDate, endDate, dailyLimit, model.AdjustmentBackward)
+	})
+	dailyProbePassed := false
+	for _, result := range report.Results[beforeBaoStockDaily:] {
+		if result.Provider == "baostock" &&
+			result.Capability == "daily_bars" &&
+			result.Adjustment == model.AdjustmentForward &&
+			result.Status == "returned" {
+			dailyProbePassed = true
+			break
+		}
+	}
 	calendarStart := now.AddDate(0, 0, -14).Format("2006-01-02")
 	calendarEnd := now.Format("2006-01-02")
 	calendarResult := liveProbeResult{Provider: "baostock", Capability: "trading_calendar"}
@@ -1126,7 +1365,10 @@ func TestLiveProviderProbe(t *testing.T) {
 		return yahoo.FetchQuote(ctx, quoteSymbol)
 	})
 	runDaily("yahoo", "yahoo", dailySymbol, model.AdjustmentForward, yahoo.client, func(ctx context.Context) ([]model.DailyBar, error) {
-		return yahoo.FetchDailyBars(ctx, dailySymbol, startDate, endDate, 8, model.AdjustmentForward)
+		return yahoo.FetchDailyBars(ctx, dailySymbol, startDate, endDate, dailyLimit, model.AdjustmentForward)
+	})
+	runDaily("yahoo", "yahoo", dailySymbol, model.AdjustmentBackward, yahoo.client, func(ctx context.Context) ([]model.DailyBar, error) {
+		return yahoo.FetchDailyBars(ctx, dailySymbol, startDate, endDate, dailyLimit, model.AdjustmentBackward)
 	})
 
 	if os.Getenv("MARKET_DATA_LIVE_NETEASE_TESTS") == "1" {
@@ -1135,7 +1377,7 @@ func TestLiveProviderProbe(t *testing.T) {
 			return netease.FetchQuote(ctx, quoteSymbol)
 		})
 		runDaily("netease", "netease", dailySymbol, model.AdjustmentNone, netease.client, func(ctx context.Context) ([]model.DailyBar, error) {
-			return netease.FetchDailyBars(ctx, dailySymbol, startDate, endDate, 8, model.AdjustmentNone)
+			return netease.FetchDailyBars(ctx, dailySymbol, startDate, endDate, dailyLimit, model.AdjustmentNone)
 		})
 	} else {
 		report.Results = append(report.Results,

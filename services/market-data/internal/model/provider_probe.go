@@ -26,6 +26,7 @@ type ProviderProbeFieldIssue struct {
 	RowIndex      *int   `json:"row_index,omitempty"`
 	Symbol        string `json:"symbol,omitempty"`
 	TradeDate     string `json:"trade_date,omitempty"`
+	Count         int    `json:"count,omitempty"`
 }
 
 // ProviderProbeCoverageDimension describes a field-specific coverage denominator.
@@ -119,6 +120,10 @@ type ProviderProbeCheckResult struct {
 	LeftSourceVersion      string                         `json:"left_source_version,omitempty"`
 	RightSourceVersion     string                         `json:"right_source_version,omitempty"`
 	AdjustmentBasis        string                         `json:"adjustment_basis,omitempty"`
+	LeftAdjustmentMethod   string                         `json:"left_adjustment_method,omitempty"`
+	RightAdjustmentMethod  string                         `json:"right_adjustment_method,omitempty"`
+	LeftAdjustmentRefDate  string                         `json:"left_adjustment_reference_date,omitempty"`
+	RightAdjustmentRefDate string                         `json:"right_adjustment_reference_date,omitempty"`
 	LeftQualityStatus      QualityStatus                  `json:"left_quality_status,omitempty"`
 	RightQualityStatus     QualityStatus                  `json:"right_quality_status,omitempty"`
 	ComparedDates          []string                       `json:"compared_dates,omitempty"`
@@ -140,6 +145,8 @@ type ProviderProbeRun struct {
 	RequestedMarkets             []string                   `json:"requested_markets,omitempty"`
 	RequestedSymbols             []string                   `json:"requested_symbols,omitempty"`
 	RequestedDailyBarAdjustments []AdjustmentBasis          `json:"requested_daily_bar_adjustments,omitempty"`
+	RequestedDailyBarStartDate   string                     `json:"requested_daily_bar_start_date,omitempty"`
+	RequestedDailyBarEndDate     string                     `json:"requested_daily_bar_end_date,omitempty"`
 	TimeoutSeconds               int                        `json:"timeout_seconds,omitempty"`
 	Status                       string                     `json:"status"`
 	Persisted                    bool                       `json:"persisted"`
