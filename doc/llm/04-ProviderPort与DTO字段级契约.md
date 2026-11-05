@@ -61,7 +61,6 @@
 | tool_choice | enum? | 否 | 首批限制 none/auto；required/指定工具延后 |
 | deadline_at | UTC timestamp | 是 | 绝对截止时间，不得晚于调用方 Context deadline |
 | correlation_id | string | 否 | 跨模块关联 ID，不承载领域对象 |
-
 | trace_id | string | 否 | 受控追踪标识 |
 
 首批不接收任意 map、任意 JSON 或完整 Responses input item 数组。多轮对话、多模态、background response、previous_response_id、conversation_id 等 deferred；出现时返回 unsupported_capability，不得静默丢弃。
@@ -112,7 +111,6 @@ ToolDefinition 是 Researchflow Registry 筛选后的只读声明。LLM 只序�
 | model_version | string? | 否 | 上游明确返回才设置 |
 | gateway_request_id | string? | 否 | 从响应头读取，缺失允许 |
 | incomplete_reason | string? | 否 | Responses incomplete_details.reason |
-
 | error | ModelErrorInfo? | 否 | 稳定错误码和安全摘要 |
 | started_at / finished_at | UTC timestamp | 是 | 调用时间边界 |
 | duration_ms | integer | 是 | 非负 |
