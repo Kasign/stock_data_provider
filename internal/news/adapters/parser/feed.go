@@ -113,13 +113,13 @@ type atomContent struct {
 }
 
 type atomEntry struct {
-	ID        string     `xml:"id"`
-	Title     string     `xml:"title"`
-	Links     []atomLink `xml:"link"`
-	Summary   string     `xml:"summary"`
+	ID        string      `xml:"id"`
+	Title     string      `xml:"title"`
+	Links     []atomLink  `xml:"link"`
+	Summary   string      `xml:"summary"`
 	Content   atomContent `xml:"content"`
-	Published string     `xml:"published"`
-	Updated   string     `xml:"updated"`
+	Published string      `xml:"published"`
+	Updated   string      `xml:"updated"`
 	Authors   []struct {
 		Name string `xml:"name"`
 	} `xml:"author"`

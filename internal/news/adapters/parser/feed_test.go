@@ -121,7 +121,7 @@ func TestFeedEntryContentLayersKeepSummaryAndBodySeparate(t *testing.T) {
 	if layers.ProviderSummary != "Provider 搜索摘要" || layers.SourceSummary != "来源摘要" || layers.SourceSummaryOrigin != "feed_summary" {
 		t.Fatalf("layers=%+v", layers)
 	}
-	if layers.Body == nil || layers.Body.Text != "<p>Feed 正文</p>" || layers.Body.Origin != "feed_body" || layers.Body.Format != "unknown" || layers.Body.Kind != "" {
+	if layers.Body == nil || layers.Body.Text != "<p>Feed 正文</p>" || layers.Body.Origin != "feed_body" || layers.Body.Format != domain.ContentFormatHTMLFragment || layers.Body.Kind != "" {
 		t.Fatalf("body=%+v", layers.Body)
 	}
 }
@@ -202,21 +202,37 @@ func TestParseAtomFeedExtractsEnclosureAndIgnoresInvalidLength(t *testing.T) {
 }
 
 func TestAtomContentFormatMapping(t *testing.T) {
-	cases := []struct { name, content, want string; format domain.ContentFormat }{
+	cases := []struct {
+		name, content, want string
+		format              domain.ContentFormat
+	}{
 		{name: "default text", content: `<content>纯文本</content>`, want: "纯文本", format: domain.ContentFormatPlainText},
 		{name: "html", content: `<content type="html">&lt;p&gt;HTML&lt;/p&gt;</content>`, want: "<p>HTML</p>", format: domain.ContentFormatHTMLFragment},
 		{name: "xhtml", content: `<content type="xhtml"><div xmlns="http://www.w3.org/1999/xhtml"><p>XHTML</p></div></content>`, want: `<div xmlns="http://www.w3.org/1999/xhtml"><p>XHTML</p></div>`, format: domain.ContentFormatHTMLFragment},
 		{name: "external", content: `<content type="html" src="https://publisher.example/body"/>`, want: "", format: domain.ContentFormatUnknown},
 		{name: "unsupported media", content: `<content type="application/pdf">opaque</content>`, want: "opaque", format: domain.ContentFormatUnknown},
 	}
-	for _, tc := range cases { t.Run(tc.name, func(t *testing.T) {
-		payload := []byte(`<feed xmlns="http://www.w3.org/2005/Atom"><entry><id>id</id><title>标题</title>`+tc.content+`</entry></feed>`)
-		doc, err := ParseFeed(payload, time.Now())
-		if err != nil { t.Fatal(err) }
-		entry := doc.Entries[0]
-		if entry.Content != tc.want || entry.ContentFormat != tc.format { t.Fatalf("content=%q format=%q", entry.Content, entry.ContentFormat) }
-		layers := entry.ContentLayers("")
-		if tc.want == "" { if layers.Body != nil { t.Fatalf("unexpected body: %+v", layers.Body) }; return }
-		if layers.Body == nil || layers.Body.Format != tc.format { t.Fatalf("body=%+v", layers.Body) }
-	}) }
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			payload := []byte(`<feed xmlns="http://www.w3.org/2005/Atom"><entry><id>id</id><title>标题</title>` + tc.content + `</entry></feed>`)
+			doc, err := ParseFeed(payload, time.Now())
+			if err != nil {
+				t.Fatal(err)
+			}
+			entry := doc.Entries[0]
+			if entry.Content != tc.want || entry.ContentFormat != tc.format {
+				t.Fatalf("content=%q format=%q", entry.Content, entry.ContentFormat)
+			}
+			layers := entry.ContentLayers("")
+			if tc.want == "" {
+				if layers.Body != nil {
+					t.Fatalf("unexpected body: %+v", layers.Body)
+				}
+				return
+			}
+			if layers.Body == nil || layers.Body.Format != tc.format {
+				t.Fatalf("body=%+v", layers.Body)
+			}
+		})
+	}
 }
