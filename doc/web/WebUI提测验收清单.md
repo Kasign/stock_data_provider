@@ -2286,3 +2286,61 @@ Artifact 核验结果：
 - [ ] 完成中文字体环境修复后，再决定是否启动单页面 CSS 迁移。
 
 当前仍不执行 CSS 物理拆分。
+
+
+## 2026-11-05 CSS AST 首轮结果与共享 Selector Owner Map
+
+### AST 运行结果
+
+提交 `9cb8cded61a328bb3c3e7c95240247a4baa30444` 的 Browser Smoke 与 WebUI Checks 均成功。PostCSS 分析脚本实际解析得到：
+
+- `web/styles.css`：200,620 bytes、5,110 行。
+- 1,857 条 CSS Rule、5,511 条声明、113 个 At-rule。
+- 1,739 个唯一 selector、353 个重复 selector。
+- 18 组“相同 selector + 相同 At-rule 上下文 + 相同声明块”的精确重复候选。
+- 259 个 selector 出现声明值变体；这只代表同一 selector 的声明不完全相同，不代表最终样式冲突。必须结合 selector specificity、at-rule 条件、主题状态、源码顺序和 DOM 命中范围判断。
+
+### 统计修正
+
+首轮运行发现 selector parser 返回的 selector 字符串可能保留逗号列表分隔处的空白。分析脚本现将每个 selector 节点统一 trim() 后再归并，避免把带前导空白的 selector 误认为独立选择器。修正后的 CI 结果需以新一轮运行数据为准；首轮 1,739/353/259 作为修正前基线，不作为最终去重指标。
+
+### 共享 Selector Owner Map（逻辑归属，不等于所有覆盖规则都迁移到同一文件）
+
+| Selector | 唯一基础 Owner | 基础定义 | 已确认的覆盖/参与区域 | 处理原则 |
+|---|---|---:|---|---|
+| `.main-area` | shared-shell | 132 | 421、434、726、1066–1068、2574–2664、4503–4512 | 基础框架归 shared-shell；断点覆盖跟随共享壳层，保留现有源码顺序；feature 不得重定义宽度/侧栏偏移 |
+| `.view` | shared-shell | 163 | 436、2574–2664、4517 | 页面容器宽度、最大宽度、内边距由 shared-shell 管理；页面只管理自身内容布局 |
+| `.sidebar` | shared-shell/navigation | 59 | 421、425–429、759–805、832 | 桌面/平板/移动抽屉与亮色主题均属于导航壳层覆盖；feature 不得接管 sidebar 宽度、定位、z-index |
+| `.topbar` | shared-shell | 133 | 434、759–805、4452–4520 | 基础顶栏与窄屏尺寸由 shared-shell 管理；页面不得覆盖全局顶栏高度和布局 |
+| `.nav-link` | navigation | 88 | 428、763–805、834–835、956、1088、4475 | 导航状态、可访问性、亮色主题、折叠/抽屉适配归 navigation |
+| `.button` | shared-controls | 202 | 711、720、3262–3325、4487 及主题覆盖 | 基础尺寸、排版、通用状态归 shared-controls；业务专属按钮只允许添加局部布局，不重复定义通用基线 |
+| `.field` | shared-controls | 183 | 850–860 及各 feature 的 field 后代/容器规则 | 字段基础排版与表单控件基线归 shared-controls；业务表单布局由对应 feature 管理 |
+| `.panel` | shared-components | 170 | 848–849 及各 feature panel 容器规则 | 面板表面、边框、阴影归 shared-components；业务面板内边距/网格由 feature 管理 |
+| `.page-heading` | shared-shell | 164 | 436、2574–2664、4518、5098–5109 | 页面标题区域结构与全局响应式归 shared-shell；标题内容及按钮由页面负责 |
+| `.panel-heading` | shared-components | 268 | 2627、2646、5015–5019、5087–5094 | 面板标题公共结构归 shared-components；末尾 UIR 指定面板修正暂保留原位置 |
+
+### 层级和迁移边界
+
+1. tokens/base：`:root`（1–51）、reset/通用元素（52–57）及 body 基础定义。body 可读性修正（706、3257）仍影响全局，不应误判为 feature 样式。
+2. shared-shell/navigation：侧栏、顶栏、主内容区、视图容器、导航项、页面标题及全局断点覆盖。逻辑归属同一 Owner，不代表迁移时可以改变其相对主题和 feature 规则的级联位置。
+3. shared-controls/components：按钮、字段、面板、面板标题。业务后代选择器（如 `.settings-connection-form .field`）仍由对应 feature 管理，不因包含 `.field` 就整体划给 shared-controls。
+4. theme/accessibility：亮色主题从 810 开始；移动导航状态及 reduced-motion 位于 759–808；`:focus-visible` 与 `[hidden]` 基础状态在 56–57。主题覆盖必须在基础样式之后生效。
+5. feature owners：Run Flow、Settings、Chat、Screening、Alerts、Research、Market、Watchlist 等以现有注释锚点作为候选 owner。若 selector 同时命中共享壳层和页面节点，必须拆分责任，不能整段迁移。
+6. late overrides：2574 之后的布局统一、4452 之后的工作台基线、5008–5109 的 UIR 修正包含跨页面或特定组件的后置规则。当前不移动、不删除。
+
+### 首轮风险判断
+
+- 18 组精确重复候选包含响应式上下文内重复（例如 `.main-area` 在 max-width 600/900 条件下）；即使声明相同也不能直接删除，必须结合源码顺序判断。
+- 259 个声明变体中，`:root`、`body`、`.sidebar`、`.main-area`、`.view`、`.topbar`、`.nav-link` 等共享选择器受主题、断点和后置基线影响。该集合不是冲突清单。
+- 低耦合候选优先从 Research 本地研究记录/报告组件、Screening 本地批量工具等页面专属规则中筛选，但必须将完整断点规则一起纳入迁移单元。
+- `.run-flow-dialog` 是非模态工作区，且通过共享 sidebar 宽度（238/67px）计算布局，属于高耦合区域，不作为首批迁移对象。
+
+### 下一步门槛
+
+- [x] PostCSS + selector parser 已接入 CI，首轮运行通过。
+- [x] 已建立共享 selector 的基础 Owner 和覆盖边界初稿。
+- [ ] selector trim 修正后的 CI 结果确认唯一/重复 selector 统计。
+- [ ] 补齐逐规则 at-rule / specificity / source-order 审查；当前声明值差异不能代替 CSS cascade 计算。
+- [ ] 选定一个低耦合 feature，使用浏览器 CSSOM 在迁移前后比对 computed styles；中文字体基线问题解决前，不做视觉像素验收或 CSS 物理迁移。
+
+**结论：Owner Map 初稿已建立，CSS 物理拆分仍未启动。**

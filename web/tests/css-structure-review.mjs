@@ -18,7 +18,7 @@ function visit(container, conditions = []) {
     }
     if (node.type === "rule") {
       const rule = {
-        selectors: selectorParser().astSync(node.selector).nodes.map((item) => item.toString()),
+        selectors: selectorParser().astSync(node.selector).nodes.map((item) => item.toString().trim()),
         conditions,
         source: node.source?.start?.line ?? null,
         declarations: []
