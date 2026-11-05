@@ -33,6 +33,7 @@ const [html, appSource, format, domain, openapi, recentTaskModule, stylesheet, w
 ]);
 const settingsNavigation = await readFile(new URL("../src/settings-navigation.js", import.meta.url), "utf8");
 const recentTaskView = await readFile(new URL("../src/recent-task-view.js", import.meta.url), "utf8");
+const stockSearchView = await readFile(new URL("../src/stock-search-view.js", import.meta.url), "utf8");
 const watchlistImportPreviewView = await readFile(new URL("../src/watchlist-import-preview-view.js", import.meta.url), "utf8");
 const watchlistTrackingViewModel = await readFile(new URL("../src/watchlist-tracking-view-model.js", import.meta.url), "utf8");
 const watchlistListViewModel = await readFile(new URL("../src/watchlist-list-view-model.js", import.meta.url), "utf8");
@@ -1221,9 +1222,14 @@ test("stock-name autocomplete uses the real market API and accessible, stale-saf
   assert.match(html, /id="stock-search-results"[^>]*role="listbox"/);
   assert.match(html, /id="stock-search-status"[^>]*role="status"/);
   assert.match(apiClient, /export function searchStocks\(/);
+  assert.match(appSource, /import \{ normalizeStockSearchItems, renderStockSearchResultsView, updateStockSearchActiveOptionView \} from "\.\/stock-search-view\.js"/);
   assert.match(app, /function scheduleStockSearch\(\)/);
   assert.match(app, /new AbortController\(\)/);
   assert.match(app, /generation !== state\.stockSearchGeneration/);
+  assert.match(stockSearchView, /export function normalizeStockSearchItems/);
+  assert.match(stockSearchView, /export function renderStockSearchResultsView/);
+  assert.match(stockSearchView, /export function updateStockSearchActiveOptionView/);
+  assert.doesNotMatch(stockSearchView, /localStorage|fetch\s*\(|AbortController|setTimeout|state\./);
   assert.match(app, /addEventListener\("compositionstart"/);
   assert.match(app, /addEventListener\("compositionend"/);
   assert.match(app, /function chooseStockSearchResult\(/);

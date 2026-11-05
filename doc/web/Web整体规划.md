@@ -1068,16 +1068,3 @@ app.js 仅负责两处初始化装配；页面路由 `setView`、hashchange、�
 首轮 WebUI Checks 的 455 项测试中有 1 项失败，原因是原 UI contract 仍检查 app.js 内联函数；已改为检查 `section-navigation.js` 的真实行为边界。修正后的最终提交对应 455/455 全通过。首轮失败记录保留，不作为最终验收依据。
 
 下一步：盘点 app.js 剩余页面初始化和全局事件绑定，区分真正闭合的 DOM 行为与依赖全局状态/事务的协调入口；不迁移 `setView`、storage event 总路由、连接配置应用或 Task/Run 请求生命周期。
-
-
-### 2026-11-05 JSR-6E：app.js 页面路由与全局事件所有权审查（审查完成，无代码迁移）
-
-复核 `setView`、`handleLocalStorageChange`、页面初始化、hashchange、全局 keydown/resize，以及 app.js 底部集中绑定的业务事件。
-
-- [x] `setView` 同时协调 view 状态、设置密钥显隐、分组控件、页面刷新、问股上下文、Run Flow dialog、页面显隐、导航 aria 状态、标题、焦点和 hash；它是应用级路由/跨域协调入口，继续留在 app.js。
-- [x] `handleLocalStorageChange` 是主题、偏好、自选、分组、最近任务、研究记录、告警和通知等多个模块的总路由；各领域模块已有独立 storage handler，不再创建第二层总线。
-- [x] 页面业务事件绑定直接引用 app state、存储事务、请求 generation/AbortController 和跨模块回调。将其整体迁入 event-bus/controller 需要大量参数注入并改变状态所有权，本轮不迁移。
-- [x] 全局 keydown 同时处理 Escape、模态 dialog 焦点循环和移动端侧栏 Tab 焦点循环；resize 与移动端导航开合联动，不能拆成单纯 DOM listener。
-- [x] 已在 JSR-6D 将唯一闭合且被多页复用的区块导航行为迁入 `section-navigation.js`；剩余全局入口未发现安全且收益明确的独立边界。
-
-结论：本轮不创建 `app-events.js`、`app-router.js` 或全局 Controller。下一步应从 app.js 的具体业务域状态读取/展示入口继续盘点，优先寻找可纯计算或可通过少量显式参数隔离的 DOM adapter；全局路由、storage 总路由和请求/事务所有权继续留在 app.js。

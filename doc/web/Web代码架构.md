@@ -582,17 +582,3 @@ app.js 继续拥有筛选条件和结果快照、`isCurrentScreeningSnapshot`、
 页面级路由 `setView`、hashchange、移动端导航、全局 Escape/Tab 处理和业务事件仍由 app.js 持有；本次只迁移闭合的区块导航行为，不改变页面状态和业务请求。
 
 单测覆盖导航点击后的滚动/焦点/aria-current、减少动态效果、目标缺失安全退出，以及根据全部可见目标重算当前高亮。最终验收：WebUI Checks #41949111706（455/455 tests、语法、Compose、镜像构建通过）；Chromium Browser Smoke #41949111694（所有步骤通过）。
-
-
-### 12.25 JSR-6E app.js 页面路由与全局事件所有权审查
-
-| 能力 | 当前职责 | 边界结论 |
-|---|---|---|
-| `setView` | view state、页面显隐、导航 aria、标题/hash、焦点、页面刷新和跨域联动 | 应用级路由协调；保留在 app.js |
-| `handleLocalStorageChange` | 多个领域模块 storage event 的总路由及 app 级刷新 | 保留唯一总路由；领域模块继续处理各自数据冲突 |
-| 业务事件绑定 | 直接操作 state、localStorage、API、请求代际、事务和跨模块回调 | 不整体迁入 event bus/controller，避免大规模依赖注入和状态所有权转移 |
-| 全局 keydown | Escape 处理、dialog 焦点循环、移动端侧栏 Tab 焦点循环 | 与 dialog 和移动端导航状态耦合，保留在 app.js |
-| resize/hashchange | 移动端侧栏收起、页面路由同步 | 属于应用生命周期入口，保留在 app.js |
-| 区块滚动导航 | 设置页/研究页的闭合区块定位和高亮 | 已迁入 `section-navigation.js`，由 app 初始化装配 |
-
-app.js 当前约 5.5k 行，事件监听约 88 处。数量本身不构成拆分依据；多数 handler 直接参与业务状态、存储事务、请求生命周期和页面刷新。JSR-6E 未修改运行时代码，也未创建全局事件总线或路由 Controller。

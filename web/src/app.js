@@ -3,6 +3,7 @@ import { DEFAULT_PREFERENCES, PREFERENCES_KEY, WATCHLIST_DISPLAY_FIELDS, normali
 import { connectionDraftChanged, mergeConnectionDraft } from "./settings-draft.js";
 import { setupSettingsNavigation } from "./settings-navigation.js";
 import { setupSectionNavigation } from "./section-navigation.js";
+import { normalizeStockSearchItems, renderStockSearchResultsView, updateStockSearchActiveOptionView } from "./stock-search-view.js";
 import { syncPreferencesControls } from "./settings-preferences-view.js";
 import { resolveNotificationViewState } from "./notification-state.js";
 import { resolveChatViewState } from "./chat-state.js";
@@ -1132,55 +1133,23 @@ function setStockSearchMessage(message, { show = true } = {}) {
 }
 
 function updateStockSearchActiveOption() {
-  const input = $("#symbol-input");
-  const results = $("#stock-search-results");
-  if (!input || !results) return;
-  const options = results.querySelectorAll("[data-stock-search-index]");
-  options.forEach((option, index) => {
-    option.setAttribute("aria-selected", String(index === state.stockSearchActiveIndex));
+  updateStockSearchActiveOptionView({
+    input: $("#symbol-input"),
+    root: $("#stock-search-results"),
+    activeIndex: state.stockSearchActiveIndex
   });
-  const active = results.querySelector('[aria-selected="true"]');
-  if (active) {
-    input.setAttribute("aria-activedescendant", active.id);
-    active.scrollIntoView?.({ block: "nearest" });
-  } else {
-    input.removeAttribute("aria-activedescendant");
-  }
 }
 
 function renderStockSearchResults(items, stale = false) {
   const root = $("#stock-search-results");
   if (!root) return;
-  root.replaceChildren();
-  state.stockSearchResults = Array.isArray(items) ? items.filter((item) =>
-    item && typeof item.symbol === "string" && typeof item.code === "string"
-    && typeof item.name === "string" && typeof item.exchange === "string"
-  ) : [];
+  state.stockSearchResults = normalizeStockSearchItems(items);
   state.stockSearchActiveIndex = -1;
-  state.stockSearchResults.forEach((item, index) => {
-    const option = document.createElement("button");
-    option.type = "button";
-    option.className = "stock-search-option";
-    option.id = "stock-search-option-" + state.stockSearchGeneration + "-" + index;
-    option.dataset.stockSearchIndex = String(index);
-    option.setAttribute("role", "option");
-    option.setAttribute("aria-selected", "false");
-
-    const main = document.createElement("span");
-    main.className = "stock-search-option-main";
-    const name = document.createElement("span");
-    name.className = "stock-search-option-name";
-    name.textContent = item.name;
-    const symbol = document.createElement("span");
-    symbol.className = "stock-search-option-symbol";
-    symbol.textContent = item.symbol;
-    main.append(name, symbol);
-
-    const exchange = document.createElement("span");
-    exchange.className = "stock-search-option-exchange";
-    exchange.textContent = item.exchange;
-    option.append(main, exchange);
-    root.append(option);
+  renderStockSearchResultsView({
+    document,
+    root,
+    items: state.stockSearchResults,
+    generation: state.stockSearchGeneration
   });
   const status = stale
     ? "证券目录刷新暂时失败，以下为缓存目录结果，请留意数据时效。"
