@@ -102,6 +102,7 @@ const RUN_RESULT_RETRY_DELAYS_MS = [1000, 2500, 5000];
 let initialConnectionDraft = null;
 let serviceRefreshGeneration = 0;
 let sourceRefreshGeneration = 0;
+let sourceRefreshController = null;
 let savedConnectionCheckGeneration = 0;
 let draftConnectionCheckGeneration = 0;
 let pendingBrowserImport = null;
@@ -2547,8 +2548,40 @@ async function checkDraftConnectionFromSettings() {
 }
 
 
+function invalidateSourceRefresh(message = "连接配置已变更，旧的数据源能力结果已作废，请重新读取。") {
+  sourceRefreshGeneration += 1;
+  const controller = sourceRefreshController;
+  sourceRefreshController = null;
+  try { controller?.abort(); } catch {}
+  try {
+    const list = $("#data-source-list");
+    if (list) {
+      const hint = document.createElement("div");
+      hint.className = "empty-row";
+      hint.textContent = message;
+      list.replaceChildren(hint);
+    }
+    setText("#source-count", "—");
+    setText("#normalization-version", "归一化版本 —");
+    state.sourceCount = 0;
+  } catch {
+    // 连接代际先失效；局部 DOM 不可用不能让旧响应重新生效。
+  }
+  try {
+    const button = $("#reload-sources");
+    if (button) {
+      button.disabled = false;
+      button.removeAttribute("aria-busy");
+      button.textContent = "刷新 ↻";
+    }
+  } catch {}
+}
+
 async function refreshSources() {
   const generation = ++sourceRefreshGeneration;
+  try { sourceRefreshController?.abort(); } catch {}
+  const controller = new AbortController();
+  sourceRefreshController = controller;
   const settings = state.settings;
   let button = null;
   let list = null;
@@ -2600,8 +2633,8 @@ async function refreshSources() {
       return;
     }
 
-    const payload = await getDataSources(settings);
-    if (generation !== sourceRefreshGeneration) return;
+    const payload = await getDataSources(settings, controller.signal);
+    if (controller.signal.aborted || generation !== sourceRefreshGeneration) return;
     try {
       renderSources(payload);
     } catch (error) {
@@ -2610,7 +2643,7 @@ async function refreshSources() {
       showMessage("数据源能力已读取，但页面渲染失败：" + message, "empty-row error-text");
     }
   } catch (error) {
-    if (generation !== sourceRefreshGeneration) return;
+    if (controller.signal.aborted || generation !== sourceRefreshGeneration) return;
     let message = "未知异常";
     try { message = errorMessage(error); } catch {}
     showMessage(message, "empty-row error-text");
@@ -2618,7 +2651,8 @@ async function refreshSources() {
     setSourceTextSafely("#normalization-version", "归一化版本 —");
     state.sourceCount = 0;
   } finally {
-    if (generation === sourceRefreshGeneration) {
+    if (generation === sourceRefreshGeneration && sourceRefreshController === controller) {
+      sourceRefreshController = null;
       try {
         if (!button) button = $("#reload-sources");
         if (button) {
@@ -4264,6 +4298,7 @@ function applySettings(nextSettings, { persistPreviousActiveTask = true } = {}) 
   }
 
   if (marketConnectionChanged) {
+    runSettingsApplyStep("失效数据源能力读取失败：", () => invalidateSourceRefresh(), failures);
     runSettingsApplyStep("失效自选股批量行情失败：", () => invalidateWatchlistQuotes(), failures);
     runSettingsApplyStep("失效市场总览请求失败：", () => marketOverview.invalidateConnection(), failures);
     runSettingsApplyStep("失效市场活动请求失败：", () => marketActivity.invalidateConnection(), failures);

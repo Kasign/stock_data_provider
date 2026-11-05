@@ -277,7 +277,7 @@ test("数据源能力刷新初始化或最终解锁异常不会产生未处理 r
   assert.match(refresh, /let button = null;[\s\S]*?let list = null;[\s\S]*?try \{/);
   assert.match(refresh, /showMessage\("正在读取当前连接配置对应的数据源能力…"/);
   assert.match(refresh, /try \{\s*if \(button\) \{\s*button\.disabled = true;[\s\S]*?catch \{/);
-  assert.match(refresh, /const payload = await getDataSources\(settings\);[\s\S]*?generation !== sourceRefreshGeneration/);
+  assert.match(refresh, /const payload = await getDataSources\\(settings, controller.signal\\);[\\s\\S]*?controller.signal.aborted \\|\\| generation !== sourceRefreshGeneration/);
   assert.match(refresh, /catch \(error\) \{\s*if \(generation !== sourceRefreshGeneration\) return;[\s\S]*?showMessage\(message, "empty-row error-text"\)/);
   assert.match(refresh, /finally \{[\s\S]*?if \(generation === sourceRefreshGeneration\) \{[\s\S]*?try \{[\s\S]*?button\.disabled = false;[\s\S]*?catch \{/);
 });
@@ -759,6 +759,9 @@ test("market connection changes invalidate all in-flight stock-research panels",
 test("service health and provider-list refreshes ignore superseded responses", () => {
   assert.match(app, /let serviceRefreshGeneration = 0;/);
   assert.match(app, /let sourceRefreshGeneration = 0;/);
+  assert.match(app, /let sourceRefreshController = null;/);
+  assert.match(app, /function invalidateSourceRefresh\\([\\s\\S]*?sourceRefreshGeneration \\+= 1;[\\s\\S]*?controller\\?\\.abort\\(\\)/);
+  assert.match(app, /function applySettings\\([\\s\\S]*?runSettingsApplyStep\\("失效数据源能力读取失败：", \\(\\) => invalidateSourceRefresh\\(\\), failures\\)/);
   assert.match(app, /async function refreshServices\(\) \{[\s\S]*?const generation = \+\+serviceRefreshGeneration;[\s\S]*?if \(generation !== serviceRefreshGeneration\) \{\s*return \{ marketOK, analysisOK, marketState, analysisState, stale: true \};\s*\}/);
   assert.match(app, /async function refreshSources\(\) \{[\s\S]*?const generation = \+\+sourceRefreshGeneration;[\s\S]*?if \(generation !== sourceRefreshGeneration\) return;/);
   assert.match(app, /if \(generation !== serviceRefreshGeneration\) \{\s*return \{ marketOK, analysisOK, marketState, analysisState, stale: true \};\s*\}[\s\S]*?setText\("#connection-label", connectionLabel\)/);
