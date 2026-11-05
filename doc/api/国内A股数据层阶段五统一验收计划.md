@@ -229,3 +229,6 @@
 - 前复权参考因子按 `OperateDate <= requestedReferenceDate` 选最新事件，参考日期不得早于最新 raw K；后复权按每根 K 的最近事件因子计算。
 - current 仍允许 AvailableAt nil，但必须有持久化 SystemObservedAt，输出保留 degraded；PIT 仍要求 AvailableAt 有证据。
 - 新增事件因子日期向后对齐、跨源/跨证券拒绝、首因子之前日期拒绝及 current/PIT 可见性测试。当前 helper 未接入普通 DailyBars，等待 CI 与真实复权对账。
+
+
+- 防御性补充：current helper 即使收到错误标记为 `valid` 但 `AvailableAt=nil` 的因子，也会强制降级并写入 `provider_available_at_unknown`；PIT 仍直接排除该因子。回归测试验证该防御，而不是依赖 Provider 一定正确标记 QualityStatus。

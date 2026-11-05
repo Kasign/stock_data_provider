@@ -37,14 +37,14 @@ func TestRebuildAdjustedDailyBarsPrefersMatchingFactorBasis(t *testing.T) {
 		factor("2025-06-30", 5, model.AdjustmentFactorBackward),
 		factor("2025-07-01", 10, model.AdjustmentFactorBackward),
 	}
-	forward, err := rebuildAdjustedDailyBars(raw, factors, model.AdjustmentForward, "2025-07-01")
+	forward, err := rebuildAdjustedDailyBars(raw, factors, model.AdjustmentForward, "2025-07-02")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if forward[0].Close != 5 || forward[1].Close != 20 || forward[2].Close != 30 {
 		t.Fatalf("forward rebuild must carry the latest event factor across dates: got closes %.4f, %.4f, %.4f", forward[0].Close, forward[1].Close, forward[2].Close)
 	}
-	backward, err := rebuildAdjustedDailyBars(raw, factors, model.AdjustmentBackward, "2025-07-01")
+	backward, err := rebuildAdjustedDailyBars(raw, factors, model.AdjustmentBackward, "2025-07-02")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -68,7 +68,7 @@ func TestRebuildAdjustedDailyBarsKeepsSharedFactorFallback(t *testing.T) {
 		SystemObservedAt: &observed,
 		QualityStatus:    model.QualityValid,
 	}}
-	got, err := rebuildAdjustedDailyBars(raw, factors, model.AdjustmentForward, "2025-07-01")
+	got, err := rebuildAdjustedDailyBars(raw, factors, model.AdjustmentForward, "2025-07-02")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -128,7 +128,7 @@ func TestRebuildAdjustedDailyBarsCurrentAllowsUnknownAvailabilityButKeepsDegrade
 	factor := model.AdjustmentFactor{
 		Symbol: "600036.SH", TradeDate: "2025-07-01", Factor: 2, Basis: model.AdjustmentFactorForward,
 		Source: "baostock", SourceVersion: "baostock-test-v1", FetchedAt: fetched,
-		SystemObservedAt: &observed, QualityStatus: model.QualityDegraded,
+		SystemObservedAt: &observed, QualityStatus: model.QualityValid,
 		QualityReasons: []string{"provider_available_at_not_exposed_by_query_adjust_factor"},
 	}
 	got, err := rebuildAdjustedDailyBarsCurrent(raw, []model.AdjustmentFactor{factor}, model.AdjustmentForward, "2025-07-01")
@@ -137,7 +137,8 @@ func TestRebuildAdjustedDailyBarsCurrentAllowsUnknownAvailabilityButKeepsDegrade
 	}
 	if got[0].Close != 10 || got[0].AdjustmentRefDate != "2025-07-01" ||
 		got[0].QualityStatus != model.QualityDegraded ||
-		!containsReason(got[0].QualityReasons, "adjustment_factor_reference_quality_degraded") {
+		!containsReason(got[0].QualityReasons, "adjustment_factor_reference_quality_degraded") ||
+		!containsReason(got[0].QualityReasons, "adjustment_factor_reference:provider_available_at_unknown") {
 		t.Fatalf("current rebuild must preserve unknown availability as degraded: %+v", got[0])
 	}
 	if _, err := rebuildAdjustedDailyBarsPIT(raw, []model.AdjustmentFactor{factor}, model.AdjustmentForward, "2025-07-01"); err == nil {
