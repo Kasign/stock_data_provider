@@ -480,3 +480,10 @@ PriceLimitRule Handler 直接写出 PriceLimitRuleSnapshot。Go PriceLimitEventE
 Data 最新 HEAD 为 `0afec7ead92672ce9c68a7a8f419990471e01620`（复权因子持久化链路审查文档），相较 cce59e8 ahead 1 / behind 0；只改动 doc/api 与接口协作文档，没有修改 OpenAPI、Handler、Model 或 Service。
 
 最新 SHA 的 Go test suite in_progress、Go-Python parity cancelled、WebUI checks success、Live provider probe success。Parity cancelled 不能视为通过，Go test suite 未完成前不能标记全绿。静态字段结论仍适用，GOV-004 继续 NO-GO。
+
+
+## 24. Data 最新审查基线更新至 1358847（2026-11-05）
+
+Data 最新 HEAD 为 `13588476d000ebeee801e8b7a782fc6678f25dd4`，相较 0afec7e ahead 1 / behind 0。提交只修改 Data/API 规划与 WebUI 协作文档，未修改 OpenAPI、Handler、Model 或 Service；第 20、22 节静态结论仍适用。
+
+该 SHA 的 WebUI checks、Live provider probe、Go-Python parity 均成功；Go test suite run `42018997889` 仍 in_progress。不能把当前 SHA 标记为 CI 全绿。
