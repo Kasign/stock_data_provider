@@ -2880,3 +2880,14 @@ test("UIR-2 table white-space behavior is inherited from the shared table baseli
   assert.match(stylesheet, /\.market-overview-table-scroll td \{\s*vertical-align:middle\s*\}/);
   assert.match(stylesheet, /\.market-activity-table td \{\s*vertical-align:middle\s*\}/);
 });
+
+
+test("UIR-2 shared table scrollers contain horizontal chaining and enable touch momentum", () => {
+  const tableScroller = baseCssDeclarationBlock(".table-scroll");
+  assert.match(tableScroller, /overflow-x:\s*auto\s*;/);
+  assert.match(tableScroller, /overscroll-behavior-x:\s*contain\s*;/);
+  assert.match(tableScroller, /-webkit-overflow-scrolling:\s*touch\s*;/);
+  const activityScroller = baseCssDeclarationBlock(".market-activity-table");
+  assert.match(activityScroller, /overscroll-behavior:\s*contain\s*;/);
+  assert.doesNotMatch(activityScroller, /-webkit-overflow-scrolling:/);
+});

@@ -1890,3 +1890,13 @@ CI 复核记录：本批首次 Chromium Browser Smoke 在个股研究数据质�
 - [x] 新增 UI contract 锁定共享 nowrap 基线及组件垂直对齐规则。
 - [ ] 在本批最终提交 SHA 上运行 WebUI Checks、JavaScript 语法检查、Compose 校验和 Nginx 镜像构建。
 - [ ] 执行 Chromium Browser Smoke，重点核验行情总览、研究列表及市场活动表格在 320/375/600/768/900/1280/1600px 下的横向滚动、长文本和列对齐。
+
+
+## 2026-11-05 UIR-2 第五十批：表格横向滚动体验统一
+
+- [x] 在共享 `.table-scroll` 增加 `overscroll-behavior-x: contain`，避免横向滚动链传递到页面或外层容器。
+- [x] 在共享 `.table-scroll` 启用 `-webkit-overflow-scrolling: touch`，统一移动端惯性滚动体验。
+- [x] 删除市场活动表格重复的触控惯性滚动声明；保留其 `overscroll-behavior: contain`，继续隔离横纵向滚动链。
+- [x] 新增 UI contract 锁定共享滚动行为及市场活动容器的额外隔离规则。
+- [ ] 在本批最终提交 SHA 上运行 WebUI Checks、JavaScript 语法检查、Compose 校验和 Nginx 镜像构建。
+- [ ] 执行 Chromium Browser Smoke，并在触屏设备及 320/375/600px 视口检查行情总览、全市场列表、研究列表、数据中心结果表格的横向滚动与页面纵向滚动是否互不干扰。
