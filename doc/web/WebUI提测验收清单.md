@@ -1630,3 +1630,17 @@ CI 复核记录：本批首次 Chromium Browser Smoke 在个股研究数据质�
 - [x] WebUI Checks #41951798439：458/458 tests、语法检查和镜像构建通过。
 - [x] Chromium Browser Smoke #41951798471：所有浏览器验收步骤通过。
 - [x] 代码提交 `b399077ad6d85cdb84981e40b4c44dd5d6797916`；最终测试提交 `e360ed1c3feda57425e74183218731d1f7415e53`。
+
+
+## 2026-11-05 JSR-6J：页面隐藏与 BFCache 恢复（已验收）
+
+- [x] SPA 页面切换不停止 Task 自动跟踪。
+- [x] 浏览器标签页 hidden 时，取消在途 Task/阶段事件请求并清除轮询 timer，保留任务上下文和事件游标。
+- [x] visible 恢复时，仅恢复此前因页面生命周期暂停的任务轮询。
+- [x] pollTaskSafely 增加 hidden 兜底，防止隐藏状态继续发起请求。
+- [x] BFCache persisted pagehide/pageshow 与 visibilitychange 事件去重。
+- [x] 生命周期 adapter 测试覆盖事件去重、BFCache 和 listener cleanup。
+- [x] 已发起的一次性市场/研究/数据中心请求在 hidden 时完成，仍允许提交有效结果；不做全局 abort 或丢弃。
+- [x] WebUI Checks #41952755042：462/462 tests、语法检查和容器构建通过。
+- [x] Chromium Browser Smoke #41952755015：所有验收步骤通过。
+- [x] 代码提交 `df4f0ebf5ba3b680c6902d01987b98411d9bb189`。

@@ -1144,3 +1144,27 @@ app.js 仅负责两处初始化装配；页面路由 `setView`、hashchange、�
 - Chromium Browser Smoke #41951798471：响应式布局、跨标签同步、自选行情、Run Flow、个股研究、数据中心、选股和全市场分页验收全部通过。
 
 下一步：JSR-6J 对刷新/请求生命周期的边界做收尾复核，重点检查页面恢复（BFCache/pageshow）与离开页面时的请求行为是否需要明确策略；不默认引入定时刷新或页面可见性刷新。
+
+
+### 2026-11-05 JSR-6J：页面隐藏与 BFCache 恢复策略（已验收）
+
+审查结论：
+- SPA 内部切换页面不停止 Task 轮询。任务跟踪与当前 view 解耦，用户切到行情/自选/设置仍应持续跟踪。
+- 浏览器标签页进入 hidden 状态时，若当前任务存在待执行轮询定时器或正在执行的轮询请求，则暂停该轮询：先保留任务 ID、Run ID、事件游标和已接收事件，再递增轮询代际、清除定时器并 abort 在途 Task/事件请求。
+- 页面重新 visible 时，仅恢复此前因页面生命周期暂停的任务轮询，立即读取服务端状态和事件；不会对已结束/永久失败且本来已停止的任务无条件重启。
+- `pollTaskSafely` 增加 hidden 兜底：即使定时器在浏览器完成 visibilitychange 处理前触发，也不会在隐藏页面继续发请求。
+- BFCache `pagehide/pageshow` 仅在 `event.persisted` 时参与暂停/恢复；与 visibilitychange 可能重叠，生命周期 adapter 对重复 pause/resume 去重。
+- 页面销毁（非 BFCache pagehide）不额外写入持久化状态；浏览器恢复页面时由正常启动或 BFCache 恢复路径处理。
+- 市场总览、市场活动、行情查询、个股研究、数据中心均无周期性后台轮询。它们已发起的一次性请求即使在标签页隐藏后完成，仍可提交有效状态/DOM 结果；不做隐藏即丢弃，避免页面恢复后丢失结果或引入额外重查。任务轮询在途请求则因高频和可续读游标而主动取消。
+- 不暂停服务端任务本身；只暂停浏览器端读取频率。SPA 导航、任务创建/切换、连接变更和手动刷新仍沿用现有代际与取消机制。
+
+实施：
+- 新增 `web/src/task-poll-lifecycle.js`，仅负责 visibilitychange/pagehide/pageshow 生命周期事件去重与解绑。
+- app.js 保留 Task 状态、请求 controller、generation、事件游标和暂停/恢复决策。
+- 新增 4 项 lifecycle 测试，覆盖隐藏/可见去重、BFCache 事件去重、监听器解绑及 app 接线。
+- 不引入缓存、全局请求管理器或页面离开时的全量请求清理。
+
+验收：
+- 代码提交：`df4f0ebf5ba3b680c6902d01987b98411d9bb189`。
+- WebUI Checks #41952755042：462/462 tests 通过，语法检查及容器构建通过。
+- Chromium Browser Smoke #41952755015：响应式与全部跨标签/业务交互验收步骤通过。

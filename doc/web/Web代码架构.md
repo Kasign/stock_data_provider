@@ -659,3 +659,18 @@ API client 会把调用方 AbortSignal 与超时 controller 合并，再传给 f
 `refreshSources` 现在在启动新读取时先 abort 旧 controller，并将 signal 传给 `getDataSources`。响应和错误处理均检查 aborted/generation；finally 仅由当前 generation 且仍持有 controller 的请求恢复按钮。行情连接变化调用 `invalidateSourceRefresh`，先递增 generation 并 abort，再清理旧能力列表/计数和 busy 状态，防止旧连接结果回写。
 
 本轮没有建立全局缓存或统一刷新队列。手动刷新按钮已有 busy 锁；设置应用触发的健康检查和当前页刷新属于显式配置生效动作，不视为无意义重复。最终验收 458/458 tests；WebUI Checks #41951798439、Chromium Browser Smoke #41951798471 均通过。代码提交 `b399077ad6d85cdb84981e40b4c44dd5d6797916`，最终契约测试基线 `e360ed1c3feda57425e74183218731d1f7415e53`。
+
+
+### 12.30 JSR-6J 页面隐藏与 BFCache 生命周期
+
+新增 `task-poll-lifecycle.js` 作为浏览器生命周期事件 adapter；它只负责监听/去重，不持有 Task 业务状态。app.js 继续拥有 taskId、pollGeneration、pollTimer、pollController、事件游标及请求取消逻辑。
+
+行为约定：
+1. SPA view 切换不暂停 Task 轮询。
+2. document.hidden 时，若任务轮询有 timer 或 controller，保留任务上下文和事件游标，停止 timer、abort 在途请求并递增 generation。
+3. visible 恢复时，仅对 visibility 生命周期明确暂停过的任务立即重新读取；任务切换/连接切换/永久错误等主动 stop 语义不因恢复事件而重启。
+4. pollTaskSafely 在隐藏状态下提供第二道保护，避免隐藏期间 timer 回调继续发请求。
+5. BFCache 只处理 persisted pagehide/pageshow；与 visibilitychange 重叠的暂停/恢复由 adapter 去重。
+6. 市场模块没有周期性后台请求。已启动的一次性行情/研究/数据中心请求若在 hidden 期间完成，仍提交有效结果，不做全局丢弃；Task 高频轮询则取消并依靠事件 cursor 恢复。
+
+测试：生命周期 adapter 覆盖 hidden/visible 去重、BFCache pagehide/pageshow、监听器解绑；app contract 检查 pause/resume 接线和 hidden 兜底。462/462 tests、语法与容器构建通过；Browser Smoke 全部步骤通过。代码提交 `df4f0ebf5ba3b680c6902d01987b98411d9bb189`，WebUI Checks #41952755042，Chromium Browser Smoke #41952755015。
