@@ -1039,10 +1039,13 @@ func TestLiveProviderProbe(t *testing.T) {
 			result.SampleBars = append([]model.DailyBar(nil), bars...)
 		default:
 			result.Status = "returned"
-			// Providers normally return rows in ascending date order. Keep the newest three samples in the report.
-			first := len(bars) - 3
-			if first < 0 {
-				first = 0
+			// 历史窗口探测保留完整样本以便离线对账；常规近期探测仍只保留最新三条。
+			first := 0
+			if dailyLimit <= 8 {
+				first = len(bars) - 3
+				if first < 0 {
+					first = 0
+				}
 			}
 			result.SampleBars = append([]model.DailyBar(nil), bars[first:]...)
 		}
