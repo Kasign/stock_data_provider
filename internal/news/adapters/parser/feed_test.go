@@ -272,25 +272,60 @@ func TestFeedAttachmentMetadataBoundaries(t *testing.T) {
 	}
 }
 
-func int64Pointer(value int64) *int64 { return &value }
+func int64Pointer(value int64) *int64 {
+	return &value
+}
 
 func sameOptionalInt64(left, right *int64) bool {
-	if left == nil || right == nil { return left == nil && right == nil }
+	if left == nil || right == nil {
+		return left == nil && right == nil
+	}
 	return *left == *right
 }
 
 func equalStrings(left, right []string) bool {
-	if len(left) != len(right) { return false }
-	for i := range left { if left[i] != right[i] { return false } }
+	if len(left) != len(right) {
+		return false
+	}
+	for i := range left {
+		if left[i] != right[i] {
+			return false
+		}
+	}
 	return true
 }
 
 func TestFeedBodyAndAttachmentRemainSeparate(t *testing.T) {
 	payload := []byte(`<rss version="2.0" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><item><title>公告</title><description>摘要</description><content:encoded><![CDATA[<p>正文</p>]]></content:encoded><enclosure url="https://publisher.example/report.pdf" type="application/pdf" length="10"/></item></channel></rss>`)
 	doc, err := ParseFeed(payload, time.Now())
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	entry := doc.Entries[0]
 	layers := entry.ContentLayers("")
-	if layers.Body == nil || layers.Body.Text != "<p>正文</p>" || layers.SourceSummary != "摘要" { t.Fatalf("layers=%+v", layers) }
-	if len(entry.Attachments) != 1 || entry.Attachments[0].URL != "https://publisher.example/report.pdf" { t.Fatalf("attachments=%+v", entry.Attachments) }
+	if layers.Body == nil || layers.Body.Text != "<p>正文</p>" || layers.SourceSummary != "摘要" {
+		t.Fatalf("layers=%+v", layers)
+	}
+	if len(entry.Attachments) != 1 || entry.Attachments[0].URL != "https://publisher.example/report.pdf" {
+		t.Fatalf("attachments=%+v", entry.Attachments)
+	}
+}
+
+func TestAtomFeedBodyAndAttachmentRemainSeparate(t *testing.T) {
+	payload := []byte(`<feed xmlns="http://www.w3.org/2005/Atom"><entry><id>item-1</id><title>公告</title><summary>摘要</summary><content type="html">&lt;p&gt;正文&lt;/p&gt;</content><link rel="enclosure" href="" type="application/pdf" length="0"/></entry></feed>`)
+	doc, err := ParseFeed(payload, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	entry := doc.Entries[0]
+	layers := entry.ContentLayers("")
+	if layers.Body == nil || layers.Body.Text != "<p>正文</p>" || layers.SourceSummary != "摘要" {
+		t.Fatalf("layers=%+v", layers)
+	}
+	if len(entry.Attachments) != 1 || entry.Attachments[0].URL != "" || entry.Attachments[0].Length == nil || *entry.Attachments[0].Length != 0 {
+		t.Fatalf("attachments=%+v", entry.Attachments)
+	}
+	if !equalStrings(entry.Attachments[0].ValidationIssues, []string{"missing_url"}) {
+		t.Fatalf("attachment issues=%v", entry.Attachments[0].ValidationIssues)
+	}
 }
