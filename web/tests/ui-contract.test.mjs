@@ -2973,7 +2973,8 @@ test("UIR-2 technical chart legends wrap without forcing narrow chart panels wid
 test("UIR-2 research chart anchors clear the sticky section navigation", () => {
   assert.ok(stylesheet.includes(`#research-view #daily-chart-panel,
 #research-view #technical-indicators-panel,
-#research-view #historical-bars-panel {
+#research-view #historical-bars-panel,
+#research-view [id^="research-detail-"] {
   scroll-margin-top: 82px;
 }`));
   assert.ok(stylesheet.includes(".research-workspace-nav { position: sticky;"));
