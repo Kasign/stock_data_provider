@@ -1,8 +1,10 @@
 package config
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"strings"
 	"testing"
 	"time"
@@ -111,5 +113,16 @@ func TestInvalidConfigurationKeyIsIgnored(t *testing.T) {
 	env := testEnv(map[string]string{"APP TOKEN": "unexpected"})
 	if got := env.String("APP TOKEN", "fallback"); got != "fallback" {
 		t.Fatalf("invalid configuration key returned %q", got)
+	}
+}
+
+func TestSecretSlogValueIsRedacted(t *testing.T) {
+	const raw = "slog-secret-value"
+	secret := testEnv(map[string]string{"API_TOKEN": raw}).Secret("API_TOKEN")
+	var output bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&output, nil))
+	logger.Info("configured", "token", secret)
+	if strings.Contains(output.String(), raw) || !strings.Contains(output.String(), "[REDACTED]") {
+		t.Fatalf("unexpected slog output: %s", output.String())
 	}
 }

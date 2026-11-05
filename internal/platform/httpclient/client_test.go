@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"example.com/stock-analysis-flow/internal/platform/fault"
+	"example.com/stock-analysis-flow/internal/platform/observability"
 )
 
 type staticResolver struct {
@@ -397,4 +398,22 @@ func TestClientRetriesOnlyExplicitlyIdempotentRequests(t *testing.T) {
 	if calls.Load() != 2 {
 		t.Fatalf("expected one retry, got %d requests", calls.Load())
 	}
+}
+
+func TestClientPropagatesRequestIDFromContext(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+		if got := request.Header.Get(observability.RequestIDHeader); got != "upstream-trace-789" {
+			t.Errorf("request ID = %q", got)
+		}
+		_, _ = w.Write([]byte("ok"))
+	}))
+	defer server.Close()
+
+	client := newLocalTestClient(t, server, staticResolver{addresses: []netip.Addr{netip.MustParseAddr("8.8.8.8")}}, 1024, 0)
+	ctx := observability.WithRequestID(context.Background(), "upstream-trace-789")
+	response, err := client.Do(ctx, localRequest(t, server, "/request-id"), localPolicy(server))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = response.Body.Close()
 }

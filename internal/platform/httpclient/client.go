@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"example.com/stock-analysis-flow/internal/platform/fault"
+	"example.com/stock-analysis-flow/internal/platform/observability"
 )
 
 const (
@@ -191,6 +192,7 @@ func (c *Client) Do(ctx context.Context, request *http.Request, policy Destinati
 	retryEnabled := policy.Idempotent && c.config.MaxRetries > 0 && (request.Body == nil || request.GetBody != nil)
 	for attempt := 0; attempt <= c.config.MaxRetries; attempt++ {
 		current := request.Clone(requestCtx)
+		observability.PropagateRequestID(requestCtx, current)
 		if attempt > 0 && request.Body != nil {
 			body, err := request.GetBody()
 			if err != nil {

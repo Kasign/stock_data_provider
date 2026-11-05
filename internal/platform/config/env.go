@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"strconv"
 	"strings"
@@ -165,6 +166,11 @@ func (s Secret) GoString() string {
 // Format prevents fmt verbs from exposing the underlying secret.
 func (Secret) Format(state fmt.State, _ rune) {
 	_, _ = state.Write([]byte("[REDACTED]"))
+}
+
+// LogValue ensures slog never serializes the underlying secret.
+func (Secret) LogValue() slog.Value {
+	return slog.StringValue("[REDACTED]")
 }
 
 // MarshalJSON serializes only a redaction marker, never the secret.
