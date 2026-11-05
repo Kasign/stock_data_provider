@@ -158,6 +158,9 @@ func (c *Client) Do(ctx context.Context, request *http.Request, policy Destinati
 	if ctx == nil || request == nil {
 		return nil, fault.New(fault.ClassValidation, "platform.httpclient.invalid_request", "invalid HTTP request", nil)
 	}
+	if request.URL == nil {
+		return nil, fault.New(fault.ClassValidation, "platform.httpclient.invalid_request", "invalid HTTP request", nil)
+	}
 	if !validDependency(policy.Dependency) {
 		return nil, fault.New(fault.ClassValidation, "platform.httpclient.invalid_dependency", "invalid dependency identifier", nil)
 	}
@@ -166,7 +169,7 @@ func (c *Client) Do(ctx context.Context, request *http.Request, policy Destinati
 	if err := validatePolicy(policy); err != nil {
 		return nil, c.faultFor(err, policy.Dependency)
 	}
-	if request.Host != "" || request.Header.Get("Host") != "" {
+	if (request.Host != "" && !strings.EqualFold(request.Host, request.URL.Host)) || request.Header.Get("Host") != "" {
 		return nil, c.newFault(fault.ClassValidation, "platform.httpclient.custom_host_rejected", "custom Host header is not allowed", errPolicyRejected, policy.Dependency, false)
 	}
 	if err := validateURL(request.URL, policy); err != nil {
