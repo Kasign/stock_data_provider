@@ -300,3 +300,41 @@ Live Provider Probe Run `41788725692` 的 workflow conclusion 为 success，但�
 - 集成测试步骤已通过：MariaDB migration / PIT persistence 和 Probe HTTP + MariaDB end-to-end 两步均为 success。WebUI checks、Go-Python parity 通过；本次 Go test suite 其余 Job 与 Live Provider Probe 在记录时仍运行中，不能提前记为全部通过。
 
 因此，HTTP 序列化、Probe 服务执行、MariaDB 持久化、连接重建后的历史读取这一联合链路已有 CI 端到端证据。该测试使用确定性模拟 Provider，不代表真实上游复权算法已对账成功；真实 Provider 的 adjusted 基准兼容性仍需独立证据。阶段 B 暂不关闭。
+
+
+## 16. 2026-11-05：600036.SH / 002982.SZ 历史不复权日 K 样本
+
+### 16.1 样本边界与来源
+
+- GitHub Actions Live Provider Probe Run：`41950643180`。
+- 交易日期：2025-07-07 至 2025-07-17（含首尾），共 9 个交易日。
+- 股票：600036.SH（招商银行）、002982.SZ（湘佳股份）。
+- 复权口径：`none`。Provider：Sina、Tencent、Eastmoney、Yahoo。
+- 四家 Provider 对两只股票均返回 9 条，日期序列完整一致。
+
+### 16.2 数据字段与质量
+
+| Provider | 两只股票结果 | OHLC | 成交量 | 成交额 | 质量 |
+|---|---|---|---|---|---|
+| Sina | 各 9 条 | 与其他三家按分一致 | 精确股数 | 缺失 | degraded |
+| Tencent | 各 9 条 | 与其他三家按分一致 | 百股粒度 | 缺失 | degraded |
+| Eastmoney | 各 9 条 | 与其他三家按分一致 | 百股粒度 | 有值 | valid |
+| Yahoo | 各 9 条 | 与其他三家按分一致 | 精确股数 | 缺失 | degraded |
+
+- 600036.SH 与 002982.SZ 的全部 9 个交易日，四家 OHLC 均按 0.01 元精度一致。
+- Sina/Yahoo 的成交量值一致；Tencent/Eastmoney 的成交量值一致，但与 Sina/Yahoo 存在小幅股数差异，符合返回精度/粒度不同的表现，当前不把该差异折算成错误。
+- Eastmoney 的成交额字段有值，质量标记 valid；Sina、Tencent、Yahoo 没有可验证成交额字段，必须保留 null 与 degraded，不用价格×成交量推算。
+- 上述 valid/degraded 是字段质量契约结果，不代表官方基准或绝对准确性已完成验收。
+
+### 16.3 Sina 历史窗口问题与修复
+
+- 首轮请求时 Sina HTTP 200，但返回的是 2026 年近期 K 线；因请求窗口为 2025 年，既有日期校验正确拒绝了该结果。
+- 根因是 Sina 端点只接受 `datalen`，不接受结束日期；原条数估算仅覆盖目标窗口长度，无法回溯到历史日期。
+- 修正为按目标起始日到当前最新日期估算 `datalen`，并保留 1023 条安全上限；既有归一化逻辑负责按结束日期过滤。回归测试验证历史窗口会请求足够的最新行数。
+- 修复后同一 GitHub Actions Run 中，Sina 对两只股票均返回完整 9 条。
+
+### 16.4 当前结论与下一步
+
+- `none` 口径的 OHLC 跨源一致性通过本批样本核验；成交额字段质量仍为 Eastmoney valid、其他三家 degraded。
+- 该记录不是交易所官方数据对账，也未覆盖生产 Probe 的跨源比较器、交易日历、证券交易状态和 MariaDB 历史持久化链路。
+- 下一步对同样两个窗口执行 qfq/hfq，记录 method/refdate 和源端公司行为证据；不同或缺失绝对基准时保持 not_comparable，不允许仅凭 adjustment enum 相同判 matched。

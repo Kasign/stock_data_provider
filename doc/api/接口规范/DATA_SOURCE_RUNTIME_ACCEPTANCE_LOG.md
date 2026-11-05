@@ -897,3 +897,31 @@ Go suite 覆盖根模块、go-core、market-data 的格式/测试/race/vet、Mar
 - Go-Python data quality parity Run `41836540034`、WebUI checks Run `41836540427` 通过；Live Provider Probe Run `41836540261` Workflow success。
 - Live Provider Probe 为常规近期探测，没有使用历史日期窗口，不构成 2025 事件窗口真实数据验收。
 - 初轮 CI 仅发现 gofmt 格式问题，已根据 CI diff 修正；最终 SHA 自动化验证通过。真实历史数据尚未请求，阶段 B 不关闭。
+
+
+## 56. 2026-11-05 目标历史窗口不复权日 K 真实 Provider 验收
+
+### 56.1 探测入口与 Sina 回溯修复
+
+- GitHub Actions 已支持通过提交标记触发指定历史窗口探测，并可一次指定多只股票；本次窗口为 2025-07-07 至 2025-07-17，样本为 600036.SH、002982.SZ。
+- 首轮探测发现 Sina K 线端点只接受 `datalen`，不接受结束日期。原实现按目标窗口长度估算条数，导致上游返回 2026 年近期数据，历史窗口归一化后为空。
+- 修正 `sinaKlineDataLength`：历史请求按目标起始日到当前最新日期估算所需返回条数，仍受 1023 条上限保护；之后由既有归一化流程按请求结束日期过滤。增加历史窗口请求条数回归测试。
+- 历史窗口模式将完整返回行写入脱敏报告；常规近期探测仍只保留最新三条。未新增生产 API 或 Provider。
+
+### 56.2 真实请求结果
+
+- GitHub Actions Live Provider Probe Push Run：`41950643180`，Workflow conclusion success，内部探测步骤 success。
+- 请求范围：`2025-07-07..2025-07-17`；股票：`600036.SH`、`002982.SZ`；复权：`none`。
+- Sina、Tencent、Eastmoney、Yahoo 对两只股票均返回 9 条日 K，日期覆盖 2025-07-07 至 2025-07-11、2025-07-14 至 2025-07-17，未发现重复日期或窗口外日期。
+- 两只股票的 9 个交易日 OHLC 在四家 Provider 间按人民币分精度一致。
+- 成交量表现为两组：Sina/Yahoo 返回精确股数；Tencent/Eastmoney 返回以百股为粒度的数量。差异为小幅数量精度差，不应在没有来源单位证据时强制判为相同。
+- Eastmoney 9 条均为 `valid`，成交额字段可用；Sina、Tencent、Yahoo 因源端没有可验证成交额字段，9 条均为 `degraded`，成交额保持 null，不进行推算。
+- 本次 002982 的 Eastmoney 请求曾出现一次 EOF；后续合并窗口探测成功返回 9 条。前次 EOF 作为瞬时连接关闭记录，不覆盖最终成功结果。
+
+### 56.3 验收边界
+
+- 本次证明四家 Provider 在这两个目标窗口能取回完整 9 条未复权日 K，并且 OHLC 有跨源一致性证据；不等于已获得交易所/官方基准数据，也不构成绝对数据准确性证明。
+- 本次使用 Provider 真实请求测试入口及其行契约检查，不等同于生产 `POST /api/v1/data-sources/probe` 完整执行；尚未通过生产 Probe 链路完成 CrossProviderDailyCompare、TradingCalendar、SecurityTradingStatus 和 MariaDB 历史持久化的真实窗口联验。
+- 未测试 qfq/hfq、复权参考日期、复权因子及公司行为。阶段 B 继续 in_progress，不关闭。
+- 下一步：以这两个窗口继续执行 qfq/hfq 最小真实请求，保留每条 K 线的 `AdjustmentMethod`、`AdjustmentRefDate`；仅在比较器确认同一绝对基准后才允许 matched。随后再通过生产 Probe 历史日期选项补齐交易上下文与持久化联验。
+- 最新代码 SHA：`23365dd16b39d5be3077d8870d178c3c50a457a9`。该 SHA 的 Go test suite Push Run `41950643179` 在记录时仍在执行；Live Provider Probe 已完成。CI 未完成前不提前标记代码验收全部通过。
