@@ -1807,9 +1807,6 @@ button:disabled, input:disabled, select:disabled, textarea:disabled { cursor: no
 .market-overview-table-scroll table {
   min-width:500px
 }
-.market-overview-table-scroll th,.market-overview-table-scroll td {
-  white-space:nowrap
-}
 .market-overview-table-scroll td {
   vertical-align:middle
 }
@@ -4075,10 +4072,6 @@ body {
 }
 .research-list-table-scroll {
   margin-top: 11px;
-}
-.research-list-table-scroll th,
-.research-list-table-scroll td {
-  white-space: nowrap;
 }
 .research-list-stock-name {
   display: block;

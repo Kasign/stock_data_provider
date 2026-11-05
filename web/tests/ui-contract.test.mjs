@@ -2871,3 +2871,12 @@ test("UIR-2 table typography uses component baselines and scoped readable table 
   assert.match(stylesheet, /\.watchlist-import-preview th, \.watchlist-import-preview td \{[^}]*font-size: 12px;/);
   assert.match(stylesheet, /@media \(max-width: 600px\)[\s\S]*?th, td \{ padding: 9px 10px; \}/);
 });
+
+
+test("UIR-2 table white-space behavior is inherited from the shared table baseline", () => {
+  assert.match(stylesheet, /table \{[^}]*white-space: nowrap;/);
+  assert.doesNotMatch(stylesheet, /\.market-overview-table-scroll th\s*,\s*\.market-overview-table-scroll td\s*\{[^}]*white-space\s*:/);
+  assert.doesNotMatch(stylesheet, /\.research-list-table-scroll th\s*,\s*\.research-list-table-scroll td\s*\{[^}]*white-space\s*:/);
+  assert.match(stylesheet, /\.market-overview-table-scroll td \{\s*vertical-align:middle\s*\}/);
+  assert.match(stylesheet, /\.market-activity-table td \{\s*vertical-align:middle\s*\}/);
+});

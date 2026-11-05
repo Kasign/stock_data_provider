@@ -1641,3 +1641,13 @@ JSR-6L 补充：连接配置变更取消草稿检查后，旧代际 finally 按�
 - [x] 新增 UI contract 锁定基础字号、主表格字号、导入预览覆盖与窄屏行为。
 - [ ] 在本批最终提交 SHA 上运行 WebUI Checks、JavaScript 语法检查、Compose 校验和 Nginx 镜像构建。
 - [ ] 执行 Chromium Browser Smoke，并人工核验行情表格、分析结果表格、数据中心表格和自选股导入预览在 320/375/600/768/900/1280/1600px 下的可读性与横向滚动。
+
+
+## 2026-11-05 UIR-2 第四十九批：表格 nowrap 规则去重
+
+- [x] 确认共享 `table` 基础规则已设置 `white-space: nowrap`，该属性由表格单元格继承。
+- [x] 删除行情总览表格与研究列表表格中重复的 `th` / `td` nowrap 声明。
+- [x] 保留行情总览与市场活动表格的单元格垂直对齐规则，不影响滚动容器和窄屏内边距。
+- [x] 新增 UI contract 锁定共享 nowrap 基线及组件垂直对齐规则。
+- [ ] 在本批最终提交 SHA 上运行 WebUI Checks、JavaScript 语法检查、Compose 校验和 Nginx 镜像构建。
+- [ ] 执行 Chromium Browser Smoke，重点核验行情总览、研究列表及市场活动表格在 320/375/600/768/900/1280/1600px 下的横向滚动、长文本和列对齐。
