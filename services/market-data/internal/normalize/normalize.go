@@ -328,7 +328,7 @@ func ValidateAndSortBars(symbol string, bars []model.DailyBar, start, end string
 		seen[b.TradeDate] = true
 		valid = append(valid, b)
 	}
-	sort.SliceStable(valid, func(i, j int) bool { return valid[i].TradeDate < valid[j].TradeDate })
+	sort.Slice(valid, func(i, j int) bool { return valid[i].TradeDate < valid[j].TradeDate })
 	if limit > 0 && len(valid) > limit {
 		valid = valid[len(valid)-limit:]
 		warnings = append(warnings, "bars_truncated_to_limit")
