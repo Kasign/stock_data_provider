@@ -117,6 +117,11 @@ func TestCrossProviderAmountErrorBoundUsesProviderContracts(t *testing.T) {
 	if tdxBound != 128.001 {
 		t.Fatalf("expected float32 half-ULP plus Price truncation bound 128.001 CNY at 2.67B, got %v", tdxBound)
 	}
+	smallAmount := 100000.0
+	smallBound := CrossProviderAmountErrorBound("pytdx", "CNY", "amount", &smallAmount)
+	if smallBound != 0.00490625 {
+		t.Fatalf("expected 100000 CNY float32 half-ULP plus Price truncation bound 0.00490625, got %v", smallBound)
+	}
 	baoBound := CrossProviderAmountErrorBound("baostock", "CNY", "amount", &tdxAmount)
 	if baoBound != 0.0001 {
 		t.Fatalf("expected conservative BaoStock 4-decimal error bound, got %v", baoBound)
