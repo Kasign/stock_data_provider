@@ -720,3 +720,40 @@ Data 分支最新 HEAD 已从 `587f27683c8422810d2f7fc917a2c9324eb147b0` 前进�
 前一 SHA `587f276` 的 Go test suite 曾失败：`internal/baostock/live_adjustment_probe_test.go` 未通过 gofmt，导致 market-data 单测、race、vet 步骤跳过；Docker market-data image build 因同一 gofmt 检查失败。MariaDB Migration/PIT integration、go-core 和根模块测试当时通过。新 SHA 的格式修正后，四个 Workflow 全部成功。
 
 本轮 11.18 的静态字段追踪以 cce59e8 为基线；Compare 证明该提交只改了上述测试文件格式，未改 OpenAPI、Handler、Model 或 Service。CI 全绿不代表字段级契约已修复，GOV-004 仍 NO-GO。
+
+
+### 11.20 9 个 OpenAPI 多余字段：Operation → Handler → Model 反向追踪（2026-11-05）
+
+本轮对 OpenAPI 中存在、Go 响应 Model 不存在的 9 个字段做反向追踪。检查了实际 Handler、直接序列化对象和 Service 返回类型。三个异常 Schema 都没有独立 Response DTO 来提供这些字段，因此当前文档描述超出了真实 JSON 输出。
+
+| OpenAPI Schema.field | Operation → Handler → 实际对象 | Go Model 事实 | 结论 |
+|---|---|---|---|
+| Quote.validation_total_count | GET /api/v1/quotes/{symbol} → Server.quote → writeJSON(model.Quote)；批量行情也嵌套 model.Quote | Quote struct 无此字段，也没有自定义 MarshalJSON 或验证结果包装层 | 从 OpenAPI 删除 |
+| Quote.validation_error_count | 同上 | 无 Go 字段/赋值路径 | 从 OpenAPI 删除 |
+| Quote.validation_warning_count | 同上 | 无 Go 字段/赋值路径 | 从 OpenAPI 删除 |
+| Quote.validation_info_count | 同上 | 无 Go 字段/赋值路径 | 从 OpenAPI 删除 |
+| Quote.validation_truncated | 同上 | 无 Go 字段/赋值路径 | 从 OpenAPI 删除 |
+| Quote.validation_issues | 同上 | 无 Go 字段/赋值路径；没有嵌套 ValidationIssue response type | 从 OpenAPI 删除 |
+| StockBoard.change_percent_5d | GET /api/v1/stocks/{symbol}/boards → Server.stockBoards → writeJSON(StockBoardSnapshot) | StockBoard struct 只有 change_percent，没有 ChangePercent5D；Items 是 []model.StockBoard | 从 OpenAPI 删除 |
+| StockBoard.provider_report_date | 同上 | StockBoard struct 无 ProviderReportDate；Snapshot 层也没有该 Item 字段 | 从 OpenAPI 删除 |
+| PriceLimitEventEvidence.adjustment_basis | GET /api/v1/stocks/{symbol}/price-limit-rule → Server.priceLimitRule → PriceLimitRuleSnapshot.special_exception_evidence | PriceLimitEventEvidence struct 没有 AdjustmentBasis；Service 校验和 Resolve 逻辑也不读取该字段 | 从 OpenAPI 删除 |
+
+#### 反向审查结论
+
+1. Quote 的 6 个 validation 字段不是“Model 忘记声明但 Handler 会输出”的情况。单条行情 Handler 直接序列化 `*model.Quote`；批量行情的 `batchQuoteItem.Quote` 也是 `*model.Quote`。当前没有验证统计/Issue 聚合对象，不能继续在 OpenAPI 中承诺这些属性。
+2. StockBoard 的 2 个字段也没有响应对象承载。OpenAPI 的 `change_percent_5d` 和 `provider_report_date` 可能是历史设计残留；当前 Board Item 只有单日涨跌幅和基础来源/质量字段。不能把 SectorRanking 的五日涨跌幅或 Snapshot 报告日挪用到 StockBoard Item。
+3. PriceLimitEventEvidence 的 `adjustment_basis` 与特殊涨跌幅事件证据语义无关；当前证据对象只包含证券、状态、生效区间、来源、质量、URL、公告 ID、观察时间和覆盖确认。删除 Schema 多余字段比新增无意义 Go 字段更合理。
+4. 以上判断基于当前 Handler 直接序列化 Model 的实现；若未来确实需要这些功能，应先定义独立 Response DTO、明确赋值规则，再同时更新 Handler、Schema、Golden，不得只在 OpenAPI 中预先声明。
+
+**DATA-CONTRACT-004-F**：删除上述 9 个 Schema 属性；增加 Go JSON 输出与 OpenAPI Schema 双向契约测试，确保 OpenAPI 属性不存在无来源字段，且 Model 对外字段都在 Schema 中得到定义（允许显式配置 internal/inline/retired 白名单）。
+
+### 11.21 Data 最新 HEAD 更新（2026-11-05）
+
+Data 分支最新 HEAD 已从 `cce59e8de493813a4b04f7d0bd24211e1e919bb1` 前进到：
+
+- SHA：`0afec7ead92672ce9c68a7a8f419990471e01620`
+- 提交：`docs(api): 记录复权因子持久化链路审查结论`
+- Compare：ahead 1 / behind 0；只修改 `doc/api/**` 和 `doc/接口规范/**` 文档，没有修改 OpenAPI、Handler、Model 或 Service。
+- 因此 11.18 和 11.20 的代码静态结论继续适用于最新实现。
+
+该 SHA 最新 Workflow 状态：Go test suite in_progress；Go-Python parity cancelled；WebUI checks success；Live provider probe success。Parity cancelled 不是成功，Go test suite 也尚不能判定通过。最新 SHA 的 CI 尚未全部完成。
