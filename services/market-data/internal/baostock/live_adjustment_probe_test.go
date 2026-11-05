@@ -31,11 +31,11 @@ type liveBaoStockAdjustmentItem struct {
 	Mismatches   []liveAdjustmentMismatch `json:"mismatches,omitempty"`
 	Error        string                   `json:"error,omitempty"`
 
-	PreFirstEventStatus      string                   `json:"pre_first_event_status,omitempty"`
-	PreFirstEventRows        int                      `json:"pre_first_event_rows,omitempty"`
-	PreFirstEventFactorDate  string                   `json:"pre_first_event_factor_date,omitempty"`
-	PreFirstEventMismatches  []liveAdjustmentMismatch `json:"pre_first_event_mismatches,omitempty"`
-	PreFirstEventError       string                   `json:"pre_first_event_error,omitempty"`
+	PreFirstEventStatus     string                   `json:"pre_first_event_status,omitempty"`
+	PreFirstEventRows       int                      `json:"pre_first_event_rows,omitempty"`
+	PreFirstEventFactorDate string                   `json:"pre_first_event_factor_date,omitempty"`
+	PreFirstEventMismatches []liveAdjustmentMismatch `json:"pre_first_event_mismatches,omitempty"`
+	PreFirstEventError      string                   `json:"pre_first_event_error,omitempty"`
 }
 
 type liveAdjustmentMismatch struct {
@@ -150,7 +150,10 @@ func TestLiveBaoStockAdjustmentFactorConsistency(t *testing.T) {
 				item.PreFirstEventError = "invalid first factor event date: " + parseErr.Error()
 			} else {
 				preEnd = preEnd.AddDate(0, 0, -1)
-				if !preEnd.Before(time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)) {
+				if preEnd.Before(time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)) {
+					item.PreFirstEventStatus = "not_applicable"
+					item.PreFirstEventError = "first factor event is not after the probe history start date"
+				} else {
 					preEndDate := preEnd.Format("2006-01-02")
 					preRaw, preRawErr := client.QueryDailyKLines(ctx, symbol, "2000-01-01", preEndDate, "3")
 					preForward, preForwardErr := client.QueryDailyKLines(ctx, symbol, "2000-01-01", preEndDate, "2")
@@ -172,6 +175,8 @@ func TestLiveBaoStockAdjustmentFactorConsistency(t *testing.T) {
 						if start < 0 {
 							start = 0
 						}
+					item.PreFirstEventRows = len(preRaw) - start
+					item.PreFirstEventFactorDate = latestFactor.OperateDate
 					for index := start; index < len(preRaw); index++ {
 						if preRaw[index].Date != preForward[index].Date || preRaw[index].Date >= firstFactor.OperateDate {
 							item.PreFirstEventStatus = "mismatch"
@@ -184,9 +189,9 @@ func TestLiveBaoStockAdjustmentFactorConsistency(t *testing.T) {
 							if rawValueErr != nil || forwardValueErr != nil {
 								item.PreFirstEventStatus = "unavailable"
 								item.PreFirstEventError = strings.TrimSpace(strings.Join([]string{
-								formatLiveBaoStockError("pre-first-event raw price", rawValueErr),
-								formatLiveBaoStockError("pre-first-event qfq price", forwardValueErr),
-							}, "; "))
+									formatLiveBaoStockError("pre-first-event raw price", rawValueErr),
+									formatLiveBaoStockError("pre-first-event qfq price", forwardValueErr),
+								}, "; "))
 								break
 							}
 							compareLiveAdjustment(&probeItem, preRaw[index].Date, "qfq_pre_first_event_latest_factor_fallback", field, rawValue*latestFactor.ForwardFactor, forwardValue)
@@ -195,8 +200,6 @@ func TestLiveBaoStockAdjustmentFactorConsistency(t *testing.T) {
 							break
 						}
 					}
-					item.PreFirstEventRows = len(preRaw) - start
-					item.PreFirstEventFactorDate = latestFactor.OperateDate
 					item.PreFirstEventMismatches = probeItem.Mismatches
 					if item.PreFirstEventStatus == "" {
 						if len(item.PreFirstEventMismatches) > 0 {
@@ -205,10 +208,6 @@ func TestLiveBaoStockAdjustmentFactorConsistency(t *testing.T) {
 							item.PreFirstEventStatus = "matched"
 						}
 					}
-				}
-				} else {
-					item.PreFirstEventStatus = "not_applicable"
-					item.PreFirstEventError = "first factor event is not after the probe history start date"
 				}
 			}
 		} else {
@@ -238,7 +237,6 @@ func TestLiveBaoStockAdjustmentFactorConsistency(t *testing.T) {
 		t.Errorf("BaoStock adjustment verification failed: %s", strings.Join(failures, " | "))
 	}
 }
-
 
 func TestLiveAdjustmentFactorBoundsFindsEarliestAndLatestEvent(t *testing.T) {
 	factors := []AdjustmentFactor{

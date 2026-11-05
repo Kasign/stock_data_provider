@@ -271,3 +271,6 @@
 
 
 - 探测的因子选择 helper 改为不依赖 Provider 返回顺序，按 `OperateDate` 最大值选择不晚于 trade_date 的事件；测试故意使用乱序输入，避免把上游排序假设固化为正确性前提。当前提交带标记触发真实首事件前对账。
+
+
+- CI 格式修正：SHA `e73cffa6dbc145814f49dea57c32ee4df92d1e0c` 的首次 Go suite 仅因新报告字段对齐及 pre-event 循环缩进未通过 gofmt；本提交重排该结构并再次触发真实 BaoStock 探测。旧 SHA 不计通过。
