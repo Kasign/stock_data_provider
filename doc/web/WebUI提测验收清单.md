@@ -2236,3 +2236,36 @@ Artifact 核验结果：
 - [ ] 当前 GitHub Actions Ubuntu Chromium 截图环境未提供可用的中文字体，截图中的中文字符呈方框/缺字。当前 Artifact 可用于检查布局、间距、主题表面、导航遮罩和组件位置，但不能作为中文字体、字重、文案换行的视觉验收依据。
 
 处理原则：不将字体缺失误判为产品 CSS 问题，不通过调整字号/宽度掩盖 CI 字体环境缺陷。若要建立完整视觉回归基线，后续需在受控浏览器环境提供 Noto CJK 等中文字体，并重新采集截图；在此之前仅将现有截图作为布局结构参考，不执行全图像素 diff，也不据此启动 CSS 物理拆分。
+
+
+## 2026-11-05 CSS 物理拆分前静态 Review（第一轮）
+
+本轮只读检查 `web/styles.css`（约 5,110 行、200 KB），未修改样式。结合现有 CSS 结构、页面注释、媒体查询和前几轮级联记录，确认当前文件并不是简单的“全局样式在前、页面样式在后”：基础壳层规则、页面样式、主题覆盖、断点规则和后置修正交错存在。直接按行号切文件或按类名归属搬运，会改变级联顺序。
+
+### 初步风险盘点
+
+- 文件开头包含 design tokens、全局基础元素、导航/页面壳层、共享控件；后续有亮色主题、可访问性、断点和多轮 UIR 修正。
+- 页面/功能区域已有注释锚点，例如 Run Flow、Market、Stock Research、Settings、Notifications、Chat、Screening、Alerts；这些可作为未来迁移边界的候选，不代表可以直接整段移动。
+- 高耦合共享选择器包括 `.main-area`、`.view`、`.sidebar`、`.topbar`、`.nav-link`、`.button`、`.page-heading`、`.panel-heading`、`.field`；它们同时受到主题和多个 viewport 规则影响，应留在共享层或通过明确的分层覆盖机制管理。
+- Chat、Run Flow、Settings 等局部组件存在跨区域重复声明。重复声明可能是媒体查询/状态覆盖，不等于重复代码；相同 selector 的相同声明也不能脱离媒体条件和源码顺序直接删除。
+- 文件尾部仍有近期研究表单、行情面板和窄屏布局补丁，表明当前末尾包含有效的后置覆盖，不可简单移到 feature 文件中间。
+- 仓库没有自带 woff/woff2/ttf/otf 字体资产。当前 CI 中文缺字属于浏览器运行环境字体缺失，不应通过 CSS 字体栈调整或远程字体依赖掩盖。
+
+### 迁移原则与候选层次
+
+1. `tokens-base`：:root tokens、reset、body、通用元素基础；保持在最前。
+2. `shared-shell`：sidebar、topbar、main-area、view、通用页面标题/面板/表单/按钮；作为稳定共享层。
+3. `theme-accessibility`：主题语义覆盖、focus-visible、reduced-motion、[hidden] 等全局状态规则；必须明确放在基础层之后、页面局部覆盖之前或通过受控层级定义。
+4. `feature-<page>`：按现有页面注释锚点迁移页面专属组件，禁止携带共享壳层 selector。
+5. `responsive-overrides` 不应成为所有断点规则的垃圾桶。断点规则优先跟随所属组件；只有真正全局的壳层断点才进入共享响应式层。
+
+### 拆分前必须完成的门槛
+
+- [ ] 使用真正的 CSS parser（而不是正则）产出 selector、声明、媒体条件和源码顺序索引；区分重复声明、同值重复和条件覆盖。
+- [ ] 建立共享 selector 的唯一 owner 与允许覆盖点清单，至少覆盖 main-area/view/sidebar/topbar/nav-link/button/panel/field/page-heading。
+- [ ] 明确主题规则、媒体查询、prefers-reduced-motion、打印规则（如有）及状态选择器的层级顺序。
+- [ ] 每次只迁移一个低耦合 feature 区域；迁移前后比较 CSSOM 计算样式和截图，不改变选择器优先级及资源加载顺序。
+- [ ] 在完整中文字体的受控浏览器环境重新采集截图；当前 CI artifact 只能用于布局结构参考。
+- [ ] 保留单入口加载顺序和无 FOUC；验证所有页面、主题、断点、移动导航与 Run Flow。
+
+**本轮结论：暂不物理拆分 CSS。** 当前可以进入 parser 级依赖清单和 owner map 阶段；未完成上述门槛前，任何按注释块搬迁都属于高风险改动。
