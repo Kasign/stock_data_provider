@@ -1074,6 +1074,27 @@ func TestLiveProviderProbe(t *testing.T) {
 				return yahoo.FetchDailyBars(ctx, symbol, startDate, endDate, dailyLimit, model.AdjustmentNone)
 			})
 		}
+		if os.Getenv("MARKET_DATA_LIVE_PUBLIC_ADJUSTED") == "1" {
+			for _, symbol := range dailySymbols {
+				for _, adjustment := range []model.AdjustmentBasis{model.AdjustmentForward, model.AdjustmentBackward} {
+					// Sina 明确只支持 none；不发送无效的 adjusted 请求。
+					report.Results = append(report.Results, liveProbeResult{
+						Provider: "sina", Capability: "daily_bars", Symbol: symbol,
+						Adjustment: adjustment, Status: "not_supported",
+						Error: "Sina K-line endpoint only supports none adjustment; adjusted request intentionally skipped",
+					})
+					runDaily("tencent", "tencent", symbol, adjustment, tencent.client, func(ctx context.Context) ([]model.DailyBar, error) {
+						return tencent.FetchDailyBars(ctx, symbol, startDate, endDate, dailyLimit, adjustment)
+					})
+					runDaily("eastmoney", "eastmoney", symbol, adjustment, eastmoney.client, func(ctx context.Context) ([]model.DailyBar, error) {
+						return eastmoney.FetchDailyBars(ctx, symbol, startDate, endDate, dailyLimit, adjustment)
+					})
+					runDaily("yahoo", "yahoo", symbol, adjustment, yahoo.client, func(ctx context.Context) ([]model.DailyBar, error) {
+						return yahoo.FetchDailyBars(ctx, symbol, startDate, endDate, dailyLimit, adjustment)
+					})
+				}
+			}
+		}
 		report.Failures = failures
 		encoded, marshalErr := json.MarshalIndent(report, "", "  ")
 		if marshalErr != nil {
