@@ -1409,6 +1409,11 @@ test("market overview and activity use readable secondary text and touch-sized c
   assert.match(marketActivityControlButtonBase, /font-size:\s*12px\s*;?/);
   assert.equal((stylesheet.match(/\.market-activity-controls \.button\s*\{/g) || []).length, 2, "market activity controls should have one base button rule and one mobile flex rule");
   assert.ok(stylesheet.includes(".market-activity-controls .button { flex: 1 1 100%; }"), "mobile button width behavior should remain without typography overrides");
+  const marketActivityFooterMetaBase = exactCssDeclarationBlock(".market-activity-footer span");
+  assert.match(marketActivityFooterMetaBase, /color:\s*var\(--text-dim\)\s*;?/);
+  assert.match(marketActivityFooterMetaBase, /font-size:\s*12px\s*;?/);
+  assert.equal((stylesheet.match(/\.market-activity-footer span\s*\{/g) || []).length, 1, "market activity footer metadata should have one exact base rule");
+  assert.match(finalCssRuleBody(".market-activity-footer"), /flex-wrap:\s*wrap/);
   const readabilityStart = stylesheet.indexOf("/* 2026-10-27 readability pass: market overview, activity table, and calendar. */");
   const mobileOverrideStart = stylesheet.indexOf("@media (max-width: 700px)", readabilityStart);
   assert.ok(readabilityStart >= 0 && mobileOverrideStart > readabilityStart, "the general readability pass should precede responsive overrides");
