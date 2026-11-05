@@ -2666,14 +2666,6 @@ button:disabled, input:disabled, select:disabled, textarea:disabled { cursor: no
 }
 #main-content:focus { outline: none; }
 #main-content h1:focus { outline: none; }
-@media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after {
-    scroll-behavior: auto !important;
-    animation-duration: .01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: .01ms !important;
-  }
-}
 
 
 /* Consistent page frame and final responsive layout normalization. */
@@ -4634,14 +4626,6 @@ button:disabled {
   .environment-chip > span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .view { padding-top: 20px; }
   .page-heading { margin-bottom: 16px; }
-}
-@media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after {
-    scroll-behavior: auto !important;
-    transition-duration: .01ms !important;
-    animation-duration: .01ms !important;
-    animation-iteration-count: 1 !important;
-  }
 }
 
 

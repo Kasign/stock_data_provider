@@ -2453,6 +2453,12 @@ test("UIR-2 typography roles use semantic tokens without changing their baseline
 });
 
 
+test("UIR-2 全局减少动态效果规则只保留一份", () => {
+  const globalMotionRules = stylesheet.match(/\*,\s*\*::before,\s*\*::after\s*\{/g) || [];
+  assert.equal(globalMotionRules.length, 1, "global reduced-motion declarations should have one authoritative rule");
+  assert.match(stylesheet, /@media \(prefers-reduced-motion: reduce\) \{\s*\*, \*::before, \*::after \{[\s\S]*?scroll-behavior: auto !important;[\s\S]*?animation-duration: \.01ms !important;[\s\S]*?animation-iteration-count: 1 !important;[\s\S]*?transition-duration: \.01ms !important;/);
+});
+
 test("UIR-2 正文与常规控件使用统一的最终计算基线", () => {
   assert.ok(stylesheet.includes("--control-height-base: 40px;"));
   assert.ok(stylesheet.includes("--font-size-body-readable: 14px;"));
