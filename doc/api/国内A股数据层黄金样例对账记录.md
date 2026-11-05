@@ -501,3 +501,10 @@ Live Provider Probe Run `41788725692` 的 workflow conclusion 为 success，但�
 - 按源粒度重新评估成交量：TDX `VOL` 以手为单位（1 手=100 股），BaoStock provider 原始量单位为 shares。600036 最大差 84 股、002982 最大差 96 股，均在 100 股粒度内。新增内部 `VolumeGranularity` 后，成交量字段可判 matched；未更改原始成交量数据。
 - 成交额单位均为 CNY，当前 1 CNY 容差保持不变。600036 9/9、002982 8/9 行成交额差异超过 1 CNY；最大差 120.74/7.90 CNY。相对误差虽小，但没有足够源精度证据放宽阈值，双源整体状态仍 mismatch。
 - 本轮不是新的完整实时双源重跑；Run `42021978339` 的 BaoStock 请求超时，报告为 not_comparable。新粒度结论来自前次真实原始值离线重评和单测，不计新的实时验收。
+
+
+## 27. 2026-11-05：TDX/BaoStock 成交额精度复核
+
+- TDX `protocol.Kline.Amount` 使用 `Price`（内部单位毫元），协议解码将原始整数 CNY 转为内部 Price，`Float64()` 还原为整数元；TDX 官方 `AMOUNT` 单位为元。BaoStock adapter 保留原始 amount，单位标记 CNY，响应值存在小数。
+- 既有 18 个真实交易日样本中，600036.SH 成交额差最大 120.74 CNY，002982.SZ 最大 7.90 CNY；17/18 行超过 1 CNY 容差。相对差很小（约 3.19e-8/4.13e-8），但没有证据证明差异仅来自格式舍入。
+- 保持 1 CNY 绝对容差和 mismatch 判定；不将这批 raw 双源样本标记 matched。待增加更多成交额量级样本并明确供应商聚合口径后再评估阈值。

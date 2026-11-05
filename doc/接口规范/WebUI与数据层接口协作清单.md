@@ -120,7 +120,7 @@
 | API-03 | 全市场分页与批量行情的范围、总数下限、覆盖率、MA 和复权语义 | 待当前 HEAD 复核 | 双方 | 服务端分页与字段质量可验证，WebUI 不将页内结果解释为全市场排名 |
 | API-04 | 市场情绪当前快照与历史快照的持久化、缺失交易日和覆盖语义 | 待真实验收 | 数据侧主责，WebUI 配合 | 有真实历史数据、数据库读写证据和无数据/缺日契约 |
 | API-05 | 市场级资金流真实数据与 Provider 权限验收 | 依赖凭据/权限 | 数据侧主责 | 真实请求可复现；权限缺失、Provider 不可用和空数据状态可区分 |
-| API-06 | 开发中 | Provider 清单、诊断、Probe 与 Probe 历史已有 API；BaoStock 八证券复权主窗口真实样本通过；跨 Provider raw comparator 已按 `RawVolumeUnit` 传递内部 `VolumeGranularity`（hands=100 shares、shares=1、unknown=0），成交量容差按源粒度计算；成交额仍存在真实差异 | 下一项核查 TDX/BaoStock amount 字段精度和聚合口径，保持 1 CNY 容差；完成后再评估是否可比较；Current helper 无生产调用场景，不新增 Current 因子 API | BaoStock AvailableAt 未知，PIT 继续排除；八只样本无首事件前交易日，fallback 未验证；raw 双源 OHLC 一致、成交量在源粒度内，但成交额 17/18 行超 1 CNY，整体 mismatch；新鲜重跑 BaoStock TCP timeout | `982f46a936a5e62e4c510e5ab1402ca324bd40d5` | Push Go suite `42022406352` success；PR Parity `42022414959` success；WebUI `42022415185` success；PR Go suite `42022415449` 待最终状态 | BaoStock 同源 8 证券主窗口一致；BaoStock/Pytdx raw 双源未通过（amount mismatch） | 接口层已接入，待真实验收 |
+| API-06 | 开发中 | Provider 清单、诊断、Probe 与 Probe 历史已有 API；跨 Provider raw comparator 已按 RawVolumeUnit 传递内部 VolumeGranularity（hands=100 shares、shares=1、unknown=0）；成交量差异按源粒度处理；成交额仍使用 1 CNY 绝对容差 | P0-8 扩展不同成交额量级的 BaoStock/Pytdx 真实样本，核查供应商聚合口径；不放宽 amount tolerance、不新增 amount precision API 字段；Current helper 无生产调用场景，不新增 Current 因子 API | BaoStock AvailableAt 未知，PIT 继续排除；八只样本无首事件前交易日，fallback 未验证；raw 双源 OHLC 一致、成交量在源粒度内，但成交额 17/18 行超 1 CNY，整体 mismatch；新鲜重跑 BaoStock TCP timeout | `982f46a936a5e62e4c510e5ab1402ca324bd40d5` | Push Go suite `42022406352` success；PR Go suite `42022415449` success；PR Parity `42022414959` success；WebUI `42022415185` success | BaoStock 同源 8 证券主窗口一致；BaoStock/Pytdx raw 双源尚未通过（amount mismatch） | 接口层已接入，待真实验收 |
 | API-07 | 板块多维排行（近 5 日涨幅、资金净流入等） | 待能力评估 | 数据侧主责，WebUI 配合 | 有真实来源、完整候选范围、排序/分页契约及质量证据；不以成交额冒充净流入 |
 | API-08 | 通知渠道、订阅、发送测试与投递记录服务端能力 | 未提供服务端接口 | 数据侧主责；WebUI 后续接入 | 服务端安全存储、鉴权、审计、重试和投递查询契约完整 |
 | API-09 | 服务端选股策略、全市场扫描、候选理由与历史记录 | 待产品/API 设计 | 双方 | 明确策略 schema、扫描范围、异步任务、结果快照和可追溯理由 |
@@ -356,3 +356,9 @@
 - 内部比较输入新增 `VolumeGranularity`，来源 `RawVolumeUnit`，hands=100 shares、shares=1、unknown=0；仅用于 comparator，不改变公共 API/数据库契约。
 - 真实 raw 双源样本离线重评后，成交量差异在 100 股 TDX 粒度内；成交额仍有 17/18 行超过 1 CNY，整体 mismatch。下一项核查 amount precision/aggregation，不放宽容差。
 - WebUI 无需修改；API-06 继续等待真实跨 Provider 数据验收。
+
+
+## 22. 2026-11-05 API-06 成交额精度边界
+
+- TDX 日 K amount 以整数 CNY 表示（协议 Price 内部为毫元，解码回元）；BaoStock amount 标记为 CNY，但暂无明确官方小数精度保证。真实样本 17/18 行超过 1 CNY，保持 mismatch。
+- 不放宽 amount tolerance、不新增字段/API。下一项扩大不同成交额量级的真实样本并核查供应商聚合口径；WebUI 无需修改。
