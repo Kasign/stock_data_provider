@@ -473,3 +473,20 @@ type ResearchEvidenceQuery interface {
 7. ListEvidence Cursor 绑定固定 system_as_of、过滤条件、排序版本和快照，禁止 OFFSET 并发分页导致漏项/重复。
 
 本轮只在 `feat/design_doc` 增加契约文档；News 分支未修改。News N6 Repository/Migration 仍等待 Platform Storage 真实 MariaDB 验收。GOV-004 未冻结。
+
+
+### 13.7 Platform → 五模块公共依赖与集成验收
+
+新增清单：[Platform → 五模块公共依赖与集成验收清单](./Platform-五模块公共依赖与集成验收清单.md)。
+
+本轮重新比较 `feat/platform-foundation` 与已记录核查点 `a30ee12130d2a50bc3db672d9d12d1e14040e34f`：当前分支 ahead 2 个提交，变更涉及 dotenv、security 测试和配置/日志/诊断文档；未发现既有 Fault、Diagnostics、HTTP Client、Storage、Task Queue 职责边界发生改变。
+
+文档把五模块可依赖的 Platform 能力和禁止事项整理为矩阵：
+- 可复用：config/Secret、security trusted context、Request ID/slog、Fault、Diagnostics Check/Observation/Runner、受控 HTTP Client、SQL/Redis 生命周期和 Migration Runner。
+- 不作为稳定通用依赖：历史 Analysis HTTP transport、当前与 `internal/analysis/domain` 耦合的 Task Queue。
+- 领域所有权不转移：Repository/SQL/Migration、业务授权、领域诊断规则/历史、Researchflow Run/Stage/Attempt、Provider 配额和质量规则。
+- 真实 MariaDB/Redis、Migration 故障恢复、生产出口 SSRF、Diagnostics 路由/领域 Adapter、Worker Request ID 恢复仍需集成验收。
+
+**依赖规则：** Platform 不得反向依赖业务领域；Data 独立 Go Module 不得 import 根模块 Platform internal。模块分支不得提前修改根 DI、HTTP 路由、cmd 或 Migration 总注册入口。
+
+本轮只更新规划文档，不修改 Platform 分支。GOV-004 仍未冻结。
