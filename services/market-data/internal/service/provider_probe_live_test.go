@@ -44,14 +44,14 @@ func TestLiveHistoricalProviderProbe(t *testing.T) {
 	var failures []string
 	for _, symbol := range []string{"600036.SH", "002982.SZ"} {
 		run, err := ds.ProbeProviderCapabilitiesWithOptions(ctx, ProviderProbeOptions{
-			Scope: "all",
-			Capabilities: []string{"daily_bars"},
-			Checks: []string{"connectivity", "contract", "quality", "cross_provider"},
-			Symbols: []string{symbol},
-			DailyBarStartDate: startDate,
-			DailyBarEndDate: endDate,
+			Scope:               "all",
+			Capabilities:        []string{"daily_bars"},
+			Checks:              []string{"connectivity", "contract", "quality", "cross_provider"},
+			Symbols:             []string{symbol},
+			DailyBarStartDate:   startDate,
+			DailyBarEndDate:     endDate,
 			DailyBarAdjustments: adjustments,
-			TimeoutSeconds: 25,
+			TimeoutSeconds:      25,
 		})
 		if err != nil {
 			t.Fatalf("production historical Probe failed for %s: %v", symbol, err)
