@@ -22,9 +22,9 @@ func (entry FeedEntry) ToCandidate(publisherName, publisherDomain string) domain
 func (entry FeedEntry) ContentLayers(providerSummary string) domain.ContentLayers {
 	layers := domain.ContentLayers{ProviderSummary: providerSummary}
 	if len(entry.Attachments) > 0 {
-		layers.Attachments = make([]domain.ContentAttachment, 0, len(entry.Attachments))
+		layers.Attachments = make([]domain.ContentAttachmentMetadata, 0, len(entry.Attachments))
 		for _, attachment := range entry.Attachments {
-			layers.Attachments = append(layers.Attachments, domain.ContentAttachment{
+			layers.Attachments = append(layers.Attachments, domain.ContentAttachmentMetadata{
 				URL: attachment.URL, RawURL: attachment.RawURL,
 				MediaType: attachment.MediaType, RawMediaType: attachment.RawMediaType,
 				RawLength: attachment.RawLength, Length: attachment.Length,

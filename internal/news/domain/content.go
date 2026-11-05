@@ -21,8 +21,8 @@ const (
 	ContentFormatHTMLFragment ContentFormat = "html_fragment"
 )
 
-// ContentAttachment 保存 Feed 声明的附件元数据，不代表附件已下载或获准保存。
-type ContentAttachment struct {
+// ContentAttachmentMetadata 保存 Feed 声明的附件元数据，不代表附件已下载或获准保存。
+type ContentAttachmentMetadata struct {
 	URL              string
 	RawURL           string
 	MediaType        string
@@ -47,7 +47,7 @@ type ContentLayers struct {
 	SourceSummary       string
 	SourceSummaryOrigin ContentOrigin
 	Body                *ContentPayload
-	Attachments         []ContentAttachment
+	Attachments         []ContentAttachmentMetadata
 }
 
 // ContentLayersFromCandidate 只把 Provider 的搜索摘要放入 Provider 层，不提升为来源摘要或正文。
@@ -60,7 +60,7 @@ func NormalizeContentLayers(layers ContentLayers) ContentLayers {
 	layers.ProviderSummary = normalizeCandidateText(layers.ProviderSummary)
 	layers.SourceSummary = normalizeCandidateText(layers.SourceSummary)
 	if len(layers.Attachments) > 0 {
-		attachments := make([]ContentAttachment, len(layers.Attachments))
+		attachments := make([]ContentAttachmentMetadata, len(layers.Attachments))
 		for i, attachment := range layers.Attachments {
 			attachments[i] = attachment
 			attachments[i].ValidationIssues = append([]string(nil), attachment.ValidationIssues...)

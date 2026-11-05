@@ -33,7 +33,7 @@ func TestNormalizeContentLayersPreservesBodyParagraphsAndOrigin(t *testing.T) {
 func TestNormalizeContentLayersClonesAttachmentMetadata(t *testing.T) {
 	length := int64(10)
 	issues := []string{"invalid_media_type"}
-	layers := NormalizeContentLayers(ContentLayers{Attachments: []ContentAttachment{{RawURL: " raw ", URL: "raw", Length: &length, ValidationIssues: issues}}})
+	layers := NormalizeContentLayers(ContentLayers{Attachments: []ContentAttachmentMetadata{{RawURL: " raw ", URL: "raw", Length: &length, ValidationIssues: issues}}})
 	layers.Attachments[0].ValidationIssues[0] = "changed"
 	*layers.Attachments[0].Length = 20
 	if issues[0] != "invalid_media_type" || length != 10 {
