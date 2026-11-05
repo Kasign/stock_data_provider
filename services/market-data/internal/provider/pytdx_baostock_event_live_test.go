@@ -15,29 +15,29 @@ import (
 )
 
 type pytdxBaoStockEventReport struct {
-	GeneratedAt string                      `json:"generated_at"`
-	Year        string                      `json:"year"`
-	Items       []pytdxBaoStockEventItem    `json:"items"`
+	GeneratedAt string                   `json:"generated_at"`
+	Year        string                   `json:"year"`
+	Items       []pytdxBaoStockEventItem `json:"items"`
 }
 
 type pytdxBaoStockEventItem struct {
-	Symbol             string  `json:"symbol"`
-	EventDate          string  `json:"event_date"`
-	CashDividend       float64 `json:"cash_dividend_per_10"`
-	RightsPrice        float64 `json:"rights_price"`
-	BonusShares        float64 `json:"bonus_shares_per_10"`
-	RightsShares       float64 `json:"rights_shares_per_10"`
-	PreviousClose      float64 `json:"previous_close"`
-	ExpectedPreClose   float64 `json:"pytdx_theoretical_preclose"`
-	BaoStockPreClose   float64 `json:"baostock_preclose"`
+	Symbol               string  `json:"symbol"`
+	EventDate            string  `json:"event_date"`
+	CashDividend         float64 `json:"cash_dividend_per_10"`
+	RightsPrice          float64 `json:"rights_price"`
+	BonusShares          float64 `json:"bonus_shares_per_10"`
+	RightsShares         float64 `json:"rights_shares_per_10"`
+	PreviousClose        float64 `json:"previous_close"`
+	ExpectedPreClose     float64 `json:"pytdx_theoretical_preclose"`
+	BaoStockPreClose     float64 `json:"baostock_preclose"`
 	FactorDelta          float64 `json:"baostock_back_factor_delta"`
 	ForwardFactorDelta   float64 `json:"baostock_forward_factor_delta"`
 	ImpliedRatio         float64 `json:"pytdx_implied_adjustment_ratio"`
 	PreCloseDiff         float64 `json:"preclose_diff"`
 	FactorRatioDiff      float64 `json:"factor_ratio_diff"`
 	ForwardBackDeltaDiff float64 `json:"forward_back_factor_delta_diff"`
-	Status             string  `json:"status"`
-	Error              string  `json:"error,omitempty"`
+	Status               string  `json:"status"`
+	Error                string  `json:"error,omitempty"`
 }
 
 // TestLivePytdxBaoStockCorporateActionConsistency compares source event inputs,
