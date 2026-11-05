@@ -18,8 +18,9 @@ func rebuildAdjustedDailyBars(raw []model.DailyBar, factors []model.AdjustmentFa
 	}
 
 	type factorKey struct {
-		source  string
+		source string
 		version string
+		basis model.AdjustmentFactorBasis
 	}
 	groups := make(map[factorKey]map[string]model.AdjustmentFactor)
 	for _, factor := range factors {
@@ -28,7 +29,10 @@ func rebuildAdjustedDailyBars(raw []model.DailyBar, factors []model.AdjustmentFa
 			factor.AvailableAt.IsZero() || factor.SystemObservedAt.IsZero() {
 			continue
 		}
-		key := factorKey{source: factor.Source, version: factor.SourceVersion}
+		factorBasis := model.NormalizeAdjustmentFactorBasis(factor.Basis)
+		if factorBasis != model.AdjustmentFactorShared && factorBasis != model.AdjustmentFactorForward && factorBasis != model.AdjustmentFactorBackward { continue }
+		if factorBasis != model.AdjustmentFactorShared && factorBasis != factorBasisForAdjustment(basis) { continue }
+		key := factorKey{source: factor.Source, version: factor.SourceVersion, basis: factorBasis}
 		if groups[key] == nil {
 			groups[key] = make(map[string]model.AdjustmentFactor)
 		}
@@ -44,6 +48,9 @@ func rebuildAdjustedDailyBars(raw []model.DailyBar, factors []model.AdjustmentFa
 	}
 	sort.Slice(keys, func(i, j int) bool {
 		if keys[i].source == keys[j].source {
+			if keys[i].version == keys[j].version {
+				return keys[i].basis == factorBasisForAdjustment(basis) && keys[j].basis == model.AdjustmentFactorShared
+			}
 			return keys[i].version < keys[j].version
 		}
 		return keys[i].source < keys[j].source
@@ -125,6 +132,11 @@ func rebuildAdjustedDailyBars(raw []model.DailyBar, factors []model.AdjustmentFa
 		}
 	}
 	return out, nil
+}
+
+func factorBasisForAdjustment(basis model.AdjustmentBasis) model.AdjustmentFactorBasis {
+	if basis == model.AdjustmentForward { return model.AdjustmentFactorForward }
+	return model.AdjustmentFactorBackward
 }
 
 func applyAdjustmentFactorQuality(bar *model.DailyBar, factor model.AdjustmentFactor, role string) {

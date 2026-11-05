@@ -23,11 +23,16 @@ func validISODate(value string, optional bool) bool {
 	return err == nil && parsed.Format("2006-01-02") == value
 }
 
+func validAdjustmentFactorBasis(value model.AdjustmentFactorBasis) bool {
+	return value == model.AdjustmentFactorShared || value == model.AdjustmentFactorForward || value == model.AdjustmentFactorBackward
+}
+
 func validObservedQuality(value model.QualityStatus) bool {
 	return value == model.QualityValid || value == model.QualityDegraded || value == model.QualityUnknown
 }
 
 func adjustmentFactorHash(value model.AdjustmentFactor) (string, error) {
+	value.Basis = model.NormalizeAdjustmentFactorBasis(value.Basis)
 	value.SystemObservedAt = nil
 	value.FetchedAt = time.Time{}
 	payload, err := json.Marshal(value)
@@ -46,6 +51,7 @@ func (s *Store) SaveAdjustmentFactors(ctx context.Context, values []model.Adjust
 	for _, value := range values {
 		if strings.TrimSpace(value.Symbol) == "" || !validISODate(value.TradeDate, false) ||
 			value.Factor <= 0 || math.IsNaN(value.Factor) || math.IsInf(value.Factor, 0) ||
+			!validAdjustmentFactorBasis(model.NormalizeAdjustmentFactorBasis(value.Basis)) ||
 			strings.TrimSpace(value.Source) == "" || value.FetchedAt.IsZero() || !validObservedQuality(value.QualityStatus) {
 			return fmt.Errorf("invalid adjustment factor observation for %s on %s", value.Symbol, value.TradeDate)
 		}
@@ -54,6 +60,7 @@ func (s *Store) SaveAdjustmentFactors(ctx context.Context, values []model.Adjust
 			return err
 		}
 		stored := value
+		stored.Basis = model.NormalizeAdjustmentFactorBasis(stored.Basis)
 		stored.SystemObservedAt = nil
 		metadata, err := json.Marshal(stored)
 		if err != nil {
@@ -65,16 +72,16 @@ func (s *Store) SaveAdjustmentFactors(ctx context.Context, values []model.Adjust
 		}
 		var latest string
 		lookupErr := tx.QueryRowContext(ctx, `SELECT revision_hash FROM market_data_adjustment_factor_versions
-WHERE symbol=? AND trade_date=? AND source=? ORDER BY recorded_at DESC,id DESC LIMIT 1 FOR UPDATE`,
-			value.Symbol, value.TradeDate, value.Source).Scan(&latest)
+WHERE symbol=? AND trade_date=? AND source=? AND factor_basis=? ORDER BY recorded_at DESC,id DESC LIMIT 1 FOR UPDATE`,
+			value.Symbol, value.TradeDate, value.Source, string(model.NormalizeAdjustmentFactorBasis(value.Basis)).Scan(&latest)
 		if lookupErr != nil && !errors.Is(lookupErr, sql.ErrNoRows) {
 			tx.Rollback()
 			return lookupErr
 		}
 		if lookupErr != nil || latest != hash {
 			_, err = tx.ExecContext(ctx, `INSERT INTO market_data_adjustment_factor_versions
-(symbol,trade_date,source,revision_hash,recorded_at,fetched_at,available_at,quality_status,metadata)
-VALUES (?,?,?,?,?,?,?,?,?)`, value.Symbol, value.TradeDate, value.Source, hash,
+(symbol,trade_date,source,factor_basis,revision_hash,recorded_at,fetched_at,available_at,quality_status,metadata)
+VALUES (?,?,?,?,?,?,?,?,?,?)`, value.Symbol, value.TradeDate, value.Source, string(model.NormalizeAdjustmentFactorBasis(value.Basis)), hash,
 				time.Now().UTC(), value.FetchedAt.UTC(), nullableTime(value.AvailableAt), string(value.QualityStatus), metadata)
 			if err != nil {
 				tx.Rollback()
@@ -102,10 +109,10 @@ FROM market_data_adjustment_factor_versions v
 WHERE v.symbol=? AND (?='' OR v.trade_date>=?) AND (?='' OR v.trade_date<=?) AND v.recorded_at<=?
 AND NOT EXISTS (
  SELECT 1 FROM market_data_adjustment_factor_versions n
- WHERE n.symbol=v.symbol AND n.trade_date=v.trade_date AND n.source=v.source AND n.recorded_at<=?
+ WHERE n.symbol=v.symbol AND n.trade_date=v.trade_date AND n.source=v.source AND n.factor_basis=v.factor_basis AND n.recorded_at<=?
  AND (n.recorded_at>v.recorded_at OR (n.recorded_at=v.recorded_at AND n.id>v.id))
 )
-ORDER BY v.trade_date ASC,v.source ASC,v.recorded_at DESC`,
+ORDER BY v.trade_date ASC,v.source ASC,v.factor_basis ASC,v.recorded_at DESC`,
 		symbol, startDate, startDate, endDate, endDate, asOfUTC, asOfUTC)
 	if err != nil {
 		return nil, fmt.Errorf("query adjustment-factor revisions: %w", err)
