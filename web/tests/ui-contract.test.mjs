@@ -2304,3 +2304,15 @@ test("UIR-2 基础布局间距使用语义 token", () => {
   assert.match(stylesheet, /\.metric-grid\s*\{[^}]*gap:\s*var\(--space-3\)/);
   assert.match(stylesheet, /\.content-grid\s*\{[^}]*margin-top:\s*var\(--space-4\)/);
 });
+
+
+test("UIR-2 typography roles use semantic tokens without changing their baseline values", () => {
+  assert.match(stylesheet, /--font-size-support:\\s*12px/);
+  assert.match(stylesheet, /--font-size-secondary:\\s*13px/);
+  assert.match(stylesheet, /--font-size-control:\\s*13px/);
+  assert.match(stylesheet, /--font-size-input:\\s*14px/);
+  assert.match(stylesheet, /\\.page-subtitle \\{ font-size: var\\(--font-size-secondary\\) !important; \\}/);
+  assert.match(stylesheet, /\\.panel-muted \\{ font-size: var\\(--font-size-support\\) !important; \\}/);
+  assert.match(stylesheet, /\\.button \\{ font-size: var\\(--font-size-control\\) !important; \\}/);
+  assert.match(stylesheet, /\\.field input, \\.field select, \\.field textarea, \\.recent-analysis-search input \\{ font-size: var\\(--font-size-input\\); \\}/);
+});

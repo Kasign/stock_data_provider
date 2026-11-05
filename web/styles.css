@@ -41,6 +41,10 @@
   --control-height-base: 37px;
   --font-size-body-base: 13px;
   --font-size-body-readable: 15px;
+  --font-size-support: 12px;
+  --font-size-secondary: 13px;
+  --font-size-control: 13px;
+  --font-size-input: 14px;
   --line-height-body: 1.65;
   font-family: Inter, "SF Pro Display", -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
   font-synthesis: none; text-rendering: optimizeLegibility;
@@ -693,22 +697,22 @@ body { font-size: var(--font-size-body-readable); line-height: var(--line-height
 .mini-service strong { font-size: 13px !important; }
 .mini-service small { font-size: 12px !important; }
 .sidebar-footnote { font-size: 12px !important; }
-.breadcrumb { font-size: 13px !important; }
-.environment-chip { font-size: 12px !important; }
-.eyebrow { font-size: 12px !important; }
-.page-subtitle { font-size: 13px !important; }
+.breadcrumb { font-size: var(--font-size-secondary) !important; }
+.environment-chip { font-size: var(--font-size-support) !important; }
+.eyebrow { font-size: var(--font-size-support) !important; }
+.page-subtitle { font-size: var(--font-size-secondary) !important; }
 .last-updated { font-size: 12px !important; }
 .last-updated strong { font-size: 12px !important; }
-.panel-kicker { font-size: 13px !important; }
-.panel-muted { font-size: 12px !important; }
-.field { font-size: 12px !important; }
-.button { font-size: 13px !important; }
-.query-hint { font-size: 12px !important; }
-.section-heading h2 span { font-size: 13px !important; }
-.section-heading p, .panel-heading p { font-size: 12px !important; }
+.panel-kicker { font-size: var(--font-size-secondary) !important; }
+.panel-muted { font-size: var(--font-size-support) !important; }
+.field { font-size: var(--font-size-support) !important; }
+.button { font-size: var(--font-size-control) !important; }
+.query-hint { font-size: var(--font-size-support) !important; }
+.section-heading h2 span { font-size: var(--font-size-secondary) !important; }
+.section-heading p, .panel-heading p { font-size: var(--font-size-support) !important; }
 .quality-pill { font-size: 12px !important; }
-.metric-label { font-size: 12px !important; }
-.metric-foot { font-size: 12px !important; }
+.metric-label { font-size: var(--font-size-support) !important; }
+.metric-foot { font-size: var(--font-size-support) !important; }
 .panel-heading p { font-size: 12px !important; }
 .chart-legend { font-size: 12px !important; }
 .chart-summary span { font-size: 12px !important; }
@@ -788,7 +792,7 @@ td { font-size: 12px !important; }
 .recent-analysis-feedback { font-size: 13px !important; }
 .recent-analysis-remove { font-size: 12px !important; }
 
-.field input, .field select, .field textarea, .recent-analysis-search input { font-size: 14px; }
+.field input, .field select, .field textarea, .recent-analysis-search input { font-size: var(--font-size-input); }
 .button { font-size: 13px; }
 .text-button { font-size: 12px; }
 .table-scroll th { font-size: 12px !important; }

@@ -302,7 +302,7 @@ localStorage + storage event 方案能解决“另一个标签页完成写入后
 **下一批：**
 1. JSR-6L 已完成：设置中心已保存连接检查/草稿检查主动取消、controller identity 收尾和按钮恢复均已补齐；最终提交 `cd7b6728` 的 WebUI Checks #41956881054、Chromium Browser Smoke #41956881062 均通过。
 2. JSR-6M 已完成只读架构 Review：app.js 继续作为 composition root，未发现值得为行数而拆分的闭合边界；保留跨域协调、共享请求生命周期和状态 owner，不新增全局 store/event bus。
-3. UIR-2 已开始基础间距 token 迁移：先保持计算样式不变，CI 通过后再按共享组件族统一尺寸与响应式表现。JSR 与 UIR 分开提交。
+3. UIR-2 已完成基础间距和第一批字体角色 token 迁移，均保持既有计算值；继续逐组件收敛文字覆盖与控件尺寸，不全局移除 `!important`。
 
 **状态所有权门禁：**
 - app.js 继续持有跨页面 state、当前页行情快照校验、选中证券集合、批量操作、导出、请求生命周期和 storage 事件。
@@ -1235,3 +1235,12 @@ app.js 仅负责两处初始化装配；页面路由 `setView`、hashchange、�
 
 
 JSR-6L 补充：连接配置变更取消草稿检查后，旧代际 finally 按设计不会再触碰按钮；因此由 `applySettings` 的配置失效流程显式恢复草稿检查按钮，避免取消后按钮保持 disabled。对应 UI contract 已补充断言。
+
+
+### UIR-2 第四批：基础文字层级 token 迁移（2026-11-05）
+
+上一批基础间距 token 迁移通过 WebUI Checks #41957447987 与 Chromium Browser Smoke #41957448043。浏览器验收的响应式、跨标签页、Run Flow、研究、数据中心、选股和行情分页步骤全部通过。
+
+本批在 `:root` 建立 support/secondary/control/input 四类字体角色 token（12/13/13/14px），将页面副标题、面板辅助标题、表单标签、按钮、查询提示、指标标签和输入控件等 14 处基础声明迁移到语义 token。token 值与原声明一致，保留现有 `!important` 和级联顺序，不改变当前计算字号。新增 UI contract 锁定 token 值和关键引用。
+
+风险说明：全局 readability pass 仍有历史 `!important` 规则和后续覆盖；本批不尝试批量移除，以免改变各页面字号。后续需按页面/组件族核对最终计算样式后逐步收敛优先级。CI Runner 缺少 CJK 字体，中文换行与字宽仍需真实 macOS 截图确认。
