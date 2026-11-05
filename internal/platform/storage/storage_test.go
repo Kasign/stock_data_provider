@@ -499,7 +499,6 @@ func TestApplyMigrationsRecordsFailureAndRequiresManualRecovery(t *testing.T) {
 	}
 }
 
-
 func TestNormalizeSQLConfigAppliesCompleteDefaults(t *testing.T) {
 	config, err := normalizeSQLConfig(SQLConfig{})
 	if err != nil {
