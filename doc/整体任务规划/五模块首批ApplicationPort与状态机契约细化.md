@@ -211,7 +211,7 @@ Attempt：
 
 - Run deadline_at 是绝对 UTC 时间；所有 Stage deadline 为 min(stage_budget_deadline, Run.deadline_at)，所有重试共用同一 Run deadline，不得续期。
 - 显式取消在 Run 尚未到 deadline 且 Run 非终态时，以原子状态迁移进入 cancelling，并设置 termination_reason=user_cancelled。进入 cancelling 后立即拒绝新 Stage/Attempt 和 RetryStage，未开始 Stage 标记 cancelled，向运行中 Attempt 传播 context cancellation。
-- Run deadline 到达且尚未有更早被接受的 user_cancelled 请求时，设置 termination_reason=deadline_exceeded，停止派发并取消在途执行；达到预算的 Attempt/Stage 记录 timed_out。
+- Run deadline 到达且尚未有更早被接受的 user_cancelled 请求时，将 Run 原子置为 cancelling 并设置 termination_reason=deadline_exceeded，停止派发并取消在途执行；达到预算的 Attempt/Stage 记录 timed_out。
 - 若 user_cancelled 在 deadline 前先被原子接受，则取消原因保持不变；deadline 之后只负责强制收敛超时 Worker，不得把 Run 的取消原因改写为 deadline_exceeded。
 - Run 进入 cancelling 后，等待运行中 Attempt 完成收敛；Attempt 通过原子终态写入记录 cancelled，或保留在取消线性化点前已提交的真实完成结果。已写入终态的 Attempt 不得被覆盖；取消后迟到的输出不得回写为成功结果。
 - termination_reason=user_cancelled 时，所有在途 Attempt 收敛、Stage 封存后 Run 转为 cancelled；termination_reason=deadline_exceeded 时，按 CONTRACT-006 的模板策略归并为 failed 或 partial。不得出现 Run 已终态但仍有 running Attempt。
