@@ -89,7 +89,21 @@ func isRootCatchAllPattern(pattern string) bool {
 		return false
 	}
 	route := parts[len(parts)-1]
-	return route == "/" || (strings.HasSuffix(route, "/") && strings.Count(route, "/") == 1)
+	if route == "/" || (strings.HasSuffix(route, "/") && strings.Count(route, "/") == 1) {
+		return true
+	}
+
+	// ServeMux also supports a root-level multi-segment wildcard such as
+	// "/{path...}". It matches every path just like a "/" subtree pattern.
+	// Preserve host-specific matching semantics while inspecting the path.
+	pathStart := strings.Index(route, "/")
+	if pathStart < 0 {
+		return false
+	}
+	path := route[pathStart:]
+	return strings.HasPrefix(path, "/{") &&
+		strings.HasSuffix(path, "...}") &&
+		strings.Count(path, "/") == 1
 }
 
 // HandleFunc registers a handler function with an explicit access policy.

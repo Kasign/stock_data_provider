@@ -259,7 +259,7 @@ func TestRouterRequiresExplicitPolicyAndDefaultsUnknownRoutesToNotFound(t *testi
 
 func TestRouterRejectsRootCatchAllPatterns(t *testing.T) {
 	auth := newTestAuthenticator(t)
-	for _, pattern := range []string{"/", "GET /", "example.com/", "GET example.com/"} {
+	for _, pattern := range []string{"/", "GET /", "example.com/", "GET example.com/", "/{path...}", "GET /{path...}", "example.com/{path...}", "GET example.com/{path...}"} {
 		router := NewRouter()
 		if err := router.Handle(pattern, auth, AnonymousAccess(), http.HandlerFunc(func(http.ResponseWriter, *http.Request) {})); err == nil {
 			t.Errorf("pattern %q must not register a root catch-all route", pattern)
