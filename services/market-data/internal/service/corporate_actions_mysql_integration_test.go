@@ -64,7 +64,6 @@ func TestAdjustmentFactorsAsOfFallsBackToLatestProviderVisibleRevision(t *testin
 	}
 }
 
-
 func TestCorporateActionsAsOfFallsBackToLatestProviderVisibleRevision(t *testing.T) {
 	dsn := os.Getenv("MARKET_DATA_TEST_MYSQL_DSN")
 	if dsn == "" {
