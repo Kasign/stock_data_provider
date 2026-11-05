@@ -39,6 +39,8 @@ type FeedEntry struct {
 	Author         string
 	PublishedAtRaw string
 	PublishedAt    *time.Time
+	UpdatedAtRaw   string
+	UpdatedAt      *time.Time
 	MissingFields  []string
 }
 
@@ -119,7 +121,7 @@ func ParseFeed(data []byte, observedAt time.Time) (FeedDocument, error) {
 			}
 			content := item.Content
 			doc.Entries = append(doc.Entries, newFeedEntry(
-				item.GUID, item.Title, item.Link, item.Description, content, author, item.PubDate,
+				item.GUID, item.Title, item.Link, item.Description, content, author, item.PubDate, "",
 			))
 		}
 		return doc, nil
@@ -134,16 +136,12 @@ func ParseFeed(data []byte, observedAt time.Time) (FeedDocument, error) {
 			Entries: make([]FeedEntry, 0, len(parsed.Entries)),
 		}
 		for _, item := range parsed.Entries {
-			published := item.Published
-			if strings.TrimSpace(published) == "" {
-				published = item.Updated
-			}
 			author := ""
 			if len(item.Authors) > 0 {
 				author = item.Authors[0].Name
 			}
 			doc.Entries = append(doc.Entries, newFeedEntry(
-				item.ID, item.Title, selectAtomLink(item.Links), item.Summary, item.Content, author, published,
+				item.ID, item.Title, selectAtomLink(item.Links), item.Summary, item.Content, author, item.Published, item.Updated,
 			))
 		}
 		return doc, nil
@@ -152,15 +150,19 @@ func ParseFeed(data []byte, observedAt time.Time) (FeedDocument, error) {
 	}
 }
 
-func newFeedEntry(id, title, link, summary, content, author, publishedRaw string) FeedEntry {
+func newFeedEntry(id, title, link, summary, content, author, publishedRaw, updatedRaw string) FeedEntry {
 	entry := FeedEntry{
 		ID: normalizeText(id), Title: normalizeText(title), Link: strings.TrimSpace(link),
 		Summary: normalizeText(summary), Content: strings.TrimSpace(content),
-		Author: normalizeText(author), PublishedAtRaw: strings.TrimSpace(publishedRaw),
+		Author: normalizeText(author), PublishedAtRaw: strings.TrimSpace(publishedRaw), UpdatedAtRaw: strings.TrimSpace(updatedRaw),
 	}
 	if parsed, ok := parseFeedTime(entry.PublishedAtRaw); ok {
 		parsed = parsed.UTC()
 		entry.PublishedAt = &parsed
+	}
+	if parsed, ok := parseFeedTime(entry.UpdatedAtRaw); ok {
+		parsed = parsed.UTC()
+		entry.UpdatedAt = &parsed
 	}
 	if entry.ID == "" {
 		entry.MissingFields = append(entry.MissingFields, "id")
@@ -196,11 +198,7 @@ func parseFeedTime(raw string) (time.Time, bool) {
 	layouts := []string{
 		time.RFC3339Nano,
 		time.RFC1123Z,
-		time.RFC1123,
 		time.RFC822Z,
-		time.RFC822,
-		time.RFC850,
-		time.ANSIC,
 	}
 	for _, layout := range layouts {
 		parsed, err := time.Parse(layout, raw)

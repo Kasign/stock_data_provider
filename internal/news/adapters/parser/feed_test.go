@@ -78,6 +78,35 @@ func TestParseFeedKeepsUnzonedTimeUnparsedAndReportsMissingFields(t *testing.T) 
 	}
 }
 
+func TestParseAtomFeedDoesNotTreatUpdatedAsPublished(t *testing.T) {
+	payload := []byte(`<feed xmlns="http://www.w3.org/2005/Atom"><entry>
+		<id>item-3</id><title>更新内容</title><link href="https://publisher.example/a"/>
+		<updated>2026-11-04T10:00:00+08:00</updated>
+	</entry></feed>`)
+	doc, err := ParseFeed(payload, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	entry := doc.Entries[0]
+	if entry.PublishedAt != nil || entry.PublishedAtRaw != "" {
+		t.Fatalf("published_at must remain absent: %+v", entry)
+	}
+	if entry.UpdatedAt == nil || entry.UpdatedAt.Hour() != 2 || entry.UpdatedAtRaw == "" {
+		t.Fatalf("updated_at=%+v raw=%q", entry.UpdatedAt, entry.UpdatedAtRaw)
+	}
+	if len(entry.MissingFields) != 2 || entry.MissingFields[0] != "published_at" || entry.MissingFields[1] != "content" {
+		t.Fatalf("missing_fields=%v", entry.MissingFields)
+	}
+}
+
+func TestParseFeedDoesNotInferTimezoneForRFCDate(t *testing.T) {
+	for _, raw := range []string{"2026-11-04", "Wed, 04 Nov 2026 10:30:00", "Wed, 04 Nov 2026 10:30:00 CST"} {
+		if _, ok := parseFeedTime(raw); ok {
+			t.Fatalf("unexpected timezone inference for %q", raw)
+		}
+	}
+}
+
 func TestParseFeedAllowsValidEmptyFeed(t *testing.T) {
 	doc, err := ParseFeed([]byte(`<rss version="2.0"><channel><title>Empty</title></channel></rss>`), time.Now())
 	if err != nil {
