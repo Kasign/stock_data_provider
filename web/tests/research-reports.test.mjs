@@ -34,3 +34,26 @@ test("读取时同样执行归档总容量限制，超限原始内容不被覆�
 
 
 test("归档 ID、Run ID 与分析服务地址长度有上限",()=>{const s=memory();const base={id:"report-a",runId:"run-a",result:result("run-a")};for(const item of [{...base,id:"i".repeat(161)},{...base,runId:"r".repeat(161),result:result("r".repeat(161))},{...base,analysisBase:"https://a/".padEnd(2049,"x")}]){assert.equal(writeResearchReports([item],s).reason,"invalid");assert.equal(s.getItem(RESEARCH_REPORTS_KEY),null);}});
+
+test("浏览器存储 API 异常时拒绝读取与写入，不报告成功", () => {
+  const denied = {
+    getItem() { throw new Error("SecurityError"); },
+    setItem() {}
+  };
+  const read = readResearchReports(denied);
+  assert.equal(read.readable, false);
+  assert.equal(read.valid, false);
+
+  const quota = {
+    getItem() { return null; },
+    setItem() { throw new Error("QuotaExceededError"); }
+  };
+  assert.deepEqual(writeResearchReports([{
+    id: "report-quota",
+    runId: "run-quota",
+    result: result("run-quota")
+  }], quota), {
+    ok: false,
+    reason: "unavailable"
+  });
+});

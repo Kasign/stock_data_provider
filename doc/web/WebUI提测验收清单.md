@@ -2049,3 +2049,11 @@ CI 复核记录：本批首次 Chromium Browser Smoke 在个股研究数据质�
 - [x] 补齐浏览器存储 API 异常测试：读取抛出 SecurityError 时标记为不可读取；写入抛出 QuotaExceededError 时明确返回失败，不报告保存成功。
 - [x] 验证存储故障与数据格式损坏保持不同结果语义；不尝试清空或覆盖用户原始数据。
 - [ ] 当前提交 SHA 的 WebUI Checks 与 Chromium Browser Smoke 待运行。
+
+## 2026-11-05 P0 研究记录存储 API 故障验证
+
+- [x] 复核笔记/报告模块的跨标签页事件路由、列表重绘、编辑快照冲突保护、远端删除防复活与报告删除不级联笔记；现有代码和 Chromium 专项已覆盖这些行为。
+- [x] 补齐研究笔记与报告归档的存储 API 故障单测：读取抛出 SecurityError 时标记不可读取；写入抛出 QuotaExceededError 时返回 unavailable，不报告保存成功。
+- [x] 明确历史“实施前现状核验”仅描述开发前基线；当前实现已接入 storage 事件和 render 刷新，避免规划文档被误读为未完成。
+- [ ] 当前提交 SHA 的 WebUI Checks 与 Chromium Browser Smoke 待运行。
+- [ ] localStorage 读—改—写仍非事务；快照比较不能消除最后比较与写入之间的并发竞态。

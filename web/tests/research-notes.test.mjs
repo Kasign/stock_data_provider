@@ -32,3 +32,22 @@ test("编辑快照可区分未变化、远端修改和远端删除", () => {
   assert.equal(researchNoteEditState([{ ...original, title: "远端新标题", updatedAt: "2026-02-01" }], "edit-1", snapshot), "changed");
   assert.equal(researchNoteEditState([], "edit-1", snapshot), "missing");
 });
+
+test("浏览器存储 API 异常时拒绝读取与写入，不报告成功", () => {
+  const denied = {
+    getItem() { throw new Error("SecurityError"); },
+    setItem() {}
+  };
+  const read = readResearchNotes(denied);
+  assert.equal(read.readable, false);
+  assert.equal(read.valid, false);
+
+  const quota = {
+    getItem() { return null; },
+    setItem() { throw new Error("QuotaExceededError"); }
+  };
+  assert.deepEqual(writeResearchNotes([note("quota", "标题", "内容")], quota), {
+    ok: false,
+    reason: "unavailable"
+  });
+});
