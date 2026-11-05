@@ -2,9 +2,13 @@ package storage
 
 import (
 	"context"
+	"database/sql"
 	"database/sql/driver"
 	"errors"
+	"fmt"
+	"io"
 	"net"
+	"sort"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -235,3 +239,180 @@ func TestApplyMigrationsRejectsMissingDatabase(t *testing.T) {
 
 var _ driver.Pinger = (*testConn)(nil)
 var _ driver.Connector = (*testConnector)(nil)
+
+
+type migrationTestState struct {
+	applied       map[uint64]string
+	statements    []string
+	lockAcquired  bool
+	lockReleased  bool
+	historyCreated bool
+}
+
+type migrationTestConnector struct {
+	state *migrationTestState
+}
+
+func (c migrationTestConnector) Connect(context.Context) (driver.Conn, error) {
+	return migrationTestConn{state: c.state}, nil
+}
+
+func (c migrationTestConnector) Driver() driver.Driver {
+	return migrationTestDriver{state: c.state}
+}
+
+type migrationTestDriver struct {
+	state *migrationTestState
+}
+
+func (d migrationTestDriver) Open(string) (driver.Conn, error) {
+	return migrationTestConn{state: d.state}, nil
+}
+
+type migrationTestConn struct {
+	state *migrationTestState
+}
+
+func (c migrationTestConn) Prepare(string) (driver.Stmt, error) {
+	return nil, errors.New("prepared statements are not supported in this test driver")
+}
+
+func (c migrationTestConn) Close() error { return nil }
+
+func (c migrationTestConn) Begin() (driver.Tx, error) {
+	return nil, errors.New("transactions are not supported in this test driver")
+}
+
+func (c migrationTestConn) QueryContext(_ context.Context, query string, _ []driver.NamedValue) (driver.Rows, error) {
+	switch {
+	case strings.Contains(query, "GET_LOCK"):
+		value := int64(0)
+		if c.state.lockAcquired {
+			value = 1
+		}
+		return &migrationTestRows{columns: []string{"locked"}, values: [][]driver.Value{{value}}}, nil
+	case strings.Contains(query, "RELEASE_LOCK"):
+		c.state.lockReleased = true
+		return &migrationTestRows{columns: []string{"released"}, values: [][]driver.Value{{int64(1)}}}, nil
+	case strings.Contains(query, "SELECT version, checksum"):
+		versions := make([]uint64, 0, len(c.state.applied))
+		for version := range c.state.applied {
+			versions = append(versions, version)
+		}
+		sort.Slice(versions, func(i, j int) bool { return versions[i] < versions[j] })
+		values := make([][]driver.Value, 0, len(versions))
+		for _, version := range versions {
+			values = append(values, []driver.Value{int64(version), c.state.applied[version]})
+		}
+		return &migrationTestRows{columns: []string{"version", "checksum"}, values: values}, nil
+	default:
+		return nil, fmt.Errorf("unexpected query: %s", query)
+	}
+}
+
+func (c migrationTestConn) ExecContext(_ context.Context, query string, args []driver.NamedValue) (driver.Result, error) {
+	switch {
+	case strings.HasPrefix(query, "CREATE TABLE IF NOT EXISTS platform_schema_migrations"):
+		c.state.historyCreated = true
+	case strings.Contains(query, "INSERT INTO platform_schema_migrations"):
+		version, ok := args[1].Value.(int64)
+		if !ok {
+			return nil, fmt.Errorf("unexpected migration version argument: %T", args[1].Value)
+		}
+		checksum, ok := args[3].Value.(string)
+		if !ok {
+			return nil, fmt.Errorf("unexpected migration checksum argument: %T", args[3].Value)
+		}
+		c.state.applied[uint64(version)] = checksum
+	default:
+		c.state.statements = append(c.state.statements, query)
+	}
+	return driver.RowsAffected(1), nil
+}
+
+type migrationTestRows struct {
+	columns []string
+	values  [][]driver.Value
+	index   int
+}
+
+func (r *migrationTestRows) Columns() []string { return r.columns }
+func (r *migrationTestRows) Close() error      { return nil }
+func (r *migrationTestRows) Next(destination []driver.Value) error {
+	if r.index >= len(r.values) {
+		return io.EOF
+	}
+	copy(destination, r.values[r.index])
+	r.index++
+	return nil
+}
+
+func TestApplyMigrationsAppliesInOrderAndIsIdempotent(t *testing.T) {
+	state := &migrationTestState{applied: make(map[uint64]string), lockAcquired: true}
+	db := sql.OpenDB(migrationTestConnector{state: state})
+	defer db.Close()
+	migrations := []Migration{
+		{Version: 2, Description: "add index", Statements: []string{"CREATE INDEX idx_value ON sample(value)"}},
+		{Version: 1, Description: "create table", Statements: []string{"CREATE TABLE sample (id BIGINT PRIMARY KEY)"}},
+	}
+	if err := ApplyMigrations(context.Background(), db, "analysis", migrations); err != nil {
+		t.Fatal(err)
+	}
+	if !state.historyCreated || !state.lockReleased {
+		t.Fatalf("migration lifecycle incomplete: history=%t lockReleased=%t", state.historyCreated, state.lockReleased)
+	}
+	if len(state.statements) != 2 || !strings.HasPrefix(state.statements[0], "CREATE TABLE") || !strings.HasPrefix(state.statements[1], "CREATE INDEX") {
+		t.Fatalf("migrations were not applied in version order: %v", state.statements)
+	}
+	if len(state.applied) != 2 {
+		t.Fatalf("expected two migration records, got %d", len(state.applied))
+	}
+	if err := ApplyMigrations(context.Background(), db, "analysis", migrations); err != nil {
+		t.Fatal(err)
+	}
+	if len(state.statements) != 2 {
+		t.Fatalf("already applied migrations ran again: %v", state.statements)
+	}
+}
+
+func TestApplyMigrationsRejectsChecksumDriftAndUnknownHistory(t *testing.T) {
+	migration := Migration{Version: 1, Description: "create table", Statements: []string{"CREATE TABLE sample (id BIGINT PRIMARY KEY)"}}
+	_, checksums, err := prepareMigrations("analysis", []Migration{migration})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, applied := range []map[uint64]string{
+		{1: "different-checksum"},
+		{2: "unknown-version"},
+	} {
+		state := &migrationTestState{applied: applied, lockAcquired: true}
+		db := sql.OpenDB(migrationTestConnector{state: state})
+		err := ApplyMigrations(context.Background(), db, "analysis", []Migration{migration})
+		_ = db.Close()
+		if err == nil {
+			t.Fatal("migration history mismatch must be rejected")
+		}
+		if len(state.statements) != 0 {
+			t.Fatalf("migration executed despite history mismatch: %v", state.statements)
+		}
+	}
+	if checksums[1] == "" {
+		t.Fatal("expected migration checksum")
+	}
+}
+
+func TestApplyMigrationsRejectsConcurrentMigrationLock(t *testing.T) {
+	state := &migrationTestState{applied: make(map[uint64]string), lockAcquired: false}
+	db := sql.OpenDB(migrationTestConnector{state: state})
+	defer db.Close()
+	err := ApplyMigrations(context.Background(), db, "analysis", []Migration{{
+		Version: 1, Description: "create", Statements: []string{"CREATE TABLE sample (id INT)"},
+	}})
+	var platformFault *fault.Fault
+	if !errors.As(err, &platformFault) || platformFault.Code != "platform.storage.migration_lock_busy" {
+		t.Fatalf("expected migration lock conflict, got %v", err)
+	}
+	if state.historyCreated || len(state.statements) != 0 || state.lockReleased {
+		t.Fatalf("migration ran without owning lock: %+v", state)
+	}
+}
