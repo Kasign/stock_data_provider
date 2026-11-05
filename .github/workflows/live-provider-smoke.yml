@@ -21,6 +21,7 @@ on:
       - "services/market-data/internal/provider/pytdx_official_intraday_suspension_daily_live_test.go"
       - "services/market-data/internal/baostock/**"
       - "services/market-data/internal/service/provider_probe_live_test.go"
+      - "services/market-data/internal/service/provider_probe.go"
       - "services/market-data/internal/service/data.go"
       - "services/market-data/internal/service/data_test.go"
       - "services/market-data/internal/service/adjustment_rebuild.go"
