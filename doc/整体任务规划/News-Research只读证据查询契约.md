@@ -342,3 +342,37 @@ Platform 只提供 SQL/Redis 连接生命周期、Ping 和 Migration Runner。Ne
 ## 13. 当前结论
 
 当前 News 已有 Candidate、Observation、Version、Policy、Identity、Relation 和写入事务端口，但没有 Research 只读 Query Facade、持久化实现和完整 system_as_of 查询。该文档定义后续目标契约，不代表上述能力已经实现。GOV-004 在 News 方向仍未完成，不能冻结。
+
+
+## 14. 最新 News 分支源码复核（2026-11-05）
+
+本节基于 News 分支最新 HEAD `cefbbbb10ef418f8bca1d2ff3d6a1fef8ce203b6`（`test(news): 修复证据归属校验格式并覆盖跨新闻版本`，2026-11-05 10:26 UTC）复核。相较上一核查点 `ea697fe437d44afffbd60874ad144adc4313e469`，compare 为 ahead 4 / behind 0，变化涉及新闻任务文档、关系更新事务和测试、关系领域校验及证券身份测试；没有新增 Research 只读查询 Facade 的证据。
+
+### 14.1 已核实的代码能力
+
+- `Observation` 与 `NewsItemVersion` 均有 `ObservedAt`；版本同时关联 `ObservationID`。
+- `SecurityIdentityRecord`、`IndustryClassificationRecord` 和 `RelationAssertion` 均保存 `ObservedAt`。
+- `ResolveSecurityIdentity` 仅接收 market、symbol、业务 `asOf`，只按 `ValidFrom/ValidTo` 匹配；未接收 `system_as_of`，也不负责过滤未来才被系统观察到的记录。
+- `ResolveIndustryClassification` 仅按分类体系、分类版本、行业代码和业务有效时间解析；同样没有知识时间过滤。
+- `ResolveCurrentRelations` 对传入的断言集合计算当前 supersedes 链和当前已确认关系；没有历史知识时点参数。
+- `ApplyResearchUpdate` 通过事务端口追加版本、关系和证据，并验证 Observation/Version 存在且归属同一 NewsID；它是写入用例，不是只读 Query Facade。
+- 最新提交新增跨 News Item 的 SourceVersion 证据归属拒绝测试，并验证事务回滚；这是有效的写入完整性改进，但不覆盖 PIT 查询。
+
+### 14.2 授权与查询能力差距
+
+- `PolicyDecision` 当前只有 `Allowed`、`ReasonCode`、`MaxRetention`，没有不可变决策 ID、策略版本引用、策略快照哈希或评估时间。
+- Source/Endpoint/Provider Policy 有有效期、证据引用及权限集合，但现有结构不能单独证明某次历史研究实际使用的策略版本和决策结果。
+- 本轮未发现 `ResearchEvidenceQuery`、`GetEvidence`、`ListEvidence` 只读 Facade 或对应 DTO。
+- 未发现将 Observation、Version、Identity、Classification、Relation 按统一 `system_as_of` 过滤的查询闭环。
+- 未发现绑定固定 snapshot、过滤条件、排序版本和稳定唯一键的分页 Cursor 实现。
+- News README 仍将身份识别/版本/关系后续阶段、N6 Repository/Migration 列为待完成；当前模型时间字段不等于持久化查询能力已经存在。
+
+### 14.3 必须遵循的实现顺序
+
+1. News Repository/Query Adapter 提供同一知识水位的 Observation、Version、Identity、Classification、Relation 读取能力。
+2. 在查询层先按 `ObservedAt <= system_as_of` 过滤所有记录，再按 `valid_at` / `published_at` 解析业务有效事实；历史 supersedes 链只能由过滤后的断言集合计算。
+3. 授权策略采用不可变版本或不可变快照；保存本次授权决策引用。历史授权用于审计，当前读取仍须重新检查撤销状态。
+4. 建立固定查询快照和签名/防篡改 Cursor，保证并发写入期间分页集合不漂移。
+5. 最后提供 News Application Facade 与 DTO，Research 只依赖该 Facade；内容读取再次执行用途、内容级别和当前授权校验。
+
+**本轮结论：News → Research Facade、知识时间查询、授权决策快照、稳定分页和 Repository/Migration 均未实现。GOV-004 News 阻断保持打开；本轮只做只读源码审查和规划文档更新，没有修改 News 分支。**
