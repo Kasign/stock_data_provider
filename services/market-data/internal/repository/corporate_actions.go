@@ -73,7 +73,7 @@ func (s *Store) SaveAdjustmentFactors(ctx context.Context, values []model.Adjust
 		var latest string
 		lookupErr := tx.QueryRowContext(ctx, `SELECT revision_hash FROM market_data_adjustment_factor_versions
 WHERE symbol=? AND trade_date=? AND source=? AND factor_basis=? ORDER BY recorded_at DESC,id DESC LIMIT 1 FOR UPDATE`,
-			value.Symbol, value.TradeDate, value.Source, string(model.NormalizeAdjustmentFactorBasis(value.Basis)).Scan(&latest)
+			value.Symbol, value.TradeDate, value.Source, string(model.NormalizeAdjustmentFactorBasis(value.Basis))).Scan(&latest)
 		if lookupErr != nil && !errors.Is(lookupErr, sql.ErrNoRows) {
 			tx.Rollback()
 			return lookupErr

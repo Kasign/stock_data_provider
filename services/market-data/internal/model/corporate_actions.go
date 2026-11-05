@@ -13,7 +13,9 @@ const (
 
 // NormalizeAdjustmentFactorBasis 将未显式标注的单列因子按 shared 口径处理。
 func NormalizeAdjustmentFactorBasis(value AdjustmentFactorBasis) AdjustmentFactorBasis {
-	if value == "" { return AdjustmentFactorShared }
+	if value == "" {
+		return AdjustmentFactorShared
+	}
 	return value
 }
 

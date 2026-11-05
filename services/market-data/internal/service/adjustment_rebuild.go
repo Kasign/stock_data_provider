@@ -30,8 +30,12 @@ func rebuildAdjustedDailyBars(raw []model.DailyBar, factors []model.AdjustmentFa
 			continue
 		}
 		factorBasis := model.NormalizeAdjustmentFactorBasis(factor.Basis)
-		if factorBasis != model.AdjustmentFactorShared && factorBasis != model.AdjustmentFactorForward && factorBasis != model.AdjustmentFactorBackward { continue }
-		if factorBasis != model.AdjustmentFactorShared && factorBasis != factorBasisForAdjustment(basis) { continue }
+		if factorBasis != model.AdjustmentFactorShared && factorBasis != model.AdjustmentFactorForward && factorBasis != model.AdjustmentFactorBackward {
+			continue
+		}
+		if factorBasis != model.AdjustmentFactorShared && factorBasis != factorBasisForAdjustment(basis) {
+			continue
+		}
 		key := factorKey{source: factor.Source, version: factor.SourceVersion, basis: factorBasis}
 		if groups[key] == nil {
 			groups[key] = make(map[string]model.AdjustmentFactor)
@@ -135,7 +139,9 @@ func rebuildAdjustedDailyBars(raw []model.DailyBar, factors []model.AdjustmentFa
 }
 
 func factorBasisForAdjustment(basis model.AdjustmentBasis) model.AdjustmentFactorBasis {
-	if basis == model.AdjustmentForward { return model.AdjustmentFactorForward }
+	if basis == model.AdjustmentForward {
+		return model.AdjustmentFactorForward
+	}
 	return model.AdjustmentFactorBackward
 }
 
