@@ -147,4 +147,5 @@ jobs:
       - name: Build Go market-data image
         run: docker build --tag stock-analysis-data:ci --file services/market-data/Dockerfile services/market-data
       - name: Build Go analysis API image
+        if: ${{ !cancelled() }}
         run: docker build --tag stock-analysis-server:ci --file Dockerfile .
