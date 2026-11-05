@@ -494,3 +494,64 @@ Go `model.AdjustmentBasis` 响应值为 `none`、`forward_adjusted`、`backward_
 - Live provider probe：run `42012444966`，workflow completed / success；但 BaoStock historical adjustment-factor consistency 专项步骤为 **skipped**，因此本次没有八只候选证券的 BaoStock matched/mismatch/not_applicable/unavailable 结果。报告打印/上传步骤 success 不能替代实际专项探测。
 
 这次 CI 证明最新 HEAD 已恢复 Go 语法并通过当前执行的测试/build 门禁；**不证明 OpenAPI ↔ Go JSON 双向契约已修复**，因为本轮提交没有修改相关 Schema/Model，也没有新增契约测试。Data Schema 阻断继续打开。
+
+
+### 11.11 22 个非 omitempty 集合字段：构造路径与 nil/empty 风险复核（2026-11-05）
+
+核查代码基线仍为 Data HEAD c22470bec87beb89961b76ad9856d5c8709aac73。本节追踪 Service 校验、Provider 返回、缓存反序列化和 Service 构造，不把 len(x)==0 误认为 x 一定是非 nil 空集合。
+
+#### 11.11.1 逐字段结论
+
+| # | JSON 字段 | 构造/数据来源 | 当前静态结论 | 关键证据与后续要求 |
+|---:|---|---|---|---|
+| 1 | StockAnnouncementSnapshot.items | Announcement Provider / Redis Cache | **确认存在 nil 风险** | 空报告 Total=0 时仅检查 len(Items)==0，unknown 空报告可通过；需归一化或 nullable。 |
+| 2 | DragonTigerSnapshot.items | DragonTiger Provider / Redis Cache | **确认存在 nil 风险** | 空报告、全部为非 A 股的 unknown 空页只检查 len(Items)==0，可接受 nil slice。 |
+| 3 | MarketSentimentHistory.items | store.ListMarketSentiment | **边界待核实** | Service 直接将 Store 返回的 items 写入响应，没有 make/copy 归一化；需检查 Store 空结果是否返回 []，并做 Handler Golden。 |
+| 4 | Bundle.daily_bars | DataService.DailyBars | **条件性 nil 风险** | Bundle 直接赋值 DailyBars: bars，未归一化；若 DailyBars 的合法空结果为 nil，JSON 即为 null。需追踪 DailyBars 的 Provider/缓存/降级空结果。 |
+| 5 | Bundle.sources | Bundle Service 构造 | **已确认非 nil** | 显式 map[string]string{} 初始化。 |
+| 6 | StockBoardSnapshot.items | StockBoard Provider / Redis Cache | **确认存在 nil 风险** | 无数据分支要求 Total=0、len(Items)=0、QualityUnknown，nil 可通过。 |
+| 7 | StockSearchSnapshot.items | StockSearch Provider | **确认存在 nil 风险** | Validator 只检查总数和 len 上限；unknown 空匹配可被保留并最终返回，nil 可通过。 |
+| 8 | SectorRankingSnapshot.items | Sector Ranking Provider / Redis Cache | **成功响应非 nil** | Validator 要求 1 <= len(Items) <= limit，空集合不会作为成功响应返回。 |
+| 9 | IndexQuoteSnapshot.items | Index Quote Provider / Redis Cache | **成功响应非 nil** | Validator 在入口拒绝 len(Items)==0。 |
+| 10 | LimitPoolSnapshot.items | Limit Pool Provider / Redis Cache | **确认存在 nil 风险** | 无数据分支允许 Total=0、len(Items)=0、QualityUnknown，nil 可通过。 |
+| 11 | FundamentalSection.metrics | Fundamentals Provider / Redis Cache | **确认存在 nil 风险** | HasData == (len(Metrics)>0)；无数据分区允许 nil。字段没有 omitempty，nil 会输出 null。 |
+| 12 | FundamentalsSnapshot.sections | Fundamentals Provider / Redis Cache | **验证后非 nil** | Validator 要求 Sections 数量为 6..9，nil 不可能通过。PIT 过滤分支也使用 make([]model.FundamentalSection, 0, ...)。 |
+| 13 | ValuationSnapshot.requested_symbols | Valuation Provider / Redis Cache | **验证后非 nil** | 请求先构造非空 symbols；Validator 要求长度相等并逐项按请求顺序比对，nil 不可能通过。 |
+| 14 | ValuationSnapshot.items | Valuation Provider / Redis Cache | **确认存在 nil 风险** | Validator 允许 Total == len(Items) == 0，并允许通过 MissingSymbols 覆盖全部请求证券；未要求空 Items 非 nil。 |
+| 15 | IndexCatalogSnapshot.items | Index Catalog Provider / Redis Cache | **确认存在 nil 风险** | 空目录在 QualityUnknown 状态下可通过 Validator，并可能作为 fallback exhausted 的结果返回。 |
+| 16 | IndexConstituentSnapshot.items | Index Constituent Provider / Redis Cache | **确认存在 nil 风险** | Validator 允许空 Items，但要求 QualityUnknown；unknown 候选会在后备源耗尽后返回。 |
+| 17 | IndexDailyBarsSnapshot.items | Index Daily Bars Provider / Redis Cache | **确认存在 nil 风险** | Validator 以 Total 与 len 相等校验；Service 将空 Items/unknown 作为候选，后备源耗尽后可返回。 |
+| 18 | HotRankingSnapshot.items | Hot Ranking Provider / Redis Cache | **确认存在 nil 风险** | Validator 明确允许空榜，但必须 QualityUnknown；后备源耗尽后返回 unknown 候选。 |
+| 19 | MarketCapitalFlowSnapshot.items | Market Capital Flow Provider / Redis Cache | **成功响应非 nil** | Validator 要求 Total>0 且 Total=len(Items)，空集合不会作为成功响应返回。 |
+| 20 | ProviderProbeRun.items | Probe Service 构造 | **已确认非 nil** | 初始化使用 make([]model.ProviderProbeItem, 0)。 |
+| 21 | ProviderProbeHistory.items | store.ListProviderProbeRuns | **边界待核实** | Service 直接使用 Store 返回值；空历史时是否返回 nil 取决于 Store 实现，需核对并 Golden。 |
+| 22 | TradingCalendarSnapshot.items | Trading Calendar Provider / Redis Cache | **验证后非 nil** | 日期区间有效且至少覆盖一个自然日；Validator 要求 Items 长度等于预期自然日数，nil 不可能通过。 |
+
+#### 11.11.2 风险分组
+
+- **已确认存在 nil 可通过并可能输出 null 的 Provider 响应字段**：Announcement、DragonTiger、StockBoard、StockSearch、LimitPool、FundamentalSection.metrics、Valuation.items、IndexCatalog、IndexConstituent、IndexDailyBars、HotRanking。
+- **需继续核对外部边界实现**：MarketSentimentHistory.items、ProviderProbeHistory.items（Store）；Bundle.daily_bars（DailyBars 返回路径）。
+- **Service 校验已保证非空或显式初始化**：Bundle.sources、MarketStocksSnapshot.items（按 selected 长度 make）、SectorRanking.items、IndexQuote.items、FundamentalsSnapshot.sections、Valuation.requested_symbols、MarketCapitalFlow.items、ProviderProbeRun.items、TradingCalendar.items。
+- Bundle.warnings 使用 append([]string{}, warnings...) 显式构造非 nil slice，但 JSON Tag 带 omitempty，空时会省略；它不是此前 22 个非 omitempty 字段之一。
+
+这里的“确认 nil 风险”表示当前 Service 校验允许 nil slice 通过，并且没有统一归一化；不表示已在生产 HTTP 响应中抓到实际 null。最终证据仍需真实 Handler JSON Golden 或运行时响应样本。
+
+#### 11.11.3 修正原则
+
+1. 对必需数组/对象，优先在明确的 HTTP Response DTO 边界统一输出空集合；不能随意修改 Domain/Provider Model 语义。
+2. 对允许 null 的业务字段，OpenAPI 必须明确 nullable；不能把“无数据/未知”偷换成空数组或 0。
+3. Provider 原始快照若在领域层需要保留 nil/unknown 语义，可在 API DTO 映射时转换，避免污染 Provider 适配和缓存模型。
+4. Store 查询的空结果应由 Store 契约明确返回空集合，或由 Application Service 在响应边界归一化；不能依赖 SQL Driver 恰好返回非 nil。
+5. Golden 至少覆盖：有数据、确定空结果、unknown 空结果、Provider 全部失败后保留 unknown 候选、Redis 命中历史 nil 缓存、Store 空历史、PIT 过滤后空集合。
+6. omitempty nullable 字段需另行区分“省略”与“显式 null”；本表不替代 122 个字段的逐字段处理。
+
+#### 11.11.4 下一步实施任务细化
+
+在 DATA-CONTRACT-004 下增加以下子项：
+- **004-A**：新增响应 DTO 集合归一化策略，不在全局 JSON Encoder 做无差别递归转换。
+- **004-B**：修正上述 11 个已确认风险字段，优先覆盖 unknown/empty fallback 分支。
+- **004-C**：核查 Store 的两个 List 方法和 DailyBars 的空结果，补充 Store/Service 契约。
+- **004-D**：对 22 个字段逐项增加非 nil / nil 的 JSON 测试，并对 OpenAPI required/nullable 作对应校验。
+- **004-E**：检查 Redis 旧缓存反序列化路径，确保缓存命中与 Provider 新鲜响应输出一致。
+
+**结论**：22 个字段已完成第一轮构造/校验路径分类；11 个字段确认存在 nil 可通过风险，3 个字段边界待核实，其余字段有明确的非 nil 约束或构造保证。未运行 Data 测试，未修改 Data 分支；GOV-004 仍 NO-GO。
