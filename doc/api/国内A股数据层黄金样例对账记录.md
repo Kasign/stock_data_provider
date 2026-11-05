@@ -376,3 +376,23 @@ Live Provider Probe Run `41788725692` 的 workflow conclusion 为 success，但�
 - 保留现有质量门禁，不允许 degraded 样本进入 matched。
 - 不猜测 Tencent/Eastmoney 的复权参考日期，不把 Yahoo 的窗口重基准日期等同于源端原始参考日期。
 - 下一步查找可验证的源端复权基准/公司行为证据；如果不能证明同一参考基准，继续 not_comparable。
+
+
+## 17. 2026-11-05：Pytdx 历史窗口复权样本与生产 Probe 持久化
+
+### 17.1 Pytdx 样本
+
+- GitHub Actions Pytdx 专项 Run：`41955146155`。
+- 交易窗口：2025-07-07 至 2025-07-17，600036.SH、002982.SZ，各 9 个交易日。
+- none：两只股票各 9 条，质量 9/9 valid；OHLC 与 Sina/Tencent/Eastmoney/Yahoo none 样本按分一致。
+- qfq：两只股票各 9 条，方法 `pytdx_qfq`，质量 9/9 degraded；当前缺少可验证参考日期/完整因子证据。
+- hfq：两只股票各 9 条，方法 `pytdx_hfq`，质量 9/9 valid；但尚未证实其绝对基准与其他源一致。
+- Pytdx GBBQ 输出不是公司行为权威数据的替代品。qfq/hfq 不得仅按枚举或方法名判定跨源 matched。
+
+### 17.2 生产 Probe + MariaDB
+
+- Live Provider Probe Run：`41954775830`。
+- 两只股票各自 Probe Run 均 `persisted=true`，storage check passed，并通过 ProviderProbeHistory 读回同一 RunID。
+- BaoStock 日历已装配并参与窗口校验，但因源端快照时间未暴露而为 degraded；日 K 上下文随之 degraded。
+- Eastmoney 本次三个 adjustment 请求均遇到 EOF；其他 Provider 返回的质量状态仍按原规则保留。
+- CrossProviderDailyCompare 因 `quality_status_must_be_valid` skipped，没有 matched。

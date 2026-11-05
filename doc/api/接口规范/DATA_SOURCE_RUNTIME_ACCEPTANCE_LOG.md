@@ -975,3 +975,34 @@ Go suite 覆盖根模块、go-core、market-data 的格式/测试/race/vet、Mar
 
 - 通过提交标记 `[historical_service_probe]` 重新触发相同历史窗口，检查 BaoStock 日历是否真实可用、Tushare 状态证据是否返回，以及 MariaDB 是否成功持久化并读回。
 - 只有实际结果支持时才更新交易上下文、cross-provider、storage 结论；若 BaoStock/Tushare 无法提供证据，按 unavailable/degraded 记录，不将缺失上下文误标通过。
+
+
+## 59. 2026-11-05 BaoStock 日历与 MariaDB 生产 Probe 复验结果
+
+### 59.1 真实服务层执行
+
+- GitHub Actions Live Provider Probe Push Run：`41954775830`；服务层历史 Probe 步骤执行失败，但报告已生成并上传。
+- 两个目标股票各产生一条 Probe Run，均为 `persisted=true`；storage check 为 `passed`，测试随后通过历史查询读回对应 RunID。MariaDB 临时服务、迁移、写入和读回链路已获得真实执行证据。
+- 每只股票共 12 项日 K 探测：7 项 returned_degraded、3 项 Eastmoney network_error/EOF、2 项 Sina adjusted not_supported；无 Provider mismatch 结论。
+- BaoStock 交易日历已被注入并参与日 K 上下文校验，但其快照质量为 degraded（源端未暴露可验证快照时间），所以所有返回 K 线附加 `daily_bar_context_calendar_degraded`。这是上下文质量降级，不是日历完全不可用。
+- 本次没有单独请求 `security_trading_status` 能力；日 K 窗口本身完整，无缺失交易日需要证券状态回补，不能据此宣称 Tushare 历史证券状态已验收。
+- Eastmoney 三种复权口径在服务层本次均遇到 EOF；此前直连批次曾成功返回，按瞬时网络错误处理，不推翻此前样本，但本次不能计为成功。
+- CrossProviderDailyCompare 全部按现有门禁 skipped，错误为 `quality_status_must_be_valid`；未产生 matched，也未放宽门禁。
+
+### 59.2 Pytdx 历史日 K / GBBQ 探测
+
+- GitHub Actions Run：`41955146155`，Pytdx 专项步骤成功，目标窗口 2025-07-07 至 2025-07-17。
+- 600036.SH、002982.SZ 均返回 9 条 none/qfq/hfq 日 K，日期覆盖完整。
+- none 两只股票均为 9/9 valid；OHLC 与前述四家 Provider 样本按分一致。Pytdx 成交量/成交额单位和数量精度仍需保留各自证据，不能与其他源简单要求逐位相同。
+- qfq 两只股票均返回 9 条，方法标记 `pytdx_qfq`，但 9/9 quality degraded；未提供可验证复权参考日期，不能作为 matched 证据。
+- hfq 两只股票均返回 9 条，方法标记 `pytdx_hfq`，9/9 valid；但方法标记本身不等于绝对参考基准已验证。当前报告没有可证明与其他 Provider 同一参考基准的 ref date / factor evidence。
+- 这批 Pytdx 样本证明 GBBQ 路径可以产出历史 qfq/hfq 数值，不证明公司行为完整、复权基准一致或复权值绝对准确。
+
+### 59.3 结论
+
+- MariaDB Probe 持久化与历史读回：passed。
+- BaoStock 交易日历：returned_degraded，已实际参与上下文校验，但快照时间证据缺失。
+- Eastmoney：本次服务层调用 transient EOF；之前 direct probe 成功记录保留。
+- Pytdx none：样本级 valid；qfq degraded；hfq valid 但绝对参考基准未证实。
+- CrossProviderDailyCompare：not_comparable，保持原门禁。
+- 阶段 B 继续 in_progress。下一步执行 Tushare 历史复权因子/公司行为专项探测，并将 Pytdx 与独立公司行为证据对齐；不凭 qfq/hfq 名称做跨源比较。
