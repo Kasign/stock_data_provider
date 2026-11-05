@@ -1,0 +1,16 @@
+/* Screening local batch toolbar: component-scoped styles. */
+.screening-local-batch-toolbar {
+  display: flex; align-items: end; flex-wrap: wrap; gap: 10px; margin: 12px 0; padding: 12px;
+  border: 1px solid var(--border-soft); border-radius: 10px; background: var(--panel-raised);
+}
+.screening-local-batch-toolbar .field { min-width: min(280px, 100%); margin: 0; }
+.screening-local-batch-toolbar .field > span { font-size: 11px; }
+.screening-select-all { display: inline-flex; align-items: center; gap: 7px; min-height: 36px; }
+#screening-local-select-count { color: var(--text-soft); min-height: 36px; display: inline-flex; align-items: center; }
+#screening-local-batch-feedback { min-height: 1.5em; margin: 4px 0 8px; }
+#screening-local-results-body input[type="checkbox"] { accent-color: var(--accent); }
+
+@media (max-width: 640px) {
+  .screening-local-batch-toolbar { align-items: stretch; }
+  .screening-local-batch-toolbar > * { width: 100%; }
+}

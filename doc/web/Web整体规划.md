@@ -2186,4 +2186,12 @@ CSS AST 检查器进一步扩展：
 
 - [x] `876deb65` 的 CI 已验证字体度量排除生效，但比较失败的原因是 fixture 沿用完整采集快照结构，额外包含 `selector`、元素绝对坐标 `x/y`；比较器按约定只比较节点名、选定 computed properties 和宽高。
 - [x] 已根据成功采集的 Chromium Artifact 重建 fixture：保留 8 个场景、6 个节点、37 个样式属性；去除 `font-size`、`font-weight`、`line-height`、`selector`、`x/y` 等非比较字段。
-- [ ] 下一次 Chromium CI 需验证规范化 fixture 的解压和比较通过，再进入 CSS 迁移。
+- [x] `ad32b90d` 对应 Chromium Browser Smoke 全部通过，CSSOM fixture 解压与 8 场景比较通过，Artifact `webui-cssom-baseline`（ID `13414828744`）正常上传。
+
+### Screening 批量工具栏首轮 CSS 拆分
+
+- [x] CSSOM 基线规范化后，`ad32b90d` 的 8 场景、6 节点比较通过。
+- [x] 将 Screening 批量工具栏局部规则迁移至 `web/screening-local-batch.css`，由 `index.html` 在 `/styles.css` 后加载。
+- [x] 公共 `.field`、`.button`、主题变量和其他页面规则继续留在 `styles.css`；反馈提示及结果 checkbox 规则保留在原文件，避免扩大首轮拆分边界。
+- [x] 保持原有 CSS 声明与媒体查询内容，仅调整文件归属；新样式表后置加载，维持组件局部规则相对公共控件规则的级联优先级。
+- [ ] 等待 Chromium CSSOM fixture 回归，确认 8 场景计算样式和宽高与迁移前一致。

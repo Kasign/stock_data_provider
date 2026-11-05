@@ -2419,4 +2419,10 @@ CSS AST 检查器进一步扩展：
 
 - [x] 定位 `876deb65` 比较失败原因：旧 fixture 包含 `selector` 与 `rect.x/y`，而比较器只比较节点名称、计算样式和宽高。
 - [x] 已按比较器实际结构重建 fixture，保留 8 场景 × 6 节点及 37 项样式属性，并排除字体度量和绝对位置。
-- [ ] 等待下一次 Chromium CI 验证规范化 fixture。
+- [x] `ad32b90d` 对应 Chromium Browser Smoke 全部通过，规范化 fixture 解压、8 场景比较和 Artifact 上传均成功。
+
+### Screening 批量工具栏 CSS 拆分
+
+- [x] 新增 `web/screening-local-batch.css`，仅承载批量工具栏、全选、已选数量及移动端规则。
+- [x] `index.html` 在 `styles.css` 后加载组件样式；共享控件、反馈提示和结果 checkbox 规则仍留在公共样式表。
+- [ ] Chromium CSSOM 回归确认迁移前后计算样式一致。
