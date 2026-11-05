@@ -128,9 +128,9 @@ func TestAssessDailyBarTradingContextDoesNotUseConflictingCalendarToConfirmMissi
 func TestAssessDailyBarTradingContextHistoricalCalendarTimestampGapIsWarningOnly(t *testing.T) {
 	calendar := &model.TradingCalendarSnapshot{
 		StartDate: "2025-07-07", EndDate: "2025-07-07",
-		QualityStatus: model.QualityDegraded,
+		QualityStatus:  model.QualityDegraded,
 		QualityReasons: []string{"provider_snapshot_timestamp_not_exposed"},
-		Items: []model.TradingCalendarDay{{Date: "2025-07-07", IsTradingDay: true}},
+		Items:          []model.TradingCalendarDay{{Date: "2025-07-07", IsTradingDay: true}},
 	}
 	result := assessDailyBarTradingContext(calendar, []model.DailyBar{{TradeDate: "2025-07-07"}}, nil, nil)
 	if result.QualityStatus != model.QualityValid ||
@@ -144,9 +144,9 @@ func TestAssessDailyBarTradingContextCurrentCalendarTimestampGapDegrades(t *test
 	today := time.Now().In(marketLocation()).Format("2006-01-02")
 	calendar := &model.TradingCalendarSnapshot{
 		StartDate: today, EndDate: today,
-		QualityStatus: model.QualityDegraded,
+		QualityStatus:  model.QualityDegraded,
 		QualityReasons: []string{"provider_snapshot_timestamp_not_exposed"},
-		Items: []model.TradingCalendarDay{{Date: today, IsTradingDay: true}},
+		Items:          []model.TradingCalendarDay{{Date: today, IsTradingDay: true}},
 	}
 	result := assessDailyBarTradingContext(calendar, []model.DailyBar{{TradeDate: today}}, nil, nil)
 	if result.QualityStatus != model.QualityDegraded ||
@@ -158,9 +158,9 @@ func TestAssessDailyBarTradingContextCurrentCalendarTimestampGapDegrades(t *test
 func TestAssessDailyBarTradingContextHistoricalCalendarInferenceStillDegrades(t *testing.T) {
 	calendar := &model.TradingCalendarSnapshot{
 		StartDate: "2025-07-07", EndDate: "2025-07-07",
-		QualityStatus: model.QualityDegraded,
+		QualityStatus:  model.QualityDegraded,
 		QualityReasons: []string{"provider_returns_trading_days_only_non_trading_dates_inferred"},
-		Items: []model.TradingCalendarDay{{Date: "2025-07-07", IsTradingDay: true}},
+		Items:          []model.TradingCalendarDay{{Date: "2025-07-07", IsTradingDay: true}},
 	}
 	result := assessDailyBarTradingContext(calendar, []model.DailyBar{{TradeDate: "2025-07-07"}}, nil, nil)
 	if result.QualityStatus != model.QualityDegraded ||
