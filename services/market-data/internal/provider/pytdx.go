@@ -406,7 +406,7 @@ func (p *Pytdx) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endDat
 			QualityStatus:     quality,
 			QualityReasons:    reasons,
 			NormalizationVer:  normalize.Version,
-		}))
+		})
 	}
 	return normalizeProviderDailyBarsWithReport(ctx, symbol, start.Format("2006-01-02"), end.Format("2006-01-02"), limit, out, 0)
 }
