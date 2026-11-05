@@ -22,7 +22,7 @@
 
 - 审计基线：`b4cf1a5dbd898f000cf679fa0eb73be6f1039a2e`。核对 Eastmoney/Tencent/BaoStock/Pytdx Provider 实现、复权契约测试及本地因子重建逻辑。
 - Eastmoney 当前请求 `fqt=0/1/2`，K 线解析字段为 `f51..f61`；没有解析独立参考日回显。Tencent 当前解析 `day/qfqday/hfqday` K 线行，也没有独立参考日字段。两者保持 unknown / not_comparable，不从请求 endDate、返回末行日期或采样当前日期推断。
-- BaoStock `adjustflag=3/2/1` 只证明请求的 none/qfq/hfq 口径；历史复权因子与 K 线内部复算 mismatch=0 是样本窗口内部一致性证据，不证明跨源绝对基准。
+- BaoStock `adjustflag=3/2/1` 只证明请求的 none/qfq/hfq 口径；底层 TCP Client 已有 QueryAdjustmentFactors，但尚未适配到 Baostock Provider/service；历史复权因子与 K 线内部复算 mismatch=0 是既有专项样本证据，不证明跨源绝对基准。
 - Pytdx 使用 GBBQ 事件执行仿射 QFQ/HFQ；当前 AdjustmentRefDate 由完整扫描序列的日期边界确定（QFQ 最新日、HFQ 最早日），属于算法定义的基准，不是上游字段回显。必须保留完整扫描边界约束。
 - `rebuildAdjustedDailyBars` 已要求同一 source/version 因子覆盖全部原始 Bar 和参考日期，并对前复权记录实际参考因子日期；不需要另建因子重建逻辑。
 - 未发现可证明的生产代码缺陷。本轮不改代码、不新增字段/API、不调整 Provider 算法；现有“参考日未知则不可比较”门禁正确。
