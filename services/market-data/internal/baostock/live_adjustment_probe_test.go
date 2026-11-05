@@ -28,12 +28,12 @@ type liveBaoStockAdjustmentItem struct {
 	ListingDate       string                   `json:"listing_date"`
 	ListingDateSource string                   `json:"listing_date_source"`
 	FactorCount       int                      `json:"factor_count"`
-	Factors      []AdjustmentFactor       `json:"factors,omitempty"`
-	RawRows      int                      `json:"raw_rows"`
-	ForwardRows  int                      `json:"forward_rows"`
-	BackwardRows int                      `json:"backward_rows"`
-	Mismatches   []liveAdjustmentMismatch `json:"mismatches,omitempty"`
-	Error        string                   `json:"error,omitempty"`
+	Factors           []AdjustmentFactor       `json:"factors,omitempty"`
+	RawRows           int                      `json:"raw_rows"`
+	ForwardRows       int                      `json:"forward_rows"`
+	BackwardRows      int                      `json:"backward_rows"`
+	Mismatches        []liveAdjustmentMismatch `json:"mismatches,omitempty"`
+	Error             string                   `json:"error,omitempty"`
 
 	PreFirstEventStatus     string                   `json:"pre_first_event_status,omitempty"`
 	PreFirstEventRows       int                      `json:"pre_first_event_rows,omitempty"`
