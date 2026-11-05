@@ -606,6 +606,41 @@ func hasLiveProbeQualityReason(reasons []string, target string) bool {
 	return false
 }
 
+func parseLiveProbeDailySymbols(configured, fallback string) ([]string, error) {
+	configured = strings.TrimSpace(configured)
+	if configured == "" {
+		return []string{strings.TrimSpace(fallback)}, nil
+	}
+	symbols := strings.Split(configured, ",")
+	seen := make(map[string]struct{}, len(symbols))
+	for index := range symbols {
+		symbols[index] = strings.TrimSpace(symbols[index])
+		if symbols[index] == "" {
+			return nil, errors.New("LIVE_PROBE_DAILY_SYMBOLS must not contain empty symbols")
+		}
+		if _, exists := seen[symbols[index]]; exists {
+			return nil, fmt.Errorf("LIVE_PROBE_DAILY_SYMBOLS contains duplicate symbol %q", symbols[index])
+		}
+		seen[symbols[index]] = struct{}{}
+	}
+	return symbols, nil
+}
+
+func TestParseLiveProbeDailySymbols(t *testing.T) {
+	got, err := parseLiveProbeDailySymbols("600036.SH, 002982.SZ", "600519.SH")
+	if err != nil || len(got) != 2 || got[0] != "600036.SH" || got[1] != "002982.SZ" {
+		t.Fatalf("unexpected parsed daily symbols: symbols=%v err=%v", got, err)
+	}
+	if got, err := parseLiveProbeDailySymbols("", "600519.SH"); err != nil || len(got) != 1 || got[0] != "600519.SH" {
+		t.Fatalf("fallback daily symbol mismatch: symbols=%v err=%v", got, err)
+	}
+	for _, configured := range []string{"600036.SH,", "600036.SH, ,002982.SZ", "600036.SH,600036.SH"} {
+		if _, err := parseLiveProbeDailySymbols(configured, "600519.SH"); err == nil {
+			t.Errorf("expected invalid daily symbol list %q to be rejected", configured)
+		}
+	}
+}
+
 func TestLiveProviderProbe(t *testing.T) {
 	if os.Getenv("MARKET_DATA_LIVE_PROVIDER_TESTS") != "1" {
 		t.Skip("set MARKET_DATA_LIVE_PROVIDER_TESTS=1 to call real public provider endpoints")
@@ -640,17 +675,11 @@ func TestLiveProviderProbe(t *testing.T) {
 	if dailySymbol == "" {
 		dailySymbol = "600036.SH"
 	}
-	dailySymbols := []string{dailySymbol}
-	if configuredSymbols := strings.TrimSpace(os.Getenv("LIVE_PROBE_DAILY_SYMBOLS")); configuredSymbols != "" {
-		dailySymbols = strings.Split(configuredSymbols, ",")
-		for index := range dailySymbols {
-			dailySymbols[index] = strings.TrimSpace(dailySymbols[index])
-			if dailySymbols[index] == "" {
-				t.Fatal("LIVE_PROBE_DAILY_SYMBOLS must not contain empty symbols")
-			}
-		}
-		dailySymbol = dailySymbols[0]
+	dailySymbols, symbolErr := parseLiveProbeDailySymbols(os.Getenv("LIVE_PROBE_DAILY_SYMBOLS"), dailySymbol)
+	if symbolErr != nil {
+		t.Fatal(symbolErr)
 	}
+	dailySymbol = dailySymbols[0]
 
 	report := liveProbeReport{
 		GeneratedAt: now.Format(time.RFC3339),
@@ -1229,23 +1258,27 @@ func TestLiveProviderProbe(t *testing.T) {
 	runQuote("sina", "sina", quoteSymbol, sina.client, func(ctx context.Context) (*model.Quote, error) {
 		return sina.FetchQuote(ctx, quoteSymbol)
 	})
-	runDaily("sina", "sina", dailySymbol, model.AdjustmentNone, sina.client, func(ctx context.Context) ([]model.DailyBar, error) {
-		return sina.FetchDailyBars(ctx, dailySymbol, startDate, endDate, dailyLimit, model.AdjustmentNone)
-	})
+	for _, symbol := range dailySymbols {
+		runDaily("sina", "sina", symbol, model.AdjustmentNone, sina.client, func(ctx context.Context) ([]model.DailyBar, error) {
+			return sina.FetchDailyBars(ctx, symbol, startDate, endDate, dailyLimit, model.AdjustmentNone)
+		})
+	}
 
 	tencent := NewTencent(12 * time.Second)
 	runQuote("tencent", "tencent", quoteSymbol, tencent.client, func(ctx context.Context) (*model.Quote, error) {
 		return tencent.FetchQuote(ctx, quoteSymbol)
 	})
-	runDaily("tencent", "tencent", dailySymbol, model.AdjustmentNone, tencent.client, func(ctx context.Context) ([]model.DailyBar, error) {
-		return tencent.FetchDailyBars(ctx, dailySymbol, startDate, endDate, dailyLimit, model.AdjustmentNone)
-	})
-	runDaily("tencent", "tencent", dailySymbol, model.AdjustmentForward, tencent.client, func(ctx context.Context) ([]model.DailyBar, error) {
-		return tencent.FetchDailyBars(ctx, dailySymbol, startDate, endDate, dailyLimit, model.AdjustmentForward)
-	})
-	runDaily("tencent", "tencent", dailySymbol, model.AdjustmentBackward, tencent.client, func(ctx context.Context) ([]model.DailyBar, error) {
-		return tencent.FetchDailyBars(ctx, dailySymbol, startDate, endDate, dailyLimit, model.AdjustmentBackward)
-	})
+	for _, symbol := range dailySymbols {
+		runDaily("tencent", "tencent", symbol, model.AdjustmentNone, tencent.client, func(ctx context.Context) ([]model.DailyBar, error) {
+			return tencent.FetchDailyBars(ctx, symbol, startDate, endDate, dailyLimit, model.AdjustmentNone)
+		})
+		runDaily("tencent", "tencent", symbol, model.AdjustmentForward, tencent.client, func(ctx context.Context) ([]model.DailyBar, error) {
+			return tencent.FetchDailyBars(ctx, symbol, startDate, endDate, dailyLimit, model.AdjustmentForward)
+		})
+		runDaily("tencent", "tencent", symbol, model.AdjustmentBackward, tencent.client, func(ctx context.Context) ([]model.DailyBar, error) {
+			return tencent.FetchDailyBars(ctx, symbol, startDate, endDate, dailyLimit, model.AdjustmentBackward)
+		})
+	}
 
 	// Cross-market coverage: Shenzhen ChiNext and Shanghai STAR Market are probed
 	// independently so a Shanghai Main Board success cannot stand in for them.
@@ -1304,22 +1337,26 @@ func TestLiveProviderProbe(t *testing.T) {
 	runQuote("eastmoney-delay", "eastmoney", dailySymbol, eastmoneyDelay.client, func(ctx context.Context) (*model.Quote, error) {
 		return eastmoneyDelay.FetchQuote(ctx, dailySymbol)
 	})
-	runDaily("eastmoney", "eastmoney", dailySymbol, model.AdjustmentForward, eastmoney.client, func(ctx context.Context) ([]model.DailyBar, error) {
-		return eastmoney.FetchDailyBars(ctx, dailySymbol, startDate, endDate, dailyLimit, model.AdjustmentForward)
-	})
-	runDaily("eastmoney", "eastmoney", dailySymbol, model.AdjustmentBackward, eastmoney.client, func(ctx context.Context) ([]model.DailyBar, error) {
-		return eastmoney.FetchDailyBars(ctx, dailySymbol, startDate, endDate, dailyLimit, model.AdjustmentBackward)
-	})
+	for _, symbol := range dailySymbols {
+		runDaily("eastmoney", "eastmoney", symbol, model.AdjustmentForward, eastmoney.client, func(ctx context.Context) ([]model.DailyBar, error) {
+			return eastmoney.FetchDailyBars(ctx, symbol, startDate, endDate, dailyLimit, model.AdjustmentForward)
+		})
+		runDaily("eastmoney", "eastmoney", symbol, model.AdjustmentBackward, eastmoney.client, func(ctx context.Context) ([]model.DailyBar, error) {
+			return eastmoney.FetchDailyBars(ctx, symbol, startDate, endDate, dailyLimit, model.AdjustmentBackward)
+		})
+	}
 
 	baostockClient := baostock.NewClient(baostock.Config{ConnectTimeout: 8 * time.Second, RequestTimeout: 20 * time.Second})
 	baostockProvider := NewBaostock(baostockClient)
 	beforeBaoStockDaily := len(report.Results)
-	runDaily("baostock", "baostock", dailySymbol, model.AdjustmentForward, nil, func(ctx context.Context) ([]model.DailyBar, error) {
-		return baostockProvider.FetchDailyBars(ctx, dailySymbol, startDate, endDate, dailyLimit, model.AdjustmentForward)
-	})
-	runDaily("baostock", "baostock", dailySymbol, model.AdjustmentBackward, nil, func(ctx context.Context) ([]model.DailyBar, error) {
-		return baostockProvider.FetchDailyBars(ctx, dailySymbol, startDate, endDate, dailyLimit, model.AdjustmentBackward)
-	})
+	for _, symbol := range dailySymbols {
+		runDaily("baostock", "baostock", symbol, model.AdjustmentForward, nil, func(ctx context.Context) ([]model.DailyBar, error) {
+			return baostockProvider.FetchDailyBars(ctx, symbol, startDate, endDate, dailyLimit, model.AdjustmentForward)
+		})
+		runDaily("baostock", "baostock", symbol, model.AdjustmentBackward, nil, func(ctx context.Context) ([]model.DailyBar, error) {
+			return baostockProvider.FetchDailyBars(ctx, symbol, startDate, endDate, dailyLimit, model.AdjustmentBackward)
+		})
+	}
 	dailyProbePassed := false
 	for _, result := range report.Results[beforeBaoStockDaily:] {
 		if result.Provider == "baostock" &&
@@ -1364,21 +1401,25 @@ func TestLiveProviderProbe(t *testing.T) {
 	runQuote("yahoo", "yahoo", quoteSymbol, yahoo.client, func(ctx context.Context) (*model.Quote, error) {
 		return yahoo.FetchQuote(ctx, quoteSymbol)
 	})
-	runDaily("yahoo", "yahoo", dailySymbol, model.AdjustmentForward, yahoo.client, func(ctx context.Context) ([]model.DailyBar, error) {
-		return yahoo.FetchDailyBars(ctx, dailySymbol, startDate, endDate, dailyLimit, model.AdjustmentForward)
-	})
-	runDaily("yahoo", "yahoo", dailySymbol, model.AdjustmentBackward, yahoo.client, func(ctx context.Context) ([]model.DailyBar, error) {
-		return yahoo.FetchDailyBars(ctx, dailySymbol, startDate, endDate, dailyLimit, model.AdjustmentBackward)
-	})
+	for _, symbol := range dailySymbols {
+		runDaily("yahoo", "yahoo", symbol, model.AdjustmentForward, yahoo.client, func(ctx context.Context) ([]model.DailyBar, error) {
+			return yahoo.FetchDailyBars(ctx, symbol, startDate, endDate, dailyLimit, model.AdjustmentForward)
+		})
+		runDaily("yahoo", "yahoo", symbol, model.AdjustmentBackward, yahoo.client, func(ctx context.Context) ([]model.DailyBar, error) {
+			return yahoo.FetchDailyBars(ctx, symbol, startDate, endDate, dailyLimit, model.AdjustmentBackward)
+		})
+	}
 
 	if os.Getenv("MARKET_DATA_LIVE_NETEASE_TESTS") == "1" {
 		netease := NewNetease(12*time.Second, "")
 		runQuote("netease", "netease", quoteSymbol, netease.client, func(ctx context.Context) (*model.Quote, error) {
 			return netease.FetchQuote(ctx, quoteSymbol)
 		})
-		runDaily("netease", "netease", dailySymbol, model.AdjustmentNone, netease.client, func(ctx context.Context) ([]model.DailyBar, error) {
-			return netease.FetchDailyBars(ctx, dailySymbol, startDate, endDate, dailyLimit, model.AdjustmentNone)
-		})
+		for _, symbol := range dailySymbols {
+			runDaily("netease", "netease", symbol, model.AdjustmentNone, netease.client, func(ctx context.Context) ([]model.DailyBar, error) {
+				return netease.FetchDailyBars(ctx, symbol, startDate, endDate, dailyLimit, model.AdjustmentNone)
+			})
+		}
 	} else {
 		report.Results = append(report.Results,
 			liveProbeResult{Provider: "netease", Capability: "quote", Symbol: quoteSymbol, Status: "skipped", Error: "NetEase quote endpoint DNS resolution failed in hosted runners; set MARKET_DATA_LIVE_NETEASE_TESTS=1 to retry"},

@@ -464,3 +464,60 @@ Live Provider Probe Run `41788725692` 的 workflow conclusion 为 success，但�
 - 两只股票 none/qfq/hfq 各 9 条，均 9/9 valid，method/ref-date 断言通过。
 - Go test suite Run `41960406782` 全部通过。
 - 该元数据描述 Pytdx 自身复权锚点；与 BaoStock 的方法不同，不能据此直接跨源比较 adjusted OHLC。
+
+
+## 23. 2026-11-05：BaoStock 八只证券真实复权与上市日期对账
+
+- 代码 SHA：`687b49a190e661bed0855ab3f5bfd367bf9bd4c1`；Push Live Provider Probe Run `42017059794` success，BaoStock 专项 `TestLiveBaoStockAdjustmentFactorConsistency` 实际运行并产出 Artifact `live-baostock-adjustment-report`（ID `13409567542`）。
+- 请求窗口：因子历史 `1990-01-01` 至探测日；OHLC 主窗口 `2025-07-07` 至 `2025-07-17`。
+
+| 证券 | 因子行数 | 首因子日期 | raw/qfq/hfq 行数 | OHLC mismatch |
+|---|---:|---|---:|---:|
+| 000001.SZ | 42 | 1991-04-03 | 9/9/9 | 0 |
+| 000002.SZ | 46 | 1991-01-29 | 9/9/9 | 0 |
+| 000858.SZ | 31 | 1998-04-27 | 9/9/9 | 0 |
+| 600000.SH | 27 | 1999-11-10 | 9/9/9 | 0 |
+| 600016.SH | 40 | 2000-12-19 | 9/9/9 | 0 |
+| 600601.SH | 29 | 1990-12-19 | 9/9/9 | 0 |
+| 600036.SH | 30 | 2002-04-09 | 9/9/9 | 0 |
+| 002982.SZ | 8 | 2020-04-24 | 9/9/9 | 0 |
+
+- 八只证券首因子日期均与独立上市日期核验一致：000001（公司资料）、000002（巨潮/发行人文件）、000858（公司资料）、600000/600601（上交所公司概况）、600016（公司资料）、600036（发行人上市文件）、002982（深交所上市公告）。上市日期是独立证据，不由 BaoStock 因子推断。
+- 旧报告八只 `pre_first_event_status=unavailable`，因为 1990 至首事件前一天 raw 查询为空。结合上市日期证据，这八只均不存在上市交易日前的交易日，适用性应为 `not_applicable`，不能计为 matched，也不能据此证明 fallback 公式。
+- 本批仅证明 2025 主窗口 BaoStock 自身 raw × 因子与自身 qfq/hfq OHLC 一致；不证明跨 Provider parity、AvailableAt 或 PIT 可见性。生产 helper 继续 fail-closed。
+
+
+## 24. 2026-11-05：上市日期分类代码专项重跑
+
+- 代码 SHA：`cce59e8de493813a4b04f7d0bd24211e1e919bb1`；Push Go suite Run `42018395454` success；Push Live Probe Run `42018395554` 外层 success，但 BaoStock 专项测试步骤 failure。
+- 新报告 Artifact `13410008325`：600601.SH、600036.SH、002982.SZ 成功取回 29/30/8 条因子，raw/qfq/hfq 各 9 行、OHLC mismatch=0；三只首因子日均与独立上市日期相同，`pre_first_event_status=not_applicable`。
+- 000001.SZ、000002.SZ、000858.SZ、600000.SH、600016.SH 登录 BaoStock 时发生 TCP timeout，报告为 `factor_count=0`，属于 `unavailable`，不计验收通过。不得把外层 workflow success 解释为八证券专项通过。
+- 八证券主窗口完整真实对账仍以 Run `42017059794` / Artifact `13409567542` 为证据。本次仅补充验证新分类逻辑，不覆盖或替代原完整报告。
+
+
+## 26. 2026-11-05：BaoStock/Pytdx raw 双源成交量精度重评
+
+- 真实原始样本来自 Pytdx/BaoStock live report Artifact `13410429933`，证券 `600036.SH`、`002982.SZ`，窗口 2025-07-07 至 2025-07-17，各 9 个交易日。原始报告 OHLC 全匹配，成交量和成交额因原始比较器固定容差分别出现 mismatch。
+- 按源粒度重新评估成交量：TDX `VOL` 以手为单位（1 手=100 股），BaoStock provider 原始量单位为 shares。600036 最大差 84 股、002982 最大差 96 股，均在 100 股粒度内。新增内部 `VolumeGranularity` 后，成交量字段可判 matched；未更改原始成交量数据。
+- 成交额单位均为 CNY，当前 1 CNY 容差保持不变。600036 9/9、002982 8/9 行成交额差异超过 1 CNY；最大差 120.74/7.90 CNY。相对误差虽小，但没有足够源精度证据放宽阈值，双源整体状态仍 mismatch。
+- 本轮不是新的完整实时双源重跑；Run `42021978339` 的 BaoStock 请求超时，报告为 not_comparable。新粒度结论来自前次真实原始值离线重评和单测，不计新的实时验收。
+
+
+## 27. 2026-11-05：TDX/BaoStock 成交额精度复核
+
+- TDX `protocol.Kline.Amount` 使用 `Price`（内部单位毫元），协议解码将原始整数 CNY 转为内部 Price，`Float64()` 还原为整数元；TDX 官方 `AMOUNT` 单位为元。BaoStock adapter 保留原始 amount，单位标记 CNY，响应值存在小数。
+- 既有 18 个真实交易日样本中，600036.SH 成交额差最大 120.74 CNY，002982.SZ 最大 7.90 CNY；17/18 行超过 1 CNY 容差。相对差很小（约 3.19e-8/4.13e-8），但没有证据证明差异仅来自格式舍入。
+- 保持 1 CNY 绝对容差和 mismatch 判定；不将这批 raw 双源样本标记 matched。待增加更多成交额量级样本并明确供应商聚合口径后再评估阈值。
+
+## 28. 2026-11-05：raw 双源成交额按来源精度重评
+
+- 原始证据：Artifact `13410429933`，生成时间 2026-11-05T11:39:09Z，窗口 2025-07-07 至 2025-07-17；Pytdx 与 BaoStock 各提供 600036.SH、002982.SZ 的 9 个共同交易日。两侧样本 QualityStatus 均 valid，证券身份、日期集合一致。
+- 来源精度依据：
+  - Pytdx v0.0.86 `protocol/model_kline.go` 将 `getVolume(Float32frombits(...))*1000` 转为 `Price`；`protocol/unit.go` 的 `getVolume` 明确由 float32 解码。金额步长按 float32 ULP，并取不低于 0.001 CNY。
+  - BaoStock Python API 字段说明定义 amount 精度为小数点后 4 位、单位人民币元，步长 0.0001 CNY。
+  - 双边独立量化容差为 `(TDX_step + BaoStock_step) / 2`。
+- 按当前比较器规则离线重评：
+  - 600036.SH：OHLC 9/9、volume 9/9、amount 9/9 matched；成交量最大差 84 股；成交额最大差 120.74 CNY，所在金额量级的动态容差为 256.00005 CNY。
+  - 002982.SZ：OHLC 9/9、volume 9/9、amount 9/9 matched；成交量最大差 96 股；成交额最大差 7.90 CNY，所在金额量级的动态容差为 8.00005 CNY。
+  - 两只证券各 54/54 字段 matched。原始报告中按固定 50 股/1 CNY 得到的 mismatch 是容差没有表达来源量化精度，并非 OHLC 或交易日数据不一致。
+- 结论：该 artifact 可作为 raw 双源精度感知对账的黄金样例。此次是对已保存的真实响应离线重评，不代表 2026-11-05 本轮重新拉取成功；后续仍需在 BaoStock 网络可用时 fresh rerun。复权样本与 PIT 可见性不在本条结论范围内；AvailableAt 未知仍禁止 PIT 使用。

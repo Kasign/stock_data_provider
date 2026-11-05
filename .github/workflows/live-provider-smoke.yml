@@ -21,6 +21,12 @@ on:
       - "services/market-data/internal/provider/pytdx_official_intraday_suspension_daily_live_test.go"
       - "services/market-data/internal/baostock/**"
       - "services/market-data/internal/service/provider_probe_live_test.go"
+      - "services/market-data/internal/service/data.go"
+      - "services/market-data/internal/service/data_test.go"
+      - "services/market-data/internal/service/adjustment_rebuild.go"
+      - "services/market-data/internal/service/adjustment_rebuild_basis_test.go"
+      - "services/market-data/internal/service/daily_bar_trading_context.go"
+      - "services/market-data/internal/service/daily_bar_trading_context_test.go"
   workflow_dispatch:
     inputs:
       quote_symbol:
@@ -64,6 +70,12 @@ on:
       - "services/market-data/internal/provider/**"
       - "services/market-data/internal/baostock/**"
       - "services/market-data/internal/model/**"
+      - "services/market-data/internal/service/data.go"
+      - "services/market-data/internal/service/data_test.go"
+      - "services/market-data/internal/service/adjustment_rebuild.go"
+      - "services/market-data/internal/service/adjustment_rebuild_basis_test.go"
+      - "services/market-data/internal/service/daily_bar_trading_context.go"
+      - "services/market-data/internal/service/daily_bar_trading_context_test.go"
       - "services/market-data/configs/**"
       - "services/market-data/.env.example"
       - "go-core/**"

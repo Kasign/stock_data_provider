@@ -48,8 +48,12 @@ func TestDailyBarsAsOfRejectsInvalidDateBoundsBeforeStorageLookup(t *testing.T) 
 
 func TestRebuildAdjustedDailyBarsUsesAsOfFactorReferenceAndProvenance(t *testing.T) {
 	observed := time.Date(2026, 10, 1, 8, 0, 0, 0, time.UTC)
-	bars := []model.DailyBar{{Symbol: "600519.SH", TradeDate: "2026-09-29", Open: 100, High: 110, Low: 90, Close: 100, AdjustmentBasis: model.AdjustmentNone}, {Symbol: "600519.SH", TradeDate: "2026-09-30", Open: 110, High: 120, Low: 100, Close: 110, AdjustmentBasis: model.AdjustmentNone}}
-	factors := []model.AdjustmentFactor{{Symbol: "600519.SH", TradeDate: "2026-09-29", Factor: 2, Source: "factor-provider", SourceVersion: "v1", SystemObservedAt: &observed, AvailableAt: &observed, QualityStatus: model.QualityValid}, {Symbol: "600519.SH", TradeDate: "2026-09-30", Factor: 4, Source: "factor-provider", SourceVersion: "v1", SystemObservedAt: &observed, AvailableAt: &observed, QualityStatus: model.QualityValid}}
+	bars := []model.DailyBar{
+		{Symbol: "600519.SH", TradeDate: "2026-09-29", Open: 100, High: 110, Low: 90, Close: 100, Source: "factor-provider", SourceVersion: "v1", AdjustmentBasis: model.AdjustmentNone},
+		{Symbol: "600519.SH", TradeDate: "2026-09-30", Open: 110, High: 120, Low: 100, Close: 110, Source: "factor-provider", SourceVersion: "v1", AdjustmentBasis: model.AdjustmentNone},
+	}
+	factors := []model.AdjustmentFactor{{Symbol: "600519.SH", TradeDate: "2026-09-29", Factor: 2, Source: "factor-provider", SourceVersion: "v1", FetchedAt: observed, SystemObservedAt: &observed, AvailableAt: &observed, QualityStatus: model.QualityValid},
+		{Symbol: "600519.SH", TradeDate: "2026-09-30", Factor: 4, Source: "factor-provider", SourceVersion: "v1", FetchedAt: observed, SystemObservedAt: &observed, AvailableAt: &observed, QualityStatus: model.QualityValid}}
 	got, err := rebuildAdjustedDailyBars(bars, factors, model.AdjustmentForward, "2026-09-30")
 	if err != nil {
 		t.Fatal(err)
@@ -74,8 +78,8 @@ func TestRebuildAdjustedDailyBarsUsesAsOfFactorReferenceAndProvenance(t *testing
 
 func TestRebuildAdjustedDailyBarsRejectsUnprovenFactor(t *testing.T) {
 	observed := time.Date(2026, 10, 1, 8, 0, 0, 0, time.UTC)
-	bars := []model.DailyBar{{Symbol: "600519.SH", TradeDate: "2026-09-29", Open: 10, High: 11, Low: 9, Close: 10, AdjustmentBasis: model.AdjustmentNone}}
-	factors := []model.AdjustmentFactor{{Symbol: "600519.SH", TradeDate: "2026-09-29", Factor: 2, Source: "p", SourceVersion: "v1", SystemObservedAt: &observed, QualityStatus: model.QualityValid}}
+	bars := []model.DailyBar{{Symbol: "600519.SH", TradeDate: "2026-09-29", Open: 10, High: 11, Low: 9, Close: 10, Source: "p", SourceVersion: "v1", AdjustmentBasis: model.AdjustmentNone}}
+	factors := []model.AdjustmentFactor{{Symbol: "600519.SH", TradeDate: "2026-09-29", Factor: 2, Source: "p", SourceVersion: "v1", FetchedAt: observed, SystemObservedAt: &observed, QualityStatus: model.QualityValid}}
 	if _, err := rebuildAdjustedDailyBars(bars, factors, model.AdjustmentForward, "2026-09-29"); err == nil {
 		t.Fatal("factor without available_at must be rejected")
 	}
@@ -84,12 +88,12 @@ func TestRebuildAdjustedDailyBarsRejectsUnprovenFactor(t *testing.T) {
 func TestRebuildAdjustedDailyBarsPropagatesDegradedFactorQuality(t *testing.T) {
 	observed := time.Date(2026, 10, 1, 8, 0, 0, 0, time.UTC)
 	bars := []model.DailyBar{
-		{Symbol: "600519.SH", TradeDate: "2026-09-29", Open: 100, High: 110, Low: 90, Close: 100, AdjustmentBasis: model.AdjustmentNone, QualityStatus: model.QualityValid},
-		{Symbol: "600519.SH", TradeDate: "2026-09-30", Open: 110, High: 120, Low: 100, Close: 110, AdjustmentBasis: model.AdjustmentNone, QualityStatus: model.QualityValid},
+		{Symbol: "600519.SH", TradeDate: "2026-09-29", Open: 100, High: 110, Low: 90, Close: 100, Source: "factor-provider", SourceVersion: "v1", AdjustmentBasis: model.AdjustmentNone, QualityStatus: model.QualityValid},
+		{Symbol: "600519.SH", TradeDate: "2026-09-30", Open: 110, High: 120, Low: 100, Close: 110, Source: "factor-provider", SourceVersion: "v1", AdjustmentBasis: model.AdjustmentNone, QualityStatus: model.QualityValid},
 	}
 	factors := []model.AdjustmentFactor{
-		{Symbol: "600519.SH", TradeDate: "2026-09-29", Factor: 2, Source: "factor-provider", SourceVersion: "v1", SystemObservedAt: &observed, AvailableAt: &observed, QualityStatus: model.QualityValid},
-		{Symbol: "600519.SH", TradeDate: "2026-09-30", Factor: 4, Source: "factor-provider", SourceVersion: "v1", SystemObservedAt: &observed, AvailableAt: &observed, QualityStatus: model.QualityDegraded, QualityReasons: []string{"factor_revision_incomplete"}},
+		{Symbol: "600519.SH", TradeDate: "2026-09-29", Factor: 2, Source: "factor-provider", SourceVersion: "v1", FetchedAt: observed, SystemObservedAt: &observed, AvailableAt: &observed, QualityStatus: model.QualityValid},
+		{Symbol: "600519.SH", TradeDate: "2026-09-30", Factor: 4, Source: "factor-provider", SourceVersion: "v1", FetchedAt: observed, SystemObservedAt: &observed, AvailableAt: &observed, QualityStatus: model.QualityDegraded, QualityReasons: []string{"factor_revision_incomplete"}},
 	}
 	got, err := rebuildAdjustedDailyBars(bars, factors, model.AdjustmentForward, "2026-09-30")
 	if err != nil {
@@ -117,12 +121,13 @@ func TestRebuildAdjustedDailyBarsCurrentAcceptsObservedBaoStockFactorWithoutAvai
 	bars := []model.DailyBar{{
 		Symbol: "600036.SH", TradeDate: "2025-07-07",
 		Open: 10, High: 11, Low: 9, Close: 10,
+		Source: "baostock", SourceVersion: "baostock-public-tcp-v1", AdjustmentBasis: model.AdjustmentNone,
 		QualityStatus: model.QualityValid,
 	}}
 	factors := []model.AdjustmentFactor{{
 		Symbol: "600036.SH", TradeDate: "2025-07-07", Factor: 2,
 		Basis: model.AdjustmentFactorForward, Source: "baostock", SourceVersion: "baostock-public-tcp-v1",
-		AvailableAt: nil, SystemObservedAt: &observed,
+		FetchedAt: observed.Add(-time.Minute), AvailableAt: nil, SystemObservedAt: &observed,
 		QualityStatus:  model.QualityDegraded,
 		QualityReasons: []string{"provider_available_at_not_exposed_by_query_adjust_factor"},
 	}}
@@ -131,7 +136,7 @@ func TestRebuildAdjustedDailyBarsCurrentAcceptsObservedBaoStockFactorWithoutAvai
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got[0].Close != 10 || got[0].AdjustmentFactorSource != "baostock" {
+	if got[0].Close != 20 || got[0].AdjustmentFactorSource != "baostock" {
 		t.Fatalf("unexpected current rebuild result: %+v", got[0])
 	}
 	if got[0].QualityStatus != model.QualityDegraded ||
@@ -146,11 +151,11 @@ func TestRebuildAdjustedDailyBarsCurrentAcceptsObservedBaoStockFactorWithoutAvai
 }
 
 func TestRebuildAdjustedDailyBarsCurrentStillRequiresSystemObservation(t *testing.T) {
-	bars := []model.DailyBar{{Symbol: "600036.SH", TradeDate: "2025-07-07", Open: 10, High: 11, Low: 9, Close: 10}}
+	bars := []model.DailyBar{{Symbol: "600036.SH", TradeDate: "2025-07-07", Open: 10, High: 11, Low: 9, Close: 10, Source: "baostock", SourceVersion: "v1", AdjustmentBasis: model.AdjustmentNone}}
 	factors := []model.AdjustmentFactor{{
 		Symbol: "600036.SH", TradeDate: "2025-07-07", Factor: 2,
 		Basis: model.AdjustmentFactorForward, Source: "baostock", SourceVersion: "v1",
-		QualityStatus: model.QualityDegraded,
+		FetchedAt: time.Now().UTC().Add(-time.Minute), QualityStatus: model.QualityDegraded,
 	}}
 	if _, err := rebuildAdjustedDailyBarsCurrent(bars, factors, model.AdjustmentForward, "2025-07-07"); err == nil {
 		t.Fatal("current rebuild must reject factors that have not been observed by this system")

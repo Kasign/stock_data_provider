@@ -103,3 +103,294 @@
 - 普通 DailyBars 仍使用 Provider 原生 qfq/hfq 数据；本次不新增 API、不自动跨 Provider 拼接 raw bars 与因子。只有后续出现明确的“当前本地因子重建”产品需求时，才增加受控 service 入口，并要求 raw bars 与因子来源/版本可验证匹配。
 - 验收覆盖：BaoStock 无 AvailableAt、有 SystemObservedAt 的因子可用于 current helper，重建结果保留 degraded；同一因子在 PIT helper 中被拒绝；缺少 SystemObservedAt 的临时 Provider 结果在 current helper 中也被拒绝。
 - 当前状态：语义隔离代码与单测已实现，待最新 SHA 的 CI 验证；不代表普通 DailyBars 已启用本地因子重建。阶段 B 继续 in_progress。
+
+
+## 2026-11-05 P0 批次 17：PIT 版本选择必须按可见版本回退
+
+- 复核 AdjustmentFactor 与 CorporateAction 的 MariaDB as_of SQL，发现原查询先按系统记录时间选最新 revision，再由 Service 过滤 Provider AvailableAt。若最新 revision 已被系统观察、但 Provider AvailableAt 晚于 as_of，旧的已可用 revision 会被新 revision 遮蔽，造成历史 PIT 误报缺失。
+- 两类查询现统一将 recorded_at、fetched_at、available_at 三个时间条件放入候选版本与 NOT EXISTS 子查询；只在“as_of 时点三项时间均可见”的候选集合内选最新版本。
+- Service 层现有三时间校验继续保留，作为 SQL 结果的第二道防线；AvailableAt=nil 的 BaoStock 因子仍不会进入 PIT。
+- MariaDB 集成测试新增因子与公司行动两组回退场景：v1 已可用，v2 已观察但 AvailableAt 在 as_of 之后，必须返回 v1。
+- 该修复只影响 PIT 历史版本选择，不改变当前值表、Provider 采集或对外 API。待最新 SHA 的 MariaDB migration/PIT 集成与完整 CI 验证。
+
+## 2026-11-05 P0 批次 18：Service 层 PIT 版本回退集成覆盖
+
+- 新增真实 MariaDB 驱动的 Service 层回归测试，分别覆盖复权因子和公司行动。
+- 两类数据均构造 v1 已在 as_of 前可见、v2 已被系统观察但供应商 available_at 晚于 as_of 的场景；Service 必须返回 v1。
+- 该测试补足 Repository SQL 回退与 Service 三时间二次校验之间的调用链验证。MariaDB 未配置时测试 Skip，不能将 Skip 当作成功验收。
+- 不改变 PIT 时间语义、版本键、API 或 BaoStock nil AvailableAt 处理规则。待新 SHA CI 验证后再更新批次状态。
+
+
+## 2026-11-05 P0 批次 19：Service PIT 回退测试纳入真实 MariaDB CI
+
+- 发现批次 18 两项 Service PIT 集成测试此前未纳入专用 MariaDB Job；普通 Go suite 因未设置 `MARKET_DATA_TEST_MYSQL_DSN` 会 Skip，不能作为真实数据库验收。
+- 已新增独立 CI 步骤，注入 MariaDB DSN，精确执行因子和公司行动两项 Service PIT 版本回退测试。
+- 新 SHA 验收要求两条测试日志明确 PASS，不接受 Skip 或仅凭 workflow success 推断通过。
+- 本批只调整自动化验收，不改变业务代码和 PIT 语义；阶段 B 仍为 in_progress，等待新 SHA CI。
+
+
+## 2026-11-05 P0 批次 20：修正 Service PIT 集成测试证券代码夹具
+
+- 真实 MariaDB CI 已执行批次 19 新增的 Service PIT 测试，暴露测试夹具使用随机字符串而非合法 A 股证券代码的问题；生产代码校验正确，不应放宽。
+- 两项测试改用合法证券代码 `600519.SH`，继续验证因子与公司行动在 Service 层回退到 as_of 可见的 v1 revision。
+- 批次 19 CI 结果为失败，不能将 Job success 或 Repository 测试通过误报为 Service PIT 通过。批次 20 等待新 SHA 的真实 MariaDB 结果。
+
+
+## 2026-11-05 P0 批次 21：Service PIT 回退真实 MariaDB 验收通过
+
+- 验收 SHA：`c938d7b5f2c0e690eb70d3246f2b0ad91eb67578`。
+- 专用 MariaDB Job `127144202157` 的 Service PIT 步骤中，复权因子与公司行动两项版本回退测试均明确 PASS，未发生 SKIP。
+- 测试证券代码夹具已修正为合法的 `600519.SH`；生产代码的证券校验保持不变。
+- 同一 SHA 的 5 个 workflow 全部完成且 success：Go test suite push `41997386635`、Go test suite PR `41997394765`、Go-Python parity `41997394676`、Live provider probe `41997394766`、WebUI checks `41997394719`。
+- PR #1 保持 Open / Draft，未合并。Service PIT 回退验收通过；阶段 B 仍 in_progress，后续继续复权口径、交易边界和诊断计数审查。
+
+
+## 2026-11-05 P0 批次 22：修正前复权参考日与请求结束日混淆
+
+- Pytdx 的前复权参考日来自完整加载历史的最新交易日，可能晚于请求区间结束日；请求结束日只限定返回 K 线，不应限制复权计算基准日。
+- Service 校验改为：前复权参考日不得早于任一 K 线日期；参考日不得晚于当前 Asia/Shanghai 日期；同一序列 method/reference date 必须一致。移除“参考日不得晚于请求结束日”的错误限制。
+- 新增晚于请求结束日的参考日可接受、未来参考日拒绝两项回归测试。
+- 本批待新 SHA 完整 CI 验证，阶段 B 继续 in_progress。
+
+
+## 2026-11-05 P0 批次 23：前复权参考日校验修复通过 CI
+
+- 验收 SHA：`6730e6e612c6b72bf57e18b2c5d8c45bf62e4d50`。
+- Go test suite Push Run `41998874246`、PR Run `41998882338` 全部 Job success；Go-Python parity Run `41998881955`、WebUI checks Run `41998881909`、Live provider probe Run `41998881866` 均为 success。
+- Live provider probe 的外层 workflow success 不代表真实请求全部执行；日志显示通用实时探测及 Tushare、同花顺、TickFlow 可选实时探测均因环境开关未配置而 SKIP。
+- 前复权参考日晚于请求结束日的合法场景和未来参考日拒绝场景已纳入单测，并随当前 SHA 的 market-data Go tests 通过。
+- PR #1 仍为 Open / Draft，未合并。批次 22 验收关闭，阶段 B 继续 in_progress。
+
+
+## 2026-11-05 P0 批次 24：补充前复权参考日 Service 调用链回归
+
+- 新增 DataService.DailyBars 级测试，验证 Pytdx 风格前复权参考日 `2026-10-22` 晚于请求结束日 `2026-10-21` 时，Service 仍返回结果并保留复权 method/reference date，不错误降级。
+- 该测试补足 helper 单测与真实 Service 调用路径之间的回归覆盖；本批待新 SHA CI 验证。
+
+
+## 2026-11-05 P0 批次 25：扩展 DailyBars 变更触发公开 Provider 探测
+
+- live-provider-smoke 的 push / pull_request 路径过滤新增 DataService.DailyBars、复权重建和日 K 交易上下文相关 Service 文件。
+- 公开 Provider 实时请求仍由提交标记 `[include_public]` 显式开启；普通 PR 不自动消耗线上接口额度。
+- 本批触发两只样本证券 `600036.SH`、`002982.SZ` 在 2025-07-07 至 2025-07-17 的公开 Provider 日 K/复权探测，真实结果待核验。
+
+
+## 2026-11-05 P0 批次 26：修复完整 Live Probe 多证券样本覆盖
+
+- 真实运行发现完整探测路径忽略 `LIVE_PROBE_DAILY_SYMBOLS` 中第二只证券，只在 public-daily-only 分支遍历样本列表。
+- 完整路径现对全部配置样本执行 Sina raw、Tencent none/qfq/hfq、Eastmoney qfq/hfq、BaoStock qfq/hfq、Yahoo qfq/hfq；可选 NetEase raw 同样遍历。Quote、公告等非日 K 能力仍只使用首只样本。
+- 增加样本证券列表解析测试，验证多证券、默认值、空项与重复项。
+- 新 SHA 待两只样本真实探测和完整 CI 验证。
+
+
+## 2026-11-05 P0 批次 27：执行 Pytdx 与 Service 真实历史诊断
+
+- Pytdx 前复权参考日测试改名并补充契约注释，明确参考日可晚于请求结束日，但输出 K 线仍受请求日期范围约束。
+- 通过 live-provider-smoke 提交标记触发 Pytdx 两只证券 raw/qfq/hfq + GBBQ 真实探测，以及生产 DataService Probe 两证券、三复权口径的 MariaDB 持久化诊断。
+- 结果待真实运行完成后核验。
+
+
+## 2026-11-05 P0 批次 27：Pytdx 与生产 DataService 历史探测结果
+
+- SHA：`2477e92d5fd439f4ed97bae971ad0ffe9ae2085b`。Push Go tests Run `42003400135`、Push Live probe Run `42003400131`、PR Go tests `42003411612`、Parity `42003411993`、WebUI `42003411698`、PR Live probe `42003411518` 均 success；均对应当前 SHA。PR #1 仍 Open/Draft、未合并。
+- Pytdx 两只样本 `600036.SH`、`002982.SZ` 的 raw/qfq/hfq 在 2025-07-07 至 2025-07-17 均返回 9 根、quality valid；qfq reference date 均为 2026-11-05（晚于请求结束日），hfq reference date 分别为 2002-04-09、2020-04-24。
+- GBBQ/BaoStock 公司行动三条事件全部 matched；`002982.SZ/2025-05-30` 的理论除权价差 0.0042857 元、factor ratio 差 0.0004050，低于现行阈值但接近 factor 容差上限，列为边界样本待评估，不据此扩大容差。
+- 生产 DataService Probe 两只证券各 15 项：13 degraded、2 not_supported、0 failed，均持久化且读回通过。Sina qfq/hfq 为 not_supported；两只证券 Eastmoney+BaoStock raw 交叉比较各 9 日期、54 字段全部匹配；每只 storage check passed。
+- 全部返回项附加 `daily_bar_context_calendar_degraded`，源于当前只配置 BaoStock 日历，日历快照缺少 Provider snapshot timestamp；这表示交易日上下文质量降级，不代表 K 线 OHLC 全部错误。Sina/Tencent/Yahoo 另缺成交额；Tencent/Eastmoney/BaoStock qfq 参考日未验证。
+- 本批专项完成，但生产 Probe 总体仍 degraded，不关闭数据质量验收。下一步审查日历降级语义：区分日历日期覆盖/来源冲突与快照时间戳缺失，确定何时应影响 K 线质量、何时只作为上下文 warning；禁止伪造时间戳或强制 valid。
+
+
+## 2026-11-05 P0 批次 28：历史交易日历时间戳缺口分级
+
+- 对完整历史日历，若唯一质量缺口是 Provider 未暴露/缺少快照发布时间，且日历结束日期早于当前 Asia/Shanghai 日期，则保留 `daily_bar_context_calendar_snapshot_time_unverified` warning，但不单独降级历史 K 线质量。
+- 当前/未来日历、日历来源冲突、仅返回交易日而推断非交易日、其他质量缺口继续 degraded；缺少日历仍 degraded。
+- 该修复不伪造上游时间、不放宽日期覆盖校验。新增三项回归测试，等待新 SHA CI 与真实 Probe 复验。
+
+
+- 边界修正：历史判定按上海时区的自然日比较，当前日期本身仍属于 current calendar，不会因当天零点早于当前时刻而误判为历史日期。
+
+
+- CI 修正记录：SHA `11e742e5e89df4776798a8622f12d68ed246fc84` 的 Go test suite 在 `Check gofmt` 发现新增测试文件三处字段对齐不符合 gofmt，属于格式检查失败；已在本提交修正格式，并通过提交标记重新触发生产 DataService 历史 Probe。该 SHA 不作为通过验收的依据。
+
+
+## 2026-11-05 P0 批次 30：历史交易日历质量边界真实复验
+
+- 验收 SHA：`a27067dbdc1ae288afeb75b2fbc60f471e9087cc`；Go push/PR、Parity、WebUI、Live push/PR 六个 workflow 全部 success。旧 SHA `11e742...` 的 gofmt 失败已修复，不作为通过结果。
+- 生产 Service Probe 两只证券各 15 项：4 returned、9 degraded、2 not_supported、0 failed，均持久化成功；connectivity/contract 通过，storage 通过。
+- 历史日历时间戳缺失只保留 warning；剩余降级来自成交额缺失、前复权参考日未知和 Provider contract warning。
+- 每只证券 Eastmoney raw 与 BaoStock raw 9 日 × 6 字段 54/54 matched；其余 21 项 cross-provider 比较 skipped，无 mismatch；adjusted 跨源一致性仍未验收。
+- PR #1 Open / Draft，未合并。批次 29 关闭；下一步评估 BaoStock 因子与同源 raw K 的 current 重建证据链，Eastmoney/Tencent 不推断锚点，Tushare 40203 不重复请求。阶段 B 继续 in_progress。
+
+
+## 2026-11-05 P0 批次 31：复权事件因子向后对齐与同源约束
+
+- BaoStock `query_adjust_factor` 返回除权除息事件日期 `dividOperateDate`，不是逐交易日因子；重建时按每根 raw K 日期选择最近的 `OperateDate <= trade_date` 事件因子。首根 K 之前无可用事件时拒绝重建，不回退到未来因子。
+- 强制 raw K 与因子同证券、同 Provider、同 source_version，且 raw K 必须为 none basis；禁止跨源拼接。
+- 前复权参考因子按 `OperateDate <= requestedReferenceDate` 选最新事件，参考日期不得早于最新 raw K；后复权按每根 K 的最近事件因子计算。
+- current 仍允许 AvailableAt nil，但必须有持久化 SystemObservedAt，输出保留 degraded；PIT 仍要求 AvailableAt 有证据。
+- 新增事件因子日期向后对齐、跨源/跨证券拒绝、首因子之前日期拒绝及 current/PIT 可见性测试。当前 helper 未接入普通 DailyBars，等待 CI 与真实复权对账。
+
+
+- 防御性补充：current helper 即使收到错误标记为 `valid` 但 `AvailableAt=nil` 的因子，也会强制降级并写入 `provider_available_at_unknown`；PIT 仍直接排除该因子。回归测试验证该防御，而不是依赖 Provider 一定正确标记 QualityStatus。
+
+
+- CI 格式修正：SHA `ac743f19cdbed45d2b0d44c5c163fb3be2cec7a2` 的首次 Go suite 在新增测试函数前多出一行空行，`Check gofmt` 失败；仅修正格式，不改变逻辑。下一 SHA 重新执行完整 CI。
+
+
+- 参考锚点语义修正：`AdjustmentRefDate` 表示复权价格序列的参考锚点，应记录 `requestedReferenceDate`；内部用于查找累计因子的最近 `OperateDate` 是事件日期，不得冒充价格参考锚点。测试覆盖两者不同的情况。
+
+
+- CI 编译修正：SHA `32a4884c5094831331b00add4553a290d863f00c` 的首次 Go suite 在 current 因子质量补充处错误使用了返回值形式的 `appendReasonOnce`；该函数实际接收切片指针并原地追加。已修正调用，旧 SHA 不作为通过依据。
+
+
+- 公式语义进一步明确：方向专属 `forward/backward` 因子是 Provider 已计算的直接价格乘数，均直接乘 raw OHLC；只有 `shared` 累计因子在前复权时使用 `factor(date)/factor(referenceDate)`。BaoStock 真实探测代码已用 raw×fore/back factor 与原生 qfq/hfq 对账；Tushare `adj_factor` 继续使用 shared 归一化语义。
+
+
+- CI 兼容性修正：批次 31 新增 raw K 同源身份硬约束后，旧 `daily_bars_pit_test.go` 的三组夹具缺少 Source/SourceVersion/FetchedAt，触发预期的契约拒绝。已补齐真实同源测试元数据；不放宽生产校验。BaoStock 方向因子回归期望值同步按直接乘数修正。
+
+
+## 2026-11-05 P0 批次 32：复权重建事件因子与来源语义验收
+
+- 最终代码 SHA `4732f14d8998bcd06ffb1118846535b626865b2d` 的 Push Go suite `42007631175`、PR Go suite `42007643683`、PR Live probe `42007643685`、PR WebUI `42007643763`、PR Parity `42007643883` 全部 success。该 SHA 没有 push Live probe run，不将 PR Live probe 外层 success 误认为新的真实 Provider 请求。
+- BaoStock 事件因子按最近 `OperateDate <= trade_date` 向后对齐；无首个可用事件因子时拒绝外推。raw K 与因子强制同证券/Provider/source_version。
+- BaoStock `forward/backward` 方向因子直接乘 raw OHLC；Tushare `shared` 因子前复权用参考日比值、后复权直接乘。参考锚点日期与内部因子事件日期分离。
+- current 模式可消费持久化且 SystemObservedAt 已生成的 AvailableAt=nil 因子，但必须 degraded；PIT 仍要求 AvailableAt 可证明。
+- 两个中间 SHA 分别出现编译参数错误和旧测试夹具缺少来源元数据，已修复；只有最终 SHA 全量 CI 计通过。
+- current helper 未接入 DailyBars：当前没有不要求 AvailableAt 的 Repository current factor read；RefreshAdjustmentFactors 返回的值缺 SystemObservedAt，且会选择第一个 factor Provider，不能保证和 raw K 同源。明确业务场景出现前不新增 current 查询 API 或接入普通行情。
+- 阶段 B 仍 in_progress；BaoStock AvailableAt 未知意味着 PIT 仍不可用。
+
+
+## 2026-11-05 P0 批次 33：BaoStock 首因子事件前 qfq fallback 真实探测
+
+- 官方本地复权示例在 trade_date 早于首个 `dividOperateDate` 时，使用因子序列最新的 `foreAdjustFactor` 作为 qfq fallback；本项目当前 helper 选择 fail-closed。两者存在明确语义差异，不能凭代码推断谁正确。
+- 新增真实探测：两只样本证券的首个因子事件日前，抽取最多 5 根 raw 日 K，以最新 fore factor 直接乘 raw OHLC，与同源 qfq OHLC 对账；结果单独报告，不自动改变生产算法。
+- 只有真实对账匹配后才考虑为 BaoStock forward basis 增加首事件前 fallback；不影响 backward/shared 因子。
+
+
+- 探测实现修正：因子边界 helper 按日期而不是 Provider 返回顺序确定首末事件；首事件不晚于探测历史起点时显式标记 `not_applicable`。解析错误使用 BaoStock 专用错误格式化函数，避免引入测试包不存在的通用 helper。
+
+
+- 探测的因子选择 helper 改为不依赖 Provider 返回顺序，按 `OperateDate` 最大值选择不晚于 trade_date 的事件；测试故意使用乱序输入，避免把上游排序假设固化为正确性前提。当前提交带标记触发真实首事件前对账。
+
+
+- CI 格式修正：SHA `e73cffa6dbc145814f49dea57c32ee4df92d1e0c` 的首次 Go suite 仅因新报告字段对齐及 pre-event 循环缩进未通过 gofmt；本提交重排该结构并再次触发真实 BaoStock 探测。旧 SHA 不计通过。
+
+
+- CI 语法修正：SHA `6537f685d0c0ca6c14c6636d840b72f8b1fce40d` 暴露 pre-event 探测嵌套分支少一个闭合括号，已按完整 if/else 结构重写该段；上一 SHA 不作为通过依据。
+
+
+## 2026-11-05 P0 批次 34：BaoStock 首因子事件前 fallback 探测结果
+
+- Push Live probe Run `42009726295` 实际执行 BaoStock 因子专项，Push Go suite `42009726404`、PR Go suite `42009734363`、PR Live probe `42009734302`、Parity `42009734410`、WebUI `42009734375` 全部 success，均关联代码 SHA `f12522e93713bb42ccd38f278e76a8f58b9fb003`。
+- `sh.600036` 首因子事件日 `2002-04-09`，因子 30 条；`sz.002982` 首因子事件日 `2020-04-24`，因子 8 条。两者 raw/qfq/hfq 均各 9 条，样本区间没有 OHLC mismatch。
+- 两只证券首事件前都没有 raw 日 K，`pre_first_event_status=not_applicable`。因此官方 latest-factor fallback 没有被真实数据验证；生产 helper 继续 fail closed，不采用未来因子。
+- AvailableAt 仍未知；当前复权 OHLC 匹配不等于 PIT 可见性证明。
+
+
+## 2026-11-05 P0 批次 35：扩展 BaoStock 首事件前 fallback 真实样本候选
+
+- 批次 34 的两个样本均为 `not_applicable`，没有真实首事件前 raw 日 K，不能验证官方 latest-factor fallback。当前不改变生产 helper 的 fail-closed 行为。
+- 扩展独立 Live Probe 候选至 `000001.SZ`、`000002.SZ`、`000858.SZ`、`600000.SH`、`600016.SH`、`600601.SH`，并保留 `600036.SH`、`002982.SZ` 作为既有对照样本。候选只是待探测集合，不代表已确认存在适用窗口。
+- 对每只候选仍查询 2000-01-01 至探测当天的因子历史，并查询首个因子事件日前 raw/qfq 日 K；只有存在真实 raw 交易日且日期严格早于首事件，才进入 latest-factor × raw OHLC 对账。
+- 每只证券独立输出 matched/mismatch/not_applicable/unavailable；网络或数据不可用不得记为 not_applicable，not_applicable 不计为通过。至少两个独立证券得到 matched，才进入公式评审；任何 mismatch 都维持 fail-closed 并调查。
+- 本批仅扩展测试候选，不新增 API、字段、数据库结构，不修改生产复权算法。真实运行结果以带 `[historical_baostock_factors]` 标记的 Push Live Probe 报告为准。
+
+
+## 2026-11-05 P0 批次 36：修复 BaoStock 探测候选扩展的转义字符
+
+- 批次 35 的 SHA `4ff4359178be7a055fb81756a5099adb9fcf3f31` 在新增候选证券循环前误写入字面量反斜杠，导致 Go parser 报 `illegal character U+005C`；gofmt、market-data Go tests、Docker market-data build、Parity 中的 market-data tests 失败。该错误由本批候选扩展引入，不是 Provider 网络或 Docker 环境问题。
+- 已将循环恢复为正常 Go 缩进语法，不改探测逻辑、候选集合、生产复权算法或数据契约。
+- 该 SHA 的通用 Go suite、race/vet、MariaDB PIT/fallback 集成和 WebUI checks 通过；但因 market-data 包无法解析，不能将整体验收视为通过。Push Live BaoStock 专项未能执行到请求阶段，因此没有八只证券的真实报告；不得将空报告或 workflow 后续打印步骤成功解释为 matched/not_applicable。
+- 修复后的新 SHA 必须重新通过 gofmt、market-data tests、race/vet、Docker build 与 parity；Push Live Probe 必须实际产出 BaoStock 报告后，才评估八只证券的 matched/mismatch/not_applicable/unavailable。阶段 B 继续 in_progress，生产 helper 继续 fail-closed。
+
+
+## 2026-11-05 P0 批次 37：BaoStock 探测历史窗口边界修正
+
+- 当前专项因子历史与首事件前 raw/qfq 查询起点由 2000-01-01 调整为 1990-01-01；2025-07-07 至 2025-07-17 的 none/qfq/hfq 主对账窗口不变。
+- 报告新增 `history_start_date`，仅表示请求窗口起点，不代表 Provider 最早可用日期或证券上市日期。
+- 首事件不晚于请求起点才可判 `not_applicable`；无效日期、请求失败，以及首事件晚于起点但 raw 查询为空且无法区分覆盖缺口时均为 `unavailable`。
+- 新增窗口分类边界单测。此项为探测方法修正，不产生真实复权匹配证据；八只证券真实报告待带标记 Push workflow 执行。AvailableAt 仍未知，PIT 不可用。
+
+
+## 2026-11-05 P0 批次 38：BaoStock 八只证券真实报告
+
+- 代码 SHA `687b49a190e661bed0855ab3f5bfd367bf9bd4c1`；Push Live Probe Run `42017059794` success，BaoStock 专项测试实际执行并上传 Artifact `13409567542`；Push Go suite Run `42017059947` success。
+- `1990-01-01` 起查询因子；2025-07-07 至 2025-07-17 主窗口八只证券 raw/qfq/hfq 均各 9 行，OHLC mismatches 均为 0；因子数量依次为 42、46、31、27、40、29、30、8。
+- 八只证券首因子日期与独立核验的 A 股上市日期一致。首事件前无上市交易日，旧报告 `pre_first_event_status=unavailable` 仅代表空查询不能单独区分覆盖缺口；结合上市日期证据后，本次八个样本对首事件前 fallback 均为 `not_applicable`，不计 matched。
+- 不再盲目扩大同类候选，不开放生产 fallback。AvailableAt 未知，PIT fail-closed。
+
+## 2026-11-05 P0 批次 39：上市日期驱动的首事件前分类
+
+- 专项测试候选增加独立上市日期和来源 URL；报告增加 `listing_date`、`listing_date_source`，仅属于测试证据，不是生产 API 字段。
+- 首因子早于上市日为 mismatch；等于上市日为 not_applicable；晚于上市日才请求首事件前 raw/qfq，空样本为 unavailable。
+- 新增分类边界单测。代码 SHA `2c3fb0b0373d72a45ee408a8ccc09a5d1ded170d` 的 CI/专项报告待验。
+
+
+## 2026-11-05 P0 批次 40：复权因子持久化链路审查
+
+- `RefreshAdjustmentFactors` 采集后持久化；`SaveAdjustmentFactors` 记录 `recorded_at`，metadata 不伪造 `SystemObservedAt`；`ListAdjustmentFactorsAsOf` 读取时以 `recorded_at` 恢复系统观察时间。
+- PIT 路径要求 `AvailableAt` 已知且不晚于 `as_of`，`DailyBarsAsOf` 通过 `AdjustmentFactorsAsOf` + `rebuildAdjustedDailyBarsPIT` 重建，并按 raw K 的 source/version 匹配因子；未知 AvailableAt 不进入 PIT，保持正确。
+- Current helper 没有生产调用者，`RefreshAdjustmentFactors` 返回对象没有 `SystemObservedAt`，且当前无未知 AvailableAt 的 Current Repository 读取方法。由于当前 DailyBars 使用 Provider 原生复权 K 线，暂不存在调用场景；不新增接口/字段，待自建复权重建正式接入时再设计。
+- 本批无代码修改；PIT fail-closed 不变。
+
+
+## 2026-11-05 P0 批次 41：上市日期分类专项重跑
+
+- 代码 SHA `cce59e8de493813a4b04f7d0bd24211e1e919bb1` 的 Push Go suite Run `42018395454` 全部 Job success。
+- Live Probe Run `42018395554` 外层 workflow success，但 BaoStock 专项步骤失败：600601.SH、600036.SH、002982.SZ 取得因子和主窗口 OHLC 样本，mismatch=0，首因子日等于上市日，`not_applicable`；另外五只登录 TCP timeout，`unavailable`，不计真实通过。
+- 上一完整报告 SHA `687b49a1` 已覆盖八证券 2025 主窗口。当前不连续重复探测，保留完整报告作为主窗口证据，使用本次 3 个可用样本验证上市日分类。PIT 与生产 fail-closed 不变。
+
+
+## 2026-11-05 P0 批次 42：DailyBar 复权 Provider 能力矩阵
+
+| Provider | qfq/hfq 实现 | AdjustmentMethod | AdjustmentRefDate | 当前跨源比较结论 |
+|---|---|---|---|---|
+| BaoStock | 上游 adjustFlag 2/1 | `baostock_pct_change` | 缺失 | adjusted not_comparable |
+| Pytdx | GBBQ 本地重建 | `pytdx_qfq/hfq` | qfq=完整加载历史最新日（可晚于请求 end）；hfq=完整历史最早日 | 需同方法、同参考日证据 |
+| Eastmoney | 上游 fqt 1/2 | `eastmoney_fqt_1/2` | 缺失 | adjusted not_comparable |
+| Tencent | 上游 qfqday/hfqday | `tencent_qfqday/hfqday` | 缺失 | adjusted not_comparable |
+| HiThink | API forward/backward | `hithink_api_forward/backward` | 缺失 | adjusted not_comparable |
+| Tushare | daily raw + adj_factor 换算 | `tushare_adj_factor_qfq_v1/hfq_v1` | qfq 请求因子最大日；hfq 不声明 | qfq 仍需方法语义对齐；hfq 不可比较 |
+| Yahoo | adjclose ratio rebased | `yahoo_adjclose_ratio_rebased_to_end/start` | 请求结果末日/首日 | 需同方法、同参考日证据 |
+| Netease/Sina | raw only | raw method | 不适用 | raw 可比较；不支持 qfq/hfq |
+
+- Cross-provider adjusted comparator 要求相同 basis、quality valid、相同 method 与非空且一致 ref date。缺字段或不一致返回 not_comparable，符合当前证据边界。
+- 本轮没有跨 Provider adjusted 真实样本；BaoStock 同源 8 证券对账不能代替跨源验收，Pytdx 专项在 Run `42017059794` skipped，Tushare 受 40203 权限阻塞。
+- 不补造 ref date、不放宽 method equality、不新增字段/API。待有可证明的共同基准和真实双源样本后再做 canonical method 评估。
+
+
+## 2026-11-05 P0 批次 43：复权参考日期与原始 K 跨源样例复核
+
+- Pytdx qfq reference date 是完整加载历史最新交易日，可晚于请求 end；hfq reference date 是完整历史最早交易日，必须完成历史扫描。既有单测已覆盖这两种边界。Yahoo 则使用请求结果末/首日，Tushare qfq 使用请求因子窗口最大日，不能混为同一语义。
+- 600036.SH 的 Sina/Tencent raw 黄金样例中 OHLC 一致、成交量差值 3/3/46 股；但两边 amount 缺失/unknown，Sina K 线未回显证券代码，QualityStatus 均 degraded。Comparator 返回 not_comparable，不是 matched。
+- 下一项 P0：使用现有 Pytdx/BaoStock live probe 窗口建立 raw K 线真实双源对账，按 matched/partial/mismatch/not_comparable/provider unavailable 分别记录；不放宽质量门槛。
+
+
+## 2026-11-05 P0 批次 44：跨 Provider 成交量粒度
+
+- `CrossProviderDailyBar.VolumeGranularity` 为内部比较字段，来源 `DailyBar.RawVolumeUnit`：hands/hands_inferred=100 shares，shares=1，未知=0（not_comparable）。不进入公共 API、数据库或 WebUI。
+- 成交量容差为 `max(1, 两侧源粒度)`：两侧 shares 容差 1 股；含 TDX hands 时容差 100 股；未知粒度不可比较。此前固定 50 股下限已移除；TDX 官方说明 VOL 单位为手、AMOUNT 单位为元（https://help.tdx.com.cn/gspt/docs/markdown/redword/functionlist.html）。BaoStock provider 原始 volume unit 为 shares。
+- 既有真实双源样本离线重评：600036 最大成交量差 84 股、002982 最大差 96 股，均在 100 股粒度内；OHLC 全匹配。成交额仍有 17/18 行超过 1 CNY 容差，整体仍 mismatch。
+- 新增单测覆盖 96/101 股边界和未知粒度不可比较；服务层 Probe 透传 RawVolumeUnit。Push Go suite `42022406352` success，PR Parity `42022414959` success；PR Go suite `42022415449` 待最终状态。
+- 下一项核查成交额来源精度与聚合口径，不放宽 amount tolerance。
+
+
+## 2026-11-05 P0 批次 45：成交额精度边界
+
+- TDX 协议 Kline.Amount 经 Price（内部毫元）解码为整数 CNY，官方字段 AMOUNT 单位为元；BaoStock adapter 的原始 amount 单位为 CNY，但官方资料未承诺小数精度。
+- 真实双源样本成交额差最大 120.74/7.90 CNY，17/18 行超过当前 1 CNY 容差；相对差约 3.19e-8/4.13e-8。不能仅凭相对差小就放宽验收。
+- 不改 amount tolerance、不新增字段；下一步扩大不同成交额量级的真实样本，调查供应商聚合口径。
+
+
+## 2026-11-05 P0 批次 46：成交量容差与源精度一致
+
+- 代码 SHA `5adb663ca41d6083847c7d497ca387a2931e2422` 将固定 50 股容差下限改为 1 股，再取两侧来源粒度最大值。shares/shares=1 股，hands/shares=100 股，unknown=not_comparable。
+- 新增 shares 两侧差 2 股必须 mismatch 的测试；原 1 股差异通过、TDX 100 股粒度下 96 股通过/101 股 mismatch 继续覆盖。成交额 1 CNY 容差保持不变。
+- 新 SHA Push/PR CI 待验；WebUI 无需修改。
+
+## 2026-11-05 P0 批次 47：成交额按 Provider 量化精度对账
+
+- 内部新增 `AmountGranularity`，由来源名称、原始 amount 字段名/单位和值计算；不新增公共 API 或数据库字段。Pytdx v0.0.86 的 Kline amount 由 float32 协议字段转成 Price（厘），实际步长按 float32 ULP 计算并至少保留 0.001 CNY；BaoStock API 文档定义 amount 精度 4 位小数，即 0.0001 CNY。
+- 容差为两侧量化步长之和的一半。精度未知、字段不符、单位不为 CNY、金额缺失均保持 `not_comparable`。成交量仍按 `max(1, 两侧源粒度)`，不改价格 OHLC 的 0.001 容差。
+- 对 Artifact `13410429933` 中两只证券的 18 个真实 raw 双源日样本重算：600036.SH、002982.SZ 各 9/9 日 OHLC、volume、amount 全部 matched；每只证券 54/54 字段 matched。此前固定 1 CNY 容差产生的 17/18 amount mismatch 不再成立，原因是未考虑 TDX float32 大额成交额的量化步长。
+- 该结论是既有真实响应的离线重评，不是本轮重新请求 Provider。代码 SHA `4e1c61be` 的 Push Go suite Run `42026781971` 全部通过（gofmt、market-data tests/race/vet、根模块、go-core、MariaDB migration/PIT、Compose/Docker build）；PR Go suite `42026791104`、Parity `42026791130`、WebUI checks `42026791276` 均 success。PR Live Provider Probe `42026791238` 外层 success，但 BaoStock/Pytdx 历史专项 skipped。PIT 规则未变。

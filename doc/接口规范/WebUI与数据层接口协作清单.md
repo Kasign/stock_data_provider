@@ -120,7 +120,7 @@
 | API-03 | 全市场分页与批量行情的范围、总数下限、覆盖率、MA 和复权语义 | 待当前 HEAD 复核 | 双方 | 服务端分页与字段质量可验证，WebUI 不将页内结果解释为全市场排名 |
 | API-04 | 市场情绪当前快照与历史快照的持久化、缺失交易日和覆盖语义 | 待真实验收 | 数据侧主责，WebUI 配合 | 有真实历史数据、数据库读写证据和无数据/缺日契约 |
 | API-05 | 市场级资金流真实数据与 Provider 权限验收 | 依赖凭据/权限 | 数据侧主责 | 真实请求可复现；权限缺失、Provider 不可用和空数据状态可区分 |
-| API-06 | 开发中 | Provider 静态清单、被动诊断、主动 Probe、Probe 历史均有 API；WebUI 已封装；DailyBar 交易上下文与日期边界诊断复用现有 Validator/Reporter/TradingCalendar/SecurityTradingStatus；重复无效行优先级、请求级参数单次计数、Reporter 截断计数已补回归；MariaDB fallback 标准化 warnings 已保留，来源序列选择改为最新交易日优先；缓存历史 warnings 与本次标准化 warnings 已补回归 | 本轮提交 CI 通过后，继续真实 MariaDB fallback / 日内停牌样本验收；Eastmoney/Tencent 复权锚点仍需有限真实样本 | TickFlow `/v1/klines` 成交量单位仍待真实样本证明；日内停牌真实样本未验；Eastmoney/Tencent 响应未提供可独立确认的 ref date；Tushare adj_factor/dividend 40203 权限阻塞 | `6b46bf0c4fa8388468a48105fbb4cd7fe7a7e8d6`（本轮变更前基线） | 基线 Go suite、Parity、WebUI checks 通过；Live Probe 工作流成功但真实 Provider 测试状态需查看本轮 job 日志；本轮新增测试 CI 待验收 | BaoStock/Pytdx 既有样本证据保持；Eastmoney/Tencent 锚点未验证；日内停牌缺失日 K 仅自动化规则已修复，真实样本待验 | 接口层已接入，待真实验收 |
+| API-06 | 开发中 | Provider 清单、诊断、Probe 与 Probe 历史已有 API；跨 Provider raw comparator 已按 RawVolumeUnit 传递内部 VolumeGranularity（hands=100 shares、shares=1、unknown=0）；成交量差异按源粒度处理；成交额仍使用 1 CNY 绝对容差 | P0-8 扩展不同成交额量级的 BaoStock/Pytdx 真实样本，核查供应商聚合口径；不放宽 amount tolerance、不新增 amount precision API 字段；Current helper 无生产调用场景，不新增 Current 因子 API | BaoStock AvailableAt 未知，PIT 继续排除；八只样本无首事件前交易日，fallback 未验证；raw 双源 OHLC 一致、成交量在源粒度内，但成交额 17/18 行超 1 CNY，整体 mismatch；新鲜重跑 BaoStock TCP timeout | `982f46a936a5e62e4c510e5ab1402ca324bd40d5` | Push Go suite `42022406352` success；PR Go suite `42022415449` success；PR Parity `42022414959` success；WebUI `42022415185` success | BaoStock 同源 8 证券主窗口一致；BaoStock/Pytdx raw 双源尚未通过（amount mismatch） | 接口层已接入，待真实验收 |
 | API-07 | 板块多维排行（近 5 日涨幅、资金净流入等） | 待能力评估 | 数据侧主责，WebUI 配合 | 有真实来源、完整候选范围、排序/分页契约及质量证据；不以成交额冒充净流入 |
 | API-08 | 通知渠道、订阅、发送测试与投递记录服务端能力 | 未提供服务端接口 | 数据侧主责；WebUI 后续接入 | 服务端安全存储、鉴权、审计、重试和投递查询契约完整 |
 | API-09 | 服务端选股策略、全市场扫描、候选理由与历史记录 | 待产品/API 设计 | 双方 | 明确策略 schema、扫描范围、异步任务、结果快照和可追溯理由 |
@@ -139,7 +139,7 @@
 
 ### 6.2 数据侧 API 开发进度（由数据侧维护）
 
-本节是数据侧更新 API 开发进度的固定区域。当前数据侧业务代码复核基线为 `cf69ccc4e8d81cfa44b11a9a61cde3666ee4d50f`（2026-11-05）。该代码基线的 Go suite Run `41960803425`、Parity Run `41960803760`、WebUI checks Run `41960803407`、Live Provider Probe Run `41960803434` 均通过。Live Provider Probe 的工作流成功不代表每个 Provider 的每种复权口径均已真实验收。数据侧每完成一个开发节点、测试节点或真实数据验证节点，都应更新对应行；不需要等待 WebUI 联调完成才更新。
+本节是数据侧更新 API 开发进度的固定区域。已复核代码基线 `687b49a190e661bed0855ab3f5bfd367bf9bd4c1` 的 Push Go suite Run `42017059947`、Push Live Probe Run `42017059794` success；BaoStock 专项实际执行并产出八只证券报告。报告主窗口 raw/qfq/hfq 各 9 行且 OHLC mismatch=0；首因子日期与独立上市日期相同，首事件前 fallback 对本批样本 not_applicable。当前最新代码 SHA `2c3fb0b0373d72a45ee408a8ccc09a5d1ded170d` 已触发新 Push/PR 工作流，待完整验收。数据侧每完成一个开发节点、测试节点或真实数据验证节点，都应更新对应行；不需要等待 WebUI 联调完成才更新。
 
 **填写规则：**
 1. 只更新自己负责的 API 任务行，不覆盖 WebUI 接入状态。
@@ -306,3 +306,72 @@
 - MariaDB 来源组选择调整为最新交易日优先，其次比较覆盖行数、采集时间和稳定 key；仍禁止跨来源、版本、复权 method/ref date 或 normalization version 混合。
 - 缓存命中路径增加回归覆盖，确保缓存写入时 warnings 与本次重新标准化 warnings 均保留。
 - 无 API、Schema、数据库结构、Provider 请求或 WebUI 变更；本轮 CI 待验收。
+
+
+## 15. 2026-11-05 API-06 BaoStock 专项探测窗口修正
+
+- 数据侧变更基线：`c22470bec87beb89961b76ad9856d5c8709aac73`；本批代码提交：`687b49a190e661bed0855ab3f5bfd367bf9bd4c1`。仅调整 BaoStock 专项测试探测，不涉及 WebUI 调用或 API Schema。
+- 因子历史与首事件前 raw/qfq 请求统一从 1990-01-01 起查；报告 `history_start_date` 仅代表请求窗口起点。
+- 首事件不晚于请求起点可判 `not_applicable`；首事件晚于起点但无 raw 行不能据此断言无历史，改为 `unavailable`；无效日期同样 `unavailable`。
+- 新提交 CI 待验；八只证券真实报告尚未执行。WebUI 无需改动；API-06 继续“接口层已接入，待真实验收”。BaoStock AvailableAt 仍未知，不改变 PIT 门禁。
+
+
+## 16. 2026-11-05 API-06 BaoStock 真实数据验收与上市日期判定
+
+- 代码 SHA `687b49a190e661bed0855ab3f5bfd367bf9bd4c1` 的 Push Live Probe Run `42017059794` 实际执行 BaoStock 八只证券专项并上传报告；2025 主窗口 raw/qfq/hfq 各 9 行，OHLC mismatch=0。
+- 八只证券首因子日期与独立上市日期证据一致；首事件前没有上市交易日，fallback 对这些样本 not_applicable，不计 matched。
+- 新代码 SHA `2c3fb0b0373d72a45ee408a8ccc09a5d1ded170d` 将上市日期及来源 URL 纳入测试报告，修正分类；不新增生产 API 或 Schema。新 SHA CI 与专项报告待验。
+- WebUI 无需改动；API-06 仍为“接口层已接入，待真实数据验收”。BaoStock AvailableAt 未知，PIT 继续 fail-closed。
+
+
+## 17. 2026-11-05 API-06 复权因子持久化链路审查
+
+- 当前代码基线 `cce59e8de493813a4b04f7d0bd24211e1e919bb1`。PIT 因子读取继续要求 Provider `AvailableAt` 有证明，系统 `SystemObservedAt` 从数据库 `recorded_at` 恢复；DailyBarsAsOf 使用 PIT 专用重建，不混用 Current helper。
+- Current helper 当前没有生产调用者，普通 DailyBars 仍消费 Provider 原生复权 K 线。没有明确业务调用场景前不增加 Current 因子读取 API 或字段。
+- 本批没有 WebUI 契约变化，WebUI 无需修改。BaoStock AvailableAt 未知，PIT fail-closed 不变。
+
+
+## 18. 2026-11-05 API-06 上市日期分类重跑状态
+
+- 代码 SHA `cce59e8de493813a4b04f7d0bd24211e1e919bb1` 的 Go suite `42018395454` success。Live Probe `42018395554` 外层 success，但 BaoStock 专项步骤 failure；3/8 样本有真实因子响应并验证 `not_applicable`，5/8 因登录 TCP timeout 为 unavailable。
+- 完整八证券主窗口真实证据仍引用 SHA `687b49a1` 的报告；本次不将 5 个网络失败计为通过。无 WebUI/API 契约变化，Current helper 仍无生产调用场景，不新增接口。
+
+
+## 19. 2026-11-05 API-06 DailyBar 复权能力矩阵复核
+
+- 已核对 Provider 实现及 cross-provider comparator。adjusted 跨源比较需要 basis、quality、method、reference date 全部可比较；缺失或不一致返回 `not_comparable`，保持现有契约。
+- 多个 Provider 未提供可信 `AdjustmentRefDate`，不允许用请求 end date 或当前日期推断。Provider method 标识不同也不能仅凭 qfq/hfq 名称相同而归并。
+- 本轮无 WebUI/API 变化，无需 WebUI 修改；真实跨源 adjusted 样本不足，API-06 继续等待真实数据验收。
+
+
+## 20. 2026-11-05 API-06 Pytdx 参考日期与 raw 跨源证据边界
+
+- Pytdx qfq/hfq 参考日期按完整加载历史确定，而非请求返回窗口：qfq 可晚于请求 end，hfq 为完整历史最早日。Yahoo、Tushare 的参考日期定义不同，不能推断或统一覆盖。
+- 600036.SH Sina/Tencent raw 样例存在 amount 缺失与 Sina symbol 未回显，质量降级，比较结果 not_comparable；不作为跨源验收通过。
+- 下一项为 BaoStock/Pytdx raw K 真实双源对账诊断，无 WebUI/API 契约变更；PIT fail-closed 保持。
+
+
+## 21. 2026-11-05 API-06 raw 双源成交量粒度与成交额差异
+
+- 内部比较输入新增 `VolumeGranularity`，来源 `RawVolumeUnit`，hands=100 shares、shares=1、unknown=0；仅用于 comparator，不改变公共 API/数据库契约。
+- 真实 raw 双源样本离线重评后，成交量差异在 100 股 TDX 粒度内；成交额仍有 17/18 行超过 1 CNY，整体 mismatch。下一项核查 amount precision/aggregation，不放宽容差。
+- WebUI 无需修改；API-06 继续等待真实跨 Provider 数据验收。
+
+
+## 22. 2026-11-05 API-06 成交额精度边界
+
+- TDX 日 K amount 以整数 CNY 表示（协议 Price 内部为毫元，解码回元）；BaoStock amount 标记为 CNY，但暂无明确官方小数精度保证。真实样本 17/18 行超过 1 CNY，保持 mismatch。
+- 不放宽 amount tolerance、不新增字段/API。下一项扩大不同成交额量级的真实样本并核查供应商聚合口径；WebUI 无需修改。
+
+
+## 2026-11-05 API-06 成交量源精度容差修正
+
+- 内部比较器容差修正为 `max(1, left.VolumeGranularity, right.VolumeGranularity)`；两侧 shares 为 1 股，包含 TDX hands 时为 100 股，未知粒度仍 not_comparable。移除固定 50 股下限，避免将来源粒度为 1 股的数据差异误放宽。
+- 仅内部对账逻辑与测试变化，不新增 DailyBar API、数据库字段或 WebUI 展示字段。成交额容差仍为 1 CNY；既有真实样本整体 mismatch，等待不同成交额量级的新证据。
+- 代码 SHA `5adb663ca41d6083847c7d497ca387a2931e2422` 的 Go suite/Parity 待验；WebUI 无需变更。
+
+## 23. 2026-11-05 API-06 raw 双源成交额精度闭合
+
+- 内部 comparator 增加 `AmountGranularity`，Probe 从 DailyBar 的 Provider 来源、RawAmountUnit、RawAmountField、RawAmount 传递精度。Pytdx 按 float32 协议字段的 ULP（最小 0.001 CNY），BaoStock 按 API 文档 amount 小数点后 4 位（0.0001 CNY）；容差为两侧步长之和的一半。未知来源/字段/单位仍 not_comparable。
+- 真实 artifact `13410429933` 离线重评：600036.SH 与 002982.SZ 各 9 个共同交易日，OHLC/volume/amount 各项全部匹配，两只证券分别 54/54 字段 matched。成交量最大差 84/96 股，均在 TDX 100 股粒度内；成交额最大差 120.74/7.90 CNY，均在对应金额量级的动态量化容差内。
+- 不新增公共 API、数据库字段或 WebUI 展示；仅服务端内部对账逻辑与测试变化。此次不是新鲜实时重跑，PR Live Probe 专项步骤 skipped；PIT fail-closed 规则不变。

@@ -3,6 +3,7 @@ package service
 import (
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/Kasign/stock_data_provider/services/market-data/internal/model"
 )
@@ -124,21 +125,46 @@ func TestAssessDailyBarTradingContextDoesNotUseConflictingCalendarToConfirmMissi
 	}
 }
 
-func TestAssessDailyBarTradingContextDegradesWhenCalendarQualityIsDegraded(t *testing.T) {
+func TestAssessDailyBarTradingContextHistoricalCalendarTimestampGapIsWarningOnly(t *testing.T) {
 	calendar := &model.TradingCalendarSnapshot{
+		StartDate: "2025-07-07", EndDate: "2025-07-07",
 		QualityStatus:  model.QualityDegraded,
 		QualityReasons: []string{"provider_snapshot_timestamp_not_exposed"},
-		Items: []model.TradingCalendarDay{
-			{Date: "2026-10-20", IsTradingDay: true},
-		},
+		Items:          []model.TradingCalendarDay{{Date: "2025-07-07", IsTradingDay: true}},
 	}
-	statuses := map[string]*model.SecurityTradingStatusSnapshot{
-		"2026-10-20": dailyBarContextStatus("2026-10-20", "2026-10-01", true, model.SuspensionStatusSuspended),
+	result := assessDailyBarTradingContext(calendar, []model.DailyBar{{TradeDate: "2025-07-07"}}, nil, nil)
+	if result.QualityStatus != model.QualityValid ||
+		!hasDailyBarContextReason(result.Reasons, "daily_bar_context_calendar_snapshot_time_unverified") ||
+		hasDailyBarContextReason(result.Reasons, "daily_bar_context_calendar_degraded") {
+		t.Fatalf("historical date coverage must remain usable while exposing missing source timestamp: %+v", result)
 	}
-	result := assessDailyBarTradingContext(calendar, nil, statuses, nil)
+}
+
+func TestAssessDailyBarTradingContextCurrentCalendarTimestampGapDegrades(t *testing.T) {
+	today := time.Now().In(marketLocation()).Format("2006-01-02")
+	calendar := &model.TradingCalendarSnapshot{
+		StartDate: today, EndDate: today,
+		QualityStatus:  model.QualityDegraded,
+		QualityReasons: []string{"provider_snapshot_timestamp_not_exposed"},
+		Items:          []model.TradingCalendarDay{{Date: today, IsTradingDay: true}},
+	}
+	result := assessDailyBarTradingContext(calendar, []model.DailyBar{{TradeDate: today}}, nil, nil)
 	if result.QualityStatus != model.QualityDegraded ||
-		!hasDailyBarContextReason(result.Reasons, "daily_bar_context_calendar_degraded") ||
-		!hasDailyBarContextReason(result.Reasons, "daily_bar_excluded_suspended:2026-10-20") {
-		t.Fatalf("degraded calendar must degrade context while retaining security-status evidence: %+v", result)
+		!hasDailyBarContextReason(result.Reasons, "daily_bar_context_calendar_degraded") {
+		t.Fatalf("current calendar without source timestamp must remain degraded: %+v", result)
+	}
+}
+
+func TestAssessDailyBarTradingContextHistoricalCalendarInferenceStillDegrades(t *testing.T) {
+	calendar := &model.TradingCalendarSnapshot{
+		StartDate: "2025-07-07", EndDate: "2025-07-07",
+		QualityStatus:  model.QualityDegraded,
+		QualityReasons: []string{"provider_returns_trading_days_only_non_trading_dates_inferred"},
+		Items:          []model.TradingCalendarDay{{Date: "2025-07-07", IsTradingDay: true}},
+	}
+	result := assessDailyBarTradingContext(calendar, []model.DailyBar{{TradeDate: "2025-07-07"}}, nil, nil)
+	if result.QualityStatus != model.QualityDegraded ||
+		!hasDailyBarContextReason(result.Reasons, "daily_bar_context_calendar_degraded") {
+		t.Fatalf("inferred historical calendar dates must remain degraded: %+v", result)
 	}
 }

@@ -2796,7 +2796,7 @@ func (s *DataService) DailyBars(ctx context.Context, rawSymbol, start, end strin
 			if !contractMismatch {
 				validated, warnings := normalize.ValidateAndSortBars(symbol, candidates, start, end, limit)
 				if len(validated) > 0 {
-					adjustmentWarnings, adjustmentErr := applyDailyBarAdjustmentMetadataQuality(validated, basis, end)
+					adjustmentWarnings, adjustmentErr := applyDailyBarAdjustmentMetadataQuality(validated, basis)
 					if adjustmentErr != nil {
 						contractMismatch = true
 					} else if dailyBarsCacheNeedsPostCloseRefresh(validated, time.Now()) {
@@ -2941,7 +2941,7 @@ func (s *DataService) DailyBars(ctx context.Context, rawSymbol, start, end strin
 			errs = append(errs, p.Name()+" response failed bar validation")
 			continue
 		}
-		adjustmentWarnings, adjustmentErr := applyDailyBarAdjustmentMetadataQuality(bars, basis, end)
+		adjustmentWarnings, adjustmentErr := applyDailyBarAdjustmentMetadataQuality(bars, basis)
 		if adjustmentErr != nil {
 			s.breaker.Failure(breakerKey)
 			errs = append(errs, p.Name()+": "+adjustmentErr.Error())
@@ -3731,7 +3731,7 @@ func (s *DataService) DailyBarsAsOf(ctx context.Context, rawSymbol, start, end s
 	return bars, dedupeStrings(warnings), nil
 }
 
-func applyDailyBarAdjustmentMetadataQuality(bars []model.DailyBar, basis model.AdjustmentBasis, requestedEnd string) ([]string, error) {
+func applyDailyBarAdjustmentMetadataQuality(bars []model.DailyBar, basis model.AdjustmentBasis) ([]string, error) {
 	if basis == model.AdjustmentNone || len(bars) == 0 {
 		return nil, nil
 	}
@@ -3748,12 +3748,13 @@ func applyDailyBarAdjustmentMetadataQuality(bars []model.DailyBar, basis model.A
 		if err != nil || parsed.Format("2006-01-02") != referenceDate {
 			return nil, fmt.Errorf("provider returned invalid adjustment reference date %q", referenceDate)
 		}
+		if referenceDate > time.Now().In(marketLocation()).Format("2006-01-02") {
+			return nil, fmt.Errorf("adjustment reference date %s is in the future", referenceDate)
+		}
 		if basis == model.AdjustmentForward {
+			// 前复权基准可以晚于请求区间结束日：Provider 可能使用其最新已加载交易日作为统一基准。
 			if referenceDate < bar.TradeDate {
 				return nil, fmt.Errorf("forward-adjustment reference date %s precedes bar date %s", referenceDate, bar.TradeDate)
-			}
-			if requestedEnd != "" && referenceDate > requestedEnd {
-				return nil, fmt.Errorf("forward-adjustment reference date %s exceeds requested end date %s", referenceDate, requestedEnd)
 			}
 		} else if basis == model.AdjustmentBackward && referenceDate > bar.TradeDate {
 			return nil, fmt.Errorf("backward-adjustment reference date %s follows bar date %s", referenceDate, bar.TradeDate)
