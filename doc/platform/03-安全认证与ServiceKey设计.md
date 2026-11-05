@@ -20,7 +20,7 @@
 | 模式 | 用途 | 建立方式 |
 |---|---|---|
 | anonymous | 明确允许公开的 liveness 等少数接口 | 路由显式白名单 |
-| owner | 所有者管理操作 | 独立管理凭证/可信管理入口；不得由普通 Service Key 冒充 |
+| owner | 所有者管理操作 | 部署环境注入的独立 PLATFORM_ADMIN_TOKEN；不得由普通 Service Key 冒充 |
 | service | 服务间调用 | Service Key 验证成功后建立 |
 
 暂不实现 user 注册/登录体系和 job 独立身份体系。后台任务保存创建来源、Request ID 和任务 ID，恢复执行时使用服务端记录，不接受客户端自报身份。
@@ -75,7 +75,7 @@
 
 ## 7. 管理入口与审计
 
-管理操作只允许 owner 身份。首期通过受保护的管理 API 或明确的部署操作完成 Key 创建、禁用、轮换和撤销，不建设用户管理 UI。
+管理操作只允许 owner 身份。首期通过部署 Secret 注入独立的 PLATFORM_ADMIN_TOKEN，使用 Bearer 认证；该凭证不写入 Service Key 表、不由 Service Key 替代，轮换通过部署 Secret 更新完成。管理 API 仅在私有入口开放，不建设用户管理 UI。
 
 只审计敏感管理动作：凭证创建/轮换/禁用/撤销、权限变更和关键配置修改。记录主体、动作、对象 ID、结果、时间和 Request ID；不记录凭证明文或摘要。普通业务读取不做逐请求审计。
 
