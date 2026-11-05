@@ -80,8 +80,8 @@ func TestBuildVersionFingerprintTreatsEmptyBodyAsAbsent(t *testing.T) {
 }
 
 func TestBuildVersionFingerprintChangesWithAttachmentMetadata(t *testing.T) {
-	first := ContentLayers{Attachments: []ContentAttachment{{URL: "https://news.example/file.pdf", MediaType: "application/pdf"}}}
-	second := ContentLayers{Attachments: []ContentAttachment{{URL: "https://news.example/file.pdf", MediaType: "application/octet-stream"}}}
+	first := ContentLayers{Attachments: []ContentAttachmentMetadata{{URL: "https://news.example/file.pdf", MediaType: "application/pdf"}}}
+	second := ContentLayers{Attachments: []ContentAttachmentMetadata{{URL: "https://news.example/file.pdf", MediaType: "application/octet-stream"}}}
 	if BuildVersionFingerprint(Candidate{Title: "标题"}, first) == BuildVersionFingerprint(Candidate{Title: "标题"}, second) {
 		t.Fatal("attachment metadata change must produce a new version fingerprint")
 	}
