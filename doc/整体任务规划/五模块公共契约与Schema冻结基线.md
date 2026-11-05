@@ -348,6 +348,36 @@ Quant 首期只建立自己的 Adapter DTO，不复制整个 Data Model：
 5. 当前没有完整公开的 Research Query Facade。已存在的 `ApplyResearchUpdate` 是新闻版本/关系写入用例，不等于 Research 模块可直接调用的只读 Evidence Query API。需在 News 持久化闭环与跨模块 Facade 设计阶段补齐。
 6. News 的 `IdentityRepository` 与 `ResearchUpdateRepository` 是事务端口；当前代码树尚未实现对应 Repository/Migration，故 Evidence 持久化和跨重启引用稳定性仍未验收。
 
+**Research 只读查询 Facade：目标契约（设计建议，尚未实现）**
+
+Research 不应直接访问 News Repository、SQL 表或内部 Domain 聚合；建议在 News Application 暴露稳定的只读 Facade，由 News 自己完成授权校验、知识时间过滤、版本选择和内容裁剪。
+
+建议最小端口：
+
+```go
+type ResearchEvidenceQuery interface {
+    GetEvidence(ctx context.Context, request GetEvidenceRequest) (EvidenceRecord, error)
+    ListEvidence(ctx context.Context, request ListEvidenceRequest) (EvidencePage, error)
+}
+```
+
+请求语义：
+- `GetEvidence` 必须指定 `news_id`，并可选指定 `version_id`；不指定版本时必须显式提供 `system_as_of`，由 News 选择该知识时点可见的最新版本。
+- `ListEvidence` 以明确的时间窗、来源/主体引用和分页上限查询；不能把任意外部 URL 作为抓取指令。
+- 所有请求均包含调用方用途（personal research / internal business 等）和所需内容级别；News 按 Source + Endpoint + Provider Output Policy 重新评估权限，不因内部调用而绕过授权。
+- `system_as_of` 是系统知识时间；`published_at` 是来源声明的发布时间；`available_at` 只有获得可验证证据才返回，三者不能互相替代。
+- 结果保留 `news_id`、`observation_id`、`version_id/version_no/fingerprint`、Source/Provider 标识、身份状态、质量状态、时间字段和授权决策引用。
+- 正文/摘要采用按需字段，不默认返回全量内容；响应只提供本次授权允许的内容级别。Research 若要保存证据快照，应保存引用、指纹、必要摘要和授权依据，不得绕过许可复制全文。
+- 查询结果应返回 `observed_at` 和被选版本的明确标识；分页必须稳定，不能在分页期间悄悄切换版本集合。
+
+返回模型建议命名为 `ResearchEvidenceRecord`，属于 News Application 的公开 DTO，不直接暴露 `domain.NewsItemVersion`、`ContentLayers` 或 Repository Entity。Research 将它转换为自己的 Evidence Domain，并自行维护 Claim/Hypothesis/Scenario 与证据关系。
+
+**PIT 必须区分两条时间轴：**
+1. 业务有效/来源时间：`published_at`、行业/证券关系 `valid_from/valid_to`；
+2. 系统知识时间：`observation.observed_at`、`version.observed_at`、身份/分类记录 `observed_at`。
+
+对于历史 Run，Researchflow 传入统一 `system_as_of`；News Query Facade 必须先按知识时间过滤 Observation、Version、Identity、Classification 和 Relation，再按业务时间解析。当前 SecurityIdentity / IndustryClassification Resolver 仅按业务有效时间解析，尚不能独立保证这项门禁。若某个来源事实没有可证明的 `available_at`，只能以系统实际观察时间作为“本系统已知”边界，不得伪造来源首次公开时间。
+
 **NewsObjectRef 语义调整**
 
 当前可由现有 News 事实直接支持的字段为：
@@ -392,7 +422,7 @@ Quant 首期只建立自己的 Adapter DTO，不复制整个 Data Model：
 **仍未完成：**
 1. 已完成 11 个 Model 文件的字段名和主要类型静态对照；已发现 required 不一致 15 处、nullable 不准确 10 处、OpenAPI 多余字段 9 个。仍需人工确认全部 Schema 的格式/范围/枚举/嵌套引用，并把 Go JSON Tag 与 OpenAPI 的双向对照固化为自动化测试。Data 最新 HEAD 相对本次 Schema 核查基准仅有文档和测试夹具变更，未改变模型/OpenAPI。
 2. 修正 Data OpenAPI 已识别的 9 组、15 个字段缺口、15 处 required 不一致、10 处 nullable 不准确及 9 个多余字段；6 个未按同名 Schema 匹配的结构体已完成内外部归类；增加双向契约测试。
-3. 为 News 增加可供 Research 调用的只读查询 Facade、明确可获得时间和采集时间语义、策略版本引用及授权内容引用；为 SecurityIdentity/IndustryClassification/Relation 增加 Repository/Migration 与 system_as_of 知识时间过滤；等待 N6 Repository/Migration 实现。
+3. 按本节目标契约为 News 增加 Research 只读查询 Facade；补充可获得时间、采集时间、策略版本和授权内容引用；为 SecurityIdentity/IndustryClassification/Relation 增加 Repository/Migration 与 system_as_of 知识时间过滤；等待 N6 Repository/Migration 实现。
 4. 对 Platform Storage 执行真实 MariaDB/Redis 集成和故障演练；对 HTTP Client 执行部署环境出口安全验收。
 5. 结合以上结果修订模块 DTO，完成 Quant/Research 的公开契约字段表与 Schema 版本策略。
 
