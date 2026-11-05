@@ -36,3 +36,27 @@ test("拒绝非布尔启用状态、超长 ID 和超长时间字段，且不覆�
     assert.equal(target.getItem(LOCAL_ALERT_DRAFTS_KEY), storageValue);
   }
 });
+test("浏览器存储读取异常与写入配额异常不会报告成功", () => {
+  const unreadable = {
+    getItem() {
+      throw new Error("SecurityError");
+    },
+    setItem() {}
+  };
+  const read = readLocalAlertDrafts(unreadable);
+  assert.equal(read.readable, false);
+  assert.equal(read.valid, false);
+
+  const quotaExceeded = {
+    getItem() {
+      return null;
+    },
+    setItem() {
+      throw new Error("QuotaExceededError");
+    }
+  };
+  assert.deepEqual(writeLocalAlertDrafts([draft("quota")], quotaExceeded), {
+    ok: false,
+    reason: "unavailable"
+  });
+});

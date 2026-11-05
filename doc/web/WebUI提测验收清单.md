@@ -2043,3 +2043,9 @@ CI 复核记录：本批首次 Chromium Browser Smoke 在个股研究数据质�
 - [x] 扩展 Chromium 双标签页专项，覆盖切换编辑对象与进入新建模式的确认接受/取消路径。
 - [ ] 当前提交 SHA 的 WebUI Checks 与 Browser Smoke 待运行。
 - [x] 启停和删除仍以操作时重新读取的最新本地列表为基础；跨标签页编辑冲突仍由规则快照阻止过期覆盖。
+
+## 2026-11-05 P0 本地告警草稿存储故障边界
+
+- [x] 补齐浏览器存储 API 异常测试：读取抛出 SecurityError 时标记为不可读取；写入抛出 QuotaExceededError 时明确返回失败，不报告保存成功。
+- [x] 验证存储故障与数据格式损坏保持不同结果语义；不尝试清空或覆盖用户原始数据。
+- [ ] 当前提交 SHA 的 WebUI Checks 与 Chromium Browser Smoke 待运行。
