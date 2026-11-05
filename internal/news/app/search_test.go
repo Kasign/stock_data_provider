@@ -35,6 +35,9 @@ func TestSearchCandidatesPreservesPartialProviderFailure(t *testing.T) {
 	if len(result.Outcomes) != 2 || result.Outcomes[1].Status != domain.ProviderFailed {
 		t.Fatalf("outcomes=%+v", result.Outcomes)
 	}
+	if result.Outcomes[0].QueryDimension != "market" || result.Outcomes[1].CandidateCount != 0 {
+		t.Fatalf("provider outcome detail mismatch: %+v", result.Outcomes)
+	}
 	if result.Outcomes[1].Retryable {
 		t.Fatal("unknown provider errors must not be marked retryable")
 	}

@@ -60,6 +60,7 @@ func (s *SearchCandidates) Execute(ctx context.Context, request domain.SearchReq
 			candidates = nil
 		} else if err != nil {
 			outcome.Status = domain.ProviderFailed
+			outcome.CandidateCount = 0
 			outcome.ErrorCode = "provider_request_failed"
 			var providerErr *ProviderError
 			if errors.As(err, &providerErr) {
