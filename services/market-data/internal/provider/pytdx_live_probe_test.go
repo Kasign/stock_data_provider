@@ -128,6 +128,27 @@ func TestLivePytdxHistoricalDailyBars(t *testing.T) {
 					item.Error = "adjustment method metadata mismatch"
 					failures = append(failures, symbol+"/"+string(adjustment)+": "+item.Error)
 				}
+				if len(item.AdjustmentRefDates) != 1 {
+					item.Status = "contract_invalid"
+					item.Error = "adjustment reference date metadata missing or inconsistent"
+					failures = append(failures, symbol+"/"+string(adjustment)+": "+item.Error)
+				} else if _, dateErr := time.Parse("2006-01-02", item.AdjustmentRefDates[0]); dateErr != nil {
+					item.Status = "contract_invalid"
+					item.Error = "adjustment reference date metadata is invalid"
+					failures = append(failures, symbol+"/"+string(adjustment)+": "+item.Error)
+				} else if adjustment == model.AdjustmentForward && item.AdjustmentRefDates[0] < item.LastDate {
+					item.Status = "contract_invalid"
+					item.Error = "qfq reference date precedes the last returned trading date"
+					failures = append(failures, symbol+"/"+string(adjustment)+": "+item.Error)
+				} else if adjustment == model.AdjustmentBackward && item.AdjustmentRefDates[0] > item.FirstDate {
+					item.Status = "contract_invalid"
+					item.Error = "hfq reference date follows the first returned trading date"
+					failures = append(failures, symbol+"/"+string(adjustment)+": "+item.Error)
+				}
+			} else if len(item.AdjustmentRefDates) != 0 {
+				item.Status = "contract_invalid"
+				item.Error = "unadjusted daily bars must not declare an adjustment reference date"
+				failures = append(failures, symbol+"/"+string(adjustment)+": "+item.Error)
 			}
 			report.Items = append(report.Items, item)
 		}

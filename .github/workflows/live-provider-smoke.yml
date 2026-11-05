@@ -14,6 +14,8 @@ on:
       - "services/market-data/internal/provider/sina.go"
       - "services/market-data/internal/provider/sina_test.go"
       - "services/market-data/internal/provider/pytdx_live_probe_test.go"
+      - "services/market-data/internal/provider/pytdx.go"
+      - "services/market-data/internal/provider/pytdx_daily_client_test.go"
       - "services/market-data/internal/provider/pytdx_baostock_event_live_test.go"
       - "services/market-data/internal/baostock/**"
       - "services/market-data/internal/service/provider_probe_live_test.go"
