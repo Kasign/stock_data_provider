@@ -1428,7 +1428,14 @@ test("market overview and activity use readable secondary text and touch-sized c
   assert.match(marketActivityControlInputBase, /min-height:\s*38px\s*;?/, "date inputs need a 38px base touch target");
   assert.match(marketActivityControlButtonBase, /min-height:\s*38px\s*;?/, "market activity buttons need a 38px base touch target");
   assert.match(marketActivityControlButtonBase, /font-size:\s*12px\s*;?/, "market activity button labels need a readable base font size");
-  assert.match(finalCssRuleBody(".activity-stock-link"), /min-height: 38px/);
+  const activityStockLinkBase = exactCssDeclarationBlock(".activity-stock-link");
+  assert.match(activityStockLinkBase, /display:\s*block\s*;?/);
+  assert.match(activityStockLinkBase, /min-height:\s*38px\s*;?/);
+  assert.match(activityStockLinkBase, /margin-top:\s*5px\s*;?/);
+  assert.match(activityStockLinkBase, /padding:\s*5px 0\s*;?/);
+  assert.match(activityStockLinkBase, /font-size:\s*12px\s*;?/);
+  assert.equal((stylesheet.match(/(?:^|})\s*\.activity-stock-link\s*\{/g) || []).length, 1, "activity stock links should have one exact base rule");
+  assert.match(finalCssRuleBody(".activity-stock-link:hover"), /text-decoration:\s*underline/);
   assert.match(finalCssRuleBody(".calendar-month-navigation .icon-button"), /min-width: 38px; min-height: 38px/);
   assert.match(finalCssRuleBody(".trading-calendar-weekdays span"), /font-size: 11px/);
   assert.match(stylesheet, /\.trading-calendar-day span \{ font-size: 11px; line-height: 1\.25; text-align: center; overflow-wrap: anywhere; \}/);

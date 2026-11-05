@@ -2261,12 +2261,13 @@ button:disabled, input:disabled, select:disabled, textarea:disabled { cursor: no
 }
 .activity-stock-link {
   display:block;
+  min-height:38px;
   margin-top:5px;
-  padding:3px 0;
+  padding:5px 0;
   border:0;
   color:var(--accent);
   background:transparent;
-  font-size:10px;
+  font-size:12px;
   cursor:pointer
 }
 .activity-stock-link:hover {
@@ -3296,7 +3297,6 @@ button:disabled, input:disabled, select:disabled, textarea:disabled { cursor: no
 .market-overview-actions .button { min-height: 38px; font-size: 12px; }
 
 .market-activity-table { -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
-.activity-stock-link { min-height: 38px; padding: 5px 0; font-size: 12px; }
 .calendar-month-navigation .icon-button { min-width: 38px; min-height: 38px; font-size: 13px; }
 .trading-calendar-weekdays span { padding: 5px 0; font-size: 11px; font-weight: 650; }
 .trading-calendar-day { min-height: 56px; padding: 6px 2px; gap: 5px; }
