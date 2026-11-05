@@ -236,11 +236,13 @@ Migration namespace 由模块固定且唯一，如 quant/research/researchflow/n
 
 | 分支 | 本次核查 HEAD | 提交信息 |
 |---|---|---|
-| `feat/full-go-data-providers-api-switch` | `c1ae8bb1f02a10a7f8c73a40f125fce3f1e4da3c` | `fix(market-data): 区分方向因子与共享因子公式` |
-| `feat/research-news-ingestion` | `0eb727b4c6a42f568818bdf9a7161afd09db5284` | `fix(news): 补齐版本更新代码格式` |
-| `feat/platform-foundation` | `b7896ea7cc49d925d896f770c479b84c04688c67` | `docs(platform): record policy-bound HTTP adapter validation` |
+| `feat/full-go-data-providers-api-switch` | `4732f14d8998bcd06ffb1118846535b626865b2d` | `test(market-data): 补齐复权重建同源测试夹具` |
+| `feat/research-news-ingestion` | `ea697fe437d44afffbd60874ad144adc4313e469` | `style(news): 对齐行业分类领域代码格式` |
+| `feat/platform-foundation` | `a30ee12130d2a50bc3db672d9d12d1e14040e34f` | `docs(platform): record request correlation and fault safety boundaries` |
 
 ### 13.1 Data OpenAPI ↔ Go Model
+
+本轮最新 Data 分支 HEAD 已推进到 `4732f14d8998bcd06ffb1118846535b626865b2d`。通过 compare 检查，`c1ae8bb1f02a10a7f8c73a40f125fce3f1e4da3c` 至该 HEAD 之间只修改了 Data 文档与 PIT 测试夹具，没有修改 `services/market-data/openapi.yaml` 或 `internal/model/**`；因此下述 Schema 发现仍适用于最新分支。
 
 核查文件：
 - `services/market-data/openapi.yaml`
@@ -323,6 +325,20 @@ Quant 首期只建立自己的 Adapter DTO，不复制整个 Data Model：
 | Research Relation | RelationAssertion + RelationEvidence | 追加式、可 supersede；证据定位到版本/Observation/字段/规则/模型 |
 | Research Update | ApplyResearchUpdate + ResearchUpdateRepository/Transaction | 版本追加与关系更新在一个事务端口中执行；仍是抽象端口，无已确认持久化 Adapter |
 
+**本轮新增领域模型（最新 HEAD：`ea697fe437d44afffbd60874ad144adc4313e469`）**
+
+- 新增 `SecurityIdentityRecord`：以 `IdentityNamespace + IdentityValue` 表达稳定证券级身份，同时保留 Market/Symbol/Name、代码状态、上市生命周期、ValidFrom/ValidTo、ObservedAt、Source 和 EvidenceRef。解析结果明确区分 resolved/not_found/ambiguous；不会跨市场按相同代码合并。
+- 新增 `IndustryClassificationRecord`：以 ClassificationSystem + ClassificationVersion + IndustryCode 定义行业代码空间，保留父级、名称、有效期、观察时间和来源证据；同一代码跨版本不自动映射。
+- `RelationAssertion` 现支持 Security / Industry 两种 Subject，关系断言可 proposed/confirmed/rejected/retracted，修正通过 supersedes 追加；RelationEvidence 定位到 SourceVersion、Observation、规则/模型版本、字段路径和证据哈希，不复制正文。
+
+**新增模型的 PIT 与持久化边界**
+
+- 两类 Identity/Classification Resolver 当前只按业务有效时间（ValidFrom/ValidTo）解析；记录虽含 ObservedAt，但解析函数没有 system-known-at 参数，也不会自行过滤 ObservedAt。当前测试也未覆盖知识时间截断。
+- 这不代表有效时间解析逻辑本身错误，但 Researchflow 的历史 Run 若要求“当时已知事实”，必须由 Repository/Query Facade 在装配输入前执行 `ObservedAt <= system_as_of` 的知识时间过滤，或将双时间参数显式纳入 Resolver。不能只传一个 as_of 并把它同时解释为业务有效时间和系统观察时间。
+- SecurityIdentityRecord 要求 IdentityNamespace/IdentityValue，但当前 ResolveSecurityIdentity 的查询键仍是 Market + Symbol + valid time；跨代码变更的同一证券身份链路仍需通过稳定 IdentityValue 或显式映射关系维护。
+- 新增内容目前是纯 Domain 类型与解析/校验函数，没有 Repository、Migration、Application 查询 Facade 或 Data Provider Adapter。不得将其描述为已接入 Data 证券主数据或已具备持久化 PIT 查询。
+- 新增关系的 `ResolveCurrentRelations` 是当前关系状态解析，不是历史知识时点查询；Research Evidence Snapshot 仍需固定本次运行看到的关系断言和证据版本。
+
 **对 GOV-004 草案的修订要求**
 
 1. 当前 Candidate/Observation/NewsItemVersion 没有 `available_at` 字段。NewsObjectRef 的 available_at 只能由明确的可获得性证据/上游来源契约补充；不能从 published_at、observed_at 或 fetched_at 推导。
@@ -370,13 +386,13 @@ Quant 首期只建立自己的 Adapter DTO，不复制整个 Data Model：
 **已完成：**
 - Data OpenAPI 与 Provider Probe Go JSON 字段的主要逐字段核对；
 - Data Quote/DailyBar 与质量、时间、单位、复权字段核对；
-- News Application 当前输出、持久化端口、身份、版本、内容、授权和关系能力核对；
+- News Application 当前输出、持久化端口、身份、版本、内容、授权和关系能力核对；新增证券身份、行业分类和领域关系模型已纳入审查；
 - Platform 核心包导出 API 与依赖限制核对。
 
 **仍未完成：**
-1. 已完成 11 个 Model 文件的字段名和主要类型静态对照；已发现 required 不一致 15 处、nullable 不准确 10 处、OpenAPI 多余字段 9 个。仍需人工确认全部 Schema 的格式/范围/枚举/嵌套引用，并把 Go JSON Tag 与 OpenAPI 的双向对照固化为自动化测试。
+1. 已完成 11 个 Model 文件的字段名和主要类型静态对照；已发现 required 不一致 15 处、nullable 不准确 10 处、OpenAPI 多余字段 9 个。仍需人工确认全部 Schema 的格式/范围/枚举/嵌套引用，并把 Go JSON Tag 与 OpenAPI 的双向对照固化为自动化测试。Data 最新 HEAD 相对本次 Schema 核查基准仅有文档和测试夹具变更，未改变模型/OpenAPI。
 2. 修正 Data OpenAPI 已识别的 9 组、15 个字段缺口、15 处 required 不一致、10 处 nullable 不准确及 9 个多余字段；6 个未按同名 Schema 匹配的结构体已完成内外部归类；增加双向契约测试。
-3. 为 News 增加可供 Research 调用的只读查询 Facade、明确可获得时间和采集时间语义、策略版本引用及授权内容引用；等待 N6 Repository/Migration 实现。
+3. 为 News 增加可供 Research 调用的只读查询 Facade、明确可获得时间和采集时间语义、策略版本引用及授权内容引用；为 SecurityIdentity/IndustryClassification/Relation 增加 Repository/Migration 与 system_as_of 知识时间过滤；等待 N6 Repository/Migration 实现。
 4. 对 Platform Storage 执行真实 MariaDB/Redis 集成和故障演练；对 HTTP Client 执行部署环境出口安全验收。
 5. 结合以上结果修订模块 DTO，完成 Quant/Research 的公开契约字段表与 Schema 版本策略。
 
