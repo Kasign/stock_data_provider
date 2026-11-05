@@ -51,3 +51,32 @@ test("浏览器存储 API 异常时拒绝读取与写入，不报告成功", () 
     reason: "unavailable"
   });
 });
+
+
+test("笔记 ID 与时间字段有长度上限，但不强制单一日期格式", () => {
+  const s = memory();
+  const base = note("note-a", "标题", "内容");
+  for (const item of [
+    { ...base, id: "i".repeat(161) },
+    { ...base, createdAt: "t".repeat(65) },
+    { ...base, updatedAt: "t".repeat(65) }
+  ]) {
+    assert.equal(writeResearchNotes([item], s).reason, "invalid");
+    assert.equal(s.getItem(RESEARCH_NOTES_KEY), null);
+  }
+  assert.equal(writeResearchNotes([{ ...base, createdAt: "legacy-date", updatedAt: "" }], s).ok, true);
+});
+
+test("从报告创建笔记的关联字段不再静默截断", () => {
+  const context = buildResearchNoteContextFromReport({
+    runId: "run-1",
+    taskId: "t".repeat(161),
+    symbols: ["s".repeat(33)]
+  });
+  assert.equal(context.symbol.length, 33);
+  assert.equal(context.taskId.length, 161);
+  assert.equal(writeResearchNotes([{
+    ...note("note-long-context", "标题", "内容"),
+    ...context
+  }], memory()).reason, "invalid");
+});

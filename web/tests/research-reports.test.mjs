@@ -57,3 +57,12 @@ test("浏览器存储 API 异常时拒绝读取与写入，不报告成功", () 
     reason: "unavailable"
   });
 });
+
+
+test("归档创建时间有长度上限，不强制单一日期格式", () => {
+  const s = memory();
+  const base = { id: "report-time", runId: "run-1", result: result("run-1") };
+  assert.equal(writeResearchReports([{ ...base, createdAt: "t".repeat(65) }], s).reason, "invalid");
+  assert.equal(s.getItem(RESEARCH_REPORTS_KEY), null);
+  assert.equal(writeResearchReports([{ ...base, createdAt: "legacy-date" }], s).ok, true);
+});

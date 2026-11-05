@@ -17,7 +17,7 @@ function normalizeReport(item) {
   const symbols = item.symbols === undefined ? [] : item.symbols;
   if (typeof analysisBase !== "string" || analysisBase.length > 2048 || typeof taskId !== "string" || taskId.length > 160 ||
       typeof status !== "string" || status.length > 80 || typeof asOf !== "string" || asOf.length > 80 ||
-      typeof createdAt !== "string" || !Array.isArray(symbols) || symbols.length > 50 ||
+      typeof createdAt !== "string" || createdAt.length > 64 || !Array.isArray(symbols) || symbols.length > 50 ||
       symbols.some(value => typeof value !== "string" || !value.trim() || value.trim().length > 32) ||
       (item.corePass !== undefined && item.corePass !== null && typeof item.corePass !== "boolean")) return null;
   let serialized; try { serialized = JSON.stringify(item.result); } catch { return null; }

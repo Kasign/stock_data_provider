@@ -13,13 +13,14 @@ function normalizeNote(note) {
   const tags = note.tags === undefined ? [] : note.tags;
   const createdAt = note.createdAt === undefined ? "" : note.createdAt;
   const updatedAt = note.updatedAt === undefined ? "" : note.updatedAt;
-  if (!id || !title || !content || title.length > MAX_TITLE || content.length > MAX_CONTENT ||
+  if (!id || id.length > 160 || !title || !content || title.length > MAX_TITLE || content.length > MAX_CONTENT ||
       typeof symbol !== "string" || symbol.trim().length > 32 ||
       typeof taskId !== "string" || taskId.trim().length > 160 ||
       typeof runId !== "string" || runId.trim().length > 160 ||
       !Array.isArray(tags) || tags.length > MAX_TAGS ||
       tags.some(tag => typeof tag !== "string" || !tag.trim() || tag.trim().length > 40) ||
-      typeof createdAt !== "string" || typeof updatedAt !== "string") return null;
+      typeof createdAt !== "string" || createdAt.length > 64 ||
+      typeof updatedAt !== "string" || updatedAt.length > 64) return null;
   return { id, title, content, symbol: symbol.trim(), taskId: taskId.trim(), runId: runId.trim(),
     tags: tags.map(tag => tag.trim()), createdAt, updatedAt };
 }
@@ -53,8 +54,8 @@ export function buildResearchNoteContextFromReport(report) {
   const runId = String(report.runId || report.result?.run_id || "").trim();
   if (!runId) return null;
   const symbols = Array.isArray(report.symbols) ? report.symbols : report.result?.request?.symbols;
-  const symbol = Array.isArray(symbols) ? String(symbols[0] || "").trim().slice(0, 32) : "";
-  return { symbol, taskId: String(report.taskId || "").trim().slice(0, 160), runId };
+  const symbol = Array.isArray(symbols) ? String(symbols[0] || "").trim() : "";
+  return { symbol, taskId: String(report.taskId || "").trim(), runId };
 }
 
 export function filterResearchNotes(items, query="", symbol="") {
