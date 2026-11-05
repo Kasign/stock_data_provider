@@ -336,3 +336,8 @@ Migration 状态为 `running` 或 `failed` 时，Runner 不会自动重跑。处
 - Migration 历史新增 started_at、finished_at、failure_code；保留旧 applied_at 兼容既有历史表。通过 MariaDB `ADD COLUMN IF NOT EXISTS` 补齐旧表字段，不为旧记录推断或伪造完成时间。
 - 新迁移开始时写 started_at，成功/失败结束时写 finished_at；失败码使用固定 `platform.storage.migration_apply_failed`，只存失败语句序号和稳定错误码，不保存 SQL Driver 原始错误。
 - fake Driver 测试覆盖池配置边界、迁移开始/完成时间、失败元数据和历史表列升级。真实 MariaDB/Redis 运行时集成仍待部署验收。
+
+
+### 9.8 PLAT-009 修复提交与专项 CI 证据
+
+最终代码提交：`fbbb10681194286ccf52405baa66331d045655d2`。Platform Go checks：[`42026901950`](https://github.com/Kasign/stock_data_provider/actions/runs/42026901950)，最终结论 success；gofmt、`go test ./internal/platform/...`、`go test -race ./internal/platform/...`、`go vet ./internal/platform/...` 均通过。之前提交 `b7ac6bef` 的初次 CI 曾因变量重复声明失败，已修复；不能把该失败 SHA 记为通过。
