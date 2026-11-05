@@ -582,3 +582,18 @@ app.js 继续拥有筛选条件和结果快照、`isCurrentScreeningSnapshot`、
 页面级路由 `setView`、hashchange、移动端导航、全局 Escape/Tab 处理和业务事件仍由 app.js 持有；本次只迁移闭合的区块导航行为，不改变页面状态和业务请求。
 
 单测覆盖导航点击后的滚动/焦点/aria-current、减少动态效果、目标缺失安全退出，以及根据全部可见目标重算当前高亮。最终验收：WebUI Checks #41949111706（455/455 tests、语法、Compose、镜像构建通过）；Chromium Browser Smoke #41949111694（所有步骤通过）。
+
+
+### 12.26 JSR-6F 证券搜索结果展示 adapter
+
+新增 `stock-search-view.js`，导出三个边界函数：
+
+- `normalizeStockSearchItems(items)`：仅保留 symbol/code/name/exchange 均为字符串的目录记录。
+- `renderStockSearchResultsView({ document, root, items, generation })`：构建按钮候选项、名称/代码/交易所文本、role 和初始 aria-selected。
+- `updateStockSearchActiveOptionView({ input, root, activeIndex })`：同步 aria-selected、aria-activedescendant，并将当前项滚动到可视区域。
+
+app.js 继续负责结果集合与活动索引状态、输入防抖、请求 AbortController、generation 校验、当前输入值校验、错误文案、键盘事件和最终证券选择。adapter 不读取全局 DOM、不访问 state/localStorage/API、不创建请求或定时器，也不绑定事件。
+
+测试覆盖记录规范化、畸形记录过滤、generation ID、DOM 文本、ARIA 属性、活动项滚动及清除活动项。最终验收：WebUI Checks #41950184865（458/458 tests、语法、Compose、镜像构建通过）；Chromium Browser Smoke #41950184912（所有浏览器步骤通过）。实施提交 `84d057b5a7e89756baa14098c1d3b1a9ee9efc06`，测试替身修正提交 `e9829c9157131d7b7318d2c952588f0122a9f063`。
+
+本次测试首轮失败仅由 FakeElement 缺少 `removeAttribute` 造成，已补齐测试替身；不涉及运行时代码缺陷。

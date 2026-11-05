@@ -1,6 +1,6 @@
 # WebUI 整体规划
 
-更新时间：2026-11-05（当前代码/测试基线：`581f4bddc1d8eaa3eaa2241b4eb571502c1f9ff2`）
+更新时间：2026-11-05（当前代码/测试基线：`e9829c9157131d7b7318d2c952588f0122a9f063`）
 目标分支：`feat/webui-market-data-console`
 适用范围：仅规划和管理 WebUI（`web/**`）及其专属文档（`doc/web/**`）。除明确获批的文档路径修正外，不修改 Go、Provider、数据库、服务端 API、OpenAPI 实现和部署配置。
 
@@ -1068,3 +1068,20 @@ app.js 仅负责两处初始化装配；页面路由 `setView`、hashchange、�
 首轮 WebUI Checks 的 455 项测试中有 1 项失败，原因是原 UI contract 仍检查 app.js 内联函数；已改为检查 `section-navigation.js` 的真实行为边界。修正后的最终提交对应 455/455 全通过。首轮失败记录保留，不作为最终验收依据。
 
 下一步：盘点 app.js 剩余页面初始化和全局事件绑定，区分真正闭合的 DOM 行为与依赖全局状态/事务的协调入口；不迁移 `setView`、storage event 总路由、连接配置应用或 Task/Run 请求生命周期。
+
+
+### 2026-11-05 JSR-6F：证券搜索结果展示 adapter（已验收）
+
+复核证券名称自动补全的结果规范化、候选项 DOM、键盘选中态同步和请求生命周期。确认纯展示边界只包括记录规范化、候选项 DOM 构建、选中态/aria 属性与最近项滚动；输入防抖、AbortController、generation、错误映射、键盘导航索引和选股事务仍属于 app 协调层。
+
+- [x] 新增 `stock-search-view.js`：`normalizeStockSearchItems` 负责筛选结构完整的目录项；`renderStockSearchResultsView` 只构建候选项 DOM；`updateStockSearchActiveOptionView` 只同步 aria 选中态和滚动位置。
+- [x] app.js 保留 `stockSearchResults`、`stockSearchActiveIndex`、`stockSearchGeneration`、定时器/AbortController、请求错误状态、输入值比对和最终选择行为。
+- [x] 新增视图单测，覆盖无效记录过滤、generation 范围 ID、文本安全写入、role/aria 属性、活动选项和无活动项清理。
+- [x] 更新 UI contract，确保 adapter 不访问 storage/API/请求生命周期或 app state。
+- [x] 代码实施提交：`84d057b5a7e89756baa14098c1d3b1a9ee9efc06`；测试替身修正提交：`e9829c9157131d7b7318d2c952588f0122a9f063`。
+- [x] WebUI Checks #41950184865 通过：458/458 tests、语法检查、Compose 校验和 Nginx 镜像构建通过。
+- [x] Chromium Browser Smoke #41950184912 通过：响应式布局、跨标签同步、自选股行情、Run Flow、个股研究、数据中心、选股和全市场分页生命周期全部通过。
+
+首轮 Checks 发现测试 FakeElement 未实现 `removeAttribute`，导致“清除活动选项”单测失败；补齐测试替身后，最终修复提交对应 458/458 全通过。运行时代码不需要因该测试替身问题再做修改。
+
+下一步：停止对 app.js 进行无目标的机械拆分。转向整体架构回顾，盘点剩余大模块的状态所有权、重复格式化/DOM 逻辑、跨模块依赖和测试缺口；只有能形成稳定、可验证边界的场景才进入下一次迁移。

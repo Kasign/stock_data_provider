@@ -1586,3 +1586,16 @@ CI 复核记录：本批首次 Chromium Browser Smoke 在个股研究数据质�
 - [x] Chromium Browser Smoke #41949111694：所有浏览器步骤通过。
 - [x] 实施提交 `c6f3ef778aa9e76a01da6dfa1f7da9143a9bb631`；最终契约修正提交 `581f4bddc1d8eaa3eaa2241b4eb571502c1f9ff2`。
 - [x] 首轮静态契约失败已修正；最终提交的全量测试和浏览器回归均通过。
+
+
+## 2026-11-05 JSR-6F：证券搜索结果展示 adapter（已验收）
+
+- [x] 证券搜索结果记录规范化迁入 `stock-search-view.js`。
+- [x] 候选项 DOM 构建迁入 adapter，保留名称、代码、交易所、role 和 generation-scoped ID。
+- [x] 活动项 aria 状态、activedescendant 和最近项滚动同步迁入 adapter。
+- [x] 输入防抖、AbortController、generation、错误处理、键盘索引和最终选股仍由 app.js 管理。
+- [x] 新增视图单测与 UI contract；adapter 不访问状态、存储、API、请求或定时器。
+- [x] WebUI Checks #41950184865：458/458 tests、语法检查、Compose 校验和 Nginx 镜像构建通过。
+- [x] Chromium Browser Smoke #41950184912：全部浏览器步骤通过。
+- [x] 实施提交 `84d057b5a7e89756baa14098c1d3b1a9ee9efc06`；最终修正提交 `e9829c9157131d7b7318d2c952588f0122a9f063`。
+- [x] 首轮测试替身缺少 `removeAttribute` 的问题已修正，最终提交全量通过。
