@@ -764,3 +764,35 @@ func TestRedirectAllowsSameOriginPathChange(t *testing.T) {
 		t.Fatalf("expected same-origin redirect to pass, got %v", err)
 	}
 }
+
+
+func TestClientUsesBoundedSemaphorePoolsForUnknownDependencies(t *testing.T) {
+	client, err := New(Config{
+		MaxConcurrent: 2,
+		DependencyLimits: map[string]int{
+			"news.provider.bocha": 1,
+			"news.provider.brave": 2,
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	bocha := client.semaphore("news.provider.bocha")
+	brave := client.semaphore("news.provider.brave")
+	unknownA := client.semaphore("request.user.1001")
+	unknownB := client.semaphore("request.user.1002")
+
+	if bocha == brave || bocha == unknownA || brave == unknownA {
+		t.Fatal("configured dependencies must have dedicated semaphore pools")
+	}
+	if unknownA != unknownB {
+		t.Fatal("unconfigured dependencies must share the bounded fallback pool")
+	}
+	if got, want := len(client.semaphores), 2; got != want {
+		t.Fatalf("configured semaphore pool count = %d, want %d", got, want)
+	}
+	if got, want := cap(client.defaultSemaphore), 2; got != want {
+		t.Fatalf("fallback semaphore capacity = %d, want %d", got, want)
+	}
+}

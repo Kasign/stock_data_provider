@@ -244,3 +244,16 @@ Migration 状态为 `running` 或 `failed` 时，Runner 不会自动重跑。处
 - News Provider 当前没有生产组合根或真实构造调用点；因此上述是集成契约，不代表 News 已完成生产注入或真实网络验收。服务组合根应由集成分支统一装配，Platform 不直接依赖/修改 News 领域。
 
 本契约仅说明固定 Provider API 的最小接入，不授予任意来源抓取权限，也不替代真实 Provider 账号、配额和来源授权审核。
+
+
+### 7.9 Dependency semaphore 有界化（2026-11-05）
+
+并发隔离只为 `Config.DependencyLimits` 中显式配置的依赖创建独立 semaphore。所有未配置的 Dependency 共用一个容量为 `MaxConcurrent` 的 fallback semaphore，不再按请求动态创建 channel。
+
+- semaphore map 在 Client 构造时按配置一次性初始化，运行期间只读；其大小严格等于显式配置的依赖数量。
+- 未配置依赖共享 fallback 池，动态依赖名不会导致 map 增长。调用方仍应使用固定低基数 Dependency；fallback 只是资源安全兜底，不代表推荐动态命名。
+- 已配置依赖仍拥有独立并发额度，不会被未配置依赖占用；未配置依赖之间共享全局 fallback 容量。
+- `DependencyLimits` 的配置项数量由启动配置控制，禁止从请求或远端响应动态追加；配置应在启动时完成校验。
+- 不采用 LRU/TTL 淘汰 semaphore：淘汰仍被请求持有的 channel 会创建同名新池，破坏同一依赖的并发上限。
+
+该设计将运行期 semaphore 数量从“请求期间出现过的不同 Dependency 数量”收敛为“启动时配置的 Dependency 数量 + 1”，避免高基数输入导致无界内存增长。

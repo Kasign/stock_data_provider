@@ -13,7 +13,6 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"example.com/stock-analysis-flow/internal/platform/fault"
@@ -72,9 +71,8 @@ type Client struct {
 	dial        func(context.Context, string, string) (net.Conn, error)
 	httpClient  *http.Client
 	transport   *http.Transport
-	limits      map[string]int
-	semaphoreMu sync.Mutex
-	semaphores  map[string]chan struct{}
+	defaultSemaphore chan struct{}
+	semaphores       map[string]chan struct{}
 }
 
 type policyContextKey struct{}
@@ -123,12 +121,16 @@ func New(config Config) (*Client, error) {
 	}
 
 	dialer := &net.Dialer{Timeout: config.DialTimeout, KeepAlive: 30 * time.Second}
+	semaphores := make(map[string]chan struct{}, len(limits))
+	for dependency, limit := range limits {
+		semaphores[dependency] = make(chan struct{}, limit)
+	}
 	client := &Client{
-		config:     config,
-		resolver:   resolver,
-		dial:       dialer.DialContext,
-		limits:     limits,
-		semaphores: make(map[string]chan struct{}),
+		config:           config,
+		resolver:         resolver,
+		dial:              dialer.DialContext,
+		defaultSemaphore: make(chan struct{}, config.MaxConcurrent),
+		semaphores:       semaphores,
 	}
 
 	transport := &http.Transport{
@@ -260,19 +262,14 @@ func (c *Client) CloseIdleConnections() {
 	}
 }
 
+// semaphore returns a dedicated slot pool only for explicitly configured
+// dependencies. Unconfigured dependency names share one bounded fallback pool,
+// so request-controlled identifiers cannot grow the semaphore map.
 func (c *Client) semaphore(dependency string) chan struct{} {
-	c.semaphoreMu.Lock()
-	defer c.semaphoreMu.Unlock()
 	if semaphore, ok := c.semaphores[dependency]; ok {
 		return semaphore
 	}
-	limit := c.limits[dependency]
-	if limit == 0 {
-		limit = c.config.MaxConcurrent
-	}
-	semaphore := make(chan struct{}, limit)
-	c.semaphores[dependency] = semaphore
-	return semaphore
+	return c.defaultSemaphore
 }
 
 func (c *Client) dialContext(ctx context.Context, network, address string) (net.Conn, error) {
