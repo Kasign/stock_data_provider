@@ -35,7 +35,7 @@ jobs:
 
       - name: Install Playwright
         working-directory: web
-        run: npm install --no-save --no-package-lock playwright
+        run: npm install --no-save --no-package-lock playwright postcss postcss-selector-parser
 
       - name: Install Chromium
         working-directory: web
@@ -44,6 +44,10 @@ jobs:
       - name: Run responsive browser smoke tests
         working-directory: web
         run: node tests/browser-smoke.mjs
+
+      - name: Analyze CSS cascade structure with PostCSS
+        working-directory: web
+        run: node tests/css-structure-review.mjs
 
       - name: Run settings cross-tab synchronization acceptance
         working-directory: web

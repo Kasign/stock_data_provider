@@ -2032,3 +2032,20 @@ Artifact 核验结果：
 - [ ] 保留单入口加载顺序和无 FOUC；验证所有页面、主题、断点、移动导航与 Run Flow。
 
 **本轮结论：暂不物理拆分 CSS。** 当前可以进入 parser 级依赖清单和 owner map 阶段；未完成上述门槛前，任何按注释块搬迁都属于高风险改动。
+
+
+## 2026-11-05 CSS AST 依赖分析工具接入
+
+在 Browser Smoke workflow 中增加 PostCSS + postcss-selector-parser 静态分析步骤，解析 `web/styles.css` 的真实规则树、嵌套 at-rule 条件、selector list、声明和源码行号。分析结果会区分：
+
+- 同一 selector、相同 at-rule 上下文、相同声明块的精确重复候选；
+- 同一 selector 在不同规则/条件下出现的声明值变体（仅作为覆盖线索，不直接判定冲突）；
+- 共享壳层关键 selector 的出现次数与源码行号，作为 Owner Map 的输入。
+
+脚本仅输出分析报告并校验 CSS 解析结果和共享 selector 存在性，不自动改写 CSS、不删除规则、不以静态统计结果直接判定冗余。依赖仅在 CI 临时安装，不增加 WebUI 运行时依赖或生产包体积。
+
+- [ ] 首次 CI 运行确认 PostCSS 解析与统计阈值正常。
+- [ ] 结合 AST 结果复核媒体条件、主题上下文和级联顺序，完成共享 selector Owner Map。
+- [ ] 完成中文字体环境修复后，再决定是否启动单页面 CSS 迁移。
+
+当前仍不执行 CSS 物理拆分。
