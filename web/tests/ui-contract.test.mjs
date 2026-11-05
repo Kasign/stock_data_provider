@@ -2907,3 +2907,12 @@ test("UIR-2 table viewport constraints keep wide data inside local scrollers", (
   assert.match(html, /class="table-scroll market-stocks-table-scroll"/);
   assert.match(html, /class="existing-api-results-grid"/);
 });
+
+
+test("UIR-2 market stocks pagination controls wrap within narrow panels", () => {
+  assert.match(stylesheet, /\.market-stocks-pagination\{[^}]*display:flex;[^}]*flex-wrap:wrap/);
+  assert.match(stylesheet, /\.market-stocks-pagination>div\{[^}]*display:flex;[^}]*flex-wrap:wrap/);
+  assert.match(html, /class="market-stocks-pagination"><span id="market-stocks-page-label"/);
+  assert.match(html, /id="market-stocks-prev"/);
+  assert.match(html, /id="market-stocks-next"/);
+});
