@@ -2361,5 +2361,5 @@ test("UIR-2 settings section heading final values are consolidated", () => {
   assert.ok(!stylesheet.includes(".settings-section-heading { display:flex;"));
   assert.ok(!stylesheet.includes(".settings-section-heading { align-items:center; }"));
   assert.ok(!stylesheet.includes(".settings-section { margin-bottom:22px; }"));
-  assert.ok(stylesheet.includes("@media (max-width:640px) {\\n  .settings-section-heading { align-items:flex-start; }"));
+  assert.ok(stylesheet.includes(["@media (max-width:640px) {", "  .settings-section-heading { align-items:flex-start; }"].join(newline)));
 });

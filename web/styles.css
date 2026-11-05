@@ -4717,7 +4717,6 @@ button:disabled {
 .settings-overview-strip strong { color:var(--text); font-size:13px; }
 .settings-overview-strip p { margin:3px 0 0; color:var(--text-dim); font-size:11px; }
 .settings-overview-strip .availability-pill { margin-left:auto; white-space:nowrap; }
-.settings-section-heading p { margin:0; color:var(--text-soft); font-size:12px; line-height:1.65; }
 .settings-config-panel { padding:20px; }
 .settings-group-heading { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; margin:0 0 15px; }
 .settings-group-heading strong { color:var(--text); font-size:14px; }
