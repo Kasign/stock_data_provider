@@ -71,7 +71,7 @@ completed 不代表 valid；消费方必须同时检查 result_status 和 qualit
 | JSON 字段 | 必需 | 类型/约束 | 语义 |
 |---|---|---|---|
 | metric_code | 是 | string | 稳定指标编码 |
-| value | 条件必需 | number/null | 无有效数值时为 null，由 metric_status 解释 |
+| value | 是 | string/number/null（由 metric_code 对应 Schema 固定） | 无有效数值时必须显式 null，由 metric_status 解释；精确数值与统计数值采用不同且固定的 JSON 类型 |
 | unit | 是 | string/enum | CNY、CNY/share、shares、percentage_point、ratio、day 等 |
 | period | 是 | string | 统计周期 |
 | as_of | 是 | timestamp | 知识截止时间 |
@@ -79,8 +79,8 @@ completed 不代表 valid；消费方必须同时检查 result_status 和 qualit
 | metric_status | 是 | available/insufficient_data/insufficient_sample/not_applicable/unknown | 数值可用性 |
 | calculation_version | 是 | string | 公式/实现版本 |
 | sample_count | 条件必需 | integer/null | 统计/概率类指标必需 |
-| lower_bound | 否 | number/null | 区间下界，与 upper_bound 成对 |
-| upper_bound | 否 | number/null | 区间上界，与 lower_bound 成对 |
+| lower_bound | 是 | string/number/null（与该 metric_code 的 value 类型一致） | 无区间时显式 null；有区间时与 upper_bound 同时非 null |
+| upper_bound | 是 | string/number/null（与该 metric_code 的 value 类型一致） | 无区间时显式 null；有区间时与 lower_bound 同时非 null |
 
 金额和价格必须采用明确 decimal 精度策略；若统计指标使用 float64，必须声明误差容忍、舍入策略和固定样本。value 为 null 时必须说明原因，禁止用 0 代替缺失。
 
@@ -521,3 +521,111 @@ available_at=null 表示没有可验证的外部可获得时间，不得用 publ
 - JSON Schema 使用 string + pattern/format 约束，并在 Go 侧使用专用 Decimal 类型和 Marshal/Unmarshal 测试。
 
 该建议优于 JSON number 的原因是避免跨语言 IEEE-754 精度损失，尤其金额、价格、成本和收益计算。但需要结合现有 Data OpenAPI 的 number 字段决定 Adapter 边界转换，不要求修改 Data 服务既有 API；Quant 内部和 Quant/Research/Researchflow 跨模块契约应统一。
+
+## 11. Quant / Research Owner Review 建议决议（2026-11-05）
+
+本节是供 Owner 确认的建议决议，不代表 Owner 已签字或 Schema 已冻结。
+
+### 11.1 CONTRACT-001：数值 JSON 类型与精度
+
+建议采用按指标语义固定类型的策略，而不是全局强制所有数值均为 string 或 number：
+
+| 数值类别 | JSON 表达 | 规则 |
+|---|---|---|
+| 价格、金额、单价、成本、费用 | decimal string | 十进制精确表达；Schema 固定小数位/最大精度和舍入模式 |
+| 股数、样本数、计数 | integer | 明确整数范围；禁止浮点计数 |
+| 比例、收益率、波动率、标准化分数 | number | 明确单位、计算精度、舍入和绝对/相对误差 |
+| 无效或不可用数值 | null | 字段按 DTO required 规则输出，原因由 metric_status/quality_status 表达 |
+
+具体约束：
+1. 每个指标编码在 Metric Registry 声明 JSON 类型、unit、精度、舍入模式、允许范围和误差容忍。
+2. QuantMetric 的 value/lower_bound/upper_bound 遵循同一指标编码的同一类型；不得同一指标有时返回 string、有时返回 number。
+3. lower_bound 与 upper_bound 同时存在或同时为 null；无区间时显式 null。若指标不支持区间，应在专属 Schema 中省略这两个字段。
+4. 金额/价格在 Go 内部使用明确十进制类型或经过验证的十进制运算边界；禁止通过 float64 来回转换后宣称精确。
+5. JSON number 统计指标定义稳定舍入位数和 golden 容差；NaN、+Inf、-Inf 不允许序列化，必须转为明确的 unknown/failed 结果。
+6. QuantMetric 通用字段的 value 类型由指标编码 Schema 约束；JSON Schema 应按指标类型拆分 oneOf 或使用指标专属 DTO，不允许宽泛接受任意 string/number。
+
+**建议决议：采纳按指标语义固定 JSON 类型；金额/价格 decimal string，计数 integer，统计比例 number。** Owner 确认后更新 CONTRACT-001 状态。
+
+### 11.2 CONTRACT-002：Indicator 首批代码与参数 Schema
+
+首批只纳入可以由日线 OHLCV 稳定复算、定义成熟且能提供固定样本的指标：
+
+| indicator_code | 首批参数 | 输入要求 | 输出/边界 |
+|---|---|---|---|
+| sma | window | close | window 个有效样本；不足返回 insufficient_data |
+| ema | window、seed_method | close | seed_method 固定为版本化枚举；初始化算法不得隐式改变 |
+| return | window、return_basis | close | return_basis 明确 simple/log；单位 ratio |
+| volatility | window、return_basis、annualization_factor | close | 明确收益序列和年化因子；样本不足不得输出有效值 |
+| rsi | window、smoothing_method | close | 平滑算法版本化；固定边界样本 |
+| macd | fast_window、slow_window、signal_window | close | fast_window < slow_window；分别输出 DIF/DEA/histogram |
+| atr | window、smoothing_method | high/low/close | 需要完整 OHLC；复权口径一致 |
+| bollinger | window、multiplier、stddev_method | close | 输出 middle/upper/lower；标准差算法固定 |
+
+首批规则：
+- 参数必须进入 indicator-specific typed DTO；不接受任意 map。
+- indicator_code + schema_version 唯一确定参数 Schema 和默认值；禁止调用方省略参数后依赖不透明默认值。
+- 首批不纳入复杂形态识别、自动参数搜索、任意表达式和用户脚本。
+- 输入序列必须包含交易日、质量、单位和复权语义；窗口按交易日有效样本计数，缺失日处理策略由指标定义明确。
+- 每个指标至少提供正常、边界、缺失、异常、复权切换五类固定样本；结果包含 algorithm_version 和输入快照引用。
+
+**建议决议：以上八项作为首批候选清单；Owner 可缩减，不应在首批无验收样本时扩张。**
+
+### 11.3 CONTRACT-003：Factor 首批候选与横截面规则
+
+首批候选因子：
+
+| factor_code | 候选定义 | 关键输入 |
+|---|---|---|
+| momentum_20d | 20 个有效交易日收益动量 | 复权收盘价 |
+| momentum_60d | 60 个有效交易日收益动量 | 复权收盘价 |
+| volatility_20d | 20 日收益波动 | 复权收盘价、收益口径 |
+| turnover_mean_20d | 20 日平均换手率 | 换手率及来源/质量 |
+| relative_strength_20d | 相对指定基准的 20 日收益差 | 个股与基准同口径收益 |
+| volume_ratio_20d | 当日成交量相对 20 日基准量 | 成交量、停牌/异常成交处理 |
+
+横截面契约：
+- 必须固定 universe_ref、trade_date、as_of、证券主数据版本和行业分类版本（若中性化）。
+- 标准化顺序固定为：样本资格过滤 → 缺失处理 → 异常值处理 → 中性化（如启用）→ 标准化；每一步输出样本数和排除原因。
+- winsorize 必须指定分位数/阈值；zscore 必须指定母体标准差定义；rank 必须指定并列排名策略和输出区间。
+- 缺失样本不能按 0 参与；minimum_coverage 不满足时结果为 insufficient_data/unknown，不输出可用于排序的有效因子值。
+- Indicator 与 Factor 是并列子系统；Factor 可直接消费标准化数据，不要求依赖 Indicator Engine。
+
+**建议决议：首批先实现 momentum_20d、momentum_60d、volatility_20d；其余候选在数据覆盖率评估后纳入。**
+
+### 11.4 CONTRACT-004：Evidence 授权引用
+
+建议统一保留 authorization_ref 不透明字符串引用；授权决策快照本身由授权策略 Owner 管理，不由 Research 复制成自己的授权事实。
+
+- policy_owner 必须是实际对该来源/内容拥有授权决策权的模块或策略主体。
+- News/Data 内容读取由来源 Owner 重新执行当前授权检查；Research 保存当时的 decision_ref、policy_version、content_level、purpose、scope 和 fingerprint。
+- 历史回放同时保留当时授权决策引用与本次读取的当前授权结果；当前 denied/expired 不得因历史 allowed 而放行。
+- Research 派生内容由 Research 对自身派生记录负责；引用外部来源时仍保留原始来源授权链，不能用 Research 自身决策覆盖上游限制。
+- 授权状态 unknown/缺少决策引用时，不允许读取受限正文；可在允许范围内保留 metadata 引用并标记限制。
+
+**建议决议：采用统一不透明 AuthorizationRef + 来源 Owner 当前复核；不建立跨模块万能授权服务。**
+
+### 11.5 CONTRACT-005：system_as_of 传播
+
+建议将 ResearchRun.as_of 作为一次研究运行唯一的系统知识截止时间：
+
+1. CreateRun 时确定并持久化 UTC 时间；重试 Stage 不得自动刷新。
+2. QuantAnalysisRequest、ResearchContext、Evidence 写入/查询和 News Query 均接收同一 system_as_of。
+3. 子对象的 system_as_of 不得晚于 Run.as_of；若来源数据在该时点不可见，必须排除或标记不可用。
+4. observed_at 是事实被系统观察的实际时间，不能为了满足 PIT 而回填成 Run.as_of。
+5. trade_date 是交易日，不是知识截止时间；published_at 是来源声明时间，不是系统已知时间。
+6. 新建 Run 可选择新的 as_of；原 Run 的历史输入快照和结果不可被新时点覆盖。
+
+**建议决议：Run 固定 system_as_of，所有下游模块只消费该值；禁止 Stage 各自取当前时间。**
+
+### 11.6 本轮 Review 状态
+
+| 决策 | 建议 | 当前状态 |
+|---|---|---|
+| CONTRACT-001 | 精确数值 string、计数 integer、统计数值 number，按指标编码固定 Schema | 待 Quant Owner 确认 |
+| CONTRACT-002 | 八项 Indicator 候选及 typed 参数 Schema | 待 Quant Owner 确认 |
+| CONTRACT-003 | 三项首批 Factor + 可选候选；与 Indicator 解耦 | 待 Quant Owner 确认 |
+| CONTRACT-004 | 统一不透明授权引用、来源 Owner 当前复核 | 待 Research/News Owner 确认 |
+| CONTRACT-005 | Run 唯一固定 system_as_of | 待 Research/Researchflow Owner 确认 |
+
+**本轮结论：形成可供 Owner 逐项接受/修改的明确建议；未收到 Owner 确认前，不勾选冻结状态，不进入 L2 Module Ready。**
