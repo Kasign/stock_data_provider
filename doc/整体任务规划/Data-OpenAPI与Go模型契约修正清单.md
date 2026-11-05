@@ -648,3 +648,21 @@ Data 分支最新 HEAD 已推进至 `266ac21f5c840207f79aae8984021dac74185652`�
 - Go test suite run `42017899888`：in_progress。
 
 不得沿用前一 SHA 的 CI 结果作为本次最新 SHA 的验收结论。待 Workflow 完成后再更新状态；当前只确认静态代码文件未变化。
+
+
+### 11.17 Data 最新 HEAD 再次前进（2026-11-05）
+
+最新 Data HEAD 已从 `266ac21f5c840207f79aae8984021dac74185652` 前进到 `587f27683c8422810d2f7fc917a2c9324eb147b0`：
+
+- 提交：`test(baostock): 锁定上市日首因子样本边界 [historical_baostock_factors]`
+- Compare：ahead 1 / behind 0。
+- 唯一变更文件：`services/market-data/internal/baostock/live_adjustment_probe_test.go`，增加 22 行测试。
+- 未修改 OpenAPI、HTTP Handler、Model 或 Service 业务实现，因此 11.9~11.15 的静态契约结论仍适用于最新代码。
+
+最新 SHA 关联 Workflow：
+- Go test suite run `42017963089`：pending。
+- Live provider probe run `42017963182`：in_progress。
+- WebUI checks run `42017963171`：completed / success。
+- Go-Python parity run `42017963237`：in_progress。
+
+此处的 Workflow 状态属于 SHA 587f276；不能混用前一个 SHA 266ac21 的状态。静态契约核查基线已更新为 587f276，待其 CI 完成后再记录最终结果。
