@@ -1092,3 +1092,31 @@ Go suite 覆盖根模块、go-core、market-data 的格式/测试/race/vet、Mar
 - Pytdx GBBQ 与 BaoStock 2025 年公司行为事件及参考价对账：3/3 matched。
 - Pytdx/BaoStock 复权后历史 OHLC 跨源可比性：not_comparable（算法/基准未统一）。
 - 阶段 B 继续 in_progress；后续先确定系统内部统一复权口径/基准策略，再考虑是否提供统一折算视图，不把不同源的原生复权结果强行合并。
+
+
+## 63. 2026-11-05 复权方法与参考日期元数据路径盘点
+
+### 63.1 当前实现矩阵
+
+| Provider | AdjustmentMethod | AdjustmentRefDate | 当前证据/限制 |
+|---|---|---|---|
+| BaoStock | `baostock_pct_change` | 未填 | 原生 adjustflag；本轮验证了自身因子与 qfq/hfq OHLC 内部一致，但源接口未直接返回明确参考日期 |
+| Pytdx | `pytdx_qfq` / `pytdx_hfq` | 未填 | v0.0.86 GBBQ 仿射模型；qfq 锚定本次加载历史的最新交易日，hfq 锚定加载历史的最早交易日，代码尚未把锚点写入 Bar |
+| Eastmoney | `eastmoney_fqt_{fqt}` | 未填 | 原生 fqt 参数，当前适配器未声明参考日期 |
+| Tencent | `tencent_{key}` | 未填 | 原生 kline 复权 key，当前适配器未声明参考日期 |
+| Tushare | `tushare_adj_factor_qfq_v1` / `tushare_adj_factor_hfq_v1` | 仅 qfq 填 | qfq 参考日期取本次因子集合最大交易日；hfq 使用原始累计因子，但当前未填锚点日期 |
+| Yahoo Finance | `yahoo_adjclose_ratio_rebased_to_end/start` | 已填 | qfq 明确重基准到请求区间最后一条，hfq 重基准到请求区间第一条 |
+| Sina / NetEase | raw only | 空 | 当前仅支持 none，不进入复权比较 |
+
+### 63.2 生产比较器安全性
+
+- `validateCrossProviderAdjustmentCompatibility` 对 adjusted basis 要求双方 `AdjustmentMethod` 非空且相同、`AdjustmentRefDate` 非空且相同，并检查每根 Bar 元数据一致。
+- 因此当前 BaoStock/Pytdx/Eastmoney/Tencent/Tushare hfq 等元数据不完整的 adjusted 样本会被拒绝比较，不会仅凭相同 qfq/hfq 枚举进入 matched。
+- 本轮只做代码盘点，没有修改生产比较器，也没有人为补造参考日期。
+
+### 63.3 后续设计任务
+
+- 优先评估 Pytdx：其算法明确使用加载历史的最新/最早 K 线作为 qfq/hfq 锚点，可从当前已加载数据精确得出；但要先评估历史分页完整性和 limit 截断对锚点的影响。
+- BaoStock、Eastmoney、Tencent 的参考日期需要来源文档或额外真实请求证据；不得直接把请求 endDate 当作服务端实际参考日。
+- Tushare hfq 的锚点日期需核实接口因子归一化语义后再填。
+- 在元数据来源确认前维持 not_comparable，不改生产行为。

@@ -445,3 +445,12 @@ Live Provider Probe Run `41788725692` 的 workflow conclusion 为 success，但�
 - 002982.SZ 2025-05-30：现金分红 1 元/10 股、送转 4 股，理论价 14.885714 元，BaoStock preclose 14.89 元，差 0.004286 元。
 - 三个事件的 BaoStock back/forward 累积因子增量与 Pytdx 事件隐含比率均在 0.0005 容差内，preclose 差在 0.01 元容差内。
 - 事件级匹配不代表复权后历史 OHLC 可以直接对账：Pytdx v0.0.86 为仿射变换，BaoStock 为累计因子乘法。跨源比较必须保留 method/ref date 一致门禁。
+
+
+## 21. 2026-11-05：复权参考日期元数据盘点
+
+- BaoStock/Pytdx/Eastmoney/Tencent 当前记录 adjustment method，但未提供 adjustment reference date。
+- Tushare qfq 记录本次因子集合最大交易日，hfq 未填 ref date。
+- Yahoo qfq/hfq 分别重基准到请求窗口末日/首日，并记录日期。
+- 生产比较器对 adjusted basis 要求 method 与 ref date 同时相同；缺失/不一致时 not_comparable。
+- 不将请求窗口日期冒充源端参考日期。Pytdx 锚点可从实际加载历史推导，其他 Provider 需要源端证据后再补。
