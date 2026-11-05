@@ -145,22 +145,22 @@ event: response.output_item.added
 data: {"type":"response.output_item.added","sequence_number":2,"output_index":0,"item":{"id":"fc_item_001","type":"function_call","status":"in_progress","call_id":"call_001","name":"lookup_quote","arguments":""}}
 
 event: response.function_call_arguments.delta
-data: {"type":"response.function_call_arguments.delta","sequence_number":3,"item_id":"fc_item_001","output_index":0,"call_id":"call_001","delta":"{\\\"symbol\\\":"}
+data: {"type":"response.function_call_arguments.delta","sequence_number":3,"item_id":"fc_item_001","output_index":0,"call_id":"call_001","delta":"{\"symbol\":"}
 
 event: response.function_call_arguments.delta
-data: {"type":"response.function_call_arguments.delta","sequence_number":4,"item_id":"fc_item_001","output_index":0,"call_id":"call_001","delta":"\\\"600000.SH\\\"}"}
+data: {"type":"response.function_call_arguments.delta","sequence_number":4,"item_id":"fc_item_001","output_index":0,"call_id":"call_001","delta":"\"600000.SH\"}"}
 
 event: response.function_call_arguments.done
-data: {"type":"response.function_call_arguments.done","sequence_number":5,"item_id":"fc_item_001","output_index":0,"call_id":"call_001","arguments":"{\\\"symbol\\\":\\\"600000.SH\\\"}"}
+data: {"type":"response.function_call_arguments.done","sequence_number":5,"item_id":"fc_item_001","output_index":0,"call_id":"call_001","arguments":"{\"symbol\":\"600000.SH\"}"}
 
 event: response.output_item.done
-data: {"type":"response.output_item.done","sequence_number":6,"output_index":0,"item":{"id":"fc_item_001","type":"function_call","status":"completed","call_id":"call_001","name":"lookup_quote","arguments":"{\\\"symbol\\\":\\\"600000.SH\\\"}"}}
+data: {"type":"response.output_item.done","sequence_number":6,"output_index":0,"item":{"id":"fc_item_001","type":"function_call","status":"completed","call_id":"call_001","name":"lookup_quote","arguments":"{\"symbol\":\"600000.SH\"}"}}
 
 event: response.completed
-data: {"type":"response.completed","sequence_number":7,"response":{"id":"resp_tool_001","status":"completed","model":"fixture-model","output":[]}}
+data: {"type":"response.completed","sequence_number":7,"response":{"id":"resp_tool_001","status":"completed","model":"fixture-model","output":[{"id":"fc_item_001","type":"function_call","status":"completed","call_id":"call_001","name":"lookup_quote","arguments":"{\"symbol\":\"600000.SH\"}"}]}}
 ```
 
-预期：按 item_id/call_id 聚合参数增量；arguments.done 与 output_item.done 的最终参数一致；生成待授权 ModelToolCall，不执行工具。若最终 arguments 与 delta 聚合不一致，返回 invalid_response。
+预期：按 item_id/call_id 聚合参数增量；arguments.done、output_item.done 与 delta 聚合结果必须一致；生成待授权 ModelToolCall，不执行工具。若最终 arguments 与 delta 聚合不一致，返回 invalid_response。
 
 ### 5.3 Terminal 事件
 
