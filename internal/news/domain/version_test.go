@@ -78,3 +78,21 @@ func TestBuildVersionFingerprintTreatsEmptyBodyAsAbsent(t *testing.T) {
 		t.Fatal("empty normalized body must be treated as absent")
 	}
 }
+
+func TestBuildVersionFingerprintChangesWithCanonicalURL(t *testing.T) {
+	first := Candidate{Title: "标题", RawURL: "https://news.example/article"}
+	second := Candidate{Title: "标题", RawURL: "https://news.example/article-revised"}
+	if BuildVersionFingerprint(first, ContentLayers{}) == BuildVersionFingerprint(second, ContentLayers{}) {
+		t.Fatal("canonical URL change must produce a new content version")
+	}
+}
+
+func TestBuildVersionFingerprintIgnoresProviderItemID(t *testing.T) {
+	first := Candidate{Title: "标题", RawURL: "https://news.example/article", ProviderItemID: "provider-id-1"}
+	second := first
+	second.ProviderItemID = "provider-id-2"
+	if BuildVersionFingerprint(first, ContentLayers{}) != BuildVersionFingerprint(second, ContentLayers{}) {
+		t.Fatal("provider identity credential must not create a content version")
+	}
+}
+

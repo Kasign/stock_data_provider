@@ -16,7 +16,10 @@ var (
 )
 
 // IdentityRepository 要求在单一事务中读取身份、创建主体/凭据并追加 Observation。
-// 实现必须依靠事务隔离与唯一约束处理并发竞争，不允许先查后写的非原子实现。
+// 生产实现必须在解析身份前取得按 SourceID 协调的跨实例写锁，并持有至事务提交；
+// 否则两个事务可能同时查无凭据并创建重复主体。数据库还必须约束
+// (source_id, identifier_type, identifier_hash) 唯一、observation.id 唯一，
+// 并对全局 idempotency_key 建立唯一约束。唯一约束冲突后需重跑完整事务并重新解析身份。
 type IdentityRepository interface {
 	WithinIdentityTransaction(context.Context, func(IdentityTransaction) error) error
 }
@@ -26,7 +29,7 @@ type IdentityTransaction interface {
 	FindIdentityCredentials(context.Context, string, []domain.IdentityCredential) ([]domain.IdentityCredential, error)
 	CreateNewsItem(context.Context, string) (string, error)
 	SaveIdentityCredentials(context.Context, []domain.IdentityCredential) error
-	// AppendObservation 对同一 IdempotencyKey + 相同候选载荷必须返回既有记录；载荷不同则返回冲突。
+	// AppendObservation 对全局唯一的 IdempotencyKey：相同候选载荷返回既有记录，载荷不同返回冲突。
 	AppendObservation(context.Context, domain.Observation) (domain.Observation, error)
 }
 
