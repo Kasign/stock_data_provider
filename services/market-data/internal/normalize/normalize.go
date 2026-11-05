@@ -197,6 +197,9 @@ func ValidateAndSortBars(symbol string, bars []model.DailyBar, start, end string
 			return nil, []string{"invalid_end_date"}
 		}
 	}
+	if start != "" && end != "" && start > end {
+		return nil, []string{"invalid_date_range"}
+	}
 	canonicalRequestedSymbol, symbolErr := NormalizeSymbol(symbol)
 	if symbolErr != nil || canonicalRequestedSymbol != symbol {
 		return nil, []string{"invalid_requested_symbol"}
@@ -225,14 +228,11 @@ func ValidateAndSortBars(symbol string, bars []model.DailyBar, start, end string
 			continue
 		}
 		if start != "" && b.TradeDate < start {
+			warnings = append(warnings, "bar_before_start_date_dropped")
 			continue
 		}
 		if end != "" && b.TradeDate > end {
 			warnings = append(warnings, "bar_after_end_date_dropped")
-			continue
-		}
-		if seen[b.TradeDate] {
-			warnings = append(warnings, "duplicate_trade_date_dropped")
 			continue
 		}
 		if !finite(b.Open) || !finite(b.High) || !finite(b.Low) || !finite(b.Close) || b.Open <= 0 || b.High <= 0 || b.Low <= 0 || b.Close <= 0 || b.Low > b.High || b.Open < b.Low || b.Open > b.High || b.Close < b.Low || b.Close > b.High {
@@ -321,6 +321,10 @@ func ValidateAndSortBars(symbol string, bars []model.DailyBar, start, end string
 			warnings = append(warnings, "unsupported_quality_status_bar_dropped")
 			continue
 		}
+		if seen[b.TradeDate] {
+			warnings = append(warnings, "duplicate_trade_date_dropped")
+			continue
+		}
 		seen[b.TradeDate] = true
 		valid = append(valid, b)
 	}
@@ -378,6 +382,39 @@ func ValidateQuoteWithReport(q *model.Quote) (validation.Report, error) {
 // Count is the number of affected rows for aggregate issues; Issues remains bounded.
 func ValidateAndSortBarsWithReport(symbolValue string, bars []model.DailyBar, start, end string, limit int) ([]model.DailyBar, []string, validation.Report) {
 	report := validation.NewReport(validation.DefaultMaxIssues)
+	if start != "" && !validISOTradeDate(start) {
+		report.Add(validation.FieldIssue{
+			Stage: validation.StageValidate, Field: "start_date", Code: "invalid_date",
+			Expected: "YYYY-MM-DD", Severity: validation.SeverityError,
+			Message: "requested start date is invalid",
+		})
+		return nil, []string{"invalid_start_date"}, report
+	}
+	if end != "" && !validISOTradeDate(end) {
+		report.Add(validation.FieldIssue{
+			Stage: validation.StageValidate, Field: "end_date", Code: "invalid_date",
+			Expected: "YYYY-MM-DD", Severity: validation.SeverityError,
+			Message: "requested end date is invalid",
+		})
+		return nil, []string{"invalid_end_date"}, report
+	}
+	if start != "" && end != "" && start > end {
+		report.Add(validation.FieldIssue{
+			Stage: validation.StageValidate, Field: "date_range", Code: "invalid_date_range",
+			Expected: "start_date must be on or before end_date", Severity: validation.SeverityError,
+			Message: "requested daily-bar date range is reversed",
+		})
+		return nil, []string{"invalid_date_range"}, report
+	}
+	canonicalRequestedSymbol, symbolErr := NormalizeSymbol(symbolValue)
+	if symbolErr != nil || canonicalRequestedSymbol != symbolValue {
+		report.Add(validation.FieldIssue{
+			Stage: validation.StageValidate, Field: "requested_symbol", Code: "invalid_symbol",
+			Expected: "canonical six-digit code with exchange suffix", Severity: validation.SeverityError,
+			Message: "requested symbol is not canonical",
+		})
+		return nil, []string{"invalid_requested_symbol"}, report
+	}
 	ctx := validation.DailyBarContext{RequestedSymbol: symbolValue, StartDate: start, EndDate: end, Period: "1d"}
 	rowHasErrors := make([]bool, len(bars))
 	for index, bar := range bars {

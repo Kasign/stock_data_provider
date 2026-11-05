@@ -4,12 +4,38 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"time"
 
 	"github.com/Kasign/stock_data_provider/services/market-data/internal/model"
 )
 
-// rebuildAdjustedDailyBars 仅使用同一来源版本、且系统观察与市场可用时间均已证明的因子重建价格。
+type adjustmentFactorRebuildMode uint8
+
+const (
+	adjustmentFactorRebuildCurrent adjustmentFactorRebuildMode = iota + 1
+	adjustmentFactorRebuildPIT
+)
+
+// rebuildAdjustedDailyBars 保留历史调用语义：严格按 PIT 规则筛选因子。
 func rebuildAdjustedDailyBars(raw []model.DailyBar, factors []model.AdjustmentFactor, basis model.AdjustmentBasis, requestedReferenceDate string) ([]model.DailyBar, error) {
+	return rebuildAdjustedDailyBarsPIT(raw, factors, basis, requestedReferenceDate)
+}
+
+// rebuildAdjustedDailyBarsPIT 仅使用系统当时已观察且 Provider 可用时间已证明的因子。
+func rebuildAdjustedDailyBarsPIT(raw []model.DailyBar, factors []model.AdjustmentFactor, basis model.AdjustmentBasis, requestedReferenceDate string) ([]model.DailyBar, error) {
+	return rebuildAdjustedDailyBarsWithMode(raw, factors, basis, requestedReferenceDate, adjustmentFactorRebuildPIT)
+}
+
+// rebuildAdjustedDailyBarsCurrent 用于当前数据重建，可使用系统已观察但 Provider AvailableAt 未知的因子。
+// 该入口不得用于任何历史 PIT 查询；SystemObservedAt 仍是必要条件，防止消费未持久化的 Provider 临时结果。
+func rebuildAdjustedDailyBarsCurrent(raw []model.DailyBar, factors []model.AdjustmentFactor, basis model.AdjustmentBasis, requestedReferenceDate string) ([]model.DailyBar, error) {
+	return rebuildAdjustedDailyBarsWithMode(raw, factors, basis, requestedReferenceDate, adjustmentFactorRebuildCurrent)
+}
+
+func rebuildAdjustedDailyBarsWithMode(raw []model.DailyBar, factors []model.AdjustmentFactor, basis model.AdjustmentBasis, requestedReferenceDate string, mode adjustmentFactorRebuildMode) ([]model.DailyBar, error) {
+	if mode != adjustmentFactorRebuildCurrent && mode != adjustmentFactorRebuildPIT {
+		return nil, errors.New("unsupported adjustment factor rebuild mode")
+	}
 	if basis != model.AdjustmentForward && basis != model.AdjustmentBackward {
 		return nil, errors.New("adjustment rebuild requires forward or backward basis")
 	}
@@ -20,15 +46,27 @@ func rebuildAdjustedDailyBars(raw []model.DailyBar, factors []model.AdjustmentFa
 	type factorKey struct {
 		source  string
 		version string
+		basis   model.AdjustmentFactorBasis
 	}
 	groups := make(map[factorKey]map[string]model.AdjustmentFactor)
 	for _, factor := range factors {
 		if factor.Factor <= 0 || (factor.QualityStatus != model.QualityValid && factor.QualityStatus != model.QualityDegraded) ||
-			factor.AvailableAt == nil || factor.SystemObservedAt == nil ||
-			factor.AvailableAt.IsZero() || factor.SystemObservedAt.IsZero() {
+			factor.SystemObservedAt == nil || factor.SystemObservedAt.IsZero() ||
+			factor.SystemObservedAt.After(time.Now().UTC()) {
 			continue
 		}
-		key := factorKey{source: factor.Source, version: factor.SourceVersion}
+		if mode == adjustmentFactorRebuildPIT &&
+			(factor.AvailableAt == nil || factor.AvailableAt.IsZero()) {
+			continue
+		}
+		factorBasis := model.NormalizeAdjustmentFactorBasis(factor.Basis)
+		if factorBasis != model.AdjustmentFactorShared && factorBasis != model.AdjustmentFactorForward && factorBasis != model.AdjustmentFactorBackward {
+			continue
+		}
+		if factorBasis != model.AdjustmentFactorShared && factorBasis != factorBasisForAdjustment(basis) {
+			continue
+		}
+		key := factorKey{source: factor.Source, version: factor.SourceVersion, basis: factorBasis}
 		if groups[key] == nil {
 			groups[key] = make(map[string]model.AdjustmentFactor)
 		}
@@ -44,6 +82,9 @@ func rebuildAdjustedDailyBars(raw []model.DailyBar, factors []model.AdjustmentFa
 	}
 	sort.Slice(keys, func(i, j int) bool {
 		if keys[i].source == keys[j].source {
+			if keys[i].basis != keys[j].basis {
+				return keys[i].basis == factorBasisForAdjustment(basis)
+			}
 			return keys[i].version < keys[j].version
 		}
 		return keys[i].source < keys[j].source
@@ -125,6 +166,13 @@ func rebuildAdjustedDailyBars(raw []model.DailyBar, factors []model.AdjustmentFa
 		}
 	}
 	return out, nil
+}
+
+func factorBasisForAdjustment(basis model.AdjustmentBasis) model.AdjustmentFactorBasis {
+	if basis == model.AdjustmentForward {
+		return model.AdjustmentFactorForward
+	}
+	return model.AdjustmentFactorBackward
 }
 
 func applyAdjustmentFactorQuality(bar *model.DailyBar, factor model.AdjustmentFactor, role string) {
