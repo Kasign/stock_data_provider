@@ -14,6 +14,7 @@ import (
 
 type liveBaoStockAdjustmentReport struct {
 	GeneratedAt        string                       `json:"generated_at"`
+	HistoryStartDate   string                       `json:"history_start_date"`
 	StartDate          string                       `json:"start_date"`
 	EndDate            string                       `json:"end_date"`
 	DateSemanticsNote  string                       `json:"date_semantics_note"`
@@ -52,6 +53,7 @@ func TestLiveBaoStockAdjustmentFactorConsistency(t *testing.T) {
 		t.Skip("set MARKET_DATA_LIVE_BAOSTOCK_ADJUSTMENT_TESTS=1 to query live BaoStock adjustment factors")
 	}
 
+	const historyStartDate = "1990-01-01"
 	const startDate, endDate = "2025-07-07", "2025-07-17"
 	location, err := time.LoadLocation("Asia/Shanghai")
 	if err != nil {
@@ -65,6 +67,7 @@ func TestLiveBaoStockAdjustmentFactorConsistency(t *testing.T) {
 	defer cancel()
 	report := liveBaoStockAdjustmentReport{
 		GeneratedAt:        time.Now().UTC().Format(time.RFC3339),
+		HistoryStartDate:   historyStartDate,
 		StartDate:          startDate,
 		EndDate:            endDate,
 		DateSemanticsNote:  "OperateDate is tested as a candidate effective date by matching raw, forward-adjusted and backward-adjusted K-lines; a successful price match is evidence for reconstruction semantics, not proof of the upstream field's legal/business definition.",
@@ -75,7 +78,7 @@ func TestLiveBaoStockAdjustmentFactorConsistency(t *testing.T) {
 	// Include older listed securities so the probe can find a genuine raw-K window before the first factor event.
 	for _, symbol := range []string{"sz.000001", "sz.000002", "sz.000858", "sh.600000", "sh.600016", "sh.600601", "sh.600036", "sz.002982"} {
 		item := liveBaoStockAdjustmentItem{Symbol: symbol}
-		factors, factorErr := client.QueryAdjustmentFactors(ctx, symbol, "2000-01-01", factorEndDate)
+		factors, factorErr := client.QueryAdjustmentFactors(ctx, symbol, historyStartDate, factorEndDate)
 		if factorErr != nil {
 			item.Error = "query adjustment factors: " + factorErr.Error()
 			failures = append(failures, symbol+": "+item.Error)
@@ -151,13 +154,14 @@ func TestLiveBaoStockAdjustmentFactorConsistency(t *testing.T) {
 				item.PreFirstEventError = "invalid first factor event date: " + parseErr.Error()
 			} else {
 				preEnd = preEnd.AddDate(0, 0, -1)
-				if preEnd.Before(time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)) {
-					item.PreFirstEventStatus = "not_applicable"
-					item.PreFirstEventError = "first factor event is not after the probe history start date"
+				status, reason := classifyLivePreFirstEventWindow(firstFactor.OperateDate, historyStartDate)
+				if status != "" {
+					item.PreFirstEventStatus = status
+					item.PreFirstEventError = reason
 				} else {
 					preEndDate := preEnd.Format("2006-01-02")
-					preRaw, preRawErr := client.QueryDailyKLines(ctx, symbol, "2000-01-01", preEndDate, "3")
-					preForward, preForwardErr := client.QueryDailyKLines(ctx, symbol, "2000-01-01", preEndDate, "2")
+					preRaw, preRawErr := client.QueryDailyKLines(ctx, symbol, historyStartDate, preEndDate, "3")
+					preForward, preForwardErr := client.QueryDailyKLines(ctx, symbol, historyStartDate, preEndDate, "2")
 					if preRawErr != nil || preForwardErr != nil {
 						item.PreFirstEventStatus = "unavailable"
 						item.PreFirstEventError = strings.TrimSpace(strings.Join([]string{
@@ -165,8 +169,8 @@ func TestLiveBaoStockAdjustmentFactorConsistency(t *testing.T) {
 							formatLiveBaoStockError("pre-first-event qfq", preForwardErr),
 						}, "; "))
 					} else if len(preRaw) == 0 {
-						item.PreFirstEventStatus = "not_applicable"
-						item.PreFirstEventError = "no raw trading bars exist before the first factor event"
+						item.PreFirstEventStatus = "unavailable"
+						item.PreFirstEventError = "no raw bars returned for a pre-event interval; cannot distinguish no pre-event trading history from provider coverage gap"
 					} else if len(preRaw) != len(preForward) {
 						item.PreFirstEventStatus = "mismatch"
 						item.PreFirstEventError = "pre-first-event raw/qfq row counts differ"
@@ -240,6 +244,29 @@ func TestLiveBaoStockAdjustmentFactorConsistency(t *testing.T) {
 	}
 }
 
+func TestClassifyLivePreFirstEventWindow(t *testing.T) {
+	tests := []struct {
+		name           string
+		firstEventDate string
+		historyStart   string
+		wantStatus     string
+	}{
+		{name: "event before requested history", firstEventDate: "1989-12-31", historyStart: "1990-01-01", wantStatus: "not_applicable"},
+		{name: "event on requested history start", firstEventDate: "1990-01-01", historyStart: "1990-01-01", wantStatus: "not_applicable"},
+		{name: "pre-event interval exists", firstEventDate: "2002-04-09", historyStart: "1990-01-01", wantStatus: ""},
+		{name: "invalid event date", firstEventDate: "not-a-date", historyStart: "1990-01-01", wantStatus: "unavailable"},
+		{name: "invalid history start", firstEventDate: "2002-04-09", historyStart: "not-a-date", wantStatus: "unavailable"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, _ := classifyLivePreFirstEventWindow(tt.firstEventDate, tt.historyStart)
+			if got != tt.wantStatus {
+				t.Fatalf("classifyLivePreFirstEventWindow(%q, %q) status = %q, want %q", tt.firstEventDate, tt.historyStart, got, tt.wantStatus)
+			}
+		})
+	}
+}
+
 func TestLiveAdjustmentFactorBoundsFindsEarliestAndLatestEvent(t *testing.T) {
 	factors := []AdjustmentFactor{
 		{OperateDate: "2025-06-01", ForwardFactor: 0.9},
@@ -277,6 +304,18 @@ func TestLatestLiveAdjustmentFactorUsesLatestEffectiveEvent(t *testing.T) {
 			}
 		})
 	}
+}
+
+func classifyLivePreFirstEventWindow(firstEventDate, historyStartDate string) (string, string) {
+	firstEvent, firstErr := time.Parse("2006-01-02", firstEventDate)
+	start, startErr := time.Parse("2006-01-02", historyStartDate)
+	if firstErr != nil || startErr != nil {
+		return "unavailable", "invalid first-event date or history start date"
+	}
+	if !firstEvent.After(start) {
+		return "not_applicable", "first factor event is on or before the earliest requested history date"
+	}
+	return "", ""
 }
 
 func liveAdjustmentFactorBounds(factors []AdjustmentFactor) (AdjustmentFactor, AdjustmentFactor, bool) {
