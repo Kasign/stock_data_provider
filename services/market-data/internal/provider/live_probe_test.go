@@ -618,11 +618,25 @@ func TestLiveProviderProbe(t *testing.T) {
 	now := time.Now().In(loc)
 	startDate := now.AddDate(0, 0, -35).Format("2006-01-02")
 	endDate := now.AddDate(0, 0, -1).Format("2006-01-02")
+	if configuredStart := strings.TrimSpace(os.Getenv("LIVE_PROBE_DAILY_START_DATE")); configuredStart != "" {
+		startDate = configuredStart
+	}
+	if configuredEnd := strings.TrimSpace(os.Getenv("LIVE_PROBE_DAILY_END_DATE")); configuredEnd != "" {
+		endDate = configuredEnd
+	}
+	parsedStart, startErr := time.ParseInLocation("2006-01-02", startDate, loc)
+	parsedEnd, endErr := time.ParseInLocation("2006-01-02", endDate, loc)
+	if startErr != nil || endErr != nil || parsedStart.After(parsedEnd) || parsedEnd.After(now) {
+		t.Fatalf("invalid live probe daily date range: %s..%s", startDate, endDate)
+	}
 	quoteSymbol := strings.TrimSpace(os.Getenv("LIVE_PROBE_QUOTE_SYMBOL"))
 	if quoteSymbol == "" {
 		quoteSymbol = "600519.SH"
 	}
-	dailySymbol := "600036.SH"
+	dailySymbol := strings.TrimSpace(os.Getenv("LIVE_PROBE_DAILY_SYMBOL"))
+	if dailySymbol == "" {
+		dailySymbol = "600036.SH"
+	}
 
 	report := liveProbeReport{
 		GeneratedAt: now.Format(time.RFC3339),
