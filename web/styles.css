@@ -2349,10 +2349,10 @@ button:disabled, input:disabled, select:disabled, textarea:disabled { cursor: no
   flex-direction:column;
   align-items:center;
   justify-content:center;
-  gap:4px;
+  gap:5px;
   min-width:0;
-  min-height:48px;
-  padding:5px 2px;
+  min-height:56px;
+  padding:6px 2px;
   border:1px solid var(--border-soft);
   border-radius:7px;
   background:var(--panel-raised)
@@ -2363,8 +2363,10 @@ button:disabled, input:disabled, select:disabled, textarea:disabled { cursor: no
   color:var(--text)
 }
 .trading-calendar-day span {
-  font-size:9px;
-  line-height:1.2
+  font-size:11px;
+  line-height:1.25;
+  text-align:center;
+  overflow-wrap:anywhere
 }
 .trading-calendar-day.is-trading-day {
   border-color:rgba(71,214,173,.28);
@@ -2421,12 +2423,8 @@ button:disabled, input:disabled, select:disabled, textarea:disabled { cursor: no
   .calendar-range-controls label {
     min-width:calc(50% - 8px)
   }
-  .trading-calendar-day {
-    min-height:42px
-  }
-  .trading-calendar-day span {
-    font-size:8px
-  }
+  
+  
 }
 
 /* Provider capability details use the actual fields returned by market-data. */
@@ -3300,8 +3298,8 @@ button:disabled, input:disabled, select:disabled, textarea:disabled { cursor: no
 .market-activity-table { -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
 
 
-.trading-calendar-day { min-height: 56px; padding: 6px 2px; gap: 5px; }
-.trading-calendar-day span { font-size: 11px; line-height: 1.25; text-align: center; overflow-wrap: anywhere; }
+
+
 .market-activity-widget .calendar-coverage-warning { font-size: 12px; line-height: 1.6; }
 
 @media (max-width: 700px) {
