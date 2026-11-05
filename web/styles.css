@@ -244,7 +244,7 @@ h2 { margin: 0; color: #e5edf3; font-size: 14px; font-weight: 650; letter-spacin
    padding: 4px 9px;
    border: 1px solid #314151;
    border-radius: 99px;
-   font-size: 10px;
+   font-size: 12px;
    font-weight: 600;
    white-space: nowrap;
 }
@@ -256,11 +256,11 @@ h2 { margin: 0; color: #e5edf3; font-size: 14px; font-weight: 650; letter-spacin
 .metric-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: var(--space-3); }
 .metric-card { min-width: 0; min-height: 111px; padding: 16px 16px 13px; border: 1px solid var(--border); border-radius: 12px; background: #111a24; }
 .metric-primary { border-color: rgba(71, 214, 173, .22); background: linear-gradient(145deg, rgba(39, 91, 82, .25), #111a24 80%); }
-.metric-label { color: var(--text-dim); font-size: 10px; }
+.metric-label { color: var(--text-dim); font-size: 12px; }
 .metric-value { overflow: hidden; margin-top: 12px; color: #e6eef4; font-size: clamp(16px, 1.7vw, 23px); font-weight: 670; letter-spacing: -.6px; text-overflow: ellipsis; white-space: nowrap; }
 .metric-primary .metric-value { color: var(--accent); font-size: clamp(21px, 2.2vw, 28px); }
 .metric-source { font-size: clamp(13px, 1.2vw, 17px); letter-spacing: 0; }
-.metric-foot { overflow: hidden; margin-top: 6px; color: var(--text-dim); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+.metric-foot { overflow: hidden; margin-top: 6px; color: var(--text-dim); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
 .positive { color: var(--positive) !important; }
 .negative { color: var(--negative) !important; }
 .content-grid { display: grid; grid-template-columns: minmax(0, 1.56fr) minmax(285px, 1fr); gap: var(--layout-panel-gap); margin-top: var(--space-4); }
@@ -718,10 +718,6 @@ body { font-size: var(--font-size-body-readable); line-height: var(--line-height
 .query-hint { font-size: var(--font-size-support) !important; }
 .section-heading h2 span { font-size: var(--font-size-secondary) !important; }
 .section-heading p, .panel-heading p { font-size: var(--font-size-support) !important; }
-.quality-pill { font-size: 12px !important; }
-.metric-label { font-size: var(--font-size-support) !important; }
-.metric-foot { font-size: var(--font-size-support) !important; }
-.panel-heading p { font-size: 12px !important; }
 .text-button { font-size: 12px !important; }
 th { font-size: 12px !important; }
 td { font-size: 12px !important; }
