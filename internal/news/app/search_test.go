@@ -3,7 +3,7 @@ package app
 import (
 	"context"
 	"errors"
-	"testing"
+	"testing"\n\t"time"
 
 	"example.com/stock-analysis-flow/internal/news/domain"
 )
@@ -40,6 +40,27 @@ func TestSearchCandidatesPreservesPartialProviderFailure(t *testing.T) {
 	}
 	if result.Outcomes[1].Retryable {
 		t.Fatal("unknown provider errors must not be marked retryable")
+	}
+}
+
+func TestSearchCandidatesNormalizesProviderCandidates(t *testing.T) {
+	publishedAt := time.Date(2026, 11, 4, 10, 0, 0, 0, time.FixedZone("CST", 8*60*60))
+	usecase := NewSearchCandidates(StaticProviderSet{Providers: []Provider{
+		fakeProvider{code: " provider-a ", items: []domain.Candidate{{
+			Title: "  标题  ", Summary: " 摘要  内容 ", RawURL: " https://publisher.example/a ",
+			PublisherName: " 媒体 ", PublishedAt: &publishedAt,
+		}}},
+	}})
+	result := usecase.Execute(context.Background(), domain.SearchRequest{Query: "market", Limit: 10, QueryDimension: "news"})
+	if len(result.Candidates) != 1 {
+		t.Fatalf("candidates=%+v", result.Candidates)
+	}
+	got := result.Candidates[0]
+	if got.ProviderCode != "provider-a" || got.Title != "标题" || got.Summary != "摘要 内容" {
+		t.Fatalf("candidate=%+v", got)
+	}
+	if got.QueryDimension != "news" || got.ObservedAt.IsZero() || got.PublishedAt.Location() != time.UTC {
+		t.Fatalf("candidate context/time=%+v", got)
 	}
 }
 

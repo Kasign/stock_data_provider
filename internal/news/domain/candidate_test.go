@@ -1,0 +1,80 @@
+package domain
+
+import (
+	"testing"
+	"time"
+)
+
+func TestNormalizeCandidateNormalizesFieldsAndUsesFallbackContext(t *testing.T) {
+	observedAt := time.Date(2026, 11, 5, 10, 0, 0, 0, time.FixedZone("CST", 8*60*60))
+	candidate := Candidate{
+		ProviderCode: "  tavily ", ProviderItemID: " item-1 ",
+		PublisherName: "  媒体名称  ", PublisherDomain: " EXAMPLE.COM ",
+		Title: "  市场   新闻\n标题 ", Summary: " 摘要  内容 ",
+		RawURL: " https://publisher.example/a ", PublishedAtRaw: "Wed, 04 Nov 2026 10:30:00 +0800",
+	}
+	got := NormalizeCandidate(candidate, observedAt, " market ")
+	if got.ProviderCode != "tavily" || got.ProviderItemID != "item-1" || got.PublisherName != "媒体名称" {
+		t.Fatalf("identity fields=%+v", got)
+	}
+	if got.PublisherDomain != "example.com" || got.Title != "市场 新闻 标题" || got.Summary != "摘要 内容" {
+		t.Fatalf("normalized text=%+v", got)
+	}
+	if got.RawURL != "https://publisher.example/a" || got.QueryDimension != "market" {
+		t.Fatalf("url/dimension=%+v", got)
+	}
+	if !got.ObservedAt.Equal(observedAt.UTC()) || got.ObservedAt.Location() != time.UTC {
+		t.Fatalf("observed_at=%v", got.ObservedAt)
+	}
+	want := time.Date(2026, 11, 4, 2, 30, 0, 0, time.UTC)
+	if got.PublishedAt == nil || !got.PublishedAt.Equal(want) {
+		t.Fatalf("published_at=%v", got.PublishedAt)
+	}
+	if len(got.MissingFields) != 0 {
+		t.Fatalf("missing_fields=%v", got.MissingFields)
+	}
+}
+
+func TestNormalizeCandidateDoesNotInferPublicationTimezoneOrPublisherDomain(t *testing.T) {
+	got := NormalizeCandidate(Candidate{
+		Title: "标题", RawURL: "https://article.example/path",
+		PublishedAtRaw: "2026-11-04", PublisherName: "媒体",
+	}, time.Time{}, "")
+	if got.PublishedAt != nil || len(got.MissingFields) != 1 || got.MissingFields[0] != "published_at" {
+		t.Fatalf("candidate=%+v", got)
+	}
+	if got.PublisherDomain != "" {
+		t.Fatalf("publisher domain must not be inferred: %q", got.PublisherDomain)
+	}
+	if !got.ObservedAt.IsZero() {
+		t.Fatalf("zero fallback must remain zero: %v", got.ObservedAt)
+	}
+}
+
+func TestNormalizeCandidateRebuildsMissingFieldsInStableOrder(t *testing.T) {
+	publishedAt := time.Date(2026, 11, 4, 0, 0, 0, 0, time.UTC)
+	got := NormalizeCandidate(Candidate{
+		MissingFields: []string{"stale", "title"},
+		PublishedAt: &publishedAt,
+	}, time.Time{}, "")
+	want := []string{"title", "url", "publisher"}
+	if len(got.MissingFields) != len(want) {
+		t.Fatalf("missing_fields=%v", got.MissingFields)
+	}
+	for i := range want {
+		if got.MissingFields[i] != want[i] {
+			t.Fatalf("missing_fields=%v want=%v", got.MissingFields, want)
+		}
+	}
+	if got.PublishedAt.Location() != time.UTC {
+		t.Fatalf("published_at location=%v", got.PublishedAt.Location())
+	}
+}
+
+func TestNormalizeCandidatePreservesUnknownTimestampText(t *testing.T) {
+	raw := "not-a-date"
+	got := NormalizeCandidate(Candidate{PublishedAtRaw: raw}, time.Time{}, "")
+	if got.PublishedAtRaw != raw || got.PublishedAt != nil {
+		t.Fatalf("candidate=%+v", got)
+	}
+}
