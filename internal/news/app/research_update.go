@@ -73,7 +73,6 @@ func (u *ApplyResearchUpdate) Execute(ctx context.Context, request ResearchUpdat
 	observedAt := u.now().UTC()
 	candidate := domain.NormalizeCandidate(request.Candidate, observedAt, request.Candidate.QueryDimension)
 	content := domain.NormalizeContentLayers(request.Content)
-	fingerprint := domain.BuildVersionFingerprint(candidate, content)
 
 	var result ResearchUpdateResult
 	err := u.repository.WithinResearchUpdateTransaction(ctx, func(tx ResearchUpdateTransaction) error {
@@ -84,6 +83,10 @@ func (u *ApplyResearchUpdate) Execute(ctx context.Context, request ResearchUpdat
 		if !observationExists || observation.ID != request.ObservationID || observation.NewsID != request.NewsID {
 			return ErrVersionHistoryInvalid
 		}
+		// URL 身份字段必须来自已持久化 Observation，不能由 ResearchUpdate 调用方覆盖。
+		candidate.RawURL = observation.Candidate.RawURL
+		candidate.CanonicalURL = observation.Candidate.CanonicalURL
+		fingerprint := domain.BuildVersionFingerprint(candidate, content)
 
 		current, exists, err := tx.LatestNewsItemVersion(ctx, request.NewsID)
 		if err != nil {

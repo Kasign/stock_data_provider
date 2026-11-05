@@ -133,6 +133,61 @@ func baseResearchRequest() ResearchUpdateRequest {
 	}
 }
 
+func TestApplyResearchUpdateUsesPersistedObservationURLForFingerprint(t *testing.T) {
+	repository := &memoryResearchRepository{
+		versions: map[string][]domain.NewsItemVersion{},
+		observations: map[string]domain.Observation{
+			"obs-1": {
+				ID: "obs-1", NewsID: "news-1",
+				Candidate: domain.Candidate{
+					RawURL: "https://publisher.example/raw?tracking=1",
+					CanonicalURL: "https://publisher.example/article",
+				},
+			},
+		},
+	}
+	request := baseResearchRequest()
+	request.Candidate.RawURL = "https://attacker.example/forged"
+	request.Candidate.CanonicalURL = "https://publisher.example/forged-canonical"
+	result, err := newResearchUseCase(repository).Execute(context.Background(), request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	expectedCandidate := request.Candidate
+	expectedCandidate.RawURL = "https://publisher.example/raw?tracking=1"
+	expectedCandidate.CanonicalURL = "https://publisher.example/article"
+	expected := domain.BuildVersionFingerprint(expectedCandidate, request.Content)
+	if result.Version.Fingerprint != expected {
+		t.Fatalf("fingerprint did not use persisted observation URL: got=%s want=%s", result.Version.Fingerprint, expected)
+	}
+}
+
+func TestApplyResearchUpdateDoesNotTrustCanonicalURLWhenObservationHasNone(t *testing.T) {
+	repository := &memoryResearchRepository{
+		versions: map[string][]domain.NewsItemVersion{},
+		observations: map[string]domain.Observation{
+			"obs-1": {
+				ID: "obs-1", NewsID: "news-1",
+				Candidate: domain.Candidate{RawURL: "https://publisher.example/article"},
+			},
+		},
+	}
+	request := baseResearchRequest()
+	request.Candidate.RawURL = "https://attacker.example/forged"
+	request.Candidate.CanonicalURL = "https://publisher.example/forged-canonical"
+	result, err := newResearchUseCase(repository).Execute(context.Background(), request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	expectedCandidate := request.Candidate
+	expectedCandidate.RawURL = "https://publisher.example/article"
+	expectedCandidate.CanonicalURL = ""
+	expected := domain.BuildVersionFingerprint(expectedCandidate, request.Content)
+	if result.Version.Fingerprint != expected {
+		t.Fatalf("fingerprint used caller URL instead of observation raw URL: got=%s want=%s", result.Version.Fingerprint, expected)
+	}
+}
+
 func TestApplyResearchUpdateAppendsOnlyChangedVersions(t *testing.T) {
 	repository := &memoryResearchRepository{versions: map[string][]domain.NewsItemVersion{}}
 	useCase := newResearchUseCase(repository)
