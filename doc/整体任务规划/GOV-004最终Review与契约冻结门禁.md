@@ -340,3 +340,18 @@ Data 最新 HEAD 更新为 `c22470bec87beb89961b76ad9856d5c8709aac73`。相较 O
 详细逐字段路径、证据与 DATA-CONTRACT-004-A~E 修正任务见 [Data OpenAPI 与 Go 模型契约修正清单](./Data-OpenAPI与Go模型契约修正清单.md) 第 11.11 节。
 
 **GOV-004 Data 阻断继续打开**：尚未实施 DTO 归一化、Store 边界确认、Redis 历史 nil 缓存回归和真实 Handler Golden；没有运行 Data 测试。不得因静态审查完成而冻结契约。
+
+
+## 14. nullable + omitempty 语义复核：修正 122 项阻断统计（2026-11-05）
+
+重新解析 OpenAPI nullable 属性并与 Go JSON Tag 交叉比对后，确认 122 项（121 个顶层 Schema 字段 + 1 个 Price Limit Rule 内联字段）均未列入对应 Schema 的 required 列表。此前将 122 项整体描述为“过宽 nullable / 契约错误”不准确，现予以修正：
+
+- 对 optional 属性，Go 的 omitempty 在 nil/零值时省略字段，符合“字段可以缺席”的 Schema 约束；nullable=true 允许 null，但不要求必须输出 null。
+- 122 项不是 122 个 JSON Schema 结构性错误。它们属于 API 允许显式 null、当前 Go 实现选择省略的语义差异，是否需要统一取决于字段说明和调用方是否需要区分 null 与缺席。
+- 已定位 Quote.volume_ratio 的描述明确写了“不支持时为 null”，但 Go Tag 是 omitempty，nil 时会省略。该字段必须裁决：修正文档为“不支持时省略”，或由 Response DTO 输出显式 null。
+- 其余字段逐项检查描述中的 null 承诺和业务含义；不要为形式统一而全部移除 omitempty 或全部取消 nullable。
+- 本次 required 交叉扫描未发现 nullable + omitempty 字段与 required 的交集，但原先 15 处 Go/OpenAPI required 差异仍独立存在，不能据此关闭。
+
+详细审查和 DATA-CONTRACT-003-B 见 [Data OpenAPI 与 Go 模型契约修正清单](./Data-OpenAPI与Go模型契约修正清单.md) 第 11.12 节。
+
+**GOV-004 阻断计数修正**：不得再把 122 项作为 122 个独立契约错误。阻断应聚焦于明确承诺 null 却实际省略的字段、required 差异、23 个潜在 null 字段、无来源 Schema 字段和缺失的 Handler Golden/双向契约测试。
