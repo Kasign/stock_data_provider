@@ -85,12 +85,28 @@ type EndpointPolicy struct {
 }
 
 // CollectionPolicyRequest 描述一次具体采集/留存意图。
+type ProviderOutputPolicy struct {
+	Status                   AuthorizationStatus
+	AllowedPurposes          []Purpose
+	AllowRequestProcessing  bool
+	AllowCrossRequestCache  bool
+	MaxRequestRetention     time.Duration
+	MaxCacheRetention       time.Duration
+	AllowedStorageModes     []StorageMode
+	MaxPersistenceRetention time.Duration
+	EffectiveAt              time.Time
+	ExpiresAt                *time.Time
+	EvidenceRef              string
+}
+
+// CollectionPolicyRequest 描述一次具体采集/留存意图。
 type CollectionPolicyRequest struct {
-	AccessMethod AccessMethod
-	Purpose      Purpose
-	ContentKind  ContentKind
-	StorageMode  StorageMode
-	Retention    time.Duration
+	AccessMethod      AccessMethod
+	Purpose           Purpose
+	ContentKind       ContentKind
+	StorageMode       StorageMode
+	Retention         time.Duration
+	CrossRequestCache bool
 }
 
 // PolicyDecision 是新闻领域授权评估结果，不是平台 Diagnostics 状态。
@@ -103,7 +119,7 @@ type PolicyDecision struct {
 // EvaluateSourceCollectionPolicy 评估 Source 与可选 Endpoint 的权限交集。
 // Provider 输出权利必须由调用方另行评估；本函数只负责发布来源及其入口。
 func EvaluateSourceCollectionPolicy(source SourcePolicy, endpoint *EndpointPolicy, request CollectionPolicyRequest, now time.Time) PolicyDecision {
-	if now.IsZero() || request.AccessMethod == "" || request.Purpose == "" || request.ContentKind == "" || request.StorageMode == "" || request.Retention < 0 {
+	if now.IsZero() || request.AccessMethod == "" || request.Purpose == "" || request.ContentKind == "" || request.StorageMode == "" || request.Retention < 0 || (request.CrossRequestCache && request.StorageMode != StorageTransient) {
 		return denied("news.policy.invalid_request")
 	}
 	if source.Status != AuthorizationApproved && source.Status != AuthorizationRestricted {
@@ -137,7 +153,7 @@ func EvaluateSourceCollectionPolicy(source SourcePolicy, endpoint *EndpointPolic
 		return denied("news.policy.storage_denied")
 	}
 	if request.StorageMode == StorageNone {
-		if request.Retention != 0 {
+		if request.Retention != 0 || request.CrossRequestCache {
 			return denied("news.policy.retention_invalid")
 		}
 	} else if source.MaxRetention == 0 || request.Retention == 0 || request.Retention > source.MaxRetention {
@@ -146,6 +162,9 @@ func EvaluateSourceCollectionPolicy(source SourcePolicy, endpoint *EndpointPolic
 
 	maxRetention := source.MaxRetention
 	if endpoint == nil {
+		if request.StorageMode == StorageNone {
+			return allowed(0)
+		}
 		return allowed(maxRetention)
 	}
 	if endpoint.Status != "" && endpoint.Status != AuthorizationApproved && endpoint.Status != AuthorizationRestricted {
@@ -208,7 +227,112 @@ func EvaluateSourceCollectionPolicy(source SourcePolicy, endpoint *EndpointPolic
 			return denied("news.policy.endpoint_retention_exceeded")
 		}
 	}
+	if request.StorageMode == StorageNone {
+		return allowed(0)
+	}
 	return allowed(maxRetention)
+}
+
+// EvaluateProviderOutputPolicy evaluates the separate rights granted by a search Provider.
+// It does not imply that the original publisher permits fetching or retaining the article.
+func EvaluateProviderOutputPolicy(policy ProviderOutputPolicy, request CollectionPolicyRequest, now time.Time) PolicyDecision {
+	if now.IsZero() || request.Purpose == "" || request.StorageMode == "" || request.Retention < 0 || (request.CrossRequestCache && request.StorageMode != StorageTransient) {
+		return denied("news.policy.invalid_request")
+	}
+	if policy.Status != AuthorizationApproved && policy.Status != AuthorizationRestricted {
+		if policy.Status == AuthorizationPending {
+			return denied("news.policy.provider_pending")
+		}
+		if policy.Status == AuthorizationRevoked {
+			return denied("news.policy.provider_revoked")
+		}
+		return denied("news.policy.provider_status_unknown")
+	}
+	if policy.EvidenceRef == "" {
+		return denied("news.policy.provider_evidence_missing")
+	}
+	if !policyTimeActive(policy.EffectiveAt, policy.ExpiresAt, now) {
+		return denied(policyTimeReason(policy.EffectiveAt, policy.ExpiresAt, now, "provider"))
+	}
+	if policy.MaxRequestRetention < 0 || policy.MaxCacheRetention < 0 || policy.MaxPersistenceRetention < 0 {
+		return denied("news.policy.provider_policy_invalid")
+	}
+	if !containsPolicyValue(policy.AllowedPurposes, request.Purpose) {
+		return denied("news.policy.provider_purpose_denied")
+	}
+	if !policy.AllowRequestProcessing {
+		return denied("news.policy.provider_processing_denied")
+	}
+	if request.StorageMode == StorageNone {
+		if request.Retention != 0 || request.CrossRequestCache {
+			return denied("news.policy.retention_invalid")
+		}
+		return allowed(0)
+	}
+	if request.Retention == 0 {
+		return denied("news.policy.retention_invalid")
+	}
+	if request.StorageMode == StorageTransient {
+		if request.CrossRequestCache {
+			if !policy.AllowCrossRequestCache || policy.MaxCacheRetention == 0 || request.Retention > policy.MaxCacheRetention {
+				return denied("news.policy.provider_cache_denied")
+			}
+			return allowed(policy.MaxCacheRetention)
+		}
+		if policy.MaxRequestRetention == 0 || request.Retention > policy.MaxRequestRetention {
+			return denied("news.policy.provider_request_retention_exceeded")
+		}
+		return allowed(policy.MaxRequestRetention)
+	}
+	if request.CrossRequestCache {
+		return denied("news.policy.invalid_request")
+	}
+	if !isPersistentStorageMode(request.StorageMode) || !containsPolicyValue(policy.AllowedStorageModes, request.StorageMode) {
+		return denied("news.policy.provider_storage_denied")
+	}
+	if policy.MaxPersistenceRetention == 0 || request.Retention > policy.MaxPersistenceRetention {
+		return denied("news.policy.provider_persistence_retention_exceeded")
+	}
+	for _, mode := range policy.AllowedStorageModes {
+		if !isPersistentStorageMode(mode) {
+			return denied("news.policy.provider_policy_invalid")
+		}
+	}
+	return allowed(policy.MaxPersistenceRetention)
+}
+
+// EvaluateCandidateCollectionPolicy intersects Provider output rights with Source and Endpoint rights.
+// A nil Provider policy is reserved for candidates obtained directly from a registered Source.
+func EvaluateCandidateCollectionPolicy(provider *ProviderOutputPolicy, source SourcePolicy, endpoint *EndpointPolicy, request CollectionPolicyRequest, now time.Time) PolicyDecision {
+	sourceDecision := EvaluateSourceCollectionPolicy(source, endpoint, request, now)
+	if !sourceDecision.Allowed {
+		return sourceDecision
+	}
+	if provider == nil {
+		if request.CrossRequestCache {
+			return denied("news.policy.provider_policy_missing")
+		}
+		return sourceDecision
+	}
+	providerDecision := EvaluateProviderOutputPolicy(*provider, request, now)
+	if !providerDecision.Allowed {
+		return providerDecision
+	}
+	if request.StorageMode == StorageNone {
+		return allowed(0)
+	}
+	maxRetention := sourceDecision.MaxRetention
+	if providerDecision.MaxRetention < maxRetention {
+		maxRetention = providerDecision.MaxRetention
+	}
+	if request.Retention > maxRetention {
+		return denied("news.policy.retention_intersection_exceeded")
+	}
+	return allowed(maxRetention)
+}
+
+func isPersistentStorageMode(mode StorageMode) bool {
+	return mode == StoragePersistentMetadata || mode == StoragePersistentExcerpt || mode == StoragePersistentFullText
 }
 
 // HasOverrides reports whether an endpoint policy contains any independent restriction.

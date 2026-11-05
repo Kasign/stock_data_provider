@@ -102,3 +102,98 @@ func TestEvaluateSourceCollectionPolicyRequiresEvidenceAndExplicitRetention(t *t
 func durationPointer(value time.Duration) *time.Duration {
 	return &value
 }
+
+func validProviderOutputPolicy() ProviderOutputPolicy {
+	return ProviderOutputPolicy{
+		Status:                   AuthorizationApproved,
+		AllowedPurposes:          []Purpose{PurposeInternalPersonalResearch},
+		AllowRequestProcessing:  true,
+		MaxRequestRetention:     time.Hour,
+		AllowedStorageModes:     []StorageMode{StoragePersistentMetadata},
+		MaxPersistenceRetention: 7 * 24 * time.Hour,
+		EvidenceRef:              "provider-terms:tavily:v1",
+	}
+}
+
+func TestEvaluateCandidateCollectionPolicyIntersectsProviderSourceAndEndpoint(t *testing.T) {
+	source := validSourcePolicy()
+	source.AllowedContentKinds = []ContentKind{ContentMetadata}
+	source.AllowedStorageModes = []StorageMode{StoragePersistentMetadata}
+	endpoint := &EndpointPolicy{
+		MaxRetention: durationPointer(48 * time.Hour),
+		EvidenceRef:  "agreement:endpoint-1:v1",
+	}
+	provider := validProviderOutputPolicy()
+	request := validCollectionRequest()
+	request.ContentKind = ContentMetadata
+	request.StorageMode = StoragePersistentMetadata
+	request.Retention = 24 * time.Hour
+
+	decision := EvaluateCandidateCollectionPolicy(&provider, source, endpoint, request, time.Now().UTC())
+	if !decision.Allowed || decision.MaxRetention != 48*time.Hour {
+		t.Fatalf("decision=%+v", decision)
+	}
+
+	request.Retention = 3 * 24 * time.Hour
+	decision = EvaluateCandidateCollectionPolicy(&provider, source, endpoint, request, time.Now().UTC())
+	if decision.Allowed || decision.ReasonCode != "news.policy.endpoint_retention_exceeded" {
+		t.Fatalf("endpoint cap decision=%+v", decision)
+	}
+}
+
+func TestEvaluateProviderOutputPolicySeparatesProcessingCacheAndPersistence(t *testing.T) {
+	policy := validProviderOutputPolicy()
+	request := validCollectionRequest()
+	request.ContentKind = ContentMetadata
+	request.StorageMode = StorageTransient
+	request.Retention = 30 * time.Minute
+
+	decision := EvaluateProviderOutputPolicy(policy, request, time.Now().UTC())
+	if !decision.Allowed || decision.MaxRetention != time.Hour {
+		t.Fatalf("request processing decision=%+v", decision)
+	}
+
+	request.CrossRequestCache = true
+	decision = EvaluateProviderOutputPolicy(policy, request, time.Now().UTC())
+	if decision.Allowed || decision.ReasonCode != "news.policy.provider_cache_denied" {
+		t.Fatalf("cache decision=%+v", decision)
+	}
+
+	policy.AllowCrossRequestCache = true
+	policy.MaxCacheRetention = 10 * time.Minute
+	request.Retention = 5 * time.Minute
+	decision = EvaluateProviderOutputPolicy(policy, request, time.Now().UTC())
+	if !decision.Allowed || decision.MaxRetention != 10*time.Minute {
+		t.Fatalf("approved cache decision=%+v", decision)
+	}
+}
+
+func TestEvaluateProviderOutputPolicyRejectsUnauthorizedPersistence(t *testing.T) {
+	policy := validProviderOutputPolicy()
+	request := validCollectionRequest()
+	request.ContentKind = ContentMetadata
+	request.StorageMode = StoragePersistentFullText
+
+	decision := EvaluateProviderOutputPolicy(policy, request, time.Now().UTC())
+	if decision.Allowed || decision.ReasonCode != "news.policy.provider_storage_denied" {
+		t.Fatalf("decision=%+v", decision)
+	}
+
+	request.StorageMode = StoragePersistentMetadata
+	request.Retention = 8 * 24 * time.Hour
+	decision = EvaluateProviderOutputPolicy(policy, request, time.Now().UTC())
+	if decision.Allowed || decision.ReasonCode != "news.policy.provider_persistence_retention_exceeded" {
+		t.Fatalf("retention decision=%+v", decision)
+	}
+}
+
+func TestEvaluateCandidateCollectionPolicyRequiresProviderPolicyForCrossRequestCache(t *testing.T) {
+	request := validCollectionRequest()
+	request.StorageMode = StorageTransient
+	request.CrossRequestCache = true
+	request.Retention = time.Minute
+	decision := EvaluateCandidateCollectionPolicy(nil, validSourcePolicy(), nil, request, time.Now().UTC())
+	if decision.Allowed || decision.ReasonCode != "news.policy.provider_policy_missing" {
+		t.Fatalf("decision=%+v", decision)
+	}
+}
