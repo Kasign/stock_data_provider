@@ -15,7 +15,7 @@ import (
 	"github.com/Kasign/stock_data_provider/services/market-data/internal/repository"
 )
 
-// TestLiveHistoricalProviderProbe exercises the production Probe service path
+// TestLiveHistoricalProviderProbe repeats the production Probe service path
 // against public providers, BaoStock calendar, optional Tushare security status,
 // and MariaDB history persistence. It is opt-in and never gates regular CI.
 func TestLiveHistoricalProviderProbe(t *testing.T) {
