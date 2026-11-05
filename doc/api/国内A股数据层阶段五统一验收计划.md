@@ -387,3 +387,10 @@
 - 代码 SHA `5adb663ca41d6083847c7d497ca387a2931e2422` 将固定 50 股容差下限改为 1 股，再取两侧来源粒度最大值。shares/shares=1 股，hands/shares=100 股，unknown=not_comparable。
 - 新增 shares 两侧差 2 股必须 mismatch 的测试；原 1 股差异通过、TDX 100 股粒度下 96 股通过/101 股 mismatch 继续覆盖。成交额 1 CNY 容差保持不变。
 - 新 SHA Push/PR CI 待验；WebUI 无需修改。
+
+## 2026-11-05 P0 批次 47：成交额按 Provider 量化精度对账
+
+- 内部新增 `AmountGranularity`，由来源名称、原始 amount 字段名/单位和值计算；不新增公共 API 或数据库字段。Pytdx v0.0.86 的 Kline amount 由 float32 协议字段转成 Price（厘），实际步长按 float32 ULP 计算并至少保留 0.001 CNY；BaoStock API 文档定义 amount 精度 4 位小数，即 0.0001 CNY。
+- 容差为两侧量化步长之和的一半。精度未知、字段不符、单位不为 CNY、金额缺失均保持 `not_comparable`。成交量仍按 `max(1, 两侧源粒度)`，不改价格 OHLC 的 0.001 容差。
+- 对 Artifact `13410429933` 中两只证券的 18 个真实 raw 双源日样本重算：600036.SH、002982.SZ 各 9/9 日 OHLC、volume、amount 全部 matched；每只证券 54/54 字段 matched。此前固定 1 CNY 容差产生的 17/18 amount mismatch 不再成立，原因是未考虑 TDX float32 大额成交额的量化步长。
+- 该结论是既有真实响应的离线重评，不是本轮重新请求 Provider。新 SHA `4e1c61be` 的 Push Go suite Run `42026781971`：普通 market-data 测试及基础检查通过，race/vet 和 Docker 构建待完成。PIT 规则未变。

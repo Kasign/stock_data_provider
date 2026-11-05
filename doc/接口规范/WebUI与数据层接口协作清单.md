@@ -369,3 +369,9 @@
 - 内部比较器容差修正为 `max(1, left.VolumeGranularity, right.VolumeGranularity)`；两侧 shares 为 1 股，包含 TDX hands 时为 100 股，未知粒度仍 not_comparable。移除固定 50 股下限，避免将来源粒度为 1 股的数据差异误放宽。
 - 仅内部对账逻辑与测试变化，不新增 DailyBar API、数据库字段或 WebUI 展示字段。成交额容差仍为 1 CNY；既有真实样本整体 mismatch，等待不同成交额量级的新证据。
 - 代码 SHA `5adb663ca41d6083847c7d497ca387a2931e2422` 的 Go suite/Parity 待验；WebUI 无需变更。
+
+## 23. 2026-11-05 API-06 raw 双源成交额精度闭合
+
+- 内部 comparator 增加 `AmountGranularity`，Probe 从 DailyBar 的 Provider 来源、RawAmountUnit、RawAmountField、RawAmount 传递精度。Pytdx 按 float32 协议字段的 ULP（最小 0.001 CNY），BaoStock 按 API 文档 amount 小数点后 4 位（0.0001 CNY）；容差为两侧步长之和的一半。未知来源/字段/单位仍 not_comparable。
+- 真实 artifact `13410429933` 离线重评：600036.SH 与 002982.SZ 各 9 个共同交易日，OHLC/volume/amount 各项全部匹配，两只证券分别 54/54 字段 matched。成交量最大差 84/96 股，均在 TDX 100 股粒度内；成交额最大差 120.74/7.90 CNY，均在对应金额量级的动态量化容差内。
+- 不新增公共 API、数据库字段或 WebUI 展示；仅服务端内部对账逻辑与测试变化。此次不是新鲜实时重跑，PR Live Probe 专项步骤 skipped；PIT fail-closed 规则不变。
