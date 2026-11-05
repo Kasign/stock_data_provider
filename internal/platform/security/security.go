@@ -31,9 +31,9 @@ const (
 const minimumTokenBytes = 32
 
 type Principal struct {
-	Kind   IdentityKind
+	Kind    IdentityKind
 	Subject string
-	Scopes []string
+	Scopes  []string
 }
 
 type ServiceCredential struct {

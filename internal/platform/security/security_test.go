@@ -17,25 +17,33 @@ func newTestAuthenticator(t *testing.T) *Authenticator {
 	t.Helper()
 	auth, err := NewAuthenticator(
 		config.NewEnvWithLookup(func(key string) (string, bool) {
-			if key == "OWNER" { return ownerToken, true }
+			if key == "OWNER" {
+				return ownerToken, true
+			}
 			return "", false
 		}).Secret("OWNER"),
 		[]ServiceCredential{{
 			Name: "data-service",
 			Secret: config.NewEnvWithLookup(func(key string) (string, bool) {
-				if key == "SERVICE" { return dataToken, true }
+				if key == "SERVICE" {
+					return dataToken, true
+				}
 				return "", false
 			}).Secret("SERVICE"),
 			Scopes: []string{ScopeDataRead, ScopeDataDiagnose},
 		}},
 	)
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	return auth
 }
 
 func requestWithToken(token string) *http.Request {
 	request := httptest.NewRequest(http.MethodGet, "/protected", nil)
-	if token != "" { request.Header.Set("Authorization", "Bearer "+token) }
+	if token != "" {
+		request.Header.Set("Authorization", "Bearer "+token)
+	}
 	return request
 }
 
@@ -109,18 +117,24 @@ func TestGuardAnonymousOwnerAndDefaultDeny(t *testing.T) {
 	}))
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, requestWithToken(""))
-	if response.Code != http.StatusNoContent { t.Fatalf("anonymous status=%d", response.Code) }
+	if response.Code != http.StatusNoContent {
+		t.Fatalf("anonymous status=%d", response.Code)
+	}
 
 	response = httptest.NewRecorder()
 	handler.ServeHTTP(response, requestWithToken(ownerToken))
-	if response.Code != http.StatusForbidden { t.Fatalf("owner should not use anonymous-only route: %d", response.Code) }
+	if response.Code != http.StatusForbidden {
+		t.Fatalf("owner should not use anonymous-only route: %d", response.Code)
+	}
 
 	denied := Guard(auth, RoutePolicy{}, http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
 		t.Fatal("unconfigured route policy must not invoke handler")
 	}))
 	response = httptest.NewRecorder()
 	denied.ServeHTTP(response, requestWithToken(ownerToken))
-	if response.Code != http.StatusForbidden { t.Fatalf("default deny status=%d", response.Code) }
+	if response.Code != http.StatusForbidden {
+		t.Fatalf("default deny status=%d", response.Code)
+	}
 }
 
 func TestGuardOwnerOnlyAndOwnerOrService(t *testing.T) {
@@ -130,10 +144,14 @@ func TestGuardOwnerOnlyAndOwnerOrService(t *testing.T) {
 	}))
 	response := httptest.NewRecorder()
 	ownerOnly.ServeHTTP(response, requestWithToken(ownerToken))
-	if response.Code != http.StatusNoContent { t.Fatalf("owner status=%d", response.Code) }
+	if response.Code != http.StatusNoContent {
+		t.Fatalf("owner status=%d", response.Code)
+	}
 	response = httptest.NewRecorder()
 	ownerOnly.ServeHTTP(response, requestWithToken(dataToken))
-	if response.Code != http.StatusForbidden { t.Fatalf("service status=%d", response.Code) }
+	if response.Code != http.StatusForbidden {
+		t.Fatalf("service status=%d", response.Code)
+	}
 
 	both := Guard(auth, OwnerOrServiceAccess(ScopeDataRead), http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
@@ -141,7 +159,9 @@ func TestGuardOwnerOnlyAndOwnerOrService(t *testing.T) {
 	for _, token := range []string{ownerToken, dataToken} {
 		response = httptest.NewRecorder()
 		both.ServeHTTP(response, requestWithToken(token))
-		if response.Code != http.StatusNoContent { t.Fatalf("allowed identity status=%d", response.Code) }
+		if response.Code != http.StatusNoContent {
+			t.Fatalf("allowed identity status=%d", response.Code)
+		}
 	}
 }
 
@@ -164,7 +184,9 @@ func TestClientSuppliedIdentityHeadersAreIgnored(t *testing.T) {
 	auth := newTestAuthenticator(t)
 	handler := Guard(auth, ServiceAccess(ScopeDataRead), http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		principal, _ := PrincipalFromContext(r)
-		if principal.Subject != "data-service" { t.Errorf("subject=%q", principal.Subject) }
+		if principal.Subject != "data-service" {
+			t.Errorf("subject=%q", principal.Subject)
+		}
 		w.WriteHeader(http.StatusNoContent)
 	}))
 	request := requestWithToken(dataToken)
@@ -172,7 +194,9 @@ func TestClientSuppliedIdentityHeadersAreIgnored(t *testing.T) {
 	request.Header.Set("X-Principal", "owner")
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, request)
-	if response.Code != http.StatusNoContent { t.Fatalf("status=%d", response.Code) }
+	if response.Code != http.StatusNoContent {
+		t.Fatalf("status=%d", response.Code)
+	}
 }
 
 func TestAuthorizationFailureDoesNotLeakToken(t *testing.T) {
@@ -197,7 +221,9 @@ func TestPrincipalContextIsRequestScoped(t *testing.T) {
 	request := requestWithToken(dataToken).WithContext(context.Background())
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, request)
-	if response.Code != http.StatusNoContent { t.Fatalf("status=%d", response.Code) }
+	if response.Code != http.StatusNoContent {
+		t.Fatalf("status=%d", response.Code)
+	}
 }
 
 func TestRouterRequiresExplicitPolicyAndDefaultsUnknownRoutesToNotFound(t *testing.T) {
