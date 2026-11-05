@@ -2328,3 +2328,17 @@ test("UIR-2 正文与常规控件使用统一的最终计算基线", () => {
   assert.ok(stylesheet.includes(".field input,") && stylesheet.includes("min-height: var(--control-height-base);"));
   assert.ok(stylesheet.includes(".settings-dialog .field input { min-height: var(--control-height-base); }"));
 });
+
+
+test("UIR-2 shared page frame selectors have one canonical base rule", () => {
+  const blocks = [...stylesheet.matchAll(/(^|\\n)([^{}]+)\\{([^{}]*)\\}/g)];
+  const count = selector => blocks.filter(([, , raw]) => raw.trim() === selector).length;
+  assert.equal(count(".main-area"), 1);
+  assert.equal(count(".view"), 1);
+  assert.equal(count(".panel"), 1);
+  assert.ok(stylesheet.includes("--space-page: clamp(16px, 2.1vw, 30px);"));
+  assert.ok(stylesheet.includes("padding: 0 var(--space-page);"));
+  assert.ok(stylesheet.includes("max-width: 1680px;"));
+  assert.ok(stylesheet.includes("box-shadow: 0 8px 26px rgba(0, 0, 0, .10);"));
+  assert.ok(stylesheet.includes("transition: border-color .16s ease, box-shadow .16s ease;"));
+});
