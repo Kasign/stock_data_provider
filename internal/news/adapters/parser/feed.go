@@ -5,6 +5,8 @@ import (
 	"encoding/xml"
 	"errors"
 	"io"
+	"mime"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -37,6 +39,7 @@ type FeedEntry struct {
 	Link           string
 	Summary        string
 	Content        string
+	Attachments    []FeedAttachment
 	Author         string
 	PublishedAtRaw string
 	PublishedAt    *time.Time
@@ -62,7 +65,14 @@ type rssItem struct {
 	Content     string `xml:"http://purl.org/rss/1.0/modules/content/ encoded"`
 	Author      string `xml:"author"`
 	Creator     string `xml:"http://purl.org/dc/elements/1.1/ creator"`
-	PubDate     string `xml:"pubDate"`
+	PubDate     string         `xml:"pubDate"`
+	Enclosures  []rssEnclosure `xml:"enclosure"`
+}
+
+type rssEnclosure struct {
+	URL    string `xml:"url,attr"`
+	Type   string `xml:"type,attr"`
+	Length string `xml:"length,attr"`
 }
 
 type atomDocument struct {
@@ -73,8 +83,20 @@ type atomDocument struct {
 }
 
 type atomLink struct {
-	Href string `xml:"href,attr"`
-	Rel  string `xml:"rel,attr"`
+	Href   string `xml:"href,attr"`
+	Rel    string `xml:"rel,attr"`
+	Type   string `xml:"type,attr"`
+	Length string `xml:"length,attr"`
+	Title  string `xml:"title,attr"`
+}
+
+// FeedAttachment 仅保存 Feed 声明的附件元信息，不下载或信任附件 URL。
+type FeedAttachment struct {
+	URL        string
+	MediaType  string
+	RawLength  string
+	Length     *int64
+	Title      string
 }
 
 type atomEntry struct {
@@ -148,9 +170,11 @@ func ParseFeed(data []byte, observedAt time.Time) (FeedDocument, error) {
 				author = item.Creator
 			}
 			content := item.Content
-			doc.Entries = append(doc.Entries, newFeedEntry(
-				item.GUID, item.Title, item.Link, item.Description, content, author, item.PubDate, "",
-			))
+			entry := newFeedEntry(item.GUID, item.Title, item.Link, item.Description, content, author, item.PubDate, "")
+			for _, enclosure := range item.Enclosures {
+				entry.Attachments = append(entry.Attachments, newFeedAttachment(enclosure.URL, enclosure.Type, enclosure.Length, ""))
+			}
+			doc.Entries = append(doc.Entries, entry)
 		}
 		return doc, nil
 	case "feed":
@@ -168,14 +192,29 @@ func ParseFeed(data []byte, observedAt time.Time) (FeedDocument, error) {
 			if len(item.Authors) > 0 {
 				author = item.Authors[0].Name
 			}
-			doc.Entries = append(doc.Entries, newFeedEntry(
-				item.ID, item.Title, selectAtomLink(item.Links), item.Summary, item.Content, author, item.Published, item.Updated,
-			))
+			entry := newFeedEntry(item.ID, item.Title, selectAtomLink(item.Links), item.Summary, item.Content, author, item.Published, item.Updated)
+			for _, link := range item.Links {
+				if strings.EqualFold(strings.TrimSpace(link.Rel), "enclosure") {
+					entry.Attachments = append(entry.Attachments, newFeedAttachment(link.Href, link.Type, link.Length, link.Title))
+				}
+			}
+			doc.Entries = append(doc.Entries, entry)
 		}
 		return doc, nil
 	default:
 		return FeedDocument{}, ErrUnsupportedFeed
 	}
+}
+
+func newFeedAttachment(rawURL, rawType, rawLength, title string) FeedAttachment {
+	attachment := FeedAttachment{URL: strings.TrimSpace(rawURL), RawLength: strings.TrimSpace(rawLength), Title: normalizeText(title)}
+	if mediaType, _, err := mime.ParseMediaType(strings.TrimSpace(rawType)); err == nil {
+		attachment.MediaType = strings.ToLower(mediaType)
+	}
+	if length, err := strconv.ParseInt(attachment.RawLength, 10, 64); err == nil && length >= 0 {
+		attachment.Length = &length
+	}
+	return attachment
 }
 
 func newFeedEntry(id, title, link, summary, content, author, publishedRaw, updatedRaw string) FeedEntry {

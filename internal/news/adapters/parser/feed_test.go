@@ -166,3 +166,23 @@ func TestParseFeedAcceptsUTF8BOM(t *testing.T) {
 		t.Fatalf("document=%+v error=%v", doc, err)
 	}
 }
+
+func TestParseRSSFeedExtractsEnclosureMetadata(t *testing.T) {
+	payload := []byte(`<rss version="2.0"><channel><item><title>公告</title><enclosure url="https://publisher.example/report.pdf" type="application/pdf; version=1" length="2048"/></item></channel></rss>`)
+	doc, err := ParseFeed(payload, time.Now())
+	if err != nil { t.Fatal(err) }
+	attachments := doc.Entries[0].Attachments
+	if len(attachments) != 1 { t.Fatalf("attachments=%+v", attachments) }
+	got := attachments[0]
+	if got.URL != "https://publisher.example/report.pdf" || got.MediaType != "application/pdf" || got.Length == nil || *got.Length != 2048 { t.Fatalf("attachment=%+v", got) }
+}
+
+func TestParseAtomFeedExtractsEnclosureAndIgnoresInvalidLength(t *testing.T) {
+	payload := []byte(`<feed xmlns="http://www.w3.org/2005/Atom"><entry><link rel="enclosure" href="https://publisher.example/audio.mp3" type="audio/mpeg" length="-1" title="音频"/></entry></feed>`)
+	doc, err := ParseFeed(payload, time.Now())
+	if err != nil { t.Fatal(err) }
+	attachments := doc.Entries[0].Attachments
+	if len(attachments) != 1 { t.Fatalf("attachments=%+v", attachments) }
+	got := attachments[0]
+	if got.URL != "https://publisher.example/audio.mp3" || got.MediaType != "audio/mpeg" || got.Length != nil || got.RawLength != "-1" || got.Title != "音频" { t.Fatalf("attachment=%+v", got) }
+}

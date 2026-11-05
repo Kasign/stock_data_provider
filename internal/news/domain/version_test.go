@@ -95,4 +95,3 @@ func TestBuildVersionFingerprintIgnoresProviderItemID(t *testing.T) {
 		t.Fatal("provider identity credential must not create a content version")
 	}
 }
-
