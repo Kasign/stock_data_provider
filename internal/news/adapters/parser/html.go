@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"io"
 	"mime"
 	"strings"
 	"time"
@@ -236,7 +235,7 @@ func normalizeHTMLLines(value string) string {
 	normalized := make([]string, 0, len(lines))
 	for _, line := range lines {
 		line = normalizeText(line)
-		if line != "" && (len(normalized) == 0 || normalized[len(normalized)-1] != line) {
+		if line != "" {
 			normalized = append(normalized, line)
 		}
 	}
@@ -252,5 +251,3 @@ func firstNonEmpty(values ...string) string {
 	return ""
 }
 
-// Keep io referenced by the parser's reader contract explicit for future bounded readers.
-var _ io.Reader

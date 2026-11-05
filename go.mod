@@ -4,8 +4,8 @@ go 1.22
 
 require (
 	github.com/go-sql-driver/mysql v1.9.3
-	golang.org/x/net v0.35.0
 	github.com/redis/go-redis/v9 v9.7.3
+	golang.org/x/net v0.35.0
 )
 
 require (

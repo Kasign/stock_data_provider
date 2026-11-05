@@ -17,7 +17,8 @@ func TestParseHTMLDocumentExtractsArticleAndMetadata(t *testing.T) {
 </head><body>
 <nav>导航内容</nav>
 <main><article><h1>文章标题</h1><p>第一段 &amp; 内容。</p>
-<script>不应出现的脚本</script><p>第二段内容。</p></article></main>
+<script>不应出现的脚本</script><p>第二段内容。</p>
+<p>重复段落</p><p>重复段落</p></article></main>
 <footer>页脚内容</footer>
 </body></html>`)
 	doc, err := ParseHTMLDocument(payload, "text/html; charset=utf-8", time.Now())
@@ -36,6 +37,9 @@ func TestParseHTMLDocumentExtractsArticleAndMetadata(t *testing.T) {
 	if !strings.Contains(doc.Text, "第一段 & 内容。") || !strings.Contains(doc.Text, "第二段内容。") {
 		t.Fatalf("text=%q", doc.Text)
 	}
+	if strings.Count(doc.Text, "重复段落") != 2 {
+		t.Fatalf("repeated source paragraphs were lost: %q", doc.Text)
+	}
 	for _, excluded := range []string{"导航内容", "不应出现的脚本", "页脚内容"} {
 		if strings.Contains(doc.Text, excluded) {
 			t.Fatalf("unexpected text %q in %q", excluded, doc.Text)
@@ -50,6 +54,17 @@ func TestParseHTMLDocumentConvertsDeclaredLegacyCharset(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !strings.Contains(doc.Text, "café") {
+		t.Fatalf("text=%q", doc.Text)
+	}
+}
+
+func TestParseHTMLDocumentConvertsGBKCharset(t *testing.T) {
+	payload := []byte("<html><body><article><p>\xD6\xD0\xCE\xC4</p></article></body></html>")
+	doc, err := ParseHTMLDocument(payload, "text/html; charset=gbk", time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(doc.Text, "中文") {
 		t.Fatalf("text=%q", doc.Text)
 	}
 }
