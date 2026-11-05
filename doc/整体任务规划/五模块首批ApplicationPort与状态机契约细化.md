@@ -248,7 +248,7 @@ LLM-001 已完成现有 Gateway 静态协议盘点：客户端主协议为 OpenA
 - ModelRequest 使用 instructions + input_text；首批不把 Chat Completions messages 作为内部默认结构。
 - 输出 token 参数使用 max_output_tokens；temperature/top_p/reasoning_effort 仅在当前 Model Capability=supported 时发送。
 - Responses JSON 需解析 output item 类型、status、incomplete_details 和 usage；usage 缺失保持 unknown/null。
-- Responses SSE 需识别文本 delta、completed/incomplete/failed/error 等 terminal event；断流且没有 terminal event 不算成功。
+- Responses SSE 需识别文本 delta、OutputItem/ContentPart、function_call arguments delta、refusal 和 completed/incomplete/failed/error terminal event；断流且没有 terminal event 不算成功。
 - text.format 目前只能确认可透传，不能认定本地模型 structured output 已通过；Adapter 必须本地 Schema 校验。
 - tools 可以透传，但 LLM 不执行；Researchflow 负责授权、参数校验、预算、执行和结果回填。
 - 当前 Gateway 本地路径会合并 instructions 与 input 中 system/developer 项，并可能注入 stream_options.include_usage；Adapter Fixture 必须覆盖这些改写。

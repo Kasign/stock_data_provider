@@ -793,3 +793,11 @@ Workflow Template 按 stage_code + template_version 固定 on_degraded、on_skip
 - Fixture 验收必须断言原始 wire payload 到内部 DTO 的映射、状态与 typed error、Usage 来源、序号诊断及 completed 判定；不能仅断言 parser 不 panic。
 - Fixture 仅证明 Adapter 协议解析与归一化行为，不证明当前 Gateway/本地模型具备 Structured Output、Tool Call、Reasoning 或稳定 SSE 能力。
 - 本轮仍为规划设计；没有实现 Fixture 或执行测试。Owner Review、validator 选型和真实 Gateway E2E 仍未完成，GOV-004 NO-GO。
+
+
+## 37. LLM-002 Stream Tool Call 事件契约补充
+
+- ToolDefinition 作为受控可选字段进入 MVP 后，Stream 事件必须覆盖 function_call 的 output item 生命周期和 arguments delta；仅定义 output_text.delta 不足以承载工具调用。
+- ModelEvent 已补充 item/content_part/arguments，首批识别 output_item、content_part、function_call_arguments、refusal 和文本事件。
+- Fixture 增加 stream_function_call.sse，验证增量聚合、item/call ID 关联、最终参数一致性和不执行工具。
+- 该补充仍属规划侧契约建议；本地模型真实流式工具调用未验收，GOV-004 NO-GO。

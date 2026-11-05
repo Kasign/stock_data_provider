@@ -133,14 +133,43 @@ data: {"type":"response.completed","sequence_number":5,"response":{"id":"resp_st
 
 预期：按到达顺序回调事件；Stream 返回最终 ModelResponse.status=completed；Usage.source=upstream；只有 terminal response.completed 后才可判成功。
 
-### 5.2 Terminal 事件
+### 5.2 Function Call 流
+
+文件：`stream_function_call.sse`
+
+```text
+event: response.created
+data: {"type":"response.created","sequence_number":1,"response":{"id":"resp_tool_001","status":"in_progress","model":"fixture-model"}}
+
+event: response.output_item.added
+data: {"type":"response.output_item.added","sequence_number":2,"output_index":0,"item":{"id":"fc_item_001","type":"function_call","status":"in_progress","call_id":"call_001","name":"lookup_quote","arguments":""}}
+
+event: response.function_call_arguments.delta
+data: {"type":"response.function_call_arguments.delta","sequence_number":3,"item_id":"fc_item_001","output_index":0,"call_id":"call_001","delta":"{\\\"symbol\\\":"}
+
+event: response.function_call_arguments.delta
+data: {"type":"response.function_call_arguments.delta","sequence_number":4,"item_id":"fc_item_001","output_index":0,"call_id":"call_001","delta":"\\\"600000.SH\\\"}"}
+
+event: response.function_call_arguments.done
+data: {"type":"response.function_call_arguments.done","sequence_number":5,"item_id":"fc_item_001","output_index":0,"call_id":"call_001","arguments":"{\\\"symbol\\\":\\\"600000.SH\\\"}"}
+
+event: response.output_item.done
+data: {"type":"response.output_item.done","sequence_number":6,"output_index":0,"item":{"id":"fc_item_001","type":"function_call","status":"completed","call_id":"call_001","name":"lookup_quote","arguments":"{\\\"symbol\\\":\\\"600000.SH\\\"}"}}
+
+event: response.completed
+data: {"type":"response.completed","sequence_number":7,"response":{"id":"resp_tool_001","status":"completed","model":"fixture-model","output":[]}}
+```
+
+预期：按 item_id/call_id 聚合参数增量；arguments.done 与 output_item.done 的最终参数一致；生成待授权 ModelToolCall，不执行工具。若最终 arguments 与 delta 聚合不一致，返回 invalid_response。
+
+### 5.3 Terminal 事件
 
 - `stream_incomplete.sse`：以 response.incomplete 结束，返回 status=incomplete 和 incomplete_reason。
 - `stream_failed.sse`：以 response.failed 结束，返回 status=failed 和 ModelErrorInfo。
 - `stream_error_event.sse`：以 error event 结束，返回 typed protocol/upstream error；不能将其解释成 completed。
 - `stream_unknown_event.sse`：未知 event 保留事件类型、顺序和有界安全元数据；不触发副作用。
 
-### 5.3 Sequence 与 EOF
+### 5.4 Sequence 与 EOF
 
 | Fixture | 输入 | 预期 |
 |---|---|---|
@@ -153,7 +182,7 @@ data: {"type":"response.completed","sequence_number":5,"response":{"id":"resp_st
 | stream_eof_without_terminal.sse | delta 后直接 EOF | 部分 Response + stream_interrupted；不可 completed |
 | stream_terminal_then_extra_event.sse | terminal 后仍有事件 | 协议异常；不得追加为同一成功响应的有效输出 |
 
-### 5.4 Backpressure / Cancel
+### 5.5 Backpressure / Cancel
 
 - `stream_callback_error.test`：callback 返回 sentinel error；立即停止读取并返回部分 Response + 原 callback error。
 - `stream_context_cancel.test`：Context cancel/deadline；关闭上游 body/连接，返回部分 Response（若有）和 cancelled/timeout typed error。

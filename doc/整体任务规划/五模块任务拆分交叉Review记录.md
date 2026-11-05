@@ -227,3 +227,11 @@ Domain/Contract 不得因为无关模块的 Adapter/Integration 未完成而被�
 - SSE 必须覆盖 terminal、unknown event、sequence 连续/缺号/重复/倒退/混合缺失、断流、callback error 和取消。
 - 每个 fixture 应断言 wire 原文、DTO、终态、错误类型、usage.source、sequence 诊断及可否认定 completed。
 - 样例和建议命名见 doc/llm/05-JSON与SSE契约Fixture清单.md；样例是契约测试设计，不代表本地 llama.cpp/Qwen 已支持对应能力。
+
+
+## 13. LLM-002 Stream Tool Call 事件覆盖补充
+
+- 复核发现 ToolDefinition 已纳入受控 MVP，但原 ModelEvent 首批事件列表只覆盖文本 delta，缺少 function_call 的 output item 与 arguments 增量事件，导致 Streaming Tool Call 契约不完整。
+- 已补充 response.output_item.added/done、response.function_call_arguments.delta/done、response.content_part.added/done、response.refusal.delta/done；ModelEvent 增加 item/content_part/arguments 字段。
+- 新增 stream_function_call.sse Fixture，要求按 item_id/call_id 聚合参数增量，并校验最终 arguments 与 delta 聚合一致；仍只产出待授权 ToolCall，不执行工具。
+- 本地模型是否支持这些事件仍由真实 E2E 决定；Fixture 通过不能把 function_tool_calls 或 responses_stream 设为 supported。

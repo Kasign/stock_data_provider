@@ -174,9 +174,9 @@ Usage 是计量信息，不是输出质量证明；缺失、0 和 unknown 必须
 
 Stream 使用同步回调提供背压，并返回最终聚合的 ModelResponse。Generate/Stream 的 Go error 表示传输、HTTP 非成功、协议解析/校验、本地 Schema 校验、回调或 Context 取消等 Adapter 执行错误；上游合法返回的 status=incomplete/failed 通过 ModelResponse.status 与 ModelResponse.error 表达，不重复包装成 Go error。Stream 收到 terminal event 后返回最终 Response；无 terminal event 的 EOF 返回部分 Response 与 stream_interrupted 类型错误。回调错误或 Context 取消必须停止读取上游，并返回已解析的部分 Response（若有）及对应 error。
 
-ModelEvent 字段：type、sequence_number?、response_id?、output_index?、content_index?、item_id?、call_id?、delta?、usage?、error?、received_at。
+ModelEvent 字段：type、sequence_number?、response_id?、output_index?、content_index?、item_id?、call_id?、item?、content_part?、delta?、arguments?、usage?、error?、received_at。
 
-首批识别 response.created、response.output_text.delta、response.output_text.done、response.completed、response.incomplete、response.failed、error。其他事件作为 UnknownEvent 保留类型和顺序，不执行副作用。上列是 Adapter parser 契约，不代表当前本地模型已产生所有事件。
+首批识别 response.created、response.output_item.added/done、response.content_part.added/done、response.output_text.delta/done、response.refusal.delta/done、response.function_call_arguments.delta/done、response.completed、response.incomplete、response.failed、error。文本与函数参数增量均使用 delta 字段，但由 type 区分；item/content_part 字段承载已解析的结构对象。其他事件作为 UnknownEvent 保留类型和顺序，不执行副作用。上列是 Adapter parser 契约，不代表当前本地模型已产生所有事件。
 
 流结束规则：
 - 必须收到明确 terminal event（completed/incomplete/failed/error）才算终止；只有 completed 是成功，incomplete/failed/error 都必须按非成功结果返回。

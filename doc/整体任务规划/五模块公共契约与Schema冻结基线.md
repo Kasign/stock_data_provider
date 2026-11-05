@@ -161,7 +161,8 @@ ModelResponse {
 }
 ModelEvent {
   type, sequence_number?, response_id?, output_index?, content_index?,
-  item_id?, call_id?, delta?, usage?, error?, received_at
+  item_id?, call_id?, item?, content_part?, delta?, arguments?,
+  usage?, error?, received_at
 }
 Usage {
   input_tokens?, output_tokens?, total_tokens?, input_cached_tokens?, output_reasoning_tokens?, source
