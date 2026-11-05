@@ -324,3 +324,11 @@
 - 专项测试候选增加独立上市日期和来源 URL；报告增加 `listing_date`、`listing_date_source`，仅属于测试证据，不是生产 API 字段。
 - 首因子早于上市日为 mismatch；等于上市日为 not_applicable；晚于上市日才请求首事件前 raw/qfq，空样本为 unavailable。
 - 新增分类边界单测。代码 SHA `2c3fb0b0373d72a45ee408a8ccc09a5d1ded170d` 的 CI/专项报告待验。
+
+
+## 2026-11-05 P0 批次 40：复权因子持久化链路审查
+
+- `RefreshAdjustmentFactors` 采集后持久化；`SaveAdjustmentFactors` 记录 `recorded_at`，metadata 不伪造 `SystemObservedAt`；`ListAdjustmentFactorsAsOf` 读取时以 `recorded_at` 恢复系统观察时间。
+- PIT 路径要求 `AvailableAt` 已知且不晚于 `as_of`，`DailyBarsAsOf` 通过 `AdjustmentFactorsAsOf` + `rebuildAdjustedDailyBarsPIT` 重建，并按 raw K 的 source/version 匹配因子；未知 AvailableAt 不进入 PIT，保持正确。
+- Current helper 没有生产调用者，`RefreshAdjustmentFactors` 返回对象没有 `SystemObservedAt`，且当前无未知 AvailableAt 的 Current Repository 读取方法。由于当前 DailyBars 使用 Provider 原生复权 K 线，暂不存在调用场景；不新增接口/字段，待自建复权重建正式接入时再设计。
+- 本批无代码修改；PIT fail-closed 不变。
