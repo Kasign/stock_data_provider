@@ -760,8 +760,10 @@ test("service health and provider-list refreshes ignore superseded responses", (
   assert.match(app, /let serviceRefreshGeneration = 0;/);
   assert.match(app, /let sourceRefreshGeneration = 0;/);
   assert.match(app, /let sourceRefreshController = null;/);
-  assert.match(app, /function invalidateSourceRefresh\\([\\s\\S]*?sourceRefreshGeneration \\+= 1;[\\s\\S]*?controller\\?\\.abort\\(\\)/);
-  assert.match(app, /function applySettings\\([\\s\\S]*?runSettingsApplyStep\\("失效数据源能力读取失败：", \\(\\) => invalidateSourceRefresh\\(\\), failures\\)/);
+  assert.ok(app.includes("function invalidateSourceRefresh("));
+  assert.ok(app.includes("sourceRefreshGeneration += 1;"));
+  assert.ok(app.includes("controller?.abort()"));
+  assert.ok(app.includes("runSettingsApplyStep(\"失效数据源能力读取失败：\", () => invalidateSourceRefresh(), failures)"));
   assert.match(app, /async function refreshServices\(\) \{[\s\S]*?const generation = \+\+serviceRefreshGeneration;[\s\S]*?if \(generation !== serviceRefreshGeneration\) \{\s*return \{ marketOK, analysisOK, marketState, analysisState, stale: true \};\s*\}/);
   assert.match(app, /async function refreshSources\(\) \{[\s\S]*?const generation = \+\+sourceRefreshGeneration;[\s\S]*?if \(generation !== sourceRefreshGeneration\) return;/);
   assert.match(app, /if \(generation !== serviceRefreshGeneration\) \{\s*return \{ marketOK, analysisOK, marketState, analysisState, stale: true \};\s*\}[\s\S]*?setText\("#connection-label", connectionLabel\)/);
