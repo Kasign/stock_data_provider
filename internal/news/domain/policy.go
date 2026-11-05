@@ -84,20 +84,20 @@ type EndpointPolicy struct {
 	EvidenceRef          string
 }
 
-// CollectionPolicyRequest 描述一次具体采集/留存意图。
+// ProviderOutputPolicy 描述搜索 Provider 对自身输出授予的用途和留存权限。
 type ProviderOutputPolicy struct {
 	Status                   AuthorizationStatus
 	AllowedPurposes          []Purpose
 	AllowedContentKinds      []ContentKind
-	AllowRequestProcessing  bool
-	AllowCrossRequestCache  bool
-	MaxRequestRetention     time.Duration
+	AllowRequestProcessing   bool
+	AllowCrossRequestCache   bool
+	MaxRequestRetention      time.Duration
 	MaxCacheRetention       time.Duration
-	AllowedStorageModes     []StorageMode
+	AllowedStorageModes      []StorageMode
 	MaxPersistenceRetention time.Duration
-	EffectiveAt              time.Time
+	EffectiveAt               time.Time
 	ExpiresAt                *time.Time
-	EvidenceRef              string
+	EvidenceRef               string
 }
 
 // CollectionPolicyRequest 描述一次具体采集/留存意图。

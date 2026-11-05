@@ -177,11 +177,12 @@ func TestEvaluateProviderOutputPolicyRejectsUnauthorizedPersistence(t *testing.T
 	request.ContentKind = ContentFullText
 
 	decision := EvaluateProviderOutputPolicy(policy, request, time.Now().UTC())
-	if decision.Allowed || decision.ReasonCode != "news.policy.provider_storage_denied" {
+	if decision.Allowed || decision.ReasonCode != "news.policy.provider_content_denied" {
 		t.Fatalf("decision=%+v", decision)
 	}
 
 	request.StorageMode = StoragePersistentMetadata
+	request.ContentKind = ContentMetadata
 	request.Retention = 8 * 24 * time.Hour
 	decision = EvaluateProviderOutputPolicy(policy, request, time.Now().UTC())
 	if decision.Allowed || decision.ReasonCode != "news.policy.provider_persistence_retention_exceeded" {
