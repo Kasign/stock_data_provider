@@ -30,3 +30,15 @@
 - 本批次代码审计结论通过；Eastmoney/Tencent 参考日仍不可比较；Tushare 时段映射仍阻塞；阶段 B 继续 in_progress。
 - 后续优先评估 BaoStock 现有同源因子与 raw K 线能否提供带明确日期语义的可复验锚点；只有取得数据证据后才考虑增加元数据。不得重复请求已完成的样本。
 - HEAD `b4cf1a5dbd898f000cf679fa0eb73be6f1039a2e` 的四个关联工作流均 success，但 Live Provider Probe 的 `MARKET_DATA_LIVE_PROVIDER_TESTS=0`，本 SHA 没有重新执行真实 Provider 请求。历史样本不升级为本 SHA 新验收。
+
+
+## 2026-11-05 P0 批次 16：BaoStock 因子接入前置审计
+
+- 基线：`d9a2872f8259b44f2e59615e2f966bfec2c0ad3a`。TCP Client 已有 QueryAdjustmentFactors，但 Provider 未实现 AdjustmentFactorProvider；DataService.RefreshAdjustmentFactors 因此不会调用 BaoStock。
+- BaoStock 单行同时含 foreAdjustFactor、backAdjustFactor、adjustFactor；统一 AdjustmentFactor 只有单一 Factor 字段，不能无损表达三种来源值。
+- MariaDB adjustment-factor revision 的查重与 as_of 选择均按 symbol/trade_date/source，不包含口径维度；同日同源的 forward/backward 两行不能安全共存。仅把额外字段放入 JSON metadata 不会修复版本选择键。
+- dividiOperateDate（协议字段 dividiOperateDate）只作为操作日期；没有证据证明它等于首次公开时间。适配时不得赋给 AvailableAt；FetchedAt/SystemObservedAt 也不能替代供应商 AvailableAt。
+- 现有 BaoStock live probe 的历史样本对账 mismatch=0 仍是有效的窗口内证据，但不能据此推导统一重建器公式。当前重建器对 forward 因子做参考日归一化，必须用真实数据分别确认 BaoStock forward/backward factor 的基准定义。
+- 本轮不写 Provider 适配器，避免先接入后返工或丢失一个复权口径。下一步先设计 factor_basis（shared/forward/backward）模型、持久化版本键、as_of 查询与重建规则；明确 Tushare 单列 adj_factor 的 shared 语义，再按真实样本完成公式对账。
+- 状态：协议层已有实现；Provider/service 未接入；统一模型与存储需扩展；AvailableAt 仍未知；批次16继续 in_progress，阶段 B 不关闭。未执行真实请求。
+- 当前 HEAD `d9a2872f8259b44f2e59615e2f966bfec2c0ad3a` 尚无关联 workflow run；PR #1 仍 Open / Draft，未合并。
