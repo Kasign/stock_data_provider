@@ -2344,3 +2344,22 @@ Artifact 核验结果：
 - [ ] 选定一个低耦合 feature，使用浏览器 CSSOM 在迁移前后比对 computed styles；中文字体基线问题解决前，不做视觉像素验收或 CSS 物理迁移。
 
 **结论：Owner Map 初稿已建立，CSS 物理拆分仍未启动。**
+
+
+## 2026-11-05 CSS AST Selector 空白归一化复核
+
+在 `web/tests/css-structure-review.mjs` 中将 selector-parser 节点统一 trim 后，提交 `890ca59662c9e70c0f39bb2ce8ae6a7c61b63601` 的 Browser Smoke 已通过，复核统计为：
+
+- 1,857 条 CSS Rule、5,511 条声明、113 个 At-rule（与首轮一致）。
+- 1,648 个唯一 selector、386 个重复 selector。
+- 25 组精确重复候选。
+- 284 个 selector 存在声明值变体。
+
+本结果取代前一节中的修正前 selector 统计（1,739/353/18/259）。唯一 selector 数下降，是因为逗号列表分隔空白被正确归一化；重复 selector、精确重复组及声明变体数量变化，则来自 selector 节点被正确拆分后重新归并。不能据此推断 CSS 冲突增加或减少。
+
+复核后的精确重复候选仍必须逐项结合上下文判断：例如 `.main-area` 在 max-width 600px（726、2634）和 max-width 900px（1068、4507）存在相同声明块，但各自处于不同的源码区段，当前不删除。首批迁移仍以 Owner Map 的共享边界为约束。
+
+- [x] Selector 空白归一化已由 CI 实际执行。
+- [x] Browser Smoke 全部步骤通过，包含 CSS AST 分析。
+- [x] WebUI Checks 全部通过。
+- [ ] 下一步补齐 at-rule 条件、selector specificity 和源码顺序联合审查，再确定低耦合 feature 迁移单元。
