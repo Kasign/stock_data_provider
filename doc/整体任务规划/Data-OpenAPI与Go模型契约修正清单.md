@@ -613,3 +613,20 @@ Live provider probe 整体 success 仅表示 Workflow 成功；如需确认专�
 因此此前 23 项“可能 null”应拆分为：22 个 slice/map 字段继续按 11.11 逐项验证；LimitPoolItem.change_percent 从当前可达运行时阻断清单中移除。它仍可保留单元测试，明确 nil 必须被 Validator 拒绝。
 
 **修正结论**：不能只看 Go 指针类型就判定 API 一定输出 null；必须结合 omitempty、Validator、Handler 和实际可达分支。
+
+
+### 11.15 15 处 required 差异：按真实可达输出重新分级（2026-11-05）
+
+本轮重新用 Go JSON Tag 与 OpenAPI Schema required 列表交叉扫描 51 个同名 Go/OpenAPI 类型。对“OpenAPI required、Go omitempty”的方向，得到 3 项：
+
+| Schema.field | Go JSON Tag | Validator / 构造路径 | 运行时结论 |
+|---|---|---|---|
+| Bundle.warnings | warnings,omitempty | Bundle Service 显式构造 append([]string{}, warnings...)；无警告时 len=0，encoding/json 的 omitempty 仍会省略 | **确认 required 违约风险**：OpenAPI required，但空警告集合会缺席。建议移除 Go Tag 的 omitempty，保留非 nil 空 slice 输出 []。 |
+| HotRankingItem.source_version | source_version,omitempty | validateHotRankingSnapshot 要求 Item.SourceVersion 与 Snapshot.SourceVersion 一致；Snapshot.SourceVersion 又必须 identifiable/non-empty | **当前正常路径不可达缺失**：Validator 阻止空值 Item 进入成功响应；保留 omitempty 可接受，但应加回归测试证明。 |
+| HotRankingSnapshot.source_version | source_version,omitempty | validateHotRankingSnapshot 要求 Snapshot.SourceVersion 可识别且非空 | **当前正常路径不可达缺失**：Validator 阻止空值 Snapshot 进入成功响应；保留 omitempty 可接受，但应加回归测试证明。 |
+
+其余 12 处差异方向为“Go 无 omitempty、OpenAPI optional”。Go 总是输出这些字段（指针字段为 nil 时输出 null），而 Schema 允许它们缺席；这不是输出违约。对其中的指针字段，OpenAPI 已声明 nullable，需继续保留正确的 null 语义。
+
+因此，原始 15 处 required 差异不能全部算作 15 个运行时错误。当前已确认需要实施修复的重点是 Bundle.warnings；HotRanking 两项由 Validator 保证非空，需用测试固化此约束。
+
+**DATA-CONTRACT-003-C**：修正 Bundle.warnings 的 JSON Tag，或调整 Schema required（优先保持其作为稳定数组字段，建议去掉 omitempty）；补充 Bundle 无警告/有警告两种 Handler Golden。另对 HotRanking 两项增加空 source_version 必须被 Validator 拒绝的测试。
