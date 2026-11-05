@@ -183,7 +183,10 @@ func TestLiveBaoStockAdjustmentFactorConsistency(t *testing.T) {
 							forwardValue, forwardValueErr := parseLiveBaoStockPrice(preForward[index], field)
 							if rawValueErr != nil || forwardValueErr != nil {
 								item.PreFirstEventStatus = "unavailable"
-								item.PreFirstEventError = strings.TrimSpace(strings.Join([]string{errorText(rawValueErr), errorText(forwardValueErr)}, "; "))
+								item.PreFirstEventError = strings.TrimSpace(strings.Join([]string{
+								formatLiveBaoStockError("pre-first-event raw price", rawValueErr),
+								formatLiveBaoStockError("pre-first-event qfq price", forwardValueErr),
+							}, "; "))
 								break
 							}
 							compareLiveAdjustment(&probeItem, preRaw[index].Date, "qfq_pre_first_event_latest_factor_fallback", field, rawValue*latestFactor.ForwardFactor, forwardValue)
@@ -203,6 +206,9 @@ func TestLiveBaoStockAdjustmentFactorConsistency(t *testing.T) {
 						}
 					}
 				}
+				} else {
+					item.PreFirstEventStatus = "not_applicable"
+					item.PreFirstEventError = "first factor event is not after the probe history start date"
 				}
 			}
 		} else {
@@ -230,6 +236,19 @@ func TestLiveBaoStockAdjustmentFactorConsistency(t *testing.T) {
 	}
 	if len(failures) > 0 {
 		t.Errorf("BaoStock adjustment verification failed: %s", strings.Join(failures, " | "))
+	}
+}
+
+
+func TestLiveAdjustmentFactorBoundsFindsEarliestAndLatestEvent(t *testing.T) {
+	factors := []AdjustmentFactor{
+		{OperateDate: "2025-06-01", ForwardFactor: 0.9},
+		{OperateDate: "2024-06-01", ForwardFactor: 0.8},
+		{OperateDate: "2026-06-01", ForwardFactor: 1},
+	}
+	first, latest, ok := liveAdjustmentFactorBounds(factors)
+	if !ok || first.OperateDate != "2024-06-01" || latest.OperateDate != "2026-06-01" {
+		t.Fatalf("liveAdjustmentFactorBounds() = (%+v, %+v, %t)", first, latest, ok)
 	}
 }
 

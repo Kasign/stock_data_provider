@@ -265,3 +265,6 @@
 - 官方本地复权示例在 trade_date 早于首个 `dividOperateDate` 时，使用因子序列最新的 `foreAdjustFactor` 作为 qfq fallback；本项目当前 helper 选择 fail-closed。两者存在明确语义差异，不能凭代码推断谁正确。
 - 新增真实探测：两只样本证券的首个因子事件日前，抽取最多 5 根 raw 日 K，以最新 fore factor 直接乘 raw OHLC，与同源 qfq OHLC 对账；结果单独报告，不自动改变生产算法。
 - 只有真实对账匹配后才考虑为 BaoStock forward basis 增加首事件前 fallback；不影响 backward/shared 因子。
+
+
+- 探测实现修正：因子边界 helper 按日期而不是 Provider 返回顺序确定首末事件；首事件不晚于探测历史起点时显式标记 `not_applicable`。解析错误使用 BaoStock 专用错误格式化函数，避免引入测试包不存在的通用 helper。
