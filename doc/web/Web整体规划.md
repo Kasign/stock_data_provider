@@ -1961,3 +1961,11 @@ JSR-6L 补充：连接配置变更取消草稿检查后，旧代际 finally 按�
 - [ ] 新提交的 Chromium Browser Smoke 需在 CI 中执行成功，并检查 artifact 内新增的 light/mobile-nav 截图是否齐全；CI 结果未返回前不标记验收完成。
 
 截图目录仍为 workflow artifact 的 webui-browser-screenshots/ui-review；当前只建立可人工对照的基线，不自动判定视觉像素差异。
+
+## 2026-11-05 CI 旧字号断言修正
+
+新增截图基线提交触发 WebUI Checks 与 Chromium Browser Smoke。WebUI Checks 在 513 项单元测试中 511 项通过、2 项失败；失败原因是 ui-contract.test.mjs 仍要求 .page-subtitle、.button、.section-heading p/.panel-heading p 的字号声明必须带 !important，与当前 CSS 的语义 token 声明不一致。
+
+- [x] 将三处断言改为验证对应语义 token 与字号声明，不再将 !important 当成实现契约。
+- [x] 不修改 CSS 运行样式，不扩大本轮样式优先级清理范围。
+- [ ] 修正后的 WebUI Checks 和当前 Browser Smoke 仍需 CI 结果确认。
