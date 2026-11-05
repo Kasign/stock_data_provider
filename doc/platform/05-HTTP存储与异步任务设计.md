@@ -225,3 +225,22 @@ Migration 状态为 `running` 或 `failed` 时，Runner 不会自动重跑。处
 - 同一 host:port 的 HTTP/2 连接仍会复用；这与同源策略一致。当前策略没有独立 IP allowlist，不存在两个策略对同一 authority 施加不同 IP 范围后误复用的问题。
 - go.mod 的 go 1.22 是最低语言/模块版本声明，不代表生产运行时一定是 Go 1.22。升级 Go 运行时后，应重新核对对应版本 net/http 与 bundled HTTP/2 连接池 key；不能把上述源码结论无条件外推到未来版本。
 - 不因未经证实的跨 authority HTTP/2 合并而关闭 HTTP/2。若未来加入策略级 IP/出口约束，应采用按策略隔离 Transport/连接池或其他可证明的连接隔离方案，并补充运行时集成测试。
+
+
+### 7.8 News Provider HTTPDoer 注入契约（2026-11-05）
+
+当前 News Provider Adapter 通过 Application 的窄接口 `HTTPDoer{ Do(*http.Request) (*http.Response, error) }` 接收传输能力。Platform 的 `(*httpclient.BoundDoer)` 结构上满足该接口；组合根可以直接注入，不需要 Platform 导入 News，也不需要 News 依赖 Platform 包。
+
+接入边界：
+
+- 由服务组合根创建一个生命周期受控的 `httpclient.Client`，并在服务退出时调用 `CloseIdleConnections()`。不要在每次 Search 中创建 Client/Transport。
+- 对 Bocha、Tavily、Brave、SearXNG 的每个已配置 API endpoint 分别调用 `Client.Bind(DestinationPolicy)`，将返回的 BoundDoer 注入对应 Provider 构造函数。不能把裸 Client、默认 `http.Client` 或一个可任意访问目标的通用 Doer 注入生产 Provider。
+- `AllowedHosts` 必须是运维配置/代码审核过的精确 API 主机名，不能从 Provider 响应、搜索结果 URL 或用户查询推导；`AllowedPorts` 首期只开放 443，`AllowHTTP=false`、`AllowRedirects=false`。自托管 SearXNG 必须显式配置准确主机和端口；若确需 HTTP，只能作为明确的内网部署例外单独评审，不能全局打开。
+- `Dependency` 使用低基数固定标识，例如 `news.provider.bocha`、`news.provider.tavily`、`news.provider.brave`、`news.provider.searxng`。禁止拼接 source_id、provider_item_id、URL、租户 ID 或其他每请求变化字段；Client 按 Dependency 创建并长期持有 semaphore，动态高基数会造成无界 map 增长。
+- Provider 并发上限由账号套餐、配额和业务成本确定，放在 Client 的 `DependencyLimits` 配置中；不要把平台并发上限当作供应商速率限制。更细粒度的 QPS/日配额仍由 News 领域负责。
+- 首期 `MaxRetries=0` 是最保守选择。若开启有限重试，必须按 Provider/请求方法逐项评估：Brave/SearXNG GET 可在供应商语义确认后通过 `Idempotent=true` 开启；Bocha/Tavily POST 搜索请求默认 `Idempotent=false`，避免 502/503/504 或传输错误导致重复扣费/配额消耗。429 不由平台自动重试，配额等待属于 Provider 领域策略。
+- `MaxResponseBytes` 按实际 Provider 返回规模统一设置并保留上限；默认 2 MiB，不得为绕过超限错误无上限放大。News Adapter 仍负责解析响应结构和字段质量。
+- Provider API endpoint allowlist 与新闻原始发布来源授权是两套策略。搜索 Provider 返回的 article URL 不得复用 Provider API 的 BoundDoer；未来 Source Fetch 必须先通过 News 的 Source/Endpoint 授权，再按来源 host/port 建立受限 BoundDoer，并由 News 控制内容用途/保留规则。
+- News Provider 当前没有生产组合根或真实构造调用点；因此上述是集成契约，不代表 News 已完成生产注入或真实网络验收。服务组合根应由集成分支统一装配，Platform 不直接依赖/修改 News 领域。
+
+本契约仅说明固定 Provider API 的最小接入，不授予任意来源抓取权限，也不替代真实 Provider 账号、配额和来源授权审核。
