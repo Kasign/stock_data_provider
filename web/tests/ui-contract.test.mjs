@@ -1366,7 +1366,11 @@ test("market overview and activity use readable secondary text and touch-sized c
   assert.match(marketTableSecondaryBase, /color:\s*var\(--text-dim\)\s*;?/);
   assert.match(marketTableSecondaryBase, /font-variant-numeric:\s*tabular-nums\s*;?/);
   assert.equal((stylesheet.match(/(?:^|})\s*\.market-table-secondary\s*\{/g) || []).length, 1, "market table secondary text should have one exact base rule");
-  assert.match(finalCssRuleBody(".market-touch-time"), /font-size: 12px/);
+  const marketTouchTimeBase = exactCssDeclarationBlock(".market-touch-time");
+  assert.match(marketTouchTimeBase, /font-size:\s*12px\s*;/);
+  assert.match(marketTouchTimeBase, /line-height:\s*1\.5\s*;?/);
+  assert.match(marketTouchTimeBase, /color:\s*var\(--text-soft\)\s*;?/);
+  assert.equal((stylesheet.match(/(?:^|})\s*\.market-touch-time\s*\{/g) || []).length, 1, "market touch time should have one exact base rule");
   assert.match(finalCssRuleBody(".market-activity-heading p"), /font-size: 12px/);
   assert.match(finalCssRuleBody(".market-activity-controls label"), /font-size: 12px/);
   assert.match(finalCssRuleBody(".market-activity-controls input"), /min-height: 38px/);
