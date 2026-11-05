@@ -596,3 +596,52 @@ DATA-CONTRACT-001 的 gofmt 子项已恢复；完整 CI 阻断转为测试编译
 最新 HEAD：`d93134def4ac9a4b0632f6fb98675a890b835a2a`。相较 30bcc92 又有 4 个提交，主要更新 HTTP Client 生命周期测试、实现和接入文档；当前 SHA 没有可用的 Workflow run 记录。此前 235cebe Go checks 曾因 gofmt 失败，30bcc92 的检查为 cancelled。故最新 Platform 代码尚无最新 SHA 的成功 CI 证据。
 
 当前三个分支仍未形成完整、最新 SHA 的全绿验收链。GOV-004 继续 NO-GO。
+
+
+## 30. GOV-004 / GOV-005 门禁边界修订：契约冻结不等于全量集成通过
+
+本节与 GOV-005《模块独立开发与集成治理规范》配套；如前文把提供方实现验收、其他分支 CI 或生产环境验收列为所有五模块共同开工的前置条件，以本节的分层门禁解释为准。
+
+### 30.1 三类结论必须分开
+
+| 门禁 | 验收对象 | 通过条件 | 不要求 |
+|---|---|---|---|
+| 公共契约冻结（GOV-004） | 当前批次跨模块 DTO/Port、字段语义、依赖方向和版本策略 | 契约文档/Schema/示例经 Owner Review；必需字段、单位、时间、质量、空值、错误和兼容规则明确 | 所有提供方业务实现完成；所有业务分支同时编译；真实 Provider/数据库/模型/渠道均可用 |
+| 模块独立开工（GOV-005 L2） | 单个模块当前开发批次 | 本模块首批任务依赖的契约已冻结，未就绪依赖可隔离在 Adapter/调用点之外 | 与本模块无关的模块契约和 CI；其他模块真实环境验收 |
+| 跨模块集成（L3） | 明确 SHA 组合的完整系统 | 参与模块构建、契约测试、组合根、真实依赖和端到端测试通过 | 不适用；这是最终组合验收 |
+
+### 30.2 当前阻断项重新分类
+
+| 既有审查事项 | 正确阻断范围 | 是否阻断所有五模块开工 |
+|---|---|---|
+| Data OpenAPI 与 Go JSON 已知字段差异 | 阻断受影响 Data Adapter 的字段映射和 Data 提供方契约验收；可先开发不依赖这些字段的 Quant 算法与固定样本 | 否 |
+| Data Go 测试/CI 编译失败 | 阻断 Data 当前 SHA 的 Provider CI 结论和依赖该构建的真实集成；不影响无 Data 依赖的模块单测/领域开发 | 否 |
+| News ResearchEvidenceQuery 生产 Facade/Repository/Migration 未完成 | 若目标 DTO/Port 已在契约文档中明确，Research 可开发自身 Evidence Domain 和契约测试；News 生产 Adapter、历史查询和真实证据读取保持 blocked | 否 |
+| News system_as_of、授权快照、稳定分页实现未完成 | 阻断 News 历史证据查询的生产验收；若其语义尚未在契约中明确，则只阻断依赖该语义的 Research Evidence Adapter | 否 |
+| Platform 真实 MariaDB/Redis、Migration 故障演练 | 阻断 Platform Storage 的生产集成验收和依赖真实 Storage 的持久化集成；不阻断领域模型、Repository 接口及隔离测试开发 | 否 |
+| Platform 生产出口 SSRF 验收 | 阻断 News 在线抓取等受控出网功能的生产验收；不阻断离线解析和不联网领域逻辑 | 否 |
+| Data API Key 服务端注入/轮换验收 | 阻断 Server→Data 的真实服务间调用验收；不阻断 Quant 领域算法或基于契约 Fixture 的 Adapter 单测 | 否 |
+| Quant/Research DTO 未完成 Owner Review 的具体字段 | 阻断使用这些字段的模块间调用点；对应模块可继续不依赖该 DTO 的领域工作 | 只阻断相关调用点，不自动阻断全部模块 |
+
+### 30.3 GOV-004 的最小冻结范围
+
+进入五模块并行开发前，GOV-004 只需冻结首批开发所必需的最小公共契约：
+1. 五模块职责、依赖 DAG、公开接口所有权和禁止 import 方向；
+2. 公共基础语义：ID、时间、交易日期、单位、null/unknown、质量状态、版本、错误与 Request ID；
+3. Quant 首批计算输入/输出的最小 Application DTO，以及 Researchflow 传递 Quant 结果的引用方式；
+4. Research 首批 Context/Evidence 的最小 DTO，News Evidence Query 的目标 Port、授权输入、双时间轴和分页语义；
+5. Researchflow Run/Stage/Attempt 首批状态机和模块调用 Port；
+6. LLM ModelRequest/ModelResponse 最小协议边界；
+7. Notification Event/Command/Delivery 最小契约；
+8. Repository/Migration 所有权和共享入口限制。
+
+暂不进入首批开发的字段、能力和实现可登记为 deferred，不要求一次冻结所有未来场景。凡是列入首批契约的字段，不得以“后续再说”留下含义不明的状态。
+
+### 30.4 当前结论修订
+
+- GOV-004 的总体架构和大量语义审查已完成；最小契约是否达到冻结条件，应逐项基于文档和 Owner Review 判断。
+- Data/News/Platform 的真实实现与 CI 是各自模块/集成验收证据，不再作为所有五模块同时开工的共同前置条件。
+- Quant/Research 字段级 DTO Owner Review、News Query Port 公开 DTO、Researchflow 首批调用 Port 等，仍需完成后才能判断对应调用批次是否达到 Module Ready。
+- 本节不把 GOV-004 自动改为 GO，也不授权创建分支；它只修正门禁范围，防止把实现集成阻断误判为全局开工阻断。
+
+**后续执行顺序：** 完成首批最小 DTO/Port 的字段级 Review → 按模块逐个确认 L2 Module Ready → 用户确认共同基线并授权后创建分支 → 模块独立 CI → 按明确参与 SHA 进行集成验收。
