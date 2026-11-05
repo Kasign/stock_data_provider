@@ -79,3 +79,10 @@
 ## 8. N1 HTTP 安全边界补充（2026-11-05）
 
 根 Go `internal/platform/httpapi.Server.Handler()` 当前挂载 request-id、请求日志和 panic recoverer，但未发现 API 认证中间件。由于当前不新增新闻 HTTP 路由，新闻模块不以 Server 认证中间件作为本阶段开发前置条件。来源 CRUD、外部 URL dry-run/fetch、手动采集、批量刷新和授权策略修改保持为内部运维能力；若将来通过既有 Server API 对外提供任何管理操作，必须先由该 API 落实管理员授权。
+
+
+## 9. 公共服务延期决策补充（2026-11-05）
+
+- 当前新闻模块不提供 `/api/v1/news/diagnostics` 或其他新闻专属诊断 HTTP 路由；本文第 2 节诊断候选明确为未来评估项，且诊断能力归公共服务统一建设。
+- 当前新闻业务只通过同进程 Application 接口提供能力，不因公共诊断需求新增新闻 HTTP API。
+- DB/Redis 接入和持久化查询实现同样等待公共服务；本文查询字段仅作为业务查询契约输入，不代表当前已经有持久化查询实现。
