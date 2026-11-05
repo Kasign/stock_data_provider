@@ -157,6 +157,33 @@ func TestLiveBaoStockAdjustmentFactorConsistency(t *testing.T) {
 	}
 }
 
+func TestLatestLiveAdjustmentFactorUsesLatestEffectiveEvent(t *testing.T) {
+	factors := []AdjustmentFactor{
+		{OperateDate: "2024-06-01", ForwardFactor: 0.8, BackwardFactor: 1.25},
+		{OperateDate: "2025-06-01", ForwardFactor: 0.9, BackwardFactor: 1.4},
+		{OperateDate: "2026-06-01", ForwardFactor: 1, BackwardFactor: 1.55},
+	}
+	tests := []struct {
+		name      string
+		tradeDate string
+		wantDate  string
+		wantFound bool
+	}{
+		{name: "before first event", tradeDate: "2024-05-31", wantFound: false},
+		{name: "event date is effective", tradeDate: "2025-06-01", wantDate: "2025-06-01", wantFound: true},
+		{name: "between events uses prior event", tradeDate: "2025-12-31", wantDate: "2025-06-01", wantFound: true},
+		{name: "after latest event", tradeDate: "2026-07-01", wantDate: "2026-06-01", wantFound: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, found := latestLiveAdjustmentFactor(factors, tt.tradeDate)
+			if found != tt.wantFound || (found && got.OperateDate != tt.wantDate) {
+				t.Fatalf("latestLiveAdjustmentFactor(%q) = (%+v, %t), want date=%q found=%t", tt.tradeDate, got, found, tt.wantDate, tt.wantFound)
+			}
+		})
+	}
+}
+
 func latestLiveAdjustmentFactor(factors []AdjustmentFactor, tradeDate string) (AdjustmentFactor, bool) {
 	var selected AdjustmentFactor
 	found := false
