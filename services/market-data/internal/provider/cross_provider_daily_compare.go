@@ -63,6 +63,7 @@ func CrossProviderAmountGranularity(source, rawAmountUnit, rawAmountField string
 		return 0
 	}
 }
+
 // CrossProviderDailyBar 表示一个交易日的标准化日 K。
 type CrossProviderDailyBar struct {
 	TradeDate         string
@@ -73,10 +74,10 @@ type CrossProviderDailyBar struct {
 	Volume            int64
 	VolumeUnit        string
 	VolumeGranularity int64
-	Amount              *float64
-	AmountUnit          string
-	AmountGranularity   float64
-	AdjustmentMethod    string
+	Amount            *float64
+	AmountUnit        string
+	AmountGranularity float64
+	AdjustmentMethod  string
 	AdjustmentRefDate string
 }
 

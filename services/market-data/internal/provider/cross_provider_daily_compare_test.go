@@ -128,10 +128,10 @@ func TestCrossProviderAmountGranularityUsesProviderContracts(t *testing.T) {
 
 func TestCompareCrossProviderDailyBarsUsesAmountSourcePrecision(t *testing.T) {
 	tests := []struct {
-		name string
-		tdxAmount float64
-		baoAmount float64
-		wantStatus string
+		name          string
+		tdxAmount     float64
+		baoAmount     float64
+		wantStatus    string
 		wantTolerance float64
 	}{
 		{name: "600036 large amount float32 rounding", tdxAmount: 2672021248, baoAmount: 2672021127.26, wantStatus: CrossProviderDailyMatched, wantTolerance: 128.00005},
