@@ -402,7 +402,7 @@ func TestClientRetriesOnlyExplicitlyIdempotentRequests(t *testing.T) {
 
 func TestClientPropagatesRequestIDFromContext(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
-		if got := request.Header.Get(observability.RequestIDHeader); got != "upstream-trace-789" {
+		if got := request.Header.Get(observability.RequestIDHeader); got != "request-789" {
 			t.Errorf("request ID = %q", got)
 		}
 		_, _ = w.Write([]byte("ok"))
@@ -410,7 +410,7 @@ func TestClientPropagatesRequestIDFromContext(t *testing.T) {
 	defer server.Close()
 
 	client := newLocalTestClient(t, server, staticResolver{addresses: []netip.Addr{netip.MustParseAddr("8.8.8.8")}}, 1024, 0)
-	ctx := observability.WithRequestID(context.Background(), "upstream-trace-789")
+	ctx := observability.WithRequestID(context.Background(), "request-789")
 	response, err := client.Do(ctx, localRequest(t, server, "/request-id"), localPolicy(server))
 	if err != nil {
 		t.Fatal(err)

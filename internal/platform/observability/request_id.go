@@ -57,15 +57,18 @@ func WithRequestID(ctx context.Context, requestID string) context.Context {
 	return context.WithValue(ctx, requestIDKey{}, requestID)
 }
 
-// PropagateRequestID copies the context request ID to an outbound HTTP request.
-// It does not overwrite the request header when the context has no ID.
+// PropagateRequestID makes the validated context request ID the sole source
+// for the outbound header. A caller-supplied header is removed when the
+// context has no request ID, preventing untrusted values from leaking upstream.
 func PropagateRequestID(ctx context.Context, request *http.Request) {
 	if request == nil {
 		return
 	}
 	if requestID := FromContext(ctx); requestID != "" {
 		request.Header.Set(RequestIDHeader, requestID)
+		return
 	}
+	request.Header.Del(RequestIDHeader)
 }
 
 // ValidRequestID accepts a bounded ASCII token safe for an HTTP header and logs.

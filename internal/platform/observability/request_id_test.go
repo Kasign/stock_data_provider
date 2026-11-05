@@ -61,6 +61,36 @@ func TestWithRequestIDAndOutboundPropagation(t *testing.T) {
 	}
 }
 
+func TestPropagateRequestIDRemovesCallerSuppliedHeaderWithoutContext(t *testing.T) {
+	request, err := http.NewRequest(http.MethodGet, "https://example.com", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.Header.Add(RequestIDHeader, "untrusted-client-value")
+	request.Header.Add(RequestIDHeader, "duplicate-value")
+
+	PropagateRequestID(context.Background(), request)
+
+	if values := request.Header.Values(RequestIDHeader); len(values) != 0 {
+		t.Fatalf("caller-supplied request ID must be removed, got %q", values)
+	}
+}
+
+func TestPropagateRequestIDOverwritesCallerSuppliedHeader(t *testing.T) {
+	request, err := http.NewRequest(http.MethodGet, "https://example.com", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.Header.Set(RequestIDHeader, "untrusted-client-value")
+	ctx := WithRequestID(context.Background(), "trusted-context-id")
+
+	PropagateRequestID(ctx, request)
+
+	if values := request.Header.Values(RequestIDHeader); len(values) != 1 || values[0] != "trusted-context-id" {
+		t.Fatalf("outbound request ID = %q, want one trusted context value", values)
+	}
+}
+
 func TestRequestIDValidation(t *testing.T) {
 	for _, value := range []string{"", "has space", "line\nbreak", strings.Repeat("a", 129)} {
 		if ValidRequestID(value) {
