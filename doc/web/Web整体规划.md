@@ -2146,3 +2146,14 @@ CSS AST 检查器进一步扩展：
 - [x] 同 selector、同 at-rule 条件的声明覆盖候选共 144 项（报告截取前 100 项）；候选仅用于人工定位，不直接删除。
 - [x] 校正覆盖候选的优先级标签：分别区分 earlier-important、later-important 和同重要性下的 later-source-order；补齐 `::slotted()` 参数 specificity。
 - [ ] 人工审查跨 selector 重叠和 @layer / 主题 / 响应式关系；再建立低耦合组件 CSSOM computed-style 基线。
+
+## 2026-11-05 Screening CSSOM computed-style 基线采集
+
+- [x] 确认现有 Playwright 浏览器验收已提供静态服务、API 隔离和 Chromium 启动基础；新增独立脚本复用相同轻量测试方式，不引入第二套测试框架。
+- [x] 选择 `.screening-local-batch-toolbar` 作为首个低耦合样式观察对象：节点固定存在于 Screening 页面，不依赖行情接口成功回包；同时采集全选控件、已选数量、分组字段和批量加入自选按钮。
+- [x] 新增 `web/tests/cssom-baseline.mjs`，对暗/亮主题 × 320/768/1280/1600px 共 8 个场景采集 6 个节点的 computed style 与矩形尺寸；不采集 font-family，不做像素 diff。
+- [x] Browser Smoke workflow 增加 CSSOM 采集步骤，并上传 `webui-cssom-baseline` artifact（保留 30 天）。输出是环境观测快照，不是自动判定正确性的 golden baseline。
+- [ ] 等待本次 CI 产出 artifact，审查不同主题/断点的属性差异，确认无意外的隐藏状态或字体环境干扰。
+- [ ] 如快照稳定，再将选定属性整理为受控 baseline fixture，并加入迁移前后比较；在完成该步骤前不启动 CSS 物理拆分。
+
+**本轮范围：** 仅新增测试脚本、workflow 步骤和文档；不修改 `web/styles.css`、`web/index.html`、页面运行逻辑及其他业务目录。

@@ -49,6 +49,10 @@ jobs:
         working-directory: web
         run: node tests/css-structure-review.mjs
 
+      - name: Capture Screening CSSOM computed-style baseline
+        working-directory: web
+        run: node tests/cssom-baseline.mjs
+
       - name: Run settings cross-tab synchronization acceptance
         working-directory: web
         run: node tests/settings-storage-browser.mjs
@@ -101,3 +105,12 @@ jobs:
           path: browser-screenshots/**/*.png
           if-no-files-found: warn
           retention-days: 7
+
+      - name: Upload CSSOM computed-style baseline
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: webui-cssom-baseline
+          path: browser-cssom-baseline/screening-local-batch.json
+          if-no-files-found: warn
+          retention-days: 30
