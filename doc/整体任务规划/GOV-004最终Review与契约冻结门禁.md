@@ -212,3 +212,26 @@ GOV-005 可以先做**规划设计**，包括：
 - Quant/Research 与 Researchflow 的接口级契约测试。
 
 本次仅补齐规划设计，不修改业务模块。GOV-004 仍为 **NO-GO**；Data、News、Platform 的实现/集成阻断项也未因此改变。
+
+
+## 8. Quant / Research 复合 DTO 与 JSON 示例补齐（2026-11-05）
+
+字段级草案已进一步补齐：
+- ContextSectionRef、OmittedSection；
+- ScenarioCondition；
+- RiskReason；
+- EvidenceAuthorizationRef；
+- EventSourceTime；
+- QuantMetric、RiskDecision、Evidence、ScenarioCondition 的最小 JSON 示例；
+- required/optional/nullable 的四种组合及空数组/null/0 语义；
+- 货币/价格优先采用 decimal string 的建议及 Data Adapter 边界转换策略。
+
+这使 Quant/Research 的文档级字段定义覆盖了主要复合对象和关键序列化行为，但仍不等于 Schema 已冻结。未完成项：
+1. 模块 Owner 对 decimal string 方案及 Data Adapter 转换精度的确认；
+2. 各 Use Case 的 typed parameters 完整定义；
+3. ContextSectionRef 等复合 DTO 的正式 JSON Schema 与 Go 类型；
+4. EvidenceAuthorizationRef 与 Data/News/Quant/Research 各自授权系统的映射；
+5. EventSourceTime 规范化规则和冲突裁决算法；
+6. Quant/Research/Researchflow 三方示例 JSON、golden 和契约测试。
+
+**当前状态保持 NO-GO。** 本次只更新设计文档，不代表 Data、News、Platform 的实现阻断项已经解决。
