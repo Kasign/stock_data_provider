@@ -1,6 +1,7 @@
 package httpclient
 
 import (
+	"compress/gzip"
 	"context"
 	"errors"
 	"io"
@@ -304,6 +305,45 @@ func TestClientRejectsOversizedResponse(t *testing.T) {
 	var platformFault *fault.Fault
 	if !errors.As(err, &platformFault) || platformFault.Code != "platform.httpclient.response_too_large" {
 		t.Fatalf("expected response size fault, got %v", err)
+	}
+}
+
+func TestClientRejectsOversizedDecompressedResponse(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+		if !strings.Contains(request.Header.Get("Accept-Encoding"), "gzip") {
+			t.Errorf("transport did not negotiate gzip: %q", request.Header.Get("Accept-Encoding"))
+		}
+		w.Header().Set("Content-Encoding", "gzip")
+		writer := gzip.NewWriter(w)
+		_, _ = writer.Write([]byte(strings.Repeat("A", 2048)))
+		if err := writer.Close(); err != nil {
+			t.Errorf("close gzip writer: %v", err)
+		}
+	}))
+	defer server.Close()
+
+	client := newLocalTestClient(t, server, staticResolver{addresses: []netip.Addr{netip.MustParseAddr("8.8.8.8")}}, 128, 0)
+	_, err := client.Do(context.Background(), localRequest(t, server, "/gzip-large"), localPolicy(server))
+	var platformFault *fault.Fault
+	if !errors.As(err, &platformFault) || platformFault.Code != "platform.httpclient.response_too_large" {
+		t.Fatalf("expected decompressed response size fault, got %v", err)
+	}
+}
+
+func TestClientRejectsCustomAcceptEncodingHeader(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("unexpected request"))
+	}))
+	defer server.Close()
+
+	client := newLocalTestClient(t, server, staticResolver{addresses: []netip.Addr{netip.MustParseAddr("8.8.8.8")}}, 1024, 0)
+	request := localRequest(t, server, "/custom-encoding")
+	// Deliberately use a non-canonical key to ensure validation is case-insensitive.
+	request.Header["accept-encoding"] = []string{"gzip"}
+	_, err := client.Do(context.Background(), request, localPolicy(server))
+	var platformFault *fault.Fault
+	if !errors.As(err, &platformFault) || platformFault.Code != "platform.httpclient.accept_encoding_rejected" {
+		t.Fatalf("expected Accept-Encoding validation fault, got %v", err)
 	}
 }
 
