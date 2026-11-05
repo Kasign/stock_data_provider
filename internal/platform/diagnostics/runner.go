@@ -104,7 +104,9 @@ func execute(parent context.Context, check Check) (result Result) {
 	func() {
 		defer func() {
 			if recovered := recover(); recovered != nil {
-				runErr = fmt.Errorf("check panic: %v", recovered)
+				// Panic payloads may contain credentials or upstream data; never retain them in Cause.
+				_ = recovered
+				runErr = errors.New("check panicked")
 			}
 		}()
 		observation, runErr = check.Run(ctx)

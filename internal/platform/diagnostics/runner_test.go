@@ -2,7 +2,9 @@ package diagnostics
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -140,5 +142,31 @@ func TestRunnerRejectsUnknownFaultClass(t *testing.T) {
 		got.Code != "platform.diagnostics.invalid_fault" ||
 		got.SafeMessage != "check returned an invalid fault" {
 		t.Fatalf("unexpected normalized fault: %+v", got)
+	}
+}
+
+
+func TestRunnerDoesNotRetainPanicPayload(t *testing.T) {
+	const secret = "panic-payload-secret"
+	check := Check{ID: "panic", Required: true, Run: func(context.Context) (Observation, error) {
+		panic(secret)
+	}}
+	report, err := (Runner{}).Run(context.Background(), []Check{check})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := report.Results[0]
+	if got.Observation.Status != StatusFailed || got.Fault == nil {
+		t.Fatalf("expected failed result with fault, got %+v", got)
+	}
+	if got.Fault.Cause == nil || strings.Contains(got.Fault.Cause.Error(), secret) {
+		t.Fatalf("panic payload was retained in cause: %v", got.Fault.Cause)
+	}
+	encoded, err := json.Marshal(report)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(encoded), secret) {
+		t.Fatalf("panic payload leaked in report: %s", encoded)
 	}
 }
