@@ -19,7 +19,6 @@ on:
       - "services/market-data/internal/provider/pytdx_baostock_event_live_test.go"
       - "services/market-data/internal/baostock/**"
       - "services/market-data/internal/service/provider_probe_live_test.go"
-      - "doc/api/数据侧整体规划.md"
   workflow_dispatch:
     inputs:
       quote_symbol:
