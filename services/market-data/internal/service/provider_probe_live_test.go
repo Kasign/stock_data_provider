@@ -16,7 +16,8 @@ import (
 )
 
 // TestLiveHistoricalProviderProbe exercises the production Probe service path
-// against public providers. It is opt-in and never gates the regular CI suite.
+// against public providers, BaoStock calendar, optional Tushare security status,
+// and MariaDB history persistence. It is opt-in and never gates regular CI.
 func TestLiveHistoricalProviderProbe(t *testing.T) {
 	if os.Getenv("MARKET_DATA_LIVE_HISTORICAL_PROBE") != "1" {
 		t.Skip("set MARKET_DATA_LIVE_HISTORICAL_PROBE=1 to run production historical Probe against live providers")
