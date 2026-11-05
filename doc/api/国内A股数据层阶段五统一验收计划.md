@@ -42,3 +42,14 @@
 - 本轮不写 Provider 适配器，避免先接入后返工或丢失一个复权口径。下一步先设计 factor_basis（shared/forward/backward）模型、持久化版本键、as_of 查询与重建规则；明确 Tushare 单列 adj_factor 的 shared 语义，再按真实样本完成公式对账。
 - 状态：协议层已有实现；Provider/service 未接入；统一模型与存储需扩展；AvailableAt 仍未知；批次16继续 in_progress，阶段 B 不关闭。未执行真实请求。
 - 当前 HEAD `d9a2872f8259b44f2e59615e2f966bfec2c0ad3a` 尚无关联 workflow run；PR #1 仍 Open / Draft，未合并。
+
+
+## 2026-11-05 P0 批次 16：复权因子口径维度第一阶段实现
+
+- 新增 `AdjustmentFactorBasis`：`shared`、`forward`、`backward`。Tushare `adj_factor` 显式标记为 shared；未显式赋值的单列因子归一为 shared，避免旧单因子调用方产生空口径。
+- MariaDB `market_data_adjustment_factor_versions` 增加 `factor_basis` 列，版本查重、最新版本选择和索引均纳入口径维度。同证券/日期/来源的 forward 与 backward 因子可独立追加、独立 PIT 查询。
+- DataService 重复行校验改为交易日 + 口径；相同日期的 forward/backward 两行不再互相视为重复。
+- 复权重建按请求方向筛选匹配口径，优先使用方向专属因子；Tushare shared 因子仍可作为通用因子来源。不同口径不会进入同一因子序列。
+- 新增因子哈希口径隔离测试；复权重建方向选择与 shared 回退测试随下一次补充提交加入。
+- 本阶段只完成统一模型/存储/选择规则，不代表 BaoStock 已接入。BaoStock 仍需基于真实样本核验 foreAdjustFactor/backAdjustFactor 的数值公式和参考基准后再适配；AvailableAt 仍不得从 dividiOperateDate 推断。
+- 当前状态：代码已提交待 CI；真实 Provider 验收未执行。阶段 B 继续 in_progress。
