@@ -140,17 +140,3 @@ paths:
               schema:
                 type: object
                 additionalProperties: true
-  /api/v1/news/diagnostics:
-    get:
-      tags: [News]
-      summary: 查询新闻来源诊断
-      operationId: getNewsDiagnostics
-      description: 未来候选接口；当前不注册。若未来由既有 Server API 输出诊断信息，必须脱敏内部地址、密钥和敏感错误细节。
-      responses:
-        '200':
-          description: 来源可用性和质量诊断
-          content:
-            application/json:
-              schema:
-                type: object
-                additionalProperties: true
