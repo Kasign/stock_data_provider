@@ -289,3 +289,26 @@ News 分支当前 HEAD：`cefbbbb10ef418f8bca1d2ff3d6a1fef8ce203b6`，提交 `te
 详细字段清单、6 个内部/内联类型分类、required/nullable 语义和自动化门禁见 [Data OpenAPI 与 Go 模型契约修正清单](./Data-OpenAPI与Go模型契约修正清单.md) 第 11 节。
 
 **结论：Data Schema 阻断项比此前记录更完整，但没有被修复；GOV-004 继续 NO-GO。** 本次只在规划分支更新审查文档，没有修改 Data 业务分支，也没有运行 Data Go 测试。
+
+
+## 11. Data Operation → Handler → Response Schema 复核更新（2026-11-05）
+
+Data 分支最新 HEAD 已更新为 `4ff4359178be7a055fb81756a5099adb9fcf3f31`，相较原 Schema 核查基线 `4732f14d8998bcd06ffb1118846535b626865b2d` ahead 8 / behind 0。该批只变更两份 `doc/api/**` 文档和 BaoStock Live Probe 测试；OpenAPI、HTTP Handler、Model 未变更，原字段差异仍然有效。
+
+本轮读取路由注册、OpenAPI 200 Response，并跟踪关键 Handler：
+- `GET /api/v1/quotes/{symbol}` → `quote` → `*model.Quote`；
+- `GET /api/v1/market/quotes` → `batchQuotes` → 私有批量包装 DTO，嵌套同一 `*model.Quote`；
+- `GET /api/v1/stocks/{symbol}/boards` → `stockBoards` → `*model.StockBoardSnapshot`，其 items 为 `StockBoard`；
+- `GET /api/v1/stocks/{symbol}/price-limit-rule` → `priceLimitRule` → Resolver 结果，嵌套 `*model.PriceLimitEventEvidence`；
+- 日 K、Bundle、Probe、Probe History、Market Stocks、Fundamentals、Index Catalog/Constituents/Daily、Trading Calendar、Market Session、Valuations、Market Sentiment、Market Capital Flow 等响应存在 Handler 包装或直接 Service 返回两种模式，已在 Data 修正清单 11.9 建立 Operation 映射表。
+
+三组无 Go 来源字段已确认处于真实响应链路：
+1. Quote Schema 的 6 个 validation 字段没有 `model.Quote` 输出来源，且批量行情复用该类型；
+2. StockBoard Schema 的 `change_percent_5d`、`provider_report_date` 没有 Go 子项来源；
+3. PriceLimitEventEvidence Schema 的 `adjustment_basis` 没有 Go Evidence 字段来源。
+
+`writeJSON` 通过标准 `json.Marshal` 输出，没有统一 nil slice/map 归一化层。Bundle 的 DailyBars/Sources/Warnings 存在显式初始化证据，但不能据此推定其他 Snapshot 的集合字段均非 nil。22 个非 `omitempty` 集合字段仍需逐项追踪 Provider、缓存、降级和空数据路径，并以真实 Handler JSON Golden 验收。
+
+详细 Operation 映射、包装/内联对象、nil/empty 边界和 DATA-CONTRACT-001~006 执行拆分见 [Data OpenAPI 与 Go 模型契约修正清单](./Data-OpenAPI与Go模型契约修正清单.md) 第 11.9 节。
+
+**GOV-004 Data 阻断维持打开**：当前没有 Schema 修复，没有双向 Go/OpenAPI 契约 CI，也没有完整真实 Handler Golden；本轮未运行 Data Go 测试。整体结论仍为 **NO-GO**，不冻结共同契约，不创建五个模块分支。
