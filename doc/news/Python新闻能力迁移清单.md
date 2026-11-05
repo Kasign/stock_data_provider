@@ -54,3 +54,33 @@ N1 核查后逐项填写，未核查前不填推测结果。
 - 监控证明旧链路无实际调用。
 - 回滚路径明确。
 - 用户明确批准退役。
+
+---
+
+## 6. N1 已核实调用链（2026-11-05）
+
+| 链路/文件 | 调用方 | 触发条件 | 当前能力 | Go 替代/边界 | 状态 |
+|---|---|---|---|---|---|
+| python_bridge/capabilities/search.py::search_stock_news | capability_app.py 内部路由 | POST /internal/v1/search/stock-news | 调用 SearchService 多维检索并扁平化结果 | Go Core SearchAdapter 调用该路由；原生 Go Searcher 可用时优先 | 已核实 |
+| python_bridge/capabilities/search.py::search_market_news | Bridge 内部市场新闻路由 | POST /internal/v1/search/market-news | 调用 MarketAnalyzer.search_market_news() | Go Core SearchAdapter 调用该路由；原生 Go Searcher fallback | 已核实 |
+| go-core/internal/adapters/newssearch/search.go | go-core/cmd/analysisd | 可配置原生 Provider | Bocha/Tavily/Brave/SearXNG、公告源、缓存、过滤排序、Python fallback | 搜索适配器保留；不等于新闻采集持久化 | 已核实 |
+| src/agent/tools/search_tools.py::_handle_search_stock_news | 旧 Python Agent Tool Registry | Agent 调用 search_stock_news | 单维新闻搜索、记录证据数量、保存结果 | Go Core 基础搜索接口不代表 Agent tool 行为完全迁移 | 已发现，调用方范围待追踪 |
+| src/agent/tools/search_tools.py::_handle_search_comprehensive_intel | 旧 Python Agent Tool Registry | Agent 调用 comprehensive intel | 多维检索、报告格式化、按维度持久化 | Go Core NewsItem 列表不等价于多维 Agent 工具输出 | 已发现，调用方范围待追踪 |
+| src/agent/tools/search_tools.py::_persist_news_response | 上述 Agent 工具 | Provider 成功且有结果 | 调用 DB save_news_intel 持久化 | 新新闻库需明确替代旧情报存储的范围 | 已核实方法，数据库实现与读取调用仍待追踪 |
+| src/market_analyzer.py 的本地情报合并 | MarketAnalyzer | 市场复盘生成时 | 将已持久化市场情报与搜索结果合并 | 需判断是迁移新闻查询还是保留研究素材库语义 | 已发现，具体调用链待追踪 |
+
+### 6.1 部署与兼容开关
+
+- 根目录统一 Compose 只运行 stock-analysis-server、stock-analysis-data、stock-analysis-web，不包含 Python Bridge 和 go-core。
+- 可选 docker/docker-compose.go-migration.yml 才运行 Python Bridge + go-core + market-data；其注释明确与根统一栈分开。
+- go-core/cmd/analysisd 需要 PYTHON_BRIDGE_BASE_URL、PYTHON_BRIDGE_TOKEN；Python Bridge 使用 X-Python-Bridge-Token。
+- python_bridge/go_core_client.py 的 GO_CORE_ENABLED 默认 false，且仅封装分析工作流，不提供新闻持久化迁移开关。
+- 因此，不能仅根据 Go Core 已有 SearchAdapter 就判断当前统一部署已切换到 Go 新闻链路。需要确认线上实际采用哪套 Compose/服务。
+
+### 6.2 迁移缺口
+
+1. Go Core 目前只把搜索结果传给分析流程，不提供新闻实体入库、原始正文、版本历史、来源目录和新闻查询 API。
+2. Python Agent 工具具有额外的多维格式化、证据计数和 save_news_intel 持久化行为；不能用 Go 的简单搜索结果列表宣称完全等价。
+3. 市场复盘会读取已持久化的市场情报，需继续追踪其 repository/schema 和刷新来源。
+4. 当前 Bridge 两个搜索路由的成功状态不代表来源采集、内容解析或持久化成功。
+5. 旧 Python API/Bot/Scheduler 的直接调用方尚未穷尽；N1 需要完成全仓调用引用与触发入口盘点后才能制定退役条件。

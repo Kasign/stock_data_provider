@@ -74,3 +74,15 @@ N1 必须先核实并优先复用现有 `go-core/internal/adapters/newssearch/` 
 - 现有 Probe/Validator/Reporter/Freshness 能力。
 - 错误状态枚举与 API 返回约定。
 - 是否已有官方公告适配器及其授权/数据边界。
+
+---
+
+## 8. N1 现有能力复用核对（2026-11-05）
+
+当前 Go 新闻搜索实现位于可选迁移路径的 go-core/internal/adapters/newssearch，包括 Bocha、Tavily、Brave News、显式 SearXNG、进程内缓存、查询计划、过滤排序和 Python fallback。新闻模块应通过适配器复用，不复制这些 Provider，也不在 N1 搬迁该包。
+
+market-data 已有公告 Provider 和公告 HTTP 能力，Go Core 通过 StockAnnouncementSource 调用。该公告来源可作为官方披露候选适配器；分页当前受 Searcher 限制为第 1 页 100 条，需在新闻采集接入时评估完整性，不要误认为已实现全量采集。
+
+market-data Probe 的 connectivity、contract、quality、freshness、cross_provider、storage 检查，以及 Validator/Reporter/Freshness/Probe History 可作为诊断架构参考。其数据结构和检查函数目前面向行情 Provider，不能直接拿来报告新闻抓取/解析/去重/持久化质量。新闻阶段应独立记录结果，并尽量复用底层日志、脱敏、超时、状态分类和观测方式。
+
+现有 Searcher 只对有效发布时间候选排序，当前无原始正文采集和内容版本存储。新采集链路必须区分搜索候选返回、原文抓取、解析标准化、去重版本、持久化各阶段，不可把搜索 API 成功作为新闻入库成功。
