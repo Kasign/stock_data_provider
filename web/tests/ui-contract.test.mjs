@@ -1413,7 +1413,7 @@ test("market overview and activity use readable secondary text and touch-sized c
   assert.match(marketActivityFooterMetaBase, /color:\s*var\(--text-dim\)\s*;?/);
   assert.match(marketActivityFooterMetaBase, /font-size:\s*12px\s*;?/);
   assert.equal((stylesheet.match(/\.market-activity-footer span\s*\{/g) || []).length, 1, "market activity footer metadata should have one exact base rule");
-  assert.match(finalCssRuleBody(".market-activity-footer"), /flex-wrap:\s*wrap/);
+  assert.match(exactCssDeclarationBlock(".market-activity-footer"), /flex-wrap:\s*wrap/);
   const marketActivityFooterButtonBase = exactCssDeclarationBlock(".market-activity-footer .button");
   assert.match(marketActivityFooterButtonBase, /min-height:\s*36px\s*;?/);
   assert.match(marketActivityFooterButtonBase, /padding:\s*5px 9px\s*;?/);

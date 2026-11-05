@@ -1432,3 +1432,6 @@ JSR-6L 补充：连接配置变更取消草稿检查后，旧代际 finally 按�
 复核 `.market-activity-footer .button` 的 DOM 使用位置，确认其用于龙虎榜分页的“加载下一页”操作。基础规则原最小高度 31px、字号 10px，后置可读性规则统一覆盖为 36px、12px；未发现该按钮选择器自身的响应式、主题或状态尺寸覆盖。
 
 本批将最终最小高度 36px、字号 12px 前移至基础规则，保留 5px 9px 内边距，删除后置重复尺寸/字号声明。footer 容器的 flex 换行、间距和对齐方式不变。新增 UI contract 锁定按钮基础尺寸、字号和唯一基础规则。
+
+
+第二十六批测试契约校准：footer 容器断言误用 `finalCssRuleBody`，该辅助函数按最后一次子串出现定位，命中了后置 `.market-activity-footer .button` 子选择器，而不是容器自身。现改用严格完整选择器匹配的 `exactCssDeclarationBlock` 验证容器 flex 换行属性。CSS 不变。
