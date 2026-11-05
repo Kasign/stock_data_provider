@@ -13,6 +13,12 @@ import (
 	"github.com/Kasign/stock_data_provider/services/market-data/internal/provider"
 )
 
+func validAdjustmentFactorBasis(value model.AdjustmentFactorBasis) bool {
+	return value == model.AdjustmentFactorShared ||
+		value == model.AdjustmentFactorForward ||
+		value == model.AdjustmentFactorBackward
+}
+
 var (
 	ErrAdjustmentFactorsAsOfNotFound = errors.New("no adjustment-factor revision with proven availability was recorded by as_of")
 	ErrCorporateActionsAsOfNotFound  = errors.New("no corporate-action revision with proven availability was recorded by as_of")
@@ -66,6 +72,7 @@ func (s *DataService) RefreshAdjustmentFactors(ctx context.Context, rawSymbol, s
 			if dateErr != nil || date.Format("2006-01-02") != value.TradeDate ||
 				(startDate != "" && value.TradeDate < startDate) || (endDate != "" && value.TradeDate > endDate) ||
 				value.Factor <= 0 || math.IsNaN(value.Factor) || math.IsInf(value.Factor, 0) ||
+				!validAdjustmentFactorBasis(model.NormalizeAdjustmentFactorBasis(value.Basis)) ||
 				func() bool {
 					got, normalizeErr := normalize.NormalizeSymbol(value.Symbol)
 					return normalizeErr != nil || got != symbol
@@ -75,11 +82,13 @@ func (s *DataService) RefreshAdjustmentFactors(ctx context.Context, rawSymbol, s
 				fetchErr = fmt.Errorf("provider returned invalid adjustment-factor contract for %s", value.TradeDate)
 				break
 			}
-			if _, exists := seen[value.TradeDate]; exists {
-				fetchErr = fmt.Errorf("provider returned duplicate adjustment factor for %s", value.TradeDate)
+			identity := value.TradeDate + "|" + string(model.NormalizeAdjustmentFactorBasis(value.Basis))
+			if _, exists := seen[identity]; exists {
+				fetchErr = fmt.Errorf("provider returned duplicate adjustment factor for %s (%s)", value.TradeDate, value.Basis)
 				break
 			}
-			seen[value.TradeDate] = struct{}{}
+			seen[identity] = struct{}{}
+			value.Basis = model.NormalizeAdjustmentFactorBasis(value.Basis)
 			if value.AvailableAt != nil && (value.AvailableAt.IsZero() || value.AvailableAt.After(value.FetchedAt)) {
 				fetchErr = fmt.Errorf("provider returned invalid available_at for adjustment factor %s", value.TradeDate)
 				break

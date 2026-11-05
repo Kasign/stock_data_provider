@@ -8,6 +8,7 @@ on:
       - 'go.sum'
       - 'cmd/**'
       - 'internal/**'
+      - 'doc/news/**'
       - 'go-core/**'
       - 'services/market-data/**'
       - '.github/workflows/go-test.yml'
@@ -17,12 +18,13 @@ on:
       - 'docker-compose.yml'
       - 'scripts/**'
   push:
-    branches: [main, feat/full-go-data-providers-api-switch]
+    branches: [main, feat/full-go-data-providers-api-switch, feat/research-news-ingestion]
     paths:
       - 'go.mod'
       - 'go.sum'
       - 'cmd/**'
       - 'internal/**'
+      - 'doc/news/**'
       - 'go-core/**'
       - 'services/market-data/**'
       - '.github/workflows/go-test.yml'
@@ -152,4 +154,5 @@ jobs:
       - name: Build Go market-data image
         run: docker build --tag stock-analysis-data:ci --file services/market-data/Dockerfile services/market-data
       - name: Build Go analysis API image
+        if: ${{ !cancelled() }}
         run: docker build --tag stock-analysis-server:ci --file Dockerfile .
