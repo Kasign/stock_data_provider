@@ -1715,3 +1715,15 @@ CI 复核记录：本批首次 Chromium Browser Smoke 在个股研究数据质�
 - [x] UI contract 增加通用基础字号、Run Flow 桌面/窄屏覆盖及无 `!important` 断言。
 - [ ] 在本批最终提交 SHA 上运行 UI contract、JS 语法检查、Compose 校验和 Nginx 镜像构建。
 - [ ] 执行 Chromium Browser Smoke，并人工核验 Run Flow 事件节点在 320/375/600/768/900/1280/1600px 下的标题层级、辅助信息换行与节点布局。
+
+
+
+## 2026-11-05 UIR-2 第三十四批：分析结果与诊断文字字号级联收敛
+
+- [x] 将任务结果说明、指标说明、信号卡片、警告、原始 JSON 和结构化结果文字字号迁移到组件基础规则。
+- [x] 消除 `analysis-result-fields dt` 两条全局强制字号声明的冲突，统一为 12px。
+- [x] 保留结果操作按钮 11px 紧凑字号，删除全局及浅色主题 13px 强制覆盖。
+- [x] 保留浅色主题字段标签颜色、原始 JSON 配色和行高。
+- [x] UI contract 锁定组件基础字号、无 `!important` 及操作按钮紧凑字号。
+- [ ] 在本批最终提交 SHA 上运行 UI contract、JS 语法检查、Compose 校验和 Nginx 镜像构建。
+- [ ] 执行 Chromium Browser Smoke，并人工核验结果卡片、警告、JSON 与操作按钮在 320/375/600/768/900/1280/1600px 下的层级和换行。

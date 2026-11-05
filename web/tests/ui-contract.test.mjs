@@ -507,12 +507,41 @@ test("polling pauses on permanent API errors and Run reads use bounded, stale-sa
 });
 
 
+test("分析结果与诊断文本字号由组件基础规则负责", () => {
+  const expected = [
+    [".task-result-note", "12px"],
+    [".task-result-metric small", "13px"],
+    [".signal-result-card strong", "12px"],
+    [".signal-result-card p", "12px"],
+    [".task-result-warnings p", "13px"],
+    [".raw-result", "12px"],
+    [".raw-result pre", "12px"],
+    [".analysis-result-block > p", "13px"],
+    [".analysis-result-badge", "12px"],
+    [".analysis-result-fields dt", "12px"],
+    [".analysis-result-fields dd", "13px"],
+    [".analysis-result-empty", "13px"]
+  ];
+
+  for (const [selector, size] of expected) {
+    const declarations = exactCssDeclarationBlock(selector);
+    assert.ok(declarations.includes("font-size: " + size + ";"), selector + " should own its readability baseline");
+    assert.doesNotMatch(declarations, /!important/);
+  }
+
+  const actionDeclarations = exactCssDeclarationBlock(".task-result-actions .text-button");
+  assert.ok(actionDeclarations.includes("font-size: 11px;"), "task result actions retain compact typography");
+  assert.doesNotMatch(actionDeclarations, /!important/);
+  assert.ok(!stylesheet.includes(':root[data-theme="light"] .task-result-actions .text-button'));
+  assert.ok(!stylesheet.includes(':root[data-theme="light"] .task-result-metric small'));
+});
+
 test("structured analysis results use readable typography and mobile-safe layouts", () => {
-  assert.match(stylesheet, /\.task-result-metric small \{[^}]*font-size: 11px/);
+  assert.match(stylesheet, /\.task-result-metric small \{[^}]*font-size: 13px/);
   assert.match(stylesheet, /\.task-result-metric strong \{[^}]*font-size: 14px/);
   assert.match(stylesheet, /\.analysis-result-block > h3 \{[^}]*font-size: 14px/);
-  assert.match(stylesheet, /\.analysis-result-fields dt \{[^}]*font-size: 11px/);
-  assert.match(stylesheet, /\.analysis-result-fields dd \{[^}]*font-size: 12px/);
+  assert.match(stylesheet, /\.analysis-result-fields dt \{[^}]*font-size: 12px/);
+  assert.match(stylesheet, /\.analysis-result-fields dd \{[^}]*font-size: 13px/);
   assert.match(stylesheet, /\.task-result-actions \.text-button \{[^}]*font-size: 11px/);
   assert.match(stylesheet, /@media \(max-width: 600px\)[\s\S]*?\.analysis-result-grid \{ grid-template-columns: minmax\(0, 1fr\); \}/);
   assert.match(stylesheet, /overflow-wrap: anywhere/);
@@ -906,7 +935,8 @@ test("light/dark theme is accessible, persisted locally, and independent of back
   const rawResultPreBase = baseCssDeclarationBlock(".raw-result pre");
   assert.match(rawResultPreBase, /line-height:\s*1\.7\s*;/);
   assert.doesNotMatch(rawResultPreBase, /line-height:\s*1\.6\s*;/);
-  assert.match(stylesheet, /\.raw-result pre\s*\{[^}]*font-size:\s*12px\s*!important\s*;/);
+  assert.match(rawResultPreBase, /font-size:\s*12px\s*;/);
+   assert.doesNotMatch(rawResultPreBase, /!important/);
   const rawResultPreLineHeightRules = [...stylesheet.matchAll(/\.raw-result pre\s*\{([^}]*)\}/g)]
     .filter((match) => /line-height:\s*1\.7\s*;/.test(match[1]));
   assert.equal(rawResultPreLineHeightRules.length, 1, "raw result pre line-height must be declared once in the base rule");
@@ -2541,7 +2571,8 @@ test("UIR-2 text button height is consolidated with responsive and task-action e
   assert.ok(!stylesheet.includes([".text-button {", "  min-height: 32px;", "  font-size: 12px;", "}"].join(newline)));
   assert.ok(stylesheet.includes(["  .text-button {", "    min-height: 36px;", "  }"].join(newline)));
   assert.ok(stylesheet.includes(".task-result-actions .text-button { min-height: 30px; font-size: 11px; }"));
-  assert.ok(stylesheet.includes(".task-result-actions .text-button { font-size: 13px !important; }"));
+  assert.doesNotMatch(stylesheet, /\.task-result-actions \.text-button \{[^}]*!important/);
+  assert.ok(!stylesheet.includes(".task-result-actions .text-button { font-size: 13px !important; }"));
 });
 
 test("UIR-2 settings feedback layout constraints are consolidated", () => {
