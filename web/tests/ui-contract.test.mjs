@@ -2550,10 +2550,10 @@ test("UIR-2 typography roles use semantic tokens without changing their baseline
   assert.match(stylesheet, /--font-size-secondary:\s*13px/);
   assert.match(stylesheet, /--font-size-control:\s*13px/);
   assert.match(stylesheet, /--font-size-input:\s*14px/);
-  assert.match(stylesheet, /\.page-subtitle \{ font-size: var\(--font-size-secondary\) !important; \}/);
+  assert.match(stylesheet, /\.page-subtitle \{ font-size: var\(--font-size-secondary\); \}/);
   assert.match(baseCssDeclarationBlock(".panel-muted"), /font-size:\s*12px\s*;/);
   assert.doesNotMatch(baseCssDeclarationBlock(".panel-muted"), /!important/);
-  assert.match(stylesheet, /\.button \{ font-size: var\(--font-size-control\) !important; \}/);
+  assert.match(stylesheet, /\.button \{ font-size: var\(--font-size-control\); \}/);
   assert.match(stylesheet, /\.field input, \.field select, \.field textarea, \.recent-analysis-search input \{ font-size: var\(--font-size-input\); \}/);
 });
 
@@ -2795,7 +2795,7 @@ test("UIR-2 行情质量标记与指标辅助文字由组件基础规则控制",
   assert.doesNotMatch(stylesheet, /\.quality-pill \{[^}]*!important/);
   assert.doesNotMatch(stylesheet, /\.metric-label \{[^}]*!important/);
   assert.doesNotMatch(stylesheet, /\.metric-foot \{[^}]*!important/);
-  assert.match(stylesheet, /\.section-heading p, \.panel-heading p \{ font-size: var\(--font-size-support\) !important; \}/);
+  assert.match(stylesheet, /\.section-heading p, \.panel-heading p \{ font-size: var\(--font-size-support\); \}/);
   assert.match(stylesheet, /\.quality-valid \{[^}]*color:[^}]*background:/);
   assert.match(stylesheet, /\.quality-degraded \{[^}]*color:[^}]*background:/);
   assert.match(stylesheet, /\.quality-stale \{[^}]*color:[^}]*background:/);
