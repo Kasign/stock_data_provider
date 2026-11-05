@@ -124,3 +124,48 @@ N1 核查后逐项填写，未核查前不填推测结果。
 - 旧数据迁移预览、幂等批次、冲突报告、匿名化、计数校验和回滚方案可继续设计；实际执行等待公共 DB/迁移服务契约就绪。
 - 通用诊断与历史观测由公共服务统一承接；新闻迁移阶段只保留业务错误、质量原因和切换结果，不自行建设诊断平台。
 - Python 旧调用链在 Go 替代能力验收和用户明确批准前继续保留。
+
+
+## 10. 旧 Python 三类数据的迁移决策（N1-A 建议稿）
+
+三类旧数据语义不同，不合并为一个无差别 news_item：
+
+### 10.1 news_intel：历史搜索发现证据
+
+- 定位为旧 Agent/SearchService 搜索发现记录和研究请求上下文，不直接认定为已核实新闻主体。
+- 旧表 URL 全局唯一，命中后会覆盖部分 query/provider/dimension/snippet/source/published_date 等字段；因此现存行是最后一次覆盖后的快照，不是完整搜索历史，也不能恢复所有曾经的候选版本。
+- 若未来导入，优先映射为来源为 legacy_news_intel 的历史 observation；`news_id` 默认为空。只有在 publisher source、身份凭据和保存权利均核验通过后，才允许关联到正式 news_item。
+- provider 字段必须保留为历史 provider_code；如果为空或无法识别，标记 legacy_provider_unknown，不自动归入某个 Provider。
+- query_id、query、dimension、query_source 等可作为最小研究上下文保留；不得把 requester_user_id、requester_user_name、requester_chat_id、requester_message_id 等个人/会话标识迁入公共新闻事实。确需追溯时另行设计匿名化的审计映射，默认不迁移。
+- 旧记录的来源/Provider 条款版本未必可追溯；无法证明历史输出可留存时，先保留在旧库或隔离清单，不直接写入新库。
+
+### 10.2 intelligence_sources：来源目录与旧配置
+
+- 映射目标是新来源身份和 endpoint 配置，而不是新闻主体。
+- 旧 source_type、URL、名称、scope_type/scope_value、market、description 可作为来源登记初始数据。
+- 旧 enabled 仅表示旧系统是否启用，不代表新系统授权通过；迁移后新授权状态统一初始化为 pending，需重新核验条款、robots 和内容保存范围。
+- 旧 last_status、last_error、last_fetched_at 只能作为 legacy 状态快照，不能冒充当前来源可用性或公共诊断记录。
+- source_name 无法可靠解析为真实发布者时进入待人工映射清单，不创建通用 unknown source。
+- 旧模板和默认源仅是配置候选，不自动启用。
+
+### 10.3 intelligence_items：来源采集条目
+
+- 定位为旧 RSS/Atom/NewsNow 等来源采集的条目快照，与 news_intel 的搜索发现记录分开处理。
+- 可映射为历史 observation；只有来源身份、URL 身份、授权和内容质量通过规则后，才创建正式 news_item/version。
+- `source_id` 非空时先映射到已确认的新 source；`source_id` 为空时尝试按 source_name + source_type + URL host 生成待审核映射，不自动合并。
+- 旧唯一键包含 source、URL、scope、market。同一 source + URL 因 scope 不同出现多行时，优先形成一个新闻主体和多条适用范围/关联证据，不机械复制新闻实体。
+- 旧 raw_payload 常只有 `{source: source_name}`，不能视为完整原始 RSS/XML/HTML 证据；必须按实际字段内容判断，禁止在迁移报告中夸大原始证据完整度。
+- 旧 upsert 覆盖 summary/source/published_at/fetched_at/raw_payload，不保留历史修订；新版本只能从迁移时仍存在的最后快照建立，不能伪造旧版本链。
+- published_at、fetched_at 保留原始值和时区/解析不确定性；不得根据迁移时间补造历史可用时间。
+
+### 10.4 迁移执行顺序（等待公共 DB/迁移服务）
+
+1. 只读导出旧 SQLite，生成表级计数、字段缺失、URL 冲突、来源映射和隐私字段报告。
+2. 先迁移/审核来源目录，所有新来源默认 pending。
+3. 分别预览 news_intel 和 intelligence_items，输出不同的映射计划。
+4. 通过授权审核和数据质量门槛后，按批次幂等导入 observation 与可确认的 news_item/version。
+5. 做导入前后计数、抽样内容、关联和重复冲突核验。
+6. 保留批次映射表和可逆的导入清单；出现问题时停止后续批次并按批次回滚。
+7. 不在运行时双写旧 SQLite 和新存储；切换由调用方开关控制，旧链路在验收和用户批准前保留。
+
+本节是领域迁移决策建议，不表示已执行导出、导入或任何数据库操作。正式执行等待公共 DB/迁移能力就绪。

@@ -143,3 +143,20 @@ market-data Probe 的 connectivity、contract、quality、freshness、cross_prov
 本规范中第 4、4.1 节原先描述的 Probe、诊断报告、被动诊断历史和诊断查询均为未来能力设计，不属于新闻模块当前开发范围。当前新闻模块不实现诊断服务、诊断存储、主动 Probe 或诊断 API。
 
 新闻模块仍必须实现业务层错误与质量表达，包括来源授权不允许、候选字段缺失、发布时间未知、正文抓取/解析失败、身份冲突、重复/转载、证券未匹配等。它们是业务结果，不应伪装成通用诊断状态。未来由公共服务把新闻业务结果纳入统一诊断体系。
+
+
+## 12. Provider provenance 与共享适配器约束（2026-11-05）
+
+当前 go-core 的 Searcher 会把多个 Provider 结果合并并映射为旧 NewsItem，最终 DTO 不保留搜索 Provider 身份；NewsItem.Source 是发布来源字段，不是 Provider。当前 10 分钟缓存也会缓存混合 Provider 输出。因此现有 Searcher 不能直接作为新闻持久化入口。
+
+根服务与 go-core 是两个独立 Go module，根模块不能直接 import `go-core/internal/**`。不允许复制现有 Provider HTTP 实现。建议将 Provider 协议适配抽取到中立共享 Go library module，由根新闻模块和 go-core 各自适配自己的业务 DTO。
+
+共享候选必须保留：
+- `provider_code` 和可用时的 `provider_item_id`。
+- 发布来源名称/域名（publisher source），与 provider_code 分开。
+- 原始 URL、原始发布时间文本、标题、摘要和字段缺失情况。
+- 当前请求的观察时间与查询维度。
+- Provider 单项错误/部分失败信息，但不落入通用诊断历史。
+
+Provider 输出策略必须在缓存和持久化之前执行。Brave 只允许必要的短暂运行期使用，不得长期缓存或写库；博查在存储权利书面确认前不持久化；Tavily 的 Provider 层许可仍需叠加发布者授权。共享层默认不缓存混合 Provider 结果。
+
