@@ -3,8 +3,8 @@
 - 所属仓库：Kasign/stock_data_provider
 - 所属分支：feat/platform-foundation
 - 文档负责人：公共平台开发线
-- 当前基线：0351862c6b07ed9e28e4786fd0fb753831d5d0eb
-- 文档状态：规划与设计阶段
+- 当前基线：fc1418ab4b85126e11f5e26d550500cfba1a968b
+- 文档状态：现状盘点完成，进入契约冻结阶段
 - 任务总入口：本文 + 01-开发路线图与任务清单.md
 
 本目录是公共平台的唯一专项文档目录。平台代码、契约、开发任务、模块设计、实现记录和验收证据均以本目录为主入口。项目级总规划只维护总体职责和跨分支依赖，不复制本目录的技术细节。
@@ -20,6 +20,7 @@
 | 04-配置日志诊断与可观测性设计.md | Config/Secret、Logger/Error/Trace、Diagnostics、Metrics |
 | 05-HTTP存储与异步任务设计.md | HTTP Client、MariaDB、Redis、Migration、Task Runner、幂等 |
 | 06-分支协作与集成验收规范.md | 分支职责、接口冻结、跨分支集成、测试与验收门禁 |
+| 07-公共能力现状盘点.md | PLAT-001 跨分支代码证据、重复实现、复用判断、风险和待核验项 |
 
 ## 文档权威规则
 
@@ -31,9 +32,7 @@
 
 ## 当前代码基线观察
 
-在 0351862c6b07ed9e4786fd0fb753831d5d0eb 基线上，根 Go module 已有少量 platform 代码：配置 dotenv 加载、分析 HTTP API、异步分析任务队列；MariaDB/Redis 连接和分析存储位于 storage adapter。行情服务位于独立 Go module，拥有自己的配置、HTTP 路由、API Key 校验、Provider 诊断和 MariaDB/Redis 访问。
-
-这说明仓库已有可复用基础，但尚未形成跨服务统一的 Security、Config、Logger、Error、Trace、Diagnostics 和 HTTP Client 公共契约。PLAT-001 必须继续逐项盘点真实调用方、测试和运行状态，不能把“已有同名代码”直接认定为平台能力完成。
+PLAT-001 的跨分支静态盘点见《07-公共能力现状盘点》。根 Go module 已有分析 HTTP、Request ID/日志/恢复、DB/Redis Store 和持久化任务队列；行情独立 module 已有 Provider Probe、质量/Freshness、HTTP API Key、独立 DB/Redis 与 Migration。上述能力均是局部实现，尚未形成统一平台契约。真实运行状态未在本轮验证。
 
 ## 开发约束
 
