@@ -837,3 +837,12 @@ Data 分支在 8c0136f 后新增格式修正提交，最新 HEAD 为：
 - 根模块测试成功、go-core 测试成功、MariaDB Migration/PIT integration 成功；Live provider probe、WebUI checks、Go-Python parity 成功。
 
 注意：格式修正提交仍未消除该文件全部 gofmt 差异。当前失败 diff 仍指向 `pytdx_live_probe_test.go` 中结构体字段对齐，不能把“已提交 style 修复”写成格式门禁已恢复。DATA-CONTRACT-001 仍是第一优先级，要求同一最新 SHA 的 market-data gofmt/test/race/vet 和镜像构建全部完成。
+
+
+### 11.26 Data 最新 HEAD：第二次格式修正仍未解除 gofmt 阻断（2026-11-05）
+
+Data 分支最新 HEAD 再次前进至 `125720fe045bb7a5f68a873ddec5e9d2a46cf65f`，提交 `style(provider): 修正 Pytdx 专项报告 gofmt`。相较 80cf2e9，提交只修改 `services/market-data/internal/provider/pytdx_live_probe_test.go`。
+
+最新 Go test suite run `42020866311` 仍 failure；market-data gofmt 继续失败，tests/race/vet 跳过，Docker market-data image build 失败。根模块、go-core、MariaDB Migration/PIT integration 成功；WebUI checks 和 Go-Python parity 成功；Live provider probe 有新的运行仍 in_progress，前一运行 success。
+
+这说明连续两次格式修正提交后，Pytdx 测试文件仍有 gofmt 差异；应由 Data 分支执行完整 gofmt 后重新提交，而不是继续手工对齐少数字段。DATA-CONTRACT-001 仍未关闭。
