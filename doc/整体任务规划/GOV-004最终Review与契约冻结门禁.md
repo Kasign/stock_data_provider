@@ -494,3 +494,49 @@ Data 最新 HEAD 为 `13588476d000ebeee801e8b7a782fc6678f25dd4`，相较 0afec7e
 Data 最新 HEAD 为 `7abd5078e85ec7e6a5785ec9a4253d862af2a39c`，相较 1358847 ahead 1 / behind 0；只更新 Data API 规划与 WebUI 协作文档，没有修改 OpenAPI、Handler、Model 或 Service。当前 Operation/Handler 静态审查结论不变。
 
 最新 SHA 的 WebUI checks、Live provider probe success；Go test suite 与 Go-Python parity 仍 in_progress。不得记录为 CI 全绿。
+
+
+## 26. 2026-11-05 三分支最新基线复核：Data / News / Platform
+
+### 26.1 Data 最新基线与阻断
+
+- 分支：`feat/full-go-data-providers-api-switch`
+- 最新 HEAD：`8c0136fdcdc5ae6a0d0d293371685d7f684a9f20`
+- 相较上一轮记录 `7abd5078e85ec7e6a5785ec9a4253d862af2a39c`：ahead 2 / behind 0。
+- 新增/变更涉及 Data API 规划文档及 `services/market-data/internal/provider/pytdx_live_probe_test.go`。
+- 最新 Go test suite failure：pytdx_live_probe_test.go 未 gofmt；market-data tests/race/vet 因格式门禁跳过；market-data Docker image build 同样失败。根模块、go-core、MariaDB migration/PIT integration 成功；Live provider probe、WebUI checks、Go-Python parity 成功。
+- 这是最新 SHA 的 CI 状态，不得引用上一 SHA 的全绿结果。
+
+处理顺序：先恢复 gofmt 和完整 CI，再执行 DATA-CONTRACT-001～008。任务拆分和逐项验收见 Data 修正清单 11.24。
+
+### 26.2 News 最新基线与实际进展
+
+- 分支：`feat/research-news-ingestion`
+- 最新 HEAD：`9ece502acc5008bfa064fe94f9570ab3524ec53d`
+- 相较此前记录 `cefbbbb10ef418f8bca1d2ff3d6a1fef8ce203b6`：ahead 21 / behind 0。
+- 本轮代码新增/加强 Atom/RSS Feed 内容类型识别、XHTML 结构校验、附件元信息、转载关系 Application、转载双方版本证据校验、版本/关系事务规则和回归测试。
+- N4 的领域与 Application 首版已明显超出 README 旧状态描述；转载关系生命周期文档明确列出 Domain/Application/内存事务测试已实现，生产 Repository、数据库唯一约束、跨实例图级串行化仍待 N6。
+- N3 离线 Feed 解析与附件元信息已有实现；在线抓取仍必须等待 PLAT-008 领域注入、来源授权和生产 DNS/出口安全验收。
+- 最新整仓 Go test suite failure 的直接阻断仍是 market-data 子模块 gofmt；根模块测试、go-core、MariaDB Migration/PIT integration 成功，分析 API Docker 镜像构建成功，market-data Docker 镜像失败。该 Workflow 失败不能归因于 News N4 领域测试失败。
+- News README 和部分接入矩阵仍引用旧 Platform HEAD `ac06a544`，且 README 的 N4 状态与开发任务清单/转载关系生命周期文档不一致。只记录为 News 文档同步待办，不在本规划分支替 News 修改专项文档。
+
+### 26.3 Platform 最新基线与实际进展
+
+- 分支：`feat/platform-foundation`
+- 最新 HEAD：`235cebe61465a5b60d2578fc75c38ea1e40882c5`
+- 最新提交：`fix(platform/httpclient): bound dependency semaphore pools`。
+- 本轮 HTTP Client 按 Dependency 有界化 semaphore pool，补充未知 Dependency 的并发槽位测试；平台仍明确要求 Provider BoundDoer 由组合根按 endpoint 注入。
+- 当前任务表已正式使用 PLAT-001～PLAT-014：PLAT-013 是 Data/News/Research 领域接入验收，PLAT-014 是跨模块故障演练。PLAT-011 是按需 Metrics，PLAT-012 是必要安全审计。News 文档部分旧内容仍使用 PLAT-011/012 表示接入/故障演练，必须以后续平台正式任务表为准。
+- PLAT-003/005/006/007/008/009 均仍为开发中或接入待验收；PLAT-002 待评审；PLAT-010 待评审；PLAT-011 暂缓；PLAT-012 未开始；PLAT-013/014 未开始。
+- 最新 Platform Go checks failure：`internal/platform/httpclient/client_test.go` gofmt 未通过，导致平台包 tests/race/vet 被跳过。最新提交不能标记为 CI 通过。
+- PLAT-009 已有 Storage/Migration 原语与 fake connector/dialer 包级测试，但真实 MariaDB/Redis 集成、现有分析 Store 接入、Migration 总入口装配和失败恢复演练仍未完成。
+- PLAT-008 的 BoundDoer 和受控网络执行实现已有代码与专项测试，但生产 DNS/出口、News Provider 真实注入、真实来源授权和端到端 SSRF 验收仍待完成。
+
+### 26.4 GOV-004 门禁判断
+
+1. Data：契约问题已定位并拆成 DATA-CONTRACT-001～008，但尚未在 Data 分支实施；当前 CI 另有 gofmt 阻断。
+2. News：N3/N4 纯领域能力进展明显；N6 Repository/Migration、PIT 知识时间查询 Facade、授权决策快照和稳定分页仍未完成。
+3. Platform：公共原语已有实现，但服务入口/DI/路由/领域 Adapter 接入和真实 MariaDB/Redis/SSRF 验收未完成。
+4. Quant/Research DTO 与三方契约尚未通过模块 Owner Review 和真实 Schema/Golden 验证。
+
+因此 GOV-004 仍为 **NO-GO**。当前可以继续推进 Data/News 的纯领域和契约工作；不得冻结五模块公共契约，不创建五个模块开发分支，不宣称整体模块开发已可启动。
