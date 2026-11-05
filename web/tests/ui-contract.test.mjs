@@ -2657,3 +2657,24 @@ test("UIR-2 图表 HTML 与 SVG 文字字号归并到组件基础规则", () => 
   assert.match(stylesheet, /@media \(max-width: 800px\) \{[\s\S]*?\.chart-heading-actions/);
   assert.match(stylesheet, /@media \(max-width: 600px\) \{[\s\S]*?\.chart-view-button \{ flex: 1 1 50%; \}/);
 });
+
+
+test("UIR-2 侧栏品牌、分组标签与服务状态文字使用组件基础字号", () => {
+  const expectedSizes = [
+    [".brand-copy small", /font-size:\s*12px\s*;/],
+    [".side-label", /font-size:\s*12px\s*;/],
+    [".mini-service strong", /font-size:\s*13px\s*;/],
+    [".mini-service small", /font-size:\s*12px\s*;/],
+    [".sidebar-footnote", /font-size:\s*12px\s*;/]
+  ];
+  for (const [selector, sizePattern] of expectedSizes) {
+    const declaration = baseCssDeclarationBlock(selector);
+    assert.match(declaration, sizePattern, selector + " must own its readable base font size");
+    assert.doesNotMatch(declaration, /!important/);
+  }
+  assert.doesNotMatch(stylesheet, /:root\[data-theme="light"\] \.brand-copy small \{[^}]*font-size/);
+  assert.match(stylesheet, /:root\[data-theme="light"\] \.side-label \{ color: var\(--text-dim\); \}/);
+  assert.match(stylesheet, /:root\[data-theme="light"\] \.sidebar-footnote \{ color: var\(--text-dim\); \}/);
+  assert.match(stylesheet, /@media \(max-width: 900px\) \{[\s\S]*?\.brand-copy, \.side-label[\s\S]*?\.sidebar-footnote \{ display: none; \}/);
+  assert.match(stylesheet, /@media \(max-width: 600px\) \{[\s\S]*?\.sidebar \.side-label, \.sidebar \.sidebar-footnote \{ display: block; \}/);
+});

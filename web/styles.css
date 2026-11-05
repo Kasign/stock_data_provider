@@ -82,8 +82,8 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 }
 .brand-copy { display: flex; flex-direction: column; gap: var(--space-1); }
 .brand-copy strong { font-size: 14px; letter-spacing: -.2px; }
-.brand-copy small { font-size: 9px; letter-spacing: 1.5px; color: var(--text-dim); }
-.side-label { padding: 0 10px 11px; color: var(--text-dim); font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 1.4px; }
+.brand-copy small { font-size: 12px; letter-spacing: 1.5px; color: var(--text-dim); }
+.side-label { padding: 0 10px 11px; color: var(--text-dim); font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 1.4px; }
 .side-nav { display: grid; gap: 6px; }
 .nav-link {
    display: flex;
@@ -107,8 +107,8 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .sidebar-bottom { margin-top: auto; }
 .mini-service { display: flex; align-items: flex-start; gap: 10px; padding: 10px; border-radius: 9px; }
 .mini-service > span:last-child { display: flex; flex-direction: column; gap: var(--space-1); }
-.mini-service strong { font-size: 11px; font-weight: 600; }
-.mini-service small { font-size: 10px; color: var(--text-dim); }
+.mini-service strong { font-size: 13px; font-weight: 600; }
+.mini-service small { font-size: 12px; color: var(--text-dim); }
 .status-dot { width: 7px; height: 7px; flex: 0 0 7px; display: inline-block; border-radius: 50%; background: #65788c; box-shadow: 0 0 0 3px rgba(101, 120, 140, .08); }
 .status-dot.is-online { background: var(--accent); box-shadow: 0 0 0 3px rgba(71, 214, 173, .12); }
 .status-dot.is-offline { background: var(--danger); box-shadow: 0 0 0 3px rgba(240, 129, 138, .1); }
@@ -128,7 +128,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
    cursor: pointer;
 }
 .settings-link:hover { color: var(--accent); }
-.sidebar-footnote { margin: 16px 10px 0; color: var(--text-dim); font-size: 10px; }
+.sidebar-footnote { margin: 16px 10px 0; color: var(--text-dim); font-size: 12px; }
 .main-area { min-height: 100vh; margin-left: var(--layout-sidebar-width); padding: 0 var(--space-page); }
 .topbar { display: flex; align-items: center; justify-content: space-between; height: 67px; border-bottom: 1px solid var(--border-soft); }
 .breadcrumb { display: flex; align-items: center; gap: 10px; color: var(--text-dim); font-size: 11px; }
@@ -704,12 +704,7 @@ tbody tr:hover { background: rgba(79, 112, 135, .06); }
 
 /* Global readability pass: minimum 12px support text, 13px secondary copy. */
 body { font-size: var(--font-size-body-readable); line-height: var(--line-height-body); }
-.brand-copy small { font-size: 12px !important; }
-.side-label { font-size: 12px !important; }
 
-.mini-service strong { font-size: 13px !important; }
-.mini-service small { font-size: 12px !important; }
-.sidebar-footnote { font-size: 12px !important; }
 .breadcrumb { font-size: var(--font-size-secondary) !important; }
 .environment-chip { font-size: var(--font-size-support) !important; }
 .eyebrow { font-size: var(--font-size-support) !important; }
@@ -992,7 +987,6 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outlin
 
 
 /* Keep readability baselines explicit after theme-specific color rules. */
-:root[data-theme="light"] .brand-copy small { font-size: 12px !important; }
 :root[data-theme="light"] .analysis-result-fields dt { color: var(--text-dim); }
 
 
