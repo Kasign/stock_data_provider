@@ -23,6 +23,11 @@ func LoadDotEnvIfExists(path string) error {
 	}
 	defer file.Close()
 
+	type entry struct {
+		key   string
+		value string
+	}
+	entries := make([]entry, 0)
 	scanner := bufio.NewScanner(file)
 	scanner.Buffer(make([]byte, 1024), 1024*1024)
 	lineNo := 0
@@ -41,18 +46,29 @@ func LoadDotEnvIfExists(path string) error {
 		value = strings.TrimSpace(value)
 		value = stripInlineComment(value)
 		value, err = unquote(value)
-		if err != nil {
-			return fmt.Errorf("invalid .env value at line %d: %w", lineNo, err)
+		if err != nil || strings.ContainsRune(value, 0) {
+			return fmt.Errorf("invalid .env value at line %d", lineNo)
 		}
-		if _, exists := os.LookupEnv(key); exists {
-			continue
-		}
-		if err := os.Setenv(key, value); err != nil {
-			return fmt.Errorf("set environment variable from .env line %d: %w", lineNo, err)
-		}
+		entries = append(entries, entry{key: key, value: value})
 	}
 	if err := scanner.Err(); err != nil {
 		return fmt.Errorf("read env file: %w", err)
+	}
+
+	// Parse and validate the complete file before mutating process environment.
+	// The first occurrence wins, matching the previous load-if-absent behavior.
+	seen := make(map[string]struct{}, len(entries))
+	for _, item := range entries {
+		if _, exists := seen[item.key]; exists {
+			continue
+		}
+		seen[item.key] = struct{}{}
+		if _, exists := os.LookupEnv(item.key); exists {
+			continue
+		}
+		if err := os.Setenv(item.key, item.value); err != nil {
+			return fmt.Errorf("set environment variable from .env: %w", err)
+		}
 	}
 	return nil
 }

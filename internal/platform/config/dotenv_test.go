@@ -49,3 +49,19 @@ func TestLoadDotEnvRejectsInvalidConfigurationKey(t *testing.T) {
 		t.Fatal("invalid configuration key must not be loaded")
 	}
 }
+
+func TestLoadDotEnvDoesNotMutateEnvironmentWhenFileIsInvalid(t *testing.T) {
+	key := "PLATFORM_CONFIG_DOTENV_ATOMIC_FIRST"
+	_ = os.Unsetenv(key)
+	path := filepath.Join(t.TempDir(), ".env")
+	content := key + "=must-not-be-applied\nINVALID/KEY=value\n"
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := LoadDotEnvIfExists(path); err == nil {
+		t.Fatal("expected invalid .env entry to fail")
+	}
+	if _, exists := os.LookupEnv(key); exists {
+		t.Fatal("invalid .env file must not partially mutate process environment")
+	}
+}
