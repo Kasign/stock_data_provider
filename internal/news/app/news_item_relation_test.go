@@ -127,6 +127,18 @@ func TestApplyNewsItemRelationValidatesOwnershipAndAppends(t *testing.T) {
 	}
 }
 
+func TestApplyNewsItemRelationAllowsVersionOnlyEvidence(t *testing.T) {
+	r, u := relationAppFixture()
+	req := relationAppRequest()
+	req.Relation.EvidenceObservation = ""
+	if _, err := u.Execute(context.Background(), req); err != nil {
+		t.Fatalf("paired version evidence should be sufficient: %v", err)
+	}
+	if len(r.relations["news-from"]) != 1 {
+		t.Fatal("version-only evidence assertion was not appended")
+	}
+}
+
 func TestApplyNewsItemRelationRejectsForeignObservationAndRollsBack(t *testing.T) {
 	r, u := relationAppFixture()
 	req := relationAppRequest()

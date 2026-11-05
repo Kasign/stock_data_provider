@@ -74,14 +74,16 @@ func (u *ApplyNewsItemRelation) Execute(ctx context.Context, request NewsItemRel
 	}
 
 	err := u.repository.WithinNewsItemRelationTransaction(ctx, func(tx NewsItemRelationTransaction) error {
-		observation, exists, err := tx.ObservationByID(ctx, relation.EvidenceObservation)
-		if err != nil {
-			return err
-		}
-		if !exists || observation.ID != relation.EvidenceObservation ||
-			observation.NewsID != relation.FromNewsID ||
-			observation.SourceID != relation.FromSourceID {
-			return ErrNewsItemRelationEvidence
+		if relation.EvidenceObservation != "" {
+			observation, exists, err := tx.ObservationByID(ctx, relation.EvidenceObservation)
+			if err != nil {
+				return err
+			}
+			if !exists || observation.ID != relation.EvidenceObservation ||
+				observation.NewsID != relation.FromNewsID ||
+				observation.SourceID != relation.FromSourceID {
+				return ErrNewsItemRelationEvidence
+			}
 		}
 		if err := validateRelationVersionOwnership(ctx, tx, relation.FromVersionID, relation.FromNewsID, relation.FromSourceID); err != nil {
 			return err
