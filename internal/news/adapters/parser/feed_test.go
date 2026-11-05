@@ -245,9 +245,9 @@ func TestAtomContentFormatMapping(t *testing.T) {
 func TestFeedAttachmentMetadataBoundaries(t *testing.T) {
 	cases := []struct {
 		name, rawURL, rawType, rawLength string
-		wantURL, wantMediaType          string
-		wantLength                      *int64
-		wantIssues                      []string
+		wantURL, wantMediaType           string
+		wantLength                       *int64
+		wantIssues                       []string
 	}{
 		{name: "valid zero", rawURL: "https://publisher.example/a", rawType: "application/pdf", rawLength: "0", wantURL: "https://publisher.example/a", wantMediaType: "application/pdf", wantLength: int64Pointer(0)},
 		{name: "raw values preserved", rawURL: " https://publisher.example/a ", rawType: " application/pdf; version=1 ", rawLength: " 12 ", wantURL: "https://publisher.example/a", wantMediaType: "application/pdf", wantLength: int64Pointer(12)},
