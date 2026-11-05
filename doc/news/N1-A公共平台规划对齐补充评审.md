@@ -89,3 +89,36 @@ News 负责 quality、freshness、authorization、identity、content completenes
 - 未修改新闻业务代码、DB Schema、部署配置或根服务 DI。
 - 未进入 N2，也未运行 Go 测试。
 - 本轮只修订新闻专项规划与跨分支接入说明。
+
+
+## 7. 平台分支正式响应（2026-11-05）
+
+News 前述三项诉求已由平台分支正式接受。只读检查平台最新 HEAD：
+`98f561ec812b8b27fee5b4fb9d35b1accade93d8`
+提交：
+`docs(platform): 补齐 SSRF、Diagnostics 与 Fault 契约`
+
+接受结果：
+- HTTP Client：SSRF 作为 P0 安全门禁，DNS/IP 校验与受控 Dial 绑定，默认禁止 Redirect，逐跳复核并禁用隐式代理。
+- Diagnostics：reason_code、safe_message、可选 evidence_ref 和有界 attributes 进入正式契约。
+- Fault：retryable、dependency 进入正式契约；重试仍受幂等、Policy、预算和 Deadline 限制。
+
+PLAT-002 仍为待评审，PLAT-008 等任务仍未实现验收。因此本轮只是完成跨分支设计对齐，不表示可开始真实网络抓取。
+
+## 8. N1-A 收口检查
+
+已完成静态核查和内部设计收敛的部分：
+- 根模块部署边界、无新闻独立 HTTP API、无旧服务兼容；
+- Provider provenance、候选执行结果和官方公告独立端口；
+- 来源授权层级、Provider 输出权利与发布者内容权利分离；
+- 时间语义、身份凭据、版本指纹、跨来源转载和关系证据；
+- canonical symbol 首期证券关联，不虚构 security_id/industry_id；
+- 业务质量与公共诊断分层；
+- 公共 DB/Redis/诊断延期，不在 News 内自建；
+- 平台 HTTP/Diagnostics/Fault 三项意见已被接受。
+
+仍然需要持续保持的运行门禁：
+- 来源授权不因本次架构评审自动批准；未明确许可的来源保持 pending/restricted。
+- 证券主数据若未来提供统一 ID，再设计映射，不在当前伪造外键。
+- 平台契约文档已接受不等于平台代码实现完成。
+- N1-A 最终仍由用户评审确认；确认前不进入 N2。
