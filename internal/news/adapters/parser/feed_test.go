@@ -146,6 +146,9 @@ func TestParseFeedRejectsInvalidAndUnsupportedDocuments(t *testing.T) {
 		{name: "missing rss channel", data: "<rss/>", want: ErrInvalidFeed},
 		{name: "multiple roots", data: "<rss><channel/></rss><rss><channel/></rss>", want: ErrInvalidFeed},
 		{name: "unsupported", data: "<html/>", want: ErrUnsupportedFeed},
+		{name: "rss wrong namespace", data: `<rss xmlns="urn:unexpected"><channel/></rss>`, want: ErrUnsupportedFeed},
+		{name: "atom missing namespace", data: "<feed><entry/></feed>", want: ErrUnsupportedFeed},
+		{name: "atom wrong namespace", data: `<feed xmlns="urn:unexpected"><entry/></feed>`, want: ErrUnsupportedFeed},
 		{name: "empty", data: "  ", want: ErrInvalidFeed},
 	}
 	for _, tc := range cases {

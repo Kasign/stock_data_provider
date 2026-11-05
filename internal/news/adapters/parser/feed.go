@@ -170,6 +170,9 @@ func ParseFeed(data []byte, observedAt time.Time) (FeedDocument, error) {
 
 	switch rootName.Local {
 	case "rss":
+		if rootName.Space != "" {
+			return FeedDocument{}, ErrUnsupportedFeed
+		}
 		var parsed rssDocument
 		if err := xml.Unmarshal(data, &parsed); err != nil || parsed.Channel == nil {
 			return FeedDocument{}, ErrInvalidFeed
@@ -196,6 +199,9 @@ func ParseFeed(data []byte, observedAt time.Time) (FeedDocument, error) {
 		}
 		return doc, nil
 	case "feed":
+		if rootName.Space != "http://www.w3.org/2005/Atom" {
+			return FeedDocument{}, ErrUnsupportedFeed
+		}
 		var parsed atomDocument
 		if err := xml.Unmarshal(data, &parsed); err != nil {
 			return FeedDocument{}, ErrInvalidFeed
