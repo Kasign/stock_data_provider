@@ -239,6 +239,9 @@ func normalizeAtomContent(content atomContent) (string, domain.ContentFormat) {
 		return "", domain.ContentFormatUnknown
 	}
 	typeValue := strings.ToLower(strings.TrimSpace(content.Type))
+	if typeValue != "xhtml" && hasXMLChildElement(content.InnerXML) {
+		return firstNonEmpty(content.Text, content.InnerXML), domain.ContentFormatUnknown
+	}
 	switch typeValue {
 	case "", "text":
 		return strings.TrimSpace(content.Text), domain.ContentFormatPlainText
@@ -260,7 +263,22 @@ func normalizeAtomContent(content atomContent) (string, domain.ContentFormat) {
 		if err == nil && mediaType == "text/plain" {
 			return strings.TrimSpace(content.Text), domain.ContentFormatPlainText
 		}
-		return strings.TrimSpace(content.Text), domain.ContentFormatUnknown
+		return firstNonEmpty(content.Text, content.InnerXML), domain.ContentFormatUnknown
+	}
+}
+
+// hasXMLChildElement 判断 Atom text/html/text/plain 或扩展 MIME 是否错误地包含 XML 子元素。
+// 这类载荷不按声明类型解释，但保留原始片段供后续质量判断。
+func hasXMLChildElement(raw string) bool {
+	decoder := xml.NewDecoder(strings.NewReader(raw))
+	for {
+		token, err := decoder.Token()
+		if err != nil {
+			return false
+		}
+		if _, ok := token.(xml.StartElement); ok {
+			return true
+		}
 	}
 }
 

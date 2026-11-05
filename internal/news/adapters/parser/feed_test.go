@@ -216,6 +216,9 @@ func TestAtomContentFormatMapping(t *testing.T) {
 		{name: "invalid xhtml root", content: `<content type="xhtml"><span xmlns="http://www.w3.org/1999/xhtml">bad</span></content>`, want: `<span xmlns="http://www.w3.org/1999/xhtml">bad</span>`, format: domain.ContentFormatUnknown},
 		{name: "external", content: `<content type="html" src="https://publisher.example/body"/>`, want: "", wantSrc: "https://publisher.example/body", format: domain.ContentFormatUnknown},
 		{name: "unsupported media", content: `<content type="application/pdf">opaque</content>`, want: "opaque", format: domain.ContentFormatUnknown},
+		{name: "unsupported media with nested markup", content: `<content type="application/pdf"><document><page>opaque</page></document></content>`, want: `<document><page>opaque</page></document>`, format: domain.ContentFormatUnknown},
+		{name: "html declaration with nested xml", content: `<content type="html"><p>not escaped html</p></content>`, want: `<p>not escaped html</p>`, format: domain.ContentFormatUnknown},
+		{name: "text declaration with nested xml", content: `<content type="text"><span>not plain text</span></content>`, want: `<span>not plain text</span>`, format: domain.ContentFormatUnknown},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
