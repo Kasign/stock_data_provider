@@ -118,7 +118,9 @@ func newResearchUseCase(r *memoryResearchRepository) *ApplyResearchUpdate {
 		r.observations = map[string]domain.Observation{}
 	}
 	for _, id := range []string{"obs-1", "obs-2", "obs-3"} {
-		r.observations[id] = domain.Observation{ID: id, NewsID: "news-1"}
+		if _, exists := r.observations[id]; !exists {
+			r.observations[id] = domain.Observation{ID: id, NewsID: "news-1"}
+		}
 	}
 	u := NewApplyResearchUpdate(r, func() string { return "version-next" })
 	u.now = func() time.Time { return time.Date(2026, 11, 5, 10, 0, 0, 0, time.UTC) }
