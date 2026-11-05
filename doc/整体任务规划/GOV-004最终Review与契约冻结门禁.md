@@ -397,3 +397,12 @@ Data 最新 HEAD 为 `266ac21f5c840207f79aae8984021dac74185652`，相较上一�
 最新 SHA 的 Live provider probe（run `42017899688`）、WebUI checks（`42017899766`）、Go test suite（`42017899888`）均在本次复核时 in_progress；Go-Python parity（`42017899832`）为 pending。不得沿用上一 SHA 的 CI success 作为最新 SHA 的验收证据。
 
 当前 GOV-004 仍 NO-GO；最新 CI 完成后再更新验收状态。
+
+
+## 19. Data 最新 HEAD 更新至 587f276（2026-11-05）
+
+Data 分支最新 HEAD：`587f27683c8422810d2f7fc917a2c9324eb147b0`，提交锁定 BaoStock 上市日首因子样本边界。相较 266ac21 ahead 1 / behind 0，仅修改 Live Probe 测试文件（增加 22 行），未修改 OpenAPI、Handler、Model 或 Service 业务实现；当前静态契约结论不变。
+
+最新 SHA 的 Go test suite pending、Live provider probe in_progress、Go-Python parity in_progress、WebUI checks success。不得将 pending/in_progress 记录为通过。
+
+详细基线和 Run ID 见 Data 修正清单第 11.17 节。GOV-004 继续 NO-GO。
