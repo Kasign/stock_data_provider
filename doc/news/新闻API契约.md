@@ -18,7 +18,7 @@
 | 方法 | 路径 | 目的 |
 |---|---|---|
 | GET | `/api/v1/news` | 按条件查询已入库新闻 |
-| GET | `/api/v1/news/search` | 搜索/聚合候选新闻；是否入库需明确 |
+| POST | `/api/v1/news/search` | 搜索候选新闻；默认仅返回候选，`persist` 默认 `false`，不隐式入库 |
 | GET | `/api/v1/news/{id}` | 新闻详情、内容和版本信息 |
 | GET | `/api/v1/news/sources` | 来源目录和状态 |
 | GET | `/api/v1/news/diagnostics` | 新闻来源和采集质量诊断 |
@@ -73,7 +73,7 @@
 
 现有任务事件查询使用 after_sequence 和 limit，但这不是通用新闻列表分页规范。新闻列表应在 N1 最终评审时明确稳定排序键、游标/offset 方案和最大页大小。
 
-候选 /api/v1/news、/search、/{id}、/sources、/diagnostics 仍为设计候选，不是现有路由，也未冻结。尤其要明确 /search 是否只返回候选、是否触发采集入库、外部 Provider 部分失败如何返回，以及调用权限和配额策略。
+候选 /api/v1/news、/search、/{id}、/sources、/diagnostics 仍为设计候选，不是现有路由，也未冻结。仍需冻结 /search 的 Provider 部分失败响应语义、调用权限和配额策略；搜索默认只返回候选，`persist=false`，如需持久化必须由调用方显式声明并受来源/Provider 存储策略约束。
 
 ---
 
