@@ -210,7 +210,6 @@ func TestCollectSourceUnknownTransportErrorIsNotRetryable(t *testing.T) {
 	}
 }
 
-
 func TestCollectSourceRequiresImmutablePolicyVersionReferences(t *testing.T) {
 	testCases := []struct {
 		name   string
