@@ -2414,3 +2414,9 @@ CSS AST 检查器进一步扩展：
 ### 字体度量排除项校正
 
 - [x] 对照 CI Artifact 校正采集属性与 fixture，移除 `font-size`、`font-weight`、`line-height`，避免环境字体度量差异造成回归误报；调整后需由下一次 CI 验证。
+
+### CSSOM fixture 比较结构修正
+
+- [x] 定位 `876deb65` 比较失败原因：旧 fixture 包含 `selector` 与 `rect.x/y`，而比较器只比较节点名称、计算样式和宽高。
+- [x] 已按比较器实际结构重建 fixture，保留 8 场景 × 6 节点及 37 项样式属性，并排除字体度量和绝对位置。
+- [ ] 等待下一次 Chromium CI 验证规范化 fixture。

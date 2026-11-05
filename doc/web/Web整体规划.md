@@ -2181,3 +2181,9 @@ CSS AST 检查器进一步扩展：
 
 - [x] 对照 CI 实际 Artifact 发现旧 fixture 和采集属性仍包含 `font-size`、`font-weight`、`line-height`，与文档中排除字体度量的约定不一致。
 - [x] 已从 CSSOM 采集属性与受控 fixture 中移除上述三项；保留 `font-family` 不采集的既有约束。后续 CI 验证该调整。
+
+### CSSOM fixture 比较结构修正
+
+- [x] `876deb65` 的 CI 已验证字体度量排除生效，但比较失败的原因是 fixture 沿用完整采集快照结构，额外包含 `selector`、元素绝对坐标 `x/y`；比较器按约定只比较节点名、选定 computed properties 和宽高。
+- [x] 已根据成功采集的 Chromium Artifact 重建 fixture：保留 8 个场景、6 个节点、37 个样式属性；去除 `font-size`、`font-weight`、`line-height`、`selector`、`x/y` 等非比较字段。
+- [ ] 下一次 Chromium CI 需验证规范化 fixture 的解压和比较通过，再进入 CSS 迁移。
