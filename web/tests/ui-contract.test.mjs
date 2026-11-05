@@ -1312,7 +1312,11 @@ test("market overview and activity use readable secondary text and touch-sized c
   assert.match(finalCssRuleBody(".market-overview-updated"), /font-size: 12px/);
   assert.match(finalCssRuleBody(".market-overview-subheading p"), /font-size: 12px/);
   assert.match(finalCssRuleBody(".market-index-identity small"), /font-size: 12px/);
-  assert.match(finalCssRuleBody(".market-index-changes span"), /font-size: 12px/);
+  const marketIndexChangeBase = baseCssDeclarationBlock(".market-index-changes span");
+  assert.match(marketIndexChangeBase, /font-size:\s*12px\s*;/);
+  assert.match(marketIndexChangeBase, /color:var\(--text-soft\)/);
+  assert.match(marketIndexChangeBase, /font-variant-numeric:tabular-nums/);
+  assert.equal((stylesheet.match(/\.market-index-changes span\s*\{/g) || []).length, 1, "index change detail text should have one base rule");
   const marketWidgetMetaBase = baseCssDeclarationBlock(".market-widget-meta");
   assert.match(marketWidgetMetaBase, /font-size:\s*12px\s*;/);
   assert.match(marketWidgetMetaBase, /line-height:\s*1\.65\s*;/);

@@ -1750,7 +1750,7 @@ button:disabled, input:disabled, select:disabled, textarea:disabled { cursor: no
 }
 .market-index-changes span {
   color:var(--text-soft);
-  font-size:10px;
+  font-size:12px;
   font-variant-numeric:tabular-nums
 }
 .market-index-changes strong {
@@ -3290,7 +3290,7 @@ button:disabled, input:disabled, select:disabled, textarea:disabled { cursor: no
 .market-overview-widget-heading p { font-size: 12px; line-height: 1.65; }
 .market-index-identity small,
 .market-index-card-footer small { font-size: 12px; line-height: 1.5; }
-.market-index-changes span { font-size: 12px; }
+
 
 .market-breadth-metric small { font-size: 12px; line-height: 1.45; }
 .market-table-primary { font-size: 12px; line-height: 1.5; }
