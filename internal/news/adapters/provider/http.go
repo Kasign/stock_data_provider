@@ -36,7 +36,6 @@ func newConfig(endpoint, apiKey string, client app.HTTPDoer) (config, error) {
 	return config{endpoint: endpoint, apiKey: strings.TrimSpace(apiKey), client: client}, nil
 }
 
-
 func hasCredentialQuery(query url.Values) bool {
 	for key := range query {
 		normalized := strings.NewReplacer("_", "", "-", "").Replace(strings.ToLower(key))

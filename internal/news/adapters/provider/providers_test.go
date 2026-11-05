@@ -141,7 +141,6 @@ func TestProviderHTTPStatusClassifiesRetryCandidate(t *testing.T) {
 	}
 }
 
-
 func TestTavilyRejectsMissingResultsField(t *testing.T) {
 	client := roundTripFunc(func(req *http.Request) (*http.Response, error) {
 		return response(`{}`), nil
