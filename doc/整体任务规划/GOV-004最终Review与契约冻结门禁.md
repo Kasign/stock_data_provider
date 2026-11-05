@@ -447,3 +447,36 @@ Data 最新 HEAD 更新为 cce59e8de493813a4b04f7d0bd24211e1e919bb1（style(baos
 587f276 的 Go test suite 和 Docker market-data image build 曾因同一测试文件未 gofmt 失败，导致 market-data 单测/race/vet 步骤跳过；其 MariaDB Migration/PIT integration、go-core 和根模块测试通过。cce59e8 修正格式后，最新 SHA 的 Go test suite、Live provider probe、WebUI checks、Go-Python parity 全部 completed / success。
 
 CI 全绿不等于 OpenAPI 与 Go Model 契约问题已经修复。GOV-004 仍 NO-GO。
+
+
+## 22. Data OpenAPI 多余字段反向审查（2026-11-05）
+
+原先 9 个“OpenAPI 有、Go Model 无”的字段，经 Operation → Handler → 实际序列化对象追踪，确认当前没有 DTO 或自定义序列化路径承载这些字段，建议从 OpenAPI 删除，而不是向 Model 增加空字段：
+
+- Quote.validation_total_count
+- Quote.validation_error_count
+- Quote.validation_warning_count
+- Quote.validation_info_count
+- Quote.validation_truncated
+- Quote.validation_issues
+
+单条 Quote Handler 直接写出 model.Quote；批量行情的嵌套 Quote 也是 *model.Quote。Go Quote 没有上述字段，也没有 ValidationIssue 包装对象。
+
+- StockBoard.change_percent_5d
+- StockBoard.provider_report_date
+
+StockBoards Handler 直接写出 StockBoardSnapshot，Items 类型为 []model.StockBoard。Go StockBoard 只有单日 change_percent，没有五日涨跌幅或逐项报告日字段。
+
+- PriceLimitEventEvidence.adjustment_basis
+
+PriceLimitRule Handler 直接写出 PriceLimitRuleSnapshot。Go PriceLimitEventEvidence 没有 AdjustmentBasis，Service 验证和规则解析也不消费该字段；该字段与事件证据语义无关。
+
+详细路由、Handler 和 Go Model 证据见 [Data OpenAPI 与 Go 模型契约修正清单](./Data-OpenAPI与Go模型契约修正清单.md) 第 11.20 节。
+
+**DATA-CONTRACT-004-F**：删除 9 个 OpenAPI 多余属性；补双向契约测试，禁止 Schema 出现无真实 DTO/Model 来源的字段。若未来确需这些功能，必须先建立 Response DTO 和赋值逻辑，再更新 Handler/Schema/Golden。
+
+## 23. Data 最新 HEAD 与 Workflow 状态更新（2026-11-05）
+
+Data 最新 HEAD 为 `0afec7ead92672ce9c68a7a8f419990471e01620`（复权因子持久化链路审查文档），相较 cce59e8 ahead 1 / behind 0；只改动 doc/api 与接口协作文档，没有修改 OpenAPI、Handler、Model 或 Service。
+
+最新 SHA 的 Go test suite in_progress、Go-Python parity cancelled、WebUI checks success、Live provider probe success。Parity cancelled 不能视为通过，Go test suite 未完成前不能标记全绿。静态字段结论仍适用，GOV-004 继续 NO-GO。
