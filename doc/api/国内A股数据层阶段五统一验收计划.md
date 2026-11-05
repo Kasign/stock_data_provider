@@ -247,3 +247,14 @@
 
 
 - CI 兼容性修正：批次 31 新增 raw K 同源身份硬约束后，旧 `daily_bars_pit_test.go` 的三组夹具缺少 Source/SourceVersion/FetchedAt，触发预期的契约拒绝。已补齐真实同源测试元数据；不放宽生产校验。BaoStock 方向因子回归期望值同步按直接乘数修正。
+
+
+## 2026-11-05 P0 批次 32：复权重建事件因子与来源语义验收
+
+- 最终代码 SHA `4732f14d8998bcd06ffb1118846535b626865b2d` 的 Push Go suite `42007631175`、PR Go suite `42007643683`、PR Live probe `42007643685`、PR WebUI `42007643763`、PR Parity `42007643883` 全部 success。该 SHA 没有 push Live probe run，不将 PR Live probe 外层 success 误认为新的真实 Provider 请求。
+- BaoStock 事件因子按最近 `OperateDate <= trade_date` 向后对齐；无首个可用事件因子时拒绝外推。raw K 与因子强制同证券/Provider/source_version。
+- BaoStock `forward/backward` 方向因子直接乘 raw OHLC；Tushare `shared` 因子前复权用参考日比值、后复权直接乘。参考锚点日期与内部因子事件日期分离。
+- current 模式可消费持久化且 SystemObservedAt 已生成的 AvailableAt=nil 因子，但必须 degraded；PIT 仍要求 AvailableAt 可证明。
+- 两个中间 SHA 分别出现编译参数错误和旧测试夹具缺少来源元数据，已修复；只有最终 SHA 全量 CI 计通过。
+- current helper 未接入 DailyBars：当前没有不要求 AvailableAt 的 Repository current factor read；RefreshAdjustmentFactors 返回的值缺 SystemObservedAt，且会选择第一个 factor Provider，不能保证和 raw K 同源。明确业务场景出现前不新增 current 查询 API 或接入普通行情。
+- 阶段 B 仍 in_progress；BaoStock AvailableAt 未知意味着 PIT 仍不可用。
