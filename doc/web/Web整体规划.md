@@ -1618,3 +1618,6 @@ JSR-6L 补充：连接配置变更取消草稿检查后，旧代际 finally 按�
 - [x] UI contract 锁定组件基础字号、无强制优先级、主题颜色和窄屏换行。
 - [ ] 在本批最终提交 SHA 上运行 WebUI Checks、JS 语法检查、Compose 校验和 Nginx 镜像构建。
 - [ ] 执行 Chromium Browser Smoke；人工核验更新时间及面板眉题在深浅主题和多分辨率下的可读性。
+
+
+第四十六批 contract 正则转义校正：首次提交中的新增断言多转义了一层反斜杠，已修正为正常 JavaScript 正则表达式；不涉及样式或运行时代码变化，需以修正提交 SHA 重新执行 CI。
