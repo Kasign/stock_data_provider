@@ -44,14 +44,14 @@ func TestLiveHistoricalProviderProbe(t *testing.T) {
 	var failures []string
 	for _, symbol := range []string{"600036.SH", "002982.SZ"} {
 		run, err := ds.ProbeProviderCapabilitiesWithOptions(ctx, ProviderProbeOptions{
-			Scope:               "all",
-			Capabilities:        []string{"daily_bars"},
-			Checks:              []string{"connectivity", "contract", "quality", "cross_provider"},
-			Symbols:             []string{symbol},
-			DailyBarStartDate:   startDate,
-			DailyBarEndDate:     endDate,
+			Scope: "all",
+			Capabilities: []string{"daily_bars"},
+			Checks: []string{"connectivity", "contract", "quality", "cross_provider"},
+			Symbols: []string{symbol},
+			DailyBarStartDate: startDate,
+			DailyBarEndDate: endDate,
 			DailyBarAdjustments: adjustments,
-			TimeoutSeconds:      25,
+			TimeoutSeconds: 25,
 		})
 		if err != nil {
 			t.Fatalf("production historical Probe failed for %s: %v", symbol, err)
@@ -66,12 +66,9 @@ func TestLiveHistoricalProviderProbe(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal production historical Probe report: %v", err)
 	}
-	t.Logf("LIVE_HISTORICAL_PROBE_REPORT_BEGIN
-%s
-LIVE_HISTORICAL_PROBE_REPORT_END", encoded)
+	t.Logf("LIVE_HISTORICAL_PROBE_REPORT_BEGIN\n%s\nLIVE_HISTORICAL_PROBE_REPORT_END", encoded)
 	if outputPath := strings.TrimSpace(os.Getenv("LIVE_HISTORICAL_PROBE_REPORT_PATH")); outputPath != "" {
-		if writeErr := os.WriteFile(outputPath, append(encoded, '
-'), 0o644); writeErr != nil {
+		if writeErr := os.WriteFile(outputPath, append(encoded, '\n'), 0o644); writeErr != nil {
 			t.Errorf("write production historical Probe report: %v", writeErr)
 		}
 	}
