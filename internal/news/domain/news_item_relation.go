@@ -115,17 +115,26 @@ func ValidateNewsItemRelationHistory(relations []NewsItemRelation) error {
 		}
 	}
 
-	effectiveSuccessor := make(map[string]string, len(successor))
-	for parentID, childID := range successor {
-		child := byID[childID]
-		if child.Status == NewsItemRelationConfirmed || child.Status == NewsItemRelationRetracted {
-			effectiveSuccessor[parentID] = childID
+	// 沿替代链跳过 proposed 中间态：只要后续链上出现 confirmed/retracted，
+	// 所有祖先断言都应退出当前图，不能因直接后继仍是 proposed 而复活旧边。
+	effectivelyReplaced := func(id string) bool {
+		seen := make(map[string]struct{})
+		for nextID := successor[id]; nextID != ""; nextID = successor[nextID] {
+			if _, exists := seen[nextID]; exists {
+				return true
+			}
+			seen[nextID] = struct{}{}
+			next := byID[nextID]
+			if next.Status == NewsItemRelationConfirmed || next.Status == NewsItemRelationRetracted {
+				return true
+			}
 		}
+		return false
 	}
 	edges := make(map[string]struct{})
 	adjacency := make(map[string][]string)
 	for id, relation := range byID {
-		if _, replaced := effectiveSuccessor[id]; replaced || relation.Status != NewsItemRelationConfirmed {
+		if effectivelyReplaced(id) || relation.Status != NewsItemRelationConfirmed {
 			continue
 		}
 		key := relation.FromNewsID + "\x00" + relation.ToNewsID

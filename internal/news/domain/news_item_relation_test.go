@@ -124,6 +124,19 @@ func TestValidateNewsItemRelationHistoryRequiresAppendOnlyReplacement(t *testing
 	}
 }
 
+func TestValidateNewsItemRelationHistoryConfirmedDescendantReplacesProposedChain(t *testing.T) {
+	old := relationFixture("rel-old", "news-repost", "news-original")
+	proposal := relationFixture("rel-proposal", "news-repost", "news-original")
+	proposal.Status = NewsItemRelationProposed
+	proposal.SupersedesRelationID = old.ID
+	confirmed := relationFixture("rel-confirmed", "news-repost", "news-original")
+	confirmed.SupersedesRelationID = proposal.ID
+
+	if err := ValidateNewsItemRelationHistory([]NewsItemRelation{old, proposal, confirmed}); err != nil {
+		t.Fatalf("confirmed descendant must replace the old confirmed edge through proposed state: %v", err)
+	}
+}
+
 func TestValidateNewsItemRelationHistoryRejectsMissingParentAndMultipleSuccessors(t *testing.T) {
 	orphan := relationFixture("rel-orphan", "news-repost", "news-original")
 	orphan.SupersedesRelationID = "missing"

@@ -178,6 +178,60 @@ func TestApplyNewsItemRelationRejectsDuplicateEdgeAndCycle(t *testing.T) {
 	}
 }
 
+func TestApplyNewsItemRelationSupportsProposedToConfirmedReplacement(t *testing.T) {
+	r, u := relationAppFixture()
+	old := relationAppRequest().Relation
+	old.ID = "rel-old"
+	r.relations["news-from"] = []domain.NewsItemRelation{old}
+
+	proposal := relationAppRequest()
+	proposal.Relation.Status = domain.NewsItemRelationProposed
+	proposal.Relation.SupersedesRelationID = old.ID
+	proposal.Relation.ID = "rel-proposal"
+	if _, err := u.Execute(context.Background(), proposal); err != nil {
+		t.Fatalf("append proposal: %v", err)
+	}
+
+	confirmed := relationAppRequest()
+	confirmed.Relation.SupersedesRelationID = proposal.Relation.ID
+	confirmed.Relation.ID = "rel-confirmed"
+	if _, err := u.Execute(context.Background(), confirmed); err != nil {
+		t.Fatalf("confirm proposal: %v", err)
+	}
+	if got := len(r.relations["news-from"]); got != 3 {
+		t.Fatalf("expected immutable old/proposed/confirmed history, got %d records", got)
+	}
+}
+
+func TestApplyNewsItemRelationRechecksStaleEvidenceWithNewVersions(t *testing.T) {
+	r, u := relationAppFixture()
+	old := relationAppRequest().Relation
+	old.ID = "rel-stale"
+	r.relations["news-from"] = []domain.NewsItemRelation{old}
+	r.versions["from-v2"] = domain.NewsItemVersion{
+		ID: "from-v2", NewsID: "news-from", VersionNo: 2, ObservationID: "from-obs",
+	}
+	r.versions["to-v2"] = domain.NewsItemVersion{
+		ID: "to-v2", NewsID: "news-to", VersionNo: 2, ObservationID: "to-obs",
+	}
+
+	recheck := relationAppRequest()
+	recheck.Relation.ID = "rel-rechecked"
+	recheck.Relation.SupersedesRelationID = old.ID
+	recheck.Relation.FromVersionID = "from-v2"
+	recheck.Relation.ToVersionID = "to-v2"
+	if _, err := u.Execute(context.Background(), recheck); err != nil {
+		t.Fatalf("append rechecked assertion: %v", err)
+	}
+	if got := len(r.relations["news-from"]); got != 2 {
+		t.Fatalf("expected stale and rechecked assertions to remain, got %d records", got)
+	}
+	if r.relations["news-from"][0].FromVersionID != "from-v1" ||
+		r.relations["news-from"][1].FromVersionID != "from-v2" {
+		t.Fatal("recheck must preserve old evidence and append new version evidence")
+	}
+}
+
 func TestApplyNewsItemRelationAppendFailureRollsBack(t *testing.T) {
 	r, u := relationAppFixture()
 	r.failAppend = true
