@@ -66,11 +66,11 @@ type DestinationPolicy struct {
 }
 
 type Client struct {
-	config      Config
-	resolver    Resolver
-	dial        func(context.Context, string, string) (net.Conn, error)
-	httpClient  *http.Client
-	transport   *http.Transport
+	config           Config
+	resolver         Resolver
+	dial             func(context.Context, string, string) (net.Conn, error)
+	httpClient       *http.Client
+	transport        *http.Transport
 	defaultSemaphore chan struct{}
 	semaphores       map[string]chan struct{}
 }
