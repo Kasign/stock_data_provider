@@ -63,3 +63,13 @@
 - Go-Python parity 的样本比较契约测试本身通过；其后 market-data Go 测试因上述编译错误失败。报告中发现的 fixture 差异（close 精度、quality_status、记录覆盖）属于现有 parity 样本报告，不作为本轮复权因子改造的根因，也不应通过放宽容差掩盖。
 - 下一 SHA 必须重新执行 gofmt、market-data unit/race/vet、MariaDB migration/PIT、Docker build 和 parity。当前尚未获得修复后 SHA 的 CI 结果，不得标记通过。
 - BaoStock Provider adapter 继续暂缓，直到本轮基础模型、存储及重建测试全绿，并完成因子公式/日期语义证据核验。
+
+
+## 2026-11-05 P0 批次 16：基础 CI 全绿，启动 BaoStock 因子真实对账
+
+- 最新基线 `a778e1b8fd3f8612bf3ab2508ba3198305f6f126` 的 Go test suite（含 gofmt、unit、race、vet）、market-data MariaDB migration/PIT、Docker 构建、Go-Python parity、WebUI checks、Live provider probe 均已结束且 workflow conclusion 为 success。
+- 本轮 Live provider probe 的普通成功状态不代表 BaoStock 复权因子专项已经执行。专项测试通过 push commit message 标记 `[historical_baostock_factors]` 单独触发；本批启动该真实查询。
+- BaoStock TCP Client 已具备 `QueryAdjustmentFactors`，返回 `dividOperateDate`、`foreAdjustFactor`、`backAdjustFactor`、`adjustFactor`。字段映射与协议解析可用，但 `OperateDate` 的业务日期语义尚不能仅凭字段名认定为可用于 PIT 的生效日期。
+- 专项对账将同证券 raw / qfq / hfq 日 K 的 OHLC 与因子重建结果逐日比较。价格重建一致只构成重建映射的实证，不自动证明字段的法律/业务定义或历史首次公开时间。
+- BaoStock 响应未提供已验证的首次公开时间，`AvailableAt` 必须保持 unknown；`SystemObservedAt` 仅由系统入库时生成。
+- 在专项真实对账结果出来前，不接入 BaoStock AdjustmentFactorProvider，不把 `OperateDate` 直接写入可用于 PIT 的 `TradeDate`。

@@ -13,10 +13,12 @@ import (
 )
 
 type liveBaoStockAdjustmentReport struct {
-	GeneratedAt string                       `json:"generated_at"`
-	StartDate   string                       `json:"start_date"`
-	EndDate     string                       `json:"end_date"`
-	Items       []liveBaoStockAdjustmentItem `json:"items"`
+	GeneratedAt         string                       `json:"generated_at"`
+	StartDate           string                       `json:"start_date"`
+	EndDate             string                       `json:"end_date"`
+	DateSemanticsNote   string                       `json:"date_semantics_note"`
+	AvailabilityAtNote  string                       `json:"available_at_note"`
+	Items               []liveBaoStockAdjustmentItem `json:"items"`
 }
 
 type liveBaoStockAdjustmentItem struct {
@@ -56,9 +58,11 @@ func TestLiveBaoStockAdjustmentFactorConsistency(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Minute)
 	defer cancel()
 	report := liveBaoStockAdjustmentReport{
-		GeneratedAt: time.Now().UTC().Format(time.RFC3339),
-		StartDate:   startDate,
-		EndDate:     endDate,
+		GeneratedAt:        time.Now().UTC().Format(time.RFC3339),
+		StartDate:          startDate,
+		EndDate:            endDate,
+		DateSemanticsNote:  "OperateDate is tested as a candidate effective date by matching raw, forward-adjusted and backward-adjusted K-lines; a successful price match is evidence for reconstruction semantics, not proof of the upstream field's legal/business definition.",
+		AvailabilityAtNote: "BaoStock query_adjust_factor does not expose a verified first-publication timestamp in this response; AvailableAt must remain unknown.",
 		Items:       make([]liveBaoStockAdjustmentItem, 0, 2),
 	}
 	var failures []string
