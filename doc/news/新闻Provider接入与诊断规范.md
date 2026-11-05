@@ -45,7 +45,45 @@ N1 必须先核实并优先复用现有 `go-core/internal/adapters/newssearch/` 
 
 跳过不等于失败，也不能标记为可用。认证失败、配额限制、限流、超时、网络错误、响应格式错误、空结果和内容解析失败应分别记录。
 
-诊断报告应包括 provider、能力、检查时间、耗时、状态、错误类别、脱敏后的错误摘要和质量指标。
+诊断报告应包括对象类型（Provider/source/endpoint/run）、对象标识、能力/阶段、检查时间、耗时、执行状态、可用性状态、错误类别与错误码、脱敏摘要、输入/输出/跳过/失败计数、质量指标、Freshness 证据、授权策略版本引用和可重试建议。诊断报告不得包含 API Key、Token、Cookie、完整 Authorization Header 或未获准保存的正文。
+
+## 4.1 新闻诊断分层与复用边界
+
+根仓库 `services/market-data` 已有 Provider Probe、Validator/Reporter、Freshness Evaluator、Probe History 和存储检查。它们面向行情 Provider 和行情质量，不应由新闻模块直接依赖其内部 model/service/repository 包，也不能把行情 Probe 的结果直接解释为新闻诊断。
+
+新闻模块复用的是成熟的诊断原则和底层约定：超时、错误分类、脱敏、状态语义、证据结构、质量校验和 Freshness 的“源端时间优先”原则。新闻模块在自己的 Domain/Application 中定义领域检查项，并通过既有根 Store 持久化运行证据。
+
+### 诊断层次
+
+| 层次 | 检查对象 | 示例 |
+|---|---|---|
+| 配置诊断 | Provider/来源配置 | 是否启用、凭证是否配置、策略是否批准、URL 是否满足安全约束 |
+| 连通性诊断 | Provider/endpoint | DNS/TLS/HTTP、超时、响应码、限流 |
+| 契约诊断 | Provider 响应 | JSON/RSS/Atom 格式、必需字段、分页/响应结构 |
+| 采集诊断 | fetch | 状态码、响应大小、重定向、内容类型、耗时 |
+| 解析诊断 | parse/normalize | 编码、HTML/Feed 解析、时间解析、字段完整度 |
+| 身份诊断 | deduplicate | 原始 ID/URL 命中、Hash 碰撞核验、身份冲突、重复率 |
+| 持久化诊断 | persist | 新建/更新/跳过/冲突数量、事务失败、幂等结果 |
+| 关联诊断 | relation | 证券/行业命中、证据类型、未匹配和冲突数量 |
+| 质量/新鲜度 | 标准化结果 | 时间可信度、内容完整度、来源权威性、采集延迟、Freshness |
+
+### 被动诊断与主动 Probe
+
+- 被动诊断：每次正常搜索/采集/写入都记录阶段耗时、计数、状态和错误，是默认方式。
+- 主动 Probe：由内部受控任务触发，检查配置、连通性和响应契约；默认不执行全文抓取、不写入正式新闻、不触发高成本查询。
+- 主动 Probe 未配置凭证、策略不允许或检查条件不满足时返回 skipped；只有获得明确失败证据才返回 failed/unavailable。
+- 真实 Provider Probe 必须有单项超时、并发上限、频率限制和请求成本控制；CI 使用固定样本和 fake，不依赖真实 Key。
+- 新闻诊断当前通过同进程 Application 暴露，不新增新闻 HTTP Handler、公网管理接口或独立诊断服务。
+
+### 诊断状态不能互相覆盖
+
+- 检查执行状态：passed/degraded/failed/skipped/unknown。
+- Provider/来源可用性：available/degraded/unavailable/skipped/unknown。
+- 数据质量：valid/degraded/invalid/unknown。
+- Freshness：fresh/stale/unknown/not_applicable。
+- 授权策略：approved/restricted/pending/revoked。
+
+例如，Provider 连通性 passed，但搜索返回零条有效候选，连通性仍是 passed，搜索质量可为 degraded；授权 pending 时，即使正文抓取成功，持久化仍必须 skipped/restricted，不能算整体可用。
 
 ## 5. 可靠性与安全
 
