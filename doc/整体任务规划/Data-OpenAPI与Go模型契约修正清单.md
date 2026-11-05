@@ -846,3 +846,21 @@ Data 分支最新 HEAD 再次前进至 `125720fe045bb7a5f68a873ddec5e9d2a46cf65f
 最新 Go test suite run `42020866311` 仍 failure；market-data gofmt 继续失败，tests/race/vet 跳过，Docker market-data image build 失败。根模块、go-core、MariaDB Migration/PIT integration 成功；WebUI checks 和 Go-Python parity 成功；Live provider probe 有新的运行仍 in_progress，前一运行 success。
 
 这说明连续两次格式修正提交后，Pytdx 测试文件仍有 gofmt 差异；应由 Data 分支执行完整 gofmt 后重新提交，而不是继续手工对齐少数字段。DATA-CONTRACT-001 仍未关闭。
+
+
+### 11.27 Data 最新 HEAD：gofmt 恢复，但新增对账测试编译失败（2026-11-05）
+
+Data 最新 HEAD：`e21447e46b5c2c7e0b50336e4fbbe67885b268fb`。
+
+相较 125720fe，分支新增 3 个提交，涉及：
+- `services/market-data/internal/provider/cross_provider_daily_compare_test.go`
+- `services/market-data/internal/provider/pytdx_live_probe_test.go`
+
+最新 Go test suite run `42021287382`：
+- gofmt 已通过，说明前一轮 Pytdx 格式门禁已解除。
+- market-data `go test ./...` 失败：`internal/provider/cross_provider_daily_compare_test.go:20:43: unknown field VolumeGranularity in struct literal of type CrossProviderDailyBar`。
+- 因测试编译失败，race/vet 被跳过；Docker market-data 镜像构建失败。
+- 根模块、go-core、MariaDB Migration/PIT integration 成功；Live provider probe、WebUI checks 成功。
+- Go-Python parity run `42021287608` failure，其 Python/Go 样例比较工具与 parity contract tests 通过，但后续 market-data Go tests 因同一编译错误失败。
+
+**DATA-CONTRACT-001 更新状态**：gofmt 子项已恢复，但完整 Data CI 仍未恢复；当前阻断从格式错误转为测试代码编译错误。先修复 `VolumeGranularity` 字段与实际 `CrossProviderDailyBar` 类型契约的一致性，再跑 test/race/vet/镜像构建。不能将这次失败归类为契约 Schema 问题。
