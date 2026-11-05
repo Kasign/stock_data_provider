@@ -2916,3 +2916,11 @@ test("UIR-2 market stocks pagination controls wrap within narrow panels", () => 
   assert.match(html, /id="market-stocks-prev"/);
   assert.match(html, /id="market-stocks-next"/);
 });
+
+
+test("UIR-2 local alert draft text wraps inside flex cards", () => {
+  assert.match(stylesheet, /\.local-alert-draft-card > div\s*\{[^}]*min-width:\s*0;[^}]*overflow-wrap:\s*anywhere;/);
+  assert.match(stylesheet, /\.local-alert-draft-card h4,\s*\.local-alert-draft-card p\s*\{[^}]*overflow-wrap:\s*anywhere;/);
+  assert.match(localAlertDrafts, /const copy = document\.createElement\("div"\);[\s\S]*?title\.textContent = item\.name;/);
+  assert.match(localAlertDrafts, /name\.length > 80/);
+});

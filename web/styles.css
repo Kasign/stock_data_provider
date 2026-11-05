@@ -4832,6 +4832,8 @@ button:disabled {
 .local-alert-draft-list{display:grid;gap:9px}
 .local-alert-draft-card{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:12px;border:1px solid var(--border);border-radius:9px;background:var(--panel-raised)}
 .local-alert-draft-card h4{margin:0 0 5px;font-size:13px}
+.local-alert-draft-card > div { min-width: 0; overflow-wrap: anywhere; }
+.local-alert-draft-card h4, .local-alert-draft-card p { overflow-wrap: anywhere; }
 .local-alert-draft-card p{margin:3px 0;color:var(--text-dim);font-size:11px;line-height:1.6}
 .local-alert-draft-actions{display:flex;gap:6px;flex-wrap:wrap}
 .local-alert-draft-actions button{white-space:nowrap}
