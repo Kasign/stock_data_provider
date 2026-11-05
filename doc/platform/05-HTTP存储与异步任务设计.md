@@ -159,3 +159,10 @@ HTTP Client 必须区分固定 Provider API Endpoint 与不可信来源 URL。�
 代码提交 `70e780bcbaaf8c3a084534ba5214a6fcec35ee7c` 对应 Platform Go checks 已通过 gofmt、平台包单测、race test 和 vet，CI：[41997989479](https://github.com/Kasign/stock_data_provider/actions/runs/41997989479)。
 
 测试使用 fake SQL Connector/Driver 和注入 Redis Dialer，不依赖外部数据库服务。真实 MariaDB/Redis 集成、故障恢复和现有分析 Store 的平台化接入尚未验收；服务入口和领域 Migration 总注册仍由集成分支负责。
+
+
+### 9.5 Migration 顺序保护补充
+
+执行前不仅检查未知版本和 checksum 漂移，还检查已应用版本必须构成当前注册清单的有序前缀。若数据库记录了较新版本，但更早版本缺失，直接拒绝执行，防止旧 Migration 被补跑到新 Schema 上。
+
+验证提交：`b63c2ca64d165f3fb207070190821da76a02dedb`；CI：[41998916359](https://github.com/Kasign/stock_data_provider/actions/runs/41998916359)，全部专项检查通过。
