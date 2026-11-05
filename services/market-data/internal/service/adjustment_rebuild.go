@@ -116,7 +116,7 @@ func rebuildAdjustedDailyBarsWithMode(raw []model.DailyBar, factors []model.Adju
 			// Current reconstruction may consume a persisted factor with unknown
 			// Provider availability, but it must never report that result as valid.
 			factor.QualityStatus = model.QualityDegraded
-			factor.QualityReasons = appendReasonOnce(factor.QualityReasons, "provider_available_at_unknown")
+			appendReasonOnce(&factor.QualityReasons, "provider_available_at_unknown")
 		}
 		factorBasis := model.NormalizeAdjustmentFactorBasis(factor.Basis)
 		if factorBasis != model.AdjustmentFactorShared && factorBasis != model.AdjustmentFactorForward && factorBasis != model.AdjustmentFactorBackward {
