@@ -2474,7 +2474,7 @@ button:disabled, input:disabled, select:disabled, textarea:disabled { cursor: no
 }
 .run-flow-dialog .event-body strong {
   color: var(--text);
-  font-size: 13px !important;
+  font-size: 13px;
   font-weight: 650;
   line-height: 1.5;
   overflow-wrap: anywhere;
@@ -3537,12 +3537,12 @@ td {
 }
 
 .run-flow-dialog .run-flow-events-column .event-heading h3 {
-  font-size: 14px !important;
+  font-size: 14px;
 }
 
 .run-flow-dialog .run-flow-events-column .event-heading span {
   color: var(--text-dim);
-  font-size: 11px !important;
+  font-size: 11px;
 }
 
 .run-flow-dialog .task-events-read-status {

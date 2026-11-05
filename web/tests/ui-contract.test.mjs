@@ -2743,3 +2743,18 @@ test("UIR-2 最近分析搜索、反馈和移除操作使用组件基础字号",
   assert.match(stylesheet, /@media \(max-width: 600px\) \{[\s\S]*?\.recent-analysis-tools \{ align-items: stretch; flex-direction: column; \}/);
   assert.match(stylesheet, /@media \(max-width: 600px\) \{[\s\S]*?\.quote-heading-actions \.button \{ padding: 0 9px; \}/);
 });
+
+
+test("UIR-2 Run Flow 事件标题与事件区辅助文字由组件选择器控制字号", () => {
+  assert.match(stylesheet, /\.run-flow-dialog \.event-body strong \{[\s\S]*?font-size:\s*13px\s*;/);
+  assert.match(stylesheet, /\.run-flow-dialog \.run-flow-events-column \.event-heading h3 \{\s*font-size:\s*14px\s*;/);
+  assert.match(stylesheet, /\.run-flow-dialog \.run-flow-events-column \.event-heading span \{\s*color:\s*var\(--text-dim\);\s*font-size:\s*11px\s*;/);
+  assert.doesNotMatch(stylesheet, /\.run-flow-dialog \.event-body strong \{[^}]*!important/);
+  assert.doesNotMatch(stylesheet, /\.run-flow-dialog \.run-flow-events-column \.event-heading h3 \{[^}]*!important/);
+  assert.doesNotMatch(stylesheet, /\.run-flow-dialog \.run-flow-events-column \.event-heading span \{[^}]*!important/);
+  assert.match(stylesheet, /\.run-flow-dialog \.event-row-succeeded \.event-state-label,[\s\S]*?\.run-flow-dialog \.event-row-completed \.event-state-label \{[\s\S]*?color:\s*var\(--accent\);/);
+  assert.match(stylesheet, /\.run-flow-dialog \.event-row-failed \.event-state-label,[\s\S]*?\.run-flow-dialog \.event-row-rejected \.event-state-label \{[\s\S]*?color:\s*var\(--danger\);/);
+  assert.match(stylesheet, /\.run-flow-dialog \.event-row-running \.event-state-label,[\s\S]*?\.run-flow-dialog \.event-row-processing \.event-state-label \{[\s\S]*?color:\s*var\(--blue\);/);
+  assert.match(stylesheet, /\.run-flow-dialog \.event-row-pending \.event-state-label \{[\s\S]*?color:\s*var\(--warning\);/);
+  assert.match(stylesheet, /@media \(max-width: 600px\) \{[\s\S]*?\.run-flow-dialog \.event-heading \{ align-items: flex-start; flex-direction: column;/);
+});

@@ -1806,3 +1806,12 @@ CI 复核记录：本批首次 Chromium Browser Smoke 在个股研究数据质�
 - [x] UI contract 锁定基础字号、语义反馈、焦点和移动端布局。
 - [ ] 在本批最终提交 SHA 上运行 WebUI Checks、JS 语法检查、Compose 校验和 Nginx 镜像构建。
 - [ ] 执行 Chromium Browser Smoke；人工核验最近分析搜索/反馈、移除操作和分析结果标题按钮在多分辨率下的实际可读性。
+
+## 2026-11-05 UIR-2 第四十二批：Run Flow 事件字号优先级收敛
+
+- [x] Run Flow 事件标题、事件区标题与辅助文字移除 3 处冗余 `!important`，字号保持 13px/14px/11px。
+- [x] 保留成功、失败、运行中、等待等状态语义色。
+- [x] 保留窄屏事件标题布局和事件区滚动行为。
+- [x] UI contract 锁定字号、优先级和状态颜色。
+- [ ] 在本批最终提交 SHA 上运行 WebUI Checks、JS 语法检查、Compose 校验和 Nginx 镜像构建。
+- [ ] 执行 Chromium Browser Smoke；人工核验 Run Flow 事件列表、状态标签和窄屏布局。
