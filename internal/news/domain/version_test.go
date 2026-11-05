@@ -22,9 +22,9 @@ func TestBuildVersionFingerprintIgnoresObservationAndProviderSummary(t *testing.
 func TestBuildVersionFingerprintChangesWithSourceContent(t *testing.T) {
 	candidate := Candidate{Title: "标题"}
 	first := ContentLayers{
-		SourceSummary: "来源摘要",
+		SourceSummary:       "来源摘要",
 		SourceSummaryOrigin: ContentOriginFeedSummary,
-		Body: &ContentPayload{Origin: ContentOriginFeedBody, Format: ContentFormatUnknown, Kind: ContentFullText, Text: "第一段\n第二段"},
+		Body:                &ContentPayload{Origin: ContentOriginFeedBody, Format: ContentFormatUnknown, Kind: ContentFullText, Text: "第一段\n第二段"},
 	}
 	second := first
 	body := *first.Body
