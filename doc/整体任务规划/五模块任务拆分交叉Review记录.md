@@ -209,3 +209,12 @@ Domain/Contract 不得因为无关模块的 Adapter/Integration 未完成而被�
 - ToolDefinition 是受控声明，LLM 只传输和解析；Researchflow 仍负责白名单、权限、预算和执行。
 - 完整字段表、JSON Schema、错误分类、资源边界和 Owner 未决项见 doc/llm/04-ProviderPort与DTO字段级契约.md。
 - 本轮仅形成 LLM-002 规划侧建议稿，待 LLM/Platform Owner Review；不代表接口冻结或模块开工。
+
+
+## 11. LLM-002 Owner Review 深化（2026-11-05）
+
+- 发现原 Stream Port 只返回 error，没有交付 terminal 聚合后的 ModelResponse；Generate 也没有区分合法上游 failed/incomplete envelope 与 Adapter/transport error。建议统一为 Generate/Stream 返回 (ModelResponse,error)，Stream 通过同步 callback 提供事件并返回最终聚合响应。
+- 七项建议决议：MVP 单轮文本；ToolDefinition 纳入但默认禁用、只在能力 supported 时允许 auto；reasoning_effort 保留可选但默认关闭；本地 Schema 使用 Draft 2020-12、上游 strict 子集独立验证；Usage.total_tokens 有条件派生；SSE 序号严格校验；request/correlation/Gateway/upstream 四类 ID 分离。
+- SSE 若全流提供 sequence_number，必须连续递增；缺号/重号/倒退不能标记 completed。若整流均不提供可继续但记录序号能力 unavailable；混合有无按协议异常。
+- ModelResponse.status 表达上游合法终态；Go error 表达传输、HTTP、协议、Schema、callback 和 Context 错误。无 terminal EOF 返回部分 Response + stream_interrupted。
+- 以上为规划侧建议，待 LLM/Platform Owner Review；不构成签字冻结。详细字段和决议见 doc/llm/04-ProviderPort与DTO字段级契约.md。

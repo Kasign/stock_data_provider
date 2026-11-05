@@ -156,7 +156,7 @@ ModelRequest {
 ModelResponse {
   request_id, provider_id, response_id?, status, output_items[], output_text?,
   structured_json?, tool_calls[], usage?, model_requested, model_actual?,
-  model_version?, gateway_request_id?, incomplete_reason?, error?,
+  model_version?, gateway_request_id?, upstream_request_id?, incomplete_reason?, error?,
   started_at, finished_at, duration_ms
 }
 ModelEvent {
@@ -168,7 +168,7 @@ Usage {
 }
 ```
 
-首批协议以 OpenAI Responses 为基线，内部 ModelRequest 暂定单轮 input_text + instructions；复杂 input item、多模态和多协议路由 deferred。ModelResponse 必须保留 output item 类型与 completed/incomplete/failed 状态；Usage 缺失保持 unknown/null。Stream 使用 Responses SSE ModelEvent，必须有 terminal event；无 terminal 的 EOF 视为 stream_interrupted。LLM 只实现模型协议和 Adapter，不执行工具、不持有研究领域事实、不编排工作流。Tool Call 是模型返回的请求，由 Researchflow 授权、校验和执行。Structured Output 必须按调用方 Schema 本地校验；解析失败不能伪装成功。Prompt 正文默认不持久化。首期不要求多模型路由/自动降级。字段细节见 doc/llm/04-ProviderPort与DTO字段级契约.md。
+首批协议以 OpenAI Responses 为基线，内部 ModelRequest 暂定单轮 input_text + instructions；复杂 input item、多模态和多协议路由 deferred。ModelResponse 必须保留 output item 类型与 completed/incomplete/failed 状态；Usage 缺失保持 unknown/null。Stream 使用同步 callback 并返回最终 ModelResponse；无 terminal 的 EOF 视为 stream_interrupted。ToolDefinition 是受控可选项，默认 tool_choice=none，只有 capability=supported 才允许发送；LLM 不执行工具，Researchflow 负责授权、校验和执行。Structured Output 本地 Schema 基线建议 Draft 2020-12，上游 strict 子集能力单独验证。Request ID、Gateway ID、上游 ID 和 correlation ID 分开保存。Prompt 正文默认不持久化。字段细节见 doc/llm/04-ProviderPort与DTO字段级契约.md。
 
 ## 8. Notification：事件与投递
 

@@ -776,3 +776,12 @@ Workflow Template 按 stage_code + template_version 固定 on_degraded、on_skip
 - CapabilityState 默认 unknown，必须绑定 Provider/Model/Gateway 版本与验证时间；本地 Responses、Structured Output、Tool Call 未经真实 E2E 不得设为 supported。
 - 本地 Schema 校验、Usage null、工具不执行和 SecretRef 隔离均纳入契约建议。
 - 当前仍待 LLM/Platform Owner Review；未选择 JSON Schema validator 具体库，未实现 Port/Adapter/Fixture，也未创建模块分支。GOV-004 继续 NO-GO。
+
+
+## 35. LLM-002 Owner Review 建议决议（2026-11-05）
+
+- 原 Port 存在 Stream 不能返回最终聚合 Response、Generate 未定义 Response.status 与 Go error 分工的问题，已在规划建议中修正为 Generate/Stream 均返回 (ModelResponse,error)。
+- MVP 输入单轮文本；ToolDefinition 受控纳入但默认 tool_choice=none；reasoning_effort 保留可选但默认关闭；JSON Schema 本地基线建议 Draft 2020-12；Usage.total_tokens 仅在分项完整时派生；SSE sequence_number 严格连续；四类 Request/Correlation ID 分开保存。
+- 上游合法 incomplete/failed 由 ModelResponse.status/error 表达；Adapter 执行错误由 Go error 表达；EOF 无 terminal event 返回部分 Response + stream_interrupted。
+- 本轮只形成规划侧建议，待 LLM/Platform Owner 签字；validator 库/许可证、真实 Gateway ID header 映射、本地模型 Responses/Schema/Tool/Reasoning/SSE E2E 尚未完成。
+- LLM-001 仍 partial；LLM-002 仅契约草案；不宣称 LLM-004/005 能力通过，不创建 feat/llm 分支，GOV-004 继续 NO-GO。

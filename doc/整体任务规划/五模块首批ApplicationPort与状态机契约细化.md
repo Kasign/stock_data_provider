@@ -252,12 +252,13 @@ LLM-001 已完成现有 Gateway 静态协议盘点：客户端主协议为 OpenA
 - text.format 目前只能确认可透传，不能认定本地模型 structured output 已通过；Adapter 必须本地 Schema 校验。
 - tools 可以透传，但 LLM 不执行；Researchflow 负责授权、参数校验、预算、执行和结果回填。
 - 当前 Gateway 本地路径会合并 instructions 与 input 中 system/developer 项，并可能注入 stream_options.include_usage；Adapter Fixture 必须覆盖这些改写。
+- ID 明确区分：request_id（调用方生成并回显）、correlation_id（跨模块关联）、gateway_request_id（Gateway X-Request-ID）、upstream_request_id（上游 Request-Id）。
 
 LLM-002 当前建议接口：
-- Generate(ctx, ModelRequest) -> ModelResponse
-- Stream(ctx, ModelRequest, onEvent func(ModelEvent) error) -> error
+- Generate(ctx, ModelRequest) -> (ModelResponse, error)
+- Stream(ctx, ModelRequest, onEvent func(ModelEvent) error) -> (ModelResponse, error)
 
-Stream 使用同步回调提供背压；回调错误或 Context 取消必须停止读取上游。详细 DTO、CapabilityState、Responses SSE event、Error Contract 和 Owner 未决项见 doc/llm/04-ProviderPort与DTO字段级契约.md。
+Stream 使用同步回调提供背压，并返回最终聚合 Response。Go error 表示 Adapter 执行错误；合法上游 incomplete/failed 由 Response.status/error 表达。无 terminal event 的 EOF 返回部分 Response 与 stream_interrupted error。详细 DTO、CapabilityState、Responses SSE event、Error Contract 和 Owner 未决项见 doc/llm/04-ProviderPort与DTO字段级契约.md。
 
 LLM-001 静态盘点已完成，在线真实调用未执行；LLM-002 Port/DTO 草案待 LLM/Platform Owner Review。Stream 的生产可用状态必须由实际本地上游 E2E 决定；若不支持应标记 unsupported，不得通过一次性响应伪装增量事件。Tool Call 作为结构化输出返回，不由 LLM 执行。
 

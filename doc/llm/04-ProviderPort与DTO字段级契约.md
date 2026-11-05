@@ -51,14 +51,14 @@
 | purpose_code | string | 是 | 稳定调用用途代码，不写自由文本 Prompt |
 | model | string | 是 | 明确模型 ID，不依赖任意模型路由 |
 | instructions | string | 是 | 序列化到 Responses instructions；允许空字符串 |
-| input_text | string | 是 | 首批只支持单轮文本，序列化为 Responses input string |
+| input_text | string | 是 | 首批只支持非空单轮文本，序列化为 Responses input string |
 | max_output_tokens | integer | 是 | 正整数，受调用预算限制 |
 | temperature | *number | 否 | 仅 capability=supported 时发送 |
 | top_p | *number | 否 | 仅 capability=supported 时发送 |
-| reasoning_effort | enum | 否 | low/medium/high；未知能力时不得静默发送 |
+| reasoning_effort | enum | 否 | low/medium/high；默认不发送，仅 capability=supported 时允许 |
 | response_schema | JSONSchemaSpec? | 否 | 发送前做本地语法、大小和深度校验 |
 | tools | ToolDefinition[] | 否 | 只接受调用方授权后的定义；不执行 |
-| tool_choice | enum? | 否 | 首批限制 none/auto；required/指定工具延后 |
+| tool_choice | enum? | 否 | 默认 none；仅 tools 非空且 function_tool_calls=supported 时允许 auto；required/指定工具延后 |
 | deadline_at | UTC timestamp | 是 | 绝对截止时间，不得晚于调用方 Context deadline |
 | correlation_id | string | 否 | 跨模块关联 ID，不承载领域对象 |
 | trace_id | string | 否 | 受控追踪标识 |
@@ -70,8 +70,8 @@
 | 字段 | 类型 | 必需 | 约束 |
 |---|---|---:|---|
 | name | string | 是 | 稳定 Schema 名称 |
-| schema_json | json.RawMessage | 是 | 合法 JSON Schema，限制字节数和深度 |
-| strict | bool | 是 | 显式指定，不依赖上游默认值 |
+| schema_json | json.RawMessage | 是 | 合法 JSON Schema Draft 2020-12，限制字节数和深度 |
+| strict | bool | 是 | 显式指定，不依赖上游默认值；上游 strict 子集另行检查 |
 
 Adapter 序列化到 Responses text.format 的 type=json_schema/name/strict/schema。Schema 编译失败属于本地 invalid_request；响应后必须再次校验 JSON。
 
@@ -109,7 +109,8 @@ ToolDefinition 是 Researchflow Registry 筛选后的只读声明。LLM 只序�
 | model_requested | string | 是 | 请求模型 ID |
 | model_actual | string? | 否 | 上游响应 model 或 Gateway 实际模型 |
 | model_version | string? | 否 | 上游明确返回才设置 |
-| gateway_request_id | string? | 否 | 从响应头读取，缺失允许 |
+| gateway_request_id | string? | 否 | Gateway 生成的 X-Request-ID，缺失允许 |
+| upstream_request_id | string? | 否 | Gateway 透传/回传的上游 Request-Id；与 gateway_request_id 分开保存 |
 | incomplete_reason | string? | 否 | Responses incomplete_details.reason |
 | error | ModelErrorInfo? | 否 | 稳定错误码和安全摘要 |
 | started_at / finished_at | UTC timestamp | 是 | 调用时间边界 |
@@ -168,10 +169,10 @@ Usage 是计量信息，不是输出质量证明；缺失、0 和 unknown 必须
 ## 6. Stream Port 与事件
 
 建议接口：
-- Generate(ctx, ModelRequest) -> ModelResponse
-- Stream(ctx, ModelRequest, onEvent func(ModelEvent) error) -> error
+- Generate(ctx, ModelRequest) -> (ModelResponse, error)
+- Stream(ctx, ModelRequest, onEvent func(ModelEvent) error) -> (ModelResponse, error)
 
-Stream 使用同步回调提供背压；回调返回错误或 Context 取消时停止读取上游。
+Stream 使用同步回调提供背压，并返回最终聚合的 ModelResponse。Generate/Stream 的 Go error 表示传输、HTTP 非成功、协议解析/校验、本地 Schema 校验、回调或 Context 取消等 Adapter 执行错误；上游合法返回的 status=incomplete/failed 通过 ModelResponse.status 与 ModelResponse.error 表达，不重复包装成 Go error。Stream 收到 terminal event 后返回最终 Response；无 terminal event 的 EOF 返回部分 Response 与 stream_interrupted 类型错误。回调错误或 Context 取消必须停止读取上游，并返回已解析的部分 Response（若有）及对应 error。
 
 ModelEvent 字段：type、sequence_number?、response_id?、output_index?、content_index?、item_id?、call_id?、delta?、usage?、error?、received_at。
 
@@ -180,7 +181,7 @@ ModelEvent 字段：type、sequence_number?、response_id?、output_index?、con
 流结束规则：
 - 必须收到明确 terminal event（completed/incomplete/failed/error）才算终止；只有 completed 是成功，incomplete/failed/error 都必须按非成功结果返回。
 - EOF 前没有 terminal event，返回 stream_interrupted；不得把连接关闭当成功。
-- sequence_number 不得倒退；缺号/重号策略由 Fixture 固定并经 Owner Review。
+- sequence_number 若全流提供，必须严格连续递增；重复/倒退返回 invalid_response，出现缺号返回 stream_sequence_gap，不得将该流标记为 completed。若整条流均未提供 sequence_number，可继续解析并记录该 Provider 未提供序号；同一条流中有的事件提供、有的事件缺失，按协议异常处理。
 - 首字节、首个文本 delta、首个 reasoning delta 分别记录；Responses TTFT 不能用首字节时间冒充。
 - 收到首个事件后禁止自动透明重试，避免重复计费和重复输出。
 
@@ -221,12 +222,28 @@ DTO、Port、Fixture 和 parser 单元测试不依赖 Researchflow/Platform 生�
 
 ## 10. Owner 未决项
 
-1. 首批 input_text 单轮输入是否满足研究流程；建议先固定单轮文本，复杂 input item/multimodal 延后。
-2. ToolDefinition 是否进入首批 ModelRequest；建议保留受控结构，但 capability=unknown 时禁止发送，工具执行永远归 Researchflow。
-3. reasoning_effort 是否纳入首批参数；当前配置样本有 high，但 Qwen/llama.cpp 对该字段的实际行为仍需验证。
-4. JSON Schema validator 的具体库与 Draft 版本；先冻结语义和 Fixture，不在此阶段锁定实现库。
-5. Usage.total_tokens 缺失时是否允许派生；建议允许但必须 source=derived。
-6. SSE sequence_number 缺号/重号策略；建议重号视为协议异常，缺号记录诊断并继续，最终由 Owner Review 确认。
-7. Gateway request_id 与 LLM request_id 的映射；建议保留双字段，不覆盖内部 correlation_id。
+### 10.1 Owner Review 建议决议（规划侧，待 Owner 确认）
 
-**当前结论：LLM-002 的最小 Port/DTO 已细化到可评审和编写 Fixture 的粒度；仍待 LLM/Platform Owner Review。LLM-001 在线 E2E、LLM-004/005 真实模型能力仍未通过。**
+1. **单轮文本输入：建议接受为 MVP。** ModelRequest 固定 instructions + input_text；input_text 非空。多轮消息、previous_response_id、conversation_id、图片/音频/视频和任意 input item 延后，不允许静默降级或丢弃。
+2. **ToolDefinition：建议纳入 MVP 的受控可选字段。** 默认 tool_choice=none；仅当 tools 非空且 function_tool_calls=supported 时允许 auto。required、指定工具强制选择和并行工具策略延后。LLM 只解析 function_call，不执行、不批准。
+3. **reasoning_effort：保留可选 typed 字段，但默认关闭。** 只有 CapabilityState 对当前 Provider + Model + Gateway 版本明确为 supported 才能发送；当前本地 Qwen/llama.cpp 未验证，不得因为 Gateway 配置样本出现 high 就启用。
+4. **JSON Schema：建议固定 Draft 2020-12 为本地 Schema 语义基线。** Adapter 本地完整校验输入 Schema 与模型输出；上游 Responses strict schema 子集兼容性单独判定，不支持的关键字不得静默移除。具体 Go validator 库可延后，但不得延后 dialect、格式校验和深度/字节限制。
+5. **Usage.total_tokens：允许受控派生。** 上游值优先；缺失时仅当 input_tokens 与 output_tokens 都明确且加法无溢出时派生，source=derived。上游 total 与分项不一致时保留上游原值并产生诊断，不覆盖。
+6. **SSE sequence_number：建议严格校验。** 若整条流均提供，必须连续递增；重复/倒退为 invalid_response，缺号为 stream_sequence_gap，均不得标记 completed。整条流都未提供可继续但标记序号能力 unavailable；同流混合有无序号按协议异常处理。
+7. **Request ID：明确三层 ID。** ModelRequest.request_id 由调用方生成并由 ModelResponse 原样回显；correlation_id 用于跨模块关联；gateway_request_id 记录 Gateway 的 X-Request-ID，upstream_request_id 单独记录 Gateway 透传/回传的上游 Request-Id。四者不得相互覆盖或伪造。
+
+### 10.2 Port 返回值语义
+
+- Generate(ctx, request) 与 Stream(ctx, request, callback) 均返回 (ModelResponse, error)。Stream 在 terminal event 后返回最终聚合 Response。
+- Go error 表示传输/HTTP 非成功、协议解析、Schema 校验、callback 或 Context 执行错误；若收到结构合法的 response.incomplete / response.failed，则以 Response.status 与 Response.error 表达，不把同一上游终态重复包装成 Go error。
+- EOF 无 terminal event、sequence gap、重复/倒退序号均返回 typed error；可同时返回部分 Response 供诊断，但部分结果不得标记 completed。
+- Tool Call 默认关闭；工具定义和工具调用能力都需显式 supported，调用结果交回 Researchflow。
+
+### 10.3 尚待确认/验证
+
+- LLM/Platform Owner 对上述七项建议决议签字确认。
+- 选择并锁定 Draft 2020-12 validator 实现库与许可证审查；补齐格式校验、深度/大小限制和 golden fixtures。
+- 以真实 Gateway 验证 X-Request-ID、上游 Request-Id 的响应头映射；当前文档只确认两者是不同 ID。
+- 对当前本地 llama.cpp/Qwen 验证 Responses JSON/SSE、Tool Call、Structured Output、reasoning_effort 和断流行为；未验证能力继续为 unknown。
+
+**当前结论：规划侧已形成七项建议决议和一致的 Port 返回值语义，仍待 LLM/Platform Owner 确认；不代表接口冻结、实现完成或 L2 Module Ready。**
