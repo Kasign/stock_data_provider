@@ -72,6 +72,19 @@ jobs:
     timeout-minutes: 10
     # Provider networks can rate-limit or block hosted runners; this diagnostic must not gate normal CI.
     continue-on-error: true
+    services:
+      mariadb:
+        image: mariadb:11.4
+        env:
+          MARIADB_ROOT_PASSWORD: market-data-ci
+          MARIADB_DATABASE: market_data_probe
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -128,6 +141,8 @@ jobs:
         env:
           MARKET_DATA_LIVE_HISTORICAL_PROBE: "1"
           LIVE_HISTORICAL_PROBE_REPORT_PATH: ${{ github.workspace }}/live-historical-probe-report.json
+          MARKET_DATA_TEST_MYSQL_DSN: "root:market-data-ci@tcp(127.0.0.1:3306)/market_data_probe?parseTime=true&loc=UTC"
+          MARKET_DATA_TUSHARE_TOKEN: ${{ secrets.TUSHARE_TOKEN }}
         working-directory: services/market-data
         run: go test -run TestLiveHistoricalProviderProbe -count=1 -v ./internal/service
       - name: Print production historical Probe report
