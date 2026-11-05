@@ -406,3 +406,44 @@ Data 分支最新 HEAD：`587f27683c8422810d2f7fc917a2c9324eb147b0`，提交锁�
 最新 SHA 的 Go test suite pending、Live provider probe in_progress、Go-Python parity in_progress、WebUI checks success。不得将 pending/in_progress 记录为通过。
 
 详细基线和 Run ID 见 Data 修正清单第 11.17 节。GOV-004 继续 NO-GO。
+
+## 20. Data 缺失 Model 字段的真实 API 路径审查（2026-11-05）
+
+本轮按 Operation → 路由 → Handler → Service/Provider → 实际响应对象核查原 15 个“Go 有字段、OpenAPI 缺字段”问题。结论修正为 **13 个应补 Schema、2 个应从 Go Model 删除**，不应机械地将 15 个字段全部新增到 OpenAPI。
+
+### 应补 Schema 的 13 个字段
+
+| Schema | 字段 | 实际 API 路径 | 运行时证据 |
+|---|---|---|---|
+| ProviderProbeCheckResult | left_adjustment_method / right_adjustment_method | POST probe、GET probe/history → ProviderProbeRun.check_results[] | Service 跨 Provider 对比结果明确赋值 |
+| ProviderProbeCheckResult | left_adjustment_reference_date / right_adjustment_reference_date | 同上 | Service 从两侧 Provider 结果提取参考日期 |
+| MarketBreadthSnapshot | excluded_non_a_share_count | GET /market/breadth | TickFlow 使用 len(excluded) 赋值 |
+| LimitPoolItem | seal_money / max_seal_money | GET /market/limit-pools → items[] | Hithink 对涨停池解析非负金额；单位由 provider_amount_unit 表达，当前为 provider_defined |
+| FundamentalSection | available_at | GET /stocks/{symbol}/fundamentals → sections[] | 当前 Provider 未赋值，但 Service PIT 校验读取该字段，Model 注释定义了精确市场可用时间 |
+| IndexConstituent | effective_from / effective_to / available_at / system_observed_at | GET /market/indices/{symbol}/constituents → items[] | 当前 Provider 未赋值；Service 历史区间质量门禁读取这些字段，缺失时降级 |
+| SourceStatus | market_capital_flow_capable | GET /data-sources → sources[] | Server 根据 MarketCapitalFlowProviders 能力集合赋值 |
+
+补充规则：
+- Provider Probe 四字段均为 optional string；Reference Date 在格式统一完成前不承诺 date format。
+- MarketBreadth excluded count 为 optional integer，minimum 0。
+- seal_money/max_seal_money 为 optional nullable number，不能写死 CNY。
+- Fundamental available_at 为 optional nullable date-time；不从 report_date/publication_date/fetched_at 推导。
+- IndexConstituent 有效区间为 optional date，available_at/system_observed_at 为 optional nullable date-time；不得从 provider_report_date 推导。
+- SourceStatus capability 为 optional boolean；false 因 omitempty 可缺席。
+
+### 应从 Go Model 删除的 2 个字段
+
+- SectorRanking.provider_report_date：当前 SectorRanking Provider/Service 没有生产赋值点；报告日期已由 SectorRankingSnapshot.provider_report_date 表达，逐条排名重复该字段没有必要。
+- SectorRankingSnapshot.excluded_non_a_share_count：当前 Sector Ranking Provider/Service 没有生产赋值点；不能把其他 MarketBreadth/LimitPool 路径的计数移植为行业排名的排除计数。
+
+详细 Operation → Handler → Model 对照、逐字段证据和建议见 [Data OpenAPI 与 Go 模型契约修正清单](./Data-OpenAPI与Go模型契约修正清单.md) 第 11.18 节。
+
+**重要限制**：上述 13 个补充字段尚未修改 Data 分支，也未通过真实 Handler Golden 验证。FundamentalSection 和 IndexConstituent 的 PIT 字段目前由 Provider 缺省，新增 Schema 仅冻结“有可验证来源证据时可返回”的可选契约，不能因此宣称 PIT 数据已可用。
+
+## 21. Data 最新 HEAD 与 CI 复核（2026-11-05）
+
+Data 最新 HEAD 更新为 cce59e8de493813a4b04f7d0bd24211e1e919bb1（style(baostock): 修正专项报告结构体格式 [historical_baostock_factors]），相较 587f276 ahead 1 / behind 0；唯一改动是 internal/baostock/live_adjustment_probe_test.go 的 gofmt 排版。
+
+587f276 的 Go test suite 和 Docker market-data image build 曾因同一测试文件未 gofmt 失败，导致 market-data 单测/race/vet 步骤跳过；其 MariaDB Migration/PIT integration、go-core 和根模块测试通过。cce59e8 修正格式后，最新 SHA 的 Go test suite、Live provider probe、WebUI checks、Go-Python parity 全部 completed / success。
+
+CI 全绿不等于 OpenAPI 与 Go Model 契约问题已经修复。GOV-004 仍 NO-GO。
