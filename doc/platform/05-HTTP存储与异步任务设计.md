@@ -266,3 +266,16 @@ Migration 状态为 `running` 或 `failed` 时，Runner 不会自动重跑。处
 - 依赖槽位覆盖上游请求和响应体缓冲读取。响应体读取完成后，上游 Body 已关闭，返回给调用方的是有界内存 Body；调用方仍应关闭返回 Body，但不会因忘记关闭而占用依赖槽位。
 - `CloseIdleConnections` 只关闭空闲连接，不取消活动请求；调用后 Client 仍可继续使用。它不是 Client 的永久 Close，也不替代服务退出时的请求 Context 取消与生命周期管理。
 - 慢速响应体必须验证在读取完成前占用依赖槽位；关闭空闲连接必须验证不影响活动请求且后续请求仍可执行。
+
+
+### 7.11 IANA 特殊用途地址覆盖补充（2026-11-05）
+
+专项复核发现：仅依赖 `IsGlobalUnicast`、`IsPrivate` 等通用判断和原有静态前缀表，不能覆盖 IANA 特殊用途地址注册表中的全部条目。部分特殊用途前缀标记为 Globally Reachable=true，仍属于专用协议/服务地址，不应因可全局路由就自动作为普通 Provider 目标放行。
+
+本轮将当前 IANA IPv4/IPv6 Special-Purpose Address Registry 中原前缀表遗漏的条目补入拒绝列表，包括 IPv4 的 AS112/AMT 前缀，以及 IPv6 的 Dummy Prefix、Benchmarking、AMT、AS112、ORCHIDv2、协议实体标签、SRv6 SID 和 AS112 服务前缀。现有较大拒绝前缀（如 `2001::/23`）已覆盖的子网不重复添加。
+
+- `isPublicIP` 的语义是“允许作为普通公网 HTTP 目标”，不是简单判断是否可全局路由。
+- 新增地址回归用例应同时覆盖 IPv4/IPv6 特殊用途条目，避免未来维护时只补私网段。
+- IANA 注册表会更新；新增特殊用途分配或前缀变化时，必须重新核对地址表和测试。生产网络出口仍应叠加部署层 egress 防火墙，代码内静态列表不是唯一安全边界。
+
+参考：IANA [IPv4 Special-Purpose Address Registry](https://www.iana.org/assignments/iana-ipv4-special-registry)（Last Updated 2025-10-09）与 [IPv6 Special-Purpose Address Registry](https://www.iana.org/assignments/iana-ipv6-special-registry)（Last Updated 2025-10-09）。
