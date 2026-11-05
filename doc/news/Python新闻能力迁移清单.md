@@ -1,6 +1,8 @@
 # 旧 Python 新闻能力盘点与历史数据评估
 
- > 状态：历史盘点资料；不构成兼容开发要求  
+  > 状态：历史盘点资料；不构成兼容开发要求
+>
+> 阅读规则：本文件前半部分的接口、开关、部署和迁移描述是旧系统事实快照，不是新系统待办。第 11 节为当前最终决策；与其冲突的旧灰度、兼容、双写和调用方切换步骤全部废弃。  
 > 原则：先建立调用链证据，再确定迁移范围；不得根据模块名称推断调用关系。
 
 ## 1. 迁移原则
@@ -9,7 +11,7 @@
 
 Python 旧实现不是新模块的验收基准；新模块按已冻结的业务契约和质量规则验收。
 
-## 2. 必须登记的调用信息
+## 2. 历史调用信息记录字段（仅用于理解旧系统，不用于新模块兼容实现）
 
 | 项目 | 记录要求 |
 |---|---|
@@ -65,7 +67,7 @@ N1 核查后逐项填写，未核查前不填推测结果。
 | src/agent/tools/search_tools.py::_persist_news_response | 上述 Agent 工具 | Provider 成功且有结果 | 调用 DB save_news_intel 持久化 | 新新闻库需明确替代旧情报存储的范围 | 已核实方法，数据库实现与读取调用仍待追踪 |
 | src/market_analyzer.py 的本地情报合并 | MarketAnalyzer | 市场复盘生成时 | 将已持久化市场情报与搜索结果合并 | 需判断是迁移新闻查询还是保留研究素材库语义 | 已发现，具体调用链待追踪 |
 
-### 6.1 部署与兼容开关
+### 6.1 旧系统部署与兼容开关（历史事实，不迁移）
 
 - 根目录统一 Compose 只运行 stock-analysis-server、stock-analysis-data、stock-analysis-web，不包含 Python Bridge 和 go-core。
 - 可选 docker/docker-compose.go-migration.yml 才运行 Python Bridge + go-core + market-data；其注释明确与根统一栈分开。
@@ -115,7 +117,7 @@ N1 核查后逐项填写，未核查前不填推测结果。
 
 ## 9. 公共服务延期后的迁移实施边界（2026-11-05）
 
-- 当前迁移工作只推进调用链盘点、旧 DTO 到新闻 Domain 的转换、兼容适配、固定样本对照和调用方切换方案。
+- 该段描述的 DTO 转换、兼容适配和调用方切换方案已废弃；当前只保留调用链盘点、旧字段语义分析和历史数据价值评估。
 - 不实现 Python 旧 SQLite 到 MariaDB 的正式导入，不做双写，不创建临时数据库连接或 Redis 缓存。
 - 旧数据迁移预览、幂等批次、冲突报告、匿名化、计数校验和回滚方案可继续设计；实际执行等待公共 DB/迁移服务契约就绪。
 - 通用诊断与历史观测由公共服务统一承接；新闻迁移阶段只保留业务错误、质量原因和切换结果，不自行建设诊断平台。
@@ -138,7 +140,7 @@ N1 核查后逐项填写，未核查前不填推测结果。
 ### 10.2 intelligence_sources：来源目录与旧配置
 
 - 映射目标是新来源身份和 endpoint 配置，而不是新闻主体。
-- 旧 source_type、URL、名称、scope_type/scope_value、market、description 可作为来源登记初始数据。
+- 旧 source_type、URL、名称、scope_type/scope_value、market、description 仅作为未来人工审核时的历史参考，不得直接导入并自动启用。
 - 旧 enabled 仅表示旧系统是否启用，不代表新系统授权通过；迁移后新授权状态统一初始化为 pending，需重新核验条款、robots 和内容保存范围。
 - 旧 last_status、last_error、last_fetched_at 只能作为 legacy 状态快照，不能冒充当前来源可用性或公共诊断记录。
 - source_name 无法可靠解析为真实发布者时进入待人工映射清单，不创建通用 unknown source。

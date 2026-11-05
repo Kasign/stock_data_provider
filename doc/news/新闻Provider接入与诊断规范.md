@@ -115,7 +115,7 @@ Provider Adapter 直接实现于根模块 `internal/news/adapters/provider/`。`
 
 ## 8. N1 现有能力盘点（历史参考，2026-11-05）
 
-当前 Go 新闻搜索实现位于可选迁移路径的 go-core/internal/adapters/newssearch，包括 Bocha、Tavily、Brave News、显式 SearXNG、进程内缓存、查询计划、过滤排序和 Python fallback。新闻模块应通过适配器复用，不复制这些 Provider，也不在 N1 搬迁该包。
+当前 Go 新闻搜索实现位于可选迁移路径的 go-core/internal/adapters/newssearch，包括 Bocha、Tavily、Brave News、显式 SearXNG、进程内缓存、查询计划、过滤排序和 Python fallback。该实现仅作协议与历史行为参考；新模块迁移必要的 HTTP 协议处理并按根模块新契约重构，不复用旧 Searcher，也不复制其聚合、缓存、过滤排序和 fallback。
 
 market-data 已有公告 Provider 和公告 HTTP 能力，Go Core 通过 StockAnnouncementSource 调用。该公告来源可作为官方披露候选适配器；分页当前受 Searcher 限制为第 1 页 100 条，需在新闻采集接入时评估完整性，不要误认为已实现全量采集。
 
@@ -145,9 +145,11 @@ market-data Probe 的 connectivity、contract、quality、freshness、cross_prov
 
 ## 12. Provider provenance 与共享适配器历史方案（已废弃，2026-11-05）
 
-当前 go-core 的 Searcher 会把多个 Provider 结果合并并映射为旧 NewsItem，最终 DTO 不保留搜索 Provider 身份；NewsItem.Source 是发布来源字段，不是 Provider。当前 10 分钟缓存也会缓存混合 Provider 输出。因此现有 Searcher 不能直接作为新闻持久化入口。
+当前 go-core 的 Searcher 会把多个 Provider 结果合并并映射为旧 NewsItem，最终 DTO 不保留搜索 Provider 身份；NewsItem.Source 是发布来源字段，不是 Provider。当前 10 分钟缓存也会缓存混合 Provider 输出。因此现有 Searcher 不能直接作为新闻持久化入口。新模块必须在 Provider Adapter 边界保留 provider_code，不得先映射旧 DTO 再补身份。
 
 根服务与 go-core 是两个独立 Go module，根模块不能直接 import `go-core/internal/**`。不允许复制现有 Provider HTTP 实现。建议将 Provider 协议适配抽取到中立共享 Go library module，由根新闻模块和 go-core 各自适配自己的业务 DTO。
+
+（以下共享候选设计已废弃，仅保留历史背景，不再建设共享 Go Module。）
 
 共享候选必须保留：
 - `provider_code` 和可用时的 `provider_item_id`。
