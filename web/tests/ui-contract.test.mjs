@@ -2521,4 +2521,13 @@ test("UIR-2 settings feedback layout constraints are consolidated", () => {
   assert.ok(stylesheet.includes(".settings-connection-form .settings-feedback { margin: 0; }"));
   assert.ok(stylesheet.includes(".settings-feedback { font-size: 12px !important; }"));
   assert.ok(stylesheet.includes(":root[data-theme=\"light\"] .settings-feedback"));
+  const inlineStatus = exactCssDeclarationBlock(".settings-inline-status");
+  assert.match(inlineStatus, /margin:\s*11px 0 0\s*;/);
+  assert.match(inlineStatus, /color:\s*var\(--text-dim\)\s*;/);
+  assert.match(inlineStatus, /font-size:\s*12px\s*;/);
+  assert.doesNotMatch(inlineStatus, /!important/);
+  const browserStatus = exactCssDeclarationBlock(".settings-browser-data-panel > .settings-inline-status");
+  assert.match(browserStatus, /margin:\s*0\s*;/);
+  const browserErrorStatus = exactCssDeclarationBlock(".settings-browser-data-panel .settings-inline-status.is-error");
+  assert.match(browserErrorStatus, /color:\s*var\(--danger\)\s*;/);
 });

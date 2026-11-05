@@ -1692,3 +1692,14 @@ CI 复核记录：本批首次 Chromium Browser Smoke 在个股研究数据质�
 - [ ] WebUI Checks、语法检查、容器构建及 Chromium Browser Smoke 需在本批最终提交 SHA 上验收。
 - [ ] 人工核验 320/375/600/768/900/1280/1600px 交易日历与全站中文排版；CI 缺少 CJK 字体不能替代实机验收。
 - [ ] 后续按组件迁移历史可读性 !important，每批核对最终计算样式，不改变字体层级和响应式差异。
+
+
+## 2026-11-05 UIR-2 第三十二批：设置中心状态提示级联修复
+
+- [x] 复核设置中心状态提示在本地偏好、连接检查、浏览器数据导入导出等位置的使用。
+- [x] 移除 .settings-inline-status 基础规则及 success/warning 修饰规则中不必要的 !important。
+- [x] 恢复浏览器数据面板状态提示 margin: 0 的组件覆盖能力。
+- [x] 恢复浏览器数据面板错误状态使用 danger 语义色的覆盖能力。
+- [x] UI contract 锁定基础状态提示声明无 !important，以及面板 margin/错误颜色覆盖声明。
+- [ ] WebUI Checks、语法检查、容器构建及 Chromium Browser Smoke 需在本批最终提交 SHA 上验收。
+- [ ] 人工核验设置中心连接检查、导入导出反馈在深色/浅色主题及窄屏下的间距和状态颜色。

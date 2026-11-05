@@ -1246,9 +1246,9 @@ button:disabled, input:disabled, select:disabled, textarea:disabled { cursor: no
 }
 .settings-content { min-width: 0; }
 .settings-content .settings-section { min-width: 0; scroll-margin-top: 18px; }
-.settings-inline-status { margin: 11px 0 0 !important; color: var(--text-dim) !important; font-size: 12px !important; line-height: 1.65; overflow-wrap: anywhere; }
-.settings-inline-status.is-success { color: var(--accent) !important; }
-.settings-inline-status.is-warning { color: var(--warning) !important; }
+.settings-inline-status { margin: 11px 0 0; color: var(--text-dim); font-size: 12px; line-height: 1.65; overflow-wrap: anywhere; }
+.settings-inline-status.is-success { color: var(--accent); }
+.settings-inline-status.is-warning { color: var(--warning); }
 .settings-connection-actions { display: flex; flex-wrap: wrap; gap: 8px; flex: 0 0 auto; }
 .settings-config-panel, .settings-unavailable-panel { padding: 20px; min-width: 0; }
 .settings-unavailable-panel h3 { margin: 0 0 7px; font-size: 15px; }
