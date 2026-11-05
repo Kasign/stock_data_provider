@@ -1058,4 +1058,4 @@ Go suite 覆盖根模块、go-core、market-data 的格式/测试/race/vet、Mar
 
 - 初始 Go test suite Run `41957200038` 因 BaoStock 两个常量块未 gofmt 而失败；不是单元测试或业务断言失败。
 - 已修正 `internal/baostock/client.go`、`internal/baostock/protocol.go` 格式，并增加复权事件生效日期单元测试。
-- 最新 Go test suite Run `41958045915` 正在执行，最终结果待完整 Run 完成后记录。
+- Go test suite Push Run `41958045915` 全部 5 个 Job success：根模块、go-core、market-data（含 race/vet）、MariaDB migration/PIT、Compose/Docker 构建。

@@ -427,3 +427,10 @@ Live Provider Probe Run `41788725692` 的 workflow conclusion 为 success，但�
 - 两只股票各 9×4×2 个价格字段均未报告 mismatch。600036 的 2025-07-11 事件处于窗口中，事件因子生效日期选择通过。
 - 该结论仅证明 BaoStock 自身因子与自身复权 K 线内部一致，不证明与 Pytdx/Tushare 基准相同；不能作为跨源 matched。
 - 当前 Tushare adj_factor/dividend 仍权限不足；Pytdx GBBQ 对账继续进行。
+
+
+### 19.1 自动化验收
+
+- Go test suite Push Run：`41958045915`，全部 5 个 Job success。
+- 包含 market-data gofmt/unit/race/vet、MariaDB migration/PIT persistence、根模块与 go-core 测试、Compose/Docker 镜像构建。
+- BaoStock Live Provider Probe Run `41958045930` 的专项因子一致性测试 success。
