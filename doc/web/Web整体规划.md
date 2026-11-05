@@ -1,6 +1,6 @@
 # WebUI 整体规划
 
-更新时间：2026-11-05（当前代码/测试基线：`e9829c9157131d7b7318d2c952588f0122a9f063`）
+更新时间：2026-11-05（当前代码/测试基线：`bfe4495f630f36fb6276e5bb4f640359291b65a9`）
 目标分支：`feat/webui-market-data-console`
 适用范围：仅规划和管理 WebUI（`web/**`）及其专属文档（`doc/web/**`）。除明确获批的文档路径修正外，不修改 Go、Provider、数据库、服务端 API、OpenAPI 实现和部署配置。
 
@@ -1168,3 +1168,34 @@ app.js 仅负责两处初始化装配；页面路由 `setView`、hashchange、�
 - 代码提交：`df4f0ebf5ba3b680c6902d01987b98411d9bb189`。
 - WebUI Checks #41952755042：462/462 tests 通过，语法检查及容器构建通过。
 - Chromium Browser Smoke #41952755015：响应式与全部跨标签/业务交互验收步骤通过。
+
+
+### 2026-11-05 JSR-6K：请求生命周期综合 Review（已验收）
+
+审查范围：
+- 页面切换、行情/分析连接变更、浏览器标签页隐藏与 BFCache 恢复三种生命周期边界。
+- 请求 controller 与 generation 的 owner 关系、同一资源是否被多个 controller 重复管理。
+- 请求完成后的 `finally` 是否可能清理新请求的 controller、错误解锁新请求按钮。
+- Task/阶段事件并行轮询、分页游标、隐藏暂停与 visible 恢复之间的时序。
+- 跨标签页 `storage` 事件同步连接配置时，是否可能保留旧请求或覆盖未保存草稿。
+
+审查结论：
+- 市场总览按模块 key、市场活动按 dragon/calendar、个股研究按面板 key 分别拥有 controller/generation；没有发现同一资源被两个独立 owner 同时管理的明确问题。
+- 全市场分页的 `invalidate()` 会先递增 generation 并 abort，再清除快照和 busy；旧请求的 `finally` 不会覆盖新代际。
+- 市场总览、资金流历史、情绪历史、个股研究及数据中心探测/历史读取的 `finally` 均按 generation 或 controller identity 保护清理动作。
+- Task 状态与阶段事件共用同一轮询 controller，并通过 `Promise.allSettled` 汇合；暂停时先递增 poll generation 再 abort。旧轮询不会推进事件游标；恢复后从最后确认的 `taskEventCursor` 重读，重复事件由序号去重。
+- 跨标签页连接设置通过 `SETTINGS_KEY` 的 storage event 读取规范化配置，再进入 `applySettings`；连接变更失效旧请求，同时保留当前标签页未保存草稿，不会把旧 Task ID 发往新分析地址。
+- 发现数据中心主检查只有 generation 防晚到响应，没有主动取消在途健康/Provider 检查；连接变更后旧网络请求仍可能运行到单项 6 秒超时。
+
+修正：
+- 为 `runHealthCheck` 增加可选外部 AbortSignal；保留内部 6 秒超时 controller，并在外部取消时立即结束包装 Promise、取消底层请求、清理 timeout 和 abort listener。
+- 数据中心主检查新增独立 `refreshController`；连接配置变化时递增 generation 并 abort 主检查。探测与探测历史仍保留各自 controller，不合并生命周期。
+- 增加外部取消、取消前已发起请求、启动前已取消等测试；更新 UI contract，约束数据中心主检查必须传递 owner signal。
+- 未改动 Task 游标算法、市场模块状态所有权、storage event 路由、全局请求管理器或页面隐藏时的一次性请求策略。
+
+验收：
+- 代码提交：`385b73364287217f847c7290645326ab3bb94af0`；契约修订：`bfe4495f630f36fb6276e5bb4f640359291b65a9`。
+- WebUI Checks #41954110738：464/464 tests 通过，JavaScript 语法检查及 Nginx 镜像构建通过。
+- Chromium Browser Smoke #41954110757：响应式布局、跨标签页、Run Flow、个股研究、数据中心、选股和全市场分页等全部步骤通过。
+
+下一步：JSR-6L 对 app.js 剩余请求入口做按钮 busy 与 controller owner 一致性专项审查，重点覆盖服务健康检查、行情查询、证券搜索、自选批量行情、数据源能力刷新和 Run 结果重读；先检查证据，不为拆分而拆分。

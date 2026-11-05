@@ -1644,3 +1644,19 @@ CI 复核记录：本批首次 Chromium Browser Smoke 在个股研究数据质�
 - [x] WebUI Checks #41952755042：462/462 tests、语法检查和容器构建通过。
 - [x] Chromium Browser Smoke #41952755015：所有验收步骤通过。
 - [x] 代码提交 `df4f0ebf5ba3b680c6902d01987b98411d9bb189`。
+
+
+## 2026-11-05 JSR-6K：请求生命周期综合 Review
+
+- [x] 复核页面切换、连接配置变更、hidden/BFCache 三种生命周期的请求失效边界。
+- [x] 复核市场总览、全市场分页、市场活动、个股研究、数据中心的 controller/generation owner 与 finally 清理保护。
+- [x] 复核 Task 状态与阶段事件共享轮询 controller；旧代际不能推进事件 cursor，恢复后从最后确认游标续读。
+- [x] 复核跨标签页连接配置 storage event 进入 applySettings，旧请求失效且未保存草稿保留。
+- [x] 修复数据中心主检查缺少主动取消的问题；主检查新增独立 AbortController，连接变更时 abort。
+- [x] runHealthCheck 支持外部 AbortSignal，同时保留单项 6 秒超时和 timeout/listener 清理。
+- [x] 新增健康检查外部取消及启动前已取消测试；更新 UI contract。
+- [x] WebUI Checks #41954110738：464/464 tests、语法检查和 Nginx 镜像构建通过。
+- [x] Chromium Browser Smoke #41954110757：响应式、跨标签页、Run Flow、个股研究、数据中心、选股和全市场分页等全部步骤通过。
+- [x] 代码提交 `385b73364287217f847c7290645326ab3bb94af0`；契约修订提交 `bfe4495f630f36fb6276e5bb4f640359291b65a9`。
+
+验收边界：本轮验证前端请求取消、代际隔离和页面交互，不代表真实 Provider 数据准确性或生产环境联调通过。

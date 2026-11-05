@@ -633,7 +633,7 @@ app.js 继续负责结果集合与活动索引状态、输入防抖、请求 Abo
 | 龙虎榜/交易日历 | 是 | 否 | `marketActivity.invalidateConnection()` |
 | 行情查询/证券搜索 | 是 | 否 | 取消 controller/timer、generation 递增、清空旧结果 |
 | 个股研究 | 是 | 否 | 各面板 generation 递增、controller abort、标记旧结果失效 |
-| 数据中心检查/探测/历史 | 是 | 是 | 检查、探测和历史读取各自 generation 递增并 abort |
+| 数据中心检查/探测/历史 | 是 | 是 | 主检查、主动探测和历史读取分别拥有 generation/controller；连接变更时各自 abort |
 | Task/Run | 否 | 是 | Task 上下文与连接 generation 递增，停止轮询、取消 Run 结果读取，清空活动任务状态 |
 
 API client 会把调用方 AbortSignal 与超时 controller 合并，再传给 fetch。各模块在响应后还会检查 signal/generation；Task/Run 额外检查 taskId、runId 和 analysisBase 等身份。
@@ -674,3 +674,21 @@ API client 会把调用方 AbortSignal 与超时 controller 合并，再传给 f
 6. 市场模块没有周期性后台请求。已启动的一次性行情/研究/数据中心请求若在 hidden 期间完成，仍提交有效结果，不做全局丢弃；Task 高频轮询则取消并依靠事件 cursor 恢复。
 
 测试：生命周期 adapter 覆盖 hidden/visible 去重、BFCache pagehide/pageshow、监听器解绑；app contract 检查 pause/resume 接线和 hidden 兜底。462/462 tests、语法与容器构建通过；Browser Smoke 全部步骤通过。代码提交 `df4f0ebf5ba3b680c6902d01987b98411d9bb189`，WebUI Checks #41952755042，Chromium Browser Smoke #41952755015。
+
+
+### 12.31 JSR-6K 请求生命周期综合 Review
+
+本轮复核页面切换、连接变更、hidden/BFCache、请求完成收尾、Task 事件分页和跨标签配置同步。总体规则保持按领域 owner 管理 controller/generation，不创建全局请求管理器。
+
+重点确认：
+- `market-overview.js`：模块请求按 key 取消；资金流与历史情绪分别拥有 controller/generation；刷新摘要另按 status selector generation 防止旧摘要回写。
+- `market-activity.js`：龙虎榜与交易日历分开管理；筛选变更和连接变更统一递增 generation 并 abort。
+- `stock-research.js`：各面板请求独立；面板按钮与总加载按钮在请求代际仍有效时才复位。
+- `market-stocks.js`：分页请求由模块单一 controller/generation 管理；连接失效先递增 generation 再 abort，旧 finally 不会解锁新代际。
+- Task/Run：Task 状态与阶段事件共享轮询 controller；事件 cursor 只在轮询代际、任务身份和分析连接均有效后推进。隐藏暂停导致的 abort 不推进游标，恢复后从最后确认游标续读。
+- storage event：连接配置跨标签同步统一进入 app.js `applySettings`；先失效旧连接请求，再按当前 view 启动新连接刷新；未保存草稿单独保留。
+- 数据中心主检查此前只有 generation 保护，没有取消在途检查。JSR-6K 已为主检查增加独立 `refreshController`，并通过 `runHealthCheck` 外部 signal 将取消传递到底层 HTTP 请求；内部 6 秒超时仍独立生效。
+
+`runHealthCheck(check, settings, timeoutMs, externalSignal)` 的外部 signal 仅用于 owner 取消，不替代内部 timeout。取消会立即结束包装 Promise 并清理 timeout/listener；请求回调在启动前也会检查内部 signal，避免已取消的检查继续发起请求。数据中心 generation 仍作为第二道 UI 写入保护。
+
+验收证据：WebUI Checks #41954110738（464/464）；Chromium Browser Smoke #41954110757 全部步骤通过。代码提交 `385b73364287217f847c7290645326ab3bb94af0`，契约修订提交 `bfe4495f630f36fb6276e5bb4f640359291b65a9`。
