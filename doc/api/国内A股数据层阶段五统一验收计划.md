@@ -346,14 +346,21 @@
 | Provider | qfq/hfq 实现 | AdjustmentMethod | AdjustmentRefDate | 当前跨源比较结论 |
 |---|---|---|---|---|
 | BaoStock | 上游 adjustFlag 2/1 | `baostock_pct_change` | 缺失 | adjusted not_comparable |
-| Pytdx | GBBQ 本地重建 | `pytdx_qfq/hfq` | 请求末日/首日 | 需同方法、同参考日证据 |
+| Pytdx | GBBQ 本地重建 | `pytdx_qfq/hfq` | qfq=完整加载历史最新日（可晚于请求 end）；hfq=完整历史最早日 | 需同方法、同参考日证据 |
 | Eastmoney | 上游 fqt 1/2 | `eastmoney_fqt_1/2` | 缺失 | adjusted not_comparable |
 | Tencent | 上游 qfqday/hfqday | `tencent_qfqday/hfqday` | 缺失 | adjusted not_comparable |
 | HiThink | API forward/backward | `hithink_api_forward/backward` | 缺失 | adjusted not_comparable |
 | Tushare | daily raw + adj_factor 换算 | `tushare_adj_factor_qfq_v1/hfq_v1` | qfq 请求因子最大日；hfq 不声明 | qfq 仍需方法语义对齐；hfq 不可比较 |
-| Yahoo | adjclose ratio rebased | `yahoo_adjclose_ratio_rebased_to_end/start` | 请求末日/首日 | 需同方法、同参考日证据 |
+| Yahoo | adjclose ratio rebased | `yahoo_adjclose_ratio_rebased_to_end/start` | 请求结果末日/首日 | 需同方法、同参考日证据 |
 | Netease/Sina | raw only | raw method | 不适用 | raw 可比较；不支持 qfq/hfq |
 
 - Cross-provider adjusted comparator 要求相同 basis、quality valid、相同 method 与非空且一致 ref date。缺字段或不一致返回 not_comparable，符合当前证据边界。
 - 本轮没有跨 Provider adjusted 真实样本；BaoStock 同源 8 证券对账不能代替跨源验收，Pytdx 专项在 Run `42017059794` skipped，Tushare 受 40203 权限阻塞。
 - 不补造 ref date、不放宽 method equality、不新增字段/API。待有可证明的共同基准和真实双源样本后再做 canonical method 评估。
+
+
+## 2026-11-05 P0 批次 43：复权参考日期与原始 K 跨源样例复核
+
+- Pytdx qfq reference date 是完整加载历史最新交易日，可晚于请求 end；hfq reference date 是完整历史最早交易日，必须完成历史扫描。既有单测已覆盖这两种边界。Yahoo 则使用请求结果末/首日，Tushare qfq 使用请求因子窗口最大日，不能混为同一语义。
+- 600036.SH 的 Sina/Tencent raw 黄金样例中 OHLC 一致、成交量差值 3/3/46 股；但两边 amount 缺失/unknown，Sina K 线未回显证券代码，QualityStatus 均 degraded。Comparator 返回 not_comparable，不是 matched。
+- 下一项 P0：使用现有 Pytdx/BaoStock live probe 窗口建立 raw K 线真实双源对账，按 matched/partial/mismatch/not_comparable/provider unavailable 分别记录；不放宽质量门槛。
