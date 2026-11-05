@@ -4,7 +4,7 @@
 - 所属分支：feat/platform-foundation
 - 当前基线：以分支最新 HEAD 为准
 - 当前目标：个人使用、单一所有者、少量服务与低并发
-- 当前阶段：PLAT-003 身份认证/路由授权首批实现已通过专项 CI，但服务级接入待继续；PLAT-005 配置/Secret、PLAT-006 Request ID 公共原语开发中；PLAT-007 首批包测试已通过；PLAT-008 SSRF 链路及重试 Deadline 回归测试已通过专项 CI，生产 DNS/出口与 News 来源授权验收待继续；PLAT-009 SQL/Redis 生命周期和 Migration 公共原语已通过包级 CI，Migration 顺序一致性保护已补齐并通过 CI，真实存储集成待继续
+- 当前阶段：PLAT-003 身份认证/路由授权原语及 401/403 语义回归测试已通过专项 CI，服务级路由接入与凭证轮换演练待验收；PLAT-005 类型化配置/Secret 原语和 dotenv 原子装载已通过专项 CI，服务 Config loader 接入待验收；PLAT-006 Request ID/Fault 公共原语已实现，入口/Worker/日志接入待验收；PLAT-007 Runner 已实现，领域 Adapter 与诊断路由授权待验收；PLAT-008 SSRF 链路及重试 Deadline 回归测试已通过专项 CI，生产 DNS/出口与 News 来源授权验收待继续；PLAT-009 SQL/Redis 生命周期和 Migration 公共原语已通过包级 CI，真实存储集成待继续
 
 本目录是公共平台的唯一专项文档入口。平台的目标不是建设通用 SaaS 底座，而是为个人使用的股票研究系统提供足够可靠、性能可控、故障可定位的公共能力。
 
@@ -22,6 +22,7 @@
 | 07-公共能力现状盘点.md | PLAT-001 历史基线、代码证据和未知项 |
 | 08-公共平台契约规范.md | PLAT-002 收敛后的最小稳定契约 |
 | 09-跨分支契约评审记录.md | 基于 Server/News/Research 当前分支代码的兼容性核对和接入风险 |
+| 10-服务接入统一验收清单.md | PLAT-003/005/006/007/008 的服务端与领域接入步骤、测试和边界 |
 
 ## 规则
 
