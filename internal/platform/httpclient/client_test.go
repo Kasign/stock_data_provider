@@ -376,6 +376,67 @@ func TestClientRevalidatesDNSAfterConnectionClose(t *testing.T) {
 	}
 }
 
+func TestClientReleasesDependencySlotDuringRetryBackoff(t *testing.T) {
+	var calls atomic.Int32
+	firstAttempt := make(chan struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		if calls.Add(1) == 1 {
+			close(firstAttempt)
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
+		_, _ = w.Write([]byte("ok"))
+	}))
+	defer server.Close()
+
+	client, err := New(Config{
+		Resolver: staticResolver{addresses: []netip.Addr{netip.MustParseAddr("8.8.8.8")}},
+		MaxRetries: 1, MaxConcurrent: 1, DependencyLimits: map[string]int{"news.fetch": 1},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	client.dial = func(ctx context.Context, network, _ string) (net.Conn, error) {
+		return (&net.Dialer{}).DialContext(ctx, network, server.Listener.Addr().String())
+	}
+	t.Cleanup(client.CloseIdleConnections)
+
+	policy := localPolicy(server)
+	policy.Idempotent = true
+	firstDone := make(chan error, 1)
+	go func() {
+		response, requestErr := client.Do(context.Background(), localRequest(t, server, "/retry-first"), policy)
+		if requestErr == nil {
+			_ = response.Body.Close()
+		}
+		firstDone <- requestErr
+	}()
+	<-firstAttempt
+
+	secondDone := make(chan error, 1)
+	go func() {
+		response, requestErr := client.Do(context.Background(), localRequest(t, server, "/concurrent"), policy)
+		if requestErr == nil {
+			_ = response.Body.Close()
+		}
+		secondDone <- requestErr
+	}()
+	select {
+	case err := <-secondDone:
+		if err != nil {
+			t.Fatalf("concurrent request failed during retry backoff: %v", err)
+		}
+	case <-time.After(80 * time.Millisecond):
+		t.Fatal("concurrent request was blocked by another request's retry backoff")
+	}
+	if err := <-firstDone; err != nil {
+		t.Fatalf("retried request failed: %v", err)
+	}
+	if got := calls.Load(); got != 3 {
+		t.Fatalf("expected initial, concurrent, and retry requests; got %d", got)
+	}
+}
+
 func TestClientRetriesOnlyExplicitlyIdempotentRequests(t *testing.T) {
 	var calls atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {

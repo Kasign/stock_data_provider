@@ -182,12 +182,26 @@ func (c *Client) Do(ctx context.Context, request *http.Request, policy Destinati
 	requestCtx = context.WithValue(requestCtx, policyContextKey{}, policy)
 
 	semaphore := c.semaphore(policy.Dependency)
-	select {
-	case semaphore <- struct{}{}:
-		defer func() { <-semaphore }()
-	case <-requestCtx.Done():
-		return nil, c.faultFor(requestCtx.Err(), policy.Dependency)
+	held := false
+	acquire := func() error {
+		select {
+		case semaphore <- struct{}{}:
+			held = true
+			return nil
+		case <-requestCtx.Done():
+			return requestCtx.Err()
+		}
 	}
+	release := func() {
+		if held {
+			<-semaphore
+			held = false
+		}
+	}
+	if err := acquire(); err != nil {
+		return nil, c.faultFor(err, policy.Dependency)
+	}
+	defer release()
 
 	retryEnabled := policy.Idempotent && c.config.MaxRetries > 0 && (request.Body == nil || request.GetBody != nil)
 	for attempt := 0; attempt <= c.config.MaxRetries; attempt++ {
@@ -204,19 +218,26 @@ func (c *Client) Do(ctx context.Context, request *http.Request, policy Destinati
 		response, err := c.httpClient.Do(current)
 		if err != nil {
 			if retryEnabled && attempt < c.config.MaxRetries && retryableTransportError(err) {
-				if waitErr := waitRetry(requestCtx, attempt); waitErr == nil {
-					continue
-				} else {
+				release()
+				if waitErr := waitRetry(requestCtx, attempt); waitErr != nil {
 					return nil, c.faultFor(waitErr, policy.Dependency)
 				}
+				if acquireErr := acquire(); acquireErr != nil {
+					return nil, c.faultFor(acquireErr, policy.Dependency)
+				}
+				continue
 			}
 			return nil, c.faultFor(err, policy.Dependency)
 		}
 
 		if retryEnabled && attempt < c.config.MaxRetries && retryableStatus(response.StatusCode) {
 			_ = response.Body.Close()
+			release()
 			if waitErr := waitRetry(requestCtx, attempt); waitErr != nil {
 				return nil, c.faultFor(waitErr, policy.Dependency)
+			}
+			if acquireErr := acquire(); acquireErr != nil {
+				return nil, c.faultFor(acquireErr, policy.Dependency)
 			}
 			continue
 		}
