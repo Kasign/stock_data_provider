@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"math"
-	"sort"
 	"strings"
 	"time"
 
@@ -93,12 +92,6 @@ func (p *Baostock) FetchAdjustmentFactors(ctx context.Context, rawSymbol, startD
 			})
 		}
 	}
-	sort.Slice(out, func(i, j int) bool {
-		if out[i].TradeDate == out[j].TradeDate {
-			return out[i].Basis < out[j].Basis
-		}
-		return out[i].TradeDate < out[j].TradeDate
-	})
 	return out, nil
 }
 

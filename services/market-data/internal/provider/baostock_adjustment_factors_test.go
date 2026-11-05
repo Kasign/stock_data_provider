@@ -77,7 +77,7 @@ func TestBaoStockFetchAdjustmentFactorsRejectsInvalidScopeAndRows(t *testing.T) 
 	if _, err := p.FetchAdjustmentFactors(context.Background(), "002982.SZ", "2025-08-01", "2025-07-01"); err == nil {
 		t.Fatal("reversed date range must be rejected")
 	}
-	if _, err := p.FetchAdjustmentFactors(context.Background(), "002982.SZ", "2025-01-01", "2025-12-31"); err == nil {
+	if _, err := p.FetchAdjustmentFactors(context.Background(), "002982.SZ", "2025-08-01", "2025-12-31"); err == nil {
 		t.Fatal("out-of-range source rows must be rejected")
 	}
 	client.rows = []baostock.AdjustmentFactor{{Code: "sz.002982", OperateDate: "2025-07-11", ForwardFactor: 0, BackwardFactor: 1}}

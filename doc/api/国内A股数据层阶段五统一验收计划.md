@@ -83,3 +83,11 @@
 - BaoStock Provider 适配将每个操作日期拆成 forward / backward 两条口径独立记录，忽略第三列 `adjustFactor`（样本中与 backward 数值相同，尚无独立业务语义证据），保留 `AvailableAt=nil`、`QualityStatus=degraded`，并写明可用时间未由接口提供。
 - 此次专项探测同时发现新增报告结构的 gofmt 对齐问题，已在当前批次修正；修复 SHA 的 Go suite / Docker build 结果以最新 SHA 对应 CI 为准。
 - 由于 BaoStock 因子缺少可证明的 `AvailableAt`，当前 PIT 可见性接口会有意排除它们；不得通过把 `OperateDate` 填入 `AvailableAt` 绕过限制。当前适配先完成真实因子采集与版本存储，重建消费策略仍需区分“当前已观察数据重建”和“历史 PIT 重建”。
+
+
+## 2026-11-05 BaoStock 因子适配 CI 问题修正
+
+- 真实对账结果已支持按操作日期拆分 forward/backward 两个因子口径；适配器首轮单测暴露了两个测试/实现问题：口径字符串字典序把 backward 排在 forward 前面，以及越界测试夹具日期实际仍落在请求范围内。
+- 适配器保持按上游日期顺序输出，每个日期先 forward 后 backward；修正越界夹具范围，未放宽校验。
+- MariaDB 集成测试新增同证券/日期/来源下两种 basis 并存验证，并确认无 `AvailableAt` 的 BaoStock 观测可以持久化且保留 `SystemObservedAt`，不伪造可用时间。
+- 当前 SHA 后续 CI 必须重新验证 market-data 单测、MariaDB PIT 集成、race/vet 和 Docker 构建；此前失败 SHA 不得算作通过。
