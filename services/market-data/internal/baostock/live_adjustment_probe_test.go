@@ -262,6 +262,28 @@ func TestLiveBaoStockAdjustmentFactorConsistency(t *testing.T) {
 	}
 }
 
+func TestBaoStockHistoricalCandidatesHaveNoPreListingFactorWindow(t *testing.T) {
+	candidates := []struct {
+		symbol, firstFactorDate, listingDate string
+	}{
+		{"sz.000001", "1991-04-03", "1991-04-03"},
+		{"sz.000002", "1991-01-29", "1991-01-29"},
+		{"sz.000858", "1998-04-27", "1998-04-27"},
+		{"sh.600000", "1999-11-10", "1999-11-10"},
+		{"sh.600016", "2000-12-19", "2000-12-19"},
+		{"sh.600601", "1990-12-19", "1990-12-19"},
+		{"sh.600036", "2002-04-09", "2002-04-09"},
+		{"sz.002982", "2020-04-24", "2020-04-24"},
+	}
+	for _, candidate := range candidates {
+		t.Run(candidate.symbol, func(t *testing.T) {
+			status, _ := classifyLivePreFirstEventWindowWithListingDate(candidate.firstFactorDate, candidate.listingDate, "1990-01-01")
+			if status != "not_applicable" {
+				t.Fatalf("status = %q, want not_applicable", status)
+			}
+		})
+	}
+}
 func TestClassifyLivePreFirstEventWindowWithListingDate(t *testing.T) {
 	tests := []struct {
 		name           string
