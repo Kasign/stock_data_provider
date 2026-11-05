@@ -96,3 +96,10 @@
 - 匿名路由仅使用 `AnonymousAccess()`；若匿名请求携带错误 Bearer 凭证，仍返回 401，避免错误凭证被静默忽略。
 
 该包不负责启动入口和现有服务路由改造。集成方必须将所有路由统一注册到受策略约束的 Router，不能保留旁路 ServeMux 或未保护的 Handler 注册路径。
+
+
+## 10. PLAT-003 代码验证记录
+
+最终验证提交：`f9334281ba0f90406fcd7de0f239afe24845bb23`。Platform packages workflow 已通过 gofmt、平台包单测、race test 和 go vet。
+
+首次提交的 gofmt 检查未通过，已修正后重跑，最终提交 CI success。服务入口和真实路由接入尚未实施；凭证轮换的部署演练也未执行，因此本任务仍处于开发中。
