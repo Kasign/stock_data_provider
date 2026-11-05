@@ -555,3 +555,25 @@ Go `model.AdjustmentBasis` 响应值为 `none`、`forward_adjusted`、`backward_
 - **004-E**：检查 Redis 旧缓存反序列化路径，确保缓存命中与 Provider 新鲜响应输出一致。
 
 **结论**：22 个字段已完成第一轮构造/校验路径分类；11 个字段确认存在 nil 可通过风险，3 个字段边界待核实，其余字段有明确的非 nil 约束或构造保证。未运行 Data 测试，未修改 Data 分支；GOV-004 仍 NO-GO。
+
+
+### 11.12 nullable + omitempty 交叉复核：修正“122 项均为契约错误”的判断（2026-11-05）
+
+本轮重新解析 Data 当前 OpenAPI 的 nullable 声明，并与 57 个 Go Model struct 的 JSON Tag 交叉核对。结果：
+
+- 121 项位于同名顶层 OpenAPI Schema 属性，Go 对应字段带 omitempty。
+- 另有 1 项是 Price Limit Rule 的内联响应属性 special_exception_evidence，对应 PriceLimitRuleSnapshot.SpecialExceptionEvidence，Go Tag 为 omitempty。
+- 合计 122 项；其中 112 个指针字段、9 个字符串字段、1 个内联指针属性。
+- **122 项均未出现在各自 Schema 的 required 列表中**。对已匹配的 121 个顶层字段，程序化扫描 required 交集为 0；内联 special_exception_evidence 也不在该响应的 required 列表中。
+
+因此必须修正此前“122 个 nullable + omitempty 全部是 Schema 不一致/阻断项”的表述：
+
+1. OpenAPI 属性非 required 时，Go omitempty 省略 nil/零值，符合“字段可以不存在”的契约；OpenAPI nullable=true 允许 null，并不强制实现必须输出 null。**这 122 项本身不是 JSON Schema required/property conformance 错误。**
+2. 它们仍然存在“实现输出集合是 OpenAPI 允许集合的子集”的语义差异：OpenAPI 允许显式 null，当前 Go JSON Tag 选择省略。若调用方需要区分“明确未知/null”和“字段不适用/未提供”，必须冻结字段级语义，不能仅凭 nullable=true 推断服务会输出 null。
+3. 当前已定位到至少一个文档语义需要裁决的字段：Quote.volume_ratio 的 OpenAPI 描述写明“不支持时为 null”，但 Go Tag 为 volume_ratio,omitempty，nil 时实际省略。应二选一：把文档改为“不支持时省略”，或由明确的 Response DTO 输出显式 null；不能保留文档承诺与实际编码行为不一致。
+4. 其他 nullable + omitempty 字段逐项检查描述、Provider 语义和调用方需求；不要求为了形式一致而把所有 omitempty 删除，也不要求把所有 nullable 改成非 nullable。
+5. required 差异仍按原 15 项单独处理；本次交叉复核没有发现 nullable + omitempty 与 required 交集，不代表此前 15 项 required 差异已自动消失。
+
+建议把原任务“修正 122 个过宽 nullable”改为 **DATA-CONTRACT-003-B：nullable/省略语义裁决**，逐字段输出三种结果：保留 nullable + 允许省略、改为明确 null 输出、移除 nullable 并仅允许省略。Quote.volume_ratio 优先处理。
+
+**修正后的判断**：122 项不应作为 122 个独立阻断缺陷计数。真正的阻断是其中明确承诺 null 却被 omitempty 省略的语义冲突、required 差异和真实 Handler 输出未被 Golden 验证。此前“122 个过宽 nullable”属于过度归因，本节予以纠正。
