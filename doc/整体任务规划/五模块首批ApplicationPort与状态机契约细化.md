@@ -173,7 +173,7 @@ Attempt：
 | Run | created | queued / cancelled |
 | Run | queued | running / cancelling / cancelled |
 | Run | running | cancelling / succeeded / partial / failed |
-| Run | cancelling | cancelled / succeeded / partial / failed（仅 deadline_exceeded 收敛） |
+| Run | cancelling | cancelled（user_cancelled） / partial / failed（deadline_exceeded 收敛） |
 | Stage | pending | ready / skipped / blocked / cancelled / timed_out |
 | Stage | ready | running / cancelled / blocked / timed_out |
 | Stage | running | succeeded / degraded / failed / timed_out / cancelled |

@@ -135,8 +135,7 @@ ResearchAttempt {
   attempt_id, stage_id, attempt_no, status, started_at?, finished_at?,
   deadline_at, lease_owner?, lease_expires_at?, fencing_token,
   input_refs[], output_ref?, error_code?, safe_message?
-}
-```
+}```
 
 - Run：created/queued/running/cancelling 为非终态；succeeded/partial/failed/cancelled 为终态。Run 不设置 degraded/timed_out；质量降级由结果摘要表达，超时由 Stage/Attempt 表达并按模板归并。termination_reason 区分 user_cancelled 与 deadline_exceeded。
 - Stage：pending/ready/running/succeeded/degraded/skipped/failed/timed_out/cancelled/blocked；Attempt：running/succeeded/degraded/failed/timed_out/cancelled。blocked 不创建 Attempt；skipped 仅用于模板裁剪/不适用。
