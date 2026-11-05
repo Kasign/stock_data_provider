@@ -1088,3 +1088,53 @@ func TestNewRejectsTooManyDependencyLimits(t *testing.T) {
 		t.Fatalf("unexpected validation error: %v", err)
 	}
 }
+
+func TestBoundDoerCopiesDestinationPolicy(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("bound"))
+	}))
+	defer server.Close()
+
+	client := newLocalTestClient(t, server, staticResolver{addresses: []netip.Addr{netip.MustParseAddr("8.8.8.8")}}, 1024, 0)
+	policy := localPolicy(server)
+	bound, err := client.Bind(policy)
+	if err != nil {
+		t.Fatalf("bind destination policy: %v", err)
+	}
+
+	// Mutating caller-owned slices after Bind must not replace the policy
+	// retained by BoundDoer.
+	policy.AllowedHosts[0] = "attacker.example"
+	policy.AllowedPorts[0] = 1
+
+	response, err := bound.Do(localRequest(t, server, "/bound"))
+	if err != nil {
+		t.Fatalf("bound request failed after caller mutation: %v", err)
+	}
+	defer response.Body.Close()
+	body, err := io.ReadAll(response.Body)
+	if err != nil || string(body) != "bound" {
+		t.Fatalf("unexpected bound response body %q, err=%v", body, err)
+	}
+}
+
+func TestBoundDoerDoesNotAllowRequestToReplaceDestination(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("unexpected"))
+	}))
+	defer server.Close()
+
+	client := newLocalTestClient(t, server, staticResolver{addresses: []netip.Addr{netip.MustParseAddr("8.8.8.8")}}, 1024, 0)
+	bound, err := client.Bind(localPolicy(server))
+	if err != nil {
+		t.Fatalf("bind destination policy: %v", err)
+	}
+
+	request := localRequest(t, server, "/replace")
+	request.URL.Host = "attacker.example:" + request.URL.Port()
+	_, err = bound.Do(request)
+	var platformFault *fault.Fault
+	if !errors.As(err, &platformFault) || platformFault.Code != "platform.httpclient.destination_rejected" {
+		t.Fatalf("expected bound destination rejection, got %v", err)
+	}
+}
