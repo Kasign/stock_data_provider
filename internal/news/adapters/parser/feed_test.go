@@ -250,6 +250,7 @@ func TestFeedAttachmentMetadataBoundaries(t *testing.T) {
 		wantIssues                      []string
 	}{
 		{name: "valid zero", rawURL: "https://publisher.example/a", rawType: "application/pdf", rawLength: "0", wantURL: "https://publisher.example/a", wantMediaType: "application/pdf", wantLength: int64Pointer(0)},
+		{name: "raw values preserved", rawURL: " https://publisher.example/a ", rawType: " application/pdf; version=1 ", rawLength: " 12 ", wantURL: "https://publisher.example/a", wantMediaType: "application/pdf", wantLength: int64Pointer(12)},
 		{name: "valid positive", rawURL: "https://publisher.example/a", rawType: "audio/mpeg", rawLength: "2048", wantURL: "https://publisher.example/a", wantMediaType: "audio/mpeg", wantLength: int64Pointer(2048)},
 		{name: "optional length absent", rawURL: "https://publisher.example/a", rawType: "audio/mpeg", wantURL: "https://publisher.example/a", wantMediaType: "audio/mpeg"},
 		{name: "negative length", rawURL: "https://publisher.example/a", rawLength: "-1", wantURL: "https://publisher.example/a", wantIssues: []string{"invalid_length"}},

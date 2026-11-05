@@ -219,8 +219,8 @@ func ParseFeed(data []byte, observedAt time.Time) (FeedDocument, error) {
 			contentText, contentFormat := normalizeAtomContent(item.Content)
 			entry := newFeedEntry(item.ID, item.Title, selectAtomLink(item.Links), item.Summary, contentText, author, item.Published, item.Updated)
 			entry.ContentFormat = contentFormat
-			entry.ContentTypeRaw = strings.TrimSpace(item.Content.Type)
-			entry.ContentSrc = strings.TrimSpace(item.Content.Src)
+			entry.ContentTypeRaw = item.Content.Type
+			entry.ContentSrc = item.Content.Src
 			for _, link := range item.Links {
 				if strings.EqualFold(strings.TrimSpace(link.Rel), "enclosure") {
 					entry.Attachments = append(entry.Attachments, newFeedAttachment(link.Href, link.Type, link.Length, link.Title))
@@ -268,22 +268,24 @@ func newFeedAttachment(rawURL, rawType, rawLength, title string) FeedAttachment 
 	attachment := FeedAttachment{
 		URL:          strings.TrimSpace(rawURL),
 		RawURL:       rawURL,
-		RawMediaType: strings.TrimSpace(rawType),
-		RawLength:    strings.TrimSpace(rawLength),
+		RawMediaType: rawType,
+		RawLength:    rawLength,
 		Title:        normalizeText(title),
 	}
 	if attachment.URL == "" {
 		attachment.ValidationIssues = append(attachment.ValidationIssues, "missing_url")
 	}
-	if attachment.RawMediaType != "" {
-		if mediaType, _, err := mime.ParseMediaType(attachment.RawMediaType); err == nil {
+	normalizedMediaType := strings.TrimSpace(attachment.RawMediaType)
+	if normalizedMediaType != "" {
+		if mediaType, _, err := mime.ParseMediaType(normalizedMediaType); err == nil {
 			attachment.MediaType = strings.ToLower(mediaType)
 		} else {
 			attachment.ValidationIssues = append(attachment.ValidationIssues, "invalid_media_type")
 		}
 	}
-	if attachment.RawLength != "" {
-		if length, err := strconv.ParseInt(attachment.RawLength, 10, 64); err == nil && length >= 0 {
+	normalizedLength := strings.TrimSpace(attachment.RawLength)
+	if normalizedLength != "" {
+		if length, err := strconv.ParseInt(normalizedLength, 10, 64); err == nil && length >= 0 {
 			attachment.Length = &length
 		} else {
 			attachment.ValidationIssues = append(attachment.ValidationIssues, "invalid_length")
