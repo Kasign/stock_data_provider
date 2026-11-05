@@ -2312,10 +2312,10 @@ button:disabled, input:disabled, select:disabled, textarea:disabled { cursor: no
   font-variant-numeric:tabular-nums
 }
 .calendar-month-navigation .icon-button {
-  min-width:32px;
-  min-height:30px;
+  min-width:38px;
+  min-height:38px;
   padding:4px 8px;
-  font-size:11px
+  font-size:13px
 }
 .calendar-range-controls input {
   max-width:140px
@@ -2331,8 +2331,9 @@ button:disabled, input:disabled, select:disabled, textarea:disabled { cursor: no
 .trading-calendar-weekdays span {
   text-align:center;
   color:var(--text-dim);
-  font-size:10px;
-  padding:4px 0
+  font-size:11px;
+  font-weight:650;
+  padding:5px 0
 }
 .trading-calendar-grid {
   align-items:stretch
@@ -3297,8 +3298,8 @@ button:disabled, input:disabled, select:disabled, textarea:disabled { cursor: no
 .market-overview-actions .button { min-height: 38px; font-size: 12px; }
 
 .market-activity-table { -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
-.calendar-month-navigation .icon-button { min-width: 38px; min-height: 38px; font-size: 13px; }
-.trading-calendar-weekdays span { padding: 5px 0; font-size: 11px; font-weight: 650; }
+
+
 .trading-calendar-day { min-height: 56px; padding: 6px 2px; gap: 5px; }
 .trading-calendar-day span { font-size: 11px; line-height: 1.25; text-align: center; overflow-wrap: anywhere; }
 .market-activity-widget .calendar-coverage-warning { font-size: 12px; line-height: 1.6; }
