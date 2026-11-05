@@ -21,7 +21,7 @@ const (
 	ContentFormatHTMLFragment ContentFormat = "html_fragment"
 )
 
-// ContentPayload 保存来源正文/片段。Kind 未确定时保持空值，不推断为全文。
+// ContentAttachment 保存 Feed 声明的附件元数据，不代表附件已下载或获准保存。
 type ContentAttachment struct {
 	URL              string
 	RawURL           string
@@ -33,6 +33,7 @@ type ContentAttachment struct {
 	ValidationIssues []string
 }
 
+// ContentPayload 保存来源正文/片段。Kind 未确定时保持空值，不推断为全文。
 type ContentPayload struct {
 	Origin ContentOrigin
 	Format ContentFormat

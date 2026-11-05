@@ -133,7 +133,9 @@ func TestFeedEntryToCandidateKeepsSourceIdentityAndAuthorSeparate(t *testing.T) 
 func TestFeedEntryContentLayersKeepAttachmentsSeparateFromBody(t *testing.T) {
 	payload := []byte(`<rss version="2.0"><channel><item><title>公告</title><enclosure url="" type="bad mime" length="-1"/></item></channel></rss>`)
 	doc, err := ParseFeed(payload, time.Now())
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	layers := doc.Entries[0].ContentLayers("")
 	if layers.Body != nil || len(layers.Attachments) != 1 {
 		t.Fatalf("layers=%+v", layers)
