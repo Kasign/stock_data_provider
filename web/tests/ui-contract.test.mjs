@@ -558,6 +558,30 @@ test("最近分析与自选股文字字号由组件基础规则负责", () => {
   assert.ok(!stylesheet.includes(".watchlist-panel .panel-heading p { font-size: 13px !important; }"));
 });
 
+test("个股补充资料文字字号由组件基础规则负责", () => {
+  const expected = [
+    [".supplemental-heading p", "13px"],
+    [".supplemental-heading .button", "13px"],
+    [".supplemental-context", "12px"],
+    [".supplemental-feedback", "13px"],
+    [".supplemental-card-heading small", "12px"],
+    [".supplement-quality", "12px"],
+    [".supplemental-fields dt", "13px"],
+    [".supplemental-fields dd", "13px"],
+    [".supplemental-reasons", "12px"],
+    [".supplemental-error", "13px"]
+  ];
+
+  for (const [selector, size] of expected) {
+    const declarations = exactCssDeclarationBlock(selector);
+    assert.ok(declarations.includes("font-size: " + size + ";"), selector + " should own its readability baseline");
+    assert.doesNotMatch(declarations, /!important/);
+  }
+
+  assert.match(stylesheet, /@media \(max-width: 800px\) \{ \.supplemental-grid \{ grid-template-columns: minmax\(0, 1fr\); \} \}/);
+  assert.match(stylesheet, /@media \(max-width: 600px\)[\s\S]*?\.supplemental-fields \{ grid-template-columns:/);
+});
+
 test("structured analysis results use readable typography and mobile-safe layouts", () => {
   assert.match(stylesheet, /\.task-result-metric small \{[^}]*font-size: 13px/);
   assert.match(stylesheet, /\.task-result-metric strong \{[^}]*font-size: 14px/);
