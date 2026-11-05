@@ -134,7 +134,7 @@ func CompareCrossProviderDailyBars(left, right CrossProviderDailySnapshot) Cross
 			result.Reason = "volume_granularity_missing"
 			return result
 		}
-		volumeTolerance := int64(50)
+		volumeTolerance := int64(1)
 		if a.VolumeGranularity > volumeTolerance {
 			volumeTolerance = a.VolumeGranularity
 		}

@@ -53,7 +53,7 @@ func TestCompareCrossProviderDailyBarsRejectsDegradedBaseline(t *testing.T) {
 
 func TestCompareCrossProviderDailyBarsComparesCommonContract(t *testing.T) {
 	leftBar, rightBar := crossProviderBar("2026-10-29"), crossProviderBar("2026-10-29")
-	rightBar.Volume += 46
+	rightBar.Volume += 1
 	leftBar.Amount, rightBar.Amount = crossProviderAmount(1000000), crossProviderAmount(1000000.5)
 	leftBar.AmountUnit, rightBar.AmountUnit = "CNY", "CNY"
 	left := crossProviderSnapshot("sina", "none", "valid", leftBar)
@@ -90,6 +90,26 @@ func TestCompareCrossProviderDailyBarsUsesRawVolumeGranularity(t *testing.T) {
 	}
 }
 
+func TestCompareCrossProviderDailyBarsRejectsDifferenceAboveSharePrecision(t *testing.T) {
+	leftBar := crossProviderBar("2026-10-29")
+	rightBar := crossProviderBar("2026-10-29")
+	leftBar.Volume, rightBar.Volume = 100000, 100002
+	leftBar.VolumeGranularity, rightBar.VolumeGranularity = 1, 1
+	amount := 1000000.0
+	leftBar.Amount, rightBar.Amount = &amount, &amount
+	leftBar.AmountUnit, rightBar.AmountUnit = "CNY", "CNY"
+	left := crossProviderSnapshot("sina", "none", "valid", leftBar)
+	right := crossProviderSnapshot("tencent", "none", "valid", rightBar)
+	got := CompareCrossProviderDailyBars(left, right)
+	if got.Status != CrossProviderDailyMismatch {
+		t.Fatalf("two share-precision sources must not tolerate a two-share difference: %+v", got)
+	}
+	for _, field := range got.Fields {
+		if field.Field == "2026-10-29.volume" && field.Tolerance != 1 {
+			t.Fatalf("share-precision comparison must use one-share tolerance: %+v", field)
+		}
+	}
+}
 func TestCompareCrossProviderDailyBarsRequiresVolumeGranularity(t *testing.T) {
 	leftBar := crossProviderBar("2026-10-29")
 	rightBar := crossProviderBar("2026-10-29")
