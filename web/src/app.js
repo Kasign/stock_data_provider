@@ -4367,6 +4367,8 @@ function applySettings(nextSettings, { persistPreviousActiveTask = true } = {}) 
       button.removeAttribute("aria-busy");
       button.textContent = "检查连接";
     }, failures);
+    runSettingsApplyStep("恢复草稿连接检查按钮失败：", () =>
+      releaseSettingsCheckButtonSafely($("#settings-check-draft-connection"), "检查未保存配置"), failures);
     runSettingsApplyStep("更新连接检查提示失败：", () => {
       const output = $("#settings-connection-check");
       output.textContent = "连接配置已变化，请重新检查当前已保存的配置。";

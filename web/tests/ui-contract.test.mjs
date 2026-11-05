@@ -310,6 +310,7 @@ test("applySettings 的单项清理失败不会阻断其余配置应用步骤", 
   assert.match(apply, /runSettingsApplyStep\("失效市场总览请求失败："/);
   assert.match(apply, /savedConnectionCheckController\?\.abort\(\)/);
   assert.match(apply, /draftConnectionCheckController\?\.abort\(\)/);
+  assert.match(apply, /恢复草稿连接检查按钮失败：[\s\S]*?releaseSettingsCheckButtonSafely\(\$\("#settings-check-draft-connection"\), "检查未保存配置"\)/);
   assert.match(apply, /runSettingsApplyStep\("刷新服务健康状态失败："/);
   assert.match(apply, /reportSettingsApplyFailures\(failures\)/);
 });

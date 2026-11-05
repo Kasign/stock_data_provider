@@ -1225,3 +1225,6 @@ app.js 仅负责两处初始化装配；页面路由 `setView`、hashchange、�
 
 验收：
 - 代码、契约测试及本文档集中提交；等待当前提交对应 WebUI Checks 与 Chromium Browser Smoke。
+
+
+JSR-6L 补充：连接配置变更取消草稿检查后，旧代际 finally 按设计不会再触碰按钮；因此由 `applySettings` 的配置失效流程显式恢复草稿检查按钮，避免取消后按钮保持 disabled。对应 UI contract 已补充断言。
