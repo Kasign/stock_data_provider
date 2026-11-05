@@ -332,7 +332,7 @@ Data 最新 HEAD 更新为 `c22470bec87beb89961b76ad9856d5c8709aac73`。相较 O
 结果分为三类：
 - **11 个字段确认存在 nil 可通过风险**：StockAnnouncementSnapshot.items、DragonTigerSnapshot.items、StockBoardSnapshot.items、StockSearchSnapshot.items、LimitPoolSnapshot.items、FundamentalSection.metrics、ValuationSnapshot.items、IndexCatalogSnapshot.items、IndexConstituentSnapshot.items、IndexDailyBarsSnapshot.items、HotRankingSnapshot.items。
 - **3 个字段边界待核实**：MarketSentimentHistory.items、ProviderProbeHistory.items（直接使用 Store List 返回值）；Bundle.daily_bars（直接接收 DailyBars 返回值，未归一化）。
-- **8 个字段已有非 nil 约束或显式构造**：Bundle.sources、MarketStocksSnapshot.items、SectorRankingSnapshot.items、IndexQuoteSnapshot.items、FundamentalsSnapshot.sections、ValuationSnapshot.requested_symbols、MarketCapitalFlowSnapshot.items、ProviderProbeRun.items、TradingCalendarSnapshot.items。注：此列表实际为 9 项，按字段计数为 9；总分类应以 11 + 3 + 8 的字段基数重新核对，Bundle.sources 与 MarketStocks 等合计 9 项，故当前准确数量为 **11 风险 + 3 待核实 + 8?** 需注意此前 22 字段清单含 Bundle.sources 与其他字段共 22 项，最终以 Data 清单 11.11 表格逐项为准，不以本段分组数量作为契约统计依据。
+- **8 个字段已有非 nil 约束或显式构造**：Bundle.sources、SectorRankingSnapshot.items、IndexQuoteSnapshot.items、FundamentalsSnapshot.sections、ValuationSnapshot.requested_symbols、MarketCapitalFlowSnapshot.items、ProviderProbeRun.items、TradingCalendarSnapshot.items。
 - Bundle.warnings 不属于此前 22 个非 omitempty 字段；它使用非 nil 构造，但空值因 omitempty 被省略。
 
 上述 11 项的 Validator 允许空集合以 nil slice 表示；部分是 unknown/empty fallback 分支，不能仅靠正常有数据样本覆盖。当前没有生产 HTTP 响应抓包证据，故结论是“代码路径允许 null”，而不是宣称已经观察到实际线上 null。
