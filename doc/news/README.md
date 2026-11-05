@@ -60,7 +60,7 @@ N1 已完成固定旧 Python 上游的三类新闻/情报持久化对象、旧 i
 
 ### N1-A 最终收口（2026-11-05）
 
-已完成旧 Python 主要调用链和历史表语义盘点、证券主数据核验、Provider/来源公开条款首轮核查、领域模型与 Application 契约设计。平台分支已接受 News 提出的 SSRF、Diagnostics、Fault 三项契约意见；只读检查最新平台 HEAD `ac06a544`，PLAT-007 首批代码已出现，但 PLAT-002 仍待正式冻结、PLAT-008 尚未实现和安全验收。N1-A 已评审确认，N2 根模块验证已通过；N3 已实现 Provider/Source/Endpoint 授权交集、内容存储类型约束、HTTP(S) 来源 URL 离线校验及 RSS 2.0 / Atom 1.0 离线解析；RSS/Atom 与离线 HTML 正文解析首批已实现；在线抓取和平台网络安全能力仍待完成。未获明确许可的来源保持 pending/restricted。
+已完成旧 Python 主要调用链和历史表语义盘点、证券主数据核验、Provider/来源公开条款首轮核查、领域模型与 Application 契约设计。平台分支已接受 News 提出的 SSRF、Diagnostics、Fault 三项契约意见；只读检查最新平台 HEAD `ac06a544`，PLAT-007 首批代码已出现，但 PLAT-002 仍待正式冻结、PLAT-008 尚未实现和安全验收。N1-A 已评审确认，N2 根模块验证已通过；N3 已实现 Provider/Source/Endpoint 授权交集、HTTP(S) 来源 URL 离线校验、RSS 2.0 / Atom 1.0 与离线 HTML 解析、搜索候选标准化，以及 Provider 摘要/来源摘要/正文载荷分层映射；在线抓取和平台网络安全能力仍待完成。未获明确许可的来源保持 pending/restricted。
 
 ## N1 已确认的架构决策（2026-11-05）
 
