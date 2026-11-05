@@ -151,3 +151,12 @@
 - Service 校验改为：前复权参考日不得早于任一 K 线日期；参考日不得晚于当前 Asia/Shanghai 日期；同一序列 method/reference date 必须一致。移除“参考日不得晚于请求结束日”的错误限制。
 - 新增晚于请求结束日的参考日可接受、未来参考日拒绝两项回归测试。
 - 本批待新 SHA 完整 CI 验证，阶段 B 继续 in_progress。
+
+
+## 2026-11-05 P0 批次 23：前复权参考日校验修复通过 CI
+
+- 验收 SHA：`6730e6e612c6b72bf57e18b2c5d8c45bf62e4d50`。
+- Go test suite Push Run `41998874246`、PR Run `41998882338` 全部 Job success；Go-Python parity Run `41998881955`、WebUI checks Run `41998881909`、Live provider probe Run `41998881866` 均为 success。
+- Live provider probe 的外层 workflow success 不代表真实请求全部执行；日志显示通用实时探测及 Tushare、同花顺、TickFlow 可选实时探测均因环境开关未配置而 SKIP。
+- 前复权参考日晚于请求结束日的合法场景和未来参考日拒绝场景已纳入单测，并随当前 SHA 的 market-data Go tests 通过。
+- PR #1 仍为 Open / Draft，未合并。批次 22 验收关闭，阶段 B 继续 in_progress。
