@@ -2290,3 +2290,17 @@ test("section navigation is a closed DOM behavior module and app only configures
   assert.match(sectionNavigation, /export function setupSectionNavigation\(/);
   assert.doesNotMatch(sectionNavigation, /\bstate\.|localStorage|fetch\(|\$\(/);
 });
+
+
+test("UIR-2 基础布局间距使用语义 token", () => {
+  assert.match(stylesheet, /--space-1:\s*4px/);
+  assert.match(stylesheet, /--space-2:\s*8px/);
+  assert.match(stylesheet, /--space-3:\s*12px/);
+  assert.match(stylesheet, /--space-4:\s*16px/);
+  assert.match(stylesheet, /--space-6:\s*24px/);
+  assert.match(stylesheet, /\.sidebar\s*\{[^}]*padding:\s*var\(--space-6\) 15px 17px/);
+  assert.match(stylesheet, /\.search-panel\s*\{[^}]*gap:\s*var\(--space-6\)/);
+  assert.match(stylesheet, /\.button\s*\{[^}]*gap:\s*var\(--space-2\)/);
+  assert.match(stylesheet, /\.metric-grid\s*\{[^}]*gap:\s*var\(--space-3\)/);
+  assert.match(stylesheet, /\.content-grid\s*\{[^}]*margin-top:\s*var\(--space-4\)/);
+});
