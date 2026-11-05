@@ -257,11 +257,13 @@ LLM-001 先盘点现有 Gateway 协议，不在调查前冻结完整 DTO。盘�
 - provider request ID、model version 和响应时间；
 - 最大输入/输出、响应体大小和并发限制。
 
-协议调查输出后，再冻结最小 ModelRequest/ModelResponse。初始 Port 目标为：
+协议调查输出后，再冻结最小 ModelRequest/ModelResponse。LLM-002 当前建议签名为：
 - Generate(ctx, ModelRequest) -> ModelResponse
-- Stream(ctx, ModelRequest) -> Stream[ModelEvent]
+- Stream(ctx, ModelRequest, onEvent func(ModelEvent) error) -> error
 
-当前 Gateway 已有 Responses JSON/SSE 转发代码与远程 Provider Mock 测试，但当前部署的本地 llama.cpp Responses 真实链路未验收。静态协议盘点见 doc/llm/03-现有模型Gateway协议盘点.md。Stream 的生产可用状态必须由实际本地上游 E2E 决定；若不支持应标记 unsupported，不得通过一次性响应伪装增量事件。Tool Call 作为结构化输出返回，不由 LLM 执行。
+Stream 使用同步回调提供背压；回调错误或 Context 取消必须停止读取上游。详细 DTO、Responses SSE event、能力状态和错误分类见 doc/llm/04-ProviderPort与DTO字段级契约.md。
+
+当前 Gateway 已有 Responses JSON/SSE 转发代码与远程 Provider Mock 测试，但当前部署的本地 llama.cpp Responses 真实链路未验收。LLM-002 的 Provider Port 与 DTO 字段建议已整理，待 LLM/Platform Owner Review。静态协议盘点见 doc/llm/03-现有模型Gateway协议盘点.md。Stream 的生产可用状态必须由实际本地上游 E2E 决定；若不支持应标记 unsupported，不得通过一次性响应伪装增量事件。Tool Call 作为结构化输出返回，不由 LLM 执行。
 
 ## 6. Notification 首批 Application Port
 

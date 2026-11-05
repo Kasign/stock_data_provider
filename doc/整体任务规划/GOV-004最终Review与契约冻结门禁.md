@@ -708,7 +708,7 @@ DATA-CONTRACT-001 的 gofmt 子项已恢复；完整 CI 阻断转为测试编译
 | Research Context/Evidence | Research + Researchflow | 待 Review | system_as_of、AuthorizationRef、内容策略 |
 | News Evidence Query Port | News + Research + Researchflow | 目标契约已写，待确认 | DTO、知识时间过滤、当前授权、Cursor、错误 |
 | Researchflow Run/Stage/Attempt | Researchflow + Platform | 规划侧 CONTRACT-006/007 Review 已完成，待 Owner Review | 传播矩阵、硬风险门禁标记、取消宽限期、租约/并发参数、Repository CAS/fencing 约束 |
-| LLM Model Adapter | LLM + Platform | LLM-001 静态盘点完成，在线 E2E 未验收 | Responses Adapter Port/Fixture 可开始；真实本地链路、Structured Output、SSE 能力待验证 |
+| LLM Model Adapter | LLM + Platform | LLM-001 静态盘点完成；LLM-002 Port/DTO 草案完成，待 Owner Review | Responses 字段契约、CapabilityState、Schema validator、SSE 事件策略；本地 E2E 未验收 |
 | Notification Event/Delivery | Notification + Platform | 待 Review | payload Schema、recipient_scope、幂等和 Attempt |
 | Data Snapshot Input | Data + Quant | 总体语义已定义，字段映射待 Review | PIT、单位、复权、quality、source version |
 
@@ -766,3 +766,13 @@ Workflow Template 按 stage_code + template_version 固定 on_degraded、on_skip
 - Responses usage 的 JSON/SSE 解析已存在；Responses 文本增量的 TTFT/内容审计存在缺口。本地 SSE 中断后的 Responses error event 行为未与远程 Provider 对齐。
 - LLM-001 静态盘点完成；真实本地 llama.cpp Responses JSON/SSE、Structured Output、Tool Call 在线验收未执行，故总体状态 partial。详细结果见 doc/llm/03-现有模型Gateway协议盘点.md。
 - LLM-002 的 Port/Fixture 可基于已确认协议先行；不得据此把 LLM-004/005 的真实模型能力标记通过。GOV-004 仍未冻结，不创建模块分支。
+
+
+## 34. LLM-002 Provider Port / DTO 字段级契约更新（2026-11-05）
+
+- 已新增 doc/llm/04-ProviderPort与DTO字段级契约.md，定义首批 Responses Protocol、ProviderConfig、CapabilityState、ModelRequest、ModelResponse、Usage、OutputItem、Stream event、Error Contract 与资源限制。
+- 建议首批仅支持单轮文本 input；多轮 item、多模态、background response、多协议路由 deferred，避免将 Gateway 宽松 JSON 直接扩展为无边界内部 DTO。
+- Stream 采用同步 callback 事件接口，必须收到 terminal event；无 terminal 的 EOF 是 stream_interrupted，首个事件后不得透明重试。
+- CapabilityState 默认 unknown，必须绑定 Provider/Model/Gateway 版本与验证时间；本地 Responses、Structured Output、Tool Call 未经真实 E2E 不得设为 supported。
+- 本地 Schema 校验、Usage null、工具不执行和 SecretRef 隔离均纳入契约建议。
+- 当前仍待 LLM/Platform Owner Review；未选择 JSON Schema validator 具体库，未实现 Port/Adapter/Fixture，也未创建模块分支。GOV-004 继续 NO-GO。

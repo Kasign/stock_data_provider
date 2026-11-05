@@ -95,6 +95,7 @@ Domain/Contract 不得因为无关模块的 Adapter/Integration 未完成而被�
 - text.format 目前只是透传条件，Gateway 未做 Responses JSON Schema 语义保证；本地模型 structured output 仍待验证，LLM Adapter 必须本地 Schema 校验。
 - Responses tools 可透传但 Gateway 不执行；模型返回 tool call 只是待执行意图，Researchflow 必须独立做白名单、参数 Schema、权限和预算检查。
 - Responses usage 可解析 input/output tokens；流式审计能提取 usage，但 Responses 文本 delta 当前未形成统一内容 delta/TTFT 事件；LLM Adapter 需独立解析 Responses SSE。
+- LLM-002 建议首批采用单轮文本 ModelRequest、typed OutputItem、nullable Usage、Responses SSE event callback 和显式 CapabilityState；复杂 input/multimodal 与多 Provider 路由延后。
 - Prompt/Response 日志必须脱敏并限制保存；调用元数据与内容正文分开管理。
 
 ### 4.5 Notification
@@ -196,3 +197,15 @@ Domain/Contract 不得因为无关模块的 Adapter/Integration 未完成而被�
 - 本地 Responses SSE 中断后未发现专用 event:error 补发；Responses output_text.delta 也未被当前 Chat delta 审计解析器识别为内容/TTFT。Usage 的 response.usage 可解析。
 - LLM-001 静态盘点完成、在线验收未执行，整体状态 partial。LLM-002 Port/Fixture 可继续；LLM-004/005 只能先做独立解析/校验准备，不能宣称真实模型能力已通过。
 - 详细证据与测试矩阵见 doc/llm/03-现有模型Gateway协议盘点.md。
+
+
+## 10. LLM-002 Provider Port 与 DTO 字段级 Review（2026-11-05）
+
+- 首批协议建议固定为 OpenAI Responses，不做 Chat Completions/Anthropic 多协议统一抽象。
+- ModelRequest 建议先采用 instructions + input_text 单轮文本；max_output_tokens、可选 temperature/top_p/reasoning_effort、response_schema、受控 ToolDefinition、deadline 和 correlation/trace metadata 均有明确字段。
+- ModelResponse 以 status=completed/incomplete/failed 表达终态，按 OutputItem 类型解析 message/function_call/refusal/unknown；Usage 缺失保持 nil，不能补 0。
+- Stream 建议采用同步事件回调提供背压；必须收到 terminal event，EOF 无 terminal 视为 stream_interrupted；首个事件后禁止透明重试。
+- CapabilityState 使用 supported/unsupported/unknown，按 Provider + Model + Gateway 版本和验证日期记录；当前本地 Responses/Structured Output/Tool Call 真实能力均不能因 Mock 通过而标记 supported。
+- ToolDefinition 是受控声明，LLM 只传输和解析；Researchflow 仍负责白名单、权限、预算和执行。
+- 完整字段表、JSON Schema、错误分类、资源边界和 Owner 未决项见 doc/llm/04-ProviderPort与DTO字段级契约.md。
+- 本轮仅形成 LLM-002 规划侧建议稿，待 LLM/Platform Owner Review；不代表接口冻结或模块开工。
