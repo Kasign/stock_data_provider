@@ -127,3 +127,10 @@
 - 已新增独立 CI 步骤，注入 MariaDB DSN，精确执行因子和公司行动两项 Service PIT 版本回退测试。
 - 新 SHA 验收要求两条测试日志明确 PASS，不接受 Skip 或仅凭 workflow success 推断通过。
 - 本批只调整自动化验收，不改变业务代码和 PIT 语义；阶段 B 仍为 in_progress，等待新 SHA CI。
+
+
+## 2026-11-05 P0 批次 20：修正 Service PIT 集成测试证券代码夹具
+
+- 真实 MariaDB CI 已执行批次 19 新增的 Service PIT 测试，暴露测试夹具使用随机字符串而非合法 A 股证券代码的问题；生产代码校验正确，不应放宽。
+- 两项测试改用合法证券代码 `600519.SH`，继续验证因子与公司行动在 Service 层回退到 as_of 可见的 v1 revision。
+- 批次 19 CI 结果为失败，不能将 Job success 或 Repository 测试通过误报为 Service PIT 通过。批次 20 等待新 SHA 的真实 MariaDB 结果。

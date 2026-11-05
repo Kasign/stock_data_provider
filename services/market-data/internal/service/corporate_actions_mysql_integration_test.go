@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"testing"
 	"time"
@@ -29,7 +28,7 @@ func TestAdjustmentFactorsAsOfFallsBackToLatestProviderVisibleRevision(t *testin
 		t.Fatalf("migrate MariaDB: %v", err)
 	}
 
-	symbol := fmt.Sprintf("S%014d", time.Now().UnixNano()%100000000000000)
+	symbol := "600519.SH"
 	fetchedV1 := time.Now().UTC()
 	availableV1 := fetchedV1.Add(-time.Minute)
 	v1 := model.AdjustmentFactor{
@@ -82,7 +81,7 @@ func TestCorporateActionsAsOfFallsBackToLatestProviderVisibleRevision(t *testing
 		t.Fatalf("migrate MariaDB: %v", err)
 	}
 
-	symbol := fmt.Sprintf("A%014d", time.Now().UnixNano()%100000000000000)
+	symbol := "600519.SH"
 	fetchedV1 := time.Now().UTC()
 	availableV1 := fetchedV1.Add(-time.Minute)
 	v1 := model.CorporateAction{
