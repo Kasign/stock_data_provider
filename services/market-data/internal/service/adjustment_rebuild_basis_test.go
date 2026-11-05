@@ -77,7 +77,6 @@ func TestRebuildAdjustedDailyBarsKeepsSharedFactorFallback(t *testing.T) {
 	}
 }
 
-
 func TestRebuildAdjustedDailyBarsRejectsCrossProviderOrSymbolFactors(t *testing.T) {
 	available := time.Date(2025, 7, 1, 0, 0, 0, 0, time.UTC)
 	observed := available.Add(time.Hour)
