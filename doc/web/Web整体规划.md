@@ -1342,3 +1342,6 @@ JSR-6L 补充：连接配置变更取消草稿检查后，旧代际 finally 按�
 
 
 第十八批首次 WebUI Checks 暴露现有测试辅助函数 `baseCssDeclarationBlock` 的查找语义：它优先返回包含目标选择器的逗号分组规则（本例为主/次文本共享的 `display:block`），而非目标选择器自己的基础规则。该失败是测试定位范围问题。新增严格匹配完整选择器的 `exactCssDeclarationBlock`，仅用于本次主文本规则检查；不改变 CSS。后续 CI 重新验收。
+
+
+第十八批测试契约再次校准：唯一规则断言原正则也匹配了 `.market-hot-stock-link:hover .market-table-primary` 后代状态规则，将组件基础规则与 hover 规则误计为两条。现改为解析规则选择器并要求完整选择器严格等于 `.market-table-primary`，只统计基础规则；hover 颜色/下划线规则仍保留且不计入基础规则数量。CSS 不变。
