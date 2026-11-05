@@ -925,3 +925,31 @@ Go suite 覆盖根模块、go-core、market-data 的格式/测试/race/vet、Mar
 - 未测试 qfq/hfq、复权参考日期、复权因子及公司行为。阶段 B 继续 in_progress，不关闭。
 - 下一步：以这两个窗口继续执行 qfq/hfq 最小真实请求，保留每条 K 线的 `AdjustmentMethod`、`AdjustmentRefDate`；仅在比较器确认同一绝对基准后才允许 matched。随后再通过生产 Probe 历史日期选项补齐交易上下文与持久化联验。
 - 最新代码 SHA：`23365dd16b39d5be3077d8870d178c3c50a457a9`。该 SHA 的 Go test suite Push Run `41950643179` 在记录时仍在执行；Live Provider Probe 已完成。CI 未完成前不提前标记代码验收全部通过。
+
+
+## 57. 2026-11-05 qfq/hfq 与生产 Probe 历史窗口联验
+
+### 57.1 qfq/hfq 真实请求
+
+- GitHub Actions Live Provider Probe Run：`41951184379`。该轮直接 Provider 报告用于查看每条样本的调整方法和参考日期；Eastmoney 在该轮遇到连接 EOF。
+- 随后的生产 Probe 历史联验 Run：`41952778969`，两只样本均对 Sina、Tencent、Eastmoney、Yahoo 执行 `none`、`forward_adjusted`、`backward_adjusted`，每项均完成 9 条返回/验证或明确 not_supported。
+- Sina 的 forward/backward 均为 `not_supported`，错误语义明确为只支持 none，没有把不支持误报为请求失败。
+- Tencent forward/backward 分别返回 `tencent_qfqday`、`tencent_hfqday`；当前模型未得到可验证的 `AdjustmentRefDate`。
+- Eastmoney forward/backward 分别返回 `eastmoney_fqt_1`、`eastmoney_fqt_2`；当前模型未得到可验证的 `AdjustmentRefDate`。forward 另有 `daily_bar_adjustment_reference_date_unverified` 与响应契约 warning。
+- Yahoo forward 使用 `yahoo_adjclose_ratio_rebased_to_end`，参考日期为请求窗口末日 `2025-07-17`；backward 使用 `yahoo_adjclose_ratio_rebased_to_start`，参考日期为窗口首日 `2025-07-07`。这是适配器按请求窗口重基准的日期，不应误解为 Yahoo 原始数据的永久复权基准。
+
+### 57.2 生产 Probe 链路结果
+
+- 生产服务层测试直接调用 `DataService.ProbeProviderCapabilitiesWithOptions`，使用 `daily_bars`、`connectivity/contract/quality/cross_provider` 检查，传入两只股票、历史日期和三种复权口径。
+- 两只股票各自 12 个 Provider/口径项：`total=12`、`failed=0`、`not_supported=2`、`degraded=10`、`returned=0`、`status=degraded`；10 个可支持项均返回并验证 9 条，2 个 Sina adjusted 项明确 not_supported。
+- 本次测试未注入交易日历 Provider，故各可支持项带有 `daily_bar_context_calendar_unavailable`；同时 Sina/Tencent/Yahoo 成交额缺失也使其字段质量降级。该测试没有 MariaDB Store，`persisted=false` 是测试配置预期，不代表生产数据库写入失败。
+- 所有 cross_provider 对账项被现有严格门禁标记为 `skipped / comparison_not_comparable`，原因是 `quality_status_must_be_valid`。这不是数据 mismatch，也不能计为 matched。
+- 调整元数据仍有独立缺口：Tencent/Eastmoney 缺少可验证参考日期；Yahoo 参考日期是窗口重基准日期，三家方法标识不同。即使以后质量状态满足门禁，也不能仅凭 forward/backward enum 相同直接比较。
+
+### 57.3 结论与后续
+
+- none 的 Provider 直连样本已证明两只股票 9 日 OHLC 按分跨源一致；qfq/hfq 已证明三家 Provider 能返回数据，但复权基准仍不可比。
+- 当前不修改 CrossProviderDailyCompare 的质量门禁，不允许降级数据进入 matched；也不为 Tencent/Eastmoney 猜测参考日期。
+- 下一步优先核对 Tencent/Eastmoney 源端复权定义和可追溯参考日期证据；如果源端不暴露，应明确标记缺失并保持 not_comparable。再评估是否有可信公司行为/复权因子源可作为独立基准。
+- 本轮生产 Probe 测试只注入四家日 K Provider，未注入生产日历 Provider，也未连接 MariaDB；交易上下文和历史持久化仍需单独联验。
+- 当前代码 HEAD：`e3a0bbb2ba973abe3317f26fe4bd4f0e250a7d4c`。Live Provider Probe Run `41952778969` 成功；Go test suite Run `41952778933` 在记录时 Go 格式检查及普通测试已通过，race/vet 和 Docker 构建仍在执行。

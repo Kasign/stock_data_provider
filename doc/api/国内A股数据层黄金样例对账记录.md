@@ -338,3 +338,41 @@ Live Provider Probe Run `41788725692` 的 workflow conclusion 为 success，但�
 - `none` 口径的 OHLC 跨源一致性通过本批样本核验；成交额字段质量仍为 Eastmoney valid、其他三家 degraded。
 - 该记录不是交易所官方数据对账，也未覆盖生产 Probe 的跨源比较器、交易日历、证券交易状态和 MariaDB 历史持久化链路。
 - 下一步对同样两个窗口执行 qfq/hfq，记录 method/refdate 和源端公司行为证据；不同或缺失绝对基准时保持 not_comparable，不允许仅凭 adjustment enum 相同判 matched。
+
+
+## 17. 2026-11-05：历史窗口 qfq/hfq 与生产 Probe 诊断结果
+
+### 17.1 复权样本来源
+
+- 直接 Provider 报告：GitHub Actions Run `41951184379`。
+- 生产 Probe 历史窗口诊断：GitHub Actions Run `41952778969`。
+- 股票：600036.SH、002982.SZ；窗口：2025-07-07 至 2025-07-17；每种口径目标 9 个交易日。
+- 复权能力矩阵：
+
+| Provider | none | qfq / forward_adjusted | hfq / backward_adjusted | 参考日期 |
+|---|---|---|---|---|
+| Sina | 9 条 | not_supported | not_supported | 不适用 |
+| Tencent | 9 条 | 9 条 | 9 条 | adjusted 未提供可验证值 |
+| Eastmoney | 9 条 | 9 条 | 9 条 | 未提供可验证值 |
+| Yahoo | 9 条 | 9 条 | 9 条 | qfq=2025-07-17；hfq=2025-07-07（窗口重基准） |
+
+### 17.2 复权方法与比较限制
+
+- Tencent：`tencent_qfqday` / `tencent_hfqday`，没有可验证的 AdjustmentRefDate。
+- Eastmoney：`eastmoney_fqt_1` / `eastmoney_fqt_2`，没有可验证的 AdjustmentRefDate；forward 还产生 reference-date-unverified 警告。
+- Yahoo：`yahoo_adjclose_ratio_rebased_to_end` / `yahoo_adjclose_ratio_rebased_to_start`。它将 Yahoo adjclose 比率分别重基准到请求窗口末日/首日。
+- Sina：只支持 none。adjusted 项由 Probe 标记 not_supported，而非 failed。
+- Tencent 与 Yahoo 的 adjusted OHLC 数值尺度存在明显差异，且方法/参考日期没有共同证据；Eastmoney 虽然返回 9 条，但缺少参考日期证据。所有 adjusted 样本均不得互相判定 matched。
+
+### 17.3 生产 Probe 历史窗口结果
+
+- 每只股票 12 个 Provider/adjustment 项：10 项返回 9 条并完成公共校验，2 项 Sina adjusted 明确 not_supported；Provider 失败数为 0。
+- Run 状态为 degraded：10 项 degraded、2 项 not_supported。测试未注入交易日历 Provider，因此有 `daily_bar_context_calendar_unavailable`；也未连接 MariaDB，因此 `persisted=false`。
+- cross_provider 项均 skipped，原因 `quality_status_must_be_valid`。该状态不代表 mismatch，更不能计为 matched。
+- none 口径的原始 Provider 完整样本在第 16 节；直接样本 OHLC 按分一致，但因为多个源成交额字段缺失，整体质量仍 degraded，生产比较器按现有门禁不执行对账。
+
+### 17.4 当前决策
+
+- 保留现有质量门禁，不允许 degraded 样本进入 matched。
+- 不猜测 Tencent/Eastmoney 的复权参考日期，不把 Yahoo 的窗口重基准日期等同于源端原始参考日期。
+- 下一步查找可验证的源端复权基准/公司行为证据；如果不能证明同一参考基准，继续 not_comparable。
