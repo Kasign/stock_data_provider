@@ -46,8 +46,8 @@ func (p *Bocha) Search(ctx context.Context, req domain.SearchRequest) ([]domain.
 	var payload struct {
 		Code json.RawMessage `json:"code"`
 		Data struct {
-			WebPages struct {
-				Value []struct {
+			WebPages *struct {
+				Value *[]struct {
 					ID            string          `json:"id"`
 					Name          string          `json:"name"`
 					URL           string          `json:"url"`
@@ -67,10 +67,13 @@ func (p *Bocha) Search(ctx context.Context, req domain.SearchRequest) ([]domain.
 	if code != "200" {
 		return nil, &app.ProviderError{Code: "provider_business_rejected"}
 	}
+	if payload.Data.WebPages == nil || payload.Data.WebPages.Value == nil {
+		return nil, &app.ProviderError{Code: "provider_response_invalid"}
+	}
 
 	now := time.Now().UTC()
-	out := make([]domain.Candidate, 0, len(payload.Data.WebPages.Value))
-	for _, item := range payload.Data.WebPages.Value {
+	out := make([]domain.Candidate, 0, len(*payload.Data.WebPages.Value))
+	for _, item := range *payload.Data.WebPages.Value {
 		summary := item.Summary
 		if summary == "" {
 			summary = item.Snippet
@@ -105,20 +108,20 @@ func (p *Tavily) Search(ctx context.Context, req domain.SearchRequest) ([]domain
 	}
 
 	var payload struct {
-		Results []struct {
+		Results *[]struct {
 			Title         string `json:"title"`
 			URL           string `json:"url"`
 			Content       string `json:"content"`
 			PublishedDate string `json:"published_date"`
 		} `json:"results"`
 	}
-	if err := json.Unmarshal(raw, &payload); err != nil {
+	if err := json.Unmarshal(raw, &payload); err != nil || payload.Results == nil {
 		return nil, &app.ProviderError{Code: "provider_response_invalid"}
 	}
 
 	now := time.Now().UTC()
-	out := make([]domain.Candidate, 0, len(payload.Results))
-	for _, item := range payload.Results {
+	out := make([]domain.Candidate, 0, len(*payload.Results))
+	for _, item := range *payload.Results {
 		out = append(out, candidate(TavilyCode, "", item.Title, item.Content, item.URL, "", "", item.PublishedDate, now, req.QueryDimension))
 	}
 	return out, nil
@@ -161,7 +164,7 @@ func (p *Brave) Search(ctx context.Context, req domain.SearchRequest) ([]domain.
 	}
 
 	var payload struct {
-		Results []struct {
+		Results *[]struct {
 			Title         string `json:"title"`
 			URL           string `json:"url"`
 			Description   string `json:"description"`
@@ -169,13 +172,13 @@ func (p *Brave) Search(ctx context.Context, req domain.SearchRequest) ([]domain.
 			PageAge       string `json:"page_age"`
 		} `json:"results"`
 	}
-	if err := json.Unmarshal(raw, &payload); err != nil {
+	if err := json.Unmarshal(raw, &payload); err != nil || payload.Results == nil {
 		return nil, &app.ProviderError{Code: "provider_response_invalid"}
 	}
 
 	now := time.Now().UTC()
-	out := make([]domain.Candidate, 0, len(payload.Results))
-	for _, item := range payload.Results {
+	out := make([]domain.Candidate, 0, len(*payload.Results))
+	for _, item := range *payload.Results {
 		// Brave page_age 是页面年龄/更新时间信息，不是新闻发布时间。
 		out = append(out, candidate(BraveCode, "", item.Title, item.Description, item.URL, "", "", item.PublishedDate, now, req.QueryDimension))
 	}
@@ -209,23 +212,23 @@ func (p *SearXNG) Search(ctx context.Context, req domain.SearchRequest) ([]domai
 	}
 
 	var payload struct {
-		Results []struct {
-			Title         string          `json:"title"`
-			URL           string          `json:"url"`
-			Content       string          `json:"content"`
-			Description   string          `json:"description"`
-			PublishedDate json.RawMessage `json:"publishedDate"`
+		Results *[]struct {
+			Title          string          `json:"title"`
+			URL            string          `json:"url"`
+			Content        string          `json:"content"`
+			Description    string          `json:"description"`
+			PublishedDate  json.RawMessage `json:"publishedDate"`
 			PublishedSnake json.RawMessage `json:"published_date"`
-			PublishedAt   json.RawMessage `json:"published_at"`
+			PublishedAt    json.RawMessage `json:"published_at"`
 		} `json:"results"`
 	}
-	if err := json.Unmarshal(raw, &payload); err != nil {
+	if err := json.Unmarshal(raw, &payload); err != nil || payload.Results == nil {
 		return nil, &app.ProviderError{Code: "provider_response_invalid"}
 	}
 
 	now := time.Now().UTC()
-	out := make([]domain.Candidate, 0, len(payload.Results))
-	for _, item := range payload.Results {
+	out := make([]domain.Candidate, 0, len(*payload.Results))
+	for _, item := range *payload.Results {
 		summary := item.Content
 		if summary == "" {
 			summary = item.Description

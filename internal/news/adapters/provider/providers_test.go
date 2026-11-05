@@ -140,3 +140,46 @@ func TestProviderHTTPStatusClassifiesRetryCandidate(t *testing.T) {
 		t.Fatalf("error=%#v", err)
 	}
 }
+
+
+func TestTavilyRejectsMissingResultsField(t *testing.T) {
+	client := roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		return response(`{}`), nil
+	})
+	p, err := NewTavily("https://api.example.test/search", "secret", client)
+	if err != nil {
+		t.Fatal(err)
+	}
+	items, err := p.Search(context.Background(), domain.SearchRequest{Query: "测试", Limit: 5})
+	if err == nil || items != nil {
+		t.Fatalf("missing results field must be rejected: items=%+v err=%v", items, err)
+	}
+}
+
+func TestBochaRejectsMissingResultEnvelope(t *testing.T) {
+	client := roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		return response(`{"code":200,"data":{}}`), nil
+	})
+	p, err := NewBocha("https://api.example.test/v1/web-search", "secret", client)
+	if err != nil {
+		t.Fatal(err)
+	}
+	items, err := p.Search(context.Background(), domain.SearchRequest{Query: "测试", Limit: 5})
+	if err == nil || items != nil {
+		t.Fatalf("missing result envelope must be rejected: items=%+v err=%v", items, err)
+	}
+}
+
+func TestSearXNGRejectsMissingResultsField(t *testing.T) {
+	client := roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		return response(`{}`), nil
+	})
+	p, err := NewSearXNG("https://searx.example", client)
+	if err != nil {
+		t.Fatal(err)
+	}
+	items, err := p.Search(context.Background(), domain.SearchRequest{Query: "测试", Limit: 5})
+	if err == nil || items != nil {
+		t.Fatalf("missing results field must be rejected: items=%+v err=%v", items, err)
+	}
+}
