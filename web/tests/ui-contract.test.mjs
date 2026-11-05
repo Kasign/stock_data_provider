@@ -1403,7 +1403,12 @@ test("market overview and activity use readable secondary text and touch-sized c
   assert.match(marketActivityControlInputBase, /padding:\s*6px 8px\s*;?/);
   assert.equal((stylesheet.match(/\.market-activity-controls input\s*\{/g) || []).length, 2, "market activity date inputs should have one base rule and one responsive width rule");
   assert.match(stylesheet, /\.market-activity-controls input \{\s*width:100%;\s*max-width:none\s*\}/);
-  assert.match(finalCssRuleBody(".market-activity-controls .button"), /min-height: 38px/);
+  const marketActivityControlButtonBase = exactCssDeclarationBlock(".market-activity-controls .button");
+  assert.match(marketActivityControlButtonBase, /min-height:\s*38px\s*;?/);
+  assert.match(marketActivityControlButtonBase, /padding:\s*6px 10px\s*;?/);
+  assert.match(marketActivityControlButtonBase, /font-size:\s*12px\s*;?/);
+  assert.equal((stylesheet.match(/\.market-activity-controls \.button\s*\{/g) || []).length, 2, "market activity controls should have one base button rule and one mobile flex rule");
+  assert.ok(stylesheet.includes(".market-activity-controls .button { flex: 1 1 100%; }"), "mobile button width behavior should remain without typography overrides");
   const readabilityStart = stylesheet.indexOf("/* 2026-10-27 readability pass: market overview, activity table, and calendar. */");
   const mobileOverrideStart = stylesheet.indexOf("@media (max-width: 700px)", readabilityStart);
   assert.ok(readabilityStart >= 0 && mobileOverrideStart > readabilityStart, "the general readability pass should precede responsive overrides");
@@ -1411,7 +1416,8 @@ test("market overview and activity use readable secondary text and touch-sized c
   assert.match(marketActivityControlLabelBase, /font-size:\s*12px\s*;/, "desktop labels need a readable base font size");
   assert.match(marketActivityControlLabelBase, /line-height:\s*1\.4\s*;?/, "desktop labels need a readable base line height");
   assert.match(marketActivityControlInputBase, /min-height:\s*38px\s*;?/, "date inputs need a 38px base touch target");
-  assert.match(generalRules, /\.market-activity-controls \.button \{ min-height: 38px; font-size: 12px; \}/, "desktop buttons need a readable 38px baseline");
+  assert.match(marketActivityControlButtonBase, /min-height:\s*38px\s*;?/, "market activity buttons need a 38px base touch target");
+  assert.match(marketActivityControlButtonBase, /font-size:\s*12px\s*;?/, "market activity button labels need a readable base font size");
   assert.match(finalCssRuleBody(".activity-stock-link"), /min-height: 38px/);
   assert.match(finalCssRuleBody(".calendar-month-navigation .icon-button"), /min-width: 38px; min-height: 38px/);
   assert.match(finalCssRuleBody(".trading-calendar-weekdays span"), /font-size: 11px/);

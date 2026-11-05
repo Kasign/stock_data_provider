@@ -2242,9 +2242,9 @@ button:disabled, input:disabled, select:disabled, textarea:disabled { cursor: no
   color:var(--text)
 }
 .market-activity-controls .button {
-  min-height:33px;
+  min-height:38px;
   padding:6px 10px;
-  font-size:10px
+  font-size:12px
 }
 .market-activity-table {
   max-height:420px;
@@ -3295,7 +3295,6 @@ button:disabled, input:disabled, select:disabled, textarea:disabled { cursor: no
 
 .market-overview-actions .button { min-height: 38px; font-size: 12px; }
 
-.market-activity-controls .button { min-height: 38px; font-size: 12px; }
 .market-activity-table { -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
 .activity-stock-link { min-height: 38px; padding: 5px 0; font-size: 12px; }
 .market-activity-footer span { font-size: 12px; }
@@ -3314,7 +3313,7 @@ button:disabled, input:disabled, select:disabled, textarea:disabled { cursor: no
 
 @media (max-width: 600px) {
   .market-activity-controls label { min-width: 0; flex: 1 1 140px; }
-  .market-activity-controls .button { flex: 1 1 100%; min-height: 38px; font-size: 12px; }
+  .market-activity-controls .button { flex: 1 1 100%; }
   .calendar-range-controls label { min-width: calc(50% - 4px); }
   .trading-calendar-weekdays,
   .trading-calendar-grid { gap: 3px; }
