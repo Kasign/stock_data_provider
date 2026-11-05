@@ -28,9 +28,9 @@ type liveTushareIntradaySuspensionSample struct {
 	TimingMatches      bool   `json:"timing_matches_official"`
 	DailyBarRows       int    `json:"daily_bar_rows"`
 	DailyBarQuality    string `json:"daily_bar_quality,omitempty"`
-	DailyBarError      string `json:"daily_bar_error,omitempty"`
+	DailyBarError   string `json:"daily_bar_error,omitempty"`
 	Status             string `json:"status"`
-	Error              string `json:"error,omitempty"`
+	Error           string `json:"error,omitempty"`
 }
 
 // TestLiveTushareIntradaySuspensionSamples checks official exchange intraday
