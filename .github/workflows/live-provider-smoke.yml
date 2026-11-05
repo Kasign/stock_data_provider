@@ -187,6 +187,31 @@ jobs:
           name: live-tushare-adjustment-report
           path: live-tushare-adjustment-report.json
           if-no-files-found: warn
+      - name: Run Pytdx historical daily-bar and GBBQ probe
+        if: github.event_name == 'push' && contains(github.event.head_commit.message, '[historical_pytdx_gbbq]')
+        env:
+          MARKET_DATA_LIVE_PYTDX_HISTORICAL_TESTS: "1"
+          LIVE_PROBE_DAILY_START_DATE: "2025-07-07"
+          LIVE_PROBE_DAILY_END_DATE: "2025-07-17"
+          LIVE_PROBE_DAILY_SYMBOLS: "600036.SH,002982.SZ"
+          LIVE_PYTDX_HISTORICAL_REPORT_PATH: ${{ github.workspace }}/live-pytdx-historical-report.json
+        working-directory: services/market-data
+        run: go test -run TestLivePytdxHistoricalDailyBars -count=1 -v ./internal/provider
+      - name: Print Pytdx historical report
+        if: always()
+        run: |
+          if [[ -f live-pytdx-historical-report.json ]]; then
+            cat live-pytdx-historical-report.json
+          else
+            echo "No Pytdx historical report was produced."
+          fi
+      - name: Upload Pytdx historical report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: live-pytdx-historical-report
+          path: live-pytdx-historical-report.json
+          if-no-files-found: warn
       - name: Probe native news search when credentials are available
         env:
           GO_NATIVE_NEWS_LIVE_TESTS: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '[include_news]') && '1' || '0' }}
