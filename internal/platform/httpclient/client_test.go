@@ -588,7 +588,7 @@ func TestClientReturnsTimeoutWhenRetryBackoffExceedsDeadline(t *testing.T) {
 
 	client, err := New(Config{
 		Resolver: staticResolver{addresses: []netip.Addr{netip.MustParseAddr("8.8.8.8")}},
-		Timeout: 20 * time.Millisecond, MaxRetries: 1,
+		Timeout:  20 * time.Millisecond, MaxRetries: 1,
 	})
 	if err != nil {
 		t.Fatal(err)
