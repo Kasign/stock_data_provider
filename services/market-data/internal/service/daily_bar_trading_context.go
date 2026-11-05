@@ -48,7 +48,8 @@ func historicalCalendarTimestampOnlyDegradation(calendar *model.TradingCalendarS
 		return false
 	}
 	endDate, err := time.ParseInLocation("2006-01-02", calendar.EndDate, marketLocation())
-	if err != nil || !endDate.Before(time.Now().In(marketLocation())) {
+	today := time.Now().In(marketLocation()).Format("2006-01-02")
+	if err != nil || endDate.Format("2006-01-02") >= today {
 		return false
 	}
 	if len(calendar.QualityReasons) == 0 {

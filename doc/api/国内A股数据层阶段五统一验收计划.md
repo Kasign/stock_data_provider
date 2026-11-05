@@ -205,3 +205,6 @@
 - 对完整历史日历，若唯一质量缺口是 Provider 未暴露/缺少快照发布时间，且日历结束日期早于当前 Asia/Shanghai 日期，则保留 `daily_bar_context_calendar_snapshot_time_unverified` warning，但不单独降级历史 K 线质量。
 - 当前/未来日历、日历来源冲突、仅返回交易日而推断非交易日、其他质量缺口继续 degraded；缺少日历仍 degraded。
 - 该修复不伪造上游时间、不放宽日期覆盖校验。新增三项回归测试，等待新 SHA CI 与真实 Probe 复验。
+
+
+- 边界修正：历史判定按上海时区的自然日比较，当前日期本身仍属于 current calendar，不会因当天零点早于当前时刻而误判为历史日期。
