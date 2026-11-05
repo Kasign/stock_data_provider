@@ -247,47 +247,7 @@ jobs:
           MARKET_DATA_TUSHARE_TOKEN: ${{ secrets.TUSHARE_TOKEN }}
           LIVE_TUSHARE_SUSPENSION_REPORT_PATH: ${{ github.workspace }}/live-tushare-suspension-report.json
         working-directory: services/market-data
-        run: go test -run '^TestLiveTushareIntradaySuspensionSamples        if: always()
-        run: |
-          if [[ -f live-pytdx-baostock-event-report.json ]]; then
-            cat live-pytdx-baostock-event-report.json
-          else
-            echo "No Pytdx/BaoStock event report was produced."
-          fi
-      - name: Upload Pytdx/BaoStock corporate-action event report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: live-pytdx-baostock-event-report
-          path: live-pytdx-baostock-event-report.json
-          if-no-files-found: warn
-      - name: Probe native news search when credentials are available
-        env:
-          GO_NATIVE_NEWS_LIVE_TESTS: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '[include_news]') && '1' || '0' }}
-          GO_NEWS_LIVE_REPORT_PATH: ${{ github.workspace }}/live-news-report.json
-          BOCHA_API_KEYS: ${{ secrets.BOCHA_API_KEYS }}
-          SEARXNG_BASE_URLS: ${{ secrets.SEARXNG_BASE_URLS }}
-          NEWS_MAX_AGE_DAYS: "3"
-          NEWS_STRATEGY_PROFILE: short
-          NEWS_SEARCH_TIMEOUT_SECONDS: "10"
-        working-directory: go-core
-        run: go test -run '^TestLiveNativeNewsSearch$' -count=1 -v ./internal/adapters/newssearch
-      - name: Print native news report
-        if: always()
-        run: |
-          if [[ -f live-news-report.json ]]; then
-            cat live-news-report.json
-          else
-            echo "No native-news report file was produced; inspect the probe step logs."
-          fi
-      - name: Upload native-news report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: live-news-report
-          path: live-news-report.json
-          if-no-files-found: warn
- -count=1 -v ./internal/provider
+        run: go test -run '^TestLiveTushareIntradaySuspensionSamples$' -count=1 -v ./internal/provider
       - name: Print Tushare intraday suspension report
         if: always()
         run: |
