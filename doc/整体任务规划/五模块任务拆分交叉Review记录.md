@@ -1,0 +1,124 @@
+# 五模块任务拆分交叉 Review 记录
+
+- 所属治理任务：GOV-004 / GOV-005
+- 规划分支：feat/design_doc
+- 日期：2026-11-05
+- 状态：规划侧 Review 完成；不代表模块 Owner 已批准或模块已开工。
+- 范围：五模块任务拆分与验收文档、首批 Application Port 与状态机契约。
+
+## 1. Review 结论
+
+原任务表存在依赖语义过粗的问题：领域开发、契约评审、Adapter 接入、真实环境和根组合验收混在同一个“依赖”列。若照原表执行，容易把 Data/News/Platform 生产实现或其他模块 CI 变成不必要的全局阻断。
+
+本轮已修正五份任务拆分文档的依赖列，并补充分层规则。以后任务依赖必须标明属于哪一层：
+
+- **Domain**：本模块领域对象、算法、状态机和内存实现依赖。
+- **Contract**：跨模块 DTO/Port 的 Owner Review 与版本冻结。
+- **Adapter**：调用外部模块、Provider、HTTP、Secret、Storage 的适配实现。
+- **Integration**：根 DI/HTTP/Worker/Migration、真实依赖和端到端验收。
+
+Domain/Contract 不得因为无关模块的 Adapter/Integration 未完成而被动等待。
+
+## 2. 本轮修正清单
+
+| 模块 | 原问题 | 修正 |
+|---|---|---|
+| Quant | QNT-003 强制依赖 QNT-002；QNT-013 等待 QNT-001~012 全部完成和 Platform Storage | Factor 不再强制依赖 Indicator；Repository Port/Schema 可并行，真实 DB/根注册单列 L3 |
+| Research | RSC-002 直接依赖 News 契约；RSC-003/004 依赖 News/Data 生产能力 | Evidence/Event/实体关联先依赖自身 DTO 与 Fixture；News/Data Adapter 单独验收 |
+| Researchflow | FLOW-004 直接依赖 Platform Task；FLOW-007 等待 Platform Storage | 自有 Executor Port 优先；Platform Task Queue 仅可选复用；Repository Port/Schema 与真实 Storage 分层 |
+| LLM | LLM-002 把 Platform HTTP 作为接口开发前置 | Provider Port 和 Fixture 先行，Platform HTTP Adapter 单独验收 |
+| Notification | NTF-001 依赖 Platform；NTF-004 依赖 Platform Task；NTF-006 等待 Storage | Event/Subscription/Delivery 和 Dispatcher 先独立；真实渠道、Worker、Storage 分别作为 Adapter/Integration 验收 |
+
+## 3. 首批任务建议执行顺序
+
+### Quant
+1. QNT-001：冻结本模块最小计算上下文、Indicator/Factor 子契约。
+2. QNT-002 与 QNT-003：在各自子契约明确后并行开发。
+3. QNT-004 及 QNT-005/006/007 按数据输入边界并行推进。
+4. QNT-008/009/010 按策略、回测、硬风险门禁顺序。
+5. QNT-013 Repository Port/Schema 可提前设计；生产存储接入不阻断纯计算能力。
+
+### Research
+1. RSC-001 与 RSC-002 可并行细化；共享基础时间/来源/授权语义。
+2. RSC-003 依赖 Evidence 结构稳定，不依赖 News 生产 Facade 已上线。
+3. RSC-004 先固定实体引用契约，Data Adapter 独立推进。
+4. RSC-005 可在 Context/Evidence 首批契约稳定后开始。
+5. RSC-007 Repository Port/Schema 与领域开发并行设计；真实存储单独验收。
+
+### Researchflow
+1. FLOW-001~003 为第一批独立核心。
+2. FLOW-004 自有 Executor Port 和有界执行语义评审通过后开始，不默认复用 Platform Task Queue。
+3. FLOW-005/006 使用已冻结 DTO 或 Fixture 开发；真实 Facade 组合另验。
+4. FLOW-007 Repository Port/Schema 可提前设计。
+5. FLOW-009 根 HTTP/DI/Worker 接入必须由集成 Owner 统一处理。
+
+### LLM
+1. 立即执行 LLM-001 协议盘点。
+2. 盘点后冻结 LLM-002 最小 Provider Port。
+3. 超时、结构化输出、用量、脱敏等能力按真实协议分开实现。
+4. Stream 只在 Gateway 真实支持时实现；多模型路由继续 P2。
+
+### Notification
+1. NTF-001 先冻结事件类型、Payload Schema、Subscription 范围和 Delivery 状态。
+2. NTF-002 Renderer 与 NTF-001 并行准备 Schema/Fixture，冻结后完成集成。
+3. NTF-003 真实渠道 Adapter 独立验收。
+4. NTF-004/005 先实现模块内有界 Dispatcher 和重试状态机。
+5. NTF-006 Outbox/Repository Port 与 Schema 可并行设计，真实 DB 和根 Migration 另验。
+
+## 4. 发现的契约风险与需要补充的门禁
+
+### 4.1 Quant
+
+- QNT-003 Factor 的输入不应被限定为 Indicator 输出；因子可直接消费标准化行情/财务/分类输入。
+- QNT-009 回测必须绑定数据快照、交易制度版本、费用模型版本和策略版本，不能仅以“历史行情”作为可复现条件。
+- QNT-010 RiskDecision 必须区分 pass/reject/unknown；输入质量或规则缺失不得默认 pass。
+- QNT-013 的领域 Migration 文件归 Quant；根 Migration 注册和执行入口归集成 Owner。
+
+### 4.2 Research
+
+- Evidence 的 source_ref 和 authorization_ref 均为不透明引用；不得由 Research 自行访问来源内部表。
+- Research 的 system_as_of 必须由 Researchflow Run 统一传入；不能每个 Stage 自行取当前时间。
+- Evidence 的授权引用不能作为永久授权凭证；真实读取必须由来源 Owner 执行当前撤销/过期检查。
+- Event 合并/拆分必须保留来源 Evidence 与修订关系，不允许覆盖旧归并结果。
+
+### 4.3 Researchflow
+
+- Executor 必须限制并发、排队容量、单 Stage deadline 和总 Run deadline；不能只定义 DAG 拓扑。
+- Attempt 是不可变执行记录；重试创建新 Attempt，不能重写失败记录。
+- Run cancel 后不能启动新 Stage；正在执行的 Attempt 必须接收取消信号并记录真实结束状态。
+- partial 必须说明缺失阶段与结果覆盖范围；不能仅返回一个布尔值。
+- 硬风险门禁是不可绕过的阶段约束；LLM 结果不能改变 RiskDecision。
+
+### 4.4 LLM
+
+- LLM-001 需明确 Gateway 是否真正支持 Responses/Chat Completions、结构化输出、流式和工具调用；不能按兼容宣称设计能力。
+- 模型返回 tool call 只是待执行意图；Researchflow 必须独立做白名单、参数 Schema、权限和预算检查。
+- Prompt/Response 日志必须脱敏并限制保存；调用元数据与内容正文分开管理。
+
+### 4.5 Notification
+
+- Event Inbox 幂等与 Delivery 幂等是两道不同防线。
+- 网络超时后无法确认渠道是否接收时，需有 unknown/needs_reconciliation 状态或等价机制，不能直接盲目重发。
+- Outbox 只能保证本地事务与待投递事件原子性，不能承诺外部渠道 exactly-once。
+- recipient_scope 不能直接充当 recipient_ref；接收人只能由已授权 Subscription/Channel 配置解析。
+
+## 5. 仍然不能宣称通过的事项
+
+- 所有 DTO/Port 仍待各模块 Owner Review；本轮规划 Review 不能代替 Owner 签字。
+- Quant 数值精度、Indicator/Factor 首批参数仍待 CONTRACT-001~003。
+- Research AuthorizationRef 与统一 system_as_of 仍待 CONTRACT-004/005。
+- Researchflow partial/degraded 和 cancel 迁移细节仍待 CONTRACT-006/007。
+- LLM 真实 Gateway 协议仍待 LLM-001。
+- Notification recipient_scope、幂等唯一键和 Payload Schema 注册仍待 CONTRACT-009/010。
+- 根 DI、HTTP、Worker、Migration 注册及真实 DB/渠道验收均属于 Integration，不在本轮完成。
+
+## 6. 本轮文件变更
+
+已更新：
+- doc/quant/02-任务拆分与验收.md
+- doc/research/02-任务拆分与验收.md
+- doc/researchflow/02-任务拆分与验收.md
+- doc/llm/02-任务拆分与验收.md
+- doc/notification/02-任务拆分与验收.md
+
+**最终结论：五模块任务拆分的依赖边界已按 Domain / Contract / Adapter / Integration 分层修正。模块仍处于 Design Ready；Owner Review 通过后按模块确认 Module Ready。没有理由要求五个模块等待其他业务分支同时编译。**
