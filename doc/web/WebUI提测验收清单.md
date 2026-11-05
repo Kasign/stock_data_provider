@@ -1760,8 +1760,9 @@ CI 复核记录：本批首次 Chromium Browser Smoke 在个股研究数据质�
 - [x] 删除全局可读性区段对应的 7 条 !important 字号覆盖。
 - [x] 保留浅色主题 SVG 填充色、视图按钮交互态、800px 操作区排列和 600px 双按钮等宽布局。
 - [x] UI contract 锁定 7 组基础字号、无 !important 及主题/响应式规则。
-- [ ] 在本批最终提交 SHA 上运行 UI contract、图表单测、JS 语法检查、Compose 校验和 Nginx 镜像构建。
-- [ ] 执行 Chromium Browser Smoke，并核验 320/375/600/768/900/1280/1600px 下折线图、日 K、RSI、成交量提示、空态和深浅主题 SVG 文字实际渲染。
+- [x] 最终修正提交 `a373fe1eea4af5446655c347acbc48cfccdcabc8` 的 WebUI Checks #41985693033：UI contract、JS 语法检查、Compose 校验和 Nginx 镜像构建通过。
+- [x] Chromium Browser Smoke #41985692894 全部步骤通过，包含响应式布局、跨标签页、Run Flow、个股研究、数据中心探测、选股和全市场分页。
+- [ ] 人工核验 macOS 中文字体环境下 320/375/600/768/900/1280/1600px 的折线图、日 K、RSI、成交量提示、空态和深浅主题 SVG 文字实际渲染。
 
 
 ## 2026-11-05 UIR-2 CI 契约校正
@@ -1769,4 +1770,4 @@ CI 复核记录：本批首次 Chromium Browser Smoke 在个股研究数据质�
 - [x] 删除被后续组件规则完全覆盖的 Run Flow 旧 small 声明，保留当前 11px 组件字号及移动端规则。
 - [x] 日历移动端尺寸断言精确匹配 700px 响应式声明，修正子选择器前缀误匹配。
 - [x] 设置浏览器数据面板状态断言匹配真实的组合选择器声明，不再要求其作为独立选择器存在。
-- [ ] 在修正提交 SHA 上重新运行 WebUI Checks、Chromium Browser Smoke。
+- [x] 修正提交 `a373fe1eea4af5446655c347acbc48cfccdcabc8` 的 WebUI Checks #41985693033、Chromium Browser Smoke #41985692894 均通过。
