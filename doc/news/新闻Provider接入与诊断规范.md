@@ -160,3 +160,20 @@ market-data Probe 的 connectivity、contract、quality、freshness、cross_prov
 
 Provider 输出策略必须在缓存和持久化之前执行。Brave 只允许必要的短暂运行期使用，不得长期缓存或写库；博查在存储权利书面确认前不持久化；Tavily 的 Provider 层许可仍需叠加发布者授权。共享层默认不缓存混合 Provider 结果。
 
+
+
+## 13. 最终 Provider 实施决策（2026-11-05）
+
+本节替代此前第 2、8、12 节中要求根模块与 go-core 共享 Provider Library、保留旧 Searcher 兼容和 Python fallback 的建议。
+
+- 目标运行时只有根 Go Module；Provider Adapter 直接实现于 `internal/news/adapters/provider/`。
+- 不创建独立共享 Go Module，不调整 go-core Docker build context，不引入本地 replace。
+- 现有 go-core Searcher 仅供协议行为参考。按新领域契约迁移必要的 Provider 请求/响应解析，不复制旧聚合、旧 DTO、旧缓存、旧 fallback。
+- 不保留旧 `NewsSearcher` 兼容层或 Python Bridge fallback；整体服务尚未上线，不为旧服务增加兼容成本。
+- 搜索 Provider 和官方公告源采用不同端口；publisher 与 provider 身份分离。
+- Provider 候选保留 provider_code、provider_item_id、publisher、原始 URL、原始发布时间文本、observed_at、query dimension 和字段缺失信息。
+- Provider 执行结果按实际 Provider/query 任务返回 success、empty、failed、skipped 及错误类别；部分成功必须保留失败明细。
+- 首期不跨请求缓存，不缓存混合 Provider 结果。Brave 不长期缓存/持久化；博查书面许可未确认前不持久化；Tavily 输出仍叠加发布者许可。
+- 不为旧 go-core/Python 调用方设置兼容验收；删除旧新闻集成前先核实仓库内引用，不触碰无关模块。
+
+实施时由根模块自己的构建、测试和部署流程负责，不为兼容旧嵌套模块改变仓库布局。

@@ -67,3 +67,20 @@ N1 已追加核对固定旧 Python 上游的三类新闻/情报持久化对象�
 ## 2026-11-05 阶段调整
 
 用户已确认：新闻模块不再自行建设 DB/Redis 接入和通用诊断能力，统一等待公共服务提供。新闻当前阶段只建设不依赖这些基础设施的业务能力；质量规则仍属于新闻领域，不能与通用诊断混为一谈。详细边界和阶段顺序以《新闻模块总体设计》9.16 及《新闻模块开发任务与验收清单》为准。
+
+
+## 2026-11-05 架构决策更新：根模块原生实现，不建设共享 Provider Module
+
+用户已明确：整体服务尚未投入使用，不要求兼容旧 Go/Python 新闻调用链。本专项按最终目标架构直接实现，不为未上线旧服务保留适配层、fallback 或双轨运行。
+
+- 新闻 Provider 实现直接归属根 Go 模块 `internal/news/adapters/provider/`，不创建 `shared/newsprovider` 独立 Go Module。
+- 根模块是唯一新闻业务运行时；新闻业务 Domain/Application/Provider Adapter 在同一 Go Module 内组织，依赖方向由包边界和接口控制。
+- 现有 `go-core/internal/adapters/newssearch` 仅作为协议实现和边界行为的参考来源；按新领域契约迁移/重构必要 Provider 能力，不复制旧 Searcher 聚合、缓存、Python fallback、旧 DTO 或旧业务接口。
+- 不保留旧 `NewsSearcher` 兼容 Adapter，不接入 Python Bridge fallback，不为 go-core 维护第二套新闻 Provider 调用链。确认没有其他有效调用后，清理本专项范围内废弃的旧 Go 新闻搜索集成；不擅自删除仓库中与新闻无关的 go-core 模块。
+- Provider 结果必须从最初适配层开始保留 provider_code、provider_item_id（若有）、publisher/source、原始 URL、原始发布时间文本、observed_at、query dimension 和字段缺失信息；不先映射成旧 NewsItem 再补信息。
+- 搜索 Provider、官方公告源和原始发布来源是不同概念，公告源采用独立端口，不伪装为搜索 Provider。
+- 不设置混合结果跨请求缓存。首期 Provider Adapter 不缓存；缓存若未来必要，必须由明确的 Provider 留存策略和业务收益驱动。
+- 不为旧 go-core Docker 构建上下文调整仓库布局；根模块按自身构建上下文部署。独立共享模块与本地 replace 均不再是方案的一部分。
+- Python 旧 API、Agent、Bot、旧 NewsItem DTO 兼容和旧库双写/在线迁移不属于本专项交付。历史数据若未来确有价值，另行按公共存储迁移流程评估，不反向约束新业务模型。
+
+本决策优先于本文此前关于共享 Provider Library、go-core 双调用方适配、Python fallback 和旧 DTO 兼容的建议。
