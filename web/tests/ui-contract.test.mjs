@@ -1386,7 +1386,17 @@ test("market overview and activity use readable secondary text and touch-sized c
   assert.match(marketActivityHeadingDescriptionBase, /line-height:\s*1\.65\s*;?/);
   assert.equal((stylesheet.match(/(?:^|})\s*\.market-activity-heading p\s*\{/g) || []).length, 1, "market activity heading descriptions should have one exact base rule");
   assert.match(finalCssRuleBody(".market-activity-heading"), /flex-direction:\s*column/);
-  assert.match(finalCssRuleBody(".market-activity-controls label"), /font-size: 12px/);
+  const marketActivityControlLabelBase = exactCssDeclarationBlock(".market-activity-controls label");
+  assert.match(marketActivityControlLabelBase, /display:\s*flex\s*;?/);
+  assert.match(marketActivityControlLabelBase, /flex-direction:\s*column\s*;?/);
+  assert.match(marketActivityControlLabelBase, /gap:\s*5px\s*;?/);
+  assert.match(marketActivityControlLabelBase, /color:\s*var\(--text-soft\)\s*;?/);
+  assert.match(marketActivityControlLabelBase, /font-size:\s*12px\s*;/);
+  assert.match(marketActivityControlLabelBase, /line-height:\s*1\.4\s*;?/);
+  assert.equal((stylesheet.match(/(?:^|})\s*\.market-activity-controls label\s*\{/g) || []).length, 1, "market activity control labels should have one exact base rule");
+  const mobileActivityControlLabelRule = stylesheet.match(/@media \(max-width: 600px\)\s*\{([^}]*)\}/)?.[1] || "";
+  assert.match(mobileActivityControlLabelRule, /\.market-activity-controls label\s*\{[^}]*min-width:\s*0;[^}]*flex:\s*1 1 140px;/);
+  assert.doesNotMatch(mobileActivityControlLabelRule, /\.market-activity-controls label\s*\{[^}]*font-size:/);
   assert.match(finalCssRuleBody(".market-activity-controls input"), /min-height: 38px/);
   assert.match(finalCssRuleBody(".market-activity-controls .button"), /min-height: 38px/);
   const readabilityStart = stylesheet.indexOf("/* 2026-10-27 readability pass: market overview, activity table, and calendar. */");
