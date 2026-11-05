@@ -1059,3 +1059,36 @@ Go suite 覆盖根模块、go-core、market-data 的格式/测试/race/vet、Mar
 - 初始 Go test suite Run `41957200038` 因 BaoStock 两个常量块未 gofmt 而失败；不是单元测试或业务断言失败。
 - 已修正 `internal/baostock/client.go`、`internal/baostock/protocol.go` 格式，并增加复权事件生效日期单元测试。
 - Go test suite Push Run `41958045915` 全部 5 个 Job success：根模块、go-core、market-data（含 race/vet）、MariaDB migration/PIT、Compose/Docker 构建。
+
+
+## 62. 2026-11-05 Pytdx GBBQ 与 BaoStock 公司行为事件对账
+
+### 62.1 GitHub Actions 实测
+
+- Live Provider Probe Push Run：`41959062007`，完整 workflow success；Pytdx 历史日 K 与公司行为事件专项均 success。
+- Go test suite Push Run：`41959062051`，全部 5 个 Job success，包含 market-data gofmt/unit/race/vet、MariaDB migration/PIT、根模块、go-core、Compose/Docker。
+- 2025 年共核对 3 个事件：600036.SH 1 个、002982.SZ 2 个，全部匹配。
+
+| 股票 | 除权日 | Pytdx 事件 | Pytdx 理论参考价 | BaoStock preclose | 因子增量核验 |
+|---|---|---|---:|---:|---|
+| 600036.SH | 2025-07-11 | 每 10 股现金分红 20 元 | 46.24 | 46.24 | back 增量 1.043252582；forward 增量 1.043252485；Pytdx 隐含比率 1.043252595 |
+| 002982.SZ | 2025-01-14 | 每 10 股现金分红 2 元 | 16.45 | 16.45 | back 增量 1.012158040；forward 增量 1.012157274；Pytdx 隐含比率 1.012158055 |
+| 002982.SZ | 2025-05-30 | 每 10 股现金分红 1 元、送转 4 股 | 14.885714 | 14.89 | back 增量 1.406312835；forward 增量 1.406314235；Pytdx 隐含比率 1.406717850 |
+
+- 三个事件的 BaoStock preclose 差异均在 0.01 元容差内；因子增量与 Pytdx 隐含比率差异均在 0.0005 容差内；forward/back 因子增量彼此差异均在 0.0005 容差内。
+- 002982 2025-05-30 的理论参考价因 4 股送转产生非整分结果，BaoStock preclose 按分显示为 14.89，差 0.004286 元；未把舍入差异误判为事件不匹配。
+
+### 62.2 算法与比较器边界
+
+- Pytdx 锁定依赖 `github.com/injoyai/tdx v0.0.86`，其 GBBQ 复权为仿射变换 `A*raw+B`，现金分红会形成加法偏移。
+- BaoStock 提供前/后复权累计因子，按 raw 价格乘因子折算；其与 Pytdx 在除权参考价处可对齐，不代表历史所有价格点的变换相同。
+- 因此本轮只验证公司行为事件、理论除权参考价和因子增量，不比较两边 qfq/hfq 历史 OHLC，不生成 cross-provider matched。
+- 生产比较器已有 `validateCrossProviderAdjustmentCompatibility`，要求复权 method 和 reference date 同时一致；该门禁保留，不需要放宽或新增绕过。
+- Tushare `adj_factor`/`dividend` 的 40203 permission_required 结论不变。
+
+### 62.3 阶段结论
+
+- BaoStock 自身因子与其 qfq/hfq OHLC 内部一致：passed（仅目标窗口 OHLC）。
+- Pytdx GBBQ 与 BaoStock 2025 年公司行为事件及参考价对账：3/3 matched。
+- Pytdx/BaoStock 复权后历史 OHLC 跨源可比性：not_comparable（算法/基准未统一）。
+- 阶段 B 继续 in_progress；后续先确定系统内部统一复权口径/基准策略，再考虑是否提供统一折算视图，不把不同源的原生复权结果强行合并。

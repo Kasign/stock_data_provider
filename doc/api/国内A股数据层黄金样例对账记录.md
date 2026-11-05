@@ -434,3 +434,14 @@ Live Provider Probe Run `41788725692` 的 workflow conclusion 为 success，但�
 - Go test suite Push Run：`41958045915`，全部 5 个 Job success。
 - 包含 market-data gofmt/unit/race/vet、MariaDB migration/PIT persistence、根模块与 go-core 测试、Compose/Docker 镜像构建。
 - BaoStock Live Provider Probe Run `41958045930` 的专项因子一致性测试 success。
+
+
+## 20. 2026-11-05：Pytdx GBBQ 与 BaoStock 公司行为事件对账
+
+- GitHub Actions Live Provider Probe Run：`41959062007` success；Go test suite Run：`41959062051` success。
+- 2025 年核对 3 个事件，600036.SH 1 个、002982.SZ 2 个。
+- 600036.SH 2025-07-11：现金分红 20 元/10 股，Pytdx 理论除权参考价与 BaoStock preclose 均为 46.24 元。
+- 002982.SZ 2025-01-14：现金分红 2 元/10 股，理论价与 BaoStock preclose 均为 16.45 元。
+- 002982.SZ 2025-05-30：现金分红 1 元/10 股、送转 4 股，理论价 14.885714 元，BaoStock preclose 14.89 元，差 0.004286 元。
+- 三个事件的 BaoStock back/forward 累积因子增量与 Pytdx 事件隐含比率均在 0.0005 容差内，preclose 差在 0.01 元容差内。
+- 事件级匹配不代表复权后历史 OHLC 可以直接对账：Pytdx v0.0.86 为仿射变换，BaoStock 为累计因子乘法。跨源比较必须保留 method/ref date 一致门禁。
