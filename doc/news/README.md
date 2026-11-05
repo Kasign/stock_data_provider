@@ -1,6 +1,6 @@
 # 新闻模块专项文档
 
-> 状态：N1-A 已评审确认；N2 根模块验证通过；N3 首批授权与离线 URL 规则已实现，Feed/HTML 解析及平台安全接入继续开发  
+> 状态：N1-A 已评审确认；N2 根模块验证通过；N3 授权、离线解析、候选标准化、内容分层和业务质量评估首批完成；在线抓取仍等待平台安全门禁  
 > 开发分支：`feat/research-news-ingestion`  
 > 基线分支：`feat/full-go-data-providers-api-switch`
 
@@ -34,7 +34,8 @@
 - [x] N1-A：完成新闻领域模型、时间/身份/版本/关联证据、Provider 与 Application 契约及跨文档内部评审
 - [x] N2：Domain、Application Port、Bocha/Tavily/Brave/SearXNG Adapter 与 fake 测试已提交；根模块 gofmt、test、race、vet 和分析服务镜像构建通过
 - [x] N3 首批：Provider/Source/Endpoint 授权交集评估、用途/保留期限限制、内容类型与存储模式一致性、HTTP(S) URL 规范化与精确主机/端口 allowlist；固定测试通过
-- [ ] N3 后续：RSS/Atom、离线 HTML、候选标准化及摘要/正文分层映射首批完成；DNS/IP 与重定向安全由 PLAT-008 执行，Feed 内容格式识别、附件元信息和在线 Feed 获取继续开发
+- [x] N3 离线业务质量：按元数据、内容、来源身份三个维度评估 valid/degraded/invalid/unknown；不把 Provider 摘要提升为来源正文，不把发布者文本视为已解析来源
+- [ ] N3 后续：附件元信息、Feed 内容类型识别及在线 Feed 获取继续开发；DNS/IP 与重定向安全由 PLAT-008 执行
 - [ ] N4：实现身份识别、去重、版本和证券关联业务规则
 - [ ] N5：按冻结契约接入 Config/Secret、Logger/Error/Trace、HTTP Client
 - [ ] N6：公共存储能力就绪后实现新闻自有 Repository/SQL/Migration；Redis 按需
