@@ -328,6 +328,14 @@ func (p *Pytdx) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endDat
 		}
 	}
 
+	adjustmentRefDate := ""
+	switch adjustment {
+	case model.AdjustmentForward:
+		adjustmentRefDate = all[len(all)-1].Time.In(loc).Format("2006-01-02")
+	case model.AdjustmentBackward:
+		adjustmentRefDate = all[0].Time.In(loc).Format("2006-01-02")
+	}
+
 	fetchedAt := time.Now().UTC()
 	out := make([]model.DailyBar, 0, min(limit, len(adjusted)))
 	for i, item := range adjusted {
@@ -383,6 +391,7 @@ func (p *Pytdx) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endDat
 			ChangePercent:    changePercent,
 			AdjustmentBasis:  adjustment,
 			AdjustmentMethod: adjustmentMethod,
+			AdjustmentRefDate: adjustmentRefDate,
 			Source:           p.Name(),
 			SourceVersion:    pytdxVersion,
 			FetchedAt:        fetchedAt,

@@ -71,6 +71,58 @@ func TestPytdxDailyBarsEmptyGbbqResponseIsNotReportedAsUnsupported(t *testing.T)
 	}
 }
 
+func TestPytdxForwardAdjustmentReferenceDateUsesLatestLoadedBar(t *testing.T) {
+	client := &fakePytdxDailyClient{
+		klineResponse: &protocol.KlineResp{List: []*protocol.Kline{
+			pytdxTestDailyKline("2026-10-21", 10000, 10200, 9800, 10100, 10000),
+			pytdxTestDailyKline("2026-10-22", 10100, 10300, 10000, 10200, 10100),
+		}},
+		gbbqResponse: &protocol.GbbqResp{List: []*protocol.Gbbq{}},
+	}
+	p := NewPytdx(time.Second, "127.0.0.1")
+	p.dailyClientFactory = func(context.Context) (pytdxDailyClient, error) { return client, nil }
+
+	bars, err := p.FetchDailyBars(context.Background(), "600519.SH", "2026-10-21", "2026-10-21", 10, model.AdjustmentForward)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(bars) != 1 || bars[0].TradeDate != "2026-10-21" || bars[0].AdjustmentRefDate != "2026-10-22" {
+		t.Fatalf("forward adjustment should reference the latest loaded date, got %+v", bars)
+	}
+}
+
+func TestPytdxBackwardAdjustmentReferenceDateUsesEarliestLoadedBar(t *testing.T) {
+	client := &fakePytdxDailyClient{
+		klineResponse: &protocol.KlineResp{List: []*protocol.Kline{
+			pytdxTestDailyKline("2026-10-21", 10000, 10200, 9800, 10100, 10000),
+			pytdxTestDailyKline("2026-10-22", 10100, 10300, 10000, 10200, 10100),
+		}},
+		gbbqResponse: &protocol.GbbqResp{List: []*protocol.Gbbq{}},
+	}
+	p := NewPytdx(time.Second, "127.0.0.1")
+	p.dailyClientFactory = func(context.Context) (pytdxDailyClient, error) { return client, nil }
+
+	bars, err := p.FetchDailyBars(context.Background(), "600519.SH", "2026-10-22", "2026-10-22", 10, model.AdjustmentBackward)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(bars) != 1 || bars[0].TradeDate != "2026-10-22" || bars[0].AdjustmentRefDate != "2026-10-21" {
+		t.Fatalf("backward adjustment should reference the earliest complete-history date, got %+v", bars)
+	}
+}
+
+func pytdxTestDailyKline(date string, open, high, low, close, last protocol.Price) *protocol.Kline {
+	loc := time.FixedZone("CST", 8*60*60)
+	day, err := time.ParseInLocation("2006-01-02", date, loc)
+	if err != nil {
+		panic(err)
+	}
+	return &protocol.Kline{
+		Time: day.Add(15 * time.Hour), Open: open, High: high, Low: low,
+		Close: close, Last: last, Volume: 100, Amount: protocol.Price(101000000),
+	}
+}
+
 func containsPytdxError(value, fragment string) bool {
 	return len(value) >= len(fragment) && strings.Contains(value, fragment)
 }
