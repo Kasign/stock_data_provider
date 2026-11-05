@@ -83,6 +83,66 @@ func TestMariaDBRevisionPersistenceAndPointInTimeQueries(t *testing.T) {
 		t.Fatalf("as_of before revision must restore v1: rows=%+v err=%v", historicalFactors, err)
 	}
 
+	// 新版本已被系统观察，但 Provider 声明它在 as_of 之后才可用；
+	// PIT 必须回退到此前已可用的旧版本，而不是将整条记录过滤掉。
+	fallbackSymbol := fmt.Sprintf("F%014d", time.Now().UnixNano()%100000000000000)
+	fallbackFetched := time.Now().UTC()
+	fallbackAvailable := fallbackFetched.Add(-time.Minute)
+	fallbackFactor := model.AdjustmentFactor{
+		Symbol: fallbackSymbol, TradeDate: "2026-10-29", Factor: 1.1,
+		Source: "integration-fallback", SourceVersion: "v1",
+		AvailableAt: &fallbackAvailable, FetchedAt: fallbackFetched, QualityStatus: model.QualityValid,
+	}
+	if err := store.SaveAdjustmentFactors(ctx, []model.AdjustmentFactor{fallbackFactor}); err != nil {
+		store.Close()
+		t.Fatalf("save available fallback factor: %v", err)
+	}
+	time.Sleep(3 * time.Millisecond)
+	fallbackFactor.Factor = 1.2
+	fallbackFactor.SourceVersion = "v2"
+	fallbackFactor.FetchedAt = time.Now().UTC()
+	futureAvailable := fallbackFactor.FetchedAt.Add(time.Hour)
+	fallbackFactor.AvailableAt = &futureAvailable
+	if err := store.SaveAdjustmentFactors(ctx, []model.AdjustmentFactor{fallbackFactor}); err != nil {
+		store.Close()
+		t.Fatalf("save not-yet-available factor revision: %v", err)
+	}
+	fallbackAsOf := time.Now().UTC()
+	fallbackFactors, err := store.ListAdjustmentFactorsAsOf(ctx, fallbackSymbol, "", "", fallbackAsOf)
+	if err != nil || len(fallbackFactors) != 1 || fallbackFactors[0].Factor != 1.1 || fallbackFactors[0].SourceVersion != "v1" {
+		store.Close()
+		t.Fatalf("PIT must fall back to latest provider-available factor revision: rows=%+v err=%v", fallbackFactors, err)
+	}
+
+	// 同一证券、交易日和来源允许 forward/backward 两种独立因子口径并存；
+	// BaoStock 未提供 AvailableAt 时仍应保存原始观测，但 PIT 服务层不得将其视为可见。
+	basisSymbol := fmt.Sprintf("B%014d", time.Now().UnixNano()%100000000000000)
+	basisFetchedAt := time.Now().UTC()
+	forwardFactor := model.AdjustmentFactor{
+		Symbol: basisSymbol, TradeDate: "2026-10-30", Factor: 0.95,
+		Basis: model.AdjustmentFactorForward, Source: "baostock", SourceVersion: "baostock-public-tcp-v1",
+		FetchedAt: basisFetchedAt, QualityStatus: model.QualityDegraded,
+		QualityReasons: []string{"provider_available_at_not_exposed_by_query_adjust_factor"},
+	}
+	backwardFactor := forwardFactor
+	backwardFactor.Basis = model.AdjustmentFactorBackward
+	backwardFactor.Factor = 5.4
+	if err := store.SaveAdjustmentFactors(ctx, []model.AdjustmentFactor{forwardFactor, backwardFactor}); err != nil {
+		store.Close()
+		t.Fatalf("save independent BaoStock factor bases: %v", err)
+	}
+	var persistedBasisCount int
+	if err := store.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM market_data_adjustment_factor_versions
+WHERE symbol=? AND trade_date=? AND source=?`, basisSymbol, "2026-10-30", "baostock").Scan(&persistedBasisCount); err != nil || persistedBasisCount != 2 {
+		store.Close()
+		t.Fatalf("forward/backward factor bases must both persist: count=%d err=%v", persistedBasisCount, err)
+	}
+	basisRows, err := store.ListAdjustmentFactorsAsOf(ctx, basisSymbol, "2026-10-30", "2026-10-30", time.Now().UTC())
+	if err != nil || len(basisRows) != 0 {
+		store.Close()
+		t.Fatalf("BaoStock factors without available_at must remain excluded from PIT queries: rows=%+v err=%v", basisRows, err)
+	}
+
 	cashV1 := 0.5
 	action := model.CorporateAction{
 		Symbol: symbol, ProviderEventID: "integration-dividend-1",
@@ -116,6 +176,79 @@ func TestMariaDBRevisionPersistenceAndPointInTimeQueries(t *testing.T) {
 	if err != nil || len(newActions) != 1 || newActions[0].CashDividendCNY == nil || *newActions[0].CashDividendCNY != 0.8 {
 		store.Close()
 		t.Fatalf("corporate-action query must return v2: rows=%+v err=%v", newActions, err)
+	}
+
+	// 公司行动采用相同的 PIT 可见性规则：未到供应商可用时间的修订不能遮蔽旧版本。
+	actionFallback := model.CorporateAction{
+		Symbol: symbol, ProviderEventID: "integration-future-availability",
+		EventType: "cash_dividend", EventStatus: "implementation",
+		AnnouncementDate: "2026-08-02", ExDate: "2026-10-30",
+		Source: "integration-fallback", SourceVersion: "v1",
+		AvailableAt: &fallbackAvailable, FetchedAt: time.Now().UTC(), QualityStatus: model.QualityValid,
+	}
+	actionFallback.CashDividendCNY = &cashV1
+	if err := store.SaveCorporateActions(ctx, []model.CorporateAction{actionFallback}); err != nil {
+		store.Close()
+		t.Fatalf("save available corporate-action fallback: %v", err)
+	}
+	time.Sleep(3 * time.Millisecond)
+	actionFallback.SourceVersion = "v2"
+	actionFallback.CashDividendCNY = &cashV2
+	actionFallback.FetchedAt = time.Now().UTC()
+	actionFutureAvailable := actionFallback.FetchedAt.Add(time.Hour)
+	actionFallback.AvailableAt = &actionFutureAvailable
+	if err := store.SaveCorporateActions(ctx, []model.CorporateAction{actionFallback}); err != nil {
+		store.Close()
+		t.Fatalf("save not-yet-available corporate-action revision: %v", err)
+	}
+	actionFallbackAsOf := time.Now().UTC()
+	actionFallbackRows, err := store.ListCorporateActionsAsOf(ctx, symbol, "", "", actionFallbackAsOf)
+	if err != nil {
+		store.Close()
+		t.Fatalf("query corporate-action fallback: %v", err)
+	}
+	var selectedFallback *model.CorporateAction
+	for i := range actionFallbackRows {
+		if actionFallbackRows[i].ProviderEventID == "integration-future-availability" {
+			selectedFallback = &actionFallbackRows[i]
+			break
+		}
+	}
+	if selectedFallback == nil || selectedFallback.SourceVersion != "v1" ||
+		selectedFallback.CashDividendCNY == nil || *selectedFallback.CashDividendCNY != cashV1 {
+		store.Close()
+		t.Fatalf("PIT must fall back to latest provider-available corporate-action revision: rows=%+v", actionFallbackRows)
+	}
+
+	barVolume := int64(1000)
+	barAmount := 10000.0
+	barFetchedAt := time.Now().UTC()
+	makeIntegrationBar := func(tradeDate string) model.DailyBar {
+		return model.DailyBar{
+			Symbol: symbol, TradeDate: tradeDate, Period: "1d", AdjustmentBasis: model.AdjustmentNone,
+			Source: "integration-fixture", SourceVersion: "integration-bars-v1",
+			Open: 10, High: 11, Low: 9, Close: 10.5, Volume: &barVolume, Amount: &barAmount,
+			VolumeUnit: "shares", AmountUnit: "CNY", FetchedAt: barFetchedAt, NormalizedAt: barFetchedAt,
+			QualityStatus: model.QualityDegraded, NormalizationVer: "4",
+		}
+	}
+	if err := store.UpsertBars(ctx, []model.DailyBar{
+		makeIntegrationBar("2026-10-19"), makeIntegrationBar("2026-10-20"),
+		makeIntegrationBar("2026-10-21"), makeIntegrationBar("2026-10-22"),
+	}); err != nil {
+		t.Fatalf("save daily-bar range fixtures: %v", err)
+	}
+	boundedBars, err := store.ListBars(ctx, symbol, "2026-10-20", "2026-10-21", model.AdjustmentNone, 0)
+	if err != nil || len(boundedBars) != 2 || boundedBars[0].TradeDate != "2026-10-21" || boundedBars[1].TradeDate != "2026-10-20" {
+		t.Fatalf("current daily-bar query must use inclusive date bounds: bars=%+v err=%v", boundedBars, err)
+	}
+	barsAsOf, err := store.ListBarsAsOf(ctx, symbol, "2026-10-20", "2026-10-21", model.AdjustmentNone, time.Now().UTC().Add(time.Second), 0)
+	if err != nil || len(barsAsOf) != 2 {
+		t.Fatalf("PIT daily-bar query must use the same inclusive date bounds: bars=%+v err=%v", barsAsOf, err)
+	}
+	barsBeforeObservation, err := store.ListBarsAsOf(ctx, symbol, "2026-10-20", "2026-10-21", model.AdjustmentNone, barFetchedAt.Add(-time.Second), 0)
+	if err != nil || len(barsBeforeObservation) != 0 {
+		t.Fatalf("PIT daily-bar query must exclude revisions recorded after as_of: bars=%+v err=%v", barsBeforeObservation, err)
 	}
 
 	if err := store.Close(); err != nil {

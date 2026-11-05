@@ -538,7 +538,7 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 					}
 					snapshotBars = append(snapshotBars, provider.CrossProviderDailyBar{
 						TradeDate: bar.TradeDate, Open: bar.Open, High: bar.High, Low: bar.Low, Close: bar.Close,
-						Volume: *bar.Volume, VolumeUnit: bar.VolumeUnit, Amount: bar.Amount, AmountUnit: bar.AmountUnit,
+						Volume: *bar.Volume, VolumeUnit: bar.VolumeUnit, VolumeGranularity: provider.CrossProviderVolumeGranularity(bar.RawVolumeUnit), Amount: bar.Amount, AmountUnit: bar.AmountUnit, AmountGranularity: provider.CrossProviderAmountGranularity(bar.Source, bar.RawAmountUnit, bar.RawAmountField, bar.RawAmount),
 						AdjustmentMethod: bar.AdjustmentMethod, AdjustmentRefDate: bar.AdjustmentRefDate,
 					})
 				}

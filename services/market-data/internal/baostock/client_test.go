@@ -148,6 +148,99 @@ func TestQueryTradeDatesHandlesLoginQueryAndLogout(t *testing.T) {
 	}
 }
 
+func TestQueryAdjustmentFactorsHandlesLoginQueryAndLogout(t *testing.T) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer listener.Close()
+	serverErr := make(chan error, 1)
+	go func() {
+		conn, err := listener.Accept()
+		if err != nil {
+			serverErr <- err
+			return
+		}
+		defer conn.Close()
+		reader := bufio.NewReader(conn)
+		if err := serveBaoStockLoginForTest(conn, reader); err != nil {
+			serverErr <- err
+			return
+		}
+		messageType, body, err := readBaoStockRequestForTest(reader)
+		if err != nil {
+			serverErr <- err
+			return
+		}
+		parts := strings.Split(body, messageSplit)
+		if messageType != messageAdjustmentFactorRequest || len(parts) != 7 ||
+			parts[0] != "query_adjust_factor" || parts[1] != "anonymous" ||
+			parts[2] != "1" || parts[3] != strconv.Itoa(defaultPageSize) ||
+			parts[4] != "sh.600036" || parts[5] != "2025-01-01" || parts[6] != "2025-12-31" {
+			serverErr <- fmt.Errorf("unexpected adjustment-factor request type=%q body=%q", messageType, body)
+			return
+		}
+		payload, err := json.Marshal(map[string]any{
+			"record": [][]string{
+				{"sh.600036", "2025-06-30", "0.875", "4.25", "4.25"},
+				{"sh.600036", "2025-12-01", "1", "4.75", "4.75"},
+			},
+		})
+		if err != nil {
+			serverErr <- err
+			return
+		}
+		responseBody := strings.Join([]string{
+			"0", "success", "query_adjust_factor", "anonymous", "1",
+			strconv.Itoa(defaultPageSize), string(payload), "sh.600036",
+			"2025-01-01", "2025-12-31", adjustmentFactorFields,
+		}, messageSplit)
+		if err := writeAll(conn, responseFrameForTest(messageAdjustmentFactorResponse, responseBody, false)); err != nil {
+			serverErr <- err
+			return
+		}
+		messageType, _, err = readBaoStockRequestForTest(reader)
+		if err != nil {
+			serverErr <- err
+			return
+		}
+		if messageType != messageLogoutRequest {
+			serverErr <- fmt.Errorf("expected logout after adjustment-factor query, got %q", messageType)
+			return
+		}
+		if err := writeAll(conn, responseFrameForTest(messageLogoutResponse, "0\x01success\x01logout", false)); err != nil {
+			serverErr <- err
+			return
+		}
+		serverErr <- nil
+	}()
+	host, portText, err := net.SplitHostPort(listener.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	port, err := strconv.Atoi(portText)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := NewClient(Config{Host: host, Port: port, ConnectTimeout: time.Second, RequestTimeout: time.Second})
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	rows, err := client.QueryAdjustmentFactors(ctx, "sh.600036", "2025-01-01", "2025-12-31")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 2 || rows[0].OperateDate != "2025-06-30" || rows[0].ForwardFactor != 0.875 ||
+		rows[0].BackwardFactor != 4.25 || rows[1].OperateDate != "2025-12-01" || rows[1].ForwardFactor != 1 {
+		t.Fatalf("unexpected adjustment factors: %+v", rows)
+	}
+	if err := client.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := <-serverErr; err != nil {
+		t.Fatalf("mock BaoStock server failed: %v", err)
+	}
+}
+
 func TestQueryDailyKLinesHandlesLoginCompressedQueryAndLogout(t *testing.T) {
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {

@@ -338,3 +338,173 @@ Live Provider Probe Run `41788725692` 的 workflow conclusion 为 success，但�
 - `none` 口径的 OHLC 跨源一致性通过本批样本核验；成交额字段质量仍为 Eastmoney valid、其他三家 degraded。
 - 该记录不是交易所官方数据对账，也未覆盖生产 Probe 的跨源比较器、交易日历、证券交易状态和 MariaDB 历史持久化链路。
 - 下一步对同样两个窗口执行 qfq/hfq，记录 method/refdate 和源端公司行为证据；不同或缺失绝对基准时保持 not_comparable，不允许仅凭 adjustment enum 相同判 matched。
+
+
+## 17. 2026-11-05：历史窗口 qfq/hfq 与生产 Probe 诊断结果
+
+### 17.1 复权样本来源
+
+- 直接 Provider 报告：GitHub Actions Run `41951184379`。
+- 生产 Probe 历史窗口诊断：GitHub Actions Run `41952778969`。
+- 股票：600036.SH、002982.SZ；窗口：2025-07-07 至 2025-07-17；每种口径目标 9 个交易日。
+- 复权能力矩阵：
+
+| Provider | none | qfq / forward_adjusted | hfq / backward_adjusted | 参考日期 |
+|---|---|---|---|---|
+| Sina | 9 条 | not_supported | not_supported | 不适用 |
+| Tencent | 9 条 | 9 条 | 9 条 | adjusted 未提供可验证值 |
+| Eastmoney | 9 条 | 9 条 | 9 条 | 未提供可验证值 |
+| Yahoo | 9 条 | 9 条 | 9 条 | qfq=2025-07-17；hfq=2025-07-07（窗口重基准） |
+
+### 17.2 复权方法与比较限制
+
+- Tencent：`tencent_qfqday` / `tencent_hfqday`，没有可验证的 AdjustmentRefDate。
+- Eastmoney：`eastmoney_fqt_1` / `eastmoney_fqt_2`，没有可验证的 AdjustmentRefDate；forward 还产生 reference-date-unverified 警告。
+- Yahoo：`yahoo_adjclose_ratio_rebased_to_end` / `yahoo_adjclose_ratio_rebased_to_start`。它将 Yahoo adjclose 比率分别重基准到请求窗口末日/首日。
+- Sina：只支持 none。adjusted 项由 Probe 标记 not_supported，而非 failed。
+- Tencent 与 Yahoo 的 adjusted OHLC 数值尺度存在明显差异，且方法/参考日期没有共同证据；Eastmoney 虽然返回 9 条，但缺少参考日期证据。所有 adjusted 样本均不得互相判定 matched。
+
+### 17.3 生产 Probe 历史窗口结果
+
+- 每只股票 12 个 Provider/adjustment 项：10 项返回 9 条并完成公共校验，2 项 Sina adjusted 明确 not_supported；Provider 失败数为 0。
+- Run 状态为 degraded：10 项 degraded、2 项 not_supported。测试未注入交易日历 Provider，因此有 `daily_bar_context_calendar_unavailable`；也未连接 MariaDB，因此 `persisted=false`。
+- cross_provider 项均 skipped，原因 `quality_status_must_be_valid`。该状态不代表 mismatch，更不能计为 matched。
+- none 口径的原始 Provider 完整样本在第 16 节；直接样本 OHLC 按分一致，但因为多个源成交额字段缺失，整体质量仍 degraded，生产比较器按现有门禁不执行对账。
+
+### 17.4 当前决策
+
+- 保留现有质量门禁，不允许 degraded 样本进入 matched。
+- 不猜测 Tencent/Eastmoney 的复权参考日期，不把 Yahoo 的窗口重基准日期等同于源端原始参考日期。
+- 下一步查找可验证的源端复权基准/公司行为证据；如果不能证明同一参考基准，继续 not_comparable。
+
+
+## 17. 2026-11-05：Pytdx 历史窗口复权样本与生产 Probe 持久化
+
+### 17.1 Pytdx 样本
+
+- GitHub Actions Pytdx 专项 Run：`41955146155`。
+- 交易窗口：2025-07-07 至 2025-07-17，600036.SH、002982.SZ，各 9 个交易日。
+- none：两只股票各 9 条，质量 9/9 valid；OHLC 与 Sina/Tencent/Eastmoney/Yahoo none 样本按分一致。
+- qfq：两只股票各 9 条，方法 `pytdx_qfq`，质量 9/9 degraded；当前缺少可验证参考日期/完整因子证据。
+- hfq：两只股票各 9 条，方法 `pytdx_hfq`，质量 9/9 valid；但尚未证实其绝对基准与其他源一致。
+- Pytdx GBBQ 输出不是公司行为权威数据的替代品。qfq/hfq 不得仅按枚举或方法名判定跨源 matched。
+
+### 17.2 生产 Probe + MariaDB
+
+- Live Provider Probe Run：`41954775830`。
+- 两只股票各自 Probe Run 均 `persisted=true`，storage check passed，并通过 ProviderProbeHistory 读回同一 RunID。
+- BaoStock 日历已装配并参与窗口校验，但因源端快照时间未暴露而为 degraded；日 K 上下文随之 degraded。
+- Eastmoney 本次三个 adjustment 请求均遇到 EOF；其他 Provider 返回的质量状态仍按原规则保留。
+- CrossProviderDailyCompare 因 `quality_status_must_be_valid` skipped，没有 matched。
+
+
+## 18. 2026-11-05：Tushare 权限证据与生产 Probe 复验
+
+### 18.1 Tushare 权限核验
+
+- GitHub Actions Live Provider Probe Run：`41955543025`。
+- 对 600036.SH、002982.SZ 的 2025-07-07..2025-07-17 窗口，Tushare `adj_factor` 均返回 code 40203；`dividend` 也均返回 code 40203。
+- 当前账号没有这两个接口的访问权限；报告标记 `permission_required`。没有拿到因子或公司行为数据，不得把空响应解释为无事件。
+- 当前不再重试，除非账号权限发生变化。
+
+### 18.2 生产 Probe 结果
+
+- 同一 Run 的服务层历史 Probe 步骤成功执行。
+- 两只股票 Probe 均持久化到 MariaDB，并通过历史接口读回 RunID。
+- 四家 Provider 各返回 9 条；Eastmoney 本轮成功。每只股票 10 项 degraded、2 项 Sina adjusted not_supported、0 failed。
+- BaoStock 日历参与上下文检查但 quality degraded；跨源比较按 valid 门禁 skipped。
+- 本次服务链路通过不改变数据质量结论，Probe run 状态仍为 degraded。
+
+
+## 19. 2026-11-05：BaoStock 历史复权因子与日 K 内部一致性
+
+- GitHub Actions Live Provider Probe Run：`41958045930`，BaoStock 专项步骤 success。
+- 样本窗口 2025-07-07..2025-07-17，600036.SH、002982.SZ 各 9 个交易日。
+- 600036 返回 30 条历史因子，002982 返回 8 条；因子覆盖从 2002-04-09 / 2020-04-24 延续到 2026 年最近事件。
+- 对每个交易日的 open/high/low/close 核验：
+  - `raw × foreAdjustFactor` 与 BaoStock `adjustflag=2` qfq OHLC 一致；
+  - `raw × backAdjustFactor` 与 BaoStock `adjustflag=1` hfq OHLC 一致。
+- 两只股票各 9×4×2 个价格字段均未报告 mismatch。600036 的 2025-07-11 事件处于窗口中，事件因子生效日期选择通过。
+- 该结论仅证明 BaoStock 自身因子与自身复权 K 线内部一致，不证明与 Pytdx/Tushare 基准相同；不能作为跨源 matched。
+- 当前 Tushare adj_factor/dividend 仍权限不足；Pytdx GBBQ 对账继续进行。
+
+
+### 19.1 自动化验收
+
+- Go test suite Push Run：`41958045915`，全部 5 个 Job success。
+- 包含 market-data gofmt/unit/race/vet、MariaDB migration/PIT persistence、根模块与 go-core 测试、Compose/Docker 镜像构建。
+- BaoStock Live Provider Probe Run `41958045930` 的专项因子一致性测试 success。
+
+
+## 20. 2026-11-05：Pytdx GBBQ 与 BaoStock 公司行为事件对账
+
+- GitHub Actions Live Provider Probe Run：`41959062007` success；Go test suite Run：`41959062051` success。
+- 2025 年核对 3 个事件，600036.SH 1 个、002982.SZ 2 个。
+- 600036.SH 2025-07-11：现金分红 20 元/10 股，Pytdx 理论除权参考价与 BaoStock preclose 均为 46.24 元。
+- 002982.SZ 2025-01-14：现金分红 2 元/10 股，理论价与 BaoStock preclose 均为 16.45 元。
+- 002982.SZ 2025-05-30：现金分红 1 元/10 股、送转 4 股，理论价 14.885714 元，BaoStock preclose 14.89 元，差 0.004286 元。
+- 三个事件的 BaoStock back/forward 累积因子增量与 Pytdx 事件隐含比率均在 0.0005 容差内，preclose 差在 0.01 元容差内。
+- 事件级匹配不代表复权后历史 OHLC 可以直接对账：Pytdx v0.0.86 为仿射变换，BaoStock 为累计因子乘法。跨源比较必须保留 method/ref date 一致门禁。
+
+
+## 21. 2026-11-05：复权参考日期元数据盘点
+
+- BaoStock/Pytdx/Eastmoney/Tencent 当前记录 adjustment method，但未提供 adjustment reference date。
+- Tushare qfq 记录本次因子集合最大交易日，hfq 未填 ref date。
+- Yahoo qfq/hfq 分别重基准到请求窗口末日/首日，并记录日期。
+- 生产比较器对 adjusted basis 要求 method 与 ref date 同时相同；缺失/不一致时 not_comparable。
+- 不将请求窗口日期冒充源端参考日期。Pytdx 锚点可从实际加载历史推导，其他 Provider 需要源端证据后再补。
+
+
+## 22. 2026-11-05：Pytdx 复权参考日期元数据
+
+- Pytdx qfq 的 `AdjustmentRefDate` 取实际加载历史的最新交易日；hfq 取完整历史扫描的最早交易日；none 为空。
+- GitHub Actions Live Provider Probe Run `41960406846` success。
+- 600036.SH：qfq 2026-11-05，hfq 2002-04-09；002982.SZ：qfq 2026-11-05，hfq 2020-04-24。
+- 两只股票 none/qfq/hfq 各 9 条，均 9/9 valid，method/ref-date 断言通过。
+- Go test suite Run `41960406782` 全部通过。
+- 该元数据描述 Pytdx 自身复权锚点；与 BaoStock 的方法不同，不能据此直接跨源比较 adjusted OHLC。
+
+
+## 23. 2026-11-05：BaoStock 八只证券真实复权与上市日期对账
+
+- 代码 SHA：`687b49a190e661bed0855ab3f5bfd367bf9bd4c1`；Push Live Provider Probe Run `42017059794` success，BaoStock 专项 `TestLiveBaoStockAdjustmentFactorConsistency` 实际运行并产出 Artifact `live-baostock-adjustment-report`（ID `13409567542`）。
+- 请求窗口：因子历史 `1990-01-01` 至探测日；OHLC 主窗口 `2025-07-07` 至 `2025-07-17`。
+
+| 证券 | 因子行数 | 首因子日期 | raw/qfq/hfq 行数 | OHLC mismatch |
+|---|---:|---|---:|---:|
+| 000001.SZ | 42 | 1991-04-03 | 9/9/9 | 0 |
+| 000002.SZ | 46 | 1991-01-29 | 9/9/9 | 0 |
+| 000858.SZ | 31 | 1998-04-27 | 9/9/9 | 0 |
+| 600000.SH | 27 | 1999-11-10 | 9/9/9 | 0 |
+| 600016.SH | 40 | 2000-12-19 | 9/9/9 | 0 |
+| 600601.SH | 29 | 1990-12-19 | 9/9/9 | 0 |
+| 600036.SH | 30 | 2002-04-09 | 9/9/9 | 0 |
+| 002982.SZ | 8 | 2020-04-24 | 9/9/9 | 0 |
+
+- 八只证券首因子日期均与独立上市日期核验一致：000001（公司资料）、000002（巨潮/发行人文件）、000858（公司资料）、600000/600601（上交所公司概况）、600016（公司资料）、600036（发行人上市文件）、002982（深交所上市公告）。上市日期是独立证据，不由 BaoStock 因子推断。
+- 旧报告八只 `pre_first_event_status=unavailable`，因为 1990 至首事件前一天 raw 查询为空。结合上市日期证据，这八只均不存在上市交易日前的交易日，适用性应为 `not_applicable`，不能计为 matched，也不能据此证明 fallback 公式。
+- 本批仅证明 2025 主窗口 BaoStock 自身 raw × 因子与自身 qfq/hfq OHLC 一致；不证明跨 Provider parity、AvailableAt 或 PIT 可见性。生产 helper 继续 fail-closed。
+
+
+## 24. 2026-11-05：上市日期分类代码专项重跑
+
+- 代码 SHA：`cce59e8de493813a4b04f7d0bd24211e1e919bb1`；Push Go suite Run `42018395454` success；Push Live Probe Run `42018395554` 外层 success，但 BaoStock 专项测试步骤 failure。
+- 新报告 Artifact `13410008325`：600601.SH、600036.SH、002982.SZ 成功取回 29/30/8 条因子，raw/qfq/hfq 各 9 行、OHLC mismatch=0；三只首因子日均与独立上市日期相同，`pre_first_event_status=not_applicable`。
+- 000001.SZ、000002.SZ、000858.SZ、600000.SH、600016.SH 登录 BaoStock 时发生 TCP timeout，报告为 `factor_count=0`，属于 `unavailable`，不计验收通过。不得把外层 workflow success 解释为八证券专项通过。
+- 八证券主窗口完整真实对账仍以 Run `42017059794` / Artifact `13409567542` 为证据。本次仅补充验证新分类逻辑，不覆盖或替代原完整报告。
+
+
+## 26. 2026-11-05：BaoStock/Pytdx raw 双源成交量精度重评
+
+- 真实原始样本来自 Pytdx/BaoStock live report Artifact `13410429933`，证券 `600036.SH`、`002982.SZ`，窗口 2025-07-07 至 2025-07-17，各 9 个交易日。原始报告 OHLC 全匹配，成交量和成交额因原始比较器固定容差分别出现 mismatch。
+- 按源粒度重新评估成交量：TDX `VOL` 以手为单位（1 手=100 股），BaoStock provider 原始量单位为 shares。600036 最大差 84 股、002982 最大差 96 股，均在 100 股粒度内。新增内部 `VolumeGranularity` 后，成交量字段可判 matched；未更改原始成交量数据。
+- 成交额单位均为 CNY，当前 1 CNY 容差保持不变。600036 9/9、002982 8/9 行成交额差异超过 1 CNY；最大差 120.74/7.90 CNY。相对误差虽小，但没有足够源精度证据放宽阈值，双源整体状态仍 mismatch。
+- 本轮不是新的完整实时双源重跑；Run `42021978339` 的 BaoStock 请求超时，报告为 not_comparable。新粒度结论来自前次真实原始值离线重评和单测，不计新的实时验收。
+
+
+## 27. 2026-11-05：TDX/BaoStock 成交额精度复核
+
+- TDX `protocol.Kline.Amount` 使用 `Price`（内部单位毫元），协议解码将原始整数 CNY 转为内部 Price，`Float64()` 还原为整数元；TDX 官方 `AMOUNT` 单位为元。BaoStock adapter 保留原始 amount，单位标记 CNY，响应值存在小数。
+- 既有 18 个真实交易日样本中，600036.SH 成交额差最大 120.74 CNY，002982.SZ 最大 7.90 CNY；17/18 行超过 1 CNY 容差。相对差很小（约 3.19e-8/4.13e-8），但没有证据证明差异仅来自格式舍入。
+- 保持 1 CNY 绝对容差和 mismatch 判定；不将这批 raw 双源样本标记 matched。待增加更多成交额量级样本并明确供应商聚合口径后再评估阈值。

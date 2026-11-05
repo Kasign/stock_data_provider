@@ -2796,7 +2796,7 @@ func (s *DataService) DailyBars(ctx context.Context, rawSymbol, start, end strin
 			if !contractMismatch {
 				validated, warnings := normalize.ValidateAndSortBars(symbol, candidates, start, end, limit)
 				if len(validated) > 0 {
-					adjustmentWarnings, adjustmentErr := applyDailyBarAdjustmentMetadataQuality(validated, basis, end)
+					adjustmentWarnings, adjustmentErr := applyDailyBarAdjustmentMetadataQuality(validated, basis)
 					if adjustmentErr != nil {
 						contractMismatch = true
 					} else if dailyBarsCacheNeedsPostCloseRefresh(validated, time.Now()) {
@@ -2941,7 +2941,7 @@ func (s *DataService) DailyBars(ctx context.Context, rawSymbol, start, end strin
 			errs = append(errs, p.Name()+" response failed bar validation")
 			continue
 		}
-		adjustmentWarnings, adjustmentErr := applyDailyBarAdjustmentMetadataQuality(bars, basis, end)
+		adjustmentWarnings, adjustmentErr := applyDailyBarAdjustmentMetadataQuality(bars, basis)
 		if adjustmentErr != nil {
 			s.breaker.Failure(breakerKey)
 			errs = append(errs, p.Name()+": "+adjustmentErr.Error())
@@ -3017,23 +3017,15 @@ func (s *DataService) DailyBars(ctx context.Context, rawSymbol, start, end strin
 				errs = append(errs, "MariaDB fallback rejected: "+coherentReason)
 				s.logger.Warn("MariaDB fallback rejected because stored bars are not a coherent series", "symbol", symbol, "adjustment", basis, "reason", coherentReason)
 			} else {
-				filtered := make([]model.DailyBar, 0, len(coherent))
-				contractMismatch := false
-				for _, bar := range coherent {
-					cachedSymbol, symbolErr := normalize.NormalizeSymbol(bar.Symbol)
-					if symbolErr != nil || cachedSymbol != symbol || bar.AdjustmentBasis != basis || bar.NormalizationVer != normalize.Version {
-						contractMismatch = true
-						break
+				cached, storedWarnings, storedErr, contractMismatch := normalizeStoredDailyBarSeries(symbol, coherent, start, end, limit, basis)
+				if storedErr != "" {
+					if contractMismatch {
+						s.logger.Error("MariaDB fallback rejected due to stored symbol/adjustment/normalization contract mismatch", "symbol", symbol, "adjustment", basis, "normalization_version", normalize.Version)
+					} else {
+						s.logger.Warn("MariaDB fallback rejected after stored-bar validation", "symbol", symbol, "adjustment", basis, "reason", storedErr)
 					}
-					filtered = append(filtered, bar)
-				}
-				if contractMismatch {
-					s.logger.Error("MariaDB fallback rejected due to stored symbol/adjustment/normalization contract mismatch", "symbol", symbol, "adjustment", basis, "normalization_version", normalize.Version)
-					errs = append(errs, "MariaDB fallback rejected due to symbol/adjustment/normalization contract mismatch")
-				} else {
-					cached, _ = normalize.ValidateAndSortBars(symbol, filtered, start, end, limit)
-				}
-				if !contractMismatch && len(cached) > 0 {
+					errs = append(errs, "MariaDB fallback rejected: "+storedErr)
+				} else if len(cached) > 0 {
 					for i := range cached {
 						cached[i].QualityStatus = model.QualityStale
 						appendReasonOnce(&cached[i].QualityReasons, "provider_unavailable_served_from_mariadb")
@@ -3042,7 +3034,9 @@ func (s *DataService) DailyBars(ctx context.Context, rawSymbol, start, end strin
 					// at least as recent a trade date and at least as much history as
 					// the best provider partial. Never merge their price series.
 					if len(bestPartial) == 0 || preferStoredSeries(cached, bestPartial) {
-						return cached, false, []string{"provider_unavailable_served_from_mariadb", "mariadb_bars_use_one_coherent_source_and_adjustment_reference"}, nil
+						fallbackWarnings := []string{"provider_unavailable_served_from_mariadb", "mariadb_bars_use_one_coherent_source_and_adjustment_reference"}
+						fallbackWarnings = append(fallbackWarnings, storedWarnings...)
+						return cached, false, dedupeStrings(fallbackWarnings), nil
 					}
 				}
 			}
@@ -3345,6 +3339,22 @@ func preferStoredSeries(stored, providerPartial []model.DailyBar) bool {
 	return len(stored) >= len(providerPartial)
 }
 
+func normalizeStoredDailyBarSeries(symbol string, bars []model.DailyBar, start, end string, limit int, basis model.AdjustmentBasis) ([]model.DailyBar, []string, string, bool) {
+	filtered := make([]model.DailyBar, 0, len(bars))
+	for _, bar := range bars {
+		cachedSymbol, symbolErr := normalize.NormalizeSymbol(bar.Symbol)
+		if symbolErr != nil || cachedSymbol != symbol || bar.AdjustmentBasis != basis || bar.NormalizationVer != normalize.Version {
+			return nil, nil, "symbol/adjustment/normalization contract mismatch", true
+		}
+		filtered = append(filtered, bar)
+	}
+	validated, warnings := normalize.ValidateAndSortBars(symbol, filtered, start, end, limit)
+	if len(validated) == 0 {
+		return nil, warnings, "stored daily bars contain no valid rows after normalization", false
+	}
+	return validated, dedupeStrings(warnings), "", false
+}
+
 func coherentStoredSeries(bars []model.DailyBar, basis model.AdjustmentBasis) ([]model.DailyBar, string) {
 	type group struct {
 		key             string
@@ -3398,10 +3408,10 @@ func coherentStoredSeries(bars []model.DailyBar, basis model.AdjustmentBasis) ([
 	var best *group
 	for _, g := range groups {
 		if best == nil ||
-			len(g.bars) > len(best.bars) ||
-			(len(g.bars) == len(best.bars) && g.newest > best.newest) ||
-			(len(g.bars) == len(best.bars) && g.newest == best.newest && g.latestFetchedAt.After(best.latestFetchedAt)) ||
-			(len(g.bars) == len(best.bars) && g.newest == best.newest && g.latestFetchedAt.Equal(best.latestFetchedAt) && g.key < best.key) {
+			g.newest > best.newest ||
+			(g.newest == best.newest && len(g.bars) > len(best.bars)) ||
+			(g.newest == best.newest && len(g.bars) == len(best.bars) && g.latestFetchedAt.After(best.latestFetchedAt)) ||
+			(g.newest == best.newest && len(g.bars) == len(best.bars) && g.latestFetchedAt.Equal(best.latestFetchedAt) && g.key < best.key) {
 			best = g
 		}
 	}
@@ -3695,7 +3705,7 @@ func (s *DataService) DailyBarsAsOf(ctx context.Context, rawSymbol, start, end s
 		if factorErr != nil {
 			return nil, nil, fmt.Errorf("%w: cannot rebuild adjusted daily bars without point-in-time adjustment factors: %v", ErrDailyBarsAsOfNotFound, factorErr)
 		}
-		bars, factorErr = rebuildAdjustedDailyBars(bars, factors, basis, end)
+		bars, factorErr = rebuildAdjustedDailyBarsPIT(bars, factors, basis, end)
 		if factorErr != nil {
 			return nil, nil, fmt.Errorf("%w: %v", ErrDailyBarsAsOfNotFound, factorErr)
 		}
@@ -3721,7 +3731,7 @@ func (s *DataService) DailyBarsAsOf(ctx context.Context, rawSymbol, start, end s
 	return bars, dedupeStrings(warnings), nil
 }
 
-func applyDailyBarAdjustmentMetadataQuality(bars []model.DailyBar, basis model.AdjustmentBasis, requestedEnd string) ([]string, error) {
+func applyDailyBarAdjustmentMetadataQuality(bars []model.DailyBar, basis model.AdjustmentBasis) ([]string, error) {
 	if basis == model.AdjustmentNone || len(bars) == 0 {
 		return nil, nil
 	}
@@ -3738,12 +3748,13 @@ func applyDailyBarAdjustmentMetadataQuality(bars []model.DailyBar, basis model.A
 		if err != nil || parsed.Format("2006-01-02") != referenceDate {
 			return nil, fmt.Errorf("provider returned invalid adjustment reference date %q", referenceDate)
 		}
+		if referenceDate > time.Now().In(marketLocation()).Format("2006-01-02") {
+			return nil, fmt.Errorf("adjustment reference date %s is in the future", referenceDate)
+		}
 		if basis == model.AdjustmentForward {
+			// 前复权基准可以晚于请求区间结束日：Provider 可能使用其最新已加载交易日作为统一基准。
 			if referenceDate < bar.TradeDate {
 				return nil, fmt.Errorf("forward-adjustment reference date %s precedes bar date %s", referenceDate, bar.TradeDate)
-			}
-			if requestedEnd != "" && referenceDate > requestedEnd {
-				return nil, fmt.Errorf("forward-adjustment reference date %s exceeds requested end date %s", referenceDate, requestedEnd)
 			}
 		} else if basis == model.AdjustmentBackward && referenceDate > bar.TradeDate {
 			return nil, fmt.Errorf("backward-adjustment reference date %s follows bar date %s", referenceDate, bar.TradeDate)

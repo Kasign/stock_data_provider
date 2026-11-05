@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"math"
 	"os"
 	"strings"
 	"testing"
@@ -249,6 +250,149 @@ func TestLiveTushareCapabilities(t *testing.T) {
 		})
 	}
 	logOptionalProviderProbe(t, results, failures)
+}
+
+type liveTushareAdjustmentEvidenceItem struct {
+	Symbol                string                   `json:"symbol"`
+	AdjustmentFactors     []model.AdjustmentFactor `json:"adjustment_factors,omitempty"`
+	CorporateActions      []model.CorporateAction  `json:"corporate_actions,omitempty"`
+	FactorStatus          string                   `json:"factor_status"`
+	FactorError           string                   `json:"factor_error,omitempty"`
+	CorporateActionStatus string                   `json:"corporate_action_status"`
+	CorporateActionError  string                   `json:"corporate_action_error,omitempty"`
+}
+
+type liveTushareAdjustmentEvidenceReport struct {
+	GeneratedAt string                              `json:"generated_at"`
+	StartDate   string                              `json:"start_date"`
+	EndDate     string                              `json:"end_date"`
+	Items       []liveTushareAdjustmentEvidenceItem `json:"items"`
+}
+
+// TestLiveTushareHistoricalAdjustmentEvidence checks whether the existing Tushare
+// token can supply historical adjustment factors and dividend/corporate-action
+// evidence for the same golden windows used by the public daily-bar probes.
+func TestLiveTushareHistoricalAdjustmentEvidence(t *testing.T) {
+	if os.Getenv("MARKET_DATA_LIVE_TUSHARE_ADJUSTMENT_TESTS") != "1" {
+		t.Skip("set MARKET_DATA_LIVE_TUSHARE_ADJUSTMENT_TESTS=1 to query Tushare historical adjustment evidence")
+	}
+	token := strings.TrimSpace(os.Getenv("MARKET_DATA_TUSHARE_TOKEN"))
+	if token == "" {
+		token = strings.TrimSpace(os.Getenv("TUSHARE_TOKEN"))
+	}
+	if token == "" {
+		t.Skip("Tushare adjustment evidence probe skipped: token is not configured")
+	}
+	startDate := strings.TrimSpace(os.Getenv("LIVE_PROBE_DAILY_START_DATE"))
+	if startDate == "" {
+		startDate = "2025-07-07"
+	}
+	endDate := strings.TrimSpace(os.Getenv("LIVE_PROBE_DAILY_END_DATE"))
+	if endDate == "" {
+		endDate = "2025-07-17"
+	}
+	if _, err := time.Parse("2006-01-02", startDate); err != nil {
+		t.Fatalf("invalid LIVE_PROBE_DAILY_START_DATE: %v", err)
+	}
+	if _, err := time.Parse("2006-01-02", endDate); err != nil {
+		t.Fatalf("invalid LIVE_PROBE_DAILY_END_DATE: %v", err)
+	}
+	if startDate > endDate {
+		t.Fatalf("historical adjustment range is reversed: %s..%s", startDate, endDate)
+	}
+	symbols := []string{"600036.SH", "002982.SZ"}
+	if configured := strings.TrimSpace(os.Getenv("LIVE_PROBE_DAILY_SYMBOLS")); configured != "" {
+		symbols = strings.Split(configured, ",")
+	}
+	endpoint := strings.TrimSpace(os.Getenv("MARKET_DATA_TUSHARE_API_URL"))
+	client := NewTushareConfigured(25*time.Second, endpoint, token)
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	defer cancel()
+
+	report := liveTushareAdjustmentEvidenceReport{
+		GeneratedAt: time.Now().UTC().Format(time.RFC3339),
+		StartDate:   startDate, EndDate: endDate,
+		Items: make([]liveTushareAdjustmentEvidenceItem, 0, len(symbols)),
+	}
+	var failures []string
+	for _, rawSymbol := range symbols {
+		symbol := strings.ToUpper(strings.TrimSpace(rawSymbol))
+		if symbol == "" {
+			t.Fatalf("LIVE_PROBE_DAILY_SYMBOLS contains an empty symbol")
+		}
+		item := liveTushareAdjustmentEvidenceItem{Symbol: symbol}
+		factors, factorErr := client.FetchAdjustmentFactors(ctx, symbol, startDate, endDate)
+		if factorErr != nil {
+			_, safe := liveProbeErrorSummary(factorErr)
+			item.FactorError = safe
+			if isTusharePermissionRequired(factorErr) {
+				item.FactorStatus = "permission_required"
+			} else {
+				item.FactorStatus = "failed"
+				failures = append(failures, symbol+" adjustment_factors: "+safe)
+			}
+		} else {
+			item.AdjustmentFactors = factors
+			item.FactorStatus = "returned"
+			if len(factors) == 0 {
+				item.FactorStatus = "returned_empty"
+			}
+			for _, factor := range factors {
+				if factor.Symbol != symbol || factor.TradeDate < startDate || factor.TradeDate > endDate ||
+					factor.Factor <= 0 || math.IsNaN(factor.Factor) || math.IsInf(factor.Factor, 0) ||
+					factor.Source != "tushare" || factor.FetchedAt.IsZero() {
+					failures = append(failures, symbol+" adjustment_factors: row contract invalid at "+factor.TradeDate)
+					item.FactorStatus = "contract_invalid"
+					break
+				}
+			}
+		}
+
+		actions, actionErr := client.FetchCorporateActions(ctx, symbol, startDate, endDate)
+		if actionErr != nil {
+			_, safe := liveProbeErrorSummary(actionErr)
+			item.CorporateActionError = safe
+			if isTusharePermissionRequired(actionErr) {
+				item.CorporateActionStatus = "permission_required"
+			} else {
+				item.CorporateActionStatus = "failed"
+				failures = append(failures, symbol+" corporate_actions: "+safe)
+			}
+		} else {
+			item.CorporateActions = actions
+			item.CorporateActionStatus = "returned"
+			if len(actions) == 0 {
+				item.CorporateActionStatus = "returned_empty"
+			}
+			for _, action := range actions {
+				eventDate := action.ExDate
+				if eventDate == "" {
+					eventDate = action.AnnouncementDate
+				}
+				if action.Symbol != symbol || eventDate < startDate || eventDate > endDate ||
+					action.Source != "tushare" || action.FetchedAt.IsZero() {
+					failures = append(failures, symbol+" corporate_actions: row contract invalid at "+eventDate)
+					item.CorporateActionStatus = "contract_invalid"
+					break
+				}
+			}
+		}
+		report.Items = append(report.Items, item)
+	}
+
+	encoded, err := json.MarshalIndent(report, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal Tushare historical adjustment evidence report: %v", err)
+	}
+	t.Logf("LIVE_TUSHARE_ADJUSTMENT_REPORT_BEGIN\n%s\nLIVE_TUSHARE_ADJUSTMENT_REPORT_END", encoded)
+	if outputPath := strings.TrimSpace(os.Getenv("LIVE_TUSHARE_ADJUSTMENT_REPORT_PATH")); outputPath != "" {
+		if writeErr := os.WriteFile(outputPath, append(encoded, '\n'), 0o644); writeErr != nil {
+			t.Errorf("write Tushare historical adjustment evidence report: %v", writeErr)
+		}
+	}
+	if len(failures) > 0 {
+		t.Errorf("Tushare historical adjustment evidence failed: %s", strings.Join(failures, " | "))
+	}
 }
 
 func TestLiveHithinkCapabilities(t *testing.T) {

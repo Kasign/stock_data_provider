@@ -925,3 +925,223 @@ Go suite 覆盖根模块、go-core、market-data 的格式/测试/race/vet、Mar
 - 未测试 qfq/hfq、复权参考日期、复权因子及公司行为。阶段 B 继续 in_progress，不关闭。
 - 下一步：以这两个窗口继续执行 qfq/hfq 最小真实请求，保留每条 K 线的 `AdjustmentMethod`、`AdjustmentRefDate`；仅在比较器确认同一绝对基准后才允许 matched。随后再通过生产 Probe 历史日期选项补齐交易上下文与持久化联验。
 - 最新代码 SHA：`23365dd16b39d5be3077d8870d178c3c50a457a9`。该 SHA 的 Go test suite Push Run `41950643179` 在记录时仍在执行；Live Provider Probe 已完成。CI 未完成前不提前标记代码验收全部通过。
+
+
+## 57. 2026-11-05 qfq/hfq 与生产 Probe 历史窗口联验
+
+### 57.1 qfq/hfq 真实请求
+
+- GitHub Actions Live Provider Probe Run：`41951184379`。该轮直接 Provider 报告用于查看每条样本的调整方法和参考日期；Eastmoney 在该轮遇到连接 EOF。
+- 随后的生产 Probe 历史联验 Run：`41952778969`，两只样本均对 Sina、Tencent、Eastmoney、Yahoo 执行 `none`、`forward_adjusted`、`backward_adjusted`，每项均完成 9 条返回/验证或明确 not_supported。
+- Sina 的 forward/backward 均为 `not_supported`，错误语义明确为只支持 none，没有把不支持误报为请求失败。
+- Tencent forward/backward 分别返回 `tencent_qfqday`、`tencent_hfqday`；当前模型未得到可验证的 `AdjustmentRefDate`。
+- Eastmoney forward/backward 分别返回 `eastmoney_fqt_1`、`eastmoney_fqt_2`；当前模型未得到可验证的 `AdjustmentRefDate`。forward 另有 `daily_bar_adjustment_reference_date_unverified` 与响应契约 warning。
+- Yahoo forward 使用 `yahoo_adjclose_ratio_rebased_to_end`，参考日期为请求窗口末日 `2025-07-17`；backward 使用 `yahoo_adjclose_ratio_rebased_to_start`，参考日期为窗口首日 `2025-07-07`。这是适配器按请求窗口重基准的日期，不应误解为 Yahoo 原始数据的永久复权基准。
+
+### 57.2 生产 Probe 链路结果
+
+- 生产服务层测试直接调用 `DataService.ProbeProviderCapabilitiesWithOptions`，使用 `daily_bars`、`connectivity/contract/quality/cross_provider` 检查，传入两只股票、历史日期和三种复权口径。
+- 两只股票各自 12 个 Provider/口径项：`total=12`、`failed=0`、`not_supported=2`、`degraded=10`、`returned=0`、`status=degraded`；10 个可支持项均返回并验证 9 条，2 个 Sina adjusted 项明确 not_supported。
+- 本次测试未注入交易日历 Provider，故各可支持项带有 `daily_bar_context_calendar_unavailable`；同时 Sina/Tencent/Yahoo 成交额缺失也使其字段质量降级。该测试没有 MariaDB Store，`persisted=false` 是测试配置预期，不代表生产数据库写入失败。
+- 所有 cross_provider 对账项被现有严格门禁标记为 `skipped / comparison_not_comparable`，原因是 `quality_status_must_be_valid`。这不是数据 mismatch，也不能计为 matched。
+- 调整元数据仍有独立缺口：Tencent/Eastmoney 缺少可验证参考日期；Yahoo 参考日期是窗口重基准日期，三家方法标识不同。即使以后质量状态满足门禁，也不能仅凭 forward/backward enum 相同直接比较。
+
+### 57.3 结论与后续
+
+- none 的 Provider 直连样本已证明两只股票 9 日 OHLC 按分跨源一致；qfq/hfq 已证明三家 Provider 能返回数据，但复权基准仍不可比。
+- 当前不修改 CrossProviderDailyCompare 的质量门禁，不允许降级数据进入 matched；也不为 Tencent/Eastmoney 猜测参考日期。
+- 下一步优先核对 Tencent/Eastmoney 源端复权定义和可追溯参考日期证据；如果源端不暴露，应明确标记缺失并保持 not_comparable。再评估是否有可信公司行为/复权因子源可作为独立基准。
+- 本轮生产 Probe 测试只注入四家日 K Provider，未注入生产日历 Provider，也未连接 MariaDB；交易上下文和历史持久化仍需单独联验。
+- 当前代码 HEAD：`e3a0bbb2ba973abe3317f26fe4bd4f0e250a7d4c`。Live Provider Probe Run `41952778969` 成功；Go test suite Run `41952778933` 在记录时 Go 格式检查及普通测试已通过，race/vet 和 Docker 构建仍在执行。
+
+
+## 58. 2026-11-05 生产历史 Probe 测试装配修正
+
+### 58.1 上轮问题复核
+
+- 上轮 GitHub Actions 服务层历史 Probe Run `41951967119` 执行成功，但测试构造的 DataService 没有注入生产使用的交易日历/证券状态 Provider，也没有 MariaDB Store。
+- 结果为两只股票各 12 项诊断：10 项 returned_degraded、2 项 Sina adjusted not_supported、0 failed；交易日历上下文不可用，CrossProviderDailyCompare 因 `quality_status_must_be_valid` 全部 skipped；`persisted=false` 是测试未配置 Store 的结果。
+- 这不是 Provider 硬失败，也不是跨源 mismatch，更不能作为交易上下文或持久化验收通过。
+
+### 58.2 测试入口修正
+
+- 历史 Probe opt-in 测试现在按生产装配方式注入 BaoStock TradingCalendarProvider。
+- 当 GitHub Secret `TUSHARE_TOKEN` 存在时，注入 Tushare SecurityTradingStatusProvider；不把 Tushare 加入本轮日 K Provider 列表，避免扩大请求范围。
+- Live Provider Probe job 增加临时 MariaDB 11.4 service；测试启动后执行既有 `Store.Migrate`，Probe 执行 storage check，随后通过 `ProviderProbeHistory` 读回并核对 RunID。
+- 不修改生产 Probe 业务逻辑、不放宽质量门禁、不增加生产 API。
+- 最近一次 Go test suite 中 market-data 的 gofmt 与普通测试已通过；race/vet 和 MariaDB 集成仍以完整 Run 结论为准。
+
+### 58.3 下一轮真实验收
+
+- 通过提交标记 `[historical_service_probe]` 重新触发相同历史窗口，检查 BaoStock 日历是否真实可用、Tushare 状态证据是否返回，以及 MariaDB 是否成功持久化并读回。
+- 只有实际结果支持时才更新交易上下文、cross-provider、storage 结论；若 BaoStock/Tushare 无法提供证据，按 unavailable/degraded 记录，不将缺失上下文误标通过。
+
+
+## 59. 2026-11-05 BaoStock 日历与 MariaDB 生产 Probe 复验结果
+
+### 59.1 真实服务层执行
+
+- GitHub Actions Live Provider Probe Push Run：`41954775830`；服务层历史 Probe 步骤执行失败，但报告已生成并上传。
+- 两个目标股票各产生一条 Probe Run，均为 `persisted=true`；storage check 为 `passed`，测试随后通过历史查询读回对应 RunID。MariaDB 临时服务、迁移、写入和读回链路已获得真实执行证据。
+- 每只股票共 12 项日 K 探测：7 项 returned_degraded、3 项 Eastmoney network_error/EOF、2 项 Sina adjusted not_supported；无 Provider mismatch 结论。
+- BaoStock 交易日历已被注入并参与日 K 上下文校验，但其快照质量为 degraded（源端未暴露可验证快照时间），所以所有返回 K 线附加 `daily_bar_context_calendar_degraded`。这是上下文质量降级，不是日历完全不可用。
+- 本次没有单独请求 `security_trading_status` 能力；日 K 窗口本身完整，无缺失交易日需要证券状态回补，不能据此宣称 Tushare 历史证券状态已验收。
+- Eastmoney 三种复权口径在服务层本次均遇到 EOF；此前直连批次曾成功返回，按瞬时网络错误处理，不推翻此前样本，但本次不能计为成功。
+- CrossProviderDailyCompare 全部按现有门禁 skipped，错误为 `quality_status_must_be_valid`；未产生 matched，也未放宽门禁。
+
+### 59.2 Pytdx 历史日 K / GBBQ 探测
+
+- GitHub Actions Run：`41955146155`，Pytdx 专项步骤成功，目标窗口 2025-07-07 至 2025-07-17。
+- 600036.SH、002982.SZ 均返回 9 条 none/qfq/hfq 日 K，日期覆盖完整。
+- none 两只股票均为 9/9 valid；OHLC 与前述四家 Provider 样本按分一致。Pytdx 成交量/成交额单位和数量精度仍需保留各自证据，不能与其他源简单要求逐位相同。
+- qfq 两只股票均返回 9 条，方法标记 `pytdx_qfq`，但 9/9 quality degraded；未提供可验证复权参考日期，不能作为 matched 证据。
+- hfq 两只股票均返回 9 条，方法标记 `pytdx_hfq`，9/9 valid；但方法标记本身不等于绝对参考基准已验证。当前报告没有可证明与其他 Provider 同一参考基准的 ref date / factor evidence。
+- 这批 Pytdx 样本证明 GBBQ 路径可以产出历史 qfq/hfq 数值，不证明公司行为完整、复权基准一致或复权值绝对准确。
+
+### 59.3 结论
+
+- MariaDB Probe 持久化与历史读回：passed。
+- BaoStock 交易日历：returned_degraded，已实际参与上下文校验，但快照时间证据缺失。
+- Eastmoney：本次服务层调用 transient EOF；之前 direct probe 成功记录保留。
+- Pytdx none：样本级 valid；qfq degraded；hfq valid 但绝对参考基准未证实。
+- CrossProviderDailyCompare：not_comparable，保持原门禁。
+- 阶段 B 继续 in_progress。下一步执行 Tushare 历史复权因子/公司行为专项探测，并将 Pytdx 与独立公司行为证据对齐；不凭 qfq/hfq 名称做跨源比较。
+
+
+## 60. 2026-11-05 Tushare 复权证据权限核验与生产 Probe 复验
+
+### 60.1 生产 Probe + MariaDB
+
+- GitHub Actions Live Provider Probe Push Run：`41955543025`，生产历史 Probe 步骤 success。
+- 两只股票各生成一条历史 Probe Run，均 `persisted=true`；storage check passed；测试通过历史查询读回对应 RunID。
+- 每只股票 12 项：10 项 returned_degraded、2 项 Sina adjusted not_supported、0 failed。
+- 四家日 K Provider 在本次服务层窗口均返回 9 条。Eastmoney 本轮恢复成功；此前 EOF 作为瞬时网络失败保留历史记录。
+- BaoStock 日历参与上下文检查，但快照质量 degraded，原因仍为源端未提供可验证快照时间。
+- CrossProviderDailyCompare 仍因 `quality_status_must_be_valid` skipped，没有 matched。数据质量门禁未调整。
+
+### 60.2 Tushare adj_factor / dividend 权限核验
+
+- 同一 Run 的 Tushare 历史证据专项步骤 success（报告成功生成，不代表数据接口成功）。
+- 600036.SH、002982.SZ 在 2025-07-07..2025-07-17 的 `adj_factor` 均返回权限错误 code `40203`。
+- 两只股票的 `dividend` 公司行为查询同样返回权限错误 code `40203`。
+- 结果明确记为 `permission_required`；没有复权因子行或公司行为记录可供计算。不能将空数据解释为“无公司行为”，也不能继续重试同一权限受限接口。
+- 只有在 Tushare 账号权限变更后才重新核验；当前不将 Tushare 作为可用复权基准。
+
+### 60.3 当前结论
+
+- 生产 Probe 诊断执行和 MariaDB 持久化/读回：passed（Probe 总体状态仍 degraded）。
+- none 的 OHLC 样本跨源一致性仍保持样本级结论。
+- qfq/hfq 的绝对基准仍未被独立公司行为/因子证据确认；Tushare 当前权限不足。
+- 阶段 B 保持 in_progress；不放宽比较器、不将权限不足记作 Provider 网络失败。
+
+
+## 61. 2026-11-05 BaoStock 历史复权因子与日 K 一致性实测
+
+### 61.1 GitHub Actions 执行
+
+- Live Provider Probe Push Run：`41958045930`，BaoStock 专项步骤 success。
+- 专项测试窗口：2025-07-07 至 2025-07-17；股票 `sh.600036`、`sz.002982`。
+- 两只股票均返回 9 条 none、9 条 qfq、9 条 hfq 日 K。
+- 全历史复权因子：600036 返回 30 条（2002-04-09 至 2026-07-10）；002982 返回 8 条（2020-04-24 至 2026-05-29）。
+- 对窗口内每个交易日的 open/high/low/close 执行逐字段核验：`raw × foreAdjustFactor == qfq`，`raw × backAdjustFactor == hfq`；报告未出现 mismatch，也无查询/解析错误。
+- 600036 的复权事件日 2025-07-11 落在本次窗口中，事件前后按生效日期选择因子，9 个交易日均通过；002982 使用 2025-05-30 的最近有效事件因子，9 个交易日均通过。
+
+### 61.2 结论与边界
+
+- BaoStock 的历史因子查询协议、分页结果解析、事件日期排序，以及因子与其自身 qfq/hfq OHLC 的折算一致性，获得本次真实服务样本验证。
+- 这验证的是 BaoStock 自身 raw/因子/adjustflag 三套返回之间的一致性，不代表 BaoStock 因子等同于 Tushare/Pytdx 的基准，也不构成跨 Provider matched。
+- 该测试只核对 OHLC，不核对成交量/成交额，也不验证公司行为公告完整性、除权参考价外部权威性。
+- Tushare `adj_factor`/`dividend` 仍为 40203 permission_required；不重复请求。
+- 阶段 B 继续 in_progress：下一步核对 Pytdx GBBQ 事件与 BaoStock 因子事件的日期/比例语义；如不能证明同一基准，保持 not_comparable，不放宽质量门禁。
+
+### 61.3 CI 格式修正
+
+- 初始 Go test suite Run `41957200038` 因 BaoStock 两个常量块未 gofmt 而失败；不是单元测试或业务断言失败。
+- 已修正 `internal/baostock/client.go`、`internal/baostock/protocol.go` 格式，并增加复权事件生效日期单元测试。
+- Go test suite Push Run `41958045915` 全部 5 个 Job success：根模块、go-core、market-data（含 race/vet）、MariaDB migration/PIT、Compose/Docker 构建。
+
+
+## 62. 2026-11-05 Pytdx GBBQ 与 BaoStock 公司行为事件对账
+
+### 62.1 GitHub Actions 实测
+
+- Live Provider Probe Push Run：`41959062007`，完整 workflow success；Pytdx 历史日 K 与公司行为事件专项均 success。
+- Go test suite Push Run：`41959062051`，全部 5 个 Job success，包含 market-data gofmt/unit/race/vet、MariaDB migration/PIT、根模块、go-core、Compose/Docker。
+- 2025 年共核对 3 个事件：600036.SH 1 个、002982.SZ 2 个，全部匹配。
+
+| 股票 | 除权日 | Pytdx 事件 | Pytdx 理论参考价 | BaoStock preclose | 因子增量核验 |
+|---|---|---|---:|---:|---|
+| 600036.SH | 2025-07-11 | 每 10 股现金分红 20 元 | 46.24 | 46.24 | back 增量 1.043252582；forward 增量 1.043252485；Pytdx 隐含比率 1.043252595 |
+| 002982.SZ | 2025-01-14 | 每 10 股现金分红 2 元 | 16.45 | 16.45 | back 增量 1.012158040；forward 增量 1.012157274；Pytdx 隐含比率 1.012158055 |
+| 002982.SZ | 2025-05-30 | 每 10 股现金分红 1 元、送转 4 股 | 14.885714 | 14.89 | back 增量 1.406312835；forward 增量 1.406314235；Pytdx 隐含比率 1.406717850 |
+
+- 三个事件的 BaoStock preclose 差异均在 0.01 元容差内；因子增量与 Pytdx 隐含比率差异均在 0.0005 容差内；forward/back 因子增量彼此差异均在 0.0005 容差内。
+- 002982 2025-05-30 的理论参考价因 4 股送转产生非整分结果，BaoStock preclose 按分显示为 14.89，差 0.004286 元；未把舍入差异误判为事件不匹配。
+
+### 62.2 算法与比较器边界
+
+- Pytdx 锁定依赖 `github.com/injoyai/tdx v0.0.86`，其 GBBQ 复权为仿射变换 `A*raw+B`，现金分红会形成加法偏移。
+- BaoStock 提供前/后复权累计因子，按 raw 价格乘因子折算；其与 Pytdx 在除权参考价处可对齐，不代表历史所有价格点的变换相同。
+- 因此本轮只验证公司行为事件、理论除权参考价和因子增量，不比较两边 qfq/hfq 历史 OHLC，不生成 cross-provider matched。
+- 生产比较器已有 `validateCrossProviderAdjustmentCompatibility`，要求复权 method 和 reference date 同时一致；该门禁保留，不需要放宽或新增绕过。
+- Tushare `adj_factor`/`dividend` 的 40203 permission_required 结论不变。
+
+### 62.3 阶段结论
+
+- BaoStock 自身因子与其 qfq/hfq OHLC 内部一致：passed（仅目标窗口 OHLC）。
+- Pytdx GBBQ 与 BaoStock 2025 年公司行为事件及参考价对账：3/3 matched。
+- Pytdx/BaoStock 复权后历史 OHLC 跨源可比性：not_comparable（算法/基准未统一）。
+- 阶段 B 继续 in_progress；后续先确定系统内部统一复权口径/基准策略，再考虑是否提供统一折算视图，不把不同源的原生复权结果强行合并。
+
+
+## 63. 2026-11-05 复权方法与参考日期元数据路径盘点
+
+### 63.1 当前实现矩阵
+
+| Provider | AdjustmentMethod | AdjustmentRefDate | 当前证据/限制 |
+|---|---|---|---|
+| BaoStock | `baostock_pct_change` | 未填 | 原生 adjustflag；本轮验证了自身因子与 qfq/hfq OHLC 内部一致，但源接口未直接返回明确参考日期 |
+| Pytdx | `pytdx_qfq` / `pytdx_hfq` | 已填 | qfq 记录实际加载历史的最新交易日；hfq 记录完整历史扫描的最早交易日；已通过单测和真实窗口探测验证 |
+| Eastmoney | `eastmoney_fqt_{fqt}` | 未填 | 原生 fqt 参数，当前适配器未声明参考日期 |
+| Tencent | `tencent_{key}` | 未填 | 原生 kline 复权 key，当前适配器未声明参考日期 |
+| Tushare | `tushare_adj_factor_qfq_v1` / `tushare_adj_factor_hfq_v1` | 仅 qfq 填 | qfq 参考日期取本次因子集合最大交易日；hfq 使用原始累计因子，但当前未填锚点日期 |
+| Yahoo Finance | `yahoo_adjclose_ratio_rebased_to_end/start` | 已填 | qfq 明确重基准到请求区间最后一条，hfq 重基准到请求区间第一条 |
+| Sina / NetEase | raw only | 空 | 当前仅支持 none，不进入复权比较 |
+
+### 63.2 生产比较器安全性
+
+- `validateCrossProviderAdjustmentCompatibility` 对 adjusted basis 要求双方 `AdjustmentMethod` 非空且相同、`AdjustmentRefDate` 非空且相同，并检查每根 Bar 元数据一致。
+- 因此当前 BaoStock/Pytdx/Eastmoney/Tencent/Tushare hfq 等元数据不完整的 adjusted 样本会被拒绝比较，不会仅凭相同 qfq/hfq 枚举进入 matched。
+- 本轮只做代码盘点，没有修改生产比较器，也没有人为补造参考日期。
+
+### 63.3 后续设计任务
+
+- Pytdx 锚点已实现并验证：qfq 取实际加载历史的最新交易日，hfq 取完整历史扫描的最早交易日；锚点计算不受最终返回 limit 截断影响。
+- BaoStock、Eastmoney、Tencent 的参考日期需要来源文档或额外真实请求证据；不得直接把请求 endDate 当作服务端实际参考日。
+- Tushare hfq 的锚点日期需核实接口因子归一化语义后再填。
+- 在元数据来源确认前维持 not_comparable，不改生产行为。
+
+
+## 64. 2026-11-05 Pytdx 原生复权参考日期元数据补齐
+
+### 64.1 实现
+
+- `FetchDailyBars` 对 forward-adjusted Bar 写入实际参与 GBBQ 复权计算的最新加载交易日作为 `AdjustmentRefDate`。
+- 对 backward-adjusted Bar 写入完整历史扫描的最早交易日作为 `AdjustmentRefDate`；backward 路径本身要求历史扫描完整，不使用返回 limit 或请求窗口首日冒充锚点。
+- none 不填 `AdjustmentRefDate`。
+- 增加单测覆盖：请求窗口早于最新源数据时 qfq 仍引用最新加载日；请求窗口晚于最早历史日时 hfq 仍引用完整历史最早日。
+
+### 64.2 GitHub Actions 实测
+
+- Live Provider Probe Push Run：`41960406846` success，Pytdx 历史探测的 method/ref-date 断言全部通过。
+- 600036.SH：qfq ref date `2026-11-05`；hfq ref date `2002-04-09`。
+- 002982.SZ：qfq ref date `2026-11-05`；hfq ref date `2020-04-24`。
+- 两只股票 none/qfq/hfq 均返回 9 条；质量统计均为 9/9 valid。
+- Go test suite Push Run：`41960406782` 全部 5 个 Job success，包含 market-data gofmt/unit/race/vet、MariaDB migration/PIT、根模块、go-core、Compose/Docker。
+- 同一 Live Run 的 Pytdx/BaoStock 2025 公司行为事件仍为 3/3 matched。
+
+### 64.3 结论边界
+
+- Pytdx ref date 现在有明确算法锚点和真实数据证据，元数据完整性改善。
+- 这不会改变 Pytdx 与 BaoStock 的原生复权算法差异；比较器仍要求 method/ref date 同时一致，不会因此把两边 adjusted OHLC 判为 matched。
+- BaoStock、Eastmoney、Tencent 和 Tushare hfq 的 ref date 仍按 section 63 所列状态处理，不补猜测值。

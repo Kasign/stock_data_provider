@@ -52,7 +52,7 @@ func (p *Tushare) FetchAdjustmentFactors(ctx context.Context, rawSymbol, startDa
 	out := make([]model.AdjustmentFactor, 0, len(values))
 	for tradeDate, factor := range values {
 		out = append(out, model.AdjustmentFactor{
-			Symbol: symbol, TradeDate: tradeDate, Factor: factor,
+			Symbol: symbol, TradeDate: tradeDate, Factor: factor, Basis: model.AdjustmentFactorShared,
 			Source: p.Name(), SourceVersion: tushareVersion, FetchedAt: fetchedAt,
 			QualityStatus:  model.QualityDegraded,
 			QualityReasons: []string{"provider_available_at_not_exposed_by_adj_factor"},

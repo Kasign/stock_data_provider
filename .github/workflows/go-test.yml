@@ -127,6 +127,16 @@ jobs:
         env:
           MARKET_DATA_TEST_MYSQL_DSN: "root:market-data-ci@tcp(127.0.0.1:3306)/market_data_test?parseTime=true&loc=UTC"
         run: go test ./internal/repository -run TestMariaDBRevisionPersistenceAndPointInTimeQueries -count=1 -v
+      - name: Run DataService MariaDB daily-bar fallback integration
+        working-directory: services/market-data
+        env:
+          MARKET_DATA_TEST_MYSQL_DSN: "root:market-data-ci@tcp(127.0.0.1:3306)/market_data_test?parseTime=true&loc=UTC"
+        run: go test ./internal/service -run TestDailyBarsMariaDBFallbackPreservesNormalizationWarnings -count=1 -v
+      - name: Run DataService PIT revision fallback integration
+        working-directory: services/market-data
+        env:
+          MARKET_DATA_TEST_MYSQL_DSN: "root:market-data-ci@tcp(127.0.0.1:3306)/market_data_test?parseTime=true&loc=UTC"
+        run: go test ./internal/service -run 'Test(AdjustmentFactors|CorporateActions)AsOfFallsBackToLatestProviderVisibleRevision' -count=1 -v
       - name: Run Probe HTTP and MariaDB end-to-end integration
         working-directory: services/market-data
         env:
