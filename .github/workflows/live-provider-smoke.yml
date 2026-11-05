@@ -218,8 +218,9 @@ jobs:
           LIVE_PROBE_DAILY_END_DATE: "2025-07-17"
           LIVE_PROBE_DAILY_SYMBOLS: "600036.SH,002982.SZ"
           LIVE_PYTDX_HISTORICAL_REPORT_PATH: ${{ github.workspace }}/live-pytdx-historical-report.json
+          LIVE_PYTDX_BAOSTOCK_EVENT_REPORT_PATH: ${{ github.workspace }}/live-pytdx-baostock-event-report.json
         working-directory: services/market-data
-        run: go test -run TestLivePytdxHistoricalDailyBars -count=1 -v ./internal/provider
+        run: go test -run 'TestLivePytdxHistoricalDailyBars|TestLivePytdxBaoStockCorporateActionConsistency' -count=1 -v ./internal/provider
       - name: Print Pytdx historical report
         if: always()
         run: |
@@ -234,6 +235,21 @@ jobs:
         with:
           name: live-pytdx-historical-report
           path: live-pytdx-historical-report.json
+          if-no-files-found: warn
+      - name: Print Pytdx/BaoStock corporate-action event report
+        if: always()
+        run: |
+          if [[ -f live-pytdx-baostock-event-report.json ]]; then
+            cat live-pytdx-baostock-event-report.json
+          else
+            echo "No Pytdx/BaoStock event report was produced."
+          fi
+      - name: Upload Pytdx/BaoStock corporate-action event report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: live-pytdx-baostock-event-report
+          path: live-pytdx-baostock-event-report.json
           if-no-files-found: warn
       - name: Probe native news search when credentials are available
         env:
