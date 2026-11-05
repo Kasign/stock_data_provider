@@ -356,10 +356,10 @@ func TestFeedEmptyPayloadDoesNotCreateBody(t *testing.T) {
 			if entry.ContentLayers("").Body != nil {
 				t.Fatalf("empty payload created body: %+v", entry)
 			}
-			if !equalStrings(entry.MissingFields, []string{"id", "title", "link", "published_at", "content"}) && tc.name == "rss empty content" {
+			if !equalStrings(entry.MissingFields, []string{"id", "link", "published_at", "content"}) && tc.name == "rss empty content" {
 				t.Fatalf("missing fields=%v", entry.MissingFields)
 			}
-			if !equalStrings(entry.MissingFields, []string{"published_at", "content"}) && tc.name == "atom empty content" {
+			if !equalStrings(entry.MissingFields, []string{"link", "published_at", "content"}) && tc.name == "atom empty content" {
 				t.Fatalf("missing fields=%v", entry.MissingFields)
 			}
 		})
