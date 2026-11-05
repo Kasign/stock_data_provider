@@ -127,6 +127,7 @@ export function bindLocalAlertDrafts({ root = document, storage } = {}) {
   });
 
   const hasUnsavedEditorChanges = () => currentEditorSnapshot() !== editorBaselineSnapshot;
+  editorBaselineSnapshot = currentEditorSnapshot();
 
   const feedback = (message, error = false) => {
     const node = $("#local-alert-draft-feedback");
