@@ -2,7 +2,7 @@
 
 ## 1. HTTP Client
 
-统一最基本的外部请求治理，避免 Provider 慢响应、异常大响应和重试放大。
+统一最基本的外部请求治理，避免 Provider 慢响应、异常大响应、重试放大和不可信目标地址导致的 SSRF。
 
 必须具备：
 - 连接复用，不为每次请求创建 Transport；
@@ -69,3 +69,51 @@ Redis 仅承担缓存和可丢失的短期辅助状态。所有缓存有 TTL 和
 - 缓存必须有 TTL，且缓存失效不能破坏事实数据。
 - 大响应和大任务输入设置大小上限。
 - 性能优化以 p95/p99、资源占用、连接池等待和 Provider 延迟等实际测量为依据，不提前建设分布式组件。
+
+
+## 7. 不可信 URL 与 SSRF 防护（强制安全契约）
+
+HTTP Client 必须区分固定 Provider API Endpoint 与不可信来源 URL。新闻 Source Fetcher 只接受已登记的 source_id/endpoint_id 解析出的 URL，不接受用户直接提交任意 URL；来源授权、允许域名和用途策略由 News 持有，底层网络目标校验由平台 HTTP Client 执行。两层校验缺一不可。
+
+### 7.1 URL 与目标地址校验
+
+- 仅允许显式配置的 HTTP/HTTPS scheme；默认拒绝其他 scheme、userinfo、空 host、IPv6 zone 和非允许端口。
+- Source Fetch 场景必须执行来源 host/port allowlist 校验；不能把任意公网地址等同于已授权来源。
+- 拒绝 loopback、private、link-local、unspecified、multicast、保留/特殊用途地址、IPv4-mapped IPv6，以及策略明确禁止的地址段。
+- DNS 解析结果必须完整检查；同一 hostname 返回的地址中只要存在禁止地址，默认整体拒绝，不能只挑选一个公网地址继续。
+- IP literal 与 DNS 解析结果执行相同地址策略。
+- 不信任 X-Forwarded-*、客户端身份 Header 或 URL 文本中的主机声明作为安全依据。
+
+### 7.2 DNS rebinding 防护
+
+不能采用“先 LookupIP 校验，随后让默认 Transport 再解析一次 hostname”的实现。
+
+必须由受控 DialContext 完成解析、地址校验和连接：
+1. 对目标 hostname 执行 DNS 解析；
+2. 检查全部 A/AAAA 结果及特殊地址；
+3. 选择通过策略的 IP；
+4. 使用该 IP literal 直接建立 TCP 连接，不再对 hostname 二次解析；
+5. TLS ServerName 和 HTTP Host 仍使用原始 hostname，保持证书校验和虚拟主机语义。
+
+即校验通过的 IP 必须与实际连接 IP 绑定。每次新建连接都重新执行解析和校验；不能依赖不受控的长 TTL DNS 结果作为授权依据。
+
+### 7.3 重定向逐跳校验
+
+- 默认禁止自动重定向。
+- 需要重定向的 Source Fetch 必须显式启用有限跳数策略（首期建议最多 3 跳）。
+- 每一跳重新校验 scheme、userinfo、host、port、来源 allowlist 和 DNS/IP；最终连接仍通过上述受控 DialContext。
+- 不允许 HTTPS 降级到 HTTP；跨 host 跳转必须再次满足来源策略，不继承原 host 的授权。
+- 重定向循环、超限、目标不合规时立即失败，不跟随。
+- 不能通过自定义 CheckRedirect 校验后，再让默认 Dialer 独立解析目标地址。
+
+### 7.4 Proxy 与并发边界
+
+- 不可信 URL 抓取默认禁用环境代理和隐式 ProxyFromEnvironment；如将来使用受控代理，必须由代理端实施等价的 DNS/IP/重定向防护，并有明确配置。
+- HTTP Client 按逻辑 dependency 提供有限并发上限，避免单一来源拖垮其他调用；Provider 配额、账号级速率限制和业务成本仍由 News/Data Adapter 管理。
+- DNS、连接、TLS、响应头、总请求均受 context/deadline 约束；响应体和重定向次数有上限。
+
+### 7.5 最小安全测试矩阵
+
+覆盖 IPv4/IPv6 私网、loopback、link-local、保留地址、IPv4-mapped IPv6、混合公网/私网 DNS 结果、DNS 结果变化/rebinding、重定向到私网/其他 host/HTTP 降级、userinfo、非标准端口、代理环境变量、重定向循环和连接超时。
+
+固定 Provider API 也必须使用明确的 endpoint 策略；Source Fetch 的来源授权策略不能被通用 HTTP Client 代替。未完成上述安全测试前，不开放任意来源真实抓取。
