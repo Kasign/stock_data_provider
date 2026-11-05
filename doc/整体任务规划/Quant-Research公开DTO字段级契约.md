@@ -284,3 +284,240 @@ Researchflow 是唯一跨模块组合者，并负责传播同一 Run 的 system_
 ## 8. 当前结论
 
 本文将 Quant / Research 公开 DTO 从概念性字段推进到字段级草案，可进入模块 Owner Review，但价格精度、参数结构、授权引用和复合子对象仍有未决项。GOV-004 仍未通过；本文不构成 Schema 冻结，也不授权创建模块分支。
+
+
+## 9. 复合 DTO 字段级定义
+
+本节补齐第 6 节列出的复合对象。所有引用均为不透明 ID；数组顺序如影响语义必须由生产方保证并写入 Schema 说明。
+
+### 9.1 ContextSectionRef
+
+| JSON 字段 | 必需 | 类型/约束 | 语义 |
+|---|---|---|---|
+| section_id | 是 | string | 稳定分区编码，如 market_overview、security_profile、quant_metrics、events、risks |
+| section_version | 是 | string | 分区内容版本/指纹 |
+| source_owner | 是 | data/quant/research/news | 权威来源模块 |
+| source_refs | 是 | string[] | 来源对象引用，可为空仅限纯 Research 派生分区 |
+| evidence_refs | 是 | string[] | 分区内证据引用 |
+| quality_status | 是 | valid/degraded/invalid/unknown | 分区质量 |
+| required | 是 | boolean | 本研究模板是否要求该分区 |
+| included | 是 | boolean | 是否实际装入 Context |
+| observed_at | 是 | timestamp | 本次装配观察时间 |
+| system_as_of | 是 | timestamp | 分区知识截止时间 |
+
+同一 Context 中 section_id 唯一；同一 section_id 的不同版本不能同时作为当前版本装入，除非显式标记为对比研究。
+
+### 9.2 OmittedSection
+
+| JSON 字段 | 必需 | 类型/约束 | 语义 |
+|---|---|---|---|
+| section_id | 是 | string | 被省略分区编码 |
+| source_owner | 是 | enum | 来源模块 |
+| reason_code | 是 | not_requested/budget_exceeded/unavailable/unauthorized/quality_rejected/failed/duplicate | 省略原因 |
+| required | 是 | boolean | 是否为模板必需 |
+| source_refs | 是 | string[] | 已知来源引用，可为空 |
+| safe_message | 是 | string | 可对调用方展示的安全摘要 |
+| retryable | 是 | boolean | 是否允许重新装配时重试 |
+
+required=true 的分区被省略时，Context 整体不能标记为 valid；必须由 Researchflow 按 Workflow 门禁决定阻断、降级或失败。
+
+### 9.3 ScenarioCondition
+
+| JSON 字段 | 必需 | 类型/约束 | 语义 |
+|---|---|---|---|
+| condition_id | 是 | string | 条件稳定编码 |
+| condition_type | 是 | price/volume/indicator/event/fundamental/market/industry/other | 条件类别 |
+| description | 是 | string | 人类可读条件 |
+| operator | 是 | gt/gte/lt/lte/eq/neq/in/not_in/crosses/exists/not_exists | 比较运算 |
+| metric_ref | 条件必需 | string | Quant Metric 或外部事实引用 |
+| expected_value | 条件必需 | typed scalar/object | 目标值；必须与 unit 一致 |
+| unit | 条件必需 | string | 比较单位 |
+| window | 否 | string | 条件观察窗口 |
+| evaluation_status | 是 | satisfied/not_satisfied/unknown/not_evaluated | 当前验证状态 |
+| evidence_refs | 是 | string[] | 支撑该条件的证据 |
+| required | 是 | boolean | 是否为场景成立的必要条件 |
+
+条件表达式不允许执行任意代码、SQL、脚本或外部 URL。跨多个条件的 AND/OR 组合应使用受限 ConditionGroup（operator=all/any、conditions[]），不允许隐式自然语言解析作为唯一执行依据。
+
+### 9.4 RiskReason
+
+| JSON 字段 | 必需 | 类型/约束 | 语义 |
+|---|---|---|---|
+| code | 是 | string | 稳定机器码 |
+| severity | 是 | block/warn/info | 严重级别 |
+| status | 是 | triggered/not_triggered/unknown | 规则评估状态 |
+| safe_message | 是 | string | 安全摘要，不含敏感内部细节 |
+| rule_ref | 是 | string | 规则 ID/版本引用 |
+| evidence_refs | 是 | string[] | 触发/无法评估的证据 |
+| observed_value | 否 | string/number/null | 脱敏后的观察值 |
+| expected_range | 否 | string | 规则阈值摘要 |
+| remediation_code | 否 | string | 建议处置机器码 |
+
+只要存在 severity=block 且 status=triggered，RiskDecision 不得 pass。任何必需阻断规则 status=unknown 时，RiskDecision 不得 pass。warn/info 不得被提升为硬门禁，除非规则集版本明确配置。
+
+### 9.5 EvidenceAuthorizationRef
+
+统一引用授权决策，不把授权结论简化为 Evidence 的永久布尔值。
+
+| JSON 字段 | 必需 | 类型/约束 | 语义 |
+|---|---|---|---|
+| authorization_ref | 是 | string | 不透明授权决策 ID |
+| policy_owner | 是 | data/news/quant/research | 授权策略权威模块 |
+| policy_version | 是 | string | 策略版本 |
+| decision | 是 | allowed/denied/conditional/unknown | 当时决策 |
+| purpose | 是 | string/enum | 使用目的 |
+| content_level | 是 | metadata/summary/snippet/full | 内容级别 |
+| subject_ref | 是 | string | 被授权来源对象 |
+| decided_at | 是 | timestamp | 决策时间 |
+| expires_at | 否 | timestamp | 授权到期时间 |
+| conditions | 是 | string[] | 限制条件，可为空 |
+| decision_fingerprint | 是 | string | 决策内容指纹 |
+
+该对象是决策审计快照，不代表未来访问自动获准。读取时必须由权威模块按当前策略重新授权；历史 Run 回放同时保留当时决策和当前访问决策，二者不能互相覆盖。
+
+### 9.6 EventSourceTime
+
+Event 允许多来源时间并存，不以单一 occurred_at 覆盖冲突来源。
+
+| JSON 字段 | 必需 | 类型/约束 | 语义 |
+|---|---|---|---|
+| evidence_ref | 是 | string | 对应来源证据 |
+| time_type | 是 | occurred_at/published_at/available_at/observed_at | 时间语义 |
+| value | 是 | timestamp | 来源/系统时间值 |
+| asserted_by | 是 | string | 来源或系统主体引用 |
+| confidence | 否 | number/null | 时间可信程度及其评估方法 |
+| notes | 否 | string | 时间解释/冲突说明 |
+
+Event 可保留规范化 occurred_at 作为研究归一结果，但必须同时提供 source_times[]；规范化值必须能追溯到所采用的证据与规则版本。
+
+## 10. 最小 JSON 示例与空值规则
+
+以下示例用于固定字段语义，不代表最终 JSON Schema 已生成。示例时间均为 UTC；交易日字段另用 YYYY-MM-DD。
+
+### 10.1 QuantMetric：无数据与有效值
+
+无数据时显式 null，不能省略 value 或填 0：
+
+```json
+{
+  "metric_code": "volatility_20d",
+  "value": null,
+  "unit": "ratio",
+  "period": "20d",
+  "as_of": "2026-11-04T08:00:00Z",
+  "quality_status": "unknown",
+  "metric_status": "insufficient_data",
+  "calculation_version": "volatility.v1",
+  "sample_count": 8,
+  "lower_bound": null,
+  "upper_bound": null
+}
+```
+
+有效值示例：
+
+```json
+{
+  "metric_code": "turnover_amount",
+  "value": "125000000.00",
+  "unit": "CNY",
+  "period": "1d",
+  "as_of": "2026-11-04T08:00:00Z",
+  "quality_status": "valid",
+  "metric_status": "available",
+  "calculation_version": "turnover.v1",
+  "sample_count": 1,
+  "lower_bound": null,
+  "upper_bound": null
+}
+```
+
+注意：示例使用 decimal string 表达金额，作为当前推荐方向；最终需在模块 Owner Review 中冻结。若采用该方案，所有金额/价格字段统一 decimal string，不能同一 DTO 中混用 number 和 string。
+
+### 10.2 RiskDecision：未知不得放行
+
+```json
+{
+  "decision_id": "risk_decision_example",
+  "status": "unknown",
+  "rule_set_version": "risk.rules.v1",
+  "evaluated_at": "2026-11-04T08:01:00Z",
+  "as_of": "2026-11-04T08:00:00Z",
+  "input_refs": ["quant_result_example"],
+  "reasons": [
+    {
+      "code": "TRADING_STATUS_UNAVAILABLE",
+      "severity": "block",
+      "status": "unknown",
+      "safe_message": "无法确认证券当前交易状态",
+      "rule_ref": "risk.trading_status.v1",
+      "evidence_refs": [],
+      "remediation_code": "REFRESH_SECURITY_STATUS"
+    }
+  ]
+}
+```
+
+### 10.3 Evidence：来源知识时间和授权引用
+
+```json
+{
+  "evidence_id": "evidence_example",
+  "evidence_type": "reported_fact",
+  "source_owner": "news",
+  "source_ref": "news_object_example",
+  "source_version": "version_3",
+  "subject_refs": ["security_example"],
+  "published_at": "2026-11-03T02:00:00Z",
+  "available_at": null,
+  "observed_at": "2026-11-03T02:05:00Z",
+  "system_as_of": "2026-11-04T08:00:00Z",
+  "stance": "supports",
+  "confidence": null,
+  "quality_status": "degraded",
+  "authorization_ref": "authorization_decision_example",
+  "limitations": ["来源未提供可验证的首次公开时间"],
+  "content_fingerprint": "sha256:example"
+}
+```
+
+available_at=null 表示没有可验证的外部可获得时间，不得用 published_at 或 observed_at 自动填充。授权决策详情由 EvidenceAuthorizationRef 对应权威模块查询。
+
+### 10.4 ScenarioCondition：受限可执行条件
+
+```json
+{
+  "condition_id": "close_above_ma20",
+  "condition_type": "indicator",
+  "description": "收盘价高于 MA20",
+  "operator": "gt",
+  "metric_ref": "metric_close_example",
+  "expected_value": "20.50",
+  "unit": "CNY/share",
+  "window": "1d",
+  "evaluation_status": "not_evaluated",
+  "evidence_refs": [],
+  "required": true
+}
+```
+
+### 10.5 序列化空值规则
+
+- required 且 nullable：字段必须存在，值可为 null。
+- optional 且 non-nullable：无值时省略，不得输出 null。
+- optional 且 nullable：是否省略或输出 null 必须由字段级 Schema 固定，禁止同一版本混用。
+- required 且 non-nullable：字段必须存在且非 null。
+- 空数组表示已评估但集合为空；null 表示未知/不可得（仅在字段允许 nullable 时）。
+- 对于计数，0 表示确实统计为零；统计未执行或未知必须用状态字段表达，不能填 0 伪装成功。
+
+## 11. 精度策略建议（待 Owner 冻结）
+
+建议将所有货币和价格金额采用 JSON string decimal：
+- 金额：定点 decimal，单位字段明确；如 "125000000.00" CNY。
+- 价格：定点 decimal；精度由 Data 源字段和证券市场规则约束，不统一强行四舍五入为两位。
+- 比例/收益率：使用 number 仅限有明确范围和误差容忍的统计量；百分比字段明确 percentage_point 或 ratio。
+- 计算内部可使用 decimal 或整数最小单位；不得通过 float64 计算货币后再声称精确。
+- 所有 decimal string 使用规范格式：十进制、无千分位、无货币符号、无科学计数法；负数使用前导负号。
+- JSON Schema 使用 string + pattern/format 约束，并在 Go 侧使用专用 Decimal 类型和 Marshal/Unmarshal 测试。
+
+该建议优于 JSON number 的原因是避免跨语言 IEEE-754 精度损失，尤其金额、价格、成本和收益计算。但需要结合现有 Data OpenAPI 的 number 字段决定 Adapter 边界转换，不要求修改 Data 服务既有 API；Quant 内部和 Quant/Research/Researchflow 跨模块契约应统一。
