@@ -107,3 +107,38 @@ func TestRunnerTotalDeadlineMarksQueuedOptionalCheckUnavailable(t *testing.T) {
 		t.Fatalf("expected queued optional check unavailable, got %s", report.Results[1].Observation.Status)
 	}
 }
+
+func TestRunnerDoesNotInferDependencyFromCheckID(t *testing.T) {
+	check := Check{ID: "storage.mariadb.ping", Required: true, Run: func(context.Context) (Observation, error) {
+		return Observation{}, &fault.Fault{
+			Class: fault.ClassUnavailable, Code: "storage.mariadb.unavailable",
+			SafeMessage: "database unavailable",
+		}
+	}}
+	report, err := (Runner{}).Run(context.Background(), []Check{check})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := report.Results[0].Fault.Dependency; got != "" {
+		t.Fatalf("check ID must not be misrepresented as dependency: %q", got)
+	}
+}
+
+func TestRunnerRejectsUnknownFaultClass(t *testing.T) {
+	check := Check{ID: "invalid-fault", Required: true, Run: func(context.Context) (Observation, error) {
+		return Observation{}, &fault.Fault{
+			Class: fault.Class("custom"), Code: "custom.failure",
+			SafeMessage: "untrusted message",
+		}
+	}}
+	report, err := (Runner{}).Run(context.Background(), []Check{check})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := report.Results[0].Fault
+	if got == nil || got.Class != fault.ClassInternal ||
+		got.Code != "platform.diagnostics.invalid_fault" ||
+		got.SafeMessage != "check returned an invalid fault" {
+		t.Fatalf("unexpected normalized fault: %+v", got)
+	}
+}

@@ -115,7 +115,7 @@ func execute(parent context.Context, check Check) (result Result) {
 		runErr = ctx.Err()
 	}
 	if runErr != nil {
-		f := normalizeFault(runErr, check.ID, ctx.Err())
+		f := normalizeFault(runErr, ctx.Err())
 		result.Fault = f
 		status := StatusFailed
 		if f.Class == fault.ClassTimeout || f.Class == fault.ClassUnavailable {
@@ -158,13 +158,16 @@ func execute(parent context.Context, check Check) (result Result) {
 	return result
 }
 
-func normalizeFault(err error, dependency string, contextErr error) *fault.Fault {
+func normalizeFault(err error, contextErr error) *fault.Fault {
 	var f *fault.Fault
 	if errors.As(err, &f) && f != nil {
-		copy := *f
-		if copy.Dependency == "" {
-			copy.Dependency = dependency
+		if !validFaultClass(f.Class) {
+			return &fault.Fault{
+				Class: fault.ClassInternal, Code: "platform.diagnostics.invalid_fault",
+				SafeMessage: "check returned an invalid fault", Cause: err,
+			}
 		}
+		copy := *f
 		if copy.Code == "" {
 			copy.Code = "platform.diagnostics.check_failed"
 		}
@@ -188,6 +191,18 @@ func normalizeFault(err error, dependency string, contextErr error) *fault.Fault
 	return &fault.Fault{
 		Class: fault.ClassInternal, Code: "platform.diagnostics.check_failed",
 		SafeMessage: "check failed", Dependency: dependency, Cause: err,
+	}
+}
+
+
+func validFaultClass(class fault.Class) bool {
+	switch class {
+	case fault.ClassValidation, fault.ClassUnauthenticated, fault.ClassForbidden,
+		fault.ClassNotFound, fault.ClassConflict, fault.ClassUnavailable,
+		fault.ClassTimeout, fault.ClassInternal:
+		return true
+	default:
+		return false
 	}
 }
 
