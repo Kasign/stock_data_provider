@@ -2403,3 +2403,10 @@ CSS AST 检查器进一步扩展：
 - [ ] 迁移前复核候选 CSS 规则与 shared-controls 的边界；未完成评审前不拆分。
 
 说明：fixture 是当前实现的回归基线，不代表产品视觉设计稿或设计正确性。
+
+
+### CSSOM fixture 格式修复
+
+- [x] 已定位首次回归失败为 gzip fixture 字节损坏（`Z_DATA_ERROR`），不是页面样式变化。
+- [x] 使用已成功采集的 CSSOM Artifact 重建 gzip fixture。
+- [ ] 重新验收 Chromium CI 中的 fixture 解压、8 场景比较及 artifact 上传。
