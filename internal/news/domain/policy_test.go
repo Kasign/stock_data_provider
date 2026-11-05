@@ -107,6 +107,7 @@ func validProviderOutputPolicy() ProviderOutputPolicy {
 	return ProviderOutputPolicy{
 		Status:                   AuthorizationApproved,
 		AllowedPurposes:          []Purpose{PurposeInternalPersonalResearch},
+		AllowedContentKinds:      []ContentKind{ContentMetadata},
 		AllowRequestProcessing:  true,
 		MaxRequestRetention:     time.Hour,
 		AllowedStorageModes:     []StorageMode{StoragePersistentMetadata},
@@ -173,6 +174,7 @@ func TestEvaluateProviderOutputPolicyRejectsUnauthorizedPersistence(t *testing.T
 	request := validCollectionRequest()
 	request.ContentKind = ContentMetadata
 	request.StorageMode = StoragePersistentFullText
+	request.ContentKind = ContentFullText
 
 	decision := EvaluateProviderOutputPolicy(policy, request, time.Now().UTC())
 	if decision.Allowed || decision.ReasonCode != "news.policy.provider_storage_denied" {

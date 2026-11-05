@@ -88,6 +88,7 @@ type EndpointPolicy struct {
 type ProviderOutputPolicy struct {
 	Status                   AuthorizationStatus
 	AllowedPurposes          []Purpose
+	AllowedContentKinds      []ContentKind
 	AllowRequestProcessing  bool
 	AllowCrossRequestCache  bool
 	MaxRequestRetention     time.Duration
@@ -259,6 +260,9 @@ func EvaluateProviderOutputPolicy(policy ProviderOutputPolicy, request Collectio
 	}
 	if !containsPolicyValue(policy.AllowedPurposes, request.Purpose) {
 		return denied("news.policy.provider_purpose_denied")
+	}
+	if !containsPolicyValue(policy.AllowedContentKinds, request.ContentKind) {
+		return denied("news.policy.provider_content_denied")
 	}
 	if !policy.AllowRequestProcessing {
 		return denied("news.policy.provider_processing_denied")
