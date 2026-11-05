@@ -96,12 +96,12 @@ func TestTavilyUsesBearerHeaderAndPreservesPublishedDate(t *testing.T) {
 
 func TestSearXNGPreservesProviderAndParsesExplicitTimestamp(t *testing.T) {
 	client := roundTripFunc(func(req *http.Request) (*http.Response, error) {
-		if req.URL.Path != "/search" || req.URL.Query().Get("q") != "市场消息" || req.URL.Query().Get("format") != "json" {
+		if req.URL.Path != "/search" || req.URL.Query().Get("q") != "市场消息" || req.URL.Query().Get("format") != "json" || req.URL.Query().Get("language") != "zh-CN" {
 			t.Fatalf("request URL=%s", req.URL.String())
 		}
 		return response(`{"results":[{"title":"标题","url":"https://publisher.example/a","content":"摘要","publishedDate":"2026-11-04T08:30:00+08:00"}]}`), nil
 	})
-	p, err := NewSearXNG("https://searx.example", client)
+	p, err := NewSearXNG("https://searx.example/search?language=zh-CN", client)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -181,5 +181,14 @@ func TestSearXNGRejectsMissingResultsField(t *testing.T) {
 	items, err := p.Search(context.Background(), domain.SearchRequest{Query: "测试", Limit: 5})
 	if err == nil || items != nil {
 		t.Fatalf("missing results field must be rejected: items=%+v err=%v", items, err)
+	}
+}
+
+func TestProviderRejectsCredentialQueryParameters(t *testing.T) {
+	client := roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		return response(`{}`), nil
+	})
+	if _, err := NewTavily("https://api.example.test/search?api_key=secret", "secret", client); err == nil {
+		t.Fatal("credential query parameters must be rejected")
 	}
 }

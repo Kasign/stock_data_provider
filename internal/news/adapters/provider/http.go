@@ -27,13 +27,25 @@ type config struct {
 func newConfig(endpoint, apiKey string, client app.HTTPDoer) (config, error) {
 	endpoint = strings.TrimSpace(endpoint)
 	parsed, err := url.Parse(endpoint)
-	if err != nil || parsed.Scheme == "" || parsed.Host == "" || parsed.User != nil || (parsed.Scheme != "https" && parsed.Scheme != "http") {
+	if err != nil || parsed.Scheme == "" || parsed.Host == "" || parsed.User != nil || (parsed.Scheme != "https" && parsed.Scheme != "http") || hasCredentialQuery(parsed.Query()) {
 		return config{}, app.ErrProviderConfig
 	}
 	if client == nil {
 		return config{}, app.ErrProviderConfig
 	}
 	return config{endpoint: endpoint, apiKey: strings.TrimSpace(apiKey), client: client}, nil
+}
+
+
+func hasCredentialQuery(query url.Values) bool {
+	for key := range query {
+		normalized := strings.NewReplacer("_", "", "-", "").Replace(strings.ToLower(key))
+		switch normalized {
+		case "apikey", "accesskey", "accesstoken", "token", "authorization", "subscriptiontoken", "clientsecret":
+			return true
+		}
+	}
+	return false
 }
 
 func (c config) do(ctx context.Context, method, target string, headers map[string]string, payload any) ([]byte, error) {

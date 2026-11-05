@@ -188,11 +188,21 @@ func (p *Brave) Search(ctx context.Context, req domain.SearchRequest) ([]domain.
 type SearXNG struct{ cfg config }
 
 func NewSearXNG(baseURL string, client app.HTTPDoer) (*SearXNG, error) {
-	baseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
-	if !strings.HasSuffix(strings.ToLower(baseURL), "/search") {
-		baseURL += "/search"
+	parsed, err := url.Parse(strings.TrimSpace(baseURL))
+	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
+		return nil, app.ErrProviderConfig
 	}
-	cfg, err := newConfig(baseURL, "", client)
+	path := strings.TrimRight(parsed.Path, "/")
+	if !strings.HasSuffix(strings.ToLower(path), "/search") {
+		path += "/search"
+	}
+	if path == "" {
+		path = "/search"
+	}
+	parsed.Path = path
+	parsed.RawPath = ""
+
+	cfg, err := newConfig(parsed.String(), "", client)
 	if err != nil {
 		return nil, err
 	}
