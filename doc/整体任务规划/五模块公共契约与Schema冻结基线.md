@@ -171,6 +171,9 @@ CapabilityState {
   provider_id, model_id, gateway_version, capability_code,
   state: supported|unsupported|unknown, checked_at, evidence_ref?
 }
+ModelErrorInfo {
+  kind, stable_code, retryable, http_status?, retry_after?, safe_message
+}
 ```
 
 首批协议以 OpenAI Responses 为基线，内部 ModelRequest 暂定单轮 input_text + instructions；复杂 input item、多模态和多协议路由 deferred。ModelResponse 必须保留 output item 类型与 completed/incomplete/failed 状态；Usage 缺失保持 unknown/null。Stream 使用同步 callback 并返回最终 ModelResponse；无 terminal 的 EOF 视为 stream_interrupted。ToolDefinition 是受控可选项，默认 tool_choice=none，只有 capability=supported 才允许发送；LLM 不执行工具，Researchflow 负责授权、校验和执行。Structured Output 本地 Schema 基线建议 Draft 2020-12，上游 strict 子集能力单独验证。Request ID、Gateway ID、上游 ID 和 correlation ID 分开保存。Prompt 正文默认不持久化。字段细节见 doc/llm/04-ProviderPort与DTO字段级契约.md。

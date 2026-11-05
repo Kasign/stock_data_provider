@@ -187,7 +187,7 @@ ModelEvent 字段：type、sequence_number?、response_id?、output_index?、con
 
 ## 7. Error Contract 与重试
 
-ModelErrorKind：invalid_request、unauthorized、rate_limited、overloaded、timeout、cancelled、upstream_unavailable、upstream_error、invalid_response、incomplete_response、schema_validation_failed、unsupported_capability、stream_interrupted。
+ModelErrorKind：invalid_request、unauthorized、rate_limited、overloaded、timeout、cancelled、upstream_unavailable、upstream_error、invalid_response、incomplete_response、schema_validation_failed、unsupported_capability、stream_interrupted、stream_sequence_gap、resource_limit。
 
 ModelErrorInfo 字段为 kind、stable_code、retryable、http_status?、retry_after?、request_id?、safe_message；底层 Cause 仅内部日志，不序列化给调用方。
 

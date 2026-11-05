@@ -187,7 +187,7 @@ data: {"type":"response.completed","sequence_number":7,"response":{"id":"resp_to
 - `stream_callback_error.test`：callback 返回 sentinel error；立即停止读取并返回部分 Response + 原 callback error。
 - `stream_context_cancel.test`：Context cancel/deadline；关闭上游 body/连接，返回部分 Response（若有）和 cancelled/timeout typed error。
 - `stream_slow_callback.test`：慢 callback 应形成自然背压，不创建无界事件缓冲队列。
-- `stream_large_event.test`：单行/单事件/累计字节超限，返回 resource_limit/invalid_response，并释放资源。
+- `stream_large_event.test`：单行/单事件/累计字节超限，返回 resource_limit，并释放资源。
 
 ## 6. 统一断言矩阵
 
