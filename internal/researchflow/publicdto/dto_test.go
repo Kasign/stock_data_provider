@@ -41,6 +41,7 @@ func TestPublicDTOSchemaGoldens(t *testing.T) {
 		{"run-1.0.0.schema.json","run-partial-1.0.0.golden.json"},
 		{"run-1.0.0.schema.json","run-failed-1.0.0.golden.json"},
 		{"run-1.0.0.schema.json","run-cancelled-1.0.0.golden.json"},
+		{"result-summary-1.0.0.schema.json","result-summary-partial-1.0.0.golden.json"},
 		{"stage-1.0.0.schema.json","stage-ready-1.0.0.golden.json"},
 		{"stage-1.0.0.schema.json","stage-degraded-1.0.0.golden.json"},
 		{"stage-1.0.0.schema.json","stage-failed-1.0.0.golden.json"},
@@ -125,6 +126,7 @@ func TestDomainProjectionsValidateAgainstTheirPublicSchemas(t *testing.T) {
 		if err:=compiled.Validate(instance);err!=nil{t.Fatalf("%s DTO violates public schema: %v; json=%s",name,err,raw)}
 	}
 	assertDTO("Run","run-1.0.0.schema.json",run)
+	assertDTO("ResultSummary","result-summary-1.0.0.schema.json",ResultSummaryFromDomain(domainRunSummaryForTest()))
 	assertDTO("Stage","stage-1.0.0.schema.json",stage)
 	assertDTO("Attempt","attempt-1.0.0.schema.json",attempt)
 }
@@ -137,3 +139,14 @@ func TestAttemptDTOClonesNullableTimePointers(t *testing.T) {
 }
 
 func timePointer(v time.Time) *time.Time { return &v }
+
+func domainRunSummaryForTest() *domain.ResultSummary {
+	return &domain.ResultSummary{
+		StageOutcomes:map[string]domain.StageStatus{"quote":domain.StageDegraded},
+		ExcludedStages:[]domain.ExcludedStage{{StageCode:"optional_news",RuleVersion:"v2",ReasonCode:"market_closed"}},
+		MissingStageCodes:[]string{"risk"},DegradedStageCodes:[]string{"quote"},
+		BlockedStageCodes:[]string{},ReasonCodes:[]string{"source_partial"},
+		Coverage:0.5,QualityStatus:"incomplete",RiskGateDecisions:map[string]string{"risk":"unknown"},
+		ActionabilityStatus:"blocked",
+	}
+}
