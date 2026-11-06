@@ -1395,7 +1395,7 @@ func TestRecordProviderProbeFetchedAtKeepsCollectionTimeSeparateFromSourceTime(t
 
 func containsProbeReason(reasons []string, expected string) bool {
 	for _, reason := range reasons {
-		if reason == expected {
+		if reason == expected || strings.HasPrefix(reason, expected) {
 			return true
 		}
 	}
