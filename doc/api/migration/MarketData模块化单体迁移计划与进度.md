@@ -525,3 +525,8 @@ internal/platform/httpclient.Client 使用 DestinationPolicy 精确 Host/Port al
 3. 明确 Data/Analysis Migration 的版本治理和共享数据库真实部署配置，并获得最新完整 Go test、Parity、Compose/Docker 验收结果；另需定位 WebUI browser smoke 的 320px ERR_ABORTED。
 
 **M0 状态：in_progress。** 当前不开始 M1。先关闭上述准入项，避免 Module 归并后才发现 Provider 请求行为、PIT 元数据或数据库升级路径不兼容。
+
+### 2026-11-06：M0 第八轮补充（OpenAPI 路由完整性）
+
+已将 services/market-data/openapi.yaml 的 Operation（HTTP Method + Path）与 services/market-data/internal/httpapi/server.go 的 mux 注册逐项比对：35/35 完全匹配，OpenAPI 未声明而 Server 暴露的路由 0 个，OpenAPI 声明但 Server 缺失的路由 0 个。该结果证明当前路径/方法层一致，不代表 Request/Response Schema、字段 required/nullability、错误响应、鉴权 Header 和示例值也完全一致；后者仍需独立字段级核验。
+
