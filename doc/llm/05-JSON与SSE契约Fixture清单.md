@@ -3,7 +3,7 @@
 - 归属任务：LLM-002-F
 - 对应协议：OpenAI Responses
 - 日期：2026-11-05
-- 状态：测试设计基线；对应 LLM-CTR-001～003，当前为 pending_evidence。尚未生成实际 fixture 文件/测试代码，也不是真实模型能力证明；不设置个人 Owner 签字门槛。
+- 状态：Fixture 设计基线、首批 JSON/SSE Golden 文件及 Mapper/Parser/HTTP Adapter/纯 SSE Parser 单测代码已存在；Golden/单测执行证据仍缺失，对应 LLM-CTR-001～003 当前为 pending_evidence；不代表真实模型能力证明。
 
 ## 1. Fixture 原则
 
@@ -209,12 +209,68 @@ data: {"type":"response.completed","sequence_number":7,"response":{"id":"resp_to
 - 远程 Provider Mock、Gateway 路由存在、字段透传、Fixture 全通过均不能单独把本地 llama.cpp/Qwen 能力设为 supported。
 - 当前仍未对实际部署 Gateway 发起真实调用；LLM-001 partial，LLM-004/005 真实能力待验收。
 
-## 8. Owner 待确认
+## 8. 已接受语义与实现证据待办
 
-1. 是否接受 sequence_number 缺号即失败的严格策略。
-2. 是否接受 Draft 2020-12 作为本地 Schema dialect，并明确 format assertion 语义。
-3. SSE `response.error` 与 `error` event 的稳定错误映射。
-4. unknown OutputItem/ContentPart 的安全元数据 allowlist。
-5. 对 terminal 后多余事件是立即失败还是只记录协议诊断；建议立即失败。
+sequence_number 严格连续策略、Draft 2020-12 本地 Schema dialect、Request ID 四层区分已在 04 文档第 10 节接受，不再等待个人 Owner 确认。
 
-**本清单是 LLM-002-F 的测试设计基线；尚未生成实际 fixture 文件、测试代码或真实模型验收结果。契约语义与状态以项目级契约目录为准，不以个人 Owner Review/签字作为门槛。**
+本轮明确以下解析规则：
+1. SSE error event 携带合法上游错误对象时映射为 upstream_error；event/data 结构畸形或字段矛盾映射 invalid_response。
+2. UnknownEvent 仅保留 type、sequence_number（若有）、response_id、output_index、content_index、item_id、call_id、status，以及 item/content_part 的 type/id 等 allowlist 元数据；不得保留未知正文、Prompt 或任意原始字段。
+3. terminal event 后出现额外完整事件按 invalid_response；不得追加到已完成响应。
+4. 以上规则必须进入 JSON/SSE Golden 与 Contract Test；本清单不代表测试代码已实现或执行通过。
+
+**本清单是 LLM-002-F 测试设计基线；独立 JSON/SSE fixture 文件尚未齐备。Mapper/Parser/HTTP Adapter/纯 SSE Parser 单测代码已存在但尚未执行，不代表真实模型验收通过。**
+
+
+## 9. Responses JSON Parser 当前实现状态（2026-11-06）
+
+已新增非流式 Responses JSON Request Mapper / Response Parser 的首批单测，覆盖请求字段映射、应用层元数据不进入 wire body、tool_choice 默认 none、completed/incomplete/failed、message/refusal/function_call/unknown item、Usage total 优先与安全派生、Schema 输出二次校验、畸形 envelope 和未知类型安全保留。
+
+注意：
+- 以上是已提交的测试代码，不是独立 Golden Fixture 文件；本轮尚未执行 gofmt/go test。
+- 未知 OutputItem/ContentPart 仅保留受限的 wire type 元数据，不保留未知正文；annotations 暂不回传，避免任意上游元数据进入 DTO。
+- 非流式 JSON Parser 不代表 HTTP Adapter、SSE Parser 或真实 Gateway E2E 已完成。
+
+
+## 10. HTTP Adapter 测试覆盖（2026-11-06）
+
+首批 fake-doer 单测覆盖固定 Responses endpoint、Bearer caller key 注入、X-Request-ID 与 Request-Id 分离、HTTP 429 与 Retry-After、传输错误脱敏、缺失 Secret/Doer 拒绝，以及 request deadline、Context deadline 和 Provider timeout 取最早值。fake doer 只用于测试；真实网络必须经 Platform BoundDoer。测试代码尚未运行，不能作为通过证据。
+
+
+## 11. Clock / Deadline 确定性测试（2026-11-06）
+
+- 使用固定/可推进 Clock，覆盖 ModelRequest deadline 校验与 CapabilityState 有效期边界。
+- HTTP Adapter 覆盖 ModelRequest deadline、Context deadline、Provider timeout 三者分别成为最早边界；deadline 已过时必须在 doer 调用前终止。
+- 通过可推进 Clock 验证 started_at / finished_at / duration_ms，不依赖测试机实际耗时。
+- 本轮新增测试代码尚未执行，仍为 pending_evidence。
+
+
+## 12. 纯 SSE Parser 首批测试覆盖（2026-11-06）
+
+- 完整文本流：created → text delta → completed；校验事件顺序、response_id、model、Usage。
+- Terminal：incomplete/failed 作为合法 ModelResponse 状态；error event 映射 upstream_error，不暴露原始 message。
+- Sequence：连续序号、全缺失、混合缺失、缺号、重复、倒退；成功结果记录 sequence_number_status=available/unavailable。
+- Function Call：arguments delta 聚合，并与 arguments.done、output_item.done、terminal response 最终参数比对。
+- UnknownEvent：仅保留 type、sequence、response/index/item/call/status 和 item/content_part 安全类型标识，不保留未知正文。
+- EOF/终态：无 terminal 返回部分 Response + stream_interrupted；terminal 后额外事件拒绝；callback error 原样返回。
+- Resource：总字节、单行、单事件、事件数量和函数参数累计大小均有上限。
+- 测试代码尚未执行；没有独立 SSE Golden 文件，也没有 Platform 网络流式接入或真实 Gateway E2E 证据。
+
+
+## 13. 已落库的首批 Golden Fixture
+
+### JSON
+
+- `internal/llm/testdata/json/response_completed_text.json` + `.expected.json`
+- `internal/llm/testdata/json/response_completed_function_call.json` + `.expected.json`
+- `internal/llm/testdata/json/response_incomplete_max_output_tokens.json` + `.expected.json`
+- `internal/llm/testdata/json/response_usage_inconsistent_total.json` + `.expected.json`
+
+### SSE
+
+- `internal/llm/testdata/sse/stream_completed_text.sse` + `.expected.json`
+- `internal/llm/testdata/sse/stream_function_call.sse` + `.expected.json`
+- `internal/llm/testdata/sse/stream_incomplete.sse` + `.expected.json`
+- 错误/边界原始样例：sequence_gap、EOF_without_terminal、unknown_event、terminal_then_extra_event、error_event。
+
+`responses_golden_test.go` 将原始 wire 与 expected DTO 比较；错误/边界 fixture 断言错误类型和安全行为。此集合只是第一批，Usage missing/partial/derived/overflow、mixed/duplicate/decreasing sequence、callback error、CRLF/multiline data、资源限制等仍需补充独立 fixture。

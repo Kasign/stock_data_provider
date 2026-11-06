@@ -1,0 +1,286 @@
+package llm
+
+import (
+	"encoding/json"
+	"errors"
+	"fmt"
+	"strconv"
+	"strings"
+	"testing"
+	"time"
+)
+
+type sseTestClock struct {
+	now time.Time
+}
+
+func (c sseTestClock) Now() time.Time {
+	return c.now
+}
+
+func validSSERequest() ModelRequest {
+	now := time.Now().UTC()
+	return ModelRequest{
+		ProviderID: "gateway-1", RequestID: "req-sse-1", PurposeCode: "research.summary",
+		Model: "qwen-local", InputText: "Summarize evidence", MaxOutputTokens: 128,
+		DeadlineAt: now.Add(time.Minute), CorrelationID: "run-sse-1", SystemAsOf: now,
+	}
+}
+
+func TestParseResponsesSSECompletedTextAndUsage(t *testing.T) {
+	request := validSSERequest()
+	clock := sseTestClock{now: request.SystemAsOf.Add(time.Second)}
+	data := strings.Join([]string{
+		"event: response.created",
+		"data: {\"type\":\"response.created\",\"sequence_number\":10,\"response\":{\"id\":\"resp-sse-1\",\"model\":\"qwen-actual\",\"status\":\"in_progress\"}}",
+		"",
+		"event: response.output_text.delta",
+		"data: {\"type\":\"response.output_text.delta\",\"sequence_number\":11,\"response_id\":\"resp-sse-1\",\"delta\":\"hello \"}",
+		"",
+		"event: response.output_text.delta",
+		"data: {\"type\":\"response.output_text.delta\",\"sequence_number\":12,\"response_id\":\"resp-sse-1\",\"delta\":\"world\"}",
+		"",
+		"event: response.completed",
+		"data: {\"type\":\"response.completed\",\"sequence_number\":13,\"response\":{\"id\":\"resp-sse-1\",\"object\":\"response\",\"model\":\"qwen-actual\",\"status\":\"completed\",\"output\":[{\"id\":\"msg-1\",\"type\":\"message\",\"content\":[{\"type\":\"output_text\",\"text\":\"hello world\"}]}],\"usage\":{\"input_tokens\":8,\"output_tokens\":2,\"total_tokens\":10}}}",
+		"",
+	}, "\n")
+	var gotEvents []ModelEvent
+	got, err := ParseResponsesSSE([]byte(data), request, clock, func(event ModelEvent) error {
+		gotEvents = append(gotEvents, event)
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("ParseResponsesSSE failed: %v", err)
+	}
+	if got.Status != ResponseCompleted || got.ResponseID != "resp-sse-1" || got.ModelActual != "qwen-actual" {
+		t.Fatalf("unexpected terminal response: %+v", got)
+	}
+	if got.OutputText != "hello world" || got.Usage == nil || got.Usage.Source != UsageSourceUpstream ||
+		got.Usage.TotalTokens == nil || *got.Usage.TotalTokens != 10 {
+		t.Fatalf("text/usage normalization failed: %+v", got)
+	}
+	if len(gotEvents) != 4 || gotEvents[1].Type != "response.output_text.delta" ||
+		gotEvents[3].Type != "response.completed" {
+		t.Fatalf("event order was not preserved: %+v", gotEvents)
+	}
+	if got.DurationMS != 0 {
+		t.Fatalf("fixed clock should produce deterministic zero duration, got %d", got.DurationMS)
+	}
+}
+
+func TestParseResponsesSSESequencePolicies(t *testing.T) {
+	request := validSSERequest()
+	clock := sseTestClock{now: request.SystemAsOf.Add(time.Second)}
+	makeStream := func(sequences []string) []byte {
+		var lines []string
+		for i, seq := range sequences {
+			lines = append(lines, "event: response.output_text.delta")
+			sequence := ""
+			if seq != "" {
+				sequence = ",\"sequence_number\":"+seq
+			}
+			lines = append(lines, "data: {\"type\":\"response.output_text.delta\""+sequence+",\"delta\":\"x\"}", "")
+			_ = i
+		}
+		terminalSequence := ""
+		if len(sequences) > 0 && sequences[0] != "" {
+			last, _ := strconv.ParseInt(sequences[len(sequences)-1], 10, 64)
+			terminalSequence = fmt.Sprintf(",\"sequence_number\":%d", last+1)
+		}
+		lines = append(lines,
+			"event: response.completed",
+			"data: {\"type\":\"response.completed\""+terminalSequence+",\"response\":{\"id\":\"resp-seq\",\"object\":\"response\",\"status\":\"completed\",\"output\":[]}}",
+			"",
+		)
+		return []byte(strings.Join(lines, "\n"))
+	}
+	tests := []struct {
+		name string
+		seq []string
+		want ModelErrorKind
+	}{
+		{name: "contiguous", seq: []string{"10", "11"}},
+		{name: "all missing", seq: []string{"", ""}},
+		{name: "gap", seq: []string{"10", "12"}, want: ErrorStreamSequenceGap},
+		{name: "duplicate", seq: []string{"10", "10"}, want: ErrorInvalidResponse},
+		{name: "decreasing", seq: []string{"10", "9"}, want: ErrorInvalidResponse},
+		{name: "mixed", seq: []string{"10", ""}, want: ErrorInvalidResponse},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := ParseResponsesSSE(makeStream(tt.seq), request, clock, nil)
+			if tt.want == "" {
+				if err != nil || got.Status != ResponseCompleted {
+					t.Fatalf("expected successful stream, got status=%s err=%v", got.Status, err)
+				}
+				if tt.name == "all missing" && got.SequenceNumberStatus != SequenceNumberUnavailable {
+					t.Fatalf("all-missing sequence must be recorded unavailable: %+v", got)
+				}
+				if tt.name == "contiguous" && got.SequenceNumberStatus != SequenceNumberAvailable {
+					t.Fatalf("contiguous sequence must be recorded available: %+v", got)
+				}
+				return
+			}
+			var adapterErr *AdapterError
+			if !errors.As(err, &adapterErr) || adapterErr.Info.Kind != tt.want || got.Status == ResponseCompleted {
+				t.Fatalf("unexpected sequence result: status=%s err=%v", got.Status, err)
+			}
+		})
+	}
+}
+
+func TestParseResponsesSSEEOFAndCallbackErrorReturnPartialResponse(t *testing.T) {
+	request := validSSERequest()
+	clock := sseTestClock{now: request.SystemAsOf.Add(time.Second)}
+	partial := []byte("event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"delta\":\"partial\"}\n\n")
+	got, err := ParseResponsesSSE(partial, request, clock, nil)
+	var adapterErr *AdapterError
+	if !errors.As(err, &adapterErr) || adapterErr.Info.Kind != ErrorStreamInterrupted ||
+		got.Status != ResponseIncomplete || got.OutputText != "partial" {
+		t.Fatalf("EOF without terminal must preserve partial output and fail: %+v err=%v", got, err)
+	}
+
+	callbackErr := errors.New("callback stopped")
+	got, err = ParseResponsesSSE(partial, request, clock, func(ModelEvent) error { return callbackErr })
+	if !errors.Is(err, callbackErr) || got.OutputText != "partial" || got.Status == ResponseCompleted {
+		t.Fatalf("callback error must be returned unchanged with partial response: %+v err=%v", got, err)
+	}
+}
+
+func TestParseResponsesSSEFunctionCallAggregationAndConsistency(t *testing.T) {
+	request := validSSERequest()
+	clock := sseTestClock{now: request.SystemAsOf.Add(time.Second)}
+	data := strings.Join([]string{
+		"event: response.output_item.added",
+		"data: {\"type\":\"response.output_item.added\",\"sequence_number\":1,\"output_index\":0,\"item\":{\"id\":\"fc-1\",\"type\":\"function_call\",\"status\":\"in_progress\",\"call_id\":\"call-1\",\"name\":\"lookup_quote\",\"arguments\":\"\"}}",
+		"",
+		"event: response.function_call_arguments.delta",
+		"data: {\"type\":\"response.function_call_arguments.delta\",\"sequence_number\":2,\"item_id\":\"fc-1\",\"call_id\":\"call-1\",\"delta\":\"{\\\"symbol\\\":\"}",
+		"",
+		"event: response.function_call_arguments.delta",
+		"data: {\"type\":\"response.function_call_arguments.delta\",\"sequence_number\":3,\"item_id\":\"fc-1\",\"call_id\":\"call-1\",\"delta\":\"\\\"600000.SH\\\"}\"}",
+		"",
+		"event: response.function_call_arguments.done",
+		"data: {\"type\":\"response.function_call_arguments.done\",\"sequence_number\":4,\"item_id\":\"fc-1\",\"call_id\":\"call-1\",\"arguments\":\"{\\\"symbol\\\":\\\"600000.SH\\\"}\"}",
+		"",
+		"event: response.output_item.done",
+		"data: {\"type\":\"response.output_item.done\",\"sequence_number\":5,\"output_index\":0,\"item\":{\"id\":\"fc-1\",\"type\":\"function_call\",\"status\":\"completed\",\"call_id\":\"call-1\",\"name\":\"lookup_quote\",\"arguments\":\"{\\\"symbol\\\":\\\"600000.SH\\\"}\"}}",
+		"",
+		"event: response.completed",
+		"data: {\"type\":\"response.completed\",\"sequence_number\":6,\"response\":{\"id\":\"resp-tool\",\"object\":\"response\",\"status\":\"completed\",\"output\":[{\"id\":\"fc-1\",\"type\":\"function_call\",\"status\":\"completed\",\"call_id\":\"call-1\",\"name\":\"lookup_quote\",\"arguments\":\"{\\\"symbol\\\":\\\"600000.SH\\\"}\"}]}}",
+		"",
+	}, "\n")
+	got, err := ParseResponsesSSE([]byte(data), request, clock, nil)
+	if err != nil {
+		t.Fatalf("valid function call stream rejected: %v", err)
+	}
+	if got.Status != ResponseCompleted || len(got.ToolCalls) != 1 ||
+		got.ToolCalls[0].ArgumentsJSON != `{"symbol":"600000.SH"}` {
+		t.Fatalf("function call aggregation failed: %+v", got.ToolCalls)
+	}
+}
+
+func TestParseResponsesSSERejectsTerminalExtraEventAndArgumentMismatch(t *testing.T) {
+	request := validSSERequest()
+	clock := sseTestClock{now: request.SystemAsOf.Add(time.Second)}
+	terminalThenExtra := []byte(strings.Join([]string{
+		"event: response.completed",
+		"data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp-end\",\"object\":\"response\",\"status\":\"completed\",\"output\":[]}}",
+		"",
+		"event: response.output_text.delta",
+		"data: {\"type\":\"response.output_text.delta\",\"delta\":\"late\"}",
+		"",
+	}, "\n"))
+	if got, err := ParseResponsesSSE(terminalThenExtra, request, clock, nil); err == nil || got.Status == ResponseCompleted {
+		t.Fatalf("event after terminal must invalidate stream: %+v err=%v", got, err)
+	}
+}
+
+func TestParseResponsesSSEUnknownEventKeepsOnlyAllowlistedMetadata(t *testing.T) {
+	request := validSSERequest()
+	clock := sseTestClock{now: request.SystemAsOf.Add(time.Second)}
+	data := []byte(strings.Join([]string{
+		"event: response.future_event",
+		"data: {\"type\":\"response.future_event\",\"sequence_number\":1,\"response_id\":\"resp-u\",\"status\":\"future\",\"item\":{\"id\":\"item-u\",\"type\":\"message\",\"content\":[{\"type\":\"output_text\",\"text\":\"secret body\"}]},\"opaque\":\"must-not-survive\"}",
+		"",
+		"event: response.completed",
+		"data: {\"type\":\"response.completed\",\"sequence_number\":2,\"response\":{\"id\":\"resp-u\",\"object\":\"response\",\"status\":\"completed\",\"output\":[]}}",
+		"",
+	}, "\n"))
+	var unknown ModelEvent
+	got, err := ParseResponsesSSE(data, request, clock, func(event ModelEvent) error {
+		if event.Type == "response.future_event" {
+			unknown = event
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	encoded, _ := json.Marshal(unknown)
+	if unknown.Type != "response.future_event" || unknown.Item == nil || unknown.Item.ItemID != "item-u" ||
+		strings.Contains(string(encoded), "secret body") || strings.Contains(string(encoded), "must-not-survive") {
+		t.Fatalf("unknown event metadata was not safely bounded: %s", encoded)
+	}
+	if got.Status != ResponseCompleted {
+		t.Fatalf("terminal response not recognized: %+v", got)
+	}
+}
+
+
+func TestParseResponsesSSETerminalIncompleteAndFailedAreResponseStates(t *testing.T) {
+	request := validSSERequest()
+	clock := sseTestClock{now: request.SystemAsOf.Add(time.Second)}
+	cases := []struct {
+		name string
+		event string
+		body string
+		want ResponseStatus
+	}{
+		{
+			name: "incomplete", event: "response.incomplete",
+			body: `{"type":"response.incomplete","response":{"id":"resp-inc","object":"response","status":"incomplete","incomplete_details":{"reason":"max_output_tokens"},"output":[]}}`,
+			want: ResponseIncomplete,
+		},
+		{
+			name: "failed", event: "response.failed",
+			body: `{"type":"response.failed","response":{"id":"resp-fail","object":"response","status":"failed","error":{"type":"server_error","code":"model_failed","message":"sensitive upstream detail"},"output":[]}}`,
+			want: ResponseFailed,
+		},
+	}
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			data := []byte("event: "+tt.event+"\ndata: "+tt.body+"\n\n")
+			got, err := ParseResponsesSSE(data, request, clock, nil)
+			if err != nil || got.Status != tt.want {
+				t.Fatalf("valid non-completed terminal must be a Response state: status=%s err=%v", got.Status, err)
+			}
+			if tt.want == ResponseFailed && (got.Error == nil || strings.Contains(got.Error.SafeMessage, "sensitive upstream detail")) {
+				t.Fatalf("failed response error must be safely normalized: %+v", got.Error)
+			}
+		})
+	}
+}
+
+func TestParseResponsesSSEErrorEventIsUpstreamError(t *testing.T) {
+	request := validSSERequest()
+	clock := sseTestClock{now: request.SystemAsOf.Add(time.Second)}
+	data := []byte("event: error\ndata: {\"type\":\"error\",\"error\":{\"type\":\"server_error\",\"code\":\"provider_failed\",\"message\":\"secret details\"}}\n\n")
+	got, err := ParseResponsesSSE(data, request, clock, nil)
+	var adapterErr *AdapterError
+	if !errors.As(err, &adapterErr) || adapterErr.Info.Kind != ErrorUpstream ||
+		got.Status != ResponseFailed || strings.Contains(err.Error(), "secret details") {
+		t.Fatalf("error event must map to a safe upstream error: %+v err=%v", got, err)
+	}
+}
+
+func TestParseResponsesSSEEnforcesLineAndEventLimits(t *testing.T) {
+	request := validSSERequest()
+	clock := sseTestClock{now: request.SystemAsOf.Add(time.Second)}
+	largeLine := []byte("data: " + strings.Repeat("x", MaxSSELineBytes+1) + "\n")
+	got, err := ParseResponsesSSE(largeLine, request, clock, nil)
+	var adapterErr *AdapterError
+	if !errors.As(err, &adapterErr) || adapterErr.Info.Kind != ErrorResourceLimit || got.Status == ResponseCompleted {
+		t.Fatalf("oversized line must be rejected as resource limit: %+v err=%v", got, err)
+	}
+}
