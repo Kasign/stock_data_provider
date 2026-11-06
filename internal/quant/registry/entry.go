@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"math"
 	"math/big"
 	"regexp"
@@ -98,11 +99,14 @@ func (e Entry) Validate() error {
 	if e.Precision.MaxIntegerDigits < 1 || e.Precision.MaxFractionDigits < 0 || strings.TrimSpace(e.Precision.RoundingMode) == "" {
 		return invalid("precision")
 	}
-	tolerance, err := parseNumeric(e.Precision.Tolerance, e.ValueType)
+	if e.ValueType == ValueTypeInteger && e.Precision.MaxFractionDigits != 0 {
+		return invalid("integer precision.max_fraction_digits must be zero")
+	}
+	tolerance, err := parseNumeric(e.Precision.Tolerance, e.ValueType, e.Precision)
 	if err != nil || tolerance.Sign() < 0 {
 		return invalid("precision.tolerance")
 	}
-	if err := e.Range.validate(e.ValueType); err != nil {
+	if err := e.Range.validate(e.ValueType, e.Precision); err != nil {
 		return err
 	}
 	if len(e.InputRequirements) == 0 {
@@ -131,7 +135,7 @@ func (e Entry) Validate() error {
 	return nil
 }
 
-func (r NumericRange) validate(valueType ValueType) error {
+func (r NumericRange) validate(valueType ValueType, precision Precision) error {
 	if r.Unbounded {
 		if len(r.Minimum) != 0 || len(r.Maximum) != 0 {
 			return invalid("range: unbounded cannot include minimum/maximum")
@@ -141,11 +145,11 @@ func (r NumericRange) validate(valueType ValueType) error {
 	if len(r.Minimum) == 0 || len(r.Maximum) == 0 {
 		return invalid("range: bounded range requires minimum and maximum")
 	}
-	minimum, err := parseNumeric(r.Minimum, valueType)
+	minimum, err := parseNumeric(r.Minimum, valueType, precision)
 	if err != nil {
 		return invalid("range.minimum")
 	}
-	maximum, err := parseNumeric(r.Maximum, valueType)
+	maximum, err := parseNumeric(r.Maximum, valueType, precision)
 	if err != nil {
 		return invalid("range.maximum")
 	}
@@ -155,48 +159,42 @@ func (r NumericRange) validate(valueType ValueType) error {
 	return nil
 }
 
-func parseNumeric(raw json.RawMessage, valueType ValueType) (*big.Rat, error) {
-	if len(raw) == 0 || bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
-		return nil, errors.New("missing numeric value")
-	}
+func parseNumeric(raw json.RawMessage, valueType ValueType, precision Precision) (*big.Rat, error) {
+	if len(raw) == 0 || bytes.Equal(bytes.TrimSpace(raw), []byte("null")) { return nil, errors.New("missing numeric value") }
 	var text string
 	switch valueType {
 	case ValueTypeDecimalString:
-		if err := json.Unmarshal(raw, &text); err != nil || !decimalPattern.MatchString(text) {
-			return nil, errors.New("invalid decimal string")
-		}
-	case ValueTypeInteger:
-		var number json.Number
-		decoder := json.NewDecoder(bytes.NewReader(raw))
-		decoder.UseNumber()
-		if err := decoder.Decode(&number); err != nil || !integerPattern.MatchString(number.String()) {
-			return nil, errors.New("invalid integer")
-		}
+		if err := json.Unmarshal(raw, &text); err != nil || !decimalPattern.MatchString(text) { return nil, errors.New("invalid decimal string") }
+	case ValueTypeInteger, ValueTypeNumber:
+		number, err := decodeJSONNumber(raw)
+		if err != nil { return nil, err }
 		text = number.String()
-	case ValueTypeNumber:
-		var number json.Number
-		decoder := json.NewDecoder(bytes.NewReader(raw))
-		decoder.UseNumber()
-		if err := decoder.Decode(&number); err != nil {
-			return nil, err
+		if valueType == ValueTypeInteger {
+			if !integerPattern.MatchString(text) { return nil, errors.New("invalid integer") }
+		} else {
+			value, err := strconv.ParseFloat(text, 64)
+			if err != nil || math.IsNaN(value) || math.IsInf(value, 0) { return nil, errors.New("invalid finite number") }
+			text = strconv.FormatFloat(value, 'f', -1, 64)
 		}
-		value, err := strconv.ParseFloat(number.String(), 64)
-		if err != nil || math.IsNaN(value) || math.IsInf(value, 0) {
-			return nil, errors.New("invalid finite number")
-		}
-		rat := new(big.Rat)
-		if rat.SetFloat64(value) == nil {
-			return nil, errors.New("invalid number")
-		}
-		return rat, nil
-	default:
-		return nil, errors.New("unsupported value type")
+	default: return nil, errors.New("unsupported value type")
 	}
+	unsigned := strings.TrimPrefix(text, "-")
+	parts := strings.SplitN(unsigned, ".", 2)
+	if len(parts[0]) > precision.MaxIntegerDigits { return nil, errors.New("integer digits exceed declared precision") }
+	if len(parts) == 2 && len(parts[1]) > precision.MaxFractionDigits { return nil, errors.New("fraction digits exceed declared precision") }
 	rat := new(big.Rat)
-	if _, ok := rat.SetString(text); !ok {
-		return nil, errors.New("invalid numeric value")
-	}
+	if _, ok := rat.SetString(text); !ok { return nil, errors.New("invalid numeric value") }
 	return rat, nil
+}
+
+func decodeJSONNumber(raw json.RawMessage) (json.Number, error) {
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.UseNumber()
+	var number json.Number
+	if err := decoder.Decode(&number); err != nil { return "", err }
+	var trailing any
+	if err := decoder.Decode(&trailing); err != io.EOF { return "", errors.New("numeric value contains trailing JSON") }
+	return number, nil
 }
 
 func isJSONObject(raw json.RawMessage) bool {
