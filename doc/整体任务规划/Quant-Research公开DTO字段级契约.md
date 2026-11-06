@@ -57,7 +57,7 @@ QuantAnalysisRequest 的幂等作用域为 `(authenticated_caller_ref, use_case,
 | result_type | 是 | indicator/factor/trend/market/industry/stock/strategy/backtest/risk/evaluation | 结果类型 |
 | scope | 是 | stock/market/industry/portfolio | 结果范围 |
 | security_id | 条件必需 | string | 单证券结果引用 |
-| system_as_of | 是 | timestamp | 计算采用的系统知识截止时间 |
+| system_as_of | 是 | RFC3339Nano UTC | 计算采用的系统知识截止时间 |
 | trade_date | 否 | date | 对应交易日 |
 | period | 是 | string | 结果周期 |
 | algorithm_version | 是 | string | 算法实现版本 |
@@ -65,7 +65,7 @@ QuantAnalysisRequest 的幂等作用域为 `(authenticated_caller_ref, use_case,
 | input_snapshot_refs | 是 | string[] | 输入快照引用 |
 | quality_status | 是 | valid/degraded/invalid/unknown | 结果质量 |
 | result_status | 是 | completed/insufficient_data/insufficient_sample/rejected/failed | 计算状态 |
-| created_at | 是 | timestamp | 创建时间 |
+| created_at | 是 | RFC3339Nano UTC | 创建时间 |
 
 completed 不代表 valid；消费方必须同时检查 result_status 和 quality_status。invalid/unknown 不可作为有效数值事实。
 
@@ -77,7 +77,7 @@ completed 不代表 valid；消费方必须同时检查 result_status 和 qualit
 | value | 是 | string/number/null（由 metric_code 对应 Schema 固定） | 无有效数值时必须显式 null，由 metric_status 解释；精确数值与统计数值采用不同且固定的 JSON 类型 |
 | unit | 是 | string/enum | CNY、CNY/share、shares、percentage_point、ratio、day 等 |
 | period | 是 | string | 统计周期 |
-| system_as_of | 是 | timestamp | 知识截止时间 |
+| system_as_of | 是 | RFC3339Nano UTC | 知识截止时间 |
 | quality_status | 是 | valid/degraded/invalid/unknown | 质量 |
 | metric_status | 是 | available/insufficient_data/insufficient_sample/not_applicable/unknown | 数值可用性 |
 | calculation_version | 是 | string | 公式/实现版本 |
@@ -105,7 +105,7 @@ completed 不代表 valid；消费方必须同时检查 result_status 和 qualit
 | evidence_metrics | 是 | QuantMetric[] | 支撑指标 |
 | conflict_refs | 是 | string[] | 周期冲突/反向结构引用 |
 | quality_status | 是 | enum | 质量 |
-| system_as_of | 是 | timestamp | 截止时间 |
+| system_as_of | 是 | RFC3339Nano UTC | 截止时间 |
 | algorithm_version | 是 | string | 算法版本 |
 
 direction 与 phase 必须分开；unknown 不得用 sideways 代替。跨周期冲突必须显式表达。
@@ -117,8 +117,8 @@ direction 与 phase 必须分开；unknown 不得用 sideways 代替。跨周期
 | decision_id | 是 | string | 决策 ID |
 | status | 是 | pass/reject/unknown | 硬风险结论 |
 | rule_set_version | 是 | string | 规则集版本 |
-| evaluated_at | 是 | timestamp | 评估时间 |
-| system_as_of | 是 | timestamp | 输入知识截止时间 |
+| evaluated_at | 是 | RFC3339Nano UTC | 评估时间 |
+| system_as_of | 是 | RFC3339Nano UTC | 输入知识截止时间 |
 | reasons | 是 | RiskReason[] | 命中、拒绝或未知原因 |
 | input_refs | 是 | string[] | 输入结果/快照引用 |
 
@@ -165,13 +165,13 @@ Quant Application 返回的 QuantResult 使用共同 Envelope，不允许 `map[s
 | research_question | 是 | string | 研究问题 |
 | scope | 是 | market/industry/stock/event | 研究范围 |
 | subject_refs | 是 | string[] | 证券/行业/Event 引用 |
-| system_as_of | 是 | timestamp | 系统知识截止时间 |
+| system_as_of | 是 | RFC3339Nano UTC | 系统知识截止时间 |
 | section_refs | 是 | ContextSectionRef[] | 分区引用及版本 |
 | quality_summary | 是 | QualitySummary | 完整性/质量概览 |
 | included_sections | 是 | string[] | 已包含分区 |
 | omitted_sections | 是 | OmittedSection[] | 裁剪/缺失分区及原因 |
 | builder_version | 是 | string | 语义构建版本 |
-| created_at | 是 | timestamp | 创建时间 |
+| created_at | 是 | RFC3339Nano UTC | 创建时间 |
 
 Research 定义 Context 领域语义；Researchflow 负责单次 Run 的分区选择、排序、Token Budget、裁剪和模型上下文装配。裁剪不得静默丢失来源、关键反证和风险限制。
 
@@ -187,11 +187,11 @@ Research 定义 Context 领域语义；Researchflow 负责单次 Run 的分区�
 | source_locator | 否 | string | 来源定位符，不直接存未授权全文 |
 | claim_ref | 否 | string | 关联 Claim |
 | subject_refs | 是 | string[] | 证券/行业/Event 引用 |
-| published_at | 是 | timestamp/null | 来源声明发布时间；无来源证据显式 null |
-| available_at | 是 | timestamp/null | 有证据支持的外部可获得时间；无来源证据显式 null |
-| system_observed_at | 是 | timestamp | 本系统观察时间 |
-| valid_time_start/end | 是 | timestamp/null | 业务有效区间；必须同时为 null 或同时提供且 start<=end |
-| system_as_of | 是 | timestamp | 纳入研究时的知识截止时间 |
+| published_at | 是 | RFC3339Nano UTC/null | 来源声明发布时间；无来源证据显式 null |
+| available_at | 是 | RFC3339Nano UTC/null | 有证据支持的外部可获得时间；无来源证据显式 null |
+| system_observed_at | 是 | RFC3339Nano UTC | 本系统观察时间 |
+| valid_time_start/end | 是 | RFC3339Nano UTC/null | 业务有效区间；必须同时为 null 或同时提供且 start<=end |
+| system_as_of | 是 | RFC3339Nano UTC | 纳入研究时的知识截止时间 |
 | stance | 是 | supports/contradicts/neutral | 对 Claim 的立场 |
 | confidence | 是 | number/null | 仅允许 [0,1]；无可信置信估计时 null；非 null 时 confidence_method 与 confidence_method_version 必填，不能使用 LLM 自评分冒充统计概率 |
 | confidence_method | 条件必需 | string | confidence 非 null 时必填，说明估计方法 |
@@ -214,11 +214,11 @@ fact 必须有可验证来源与时间；reported_fact 只表示来源声称；i
 | status | 是 | detected/consolidating/active/materializing/fading/invalidated/closed | 生命周期 |
 | subject_refs | 是 | string[] | 主体引用 |
 | evidence_refs | 是 | string[] | 支持/反证引用 |
-| occurred_at | 是 | timestamp/null | 规范化事件发生时间；无可靠时间时显式 null |
-| published_at | 是 | timestamp/null | 单一规范化来源发布时间；多来源原始值以 source_times[] 为准，无统一值时 null |
-| available_at | 是 | timestamp/null | 单一规范化外部可获得时间；多来源原始值以 source_times[] 为准，无统一值时 null |
-| system_observed_at | 是 | timestamp | 系统观察时间 |
-| system_as_of | 是 | timestamp | 当前版本知识截止时间 |
+| occurred_at | 是 | RFC3339Nano UTC/null | 规范化事件发生时间；无可靠时间时显式 null |
+| published_at | 是 | RFC3339Nano UTC/null | 单一规范化来源发布时间；多来源原始值以 source_times[] 为准，无统一值时 null |
+| available_at | 是 | RFC3339Nano UTC/null | 单一规范化外部可获得时间；多来源原始值以 source_times[] 为准，无统一值时 null |
+| system_observed_at | 是 | RFC3339Nano UTC | 系统观察时间 |
+| system_as_of | 是 | RFC3339Nano UTC | 当前版本知识截止时间 |
 | impact_hypothesis_refs | 是 | string[] | 影响假设引用 |
 | invalidation_conditions | 是 | string[] | 失效条件 |
 | uncertainty | 是 | string[] | 不确定因素 |
@@ -236,7 +236,7 @@ fact 必须有可验证来源与时间；reported_fact 只表示来源声称；i
 | statement | 是 | string | 可验证陈述 |
 | epistemic_type | 是 | reported_fact/inference/hypothesis | 陈述性质 |
 | scope_refs | 是 | string[] | 适用主体/范围 |
-| system_as_of | 是 | timestamp | 知识截止时间 |
+| system_as_of | 是 | RFC3339Nano UTC | 知识截止时间 |
 | supporting_evidence_refs | 是 | string[] | 支持证据，可为空数组 |
 | contradicting_evidence_refs | 是 | string[] | 反证，可为空数组 |
 | required_data_refs | 是 | string[] | 验证所需数据引用 |
@@ -255,7 +255,7 @@ Claim 与 Hypothesis 可共享存储基类，但公开 DTO 必须明确 epistemi
 | scenario_id | 是 | string | 不透明 ID |
 | scenario_version | 是 | integer | 版本 |
 | subject_refs | 是 | string[] | 适用证券/行业 |
-| system_as_of | 是 | timestamp | 基准知识时点 |
+| system_as_of | 是 | RFC3339Nano UTC | 基准知识时点 |
 | horizon | 是 | string | 预测周期 |
 | conditions | 是 | ScenarioCondition[] | 触发/前提条件 |
 | expected_path | 是 | string | 条件化路径描述 |
@@ -339,8 +339,8 @@ Researchflow 是唯一跨模块组合者，并负责传播同一 Run 的 system_
 | quality_status | 是 | valid/degraded/invalid/unknown | 分区质量 |
 | required | 是 | boolean | 本研究模板是否要求该分区 |
 | included | 是 | boolean | 是否实际装入 Context |
-| assembled_at | 是 | timestamp | 本次 Context 分区装配时间 |
-| system_as_of | 是 | timestamp | 分区知识截止时间 |
+| assembled_at | 是 | RFC3339Nano UTC | 本次 Context 分区装配时间 |
+| system_as_of | 是 | RFC3339Nano UTC | 分区知识截止时间 |
 
 同一 Context 中 section_id 唯一；同一 section_id 的不同版本不能同时作为当前版本装入，除非显式标记为对比研究。
 
@@ -406,8 +406,8 @@ required=true 的分区被省略时，Context 整体不能标记为 valid；必�
 | content_level | 是 | metadata/summary/snippet/full | 内容级别 |
 | subject_ref | 是 | string | 被授权调用主体 caller_ref |
 | resource_ref | 是 | string | 本次授权决策覆盖的来源/内容/Endpoint 资源引用 |
-| decided_at | 是 | timestamp | 决策时间 |
-| expires_at | 是 | timestamp/null | 无固定到期时显式 null，不代表永久授权 |
+| decided_at | 是 | RFC3339Nano UTC | 决策时间 |
+| expires_at | 是 | RFC3339Nano UTC/null | 无固定到期时显式 null，不代表永久授权 |
 | conditions | 是 | string[] | 限制条件，可为空 |
 | decision_fingerprint | 是 | string | 决策内容指纹 |
 
@@ -421,7 +421,7 @@ Event 允许多来源时间并存，不以单一 occurred_at 覆盖冲突来源�
 |---|---|---|---|
 | evidence_ref | 是 | string | 对应来源证据 |
 | time_type | 是 | occurred_at/published_at/available_at/system_observed_at | 时间语义 |
-| value | 是 | timestamp | 来源/系统时间值 |
+| value | 是 | RFC3339Nano UTC | 来源/系统时间值 |
 | asserted_by | 是 | string | 来源或系统主体引用 |
 | confidence | 否 | number/null | 仅允许 [0,1]；非 null 时 confidence_method 与 confidence_method_version 必填 |
 | confidence_method | 条件必需 | string | confidence 非 null 时必填 |
