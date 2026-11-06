@@ -845,7 +845,7 @@ Workflow Template 按 stage_code + template_version 固定 on_degraded、on_skip
 - Run：created/queued/running/cancelling/succeeded/partial/failed/cancelled；不设置 Run.degraded/timed_out。
 - Stage 增加 retry_wait。Template 固定 max_attempts（含首次）、retryable_reason_codes、backoff_policy、attempt_timeout；仅白名单错误自动重试，Attempt 历史追加保存。
 - Template 固定 on_degraded、on_skipped、on_failed、on_timed_out、on_blocked 传播策略；required Stage 适用性在 CreateRun 前解析，不适用记录 excluded_stages；resolved DAG 不允许为空。
-- 硬风险门禁必须同时匹配 Registry stage_code 和 gate_type=hard_risk；执行层失败/降级/跳过/阻断/超时均 fail。RiskDecision=reject/unknown 是有效业务结果，actionability_status=blocked；只有 Run=succeeded 且所有适用硬门禁明确 pass 才可能 actionable。
+- 硬风险门禁必须同时匹配 Registry stage_code 和 gate_type=hard_risk；执行层失败/降级/跳过/阻断/超时均 fail。RiskDecision=reject/unknown 是有效业务结果，actionability_status=blocked；Template 必须声明 requires_hard_risk_gate：可执行结论模板必须包含至少一个适用门禁，否则拒绝 CreateRun；纯观察/研究模板 actionability_status=not_evaluated。只有 Run=succeeded 且所有适用硬门禁明确 pass 才可能 actionable。
 - RetryStage 只推进 retry_wait，不重开终态 Stage，不修改 Run.as_of、输入快照、Template 版本或重试预算；命令具备幂等键。
 - created/queued 无运行中 Attempt 时取消可直接终结；running 取消进入 cancelling。queued Worker claim 与取消由 CAS 决胜。
 - deadline 使用数据库 UTC 时钟；db_now >= deadline_at 时 deadline 优先。未启动 Stage 记 timed_out/run_deadline_exceeded；运行中 Attempt 停止或 fence 后记 timed_out；deadline 超时不重试。
