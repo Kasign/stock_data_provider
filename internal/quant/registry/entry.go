@@ -122,6 +122,9 @@ func (e Entry) Validate() error {
 	if !isJSONObject(e.ParametersSchema) {
 		return invalid("parameters_schema must be a JSON object")
 	}
+	if _, err := compileJSONSchema(e.ParametersSchema); err != nil {
+		return invalid("parameters_schema: " + err.Error())
+	}
 	if math.IsNaN(e.QualityPolicy.MinimumCoverage) || math.IsInf(e.QualityPolicy.MinimumCoverage, 0) || e.QualityPolicy.MinimumCoverage < 0 || e.QualityPolicy.MinimumCoverage > 1 {
 		return invalid("quality_policy.minimum_coverage")
 	}

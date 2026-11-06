@@ -31,7 +31,7 @@ func validEntry(code, algorithmVersion string) Entry {
 			Quality:          []string{"valid"},
 			RequiresSnapshot: true,
 		}},
-		ParametersSchema: json.RawMessage(`{"type":"object","additionalProperties":false}`),
+		ParametersSchema: json.RawMessage(`{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","additionalProperties":false}`),
 		QualityPolicy: QualityPolicy{
 			MinimumCoverage:       1,
 			MissingHandling:       "reject",
