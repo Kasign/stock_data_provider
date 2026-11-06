@@ -115,9 +115,9 @@ type NewsAuthorizationBinding struct {
 	ResourceRef           string                      `json:"resource_ref"`
 	PurposeCode           string                      `json:"purpose_code"`
 	RequestedContentLevel AuthorizationContentLevel   `json:"requested_content_level"`
-	ProviderRef           NullableOpaqueRef `json:"provider_ref"`
+	ProviderRef            NullableOpaqueRef          `json:"provider_ref"`
 	SourceRef             string                      `json:"source_ref"`
-	EndpointRef           NullableOpaqueRef `json:"endpoint_ref"`
+	EndpointRef            NullableOpaqueRef          `json:"endpoint_ref"`
 	AuthorizationRef      NewsAuthorizationRef        `json:"authorization_ref"`
 	PolicySnapshot        AuthorizationPolicySnapshot `json:"policy_snapshot"`
 }
