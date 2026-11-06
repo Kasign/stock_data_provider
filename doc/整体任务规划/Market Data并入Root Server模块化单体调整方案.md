@@ -104,6 +104,8 @@ docker-compose
 | Nginx | `web/default.conf.template` 的 `/market-api/` 当前代理到 Data 服务，`/analysis-api/` 代理 Server | 两个前缀可保留，但上游统一改为 Root Server |
 | go-core | `docker/docker-compose.go-migration.yml` 将 Python Bridge、go-core、Data 组成单独的 `go-migration` profile，并明确不与根 Compose 叠加；根 Compose 当前运行的是根模块 `cmd/analysis-api` | go-core 是仓库保留的旧迁移部署路径，不是根 Compose 的当前组合入口；本次不把 go-core 合并进 Root Server。仍需部署现场确认没有继续使用旧 profile |
 
+**M0 最新分支复核（2026-11-06）：** 已只读检查 Data 分支 `feat/full-go-data-providers-api-switch` 当前 HEAD `f2b9e5fc637ea59bff87f5449823e98f746c8428`：根 `go.mod` 仍为 `example.com/stock-analysis-flow` / Go 1.22；`services/market-data/go.mod` 仍为 `github.com/Kasign/stock_data_provider/services/market-data` / Go 1.23.0；`services/market-data/cmd/market-data/main.go` 与根 `cmd/analysis-api/main.go` 同时存在。该证据确认 MDM-002 尚未开始，且两边 Go 版本/依赖需要在归并时统一。此次只核对模块边界与入口文件，不代表完成 Provider 全量依赖、调用方、路由、Worker、Migration、CI 和部署现场审计；MDM-001 仍未关闭。
+
 **M0 已确认的主要改造点：**
 
 1. Data Repository 增加接收共享 `*sql.DB` 的构造方式，并区分借用/自有资源；独立远程兼容入口可继续自有连接池。
@@ -176,8 +178,8 @@ Data Repository Adapter -> shared DB handle
 
 ```text
 cmd/
-  server/
-    main.go                       # 唯一正式运行入口
+  analysis-api/
+    main.go                       # 沿用现有 Root Server 入口；本次不强制改名为 cmd/server
 
 internal/
   server/
@@ -201,6 +203,8 @@ internal/
 ```
 
 结构是目标边界，不要求一次性重命名所有包。第一阶段可以先保留原有 package 名称与相对目录，仅完成 Go Module 归并和构造装配提取；在可编译、可测试后，再按需要做领域分层重构，避免把“合并部署”扩大成无关重写。
+
+**入口兼容约束：** 当前正式根入口为 `cmd/analysis-api/main.go`，根 Dockerfile/Compose 也围绕该入口构建。本次只要求它演进为 Root Server 唯一组合根，不要求新增或改名为 `cmd/server`；如未来确需统一命名，必须单独评估 Dockerfile、Compose、CI、部署脚本和运维命令的联动成本。
 
 ### 4.1 Data 对外 Port
 

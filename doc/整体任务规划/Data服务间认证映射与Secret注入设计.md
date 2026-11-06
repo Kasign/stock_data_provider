@@ -44,7 +44,7 @@ Quant Data Adapter
     │ 从 Server Config 读取 Data 专用 Secret
     │ 设置 X-API-Key
     ▼
-Market Data Service (独立 Go Module)
+Market Data Remote HTTP Adapter（仅远程兼容模式）
     │ 校验 X-API-Key
     ▼
 Data Provider Adapter
@@ -57,7 +57,7 @@ Upstream Providers
 - WebUI/浏览器永远不拿到 Data API Key、Platform Service Secret 或 Provider Token。
 - 根 Server 只在 Data Adapter 构造认证请求时读取 Data 专用 Secret；Handler、Domain、Use Case 不直接读取环境变量。
 - Data Adapter 是根 Server 中唯一知道 Data API Key Header 的业务基础设施适配器。
-- Data 服务独立管理自己的 API Key 校验、有效性和轮换，不 import 根模块 Platform internal。
+- 仅远程兼容模式下，Data HTTP Adapter 管理 Data API Key 校验、有效性和轮换；同进程模式不经过该 Adapter，也不要求 Data 模块依赖独立服务认证。
 - Data Provider Token 只由 Data 服务注入和使用，不透传到根 Server。
 - 根 Server owner Token 不作为 Data API Key 发送；外部用户身份不能变成服务间凭据。
 
@@ -67,7 +67,7 @@ Upstream Providers
 - Platform Service Secret 代表调用方服务身份；可能有调用方、受众、权限、有效期、轮换和撤销语义。
 - Data X-API-Key 当前是 Data 服务自身的 API 凭据；OpenAPI 只定义 Header，不表达 issuer、audience、scope、expiry 或调用方身份。
 - 把同一个字符串同时当两种凭据，会造成凭据边界混淆，也无法证明 Data 端真正校验了 Platform 服务身份。
-- 让 Data 独立 Go Module import 根模块 Platform internal 会破坏 Module 边界。
+- 在迁移前的独立 Go Module 形态下，直接 import 根模块 Platform internal 会破坏 Module 边界；完成方案 B 后，Data 可以依赖 Platform 公开技术 package，但仍不得依赖其私有实现。
 
 因此首期不强行做凭据复用或统一身份改造。Data API Key 作为独立服务凭据，Platform Service Secret 若存在则继续用于其明确支持的服务身份场景。
 
@@ -110,7 +110,7 @@ Upstream Providers
 首期保持 Data X-API-Key 不变。若后续需要统一服务身份，必须先设计跨 Go Module 的稳定协议，而不是共享 Go internal 包：
 - 由可信服务身份系统签发短期凭据或受众明确的服务令牌；
 - Token 至少表达 issuer、audience（Data Service）、subject/caller、scope、issued_at、expires_at 和 key/version ID；
-- Data 服务在自己的独立 Module 中实现校验 Adapter；
+- 仅远程兼容部署时，Data HTTP Adapter 在 Data 模块内实现 Key 校验；
 - 根 Server 通过公开配置/HTTP 协议调用，不依赖 Platform 内部 Go 类型；
 - 评估是否以 mTLS / Gateway 身份断言替代长期 API Key；
 - 迁移需有双凭据窗口、撤销策略、审计和回滚方案。

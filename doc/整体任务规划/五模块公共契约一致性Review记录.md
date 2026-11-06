@@ -35,7 +35,7 @@ quality_status、Quant result_status、RiskDecision、Researchflow Run/Stage/Att
 request_id 标识一次调用；correlation_id 关联跨模块链路；event_id 标识稳定事件；idempotency_key 标识幂等命令意图。异步消费者使用自身 Inbox 去重，不使用 correlation_id。幂等命令由 Owner 定义作用域和规范化 fingerprint；相同键同指纹返回原结果，不同指纹冲突。
 
 ## 3. 架构检查
-未发现需要改变既有依赖方向的冲突：Quant 与 Research 互不依赖；Researchflow 是唯一跨模块组合者；LLM 不执行工具；Notification 不计算告警条件；Platform 不反向依赖业务模块；Data 仍通过独立 HTTP/OpenAPI Module 接入。
+当时未发现需要改变五模块依赖方向的冲突：Quant 与 Research 互不依赖；Researchflow 是唯一跨模块组合者；LLM 不执行工具；Notification 不计算告警条件；Platform 不反向依赖业务模块；Data 在该次 Review 的迁移前基线中通过独立 HTTP/OpenAPI Module 接入。该 Data 传输/Module 边界已由 2026-11-06 方案 B 决议替代。
 
 ## 4. 同步文件
 - 五模块公共契约与 Schema 冻结基线
