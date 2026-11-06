@@ -1533,9 +1533,9 @@ JSR-6L 补充：连接配置变更取消草稿检查后，旧代际 finally 按�
 
 ### WebUI 分支内
 
-- [x] 当前功能验收 HEAD `49aa0eb8f9a2ce49b99c6c53f659208fff77b841` 的 WebUI Checks #42171720219 和 Chromium Browser Smoke #42171720084 均通过。
+- [x] 当前功能验收 HEAD `b6da380eb29955c321b1d42b4e7dfb843f162fe9` 的 WebUI Checks #42207380891 和 Chromium Browser Smoke #42207380849 均通过。
 - [x] JSR-6 请求生命周期与展示层边界主线完成；后续只处理可复现缺陷，不进行无目标拆分。
-- [ ] UIR-2 样式级联收尾：当前 13 处 `!important`；全局隐藏、语义状态色和 reduced-motion 规则已保留，继续核对主题/响应式/跨 selector 命中关系；保留确有必要的优先级，不以数量归零为验收目标。
+- [x] UIR-2 样式级联审查完成：`!important` 从 13 处降至 6 处；仅保留全局 `[hidden]` 及 reduced-motion 无障碍规则，语义颜色已按组件作用域和主题优先级验收；不启动 CSS 物理拆分。
 - [ ] 人工视觉验收：macOS 中文字体环境下检查 320/375/600/768/900/1280/1600px，重点覆盖图表 SVG、交易日历、Run Flow、研究报告/记录工作区、表格和弹层。
 - [ ] 真实部署验收：使用实际行情/分析服务配置，验证数据质量、时间语义、错误/降级、鉴权代理和真实 Provider 响应。CI 使用隔离 API fixture，不作为生产联调证据。
 
