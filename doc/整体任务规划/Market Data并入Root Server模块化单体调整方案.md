@@ -96,6 +96,7 @@ docker-compose
 |---|---|---|
 | Root Server 数据库资源 | `internal/adapters/storage/mysqlredis/store.go` 的 `Open` 创建并 Ping `*sql.DB`，Store 暴露 `DB`；`DBAutoMigrate=true` 时在 Open 内部执行 Analysis Migration，随后执行 CheckSchema | Data Repository 可接收同一个 `*sql.DB`，但必须明确借用资源；Root Migration 也要从 Open 副作用中拆出，由 Server Bootstrap 显式编排，不能在连接创建时隐式执行 |
 | Data 数据库资源 | `services/market-data/internal/repository/mysql.go` 的 `OpenMySQL` 自行 `sql.Open`，连接池默认 MaxOpen=10/MaxIdle=3/ConnMaxLifetime=5m；Data main 根据 `MARKET_DATA_DB_AUTO_MIGRATE` 执行 Data Migration | 当前确实存在两套 DB Pool 和两个 Migration 入口；合并时要保留 Data Migration 内容，但由 Server 统一执行 |
+| Root/Data 有效 DSN 对照 | `.env.example` 两侧 DB Host/Port/Name/User、字符集和 UTC 时区配置意图相同，但 Root/Data 使用独立 Password 环境变量；Redis 地址/DB 示例相同，密码变量也独立。Data Config 还支持独立 Redis Username/TLS 等连接参数 | 示例文件不能证明生产凭据相同。部署前核对有效 DSN/凭据；只有完全一致才共享同一 DB Pool/Redis Client，否则由 Root Bootstrap 拥有多个资源句柄并分别注入 borrowed handle/client |
 | Root Redis | Root Store 使用 `github.com/redis/go-redis/v9` 创建有连接池的 Client，并由 Store.Close 关闭 | 可作为统一 Redis 资源的基础 |
 | Data Redis | `services/market-data/internal/cache/redis.go` 是自定义 RESP Client，每次命令重新 Dial、AUTH/SELECT、执行命令后关闭连接 | 不应原样保留为同进程默认实现；建议提供基于共享 go-redis Client 的 Data Cache Adapter，按 Data key namespace/TTL 规则隔离 |
 | Data 配置 | `services/market-data/internal/config/config.go` 当前无条件校验 `MARKET_DATA_API_KEY`；Redis 地址可为空，允许禁用缓存；MySQL 可按 AllowNoStorage 配置 | 同进程模式必须将 Data API Key 从必填配置中移除；远程 Adapter 模式才要求 Key。Redis 可选语义不能被 Root Server 的 Redis 强依赖无意覆盖 |
@@ -104,7 +105,7 @@ docker-compose
 | Nginx | `web/default.conf.template` 的 `/market-api/` 当前代理到 Data 服务，`/analysis-api/` 代理 Server | 两个前缀可保留，但上游统一改为 Root Server |
 | go-core | `docker/docker-compose.go-migration.yml` 将 Python Bridge、go-core、Data 组成单独的 `go-migration` profile，并明确不与根 Compose 叠加；根 Compose 当前运行的是根模块 `cmd/analysis-api` | go-core 是仓库保留的旧迁移部署路径，不是根 Compose 的当前组合入口；本次不把 go-core 合并进 Root Server。仍需部署现场确认没有继续使用旧 profile |
 
-**M0 扩展分支复核（2026-11-06）：** 本轮只读审计以 Data 分支 `feat/full-go-data-providers-api-switch` HEAD `8c569366aff08738d632c7ea8856ac55f95c892d` 为准。根 `go.mod` 仍是 `example.com/stock-analysis-flow` / Go 1.22；Data `go.mod` 仍是独立 Module / Go 1.23.0；根 Dockerfile Builder 为 Go 1.22，Data Dockerfile Builder 为 Go 1.23，CI Go setup 为 1.23.x。Data 归并尚未开始。
+**M0 扩展分支复核（2026-11-06）：** 本轮只读审计以 Data 分支 `feat/full-go-data-providers-api-switch` HEAD `8c569366aff08738d632c7ea8856ac55f95c892d` 为准。根 `go.mod` 仍是 `example.com/stock-analysis-flow` / Go 1.22；Data `go.mod` 仍是独立 Module / Go 1.23.0；根 Dockerfile Builder 为 Go 1.22，Data Dockerfile Builder 为 Go 1.23，CI Go setup 为 1.23.x。Data 归并尚未开始。Data 分支从代码基线 `4ca1da2` 到当前 HEAD `8c56936` 的比较仅显示迁移跟踪文档有变化，没有生产 Go/配置/部署代码变化；因此本段代码证据仍对应 `4ca1da2` 的实现状态，当前 HEAD 主要推进了审计记录。
 
 本轮新增确认：
 
@@ -116,7 +117,7 @@ docker-compose
 | 出站安全边界 | Data `validateEndpointURL` 主要校验 URL 结构和 http(s) scheme；Provider 仍直接持有 `http.Client`。根 `internal/platform/httpclient` 已提供目的地址策略、精确 Host/Port、DNS 与响应体约束，但 Data Provider 尚未使用 | Provider HTTP Client 接入 Platform 是需单独评估的技术子项；先完成 Host/Redirect 策略映射。TCP Provider 另行评估目标地址约束 |
 | Data Config 资源 | `config.Load` 默认从进程工作目录读取 `configs/providers.json`；当前 Data Dockerfile 将其复制到 `/app/configs` | 并入根镜像后原文件不会自动出现在根工作目录；应采用 `go:embed` 或 Bootstrap 显式注入路径 |
 | Data HTTP 路由 | Handler 注册 33 条受 API Key 保护的业务路由；`/health/live`、`/health/ready` 不走该 Key；外层含 Security Header、Request ID、Access Log、Timeout Context | 保留全部 v1 路由语义；拆出业务 Handler，由 Root 统一外部认证/授权/Request ID/错误映射 |
-| DB Migration | Data main 调用 `Store.Migrate`；Go 代码创建 9 张 Data 表，并额外修复历史索引唯一性、补齐 `volume_ratio`/`turnover_rate` 列；另有 `migrations/001_create_market_data.sql` 静态 DDL | Migration Registry 必须承接 Go Migrate 的索引/列升级逻辑；先核对 SQL 文件与运行时代码差异，不能只用静态 SQL 替代 |
+| DB Migration | Go `Store.Migrate` 与 `migrations/001_create_market_data.sql` 的 CREATE TABLE 名称集合已核对为 9/9 一致；Go 运行时还会把日线版本表、财务版本表的历史唯一索引改为非唯一索引，并补齐 Quote 的 `volume_ratio`/`turnover_rate` 两列 | M1/M4 必须保留 Go 运行时升级逻辑；当前只完成表名集合对照，字段定义、索引列顺序/唯一性、默认值、字符集/排序规则的完整 DDL diff 仍未完成，不能以 9/9 表名匹配宣称 Schema 完全一致 |
 | Worker / 资源关闭 | Data main 启动 Quote Retention Goroutine（启动立即执行，之后每 24 小时执行）；关闭 BaoStock Client 和自有 Store；Worker 当前没有显式 Wait/Drain 句柄 | Module 必须提供受管理的 Start/Stop/Wait；共享 DB/Redis 不得由 Data Close；先停止 Worker，再关闭共享资源 |
 | DB / Redis | Data Repository 自建 `*sql.DB`（MaxOpen=10/MaxIdle=3/ConnMaxLifetime=5m）；Redis 每条命令新建 TCP 连接并 AUTH/SELECT；Root Store 持有 DB 与 go-redis Client | Data Repository 增加借用 DB 构造；Cache 接入共享 go-redis Client；明确 borrowed/owned 生命周期并保留缓存禁用/降级语义 |
 | Compose / Nginx / 部署 | 根 Compose 当前运行 Data、Server、Web 三容器；Nginx 两个 API 前缀分别代理 Data:8091 与 Server:8092；部署脚本固定构建、启动、健康检查三个容器 | 默认栈迁移为双容器；两个 API 前缀统一到 Root Server；部署脚本、健康检查和 .env 同步调整 |
@@ -151,7 +152,7 @@ docker-compose
 5. Data 迁移跟踪文档已完成 Provider 请求模式矩阵初稿，但逐调用点 Query/Body/Header/Retry/Redirect/响应大小限制及跨域敏感信息转发测试仍未全部完成。
 6. Data 分支 M0 第十四轮发现 OpenAPI 鉴权声明与实际 Handler 不一致：35 个 Operation 中，Handler 有 33 条业务路由执行 API Key 认证、2 条 health 路由公开；OpenAPI 仅 11 条业务 Operation 显式声明 ApiKey，另 22 条漏声明；Diagnostics Operation 还缺少 401 响应。该问题是现有 v1 HTTP 契约描述错误，不是实际 Handler 放开了认证。应在 MDM-001 阶段修正 OpenAPI security/401 并通过逐 Operation Contract Test，作为 MDM-002 的前置门禁；这不等于提前实施 MDM-008 的新 Principal/Scope 契约。
 
-**MDM-001 当前结论：** 仓库内主要代码路径、HTTP 调用方、Provider 传输类型、资源入口、Worker、路由、Compose、部署脚本和主要 CI Workflow 已完成静态盘点；Data 分支也完成了 OpenAPI 路由完整性首轮核对和 DTO/PIT 风险识别。当前新增明确阻断：OpenAPI 22 条受保护业务 Operation 漏声明 ApiKey，且错误响应声明不完整，必须在 MDM-001 修正并通过逐 Operation Contract Test。部署现场是否仍使用 `go-migration` Profile、Provider 可配置 Host 的最终 Allowlist、SQL 文件与 Go Migration 的逐表差异、全部 Schema/DTO 字段级核验及 PIT 时间语义映射仍需确认。因此 MDM-001 暂不关闭，MDM-002 不得提前开始删除旧入口/构建文件。
+**MDM-001 当前结论：** 仓库内主要代码路径、HTTP 调用方、Provider 传输类型、资源入口、Worker、路由、Compose、部署脚本和主要 CI Workflow 已完成静态盘点；Data 分支也完成了 OpenAPI 路由完整性首轮核对和 DTO/PIT 风险识别。当前新增明确阻断：OpenAPI 22 条受保护业务 Operation 漏声明 ApiKey，且错误响应声明不完整，必须在 MDM-001 修正并通过逐 Operation Contract Test。部署现场是否仍使用 `go-migration` Profile、Provider 可配置 Host 的最终 Allowlist、SQL 文件与 Go Migration 的完整字段/索引 DDL 差异、全部 Schema/DTO 字段级核验及 PIT 时间语义映射仍需确认；SQL/Go Migration 的表名集合已确认 9/9 一致。因此 MDM-001 暂不关闭，MDM-002 不得提前开始删除旧入口/构建文件。
 
 **结构迁移编号映射：** 与 Data 分支迁移跟踪文档统一采用 M0～M6 七个结构迁移阶段：MDM-001=M0 审计、MDM-002=M1 Module 归并、MDM-003=M2 Application Port/Bootstrap、MDM-004=M3 Root Server 装配、MDM-005=M4 共享资源与生命周期统一、MDM-006=M5 部署/WebUI 切换、MDM-007=M6 结构回归与稳定性验收。迁移验收后另执行 MDM-008 公共平台/数据契约接入；不得把 MDM-008 混入结构迁移验收。
 
