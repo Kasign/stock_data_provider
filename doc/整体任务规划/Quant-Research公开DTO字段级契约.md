@@ -167,7 +167,7 @@ Research 定义 Context 领域语义；Researchflow 负责单次 Run 的分区�
 
 fact 必须有可验证来源与时间；reported_fact 只表示来源声称；inference 必须附推导依据；hypothesis 不得伪装成已证实事实；unknown 表达证据不足。支持与反证都必须可追溯。Research 不复制 News 未授权正文，历史读取仍需重新检查当前授权。Evidence 的 system_as_of 不得晚于所属 Run。
 
-### 3.3 Event
+### 3.3 ResearchEvent
 
 | JSON 字段 | 必需 | 类型/约束 | 语义 |
 |---|---|---|---|
