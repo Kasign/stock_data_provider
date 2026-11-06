@@ -67,7 +67,8 @@ QuantResultRef {
 }
 QuantMetric {
   metric_code, value, unit, period, as_of,
-  quality_status, calculation_version
+  quality_status, metric_status, sample_count?,
+  lower_bound, upper_bound, calculation_version
 }
 RiskDecision {
   decision_id, status: pass|reject|unknown,
@@ -92,9 +93,10 @@ NewsObjectRef {
 Evidence {
   evidence_id, evidence_type: fact|reported_fact|inference|hypothesis|unknown,
   source_owner: data|news|quant|research, source_ref, source_version?,
-  observed_at?, available_at?, published_at?, valid_time_start?,
-  valid_time_end?, polarity: supports|contradicts|neutral,
-  confidence?, quality_status, authorization_status, created_at
+  observed_at, available_at?, published_at?, valid_time_start?,
+  valid_time_end?, system_as_of, polarity: supports|contradicts|neutral,
+  confidence?, quality_status, authorization_ref, limitations[],
+  content_fingerprint?, created_at
 }
 ```
 
@@ -109,7 +111,7 @@ Evidence {
 
 ## 5. Research：领域对象边界
 
-Research Application 至少提供 Context、Evidence、Event、Claim/Hypothesis、Scenario 用例。
+Research Application 至少提供 Context、Evidence、ResearchEvent、Claim/Hypothesis、Scenario 用例。ResearchEvent 是研究领域内多来源证据归并对象，与 NotificationEvent（跨模块集成事件）不是同一实体，ID、版本和生命周期不可互换。
 
 - Event 是多来源证据归并后的研究对象，保留合并依据与生命周期。
 - Claim/Hypothesis 必须有支持/反证、验证方法、预期观察和失效条件。
@@ -560,3 +562,34 @@ type ResearchEvidenceQuery interface {
 5. Quant/Research 逐字段公开 DTO、Schema 示例和版本策略。
 
 **结论：GOV-004 当前 NO-GO，不冻结共同契约，不创建五个模块分支。** GOV-005 可先做规划设计，但不能冻结共同基线 SHA 或启动模块并行实现。
+
+
+## 14. 五模块公共契约一致性规则（2026-11-06）
+
+字段级权威定义：Quant/Research 见 `Quant-Research公开DTO字段级契约.md`，LLM 见 `doc/llm/04-ProviderPort与DTO字段级契约.md`，Notification 见 `doc/notification/03-ApplicationPort与投递状态契约.md`。本节统一跨模块语义，不合并各领域状态机。
+
+### 14.1 时间
+- 时间戳统一 RFC3339 UTC；交易日仍为 Asia/Shanghai 的 YYYY-MM-DD。
+- Researchflow 的 `ResearchRun.as_of` 是一次 Run 唯一系统知识截止时间。Quant Request/Result、Research Context/Claim/Scenario 的 `as_of`，以及 Evidence/News Query 的 `system_as_of`，在该 Run 语境中表达同一截止值；所有下游沿用原值，不得自行刷新。
+- `observed_at` 永远是真实观察时间，不得回填为 as_of；`occurred_at` 是业务事件发生时间；`published_at` 是来源声明时间；`available_at` 仅在有证据时提供；`fetched_at/normalized_at` 分别表示采集/标准化时间。
+- NotificationEvent.occurred_at 不等于接收/投递时间；Delivery/Attempt 自行记录处理时间。
+
+### 14.2 ID 与幂等
+- `request_id` 标识一次调用；`correlation_id` 关联跨模块工作链；`event_id` 标识稳定事件；`idempotency_key` 标识调用方的幂等命令意图。四者不得互换。
+- 异步消费者用自身 Inbox 去重，不用 correlation_id 去重。
+- 幂等命令由 Owner 定义作用域和规范化请求 fingerprint：相同作用域/key/fingerprint 返回原结果；相同 key 不同 fingerprint 返回冲突，不覆盖历史。唯一键作用域由命令 Owner 定义，禁止全局共享幂等键空间。
+- Quant 计算、Researchflow CreateRun、Notification PublishEvent 分别拥有自己的幂等约束；Notification Inbox、PublishEvent、Delivery 三层幂等不能合并。
+
+### 14.3 错误与状态
+- Platform Fault 是同进程执行错误的基础语义，保留稳定类别/Code、Dependency、Retryable、安全摘要；Cause 仅内部日志。
+- 模块可定义受控公开错误投影（如 ModelErrorInfo），但必须给出 Fault 到 kind/stable_code/retryable 的确定映射；不得暴露原始 Cause、Secret 或 Provider 正文。ModelResponse.request_id 负责关联，ModelErrorInfo 不重复携带 request_id。
+- quality_status、Quant result_status、RiskDecision、Researchflow Run/Stage/Attempt、ModelResponse.status、Notification Delivery.status 各自独立。禁止按同名字符串直接跨域转换。
+- Run partial 表示覆盖不完整；Run succeeded 仍可有 degraded 质量摘要；Risk unknown 不得映射为 pass。Notification skipped/blocked/unknown 不是 Platform Fault 的同义词。
+
+### 14.4 事件与版本
+- ResearchEvent 是 Research 领域聚合对象；NotificationEvent 是集成消息。二者 ID、版本和生命周期独立；转换必须显式映射并生成独立 Notification event_id。
+- DTO/event_type 的 schema_version 由生产 Owner 管理且不可变；兼容性按消费者可见语义评估。
+- QuantMetric 的 value/bounds 类型由 metric_code Schema 固定；Evidence 必须携带 system_as_of 和 authorization_ref。授权快照不代表当前访问授权。
+- 公共 Schema 对象是摘要，模块字段级文档是完整字段权威清单；二者不一致时必须先同步文档，禁止实现方自行猜测。
+
+本轮规则为规划建议，待各模块 Owner Review，不代表正式 JSON Schema 或 Go DTO 已实现。

@@ -821,3 +821,16 @@ Workflow Template 按 stage_code + template_version 固定 on_degraded、on_skip
 - 测试需断言实际外部调用次数、Attempt 追加历史、幂等键稳定性、状态迁移和敏感信息脱敏。
 - Fake Adapter/内存 Repository 只证明模块逻辑，不证明真实渠道、MariaDB、Worker 或根 Outbox/Migration 集成。
 - 本轮没有生成测试代码或执行测试；CONTRACT-009/010 仍待 Owner Review，GOV-004 NO-GO。
+
+
+## 40. 五模块公共契约一致性 Review（2026-11-06）
+
+本轮对公共 Schema、Quant/Research 字段级 DTO、Researchflow Port、LLM Provider Port 和 Notification Port 交叉核对：
+- 修正 QuantMetric 摘要，补齐 metric_status、sample_count、lower_bound、upper_bound。
+- Evidence 授权字段统一为 authorization_ref，并补 system_as_of、limitations、content_fingerprint；历史授权快照不替代来源 Owner 当前授权检查。
+- 明确 ResearchEvent 与 NotificationEvent 是不同对象，ID/版本不共享。
+- 明确 ResearchRun.as_of 是唯一系统知识截止值；Evidence/News system_as_of 与其语义一致，observed_at 保留真实观察时间。
+- LLM ModelErrorInfo 增加 Platform Fault 映射；request_id 只在 ModelResponse 层表达，Cause 不对外暴露。
+- 明确质量、计算结果、流程、模型响应和通知投递状态分域管理；统一幂等和关联 ID 基本规则。
+
+未发现需要调整五模块依赖方向的架构冲突。Owner 签字、正式 JSON Schema、Go DTO/golden 与契约测试仍未完成；GOV-004 保持 NO-GO，不创建模块分支。

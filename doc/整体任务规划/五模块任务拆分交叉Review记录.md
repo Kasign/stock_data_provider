@@ -263,3 +263,16 @@ Domain/Contract 不得因为无关模块的 Adapter/Integration 未完成而被�
 - 明确断言外部调用次数、Attempt 历史、幂等键、状态版本和敏感信息脱敏；不能只断言最终 status。
 - 真实渠道行为、MariaDB 事务和 Worker 崩溃恢复属于 L3，Fake Fixture 通过不代表真实集成通过。
 - 详细清单见 `doc/notification/04-契约Fixture与状态迁移验收清单.md`；仍待 Owner Review。
+
+
+## 16. 五模块公共契约一致性 Review（2026-11-06）
+
+1. QuantMetric 公共摘要缺少 metric_status、sample_count、lower_bound、upper_bound；已补齐，数值类型由 metric_code Schema 固定。
+2. Evidence 公共摘要使用 authorization_status，而字段级 DTO 使用 authorization_ref/EvidenceAuthorizationRef；已统一为 authorization_ref，并补 system_as_of、limitations、content_fingerprint。NewsObjectRef 的 authorization_status 仍可表达 News 来源状态，但不能替代 Evidence 授权审计引用。
+3. ResearchEvent 与 NotificationEvent 是不同领域对象/集成消息，ID、版本和生命周期不可复用；转换必须显式映射。
+4. ResearchRun.as_of 是唯一系统知识截止值；下游 as_of 与 Evidence/News system_as_of 在该 Run 语境中表达同一值；observed_at 不得回填。
+5. Platform Fault 与 LLM ModelErrorInfo 增加显式映射；request_id 只保留在 ModelResponse 层，Cause 不对外暴露。
+6. quality_status、Quant result_status、Researchflow 状态、ModelResponse.status、Notification Delivery.status 分域管理，不按同名字符串直接转换。
+7. request_id/correlation_id/event_id/idempotency_key 分工明确；幂等使用 Owner 定义的作用域与 fingerprint。
+
+本轮未发现需要改变五模块依赖方向的架构冲突。字段级差异已在规划文档修订；Owner 签字、正式 JSON Schema、Go DTO/golden 和契约测试仍未完成。GOV-004 继续 NO-GO。

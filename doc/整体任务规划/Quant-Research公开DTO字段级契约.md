@@ -629,3 +629,14 @@ available_at=null 表示没有可验证的外部可获得时间，不得用 publ
 | CONTRACT-005 | Run 唯一固定 system_as_of | 待 Research/Researchflow Owner 确认 |
 
 **本轮结论：形成可供 Owner 逐项接受/修改的明确建议；未收到 Owner 确认前，不勾选冻结状态，不进入 L2 Module Ready。**
+
+## 12. 五模块交叉契约映射补充（2026-11-06）
+
+- Researchflow `ResearchRun.as_of` 是 Run 唯一系统知识截止值。QuantAnalysisRequest/QuantResultRef、ResearchContext/Claim/Scenario 的 `as_of` 必须沿用该值；Evidence 的 `system_as_of` 与其语义相同，且不得晚于所属 Run。
+- `observed_at` 始终记录真实观察时间；不能用 system_as_of 回填。published_at/available_at/valid_time 保留各自来源时间和业务有效时间。Data API 的 as_of 映射由 Quant Data Adapter 负责，不改写 Data 自身时间语义。
+- Evidence.authorization_ref 指向 EvidenceAuthorizationRef 审计快照，包含 policy_owner、policy_version、decision、purpose、content_level、subject_ref、decided_at、expires_at、conditions 和 decision_fingerprint。它不是永久访问令牌；读取受限内容仍需来源 Owner 当前授权复核。Evidence 不用 authorization_status 替代该引用。
+- ResearchEvent 是多来源证据归并后的领域对象；NotificationEvent 是通知模块消费的版本化集成消息。两者 ID/版本空间独立，转换必须显式映射并生成独立 event_id。
+- quality_status、Quant result_status、RiskDecision、Run/Stage/Attempt、ModelResponse.status、Delivery.status 分域管理；同名状态不可直接转换。Run partial 表示覆盖不完整；Run succeeded 仍可有 degraded 质量摘要；Risk unknown 不可 pass。
+- request_id 标识一次调用；correlation_id 贯穿链路；event_id 标识稳定事件；idempotency_key 标识命令意图。幂等使用 Owner 定义作用域与 fingerprint；相同键同指纹返回原结果，不同指纹冲突。
+
+**以上是字段语义校准，不替代 CONTRACT-001~005 Owner 决议，也不构成 Schema 冻结。**

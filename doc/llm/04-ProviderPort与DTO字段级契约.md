@@ -247,3 +247,21 @@ DTO、Port、Fixture 和 parser 单元测试不依赖 Researchflow/Platform 生�
 - 对当前本地 llama.cpp/Qwen 验证 Responses JSON/SSE、Tool Call、Structured Output、reasoning_effort 和断流行为；未验证能力继续为 unknown。
 
 **当前结论：规划侧已形成七项建议决议和一致的 Port 返回值语义，仍待 LLM/Platform Owner 确认；不代表接口冻结、实现完成或 L2 Module Ready。**
+
+
+## 11. Platform Fault 映射与关联 ID 一致性
+
+LLM Adapter 内部执行错误使用 Platform Fault；对调用方公开时投影为 ModelErrorInfo：
+
+| Platform Fault | ModelErrorInfo |
+|---|---|
+| Fault Code | stable_code |
+| Fault Category | kind（映射到 ModelErrorKind） |
+| Retryable | retryable |
+| Dependency | 仅在受控诊断元数据保留，不拼入 safe_message |
+| Safe Message | safe_message |
+| Cause | 仅内部日志，不序列化 |
+
+ModelResponse.request_id 是该次模型调用的关联 ID；ModelErrorInfo 不重复携带 request_id。gateway_request_id 与 upstream_request_id 分别记录；correlation_id 继续用于跨模块链路关联。
+
+ModelResponse.status=incomplete/failed 是协议响应结果，不自动等同于 Platform Fault。只有 Adapter 执行、传输、协议解析或本地校验失败才构造对应 Fault。上游 response.failed 的错误信息是安全归一化投影，不暴露原始响应正文。具体 Fault Go 类型与映射表待 LLM/Platform Owner Review，并以契约测试固定。
