@@ -3044,6 +3044,8 @@ function renderTaskFlowSummary() {
 }
 
 function renderSelectedTaskEvent(item) {
+  const inspector = $(".run-flow-event-inspector");
+  if (inspector) inspector.open = Boolean(item);
   renderSelectedTaskEventView({
     panel: $("#task-event-detail"),
     detailLayout: $("#task-detail"),
