@@ -103,9 +103,10 @@ func (s *CreateRunService) CreateRun(ctx context.Context, command domain.CreateR
 	}
 	command.OriginatingRequestID = cloneString(s.identity.OriginatingRequestID(ctx))
 	command.CorrelationID = strings.TrimSpace(s.identity.CorrelationID(ctx))
-	if command.CorrelationID == "" {
-		command.CorrelationID, err = s.ids.NewRef(ctx, "correlation")
-		if err != nil { return CreateRunResult{}, fmt.Errorf("generate correlation id: %w", err) }
+	if strings.TrimSpace(command.IdempotencyKey) == "" || len(command.IdempotencyKey) > 128 ||
+		strings.TrimSpace(command.SchemaVersion) == "" || strings.TrimSpace(command.TemplateRef) == "" ||
+		strings.TrimSpace(command.TemplateVersion) == "" {
+		return CreateRunResult{}, fmt.Errorf("%w: schema, idempotency key and exact template identity are required", domain.ErrInvalidCommand)
 	}
 	fingerprint, err := domain.RequestFingerprint(callerRef, command)
 	if err != nil { return CreateRunResult{}, err }
@@ -116,6 +117,10 @@ func (s *CreateRunService) CreateRun(ctx context.Context, command domain.CreateR
 		if err := domain.ValidateIdempotentReplay(existingFingerprint, fingerprint); err != nil { return CreateRunResult{}, err }
 		existing.Replayed = true
 		return existing, nil
+	}
+	if command.CorrelationID == "" {
+		command.CorrelationID, err = s.ids.NewRef(ctx, "correlation")
+		if err != nil { return CreateRunResult{}, fmt.Errorf("generate correlation id: %w", err) }
 	}
 
 	tmpl, err := s.templates.Get(ctx, command.TemplateRef, command.TemplateVersion)
