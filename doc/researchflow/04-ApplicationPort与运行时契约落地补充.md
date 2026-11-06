@@ -145,3 +145,12 @@ Fake Repository/Fake Clock/Fake Provider 只证明模块内逻辑；MariaDB/Redi
 - 时间先显式转 UTC，再进入 JSON 对象；tracing 字段仍不参与 RequestFingerprint。
 - 依赖：`github.com/gowebpki/jcs@v1.0.2`（模块 Go 1.21）。
 - 当前提交只完成 JCS 接入和等价输入/重复键测试代码；Golden 固定摘要、RFC 8785 全量测试执行记录仍待补充。
+
+
+## 14. Typed Parameter Schema Registry 与解析门禁（2026-11-06）
+
+- Template.ParameterSchemaRef 是不可变 Registry 引用，不允许 latest/浮动别名；Registry 返回的 ref 必须与请求完全一致，并同时返回非空 version、canonical document fingerprint。
+- Template.Resolve 必须先执行参数 Schema 校验，再运行 applicability rule。Schema 不存在、版本/指纹缺失、引用错配、参数字段缺失/类型不符/额外字段均 fail-closed；不得进入 DAG 解析或 Run 创建。
+- JSON Schema Draft 2020-12；根类型必须为 object，根对象必须关闭额外属性。MVP 禁止远程 $ref/任意 URL 加载，仅允许文档内局部引用，避免运行时联网和 Schema 供应链漂移。
+- Schema 内容使用 RFC 8785 JCS 后计算 SHA-256。ResolvedTemplate 保留 Schema Ref、Registry Version、Fingerprint，Application 持久化到 resolved template snapshot；Registry 对相同 Ref 的版本/内容变更必须拒绝。
+- 实现依赖 github.com/santhosh-tekuri/jsonschema/v5 v5.3.1（Apache-2.0，Go 1.19），固定 JSON Schema Draft 2020-12。

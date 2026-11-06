@@ -64,10 +64,21 @@ type ApplicabilityEvaluator interface {
 }
 type HardRiskGateRegistry interface { Contains(stageCode string) bool }
 type ResolvedStage struct { Definition StageDefinition; Dependencies []string }
+type ParameterSchemaSnapshot struct {
+	Ref string
+	Version string
+	Fingerprint string
+}
+
+type ParameterSchemaValidator interface {
+	Validate(context.Context, string, json.RawMessage) (ParameterSchemaSnapshot, error)
+}
+
 type ResolvedTemplate struct {
 	Ref string
 	Version string
 	Fingerprint string
+	ParameterSchema ParameterSchemaSnapshot
 	Stages []ResolvedStage
 	Excluded []domain.ExcludedStage
 }
@@ -158,12 +169,18 @@ func Fingerprint(t WorkflowTemplate) (string, error) {
 	return hex.EncodeToString(sum[:]), nil
 }
 
-func Resolve(ctx context.Context, t WorkflowTemplate, parameters json.RawMessage, evaluator ApplicabilityEvaluator, gates HardRiskGateRegistry) (ResolvedTemplate, error) {
+func Resolve(ctx context.Context, t WorkflowTemplate, parameters json.RawMessage, parameterSchemas ParameterSchemaValidator, evaluator ApplicabilityEvaluator, gates HardRiskGateRegistry) (ResolvedTemplate, error) {
 	if err := Validate(t, gates); err != nil { return ResolvedTemplate{}, err }
+	if parameterSchemas == nil { return ResolvedTemplate{}, fmt.Errorf("%w: parameter schema validator is required", ErrInvalidTemplate) }
 	if evaluator == nil { return ResolvedTemplate{}, fmt.Errorf("%w: applicability evaluator is required", ErrInvalidTemplate) }
+	parameterSchema, err := parameterSchemas.Validate(ctx, t.ParameterSchemaRef, parameters)
+	if err != nil { return ResolvedTemplate{}, fmt.Errorf("%w: validate parameters against %q: %v", ErrInvalidTemplate, t.ParameterSchemaRef, err) }
+	if parameterSchema.Ref != t.ParameterSchemaRef || strings.TrimSpace(parameterSchema.Version) == "" || strings.TrimSpace(parameterSchema.Fingerprint) == "" {
+		return ResolvedTemplate{}, fmt.Errorf("%w: parameter schema validator returned an incomplete or mismatched immutable snapshot", ErrInvalidTemplate)
+	}
 	fingerprint, err := Fingerprint(t)
 	if err != nil { return ResolvedTemplate{}, err }
-	resolved := ResolvedTemplate{Ref:t.Ref, Version:t.Version, Fingerprint:fingerprint}
+	resolved := ResolvedTemplate{Ref:t.Ref, Version:t.Version, Fingerprint:fingerprint, ParameterSchema:parameterSchema}
 	included := map[string]bool{}
 	definitions := map[string]StageDefinition{}
 	for _, stage := range t.Stages {
