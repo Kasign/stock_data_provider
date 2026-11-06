@@ -1,8 +1,8 @@
 # Notification 契约 Fixture 与状态迁移验收清单
 
 - 归属：NTF-001/004/005/006
-- 对应决议：CONTRACT-009/010
-- 状态：测试设计基线，待 Notification/Platform Owner Review
+- 对应契约：NTF-CTR-001～003（历史别名 Platform CONTRACT-009/010）；状态以项目级契约目录为准
+- 状态：4 份 Draft 2020-12 Schema 与 6 个代表性 Golden 已提交；本地 Draft 2020-12 Validator 校验通过；NTF-CTR-001～003 仍为 pending_evidence，模块 CI Validator/自动化 Golden/Contract Test 未完成；不要求个人 Owner 签字
 - 日期：2026-11-06
 - 说明：以下均为合成数据与测试场景，不代表已有实现或真实渠道能力。
 
@@ -17,36 +17,20 @@
 
 ## 2. Event JSON Golden
 
-建议合成样例：
+首批事件映射与触发语义见 [INT-CTR-001 首批业务事件映射决议](05-首批业务事件映射决议.md)。机器可读 Schema 位于 `schema/`，包括 Envelope 和三类 Payload：
 
-```json
-{
-  "event_id": "evt_fixture_001",
-  "event_type": "research.run.completed",
-  "schema_version": "1.0.0",
-  "source_module": "researchflow",
-  "subject_ref": "research-run:run_fixture_001",
-  "idempotency_key": "publish:run_fixture_001:completed",
-  "occurred_at": "2026-11-06T01:00:00Z",
-  "correlation_id": "corr_fixture_001",
-  "payload": {
-    "run_id": "run_fixture_001",
-    "result_ref": "research-result:result_fixture_001",
-    "result_status": "completed"
-  }
-}
-```
+- `notification-event-envelope-1.0.0.schema.json`
+- `researchflow-run-terminal-1.0.0.schema.json`
+- `quant-risk-decision-changed-1.0.0.schema.json`
+- `research-event-lifecycle-changed-1.0.0.schema.json`
 
-Golden 需覆盖：
-- `event_valid_v1.json`：注册版本、合法 payload，接收 accepted。
-- `event_duplicate_same_fingerprint.json`：同 source/event_id/idempotency_key/fingerprint 重放，返回原接收结果，不新增 Inbox/Delivery。
-- `event_duplicate_event_id_changed_payload.json`：相同 event_id 不同 fingerprint，返回 idempotency_conflict。
-- `event_idempotency_key_collision.json`：同 source_module/idempotency_key 对应不同 event_id 或 fingerprint，返回冲突。
-- `event_unknown_schema_version.json`：未注册版本，拒绝持久化。
-- `event_schema_invalid_payload.json`：缺 required、类型错误或越界，拒绝持久化。
-- `event_schema_registry_mutation.json`：同 event_type/schema_version 试图替换 digest，注册失败。
-- `event_unknown_source_module.json`：未知 source_module，拒绝。
-- `event_payload_too_large.json`：超大小限制，拒绝且不记录正文。
+已提交的代表性 Golden 位于 `golden/`：
+
+- `researchflow-run-terminal-succeeded.golden.json`、`researchflow-run-terminal-cancelled.golden.json`
+- `quant-risk-decision-first-evaluation.golden.json`、`quant-risk-decision-reject.golden.json`
+- `research-event-lifecycle-created.golden.json`、`research-event-lifecycle-invalidated.golden.json`
+
+仍需自动化覆盖：相同事件重放、相同 event_id 不同 fingerprint、同 source_module 幂等键冲突、未知 Schema 版本、非法 Payload、Registry digest 不可变、未知 source_module、超大小拒绝，以及 Outbox 提交/回滚边界。
 
 ## 3. Subscription 与 recipient Fixture
 
@@ -134,14 +118,70 @@ Fake Adapter 只能验证分类和状态机，不证明真实渠道行为。每�
 9. 上游事务是否不受外部发送失败回滚影响。
 10. Secret、目标和 payload 正文是否从日志/错误摘要中脱敏。
 
-## 9. Owner 待确认
+## 9. 尚待证据验收项
 
-1. recipient_scope MVP 是否仅开放 subscription_owner 与 preconfigured_target。
-2. Event Inbox 与 PublishEvent 是否接受双唯一键及冲突策略。
-3. DeliveryPlan 是否在 fan-out 时冻结订阅/渠道/模板版本。
-4. unknown 的自动对账能力和人工处理 SLA。
-5. 渠道幂等键是否支持以及不同渠道的保留期限。
-6. Schema 兼容级别和版本命名规则。
-7. Delivery deadline、max_attempts、max_elapsed 的默认值由谁配置。
+1. recipient_scope 的允许值、解析路径和未授权拒绝行为需由 Schema/Contract Test 固化。
+2. Event Inbox 与 PublishEvent 双唯一键、相同指纹重放和不同指纹冲突需完成并发测试。
+3. DeliveryPlan 在 fan-out 时冻结 Subscription/Channel/Template 版本的行为需有回归测试。
+4. unknown 的自动对账能力和人工处理 SLA 按真实渠道逐项登记；不支持对账时不得自动重发。
+5. 渠道幂等键支持情况及保留期限按 Channel Capability 提供证据；未验证不得标记 supported。
+6. Schema 兼容级别和版本命名规则需补兼容矩阵与 Registry 不可变性测试。
+7. Delivery deadline、max_attempts、max_elapsed 必须显式配置并测试边界，不依赖隐式默认值。
 
 **本清单是模块级测试设计基线；未生成真实测试代码，未连接真实渠道或数据库，不能据此宣称 NTF-001~006 已通过。**
+
+## 10. INT-CTR-001 / NTF-CTR-001～003 Contract Test 执行矩阵
+
+以下测试应由模块 CI 以 Fake Repository、Fake Clock、Fake Channel 执行；数据库唯一约束、事务隔离和进程恢复属于后续 L3。每项必须断言持久化副作用和外部调用次数。
+
+| Test ID | 场景 | 必须断言 |
+|---|---|---|
+| INT001-SCHEMA-01 | 四份 Schema + 六个 Golden | Draft 2020-12 校验通过；date-time format assertion 开启；Payload 按 event_type + schema_version 精确选择 |
+| INT001-SCHEMA-02 | 未知 event_type、未知 schema_version、未知 source_module | PublishEvent 明确拒绝；不回退旧 Schema；不写 Inbox/Delivery |
+| INT001-SCHEMA-03 | 缺字段、未知字段、错误 enum、错误时间、超大 Payload | 明确校验失败；无字段静默补全；无持久化副作用 |
+| INT001-ID-01 | 相同 event_id、相同 fingerprint 重放 | 返回原接收结果；只 fan-out 一次 |
+| INT001-ID-02 | 相同 event_id、不同 fingerprint | 返回稳定 idempotency_conflict；不覆盖原事件、不 fan-out |
+| INT001-ID-03 | 相同 source_module + idempotency_key、相同 fingerprint | 返回原 PublishResult；不创建第二个事件 |
+| INT001-ID-04 | 相同 source_module + idempotency_key、不同 fingerprint | 返回 idempotency_conflict；不通过更换 event_id 绕过 |
+| INT001-ID-05 | 不同 source_module 使用相同 idempotency_key | 按不同生产方作用域分别处理；Inbox 唯一键不得跨 source_module 误冲突 |
+| INT001-FP-01 | 变更 event_type/schema_version/source_module/subject_ref/occurred_at/payload 任一字段 | payload fingerprint 必须变化 |
+| INT001-FP-02 | 仅变更 event_id 或 idempotency_key | payload fingerprint 不变化；对应唯一键仍按各自规则处理 |
+| INT001-OUTBOX-01 | 领域状态与 Outbox 同事务提交 | 两者同时提交；Outbox 事件字段与领域事实一致 |
+| INT001-OUTBOX-02 | 领域状态写入成功但 Outbox 写入失败 | 整个本地事务回滚；不允许出现已提交事实但缺 Outbox |
+| INT001-OUTBOX-03 | Outbox 已发送，确认前进程崩溃 | 重启后可重复发送；Inbox 幂等吸收重复事件 |
+| INT001-RUN-01 | Run queued/running/cancelling | 不发布 terminal 事件 |
+| INT001-RUN-02 | Run 终态 succeeded/partial/failed/cancelled 经 CAS 固化 | 每个 Run 只发布一次；occurred_at=finished_at；重试复用原 envelope |
+| INT001-QUANT-01 | RiskDecision 首次形成 | previous_status=null；发布一条事件 |
+| INT001-QUANT-02 | status 变化或硬阻断 reason code 集合变化 | 发布一条新事件；reason codes 去重并字典序排序 |
+| INT001-QUANT-03 | 仅 warning/info 变化，或硬阻断原因顺序变化但集合相同 | 不发布新事件 |
+| INT001-QUANT-04 | 一个 RiskDecision 涉及多个主体 | 按主体拆分；每条事件只有一个 subject_ref；各自 idempotency_key 稳定且不同 |
+| INT001-RESEARCH-01 | ResearchEvent 首次创建或生命周期状态迁移 | event_version 单调递增；previous/current 正确；occurred_at=changed_at |
+| INT001-RESEARCH-02 | Evidence 追加、来源补录、描述修订但状态不变 | 不发布 lifecycle_changed |
+| INT001-RESEARCH-03 | invalidated/closed 后再次更正或迁移 | 追加新版本事件；不修改或删除历史事件 |
+| NTF002-SUB-01 | Subscription active/paused/disabled/filter mismatch | 仅 active 且匹配时生成 Delivery；其他情况无外部调用 |
+| NTF002-PLAN-01 | Subscription/Channel/Template 版本在 fan-out 前后变更 | Delivery 固定使用单一版本快照；历史计划不原地改写 |
+| NTF002-PLAN-02 | 同一 Event 并发 fan-out | 唯一约束/幂等只生成一份 DeliveryPlan |
+| NTF002-CAS-01 | 两个 Worker 同时领取同一 Delivery | 仅一个 lease/fencing token 有效；旧 Worker 回写被拒绝 |
+| NTF002-CAS-02 | 旧 Worker lease 过期后提交成功结果 | CAS 拒绝迟到状态覆盖；保留审计记录 |
+| NTF003-RETRY-01 | 明确 retryable rejection + 有效 Retry-After | next_attempt_at 取本地退避与 Retry-After 的较晚值；不超过总 deadline |
+| NTF003-RETRY-02 | permanent rejection / retry budget exhausted | 结束为 failed；不超过 max_attempts |
+| NTF003-RETRY-03 | timeout-after-write / 请求可能已到渠道 | 进入 unknown；不自动重发 |
+| NTF003-RETRY-04 | unknown 且对账证明渠道未接受 | 按剩余预算进入 retry_wait 或 failed；保留对账 evidence_ref |
+| NTF003-RETRY-05 | unknown 且渠道不支持查询/幂等 | 保持 unknown；人工重试请求被拒绝 |
+| NTF003-SECRET-01 | Secret 缺失、撤销、轮换或授权失效 | 发送前复核；未调用渠道；不把 Secret 写入日志或错误摘要 |
+
+### 10.1 关键事件字段绑定断言
+
+- Run：envelope.subject_ref == payload.run_ref；occurred_at == payload.finished_at；source_event_ref 不得复用 event_id。
+- Quant：每条事件只对应一个业务主体；occurred_at == evaluated_at；reason code 集合按去重后的字典序比较。
+- Research：envelope.subject_ref == payload.research_event_ref；event_version 严格递增；previous_state != current_state；occurred_at == changed_at。
+- 三类事件：重试时 event_id、idempotency_key、occurred_at、correlation_id、payload 必须逐字节语义一致；更正事实必须生成新的领域版本/发布意图。
+- Notification：不得根据 event_type 猜测 source_module；不得从模型输出或 payload 解析真实 recipient；发送前重新检查 Subscription、授权和 Secret。
+
+### 10.2 CI 完成定义
+
+1. L1：INT001-SCHEMA-*、ID-*、FP-* 全通过，并将六个 Golden 纳入自动测试。
+2. L2：INT001-OUTBOX-*、RUN-*、QUANT-*、RESEARCH-* 由三个生产方分别运行并上传测试报告/提交 SHA。
+3. L2：NTF002-*、NTF003-* 在 Fake Repository/Fake Channel 下全通过。
+4. L3：MariaDB 唯一约束/事务、真实 Outbox/Inbox、Worker 崩溃恢复、真实渠道幂等/对账能力单独验收，不得混入 L2 结论。
+5. 任一契约只有在对应层级的全部适用测试都有可复现 CI 证据后才可升级状态；本清单本身不代表测试已经执行。

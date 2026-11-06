@@ -7,7 +7,9 @@
 
 Researchflow 是研究应用编排层，依赖 Quant、Research、LLM、Notification 的公开接口。它拥有 Run/Stage/Attempt 状态，不拥有其他模块内部领域规则。Platform Task Runner 只提供执行基础设施，不替代 Researchflow 业务状态机。
 
-设计文档：[01-研究流程与状态机设计](01-研究流程与状态机设计.md)。\n\n目标结构：
+设计文档：[01-研究流程与状态机设计](01-研究流程与状态机设计.md)。
+
+契约决议：[FLOW-CTR-001/002 最终决议（历史别名 CONTRACT-006/007）](03-CONTRACT-006与007最终决议.md)。\n\n目标结构：
 ```text
 internal/researchflow/
   application/ orchestration/ workflow/ contextbuilder/

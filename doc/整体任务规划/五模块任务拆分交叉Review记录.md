@@ -3,7 +3,7 @@
 - 所属治理任务：GOV-004 / GOV-005
 - 规划分支：feat/design_doc
 - 日期：2026-11-05
-- 状态：规划侧 Review 完成；不代表模块 Owner 已批准或模块已开工。
+- 状态：历史规划侧 Review 记录；不构成个人 Owner 批准或模块开工/冻结声明，当前语义与状态以项目级契约目录为准。
 - 范围：五模块任务拆分与验收文档、首批 Application Port 与状态机契约。
 
 ## 1. Review 结论
@@ -13,7 +13,7 @@
 本轮已修正五份任务拆分文档的依赖列，并补充分层规则。以后任务依赖必须标明属于哪一层：
 
 - **Domain**：本模块领域对象、算法、状态机和内存实现依赖。
-- **Contract**：跨模块 DTO/Port 的 Owner Review 与版本冻结。
+- **Contract**：跨模块 DTO/Port 的项目级语义决议、版本管理和证据验收；不设置个人 Owner 签字门槛。
 - **Adapter**：调用外部模块、Provider、HTTP、Secret、Storage 的适配实现。
 - **Integration**：根 DI/HTTP/Worker/Migration、真实依赖和端到端验收。
 
@@ -107,12 +107,12 @@ Domain/Contract 不得因为无关模块的 Adapter/Integration 未完成而被�
 
 ## 5. 仍然不能宣称通过的事项
 
-- 所有 DTO/Port 仍待各模块 Owner Review；本轮规划 Review 不能代替 Owner 签字。
-- Quant 数值精度、Indicator/Factor 首批参数仍待 CONTRACT-001~003。
-- Research AuthorizationRef 与统一 system_as_of 仍待 CONTRACT-004/005。
-- Researchflow CONTRACT-006/007 的规划侧状态机 Review 已完成，传播矩阵、硬风险门禁策略和取消/deadline 竞争语义仍待 Owner 签字；实现和集成验收未完成。
+- 本轮规划 Review 不代表 Schema/Golden/Contract Test 已通过；当前契约状态以项目级目录为准，语义由项目统一决策方裁定，模块责任角色提供实现和测试证据。
+- Quant 数值精度、Indicator/Factor 首批参数对应 GOV-CTR-001、QNT-CTR-001～003；公共语义已定，Schema/Golden 仍为 pending_evidence。
+- Research AuthorizationRef 与 system_as_of 分别对应 GOV-CTR-006/002、NEWS-CTR-002、RSC-CTR-001、FLOW-CTR-003；语义已形成基线，证据仍为 pending_evidence。
+- Researchflow FLOW-CTR-001/002（历史别名 CONTRACT-006/007）的设计决议已由项目统一决策方关闭；Schema/Golden、传播矩阵自动测试、CAS/竞态/fencing 证据仍未完成。
 - LLM-001 静态盘点已完成，当前部署本地 llama.cpp Responses JSON/SSE 在线 E2E、structured output 和工具调用能力仍待真实验收。
-- Notification recipient_scope、幂等唯一键和 Payload Schema 注册仍待 CONTRACT-009/010。
+- Notification NTF-CTR-001～003 的语义已形成基线，Schema/Golden/状态迁移证据仍待补；首批跨模块事件映射 INT-CTR-001 仍为 pending_decision。
 - 根 DI、HTTP、Worker、Migration 注册及真实 DB/渠道验收均属于 Integration，不在本轮完成。
 
 ## 6. 本轮文件变更
@@ -124,20 +124,20 @@ Domain/Contract 不得因为无关模块的 Adapter/Integration 未完成而被�
 - doc/llm/02-任务拆分与验收.md
 - doc/notification/02-任务拆分与验收.md
 
-**最终结论：五模块任务拆分的依赖边界已按 Domain / Contract / Adapter / Integration 分层修正。模块仍处于 Design Ready；Owner Review 通过后按模块确认 Module Ready。没有理由要求五个模块等待其他业务分支同时编译。**
+**最终结论：五模块任务拆分的依赖边界已按 Domain / Contract / Adapter / Integration 分层修正。模块可按已登记的契约状态和各自证据推进；不以个人 Owner Review 作为 Module Ready 前置，也不把设计评审完成等同于实现/集成验收通过。**
 
 
 ## 7. Quant / Research 字段级契约 Review（2026-11-05）
 
-本轮继续细化 CONTRACT-001~005，结果写入《Quant-Research公开DTO字段级契约.md》第 11 节，状态均为建议稿，待 Owner 确认。
+本轮细化内容属于历史评审建议，当前有效编号和状态以项目级目录为准：GOV-CTR-001/002 已 accepted；GOV-CTR-006、QNT-CTR-001～005、NEWS-CTR-002、RSC-CTR-001、FLOW-CTR-003 均按 pending_evidence 追踪。
 
 | 决策 | 本轮建议 | 当前门禁 |
 |---|---|---|
-| CONTRACT-001 | 价格/金额 decimal string；计数 integer；比例/收益率等统计量 number；按 metric_code 固定 JSON Schema、精度和误差 | 待 Quant Owner 确认 |
-| CONTRACT-002 | 首批 SMA、EMA、Return、Volatility、RSI、MACD、ATR、Bollinger；每个指标独立 typed 参数 Schema | 待 Quant Owner 确认 |
-| CONTRACT-003 | 首批优先 momentum_20d、momentum_60d、volatility_20d；Factor 与 Indicator 解耦，横截面母体和覆盖率必须固定 | 待 Quant Owner 确认 |
-| CONTRACT-004 | Evidence 保存统一不透明 AuthorizationRef；来源 Owner 负责当前授权复核；历史授权快照不可覆盖当前决策 | 待 Research/News Owner 确认 |
-| CONTRACT-005 | ResearchRun 固定唯一 system_as_of；所有 Stage 和下游模块沿用，不允许重试时刷新 | 待 Research/Researchflow Owner 确认 |
+| GOV-CTR-001 / QNT-CTR-001 | 价格/金额 decimal string；计数 integer；比例/收益率等统计量 number；按 metric_code 固定 JSON Schema、精度和误差 | 公共语义 accepted；Quant Registry Schema/Golden pending_evidence |
+| QNT-CTR-002 | 首批 SMA、EMA、Return、Volatility、RSI、MACD、ATR、Bollinger；每个指标独立 typed 参数 Schema | pending_evidence：补参数 Schema/默认值/范围 Golden |
+| QNT-CTR-003 | 首批优先 momentum_20d、momentum_60d、volatility_20d；Factor 与 Indicator 解耦，横截面母体和覆盖率必须固定 | pending_evidence：补 Registry/算法 Schema/Golden |
+| GOV-CTR-006 / NEWS-CTR-002 / RSC-CTR-001 | Evidence 保存统一不透明 AuthorizationRef；来源责任模块负责当前授权复核；历史授权快照不可覆盖当前决策 | pending_evidence：补统一 Schema、签发方映射和撤销竞态测试 |
+| GOV-CTR-002 / FLOW-CTR-003 | ResearchRun 固定唯一 system_as_of；所有 Stage 和下游模块沿用，不允许重试时刷新 | 公共时间语义 accepted；传播/Adapter Golden pending_evidence |
 
 同时修正 QuantMetric 原字段表中 value/bounds 的类型矛盾：数值类型由 metric_code 对应 Schema 固定；value 与区间边界按 required 字段显式输出 null 或有效值，禁止省略来隐藏未知状态。Quant 与 Research 的任务验收表已同步加入对应要求。
 
@@ -149,7 +149,7 @@ Domain/Contract 不得因为无关模块的 Adapter/Integration 未完成而被�
 - AuthorizationRef 是审计引用，不是访问令牌；历史允许不代表当前允许。
 - system_as_of 是知识截止时间，不得伪造 observed_at，也不能替代 trade_date。
 
-## 8. Researchflow 状态机契约 Review（CONTRACT-006 / 007，2026-11-05）
+## 8. Researchflow 状态机契约 Review（FLOW-CTR-001/002；历史别名 CONTRACT-006/007，2026-11-05）
 
 本轮对 Application Port、公共 Schema、Researchflow 设计和 FLOW-001~004 验收项进行一致性 Review，发现 Run 状态枚举存在三处不一致：旧设计文档使用 degraded/timed_out 作为 Run 终态，而首批 Port 与公共 Schema 使用 partial/failed。该差异会导致结果聚合、持久化枚举和 API 状态解释不一致。
 
@@ -157,8 +157,8 @@ Domain/Contract 不得因为无关模块的 Adapter/Integration 未完成而被�
 
 | 决策 | 统一建议 | 验收影响 |
 |---|---|---|
-| CONTRACT-006 | Run 只表达完成度：succeeded/partial/failed/cancelled；Stage/Attempt 承载 degraded/timed_out。Template 显式定义每种 Stage 结果传播策略 | FLOW-001~003 状态和聚合测试；FLOW-002 Template fingerprint |
-| CONTRACT-007 | Run 增加 cancelling 中间态；cancel/deadline/retry 使用 CAS 与绝对 deadline；在途 Attempt 收敛后才允许 Run 终态 | FLOW-003 竞态测试；FLOW-004 队列/租约/恢复测试 |
+| FLOW-CTR-001 | Run 只表达完成度：succeeded/partial/failed/cancelled；Stage/Attempt 承载 degraded/timed_out。Template 显式定义每种 Stage 结果传播策略 | 状态迁移/传播矩阵 Schema、Golden 和 Contract Test（pending_evidence） |
+| FLOW-CTR-002 | Run 增加 cancelling 中间态；cancel/deadline/retry 使用 CAS 与绝对 deadline；在途 Attempt 收敛后才允许 Run 终态 | CAS/竞态/fencing/重启恢复 Contract Test（pending_evidence） |
 
 ### 8.2 本轮发现及修正
 
@@ -177,7 +177,7 @@ Domain/Contract 不得因为无关模块的 Adapter/Integration 未完成而被�
 - FLOW-003：覆盖状态合法迁移、blocked/skipped 区分、失败重试新 Attempt、partial 聚合、Run cancelling、deadline、CAS 竞争与迟到结果拒绝。
 - FLOW-004：覆盖容量满拒绝、并发上限、单 Run 并行上限、queued 恢复、租约过期回收、fencing token、单层重试和进程重启恢复。
 
-### 8.4 尚待 Researchflow Owner 确认
+### 8.4 历史待决项（已由第 17 节项目决议覆盖）
 
 - Stage 传播策略是否采用本轮五项枚举，以及是否需要针对特定 reason_code 增加更细粒度规则。
 - 硬风险门禁 Stage 的识别方式（Template 元数据标记或受控 stage_code Registry）；建议两者校验，不能仅靠自由文本。
@@ -185,7 +185,7 @@ Domain/Contract 不得因为无关模块的 Adapter/Integration 未完成而被�
 - deadline 到达时 optional Stage 的传播策略是否默认 partial；建议默认 partial，Owner 可在明确无影响时配置 no_impact，但不能放宽 required/risk gate。
 - 数据库 CAS、租约和 fencing token 的具体字段/唯一约束属于 FLOW-007 Repository/Schema 评审，当前为逻辑契约建议。
 
-**本轮结论：规划侧 CONTRACT-006/007 建议决议已形成，文档间状态语义已统一；仍待 Researchflow Owner Review，不代表实现、契约冻结或 L2 Module Ready。**
+**历史结论已由第 17 节项目最终决议覆盖；实现、自动化契约测试和 L2 Module Ready 仍未完成。**
 
 
 ## 9. LLM-001 现有 Gateway 协议盘点（2026-11-05）
@@ -208,7 +208,7 @@ Domain/Contract 不得因为无关模块的 Adapter/Integration 未完成而被�
 - CapabilityState 使用 supported/unsupported/unknown，按 Provider + Model + Gateway 版本和验证日期记录；当前本地 Responses/Structured Output/Tool Call 真实能力均不能因 Mock 通过而标记 supported。
 - ToolDefinition 是受控声明，LLM 只传输和解析；Researchflow 仍负责白名单、权限、预算和执行。
 - 完整字段表、JSON Schema、错误分类、资源边界和 Owner 未决项见 doc/llm/04-ProviderPort与DTO字段级契约.md。
-- 本轮仅形成 LLM-002 规划侧建议稿，待 LLM/Platform Owner Review；不代表接口冻结或模块开工。
+- 本轮仅形成 LLM-002 规划侧建议稿；当前 LLM-CTR-001～003 状态以项目级目录为准，均未完成证据验收，不代表接口已 frozen 或模块已开工。
 
 
 ## 11. LLM-002 Owner Review 深化（2026-11-05）
@@ -217,7 +217,7 @@ Domain/Contract 不得因为无关模块的 Adapter/Integration 未完成而被�
 - 七项建议决议：MVP 单轮文本；ToolDefinition 纳入但默认禁用、只在能力 supported 时允许 auto；reasoning_effort 保留可选但默认关闭；本地 Schema 使用 Draft 2020-12、上游 strict 子集独立验证；Usage.total_tokens 有条件派生；SSE 序号严格校验；request/correlation/Gateway/upstream 四类 ID 分离。
 - SSE 若全流提供 sequence_number，必须连续递增；缺号/重号/倒退不能标记 completed。若整流均不提供可继续但记录序号能力 unavailable；混合有无按协议异常。
 - ModelResponse.status 表达上游合法终态；Go error 表达传输、HTTP、协议、Schema、callback 和 Context 错误。无 terminal EOF 返回部分 Response + stream_interrupted。
-- 以上为规划侧建议，待 LLM/Platform Owner Review；不构成签字冻结。详细字段和决议见 doc/llm/04-ProviderPort与DTO字段级契约.md。
+- 以上为规划侧建议，不构成证据冻结。详细字段见 doc/llm/04-ProviderPort与DTO字段级契约.md；当前状态以项目级目录为准。
 
 
 ## 12. LLM-002 JSON/SSE Fixture 设计
@@ -237,7 +237,7 @@ Domain/Contract 不得因为无关模块的 Adapter/Integration 未完成而被�
 - 本地模型是否支持这些事件仍由真实 E2E 决定；Fixture 通过不能把 function_tool_calls 或 responses_stream 设为 supported。
 
 
-## 14. Notification CONTRACT-009/010 字段级 Review（2026-11-06）
+## 14. Notification NTF-CTR-001～003 字段级 Review（历史别名 CONTRACT-009/010，2026-11-06）
 
 ### 发现
 - 旧 DeliveryRecord 仅列 queued/sending/sent/failed/skipped，未完整表达 retry_wait、blocked 和外部结果未知；与 Outbox/租约恢复要求不一致。
@@ -254,7 +254,7 @@ Domain/Contract 不得因为无关模块的 Adapter/Integration 未完成而被�
 - 退订会抑制尚未发送的 queued/retry_wait；sending 中的外部副作用不承诺可撤回。
 - Schema 注册键 `(event_type,schema_version)`，注册后不可原地修改；模板绑定明确版本和变量 allowlist。
 
-详细状态机、字段、唯一键、Port 和验收映射见 `doc/notification/03-ApplicationPort与投递状态契约.md`。上述为规划建议，待 Notification/Platform/事件 Owner 签字。
+详细状态机、字段、唯一键、Port 和验收映射见 `doc/notification/03-ApplicationPort与投递状态契约.md`。上述为规划建议；当前 NTF-CTR-001～003 的状态与证据缺口以项目级目录为准，不以个人 Owner 签字作为门槛。
 
 
 ## 15. Notification Fixture 与验收覆盖补充
@@ -262,4 +262,29 @@ Domain/Contract 不得因为无关模块的 Adapter/Integration 未完成而被�
 - 新增合成 Event JSON Golden、Inbox/Publish 幂等冲突、Subscription/recipient 变更、Delivery 状态迁移、unknown 对账、RetryDelivery、租约/fencing、Outbox/Inbox 恢复和 Channel Fake Adapter 场景。
 - 明确断言外部调用次数、Attempt 历史、幂等键、状态版本和敏感信息脱敏；不能只断言最终 status。
 - 真实渠道行为、MariaDB 事务和 Worker 崩溃恢复属于 L3，Fake Fixture 通过不代表真实集成通过。
-- 详细清单见 `doc/notification/04-契约Fixture与状态迁移验收清单.md`；仍待 Owner Review。
+- 详细清单见 `doc/notification/04-契约Fixture与状态迁移验收清单.md`；Schema/Golden/Contract Test 仍待完成。
+
+
+## 16. 五模块公共契约一致性 Review（2026-11-06）
+
+1. QuantMetric 公共摘要缺少 metric_status、sample_count、lower_bound、upper_bound；已补齐，数值类型由 metric_code Schema 固定。
+2. Evidence 公共摘要使用 authorization_status，而字段级 DTO 使用 authorization_ref/EvidenceAuthorizationRef；已统一为 authorization_ref，并补 system_as_of、limitations、content_fingerprint。NewsObjectRef 的 authorization_status 仍可表达 News 来源状态，但不能替代 Evidence 授权审计引用。
+3. ResearchEvent 与 NotificationEvent 是不同领域对象/集成消息，ID、版本和生命周期不可复用；转换必须显式映射。
+4. ResearchRun.as_of 是唯一系统知识截止值；下游 as_of 与 Evidence/News system_as_of 在该 Run 语境中表达同一值；observed_at 不得回填。
+5. Platform Fault 与 LLM ModelErrorInfo 增加显式映射；request_id 只保留在 ModelResponse 层，Cause 不对外暴露。
+6. quality_status、Quant result_status、Researchflow 状态、ModelResponse.status、Notification Delivery.status 分域管理，不按同名字符串直接转换。
+7. request_id/correlation_id/event_id/idempotency_key 分工明确；幂等使用 Owner 定义的作用域与 fingerprint。
+
+本轮未发现需要改变五模块依赖方向的架构冲突。字段级差异已在规划文档修订；正式 JSON Schema、Go DTO/Golden 和契约测试仍未完成。GOV-004 继续 NO-GO。
+
+
+## 17. FLOW-CTR-001/002 项目最终决议（历史别名 CONTRACT-006/007，2026-11-06）
+
+本节取代第 8 节中“待 Researchflow Owner 确认”的历史状态。项目不存在独立模块 Owner；由项目统一决策方形成决议。设计决策关闭，代码实现与自动化验收仍未完成。
+
+- FLOW-CTR-001：Run 只表达完成度；Stage 增加 retry_wait；Template 固定传播矩阵和有限 retry_policy；硬风险门禁使用 Registry + gate_type 双重标识；RiskDecision reject/unknown 是有效业务结果但 actionability blocked；门禁未执行或执行层失败必须 Run.failed。
+- FLOW-CTR-002：created/queued 无运行中 Attempt 时可直接取消；running 进入 cancelling；数据库 UTC 时钟决定 deadline 优先级；deadline 将未启动 Stage 标为 timed_out，在途 Attempt 停止/fence 后 timed_out；Run 终态必须无活动 Stage/Attempt，并以事务/CAS 固化。
+- 租约 fencing 仅阻止本地迟到写入；外部副作用必须使用下游幂等键，ambiguous outcome 不自动重试。
+- 详细决议与验收矩阵见 `doc/researchflow/03-CONTRACT-006与007最终决议.md`（文件名保留历史编号；正文契约编号为 FLOW-CTR-001/002）。
+
+本决议不代表 FLOW-001~004 已实现或测试通过，也不单独使 GOV-004/L2 Module Ready 通过。

@@ -1,7 +1,7 @@
 # Quant / Research 公开 DTO 字段级契约
 
 - 所属治理任务：GOV-004
-- 状态：字段级设计草案，待 Quant / Research / Researchflow Review；不是已实现代码，也不是最终冻结 Schema。
+- 状态：字段级设计与项目统一决议输入；当前各契约状态以 `doc/整体任务规划/跨模块契约目录与冻结状态.md` 为准。本文件不是已实现代码，也不是冻结 Schema。
 - 规划归属：仅维护于 feat/design_doc；模块实现分别归未来 feat/quant、feat/research。
 - 目标：跨模块只传稳定 Application DTO 和不透明引用，不暴露 Domain、Repository、Adapter 类型。
 
@@ -12,7 +12,7 @@
 | JSON 命名 | snake_case；发布后不随 Go 字段重命名自动变化 |
 | ID / Ref | 不透明非空字符串；消费方不解析、不拼接、不推导内部 ID |
 | 时间 | RFC3339 UTC；交易日期单独使用 YYYY-MM-DD（Asia/Shanghai） |
-| as_of | 系统知识截止时间，不与交易日、published_at、valid_at 混用 |
+| system_as_of | 系统知识截止时间，不与交易日、published_at、valid_at 混用 |
 | 单位 | 金额 CNY、价格 CNY/股、数量 shares；百分比明确百分点或比例 |
 | 缺失 | 区分 required、optional、nullable；unknown 不转 0 / false / 空字符串 |
 | 状态 | 稳定枚举；消费方对未知枚举采取 fail-safe |
@@ -31,10 +31,11 @@
 | JSON 字段 | 必需 | 类型/约束 | 语义 |
 |---|---|---|---|
 | schema_version | 是 | string | 请求 Schema 版本 |
-| request_id | 是 | string | 跨模块关联 ID |
+| request_id | 是 | string | 本次 Quant Application 调用的 Request ID；由 Researchflow 当前 Worker/Adapter 生成或传播，不是 Run 长期关联 ID |
+| correlation_id | 是 | string | 关联所属 Run 的跨模块工作链 ID；从 Researchflow Run Execution Context 原样继承 |
 | security_id | 条件必需 | string | 单证券分析必需；市场分析可缺省 |
 | scope | 是 | stock/market/industry | 分析范围 |
-| as_of | 是 | timestamp | 系统知识截止时间 |
+| system_as_of | 是 | RFC3339Nano UTC | 必须不晚于服务端可信 UTC 当前时间；系统知识截止时间 |
 | trade_date | 否 | date | 目标交易日，不替代 as_of |
 | period | 是 | string/enum | 分析周期，允许值由接口版本约束 |
 | input_snapshot_refs | 是 | string[] | Data 快照引用，保留来源与 PIT 元数据 |
@@ -45,6 +46,8 @@
 
 Market/Industry 范围必须有明确证券全集或分类版本引用。allow_degraded 只允许按用例规则处理 degraded，不得放行 invalid 或把 unknown 当有效数值。
 
+QuantAnalysisRequest 的幂等作用域为 `(authenticated_caller_ref, use_case, idempotency_key)`。请求指纹覆盖 security_id、scope、system_as_of、trade_date、period、input_snapshot_refs、adjustment_basis、parameters 和 quality_policy；不覆盖 request_id、correlation_id 和接收时间。相同键/相同指纹返回原 QuantResultRef；相同键/不同指纹返回 idempotency_conflict。Quant 首批计算为无外部副作用的纯计算，不允许把幂等键当作结果 ID。
+
 ### 2.2 QuantResultRef
 
 | JSON 字段 | 必需 | 类型/约束 | 语义 |
@@ -54,7 +57,7 @@ Market/Industry 范围必须有明确证券全集或分类版本引用。allow_d
 | result_type | 是 | indicator/factor/trend/market/industry/stock/strategy/backtest/risk/evaluation | 结果类型 |
 | scope | 是 | stock/market/industry/portfolio | 结果范围 |
 | security_id | 条件必需 | string | 单证券结果引用 |
-| as_of | 是 | timestamp | 计算采用的系统知识截止时间 |
+| system_as_of | 是 | RFC3339Nano UTC | 计算采用的系统知识截止时间 |
 | trade_date | 否 | date | 对应交易日 |
 | period | 是 | string | 结果周期 |
 | algorithm_version | 是 | string | 算法实现版本 |
@@ -62,7 +65,8 @@ Market/Industry 范围必须有明确证券全集或分类版本引用。allow_d
 | input_snapshot_refs | 是 | string[] | 输入快照引用 |
 | quality_status | 是 | valid/degraded/invalid/unknown | 结果质量 |
 | result_status | 是 | completed/insufficient_data/insufficient_sample/rejected/failed | 计算状态 |
-| created_at | 是 | timestamp | 创建时间 |
+| authorization_ref | 是 | string | Quant 签发的 AuthorizationRef；policy_owner=quant，subject_ref=可信调用主体，resource_ref=result_id，purpose_code=quant_analysis，content_level=full |；result_id 必须绑定 QNT-CTR-005 不可变 Result Manifest
+| created_at | 是 | RFC3339Nano UTC | 创建时间 |
 
 completed 不代表 valid；消费方必须同时检查 result_status 和 quality_status。invalid/unknown 不可作为有效数值事实。
 
@@ -74,7 +78,7 @@ completed 不代表 valid；消费方必须同时检查 result_status 和 qualit
 | value | 是 | string/number/null（由 metric_code 对应 Schema 固定） | 无有效数值时必须显式 null，由 metric_status 解释；精确数值与统计数值采用不同且固定的 JSON 类型 |
 | unit | 是 | string/enum | CNY、CNY/share、shares、percentage_point、ratio、day 等 |
 | period | 是 | string | 统计周期 |
-| as_of | 是 | timestamp | 知识截止时间 |
+| system_as_of | 是 | RFC3339Nano UTC | 知识截止时间 |
 | quality_status | 是 | valid/degraded/invalid/unknown | 质量 |
 | metric_status | 是 | available/insufficient_data/insufficient_sample/not_applicable/unknown | 数值可用性 |
 | calculation_version | 是 | string | 公式/实现版本 |
@@ -84,6 +88,12 @@ completed 不代表 valid；消费方必须同时检查 result_status 和 qualit
 
 金额和价格必须采用明确 decimal 精度策略；若统计指标使用 float64，必须声明误差容忍、舍入策略和固定样本。value 为 null 时必须说明原因，禁止用 0 代替缺失。
 
+**QuantMetric 组合约束：**
+- `metric_status=available` 时 value 必须非 null；`insufficient_data/insufficient_sample/not_applicable/unknown` 时 value 必须为 null。
+- `quality_status=invalid/unknown` 时 metric_status 不得为 available；degraded 是否允许 available 必须由该 metric 的 quality_policy 明确声明。
+- lower_bound/upper_bound 必须同时为 null 或同时非 null；非 null 时类型与 value 一致且 lower_bound <= value <= upper_bound。value 为 null 时区间必须均为 null。
+- sample_count 为非负整数；Registry 声明 sample_count 是否必需及其统计口径，不得用输入行数冒充有效样本数。
+
 ### 2.4 TrendResult
 
 | JSON 字段 | 必需 | 类型/约束 | 语义 |
@@ -91,12 +101,12 @@ completed 不代表 valid；消费方必须同时检查 result_status 和 qualit
 | trend_code | 是 | string | 趋势类型编码 |
 | direction | 是 | bullish/bearish/sideways/unknown | 方向 |
 | phase | 是 | emerging/accelerating/mature/weakening/reversing/unknown | 趋势阶段 |
-| strength | 是 | number/null | 归一化强度，需定义范围 |
+| strength | 是 | number/null | 归一化强度；非 null 时范围固定为 [0,1]，并由 algorithm_version 说明归一化方法 |
 | period | 是 | string | 周期 |
 | evidence_metrics | 是 | QuantMetric[] | 支撑指标 |
 | conflict_refs | 是 | string[] | 周期冲突/反向结构引用 |
 | quality_status | 是 | enum | 质量 |
-| as_of | 是 | timestamp | 截止时间 |
+| system_as_of | 是 | RFC3339Nano UTC | 截止时间 |
 | algorithm_version | 是 | string | 算法版本 |
 
 direction 与 phase 必须分开；unknown 不得用 sideways 代替。跨周期冲突必须显式表达。
@@ -108,12 +118,38 @@ direction 与 phase 必须分开；unknown 不得用 sideways 代替。跨周期
 | decision_id | 是 | string | 决策 ID |
 | status | 是 | pass/reject/unknown | 硬风险结论 |
 | rule_set_version | 是 | string | 规则集版本 |
-| evaluated_at | 是 | timestamp | 评估时间 |
-| as_of | 是 | timestamp | 输入知识截止时间 |
+| evaluated_at | 是 | RFC3339Nano UTC | 评估时间 |
+| system_as_of | 是 | RFC3339Nano UTC | 输入知识截止时间 |
 | reasons | 是 | RiskReason[] | 命中、拒绝或未知原因 |
 | input_refs | 是 | string[] | 输入结果/快照引用 |
 
 RiskReason 至少包含 code、severity（block/warn/info）、status（triggered/not_triggered/unknown）、safe message 和 evidence_refs。数据缺失、规则无法评估或输入质量不足时，RiskDecision 必须为 unknown 或 reject，绝不能 pass。硬门禁不提供可由评分或 LLM 调整的 override 字段。
+
+
+### 2.7 QuantResult Envelope 与强类型 Payload
+
+Quant Application 返回的 QuantResult 使用共同 Envelope，不允许 `map[string]any` 或无约束 JSON payload。
+
+| 字段 | 必需 | 类型/约束 | 语义 |
+|---|---|---|---|
+| schema_version | 是 | string | Envelope Schema 版本 |
+| result_id | 是 | string | 不透明结果 ID |
+| result_type | 是 | indicator/factor/trend/market/industry/stock/strategy/backtest/risk/evaluation | 必须命中已注册结果类型 |
+| scope | 是 | stock/market/industry/portfolio | 结果范围 |
+| security_id | 条件必需 | string | 单证券结果必需 |
+| system_as_of | 是 | RFC3339Nano UTC | 计算知识截止时间 |
+| trade_date | 否 | YYYY-MM-DD | 对应交易日 |
+| period | 是 | string | 结果周期 |
+| algorithm_version | 是 | string | 算法语义版本 |
+| parameter_fingerprint | 是 | string | 规范化参数指纹 |
+| input_snapshot_refs | 是 | array<string> | 输入快照引用；无输入仅限模板白名单纯函数 |
+| quality_status | 是 | valid/degraded/invalid/unknown | 结果质量 |
+| result_status | 是 | completed/insufficient_data/insufficient_sample/rejected/failed | 计算状态 |
+| authorization_ref | 是 | string | Quant 签发的 AuthorizationRef；policy_owner=quant，subject_ref=可信调用主体，resource_ref=result_id，purpose_code=quant_analysis，content_level=full |
+| payload | 是 | discriminated union | 按 result_type + schema_version 命中唯一强类型子 Schema |
+
+同一 result_type/schema_version 的 payload 结构不可原地改变。Researchflow 只校验 discriminator、Schema 和版本并保存结果引用；Research 不解析未知 payload，也不自行计算或重解释指标。未知 result_type/schema_version 必须返回 unsupported_result_type/unsupported_schema，不回退旧版本。
+
 
 ### 2.6 Quant Facade 边界
 
@@ -131,13 +167,13 @@ RiskReason 至少包含 code、severity（block/warn/info）、status（triggere
 | research_question | 是 | string | 研究问题 |
 | scope | 是 | market/industry/stock/event | 研究范围 |
 | subject_refs | 是 | string[] | 证券/行业/Event 引用 |
-| as_of | 是 | timestamp | 系统知识截止时间 |
+| system_as_of | 是 | RFC3339Nano UTC | 系统知识截止时间 |
 | section_refs | 是 | ContextSectionRef[] | 分区引用及版本 |
 | quality_summary | 是 | QualitySummary | 完整性/质量概览 |
 | included_sections | 是 | string[] | 已包含分区 |
 | omitted_sections | 是 | OmittedSection[] | 裁剪/缺失分区及原因 |
 | builder_version | 是 | string | 语义构建版本 |
-| created_at | 是 | timestamp | 创建时间 |
+| created_at | 是 | RFC3339Nano UTC | 创建时间 |
 
 Research 定义 Context 领域语义；Researchflow 负责单次 Run 的分区选择、排序、Token Budget、裁剪和模型上下文装配。裁剪不得静默丢失来源、关键反证和风险限制。
 
@@ -151,23 +187,27 @@ Research 定义 Context 领域语义；Researchflow 负责单次 Run 的分区�
 | source_ref | 是 | string | 来源对象引用 |
 | source_version | 条件必需 | string | 版本化来源必须提供 |
 | source_locator | 否 | string | 来源定位符，不直接存未授权全文 |
+| derived_from_refs | 是 | string[] | 派生该 Evidence 的上游 Evidence 引用；fact/reported_fact 可为空，inference/hypothesis 必须非空，顺序稳定且无重复 |
 | claim_ref | 否 | string | 关联 Claim |
 | subject_refs | 是 | string[] | 证券/行业/Event 引用 |
-| published_at | 否 | timestamp | 来源声明发布时间 |
-| available_at | 否 | timestamp | 有证据支持的外部可获得时间 |
-| observed_at | 是 | timestamp | 本系统观察时间 |
-| valid_time_start/end | 否 | timestamp | 业务有效区间 |
-| system_as_of | 是 | timestamp | 纳入研究时的知识截止时间 |
+| published_at | 是 | RFC3339Nano UTC/null | 来源声明发布时间；无来源证据显式 null |
+| available_at | 是 | RFC3339Nano UTC/null | 有证据支持的外部可获得时间；无来源证据显式 null |
+| system_observed_at | 是 | RFC3339Nano UTC | 本系统观察时间 |
+| valid_time_start/end | 是 | RFC3339Nano UTC/null | 业务有效区间；必须同时为 null 或同时提供且 start<=end |
+| system_as_of | 是 | RFC3339Nano UTC | 纳入研究时的知识截止时间 |
 | stance | 是 | supports/contradicts/neutral | 对 Claim 的立场 |
-| confidence | 否 | number/null | 置信表达及其方法来源 |
+| confidence | 是 | number/null | 仅允许 [0,1]；无可信置信估计时 null；非 null 时 confidence_method 与 confidence_method_version 必填，不能使用 LLM 自评分冒充统计概率 |
+| confidence_method | 条件必需 | string | confidence 非 null 时必填，说明估计方法 |
+| confidence_method_version | 条件必需 | string | confidence 非 null 时必填，固定方法版本 |
 | quality_status | 是 | valid/degraded/invalid/unknown | 证据质量 |
+| content_level | 是 | metadata/summary/snippet/full | 本 Evidence 实际包含的内容级别；必须与其 authorization_ref 对应授权快照一致，派生 Evidence 不得高于任一上游来源允许级别 |
 | authorization_ref | 是 | string | 授权决策/安全状态引用 |
 | limitations | 是 | string[] | 使用限制 |
-| content_fingerprint | 否 | string | 内容指纹，不替代来源版本 |
+| content_fingerprint | 是 | string | 规范化内容指纹，不替代来源版本；同一版本内容变化必须生成新 Evidence 版本 |
 
-fact 必须有可验证来源与时间；reported_fact 只表示来源声称；inference 必须附推导依据；hypothesis 不得伪装成已证实事实；unknown 表达证据不足。支持与反证都必须可追溯。Research 不复制 News 未授权正文，历史读取仍需重新检查当前授权。Evidence 的 system_as_of 不得晚于所属 Run。
+fact 必须有可验证来源与时间；reported_fact 只表示来源声称；inference 必须附推导依据；hypothesis 不得伪装成已证实事实；unknown 表达证据不足。valid_time_start/end 必须同时为 null 或同时提供且 start<=end。支持与反证都必须可追溯。Research 不复制 News 未授权正文，历史读取仍需重新检查当前授权。Evidence 的 system_as_of 不得晚于所属 Run。 `content_level` 必须与 authorization_ref 对应的 GOV-CTR-006 快照一致。source_owner=data/news/quant 时，authorization_ref 由对应来源 Owner 签发；source_owner=research 时由 Research 签发。Research 派生 Evidence 必须通过 derived_from_refs 保留直接上游 Evidence 引用，沿引用链保留各来源 Owner 的 authorization_ref；Research 自己签发的 allowed 不得覆盖上游 denied/expired/revoked/unknown。content_fingerprint 对除 evidence_id、authorization_ref、content_fingerprint 外的规范化 Evidence 语义字段执行 RFC 8785 JCS + SHA-256。
 
-### 3.3 Event
+### 3.3 ResearchEvent
 
 | JSON 字段 | 必需 | 类型/约束 | 语义 |
 |---|---|---|---|
@@ -178,15 +218,16 @@ fact 必须有可验证来源与时间；reported_fact 只表示来源声称；i
 | status | 是 | detected/consolidating/active/materializing/fading/invalidated/closed | 生命周期 |
 | subject_refs | 是 | string[] | 主体引用 |
 | evidence_refs | 是 | string[] | 支持/反证引用 |
-| occurred_at | 否 | timestamp | 事件发生时间 |
-| published_at | 否 | timestamp | 来源发布时间 |
-| available_at | 否 | timestamp | 有证据的外部可获得时间 |
-| observed_at | 是 | timestamp | 系统观察时间 |
-| system_as_of | 是 | timestamp | 当前版本知识截止时间 |
+| occurred_at | 是 | RFC3339Nano UTC/null | 规范化事件发生时间；无可靠时间时显式 null |
+| published_at | 是 | RFC3339Nano UTC/null | 单一规范化来源发布时间；多来源原始值以 source_times[] 为准，无统一值时 null |
+| available_at | 是 | RFC3339Nano UTC/null | 单一规范化外部可获得时间；多来源原始值以 source_times[] 为准，无统一值时 null |
+| system_observed_at | 是 | RFC3339Nano UTC | 系统观察时间 |
+| system_as_of | 是 | RFC3339Nano UTC | 当前版本知识截止时间 |
 | impact_hypothesis_refs | 是 | string[] | 影响假设引用 |
 | invalidation_conditions | 是 | string[] | 失效条件 |
 | uncertainty | 是 | string[] | 不确定因素 |
 | supersedes_event_version | 否 | integer | 被修正版本 |
+| source_times | 是 | EventSourceTime[] | 来源级时间证据；无来源时间证据使用空数组，不压缩或覆盖冲突值 |
 
 合并、拆分、主体修正和状态变化均追加新版本并保留证据；禁止覆盖历史版本或把 Article 直接当 Event。多来源时间冲突需保留来源级时间，不得压成一个无来源的时间值。
 
@@ -199,7 +240,7 @@ fact 必须有可验证来源与时间；reported_fact 只表示来源声称；i
 | statement | 是 | string | 可验证陈述 |
 | epistemic_type | 是 | reported_fact/inference/hypothesis | 陈述性质 |
 | scope_refs | 是 | string[] | 适用主体/范围 |
-| as_of | 是 | timestamp | 知识截止时间 |
+| system_as_of | 是 | RFC3339Nano UTC | 知识截止时间 |
 | supporting_evidence_refs | 是 | string[] | 支持证据，可为空数组 |
 | contradicting_evidence_refs | 是 | string[] | 反证，可为空数组 |
 | required_data_refs | 是 | string[] | 验证所需数据引用 |
@@ -218,7 +259,7 @@ Claim 与 Hypothesis 可共享存储基类，但公开 DTO 必须明确 epistemi
 | scenario_id | 是 | string | 不透明 ID |
 | scenario_version | 是 | integer | 版本 |
 | subject_refs | 是 | string[] | 适用证券/行业 |
-| as_of | 是 | timestamp | 基准知识时点 |
+| system_as_of | 是 | RFC3339Nano UTC | 基准知识时点 |
 | horizon | 是 | string | 预测周期 |
 | conditions | 是 | ScenarioCondition[] | 触发/前提条件 |
 | expected_path | 是 | string | 条件化路径描述 |
@@ -233,7 +274,7 @@ Scenario 语义由 Research 持有，概率和收益分布由 Quant 提供。没
 
 ### 3.6 QualitySummary
 
-最小字段：status（valid/degraded/invalid/unknown）、missing_required_count、missing_optional_count、conflict_count、stale_count、reason_codes。该汇总只描述 Research 自身 Context/Evidence 完整性，不覆盖 Data Probe、News 业务质量或 Platform Diagnostics。
+最小字段：status（valid/degraded/invalid/unknown）、missing_required_count、missing_optional_count、conflict_count、stale_count、reason_codes。该汇总只描述 Research 自身 Context/Evidence 完整性，不覆盖 Data Probe、News 业务质量或 Platform Diagnostics。计数字段为非负整数；reason_codes 去重并按字典序排序。
 
 ## 4. 模块调用关系和返回约束
 
@@ -259,15 +300,15 @@ Researchflow 是唯一跨模块组合者，并负责传播同一 Run 的 system_
 6. 跨模块契约变更由生产模块提出、消费模块 Review；禁止消费模块复制生产模块私有结构。
 7. 时间字段需覆盖 UTC、Asia/Shanghai 交易日转换和缺失值行为。
 
-## 6. 待 Review 决策
+## 6. 历史 Review 决策（语义已确认）
 
-- [ ] 价格/金额最终采用 decimal string，还是 JSON number + 明确精度；禁止实现中混用。
-- [ ] Quant 参数对象按每个 Use Case 定义独立结构并生成 JSON Schema。
-- [ ] input_snapshot_refs 是否允许空数组，仅限纯函数场景并在用例级白名单化。
-- [ ] Evidence 的 authorization_ref 对非 News 来源采用统一授权审计引用还是来源专属安全引用。
-- [ ] ContextSectionRef、OmittedSection、ScenarioCondition、RiskReason 的完整字段和枚举。
-- [ ] Event 发生时间与来源发布时间冲突时保留来源级多值表达。
-- [ ] QuantResult 采用强类型子 DTO + 共同元数据，不使用任意 payload map。
+- [x] 精确价格/金额采用 decimal string；允许误差的统计值采用 number 并由 Registry 声明 precision/tolerance；Data v1 number 不作为精确计算输入，见 DATA-CTR-005。
+- [x] Quant 参数对象按 indicator_code/factor_code + schema_version 定义独立 typed Schema；首批参数不得使用任意 map，见本目录第 8.2/8.3 节。
+- [x] input_snapshot_refs 必填；仅模板注册时显式声明 allow_empty_inputs=true 的纯函数场景允许空数组，见 FLOW-CTR-003。
+- [x] Evidence 所有来源统一携带 authorization_ref；各 source_owner 签发自己的授权审计快照，公开/无限制访问也用 allow 决策记录，不设置绕过授权链的 not_required 空值。
+- [x] ContextSectionRef、OmittedSection、ScenarioCondition、RiskReason 的字段和枚举见第 9.1–9.4 节；Schema/Golden 仍待实现。
+- [x] Event 通过 source_times[] 保留来源级 occurred_at/published_at/available_at/system_observed_at，不以单一 occurred_at 覆盖冲突，见第 9.6 节。
+- [x] QuantResult 采用共同元数据 Envelope + 按 result_type 区分的强类型 payload；禁止任意 payload map，具体 Registry/Schema 仍待实现。
 
 ## 7. 验收清单
 
@@ -283,7 +324,7 @@ Researchflow 是唯一跨模块组合者，并负责传播同一 Run 的 system_
 
 ## 8. 当前结论
 
-本文将 Quant / Research 公开 DTO 从概念性字段推进到字段级草案，可进入模块 Owner Review，但价格精度、参数结构、授权引用和复合子对象仍有未决项。GOV-004 仍未通过；本文不构成 Schema 冻结，也不授权创建模块分支。
+本节历史 Review 决策项均已完成语义选择；剩余未勾选项属于 Schema/Golden/Contract Test 等实现验收证据，不再作为语义待决。本文保留 Quant / Research 公开 DTO 的字段级细节。当前已接受的公共语义和待补证据以项目级契约目录为准；本文件不构成 Schema 冻结，也不授权创建模块分支。
 
 
 ## 9. 复合 DTO 字段级定义
@@ -302,8 +343,8 @@ Researchflow 是唯一跨模块组合者，并负责传播同一 Run 的 system_
 | quality_status | 是 | valid/degraded/invalid/unknown | 分区质量 |
 | required | 是 | boolean | 本研究模板是否要求该分区 |
 | included | 是 | boolean | 是否实际装入 Context |
-| observed_at | 是 | timestamp | 本次装配观察时间 |
-| system_as_of | 是 | timestamp | 分区知识截止时间 |
+| assembled_at | 是 | RFC3339Nano UTC | 本次 Context 分区装配时间 |
+| system_as_of | 是 | RFC3339Nano UTC | 分区知识截止时间 |
 
 同一 Context 中 section_id 唯一；同一 section_id 的不同版本不能同时作为当前版本装入，除非显式标记为对比研究。
 
@@ -363,17 +404,20 @@ required=true 的分区被省略时，Context 整体不能标记为 valid；必�
 |---|---|---|---|
 | authorization_ref | 是 | string | 不透明授权决策 ID |
 | policy_owner | 是 | data/news/quant/research | 授权策略权威模块 |
-| policy_version | 是 | string | 策略版本 |
+| policy_version | 是 | string | 不可变 AuthorizationPolicySnapshot.snapshot_ref；单策略也必须形成快照，具体规则版本由快照还原 |
 | decision | 是 | allowed/denied/conditional/unknown | 当时决策 |
-| purpose | 是 | string/enum | 使用目的 |
+| purpose_code | 是 | enum | quant_analysis/research_analysis/risk_review/user_display；受控用途代码 |
 | content_level | 是 | metadata/summary/snippet/full | 内容级别 |
-| subject_ref | 是 | string | 被授权来源对象 |
-| decided_at | 是 | timestamp | 决策时间 |
-| expires_at | 否 | timestamp | 授权到期时间 |
-| conditions | 是 | string[] | 限制条件，可为空 |
+| subject_ref | 是 | string | 被授权调用主体 caller_ref |
+| resource_ref | 是 | string | 本次授权决策覆盖的来源/内容/Endpoint 资源引用 |
+| decided_at | 是 | RFC3339Nano UTC | 决策时间 |
+| expires_at | 是 | RFC3339Nano UTC/null | 无固定到期时显式 null，不代表永久授权 |
+| conditions | 是 | string[] | 稳定 condition_code 列表；无条件使用空数组 |
 | decision_fingerprint | 是 | string | 决策内容指纹 |
 
-该对象是决策审计快照，不代表未来访问自动获准。读取时必须由权威模块按当前策略重新授权；历史 Run 回放同时保留当时决策和当前访问决策，二者不能互相覆盖。
+该对象是某次访问决策的审计快照，不代表未来访问自动获准。subject_ref 对应可信调用主体，resource_ref 对应目标资源。policy_version 指向不可变 AuthorizationPolicySnapshot；decision_fingerprint 按 GOV-CTR-006 的规范输入（AuthorizationRef 字段 + evaluated_policy_versions）执行 JCS + SHA-256。conditional 不是访问许可，必须由签发方完成条件复核后重新签发 allowed 快照。读取时必须由权威模块按当前策略重新授权；历史 Run 回放同时保留当时决策和当前访问决策，二者不能互相覆盖。
+
+当 `source_owner=research` 时，由 Research 为自己的派生 Evidence 签发 AuthorizationRef：policy_owner=research，subject_ref 为可信调用主体，resource_ref=evidence_id，purpose_code 按 research_analysis/risk_review 选择，content_level 按实际返回内容选择。公开/无限制的 Research Evidence 也必须签发 allowed 快照。若派生 Evidence 依赖 Data/News/Quant 受限内容，Research 的 allow 不得覆盖来源 Owner 的限制；必须保留来源 AuthorizationRef 链，读取时按各来源 Owner 的当前策略重新授权，并采用最严格的适用限制。
 
 ### 9.6 EventSourceTime
 
@@ -382,13 +426,51 @@ Event 允许多来源时间并存，不以单一 occurred_at 覆盖冲突来源�
 | JSON 字段 | 必需 | 类型/约束 | 语义 |
 |---|---|---|---|
 | evidence_ref | 是 | string | 对应来源证据 |
-| time_type | 是 | occurred_at/published_at/available_at/observed_at | 时间语义 |
-| value | 是 | timestamp | 来源/系统时间值 |
+| time_type | 是 | occurred_at/published_at/available_at/system_observed_at | 时间语义 |
+| value | 是 | RFC3339Nano UTC | 来源/系统时间值 |
 | asserted_by | 是 | string | 来源或系统主体引用 |
-| confidence | 否 | number/null | 时间可信程度及其评估方法 |
+| confidence | 否 | number/null | 仅允许 [0,1]；非 null 时 confidence_method 与 confidence_method_version 必填 |
+| confidence_method | 条件必需 | string | confidence 非 null 时必填 |
+| confidence_method_version | 条件必需 | string | confidence 非 null 时必填 |
 | notes | 否 | string | 时间解释/冲突说明 |
 
-Event 可保留规范化 occurred_at 作为研究归一结果，但必须同时提供 source_times[]；规范化值必须能追溯到所采用的证据与规则版本。
+Event 的 source_times 必填为非 null 数组；无来源时间时为空数组。Event 可保留规范化 occurred_at 作为研究归一结果，但必须同时提供 source_times[]；规范化值必须能追溯到所采用的证据与规则版本。
+
+
+### 9.7 Evidence PIT、授权与内容指纹规则
+
+Evidence 必须保留来源事实、系统观察和研究纳入时间三条独立时间线：
+
+- `published_at`：来源声明的发布时间；无来源时间证据时 null。
+- `available_at`：来源内容可被外部获取的时间；无可验证证据时为 null/unknown，不得由 published_at、fetched_at 或 system_observed_at 推导。
+- `system_observed_at`：系统首次观察该来源事实/版本的时间，必填。
+- `system_as_of`：本次研究允许使用的知识截止时间，必填，且不得早于 system_observed_at。
+- `valid_time_start/end`：业务事实有效区间；与上述知识时间独立。
+
+严格 PIT 规则：仅当 available_at 非 null 且 available_at <= system_as_of 时，Evidence 才可作为“在该时点已公开可得”的事实参与严格 PIT 研究；available_at 晚于 system_as_of 或为 null/unknown 均排除；如果调用场景只要求“系统当时已观察”，必须由 Researchflow Template 显式声明非严格 PIT 模式及其风险，不得由 Research 自动降级。
+
+所有 Evidence 必须有 `authorization_ref`。授权快照由 `source_owner` 对应的权威模块签发：Data/News/Quant/Research 各自负责其拥有内容的访问策略。公开或无限制内容也必须签发 allow 快照；禁止 null、空字符串或 not_required 绕过授权审计。该快照不是访问令牌；读取敏感内容时仍由来源 Owner 重新执行当前授权检查。
+
+`content_fingerprint` 必填，使用 RFC 8785 JSON Canonicalization Scheme 规范化受控 Evidence 内容后计算 SHA-256。指纹覆盖 source_owner、source_ref、source_version（若有）、source_locator（若有）、evidence_type、subject_refs、来源时间字段、stance 和可被当前授权引用的内容摘要；不覆盖本系统接收时间、数据库主键和可变展示字段。不得将未经授权的全文纳入 Research 指纹输入；只对当前可访问的规范化表示计算。内容变更必须生成新 Evidence 版本/指纹，不覆盖历史记录。
+
+### 9.8 ResearchContext 与 QualitySummary 约束
+
+- `context_version` 必须单调递增；已发布版本不可原地修改。重新装配、增删分区或改变证据集合必须产生新版本。
+- `section_id` 在同一 Context 内唯一；`section_refs` 包含本次评估的全部分区；`included_sections` 必须恰好等于其中 included=true 的 section_id 集合；`omitted_sections` 必须恰好等于 included=false 的 section_id 集合，并为每个 omitted 分区提供唯一 reason_code。三者 section_id 并集一致，不得重叠或遗漏。
+- `included_sections` 和 `omitted_sections` 按 Template 定义的稳定优先级排序；同优先级按 section_id 升序，保证 fingerprint 稳定。
+- `QualitySummary` 字段固定为 status、missing_required_count、missing_optional_count、conflict_count、stale_count、reason_codes；计数字段为非负 integer，reason_codes 去重并按字典序排序。
+- 任一 required section 被 omitted，Context.status 不得为 valid；具体是否阻断 Run 由 Researchflow Template 的 Stage 传播策略决定。Research 不自行把质量状态改写为 Run/Stage 执行状态。
+- `retryable` 仅表示来源/装配操作在技术层面可能重试，不替代 Researchflow 的重试预算、deadline 和幂等策略。
+
+### 9.9 ResearchEvent / Claim / Hypothesis 版本与状态约束
+
+- ResearchEvent、Claim、Hypothesis、Scenario 均采用追加式版本；同一对象的版本号从 1 开始严格递增，版本不可覆盖或复用。
+- 修正必须声明 supersedes_version；若对象被拆分/合并，必须记录 source_refs 与 derived_from_refs，禁止删除旧对象或重写历史引用。
+- ResearchEvent 状态迁移由 Research 领域规则注册；MVP 允许 detected -> consolidating -> active -> materializing -> fading -> closed，任一非终态可转 invalidated；禁止从 closed/invalidated 回到 active，恢复必须创建新 Event 并引用旧对象。
+- Claim/Hypothesis 状态迁移：proposed -> testing -> supported/contradicted/invalidated/unknown；supported/contradicted/invalidated 为终态。新证据改变结论时创建新版本，不回写历史版本状态。
+- confidence 若存在必须在 [0,1]，同时记录 confidence_method/version；未定义方法时 confidence 必须 null，不允许把 LLM 自评分当成统计概率。
+- Research 不自行生成 Quant probability/return/risk 数值；所有数值结论必须引用 QuantResult/Metric 的 code、schema_version、algorithm_version 和输入快照。
+
 
 ## 10. 最小 JSON 示例与空值规则
 
@@ -404,7 +486,7 @@ Event 可保留规范化 occurred_at 作为研究归一结果，但必须同时�
   "value": null,
   "unit": "ratio",
   "period": "20d",
-  "as_of": "2026-11-04T08:00:00Z",
+  "system_as_of": "2026-11-04T08:00:00Z",
   "quality_status": "unknown",
   "metric_status": "insufficient_data",
   "calculation_version": "volatility.v1",
@@ -422,7 +504,7 @@ Event 可保留规范化 occurred_at 作为研究归一结果，但必须同时�
   "value": "125000000.00",
   "unit": "CNY",
   "period": "1d",
-  "as_of": "2026-11-04T08:00:00Z",
+  "system_as_of": "2026-11-04T08:00:00Z",
   "quality_status": "valid",
   "metric_status": "available",
   "calculation_version": "turnover.v1",
@@ -432,7 +514,7 @@ Event 可保留规范化 occurred_at 作为研究归一结果，但必须同时�
 }
 ```
 
-注意：示例使用 decimal string 表达金额，作为当前推荐方向；最终需在模块 Owner Review 中冻结。若采用该方案，所有金额/价格字段统一 decimal string，不能同一 DTO 中混用 number 和 string。
+注意：示例使用 decimal string 表达精确金额/价格；该类型规则已纳入 GOV-CTR-001 与 QNT-CTR-001。具体字段精度和范围仍需 Registry/Schema 固定。
 
 ### 10.2 RiskDecision：未知不得放行
 
@@ -442,7 +524,7 @@ Event 可保留规范化 occurred_at 作为研究归一结果，但必须同时�
   "status": "unknown",
   "rule_set_version": "risk.rules.v1",
   "evaluated_at": "2026-11-04T08:01:00Z",
-  "as_of": "2026-11-04T08:00:00Z",
+  "system_as_of": "2026-11-04T08:00:00Z",
   "input_refs": ["quant_result_example"],
   "reasons": [
     {
@@ -470,7 +552,7 @@ Event 可保留规范化 occurred_at 作为研究归一结果，但必须同时�
   "subject_refs": ["security_example"],
   "published_at": "2026-11-03T02:00:00Z",
   "available_at": null,
-  "observed_at": "2026-11-03T02:05:00Z",
+  "system_observed_at": "2026-11-03T02:05:00Z",
   "system_as_of": "2026-11-04T08:00:00Z",
   "stance": "supports",
   "confidence": null,
@@ -481,7 +563,7 @@ Event 可保留规范化 occurred_at 作为研究归一结果，但必须同时�
 }
 ```
 
-available_at=null 表示没有可验证的外部可获得时间，不得用 published_at 或 observed_at 自动填充。授权决策详情由 EvidenceAuthorizationRef 对应权威模块查询。
+available_at=null 表示没有可验证的外部可获得时间，不得用 published_at 或 system_observed_at 自动填充。授权决策详情由 EvidenceAuthorizationRef 对应权威模块查询。
 
 ### 10.4 ScenarioCondition：受限可执行条件
 
@@ -510,7 +592,7 @@ available_at=null 表示没有可验证的外部可获得时间，不得用 publ
 - 空数组表示已评估但集合为空；null 表示未知/不可得（仅在字段允许 nullable 时）。
 - 对于计数，0 表示确实统计为零；统计未执行或未知必须用状态字段表达，不能填 0 伪装成功。
 
-## 11. 精度策略建议（待 Owner 冻结）
+## 11. 精度策略基线（已由 GOV-CTR-001 接受）
 
 建议将所有货币和价格金额采用 JSON string decimal：
 - 金额：定点 decimal，单位字段明确；如 "125000000.00" CNY。
@@ -522,11 +604,11 @@ available_at=null 表示没有可验证的外部可获得时间，不得用 publ
 
 该建议优于 JSON number 的原因是避免跨语言 IEEE-754 精度损失，尤其金额、价格、成本和收益计算。但需要结合现有 Data OpenAPI 的 number 字段决定 Adapter 边界转换，不要求修改 Data 服务既有 API；Quant 内部和 Quant/Research/Researchflow 跨模块契约应统一。
 
-## 11. Quant / Research Owner Review 建议决议（2026-11-05）
+## 12. Quant / Research 历史决议记录（2026-11-05，现由领域契约目录接管）
 
 本节是供 Owner 确认的建议决议，不代表 Owner 已签字或 Schema 已冻结。
 
-### 11.1 CONTRACT-001：数值 JSON 类型与精度
+### 12.1 GOV-CTR-001 / QNT-CTR-001：数值 JSON 类型与精度（历史别名 CONTRACT-001）
 
 建议采用按指标语义固定类型的策略，而不是全局强制所有数值均为 string 或 number：
 
@@ -545,9 +627,9 @@ available_at=null 表示没有可验证的外部可获得时间，不得用 publ
 5. JSON number 统计指标定义稳定舍入位数和 golden 容差；NaN、+Inf、-Inf 不允许序列化，必须转为明确的 unknown/failed 结果。
 6. QuantMetric 通用字段的 value 类型由指标编码 Schema 约束；JSON Schema 应按指标类型拆分 oneOf 或使用指标专属 DTO，不允许宽泛接受任意 string/number。
 
-**建议决议：采纳按指标语义固定 JSON 类型；金额/价格 decimal string，计数 integer，统计比例 number。** Owner 确认后更新 CONTRACT-001 状态。
+**建议决议：采纳按指标语义固定 JSON 类型；金额/价格 decimal string，计数 integer，统计比例 number。** 该决议已由 GOV-CTR-001/QNT-CTR-001 登记，Schema/Golden 未齐前不标记 frozen。
 
-### 11.2 CONTRACT-002：Indicator 首批代码与参数 Schema
+### 12.2 QNT-CTR-002：Indicator 首批代码与参数 Schema（历史别名 CONTRACT-002）
 
 首批只纳入可以由日线 OHLCV 稳定复算、定义成熟且能提供固定样本的指标：
 
@@ -569,9 +651,9 @@ available_at=null 表示没有可验证的外部可获得时间，不得用 publ
 - 输入序列必须包含交易日、质量、单位和复权语义；窗口按交易日有效样本计数，缺失日处理策略由指标定义明确。
 - 每个指标至少提供正常、边界、缺失、异常、复权切换五类固定样本；结果包含 algorithm_version 和输入快照引用。
 
-**建议决议：以上八项作为首批候选清单；Owner 可缩减，不应在首批无验收样本时扩张。**
+**决议：以上八项作为首批范围；如需缩减或扩张，按项目契约变更流程更新 Registry、Schema 和消费者映射。**
 
-### 11.3 CONTRACT-003：Factor 首批候选与横截面规则
+### 12.3 QNT-CTR-003：Factor 首批候选与横截面规则（历史别名 CONTRACT-003）
 
 首批候选因子：
 
@@ -591,41 +673,52 @@ available_at=null 表示没有可验证的外部可获得时间，不得用 publ
 - 缺失样本不能按 0 参与；minimum_coverage 不满足时结果为 insufficient_data/unknown，不输出可用于排序的有效因子值。
 - Indicator 与 Factor 是并列子系统；Factor 可直接消费标准化数据，不要求依赖 Indicator Engine。
 
-**建议决议：首批先实现 momentum_20d、momentum_60d、volatility_20d；其余候选在数据覆盖率评估后纳入。**
+**决议：首批固定 momentum_20d、momentum_60d、volatility_20d；其余候选 deferred，见 QNT-CTR-003。**
 
-### 11.4 CONTRACT-004：Evidence 授权引用
+### 12.4 GOV-CTR-006 / NEWS-CTR-002 / RSC-CTR-001：Evidence 授权引用（历史别名 CONTRACT-004）
 
 建议统一保留 authorization_ref 不透明字符串引用；授权决策快照本身由授权策略 Owner 管理，不由 Research 复制成自己的授权事实。
 
-- policy_owner 必须是实际对该来源/内容拥有授权决策权的模块或策略主体。
-- News/Data 内容读取由来源 Owner 重新执行当前授权检查；Research 保存当时的 decision_ref、policy_version、content_level、purpose、scope 和 fingerprint。
+- policy_owner 必须是实际对该来源/内容拥有授权决策权的模块，取值限定为 data/news/quant/research，与 GOV-CTR-006 公共结构一致。
+- News/Data 内容读取由来源 Owner 重新执行当前授权检查；Research 保存不透明 authorization_ref；审计快照字段按 GOV-CTR-006 统一表达 policy_owner、policy_version、decision、content_level、purpose_code、subject_ref、resource_ref、decided_at、expires_at、conditions 和 decision_fingerprint。
 - 历史回放同时保留当时授权决策引用与本次读取的当前授权结果；当前 denied/expired 不得因历史 allowed 而放行。
 - Research 派生内容由 Research 对自身派生记录负责；引用外部来源时仍保留原始来源授权链，不能用 Research 自身决策覆盖上游限制。
-- 授权状态 unknown/缺少决策引用时，不允许读取受限正文；可在允许范围内保留 metadata 引用并标记限制。
+- 授权决策为 unknown 或缺少 authorization_ref 时，不允许读取受限正文；可在允许范围内保留 metadata 引用并标记限制。
 
-**建议决议：采用统一不透明 AuthorizationRef + 来源 Owner 当前复核；不建立跨模块万能授权服务。**
+**决议：采用统一不透明 AuthorizationRef + 来源责任模块当前复核；不建立跨模块万能授权服务，见 GOV-CTR-006/NEWS-CTR-002/RSC-CTR-001。**
 
-### 11.5 CONTRACT-005：system_as_of 传播
+### 12.5 GOV-CTR-002 / FLOW-CTR-003：system_as_of 传播（历史别名 CONTRACT-005）
 
-建议将 ResearchRun.as_of 作为一次研究运行唯一的系统知识截止时间：
+建议将 ResearchRun.system_as_of 作为一次研究运行唯一的系统知识截止时间：
 
 1. CreateRun 时确定并持久化 UTC 时间；重试 Stage 不得自动刷新。
 2. QuantAnalysisRequest、ResearchContext、Evidence 写入/查询和 News Query 均接收同一 system_as_of。
-3. 子对象的 system_as_of 不得晚于 Run.as_of；若来源数据在该时点不可见，必须排除或标记不可用。
-4. observed_at 是事实被系统观察的实际时间，不能为了满足 PIT 而回填成 Run.as_of。
+3. 子对象的 system_as_of 不得晚于 Run.system_as_of；若来源数据在该时点不可见，必须排除或标记不可用。
+4. system_observed_at 是事实被系统观察并持久化的实际时间，不能为了满足 PIT 而回填成 Run.system_as_of。
 5. trade_date 是交易日，不是知识截止时间；published_at 是来源声明时间，不是系统已知时间。
 6. 新建 Run 可选择新的 as_of；原 Run 的历史输入快照和结果不可被新时点覆盖。
 
-**建议决议：Run 固定 system_as_of，所有下游模块只消费该值；禁止 Stage 各自取当前时间。**
+**决议：Run 固定 system_as_of，所有下游模块只消费该值；禁止 Stage 各自取当前时间，见 GOV-CTR-002/FLOW-CTR-003。**
 
-### 11.6 本轮 Review 状态
+### 12.6 历史 Review 状态（由项目统一契约目录覆盖）
 
 | 决策 | 建议 | 当前状态 |
 |---|---|---|
-| CONTRACT-001 | 精确数值 string、计数 integer、统计数值 number，按指标编码固定 Schema | 待 Quant Owner 确认 |
-| CONTRACT-002 | 八项 Indicator 候选及 typed 参数 Schema | 待 Quant Owner 确认 |
-| CONTRACT-003 | 三项首批 Factor + 可选候选；与 Indicator 解耦 | 待 Quant Owner 确认 |
-| CONTRACT-004 | 统一不透明授权引用、来源 Owner 当前复核 | 待 Research/News Owner 确认 |
-| CONTRACT-005 | Run 唯一固定 system_as_of | 待 Research/Researchflow Owner 确认 |
+| CONTRACT-001（历史别名） | 数值 JSON 类型与精度按 Registry 固定 | 项目决议已接受；QNT-CTR-001 待 Schema/Golden |
+| CONTRACT-002（历史别名） | 八项 Indicator 候选及 typed 参数 Schema | 项目决议已接受；QNT-CTR-002 待 Schema/Golden |
+| CONTRACT-003（历史别名） | 首批三个 Factor 与算法边界 | 项目决议已接受；QNT-CTR-003 待 Schema/Golden |
+| CONTRACT-004（历史别名） | 不透明 AuthorizationRef 与来源 Owner 当前复核 | GOV-CTR-006 Schema/Golden 与 Principal/Resource 映射已建立；DATA-CTR-008/NEWS-CTR-002/QNT-CTR-005/RSC-CTR-001 的 Scope、签发与当前授权复核测试仍 pending_evidence |
+| CONTRACT-005（历史别名） | Run 唯一固定 system_as_of | 项目决议已接受；FLOW-CTR-003 待 Adapter Golden |
 
-**本轮结论：形成可供 Owner 逐项接受/修改的明确建议；未收到 Owner 确认前，不勾选冻结状态，不进入 L2 Module Ready。**
+**历史说明：本表最初是规划侧建议，不再要求虚构具体 Owner 签字。当前统一决议与状态以 `doc/整体任务规划/跨模块契约目录与冻结状态.md` 为准；项目决议已接受不等于 Schema/Golden/Contract Test 已通过。**
+
+## 13. 五模块交叉契约映射补充（2026-11-06）
+
+- Researchflow `ResearchRun.system_as_of` 是 Run 唯一系统知识截止值。QuantAnalysisRequest/QuantResultRef、ResearchContext/Claim/Scenario 的 `system_as_of` 必须沿用该值；Evidence 的 `system_as_of` 与其语义相同，且不得晚于所属 Run。
+- `system_observed_at` 始终记录系统实际观察/持久化时间；不能用 system_as_of 回填。published_at/available_at/valid_time 保留各自来源时间和业务有效时间。Data API 查询参数 `as_of` 的映射由 Quant Data Adapter 负责，不改写 Data 自身时间语义。
+- Evidence.authorization_ref 指向 GOV-CTR-006 定义的 EvidenceAuthorizationRef 审计快照；News 授权事实按 NEWS-CTR-002，Research 消费与来源授权链按 RSC-CTR-001，签发方分别按 DATA-CTR-008/QNT-CTR-005 等契约执行。快照包含 policy_owner、policy_version、decision、purpose_code、content_level、subject_ref、resource_ref、decided_at、expires_at、conditions 和 decision_fingerprint。它不是永久访问令牌；读取受限内容仍需来源 Owner 当前授权复核。Evidence 不用 authorization_status 替代该引用。
+- ResearchEvent 是多来源证据归并后的领域对象；NotificationEvent 是通知模块消费的版本化集成消息。两者 ID/版本空间独立，转换必须显式映射并生成独立 event_id。
+- quality_status、Quant result_status、RiskDecision、Run/Stage/Attempt、ModelResponse.status、Delivery.status 分域管理；同名状态不可直接转换。Run partial 表示覆盖不完整；Run succeeded 仍可有 degraded 质量摘要；Risk unknown 不可 pass。
+- request_id 标识一次调用；correlation_id 贯穿链路；event_id 标识稳定事件；idempotency_key 标识命令意图。幂等使用 Owner 定义作用域与 fingerprint；相同键同指纹返回原结果，不同指纹冲突。
+
+**以上字段语义由项目级契约目录统一治理；历史 CONTRACT-001~005 仅作为追溯别名。字段名统一使用 system_as_of；Schema/Golden/Contract Test 未完成前不构成 frozen。**

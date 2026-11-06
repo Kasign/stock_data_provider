@@ -129,6 +129,18 @@ Upstream Providers
 - [ ] Data 独立 Go Module 不 import 根模块 Platform internal。
 - [ ] Platform Service Secret 不被误当作 Data X-API-Key；未来统一身份改造单独评审。
 
+
+
+## DATA-CTR-008 与 Data API 凭据的边界
+
+- Data API Key 只用于认证；通过认证后由服务端映射到稳定 caller principal 和 Scope。Key 字符串本身不得写入 AuthorizationRef、Snapshot Manifest 或 fingerprint input。
+- caller principal 是服务端登记的稳定身份引用；同一 principal 的 Key 轮换不改变 subject_ref。Key 撤销、principal 禁用或 Scope 收窄必须在下一次读取生效。
+- Data v2 请求的 purpose_code 必填且受 Scope 限制；客户端不得提交 subject_ref/caller_ref。认证失败返回 401；认证成功但 Scope 不足返回 403；授权依赖不可用返回 503。不得把这些状态归类为 Provider 故障。
+- `schema/DATA-CTR-008-snapshot-manifest-1.0.0.schema.json` 定义授权引用绑定的最小 Snapshot Manifest。Manifest 只包含查询范围和来源版本元数据，不包含数据正文或任何 Secret。
+- Snapshot Manifest 的 `manifest_fingerprint` 对除 `snapshot_ref`、`manifest_fingerprint` 外的字段执行 RFC 8785 JCS + SHA-256；`sources` 按 `(source_ref, source_version)` 字典序排序且不得重复；`snapshot_ref` 必须为 `data_snapshot:sha256:<manifest_fingerprint>`。同一规范化 Manifest 必须得到同一引用，任何绑定字段变化必须得到不同引用。Golden：`golden/DATA-CTR-008-snapshot-manifest.golden.json`。
+- GOV-CTR-006 的 `decision_fingerprint` 仍严格遵循公共算法；通过 resource_ref 指向内容寻址 snapshot_ref，避免为 Data 单独扩展或改变公共算法。
+- 授权检查与 Snapshot Manifest/数据读取必须处于同一可证明的策略版本边界；检查后策略版本变化时重新授权，无法证明一致性则丢弃结果并 fail closed。
+
 ## 9. 当前结论
 
 首期最优边界是：**Root Server 服务端持有 Data 专用 API Key，Data Adapter 在内部 HTTP 请求中注入 `X-API-Key`；浏览器只调用 Root Server，不接触 Data Key。** Platform Service Secret、Owner Token 和 Provider Token 保持独立。
