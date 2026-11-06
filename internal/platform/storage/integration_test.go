@@ -64,7 +64,7 @@ func TestMariaDBStorageIntegration(t *testing.T) {
 	namespace := "platform_it_" + suffix
 	table := "platform_it_records_" + suffix
 	migrations := []Migration{{
-		Version: 1,
+		Version:     1,
 		Description: "create integration record table",
 		Statements: []string{fmt.Sprintf(
 			"CREATE TABLE %s (id BIGINT PRIMARY KEY, value VARCHAR(32) NOT NULL) ENGINE=InnoDB",
