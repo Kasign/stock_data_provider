@@ -1180,3 +1180,117 @@ validateEndpointURL 当前要求绝对 URL、Host 非空、Scheme 为 http/https
 - [ ] Retention Worker Stop/Wait 生命周期尚未实现；当前仅记录为迁移阻断项。
 
 **本轮结论：** 当前 Data Provider 的 HTTP Client 彼此独立，尚未接入已存在的 Platform HTTP Client；BaoStock 是单实例长连接且显式关闭，Pytdx 是按调用创建并关闭；Redis 当前不是连接池而是逐命令短连接。M0 已补齐主要配置装配与资源模型的静态证据，但安全行为测试、部署覆盖值和 Worker 生命周期仍未闭环，不能准入 M1。
+
+
+### 2026-11-06：M0 第二十一轮（部署基线、Worker 生命周期、平台 HTTP 契约、TCP 协议）
+
+审计基线：`02fd53f61bffdafae9df4a668e3191fcdfc49fe5`。本轮批量核对根 Compose、可选迁移 Compose、部署脚本、Data 入口 Worker、BaoStock 协议实现和 Platform HTTP Client 及其测试；未修改业务实现。
+
+#### 1. 部署配置与真实迁移基线
+
+**根目录 `docker-compose.yml` 当前仍是三容器部署：**
+- `stock-analysis-data` 单独构建 `services/market-data`，监听 8091。
+- `stock-analysis-server` 单独构建根 Go Server，通过 `MARKET_DATA_BASE_URL=http://stock-analysis-data:8091` 访问 Data，并依赖 Data healthy。
+- `stock-analysis-web` 单独部署，分别配置 Market Data / Analysis 上游服务名。
+- Data 与 Server 都读取根 `.env`；Compose 显式覆盖 Data HTTP Addr、API Key、Redis Addr/Password/DB、AutoMigrate，并将相同 API Key 注入 Server。Provider 其余配置由根 `.env` 提供。
+- 根 Compose 依赖外部 `1panel-network`，Data 与 Server 仍然是独立容器和网络调用。
+
+**可选 `docker/docker-compose.go-migration.yml`：**
+- 是 Python Bridge + go-core + 独立 market-data 的历史迁移 Profile。
+- Data 读取 `services/market-data/.env`，go-core 读取 `go-core/.env`；该文件明确要求不要与根 Compose 混用。
+- 该文件不能作为方案 B 已部署的证据。
+
+**`scripts/deploy-go.sh`：**
+- 固定使用根 `docker-compose.yml`，先校验 Compose 配置，再构建并启动 Data、Server、WebUI 三个服务。
+- 仍检查旧 `stock-analysis-go` / `stock-market-data` 容器并要求先清理；最终检查 8092 的 healthz/readyz。
+- 因此方案 B 完成后必须同步修改根 Compose、部署脚本、健康检查、容器迁移说明和 Web Nginx upstream；只改 Go composition 不足以完成部署迁移。
+
+**部署迁移差异清单：**
+1. Data 不再独立构建/启动，Provider 与 Data Application 由 Root Server Composition Root 创建。
+2. Server 内部调用改 InProcess，移除对 `MARKET_DATA_BASE_URL` 的内部 self-HTTP 依赖；保留 Data HTTP Adapter 仅供外部/兼容入口。
+3. 根 Compose 移除 Data 独立服务、depends_on 和服务间 API Key/URL 注入；保留 WebUI 对外路径和兼容路由。
+4. `scripts/deploy-go.sh` 的构建目标、容器状态、日志、健康检查和旧容器迁移逻辑一并调整。
+5. 可选 go-migration Profile 应明确废弃或重写，避免继续启动第二套 Data。
+6. 对比根 `.env` 与旧 `services/market-data/.env`，逐变量迁移 Provider、DB、Redis、API Key、TZ 和 AutoMigrate 配置；禁止覆盖用户真实密钥。
+
+#### 2. Retention Worker 的实际退出竞态
+
+入口在 Store 创建后调用 `runQuoteRetentionWorker(ctx, store, ...)`，该函数内部启动匿名 goroutine 并立即返回：
+- 首次 purge 在 goroutine 内执行；后续每 24 小时 ticker 执行一次。
+- 每次 purge 使用父 ctx 派生 30 秒 job context。
+- Worker 只监听父 ctx 取消，没有返回 done channel、Stop 或 Wait API。
+- 主流程收到 ctx.Done 后只等待 HTTP Server Shutdown，随后 run 返回，defer 顺序关闭 BaoStock、Store；没有等待 Worker goroutine 退出。
+
+**结论：存在真实的资源关闭竞态。** 若退出时 Worker 正在调用 `Store.PurgeQuotesBefore`，主流程可能先关闭 Store。虽然派生 job context 会收到取消，但数据库调用不保证在 Store.Close 前立即退出。
+
+M2/M4 必须将 Worker 改为可管理对象或显式 Start/Stop/Wait：
+- Start 由 Bootstrap 持有；
+- Stop 取消 Worker context；
+- Wait 等待当前 purge 完成并返回退出错误；
+- Root Shutdown 顺序应先停止接收新请求/停止后台 Worker，再等待 Worker 和 HTTP 请求退出，最后由 Root 关闭 DB；
+- Worker 只借用 Store，不得自行 Close Store；
+- 为 purge 增加可注入时钟/执行器测试，覆盖启动立即执行、周期触发、取消中断、正在执行时 Shutdown 等情况。
+
+#### 3. Platform HTTP Client 契约边界
+
+已确认 `internal/platform/httpclient.Client` 的可观察契约：
+- 每次 Do 必须提供 DestinationPolicy，AllowedHosts 必填且 exact-match；不支持通配符。
+- 默认只允许 HTTPS；HTTP 必须通过 AllowHTTP 显式允许，并受 AllowedPorts 限制。
+- 禁止 UserInfo、自定义 Host Header、未授权 Host/Port；域名解析后拒绝任何非公网 IP（包含 DNS 混合公网/私网结果）。
+- 自定义 Dial 使用已校验 IP，保留原始请求 Host；新建连接时重新解析，避免 DNS rebinding。
+- 默认禁止 Redirect；显式允许时最多 3 次、每次目标仍须符合策略，拒绝 HTTPS 降级和循环 URL。
+- 默认超时 15 秒、Dial 5 秒、Response Header 8 秒；并发默认 4，可按 dependency 单独配置。
+- 默认响应体上限 2 MiB，最大配置上限 16 MiB；读取后关闭原始 Body，再以缓冲 Body 返回。
+- 默认重试关闭；仅 policy.Idempotent=true 且请求 Body 可重放时启用，最多 2 次；只对传输错误、502/503/504 重试，间隔 100ms/200ms。
+- 注入 Request ID；提供 CloseIdleConnections；不读取 HTTP_PROXY/HTTPS_PROXY 环境代理。
+
+**与现有 Provider 的不兼容点：**
+- Tushare 是 POST 且 Token 在 JSON Body；MiaoXiang/TickFlow 等也有 POST 请求，必须为请求体重放显式构造 GetBody，并审慎标记幂等；不能因 HTTP Method 为 POST 就默认重试。
+- Eastmoney 存在 POST 热榜和自定义 Redirect 行为；Hithink/Tushare/TickFlow/Xueqiu 默认 Redirect；Tencent/Yahoo/MiaoXiang 禁止 Redirect。接入策略必须逐 Endpoint 定义，不能一刀切。
+- 现有 Provider timeout 有 10/12/15/20 秒等差异；Platform Client 采用 Client 全局 Timeout，需通过依赖级实例/请求 context 设计保留原 timeout 语义，避免统一 15 秒导致行为漂移。
+- 响应体上限各 Provider 当前不同（MiaoXiang 2 MiB 成功/4 KiB 错误、BaoStock 64 MiB 协议帧等）；Platform HTTP 默认 2 MiB 可能截断现有大响应，需要按 Provider 证据配置，且不可超过平台 16 MiB 上限。
+- Platform Client 每次 Do 将响应完整读入内存后返回；不适合未经评估地承接大文件/流式下载接口。
+- Provider 现有重试/限速有调用点差异；平台重试只能对确认幂等的请求开启，避免双层重试放大请求次数。
+
+**建议接入方式：** M4 由 Data Bootstrap 创建 Platform Client 及按 Provider/Endpoint 定义的 DestinationPolicy，再通过依赖接口注入 Provider。请求构造、签名/凭据、解析、业务级重试/限速仍由 Provider 负责；Transport、DNS/目标校验、请求并发、响应体上限、基础观测由 Platform Client 负责。先做一个低风险 GET Provider 的适配试点并加 Request Golden，再批量迁移；不要直接替换全部 `*http.Client` 字段。
+
+#### 4. BaoStock TCP 协议边界
+
+协议实现静态确认：
+- 请求帧 Body 上限 64 MiB，头部固定 21 字节，包含协议版本、消息类型和长度；请求尾部附 CRC32。
+- 响应头解析后先校验声明长度不超过 64 MiB。
+- 压缩响应先按声明长度读取压缩体，再校验 CRC Trailer 的数字格式、CDATA 终止符，zlib 解压后再次限制解压结果不超过 64 MiB。
+- 非压缩响应按 CDATA 终止符读取，累计大小超过 64 MiB 即拒绝；随后校验 CRC32。
+- 现有注释说明压缩 type-96 的 CRC 数值与 CRC32(header || compressedBody) 不匹配，因此目前只验证 Trailer 格式，依赖 zlib checksum 验证压缩内容；非压缩响应仍执行严格 CRC 校验。
+
+**风险与迁移要求：**
+- 64 MiB 是单帧硬上限，不是业务响应大小预算；Root 需评估高并发下的内存占用，保留压缩前/解压后双重限制。
+- 压缩帧按 Header 声明长度分配内存，虽有上限，但最大仍可分配 64 MiB；建议后续以实测业务数据确定更精细上限，不能在本轮擅自降低。
+- 非压缩响应不以声明长度作为边界，而以 CDATA 结束符为准；该行为是为兼容服务端 UTF-8 错误文本长度差异，回归测试需覆盖。
+- BaoStock 通过 socket deadline + Context.AfterFunc 实现取消；连接读写失败后丢弃连接，后续重新登录。
+- TCP Host/Port 仍需目标地址白名单/可信配置策略；Platform HTTP Client 不适用于 TCP Provider，需单独的 TCP Dial Policy。
+
+#### 5. Pytdx TCP 取消与重连边界
+
+- Context 覆盖 Host 轮转 Dial 和 150ms rate wait；单 Host Dial timeout 不超过 1.5 秒，最多尝试 6 个 Host。
+- 建立 TDX Client 后只调用 `client.SetTimeout(p.timeout)`；后续 GetQuote/GetKlineDay/GetGbbq 是同步调用，没有将每次请求的 ctx 直接传入底层协议调用。
+- 因此取消 Context 可阻止尚未开始的 Dial/限速等待，但不能保证中断已经开始的 TDX 网络请求；在途请求主要依赖 Client Timeout。
+- 每次调用结束 defer Close；TDX Client 配置 WithRedial，底层可能重新 Dial，仍须确保重连使用同一组受控 Host 和超时。
+- 配置 Host 当前是字符串列表，允许 host:port 或默认端口 7709；没有在 Config.Load 进行主机名/端口授权。
+
+迁移要求：保留当前每次调用独立 Client 和 defer Close；若要实现强 Context 取消，需先确认底层 tdx/ios API 是否可注入可取消 Conn 或 deadline，不应在 M0 直接更换协议库。补充测试覆盖取消发生在 Dial 前、Dial 中、请求读写中、重连中，以及关闭失败。
+
+#### 6. 本轮结论与状态调整
+
+- [x] 根 Compose 三容器部署基线与可选旧迁移 Profile 已核对。
+- [x] 部署脚本的构建、启动、健康检查和旧容器约束已核对。
+- [x] Retention Worker 启动/退出和 Store 关闭顺序已核对，确认存在缺少 Wait 的关闭竞态。
+- [x] Platform HTTP Client 的目标校验、Redirect、重试、并发、超时、响应体和 Close 契约已核对。
+- [x] BaoStock 帧大小、压缩/非压缩读取、CRC 和取消方式已核对。
+- [x] Pytdx Context 覆盖边界和同步请求 Timeout 行为已核对。
+- [ ] 生产部署 .env 的真实变量值未读取（本轮只审计仓库模板/Compose，不读取用户服务器密钥）。
+- [ ] Provider 级 HTTP 双 Host/凭据隔离/重定向和响应大小行为测试仍未执行。
+- [ ] BaoStock/Pytdx TCP 自定义目标策略和取消行为的测试覆盖仍未完整核验。
+- [ ] Worker Stop/Wait 代码改造与测试尚未实施，属于迁移实现阶段工作，不是文档审计可关闭项。
+
+**M0 状态：** 静态审计范围已明显收敛，但仍有 Provider 请求级 Golden/安全行为核验与 OpenAPI 参数/错误契约等未闭环项。Worker Stop/Wait、平台 HTTP Client 接入、TCP 出站策略属于 M2/M4 的实现任务，不应错误地作为 M0 必须先完成的代码改造。M0 暂不准入 M1，下一轮应优先批量完成剩余 OpenAPI 参数/错误契约与 Provider Request Golden 覆盖矩阵，并把可后置的运行时改造明确移入对应 M 阶段。
