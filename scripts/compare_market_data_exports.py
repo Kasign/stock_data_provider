@@ -4,6 +4,8 @@
 from __future__ import annotations
 
 import argparse
+from datetime import datetime, timezone
+import re
 import json
 import math
 import sys
@@ -24,7 +26,8 @@ DEFAULT_TOLERANCES = {
 }
 PROVENANCE_FIELDS = {
     "source", "source_version", "provider", "provider_time", "fetched_at",
-    "captured_at_utc", "source_commit", "workflow_run_id",
+    "captured_at_utc", "source_commit", "workflow_run_id", "endpoint", "provider_version",
+    "request_params", "raw_payload_sha256",
 }
 QUALITY_FIELDS = {"quality_status", "quality_reasons"}
 
@@ -48,6 +51,37 @@ def load_export(path: Path) -> dict[str, Any]:
     if not isinstance(value["records"], list):
         raise InputError(f"{path}: records must be an array")
     return value
+
+
+REAL_PROVENANCE_FIELDS = (
+    "source_commit",
+    "provider",
+    "provider_version",
+    "endpoint",
+    "request_params",
+    "captured_at_utc",
+    "raw_payload_sha256",
+)
+
+
+def validate_real_provenance(export: dict[str, Any], label: str) -> None:
+    for field in REAL_PROVENANCE_FIELDS:
+        if field not in export or export[field] in (None, "", {}):
+            raise InputError(f"{label}: real sample is missing provenance field {field!r}")
+    if str(export["provider"]).strip().lower() in {"fixture", "mock", "synthetic", "unknown"}:
+        raise InputError(f"{label}: provider={export['provider']!r} is not a real Provider")
+    if not isinstance(export["request_params"], dict):
+        raise InputError(f"{label}: request_params must be an object")
+    if not re.fullmatch(r"[0-9a-fA-F]{40,64}", str(export["source_commit"])):
+        raise InputError(f"{label}: source_commit must be a full Git commit SHA")
+    if not re.fullmatch(r"[0-9a-fA-F]{64}", str(export["raw_payload_sha256"])):
+        raise InputError(f"{label}: raw_payload_sha256 must be a SHA-256 hex digest")
+    try:
+        captured_at = datetime.fromisoformat(str(export["captured_at_utc"]).replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise InputError(f"{label}: captured_at_utc must be an ISO-8601 timestamp") from exc
+    if captured_at.tzinfo is None or captured_at.utcoffset() != timezone.utc.utcoffset(captured_at):
+        raise InputError(f"{label}: captured_at_utc must explicitly use UTC")
 
 
 def record_key(record: dict[str, Any], configured_key: str) -> str:
@@ -172,12 +206,17 @@ def main() -> int:
     parser.add_argument("--tolerance", action="append", default=[], metavar="FIELD=NUMBER",
                         help="覆盖数值容差，可重复指定")
     parser.add_argument("--output", type=Path, help="Markdown 报告输出路径；省略时输出到 stdout")
+    parser.add_argument("--require-real-provenance", action="store_true",
+                        help="要求双方提供真实 Provider、endpoint、请求参数、版本、UTC 采集时间和原始响应 SHA-256")
     args = parser.parse_args()
 
     try:
         py = load_export(args.python)
         go = load_export(args.go)
         tolerances = parse_tolerances(args.tolerance)
+        if args.require_real_provenance:
+            validate_real_provenance(py, "Python")
+            validate_real_provenance(go, "Go")
         for field in ("dataset", "symbol", "adjustment_basis"):
             if py[field] != go[field]:
                 raise InputError(

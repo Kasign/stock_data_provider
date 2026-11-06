@@ -48,6 +48,40 @@ class CompareMarketDataExportsTests(unittest.TestCase):
                                     "--go", str(go_path), *extra]):
                 return MODULE.main()
 
+    def real_provenance(self, provider):
+        return {
+            "source_commit": "a" * 40,
+            "provider": provider,
+            "provider_version": "1.2.3",
+            "endpoint": "daily-kline",
+            "request_params": {"adjust": "qfq", "period": "daily"},
+            "captured_at_utc": "2026-10-30T00:00:00Z",
+            "raw_payload_sha256": "b" * 64,
+        }
+
+    def test_real_provenance_mode_rejects_fixture_exports(self):
+        rows = [{"trade_date": "2026-10-29", "close": 1500.0}]
+        self.assertEqual(
+            self.run_cli(export(rows), export(rows), "--require-real-provenance"), 2
+        )
+
+    def test_real_provenance_mode_accepts_auditable_exports(self):
+        rows = [{"trade_date": "2026-10-29", "close": 1500.0}]
+        py = export(rows, **self.real_provenance("efinance"))
+        go = export(rows, **self.real_provenance("eastmoney-go"))
+        self.assertEqual(
+            self.run_cli(py, go, "--require-real-provenance"), 0
+        )
+
+    def test_real_provenance_mode_rejects_invalid_payload_digest(self):
+        rows = [{"trade_date": "2026-10-29", "close": 1500.0}]
+        py = export(rows, **self.real_provenance("efinance"))
+        go = export(rows, **self.real_provenance("eastmoney-go"))
+        go["raw_payload_sha256"] = "not-a-sha256"
+        self.assertEqual(
+            self.run_cli(py, go, "--require-real-provenance"), 2
+        )
+
     def test_identical_samples_pass(self):
         rows = [{"trade_date": "2026-10-29", "close": 1500.0, "volume": 1000,
                  "amount": None, "quality_status": "degraded",

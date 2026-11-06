@@ -19,6 +19,10 @@ Python 与 Go 两侧各导出一个 JSON 文件，顶层结构如下：
   "provider": "python-efinance",
   "captured_at_utc": "2026-10-30T07:00:00Z",
   "source_commit": "固定源码提交或 Go 服务提交 SHA",
+  "provider_version": "Provider/SDK 版本",
+  "endpoint": "实际命中的接口标识",
+  "request_params": {"adjust": "qfq", "period": "daily"},
+  "raw_payload_sha256": "64 位原始响应 SHA-256",
   "records": [
     {
       "trade_date": "2026-10-29",
@@ -58,6 +62,12 @@ python3 scripts/compare_market_data_exports.py \
 ```
 
 退出码：`0` 表示没有阻断性字段差异；`1` 表示记录覆盖或字段存在阻断差异；`2` 表示输入结构/样本身份错误。质量状态与质量原因差异单独列入报告，并同样使退出码为 1；质量语义不一致不能被当作数值容差通过。
+
+## 真实样本凭证
+
+真实准确性验收必须增加 `--require-real-provenance`。该模式要求 Python 和 Go 两侧分别提供 source_commit、provider、provider_version、endpoint、request_params、captured_at_utc（显式 UTC）和 raw_payload_sha256。provider 不能是 fixture/mock/synthetic/unknown；source_commit 必须是完整 Git SHA；raw_payload_sha256 必须是 64 位 SHA-256。该模式只验证凭证字段结构和摘要格式，不证明原始响应本身真实；原始响应文件必须另行归档并按摘要复核。
+
+不带该选项的模式继续用于合成 fixture 的 CI 合约测试，不能作为真实数据准确性验收。
 
 ## 比较规则
 
