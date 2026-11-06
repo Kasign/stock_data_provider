@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"sync"
 	"testing"
 	"time"
 
@@ -46,12 +47,14 @@ func TestResearchSQLRepositoriesAppendAndReadVersions(t *testing.T) {
 	contextID := "ctx-it-" + suffix
 	eventID := "event-it-" + suffix
 	claimID := "claim-it-" + suffix
+	cancelledContextID := "ctx-cancel-it-" + suffix
+	orphanContextID := "ctx-orphan-it-" + suffix
 
 	t.Cleanup(func() {
-		_, _ = db.ExecContext(context.Background(), "DELETE FROM research_context_versions WHERE context_id=?", contextID)
+		_, _ = db.ExecContext(context.Background(), "DELETE FROM research_context_versions WHERE context_id IN (?, ?)", contextID, orphanContextID)
 		_, _ = db.ExecContext(context.Background(), "DELETE FROM research_event_versions WHERE event_id=?", eventID)
 		_, _ = db.ExecContext(context.Background(), "DELETE FROM research_claim_versions WHERE claim_id=?", claimID)
-		_, _ = db.ExecContext(context.Background(), "DELETE FROM research_aggregate_heads WHERE aggregate_id IN (?, ?, ?)", contextID, eventID, claimID)
+		_, _ = db.ExecContext(context.Background(), "DELETE FROM research_aggregate_heads WHERE aggregate_id IN (?, ?, ?, ?, ?)", contextID, eventID, claimID, cancelledContextID, orphanContextID)
 	})
 
 	contextRepo, err := NewContextRepository(db, clock)
@@ -76,6 +79,29 @@ func TestResearchSQLRepositoriesAppendAndReadVersions(t *testing.T) {
 		IncludedSections: []string{"profile"}, OmittedSections: []researchcontext.OmittedSection{},
 		BuilderVersion: "integration-v1", CreatedAt: cutoff,
 	}
+
+	// Seed an orphan immutable row to force a duplicate-key failure after the
+	// adapter has created/locked the aggregate head. The transaction must roll
+	// back that newly-created head row.
+	if _, err := db.ExecContext(ctx, "INSERT INTO research_context_versions "+
+		"(context_id, context_version, system_as_of, payload_sha256, payload, created_at) VALUES (?, 1, ?, ?, ?, ?)",
+		orphanContextID, formatPIT(cutoff), payloadDigest([]byte("{}")), "{}", cutoff); err != nil {
+		t.Fatalf("seed orphan Context version: %v", err)
+	}
+	orphanContext := contextV1
+	orphanContext.ContextID = orphanContextID
+	if err := contextRepo.Append(ctx, orphanContext); err == nil {
+		t.Fatal("append over orphan Context version must fail")
+	}
+	var orphanHeadCount int
+	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM research_aggregate_heads "+
+		"WHERE aggregate_type='context' AND aggregate_id=?", orphanContextID).Scan(&orphanHeadCount); err != nil {
+		t.Fatalf("check rolled-back aggregate head: %v", err)
+	}
+	if orphanHeadCount != 0 {
+		t.Fatalf("failed append left %d aggregate head rows, want 0", orphanHeadCount)
+	}
+
 	if err := contextRepo.Append(ctx, contextV1); err != nil { t.Fatalf("append Context v1: %v", err) }
 	if err := contextRepo.Append(ctx, contextV1); err != nil { t.Fatalf("replay Context v1: %v", err) }
 	conflictingContext := contextV1
@@ -98,6 +124,75 @@ func TestResearchSQLRepositoriesAppendAndReadVersions(t *testing.T) {
 	if err := contextRepo.Append(ctx, contextV2); err != nil { t.Fatalf("append Context v2: %v", err) }
 	if got, err := contextRepo.GetVersion(ctx, contextID, 1); err != nil || got.ContextVersion != 1 {
 		t.Fatalf("get Context v1 = version %d, error %v", got.ContextVersion, err)
+	}
+
+	// Identical concurrent appends must converge to one immutable version.
+	contextV3 := contextV2
+	contextV3.ContextVersion = 3
+	contextV3.CreatedAt = cutoff.Add(2 * time.Minute)
+	contextV3.SystemAsOf = cutoff.Add(2 * time.Minute)
+	contextV3.SectionRefs = append([]researchcontext.SectionRef(nil), contextV2.SectionRefs...)
+	contextV3.SectionRefs[0].SystemAsOf = contextV3.SystemAsOf
+	contextV3.SectionRefs[0].AssembledAt = contextV3.SystemAsOf
+	var concurrent sync.WaitGroup
+	replayErrors := make(chan error, 2)
+	for i := 0; i < 2; i++ {
+		concurrent.Add(1)
+		go func() {
+			defer concurrent.Done()
+			replayErrors <- contextRepo.Append(ctx, contextV3)
+		}()
+	}
+	concurrent.Wait()
+	close(replayErrors)
+	for err := range replayErrors {
+		if err != nil { t.Fatalf("concurrent identical Context append: %v", err) }
+	}
+
+	// Conflicting payloads for one version must have exactly one winner.
+	contextV4A := contextV3
+	contextV4A.ContextVersion = 4
+	contextV4A.CreatedAt = cutoff.Add(3 * time.Minute)
+	contextV4A.SystemAsOf = cutoff.Add(3 * time.Minute)
+	contextV4A.SectionRefs = append([]researchcontext.SectionRef(nil), contextV3.SectionRefs...)
+	contextV4A.SectionRefs[0].SystemAsOf = contextV4A.SystemAsOf
+	contextV4A.SectionRefs[0].AssembledAt = contextV4A.SystemAsOf
+	contextV4B := contextV4A
+	contextV4B.ResearchQuestion = "concurrent competing payload"
+	var outcomes sync.WaitGroup
+	conflictErrors := make(chan error, 2)
+	for _, candidate := range []researchcontext.Context{contextV4A, contextV4B} {
+		candidate := candidate
+		outcomes.Add(1)
+		go func() {
+			defer outcomes.Done()
+			conflictErrors <- contextRepo.Append(ctx, candidate)
+		}()
+	}
+	outcomes.Wait()
+	close(conflictErrors)
+	successes, conflicts := 0, 0
+	for err := range conflictErrors {
+		switch {
+		case err == nil: successes++
+		case errors.Is(err, ErrConflict): conflicts++
+		default: t.Fatalf("unexpected concurrent Context append error: %v", err)
+		}
+	}
+	if successes != 1 || conflicts != 1 {
+		t.Fatalf("concurrent conflicting append results: successes=%d conflicts=%d, want 1/1", successes, conflicts)
+	}
+
+	// Cancellation must not leave a partially-created aggregate.
+	cancelledContext := contextV1
+	cancelledContext.ContextID = cancelledContextID
+	cancelCtx, cancelAppend := context.WithCancel(ctx)
+	cancelAppend()
+	if err := contextRepo.Append(cancelCtx, cancelledContext); !errors.Is(err, context.Canceled) {
+		t.Fatalf("cancelled Context append error = %v, want context.Canceled", err)
+	}
+	if _, err := contextRepo.GetVersion(ctx, cancelledContextID, 1); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("cancelled Context append GetVersion error = %v, want ErrNotFound", err)
 	}
 
 	eventV1 := researchevent.ResearchEvent{

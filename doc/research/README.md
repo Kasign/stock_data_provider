@@ -4,7 +4,7 @@
 - 代码：`internal/research/**`
 - 任务前缀：RSC
 - 当前阶段：R1 Context + R2 Evidence + R3 Event + R5 Claim/Hypothesis 领域基础；R7 Storage Port/Schema/Context-Event-Claim SQL Adapter 第一阶段
-- 当前状态：Context/Evidence/Event/Claim Domain 首批结构与校验已实现；Context 版本链、Evidence JCS/授权过期边界、Event 生命周期及 Claim 文本校验新增测试已写入但尚未执行。RSC-007 已新增四个领域 Repository Port 和 Research Migration v1/v2（v2 保留 RFC3339Nano PIT 纳秒精度）；Context/Event/Claim SQL Repository Adapter 已实现首批追加与精确版本读取；MariaDB 集成测试已增加环境变量门禁但尚未执行；并发/故障注入和组合根注册尚未验收，Evidence SQL Adapter 受 RSC-OPEN-007 阻断。未完成仓库完整构建/CI、真实 Data/News、Owner 当前授权复核、Application、Outbox 和跨模块集成。
+- 当前状态：Context/Evidence/Event/Claim Domain 首批结构与校验已实现；Context 版本链、Evidence JCS/授权过期边界、Event 生命周期及 Claim 文本校验新增测试已写入但尚未执行。RSC-007 已新增四个领域 Repository Port 和 Research Migration v1/v2（v2 保留 RFC3339Nano PIT 纳秒精度）；Context/Event/Claim SQL Repository Adapter 已实现首批追加与精确版本读取；MariaDB 集成测试已增加环境变量门禁，覆盖并发追加、冲突竞争、事务回滚和 Context Cancel；尚未执行，组合根注册尚未验收，Evidence SQL Adapter 受 RSC-OPEN-007 阻断。未完成仓库完整构建/CI、真实 Data/News、Owner 当前授权复核、Application、Outbox 和跨模块集成。
 
 ## 模块职责
 
@@ -108,4 +108,4 @@ R1/R2/R3/R5 当前实现 Context、Evidence、Event、Claim/Hypothesis 领域结
 - 本轮未运行 go test、未连接 MariaDB；因此只记录代码实现，不标记事务、并发、幂等和故障恢复验收通过。
 
 
-- 新增环境变量门禁的 MariaDB 集成测试：设置 `RESEARCH_TEST_MYSQL_DSN` 后执行 Research Migration，并验证 Context/Event/Claim 的首次追加、相同 payload 重放、冲突重放、版本跳号、连续追加和精确版本读取；未设置 DSN 时测试会 Skip。当前尚未执行该测试。
+- 新增环境变量门禁的 MariaDB 集成测试：设置 `RESEARCH_TEST_MYSQL_DSN` 后执行 Research Migration，并验证 Context/Event/Claim 的首次追加、相同 payload 重放、冲突重放、版本跳号、连续追加和精确版本读取；并验证 Context 并发相同 payload 幂等、并发不同 payload 仅一个胜出、插入失败时 aggregate head 回滚、请求取消不遗留部分记录。未设置 DSN 时测试会 Skip。当前尚未执行该测试。
