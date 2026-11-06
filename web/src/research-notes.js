@@ -539,6 +539,74 @@ export function bindResearchNotes({ root = document, getContext = () => ({}), st
     feedback("已导出全部 " + current.items.length + " 条研究记录 JSON；导出范围不受当前筛选条件影响。");
   });
 
+
+  const importFile = $("#research-note-import-file");
+  const importPanel = $("#research-note-import-preview");
+  const importSummary = $("#research-note-import-summary");
+  const importFeedback = $("#research-note-import-feedback");
+  const importCommit = $("#research-note-import-commit");
+  let pendingImport = null, pendingImportRaw = null;
+
+  const clearImportPreview = () => {
+    pendingImport = null;
+    pendingImportRaw = null;
+    if (importPanel) importPanel.hidden = true;
+    if (importCommit) importCommit.disabled = false;
+    if (importFile) importFile.value = "";
+  };
+  $("#research-note-import-cancel")?.addEventListener("click", clearImportPreview);
+  importFile?.addEventListener("change", async () => {
+    const file = importFile.files?.[0];
+    if (!file) return;
+    try {
+      if (file.size > MAX_RESEARCH_NOTES_IMPORT_BYTES) throw new RangeError("导入文件超过 2 MB，已拒绝读取。");
+      const current = state();
+      if (!current.readable || !current.valid) throw new TypeError("当前研究记录存储不可用或数据异常，不能导入。");
+      const target = safeStorage(storage);
+      if (!target) throw new TypeError("浏览器本地存储不可用。");
+      const raw = target.getItem(RESEARCH_NOTES_KEY);
+      const preview = previewResearchNotesImport(await file.text(), current);
+      pendingImport = preview;
+      pendingImportRaw = raw;
+      const copy = preview.conflicts.length ? "；冲突另存为新记录后预计新增 " + preview.conflicts.length + " 条" : "";
+      importSummary.textContent = "文件记录 " + preview.sourceCount + " 条：新增 " + preview.additions.length +
+        " 条、完全相同 " + preview.identical.length + " 条、冲突 " + preview.conflicts.length +
+        " 条、无效 " + preview.invalid.length + " 条" + copy +
+        "。本地当前 " + preview.currentCount + " 条；预览不会修改本地数据。";
+      importFeedback.textContent = preview.invalid.length ? "无效记录将跳过，不会写入。" : "";
+      importPanel.hidden = false;
+      importCommit.disabled = preview.additions.length === 0 && preview.conflicts.length === 0;
+    } catch (error) {
+      clearImportPreview();
+      feedback(error instanceof Error ? error.message : "研究记录导入预览失败。", true);
+    }
+  });
+  importCommit?.addEventListener("click", () => {
+    if (!pendingImport) return;
+    const result = commitResearchNotesImport(
+      pendingImport, storage, pendingImportRaw, $("#research-note-import-conflict").value
+    );
+    if (!result.ok) {
+      const messages = {
+        stale: "预览后本地研究记录已发生变化，未执行导入。请重新选择文件并预览。",
+        limit: "导入后将超过 200 条记录上限，未写入。",
+        verify: result.rollback ? "写入校验失败，已恢复导入前数据。" : "写入校验失败，且自动恢复未能确认；请立即导出/检查当前记录。",
+        invalid: "导入数据无效，未写入。",
+        conflict: "导入 ID 与当前记录冲突，请重新预览。",
+        unavailable: "浏览器存储不可用，未写入。",
+        "invalid-storage": "当前本地数据异常，未写入。"
+      };
+      importFeedback.textContent = messages[result.reason] || "导入失败，未确认写入。";
+      importFeedback.dataset.state = "error";
+      if (result.reason === "stale") importCommit.disabled = true;
+      return;
+    }
+    const count = result.importedCount;
+    clearImportPreview();
+    render();
+    feedback("导入完成：新增 " + count + " 条；当前共 " + result.totalCount + " 条。记录仅保存在当前浏览器。");
+  });
+
   $("#research-note-create").addEventListener("click", openNewNote);
   $("#research-note-editor-back").addEventListener("click", closeEditor);
   $("#research-note-cancel").addEventListener("click", closeEditor);

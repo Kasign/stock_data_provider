@@ -175,8 +175,8 @@ test("研究记录导入提交检查快照、容量并在回读失败时恢复�
   const failed = {
     raw,
     writes: 0,
-    getItem() { return this.raw; },
-    setItem(key, value) { this.writes++; if (this.writes === 1) this.raw = value; else if (this.writes === 2) throw new Error("quota"); },
+    getItem() { return this.writes === 1 ? "corrupted-after-write" : this.raw; },
+    setItem(key, value) { this.writes++; this.raw = value; },
     removeItem() { this.raw = null; }
   };
   const brokenPreview = previewResearchNotesImport(JSON.stringify({ format: "stock-provider-webui.research-notes", version: 1, items: [note("remote-2", "远端", "内容")] }), readResearchNotes({ getItem: () => raw }));
