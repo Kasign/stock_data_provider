@@ -180,7 +180,7 @@ try {
   await first.locator("#research-report-list").getByText("尚无归档报告。").waitFor();
   assert.equal(await first.locator("#research-report-detail").isVisible(), false, "cross-tab report deletion closes the stale detail workspace");
   await first.locator("#research-report-feedback").filter({ hasText: "其他标签页删除" }).waitFor();
-  assert.equal(await first.evaluate(key => JSON.parse(localStorage.getItem(key)).length, noteKey), 2,
+  assert.equal(await first.evaluate(key => JSON.parse(localStorage.getItem(key)).length, noteKey), 3,
     "deleting a report must not cascade-delete independent research notes");
 
   const clearNote = note("clear-note", "待清理笔记", "内容");
