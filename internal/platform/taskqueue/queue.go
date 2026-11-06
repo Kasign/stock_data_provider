@@ -155,16 +155,19 @@ func (q *Queue) Create(ctx context.Context, req domain.RunRequest, idempotencyKe
 		return Task{}, false, errors.New("task creation context is required")
 	}
 	q.lifecycleMu.Lock()
-	defer q.lifecycleMu.Unlock()
 	if q.closed || (q.runCtx != nil && q.runCtx.Err() != nil) {
+		q.lifecycleMu.Unlock()
 		return Task{}, false, ErrQueueClosed
 	}
+	runCtx := q.runCtx
+	q.lifecycleMu.Unlock()
+
 	createCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	if q.runCtx != nil {
-		stopQueueCancellation := context.AfterFunc(q.runCtx, cancel)
+	if runCtx != nil {
+		stopQueueCancellation := context.AfterFunc(runCtx, cancel)
 		defer stopQueueCancellation()
-		if q.runCtx.Err() != nil {
+		if runCtx.Err() != nil {
 			return Task{}, false, ErrQueueClosed
 		}
 	}

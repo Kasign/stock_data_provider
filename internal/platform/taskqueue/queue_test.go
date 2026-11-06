@@ -316,3 +316,95 @@ func TestWaitForWorkerPollStopsOnContextCancellation(t *testing.T) {
 		t.Fatal("worker poll wait did not stop promptly")
 	}
 }
+
+
+type blockingCreateConnector struct {
+	entered chan struct{}
+}
+
+func (c blockingCreateConnector) Connect(context.Context) (driver.Conn, error) {
+	return blockingCreateConn{entered: c.entered}, nil
+}
+
+func (c blockingCreateConnector) Driver() driver.Driver {
+	return blockingCreateDriver{entered: c.entered}
+}
+
+type blockingCreateDriver struct {
+	entered chan struct{}
+}
+
+func (d blockingCreateDriver) Open(string) (driver.Conn, error) {
+	return blockingCreateConn{entered: d.entered}, nil
+}
+
+type blockingCreateConn struct {
+	entered chan struct{}
+}
+
+func (c blockingCreateConn) Prepare(string) (driver.Stmt, error) {
+	return nil, errors.New("prepared statements are not supported")
+}
+
+func (c blockingCreateConn) Close() error { return nil }
+
+func (c blockingCreateConn) Begin() (driver.Tx, error) {
+	return nil, errors.New("transactions are not supported")
+}
+
+func (c blockingCreateConn) QueryContext(ctx context.Context, _ string, _ []driver.NamedValue) (driver.Rows, error) {
+	select {
+	case c.entered <- struct{}{}:
+	default:
+	}
+	<-ctx.Done()
+	return nil, ctx.Err()
+}
+
+func TestCloseCancelsInFlightCreateDatabaseOperation(t *testing.T) {
+	entered := make(chan struct{}, 1)
+	db := sql.OpenDB(blockingCreateConnector{entered: entered})
+	defer db.Close()
+
+	q, err := New(db, queueTestRunner{}, 1, 1, time.Second, time.Millisecond)
+	if err != nil {
+		t.Fatal(err)
+	}
+	runCtx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	q.runCtx = runCtx
+	q.cancel = cancel
+
+	createDone := make(chan error, 1)
+	go func() {
+		_, _, createErr := q.Create(context.Background(), domain.RunRequest{}, "")
+		createDone <- createErr
+	}()
+
+	select {
+	case <-entered:
+	case <-time.After(time.Second):
+		t.Fatal("Create did not reach the blocking database operation")
+	}
+
+	closeDone := make(chan struct{})
+	go func() {
+		q.Close()
+		close(closeDone)
+	}()
+	select {
+	case <-closeDone:
+	case <-time.After(time.Second):
+		cancel()
+		t.Fatal("Close did not cancel the in-flight Create operation")
+	}
+
+	select {
+	case createErr := <-createDone:
+		if createErr == nil {
+			t.Fatal("Create should fail after queue shutdown cancels its database operation")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Create did not return after queue shutdown")
+	}
+}
