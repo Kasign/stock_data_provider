@@ -239,6 +239,109 @@ func (p *TickFlow) FetchQuote(ctx context.Context, rawSymbol string) (*model.Quo
 	return quote, nil
 }
 
+type tickflowIndexQuoteRaw struct {
+	Symbol    string                     `json:"symbol"`
+	Name      string                     `json:"name"`
+	LastPrice json.RawMessage            `json:"last_price"`
+	PrevClose json.RawMessage            `json:"prev_close"`
+	Open      json.RawMessage            `json:"open"`
+	High      json.RawMessage            `json:"high"`
+	Low       json.RawMessage            `json:"low"`
+	Volume    json.RawMessage            `json:"volume"`
+	Amount    json.RawMessage            `json:"amount"`
+	Timestamp json.RawMessage            `json:"timestamp"`
+	Ext       map[string]json.RawMessage `json:"ext"`
+}
+
+func parseTickFlowIndexNumber(ctx context.Context, rowIndex int, field string, raw json.RawMessage, required bool) (*float64, error) {
+	trimmed := strings.TrimSpace(string(raw))
+	if trimmed == "" || trimmed == "null" {
+		if !required {
+			return nil, nil
+		}
+		code := "missing"
+		if trimmed == "null" {
+			code = "null_value"
+		}
+		addProviderParseIssue(ctx, rowIndex, field, field, code, "required finite number", "missing", trimmed, "TickFlow index quote required field is missing")
+		return nil, fmt.Errorf("required field is missing")
+	}
+	var value float64
+	if err := json.Unmarshal(raw, &value); err != nil {
+		var textValue string
+		if stringErr := json.Unmarshal(raw, &textValue); stringErr != nil {
+			addProviderParseIssue(ctx, rowIndex, field, field, "type_mismatch", "number or numeric string", providerJSONValueType(raw), providerJSONPreview(raw), "TickFlow index quote field has unsupported JSON type")
+			if required {
+				return nil, fmt.Errorf("unsupported JSON type")
+			}
+			return nil, nil
+		}
+		parsed, parseErr := strconv.ParseFloat(strings.TrimSpace(textValue), 64)
+		if parseErr != nil {
+			addProviderParseIssue(ctx, rowIndex, field, field, "invalid_number", "finite number", "string", providerJSONPreview(raw), "TickFlow index quote field is not numeric")
+			if required {
+				return nil, fmt.Errorf("invalid numeric string")
+			}
+			return nil, nil
+		}
+		value = parsed
+	}
+	if math.IsNaN(value) || math.IsInf(value, 0) {
+		addProviderParseIssue(ctx, rowIndex, field, field, "invalid_number", "finite number", providerJSONValueType(raw), providerJSONPreview(raw), "TickFlow index quote field is not finite")
+		if required {
+			return nil, fmt.Errorf("number is not finite")
+		}
+		return nil, nil
+	}
+	return &value, nil
+}
+
+func decodeTickFlowIndexQuoteRows(ctx context.Context, data []byte) ([]tickflowQuotePayload, error) {
+	var rows []json.RawMessage
+	if err := json.Unmarshal(data, &rows); err != nil {
+		addProviderParseIssue(ctx, -1, "items", "data", "invalid_array", "array of quote objects", providerJSONValueType(json.RawMessage(data)), providerJSONPreview(json.RawMessage(data)), "TickFlow index quote data must be an array")
+		return nil, err
+	}
+	quotes := make([]tickflowQuotePayload, 0, len(rows))
+	for rowIndex, rawRow := range rows {
+		var row tickflowIndexQuoteRaw
+		if err := json.Unmarshal(rawRow, &row); err != nil {
+			addProviderParseIssue(ctx, rowIndex, "row", "data", "invalid_object", "quote object", providerJSONValueType(rawRow), providerJSONPreview(rawRow), "TickFlow index quote row cannot be decoded")
+			return nil, fmt.Errorf("row %d: %w", rowIndex, err)
+		}
+		quote := tickflowQuotePayload{Symbol: row.Symbol, Name: row.Name, Ext: row.Ext}
+		fields := []struct {
+			providerField string
+			value         json.RawMessage
+			target        **float64
+			required      bool
+		}{
+			{"last_price", row.LastPrice, &quote.LastPrice, true},
+			{"prev_close", row.PrevClose, &quote.PrevClose, true},
+			{"open", row.Open, &quote.Open, false},
+			{"high", row.High, &quote.High, false},
+			{"low", row.Low, &quote.Low, false},
+			{"volume", row.Volume, &quote.Volume, false},
+			{"amount", row.Amount, &quote.Amount, false},
+		}
+		for _, field := range fields {
+			parsed, err := parseTickFlowIndexNumber(ctx, rowIndex, field.providerField, field.value, field.required)
+			if err != nil {
+				return nil, fmt.Errorf("row %d field %s: %w", rowIndex, field.providerField, err)
+			}
+			*field.target = parsed
+		}
+		if len(row.Timestamp) > 0 && string(row.Timestamp) != "null" {
+			if err := json.Unmarshal(row.Timestamp, &quote.Timestamp); err != nil {
+				addProviderParseIssue(ctx, rowIndex, "quote_time", "timestamp", "invalid_timestamp", "Unix millisecond timestamp", providerJSONValueType(row.Timestamp), providerJSONPreview(row.Timestamp), "TickFlow index quote timestamp cannot be parsed")
+				return nil, fmt.Errorf("row %d field timestamp: %w", rowIndex, err)
+			}
+		}
+		quotes = append(quotes, quote)
+	}
+	return quotes, nil
+}
+
 func (p *TickFlow) FetchIndexQuotes(ctx context.Context) (*model.IndexQuoteSnapshot, error) {
 	if p == nil || p.client == nil {
 		return nil, errors.New("TickFlow HTTP client is not configured")
@@ -274,8 +377,8 @@ func (p *TickFlow) FetchIndexQuotes(ctx context.Context) (*model.IndexQuoteSnaps
 		if err != nil {
 			return nil, err
 		}
-		var batchQuotes []tickflowQuotePayload
-		if err := json.Unmarshal(data, &batchQuotes); err != nil {
+		batchQuotes, err := decodeTickFlowIndexQuoteRows(ctx, data)
+		if err != nil {
 			return nil, fmt.Errorf("decode TickFlow index quote data: %w", err)
 		}
 		quotes = append(quotes, batchQuotes...)
@@ -1133,12 +1236,14 @@ func (p *TickFlow) FetchDailyBars(ctx context.Context, rawSymbol, startDate, end
 	}
 	for name, length := range map[string]int{"open": len(data.Open), "high": len(data.High), "low": len(data.Low), "close": len(data.Close), "volume": len(data.Volume)} {
 		if length != n {
+			addProviderParseIssue(ctx, -1, name, name, "array_length_mismatch", fmt.Sprintf("length %d matching timestamp", n), "array", strconv.Itoa(length), "TickFlow K-line required field array length does not match timestamp")
 			return nil, fmt.Errorf("TickFlow K-line %s length %d does not match timestamp length %d", name, length, n)
 		}
 	}
 	// 可选数组可以整体缺省，但一旦提供，必须与时间戳一一对应，避免静默错配。
 	for name, length := range map[string]int{"amount": len(data.Amount), "prev_close": len(data.PrevClose)} {
 		if length > 0 && length != n {
+			addProviderParseIssue(ctx, -1, name, name, "array_length_mismatch", fmt.Sprintf("length %d or omitted", n), "array", strconv.Itoa(length), "TickFlow K-line optional field array length does not match timestamp")
 			return nil, fmt.Errorf("TickFlow K-line %s length %d does not match timestamp length %d", name, length, n)
 		}
 	}
@@ -1148,6 +1253,7 @@ func (p *TickFlow) FetchDailyBars(ctx context.Context, rawSymbol, startDate, end
 	for i := 0; i < n; i++ {
 		timestamp, err := tickflowInt64(data.Timestamp[i])
 		if err != nil || timestamp <= 0 {
+			addProviderParseIssue(ctx, i, "trade_date", "timestamp", "invalid_timestamp", "positive Unix millisecond timestamp", providerJSONValueType(data.Timestamp[i]), providerJSONPreview(data.Timestamp[i]), "TickFlow K-line timestamp cannot be parsed")
 			return nil, fmt.Errorf("TickFlow K-line row %d has invalid timestamp", i)
 		}
 		tradeDate := time.UnixMilli(timestamp).In(loc).Format("2006-01-02")
@@ -1159,27 +1265,32 @@ func (p *TickFlow) FetchDailyBars(ctx context.Context, rawSymbol, startDate, end
 		}
 		seen[tradeDate] = struct{}{}
 		open, err := tickflowFloat(data.Open[i])
-		if err != nil {
+		if err != nil || !tickflowPositiveFinite(open) {
+			addProviderParseIssue(ctx, i, "open", "open", "invalid_number", "finite positive price", providerJSONValueType(data.Open[i]), providerJSONPreview(data.Open[i]), "TickFlow K-line price field is invalid")
 			return nil, fmt.Errorf("TickFlow invalid open on %s", tradeDate)
 		}
 		high, err := tickflowFloat(data.High[i])
-		if err != nil {
+		if err != nil || !tickflowPositiveFinite(high) {
+			addProviderParseIssue(ctx, i, "high", "high", "invalid_number", "finite positive price", providerJSONValueType(data.High[i]), providerJSONPreview(data.High[i]), "TickFlow K-line price field is invalid")
 			return nil, fmt.Errorf("TickFlow invalid high on %s", tradeDate)
 		}
 		low, err := tickflowFloat(data.Low[i])
-		if err != nil {
+		if err != nil || !tickflowPositiveFinite(low) {
+			addProviderParseIssue(ctx, i, "low", "low", "invalid_number", "finite positive price", providerJSONValueType(data.Low[i]), providerJSONPreview(data.Low[i]), "TickFlow K-line price field is invalid")
 			return nil, fmt.Errorf("TickFlow invalid low on %s", tradeDate)
 		}
 		closePrice, err := tickflowFloat(data.Close[i])
-		if err != nil {
+		if err != nil || !tickflowPositiveFinite(closePrice) {
+			addProviderParseIssue(ctx, i, "close", "close", "invalid_number", "finite positive price", providerJSONValueType(data.Close[i]), providerJSONPreview(data.Close[i]), "TickFlow K-line price field is invalid")
 			return nil, fmt.Errorf("TickFlow invalid close on %s", tradeDate)
 		}
-		if !tickflowPositiveFinite(open) || !tickflowPositiveFinite(high) || !tickflowPositiveFinite(low) || !tickflowPositiveFinite(closePrice) ||
-			low > high || open < low || open > high || closePrice < low || closePrice > high {
+		if low > high || open < low || open > high || closePrice < low || closePrice > high {
+			addProviderParseIssue(ctx, i, "ohlc", "open/high/low/close", "ohlc_invariant_violation", "low <= open/close <= high", "number", "", "TickFlow K-line OHLC values violate price range")
 			return nil, fmt.Errorf("TickFlow OHLC invariant failed on %s", tradeDate)
 		}
 		rawVolume, err := tickflowFloat(data.Volume[i])
-		if err != nil || rawVolume < 0 || math.Trunc(rawVolume) != rawVolume {
+		if err != nil || rawVolume < 0 || math.Trunc(rawVolume) != rawVolume || math.IsNaN(rawVolume) || math.IsInf(rawVolume, 0) {
+			addProviderParseIssue(ctx, i, "volume", "volume", "invalid_number", "finite non-negative integer hands", providerJSONValueType(data.Volume[i]), providerJSONPreview(data.Volume[i]), "TickFlow K-line volume is invalid")
 			return nil, fmt.Errorf("TickFlow has invalid volume on %s", tradeDate)
 		}
 		volume, err := normalize.HandsToShares(rawVolume)
@@ -1194,6 +1305,7 @@ func (p *TickFlow) FetchDailyBars(ctx context.Context, rawSymbol, startDate, end
 		if i < len(data.Amount) && len(bytesTrim(data.Amount[i])) > 0 && string(bytesTrim(data.Amount[i])) != "null" {
 			value, parseErr := tickflowFloat(data.Amount[i])
 			if parseErr != nil || value < 0 || math.IsNaN(value) || math.IsInf(value, 0) {
+				addProviderParseIssue(ctx, i, "amount", "amount", "invalid_optional_number", "finite non-negative CNY amount", providerJSONValueType(data.Amount[i]), providerJSONPreview(data.Amount[i]), "TickFlow K-line amount is invalid")
 				return nil, fmt.Errorf("TickFlow has invalid amount on %s", tradeDate)
 			}
 			amount, rawAmount = &value, &value
@@ -1212,6 +1324,9 @@ func (p *TickFlow) FetchDailyBars(ctx context.Context, rawSymbol, startDate, end
 				}
 			}
 			if pct == nil {
+				if parseErr != nil || !tickflowPositiveFinite(prev) {
+					addProviderParseIssue(ctx, i, "prev_close", "prev_close", "invalid_optional_number", "finite positive previous close", providerJSONValueType(data.PrevClose[i]), providerJSONPreview(data.PrevClose[i]), "TickFlow K-line previous close is invalid; change percent omitted")
+				}
 				quality = model.QualityDegraded
 				reasons = append(reasons, "provider_change_percent_missing_or_invalid")
 			}

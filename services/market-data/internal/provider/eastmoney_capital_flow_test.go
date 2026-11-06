@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/Kasign/stock_data_provider/services/market-data/internal/validation"
 )
 
 func TestEastmoneyCapitalFlowSortsAndAggregatesLatestTenObservations(t *testing.T) {
@@ -97,5 +99,37 @@ func TestEastmoneyCapitalFlowRejectsMalformedSecurityIdentity(t *testing.T) {
 	_, err := p.FetchCapitalFlow(context.Background(), "600519.SH")
 	if err == nil || !strings.Contains(err.Error(), "invalid security code") {
 		t.Fatalf("malformed returned security identity must be rejected, got %v", err)
+	}
+}
+
+func TestEastmoneyCapitalFlowReportsFieldAndRowParseIssue(t *testing.T) {
+	cases := []struct {
+		name, row, wantField, wantProviderField, wantCode string
+	}{
+		{name: "invalid date", row: "bad-date,100", wantField: "trade_date", wantProviderField: "f51", wantCode: "invalid_date"},
+		{name: "invalid amount", row: "2026-10-26,not-a-number", wantField: "main_net_inflow", wantProviderField: "f52", wantCode: "invalid_number"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = fmt.Fprintf(w, `{"rc":0,"data":{"code":"600519","klines":[%q]}}`, tc.row)
+			}))
+			defer server.Close()
+			ctx := validation.WithReporter(context.Background(), validation.NewReporter(10))
+			_, err := NewEastmoney(time.Second, "", "").WithCapitalFlowURL(server.URL).FetchCapitalFlow(ctx, "600519.SH")
+			if err == nil {
+				t.Fatal("malformed source row must retain fail-fast behavior")
+			}
+			report := validation.ReporterFromContext(ctx).Snapshot()
+			if report.TotalCount != 1 || len(report.Issues) != 1 {
+				t.Fatalf("expected one parse issue, got %+v", report)
+			}
+			issue := report.Issues[0]
+			if issue.Stage != validation.StageParse || issue.RowIndex == nil || *issue.RowIndex != 0 ||
+				issue.Field != tc.wantField || issue.ProviderField != tc.wantProviderField || issue.Code != tc.wantCode {
+				t.Fatalf("unexpected parse issue: %+v", issue)
+			}
+		})
 	}
 }

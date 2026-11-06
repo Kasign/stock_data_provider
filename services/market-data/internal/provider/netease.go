@@ -415,6 +415,7 @@ func (p *Netease) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endD
 	columns := neteaseCSVColumns(header)
 	for _, required := range []string{"date", "code", "open", "high", "low", "close", "volume", "amount"} {
 		if _, ok := columns[required]; !ok {
+			addProviderParseIssue(ctx, -1, required, required, "missing_column", "required CSV column", "header", strings.Join(header, ","), "Netease CSV response is missing a required column")
 			return nil, fmt.Errorf("Netease CSV missing required column %q; header=%q", required, header)
 		}
 	}
@@ -519,8 +520,13 @@ func (p *Netease) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endD
 			NormalizationVer: normalize.Version,
 		}
 		if index, ok := columns["change_percent"]; ok && index >= 0 && index < len(record) {
-			if changePercent, parseErr := parseNeteaseNumber(record[index]); parseErr == nil && finiteNumber(changePercent) {
-				bar.ChangePercent = &changePercent
+			rawChangePercent := strings.TrimSpace(record[index])
+			if rawChangePercent != "" {
+				if changePercent, parseErr := parseNeteaseNumber(rawChangePercent); parseErr == nil && finiteNumber(changePercent) {
+					bar.ChangePercent = &changePercent
+				} else {
+					addProviderParseIssue(ctx, rowIndex, "change_percent", "涨跌幅", "invalid_optional_number", "finite percentage points", "string", rawChangePercent, "Netease CSV optional change percent is invalid and omitted")
+				}
 			}
 		}
 		rows = append(rows, bar)

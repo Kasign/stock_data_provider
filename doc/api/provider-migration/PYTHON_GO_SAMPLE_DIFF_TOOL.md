@@ -19,6 +19,10 @@ Python 与 Go 两侧各导出一个 JSON 文件，顶层结构如下：
   "provider": "python-efinance",
   "captured_at_utc": "2026-10-30T07:00:00Z",
   "source_commit": "固定源码提交或 Go 服务提交 SHA",
+  "provider_version": "Provider/SDK 版本",
+  "endpoint": "实际命中的接口标识",
+  "request_params": {"adjust": "qfq", "period": "daily"},
+  "raw_payload_sha256": "64 位原始响应 SHA-256",
   "records": [
     {
       "trade_date": "2026-10-29",
@@ -59,6 +63,12 @@ python3 scripts/compare_market_data_exports.py \
 
 退出码：`0` 表示没有阻断性字段差异；`1` 表示记录覆盖或字段存在阻断差异；`2` 表示输入结构/样本身份错误。质量状态与质量原因差异单独列入报告，并同样使退出码为 1；质量语义不一致不能被当作数值容差通过。
 
+## 真实样本凭证
+
+真实准确性验收必须增加 `--require-real-provenance`。该模式要求 Python 和 Go 两侧分别提供 source_commit、provider、provider_version、endpoint、request_params、captured_at_utc（显式 UTC）和 raw_payload_sha256。provider 不能是 fixture/mock/synthetic/unknown；source_commit 必须是完整 Git SHA；raw_payload_sha256 必须是 64 位 SHA-256。该模式只验证凭证字段结构和摘要格式，不证明原始响应本身真实；原始响应文件必须另行归档并按摘要复核。
+
+不带该选项的模式继续用于合成 fixture 的 CI 合约测试，不能作为真实数据准确性验收。
+
 ## 比较规则
 
 - 必须匹配 `dataset`、`symbol`、`adjustment_basis`；不匹配直接拒绝比较。
@@ -72,3 +82,14 @@ python3 scripts/compare_market_data_exports.py \
 ## 当前状态
 
 工具和导出协议已具备；旧 Python 固定提交为 `Kasign/daily_stock_analysis@7a21cd76952c7fe44a7fc5a6113a5b2b8a16bb32`。真实双侧差分仍需在可运行该 Python 依赖的环境导出同证券、同交易日、同复权基准的数据后执行。当前 Go 双 Provider 黄金样例不能替代 Python 样本。
+
+
+## CI 合约测试与真实准确性验收的边界
+
+当前 data-quality-parity.yml 执行的是比较器单元测试、Go 归一化契约测试和静态标记检查。test_compare_market_data_exports.py 中的 Python/Go 数据均由 export() 在测试内构造，Provider 标记为 fixture；例如 close=10.005 对 close=10.0 是容差边界测试，不是 Python 真实行情。测试中出现的 2026-10-28/2026-10-29 差异同样是人为构造的覆盖率/字段差异用例。
+
+因此：
+- 该 CI 只能证明比较器和质量规则按预期工作，不能证明旧 Python 行情准确，也不能证明 Go 与 Python 真实数据等价。
+- 真实数据验收必须使用固定 Python 源码运行后导出的原始 Provider 样本；禁止复制 Go 样本伪装 Python 样本。
+- 每份真实导出必须标明 source_commit、provider、provider_version、request_params、captured_at_utc，并附带未经清洗的原始 payload 或其可审计摘要。
+- 报告应分开给出“比较器合约 CI”与“真实 Provider 数据验收”状态；前者通过不能自动提升后者状态。

@@ -180,6 +180,7 @@ func (p *Tushare) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endD
 			return nil, nil
 		}
 		if index >= len(row) {
+			addProviderParseIssue(ctx, rowIndex, field, field, "missing_column_value", "provider row contains this field", "missing", "", "Tushare row is missing a value for a declared field")
 			return nil, fmt.Errorf("Tushare row %d is missing value for field %q", rowIndex, field)
 		}
 		return row[index], nil
@@ -194,6 +195,7 @@ func (p *Tushare) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endD
 		}
 		code, err := tushareString(codeRaw)
 		if err != nil || strings.ToUpper(strings.TrimSpace(code)) != symbol {
+			addProviderParseIssue(ctx, rowIndex, "symbol", "ts_code", "symbol_mismatch", symbol, providerJSONValueType(codeRaw), providerJSONPreview(codeRaw), "Tushare row security code is invalid or differs from the requested symbol")
 			return nil, fmt.Errorf("Tushare row %d symbol mismatch: requested %s, returned %q", rowIndex, symbol, code)
 		}
 		dateRaw, err := get(row, "trade_date", rowIndex)
@@ -202,6 +204,7 @@ func (p *Tushare) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endD
 		}
 		dateText, err := tushareString(dateRaw)
 		if err != nil {
+			addProviderParseIssue(ctx, rowIndex, "trade_date", "trade_date", "invalid_date", "YYYYMMDD or YYYY-MM-DD", providerJSONValueType(dateRaw), providerJSONPreview(dateRaw), "Tushare row trade date cannot be decoded")
 			return nil, fmt.Errorf("Tushare row %d has an invalid trade date", rowIndex)
 		}
 		tradeDate, err := time.Parse("20060102", dateText)
@@ -209,6 +212,7 @@ func (p *Tushare) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endD
 			tradeDate, err = time.Parse("2006-01-02", dateText)
 		}
 		if err != nil {
+			addProviderParseIssue(ctx, rowIndex, "trade_date", "trade_date", "invalid_date", "YYYYMMDD or YYYY-MM-DD", "string", dateText, "Tushare row trade date has an unsupported format")
 			return nil, fmt.Errorf("Tushare row %d has invalid trade date %q", rowIndex, dateText)
 		}
 		isoDate := tradeDate.Format("2006-01-02")
@@ -227,6 +231,7 @@ func (p *Tushare) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endD
 			}
 			value, e := tushareRawFloat(rawValue)
 			if e != nil || (positive && value <= 0) || (!positive && value < 0) {
+				addProviderParseIssue(ctx, rowIndex, field, field, "invalid_number", "finite positive numeric value or finite non-negative numeric value", providerJSONValueType(rawValue), providerJSONPreview(rawValue), "Tushare daily numeric field is invalid")
 				return 0, fmt.Errorf("invalid Tushare %s on %s", field, isoDate)
 			}
 			return value, nil
@@ -248,6 +253,7 @@ func (p *Tushare) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endD
 			return nil, err
 		}
 		if low > high || open < low || open > high || closePrice < low || closePrice > high {
+			addProviderParseIssue(ctx, rowIndex, "ohlc", "open/high/low/close", "ohlc_invariant_violation", "low <= open/close <= high", "number", "", "Tushare daily OHLC values violate the price range")
 			return nil, fmt.Errorf("Tushare OHLC invariant failed on %s", isoDate)
 		}
 		rawVolume, err := readFloat("vol", false)
@@ -273,6 +279,7 @@ func (p *Tushare) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endD
 		} else {
 			value, parseErr := tushareRawFloat(amountRaw)
 			if parseErr != nil || value < 0 {
+				addProviderParseIssue(ctx, rowIndex, "amount", "amount", "invalid_number", "finite non-negative numeric value or null", providerJSONValueType(amountRaw), providerJSONPreview(amountRaw), "Tushare daily amount is invalid")
 				return nil, fmt.Errorf("invalid Tushare amount on %s", isoDate)
 			}
 			rawCopy := value
@@ -300,6 +307,7 @@ func (p *Tushare) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endD
 			if parseErr == nil {
 				pct = &value
 			} else {
+				addProviderParseIssue(ctx, rowIndex, "change_percent", "pct_chg", "invalid_number", "finite numeric value or null", providerJSONValueType(pctRaw), providerJSONPreview(pctRaw), "Tushare daily change percent is invalid")
 				quality = model.QualityDegraded
 				reasons = append(reasons, "provider_change_percent_unavailable")
 			}
