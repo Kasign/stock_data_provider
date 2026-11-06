@@ -294,12 +294,11 @@ func TestCollectSourceReturnsEndpointPolicyVersionWhenApplied(t *testing.T) {
 	}
 }
 
-
 type sourceRetryableTestError struct {
 	retryable bool
 }
 
-func (e sourceRetryableTestError) Error() string { return "classified source transport error" }
+func (e sourceRetryableTestError) Error() string   { return "classified source transport error" }
 func (e sourceRetryableTestError) Retryable() bool { return e.retryable }
 
 func TestSourceTransportRetryableUsesAdapterClassification(t *testing.T) {
