@@ -169,6 +169,21 @@ func Fingerprint(t WorkflowTemplate) (string, error) {
 	return hex.EncodeToString(sum[:]), nil
 }
 
+func resolvedFingerprint(templateFingerprint string, schema ParameterSchemaSnapshot) (string, error) {
+	payload := struct {
+		TemplateFingerprint string `json:"template_fingerprint"`
+		ParameterSchemaRef string `json:"parameter_schema_ref"`
+		ParameterSchemaVersion string `json:"parameter_schema_version"`
+		ParameterSchemaFingerprint string `json:"parameter_schema_fingerprint"`
+	}{templateFingerprint, schema.Ref, schema.Version, schema.Fingerprint}
+	raw, err := json.Marshal(payload)
+	if err != nil { return "", fmt.Errorf("encode resolved template fingerprint: %w", err) }
+	canonical, err := jcs.Transform(raw)
+	if err != nil { return "", fmt.Errorf("canonicalize resolved template fingerprint: %w", err) }
+	sum := sha256.Sum256(canonical)
+	return hex.EncodeToString(sum[:]), nil
+}
+
 func Resolve(ctx context.Context, t WorkflowTemplate, parameters json.RawMessage, parameterSchemas ParameterSchemaValidator, evaluator ApplicabilityEvaluator, gates HardRiskGateRegistry) (ResolvedTemplate, error) {
 	if err := Validate(t, gates); err != nil { return ResolvedTemplate{}, err }
 	if parameterSchemas == nil { return ResolvedTemplate{}, fmt.Errorf("%w: parameter schema validator is required", ErrInvalidTemplate) }
@@ -184,7 +199,9 @@ func Resolve(ctx context.Context, t WorkflowTemplate, parameters json.RawMessage
 	if _, err := hex.DecodeString(parameterSchema.Fingerprint); err != nil {
 		return ResolvedTemplate{}, fmt.Errorf("%w: parameter schema fingerprint must be lowercase SHA-256 hex", ErrInvalidTemplate)
 	}
-	fingerprint, err := Fingerprint(t)
+	templateFingerprint, err := Fingerprint(t)
+	if err != nil { return ResolvedTemplate{}, err }
+	fingerprint, err := resolvedFingerprint(templateFingerprint, parameterSchema)
 	if err != nil { return ResolvedTemplate{}, err }
 	resolved := ResolvedTemplate{Ref:t.Ref, Version:t.Version, Fingerprint:fingerprint, ParameterSchema:parameterSchema}
 	included := map[string]bool{}

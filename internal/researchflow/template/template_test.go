@@ -16,7 +16,7 @@ func(g testGates)Contains(code string)bool{return g[code]}
 
 type testParameterSchemas struct{}
 func(testParameterSchemas) Validate(_ context.Context, ref string, _ json.RawMessage) (ParameterSchemaSnapshot, error) {
-	return ParameterSchemaSnapshot{Ref:ref, Version:"1", Fingerprint:"schema-sha256"}, nil
+	return ParameterSchemaSnapshot{Ref:ref, Version:"1", Fingerprint:"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}, nil
 }
 
 func testPolicy()PropagationPolicy{return PropagationPolicy{OnDegraded:domain.PropagateAccept,OnSkipped:domain.PropagatePartial,OnFailed:domain.PropagateFail,OnTimedOut:domain.PropagateFail,OnBlocked:domain.PropagateFail}}
@@ -80,10 +80,36 @@ func TestResolveRequiresImmutableParameterSchemaSnapshot(t *testing.T) {
 
 type mismatchedParameterSchemas struct{}
 func(mismatchedParameterSchemas) Validate(_ context.Context, _ string, _ json.RawMessage) (ParameterSchemaSnapshot, error) {
-	return ParameterSchemaSnapshot{Ref:"other-schema", Version:"1", Fingerprint:"sha256"}, nil
+	return ParameterSchemaSnapshot{Ref:"other-schema", Version:"1", Fingerprint:"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}, nil
 }
 
 func TestResolveRejectsMismatchedParameterSchemaRef(t *testing.T) {
 	_, err := Resolve(context.Background(), testTemplate(), json.RawMessage("{}"), mismatchedParameterSchemas{}, testEvaluator{"always": true}, nil)
 	if err == nil { t.Fatal("mismatched parameter schema ref accepted") }
+}
+
+
+type versionedParameterSchemas struct { version, fingerprint string }
+func (s versionedParameterSchemas) Validate(_ context.Context, ref string, _ json.RawMessage) (ParameterSchemaSnapshot,error) {
+	return ParameterSchemaSnapshot{Ref:ref,Version:s.version,Fingerprint:s.fingerprint},nil
+}
+
+func TestResolvedFingerprintBindsParameterSchemaVersionAndDigest(t *testing.T) {
+	tmpl:=testTemplate()
+	base:=versionedParameterSchemas{"1","aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}
+	first,err:=Resolve(context.Background(),tmpl,json.RawMessage("{}"),base,testEvaluator{"always":true},nil)
+	if err!=nil{t.Fatal(err)}
+	second,err:=Resolve(context.Background(),tmpl,json.RawMessage("{}"),versionedParameterSchemas{"2","aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},testEvaluator{"always":true},nil)
+	if err!=nil{t.Fatal(err)}
+	third,err:=Resolve(context.Background(),tmpl,json.RawMessage("{}"),versionedParameterSchemas{"1","bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"},testEvaluator{"always":true},nil)
+	if err!=nil{t.Fatal(err)}
+	if first.Fingerprint==second.Fingerprint || first.Fingerprint==third.Fingerprint {
+		t.Fatal("resolved template fingerprint must change when immutable schema version or content digest changes")
+	}
+}
+
+func TestResolveRejectsNonHexSchemaFingerprint(t *testing.T) {
+	schemas:=versionedParameterSchemas{"1","not-a-sha256"}
+	_,err:=Resolve(context.Background(),testTemplate(),json.RawMessage("{}"),schemas,testEvaluator{"always":true},nil)
+	if err==nil{t.Fatal("non-hex schema fingerprint accepted")}
 }

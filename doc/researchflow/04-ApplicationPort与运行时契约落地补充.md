@@ -161,3 +161,10 @@ Fake Repository/Fake Clock/Fake Provider 只证明模块内逻辑；MariaDB/Redi
 
 - 参数 Schema Registry 的 not_found 与暂时不可用错误必须区分；调用方不得把 Registry 连接/超时故障伪装为模板配置不存在。
 - JSON Schema format assertion 显式开启；参数重复键、非对象、空 body 均在 schema 校验前拒绝。
+
+
+### Resolved Template 指纹绑定修正（2026-11-06）
+
+- 发现原 `Resolve` 结果虽然保存 ParameterSchema 的 version/fingerprint，但 Run 使用的 `ResolvedTemplate.Fingerprint` 仍仅为静态 Template 指纹，导致同一 Template Ref/Version 下 Schema Registry 版本或内容变化未反映到 Run 指纹。
+- 现将 resolved fingerprint 定义为 RFC 8785 JCS + SHA-256，输入包含静态 Template fingerprint、ParameterSchemaRef、Registry version 和 canonical Schema digest。这样同一模板引用下 Schema 版本/内容变化会产生不同执行指纹。
+- 修正模板测试夹具：此前使用非十六进制占位 fingerprint，与 Resolve 的 64 位 SHA-256 校验冲突；统一替换为合法固定 64 位十六进制值。
