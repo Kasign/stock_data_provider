@@ -14,6 +14,7 @@
 
 | 文档 | 内容 |
 |---|---|
+| [N1 当前 HEAD 现状盘点与设计评审报告](N1现状盘点与设计评审报告.md) | 2026-11-06 平台合并后最新代码证据、差距、风险与评审结论 |
 | [N1-A 新闻基础设施架构评审报告](N1-A新闻基础设施架构评审报告.md) | 当前最终架构、领域契约、风险和用户确认项 |
 | [新闻模块与公共平台接入矩阵](新闻模块与公共平台接入矩阵.md) | PLAT 契约映射、依赖门禁、所有权和跨分支协作 |
 | [N1-A 公共平台规划对齐补充评审](N1-A公共平台规划对齐补充评审.md) | 最新平台分支规划核验、任务编号纠偏和新闻实施门禁 |
@@ -35,18 +36,18 @@
 - [x] N2：Domain、Application Port、Bocha/Tavily/Brave/SearXNG Adapter 与 fake 测试已提交；根模块 gofmt、test、race、vet 和分析服务镜像构建通过
 - [x] N3 首批：Provider/Source/Endpoint 授权交集评估、用途/保留期限限制、内容类型与存储模式一致性、HTTP(S) URL 规范化与精确主机/端口 allowlist；固定测试通过
 - [x] N3 离线业务质量：按元数据、内容、来源身份三个维度评估 valid/degraded/invalid/unknown；不把 Provider 摘要提升为来源正文，不把发布者文本视为已解析来源
-- [ ] N3 在线采集：Feed 解析与 Endpoint 传输分派已有代码；平台 PLAT-008 原语已实现并有专项 CI，但尚未进入当前 News 分支基线，且 PLAT-002 未冻结、生产 BoundDoer 注入/来源授权/出口验收未完成
+- [ ] N3 在线采集：Feed 解析与 Endpoint 传输分派已有代码；平台 PLAT-008 BoundDoer 已随平台分支合并进入当前基线并适配 News HTTPDoer；生产逐 endpoint 注入、来源授权/出口验收未完成，PLAT-002 仍未冻结
 - [x] N4 Domain/Application 首批：身份识别、Observation 幂等语义、内容版本、证券/行业关系和转载关系规则已有实现与离线测试
 - [ ] N4/N6 后续：真实采集编排、生产 Repository、数据库唯一约束/事务并发与历史版本持久化仍未完成
 - [ ] N5：按公共契约接入 Config/Secret、Logger/Fault/Request ID、HTTP Client；NEWS-CTR-002 Binding DTO/Validator 已实现结构绑定和 nullable 字段显式 null/缺失区分；fingerprint JCS 复核等待公共 GOV-CTR-006 Verifier，尚未实现授权签发、当前策略读取时复核和授权竞态保护
-- [ ] N6：公共存储能力就绪后实现新闻自有 Repository/SQL/Migration；Redis 按需
+- [ ] N6：PLAT-009 Storage/Migration 原语已合并并通过 MariaDB/Redis CI 集成；News 自有 Repository/SQL/Migration 与根组合根注册仍待实现；Redis 按需
 - [ ] N7：接入公共 Diagnostics；Task/Audit/Metrics 按真实需求评估
 - [ ] N8：完成 News 与公共平台集成验收
 - [x] N1-A 用户评审确认；N2 已完成并进入 N3
 
 ## 公共平台协作说明
 
-公共平台分支 `feat/platform-foundation` 本轮只读核对 HEAD `55cbd0d642ac2a9b37e0ebfb8e7be0034af87f5e`：PLAT-008 `httpclient.BoundDoer` 已实现并有平台专项 CI 通过记录；PLAT-002 仍标记待评审，PLAT-013 仍在设计/领域接入阶段，PLAT-010 已收敛为领域边界评审而非通用队列。当前 News 分支包含较早版本的 `internal/platform/httpclient`，但尚无平台最新的 `BoundDoer` 与 `storage`；平台分支与 News 分支已分叉，必须等公共契约冻结、平台实现进入共同基线，并由 Server 组合根 Owner 明确接入位置后再集成。平台分支只读跟踪，不在本分支修改。生产 DNS/出口、真实 Provider 凭证/配额、Source/Endpoint 授权仍是独立验收门禁。Metrics/Audit 和 Redis 不作为新闻首期门禁。
+公共平台分支 `feat/platform-foundation` 本轮只读核对 HEAD `55cbd0d642ac2a9b37e0ebfb8e7be0034af87f5e`：PLAT-008 `httpclient.BoundDoer` 已实现并有平台专项 CI 通过记录；PLAT-002 仍标记待评审，PLAT-013 仍在设计/领域接入阶段，PLAT-010 已收敛为领域边界评审而非通用队列。当前分支已合并平台 `BoundDoer` 与 `storage` 实现；`BoundDoer` 与 News `HTTPDoer` 兼容，Storage 提供 SQL/Redis 生命周期及 Migration Runner。News 仍缺生产逐 endpoint 注入、News Repository/Migration、根组合根共享资源与 Migration 注册；PLAT-002 仍未冻结。平台分支只读跟踪，不在本分支修改。生产 DNS/出口、真实 Provider 凭证/配额、Source/Endpoint 授权仍是独立验收门禁。Metrics/Audit 和 Redis 不作为新闻首期门禁。
 
 ## 重要说明
 
@@ -148,3 +149,15 @@ Review 发现 CollectSource 原先只校验请求 ContentKind，却将 FeedEntry
 ### NEWS-CTR-002 策略快照完整性补充（2026-11-06）
 
 Binding 中 `provider_ref` / `endpoint_ref` 非 null 时，PolicySnapshot 必须分别包含对应的 `provider_output` / `endpoint` 实际生效版本；显式 null 才表示该层不参与本次决策（Endpoint 可继承 Source）。缺失任一非 null 引用对应的 tuple 必须拒绝。
+
+
+## 2026-11-06 平台合并后 N1 当前 HEAD 复核
+
+当前盘点基线：`aca8ff6b6bd2a03adf5ded075f354a77f6dc3370`。完整代码证据、旧 Python 调用链、平台合并变化、风险和设计评审见《[N1 新闻模块现状盘点与设计评审报告](N1现状盘点与设计评审报告.md)》。
+
+- 平台 `httpclient.BoundDoer` 已进入当前分支，接口与 News `app.HTTPDoer` 兼容；News 生产组合根尚未逐 Provider/Source endpoint 注入。
+- 平台 `storage` 已进入当前分支，MariaDB/Redis CI 集成与 Race 通过；根 Server 仍使用旧 mysqlredis Store，News Repository/Migration/注册尚未完成。
+- Diagnostics/Config/Security 等平台原语已合并；News 领域 Check、Bootstrap 和服务路由仍未接入。
+- 最新身份修正拒绝候选及已存凭据 Hash 不一致；最新授权修正拒绝 `expires_at == decided_at` 的零有效期授权。
+- PLAT-002 仍待冻结，平台 L1 证据不等于 News A2/A3 接入通过。
+- N1 盘点完成，等待用户确认；不自动进入后续业务开发。

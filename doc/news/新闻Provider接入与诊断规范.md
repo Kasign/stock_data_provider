@@ -198,7 +198,7 @@ Provider 输出策略必须在缓存和持久化之前执行。Brave 只允许�
 - SearXNG：只支持显式配置实例；保留 Provider 身份和原始时间字段，不把 engine 名称当作发布者。
 - 所有 Adapter 保留 provider_code；publisher_name/publisher_domain 与 Provider 身份分离。publisher_domain 不从结果 URL 推断。
 - 未知时间原文为空时保持未知；可解析的 RFC3339 时间才填充 PublishedAt，其他格式保留原文供后续标准化阶段处理。
-- HTTPDoer 由外部注入；当前没有生产 HTTP Client、连接池、通用重试器、通用限流器、跨请求缓存或真实网络验收。传输层响应大小、Deadline、TLS、重定向和 DNS/IP 安全由公共平台能力负责。
+- HTTPDoer 由外部注入；公共平台 HTTP Client/BoundDoer 已合并，但 News 尚无生产逐 endpoint 注入、真实 Provider 网络和来源授权验收。不得自行创建生产 Client/连接池/通用重试器/限流器/跨请求缓存；响应大小、Deadline、TLS、重定向和 DNS/IP 安全由平台 BoundDoer 负责。
 
 fake Transport 测试已在根模块 GitHub Actions 中执行通过，覆盖各 Provider 的基本字段/鉴权语义、429 Retryable 候选、响应结构错误路径等。提交 7e55cf681f86c762aaa3d2e6a914495c162d2898 对应的根模块 gofmt、go test ./...、go test -race ./...、go vet ./... 和分析服务镜像构建通过；未执行真实 Provider 网络请求。
 
@@ -221,3 +221,11 @@ Brave/Bocha/Tavily 等具体 Provider 的策略值必须按实际账号套餐、
 - persistent_metadata 仅允许 metadata/title；persistent_excerpt 仅允许 snippet/abstract；persistent_full_text 仅允许 full_text/attachment。
 - none/transient 不代表持久化授权；跨请求缓存另由 Provider 的 AllowCrossRequestCache 和 MaxCacheRetention 独立控制。
 - 即使 Provider 和 Source 分别允许某项内容及存储方式，内容类型与存储模式不匹配仍拒绝；不得通过将全文标记为 metadata 绕过全文留存限制。
+
+
+## 2026-11-06 平台合并后 HTTP/Diagnostics 基线复核
+
+- `internal/platform/httpclient.BoundDoer` 已进入当前共同分支，满足 News `app.HTTPDoer` 的窄接口；Provider/Source Adapter 无需自建 HTTP Client。生产装配仍需按每个固定 endpoint 单独 Bind。
+- `internal/platform/diagnostics.Runner` 已有平台 L1 原语和测试证据，但 Runner 不提供历史存储或 HTTP 路由；News 领域 Check 和 Server 路由接入仍待完成。
+- 当前 `provider/http.go` 通过注入的 HTTPDoer 读取响应体；生产响应大小上限依赖平台 BoundDoer，不能把 fake/raw HTTPDoer 作为生产实现。
+- 平台 L1 CI 通过不代表 News 实际注入、真实 Provider 请求、生产 DNS/出口或来源授权验收通过。
