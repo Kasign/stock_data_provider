@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"time"
 	"unicode/utf8"
 )
@@ -52,7 +53,7 @@ func (r repositoryBase) appendVersion(ctx context.Context, aggregateType, aggreg
 	if r.db == nil { return ErrInvalidRepository }
 	if ctx == nil { return errors.New("context is nil") }
 	if aggregateID == "" || utf8.RuneCountInString(aggregateID) > 255 || version < 1 || len(payload) == 0 {
-		return fmt.Errorf("aggregate identity, version and payload are required")
+		return fmt.Errorf("aggregate identity (1..255 characters), positive version and payload are required")
 	}
 	now := createdAt.UTC()
 	if now.IsZero() { return errors.New("repository clock returned zero time") }
@@ -80,6 +81,9 @@ func (r repositoryBase) appendVersion(ctx context.Context, aggregateType, aggreg
 		if err == nil && existingDigest == digest && bytes.Equal(existingPayload, payload) { return tx.Commit() }
 		if err != nil && !errors.Is(err, sql.ErrNoRows) { return fmt.Errorf("read existing research version: %w", err) }
 		return fmt.Errorf("%w: %s %s version %d already has different content", ErrConflict, aggregateType, aggregateID, version)
+	}
+	if latest == math.MaxInt64 {
+		return fmt.Errorf("%w: aggregate version reached the supported integer limit", ErrConflict)
 	}
 	if version != latest+1 {
 		return fmt.Errorf("%w: %s %s expected version %d, got %d", ErrConflict, aggregateType, aggregateID, latest+1, version)
