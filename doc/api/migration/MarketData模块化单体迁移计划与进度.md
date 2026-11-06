@@ -954,3 +954,67 @@ Server 的 `writeErrWithRetryable` 始终输出 JSON：
 - **不将文档静态字符串测试视为运行时契约测试**：测试需要解析 YAML 结构，并实际 Marshal/Serve HTTP 响应。
 
 **M0 状态保持 in_progress。** 当前契约测试是局部回归保护，不足以证明全部 Handler JSON 与 OpenAPI 完全一致。本轮只记录审计结论，没有修改测试或业务代码。
+
+
+### 2026-11-06：M0 第十八轮补充（Provider 出站请求行为矩阵）
+
+#### 1. 核查范围与证据
+
+本轮按当前分支 services/market-data/internal/provider/ 下实际 Provider 实现核查 HTTP Client 构造、请求方法、凭据位置、超时、限速、重定向和响应体读取边界。覆盖 Eastmoney、Tushare、Hithink、TickFlow、Xueqiu、MiaoXiang、Tencent、Sina、NetEase、Yahoo Finance、BaoStock、Pytdx。
+
+本轮为源码静态核查，不代表已对所有上游接口执行真实网络测试。Endpoint override、代理、跨 Host 重定向和恶意响应场景仍需自动化隔离测试。
+
+#### 2. Provider 请求行为矩阵
+
+| Provider | 传输/方法 | 请求参数与凭据 | Client 超时/节流 | Redirect | 响应体边界 |
+|---|---|---|---|---|---|
+| Eastmoney | HTTP GET 为主；热榜等路径存在 POST JSON | Query 参数；UT 为公开前端参数，不是部署私密凭据；固定 UA/Referer/Accept | 默认 12s；多个请求另设 6s/8s attempt timeout；部分 GET 最多 3 次重试，退避 700ms、1400ms | 自定义 eastmoneyRedirectPolicy，需单独验证 Host/协议规则 | 成功响应 maxProviderPayloadBytes；HTTP 错误最多读取 4096 bytes |
+| Tushare | HTTP POST JSON | api_name、params、fields 在 JSON Body；Token 同样在 Body | 默认 12s；请求间隔约 700ms | 未设置 CheckRedirect，使用 Go 默认策略 | 成功响应 maxProviderPayloadBytes；错误响应最多读取 4096 bytes |
+| Hithink | HTTP GET | Query；X-api-key Header | 默认 15s；请求间隔至少 150ms | 未设置 CheckRedirect，使用 Go 默认策略 | 成功响应 maxProviderPayloadBytes；错误响应最多读取 4096 bytes |
+| TickFlow | HTTP GET + POST JSON | Query 或 JSON Body；授权请求按调用参数附加 x-api-key Header；免费 K 线使用独立 free Base URL | 默认 20s；免费请求间隔至少 1s | 未设置 CheckRedirect，使用 Go 默认策略 | 成功响应 maxProviderPayloadBytes；错误 Body 最多读取 2048 bytes，并对已配置 API Key 做文本脱敏 |
+| Xueqiu | HTTP GET | Query；Cookie Header；Cookie 仅驻留内存，代码注释要求不进入日志/错误 | 默认 10s；未发现 Provider 级统一节流 | 未设置 CheckRedirect，使用 Go 默认策略 | 成功响应 maxProviderPayloadBytes；错误响应最多读取 4096 bytes |
+| MiaoXiang | HTTP POST JSON | toolQuery JSON Body；apikey Header | 默认 10s；存在跨实例共享的包级请求间隔控制，精确间隔值仍需补录 | 显式返回 http.ErrUseLastResponse，不自动跟随 | 成功响应上限 2 MiB；错误响应最多读取 4096 bytes |
+| Tencent | HTTP GET | URL Query/param；固定 UA/Referer；无用户 API Key | 默认 12s；未发现统一 Provider 级节流 | 显式禁止自动跟随 | 成功响应 maxProviderPayloadBytes；错误响应最多读取 4096 bytes |
+| Sina | HTTP GET | Query/Path；固定 UA/Referer/Accept | 默认 12s；未发现统一 Provider 级节流 | 显式禁止自动跟随 | Quote/Kline 使用 maxSinaResponseBytes 上限 |
+| NetEase | HTTP GET | Query；固定 UA/Referer/Accept | 默认 12s；未发现统一 Provider 级节流 | 显式禁止自动跟随 | Quote 使用 maxNeteaseQuoteBytes；历史 K 线使用 maxProviderPayloadBytes |
+| Yahoo Finance | HTTP GET | Query；固定 UA/Referer/Accept | 默认 12s；未发现统一 Provider 级节流 | 显式禁止自动跟随 | 成功响应 maxProviderPayloadBytes；错误响应最多读取 4096 bytes |
+| BaoStock | 原生 TCP/协议客户端 | 证券代码、日期范围、复权标记通过协议方法传递；不是 HTTP API | Provider Adapter 不持有 HTTP Client；连接/超时由 BaoStock Client 实现负责 | 不适用 | 需核对协议层帧长度/响应行数限制 |
+| Pytdx | 原生 TDX TCP 协议 | 行情代码、分页 offset/count、复权数据通过协议方法传递；不是 HTTP API | 默认 12s；单次 TCP Dial 上限 1.5s；轮转最多尝试 6 个 Host；请求间隔至少 150ms；日线每页 800 条，最多扫描 40 页 | 不适用 | 当前可见限制包括 40 页/每页 800 条；仍需核对底层帧/分配上限 |
+
+说明：
+- 默认超时是 Provider 构造函数在 timeout 未配置或非正数时使用的值；Context deadline 仍可提前取消。
+- “未发现统一 Provider 级节流”不表示上游没有频控，也不表示可以无限并发。
+- Endpoint override 能改变目标地址；不同 Provider 的 URL 解析、Scheme、Host、端口和允许目标约束不统一。平台受控 HTTP Client 接入时必须以配置来源和可信目标策略为边界，不可只替换底层 Client 就默认安全。
+
+#### 3. 当前可以确认的安全与资源风险
+
+1. **凭据跨域重定向保护不一致。** Tushare、Hithink、TickFlow、Xueqiu 使用默认 Go redirect 行为；自定义 API Key Header、Cookie、Body Token 不应假设均受到跨 Host 保护。Eastmoney 有自定义策略，仍需通过 Host 测试证明；MiaoXiang、Tencent、Sina、NetEase、Yahoo 明确禁止自动重定向。
+2. **跨 Host POST Body 凭据风险。** Tushare Token 在 JSON Body；TickFlow POST 可携带自定义 API Key Header。对于 307/308，必须验证是否重放原始 Body/Header。对 Body 携带凭据的请求，跨 Host 应拒绝，而不是只删除敏感 Header。
+3. **节流策略不是统一资源。** Tushare、Hithink、TickFlow、Pytdx、MiaoXiang 有各自节流机制；部分使用实例字段，MiaoXiang 使用包级状态。迁移到同进程后要评估多实例/多组合根是否造成共享限速状态差异，不能未经验证统一成一个全局限速器。
+4. **请求体与响应体上限不统一。** HTTP Provider 多数有响应体上限，但常量不同；MiaoXiang 单独为 2 MiB，Sina/NetEase 使用专用上限。错误响应通常只读取 2–4 KiB。TCP Provider 不受这些 HTTP 限制，需要独立核查协议解码限制。
+5. **Endpoint 可配置性扩大出站边界。** 多数 Provider 支持部分或全部 Endpoint override，但并非所有构造函数都在创建时校验绝对 URL、Scheme、UserInfo、Query、Fragment 或 Host allowlist。必须在配置加载/受控 Client 层统一验证，保留 Provider 的路径和 Query 语义。
+6. **重试行为不一致。** 本轮明确观察到 Eastmoney 对部分 429/5xx/网络超时等错误最多重试 3 次，并按 700ms、1400ms 退避；不能泛化到其他 Provider。平台 HTTP Client 接入不应暗中改变重试次数、幂等性或节流节奏。
+
+#### 4. M4 受控 HTTP Client 接入的具体验收矩阵
+
+每个使用 HTTP 的 Provider 至少验证：
+- 请求保持：Method、Path、Query 编码、JSON Body、Content-Type、Accept、UA、Referer、Origin、自定义认证 Header 与 Cookie 不变。
+- 超时与取消：Client timeout、每次请求 Context deadline、调用方取消；确认响应 Body 被关闭，取消后不再启动后续重试。
+- 重定向：同 Host 301/302/303/307/308；跨 Host 301/302/303/307/308；HTTP→HTTPS；HTTPS→HTTP；allowlist 与非 allowlist Host。默认拒绝跨 Host，只有契约明确授权的目标可例外。
+- 凭据隔离：分别覆盖 Tushare Body Token、Hithink/TickFlow Key Header、Xueqiu Cookie、MiaoXiang apikey；断言非授权 Host 收不到凭据。跨 Host 307/308 不得重放含凭据 Body。
+- 响应大小：正常边界、恰好上限、超过上限、超大错误 Body、无 Content-Length 的流式响应；确认不会无界读取或将截断 JSON 当成完整成功结果。
+- 重试/限速：429、500、502、503、504、连接重置、超时、Context cancel；确认只重试原本允许重试的错误，退避可取消，POST 不因重试产生非幂等副作用。
+- TCP 单独验收：BaoStock/Pytdx 的目标 Host 配置、Dial timeout、连接轮转、协议响应帧/行数上限、取消和 Close；不将 HTTP Client 契约错误套用到 TCP 协议。
+
+建议拆为通用 HTTP 安全测试 + Provider 专属请求 Golden。通用层验证受控 Client 的重定向、大小、超时和目标限制；Provider Golden 验证请求语义与凭据位置，避免重复实现安全逻辑，又不因统一 Client 改变上游协议。
+
+#### 5. M0 尚未完成的 Provider 审计项
+
+- [ ] 为 Eastmoney 所有 GET/POST 调用点生成完整 Query/Body 字段矩阵；目前已确认存在多组独立 Endpoint 与重试路径，不能用一个通用摘要代表所有能力。
+- [ ] 补录 MiaoXiang 包级限速的精确间隔、缓存并发行为及缓存失效边界。
+- [ ] 核对各 Provider Endpoint 配置项与真实部署配置的映射，区分可配置 URL、固定 URL、Token/API Key、Cookie 与公开参数。
+- [ ] 核对所有 HTTP Provider 的响应上限常量、错误 Body 上限和 JSON 解码前分配边界；核对 BaoStock/Pytdx 协议库帧长度与解码限制。
+- [ ] 检查所有 Provider 是否有并发上限、连接池复用、空闲连接回收和关闭能力；迁入同进程后避免多份 Client/连接池。
+- [ ] 完成双 Host 重定向测试和 Endpoint 非法配置测试；本轮只有静态源码证据，不能将风险写成已复现漏洞或已通过安全验收。
+
+**本轮结论：** Provider 请求语义已形成覆盖 12 个 Provider 的首版矩阵，但仍未达到逐调用点完整盘点；出站安全风险明确，需在 M4 受控 HTTP Client 接入时做行为等价和安全回归。M0 继续保持 in_progress，不满足 M1 准入。
