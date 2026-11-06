@@ -8,7 +8,7 @@
   "required":true,
   "dependency_stage_refs":[],
   "retry_policy_ref":"retry_default_v1",
-  "attempt_no":0,
+
   "retry_at":null,
   "output_ref":null,
   "quality_status":null,

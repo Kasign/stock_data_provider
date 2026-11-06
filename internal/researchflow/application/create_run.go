@@ -157,7 +157,7 @@ func (s *CreateRunService) CreateRun(ctx context.Context, command domain.CreateR
 		}
 		stages = append(stages, domain.Stage{
 			Ref:stageRefs[definition.Code], RunRef:runRef, Code:definition.Code,
-			Status:domain.StagePending, Version:0, Required:definition.Required,
+			Status:domain.StagePending, Version:1, Required:definition.Required,
 			Dependencies:dependencies, RetryPolicyRef:definition.Retry.Ref,
 			AttemptNo:0, ReasonCodes:[]string{}, CreatedAt:now,
 		})

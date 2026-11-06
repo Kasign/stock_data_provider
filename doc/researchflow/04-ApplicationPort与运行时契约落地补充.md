@@ -180,3 +180,11 @@ Fake Repository/Fake Clock/Fake Provider 只证明模块内逻辑；MariaDB/Redi
 
 
 - Review 发现 ResolvedTemplate 首版快照虽保存了 Stage DAG 和指纹，但未显式保留 `requires_hard_risk_gate`、`allow_empty_inputs`、`output_registry_version`、`resource_policy_ref`，无法仅凭快照完整还原执行配置。现已将四项纳入 ResolvedTemplate 并由 Resolve 固定，CreateRun Repository Port 持久化该完整快照；增加回归测试。
+
+
+### 2026-11-06 公共版本与 Fencing 字段对齐
+
+- 对齐项目契约目录：已持久化 Run/Stage 的初始 version 从 1 开始，公开 Schema 的最小值同步改为 1。
+- Stage 公开读取模型不包含 attempt_no；该字段只属于 Attempt。Domain 内部 Stage.AttemptNo 继续作为重试计数，不泄露为跨模块字段。
+- Worker Claim 必须由 Repository/Executor 在同一事务门禁下分配并注入正数 fencing_token；纯领域 Claim 函数拒绝 0，生成的 Attempt 回显该 token。Attempt Schema 对 fencing_token 的最小值同步改为 1。
+- 以上只统一字段语义和纯函数入参，不代表数据库 CAS、单调 token 分配或并发 fencing 已实现。

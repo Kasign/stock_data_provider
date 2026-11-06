@@ -2,7 +2,7 @@
   "schema_version":"1.0.0",
   "run_ref":"run_01JBY000000000000000000001",
   "status":"created",
-  "version":0,
+  "version":1,
   "system_as_of":"2026-11-06T01:00:00Z",
   "deadline_at":"2026-11-06T02:00:00Z",
   "template_ref":"daily_stock_research",

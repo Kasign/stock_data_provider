@@ -75,7 +75,7 @@ func TestCreateRunResolvesAndPersistsRunStagesAndSnapshot(t *testing.T){
 	if got.Run.Status!=domain.RunCreated||got.Run.TemplateFingerprint==""||len(got.Stages)!=2{t.Fatalf("unexpected create result: %#v",got)}
 	if repo.created==nil||repo.created.ResolvedTemplate.ParameterSchema.Fingerprint==""||string(repo.created.Parameters)!="{}"{t.Fatal("resolved template and parameters must be persisted with run")}
 	if got.Stages[1].Dependencies[0]!=got.Stages[0].Ref{t.Fatal("stage dependency must use generated stage ref")}
-	if got.Stages[0].Status!=domain.StagePending||got.Stages[0].AttemptNo!=0{t.Fatal("new stages must be pending without an Attempt")}
+	if got.Stages[0].Status!=domain.StagePending||got.Stages[0].Version!=1||got.Stages[0].AttemptNo!=0{t.Fatal("new stages must be pending without an Attempt")}
 }
 
 func TestCreateRunReplaysBeforeTemplateLookup(t *testing.T){
