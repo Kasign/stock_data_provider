@@ -96,7 +96,7 @@ type NewsAuthorizationBinding struct {
 }
 
 var (
-	ErrAuthorizationBindingInvalid  = errors.New("news.authorization.binding_invalid")
+	ErrAuthorizationBindingInvalid = errors.New("news.authorization.binding_invalid")
 	// Fingerprint syntax is checked here; JCS verification waits for the shared GOV-CTR-006 verifier in the common baseline.
 	authorizationFingerprintPattern = regexp.MustCompile(`^[0-9a-f]{64}$`)
 )
