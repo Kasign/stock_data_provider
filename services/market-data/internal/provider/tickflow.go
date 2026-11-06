@@ -239,7 +239,6 @@ func (p *TickFlow) FetchQuote(ctx context.Context, rawSymbol string) (*model.Quo
 	return quote, nil
 }
 
-
 type tickflowIndexQuoteRaw struct {
 	Symbol    string                     `json:"symbol"`
 	Name      string                     `json:"name"`
