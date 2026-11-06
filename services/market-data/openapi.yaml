@@ -1194,8 +1194,6 @@ paths:
     get:
       summary: 批量获取指定 A 股证券的实时行情
       description: 仅查询调用方明确提供的证券列表，不代表全市场扫描。最多 50 个不重复证券；部分证券失败时仍返回逐项结果和整体降级质量。
-      security:
-        - ApiKey: []
       parameters:
         - name: symbols
           in: query
@@ -1294,8 +1292,6 @@ paths:
         daily_bar_adjustments 仅用于 daily_bars，支持 none、forward_adjusted、backward_adjusted；省略时仅探测 none，每种口径独立生成结果。
         daily_bar_start_date 与 daily_bar_end_date 必须同时提供，仅用于 daily_bars 的显式历史窗口；首尾包含，按 Asia/Shanghai 交易日解释，最多 31 个自然日，结束日期不能晚于今日。省略时保持原有近期 5 条探测行为。
         探测与业务熔断统计隔离，并发上限为 4；敏感错误信息会脱敏。
-      security:
-        - ApiKey: []
       requestBody:
         required: false
         content:
@@ -1337,8 +1333,6 @@ paths:
       tags: [Data Sources]
       summary: 查询数据源运行诊断
       description: 基于进程内真实行情与日 K 请求记录返回状态，不主动探测 Provider；服务重启后历史计数重置。
-      security:
-        - ApiKey: []
       responses:
         '200':
           description: Provider 运行诊断
@@ -1449,8 +1443,6 @@ paths:
     get:
       summary: Resolve the effective A-share price-limit rule
       description: Combines historical security status, official rule tables and independently sourced special-event evidence. Missing status/event evidence returns an unknown rule and never assumes that no special event occurred.
-      security:
-        - ApiKey: []
       parameters:
         - {name: symbol, in: path, required: true, schema: {type: string}}
         - {name: date, in: query, required: true, schema: {type: string, format: date}, description: Historical exchange date in YYYY-MM-DD format; future dates are rejected}
@@ -1488,8 +1480,6 @@ paths:
     get:
       summary: Get historical trading-status evidence for one A-share
       description: Uses Tushare historical name-change, trading-calendar and suspension records to provide date-specific risk-warning, delisting and suspension evidence. Each source-content change is appended to local revision storage when MariaDB is enabled. Optional as_of reads only locally recorded versions known by that system timestamp and never falls back to live Providers. Missing or ambiguous evidence remains unknown; no-limit exception events are not inferred.
-      security:
-        - ApiKey: []
       parameters:
         - {name: symbol, in: path, required: true, schema: {type: string}}
         - {name: date, in: query, required: true, schema: {type: string, format: date}, description: Historical exchange date in YYYY-MM-DD format; future dates are rejected}
@@ -1651,8 +1641,6 @@ paths:
     get:
       summary: 获取同花顺或 Tushare 国内指数目录
       description: tag=tushare 返回 Tushare index_basic 目录；其他 tag 由兼容的同花顺 Provider 提供。Tushare 指数代码保留 .SH/.SZ/.CSI 后缀。
-      security:
-        - ApiKey: []
       parameters:
         - {name: tag, in: query, required: false, schema: {type: string, enum: [cn_concept, region, tszs, industry, tushare], default: cn_concept}}
       responses:
@@ -1670,8 +1658,6 @@ paths:
     get:
       summary: 获取指定指数的最近或指定日期之前的成分权重报告快照
       description: 未提供 as_of 时保持原有当前/最近快照行为。提供 as_of 时只使用显式支持历史查询的 Provider；Tushare 返回不晚于请求日期的最新 index_weight 报告日。as_of_date 是请求日期，provider_report_date 是实际报告日。该接口不表示成分在报告日至下次报告日之间持续有效，也不是严格历史成员生效区间回放。
-      security:
-        - ApiKey: []
       parameters:
         - name: symbol
           in: path
@@ -1708,8 +1694,6 @@ paths:
     get:
       summary: 获取指定指数的历史日线
       description: Tushare 日线成交量以手为单位，成交额按千元换算为人民币元。
-      security:
-        - ApiKey: []
       parameters:
         - {name: symbol, in: path, required: true, schema: {type: string, example: 000300.SH}}
         - {name: start, in: query, required: true, schema: {type: string, format: date}}
@@ -1729,8 +1713,6 @@ paths:
   /api/v1/market/indices:
     get:
       summary: Get quotes for an allow-listed set of core market indices
-      security:
-        - ApiKey: []
       responses:
         '200':
           description: Index quote snapshot with explicit source and quality metadata
@@ -1762,8 +1744,6 @@ paths:
     get:
       summary: Get the scheduled A-share market session for a timestamp
       description: Uses the provider-backed trading calendar for the requested date and the standard Asia/Shanghai session schedule. It does not determine individual-stock suspension, security-specific price limits, or emergency exchange interruptions. When at is omitted, current server time is used.
-      security:
-        - ApiKey: []
       parameters:
         - {name: at, in: query, required: false, schema: {type: string, format: date-time}, description: Optional RFC3339 timestamp; response includes the Asia/Shanghai date and time}
       responses:
@@ -1807,8 +1787,6 @@ paths:
         points. This is not calculated by summing a partial set of individual stocks. The endpoint requires a Tushare
         token with the moneyflow_mkt_dc permission (documented minimum 120 points); source timestamps are not precise,
         so the result remains degraded. The requested range is inclusive and capped at 2000 calendar days.
-      security:
-        - ApiKey: []
       parameters:
         - {name: start, in: query, required: true, schema: {type: string, format: date}}
         - {name: end, in: query, required: true, schema: {type: string, format: date}}

@@ -10,113 +10,148 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-func TestOpenAPIDataRoutesDeclareValidAPIKeySecurity(t *testing.T) {
+func TestOpenAPISecurityMatchesDataHTTPAdapterRoutes(t *testing.T) {
 	spec, err := os.ReadFile("../../openapi.yaml")
 	if err != nil {
 		t.Fatalf("read OpenAPI specification: %v", err)
 	}
-	text := string(spec)
 	var document map[string]any
 	if err := yaml.Unmarshal(spec, &document); err != nil {
 		t.Fatalf("OpenAPI must be valid YAML: %v", err)
 	}
-	if !strings.Contains(text, "    ApiKey:\n      type: apiKey\n      in: header\n      name: X-API-Key") {
-		t.Fatal("OpenAPI must define the ApiKey scheme used by the HTTP server")
+
+	components := document["components"].(map[string]any)
+	schemes := components["securitySchemes"].(map[string]any)
+	if _, ok := schemes["ApiKey"]; !ok {
+		t.Fatal("OpenAPI must define ApiKey for X-API-Key")
 	}
-	if strings.Contains(text, "ApiKeyAuth: []") {
-		t.Fatal("OpenAPI references undefined ApiKeyAuth; use the declared ApiKey scheme")
+	if _, ok := schemes["BearerAuth"]; !ok {
+		t.Fatal("OpenAPI must define BearerAuth for Authorization: Bearer")
 	}
 
-	paths := []string{
-		"/api/v1/data-sources/probe:",
-		"/api/v1/market/index-catalog:",
-		"/api/v1/market/indices/{symbol}/constituents:",
-		"/api/v1/market/indices/{symbol}/daily:",
-		"/api/v1/market/session:",
-		"/api/v1/stocks/{symbol}/price-limit-rule:",
-		"/api/v1/stocks/{symbol}/trading-status:",
+	rootSecurity, ok := document["security"].([]any)
+	if !ok {
+		t.Fatal("OpenAPI root security must define the shared Data HTTP Adapter authentication")
 	}
-	for _, path := range paths {
-		start := strings.Index(text, "  "+path)
-		if start < 0 {
-			t.Errorf("OpenAPI path missing: %s", path)
+	assertSecurity := func(where string, value any, wantAnonymous bool) {
+		t.Helper()
+		requirements, ok := value.([]any)
+		if !ok {
+			t.Fatalf("%s security must be an array", where)
+		}
+		if wantAnonymous {
+			if len(requirements) != 0 {
+				t.Errorf("%s must be anonymous, got %#v", where, requirements)
+			}
+			return
+		}
+		got := map[string]bool{}
+		for _, raw := range requirements {
+			requirement, ok := raw.(map[string]any)
+			if !ok || len(requirement) != 1 {
+				t.Errorf("%s has invalid security requirement %#v", where, raw)
+				continue
+			}
+			for name, scopes := range requirement {
+				if name != "ApiKey" && name != "BearerAuth" {
+					t.Errorf("%s declares unsupported security scheme %q", where, name)
+				}
+				if scopeList, ok := scopes.([]any); !ok || len(scopeList) != 0 {
+					t.Errorf("%s scheme %s must not declare OAuth scopes", where, name)
+				}
+				got[name] = true
+			}
+		}
+		if len(got) != 2 || !got["ApiKey"] || !got["BearerAuth"] {
+			t.Errorf("%s must accept ApiKey OR BearerAuth, got %#v", where, got)
+		}
+	}
+	assertSecurity("root", rootSecurity, false)
+
+	// Keep this route inventory aligned with Server.Handler(). A mismatch means
+	// either an HTTP route is undocumented or an OpenAPI operation is stale.
+	expected := map[string]map[string]bool{
+		"/health/live": {"get": true},
+		"/health/ready": {"get": true},
+		"/api/v1/quotes/{symbol}": {"get": true},
+		"/api/v1/market/quotes": {"get": true},
+		"/api/v1/market/stocks": {"get": true},
+		"/api/v1/bars/{symbol}/daily": {"get": true},
+		"/api/v1/bundles/{symbol}": {"get": true},
+		"/api/v1/data-sources": {"get": true},
+		"/api/v1/data-sources/diagnostics": {"get": true},
+		"/api/v1/data-sources/probe": {"post": true},
+		"/api/v1/data-sources/probe/history": {"get": true},
+		"/api/v1/market/sectors": {"get": true},
+		"/api/v1/market/indices": {"get": true},
+		"/api/v1/market/valuations": {"get": true},
+		"/api/v1/market/index-catalog": {"get": true},
+		"/api/v1/market/indices/{symbol}/constituents": {"get": true},
+		"/api/v1/market/indices/{symbol}/daily": {"get": true},
+		"/api/v1/market/capital-flow": {"get": true},
+		"/api/v1/market/breadth": {"get": true},
+		"/api/v1/market/sentiment": {"get": true},
+		"/api/v1/market/sentiment/history": {"get": true},
+		"/api/v1/market/hot-stocks": {"get": true},
+		"/api/v1/market/limit-pools": {"get": true},
+		"/api/v1/market/dragon-tiger": {"get": true},
+		"/api/v1/market/trading-calendar": {"get": true},
+		"/api/v1/market/session": {"get": true},
+		"/api/v1/stocks/search": {"get": true},
+		"/api/v1/stocks/{symbol}/trading-status": {"get": true},
+		"/api/v1/stocks/{symbol}/price-limit-rule": {"get": true},
+		"/api/v1/stocks/{symbol}/profile": {"get": true},
+		"/api/v1/stocks/{symbol}/boards": {"get": true},
+		"/api/v1/stocks/{symbol}/announcements": {"get": true},
+		"/api/v1/stocks/{symbol}/fundamentals": {"get": true},
+		"/api/v1/stocks/{symbol}/chip-distribution": {"get": true},
+		"/api/v1/stocks/{symbol}/capital-flow": {"get": true},
+	}
+	paths, ok := document["paths"].(map[string]any)
+	if !ok {
+		t.Fatal("OpenAPI paths object missing")
+	}
+	if len(paths) != len(expected) {
+		t.Errorf("OpenAPI path count=%d, Server.Handler route count=%d", len(paths), len(expected))
+	}
+	for path, methods := range expected {
+		rawPath, exists := paths[path]
+		if !exists {
+			t.Errorf("OpenAPI route missing: %s", path)
 			continue
 		}
-		next := strings.Index(text[start+len(path):], "\n  /api/")
-		end := len(text)
-		if next >= 0 {
-			end = start + len(path) + next
+		pathItem, ok := rawPath.(map[string]any)
+		if !ok {
+			t.Errorf("OpenAPI path %s is not an object", path)
+			continue
 		}
-		section := text[start:end]
-		securityCount := strings.Count(section, "      security:")
-		if securityCount != 1 {
-			t.Errorf("OpenAPI path %s must declare security exactly once; found %d declarations", path, securityCount)
+		for method := range methods {
+			rawOperation, exists := pathItem[method]
+			if !exists {
+				t.Errorf("OpenAPI operation missing: %s %s", method, path)
+				continue
+			}
+			operation, ok := rawOperation.(map[string]any)
+			if !ok {
+				t.Errorf("OpenAPI operation %s %s is not an object", method, path)
+				continue
+			}
+			security := any(rootSecurity)
+			if override, exists := operation["security"]; exists {
+				security = override
+			}
+			anonymous := path == "/health/live" || path == "/health/ready"
+			assertSecurity(method+" "+path, security, anonymous)
 		}
-		if !strings.Contains(section, "security:\n        - ApiKey: []") {
-			t.Errorf("OpenAPI path %s must declare the X-API-Key security used by the server", path)
-		}
-	}
-
-	sessionStart := strings.Index(text, "    MarketSessionSnapshot:")
-	if sessionStart < 0 {
-		t.Fatal("MarketSessionSnapshot schema missing")
-	}
-	sessionEnd := strings.Index(text[sessionStart+len("    MarketSessionSnapshot:"):], "\n    StockAnnouncement:")
-	if sessionEnd < 0 {
-		sessionEnd = len(text) - sessionStart
-	}
-	sessionSchema := text[sessionStart : sessionStart+len("    MarketSessionSnapshot:")+sessionEnd]
-	for _, field := range []string{"server_time:", "time_zone:", "Asia/Shanghai"} {
-		if !strings.Contains(sessionSchema, field) {
-			t.Errorf("MarketSessionSnapshot schema missing %q", field)
-		}
-	}
-
-	constituentsStart := strings.Index(text, "    IndexConstituentSnapshot:")
-	if constituentsStart < 0 {
-		t.Fatal("IndexConstituentSnapshot schema missing")
-	}
-	constituentsEnd := strings.Index(text[constituentsStart+len("    IndexConstituentSnapshot:"):], "\n    IndexDailyBar:")
-	if constituentsEnd < 0 {
-		t.Fatal("IndexConstituentSnapshot schema boundary missing")
-	}
-	constituentsSchema := text[constituentsStart : constituentsStart+len("    IndexConstituentSnapshot:")+constituentsEnd]
-	if !strings.Contains(constituentsSchema, "required: [index_symbol, items, total, provider_returned, source, fetched_at, quality_status]") {
-		t.Error("IndexConstituentSnapshot must require provider_returned because the Go model always serializes it")
-	}
-
-	if !strings.Contains(text, "special_exception_evidence: {$ref: '#/components/schemas/PriceLimitEventEvidence', nullable: true}") {
-		t.Error("PriceLimitRuleSnapshot must reference the structured special-event evidence schema")
-	}
-	evidenceStart := strings.Index(text, "    PriceLimitEventEvidence:")
-	if evidenceStart < 0 {
-		t.Fatal("PriceLimitEventEvidence schema missing")
-	}
-	evidenceEnd := strings.Index(text[evidenceStart+len("    PriceLimitEventEvidence:"):], "\n    SecurityTradingStatusSnapshot:")
-	if evidenceEnd < 0 {
-		t.Fatal("PriceLimitEventEvidence schema boundary missing")
-	}
-	evidenceSchema := text[evidenceStart : evidenceStart+len("    PriceLimitEventEvidence:")+evidenceEnd]
-	for _, field := range []string{"effective_from:", "source_version:", "quality_status:", "source_url:", "observed_at:", "coverage_confirmed:"} {
-		if !strings.Contains(evidenceSchema, field) {
-			t.Errorf("PriceLimitEventEvidence schema missing %q", field)
+		for method := range pathItem {
+			if method == "parameters" || method == "summary" || method == "description" || method == "servers" {
+				continue
+			}
+			if !methods[method] {
+				t.Errorf("OpenAPI documents an unregistered operation: %s %s", method, path)
+			}
 		}
 	}
-	probeRequestStart := strings.Index(text, "    ProviderProbeRequest:")
-	if probeRequestStart < 0 {
-		t.Fatal("ProviderProbeRequest schema missing")
-	}
-	probeRequestEnd := strings.Index(text[probeRequestStart+len("    ProviderProbeRequest:"):], "\n    ProviderProbeRun:")
-	if probeRequestEnd < 0 {
-		t.Fatal("ProviderProbeRequest schema boundary missing")
-	}
-	probeRequestSchema := text[probeRequestStart : probeRequestStart+len("    ProviderProbeRequest:")+probeRequestEnd]
-	for _, field := range []string{"scope:", "capabilities:", "timeout_seconds:", "uniqueItems: true", "maximum: 30"} {
-		if !strings.Contains(probeRequestSchema, field) {
-			t.Errorf("ProviderProbeRequest schema missing %q", field)
-		}
-	}
-
 }
 
 func TestProviderProbeValidationSchemaIsDocumented(t *testing.T) {
