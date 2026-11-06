@@ -530,3 +530,12 @@ internal/platform/httpclient.Client 使用 DestinationPolicy 精确 Host/Port al
 
 已将 services/market-data/openapi.yaml 的 Operation（HTTP Method + Path）与 services/market-data/internal/httpapi/server.go 的 mux 注册逐项比对：35/35 完全匹配，OpenAPI 未声明而 Server 暴露的路由 0 个，OpenAPI 声明但 Server 缺失的路由 0 个。该结果证明当前路径/方法层一致，不代表 Request/Response Schema、字段 required/nullability、错误响应、鉴权 Header 和示例值也完全一致；后者仍需独立字段级核验。
 
+
+### 2026-11-06：M0 第九轮补充（Data Application 能力面与 Worker 生命周期）
+
+- Data HTTP Server 当前注册 35 个 Method+Path Operation，OpenAPI 也为 35 个 Operation，已完成路径/方法双向核对。其 Handler 分布覆盖行情/日 K/Bundle、批量行情、Provider Probe/Diagnostics、市场宽度/情绪/资金流/板块/指数/涨跌停/龙虎榜/交易日历/交易时段，以及证券搜索、公告、Profile、交易状态、价格限制、财务、筹码分布、个股资金流、Boards。
+- DataService 是一个聚合型用例对象，除 Quote/DailyBars/Bundle 外，还通过多个 setter 注入 StockBasic/Search、SectorRanking、IndexQuote、MarketBreadth、LimitPool、DragonTiger、StockBoards、TradingCalendar、SecurityTradingStatus、PriceLimitEvent、Fundamentals、Valuation、IndexCatalog、ChipDistribution、CapitalFlow、MarketCapitalFlow、HotRanking、Supplement 等 Provider capability。M2 Application Port 不能只覆盖当前 Analysis Collector 用到的 Quote/DailyBars，否则会导致 WebUI 的其余 Data API 在合并后无调用入口。
+- 当前 Analysis app.DataCollector 仅消费 Quote、DailyBars、IndexBars；它不需要把 Data 的全部 35 个 HTTP Operation 暴露为 Analysis Port。建议拆分 Data Application API 为按领域聚合的用例接口（行情/证券主数据/市场统计/研究补充/诊断），Analysis InProcess Adapter 只实现 Analysis 所需的采集 Port；HTTP Adapter 继续调用完整 Data Application API。不要创建一个把全部 Provider 或 Repository 暴露给 Root 的巨大接口。
+- Retention Worker 的实际实现为 runQuoteRetentionWorker：内部启动匿名 goroutine，首次立即执行清理，之后每 24 小时执行一次；使用 30 秒子 Context，但没有返回 Stop Handle、WaitGroup 或 done channel。Root main 当前只管理 Analysis Task Queue 的 Start/Close，并通过 HTTP Server Shutdown 等待服务停止；Data Worker 无法被 Root Shutdown 显式等待。M2 应将它改成具备 Start/Stop/Wait 的生命周期组件，并确保先停止 Worker，再关闭 Data Repository/共享 DB。
+- Root Store.Close 当前关闭 Root DB 和 Redis；Data Store.Close 关闭自己创建的 DB。Data Redis Cache 没有 Close 接口，每条命令 Dial、AUTH/SELECT、执行并关闭连接。统一资源时，Redis Cache Adapter 应借用 Root Redis Client，不应让 Data Module 再关闭 Root Redis Client。
+
