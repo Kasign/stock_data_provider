@@ -866,7 +866,7 @@ components:
           items: {type: string}
     MarketSentimentSnapshot:
       type: object
-      required: [market, trade_date, total_securities, covered_securities, advancing_count, declining_count, unchanged_count, unclassified_count, limit_up_count, limit_down_count, broken_board_count, source, source_version, fetched_at, quality_status]
+      required: [market, trade_date, total_securities, covered_securities, advancing_count, declining_count, unchanged_count, unclassified_count, limit_up_count, limit_down_count, broken_board_count, source, fetched_at, quality_status]
       properties:
         market: {type: string, enum: [cn_a_share]}
         trade_date: {type: string, format: date}

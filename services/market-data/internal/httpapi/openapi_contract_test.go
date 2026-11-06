@@ -199,7 +199,7 @@ func TestOpenAPIDataModelFieldsMatchKnownJSONContract(t *testing.T) {
 		{"Quote","change"},{"Quote","change_percent"},{"Quote","amount"},{"DailyBar","amount"},
 		{"DailyBar","change_percent"},{"MarketBreadthSnapshot","total_amount_cny"},{"SourceStatus","historical_index_constituents_capable"},
 	} { if !required(item.schema)[item.field] { t.Errorf("%s.%s must be required",item.schema,item.field) } }
-	for _, item := range []struct{ schema, field string }{{"Bundle","warnings"},{"HotRankingItem","source_version"},{"HotRankingSnapshot","source_version"}} {
+	for _, item := range []struct{ schema, field string }{{"Bundle","warnings"},{"HotRankingItem","source_version"},{"HotRankingSnapshot","source_version"},{"MarketSentimentSnapshot","source_version"}} {
 		if required(item.schema)[item.field] { t.Errorf("%s.%s must be optional",item.schema,item.field) }
 	}
 	for _, item := range []struct{ schema, field string }{
