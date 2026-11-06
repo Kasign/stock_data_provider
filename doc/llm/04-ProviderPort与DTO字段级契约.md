@@ -65,7 +65,8 @@
 | deadline_at | UTC timestamp | 是 | 绝对截止时间，不得晚于调用方 Context deadline |
 | correlation_id | string | 是 | Researchflow Run 的稳定跨模块关联 ID，不承载领域对象 |
 | system_as_of | RFC3339Nano UTC | 是 | 必须不晚于服务端可信 UTC 当前时间；Researchflow Run 的知识截止值；仅用于调用审计/上下文追溯，不自动注入 Prompt 或转发为 Responses wire 字段 |
-| trace_id | string | 否 | 受控追踪标识 |\n| local_validation_only | bool | 否 | true 时只执行本地 Schema 校验，不声明上游受约束生成能力 |
+| trace_id | string | 否 | 受控追踪标识 |
+| local_validation_only | bool | 否 | true 时只执行本地 Schema 校验，不声明上游受约束生成能力 |
 
 首批不接收任意 map、任意 JSON 或完整 Responses input item 数组。多轮对话、多模态、background response、previous_response_id、conversation_id 等 deferred；出现时返回 unsupported_capability，不得静默丢弃。
 
