@@ -62,3 +62,20 @@ FLOW-CTR-001/002（历史别名 CONTRACT-006/007）不再等待模块 Owner 签�
 ## 7. Researchflow FLOW-CTR-001/002 当前有效决议（历史别名 CONTRACT-006/007，2026-11-06）
 
 本节优先于第 5 节历史表格中 Researchflow“待确认”的状态。FLOW-CTR-001/002（历史别名 CONTRACT-006/007）已由项目统一决策方关闭设计决策，契约状态仍为 pending_evidence，不再等待模块 Owner 签字。当前权威文本为 [Researchflow 状态机最终决议](../researchflow/03-CONTRACT-006与007最终决议.md)。本轮补充 CAS 线性化、取消与 Worker claim 竞态、deadline 与 retry 竞争、Attempt 停止确认/fencing、容量原子预留和 actionability 优先级。FLOW-CTR-001～004 的实现与自动化测试仍需按项目级目录推进。
+
+## 8. 第二轮实现前置契约复核（2026-11-06）
+
+本轮复核以 `feat/design_doc` 当前规划文档为准，补充结论和执行清单见 [五模块跨模块实现前置契约复核与合并清单](./五模块跨模块实现前置契约复核与合并清单.md)。
+
+本轮纠正初始 Review 中已被后续规划决议覆盖的判断：
+
+- UTC 绝对时间统一为 RFC3339Nano UTC（Z），已由 GOV-CTR-002 接受；后续缺口是各模块序列化/边界测试证据，不是重新决定时区策略。
+- ResearchEvent 通知 payload 已定义 `changed_at` 为状态迁移提交时间，Envelope `occurred_at` 映射该值；后续缺口是领域状态与 Outbox 的原子固化及生产映射测试，不应直接把 Notification 接收时间或 `system_observed_at` 当作替代值。
+- Quant `input_snapshot_refs` 必须存在且为空数组仅允许契约白名单中的纯函数；不得将其解释为所有 Quant 计算都可无输入。
+- Data v1 number/float64 与 Data v2 Decimal/PIT/AuthorizationRef 的边界已经明确；不得在 Quant/Research Adapter 中混用或伪称无损。
+- Evidence `authorization_ref`、派生引用链和来源 Owner 当前授权复核已有语义定义；后续主要补真实读取路径和撤销/过期竞态证据。
+- Notification Payload 已明确使用 RFC 8785 JCS + SHA-256；本轮未发现 Envelope 原始字节数、Payload 字节数和 JSON 嵌套深度的统一入口上限，列为 P0 待决策/实现项。
+
+新增待补实现约束包括：命令 Request Fingerprint 的统一 JCS 规范、LLM Clock/Deadline 注入与传播、Notification DeliveryPlan 持久化前 Validate + VerifyFingerprint 双重校验，以及上述 Envelope 输入资源上限。上述内容属于 Review 发现/建议，不自动改变《跨模块契约目录与冻结状态》的 accepted/pending_evidence 状态。
+
+本轮只修改规划分支文档，不读取或修改五个业务分支代码；不代表任何模块 CI、Go 测试或跨模块集成验收已通过。
