@@ -47,7 +47,7 @@
 
 | 字段 | 类型 | 必需 | 约束 |
 |---|---|---:|---|
-| request_id | string | 是 | LLM 内部调用 ID，不承载 Secret |
+| request_id | string | 是 | 由调用方生成的本次 LLM 调用 Request ID；Response 原样回显，不承载 Secret |
 | purpose_code | string | 是 | 稳定调用用途代码，不写自由文本 Prompt |
 | model | string | 是 | 明确模型 ID，不依赖任意模型路由 |
 | instructions | string | 是 | 序列化到 Responses instructions；允许空字符串 |
@@ -247,6 +247,20 @@ DTO、Port、Fixture 和 parser 单元测试不依赖 Researchflow/Platform 生�
 - 对当前本地 llama.cpp/Qwen 验证 Responses JSON/SSE、Tool Call、Structured Output、reasoning_effort 和断流行为；未验证能力继续为 unknown。
 
 **当前结论：七项协议语义已接受；Schema、Golden、Contract Test 未齐，LLM-CTR-001/002/003 仍为 pending_evidence，不代表实现完成或 L2 Module Ready。**
+
+
+
+### 10.4 Capability 有效期与请求资源边界
+
+Capability 记录唯一键为 `(provider_id, model_id, protocol, gateway_version, capability_key)`，至少保存 status、verified_at、验证方式和 evidence_ref。状态有效期由 ProviderConfig 显式配置；超过有效期、Gateway 版本变化或模型 ID 变化后，状态一律视为 unknown，不能沿用历史 supported。
+
+- unsupported 必须有可复现的失败证据；unknown 表示未验证、证据过期或运行环境发生变化。
+- 可选能力只有 status=supported 且证据仍在有效期内才可使用；unknown/unsupported 不发送对应字段或能力。
+- ProviderConfig 的 request_timeout、max_request_bytes、max_response_bytes 必须为正数并显式配置；不得依赖 HTTP Client 隐式默认值，且不得超过 PLAT-CTR-005 的全局安全上限。
+- ModelRequest.max_output_tokens 必须大于 0，并不超过当前模型已验证的输出上限；instructions、input_text、Schema、Tool 数量及序列化后的总请求字节必须在发请求前校验。
+- JSON Schema Draft 2020-12 是本地校验基线。上游 strict 子集不支持的关键字必须明确拒绝，或按调用方显式选择的 local_validation_only 模式处理；不得静默删除关键字后继续发送。
+- 未知 SSE 事件保留 type、顺序和有界安全元数据；原始 Prompt、Response 和 SSE 默认不持久化。
+- stream_enabled=true 必须绑定 provider/model/gateway 版本的真实 E2E 证据；仅路由可达、配置存在或模型清单可查询，不构成启用依据。
 
 
 ## 11. Platform Fault 映射与关联 ID 一致性
