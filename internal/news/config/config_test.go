@@ -129,7 +129,7 @@ func TestProviderSecretFormattingAndJSONAreRedacted(t *testing.T) {
 	if err != nil {
 		t.Fatalf("json.Marshal() error = %v", err)
 	}
-	if strings.Contains(string(encoded), "sensitive-value") || string(encoded) != ""[REDACTED]"" {
+	if strings.Contains(string(encoded), "sensitive-value") || string(encoded) != "\"[REDACTED]\"" {
 		t.Fatalf("secret JSON was not redacted: %s", encoded)
 	}
 }
