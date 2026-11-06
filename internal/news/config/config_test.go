@@ -117,6 +117,7 @@ func TestLoadRejectsUnsafeOrMalformedEndpoints(t *testing.T) {
 		{name: "query", endpoint: "https://provider.example/path?token=secret"},
 		{name: "fragment", endpoint: "https://provider.example/path#fragment"},
 		{name: "invalid port", endpoint: "https://provider.example:70000/path"},
+		{name: "empty port", endpoint: "https://provider.example:/path"},
 		{name: "relative URL", endpoint: "/provider/search"},
 	}
 
