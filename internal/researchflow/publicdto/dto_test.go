@@ -7,8 +7,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/santhosh-tekuri/jsonschema/v5"
 	"time"
+
+	"github.com/santhosh-tekuri/jsonschema/v5"
 
 	"example.com/stock-analysis-flow/internal/researchflow/domain"
 )
@@ -55,4 +56,17 @@ func TestPublicDTOSchemaGoldens(t *testing.T) {
 			if err:=schema.Validate(instance);err!=nil{t.Fatalf("golden rejected by public schema: %v",err)}
 		})
 	}
+}
+
+func TestRunDTOClonesNestedResultSummaryAndNormalizesCollections(t *testing.T) {
+	summary:=&domain.ResultSummary{StageOutcomes:map[string]domain.StageStatus{"quote":domain.StageSucceeded},RiskGateDecisions:map[string]string{"risk":"pass"}}
+	got:=RunFromDomain(domain.Run{ResultSummary:summary})
+	if got.ResultSummary==nil || got.ResultSummary.StageOutcomes["quote"]!="succeeded" || got.ResultSummary.RiskGateDecisions["risk"]!="pass" {
+		t.Fatalf("result summary mapping lost values: %#v",got.ResultSummary)
+	}
+	if got.ResultSummary.ExcludedStages==nil || got.ResultSummary.MissingStageCodes==nil || got.ResultSummary.ReasonCodes==nil {
+		t.Fatalf("public collections must be arrays, not null: %#v",got.ResultSummary)
+	}
+	got.ResultSummary.StageOutcomes["quote"]="failed"
+	if summary.StageOutcomes["quote"]!=domain.StageSucceeded {t.Fatal("DTO mapping must not share mutable map with domain")}
 }
