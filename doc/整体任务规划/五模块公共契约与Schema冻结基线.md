@@ -181,15 +181,25 @@ ModelErrorInfo {
 ## 8. Notification：事件与投递
 
 ```text
-NotificationCommand {
-  event_id, event_type, schema_version, idempotency_key,
-  occurred_at, recipient_scope, template_id, template_version?,
-  payload, correlation_id
+NotificationEvent {
+  event_id, event_type, schema_version, source_module, subject_ref,
+  idempotency_key, occurred_at, payload, correlation_id
 }
 DeliveryRecord {
-  delivery_id, event_id, channel, recipient_ref,
-  status: queued|sending|sent|failed|skipped,
-  attempt_count, next_attempt_at?, sent_at?, failure_code?, safe_message?
+  delivery_id, event_id, subscription_id, subscription_version,
+  channel_ref, channel_config_version, template_id, template_version,
+  recipient_ref, plan_fingerprint,
+  status: queued|sending|retry_wait|sent|failed|skipped|blocked|unknown,
+  attempt_count, next_attempt_at?, sent_at?, reason_code?, safe_message?
+}
+DeliveryAttempt {
+  attempt_id, delivery_id, attempt_no, worker_id, fencing_token,
+  started_at, finished_at?, outcome: accepted|rejected|ambiguous|not_sent,
+  provider_message_ref?, error_code?, retryable?, duration_ms?
+}
+Subscription {
+  subscription_id, owner_ref, version, status: active|paused|disabled,
+  event_types[], recipient_scope, channel_ref, template_ref
 }
 ```
 

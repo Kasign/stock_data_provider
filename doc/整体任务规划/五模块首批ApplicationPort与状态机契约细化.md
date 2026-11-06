@@ -289,12 +289,14 @@ payload 不允许无约束 map 直接进入模板。事件版本升级不得静�
 - RetryDelivery(ctx, RetryDeliveryCommand) -> DeliveryRecord
 
 规则：
-- PublishEvent 只接受已注册的 event_type/schema_version。
-- recipient_scope 必须是受控类型；真实 recipient_ref 由订阅和渠道配置解析，不接受模型输出或任意上游文本直接指定。
-- 相同 event_id + subscription_version + channel_ref 的有效投递只产生一次；唯一键具体组成需在 Repository 设计评审中确认。
-- 每次发送重试追加 DeliveryAttempt，不能覆盖历史。
-- 渠道未配置、用户未授权或订阅不匹配应产生明确 skipped reason；系统依赖故障应 blocked/failed，不能伪装 skipped。
-- 通知投递失败不回滚已完成研究结果。
+- PublishEvent 只接受已注册的 event_type/schema_version；相同 source_module + event_id 且 fingerprint 相同返回原结果，不同 fingerprint 返回冲突。
+- recipient_scope 是受控类型，不是发送地址；recipient_ref 只能由已授权 Subscription/Channel 配置解析。
+- Event Inbox 幂等与 Delivery 幂等分开；Delivery 唯一键建议包含 event、subscription/version、channel/config version 和 recipient_ref。
+- DeliveryPlan 固定 Subscription/Channel/Template 版本；发送前仍检查当前退订和授权状态。
+- 每次实际渠道调用追加 DeliveryAttempt；租约过期且无法证明请求未发出时进入 unknown。
+- Delivery 状态需区分 retry_wait、blocked、skipped、failed 和 unknown；unknown 不允许盲目重试。
+- 外部渠道不承诺 exactly-once；RetryDelivery 必须授权、幂等和审计。
+- 详细状态机、重试、Schema 注册和 Port 见 doc/notification/03-ApplicationPort与投递状态契约.md。
 
 ## 7. 跨模块 Port 依赖表
 
@@ -320,8 +322,8 @@ payload 不允许无约束 map 直接进入模板。事件版本升级不得静�
 | CONTRACT-006 | Stage 结果传播矩阵、Run partial/degraded 语义与硬风险门禁策略 | Researchflow | 状态机和结果归并 |
 | CONTRACT-007 | cancel/deadline/retry 竞争、cancelling 收敛、租约与 fencing 语义 | Researchflow | Run 终态一致性 |
 | CONTRACT-008 | LLM Gateway 真实协议调查 | LLM | ModelRequest/Response |
-| CONTRACT-009 | Notification recipient_scope 与投递幂等唯一键 | Notification | Subscription/Delivery |
-| CONTRACT-010 | 事件 Payload Schema 注册与兼容策略 | Notification | PublishEvent |
+| CONTRACT-009 | Notification Inbox/Delivery 幂等、recipient_scope、状态与未知结果恢复 | Notification + Platform | PublishEvent/Subscription/Delivery/Attempt |
+| CONTRACT-010 | 事件 Payload Schema 注册、不可变版本与兼容策略 | Notification + 各事件 Owner | PublishEvent/Template |
 
 ## 9. 评审和冻结要求
 

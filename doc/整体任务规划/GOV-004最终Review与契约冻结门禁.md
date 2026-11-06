@@ -801,3 +801,15 @@ Workflow Template 按 stage_code + template_version 固定 on_degraded、on_skip
 - ModelEvent 已补充 item/content_part/arguments，首批识别 output_item、content_part、function_call_arguments、refusal 和文本事件。
 - Fixture 增加 stream_function_call.sse，验证增量聚合、item/call ID 关联、最终参数一致性和不执行工具。
 - 该补充仍属规划侧契约建议；本地模型真实流式工具调用未验收，GOV-004 NO-GO。
+
+
+## 38. Notification CONTRACT-009/010 Review 建议决议（2026-11-06）
+
+- Notification 已形成 Application Port、Inbox/Delivery 幂等、recipient_scope、Delivery 状态、Attempt/租约/fencing、退订竞态、重试和 Schema 注册建议。
+- 关键修正：Delivery 增加 retry_wait、blocked、unknown；unknown 表示外部副作用结果不确定，不能直接重试。过期 Worker 的迟到写入由 fencing token 拒绝。
+- 幂等分三层：Event Inbox `(source_module,event_id)`、PublishEvent `(source_module,idempotency_key)`、Delivery 投递计划唯一键；相同 fingerprint 重放返回原结果，不同 fingerprint 冲突。
+- DeliveryPlan 固定 Subscription/Channel/Template 版本和 recipient_ref；发送前重新检查当前退订和授权状态。
+- 外部渠道不承诺 exactly-once；仅明确 retryable 且可确认未接受的错误自动重试。ambiguous outcome 进入 unknown/对账。
+- Schema 注册按 `(event_type,schema_version)` 不可变；模板只暴露变量 allowlist。
+- 任务拆分将领域模块测试与真实渠道、Storage、Worker、根 Migration 的 L3 集成验收分开。
+- 本轮只更新规划文档，未实现代码、Migration、Worker 或真实渠道测试；CONTRACT-009/010 仍待 Owner Review，GOV-004 不因此转为 GO。

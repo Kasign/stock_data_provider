@@ -235,3 +235,23 @@ Domain/Contract 不得因为无关模块的 Adapter/Integration 未完成而被�
 - 已补充 response.output_item.added/done、response.function_call_arguments.delta/done、response.content_part.added/done、response.refusal.delta/done；ModelEvent 增加 item/content_part/arguments 字段。
 - 新增 stream_function_call.sse Fixture，要求按 item_id/call_id 聚合参数增量，并校验最终 arguments 与 delta 聚合一致；仍只产出待授权 ToolCall，不执行工具。
 - 本地模型是否支持这些事件仍由真实 E2E 决定；Fixture 通过不能把 function_tool_calls 或 responses_stream 设为 supported。
+
+
+## 14. Notification CONTRACT-009/010 字段级 Review（2026-11-06）
+
+### 发现
+- 旧 DeliveryRecord 仅列 queued/sending/sent/failed/skipped，未完整表达 retry_wait、blocked 和外部结果未知；与 Outbox/租约恢复要求不一致。
+- 幂等键只有“event_id + subscription_version + channel_ref”的概念描述，未拆分 Event Inbox 去重、PublishEvent 命令重放和 Delivery 唯一键。
+- Subscription/Channel/Template 版本快照与退订后发送前复核未形成规则，事件 fan-out 与配置变更存在竞态。
+- DeliveryAttempt、租约过期、fencing、RetryDelivery 权限和 unknown 对账缺少可测试迁移规则。
+- Payload Schema 有 event_type + schema_version 约束，但注册不可变、兼容策略、模板变量 allowlist 尚未完整定义。
+
+### 建议决议
+- Event Inbox 唯一键 `(source_module,event_id)`；PublishEvent 幂等键 `(source_module,idempotency_key)`；相同 fingerprint 重放返回原结果，不同 fingerprint 冲突。
+- Delivery 唯一键包含 event、subscription/version、channel/config version、recipient_ref；DeliveryPlan 固定模板版本和目标引用。
+- 状态集合增加 retry_wait、blocked、unknown。unknown 不得盲目重试；过期租约若无法证明请求未发出则进入 unknown，迟到 Worker 受 fencing token 拒绝。
+- 每次实际渠道调用追加 Attempt；明确不承诺外部 exactly-once。渠道幂等键稳定跨 Attempt；不支持幂等/查询的 ambiguous outcome 进入对账。
+- 退订会抑制尚未发送的 queued/retry_wait；sending 中的外部副作用不承诺可撤回。
+- Schema 注册键 `(event_type,schema_version)`，注册后不可原地修改；模板绑定明确版本和变量 allowlist。
+
+详细状态机、字段、唯一键、Port 和验收映射见 `doc/notification/03-ApplicationPort与投递状态契约.md`。上述为规划建议，待 Notification/Platform/事件 Owner 签字。
