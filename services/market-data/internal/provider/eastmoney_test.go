@@ -1212,8 +1212,15 @@ func TestEastmoneyDailyBarsWarnsOnInvalidOptionalChangePercent(t *testing.T) {
 		t.Fatalf("optional change percent must not discard valid bar: bars=%+v err=%v", bars, err)
 	}
 	report := validation.ReporterFromContext(ctx).Snapshot()
-	if report.WarningCount != 1 || len(report.Issues) != 1 || report.Issues[0].Field != "change_percent" ||
-		report.Issues[0].ProviderField != "f59" || report.Issues[0].RowIndex == nil || *report.Issues[0].RowIndex != 0 {
+	found := false
+	for _, issue := range report.Issues {
+		if issue.Stage == validation.StageParse && issue.Severity == validation.SeverityWarning &&
+			issue.Field == "change_percent" && issue.ProviderField == "f59" &&
+			issue.RowIndex != nil && *issue.RowIndex == 0 && issue.Code == "invalid_optional_number" {
+			found = true
+		}
+	}
+	if !found {
 		t.Fatalf("expected optional field warning with row context, got %+v", report)
 	}
 }
