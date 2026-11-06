@@ -70,6 +70,7 @@ type Run struct {
 	TemplateFingerprint string `json:"template_fingerprint"`
 	InputSnapshotRefs []string `json:"input_snapshot_refs"`
 	ResultSummary *ResultSummary `json:"result_summary,omitempty"`
+	ResultSummaryRef *string `json:"-"`
 	ExcludedStages []ExcludedStage `json:"-"`
 	OriginatingRequestID *string `json:"originating_request_id"`
 	CorrelationID string `json:"correlation_id"`
@@ -91,6 +92,8 @@ type Stage struct {
 	AttemptNo int `json:"attempt_no"`
 	RetryAt *time.Time `json:"retry_at,omitempty"`
 	OutputRef *string `json:"output_ref"`
+	QualitySummaryRef *string `json:"quality_summary_ref"`
+	DiagnosticRefs []string `json:"diagnostic_refs"`
 	QualityStatus string `json:"quality_status,omitempty"`
 	ReasonCodes []string `json:"reason_codes"`
 	RiskDecision string `json:"risk_decision,omitempty"`

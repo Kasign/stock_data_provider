@@ -18,10 +18,10 @@ func TestRunDTOUsesPublicNamesAndExplicitNulls(t *testing.T) {
 	got:=RunFromDomain(domain.Run{Ref:"run_1",SchemaVersion:"1.0.0",Status:domain.RunCreated,SystemAsOf:now,DeadlineAt:now.Add(time.Hour),TemplateRef:"daily",TemplateVersion:"1",CreatedAt:now})
 	raw,err:=json.Marshal(got); if err!=nil{t.Fatal(err)}
 	var fields map[string]any; if err=json.Unmarshal(raw,&fields);err!=nil{t.Fatal(err)}
-	for _,key:=range []string{"run_ref","result_summary","originating_request_id","termination_reason","started_at","finished_at"} {
+	for _,key:=range []string{"run_ref","result_summary_ref","originating_request_id","termination_reason","started_at","finished_at"} {
 		if _,ok:=fields[key];!ok{t.Errorf("public field %q missing",key)}
 	}
-	if fields["result_summary"]!=nil || fields["started_at"]!=nil {t.Fatalf("nullable fields must be explicit nulls: %s",raw)}
+	if fields["result_summary_ref"]!=nil || fields["started_at"]!=nil {t.Fatalf("nullable fields must be explicit nulls: %s",raw)}
 	if _,ok:=fields["ref"];ok{t.Fatal("domain field name leaked into public DTO")}
 }
 
@@ -30,7 +30,7 @@ func TestStageAndAttemptDTOUseStablePublicFieldNames(t *testing.T) {
 	attempt:=AttemptFromDomain(domain.Attempt{Ref:"attempt_1",StageRef:"stage_1",Number:1,Status:domain.AttemptRunning}, "1.0.0")
 	sraw,_:=json.Marshal(stage); araw,_:=json.Marshal(attempt)
 	var s,a map[string]any; _=json.Unmarshal(sraw,&s); _=json.Unmarshal(araw,&a)
-	if s["stage_ref"]!="stage_1" || s["dependency_stage_refs"]==nil || s["attempt_no"]!=nil {t.Fatalf("unexpected Stage DTO: %s",sraw)}
+	if s["stage_ref"]!="stage_1" || s["dependency_stage_refs"]==nil || s["attempt_no"]!=nil || s["diagnostic_refs"]==nil {t.Fatalf("unexpected Stage DTO: %s",sraw)}
 	if a["attempt_ref"]!="attempt_1" || a["attempt_no"]!=float64(1) || a["lease_owner"]!=nil {t.Fatalf("unexpected Attempt DTO: %s",araw)}
 }
 
@@ -72,14 +72,14 @@ func TestPublicDTOSchemaGoldens(t *testing.T) {
 
 func TestRunDTOClonesNestedResultSummaryAndNormalizesCollections(t *testing.T) {
 	summary:=&domain.ResultSummary{StageOutcomes:map[string]domain.StageStatus{"quote":domain.StageSucceeded},RiskGateDecisions:map[string]string{"risk":"pass"}}
-	got:=RunFromDomain(domain.Run{ResultSummary:summary})
-	if got.ResultSummary==nil || got.ResultSummary.StageOutcomes["quote"]!="succeeded" || got.ResultSummary.RiskGateDecisions["risk"]!="pass" {
-		t.Fatalf("result summary mapping lost values: %#v",got.ResultSummary)
+	got:=ResultSummaryFromDomain(summary)
+	if got==nil || got.StageOutcomes["quote"]!="succeeded" || got.RiskGateDecisions["risk"]!="pass" {
+		t.Fatalf("result summary mapping lost values: %#v",got)
 	}
-	if got.ResultSummary.ExcludedStages==nil || got.ResultSummary.MissingStageCodes==nil || got.ResultSummary.ReasonCodes==nil {
+	if got.ExcludedStages==nil || got.MissingStageCodes==nil || got.ReasonCodes==nil {
 		t.Fatalf("public collections must be arrays, not null: %#v",got.ResultSummary)
 	}
-	got.ResultSummary.StageOutcomes["quote"]="failed"
+	got.StageOutcomes["quote"]="failed"
 	if summary.StageOutcomes["quote"]!=domain.StageSucceeded {t.Fatal("DTO mapping must not share mutable map with domain")}
 }
 
@@ -92,7 +92,7 @@ func TestDomainProjectionsValidateAgainstTheirPublicSchemas(t *testing.T) {
 		TemplateFingerprint:"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 		InputSnapshotRefs:[]string{"snapshot_1"},CorrelationID:"corr_1",CreatedAt:now,
 		StartedAt:&now,FinishedAt:timePointer(now.Add(time.Minute)),
-		ResultSummary:&domain.ResultSummary{
+		ResultSummaryRef:stringPointer("summary_1"),ResultSummary:&domain.ResultSummary{
 			StageOutcomes:map[string]domain.StageStatus{"quote":domain.StageDegraded},
 			ExcludedStages:[]domain.ExcludedStage{},MissingStageCodes:[]string{"risk"},
 			DegradedStageCodes:[]string{"quote"},BlockedStageCodes:[]string{},ReasonCodes:[]string{"source_partial"},
@@ -103,6 +103,7 @@ func TestDomainProjectionsValidateAgainstTheirPublicSchemas(t *testing.T) {
 	stage:=StageFromDomain(domain.Stage{
 		Ref:"stage_schema",RunRef:"run_schema",Code:"quote",Status:domain.StageDegraded,Version:2,
 		Required:false,Dependencies:[]string{},RetryPolicyRef:"retry_v1",AttemptNo:1,
+		QualitySummaryRef:stringPointer("quality_1"),DiagnosticRefs:[]string{"diagnostic_1"},
 		ReasonCodes:[]string{"source_partial"},CreatedAt:now,StartedAt:&now,FinishedAt:timePointer(now.Add(time.Second)),
 	}, "1.0.0")
 	attempt:=AttemptFromDomain(domain.Attempt{
