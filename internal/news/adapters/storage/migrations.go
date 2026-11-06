@@ -130,5 +130,28 @@ func Migrations() []platformstorage.Migration {
 				) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
 			},
 		},
+		{
+			Version:     2,
+			Description: "persist immutable news authorization decision snapshots",
+			Statements: []string{
+				`CREATE TABLE news_authorization_snapshots (
+					authorization_ref VARCHAR(256) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+					subject_ref VARCHAR(256) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+					resource_ref VARCHAR(256) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+					decision VARCHAR(16) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+					purpose_code VARCHAR(32) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+					content_level VARCHAR(16) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+					decided_at DATETIME(6) NOT NULL,
+					expires_at DATETIME(6) NULL,
+					decision_fingerprint CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+					payload_json JSON NOT NULL,
+					payload_hash CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+					PRIMARY KEY (authorization_ref),
+					KEY idx_news_auth_subject_time (subject_ref, decided_at),
+					KEY idx_news_auth_resource_time (resource_ref, decided_at),
+					KEY idx_news_auth_expiry (expires_at)
+				) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+			},
+		},
 	}
 }

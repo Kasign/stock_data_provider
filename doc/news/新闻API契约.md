@@ -195,3 +195,12 @@ Cursor Codec 不保存分页结果快照。Snapshot Store 缺失、过期或不�
 ### 11.7 采集时间字段语义
 
 Evidence DTO 的 `fetched_at` 和 `normalized_at` 来自 Observation 中的 Candidate 过程时间。News 当前不推断 `available_at`：未取得来源明确、可验证的公开可用时间证据时返回 JSON `null`。`observed_at` 对应系统观察时间，三者不可互相替代。
+
+
+### 11.8 NEWS-CTR-002 授权快照持久化边界
+
+News V2 Migration 新增 `news_authorization_snapshots`，Application 提供 append-only `AuthorizationSnapshotRepository`。相同 AuthorizationRef 的相同 binding 可幂等重放；相同引用绑定不同 payload 时返回冲突。读取时重新校验原始 JSON payload SHA-256 和 binding 结构。
+
+这里的 `payload_hash` 是数据库存储完整性校验，不等于 `decision_fingerprint` 的 GOV-CTR-006 JCS 验证。当前分支尚未接入公共 JCS Runtime Verifier，不能把结构校验或 SHA-256 原文哈希描述为 JCS 验收。
+
+该存储只证明 News 保存了某一历史授权决策快照，不证明当前策略仍允许访问。所有受限内容读取仍必须在实际读取边界重新核验当前 Source/Endpoint/Provider 策略、撤销、过期、用途与内容级别，并确保授权检查与内容读取不存在 TOCTOU 窗口。

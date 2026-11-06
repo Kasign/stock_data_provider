@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"strings"
 	"time"
+	"unicode"
 )
 
 type AuthorizationDecision string
@@ -176,7 +177,7 @@ func ValidateNewsAuthorizationBinding(binding NewsAuthorizationBinding) error {
 			return ErrAuthorizationBindingInvalid
 		}
 	}
-	if ref.Conditions == nil || !strictlySortedNonEmpty(ref.Conditions) {
+	if ref.Conditions == nil || len(ref.Conditions) > 32 || !strictlySortedNonEmpty(ref.Conditions) {
 		return ErrAuthorizationBindingInvalid
 	}
 	if ref.Decision == AuthorizationDecisionAllowed && len(ref.Conditions) != 0 {
@@ -287,7 +288,7 @@ func comparePolicyVersion(a, b AuthorizationPolicyVersion) int {
 }
 
 func canonicalOpaqueRef(value string) bool {
-	return value != "" && value == strings.TrimSpace(value)
+	return value != "" && len(value) <= 256 && value == strings.TrimSpace(value) && strings.IndexFunc(value, unicode.IsControl) < 0
 }
 
 func strictlySortedNonEmpty(values []string) bool {

@@ -7,15 +7,16 @@ import (
 
 func TestMigrationsDefineNewsOwnedPersistenceSchema(t *testing.T) {
 	migrations := Migrations()
-	if len(migrations) != 1 {
-		t.Fatalf("Migrations() count = %d, want 1", len(migrations))
+	if len(migrations) != 2 {
+		t.Fatalf("Migrations() count = %d, want 2", len(migrations))
 	}
-	migration := migrations[0]
-	if migration.Version != 1 || strings.TrimSpace(migration.Description) == "" {
-		t.Fatalf("invalid migration metadata: %#v", migration)
+	if migrations[0].Version != 1 || migrations[1].Version != 2 ||
+		strings.TrimSpace(migrations[0].Description) == "" ||
+		strings.TrimSpace(migrations[1].Description) == "" {
+		t.Fatalf("invalid migration metadata: %#v", migrations)
 	}
 
-	joined := strings.Join(migration.Statements, "\n")
+	joined := strings.Join(append(append([]string{}, migrations[0].Statements...), migrations[1].Statements...), "\n")
 	for _, table := range []string{
 		"news_items",
 		"news_identifiers",
@@ -24,6 +25,7 @@ func TestMigrationsDefineNewsOwnedPersistenceSchema(t *testing.T) {
 		"news_relation_assertions",
 		"news_relation_evidence",
 		"news_item_relations",
+		"news_authorization_snapshots",
 	} {
 		if !strings.Contains(joined, "CREATE TABLE "+table+" ") {
 			t.Errorf("migration does not create %s", table)
@@ -51,8 +53,8 @@ func TestMigrationsReturnIndependentStatementSlices(t *testing.T) {
 	if len(first) == 0 || len(first[0].Statements) == 0 || len(second[0].Statements) == 0 {
 		t.Fatal("migration statements are empty")
 	}
-	first[0].Statements[0] = "mutated"
-	if second[0].Statements[0] == "mutated" {
+	first[1].Statements[0] = "mutated"
+	if second[1].Statements[0] == "mutated" {
 		t.Fatal("migration statements are shared across calls")
 	}
 }

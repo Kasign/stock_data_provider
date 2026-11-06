@@ -3,9 +3,12 @@ package storage
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -59,6 +62,30 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 	}
 	if len(missingTables) != 0 {
 		t.Fatalf("News schema missing tables: %v", missingTables)
+	}
+
+	binding := loadIntegrationAuthorizationBinding(t)
+	if err := repository.AppendAuthorizationSnapshot(ctx, binding); err != nil {
+		t.Fatalf("append authorization snapshot: %v", err)
+	}
+	if err := repository.AppendAuthorizationSnapshot(ctx, binding); err != nil {
+		t.Fatalf("idempotent authorization snapshot append: %v", err)
+	}
+	loadedBinding, err := repository.GetAuthorizationSnapshot(ctx, binding.AuthorizationRef.AuthorizationRef)
+	if err != nil {
+		t.Fatalf("get authorization snapshot: %v", err)
+	}
+	if loadedBinding.AuthorizationRef.DecisionFingerprint != binding.AuthorizationRef.DecisionFingerprint ||
+		loadedBinding.PolicySnapshot.SnapshotRef != binding.PolicySnapshot.SnapshotRef {
+		t.Fatalf("authorization snapshot changed during persistence: %+v", loadedBinding)
+	}
+	conflictingBinding := binding
+	conflictingBinding.AuthorizationRef.DecisionFingerprint = strings.Repeat("f", 64)
+	if err := repository.AppendAuthorizationSnapshot(ctx, conflictingBinding); !errors.Is(err, app.ErrAuthorizationSnapshotConflict) {
+		t.Fatalf("conflicting authorization snapshot append error = %v", err)
+	}
+	if _, err := repository.GetAuthorizationSnapshot(ctx, "authorization-not-found"); !errors.Is(err, app.ErrAuthorizationSnapshotNotFound) {
+		t.Fatalf("missing authorization snapshot error = %v", err)
 	}
 	var idSequence atomic.Uint64
 	newID := func() string { return fmt.Sprintf("news-it-%d", idSequence.Add(1)) }
@@ -251,4 +278,23 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+}
+
+func loadIntegrationAuthorizationBinding(t *testing.T) domain.NewsAuthorizationBinding {
+	t.Helper()
+	path := filepath.Join("..", "..", "..", "doc", "整体任务规划", "golden", "NEWS-CTR-002-authorization-binding.golden.json")
+	payload, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var fixture struct {
+		AuthorizationBinding domain.NewsAuthorizationBinding `json:"authorization_binding"`
+	}
+	if err := json.Unmarshal(payload, &fixture); err != nil {
+		t.Fatal(err)
+	}
+	if err := domain.ValidateNewsAuthorizationBinding(fixture.AuthorizationBinding); err != nil {
+		t.Fatalf("invalid NEWS-CTR-002 integration golden: %v", err)
+	}
+	return fixture.AuthorizationBinding
 }
