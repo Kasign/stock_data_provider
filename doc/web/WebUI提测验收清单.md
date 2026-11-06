@@ -2610,3 +2610,14 @@ CSS AST 检查器进一步扩展：
 - [x] WebUI Checks #42180417828 成功。
 - [x] Chromium Browser Smoke #42180417905 成功，全部 21 个步骤通过，包含研究记录跨标签页、导入恢复、导出全量和完整响应式/业务专项。
 - [x] 导入仅修改当前浏览器 localStorage，不上传服务端、不修改工作区备份 Schema。
+
+
+## 2026-11-06 UIR-2 隐藏状态与龙虎榜理由优先级验收
+
+- [x] 全局 `[hidden]` 保留唯一的 `display:none !important`；删除 10 组组件级重复隐藏覆盖。
+- [x] PostCSS 检查验证全局隐藏规则唯一、有效，并拒绝组件级重复隐藏重要声明。
+- [x] 龙虎榜理由单元格使用普通 `white-space:normal`；类选择器直接命中元素，可覆盖 table 的继承值，无需 `!important`。
+- [x] CSS `!important` 数量从 24 降至 13；保留 7 处语义颜色及 5 处 reduced-motion/无障碍规则。
+- [x] WebUI Checks #42199770455 通过。
+- [x] Chromium Browser Smoke #42199770387 通过，全部浏览器专项通过。
+- [x] 验收代码 HEAD：`0bca45c54b772856a90a713d44663b44941761bb`。

@@ -301,7 +301,7 @@ localStorage + storage event 方案能解决“另一个标签页完成写入后
 - 当前功能验收 HEAD `999ca8a8b0d88dd462b206a0b149d8a09ce14e4b`：WebUI Checks #42172661741、Chromium Browser Smoke #42172661924 均通过。
 
 **下一批：**
-1. 完成 CSS AST 的 at-rule 条件、selector specificity、源码顺序和跨 selector DOM 命中关系人工复核；当前 `!important` 24 处，保留语义状态、隐藏、无障碍和必要组件优先级，不以归零为目标。
+1. 完成 CSS AST 的 at-rule 条件、selector specificity、源码顺序和跨 selector DOM 命中关系人工复核；当前 `!important` 13 处；已清理重复组件隐藏规则和可由普通级联表达的龙虎榜理由换行，剩余声明继续按具体命中关系复核，不以归零为目标。
 2. 在人工级联审查通过后，选择低耦合组件继续 CSSOM computed-style 基线与迁移；不扩大物理拆分范围，不以移动 CSS 文件替代级联审查。
 3. 继续 P2 全站人工验收：macOS 中文字体、图表 SVG、交易日历、Run Flow、研究卡片、表格和弹层；真实部署验收独立记录。
 4. 数据中心统一诊断真实联调继续等待数据侧 ProviderProbeItem/OpenAPI、真实 Provider 覆盖率和 MariaDB 历史持久化证据，不在 Web 分支模拟。
@@ -1535,7 +1535,7 @@ JSR-6L 补充：连接配置变更取消草稿检查后，旧代际 finally 按�
 
 - [x] 当前功能验收 HEAD `49aa0eb8f9a2ce49b99c6c53f659208fff77b841` 的 WebUI Checks #42171720219 和 Chromium Browser Smoke #42171720084 均通过。
 - [x] JSR-6 请求生命周期与展示层边界主线完成；后续只处理可复现缺陷，不进行无目标拆分。
-- [ ] UIR-2 样式级联收尾：当前 24 处 `!important` 需逐项分类，并完成人工 at-rule / specificity / source-order / DOM 命中关系复核；保留隐藏/可访问性/语义状态及确有必要的组件优先级，不以数量归零为验收目标。
+- [ ] UIR-2 样式级联收尾：当前 13 处 `!important`；全局隐藏、语义状态色和 reduced-motion 规则已保留，继续核对主题/响应式/跨 selector 命中关系；保留确有必要的优先级，不以数量归零为验收目标。
 - [ ] 人工视觉验收：macOS 中文字体环境下检查 320/375/600/768/900/1280/1600px，重点覆盖图表 SVG、交易日历、Run Flow、研究报告/记录工作区、表格和弹层。
 - [ ] 真实部署验收：使用实际行情/分析服务配置，验证数据质量、时间语义、错误/降级、鉴权代理和真实 Provider 响应。CI 使用隔离 API fixture，不作为生产联调证据。
 
@@ -2449,3 +2449,19 @@ CSS AST 检查器进一步扩展：
 2. 对局部 `[hidden]` 规则，核对组件显式 display 规则及隐藏/显示切换路径，确保不出现隐藏节点重新参与布局。
 3. 对 reduced-motion 规则，核对导航、通知和通用动画/过渡的实际命中关系；保留无障碍语义。
 4. 本阶段不启动 CSS 文件物理拆分。跨 selector DOM 命中和主题/响应式关系未完成前，不批量移动或合并规则。
+
+
+## 2026-11-06 UIR-2：跨 selector 隐藏与文本布局优先级清理
+
+基于 WebUI HEAD `0bca45c54b772856a90a713d44663b44941761bb`，完成全局隐藏基线与组件隐藏规则的命中关系核对：
+
+- [x] 保留全局 `[hidden] { display:none !important; }`。该属性选择器覆盖所有带 hidden 属性的节点，且重要声明优先于组件普通 `display:flex/grid/block`；不需要每个组件重复声明隐藏规则。
+- [x] 删除 10 组组件级 `[hidden]` 的 `display:none !important` 重复覆盖，涉及 Task Events、Notification、Chat、Screening、Alerts、Bundle Snapshot、Settings、Run Flow。
+- [x] 更新 PostCSS 结构测试：要求全局 `[hidden]` 规则唯一且包含 `display:none !important`，并禁止组件级重复的重要隐藏覆盖。
+- [x] 核对 `.dragon-tiger-reason`：`white-space` 从父级 `table { white-space:nowrap }` 继承；类选择器直接命中理由单元格，普通 `white-space:normal` 已足以覆盖继承值，不需要 `!important`。新增结构断言锁定普通声明。
+- [x] 当前 `!important` 从 24 处降至 **13 处**：全局隐藏 1 处、语义颜色 7 处、减少动态效果/无障碍 5 处。未改动正负向颜色、市场状态色、市场理由 warning 色和 reduced-motion 行为。
+- [x] WebUI Checks #42199770455 通过。
+- [x] Chromium Browser Smoke #42199770387 通过：响应式主流程、CSS AST、CSSOM、设置/研究记录/告警/自选股跨标签页、Run Flow、个股研究、数据中心、选股和市场分页专项全部通过。
+- [x] 代码提交：`b9909f6632b0408252b12750aa1002842d71cb2f`（组件隐藏规则）；`0bca45c54b772856a90a713d44663b44941761bb`（龙虎榜换行优先级）。
+
+下一步仅审查剩余 13 处中的跨 selector / 主题 / 响应式必要性；不批量删除语义颜色或无障碍规则，不启动 CSS 物理拆分。
