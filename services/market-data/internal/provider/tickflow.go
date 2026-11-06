@@ -239,6 +239,67 @@ func (p *TickFlow) FetchQuote(ctx context.Context, rawSymbol string) (*model.Quo
 	return quote, nil
 }
 
+
+type tickflowIndexQuoteRaw struct {
+	Symbol    string                     `json:"symbol"`
+	Name      string                     `json:"name"`
+	LastPrice json.RawMessage            `json:"last_price"`
+	PrevClose json.RawMessage            `json:"prev_close"`
+	Open      json.RawMessage            `json:"open"`
+	High      json.RawMessage            `json:"high"`
+	Low       json.RawMessage            `json:"low"`
+	Volume    json.RawMessage            `json:"volume"`
+	Amount    json.RawMessage            `json:"amount"`
+	Timestamp json.RawMessage            `json:"timestamp"`
+	Ext       map[string]json.RawMessage `json:"ext"`
+}
+
+func decodeTickFlowIndexQuoteRows(ctx context.Context, data []byte) ([]tickflowQuotePayload, error) {
+	var rows []json.RawMessage
+	if err := json.Unmarshal(data, &rows); err != nil {
+		addProviderParseIssue(ctx, -1, "items", "data", "invalid_array", "array of quote objects", providerJSONValueType(json.RawMessage(data)), providerJSONPreview(json.RawMessage(data)), "TickFlow index quote data must be an array")
+		return nil, err
+	}
+	quotes := make([]tickflowQuotePayload, 0, len(rows))
+	for rowIndex, rawRow := range rows {
+		var row tickflowIndexQuoteRaw
+		if err := json.Unmarshal(rawRow, &row); err != nil {
+			addProviderParseIssue(ctx, rowIndex, "row", "data", "invalid_object", "quote object", providerJSONValueType(rawRow), providerJSONPreview(rawRow), "TickFlow index quote row cannot be decoded")
+			return nil, fmt.Errorf("row %d: %w", rowIndex, err)
+		}
+		quote := tickflowQuotePayload{Symbol: row.Symbol, Name: row.Name, Ext: row.Ext}
+		fields := []struct {
+			providerField string
+			value         json.RawMessage
+			target        **float64
+			required      bool
+		}{
+			{"last_price", row.LastPrice, &quote.LastPrice, true},
+			{"prev_close", row.PrevClose, &quote.PrevClose, true},
+			{"open", row.Open, &quote.Open, false},
+			{"high", row.High, &quote.High, false},
+			{"low", row.Low, &quote.Low, false},
+			{"volume", row.Volume, &quote.Volume, false},
+			{"amount", row.Amount, &quote.Amount, false},
+		}
+		for _, field := range fields {
+			parsed, err := parseProviderQuoteNumber(ctx, "tickflow", field.providerField, field.providerField, field.value, len(field.value) > 0, field.required)
+			if err != nil {
+				return nil, fmt.Errorf("row %d field %s: %w", rowIndex, field.providerField, err)
+			}
+			*field.target = parsed
+		}
+		if len(row.Timestamp) > 0 && string(row.Timestamp) != "null" {
+			if err := json.Unmarshal(row.Timestamp, &quote.Timestamp); err != nil {
+				addProviderParseIssue(ctx, rowIndex, "quote_time", "timestamp", "invalid_timestamp", "Unix millisecond timestamp", providerJSONValueType(row.Timestamp), providerJSONPreview(row.Timestamp), "TickFlow index quote timestamp cannot be parsed")
+				return nil, fmt.Errorf("row %d field timestamp: %w", rowIndex, err)
+			}
+		}
+		quotes = append(quotes, quote)
+	}
+	return quotes, nil
+}
+
 func (p *TickFlow) FetchIndexQuotes(ctx context.Context) (*model.IndexQuoteSnapshot, error) {
 	if p == nil || p.client == nil {
 		return nil, errors.New("TickFlow HTTP client is not configured")
@@ -274,8 +335,8 @@ func (p *TickFlow) FetchIndexQuotes(ctx context.Context) (*model.IndexQuoteSnaps
 		if err != nil {
 			return nil, err
 		}
-		var batchQuotes []tickflowQuotePayload
-		if err := json.Unmarshal(data, &batchQuotes); err != nil {
+		batchQuotes, err := decodeTickFlowIndexQuoteRows(ctx, data)
+		if err != nil {
 			return nil, fmt.Errorf("decode TickFlow index quote data: %w", err)
 		}
 		quotes = append(quotes, batchQuotes...)
