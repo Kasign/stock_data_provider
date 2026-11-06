@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"database/sql/driver"
 	"errors"
+	"io"
 	"strings"
 	"testing"
 	"time"
@@ -154,5 +155,119 @@ func TestNewRejectsMissingDependencies(t *testing.T) {
 	q, err := New(nil, nil, 0, 0, 0, 0)
 	if err == nil || q != nil {
 		t.Fatal("queue must reject missing dependencies")
+	}
+}
+
+type invalidPayloadConnector struct {
+	state *invalidPayloadState
+}
+
+func (c invalidPayloadConnector) Connect(context.Context) (driver.Conn, error) {
+	return &invalidPayloadConn{state: c.state}, nil
+}
+
+func (c invalidPayloadConnector) Driver() driver.Driver {
+	return invalidPayloadDriver{state: c.state}
+}
+
+type invalidPayloadDriver struct {
+	state *invalidPayloadState
+}
+
+func (d invalidPayloadDriver) Open(string) (driver.Conn, error) {
+	return &invalidPayloadConn{state: d.state}, nil
+}
+
+type invalidPayloadState struct {
+	committed  bool
+	statements []string
+}
+
+type invalidPayloadConn struct {
+	state *invalidPayloadState
+}
+
+func (c *invalidPayloadConn) Prepare(string) (driver.Stmt, error) {
+	return nil, errors.New("prepared statements are not supported")
+}
+
+func (c *invalidPayloadConn) Close() error { return nil }
+
+func (c *invalidPayloadConn) Begin() (driver.Tx, error) {
+	return &invalidPayloadTx{state: c.state}, nil
+}
+
+func (c *invalidPayloadConn) BeginTx(context.Context, driver.TxOptions) (driver.Tx, error) {
+	return &invalidPayloadTx{state: c.state}, nil
+}
+
+func (c *invalidPayloadConn) QueryContext(context.Context, string, []driver.NamedValue) (driver.Rows, error) {
+	return &invalidPayloadRows{}, nil
+}
+
+func (c *invalidPayloadConn) ExecContext(_ context.Context, query string, _ []driver.NamedValue) (driver.Result, error) {
+	c.state.statements = append(c.state.statements, query)
+	return driver.RowsAffected(1), nil
+}
+
+type invalidPayloadTx struct {
+	state *invalidPayloadState
+}
+
+func (tx *invalidPayloadTx) Commit() error {
+	tx.state.committed = true
+	return nil
+}
+
+func (tx *invalidPayloadTx) Rollback() error { return nil }
+
+type invalidPayloadRows struct {
+	read bool
+}
+
+func (r *invalidPayloadRows) Columns() []string {
+	return []string{"task_id", "run_id", "request_json"}
+}
+
+func (r *invalidPayloadRows) Close() error { return nil }
+
+func (r *invalidPayloadRows) Next(dest []driver.Value) error {
+	if r.read {
+		return io.EOF
+	}
+	r.read = true
+	dest[0] = "task-invalid"
+	dest[1] = "run-invalid"
+	dest[2] = "{invalid-json"
+	return nil
+}
+
+func TestClaimRejectsInvalidPayloadWithinClaimTransaction(t *testing.T) {
+	state := &invalidPayloadState{}
+	db := sql.OpenDB(invalidPayloadConnector{state: state})
+	defer db.Close()
+	q := &Queue{db: db}
+
+	claimed, err := q.claim(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if claimed != nil {
+		t.Fatalf("invalid task payload must not be returned as claimed: %+v", claimed)
+	}
+	if !state.committed {
+		t.Fatal("invalid payload terminal state was not committed")
+	}
+	if len(state.statements) != 1 {
+		t.Fatalf("expected one atomic terminal update, got %d statements", len(state.statements))
+	}
+	statement := strings.ToLower(state.statements[0])
+	if !strings.Contains(statement, "status='failed'") ||
+		!strings.Contains(statement, "failure_code='invalid_task_payload'") ||
+		!strings.Contains(statement, "status='queued'") {
+		t.Fatalf("unexpected invalid-payload update: %s", state.statements[0])
+	}
+	if strings.Contains(statement, "status='running'") {
+		t.Fatalf("invalid payload must never transition to running: %s", state.statements[0])
 	}
 }

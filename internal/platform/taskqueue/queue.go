@@ -378,6 +378,25 @@ func (q *Queue) claim(ctx context.Context) (*claimedTask, error) {
 	if err != nil {
 		return nil, err
 	}
+	var req domain.RunRequest
+	if decodeErr := json.Unmarshal([]byte(raw), &req); decodeErr != nil {
+		res, updateErr := tx.ExecContext(ctx, `UPDATE analysis_tasks SET status='failed',failure_code='invalid_task_payload',error_message=?,finished_at=UTC_TIMESTAMP(6),updated_at=UTC_TIMESTAMP(6) WHERE task_id=? AND status='queued'`, safeMessage("Persisted task request could not be decoded"), taskID)
+		if updateErr != nil {
+			return nil, updateErr
+		}
+		affected, affectedErr := res.RowsAffected()
+		if affectedErr != nil {
+			return nil, affectedErr
+		}
+		if affected != 1 {
+			return nil, fmt.Errorf("reject invalid analysis task payload: expected one queued task, affected %d", affected)
+		}
+		if err := tx.Commit(); err != nil {
+			return nil, err
+		}
+		slog.Error("异步任务载荷无效，已终止任务", "component", "taskqueue", "task_id", taskID, "error_type", fmt.Sprintf("%T", decodeErr))
+		return nil, nil
+	}
 	res, err := tx.ExecContext(ctx, `UPDATE analysis_tasks SET status='running',started_at=UTC_TIMESTAMP(6),updated_at=UTC_TIMESTAMP(6),failure_code=NULL,error_message=NULL WHERE task_id=? AND status='queued'`, taskID)
 	if err != nil {
 		return nil, err
@@ -390,15 +409,6 @@ func (q *Queue) claim(ctx context.Context) (*claimedTask, error) {
 	}
 	if err := tx.Commit(); err != nil {
 		return nil, err
-	}
-	var req domain.RunRequest
-	if err := json.Unmarshal([]byte(raw), &req); err != nil {
-		persistCtx, persistCancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer persistCancel()
-		if finishErr := q.finish(persistCtx, taskID, "failed", "invalid_task_payload", "Persisted task request could not be decoded"); finishErr != nil {
-			slog.Error("保存无效任务载荷的终态失败", "component", "taskqueue", "task_id", taskID, "error", finishErr.Error())
-		}
-		return nil, nil
 	}
 	req.RunID = runID
 	return &claimedTask{taskID: taskID, runID: runID, request: req}, nil
