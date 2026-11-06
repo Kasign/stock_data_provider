@@ -595,3 +595,42 @@ internal/config/config.go 当前对配置化 HTTP Endpoint 调用 validateEndpoi
 - 尚未将 Endpoint override 改造为 Host allowlist；本轮仅审计并记录，不提前修改 Provider 行为。
 
 **M0 状态继续保持 in_progress。** 请求级矩阵已从“源码文件覆盖”推进到“主要 Provider 请求模式和安全边界初稿”，仍未达到逐调用点完整度，不能据此进入 M1。
+
+
+### 2026-11-06：M0 第十一轮补充（OpenAPI Schema、HTTP DTO 与 PIT 调用链）
+
+#### 1. Data Go Model 与 OpenAPI Schema（Quote/DailyBar）
+
+对 services/market-data/internal/model/model.go 的 Quote、DailyBar 字段与 services/market-data/openapi.yaml 对应 Schema 做了首轮核对：
+- Quote 的 nullable 数值字段、Volume int64、QuoteTime nullable、FetchedAt/NormalizedAt、Source/SourceVersion、原始单位字段、质量/回退/RequestID/NormalizationVersion 等字段均在 OpenAPI Schema 中有对应定义；当前未发现这两个结构的核心字段在 OpenAPI 中整体缺失。
+- DailyBar 的 OHLC、MA5/20/120/250、nullable Volume/Amount/ChangePercent、Adjustment Basis/Method/Reference Date/Factor Source/Version/SystemObservedAt、ProviderTimestamp、FetchedAt/NormalizedAt、SystemObservedAt、RawVolume/RawAmount/Unit/Field、Quality/Fallback/RequestID/NormalizationVersion 均在 OpenAPI Schema 中有对应定义。
+- OpenAPI Quote/DailyBar 将 nullable 字段标为 nullable，并对必填字段与 omitempty 可选字段做了区分；本轮静态核对未发现明显的 Go JSON tag 与 Schema 属性命名不一致。
+- 此结果只覆盖 Quote、DailyBar 两个核心 DTO，不代表 35 个 Operation 的全部 Request/Response Schema、required/nullability、错误响应、认证 Header 已完成全量验证。
+
+#### 2. Data HTTP DTO → Root Remote Adapter DTO 差异
+
+Root 的 internal/adapters/marketdata/types.go 并不是 Data HTTP Model 的无损映射：
+- Quote：Data Quote.current_price 是 *float64，Root QuoteResponse.CurrentPrice 是 float64；Data volume 是 *int64，Root 是 *float64。JSON null 会把 CurrentPrice 解码成 0，随后被 Client 作为 missing/non-positive 拒绝，虽然没有静默作为有效价格使用，但丢失了原始 null 语义；int64 volume 转 float64 也改变了数值类型及大整数精度边界。
+- Quote：Root DTO 没有接收 normalized_at、quote_time_semantics、volume_ratio、turnover_rate、raw_volume/raw_amount/raw units/raw field、fallback_from/reason、request_id、normalization_version。source_version、quality_status/reasons 已接收。
+- DailyBar：Root HistoryBar 的 OHLC 使用 *float64，而 Data DailyBar 为非 nullable float64；Volume 使用 *float64，而 Data 为 *int64。其余已接收 trade_date、OHLC、volume、amount、change_percent、source/source_version、provider_timestamp、fetched_at、adjustment_basis、quality_status/reasons、volume_unit、amount_unit。
+- DailyBar 未被 Root HistoryBar 接收的字段包括 period/is_partial、MA5/20/120/250、adjustment_method/reference_date/factor source/factor source version/factor system observed time、normalized_at、system_observed_at、raw volume/amount/unit/field、fallback、request_id、normalization_version。
+- DailyBarsResponse 的 point_in_time 与 as_of 也未被 Root apiHistory 接收；Root HistoryResult 同样没有这两个状态字段。
+
+#### 3. 当前 Analysis Collector 的 PIT 风险（新增高优先级发现）
+
+Data OpenAPI 对 /api/v1/bars/{symbol}/daily 明确区分：
+- 不传 as_of：返回当前 Provider 选出的序列；
+- 传 as_of：只从系统在该时间点之前记录的版本中重建历史序列，不调用实时 Provider，也不回退当前值表。
+
+但当前 Root Client.GetHistory 只发送 limit 和 adjustment，没有发送 as_of；Root Analysis Collector 虽然按 RunRequest.AsOf 过滤未来日期/当日尚未完成的日 K，却无法保证已存在历史交易日使用的是 as_of 时刻已观察到的版本。即：过滤交易日期晚于 as_of，不等于 PIT 版本重建。
+
+迁移 M2/M3 必须将明确的 PIT 语义纳入 Data Application Port 请求模型：历史分析请求必须携带 AsOf cutoff，并由 Data Application 层执行版本重建；不能只把当前日 K 列表交给 Analysis 后再做日期过滤。InProcess 与 Remote Adapter golden 对比时必须覆盖“同一交易日 A→B→A 修订、as_of 位于不同修订观察时间之间”的场景，并断言 point_in_time=true 和 system_observed_at 不晚于 cutoff。若当前 Analysis RunRequest 的 AsOf 语义不适合直接作为 Data revision cutoff，需要先明确两种时间语义的映射规则，禁止默默混用。
+
+#### 4. 本轮结论与剩余项
+
+- Quote/DailyBar 的 Data Go Model 与 OpenAPI Schema 核心字段首轮一致；主要 DTO 损失发生在 Root Remote Adapter，而不是 Data OpenAPI 定义。
+- 当前 Remote Adapter 的 Quote 类型存在 nullable 与 int64→float64 类型降级；DailyBar 丢失 MA、复权因子、PIT、标准化、原始单位及 fallback 元数据。
+- 发现当前 Analysis Collector 未传递 Data API 支持的 as_of 参数，存在历史修订版本无法按分析时点重建的风险；这是 M2/M3 必须解决的迁移准入项，不应作为普通字段丢失处理。
+- 后续仍需覆盖全部 35 个 Operation 的 Schema、鉴权和错误响应；同时需检查 Data HTTP Handler 的 JSON 输出是否与 Model/OpenAPI 一致，不能只依据静态结构声明。
+
+**M0 状态继续保持 in_progress。** 本轮未修改业务代码和 API 行为。
