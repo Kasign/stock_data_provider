@@ -344,3 +344,10 @@ Migration 状态为 `running` 或 `failed` 时，Runner 不会自动重跑。处
 ### 9.8 PLAT-009 修复提交与专项 CI 证据
 
 最终代码提交：`fbbb10681194286ccf52405baa66331d045655d2`。Platform Go checks：[`42026901950`](https://github.com/Kasign/stock_data_provider/actions/runs/42026901950)，最终结论 success；gofmt、`go test ./internal/platform/...`、`go test -race ./internal/platform/...`、`go vet ./internal/platform/...` 均通过。之前提交 `b7ac6bef` 的初次 CI 曾因变量重复声明失败，已修复；不能把该失败 SHA 记为通过。
+
+
+### 5.2 Worker 领取故障退避
+
+Worker 领取任务时遇到数据库错误，不能按正常空队列轮询频率持续重试。当前实现采用逐步退避：默认从 `pollEvery` 开始，每次连续领取失败后翻倍，最大等待 5 秒；使用成功的领取查询（包括队列暂时为空）后重置退避。任务执行完成后立即恢复正常轮询节奏。
+
+退避等待必须响应队列根 Context 取消，不能使用不可取消的固定 Sleep。该机制只降低数据库故障期间的查询与日志频率，不吞掉错误；每次失败仍记录错误和下一次重试间隔。该 TaskQueue 仍是现有 Analysis 领域实现，不代表平台通用队列能力。

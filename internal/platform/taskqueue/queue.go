@@ -334,27 +334,64 @@ func sameRequest(a, b domain.RunRequest) bool {
 
 func (q *Queue) worker(ctx context.Context, workerID int) {
 	defer q.wg.Done()
-	ticker := time.NewTicker(q.pollEvery)
-	defer ticker.Stop()
+	retryDelay := initialClaimRetryDelay(q.pollEvery)
 	for {
 		if ctx.Err() != nil {
 			return
 		}
 		claimed, err := q.claim(ctx)
+		wait := q.pollEvery
 		if err != nil {
 			if ctx.Err() != nil {
 				return
 			}
-			slog.Error("领取分析任务失败", "component", "taskqueue", "worker_id", workerID, "error", err.Error())
-		} else if claimed != nil {
-			q.execute(ctx, *claimed, workerID)
-			continue
+			slog.Error("领取分析任务失败", "component", "taskqueue", "worker_id", workerID, "retry_in_ms", retryDelay.Milliseconds(), "error", err.Error())
+			wait = retryDelay
+			retryDelay = nextClaimRetryDelay(retryDelay, q.pollEvery)
+		} else {
+			retryDelay = initialClaimRetryDelay(q.pollEvery)
+			if claimed != nil {
+				q.execute(ctx, *claimed, workerID)
+				continue
+			}
 		}
-		select {
-		case <-ctx.Done():
+		if !waitForWorkerPoll(ctx, wait) {
 			return
-		case <-ticker.C:
 		}
+	}
+}
+
+const maxClaimRetryDelay = 5 * time.Second
+
+func initialClaimRetryDelay(base time.Duration) time.Duration {
+	if base <= 0 {
+		base = 250 * time.Millisecond
+	}
+	if base > maxClaimRetryDelay {
+		return maxClaimRetryDelay
+	}
+	return base
+}
+
+func nextClaimRetryDelay(current, base time.Duration) time.Duration {
+	base = initialClaimRetryDelay(base)
+	if current < base {
+		current = base
+	}
+	if current >= maxClaimRetryDelay/2 {
+		return maxClaimRetryDelay
+	}
+	return current * 2
+}
+
+func waitForWorkerPoll(ctx context.Context, delay time.Duration) bool {
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return false
+	case <-timer.C:
+		return true
 	}
 }
 

@@ -271,3 +271,48 @@ func TestClaimRejectsInvalidPayloadWithinClaimTransaction(t *testing.T) {
 		t.Fatalf("invalid payload must never transition to running: %s", state.statements[0])
 	}
 }
+
+
+func TestClaimRetryDelayUsesExponentialBackoffAndCaps(t *testing.T) {
+	base := 250 * time.Millisecond
+	got := initialClaimRetryDelay(base)
+	want := []time.Duration{
+		250 * time.Millisecond,
+		500 * time.Millisecond,
+		time.Second,
+		2 * time.Second,
+		4 * time.Second,
+		5 * time.Second,
+		5 * time.Second,
+	}
+	for i, expected := range want {
+		if got != expected {
+			t.Fatalf("retry delay step %d = %s, want %s", i, got, expected)
+		}
+		got = nextClaimRetryDelay(got, base)
+	}
+}
+
+func TestClaimRetryDelayRespectsConfiguredBaseAndCaps(t *testing.T) {
+	if got := initialClaimRetryDelay(2 * time.Second); got != 2*time.Second {
+		t.Fatalf("initial retry delay = %s, want 2s", got)
+	}
+	if got := nextClaimRetryDelay(time.Second, 2*time.Second); got != 4*time.Second {
+		t.Fatalf("next retry delay = %s, want 4s", got)
+	}
+	if got := initialClaimRetryDelay(10 * time.Second); got != maxClaimRetryDelay {
+		t.Fatalf("oversized base delay = %s, want %s", got, maxClaimRetryDelay)
+	}
+}
+
+func TestWaitForWorkerPollStopsOnContextCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	started := time.Now()
+	if waitForWorkerPoll(ctx, time.Hour) {
+		t.Fatal("worker poll wait should stop after context cancellation")
+	}
+	if time.Since(started) > time.Second {
+		t.Fatal("worker poll wait did not stop promptly")
+	}
+}
