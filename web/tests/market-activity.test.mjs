@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { calendarResponseRangeError } from "../src/market-activity.js";
+import { activitySnapshotEvidence, calendarResponseRangeError } from "../src/market-activity.js";
 
 test("accepts calendar responses whose explicit date range matches the request", () => {
   assert.equal(
@@ -61,4 +61,18 @@ test("normalizes newline and tab characters in malformed response metadata", () 
   );
   assert.match(message, /wrong range value/);
   assert.doesNotMatch(message, /[\r\n\t]/);
+});
+
+
+test("market activity evidence distinguishes provider report date, version, and server fetch time", () => {
+  const evidence = activitySnapshotEvidence({
+    source: "eastmoney",
+    source_version: "release-7",
+    provider_report_date: "2026-11-03",
+    fetched_at: "2026-11-04T01:00:00Z"
+  }, { reportDate: true });
+  assert.ok(evidence.includes("源端报告日期 2026-11-03"));
+  assert.ok(evidence.includes("来源版本 release-7"));
+  assert.ok(evidence.some(value => value.startsWith("服务端采集时间 ")));
+  assert.equal(activitySnapshotEvidence({ source: "calendar" }).some(value => value.includes("源端报告日期")), false);
 });

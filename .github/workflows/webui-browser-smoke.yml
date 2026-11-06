@@ -35,7 +35,7 @@ jobs:
 
       - name: Install Playwright
         working-directory: web
-        run: npm install --no-save --no-package-lock playwright
+        run: npm install --no-save --no-package-lock playwright postcss postcss-selector-parser
 
       - name: Install Chromium
         working-directory: web
@@ -44,6 +44,30 @@ jobs:
       - name: Run responsive browser smoke tests
         working-directory: web
         run: node tests/browser-smoke.mjs
+
+      - name: Analyze CSS cascade structure with PostCSS
+        working-directory: web
+        run: node tests/css-structure-review.mjs
+
+      - name: Capture Screening CSSOM computed-style baseline
+        working-directory: web
+        run: node tests/cssom-baseline.mjs
+
+      - name: Run settings cross-tab synchronization acceptance
+        working-directory: web
+        run: node tests/settings-storage-browser.mjs
+
+      - name: Run research records cross-tab synchronization acceptance
+        working-directory: web
+        run: node tests/research-records-cross-tab-browser.mjs
+
+      - name: Run alerts and notification preferences cross-tab synchronization acceptance
+        working-directory: web
+        run: node tests/alerts-notifications-cross-tab-browser.mjs
+
+      - name: Run watchlist quote snapshot acceptance
+        working-directory: web
+        run: node tests/watchlist-quotes-browser.mjs
 
       - name: Run Run Flow interaction acceptance
         working-directory: web
@@ -69,6 +93,10 @@ jobs:
         working-directory: web
         run: node tests/screening-local-browser.mjs
 
+      - name: Run market stocks pagination lifecycle acceptance
+        working-directory: web
+        run: node tests/market-stocks-lifecycle-browser.mjs
+
       - name: Upload browser screenshots
         if: always()
         uses: actions/upload-artifact@v4
@@ -77,3 +105,12 @@ jobs:
           path: browser-screenshots/**/*.png
           if-no-files-found: warn
           retention-days: 7
+
+      - name: Upload CSSOM computed-style baseline
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: webui-cssom-baseline
+          path: browser-cssom-baseline/screening-local-batch.json
+          if-no-files-found: warn
+          retention-days: 30

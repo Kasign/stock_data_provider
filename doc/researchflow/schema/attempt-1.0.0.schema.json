@@ -1,0 +1,22 @@
+{
+  "$schema":"https://json-schema.org/draft/2020-12/schema",
+  "$id":"https://researchflow.invalid/schema/attempt-1.0.0",
+  "title":"Researchflow Attempt",
+  "type":"object",
+  "additionalProperties":false,
+  "required":["schema_version","attempt_ref","stage_ref","attempt_no","status","lease_owner","lease_expires_at","fencing_token","started_at","finished_at","fault_ref","output_ref"],
+  "properties":{
+    "schema_version":{"const":"1.0.0"},
+    "attempt_ref":{"type":"string","minLength":1},
+    "stage_ref":{"type":"string","minLength":1},
+    "attempt_no":{"type":"integer","minimum":1},
+    "status":{"enum":["running","succeeded","degraded","failed","timed_out","cancelled"]},
+    "lease_owner":{"type":["string","null"]},
+    "lease_expires_at":{"type":["string","null"],"format":"date-time"},
+    "fencing_token":{"type":"integer","minimum":0},
+    "started_at":{"type":"string","format":"date-time"},
+    "finished_at":{"type":["string","null"],"format":"date-time"},
+    "fault_ref":{"type":["string","null"]},
+    "output_ref":{"type":["string","null"]}
+  }
+}

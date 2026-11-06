@@ -2,17 +2,22 @@ package domain
 
 import "time"
 
-// Candidate 保留搜索 Provider 实际返回的事实，不将发布者身份等同于 Provider 身份。
+// Candidate 保留一次发现的候选事实，区分 Provider 标识与发布来源标识。
 type Candidate struct {
 	ProviderCode    string
 	ProviderItemID  string
+	SourceItemID    string
 	PublisherName   string
+	Author          string
 	PublisherDomain string
 	Title           string
-	Summary         string
+	ProviderSummary string
 	RawURL          string
+	CanonicalURL    string
 	PublishedAtRaw  string
 	PublishedAt     *time.Time
+	FetchedAt       *time.Time
+	NormalizedAt    *time.Time
 	ObservedAt      time.Time
 	QueryDimension  string
 	MissingFields   []string

@@ -2,7 +2,9 @@ package httpapi
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/subtle"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"log/slog"
@@ -29,8 +31,10 @@ type Server struct {
 }
 type errorBody struct {
 	Error struct {
+		Class     string `json:"class"`
 		Code      string `json:"code"`
 		Message   string `json:"message"`
+		Retryable bool   `json:"retryable"`
 		RequestID string `json:"request_id,omitempty"`
 	} `json:"error"`
 }
@@ -730,7 +734,11 @@ func (s *Server) timeoutContext(timeout time.Duration, next http.Handler) http.H
 
 func (s *Server) requestID(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		id := strings.TrimSpace(r.Header.Get("X-Request-ID"))
+		values := r.Header.Values("X-Request-ID")
+		id := ""
+		if len(values) == 1 {
+			id = strings.TrimSpace(values[0])
+		}
 		if !validRequestID(id) {
 			id = newRequestID()
 		}
@@ -742,7 +750,13 @@ func (s *Server) requestID(next http.Handler) http.Handler {
 type requestIDKey struct{}
 
 func requestID(r *http.Request) string { v, _ := r.Context().Value(requestIDKey{}).(string); return v }
-func newRequestID() string             { return time.Now().UTC().Format("20060102T150405.000000000Z") }
+func newRequestID() string {
+	var value [16]byte
+	if _, err := rand.Read(value[:]); err == nil {
+		return hex.EncodeToString(value[:])
+	}
+	return time.Now().UTC().Format("20060102T150405.000000000Z")
+}
 func validRequestID(value string) bool {
 	if value == "" || len(value) > 128 {
 		return false
@@ -765,7 +779,7 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	body, err := json.Marshal(v)
 	if err != nil {
 		status = http.StatusInternalServerError
-		body = []byte(`{"error":{"code":"INTERNAL_ERROR","message":"response serialization failed"}}`)
+		body = []byte(`{"error":{"class":"internal","code":"INTERNAL_ERROR","message":"response serialization failed","retryable":false}}`)
 	} else {
 		body = append(body, '\n')
 	}
@@ -773,31 +787,70 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.WriteHeader(status)
 	_, _ = w.Write(body)
 }
+
 func writeErr(w http.ResponseWriter, status int, code, message, id string) {
+	writeErrWithRetryable(w, status, code, message, id, false)
+}
+
+func writeErrWithRetryable(w http.ResponseWriter, status int, code, message, id string, retryable bool) {
 	var b errorBody
+	b.Error.Class = errorClassForHTTPStatus(status)
 	b.Error.Code = code
 	b.Error.Message = message
+	b.Error.Retryable = retryable
 	b.Error.RequestID = id
 	writeJSON(w, status, b)
 }
+
+func errorClassForHTTPStatus(status int) string {
+	switch status {
+	case http.StatusBadRequest:
+		return "validation"
+	case http.StatusUnauthorized:
+		return "unauthenticated"
+	case http.StatusForbidden:
+		return "forbidden"
+	case http.StatusNotFound:
+		return "not_found"
+	case http.StatusConflict:
+		return "conflict"
+	case http.StatusRequestTimeout, http.StatusGatewayTimeout:
+		return "timeout"
+	case http.StatusTooManyRequests, http.StatusBadGateway, http.StatusServiceUnavailable:
+		return "unavailable"
+	default:
+		if status >= 500 {
+			return "internal"
+		}
+		return "validation"
+	}
+}
+
 func writeDomainErr(w http.ResponseWriter, err error, id string) {
 	msg := err.Error()
-	status := 502
+	status := http.StatusBadGateway
 	code := "PROVIDER_BAD_RESPONSE"
+	safeMessage := "upstream data provider returned an invalid response"
+	retryable := false
 	if strings.Contains(msg, "invalid A-share symbol") || strings.Contains(msg, "B-share code") || strings.Contains(msg, "exchange suffix") || strings.Contains(msg, "invalid start date") || strings.Contains(msg, "invalid end date") || strings.Contains(msg, "must not be after") || strings.Contains(msg, "must not be in the future") || strings.Contains(msg, "unsupported adjustment") || strings.Contains(msg, "cannot infer exchange") {
-		status = 400
+		status = http.StatusBadRequest
 		code = "VALIDATION_ERROR"
+		safeMessage = msg
 	} else if strings.Contains(msg, "no enabled") && strings.Contains(msg, "provider") {
-		status = 503
+		status = http.StatusServiceUnavailable
 		code = "PROVIDER_UNAVAILABLE"
+		safeMessage = "no enabled data provider is available for this capability"
 	} else if errors.Is(err, context.DeadlineExceeded) {
-		status = 504
+		status = http.StatusGatewayTimeout
 		code = "PROVIDER_TIMEOUT"
+		safeMessage = "upstream data provider request timed out"
+		retryable = true
 	} else if errors.Is(err, context.Canceled) {
-		status = 408
+		status = http.StatusRequestTimeout
 		code = "REQUEST_CANCELED"
+		safeMessage = "request was canceled"
 	}
-	writeErr(w, status, code, msg, id)
+	writeErrWithRetryable(w, status, code, safeMessage, id, retryable)
 }
 
 // fmtSscan is separated to keep input parsing constrained to a single integer.

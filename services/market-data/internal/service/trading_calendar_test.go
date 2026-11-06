@@ -62,6 +62,23 @@ func validTestTradingCalendar() *model.TradingCalendarSnapshot {
 	}
 }
 
+func TestDailyBarCoverageHistoricalTimestampOnlyCalendarGapIsInformational(t *testing.T) {
+	p := &testTradingCalendarProvider{snapshot: validTestTradingCalendar()}
+	svc := NewWithCapabilities([]provider.NamedProvider{p}, nil, nil, cache.NewDisabled(), nil,
+		time.Second, time.Second, 120, 2000, ResilienceConfig{}, nil)
+	svc.SetTradingCalendarProviders([]provider.TradingCalendarProvider{p})
+
+	ok, warnings := svc.dailyBarCoverageSufficient(context.Background(), "2026-10-22", "2026-10-24", 2, 2)
+	if !ok {
+		t.Fatalf("complete historical date coverage should pass: warnings=%v", warnings)
+	}
+	for _, warning := range warnings {
+		if warning == "daily_bar_coverage_uses_degraded_trading_calendar" {
+			t.Fatalf("missing historical publication timestamp alone must not degrade complete calendar dates: %v", warnings)
+		}
+	}
+}
+
 func TestTradingCalendarRejectsMissingSourceVersion(t *testing.T) {
 	snapshot := validTestTradingCalendar()
 	snapshot.SourceVersion = ""

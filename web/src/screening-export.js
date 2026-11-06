@@ -23,7 +23,7 @@ function csvCell(value) {
 }
 
 function numericCell(value) {
-  if (value === null || value === undefined || value === "") return "";
+  if (value === null || value === undefined || (typeof value !== "number" && typeof value !== "string") || (typeof value === "string" && !value.trim())) return "";
   const number = Number(value);
   return Number.isFinite(number) ? String(number) : "";
 }

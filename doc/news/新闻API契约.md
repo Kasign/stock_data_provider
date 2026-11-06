@@ -170,3 +170,37 @@ News 为 News 来源内容签发 AuthorizationRef。公开或无限制内容也�
 
 底层 SQL/Redis/Platform 依赖故障使用 PLAT-CTR-001 Fault，不得映射成空 items 或业务质量 degraded。Provider 采集部分失败属于 News 采集用例，不属于该只读 Query Port 的部分成功语义。
 
+
+
+### 11.5 Go Application DTO 与 JSON Schema 落地状态（2026-11-06）
+
+跨模块语义以 `doc/整体任务规划/跨模块契约目录与冻结状态.md` 的 NEWS-CTR-001 为准。本分支已新增：
+
+- `app.GetEvidenceRequest`、`app.ListEvidenceRequest`、`app.ResearchEvidenceRecord`、`app.ResearchEvidencePage`。
+- `app.ResearchEvidenceQuery` 同进程只读 Port。
+- `doc/news/schema/NEWS-CTR-001-*.schema.json` 与 `doc/news/golden/NEWS-CTR-001-*.golden.json`。
+
+当前已完成 DTO、请求边界校验、Schema/Golden 和 HMAC Cursor Codec；仍未实现 Facade、PIT Repository、授权快照当前复核、固定 Snapshot，也没有对外 HTTP 路由。禁止将本阶段描述为 NEWS-CTR-001 已验收。
+
+
+### 11.6 Cursor HMAC Claims
+
+Cursor 外部格式为 `base64url(payload).base64url(signature)`，签名为 HMAC-SHA256。Claims JSON Schema 位于 `schema/NEWS-CTR-001-cursor-claims-1.0.0.schema.json`。
+
+News Application 已实现 `EvidenceCursorCodec`：签发与验证均绑定 caller_ref、purpose_code、requested_content_level、规范化 filters 指纹、page_size、system_as_of、snapshot_ref、`news-evidence-v1` 排序版本和最后一条排序键；TTL 固定 15 分钟。密钥由 Platform `config.Secret` 注入，轮换期间必须同时保留 active 与尚未过期 Cursor 使用的 previous keys。
+
+Cursor Codec 不保存分页结果快照。Snapshot Store 缺失、过期或不可用时仍必须明确失败，不得重新创建快照或退回 OFFSET。
+
+
+### 11.7 采集时间字段语义
+
+Evidence DTO 的 `fetched_at` 和 `normalized_at` 来自 Observation 中的 Candidate 过程时间。News 当前不推断 `available_at`：未取得来源明确、可验证的公开可用时间证据时返回 JSON `null`。`observed_at` 对应系统观察时间，三者不可互相替代。
+
+
+### 11.8 NEWS-CTR-002 授权快照持久化边界
+
+News V2 Migration 新增 `news_authorization_snapshots`，Application 提供 append-only `AuthorizationSnapshotRepository`。相同 AuthorizationRef 的相同 binding 可幂等重放；相同引用绑定不同 payload 时返回冲突。读取时重新校验原始 JSON payload SHA-256 和 binding 结构。
+
+这里的 `payload_hash` 是数据库存储完整性校验，不等于 `decision_fingerprint` 的 GOV-CTR-006 JCS 验证。当前分支尚未接入公共 JCS Runtime Verifier，不能把结构校验或 SHA-256 原文哈希描述为 JCS 验收。
+
+该存储只证明 News 保存了某一历史授权决策快照，不证明当前策略仍允许访问。所有受限内容读取仍必须在实际读取边界重新核验当前 Source/Endpoint/Provider 策略、撤销、过期、用途与内容级别，并确保授权检查与内容读取不存在 TOCTOU 窗口。
