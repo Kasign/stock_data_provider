@@ -63,6 +63,8 @@ func CompileJSONSchema(raw []byte) (*jsonschema.Schema, error) {
 // schemaDialectsAreDraft2020 rejects mixed-dialect embedded schema resources.
 func schemaDialectsAreDraft2020(value any) bool {
 	switch current := value.(type) {
+	case bool:
+		return true
 	case map[string]any:
 		if declared, exists := current["$schema"]; exists {
 			dialect, ok := declared.(string)
@@ -70,15 +72,33 @@ func schemaDialectsAreDraft2020(value any) bool {
 				return false
 			}
 		}
-		for _, child := range current {
-			if !schemaDialectsAreDraft2020(child) {
-				return false
-			}
-		}
-	case []any:
-		for _, child := range current {
-			if !schemaDialectsAreDraft2020(child) {
-				return false
+		for key, child := range current {
+			switch key {
+			case "$defs", "properties", "patternProperties", "dependentSchemas":
+				definitions, ok := child.(map[string]any)
+				if !ok {
+					continue
+				}
+				for _, nested := range definitions {
+					if !schemaDialectsAreDraft2020(nested) {
+						return false
+					}
+				}
+			case "allOf", "anyOf", "oneOf", "prefixItems":
+				schemas, ok := child.([]any)
+				if !ok {
+					continue
+				}
+				for _, nested := range schemas {
+					if !schemaDialectsAreDraft2020(nested) {
+						return false
+					}
+				}
+			case "items", "contains", "additionalProperties", "unevaluatedProperties",
+				"unevaluatedItems", "propertyNames", "not", "if", "then", "else", "contentSchema":
+				if !schemaDialectsAreDraft2020(child) {
+					return false
+				}
 			}
 		}
 	}
