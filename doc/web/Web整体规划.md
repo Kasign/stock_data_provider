@@ -2487,4 +2487,20 @@ CSS AST 检查器进一步扩展：
 - [x] 指数质量理由色改为 `.market-index-card-footer .market-index-reasons`，明确压过 footer 的 small 默认色。
 - [x] 个股研究概览正负值改用 `--positive` / `--negative`，遵循默认 A 股红涨绿跌、反向配色及 dark/light 主题变量。
 - [x] 新增 CSS 结构断言，锁定组件作用域、语义 token 和普通声明；通用 `.positive` / `.negative` 的重要声明暂时保留，避免未完成所有动态 class 消费点审计前降低优先级。
-- [ ] WebUI Checks、CSSOM 8 场景与完整 Chromium Browser Smoke 通过后关闭本批验收。
+- [x] WebUI Checks #42205877204（测试 HEAD `fb45b214`）与 Chromium Browser Smoke #42205877304 通过；Browser Smoke 包含 CSS AST、CSSOM 8 场景及全量浏览器专项。
+- [x] 最终集成基线 HEAD `77689d7c` 的 Browser Smoke #42205026193 通过；第一批语义颜色组件作用域化验收关闭。
+
+## 2026-11-06 UIR-2：通用涨跌语义色作用域化（第二批，已完成）
+
+- [x] 将通用 `.positive` / `.negative` 从 `!important` 改为普通语义色声明。
+- [x] 个股报价摘要增加 `.metric-primary .metric-foot.positive/negative` 作用域规则；技术指标增加 `.technical-metric-card > small.positive/negative` 作用域规则。
+- [x] 研究概览继续使用更具体的 `strong.positive/negative` 语义 token 规则；历史日 K 与自选列表的表格单元格由 class 选择器覆盖普通 `td` 默认色。
+- [x] 修复并锁定浅色主题级联：报价摘要的浅色主题默认 `.metric-foot` 规则、浅色主题通用 `td` 规则均不得覆盖正负语义色。
+- [x] CSS 结构测试验证正负语义色声明为普通声明，并锁定报价、技术指标、研究概览、浅色主题报价/表格及四类市场状态的作用域规则。
+- [x] CSSOM 浏览器检查覆盖 dark/light × cn/reverse 共 4 组场景，每组 25 个实际计算颜色断言，覆盖报价、研究概览、技术指标、指数、广度、市场榜单、市场活动、质量理由和表格单元格。
+- [x] 当前 `web/styles.css` 的 `!important` 从 8 处降至 **6 处**；剩余仅全局 `[hidden]` 强制隐藏 1 处及 reduced-motion 无障碍规则 5 处。均保留，不再为数量目标删除。
+- [x] WebUI Checks #42207380891 通过。
+- [x] Chromium Browser Smoke #42207380849 通过：响应式主流程、CSS AST、CSSOM、设置/研究记录/告警/自选股跨标签页、Run Flow、个股研究、数据中心、选股及市场分页专项全部通过。
+- [x] 最终代码验收 HEAD：`b6da380eb29955c321b1d42b4e7dfb843f162fe9`。
+
+**UIR-2 结论：** 隐藏、语义颜色和无障碍减少动态效果的级联职责均已完成审查；没有理由继续压缩剩余 6 处 `!important`。本轮不启动 CSS 物理拆分。

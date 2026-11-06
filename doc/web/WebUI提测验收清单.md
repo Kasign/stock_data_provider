@@ -2639,3 +2639,14 @@ CSS AST 检查器进一步扩展：
 - [x] 个股研究正负值统一引用 `--positive` / `--negative`，覆盖 A 股默认/反向配色和浅色/深色主题。
 - [x] CSS 结构测试新增作用域与 token 断言；通用 `.positive` / `.negative` 两处重要声明仍保留。
 - [ ] CSSOM 8 场景、Browser Smoke 与 WebUI Checks 通过后关闭验收。
+
+## 2026-11-06 UIR-2：语义颜色组件作用域化验收
+
+- [x] 第一批：市场指数、市场广度、市场榜单、市场活动状态色改为组件作用域普通声明；指数质量理由使用更具体 warning 规则；个股研究概览正负色使用主题语义 token。
+- [x] 第一批测试补强：市场状态四类 × 四个作用域均有 CSS 结构断言；反向配色偏好正确同步到根节点；WebUI Checks #42205877204、Chromium Browser Smoke #42205877304 通过。
+- [x] 第二批：通用 `.positive` / `.negative` 移除 `!important`；报价摘要、技术指标、研究概览、表格节点使用明确作用域。
+- [x] 深色/浅色主题、默认 A 股红涨绿跌/反向配色的 CSSOM 计算颜色专项通过，4 组场景 × 25 个断言；浅色主题报价和表格覆盖冲突已修复。
+- [x] WebUI Checks #42207380891 成功。
+- [x] Chromium Browser Smoke #42207380849 成功。
+- [x] `!important` 声明数从本批开始前的 8 处降至 6 处；保留全局隐藏和 reduced-motion 无障碍规则。
+- [x] 最终验收 HEAD：`b6da380eb29955c321b1d42b4e7dfb843f162fe9`。
