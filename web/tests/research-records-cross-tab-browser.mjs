@@ -57,10 +57,11 @@ try {
   await first.locator("#research-note-editor[hidden]").waitFor({ state: "hidden" });
   await first.locator('[data-note-action="edit"][data-note-id="note-1"]').click();
   await first.locator("#research-note-editor:not([hidden])").waitFor();
-  assert.equal(await first.locator(".research-note-card").filter({ hasText: "远端新版本" }).isVisible(), true, "note list remains visible while editing");
+  assert.equal(await first.locator(".research-note-card").filter({ hasText: "初始笔记" }).isVisible(), true, "note list remains visible while editing");
   await first.locator("#research-note-title").fill("本地旧草稿");
   await second.evaluate(({ key, item }) => localStorage.setItem(key, JSON.stringify([item])), { key: noteKey, item: note("note-1", "远端新版本", "远端内容", "2026-11-04T02:00:00.000Z") });
   await first.locator(".research-note-card").filter({ hasText: "远端新版本" }).waitFor();
+  assert.equal(await first.locator(".research-note-card").filter({ hasText: "远端新版本" }).isVisible(), true, "list refresh remains visible while the editor preserves its draft");
   assert.equal(await first.locator("#research-note-title").inputValue(), "本地旧草稿", "cross-tab list refresh must not reset the editing draft");
   await first.locator("#research-note-save").click();
   await first.locator("#research-note-feedback").filter({ hasText: "已被其他标签页修改" }).waitFor();
