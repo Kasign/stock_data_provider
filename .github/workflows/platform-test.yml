@@ -1,0 +1,57 @@
+name: Platform Go checks
+
+on:
+  push:
+    branches:
+      - feat/platform-foundation
+    paths:
+      - 'internal/platform/**'
+      - 'go.mod'
+      - '.github/workflows/platform-test.yml'
+  pull_request:
+    paths:
+      - 'internal/platform/**'
+      - 'go.mod'
+      - '.github/workflows/platform-test.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: platform-go-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  platform:
+    name: Platform packages
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache-dependency-path: go.sum
+
+      - name: Check gofmt
+        run: |
+          files="$(gofmt -l internal/platform)"
+          if [[ -n "$files" ]]; then
+            echo "::error::Go files need gofmt:"
+            printf '%s\n' "$files"
+            while IFS= read -r file; do
+              [[ -n "$file" ]] && gofmt -d "$file"
+            done <<< "$files"
+            exit 1
+          fi
+
+      - name: Run platform tests
+        run: go test ./internal/platform/...
+
+      - name: Run platform race tests
+        run: go test -race ./internal/platform/...
+
+      - name: Run platform vet
+        run: go vet ./internal/platform/...

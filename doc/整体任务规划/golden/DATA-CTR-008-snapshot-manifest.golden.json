@@ -1,0 +1,36 @@
+{
+  "manifest": {
+    "snapshot_ref": "data_snapshot:sha256:e75da34558f67dea7a35d412d172bde696a84c43b6bb0982b5d1da0a8a01403f",
+    "manifest_fingerprint": "e75da34558f67dea7a35d412d172bde696a84c43b6bb0982b5d1da0a8a01403f",
+    "caller_ref": "principal:data:research-service",
+    "purpose_code": "research_analysis",
+    "symbol": "600000.SH",
+    "start_date": "2026-10-01",
+    "end_date": "2026-11-05",
+    "adjustment_basis": "none",
+    "system_as_of": "2026-11-06T05:00:00Z",
+    "sources": [
+      {
+        "source_ref": "provider:tushare:daily_bars",
+        "source_version": "2026-11-06T04:59:58Z"
+      }
+    ]
+  },
+  "fingerprint_input": {
+    "caller_ref": "principal:data:research-service",
+    "purpose_code": "research_analysis",
+    "symbol": "600000.SH",
+    "start_date": "2026-10-01",
+    "end_date": "2026-11-05",
+    "adjustment_basis": "none",
+    "system_as_of": "2026-11-06T05:00:00Z",
+    "sources": [
+      {
+        "source_ref": "provider:tushare:daily_bars",
+        "source_version": "2026-11-06T04:59:58Z"
+      }
+    ]
+  },
+  "canonical_json": "{\"adjustment_basis\":\"none\",\"caller_ref\":\"principal:data:research-service\",\"end_date\":\"2026-11-05\",\"purpose_code\":\"research_analysis\",\"sources\":[{\"source_ref\":\"provider:tushare:daily_bars\",\"source_version\":\"2026-11-06T04:59:58Z\"}],\"start_date\":\"2026-10-01\",\"symbol\":\"600000.SH\",\"system_as_of\":\"2026-11-06T05:00:00Z\"}",
+  "expected_sha256": "e75da34558f67dea7a35d412d172bde696a84c43b6bb0982b5d1da0a8a01403f"
+}

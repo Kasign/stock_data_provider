@@ -1,0 +1,20 @@
+{
+  "event_id": "ntf_evt_research_001",
+  "event_type": "research.event.lifecycle_changed",
+  "schema_version": "1.0.0",
+  "source_module": "research",
+  "occurred_at": "2026-11-06T04:40:00Z",
+  "subject_ref": "research_event_001",
+  "idempotency_key": "research-event-state:research_event_001:1",
+  "correlation_id": "corr_20261106_005",
+  "payload": {
+    "source_event_ref": "research_event_version_001",
+    "research_event_ref": "research_event_001",
+    "event_version": 1,
+    "previous_state": null,
+    "current_state": "detected",
+    "reason_code": null,
+    "system_as_of": "2026-11-05T16:00:00Z",
+    "changed_at": "2026-11-06T04:40:00Z"
+  }
+}
