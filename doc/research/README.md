@@ -3,8 +3,8 @@
 - 分支：`feat/research`
 - 代码：`internal/research/**`
 - 任务前缀：RSC
-- 当前阶段：R1 Context + R2 Evidence + R3 Event + R5 Claim/Hypothesis 领域基础；R7 Storage Port/Schema 第一阶段
-- 当前状态：Context/Evidence/Event/Claim Domain 首批结构与校验已实现；Context 版本链、Evidence JCS/授权过期边界、Event 生命周期及 Claim 文本校验新增测试已写入但尚未执行。RSC-007 已新增四个领域 Repository Port 和 Research Migration v1/v2（v2 保留 RFC3339Nano PIT 纳秒精度）；Context/Event/Claim SQL Adapter 尚未完成，Evidence SQL Adapter 受 RSC-OPEN-007 阻断。未完成仓库完整构建/CI、真实 Data/News、Owner 当前授权复核、Application、Outbox 和跨模块集成。
+- 当前阶段：R1 Context + R2 Evidence + R3 Event + R5 Claim/Hypothesis 领域基础；R7 Storage Port/Schema/Context-Event-Claim SQL Adapter 第一阶段
+- 当前状态：Context/Evidence/Event/Claim Domain 首批结构与校验已实现；Context 版本链、Evidence JCS/授权过期边界、Event 生命周期及 Claim 文本校验新增测试已写入但尚未执行。RSC-007 已新增四个领域 Repository Port 和 Research Migration v1/v2（v2 保留 RFC3339Nano PIT 纳秒精度）；Context/Event/Claim SQL Repository Adapter 已实现首批追加与精确版本读取；真实 MariaDB 集成测试、并发/故障注入和组合根注册尚未验收，Evidence SQL Adapter 受 RSC-OPEN-007 阻断。未完成仓库完整构建/CI、真实 Data/News、Owner 当前授权复核、Application、Outbox 和跨模块集成。
 
 ## 模块职责
 
@@ -49,7 +49,7 @@ internal/research/
     migrations_test.go
 ```
 
-R1/R2/R3/R5 当前实现 Context、Evidence、Event、Claim/Hypothesis 领域结构及本地校验；R7 当前仅完成 Repository Port 与 Migration Schema 清单：包括 Evidence 内容指纹/PIT、GOV-CTR-006 授权快照完整性、Event 追加版本和生命周期转换、Claim/Hypothesis 认识论字段与验证条件。没有 HTTP 接口、真实数据 Adapter、SQL Repository 实现、Migration 执行、Outbox 或 Run 编排接入；当前 Repository Port 与 Migration 清单仅完成首批定义。
+R1/R2/R3/R5 当前实现 Context、Evidence、Event、Claim/Hypothesis 领域结构及本地校验；R7 当前仅完成 Repository Port 与 Migration Schema 清单：包括 Evidence 内容指纹/PIT、GOV-CTR-006 授权快照完整性、Event 追加版本和生命周期转换、Claim/Hypothesis 认识论字段与验证条件。没有 HTTP 接口、真实数据 Adapter、Migration 执行、Outbox 或 Run 编排接入；Context/Event/Claim SQL Repository Adapter 已按 Migration v1/v2 实现，但尚无真实 MariaDB 集成验收。
 
 旧 `go-core/internal/contextpack` 和 `internal/analysis` 是历史分析流程，不等同于新 Research Domain；仅作为迁移行为参考，不重复建设其已有的数据整理能力。
 
@@ -88,3 +88,15 @@ R1/R2/R3/R5 当前实现 Context、Evidence、Event、Claim/Hypothesis 领域结
 
 - RSC-007 Repository Port 已明确追加事务边界、版本连续性、完整 payload 幂等与冲突规则；SQL Adapter 尚未实现。
 - RSC-OPEN-007 阻断 Evidence SQL Adapter 的授权快照续期边界，不阻断 Context/Event/Claim SQL Adapter。
+
+
+## RSC-007 本轮实现：Context/Event/Claim SQL Repository Adapter
+
+- 新增 `storage.ContextRepository`、`storage.EventRepository`、`storage.ClaimRepository`，分别实现对应领域 Repository Port。
+- Append 使用 InnoDB 事务；先创建/锁定 `research_aggregate_heads` 对应行，再读取最新版本。新版本必须连续递增；已有版本只有完整 JSON payload 的 SHA-256 完全一致才按幂等重放处理。
+- 对新版本读取上一版 payload 并调用各领域 `ValidateNextVersion`；插入不可变版本快照后再更新 aggregate head，任一步失败均回滚。
+- GetVersion 按 ID+版本精确读取，反序列化后重新执行领域 Validate，并核对返回对象身份。
+- 构造器注入 `*sql.DB` 和可选 Clock；不自动执行 Migration。SQL 表名/列名为 Adapter 内固定常量。
+- PIT 字段按 Migration v2 使用 UTC RFC3339Nano 文本保存；完整 JSON payload 保留纳秒精度。
+- Evidence Adapter 仍未实现，RSC-OPEN-007 不变。
+- 本轮未运行 go test、未连接 MariaDB；因此只记录代码实现，不标记事务、并发、幂等和故障恢复验收通过。
