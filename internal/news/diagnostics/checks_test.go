@@ -149,7 +149,6 @@ func TestProviderChecksHaveBoundedTimeouts(t *testing.T) {
 	}
 }
 
-
 func TestSourceEndpointCheckReportsApprovedRegistration(t *testing.T) {
 	catalog := sourceCatalogStub{registration: app.SourceEndpointRegistration{
 		SourceID: "source-1", EndpointID: "endpoint-1", Enabled: true,

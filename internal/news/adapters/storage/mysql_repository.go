@@ -596,7 +596,6 @@ func nullableString(value string) any {
 	return value
 }
 
-
 var requiredNewsSchemaTables = []string{
 	"news_items",
 	"news_identifiers",

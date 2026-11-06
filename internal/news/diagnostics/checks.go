@@ -163,7 +163,7 @@ func SourceEndpointCheck(catalog app.SourceCatalog, sourceID, endpointID string,
 				Status: platformdiag.StatusHealthy, SafeMessage: "Source endpoint registration is ready",
 				CheckedAt: time.Now().UTC(),
 				Attributes: map[string]string{
-					"access_method": string(registration.AccessMethod),
+					"access_method":    string(registration.AccessMethod),
 					"policy_versioned": "true",
 				},
 			}, nil
@@ -218,7 +218,7 @@ func StorageChecks(probe StorageProbe) []platformdiag.Check {
 						SafeMessage: "News storage schema is incomplete", CheckedAt: time.Now().UTC(),
 						Attributes: map[string]string{
 							"missing_table_count": fmt.Sprintf("%d", len(missing)),
-							"missing_tables": strings.Join(missing, ","),
+							"missing_tables":      strings.Join(missing, ","),
 						},
 					}, nil
 				}
