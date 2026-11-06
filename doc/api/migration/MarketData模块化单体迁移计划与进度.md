@@ -1462,3 +1462,106 @@ M2/M4 必须将 Worker 改为可管理对象或显式 Start/Stop/Wait：
 - 现有测试文件数量较多，但测试数量不等于请求契约覆盖率；应以 Endpoint/调用族矩阵为覆盖分母。
 
 **M0 收敛建议：** Provider Request Golden 的全量补齐不应阻断 M1 的文档/模块边界设计。M0 可以把当前已证实的请求契约差异记录为迁移基线；涉及凭据泄露、重定向、目标地址的安全回归测试必须在 M4 平台出站 Client 接入前完成。MDM-001 OpenAPI 修正与 M1 Module 合并可并行推进，但当前仍需用户授权后才能修改 OpenAPI/Provider/测试代码。
+
+
+### 2026-11-06：M0 第二十四轮（新总览与跨模块契约对齐复核）
+
+审计基线：当前分支 HEAD `66a47655ce9d9b9a008729f7aebeb2f71cdfd294`。该 HEAD 是将 `feat/design_doc` 合入 Data 分支后的合并提交；本轮读取了 `doc/整体任务规划/README.md`、项目总览、契约目录与冻结状态、Data OpenAPI/Go 模型修正清单、Data 服务间认证设计、GOV-CTR-006 机器契约、Platform 集成清单和 Market Data 模块化单体方案。只更新本迁移跟踪文档，不修改规划分支文档、OpenAPI、Handler、Model 或测试代码。
+
+#### 1. 最新总体决议与迁移边界
+
+本轮确认项目总览与 Market Data 架构方案一致，方案 B 是当前唯一默认方向：
+
+- Data 迁入根 Go Module 的 `internal/marketdata`，与 Root Server 同进程、同部署；Root Server 是唯一 Composition Root。
+- Data 仍拥有 Provider、行情/财务/估值、Security Master、Calendar、Normalization、Quality、PIT、Repository、Schema 和 Migration；不能把 Data 领域代码揉进 Server Application。
+- Root/Quant/Research/Researchflow 通过 Data Application Port 消费；内部调用不走 HTTP，不使用 Data API Key，不创建 Server→Data 自调用 HTTP Client。
+- Data HTTP Adapter 保留给远程/独立部署兼容；远程模式继续按 X-API-Key 认证。浏览器不得继续持有 Data API Key。
+- Data 迁移不改变 v1 API 行为、Provider 算法、数据单位/质量语义、PIT、历史数据和数据库表所有权。
+- MDM-001=M0 审计，MDM-002=M1 Module 归并，MDM-003=M2 Port/Bootstrap，MDM-004=M3 Root 装配，MDM-005=M4 共享资源与生命周期，MDM-006=M5 部署/WebUI，MDM-007=M6 稳定性验收；MDM-008 在结构迁移后单独接入 DATA/Platform 公共契约。
+
+**阶段门禁：** 当前 M0 仍未通过，不能开始 M1 的目录搬迁、删除嵌套 go.mod、独立 Dockerfile 或旧部署入口。M0 需要先形成完整迁移对象清单、修正 v1 OpenAPI 已确认的契约描述错误，并通过全量 Contract Test。Provider 请求 Golden 的全量扩展可作为迁移基线和 M4 安全验收输入，不应把所有 Provider 测试重写错误地变成 M1 前置条件。
+
+#### 2. DATA-CTR-005～008 与 GOV-CTR-006 的新边界
+
+项目契约目录当前将 DATA-CTR-005～008、GOV-CTR-006 标为 `pending_evidence`，语义已接受但未达到 frozen；本轮按契约明确区分结构迁移与正式契约接入：
+
+- **DATA-CTR-005：** v1 Quote/DailyBar 继续保持现有 JSON number/float64 兼容形态，不得宣称精确 Decimal。跨模块精度敏感输入首批使用 v2 `GET /api/v2/bars/{symbol}/daily`，Decimal string、显式日期范围/limit/adjustment_basis/purpose_code/system_as_of，返回 PIT、质量、来源、不可变 snapshot_ref 和 authorization_ref。v2 Schema、Go Decimal Model、原始精度链路和 Golden 尚待实施，不能把 v1 DTO 直接冒充 v2。
+- **DATA-CTR-006：** 进程内由 Root Server 对外入口认证并注入可信 Principal/Scope Context，Data Application Port 不使用 Data API Key；远程兼容 HTTP Adapter 才继续校验 X-API-Key。Data Key、Owner Token、Platform Service Secret、Provider Token 必须分离。
+- **DATA-CTR-007：** Research 首批真实 Data Evidence 只消费单证券 DailyBarsV2，必须保留 PIT、snapshot_ref、authorization_ref、source/version、quality 和单位；Fundamentals、Valuations、TradingStatus、SecurityProfile 动态字段和市场当前快照不属于首批历史 Evidence。
+- **DATA-CTR-008 + GOV-CTR-006：** 同进程和远程模式都必须保留授权审计。可信 principal、Scope、purpose_code、请求范围绑定、内容寻址 Snapshot Manifest、AuthorizationRef、读取时重新授权、策略版本竞态 fail-closed 都不能因移除 Data API Key 而省略。AuthorizationRef 不是 bearer token。
+- **PLAT-CTR-005/006/007：** Provider 出站安全、Storage/Migration 生命周期、Typed Config/Secret 的公共边界已定义，但登记状态仍为 pending_evidence。M4 只能按实际已合入并验证的 Platform 实现接入，不能仅凭设计文档认定已验收。
+
+本轮没有把 DATA-CTR-005～008 提前塞入 M0/M1，也没有将 MDM-008 与结构迁移合并。
+
+#### 3. 最新 Data OpenAPI / Model 修正提交复核
+
+当前分支 `services/market-data/openapi.yaml` blob 为 `f57886d414d7e78b932044460525b701a73041dc`，`openapi_contract_test.go` blob 为 `f9916e8417461f04e9a81efeb5d92391ea5e9f38`。与《Data OpenAPI 与 Go 模型契约修正清单》记录的 OpenAPI blob `9a15f7810a07c60887a574d82e1f84d56a8c9964` 已不是同一版本，必须以当前分支文件重新核对，不能直接沿用旧清单数字作为当前未修复项。
+
+已确认两次近期修正：
+- `0f39b434`（修正数据模型与 OpenAPI 字段契约）：修改 OpenAPI 和 `openapi_contract_test.go`，补入原清单列出的 15 个 Go 字段、调整部分 required、移除 9 个没有 Go 响应来源的 Schema 字段，并增加人工列举式契约断言。
+- `3662db4b`（校正行情情绪字段 required 语义）：将 `MarketSentimentSnapshot.source_version` 从 required 移除，并在测试中增加 optional 断言。
+
+这意味着旧清单中的“15 个字段缺失、9 个多余字段、部分 required 差异”已有实际修正，不能继续原样计为全部未完成。当前测试已对这批已知字段做局部保护，但仍不是 Go Model ↔ OpenAPI 的全量双向反射测试，也没有替代真实 Handler JSON Golden。
+
+**本轮发现的剩余差异/文档冲突：**
+
+1. `DragonTigerSnapshot.source_version`：旧字段清单要求 Go 始终输出时应为 required；当前 OpenAPI `DragonTigerSnapshot.required` 未包含 `source_version`，而新加的 `TestOpenAPIDataModelFieldsMatchKnownJSONContract` 的 required 检查列表也漏掉该字段。需复核当前 Go JSON Tag 与 Validator 后补入自动断言。
+2. `LimitPoolItem.change_percent`：当前 OpenAPI 将其声明为 `nullable: true`，测试也明确要求 nullable；但《Data OpenAPI 与 Go 模型契约修正清单》第 11.14 节记录 DataService Validator 在 HasData=true 时拒绝 nil、HasData=false 时 Items 必须为空，因此当前可达成功响应不会输出该字段为 null。两份证据冲突，需由 Data Owner 基于当前 Handler/Validator 选择“Schema 非 nullable”或“运行时允许 null”，不能同时保留相反承诺。
+3. 《Data OpenAPI 与 Go 模型契约修正清单》仍以旧 OpenAPI blob `9a15...` 和旧代码快照为基线；应把 `0f39b434`、`3662db4b` 的修复纳入清单，重算 Required/Nullable/字段差异，尤其不要再把已修复的字段重复登记为待修。
+4. 新测试仍以人工列举的固定字段为主；没有从 35 个 Operation 自动构建 Operation→Handler→Response DTO→Schema 映射，也没有递归比较所有 Go JSON Tag、嵌套对象、required、nullable、enum、format 和真实 JSON。
+5. 当前 v1 OpenAPI 仍只有 35 个 Operation；项目契约中定义的 v2 DailyBars 接口尚未出现在该 OpenAPI 文件中。这与 DATA-CTR-005 仍为 pending_evidence、计划在 MDM-008 实施一致，不是本轮 M0 的 v1 兼容接口缺失。
+
+#### 4. 认证契约：纠正“22 条漏声明 ApiKey”的旧结论
+
+本轮重新按 OpenAPI 继承语义解析当前 `openapi.yaml`，结果如下：
+
+- 35 个 Operation；2 个 Health 显式 `security: []`。
+- 11 个业务 Operation 显式声明 operation-level `ApiKey: []`。
+- 其余 22 个业务 Operation 没有 operation-level security，继承 OpenAPI 根级 `security`。
+- 根级 `security` 包含两个独立 Security Requirement Object：`ApiKey: []` 和 `BearerAuth: []`。OpenAPI 语义是 OR，因此这 22 个 Operation **并非没有认证声明，也不是公开路由**；它们被文档描述为支持 X-API-Key 或 Bearer 两种方式。
+- Data 当前 Server `s.auth` 实际只读取并校验 `X-API-Key`，不接受 Authorization Bearer。故真实问题是根级 BearerAuth 对 22 个继承 Operation 造成虚假认证能力声明，而不是“22 条 Operation 漏了 ApiKey”。
+- 11 个显式 ApiKey Operation 已覆盖 X-API-Key；Health 显式公开。所有 33 个业务 Operation 的实际 Handler 仍执行 X-API-Key 认证。
+
+**需要纠正的旧记录：** 本迁移文档早期 M0 记录及设计方案中“22 条受保护业务 Operation 漏声明 ApiKey”的表述不准确，应以本轮的 OpenAPI 继承语义结果替代。规划分支中的《Market Data并入Root Server模块化单体调整方案》《Data 服务间认证映射与 Secret 注入设计》和契约登记簿也有“业务 Operation 均 operation-level 声明 ApiKey”的过度概括；这些文档由 `feat/design_doc` 维护，本轮不越权修改，只将差异记录在 Data 审计文档中。
+
+**建议的 v1 修正：**
+1. 删除 Data OpenAPI 根级 `BearerAuth` 安全替代项，根级仅保留 `ApiKey: []`；或为所有业务 Operation 显式声明 ApiKey 并移除根级 security。优先前者，避免重复配置。
+2. 保留两条 Health 的 `security: []`。
+3. diagnostics 补 401。
+4. Contract Test 解析 YAML 结构，验证 33 个业务 Operation 的有效 Security Requirement 只有 ApiKey，Health 无认证；同时与 Server mux 路由集合自动比对。不要再以“每个 Operation 必须写一份 operation-level security”作为必要条件。
+
+#### 5. 错误响应契约复核
+
+- 当前 `components.schemas.Error` 仍没有被任何 Operation 的错误响应引用；本轮按当前 OpenAPI 全文检查，35 个 Operation 的 Error Schema 引用数仍为 0。
+- 当前 Server `errorBody` 始终输出 `class/code/message/retryable`，`request_id` 可省略；但 OpenAPI Error Schema 内层 required 仍只有 `code/message`。即使后续把 Error Schema 引用到响应，也仍需把实际始终输出的 `class/retryable` 纳入 required，或明确调整运行时编码行为。
+- 新增的 `platform_contract_test.go` 已测试 Fault 的 HTTP class 映射、安全 message、retryable 和 Request ID，但 `TestOpenAPIErrorSchemaDocumentsPlatformFaultProjection` 只检查 Schema 文本包含关键字段，没有验证 Operation 错误响应是否引用 Schema，也没有验证 required 与实际 JSON 输出一致。
+- diagnostics 仍是唯一缺少 401 响应声明的业务 Operation。
+- 当前仍缺少 5 个已确认可返回“无启用 Provider”503 的 Operation 声明：`GET /api/v1/quotes/{symbol}`、`GET /api/v1/bundles/{symbol}`、`GET /api/v1/stocks/{symbol}/announcements`、`GET /api/v1/market/sentiment`、`GET /api/v1/market/dragon-tiger`。
+- 408 请求取消和 500 序列化失败仍需按每个 Handler 的真实可达路径确定是否纳入对外稳定契约；不可直接把所有通用状态码无差别添加到全部 Operation。
+
+#### 6. Platform Principal 与 Data 授权的代码边界
+
+当前根 Module 已有 `internal/platform/security`：
+- `Principal` 表达 IdentityKind、Subject、Scopes。
+- `Authenticator` 使用 Bearer 凭据摘要和常量时间比较；`Guard` 按显式 RoutePolicy 执行 anonymous/owner/service 授权，并把可信 Principal 放入 Request Context。
+- `PrincipalFromContext` 可读取可信主体；客户端自报 `X-Identity`/`X-Principal` 不参与身份建立。
+- Platform Security 的 Bearer 认证属于 Root Server 新路由边界，不能据此推断旧 Data HTTP Adapter 已支持 Bearer，也不能把 Platform Service Secret 当 Data API Key。
+- 本轮未发现 Data Application Port 已消费该 Principal/Scope Context 的集成证据；这属于 MDM-003/004 的装配与 MDM-008 的正式授权契约接入，不能仅因 Platform package 已存在就标记完成。
+
+#### 7. M0 状态与后续执行顺序
+
+本轮关闭/更新：
+- [x] 重新读取最新总览、契约目录、Data 认证/DTO 契约、GOV-CTR-006 和模块化单体方案。
+- [x] 确认方案 B、MDM-001～008 阶段映射及 Data 领域所有权边界。
+- [x] 核对当前 OpenAPI blob 与近期 Schema 修正提交，避免沿用过期字段差异数字。
+- [x] 纠正 OpenAPI 根级 security 继承导致的“22 条漏 ApiKey”误判。
+- [x] 识别 DragonTigerSnapshot.source_version required 漏项、LimitPoolItem.change_percent nullable 冲突。
+- [x] 识别 Error Schema 未引用、required 不完整、diagnostics 401 和 5 个 503 缺口。
+- [ ] 全量 Go Model ↔ OpenAPI 双向字段/required/nullable/enum/format 自动差异报告。
+- [ ] 35 Operation 的真实 Handler 成功/错误状态码与 Error Body Golden。
+- [ ] 所有参数 required/type/default/range 与 Handler 校验规则的逐项复核。
+- [ ] 真实部署是否使用旧 go-migration Profile 的现场确认。
+- [ ] Data SQL 文件与 Go Migration 的完整列/索引/默认值/字符集 DDL diff。
+- [ ] M0 全量验收记录与 MDM-001 契约修正门禁。
+
+**当前结论：** 契约已明确 Data 同进程调用边界和 DATA-CTR-005～008 的后续接入语义；部分 v1 OpenAPI/Go 字段修正已在 Data 分支真实提交，但认证继承、错误 Schema 引用、部分 required/nullable 和错误状态码仍未闭环。M0 继续 `in_progress`，M1 不准入。本轮仍为只读审计，没有修改 API、业务实现、Provider、测试或规划分支文件。
