@@ -71,6 +71,53 @@
 
 每个 Golden 同时包含 AuthorizationRef、策略组合快照、fingerprint_input、JCS canonical_json 和预期 SHA-256。测试必须复算摘要并与 expected_sha256 完全相等；不得只比较文档中的预期字符串。
 
+## 7.1 Contract Test 执行矩阵
+
+测试按生产方分别运行；每个 Owner 对自己的签发逻辑负责，消费者不得复制 Owner 的策略判断。测试必须同时验证返回内容/副作用，不允许只断言 decision 字段。
+
+| Test ID | Owner / 层 | 场景与输入 | 必须断言 | 失败结果 |
+|---|---|---|---|---|
+| GOV006-SCH-01 | 公共 Schema | 四份 Owner Golden + 两份 Schema | AuthorizationRef 与 PolicySnapshot 均通过 Draft 2020-12；启用 format assertion 校验 RFC3339 date-time | CI 失败 |
+| GOV006-SCH-02 | 公共 Schema | 缺少必填字段、未知字段、非法 enum、空 ref、非法 fingerprint、allowed 携带 conditions、conditional 不带 conditions | 每个负例均被拒绝；不得静默丢弃未知字段 | CI 失败 |
+| GOV006-SCH-03 | 语义 Validator | policy_version 与 snapshot_ref 不一致；policies 为空；重复 tuple；顺序非字典序 | 一致性、非空、tuple 唯一和稳定排序全部由跨对象 Validator 检查 | CI 失败 |
+| GOV006-FP-01 | 公共 Fingerprint | 四个 Golden | 从 AuthorizationRef + PolicySnapshot 重新构造 fingerprint_input；JCS 后 SHA-256 必须等于 expected_sha256 和 decision_fingerprint | CI 失败 |
+| GOV006-FP-02 | 公共 Fingerprint | 修改 policies 中任意一项 policy_type/ref/version，或漏掉一项 | 摘要必须变化；旧 fingerprint 不再匹配 | CI 失败 |
+| GOV006-FP-03 | 公共 Fingerprint | 仅修改 authorization_ref 或 decision_fingerprint | fingerprint_input 不变；避免把引用自身或摘要自身递归纳入摘要 | CI 失败 |
+| GOV006-DATA-01 | Data Owner | 有效 API Key、可信 principal、指定 snapshot_ref、purpose=research_analysis | subject_ref 由认证上下文派生；resource_ref 对应不可变 snapshot；记录全部 Data 策略版本 | 不允许从请求体覆盖主体或资源 |
+| GOV006-DATA-02 | Data Owner | 无效/缺失/撤销 API Key，或 snapshot 不存在/不属于当前 principal | 不签发 allowed；不得返回受限数据 | denied/unknown + 无数据正文 |
+| GOV006-NEWS-01 | News Owner | Provider Output + Source + Endpoint 三类策略均参与 | PolicySnapshot 完整包含三类实际生效版本；resource_ref 指向精确 Evidence 版本 | 缺一策略即测试失败 |
+| GOV006-NEWS-02 | News Owner | source 条款要求 attribution，条件尚未满足 | 返回 conditional 和稳定 condition_code；不得把正文交给调用方 | 仅返回允许的 metadata，不返回受限正文 |
+| GOV006-NEWS-03 | News Owner | attribution 条件满足后重新请求 | 签发新的 allowed AuthorizationRef；新引用有新 fingerprint；不得原地修改旧引用 | 旧 conditional 仍不可用于读取 |
+| GOV006-QUANT-01 | Quant Owner | Researchflow service principal 请求 quant result | subject_ref 由可信服务身份派生；resource_ref 精确对应 result_id；purpose 固定 quant_analysis | 客户端伪造主体或资源时拒绝 |
+| GOV006-QUANT-02 | Quant Owner | result_id 不存在、越权或策略拒绝 | 不签发 allowed，不返回结果内容 | denied/unknown + 无结果正文 |
+| GOV006-RES-01 | Research Owner | 读取 Research Evidence 并形成派生 Evidence | Research 签发自己的 AuthorizationRef；保留每条上游 Data/News/Quant 来源授权链 | 不得以 Research allowed 覆盖上游 denied/expired/revoked |
+| GOV006-RES-02 | Research Owner | 派生 Evidence 混合多个来源，其中一个来源当前撤销 | 重新计算可披露内容范围；不可安全剥离时拒绝整个派生内容 | 不返回受影响正文 |
+| GOV006-READ-01 | 所有消费者 | 历史 allowed，但当前 Owner 策略已撤销或 Scope 收窄 | 每次读取均由 Owner 按当前策略复核；历史快照只用于审计 | 当前 denied/unknown 时拒绝 |
+| GOV006-READ-02 | 所有消费者 | expires_at=null | 不因 null 自动通过；仍执行当前策略与 Scope 复核 | 按当前决策放行或拒绝 |
+| GOV006-READ-03 | 所有消费者 | now == expires_at | 视为过期；边界使用大于等于 | 拒绝 |
+| GOV006-READ-04 | 所有消费者 | 授权服务超时、不可用、响应不完整 | 受限资源默认拒绝；不回退使用缓存的历史 allowed | unknown/错误 + 无正文 |
+| GOV006-RACE-01 | Owner + Resource Store | 授权检查后、正文读取前策略版本被撤销或替换 | 读取时验证快照/策略版本仍有效；无法证明一致性则丢弃正文并拒绝 | 不得发生 TOCTOU 放行 |
+| GOV006-RACE-02 | Owner + Resource Store | 并发撤销与读取 | 明确线性化点；撤销生效后启动的读取不得使用旧授权；在途读取按 Owner 定义的原子边界处理 | 不得返回撤销后新读取的正文 |
+
+### 7.2 Validator 的职责边界
+
+JSON Schema 负责单对象结构约束；跨对象和运行时语义不得假装由 Schema 完成：
+
+1. **Schema Validator**：Draft 2020-12；必须启用 format assertion，而不是只把 date-time 当注释。
+2. **Snapshot Validator**：校验 authorization_ref.policy_version == policy_snapshot.snapshot_ref；policies 非空；按 (policy_type, policy_ref, policy_version) tuple 唯一且严格字典序排序。
+3. **Fingerprint Verifier**：根据 PolicySnapshot 重建 evaluated_policy_versions，再执行 RFC 8785 JCS + SHA-256；不信任调用方传入的 fingerprint_input/canonical_json。
+4. **Owner Authorization Test**：每个 Owner 自己验证 subject_ref、resource_ref、purpose_code、content_level 与可信认证上下文和真实资源的绑定关系。
+5. **Read-time Gate**：消费者必须调用资源 Owner 的当前授权检查；不得仅在任务创建时检查一次后长期缓存 allowed。
+6. **Race Test**：授权检查与正文读取必须处于可证明一致的策略版本边界；无法证明时 fail closed。
+
+### 7.3 测试分层与完成定义
+
+- **L1 Schema/Golden**：GOV006-SCH-*、GOV006-FP-* 全通过。
+- **L2 Owner Contract**：DATA/NEWS/QUANT/RESEARCH 各自的签发、Scope、资源映射、当前授权复核全通过。
+- **L2 Consumer Contract**：Researchflow/Report/Notification 等直接消费者不得把 AuthorizationRef 当 bearer token；必须保留上游来源链并调用 Owner 当前复核。
+- **L2 Concurrency/Security**：READ/RACE 场景全通过。
+- 只有 L1 + 所有适用 L2 都有 CI 运行记录、测试命令、测试结果和提交 SHA，GOV-CTR-006 才能从 pending_evidence 升级为 frozen。文档存在、Schema 可解析或 Golden 静态校验通过都不等价于 Contract Test 通过。
+
 ## 7. 尚待证据
 
 以下测试通过前，GOV-CTR-006 保持 pending_evidence：
