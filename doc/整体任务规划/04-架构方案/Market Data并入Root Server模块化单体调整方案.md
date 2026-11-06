@@ -193,11 +193,18 @@ Server 不得直接操作 Data 表、SQL、Provider 或 Data Repository。
 
 ### 3.2 Root Server 拥有的职责
 
-- 唯一进程入口、配置聚合、依赖注入、HTTP Router、进程信号和优雅关闭。
-- 共享 MariaDB/Redis/HTTP Client 等基础设施的创建与生命周期。
-- 模块装配、跨模块公开 Port 注入和 Worker 启停顺序。
-- 对外 API 的认证、授权、访问策略、限流、Request ID 和 Fault 映射。
-- 不拥有行情领域对象、Provider 策略、数据质量规则或 Data SQL。
+Root Server 是系统唯一的应用组合根和统一 HTTP 服务宿主，职责覆盖整个进程内已注册模块，而不只服务于 Market Data：
+
+- 唯一进程入口、配置聚合、依赖注入、模块注册、进程信号和优雅关闭。
+- 统一 HTTP Server/Router、API 版本前缀、路由注册与外部 API 暴露范围管理。
+- 统一接入 Platform 的认证授权、限流、审计、Request ID、超时/取消、访问日志和 Fault/HTTP 状态映射。
+- 注册各模块提供的 HTTP Handler/Adapter，并汇总实际开放接口的 OpenAPI 文档；不要求每个模块都必须暴露 HTTP API。
+- 共享 MariaDB/Redis/HTTP Client 等基础设施的创建与生命周期；模块通过构造参数或公开 Port 获得所需依赖。
+- 跨模块公开 Application Port 注入、后台 Worker 启停顺序、Migration Runner 编排和资源关闭。
+- 对外 API 的协议适配与入口治理；业务用例和领域规则仍由各模块拥有。
+- 不拥有行情领域对象、Provider 策略、数据质量规则或 Data SQL，也不接管 News、Quant、Research、Researchflow、LLM、Notification 的业务逻辑。
+
+**边界说明：** Root Server 不是内部微服务反向代理，也不是业务 Facade 的替代品。模块间同进程调用直接走强类型 Application Port；HTTP Handler 仅用于外部协议边界或明确的远程兼容场景。Nginx 位于 Server 之前，只负责 TLS/静态资源/反向代理等边缘职责，不承担模块依赖注入或业务路由。
 
 ### 3.3 允许与禁止的依赖
 
@@ -261,7 +268,9 @@ internal/
 Data 至少提供两类明确接口：
 
 1. **业务 Application Port：** 供 Analysis、Researchflow、Research 等模块使用，返回强类型结果，不依赖 HTTP DTO。
-2. **HTTP Handler Adapter：** 供 WebUI 兼容路由或受控外部 API 使用，只负责请求解析、认证上下文映射、响应编码和错误映射；内部仍调用同一个 Application Port。
+2. **HTTP Handler Adapter：** 供 Root Server 注册为 /market-api/ 等兼容路由，或供受控远程调用使用；只负责请求解析、认证上下文映射、响应编码和错误映射，内部仍调用同一个 Application Port。
+
+Root Server 统一拥有 HTTP 服务实例和路由注册权，但不因此接管 Data 的 HTTP Operation 语义或领域逻辑。Data Owner 维护 Data Handler、请求/响应 DTO、OpenAPI Operation 和对应 Contract Test；Server Owner 负责挂载、全局中间件、统一错误边界及 OpenAPI 汇总。其他模块若开放 HTTP API，遵循相同的职责分工。
 
 不得把 Data HTTP DTO 当作所有同进程模块共享的 Domain 类型。
 
