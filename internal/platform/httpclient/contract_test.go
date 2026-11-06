@@ -108,9 +108,9 @@ func TestClientRetriesOnlyWhenIdempotentAndBodyReplayable(t *testing.T) {
 			defer server.Close()
 
 			client, err := New(Config{
-				Resolver: staticResolver{addresses: []netip.Addr{netip.MustParseAddr("8.8.8.8")}},
+				Resolver:   staticResolver{addresses: []netip.Addr{netip.MustParseAddr("8.8.8.8")}},
 				MaxRetries: 1,
-				Timeout: 2 * time.Second,
+				Timeout:    2 * time.Second,
 			})
 			if err != nil {
 				t.Fatal(err)
@@ -154,7 +154,7 @@ func TestClientDoesNotRetryRateLimitResponses(t *testing.T) {
 	defer server.Close()
 
 	client, err := New(Config{
-		Resolver: staticResolver{addresses: []netip.Addr{netip.MustParseAddr("8.8.8.8")}},
+		Resolver:   staticResolver{addresses: []netip.Addr{netip.MustParseAddr("8.8.8.8")}},
 		MaxRetries: 2,
 	})
 	if err != nil {
