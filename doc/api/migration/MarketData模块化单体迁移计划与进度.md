@@ -1294,3 +1294,104 @@ M2/M4 必须将 Worker 改为可管理对象或显式 Start/Stop/Wait：
 - [ ] Worker Stop/Wait 代码改造与测试尚未实施，属于迁移实现阶段工作，不是文档审计可关闭项。
 
 **M0 状态：** 静态审计范围已明显收敛，但仍有 Provider 请求级 Golden/安全行为核验与 OpenAPI 参数/错误契约等未闭环项。Worker Stop/Wait、平台 HTTP Client 接入、TCP 出站策略属于 M2/M4 的实现任务，不应错误地作为 M0 必须先完成的代码改造。M0 暂不准入 M1，下一轮应优先批量完成剩余 OpenAPI 参数/错误契约与 Provider Request Golden 覆盖矩阵，并把可后置的运行时改造明确移入对应 M 阶段。
+
+
+### 2026-11-06：M0 第二十二轮（OpenAPI Operation / Handler 契约核对）
+
+审计基线：`d418e42b6d51950db6e4f78108c20d5b923a117f`。本轮对 `services/market-data/openapi.yaml`、`internal/httpapi/server.go`、主要 Handler、DataService 错误分支和现有 OpenAPI contract tests 做逐 Operation 静态核对。只更新迁移审计文档，不改 OpenAPI/Handler/测试代码。
+
+#### 1. 路由与认证契约
+
+- OpenAPI 当前共有 35 个 Operation：2 个公开 Health + 33 个业务 Operation。
+- Server mux 当前注册 35 条路由；2 个 Health 公开，其余 33 个都包裹 `s.auth`，认证实现只读取 `X-API-Key`，使用常量时间比较；不接受 Authorization Bearer Token。
+- OpenAPI 根级 `security` 同时列出 `ApiKey` 与 `BearerAuth` 两个独立 Security Requirement Object。OpenAPI 语义是 OR，不是 AND。因此继承根级安全声明的业务 Operation 会被文档描述为同时支持 X-API-Key 或 Bearer Token；但 Server 实际只支持 X-API-Key。
+- 其中 7 个 Operation（market/quotes、data-sources/probe、diagnostics、price-limit-rule、trading-status、index-catalog、indices/{symbol}/constituents、indices/{symbol}/daily、indices、session、capital-flow，按当前文件逐项显式声明）使用 operation-level ApiKey 覆盖根级配置；其余业务 Operation 继承错误的 Bearer OR 声明。
+- `/health/live` 与 `/health/ready` 使用 `security: []`，与 Server 一致。
+- `/api/v1/data-sources/diagnostics` 是唯一未声明 401 响应的业务 Operation；Server auth 对缺失/无效 API Key 会返回 401。其 security 本身已声明 ApiKey，因此这是响应文档缺失，不是认证绕过。
+- 现有 `TestOpenAPIDataRoutesDeclareValidAPIKeySecurity` 只对固定的少数路径检查 operation-level ApiKey，没有验证根级 Bearer 声明，也没有要求每个受保护 Operation 都声明 401；所以未发现上述问题。
+
+**契约修正建议（需进入 MDM-001 实施，不在本轮直接改）：**
+1. 根级 security 仅保留 `ApiKey: []`；如未来确实实现 Bearer，再同步 Server auth 和逐 Operation 测试。
+2. 给 diagnostics 补 401。
+3. 将安全测试改为从 OpenAPI paths 自动枚举 33 个业务 Operation，与 Server 路由集合比对：每个受保护 Operation 必须要求 ApiKey 且声明 401，两个 Health 必须 security=[]。
+
+#### 2. Error Schema 与实际错误体
+
+- `components.schemas.Error` 已定义 `error.class/code/message/retryable/request_id?`，字段与 Server `errorBody` 的 JSON 结构基本一致；但整个 OpenAPI 文件没有任何 `$ref: '#/components/schemas/Error'`，35 个 Operation 均未在错误响应 content 中声明该 Schema。
+- Handler 的 `writeErr` / `writeDomainErr` 都通过统一 `errorBody` 输出 JSON；因此当前客户端只能从描述文本推测错误结构，OpenAPI codegen 无法获得统一错误类型。
+- `writeDomainErr` 当前映射：validation→400、无启用 Provider→503、deadline→504、canceled→408、其他 Provider 错误→502；认证 401 由 auth middleware 返回。Error.class 由 HTTP status 映射。
+- OpenAPI 大部分业务 Operation 已声明 400/401/502/503/504 的子集，但没有统一错误响应组件；408（请求取消）和序列化失败 500 也未形成统一响应描述。
+- 修正时建议定义可复用 `ApiErrorResponse`（或保留 Error 命名并明确它是 response schema），在 400/401/404/408/409/429/500/502/503/504 等确实可能出现的响应 content 中引用；不要给每个 Operation 粘贴重复 JSON Schema。
+
+#### 3. 已确认的响应状态码缺口
+
+以下缺口由 Handler 调用 `writeDomainErr`，且 DataService 明确返回 `no enabled ... provider` 时映射为 503；当前 OpenAPI 未声明对应 503：
+
+| Operation | 代码证据 | OpenAPI 当前响应 | 缺失 |
+|---|---|---|---|
+| GET `/api/v1/quotes/{symbol}` | Quote 返回 `no enabled quote provider` | 200/400/401/502/504 | 503 |
+| GET `/api/v1/bundles/{symbol}` | Bundle 下游 Quote/DailyBars 无 Provider 可用时走 domain error 映射 | 200/400/401/502/504 | 503 |
+| GET `/api/v1/stocks/{symbol}/announcements` | StockAnnouncements 返回 `no enabled stock-announcement provider` | 200/400/401/502 | 503 |
+| GET `/api/v1/market/sentiment` | MarketSentiment 委托 MarketBreadth；无 Provider 时返回 `no enabled market-breadth provider`，外层错误包装仍包含该语义 | 200/400/401/502 | 503 |
+| GET `/api/v1/market/dragon-tiger` | DragonTiger 返回 `no enabled dragon-tiger provider` | 200/400/401/502 | 503 |
+
+另外：
+- diagnostics 缺少 401 已在认证节记录。
+- 所有调用 `writeDomainErr` 的 Operation 在请求取消时可能返回 408；当前各 Operation 未声明 408。需要确认项目是否将 408 作为稳定对外行为，若保留则纳入共享错误响应；若决定取消请求只在内部中断，则需调整 Handler 映射，而不是文档假装不会发生。
+- 502/503 的含义应区分“已配置 Provider 全部失败”和“没有可用 Provider”，不要统一描述成 Provider unavailable。
+
+#### 4. 参数与运行时校验对照
+
+已核对 33 个业务 Operation 的参数名和主要 Handler 读取点。未发现路由参数名与 Handler 参数名整体错位；已显式声明的参数名称基本一致。重点约束如下：
+
+- `/api/v1/market/quotes`：symbols 必填；最多 50 个、不可重复、必须为合法 A 股代码。OpenAPI 描述写了最多 50，但 Schema 未表达数量/格式约束（因为它是逗号分隔字符串，需用描述或 pattern/maxLength 表达）。
+- `/api/v1/market/valuations`：symbols 必填，最多 100 个原始 token、禁止空 token、仅六位 A 股代码（可带 SH/SZ/BJ 后缀）；Schema 当前只定义 string + example，约束主要依赖 description。
+- `/api/v1/stocks/search`：q 必填，1–64 字符；limit 1–50，默认 10；OpenAPI 与 Handler 一致。
+- `/api/v1/stocks/{symbol}/announcements`：start_date/end_date 可选，缺省为最近 7 个中国日历日；最多 366 天；page 1–1000，page_size 1–100，默认 1/20。参数 Schema 已表达分页边界，日期跨度只在 description。
+- `/api/v1/market/sectors`：type、limit、direction、sort_by 的 enum/range/default 与 Handler 一致。
+- `/api/v1/market/stocks`：page 1–10000、page_size 1–100、include_ma bool、adjustment enum 与 Handler 一致。
+- `/api/v1/market/dragon-tiger`：page 1–1000、page_size 1–500；date 可选。当前 Schema 有分页范围，但缺少明确 date 采用 Asia/Shanghai 且未来日期拒绝的参数级说明（整体 description 仅说明默认当日）。
+- `/api/v1/market/limit-pools`：type enum、limit 1–100、date 默认当日；Schema 已列 enum/range/default，但 required=false 未显式写出（OpenAPI 默认 optional，语义不冲突）。
+- `/api/v1/market/capital-flow`：start/end 必填，最多 2000 日；描述写了范围上限，参数 Schema 仅 format=date。
+- `/api/v1/market/sentiment/history`：start/end 必填、limit 1–500 默认 366；Handler 另限制日期跨度 366 日，Schema/description 未明确该跨度约束。
+- `/api/v1/market/trading-calendar` 与 `/api/v1/market/indices/{symbol}/daily`：start/end 必填，Handler 有日期跨度上限；OpenAPI 参数只表达 date 格式，描述没有把具体上限写清楚。
+- `/api/v1/market/indices/{symbol}/constituents`：as_of 是 YYYY-MM-DD 日期，不是 RFC3339 datetime；当前 Schema format=date 与 Handler 一致。
+- `/api/v1/stocks/{symbol}/price-limit-rule` 与 `trading-status`：date 必填且唯一、不能晚于中国市场当日；trading-status 的 as_of 是 RFC3339 datetime。Schema 对 format 有表达，但重复参数和未来时间限制仍由 Handler 执行。
+- Provider Probe Body Schema 已覆盖 Scope、Markets、Symbols、Checks、Capabilities、DailyBar adjustments/window、timeout；与 Handler 的字段集合基本一致。Handler 限制 JSON Body 最大 8 KiB、必须恰好一个 JSON object、拒绝未知字段；OpenAPI 当前未描述 8 KiB Body 上限。数组 maxItems/uniqueItems、timeout 1–30 已表达。
+
+参数审计结论：目前主要是“运行时约束已存在、OpenAPI Schema 约束表达不足”，没有证据表明这些校验本身失效。MDM-001 应优先把稳定边界显式化；对依赖中国交易日/时区、重复 query key、跨字段约束的规则，用 description 明确说明，不能伪造 OpenAPI 无法精确表达的约束。
+
+#### 5. 现有 Contract Test 覆盖缺口
+
+当前 `openapi_contract_test.go` 包含 4 组测试：
+1. YAML 可解析、ApiKey scheme 名称、固定路径 security、部分 Schema 关键字段。
+2. ProviderProbe validation 字段存在。
+3. SectorRanking.change_percent_5d 字段存在。
+4. 部分 Data Model JSON 必填/省略/null 语义与 OpenAPI 的人工列举字段一致。
+
+当前没有：
+- OpenAPI 35 Operation 与 Server 35 路由的自动集合比对；
+- 根级 security 与 operation-level security 的语义校验；
+- 所有受保护 Operation 的 401 和统一错误 Schema 引用校验；
+- 所有 Operation 参数名/required/type/enum/range 与 Handler 的契约矩阵；
+- 每个 Operation 的 200 JSON Golden；
+- 各 Operation 400/401/404/502/503/504 的错误 JSON Golden；
+- Handler 实际返回状态码集合与 OpenAPI responses 的自动比对。
+
+建议分层补测试：先做路由/认证/响应状态集合静态契约测试，再做参数边界测试，最后按高风险 DTO 和错误分支补 Handler Golden；避免一次性为 35 个 Operation 写重复的大型快照。
+
+#### 6. 本轮结论与 M0 状态
+
+- [x] 35 Operation / 35 Server 路由集合数量已复核。
+- [x] 认证实际只接受 X-API-Key；发现根级 BearerAuth 文档与实现不一致。
+- [x] 发现 diagnostics 缺少 401 文档响应。
+- [x] Error Schema 与实际结构基本匹配，但完全未被 Operation 错误响应引用。
+- [x] 发现 5 个 Operation 漏声明可能返回的 503。
+- [x] 主要参数名及 Handler 读取点已核对；记录 Schema 未表达的边界约束。
+- [x] 现有 Contract Test 覆盖范围和缺口已确认。
+- [ ] 逐 Operation 完整响应状态码矩阵仍需把剩余 Handler 的具体分支补齐。
+- [ ] OpenAPI 200 DTO 与 Go JSON 的全量字段/nullable/required 自动交叉核对仍未完成。
+- [ ] Provider Request Golden 仍需单独核查 Provider HTTP 请求行为和测试覆盖。
+- [ ] MDM-001 契约修正尚未执行；本轮没有获得修改 OpenAPI、Handler 或测试代码的授权。
+
+**本轮结论：** M0 已找到明确且可定位的 OpenAPI 契约问题：BearerAuth 虚假支持声明、diagnostics 缺少 401、5 个 Operation 缺少 503、统一 Error Schema 未被引用，以及多项运行时参数约束没有进入 Schema/description。它们应作为 MDM-001 的契约修正输入。当前仍保持审计模式，不直接修改 API 契约或实现。
