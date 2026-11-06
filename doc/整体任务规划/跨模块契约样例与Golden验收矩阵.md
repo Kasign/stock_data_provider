@@ -53,6 +53,7 @@
 | DATA008-AUTH-01 | Key 轮换但 caller principal 不变 | subject_ref 保持稳定；新 Key 可用，撤销的旧 Key 失败 | CI 失败 |
 | DATA008-AUTH-02 | 客户端伪造 caller_ref/subject_ref 或请求越权 purpose | 不信任客户端主体；Scope 不足返回 403 且不返回数据正文 | 403 + 无正文 |
 | DATA008-AUTH-03 | 公开/无限制数据请求 | 仍签发 decision=allowed 的 Data AuthorizationRef；不得返回 null/not_required | CI 失败 |
+| DATA008-AUTH-04 | Manifest 与 GOV-CTR-006 AuthorizationRef 跨契约绑定 | subject_ref=Manifest.caller_ref；resource_ref=Manifest.snapshot_ref；purpose_code 与 Manifest 一致；Manifest 与 AuthorizationRef 两层 fingerprint 均复算通过 | 任一绑定字段不一致、resource_ref 不是内容寻址引用或摘要不匹配；拒绝签发/读取 |
 | DATA008-RACE-01 | 授权检查后 Data Access Policy/Scope 被撤销或替换 | 重新授权；无法证明策略版本一致时丢弃数据 | fail closed |
 | DATA008-FAIL-01 | 授权依赖不可用或决策 unknown | 返回 503，不回退历史 allowed，不返回数据正文；不得记为 Provider 故障 | 503 + 无正文 |
 
