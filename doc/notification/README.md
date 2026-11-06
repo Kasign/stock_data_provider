@@ -4,8 +4,8 @@
 - 代码目录：`internal/notification/**`
 - 任务前缀：NTF
 - 当前阶段：NTF-001 核心领域实现进行中；EventEnvelope、JCS Fingerprint、Draft 2020-12 Schema Registry/Validator 已建立，Inbox/Subscription/DeliveryPlan 尚未实现。
-- 当前代码事实：HEAD 尚无 `internal/notification/**`；现存 `python_bridge/capabilities/notification.py` 是旧通知调用适配，`web/src/notification-preferences.js` 和 `notification-state.js` 是 Web 本地偏好/展示状态，不属于 Go Notification Domain。
-- 契约证据：NTF-CTR-001～003 均为 `pending_evidence`。4 份 Schema、6 个 Golden 已按补充契约校准；Validator/Golden 自动化测试已写入，尚待 CI 执行。NTF-CTR-001～003 仍为 pending_evidence；三生产方映射、重放/冲突、并发/恢复、真实 DB/渠道证据仍按各层级分别验收。
+- 当前代码事实：`internal/notification/domain` 已定义 EventEnvelope/JCS Fingerprint，`internal/notification/schema` 已实现 Draft 2020-12 Registry/Validator；Inbox/Subscription/DeliveryPlan 尚未实现。旧 Python 通知适配和 Web 本地偏好/展示状态不属于 Go Notification Domain。
+- 契约证据：NTF-CTR-001～003 均为 `pending_evidence`。4 份 Schema、6 个 Golden 已按补充契约校准；Validator/Golden 自动化测试已写入，尚待 CI 执行；NTF-CTR-001～003 仍为 pending_evidence；三生产方映射、重放/冲突、并发/恢复、真实 DB/渠道证据仍按各层级分别验收。
 
 Notification 是独立通知业务模块，负责事件接收、Subscription、Template、Channel、Dispatcher、Delivery、Attempt、幂等、重试和投递诊断。不计算业务告警条件，不依赖 Researchflow 内部实现。
 

@@ -26,6 +26,7 @@ on:
       - 'cmd/**'
       - 'internal/**'
       - 'doc/news/**'
+      - 'doc/notification/**'
       - 'go-core/**'
       - 'services/market-data/**'
       - '.github/workflows/go-test.yml'
