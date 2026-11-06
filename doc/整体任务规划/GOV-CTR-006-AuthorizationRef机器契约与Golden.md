@@ -71,6 +71,8 @@
 
 每个 Golden 同时包含 AuthorizationRef、策略组合快照、fingerprint_input、JCS canonical_json 和预期 SHA-256。测试必须复算摘要并与 expected_sha256 完全相等；不得只比较文档中的预期字符串。
 
+**Data 跨契约绑定：** `GOV-CTR-006-data-allowed.golden.json` 的 `resource_ref` 必须与 `DATA-CTR-008-snapshot-manifest.golden.json` 的 `manifest.snapshot_ref` 完全一致，`subject_ref` 必须与 `manifest.caller_ref` 一致，`purpose_code` 必须与 Manifest 一致。Data Manifest 的 fingerprint 先独立验证，再验证 AuthorizationRef 的 fingerprint；禁止使用普通业务 ID（例如 `data_snapshot:snapshot_001`）代替内容寻址引用。
+
 ## 7.1 Contract Test 执行矩阵
 
 测试按生产方分别运行；每个 Owner 对自己的签发逻辑负责，消费者不得复制 Owner 的策略判断。测试必须同时验证返回内容/副作用，不允许只断言 decision 字段。
@@ -84,6 +86,7 @@
 | GOV006-FP-02 | 公共 Fingerprint | 修改 policies 中任意一项 policy_type/ref/version，或漏掉一项 | 摘要必须变化；旧 fingerprint 不再匹配 | CI 失败 |
 | GOV006-FP-03 | 公共 Fingerprint | 仅修改 authorization_ref 或 decision_fingerprint | fingerprint_input 不变；避免把引用自身或摘要自身递归纳入摘要 | CI 失败 |
 | GOV006-DATA-01 | Data Owner | 有效 API Key、可信 principal、指定 snapshot_ref、purpose=research_analysis | subject_ref 由认证上下文派生；resource_ref 对应不可变 snapshot；记录全部 Data 策略版本 | 不允许从请求体覆盖主体或资源 |
+| GOV006-DATA-03 | Data Owner / 跨契约绑定 | DATA-CTR-008 Snapshot Manifest Golden + GOV-CTR-006 Data AuthorizationRef Golden | AuthorizationRef.subject_ref 必须等于 Manifest.caller_ref；AuthorizationRef.resource_ref 必须逐字等于 Manifest.snapshot_ref；purpose_code 必须一致；Manifest fingerprint 必须复算有效 | 任一引用不一致、资源引用不是内容寻址 snapshot_ref 或指纹不匹配均拒绝 |
 | GOV006-DATA-02 | Data Owner | 无效/缺失/撤销 API Key，或 snapshot 不存在/不属于当前 principal | 不签发 allowed；不得返回受限数据 | denied/unknown + 无数据正文 |
 | GOV006-NEWS-01 | News Owner | Provider Output + Source + Endpoint 三类策略均参与 | PolicySnapshot 完整包含三类实际生效版本；resource_ref 指向精确 Evidence 版本 | 缺一策略即测试失败 |
 | GOV006-NEWS-02 | News Owner | source 条款要求 attribution，条件尚未满足 | 返回 conditional 和稳定 condition_code；不得把正文交给调用方 | 仅返回允许的 metadata，不返回受限正文 |
