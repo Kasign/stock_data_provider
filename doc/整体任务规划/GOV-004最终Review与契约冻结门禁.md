@@ -674,7 +674,7 @@ DATA-CONTRACT-001 的 gofmt 子项已恢复；完整 CI 阻断转为测试编译
 
 ### 31.3 Research 首批字段缺口
 
-- Evidence.authorization_ref 当前只是字符串占位。建议定义不透明 AuthorizationRef DTO，至少可追溯授权决策引用、策略引用、允许的内容级别和评估时间；具体授权规则仍归 Data/News。
+- **历史记录（已更新）：** 当时 Evidence.authorization_ref 仅为字符串占位。当前已形成 GOV-CTR-006 AuthorizationRef/AuthorizationPolicySnapshot Schema、四方 Principal/Resource 映射和 JCS Golden；运行时 Validator、Scope 和授权竞态测试仍为 pending_evidence。
 - source_ref 应保持 owner namespace 下的不透明引用，Research 不解析或拼接其他模块内部 ID。
 - ResearchContext/Evidence 的知识时间字段统一使用 system_as_of；业务有效时间独立使用 valid_time，避免多个 as_of 混义。
 - 首批 Research 只存 metadata、必要摘要、fingerprint 和授权引用；全文由来源模块按当前授权按需读取。
@@ -712,7 +712,7 @@ DATA-CONTRACT-001 的 gofmt 子项已恢复；完整 CI 阻断转为测试编译
 | News Evidence Query Port | News + Research + Researchflow | 历史目标契约；当前 NEWS-CTR-001～003 均为 pending_evidence | DTO、知识时间过滤、当前授权、Cursor、错误的 Schema/Golden/竞态测试 |
 | Researchflow Run/Stage/Attempt | Researchflow + Platform | 项目统一决策已关闭设计语义；当前 FLOW-CTR-001/002 为 pending_evidence | 传播矩阵、硬风险门禁、取消/deadline、租约/并发与 CAS/fencing 的自动化证据 |
 | LLM Model Adapter | LLM + Platform | 历史草案；当前 LLM-CTR-001～003 均为 pending_evidence | Responses 字段、CapabilityState、Schema validator、SSE 事件策略；本地 E2E 属 L3 |
-| Notification Event/Delivery | Notification + Platform | 当前 NTF-CTR-001～003 为 pending_evidence；INT-CTR-001 为 pending_decision | payload Schema、recipient_scope、幂等和 Attempt；首批事件映射待决 |
+| Notification Event/Delivery | Notification + Platform | 当前 NTF-CTR-001～003 为 pending_evidence；INT-CTR-001 语义已 accepted、证据 pending_evidence | 首批事件 Schema/Golden 已提交；仍待 Validator、recipient_scope、幂等/Attempt 和三生产方映射 Contract Test |
 | Data Snapshot Input | Data + Quant | 当前 DATA-CTR-001～008 按项目级目录逐项登记，均需按具体调用点验收 | PIT、单位、复权、quality、source version 的字段映射和 Golden |
 
 以上是历史评审快照，不构成当前个人签字门槛。项目当前没有独立模块 Owner；跨模块语义由项目统一决策方裁定，模块责任角色提供实现事实和测试证据。当前契约状态以项目级目录为准。

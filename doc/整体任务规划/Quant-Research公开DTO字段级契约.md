@@ -706,7 +706,7 @@ available_at=null 表示没有可验证的外部可获得时间，不得用 publ
 | CONTRACT-001（历史别名） | 数值 JSON 类型与精度按 Registry 固定 | 项目决议已接受；QNT-CTR-001 待 Schema/Golden |
 | CONTRACT-002（历史别名） | 八项 Indicator 候选及 typed 参数 Schema | 项目决议已接受；QNT-CTR-002 待 Schema/Golden |
 | CONTRACT-003（历史别名） | 首批三个 Factor 与算法边界 | 项目决议已接受；QNT-CTR-003 待 Schema/Golden |
-| CONTRACT-004（历史别名） | 不透明 AuthorizationRef 与来源 Owner 当前复核 | 公共结构 GOV-CTR-006、News 授权 NEWS-CTR-002、Research 消费 RSC-CTR-001 及各签发方契约待 Schema/Golden |
+| CONTRACT-004（历史别名） | 不透明 AuthorizationRef 与来源 Owner 当前复核 | GOV-CTR-006 Schema/Golden 与 Principal/Resource 映射已建立；DATA-CTR-008/NEWS-CTR-002/QNT-CTR-005/RSC-CTR-001 的 Scope、签发与当前授权复核测试仍 pending_evidence |
 | CONTRACT-005（历史别名） | Run 唯一固定 system_as_of | 项目决议已接受；FLOW-CTR-003 待 Adapter Golden |
 
 **历史说明：本表最初是规划侧建议，不再要求虚构具体 Owner 签字。当前统一决议与状态以 `doc/整体任务规划/跨模块契约目录与冻结状态.md` 为准；项目决议已接受不等于 Schema/Golden/Contract Test 已通过。**
