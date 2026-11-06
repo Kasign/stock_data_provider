@@ -150,7 +150,7 @@ News 为 News 来源内容签发 AuthorizationRef。公开或无限制内容也�
 
 ### 11.3 PIT、Cursor 与稳定排序
 
-严格 PIT 先按 system_as_of 过滤系统已观察到的 Observation、Version、Identity、Classification、Relation，再按业务时间过滤/排序。available_at 缺证据时保持 null/unknown，严格 PIT 排除；不得从 published_at/provider_time/fetched_at 推导。
+严格 PIT 先按 system_as_of 过滤系统已观察到的 Observation、Version、Identity、Classification、Relation，再按业务时间过滤/排序。available_at 必须满足 available_at <= system_as_of；available_at 晚于截止时间或缺证据（null/unknown）时，严格 PIT 排除；不得从 published_at/provider_time/fetched_at/system_observed_at 推导。
 
 首期排序版本 `news-evidence-v1` 固定为：
 `system_observed_at DESC, news_id ASC, version_id ASC`。
