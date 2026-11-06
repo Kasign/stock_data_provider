@@ -3,9 +3,9 @@
 - 维护分支：`feat/design_doc`
 - 设计基线：`7344170dc53124361c9cf49efb0d66821d3605c1`
 - 决策状态：`accepted`（采用同进程模块化单体方向）
-- 实施状态：`not_started`（本文件只冻结目标架构与迁移顺序，不代表代码已改造）
+- 实施状态：`not_started`（截至 2026-11-06 Data 分支已合入架构决议，但代码仍位于独立 Module；M0 仅完成初步只读审计）
 - 范围：Root Server、Market Data、WebUI 部署接入、Platform 基础设施装配
-- 非目标：本轮不修改 Data/Platform/WebUI 业务分支，不改变行情业务语义，不删除既有 Data API DTO/Schema，不拆分 Provider 子模块
+- 非目标：结构迁移阶段不改变行情业务语义，不删除既有 Data API DTO/Schema，不拆分 Provider 子模块；DATA-CTR-005～008 的正式契约实现集中放在结构迁移后的 M6
 
 > 本方案落实项目总规划中“Server 是唯一组合根、业务模块优先同进程公开 Port、确有部署隔离需求再拆服务”的原则。合并的是运行时和 Go Module，不是 Data 的领域 Owner、Repository 或业务规则。
 
@@ -389,7 +389,7 @@ Owner：Server + Data
 - Analysis 的 MarketDataPort 改为 InProcess Adapter；不再使用 Base URL/API Key 做内部调用。
 - Researchflow/Research 等模块如需 Data，统一依赖 Data Public Port；不得自行创建 HTTP Client 或绕过 Port。
 - Data HTTP Adapter 由 Root Server Router 挂载到 `/market-api` 路由前缀，并由 Root Server 统一执行外部认证与授权。
-- Request ID、Principal、Scope、purpose_code 通过可信 Context 显式传递。
+- 先建立可信的进程内调用上下文承载既有调用身份；Principal/Scope/purpose_code 的最终字段与校验语义在 M6 按 DATA-CTR-006/008 对齐，不在结构迁移阶段自行发明契约。
 - Data 的 Migration 与 Worker 由 Server 统一编排。
 
 验收：同一 Data 请求不产生内部 HTTP 往返；不存在重复 Provider 实例、重复 DB Pool、重复 Migration、重复 Worker 或双重 Request ID。
@@ -402,12 +402,13 @@ Owner：Server + WebUI
 - Nginx 两个 API 前缀统一转发 Root Server。
 - WebUI 删除 Data API Key 配置、localStorage 读写及请求 Header。
 - 清理旧 localStorage 中 Data Key 字段；若历史上存放过真实有效 Key，部署前轮换旧 Key。
+- 若 Data 旧 Handler 在 M6 前仍依赖 X-API-Key，短期凭据只允许由 Root Server 内部兼容 Adapter 注入，不得重新暴露给浏览器；M6 完成可信 Context 后移除同进程路径上的 Key。
 - Compose 删除独立 Data 服务及其健康依赖；Server 纳入 Data Provider 配置和 Data Worker。
 - 更新 .env.example、部署说明、健康检查和回滚文档。
 
 验收：浏览器 Network/Storage/Source Map/响应体中均无 Data API Key；`/market-api` 与 `/analysis-api` 均可用；Server 单容器重启后 Data 与 Analysis 同时恢复。
 
-### M5：稳定性与拆分回归
+### M5：结构迁移稳定性与兼容回归
 
 Owner：Server + Data + Platform
 
@@ -415,10 +416,23 @@ Owner：Server + Data + Platform
 - 启动失败回滚、优雅关闭、Worker drain、DB/Redis 断连恢复测试。
 - Data Repository/Migration 只执行一次的集成测试。
 - Provider 超时/失败、Data 质量降级、缓存不可用、HTTP 请求取消等回归。
-- InProcess Adapter 与 Remote Adapter 的契约一致性测试。
+- 迁移前后 Data v1 HTTP/API 行为、Provider 结果、单位、质量、PIT、缓存和历史数据固定样本对账。
 - 记录未来恢复独立部署的触发阈值与拆分步骤。
+- 本阶段不提前宣称 DATA-CTR-005～008 已实现；正式契约改造留到 M6。
 
-验收：关键业务行为与迁移前一致；契约字段、单位、精度、PIT、授权和 Request ID 没有回退；回滚路径可执行。
+验收：结构迁移不改变现有 v1 API 与业务行为；单位、质量、PIT、缓存和历史数据没有回退；启动/关闭和回滚路径可执行。正式跨模块契约验收在 M6 单独完成。
+
+### M6：迁移后按公共契约对齐
+
+Owner：Data + Server + Platform；Quant/Researchflow 作为消费者验收方。
+
+- 按 DATA-CTR-005/007 更新精度 DTO、Application Port 映射与 PIT 输入语义；保留 v1 兼容边界。
+- 按 DATA-CTR-006/008 将同进程调用改为 Root Server 可信 Principal/Scope Context，移除同进程 Data API Key；远程 Adapter 如继续保留则独立保留 Key 认证。
+- 补齐 Snapshot Manifest、AuthorizationRef、purpose Scope、读取时当前授权复核、策略版本竞态和 Request ID 传播。
+- 更新 OpenAPI、Schema、Golden、Validator、Contract Test 和 Data/Server/消费者文档；文档路径随 M1 迁移到 `internal/marketdata/httpapi/openapi.yaml`。
+- 按真实 CI 与跨模块测试证据升级契约状态，不因目录迁移自动 frozen。
+
+验收：DATA-CTR-005～008 与 GOV-CTR-006 的 Schema/Golden/运行时测试和消费者映射一致；未解决项按实际调用点阻断，不将远程兼容 Adapter 的 Key 轮换误当作同进程接入门禁。
 
 ---
 
@@ -457,9 +471,10 @@ Owner：Server + Data + Platform
 | M3 Server 同进程装配与资源复用 | 2～3 人日 | Data Application 注入、双侧 Migration 显式编排、共享 DB/Redis、Worker |
 | M4 WebUI/Nginx/Compose 迁移 | 1～2 人日 | Key 清理、API 路由与部署 |
 | M5 回归与部署验收 | 1～2 人日 | 行为一致性、安全、PIT、生命周期 |
-| **合计** | **9～15 人日** | 不是承诺工期；包含 DB/Redis Adapter 与生命周期调整，不包含无关领域重构和新增业务功能 |
+| M6 契约对齐 | 1～2 人日 | DATA-CTR-005～008、GOV-CTR-006 的 DTO/身份/授权/Golden 对齐 |
+| **合计** | **9～16 人日** | 不是承诺工期；M0～M6 全部估算，包含 DB/Redis Adapter 与生命周期调整，不包含无关领域重构和新增业务功能 |
 
-相比此前 6.5～12 人日估算，本次核对进一步确认 Root 与 Data 各自创建 DB Pool、分别拥有 Migration 入口，Data Redis 还使用每条命令新建连接的自定义 RESP Client；因此将估算调整为 9～15 人日。
+相比此前 6.5～12 人日估算，本次核对进一步确认 Root 与 Data 各自创建 DB Pool、分别拥有 Migration 入口，Data Redis 还使用每条命令新建连接的自定义 RESP Client；并将结构迁移与迁移后契约对齐拆为独立阶段，因此估算调整为 9～16 人日。
 
 ### 10.2 长期收益
 
