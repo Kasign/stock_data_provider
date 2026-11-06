@@ -47,7 +47,7 @@ func adapterTestConfig() (ProviderConfig, config.Secret, CapabilityState, Clock)
 		ProviderID: provider.ProviderID, ModelID: provider.DefaultModel,
 		Protocol: provider.Protocol, GatewayVersion: "gateway-v1",
 		VerifiedAt: &verifiedAt, ValidUntil: &validUntil,
-		EvidenceRef: "fixture://gateway-v1/qwen-local",
+		VerificationMethod: "automated_e2e", EvidenceRef: "fixture://gateway-v1/qwen-local",
 		MaxOutputTokensLimit: 1024,
 		Values: map[Capability]CapabilityStatus{
 			CapabilityResponsesJSON: CapabilitySupported,
@@ -57,6 +57,40 @@ func adapterTestConfig() (ProviderConfig, config.Secret, CapabilityState, Clock)
 		return "gateway-caller-secret", key == "LLM_GATEWAY_KEY"
 	}).Secret("LLM_GATEWAY_KEY")
 	return provider, secret, capabilities, clock
+}
+
+
+func TestResponsesAdapterRejectsCapabilityEvidenceBeyondProviderTTL(t *testing.T) {
+	provider, secret, capabilities, clock := adapterTestConfig()
+	validUntil := capabilities.VerifiedAt.Add(time.Duration(provider.CapabilityTTLMS)*time.Millisecond + time.Nanosecond)
+	capabilities.ValidUntil = &validUntil
+	if _, err := NewResponsesAdapter(provider, secret, doerFunc(func(*http.Request) (*http.Response, error) {
+		return nil, errors.New("must not be called")
+	}), capabilities, clock); err == nil {
+		t.Fatal("adapter must reject capability evidence exceeding configured Provider TTL")
+	}
+}
+
+
+func TestResponsesAdapterRechecksCapabilityExpiryBeforeDispatch(t *testing.T) {
+	provider, secret, capabilities, _ := adapterTestConfig()
+	base := time.Now().UTC().Add(time.Second)
+	clock := &steppingTestClock{now: base, step: 2 * time.Hour}
+	var dispatched bool
+	adapter, err := NewResponsesAdapter(provider, secret, doerFunc(func(*http.Request) (*http.Response, error) {
+		dispatched = true
+		return nil, errors.New("must not dispatch with expired capability evidence")
+	}), capabilities, clock)
+	if err != nil {
+		t.Fatalf("adapter should accept evidence valid at construction: %v", err)
+	}
+	request := validResponsesRequest()
+	request.ProviderID = provider.ProviderID
+	_, err = adapter.Generate(context.Background(), request)
+	var adapterErr *AdapterError
+	if !errors.As(err, &adapterErr) || adapterErr.Info.Kind != ErrorUnsupportedCapability || dispatched {
+		t.Fatalf("expired evidence must block dispatch: err=%v dispatched=%v", err, dispatched)
+	}
 }
 
 func TestResponsesAdapterGenerateUsesInjectedPlatformDoer(t *testing.T) {

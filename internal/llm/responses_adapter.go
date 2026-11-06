@@ -65,8 +65,8 @@ func NewResponsesAdapter(provider ProviderConfig, apiKey config.Secret, doer HTT
 	if clock == nil {
 		return nil, errors.New("LLM clock is required")
 	}
-	if capabilities.ProviderID != provider.ProviderID || capabilities.Protocol != provider.Protocol {
-		return nil, errors.New("LLM capability evidence does not match provider configuration")
+	if err := provider.ValidateCapabilityStateAt(capabilities, clock.Now()); err != nil {
+		return nil, fmt.Errorf("invalid LLM capability evidence: %w", err)
 	}
 	return &ResponsesAdapter{
 		provider: provider, apiKey: apiKey, doer: doer, capabilities: capabilities, clock: clock,
@@ -98,6 +98,9 @@ func (a *ResponsesAdapter) Generate(ctx context.Context, request ModelRequest) (
 	}
 	if err := request.ValidateAgainstProvider(a.provider); err != nil {
 		return fail(adapterError(ErrorInvalidRequest, "llm.provider.request_mismatch", false, nil), err)
+	}
+	if err := a.provider.ValidateCapabilityStateAt(a.capabilities, startedAt); err != nil {
+		return fail(adapterError(ErrorUnsupportedCapability, "llm.provider.capability_unavailable", false, nil), err)
 	}
 	if err := request.ValidateCapabilitiesAt(a.capabilities, startedAt); err != nil {
 		return fail(adapterError(ErrorUnsupportedCapability, "llm.provider.capability_unavailable", false, nil), err)

@@ -41,6 +41,7 @@ type CapabilityState struct {
 	GatewayVersion string `json:"gateway_version"`
 	VerifiedAt *time.Time `json:"verified_at,omitempty"`
 	ValidUntil *time.Time `json:"valid_until,omitempty"`
+	VerificationMethod string `json:"verification_method"`
 	EvidenceRef string `json:"evidence_ref"`
 	MaxOutputTokensLimit int `json:"max_output_tokens_limit"`
 	Values map[Capability]CapabilityStatus `json:"values,omitempty"`
@@ -58,7 +59,7 @@ func (s CapabilityState) Supports(key Capability) bool {
 func (s CapabilityState) SupportsAt(key Capability, now time.Time) bool {
 	now = now.UTC()
 	return s.ProviderID != "" && s.ModelID != "" && s.Protocol == ProtocolOpenAIResponses &&
-		s.GatewayVersion != "" && s.EvidenceRef != "" && s.VerifiedAt != nil && !s.VerifiedAt.IsZero() &&
+		s.GatewayVersion != "" && strings.TrimSpace(s.VerificationMethod) != "" && len(s.VerificationMethod) <= 64 && s.EvidenceRef != "" && s.VerifiedAt != nil && !s.VerifiedAt.IsZero() &&
 		!s.VerifiedAt.After(now) && s.ValidUntil != nil && s.ValidUntil.After(*s.VerifiedAt) &&
 		now.Before(*s.ValidUntil) && s.Status(key) == CapabilitySupported
 }
@@ -71,6 +72,7 @@ type ProviderConfig struct {
 	DefaultModel string `json:"default_model"`
 	APIKeySecretRef string `json:"api_key_secret_ref"`
 	RequestTimeoutMS int64 `json:"request_timeout_ms"`
+	CapabilityTTLMS int64 `json:"capability_ttl_ms"`
 	AllowedModels []string `json:"allowed_models"`
 	MaxRequestBytes int64 `json:"max_request_bytes"`
 	MaxResponseBytes int64 `json:"max_response_bytes"`
@@ -89,6 +91,9 @@ func (c ProviderConfig) Validate() error {
 		return errors.New("default_model and api_key_secret_ref are required")
 	}
 	if c.RequestTimeoutMS <= 0 { return errors.New("request_timeout_ms must be positive") }
+	if c.CapabilityTTLMS <= 0 || c.CapabilityTTLMS > int64(^uint64(0)>>1)/int64(time.Millisecond) {
+		return errors.New("capability_ttl_ms must be positive and representable")
+	}
 	if len(c.AllowedModels) == 0 { return errors.New("allowed_models must not be empty") }
 	allowed := make(map[string]struct{}, len(c.AllowedModels))
 	for _, modelID := range c.AllowedModels {
@@ -202,6 +207,13 @@ func (c ProviderConfig) ValidateCapabilityStateAt(state CapabilityState, now tim
 	if !allowed { return errors.New("capability evidence model is outside provider allowlist") }
 	if state.MaxOutputTokensLimit <= 0 {
 		return errors.New("capability evidence max_output_tokens_limit must be positive")
+	}
+	if strings.TrimSpace(state.VerificationMethod) == "" || len(state.VerificationMethod) > 64 {
+		return errors.New("capability evidence verification_method is required")
+	}
+	if state.VerifiedAt == nil || state.ValidUntil == nil ||
+		state.ValidUntil.After(state.VerifiedAt.Add(time.Duration(c.CapabilityTTLMS)*time.Millisecond)) {
+		return errors.New("capability evidence validity exceeds provider capability_ttl_ms")
 	}
 	if !state.SupportsAt(CapabilityResponsesJSON, now) { return errors.New("responses_json capability is not currently supported") }
 	if c.StreamEnabled && !state.SupportsAt(CapabilityResponsesStream, now) {

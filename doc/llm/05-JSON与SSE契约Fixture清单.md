@@ -274,3 +274,19 @@ sequence_number 严格连续策略、Draft 2020-12 本地 Schema dialect、Reque
 - 错误/边界原始样例：sequence_gap、EOF_without_terminal、unknown_event、terminal_then_extra_event、error_event。
 
 `responses_golden_test.go` 将原始 wire 与 expected DTO 比较；错误/边界 fixture 断言错误类型和安全行为。此集合只是第一批，Usage missing/partial/derived/overflow、mixed/duplicate/decreasing sequence、callback error、CRLF/multiline data、资源限制等仍需补充独立 fixture。
+
+
+## 14. LLM 公共 DTO Draft 2020-12 Schema
+
+已新增模块机器契约 Schema，版本 1.0.0：
+
+- `schema/provider-config-1.0.0.schema.json`
+- `schema/capability-state-1.0.0.schema.json`
+- `schema/model-request-1.0.0.schema.json`
+- `schema/model-response-1.0.0.schema.json`
+- `schema/model-event-1.0.0.schema.json`
+- `schema/model-error-info-1.0.0.schema.json`
+
+新增 `dto_schema_test.go`：验证 ProviderConfig、CapabilityState、ModelRequest、ModelResponse、ModelEvent、ModelErrorInfo 的实际 JSON 序列化结果；并使用现有 JSON/SSE Golden 解析结果执行 Schema 校验，覆盖必填字段与公开错误枚举拒绝。CapabilityState 的 verification_method 与 ProviderConfig.capability_ttl_ms 同时纳入机器契约。
+
+以上为 Schema 与 Contract Test 代码交付，尚未执行 gofmt/go test；不代表 LLM-CTR-001～003 已冻结。

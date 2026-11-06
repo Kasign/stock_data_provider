@@ -26,6 +26,7 @@
 | allowed_models | string[] | 是 | 服务端 Provider 允许使用的模型白名单，调用方不可扩大 |
 | api_key_secret_ref | opaque string | 是 | Secret 引用，不存明文 Key |
 | request_timeout_ms | integer milliseconds | 是 | 正数总时限，配置序列化固定毫秒单位，并受调用方 deadline 约束 |
+| capability_ttl_ms | integer milliseconds | 是 | 正数能力证据有效期上限；CapabilityState.valid_until 不得晚于 verified_at + TTL |
 | max_request_bytes | integer | 是 | LLM 自身更小的请求上限 |
 | max_response_bytes | integer | 是 | 非流式响应上限；首批 LLM 上限不超过 8 MiB，且不得超过 Platform 上限 |
 | stream_enabled | bool | 是 | 当前部署本地上游 E2E 通过后才可设为 true |
@@ -284,14 +285,17 @@ Capability 记录唯一键为 `(provider_id, model_id, protocol, gateway_version
 
 LLM Adapter 内部执行错误使用 Platform Fault；对调用方公开时投影为 ModelErrorInfo：
 
-| Platform Fault | ModelErrorInfo |
+| Platform Fault / 条件 | ModelErrorInfo.kind |
 |---|---|
-| Fault Code | stable_code |
-| Fault Class | kind（映射到 ModelErrorKind） |
-| Retryable | retryable |
-| Dependency | 仅在受控诊断元数据保留，不拼入 safe_message |
-| Safe Message | safe_message |
-| Cause | 仅内部日志，不序列化 |
+| context.Canceled | cancelled |
+| context.DeadlineExceeded 或 ClassTimeout | timeout |
+| Code=platform.httpclient.response_too_large（优先级高于 Class） | resource_limit |
+| ClassValidation | invalid_request |
+| ClassUnauthenticated / ClassForbidden | unauthorized |
+| ClassUnavailable | upstream_unavailable |
+| ClassNotFound / ClassConflict / ClassInternal / 未知 Class | upstream_error |
+
+映射时保留 Fault.Code 为 stable_code；Code 缺失时使用 platform.fault.<class>。SafeMessage 原样保留，缺失时使用固定安全摘要；Retryable 原样保留但不触发 LLM 内部重试。Dependency、Cause 和原始错误文本不进入 ModelErrorInfo。HTTP 429/503 的 rate_limited / overloaded 归 HTTP Adapter 状态映射，不属于 Platform Fault Class 映射。
 
 ModelResponse.request_id 是该次模型调用的关联 ID；ModelErrorInfo 不重复携带 request_id。gateway_request_id 与 upstream_request_id 分别记录；correlation_id 继续用于跨模块链路关联。
 
