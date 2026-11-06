@@ -4,9 +4,9 @@ import "testing"
 
 func TestAggregateMatchesPLATCTR004ContractMatrix(t *testing.T) {
 	tests := []struct {
-		name string
+		name    string
 		results []Result
-		want Status
+		want    Status
 	}{
 		{name: "empty", want: StatusSkipped},
 		{name: "all skipped", results: []Result{{Observation: Observation{Status: StatusSkipped}}}, want: StatusSkipped},
