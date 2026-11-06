@@ -1,0 +1,134 @@
+package storage
+
+import platformstorage "example.com/stock-analysis-flow/internal/platform/storage"
+
+// Migrations 返回 News 自有 schema 变更。
+// Migration Runner、数据库连接和执行账本由 Platform/Server 提供。
+func Migrations() []platformstorage.Migration {
+	return []platformstorage.Migration{
+		{
+			Version:     1,
+			Description: "create news identity observation version and relation tables",
+			Statements: []string{
+				`CREATE TABLE news_items (
+					news_id VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+					origin_source_id VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+					created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+					PRIMARY KEY (news_id),
+					KEY idx_news_items_source_created (origin_source_id, created_at)
+				) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+				`CREATE TABLE news_identifiers (
+					source_id VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+					identifier_type VARCHAR(32) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+					identifier_hash CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+					identifier_value MEDIUMTEXT NOT NULL,
+					identifier_status VARCHAR(16) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+					news_id VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+					created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+					PRIMARY KEY (source_id, identifier_type, identifier_hash),
+					KEY idx_news_identifiers_news (news_id),
+					CONSTRAINT fk_news_identifiers_item FOREIGN KEY (news_id) REFERENCES news_items (news_id)
+				) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+				`CREATE TABLE news_observations (
+					observation_id VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+					idempotency_key VARCHAR(191) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+					source_id VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+					provider_code VARCHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+					query_dimension VARCHAR(128) NOT NULL DEFAULT '',
+					source_policy_version_id VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL DEFAULT '',
+					endpoint_policy_version_id VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL DEFAULT '',
+					policy_evaluated_at DATETIME(6) NULL,
+					candidate_json JSON NOT NULL,
+					observed_at DATETIME(6) NOT NULL,
+					identity_status VARCHAR(16) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+					news_id VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NULL,
+					reason_code VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL DEFAULT '',
+					PRIMARY KEY (observation_id),
+					UNIQUE KEY uk_news_observations_idempotency (idempotency_key),
+					KEY idx_news_observations_source_time (source_id, observed_at),
+					KEY idx_news_observations_news_time (news_id, observed_at),
+					CONSTRAINT fk_news_observations_item FOREIGN KEY (news_id) REFERENCES news_items (news_id)
+				) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+				`CREATE TABLE news_item_versions (
+					version_id VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+					news_id VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+					version_no BIGINT UNSIGNED NOT NULL,
+					fingerprint CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+					title TEXT NOT NULL,
+					publisher_name VARCHAR(512) NOT NULL DEFAULT '',
+					publisher_domain VARCHAR(253) CHARACTER SET ascii COLLATE ascii_bin NOT NULL DEFAULT '',
+					author VARCHAR(512) NOT NULL DEFAULT '',
+					published_at DATETIME(6) NULL,
+					content_json JSON NOT NULL,
+					observed_at DATETIME(6) NOT NULL,
+					observation_id VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+					PRIMARY KEY (version_id),
+					UNIQUE KEY uk_news_versions_number (news_id, version_no),
+					KEY idx_news_versions_fingerprint (news_id, fingerprint),
+					KEY idx_news_versions_observed (news_id, observed_at, version_no),
+					CONSTRAINT fk_news_versions_item FOREIGN KEY (news_id) REFERENCES news_items (news_id),
+					CONSTRAINT fk_news_versions_observation FOREIGN KEY (observation_id) REFERENCES news_observations (observation_id)
+				) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+				`CREATE TABLE news_relation_assertions (
+					relation_id VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+					news_id VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+					subject_type VARCHAR(16) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+					subject_json JSON NOT NULL,
+					relation_kind VARCHAR(32) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+					method VARCHAR(32) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+					status VARCHAR(16) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+					supersedes_relation_id VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NULL,
+					valid_from DATETIME(6) NULL,
+					valid_to DATETIME(6) NULL,
+					observed_at DATETIME(6) NOT NULL,
+					PRIMARY KEY (relation_id),
+					KEY idx_news_relations_current (news_id, status, observed_at),
+					KEY idx_news_relations_supersedes (supersedes_relation_id),
+					CONSTRAINT fk_news_relations_item FOREIGN KEY (news_id) REFERENCES news_items (news_id),
+					CONSTRAINT fk_news_relations_parent FOREIGN KEY (supersedes_relation_id) REFERENCES news_relation_assertions (relation_id)
+				) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+				`CREATE TABLE news_relation_evidence (
+					evidence_id VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+					relation_id VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+					evidence_type VARCHAR(32) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+					source_version_id VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NULL,
+					observation_id VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NULL,
+					rule_version VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL DEFAULT '',
+					model_version VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL DEFAULT '',
+					field_path VARCHAR(255) NOT NULL DEFAULT '',
+					evidence_hash CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL DEFAULT '',
+					PRIMARY KEY (evidence_id),
+					KEY idx_news_relation_evidence_relation (relation_id),
+					CONSTRAINT fk_news_relation_evidence_relation FOREIGN KEY (relation_id) REFERENCES news_relation_assertions (relation_id),
+					CONSTRAINT fk_news_relation_evidence_version FOREIGN KEY (source_version_id) REFERENCES news_item_versions (version_id),
+					CONSTRAINT fk_news_relation_evidence_observation FOREIGN KEY (observation_id) REFERENCES news_observations (observation_id)
+				) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+				`CREATE TABLE news_item_relations (
+					item_relation_id VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+					from_news_id VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+					from_source_id VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+					to_news_id VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+					to_source_id VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+					relation_kind VARCHAR(32) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+					status VARCHAR(16) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+					supersedes_relation_id VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NULL,
+					evidence_observation_id VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NULL,
+					from_version_id VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NULL,
+					to_version_id VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NULL,
+					asserted_at DATETIME(6) NOT NULL,
+					observed_at DATETIME(6) NOT NULL,
+					PRIMARY KEY (item_relation_id),
+					KEY idx_news_item_relations_from (from_news_id, status, observed_at),
+					KEY idx_news_item_relations_to (to_news_id, status, observed_at),
+					KEY idx_news_item_relations_parent (supersedes_relation_id),
+					CONSTRAINT fk_news_item_relations_from FOREIGN KEY (from_news_id) REFERENCES news_items (news_id),
+					CONSTRAINT fk_news_item_relations_to FOREIGN KEY (to_news_id) REFERENCES news_items (news_id),
+					CONSTRAINT fk_news_item_relations_parent FOREIGN KEY (supersedes_relation_id) REFERENCES news_item_relations (item_relation_id),
+					CONSTRAINT fk_news_item_relations_observation FOREIGN KEY (evidence_observation_id) REFERENCES news_observations (observation_id),
+					CONSTRAINT fk_news_item_relations_from_version FOREIGN KEY (from_version_id) REFERENCES news_item_versions (version_id),
+					CONSTRAINT fk_news_item_relations_to_version FOREIGN KEY (to_version_id) REFERENCES news_item_versions (version_id)
+				) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+			},
+		},
+	}
+}
