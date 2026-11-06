@@ -263,6 +263,10 @@ func SourceCollectionErrorCode(err error) string {
 // sourceTransportRetryable accepts an explicit adapter classification first, then
 // recognizes timeout errors. Unknown transport errors remain non-retryable.
 func sourceTransportRetryable(err error) bool {
+	var classified interface{ Retryable() bool }
+	if errors.As(err, &classified) {
+		return classified.Retryable()
+	}
 	if errors.Is(err, context.DeadlineExceeded) {
 		return true
 	}
