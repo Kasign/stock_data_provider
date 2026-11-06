@@ -3,7 +3,7 @@
 - 归属任务：LLM-002-F
 - 对应协议：OpenAI Responses
 - 日期：2026-11-05
-- 状态：Fixture 设计基线与首批 Responses JSON Mapper/Parser/HTTP Adapter 单测已存在；独立 Golden 文件和执行证据仍缺失，对应 LLM-CTR-001～003 当前为 pending_evidence；不代表真实模型能力证明。
+- 状态：Fixture 设计基线、首批 JSON/SSE Golden 文件及 Mapper/Parser/HTTP Adapter/纯 SSE Parser 单测代码已存在；Golden/单测执行证据仍缺失，对应 LLM-CTR-001～003 当前为 pending_evidence；不代表真实模型能力证明。
 
 ## 1. Fixture 原则
 
@@ -255,3 +255,22 @@ sequence_number 严格连续策略、Draft 2020-12 本地 Schema dialect、Reque
 - EOF/终态：无 terminal 返回部分 Response + stream_interrupted；terminal 后额外事件拒绝；callback error 原样返回。
 - Resource：总字节、单行、单事件、事件数量和函数参数累计大小均有上限。
 - 测试代码尚未执行；没有独立 SSE Golden 文件，也没有 Platform 网络流式接入或真实 Gateway E2E 证据。
+
+
+## 13. 已落库的首批 Golden Fixture
+
+### JSON
+
+- `internal/llm/testdata/json/response_completed_text.json` + `.expected.json`
+- `internal/llm/testdata/json/response_completed_function_call.json` + `.expected.json`
+- `internal/llm/testdata/json/response_incomplete_max_output_tokens.json` + `.expected.json`
+- `internal/llm/testdata/json/response_usage_inconsistent_total.json` + `.expected.json`
+
+### SSE
+
+- `internal/llm/testdata/sse/stream_completed_text.sse` + `.expected.json`
+- `internal/llm/testdata/sse/stream_function_call.sse` + `.expected.json`
+- `internal/llm/testdata/sse/stream_incomplete.sse` + `.expected.json`
+- 错误/边界原始样例：sequence_gap、EOF_without_terminal、unknown_event、terminal_then_extra_event、error_event。
+
+`responses_golden_test.go` 将原始 wire 与 expected DTO 比较；错误/边界 fixture 断言错误类型和安全行为。此集合只是第一批，Usage missing/partial/derived/overflow、mixed/duplicate/decreasing sequence、callback error、CRLF/multiline data、资源限制等仍需补充独立 fixture。
