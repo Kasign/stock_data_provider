@@ -13,24 +13,24 @@ import (
 )
 
 var (
-	ErrInvalidPayloadFingerprint = errors.New("notification: invalid payload fingerprint")
+	ErrInvalidPayloadFingerprint  = errors.New("notification: invalid payload fingerprint")
 	ErrPayloadFingerprintMismatch = errors.New("notification: payload fingerprint mismatch")
 )
 
 // EventEnvelope is the immutable event contract accepted by Notification.
 // Payload remains raw JSON so canonicalization sees the producer's exact JSON value.
 type EventEnvelope struct {
-	EventID           string          `json:"event_id"`
-	EventType         string          `json:"event_type"`
-	SchemaVersion     string          `json:"schema_version"`
-	SourceModule      string          `json:"source_module"`
-	OccurredAt        string          `json:"occurred_at"`
-	PublishedAt       string          `json:"published_at"`
-	SubjectRef        string          `json:"subject_ref"`
-	IdempotencyKey    string          `json:"idempotency_key"`
-	CorrelationID     string          `json:"correlation_id"`
+	EventID            string          `json:"event_id"`
+	EventType          string          `json:"event_type"`
+	SchemaVersion      string          `json:"schema_version"`
+	SourceModule       string          `json:"source_module"`
+	OccurredAt         string          `json:"occurred_at"`
+	PublishedAt        string          `json:"published_at"`
+	SubjectRef         string          `json:"subject_ref"`
+	IdempotencyKey     string          `json:"idempotency_key"`
+	CorrelationID      string          `json:"correlation_id"`
 	PayloadFingerprint string         `json:"payload_fingerprint"`
-	Payload           json.RawMessage `json:"payload"`
+	Payload            json.RawMessage `json:"payload"`
 }
 
 type fingerprintInput struct {

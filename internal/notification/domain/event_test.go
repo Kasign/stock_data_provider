@@ -45,7 +45,7 @@ func TestCalculatePayloadFingerprintRejectsDuplicateObjectKeys(t *testing.T) {
 		EventType: "test.event", SchemaVersion: "1.0.0",
 		SourceModule: "test", SubjectRef: "subject",
 		OccurredAt: "2026-11-06T00:00:00Z",
-		Payload: []byte(`{"value":1,"value":2}`),
+		Payload:    []byte(`{"value":1,"value":2}`),
 	}
 	if _, err := event.CalculatePayloadFingerprint(); err == nil {
 		t.Fatal("expected duplicate JSON property rejection")

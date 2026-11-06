@@ -21,11 +21,11 @@ const (
 )
 
 var (
-	ErrUnknownSchema       = errors.New("notification: unknown event schema")
+	ErrUnknownSchema        = errors.New("notification: unknown event schema")
 	ErrSourceModuleMismatch = errors.New("notification: event source module does not match schema")
-	ErrSchemaValidation    = errors.New("notification: event schema validation failed")
-	ErrSchemaImmutable     = errors.New("notification: registered schema digest is immutable")
-	ErrInvalidEventJSON    = errors.New("notification: invalid event JSON")
+	ErrSchemaValidation     = errors.New("notification: event schema validation failed")
+	ErrSchemaImmutable      = errors.New("notification: registered schema digest is immutable")
+	ErrInvalidEventJSON     = errors.New("notification: invalid event JSON")
 )
 
 type SchemaKey struct {
@@ -34,25 +34,25 @@ type SchemaKey struct {
 }
 
 type schemaResource struct {
-	file        string
-	key         SchemaKey
+	file         string
+	key          SchemaKey
 	sourceModule string
 }
 
 var payloadResources = []schemaResource{
 	{
-		file: "researchflow-run-terminal-1.0.0.schema.json",
-		key: SchemaKey{EventType: "researchflow.run.terminal", Version: "1.0.0"},
+		file:         "researchflow-run-terminal-1.0.0.schema.json",
+		key:          SchemaKey{EventType: "researchflow.run.terminal", Version: "1.0.0"},
 		sourceModule: "researchflow",
 	},
 	{
-		file: "quant-risk-decision-changed-1.0.0.schema.json",
-		key: SchemaKey{EventType: "quant.risk_decision.changed", Version: "1.0.0"},
+		file:         "quant-risk-decision-changed-1.0.0.schema.json",
+		key:          SchemaKey{EventType: "quant.risk_decision.changed", Version: "1.0.0"},
 		sourceModule: "quant",
 	},
 	{
-		file: "research-event-lifecycle-changed-1.0.0.schema.json",
-		key: SchemaKey{EventType: "research.event.lifecycle_changed", Version: "1.0.0"},
+		file:         "research-event-lifecycle-changed-1.0.0.schema.json",
+		key:          SchemaKey{EventType: "research.event.lifecycle_changed", Version: "1.0.0"},
 		sourceModule: "research",
 	},
 }
