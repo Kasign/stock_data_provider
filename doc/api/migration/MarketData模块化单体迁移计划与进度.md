@@ -1797,3 +1797,50 @@ M2/M4 必须将 Worker 改为可管理对象或显式 Start/Stop/Wait：
 - [ ] 为 LimitPoolSnapshot 增加条件业务约束描述与端到端响应断言。
 
 **当前状态：** LimitPool change_percent 不再作为确定的 Schema 缺陷；保留现有 v1 wire contract，转为条件语义文档和测试补强任务。M0 仍未通过；当前主要工作应转向将静态审计结论变为自动化、可重复验证的 Contract Test，以及数据库真实 Schema 基线核对。
+
+
+### 2026-11-06：M0 第二十八轮（现有 Contract Test 能力盘点与门禁缺口）
+
+审计基线：3b1eb36acb96b389ad9c5927a9fb174fd14e6e02。本轮对照 openapi_contract_test.go、platform_contract_test.go、server_test.go、LimitPool Validator 测试，确定哪些审计结论已经被自动化锁定、哪些仍只是文档结论。
+
+#### 1. 已存在的自动化覆盖
+
+- TestOpenAPIDataRoutesDeclareValidAPIKeySecurity：验证 ApiKey Scheme 和 7 条选定路径的 operation-level ApiKey 声明；**不是**全量 35 Operation 的路由/认证对照，也没有验证 root-level security 是否仍含 Bearer OR。
+- TestOpenAPIDataModelFieldsMatchKnownJSONContract：人工枚举一批字段存在、required/optional、nullable 和多余字段；不是全量 Model ↔ Schema 反射对照。
+- TestDataModelJSONSerializationMatchesOpenAPIRequiredAndNullableSemantics：仅覆盖 Quote、DailyBar、Bundle、HotRankingItem、MarketSentimentSnapshot、LimitPoolItem、SourceStatus、StockAnnouncementSnapshot 等少量代表 DTO；不是所有 51 组 Struct/Schema 的 Golden。
+- TestPlatformFaultHTTPProjectionMapsClassAndDefaultsToNonRetryable：覆盖 writeErr 的 400/401/403/404/409/502/503/504/500 class、code、message、retryable、request_id。
+- TestDomainErrorProjectionDoesNotExposeInternalCause：覆盖 Provider 错误安全消息。
+- TestDomainTimeoutIsMarkedAsRetryCandidateWithSafeMessage：覆盖 deadline → 504。
+- server_test.go 有多个真实 Handler 的 200/400/401 测试，以及 LimitPool 200/400；未形成所有 Handler 的 408/502/503/504 注入矩阵。
+- LimitPool Validator 当前实现已拒绝 HasData=true 且 ChangePercent=nil，但现有测试未发现专门的 nil ChangePercent 负例；HasData=false + 非空 Items 也未发现专门负例。
+
+#### 2. 已明确的测试缺口
+
+1. **Security**：解析 OpenAPI YAML，遍历全部 35 Operation 与 mux 注册路由；验证 Health security: []、业务 Operation 只接受 ApiKey；拒绝 root-level BearerAuth OR 使未显式覆盖的 Operation 被误描述为支持 Bearer。
+2. **Response**：从 Handler/统一错误映射建立状态码矩阵；为每类稳定错误共享验证 Error JSON Golden，并校验 Operation response 引用 Error Schema。当前 Error Schema 仅通过文本包含断言，且内层 required 只有 code/message，与实际必输出 class/code/message/retryable 不一致。
+3. **Model**：将 51 组同名 Struct/Schema 的 JSON Tag、properties、required、nullable 自动比对；对 nullable 再区分 DTO serialization 和 Endpoint business invariant，不能只按指针判断。
+4. **Endpoint**：补充 LimitPool 两个条件分支负例；对有条件业务约束的 Schema 使用 description/组合结构表达，并通过 Handler Golden 验证。
+5. **Parameter**：对 35 Operation 的 query/path/body 参数建立 Handler 校验表；将静态审计中的日期跨度、分页范围、批量数量、body 上限等关键约束转成可执行断言。
+
+#### 3. 最小实施拆分（仍属于 MDM-001）
+
+- CT-01：OpenAPI security 全量一致性测试；移除 Data OpenAPI 根级 BearerAuth OR，保留 ApiKey；Health 明确匿名。
+- CT-02：Error Schema required 与共享 Error Response 引用；逐 Operation 修正状态码声明（不机械给所有接口添加全部错误码）。
+- CT-03：Go Model/OpenAPI Schema 全量字段与 required/nullable 对照测试；修正 DragonTigerSnapshot.source_version required。
+- CT-04：LimitPool 条件约束与缺失分支测试；补齐其他确认过的 endpoint 约束说明。
+- CT-05：35 Operation 参数约束表和高风险参数边界测试。
+- CT-06：运行全部 Market Data 单元/集成测试，生成 M0 证据清单；真实数据库 DDL 对照仍需脱敏 Schema 快照。
+
+**范围边界：** 本轮只审计测试现状，没有修改 OpenAPI、Handler、Model 或测试代码。上述 CT 项仍需用户明确授权实施 MDM-001 代码修正后执行；在授权前继续完成审计证据与迁移门禁整理。
+
+#### 4. 本轮结论
+
+- [x] 区分现有测试真实覆盖范围与此前审计推导范围。
+- [x] 确认 Error Schema 测试只做文本断言，未校验 required / Operation 引用。
+- [x] 确认 35 Operation 的状态码矩阵尚未转为自动化测试。
+- [x] 确认 LimitPool 两个关键 Validator 分支缺少直接负例。
+- [x] 将 MDM-001 代码修正拆成 CT-01～CT-06，便于一次按功能组实施。
+- [ ] MDM-001 代码修正与全量测试尚未执行。
+- [ ] 真实数据库 Schema 快照核验尚未执行。
+
+**当前状态：** M0 仍未通过，M1 不准入。审计已足以形成一组边界清晰的 MDM-001 修正任务；下一步应优先取得脱敏数据库 Schema 证据，同时等待/确认是否授权当前分支实施 CT-01～CT-06。不得把“测试覆盖不足”误写为“现有运行时校验不存在”。
