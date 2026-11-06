@@ -198,3 +198,44 @@ Go 当前已为上述多项建立门禁，但需要确认这些门禁从 Provide
 - Go 当前 DailyBar MA 字段集合与 Python 的 MA5/MA10/MA20/volume_ratio 不完全一致，MA10/volume_ratio 是需评估的接口能力差异。
 
 静态源码对照已完成，但真实 Python/Go 双侧字段差分仍未执行。原 Python 数据源包不在当前仓库，需在固定原项目运行环境导出相同样本后才能做数值级判定。固定样本、来源和日期口径规则见 [迁移矩阵](./PYTHON_PROVIDER_GO_MIGRATION_MATRIX.md)。
+
+
+## 8.6 Python 日线源链与清洗规则二次核对（2026-11-06）
+
+审查固定上游版本：Kasign/daily_stock_analysis@7a21cd76952c7fe44a7fc5a6113a5b2b8a16bb32。本节补充具体 Provider 路径，修正“Python 数据统一有错”的过度概括。代码事实不等于源端数值准确性。
+
+### 分 Provider 的已确认行为
+
+| Provider / 路径 | 源码确认的行为 | 数据质量影响 |
+|---|---|---|
+| Efinance 日 K | 请求 ef.stock.get_quote_history(klt=101, fqt=1)；缺 open 列且有 close 时，以 close 填充 open/high/low；缺 volume/amount 列时补 0 | 前复权请求意图明确；缺列补值会丢失字段缺失语义，不能当作真实 OHLC/成交量/成交额 |
+| AkShare 日 K | Provider 内部依次尝试东方财富 stock_zh_a_hist、新浪 stock_zh_a_daily、腾讯 stock_zh_a_hist_tx；三个路径均请求 adjust=qfq，首个非空结果即返回 | 同一 Provider 名称可能代表三个不同源端；样本必须记录实际命中的 endpoint，不能只记录 AkShare |
+| AkShare 新浪/腾讯 fallback | 若源端没有 pct_chg，则按当前返回的 close 序列计算 pct_change()*100，并将首行 NaN 填成 0 | 首行 0 是“无前一行可计算”的占位，不是已核实涨跌幅 |
+| Tushare A 股日 K | volume 从手乘 100 转股；amount 从千元乘 1000 转元；港股 hk_daily 不做这两项缩放 | 有明确市场分支，不应把 A 股换算套到港股；还需验证 ETF 等具体接口是否沿用相同字段单位 |
+| BaseFetcher 清洗 | 日期转 datetime；数值列用 to_numeric(errors=coerce)；只按 close/volume 缺失删行；按日期升序排序 | 非法数字会变 NaN；OHLC 缺失、负值/零值、OHLC 关系、重复日期、未来日期及交易日历完整性没有在该清洗函数中统一校验 |
+| BaseFetcher 指标 | MA5/10/20 使用 rolling 均值；volume_ratio = 当日 volume / 前 5 日均量（rolling(5) 后 shift(1)），结果 round(2)，无法计算时 fill 1.0 | 这是“相对前五日均量”的日线放量倍数，不是常见分时量比；首日 1.0 是填充值，不能当作有效观测 |
+
+### 对之前判断的修正
+
+- Python 不是所有 Provider、所有字段都不可信。Tushare A 股/港股单位分支是显式实现，AkShare 三个日线 endpoint 也都显式请求前复权；这些是可确认的代码行为，但仍需原始 payload 验证。
+- 不能只以 provider=AkshareFetcher 标识样本。必须附 endpoint=em|sina|tencent，否则无法判断请求参数、字段来源和实际 fallback 路径。
+- Efinance 的 OHLC 回填条件是“close 存在且 open 列缺失”，不是对每个缺失 OHLC 单元格分别回填；文档与诊断应保持这一精确语义。
+- BaseFetcher 的 dropna 仅针对 close、volume；不能据此声称它会剔除所有 OHLC 不完整行。
+- pct_chg=0、volume_ratio=1.0 在首行等场景可能是计算占位值，应标记 derived/imputed，不得作为源端原始字段参与准确率统计。
+
+### 真实数据验收样本的最低记录字段
+
+每条样本除证券、交易日外，必须保留：
+
+1. source_project_commit、Python、efinance/akshare/tushare 包版本。
+2. provider 与实际 endpoint，以及本次请求是否命中 fallback。
+3. 完整请求参数：复权参数、市场/证券类型、日期区间、接口周期。
+4. captured_at_utc、源端响应时间（若提供）、原始字段名与原始 payload。
+5. 转换前后字段、原始单位、标准单位、缺失/补值/推导标记。
+6. 对应 Go 样本的 Provider、endpoint、请求参数、采集时间与原始 payload 摘要。
+
+对账时分别统计 source-provided、derived、imputed 三类值；不允许用 Python 的补零/回填值与 Go 的 null 直接做数值容差比较。首行 pct_chg 与 volume_ratio 应排除在源端准确率分母之外，并单独统计占位/推导行为。
+
+### 当前结论
+
+静态源码已能定位 Python 旧链路中的缺失语义损失、首行占位、复权参数和 endpoint fallback；但实际 OHLC、成交量、成交额及复权数值是否正确仍为未验收。必须取得同一时点原始响应，并以交易所公司行动信息和独立数据源交叉核验。CI 合约测试通过不改变这一结论。
