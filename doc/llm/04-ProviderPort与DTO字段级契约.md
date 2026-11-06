@@ -225,7 +225,7 @@ DTO、Port、Fixture 和 parser 单元测试不依赖 Researchflow/Platform 生�
 
 ## 10. 项目统一决议与待验证项
 
-### 10.1 已接受的协议决议（历史 CONTRACT-008 候选）
+### 10.1 已接受的协议决议（LLM-CTR-001～003；历史别名 Platform CONTRACT-008）
 
 1. **单轮文本输入：接受为 MVP。** ModelRequest 固定 instructions + input_text；input_text 非空。多轮消息、previous_response_id、conversation_id、图片/音频/视频和任意 input item 延后，不允许静默降级或丢弃。
 2. **ToolDefinition：纳入 MVP 的受控可选字段。** 默认 tool_choice=none；仅当 tools 非空且 function_tool_calls=supported 时允许 auto。required、指定工具强制选择和并行工具策略延后。LLM 只解析 function_call，不执行、不批准。
