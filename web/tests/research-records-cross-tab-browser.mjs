@@ -60,7 +60,7 @@ try {
   const noteDownloadPromise = first.waitForEvent("download");
   await first.locator("#research-note-export").click();
   const noteDownload = await noteDownloadPromise;
-  assert.match(noteDownload.suggestedFilename(), /^research-notes-\\d{4}-\\d{2}-\\d{2}\\.json$/);
+  assert.match(noteDownload.suggestedFilename(), /^research-notes-\d{4}-\d{2}-\d{2}\.json$/);
   const noteStream = await noteDownload.createReadStream();
   let noteExportText = "";
   for await (const chunk of noteStream) noteExportText += chunk.toString("utf8");
