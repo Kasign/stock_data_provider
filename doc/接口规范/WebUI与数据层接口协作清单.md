@@ -433,3 +433,6 @@
 
 - DailyBars 在交易日历不可用、使用工作日估算覆盖率时，即使候选覆盖达标也会把 K 线质量标记为 degraded，并在 QualityReasons 中保留估算依据；日历冲突/推断导致的 degraded 同样传递到 K 线。仅历史日历缺少发布时间但日期覆盖完整时不单独降级。
 - 新增服务层与日历质量回归测试；无 API/DB/WebUI 契约变化，CI 待验。
+
+
+- P0-54 最终 CI：代码 SHA `b7d60a97b78273cf653a2910b6d1a21ac7ad6ac7` 的 Push/PR Go suite `42149506735` / `42149513937`、Parity `42149513908`、WebUI checks `42149513999` 均 success；Go suite 含 gofmt、test、race、vet、MariaDB migration/PIT、Compose 和两个 Docker 镜像构建。Live Provider `42149506723` / `42149513877` 外层 success，但生产历史 Probe 与 BaoStock/Pytdx/Tushare 专项 skipped，不代表真实历史行情/跨源验收。
