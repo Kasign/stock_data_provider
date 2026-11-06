@@ -77,4 +77,4 @@ R1/R2/R3/R5 当前实现 Context、Evidence、Event、Claim/Hypothesis 领域结
 - Evidence 新增 `ValidateEvidenceAuthorizationBindingAt`：在已有 AuthorizationRef 指纹、主体/资源/用途/Owner/内容级别绑定校验后，使用调用方传入的可信 UTC 检查时点执行固定过期时间门禁；`now >= expires_at` 拒绝读取，`expires_at=null` 不构成固定过期。
 - 该方法不替代来源 Owner 的实时策略复核、撤销检查和策略检查至内容读取之间的一致性保护。生产 Adapter 仍须由 Owner 执行完整授权读取流程；Research 不得仅凭历史 allowed 快照读取上游受限内容。
 - Claim/Hypothesis 的 validation_method 与 expected_observation 现在复用统一必填字符串校验，拒绝空白及首尾空格；不新增状态迁移或 supersedes 私有字段。
-- 本轮新增测试已写入，尚未执行；不代表 Owner 授权 E2E 或真实来源验收通过。
+- 固定过期时间前/到期/过期后、无固定过期和无效检查时点测试已写入，尚未执行；不代表 Owner 授权 E2E 或真实来源验收通过。

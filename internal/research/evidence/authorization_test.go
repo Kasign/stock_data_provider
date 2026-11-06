@@ -129,7 +129,6 @@ func TestValidateEvidenceAuthorizationBindingAtEnforcesExpiryBoundary(t *testing
 	ref.ExpiresAt = &expiresAt
 	ref.DecisionFingerprint, _ = ref.ComputeDecisionFingerprint(snapshot)
 	e := Evidence{SourceOwner: SourceResearch, ContentLevel: ContentSummary, AuthorizationRef: ref.AuthorizationRef}
-	args := []any{e, ref, snapshot, "service:researchflow", "research_evidence:evidence_001", PurposeResearchAnalysis}
 
 	if err := ValidateEvidenceAuthorizationBindingAt(e, ref, snapshot,
 		"service:researchflow", "research_evidence:evidence_001", PurposeResearchAnalysis, now); err != nil {
@@ -151,5 +150,15 @@ func TestValidateEvidenceAuthorizationBindingAtEnforcesExpiryBoundary(t *testing
 		"service:researchflow", "research_evidence:evidence_001", PurposeResearchAnalysis, time.Time{}); err == nil || !strings.Contains(err.Error(), "authorization_check_time") {
 		t.Fatalf("zero check time must be rejected, got %v", err)
 	}
-	_ = args
+}
+
+
+func TestValidateEvidenceAuthorizationBindingAtAllowsNoFixedExpiry(t *testing.T) {
+	now := time.Date(2026, 11, 6, 5, 10, 0, 0, time.UTC)
+	ref, snapshot := researchAuthorizationGolden(t)
+	e := Evidence{SourceOwner: SourceResearch, ContentLevel: ContentSummary, AuthorizationRef: ref.AuthorizationRef}
+	if err := ValidateEvidenceAuthorizationBindingAt(e, ref, snapshot,
+		"service:researchflow", "research_evidence:evidence_001", PurposeResearchAnalysis, now); err != nil {
+		t.Fatalf("authorization with expires_at=null rejected: %v", err)
+	}
 }
