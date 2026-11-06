@@ -1,0 +1,47 @@
+{
+  "authorization_ref": {
+    "authorization_ref": "auth_quant_001",
+    "policy_owner": "quant",
+    "policy_version": "policy-snapshot:quant-result-access:v1",
+    "decision": "allowed",
+    "purpose_code": "quant_analysis",
+    "content_level": "full",
+    "subject_ref": "service:researchflow",
+    "resource_ref": "quant_result:result_001",
+    "decided_at": "2026-11-06T05:02:00Z",
+    "expires_at": null,
+    "conditions": [],
+    "decision_fingerprint": "01986d83f95f7117f3babc6efb0898229cef5725b342dceda9ce40652f293938"
+  },
+  "policy_snapshot": {
+    "snapshot_ref": "policy-snapshot:quant-result-access:v1",
+    "policies": [
+      {
+        "policy_type": "quant_result_access",
+        "policy_ref": "quant-result-access",
+        "policy_version": "1.0.0"
+      }
+    ]
+  },
+  "fingerprint_input": {
+    "policy_owner": "quant",
+    "policy_version": "policy-snapshot:quant-result-access:v1",
+    "decision": "allowed",
+    "purpose_code": "quant_analysis",
+    "content_level": "full",
+    "subject_ref": "service:researchflow",
+    "resource_ref": "quant_result:result_001",
+    "decided_at": "2026-11-06T05:02:00Z",
+    "expires_at": null,
+    "conditions": [],
+    "evaluated_policy_versions": [
+      {
+        "policy_type": "quant_result_access",
+        "policy_ref": "quant-result-access",
+        "policy_version": "1.0.0"
+      }
+    ]
+  },
+  "canonical_json": "{\"conditions\":[],\"content_level\":\"full\",\"decided_at\":\"2026-11-06T05:02:00Z\",\"decision\":\"allowed\",\"evaluated_policy_versions\":[{\"policy_ref\":\"quant-result-access\",\"policy_type\":\"quant_result_access\",\"policy_version\":\"1.0.0\"}],\"expires_at\":null,\"policy_owner\":\"quant\",\"policy_version\":\"policy-snapshot:quant-result-access:v1\",\"purpose_code\":\"quant_analysis\",\"resource_ref\":\"quant_result:result_001\",\"subject_ref\":\"service:researchflow\"}",
+  "expected_sha256": "01986d83f95f7117f3babc6efb0898229cef5725b342dceda9ce40652f293938"
+}

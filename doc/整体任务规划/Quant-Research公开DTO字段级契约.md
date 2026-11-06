@@ -403,7 +403,7 @@ required=true 的分区被省略时，Context 整体不能标记为 valid；必�
 |---|---|---|---|
 | authorization_ref | 是 | string | 不透明授权决策 ID |
 | policy_owner | 是 | data/news/quant/research | 授权策略权威模块 |
-| policy_version | 是 | string | 不可变策略注册版本；decision_fingerprint 覆盖本次判定采用的具体策略版本 |
+| policy_version | 是 | string | 不可变 AuthorizationPolicySnapshot.snapshot_ref；单策略也必须形成快照，具体规则版本由快照还原 |
 | decision | 是 | allowed/denied/conditional/unknown | 当时决策 |
 | purpose_code | 是 | enum | quant_analysis/research_analysis/risk_review/user_display；受控用途代码 |
 | content_level | 是 | metadata/summary/snippet/full | 内容级别 |
@@ -414,7 +414,7 @@ required=true 的分区被省略时，Context 整体不能标记为 valid；必�
 | conditions | 是 | string[] | 稳定 condition_code 列表；无条件使用空数组 |
 | decision_fingerprint | 是 | string | 决策内容指纹 |
 
-该对象是某次访问决策的审计快照，不代表未来访问自动获准。subject_ref 对应被授权调用主体，resource_ref 对应目标资源。decision_fingerprint 按 GOV-CTR-006 的 JCS + SHA-256 规则计算。读取时必须由权威模块按当前策略重新授权；历史 Run 回放同时保留当时决策和当前访问决策，二者不能互相覆盖。
+该对象是某次访问决策的审计快照，不代表未来访问自动获准。subject_ref 对应可信调用主体，resource_ref 对应目标资源。policy_version 指向不可变 AuthorizationPolicySnapshot；decision_fingerprint 按 GOV-CTR-006 的规范输入（AuthorizationRef 字段 + evaluated_policy_versions）执行 JCS + SHA-256。conditional 不是访问许可，必须由签发方完成条件复核后重新签发 allowed 快照。读取时必须由权威模块按当前策略重新授权；历史 Run 回放同时保留当时决策和当前访问决策，二者不能互相覆盖。
 
 当 `source_owner=research` 时，由 Research 为自己的派生 Evidence 签发 AuthorizationRef：policy_owner=research，subject_ref 为可信调用主体，resource_ref=evidence_id，purpose_code 按 research_analysis/risk_review 选择，content_level 按实际返回内容选择。公开/无限制的 Research Evidence 也必须签发 allowed 快照。若派生 Evidence 依赖 Data/News/Quant 受限内容，Research 的 allow 不得覆盖来源 Owner 的限制；必须保留来源 AuthorizationRef 链，读取时按各来源 Owner 的当前策略重新授权，并采用最严格的适用限制。
 

@@ -15,6 +15,7 @@
 | GOV-CTR-003 ID | X-Request-ID 通过入口校验并传播；Worker 生成自己的 request_id | 128 字节合法 Header 接受；129 字节或重复 Header 由入口重生成 | correlation_id 被当 event 去重键；拒绝 | 新增 trace_id/span_id 不改变现有 request_id 语义，需单独版本/契约 |
 | GOV-CTR-004 Schema 版本 | 已注册 schema_version 精确解析 | 新增 optional 字段的 MINOR 版本由旧消费者按未知可选字段策略处理 | 未知 MAJOR、未知必需枚举不得回退旧 Schema | 旧版本在迁移窗口内继续解析，废弃至少两个兼容发布周期 |
 | GOV-CTR-005 冻结门禁 | Schema+Golden+Contract Test+消费者映射齐备后 frozen | 语义 accepted 但 Golden 未齐时保持 pending_evidence | 仅文档写“已完成”即标 frozen；拒绝 | 证据路径迁移需保留旧证据引用和新路径映射 |
+| GOV-CTR-006 AuthorizationRef | allowed/denied/conditional/unknown 与 policy_owner、subject/resource、policy snapshot、JCS 指纹字段完整 | conditional 含 condition codes；expires_at=null 仍需当前复核；多策略快照按稳定顺序参与 fingerprint | 用历史 allowed 跳过当前撤销/过期检查；只记录单个策略版本却实际评估多个；把 conditional 当 allowed | 新增策略类型追加 policy snapshot 条目；改变 AuthorizationRef 字段或 fingerprint 输入必须升级 Schema MAJOR |
 
 ## 2. Platform 技术原语
 
