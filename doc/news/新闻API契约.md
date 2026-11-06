@@ -101,3 +101,71 @@
 | QueryPersistedNews | 查询过滤、稳定排序/游标 | 持久化新闻页 | N6，等待公共 DB |
 
 当前不定义对外 HTTP DTO，不要求所有用例立即实现。业务端口按用例最小化，禁止暴露 SQL、Redis、诊断 Run/Step 等基础设施类型。
+
+## 11. NewsEvidenceQuery 跨模块字段级契约（当前实施入口）
+
+本节是同进程 Application Port 契约，不是 HTTP API。跨模块唯一语义和冻结状态登记于 `doc/整体任务规划/跨模块契约目录与冻结状态.md` 的 NEWS-CTR-001~003；本文只维护 News 生产方的 DTO/授权实现字段，不复制其他模块内部结构。
+
+### 11.1 请求与响应
+
+`GetEvidence` 按 news_id 查询已持久化证据；若 version_id 省略，必须根据请求 system_as_of 选择当时可见版本，不得默认取当前最新版本。`ListEvidence` 只查询已持久化记录，不隐式触发搜索、Provider 请求或抓取。
+
+请求字段：
+- caller_ref：必填不透明主体引用，由可信 Application 调用上下文注入，不接受不可信客户端自报身份。
+- purpose_code：必填枚举 research_analysis/risk_review/user_display。
+- requested_content_level：必填枚举 metadata/summary/snippet/full；授权不允许时拒绝，不静默降级。
+- system_as_of：必填 RFC3339Nano UTC；必须原样使用 Researchflow Run 值。
+- filters：必填 typed object，仅允许 news_ids（最多 100）、source_refs（最多 50）、canonical_symbols（最多 100）、published_at_from/to、quality_statuses（valid/degraded/stale/invalid/unknown）；数组元素唯一。
+- business_time_from/to：可选 nullable RFC3339Nano UTC；同时存在时 from <= to。
+- page_size：必填 integer，范围 1..100，无默认值。
+- cursor：首屏省略，后续页必填；不透明、防篡改，不允许调用方拼装。
+
+响应字段：
+- items：必填数组，无结果为空数组。
+- next_cursor：无下一页为 null，不使用空字符串。
+- snapshot_ref：必填不透明快照引用；首屏创建，后续页沿用。
+- system_as_of：必填，回显请求值。
+- diagnostics：必填数组，无诊断为空数组；仅放诊断引用，不放业务结论。
+
+### 11.2 AuthorizationRef
+
+AuthorizationRef 是不可变授权审计快照，不是访问令牌。字段如下：
+
+| 字段 | JSON 类型 | 约束 |
+|---|---|---|
+| authorization_ref | string | 不透明稳定引用 |
+| policy_owner | enum | data/news/quant/research；News 内容必须为 news |
+| policy_version | string | 不可变策略版本 |
+| decision | enum | allowed/denied/conditional/unknown |
+| purpose | enum | research_analysis/risk_review/user_display |
+| content_level | enum | metadata/summary/snippet/full |
+| subject_ref | string | 授权主体引用 |
+| decided_at | RFC3339Nano UTC | 决策时间 |
+| expires_at | RFC3339Nano UTC/null | null 表示未配置固定过期，不表示永久授权 |
+| conditions | array<string> | 稳定 condition_code；无条件为空数组 |
+| decision_fingerprint | string | 决策输入与策略版本指纹 |
+
+News 为 News 来源内容签发 AuthorizationRef。公开或无限制内容也签发 allowed 快照，不允许 null/not_required 绕过授权审计。每次当前受限内容读取仍必须重新检查 Source/Endpoint/Provider 策略、用途、内容级别、撤销和过期状态；历史 allowed 不构成当前放行凭据。当前决策 denied/unknown 或授权依赖不可用时，受限内容拒绝访问。
+
+### 11.3 PIT、Cursor 与稳定排序
+
+严格 PIT 先按 system_as_of 过滤系统已观察到的 Observation、Version、Identity、Classification、Relation，再按业务时间过滤/排序。available_at 缺证据时保持 null/unknown，严格 PIT 排除；不得从 published_at/provider_time/fetched_at 推导。
+
+首期排序版本 `news-evidence-v1` 固定为：
+`system_observed_at DESC, news_id ASC, version_id ASC`。
+
+首屏创建不可变结果集快照，快照与 Cursor TTL 均为 15 分钟。Cursor 绑定 caller_ref、purpose_code、requested_content_level、规范化 filters 指纹、system_as_of、snapshot_ref、排序版本和稳定唯一键。Cursor 使用不透明 token，包含 token_version/key_id 并通过 HMAC-SHA256 防篡改；密钥轮换时旧密钥至少保留到其签发的全部 15 分钟 Cursor 过期。后续页必须读取同一 snapshot_ref。过期、签名错误、过滤指纹不一致和快照缺失分别返回稳定错误，不得静默重建快照。
+
+### 11.4 错误码
+
+| code | Fault class | retryable | 语义 |
+|---|---|---:|---|
+| news.evidence.invalid_query | validation | false | 请求结构、枚举、范围非法 |
+| news.evidence.access_denied | forbidden | false | 当前调用主体无权访问所请求内容级别 |
+| news.evidence.pit_unavailable | unavailable | false | 指定历史时点不可证明 |
+| news.evidence.cursor_invalid | validation | false | Cursor 签名或查询指纹不匹配 |
+| news.evidence.cursor_expired | conflict | false | Cursor 超过 15 分钟 TTL，调用方从首屏重查 |
+| news.evidence.snapshot_unavailable | unavailable | false | 固定分页快照已不可用，不得自动创建新快照 |
+
+底层 SQL/Redis/Platform 依赖故障使用 PLAT-CTR-001 Fault，不得映射成空 items 或业务质量 degraded。Provider 采集部分失败属于 News 采集用例，不属于该只读 Query Port 的部分成功语义。
+
