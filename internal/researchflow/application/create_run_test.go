@@ -148,6 +148,7 @@ func TestCreateRunPersistsCanonicalParameterAndSnapshotCollections(t *testing.T)
 	if got:=repo.created.Run.InputSnapshotRefs;len(got)!=2||got[0]!="snapshot_a"||got[1]!="snapshot_b"{
 		t.Fatalf("input snapshot refs are not canonical set order: %#v",got)
 	}
+	if cmd.InputSnapshotRefs[0]!="snapshot_b"||cmd.InputSnapshotRefs[1]!="snapshot_a"{t.Fatal("CreateRun mutated caller-owned input snapshot slice")}
 	if got:=string(repo.created.Parameters);got!=`{"a":1,"z":2}`{
 		t.Fatalf("parameters snapshot is not JCS canonical: %s",got)
 	}

@@ -149,6 +149,7 @@ func (s *CreateRunService) CreateRun(ctx context.Context, command domain.CreateR
 		if err != nil { return CreateRunResult{}, fmt.Errorf("generate stage ref: %w", err) }
 		stageRefs[stage.Definition.Code] = ref
 	}
+	command.InputSnapshotRefs = append([]string(nil), command.InputSnapshotRefs...)
 	sort.Strings(command.InputSnapshotRefs)
 	canonicalParameters, err := jcs.Transform(command.Parameters)
 	if err != nil { return CreateRunResult{}, fmt.Errorf("%w: canonicalize parameters for snapshot: %v", domain.ErrInvalidCommand, err) }
