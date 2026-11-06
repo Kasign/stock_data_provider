@@ -89,6 +89,7 @@ func (c startFailureConnector) Connect(context.Context) (driver.Conn, error) { r
 func (c startFailureConnector) Driver() driver.Driver                        { return startFailureDriver{err: c.err} }
 
 type startFailureDriver struct{ err error }
+
 func (d startFailureDriver) Open(string) (driver.Conn, error) { return nil, d.err }
 
 type queueTestRunner struct{}
