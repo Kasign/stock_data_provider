@@ -1,6 +1,6 @@
 # 新闻模块专项文档
 
-> 状态：N1-A 已评审确认；N2 根模块验证通过；N3 授权、离线解析、候选标准化、内容分层和业务质量评估首批完成；在线抓取仍等待平台安全门禁  
+> 状态：N1-A/N2 已完成；N3 离线能力首批完成、在线生产链路未完成；N4 领域/Application 首批完成；Platform 原语已合并，N5/N6/N7 消费者接入待推进  
 > 开发分支：`feat/research-news-ingestion`  
 > 基线分支：`feat/full-go-data-providers-api-switch`
 
@@ -36,18 +36,18 @@
 - [x] N2：Domain、Application Port、Bocha/Tavily/Brave/SearXNG Adapter 与 fake 测试已提交；根模块 gofmt、test、race、vet 和分析服务镜像构建通过
 - [x] N3 首批：Provider/Source/Endpoint 授权交集评估、用途/保留期限限制、内容类型与存储模式一致性、HTTP(S) URL 规范化与精确主机/端口 allowlist；固定测试通过
 - [x] N3 离线业务质量：按元数据、内容、来源身份三个维度评估 valid/degraded/invalid/unknown；不把 Provider 摘要提升为来源正文，不把发布者文本视为已解析来源
-- [ ] N3 在线采集：Feed 解析与 Endpoint 传输分派已有代码；平台 PLAT-008 BoundDoer 已随平台分支合并进入当前基线并适配 News HTTPDoer；生产逐 endpoint 注入、来源授权/出口验收未完成，PLAT-002 仍未冻结
+- [ ] N3 在线采集：Feed 解析与 Endpoint 传输分派已有代码；BoundDoer 已合并且接口兼容；逐 endpoint 生产注入、触发入口/CollectionRunID、持久化授权和部署 DNS/出口验收未完成
 - [x] N4 Domain/Application 首批：身份识别、Observation 幂等语义、内容版本、证券/行业关系和转载关系规则已有实现与离线测试
 - [ ] N4/N6 后续：真实采集编排、生产 Repository、数据库唯一约束/事务并发与历史版本持久化仍未完成
-- [ ] N5：按公共契约接入 Config/Secret、Logger/Fault/Request ID、HTTP Client；NEWS-CTR-002 Binding DTO/Validator 已实现结构绑定和 nullable 字段显式 null/缺失区分；fingerprint JCS 复核等待公共 GOV-CTR-006 Verifier，尚未实现授权签发、当前策略读取时复核和授权竞态保护
-- [ ] N6：PLAT-009 Storage/Migration 原语已合并并通过 MariaDB/Redis CI 集成；News 自有 Repository/SQL/Migration 与根组合根注册仍待实现；Redis 按需
-- [ ] N7：接入公共 Diagnostics；Task/Audit/Metrics 按真实需求评估
-- [ ] N8：完成 News 与公共平台集成验收
+- [ ] N5：Platform Config/Secret、Fault、Request ID、BoundDoer 尚未完成 News 消费者装配；NEWS-CTR-002 Binding DTO/Validator 已实现，但授权签发、公共 JCS Verifier、当前策略复核和读取竞态保护未完成
+- [ ] N6：Platform Storage/Migration 原语已合并；News Repository/SQL/Migration、授权快照持久化、事务并发和 Server 注册仍待实现；Redis 按需
+- [ ] N7：News 领域 Check 尚未接入 Platform Runner；不新增诊断 HTTP 路由/历史库，Task 仅按真实触发需求评估
+- [ ] N8 / PLAT-013：完成 A2 契约测试、Server 装配、Migration 注册、News/Research Facade 接入验收；A3 故障演练对应 PLAT-014
 - [x] N1-A 用户评审确认；N2 已完成并进入 N3
 
 ## 公共平台协作说明
 
-公共平台分支 `feat/platform-foundation` 本轮只读核对 HEAD `55cbd0d642ac2a9b37e0ebfb8e7be0034af87f5e`：PLAT-008 `httpclient.BoundDoer` 已实现并有平台专项 CI 通过记录；PLAT-002 仍标记待评审，PLAT-013 仍在设计/领域接入阶段，PLAT-010 已收敛为领域边界评审而非通用队列。当前分支已合并平台 `BoundDoer` 与 `storage` 实现；`BoundDoer` 与 News `HTTPDoer` 兼容，Storage 提供 SQL/Redis 生命周期及 Migration Runner。News 仍缺生产逐 endpoint 注入、News Repository/Migration、根组合根共享资源与 Migration 注册；PLAT-002 仍未冻结。平台分支只读跟踪，不在本分支修改。生产 DNS/出口、真实 Provider 凭证/配额、Source/Endpoint 授权仍是独立验收门禁。Metrics/Audit 和 Redis 不作为新闻首期门禁。
+当前 News HEAD 的 Platform 合并提交为 `68e557ccce10d650ec17b62e6ed40d4ce5aab382`，第二父提交 `0cb99a525de00d3c340891caa029b716c4d2f749` 与 `feat/platform-foundation` 当前 HEAD 一致。Platform 原语已在当前分支，不再等待代码迁入。PLAT-002 与 PLAT-CTR-001～007 的契约证据仍未全部冻结；当前按项目 A1 准入进行模块内适配和测试准备，不宣称 A2/A3。News 生产逐 endpoint BoundDoer 注入、News Repository/Migration、授权快照/当前策略复核、NewsEvidenceQuery、领域 Diagnostics Check 和 Server 共享资源/注册仍待完成。PLAT-013 是领域接入，PLAT-014 是跨模块故障演练；PLAT-011 为按需 Metrics，PLAT-012 为安全审计。
 
 ## 重要说明
 
@@ -79,7 +79,7 @@ N1 已完成固定旧 Python 上游的三类新闻/情报持久化对象、旧 i
 
 ## 2026-11-05 阶段调整
 
-用户已确认：新闻模块不再自行建设 DB/Redis 接入和通用诊断能力，统一等待公共服务提供。新闻当前阶段只建设不依赖这些基础设施的业务能力；质量规则仍属于新闻领域，不能与通用诊断混为一谈。详细边界和阶段顺序以《新闻模块总体设计》9.16 及《新闻模块开发任务与验收清单》为准。
+新闻模块不自建连接池、Redis Client、HTTP Client 或通用诊断 Runner；Platform 原语已合并，News 仍需实现自己的 Repository/SQL/Migration、授权快照、领域 Check 和公开 Application Facade。共享连接生命周期、总 Migration 注册及统一诊断入口由 Server 组合根负责。
 
 
 ## 2026-11-05 架构决策更新：根模块原生实现，不建设共享 Provider Module
@@ -160,4 +160,11 @@ Binding 中 `provider_ref` / `endpoint_ref` 非 null 时，PolicySnapshot 必须
 - Diagnostics/Config/Security 等平台原语已合并；News 领域 Check、Bootstrap 和服务路由仍未接入。
 - 最新身份修正拒绝候选及已存凭据 Hash 不一致；最新授权修正拒绝 `expires_at == decided_at` 的零有效期授权。
 - PLAT-002 仍待冻结，平台 L1 证据不等于 News A2/A3 接入通过。
-- N1 盘点完成，等待用户确认；不自动进入后续业务开发。
+- N1 盘点完成；后续按《新闻模块公共平台契约接入实施计划》分阶段推进，不跳过项目契约门禁。
+
+
+## 2026-11-06 项目级总规划复核与接入计划
+
+项目级规划当前基线：`feat/design_doc` @ `12823e069be9036ad6a05235ac4304581d6883a1`。News 分支内合并的规划文件只是旧快照，执行时以规划分支最新版本为准。
+
+详细任务顺序、并行关系、阻断项和验收证据见《[新闻模块公共平台契约接入实施计划](新闻模块公共平台契约接入实施计划.md)》。当前 N5/N6/N7 尚未完成；N3 在线采集和生产编排待触发入口、授权、BoundDoer 和存储闭环；NEWS-CTR-001/002/003 与 GOV-CTR-006 仍为 `pending_evidence`；Server 组合根与 PLAT-013 A2 接入尚未完成。本分支后续只修改 `internal/news/**` 与 `doc/news/**`，共享启动入口、HTTP 路由和 Migration 总注册须与 Server/集成 Owner 协调。

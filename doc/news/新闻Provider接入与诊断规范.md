@@ -229,3 +229,16 @@ Brave/Bocha/Tavily 等具体 Provider 的策略值必须按实际账号套餐、
 - `internal/platform/diagnostics.Runner` 已有平台 L1 原语和测试证据，但 Runner 不提供历史存储或 HTTP 路由；News 领域 Check 和 Server 路由接入仍待完成。
 - 当前 `provider/http.go` 通过注入的 HTTPDoer 读取响应体；生产响应大小上限依赖平台 BoundDoer，不能把 fake/raw HTTPDoer 作为生产实现。
 - 平台 L1 CI 通过不代表 News 实际注入、真实 Provider 请求、生产 DNS/出口或来源授权验收通过。
+
+
+## 2026-11-06 项目级契约与 News Diagnostics 接入计划
+
+项目级统一诊断规划和 Platform 现有 Runner 已核对。News 后续接入按以下边界执行：
+
+1. Platform Runner 负责 Check 的超时、并发、panic 安全处理和公共状态聚合；News 负责 Check 定义、领域 reason_code、证据引用和业务质量解释。
+2. 首批 Check 计划覆盖配置/凭证是否已配置、Provider 配置与能力状态、Source/Endpoint 授权状态、Fetch/Parse/Normalize、Identity/Deduplicate、Persist 和 Relation。未配置的可选 Provider 必须 skipped/not_configured，不标记失败或可用。
+3. Connectivity/contract/quality/freshness/authorization 分别表达；ProviderOutcome 的 empty/partial/failed/skipped 不得被 Platform Status 覆盖；quality=invalid 不得被映射为 Check failed。
+4. Check 默认只读，不发起真实 Provider 请求、不消耗配额。主动 Probe 必须由受控运维调用明确触发，并满足来源授权与网络安全门禁。
+5. Observation 的 attributes 仅允许白名单低敏计数/枚举；禁止正文、snippet、原始响应、URL Query、Token、Cookie、DSN 和模型上下文。
+6. 不新增 News Diagnostics HTTP 路由、Runner、Registry 或通用历史库。统一诊断路由的认证和注册由 Server Owner 负责；News Ingestion Run/Stage 若有真实采集触发需求，其事实记录仍由 News 持有。
+7. PLAT-CTR-004 仍为 `pending_evidence`；News Check Adapter 的 Schema/Golden/Runner Contract Test 和状态映射证据通过后，才申请对应调用点 A2。
