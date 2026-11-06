@@ -2,7 +2,7 @@
 
 - 决议日期：2026-11-06
 - 适用范围：Data、News、Quant、Research 的授权快照签发与跨模块引用
-- 当前状态：语义决议 accepted；Schema/Golden 已提交，运行时 Validator 与 Contract Test 仍 pending_evidence
+- 当前状态：语义决议 accepted；Schema 定义通过 Draft 2020-12 结构校验，四个 Golden 的 JCS/SHA-256 复算一致；模块 CI Validator、Scope/资源映射和授权竞态 Contract Test 仍 pending_evidence
 - 权威关系：公共字段与语义以项目级契约目录第 7.2 节为准；本文给出机器 Schema、Principal/Resource 映射、fingerprint 规范和 Golden 测试向量。
 
 ## 1. AuthorizationRef Schema
@@ -74,8 +74,8 @@
 ## 7. 尚待证据
 
 以下测试通过前，GOV-CTR-006 保持 pending_evidence：
-- Draft 2020-12 Validator 对 AuthorizationRef 与 PolicySnapshot Schema 的正向/反向校验。
-- 四个 Golden 的 JCS canonicalization 与 SHA-256 运行时复算。
+- 将仓库中的两份 Schema 文件接入模块 CI，由实际 Validator 执行正向/反向校验，并校验 format/date-time；本轮已对 Schema 定义执行 Draft 2020-12 结构校验。
+- 将四个 Golden 接入运行时测试，复算 JCS canonicalization 与 SHA-256；本轮四个 Golden 预期摘要独立复算一致，尚未形成模块 CI 证据。
 - policy_version 与 snapshot_ref 一致性、policies 非空/唯一/排序、遗漏任一策略版本导致 fingerprint 不匹配。
 - 四个 policy_owner 的 Principal/Scope/Resource 映射 Contract Test。
 - allowed → revoked、expires_at 边界、conditional 未满足/全部满足、unknown、授权服务不可用的拒绝测试。
