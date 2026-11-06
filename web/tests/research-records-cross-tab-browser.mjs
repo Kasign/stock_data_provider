@@ -53,6 +53,17 @@ try {
   await first.locator("#research-note-clear").click();
   await first.locator("#research-note-create").click();
   await first.locator("#research-note-editor:not([hidden])").waitFor();
+  for (const width of [320, 768, 1280, 1600]) {
+    await first.setViewportSize({ width, height: 900 });
+    await first.waitForTimeout(50);
+    assert.ok(await first.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1), "note editor must not overflow at " + width + "px");
+    const bounds = await first.locator("#research-note-editor").evaluate(node => {
+      const rect = node.getBoundingClientRect();
+      return { width: rect.width, right: rect.right };
+    });
+    assert.ok(bounds.width > 0 && bounds.right <= width + 1, "note editor stays within viewport at " + width + "px");
+  }
+  await first.setViewportSize({ width: 1280, height: 900 });
   await first.locator("#research-note-editor-back").click();
   await first.locator("#research-note-editor[hidden]").waitFor({ state: "hidden" });
   await first.locator('[data-note-action="edit"][data-note-id="note-1"]').click();
