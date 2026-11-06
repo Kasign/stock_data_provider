@@ -105,7 +105,7 @@ func TestParseResponsesCompletedAndUsage(t *testing.T) {
 	if got.RequestID != request.RequestID || got.CorrelationID != request.CorrelationID || !got.SystemAsOf.Equal(request.SystemAsOf) {
 		t.Fatalf("request correlation metadata not echoed: %+v", got)
 	}
-	if got.OutputText != "Hello world" || len(got.OutputItems) != 2 || got.OutputItems[1].Type != OutputItemUnknown {
+	if got.OutputText != "Hello world" || len(got.OutputItems) != 2 || got.OutputItems[1].Type != OutputItemUnknown || got.OutputItems[1].UnknownType != "reasoning" {
 		t.Fatalf("output order/type/text not preserved: %+v", got.OutputItems)
 	}
 	if got.Usage == nil || got.Usage.TotalTokens == nil || *got.Usage.TotalTokens != 15 || got.Usage.Source != UsageSourceDerived {
@@ -171,11 +171,54 @@ func TestParseResponsesSchemaValidation(t *testing.T) {
 	}
 }
 
+
+func TestParseResponsesRefusalAndUnknownContentPreserveTypes(t *testing.T) {
+	request := validResponsesRequest()
+	body := []byte(`{
+		"id":"resp-mixed","object":"response","model":"qwen-local","status":"completed",
+		"output":[
+			{"id":"ref-1","type":"refusal","refusal":"cannot help"},
+			{"id":"msg-1","type":"message","content":[
+				{"type":"future_content","opaque":"must not be retained"}
+			]}
+		]
+	}`)
+	got, err := ParseResponsesResponse(body, request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.OutputItems) != 2 || got.OutputItems[0].Type != OutputItemRefusal ||
+		got.OutputItems[1].ContentParts[0].Type != ContentPartUnknown ||
+		got.OutputItems[1].ContentParts[0].UnknownType != "future_content" {
+		t.Fatalf("refusal/unknown wire types were not preserved: %+v", got.OutputItems)
+	}
+	encoded, _ := json.Marshal(got)
+	if strings.Contains(string(encoded), "must not be retained") {
+		t.Fatalf("unknown payload leaked into normalized DTO: %s", encoded)
+	}
+}
+
+func TestParseResponsesUpstreamTotalTokensTakesPrecedence(t *testing.T) {
+	request := validResponsesRequest()
+	body := []byte(`{
+		"id":"resp-usage","object":"response","model":"qwen-local","status":"completed",
+		"output":[],"usage":{"input_tokens":10,"output_tokens":5,"total_tokens":99}
+	}`)
+	got, err := ParseResponsesResponse(body, request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Usage == nil || got.Usage.TotalTokens == nil || *got.Usage.TotalTokens != 99 ||
+		got.Usage.Source != UsageSourceUpstream {
+		t.Fatalf("upstream total must take precedence: %+v", got.Usage)
+	}
+}
+
 func TestParseResponsesRejectsMalformedEnvelopeAndFunctionCall(t *testing.T) {
 	request := validResponsesRequest()
 	cases := [][]byte{
 		[]byte(`{"id":"resp-1","object":"response","status":"queued","output":[]}`),
-		[]byte(`{"id":"resp-1","object":"response","status":"completed","output":[]}`),
+		[]byte(`{"object":"response","status":"completed","output":[]}`),
 		[]byte(`{"id":"resp-1","object":"response","model":"qwen","status":"completed","output":[{"type":"function_call","name":"tool","arguments":"{}"}]}`),
 	}
 	for i, body := range cases {
