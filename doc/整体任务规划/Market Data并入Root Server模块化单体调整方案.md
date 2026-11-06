@@ -104,7 +104,7 @@ docker-compose
 | Nginx | `web/default.conf.template` 的 `/market-api/` 当前代理到 Data 服务，`/analysis-api/` 代理 Server | 两个前缀可保留，但上游统一改为 Root Server |
 | go-core | `docker/docker-compose.go-migration.yml` 将 Python Bridge、go-core、Data 组成单独的 `go-migration` profile，并明确不与根 Compose 叠加；根 Compose 当前运行的是根模块 `cmd/analysis-api` | go-core 是仓库保留的旧迁移部署路径，不是根 Compose 的当前组合入口；本次不把 go-core 合并进 Root Server。仍需部署现场确认没有继续使用旧 profile |
 
-**M0 扩展分支复核（2026-11-06）：** 本轮只读审计以 Data 分支 `feat/full-go-data-providers-api-switch` HEAD `4ca1da2482ca6f5621c46954332b93e8e6b7fb46` 为准。根 `go.mod` 仍是 `example.com/stock-analysis-flow` / Go 1.22；Data `go.mod` 仍是独立 Module / Go 1.23.0；根 Dockerfile Builder 为 Go 1.22，Data Dockerfile Builder 为 Go 1.23，CI Go setup 为 1.23.x。Data 归并尚未开始。
+**M0 扩展分支复核（2026-11-06）：** 本轮只读审计以 Data 分支 `feat/full-go-data-providers-api-switch` HEAD `8c569366aff08738d632c7ea8856ac55f95c892d` 为准。根 `go.mod` 仍是 `example.com/stock-analysis-flow` / Go 1.22；Data `go.mod` 仍是独立 Module / Go 1.23.0；根 Dockerfile Builder 为 Go 1.22，Data Dockerfile Builder 为 Go 1.23，CI Go setup 为 1.23.x。Data 归并尚未开始。
 
 本轮新增确认：
 
@@ -142,15 +142,16 @@ docker-compose
 
 上述 Host 是代码默认值，不是运行时最终 Host 的完整保证：Data Config 允许通过 `MARKET_DATA_*_URL` 覆盖多个 Provider Endpoint，PyTDX Host 也由环境变量注入。当前多数 Provider 的 `http.Client` 未显式设置 Transport，会沿用 Go 默认 Transport 的环境代理行为；Platform HTTP Client 当前显式 `Proxy: nil`。接入 Platform 前必须决定代理策略、精确 Host Allowlist、Redirect 跨域限制和各 Provider 响应体预算，不能仅把 Client 替换掉而忽略网络行为差异。
 
-**Data 分支迁移跟踪文档补充证据（当前 Data HEAD：`4ca1da2482ca6f5621c46954332b93e8e6b7fb46`）：** Data 分支新增 `doc/api/migration/MarketData模块化单体迁移计划与进度.md`，其 M0 仍为 `in_progress`，与本方案采用同一架构决策。该文档补充了以下迁移准入发现：
+**Data 分支迁移跟踪文档补充证据（当前 Data HEAD：`8c569366aff08738d632c7ea8856ac55f95c892d`）：** Data 分支新增 `doc/api/migration/MarketData模块化单体迁移计划与进度.md`，其 M0 仍为 `in_progress`，与本方案采用同一架构决策。该文档补充了以下迁移准入发现：
 
 1. Data OpenAPI 与 HTTP Handler 的 Method+Path 双向核对为 35/35 匹配；这只证明路由路径/方法完整，不代表全部 Request/Response Schema、required/nullability、错误响应和鉴权 Header 已完成字段级核验。
 2. Data HTTP API 覆盖 35 个 Operation；DataService 还聚合证券主数据、搜索、市场统计、交易日历/状态、财务、估值、公告、筹码、资金流、诊断等能力。Application Port 应按领域拆分用例接口；Analysis InProcess Adapter 只实现 Analysis 所需的 Quote/DailyBars/IndexBars，不应暴露一个包含所有 Provider/Repository 的巨大接口；HTTP Adapter 仍需覆盖完整 Data 能力面。
 3. Root Remote Adapter 存在 DTO 信息损失：Quote 的 nullable `current_price` 被映射为非 nullable float64，Data 的 int64 volume 被映射为 float64；DailyBar 的均线、复权因子来源/版本/观察时间、标准化时间、原始单位/字段、fallback、Request ID 等字段没有完整进入 Root DTO。
 4. Data DailyBars API 支持 `as_of`，可按系统观察时点重建历史修订版本；当前 Root `GetHistory` 只传 `limit` 和 `adjustment`，Analysis Collector 仅过滤未来交易日期，没有传递 PIT cutoff。**过滤交易日期不等于按 as_of 重建版本**。M2/M3 必须把明确的 PIT 查询语义纳入 Application Port 和 Analysis Adapter；若 Analysis RunRequest.AsOf 与 Data revision cutoff 不是同一语义，必须定义映射，不得默默混用。
 5. Data 迁移跟踪文档已完成 Provider 请求模式矩阵初稿，但逐调用点 Query/Body/Header/Retry/Redirect/响应大小限制及跨域敏感信息转发测试仍未全部完成。
+6. Data 分支 M0 第十四轮发现 OpenAPI 鉴权声明与实际 Handler 不一致：35 个 Operation 中，Handler 有 33 条业务路由执行 API Key 认证、2 条 health 路由公开；OpenAPI 仅 11 条业务 Operation 显式声明 ApiKey，另 22 条漏声明；Diagnostics Operation 还缺少 401 响应。该问题是现有 v1 HTTP 契约描述错误，不是实际 Handler 放开了认证。应在 MDM-001 阶段修正 OpenAPI security/401 并通过逐 Operation Contract Test，作为 MDM-002 的前置门禁；这不等于提前实施 MDM-008 的新 Principal/Scope 契约。
 
-**MDM-001 当前结论：** 仓库内主要代码路径、HTTP 调用方、Provider 传输类型、资源入口、Worker、路由、Compose、部署脚本和主要 CI Workflow 已完成静态盘点；Data 分支也完成了 OpenAPI 路由完整性首轮核对和 DTO/PIT 风险识别。但部署现场是否仍使用 `go-migration` Profile、Provider 可配置 Host 的最终 Allowlist、SQL 文件与 Go Migration 的逐表差异、全部 Schema/DTO 字段级核验及 PIT 时间语义映射仍需确认。因此 MDM-001 暂不关闭，MDM-002 不得提前开始删除旧入口/构建文件。
+**MDM-001 当前结论：** 仓库内主要代码路径、HTTP 调用方、Provider 传输类型、资源入口、Worker、路由、Compose、部署脚本和主要 CI Workflow 已完成静态盘点；Data 分支也完成了 OpenAPI 路由完整性首轮核对和 DTO/PIT 风险识别。当前新增明确阻断：OpenAPI 22 条受保护业务 Operation 漏声明 ApiKey，且错误响应声明不完整，必须在 MDM-001 修正并通过逐 Operation Contract Test。部署现场是否仍使用 `go-migration` Profile、Provider 可配置 Host 的最终 Allowlist、SQL 文件与 Go Migration 的逐表差异、全部 Schema/DTO 字段级核验及 PIT 时间语义映射仍需确认。因此 MDM-001 暂不关闭，MDM-002 不得提前开始删除旧入口/构建文件。
 
 **结构迁移编号映射：** 与 Data 分支迁移跟踪文档统一采用 M0～M6 七个结构迁移阶段：MDM-001=M0 审计、MDM-002=M1 Module 归并、MDM-003=M2 Application Port/Bootstrap、MDM-004=M3 Root Server 装配、MDM-005=M4 共享资源与生命周期统一、MDM-006=M5 部署/WebUI 切换、MDM-007=M6 结构回归与稳定性验收。迁移验收后另执行 MDM-008 公共平台/数据契约接入；不得把 MDM-008 混入结构迁移验收。
 
@@ -326,7 +327,7 @@ Market Data Application
 ### 6.1 MariaDB
 
 - MariaDB 仍是事实源；本方案不更换数据库、不迁移历史数据、不改变表结构。
-- Server Bootstrap 创建共享 SQL 连接池，Data Repository 接收借用的 `*sql.DB` handle；Data 仍拥有所有 Data SQL、Repository 和 Migration 内容。Data Store 必须区分 borrowed/owned 资源，只有独立部署兼容入口可以关闭自有 DB Pool。
+- Root Bootstrap 统一拥有 MariaDB Pool（可按有效 DSN 创建一个或多个 Pool）；仅当 Root/Data 的 Host/Port/Database/User/Password/Charset/Timezone/连接参数完全一致时才共享同一个 `*sql.DB`，否则 Root 创建并持有独立 Data Pool，Data Repository 仍只接收 borrowed handle；Data 仍拥有所有 Data SQL、Repository 和 Migration 内容。Data Store 必须区分 borrowed/owned 资源，只有独立部署兼容入口可以关闭自有 DB Pool。
 - 各模块使用独立 Migration namespace/version；Server 统一按明确顺序调用各模块 Migration Runner。
 - Migration 只能由组合根执行一次；禁止 Server Store 和 Data Store 各自自动执行迁移。当前 Root Store.Open 会自动执行 Analysis Migration/CheckSchema，Data main 也会按配置执行 Data Migration；合并前必须把两侧 Migration 都改为显式注册，由 Server Bootstrap 按 namespace 顺序执行，随后分别 CheckSchema。
 - Migration 失败必须阻止 readiness/启动完成；不能继续接受请求并把缺表问题留到首次调用。
@@ -336,7 +337,7 @@ Market Data Application
 ### 6.2 Redis
 
 - Redis 是可选缓存/协调基础设施，不得仅因同进程就升级为所有模块的强依赖。
-- Server Bootstrap 可创建共享 Redis Client/Pool；Data Cache Adapter 接收接口或客户端句柄。优先将当前每条命令重新 Dial 的自定义 RESP 实现替换为 go-redis Adapter；只有 Data Redis DB index 与 Root 不同，或连接参数确实不同，才由 Server 创建独立 Client 并统一 Close。
+- Server Bootstrap 可创建共享 Redis Client/Pool；Data Cache Adapter 接收接口或客户端句柄。优先将当前每条命令重新 Dial 的自定义 RESP 实现替换为 go-redis Adapter；若 Data Redis DB index、用户名/密码、TLS 或连接参数与 Root 不同，由 Server 创建独立 Client 并统一 Close。
 - Data 缓存 key 前缀、TTL、序列化和失效规则仍由 Data 拥有。
 - Redis 不可用时的行为必须沿用当前 Data Config：明确 fail-fast、降级或禁用缓存，不得在合并时改变。
 - Server 负责最终 Close；Data 负责停止使用资源，不重复关闭共享客户端。
@@ -397,13 +398,14 @@ Owner：项目总规划 + Server + Data
 
 交付：
 - Data 全量 import 依赖与 Go 版本清单。
+- OpenAPI 35 个 Operation 与 Handler 的 Method/Path/security/401/Error Schema 逐项核验；先修复现有 22 条 ApiKey 漏声明，再以 Contract Test 锁定实际认证行为。
 - Provider 构造、DataService 构造、Repository/Cache 构造和所有后台 Worker 清单。
 - 所有 Data HTTP 路由、WebUI API 使用点和 Nginx 转发规则清单。
 - Data 表/索引/Migration namespace 与现有 DB pool 配置清单。
 - DATA-CTR-006/008、PLAT-CTR-005/006/007、SRV-CTR-001 受影响点清单。
 - go-core 入口与 Compose 正式入口关系的明确结论；不得只按目录名称推断是否仍是生产入口。
 
-验收：每个迁移对象有当前路径、目标路径、Owner、兼容要求和测试证据；无未登记的 Data HTTP 调用点。
+验收：每个迁移对象有当前路径、目标路径、Owner、兼容要求和测试证据；无未登记的 Data HTTP 调用点；OpenAPI 的 35 个 Operation 与实际 Handler 认证行为一致，M1 不得带着已确认的 security 声明错误进入归并。
 
 ### M1：Go Module 归并（不改变部署调用）
 
@@ -452,11 +454,11 @@ Owner：Server + Data
 Owner：Server + Data + Platform
 
 交付：
-- MariaDB：Root Server 创建共享 Pool；Data Repository 明确区分 borrowed/owned，进程内模式接收 borrowed `*sql.DB`，独立兼容入口才拥有并关闭自有 Pool。
+- MariaDB：Root Server 统一拥有一个或多个 Pool；仅在 Root/Data 有效 DSN 与凭据完全一致时共享同一 Pool，否则由 Root 创建并持有独立 Data Pool。Data Repository 明确区分 borrowed/owned，进程内模式只接收 borrowed `*sql.DB`，独立兼容入口才拥有并关闭自有 Pool。
 - Migration：将 Root Store.Open 与 Data main 中的隐式迁移副作用拆出；由 Root Bootstrap 显式注册 Analysis/Data Migration Runner，按 namespace 和依赖顺序执行。必须保留 Data Go Migration 中的索引唯一性修复、缺列补齐等兼容升级逻辑，不能只执行静态 SQL 文件。
 - Redis：Data Cache Adapter 接收共享 go-redis Client；若 Data DB index/连接配置不同，由 Bootstrap 创建独立 Client 并统一关闭；保留 Data Cache 禁用、降级、key namespace 和 TTL 语义。
 - Config：拆分 Data 领域配置与远程 HTTP Adapter 认证配置；同进程不要求 Data API Key；`configs/providers.json` 改为嵌入资源或由 Bootstrap 显式传入路径，避免根镜像工作目录变化后配置文件丢失。
-- Provider HTTP：按 PLAT-CTR-005 使用受控 HTTP Client，逐 Provider 配置 Host Allowlist、Redirect、代理策略、响应体预算和并发限制；BaoStock/PyTDX 原生 TCP 不得套用 HTTP Client，单独保留拨号/重连边界。
+- Provider HTTP：按 PLAT-CTR-005 使用受控 HTTP Client，逐 Provider 配置 Host Allowlist、Redirect、代理策略、响应体预算和并发限制；必须增加双 Host 本地测试覆盖 307/308、跨 Host、HTTP/HTTPS 降级，验证 Tushare Body Token、Hithink/TickFlow Key Header、Xueqiu Cookie 不会到达未授权 Host。BaoStock/PyTDX 原生 TCP 不得套用 HTTP Client，单独保留拨号/重连边界。
 - Worker：Retention Worker 等后台任务提供 Start/Stop/Wait，支持 Context 取消、超时、重复启动保护和 drain；Data 不自行处理进程信号。
 - 资源关闭：Data 不关闭 borrowed DB/Redis；Root 先停止 Worker，再关闭 HTTP Server、Module 自有资源和共享 Pool。
 
