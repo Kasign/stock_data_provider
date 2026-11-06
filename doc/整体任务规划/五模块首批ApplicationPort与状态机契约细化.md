@@ -199,7 +199,7 @@ LLM-001 静态盘点已完成，在线真实调用未执行；LLM-002 Port/DTO �
 | payload | typed object | 是 | 必须匹配 event_type + schema_version |
 | correlation_id | string | 是 | Run/请求关联 ID |
 
-payload 不允许无约束 map 直接进入模板。事件版本升级不得静默改变既有字段含义；消费者对未知 schema_version 应拒绝或进入明确的兼容处理路径。
+payload 不允许无约束 map 直接进入模板。事件版本升级不得静默改变既有字段含义；消费者对未知 schema_version 应拒绝或进入明确的兼容处理路径。首批事件类型、触发条件、幂等键及取消/撤回规则见 [INT-CTR-001 首批业务事件映射决议](../notification/05-首批业务事件映射决议.md)。
 
 ### 6.2 最小 Notification Facade
 
