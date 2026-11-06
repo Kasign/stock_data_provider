@@ -72,3 +72,14 @@ python3 scripts/compare_market_data_exports.py \
 ## 当前状态
 
 工具和导出协议已具备；旧 Python 固定提交为 `Kasign/daily_stock_analysis@7a21cd76952c7fe44a7fc5a6113a5b2b8a16bb32`。真实双侧差分仍需在可运行该 Python 依赖的环境导出同证券、同交易日、同复权基准的数据后执行。当前 Go 双 Provider 黄金样例不能替代 Python 样本。
+
+
+## CI 合约测试与真实准确性验收的边界
+
+当前 data-quality-parity.yml 执行的是比较器单元测试、Go 归一化契约测试和静态标记检查。test_compare_market_data_exports.py 中的 Python/Go 数据均由 export() 在测试内构造，Provider 标记为 fixture；例如 close=10.005 对 close=10.0 是容差边界测试，不是 Python 真实行情。测试中出现的 2026-10-28/2026-10-29 差异同样是人为构造的覆盖率/字段差异用例。
+
+因此：
+- 该 CI 只能证明比较器和质量规则按预期工作，不能证明旧 Python 行情准确，也不能证明 Go 与 Python 真实数据等价。
+- 真实数据验收必须使用固定 Python 源码运行后导出的原始 Provider 样本；禁止复制 Go 样本伪装 Python 样本。
+- 每份真实导出必须标明 source_commit、provider、provider_version、request_params、captured_at_utc，并附带未经清洗的原始 payload 或其可审计摘要。
+- 报告应分开给出“比较器合约 CI”与“真实 Provider 数据验收”状态；前者通过不能自动提升后者状态。

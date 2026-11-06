@@ -130,8 +130,9 @@ def markdown_report(py, go, key_field, tolerances, differences, missing_python, 
         lines.append(f"- {field}: {status}")
     lines += ["", "## 差异汇总", ""]
     counts = Counter(item[0] for item in differences)
-    lines.append(f"- Python 独有记录：{len(missing_python)}")
-    lines.append(f"- Go 独有记录：{len(missing_go)}")
+    # missing_python means keys present only in the Python export; missing_go means Go-only keys.
+    lines.append(f"- Python 独有记录：{len(missing_go)}")
+    lines.append(f"- Go 独有记录：{len(missing_python)}")
     lines.append(f"- 字段差异：{len(differences)}")
     for category, count in sorted(counts.items()):
         lines.append(f"- {category}: {count}")
