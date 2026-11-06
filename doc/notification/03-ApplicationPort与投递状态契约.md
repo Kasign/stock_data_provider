@@ -149,7 +149,7 @@ RetryDelivery 必须包含 delivery_id、operator/owner 身份、reason、reques
 
 ## 8. Payload Schema 与模板版本策略
 
-CONTRACT-010 建议：
+NTF-CTR-001（历史别名 CONTRACT-010）规则：
 1. Schema 注册键为 `(event_type, schema_version)`，注册后不可原地修改；变更语义必须新增版本。
 2. 注册信息包含 schema_digest、owner_module、status、registered_at、compatibility_policy。
 3. PublishEvent 在持久化前校验 payload；未知版本、Schema 不可用、校验失败均明确拒绝，不做隐式字段补全或静默降级。
