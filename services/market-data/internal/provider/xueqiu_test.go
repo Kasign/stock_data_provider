@@ -79,8 +79,8 @@ func TestXueqiuHotRankingReportsInvalidNumericField(t *testing.T) {
 		t.Fatal("invalid numeric field must reject the ranking response")
 	}
 	report := reporter.Snapshot()
-	if report.ErrorCount != 1 || len(report.Issues) != 1 {
-		t.Fatalf("expected one parse error, got %+v", report)
+	if report.WarningCount != 1 || report.ErrorCount != 0 || len(report.Issues) != 1 {
+		t.Fatalf("expected one parse warning and no errors, got %+v", report)
 	}
 	issue := report.Issues[0]
 	if issue.Field != "latest_price" || issue.ProviderField != "current" || issue.Code != "invalid_number" || issue.RowIndex != 0 {
