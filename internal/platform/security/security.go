@@ -30,6 +30,7 @@ const (
 
 const minimumTokenBytes = 32
 const maximumTokenBytes = 256
+const maximumServiceCredentials = 128
 
 type Principal struct {
 	Kind    IdentityKind
@@ -124,6 +125,9 @@ func (r *Router) Handler() http.Handler {
 }
 
 func NewAuthenticator(ownerToken config.Secret, services []ServiceCredential) (*Authenticator, error) {
+	if len(services) > maximumServiceCredentials {
+		return nil, errors.New("too many service credentials")
+	}
 	if !ownerToken.Configured() {
 		return nil, errors.New("owner credential is required")
 	}

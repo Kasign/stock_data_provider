@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"strconv"
 	"testing"
 
 	"example.com/stock-analysis-flow/internal/platform/config"
@@ -168,6 +169,23 @@ func TestGuardOwnerOnlyAndOwnerOrService(t *testing.T) {
 		if response.Code != http.StatusNoContent {
 			t.Fatalf("allowed identity status=%d", response.Code)
 		}
+	}
+}
+
+func TestNewAuthenticatorRejectsTooManyServiceCredentials(t *testing.T) {
+	makeSecret := func(value string) config.Secret {
+		return config.NewEnvWithLookup(func(string) (string, bool) { return value, true }).Secret("TOKEN")
+	}
+	services := make([]ServiceCredential, maximumServiceCredentials+1)
+	for index := range services {
+		services[index] = ServiceCredential{
+			Name: "service-" + strconv.Itoa(index),
+			Secret: makeSecret(dataToken),
+			Scopes: []string{ScopeDataRead},
+		}
+	}
+	if _, err := NewAuthenticator(makeSecret(ownerToken), services); err == nil {
+		t.Fatal("expected service credential count limit to be enforced")
 	}
 }
 
