@@ -29,7 +29,7 @@ type ResultSummary struct {
 type Run struct {
 	SchemaVersion string `json:"schema_version"`
 	RunRef string `json:"run_ref"`
-	Status domain.RunStatus `json:"status"`
+	Status string `json:"status"`
 	Version uint64 `json:"version"`
 	SystemAsOf time.Time `json:"system_as_of"`
 	DeadlineAt time.Time `json:"deadline_at"`
@@ -51,7 +51,7 @@ type Stage struct {
 	StageRef string `json:"stage_ref"`
 	RunRef string `json:"run_ref"`
 	StageCode string `json:"stage_code"`
-	Status domain.StageStatus `json:"status"`
+	Status string `json:"status"`
 	Version uint64 `json:"version"`
 	Required bool `json:"required"`
 	DependencyStageRefs []string `json:"dependency_stage_refs"`
@@ -72,7 +72,7 @@ type Attempt struct {
 	AttemptRef string `json:"attempt_ref"`
 	StageRef string `json:"stage_ref"`
 	AttemptNo int `json:"attempt_no"`
-	Status domain.AttemptStatus `json:"status"`
+	Status string `json:"status"`
 	LeaseOwner *string `json:"lease_owner"`
 	LeaseExpiresAt *time.Time `json:"lease_expires_at"`
 	FencingToken uint64 `json:"fencing_token"`
@@ -83,7 +83,7 @@ type Attempt struct {
 }
 
 func RunFromDomain(v domain.Run) Run {
-	return Run{SchemaVersion:v.SchemaVersion,RunRef:v.Ref,Status:v.Status,Version:v.Version,SystemAsOf:v.SystemAsOf,DeadlineAt:v.DeadlineAt,TemplateRef:v.TemplateRef,TemplateVersion:v.TemplateVersion,TemplateFingerprint:v.TemplateFingerprint,InputSnapshotRefs:cloneStrings(v.InputSnapshotRefs),ResultSummary:resultSummaryFromDomain(v.ResultSummary),OriginatingRequestID:cloneStringPointer(v.OriginatingRequestID),CorrelationID:v.CorrelationID,TerminationReason:stringPointer(v.TerminationReason),CreatedAt:v.CreatedAt,StartedAt:cloneTimePointer(v.StartedAt),FinishedAt:cloneTimePointer(v.FinishedAt)}
+	return Run{SchemaVersion:v.SchemaVersion,RunRef:v.Ref,Status:string(v.Status),Version:v.Version,SystemAsOf:v.SystemAsOf,DeadlineAt:v.DeadlineAt,TemplateRef:v.TemplateRef,TemplateVersion:v.TemplateVersion,TemplateFingerprint:v.TemplateFingerprint,InputSnapshotRefs:cloneStrings(v.InputSnapshotRefs),ResultSummary:resultSummaryFromDomain(v.ResultSummary),OriginatingRequestID:cloneStringPointer(v.OriginatingRequestID),CorrelationID:v.CorrelationID,TerminationReason:stringPointer(v.TerminationReason),CreatedAt:v.CreatedAt,StartedAt:cloneTimePointer(v.StartedAt),FinishedAt:cloneTimePointer(v.FinishedAt)}
 }
 func StageFromDomain(v domain.Stage, schemaVersion string) Stage {
 	return Stage{SchemaVersion:schemaVersion,StageRef:v.Ref,RunRef:v.RunRef,StageCode:v.Code,Status:v.Status,Version:v.Version,Required:v.Required,DependencyStageRefs:cloneStrings(v.Dependencies),RetryPolicyRef:v.RetryPolicyRef,AttemptNo:v.AttemptNo,RetryAt:cloneTimePointer(v.RetryAt),OutputRef:cloneStringPointer(v.OutputRef),QualityStatus:stringPointer(v.QualityStatus),ReasonCodes:cloneStrings(v.ReasonCodes),RiskDecision:stringPointer(v.RiskDecision),CreatedAt:v.CreatedAt,StartedAt:cloneTimePointer(v.StartedAt),FinishedAt:cloneTimePointer(v.FinishedAt)}

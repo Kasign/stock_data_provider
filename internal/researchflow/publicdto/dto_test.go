@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-
 	"time"
 
 	"github.com/santhosh-tekuri/jsonschema/v5"
