@@ -534,96 +534,182 @@ Shutdown 停止新请求和新任务派发，收敛在途请求/Attempt，关闭
 
 ## 16. 冻结决策登记表
 
-下列决策在 Owner 明确确认前保持 pending，不得标记冻结。
+本节是唯一的跨模块决策索引，不替代各模块权威 Schema。每条记录必须区分“语义决策”和“实现证据”，不能用一个 pending 同时表达两种不同问题。
 
-| ID | 决策 | 建议结论 | Owner / Review 方 | 当前状态 |
-|---|---|---|---|---|
-| CONTRACT-001 | 精确数值与 JSON 类型 | 金额/价格 decimal string；计数 integer；统计比例 number；Data Adapter 精确转换 | Quant / Data / Researchflow | pending |
-| CONTRACT-002 | 首批 Indicator 与参数 Schema | 每个 indicator_code 独立 typed、版本化参数 Schema | Quant | pending |
-| CONTRACT-003 | 首批 Factor、母体与标准化 | 固定 universe_ref、分类版本、样本覆盖和排除原因 | Quant | pending |
-| CONTRACT-004 | Evidence AuthorizationRef 与撤销检查 | Research 保存不透明不可变引用；来源 Owner 负责当前访问复核 | Research / News / Data | pending |
-| CONTRACT-005 | system_as_of 唯一传播 | CreateRun 固定 UTC system_as_of，下游继承且重试不刷新 | Researchflow / Research / Quant / News | pending |
-| CONTRACT-006 | Stage 结果传播矩阵 | 按 stage_code + template_version 显式定义，不依赖隐式默认 | Researchflow | pending |
-| CONTRACT-007 | cancel/deadline/retry/lease/fencing | 以状态机文档的原子迁移、预算和 fencing 规则为准 | Researchflow / Server | pending |
-| CONTRACT-008 | LLM Gateway 与 Stream 能力 | 以真实 Responses/SSE 盘点和本地 E2E 决定支持状态 | LLM / Platform | pending |
-| CONTRACT-009 | Notification 幂等与 unknown 恢复 | Inbox 与 Delivery 分离；外部副作用不确定时记录 unknown | Notification / 上游事件 Owner | pending |
-| CONTRACT-010 | Event Payload Schema 注册 | event_type + schema_version 绑定强类型 Schema 和兼容策略 | Notification / 各事件 Owner | pending |
-| CONTRACT-011 | News PIT、授权快照和稳定分页 | 双时间轴、不可变授权快照、当前撤销检查、稳定 Cursor | News / Research | pending |
-| CONTRACT-012 | Data OpenAPI ↔ Go JSON | 以真实 Handler Golden 和双向差异测试为准 | Data | pending |
-| CONTRACT-013 | Server 组合根与 Migration 总注册 | 集中在明确的集成分支；模块分支只提供 Facade/Adapter/Migration | 集成 Owner / Platform / 各模块 | pending |
+状态只允许以下取值：
+
+- `pending_decision`：契约语义尚未由责任模块确认；禁止消费者自行猜测。
+- `accepted`：生产方与所有直接消费者已书面确认语义；尚不代表实现通过。
+- `pending_evidence`：语义已确认，但 Schema、Golden、Contract Test 或实现证据尚未齐备。
+- `frozen`：语义、版本、示例、Schema、消费者确认和契约测试证据齐备，可作为该批次实现基线。
+- `deferred`：明确不属于当前批次；必须写明不阻断的模块/调用点和目标版本。
+- `rejected`：该方案被明确否决，必须记录替代方案，不能继续被消费者引用。
+
+Owner 使用**模块责任角色**而非个人姓名：生产方模块 Owner 对字段定义和行为负责；每个直接消费模块 Owner 对消费语义负责；跨模块裁决由 GOV Review 记录。个人执行者可在专项文档登记，不改变责任归属。
+
+| ID | 必须裁决的唯一问题 | 生产方责任角色 | 必须 Review 的消费方 | L2 阻断范围 | 当前状态 |
+|---|---|---|---|---|---|
+| CONTRACT-001 | 数值 JSON 类型、精度、舍入及 Data number 到 decimal 的无损边界 | Quant（Data Adapter 由 Data/调用方负责） | Researchflow、Research | 使用这些数值字段的 Quant/Researchflow/Research 调用点 | pending_decision |
+| CONTRACT-002 | 首批 Indicator 代码、每项参数 Schema、默认值和版本规则 | Quant | Researchflow | 首批调用的 Indicator Port | pending_decision |
+| CONTRACT-003 | 首批 Factor 代码、universe、分类版本、标准化和覆盖率口径 | Quant | Researchflow | 首批调用的 Factor Port | pending_decision |
+| CONTRACT-004 | AuthorizationRef 的字段、快照不可变性、来源 Owner 当前撤销检查 | Research（引用模型）；News/Data（各自授权决策） | News、Data、Researchflow | 读取受保护来源内容的 Evidence Adapter | pending_decision |
+| CONTRACT-005 | Run 唯一 system_as_of 的产生、传递、持久化和重试规则 | Researchflow | Research、Quant、News | 所有依赖历史知识时点的首批调用点 | pending_decision |
+| CONTRACT-006 | Stage 结果如何按模板策略归并为 Run 结果 | Researchflow | Server/Worker 集成方 | 首批 Workflow Template 与结果消费者 | pending_decision |
+| CONTRACT-007 | cancel/deadline/retry/lease/fencing 的原子迁移和迟到写入拒绝规则 | Researchflow | Server/Worker、Platform（仅技术执行边界） | 需要后台执行、取消或重试的首批流程 | pending_decision |
+| CONTRACT-008 | 首批 Responses 请求/响应字段、SSE 事件和 unsupported 能力表达 | LLM | Researchflow | 首批实际调用的 LLM Port；未使用能力可 deferred | pending_decision |
+| CONTRACT-009 | Notification Inbox、Delivery、Attempt 的幂等和外部结果 unknown 恢复 | Notification | 发送事件的模块 Owner | 首批通知命令/事件调用点 | pending_decision |
+| CONTRACT-010 | event_type + schema_version 到强类型 Payload Schema 的注册和兼容规则 | Notification（注册机制）；事件生产方（Payload） | 所有首批事件生产方 | 首批已启用 Event 类型 | pending_decision |
+| CONTRACT-011 | News PIT 过滤顺序、授权快照/当前撤销、Cursor 快照和稳定排序 | News | Research、Researchflow | Research 首批 News Evidence Query | pending_decision |
+| CONTRACT-012 | Data OpenAPI、Go JSON Tag、真实 Handler JSON 的双向一致性 | Data | Quant、Researchflow、Server Data Adapter | 首批被消费的 Data Operation；差异未解决的 Operation 不得进入 L2 | pending_evidence |
+| CONTRACT-013 | Server 组合根的唯一归属、装配入口和 Migration 总注册边界 | Server/集成组合根 Owner | Platform 及所有提供 Facade/Migration 的模块 Owner | 仅阻断需要改动共享入口的集成任务；不阻断模块内部独立开发 | pending_decision |
+
+### 16.1 每条契约的冻结证据
+
+任何 Decision 从 pending 转为 accepted/frozen，必须能回答以下问题，缺一不可：
+
+1. **谁生产**：唯一字段/行为生产方模块，以及负责的公开 Port/DTO。
+2. **谁消费**：列出所有直接消费者；没有消费者时明确写“无”。
+3. **输入输出**：完整字段表，逐字段声明类型、required/optional、nullable、空值语义、单位、精度、枚举和默认值。
+4. **行为**：成功、部分成功、无数据、未知、不支持、超时、取消、冲突、重试和权限拒绝的结果。
+5. **时间**：业务时间、系统知识时间、截止时间和时区规则；不得用一个泛化的 `as_of` 代替不同语义。
+6. **兼容**：Schema 版本、兼容窗口、未知字段/枚举处理和破坏性变更策略。
+7. **样例**：至少一个正常样例、一个边界/缺失样例、一个失败样例；样例必须通过 Schema 校验。
+8. **自动验证**：Contract Test/Golden Fixture 的执行入口、精确 SHA 和结果。
+9. **决策记录**：生产方与消费方确认结论；未确认的异议及最终裁决记录。
+
+只有文字原则、字段名列表或伪代码，不构成字段级契约。
 
 ## 17. GOV-004 / GOV-005 门禁分层
 
-现有规划中 GOV-004 的设计冻结和真实生产集成条件有混写。为避免把模块独立开发与所有 Provider/部署验收绑死，建议按 GOV-005 的 L1/L2/L3 分层执行。
+门禁按**当前批次真实依赖的契约和集成范围**判断，不按整个项目所有模块是否全部完成判断。GOV-004 管理跨模块契约；GOV-005 管理模块独立开发和集成顺序。两者不是同一张“全部通过/全部不通过”的总开关。
 
-### L1 Design Ready
+### L1 Design Ready（设计可进入评审）
 
-- 模块职责、依赖 DAG、数据所有权明确。
-- 首批模块 Application Port、DTO、状态机和模块任务明确。
-- 未决事项有 Decision ID、Owner 和阻断范围。
-- 允许继续设计与拆分任务；不代表公开契约可冻结。
+必须满足：
 
-### L2 Module Ready（契约冻结）
+- 模块职责、领域事实所有权和 Go 依赖 DAG 明确。
+- 当前批次的公开 Port、DTO、状态机草案及生产方/消费方明确。
+- 未决项有 Decision ID、责任模块、直接阻断范围和待决问题。
+- 允许继续领域设计、契约细化和独立测试；不得将草案当作冻结接口。
 
-- 本批次所有跨模块公开 Port/DTO/Schema 已完成生产方与消费方 Review。
-- required/optional/nullable、枚举、时间、单位、精度、错误和状态语义明确。
-- 示例 JSON、Schema、Go JSON Tag/OpenAPI 映射和 Golden Fixture 齐备。
-- 依赖 DAG、Repository/Migration Owner、认证和 Secret 边界无冲突。
-- 契约测试可独立执行；未实现的提供方业务功能可用明确 Fixture/Contract Test 支撑模块开发，但不得宣称真实集成通过。
-- 所有 P0 Decision 已决策；其余 pending 项明确不阻断的模块范围和延期版本。
-- 记录契约版本、参与模块确认 SHA 和测试证据。
+### L2 Module Ready（当前批次契约冻结，可独立实现）
 
-L2 不要求真实 Provider 在线成功、生产 DNS/出口 SSRF 演练、所有模块真实数据库部署或完整端到端研究 Run；这些属于 L3。
+当前模块批次**实际使用的每条跨模块契约**必须满足：
 
-### L3 Integration Ready
+- 生产方和所有直接消费方完成 Review；责任角色明确，不要求必须指定个人姓名。
+- 字段表明确 required/optional/nullable、空值、单位、精度、枚举、时间、状态、错误和幂等语义。
+- JSON Schema/OpenAPI、Go DTO/JSON Tag、样例和 Golden/Contract Test 相互一致；若生产实现尚未就绪，可用生产方确认的 Fixture 验证消费者，但不得宣称真实集成通过。
+- 依赖 DAG、Repository/Migration 所有权、认证和 Secret 边界无冲突。
+- 当前批次所有 P0 Decision 已 accepted；非本批次能力必须标记 deferred，并明确不阻断范围。
+- 记录契约版本、参与模块确认 SHA、测试入口和测试证据。
 
-- Data API、News Facade、Quant/Research/Researchflow/LLM/Notification 的真实 Adapter/Facade 接入完成。
+**L2 的判断单位是“模块 + 当前批次 + 实际调用点”，不是整个仓库。** 某个 Operation/DTO 不合格，只阻断消费它的调用点；不能据此笼统阻断与它无关的领域工作。
+
+L2 不要求真实 Provider 在线成功、生产 DNS/出口 SSRF 演练、所有模块真实数据库部署、真实模型/通知渠道可用或完整端到端研究 Run。这些属于 L3。
+
+### L3 Integration Ready（明确 SHA 组合的真实集成通过）
+
+- 明确参与模块和精确 SHA，不使用“最新代码”作为测试基线。
+- 真实 Data API、News Facade、Quant/Research/Researchflow/LLM/Notification Adapter 接入完成。
 - 真实 MariaDB/Redis、Migration、Worker、取消/重试/恢复通过集成测试。
-- Platform HTTP Client 生产出口 SSRF/DNS/重定向/代理安全门禁通过。
-- Diagnostics、Fault、Request ID、认证/授权在真实 Server 路由和 Worker 接入。
-- LLM 真实模型调用/Stream、Notification 真实渠道、News 授权内容访问按实际启用能力完成验收。
-- 端到端 Run 可追溯输入快照、算法/模型版本、证据、质量、Stage/Attempt 和失败原因。
-- 所有证据关联精确提交 SHA、Workflow/测试运行和部署环境。
+- Platform HTTP Client 生产出口 SSRF/DNS/重定向/代理安全验收通过。
+- Server 路由、Worker 的 Diagnostics、Fault、Request ID、认证/授权接入通过。
+- 按启用能力完成真实模型 Stream、通知渠道和授权内容访问验收。
+- 端到端 Run 可追溯输入快照、算法/模型版本、证据、质量、Stage/Attempt 和失败原因；证据关联精确 SHA、Workflow/测试运行和环境。
 
-### GOV-004 当前状态
+### 17.1 当前批次阻断规则
 
-- 架构职责和依赖 DAG：设计基线已形成，需在模块代码/Owner Review 持续核对。
-- Platform 公共技术语义：PLAT-002 文档已形成，跨模块 Review 待完成。
-- Data OpenAPI/Go JSON：存在已知字段和序列化差异，L2 阻断。
-- News Query Facade/PIT/授权/分页：目标契约已形成，DTO/Owner Review 和实现证据待补。
-- Quant/Research DTO：字段级草案存在，CONTRACT-001～005 等待 Owner 决策和 Schema/Golden。
-- Researchflow 状态机：已有详细草案，CONTRACT-006/007 等待 Owner 决策。
-- LLM/Notification：边界基线存在，首批 Port/事件 Schema 仍需 Owner Review。
-- Server 组合根：职责原则明确，具体集成分支/Owner 和入口清单仍需确认。
+| 问题 | 阻断什么 | 不阻断什么 |
+|---|---|---|
+| Quant 数值/Indicator/Factor 决策未完成 | 使用对应字段/Port 的调用点 | 不依赖这些字段的 Quant 内部领域工作 |
+| News Query 的 PIT/授权/Cursor 语义未冻结 | News Evidence Query 契约和消费者 Adapter | Research 自己的 Evidence Domain、Fixture 和非 News 来源工作 |
+| News 生产 Facade/Repository/Migration 未实现 | 真实 News 查询与 L3 集成 | 已冻结 DTO 上的消费者开发和 Contract Test |
+| Researchflow 状态传播或取消竞态未冻结 | 依赖该行为的 Executor/Worker 实现 | 不依赖该行为的模板定义、纯状态机单测 |
+| Data 某个 Operation 的 OpenAPI/Go JSON 不一致 | 该 Operation 的 L2 消费接入 | 其他已通过双向 Golden 的 Operation |
+| Server 组合根入口未明确 | 共享 DI/路由/Worker/Migration 注册的修改与 L3 集成 | 各模块公开 Facade、Adapter 和独立 Migration 文件开发 |
+| 生产 DNS、真实 Provider、数据库或渠道未验收 | 对应 L3 集成 | 已通过契约测试的模块 L2 独立开发 |
 
-**结论：当前未达到 L2，不冻结契约；但不应把 L3 生产验收全部作为五模块独立开发的前置条件。**
+### 17.2 当前状态
+
+- 架构职责和依赖 DAG：设计基线已形成，仍需结合各模块最新代码复核。
+- Platform 公共技术语义：文档已形成；跨模块消费边界仍需逐项确认。
+- Data OpenAPI/Go JSON：当前分支存在已记录差异；按 Operation 逐项核对，未通过的 Operation 不得作为 L2 消费契约。
+- News Query：目标 Port 已描述；字段级 DTO、授权、PIT、Cursor 和 Owner Review 尚未全部闭合。
+- Quant/Research：字段级草案存在；CONTRACT-001～005 仍需决策及 Schema/Golden。
+- Researchflow：状态机草案较完整；CONTRACT-006/007 仍需生产方与集成方确认。
+- LLM/Notification：首批 Port/Event Schema 仍需明确哪些能力属于当前批次。
+- Server 组合根：责任角色定义为 Server/集成组合根 Owner；具体仓库入口和目标集成分支仍需登记。
+
+**结论：当前整体尚未达到 L2，不冻结全局共同契约。允许已满足 L2 的模块/调用批次独立开发；未满足的契约只阻断其直接依赖范围。**
 
 ## 18. 整体 Review 发现与后续动作
 
-### P0：冻结前必须处理
+### P0：当前首批契约必须完成
 
-1. 确认本文件与整体任务规划、GOV-004、Platform 08、News Query、Quant/Research DTO、Application Port 文档之间的引用关系，避免维护重复 Schema。
-2. 由 Quant Owner 确认 CONTRACT-001～003，特别是 Data API number 到内部 decimal 的精确转换。
-3. 由 Research / News / Data Owner 确认 CONTRACT-004 和 CONTRACT-011，明确 AuthorizationRef 的所有者、当前撤销检查和历史引用保留。
-4. 由 Researchflow / Research / Quant / News Owner 确认 CONTRACT-005，固定 Run 的 system_as_of 传播。
-5. 由 Researchflow Owner 确认 CONTRACT-006/007，完成状态传播矩阵、取消/deadline 竞争和重试恢复边界。
-6. Data Owner 按 DATA-CONTRACT-001～008 完成 OpenAPI/Go JSON 差异修复和双向契约测试；这是 Data 对外 API 契约 L2 阻断。
-7. 明确 Server/集成根 Owner 和目标分支，登记 cmd、DI、HTTP 路由、Worker、Migration 总注册的实际入口。
+1. Quant Owner 决策 CONTRACT-001～003，形成可验证的数值类型、Indicator 参数和 Factor 母体 Schema。
+2. Research、News、Data Owner 决策 CONTRACT-004/011，明确 AuthorizationRef、当前撤销检查、PIT 过滤顺序和稳定 Cursor。
+3. Researchflow、Research、Quant、News Owner 决策 CONTRACT-005，固定唯一 system_as_of 的生成、传播和重试规则。
+4. Researchflow Owner 决策 CONTRACT-006/007，给出状态传播矩阵、取消/deadline 竞争、Attempt 终态和 fencing 规则。
+5. Data Owner 按 DATA-CONTRACT-001～008 完成首批被消费 Operation 的 OpenAPI/Go JSON 双向 Golden；未通过 Operation 从当前 L2 消费清单中排除。
+6. Server/集成组合根 Owner 登记 cmd、DI、HTTP 路由、Worker、Migration 总注册的实际入口；模块 Owner 只提交公开 Facade、Adapter 和独立 Migration。
 
-### P1：模块 L2 / 集成前完成
+### P1：对应模块批次启用前完成
 
-8. News Owner 实现并测试 ResearchEvidenceQuery Facade、PIT 双时间过滤、授权快照、当前撤销检查和稳定分页；模块契约可先用 Contract Test 评审，生产接入属于 L3。
-9. LLM Owner 完成 Responses/SSE DTO 和真实能力状态 Review；不支持的能力明确 unsupported。
-10. Notification Owner 完成 Event Schema 注册、recipient_scope、Inbox/Delivery 幂等和 unknown 恢复语义。
-11. Platform 与 Server 明确真实 MariaDB/Redis、Migration 失败恢复和服务路由接入验收计划。
-12. 所有公开 DTO 补齐 JSON Schema、正反向 Golden 和未知枚举测试。
+7. News 完成 ResearchEvidenceQuery DTO/Schema/Fixture 的双向 Review；生产 Facade、PIT Repository 和真实授权读取按 L3 验收。
+8. LLM 完成首批 Responses/SSE Port；未实现能力显式标记 unsupported/deferred。
+9. Notification 完成首批 Event Schema、recipient_scope、Inbox/Delivery 幂等和 unknown 恢复语义。
+10. 所有当前批次公开 DTO 补齐正常、边界、失败 Golden 和未知枚举测试。
 
-### P2：L3 集成和生产验收
+### P2：L3 真实集成
 
-13. 真实 Data/News/LLM/Notification Adapter 联调。
-14. 生产 HTTP 出口 SSRF、安全 DNS、重定向、代理和响应大小演练。
-15. 真实数据库、Worker Lease/Fencing、Migration 恢复、Run 取消/超时/重试故障演练。
-16. 端到端 Run、通知和 WebUI 真实结果闭环。
+11. 真实 Data/News/LLM/Notification Adapter 联调。
+12. 生产 HTTP 出口 SSRF、安全 DNS、重定向、代理和响应大小演练。
+13. 真实数据库、Worker Lease/Fencing、Migration 恢复、Run 取消/超时/重试故障演练。
+14. 端到端 Run、通知和 WebUI 真实结果闭环。
+
+## 19. 多轮 Review 复核记录（2026-11-06）
+
+本轮在 Platform 分支执行了以下复核，结论只覆盖文档与 GitHub 分支元数据，不代表代码测试通过。
+
+### Review 1：权威关系与重复定义
+
+- 本文件只作为跨模块索引和裁决规则，不复制领域字段级 Schema。
+- News、Quant/Research、Researchflow、Data 的字段细节仍由各自专项文档拥有。
+- 发现“字段/状态在总览文档重复定义”时，以专项权威文档为准；本文件只保留边界、冻结状态和冲突登记。
+- 本文件不直接修改 doc/整体任务规划，避免越过规划文档维护边界。
+
+### Review 2：语义能否直接实现
+
+重点检查 required/optional/nullable、空值、单位/精度、时间、状态迁移、错误、幂等、取消、重试、授权和分页。原登记表仅记录“决策主题 + pending”，无法区分语义未决和实现证据不足；已改为六种明确状态，并为每项补充生产方、消费者和实际阻断范围。
+
+### Review 3：门禁是否互相矛盾
+
+原文把“所有 P0 Decision 已决策”“Data 双向 Golden”“真实生产集成”放在相邻条款，但没有清楚区分当前批次契约验证与完整生产集成。现明确：
+- L2 是模块/批次/调用点级别，不是仓库级一刀切。
+- L2 可用生产方确认的 Fixture 做独立契约验证，但不得声称真实集成通过。
+- 真实 Provider、生产网络出口、真实数据库部署、模型/通知渠道和端到端 Run 属于 L3。
+- 某个 Data Operation 不一致，只阻断该 Operation 的消费，不扩大为全部 Data API 阻断。
+- Server 组合根的共享入口归集成组合根 Owner；不因此阻断模块独立实现。
+
+### Review 4：责任归属是否可执行
+
+“集成 Owner”“各模块 Owner”不再作为模糊并列责任。生产方负责定义和维护契约；直接消费者负责确认消费语义；Server/集成组合根 Owner 唯一负责共享装配入口；Platform 只提供技术原语并协助集成，不接管业务 Owner。责任角色可以先于个人姓名确定，不能因尚未指定个人而悬空。
+
+### 本轮分支快照
+
+- Platform：`feat/platform-foundation` — `24f282ec8889ea51df9335a429cc719ad406512e`
+- Data：`feat/full-go-data-providers-api-switch` — `b7d60a97b78273cf653a2910b6d1a21ac7ad6ac7`
+- News：`feat/research-news-ingestion` — `7b509c184386028802699c7e3520b7944c4ed504`
+- Researchflow：`feat/research-analysis-flow-native-go` — `bc7952845cd812ab22a4dfda33a35fd2cabbcecc`
+- WebUI：`feat/webui-market-data-console` — `8cd13620d13da97433eb4fcd5cc9cfa3d6c8f559`
+- 当前分支列表未发现独立 Quant 分支；Quant 契约按仓库中的 Quant 专项文档和模块代码归属审查，不虚构分支。
+
+### 本轮 Review 限制
+
+- 已读取 Platform 分支上的总规划、GOV-004/GOV-005、公共 Schema、Application Port、News Query、Quant/Research DTO 和 Platform 契约文档。
+- 已读取各开发分支的最新 ref SHA；尚未对所有分支业务代码逐文件做实现审计。
+- 未运行 Go 构建、测试、Provider、数据库、模型或端到端验证。
+- 分支 SHA 仅是本轮审查快照；任何后续合并都会使快照失效，必须重新读取。
 
 ## 19. 本轮范围与限制
 
