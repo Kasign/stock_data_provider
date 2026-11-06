@@ -92,6 +92,14 @@ func TestValidateNewsAuthorizationBindingRejectsConditionalAndContentLevelViolat
 	}
 }
 
+func TestValidateNewsAuthorizationBindingRequiresConditionsArray(t *testing.T) {
+	base := loadNewsAuthorizationGolden(t)
+	base.AuthorizationRef.Conditions = nil
+	if !errors.Is(ValidateNewsAuthorizationBinding(base), ErrAuthorizationBindingInvalid) {
+		t.Fatal("conditions must be an array, not null")
+	}
+}
+
 func TestValidateNewsAuthorizationBindingRejectsNonCanonicalFingerprintAndTime(t *testing.T) {
 	base := loadNewsAuthorizationGolden(t)
 

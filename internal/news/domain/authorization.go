@@ -58,16 +58,16 @@ type NewsAuthorizationBinding struct {
 	CallerRef             string                     `json:"caller_ref"`
 	ResourceRef           string                     `json:"resource_ref"`
 	PurposeCode           string                     `json:"purpose_code"`
-	RequestedContentLevel  AuthorizationContentLevel `json:"requested_content_level"`
-	ProviderRef            *string                    `json:"provider_ref"`
-	SourceRef              string                     `json:"source_ref"`
-	EndpointRef            *string                    `json:"endpoint_ref"`
-	AuthorizationRef       NewsAuthorizationRef       `json:"authorization_ref"`
-	PolicySnapshot         AuthorizationPolicySnapshot `json:"policy_snapshot"`
+	RequestedContentLevel AuthorizationContentLevel `json:"requested_content_level"`
+	ProviderRef           *string                    `json:"provider_ref"`
+	SourceRef             string                     `json:"source_ref"`
+	EndpointRef           *string                    `json:"endpoint_ref"`
+	AuthorizationRef      NewsAuthorizationRef       `json:"authorization_ref"`
+	PolicySnapshot        AuthorizationPolicySnapshot `json:"policy_snapshot"`
 }
 
 var (
-	ErrAuthorizationBindingInvalid = errors.New("news.authorization.binding_invalid")
+	ErrAuthorizationBindingInvalid  = errors.New("news.authorization.binding_invalid")
 	authorizationFingerprintPattern = regexp.MustCompile(`^[0-9a-f]{64}$`)
 )
 
@@ -108,7 +108,7 @@ func ValidateNewsAuthorizationBinding(binding NewsAuthorizationBinding) error {
 			return ErrAuthorizationBindingInvalid
 		}
 	}
-	if !strictlySortedNonEmpty(ref.Conditions) {
+	if ref.Conditions == nil || !strictlySortedNonEmpty(ref.Conditions) {
 		return ErrAuthorizationBindingInvalid
 	}
 	if ref.Decision == AuthorizationDecisionAllowed && len(ref.Conditions) != 0 {
