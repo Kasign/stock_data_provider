@@ -47,6 +47,11 @@ internal/research/
   storage/
     migrations.go
     migrations_test.go
+    repository.go
+    context_repository.go
+    event_repository.go
+    claim_repository.go
+    repository_test.go
 ```
 
 R1/R2/R3/R5 当前实现 Context、Evidence、Event、Claim/Hypothesis 领域结构及本地校验；R7 当前仅完成 Repository Port 与 Migration Schema 清单：包括 Evidence 内容指纹/PIT、GOV-CTR-006 授权快照完整性、Event 追加版本和生命周期转换、Claim/Hypothesis 认识论字段与验证条件。没有 HTTP 接口、真实数据 Adapter、Migration 执行、Outbox 或 Run 编排接入；Context/Event/Claim SQL Repository Adapter 已按 Migration v1/v2 实现，但尚无真实 MariaDB 集成验收。

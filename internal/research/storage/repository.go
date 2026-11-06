@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"database/sql"
@@ -9,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"time"
+	"unicode/utf8"
 )
 
 var (
@@ -49,7 +51,7 @@ func (r repositoryBase) appendVersion(ctx context.Context, aggregateType, aggreg
 	insertSQL string, insertArgs []any, validateNext func(previous []byte) error) error {
 	if r.db == nil { return ErrInvalidRepository }
 	if ctx == nil { return errors.New("context is nil") }
-	if aggregateID == "" || version < 1 || len(payload) == 0 {
+	if aggregateID == "" || utf8.RuneCountInString(aggregateID) > 255 || version < 1 || len(payload) == 0 {
 		return fmt.Errorf("aggregate identity, version and payload are required")
 	}
 	now := r.now().UTC()
@@ -72,9 +74,10 @@ func (r repositoryBase) appendVersion(ctx context.Context, aggregateType, aggreg
 	digest := payloadDigest(payload)
 	if version <= latest {
 		var existingDigest string
-		query := fmt.Sprintf("SELECT payload_sha256 FROM %s WHERE %s=? AND %s=?", table, idColumn, versionColumn)
-		err := tx.QueryRowContext(ctx, query, aggregateID, version).Scan(&existingDigest)
-		if err == nil && existingDigest == digest { return tx.Commit() }
+		var existingPayload []byte
+		query := fmt.Sprintf("SELECT payload_sha256, payload FROM %s WHERE %s=? AND %s=?", table, idColumn, versionColumn)
+		err := tx.QueryRowContext(ctx, query, aggregateID, version).Scan(&existingDigest, &existingPayload)
+		if err == nil && existingDigest == digest && bytes.Equal(existingPayload, payload) { return tx.Commit() }
 		if err != nil && !errors.Is(err, sql.ErrNoRows) { return fmt.Errorf("read existing research version: %w", err) }
 		return fmt.Errorf("%w: %s %s version %d already has different content", ErrConflict, aggregateType, aggregateID, version)
 	}
