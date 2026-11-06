@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:kasign:stock_data_provider:quant:result-manifest:1.0.0",
+  "title": "QNT-CTR-005 QuantResult Manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "result_id",
+    "manifest_fingerprint",
+    "result_type",
+    "schema_version",
+    "system_as_of",
+    "input_snapshot_refs",
+    "result_fingerprint"
+  ],
+  "properties": {
+    "result_id": {
+      "type": "string",
+      "pattern": "^quant_result:sha256:[0-9a-f]{64}$"
+    },
+    "manifest_fingerprint": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "result_type": {
+      "type": "string",
+      "enum": [
+        "indicator",
+        "factor",
+        "trend",
+        "market",
+        "industry",
+        "stock",
+        "strategy",
+        "backtest",
+        "risk",
+        "evaluation"
+      ]
+    },
+    "schema_version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "system_as_of": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "input_snapshot_refs": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "result_fingerprint": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    }
+  }
+}

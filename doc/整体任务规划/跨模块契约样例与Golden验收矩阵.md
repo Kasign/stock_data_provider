@@ -57,6 +57,22 @@
 
 只有 Schema/Manifest Golden 与 Data Owner/Handler/并发测试均有 CI 记录后，DATA-CTR-008 才能升级为 frozen；文档和静态 Schema 校验不构成运行时证据。
 
+### QNT-CTR-005 QuantResult Authorization Contract Test
+
+| Test ID | 场景 | 必须断言 | 失败结果 |
+|---|---|---|---|
+| QNT005-SCH-01 | Result Manifest Schema | Draft 2020-12 校验通过；未知字段、非法 enum/date-time/hash 均拒绝 | CI 失败 |
+| QNT005-FP-01 | 同一 Result Manifest 重复生成 | RFC 8785 JCS + SHA-256 稳定；result_id 与 manifest_fingerprint 一致 | CI 失败 |
+| QNT005-FP-02 | 修改 result_type/schema_version/system_as_of/input_snapshot_refs/result_fingerprint | manifest_fingerprint/result_id 必须变化；input refs 排序且去重 | CI 失败 |
+| QNT005-BIND-01 | Researchflow service principal 请求结果 | subject_ref 来自可信认证上下文；resource_ref 精确绑定 result_id；purpose 固定 quant_analysis | CI 失败 |
+| QNT005-BIND-02 | 客户端伪造主体、结果 ID 或请求其他 purpose | 不信任自报主体/资源；Scope 不满足时拒绝 | forbidden + 无 payload |
+| QNT005-AUTH-01 | 公开/内部结果 | 仍签发 decision=allowed 的 AuthorizationRef，不允许 null/not_required | CI 失败 |
+| QNT005-READ-01 | 历史 allowed 后策略撤销、过期或 Scope 收窄 | 每次读取由 Quant 按当前策略复核；历史引用只审计不放行 | forbidden + 无 payload |
+| QNT005-RACE-01 | 授权检查后结果访问策略变化 | 重新授权；无法证明一致性则丢弃结果 payload | fail closed |
+| QNT005-FAIL-01 | 授权依赖不可用或 decision=unknown | 不回退缓存 allowed，不返回结果 payload | unavailable + 无 payload |
+
+只有 Manifest/Golden、Quant Owner Scope/资源绑定、当前读取复核和竞态测试均有模块 CI 证据，QNT-CTR-005 才能 frozen。
+
 ## 4. News → Research 契约
 
 | 契约 | 正常样例 | 边界样例 | 异常样例 | 兼容样例 |
