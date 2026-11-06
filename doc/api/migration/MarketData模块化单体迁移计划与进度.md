@@ -400,3 +400,16 @@ internal/
 - 已修复 .github/workflows/data-quality-parity.yml 中旧 doc/api/接口规范/ 路径，改为 doc/api/provider-migration/。修复提交为 dc137543；该提交之后的 Parity Run 尚需观察，不能引用修复前失败结果作为当前状态。
 
 **M0 仍未通过。** 还需完成：确认 Data 配置的 DSN/Redis 环境变量及实际部署样例；逐 Provider 出站请求/Host/重定向/协议清单；Data 与 Root 所有 API 调用点和 DTO 字段映射清单；Root/Data Migration 完整表清单及版本治理；Retention Worker 生命周期测试设计；所有 Data 配置、Migration、testdata 和生成/工具文件的逐项迁移登记；当前 HEAD CI 复核。
+
+### 2026-11-06：M0 第三轮补充（存储配置与迁移开关）
+
+已核对 services/market-data/internal/config/config.go、根 .env.example、Data .env.example 与默认 docker-compose.yml：
+
+- Data 数据库配置优先使用 MARKET_DATA_DB_HOST/PORT/USER/PASSWORD/NAME/CHARSET/TIMEZONE；MARKET_DATA_MYSQL_DSN 仅作为兼容旧配置。Redis 使用 MARKET_DATA_REDIS_ADDR/USERNAME/PASSWORD/DB，支持 username；Data 默认 MARKET_DATA_DB_AUTO_MIGRATE=true。
+- Root 使用 DB_HOST/PORT/USER/PASSWORD/NAME、DB_PARAMS、REDIS_ADDR/PASSWORD/DB；Root Redis Client 当前未配置 Username。Root DB_AUTO_MIGRATE 在配置默认值为 false，但仓库 .env.example 显式设置 true。
+- 根 .env.example 的 Root 与 Data 示例数据库名都为 stock_analysis_server，Redis DB 示例都为 0，但账号/密码配置项独立。不能据此认定生产环境密码相同；迁移前必须核对实际部署配置并决定统一 Secret/连接配置映射。
+- 默认 Compose 将根 .env 同时注入 Data 与 Server；Data Redis 地址/密码/DB 和 AutoMigrate 另由 Compose 显式传入。Data DB Host/User/Password/Name 仍从同一个 .env 中的 MARKET_DATA_DB_* 读取。
+- Data config.Load 当前即使只走 InProcess 也会校验 MARKET_DATA_API_KEY；M3/M5 应将领域配置与 HTTP Adapter 认证配置拆开，InProcess 模式不应因为不再自调用 HTTP 而被迫保留内部 API Key；若保留独立 Data HTTP Adapter，则该 Adapter 仍需按契约认证。
+- Data Migration 当前由独立 repository.Store.Migrate 执行，默认自动迁移开启；Root mysqlredis.Open 可按 DB_AUTO_MIGRATE 执行 Analysis Migration，并随后检查 analysis_runs、analysis_stage_events、analysis_snapshots、analysis_tasks。两套 Migration 作用于同一示例数据库但拥有不同表，归并后应保留 Data/Analysis 各自 Migration Owner，由 Root 统一显式编排，避免重复执行或把 Data Migration 混入通用 Pool Open。
+
+本轮不改变代码配置和数据库行为，只补充审计证据。M0 仍需完成逐 Provider 请求边界、调用点/DTO 全量清单、Schema/Migration 对照与当前 HEAD CI 收敛。
