@@ -282,7 +282,7 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 
 func loadIntegrationAuthorizationBinding(t *testing.T) domain.NewsAuthorizationBinding {
 	t.Helper()
-	path := filepath.Join("..", "..", "..", "doc", "整体任务规划", "golden", "NEWS-CTR-002-authorization-binding.golden.json")
+	path := filepath.Join("..", "..", "..", "..", "doc", "整体任务规划", "golden", "NEWS-CTR-002-authorization-binding.golden.json")
 	payload, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatal(err)

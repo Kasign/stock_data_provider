@@ -135,9 +135,9 @@ func Migrations() []platformstorage.Migration {
 			Description: "persist immutable news authorization decision snapshots",
 			Statements: []string{
 				`CREATE TABLE news_authorization_snapshots (
-					authorization_ref VARCHAR(256) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
-					subject_ref VARCHAR(256) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
-					resource_ref VARCHAR(256) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+					authorization_ref VARCHAR(256) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
+					subject_ref VARCHAR(256) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
+					resource_ref VARCHAR(256) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
 					decision VARCHAR(16) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
 					purpose_code VARCHAR(32) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
 					content_level VARCHAR(16) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,

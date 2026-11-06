@@ -36,6 +36,10 @@ func (r *MySQLRepository) AppendAuthorizationSnapshot(
 	sum := sha256.Sum256(payload)
 	payloadHash := hex.EncodeToString(sum[:])
 	ref := binding.AuthorizationRef
+	decidedAt, err := time.Parse(time.RFC3339Nano, ref.DecidedAt)
+	if err != nil {
+		return app.ErrInvalidAuthorizationSnapshot
+	}
 	expiresAt, err := authorizationExpiry(ref.ExpiresAt)
 	if err != nil {
 		return app.ErrInvalidAuthorizationSnapshot
@@ -46,7 +50,7 @@ func (r *MySQLRepository) AppendAuthorizationSnapshot(
 		 content_level, decided_at, expires_at, decision_fingerprint, payload_json, payload_hash)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		ref.AuthorizationRef, ref.SubjectRef, ref.ResourceRef, string(ref.Decision),
-		ref.PurposeCode, string(ref.ContentLevel), ref.DecidedAt,
+		ref.PurposeCode, string(ref.ContentLevel), decidedAt.UTC(),
 		expiresAt, ref.DecisionFingerprint, payload, payloadHash,
 	)
 	if insertErr == nil {

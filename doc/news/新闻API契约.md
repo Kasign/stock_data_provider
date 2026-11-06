@@ -180,7 +180,7 @@ News 为 News 来源内容签发 AuthorizationRef。公开或无限制内容也�
 - `app.ResearchEvidenceQuery` 同进程只读 Port。
 - `doc/news/schema/NEWS-CTR-001-*.schema.json` 与 `doc/news/golden/NEWS-CTR-001-*.golden.json`。
 
-当前仅完成 DTO、请求边界校验、Schema 和 Golden；未实现 Facade、PIT Repository、授权快照当前复核、HMAC Cursor、固定 Snapshot，也没有对外 HTTP 路由。禁止将本阶段描述为 NEWS-CTR-001 已验收。
+当前已完成 DTO、请求边界校验、Schema/Golden 和 HMAC Cursor Codec；仍未实现 Facade、PIT Repository、授权快照当前复核、固定 Snapshot，也没有对外 HTTP 路由。禁止将本阶段描述为 NEWS-CTR-001 已验收。
 
 
 ### 11.6 Cursor HMAC Claims
