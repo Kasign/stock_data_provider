@@ -634,3 +634,49 @@ Data OpenAPI 对 /api/v1/bars/{symbol}/daily 明确区分：
 - 后续仍需覆盖全部 35 个 Operation 的 Schema、鉴权和错误响应；同时需检查 Data HTTP Handler 的 JSON 输出是否与 Model/OpenAPI 一致，不能只依据静态结构声明。
 
 **M0 状态继续保持 in_progress。** 本轮未修改业务代码和 API 行为。
+
+
+### 2026-11-06：M0 第十二轮补充（部署配置与 Migration/资源边界）
+
+#### 1. 当前 Compose 部署形态
+
+当前根 docker-compose.yml 仍部署三个容器：stock-analysis-data（独立构建 services/market-data）、stock-analysis-server（根 Dockerfile）、stock-analysis-web。Root Server 通过 MARKET_DATA_BASE_URL 指向 Data 容器，并共享 MARKET_DATA_API_KEY；Web 容器仍分别配置 Data 与 Analysis 服务名。该形态是迁移前 Remote HTTP 运行基线，不能误认为方案 B 已完成。
+
+历史 docker/docker-compose.go-migration.yml 仍是独立 profile，使用 services/market-data/.env、go-core/.env 和根 .env 分别装配；其中 go-core 与 Data 仍通过 HTTP 通信。M5 才调整默认 Compose，不在 M0 删除该兼容 profile。
+
+#### 2. MariaDB 配置与数据库边界
+
+- Root Store 使用 DB_HOST/DB_PORT/DB_USER/DB_PASSWORD/DB_NAME/DB_PARAMS；默认 DB_NAME 为 stock_analysis_server，DB_AUTO_MIGRATE 默认 false。
+- Data 使用 MARKET_DATA_DB_HOST/PORT/USER/PASSWORD/NAME/CHARSET/TIMEZONE；支持旧 MARKET_DATA_MYSQL_DSN；MARKET_DATA_DB_AUTO_MIGRATE 默认 true。
+- 根 .env.example 同时设置 Root 与 Data 两组变量，二者 DB_HOST 均为 Mariadb、DB_NAME 均为 stock_analysis_server，数据库用户同为 stock_analysis_server，但密码变量分别为 DB_PASSWORD 与 MARKET_DATA_DB_PASSWORD。也就是说，示例部署意图是同一 MariaDB Database 下由两组连接配置访问不同业务表，而不是两个独立数据库。
+- services/market-data/.env.example 是历史独立服务配置，默认 MARKET_DATA_DB_NAME=stock_analysis、用户 appuser；不能将该文件默认值与根 Compose 的统一部署配置混为一谈。
+- Root Migrate 创建 analysis_runs、analysis_stage_events、analysis_snapshots、analysis_tasks；Data Migrate 创建 market_data_* 表。当前已确认表名空间不冲突，但两侧迁移执行入口、自动迁移默认值、连接池和失败关闭路径相互独立。
+- Root mysqlredis.Open 在构造 Store 时可按 DB_AUTO_MIGRATE 执行 Root Migrate；Data main 在 OpenMySQL 后按 MARKET_DATA_DB_AUTO_MIGRATE 执行 Data Migrate。两者均在当前独立进程内执行；合并进程后不能让两个 Store 各自创建/关闭 Pool，也不能继续由两个独立开关隐式触发 Migration。
+
+M2/M4 的建议边界：
+1. Root Server 只创建一份 MariaDB *sql.DB 并拥有关闭权；Data Repository 接收 borrowed *sql.DB。
+2. Root 组合根显式注册 Root 与 Data 两个 Migration Runner，按明确顺序执行；Migration 的 SQL 和领域所有权仍分别归 Root、Data。
+3. Migration Runner 需要各自版本表或统一版本表中的独立 namespace；版本号不能只用一个全局递增数字混淆两个模块。
+4. DB_AUTO_MIGRATE 与 MARKET_DATA_DB_AUTO_MIGRATE 应在 M3/M4 迁移期间收敛为 Root 的统一迁移策略或明确兼容映射；禁止出现一个开关关闭但另一个仍在启动时偷偷迁移的状态。
+5. 迁移前先确认生产环境是否确实使用同一 Database、同一 MariaDB 实例及相同字符集/时区；示例文件只能证明默认部署意图，不能证明用户实际生产配置。
+
+#### 3. Redis 配置边界
+
+Root 使用 REDIS_ADDR/REDIS_PASSWORD/REDIS_DB 和独立的连接超时配置；Data 使用 MARKET_DATA_REDIS_ADDR/USERNAME/PASSWORD/DB。根 .env.example 中两侧地址均为 Redis:6379，DB 均为 0，但密码变量分开。迁移后是否共享同一 go-redis Client，取决于两侧用户名、密码、DB、TLS/连接参数是否完全一致；不一致时由 Root 组合根创建多个 Client 并分别拥有。Data Cache 只能借用，不得关闭 Root 持有的 Client。
+
+#### 4. 最新 CI 证据补充
+
+- 5ea9155c（430a2001 之前的代码/文档基线）上的 Go Test Suite 全部 Job success：Root Test、services/market-data Test、go-core Test、MariaDB migration/PIT persistence、Compose/Docker image build。
+- 同一 SHA 的 Go-Python data quality parity、Platform Go checks、WebUI checks、Live Provider probe 均 success。
+- 430a2001 当前触发的 CI 已观察到：Root Test、go-core Test、MariaDB migration/PIT persistence success；Parity、Platform Go、WebUI checks、Live Provider probe success；services/market-data Test 与 Compose/Docker build 当时仍 in_progress，尚不能记录最终结论。
+- 上述证据不覆盖独立的 WebUI browser smoke 320px ERR_ABORTED 问题；该问题仍需单独定位。5ea9155c 之后的纯文档提交也不能直接继承前一 SHA 的 CI 结论，必须以对应提交的实际 Checks 为准。
+
+#### 5. M0 风险更新
+
+新增需进入 M2/M4 准入清单的事项：
+- Data HTTP Adapter 迁移后继续保留，但默认内部调用切换 InProcess；当前 Compose 仅作为 Remote 基线和回滚路径。
+- 两套 DB/Redis 配置名称及自动 Migration 开关必须统一映射，且共享资源必须显式 borrowed/owned。
+- Root/Data 目前同库不同业务表，示例配置如此；生产实际 DSN/DB 需在迁移部署前核实。
+- Root/Data Migration 需分模块版本命名空间并由 Root 组合根显式执行，不能简单把两个 Migrate() 合并成一个无边界函数。
+
+**M0 状态继续保持 in_progress。** 本轮仅补充部署配置与资源审计，没有改变 Compose、数据库配置或 Migration 行为。
