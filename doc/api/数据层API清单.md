@@ -103,7 +103,7 @@
 - 质量状态：valid、degraded、stale、invalid、unknown。
 - 行情/日 K 标准单位：价格 CNY/股、成交量股、成交额 CNY；百分比数值以百分点表达，例如 1.25 表示 1.25%。
 - 时间字段必须区分源端事件时间、服务端采集时间 fetched_at、标准化时间 normalized_at 和系统观察时间 system_observed_at。
-- 错误响应统一包含 error.code、error.message，可包含 request_id；前端应保留 HTTP 状态和请求 ID，错误信息限长展示。
+- 错误响应包含 `error.class`、`error.code`、`error.message`、`error.retryable`；兼容字段 `error.request_id` 仍保留，响应 Header `X-Request-ID` 是权威关联值。`message` 为安全摘要，不暴露 Provider 原始响应或内部 Cause；`retryable` 只表示技术重试候选，不替代调用方的幂等性、重试预算与 Deadline 判断。
 - 复权请求仅接受 none、forward_adjusted、backward_adjusted；unknown 是响应状态，不是请求参数。
 
 ## 7. 仍需数据层/产品评估的 API 需求
@@ -150,5 +150,18 @@
 - `POST /api/v1/data-sources/probe` 的 `items[]` 实际由数据侧 `ProviderProbeItem` 返回，除基础状态/质量/时间字段外，还包含 `validation_total_count`、`validation_error_count`、`validation_warning_count`、`validation_info_count`、`validation_truncated`、`validation_issues` 和 `coverage_dimensions`。
 - `validation_issues[]` 字段包括 `stage`、`field`、`provider_field`、`code`、`expected`、`actual_type`、`actual_preview`、`severity`、`message`，以及可选的行号、证券代码和交易日期。实际值摘要由服务端脱敏并限长；WebUI 只按文本展示，不解释或重写规则。
 - `coverage_dimensions[]` 当前用于市场宽度，维度为 `quote_response`、`price_classification`、`quote_timestamp`、`amount`；ratio 是服务端按明确总体分母计算的覆盖率。它与 `coverage_ratio` 的总体有效证券覆盖率不是同一个指标。
-- **OpenAPI 文档缺口**：当前 `ProviderProbeItem` Schema 尚未声明上述 validation 与 coverage_dimensions 字段，但 Go 响应模型已包含。WebUI 以当前 Go JSON 响应模型和实际回包字段为接入依据；数据侧需后续补齐 OpenAPI，避免客户端只依据 Schema 生成时遗漏字段。数据侧需按主计划补齐 OpenAPI；WebUI 只消费正式契约，不自行维护服务端 Schema。
+- **Probe Schema 状态**：`ProviderProbeItem` 的 validation、coverage、error_stage 与时间字段已在当前 OpenAPI 中声明；`ProviderProbeCheckResult` 此前缺失的左右复权算法及参考日期字段已补齐。后续仍需按实际 Go JSON Tag 和 Handler 输出路径完成全量双向 Schema 自动核对，不能将已知字段补齐等同于整个 OpenAPI 冻结。
 - 时间语义：`provider_time` 为源端时间，`fetched_at` 为服务端采集时间，`checked_at` 为诊断检查时间；任何字段缺失时均不得用其他时间字段补位。
+
+
+### Data OpenAPI / Go JSON 字段对齐进度（2026-11-06）
+
+本轮在 `feat/full-go-data-providers-api-switch` 完成一批可由当前 Data Module 独立确认的字段修正：
+
+- 补齐 Go JSON 模型中已有、OpenAPI 同名 Schema 缺失的 15 个字段：Probe 左右复权方法/参考日期、板块 Provider 报告日、板块与市场宽度非 A 股排除数、涨停池封单金额、财务分区 available_at、指数成分有效区间/可获得时间/系统观察时间、Provider 市场级资金流能力。
+- 删除 9 个当前响应 Go Model 无来源的 Schema 字段：Quote 的 6 个 validation 字段、StockBoard 的 2 个字段、PriceLimitEventEvidence.adjustment_basis。不得为匹配 Schema 向 Model 虚构字段。
+- 修正已确认的 required/optional 差异：Quote、DailyBar、MarketSentiment、MarketBreadth、StockAnnouncementSnapshot、SourceStatus；Bundle.warnings 与 HotRanking source_version 按 `omitempty` 保持 optional。
+- 修正 LimitPoolItem.change_percent 的 nullable，以及 HotRankingItem.name/rank_trend 的非 nullable 省略语义。
+- 新增针对上述已知差异的 OpenAPI YAML 契约回归测试。
+
+**尚未完成：** 全量 Go JSON Tag ↔ OpenAPI 双向字段扫描；122 个过宽 nullable 声明；23 个可能输出 null 的 slice/map/pointer 字段；所有 Handler 的 JSON Golden；真实 Provider 样本准确性验收。当前批次不能代表 OpenAPI 已冻结。
