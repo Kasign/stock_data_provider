@@ -270,7 +270,7 @@ LLM Adapter 内部执行错误使用 Platform Fault；对调用方公开时投�
 | Platform Fault | ModelErrorInfo |
 |---|---|
 | Fault Code | stable_code |
-| Fault Category | kind（映射到 ModelErrorKind） |
+| Fault Class | kind（映射到 ModelErrorKind） |
 | Retryable | retryable |
 | Dependency | 仅在受控诊断元数据保留，不拼入 safe_message |
 | Safe Message | safe_message |
