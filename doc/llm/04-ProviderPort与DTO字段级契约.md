@@ -189,7 +189,7 @@ ModelEvent 字段：type、sequence_number?、response_id?、output_index?、con
 
 ModelErrorKind：invalid_request、unauthorized、rate_limited、overloaded、timeout、cancelled、upstream_unavailable、upstream_error、invalid_response、incomplete_response、schema_validation_failed、unsupported_capability、stream_interrupted、stream_sequence_gap、resource_limit。
 
-ModelErrorInfo 字段为 kind、stable_code、retryable、http_status?、retry_after?、request_id?、safe_message；底层 Cause 仅内部日志，不序列化给调用方。
+ModelErrorInfo 字段为 kind、stable_code、retryable、http_status?、retry_after?、safe_message；调用关联 ID 统一由 ModelResponse.request_id 承载，不在嵌套错误对象重复；底层 Cause 仅内部日志，不序列化给调用方。
 
 - 一次调用只能由一个层负责业务重试；首批建议由 Researchflow Run/Stage 策略决定，LLM Adapter 默认不自动重试。
 - 429/503 可返回 retry_after 提示，是否重试由调用方 deadline/预算决定。
