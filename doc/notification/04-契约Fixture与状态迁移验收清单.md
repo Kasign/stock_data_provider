@@ -81,6 +81,8 @@
 - `delivery_lease_expired_before_dispatch.test`：能证明请求未发出，允许安全回队。
 - `delivery_lease_expired_after_dispatch.test`：可能已发出，转 unknown。
 - `delivery_plan_fingerprint_stable.test`：相同事件和订阅版本生成相同 plan fingerprint。
+- `delivery_plan_policy_tuple_fingerprint.test`：policy_type、policy_ref、policy_version 任一变化都改变 plan_fingerprint；tuple 顺序变化不改变 fingerprint。
+- `delivery_plan_authorization_ref_audit_only.test`：AuthorizationRef 仅作审计引用，变化不得改变 plan_fingerprint；不完整/重复策略 tuple 必须拒绝。
 - `delivery_plan_config_version_change.test`：配置版本变化产生新计划身份，不修改历史 Delivery。
 - `retry_command_duplicate.test`：相同 RetryDelivery request_id 重放只执行一次命令。
 - `retry_command_different_payload_same_key.test`：相同幂等键不同命令参数返回冲突。
