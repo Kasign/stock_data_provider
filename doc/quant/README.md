@@ -10,7 +10,7 @@ Quant 负责确定性、可复算的数值分析：Indicator、Factor、Trend、
 
 输入由 Data 提供证券、行情、财务、估值、交易日历、行业历史成分、PIT 和质量契约；输出主要由 Researchflow 消费。Quant 不直接依赖 Research、Researchflow、LLM 或 Notification 的领域实现；风险事件通过本地 Outbox 遵循 INT-CTR-001 发布。
 
-Q0-001～003 仅表示旧资产盘点、字段级核对和 Golden 设计完成，不代表算法实现或真实数据验收完成。QNT-CTR-001～005 的状态以项目级契约目录为准，当前仍未达到 frozen；其中 QNT-CTR-005 Manifest/AuthorizationRef Schema 与 Golden 的模块内校验测试源码已增加，剩余重点是运行时可信主体/结果归属绑定、读取时当前授权复核、撤销竞态及 CI 证据。Registry 元数据定义已明确，不再因通用 Registry 包边界而阻断实现。
+Q0-001～003 仅表示旧资产盘点、字段级核对和 Golden 设计完成，不代表算法实现或真实数据验收完成。QNT-CTR-001～005 的状态以项目级契约目录为准，当前仍未达到 frozen；其中 QNT-CTR-005 已增加 Manifest 构建/Verify、Manifest/AuthorizationRef Schema 与 Golden 校验测试；剩余重点是运行时可信主体/结果归属绑定、读取时当前授权复核、撤销竞态及 CI 证据。Registry 元数据定义已明确，不再因通用 Registry 包边界而阻断实现。
 
 目标结构：
 
