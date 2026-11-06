@@ -120,3 +120,36 @@ func TestValidateEvidenceAuthorizationBindingRejectsNonAllowedDecision(t *testin
 		})
 	}
 }
+
+
+func TestValidateEvidenceAuthorizationBindingAtEnforcesExpiryBoundary(t *testing.T) {
+	now := time.Date(2026, 11, 6, 5, 10, 0, 0, time.UTC)
+	expiresAt := now.Add(time.Minute)
+	ref, snapshot := researchAuthorizationGolden(t)
+	ref.ExpiresAt = &expiresAt
+	ref.DecisionFingerprint, _ = ref.ComputeDecisionFingerprint(snapshot)
+	e := Evidence{SourceOwner: SourceResearch, ContentLevel: ContentSummary, AuthorizationRef: ref.AuthorizationRef}
+	args := []any{e, ref, snapshot, "service:researchflow", "research_evidence:evidence_001", PurposeResearchAnalysis}
+
+	if err := ValidateEvidenceAuthorizationBindingAt(e, ref, snapshot,
+		"service:researchflow", "research_evidence:evidence_001", PurposeResearchAnalysis, now); err != nil {
+		t.Fatalf("unexpired authorization rejected: %v", err)
+	}
+	if err := ValidateEvidenceAuthorizationBindingAt(e, ref, snapshot,
+		"service:researchflow", "research_evidence:evidence_001", PurposeResearchAnalysis, expiresAt.Add(-time.Nanosecond)); err != nil {
+		t.Fatalf("authorization immediately before expiry rejected: %v", err)
+	}
+	if err := ValidateEvidenceAuthorizationBindingAt(e, ref, snapshot,
+		"service:researchflow", "research_evidence:evidence_001", PurposeResearchAnalysis, expiresAt); err == nil || !strings.Contains(err.Error(), "expired") {
+		t.Fatalf("authorization at expiry must be rejected, got %v", err)
+	}
+	if err := ValidateEvidenceAuthorizationBindingAt(e, ref, snapshot,
+		"service:researchflow", "research_evidence:evidence_001", PurposeResearchAnalysis, expiresAt.Add(time.Nanosecond)); err == nil || !strings.Contains(err.Error(), "expired") {
+		t.Fatalf("authorization after expiry must be rejected, got %v", err)
+	}
+	if err := ValidateEvidenceAuthorizationBindingAt(e, ref, snapshot,
+		"service:researchflow", "research_evidence:evidence_001", PurposeResearchAnalysis, time.Time{}); err == nil || !strings.Contains(err.Error(), "authorization_check_time") {
+		t.Fatalf("zero check time must be rejected, got %v", err)
+	}
+	_ = args
+}

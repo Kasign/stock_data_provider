@@ -30,11 +30,17 @@ func (c Claim) Validate() error {
 	}
 
 	if c.EpistemicType == EpistemicHypothesis {
-		if c.ValidationMethod == nil || strings.TrimSpace(*c.ValidationMethod) == "" {
+		if c.ValidationMethod == nil {
 			return fmt.Errorf("validation_method is required for hypothesis")
 		}
-		if c.ExpectedObservation == nil || strings.TrimSpace(*c.ExpectedObservation) == "" {
+		if err := required("validation_method", *c.ValidationMethod); err != nil {
+			return err
+		}
+		if c.ExpectedObservation == nil {
 			return fmt.Errorf("expected_observation is required for hypothesis")
+		}
+		if err := required("expected_observation", *c.ExpectedObservation); err != nil {
+			return err
 		}
 		if c.InvalidationConditions == nil || len(c.InvalidationConditions) == 0 {
 			return fmt.Errorf("invalidation_conditions must be a non-empty array for hypothesis")

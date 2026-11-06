@@ -61,6 +61,8 @@ func TestClaimRejectsInvalidContractValues(t *testing.T) {
 		{"same evidence both stances", func(c *Claim) { c.ContradictingEvidenceRefs = []string{"evidence:research:0001"} }, "both supporting and contradicting"},
 		{"missing validation method", func(c *Claim) { c.ValidationMethod = nil }, "validation_method"},
 		{"missing expected observation", func(c *Claim) { c.ExpectedObservation = nil }, "expected_observation"},
+		{"padded validation method", func(c *Claim) { value := " breakout_follow_through "; c.ValidationMethod = &value }, "surrounding whitespace"},
+		{"padded expected observation", func(c *Claim) { value := " close remains above resistance "; c.ExpectedObservation = &value }, "surrounding whitespace"},
 		{"empty invalidation conditions", func(c *Claim) { c.InvalidationConditions = []string{} }, "non-empty array"},
 		{"non UTC cutoff", func(c *Claim) { c.SystemAsOf = time.Date(2026, 11, 6, 13, 0, 0, 0, time.FixedZone("CST", 8*60*60)) }, "must be UTC"},
 	}
