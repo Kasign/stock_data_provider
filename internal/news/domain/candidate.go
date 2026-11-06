@@ -38,7 +38,8 @@ func NormalizeCandidate(candidate Candidate, observedAt time.Time, queryDimensio
 		candidate.PublishedAt = &parsed
 	}
 
-	candidate.MissingFields = candidate.MissingFields[:0]
+	// Candidate 按值传递，但 MissingFields 是引用类型；重新分配，避免改写调用方切片。
+	candidate.MissingFields = make([]string, 0, 4)
 	if candidate.Title == "" {
 		candidate.MissingFields = append(candidate.MissingFields, "title")
 	}

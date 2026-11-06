@@ -71,6 +71,26 @@ func TestNormalizeCandidateRebuildsMissingFieldsInStableOrder(t *testing.T) {
 	}
 }
 
+func TestNormalizeCandidateDoesNotMutateCallerMissingFields(t *testing.T) {
+	original := make([]string, 2, 4)
+	original[0] = "caller-value-1"
+	original[1] = "caller-value-2"
+	candidate := Candidate{MissingFields: original}
+
+	got := NormalizeCandidate(candidate, time.Time{}, "")
+
+	if original[0] != "caller-value-1" || original[1] != "caller-value-2" {
+		t.Fatalf("caller-owned missing fields were modified: %v", original)
+	}
+	if len(got.MissingFields) != 4 {
+		t.Fatalf("normalized missing fields=%v", got.MissingFields)
+	}
+	got.MissingFields[0] = "changed-result"
+	if original[0] != "caller-value-1" {
+		t.Fatalf("normalized result still aliases caller slice: %v", original)
+	}
+}
+
 func TestNormalizeCandidatePreservesUnknownTimestampText(t *testing.T) {
 	raw := "not-a-date"
 	got := NormalizeCandidate(Candidate{PublishedAtRaw: raw}, time.Time{}, "")
