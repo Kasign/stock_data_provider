@@ -198,7 +198,7 @@ Provider 输出策略必须在缓存和持久化之前执行。Brave 只允许�
 - SearXNG：只支持显式配置实例；保留 Provider 身份和原始时间字段，不把 engine 名称当作发布者。
 - 所有 Adapter 保留 provider_code；publisher_name/publisher_domain 与 Provider 身份分离。publisher_domain 不从结果 URL 推断。
 - 未知时间原文为空时保持未知；可解析的 RFC3339 时间才填充 PublishedAt，其他格式保留原文供后续标准化阶段处理。
-- HTTPDoer 由外部注入；当前没有生产 HTTP Client、连接池、通用重试器、通用限流器、跨请求缓存或真实网络验收。传输层响应大小、Deadline、TLS、重定向和 DNS/IP 安全由公共平台能力负责。
+- HTTPDoer 由外部注入；公共平台 HTTP Client/BoundDoer 已合并，但 News 尚无生产逐 endpoint 注入、真实 Provider 网络和来源授权验收。不得自行创建生产 Client/连接池/通用重试器/限流器/跨请求缓存；响应大小、Deadline、TLS、重定向和 DNS/IP 安全由平台 BoundDoer 负责。
 
 fake Transport 测试已在根模块 GitHub Actions 中执行通过，覆盖各 Provider 的基本字段/鉴权语义、429 Retryable 候选、响应结构错误路径等。提交 7e55cf681f86c762aaa3d2e6a914495c162d2898 对应的根模块 gofmt、go test ./...、go test -race ./...、go vet ./... 和分析服务镜像构建通过；未执行真实 Provider 网络请求。
 
@@ -221,3 +221,34 @@ Brave/Bocha/Tavily 等具体 Provider 的策略值必须按实际账号套餐、
 - persistent_metadata 仅允许 metadata/title；persistent_excerpt 仅允许 snippet/abstract；persistent_full_text 仅允许 full_text/attachment。
 - none/transient 不代表持久化授权；跨请求缓存另由 Provider 的 AllowCrossRequestCache 和 MaxCacheRetention 独立控制。
 - 即使 Provider 和 Source 分别允许某项内容及存储方式，内容类型与存储模式不匹配仍拒绝；不得通过将全文标记为 metadata 绕过全文留存限制。
+
+
+## 2026-11-06 平台合并后 HTTP/Diagnostics 基线复核
+
+- `internal/platform/httpclient.BoundDoer` 已进入当前共同分支，满足 News `app.HTTPDoer` 的窄接口；Provider/Source Adapter 无需自建 HTTP Client。生产装配仍需按每个固定 endpoint 单独 Bind。
+- `internal/platform/diagnostics.Runner` 已有平台 L1 原语和测试证据，但 Runner 不提供历史存储或 HTTP 路由；News 领域 Check 和 Server 路由接入仍待完成。
+- 当前 `provider/http.go` 通过注入的 HTTPDoer 读取响应体；生产响应大小上限依赖平台 BoundDoer，不能把 fake/raw HTTPDoer 作为生产实现。
+- 平台 L1 CI 通过不代表 News 实际注入、真实 Provider 请求、生产 DNS/出口或来源授权验收通过。
+
+
+## 2026-11-06 项目级契约与 News Diagnostics 接入计划
+
+项目级统一诊断规划和 Platform 现有 Runner 已核对。News 后续接入按以下边界执行：
+
+1. Platform Runner 负责 Check 的超时、并发、panic 安全处理和公共状态聚合；News 负责 Check 定义、领域 reason_code、证据引用和业务质量解释。
+2. 首批 Check 计划覆盖配置/凭证是否已配置、Provider 配置与能力状态、Source/Endpoint 授权状态、Fetch/Parse/Normalize、Identity/Deduplicate、Persist 和 Relation。未配置的可选 Provider 必须 skipped/not_configured，不标记失败或可用。
+3. Connectivity/contract/quality/freshness/authorization 分别表达；ProviderOutcome 的 empty/partial/failed/skipped 不得被 Platform Status 覆盖；quality=invalid 不得被映射为 Check failed。
+4. Check 默认只读，不发起真实 Provider 请求、不消耗配额。主动 Probe 必须由受控运维调用明确触发，并满足来源授权与网络安全门禁。
+5. Observation 的 attributes 仅允许白名单低敏计数/枚举；禁止正文、snippet、原始响应、URL Query、Token、Cookie、DSN 和模型上下文。
+6. 不新增 News Diagnostics HTTP 路由、Runner、Registry 或通用历史库。统一诊断路由的认证和注册由 Server Owner 负责；News Ingestion Run/Stage 若有真实采集触发需求，其事实记录仍由 News 持有。
+7. PLAT-CTR-004 仍为 `pending_evidence`；News Check Adapter 的 Schema/Golden/Runner Contract Test 和状态映射证据通过后，才申请对应调用点 A2。
+
+
+## 2026-11-06 当前 HTTP 适配 API 修正
+
+本规范历史段落中的 `BoundDoer` / `Client.Bind()` 描述已过时。当前 Platform HTTP Client API 为 `Client.Do(ctx, request, DestinationPolicy)`。News Provider 使用 `provider.NewPlatformHTTPDoer`，Source 使用 `source.NewPlatformHTTPDoer`；每个 endpoint 独立绑定精确 Host/Port 策略。响应体大小、总 Deadline、TLS、DNS/IP 校验和拨号仍完全由 Platform Client 执行。News 不创建裸 HTTP Client，不接管共享 Client 生命周期。
+
+
+## 2026-11-06 接入状态更新
+
+Provider 适配器已落地 `provider.NewPlatformHTTPDoer`；Source 适配器已落地 `source.NewPlatformHTTPDoer`。二者均固定单个 endpoint 的 DestinationPolicy，拒绝重定向和平台自动重试；Platform Client 负责 DNS/IP、TLS、响应大小和 Deadline。Source endpoint 保留 query 参数，Provider endpoint 配置仍拒绝 query，避免将凭证放入 URL。生产组合根按每个 Provider/Source endpoint 独立注入。

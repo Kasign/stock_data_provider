@@ -4,9 +4,11 @@
 from __future__ import annotations
 
 import importlib.util
+import io
 import json
 import tempfile
 import unittest
+from contextlib import redirect_stdout
 from pathlib import Path
 from unittest.mock import patch
 
@@ -46,6 +48,40 @@ class CompareMarketDataExportsTests(unittest.TestCase):
                                     "--go", str(go_path), *extra]):
                 return MODULE.main()
 
+    def real_provenance(self, provider):
+        return {
+            "source_commit": "a" * 40,
+            "provider": provider,
+            "provider_version": "1.2.3",
+            "endpoint": "daily-kline",
+            "request_params": {"adjust": "qfq", "period": "daily"},
+            "captured_at_utc": "2026-10-30T00:00:00Z",
+            "raw_payload_sha256": "b" * 64,
+        }
+
+    def test_real_provenance_mode_rejects_fixture_exports(self):
+        rows = [{"trade_date": "2026-10-29", "close": 1500.0}]
+        self.assertEqual(
+            self.run_cli(export(rows), export(rows), "--require-real-provenance"), 2
+        )
+
+    def test_real_provenance_mode_accepts_auditable_exports(self):
+        rows = [{"trade_date": "2026-10-29", "close": 1500.0}]
+        py = export(rows, **self.real_provenance("efinance"))
+        go = export(rows, **self.real_provenance("eastmoney-go"))
+        self.assertEqual(
+            self.run_cli(py, go, "--require-real-provenance"), 0
+        )
+
+    def test_real_provenance_mode_rejects_invalid_payload_digest(self):
+        rows = [{"trade_date": "2026-10-29", "close": 1500.0}]
+        py = export(rows, **self.real_provenance("efinance"))
+        go = export(rows, **self.real_provenance("eastmoney-go"))
+        go["raw_payload_sha256"] = "not-a-sha256"
+        self.assertEqual(
+            self.run_cli(py, go, "--require-real-provenance"), 2
+        )
+
     def test_identical_samples_pass(self):
         rows = [{"trade_date": "2026-10-29", "close": 1500.0, "volume": 1000,
                  "amount": None, "quality_status": "degraded",
@@ -77,6 +113,23 @@ class CompareMarketDataExportsTests(unittest.TestCase):
         py = export([{"trade_date": "2026-10-28"}, {"trade_date": "2026-10-29"}])
         go = export([{"trade_date": "2026-10-29"}])
         self.assertEqual(self.run_cli(py, go), 1)
+
+    def test_record_coverage_counts_match_python_and_go_only_keys(self):
+        py = export([{"trade_date": "2026-10-28"}, {"trade_date": "2026-10-29"}])
+        go = export([{"trade_date": "2026-10-29"}, {"trade_date": "2026-10-30"}])
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            py_path = self.write_json(root, "python.json", py)
+            go_path = self.write_json(root, "go.json", go)
+            output = io.StringIO()
+            with patch("sys.argv", ["compare_market_data_exports.py", "--python", str(py_path),
+                                    "--go", str(go_path)]), redirect_stdout(output):
+                self.assertEqual(MODULE.main(), 1)
+            report = output.getvalue()
+            self.assertIn("- Python 独有记录：1", report)
+            self.assertIn("- Go 独有记录：1", report)
+            self.assertIn("- Python 独有键：2026-10-28", report)
+            self.assertIn("- Go 独有键：2026-10-30", report)
 
     def test_duplicate_record_key_is_rejected(self):
         py = export([{"trade_date": "2026-10-29"}, {"trade_date": "2026-10-29"}])

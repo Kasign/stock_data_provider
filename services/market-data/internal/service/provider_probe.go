@@ -478,6 +478,20 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 					validated, warnings, report = normalize.ValidateAndSortBarsWithReport(barsSymbol, bars, requestStartDate, requestEndDate, dailyBarLimit)
 					validation.AddContextReport(probeCtx, report)
 				}
+				// RowsValidated 表示通过字段校验、去重和日期范围过滤的全部行，不扣除展示 limit。
+				allValidated, _ := normalize.ValidateAndSortBars(barsSymbol, bars, requestStartDate, requestEndDate, 0)
+				if reporter != nil && reporter.Snapshot().HasStage(validation.StageValidate) {
+					truncatedCount := len(allValidated) - len(validated)
+					if truncatedCount > 0 {
+						report := validation.NewReport(validation.DefaultMaxIssues)
+						report.Add(validation.FieldIssue{
+							Stage: validation.StageNormalize, Field: "rows", Code: "bars_truncated_to_limit",
+							Expected: "all valid rows within requested limit", Severity: validation.SeverityInfo,
+							Message: "valid daily bars were truncated to the requested limit", Count: truncatedCount,
+						})
+						validation.AddContextReport(probeCtx, report)
+					}
+				}
 				latestDate := ""
 				var providerTime *time.Time
 				if len(validated) > 0 {
@@ -485,7 +499,7 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 					latestDate = latest.TradeDate
 					providerTime = latest.ProviderTime
 				}
-				recordProviderProbeEvidence(probeCtx, barsSymbol, latestDate, len(bars), len(validated), providerTime)
+				recordProviderProbeEvidence(probeCtx, barsSymbol, latestDate, len(bars), len(allValidated), providerTime)
 				if len(validated) == 0 {
 					if len(bars) > 0 {
 						return model.QualityInvalid, "", warnings, errors.New("daily-bars probe returned rows but none passed validation")
@@ -506,8 +520,13 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 				}
 				quality := model.QualityValid
 				version := ""
-				reasons := append([]string(nil), warnings...)
-				for _, bar := range validated {
+				reasons := make([]string, 0, len(warnings))
+				for _, warning := range warnings {
+					if warning != "bars_truncated_to_limit" {
+						reasons = appendReason(reasons, warning)
+					}
+				}
+				for _, bar := range allValidated {
 					if version == "" {
 						version = bar.SourceVersion
 					}
@@ -518,10 +537,9 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 						reasons = appendReason(reasons, reason)
 					}
 				}
-				if len(warnings) > 0 {
+				if normalize.HasQualityDegradingBarWarnings(warnings) {
 					quality = model.QualityDegraded
 				}
-				barDataQuality := quality
 				if len(validated) > 0 {
 					contextStartDate, contextEndDate := requestStartDate, requestEndDate
 					if contextStartDate == "" {
@@ -553,7 +571,7 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 				if len(snapshotBars) == len(validated) {
 					recordProviderProbeDailySnapshot(probeCtx, &provider.CrossProviderDailySnapshot{
 						Provider: p.Name(), SourceVersion: version, Symbol: barsSymbol,
-						AdjustmentBasis: string(adjustment), QualityStatus: string(barDataQuality), Bars: snapshotBars,
+						AdjustmentBasis: string(adjustment), QualityStatus: string(quality), Bars: snapshotBars,
 					})
 				}
 				return quality, version, reasons, nil
@@ -848,8 +866,17 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 			if err != nil {
 				return model.QualityUnknown, "", nil, err
 			}
+			report := validation.ValidateFundamentalsSnapshot(v, barsSymbol, nowLocal.Year(), 2)
+			validation.AddContextReport(probeCtx, report)
+			sourceVersion := ""
+			if v != nil {
+				sourceVersion = v.SourceVersion
+			}
+			if report.HasErrors() {
+				return model.QualityInvalid, sourceVersion, nil, errors.New("fundamentals field validation failed")
+			}
 			if err := validateFundamentalsSnapshot(barsSymbol, nowLocal.Year(), 2, v); err != nil {
-				return model.QualityInvalid, "", nil, err
+				return model.QualityInvalid, sourceVersion, nil, err
 			}
 			recordProviderProbeEvidence(probeCtx, barsSymbol, "", len(v.Sections), len(v.Sections), nil)
 			return v.QualityStatus, v.SourceVersion, append([]string(nil), v.QualityReasons...), nil
@@ -862,11 +889,20 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 			if err != nil {
 				return model.QualityUnknown, "", nil, err
 			}
+			report := validation.ValidateValuationSnapshot(v, []string{barsSymbol})
+			validation.AddContextReport(probeCtx, report)
+			sourceVersion := ""
+			if v != nil {
+				sourceVersion = v.SourceVersion
+			}
+			if report.HasErrors() {
+				return model.QualityInvalid, sourceVersion, nil, errors.New("valuation field validation failed")
+			}
 			if err := validateValuationSnapshot([]string{barsSymbol}, v); err != nil {
-				return model.QualityInvalid, "", nil, err
+				return model.QualityInvalid, sourceVersion, nil, err
 			}
 			recordProviderProbeEvidence(probeCtx, barsSymbol, v.ProviderReportDate, len(v.Items), len(v.Items), v.ProviderTimestamp)
-			return v.QualityStatus, v.SourceVersion, append([]string(nil), v.QualityReasons...), nil
+			return v.QualityStatus, sourceVersion, append([]string(nil), v.QualityReasons...), nil
 		})
 	}
 	for _, p := range s.hotRankingProviders {

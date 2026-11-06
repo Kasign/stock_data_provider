@@ -5,8 +5,12 @@ import (
 	"encoding/xml"
 	"errors"
 	"io"
+	"mime"
+	"strconv"
 	"strings"
 	"time"
+
+	"example.com/stock-analysis-flow/internal/news/domain"
 )
 
 var (
@@ -37,6 +41,10 @@ type FeedEntry struct {
 	Link           string
 	Summary        string
 	Content        string
+	ContentFormat  domain.ContentFormat
+	ContentTypeRaw string
+	ContentSrc     string
+	Attachments    []FeedAttachment
 	Author         string
 	PublishedAtRaw string
 	PublishedAt    *time.Time
@@ -55,14 +63,21 @@ type rssDocument struct {
 }
 
 type rssItem struct {
-	GUID        string `xml:"guid"`
-	Title       string `xml:"title"`
-	Link        string `xml:"link"`
-	Description string `xml:"description"`
-	Content     string `xml:"http://purl.org/rss/1.0/modules/content/ encoded"`
-	Author      string `xml:"author"`
-	Creator     string `xml:"http://purl.org/dc/elements/1.1/ creator"`
-	PubDate     string `xml:"pubDate"`
+	GUID        string         `xml:"guid"`
+	Title       string         `xml:"title"`
+	Link        string         `xml:"link"`
+	Description string         `xml:"description"`
+	Content     string         `xml:"http://purl.org/rss/1.0/modules/content/ encoded"`
+	Author      string         `xml:"author"`
+	Creator     string         `xml:"http://purl.org/dc/elements/1.1/ creator"`
+	PubDate     string         `xml:"pubDate"`
+	Enclosures  []rssEnclosure `xml:"enclosure"`
+}
+
+type rssEnclosure struct {
+	URL    string `xml:"url,attr"`
+	Type   string `xml:"type,attr"`
+	Length string `xml:"length,attr"`
 }
 
 type atomDocument struct {
@@ -73,18 +88,40 @@ type atomDocument struct {
 }
 
 type atomLink struct {
-	Href string `xml:"href,attr"`
-	Rel  string `xml:"rel,attr"`
+	Href   string `xml:"href,attr"`
+	Rel    string `xml:"rel,attr"`
+	Type   string `xml:"type,attr"`
+	Length string `xml:"length,attr"`
+	Title  string `xml:"title,attr"`
+}
+
+// FeedAttachment 仅保存 Feed 声明的附件元信息，不下载或信任附件 URL。
+type FeedAttachment struct {
+	URL              string
+	RawURL           string
+	MediaType        string
+	RawMediaType     string
+	RawLength        string
+	Length           *int64
+	Title            string
+	ValidationIssues []string
+}
+
+type atomContent struct {
+	Type     string `xml:"type,attr"`
+	Src      string `xml:"src,attr"`
+	Text     string `xml:",chardata"`
+	InnerXML string `xml:",innerxml"`
 }
 
 type atomEntry struct {
-	ID        string     `xml:"id"`
-	Title     string     `xml:"title"`
-	Links     []atomLink `xml:"link"`
-	Summary   string     `xml:"summary"`
-	Content   string     `xml:"content"`
-	Published string     `xml:"published"`
-	Updated   string     `xml:"updated"`
+	ID        string      `xml:"id"`
+	Title     string      `xml:"title"`
+	Links     []atomLink  `xml:"link"`
+	Summary   string      `xml:"summary"`
+	Content   atomContent `xml:"content"`
+	Published string      `xml:"published"`
+	Updated   string      `xml:"updated"`
 	Authors   []struct {
 		Name string `xml:"name"`
 	} `xml:"author"`
@@ -133,6 +170,9 @@ func ParseFeed(data []byte, observedAt time.Time) (FeedDocument, error) {
 
 	switch rootName.Local {
 	case "rss":
+		if rootName.Space != "" {
+			return FeedDocument{}, ErrUnsupportedFeed
+		}
 		var parsed rssDocument
 		if err := xml.Unmarshal(data, &parsed); err != nil || parsed.Channel == nil {
 			return FeedDocument{}, ErrInvalidFeed
@@ -148,12 +188,20 @@ func ParseFeed(data []byte, observedAt time.Time) (FeedDocument, error) {
 				author = item.Creator
 			}
 			content := item.Content
-			doc.Entries = append(doc.Entries, newFeedEntry(
-				item.GUID, item.Title, item.Link, item.Description, content, author, item.PubDate, "",
-			))
+			entry := newFeedEntry(item.GUID, item.Title, item.Link, item.Description, content, author, item.PubDate, "")
+			if strings.TrimSpace(content) != "" {
+				entry.ContentFormat = domain.ContentFormatHTMLFragment
+			}
+			for _, enclosure := range item.Enclosures {
+				entry.Attachments = append(entry.Attachments, newFeedAttachment(enclosure.URL, enclosure.Type, enclosure.Length, ""))
+			}
+			doc.Entries = append(doc.Entries, entry)
 		}
 		return doc, nil
 	case "feed":
+		if rootName.Space != "http://www.w3.org/2005/Atom" {
+			return FeedDocument{}, ErrUnsupportedFeed
+		}
 		var parsed atomDocument
 		if err := xml.Unmarshal(data, &parsed); err != nil {
 			return FeedDocument{}, ErrInvalidFeed
@@ -168,14 +216,100 @@ func ParseFeed(data []byte, observedAt time.Time) (FeedDocument, error) {
 			if len(item.Authors) > 0 {
 				author = item.Authors[0].Name
 			}
-			doc.Entries = append(doc.Entries, newFeedEntry(
-				item.ID, item.Title, selectAtomLink(item.Links), item.Summary, item.Content, author, item.Published, item.Updated,
-			))
+			contentText, contentFormat := normalizeAtomContent(item.Content)
+			entry := newFeedEntry(item.ID, item.Title, selectAtomLink(item.Links), item.Summary, contentText, author, item.Published, item.Updated)
+			entry.ContentFormat = contentFormat
+			entry.ContentTypeRaw = item.Content.Type
+			entry.ContentSrc = item.Content.Src
+			for _, link := range item.Links {
+				if strings.EqualFold(strings.TrimSpace(link.Rel), "enclosure") {
+					entry.Attachments = append(entry.Attachments, newFeedAttachment(link.Href, link.Type, link.Length, link.Title))
+				}
+			}
+			doc.Entries = append(doc.Entries, entry)
 		}
 		return doc, nil
 	default:
 		return FeedDocument{}, ErrUnsupportedFeed
 	}
+}
+
+func normalizeAtomContent(content atomContent) (string, domain.ContentFormat) {
+	if strings.TrimSpace(content.Src) != "" {
+		return "", domain.ContentFormatUnknown
+	}
+	typeValue := strings.ToLower(strings.TrimSpace(content.Type))
+	if typeValue != "xhtml" && hasXMLChildElement(content.InnerXML) {
+		return firstNonEmpty(content.Text, content.InnerXML), domain.ContentFormatUnknown
+	}
+	switch typeValue {
+	case "", "text":
+		return strings.TrimSpace(content.Text), domain.ContentFormatPlainText
+	case "html":
+		return strings.TrimSpace(content.Text), domain.ContentFormatHTMLFragment
+	case "xhtml":
+		var root struct {
+			XMLName xml.Name
+		}
+		if err := xml.Unmarshal([]byte(content.InnerXML), &root); err != nil || root.XMLName.Space != "http://www.w3.org/1999/xhtml" || root.XMLName.Local != "div" {
+			return strings.TrimSpace(content.InnerXML), domain.ContentFormatUnknown
+		}
+		return strings.TrimSpace(content.InnerXML), domain.ContentFormatHTMLFragment
+	default:
+		mediaType, _, err := mime.ParseMediaType(typeValue)
+		if err == nil && mediaType == "text/html" {
+			return strings.TrimSpace(content.Text), domain.ContentFormatHTMLFragment
+		}
+		if err == nil && mediaType == "text/plain" {
+			return strings.TrimSpace(content.Text), domain.ContentFormatPlainText
+		}
+		return firstNonEmpty(content.Text, content.InnerXML), domain.ContentFormatUnknown
+	}
+}
+
+// hasXMLChildElement 判断 Atom text/html/text/plain 或扩展 MIME 是否错误地包含 XML 子元素。
+// 这类载荷不按声明类型解释，但保留原始片段供后续质量判断。
+func hasXMLChildElement(raw string) bool {
+	decoder := xml.NewDecoder(strings.NewReader(raw))
+	for {
+		token, err := decoder.Token()
+		if err != nil {
+			return false
+		}
+		if _, ok := token.(xml.StartElement); ok {
+			return true
+		}
+	}
+}
+
+func newFeedAttachment(rawURL, rawType, rawLength, title string) FeedAttachment {
+	attachment := FeedAttachment{
+		URL:          strings.TrimSpace(rawURL),
+		RawURL:       rawURL,
+		RawMediaType: rawType,
+		RawLength:    rawLength,
+		Title:        normalizeText(title),
+	}
+	if attachment.URL == "" {
+		attachment.ValidationIssues = append(attachment.ValidationIssues, "missing_url")
+	}
+	normalizedMediaType := strings.TrimSpace(attachment.RawMediaType)
+	if normalizedMediaType != "" {
+		if mediaType, _, err := mime.ParseMediaType(normalizedMediaType); err == nil {
+			attachment.MediaType = strings.ToLower(mediaType)
+		} else {
+			attachment.ValidationIssues = append(attachment.ValidationIssues, "invalid_media_type")
+		}
+	}
+	normalizedLength := strings.TrimSpace(attachment.RawLength)
+	if normalizedLength != "" {
+		if length, err := strconv.ParseInt(normalizedLength, 10, 64); err == nil && length >= 0 {
+			attachment.Length = &length
+		} else {
+			attachment.ValidationIssues = append(attachment.ValidationIssues, "invalid_length")
+		}
+	}
+	return attachment
 }
 
 func newFeedEntry(id, title, link, summary, content, author, publishedRaw, updatedRaw string) FeedEntry {

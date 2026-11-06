@@ -351,3 +351,16 @@ Migration 状态为 `running` 或 `failed` 时，Runner 不会自动重跑。处
 ### 9.8 PLAT-009 修复提交与专项 CI 证据
 
 最终代码提交：`fbbb10681194286ccf52405baa66331d045655d2`。Platform Go checks：[`42026901950`](https://github.com/Kasign/stock_data_provider/actions/runs/42026901950)，最终结论 success；gofmt、`go test ./internal/platform/...`、`go test -race ./internal/platform/...`、`go vet ./internal/platform/...` 均通过。之前提交 `b7ac6bef` 的初次 CI 曾因变量重复声明失败，已修复；不能把该失败 SHA 记为通过。
+
+
+### 9.9 MariaDB / Redis 真实服务容器集成补充（2026-11-06）
+
+本节更新 9.4、9.7 中“真实 MariaDB/Redis 运行时集成待验收”的历史状态；历史记录保留其当时测试范围，不再代表当前验收结论。
+
+- CI 使用 MariaDB 11.4 与 Redis 7.4 服务容器；MariaDB 真实连接/Ping、同 namespace 并发 Migration、advisory lock 串行化与释放、历史记录幂等、DDL 隐式提交后的部分失败状态均已验证。
+- Redis 真实连接/Ping、连接池参数归一化及 SET/GET 往返已验证。
+- 同一集成测试在 CI 中执行普通运行与 Race 检查，均通过。
+- 证据：提交 c1736686a748c0a999e74a4e9d28e9a77c77884e，CI [42179599443](https://github.com/Kasign/stock_data_provider/actions/runs/42179599443)。
+- 未覆盖且仍待 A3：目标生产拓扑与网络访问控制、生产 Secret 注入、服务 Bootstrap 的共享连接池创建/关闭顺序、生产连接池压力、生产故障恢复及目标环境旧历史表升级演练。
+
+因此，“真实服务容器集成”已 PASS；“生产部署验收”仍未完成，二者不得混为一谈。

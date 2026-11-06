@@ -418,3 +418,30 @@
 
 
 - 2026-11-06 P0-52 当前验证：修正测试 gofmt 后代码 SHA `173c2f16faeb04ff7f54156ef7ef2f4ef377aa06` 的 Push/PR Go suite `42145575844` / `42145581694`、Parity `42145581855`、WebUI checks `42145581775` 均通过；Go suite 包含 gofmt、test、race、vet、MariaDB migration/PIT、Compose 和两个 Docker 镜像构建。Live Provider Probe Run `42145581739` 外层成功，但历史专项步骤 skipped，不代表真实历史 K 线或跨源验收通过。无 API、数据库或 WebUI 契约变化。
+
+
+## 27. 2026-11-06 API-06 P0-53 DailyBar 诊断计数语义
+
+- `RowsValidated` 统一表示通过字段校验、去重和日期范围过滤的完整有效行数，不受展示 limit 影响；limit 截断行数通过结构化 info issue 的 Count 表达。正常限量截断不再单独导致 DailyBar Probe quality degraded；真实数据问题仍触发降级。样本日期和跨源快照继续使用 limit 后的最新窗口。
+- 新增 7 行超过默认 limit 的服务层回归测试。无 API/DB/WebUI 契约变化，CI 待验。
+
+
+- P0-53 最终 CI：代码 SHA `91dfd465fc6cee738566d0b423e7e0b878e93d6e` 的 Push/PR Go suite `42147895923` / `42147902737`、Parity `42147902269`、WebUI checks `42147902274` 均 success；Go suite 含 gofmt、test、race、vet、MariaDB migration/PIT、Compose 和两个 Docker 镜像构建。Live Provider Probe `42147902279` 外层 success，但历史生产 Probe 与 BaoStock/Pytdx/Tushare 专项 skipped，不构成真实历史行情/跨源验收。接口字段既有，仅澄清 RowsValidated 语义，不增加 API/DB/WebUI 契约。
+
+
+## 28. 2026-11-06 API-06 P0-54 日历质量传递
+
+- DailyBars 在交易日历不可用、使用工作日估算覆盖率时，即使候选覆盖达标也会把 K 线质量标记为 degraded，并在 QualityReasons 中保留估算依据；日历冲突/推断导致的 degraded 同样传递到 K 线。仅历史日历缺少发布时间但日期覆盖完整时不单独降级。
+- 新增服务层与日历质量回归测试；无 API/DB/WebUI 契约变化，CI 待验。
+
+
+- P0-54 最终 CI：代码 SHA `b7d60a97b78273cf653a2910b6d1a21ac7ad6ac7` 的 Push/PR Go suite `42149506735` / `42149513937`、Parity `42149513908`、WebUI checks `42149513999` 均 success；Go suite 含 gofmt、test、race、vet、MariaDB migration/PIT、Compose 和两个 Docker 镜像构建。Live Provider `42149506723` / `42149513877` 外层 success，但生产历史 Probe 与 BaoStock/Pytdx/Tushare 专项 skipped，不代表真实历史行情/跨源验收。
+
+
+## 29. 2026-11-06 API-06 P0-55 上市前日期状态
+
+- Tushare 对请求日期早于上市日期时，返回可验证上市日期和 `ListingTradingDayNumber=0`，同时保留市场交易日历状态；不再将未来上市日期当作无效状态，也不请求上市前不适用的 ST/名称/停复牌信息。服务层允许该证据组合，供 DailyBar 上市前缺失日期解释使用。
+- 新增 Provider 与服务层回归测试；无 API/DB/WebUI 契约变化。最终 SHA a56a43dd241228f9a862799990c6e62346328acf 的 Push/PR Go suite、Parity、WebUI checks 均通过；Live Provider workflow 未启用历史专项，不构成真实历史行情验收。
+
+
+- P0-55 验收：Tushare 上市前状态通过 Provider httptest 和服务层校验回归；最终 Go suite（含 race/vet、MariaDB PIT、Compose、镜像构建）、Parity、WebUI checks 均通过。没有新增接口或字段。真实 Provider 专项未启用，不作为行情数据实测证据。

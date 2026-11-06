@@ -98,9 +98,6 @@ func validateValuationSnapshot(requested []string, snapshot *model.ValuationSnap
 			if value != nil && (math.IsNaN(*value) || math.IsInf(*value, 0)) {
 				return fmt.Errorf("valuation item %s has non-finite metric", symbol)
 			}
-			if value == nil {
-				hasDegradation = true
-			}
 		}
 
 		// 比例类估值字段按经济含义只能是非负数；PE/PB 等估值倍数不在此列。

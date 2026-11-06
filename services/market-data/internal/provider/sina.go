@@ -406,17 +406,24 @@ func (p *Sina) FetchQuote(ctx context.Context, rawSymbol string) (*model.Quote, 
 		return nil, err
 	}
 	if open <= 0 || prevClose <= 0 || price <= 0 || high <= 0 || low <= 0 {
+		addProviderQuoteFieldIssue(ctx, "ohlc", "field_1,field_2,field_3,field_4,field_5", "out_of_range", "positive finite prices", "string", "", "Sina quote OHLC and previous close must be positive", validation.SeverityError)
 		return nil, errors.New("Sina quote OHLC and previous close must be positive")
 	}
 	if low > high || open < low || open > high || price < low || price > high {
+		addProviderQuoteFieldIssue(ctx, "ohlc", "field_1,field_3,field_4,field_5", "ohlc_invariant_violation", "low <= open/current_price <= high", "string", "", "Sina quote OHLC invariant failed", validation.SeverityError)
 		return nil, errors.New("Sina quote OHLC invariant failed")
 	}
 	rawVolume, err := parseRequired(8, "volume")
-	if err != nil || rawVolume < 0 {
+	if err != nil {
+		return nil, err
+	}
+	if rawVolume < 0 {
+		addProviderQuoteFieldIssue(ctx, "volume", "field_8", "out_of_range", "non-negative share count", "string", fields[8], "Sina quote volume must be non-negative", validation.SeverityError)
 		return nil, errors.New("Sina quote volume must be a non-negative number of shares")
 	}
 	volume, err := normalize.RawSharesToInt64(rawVolume)
 	if err != nil {
+		addProviderQuoteFieldIssue(ctx, "volume", "field_8", "invalid_volume_unit", "non-negative integer share count", "string", fields[8], "Sina quote volume cannot be normalized to shares", validation.SeverityError)
 		return nil, fmt.Errorf("normalize Sina quote volume: %w", err)
 	}
 
@@ -426,6 +433,12 @@ func (p *Sina) FetchQuote(ctx context.Context, rawSymbol string) (*model.Quote, 
 		v, parseErr := strconv.ParseFloat(rawAmountText, 64)
 		if parseErr == nil && !math.IsNaN(v) && !math.IsInf(v, 0) && v >= 0 {
 			amount = &v
+		} else {
+			code := "invalid_optional_number"
+			if parseErr == nil {
+				code = "out_of_range"
+			}
+			addProviderQuoteFieldIssue(ctx, "amount", "field_9", code, "finite non-negative CNY amount", "string", rawAmountText, "Sina quote optional amount is invalid and will be omitted", validation.SeverityWarning)
 		}
 	}
 	change := price - prevClose
@@ -437,7 +450,11 @@ func (p *Sina) FetchQuote(ctx context.Context, rawSymbol string) (*model.Quote, 
 		if parsed, parseErr := time.ParseInLocation("2006-01-02 15:04:05", dateText+" "+timeText, time.FixedZone("CST", 8*60*60)); parseErr == nil {
 			utc := parsed.UTC()
 			quoteTime = &utc
+		} else {
+			addProviderQuoteFieldIssue(ctx, "quote_time", "field_30,field_31", "invalid_timestamp", "YYYY-MM-DD HH:MM:SS in Asia/Shanghai", "string", dateText+" "+timeText, "Sina quote provider timestamp is invalid", validation.SeverityWarning)
 		}
+	} else if dateText != "" || timeText != "" {
+		addProviderQuoteFieldIssue(ctx, "quote_time", "field_30,field_31", "incomplete_timestamp", "date and time must both be present", "string", dateText+" "+timeText, "Sina quote provider timestamp is incomplete", validation.SeverityWarning)
 	}
 	quoteTime = validProviderSnapshotTime(quoteTime, fetchedAt)
 	quality := model.QualityValid

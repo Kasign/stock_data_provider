@@ -96,7 +96,7 @@ func candidate(providerCode, itemID, title, summary, rawURL, publisherName, publ
 		ProviderCode:    providerCode,
 		ProviderItemID:  strings.TrimSpace(itemID),
 		Title:           strings.TrimSpace(title),
-		Summary:         strings.TrimSpace(summary),
+		ProviderSummary: strings.TrimSpace(summary),
 		RawURL:          strings.TrimSpace(rawURL),
 		PublisherName:   strings.TrimSpace(publisherName),
 		PublisherDomain: strings.ToLower(strings.TrimSpace(publisherDomain)),
