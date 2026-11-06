@@ -57,7 +57,7 @@ func ContentLayersFromCandidate(candidate Candidate) ContentLayers {
 	return NormalizeContentLayers(ContentLayers{ProviderSummary: candidate.ProviderSummary})
 }
 
-// NormalizeContentLayers 规范化摘要空白并仅裁剪正文首尾空白，保留正文段落和重复内容。
+// NormalizeContentLayers 规范化摘要空白与正文 CRLF 换行，保留正文段落和重复内容。
 func NormalizeContentLayers(layers ContentLayers) ContentLayers {
 	layers.ProviderSummary = normalizeCandidateText(layers.ProviderSummary)
 	layers.SourceSummary = normalizeCandidateText(layers.SourceSummary)
@@ -75,6 +75,7 @@ func NormalizeContentLayers(layers ContentLayers) ContentLayers {
 	}
 	if layers.Body != nil {
 		body := *layers.Body
+		body.Text = strings.ReplaceAll(body.Text, "\r\n", "\n")
 		body.Text = strings.TrimSpace(body.Text)
 		if body.Text == "" {
 			layers.Body = nil

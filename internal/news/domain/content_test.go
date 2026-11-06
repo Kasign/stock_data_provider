@@ -56,3 +56,17 @@ func TestNormalizeContentLayersDoesNotPromoteSummaryToBody(t *testing.T) {
 		t.Fatalf("layers=%+v", layers)
 	}
 }
+func TestNormalizeContentLayersCanonicalizesCRLFWithoutChangingParagraphs(t *testing.T) {
+	crlf := NormalizeContentLayers(ContentLayers{
+		Body: &ContentPayload{Text: "  第一段\r\n\r\n第二段\r\n  "},
+	})
+	lf := NormalizeContentLayers(ContentLayers{
+		Body: &ContentPayload{Text: "第一段\n\n第二段"},
+	})
+	if crlf.Body == nil || crlf.Body.Text != "第一段\n\n第二段" {
+		t.Fatalf("CRLF body was not canonicalized: %+v", crlf.Body)
+	}
+	if lf.Body == nil || lf.Body.Text != crlf.Body.Text {
+		t.Fatalf("equivalent line endings produced different stored bodies: CRLF=%+v LF=%+v", crlf.Body, lf.Body)
+	}
+}
