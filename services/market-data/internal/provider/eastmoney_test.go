@@ -1174,3 +1174,47 @@ func TestEastmoneyFetchSectorRankingsMarksMissingTotalAndExcludedRows(t *testing
 		}
 	}
 }
+
+
+func TestEastmoneyDailyBarsReportsFieldAndRowParseIssue(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `{"rc":0,"data":{"code":"600519","name":"贵州茅台","klines":["2026-10-20,1321.01,not-a-close,1335.00,1316.14,34136,4525398959,1.42,0.81,10.87,0.23"]}}`)
+	}))
+	defer server.Close()
+	ctx := validation.WithReporter(context.Background(), validation.NewReporter(10))
+	_, err := NewEastmoney(2*time.Second, server.URL, server.URL).FetchDailyBars(ctx, "600519.SH", "2026-10-01", "2026-10-21", 100, model.AdjustmentForward)
+	if err == nil {
+		t.Fatal("invalid close must continue to reject the source row")
+	}
+	report := validation.ReporterFromContext(ctx).Snapshot()
+	if report.TotalCount == 0 || len(report.Issues) == 0 {
+		t.Fatalf("expected field-level parse issue, got %+v", report)
+	}
+	found := false
+	for _, issue := range report.Issues {
+		if issue.Stage == validation.StageParse && issue.Field == "close" && issue.ProviderField == "f53" &&
+			issue.RowIndex != nil && *issue.RowIndex == 0 && issue.Code == "invalid_number" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("missing close/f53 row 0 diagnostic: %+v", report)
+	}
+}
+
+func TestEastmoneyDailyBarsWarnsOnInvalidOptionalChangePercent(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `{"rc":0,"data":{"code":"600519","name":"贵州茅台","klines":["2026-10-20,1321.01,1331.88,1335.00,1316.14,34136,4525398959,1.42,invalid,10.87,0.23"]}}`)
+	}))
+	defer server.Close()
+	ctx := validation.WithReporter(context.Background(), validation.NewReporter(10))
+	bars, err := NewEastmoney(2*time.Second, server.URL, server.URL).FetchDailyBars(ctx, "600519.SH", "2026-10-01", "2026-10-21", 100, model.AdjustmentForward)
+	if err != nil || len(bars) != 1 || bars[0].ChangePercent != nil {
+		t.Fatalf("optional change percent must not discard valid bar: bars=%+v err=%v", bars, err)
+	}
+	report := validation.ReporterFromContext(ctx).Snapshot()
+	if report.WarningCount != 1 || len(report.Issues) != 1 || report.Issues[0].Field != "change_percent" ||
+		report.Issues[0].ProviderField != "f59" || report.Issues[0].RowIndex == nil || *report.Issues[0].RowIndex != 0 {
+		t.Fatalf("expected optional field warning with row context, got %+v", report)
+	}
+}
