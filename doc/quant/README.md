@@ -3,7 +3,7 @@
 - 分支：`feat/quant`
 - 代码：`internal/quant/**`
 - 任务前缀：QNT
-- 当前状态：Q0-001～003 已完成；QNT-001 计算上下文开发中，Registry 元数据契约仍待实现
+- 当前状态：Q0-001～003 已完成；QNT-001 CalculationContext 结构校验已实现，7 项测试在临时独立 Go package 中 7/7 通过；Metric Registry 元数据与算法版本选择仍待决
 - 初始共同基线：`0cb99a525de00d3c340891caa029b716c4d2f749`
 
 Quant 负责确定性、可复算的数值分析：Indicator、Factor、Trend、Market、Industry、Stock、Strategy、Backtest、Risk、Evaluation。不得调用 LLM，不负责研究编排，不直接访问 Provider/HTTP/SQL/Redis。
