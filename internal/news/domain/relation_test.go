@@ -33,8 +33,8 @@ func TestValidateRelationAssertionKeepsModelOutputProposed(t *testing.T) {
 
 func TestValidateRelationAssertionRejectsNonCanonicalIdentifiers(t *testing.T) {
 	for name, mutate := range map[string]func(*RelationAssertion){
-		"padded id": func(v *RelationAssertion) { v.ID = " r1 " },
-		"padded news id": func(v *RelationAssertion) { v.NewsID = " news-1 " },
+		"padded id":        func(v *RelationAssertion) { v.ID = " r1 " },
+		"padded news id":   func(v *RelationAssertion) { v.NewsID = " news-1 " },
 		"padded parent id": func(v *RelationAssertion) { v.SupersedesRelationID = " r0 " },
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -54,8 +54,8 @@ func TestValidateRelationEvidenceRejectsNonCanonicalReferences(t *testing.T) {
 		ObservationID: "observation-1", FieldPath: "related_securities",
 	}
 	cases := map[string]func(*RelationEvidence){
-		"padded relation id": func(v *RelationEvidence) { v.RelationID = " r1 " },
-		"padded observation id": func(v *RelationEvidence) { v.ObservationID = " observation-1 " },
+		"padded relation id":       func(v *RelationEvidence) { v.RelationID = " r1 " },
+		"padded observation id":    func(v *RelationEvidence) { v.ObservationID = " observation-1 " },
 		"padded source version id": func(v *RelationEvidence) { v.SourceVersionID = " version-1 " },
 	}
 	for name, mutate := range cases {
@@ -124,8 +124,8 @@ func TestValidateRelationEvidenceRejectsNonCanonicalMetadata(t *testing.T) {
 		ObservationID: "observation-1", FieldPath: "related_securities",
 	}
 	cases := map[string]func(*RelationEvidence){
-		"padded field path": func(v *RelationEvidence) { v.FieldPath = " related_securities " },
-		"padded rule version": func(v *RelationEvidence) { v.RuleVersion = " v1 " },
+		"padded field path":    func(v *RelationEvidence) { v.FieldPath = " related_securities " },
+		"padded rule version":  func(v *RelationEvidence) { v.RuleVersion = " v1 " },
 		"padded model version": func(v *RelationEvidence) { v.ModelVersion = " model-v1 " },
 	}
 	for name, mutate := range cases {

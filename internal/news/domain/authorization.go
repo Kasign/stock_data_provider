@@ -40,9 +40,9 @@ type NewsAuthorizationRef struct {
 	AuthorizationRef    string                 `json:"authorization_ref"`
 	PolicyOwner         string                 `json:"policy_owner"`
 	PolicyVersion       string                 `json:"policy_version"`
-	Decision            AuthorizationDecision  `json:"decision"`
+	Decision            AuthorizationDecision       `json:"decision"`
 	PurposeCode         string                 `json:"purpose_code"`
-	ContentLevel        AuthorizationContentLevel `json:"content_level"`
+	ContentLevel        AuthorizationContentLevel  `json:"content_level"`
 	SubjectRef          string                 `json:"subject_ref"`
 	ResourceRef         string                 `json:"resource_ref"`
 	DecidedAt           string                 `json:"decided_at"`
@@ -56,8 +56,8 @@ type NewsAuthorizationRef struct {
 // an external request field. This value object does not itself authorize reads.
 type NewsAuthorizationBinding struct {
 	CallerRef             string                     `json:"caller_ref"`
-	ResourceRef            string                     `json:"resource_ref"`
-	PurposeCode            string                     `json:"purpose_code"`
+	ResourceRef           string                     `json:"resource_ref"`
+	PurposeCode           string                     `json:"purpose_code"`
 	RequestedContentLevel  AuthorizationContentLevel `json:"requested_content_level"`
 	ProviderRef            *string                    `json:"provider_ref"`
 	SourceRef              string                     `json:"source_ref"`
