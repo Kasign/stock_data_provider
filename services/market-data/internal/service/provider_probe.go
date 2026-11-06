@@ -866,8 +866,13 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 			if err != nil {
 				return model.QualityUnknown, "", nil, err
 			}
+			report := validation.ValidateFundamentalsSnapshot(v, barsSymbol, nowLocal.Year(), 2)
+			validation.AddContextReport(probeCtx, report)
+			if report.HasErrors() {
+				return model.QualityInvalid, v.SourceVersion, nil, errors.New("fundamentals field validation failed")
+			}
 			if err := validateFundamentalsSnapshot(barsSymbol, nowLocal.Year(), 2, v); err != nil {
-				return model.QualityInvalid, "", nil, err
+				return model.QualityInvalid, v.SourceVersion, nil, err
 			}
 			recordProviderProbeEvidence(probeCtx, barsSymbol, "", len(v.Sections), len(v.Sections), nil)
 			return v.QualityStatus, v.SourceVersion, append([]string(nil), v.QualityReasons...), nil
