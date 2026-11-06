@@ -24,7 +24,7 @@ components:
       properties:
         error:
           type: object
-          required: [code, message]
+          required: [class, code, message, retryable]
           properties:
             class: {type: string, enum: [validation, unauthenticated, forbidden, not_found, conflict, unavailable, timeout, internal], description: Stable public error class mapped from the HTTP status}
             code: {type: string, description: Stable machine-readable domain error code}
@@ -1189,7 +1189,12 @@ paths:
       security: []
       responses:
         '200': {description: Configured dependencies are ready}
-        '503': {description: Configured dependencies are not ready}
+        '503':
+          description: "Configured dependencies are not ready"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /api/v1/market/quotes:
     get:
       summary: 批量获取指定 A 股证券的实时行情
@@ -1226,8 +1231,18 @@ paths:
                   failed: {type: integer}
                   fetched_at: {type: string, format: date-time}
                   quality_status: {$ref: '#/components/schemas/QualityStatus'}
-        '400': {description: 证券列表缺失、重复、非法或超过 50 项}
-        '401': {description: API key required}
+        '400':
+          description: "证券列表缺失、重复、非法或超过 50 项"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: "API key required"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
 
   /api/v1/quotes/{symbol}:
     get:
@@ -1239,10 +1254,30 @@ paths:
           content:
             application/json:
               schema: {$ref: '#/components/schemas/Quote'}
-        '400': {description: Invalid symbol}
-        '401': {description: API key required}
-        '502': {description: All quote providers returned errors}
-        '504': {description: All quote providers timed out}
+        '400':
+          description: "Invalid symbol"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: "API key required"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '502':
+          description: "All quote providers returned errors"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '504':
+          description: "All quote providers timed out"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /api/v1/bars/{symbol}/daily:
     get:
       description: Without as_of, returns the current provider-selected series. With as_of, reads only locally recorded versions observed by that timestamp; it never calls live Providers or falls back to the current-value table.
@@ -1259,12 +1294,42 @@ paths:
           content:
             application/json:
               schema: {$ref: '#/components/schemas/DailyBarsResponse'}
-        '400': {description: Invalid symbol, date range, limit, adjustment or as_of timestamp}
-        '401': {description: API key required}
-        '404': {description: No coherent daily-bar revisions recorded by the requested as_of timestamp}
-        '502': {description: All live Providers failed}
-        '503': {description: No daily-bar Provider enabled for live reads, or PIT revision storage unavailable}
-        '504': {description: All live Providers timed out}
+        '400':
+          description: "Invalid symbol, date range, limit, adjustment or as_of timestamp"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: "API key required"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: "No coherent daily-bar revisions recorded by the requested as_of timestamp"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '502':
+          description: "All live Providers failed"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: "No daily-bar Provider enabled for live reads, or PIT revision storage unavailable"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '504':
+          description: "All live Providers timed out"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /api/v1/bundles/{symbol}:
     get:
       parameters:
@@ -1278,10 +1343,30 @@ paths:
           content:
             application/json:
               schema: {$ref: '#/components/schemas/Bundle'}
-        '400': {description: Invalid symbol, date range or adjustment}
-        '401': {description: API key required}
-        '502': {description: Providers failed}
-        '504': {description: Providers timed out}
+        '400':
+          description: "Invalid symbol, date range or adjustment"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: "API key required"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '502':
+          description: "Providers failed"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '504':
+          description: "Providers timed out"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /api/v1/data-sources/probe:
     post:
       tags: [Data Sources]
@@ -1311,9 +1396,24 @@ paths:
           content:
             application/json:
               schema: {$ref: '#/components/schemas/ProviderProbeRun'}
-        '400': {description: 请求参数或 JSON 格式无效}
-        '401': {description: API Key 缺失或无效}
-        '500': {description: 诊断结果持久化失败}
+        '400':
+          description: "请求参数或 JSON 格式无效"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: "API Key 缺失或无效"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: "诊断结果持久化失败"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /api/v1/data-sources/probe/history:
     get:
       summary: List recent persisted Provider probe runs
@@ -1325,9 +1425,24 @@ paths:
           content:
             application/json:
               schema: {$ref: '#/components/schemas/ProviderProbeHistory'}
-        '400': {description: Invalid limit}
-        '401': {description: API key required}
-        '503': {description: Provider-probe history storage is unavailable}
+        '400':
+          description: "Invalid limit"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: "API key required"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: "Provider-probe history storage is unavailable"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /api/v1/data-sources/diagnostics:
     get:
       tags: [Data Sources]
@@ -1375,7 +1490,12 @@ paths:
           content:
             application/json:
               schema: {$ref: '#/components/schemas/DataSourcesResponse'}
-        '401': {description: API key required}
+        '401':
+          description: "API key required"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
 
   /api/v1/stocks/search:
     get:
@@ -1393,10 +1513,30 @@ paths:
           content:
             application/json:
               schema: {$ref: '#/components/schemas/StockSearchSnapshot'}
-        '400': {description: Empty/overlong query or invalid limit}
-        '401': {description: API key required}
-        '502': {description: All stock-search providers failed or returned invalid data}
-        '503': {description: No stock-search provider enabled}
+        '400':
+          description: "Empty/overlong query or invalid limit"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: "API key required"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '502':
+          description: "All stock-search providers failed or returned invalid data"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: "No stock-search provider enabled"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
 
   /api/v1/stocks/{symbol}/announcements:
     get:
@@ -1417,9 +1557,24 @@ paths:
           content:
             application/json:
               schema: {$ref: '#/components/schemas/StockAnnouncementSnapshot'}
-        '400': {description: Invalid symbol, date range or pagination}
-        '401': {description: API key required}
-        '502': {description: Provider unavailable or returned inconsistent data}
+        '400':
+          description: "Invalid symbol, date range or pagination"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: "API key required"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '502':
+          description: "Provider unavailable or returned inconsistent data"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /api/v1/stocks/{symbol}/profile:
     get:
       summary: Get single-security identity, listing metadata and current market-profile fields
@@ -1435,10 +1590,30 @@ paths:
           content:
             application/json:
               schema: {$ref: '#/components/schemas/StockBasic'}
-        '400': {description: Invalid symbol}
-        '401': {description: API key required}
-        '502': {description: All stock-basic providers failed}
-        '503': {description: No stock-basic provider enabled}
+        '400':
+          description: "Invalid symbol"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: "API key required"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '502':
+          description: "All stock-basic providers failed"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: "No stock-basic provider enabled"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /api/v1/stocks/{symbol}/price-limit-rule:
     get:
       summary: Resolve the effective A-share price-limit rule
@@ -1474,8 +1649,18 @@ paths:
                   rule_source_url: {type: string, format: uri}
                   quality_status: {$ref: '#/components/schemas/QualityStatus'}
                   quality_reasons: {type: array, items: {type: string}}
-        '400': {description: Invalid symbol or trade date}
-        '401': {description: API key required}
+        '400':
+          description: "Invalid symbol or trade date"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: "API key required"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /api/v1/stocks/{symbol}/trading-status:
     get:
       summary: Get historical trading-status evidence for one A-share
@@ -1490,11 +1675,36 @@ paths:
           content:
             application/json:
               schema: {$ref: '#/components/schemas/SecurityTradingStatusSnapshot'}
-        '400': {description: Invalid symbol, trade date or as_of timestamp}
-        '401': {description: API key required}
-        '404': {description: No usable status revision was recorded by the requested as_of timestamp}
-        '502': {description: All configured security-status Providers failed for a live read}
-        '503': {description: No security-trading-status Provider enabled, or local PIT revision storage unavailable}
+        '400':
+          description: "Invalid symbol, trade date or as_of timestamp"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: "API key required"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: "No usable status revision was recorded by the requested as_of timestamp"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '502':
+          description: "All configured security-status Providers failed for a live read"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: "No security-trading-status Provider enabled, or local PIT revision storage unavailable"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /api/v1/stocks/{symbol}/fundamentals:
     get:
       summary: Get quarterly indicators and financial statement sections
@@ -1521,11 +1731,36 @@ paths:
           content:
             application/json:
               schema: {$ref: '#/components/schemas/FundamentalsSnapshot'}
-        '400': {description: Invalid symbol, report year, quarter or as_of timestamp}
-        '401': {description: API key required}
-        '404': {description: No usable financial revision was recorded by the requested as_of timestamp}
-        '502': {description: Provider failed or returned invalid financial data}
-        '503': {description: No fundamentals provider enabled for live reads, or PIT revision storage is unavailable}
+        '400':
+          description: "Invalid symbol, report year, quarter or as_of timestamp"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: "API key required"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: "No usable financial revision was recorded by the requested as_of timestamp"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '502':
+          description: "Provider failed or returned invalid financial data"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: "No fundamentals provider enabled for live reads, or PIT revision storage is unavailable"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /api/v1/stocks/{symbol}/chip-distribution:
     get:
       summary: Get a stock chip-distribution snapshot
@@ -1541,10 +1776,30 @@ paths:
           content:
             application/json:
               schema: {$ref: '#/components/schemas/ChipDistribution'}
-        '400': {description: Invalid or unsupported symbol}
-        '401': {description: API key required}
-        '502': {description: All chip-distribution providers failed or returned invalid data}
-        '503': {description: No chip-distribution provider enabled}
+        '400':
+          description: "Invalid or unsupported symbol"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: "API key required"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '502':
+          description: "All chip-distribution providers failed or returned invalid data"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: "No chip-distribution provider enabled"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /api/v1/stocks/{symbol}/capital-flow:
     get:
       summary: Get a stock capital-flow summary
@@ -1560,10 +1815,30 @@ paths:
           content:
             application/json:
               schema: {$ref: '#/components/schemas/CapitalFlow'}
-        '400': {description: Invalid or unsupported symbol}
-        '401': {description: API key required}
-        '502': {description: All capital-flow providers failed or returned invalid data}
-        '503': {description: No capital-flow provider enabled}
+        '400':
+          description: "Invalid or unsupported symbol"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: "API key required"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '502':
+          description: "All capital-flow providers failed or returned invalid data"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: "No capital-flow provider enabled"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /api/v1/stocks/{symbol}/boards:
     get:
       summary: Get the boards associated with one A-share
@@ -1575,10 +1850,30 @@ paths:
           content:
             application/json:
               schema: {$ref: '#/components/schemas/StockBoardSnapshot'}
-        '400': {description: Invalid symbol}
-        '401': {description: API key required}
-        '502': {description: All stock-boards providers failed or returned incomplete data}
-        '503': {description: No stock-boards provider enabled}
+        '400':
+          description: "Invalid symbol"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: "API key required"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '502':
+          description: "All stock-boards providers failed or returned incomplete data"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: "No stock-boards provider enabled"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
 
   /api/v1/market/valuations:
     get:
@@ -1602,10 +1897,30 @@ paths:
           content:
             application/json:
               schema: {$ref: '#/components/schemas/ValuationSnapshot'}
-        '400': {description: Missing symbols, more than 100 raw entries, empty tokens, or invalid/B-share symbol}
-        '401': {description: API key required}
-        '502': {description: All valuation providers failed or returned invalid data}
-        '503': {description: No valuation provider enabled}
+        '400':
+          description: "Missing symbols, more than 100 raw entries, empty tokens, or invalid/B-share symbol"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: "API key required"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '502':
+          description: "All valuation providers failed or returned invalid data"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: "No valuation provider enabled"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
 
   /api/v1/market/sectors:
     get:
@@ -1632,10 +1947,30 @@ paths:
           content:
             application/json:
               schema: {$ref: '#/components/schemas/SectorRankingSnapshot'}
-        '400': {description: Invalid sector type, sort_by, direction or limit}
-        '401': {description: API key required}
-        '502': {description: All sector-ranking providers failed}
-        '503': {description: No sector-ranking provider enabled}
+        '400':
+          description: "Invalid sector type, sort_by, direction or limit"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: "API key required"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '502':
+          description: "All sector-ranking providers failed"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: "No sector-ranking provider enabled"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
 
   /api/v1/market/index-catalog:
     get:
@@ -1649,10 +1984,30 @@ paths:
           content:
             application/json:
               schema: {$ref: '#/components/schemas/IndexCatalogSnapshot'}
-        '400': {description: Invalid index catalog tag}
-        '401': {description: API key required}
-        '502': {description: All index catalog providers failed}
-        '503': {description: No index catalog provider enabled}
+        '400':
+          description: "Invalid index catalog tag"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: "API key required"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '502':
+          description: "All index catalog providers failed"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: "No index catalog provider enabled"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
 
   /api/v1/market/indices/{symbol}/constituents:
     get:
@@ -1685,10 +2040,30 @@ paths:
           content:
             application/json:
               schema: {$ref: '#/components/schemas/IndexConstituentSnapshot'}
-        '400': {description: Invalid date or source does not support historical query}
-        '401': {description: API key required}
-        '502': {description: All index constituent providers failed}
-        '503': {description: No index catalog provider enabled}
+        '400':
+          description: "Invalid date or source does not support historical query"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: "API key required"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '502':
+          description: "All index constituent providers failed"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: "No index catalog provider enabled"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
 
   /api/v1/market/indices/{symbol}/daily:
     get:
@@ -1705,10 +2080,30 @@ paths:
           content:
             application/json:
               schema: {$ref: '#/components/schemas/IndexDailyBarsSnapshot'}
-        '400': {description: Invalid date range or index symbol}
-        '401': {description: API key required}
-        '502': {description: All index daily-bar providers failed}
-        '503': {description: No index catalog provider enabled}
+        '400':
+          description: "Invalid date range or index symbol"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: "API key required"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '502':
+          description: "All index daily-bar providers failed"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: "No index catalog provider enabled"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
 
   /api/v1/market/indices:
     get:
@@ -1719,9 +2114,24 @@ paths:
           content:
             application/json:
               schema: {$ref: '#/components/schemas/IndexQuoteSnapshot'}
-        '401': {description: API key required}
-        '502': {description: All index-quote providers failed}
-        '503': {description: No index-quote provider enabled}
+        '401':
+          description: "API key required"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '502':
+          description: "All index-quote providers failed"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: "No index-quote provider enabled"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
 
   /api/v1/market/trading-calendar:
     get:
@@ -1736,10 +2146,30 @@ paths:
           content:
             application/json:
               schema: {$ref: '#/components/schemas/TradingCalendarSnapshot'}
-        '400': {description: Invalid or excessive date range}
-        '401': {description: API key required}
-        '502': {description: All trading-calendar providers failed or returned incomplete data}
-        '503': {description: No trading-calendar provider enabled}
+        '400':
+          description: "Invalid or excessive date range"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: "API key required"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '502':
+          description: "All trading-calendar providers failed or returned incomplete data"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: "No trading-calendar provider enabled"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /api/v1/market/session:
     get:
       summary: Get the scheduled A-share market session for a timestamp
@@ -1752,10 +2182,30 @@ paths:
           content:
             application/json:
               schema: {$ref: '#/components/schemas/MarketSessionSnapshot'}
-        '400': {description: Invalid RFC3339 timestamp}
-        '401': {description: API key required}
-        '502': {description: Calendar provider failed or returned incomplete data}
-        '503': {description: No trading-calendar provider enabled}
+        '400':
+          description: "Invalid RFC3339 timestamp"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: "API key required"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '502':
+          description: "Calendar provider failed or returned incomplete data"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: "No trading-calendar provider enabled"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /api/v1/market/stocks:
     get:
       summary: Get a paginated A-share market overview with quotes and optional moving averages
@@ -1775,10 +2225,30 @@ paths:
           content:
             application/json:
               schema: {$ref: '#/components/schemas/MarketStocksSnapshot'}
-        '400': {description: Invalid page, page_size, include_ma or adjustment}
-        '401': {description: API key required}
-        '502': {description: All complete-universe providers failed}
-        '503': {description: No configured Provider exposes a complete A-share universe}
+        '400':
+          description: "Invalid page, page_size, include_ma or adjustment"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: "API key required"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '502':
+          description: "All complete-universe providers failed"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: "No configured Provider exposes a complete A-share universe"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /api/v1/market/capital-flow:
     get:
       summary: Get Tushare market-wide daily capital-flow history
@@ -1796,10 +2266,30 @@ paths:
           content:
             application/json:
               schema: {$ref: '#/components/schemas/MarketCapitalFlowSnapshot'}
-        '400': {description: Invalid date range}
-        '401': {description: API key required}
-        '502': {description: Market capital-flow provider failed or returned invalid data}
-        '503': {description: No market capital-flow provider enabled}
+        '400':
+          description: "Invalid date range"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: "API key required"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '502':
+          description: "Market capital-flow provider failed or returned invalid data"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: "No market capital-flow provider enabled"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
 
   /api/v1/market/sentiment:
     get:
@@ -1816,9 +2306,24 @@ paths:
           content:
             application/json:
               schema: {$ref: '#/components/schemas/MarketSentimentSnapshot'}
-        '400': {description: Invalid or historical collection date}
-        '401': {description: API key required}
-        '502': {description: Market breadth provider failed}
+        '400':
+          description: "Invalid or historical collection date"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: "API key required"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '502':
+          description: "Market breadth provider failed"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /api/v1/market/sentiment/history:
     get:
       summary: Get persisted daily A-share market sentiment snapshots
@@ -1832,9 +2337,24 @@ paths:
           content:
             application/json:
               schema: {$ref: '#/components/schemas/MarketSentimentHistory'}
-        '400': {description: Invalid date range or limit}
-        '401': {description: API key required}
-        '503': {description: MariaDB history storage is unavailable}
+        '400':
+          description: "Invalid date range or limit"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: "API key required"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: "MariaDB history storage is unavailable"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /api/v1/market/breadth:
     get:
       summary: Get Eastmoney A-share market-breadth distribution
@@ -1845,9 +2365,24 @@ paths:
           content:
             application/json:
               schema: {$ref: '#/components/schemas/MarketBreadthSnapshot'}
-        '401': {description: API key required}
-        '502': {description: Provider returned incomplete or invalid data}
-        '503': {description: No market breadth provider enabled}
+        '401':
+          description: "API key required"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '502':
+          description: "Provider returned incomplete or invalid data"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: "No market breadth provider enabled"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /api/v1/market/hot-stocks:
     get:
       summary: Get domestic popularity, surge-proxy or follower ranking
@@ -1861,10 +2396,30 @@ paths:
           content:
             application/json:
               schema: {$ref: '#/components/schemas/HotRankingSnapshot'}
-        '400': {description: Invalid ranking type or limit}
-        '401': {description: API key required}
-        '502': {description: Provider returned invalid or unavailable data}
-        '503': {description: No hot-ranking provider enabled}
+        '400':
+          description: "Invalid ranking type or limit"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: "API key required"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '502':
+          description: "Provider returned invalid or unavailable data"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: "No hot-ranking provider enabled"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /api/v1/market/dragon-tiger:
     get:
       summary: 获取指定交易日龙虎榜盘后分页
@@ -1879,9 +2434,24 @@ paths:
           content:
             application/json:
               schema: {$ref: '#/components/schemas/DragonTigerSnapshot'}
-        '400': {description: Invalid date or page parameters}
-        '401': {description: API key required}
-        '502': {description: Provider returned invalid or unavailable data}
+        '400':
+          description: "Invalid date or page parameters"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: "API key required"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '502':
+          description: "Provider returned invalid or unavailable data"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /api/v1/market/limit-pools:
     get:
       summary: Get limit-up, limit-down or broken-board pool
@@ -1895,7 +2465,27 @@ paths:
           content:
             application/json:
               schema: {$ref: '#/components/schemas/LimitPoolSnapshot'}
-        '400': {description: Invalid type, date or limit}
-        '401': {description: API key required}
-        '502': {description: Provider failed or returned invalid data}
-        '503': {description: No limit-pool provider enabled}
+        '400':
+          description: "Invalid type, date or limit"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: "API key required"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '502':
+          description: "Provider failed or returned invalid data"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: "No limit-pool provider enabled"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'

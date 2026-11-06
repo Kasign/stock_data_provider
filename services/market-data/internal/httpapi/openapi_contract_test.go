@@ -3,6 +3,7 @@ package httpapi
 import (
 	"encoding/json"
 	"os"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -152,6 +153,93 @@ func TestOpenAPISecurityMatchesDataHTTPAdapterRoutes(t *testing.T) {
 			}
 		}
 	}
+}
+
+
+func TestOpenAPIErrorResponsesReferenceRuntimeErrorEnvelope(t *testing.T) {
+	spec, err := os.ReadFile("../../openapi.yaml")
+	if err != nil {
+		t.Fatalf("read OpenAPI specification: %v", err)
+	}
+	var document map[string]any
+	if err := yaml.Unmarshal(spec, &document); err != nil {
+		t.Fatalf("OpenAPI must be valid YAML: %v", err)
+	}
+	components := document["components"].(map[string]any)
+	schemas := components["schemas"].(map[string]any)
+	errorSchema := schemas["Error"].(map[string]any)
+	errorRequired, ok := errorSchema["required"].([]any)
+	if !ok || !containsContractString(errorRequired, "error") {
+		t.Fatal("Error schema must require the error envelope")
+	}
+	errorObject := errorSchema["properties"].(map[string]any)["error"].(map[string]any)
+	required, ok := errorObject["required"].([]any)
+	if !ok {
+		t.Fatal("Error.error.required must be declared")
+	}
+	for _, field := range []string{"class", "code", "message", "retryable"} {
+		if !containsContractString(required, field) {
+			t.Errorf("Error.error must require runtime field %q", field)
+		}
+	}
+	if containsContractString(required, "request_id") {
+		t.Error("request_id is optional and must not be required")
+	}
+
+	paths := document["paths"].(map[string]any)
+	checked := 0
+	for path, rawPath := range paths {
+		pathItem := rawPath.(map[string]any)
+		for method, rawOperation := range pathItem {
+			operation, ok := rawOperation.(map[string]any)
+			if !ok {
+				continue
+			}
+			responses, ok := operation["responses"].(map[string]any)
+			if !ok {
+				continue
+			}
+			for status, rawResponse := range responses {
+				code, parseErr := strconv.Atoi(status)
+				if parseErr != nil || code < 400 {
+					continue
+				}
+				response, ok := rawResponse.(map[string]any)
+				if !ok {
+					t.Errorf("%s %s response %s must be an object", method, path, status)
+					continue
+				}
+				content, ok := response["content"].(map[string]any)
+				if !ok {
+					t.Errorf("%s %s response %s has no JSON Error content", method, path, status)
+					continue
+				}
+				jsonContent, ok := content["application/json"].(map[string]any)
+				if !ok {
+					t.Errorf("%s %s response %s has no application/json schema", method, path, status)
+					continue
+				}
+				schema, ok := jsonContent["schema"].(map[string]any)
+				if !ok || schema["$ref"] != "#/components/schemas/Error" {
+					t.Errorf("%s %s response %s must reference components.schemas.Error", method, path, status)
+					continue
+				}
+				checked++
+			}
+		}
+	}
+	if checked == 0 {
+		t.Fatal("no error responses were checked")
+	}
+}
+
+func containsContractString(values []any, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
 }
 
 func TestProviderProbeValidationSchemaIsDocumented(t *testing.T) {
