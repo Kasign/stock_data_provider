@@ -1,0 +1,30 @@
+{
+  "header": "X-Request-ID",
+  "max_length": 128,
+  "generated_random_bytes": 16,
+  "valid_values": [
+    "abc",
+    "a-b_c.d:e",
+    "request-123.test:abc"
+  ],
+  "invalid_values": [
+    "",
+    "has space",
+    "line\nbreak",
+    "请求-123",
+    "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  ],
+  "duplicate_values": [
+    "client-id-one",
+    "client-id-two"
+  ],
+  "outbound_with_context": {
+    "context_id": "trusted-context-id",
+    "existing_header": "untrusted-client-value",
+    "expected_header": "trusted-context-id"
+  },
+  "outbound_without_context": {
+    "existing_header": "untrusted-client-value",
+    "expected_header": null
+  }
+}

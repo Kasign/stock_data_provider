@@ -205,14 +205,7 @@ func normalizeFault(err error, contextErr error) *fault.Fault {
 }
 
 func validFaultClass(class fault.Class) bool {
-	switch class {
-	case fault.ClassValidation, fault.ClassUnauthenticated, fault.ClassForbidden,
-		fault.ClassNotFound, fault.ClassConflict, fault.ClassUnavailable,
-		fault.ClassTimeout, fault.ClassInternal:
-		return true
-	default:
-		return false
-	}
+	return class.Valid()
 }
 
 func notStartedObservation(cause error) Observation {
