@@ -1,6 +1,8 @@
 package domain
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
 	"regexp"
 	"strings"
@@ -36,6 +38,33 @@ type AuthorizationPolicySnapshot struct {
 	Policies    []AuthorizationPolicyVersion `json:"policies"`
 }
 
+// NullableDateTime distinguishes an explicit JSON null from an omitted field.
+type NullableDateTime struct {
+	Present bool
+	Value   *string
+}
+
+func (v *NullableDateTime) UnmarshalJSON(data []byte) error {
+	v.Present = true
+	if bytes.Equal(bytes.TrimSpace(data), []byte("null")) {
+		v.Value = nil
+		return nil
+	}
+	var value string
+	if err := json.Unmarshal(data, &value); err != nil {
+		return err
+	}
+	v.Value = &value
+	return nil
+}
+
+func (v NullableDateTime) MarshalJSON() ([]byte, error) {
+	if v.Value == nil {
+		return []byte("null"), nil
+	}
+	return json.Marshal(*v.Value)
+}
+
 type NewsAuthorizationRef struct {
 	AuthorizationRef    string                    `json:"authorization_ref"`
 	PolicyOwner         string                    `json:"policy_owner"`
@@ -46,7 +75,7 @@ type NewsAuthorizationRef struct {
 	SubjectRef          string                    `json:"subject_ref"`
 	ResourceRef         string                    `json:"resource_ref"`
 	DecidedAt           string                    `json:"decided_at"`
-	ExpiresAt           *string                   `json:"expires_at"`
+	ExpiresAt           NullableDateTime          `json:"expires_at"`
 	Conditions          []string                  `json:"conditions"`
 	DecisionFingerprint string                    `json:"decision_fingerprint"`
 }
@@ -68,6 +97,7 @@ type NewsAuthorizationBinding struct {
 
 var (
 	ErrAuthorizationBindingInvalid  = errors.New("news.authorization.binding_invalid")
+	// Fingerprint syntax is checked here; JCS verification waits for the shared GOV-CTR-006 verifier in the common baseline.
 	authorizationFingerprintPattern = regexp.MustCompile(`^[0-9a-f]{64}$`)
 )
 
@@ -98,11 +128,12 @@ func ValidateNewsAuthorizationBinding(binding NewsAuthorizationBinding) error {
 		!validAuthorizationContentLevel(ref.ContentLevel) ||
 		!validAuthorizationDecision(ref.Decision) ||
 		!validUTCDateTime(ref.DecidedAt) ||
+		!ref.ExpiresAt.Present ||
 		!authorizationFingerprintPattern.MatchString(ref.DecisionFingerprint) {
 		return ErrAuthorizationBindingInvalid
 	}
-	if ref.ExpiresAt != nil {
-		expiresAt, ok := parseUTCDateTime(*ref.ExpiresAt)
+	if ref.ExpiresAt.Value != nil {
+		expiresAt, ok := parseUTCDateTime(*ref.ExpiresAt.Value)
 		decidedAt, decidedOK := parseUTCDateTime(ref.DecidedAt)
 		if !ok || !decidedOK || expiresAt.Before(decidedAt) {
 			return ErrAuthorizationBindingInvalid

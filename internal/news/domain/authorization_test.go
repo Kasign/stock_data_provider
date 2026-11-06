@@ -61,7 +61,12 @@ func TestValidateNewsAuthorizationBindingRejectsIncompleteOrUnsortedPolicySnapsh
 	base := loadNewsAuthorizationGolden(t)
 
 	missingProvider := base
-	missingProvider.PolicySnapshot.Policies = append([]AuthorizationPolicyVersion(nil), base.PolicySnapshot.Policies[1:]...)
+	missingProvider.PolicySnapshot.Policies = make([]AuthorizationPolicyVersion, 0, len(base.PolicySnapshot.Policies)-1)
+	for _, policy := range base.PolicySnapshot.Policies {
+		if policy.PolicyType != "provider_output" {
+			missingProvider.PolicySnapshot.Policies = append(missingProvider.PolicySnapshot.Policies, policy)
+		}
+	}
 	if !errors.Is(ValidateNewsAuthorizationBinding(missingProvider), ErrAuthorizationBindingInvalid) {
 		t.Fatal("provider output policy version must be present when provider_ref is set")
 	}
@@ -97,6 +102,14 @@ func TestValidateNewsAuthorizationBindingRequiresConditionsArray(t *testing.T) {
 	base.AuthorizationRef.Conditions = nil
 	if !errors.Is(ValidateNewsAuthorizationBinding(base), ErrAuthorizationBindingInvalid) {
 		t.Fatal("conditions must be an array, not null")
+	}
+}
+
+func TestValidateNewsAuthorizationBindingRequiresExpiresAtField(t *testing.T) {
+	base := loadNewsAuthorizationGolden(t)
+	base.AuthorizationRef.ExpiresAt.Present = false
+	if !errors.Is(ValidateNewsAuthorizationBinding(base), ErrAuthorizationBindingInvalid) {
+		t.Fatal("expires_at must be present even when its value is null")
 	}
 }
 
