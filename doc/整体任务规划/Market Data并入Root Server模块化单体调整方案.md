@@ -79,7 +79,7 @@ docker-compose
 | 根 `go.mod` | Go 1.22；模块路径 `example.com/stock-analysis-flow` | 需要统一模块路径和 Go 版本 |
 | `services/market-data/go.mod` | 独立 Module，Go 1.23.0；包含 TDX、x/text 等依赖 | 不能直接 import Data 的 `internal` 包；合并后需要处理依赖版本 |
 | `cmd/analysis-api/main.go` | Bootstrap 创建 MySQL/Redis Store、Market Data HTTP Client、Runner、Task Queue 和 HTTP API | 是当前 Root Server 进程入口；应演进为唯一组合根 |
-| `internal/adapters/marketdata/client.go` | 使用 Base URL、HTTP Client、X-API-Key 调用 Data HTTP API，解析 JSON | 是 Server→Data 的网络边界，未来应替换为进程内 Port Adapter |
+| `internal/adapters/marketdata/client.go` | Root Server 通过标准库 `net/http`、Base URL、JSON DTO 和 `X-API-Key` 调用 Data；没有使用现有 `internal/platform/httpclient` | 迁移后替换为 Data Application Port；不能将其与 Provider 出站 HTTP 混为一谈 |
 | `services/market-data/cmd/market-data/main.go` | 集中加载 Data Config、连接 MariaDB/Redis、构造 Provider 能力集合、DataService、HTTP Handler 并监听端口 | Data 的构造装配逻辑应提取为可复用 Module Bootstrap，不再由独立 main 独占 |
 | `services/market-data/internal/httpapi/server.go` | HTTP Server 持有 API Key 校验、Request ID、超时、访问日志、安全 Header 与多条 API 路由 | Handler 与业务 Application 需要解耦；不能直接把原 Handler 当作不受保护的内部 Port |
 | `services/market-data/internal/repository/mysql.go` | Data 自有 MariaDB Repository、表结构和迁移逻辑 | Data 继续拥有 Repository 和 Migration；连接池由组合根统一提供 |
@@ -104,7 +104,28 @@ docker-compose
 | Nginx | `web/default.conf.template` 的 `/market-api/` 当前代理到 Data 服务，`/analysis-api/` 代理 Server | 两个前缀可保留，但上游统一改为 Root Server |
 | go-core | `docker/docker-compose.go-migration.yml` 将 Python Bridge、go-core、Data 组成单独的 `go-migration` profile，并明确不与根 Compose 叠加；根 Compose 当前运行的是根模块 `cmd/analysis-api` | go-core 是仓库保留的旧迁移部署路径，不是根 Compose 的当前组合入口；本次不把 go-core 合并进 Root Server。仍需部署现场确认没有继续使用旧 profile |
 
-**M0 最新分支复核（2026-11-06）：** 已只读检查 Data 分支 `feat/full-go-data-providers-api-switch` 当前 HEAD `f2b9e5fc637ea59bff87f5449823e98f746c8428`：根 `go.mod` 仍为 `example.com/stock-analysis-flow` / Go 1.22；`services/market-data/go.mod` 仍为 `github.com/Kasign/stock_data_provider/services/market-data` / Go 1.23.0；`services/market-data/cmd/market-data/main.go` 与根 `cmd/analysis-api/main.go` 同时存在。该证据确认 MDM-002 尚未开始，且两边 Go 版本/依赖需要在归并时统一。此次只核对模块边界与入口文件，不代表完成 Provider 全量依赖、调用方、路由、Worker、Migration、CI 和部署现场审计；MDM-001 仍未关闭。
+**M0 扩展分支复核（2026-11-06）：** 本轮只读审计以 Data 分支 `feat/full-go-data-providers-api-switch` HEAD `977bf59c70c0b4d34b6ba5daaab63919f1ca9f45` 为准。根 `go.mod` 仍是 `example.com/stock-analysis-flow` / Go 1.22；Data `go.mod` 仍是独立 Module / Go 1.23.0；根 Dockerfile Builder 为 Go 1.22，Data Dockerfile Builder 为 Go 1.23，CI Go setup 为 1.23.x。Data 归并尚未开始。
+
+本轮新增确认：
+
+| 审计项 | 当前代码事实 | 迁移影响 / 必须保留的行为 |
+|---|---|---|
+| Module 依赖 | 根模块使用 `github.com/go-sql-driver/mysql v1.9.3`；Data 模块使用 v1.8.1，并引入 `github.com/injoyai/tdx`、`golang.org/x/text` 等依赖 | 合并时统一 Go 版本与依赖图，不能简单复制 Data go.mod；按根模块 MVS 结果复核依赖兼容性 |
+| 仓库内调用方 | Root 的 `internal/adapters/marketdata/client.go` 和旧 `go-core/internal/adapters/marketdatahttp/client.go` 均使用远程 HTTP + Data API Key；WebUI `web/src/api.js` 仍保存 apiKey 到 localStorage 并写 `X-API-Key` | Root 调用改为 Application Port；go-core 属旧 `go-migration` Profile，不并入 Root，需确认是否保留；WebUI Key 必须删除 |
+| Provider 出站网络 | Eastmoney、Hithink、Tencent、Sina、Yahoo、Netease、Tushare、TickFlow、Xueqiu、MiaoXiang 使用各自 `net/http` Client；BaoStock 与 PyTDX 使用原生 TCP/第三方 TDX Dial | Platform HTTP Client 只适用于 HTTP Provider，不适用于 BaoStock/PyTDX TCP。逐 Provider 登记 Host、Redirect、Cookie/Header、Timeout、Retry、响应上限；禁止机械替换 |
+| 出站安全边界 | Data `validateEndpointURL` 主要校验 URL 结构和 http(s) scheme；Provider 仍直接持有 `http.Client`。根 `internal/platform/httpclient` 已提供目的地址策略、精确 Host/Port、DNS 与响应体约束，但 Data Provider 尚未使用 | Provider HTTP Client 接入 Platform 是需单独评估的技术子项；先完成 Host/Redirect 策略映射。TCP Provider 另行评估目标地址约束 |
+| Data Config 资源 | `config.Load` 默认从进程工作目录读取 `configs/providers.json`；当前 Data Dockerfile 将其复制到 `/app/configs` | 并入根镜像后原文件不会自动出现在根工作目录；应采用 `go:embed` 或 Bootstrap 显式注入路径 |
+| Data HTTP 路由 | Handler 注册 33 条受 API Key 保护的业务路由；`/health/live`、`/health/ready` 不走该 Key；外层含 Security Header、Request ID、Access Log、Timeout Context | 保留全部 v1 路由语义；拆出业务 Handler，由 Root 统一外部认证/授权/Request ID/错误映射 |
+| DB Migration | Data main 调用 `Store.Migrate`；Go 代码创建 9 张 Data 表，并额外修复历史索引唯一性、补齐 `volume_ratio`/`turnover_rate` 列；另有 `migrations/001_create_market_data.sql` 静态 DDL | Migration Registry 必须承接 Go Migrate 的索引/列升级逻辑；先核对 SQL 文件与运行时代码差异，不能只用静态 SQL 替代 |
+| Worker / 资源关闭 | Data main 启动 Quote Retention Goroutine（启动立即执行，之后每 24 小时执行）；关闭 BaoStock Client 和自有 Store；Worker 当前没有显式 Wait/Drain 句柄 | Module 必须提供受管理的 Start/Stop/Wait；共享 DB/Redis 不得由 Data Close；先停止 Worker，再关闭共享资源 |
+| DB / Redis | Data Repository 自建 `*sql.DB`（MaxOpen=10/MaxIdle=3/ConnMaxLifetime=5m）；Redis 每条命令新建 TCP 连接并 AUTH/SELECT；Root Store 持有 DB 与 go-redis Client | Data Repository 增加借用 DB 构造；Cache 接入共享 go-redis Client；明确 borrowed/owned 生命周期并保留缓存禁用/降级语义 |
+| Compose / Nginx / 部署 | 根 Compose 当前运行 Data、Server、Web 三容器；Nginx 两个 API 前缀分别代理 Data:8091 与 Server:8092；部署脚本固定构建、启动、健康检查三个容器 | 默认栈迁移为双容器；两个 API 前缀统一到 Root Server；部署脚本、健康检查和 .env 同步调整 |
+| 旧迁移 Profile | `docker/docker-compose.go-migration.yml` 仍构建 `../services/market-data/Dockerfile`；go-core 仍通过远程 Data HTTP Client 调用它 | 删除旧目录/Dockerfile 会使 Profile 失效。MDM-001 必须确认现场使用情况；需保留回滚则 M1 保留兼容入口和可构建镜像，确认退役才可删除 |
+| CI | `go-test.yml` matrix 包含根、go-core、services/market-data 三个 Module；Data MariaDB 集成测试、Docker Build、Parity 和 Live Probe Workflow 均硬编码旧路径 | M1 后 Data 测试迁到根 Module；更新 matrix、cache path、working-directory、触发路径、Docker Build；go-core 保持独立 Module，直至旧 Profile 退役 |
+
+**MDM-001 当前结论：** 仓库内主要代码路径、HTTP 调用方、Provider 传输类型、资源入口、Worker、路由、Compose、部署脚本和主要 CI Workflow 已完成静态盘点；但部署现场是否仍使用 `go-migration` Profile、Provider 可配置 Host 的最终 Allowlist、SQL 文件与 Go Migration 的逐表差异仍需确认。因此 MDM-001 暂不关闭，MDM-002 不得提前开始删除旧入口/构建文件。
+
+**结构迁移编号映射：** 项目总览使用的 MDM-001～MDM-007 对应本文 M0～M6：MDM-001=M0 审计、002=M1 Module 归并、003=M2 Bootstrap/Port、004=M3 Root 装配、005=M4 部署切换、006=M5 结构回归、007=M6 契约对齐。
 
 **M0 已确认的主要改造点：**
 
