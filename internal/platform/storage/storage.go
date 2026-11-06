@@ -245,6 +245,10 @@ func ApplyMigrations(ctx context.Context, db *sql.DB, namespace string, migratio
 	defer cancel()
 	var acquired sql.NullInt64
 	if err := conn.QueryRowContext(lockCtx, "SELECT GET_LOCK(?, ?)", lockName, migrationLockWaitSeconds).Scan(&acquired); err != nil {
+		// The server may have acquired the advisory lock even if the response
+		// was lost or could not be decoded. Do not return an ambiguous session
+		// to the connection pool.
+		_ = conn.Raw(func(any) error { return driver.ErrBadConn })
 		return dependencyFault("sql", "platform.storage.migration_lock_failed", "could not acquire migration lock", err)
 	}
 	if !acquired.Valid || acquired.Int64 != 1 {

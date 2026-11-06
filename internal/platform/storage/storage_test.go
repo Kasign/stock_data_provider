@@ -249,6 +249,7 @@ type migrationTestState struct {
 	finished                 map[uint64]bool
 	failStatement            bool
 	statements               []string
+	failLockAcquire           bool
 	lockAcquired             bool
 	lockReleased             bool
 	failLockRelease          bool
@@ -298,6 +299,9 @@ func (c migrationTestConn) Begin() (driver.Tx, error) {
 func (c migrationTestConn) QueryContext(_ context.Context, query string, _ []driver.NamedValue) (driver.Rows, error) {
 	switch {
 	case strings.Contains(query, "GET_LOCK"):
+		if c.state.failLockAcquire {
+			return nil, errors.New("private lock acquisition detail")
+		}
 		value := int64(0)
 		if c.state.lockAcquired {
 			value = 1
@@ -477,6 +481,29 @@ func TestApplyMigrationsRejectsHistoryUpdateWithoutAffectedRow(t *testing.T) {
 	}
 	if len(state.applied) != 0 || state.pending[1] == "" {
 		t.Fatalf("migration must not be reported as applied when history update affects no row: applied=%v pending=%v", state.applied, state.pending)
+	}
+}
+
+func TestApplyMigrationsDiscardsConnectionWhenLockAcquisitionIsAmbiguous(t *testing.T) {
+	state := &migrationTestState{
+		applied: make(map[uint64]string), pending: make(map[uint64]string),
+		failed: make(map[uint64]int), lockAcquired: true, failLockAcquire: true,
+	}
+	db := sql.OpenDB(migrationTestConnector{state: state})
+	defer db.Close()
+
+	err := ApplyMigrations(context.Background(), db, "analysis", []Migration{{
+		Version: 1, Description: "create", Statements: []string{"CREATE TABLE sample (id INT)"},
+	}})
+	var platformFault *fault.Fault
+	if !errors.As(err, &platformFault) || platformFault.Code != "platform.storage.migration_lock_failed" {
+		t.Fatalf("expected lock acquisition failure, got %v", err)
+	}
+	if !state.physicalConnClosed {
+		t.Fatal("connection with an ambiguous advisory-lock result was returned to the pool")
+	}
+	if state.historyCreated || len(state.statements) != 0 {
+		t.Fatalf("migration ran without confirmed lock ownership: %+v", state)
 	}
 }
 
