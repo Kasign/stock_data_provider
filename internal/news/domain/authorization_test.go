@@ -32,12 +32,17 @@ func loadNewsAuthorizationGolden(t *testing.T) NewsAuthorizationBinding {
 		t.Fatalf("unexpected NEWS-CTR-002 golden metadata: %+v", fixture)
 	}
 	binding := fixture.AuthorizationBinding
-	if fixture.ExpectedBinding["subject_ref"] != binding.CallerRef ||
-		fixture.ExpectedBinding["resource_ref"] != binding.ResourceRef ||
-		fixture.ExpectedBinding["purpose_code"] != binding.PurposeCode ||
-		fixture.ExpectedBinding["content_level"] != string(binding.RequestedContentLevel) ||
-		fixture.ExpectedBinding["policy_version"] != binding.PolicySnapshot.SnapshotRef {
-		t.Fatalf("NEWS-CTR-002 expected binding does not match DTO: %+v", fixture.ExpectedBinding)
+	if fixture.ExpectedBinding["subject_ref"] != "caller_ref" ||
+		fixture.ExpectedBinding["resource_ref"] != "resource_ref" ||
+		fixture.ExpectedBinding["purpose_code"] != "purpose_code" ||
+		fixture.ExpectedBinding["content_level"] != "requested_content_level" ||
+		fixture.ExpectedBinding["policy_version"] != "policy_snapshot.snapshot_ref" ||
+		binding.AuthorizationRef.SubjectRef != binding.CallerRef ||
+		binding.AuthorizationRef.ResourceRef != binding.ResourceRef ||
+		binding.AuthorizationRef.PurposeCode != binding.PurposeCode ||
+		binding.AuthorizationRef.ContentLevel != binding.RequestedContentLevel ||
+		binding.AuthorizationRef.PolicyVersion != binding.PolicySnapshot.SnapshotRef {
+		t.Fatalf("NEWS-CTR-002 expected binding mapping does not match DTO: %+v", fixture.ExpectedBinding)
 	}
 	return binding
 }
