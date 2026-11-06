@@ -2,7 +2,7 @@
 
 - 归属：Notification 模块，NTF-001/004/005/006
 - 对应项目契约：NTF-CTR-001、NTF-CTR-002、NTF-CTR-003（历史别名 CONTRACT-009/010）
-- 状态：Notification 字段级契约输入；当前状态和阻断范围以 `doc/整体任务规划/跨模块契约目录与冻结状态.md` 为准
+- 状态：Notification 字段级契约输入；当前状态和阻断范围以 `doc/整体任务规划/02-契约治理/跨模块契约目录与冻结状态.md` 为准
 - 日期：2026-11-06
 - 代码边界：`internal/notification/**`；根 DI、HTTP、Worker、Migration 注册由 Integration Owner 负责
 
@@ -20,14 +20,17 @@ Notification 不计算告警条件、不决定研究结论、不执行模型输�
 - `event_id`：事件所有者生成的稳定、不透明 ID；同一逻辑 NotificationEvent 重放时不得变化；ResearchEvent.event_id 等领域事件 ID 不得直接复用为 NotificationEvent.event_id，领域来源通过 payload 中受控的 source_event_ref 表达。
 - `event_type`、`schema_version`：注册表中的精确键。
 - `source_module`：受控枚举 quant/research/researchflow；首批映射见 `doc/notification/05-首批业务事件映射决议.md`。
-- `occurred_at`：业务事件发生时间，不作为投递时间。
+- `occurred_at`：业务事实发生时间，不作为投递时间。
+- `published_at`：生产方将事件写入 Outbox 的发布时间；与 occurred_at 分离，重放时保持不变，不纳入 payload fingerprint。
+- `payload_fingerprint`：按 NTF-CTR-001 指定字段和 RFC 8785 计算的小写十六进制 SHA-256（64 字符），由生产方计算并随 Envelope 传输；接收方必须重新计算并比较。
 - `subject_ref`：业务主体不透明引用。
 - `idempotency_key`：调用方对本次发布意图提供的稳定键；重试 PublishEvent 时不得变化。
 - `payload`：必须通过该 event_type + schema_version 对应的 Schema 校验。
 - `correlation_id`：跨模块关联 ID。
 
-接收规则建议：
-1. 对 payload 做规范化后计算 fingerprint，覆盖 source_module、event_type、schema_version、subject_ref、occurred_at 和 payload；使用 RFC 8785 JSON Canonicalization Scheme 的 UTF-8 结果计算 SHA-256；不把 event_id、idempotency_key、correlation_id、接收时间或传输 Header 纳入 payload fingerprint。
+接收规则：
+0. Registry 构造必须显式提供正数 ResourceLimits：MaxEnvelopeBytes、MaxPayloadBytes、MaxJSONDepth；不得使用未审批的隐式默认值。ValidateEvent 先检查原始 Envelope 字节数，再严格解析 JSON（重复对象键、非法 UTF-8、非法 Unicode surrogate、非法 JSON 和超过深度均拒绝），再检查原始 Payload 字节数，之后才允许 JCS 规范化、Schema 和指纹计算。深度按整个 JSON 文档中的 object/array 容器层级计数，Envelope 根对象计为 1；字节上限按原始输入字节计，包含空白和转义文本。超限返回稳定 resource-limit 错误，不截断、不降级。项目级 Review 建议的 Envelope 1 MiB / Payload 768 KiB / depth 32 尚未被统一批准，不能作为模块默认值或 frozen 契约；由集成配置显式注入最终值，并确保 Envelope 上限不超过 HTTP 入口限制。
+1. 对 payload 做规范化后计算 fingerprint，覆盖 source_module、event_type、schema_version、subject_ref、occurred_at 和 payload；使用 RFC 8785 JSON Canonicalization Scheme 的 UTF-8 结果计算 SHA-256；不把 event_id、idempotency_key、correlation_id、published_at、接收时间或传输 Header 纳入 payload fingerprint。Envelope 必须携带 payload_fingerprint；接收方重新计算并拒绝不匹配的值。
 2. Inbox 唯一约束为 `(source_module, event_id)`；发布幂等唯一约束为 `(source_module, idempotency_key)`；同一 source_module 范围内该键全局唯一，不按 event_type 分桶，生产方不得跨发布意图复用。
 3. 相同 source_module/event_id 且 fingerprint 相同：返回原接收结果，不重复 fan-out。
 4. event_id 或 idempotency_key 已存在但 fingerprint/事件身份不一致：返回 idempotency_conflict，不覆盖旧事件。
@@ -59,7 +62,7 @@ Subscription 更新采用版本递增和不可变版本快照。任何影响匹�
 Delivery 唯一键固定为：
 `(source_module, event_id, subscription_id, subscription_version, channel_ref, channel_config_version, template_id, template_version, recipient_ref)`。
 
-所有版本均属于计划快照，不能在原版本上原地修改。
+所有版本均属于计划快照，不能在原版本上原地修改。 Application 写入前必须先独立执行 DeliveryPlan.Validate()，再执行 VerifyFingerprint()；任一步失败均不得调用 Repository。Repository Adapter 仍须在自身事务边界再次验证唯一键和指纹，避免绕过 Application 的直接写入路径。
 
 Template 与 Channel 配置版本始终属于唯一键和 Delivery 计划快照；任何影响渲染/发送行为的变更都必须创建新版本，禁止原版本原地修改。Channel 只保存版本化 Secret 引用，不在 Delivery 中复制 Secret 明文。
 
@@ -194,7 +197,7 @@ Worker 取得 Delivery 时必须原子完成 queued/retry_wait -> sending 和租
 ## 6. 重试与外部 exactly-once 边界
 
 - 只对渠道明确拒绝且标记 retryable 的结果自动重试。
-- 永久错误不重试；Retry-After 优先于本地退避上限，但不得越过 Delivery deadline。
+- 永久错误不重试；存在有效 Retry-After 时，next_attempt_at = max(本地 full-jitter 退避时间, Retry-After 指定时间)，不得缩短本地退避，也不得达到或越过 Delivery deadline；若计算结果不早于 deadline_at，则结束为 failed（reason_code=deadline_exceeded），不再安排重试。
 - 使用 capped exponential full jitter；策略固定 max_attempts、max_elapsed_ms、per_attempt_timeout_ms、base_delay_ms、max_delay_ms 和总 deadline。所有 duration 为正整数 milliseconds；max_elapsed_ms/per_attempt_timeout_ms/base_delay_ms>0，max_delay_ms>=base_delay_ms。MVP 算法固定 exponential_full_jitter_v1：第 n 次 Attempt 失败后的上限 delay=min(max_delay_ms, base_delay_ms*2^(n-1))，实际等待从 [0,delay] 均匀抽取。单次调用截止=min(now+per_attempt_timeout_ms, deadline_at, first_attempt_at+max_elapsed_ms)。
 - attempt_count 只统计实际发起的渠道调用，不统计 Schema/权限/配置预检查。
 - 同一 Delivery 的渠道 idempotency key 在各 Attempt 间保持稳定；仅在渠道明确支持幂等时发送该键。
@@ -272,9 +275,11 @@ PublishResult 应明确 accepted/duplicate；冲突通过稳定错误返回。�
 | schema_version | string | 必填 / non-null | SemVer，精确命中注册项 |
 | source_module | enum | 必填 / non-null | MVP 为 quant/research/researchflow；新增生产模块须先登记并评审 |
 | occurred_at | RFC3339Nano UTC | 必填 / non-null | 业务事实发生时间，不是发布或接收时间 |
+| published_at | RFC3339Nano UTC | 必填 / non-null | 生产方写入 Outbox 的发布时间；重放不变，不参与 payload fingerprint |
 | subject_ref | string | 必填 / non-null | 不透明业务主体引用 |
 | idempotency_key | string | 必填 / non-null | 发布命令稳定键，重试时保持不变 |
 | correlation_id | string | 必填 / non-null | 跨模块关联，不作为去重键 |
+| payload_fingerprint | string | 必填 / non-null | 小写 64 位 SHA-256；接收方重新计算校验 |
 | payload | object | 必填 / non-null | 由 event_type + schema_version 唯一 Schema 校验 |
 
 Payload fingerprint 使用 RFC 8785 JSON Canonicalization Scheme 的 UTF-8 结果计算 SHA-256，覆盖 event_type、schema_version、source_module、subject_ref、occurred_at 和 payload。event_id/idempotency_key 不进入 payload fingerprint，而分别参与 Inbox/Publish 唯一性约束。Decimal string 不得规范化为 JSON number。

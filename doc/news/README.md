@@ -1,6 +1,6 @@
 # 新闻模块专项文档
 
-> 状态：N1-A 已评审确认；N2 根模块验证通过；N3 首批授权与离线 URL 规则已实现，Feed/HTML 解析及平台安全接入继续开发  
+> 状态：N1-A/N2 已完成；N3 离线能力首批完成、在线生产链路未完成；N4 领域/Application 首批完成；Platform 原语已合并，N5/N6/N7 消费者接入待推进  
 > 开发分支：`feat/research-news-ingestion`  
 > 基线分支：`feat/full-go-data-providers-api-switch`
 
@@ -14,6 +14,7 @@
 
 | 文档 | 内容 |
 |---|---|
+| [N1 当前 HEAD 现状盘点与设计评审报告](N1现状盘点与设计评审报告.md) | 2026-11-06 平台合并后最新代码证据、差距、风险与评审结论 |
 | [N1-A 新闻基础设施架构评审报告](N1-A新闻基础设施架构评审报告.md) | 当前最终架构、领域契约、风险和用户确认项 |
 | [新闻模块与公共平台接入矩阵](新闻模块与公共平台接入矩阵.md) | PLAT 契约映射、依赖门禁、所有权和跨分支协作 |
 | [N1-A 公共平台规划对齐补充评审](N1-A公共平台规划对齐补充评审.md) | 最新平台分支规划核验、任务编号纠偏和新闻实施门禁 |
@@ -34,17 +35,19 @@
 - [x] N1-A：完成新闻领域模型、时间/身份/版本/关联证据、Provider 与 Application 契约及跨文档内部评审
 - [x] N2：Domain、Application Port、Bocha/Tavily/Brave/SearXNG Adapter 与 fake 测试已提交；根模块 gofmt、test、race、vet 和分析服务镜像构建通过
 - [x] N3 首批：Provider/Source/Endpoint 授权交集评估、用途/保留期限限制、内容类型与存储模式一致性、HTTP(S) URL 规范化与精确主机/端口 allowlist；固定测试通过
-- [ ] N3 后续：RSS/Atom 离线解析首批完成；DNS/IP 与重定向安全由 PLAT-008 执行，HTML 正文解析、编码处理和正文标准化继续开发
-- [ ] N4：实现身份识别、去重、版本和证券关联业务规则
-- [ ] N5：按冻结契约接入 Config/Secret、Logger/Error/Trace、HTTP Client
-- [ ] N6：公共存储能力就绪后实现新闻自有 Repository/SQL/Migration；Redis 按需
-- [ ] N7：接入公共 Diagnostics；Task/Audit/Metrics 按真实需求评估
-- [ ] N8：完成 News 与公共平台集成验收
+- [x] N3 离线业务质量：按元数据、内容、来源身份三个维度评估 valid/degraded/invalid/unknown；不把 Provider 摘要提升为来源正文，不把发布者文本视为已解析来源
+- [ ] N3 在线采集：Feed 解析与 Endpoint 传输分派已有代码；BoundDoer 已合并且接口兼容；逐 endpoint 生产注入、触发入口/CollectionRunID、持久化授权和部署 DNS/出口验收未完成
+- [x] N4 Domain/Application 首批：身份识别、Observation 幂等语义、内容版本、证券/行业关系和转载关系规则已有实现与离线测试
+- [ ] N4/N6 后续：真实采集编排、生产 Repository、数据库唯一约束/事务并发与历史版本持久化仍未完成
+- [ ] N5：Platform Config/Secret、Fault、Request ID、BoundDoer 尚未完成 News 消费者装配；NEWS-CTR-002 Binding DTO/Validator 已实现，但授权签发、公共 JCS Verifier、当前策略复核和读取竞态保护未完成
+- [ ] N6：Platform Storage/Migration 原语已合并；News Repository/SQL/Migration、授权快照持久化、事务并发和 Server 注册仍待实现；Redis 按需
+- [ ] N7：News 领域 Check 尚未接入 Platform Runner；不新增诊断 HTTP 路由/历史库，Task 仅按真实触发需求评估
+- [ ] N8 / PLAT-013：完成 A2 契约测试、Server 装配、Migration 注册、News/Research Facade 接入验收；A3 故障演练对应 PLAT-014
 - [x] N1-A 用户评审确认；N2 已完成并进入 N3
 
 ## 公共平台协作说明
 
-公共平台分支 feat/platform-foundation 的 PLAT-002 仍处于待评审状态；只读检查平台分支最新 HEAD `ac06a544`，当前已出现 PLAT-007 Diagnostics 首批代码，但尚无 PLAT-008 HTTP Client 实现。平台已接受 News 提出的 HTTP/SSRF、Diagnostics、Fault 契约意见。News 只读跟踪平台分支，不直接依赖未冻结的内部实现。PLAT-011 为业务接入、PLAT-012 为故障演练；Metrics/Audit 和 Redis 不作为新闻首期门禁。具体差异见《N1-A 公共平台规划对齐补充评审》和《新闻模块与公共平台接入矩阵》。
+当前 News HEAD 的 Platform 合并提交为 `68e557ccce10d650ec17b62e6ed40d4ce5aab382`，第二父提交 `0cb99a525de00d3c340891caa029b716c4d2f749` 与 `feat/platform-foundation` 当前 HEAD 一致。Platform 原语已在当前分支，不再等待代码迁入。PLAT-002 与 PLAT-CTR-001～007 的契约证据仍未全部冻结；当前按项目 A1 准入进行模块内适配和测试准备，不宣称 A2/A3。News 生产逐 endpoint BoundDoer 注入、News Repository/Migration、授权快照/当前策略复核、NewsEvidenceQuery、领域 Diagnostics Check 和 Server 共享资源/注册仍待完成。PLAT-013 是领域接入，PLAT-014 是跨模块故障演练；PLAT-011 为按需 Metrics，PLAT-012 为安全审计。
 
 ## 重要说明
 
@@ -60,7 +63,7 @@ N1 已完成固定旧 Python 上游的三类新闻/情报持久化对象、旧 i
 
 ### N1-A 最终收口（2026-11-05）
 
-已完成旧 Python 主要调用链和历史表语义盘点、证券主数据核验、Provider/来源公开条款首轮核查、领域模型与 Application 契约设计。平台分支已接受 News 提出的 SSRF、Diagnostics、Fault 三项契约意见；只读检查最新平台 HEAD `ac06a544`，PLAT-007 首批代码已出现，但 PLAT-002 仍待正式冻结、PLAT-008 尚未实现和安全验收。N1-A 已评审确认，N2 根模块验证已通过；N3 已实现 Provider/Source/Endpoint 授权交集、内容存储类型约束、HTTP(S) 来源 URL 离线校验及 RSS 2.0 / Atom 1.0 离线解析；HTML 正文解析和平台网络安全能力仍待完成。未获明确许可的来源保持 pending/restricted。
+已完成旧 Python 主要调用链和历史表语义盘点、证券主数据核验、Provider/来源公开条款首轮核查、领域模型与 Application 契约设计。N1-A 已评审确认，N2 根模块验证已通过；N3 已实现授权交集、URL 离线校验、RSS/Atom/HTML 离线解析、候选标准化和内容分层。平台分支当前已有 PLAT-008 BoundDoer 及专项 CI，但 News 分支尚未包含该实现，PLAT-002 也未冻结；在线抓取仍未开放。N4 Domain/Application 首批能力已有离线测试，生产编排与 Repository 仍待完成。未获明确许可的来源保持 pending/restricted。
 
 ## N1 已确认的架构决策（2026-11-05）
 
@@ -76,7 +79,7 @@ N1 已完成固定旧 Python 上游的三类新闻/情报持久化对象、旧 i
 
 ## 2026-11-05 阶段调整
 
-用户已确认：新闻模块不再自行建设 DB/Redis 接入和通用诊断能力，统一等待公共服务提供。新闻当前阶段只建设不依赖这些基础设施的业务能力；质量规则仍属于新闻领域，不能与通用诊断混为一谈。详细边界和阶段顺序以《新闻模块总体设计》9.16 及《新闻模块开发任务与验收清单》为准。
+新闻模块不自建连接池、Redis Client、HTTP Client 或通用诊断 Runner；Platform 原语已合并，News 仍需实现自己的 Repository/SQL/Migration、授权快照、领域 Check 和公开 Application Facade。共享连接生命周期、总 Migration 注册及统一诊断入口由 Server 组合根负责。
 
 
 ## 2026-11-05 架构决策更新：根模块原生实现，不建设共享 Provider Module
@@ -98,3 +101,70 @@ N1 已完成固定旧 Python 上游的三类新闻/情报持久化对象、旧 i
 ## 2026-11-05 实施策略更新
 
 整体服务尚未投入使用，新闻模块直接按根 Go 模块最终架构建设，不承担旧 Go/Python 服务兼容。旧 Python 文档仅作为历史调用链和数据语义盘点，不再代表兼容迁移任务。当前以《新闻模块总体设计》9.21、《新闻模块开发任务与验收清单》第十一节为准。
+
+
+## NEWS-CTR-002 授权绑定校验进度（2026-11-06）
+
+- 已实现强类型 Binding / AuthorizationRef / PolicySnapshot DTO。
+- Validator 校验可信 caller、资源、用途、内容级别、策略版本引用、策略 tuple 唯一性和排序。
+- `provider_ref`、`endpoint_ref`、`expires_at` 均区分字段缺失与显式 `null`；Schema 要求字段存在，null 按各字段契约表达不适用/无固定过期时间。
+- Fingerprint 当前只校验小写 64 位 SHA-256 hex；JCS + SHA-256 复核等待公共 GOV-CTR-006 Verifier 进入共同基线，不在 News 内复制算法。
+- 本 Validator 不签发授权、不读取当前策略、不提供受限内容，也不替代读取时 Owner 复核。
+- NEWS-CTR-002 仍为 pending_evidence，不标记 L2/frozen。
+
+
+## NEWS 授权用途与内容级别映射（2026-11-06）
+
+- `internal_personal_research` 明确映射为 `research_analysis`；`public_display` 明确映射为 `user_display`。
+- `internal_business` 不能自动推断为 `research_analysis` 或 `risk_review`；`redistribution`、`model_training` 不属于 NEWS-CTR-002 当前用途枚举，均拒绝隐式映射。
+- `ContentMetadata` / `ContentTitle` → `metadata`；`ContentAbstract` → `summary`；`ContentSnippet` → `snippet`；`ContentFullText` → `full`。
+- `ContentAttachment` 与未知内容类型不自动映射到 `full`，必须单独确认内容权限后才能处理。
+- `risk_review` 是显式授权用途，不从现有通用 `Purpose` 值推断。
+
+
+## NEWS-CTR-002 授权内容放行门禁（2026-11-06）
+
+新增 `EvaluateNewsAuthorizationUse`，对已提供的 AuthorizationRef 执行本地 fail-closed 判定：
+
+- 仅显式 `allowed` 且授权内容级别覆盖请求级别时允许披露。
+- `conditional` 在授权 Owner 完成条件评估前一律拒绝；Conditions 非空不等于条件已满足。
+- `denied`、`unknown`、未生效、过期、无效时钟和 Binding 不一致均拒绝。
+- 过期边界为 `now >= expires_at` 即拒绝。
+- 该门禁不刷新当前策略目录、不复算 GOV-CTR-006 JCS 指纹、不提供撤销实时性，也不保护数据库读取竞态。生产读取仍需先由 News Owner 复核当前策略，再在同一一致性边界内读取内容。
+
+
+## CollectSource 内容级别裁剪（2026-11-06）
+
+Review 发现 CollectSource 原先只校验请求 ContentKind，却将 FeedEntry 的全部 ContentLayers 原样返回，存在请求 metadata 却连带返回来源摘要/正文/附件元数据的越权披露风险。现已在 Application 返回边界调用 `domain.RestrictContentLayers`：
+
+- metadata/title 不返回来源摘要、正文、外部正文引用或附件元数据。
+- abstract 只保留来源摘要；snippet/full 仅保留明确分类且不高于请求级别的正文载荷。
+- parser 未确认 Kind 的正文保持 unknown，不因调用方请求 full_text 就提升为全文。
+- attachment 请求只返回附件元数据，不返回文章摘要或正文；附件仍不下载。
+- ProviderSummary 与来源授权内容分层，不被提升成来源摘要或正文。
+
+该裁剪是返回数据最小化，不替代 Provider/Source/Endpoint 当前策略复核，也不代表正文持久化已获授权。
+
+
+### NEWS-CTR-002 策略快照完整性补充（2026-11-06）
+
+Binding 中 `provider_ref` / `endpoint_ref` 非 null 时，PolicySnapshot 必须分别包含对应的 `provider_output` / `endpoint` 实际生效版本；显式 null 才表示该层不参与本次决策（Endpoint 可继承 Source）。缺失任一非 null 引用对应的 tuple 必须拒绝。
+
+
+## 2026-11-06 平台合并后 N1 当前 HEAD 复核
+
+当前盘点基线：`aca8ff6b6bd2a03adf5ded075f354a77f6dc3370`。完整代码证据、旧 Python 调用链、平台合并变化、风险和设计评审见《[N1 新闻模块现状盘点与设计评审报告](N1现状盘点与设计评审报告.md)》。
+
+- 平台 `httpclient.BoundDoer` 已进入当前分支，接口与 News `app.HTTPDoer` 兼容；News 生产组合根尚未逐 Provider/Source endpoint 注入。
+- 平台 `storage` 已进入当前分支，MariaDB/Redis CI 集成与 Race 通过；根 Server 仍使用旧 mysqlredis Store，News Repository/Migration/注册尚未完成。
+- Diagnostics/Config/Security 等平台原语已合并；News 领域 Check、Bootstrap 和服务路由仍未接入。
+- 最新身份修正拒绝候选及已存凭据 Hash 不一致；最新授权修正拒绝 `expires_at == decided_at` 的零有效期授权。
+- PLAT-002 仍待冻结，平台 L1 证据不等于 News A2/A3 接入通过。
+- N1 盘点完成；后续按《新闻模块公共平台契约接入实施计划》分阶段推进，不跳过项目契约门禁。
+
+
+## 2026-11-06 项目级总规划复核与接入计划
+
+项目级规划当前基线：`feat/design_doc` @ `12823e069be9036ad6a05235ac4304581d6883a1`。News 分支内合并的规划文件只是旧快照，执行时以规划分支最新版本为准。
+
+详细任务顺序、并行关系、阻断项和验收证据见《[新闻模块公共平台契约接入实施计划](新闻模块公共平台契约接入实施计划.md)》。当前 N5/N6/N7 尚未完成；N3 在线采集和生产编排待触发入口、授权、BoundDoer 和存储闭环；NEWS-CTR-001/002/003 与 GOV-CTR-006 仍为 `pending_evidence`；Server 组合根与 PLAT-013 A2 接入尚未完成。本分支后续只修改 `internal/news/**` 与 `doc/news/**`，共享启动入口、HTTP 路由和 Migration 总注册须与 Server/集成 Owner 协调。

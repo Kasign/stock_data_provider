@@ -10,6 +10,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/Kasign/stock_data_provider/services/market-data/internal/validation"
 )
 
 func newXueqiuFixtureServer(t *testing.T, expectedSize string, rows []map[string]any) *httptest.Server {
@@ -74,6 +76,61 @@ func TestXueqiuHotRankingMarksRequestLimitCap(t *testing.T) {
 	}
 	if !hasXueqiuReason(snapshot.QualityReasons, "provider_request_limit_capped_at_50") {
 		t.Fatalf("missing explicit provider cap reason: %v", snapshot.QualityReasons)
+	}
+}
+
+func TestXueqiuHotRankingReportsInvalidNumericField(t *testing.T) {
+	rows := []map[string]any{{
+		"symbol":  "SH600519",
+		"name":    "贵州茅台",
+		"current": "not-a-number",
+	}}
+	server := newXueqiuFixtureServer(t, "10", rows)
+	defer server.Close()
+
+	reporter := validation.NewReporter(10)
+	ctx := validation.WithReporter(context.Background(), reporter)
+	provider := NewXueqiuConfigured(2*time.Second, server.URL, "")
+	if _, err := provider.FetchHotStocks(ctx, "popular", 10); err == nil {
+		t.Fatal("invalid numeric field must reject the ranking response")
+	}
+	report := reporter.Snapshot()
+	if report.WarningCount != 1 || report.ErrorCount != 0 || len(report.Issues) != 1 {
+		t.Fatalf("expected one parse warning and no errors, got %+v", report)
+	}
+	issue := report.Issues[0]
+	if issue.Field != "latest_price" || issue.ProviderField != "current" || issue.Code != "invalid_number" || issue.RowIndex == nil || *issue.RowIndex != 0 {
+		t.Fatalf("unexpected row-level numeric diagnostic: %+v", issue)
+	}
+}
+
+func TestXueqiuHotRankingReportsInvalidRankChangeWarning(t *testing.T) {
+	rows := []map[string]any{{
+		"symbol":      "SH600519",
+		"name":        "贵州茅台",
+		"current":     1500.0,
+		"rank_change": "not-an-integer",
+	}}
+	server := newXueqiuFixtureServer(t, "10", rows)
+	defer server.Close()
+
+	reporter := validation.NewReporter(10)
+	ctx := validation.WithReporter(context.Background(), reporter)
+	provider := NewXueqiuConfigured(2*time.Second, server.URL, "")
+	snapshot, err := provider.FetchHotStocks(ctx, "popular", 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if snapshot.Items[0].RankChange != nil {
+		t.Fatalf("invalid rank_change must remain omitted: %+v", snapshot.Items[0])
+	}
+	report := reporter.Snapshot()
+	if report.WarningCount != 1 || report.ErrorCount != 0 {
+		t.Fatalf("expected one warning and no errors, got %+v", report)
+	}
+	issue := report.Issues[0]
+	if issue.Field != "rank_change" || issue.ProviderField != "rank_change" || issue.Code != "invalid_optional_integer" || issue.RowIndex == nil || *issue.RowIndex != 0 {
+		t.Fatalf("unexpected optional integer diagnostic: %+v", issue)
 	}
 }
 

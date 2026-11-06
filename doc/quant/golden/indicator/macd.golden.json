@@ -1,0 +1,25 @@
+{
+  "fixture_type": "synthetic_fixture",
+  "schema_version": "1.0.0",
+  "indicator_code": "macd",
+  "algorithm_version": "1.0.0",
+  "parameters": {
+    "fast_window": 2,
+    "slow_window": 3,
+    "signal_window": 2
+  },
+  "input": {
+    "close": [
+      4,
+      3,
+      2,
+      1
+    ]
+  },
+  "expected": {
+    "dif": -0.5,
+    "dea": -0.5,
+    "histogram": 0
+  },
+  "tolerance": 1e-12
+}

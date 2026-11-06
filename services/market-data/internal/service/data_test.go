@@ -359,6 +359,17 @@ func TestDailyBarsAcceptsForwardReferenceAfterRequestedEnd(t *testing.T) {
 	bar.QualityStatus = model.QualityValid
 	svc := New([]provider.Provider{fakeProvider{name: "pytdx", bars: []model.DailyBar{bar}}},
 		cache.NewDisabled(), nil, time.Second, time.Minute, 120, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	calendarProvider := &testTradingCalendarProvider{name: "test-calendar", snapshot: &model.TradingCalendarSnapshot{
+		Market: "cn_a_share", StartDate: "2026-10-20", EndDate: "2026-10-21",
+		TotalDays: 2, TradingDays: 2,
+		Items: []model.TradingCalendarDay{
+			{Date: "2026-10-20", IsTradingDay: true},
+			{Date: "2026-10-21", IsTradingDay: true},
+		},
+		Source: "test-calendar", SourceVersion: "test-calendar-v1",
+		FetchedAt: time.Now().UTC(), QualityStatus: model.QualityValid,
+	}}
+	svc.SetTradingCalendarProviders([]provider.TradingCalendarProvider{calendarProvider})
 
 	bars, hit, _, err := svc.DailyBars(context.Background(), "600519.SH", "2026-10-20", "2026-10-21", 1, model.AdjustmentForward)
 	if err != nil || hit {
@@ -1192,6 +1203,33 @@ func TestCoverageSufficientRejectsSparseLookback(t *testing.T) {
 	}
 }
 
+func TestDailyBarsDegradesWhenCoverageCalendarIsUnavailable(t *testing.T) {
+	tradeDates := []string{"2026-10-19", "2026-10-20", "2026-10-21", "2026-10-22", "2026-10-23"}
+	bars := make([]model.DailyBar, 0, len(tradeDates))
+	for _, tradeDate := range tradeDates {
+		bar := dailyBarForVersionContractTest("eastmoney-daily-bars-v1", tradeDate)
+		bar.AdjustmentBasis = model.AdjustmentNone
+		bar.QualityStatus = model.QualityValid
+		bars = append(bars, bar)
+	}
+	barsProvider := fakeProvider{name: "eastmoney", bars: bars}
+	svc := New([]provider.Provider{barsProvider}, cache.NewDisabled(), nil, time.Second, time.Minute, 120,
+		slog.New(slog.NewTextHandler(io.Discard, nil)))
+
+	got, hit, warnings, err := svc.DailyBars(context.Background(), "600519.SH", "2026-10-19", "2026-10-23", 5, model.AdjustmentNone)
+	if err != nil || hit {
+		t.Fatalf("DailyBars returned hit=%v err=%v", hit, err)
+	}
+	if len(got) != 5 || !containsTestWarning(warnings, "daily_bar_coverage_uses_weekday_estimate_calendar_unavailable") {
+		t.Fatalf("weekday estimate should preserve plausible coverage but expose unavailable calendar: bars=%+v warnings=%v", got, warnings)
+	}
+	for _, bar := range got {
+		if bar.QualityStatus != model.QualityDegraded || !containsReason(bar.QualityReasons, "daily_bar_coverage_uses_weekday_estimate_calendar_unavailable") {
+			t.Fatalf("calendar-unverified coverage must not be marked valid: %+v", bar)
+		}
+	}
+}
+
 func TestDailyBarsCachePartialCandleRefreshesAfterClose(t *testing.T) {
 	loc := marketLocation()
 	bar := model.DailyBar{SourceVersion: "test-v1", TradeDate: "2026-10-21", IsPartial: true}
@@ -1663,6 +1701,23 @@ func TestValidateLimitPoolRejectsInvalidNumericFieldsAndQualityMismatch(t *testi
 			t.Fatalf("mismatched provider report date must be rejected to permit source fallback, got %v", err)
 		}
 	})
+	t.Run("has data requires non-null change percent", func(t *testing.T) {
+		snapshot := makeSnapshot()
+		snapshot.Items[0].ChangePercent = nil
+		if err := validateLimitPoolSnapshot("up", "2026-10-23", 30, snapshot); err == nil {
+			t.Fatal("HasData=true must reject an item with null change_percent")
+		}
+	})
+	t.Run("no data requires empty items and zero total", func(t *testing.T) {
+		snapshot := makeSnapshot()
+		snapshot.HasData = false
+		snapshot.Total = 0
+		snapshot.QualityStatus = model.QualityUnknown
+		if err := validateLimitPoolSnapshot("up", "2026-10-23", 30, snapshot); err == nil || !strings.Contains(err.Error(), "empty limit pool") {
+			t.Fatalf("HasData=false must reject a snapshot containing items through the empty-state invariant, got %v", err)
+		}
+	})
+
 }
 
 func TestMarkLimitPoolTruncatedDowngradesIncompleteSnapshot(t *testing.T) {

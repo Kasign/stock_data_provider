@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -43,6 +44,30 @@ func (p httpProbeMariaDBDailyBarProvider) FetchDailyBars(_ context.Context, symb
 	}}, nil
 }
 
+type httpProbeMariaDBTradingCalendar struct{}
+
+func (httpProbeMariaDBTradingCalendar) Name() string { return "http-probe-calendar" }
+
+func (p httpProbeMariaDBTradingCalendar) FetchTradingCalendar(_ context.Context, startDate, endDate string) (*model.TradingCalendarSnapshot, error) {
+	if startDate != endDate {
+		return nil, fmt.Errorf("integration fixture expects one-day calendar range, got %s..%s", startDate, endDate)
+	}
+	date, err := time.Parse("2006-01-02", startDate)
+	if err != nil {
+		return nil, err
+	}
+	if date.Weekday() == time.Saturday || date.Weekday() == time.Sunday {
+		return nil, fmt.Errorf("integration fixture date must be a trading weekday: %s", startDate)
+	}
+	return &model.TradingCalendarSnapshot{
+		Market: "cn_a_share", StartDate: startDate, EndDate: endDate,
+		TotalDays: 1, TradingDays: 1,
+		Items:  []model.TradingCalendarDay{{Date: startDate, IsTradingDay: true}},
+		Source: p.Name(), SourceVersion: "calendar-v1", FetchedAt: time.Now().UTC(),
+		QualityStatus: model.QualityValid,
+	}, nil
+}
+
 func newHTTPProbeMariaDBHandler(store *repository.Store, providers ...provider.DailyBarProvider) http.Handler {
 	named := make([]provider.NamedProvider, 0, len(providers))
 	for _, item := range providers {
@@ -52,6 +77,7 @@ func newHTTPProbeMariaDBHandler(store *repository.Store, providers ...provider.D
 		named, nil, providers, cache.NewDisabled(), store,
 		time.Second, time.Minute, 120, 2000, service.ResilienceConfig{}, nil,
 	)
+	svc.SetTradingCalendarProviders([]provider.TradingCalendarProvider{httpProbeMariaDBTradingCalendar{}})
 	return NewWithCapabilityInterfaces(
 		"probe-mariadb-test-key", "none", svc,
 		named, nil, providers, 2000, 110*time.Second,
@@ -81,7 +107,7 @@ func TestProviderProbeHTTPMariaDBEndToEnd(t *testing.T) {
 	}
 
 	postHandler := newHTTPProbeMariaDBHandler(store, left, right)
-	body := `{"scope":"all","capabilities":["daily_bars"],"checks":["cross_provider"],"symbols":["600036.SH"],"daily_bar_adjustments":["backward_adjusted"],"timeout_seconds":5}`
+	body := `{"scope":"all","capabilities":["daily_bars"],"checks":["cross_provider"],"symbols":["600036.SH"],"daily_bar_start_date":"2026-10-29","daily_bar_end_date":"2026-10-29","daily_bar_adjustments":["backward_adjusted"],"timeout_seconds":5}`
 	postRequest := httptest.NewRequest(http.MethodPost, "/api/v1/data-sources/probe", bytes.NewBufferString(body))
 	postRequest.Header.Set("X-API-Key", "probe-mariadb-test-key")
 	postResponse := httptest.NewRecorder()
