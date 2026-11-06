@@ -16,13 +16,25 @@ const (
 	ClassInternal        Class = "internal"
 )
 
-// Fault 是可安全序列化的错误结构；Cause 仅用于内部错误链，不输出到 JSON。
+// Valid reports whether c belongs to the stable public Fault class set.
+func (c Class) Valid() bool {
+	switch c {
+	case ClassValidation, ClassUnauthenticated, ClassForbidden, ClassNotFound,
+		ClassConflict, ClassUnavailable, ClassTimeout, ClassInternal:
+		return true
+	default:
+		return false
+	}
+}
+
+// Fault 是仅供进程内部使用的错误结构。所有字段均禁止 JSON 序列化；
+// HTTP transport 必须显式映射到独立公开 DTO。
 type Fault struct {
-	Class       Class  `json:"class"`
-	Code        string `json:"code"`
-	SafeMessage string `json:"safe_message"`
-	Dependency  string `json:"dependency,omitempty"`
-	Retryable   bool   `json:"retryable"`
+	Class       Class  `json:"-"`
+	Code        string `json:"-"`
+	SafeMessage string `json:"-"`
+	Dependency  string `json:"-"`
+	Retryable   bool   `json:"-"`
 	Cause       error  `json:"-"`
 }
 

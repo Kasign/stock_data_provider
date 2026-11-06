@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kasign.github.io/stock_data_provider/platform/PLAT-CTR-004-observation-1.0.0.schema.json",
+  "title": "PLAT-CTR-004 Observation",
+  "description": "Platform diagnostic Observation; reason_code and evidence_ref are opaque domain-owned references.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["status", "safe_message", "checked_at", "duration"],
+  "properties": {
+    "status": {
+      "type": "string",
+      "enum": ["healthy", "degraded", "unavailable", "skipped", "failed"]
+    },
+    "reason_code": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 160,
+      "pattern": "^[a-z0-9][a-z0-9._-]*$"
+    },
+    "safe_message": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512,
+      "pattern": "^[^\\u0000-\\u001F\\u007F]*$"
+    },
+    "checked_at": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "Z$"
+    },
+    "duration": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Go time.Duration encoded as a non-negative integer number of nanoseconds."
+    },
+    "evidence_ref": {
+      "type": "string",
+      "maxLength": 512,
+      "pattern": "^[^\\u0000-\\u001F\\u007F]*$"
+    },
+    "attributes": {
+      "type": "object",
+      "maxProperties": 16,
+      "propertyNames": {
+        "minLength": 1,
+        "maxLength": 64,
+        "pattern": "^[^\\u0000-\\u001F\\u007F]+$"
+      },
+      "additionalProperties": {
+        "type": "string",
+        "maxLength": 256,
+        "pattern": "^[^\\u0000-\\u001F\\u007F]*$"
+      }
+    }
+  },
+  "allOf": [{
+    "if": {
+      "properties": {"status": {"const": "healthy"}},
+      "required": ["status"]
+    },
+    "then": {},
+    "else": {"required": ["reason_code"]}
+  }]
+}

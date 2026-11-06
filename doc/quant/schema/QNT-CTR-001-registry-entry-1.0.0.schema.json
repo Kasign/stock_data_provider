@@ -1,0 +1,114 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://stock-data-provider.local/schema/QNT-CTR-001-registry-entry-1.0.0.schema.json",
+  "title": "Quant Metric Registry Entry",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "code",
+    "schema_version",
+    "value_type",
+    "unit",
+    "precision",
+    "range",
+    "algorithm_version",
+    "input_requirements",
+    "parameters_schema",
+    "quality_policy",
+    "supports_interval"
+  ],
+  "allOf": [
+    {
+      "if": { "properties": { "value_type": { "const": "decimal_string" } }, "required": ["value_type"] },
+      "then": {
+        "properties": {
+          "precision": { "properties": { "tolerance": { "type": "string" } } },
+          "range": { "properties": { "minimum": { "type": "string" }, "maximum": { "type": "string" } } }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "value_type": { "const": "integer" } }, "required": ["value_type"] },
+      "then": {
+        "properties": {
+          "precision": { "properties": { "max_fraction_digits": { "const": 0 }, "tolerance": { "type": "integer" } } },
+          "range": { "properties": { "minimum": { "type": "integer" }, "maximum": { "type": "integer" } } }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "value_type": { "const": "number" } }, "required": ["value_type"] },
+      "then": {
+        "properties": {
+          "precision": { "properties": { "tolerance": { "type": "number" } } },
+          "range": { "properties": { "minimum": { "type": "number" }, "maximum": { "type": "number" } } }
+        }
+      }
+    }
+  ],
+  "properties": {
+    "code": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
+    "schema_version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.-]+)?$" },
+    "value_type": { "type": "string", "enum": ["decimal_string", "integer", "number"] },
+    "unit": { "type": "string", "minLength": 1 },
+    "precision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["max_integer_digits", "max_fraction_digits", "rounding_mode", "tolerance"],
+      "properties": {
+        "max_integer_digits": { "type": "integer", "minimum": 1 },
+        "max_fraction_digits": { "type": "integer", "minimum": 0 },
+        "rounding_mode": { "type": "string", "minLength": 1 },
+        "tolerance": {}
+      }
+    },
+    "range": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["unbounded"],
+      "properties": {
+        "minimum": {},
+        "maximum": {},
+        "unbounded": { "type": "boolean" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "unbounded": { "const": true } }, "required": ["unbounded"] },
+          "then": { "not": { "anyOf": [{ "required": ["minimum"] }, { "required": ["maximum"] }] } },
+          "else": { "required": ["minimum", "maximum"] }
+        }
+      ]
+    },
+    "algorithm_version": { "type": "string", "minLength": 1 },
+    "input_requirements": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["fields", "interval", "adjustment", "pit", "quality", "requires_snapshot"],
+        "properties": {
+          "fields": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 }, "uniqueItems": true },
+          "interval": { "type": "string", "minLength": 1 },
+          "adjustment": { "type": "string", "minLength": 1 },
+          "pit": { "type": "boolean" },
+          "quality": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 }, "uniqueItems": true },
+          "requires_snapshot": { "type": "boolean" }
+        }
+      }
+    },
+    "parameters_schema": { "type": "object" },
+    "quality_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["minimum_coverage", "missing_handling", "quality_states", "unavailable_conditions"],
+      "properties": {
+        "minimum_coverage": { "type": "number", "minimum": 0, "maximum": 1 },
+        "missing_handling": { "type": "string", "minLength": 1 },
+        "quality_states": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 }, "uniqueItems": true },
+        "unavailable_conditions": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 }, "uniqueItems": true }
+      }
+    },
+    "supports_interval": { "type": "boolean" }
+  }
+}

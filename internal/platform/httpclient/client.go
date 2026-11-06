@@ -13,7 +13,6 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"example.com/stock-analysis-flow/internal/platform/fault"
@@ -28,6 +27,7 @@ const (
 	maxResponseBytesLimit        = int64(16 << 20)
 	defaultMaxConcurrent         = 4
 	maxConcurrentLimit           = 32
+	maxDependencyLimitEntries    = 64
 	maxRetryLimit                = 2
 )
 
@@ -67,14 +67,13 @@ type DestinationPolicy struct {
 }
 
 type Client struct {
-	config      Config
-	resolver    Resolver
-	dial        func(context.Context, string, string) (net.Conn, error)
-	httpClient  *http.Client
-	transport   *http.Transport
-	limits      map[string]int
-	semaphoreMu sync.Mutex
-	semaphores  map[string]chan struct{}
+	config           Config
+	resolver         Resolver
+	dial             func(context.Context, string, string) (net.Conn, error)
+	httpClient       *http.Client
+	transport        *http.Transport
+	defaultSemaphore chan struct{}
+	semaphores       map[string]chan struct{}
 }
 
 type policyContextKey struct{}
@@ -108,6 +107,10 @@ func New(config Config) (*Client, error) {
 		return nil, fmt.Errorf("max concurrent requests cannot exceed %d", maxConcurrentLimit)
 	}
 
+	if len(config.DependencyLimits) > maxDependencyLimitEntries {
+		return nil, fmt.Errorf("dependency limits cannot exceed %d entries", maxDependencyLimitEntries)
+	}
+
 	limits := make(map[string]int, len(config.DependencyLimits))
 	for dependency, limit := range config.DependencyLimits {
 		if !validDependency(dependency) || limit < 1 || limit > maxConcurrentLimit {
@@ -123,12 +126,16 @@ func New(config Config) (*Client, error) {
 	}
 
 	dialer := &net.Dialer{Timeout: config.DialTimeout, KeepAlive: 30 * time.Second}
+	semaphores := make(map[string]chan struct{}, len(limits))
+	for dependency, limit := range limits {
+		semaphores[dependency] = make(chan struct{}, limit)
+	}
 	client := &Client{
-		config:     config,
-		resolver:   resolver,
-		dial:       dialer.DialContext,
-		limits:     limits,
-		semaphores: make(map[string]chan struct{}),
+		config:           config,
+		resolver:         resolver,
+		dial:             dialer.DialContext,
+		defaultSemaphore: make(chan struct{}, config.MaxConcurrent),
+		semaphores:       semaphores,
 	}
 
 	transport := &http.Transport{
@@ -173,6 +180,9 @@ func (c *Client) Do(ctx context.Context, request *http.Request, policy Destinati
 	if (request.Host != "" && !strings.EqualFold(request.Host, request.URL.Host)) || request.Header.Get("Host") != "" {
 		return nil, c.newFault(fault.ClassValidation, "platform.httpclient.custom_host_rejected", "custom Host header is not allowed", errPolicyRejected, policy.Dependency, false)
 	}
+	if hasHeaderFold(request.Header, "Accept-Encoding") {
+		return nil, c.newFault(fault.ClassValidation, "platform.httpclient.accept_encoding_rejected", "custom Accept-Encoding header is not allowed", errPolicyRejected, policy.Dependency, false)
+	}
 	if err := validateURL(request.URL, policy); err != nil {
 		return nil, c.faultFor(err, policy.Dependency)
 	}
@@ -182,12 +192,26 @@ func (c *Client) Do(ctx context.Context, request *http.Request, policy Destinati
 	requestCtx = context.WithValue(requestCtx, policyContextKey{}, policy)
 
 	semaphore := c.semaphore(policy.Dependency)
-	select {
-	case semaphore <- struct{}{}:
-		defer func() { <-semaphore }()
-	case <-requestCtx.Done():
-		return nil, c.faultFor(requestCtx.Err(), policy.Dependency)
+	held := false
+	acquire := func() error {
+		select {
+		case semaphore <- struct{}{}:
+			held = true
+			return nil
+		case <-requestCtx.Done():
+			return requestCtx.Err()
+		}
 	}
+	release := func() {
+		if held {
+			<-semaphore
+			held = false
+		}
+	}
+	if err := acquire(); err != nil {
+		return nil, c.faultFor(err, policy.Dependency)
+	}
+	defer release()
 
 	retryEnabled := policy.Idempotent && c.config.MaxRetries > 0 && (request.Body == nil || request.GetBody != nil)
 	for attempt := 0; attempt <= c.config.MaxRetries; attempt++ {
@@ -204,20 +228,28 @@ func (c *Client) Do(ctx context.Context, request *http.Request, policy Destinati
 		response, err := c.httpClient.Do(current)
 		if err != nil {
 			if retryEnabled && attempt < c.config.MaxRetries && retryableTransportError(err) {
-				if waitErr := waitRetry(requestCtx, attempt); waitErr == nil {
-					continue
-				} else {
+				release()
+				if waitErr := waitRetry(requestCtx, attempt); waitErr != nil {
 					return nil, c.faultFor(waitErr, policy.Dependency)
 				}
+				if acquireErr := acquire(); acquireErr != nil {
+					return nil, c.faultFor(acquireErr, policy.Dependency)
+				}
+				continue
 			}
 			return nil, c.faultFor(err, policy.Dependency)
 		}
 
 		if retryEnabled && attempt < c.config.MaxRetries && retryableStatus(response.StatusCode) {
 			_ = response.Body.Close()
-			if waitErr := waitRetry(requestCtx, attempt); waitErr == nil {
-				continue
+			release()
+			if waitErr := waitRetry(requestCtx, attempt); waitErr != nil {
+				return nil, c.faultFor(waitErr, policy.Dependency)
 			}
+			if acquireErr := acquire(); acquireErr != nil {
+				return nil, c.faultFor(acquireErr, policy.Dependency)
+			}
+			continue
 		}
 
 		body, readErr := readLimitedBody(response.Body, c.config.MaxResponseBytes)
@@ -238,19 +270,14 @@ func (c *Client) CloseIdleConnections() {
 	}
 }
 
+// semaphore returns a dedicated slot pool only for explicitly configured
+// dependencies. Unconfigured dependency names share one bounded fallback pool,
+// so request-controlled identifiers cannot grow the semaphore map.
 func (c *Client) semaphore(dependency string) chan struct{} {
-	c.semaphoreMu.Lock()
-	defer c.semaphoreMu.Unlock()
 	if semaphore, ok := c.semaphores[dependency]; ok {
 		return semaphore
 	}
-	limit := c.limits[dependency]
-	if limit == 0 {
-		limit = c.config.MaxConcurrent
-	}
-	semaphore := make(chan struct{}, limit)
-	c.semaphores[dependency] = semaphore
-	return semaphore
+	return c.defaultSemaphore
 }
 
 func (c *Client) dialContext(ctx context.Context, network, address string) (net.Conn, error) {
@@ -337,6 +364,15 @@ func (c *Client) newFault(class fault.Class, code, message string, cause error, 
 	}
 }
 
+func hasHeaderFold(header http.Header, name string) bool {
+	for key := range header {
+		if strings.EqualFold(key, name) {
+			return true
+		}
+	}
+	return false
+}
+
 func validDependency(value string) bool {
 	if value == "" || len(value) > 128 {
 		return false
@@ -408,6 +444,12 @@ func validateRedirect(request *http.Request, via []*http.Request) error {
 	if previous.URL.Scheme == "https" && request.URL.Scheme != "https" {
 		return errRedirectRejected
 	}
+	// Redirects may carry Authorization, Cookie, or provider-specific headers.
+	// Keep them within the original origin until cross-origin credential
+	// forwarding has an explicit, separately reviewed policy.
+	if !sameOrigin(previous.URL, request.URL) {
+		return errRedirectRejected
+	}
 	if err := validateURL(request.URL, policy); err != nil {
 		return errRedirectRejected
 	}
@@ -417,6 +459,29 @@ func validateRedirect(request *http.Request, via []*http.Request) error {
 		}
 	}
 	return nil
+}
+
+func sameOrigin(left, right *url.URL) bool {
+	if left == nil || right == nil || !strings.EqualFold(left.Scheme, right.Scheme) {
+		return false
+	}
+	leftPort := left.Port()
+	if leftPort == "" {
+		if strings.EqualFold(left.Scheme, "https") {
+			leftPort = "443"
+		} else if strings.EqualFold(left.Scheme, "http") {
+			leftPort = "80"
+		}
+	}
+	rightPort := right.Port()
+	if rightPort == "" {
+		if strings.EqualFold(right.Scheme, "https") {
+			rightPort = "443"
+		} else if strings.EqualFold(right.Scheme, "http") {
+			rightPort = "80"
+		}
+	}
+	return normalizeHost(left.Hostname()) == normalizeHost(right.Hostname()) && leftPort == rightPort
 }
 
 func validatePolicy(policy DestinationPolicy) error {

@@ -39,15 +39,34 @@ try {
   const page = await context.newPage(), pageErrors = [];
   page.on("pageerror", error => pageErrors.push(error.stack || error.message));
   let marketStocksRequests = 0;
+  let holdSecondMarketStocksResponse = false;
+  let releaseSecondMarketStocksResponse;
+  let markSecondMarketStocksStarted;
+  const secondMarketStocksStarted = new Promise(resolve => { markSecondMarketStocksStarted = resolve; });
+  const secondMarketStocksResponseGate = new Promise(resolve => { releaseSecondMarketStocksResponse = resolve; });
+  let holdThirdMarketStocksResponse = false;
+  let releaseThirdMarketStocksResponse;
+  let markThirdMarketStocksStarted;
+  const thirdMarketStocksStarted = new Promise(resolve => { markThirdMarketStocksStarted = resolve; });
+  const thirdMarketStocksResponseGate = new Promise(resolve => { releaseThirdMarketStocksResponse = resolve; });
   await page.route("**/*", async route => {
     const url = new URL(route.request().url());
     if (url.pathname === "/market-api/api/v1/market/stocks") {
       marketStocksRequests += 1;
-      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({
+      if (marketStocksRequests === 2 && holdSecondMarketStocksResponse) {
+        markSecondMarketStocksStarted();
+        await secondMarketStocksResponseGate;
+      }
+      if (marketStocksRequests === 3 && holdThirdMarketStocksResponse) {
+        markThirdMarketStocksStarted();
+        await thirdMarketStocksResponseGate;
+      }
+      try {
+        await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({
         items: [
-          { symbol: "600001.SH", name: "测试命中", quality_status: "valid", quote: { symbol: "600001.SH", change_percent: 3, turnover_rate: 2, amount: 20000000, quality_status: "valid" }, ma5: 12, ma20: 11 },
-          { symbol: "600002.SH", name: "测试未命中", quality_status: "valid", quote: { symbol: "600002.SH", change_percent: -1, turnover_rate: 5, amount: 5000000, quality_status: "valid" }, ma5: 8, ma20: 9 },
-          { symbol: "600003.SH", name: "测试待判断", quality_status: "degraded", quality_reasons: ["MA5 字段缺失"], quote: { symbol: "600003.SH", change_percent: null, turnover_rate: 3, amount: 30000000, quality_status: "degraded", quality_reasons: ["行情涨跌幅未报告"] }, ma5: null, ma20: 10 }
+          { symbol: "600001.SH", name: "测试命中", ma_adjustment_basis: "forward_adjusted", quality_status: "valid", quote: { symbol: "600001.SH", change_percent: 3, turnover_rate: 2, amount: 20000000, amount_unit: "CNY", quality_status: "valid" }, ma5: 12, ma20: 11 },
+          { symbol: "600002.SH", name: "测试未命中", ma_adjustment_basis: "forward_adjusted", quality_status: "valid", quote: { symbol: "600002.SH", change_percent: -1, turnover_rate: 5, amount: 5000000, amount_unit: "CNY", quality_status: "valid" }, ma5: 8, ma20: 9 },
+          { symbol: "600003.SH", name: "测试待判断", ma_adjustment_basis: "forward_adjusted", quality_status: "degraded", quality_reasons: ["MA5 字段缺失"], quote: { symbol: "600003.SH", change_percent: null, turnover_rate: 3, amount: 30000000, amount_unit: "CNY", quality_status: "degraded", quality_reasons: ["行情涨跌幅未报告"] }, ma5: null, ma20: 10 }
         ],
         page: 1, page_size: 50, total: 3, total_is_lower_bound: false, coverage_ratio: 1,
         quote_succeeded: 3, quote_failed: 0, quality_status: "degraded",
@@ -55,6 +74,9 @@ try {
         universe_fetched_at: "2026-11-03T03:00:00Z", fetched_at: "2026-11-03T03:00:0" + marketStocksRequests + "Z",
         ma_adjustment_basis: "forward_adjusted"
       }) });
+      } catch {
+        // 连接变更后旧请求应已被取消，不能再提交旧连接响应。
+      }
       return;
     }
     if (url.pathname.includes("/api/")) {
@@ -136,8 +158,43 @@ try {
 
   await page.locator("#screening-plan-name").fill("浏览器筛选方案");
   await page.locator("#screening-plan-save").click();
-  const storedBeforeClear = await page.evaluate(() => JSON.parse(localStorage.getItem("stock-provider-webui.screening-plans.v1") || "[]"));
+  let storedBeforeClear = await page.evaluate(() => JSON.parse(localStorage.getItem("stock-provider-webui.screening-plans.v1") || "[]"));
   assert.equal(storedBeforeClear.length, 1);
+
+  // 双标签页：远端修改/删除已载入方案时，保留本地草稿并阻止旧版本覆盖或复活。
+  const planId = storedBeforeClear[0].id;
+  await page.locator('[data-screening-plan-load="' + planId + '"]').click();
+  await page.locator("#screening-condition-field").selectOption("ma5");
+  await page.locator("#screening-condition-value").fill("11");
+  await page.locator("#screening-condition-add").click();
+  const planPeer = await context.newPage();
+  await planPeer.goto(baseUrl, { waitUntil: "domcontentloaded" });
+  await planPeer.evaluate((id) => {
+    const key = "stock-provider-webui.screening-plans.v1";
+    const plans = JSON.parse(localStorage.getItem(key) || "[]");
+    const index = plans.findIndex((item) => item.id === id);
+    plans[index] = { ...plans[index], name: "远端修改方案", updated_at: "2026-11-04T04:00:00Z" };
+    localStorage.setItem(key, JSON.stringify(plans));
+  }, planId);
+  await page.waitForFunction(() => document.querySelector("#screening-condition-feedback")?.textContent.includes("已在其他标签页修改"));
+  await page.locator("#screening-plan-save").click();
+  assert.match(await page.locator("#screening-condition-feedback").textContent(), /未覆盖远端版本/);
+  assert.equal(await page.evaluate((id) => JSON.parse(localStorage.getItem("stock-provider-webui.screening-plans.v1") || "[]").find(item => item.id === id)?.name, planId), "远端修改方案");
+
+  await planPeer.evaluate((id) => {
+    const key = "stock-provider-webui.screening-plans.v1";
+    const plans = JSON.parse(localStorage.getItem(key) || "[]").filter(item => item.id !== id);
+    localStorage.setItem(key, JSON.stringify(plans));
+  }, planId);
+  await page.waitForFunction(() => document.querySelector("#screening-condition-feedback")?.textContent.includes("已在其他标签页删除"));
+  await page.locator("#screening-plan-name").fill("冲突后另存方案");
+  await page.locator("#screening-plan-save-as").click();
+  assert.match(await page.locator("#screening-condition-feedback").textContent(), /已另存为新方案/);
+  storedBeforeClear = await page.evaluate(() => JSON.parse(localStorage.getItem("stock-provider-webui.screening-plans.v1") || "[]"));
+  assert.equal(storedBeforeClear.length, 1);
+  assert.equal(storedBeforeClear[0].name, "冲突后另存方案");
+  await planPeer.close();
+
   await page.locator("#screening-condition-clear").click();
   assert.match(await summary.textContent(), /条件已清空/);
   assert.match(await page.locator("#screening-local-results-body").textContent(), /尚未执行当前页筛选/);
@@ -154,12 +211,46 @@ try {
   assert.match(await page.locator("#screening-local-results-body").textContent(), /尚未执行当前页筛选/);
   await page.locator("#screening-apply-current-page").click();
 
-  // 全市场分页刷新后，即使页码/页大小相同，也必须使上一批结果失效。
+  // 全市场刷新进行中时，旧快照不得继续用于筛选、导出或批量加入。
   await page.locator('.nav-link[data-view="stocks"]').click();
+  holdSecondMarketStocksResponse = true;
   await page.locator("#reload-market-stocks").click();
-  await page.waitForFunction(() => document.querySelector("#market-stocks-meta")?.textContent.includes("2026-11-03T03:00:02Z"));
+  await secondMarketStocksStarted;
+  assert.match(await page.locator("#market-stocks-status").textContent(), /正在刷新/);
+  assert.match(await page.locator("#market-stocks-summary").textContent(), /上次成功快照/);
+  assert.match(await page.locator("#market-stocks-page-label").textContent(), /当前快照第 1 页/);
   await page.locator('.nav-link[data-view="screening"]').click();
   assert.match(await summary.textContent(), /分页已变化或重新加载/);
+  await page.locator("#screening-apply-current-page").click();
+  assert.match(await summary.textContent(), /正在刷新，暂不能应用筛选条件/);
+  assert.equal(await exportButton.isEnabled(), false);
+  assert.equal(await page.locator("#screening-local-add-watchlist").isEnabled(), false);
+  assert.equal(await page.locator("#screening-local-results-body tr").count(), 1);
+  releaseSecondMarketStocksResponse();
+  await page.waitForFunction(() => document.querySelector("#market-stocks-meta")?.textContent.includes("2026-11-03T03:00:02Z"));
+  assert.equal(await exportButton.isEnabled(), false, "refresh completion must not silently revive the previous screening result");
+  await page.locator("#screening-apply-current-page").click();
+  await page.waitForFunction(() => document.querySelector("#screening-local-results-summary")?.textContent.includes("命中 1 条"));
+
+  // 行情连接变化必须清空全市场旧快照及元数据，并隔离取消请求的晚到响应。
+  await page.locator('.nav-link[data-view="stocks"]').click();
+  holdThirdMarketStocksResponse = true;
+  await page.locator("#reload-market-stocks").click();
+  await thirdMarketStocksStarted;
+  const settingsPage = await context.newPage();
+  await settingsPage.goto(baseUrl, { waitUntil: "domcontentloaded" });
+  await settingsPage.evaluate(() => localStorage.setItem("stock-provider-webui.settings.v1", JSON.stringify({
+    marketBase: "/market-api-v2", analysisBase: "/analysis-api", apiKey: "screening-browser-key-v2"
+  })));
+  await page.waitForFunction(() => document.querySelector("#market-stocks-status")?.textContent === "连接已变化");
+  assert.match(await page.locator("#market-stocks-summary").textContent(), /旧连接下的全市场行情快照已清除/);
+  assert.match(await page.locator("#market-stocks-meta").textContent(), /旧连接下的分页行情元数据已失效/);
+  assert.equal(await page.locator("#market-stocks-body tr").count(), 1);
+  releaseThirdMarketStocksResponse();
+  await page.waitForTimeout(100);
+  assert.doesNotMatch(await page.locator("#market-stocks-body").textContent(), /测试命中|测试未命中|测试待判断/);
+  await settingsPage.close();
+
   assert.deepEqual(pageErrors, []);
   await page.screenshot({ path: path.join(screenshotDir, "screening-local-results.png"), fullPage: true });
   console.log("Screening local filter browser acceptance passed: result views, tri-state quality, stale-result invalidation, draft clearing and saved-plan preservation.");

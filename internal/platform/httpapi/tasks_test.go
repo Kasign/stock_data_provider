@@ -182,3 +182,31 @@ func TestIdempotencyConflictReturns409(t *testing.T) {
 		t.Fatal("unexpected fake error")
 	}
 }
+
+func TestCreateTaskRejectsOversizedTrailingBody(t *testing.T) {
+	tasks := &fakeTaskService{}
+	api, _ := NewWithTasks(&fakeRunner{}, &fakeStore{}, time.Second, tasks)
+	body := `{"symbols":["600519"]}` + strings.Repeat(" ", (1<<20)+1)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/analysis/tasks", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	api.Handler().ServeHTTP(w, req)
+	if w.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("status=%d body=%s", w.Code, w.Body.String())
+	}
+	if tasks.gotRequest.TaskType != "" {
+		t.Fatal("task was created despite oversized trailing body")
+	}
+}
+
+func TestCreateTaskRejectsJSONPrefixMediaType(t *testing.T) {
+	tasks := &fakeTaskService{}
+	api, _ := NewWithTasks(&fakeRunner{}, &fakeStore{}, time.Second, tasks)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/analysis/tasks", strings.NewReader(`{}`))
+	req.Header.Set("Content-Type", "application/jsonp")
+	w := httptest.NewRecorder()
+	api.Handler().ServeHTTP(w, req)
+	if w.Code != http.StatusUnsupportedMediaType {
+		t.Fatalf("status=%d body=%s", w.Code, w.Body.String())
+	}
+}

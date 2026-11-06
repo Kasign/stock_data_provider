@@ -29,6 +29,8 @@ const (
 )
 
 const minimumTokenBytes = 32
+const maximumTokenBytes = 256
+const maximumServiceCredentials = 128
 
 type Principal struct {
 	Kind    IdentityKind
@@ -69,6 +71,9 @@ func (r *Router) Handle(pattern string, authenticator *Authenticator, policy Rou
 	if r == nil || r.mux == nil || authenticator == nil || handler == nil || !policy.valid() {
 		return errors.New("route, authenticator, handler and explicit access policy are required")
 	}
+	if isRootCatchAllPattern(pattern) {
+		return errors.New("root catch-all routes are not allowed; register explicit route patterns")
+	}
 	defer func() {
 		if recovered := recover(); recovered != nil {
 			err = errors.New("route pattern is invalid or already registered")
@@ -76,6 +81,31 @@ func (r *Router) Handle(pattern string, authenticator *Authenticator, policy Rou
 	}()
 	r.mux.Handle(pattern, Guard(authenticator, policy, handler))
 	return nil
+}
+
+// isRootCatchAllPattern rejects ServeMux root patterns that would capture every
+// otherwise-unmatched path, bypassing the router's intended default 404 boundary.
+func isRootCatchAllPattern(pattern string) bool {
+	parts := strings.Fields(pattern)
+	if len(parts) == 0 {
+		return false
+	}
+	route := parts[len(parts)-1]
+	if route == "/" || (strings.HasSuffix(route, "/") && strings.Count(route, "/") == 1) {
+		return true
+	}
+
+	// ServeMux also supports a root-level multi-segment wildcard such as
+	// "/{path...}". It matches every path just like a "/" subtree pattern.
+	// Preserve host-specific matching semantics while inspecting the path.
+	pathStart := strings.Index(route, "/")
+	if pathStart < 0 {
+		return false
+	}
+	path := route[pathStart:]
+	return strings.HasPrefix(path, "/{") &&
+		strings.HasSuffix(path, "...}") &&
+		strings.Count(path, "/") == 1
 }
 
 // HandleFunc registers a handler function with an explicit access policy.
@@ -95,11 +125,14 @@ func (r *Router) Handler() http.Handler {
 }
 
 func NewAuthenticator(ownerToken config.Secret, services []ServiceCredential) (*Authenticator, error) {
+	if len(services) > maximumServiceCredentials {
+		return nil, errors.New("too many service credentials")
+	}
 	if !ownerToken.Configured() {
 		return nil, errors.New("owner credential is required")
 	}
-	if len(ownerToken.Value()) < minimumTokenBytes {
-		return nil, errors.New("owner credential must contain at least 32 bytes")
+	if !validToken(ownerToken.Value()) {
+		return nil, errors.New("owner credential must be a 32-256 byte URL-safe token")
 	}
 
 	auth := &Authenticator{}
@@ -115,8 +148,8 @@ func NewAuthenticator(ownerToken config.Secret, services []ServiceCredential) (*
 		if name == "" || !service.Secret.Configured() {
 			return nil, errors.New("service credential name and secret are required")
 		}
-		if len(service.Secret.Value()) < minimumTokenBytes {
-			return nil, errors.New("service credential must contain at least 32 bytes")
+		if !validToken(service.Secret.Value()) {
+			return nil, errors.New("service credential must be a 32-256 byte URL-safe token")
 		}
 		if _, exists := seenNames[name]; exists {
 			return nil, errors.New("service credential names must be unique")
@@ -146,6 +179,24 @@ func NewAuthenticator(ownerToken config.Secret, services []ServiceCredential) (*
 		})
 	}
 	return auth, nil
+}
+
+// validToken accepts unpadded URL-safe tokens and bounds the work performed
+// for every authentication attempt. Generate credentials from cryptographic
+// random bytes; this syntax check does not prove their entropy.
+func validToken(token string) bool {
+	if len(token) < minimumTokenBytes || len(token) > maximumTokenBytes {
+		return false
+	}
+	for _, char := range []byte(token) {
+		if (char >= 'a' && char <= 'z') ||
+			(char >= 'A' && char <= 'Z') ||
+			(char >= '0' && char <= '9') || char == '-' || char == '_' {
+			continue
+		}
+		return false
+	}
+	return true
 }
 
 func normalizeScopes(scopes []string) ([]string, error) {
@@ -181,7 +232,7 @@ func (a *Authenticator) Authenticate(request *http.Request) (Principal, error) {
 		return Principal{}, errors.New("invalid authorization header")
 	}
 	parts := strings.Fields(values[0])
-	if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") || parts[1] == "" {
+	if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") || !validToken(parts[1]) {
 		return Principal{}, errors.New("invalid authorization header")
 	}
 
@@ -261,7 +312,7 @@ func Guard(authenticator *Authenticator, policy RoutePolicy, next http.Handler) 
 			return
 		}
 		principal, err := authenticator.Authenticate(request)
-		if err != nil {
+		if err != nil || (len(request.Header.Values("Authorization")) == 0 && !policy.allowAnonymous) {
 			w.Header().Set("WWW-Authenticate", "Bearer")
 			writeAuthError(w, http.StatusUnauthorized, "unauthorized", "valid bearer credentials are required")
 			return

@@ -1,0 +1,9 @@
+{
+  "status": "healthy",
+  "safe_message": "MariaDB 连接正常",
+  "checked_at": "2026-11-06T14:40:00Z",
+  "duration": 1250000,
+  "attributes": {
+    "dependency": "storage.mariadb"
+  }
+}

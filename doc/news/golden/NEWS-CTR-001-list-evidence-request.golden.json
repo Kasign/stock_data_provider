@@ -1,0 +1,24 @@
+{
+  "caller_ref": "research",
+  "purpose_code": "research_analysis",
+  "requested_content_level": "summary",
+  "system_as_of": "2026-11-06T09:00:00Z",
+  "filters": {
+    "news_ids": [
+      "news-example-001"
+    ],
+    "source_refs": [
+      "source-example-001"
+    ],
+    "canonical_symbols": [
+      "SSE:600000"
+    ],
+    "quality_statuses": [
+      "valid",
+      "degraded"
+    ]
+  },
+  "business_time_from": "2026-11-01T00:00:00Z",
+  "business_time_to": "2026-11-06T00:00:00Z",
+  "page_size": 20
+}

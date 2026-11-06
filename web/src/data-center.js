@@ -46,14 +46,11 @@ function safeError(error) {
     .filter(Boolean).join(" · ") || "未返回错误详情";
 }
 
-async function checkWebUI(_settings, signal) {
-  const response = await fetch(window.location.pathname || "/", { method: "GET", credentials: "same-origin", cache: "no-store", signal });
-  if (!response.ok) {
-    const error = new Error("WebUI 页面返回 HTTP " + response.status);
-    error.status = response.status;
-    throw error;
+async function checkWebUI() {
+  if (!document.documentElement || document.readyState === "loading") {
+    throw new Error("WebUI 文档尚未完成初始化。");
   }
-  return { status: "ok" };
+  return { status: "ok", readyState: document.readyState };
 }
 
 
@@ -583,7 +580,8 @@ function renderProbeItems(items, root) {
     card.append(top);
 
     const metadata = [
-      Number.isFinite(Number(item.elapsed_ms)) ? "耗时 " + Number(item.elapsed_ms) + " ms" : "",
+      typeof item.elapsed_ms === "number" && Number.isFinite(item.elapsed_ms) && item.elapsed_ms >= 0
+        ? "耗时 " + item.elapsed_ms + " ms" : "",
       item.quality_status ? "质量 " + item.quality_status : "",
       item.http_status ? "HTTP " + item.http_status : "",
       item.sample_symbol ? "样本 " + item.sample_symbol : "",
@@ -595,9 +593,10 @@ function renderProbeItems(items, root) {
       item.coverage_validated !== undefined ? "覆盖有效 " + item.coverage_validated : "",
       item.coverage_missing !== undefined ? "缺失 " + item.coverage_missing : "",
       item.coverage_excluded !== undefined ? "排除 " + item.coverage_excluded : "",
-      item.coverage_ratio !== undefined && item.coverage_ratio !== null
-        ? "总体覆盖率 " + (Number(item.coverage_ratio) * 100).toFixed(1) + "%" : "",
-      item.coverage_ratio === null || (item.coverage_ratio === undefined && item.coverage_total === undefined) ? "覆盖率不可确认" : "",
+      typeof item.coverage_ratio === "number" && Number.isFinite(item.coverage_ratio)
+        && item.coverage_ratio >= 0 && item.coverage_ratio <= 1
+        ? "总体覆盖率 " + (item.coverage_ratio * 100).toFixed(1) + "%"
+        : (item.coverage_ratio !== undefined || item.coverage_total === undefined) ? "覆盖率不可确认" : "",
       item.coverage_population ? "分母范围 " + item.coverage_population : "",
       item.coverage_source ? "分母依据 " + item.coverage_source : "",
       item.provider_time ? "源端时间 " + formatDateTime(item.provider_time) : "",
@@ -730,6 +729,7 @@ function showProviderProbeHistoryFailure(error, skipped = false) {
 export function bindDataCenter(getSettings) {
   let checking = false;
   let generation = 0;
+  let refreshController = null;
   let probing = false;
   let probeGeneration = 0;
   let probeController = null;
@@ -862,6 +862,9 @@ export function bindDataCenter(getSettings) {
     if (checking) return;
     checking = true;
     const current = ++generation;
+    refreshController?.abort();
+    const controller = new AbortController();
+    refreshController = controller;
     let settings = null;
     try {
       settings = typeof getSettings === "function" ? getSettings() : null;
@@ -896,16 +899,16 @@ export function bindDataCenter(getSettings) {
       }
 
       const checks = await Promise.all([
-        runHealthCheck(checkWebUI, settings),
-        runHealthCheck(marketLiveness, settings),
-        runHealthCheck(marketHealth, settings),
-        runHealthCheck(analysisLiveness, settings),
-        runHealthCheck(analysisHealth, settings),
+        runHealthCheck(checkWebUI, settings, 6000, controller.signal),
+        runHealthCheck(marketLiveness, settings, 6000, controller.signal),
+        runHealthCheck(marketHealth, settings, 6000, controller.signal),
+        runHealthCheck(analysisLiveness, settings, 6000, controller.signal),
+        runHealthCheck(analysisHealth, settings, 6000, controller.signal),
         settings?.apiKey
-          ? runHealthCheck(getDataSources, settings)
+          ? runHealthCheck(getDataSources, settings, 6000, controller.signal)
           : Promise.resolve({ ok: false, skipped: true, error: new Error("需先配置行情 API Key"), durationMs: 0 }),
         settings?.apiKey
-          ? runHealthCheck(getDataSourceDiagnostics, settings)
+          ? runHealthCheck(getDataSourceDiagnostics, settings, 6000, controller.signal)
           : Promise.resolve({ ok: false, skipped: true, error: new Error("需先配置行情 API Key"), durationMs: 0 })
       ]);
       if (current !== generation) return;
@@ -1012,6 +1015,7 @@ export function bindDataCenter(getSettings) {
     } finally {
       if (current === generation) {
         checking = false;
+        if (refreshController === controller) refreshController = null;
         try {
           if (button) {
             button.disabled = false;
@@ -1028,6 +1032,8 @@ export function bindDataCenter(getSettings) {
   function invalidate(message = "连接配置已变更，之前的检查结果已作废。请重新检查。") {
     generation += 1;
     checking = false;
+    refreshController?.abort();
+    refreshController = null;
     probeGeneration += 1;
     historyGeneration += 1;
     probing = false;
