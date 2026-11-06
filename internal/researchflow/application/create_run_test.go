@@ -85,9 +85,10 @@ func TestCreateRunReplaysBeforeTemplateLookup(t *testing.T){
 	existing:=CreateRunResult{Run:domain.Run{Ref:"run_existing",Status:domain.RunCreated}}
 	repo:=&repositoryStub{existing:&existing,existingFingerprint:fingerprint}
 	reader:=&templatesStub{value:validTemplate()}
-	service,err:=newService(t,repo,&idsStub{},reader,now);if err!=nil{t.Fatal(err)}
+	ids:=&idsStub{}
+	service,err:=newService(t,repo,ids,reader,now);if err!=nil{t.Fatal(err)}
 	got,err:=service.CreateRun(context.Background(),cmd);if err!=nil{t.Fatal(err)}
-	if !got.Replayed||got.Run.Ref!="run_existing"||reader.calls!=0{t.Fatalf("expected idempotent replay before resolving template: %#v, calls=%d",got,reader.calls)}
+	if !got.Replayed||got.Run.Ref!="run_existing"||reader.calls!=0||ids.next!=0{t.Fatalf("expected idempotent replay before template lookup or ID allocation: %#v, calls=%d, ids=%d",got,reader.calls,ids.next)}
 }
 
 func TestCreateRunRejectsIdempotencyConflictBeforeTemplateLookup(t *testing.T){
