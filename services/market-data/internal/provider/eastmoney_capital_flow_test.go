@@ -8,6 +8,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/Kasign/stock_data_provider/services/market-data/internal/validation"
 	"time"
 )
 
@@ -99,7 +101,6 @@ func TestEastmoneyCapitalFlowRejectsMalformedSecurityIdentity(t *testing.T) {
 		t.Fatalf("malformed returned security identity must be rejected, got %v", err)
 	}
 }
-
 
 func TestEastmoneyCapitalFlowReportsFieldAndRowParseIssue(t *testing.T) {
 	cases := []struct {
