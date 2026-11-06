@@ -61,7 +61,7 @@ Upstream Providers
 - Data Provider Token 只由 Data 服务注入和使用，不透传到根 Server。
 - 根 Server owner Token 不作为 Data API Key 发送；外部用户身份不能变成服务间凭据。
 
-## 3. 为什么不直接把 Platform Service Secret 当作 Data X-API-Key
+## 3. 远程模式下为什么不直接把 Platform Service Secret 当作 Data X-API-Key
 
 两者的安全语义不等价：
 - Platform Service Secret 代表调用方服务身份；可能有调用方、受众、权限、有效期、轮换和撤销语义。
@@ -71,9 +71,9 @@ Upstream Providers
 
 因此首期不强行做凭据复用或统一身份改造。Data API Key 作为独立服务凭据，Platform Service Secret 若存在则继续用于其明确支持的服务身份场景。
 
-## 4. Secret 配置与装配约束
+## 4. 远程部署模式的 Secret 配置与装配约束
 
-建议根 Server Config 持有一个 Data 专用 Secret 字段，配置键名在 Server 配置文档/部署配置中统一冻结（例如采用 `MARKET_DATA_API_KEY` 这一类明确归属的名称；在实际确认前不要求代码照抄示例）。
+仅在恢复 Data 独立部署/远程 HTTP Adapter 时，根 Server Config 才需要持有 Data 专用 Secret 字段，配置键名由部署契约统一冻结。当前同进程模式不配置、不读取、不注入 `MARKET_DATA_API_KEY`。
 
 约束：
 1. 启动时读取并校验必需 Secret；Data Adapter 未配置凭据时，启动或 readiness 按 Data 能力是否必需明确失败/降级，不能每次请求才静默发现。
@@ -85,7 +85,7 @@ Upstream Providers
 7. 禁止将 Secret 作为 Data Adapter 的普通可序列化配置字段暴露给 JSON。
 8. 测试使用专用临时凭据或 Mock Transport，不读取生产 Secret。
 
-## 5. Header 与网络边界
+## 5. 远程 HTTP Adapter 的 Header 与网络边界
 
 - Data Adapter 对受控 Data Service Base URL 固定设置 `X-API-Key`。
 - 认证 Header 不允许由用户请求参数、任意 Header 转发或 LLM Tool 参数覆盖。
@@ -95,7 +95,7 @@ Upstream Providers
 - 代理/网关不得把外部客户端提供的 `X-API-Key` 原样透传到 Data；必须由 Data Adapter 覆盖为服务端 Secret。
 - Request ID 可以跨 Server → Data 传播，但它不是认证信息，也不能作为授权依据。
 
-## 6. Key 轮换与多环境
+## 6. 远程 Data API Key 轮换与多环境
 
 首期至少区分 dev/test/staging/prod 的不同 Key：
 - 不跨环境复用同一 Key。
@@ -105,7 +105,7 @@ Upstream Providers
 - Key 撤销后，Data API 应拒绝旧 Key；Server readiness/诊断应能区分认证配置错误与 Data 网络不可达。
 - Secret 轮换、撤销、权限变化要有操作记录，但不能记录 Secret 明文。
 
-## 7. 与 Platform Security 的未来衔接
+## 7. 远程模式与 Platform Security 的未来衔接
 
 首期保持 Data X-API-Key 不变。若后续需要统一服务身份，必须先设计跨 Go Module 的稳定协议，而不是共享 Go internal 包：
 - 由可信服务身份系统签发短期凭据或受众明确的服务令牌；
@@ -147,4 +147,4 @@ Upstream Providers
 
 当前默认边界是：**Root Server 与 Data 同进程运行，通过 Data Application Port 调用；Root Server 在入口认证后将可信 Principal/Scope Context 注入 Data，不使用 Data API Key。** 浏览器不接触 Data Key、Platform Service Secret 或 Provider Token。\n\n若未来恢复 Data 独立部署，远程 HTTP Adapter 可沿用本文件第 2～8 节的 Data API Key 方案；Data API Key、Platform Service Secret、Owner Token 和 Provider Token 仍保持独立。
 
-该方案不需要为兼容旧服务增加复杂适配，也不要求 Data 立刻切换认证协议。实际环境仍需完成 Key 轮换、网络 ACL、服务端 Header 注入和安全日志验收。
+当前同进程默认模式不需要 Server→Data Data API Key、Data Base URL 或内部 HTTP 请求；仍需完成 Root Server 路由认证、可信 Principal/Scope 注入和安全日志验收。若未来启用远程兼容模式，则必须另行完成 Key 轮换、网络 ACL、服务端 Header 注入和安全日志验收。
