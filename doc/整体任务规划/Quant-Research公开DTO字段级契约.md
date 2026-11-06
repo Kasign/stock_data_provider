@@ -674,17 +674,17 @@ available_at=null 表示没有可验证的外部可获得时间，不得用 publ
 
 **决议：首批固定 momentum_20d、momentum_60d、volatility_20d；其余候选 deferred，见 QNT-CTR-003。**
 
-### 12.4 NEWS-CTR-002 / RSC-CTR-001：Evidence 授权引用（历史别名 CONTRACT-004）
+### 12.4 GOV-CTR-006 / NEWS-CTR-002 / RSC-CTR-001：Evidence 授权引用（历史别名 CONTRACT-004）
 
 建议统一保留 authorization_ref 不透明字符串引用；授权决策快照本身由授权策略 Owner 管理，不由 Research 复制成自己的授权事实。
 
-- policy_owner 必须是实际对该来源/内容拥有授权决策权的模块或策略主体。
-- News/Data 内容读取由来源 Owner 重新执行当前授权检查；Research 保存当时的 decision_ref、policy_version、content_level、purpose、scope 和 fingerprint。
+- policy_owner 必须是实际对该来源/内容拥有授权决策权的模块，取值限定为 data/news/quant/research，与 GOV-CTR-006 公共结构一致。
+- News/Data 内容读取由来源 Owner 重新执行当前授权检查；Research 保存不透明 authorization_ref；审计快照字段按 GOV-CTR-006 统一表达 policy_owner、policy_version、decision、content_level、purpose_code、subject_ref、resource_ref、decided_at、expires_at、conditions 和 decision_fingerprint。
 - 历史回放同时保留当时授权决策引用与本次读取的当前授权结果；当前 denied/expired 不得因历史 allowed 而放行。
 - Research 派生内容由 Research 对自身派生记录负责；引用外部来源时仍保留原始来源授权链，不能用 Research 自身决策覆盖上游限制。
-- 授权状态 unknown/缺少决策引用时，不允许读取受限正文；可在允许范围内保留 metadata 引用并标记限制。
+- 授权决策为 unknown 或缺少 authorization_ref 时，不允许读取受限正文；可在允许范围内保留 metadata 引用并标记限制。
 
-**决议：采用统一不透明 AuthorizationRef + 来源责任模块当前复核；不建立跨模块万能授权服务，见 NEWS-CTR-002/RSC-CTR-001。**
+**决议：采用统一不透明 AuthorizationRef + 来源责任模块当前复核；不建立跨模块万能授权服务，见 GOV-CTR-006/NEWS-CTR-002/RSC-CTR-001。**
 
 ### 12.5 GOV-CTR-002 / FLOW-CTR-003：system_as_of 传播（历史别名 CONTRACT-005）
 
@@ -706,7 +706,7 @@ available_at=null 表示没有可验证的外部可获得时间，不得用 publ
 | CONTRACT-001（历史别名） | 数值 JSON 类型与精度按 Registry 固定 | 项目决议已接受；QNT-CTR-001 待 Schema/Golden |
 | CONTRACT-002（历史别名） | 八项 Indicator 候选及 typed 参数 Schema | 项目决议已接受；QNT-CTR-002 待 Schema/Golden |
 | CONTRACT-003（历史别名） | 首批三个 Factor 与算法边界 | 项目决议已接受；QNT-CTR-003 待 Schema/Golden |
-| CONTRACT-004（历史别名） | 不透明 AuthorizationRef 与来源 Owner 当前复核 | 项目决议已接受；NEWS-CTR-002/RSC-CTR-001 待 Schema/Golden |
+| CONTRACT-004（历史别名） | 不透明 AuthorizationRef 与来源 Owner 当前复核 | 公共结构 GOV-CTR-006、News 授权 NEWS-CTR-002、Research 消费 RSC-CTR-001 及各签发方契约待 Schema/Golden |
 | CONTRACT-005（历史别名） | Run 唯一固定 system_as_of | 项目决议已接受；FLOW-CTR-003 待 Adapter Golden |
 
 **历史说明：本表最初是规划侧建议，不再要求虚构具体 Owner 签字。当前统一决议与状态以 `doc/整体任务规划/跨模块契约目录与冻结状态.md` 为准；项目决议已接受不等于 Schema/Golden/Contract Test 已通过。**
@@ -715,7 +715,7 @@ available_at=null 表示没有可验证的外部可获得时间，不得用 publ
 
 - Researchflow `ResearchRun.system_as_of` 是 Run 唯一系统知识截止值。QuantAnalysisRequest/QuantResultRef、ResearchContext/Claim/Scenario 的 `system_as_of` 必须沿用该值；Evidence 的 `system_as_of` 与其语义相同，且不得晚于所属 Run。
 - `system_observed_at` 始终记录系统实际观察/持久化时间；不能用 system_as_of 回填。published_at/available_at/valid_time 保留各自来源时间和业务有效时间。Data API 查询参数 `as_of` 的映射由 Quant Data Adapter 负责，不改写 Data 自身时间语义。
-- Evidence.authorization_ref 指向 EvidenceAuthorizationRef 审计快照，包含 policy_owner、policy_version、decision、purpose_code、content_level、subject_ref、resource_ref、decided_at、expires_at、conditions 和 decision_fingerprint。它不是永久访问令牌；读取受限内容仍需来源 Owner 当前授权复核。Evidence 不用 authorization_status 替代该引用。
+- Evidence.authorization_ref 指向 GOV-CTR-006 定义的 EvidenceAuthorizationRef 审计快照；News 授权事实按 NEWS-CTR-002，Research 消费与来源授权链按 RSC-CTR-001，签发方分别按 DATA-CTR-008/QNT-CTR-005 等契约执行。快照包含 policy_owner、policy_version、decision、purpose_code、content_level、subject_ref、resource_ref、decided_at、expires_at、conditions 和 decision_fingerprint。它不是永久访问令牌；读取受限内容仍需来源 Owner 当前授权复核。Evidence 不用 authorization_status 替代该引用。
 - ResearchEvent 是多来源证据归并后的领域对象；NotificationEvent 是通知模块消费的版本化集成消息。两者 ID/版本空间独立，转换必须显式映射并生成独立 event_id。
 - quality_status、Quant result_status、RiskDecision、Run/Stage/Attempt、ModelResponse.status、Delivery.status 分域管理；同名状态不可直接转换。Run partial 表示覆盖不完整；Run succeeded 仍可有 degraded 质量摘要；Risk unknown 不可 pass。
 - request_id 标识一次调用；correlation_id 贯穿链路；event_id 标识稳定事件；idempotency_key 标识命令意图。幂等使用 Owner 定义作用域与 fingerprint；相同键同指纹返回原结果，不同指纹冲突。
