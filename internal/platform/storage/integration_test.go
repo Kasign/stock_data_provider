@@ -121,7 +121,7 @@ func TestMariaDBStorageIntegration(t *testing.T) {
 	failedNamespace := namespace + "_failed"
 	partialTable := "platform_it_partial_" + suffix
 	failedMigration := []Migration{{
-		Version: 1,
+		Version:     1,
 		Description: "verify partial DDL recovery",
 		Statements: []string{
 			fmt.Sprintf("CREATE TABLE %s (id BIGINT PRIMARY KEY) ENGINE=InnoDB", partialTable),
