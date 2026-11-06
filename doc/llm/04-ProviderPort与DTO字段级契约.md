@@ -63,7 +63,7 @@
 | local_validation_only | bool | 否 | true 时不要求上游 structured output 能力，只在本地校验模型输出；不代表模型受约束生成 |
 | tools | ToolDefinition[] | 否 | 只接受调用方授权后的定义；不执行 |
 | tool_choice | enum? | 否 | 默认 none；仅 tools 非空且 function_tool_calls=supported 时允许 auto；required/指定工具延后 |
-| deadline_at | UTC timestamp | 是 | 绝对截止时间，不得晚于调用方 Context deadline |
+| deadline_at | UTC timestamp | 是 | 绝对截止时间；与调用方 Context deadline、Provider timeout 取最早值，不要求其单独早于 Context deadline |
 | correlation_id | string | 是 | Researchflow Run 的稳定跨模块关联 ID，不承载领域对象 |
 | system_as_of | RFC3339Nano UTC | 是 | 必须不晚于服务端可信 UTC 当前时间；Researchflow Run 的知识截止值；仅用于调用审计/上下文追溯，不自动注入 Prompt 或转发为 Responses wire 字段 |
 | trace_id | string | 否 | 受控追踪标识 |
