@@ -5,6 +5,8 @@
   "type": "object",
   "additionalProperties": false,
   "required": [
+    "snapshot_ref",
+    "manifest_fingerprint",
     "caller_ref",
     "purpose_code",
     "symbol",
@@ -73,7 +75,11 @@
         }
       }
     },
-    "content_fingerprint": {
+    "snapshot_ref": {
+      "type": "string",
+      "pattern": "^data_snapshot:sha256:[0-9a-f]{64}$"
+    },
+    "manifest_fingerprint": {
       "type": "string",
       "pattern": "^[0-9a-f]{64}$"
     }

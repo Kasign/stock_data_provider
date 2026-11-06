@@ -41,6 +41,22 @@
 | DATA-CTR-006 Data API Auth | Server Adapter 发送一个 X-API-Key 或 Bearer 凭据 | Key 轮换后新值成功、旧值失败 | 两种 Header 同时存在且冲突、空 Key、日志泄漏 | Data API Key 不与 Platform Service Secret 自动互换 |
 | DATA-CTR-008 AuthorizationRef | 已认证 Key 映射稳定 caller principal；Snapshot Manifest 内容寻址并绑定请求范围/来源版本；每个响应携带 allowed AuthorizationRef | Key 轮换保持 principal；公开数据仍签发 allowed；同范围相同 Manifest 得到同一 fingerprint | 自报 caller_ref、越权 purpose、Manifest 被改写、策略版本竞态、unknown 时返回正文 | 新增 Manifest 字段升级 Schema；已签发 snapshot_ref 永不改义 |
 
+### DATA-CTR-008 Snapshot Manifest Contract Test
+
+| Test ID | 场景 | 必须断言 | 失败结果 |
+|---|---|---|---|
+| DATA008-SCH-01 | 正常 Snapshot Manifest | Draft 2020-12 Schema 通过；date/date-time format assertion 开启 | CI 失败 |
+| DATA008-SCH-02 | 缺字段、未知字段、非法 purpose/adjustment、非法日期、非 SHA-256 引用 | 全部拒绝；不静默忽略未知字段 | CI 失败 |
+| DATA008-FP-01 | 相同规范化 Manifest 重复签发 | RFC 8785 JCS + SHA-256 结果稳定；snapshot_ref 与 manifest_fingerprint 一致 | CI 失败 |
+| DATA008-FP-02 | 分别修改 caller、purpose、symbol、日期范围、复权口径、system_as_of、source_ref/source_version | manifest_fingerprint 与 snapshot_ref 必须变化 | CI 失败 |
+| DATA008-AUTH-01 | Key 轮换但 caller principal 不变 | subject_ref 保持稳定；新 Key 可用，撤销的旧 Key 失败 | CI 失败 |
+| DATA008-AUTH-02 | 客户端伪造 caller_ref/subject_ref 或请求越权 purpose | 不信任客户端主体；Scope 不足返回 403 且不返回数据正文 | 403 + 无正文 |
+| DATA008-AUTH-03 | 公开/无限制数据请求 | 仍签发 decision=allowed 的 Data AuthorizationRef；不得返回 null/not_required | CI 失败 |
+| DATA008-RACE-01 | 授权检查后 Data Access Policy/Scope 被撤销或替换 | 重新授权；无法证明策略版本一致时丢弃数据 | fail closed |
+| DATA008-FAIL-01 | 授权依赖不可用或决策 unknown | 返回 503，不回退历史 allowed，不返回数据正文；不得记为 Provider 故障 | 503 + 无正文 |
+
+只有 Schema/Manifest Golden 与 Data Owner/Handler/并发测试均有 CI 记录后，DATA-CTR-008 才能升级为 frozen；文档和静态 Schema 校验不构成运行时证据。
+
 ## 4. News → Research 契约
 
 | 契约 | 正常样例 | 边界样例 | 异常样例 | 兼容样例 |
