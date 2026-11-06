@@ -911,3 +911,46 @@ Server 的 `writeErrWithRetryable` 始终输出 JSON：
 5. 继续做成功响应 JSON 与 OpenAPI Schema 的实际字段/nullable golden 对照。
 
 **M0 状态保持 in_progress。** 本轮只更新迁移审计文档，没有修改 OpenAPI 或 Handler 行为。
+
+
+### 2026-11-06：M0 第十七轮补充（OpenAPI JSON Golden 覆盖范围）
+
+#### 1. 当前 OpenAPI contract test 实际覆盖边界
+
+检查 `services/market-data/internal/httpapi/openapi_contract_test.go`，当前只有 5 个测试：
+- `TestOpenAPIDataRoutesDeclareValidAPIKeySecurity`
+- `TestProviderProbeValidationSchemaIsDocumented`
+- `TestSectorRankingFiveDayChangeSchemaIsDocumented`
+- `TestOpenAPIDataModelFieldsMatchKnownJSONContract`
+- `TestDataModelJSONSerializationMatchesOpenAPIRequiredAndNullableSemantics`
+
+其中字段/JSON 序列化测试目前只对少数代表性结构做手工断言：Quote、DailyBar、Bundle、HotRankingItem、MarketSentimentSnapshot、LimitPoolItem、SourceStatus、StockAnnouncementSnapshot。它们能够防止已列举字段回归，但不构成全部 Response Schema 与 Go JSON 的自动对账。
+
+当前测试没有完成以下自动化覆盖：
+1. 遍历所有 OpenAPI components.schemas 与 Go Model JSON tag 的双向字段比较。
+2. 对所有 Schema required 字段验证 JSON 必须存在，对 nullable 字段验证 null/非 null 行为。
+3. 对每个 Operation 的 200 Response Schema 验证 Handler 实际输出。
+4. 对匿名 map 包装响应做 JSON Golden 验证。
+5. 对错误响应验证统一 Error Body 与 OpenAPI Error Schema 一致。
+
+#### 2. Handler 输出形态需要单独纳入 Golden
+
+当前 Handler 并非全部直接返回单个 Model：
+- Daily Bars 返回外层集合对象；PIT 分支额外输出 point_in_time=true 与 as_of。
+- Data Sources 返回 sources 与 normalization_version。
+- Diagnostics 返回 items、scope、observed_from 的匿名对象。
+- Batch Quotes 返回 items、total、succeeded、failed、fetched_at、quality_status 的组合对象。
+- Health live/ready 返回状态对象。
+- 其余大量 Handler 直接序列化 Model Snapshot 或单个 Model。
+
+因此仅验证 Model struct 无法覆盖 Operation 的外层包装字段、PIT 条件字段、逐项错误字段和聚合统计字段。建议为每个 Operation 建立最小有效/降级/错误三类 JSON fixture；对条件字段分别验证存在与省略规则。Provider 行为本身不需要在 M0 变更，测试可以使用现有 fake Provider 与固定时间。
+
+#### 3. M0 验收建议新增硬性测试门槛
+
+- **Schema/Model 对账**：对具有 Go Model 对应关系的 components schema，自动核对 JSON tag、required、nullable、type/format；允许差异必须通过显式例外清单解释。
+- **Operation Golden**：每条 Operation 至少有一个成功响应 fixture，重点覆盖匿名包装、PIT、nullable、optional/omitempty。
+- **Error Golden**：400、401、404、408、429（若该路由可达）、500、502、503、504 等实际错误分支按路由能力覆盖；统一验证 Error Body。
+- **路由/鉴权对账**：与第十五轮所述测试合并，确保 35 个 Operation 与 mux 路由双向一致。
+- **不将文档静态字符串测试视为运行时契约测试**：测试需要解析 YAML 结构，并实际 Marshal/Serve HTTP 响应。
+
+**M0 状态保持 in_progress。** 当前契约测试是局部回归保护，不足以证明全部 Handler JSON 与 OpenAPI 完全一致。本轮只记录审计结论，没有修改测试或业务代码。
