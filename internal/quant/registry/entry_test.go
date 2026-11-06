@@ -78,6 +78,14 @@ func TestEntryValidateRejectsTrailingJSONInNumericMetadata(t *testing.T) {
 	}
 }
 
+func TestEntryValidateRejectsQuotedJSONNumber(t *testing.T) {
+	entry := validEntry("momentum_20d", "1.0.0")
+	entry.Precision.Tolerance = json.RawMessage("\"0.000001\"")
+	if err := entry.Validate(); !errors.Is(err, ErrInvalidEntry) {
+		t.Fatalf("expected quoted JSON number to fail, got %v", err)
+	}
+}
+
 func TestEntryValidateRequiresIntegerScaleZero(t *testing.T) {
 	entry := validEntry("trade_count", "1.0.0")
 	entry.ValueType = ValueTypeInteger

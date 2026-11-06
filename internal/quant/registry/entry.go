@@ -211,9 +211,13 @@ func decodeJSONNumber(raw json.RawMessage) (json.Number, error) {
 	decoder := json.NewDecoder(bytes.NewReader(raw))
 	decoder.UseNumber()
 
-	var number json.Number
-	if err := decoder.Decode(&number); err != nil {
+	var decoded any
+	if err := decoder.Decode(&decoded); err != nil {
 		return "", err
+	}
+	number, ok := decoded.(json.Number)
+	if !ok {
+		return "", errors.New("numeric value must be a JSON number")
 	}
 	var trailing any
 	if err := decoder.Decode(&trailing); err != io.EOF {
