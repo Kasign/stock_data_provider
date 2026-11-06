@@ -125,8 +125,9 @@ Fixture/Fake Adapter 只能证明 Research 自身模型和消费边界；真实 
 - Evidence 当前契约没有 Research-owned version 字段，Repository 以 evidence_id 作为不可变键；相同 ID 的不同 content_fingerprint 必须拒绝，禁止自动生成替代 ID。语义变化如何形成新版本仍待项目契约明确；content_fingerprint 不替代上游 source_version。
 - Research 拥有领域表、SQL、Repository Port 和 Migration 定义；连接池、Ping/Close、Migration 执行与历史校验复用 `internal/platform/storage`。
 - Research Migration namespace 为 `research`，由组合根显式注册和执行；Research 分支不修改服务启动入口或根 Migration 注册表。
-- 所有 DATETIME(6) 按 UTC 写入；存储层 payload_sha256 只用于完整 DTO 序列化内容的幂等校验。
+- system_as_of、system_observed_at、available_at 使用固定 30 字符 UTC RFC3339Nano（9 位小数）字符串并以 ascii_bin 排序，保证 PIT 纳秒精度；Migration v2 将 v1 DATETIME(6) 数据扩展为 6 位微秒 + 3 位零纳秒。created_at/updated_at 仍使用 DATETIME(6)，只作审计时间。payload_sha256 只用于完整 DTO 序列化内容的幂等校验。
 - changed_at 的事务 Outbox 记录暂不创建，等待 RSC-OPEN-002 的 DTO/Envelope 映射决议。
+- Evidence SQL Adapter 暂缓，等待 RSC-OPEN-007 明确授权快照续期历史的独立存储模型。
 
 ## 9. 跨模块边界决议与待决项
 

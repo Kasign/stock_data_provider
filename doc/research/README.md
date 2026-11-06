@@ -4,7 +4,7 @@
 - 代码：`internal/research/**`
 - 任务前缀：RSC
 - 当前阶段：R1 Context + R2 Evidence + R3 Event + R5 Claim/Hypothesis 领域基础；R7 Storage Port/Schema 第一阶段
-- 当前状态：Context/Evidence/Event/Claim Domain 首批结构与校验已实现；Context 版本链、Evidence JCS/授权过期边界、Event 生命周期及 Claim 文本校验新增测试已写入但尚未执行。RSC-007 已新增四个领域 Repository Port 和 Research Migration v1，SQL Adapter/真实 DB 尚未完成。未完成仓库完整构建/CI、真实 Data/News、Owner 当前授权复核、Application、Outbox 和跨模块集成。
+- 当前状态：Context/Evidence/Event/Claim Domain 首批结构与校验已实现；Context 版本链、Evidence JCS/授权过期边界、Event 生命周期及 Claim 文本校验新增测试已写入但尚未执行。RSC-007 已新增四个领域 Repository Port 和 Research Migration v1/v2（v2 保留 RFC3339Nano PIT 纳秒精度）；Context/Event/Claim SQL Adapter 尚未完成，Evidence SQL Adapter 受 RSC-OPEN-007 阻断。未完成仓库完整构建/CI、真实 Data/News、Owner 当前授权复核、Application、Outbox 和跨模块集成。
 
 ## 模块职责
 
@@ -68,6 +68,7 @@ R1/R2/R3/R5 当前实现 Context、Evidence、Event、Claim/Hypothesis 领域结
 - RSC-OPEN-005：Claim/Hypothesis 版本治理要求 supersedes_version，但字段表未定义该字段；当前仅验证版本号连续性，不能声称显式替代关系完整。
 - RSC-004 等待 Data 提供稳定 Security/Industry 引用和公开查询端口；不基于旧 Analysis 的 UniverseResolver 提前开发实体 Adapter。
 - RSC-OPEN-006：ScenarioCondition.expected_value 的 typed scalar/object 具体类型、ConditionGroup 联合结构和按 metric_ref/unit 的校验规则尚未形成机器契约；不使用 any/map 假装完成。
+- RSC-OPEN-007：Evidence.content_fingerprint 排除 authorization_ref，但完整 payload_sha256 包含该字段；授权续期后的同 evidence_id 留档/幂等语义未决，暂缓 Evidence SQL Adapter。
 
 详细设计见 [01-研究领域模型与证据体系](01-研究领域模型与证据体系.md)，字段与授权链补充见 [03-Context与Evidence字段语义及授权链补充](03-Context与Evidence字段语义及授权链补充.md)，任务与验收见 [02-任务拆分与验收](02-任务拆分与验收.md)。
 
