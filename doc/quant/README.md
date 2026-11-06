@@ -3,7 +3,7 @@
 - 分支：`feat/quant`
 - 代码：`internal/quant/**`
 - 任务前缀：QNT
-- 当前状态：Q0 迁移盘点已完成；QNT-001~003 尚未开始实现
+- 当前状态：Q0-001 旧资产盘点、Q0-002 契约核对已完成；Q0-003 Golden/Schema 设计待执行；QNT-001~003 尚未开始实现
 - 最近盘点基线：`0cb99a525de00d3c340891caa029b716c4d2f749`
 
 Quant 负责确定性、可复算的数值分析：Indicator、Factor、Trend、Market、Industry、Stock、Strategy、Backtest、Risk、Evaluation。不得调用 LLM，不负责研究编排，不直接访问 Provider/HTTP/SQL/Redis。
