@@ -8,9 +8,9 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Kasign/stock_data_provider/services/market-data/internal/validation"
-	"time"
 )
 
 func TestEastmoneyCapitalFlowSortsAndAggregatesLatestTenObservations(t *testing.T) {
