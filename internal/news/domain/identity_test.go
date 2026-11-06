@@ -104,3 +104,15 @@ func TestResolveIdentityRejectsTamperedCandidateHash(t *testing.T) {
 		t.Fatalf("resolution=%+v", got)
 	}
 }
+
+func TestResolveIdentityRejectsStoredHashMismatchForSameValue(t *testing.T) {
+	candidate := newIdentityCredential("source-1", IdentifierSourceNativeID, "same-id")
+	stored := candidate
+	stored.Hash = "corrupted-stored-hash"
+	stored.NewsID = "news-1"
+
+	got := ResolveIdentity("source-1", []IdentityCredential{candidate}, []IdentityCredential{stored})
+	if got.Status != IdentityConflict || got.Reason != "news.identity.stored_hash_mismatch" {
+		t.Fatalf("resolution=%+v", got)
+	}
+}

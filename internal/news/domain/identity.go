@@ -105,16 +105,22 @@ func ResolveIdentity(sourceID string, candidate, existing []IdentityCredential) 
 			if stored.SourceID != sourceID || (stored.Status != IdentifierActive && stored.Status != IdentifierHistorical) {
 				continue
 			}
-			if stored.Type != wanted.Type || stored.Hash != wanted.Hash {
+			if stored.Type != wanted.Type {
 				continue
 			}
-			if stored.Value != wanted.Value {
+			if stored.Value == wanted.Value {
+				if stored.Hash != wanted.Hash {
+					return IdentityResolution{Status: IdentityConflict, Reason: "news.identity.stored_hash_mismatch"}
+				}
+				if stored.NewsID == "" {
+					return IdentityResolution{Status: IdentityConflict, Reason: "news.identity.existing_owner_missing"}
+				}
+				matchedNewsIDs[stored.NewsID] = struct{}{}
+				continue
+			}
+			if stored.Hash == wanted.Hash {
 				return IdentityResolution{Status: IdentityConflict, Reason: "news.identity.hash_collision"}
 			}
-			if stored.NewsID == "" {
-				return IdentityResolution{Status: IdentityConflict, Reason: "news.identity.existing_owner_missing"}
-			}
-			matchedNewsIDs[stored.NewsID] = struct{}{}
 		}
 	}
 
