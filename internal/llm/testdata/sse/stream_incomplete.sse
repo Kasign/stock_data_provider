@@ -1,0 +1,2 @@
+event: response.incomplete
+data: {"type":"response.incomplete","sequence_number":1,"response":{"id":"resp_inc_001","object":"response","status":"incomplete","incomplete_details":{"reason":"max_output_tokens"},"output":[]}}
