@@ -170,3 +170,10 @@ Binding 中 `provider_ref` / `endpoint_ref` 非 null 时，PolicySnapshot 必须
 项目级规划当前基线：`feat/design_doc` @ `12823e069be9036ad6a05235ac4304581d6883a1`。News 分支内合并的规划文件只是旧快照，执行时以规划分支最新版本为准。
 
 详细任务顺序、并行关系、阻断项和验收证据见《[新闻模块公共平台契约接入实施计划](新闻模块公共平台契约接入实施计划.md)》。当前 N5/N6/N7 尚未完成；N3 在线采集和生产编排待触发入口、授权、BoundDoer 和存储闭环；NEWS-CTR-001/002/003 与 GOV-CTR-006 仍为 `pending_evidence`；Server 组合根与 PLAT-013 A2 接入尚未完成。本分支后续只修改 `internal/news/**` 与 `doc/news/**`，共享启动入口、HTTP 路由和 Migration 总注册须与 Server/集成 Owner 协调。
+
+
+## 2026-11-06 N6 快照存储篡改回归补充
+
+News MariaDB 集成测试新增两类篡改场景：授权快照和分页 Evidence Snapshot 的存储 payload_hash 被修改后，读取必须 fail closed。该测试随本分支 CI 执行，CI 成功前不记录为真实数据库验收通过。
+
+存储 payload_hash 仅验证持久化字节完整性，不等于 GOV-CTR-006 的 JCS decision_fingerprint 验证。当前公共 Runtime Verifier 尚未进入当前分支，News 不重复实现；当前授权策略复核、撤销竞态及内容读取 TOCTOU 仍未完成。
