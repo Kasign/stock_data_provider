@@ -38,9 +38,9 @@ type inboxKey struct {
 }
 
 type memoryInbox struct {
-	mu            sync.Mutex
-	byEvent       map[inboxKey]domain.InboxRecord
-	byIdempotency map[inboxKey]domain.InboxRecord
+	mu              sync.Mutex
+	byEvent         map[inboxKey]domain.InboxRecord
+	byIdempotency   map[inboxKey]domain.InboxRecord
 	fanoutWorkItems int
 }
 
