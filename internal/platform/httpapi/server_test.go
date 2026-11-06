@@ -121,3 +121,60 @@ func TestRequestIDIsReturnedAndInvalidIDIsReplaced(t *testing.T) {
 		t.Fatalf("invalid request ID was not replaced safely: got %q", got)
 	}
 }
+
+func TestCreateRunRejectsOversizedBody(t *testing.T) {
+	api, _ := New(&fakeRunner{}, &fakeStore{}, time.Second)
+	body := `{"symbols":["` + strings.Repeat("x", (1<<20)+1) + `"]}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/analysis/runs", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	api.Handler().ServeHTTP(w, req)
+	if w.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("status=%d body=%s", w.Code, w.Body.String())
+	}
+}
+
+func TestCreateRunRejectsNonJSONMediaType(t *testing.T) {
+	api, _ := New(&fakeRunner{}, &fakeStore{}, time.Second)
+	for _, contentType := range []string{"application/jsonp", "application/jsonfoo", "text/application/json"} {
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/analysis/runs", strings.NewReader(`{}`))
+		req.Header.Set("Content-Type", contentType)
+		w := httptest.NewRecorder()
+		api.Handler().ServeHTTP(w, req)
+		if w.Code != http.StatusUnsupportedMediaType {
+			t.Errorf("content type %q: status=%d body=%s", contentType, w.Code, w.Body.String())
+		}
+	}
+}
+
+func TestReadyzDoesNotExposeDependencyError(t *testing.T) {
+	api, _ := New(&fakeRunner{}, &fakeStore{healthErr: errors.New("redis password=secret")}, time.Second)
+	req := httptest.NewRequest(http.MethodGet, "/readyz", nil)
+	w := httptest.NewRecorder()
+	api.Handler().ServeHTTP(w, req)
+	if strings.Contains(w.Body.String(), "secret") {
+		t.Fatalf("response leaked dependency error: %s", w.Body.String())
+	}
+}
+
+func TestCreateRunDoesNotExposeRunnerError(t *testing.T) {
+	runner := &fakeRunner{err: errors.New("database password=secret")}
+	api, _ := New(runner, &fakeStore{}, time.Second)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/analysis/runs", strings.NewReader(`{"symbols":["600519"]}`))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	api.Handler().ServeHTTP(w, req)
+	if w.Code != http.StatusBadGateway || strings.Contains(w.Body.String(), "secret") {
+		t.Fatalf("unexpected response: status=%d body=%s", w.Code, w.Body.String())
+	}
+}
+
+func TestReadResultDoesNotExposeStorageError(t *testing.T) {
+	api, _ := New(&fakeRunner{}, &fakeStore{resultErr: errors.New("database password=secret")}, time.Second)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/analysis/runs/run-1", nil)
+	w := httptest.NewRecorder()
+	api.Handler().ServeHTTP(w, req)
+	if w.Code != http.StatusInternalServerError || strings.Contains(w.Body.String(), "secret") {
+		t.Fatalf("unexpected response: status=%d body=%s", w.Code, w.Body.String())
+	}
+}

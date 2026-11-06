@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"mime"
 	"net/http"
 	"strings"
 	"time"
@@ -72,13 +73,13 @@ func (s *Server) handleReady(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 4*time.Second)
 	defer cancel()
 	if err := s.store.Health(ctx); err != nil {
-		writeError(w, http.StatusServiceUnavailable, "dependencies_unready", err.Error())
+		writeError(w, http.StatusServiceUnavailable, "dependencies_unready", "one or more dependencies are unavailable")
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"status": "ready", "dependencies": map[string]string{"mariadb": "ok", "redis": "ok"}, "time": time.Now().UTC()})
 }
 func (s *Server) handleCreateRun(w http.ResponseWriter, r *http.Request) {
-	if !strings.HasPrefix(strings.ToLower(r.Header.Get("Content-Type")), "application/json") {
+	if !isJSONContentType(r.Header.Get("Content-Type")) {
 		writeError(w, http.StatusUnsupportedMediaType, "content_type_required", "Content-Type must be application/json")
 		return
 	}
@@ -87,12 +88,12 @@ func (s *Server) handleCreateRun(w http.ResponseWriter, r *http.Request) {
 	decoder.DisallowUnknownFields()
 	var req domain.RunRequest
 	if err := decoder.Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", err.Error())
+		writeRequestDecodeError(w, err)
 		return
 	}
 	var trailing any
 	if err := decoder.Decode(&trailing); err != io.EOF {
-		writeError(w, http.StatusBadRequest, "invalid_json", "request body must contain one JSON object")
+		writeRequestDecodeError(w, err)
 		return
 	}
 	asOfExplicit := !req.AsOf.IsZero()
@@ -137,7 +138,7 @@ func (s *Server) handleCreateRun(w http.ResponseWriter, r *http.Request) {
 			"duration_ms", time.Since(started).Milliseconds(),
 			"error_type", fmt.Sprintf("%T", err),
 			"error", boundedLogText(err.Error(), 300))
-		writeJSON(w, http.StatusBadGateway, map[string]any{"error": map[string]string{"code": "analysis_failed", "message": err.Error()}, "partial_result": result})
+		writeJSON(w, http.StatusBadGateway, map[string]any{"error": map[string]string{"code": "analysis_failed", "message": "analysis execution failed"}, "partial_result": result})
 		return
 	}
 	status := http.StatusOK
@@ -177,9 +178,9 @@ func (s *Server) handleGetRun(w http.ResponseWriter, r *http.Request) {
 		events, err := s.store.GetEvents(ctx, runID)
 		if err != nil {
 			if errors.Is(err, storage.ErrRunNotFound) {
-				writeError(w, http.StatusNotFound, "run_not_found", err.Error())
+				writeError(w, http.StatusNotFound, "run_not_found", "analysis run not found")
 			} else {
-				writeError(w, http.StatusInternalServerError, "read_events_failed", err.Error())
+				writeError(w, http.StatusInternalServerError, "read_events_failed", "could not read analysis events")
 			}
 			return
 		}
@@ -190,11 +191,11 @@ func (s *Server) handleGetRun(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		switch {
 		case errors.Is(err, storage.ErrRunNotFound):
-			writeError(w, http.StatusNotFound, "run_not_found", err.Error())
+			writeError(w, http.StatusNotFound, "run_not_found", "analysis run not found")
 		case errors.Is(err, storage.ErrRunNotFinished):
-			writeError(w, http.StatusConflict, "run_not_finished", err.Error())
+			writeError(w, http.StatusConflict, "run_not_finished", "analysis run is not finished")
 		default:
-			writeError(w, http.StatusInternalServerError, "read_result_failed", err.Error())
+			writeError(w, http.StatusInternalServerError, "read_result_failed", "could not read analysis result")
 		}
 		return
 	}
@@ -253,6 +254,20 @@ func mustLocation(name string) *time.Location {
 	}
 	return loc
 }
+func isJSONContentType(value string) bool {
+	mediaType, _, err := mime.ParseMediaType(value)
+	return err == nil && strings.EqualFold(mediaType, "application/json")
+}
+
+func writeRequestDecodeError(w http.ResponseWriter, err error) {
+	var maxBytesErr *http.MaxBytesError
+	if errors.As(err, &maxBytesErr) {
+		writeError(w, http.StatusRequestEntityTooLarge, "request_too_large", "request body exceeds 1 MiB")
+		return
+	}
+	writeError(w, http.StatusBadRequest, "invalid_json", "request body must contain one valid JSON object")
+}
+
 func writeError(w http.ResponseWriter, status int, code, message string) {
 	writeJSON(w, status, map[string]any{"error": map[string]string{"code": code, "message": message}})
 }
