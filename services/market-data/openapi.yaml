@@ -1376,7 +1376,7 @@ paths:
         timeout_seconds 为单项 Provider 请求超时，范围 1 到 30 秒，默认 12 秒。
         daily_bar_adjustments 仅用于 daily_bars，支持 none、forward_adjusted、backward_adjusted；省略时仅探测 none，每种口径独立生成结果。
         daily_bar_start_date 与 daily_bar_end_date 必须同时提供，仅用于 daily_bars 的显式历史窗口；首尾包含，按 Asia/Shanghai 交易日解释，最多 31 个自然日，结束日期不能晚于今日。省略时保持原有近期 5 条探测行为。
-        探测与业务熔断统计隔离，并发上限为 4；敏感错误信息会脱敏。
+        探测与业务熔断统计隔离，并发上限为 4；敏感错误信息会脱敏。请求体最多 8 KiB，必须恰好包含一个 JSON 对象；未知字段拒绝。
       requestBody:
         required: false
         content:
@@ -1726,7 +1726,7 @@ paths:
         never falls back to a live request. Since publication_time is not available for every metric, sections with a
         missing publication date or a publication date on/after the as_of date in Asia/Shanghai are excluded
         conservatively. Historical revisions can only be reconstructed for snapshots recorded after PIT storage began.
-        Values preserve provider-native numeric scale and explicit units.
+        Values preserve provider-native numeric scale and explicit units. year must be 2007 through the current calendar year; quarter must be 1..4. as_of must be a single non-future RFC3339 timestamp.
       parameters:
         - {name: symbol, in: path, required: true, schema: {type: string}}
         - {name: year, in: query, required: true, schema: {type: integer, minimum: 2007}}
@@ -2075,7 +2075,7 @@ paths:
   /api/v1/market/indices/{symbol}/daily:
     get:
       summary: 获取指定指数的历史日线
-      description: Tushare 日线成交量以手为单位，成交额按千元换算为人民币元。
+      description: Tushare 日线成交量以手为单位，成交额按千元换算为人民币元。start 与 end 均必填，日期范围首尾包含且不得超过 10 年 / 3660 个自然日。
       parameters:
         - {name: symbol, in: path, required: true, schema: {type: string, example: 000300.SH}}
         - {name: start, in: query, required: true, schema: {type: string, format: date}}
@@ -2143,7 +2143,7 @@ paths:
   /api/v1/market/trading-calendar:
     get:
       summary: Get the explicit A-share trading calendar for an inclusive date range
-      description: Returns one row for every calendar date, including weekends and holidays. The endpoint rejects missing date coverage and does not infer trading days from weekdays.
+      description: Returns one row for every calendar date, including weekends and holidays. The inclusive start/end range must not exceed 3660 calendar days. The endpoint rejects missing date coverage and does not infer trading days from weekdays.
       parameters:
         - {name: start, in: query, required: true, schema: {type: string, format: date}}
         - {name: end, in: query, required: true, schema: {type: string, format: date}}
@@ -2180,7 +2180,7 @@ paths:
   /api/v1/market/session:
     get:
       summary: Get the scheduled A-share market session for a timestamp
-      description: Uses the provider-backed trading calendar for the requested date and the standard Asia/Shanghai session schedule. It does not determine individual-stock suspension, security-specific price limits, or emergency exchange interruptions. When at is omitted, current server time is used.
+      description: Uses the provider-backed trading calendar for the requested date and the standard Asia/Shanghai session schedule. It does not determine individual-stock suspension, security-specific price limits, or emergency exchange interruptions. When at is omitted, current server time is used. When supplied, at must be a single RFC3339 timestamp.
       parameters:
         - {name: at, in: query, required: false, schema: {type: string, format: date-time}, description: Optional RFC3339 timestamp; response includes the Asia/Shanghai date and time}
       responses:
@@ -2334,6 +2334,7 @@ paths:
   /api/v1/market/sentiment/history:
     get:
       summary: Get persisted daily A-share market sentiment snapshots
+      description: start/end are required, inclusive and limited to 366 calendar days. limit is 1..500 with a default of 366.
       parameters:
         - {name: start, in: query, required: true, schema: {type: string, format: date}}
         - {name: end, in: query, required: true, schema: {type: string, format: date}}

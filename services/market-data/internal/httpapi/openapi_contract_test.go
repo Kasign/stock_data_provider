@@ -622,3 +622,53 @@ func TestDataModelJSONSerializationMatchesOpenAPIRequiredAndNullableSemantics(t 
 		nil,
 		nil)
 }
+
+
+func TestOpenAPIDocumentsHandlerParameterBounds(t *testing.T) {
+	spec, err := os.ReadFile("../../openapi.yaml")
+	if err != nil {
+		t.Fatalf("read OpenAPI specification: %v", err)
+	}
+	var document map[string]any
+	if err := yaml.Unmarshal(spec, &document); err != nil {
+		t.Fatalf("OpenAPI must be valid YAML: %v", err)
+	}
+	paths, ok := document["paths"].(map[string]any)
+	if !ok {
+		t.Fatal("OpenAPI paths object missing")
+	}
+	checks := []struct {
+		path     string
+		method   string
+		phrases  []string
+	}{
+		{"/api/v1/market/indices/{symbol}/daily", "get", []string{"10 years / 3660 calendar days"}},
+		{"/api/v1/market/trading-calendar", "get", []string{"3660 calendar days"}},
+		{"/api/v1/market/sentiment/history", "get", []string{"366 calendar days", "1..500", "default of 366"}},
+		{"/api/v1/stocks/{symbol}/fundamentals", "get", []string{"2007 through the current calendar year", "single non-future RFC3339 timestamp"}},
+		{"/api/v1/market/session", "get", []string{"single RFC3339 timestamp"}},
+		{"/api/v1/data-sources/probe", "post", []string{"8 KiB", "exactly one JSON object", "unknown fields"}},
+	}
+	for _, check := range checks {
+		pathItem, ok := paths[check.path].(map[string]any)
+		if !ok {
+			t.Errorf("OpenAPI path missing: %s", check.path)
+			continue
+		}
+		operation, ok := pathItem[check.method].(map[string]any)
+		if !ok {
+			t.Errorf("OpenAPI operation missing: %s %s", check.method, check.path)
+			continue
+		}
+		description, ok := operation["description"].(string)
+		if !ok {
+			t.Errorf("%s %s must document handler parameter constraints", check.method, check.path)
+			continue
+		}
+		for _, phrase := range check.phrases {
+			if !strings.Contains(description, phrase) {
+				t.Errorf("%s %s description is missing handler constraint %q", check.method, check.path, phrase)
+			}
+		}
+	}
+}
