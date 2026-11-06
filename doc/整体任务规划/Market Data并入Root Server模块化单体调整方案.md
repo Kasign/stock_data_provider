@@ -123,6 +123,25 @@ docker-compose
 | 旧迁移 Profile | `docker/docker-compose.go-migration.yml` 仍构建 `../services/market-data/Dockerfile`；go-core 仍通过远程 Data HTTP Client 调用它 | 删除旧目录/Dockerfile 会使 Profile 失效。MDM-001 必须确认现场使用情况；需保留回滚则 M1 保留兼容入口和可构建镜像，确认退役才可删除 |
 | CI | `go-test.yml` matrix 包含根、go-core、services/market-data 三个 Module；Data MariaDB 集成测试、Docker Build、Parity 和 Live Probe Workflow 均硬编码旧路径 | M1 后 Data 测试迁到根 Module；更新 matrix、cache path、working-directory、触发路径、Docker Build；go-core 保持独立 Module，直至旧 Profile 退役 |
 
+**Provider 默认 Host / Redirect 策略补充核对：**
+
+| Provider | 当前默认目标 Host | 当前 Redirect 行为 |
+|---|---|---|
+| Eastmoney | `push2.eastmoney.com`、`push2his.eastmoney.com`、`datacenter.eastmoney.com`、`push2ex.eastmoney.com`、`datacenter-web.eastmoney.com`、`np-anotice-stock.eastmoney.com`、`emappdata.eastmoney.com` | 自定义策略：仅允许 HTTPS 下东方财富域名内跳转，最多 3 次 |
+| Hithink | `fuyao.aicubes.cn` | Go 默认 Redirect 策略 |
+| Tencent | `web.sqt.gtimg.cn`、`web.ifzq.gtimg.cn`、`smartbox.gtimg.cn` | 禁止 Redirect |
+| Sina | `hq.sinajs.cn`、`money.finance.sina.com.cn` | 禁止 Redirect |
+| Yahoo | `query1.finance.yahoo.com` | 禁止 Redirect |
+| Netease | `quotes.money.163.com`、`api.money.126.net` | 禁止 Redirect |
+| Tushare | `api.tushare.pro` | Go 默认 Redirect 策略 |
+| TickFlow | `api.tickflow.org`、`free-api.tickflow.org` | Go 默认 Redirect 策略 |
+| Xueqiu | `stock.xueqiu.com` | Go 默认 Redirect 策略 |
+| MiaoXiang | `mkapi2.dfcfs.com` | 禁止 Redirect |
+| BaoStock | `public-api.baostock.com:10030` | 原生 TCP，不适用 HTTP Redirect |
+| PyTDX | 由 `MARKET_DATA_PYTDX_HOSTS` 配置 | 原生 TCP/第三方 TDX Dial，不适用 HTTP Redirect |
+
+上述 Host 是代码默认值，不是运行时最终 Host 的完整保证：Data Config 允许通过 `MARKET_DATA_*_URL` 覆盖多个 Provider Endpoint，PyTDX Host 也由环境变量注入。当前多数 Provider 的 `http.Client` 未显式设置 Transport，会沿用 Go 默认 Transport 的环境代理行为；Platform HTTP Client 当前显式 `Proxy: nil`。接入 Platform 前必须决定代理策略、精确 Host Allowlist、Redirect 跨域限制和各 Provider 响应体预算，不能仅把 Client 替换掉而忽略网络行为差异。
+
 **MDM-001 当前结论：** 仓库内主要代码路径、HTTP 调用方、Provider 传输类型、资源入口、Worker、路由、Compose、部署脚本和主要 CI Workflow 已完成静态盘点；但部署现场是否仍使用 `go-migration` Profile、Provider 可配置 Host 的最终 Allowlist、SQL 文件与 Go Migration 的逐表差异仍需确认。因此 MDM-001 暂不关闭，MDM-002 不得提前开始删除旧入口/构建文件。
 
 **结构迁移编号映射：** 项目总览使用的 MDM-001～MDM-007 对应本文 M0～M6：MDM-001=M0 审计、002=M1 Module 归并、003=M2 Bootstrap/Port、004=M3 Root 装配、005=M4 部署切换、006=M5 结构回归、007=M6 契约对齐。
