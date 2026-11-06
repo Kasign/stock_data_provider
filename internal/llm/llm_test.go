@@ -1,10 +1,14 @@
 package llm
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 	"time"
+
+	"example.com/stock-analysis-flow/internal/platform/fault"
 )
 
 func testProviderConfig() ProviderConfig {
@@ -160,4 +164,69 @@ func TestSchemaAndToolJSONValidation(t *testing.T) {
 	if err := r.Validate(); err != nil { t.Fatalf("valid schema/tool rejected: %v", err) }
 	r.ResponseSchema.SchemaJSON = json.RawMessage("{\"type\":")
 	if err := r.Validate(); err == nil { t.Fatal("invalid schema JSON must be rejected") }
+}
+
+func TestModelErrorFromPlatformFault(t *testing.T) {
+	tests := []struct {
+		name string
+		class fault.Class
+		want ModelErrorKind
+		retryable bool
+	}{
+		{name: "validation", class: fault.ClassValidation, want: ErrorInvalidRequest},
+		{name: "unauthenticated", class: fault.ClassUnauthenticated, want: ErrorUnauthorized},
+		{name: "forbidden", class: fault.ClassForbidden, want: ErrorUnauthorized},
+		{name: "unavailable", class: fault.ClassUnavailable, want: ErrorUpstreamUnavailable, retryable: true},
+		{name: "timeout", class: fault.ClassTimeout, want: ErrorTimeout, retryable: true},
+		{name: "internal", class: fault.ClassInternal, want: ErrorUpstream},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := &fault.Fault{Class: tt.class, Code: "platform.test." + string(tt.class), SafeMessage: "safe summary", Retryable: tt.retryable}
+			got := ModelErrorFromPlatformFault(err)
+			if got == nil {
+				t.Fatal("expected mapped model error")
+			}
+			if got.Kind != tt.want || got.Retryable != tt.retryable {
+				t.Fatalf("unexpected mapping: %+v", got)
+			}
+			if got.StableCode != "platform.test."+string(tt.class) || got.SafeMessage != "safe summary" {
+				t.Fatalf("stable code or safe message lost: %+v", got)
+			}
+		})
+	}
+}
+
+func TestModelErrorFromPlatformFaultDoesNotExposeDependencyOrCause(t *testing.T) {
+	secretCause := errors.New("authorization: Bearer secret-value")
+	f := &fault.Fault{
+		Class: fault.ClassUnavailable, Code: "platform.httpclient.request_failed",
+		SafeMessage: "upstream request failed", Dependency: "llm.provider.secret-host",
+		Retryable: true, Cause: secretCause,
+	}
+	got := ModelErrorFromPlatformFault(f)
+	if got == nil {
+		t.Fatal("expected mapped model error")
+	}
+	encoded, err := json.Marshal(got)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(encoded), "secret-host") || strings.Contains(string(encoded), "secret-value") {
+		t.Fatalf("internal dependency or cause leaked: %s", encoded)
+	}
+}
+
+func TestModelErrorFromPlatformFaultCancellationAndUnknown(t *testing.T) {
+	cancelled := &fault.Fault{Class: fault.ClassUnavailable, Code: "platform.httpclient.canceled", Cause: context.Canceled}
+	if got := ModelErrorFromPlatformFault(cancelled); got == nil || got.Kind != ErrorCancelled {
+		t.Fatalf("context cancellation must map to cancelled: %+v", got)
+	}
+	deadline := &fault.Fault{Class: fault.ClassUnavailable, Code: "platform.httpclient.timeout", Cause: context.DeadlineExceeded}
+	if got := ModelErrorFromPlatformFault(deadline); got == nil || got.Kind != ErrorTimeout {
+		t.Fatalf("deadline must map to timeout: %+v", got)
+	}
+	if got := ModelErrorFromPlatformFault(errors.New("ordinary error")); got != nil {
+		t.Fatalf("non-platform error must not be silently mapped: %+v", got)
+	}
 }

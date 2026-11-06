@@ -197,6 +197,13 @@ ModelErrorKind：invalid_request、unauthorized、rate_limited、overloaded、ti
 
 ModelErrorInfo 字段为 kind、stable_code、retryable、http_status?、retry_after?、safe_message；调用关联 ID 统一由 ModelResponse.request_id 承载，不在嵌套错误对象重复；底层 Cause 仅内部日志，不序列化给调用方。
 
+LLM 通过 `ModelErrorFromPlatformFault(error)` 将 `errors.As` 可识别的 `*platform/fault.Fault` 投影为 ModelErrorInfo：
+- validation → invalid_request；unauthenticated/forbidden → unauthorized；timeout 或 context deadline → timeout；context canceled → cancelled；unavailable → upstream_unavailable；其余类别 → upstream_error。
+- stable_code 保留 Fault.Code；缺失时使用 `platform.fault.<class>`。safe_message 只取 Fault.SafeMessage，缺失时使用固定安全摘要。
+- Retryable 原样保留为技术提示，不触发 LLM 内部重试。Dependency、Cause 和原始错误文本不进入 ModelErrorInfo。
+- 非 Platform Fault 返回 nil，调用方必须保留原始 Go error，不得伪装为平台错误。
+
+
 - 一次调用只能由一个层负责业务重试；首批建议由 Researchflow Run/Stage 策略决定，LLM Adapter 默认不自动重试。
 - 429/503 可返回 retry_after 提示，是否重试由调用方 deadline/预算决定。
 - timeout/cancelled 不自动重试。
