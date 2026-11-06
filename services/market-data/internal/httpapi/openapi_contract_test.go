@@ -199,6 +199,11 @@ func TestOpenAPIErrorResponsesReferenceRuntimeErrorEnvelope(t *testing.T) {
 			if !ok {
 				continue
 			}
+			if path != "/health/live" && path != "/health/ready" {
+				if _, exists := responses["401"]; !exists {
+					t.Errorf("%s %s is protected by Server.auth but does not declare 401", method, path)
+				}
+			}
 			for status, rawResponse := range responses {
 				code, parseErr := strconv.Atoi(status)
 				if parseErr != nil || code < 400 {

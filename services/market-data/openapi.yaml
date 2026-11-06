@@ -1482,6 +1482,13 @@ paths:
                     type: array
                     items: {type: string}
                   observed_from: {type: string, enum: [in_process_circuit_breaker]}
+        '401':
+          description: "API key required"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
   /api/v1/data-sources:
     get:
       responses:
