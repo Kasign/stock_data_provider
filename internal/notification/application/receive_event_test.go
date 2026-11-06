@@ -41,6 +41,7 @@ type memoryInbox struct {
 	mu            sync.Mutex
 	byEvent       map[inboxKey]domain.InboxRecord
 	byIdempotency map[inboxKey]domain.InboxRecord
+	fanoutWorkItems int
 }
 
 func newMemoryInbox() *memoryInbox {
@@ -75,6 +76,7 @@ func (m *memoryInbox) Accept(_ context.Context, event domain.EventEnvelope, rece
 	record := domain.InboxRecord{Event: event, ReceivedAt: receivedAt}
 	m.byEvent[eventKey] = record
 	m.byIdempotency[idempotencyKey] = record
+	m.fanoutWorkItems++
 	return record, false, nil
 }
 
@@ -104,8 +106,8 @@ func TestEventReceiverAcceptsAndDeduplicates(t *testing.T) {
 	if !second.Duplicate || second.EventID != event.EventID {
 		t.Fatalf("expected duplicate result: %+v", second)
 	}
-	if len(repo.byEvent) != 1 || len(repo.byIdempotency) != 1 {
-		t.Fatalf("expected one Inbox record, got event=%d idempotency=%d", len(repo.byEvent), len(repo.byIdempotency))
+	if len(repo.byEvent) != 1 || len(repo.byIdempotency) != 1 || repo.fanoutWorkItems != 1 {
+		t.Fatalf("expected one Inbox record and one fan-out item, got event=%d idempotency=%d fanout=%d", len(repo.byEvent), len(repo.byIdempotency), repo.fanoutWorkItems)
 	}
 }
 
