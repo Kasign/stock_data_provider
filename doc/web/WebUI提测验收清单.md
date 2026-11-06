@@ -2565,3 +2565,10 @@ CSS AST 检查器进一步扩展：
 - [x] Chromium Browser Smoke #42171720084 成功，研究记录双标签页专项通过。
 - [x] 编辑区和列表态均通过 320 / 768 / 1280 / 1600px 响应式检查。
 - [x] 本批没有新增服务端 API，也没有改变研究记录本地存储契约。
+
+
+## 2026-11-06 UIR-2 CSS 结构清理验收
+- [x] 删除重复的 `.run-flow-dialog .task-event-detail[hidden]` 规则，保留唯一有效规则。
+- [x] CSS AST 检查新增唯一性断言。
+- [x] `!important` 声明数由 25 降至 24；其余声明均保留，未进行批量清理。
+- [x] WebUI Checks #42172661741、Chromium Browser Smoke #42172661924 通过。

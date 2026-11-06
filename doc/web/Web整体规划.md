@@ -1,6 +1,6 @@
 # WebUI 整体规划
 
-更新时间：2026-11-06（当前功能验收基线：`49aa0eb8f9a2ce49b99c6c53f659208fff77b841`）
+更新时间：2026-11-06（当前功能验收基线：`999ca8a8b0d88dd462b206a0b149d8a09ce14e4b`）
 目标分支：`feat/webui-market-data-console`
 适用范围：仅规划和管理 WebUI（`web/**`）及其专属文档（`doc/web/**`）。除明确获批的文档路径修正外，不修改 Go、Provider、数据库、服务端 API、OpenAPI 实现和部署配置。
 
@@ -298,7 +298,7 @@ localStorage + storage event 方案能解决“另一个标签页完成写入后
 - W1 数据中心自检重复请求修复、W2 Run Flow 体验优化。
 - W3-A 独立报告详情工作区：Markdown 结构化阅读、章节导航、长报告滚动、四档视口和 HTML 注入防护。
 - W3-B1 研究记录列表/编辑区分离、标签筛选、多标的摘要、三行正文预览、草稿保护及跨标签页冲突处理。
-- 当前功能验收 HEAD `49aa0eb8f9a2ce49b99c6c53f659208fff77b841`：WebUI Checks #42171720219、Chromium Browser Smoke #42171720084 均通过。
+- 当前功能验收 HEAD `999ca8a8b0d88dd462b206a0b149d8a09ce14e4b`：WebUI Checks #42172661741、Chromium Browser Smoke #42172661924 均通过。
 
 **下一批：**
 1. 完成 CSS AST 的 at-rule 条件、selector specificity、源码顺序和跨 selector DOM 命中关系人工复核；当前 `!important` 24 处，保留语义状态、隐藏、无障碍和必要组件优先级，不以归零为目标。
@@ -2359,3 +2359,10 @@ CSS AST 检查器进一步扩展：
 - [x] CSS AST 检查增加结构门禁，要求该 selector 仅保留一条规则，防止重复回归。
 - [x] `!important` 声明数从 25 降至 24；没有改变隐藏状态语义。
 - [ ] 继续人工审查跨 selector DOM 命中、主题和响应式覆盖；未完成前不扩大 CSS 物理拆分。
+
+
+### UIR-2 Run Flow 隐藏规则清理验收（2026-11-06）
+- [x] 当前 `web/styles.css` 的 `!important` 声明数为 24；前置重复的 `.run-flow-dialog .task-event-detail[hidden]` 已移除。
+- [x] `web/tests/css-structure-review.mjs` 增加 selector 唯一性断言，防止同一隐藏规则重复。
+- [x] WebUI Checks #42172661741、Chromium Browser Smoke #42172661924 均通过；CSS AST、Run Flow 交互及响应式专项通过。
+- [ ] 跨 selector DOM 命中、主题、@layer 和响应式级联关系仍需继续人工复核；本次只清理已证明完全重复的同 selector 同条件规则。
