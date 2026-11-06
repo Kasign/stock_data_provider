@@ -2430,3 +2430,22 @@ CSS AST 检查器进一步扩展：
 - [x] 验收 HEAD：`ea2d17304e0086b2a028f1eff38267beacf69470`。
 - [x] WebUI Checks #42180417828 通过。
 - [x] Chromium Browser Smoke #42180417905 通过；完整 21 步全部成功，包含研究记录跨标签页、导入恢复、导出全量、CSS AST/CSSOM、Run Flow、个股研究、Provider Probe、本地筛选及市场分页专项。
+
+
+## 2026-11-06 UIR-2 剩余 !important 首轮用途分类
+
+基于当前 WebUI HEAD `6aa456859227399f90d25fabf10bf82e58d619d1` 对 `web/styles.css` 做静态盘点，并结合 `web/index.html` 与页面 JS 模块检查选择器使用位置：
+
+- 当前共有 **24 处 `!important` 声明，分布在 21 组 CSS 规则**。声明数与规则组数不同：减少动态效果的通用规则在同一声明块中包含 4 处。
+- **隐藏状态（11 处）**：全局 `[hidden]` 基线，以及 Task Events、Notification、Chat、Screening、Alerts、Bundle Snapshot、Settings、Run Flow 的局部隐藏规则。相关组件存在 `display:flex/grid` 等显式布局；局部选择器比全局 `[hidden]` 更具体，不能直接删除局部保护。
+- **语义颜色（7 处）**：`.positive` / `.negative` 两处通用涨跌色，以及市场指数理由、正/负/平/未知四类市场数据状态色。相关 class 由市场概览、市场活动和行情渲染 JS 动态生成；需保留状态色优先级，避免被指标值、表格单元格等组件文字色覆盖。
+- **减少动态效果（5 处）**：`prefers-reduced-motion` 通用规则的滚动、动画时长、动画次数和过渡时长，以及导航/通知控件的 transition 关闭规则。属于系统无障碍偏好，不按普通样式冗余处理。
+- **文本布局（1 处）**：`.dragon-tiger-reason` 强制允许换行，用于龙虎榜理由列；需防止表格通用 nowrap 规则覆盖长文本换行。
+
+首轮结论：本轮没有发现可在缺少浏览器计算样式证据时安全删除的 `!important`。没有为了降低数量而修改 CSS。DOM/JS 使用位置已做静态核对；这不等于完整的跨 selector cascade 证明。
+
+后续审查门槛：
+1. 对上述语义颜色及文本布局规则，逐项核对同一 DOM 节点的命中选择器、specificity、at-rule 条件和源码顺序，确认具体需要抵抗的覆盖规则。
+2. 对局部 `[hidden]` 规则，核对组件显式 display 规则及隐藏/显示切换路径，确保不出现隐藏节点重新参与布局。
+3. 对 reduced-motion 规则，核对导航、通知和通用动画/过渡的实际命中关系；保留无障碍语义。
+4. 本阶段不启动 CSS 文件物理拆分。跨 selector DOM 命中和主题/响应式关系未完成前，不批量移动或合并规则。
