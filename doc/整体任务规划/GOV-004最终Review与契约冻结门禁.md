@@ -1,5 +1,8 @@
 # GOV-004 最终 Review 与契约冻结门禁
 
+> **权威状态说明（2026-11-06）：** 本文件包含历史 Review 记录。自《跨模块契约目录与冻结状态》建立后，契约编号、字段语义、唯一权威文档、状态和阻断调用点统一以该目录为准。本文历史章节中的“待 Owner Review/签字”不再作为门禁；项目由统一决策方作出语义决议，模块责任角色提供消费者确认和验收证据。旧 CONTRACT 编号仅作历史别名。
+
+
 - 所属治理任务：GOV-004
 - Review 日期：2026-11-05
 - 规划分支：`feat/design_doc`
@@ -868,3 +871,36 @@ Workflow Template 按 stage_code + template_version 固定 on_degraded、on_skip
 本节优先于本文历史章节中“待 Owner Review”的旧表述。项目不存在独立模块 Owner，CONTRACT-006/007 已由项目统一决策方关闭设计决策。当前权威文本为 [Researchflow 状态机最终决议](../researchflow/03-CONTRACT-006与007最终决议.md)。本轮进一步补齐取消/Worker claim/重试/deadline 的 CAS 线性化规则、Attempt 停止确认与 fencing 收敛、队列容量原子预留，以及纯观察模板与可执行建议模板的 actionability 优先级。
 
 设计决策关闭不代表实现验收通过：FLOW-001~004 尚未实现；Go DTO、JSON Schema、Golden、状态迁移 Fixture、模块 CI 和 L3 真实集成仍按各自层级验收。GOV-004 整体仍为 NO-GO，不创建模块分支。
+
+
+## 36. 2026-11-06 跨模块统一契约目录接管
+
+### 36.1 权威与编号
+
+- 唯一契约目录：[跨模块契约目录与冻结状态](./跨模块契约目录与冻结状态.md)。
+- 新契约编号统一为 `<DOMAIN>-CTR-NNN`；任务编号与契约编号分离。
+- Platform、Quant/Research、Researchflow、Notification 等专项文档中的旧 `CONTRACT-xxx` 只保留历史追溯，不再新增。
+- 项目总规划拥有跨模块语义；Platform 只维护技术原语；领域模块维护本模块 DTO/Port/业务语义；Server 只负责组合根和生命周期。
+
+### 36.2 当前冻结判断
+
+- 本轮已经形成统一语义决议的契约，按目录标记为 `accepted`；语义已确定但 Schema/Golden/Contract Test 不齐的契约标记 `pending_evidence`。
+- 当前没有证据支持将全部跨模块契约标记为 `frozen`；因此 GOV-004 的“全局共同基线冻结”仍为 NO-GO。
+- 该 NO-GO 不等于所有模块停工。L1 按模块职责、首批 Port/DTO/状态机和依赖方向判断；L2 只看当前模块实际调用点依赖的冻结契约；L3 才验证真实 Provider、数据库、网络、Worker、模型、通知渠道和端到端流程。
+- 不要求其他分支编译、CI 或实现完成作为当前模块 L2 的前置条件；未冻结契约只阻断真正依赖它的调用点。
+
+### 36.3 当前独立推进边界
+
+- Platform：Fault/Request Context/Diagnostics/HTTP/Storage/Config 的 Schema、Golden、安全测试可独立推进。
+- Data：v1 OpenAPI/Go Model 对齐、Provider Fixture、质量与单位校验可推进；精度敏感 Quant Adapter 等待 DATA-CTR-005 v2。
+- News：Domain、Provider 协议解析、授权策略、离线解析和 Fake 测试可推进；真实 Evidence Query Adapter 等待 NEWS-CTR-001~003 证据。
+- Quant：Indicator/Factor 纯算法、Registry、Fixture 可推进；真实 Data Adapter 等待 DATA-CTR-005。
+- Research：Context/Evidence/Claim/Scenario Domain 和本地 Fixture 可推进；受限 News 正文读取等待 NEWS-CTR-002。
+- Researchflow：Run/Stage/Attempt 纯领域状态机和 CAS Port 可推进；真实 Worker/Repository Adapter 等待 FLOW-CTR-001/002 证据。
+- LLM：JSON/SSE Parser、Fixture、错误映射可推进；真实模型能力属 L3。
+- Notification：Inbox/Delivery Domain、Fake Channel、幂等状态机可推进；真实渠道属 L3；事件自动发布等待 INT-CTR-001。
+- Server：组合根、Bootstrap 和生命周期设计可推进；生产装配验收属 L3。
+
+### 36.4 当前治理结论
+
+全局契约仍未冻结，不授权因此自动创建模块分支、修改业务代码、创建 PR 或合并。后续每次契约变更先更新项目契约目录，再按责任边界分别同步专项文档；不得将本文件的历史 Review 状态覆盖目录中的最新决议。
