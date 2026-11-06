@@ -18,6 +18,7 @@ func loadNewsAuthorizationGolden(t *testing.T) NewsAuthorizationBinding {
 	var fixture struct {
 		AuthorizationBinding NewsAuthorizationBinding `json:"authorization_binding"`
 		SourceGoldenRef     string                    `json:"source_golden_ref"`
+		ExpectedBinding     map[string]string         `json:"expected_binding"`
 		ExpectedDecision    string                    `json:"expected_decision"`
 		ExpectedContent     bool                      `json:"expected_content_returned"`
 	}
@@ -26,7 +27,8 @@ func loadNewsAuthorizationGolden(t *testing.T) NewsAuthorizationBinding {
 	if err := decoder.Decode(&fixture); err != nil {
 		t.Fatal(err)
 	}
-	if fixture.SourceGoldenRef == "" || fixture.ExpectedDecision != string(AuthorizationDecisionConditional) || fixture.ExpectedContent {
+	if fixture.SourceGoldenRef == "" || len(fixture.ExpectedBinding) == 0 ||
+		fixture.ExpectedDecision != string(AuthorizationDecisionConditional) || fixture.ExpectedContent {
 		t.Fatalf("unexpected NEWS-CTR-002 golden metadata: %+v", fixture)
 	}
 	return fixture.AuthorizationBinding
