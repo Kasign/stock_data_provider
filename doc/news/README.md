@@ -1,6 +1,6 @@
 # 新闻模块专项文档
 
-> 状态：N1-A/N2 已完成；N3 离线能力首批完成、在线生产链路未完成；N4 领域/Application 首批完成；Platform 原语已合并，N5/N6/N7 消费者接入待推进  
+> 状态：N1-A/N2 已完成；N3 离线能力与在线采集编排首批完成、生产触发/授权网络门禁待接入；N4 领域/Application 首批完成；N5 Config/HTTP/Fault 适配完成；N6 Repository 与 Migration V1-V3 已实现（V1/V2 MariaDB 集成通过，V3 等待当前 CI）；N7 News Checks 已实现；NEWS-CTR-001 DTO/Cursor/Snapshot Store 与 NEWS-CTR-002 授权快照存储已推进，Query Facade/PIT/当前授权复核仍未完成  
 > 开发分支：`feat/research-news-ingestion`  
 > 基线分支：`feat/full-go-data-providers-api-switch`
 
@@ -39,15 +39,17 @@
 - [ ] N3 在线采集：Feed 解析与 Endpoint 传输分派已有代码；BoundDoer 已合并且接口兼容；逐 endpoint 生产注入、触发入口/CollectionRunID、持久化授权和部署 DNS/出口验收未完成
 - [x] N4 Domain/Application 首批：身份识别、Observation 幂等语义、内容版本、证券/行业关系和转载关系规则已有实现与离线测试
 - [ ] N4/N6 后续：真实采集编排、生产 Repository、数据库唯一约束/事务并发与历史版本持久化仍未完成
-- [ ] N5：Platform Config/Secret、Fault、Request ID、BoundDoer 尚未完成 News 消费者装配；NEWS-CTR-002 Binding DTO/Validator 已实现，但授权签发、公共 JCS Verifier、当前策略复核和读取竞态保护未完成
-- [ ] N6：Platform Storage/Migration 原语已合并；News Repository/SQL/Migration、授权快照持久化、事务并发和 Server 注册仍待实现；Redis 按需
-- [ ] N7：News 领域 Check 尚未接入 Platform Runner；不新增诊断 HTTP 路由/历史库，Task 仅按真实触发需求评估
+- [x] N5 A1：Platform Config/Secret、Provider/Source BoundDoer 策略适配、Fault 安全映射与 Request ID 传播代码已实现；真实公网/DNS 出口及 Server 生产注入仍待集成验收
+- [x] N6 A1：News MySQLRepository、Migration V1-V3、不可变授权快照和只读分页 Snapshot Store 已实现；V1/V2 MariaDB 11.4 集成已通过，V3 等待最新 CI；Server 共享 DB 注入和总 Migration 注册不在 News 分支修改范围
+- [x] N7 A1：Provider Config、Parser Self、Source Endpoint Readiness、Storage 和单条 BusinessQuality Checks 已实现；Platform Runner 注册仍由 Server 组合根完成
+- [x] NEWS-CTR-001 首批：Request/Response DTO、JSON Schema/Golden、HMAC Cursor Codec、只存引用的 15 分钟 Snapshot Store 已实现；Query Facade、严格 PIT Repository、available_at 证据过滤和内容裁剪未完成
+- [x] NEWS-CTR-002 首批：AuthorizationBinding 校验和不可变快照 MariaDB 存储已实现；JCS Runtime Verifier、当前策略版本复核、撤销/过期竞态和内容读取 TOCTOU 保护未完成
 - [ ] N8 / PLAT-013：完成 A2 契约测试、Server 装配、Migration 注册、News/Research Facade 接入验收；A3 故障演练对应 PLAT-014
 - [x] N1-A 用户评审确认；N2 已完成并进入 N3
 
 ## 公共平台协作说明
 
-当前 News HEAD 的 Platform 合并提交为 `68e557ccce10d650ec17b62e6ed40d4ce5aab382`，第二父提交 `0cb99a525de00d3c340891caa029b716c4d2f749` 与 `feat/platform-foundation` 当前 HEAD 一致。Platform 原语已在当前分支，不再等待代码迁入。PLAT-002 与 PLAT-CTR-001～007 的契约证据仍未全部冻结；当前按项目 A1 准入进行模块内适配和测试准备，不宣称 A2/A3。News 生产逐 endpoint BoundDoer 注入、News Repository/Migration、授权快照/当前策略复核、NewsEvidenceQuery、领域 Diagnostics Check 和 Server 共享资源/注册仍待完成。PLAT-013 是领域接入，PLAT-014 是跨模块故障演练；PLAT-011 为按需 Metrics，PLAT-012 为安全审计。
+Platform 原语已在当前分支，不再等待代码迁入。PLAT-002 与 PLAT-CTR-001～007 的契约证据仍未全部冻结；当前完成的是 News 模块 A1 适配，不宣称 A2/A3。News 的 Provider/Source BoundDoer 适配、Repository/Migration、授权快照和 Diagnostics Check 已有首批实现；真实生产注入、JCS 验证、当前授权复核、严格 PIT Query Facade 与 Server 共享资源/注册仍待完成。PLAT-013 是领域接入，PLAT-014 是跨模块故障演练；PLAT-011 为按需 Metrics，PLAT-012 为安全审计。
 
 ## 重要说明
 
