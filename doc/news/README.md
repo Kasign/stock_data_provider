@@ -130,3 +130,16 @@ N1 已完成固定旧 Python 上游的三类新闻/情报持久化对象、旧 i
 - `denied`、`unknown`、未生效、过期、无效时钟和 Binding 不一致均拒绝。
 - 过期边界为 `now >= expires_at` 即拒绝。
 - 该门禁不刷新当前策略目录、不复算 GOV-CTR-006 JCS 指纹、不提供撤销实时性，也不保护数据库读取竞态。生产读取仍需先由 News Owner 复核当前策略，再在同一一致性边界内读取内容。
+
+
+## CollectSource 内容级别裁剪（2026-11-06）
+
+Review 发现 CollectSource 原先只校验请求 ContentKind，却将 FeedEntry 的全部 ContentLayers 原样返回，存在请求 metadata 却连带返回来源摘要/正文/附件元数据的越权披露风险。现已在 Application 返回边界调用 `domain.RestrictContentLayers`：
+
+- metadata/title 不返回来源摘要、正文、外部正文引用或附件元数据。
+- abstract 只保留来源摘要；snippet/full 仅保留明确分类且不高于请求级别的正文载荷。
+- parser 未确认 Kind 的正文保持 unknown，不因调用方请求 full_text 就提升为全文。
+- attachment 请求只返回附件元数据，不返回文章摘要或正文；附件仍不下载。
+- ProviderSummary 与来源授权内容分层，不被提升成来源摘要或正文。
+
+该裁剪是返回数据最小化，不替代 Provider/Source/Endpoint 当前策略复核，也不代表正文持久化已获授权。

@@ -85,3 +85,36 @@ func NormalizeContentLayers(layers ContentLayers) ContentLayers {
 	}
 	return layers
 }
+
+
+// RestrictContentLayers removes payloads that are not covered by the requested
+// content ceiling. Unknown body kinds and external references are never promoted.
+func RestrictContentLayers(layers ContentLayers, requested ContentKind) ContentLayers {
+	if requested == ContentAttachment {
+		layers.SourceSummary = ""
+		layers.SourceSummaryOrigin = ""
+		layers.Body = nil
+		layers.BodyDeclaredTypeRaw = ""
+		layers.ExternalBodyReference = ""
+		return NormalizeContentLayers(layers)
+	}
+	maxLevel, ok := AuthorizationContentLevelForKind(requested)
+	if !ok {
+		return ContentLayers{}
+	}
+	maxRank := authorizationContentRank(maxLevel)
+	if maxRank < authorizationContentRank(AuthorizationContentSummary) {
+		layers.SourceSummary = ""
+		layers.SourceSummaryOrigin = ""
+	}
+	if layers.Body != nil {
+		bodyLevel, known := AuthorizationContentLevelForKind(layers.Body.Kind)
+		if !known || authorizationContentRank(bodyLevel) > maxRank {
+			layers.Body = nil
+			layers.BodyDeclaredTypeRaw = ""
+			layers.ExternalBodyReference = ""
+		}
+	}
+	layers.Attachments = nil
+	return NormalizeContentLayers(layers)
+}

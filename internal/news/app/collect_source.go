@@ -239,7 +239,7 @@ func (u *CollectSource) Execute(ctx context.Context, request CollectSourceReques
 		}
 		result.Entries = append(result.Entries, CollectedSourceEntry{
 			Candidate: candidate,
-			Content:   entry.ContentLayers(""),
+			Content:   domain.RestrictContentLayers(entry.ContentLayers(""), request.ContentKind),
 		})
 	}
 	return result, nil
