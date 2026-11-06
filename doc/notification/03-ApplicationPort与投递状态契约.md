@@ -48,7 +48,7 @@ Subscription 更新采用版本递增和不可变版本快照。任何影响匹�
 ### 2.3 DeliveryPlan 与 DeliveryRecord
 
 每个 Delivery 在入队时固定本次投递计划快照：
-- event_id；
+- source_module + event_id；
 - subscription_id + subscription_version；
 - channel_ref + channel_config_version；
 - template_id + template_version；
@@ -61,7 +61,7 @@ Delivery 唯一键固定为：
 
 所有版本均属于计划快照，不能在原版本上原地修改。
 
-Template 版本必须由 Subscription 版本快照固定；如果实现允许同一 Subscription 版本切换 Template，则必须把 template_id/template_version 加入唯一键，并禁止原版本原地修改。Channel 配置同理，版本化 Secret 引用，不在 Delivery 中复制 Secret 明文。
+Template 与 Channel 配置版本始终属于唯一键和 Delivery 计划快照；任何影响渲染/发送行为的变更都必须创建新版本，禁止原版本原地修改。Channel 只保存版本化 Secret 引用，不在 Delivery 中复制 Secret 明文。
 
 默认不对历史事件做新订阅回补。若未来提供 backfill，必须使用独立显式命令、权限和幂等范围，不得由普通 PublishEvent 重放隐式触发。
 
