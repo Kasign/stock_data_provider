@@ -117,7 +117,9 @@ func TestStartRejectsNilContextAndClosedQueue(t *testing.T) {
 	db := sql.OpenDB(startFailureConnector{err: errors.New("unused")})
 	defer db.Close()
 	q, err := New(db, queueTestRunner{}, 1, 1, time.Second, time.Millisecond)
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	if err := q.Start(nil); err == nil {
 		t.Fatal("nil start context must be rejected")
 	}
