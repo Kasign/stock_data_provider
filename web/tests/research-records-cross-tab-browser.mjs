@@ -67,14 +67,13 @@ try {
     "import preview must not mutate localStorage");
   await first.locator("#research-note-import-conflict").selectOption("copy");
   await first.locator("#research-note-import-commit").click();
-  await first.locator("#research-note-import-feedback").filter({ hasText: "导入完成" }).waitFor();
+  await first.locator("#research-note-import-summary").filter({ hasText: "导入完成" }).waitFor();
   const importedItems = await first.evaluate(key => JSON.parse(localStorage.getItem(key)), noteKey);
   assert.equal(importedItems.length, 4);
   assert.equal(importedItems.find(item => item.id === "note-1").title, "初始笔记",
     "conflicting import must not overwrite the local note");
   assert.ok(importedItems.some(item => item.id !== "note-1" && item.title === "远端冲突版本"),
     "conflict copy must be assigned a new ID");
-  assert.ok(importedItems.some(item => item.id === "note-3" && item.title === "导入新增"));
   assert.ok(importedItems.some(item => item.id === "note-3" && item.title === "导入新增"));
   await importInput.setInputFiles({ name: "research-notes-stale.json", mimeType: "application/json", buffer: Buffer.from(JSON.stringify({
     format: "stock-provider-webui.research-notes", version: 1, items: [note("note-4", "过期预览记录", "不应导入")]
