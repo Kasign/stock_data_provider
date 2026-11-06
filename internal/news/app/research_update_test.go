@@ -83,10 +83,8 @@ func (tx memoryResearchTransaction) AppendNewsItemVersion(_ context.Context, ver
 	if len(versions)+1 != version.VersionNo {
 		return ErrVersionHistoryInvalid
 	}
-	for _, existing := range versions {
-		if existing.Fingerprint == version.Fingerprint {
-			return ErrVersionHistoryInvalid
-		}
+	if len(versions) > 0 && versions[len(versions)-1].Fingerprint == version.Fingerprint {
+		return ErrVersionHistoryInvalid
 	}
 	tx.repository.versions[version.NewsID] = append(versions, version)
 	return nil
@@ -393,5 +391,43 @@ func TestApplyResearchUpdateRejectsUnknownRequestObservation(t *testing.T) {
 	}
 	if len(repository.versions["news-1"]) != 0 {
 		t.Fatalf("missing observation must not create a version: %+v", repository.versions)
+	}
+}
+
+func TestApplyResearchUpdateCreatesNewVersionWhenContentReturnsToEarlierState(t *testing.T) {
+	repository := &memoryResearchRepository{versions: map[string][]domain.NewsItemVersion{}}
+	useCase := newResearchUseCase(repository)
+
+	firstRequest := baseResearchRequest()
+	first, err := useCase.Execute(context.Background(), firstRequest)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	changedRequest := baseResearchRequest()
+	changedRequest.ObservationID = "obs-2"
+	changedRequest.Content.SourceSummary = "内容 B"
+	second, err := useCase.Execute(context.Background(), changedRequest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !second.VersionCreated || second.Version.VersionNo != 2 {
+		t.Fatalf("second=%+v", second)
+	}
+
+	restoredRequest := baseResearchRequest()
+	restoredRequest.ObservationID = "obs-3"
+	restored, err := useCase.Execute(context.Background(), restoredRequest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !restored.VersionCreated || restored.Version.VersionNo != 3 {
+		t.Fatalf("restored=%+v", restored)
+	}
+	if restored.Version.Fingerprint != first.Version.Fingerprint {
+		t.Fatal("restored content should reproduce the original content fingerprint")
+	}
+	if len(repository.versions["news-1"]) != 3 {
+		t.Fatalf("version history=%+v", repository.versions["news-1"])
 	}
 }
