@@ -13,6 +13,8 @@ Notification 是独立通知业务模块，负责事件接收、Subscription、T
 - [Application Port 与投递状态契约](03-ApplicationPort与投递状态契约.md)
 - [契约 Fixture 与状态迁移验收清单](04-契约Fixture与状态迁移验收清单.md)
 - [首批业务事件映射决议（INT-CTR-001）](05-首批业务事件映射决议.md)
+- [首批 JSON Schema](schema/)
+- [首批 Golden 样例](golden/)
 
 关键边界：recipient_scope 不等于真实发送目标；外部渠道不承诺 exactly-once；发送结果不确定时不得盲目重试。Platform 提供 Secret、HTTP、Storage 和 Worker 基础设施，领域状态与 Repository 归 Notification 所有。
 

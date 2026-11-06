@@ -2,7 +2,7 @@
 
 - 归属：NTF-001/004/005/006
 - 对应契约：NTF-CTR-001～003（历史别名 Platform CONTRACT-009/010）；状态以项目级契约目录为准
-- 状态：测试设计基线；NTF-CTR-001～003 当前为 pending_evidence，Schema/Golden/Contract Test 完成后再验收；不要求个人 Owner 签字
+- 状态：4 份 Draft 2020-12 Schema 与 6 个代表性 Golden 已提交；NTF-CTR-001～003 仍为 pending_evidence，自动化 Validator/Golden/Contract Test 未完成；不要求个人 Owner 签字
 - 日期：2026-11-06
 - 说明：以下均为合成数据与测试场景，不代表已有实现或真实渠道能力。
 
@@ -17,36 +17,20 @@
 
 ## 2. Event JSON Golden
 
-建议合成样例：
+首批事件映射与触发语义见 [INT-CTR-001 首批业务事件映射决议](05-首批业务事件映射决议.md)。机器可读 Schema 位于 `schema/`，包括 Envelope 和三类 Payload：
 
-```json
-{
-  "event_id": "evt_fixture_001",
-  "event_type": "research.run.completed",
-  "schema_version": "1.0.0",
-  "source_module": "researchflow",
-  "subject_ref": "research-run:run_fixture_001",
-  "idempotency_key": "publish:run_fixture_001:completed",
-  "occurred_at": "2026-11-06T01:00:00Z",
-  "correlation_id": "corr_fixture_001",
-  "payload": {
-    "run_id": "run_fixture_001",
-    "result_ref": "research-result:result_fixture_001",
-    "result_status": "completed"
-  }
-}
-```
+- `notification-event-envelope-1.0.0.schema.json`
+- `researchflow-run-terminal-1.0.0.schema.json`
+- `quant-risk-decision-changed-1.0.0.schema.json`
+- `research-event-lifecycle-changed-1.0.0.schema.json`
 
-Golden 需覆盖：
-- `event_valid_v1.json`：注册版本、合法 payload，接收 accepted。
-- `event_duplicate_same_fingerprint.json`：同 source/event_id/idempotency_key/fingerprint 重放，返回原接收结果，不新增 Inbox/Delivery。
-- `event_duplicate_event_id_changed_payload.json`：相同 event_id 不同 fingerprint，返回 idempotency_conflict。
-- `event_idempotency_key_collision.json`：同 source_module/idempotency_key 对应不同 event_id 或 fingerprint，返回冲突。
-- `event_unknown_schema_version.json`：未注册版本，拒绝持久化。
-- `event_schema_invalid_payload.json`：缺 required、类型错误或越界，拒绝持久化。
-- `event_schema_registry_mutation.json`：同 event_type/schema_version 试图替换 digest，注册失败。
-- `event_unknown_source_module.json`：未知 source_module，拒绝。
-- `event_payload_too_large.json`：超大小限制，拒绝且不记录正文。
+已提交的代表性 Golden 位于 `golden/`：
+
+- `researchflow-run-terminal-succeeded.golden.json`、`researchflow-run-terminal-cancelled.golden.json`
+- `quant-risk-decision-first-evaluation.golden.json`、`quant-risk-decision-reject.golden.json`
+- `research-event-lifecycle-created.golden.json`、`research-event-lifecycle-invalidated.golden.json`
+
+仍需自动化覆盖：相同事件重放、相同 event_id 不同 fingerprint、同 source_module 幂等键冲突、未知 Schema 版本、非法 Payload、Registry digest 不可变、未知 source_module、超大小拒绝，以及 Outbox 提交/回滚边界。
 
 ## 3. Subscription 与 recipient Fixture
 
@@ -134,14 +118,14 @@ Fake Adapter 只能验证分类和状态机，不证明真实渠道行为。每�
 9. 上游事务是否不受外部发送失败回滚影响。
 10. Secret、目标和 payload 正文是否从日志/错误摘要中脱敏。
 
-## 9. Owner 待确认
+## 9. 尚待证据验收项
 
-1. recipient_scope MVP 是否仅开放 subscription_owner 与 preconfigured_target。
-2. Event Inbox 与 PublishEvent 是否接受双唯一键及冲突策略。
-3. DeliveryPlan 是否在 fan-out 时冻结订阅/渠道/模板版本。
-4. unknown 的自动对账能力和人工处理 SLA。
-5. 渠道幂等键是否支持以及不同渠道的保留期限。
-6. Schema 兼容级别和版本命名规则。
-7. Delivery deadline、max_attempts、max_elapsed 的默认值由谁配置。
+1. recipient_scope 的允许值、解析路径和未授权拒绝行为需由 Schema/Contract Test 固化。
+2. Event Inbox 与 PublishEvent 双唯一键、相同指纹重放和不同指纹冲突需完成并发测试。
+3. DeliveryPlan 在 fan-out 时冻结 Subscription/Channel/Template 版本的行为需有回归测试。
+4. unknown 的自动对账能力和人工处理 SLA 按真实渠道逐项登记；不支持对账时不得自动重发。
+5. 渠道幂等键支持情况及保留期限按 Channel Capability 提供证据；未验证不得标记 supported。
+6. Schema 兼容级别和版本命名规则需补兼容矩阵与 Registry 不可变性测试。
+7. Delivery deadline、max_attempts、max_elapsed 必须显式配置并测试边界，不依赖隐式默认值。
 
 **本清单是模块级测试设计基线；未生成真实测试代码，未连接真实渠道或数据库，不能据此宣称 NTF-001~006 已通过。**

@@ -254,6 +254,15 @@ PublishResult 应明确 accepted/duplicate；冲突通过稳定错误返回。�
 
 ### 8.1 NTF-CTR-001 Event Envelope 与 Fingerprint
 
+首批 Envelope 与 Payload Schema 文件：
+- `schema/notification-event-envelope-1.0.0.schema.json`：校验 Envelope 字段，并按 event_type/schema_version/source_module 选择 Payload Schema。
+- `schema/researchflow-run-terminal-1.0.0.schema.json`
+- `schema/quant-risk-decision-changed-1.0.0.schema.json`
+- `schema/research-event-lifecycle-changed-1.0.0.schema.json`
+
+上述文件是 NTF-CTR-001/INT-CTR-001 的机器可读设计基线；尚需在模块测试中执行 JSON Schema Validator、Golden 和 Registry 不可变性测试。
+
+
 首批 Event Envelope 字段：
 
 | 字段 | JSON 类型 | 必填/nullable | 约束 |

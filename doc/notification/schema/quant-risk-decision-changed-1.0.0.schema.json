@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:kasign:stock_data_provider:notification:payload:quant-risk-decision-changed:1.0.0",
+  "title": "Quant Risk Decision Changed Notification Payload",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "source_event_ref",
+    "decision_id",
+    "previous_status",
+    "current_status",
+    "rule_set_version",
+    "changed_block_reason_codes",
+    "system_as_of",
+    "evaluated_at"
+  ],
+  "properties": {
+    "source_event_ref": {
+      "type": "string",
+      "minLength": 1
+    },
+    "decision_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "previous_status": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        "pass",
+        "reject",
+        "unknown",
+        null
+      ]
+    },
+    "current_status": {
+      "type": "string",
+      "enum": [
+        "pass",
+        "reject",
+        "unknown"
+      ]
+    },
+    "rule_set_version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "changed_block_reason_codes": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "system_as_of": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "evaluated_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  }
+}
