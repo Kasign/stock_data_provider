@@ -59,9 +59,13 @@ func BuildIdentityCredentials(sourceID, sourceNativeID, rawURL string, policy So
 	if strings.TrimSpace(rawURL) != "" {
 		decision := EvaluateSourceURL(rawURL, policy)
 		if !decision.Allowed {
-			return nil, errors.New("news.identity.url_rejected")
+			// URL 不能作为身份凭据，但不应抹掉同一来源下已提供的原生条目 ID。
+			if len(credentials) == 0 {
+				return nil, errors.New("news.identity.url_rejected")
+			}
+		} else {
+			credentials = append(credentials, newIdentityCredential(sourceID, IdentifierNormalizedURL, decision.CanonicalURL))
 		}
-		credentials = append(credentials, newIdentityCredential(sourceID, IdentifierNormalizedURL, decision.CanonicalURL))
 	}
 	if len(credentials) == 0 {
 		return nil, errors.New("news.identity.credential_required")

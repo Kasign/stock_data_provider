@@ -25,6 +25,16 @@ func TestBuildIdentityCredentialsUsesNativeIDAndCanonicalURL(t *testing.T) {
 	}
 }
 
+func TestBuildIdentityCredentialsKeepsNativeIDWhenURLIsNotAllowed(t *testing.T) {
+	got, err := BuildIdentityCredentials("source-1", "item-7", "https://evil.example/story", identityPolicy())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0].Type != IdentifierSourceNativeID || got[0].Value != "item-7" {
+		t.Fatalf("credentials=%+v", got)
+	}
+}
+
 func TestBuildIdentityCredentialsRequiresSourceAndAtLeastOneCredential(t *testing.T) {
 	if _, err := BuildIdentityCredentials("", "id", "", identityPolicy()); err == nil {
 		t.Fatal("expected source required")
