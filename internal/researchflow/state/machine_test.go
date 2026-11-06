@@ -71,3 +71,55 @@ func TestQueuedRunCannotCancelAnInFlightStage(t *testing.T) {
 		t.Fatal("queued run with a running stage must fail closed")
 	}
 }
+
+
+func TestAggregateHardRiskActionabilityDistinguishesExecutionFailureFromDecision(t *testing.T) {
+	now := time.Date(2026, 11, 6, 10, 0, 0, 0, time.UTC)
+	policy := template.PropagationPolicy{
+		OnDegraded: domain.PropagateFail, OnSkipped: domain.PropagateFail,
+		OnFailed: domain.PropagateFail, OnTimedOut: domain.PropagateFail, OnBlocked: domain.PropagateFail,
+	}
+	policies := map[string]template.PropagationPolicy{"risk": policy}
+	gates := map[string]bool{"risk": true}
+	tests := []struct {
+		name string
+		stage domain.Stage
+		wantRun domain.RunStatus
+		wantActionability string
+	}{
+		{name: "execution failed is not evaluated", stage: domain.Stage{Code:"risk", Status:domain.StageFailed, ReasonCodes:[]string{"provider_error"}}, wantRun:domain.RunFailed, wantActionability:"not_evaluated"},
+		{name: "business reject is evaluated but blocked", stage: domain.Stage{Code:"risk", Status:domain.StageSucceeded, RiskDecision:"reject"}, wantRun:domain.RunSucceeded, wantActionability:"blocked"},
+		{name: "business unknown is evaluated but blocked", stage: domain.Stage{Code:"risk", Status:domain.StageSucceeded, RiskDecision:"unknown"}, wantRun:domain.RunSucceeded, wantActionability:"blocked"},
+		{name: "explicit pass is actionable", stage: domain.Stage{Code:"risk", Status:domain.StageSucceeded, RiskDecision:"pass"}, wantRun:domain.RunSucceeded, wantActionability:"actionable"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := AggregateRun(domain.Run{Status:domain.RunRunning}, []domain.Stage{tt.stage}, nil, policies, gates, true, now)
+			if err != nil { t.Fatal(err) }
+			if got.Status != tt.wantRun { t.Fatalf("run status = %s, want %s", got.Status, tt.wantRun) }
+			if got.ResultSummary.ActionabilityStatus != tt.wantActionability { t.Fatalf("actionability = %s, want %s", got.ResultSummary.ActionabilityStatus, tt.wantActionability) }
+		})
+	}
+}
+
+func TestAggregateOptionalSkippedAndRequiredSkipped(t *testing.T) {
+	now := time.Date(2026, 11, 6, 10, 0, 0, 0, time.UTC)
+	policy := template.PropagationPolicy{OnSkipped:domain.PropagateNoImpact}
+	optional, err := AggregateRun(domain.Run{Status:domain.RunRunning}, []domain.Stage{{Code:"optional", Status:domain.StageSkipped}}, nil, map[string]template.PropagationPolicy{"optional":policy}, nil, false, now)
+	if err != nil { t.Fatal(err) }
+	if optional.Status != domain.RunSucceeded { t.Fatalf("optional no-impact skip should succeed, got %s", optional.Status) }
+	required, err := AggregateRun(domain.Run{Status:domain.RunRunning}, []domain.Stage{{Code:"required", Required:true, Status:domain.StageSkipped}}, nil, map[string]template.PropagationPolicy{"required":policy}, nil, false, now)
+	if err != nil { t.Fatal(err) }
+	if required.Status != domain.RunFailed { t.Fatalf("required skipped stage must fail closed, got %s", required.Status) }
+}
+
+func TestAggregateProjectsAndDeduplicatesReasonCodes(t *testing.T) {
+	now := time.Date(2026, 11, 6, 10, 0, 0, 0, time.UTC)
+	stage := domain.Stage{Code:"market", Status:domain.StageFailed, ReasonCodes:[]string{"provider_unavailable", "provider_unavailable", "invalid_payload"}}
+	policy := template.PropagationPolicy{OnFailed:domain.PropagateFail}
+	got, err := AggregateRun(domain.Run{Status:domain.RunRunning}, []domain.Stage{stage}, nil, map[string]template.PropagationPolicy{"market":policy}, nil, false, now)
+	if err != nil { t.Fatal(err) }
+	want := []string{"invalid_payload", "provider_unavailable"}
+	if len(got.ResultSummary.ReasonCodes) != len(want) { t.Fatalf("reason codes = %#v", got.ResultSummary.ReasonCodes) }
+	for i := range want { if got.ResultSummary.ReasonCodes[i] != want[i] { t.Fatalf("reason codes = %#v, want %#v", got.ResultSummary.ReasonCodes, want) } }
+}

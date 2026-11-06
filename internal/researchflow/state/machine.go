@@ -121,7 +121,7 @@ func AggregateRun(run domain.Run,stages []domain.Stage,attempts []domain.Attempt
 	for _,a:=range attempts{if a.Status==domain.AttemptRunning{return run,errors.New("cannot aggregate while an attempt is running")}}
 	summary:=domain.ResultSummary{StageOutcomes:map[string]domain.StageStatus{},RiskGateDecisions:map[string]string{},ExcludedStages:[]domain.ExcludedStage{},MissingStageCodes:[]string{},DegradedStageCodes:[]string{},BlockedStageCodes:[]string{},ReasonCodes:[]string{},QualityStatus:"valid",ActionabilityStatus:"not_evaluated"}
 	fail,partial,completed:=false,false,0
-	gateCount,gatePassed:=0,true
+	gateCount,gatePassed,gateExecutionFailed:=0,true,false
 	for _,s:=range stages{
 		summary.StageOutcomes[s.Code]=s.Status
 		p,ok:=policies[s.Code];if !ok{return run,fmt.Errorf("missing propagation policy for stage %s",s.Code)}
@@ -132,7 +132,7 @@ func AggregateRun(run domain.Run,stages []domain.Stage,attempts []domain.Attempt
 			if p.OnDegraded==domain.PropagateFail{fail=true}else if p.OnDegraded==domain.PropagatePartial{partial=true}
 		case domain.StageSkipped:
 			summary.MissingStageCodes=append(summary.MissingStageCodes,s.Code)
-			if p.OnSkipped==domain.PropagateFail{fail=true}else if p.OnSkipped==domain.PropagatePartial{partial=true}
+			if s.Required || p.OnSkipped==domain.PropagateFail { fail=true } else if p.OnSkipped==domain.PropagatePartial { partial=true }
 		case domain.StageFailed:
 			summary.MissingStageCodes=append(summary.MissingStageCodes,s.Code)
 			if p.OnFailed==domain.PropagateFail{fail=true}else{partial=true}
@@ -147,18 +147,29 @@ func AggregateRun(run domain.Run,stages []domain.Stage,attempts []domain.Attempt
 		if hardRiskStageCodes[s.Code]{
 			gateCount++
 			summary.RiskGateDecisions[s.Code]=s.RiskDecision
-			if s.Status!=domain.StageSucceeded||s.RiskDecision!="pass"{gatePassed=false}
+			if s.Status!=domain.StageSucceeded {
+				gateExecutionFailed = true
+			} else if s.RiskDecision != "pass" {
+				gatePassed = false
+			}
+		}
+		for _, reason := range s.ReasonCodes {
+			if reason != "" { summary.ReasonCodes = append(summary.ReasonCodes, reason) }
 		}
 	}
 	sort.Strings(summary.MissingStageCodes);sort.Strings(summary.DegradedStageCodes);sort.Strings(summary.BlockedStageCodes)
+	summary.ReasonCodes = uniqueSorted(summary.ReasonCodes)
 	summary.Coverage=float64(completed)/float64(len(stages))
 	if requiresHardRiskGate && gateCount == 0 { fail = true }
 	finalStatus := domain.RunSucceeded
 	if fail { finalStatus = domain.RunFailed } else if partial { finalStatus = domain.RunPartial }
 	if requiresHardRiskGate {
-		summary.ActionabilityStatus = "blocked"
-		if gateCount > 0 && gatePassed && finalStatus == domain.RunSucceeded {
-			summary.ActionabilityStatus = "actionable"
+		// Failed gate execution is not a business decision and must remain unevaluated.
+		if !gateExecutionFailed && gateCount > 0 {
+			summary.ActionabilityStatus = "blocked"
+			if gatePassed && finalStatus == domain.RunSucceeded {
+				summary.ActionabilityStatus = "actionable"
+			}
 		}
 	}
 	if run.Status != domain.RunRunning && run.Status != domain.RunCancelling {
@@ -178,6 +189,16 @@ func FinalizeCancellation(run domain.Run,stages []domain.Stage,attempts []domain
 }
 
 func contains(values []string,value string)bool{for _,v:=range values{if v==value{return true}};return false}
+
+func uniqueSorted(values []string) []string {
+	sort.Strings(values)
+	if len(values) < 2 { return values }
+	result := values[:1]
+	for _, value := range values[1:] {
+		if value != result[len(result)-1] { result = append(result, value) }
+	}
+	return result
+}
 
 
 // FinalizeDeadline aggregates timed-out and completed stages after all in-flight attempts

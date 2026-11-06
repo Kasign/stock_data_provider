@@ -101,3 +101,11 @@ Fake Repository/Fake Clock/Fake Provider 只证明模块内逻辑；MariaDB/Redi
 - 状态迁移、重试、取消和 deadline 函数尚未绑定数据库 UTC 时钟、事务、Run.version CAS、租约或 fencing。deadline 下的在途 Attempt 必须先停止确认/撤销写入权，再将 Stage/Attempt 收敛。
 - 测试文件已新增，但当前没有测试运行结果；不报告通过。
 - 尚未实现 Run 终态 Outbox、Repository、Migration、Application Facade 和跨模块 Adapter。
+
+
+## 9. P0 Review 修正（2026-11-06）
+
+- 硬风险门禁执行层失败与业务决策 reject/unknown 必须分开投影：前者 `actionability_status=not_evaluated`，后者 `blocked`；只有明确 pass 且 Run=succeeded 才 actionable。
+- required Stage 的 skipped 不允许被 `no_impact` 吸收；optional Stage 才可 no-impact。
+- ResultSummary.reason_codes 汇总各 Stage 的 reason_codes，排序去重，避免诊断信息在 Run 聚合时丢失。
+- 对应单元测试已增加，等待执行证据。
