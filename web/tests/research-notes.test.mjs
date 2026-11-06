@@ -118,7 +118,9 @@ test("研究记录 JSON 导出拒绝无效记录和重复 ID", () => {
 
 test("研究记录导入预览区分新增、相同、冲突和无效记录，且不修改存储", async () => {
   const { previewResearchNotesImport } = await import("../src/research-notes.js");
-  const current = { readable: true, valid: true, items: [note("same", "本地", "正文"), note("conflict", "本地版本", "旧正文")] };
+  const currentStorage = memory();
+  writeResearchNotes([note("same", "本地", "正文"), note("conflict", "本地版本", "旧正文")], currentStorage);
+  const current = readResearchNotes(currentStorage);
   const payload = { format: "stock-provider-webui.research-notes", version: 1, items: [
     note("new", "新增", "内容"), note("same", "本地", "正文"),
     note("conflict", "导入版本", "新正文"), { id: "bad" }
@@ -147,9 +149,9 @@ test("研究记录导入拒绝错误格式、版本、重复 ID、超量和超�
 
 test("研究记录导入冲突默认跳过，也可生成新 ID；禁止覆盖和重复 ID", async () => {
   const { previewResearchNotesImport, buildResearchNotesImportItems } = await import("../src/research-notes.js");
-  const preview = previewResearchNotesImport(JSON.stringify({ format: "stock-provider-webui.research-notes", version: 1, items: [note("conflict", "导入版本", "新正文")] }), {
-    readable: true, valid: true, items: [note("conflict", "本地版本", "旧正文")]
-  });
+  const currentStorage = memory();
+  writeResearchNotes([note("conflict", "本地版本", "旧正文")], currentStorage);
+  const preview = previewResearchNotesImport(JSON.stringify({ format: "stock-provider-webui.research-notes", version: 1, items: [note("conflict", "导入版本", "新正文")] }), readResearchNotes(currentStorage));
   assert.equal(buildResearchNotesImportItems(preview, "skip").length, 0);
   const copied = buildResearchNotesImportItems(preview, "copy", () => "new-copy");
   assert.equal(copied.length, 1);
@@ -182,5 +184,6 @@ test("研究记录导入提交检查快照、容量并在回读失败时恢复�
   const brokenPreview = previewResearchNotesImport(JSON.stringify({ format: "stock-provider-webui.research-notes", version: 1, items: [note("remote-2", "远端", "内容")] }), readResearchNotes({ getItem: () => raw }));
   const failedResult = commitResearchNotesImport(brokenPreview, failed, raw);
   assert.equal(failedResult.ok, false);
-  assert.equal(failedResult.rollback, false);
+  assert.equal(failedResult.rollback, true);
+  assert.equal(failed.raw, raw, "failed import must restore the exact pre-import snapshot");
 });

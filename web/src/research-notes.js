@@ -156,7 +156,8 @@ export function buildResearchNotesImportItems(preview, conflictMode = "skip", cr
     preview.conflicts.forEach(({ item }) => {
       let id = String(createId() || "").trim();
       if (!id || id.length > 160 || items.some(existing => existing.id === id) ||
-          preview.additions.some(existing => existing.id === id)) {
+          preview.additions.some(existing => existing.id === id) ||
+          preview.conflicts.some(({ item: conflicting }) => conflicting.id === id)) {
         throw new TypeError("冲突记录的新 ID 无效或重复，请重新生成。");
       }
       items.push({ ...item, id });
