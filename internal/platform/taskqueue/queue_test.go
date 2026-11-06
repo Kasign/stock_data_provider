@@ -1,6 +1,10 @@
 package taskqueue
 
 import (
+	"context"
+	"database/sql"
+	"database/sql/driver"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -76,6 +80,45 @@ func TestNewIDReturnsHexIdentifier(t *testing.T) {
 		if !((r >= '0' && r <= '9') || (r >= 'a' && r <= 'f')) {
 			t.Fatalf("ID is not lowercase hex: %q", id)
 		}
+	}
+}
+
+type startFailureConnector struct { err error }
+
+func (c startFailureConnector) Connect(context.Context) (driver.Conn, error) { return nil, c.err }
+func (c startFailureConnector) Driver() driver.Driver { return startFailureDriver{err: c.err} }
+
+type startFailureDriver struct { err error }
+func (d startFailureDriver) Open(string) (driver.Conn, error) { return nil, d.err }
+
+type queueTestRunner struct{}
+func (queueTestRunner) Run(context.Context, domain.RunRequest) (domain.RunResult, error) {
+	return domain.RunResult{}, nil
+}
+
+func TestStartReturnsTheOriginalStartupFailureOnEveryCall(t *testing.T) {
+	wantErr := errors.New("database unavailable")
+	db := sql.OpenDB(startFailureConnector{err: wantErr})
+	defer db.Close()
+	q, err := New(db, queueTestRunner{}, 1, 1, time.Second, time.Millisecond)
+	if err != nil { t.Fatal(err) }
+	first := q.Start(context.Background())
+	second := q.Start(context.Background())
+	if first == nil || second == nil || first.Error() != second.Error() {
+		t.Fatalf("startup failure must remain stable: first=%v second=%v", first, second)
+	}
+	q.Close()
+}
+
+func TestStartRejectsNilContextAndClosedQueue(t *testing.T) {
+	db := sql.OpenDB(startFailureConnector{err: errors.New("unused")})
+	defer db.Close()
+	q, err := New(db, queueTestRunner{}, 1, 1, time.Second, time.Millisecond)
+	if err != nil { t.Fatal(err) }
+	if err := q.Start(nil); err == nil { t.Fatal("nil start context must be rejected") }
+	q.Close()
+	if err := q.Start(context.Background()); !errors.Is(err, ErrQueueClosed) {
+		t.Fatalf("start after close = %v, want ErrQueueClosed", err)
 	}
 }
 

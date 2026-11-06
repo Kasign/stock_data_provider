@@ -21,6 +21,7 @@ var (
 	ErrTaskNotFound = errors.New("analysis task not found")
 	ErrQueueFull    = errors.New("analysis task queue is full")
 	ErrIdempotency  = errors.New("idempotency key conflicts with a different request")
+	ErrQueueClosed  = errors.New("analysis task queue is closed")
 )
 
 // Runner 与同步分析流程共用同一个 Runner，避免复制业务逻辑。
@@ -56,9 +57,12 @@ type Queue struct {
 	pollEvery time.Duration
 	cancel    context.CancelFunc
 	wg        sync.WaitGroup
-	startOnce sync.Once
-	closeOnce sync.Once
-	createMu  sync.Mutex
+	startOnce    sync.Once
+	closeOnce    sync.Once
+	lifecycleMu  sync.Mutex
+	startErr     error
+	closed       bool
+	createMu     sync.Mutex
 }
 
 func New(db *sql.DB, runner Runner, workers, maxQueued int, timeout, pollEvery time.Duration) (*Queue, error) {
@@ -86,32 +90,39 @@ func New(db *sql.DB, runner Runner, workers, maxQueued int, timeout, pollEvery t
 // Start 会恢复仍在队列中的任务；进程异常退出时正在执行的任务会被明确标记为失败，
 // 避免状态永久停留在 running。已写入的分析阶段事件仍保留供排查。
 func (q *Queue) Start(parent context.Context) error {
-	var startErr error
+	if parent == nil {
+		return errors.New("task queue start context is required")
+	}
+	q.lifecycleMu.Lock()
+	defer q.lifecycleMu.Unlock()
+	if q.closed {
+		return ErrQueueClosed
+	}
 	q.startOnce.Do(func() {
 		ctx, cancel := context.WithCancel(parent)
 		q.cancel = cancel
 		tx, err := q.db.BeginTx(ctx, nil)
 		if err != nil {
-			startErr = err
+			q.startErr = err
 			cancel()
 			return
 		}
 		// 将中断的 run 一并终结，避免旧同步查询接口永远返回 run_not_finished。
-		_, startErr = tx.ExecContext(ctx, `UPDATE analysis_runs r JOIN analysis_tasks t ON t.run_id=r.run_id
+		_, q.startErr = tx.ExecContext(ctx, `UPDATE analysis_runs r JOIN analysis_tasks t ON t.run_id=r.run_id
 			SET r.status='failed', r.finished_at=UTC_TIMESTAMP(6),
 			r.result_json=JSON_OBJECT('run_id', r.run_id, 'status', 'failed',
 				'request', JSON_EXTRACT(t.request_json, '$'),
 				'failure', JSON_OBJECT('code', 'worker_interrupted', 'stage', 'worker_recovery', 'message', 'Worker process restarted while task was running'))
 			WHERE t.status='running'`)
-		if startErr == nil {
-			_, startErr = tx.ExecContext(ctx, `UPDATE analysis_tasks SET status='failed', failure_code='worker_interrupted', error_message='Worker process restarted while task was running', finished_at=UTC_TIMESTAMP(6), updated_at=UTC_TIMESTAMP(6) WHERE status='running'`)
+		if q.startErr == nil {
+			_, q.startErr = tx.ExecContext(ctx, `UPDATE analysis_tasks SET status='failed', failure_code='worker_interrupted', error_message='Worker process restarted while task was running', finished_at=UTC_TIMESTAMP(6), updated_at=UTC_TIMESTAMP(6) WHERE status='running'`)
 		}
-		if startErr == nil {
-			startErr = tx.Commit()
+		if q.startErr == nil {
+			q.startErr = tx.Commit()
 		} else {
 			_ = tx.Rollback()
 		}
-		if startErr != nil {
+		if q.startErr != nil {
 			cancel()
 			return
 		}
@@ -121,14 +132,17 @@ func (q *Queue) Start(parent context.Context) error {
 		}
 		slog.Info("异步分析 Worker 已启动", "component", "taskqueue", "workers", q.workers, "max_queued", q.maxQueued)
 	})
-	return startErr
+	return q.startErr
 }
 
 func (q *Queue) Close() {
+	q.lifecycleMu.Lock()
+	q.closed = true
+	if q.cancel != nil {
+		q.cancel()
+	}
+	q.lifecycleMu.Unlock()
 	q.closeOnce.Do(func() {
-		if q.cancel != nil {
-			q.cancel()
-		}
 		q.wg.Wait()
 	})
 }
