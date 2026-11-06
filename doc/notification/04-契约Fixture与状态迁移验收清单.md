@@ -2,7 +2,7 @@
 
 - 归属：NTF-001/004/005/006
 - 对应契约：NTF-CTR-001～003（历史别名 Platform CONTRACT-009/010）；状态以项目级契约目录为准
-- 状态：4 份 Draft 2020-12 Schema 与 6 个代表性 Golden 已校准；Go Draft 2020-12 Envelope/Payload Validator、Golden、非法 Payload、Inbox Fake 幂等/并发、Subscription 与 DeliveryPlan 领域测试已写入；最近验证基线的完整 Go workflow 已通过；NTF-CTR-001～003 仍为 pending_evidence；不要求个人 Owner 签字
+- 状态：4 份 Draft 2020-12 Schema 与 6 个代表性 Golden 已校准；Go Draft 2020-12 Envelope/Payload Validator、Golden、非法 Payload、Inbox Fake 幂等/并发、Subscription 与 DeliveryPlan Repository Port/Fake 测试已写入；根模块 gofmt/go test/race/vet 已通过（Run 42194930035）；NTF-CTR-001～003 仍为 pending_evidence；不要求个人 Owner 签字
 - 日期：2026-11-06
 - 说明：以下均为合成数据与测试场景，不代表已有实现或真实渠道能力。
 
@@ -128,7 +128,7 @@ Fake Adapter 只能验证分类和状态机，不证明真实渠道行为。每�
 6. Schema 兼容级别和版本命名规则需补兼容矩阵与 Registry 不可变性测试。
 7. Delivery deadline、max_attempts、max_elapsed 必须显式配置并测试边界，不依赖隐式默认值。
 
-**本清单是模块级测试设计基线；最近验证基线的完整 Go workflow 已通过，但 Inbox 当前仍使用 Fake Repository；未连接 Notification 真实 MariaDB、Worker 或渠道，不能据此宣称 NTF-001 完整通过或 NTF-001~006 已通过。**
+**本清单是模块级测试设计基线；根模块 gofmt/go test/race/vet 已通过，但 Inbox/Subscription/DeliveryPlan 当前仍使用 Fake Repository；未连接 Notification 真实 MariaDB、Worker 或渠道，不能据此宣称 NTF-001 完整通过或 NTF-001~006 已通过。**
 
 ## 10. INT-CTR-001 / NTF-CTR-001～003 Contract Test 执行矩阵
 

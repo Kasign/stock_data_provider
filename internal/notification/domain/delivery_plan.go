@@ -128,3 +128,14 @@ func (p DeliveryPlan) SameUniqueKey(other DeliveryPlan) bool {
 		p.TemplateVersion == other.TemplateVersion &&
 		p.RecipientRef == other.RecipientRef
 }
+
+var ErrDeliveryPlanConflict = errors.New("notification: delivery plan conflict")
+
+// ValidateDeliveryPlanReplay accepts a duplicate only when the immutable unique tuple
+// and its full plan fingerprint are identical.
+func ValidateDeliveryPlanReplay(existing, incoming DeliveryPlan) error {
+	if !existing.SameUniqueKey(incoming) || existing.PlanFingerprint != incoming.PlanFingerprint {
+		return ErrDeliveryPlanConflict
+	}
+	return nil
+}
