@@ -734,3 +734,56 @@ M4 必须增加可自动化的回归测试：
 - 因此当前 CI 不能标记为全绿。
 
 **M0 状态继续保持 in_progress。** 本轮未改动 Provider 请求行为或 OpenAPI；发现的认证跨域风险必须进入 M4 安全验收项。
+
+
+### 2026-11-06：M0 第十四轮补充（OpenAPI 鉴权契约与实际路由差异）
+
+#### 1. 发现明确的 OpenAPI 鉴权契约缺口
+
+按 OpenAPI 3.0.3 Path/Operation 逐项提取 35 个 Operation，并与 httpapi/server.go 的 Go 1.22+ ServeMux 注册对照：
+- Server 共注册 35 条 method+path 路由，与 OpenAPI 35 个 Operation 数量一致。
+- Server 中只有 GET /health/live、GET /health/ready 不经过 s.auth；其余 33 条均经过 API Key 认证中间件。
+- OpenAPI 中只有 11 条业务 Operation 显式声明 security: ApiKey；22 条业务 Operation 未声明 security，且文件顶层也没有全局 security。
+- OpenAPI 未声明 security 的 22 条路径为：
+  GET /api/v1/quotes/{symbol}
+  GET /api/v1/bars/{symbol}/daily
+  GET /api/v1/bundles/{symbol}
+  GET /api/v1/data-sources/probe/history
+  GET /api/v1/data-sources
+  GET /api/v1/stocks/search
+  GET /api/v1/stocks/{symbol}/announcements
+  GET /api/v1/stocks/{symbol}/profile
+  GET /api/v1/stocks/{symbol}/fundamentals
+  GET /api/v1/stocks/{symbol}/chip-distribution
+  GET /api/v1/stocks/{symbol}/capital-flow
+  GET /api/v1/stocks/{symbol}/boards
+  GET /api/v1/market/valuations
+  GET /api/v1/market/sectors
+  GET /api/v1/market/trading-calendar
+  GET /api/v1/market/stocks
+  GET /api/v1/market/sentiment
+  GET /api/v1/market/sentiment/history
+  GET /api/v1/market/breadth
+  GET /api/v1/market/hot-stocks
+  GET /api/v1/market/dragon-tiger
+  GET /api/v1/market/limit-pools
+- 其中部分 Operation 声明了 401 响应，但未声明 security；这仍会让 OpenAPI 客户端/文档工具把接口误判为无需认证。GET /api/v1/data-sources/diagnostics 已声明 ApiKey，但响应列表未声明 401，属于另一处错误响应契约缺口。
+- 当前不是 Server 鉴权实现缺失，而是 OpenAPI 对实际认证行为描述不完整；不能为兼容文档而擅自放开 Server 路由。
+
+#### 2. 迁移前修复要求
+
+在 M0 准入前应确定 OpenAPI 的统一表达方式：
+- 推荐在 OpenAPI 顶层声明全局 security: [{ApiKey: []}]，再仅对 health/live 与 health/ready 显式设置 security: []。
+- 若存在真正公开的业务接口，必须由产品/安全边界确认后，Server 和 OpenAPI 同步调整；当前源码没有发现此类公开业务路由。
+- 为所有 33 条受保护路由统一声明 401 响应及 Error Schema；对 diagnostics 等缺少 401 的操作补齐。
+- 增加 contract test：逐 Operation 对照实际 mux 注册、认证中间件与 OpenAPI security；新增路由必须同步生成/维护契约测试。
+- 该修复属于 OpenAPI 契约准确性修复，不涉及业务 Provider 行为；仍应在当前分支先评审，不要在本轮审计中顺手修改 API 文档或 Server。
+
+#### 3. 其他操作级核验进度
+
+- method+path：35/35 已确认一致。
+- auth/security：发现 22 条漏声明，11 条显式 ApiKey，2 条 health 明确公开。
+- requestBody、参数 required/type/format、response Schema、错误响应完整性尚未逐项核完。
+- 当前 OpenAPI 采用部分 Operation 内联 Schema、部分 components 引用；后续需核对 Handler JSON 编码字段与 Schema，不可只比较 DTO 名称。
+
+**M0 状态继续保持 in_progress。** 此发现列为 OpenAPI 契约阻断项，M1 前应完成契约修复并通过 contract test；本轮只更新迁移审计文档，没有修改 OpenAPI 或鉴权代码。
