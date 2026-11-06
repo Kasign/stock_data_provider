@@ -80,6 +80,19 @@ func TestMACDUsesDoubledHistogramAndSupportsNegativeDIF(t *testing.T) {
 	closeTo(t, got.DIF, -.5, 1e-12)
 	closeTo(t, got.DEA, -.5, 1e-12)
 	closeTo(t, got.Histogram, 0, 1e-12)
+
+	positive, err := MACD([]float64{1, 2, 3, 4, 5, 7}, MACDParams{
+		FastWindow: 2, SlowWindow: 3, SignalWindow: 2,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	closeTo(t, positive.DIF, 2.0/3.0, 1e-12)
+	closeTo(t, positive.DEA, 11.0/18.0, 1e-12)
+	closeTo(t, positive.Histogram, 1.0/9.0, 1e-12)
+	if math.Abs(positive.Histogram-(positive.DIF-positive.DEA)) < 1e-12 {
+		t.Fatal("histogram must be twice DIF-DEA, not DIF-DEA")
+	}
 }
 
 func TestATRUsesExplicitPreviousClose(t *testing.T) {
