@@ -135,3 +135,13 @@ Fake Repository/Fake Clock/Fake Provider 只证明模块内逻辑；MariaDB/Redi
 - `ClaimReadyStage` 表达 Worker claim：校验 Run 仍 running、未取消且未到 deadline，再将 Stage 推进 running 并创建递增编号的 Attempt。调用方必须在同一事务/CAS 门禁下持久化 Stage 与 Attempt，并保证 Attempt Ref 唯一。
 - 以上函数不提供数据库并发保证；Worker claim、Cancel、Deadline、Scheduler retry 仍须共享 Run.version CAS/事务门禁。
 - 取消终态 ResultSummary 将 cancelled Stage 计入 MissingStageCodes；actionability 仍固定 not_evaluated。
+
+
+## 13. RFC 8785 Request/Template Fingerprint（2026-11-06）
+
+- RequestFingerprint 与 WorkflowTemplate.Fingerprint 均先构造完整 JSON 对象，再由 RFC 8785 JCS 生成 canonical UTF-8 bytes，最后执行 SHA-256。
+- CreateRun parameters 以 RawMessage 纳入待规范化 JSON；避免先经 `UseNumber`/map 解码导致 duplicate-key 被静默覆盖。JCS canonicalizer 必须拒绝 duplicate key。
+- input_snapshot_refs、Template.Stages、Stage.Dependencies、RetryableReasonCodes 按契约集合语义排序；真正有序的参数数组保留原顺序。
+- 时间先显式转 UTC，再进入 JSON 对象；tracing 字段仍不参与 RequestFingerprint。
+- 依赖：`github.com/gowebpki/jcs@v0.0.0-20260921015938-f5011b64e085`（模块 Go 1.21）。
+- 当前提交只完成 JCS 接入和等价输入/重复键测试代码；Golden 固定摘要、RFC 8785 全量测试执行记录仍待补充。

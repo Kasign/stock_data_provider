@@ -10,6 +10,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/gowebpki/jcs"
 )
 
 var (
@@ -71,27 +73,29 @@ func RequestFingerprint(callerRef string, cmd CreateRunCommand) (string, error) 
 	if strings.TrimSpace(callerRef) == "" {
 		return "", fmt.Errorf("%w: authenticated caller is required", ErrInvalidCommand)
 	}
-	var parameters any
-	decoder := json.NewDecoder(bytes.NewReader(cmd.Parameters))
-	decoder.UseNumber()
-	if err := decoder.Decode(&parameters); err != nil {
-		return "", fmt.Errorf("%w: decode parameters: %v", ErrInvalidCommand, err)
-	}
 	refs := append([]string(nil), cmd.InputSnapshotRefs...)
 	sort.Strings(refs)
+	parameters := bytes.TrimSpace(cmd.Parameters)
+	if len(parameters) == 0 || !json.Valid(parameters) || parameters[0] != '{' {
+		return "", fmt.Errorf("%w: parameters must be a valid JSON object", ErrInvalidCommand)
+	}
 	payload := struct {
-		CallerRef string `json:"caller_ref"`
-		Operation string `json:"operation"`
-		TemplateRef string `json:"template_ref"`
-		TemplateVersion string `json:"template_version"`
-		SystemAsOf time.Time `json:"system_as_of"`
-		DeadlineAt time.Time `json:"deadline_at"`
+		CallerRef string          `json:"caller_ref"`
+		Operation string          `json:"operation"`
+		TemplateRef string        `json:"template_ref"`
+		TemplateVersion string    `json:"template_version"`
+		SystemAsOf time.Time      `json:"system_as_of"`
+		DeadlineAt time.Time      `json:"deadline_at"`
 		InputSnapshotRefs []string `json:"input_snapshot_refs"`
-		Parameters any `json:"parameters"`
+		Parameters json.RawMessage `json:"parameters"`
 	}{callerRef, "CreateRun", cmd.TemplateRef, cmd.TemplateVersion, cmd.SystemAsOf.UTC(), cmd.DeadlineAt.UTC(), refs, parameters}
 	raw, err := json.Marshal(payload)
 	if err != nil {
 		return "", fmt.Errorf("encode create run fingerprint: %w", err)
+	}
+	canonical, err := jcs.Transform(raw)
+	if err != nil {
+		return "", fmt.Errorf("%w: canonicalize create run fingerprint: %v", ErrInvalidCommand, err)
 	}
 	sum := sha256.Sum256(raw)
 	return hex.EncodeToString(sum[:]), nil

@@ -46,3 +46,17 @@ func TestHardRiskGateMustBeRegisteredAndFailClosed(t *testing.T){
 	tmpl.Stages[0].Propagation=p
 	if err:=Validate(tmpl,testGates{"market":true});err!=nil{t.Fatal(err)}
 }
+
+
+func TestFingerprintCanonicalizesJSONAndSetLikeCollections(t *testing.T) {
+	a := testTemplate()
+	b := testTemplate()
+	b.Stages[0], b.Stages[1] = b.Stages[1], b.Stages[0]
+	b.Stages[1].Dependencies = []string{}
+	b.Stages[0].Dependencies = []string{"market"}
+	fa, err := Fingerprint(a)
+	if err != nil { t.Fatal(err) }
+	fb, err := Fingerprint(b)
+	if err != nil { t.Fatal(err) }
+	if fa != fb { t.Fatalf("equivalent template collection order changed fingerprint: %s != %s", fa, fb) }
+}

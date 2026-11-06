@@ -10,6 +10,8 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/gowebpki/jcs"
+
 	"example.com/stock-analysis-flow/internal/researchflow/domain"
 )
 
@@ -150,7 +152,9 @@ func Fingerprint(t WorkflowTemplate) (string, error) {
 	}
 	raw, err := json.Marshal(t)
 	if err != nil { return "", fmt.Errorf("encode workflow template: %w", err) }
-	sum := sha256.Sum256(raw)
+	canonical, err := jcs.Transform(raw)
+	if err != nil { return "", fmt.Errorf("canonicalize workflow template: %w", err) }
+	sum := sha256.Sum256(canonical)
 	return hex.EncodeToString(sum[:]), nil
 }
 

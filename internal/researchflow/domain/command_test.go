@@ -40,3 +40,25 @@ func TestRequestFingerprintCanonicalizesParametersAndExcludesTracing(t *testing.
 	if fa==fc{t.Fatal("caller scope missing from fingerprint")}
 	if err:=ValidateIdempotentReplay(fa,fc);!errors.Is(err,ErrIdempotencyConflict){t.Fatalf("expected idempotency conflict, got %v",err)}
 }
+
+
+func TestRequestFingerprintUsesJCSNumberAndUnicodeRules(t *testing.T) {
+	now := time.Date(2026, 11, 6, 10, 0, 0, 0, time.UTC)
+	a, b := commandAt(now), commandAt(now)
+	a.Parameters = json.RawMessage(`{"value":1.0,"negative_zero":-0,"unicode":"\\u0065"}`)
+	b.Parameters = json.RawMessage(`{ "unicode":"e", "negative_zero":0.0, "value":1 }`)
+	fa, err := RequestFingerprint("caller-a", a)
+	if err != nil { t.Fatal(err) }
+	fb, err := RequestFingerprint("caller-a", b)
+	if err != nil { t.Fatal(err) }
+	if fa != fb { t.Fatalf("JCS-equivalent numeric/Unicode parameters differ: %s != %s", fa, fb) }
+}
+
+func TestRequestFingerprintRejectsDuplicateJSONKeys(t *testing.T) {
+	now := time.Date(2026, 11, 6, 10, 0, 0, 0, time.UTC)
+	cmd := commandAt(now)
+	cmd.Parameters = json.RawMessage(`{"symbol":"600000","symbol":"000001"}`)
+	if _, err := RequestFingerprint("caller-a", cmd); err == nil {
+		t.Fatal("duplicate JSON keys must be rejected by JCS")
+	}
+}
