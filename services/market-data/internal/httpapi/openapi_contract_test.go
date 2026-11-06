@@ -173,40 +173,107 @@ func TestSectorRankingFiveDayChangeSchemaIsDocumented(t *testing.T) {
 
 func TestOpenAPIDataModelFieldsMatchKnownJSONContract(t *testing.T) {
 	spec, err := os.ReadFile("../../openapi.yaml")
-	if err != nil { t.Fatalf("read OpenAPI specification: %v", err) }
+	if err != nil {
+		t.Fatalf("read OpenAPI specification: %v", err)
+	}
 	var document map[string]any
-	if err := yaml.Unmarshal(spec, &document); err != nil { t.Fatalf("OpenAPI must be valid YAML: %v", err) }
+	if err := yaml.Unmarshal(spec, &document); err != nil {
+		t.Fatalf("OpenAPI must be valid YAML: %v", err)
+	}
 	schemas := document["components"].(map[string]any)["schemas"].(map[string]any)
 	props := func(name string) map[string]any {
-		t.Helper(); v, ok := schemas[name].(map[string]any); if !ok { t.Fatalf("schema %s missing", name) }
-		p, ok := v["properties"].(map[string]any); if !ok { t.Fatalf("schema %s properties missing", name) }; return p
+		t.Helper()
+		v, ok := schemas[name].(map[string]any)
+		if !ok {
+			t.Fatalf("schema %s missing", name)
+		}
+		p, ok := v["properties"].(map[string]any)
+		if !ok {
+			t.Fatalf("schema %s properties missing", name)
+		}
+		return p
 	}
 	required := func(name string) map[string]bool {
-		t.Helper(); v := schemas[name].(map[string]any); items, _ := v["required"].([]any); out := map[string]bool{}
-		for _, item := range items { if field, ok := item.(string); ok { out[field] = true } }; return out
+		t.Helper()
+		v := schemas[name].(map[string]any)
+		items, _ := v["required"].([]any)
+		out := map[string]bool{}
+		for _, item := range items {
+			if field, ok := item.(string); ok {
+				out[field] = true
+			}
+		}
+		return out
 	}
 	for _, item := range []struct{ schema, field string }{
-		{"ProviderProbeCheckResult","left_adjustment_method"},{"ProviderProbeCheckResult","right_adjustment_method"},
-		{"ProviderProbeCheckResult","left_adjustment_reference_date"},{"ProviderProbeCheckResult","right_adjustment_reference_date"},
-		{"SectorRanking","provider_report_date"},{"SectorRankingSnapshot","excluded_non_a_share_count"},
-		{"MarketBreadthSnapshot","excluded_non_a_share_count"},{"LimitPoolItem","seal_money"},{"LimitPoolItem","max_seal_money"},
-		{"FundamentalSection","available_at"},{"IndexConstituent","effective_from"},{"IndexConstituent","effective_to"},
-		{"IndexConstituent","available_at"},{"IndexConstituent","system_observed_at"},{"SourceStatus","market_capital_flow_capable"},
-	} { if _, ok := props(item.schema)[item.field]; !ok { t.Errorf("%s.%s missing", item.schema,item.field) } }
-	for _, item := range []struct{ schema, field string }{
-		{"StockAnnouncementSnapshot","source_version"},{"MarketSentimentSnapshot","limit_up_count"},
-		{"MarketSentimentSnapshot","limit_down_count"},{"MarketSentimentSnapshot","broken_board_count"},
-		{"Quote","change"},{"Quote","change_percent"},{"Quote","amount"},{"DailyBar","amount"},
-		{"DailyBar","change_percent"},{"MarketBreadthSnapshot","total_amount_cny"},{"SourceStatus","historical_index_constituents_capable"},
-	} { if !required(item.schema)[item.field] { t.Errorf("%s.%s must be required",item.schema,item.field) } }
-	for _, item := range []struct{ schema, field string }{{"Bundle","warnings"},{"HotRankingItem","source_version"},{"HotRankingSnapshot","source_version"},{"MarketSentimentSnapshot","source_version"}} {
-		if required(item.schema)[item.field] { t.Errorf("%s.%s must be optional",item.schema,item.field) }
+		{"ProviderProbeCheckResult", "left_adjustment_method"},
+		{"ProviderProbeCheckResult", "right_adjustment_method"},
+		{"ProviderProbeCheckResult", "left_adjustment_reference_date"},
+		{"ProviderProbeCheckResult", "right_adjustment_reference_date"},
+		{"SectorRanking", "provider_report_date"},
+		{"SectorRankingSnapshot", "excluded_non_a_share_count"},
+		{"MarketBreadthSnapshot", "excluded_non_a_share_count"},
+		{"LimitPoolItem", "seal_money"},
+		{"LimitPoolItem", "max_seal_money"},
+		{"FundamentalSection", "available_at"},
+		{"IndexConstituent", "effective_from"},
+		{"IndexConstituent", "effective_to"},
+		{"IndexConstituent", "available_at"},
+		{"IndexConstituent", "system_observed_at"},
+		{"SourceStatus", "market_capital_flow_capable"},
+	} {
+		if _, ok := props(item.schema)[item.field]; !ok {
+			t.Errorf("%s.%s missing", item.schema, item.field)
+		}
 	}
 	for _, item := range []struct{ schema, field string }{
-		{"Quote","validation_total_count"},{"Quote","validation_error_count"},{"Quote","validation_warning_count"},
-		{"Quote","validation_info_count"},{"Quote","validation_truncated"},{"Quote","validation_issues"},
-		{"StockBoard","change_percent_5d"},{"StockBoard","provider_report_date"},{"PriceLimitEventEvidence","adjustment_basis"},
-	} { if _, ok := props(item.schema)[item.field]; ok { t.Errorf("%s.%s has no current Go response field",item.schema,item.field) } }
-	if p:=props("LimitPoolItem")["change_percent"].(map[string]any); p["nullable"]!=true { t.Error("LimitPoolItem.change_percent must be nullable") }
-	for _, field := range []string{"name","rank_trend"} { if props("HotRankingItem")[field].(map[string]any)["nullable"]==true { t.Errorf("HotRankingItem.%s must not be nullable",field) } }
+		{"StockAnnouncementSnapshot", "source_version"},
+		{"MarketSentimentSnapshot", "limit_up_count"},
+		{"MarketSentimentSnapshot", "limit_down_count"},
+		{"MarketSentimentSnapshot", "broken_board_count"},
+		{"Quote", "change"},
+		{"Quote", "change_percent"},
+		{"Quote", "amount"},
+		{"DailyBar", "amount"},
+		{"DailyBar", "change_percent"},
+		{"MarketBreadthSnapshot", "total_amount_cny"},
+		{"SourceStatus", "historical_index_constituents_capable"},
+	} {
+		if !required(item.schema)[item.field] {
+			t.Errorf("%s.%s must be required", item.schema, item.field)
+		}
+	}
+	for _, item := range []struct{ schema, field string }{
+		{"Bundle", "warnings"},
+		{"HotRankingItem", "source_version"},
+		{"HotRankingSnapshot", "source_version"},
+		{"MarketSentimentSnapshot", "source_version"},
+	} {
+		if required(item.schema)[item.field] {
+			t.Errorf("%s.%s must be optional", item.schema, item.field)
+		}
+	}
+	for _, item := range []struct{ schema, field string }{
+		{"Quote", "validation_total_count"},
+		{"Quote", "validation_error_count"},
+		{"Quote", "validation_warning_count"},
+		{"Quote", "validation_info_count"},
+		{"Quote", "validation_truncated"},
+		{"Quote", "validation_issues"},
+		{"StockBoard", "change_percent_5d"},
+		{"StockBoard", "provider_report_date"},
+		{"PriceLimitEventEvidence", "adjustment_basis"},
+	} {
+		if _, ok := props(item.schema)[item.field]; ok {
+			t.Errorf("%s.%s has no current Go response field", item.schema, item.field)
+		}
+	}
+	if p := props("LimitPoolItem")["change_percent"].(map[string]any); p["nullable"] != true {
+		t.Error("LimitPoolItem.change_percent must be nullable")
+	}
+	for _, field := range []string{"name", "rank_trend"} {
+		if props("HotRankingItem")[field].(map[string]any)["nullable"] == true {
+			t.Errorf("HotRankingItem.%s must not be nullable", field)
+		}
+	}
 }
