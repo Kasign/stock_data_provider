@@ -126,3 +126,12 @@ Fake Repository/Fake Clock/Fake Provider 只证明模块内逻辑；MariaDB/Redi
 - `CreateRunCommand.Parameters` 当前只检查 JSON object，缺少按不可变 template_version 绑定的 typed Parameter Schema Validator。
 - 当前 Domain 类型的 JSON Tags 不构成公开 DTO。公开 Run/Stage/Attempt DTO 的字段、nullable、引用、状态和版本约束必须由独立 Schema/Golden 明确。
 - 取消终态现在补充固化 ResultSummary；但数据库事务、Run.version CAS、固定锁顺序、Worker claim、容量原子预留、lease/fencing 和崩溃恢复仍未实现，不能将领域纯函数描述为并发安全。
+
+
+## 12. Run 终态与 Retry/Worker Claim 边界复核（2026-11-06）
+
+- `TransitionRun` 对外拒绝直接进入任何终态；只有 AggregateRun、FinalizeCancellation 等完成 Stage/Attempt 校验并固化 ResultSummary 的收敛入口可调用包内迁移函数提交终态。
+- `PromoteRetry` 是 Scheduler promotion，只能将到期的 `retry_wait` Stage 推进到 `ready`；不得提前创建 Attempt 或将 Stage 推进为 running。
+- `ClaimReadyStage` 表达 Worker claim：校验 Run 仍 running、未取消且未到 deadline，再将 Stage 推进 running 并创建递增编号的 Attempt。调用方必须在同一事务/CAS 门禁下持久化 Stage 与 Attempt，并保证 Attempt Ref 唯一。
+- 以上函数不提供数据库并发保证；Worker claim、Cancel、Deadline、Scheduler retry 仍须共享 Run.version CAS/事务门禁。
+- 取消终态 ResultSummary 将 cancelled Stage 计入 MissingStageCodes；actionability 仍固定 not_evaluated。

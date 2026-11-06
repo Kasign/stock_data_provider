@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"sort"
+	"strings"
 	"time"
 
 	"example.com/stock-analysis-flow/internal/researchflow/domain"
@@ -19,7 +20,19 @@ var (
 	ErrAlreadyTerminal = errors.New("run is already terminal")
 )
 
+// TransitionRun exposes only non-terminal Run transitions. Terminal transitions must
+// go through aggregation/finalization so the ResultSummary invariant cannot be bypassed.
 func TransitionRun(run domain.Run, next domain.RunStatus, now time.Time) (domain.Run, error) {
+	if run.Status.Terminal() {
+		return run, ErrAlreadyTerminal
+	}
+	if next.Terminal() {
+		return run, fmt.Errorf("%w: terminal Run transitions require a finalizer", ErrInvalidTransition)
+	}
+	return transitionRun(run, next, now)
+}
+
+func transitionRun(run domain.Run, next domain.RunStatus, now time.Time) (domain.Run, error) {
 	if run.Status.Terminal() { return run, ErrAlreadyTerminal }
 	allowed := false
 	switch run.Status {
@@ -65,7 +78,7 @@ func CancelRun(run domain.Run, stages []domain.Stage, now time.Time) (domain.Run
 				return run, stages, errors.New("queued or created run cannot contain a running stage")
 			}
 		}
-		updatedRun, err := TransitionRun(run, domain.RunCancelled, now)
+		updatedRun, err := transitionRun(run, domain.RunCancelled, now)
 		if err != nil { return run, stages, err }
 		updatedRun.TerminationReason = "user_cancelled"
 		for i := range updatedStages {
@@ -138,15 +151,45 @@ func ScheduleRetry(stage domain.Stage,attempt domain.Attempt,policy template.Ret
 	return updated,terminal,nil
 }
 
-func PromoteRetry(run domain.Run,stage domain.Stage,now time.Time,nextAttemptRef string)(domain.Stage,domain.Attempt,error){
-	if run.Status!=domain.RunRunning||run.TerminationReason!=""{return stage,domain.Attempt{},fmt.Errorf("%w: run does not permit retry",ErrInvalidTransition)}
-	if !now.UTC().Before(run.DeadlineAt.UTC()){return stage,domain.Attempt{},ErrDeadlineExceeded}
-	if stage.Status!=domain.StageRetryWait||stage.RetryAt==nil||now.UTC().Before(*stage.RetryAt)||nextAttemptRef==""{return stage,domain.Attempt{},fmt.Errorf("%w: stage is not ready for retry",ErrInvalidTransition)}
-	updated,err:=TransitionStage(stage,domain.StageReady,now);if err!=nil{return stage,domain.Attempt{},err}
-	updated.AttemptNo++;updated.RetryAt=nil
-	updated,err=TransitionStage(updated,domain.StageRunning,now);if err!=nil{return stage,domain.Attempt{},err}
-	attempt:=domain.Attempt{Ref:nextAttemptRef,StageRef:stage.Ref,Number:updated.AttemptNo,Status:domain.AttemptRunning,StartedAt:now.UTC()}
-	return updated,attempt,nil
+// PromoteRetry is the scheduler transition only: retry_wait -> ready.
+// It does not claim work or create an Attempt; Worker claim is a separate transition.
+func PromoteRetry(run domain.Run, stage domain.Stage, now time.Time) (domain.Stage, error) {
+	if run.Status != domain.RunRunning || run.TerminationReason != "" {
+		return stage, fmt.Errorf("%w: run does not permit retry", ErrInvalidTransition)
+	}
+	if !now.UTC().Before(run.DeadlineAt.UTC()) {
+		return stage, ErrDeadlineExceeded
+	}
+	if stage.Status != domain.StageRetryWait || stage.RetryAt == nil || now.UTC().Before(*stage.RetryAt) {
+		return stage, fmt.Errorf("%w: stage is not ready for retry", ErrInvalidTransition)
+	}
+	updated, err := TransitionStage(stage, domain.StageReady, now)
+	if err != nil { return stage, err }
+	updated.RetryAt = nil
+	return updated, nil
+}
+
+// ClaimReadyStage models a Worker claim after scheduler promotion. The caller must
+// persist the Stage and Attempt atomically under the Run.version/CAS gate and ensure
+// attemptRef uniqueness; this pure function does not provide cross-process exclusion.
+func ClaimReadyStage(run domain.Run, stage domain.Stage, now time.Time, attemptRef string) (domain.Stage, domain.Attempt, error) {
+	if run.Status != domain.RunRunning || run.TerminationReason != "" {
+		return stage, domain.Attempt{}, fmt.Errorf("%w: run does not permit worker claim", ErrInvalidTransition)
+	}
+	if !now.UTC().Before(run.DeadlineAt.UTC()) {
+		return stage, domain.Attempt{}, ErrDeadlineExceeded
+	}
+	if stage.Status != domain.StageReady || strings.TrimSpace(attemptRef) == "" {
+		return stage, domain.Attempt{}, fmt.Errorf("%w: stage is not claimable", ErrInvalidTransition)
+	}
+	updated, err := TransitionStage(stage, domain.StageRunning, now)
+	if err != nil { return stage, domain.Attempt{}, err }
+	updated.AttemptNo++
+	attempt := domain.Attempt{
+		Ref: attemptRef, StageRef: stage.Ref, Number: updated.AttemptNo,
+		Status: domain.AttemptRunning, StartedAt: now.UTC(),
+	}
+	return updated, attempt, nil
 }
 
 func AggregateRun(run domain.Run,stages []domain.Stage,attempts []domain.Attempt,policies map[string]template.PropagationPolicy,hardRiskStageCodes map[string]bool,requiresHardRiskGate bool,now time.Time)(domain.Run,error){
@@ -215,7 +258,7 @@ func AggregateRun(run domain.Run,stages []domain.Stage,attempts []domain.Attempt
 	if run.Status != domain.RunRunning && run.Status != domain.RunCancelling {
 		return run, fmt.Errorf("%w: run cannot be aggregated from %s", ErrInvalidTransition, run.Status)
 	}
-	updated, err := TransitionRun(run, finalStatus, now)
+	updated, err := transitionRun(run, finalStatus, now)
 	if err != nil { return run, err }
 	updated.ResultSummary = &summary
 	return updated, nil
@@ -232,7 +275,7 @@ func FinalizeCancellation(run domain.Run, stages []domain.Stage, attempts []doma
 		if attempt.Status == domain.AttemptRunning { return run, errors.New("cannot finalize while an attempt is running") }
 	}
 	summary := buildTerminalSummary(stages)
-	updated, err := TransitionRun(run, domain.RunCancelled, now)
+	updated, err := transitionRun(run, domain.RunCancelled, now)
 	if err != nil { return run, err }
 	updated.ResultSummary = &summary
 	return updated, nil
@@ -257,7 +300,7 @@ func buildTerminalSummary(stages []domain.Stage) domain.ResultSummary {
 			completed++
 			summary.DegradedStageCodes = append(summary.DegradedStageCodes, stage.Code)
 			summary.QualityStatus = "degraded"
-		case domain.StageSkipped, domain.StageFailed, domain.StageTimedOut:
+		case domain.StageSkipped, domain.StageFailed, domain.StageTimedOut, domain.StageCancelled:
 			summary.MissingStageCodes = append(summary.MissingStageCodes, stage.Code)
 		case domain.StageBlocked:
 			summary.MissingStageCodes = append(summary.MissingStageCodes, stage.Code)

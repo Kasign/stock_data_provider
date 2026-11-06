@@ -24,9 +24,12 @@ func TestRetryPreservesAttemptAndEnforcesBudget(t *testing.T){
 	if err!=nil{t.Fatal(err)}
 	if waiting.Status!=domain.StageRetryWait||finished.Status!=domain.AttemptFailed||waiting.RetryAt==nil{t.Fatal("retry transition did not preserve failed attempt")}
 	run:=domain.Run{Status:domain.RunRunning,DeadlineAt:now.Add(time.Minute)}
-	ready,next,err:=PromoteRetry(run,waiting,*waiting.RetryAt,"attempt-2")
+	ready,err:=PromoteRetry(run,waiting,*waiting.RetryAt)
 	if err!=nil{t.Fatal(err)}
-	if ready.AttemptNo!=2||next.Number!=2||next.Ref==finished.Ref{t.Fatal("retry did not append a new attempt")}
+	if ready.Status!=domain.StageReady||ready.AttemptNo!=1||ready.RetryAt!=nil{t.Fatal("scheduler promotion must only move retry_wait to ready")}
+	claimed,next,err:=ClaimReadyStage(run,ready,*waiting.RetryAt,"attempt-2")
+	if err!=nil{t.Fatal(err)}
+	if claimed.Status!=domain.StageRunning||claimed.AttemptNo!=2||next.Number!=2||next.Ref==finished.Ref{t.Fatal("worker claim did not create the next attempt")}
 	if _,_,err:=ScheduleRetry(ready,next,p,"provider_unavailable",domain.AttemptFailed,*waiting.RetryAt,run.DeadlineAt,0.5);!errors.Is(err,ErrRetryBudgetExhausted){t.Fatalf("expected exhausted budget, got %v",err)}
 }
 
@@ -208,4 +211,30 @@ func TestQueuedCancellationCreatesTerminalSummary(t *testing.T) {
 	if got.Status != domain.RunCancelled || got.ResultSummary == nil { t.Fatal("queued cancellation must persist terminal summary") }
 	if got.ResultSummary.StageOutcomes["market"] != domain.StageCancelled || updated[0].Status != domain.StageCancelled { t.Fatal("cancelled stage missing from terminal summary") }
 	if stages[0].Status != domain.StageReady { t.Fatal("CancelRun mutated caller-owned input slice") }
+}
+
+
+func TestTransitionRunCannotBypassTerminalFinalization(t *testing.T) {
+	now := time.Date(2026, 11, 6, 10, 0, 0, 0, time.UTC)
+	run := domain.Run{Status: domain.RunRunning}
+	if _, err := TransitionRun(run, domain.RunSucceeded, now); !errors.Is(err, ErrInvalidTransition) {
+		t.Fatalf("terminal transition must require a finalizer, got %v", err)
+	}
+}
+
+func TestWorkerClaimIsSeparateFromRetryPromotion(t *testing.T) {
+	now := time.Date(2026, 11, 6, 10, 0, 0, 0, time.UTC)
+	run := domain.Run{Status: domain.RunRunning, DeadlineAt: now.Add(time.Minute)}
+	stage := domain.Stage{Ref: "stage-1", Status: domain.StageReady, AttemptNo: 1}
+	claimed, attempt, err := ClaimReadyStage(run, stage, now, "attempt-2")
+	if err != nil { t.Fatal(err) }
+	if claimed.Status != domain.StageRunning || claimed.AttemptNo != 2 || attempt.Number != 2 {
+		t.Fatalf("unexpected claim result: stage=%#v attempt=%#v", claimed, attempt)
+	}
+	if _, _, err := ClaimReadyStage(domain.Run{Status: domain.RunCancelling, DeadlineAt: now.Add(time.Minute)}, stage, now, "attempt-3"); !errors.Is(err, ErrInvalidTransition) {
+		t.Fatalf("claim during cancellation must be rejected, got %v", err)
+	}
+	if _, _, err := ClaimReadyStage(domain.Run{Status: domain.RunRunning, DeadlineAt: now}, stage, now, "attempt-3"); !errors.Is(err, ErrDeadlineExceeded) {
+		t.Fatalf("claim at deadline must be rejected, got %v", err)
+	}
 }
