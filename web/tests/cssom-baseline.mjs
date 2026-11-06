@@ -154,16 +154,17 @@ try {
       }))
     }))
   };
+  // Always preserve the observation artifact, including on an intentional baseline mismatch.
+  await mkdir(path.dirname(outputPath), { recursive: true });
+  await writeFile(outputPath, JSON.stringify(snapshot, null, 2) + "\n", "utf8");
+  console.log("CSSOM observation captured:", outputPath);
   assert.deepEqual(comparison, {
     schemaVersion: fixture.schemaVersion,
     scope: fixture.scope,
     properties: fixture.properties,
     scenarios: fixture.scenarios
   }, "Screening CSSOM regression baseline changed; review and update the fixture intentionally");
-  await mkdir(path.dirname(outputPath), { recursive: true });
-  await writeFile(outputPath, JSON.stringify(snapshot, null, 2) + "\n", "utf8");
   console.log("CSSOM regression baseline passed:", fixturePath);
-  console.log("CSSOM observation captured:", outputPath);
   console.log("Scenarios:", snapshot.scenarios.length, "| targets per scenario:", targets.length);
 } finally {
   if (browser) await browser.close();
