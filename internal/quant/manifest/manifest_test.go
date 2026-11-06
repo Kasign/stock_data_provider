@@ -34,9 +34,7 @@ func TestBuildMatchesQNTCTR005Golden(t *testing.T) {
 		t.Fatalf("Build() error = %v", err)
 	}
 	if !reflect.DeepEqual(got, golden.Manifest) {
-		t.Fatalf("Build() manifest mismatch:
- got: %+v
-want: %+v", got, golden.Manifest)
+		t.Fatalf("Build() manifest mismatch: got=%+v want=%+v", got, golden.Manifest)
 	}
 	if err := got.Verify(); err != nil {
 		t.Fatalf("Verify() error = %v", err)

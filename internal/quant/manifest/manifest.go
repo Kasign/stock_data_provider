@@ -22,15 +22,15 @@ var (
 	schemaVersionRE    = regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?$`)
 	fingerprintRE      = regexp.MustCompile(`^[0-9a-f]{64}$`)
 	allowedResultTypes = map[string]struct{}{
-		"indicator": {},
-		"factor":    {},
-		"trend":     {},
-		"market":    {},
-		"industry":  {},
-		"stock":     {},
-		"strategy":  {},
-		"backtest":  {},
-		"risk":      {},
+		"indicator":  {},
+		"factor":     {},
+		"trend":      {},
+		"market":     {},
+		"industry":   {},
+		"stock":      {},
+		"strategy":   {},
+		"backtest":   {},
+		"risk":       {},
 		"evaluation": {},
 	}
 )
