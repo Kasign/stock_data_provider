@@ -161,3 +161,54 @@ Fake Repository/Fake Clock/Fake Provider 只证明模块内逻辑；MariaDB/Redi
 
 - 参数 Schema Registry 的 not_found 与暂时不可用错误必须区分；调用方不得把 Registry 连接/超时故障伪装为模板配置不存在。
 - JSON Schema format assertion 显式开启；参数重复键、非对象、空 body 均在 schema 校验前拒绝。
+
+
+### Resolved Template 指纹绑定修正（2026-11-06）
+
+- 发现原 `Resolve` 结果虽然保存 ParameterSchema 的 version/fingerprint，但 Run 使用的 `ResolvedTemplate.Fingerprint` 仍仅为静态 Template 指纹，导致同一 Template Ref/Version 下 Schema Registry 版本或内容变化未反映到 Run 指纹。
+- 现将 resolved fingerprint 定义为 RFC 8785 JCS + SHA-256，输入包含静态 Template fingerprint、ParameterSchemaRef、Registry version 和 canonical Schema digest。这样同一模板引用下 Schema 版本/内容变化会产生不同执行指纹。
+- 修正模板测试夹具：此前使用非十六进制占位 fingerprint，与 Resolve 的 64 位 SHA-256 校验冲突；统一替换为合法固定 64 位十六进制值。
+
+## 15. CreateRun Application Port 首轮
+
+- `RequestIdentity` 是可信认证/请求上下文适配边界；caller_ref 不从命令体读取。originating_request_id/correlation_id 由可信上下文注入，correlation 缺失时由高熵 ID Generator 生成。
+- TemplateRegistry 必须按 `(template_ref, template_version)` 精确读取；返回值 ref/version 不匹配立即拒绝。
+- CreateRun 先计算 caller-scoped JCS 指纹并查询幂等记录，再解析模板。这样相同请求重放不依赖模板/Schema Registry 当前在线；并发首次请求仍由 Repository 原子写入门禁裁决。
+- Run/Stage、完整 ResolvedTemplate（包括 ParameterSchema version/digest 与 applicability 排除记录）、原始参数快照及幂等键/指纹必须在 Repository 同一事务提交。
+- Repository `CreateRunAtomic` 必须保证唯一键 `(caller_ref, operation, idempotency_key)`；若并发竞争中已存在记录，必须在事务内比较 fingerprint，相同返回原 Run，不同返回 idempotency_conflict。必须在写入前以数据库 UTC 时钟复核 deadline。
+- 当前 Fake Repository 只证明 Application 编排，不证明 SQL/Redis/事务/CAS；持久化实现与 MariaDB 集成留在 FLOW-007/根集成阶段。
+
+
+- Review 发现 ResolvedTemplate 首版快照虽保存了 Stage DAG 和指纹，但未显式保留 `requires_hard_risk_gate`、`allow_empty_inputs`、`output_registry_version`、`resource_policy_ref`，无法仅凭快照完整还原执行配置。现已将四项纳入 ResolvedTemplate 并由 Resolve 固定，CreateRun Repository Port 持久化该完整快照；增加回归测试。
+
+
+### 2026-11-06 公共版本与 Fencing 字段对齐
+
+- 对齐项目契约目录：已持久化 Run/Stage 的初始 version 从 1 开始，公开 Schema 的最小值同步改为 1。
+- Stage 公开读取模型不包含 attempt_no；该字段只属于 Attempt。Domain 内部 Stage.AttemptNo 继续作为重试计数，不泄露为跨模块字段。
+- Worker Claim 必须由 Repository/Executor 在同一事务门禁下分配并注入正数 fencing_token；纯领域 Claim 函数拒绝 0，生成的 Attempt 回显该 token。Attempt Schema 对 fencing_token 的最小值同步改为 1。
+- 以上只统一字段语义和纯函数入参，不代表数据库 CAS、单调 token 分配或并发 fencing 已实现。
+
+
+- CreateRun 持久化前对输入快照引用按集合语义排序，并将已通过 typed Schema 校验的 parameters 保存为 RFC 8785 JCS canonical bytes；避免同一指纹语义请求因输入顺序/JSON 排版产生不同的运行快照。
+
+
+### 2026-11-06 适用性排除证据进入终态摘要
+
+- Review 发现 ResolvedTemplate 已记录 excluded_stages，但状态机聚合/取消摘要此前始终初始化为空，导致 CreateRun 前的适用性裁剪证据没有进入 Run 终态 ResultSummary。
+- Domain Run 增加仅供内部归并使用的 excluded-stage 快照字段（不进入公开 Run DTO）；CreateRun 从 ResolvedTemplate 注入。正常聚合、排队取消和运行中取消最终摘要均保留该列表。
+- 新增成功聚合与取消终态的排除证据回归测试。真实持久化时仍须从不可变 ResolvedTemplate Snapshot 恢复该字段。
+
+
+- Template Resolve 输出的 Stage 依赖引用现按集合语义排序，并同步写回 ResolvedStage.Definition，确保相同 Template fingerprint 对应稳定的 ResolvedTemplate Snapshot/Run Stage 依赖序列。
+
+
+### 2026-11-06 Run / Stage / ResultSummary 公开引用字段对齐
+
+- Run 公开 DTO 改为 `result_summary_ref`，不再内嵌 ResultSummary；ResultSummary 作为独立公开资源，单独定义 `result-summary-1.0.0.schema.json` 与 Golden。
+- Stage 公开 DTO 按项目字段级契约暴露 `quality_summary_ref`、`diagnostic_refs`，移除 Domain 内部的 `quality_status` 与 `risk_decision`；质量状态与风险门禁决策留在 ResultSummary 领域汇总。
+- Run Schema 对终态状态增加条件约束：succeeded/partial/failed/cancelled 必须有非空 result_summary_ref；非终态允许显式 null。
+- Domain 保留 ResultSummary 内容用于状态归并，ResultSummaryRef 由持久化终态提交时分配；Repository 必须与 Run 终态和 ResultSummary 在同一事务内写入。该持久化能力尚未实现。
+
+
+- RunRepository / 终态 Repository 的后续实现必须在终态事务内分配 result_summary_ref，并原子保存 ResultSummary 资源和 Run 终态；公开 Schema 已通过条件约束拒绝缺少该引用的终态 Run。

@@ -78,6 +78,10 @@ type ResolvedTemplate struct {
 	Ref string
 	Version string
 	Fingerprint string
+	RequiresHardRiskGate bool
+	AllowEmptyInputs bool
+	OutputRegistryVersion string
+	ResourcePolicyRef string
 	ParameterSchema ParameterSchemaSnapshot
 	Stages []ResolvedStage
 	Excluded []domain.ExcludedStage
@@ -169,6 +173,21 @@ func Fingerprint(t WorkflowTemplate) (string, error) {
 	return hex.EncodeToString(sum[:]), nil
 }
 
+func resolvedFingerprint(templateFingerprint string, schema ParameterSchemaSnapshot) (string, error) {
+	payload := struct {
+		TemplateFingerprint string `json:"template_fingerprint"`
+		ParameterSchemaRef string `json:"parameter_schema_ref"`
+		ParameterSchemaVersion string `json:"parameter_schema_version"`
+		ParameterSchemaFingerprint string `json:"parameter_schema_fingerprint"`
+	}{templateFingerprint, schema.Ref, schema.Version, schema.Fingerprint}
+	raw, err := json.Marshal(payload)
+	if err != nil { return "", fmt.Errorf("encode resolved template fingerprint: %w", err) }
+	canonical, err := jcs.Transform(raw)
+	if err != nil { return "", fmt.Errorf("canonicalize resolved template fingerprint: %w", err) }
+	sum := sha256.Sum256(canonical)
+	return hex.EncodeToString(sum[:]), nil
+}
+
 func Resolve(ctx context.Context, t WorkflowTemplate, parameters json.RawMessage, parameterSchemas ParameterSchemaValidator, evaluator ApplicabilityEvaluator, gates HardRiskGateRegistry) (ResolvedTemplate, error) {
 	if err := Validate(t, gates); err != nil { return ResolvedTemplate{}, err }
 	if parameterSchemas == nil { return ResolvedTemplate{}, fmt.Errorf("%w: parameter schema validator is required", ErrInvalidTemplate) }
@@ -184,9 +203,16 @@ func Resolve(ctx context.Context, t WorkflowTemplate, parameters json.RawMessage
 	if _, err := hex.DecodeString(parameterSchema.Fingerprint); err != nil {
 		return ResolvedTemplate{}, fmt.Errorf("%w: parameter schema fingerprint must be lowercase SHA-256 hex", ErrInvalidTemplate)
 	}
-	fingerprint, err := Fingerprint(t)
+	templateFingerprint, err := Fingerprint(t)
 	if err != nil { return ResolvedTemplate{}, err }
-	resolved := ResolvedTemplate{Ref:t.Ref, Version:t.Version, Fingerprint:fingerprint, ParameterSchema:parameterSchema}
+	fingerprint, err := resolvedFingerprint(templateFingerprint, parameterSchema)
+	if err != nil { return ResolvedTemplate{}, err }
+	resolved := ResolvedTemplate{
+		Ref:t.Ref, Version:t.Version, Fingerprint:fingerprint,
+		RequiresHardRiskGate:t.RequiresHardRiskGate, AllowEmptyInputs:t.AllowEmptyInputs,
+		OutputRegistryVersion:t.OutputRegistryVersion, ResourcePolicyRef:t.ResourcePolicyRef,
+		ParameterSchema:parameterSchema,
+	}
 	included := map[string]bool{}
 	definitions := map[string]StageDefinition{}
 	for _, stage := range t.Stages {
@@ -213,7 +239,10 @@ func Resolve(ctx context.Context, t WorkflowTemplate, parameters json.RawMessage
 	if err != nil { return ResolvedTemplate{}, err }
 	for _, code := range order {
 		stage := definitions[code]
-		resolved.Stages = append(resolved.Stages, ResolvedStage{Definition:stage, Dependencies:append([]string(nil), stage.Dependencies...)})
+		dependencies := append([]string(nil), stage.Dependencies...)
+		sort.Strings(dependencies)
+		stage.Dependencies = append([]string(nil), dependencies...)
+		resolved.Stages = append(resolved.Stages, ResolvedStage{Definition:stage, Dependencies:dependencies})
 	}
 	sort.Slice(resolved.Excluded, func(i,j int) bool { return resolved.Excluded[i].StageCode < resolved.Excluded[j].StageCode })
 	return resolved, nil

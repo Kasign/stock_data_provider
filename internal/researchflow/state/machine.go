@@ -87,7 +87,7 @@ func CancelRun(run domain.Run, stages []domain.Stage, now time.Time) (domain.Run
 				if err != nil { return run, stages, err }
 			}
 		}
-		updatedRun.ResultSummary = ptrSummary(buildTerminalSummary(updatedStages))
+		updatedRun.ResultSummary = ptrSummary(buildTerminalSummary(updatedStages, run.ExcludedStages))
 		return updatedRun, updatedStages, nil
 	}
 	if run.Status == domain.RunRunning {
@@ -174,14 +174,14 @@ func PromoteRetry(run domain.Run, stage domain.Stage, now time.Time) (domain.Sta
 // ClaimReadyStage models a Worker claim after scheduler promotion. The caller must
 // persist the Stage and Attempt atomically under the Run.version/CAS gate and ensure
 // attemptRef uniqueness; this pure function does not provide cross-process exclusion.
-func ClaimReadyStage(run domain.Run, stage domain.Stage, now time.Time, attemptRef string) (domain.Stage, domain.Attempt, error) {
+func ClaimReadyStage(run domain.Run, stage domain.Stage, now time.Time, attemptRef string, fencingToken uint64) (domain.Stage, domain.Attempt, error) {
 	if run.Status != domain.RunRunning || run.TerminationReason != "" {
 		return stage, domain.Attempt{}, fmt.Errorf("%w: run does not permit worker claim", ErrInvalidTransition)
 	}
 	if !now.UTC().Before(run.DeadlineAt.UTC()) {
 		return stage, domain.Attempt{}, ErrDeadlineExceeded
 	}
-	if stage.Status != domain.StageReady || strings.TrimSpace(stage.Ref) == "" || stage.AttemptNo < 0 || strings.TrimSpace(attemptRef) == "" {
+	if stage.Status != domain.StageReady || strings.TrimSpace(stage.Ref) == "" || stage.AttemptNo < 0 || strings.TrimSpace(attemptRef) == "" || fencingToken == 0 {
 		return stage, domain.Attempt{}, fmt.Errorf("%w: stage is not claimable", ErrInvalidTransition)
 	}
 	updated, err := TransitionStage(stage, domain.StageRunning, now)
@@ -189,7 +189,7 @@ func ClaimReadyStage(run domain.Run, stage domain.Stage, now time.Time, attemptR
 	updated.AttemptNo++
 	attempt := domain.Attempt{
 		Ref: attemptRef, StageRef: stage.Ref, Number: updated.AttemptNo,
-		Status: domain.AttemptRunning, StartedAt: now.UTC(),
+		Status: domain.AttemptRunning, StartedAt: now.UTC(), FencingToken: fencingToken,
 	}
 	return updated, attempt, nil
 }
@@ -198,7 +198,7 @@ func AggregateRun(run domain.Run,stages []domain.Stage,attempts []domain.Attempt
 	if len(stages)==0{return run,errors.New("cannot aggregate an empty run")}
 	for _,s:=range stages{if !s.Status.Terminal(){return run,errors.New("cannot aggregate while stages are non-terminal")}}
 	for _,a:=range attempts{if a.Status==domain.AttemptRunning{return run,errors.New("cannot aggregate while an attempt is running")}}
-	summary:=domain.ResultSummary{StageOutcomes:map[string]domain.StageStatus{},RiskGateDecisions:map[string]string{},ExcludedStages:[]domain.ExcludedStage{},MissingStageCodes:[]string{},DegradedStageCodes:[]string{},BlockedStageCodes:[]string{},ReasonCodes:[]string{},QualityStatus:"valid",ActionabilityStatus:"not_evaluated"}
+	summary:=domain.ResultSummary{StageOutcomes:map[string]domain.StageStatus{},RiskGateDecisions:map[string]string{},ExcludedStages:cloneExcludedStages(run.ExcludedStages),MissingStageCodes:[]string{},DegradedStageCodes:[]string{},BlockedStageCodes:[]string{},ReasonCodes:[]string{},QualityStatus:"valid",ActionabilityStatus:"not_evaluated"}
 	fail,partial,completed:=false,false,0
 	gateCount,gatePassed,gateExecutionFailed:=0,true,false
 	for _,s:=range stages{
@@ -276,7 +276,7 @@ func FinalizeCancellation(run domain.Run, stages []domain.Stage, attempts []doma
 	for _, attempt := range attempts {
 		if attempt.Status == domain.AttemptRunning { return run, errors.New("cannot finalize while an attempt is running") }
 	}
-	summary := buildTerminalSummary(stages)
+	summary := buildTerminalSummary(stages, run.ExcludedStages)
 	updated, err := transitionRun(run, domain.RunCancelled, now)
 	if err != nil { return run, err }
 	updated.ResultSummary = &summary
@@ -285,10 +285,10 @@ func FinalizeCancellation(run domain.Run, stages []domain.Stage, attempts []doma
 
 func ptrSummary(summary domain.ResultSummary) *domain.ResultSummary { return &summary }
 
-func buildTerminalSummary(stages []domain.Stage) domain.ResultSummary {
+func buildTerminalSummary(stages []domain.Stage, excludedStages []domain.ExcludedStage) domain.ResultSummary {
 	summary := domain.ResultSummary{
 		StageOutcomes: map[string]domain.StageStatus{}, RiskGateDecisions: map[string]string{},
-		ExcludedStages: []domain.ExcludedStage{}, MissingStageCodes: []string{},
+		ExcludedStages: cloneExcludedStages(excludedStages), MissingStageCodes: []string{},
 		DegradedStageCodes: []string{}, BlockedStageCodes: []string{}, ReasonCodes: []string{},
 		QualityStatus: "valid", ActionabilityStatus: "not_evaluated",
 	}
@@ -340,4 +340,9 @@ func FinalizeDeadline(run domain.Run, stages []domain.Stage, attempts []domain.A
 		return run, fmt.Errorf("%w: run is not cancelling due to deadline", ErrInvalidTransition)
 	}
 	return AggregateRun(run, stages, attempts, policies, hardRiskStageCodes, requiresHardRiskGate, now)
+}
+
+func cloneExcludedStages(values []domain.ExcludedStage) []domain.ExcludedStage {
+	if values == nil { return []domain.ExcludedStage{} }
+	return append([]domain.ExcludedStage(nil), values...)
 }

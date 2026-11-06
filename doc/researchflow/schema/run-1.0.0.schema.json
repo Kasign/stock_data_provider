@@ -1,43 +1,147 @@
 {
-  "$schema":"https://json-schema.org/draft/2020-12/schema",
-  "$id":"https://researchflow.invalid/schema/run-1.0.0",
-  "title":"Researchflow Run",
-  "type":"object",
-  "additionalProperties":false,
-  "required":["schema_version","run_ref","status","version","system_as_of","deadline_at","template_ref","template_version","template_fingerprint","input_snapshot_refs","result_summary","originating_request_id","correlation_id","termination_reason","created_at","started_at","finished_at"],
-  "properties":{
-    "schema_version":{"const":"1.0.0"},
-    "run_ref":{"type":"string","minLength":1},
-    "status":{"enum":["created","queued","running","cancelling","succeeded","partial","failed","cancelled"]},
-    "version":{"type":"integer","minimum":0},
-    "system_as_of":{"type":"string","format":"date-time"},
-    "deadline_at":{"type":"string","format":"date-time"},
-    "template_ref":{"type":"string","minLength":1},
-    "template_version":{"type":"string","minLength":1},
-    "template_fingerprint":{"type":"string","pattern":"^[a-f0-9]{64}$"},
-    "input_snapshot_refs":{"type":"array","items":{"type":"string","minLength":1},"uniqueItems":true},
-    "result_summary":{
-      "type":["object","null"],
-      "additionalProperties":false,
-      "required":["stage_outcomes","excluded_stages","missing_stage_codes","degraded_stage_codes","blocked_stage_codes","reason_codes","coverage","quality_status","risk_gate_decisions","actionability_status"],
-      "properties":{
-        "stage_outcomes":{"type":"object","additionalProperties":{"enum":["pending","ready","running","retry_wait","succeeded","degraded","skipped","failed","timed_out","cancelled","blocked"]}},
-        "excluded_stages":{"type":"array","items":{"type":"object","additionalProperties":false,"required":["stage_code","rule_version","reason_code"],"properties":{"stage_code":{"type":"string","minLength":1},"rule_version":{"type":"string","minLength":1},"reason_code":{"type":"string","minLength":1}}}},
-        "missing_stage_codes":{"type":"array","items":{"type":"string"},"uniqueItems":true},
-        "degraded_stage_codes":{"type":"array","items":{"type":"string"},"uniqueItems":true},
-        "blocked_stage_codes":{"type":"array","items":{"type":"string"},"uniqueItems":true},
-        "reason_codes":{"type":"array","items":{"type":"string"},"uniqueItems":true},
-        "coverage":{"type":"number","minimum":0,"maximum":1},
-        "quality_status":{"type":"string","minLength":1},
-        "risk_gate_decisions":{"type":"object","additionalProperties":{"enum":["pass","reject","unknown"]}},
-        "actionability_status":{"enum":["not_evaluated","blocked","actionable"]}
-      }
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://researchflow.invalid/schema/run-1.0.0",
+  "title": "Researchflow Run",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "run_ref",
+    "status",
+    "version",
+    "system_as_of",
+    "deadline_at",
+    "template_ref",
+    "template_version",
+    "template_fingerprint",
+    "input_snapshot_refs",
+    "result_summary_ref",
+    "originating_request_id",
+    "correlation_id",
+    "termination_reason",
+    "created_at",
+    "started_at",
+    "finished_at"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1.0.0"
     },
-    "originating_request_id":{"type":["string","null"]},
-    "correlation_id":{"type":"string","minLength":1},
-    "termination_reason":{"type":["string","null"]},
-    "created_at":{"type":"string","format":"date-time"},
-    "started_at":{"type":["string","null"],"format":"date-time"},
-    "finished_at":{"type":["string","null"],"format":"date-time"}
-  }
+    "run_ref": {
+      "type": "string",
+      "minLength": 1
+    },
+    "status": {
+      "enum": [
+        "created",
+        "queued",
+        "running",
+        "cancelling",
+        "succeeded",
+        "partial",
+        "failed",
+        "cancelled"
+      ]
+    },
+    "version": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "system_as_of": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "deadline_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "template_ref": {
+      "type": "string",
+      "minLength": 1
+    },
+    "template_version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "template_fingerprint": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "input_snapshot_refs": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "uniqueItems": true
+    },
+    "originating_request_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "correlation_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "termination_reason": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "started_at": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time"
+    },
+    "finished_at": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time"
+    },
+    "result_summary_ref": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "minLength": 1
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "enum": [
+              "succeeded",
+              "partial",
+              "failed",
+              "cancelled"
+            ]
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "then": {
+        "properties": {
+          "result_summary_ref": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    }
+  ]
 }

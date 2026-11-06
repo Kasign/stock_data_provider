@@ -16,7 +16,7 @@ func(g testGates)Contains(code string)bool{return g[code]}
 
 type testParameterSchemas struct{}
 func(testParameterSchemas) Validate(_ context.Context, ref string, _ json.RawMessage) (ParameterSchemaSnapshot, error) {
-	return ParameterSchemaSnapshot{Ref:ref, Version:"1", Fingerprint:"schema-sha256"}, nil
+	return ParameterSchemaSnapshot{Ref:ref, Version:"1", Fingerprint:"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}, nil
 }
 
 func testPolicy()PropagationPolicy{return PropagationPolicy{OnDegraded:domain.PropagateAccept,OnSkipped:domain.PropagatePartial,OnFailed:domain.PropagateFail,OnTimedOut:domain.PropagateFail,OnBlocked:domain.PropagateFail}}
@@ -80,10 +80,72 @@ func TestResolveRequiresImmutableParameterSchemaSnapshot(t *testing.T) {
 
 type mismatchedParameterSchemas struct{}
 func(mismatchedParameterSchemas) Validate(_ context.Context, _ string, _ json.RawMessage) (ParameterSchemaSnapshot, error) {
-	return ParameterSchemaSnapshot{Ref:"other-schema", Version:"1", Fingerprint:"sha256"}, nil
+	return ParameterSchemaSnapshot{Ref:"other-schema", Version:"1", Fingerprint:"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}, nil
 }
 
 func TestResolveRejectsMismatchedParameterSchemaRef(t *testing.T) {
 	_, err := Resolve(context.Background(), testTemplate(), json.RawMessage("{}"), mismatchedParameterSchemas{}, testEvaluator{"always": true}, nil)
 	if err == nil { t.Fatal("mismatched parameter schema ref accepted") }
+}
+
+
+type versionedParameterSchemas struct { version, fingerprint string }
+func (s versionedParameterSchemas) Validate(_ context.Context, ref string, _ json.RawMessage) (ParameterSchemaSnapshot,error) {
+	return ParameterSchemaSnapshot{Ref:ref,Version:s.version,Fingerprint:s.fingerprint},nil
+}
+
+func TestResolvedFingerprintBindsParameterSchemaVersionAndDigest(t *testing.T) {
+	tmpl:=testTemplate()
+	base:=versionedParameterSchemas{"1","aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}
+	first,err:=Resolve(context.Background(),tmpl,json.RawMessage("{}"),base,testEvaluator{"always":true},nil)
+	if err!=nil{t.Fatal(err)}
+	second,err:=Resolve(context.Background(),tmpl,json.RawMessage("{}"),versionedParameterSchemas{"2","aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},testEvaluator{"always":true},nil)
+	if err!=nil{t.Fatal(err)}
+	third,err:=Resolve(context.Background(),tmpl,json.RawMessage("{}"),versionedParameterSchemas{"1","bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"},testEvaluator{"always":true},nil)
+	if err!=nil{t.Fatal(err)}
+	if first.Fingerprint==second.Fingerprint || first.Fingerprint==third.Fingerprint {
+		t.Fatal("resolved template fingerprint must change when immutable schema version or content digest changes")
+	}
+}
+
+func TestResolveRejectsNonHexSchemaFingerprint(t *testing.T) {
+	schemas:=versionedParameterSchemas{"1","not-a-sha256"}
+	_,err:=Resolve(context.Background(),testTemplate(),json.RawMessage("{}"),schemas,testEvaluator{"always":true},nil)
+	if err==nil{t.Fatal("non-hex schema fingerprint accepted")}
+}
+
+
+func TestResolvePreservesExecutionPolicyInImmutableSnapshot(t *testing.T) {
+	tmpl:=testTemplate()
+	tmpl.RequiresHardRiskGate=true
+	tmpl.Stages[0].GateType="hard_risk"
+	tmpl.Stages[0].Propagation=PropagationPolicy{OnDegraded:domain.PropagateFail,OnSkipped:domain.PropagateFail,OnFailed:domain.PropagateFail,OnTimedOut:domain.PropagateFail,OnBlocked:domain.PropagateFail}
+	tmpl.AllowEmptyInputs=true
+	tmpl.OutputRegistryVersion="outputs-v7"
+	tmpl.ResourcePolicyRef="resource-v9"
+	resolved,err:=Resolve(context.Background(),tmpl,json.RawMessage("{}"),testParameterSchemas{},testEvaluator{"always":true},testGates{"market":true})
+	if err!=nil{t.Fatal(err)}
+	if !resolved.RequiresHardRiskGate||!resolved.AllowEmptyInputs||resolved.OutputRegistryVersion!="outputs-v7"||resolved.ResourcePolicyRef!="resource-v9" {
+		t.Fatalf("resolved template snapshot lost execution policy: %#v",resolved)
+	}
+}
+
+func TestResolveCanonicalizesDependencySetInSnapshot(t *testing.T) {
+	tmpl:=testTemplate()
+	audit:=StageDefinition{Code:"audit",Required:false,Applicability:ApplicabilityRule{RuleRef:"always",RuleVersion:"1"},Retry:testRetry(),Propagation:testPolicy()}
+	tmpl.Stages=append(tmpl.Stages,audit)
+	tmpl.Stages[1].Dependencies=[]string{"summary","audit"}
+	// Replace the dependent stage with a valid DAG node that depends on both roots.
+	tmpl.Stages[1].Dependencies=[]string{"audit","market"}
+	resolved,err:=Resolve(context.Background(),tmpl,json.RawMessage("{}"),testParameterSchemas{},testEvaluator{"always":true},nil)
+	if err!=nil{t.Fatal(err)}
+	var final *ResolvedStage
+	for i:=range resolved.Stages{if resolved.Stages[i].Definition.Code=="summary"{final=&resolved.Stages[i];break}}
+	if final==nil{t.Fatal("summary stage missing")}
+	if len(final.Dependencies)!=2||final.Dependencies[0]!="audit"||final.Dependencies[1]!="market"{
+		t.Fatalf("resolved dependency set is not canonical: %#v",final.Dependencies)
+	}
+	if len(final.Definition.Dependencies)!=2||final.Definition.Dependencies[0]!="audit"||final.Definition.Dependencies[1]!="market"{
+		t.Fatalf("resolved definition snapshot is not canonical: %#v",final.Definition.Dependencies)
+	}
 }

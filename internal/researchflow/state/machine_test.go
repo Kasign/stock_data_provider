@@ -27,7 +27,7 @@ func TestRetryPreservesAttemptAndEnforcesBudget(t *testing.T){
 	ready,err:=PromoteRetry(run,waiting,*waiting.RetryAt)
 	if err!=nil{t.Fatal(err)}
 	if ready.Status!=domain.StageReady||ready.AttemptNo!=1||ready.RetryAt!=nil{t.Fatal("scheduler promotion must only move retry_wait to ready")}
-	claimed,next,err:=ClaimReadyStage(run,ready,*waiting.RetryAt,"attempt-2")
+	claimed,next,err:=ClaimReadyStage(run,ready,*waiting.RetryAt,"attempt-2",2)
 	if err!=nil{t.Fatal(err)}
 	if claimed.Status!=domain.StageRunning||claimed.AttemptNo!=2||next.Number!=2||next.Ref==finished.Ref{t.Fatal("worker claim did not create the next attempt")}
 	if _,_,err:=ScheduleRetry(ready,next,p,"provider_unavailable",domain.AttemptFailed,*waiting.RetryAt,run.DeadlineAt,0.5);!errors.Is(err,ErrRetryBudgetExhausted){t.Fatalf("expected exhausted budget, got %v",err)}
@@ -226,15 +226,15 @@ func TestWorkerClaimIsSeparateFromRetryPromotion(t *testing.T) {
 	now := time.Date(2026, 11, 6, 10, 0, 0, 0, time.UTC)
 	run := domain.Run{Status: domain.RunRunning, DeadlineAt: now.Add(time.Minute)}
 	stage := domain.Stage{Ref: "stage-1", Status: domain.StageReady, AttemptNo: 1}
-	claimed, attempt, err := ClaimReadyStage(run, stage, now, "attempt-2")
+	claimed, attempt, err := ClaimReadyStage(run, stage, now, "attempt-2", 2)
 	if err != nil { t.Fatal(err) }
 	if claimed.Status != domain.StageRunning || claimed.AttemptNo != 2 || attempt.Number != 2 {
 		t.Fatalf("unexpected claim result: stage=%#v attempt=%#v", claimed, attempt)
 	}
-	if _, _, err := ClaimReadyStage(domain.Run{Status: domain.RunCancelling, DeadlineAt: now.Add(time.Minute)}, stage, now, "attempt-3"); !errors.Is(err, ErrInvalidTransition) {
+	if _, _, err := ClaimReadyStage(domain.Run{Status: domain.RunCancelling, DeadlineAt: now.Add(time.Minute)}, stage, now, "attempt-3", 3); !errors.Is(err, ErrInvalidTransition) {
 		t.Fatalf("claim during cancellation must be rejected, got %v", err)
 	}
-	if _, _, err := ClaimReadyStage(domain.Run{Status: domain.RunRunning, DeadlineAt: now}, stage, now, "attempt-3"); !errors.Is(err, ErrDeadlineExceeded) {
+	if _, _, err := ClaimReadyStage(domain.Run{Status: domain.RunRunning, DeadlineAt: now}, stage, now, "attempt-3", 3); !errors.Is(err, ErrDeadlineExceeded) {
 		t.Fatalf("claim at deadline must be rejected, got %v", err)
 	}
 }
@@ -256,5 +256,88 @@ func TestScheduleRetryDoesNotMutateCallerReasonCodeBackingArray(t *testing.T) {
 	}
 	if len(updated.ReasonCodes) != 2 || updated.ReasonCodes[1] != "provider_unavailable" {
 		t.Fatalf("updated reason codes missing retry reason: %#v", updated.ReasonCodes)
+	}
+}
+
+func TestWorkerClaimRequiresPositiveFencingToken(t *testing.T) {
+	now:=time.Date(2026,11,6,10,0,0,0,time.UTC)
+	run:=domain.Run{Status:domain.RunRunning,DeadlineAt:now.Add(time.Minute)}
+	stage:=domain.Stage{Ref:"stage-1",Status:domain.StageReady}
+	if _,_,err:=ClaimReadyStage(run,stage,now,"attempt-1",0);!errors.Is(err,ErrInvalidTransition){t.Fatalf("zero fencing token must be rejected, got %v",err)}
+	_,attempt,err:=ClaimReadyStage(run,stage,now,"attempt-1",1)
+	if err!=nil{t.Fatal(err)}
+	if attempt.FencingToken!=1{t.Fatalf("fencing token = %d, want 1",attempt.FencingToken)}
+}
+
+func TestRunAggregationAndCancellationPreserveExcludedStageEvidence(t *testing.T) {
+	now:=time.Date(2026,11,6,10,0,0,0,time.UTC)
+	excluded:=[]domain.ExcludedStage{{StageCode:"optional_news",RuleVersion:"v2",ReasonCode:"market_closed"}}
+	policy:=template.PropagationPolicy{OnFailed:domain.PropagateFail}
+	run:=domain.Run{Status:domain.RunRunning,ExcludedStages:excluded}
+	aggregated,err:=AggregateRun(run,[]domain.Stage{{Code:"quote",Status:domain.StageSucceeded}},nil,map[string]template.PropagationPolicy{"quote":policy},nil,false,now)
+	if err!=nil{t.Fatal(err)}
+	if len(aggregated.ResultSummary.ExcludedStages)!=1||aggregated.ResultSummary.ExcludedStages[0].ReasonCode!="market_closed"{
+		t.Fatalf("Run aggregation lost applicability exclusions: %#v",aggregated.ResultSummary.ExcludedStages)
+	}
+	queued:=domain.Run{Status:domain.RunQueued,ExcludedStages:excluded}
+	cancelled,_,err:=CancelRun(queued,[]domain.Stage{{Code:"quote",Status:domain.StageReady}},now)
+	if err!=nil{t.Fatal(err)}
+	if cancelled.ResultSummary==nil||len(cancelled.ResultSummary.ExcludedStages)!=1{
+		t.Fatalf("cancellation summary lost applicability exclusions: %#v",cancelled.ResultSummary)
+	}
+}
+
+func TestRunAndStageTransitionTables(t *testing.T) {
+	now:=time.Date(2026,11,6,10,0,0,0,time.UTC)
+	runCases:=[]struct{name string;from,next domain.RunStatus;wantErr bool}{
+		{"created_to_queued",domain.RunCreated,domain.RunQueued,false},
+		{"queued_to_running",domain.RunQueued,domain.RunRunning,false},
+		{"queued_to_cancelling",domain.RunQueued,domain.RunCancelling,false},
+		{"running_to_cancelling",domain.RunRunning,domain.RunCancelling,false},
+		{"created_to_running",domain.RunCreated,domain.RunRunning,true},
+		{"running_to_succeeded_requires_finalizer",domain.RunRunning,domain.RunSucceeded,true},
+		{"cancelling_to_running",domain.RunCancelling,domain.RunRunning,true},
+		{"terminal_run_is_immutable",domain.RunSucceeded,domain.RunCancelling,true},
+	}
+	for _,tc:=range runCases{t.Run(tc.name,func(t *testing.T){
+		_,err:=TransitionRun(domain.Run{Status:tc.from},tc.next,now)
+		if (err!=nil)!=tc.wantErr{t.Fatalf("TransitionRun(%s -> %s) error=%v wantErr=%v",tc.from,tc.next,err,tc.wantErr)}
+	})}
+	stageCases:=[]struct{name string;from,next domain.StageStatus;wantErr bool}{
+		{"pending_to_ready",domain.StagePending,domain.StageReady,false},
+		{"pending_to_blocked",domain.StagePending,domain.StageBlocked,false},
+		{"ready_to_running",domain.StageReady,domain.StageRunning,false},
+		{"running_to_retry_wait",domain.StageRunning,domain.StageRetryWait,false},
+		{"running_to_degraded",domain.StageRunning,domain.StageDegraded,false},
+		{"retry_wait_to_ready",domain.StageRetryWait,domain.StageReady,false},
+		{"pending_to_succeeded",domain.StagePending,domain.StageSucceeded,true},
+		{"running_to_skipped",domain.StageRunning,domain.StageSkipped,true},
+		{"terminal_stage_is_immutable",domain.StageFailed,domain.StageReady,true},
+	}
+	for _,tc:=range stageCases{t.Run(tc.name,func(t *testing.T){
+		_,err:=TransitionStage(domain.Stage{Status:tc.from},tc.next,now)
+		if (err!=nil)!=tc.wantErr{t.Fatalf("TransitionStage(%s -> %s) error=%v wantErr=%v",tc.from,tc.next,err,tc.wantErr)}
+	})}
+}
+
+func TestFinalizeDeadlineRequiresAllWorkStoppedAndUsesPropagation(t *testing.T) {
+	now:=time.Date(2026,11,6,10,0,0,0,time.UTC)
+	run:=domain.Run{Status:domain.RunCancelling,TerminationReason:"run_deadline_exceeded"}
+	policies:=map[string]template.PropagationPolicy{
+		"required":{OnTimedOut:domain.PropagateFail},
+		"optional":{OnTimedOut:domain.PropagatePartial},
+	}
+	stages:=[]domain.Stage{
+		{Code:"required",Required:true,Status:domain.StageTimedOut,ReasonCodes:[]string{"run_deadline_exceeded"}},
+		{Code:"optional",Required:false,Status:domain.StageTimedOut,ReasonCodes:[]string{"run_deadline_exceeded"}},
+	}
+	got,err:=FinalizeDeadline(run,stages,nil,policies,nil,false,now)
+	if err!=nil{t.Fatal(err)}
+	if got.Status!=domain.RunFailed||got.ResultSummary==nil||got.ResultSummary.ActionabilityStatus!="not_evaluated"{
+		t.Fatalf("deadline propagation/finalization mismatch: %#v",got)
+	}
+	runningAttempt:=domain.Attempt{Status:domain.AttemptRunning}
+	if _,err:=FinalizeDeadline(run,stages,[]domain.Attempt{runningAttempt},policies,nil,false,now);err==nil{
+		t.Fatal("deadline finalizer accepted a still-running Attempt")
 	}
 }
