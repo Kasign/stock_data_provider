@@ -408,17 +408,8 @@ func (q *Queue) execute(parent context.Context, task claimedTask, workerID int) 
 			slog.Error("异步分析 Worker 捕获到任务 panic", "component", "taskqueue", "task_id", task.taskID, "run_id", task.runID, "panic_type", fmt.Sprintf("%T", recovered))
 			persistCtx, persistCancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer persistCancel()
-			query := "UPDATE analysis_runs r JOIN analysis_tasks t ON t.run_id=r.run_id " +
-				"SET r.status='failed', r.finished_at=UTC_TIMESTAMP(6), " +
-				"r.result_json=JSON_OBJECT('run_id', r.run_id, 'status', 'failed', " +
-				"'request', JSON_EXTRACT(t.request_json, '$'), " +
-				"'failure', JSON_OBJECT('code', 'worker_panic', 'stage', 'worker', 'message', 'Analysis worker recovered from an internal panic')) " +
-				"WHERE t.task_id=?"
-			if _, err := q.db.ExecContext(persistCtx, query, task.taskID); err != nil {
-				slog.Error("保存 panic 分析 run 终态失败", "component", "taskqueue", "task_id", task.taskID, "run_id", task.runID, "error", err.Error())
-			}
-			if err := q.finish(persistCtx, task.taskID, "failed", "worker_panic", "analysis worker recovered from an internal panic"); err != nil {
-				slog.Error("保存 panic 任务终态失败", "component", "taskqueue", "task_id", task.taskID, "run_id", task.runID, "error", err.Error())
+			if err := q.finishPanic(persistCtx, task); err != nil {
+				slog.Error("保存 panic 任务与分析 run 终态失败", "component", "taskqueue", "task_id", task.taskID, "run_id", task.runID, "error", err.Error())
 			}
 		}
 	}()
@@ -462,8 +453,72 @@ func taskStatusForRun(status domain.RunStatus) string {
 }
 
 func (q *Queue) finish(ctx context.Context, taskID, status, failureCode, message string) error {
-	_, err := q.db.ExecContext(ctx, `UPDATE analysis_tasks SET status=?,failure_code=NULLIF(?,''),error_message=NULLIF(?,''),finished_at=UTC_TIMESTAMP(6),updated_at=UTC_TIMESTAMP(6) WHERE task_id=?`, status, failureCode, safeMessage(message), taskID)
-	return err
+	res, err := q.db.ExecContext(ctx, `UPDATE analysis_tasks SET status=?,failure_code=NULLIF(?,''),error_message=NULLIF(?,''),finished_at=UTC_TIMESTAMP(6),updated_at=UTC_TIMESTAMP(6) WHERE task_id=? AND status='running'`, status, failureCode, safeMessage(message), taskID)
+	if err != nil {
+		return err
+	}
+	affected, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("read finished task row count: %w", err)
+	}
+	if affected != 1 {
+		return fmt.Errorf("finish analysis task: expected one running task, affected %d", affected)
+	}
+	return nil
+}
+
+// finishPanic 在同一事务中终结 Run 与 Task，避免 panic 恢复只更新其中一张表。
+func (q *Queue) finishPanic(ctx context.Context, task claimedTask) error {
+	tx, err := q.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin panic finalization: %w", err)
+	}
+	defer tx.Rollback()
+	if _, err := tx.ExecContext(ctx, `UPDATE analysis_runs r JOIN analysis_tasks t ON t.run_id=r.run_id
+		SET r.status='failed', r.finished_at=UTC_TIMESTAMP(6),
+		r.result_json=JSON_OBJECT('run_id', r.run_id, 'status', 'failed',
+			'request', JSON_EXTRACT(t.request_json, '
+
+func newID() (string, error) {
+	var b [16]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return "", fmt.Errorf("generate task ID: %w", err)
+	}
+	return hex.EncodeToString(b[:]), nil
+}
+
+func safeMessage(value string) string {
+	value = strings.Map(func(r rune) rune {
+		if r < 32 && r != '\t' {
+			return -1
+		}
+		return r
+	}, value)
+	if len(value) > 300 {
+		return value[:300]
+	}
+	return value
+}
+),
+			'failure', JSON_OBJECT('code', 'worker_panic', 'stage', 'worker', 'message', 'Analysis worker recovered from an internal panic'))
+		WHERE t.task_id=?`, task.taskID); err != nil {
+		return fmt.Errorf("persist panic run result: %w", err)
+	}
+	res, err := tx.ExecContext(ctx, `UPDATE analysis_tasks SET status='failed',failure_code='worker_panic',error_message=?,finished_at=UTC_TIMESTAMP(6),updated_at=UTC_TIMESTAMP(6) WHERE task_id=? AND status='running'`, safeMessage("analysis worker recovered from an internal panic"), task.taskID)
+	if err != nil {
+		return fmt.Errorf("persist panic task result: %w", err)
+	}
+	affected, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("read panic task row count: %w", err)
+	}
+	if affected != 1 {
+		return fmt.Errorf("finalize panic task: expected one running task, affected %d", affected)
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit panic finalization: %w", err)
+	}
+	return nil
 }
 
 func newID() (string, error) {
