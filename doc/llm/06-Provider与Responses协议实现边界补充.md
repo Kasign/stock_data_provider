@@ -13,19 +13,20 @@ Researchflow 决定调用时机、调用预算和业务重试；LLM 负责一次
 
 ## 2. ProviderConfig 与 Secret
 
-ProviderConfig 是服务端受控配置，不是调用方请求参数。首批固定 provider_id、protocol=openai_responses、base_url、default_model、api_key_secret_ref、request_timeout、max_request_bytes、max_response_bytes、stream_enabled 与 Capability 有效期策略。
+ProviderConfig 是服务端受控配置，不是调用方请求参数。首批固定 provider_id、protocol=openai_responses、base_url、default_model、allowed_models、api_key_secret_ref、request_timeout_ms、max_request_bytes、max_response_bytes、stream_enabled 与 Capability 有效期策略。
 
 base_url 必须是服务端配置的 HTTPS Gateway 根地址并规范化为 /v1 结尾；请求方不得覆盖 URL、Provider、Header 或 Secret。Adapter 固定 POST {base_url}/responses，不得重复拼接 /v1。API Key 只通过 SecretRef 在调用时读取，禁止写入 DTO、日志、错误、Fixture 或持久化请求快照。
 
-timeout 与大小限制必须为正数并显式配置；配置序列化时间单位固定为 integer milliseconds，不得把 Go duration 纳秒整数直接暴露为 JSON。所有限制不得超过 PLAT-CTR-005 公共上限。HTTP 重定向、代理、DNS/SSRF、TLS 和连接资源策略交给 Platform HTTP Client。
+request_timeout_ms、max_request_bytes、max_response_bytes 必须为正数并显式配置；max_response_bytes 首批不超过 8 MiB；配置序列化时间单位固定为 integer milliseconds，不得把 Go duration 纳秒整数直接暴露为 JSON。所有限制不得超过 PLAT-CTR-005 公共上限。HTTP 重定向、代理、DNS/SSRF、TLS 和连接资源策略交给 Platform HTTP Client。
 
 ## 3. ModelRequest / ModelResponse
 
 ModelRequest 是 LLM 自己的应用 DTO，不允许传入任意 URL/Header/Gateway SDK 类型。MVP 单轮文本输入：
 - request_id：调用方生成的单次调用 ID；Response 原样回显，不以 Gateway ID 替换。
 - correlation_id：从 Researchflow Run Context 继承。
-- provider_id/model：必须命中服务端允许配置；model 如可请求选择，也必须在 Provider 允许列表内。
-- instructions/input_text：typed 文本字段；input_text 非空。
+- provider_id/model：必须命中服务端 ProviderConfig；model 必须属于 allowed_models。
+- purpose_code：必填稳定用途代码，不使用自由文本表达调用目的。
+- instructions/input_text：typed 文本字段；instructions 可为空，input_text 必须非空。
 - max_output_tokens：正整数且不超过当前 Model Capability 已验证上限。
 - temperature/top_p/reasoning_effort：只有对应 CapabilityState 当前有效且 supported 才允许发送，否则明确拒绝。
 - tools/tool_choice：默认关闭；仅 function_tool_calls=supported 且 Tool 定义通过本地 Schema 校验时允许受控 auto。LLM 只解析，不批准或执行。
