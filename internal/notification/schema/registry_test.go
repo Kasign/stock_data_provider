@@ -2,6 +2,8 @@ package schema
 
 import (
 	"encoding/json"
+
+	"example.com/stock-analysis-flow/internal/notification/domain"
 	"errors"
 	"io/fs"
 	"os"
@@ -112,5 +114,29 @@ func TestSchemaDigestIsImmutable(t *testing.T) {
 	}
 	if err := registry.registerDigest(key, "quant", strings.Repeat("0", 64)); !errors.Is(err, ErrSchemaImmutable) {
 		t.Fatalf("expected immutable schema error, got %v", err)
+	}
+}
+
+func TestRejectsPayloadThatDoesNotMatchRegisteredSchema(t *testing.T) {
+	registry := newTestRegistry(t)
+	raw, err := fs.ReadFile(os.DirFS("../../../doc/notification/golden"), "quant-risk-decision-first-evaluation.golden.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var event domain.EventEnvelope
+	if err := json.Unmarshal(raw, &event); err != nil {
+		t.Fatal(err)
+	}
+	event.Payload = []byte(`{"unexpected":"field"}`)
+	event.PayloadFingerprint, err = event.CalculatePayloadFingerprint()
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err = json.Marshal(event)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := registry.ValidateEvent(raw); !errors.Is(err, ErrSchemaValidation) {
+		t.Fatalf("expected payload schema validation error, got %v", err)
 	}
 }

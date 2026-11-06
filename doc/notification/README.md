@@ -26,8 +26,8 @@ Notification 是独立通知业务模块，负责事件接收、Subscription、T
 | 范围 | 状态 | 证据/限制 |
 |---|---|---|
 | 领域设计与字段契约 | 已建立 | 以 01/03 文档为准；发现契约矛盾先修正文档并评审 |
-| Schema/Golden 资产 | 已校准，待 CI | 4 Schema、6 Golden；Draft 2020-12 Validator 和 Golden 测试已编写，执行证据待补 |
-| Go Notification Domain/Application | 部分实现 | EventEnvelope、JCS Fingerprint、Schema Registry/Validator 已提交；CI 待执行 |
+| Schema/Golden 资产 | 已校准，待 CI | 4 Schema、6 Golden；Draft 2020-12 Envelope/Payload Validator 和 Golden 测试已编写；CI 曾因 go.mod 缺少间接依赖声明失败，修复后待重跑 |
+| Go Notification Domain/Application | 部分实现 | EventEnvelope、JCS Fingerprint、Schema Registry/Validator 已提交，包含按 event_type + schema_version 编译并验证 Payload Schema；CI 待重跑 |
 | Inbox/Subscription/DeliveryPlan | 未开始 | 无实现和模块测试证据 |
 | Template/Channel/Dispatcher/Retry | 未开始 | 无实现；不得以旧 Python 通知能力替代 |
 | Repository/Migration | 未开始 | Platform Storage 已有通用基础能力；Notification 专属模型/迁移尚无 |

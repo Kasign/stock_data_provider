@@ -60,6 +60,7 @@ var payloadResources = []schemaResource{
 type registryEntry struct {
 	sourceModule string
 	digest       string
+	validator    *jsonschema.Schema
 }
 
 // Registry is read-only after construction and safe for concurrent validation.
@@ -122,8 +123,12 @@ func NewRegistry(schemaFS fs.FS) (*Registry, error) {
 		}
 
 		if resource.key.EventType != "" {
+			payloadValidator, err := compiler.Compile(schemaID)
+			if err != nil {
+				return nil, fmt.Errorf("notification: compile payload schema %s: %w", resource.file, err)
+			}
 			sum := sha256.Sum256(canonical)
-			if err := registry.registerDigest(resource.key, resource.sourceModule, hex.EncodeToString(sum[:])); err != nil {
+			if err := registry.registerDigest(resource.key, resource.sourceModule, hex.EncodeToString(sum[:]), payloadValidator); err != nil {
 				return nil, err
 			}
 		}
@@ -137,14 +142,14 @@ func NewRegistry(schemaFS fs.FS) (*Registry, error) {
 	return registry, nil
 }
 
-func (r *Registry) registerDigest(key SchemaKey, sourceModule, digest string) error {
+func (r *Registry) registerDigest(key SchemaKey, sourceModule, digest string, validator *jsonschema.Schema) error {
 	if previous, exists := r.entries[key]; exists {
 		if previous.sourceModule != sourceModule || previous.digest != digest {
 			return ErrSchemaImmutable
 		}
 		return nil
 	}
-	r.entries[key] = registryEntry{sourceModule: sourceModule, digest: digest}
+	r.entries[key] = registryEntry{sourceModule: sourceModule, digest: digest, validator: validator}
 	return nil
 }
 
@@ -174,6 +179,16 @@ func (r *Registry) ValidateEvent(raw []byte) (domain.EventEnvelope, error) {
 	}
 	if entry.sourceModule != event.SourceModule {
 		return event, ErrSourceModuleMismatch
+	}
+	if entry.validator == nil {
+		return event, ErrUnknownSchema
+	}
+	var payload any
+	if err := json.Unmarshal(event.Payload, &payload); err != nil {
+		return event, fmt.Errorf("%w: invalid payload: %v", ErrInvalidEventJSON, err)
+	}
+	if err := entry.validator.Validate(payload); err != nil {
+		return event, fmt.Errorf("%w: payload: %v", ErrSchemaValidation, err)
 	}
 
 	var instance any
