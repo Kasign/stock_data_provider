@@ -21,11 +21,11 @@ Research 定义分区结构、质量和语义校验；Researchflow 决定本次 
 
 ## 3. Evidence 字段和认识论约束
 
-Evidence DTO 的规范字段如下。旧文档中的 source_type、observed_at、as_of、content_hash 仅为早期概念草稿，不作为跨模块 JSON 字段：
+Evidence DTO 的规范字段如下。RSC-CTR-001 的 Schema `$id` 标识 1.0.0 版本，JSON payload 不包含 schema_version。旧文档中的 source_type、observed_at、as_of、content_hash 仅为早期概念草稿，不作为跨模块 JSON 字段：
 
 | 字段 | 必需/nullable | 语义 |
 |---|---|---|
-| evidence_id / schema_version | 必填 | Research 内不透明 ID / DTO 版本 |
+| evidence_id | 必填 | Research 内不透明 ID；契约版本由 JSON Schema `$id` 标识，payload 不增加 schema_version |
 | evidence_type | 必填 | fact/reported_fact/inference/hypothesis/unknown |
 | source_owner | 必填 | data/news/quant/research |
 | source_ref | 必填 | 上游资源或来源对象引用 |

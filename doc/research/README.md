@@ -3,8 +3,8 @@
 - 分支：`feat/research`
 - 代码：`internal/research/**`
 - 任务前缀：RSC
-- 当前阶段：R1 Context 领域基础
-- 当前状态：Context Domain 首批实现已完成 7/7 临时独立 Go package 单元测试；这不等同于仓库完整构建/CI。Application、Repository 和跨模块集成尚未完成。
+- 当前阶段：R1 Context 领域基础 + R2 Evidence 领域基础
+- 当前状态：Context/Evidence Domain 首批实现已完成临时独立 Go 1.22 package 单元测试、Evidence Golden 指纹复算和 go vet；不等同于仓库完整构建/CI。真实 Data/News、授权复核、Application、Repository 和跨模块集成尚未完成。
 
 ## 模块职责
 
@@ -26,16 +26,20 @@ internal/research/
     model.go
     validate.go
     validate_test.go
+  evidence/
+    model.go
+    validate.go
+    validate_test.go
 ```
 
-R1 当前只实现 Context 领域结构和结构校验。没有 HTTP 接口、真实数据 Adapter、Repository、Migration 或 Run 编排接入。
+R1/R2 当前只实现 Context、Evidence 领域结构、契约校验、Evidence 指纹复算和严格 PIT 本地校验。没有 HTTP 接口、真实数据 Adapter、Repository、Migration 或 Run 编排接入。
 
 旧 `go-core/internal/contextpack` 和 `internal/analysis` 是历史分析流程，不等同于新 Research Domain；仅作为迁移行为参考，不重复建设其已有的数据整理能力。
 
 ## 当前契约状态
 
 - Context：字段依据 `doc/整体任务规划/Quant-Research公开DTO字段级契约.md` 第 3.1、9.1、9.2、9.8 节；尚无专属冻结 Schema/Golden。本模块当前实现是领域校验模型，不代表跨模块契约已冻结。
-- Evidence：遵循项目级 `RSC-CTR-001` Evidence Schema/Golden；该契约属于 Evidence，不属于 Context。
+- Evidence：遵循项目级 `RSC-CTR-001` Evidence Schema/Golden；当前已实现 Go Domain/Validator/JCS-SHA-256 指纹复算和严格 PIT 本地校验，但未完成 Owner 授权复核及真实来源接入。该契约属于 Evidence，不属于 Context。
 - News → Research 只读证据查询：目标契约尚未实现/冻结；不得据此宣称真实新闻接入通过。
 - Research → Researchflow 的 Context 消费接口：字段语义已形成设计基线，Schema/Golden/Contract Test 尚未完成。
 - RSC-DEC-001：Quant 结果通过 Researchflow 获取；Research 不新增 Quant Port、不直接调用 Quant、不自行解引用。
