@@ -3,7 +3,7 @@
 - 分支：`feat/quant`
 - 代码：`internal/quant/**`
 - 任务前缀：QNT
-- 当前状态：Q0-001～003 盘点/设计工作已完成；QNT-001 CalculationContext 与 Quant Registry 基础能力已提交，Registry 已增加数值精度/JSON 边界校验；QNT-002 八种 Indicator 计算函数、QNT-003 三种时间序列 Factor 函数及固定样本测试已提交。当前测试源码尚未在本分支执行，Schema/Golden、注册项、Context 组合验收、交易日历/复权输入验证和 CI 证据仍未完成。
+- 当前状态：Q0-001～003 盘点/设计工作已完成；QNT-001 CalculationContext 与 Quant Registry 基础能力已提交，Registry 已增加数值精度/JSON 边界校验；QNT-002 八种 Indicator 计算函数、QNT-003 三种时间序列 Factor 函数及固定样本测试已提交。当前测试源码尚未在本分支执行；Indicator/Factor 参数 Schema 与 11 份 synthetic Golden 已提交，仍缺 Schema/Golden 自动验证、Registry 注册条目、Context 组合验收、交易日历/复权输入验证和 CI 证据。
 - 初始共同基线：`0cb99a525de00d3c340891caa029b716c4d2f749`
 
 Quant 负责确定性、可复算的数值分析：Indicator、Factor、Trend、Market、Industry、Stock、Strategy、Backtest、Risk、Evaluation。不得调用 LLM，不负责研究编排，不直接访问 Provider/HTTP/SQL/Redis。
