@@ -22,11 +22,11 @@
 | provider_id | opaque string | 是 | 稳定配置 ID |
 | protocol | enum | 是 | 首批固定 openai_responses |
 | base_url | URL | 是 | HTTPS Gateway 根地址，规范化后以 /v1 结尾；请求方不可覆盖 |
-| default_model | string | 是 | Gateway 可识别的模型 ID |
+| default_model | string | 是 | Gateway 可识别的模型 ID，必须属于 allowed_models |\n| allowed_models | string[] | 是 | 服务端 Provider 允许使用的模型白名单，调用方不可扩大 |
 | api_key_secret_ref | opaque string | 是 | Secret 引用，不存明文 Key |
-| request_timeout | duration | 是 | 正数总时限，并受调用方 deadline 约束 |
+| request_timeout_ms | integer milliseconds | 是 | 正数总时限，配置序列化固定毫秒单位，并受调用方 deadline 约束 |
 | max_request_bytes | integer | 是 | LLM 自身更小的请求上限 |
-| max_response_bytes | integer | 是 | 非流式响应上限 |
+| max_response_bytes | integer | 是 | 非流式响应上限；首批 LLM 上限不超过 8 MiB，且不得超过 Platform 上限 |
 | stream_enabled | bool | 是 | 当前部署本地上游 E2E 通过后才可设为 true |
 
 - 首批 endpoint 固定为 POST {base_url}/responses；base_url 已含 /v1，Adapter 不得重复拼接版本段。
@@ -41,22 +41,22 @@
 
 首批能力键：responses_json、responses_stream、structured_output_json_schema、function_tool_calls、reasoning_effort、sampling_parameters、usage_details。temperature/top_p 仅在 sampling_parameters=supported 时发送。
 
-能力状态必须绑定 provider_id、model_id、Gateway 版本和验证时间。Gateway 升级或模型更换后，历史结果不能自动沿用为 supported。路由存在只证明协议路径可达，不证明上游模型完整支持该能力。
+能力状态必须绑定 provider_id、model_id、protocol、Gateway 版本、verified_at、valid_until 和 evidence_ref；还需记录当前模型已验证的 max_output_tokens_limit。缺少证据引用、有效期或模型上限时不得用于放行请求。Gateway 升级或模型更换后，历史结果不能自动沿用为 supported。路由存在只证明协议路径可达，不证明上游模型完整支持该能力。
 
 ## 4. ModelRequest
 
 | 字段 | 类型 | 必需 | 约束 |
 |---|---|---:|---|
-| request_id | string | 是 | 由调用方生成的本次 LLM 调用 Request ID；Response 原样回显，不承载 Secret |
+| provider_id | string | 是 | 必须命中服务端 ProviderConfig；不接受调用方自定义 endpoint |\n| request_id | string | 是 | 由调用方生成的本次 LLM 调用 Request ID；Response 原样回显，不承载 Secret |
 | purpose_code | string | 是 | 稳定调用用途代码，不写自由文本 Prompt |
-| model | string | 是 | 明确模型 ID，不依赖任意模型路由 |
+| model | string | 是 | 明确模型 ID，必须属于 provider_id 对应的 allowed_models，不依赖任意模型路由 |
 | instructions | string | 是 | 序列化到 Responses instructions；允许空字符串 |
 | input_text | string | 是 | 首批只支持非空单轮文本，序列化为 Responses input string |
 | max_output_tokens | integer | 是 | 正整数，受调用预算限制 |
 | temperature | *number | 否 | 仅 capability=supported 时发送 |
 | top_p | *number | 否 | 仅 capability=supported 时发送 |
 | reasoning_effort | enum | 否 | low/medium/high；默认不发送，仅 capability=supported 时允许 |
-| response_schema | JSONSchemaSpec? | 否 | 发送前做本地语法、大小和深度校验 |
+| response_schema | JSONSchemaSpec? | 否 | 发送前做本地 Schema 编译、dialect、大小和深度校验 |\n| local_validation_only | bool | 否 | true 时不要求上游 structured output 能力，只在本地校验模型输出；不代表模型受约束生成 |
 | tools | ToolDefinition[] | 否 | 只接受调用方授权后的定义；不执行 |
 | tool_choice | enum? | 否 | 默认 none；仅 tools 非空且 function_tool_calls=supported 时允许 auto；required/指定工具延后 |
 | deadline_at | UTC timestamp | 是 | 绝对截止时间，不得晚于调用方 Context deadline |
