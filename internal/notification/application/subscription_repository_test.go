@@ -103,7 +103,7 @@ func validApplicationSubscription() domain.Subscription {
 		SubscriptionID: "sub-1", OwnerRef: "owner-1", Version: 1,
 		Status: domain.SubscriptionActive, EventType: "quant.risk_decision.changed",
 		RecipientScope: domain.RecipientScopeOwner,
-		ChannelRef: "channel-1", TemplateID: "template-1",
+		ChannelRef:     "channel-1", TemplateID: "template-1",
 		CreatedAt: now, UpdatedAt: now, EffectiveAt: now,
 	}
 }
