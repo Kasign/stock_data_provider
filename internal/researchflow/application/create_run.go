@@ -163,7 +163,7 @@ func (s *CreateRunService) CreateRun(ctx context.Context, command domain.CreateR
 		})
 	}
 	run := domain.Run{
-		Ref:runRef, SchemaVersion:command.SchemaVersion, Status:domain.RunCreated, Version:0,
+		Ref:runRef, SchemaVersion:command.SchemaVersion, Status:domain.RunCreated, Version:1,
 		SystemAsOf:command.SystemAsOf.UTC(), DeadlineAt:command.DeadlineAt.UTC(),
 		TemplateRef:resolved.Ref, TemplateVersion:resolved.Version, TemplateFingerprint:resolved.Fingerprint,
 		InputSnapshotRefs:append([]string{}, command.InputSnapshotRefs...),

@@ -27,7 +27,7 @@ func TestRetryPreservesAttemptAndEnforcesBudget(t *testing.T){
 	ready,err:=PromoteRetry(run,waiting,*waiting.RetryAt)
 	if err!=nil{t.Fatal(err)}
 	if ready.Status!=domain.StageReady||ready.AttemptNo!=1||ready.RetryAt!=nil{t.Fatal("scheduler promotion must only move retry_wait to ready")}
-	claimed,next,err:=ClaimReadyStage(run,ready,*waiting.RetryAt,"attempt-2")
+	claimed,next,err:=ClaimReadyStage(run,ready,*waiting.RetryAt,"attempt-2",2)
 	if err!=nil{t.Fatal(err)}
 	if claimed.Status!=domain.StageRunning||claimed.AttemptNo!=2||next.Number!=2||next.Ref==finished.Ref{t.Fatal("worker claim did not create the next attempt")}
 	if _,_,err:=ScheduleRetry(ready,next,p,"provider_unavailable",domain.AttemptFailed,*waiting.RetryAt,run.DeadlineAt,0.5);!errors.Is(err,ErrRetryBudgetExhausted){t.Fatalf("expected exhausted budget, got %v",err)}
@@ -226,15 +226,15 @@ func TestWorkerClaimIsSeparateFromRetryPromotion(t *testing.T) {
 	now := time.Date(2026, 11, 6, 10, 0, 0, 0, time.UTC)
 	run := domain.Run{Status: domain.RunRunning, DeadlineAt: now.Add(time.Minute)}
 	stage := domain.Stage{Ref: "stage-1", Status: domain.StageReady, AttemptNo: 1}
-	claimed, attempt, err := ClaimReadyStage(run, stage, now, "attempt-2")
+	claimed, attempt, err := ClaimReadyStage(run, stage, now, "attempt-2", 2)
 	if err != nil { t.Fatal(err) }
 	if claimed.Status != domain.StageRunning || claimed.AttemptNo != 2 || attempt.Number != 2 {
 		t.Fatalf("unexpected claim result: stage=%#v attempt=%#v", claimed, attempt)
 	}
-	if _, _, err := ClaimReadyStage(domain.Run{Status: domain.RunCancelling, DeadlineAt: now.Add(time.Minute)}, stage, now, "attempt-3"); !errors.Is(err, ErrInvalidTransition) {
+	if _, _, err := ClaimReadyStage(domain.Run{Status: domain.RunCancelling, DeadlineAt: now.Add(time.Minute)}, stage, now, "attempt-3", 3); !errors.Is(err, ErrInvalidTransition) {
 		t.Fatalf("claim during cancellation must be rejected, got %v", err)
 	}
-	if _, _, err := ClaimReadyStage(domain.Run{Status: domain.RunRunning, DeadlineAt: now}, stage, now, "attempt-3"); !errors.Is(err, ErrDeadlineExceeded) {
+	if _, _, err := ClaimReadyStage(domain.Run{Status: domain.RunRunning, DeadlineAt: now}, stage, now, "attempt-3", 3); !errors.Is(err, ErrDeadlineExceeded) {
 		t.Fatalf("claim at deadline must be rejected, got %v", err)
 	}
 }
@@ -257,4 +257,14 @@ func TestScheduleRetryDoesNotMutateCallerReasonCodeBackingArray(t *testing.T) {
 	if len(updated.ReasonCodes) != 2 || updated.ReasonCodes[1] != "provider_unavailable" {
 		t.Fatalf("updated reason codes missing retry reason: %#v", updated.ReasonCodes)
 	}
+}
+
+func TestWorkerClaimRequiresPositiveFencingToken(t *testing.T) {
+	now:=time.Date(2026,11,6,10,0,0,0,time.UTC)
+	run:=domain.Run{Status:domain.RunRunning,DeadlineAt:now.Add(time.Minute)}
+	stage:=domain.Stage{Ref:"stage-1",Status:domain.StageReady}
+	if _,_,err:=ClaimReadyStage(run,stage,now,"attempt-1",0);!errors.Is(err,ErrInvalidTransition){t.Fatalf("zero fencing token must be rejected, got %v",err)}
+	_,attempt,err:=ClaimReadyStage(run,stage,now,"attempt-1",1)
+	if err!=nil{t.Fatal(err)}
+	if attempt.FencingToken!=1{t.Fatalf("fencing token = %d, want 1",attempt.FencingToken)}
 }

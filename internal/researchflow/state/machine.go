@@ -174,14 +174,14 @@ func PromoteRetry(run domain.Run, stage domain.Stage, now time.Time) (domain.Sta
 // ClaimReadyStage models a Worker claim after scheduler promotion. The caller must
 // persist the Stage and Attempt atomically under the Run.version/CAS gate and ensure
 // attemptRef uniqueness; this pure function does not provide cross-process exclusion.
-func ClaimReadyStage(run domain.Run, stage domain.Stage, now time.Time, attemptRef string) (domain.Stage, domain.Attempt, error) {
+func ClaimReadyStage(run domain.Run, stage domain.Stage, now time.Time, attemptRef string, fencingToken uint64) (domain.Stage, domain.Attempt, error) {
 	if run.Status != domain.RunRunning || run.TerminationReason != "" {
 		return stage, domain.Attempt{}, fmt.Errorf("%w: run does not permit worker claim", ErrInvalidTransition)
 	}
 	if !now.UTC().Before(run.DeadlineAt.UTC()) {
 		return stage, domain.Attempt{}, ErrDeadlineExceeded
 	}
-	if stage.Status != domain.StageReady || strings.TrimSpace(stage.Ref) == "" || stage.AttemptNo < 0 || strings.TrimSpace(attemptRef) == "" {
+	if stage.Status != domain.StageReady || strings.TrimSpace(stage.Ref) == "" || stage.AttemptNo < 0 || strings.TrimSpace(attemptRef) == "" || fencingToken == 0 {
 		return stage, domain.Attempt{}, fmt.Errorf("%w: stage is not claimable", ErrInvalidTransition)
 	}
 	updated, err := TransitionStage(stage, domain.StageRunning, now)
@@ -189,7 +189,7 @@ func ClaimReadyStage(run domain.Run, stage domain.Stage, now time.Time, attemptR
 	updated.AttemptNo++
 	attempt := domain.Attempt{
 		Ref: attemptRef, StageRef: stage.Ref, Number: updated.AttemptNo,
-		Status: domain.AttemptRunning, StartedAt: now.UTC(),
+		Status: domain.AttemptRunning, StartedAt: now.UTC(), FencingToken: fencingToken,
 	}
 	return updated, attempt, nil
 }
