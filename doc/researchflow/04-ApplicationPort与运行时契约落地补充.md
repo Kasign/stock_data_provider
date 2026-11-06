@@ -168,3 +168,12 @@ Fake Repository/Fake Clock/Fake Provider 只证明模块内逻辑；MariaDB/Redi
 - 发现原 `Resolve` 结果虽然保存 ParameterSchema 的 version/fingerprint，但 Run 使用的 `ResolvedTemplate.Fingerprint` 仍仅为静态 Template 指纹，导致同一 Template Ref/Version 下 Schema Registry 版本或内容变化未反映到 Run 指纹。
 - 现将 resolved fingerprint 定义为 RFC 8785 JCS + SHA-256，输入包含静态 Template fingerprint、ParameterSchemaRef、Registry version 和 canonical Schema digest。这样同一模板引用下 Schema 版本/内容变化会产生不同执行指纹。
 - 修正模板测试夹具：此前使用非十六进制占位 fingerprint，与 Resolve 的 64 位 SHA-256 校验冲突；统一替换为合法固定 64 位十六进制值。
+
+## 15. CreateRun Application Port 首轮
+
+- `RequestIdentity` 是可信认证/请求上下文适配边界；caller_ref 不从命令体读取。originating_request_id/correlation_id 由可信上下文注入，correlation 缺失时由高熵 ID Generator 生成。
+- TemplateRegistry 必须按 `(template_ref, template_version)` 精确读取；返回值 ref/version 不匹配立即拒绝。
+- CreateRun 先计算 caller-scoped JCS 指纹并查询幂等记录，再解析模板。这样相同请求重放不依赖模板/Schema Registry 当前在线；并发首次请求仍由 Repository 原子写入门禁裁决。
+- Run/Stage、完整 ResolvedTemplate（包括 ParameterSchema version/digest 与 applicability 排除记录）、原始参数快照及幂等键/指纹必须在 Repository 同一事务提交。
+- Repository `CreateRunAtomic` 必须保证唯一键 `(caller_ref, operation, idempotency_key)`；若并发竞争中已存在记录，必须在事务内比较 fingerprint，相同返回原 Run，不同返回 idempotency_conflict。必须在写入前以数据库 UTC 时钟复核 deadline。
+- 当前 Fake Repository 只证明 Application 编排，不证明 SQL/Redis/事务/CAS；持久化实现与 MariaDB 集成留在 FLOW-007/根集成阶段。
