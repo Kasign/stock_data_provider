@@ -3,9 +3,9 @@
 - 目标分支：`feat/notification`
 - 代码目录：`internal/notification/**`
 - 任务前缀：NTF
-- 当前阶段：NTF-001 核心领域实现进行中；EventEnvelope、JCS Fingerprint、Draft 2020-12 Schema Registry/Validator 已建立，Inbox/Subscription/DeliveryPlan 尚未实现。
-- 当前代码事实：`internal/notification/domain` 已定义 EventEnvelope/JCS Fingerprint，`internal/notification/schema` 已实现 Draft 2020-12 Registry/Validator；Inbox/Subscription/DeliveryPlan 尚未实现。旧 Python 通知适配和 Web 本地偏好/展示状态不属于 Go Notification Domain。
-- 契约证据：NTF-CTR-001～003 均为 `pending_evidence`。4 份 Schema、6 个 Golden 已按补充契约校准；Validator/Golden 自动化测试已写入，尚待 CI 执行；NTF-CTR-001～003 仍为 pending_evidence；三生产方映射、重放/冲突、并发/恢复、真实 DB/渠道证据仍按各层级分别验收。
+- 当前阶段：NTF-001 核心领域实现进行中；EventEnvelope、JCS Fingerprint、Envelope/Payload Schema Registry/Validator、EventReceiver、Inbox replay、Subscription 校验和 DeliveryPlan 指纹基础类型已实现，真实 Repository 与快照持久化尚未完成。
+- 当前代码事实：`internal/notification/domain`、`internal/notification/schema` 和 `internal/notification/application` 已建立；接收用例先校验 Envelope/Payload，再调用 InboxRepository。Repository Port 要求原子双唯一键检查并将 Inbox 与 fan-out 工作项一起持久化；当前只有 Fake Repository 测试，没有真实持久化 Adapter。旧 Python/Web 通知能力不属于 Go Notification Domain。
+- 契约证据：NTF-CTR-001～003 均为 `pending_evidence`。4 份 Schema、6 个 Golden 已校准；最近验证基线 `c8db1b9b` 的完整 Go workflow 已通过（根模块 gofmt/go test/race/vet、go-core、market-data 测试、MariaDB 集成及 Docker 构建）。当前提交新增领域边界测试后仍需重新跑 CI。
 
 Notification 是独立通知业务模块，负责事件接收、Subscription、Template、Channel、Dispatcher、Delivery、Attempt、幂等、重试和投递诊断。不计算业务告警条件，不依赖 Researchflow 内部实现。
 
@@ -27,8 +27,8 @@ Notification 是独立通知业务模块，负责事件接收、Subscription、T
 |---|---|---|
 | 领域设计与字段契约 | 已建立 | 以 01/03 文档为准；发现契约矛盾先修正文档并评审 |
 | Schema/Golden 资产 | 已校准，待 CI | 4 Schema、6 Golden；Draft 2020-12 Envelope/Payload Validator 和 Golden 测试已编写；根模块 go test、race、vet 已通过（Run 42192962140）；其余 workflow job 仍在执行 |
-| Go Notification Domain/Application | 部分实现 | EventEnvelope、JCS Fingerprint、Schema Registry/Validator 已提交，包含按 event_type + schema_version 编译并验证 Payload Schema；根模块 go test/race/vet 已通过 |
-| Inbox/Subscription/DeliveryPlan | 部分实现 | 已有 Inbox replay 比较、Subscription/recipient_scope 校验、DeliveryPlan fingerprint/唯一键基础类型；双唯一 Repository、不可变版本持久化与 fan-out 尚未实现 |
+| Go Notification Domain/Application | 部分实现 | EventEnvelope、JCS Fingerprint、Envelope/Payload Validator、EventReceiver、Subscription/DeliveryPlan 领域校验已实现；真实 Repository Adapter 尚未实现 |
+| Inbox/Subscription/DeliveryPlan | 部分实现 | Fake Repository 覆盖双唯一键重放/冲突/32 路并发；Subscription event_type/recipient_scope/filter/version 校验和 DeliveryPlan 指纹/唯一键已实现；持久化与 fan-out 仍待实现 |
 | Template/Channel/Dispatcher/Retry | 未开始 | 无实现；不得以旧 Python 通知能力替代 |
 | Repository/Migration | 未开始 | Platform Storage 已有通用基础能力；Notification 专属模型/迁移尚无 |
 | 三生产方事件接入 | 未验收 | 仅按各生产方契约和真实测试证据逐项开放 |

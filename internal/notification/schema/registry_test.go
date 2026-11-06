@@ -140,3 +140,19 @@ func TestRejectsPayloadThatDoesNotMatchRegisteredSchema(t *testing.T) {
 		t.Fatalf("expected payload schema validation error, got %v", err)
 	}
 }
+
+func TestRegistryEventTypeLookup(t *testing.T) {
+	registry := newTestRegistry(t)
+	for _, eventType := range []string{
+		"researchflow.run.terminal",
+		"quant.risk_decision.changed",
+		"research.event.lifecycle_changed",
+	} {
+		if !registry.HasEventType(eventType) {
+			t.Fatalf("expected registered event type %q", eventType)
+		}
+	}
+	if registry.HasEventType("unknown.event") {
+		t.Fatal("unknown event type must not be registered")
+	}
+}

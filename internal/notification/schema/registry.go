@@ -153,6 +153,19 @@ func (r *Registry) registerDigest(key SchemaKey, sourceModule, digest string, va
 	return nil
 }
 
+// HasEventType reports whether at least one immutable version of an event type is registered.
+func (r *Registry) HasEventType(eventType string) bool {
+	if r == nil || eventType == "" {
+		return false
+	}
+	for key := range r.entries {
+		if key.EventType == eventType {
+			return true
+		}
+	}
+	return false
+}
+
 func (r *Registry) SchemaDigest(key SchemaKey) (string, bool) {
 	entry, ok := r.entries[key]
 	return entry.digest, ok

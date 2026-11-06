@@ -7,6 +7,12 @@ import (
 	"time"
 )
 
+type acceptingEventTypeLookup struct{}
+
+func (acceptingEventTypeLookup) HasEventType(eventType string) bool {
+	return eventType == "quant.risk_decision.changed"
+}
+
 type acceptingFilterValidator struct{}
 
 func (acceptingFilterValidator) ValidateFilter(eventType, schemaVersion string, filters json.RawMessage) error {
@@ -28,7 +34,7 @@ func validSubscription() Subscription {
 
 func TestSubscriptionRecipientScope(t *testing.T) {
 	sub := validSubscription()
-	if err := sub.Validate(nil); err != nil {
+	if err := sub.Validate(acceptingEventTypeLookup{}, nil); err != nil {
 		t.Fatalf("subscription_owner should be valid: %v", err)
 	}
 	sub.RecipientRef = "recipient-1"
@@ -53,7 +59,7 @@ func TestSubscriptionFiltersFailClosed(t *testing.T) {
 	if err := sub.Validate(nil); !errors.Is(err, ErrInvalidSubscription) {
 		t.Fatalf("expected unavailable filter validator to fail closed, got %v", err)
 	}
-	if err := sub.Validate(acceptingFilterValidator{}); err != nil {
+	if err := sub.Validate(acceptingEventTypeLookup{}, acceptingFilterValidator{}); err != nil {
 		t.Fatalf("valid registered filter should pass: %v", err)
 	}
 	sub.Filters = json.RawMessage(`[]`)
@@ -77,5 +83,16 @@ func TestSubscriptionVersionMustBeAppendOnly(t *testing.T) {
 	next.Version = 3
 	if !errors.Is(ValidateSubscriptionVersion(previous, next), ErrSubscriptionVersionConflict) {
 		t.Fatal("expected version gap to be rejected")
+	}
+}
+
+func TestSubscriptionRequiresRegisteredEventType(t *testing.T) {
+	sub := validSubscription()
+	if err := sub.Validate(nil, nil); !errors.Is(err, ErrInvalidSubscription) {
+		t.Fatalf("expected missing event registry to fail closed, got %v", err)
+	}
+	sub.EventType = "unregistered.event"
+	if err := sub.Validate(acceptingEventTypeLookup{}, nil); !errors.Is(err, ErrInvalidSubscription) {
+		t.Fatalf("expected unknown event type to fail, got %v", err)
 	}
 }

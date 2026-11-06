@@ -32,3 +32,16 @@ func TestValidateInboxReplay(t *testing.T) {
 		})
 	}
 }
+
+func TestValidateInboxReplayRequiresStablePublishedAt(t *testing.T) {
+	existing := EventEnvelope{
+		SourceModule: "quant", EventID: "event-1",
+		IdempotencyKey: "publish-1", PublishedAt: "2026-11-06T09:00:00Z",
+		PayloadFingerprint: "fingerprint-a",
+	}
+	incoming := existing
+	incoming.PublishedAt = "2026-11-06T09:00:01Z"
+	if !errors.Is(ValidateInboxReplay(existing, incoming), ErrInboxIdempotencyConflict) {
+		t.Fatal("published_at change must conflict on event replay")
+	}
+}

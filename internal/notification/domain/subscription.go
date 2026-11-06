@@ -28,6 +28,11 @@ var (
 	ErrSubscriptionVersionConflict = errors.New("notification: subscription version conflict")
 )
 
+// EventTypeLookup rejects subscriptions for unregistered event types.
+type EventTypeLookup interface {
+	HasEventType(eventType string) bool
+}
+
 // FilterSchemaValidator validates a constrained filter document for one event type/version.
 // A missing validator must never cause a non-empty filter to be accepted.
 type FilterSchemaValidator interface {
@@ -51,10 +56,13 @@ type Subscription struct {
 	EffectiveAt         time.Time          `json:"effective_at"`
 }
 
-func (s Subscription) Validate(filterValidator FilterSchemaValidator) error {
+func (s Subscription) Validate(eventTypes EventTypeLookup, filterValidator FilterSchemaValidator) error {
 	if s.SubscriptionID == "" || s.OwnerRef == "" || s.Version < 1 ||
 		s.EventType == "" || s.ChannelRef == "" || s.TemplateID == "" {
 		return ErrInvalidSubscription
+	}
+	if eventTypes == nil || !eventTypes.HasEventType(s.EventType) {
+		return fmt.Errorf("%w: event_type is not registered", ErrInvalidSubscription)
 	}
 	switch s.Status {
 	case SubscriptionActive, SubscriptionPaused, SubscriptionDisabled:
@@ -105,7 +113,9 @@ func (s Subscription) Validate(filterValidator FilterSchemaValidator) error {
 func ValidateSubscriptionVersion(previous, next Subscription) error {
 	if previous.SubscriptionID == "" || previous.SubscriptionID != next.SubscriptionID ||
 		previous.OwnerRef != next.OwnerRef || next.Version != previous.Version+1 ||
-		!previous.CreatedAt.Equal(next.CreatedAt) || next.UpdatedAt.Before(previous.UpdatedAt) {
+		!previous.CreatedAt.Equal(next.CreatedAt) ||
+		!isUTCInstant(next.UpdatedAt) || !isUTCInstant(next.EffectiveAt) ||
+		next.UpdatedAt.Before(previous.UpdatedAt) || next.EffectiveAt.Before(previous.EffectiveAt) {
 		return ErrSubscriptionVersionConflict
 	}
 	return nil

@@ -82,7 +82,8 @@ func (p DeliveryPlan) CalculateFingerprint() (string, error) {
 	if err := p.Validate(); err != nil {
 		return "", err
 	}
-	versions := append([]string(nil), p.AuthorizationPolicyVersions...)
+	versions := make([]string, 0, len(p.AuthorizationPolicyVersions))
+	versions = append(versions, p.AuthorizationPolicyVersions...)
 	sort.Strings(versions)
 	input := deliveryPlanFingerprintInput{
 		SourceModule: p.SourceModule, EventID: p.EventID,

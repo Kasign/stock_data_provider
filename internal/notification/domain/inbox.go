@@ -20,6 +20,7 @@ func ValidateInboxReplay(existing, incoming EventEnvelope) error {
 	if existing.SourceModule != incoming.SourceModule ||
 		existing.EventID != incoming.EventID ||
 		existing.IdempotencyKey != incoming.IdempotencyKey ||
+		existing.PublishedAt != incoming.PublishedAt ||
 		existing.PayloadFingerprint != incoming.PayloadFingerprint {
 		return ErrInboxIdempotencyConflict
 	}
