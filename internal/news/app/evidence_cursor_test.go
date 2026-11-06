@@ -20,7 +20,7 @@ func TestEvidenceCursorCodecRoundTripAndFilterCanonicalization(t *testing.T) {
 	last := ResearchEvidenceRecord{
 		NewsID: "news-1", VersionID: "version-3",
 		SystemObservedAt: now.Add(-2 * time.Minute),
-		SystemAsOf: request.SystemAsOf,
+		SystemAsOf:       request.SystemAsOf,
 	}
 	token, err := codec.EncodeNextCursor(request, "snapshot-1", last, now)
 	if err != nil {
@@ -52,7 +52,7 @@ func TestEvidenceCursorCodecRejectsTamperingAndQueryMismatch(t *testing.T) {
 	last := ResearchEvidenceRecord{
 		NewsID: "news-1", VersionID: "version-1",
 		SystemObservedAt: request.SystemAsOf.Add(-time.Second),
-		SystemAsOf: request.SystemAsOf,
+		SystemAsOf:       request.SystemAsOf,
 	}
 	token, err := codec.EncodeNextCursor(request, "snapshot-1", last, now)
 	if err != nil {
@@ -90,7 +90,7 @@ func TestEvidenceCursorCodecEnforcesExpiryAndIssueTime(t *testing.T) {
 	last := ResearchEvidenceRecord{
 		NewsID: "news-1", VersionID: "version-1",
 		SystemObservedAt: request.SystemAsOf.Add(-time.Second),
-		SystemAsOf: request.SystemAsOf,
+		SystemAsOf:       request.SystemAsOf,
 	}
 	token, err := codec.EncodeNextCursor(request, "snapshot-1", last, now)
 	if err != nil {
@@ -113,7 +113,7 @@ func TestEvidenceCursorCodecSupportsKeyRotation(t *testing.T) {
 	last := ResearchEvidenceRecord{
 		NewsID: "news-1", VersionID: "version-1",
 		SystemObservedAt: request.SystemAsOf.Add(-time.Second),
-		SystemAsOf: request.SystemAsOf,
+		SystemAsOf:       request.SystemAsOf,
 	}
 	oldToken, err := oldCodec.EncodeNextCursor(request, "snapshot-1", last, now)
 	if err != nil {
