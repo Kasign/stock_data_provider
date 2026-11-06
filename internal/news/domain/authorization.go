@@ -37,32 +37,32 @@ type AuthorizationPolicySnapshot struct {
 }
 
 type NewsAuthorizationRef struct {
-	AuthorizationRef    string                 `json:"authorization_ref"`
-	PolicyOwner         string                 `json:"policy_owner"`
-	PolicyVersion       string                 `json:"policy_version"`
-	Decision            AuthorizationDecision       `json:"decision"`
-	PurposeCode         string                 `json:"purpose_code"`
-	ContentLevel        AuthorizationContentLevel  `json:"content_level"`
-	SubjectRef          string                 `json:"subject_ref"`
-	ResourceRef         string                 `json:"resource_ref"`
-	DecidedAt           string                 `json:"decided_at"`
-	ExpiresAt           *string                `json:"expires_at"`
-	Conditions          []string               `json:"conditions"`
-	DecisionFingerprint string                 `json:"decision_fingerprint"`
+	AuthorizationRef    string                    `json:"authorization_ref"`
+	PolicyOwner         string                    `json:"policy_owner"`
+	PolicyVersion       string                    `json:"policy_version"`
+	Decision            AuthorizationDecision     `json:"decision"`
+	PurposeCode         string                    `json:"purpose_code"`
+	ContentLevel        AuthorizationContentLevel `json:"content_level"`
+	SubjectRef          string                    `json:"subject_ref"`
+	ResourceRef         string                    `json:"resource_ref"`
+	DecidedAt           string                    `json:"decided_at"`
+	ExpiresAt           *string                   `json:"expires_at"`
+	Conditions          []string                  `json:"conditions"`
+	DecisionFingerprint string                    `json:"decision_fingerprint"`
 }
 
 // NewsAuthorizationBinding is the NEWS-CTR-002 cross-object binding DTO.
 // CallerRef must be supplied by a trusted in-process caller context, never by
 // an external request field. This value object does not itself authorize reads.
 type NewsAuthorizationBinding struct {
-	CallerRef             string                     `json:"caller_ref"`
-	ResourceRef           string                     `json:"resource_ref"`
-	PurposeCode           string                     `json:"purpose_code"`
-	RequestedContentLevel AuthorizationContentLevel `json:"requested_content_level"`
-	ProviderRef           *string                    `json:"provider_ref"`
-	SourceRef             string                     `json:"source_ref"`
-	EndpointRef           *string                    `json:"endpoint_ref"`
-	AuthorizationRef      NewsAuthorizationRef       `json:"authorization_ref"`
+	CallerRef             string                      `json:"caller_ref"`
+	ResourceRef           string                      `json:"resource_ref"`
+	PurposeCode           string                      `json:"purpose_code"`
+	RequestedContentLevel AuthorizationContentLevel   `json:"requested_content_level"`
+	ProviderRef           *string                     `json:"provider_ref"`
+	SourceRef             string                      `json:"source_ref"`
+	EndpointRef           *string                     `json:"endpoint_ref"`
+	AuthorizationRef      NewsAuthorizationRef        `json:"authorization_ref"`
 	PolicySnapshot        AuthorizationPolicySnapshot `json:"policy_snapshot"`
 }
 
