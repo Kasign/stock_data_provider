@@ -59,6 +59,9 @@ func (v *NullableDateTime) UnmarshalJSON(data []byte) error {
 }
 
 func (v NullableDateTime) MarshalJSON() ([]byte, error) {
+	if !v.Present {
+		return nil, ErrAuthorizationNullableFieldMissing
+	}
 	if v.Value == nil {
 		return []byte("null"), nil
 	}
@@ -86,6 +89,9 @@ func (v *NullableOpaqueRef) UnmarshalJSON(data []byte) error {
 }
 
 func (v NullableOpaqueRef) MarshalJSON() ([]byte, error) {
+	if !v.Present {
+		return nil, ErrAuthorizationNullableFieldMissing
+	}
 	if v.Value == nil {
 		return []byte("null"), nil
 	}
@@ -123,9 +129,10 @@ type NewsAuthorizationBinding struct {
 }
 
 var (
-	ErrAuthorizationBindingInvalid = errors.New("news.authorization.binding_invalid")
+	ErrAuthorizationBindingInvalid      = errors.New("news.authorization.binding_invalid")
+	ErrAuthorizationNullableFieldMissing = errors.New("news.authorization.nullable_field_missing")
 	// Fingerprint syntax is checked here; JCS verification waits for the shared GOV-CTR-006 verifier in the common baseline.
-	authorizationFingerprintPattern = regexp.MustCompile(`^[0-9a-f]{64}$`)
+	authorizationFingerprintPattern     = regexp.MustCompile(`^[0-9a-f]{64}$`)
 )
 
 func ValidateNewsAuthorizationBinding(binding NewsAuthorizationBinding) error {

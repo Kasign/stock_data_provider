@@ -48,6 +48,21 @@ func loadNewsAuthorizationGolden(t *testing.T) NewsAuthorizationBinding {
 	return binding
 }
 
+func TestNullableAuthorizationFieldsPreservePresenceWhenMarshaled(t *testing.T) {
+	if _, err := json.Marshal(NullableOpaqueRef{}); !errors.Is(err, ErrAuthorizationNullableFieldMissing) {
+		t.Fatalf("missing provider_ref must not be marshaled as null: %v", err)
+	}
+	if encoded, err := json.Marshal(NullableOpaqueRef{Present: true}); err != nil || string(encoded) != "null" {
+		t.Fatalf("explicit null provider_ref round trip: encoded=%s err=%v", encoded, err)
+	}
+	if _, err := json.Marshal(NullableDateTime{}); !errors.Is(err, ErrAuthorizationNullableFieldMissing) {
+		t.Fatalf("missing expires_at must not be marshaled as null: %v", err)
+	}
+	if encoded, err := json.Marshal(NullableDateTime{Present: true}); err != nil || string(encoded) != "null" {
+		t.Fatalf("explicit null expires_at round trip: encoded=%s err=%v", encoded, err)
+	}
+}
+
 func TestAuthorizationPurposeCodeForPurpose(t *testing.T) {
 	cases := []struct {
 		purpose Purpose
