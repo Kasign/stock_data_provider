@@ -177,7 +177,8 @@ test("研究记录导入提交检查快照、容量并在回读失败时恢复�
   const failed = {
     raw,
     writes: 0,
-    getItem() { return this.writes === 1 ? "corrupted-after-write" : this.raw; },
+    reads: 0,
+    getItem() { this.reads++; return this.writes === 1 && this.reads === 4 ? "corrupted-on-readback" : this.raw; },
     setItem(key, value) { this.writes++; this.raw = value; },
     removeItem() { this.raw = null; }
   };
@@ -201,4 +202,32 @@ test("研究记录导入容量校验不超过 200 条", async () => {
   }), readResearchNotes(s));
   assert.deepEqual(commitResearchNotesImport(preview, s, raw), { ok: false, reason: "limit" });
   assert.equal(s.getItem(RESEARCH_NOTES_KEY), raw);
+});
+
+
+test("研究记录导入回滚不会覆盖写入期间出现的其他标签页更新", async () => {
+  const { previewResearchNotesImport, commitResearchNotesImport } = await import("../src/research-notes.js");
+  const base = memory();
+  writeResearchNotes([note("local", "本地", "原内容")], base);
+  const before = base.getItem(RESEARCH_NOTES_KEY);
+  const external = JSON.stringify([note("external", "其他标签页", "并发更新")]);
+  const storage = {
+    raw: before,
+    reads: 0,
+    writes: 0,
+    getItem() {
+      this.reads++;
+      if (this.writes === 1 && this.reads === 4) this.raw = external;
+      return this.raw;
+    },
+    setItem(key, value) { this.writes++; this.raw = value; },
+    removeItem() { this.raw = null; }
+  };
+  const preview = previewResearchNotesImport(JSON.stringify({
+    format: "stock-provider-webui.research-notes", version: 1,
+    items: [note("remote", "待导入", "内容")]
+  }), readResearchNotes(base));
+  const result = commitResearchNotesImport(preview, storage, before);
+  assert.deepEqual(result, { ok: false, reason: "verify", rollback: false });
+  assert.equal(storage.raw, external, "rollback must not overwrite an external concurrent write");
 });

@@ -177,7 +177,9 @@ export function commitResearchNotesImport(preview, storage, expectedRaw, conflic
   if (before !== expectedRaw) return { ok: false, reason: "stale" };
   const current = readResearchNotes(target);
   if (!current.readable || !current.valid) return { ok: false, reason: "invalid-storage" };
-  const imported = buildResearchNotesImportItems(preview, conflictMode, createId);
+  let imported;
+  try { imported = buildResearchNotesImportItems(preview, conflictMode, createId); }
+  catch { return { ok: false, reason: "invalid" }; }
   const ids = new Set(current.items.map(item => item.id));
   if (imported.some(item => ids.has(item.id))) return { ok: false, reason: "conflict" };
   const merged = [...imported, ...current.items];
@@ -188,6 +190,7 @@ export function commitResearchNotesImport(preview, storage, expectedRaw, conflic
   }
   const serialized = JSON.stringify(normalized);
   try {
+    if (target.getItem(RESEARCH_NOTES_KEY) !== expectedRaw) return { ok: false, reason: "stale" };
     target.setItem(RESEARCH_NOTES_KEY, serialized);
     const after = readResearchNotes(target);
     if (after.readable && after.valid && JSON.stringify(after.items) === serialized) {
@@ -196,9 +199,13 @@ export function commitResearchNotesImport(preview, storage, expectedRaw, conflic
   } catch {}
   let rollback = false;
   try {
-    if (before === null) target.removeItem(RESEARCH_NOTES_KEY);
-    else target.setItem(RESEARCH_NOTES_KEY, before);
-    rollback = target.getItem(RESEARCH_NOTES_KEY) === before;
+    const currentRaw = target.getItem(RESEARCH_NOTES_KEY);
+    if (currentRaw === before) rollback = true;
+    else if (currentRaw === serialized) {
+      if (before === null) target.removeItem(RESEARCH_NOTES_KEY);
+      else target.setItem(RESEARCH_NOTES_KEY, before);
+      rollback = target.getItem(RESEARCH_NOTES_KEY) === before;
+    }
   } catch {}
   return { ok: false, reason: "verify", rollback };
 }
