@@ -2211,3 +2211,10 @@ CSS AST 检查器进一步扩展：
 - [x] 复核 `383db135` 的失败日志：320px 视口失败项全部为 `GET /` 的 `net::ERR_ABORTED`，未出现静态资源 4xx/5xx 或业务 API 非预期网络失败。
 - [x] 测试将被后续导航替代的主文档导航单独记录；其余非 API 请求失败仍按失败处理。
 - [ ] 重新运行 Browser Smoke，确认导航取消分类后完整执行后续专项验收；不得仅凭分类调整判定 W1 通过。
+
+
+### W1 Browser Smoke 导航取消二次修正
+
+- [x] `216bcaaa` 运行后仍捕获 12 次 `GET /: net::ERR_ABORTED`，说明仅依赖 Playwright `isNavigationRequest()` 未能覆盖该请求形态。
+- [x] 将识别条件收窄为 `ERR_ABORTED + resourceType=document + pathname=/`，仅豁免被取消的根文档请求；静态资源、其他文档和非导航请求仍进入失败断言。
+- [ ] 等待最新 Browser Smoke 完整执行；后续专项全部通过前，W1 不予验收。

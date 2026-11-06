@@ -2440,3 +2440,9 @@ CSS AST 检查器进一步扩展：
 
 - [ ] 对 `GET /` 的 `ERR_ABORTED` 导航取消单独记录；真实静态资源失败仍阻断验收。
 - [ ] 重新运行完整 Browser Smoke，确认 Run Flow、研究记录、选股等后续专项均执行并通过。
+
+
+### W1 Browser Smoke 导航取消二次修正
+
+- [ ] 仅将 `GET /` 根文档的 `ERR_ABORTED` 作为被替代导航记录；其他文档与静态资源请求失败仍阻断。
+- [ ] 完整 Browser Smoke 及全部后续专项通过。

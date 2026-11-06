@@ -119,11 +119,13 @@ try {
       const wasAborted = /ERR_ABORTED|aborted/i.test(failureText);
       // 被后续导航替代的主文档导航单独记录，不与静态资源和业务请求失败混淆。
       // 页面最终可用性仍由后续导航、页面错误和各视口交互断言验证。
-      if (wasAborted && request.isNavigationRequest()) {
+      // Playwright 对部分被取消的顶层文档请求不稳定地报告 isNavigationRequest；
+      // 以 document resourceType + 根路径 + ERR_ABORTED 作为窄范围兜底。
+      if (wasAborted && request.resourceType() === "document" && pathname === "/") {
         abortedNavigationRequests.push({
           method: request.method(),
           pathname,
-          frameUrl: request.frame().url(),
+          resourceType: request.resourceType(),
           failure: failureText
         });
         return;
