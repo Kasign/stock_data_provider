@@ -209,12 +209,14 @@ data: {"type":"response.completed","sequence_number":7,"response":{"id":"resp_to
 - 远程 Provider Mock、Gateway 路由存在、字段透传、Fixture 全通过均不能单独把本地 llama.cpp/Qwen 能力设为 supported。
 - 当前仍未对实际部署 Gateway 发起真实调用；LLM-001 partial，LLM-004/005 真实能力待验收。
 
-## 8. Owner 待确认
+## 8. 已接受语义与实现证据待办
 
-1. 是否接受 sequence_number 缺号即失败的严格策略。
-2. 是否接受 Draft 2020-12 作为本地 Schema dialect，并明确 format assertion 语义。
-3. SSE `response.error` 与 `error` event 的稳定错误映射。
-4. unknown OutputItem/ContentPart 的安全元数据 allowlist。
-5. 对 terminal 后多余事件是立即失败还是只记录协议诊断；建议立即失败。
+sequence_number 严格连续策略、Draft 2020-12 本地 Schema dialect、Request ID 四层区分已在 04 文档第 10 节接受，不再等待个人 Owner 确认。
 
-**本清单是 LLM-002-F 的测试设计基线；尚未生成实际 fixture 文件、测试代码或真实模型验收结果。契约语义与状态以项目级契约目录为准，不以个人 Owner Review/签字作为门槛。**
+本轮明确以下解析规则：
+1. SSE error event 携带合法上游错误对象时映射为 upstream_error；event/data 结构畸形或字段矛盾映射 invalid_response。
+2. UnknownEvent 仅保留 type、sequence_number（若有）、response_id、output_index、content_index、item_id、call_id、status，以及 item/content_part 的 type/id 等 allowlist 元数据；不得保留未知正文、Prompt 或任意原始字段。
+3. terminal event 后出现额外完整事件按 invalid_response；不得追加到已完成响应。
+4. 以上规则必须进入 JSON/SSE Golden 与 Contract Test；本清单不代表测试代码已实现或执行通过。
+
+**本清单是 LLM-002-F 测试设计基线；尚未生成实际 fixture 文件、测试代码或真实模型验收结果。**
