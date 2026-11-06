@@ -1846,7 +1846,7 @@ M2/M4 必须将 Worker 改为可管理对象或显式 Start/Stop/Wait：
 **当前状态：** M0 仍未通过，M1 不准入。审计已足以形成一组边界清晰的 MDM-001 修正任务；下一步应优先取得脱敏数据库 Schema 证据，同时等待/确认是否授权当前分支实施 CT-01～CT-06。不得把“测试覆盖不足”误写为“现有运行时校验不存在”。
 ### 2026-11-06：CT-01～CT-06 实施进度（用户已授权）
 
-实施基线：c44a7e8aea91243efa2285175eef00c9346809f5。仅修改 feat/full-go-data-providers-api-switch；未触碰其他分支或其他模块；PR #1 仍保持 Open/Draft。
+实施基线：8540319ed9688bb33ec08eda2973274f2301eb56。仅修改 feat/full-go-data-providers-api-switch；未触碰其他分支或其他模块；PR #1 仍保持 Open/Draft。
 
 #### CT-01：认证与路由一致性
 - 经重新读取 Server.auth，Data HTTP Adapter 接受 X-API-Key 与 Authorization: Bearer 两种凭据格式，两者校验同一个 Data API Key。此前“只接受 X-API-Key”的审计结论错误。
@@ -1866,7 +1866,7 @@ M2/M4 必须将 Worker 改为可管理对象或显式 Start/Stop/Wait：
 - 原有代表性 JSON 序列化测试继续保留。剩余 nullable 需按 DTO serialization / Endpoint business invariant 分类，不将所有指针与 Schema nullable 差异机械判为错误。
 
 #### CT-04：LimitPool 条件语义
-- 新增 HasData=true 且 ChangePercent=nil、HasData=false 且 Items 非空两个 Validator 负例。
+- 新增 HasData=true 且 ChangePercent=nil、HasData=false 且 Items 非空两个 Validator 负例；调整 Validator 分支顺序，使无数据快照先执行空态不变量检查，并由测试断言命中该分支，而非被 total/items 通用检查提前拦截。
 - OpenAPI 已描述 has_data 条件约束：true 时 items 非空且每项 change_percent 非 null；false 时 total=0 且 items 为空。
 - 保留 v1 DTO 的 pointer 与 nullable wire contract，不改变既有 JSON 结构。
 
