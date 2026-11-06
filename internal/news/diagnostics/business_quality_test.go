@@ -12,7 +12,7 @@ import (
 func TestBusinessQualityCheckKeepsBusinessAndPlatformStatusesSeparate(t *testing.T) {
 	check, err := BusinessQualityCheck(
 		"observation-private-id",
-		domain.Candidate{RawURL: "https://news.example/item", Title: "private article title"},
+		domain.Candidate{RawURL: "https://news.example/item", PublisherName: "private publisher"},
 		domain.ContentLayers{Body: &domain.ContentPayload{Text: "private article body"}},
 		domain.SourceIdentityConflict,
 	)

@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kasign.github.io/stock_data_provider/news/NEWS-CTR-001-get-evidence-request-1.0.0.schema.json",
+  "title": "News GetEvidence Request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "caller_ref",
+    "purpose_code",
+    "requested_content_level",
+    "system_as_of",
+    "news_id"
+  ],
+  "properties": {
+    "caller_ref": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256
+    },
+    "purpose_code": {
+      "type": "string",
+      "enum": [
+        "research_analysis",
+        "risk_review",
+        "user_display"
+      ]
+    },
+    "requested_content_level": {
+      "type": "string",
+      "enum": [
+        "metadata",
+        "summary",
+        "snippet",
+        "full"
+      ]
+    },
+    "system_as_of": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "news_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256
+    },
+    "version_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256
+    }
+  }
+}

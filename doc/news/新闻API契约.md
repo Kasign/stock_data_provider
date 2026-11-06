@@ -170,3 +170,14 @@ News 为 News 来源内容签发 AuthorizationRef。公开或无限制内容也�
 
 底层 SQL/Redis/Platform 依赖故障使用 PLAT-CTR-001 Fault，不得映射成空 items 或业务质量 degraded。Provider 采集部分失败属于 News 采集用例，不属于该只读 Query Port 的部分成功语义。
 
+
+
+### 11.5 Go Application DTO 与 JSON Schema 落地状态（2026-11-06）
+
+跨模块语义以 `doc/整体任务规划/跨模块契约目录与冻结状态.md` 的 NEWS-CTR-001 为准。本分支已新增：
+
+- `app.GetEvidenceRequest`、`app.ListEvidenceRequest`、`app.ResearchEvidenceRecord`、`app.ResearchEvidencePage`。
+- `app.ResearchEvidenceQuery` 同进程只读 Port。
+- `doc/news/schema/NEWS-CTR-001-*.schema.json` 与 `doc/news/golden/NEWS-CTR-001-*.golden.json`。
+
+当前仅完成 DTO、请求边界校验、Schema 和 Golden；未实现 Facade、PIT Repository、授权快照当前复核、HMAC Cursor、固定 Snapshot，也没有对外 HTTP 路由。禁止将本阶段描述为 NEWS-CTR-001 已验收。
