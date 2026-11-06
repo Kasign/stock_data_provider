@@ -65,6 +65,70 @@ Template 版本必须由 Subscription 版本快照固定；如果实现允许同
 
 默认不对历史事件做新订阅回补。若未来提供 backfill，必须使用独立显式命令、权限和幂等范围，不得由普通 PublishEvent 重放隐式触发。
 
+
+### 2.4 Subscription 字段级契约
+
+| 字段 | JSON 类型 | 必填/nullable | 约束 |
+|---|---|---|---|
+| subscription_id | string | 必填 / non-null | 不透明稳定 ID |
+| owner_ref | string | 必填 / non-null | 订阅所有者引用，不是收件地址 |
+| version | integer | 必填 / non-null | 从 1 开始单调递增；每个版本不可变 |
+| status | enum | 必填 / non-null | active/paused/disabled |
+| event_types | array<string> | 必填 / non-null | 已注册 event_type 的唯一列表；空数组表示不订阅任何事件 |
+| filter_schema_version | string/null | 必填字段 / nullable | 非空时必须匹配对应 event_type 的受控过滤 Schema |
+| filters | object/null | 必填字段 / nullable | null 表示无附加过滤；非 null 必须按已注册 Schema 校验，禁止任意 map |
+| recipient_scope | enum | 必填 / non-null | subscription_owner/preconfigured_target |
+| recipient_ref | string/null | 必填字段 / nullable | 仅在预配置目标已解析并授权时填充；不存敏感地址 |
+| channel_ref | string | 必填 / non-null | 不透明渠道引用 |
+| template_id | string | 必填 / non-null | 不透明模板 ID |
+| created_at / updated_at / effective_at | RFC3339Nano UTC | 必填 / non-null | 创建、更新、当前版本生效时间 |
+
+更新 Subscription 必须产生新 version；旧版本只读保留。event_types/filter 的组合必须对每个 event_type 做 Schema 校验，不能以通用 JSON 查询语言执行任意逻辑。
+
+### 2.5 DeliveryRecord 与 DeliveryAttempt 字段级契约
+
+**DeliveryRecord：**
+
+| 字段 | JSON 类型 | 必填/nullable | 约束 |
+|---|---|---|---|
+| delivery_id | string | 必填 / non-null | 不透明稳定 ID |
+| event_id | string | 必填 / non-null | 来源 NotificationEvent |
+| subscription_id / subscription_version | string/integer | 必填 / non-null | 创建 Delivery 时固定 |
+| channel_ref / channel_config_version | string | 必填 / non-null | 创建 Delivery 时固定 |
+| template_id / template_version | string | 必填 / non-null | 创建 Delivery 时固定 |
+| recipient_ref | string | 必填 / non-null | 已授权的稳定收件目标引用，不含明文地址 |
+| payload_fingerprint / plan_fingerprint | string | 必填 / non-null | 规范化 Payload 与完整投递计划的 SHA-256 指纹 |
+| delivery_idempotency_key | string | 必填 / non-null | 同一 Delivery 全部 Attempt 稳定不变 |
+| status | enum | 必填 / non-null | Delivery 状态机枚举 |
+| version | integer | 必填 / non-null | 从 1 开始，每次 CAS 状态迁移递增 |
+| attempt_count / max_attempts | integer | 必填 / non-null | 非负 / 正整数；attempt_count 仅统计真实渠道调用 |
+| next_attempt_at | RFC3339Nano UTC/null | 必填字段 / nullable | 仅 retry_wait 有值，其余状态为 null |
+| deadline_at | RFC3339Nano UTC | 必填 / non-null | 最晚允许继续尝试的绝对截止时间 |
+| reason_code / last_error_code | string/null | 必填字段 / nullable | 稳定机器码，不拼接原始异常 |
+| provider_message_ref | string/null | 必填字段 / nullable | 渠道明确返回时设置 |
+| created_at / updated_at | RFC3339Nano UTC | 必填 / non-null | 创建和最后状态更新时间 |
+
+**DeliveryAttempt：**
+
+| 字段 | JSON 类型 | 必填/nullable | 约束 |
+|---|---|---|---|
+| attempt_id | string | 必填 / non-null | 不透明追加式 ID |
+| delivery_id | string | 必填 / non-null | 关联 Delivery |
+| attempt_no | integer | 必填 / non-null | 从 1 开始递增，包含每次真实渠道调用 |
+| worker_id | string | 必填 / non-null | 执行 Worker 引用 |
+| fencing_token | integer | 必填 / non-null | 单调递增；旧 token 永久失效 |
+| lease_expires_at | RFC3339Nano UTC | 必填 / non-null | 当前执行租约截止 |
+| started_at / finished_at | RFC3339Nano UTC/null | 必填字段 / nullable | finished_at 在 Attempt 结束前为 null |
+| outcome | enum/null | 必填字段 / nullable | accepted/rejected/ambiguous/not_sent；运行中为 null |
+| provider_message_ref | string/null | 必填字段 / nullable | 渠道回执引用 |
+| error_code | string/null | 必填字段 / nullable | 稳定错误码 |
+| retryable | boolean | 必填 / non-null | 技术建议，不覆盖 Channel retryable 白名单 |
+| duration_ms | integer/null | 必填字段 / nullable | 结束后非负毫秒值；运行中 null |
+| evidence_ref | string/null | 必填字段 / nullable | 不透明诊断证据引用 |
+
+Attempt 完成后不可覆盖；结果纠正通过新对账事实追加。DeliveryRecord 是当前投递状态快照，DeliveryAttempt 是不可变执行历史，两者不能合并成同一可覆盖记录。
+
+
 ## 3. recipient_scope 与安全边界
 
 recipient_scope 不是地址，也不是 recipient_ref。建议 MVP 仅允许：
