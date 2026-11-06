@@ -1,10 +1,12 @@
 package httpapi
 
 import (
+	"encoding/json"
 	"os"
 	"strings"
 	"testing"
 
+	"github.com/Kasign/stock_data_provider/services/market-data/internal/model"
 	"gopkg.in/yaml.v3"
 )
 
@@ -276,4 +278,66 @@ func TestOpenAPIDataModelFieldsMatchKnownJSONContract(t *testing.T) {
 			t.Errorf("HotRankingItem.%s must not be nullable", field)
 		}
 	}
+}
+
+func TestDataModelJSONSerializationMatchesOpenAPIRequiredAndNullableSemantics(t *testing.T) {
+	assertFields := func(name string, value any, present, omitted, nullFields []string) {
+		t.Helper()
+		encoded, err := json.Marshal(value)
+		if err != nil {
+			t.Fatalf("%s JSON marshal: %v", name, err)
+		}
+		var fields map[string]json.RawMessage
+		if err := json.Unmarshal(encoded, &fields); err != nil {
+			t.Fatalf("%s JSON decode: %v", name, err)
+		}
+		for _, field := range present {
+			if _, ok := fields[field]; !ok {
+				t.Errorf("%s.%s must be emitted; JSON=%s", name, field, encoded)
+			}
+		}
+		for _, field := range omitted {
+			if _, ok := fields[field]; ok {
+				t.Errorf("%s.%s must be omitted; JSON=%s", name, field, encoded)
+			}
+		}
+		for _, field := range nullFields {
+			if raw, ok := fields[field]; !ok || string(raw) != "null" {
+				t.Errorf("%s.%s must serialize as null; got %s", name, field, raw)
+			}
+		}
+	}
+
+	assertFields("Quote", model.Quote{},
+		[]string{"symbol", "change", "change_percent", "amount", "current_price", "quote_time"},
+		[]string{"name", "validation_total_count", "validation_issues"},
+		[]string{"change", "change_percent", "amount", "current_price", "quote_time"})
+	assertFields("DailyBar", model.DailyBar{},
+		[]string{"symbol", "trade_date", "amount", "change_percent", "ma5"},
+		[]string{"is_partial", "adjustment_method"},
+		[]string{"amount", "change_percent", "ma5"})
+	assertFields("Bundle", model.Bundle{},
+		[]string{"symbol", "daily_bars", "sources", "snapshot_id"},
+		[]string{"warnings", "name", "quote"},
+		nil)
+	assertFields("HotRankingItem", model.HotRankingItem{},
+		[]string{"rank", "symbol", "code"},
+		[]string{"source_version", "name", "rank_trend"},
+		nil)
+	assertFields("MarketSentimentSnapshot", model.MarketSentimentSnapshot{},
+		[]string{"market", "trade_date", "limit_up_count", "limit_down_count", "broken_board_count"},
+		[]string{"source_version", "provider_report_date"},
+		[]string{"limit_up_count", "limit_down_count", "broken_board_count"})
+	assertFields("LimitPoolItem", model.LimitPoolItem{},
+		[]string{"symbol", "change_percent"},
+		[]string{"seal_money", "max_seal_money"},
+		[]string{"change_percent"})
+	assertFields("SourceStatus", model.SourceStatus{},
+		[]string{"name", "enabled", "quote_capable", "daily_bar_capable", "historical_index_constituents_capable"},
+		[]string{"market_capital_flow_capable"},
+		nil)
+	assertFields("StockAnnouncementSnapshot", model.StockAnnouncementSnapshot{},
+		[]string{"symbol", "source_version", "items"},
+		nil,
+		nil)
 }
