@@ -715,7 +715,6 @@ func TestIndexConstituentsRejectsInvalidAsOfQueryAndCurrentOnlySource(t *testing
 	}
 }
 
-
 func TestHighRiskQueryParameterUpperAndLowerBounds(t *testing.T) {
 	p := httpFakeProvider{}
 	svc := service.New([]provider.Provider{p}, cache.NewDisabled(), nil, time.Second, time.Minute, 120, slog.New(slog.NewTextHandler(io.Discard, nil)))
