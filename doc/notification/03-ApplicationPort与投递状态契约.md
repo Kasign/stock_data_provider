@@ -56,8 +56,10 @@ Subscription 更新采用版本递增和不可变版本快照。任何影响匹�
 - payload_fingerprint、plan_fingerprint；
 - delivery_id、delivery_idempotency_key。
 
-建议唯一键：
-`(event_id, subscription_id, subscription_version, channel_ref, channel_config_version, recipient_ref)`。
+Delivery 唯一键固定为：
+`(event_id, subscription_id, subscription_version, channel_ref, channel_config_version, template_id, template_version, recipient_ref)`。
+
+所有版本均属于计划快照，不能在原版本上原地修改。
 
 Template 版本必须由 Subscription 版本快照固定；如果实现允许同一 Subscription 版本切换 Template，则必须把 template_id/template_version 加入唯一键，并禁止原版本原地修改。Channel 配置同理，版本化 Secret 引用，不在 Delivery 中复制 Secret 明文。
 
@@ -94,7 +96,7 @@ recipient_scope 不是地址，也不是 recipient_ref。建议 MVP 仅允许：
 允许迁移：
 - queued -> sending / skipped / blocked
 - blocked -> queued / skipped / failed
-- sending -> sent / retry_wait / failed / skipped / unknown
+- sending -> sent / retry_wait / failed / skipped / unknown（转 skipped 仅限可证明渠道调用尚未发出；请求可能已到达渠道时必须转 unknown）
 - retry_wait -> sending / skipped / blocked / failed
 - unknown -> sent / retry_wait / failed（仅通过对账或渠道幂等协议给出有证据的裁决）
 - failed -> queued 仅允许显式、授权、审计的人工重试命令；必须重新校验策略预算。
@@ -183,6 +185,46 @@ PublishResult 应明确 accepted/duplicate；冲突通过稳定错误返回。�
 | NTF-005 | retryable/permanent/ambiguous 分类、退避预算、Retry-After、unknown 不盲重试 | 真实渠道超时/回执丢失/幂等行为验证 |
 | NTF-006 | Repository Port、唯一约束、Outbox/Inbox Schema 设计 | MariaDB 事务、唯一冲突、锁竞争、Migration/恢复演练 |
 | NTF-007 | Delivery 查询、脱敏诊断、reason_code 和审计 | 根 HTTP/权限/监控接入 |
+
+
+### 8.1 NTF-CTR-001 Event Envelope 与 Fingerprint
+
+首批 Event Envelope 字段：
+
+| 字段 | JSON 类型 | 必填/nullable | 约束 |
+|---|---|---|---|
+| event_id | string | 必填 / non-null | 生产方生成的稳定 ID；同一逻辑事件重放不得变化 |
+| event_type | string | 必填 / non-null | 全局注册名，由 Registry 校验 |
+| schema_version | string | 必填 / non-null | SemVer，精确命中注册项 |
+| source_module | enum | 必填 / non-null | MVP 为 quant/research/researchflow；新增生产模块先登记 |
+| occurred_at | RFC3339Nano UTC | 必填 / non-null | 业务事实发生时间，不是发布或接收时间 |
+| subject_ref | string | 必填 / non-null | 不透明业务主体引用 |
+| idempotency_key | string | 必填 / non-null | 发布命令稳定键，重试时保持不变 |
+| correlation_id | string | 必填 / non-null | 跨模块关联，不作为去重键 |
+| payload | object | 必填 / non-null | 由 event_type + schema_version 唯一 Schema 校验 |
+
+Payload fingerprint 使用 RFC 8785 JSON Canonicalization Scheme 的 UTF-8 结果计算 SHA-256，覆盖 event_type、schema_version、source_module、subject_ref、occurred_at 和 payload。event_id/idempotency_key 不进入 payload fingerprint，而分别参与 Inbox/Publish 唯一性约束。Decimal string 不得规范化为 JSON number。
+
+### 8.2 NTF-CTR-002 幂等与 Delivery 计划快照
+
+- Inbox 唯一键：`(source_module, event_id)`。
+- Publish 幂等唯一键：`(source_module, idempotency_key)`。
+- 相同唯一键且 fingerprint 相同，返回原接收/发布结果，不重复 fan-out；相同唯一键不同 fingerprint 返回 idempotency_conflict。
+- Delivery 唯一键：`(event_id, subscription_id, subscription_version, channel_ref, channel_config_version, template_id, template_version, recipient_ref)`。
+- delivery_idempotency_key 在同一 Delivery 全部 Attempt 间稳定，作用域为 channel_ref + recipient_ref + delivery_id；只有 Channel Capability 已验证 supports_idempotency=true 时才发送。
+- Subscription、Channel、Template 任一影响匹配、目标、渲染或发送行为的变更必须产生新版本；历史 Delivery 保留原版本。
+- Outbox/Inbox 只保证业务事件到 Notification 的本地可靠接收，不代表外部渠道 exactly-once。
+
+### 8.3 NTF-CTR-003 状态迁移与渠道能力
+
+- 状态迁移通过 Delivery.version CAS；每次成功迁移递增 version，并追加不可变状态事件。
+- sending -> skipped 仅在可证明渠道调用尚未发出时允许；请求可能到达渠道时必须进入 unknown 或等待明确回执，不得以退订/取消覆盖外部副作用不确定性。
+- unknown -> retry_wait 仅在对账证明未接受，或已验证同一幂等键安全重放时允许；否则保持 unknown。
+- max_attempts 包含首次发送，必须为正整数；max_elapsed、per_attempt_timeout、总 deadline 必须显式配置且为正值，不设隐式全局重试默认值。
+- 自动重试仅针对渠道明确 rejected 且 reason_code 在该 Channel 的 retryable 白名单内；Retry-After 只能延后 next_attempt_at，不得越过总 deadline。ambiguous、timeout-after-write、连接中断且无法证明未发送均进入 unknown。
+- Channel Capability 必须逐渠道注册 supports_idempotency、supports_delivery_lookup、supports_retry_after、max_payload_bytes；未验证能力按 false/unknown 处理。
+- sent 仅表示渠道明确接受，不代表最终用户已送达/阅读。若渠道提供 delivered/read 回执，使用独立 DeliveryReceipt 事实，不改写 sent 语义。
+
 
 ## 11. 项目统一契约决议与证据状态
 
