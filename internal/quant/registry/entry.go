@@ -81,7 +81,6 @@ var (
 	codePattern    = regexp.MustCompile(`^[a-z][a-z0-9_]*$`)
 	versionPattern = regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?$`)
 	decimalPattern = regexp.MustCompile(`^-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?$`)
-	integerPattern = regexp.MustCompile(`^-?(?:0|[1-9][0-9]*)$`)
 )
 
 func (e Entry) Validate() error {
@@ -177,9 +176,11 @@ func parseNumeric(raw json.RawMessage, valueType ValueType, precision Precision)
 		}
 		text = number.String()
 		if valueType == ValueTypeInteger {
-			if !integerPattern.MatchString(text) {
+			integer, ok := new(big.Rat).SetString(text)
+			if !ok || !integer.IsInt() {
 				return nil, errors.New("invalid integer")
 			}
+			text = integer.Num().String()
 		} else {
 			value, err := strconv.ParseFloat(text, 64)
 			if err != nil || math.IsNaN(value) || math.IsInf(value, 0) {

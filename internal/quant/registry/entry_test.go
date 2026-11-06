@@ -78,6 +78,20 @@ func TestEntryValidateRejectsTrailingJSONInNumericMetadata(t *testing.T) {
 	}
 }
 
+func TestEntryValidateAcceptsMathematicallyIntegralJSONNumber(t *testing.T) {
+	entry := validEntry("trade_count", "1.0.0")
+	entry.ValueType = ValueTypeInteger
+	entry.Precision.MaxFractionDigits = 0
+	entry.Precision.Tolerance = json.RawMessage("1.0")
+	entry.Range = NumericRange{
+		Minimum: json.RawMessage("0"),
+		Maximum: json.RawMessage("1e3"),
+	}
+	if err := entry.Validate(); err != nil {
+		t.Fatalf("expected mathematically integral JSON number to pass, got %v", err)
+	}
+}
+
 func TestEntryValidateRejectsQuotedJSONNumber(t *testing.T) {
 	entry := validEntry("momentum_20d", "1.0.0")
 	entry.Precision.Tolerance = json.RawMessage("\"0.000001\"")
