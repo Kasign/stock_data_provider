@@ -23,7 +23,7 @@ func TestRunnerRejectsContractLimitViolations(t *testing.T) {
 		t.Fatal("expected check without Run function to be rejected")
 	}
 	if _, err := (Runner{}).Run(context.Background(), []Check{{
-		ID: "negative-timeout",
+		ID:      "negative-timeout",
 		Timeout: -time.Second,
 		Run: func(context.Context) (Observation, error) {
 			return Observation{Status: StatusHealthy, SafeMessage: "ok"}, nil
