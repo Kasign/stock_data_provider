@@ -960,7 +960,7 @@ components:
         quality_reasons: {type: array, items: {type: string}}
     DragonTigerSnapshot:
       type: object
-      required: [trade_date, page, page_size, total, pages, returned, source_returned, excluded_non_a_share_count, has_data, has_more, items, source, fetched_at, quality_status]
+      required: [trade_date, page, page_size, total, pages, returned, source_returned, excluded_non_a_share_count, has_data, has_more, items, source, source_version, fetched_at, quality_status]
       properties:
         trade_date: {type: string, format: date}
         provider_report_date: {type: string, format: date, nullable: true}
