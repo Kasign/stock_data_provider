@@ -8,6 +8,7 @@
     <title>行情研究台 · A 股市场与个股研究</title>
     <link rel="icon" href="data:," />
     <link rel="stylesheet" href="/styles.css" />
+    <link rel="stylesheet" href="/screening-local-batch.css" />
     <script type="module" src="/src/theme.js"></script>
     <script type="module" src="/src/app.js"></script>
   </head>
@@ -61,7 +62,7 @@
 
           <section class="panel market-overview-panel" id="market-overview-panel" aria-labelledby="market-overview-title">
             <div class="panel-heading market-overview-heading"><div><h2 id="market-overview-title">A 股市场概况</h2><p>核心指数与市场涨跌分布。数据及质量状态来自行情服务真实回包。</p></div><div class="market-overview-actions"><span class="market-overview-updated" id="market-overview-updated" role="status" aria-live="polite">等待加载</span><button class="button button-secondary" id="refresh-market-overview" type="button">刷新指数与广度 ↻</button></div></div>
-            <section class="market-overview-index-section" aria-labelledby="market-indices-title"><div class="market-overview-subheading"><h3 id="market-indices-title">核心指数</h3><span id="market-indices-status" class="availability-pill is-readonly">等待读取</span></div><div class="market-index-grid" id="market-index-grid"><p class="market-empty-state">配置行情 API Key 后加载核心指数。</p></div><p class="market-widget-meta" id="market-indices-meta"></p></section>
+            <section class="market-overview-index-section" aria-labelledby="market-indices-title"><div class="market-overview-subheading"><h3 id="market-indices-title">核心指数</h3><span id="market-indices-status" class="availability-pill is-readonly">等待读取</span></div><div class="market-index-grid" id="market-index-grid"><p class="market-empty-state">配置行情 API Key 后加载核心指数。</p></div><p class="market-widget-meta" id="market-indices-meta"></p><details class="market-quality-reasons" id="market-indices-reasons" hidden><summary>数据质量说明</summary><ul></ul></details></section>
             <section class="market-breadth-strip" aria-labelledby="market-breadth-title"><div class="market-overview-subheading"><div><h3 id="market-breadth-title">市场涨跌分布</h3><p>样本来自后端分布桶，不代表已独立核验的全市场证券总数。</p></div><span id="market-breadth-status" class="availability-pill is-readonly">等待读取</span></div><div class="market-breadth-values" id="market-breadth-values"><p class="market-empty-state">等待市场广度数据。</p></div><p class="market-widget-meta" id="market-breadth-meta"></p><details class="market-quality-reasons" id="market-breadth-reasons" hidden><summary>数据质量说明</summary><ul></ul></details></section>
             
           </section>
@@ -88,7 +89,7 @@
                   <label>结束日期<input id="market-sentiment-history-end" type="date"></label>
                   <button class="button button-secondary" id="load-market-sentiment-history" type="button">读取历史</button>
                 </div>
-                <div class="table-scroll market-overview-table-scroll"><table><thead><tr><th>交易日</th><th>上涨</th><th>下跌</th><th>平盘</th><th>涨停</th><th>跌停</th><th>质量</th><th>联动</th></tr></thead><tbody id="market-sentiment-history-body"><tr><td colspan="8" class="table-empty">选择日期范围后读取已保存快照。</td></tr></tbody></table></div>
+                <div class="table-scroll market-overview-table-scroll"><table><thead><tr><th>交易日</th><th>上涨</th><th>下跌</th><th>平盘</th><th>涨停</th><th>跌停</th><th>炸板</th><th>质量与来源</th><th>联动</th></tr></thead><tbody id="market-sentiment-history-body"><tr><td colspan="9" class="table-empty">选择日期范围后读取已保存快照。</td></tr></tbody></table></div>
                 <p class="market-widget-meta" id="market-sentiment-history-meta"></p>
               </section>
               <p class="market-widget-meta" id="market-sentiment-meta">尚未取得当日市场广度数据。</p>
@@ -401,16 +402,41 @@
 
           <section class="panel research-notes-panel" aria-labelledby="research-notes-title">
             <div class="panel-heading"><div><h2 id="research-notes-title">研究记录</h2><p>记录当前标的的研究判断、观察要点与后续跟踪事项。</p></div><span class="availability-pill is-local">仅当前浏览器保存</span></div>
-            <form id="research-note-form" class="research-note-form">
-              <label class="field"><span>记录标题</span><input id="research-note-title" maxlength="100" required placeholder="例如：关注放量突破后的持续性"></label>
-              <label class="field"><span>关联股票代码（可选）</span><input id="research-note-symbol" maxlength="32" placeholder="输入证券代码"></label>
-              <label class="field"><span>标签（逗号分隔）</span><input id="research-note-tags" maxlength="160" placeholder="基本面, 观察中"></label>
-              <label class="field"><span>关联任务 ID（可选）</span><input id="research-note-task" maxlength="160" placeholder="从当前任务上下文自动填充"></label>
-              <label class="field"><span>关联 Run ID（可选）</span><input id="research-note-run" maxlength="160" placeholder="从当前 Run 上下文自动填充"></label>
-              <label class="field"><span>研究内容</span><textarea id="research-note-content" rows="4" maxlength="10000" required placeholder="记录判断依据、风险因素和待验证事项"></textarea></label>
-              <div class="research-note-actions"><button class="button button-primary" id="research-note-save" type="submit">保存记录</button><button class="button button-secondary" id="research-note-cancel" type="button" hidden>取消编辑</button><span id="research-note-feedback" role="status" aria-live="polite">最多保存 200 条记录；不会同步到服务端。</span></div>
-            </form>
-            <div class="research-note-toolbar"><label class="field"><span>检索记录</span><input id="research-note-search" type="search" placeholder="标题、内容、股票代码或标签"></label><label class="field"><span>股票筛选</span><input id="research-note-symbol-filter" placeholder="输入股票代码"></label></div>
+            <div class="research-note-toolbar">
+              <label class="field"><span>检索记录</span><input id="research-note-search" type="search" placeholder="标题、内容、股票代码或标签"></label>
+              <label class="field"><span>股票筛选</span><input id="research-note-symbol-filter" placeholder="输入股票代码"></label>
+              <label class="field"><span>标签筛选</span><select id="research-note-tag-filter"><option value="">全部标签</option></select></label>
+              <div class="research-note-toolbar-actions">
+                <button class="button button-secondary" id="research-note-clear" type="button" disabled>清除筛选</button>
+                <button class="button button-secondary" id="research-note-export" type="button" disabled>导出全部 JSON</button>
+                <label class="button button-secondary research-note-import-picker" for="research-note-import-file">选择 JSON 导入</label>
+                <input id="research-note-import-file" type="file" accept="application/json,.json" hidden>
+                <button class="button button-primary" id="research-note-create" type="button">新建记录</button>
+              </div>
+            </div>
+            <p id="research-note-count" class="research-note-count" aria-live="polite">显示 0 / 0 条记录</p>
+            <section id="research-note-import-preview" class="research-note-import-preview" aria-live="polite" hidden>
+              <div class="research-note-editor-heading"><h3>导入预览</h3><button class="text-button" id="research-note-import-cancel" type="button">取消导入</button></div>
+              <p id="research-note-import-summary"></p>
+              <label class="field"><span>同 ID 内容冲突</span><select id="research-note-import-conflict"><option value="skip">跳过冲突，保留本地记录</option><option value="copy">将冲突记录另存为新记录</option></select></label>
+              <p class="field-hint">预览不会修改本地数据。提交前会检查其他标签页是否更改了研究记录。</p>
+              <div class="research-note-actions"><button class="button button-primary" id="research-note-import-commit" type="button">确认导入</button><span id="research-note-import-feedback" role="status"></span></div>
+            </section>
+            <section id="research-note-editor" class="research-note-editor" aria-labelledby="research-note-editor-title" hidden>
+              <div class="research-note-editor-heading">
+                <h3 id="research-note-editor-title">新建研究记录</h3>
+                <button class="text-button" id="research-note-editor-back" type="button">返回列表</button>
+              </div>
+              <form id="research-note-form" class="research-note-form">
+                <label class="field"><span>记录标题</span><input id="research-note-title" maxlength="100" required placeholder="例如：关注放量突破后的持续性"></label>
+                <label class="field"><span>关联股票代码（可选，多个用逗号分隔）</span><input id="research-note-symbol" maxlength="3399" placeholder="如 600519.SH, 000858.SZ"></label>
+                <label class="field"><span>标签（逗号分隔）</span><input id="research-note-tags" maxlength="160" placeholder="基本面, 观察中"></label>
+                <label class="field"><span>关联任务 ID（可选）</span><input id="research-note-task" maxlength="160" placeholder="从当前任务上下文自动填充"></label>
+                <label class="field"><span>关联 Run ID（可选）</span><input id="research-note-run" maxlength="160" placeholder="从当前 Run 上下文自动填充"></label>
+                <label class="field"><span>研究内容</span><textarea id="research-note-content" rows="4" maxlength="10000" required placeholder="记录判断依据、风险因素和待验证事项"></textarea></label>
+                <div class="research-note-actions"><button class="button button-primary" id="research-note-save" type="submit">保存记录</button><button class="button button-secondary" id="research-note-cancel" type="button" hidden>取消编辑</button><span id="research-note-feedback" role="status" aria-live="polite">最多保存 200 条记录；不会同步到服务端。</span></div>
+              </form>
+            </section>
             <div id="research-note-list" class="research-note-list" aria-live="polite"><p class="table-empty">尚无研究记录。</p></div>
           </section>
           <section class="panel research-reports-panel" aria-labelledby="research-reports-title">
@@ -419,9 +445,28 @@
               <label class="field"><span>检索报告</span><input id="research-report-search" type="search" placeholder="股票代码、Task ID、Run ID 或状态"></label>
               <label class="field"><span>归档日期起</span><input id="research-report-from" type="date"></label>
               <label class="field"><span>归档日期止</span><input id="research-report-to" type="date"></label>
+              <button class="button button-secondary" id="research-report-clear" type="button">清除筛选</button>
             </div>
+            <p id="research-report-count" class="field-hint" aria-live="polite">显示 0 / 0 份报告</p>
             <p id="research-report-feedback" class="field-hint" role="status" aria-live="polite">最多保存 30 份真实 Run 结果；不会同步到服务端。</p>
             <div id="research-report-list" class="research-report-list" aria-live="polite"><p class="table-empty">尚无归档报告。</p></div>
+            <section id="research-report-detail" class="research-report-detail" aria-labelledby="research-report-detail-title" hidden>
+              <header class="research-report-detail-header">
+                <div class="research-report-detail-heading">
+                  <button class="text-button" id="research-report-back" type="button">返回报告列表</button>
+                  <h3 id="research-report-detail-title">研究报告</h3>
+                  <p id="research-report-detail-meta" class="research-report-meta"></p>
+                </div>
+                <div id="research-report-detail-actions" class="research-report-actions"></div>
+              </header>
+              <div class="research-report-reader">
+                <nav class="research-report-toc" aria-label="报告章节导航">
+                  <strong>报告目录</strong>
+                  <ol id="research-report-toc"></ol>
+                </nav>
+                <article id="research-report-document" class="research-report-document" tabindex="-1"></article>
+              </div>
+            </section>
           </section>
           <section class="panel existing-api-panel" aria-labelledby="stock-status-tools-title">
             <div class="panel-heading"><div><h2 id="stock-status-tools-title">历史交易状态与涨跌幅规则</h2><p>查询指定交易日的停复牌/风险警示证据和有效涨跌幅规则。未知状态代表证据不足，不会自动当作正常或无涨跌幅限制。</p></div></div>
@@ -523,7 +568,11 @@
                 </div>
                 </div>
                 </details>
-                <div id="task-error" class="task-error" hidden></div>
+                <div id="task-error" class="task-error task-failure-banner" role="alert" aria-live="assertive" hidden>
+                  <strong id="task-error-title">任务异常信息</strong>
+                  <p id="task-error-message" hidden></p>
+                  <small id="task-error-code" hidden></small>
+                </div>
                 <div class="run-flow-workspace">
                   <div class="run-flow-events-column">
                 <div class="event-heading"><h3>阶段事件</h3><span>选择任一事件，在右侧查看状态、时间和诊断</span></div>
@@ -685,12 +734,12 @@
               <label class="field"><span>最低换手率（%）</span><input id="screening-min-turnover" type="number" disabled aria-disabled="true" placeholder="参数范围待后端定义" /></label>
             </div>
             <section class="screening-condition-builder" aria-labelledby="screening-condition-title">
-              <div class="screening-condition-heading"><div><h3 id="screening-condition-title">自定义筛选条件</h3><p>支持本地编辑并保存涨跌幅、换手率、成交额及均线条件；当前不会提交服务端扫描。</p></div><span class="availability-pill is-readonly">本地草稿</span></div>
+              <div class="screening-condition-heading"><div><h3 id="screening-condition-title">自定义筛选条件</h3><p>支持本地编辑并保存涨跌幅、换手率、成交额及 MA5/MA20 条件；当前不会提交服务端扫描。</p></div><span class="availability-pill is-readonly">本地草稿</span></div>
               <div class="screening-condition-controls">
                 <label class="field"><span>组合关系</span><select id="screening-condition-logic"><option value="and">全部满足（AND）</option><option value="or">任一满足（OR）</option></select></label>
                 <label class="field"><span>指标</span><select id="screening-condition-field">
-                  <option value="change_pct">涨跌幅</option><option value="turnover_rate">换手率</option><option value="amount">成交额</option><option value="ma5">MA5</option><option value="ma20">MA20</option>
-                </select></label>
+                  <option value="change_pct">涨跌幅</option><option value="turnover_rate">换手率</option><option value="amount">成交额</option><option value="ma5">MA5</option><option value="ma20">MA20</option><option value="ma60" disabled>MA60（待数据侧支持）</option><option value="ma120" disabled>MA120（半年，待数据侧支持）</option><option value="ma250" disabled>MA250（全年，待数据侧支持）</option>
+                </select><small class="field-hint" id="screening-ma-capability-hint">全市场分页接口目前仅返回 MA5/MA20。MA60、MA120（半年）和 MA250（全年）待数据侧补充字段后启用；不会为每只股票额外请求日 K。</small></label>
                 <label class="field"><span>条件</span><select id="screening-condition-operator"><option value="gte">大于等于</option><option value="lte">小于等于</option></select></label>
                 <label class="field"><span>数值</span><input id="screening-condition-value" type="number" step="any" placeholder="输入阈值" /></label>
                 <button class="button button-secondary" id="screening-condition-add" type="button">添加条件</button>
@@ -970,7 +1019,7 @@
                     <div><span class="settings-status-label">未保存草稿检查</span><p id="settings-draft-connection-check" class="settings-inline-status" role="status" aria-live="polite">尚未检查未保存配置。</p></div>
                   </div>
                   <p class="settings-dirty-state" id="connection-dirty-state" role="status" aria-live="polite" hidden>存在未保存的连接配置更改。</p>
-                  <div class="settings-connection-actions"><button class="button button-secondary" id="settings-check-connection" type="button">检查已保存配置</button><button class="button button-secondary" id="settings-check-draft-connection" type="button">检查当前草稿</button><span class="grow"></span><button class="button button-secondary" id="clear-settings" type="button">清除本地连接设置</button><button class="button button-primary" id="save-settings" type="button">保存连接配置</button></div>
+                  <div class="settings-connection-actions"><button class="button button-secondary" id="settings-check-connection" type="button">检查已保存配置</button><button class="button button-secondary" id="settings-check-draft-connection" type="button">检查当前草稿</button><span class="grow"></span><button class="button button-secondary" id="clear-settings" type="button">清除本地连接设置</button><button class="button button-secondary" id="cancel-settings" type="button" disabled>放弃更改</button><button class="button button-primary" id="save-settings" type="button">保存连接配置</button></div>
                   <p class="settings-feedback" id="settings-feedback" role="status" aria-live="polite"></p>
                   <div class="settings-storage-boundary"><strong>连接配置的作用范围</strong><p>保存只更新当前浏览器的连接路径和行情 API Key，不会修改服务器 .env、Docker 网络、Nginx 上游或数据库连接。服务状态与依赖健康请前往数据中心查看；健康检查成功不代表每个 Provider 的数据能力均可用。</p></div>
                   <p class="security-note">安全提示：localStorage 不是密钥保险箱，同一浏览器来源下的脚本可读取其中内容。不要分享已配置密钥的浏览器会话；公网部署必须在反向代理或身份认证层限制访问。</p>

@@ -63,8 +63,10 @@ try{
  await page.locator("#run-flow-dialog[open]").waitFor();
  await page.waitForFunction(()=>document.querySelector("#task-run-status-pill")?.dataset.runStatus==="failed");
  assert.match(await page.locator("#task-status-pill").textContent(),/执行失败/);
- assert.match(await page.locator("#task-error").textContent(),/market_snapshot_failed/);
- assert.match(await page.locator("#task-error").textContent(),/读取行情快照失败/);
+ assert.equal(await page.locator("#task-error").getAttribute("role"),"alert");
+ assert.equal(await page.locator("#task-error-title").textContent(),"任务执行失败");
+ assert.match(await page.locator("#task-error-message").textContent(),/读取行情快照失败/);
+ assert.match(await page.locator("#task-error-code").textContent(),/market_snapshot_failed/);
  assert.match(await page.locator("#task-run-status-pill").textContent(),/分析失败/);
  assert.ok(runRequests.includes("run-failed"));
  await page.locator("#close-run-flow-dialog").click();await page.locator("#run-flow-dialog:not([open])").waitFor({state:"hidden"});

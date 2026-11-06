@@ -39,9 +39,23 @@ await new Promise((resolve, reject) => {
 const address = server.address();
 assert.ok(address && typeof address === "object");
 const baseUrl = "http://127.0.0.1:" + address.port;
+function waitWithTimeout(promise, timeoutMs, message) {
+  let timer;
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => { timer = setTimeout(() => reject(new Error(message)), timeoutMs); })
+  ]).finally(() => clearTimeout(timer));
+}
 let browser;
 let releaseOldRequest;
 let oldRequestStarted;
+let releasePeriodRequest;
+let markPeriodRequestStarted;
+let releaseCrossTabResearchRequest;
+let markCrossTabResearchRequestStarted;
+let markCrossTabResearchRequestSettled;
+let crossTabResearchRouteFinished = false;
+let crossTabProfileRequestCount = 0;
 try {
   browser = await chromium.launch({ headless: true });
 
@@ -55,6 +69,9 @@ try {
     ]));
   });
   const page = await context.newPage();
+  const periodRequestStarted = new Promise(resolve => { markPeriodRequestStarted = resolve; });
+  const crossTabResearchRequestStarted = new Promise(resolve => { markCrossTabResearchRequestStarted = resolve; });
+  const crossTabResearchRequestSettled = new Promise(resolve => { markCrossTabResearchRequestSettled = resolve; });
   const pageErrors = [];
   page.on("pageerror", error => pageErrors.push(error.stack || error.message));
   oldRequestStarted = new Promise(resolve => {
@@ -82,6 +99,17 @@ try {
         }) });
         return;
       }
+      if (url.pathname === "/market-api/api/v1/market/quotes") {
+        await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({
+          items: [{
+            symbol: "000001.SZ",
+            quote: { symbol: "000001.SZ", name: "平安银行", current_price: 10.5, change_percent: 1.2, amount: 123456, quality_status: "valid", quote_time: "2026-11-04T01:00:00Z" },
+            quality_status: "valid"
+          }],
+          succeeded: 1, total: 1, failed: 0, quality_status: "valid", fetched_at: "2026-11-04T01:01:00Z"
+        }) });
+        return;
+      }
       if (url.pathname.includes("/api/v1/market/stocks")) {
         await route.fulfill({
           status: 200, contentType: "application/json",
@@ -97,6 +125,49 @@ try {
             fetched_at: "2026-11-03T03:00:00Z", ma_adjustment_basis: "forward_adjusted"
           })
         });
+        return;
+      }
+      if (url.pathname.endsWith("/api/v1/stocks/000001.SZ/profile")) {
+        crossTabProfileRequestCount += 1;
+        if (crossTabProfileRequestCount > 1) {
+          await route.fulfill({
+            status: 503, contentType: "application/json",
+            body: JSON.stringify({ error: { message: "Provider 未启用或未配置" } })
+          });
+          return;
+        }
+        markCrossTabResearchRequestStarted?.();
+        await new Promise(done => { releaseCrossTabResearchRequest = done; });
+        try {
+          await route.fulfill({
+            status: 200, contentType: "application/json",
+            body: JSON.stringify({
+              symbol: "000001.SZ", name: "延迟旧连接档案", quality_status: "valid",
+              source: "browser-fixture", normalization_version: "stale-connection",
+            })
+          });
+        } catch {
+          // 浏览器可能已取消请求；路由 fulfill 的异常行为不作为取消判据。
+        } finally {
+          crossTabResearchRouteFinished = true;
+          markCrossTabResearchRequestSettled?.();
+        }
+        return;
+      }
+      if (url.pathname.includes("/api/v1/stocks/000001.SZ/fundamentals")) {
+        markPeriodRequestStarted?.();
+        await new Promise(done => { releasePeriodRequest = done; });
+        try {
+          await route.fulfill({
+            status: 200, contentType: "application/json",
+            body: JSON.stringify({
+              symbol: "000001.SZ", year: 2026, quarter: 3, quality_status: "valid",
+              source: "browser-fixture", sections: []
+            })
+          });
+        } catch {
+          // 财务报告期切换后旧请求应已被取消。
+        }
         return;
       }
       if (url.pathname.includes("/api/v1/stocks/600519.SH/fundamentals")) {
@@ -190,6 +261,11 @@ try {
   await page.locator('.nav-link[data-view="stocks"]').click();
   await page.locator("#load-market-stocks").click();
   await page.locator('#market-stocks-body button[data-market-stock-action="research"]').waitFor({ state: "visible" });
+  const marketRowText = await page.locator("#market-stocks-body tr").first().textContent();
+  assert.match(marketRowText, /1,500/);
+  assert.match(marketRowText, /1,490/);
+  assert.match(marketRowText, /1,480/);
+  assert.doesNotMatch(marketRowText, /function formatPrice/);
   await page.locator('#market-stocks-body button[data-market-stock-action="research"]').click();
   await page.locator("#research-view").waitFor({ state: "visible" });
   await page.waitForFunction(() =>
@@ -208,12 +284,74 @@ try {
   );
   assert.equal(await page.locator("#research-overview-symbol").textContent().then(value => value.includes("000001.SZ")), true);
 
+  // 研究列表复用自选股批量行情；连接配置从其它标签页变化后，当前研究页必须立即清除旧连接快照。
+  await page.locator('.nav-link[data-view="watchlist"]').click();
+  await page.locator("#refresh-watchlist-quotes").click();
+  await page.waitForFunction(() => document.querySelector("#watchlist-quote-refresh-status")?.textContent.includes("批量行情已返回 1 / 1"));
+  await page.locator('.nav-link[data-view="research"]').click();
+  await page.waitForFunction(() => document.querySelector("#research-stock-list-body")?.textContent.includes("10.50"));
+  const settingsSyncPage = await context.newPage();
+  await settingsSyncPage.goto(baseUrl, { waitUntil: "domcontentloaded" });
+  await settingsSyncPage.evaluate(() => localStorage.setItem("stock-provider-webui.settings.v1", JSON.stringify({
+    marketBase: "/market-api-v2", analysisBase: "/analysis-api", apiKey: "research-browser-key-v2"
+  })));
+  await page.waitForFunction(() => {
+    const text = document.querySelector("#research-stock-list-body")?.textContent || "";
+    return !text.includes("10.50") && text.includes("未加载");
+  });
+  assert.match(await page.locator("#research-list-scope").textContent(), /当前浏览器列表/);
+  await settingsSyncPage.close();
+
   await page.locator('.nav-link[data-view="stocks"]').click();
   await page.locator("#symbol-input").fill("600519.SH");
   await page.locator('.nav-link[data-view="research"]').click();
   await page.locator("#research-view").waitFor({ state: "visible" });
+
+  // 当前研究标的切换后，批量行情只能继续用于仍属于当前自选清单的成员。
+  const membershipSyncPage = await context.newPage();
+  await membershipSyncPage.goto(baseUrl, { waitUntil: "domcontentloaded" });
+  await membershipSyncPage.evaluate(() => localStorage.setItem("stock-provider-webui.watchlist.v1", "[]"));
+  await page.waitForFunction(() => {
+    const text = document.querySelector("#research-stock-list-body")?.textContent || "";
+    return !text.includes("10.50") && text.includes("当前没有自选股");
+  });
+  await membershipSyncPage.close();
+
+  // 个股研究资料在途时，另一标签页切换行情连接；必须取消旧请求并恢复整组加载按钮。
+  await page.locator('.nav-link[data-view="stocks"]').click();
+  await page.locator("#symbol-input").fill("000001.SZ");
+  await page.locator('.nav-link[data-view="research"]').click();
+  // 请求进入路由后再切换连接；用延迟响应验证旧结果不会覆盖当前研究状态。
+  await page.locator("#load-stock-research").click();
+  await waitWithTimeout(crossTabResearchRequestStarted, 10000, "等待跨标签页研究档案请求启动超时");
+  const researchSettingsSyncPage = await context.newPage();
+  await researchSettingsSyncPage.goto(baseUrl, { waitUntil: "domcontentloaded" });
+  await researchSettingsSyncPage.evaluate(() => localStorage.setItem("stock-provider-webui.settings.v1", JSON.stringify({
+    marketBase: "/market-api-v3", analysisBase: "/analysis-api", apiKey: "research-browser-key-v3"
+  })));
+  await page.waitForFunction(() => {
+    const button = document.querySelector("#load-stock-research");
+    return button && !button.disabled && button.textContent.includes("重新加载公司资料");
+  });
+  await page.waitForFunction(() => document.querySelector("#stock-research-feedback")?.textContent.includes("行情连接配置已变更"));
+  assert.equal(await page.locator("#load-stock-research").isEnabled(), true);
+  assert.equal(await page.locator("#load-fundamentals").isEnabled(), true);
+  assert.equal(await page.locator("#load-valuations").isEnabled(), true);
+  assert.equal(await page.locator("#stock-profile-symbol").textContent(), "000001.SZ");
+  assert.doesNotMatch(await page.locator("#stock-profile-fields").textContent(), /延迟旧连接档案|stale-connection/);
+  // 先释放被测试路由挂起的旧连接响应，再确认它无法覆盖当前标的的研究内容。
+  releaseCrossTabResearchRequest?.();
+  await waitWithTimeout(crossTabResearchRequestSettled, 5000, "等待旧档案路由结束超时");
+  assert.equal(crossTabResearchRouteFinished, true);
+  assert.doesNotMatch(await page.locator("#stock-profile-fields").textContent(), /延迟旧连接档案|stale-connection/);
+  await researchSettingsSyncPage.close();
+
+  // 跨标签页场景使用 000001.SZ；恢复到旧标的后再执行原有的迟到财务响应测试。
+  await page.locator('.nav-link[data-view="stocks"]').click();
+  await page.locator("#symbol-input").fill("600519.SH");
+  await page.locator('.nav-link[data-view="research"]').click();
   await page.locator("#load-fundamentals").click();
-  await oldRequestStarted;
+  await waitWithTimeout(oldRequestStarted, 10000, "等待旧标的财务请求启动超时");
 
   // 切换标的后必须中止旧请求，并恢复所有请求按钮，包括财务指标按钮。
   await page.locator('.nav-link[data-view="stocks"]').click();
@@ -228,6 +366,19 @@ try {
   assert.equal(await page.locator("#fundamentals-symbol").textContent(), "000001.SZ");
   assert.doesNotMatch(await page.locator("#fundamentals-content").textContent(), /延迟旧标的指标|999/);
   assert.equal(await page.locator("#load-fundamentals").isEnabled(), true);
+
+  // 财务报告期切换会取消当前请求，但必须立即恢复读取按钮，允许按新报告期重试。
+  await page.locator("#load-fundamentals").click();
+  await waitWithTimeout(periodRequestStarted, 10000, "等待财务报告期请求启动超时");
+  await page.locator("#fundamentals-quarter").selectOption("2");
+  await page.waitForFunction(() => {
+    const button = document.querySelector("#load-fundamentals");
+    return button && !button.disabled && button.textContent.includes("读取财务指标");
+  });
+  releasePeriodRequest();
+  await page.waitForTimeout(100);
+  assert.equal(await page.locator("#load-fundamentals").isEnabled(), true);
+  assert.doesNotMatch(await page.locator("#fundamentals-content").textContent(), /2026 Q3/);
 
   // 其它补充模块的 503 状态应清楚展示，且不锁死主资料按钮。
   await page.locator("#load-stock-research").click();
@@ -300,6 +451,7 @@ try {
   console.log("PASS stock research request cancellation and button recovery");
 } finally {
   if (releaseOldRequest) releaseOldRequest();
+  if (releaseCrossTabResearchRequest) releaseCrossTabResearchRequest();
   if (browser) await browser.close();
   await new Promise(resolve => server.close(resolve));
 }

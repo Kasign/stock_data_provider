@@ -1,0 +1,24 @@
+{
+  "response_id": "resp_fixture_002",
+  "status": "completed",
+  "output_items": [{
+    "type": "function_call",
+    "item_id": "fc_item_001",
+    "status": "completed",
+    "tool_call": {
+      "call_id": "call_fixture_001",
+      "output_item_id": "fc_item_001",
+      "name": "lookup_quote",
+      "arguments_json": "{\"symbol\":\"600000.SH\"}",
+      "status": "completed"
+    }
+  }],
+  "tool_calls": [{
+    "call_id": "call_fixture_001",
+    "output_item_id": "fc_item_001",
+    "name": "lookup_quote",
+    "arguments_json": "{\"symbol\":\"600000.SH\"}",
+    "status": "completed"
+  }],
+  "model_actual": "fixture-model"
+}

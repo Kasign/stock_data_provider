@@ -16,6 +16,12 @@ function cell(row,value,cls=""){row.append(el("td",cls,value===null||value===und
 function amount(v){const n=finiteNumberOrNull(v);if(n===null)return "—";return (n>0?"+":n<0?"−":"")+formatCompact(Math.abs(n))+" 元";}
 function direction(v){const n=finiteNumberOrNull(v);if(n===null)return "market-data-unknown";return n>0?"market-data-positive":n<0?"market-data-negative":"market-data-flat";}
 function errorMessage(e){if(Number(e?.status)===404)return "当前 market-data 版本尚未提供此接口，请更新数据服务后再刷新。";if(Number(e?.status)===503)return "对应 Provider 未启用或未配置，请检查 market-data 数据源设置。";if([401,403].includes(Number(e?.status)))return "API Key 验证失败，请检查连接与密钥设置。";return describeApiError(e,"读取数据失败。");}
+export function activitySnapshotEvidence(data,{reportDate=false}={}) {
+ const parts=["来源 "+(data?.source||"未报告")];
+ if(reportDate)parts.push("源端报告日期 "+(data?.provider_report_date||"未提供"));
+ parts.push("来源版本 "+(data?.source_version||"未报告"),"服务端采集时间 "+formatDateTime(data?.fetched_at));
+ return parts;
+}
 export function calendarResponseRangeError(data, requestedStart, requestedEnd) {
   const response = data && typeof data === "object" ? data : {};
   for (const [field, expected, label] of [
@@ -58,7 +64,7 @@ export function bindMarketActivity(getSettings,onSelectStock){
    const q=QUALITY.includes(String(item.quality_status||"").toLowerCase())?String(item.quality_status).toLowerCase():"unknown",td=el("td");td.append(el("span","quality-pill quality-"+q,qualityLabel(q)));tr.append(td);root.append(tr);
   });
   badge("dragon-tiger-quality",qualityLabel(data?.quality_status),data?.quality_status);
-  meta("dragon-tiger-meta",["交易日 "+(data?.trade_date||dragonDate||"中国时区当日（默认）"),"第 "+(data?.page??dragonPage)+" 页","本页 "+(data?.returned??items.length)+" 条","源端 "+(data?.source_returned??"未报告")+" 条","过滤非 A 股 "+(data?.excluded_non_a_share_count??"未报告")+" 条","来源 "+(data?.source||"未报告"),"获取 "+formatDateTime(data?.fetched_at)].join(" · "));
+  meta("dragon-tiger-meta",["交易日 "+(data?.trade_date||dragonDate||"中国时区当日（默认）"),"第 "+(data?.page??dragonPage)+" 页","本页 "+(data?.returned??items.length)+" 条","源端 "+(data?.source_returned??"未报告")+" 条","过滤非 A 股 "+(data?.excluded_non_a_share_count??"未报告")+" 条",...activitySnapshotEvidence(data,{reportDate:true})].join(" · "));
   const rr=$("#dragon-tiger-reasons");rr.replaceChildren();const rs=Array.isArray(data?.quality_reasons)?data.quality_reasons:[];rr.hidden=!rs.length;rs.forEach(x=>rr.append(el("li","",x)));
   dragonPage=Number(data?.page)||1;dragonHasMore=Boolean(data?.has_more);$("#dragon-tiger-next").hidden=!dragonHasMore;$("#dragon-tiger-next").disabled=!dragonHasMore;$("#dragon-tiger-next").textContent=dragonHasMore?"加载下一页":"没有更多页";
  }
@@ -151,7 +157,7 @@ function renderCalendar(data){
    }
   }
   badge("trading-calendar-quality",qualityLabel(data?.quality_status),data?.quality_status);
-  meta("trading-calendar-meta",["请求 "+(data?.start_date||start||"未报告")+" 至 "+(data?.end_date||end||"未报告"),"覆盖 "+items.length+" / "+(data?.total_days??"未报告")+" 天","交易日 "+(data?.trading_days??"未报告")+" 天","来源 "+(data?.source||"未报告"),"获取 "+formatDateTime(data?.fetched_at)].join(" · "));
+  meta("trading-calendar-meta",["请求 "+(data?.start_date||start||"未报告")+" 至 "+(data?.end_date||end||"未报告"),"覆盖 "+items.length+" / "+(data?.total_days??"未报告")+" 天","交易日 "+(data?.trading_days??"未报告")+" 天",...activitySnapshotEvidence(data)].join(" · "));
   const rr=$("#trading-calendar-reasons");rr.replaceChildren();const rs=Array.isArray(data?.quality_reasons)?data.quality_reasons:[];rr.hidden=!rs.length;rs.forEach(x=>rr.append(el("li","",x)));
   const totalDays=data?.total_days;
   const hasReportedTotal=totalDays!==null&&totalDays!==undefined&&totalDays!==""&&Number.isFinite(Number(totalDays));
