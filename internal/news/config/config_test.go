@@ -38,13 +38,13 @@ func TestLoadCredentialProvidersAsPairedSettings(t *testing.T) {
 	const apiKey = "secret-provider-key"
 
 	got, err := Load(env(map[string]string{
-		BochaEndpointEnv:    "https://bocha.example.com/v1/search",
-		BochaAPIKeyEnv:      apiKey,
-		TavilyEndpointEnv:   "https://api.tavily.example/search",
-		TavilyAPIKeyEnv:     "tavily-secret",
-		BraveEndpointEnv:    "https://api.brave.example/news",
-		BraveAPIKeyEnv:      "brave-secret",
-		SearXNGEndpointEnv:  "http://search.internal.example",
+		BochaEndpointEnv:   "https://bocha.example.com/v1/search",
+		BochaAPIKeyEnv:     apiKey,
+		TavilyEndpointEnv:  "https://api.tavily.example/search",
+		TavilyAPIKeyEnv:    "tavily-secret",
+		BraveEndpointEnv:   "https://api.brave.example/news",
+		BraveAPIKeyEnv:     "brave-secret",
+		SearXNGEndpointEnv: "http://search.internal.example",
 	}))
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
