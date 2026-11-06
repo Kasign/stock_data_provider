@@ -1385,9 +1385,9 @@ func (p *Eastmoney) FetchDailyBars(ctx context.Context, rawSymbol, startDate, en
 		}
 		values := []struct {
 			field, providerField string
-			value float64
-			err error
-			positive bool
+			value                float64
+			err                  error
+			positive             bool
 		}{
 			{field: "open", providerField: "f52", positive: true},
 			{field: "close", providerField: "f53", positive: true},
@@ -1402,8 +1402,12 @@ func (p *Eastmoney) FetchDailyBars(ctx context.Context, rawSymbol, startDate, en
 		invalid := false
 		for i, item := range values {
 			bad := item.err != nil || !finiteNumber(item.value)
-			if item.positive && item.value <= 0 { bad = true }
-			if (item.field == "volume" || item.field == "amount") && item.value < 0 { bad = true }
+			if item.positive && item.value <= 0 {
+				bad = true
+			}
+			if (item.field == "volume" || item.field == "amount") && item.value < 0 {
+				bad = true
+			}
 			if bad {
 				invalid = true
 				addEastmoneyDailyBarParseIssue(ctx, rowIndex, symbol, tradeDate, item.field, item.providerField, "invalid_number", "finite positive price or finite non-negative quantity", "string", parts[i+1], validation.SeverityError, "Eastmoney daily-bar numeric field is invalid")
