@@ -389,3 +389,14 @@ internal/
 10. WebUI 检查失败（待定位）：f2b9e5f 对应 WebUI unit tests 失败；需查看具体失败用例，不能假设与文档移动无关，也不能归因于 Data 迁移。
 
 **M0 状态：进行中，未通过。** 已完成 Module/入口、主要调用链、主要资源所有权、默认 Compose 和关键 CI 的第一轮静态核对；尚未完成 WebUI/Nginx 路由、所有 Provider 出站 Host、Data 全量 package/config/testdata 清单、所有 Root 调用点及当前 HEAD CI 收敛复核。未完成前不进入 M1。
+
+### 2026-11-06：M0 第二轮补充（目录规模与 WebUI 代理）
+
+- Data Module 当前共 240 个文件：Provider 93、Service 64、HTTP API 27、Model 11、Repository 9、Validation 8、BaoStock 4、Freshness 4、Cache 3、Config 3，另含命令入口、配置、Migration SQL、OpenAPI、Docker 和 Module 文件。迁移对象不是单一服务文件，M1 必须以完整目录清单和测试资产为单位搬迁。
+- WebUI 的 web/default.conf.template 中，/market-api/ 通过 proxy_pass 到 MARKET_DATA_SERVICE_NAME:8091/，Nginx 会剥离 /market-api/ 前缀；/analysis-api/ 同样剥离前缀并代理到 ANALYSIS_SERVICE_NAME:8092/。M5 切换时应将两个 location 指向 Root Server 同一个 upstream，并保留原外部路径及 URI 剥离语义；Root Router 内部注册 Data 与 Analysis 路由时需确认不存在 pattern 冲突。
+- 当前 Data Handler 自己处理 X-API-Key；WebUI 通过同源 /market-api/ 访问独立 Data 容器。M5 需要改变的是浏览器凭据边界与代理目标，不是删除 Data 的领域授权语义。Root 入口认证和 Data Scope/授权应按冻结契约组合。
+- Data Provider 主体至少可确认 Eastmoney、Tushare 等直接持有 *http.Client 并自行发请求；BaoStock 使用独立 TCP Client。所有 Provider 的 endpoint 环境覆盖、重定向、DNS、请求方法、Body、Host 清单尚未逐项完成，不能据此直接把全部 Provider 统一替换为 Platform HTTP Client。
+- Root Store 的配置使用 DB_HOST/DB_PORT/DB_USER/DB_PASSWORD/DB_NAME 与 REDIS_ADDR/REDIS_PASSWORD/REDIS_DB；Data 使用独立 MARKET_DATA_MYSQL_DSN（需复核实际 env 解析）、MARKET_DATA_REDIS_ADDR/USERNAME/PASSWORD/DB 等配置。迁移时不能只复用 Root Pool 而忽略 Data 可能连接不同 schema/database 的配置差异；应先明确最终是否同库、同账号、同 Redis DB，以及 Data key namespace。
+- 已修复 .github/workflows/data-quality-parity.yml 中旧 doc/api/接口规范/ 路径，改为 doc/api/provider-migration/。修复提交为 dc137543；该提交之后的 Parity Run 尚需观察，不能引用修复前失败结果作为当前状态。
+
+**M0 仍未通过。** 还需完成：确认 Data 配置的 DSN/Redis 环境变量及实际部署样例；逐 Provider 出站请求/Host/重定向/协议清单；Data 与 Root 所有 API 调用点和 DTO 字段映射清单；Root/Data Migration 完整表清单及版本治理；Retention Worker 生命周期测试设计；所有 Data 配置、Migration、testdata 和生成/工具文件的逐项迁移登记；当前 HEAD CI 复核。
