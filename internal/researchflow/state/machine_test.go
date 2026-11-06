@@ -60,3 +60,13 @@ func TestDeadlineAndUserCancellationRemainDistinct(t *testing.T){
 	if err!=nil{t.Fatal(err)}
 	if updated.TerminationReason!="run_deadline_exceeded"{t.Fatalf("unexpected reason: %s",updated.TerminationReason)}
 }
+
+
+func TestQueuedRunCannotCancelAnInFlightStage(t *testing.T) {
+	now := time.Date(2026, 11, 6, 10, 0, 0, 0, time.UTC)
+	run := domain.Run{Status: domain.RunQueued}
+	stages := []domain.Stage{{Status: domain.StageRunning}}
+	if _, _, err := CancelRun(run, stages, now); err == nil {
+		t.Fatal("queued run with a running stage must fail closed")
+	}
+}

@@ -60,7 +60,7 @@ func CancelRun(run domain.Run,stages []domain.Stage,now time.Time)(domain.Run,[]
 	if run.Status==domain.RunCreated||run.Status==domain.RunQueued{
 		updated,err:=TransitionRun(run,domain.RunCancelled,now);if err!=nil{return run,stages,err}
 		updated.TerminationReason="user_cancelled"
-		for i:=range stages{if !stages[i].Status.Terminal(){stages[i],err=TransitionStage(stages[i],domain.StageCancelled,now);if err!=nil{return run,stages,err}}}
+		for i:=range stages{if stages[i].Status==domain.StageRunning{return run,stages,errors.New("queued or created run cannot contain a running stage")};if !stages[i].Status.Terminal(){stages[i],err=TransitionStage(stages[i],domain.StageCancelled,now);if err!=nil{return run,stages,err}}}
 		return updated,stages,nil
 	}
 	if run.Status==domain.RunRunning{
