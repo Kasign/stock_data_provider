@@ -88,6 +88,31 @@ docker-compose
 | `web/default.conf.template` | `/market-api/` 代理 Data:8091，`/analysis-api/` 代理 Server:8092 | 两个 API 前缀改为同一 Root Server 上游，保留 URL 兼容 |
 | `doc/整体任务规划/跨模块契约目录与冻结状态.md` | Server 是唯一组合根；News 已明确采用根 Module 同进程 Application Port | Data 应统一遵循该部署原则；逻辑依赖 DAG 不因同进程而放宽 |
 
+### 2.2 M0 初步审计结果（只读核对）
+
+本轮继续核对了 Root Server、Data、WebUI 与旧迁移部署文件，得到以下已确认事实：
+
+| 检查项 | 代码证据 | 结论 |
+|---|---|---|
+| Root Server 数据库资源 | `internal/adapters/storage/mysqlredis/store.go` 的 `Open` 创建并 Ping `*sql.DB`，Store 暴露 `DB`；当 `DBAutoMigrate=true` 时执行 Analysis 表迁移 | Data Repository 可接收同一个 `*sql.DB`，但必须明确借用资源，不得在 Data Close 时关闭共享连接池 |
+| Data 数据库资源 | `services/market-data/internal/repository/mysql.go` 的 `OpenMySQL` 自行 `sql.Open`，连接池默认 MaxOpen=10/MaxIdle=3/ConnMaxLifetime=5m；Data main 根据 `MARKET_DATA_DB_AUTO_MIGRATE` 执行 Data Migration | 当前确实存在两套 DB Pool 和两个 Migration 入口；合并时要保留 Data Migration 内容，但由 Server 统一执行 |
+| Root Redis | Root Store 使用 `github.com/redis/go-redis/v9` 创建有连接池的 Client，并由 Store.Close 关闭 | 可作为统一 Redis 资源的基础 |
+| Data Redis | `services/market-data/internal/cache/redis.go` 是自定义 RESP Client，每次命令重新 Dial、AUTH/SELECT、执行命令后关闭连接 | 不应原样保留为同进程默认实现；建议提供基于共享 go-redis Client 的 Data Cache Adapter，按 Data key namespace/TTL 规则隔离 |
+| Data 配置 | `services/market-data/internal/config/config.go` 当前无条件校验 `MARKET_DATA_API_KEY`；Redis 地址可为空，允许禁用缓存；MySQL 可按 AllowNoStorage 配置 | 同进程模式必须将 Data API Key 从必填配置中移除；远程 Adapter 模式才要求 Key。Redis 可选语义不能被 Root Server 的 Redis 强依赖无意覆盖 |
+| Data HTTP Handler | `services/market-data/internal/httpapi/server.go` 的 Handler 内部包含 API Key 校验和独立 Request ID/超时/访问日志中间件 | 不能原样挂载后再绕过认证；应拆分路由 Handler 与传输中间件，由 Root Server 统一注入认证/Request Context |
+| WebUI 凭据 | `web/src/api.js` 将 `apiKey` 纳入设置对象，读取/写入 localStorage，并在请求时写入 `X-API-Key` | 浏览器暴露问题已由当前代码直接证实，M4 必须移除；迁移后需清理旧设置字段并轮换曾暴露的有效 Key |
+| Nginx | `web/default.conf.template` 的 `/market-api/` 当前代理到 Data 服务，`/analysis-api/` 代理 Server | 两个前缀可保留，但上游统一改为 Root Server |
+| go-core | `docker/docker-compose.go-migration.yml` 将 Python Bridge、go-core、Data 组成单独的 `go-migration` profile，并明确不与根 Compose 叠加；根 Compose 当前运行的是根模块 `cmd/analysis-api` | go-core 是仓库保留的旧迁移部署路径，不是根 Compose 的当前组合入口；本次不把 go-core 合并进 Root Server。仍需部署现场确认没有继续使用旧 profile |
+
+**M0 已确认的主要改造点：**
+
+1. Data Repository 增加接收共享 `*sql.DB` 的构造方式，并区分借用/自有资源；独立远程兼容入口可继续自有连接池。
+2. Data Migration 从 Data main 的自动执行路径迁到 Server Bootstrap 的显式 Migration Registry；Analysis 与 Data 使用不同 namespace，顺序执行且只执行一次。
+3. Data Cache 改为适配 Root Redis Client；如果 Data 与 Root 配置的 Redis DB 不同，由 Server 创建并拥有独立 Client，不能强行共用错误的 DB index。
+4. Data Config 拆分“领域配置”和“远程 HTTP Adapter 认证配置”；进程内模式不要求 Data API Key。
+5. Data HTTP Handler 拆分 Application 路由与 transport middleware，Root Server 负责入口认证、可信 Context、Request ID 和统一错误映射。
+6. 旧 `go-migration` profile 暂时保留为历史回滚/迁移材料，待确认不再使用后另行删除，不把它混入本次 Data 同进程改造。
+
 ### 2.1 当前最重要的技术风险
 
 - **Go Module 版本：** 根模块 Go 1.22，Data 模块 Go 1.23.0。建议统一到 Go 1.23.x（以 Data 依赖与 CI 实际兼容结果为准），并同步 Docker Builder、CI、开发环境说明；不要为了维持旧版本而降级 Data 依赖。
@@ -249,9 +274,9 @@ Market Data Application
 ### 6.1 MariaDB
 
 - MariaDB 仍是事实源；本方案不更换数据库、不迁移历史数据、不改变表结构。
-- Server Bootstrap 创建共享 SQL 连接池，Data Repository 接收受控 DB handle；Data 仍拥有所有 Data SQL、Repository 和 Migration 内容。
+- Server Bootstrap 创建共享 SQL 连接池，Data Repository 接收借用的 `*sql.DB` handle；Data 仍拥有所有 Data SQL、Repository 和 Migration 内容。Data Store 必须区分 borrowed/owned 资源，只有独立部署兼容入口可以关闭自有 DB Pool。
 - 各模块使用独立 Migration namespace/version；Server 统一按明确顺序调用各模块 Migration Runner。
-- Migration 只能由组合根执行一次；禁止 Server Store 和 Data Store 各自自动执行同一批迁移。
+- Migration 只能由组合根执行一次；禁止 Server Store 和 Data Store 各自自动执行同一批迁移。当前两侧均有独立自动迁移入口，合并前必须关闭 Data 自动迁移默认值并迁到统一 Migration Registry。
 - Migration 失败必须阻止 readiness/启动完成；不能继续接受请求并把缺表问题留到首次调用。
 - 连接池的 MaxOpen/MaxIdle/ConnMaxLifetime 应按总负载统一配置，模块不能各自重复创建池或覆盖全局参数。
 - 需要验证 MariaDB Driver 版本、时区、ParseTime、字符集、连接参数和现有表兼容。
@@ -259,7 +284,7 @@ Market Data Application
 ### 6.2 Redis
 
 - Redis 是可选缓存/协调基础设施，不得仅因同进程就升级为所有模块的强依赖。
-- Server Bootstrap 可创建共享 Redis Client/Pool；Data Cache Adapter 接收接口或客户端句柄。
+- Server Bootstrap 可创建共享 Redis Client/Pool；Data Cache Adapter 接收接口或客户端句柄。优先将当前每条命令重新 Dial 的自定义 RESP 实现替换为 go-redis Adapter；只有 Data Redis DB index 与 Root 不同，或连接参数确实不同，才由 Server 创建独立 Client 并统一 Close。
 - Data 缓存 key 前缀、TTL、序列化和失效规则仍由 Data 拥有。
 - Redis 不可用时的行为必须沿用当前 Data Config：明确 fail-fast、降级或禁用缓存，不得在合并时改变。
 - Server 负责最终 Close；Data 负责停止使用资源，不重复关闭共享客户端。
@@ -497,10 +522,10 @@ Owner：Server + Data + Platform
 1. 根模块当前 `mysqlredis.Store` 与 Data `repository.Store` 的实际 DB/Redis 资源是否可抽象为共享句柄；确认是否存在相互依赖或不同 DSN/事务设置。
 2. Data 所有 Migration 的执行顺序、namespace 和幂等性；当前 Data main 与 Server storage Open 是否都执行迁移。
 3. Data 真实 HTTP API 是否还有除 WebUI、Analysis Adapter 以外的调用者。
-4. Compose 使用的 `go-core` 历史入口是否仍在部署/运维脚本中；不能只按当前 docker-compose 判断所有环境。
+4. 代码层面确认 `go-core` 仅在独立的 `go-migration` profile 中与 Python Bridge、Data 组合，根 Compose 使用 `cmd/analysis-api`；仍需部署现场确认未继续使用该旧 profile。
 5. WebUI 当前 Data Key 输入与 localStorage 使用点、Owner Token/session 认证方式及 CORS/CSRF 行为。
 6. Data HTTP API 是否必须继续允许独立部署调用；如保留，需定义独立模式的 Key 生命周期与网络 ACL。
-7. Data 的 Redis Cache 是否可以共享根 Server Redis Client，还是因 Redis DB、超时、命名空间需求保留独立 Client（共享底层连接池与独立 Client wrapper 二选一由审计决定）。
+7. 已确认 Data 当前 Redis Adapter 每条命令单独建立 TCP 连接；目标优先改为共享 go-redis Client Adapter。若 Redis DB index/连接参数不同，则由 Server Bootstrap 创建独立 Client 并统一 Close。
 
 ### 12.3 明确不在本轮做的事情
 
