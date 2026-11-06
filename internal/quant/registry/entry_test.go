@@ -59,16 +59,23 @@ func TestEntryValidateRejectsMismatchedNumericTypes(t *testing.T) {
 func TestEntryValidateEnforcesDeclaredPrecision(t *testing.T) {
 	entry := validEntry("momentum_20d", "1.0.0")
 	entry.Precision.MaxFractionDigits = 5
-	if err := entry.Validate(); !errors.Is(err, ErrInvalidEntry) { t.Fatalf("expected fractional precision overflow to fail, got %v", err) }
+	if err := entry.Validate(); !errors.Is(err, ErrInvalidEntry) {
+		t.Fatalf("expected fractional precision overflow to fail, got %v", err)
+	}
+
 	entry = validEntry("momentum_20d", "1.0.0")
 	entry.Range.Maximum = json.RawMessage("100000000")
-	if err := entry.Validate(); !errors.Is(err, ErrInvalidEntry) { t.Fatalf("expected integer digit overflow to fail, got %v", err) }
+	if err := entry.Validate(); !errors.Is(err, ErrInvalidEntry) {
+		t.Fatalf("expected integer digit overflow to fail, got %v", err)
+	}
 }
 
 func TestEntryValidateRejectsTrailingJSONInNumericMetadata(t *testing.T) {
 	entry := validEntry("momentum_20d", "1.0.0")
 	entry.Precision.Tolerance = json.RawMessage("0.000001 0.000002")
-	if err := entry.Validate(); !errors.Is(err, ErrInvalidEntry) { t.Fatalf("expected trailing JSON to fail, got %v", err) }
+	if err := entry.Validate(); !errors.Is(err, ErrInvalidEntry) {
+		t.Fatalf("expected trailing JSON to fail, got %v", err)
+	}
 }
 
 func TestEntryValidateRequiresIntegerScaleZero(t *testing.T) {
@@ -76,8 +83,13 @@ func TestEntryValidateRequiresIntegerScaleZero(t *testing.T) {
 	entry.ValueType = ValueTypeInteger
 	entry.Precision.MaxFractionDigits = 1
 	entry.Precision.Tolerance = json.RawMessage("0")
-	entry.Range = NumericRange{Minimum: json.RawMessage("0"), Maximum: json.RawMessage("100")}
-	if err := entry.Validate(); !errors.Is(err, ErrInvalidEntry) { t.Fatalf("expected integer scale != 0 to fail, got %v", err) }
+	entry.Range = NumericRange{
+		Minimum: json.RawMessage("0"),
+		Maximum: json.RawMessage("100"),
+	}
+	if err := entry.Validate(); !errors.Is(err, ErrInvalidEntry) {
+		t.Fatalf("expected integer scale != 0 to fail, got %v", err)
+	}
 }
 
 func TestEntryValidateRequiresExplicitRange(t *testing.T) {
