@@ -54,7 +54,8 @@ func (s CapabilityState) Status(key Capability) CapabilityStatus {
 func (s CapabilityState) Supports(key Capability) bool {
 	return s.ProviderID != "" && s.ModelID != "" && s.Protocol == ProtocolOpenAIResponses &&
 		s.GatewayVersion != "" && s.EvidenceRef != "" && s.VerifiedAt != nil && !s.VerifiedAt.IsZero() &&
-		s.ValidUntil != nil && time.Now().Before(*s.ValidUntil) && s.Status(key) == CapabilitySupported
+		s.ValidUntil != nil && s.ValidUntil.After(*s.VerifiedAt) &&
+		time.Now().Before(*s.ValidUntil) && s.Status(key) == CapabilitySupported
 }
 
 // ProviderConfig 仅保存 Secret 引用，不保存凭据明文。
@@ -142,6 +143,11 @@ func (r ModelRequest) Validate() error {
 		return errors.New("input_text must not be empty and max_output_tokens must be positive")
 	}
 	if r.DeadlineAt.IsZero() || r.SystemAsOf.IsZero() { return errors.New("deadline_at and system_as_of are required") }
+	if !r.DeadlineAt.After(time.Now()) { return errors.New("deadline_at must be in the future") }
+	if r.SystemAsOf.After(time.Now().UTC()) { return errors.New("system_as_of must not be in the future") }
+	_, deadlineOffset := r.DeadlineAt.Zone()
+	_, systemOffset := r.SystemAsOf.Zone()
+	if deadlineOffset != 0 || systemOffset != 0 { return errors.New("deadline_at and system_as_of must use UTC") }
 	if r.Temperature != nil && (*r.Temperature < 0 || *r.Temperature > 2) { return errors.New("temperature out of range") }
 	if r.TopP != nil && (*r.TopP <= 0 || *r.TopP > 1) { return errors.New("top_p out of range") }
 	if r.ReasoningEffort != "" && r.ReasoningEffort != "low" &&
@@ -167,6 +173,24 @@ func (r ModelRequest) Validate() error {
 }
 
 // ValidateAgainstProvider 检查请求只能使用服务端 ProviderConfig 中允许的 Provider 和模型。
+// ValidateCapabilityState 将 Provider 级开关与指定模型的版本化实测证据绑定。
+func (c ProviderConfig) ValidateCapabilityState(state CapabilityState) error {
+	if err := c.Validate(); err != nil { return err }
+	if state.ProviderID != c.ProviderID || state.Protocol != c.Protocol {
+		return errors.New("capability evidence does not match provider configuration")
+	}
+	allowed := false
+	for _, modelID := range c.AllowedModels {
+		if modelID == state.ModelID { allowed = true; break }
+	}
+	if !allowed { return errors.New("capability evidence model is outside provider allowlist") }
+	if !state.Supports(CapabilityResponsesJSON) { return errors.New("responses_json capability is not currently supported") }
+	if c.StreamEnabled && !state.Supports(CapabilityResponsesStream) {
+		return errors.New("stream_enabled requires current responses_stream evidence")
+	}
+	return nil
+}
+
 func (r ModelRequest) ValidateAgainstProvider(config ProviderConfig) error {
 	if err := config.Validate(); err != nil { return err }
 	if r.ProviderID != config.ProviderID { return errors.New("request provider_id does not match configured provider") }
