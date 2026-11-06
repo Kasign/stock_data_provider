@@ -693,15 +693,40 @@ type providerProbeHistoricalDailyBarsFake struct {
 func (p *providerProbeHistoricalDailyBarsFake) Name() string { return p.name }
 func (p *providerProbeHistoricalDailyBarsFake) FetchDailyBars(_ context.Context, symbol, startDate, endDate string, limit int, adjustment model.AdjustmentBasis) ([]model.DailyBar, error) {
 	p.startDate, p.endDate, p.limit = startDate, endDate, limit
+	tradeDate := startDate
+	if tradeDate == "" {
+		tradeDate = endDate
+	}
 	now := time.Now().UTC()
 	volume := int64(10000)
 	amount := 100000.0
 	return []model.DailyBar{{
-		Symbol: symbol, TradeDate: startDate, Period: "1d", Open: 10, High: 11, Low: 9, Close: 10.5,
+		Symbol: symbol, TradeDate: tradeDate, Period: "1d", Open: 10, High: 11, Low: 9, Close: 10.5,
 		Volume: &volume, Amount: &amount, AdjustmentBasis: adjustment, AdjustmentMethod: "historical-test-none",
 		Source: p.name, SourceVersion: p.name + "-v1", ProviderTime: &now, FetchedAt: now, NormalizedAt: now,
 		VolumeUnit: "shares", RawVolumeUnit: "shares", AmountUnit: "CNY", QualityStatus: model.QualityValid,
 	}}, nil
+}
+
+func TestProviderProbeDefaultDailyBarsExcludeCurrentIncompleteDay(t *testing.T) {
+	p := &providerProbeHistoricalDailyBarsFake{name: "default-range-bars"}
+	ds := NewWithCapabilities([]provider.NamedProvider{p}, nil, []provider.DailyBarProvider{p}, cache.NewDisabled(), nil, time.Second, time.Minute, 120, 2000, ResilienceConfig{}, nil)
+	run, err := ds.ProbeProviderCapabilitiesWithOptions(context.Background(), ProviderProbeOptions{
+		Scope: "all", Capabilities: []string{"daily_bars"}, Symbols: []string{"600036.SH"},
+		DailyBarAdjustments: []model.AdjustmentBasis{model.AdjustmentNone},
+		Checks:              []string{"quality"}, TimeoutSeconds: 5,
+	})
+	if err != nil {
+		t.Fatalf("default Probe failed: %v", err)
+	}
+	wantEnd := time.Now().In(marketLocation()).AddDate(0, 0, -1).Format("2006-01-02")
+	if p.startDate != "" || p.endDate != wantEnd || p.limit != 5 {
+		t.Fatalf("default Probe must request at most the previous complete day: start=%q end=%q limit=%d, want end=%q limit=5", p.startDate, p.endDate, p.limit, wantEnd)
+	}
+	item, found := findProbeItem(run.Items, p.Name(), "daily_bars")
+	if !found || item.SampleDate != wantEnd {
+		t.Fatalf("default Probe should retain the latest completed date as sample evidence: found=%v item=%+v want=%s", found, item, wantEnd)
+	}
 }
 
 func TestProviderProbePassesExplicitHistoricalRangeToDailyBarProvider(t *testing.T) {
@@ -933,6 +958,59 @@ func TestProviderProbeDailyBarCrossComparisonEnforcesAdjustmentMetadata(t *testi
 	}
 }
 
+func TestBuildCrossProviderProbeCheckResultsReportsUnavailableProvider(t *testing.T) {
+	snapshot := &provider.CrossProviderDailySnapshot{
+		Provider: "pytdx", SourceVersion: "pytdx-v1", Symbol: "600036.SH",
+		AdjustmentBasis: "none", QualityStatus: "valid",
+		Bars: []provider.CrossProviderDailyBar{{
+			TradeDate: "2025-07-07", Open: 10, High: 11, Low: 9, Close: 10,
+			Volume: 100, VolumeUnit: "shares", VolumeGranularity: 1,
+		}},
+	}
+	items := []model.ProviderProbeItem{{
+		Provider: "baostock", Capability: "daily_bars", AdjustmentBasis: model.AdjustmentNone,
+		Status: "failed", SampleSymbol: "600036.SH",
+		ErrorCode: "network_error", ErrorStage: "connect", ErrorMessage: "connection timeout",
+	}}
+	results := buildCrossProviderProbeCheckResults([]*provider.CrossProviderDailySnapshot{snapshot}, items, time.Now().UTC())
+	if len(results) != 1 {
+		t.Fatalf("expected one provider-unavailable pair result, got %+v", results)
+	}
+	result := results[0]
+	if result.Status != "failed" || result.ErrorCode != "provider_unavailable" ||
+		result.LeftProvider != "pytdx" || result.RightProvider != "baostock" ||
+		result.ComparedSymbol != "600036.SH" || result.AdjustmentBasis != "none" ||
+		!strings.Contains(result.ErrorMessage, "error_code=network_error") ||
+		!strings.Contains(result.ErrorMessage, "error_stage=connect") {
+		t.Fatalf("provider failure must remain explicit and attributable: %+v", result)
+	}
+}
+
+func TestBuildCrossProviderProbeCheckResultsMatchesFailedProviderBySymbol(t *testing.T) {
+	snapshots := []*provider.CrossProviderDailySnapshot{
+		{
+			Provider: "pytdx", SourceVersion: "pytdx-v1", Symbol: "600036.SH",
+			AdjustmentBasis: "none", QualityStatus: "valid",
+		},
+		{
+			Provider: "pytdx", SourceVersion: "pytdx-v1", Symbol: "002982.SZ",
+			AdjustmentBasis: "none", QualityStatus: "valid",
+		},
+	}
+	items := []model.ProviderProbeItem{{
+		Provider: "baostock", Capability: "daily_bars", AdjustmentBasis: model.AdjustmentNone,
+		Status: "failed", SampleSymbol: "600036.SH", ErrorCode: "network_error",
+		ErrorStage: "connect", ErrorMessage: "connection timeout",
+	}}
+	results := buildCrossProviderProbeCheckResults(snapshots, items, time.Now().UTC())
+	if len(results) != 1 {
+		t.Fatalf("failed provider must only pair with its requested symbol, got %+v", results)
+	}
+	if results[0].ComparedSymbol != "600036.SH" || results[0].RightProvider != "baostock" {
+		t.Fatalf("failed provider was paired with the wrong symbol: %+v", results[0])
+	}
+}
+
 func TestBuildCrossProviderProbeCheckResultsPreservesAdjustmentEvidence(t *testing.T) {
 	left := &provider.CrossProviderDailySnapshot{
 		Provider: "left", SourceVersion: "left-v1", Symbol: "600036.SH",
@@ -944,7 +1022,7 @@ func TestBuildCrossProviderProbeCheckResultsPreservesAdjustmentEvidence(t *testi
 		AdjustmentBasis: "backward_adjusted", QualityStatus: "valid",
 		Bars: []provider.CrossProviderDailyBar{{TradeDate: "2026-10-29", Open: 10, High: 11, Low: 9, Close: 10, Volume: 100, VolumeUnit: "shares", VolumeGranularity: 1, AdjustmentMethod: "right_hfq", AdjustmentRefDate: "2026-11-03"}},
 	}
-	results := buildCrossProviderProbeCheckResults([]*provider.CrossProviderDailySnapshot{left, right}, time.Now().UTC())
+	results := buildCrossProviderProbeCheckResults([]*provider.CrossProviderDailySnapshot{left, right}, nil, time.Now().UTC())
 	if len(results) != 1 {
 		t.Fatalf("expected one adjusted comparison result, got %+v", results)
 	}
@@ -967,7 +1045,7 @@ func TestBuildCrossProviderProbeCheckResultsRejectsDegradedSnapshots(t *testing.
 		AdjustmentBasis: "none", QualityStatus: "valid",
 		Bars: []provider.CrossProviderDailyBar{{TradeDate: "2026-10-29", Open: 10, High: 11, Low: 9, Close: 10, Volume: 100, VolumeUnit: "shares", VolumeGranularity: 1}},
 	}
-	results := buildCrossProviderProbeCheckResults([]*provider.CrossProviderDailySnapshot{left, right}, time.Now().UTC())
+	results := buildCrossProviderProbeCheckResults([]*provider.CrossProviderDailySnapshot{left, right}, nil, time.Now().UTC())
 	if len(results) != 1 || results[0].Status != "skipped" || results[0].ErrorCode != "comparison_not_comparable" {
 		t.Fatalf("degraded snapshots must not be reported as cross-provider pass: %+v", results)
 	}
@@ -1020,7 +1098,7 @@ func TestBuildCrossProviderProbeCheckResultsIncludesFieldLevelEvidence(t *testin
 			Volume: 100, VolumeUnit: "shares", VolumeGranularity: 1,
 		}},
 	}
-	results := buildCrossProviderProbeCheckResults([]*provider.CrossProviderDailySnapshot{left, right}, time.Now().UTC())
+	results := buildCrossProviderProbeCheckResults([]*provider.CrossProviderDailySnapshot{left, right}, nil, time.Now().UTC())
 	if len(results) != 1 {
 		t.Fatalf("expected one comparison result, got %+v", results)
 	}
@@ -1071,7 +1149,7 @@ func TestBuildCrossProviderProbeCheckResultsExposesMismatchValuesAndTolerance(t 
 			Volume: 100, VolumeUnit: "shares", VolumeGranularity: 1,
 		}},
 	}
-	results := buildCrossProviderProbeCheckResults([]*provider.CrossProviderDailySnapshot{left, right}, time.Now().UTC())
+	results := buildCrossProviderProbeCheckResults([]*provider.CrossProviderDailySnapshot{left, right}, nil, time.Now().UTC())
 	if len(results) != 1 {
 		t.Fatalf("expected one comparison result, got %+v", results)
 	}

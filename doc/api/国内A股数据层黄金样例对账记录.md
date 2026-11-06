@@ -508,3 +508,22 @@ Live Provider Probe Run `41788725692` 的 workflow conclusion 为 success，但�
 - TDX `protocol.Kline.Amount` 使用 `Price`（内部单位毫元），协议解码将原始整数 CNY 转为内部 Price，`Float64()` 还原为整数元；TDX 官方 `AMOUNT` 单位为元。BaoStock adapter 保留原始 amount，单位标记 CNY，响应值存在小数。
 - 既有 18 个真实交易日样本中，600036.SH 成交额差最大 120.74 CNY，002982.SZ 最大 7.90 CNY；17/18 行超过 1 CNY 容差。相对差很小（约 3.19e-8/4.13e-8），但没有证据证明差异仅来自格式舍入。
 - 保持 1 CNY 绝对容差和 mismatch 判定；不将这批 raw 双源样本标记 matched。待增加更多成交额量级样本并明确供应商聚合口径后再评估阈值。
+
+## 28. 2026-11-05：raw 双源成交额按来源精度重评
+
+- 原始证据：Artifact `13410429933`，生成时间 2026-11-05T11:39:09Z，窗口 2025-07-07 至 2025-07-17；Pytdx 与 BaoStock 各提供 600036.SH、002982.SZ 的 9 个共同交易日。两侧样本 QualityStatus 均 valid，证券身份、日期集合一致。
+- 来源精度依据：
+  - Pytdx v0.0.86 `protocol/model_kline.go` 将 `getVolume(Float32frombits(...))*1000` 转为 `Price`；`protocol/unit.go` 的 `getVolume` 明确由 float32 解码。绝对误差上界为半个 float32 ULP 加 0.001 CNY 的 Price 截断误差。
+  - BaoStock Python API 字段说明定义 amount 精度为小数点后 4 位、单位人民币元，步长 0.0001 CNY。
+  - 双边比较容差为两侧绝对误差上界之和：TDX 为半个 float32 ULP + 0.001 CNY，BaoStock 保守取 0.0001 CNY。
+- 按当前比较器规则离线重评：
+  - 600036.SH：OHLC 9/9、volume 9/9、amount 9/9 matched；成交量最大差 84 股；成交额最大差 120.74 CNY，所在金额量级的动态容差为 256.0011 CNY。
+  - 002982.SZ：OHLC 9/9、volume 9/9、amount 9/9 matched；成交量最大差 96 股；成交额最大差 7.90 CNY，所在金额量级的动态容差为 8.0011 CNY。
+  - 两只证券各 54/54 字段 matched。原始报告中按固定 50 股/1 CNY 得到的 mismatch 是容差没有表达来源量化精度，并非 OHLC 或交易日数据不一致。
+- 结论：该 artifact 可作为 raw 双源精度感知对账的黄金样例。此次是对已保存的真实响应离线重评，不代表 2026-11-05 本轮重新拉取成功；后续仍需在 BaoStock 网络可用时 fresh rerun。复权样本与 PIT 可见性不在本条结论范围内；AvailableAt 未知仍禁止 PIT 使用。
+
+## 29. 2026-11-05：成交额误差上界复核
+
+- 对 Pytdx v0.0.86 解码链路进一步核查：float32 舍入误差不超过半个 ULP，但随后乘以 1000 转为 `Price` 时发生厘单位截断，最大附加误差小于 0.001 CNY；BaoStock 4 位小数精度未声明舍入方式，按完整 0.0001 CNY 保守估计。
+- 因此比较器不再对两侧量化步长求平均，而是直接相加两侧绝对误差上界。600036.SH 最大差 120.74 CNY，对应动态容差 256.0011 CNY；002982.SZ 最大差 7.90 CNY，对应动态容差 8.0011 CNY。18 个日样本的字段结论保持不变，两只证券各 54/54 matched；原始 amount 覆盖 64,685,708–5,860,161,536 CNY，约 90 倍量级。
+- 新增 100,000 CNY 小额测试锁定 Pytdx 0.00490625 CNY 的误差上界，避免低金额区间漏计 Price 截断误差。当前代码 SHA `95383503` CI 待验。

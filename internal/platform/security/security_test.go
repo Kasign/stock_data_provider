@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -97,6 +98,12 @@ func TestGuardEnforcesIdentityAndScope(t *testing.T) {
 	handler := Guard(auth, ServiceAccess(ScopeDataRead), next)
 
 	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, requestWithToken(""))
+	if response.Code != http.StatusUnauthorized || called {
+		t.Fatalf("missing credentials must return 401: status=%d called=%v", response.Code, called)
+	}
+
+	response = httptest.NewRecorder()
 	handler.ServeHTTP(response, requestWithToken(dataToken))
 	if response.Code != http.StatusNoContent || !called {
 		t.Fatalf("service access status=%d called=%v", response.Code, called)
@@ -165,17 +172,50 @@ func TestGuardOwnerOnlyAndOwnerOrService(t *testing.T) {
 	}
 }
 
+func TestNewAuthenticatorRejectsTooManyServiceCredentials(t *testing.T) {
+	makeSecret := func(value string) config.Secret {
+		return config.NewEnvWithLookup(func(string) (string, bool) { return value, true }).Secret("TOKEN")
+	}
+	services := make([]ServiceCredential, maximumServiceCredentials+1)
+	for index := range services {
+		services[index] = ServiceCredential{
+			Name:   "service-" + strconv.Itoa(index),
+			Secret: makeSecret(dataToken),
+			Scopes: []string{ScopeDataRead},
+		}
+	}
+	if _, err := NewAuthenticator(makeSecret(ownerToken), services); err == nil {
+		t.Fatal("expected service credential count limit to be enforced")
+	}
+}
+
 func TestNewAuthenticatorRejectsWeakDuplicateAndUnknownScopes(t *testing.T) {
 	makeSecret := func(value string) config.Secret {
 		return config.NewEnvWithLookup(func(string) (string, bool) { return value, true }).Secret("TOKEN")
 	}
 	for _, services := range [][]ServiceCredential{
 		{{Name: "weak", Secret: makeSecret("short"), Scopes: []string{ScopeDataRead}}},
+		{{Name: "invalid-format", Secret: makeSecret("token.with.invalid.punctuation-0123456789"), Scopes: []string{ScopeDataRead}}},
+		{{Name: "too-long", Secret: makeSecret(strings.Repeat("a", maximumTokenBytes+1)), Scopes: []string{ScopeDataRead}}},
 		{{Name: "duplicate", Secret: makeSecret(ownerToken), Scopes: []string{ScopeDataRead}}},
 		{{Name: "unknown-scope", Secret: makeSecret(dataToken), Scopes: []string{"admin:*"}}},
 	} {
 		if _, err := NewAuthenticator(makeSecret(ownerToken), services); err == nil {
 			t.Fatal("expected invalid credentials configuration")
+		}
+	}
+}
+
+func TestAuthenticateRejectsInvalidTokenSyntaxAndOversizedToken(t *testing.T) {
+	auth := newTestAuthenticator(t)
+	for _, token := range []string{
+		"invalid.token-0123456789-0123456789",
+		"invalid+token-0123456789-0123456789",
+		"令牌令牌令牌令牌令牌令牌令牌令牌令牌令牌令牌令牌",
+		strings.Repeat("a", maximumTokenBytes+1),
+	} {
+		if _, err := auth.Authenticate(requestWithToken(token)); err == nil {
+			t.Errorf("expected token syntax rejection for %q", token)
 		}
 	}
 }
@@ -251,6 +291,29 @@ func TestRouterRequiresExplicitPolicyAndDefaultsUnknownRoutesToNotFound(t *testi
 	}
 }
 
+func TestRouterRejectsRootCatchAllPatterns(t *testing.T) {
+	auth := newTestAuthenticator(t)
+	for _, pattern := range []string{"/", "GET /", "example.com/", "GET example.com/", "/{path...}", "GET /{path...}", "example.com/{path...}", "GET example.com/{path...}"} {
+		router := NewRouter()
+		if err := router.Handle(pattern, auth, AnonymousAccess(), http.HandlerFunc(func(http.ResponseWriter, *http.Request) {})); err == nil {
+			t.Errorf("pattern %q must not register a root catch-all route", pattern)
+		}
+	}
+
+	// An exact root route remains valid and does not capture other paths.
+	router := NewRouter()
+	if err := router.Handle("GET /{$}", auth, AnonymousAccess(), http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	})); err != nil {
+		t.Fatalf("exact root route should be allowed: %v", err)
+	}
+	response := httptest.NewRecorder()
+	router.Handler().ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/other", nil))
+	if response.Code != http.StatusNotFound {
+		t.Fatalf("unregistered path status=%d, want 404", response.Code)
+	}
+}
+
 func TestRouterRejectsDuplicatePatterns(t *testing.T) {
 	auth := newTestAuthenticator(t)
 	router := NewRouter()
@@ -260,5 +323,45 @@ func TestRouterRejectsDuplicatePatterns(t *testing.T) {
 	}
 	if err := router.Handle("GET /same", auth, OwnerAccess(), handler); err == nil {
 		t.Fatal("expected duplicate route registration to fail")
+	}
+}
+
+func TestAuthenticatorCredentialSnapshotIsImmutableToCallers(t *testing.T) {
+	makeSecret := func(value string) config.Secret {
+		return config.NewEnvWithLookup(func(string) (string, bool) { return value, true }).Secret("TOKEN")
+	}
+
+	serviceScopes := []string{ScopeDataRead}
+	auth, err := NewAuthenticator(makeSecret(ownerToken), []ServiceCredential{{
+		Name:   "snapshot-service",
+		Secret: makeSecret(dataToken),
+		Scopes: serviceScopes,
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Mutating the caller-owned configuration after construction must not
+	// change the authenticator's credential or authorization snapshot.
+	serviceScopes[0] = ScopeResearchRun
+	serviceScopes = append(serviceScopes, ScopeResearchRead)
+
+	principal, err := auth.Authenticate(requestWithToken(dataToken))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if principal.Subject != "snapshot-service" || !contains(principal.Scopes, ScopeDataRead) || contains(principal.Scopes, ScopeResearchRun) {
+		t.Fatalf("authenticator changed with caller-owned scopes: %+v", principal)
+	}
+
+	// A caller may mutate its returned Principal without changing later
+	// authentication results.
+	principal.Scopes[0] = ScopeResearchRun
+	next, err := auth.Authenticate(requestWithToken(dataToken))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !contains(next.Scopes, ScopeDataRead) || contains(next.Scopes, ScopeResearchRun) {
+		t.Fatalf("returned principal mutated authenticator state: %+v", next)
 	}
 }

@@ -1,0 +1,12 @@
+{
+  "status": "unavailable",
+  "reason_code": "storage.redis.unavailable",
+  "safe_message": "Redis 暂时不可用",
+  "checked_at": "2026-11-06T14:40:01.123456789Z",
+  "duration": 3000000000,
+  "evidence_ref": "redis-probe-observation:opaque-ref",
+  "attributes": {
+    "dependency": "storage.redis",
+    "operation": "ping"
+  }
+}

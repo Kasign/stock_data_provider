@@ -387,3 +387,16 @@
 - 代码 SHA `5adb663ca41d6083847c7d497ca387a2931e2422` 将固定 50 股容差下限改为 1 股，再取两侧来源粒度最大值。shares/shares=1 股，hands/shares=100 股，unknown=not_comparable。
 - 新增 shares 两侧差 2 股必须 mismatch 的测试；原 1 股差异通过、TDX 100 股粒度下 96 股通过/101 股 mismatch 继续覆盖。成交额 1 CNY 容差保持不变。
 - 新 SHA Push/PR CI 待验；WebUI 无需修改。
+
+## 2026-11-05 P0 批次 47：成交额按 Provider 量化精度对账
+
+- 内部新增 `AmountErrorBound`，由来源名称、原始 amount 字段名/单位和值计算；不新增公共 API 或数据库字段。Pytdx v0.0.86 的 Kline amount 由 float32 协议字段转成 Price（厘），Pytdx 绝对误差上界为半个 float32 ULP 加 0.001 CNY 截断误差；BaoStock API 文档定义 amount 精度 4 位小数，即 0.0001 CNY。
+- 容差为两侧绝对误差上界之和。精度未知、字段不符、单位不为 CNY、金额缺失均保持 `not_comparable`。成交量仍按 `max(1, 两侧源粒度)`，不改价格 OHLC 的 0.001 容差。
+- 对 Artifact `13410429933` 中两只证券的 18 个真实 raw 双源日样本重算：600036.SH、002982.SZ 各 9/9 日 OHLC、volume、amount 全部 matched；每只证券 54/54 字段 matched。此前固定 1 CNY 容差产生的 17/18 amount mismatch 不再成立，原因是未考虑 TDX float32 大额成交额的量化步长。
+- 该结论是既有真实响应的离线重评，不是本轮重新请求 Provider。代码 SHA `4e1c61be` 的 Push Go suite Run `42026781971` 全部通过（gofmt、market-data tests/race/vet、根模块、go-core、MariaDB migration/PIT、Compose/Docker build）；PR Go suite `42026791104`、Parity `42026791130`、WebUI checks `42026791276` 均 success。PR Live Provider Probe `42026791238` 外层 success，但 BaoStock/Pytdx 历史专项 skipped。PIT 规则未变。
+
+## 2026-11-05 P0 批次 48：成交额误差上界修正
+
+- Pytdx 协议解码将 float32 成交额乘以 1000 后转为 `Price`（厘），Go 整数转换会截断不足 0.001 CNY 的部分。因此 Pytdx 绝对误差上界应为半个 float32 ULP + 0.001 CNY；BaoStock 4 位小数且舍入方式未明确，保守取 0.0001 CNY。
+- 内部字段改为 `AmountErrorBound`，比较容差改为两侧绝对误差上界之和。新增 100,000 CNY 小额边界测试，Pytdx error bound=0.00490625 CNY；真实样本两证券仍各 54/54 字段 matched。
+- 代码 SHA `95383503` 的 Push Go suite `42027994789`、PR Go suite `42028409432`、Parity `42028409433`、WebUI checks `42028409422` 均 success。PR Live Provider Probe `42028409554` 外层 success，但历史专项均 skipped；WebUI 契约无变化。

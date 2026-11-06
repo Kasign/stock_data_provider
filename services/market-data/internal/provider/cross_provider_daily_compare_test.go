@@ -17,7 +17,7 @@ func crossProviderSnapshot(provider, adjustment, quality string, bars ...CrossPr
 func crossProviderBar(date string) CrossProviderDailyBar {
 	return CrossProviderDailyBar{
 		TradeDate: date, Open: 42.3, High: 43.06, Low: 42.04, Close: 42.99,
-		Volume: 86728303, VolumeUnit: "shares", VolumeGranularity: 1, AmountGranularity: 0.0001,
+		Volume: 86728303, VolumeUnit: "shares", VolumeGranularity: 1, AmountErrorBound: 0.0001,
 	}
 }
 
@@ -72,7 +72,7 @@ func TestCompareCrossProviderDailyBarsUsesRawVolumeGranularity(t *testing.T) {
 	amount := 1000000.0
 	leftBar.Amount, rightBar.Amount = &amount, &amount
 	leftBar.AmountUnit, rightBar.AmountUnit = "CNY", "CNY"
-	leftBar.AmountGranularity, rightBar.AmountGranularity = 0.0001, 0.0001
+	leftBar.AmountErrorBound, rightBar.AmountErrorBound = 0.0001, 0.0001
 	left := crossProviderSnapshot("pytdx", "none", "valid", leftBar)
 	right := crossProviderSnapshot("baostock", "none", "valid", rightBar)
 	got := CompareCrossProviderDailyBars(left, right)
@@ -111,17 +111,22 @@ func TestCompareCrossProviderDailyBarsRejectsDifferenceAboveSharePrecision(t *te
 		}
 	}
 }
-func TestCrossProviderAmountGranularityUsesProviderContracts(t *testing.T) {
+func TestCrossProviderAmountErrorBoundUsesProviderContracts(t *testing.T) {
 	tdxAmount := 2672021248.0
-	tdxStep := CrossProviderAmountGranularity("pytdx", "CNY", "amount", &tdxAmount)
-	if tdxStep != 256 {
-		t.Fatalf("expected float32 ULP 256 CNY at 2.67B, got %v", tdxStep)
+	tdxBound := CrossProviderAmountErrorBound("pytdx", "CNY", "amount", &tdxAmount)
+	if tdxBound != 128.001 {
+		t.Fatalf("expected float32 half-ULP plus Price truncation bound 128.001 CNY at 2.67B, got %v", tdxBound)
 	}
-	baoStep := CrossProviderAmountGranularity("baostock", "CNY", "amount", &tdxAmount)
-	if baoStep != 0.0001 {
-		t.Fatalf("expected BaoStock 4-decimal precision, got %v", baoStep)
+	smallAmount := 100000.0
+	smallBound := CrossProviderAmountErrorBound("pytdx", "CNY", "amount", &smallAmount)
+	if smallBound != 0.00490625 {
+		t.Fatalf("expected 100000 CNY float32 half-ULP plus Price truncation bound 0.00490625, got %v", smallBound)
 	}
-	if got := CrossProviderAmountGranularity("unknown", "CNY", "amount", &tdxAmount); got != 0 {
+	baoBound := CrossProviderAmountErrorBound("baostock", "CNY", "amount", &tdxAmount)
+	if baoBound != 0.0001 {
+		t.Fatalf("expected conservative BaoStock 4-decimal error bound, got %v", baoBound)
+	}
+	if got := CrossProviderAmountErrorBound("unknown", "CNY", "amount", &tdxAmount); got != 0 {
 		t.Fatalf("unknown source precision must remain unknown, got %v", got)
 	}
 }
@@ -134,17 +139,17 @@ func TestCompareCrossProviderDailyBarsUsesAmountSourcePrecision(t *testing.T) {
 		wantStatus    string
 		wantTolerance float64
 	}{
-		{name: "600036 large amount float32 rounding", tdxAmount: 2672021248, baoAmount: 2672021127.26, wantStatus: CrossProviderDailyMatched, wantTolerance: 128.00005},
-		{name: "002982 mid amount float32 rounding", tdxAmount: 190000000, baoAmount: 189999992.1, wantStatus: CrossProviderDailyMatched, wantTolerance: 8.00005},
-		{name: "beyond float32 rounding boundary", tdxAmount: 2672021248, baoAmount: 2672021119.9, wantStatus: CrossProviderDailyMismatch, wantTolerance: 128.00005},
+		{name: "600036 large amount float32 rounding", tdxAmount: 2672021248, baoAmount: 2672021127.26, wantStatus: CrossProviderDailyMatched, wantTolerance: 128.0011},
+		{name: "002982 mid amount float32 rounding", tdxAmount: 190000000, baoAmount: 189999992.1, wantStatus: CrossProviderDailyMatched, wantTolerance: 8.0011},
+		{name: "beyond float32 rounding boundary", tdxAmount: 2672021248, baoAmount: 2672021119.9, wantStatus: CrossProviderDailyMismatch, wantTolerance: 128.0011},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tdxBar, baoBar := crossProviderBar("2025-07-07"), crossProviderBar("2025-07-07")
 			tdxBar.Amount, baoBar.Amount = &tt.tdxAmount, &tt.baoAmount
 			tdxBar.AmountUnit, baoBar.AmountUnit = "CNY", "CNY"
-			tdxBar.AmountGranularity = CrossProviderAmountGranularity("pytdx", "CNY", "amount", &tt.tdxAmount)
-			baoBar.AmountGranularity = CrossProviderAmountGranularity("baostock", "CNY", "amount", &tt.baoAmount)
+			tdxBar.AmountErrorBound = CrossProviderAmountErrorBound("pytdx", "CNY", "amount", &tt.tdxAmount)
+			baoBar.AmountErrorBound = CrossProviderAmountErrorBound("baostock", "CNY", "amount", &tt.baoAmount)
 			left := crossProviderSnapshot("pytdx", "none", "valid", tdxBar)
 			right := crossProviderSnapshot("baostock", "none", "valid", baoBar)
 			got := CompareCrossProviderDailyBars(left, right)
@@ -165,7 +170,7 @@ func TestCompareCrossProviderDailyBarsKeepsUnknownAmountPrecisionPartial(t *test
 	amount := 1000000.0
 	leftBar.Amount, rightBar.Amount = &amount, &amount
 	leftBar.AmountUnit, rightBar.AmountUnit = "CNY", "CNY"
-	leftBar.AmountGranularity = 0
+	leftBar.AmountErrorBound = 0
 	left := crossProviderSnapshot("unknown-left", "none", "valid", leftBar)
 	right := crossProviderSnapshot("baostock", "none", "valid", rightBar)
 	got := CompareCrossProviderDailyBars(left, right)
