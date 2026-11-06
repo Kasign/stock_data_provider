@@ -155,7 +155,7 @@ News 为 News 来源内容签发 AuthorizationRef。公开或无限制内容也�
 首期排序版本 `news-evidence-v1` 固定为：
 `system_observed_at DESC, news_id ASC, version_id ASC`。
 
-首屏创建不可变结果集快照，快照与 Cursor TTL 均为 15 分钟。Cursor 绑定 caller_ref、purpose_code、requested_content_level、规范化 filters 指纹、system_as_of、snapshot_ref、排序版本和稳定唯一键。Cursor 使用不透明 token，包含 token_version/key_id 并通过 HMAC-SHA256 防篡改；密钥轮换时旧密钥至少保留到其签发的全部 15 分钟 Cursor 过期。后续页必须读取同一 snapshot_ref。过期、签名错误、过滤指纹不一致和快照缺失分别返回稳定错误，不得静默重建快照。
+首屏创建不可变结果集快照，快照与 Cursor TTL 均为 15 分钟。Cursor 绑定 caller_ref、purpose_code、requested_content_level、规范化 filters 指纹、page_size、system_as_of、snapshot_ref、排序版本和稳定唯一键。Cursor 使用不透明 token，包含 token_version/key_id 并通过 HMAC-SHA256 防篡改；密钥轮换时旧密钥至少保留到其签发的全部 15 分钟 Cursor 过期。后续页必须读取同一 snapshot_ref。过期、签名错误、过滤指纹不一致和快照缺失分别返回稳定错误，不得静默重建快照。
 
 ### 11.4 错误码
 
