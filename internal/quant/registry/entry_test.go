@@ -92,6 +92,19 @@ func TestEntryValidateAcceptsMathematicallyIntegralJSONNumber(t *testing.T) {
 	}
 }
 
+func TestEntryValidateNormalizesLeadingZerosAfterExponentExpansion(t *testing.T) {
+	entry := validEntry("ratio_metric", "1.0.0")
+	entry.Precision.MaxIntegerDigits = 1
+	entry.Precision.Tolerance = json.RawMessage("0")
+	entry.Range = NumericRange{
+		Minimum: json.RawMessage("0"),
+		Maximum: json.RawMessage("0.001e3"),
+	}
+	if err := entry.Validate(); err != nil {
+		t.Fatalf("expected 0.001e3 to normalize to integer 1, got %v", err)
+	}
+}
+
 func TestEntryValidateCountsExponentExpandedDigits(t *testing.T) {
 	entry := validEntry("ratio_metric", "1.0.0")
 	entry.Precision.MaxIntegerDigits = 3

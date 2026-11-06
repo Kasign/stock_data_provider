@@ -233,6 +233,15 @@ func normalizeJSONNumber(text string) (string, error) {
 	default:
 		normalized = digits[:decimalPosition] + "." + digits[decimalPosition:]
 	}
+	decimalParts := strings.SplitN(normalized, ".", 2)
+	integerPart := strings.TrimLeft(decimalParts[0], "0")
+	if integerPart == "" {
+		integerPart = "0"
+	}
+	normalized = integerPart
+	if len(decimalParts) == 2 {
+		normalized += "." + decimalParts[1]
+	}
 	if parts[1] == "-" {
 		normalized = "-" + normalized
 	}
