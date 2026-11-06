@@ -19,7 +19,7 @@ Notification 不计算告警条件、不决定研究结论、不执行模型输�
 必需字段：
 - `event_id`：事件所有者生成的稳定、不透明 ID；同一逻辑 NotificationEvent 重放时不得变化；ResearchEvent.event_id 等领域事件 ID 不得直接复用为 NotificationEvent.event_id，领域来源通过 payload 中受控的 source_event_ref 表达。
 - `event_type`、`schema_version`：注册表中的精确键。
-- `source_module`：受控枚举 quant/research/researchflow。
+- `source_module`：受控枚举 research/researchflow。
 - `occurred_at`：业务事件发生时间，不作为投递时间。
 - `subject_ref`：业务主体不透明引用。
 - `idempotency_key`：调用方对本次发布意图提供的稳定键；重试 PublishEvent 时不得变化。
@@ -92,7 +92,7 @@ Template 与 Channel 配置版本始终属于唯一键和 Delivery 计划快照�
 | 字段 | JSON 类型 | 必填/nullable | 约束 |
 |---|---|---|---|
 | delivery_id | string | 必填 / non-null | 不透明稳定 ID |
-| source_module | enum | 必填 / non-null | quant/research/researchflow，来源事件生产模块 |
+| source_module | enum | 必填 / non-null | research/researchflow，来源事件生产模块 |
 | event_id | string | 必填 / non-null | 在 source_module 范围内稳定唯一的来源事件 ID |
 | subscription_id / subscription_version | string/integer | 必填 / non-null | 创建 Delivery 时固定 |
 | channel_ref / channel_config_version | string | 必填 / non-null | 创建 Delivery 时固定 |
@@ -261,7 +261,7 @@ PublishResult 应明确 accepted/duplicate；冲突通过稳定错误返回。�
 | event_id | string | 必填 / non-null | 生产方生成的稳定 ID；同一逻辑事件重放不得变化 |
 | event_type | string | 必填 / non-null | 全局注册名，由 Registry 校验 |
 | schema_version | string | 必填 / non-null | SemVer，精确命中注册项 |
-| source_module | enum | 必填 / non-null | MVP 为 quant/research/researchflow；新增生产模块先登记 |
+| source_module | enum | 必填 / non-null | MVP 为 research/researchflow；新增生产模块先登记 |
 | occurred_at | RFC3339Nano UTC | 必填 / non-null | 业务事实发生时间，不是发布或接收时间 |
 | subject_ref | string | 必填 / non-null | 不透明业务主体引用 |
 | idempotency_key | string | 必填 / non-null | 发布命令稳定键，重试时保持不变 |
