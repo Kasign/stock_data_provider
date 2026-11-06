@@ -27,8 +27,8 @@ Notification 不计算告警条件、不决定研究结论、不执行模型输�
 - `correlation_id`：跨模块关联 ID。
 
 接收规则建议：
-1. 对 payload 做规范化后计算 fingerprint，覆盖 event_type、schema_version、subject_ref、occurred_at 和 payload；不把接收时间或传输 Header 纳入指纹。
-2. Inbox 唯一约束为 `(source_module, event_id)`；发布幂等唯一约束为 `(source_module, idempotency_key)`。
+1. 对 payload 做规范化后计算 fingerprint，覆盖 source_module、event_type、schema_version、subject_ref、occurred_at 和 payload；使用 RFC 8785 JSON Canonicalization Scheme 的 UTF-8 结果计算 SHA-256；不把 event_id、idempotency_key、correlation_id、接收时间或传输 Header 纳入 payload fingerprint。
+2. Inbox 唯一约束为 `(source_module, event_id)`；发布幂等唯一约束为 `(source_module, idempotency_key)`；同一 source_module 范围内该键全局唯一，不按 event_type 分桶，生产方不得跨发布意图复用。
 3. 相同 source_module/event_id 且 fingerprint 相同：返回原接收结果，不重复 fan-out。
 4. event_id 或 idempotency_key 已存在但 fingerprint/事件身份不一致：返回 idempotency_conflict，不覆盖旧事件。
 5. 首次接收时持久化事件与 fan-out 工作项；如果需要跨模块本地事务，由调用方 Outbox 与 Notification Inbox 形成可靠交付，不依赖跨领域 Repository 事务。
@@ -40,7 +40,7 @@ Notification 不计算告警条件、不决定研究结论、不执行模型输�
 - status：active/paused/disabled；
 - event_type 与该事件类型对应的受限过滤条件；
 - recipient_scope、recipient_ref 来源；
-- channel_ref、template_ref；
+- channel_ref、template_id；
 - created_at、updated_at、effective_at。
 
 Subscription 更新采用版本递增和不可变版本快照。任何影响匹配、目标、渠道或模板的更新都必须递增 version。用户退订/禁用是当前授权状态，发送前必须重新检查；历史 Delivery 保留原版本，不被重写。
