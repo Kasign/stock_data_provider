@@ -714,3 +714,41 @@ func TestIndexConstituentsRejectsInvalidAsOfQueryAndCurrentOnlySource(t *testing
 		}
 	}
 }
+
+
+func TestHighRiskQueryParameterUpperAndLowerBounds(t *testing.T) {
+	p := httpFakeProvider{}
+	svc := service.New([]provider.Provider{p}, cache.NewDisabled(), nil, time.Second, time.Minute, 120, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	h := New("secret", "forward_adjusted", svc, []provider.Provider{p}, nil).Handler()
+	tests := []struct {
+		name string
+		path string
+	}{
+		{name: "market stocks page below minimum", path: "/api/v1/market/stocks?page=0"},
+		{name: "market stocks page above maximum", path: "/api/v1/market/stocks?page=10001"},
+		{name: "market stocks page size above maximum", path: "/api/v1/market/stocks?page_size=101"},
+		{name: "market stocks invalid include_ma", path: "/api/v1/market/stocks?include_ma=maybe"},
+		{name: "market stocks invalid adjustment", path: "/api/v1/market/stocks?adjustment=unknown"},
+		{name: "sector limit above maximum", path: "/api/v1/market/sectors?limit=101"},
+		{name: "limit-pool limit above maximum", path: "/api/v1/market/limit-pools?limit=101"},
+		{name: "dragon-tiger page above maximum", path: "/api/v1/market/dragon-tiger?page=1001"},
+		{name: "dragon-tiger page size above maximum", path: "/api/v1/market/dragon-tiger?page_size=501"},
+		{name: "stock search missing query", path: "/api/v1/stocks/search"},
+		{name: "stock search query above maximum", path: "/api/v1/stocks/search?q=" + strings.Repeat("a", 65)},
+		{name: "stock search limit above maximum", path: "/api/v1/stocks/search?q=maotai&limit=51"},
+		{name: "announcements page above maximum", path: "/api/v1/stocks/600519/announcements?page=1001"},
+		{name: "announcements page size above maximum", path: "/api/v1/stocks/600519/announcements?page_size=101"},
+		{name: "bundle lookback below minimum", path: "/api/v1/bundles/600519?lookback_days=19"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, tt.path, nil)
+			req.Header.Set("X-API-Key", "secret")
+			rec := httptest.NewRecorder()
+			h.ServeHTTP(rec, req)
+			if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), `"code":"VALIDATION_ERROR"`) {
+				t.Fatalf("expected validation 400, got status=%d body=%s", rec.Code, rec.Body.String())
+			}
+		})
+	}
+}
