@@ -47,6 +47,7 @@
 |---|---|---|---|
 | DATA008-SCH-01 | 正常 Snapshot Manifest | Draft 2020-12 Schema 通过；date/date-time format assertion 开启 | CI 失败 |
 | DATA008-SCH-02 | 缺字段、未知字段、非法 purpose/adjustment、非法日期、非 SHA-256 引用 | 全部拒绝；不静默忽略未知字段 | CI 失败 |
+| DATA008-MANIFEST-01 | start_date 晚于 end_date、sources 未按 (source_ref, source_version) 字典序排列或出现重复 tuple | Schema/语义 Validator 拒绝；Manifest 规范化前不得生成引用 | CI 失败 |
 | DATA008-FP-01 | 相同规范化 Manifest 重复签发 | RFC 8785 JCS + SHA-256 结果稳定；snapshot_ref 与 manifest_fingerprint 一致 | CI 失败 |
 | DATA008-FP-02 | 分别修改 caller、purpose、symbol、日期范围、复权口径、system_as_of、source_ref/source_version | manifest_fingerprint 与 snapshot_ref 必须变化 | CI 失败 |
 | DATA008-AUTH-01 | Key 轮换但 caller principal 不变 | subject_ref 保持稳定；新 Key 可用，撤销的旧 Key 失败 | CI 失败 |
