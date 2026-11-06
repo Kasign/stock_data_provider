@@ -352,6 +352,37 @@ func TestDailyBarsMarksMissingProviderSymbolAsDegraded(t *testing.T) {
 	}
 }
 
+func TestDailyBarsAcceptsForwardReferenceAfterRequestedEnd(t *testing.T) {
+	bar := dailyBarForVersionContractTest("pytdx-daily-bars-v1", "2026-10-20")
+	bar.AdjustmentMethod = "pytdx_qfq"
+	bar.AdjustmentRefDate = "2026-10-22"
+	bar.QualityStatus = model.QualityValid
+	svc := New([]provider.Provider{fakeProvider{name: "pytdx", bars: []model.DailyBar{bar}}},
+		cache.NewDisabled(), nil, time.Second, time.Minute, 120, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	calendarProvider := &testTradingCalendarProvider{name: "test-calendar", snapshot: &model.TradingCalendarSnapshot{
+		Market: "cn_a_share", StartDate: "2026-10-20", EndDate: "2026-10-21",
+		TotalDays: 2, TradingDays: 2,
+		Items: []model.TradingCalendarDay{
+			{Date: "2026-10-20", IsTradingDay: true},
+			{Date: "2026-10-21", IsTradingDay: true},
+		},
+		Source: "test-calendar", SourceVersion: "test-calendar-v1",
+		FetchedAt: time.Now().UTC(), QualityStatus: model.QualityValid,
+	}}
+	svc.SetTradingCalendarProviders([]provider.TradingCalendarProvider{calendarProvider})
+
+	bars, hit, _, err := svc.DailyBars(context.Background(), "600519.SH", "2026-10-20", "2026-10-21", 1, model.AdjustmentForward)
+	if err != nil || hit {
+		t.Fatalf("DailyBars returned hit=%v err=%v", hit, err)
+	}
+	if len(bars) != 1 || bars[0].AdjustmentRefDate != "2026-10-22" || bars[0].AdjustmentMethod != "pytdx_qfq" {
+		t.Fatalf("Service must preserve a valid forward reference date after the requested end: %+v", bars)
+	}
+	if bars[0].QualityStatus != model.QualityValid {
+		t.Fatalf("a valid reference date after the requested end must not degrade the bar: %+v", bars[0])
+	}
+}
+
 func TestQuoteFallbackDoesNotOverrideInvalidProviderQuality(t *testing.T) {
 	invalid := validQuote("tencent")
 	invalid.Symbol = ""
@@ -1172,6 +1203,33 @@ func TestCoverageSufficientRejectsSparseLookback(t *testing.T) {
 	}
 }
 
+func TestDailyBarsDegradesWhenCoverageCalendarIsUnavailable(t *testing.T) {
+	tradeDates := []string{"2026-10-19", "2026-10-20", "2026-10-21", "2026-10-22", "2026-10-23"}
+	bars := make([]model.DailyBar, 0, len(tradeDates))
+	for _, tradeDate := range tradeDates {
+		bar := dailyBarForVersionContractTest("eastmoney-daily-bars-v1", tradeDate)
+		bar.AdjustmentBasis = model.AdjustmentNone
+		bar.QualityStatus = model.QualityValid
+		bars = append(bars, bar)
+	}
+	barsProvider := fakeProvider{name: "eastmoney", bars: bars}
+	svc := New([]provider.Provider{barsProvider}, cache.NewDisabled(), nil, time.Second, time.Minute, 120,
+		slog.New(slog.NewTextHandler(io.Discard, nil)))
+
+	got, hit, warnings, err := svc.DailyBars(context.Background(), "600519.SH", "2026-10-19", "2026-10-23", 5, model.AdjustmentNone)
+	if err != nil || hit {
+		t.Fatalf("DailyBars returned hit=%v err=%v", hit, err)
+	}
+	if len(got) != 5 || !containsTestWarning(warnings, "daily_bar_coverage_uses_weekday_estimate_calendar_unavailable") {
+		t.Fatalf("weekday estimate should preserve plausible coverage but expose unavailable calendar: bars=%+v warnings=%v", got, warnings)
+	}
+	for _, bar := range got {
+		if bar.QualityStatus != model.QualityDegraded || !containsReason(bar.QualityReasons, "daily_bar_coverage_uses_weekday_estimate_calendar_unavailable") {
+			t.Fatalf("calendar-unverified coverage must not be marked valid: %+v", bar)
+		}
+	}
+}
+
 func TestDailyBarsCachePartialCandleRefreshesAfterClose(t *testing.T) {
 	loc := marketLocation()
 	bar := model.DailyBar{SourceVersion: "test-v1", TradeDate: "2026-10-21", IsPartial: true}
@@ -1643,6 +1701,23 @@ func TestValidateLimitPoolRejectsInvalidNumericFieldsAndQualityMismatch(t *testi
 			t.Fatalf("mismatched provider report date must be rejected to permit source fallback, got %v", err)
 		}
 	})
+	t.Run("has data requires non-null change percent", func(t *testing.T) {
+		snapshot := makeSnapshot()
+		snapshot.Items[0].ChangePercent = nil
+		if err := validateLimitPoolSnapshot("up", "2026-10-23", 30, snapshot); err == nil {
+			t.Fatal("HasData=true must reject an item with null change_percent")
+		}
+	})
+	t.Run("no data requires empty items and zero total", func(t *testing.T) {
+		snapshot := makeSnapshot()
+		snapshot.HasData = false
+		snapshot.Total = 0
+		snapshot.QualityStatus = model.QualityUnknown
+		if err := validateLimitPoolSnapshot("up", "2026-10-23", 30, snapshot); err == nil || !strings.Contains(err.Error(), "empty limit pool") {
+			t.Fatalf("HasData=false must reject a snapshot containing items through the empty-state invariant, got %v", err)
+		}
+	})
+
 }
 
 func TestMarkLimitPoolTruncatedDowngradesIncompleteSnapshot(t *testing.T) {
@@ -2935,7 +3010,7 @@ func TestDailyBarAdjustmentMetadataDegradesUnverifiedForwardReference(t *testing
 		AdjustmentMethod: "eastmoney_fqt_1",
 		QualityStatus:    model.QualityValid,
 	}}
-	warnings, err := applyDailyBarAdjustmentMetadataQuality(bars, model.AdjustmentForward, "2026-10-20")
+	warnings, err := applyDailyBarAdjustmentMetadataQuality(bars, model.AdjustmentForward)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2954,24 +3029,35 @@ func TestDailyBarAdjustmentMetadataRejectsMixedMethodsAndReferences(t *testing.T
 	other := base
 	other.TradeDate = "2026-10-21"
 	other.AdjustmentMethod = "method-b"
-	if _, err := applyDailyBarAdjustmentMetadataQuality([]model.DailyBar{base, other}, model.AdjustmentForward, "2026-10-22"); err == nil {
+	if _, err := applyDailyBarAdjustmentMetadataQuality([]model.DailyBar{base, other}, model.AdjustmentForward); err == nil {
 		t.Fatal("mixed adjustment methods must reject the provider response")
 	}
 	other = base
 	other.TradeDate = "2026-10-21"
 	other.AdjustmentRefDate = "2026-10-23"
-	if _, err := applyDailyBarAdjustmentMetadataQuality([]model.DailyBar{base, other}, model.AdjustmentForward, "2026-10-23"); err == nil {
+	if _, err := applyDailyBarAdjustmentMetadataQuality([]model.DailyBar{base, other}, model.AdjustmentForward); err == nil {
 		t.Fatal("mixed adjustment reference dates must reject the provider response")
 	}
 }
 
-func TestDailyBarAdjustmentMetadataRejectsReferenceOutsideRequestedRange(t *testing.T) {
+func TestDailyBarAdjustmentMetadataAllowsReferenceAfterRequestedEnd(t *testing.T) {
 	bar := model.DailyBar{
 		TradeDate: "2026-10-20", AdjustmentBasis: model.AdjustmentForward,
-		AdjustmentMethod: "method-a", AdjustmentRefDate: "2026-10-22", QualityStatus: model.QualityValid,
+		AdjustmentMethod: "pytdx_qfq", AdjustmentRefDate: "2026-10-22", QualityStatus: model.QualityValid,
 	}
-	if _, err := applyDailyBarAdjustmentMetadataQuality([]model.DailyBar{bar}, model.AdjustmentForward, "2026-10-21"); err == nil {
-		t.Fatal("forward adjustment reference date after requested end must be rejected")
+	warnings, err := applyDailyBarAdjustmentMetadataQuality([]model.DailyBar{bar}, model.AdjustmentForward)
+	if err != nil || len(warnings) != 0 || bar.QualityStatus != model.QualityValid {
+		t.Fatalf("a valid provider reference date after the requested end must be accepted: warnings=%v err=%v bar=%+v", warnings, err, bar)
+	}
+}
+
+func TestDailyBarAdjustmentMetadataRejectsFutureReferenceDate(t *testing.T) {
+	bar := model.DailyBar{
+		TradeDate: "2026-10-20", AdjustmentBasis: model.AdjustmentForward,
+		AdjustmentMethod: "pytdx_qfq", AdjustmentRefDate: "2999-01-01", QualityStatus: model.QualityValid,
+	}
+	if _, err := applyDailyBarAdjustmentMetadataQuality([]model.DailyBar{bar}, model.AdjustmentForward); err == nil {
+		t.Fatal("a future adjustment reference date must be rejected")
 	}
 }
 
@@ -2980,7 +3066,7 @@ func TestDailyBarAdjustmentMetadataAllowsCumulativeHFQWithoutReferenceDate(t *te
 		TradeDate: "2026-10-20", AdjustmentBasis: model.AdjustmentBackward,
 		AdjustmentMethod: "tushare_adj_factor_hfq_v1", QualityStatus: model.QualityValid,
 	}}
-	warnings, err := applyDailyBarAdjustmentMetadataQuality(bars, model.AdjustmentBackward, "2026-10-20")
+	warnings, err := applyDailyBarAdjustmentMetadataQuality(bars, model.AdjustmentBackward)
 	if err != nil || len(warnings) != 0 || bars[0].QualityStatus != model.QualityValid {
 		t.Fatalf("cumulative-factor HFQ without reference date: bars=%+v warnings=%v err=%v", bars, warnings, err)
 	}

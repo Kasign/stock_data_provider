@@ -1,0 +1,235 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://stock-data-provider.local/schema/QNT-CTR-002-indicator-parameters-1.0.0.schema.json",
+  "title": "Quant Indicator Parameters",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "indicator_code",
+    "parameters"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1.0.0"
+    },
+    "indicator_code": {
+      "type": "string"
+    },
+    "parameters": {
+      "type": "object"
+    }
+  },
+  "oneOf": [
+    {
+      "properties": {
+        "indicator_code": {
+          "const": "sma"
+        },
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "window"
+          ],
+          "properties": {
+            "window": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        }
+      }
+    },
+    {
+      "properties": {
+        "indicator_code": {
+          "const": "ema"
+        },
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "window",
+            "seed_method"
+          ],
+          "properties": {
+            "window": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "seed_method": {
+              "const": "sma"
+            }
+          }
+        }
+      }
+    },
+    {
+      "properties": {
+        "indicator_code": {
+          "const": "return"
+        },
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "window",
+            "return_basis"
+          ],
+          "properties": {
+            "window": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "return_basis": {
+              "enum": [
+                "simple",
+                "log"
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "properties": {
+        "indicator_code": {
+          "const": "volatility"
+        },
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "window",
+            "return_basis",
+            "annualization_factor"
+          ],
+          "properties": {
+            "window": {
+              "type": "integer",
+              "minimum": 2
+            },
+            "return_basis": {
+              "enum": [
+                "simple",
+                "log"
+              ]
+            },
+            "annualization_factor": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            }
+          }
+        }
+      }
+    },
+    {
+      "properties": {
+        "indicator_code": {
+          "const": "rsi"
+        },
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "window",
+            "smoothing_method"
+          ],
+          "properties": {
+            "window": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "smoothing_method": {
+              "const": "wilder"
+            }
+          }
+        }
+      }
+    },
+    {
+      "properties": {
+        "indicator_code": {
+          "const": "macd"
+        },
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "fast_window",
+            "slow_window",
+            "signal_window"
+          ],
+          "properties": {
+            "fast_window": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "slow_window": {
+              "type": "integer",
+              "minimum": 2
+            },
+            "signal_window": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        }
+      }
+    },
+    {
+      "properties": {
+        "indicator_code": {
+          "const": "atr"
+        },
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "window",
+            "smoothing_method"
+          ],
+          "properties": {
+            "window": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "smoothing_method": {
+              "const": "wilder"
+            }
+          }
+        }
+      }
+    },
+    {
+      "properties": {
+        "indicator_code": {
+          "const": "bollinger"
+        },
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "window",
+            "multiplier",
+            "stddev_method"
+          ],
+          "properties": {
+            "window": {
+              "type": "integer",
+              "minimum": 2
+            },
+            "multiplier": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "stddev_method": {
+              "const": "population"
+            }
+          }
+        }
+      }
+    }
+  ]
+}

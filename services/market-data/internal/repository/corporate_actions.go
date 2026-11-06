@@ -106,14 +106,16 @@ func (s *Store) ListAdjustmentFactorsAsOf(ctx context.Context, symbol, startDate
 	asOfUTC := asOf.UTC()
 	rows, err := s.db.QueryContext(ctx, `SELECT v.metadata, DATE_FORMAT(v.recorded_at,'%Y-%m-%d %H:%i:%s.%f')
 FROM market_data_adjustment_factor_versions v
-WHERE v.symbol=? AND (?='' OR v.trade_date>=?) AND (?='' OR v.trade_date<=?) AND v.recorded_at<=?
+WHERE v.symbol=? AND (?='' OR v.trade_date>=?) AND (?='' OR v.trade_date<=?)
+AND v.recorded_at<=? AND v.fetched_at<=? AND v.available_at IS NOT NULL AND v.available_at<=?
 AND NOT EXISTS (
  SELECT 1 FROM market_data_adjustment_factor_versions n
- WHERE n.symbol=v.symbol AND n.trade_date=v.trade_date AND n.source=v.source AND n.factor_basis=v.factor_basis AND n.recorded_at<=?
+ WHERE n.symbol=v.symbol AND n.trade_date=v.trade_date AND n.source=v.source AND n.factor_basis=v.factor_basis
+ AND n.recorded_at<=? AND n.fetched_at<=? AND n.available_at IS NOT NULL AND n.available_at<=?
  AND (n.recorded_at>v.recorded_at OR (n.recorded_at=v.recorded_at AND n.id>v.id))
 )
 ORDER BY v.trade_date ASC,v.source ASC,v.factor_basis ASC,v.recorded_at DESC`,
-		symbol, startDate, startDate, endDate, endDate, asOfUTC, asOfUTC)
+		symbol, startDate, startDate, endDate, endDate, asOfUTC, asOfUTC, asOfUTC, asOfUTC, asOfUTC, asOfUTC)
 	if err != nil {
 		return nil, fmt.Errorf("query adjustment-factor revisions: %w", err)
 	}
@@ -233,14 +235,16 @@ func (s *Store) ListCorporateActionsAsOf(ctx context.Context, symbol, startDate,
 	asOfUTC := asOf.UTC()
 	rows, err := s.db.QueryContext(ctx, `SELECT v.metadata,DATE_FORMAT(v.recorded_at,'%Y-%m-%d %H:%i:%s.%f')
 FROM market_data_corporate_action_versions v
-WHERE v.symbol=? AND (?='' OR COALESCE(v.ex_date,v.announcement_date)>=?) AND (?='' OR COALESCE(v.ex_date,v.announcement_date)<=?) AND v.recorded_at<=?
+WHERE v.symbol=? AND (?='' OR COALESCE(v.ex_date,v.announcement_date)>=?) AND (?='' OR COALESCE(v.ex_date,v.announcement_date)<=?)
+AND v.recorded_at<=? AND v.fetched_at<=? AND v.available_at IS NOT NULL AND v.available_at<=?
 AND NOT EXISTS (
  SELECT 1 FROM market_data_corporate_action_versions n
- WHERE n.symbol=v.symbol AND n.provider_event_id=v.provider_event_id AND n.source=v.source AND n.recorded_at<=?
+ WHERE n.symbol=v.symbol AND n.provider_event_id=v.provider_event_id AND n.source=v.source
+ AND n.recorded_at<=? AND n.fetched_at<=? AND n.available_at IS NOT NULL AND n.available_at<=?
  AND (n.recorded_at>v.recorded_at OR (n.recorded_at=v.recorded_at AND n.id>v.id))
 )
 ORDER BY COALESCE(v.ex_date,v.announcement_date) ASC,v.source ASC,v.recorded_at DESC`,
-		symbol, startDate, startDate, endDate, endDate, asOfUTC, asOfUTC)
+		symbol, startDate, startDate, endDate, endDate, asOfUTC, asOfUTC, asOfUTC, asOfUTC, asOfUTC, asOfUTC)
 	if err != nil {
 		return nil, fmt.Errorf("query corporate-action revisions: %w", err)
 	}

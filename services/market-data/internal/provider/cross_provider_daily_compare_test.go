@@ -17,7 +17,7 @@ func crossProviderSnapshot(provider, adjustment, quality string, bars ...CrossPr
 func crossProviderBar(date string) CrossProviderDailyBar {
 	return CrossProviderDailyBar{
 		TradeDate: date, Open: 42.3, High: 43.06, Low: 42.04, Close: 42.99,
-		Volume: 86728303, VolumeUnit: "shares",
+		Volume: 86728303, VolumeUnit: "shares", VolumeGranularity: 1, AmountErrorBound: 0.0001,
 	}
 }
 
@@ -53,8 +53,8 @@ func TestCompareCrossProviderDailyBarsRejectsDegradedBaseline(t *testing.T) {
 
 func TestCompareCrossProviderDailyBarsComparesCommonContract(t *testing.T) {
 	leftBar, rightBar := crossProviderBar("2026-10-29"), crossProviderBar("2026-10-29")
-	rightBar.Volume += 46
-	leftBar.Amount, rightBar.Amount = crossProviderAmount(1000000), crossProviderAmount(1000000.5)
+	rightBar.Volume += 1
+	leftBar.Amount, rightBar.Amount = crossProviderAmount(1000000), crossProviderAmount(1000000.0001)
 	leftBar.AmountUnit, rightBar.AmountUnit = "CNY", "CNY"
 	left := crossProviderSnapshot("sina", "none", "valid", leftBar)
 	right := crossProviderSnapshot("tencent", "none", "valid", rightBar)
@@ -64,6 +64,131 @@ func TestCompareCrossProviderDailyBarsComparesCommonContract(t *testing.T) {
 	}
 }
 
+func TestCompareCrossProviderDailyBarsUsesRawVolumeGranularity(t *testing.T) {
+	leftBar := crossProviderBar("2026-10-29")
+	rightBar := crossProviderBar("2026-10-29")
+	leftBar.Volume, rightBar.Volume = 100000, 100096
+	leftBar.VolumeGranularity, rightBar.VolumeGranularity = 100, 1
+	amount := 1000000.0
+	leftBar.Amount, rightBar.Amount = &amount, &amount
+	leftBar.AmountUnit, rightBar.AmountUnit = "CNY", "CNY"
+	leftBar.AmountErrorBound, rightBar.AmountErrorBound = 0.0001, 0.0001
+	left := crossProviderSnapshot("pytdx", "none", "valid", leftBar)
+	right := crossProviderSnapshot("baostock", "none", "valid", rightBar)
+	got := CompareCrossProviderDailyBars(left, right)
+	if got.Status != CrossProviderDailyMatched {
+		t.Fatalf("one TDX lot (100 shares) must be within source granularity: %+v", got)
+	}
+	for _, field := range got.Fields {
+		if field.Field == "2026-10-29.volume" && (field.Status != "matched" || field.Tolerance != 100) {
+			t.Fatalf("volume comparison must expose 100-share source granularity: %+v", field)
+		}
+	}
+	right.Bars[0].Volume = 100101
+	got = CompareCrossProviderDailyBars(left, right)
+	if got.Status != CrossProviderDailyMismatch {
+		t.Fatalf("difference above one TDX lot must remain mismatch: %+v", got)
+	}
+}
+
+func TestCompareCrossProviderDailyBarsRejectsDifferenceAboveSharePrecision(t *testing.T) {
+	leftBar := crossProviderBar("2026-10-29")
+	rightBar := crossProviderBar("2026-10-29")
+	leftBar.Volume, rightBar.Volume = 100000, 100002
+	leftBar.VolumeGranularity, rightBar.VolumeGranularity = 1, 1
+	amount := 1000000.0
+	leftBar.Amount, rightBar.Amount = &amount, &amount
+	leftBar.AmountUnit, rightBar.AmountUnit = "CNY", "CNY"
+	left := crossProviderSnapshot("sina", "none", "valid", leftBar)
+	right := crossProviderSnapshot("tencent", "none", "valid", rightBar)
+	got := CompareCrossProviderDailyBars(left, right)
+	if got.Status != CrossProviderDailyMismatch {
+		t.Fatalf("two share-precision sources must not tolerate a two-share difference: %+v", got)
+	}
+	for _, field := range got.Fields {
+		if field.Field == "2026-10-29.volume" && field.Tolerance != 1 {
+			t.Fatalf("share-precision comparison must use one-share tolerance: %+v", field)
+		}
+	}
+}
+func TestCrossProviderAmountErrorBoundUsesProviderContracts(t *testing.T) {
+	tdxAmount := 2672021248.0
+	tdxBound := CrossProviderAmountErrorBound("pytdx", "CNY", "amount", &tdxAmount)
+	if tdxBound != 128.001 {
+		t.Fatalf("expected float32 half-ULP plus Price truncation bound 128.001 CNY at 2.67B, got %v", tdxBound)
+	}
+	smallAmount := 100000.0
+	smallBound := CrossProviderAmountErrorBound("pytdx", "CNY", "amount", &smallAmount)
+	if smallBound != 0.00490625 {
+		t.Fatalf("expected 100000 CNY float32 half-ULP plus Price truncation bound 0.00490625, got %v", smallBound)
+	}
+	baoBound := CrossProviderAmountErrorBound("baostock", "CNY", "amount", &tdxAmount)
+	if baoBound != 0.0001 {
+		t.Fatalf("expected conservative BaoStock 4-decimal error bound, got %v", baoBound)
+	}
+	if got := CrossProviderAmountErrorBound("unknown", "CNY", "amount", &tdxAmount); got != 0 {
+		t.Fatalf("unknown source precision must remain unknown, got %v", got)
+	}
+}
+
+func TestCompareCrossProviderDailyBarsUsesAmountSourcePrecision(t *testing.T) {
+	tests := []struct {
+		name          string
+		tdxAmount     float64
+		baoAmount     float64
+		wantStatus    string
+		wantTolerance float64
+	}{
+		{name: "600036 large amount float32 rounding", tdxAmount: 2672021248, baoAmount: 2672021127.26, wantStatus: CrossProviderDailyMatched, wantTolerance: 128.0011},
+		{name: "002982 mid amount float32 rounding", tdxAmount: 190000000, baoAmount: 189999992.1, wantStatus: CrossProviderDailyMatched, wantTolerance: 8.0011},
+		{name: "beyond float32 rounding boundary", tdxAmount: 2672021248, baoAmount: 2672021119.9, wantStatus: CrossProviderDailyMismatch, wantTolerance: 128.0011},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tdxBar, baoBar := crossProviderBar("2025-07-07"), crossProviderBar("2025-07-07")
+			tdxBar.Amount, baoBar.Amount = &tt.tdxAmount, &tt.baoAmount
+			tdxBar.AmountUnit, baoBar.AmountUnit = "CNY", "CNY"
+			tdxBar.AmountErrorBound = CrossProviderAmountErrorBound("pytdx", "CNY", "amount", &tt.tdxAmount)
+			baoBar.AmountErrorBound = CrossProviderAmountErrorBound("baostock", "CNY", "amount", &tt.baoAmount)
+			left := crossProviderSnapshot("pytdx", "none", "valid", tdxBar)
+			right := crossProviderSnapshot("baostock", "none", "valid", baoBar)
+			got := CompareCrossProviderDailyBars(left, right)
+			if got.Status != tt.wantStatus {
+				t.Fatalf("status = %s, want %s: %+v", got.Status, tt.wantStatus, got)
+			}
+			for _, field := range got.Fields {
+				if field.Field == "2025-07-07.amount" && field.Tolerance != tt.wantTolerance {
+					t.Fatalf("amount tolerance = %v, want %v", field.Tolerance, tt.wantTolerance)
+				}
+			}
+		})
+	}
+}
+
+func TestCompareCrossProviderDailyBarsKeepsUnknownAmountPrecisionPartial(t *testing.T) {
+	leftBar, rightBar := crossProviderBar("2025-07-07"), crossProviderBar("2025-07-07")
+	amount := 1000000.0
+	leftBar.Amount, rightBar.Amount = &amount, &amount
+	leftBar.AmountUnit, rightBar.AmountUnit = "CNY", "CNY"
+	leftBar.AmountErrorBound = 0
+	left := crossProviderSnapshot("unknown-left", "none", "valid", leftBar)
+	right := crossProviderSnapshot("baostock", "none", "valid", rightBar)
+	got := CompareCrossProviderDailyBars(left, right)
+	if got.Status != CrossProviderDailyPartial {
+		t.Fatalf("unknown amount precision must not be accepted as matched: %+v", got)
+	}
+}
+func TestCompareCrossProviderDailyBarsRequiresVolumeGranularity(t *testing.T) {
+	leftBar := crossProviderBar("2026-10-29")
+	rightBar := crossProviderBar("2026-10-29")
+	leftBar.VolumeGranularity = 0
+	left := crossProviderSnapshot("left", "none", "valid", leftBar)
+	right := crossProviderSnapshot("right", "none", "valid", rightBar)
+	got := CompareCrossProviderDailyBars(left, right)
+	if got.Status != CrossProviderDailyNotComparable || got.Reason != "volume_granularity_missing" {
+		t.Fatalf("missing source volume granularity must be not_comparable: %+v", got)
+	}
+}
 func TestCompareCrossProviderDailyBarsKeepsMissingAmountPartial(t *testing.T) {
 	leftBar, rightBar := crossProviderBar("2026-10-29"), crossProviderBar("2026-10-29")
 	left := crossProviderSnapshot("sina", "none", "valid", leftBar)

@@ -27,7 +27,7 @@ func (s *Server) handleCreateTask(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusServiceUnavailable, "async_tasks_unavailable", "asynchronous task worker is not configured")
 		return
 	}
-	if !strings.HasPrefix(strings.ToLower(r.Header.Get("Content-Type")), "application/json") {
+	if !isJSONContentType(r.Header.Get("Content-Type")) {
 		writeError(w, http.StatusUnsupportedMediaType, "content_type_required", "Content-Type must be application/json")
 		return
 	}
@@ -36,17 +36,12 @@ func (s *Server) handleCreateTask(w http.ResponseWriter, r *http.Request) {
 	decoder.DisallowUnknownFields()
 	var req domain.RunRequest
 	if err := decoder.Decode(&req); err != nil {
-		var maxBytesErr *http.MaxBytesError
-		if errors.As(err, &maxBytesErr) {
-			writeError(w, http.StatusRequestEntityTooLarge, "request_too_large", "request body exceeds 1 MiB")
-			return
-		}
-		writeError(w, http.StatusBadRequest, "invalid_json", err.Error())
+		writeRequestDecodeError(w, err)
 		return
 	}
 	var trailing any
 	if err := decoder.Decode(&trailing); err != io.EOF {
-		writeError(w, http.StatusBadRequest, "invalid_json", "request body must contain one JSON object")
+		writeRequestDecodeError(w, err)
 		return
 	}
 	asOfExplicit := !req.AsOf.IsZero()
