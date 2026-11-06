@@ -114,7 +114,7 @@
 - caller_ref：必填不透明主体引用，由可信 Application 调用上下文注入，不接受不可信客户端自报身份。
 - purpose_code：必填枚举 research_analysis/risk_review/user_display。
 - requested_content_level：必填枚举 metadata/summary/snippet/full；授权不允许时拒绝，不静默降级。
-- system_as_of：必填 RFC3339Nano UTC；必须原样使用 Researchflow Run 值。
+- system_as_of：必填 RFC3339Nano UTC；必须不晚于服务端可信 UTC 当前时间，并原样使用 Researchflow Run 值。
 - filters：必填 typed object，仅允许 news_ids（最多 100）、source_refs（最多 50）、canonical_symbols（最多 100）、published_at_from/to、quality_statuses（valid/degraded/stale/invalid/unknown）；数组元素唯一。
 - business_time_from/to：可选 nullable RFC3339Nano UTC；同时存在时 from <= to。
 - page_size：必填 integer，范围 1..100，无默认值。
