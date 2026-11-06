@@ -17,7 +17,7 @@ const (
 )
 
 // Fault 是仅供进程内部使用的错误结构。所有字段均禁止 JSON 序列化；
- // HTTP transport 必须显式映射到独立公开 DTO。
+// HTTP transport 必须显式映射到独立公开 DTO。
 type Fault struct {
 	Class       Class  `json:"-"`
 	Code        string `json:"-"`
