@@ -1,8 +1,8 @@
 # Notification 契约 Fixture 与状态迁移验收清单
 
-- 归属：NTF-001/004/005/006
+- 归属：NTF-001/002/003/004/005/006
 - 对应契约：NTF-CTR-001～003（历史别名 Platform CONTRACT-009/010）；状态以项目级契约目录为准
-- 状态：4 份 Draft 2020-12 Schema 与 6 个代表性 Golden 已校准；Go Draft 2020-12 Envelope/Payload Validator、Golden、非法 Payload、Inbox Fake 幂等/并发、Subscription 与 DeliveryPlan Repository Port/Fake 测试已写入；新增严格 JSON、资源上限边界、DeliveryPlan 写入前双重校验、Subscription Repository append-only/CAS 并发及 Inbox/Subscription/DeliveryPlan 失败注入恢复测试；NTF-002 增加 Template Registry/Renderer 测试及 Subject C0/DEL/C1 控制字符回归（根模块 Test job 被跨模块 Research 源码错误阻断）；NTF-003 增加 Channel Domain/Port/内存 Registry/Fake Adapter 测试（同一 CI 阻断）；完整 CI Run 42201893234 已通过，覆盖 gofmt/go test/race/vet、go-core、market-data、MariaDB 集成和 Docker build；NTF-CTR-001～003 仍为 pending_evidence；不要求个人 Owner 签字
+- 状态：4 份 Draft 2020-12 Schema 与 6 个代表性 Golden 已校准；Go Draft 2020-12 Envelope/Payload Validator、Golden、非法 Payload、Inbox Fake 幂等/并发、Subscription 与 DeliveryPlan Repository Port/Fake 测试已写入；新增严格 JSON、资源上限边界、DeliveryPlan 写入前双重校验、Subscription Repository append-only/CAS 并发及 Inbox/Subscription/DeliveryPlan 失败注入恢复测试；NTF-002 增加 Template Registry/Renderer 测试及 Subject C0/DEL/C1 控制字符回归（根模块 Test job 被跨模块 Research 源码错误阻断）；NTF-003 增加 Channel Domain/Port/内存 Registry/Fake Adapter 测试；DeliveryPlan 授权策略 tuple 指纹与 GOV-CTR-006 对齐（同一 CI 阻断）；完整 CI Run 42201893234 已通过，覆盖 gofmt/go test/race/vet、go-core、market-data、MariaDB 集成和 Docker build；NTF-CTR-001～003 仍为 pending_evidence；不要求个人 Owner 签字
 - 日期：2026-11-06
 - 说明：以下均为合成数据与测试场景，不代表已有实现或真实渠道能力。
 
