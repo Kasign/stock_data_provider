@@ -38,7 +38,8 @@ func TestCancelAndDeadlineDoNotPretendInflightWorkStopped(t *testing.T){
 	if err!=nil{t.Fatal(err)}
 	if cancelled.Status!=domain.RunCancelling||updated[0].Status!=domain.StageRunning||updated[1].Status!=domain.StageCancelled{t.Fatal("cancel must await inflight stop confirmation")}
 	deadlineRun:=domain.Run{Status:domain.RunRunning,DeadlineAt:now}
-	deadlineRun,updated,err=ApplyDeadline(deadlineRun,stages,now)
+	deadlineStages:=[]domain.Stage{{Status:domain.StageRunning},{Status:domain.StageReady}}
+	deadlineRun,updated,err=ApplyDeadline(deadlineRun,deadlineStages,now)
 	if err!=nil{t.Fatal(err)}
 	if deadlineRun.Status!=domain.RunCancelling||updated[0].Status!=domain.StageRunning||updated[1].Status!=domain.StageTimedOut{t.Fatal("deadline must await inflight stop/fencing")}
 }
