@@ -78,7 +78,7 @@ Template 与 Channel 配置版本始终属于唯一键和 Delivery 计划快照�
 | filter_schema_version | string/null | 必填字段 / nullable | 非 null 时必须匹配该 event_type 的受控过滤 Schema |
 | filters | object/null | 必填字段 / nullable | null 表示无附加过滤；非 null 必须按 filter_schema_version 校验，禁止任意 map |
 | recipient_scope | enum | 必填 / non-null | subscription_owner/preconfigured_target |
-| recipient_ref | string/null | 必填字段 / nullable | 仅在预配置目标已解析并授权时填充；不存敏感地址 |
+| recipient_ref | string/null | 必填字段 / nullable | preconfigured_target 必填不透明目标引用；subscription_owner 必须为 null，DeliveryPlan 阶段从 owner_ref 解析；不存敏感地址 |
 | channel_ref | string | 必填 / non-null | 不透明渠道引用 |
 | template_id | string | 必填 / non-null | 不透明模板 ID |
 | created_at / updated_at / effective_at | RFC3339Nano UTC | 必填 / non-null | 创建、更新、当前版本生效时间 |
