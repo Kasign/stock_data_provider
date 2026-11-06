@@ -889,11 +889,20 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 			if err != nil {
 				return model.QualityUnknown, "", nil, err
 			}
+			report := validation.ValidateValuationSnapshot(v, []string{barsSymbol})
+			validation.AddContextReport(probeCtx, report)
+			sourceVersion := ""
+			if v != nil {
+				sourceVersion = v.SourceVersion
+			}
+			if report.HasErrors() {
+				return model.QualityInvalid, sourceVersion, nil, errors.New("valuation field validation failed")
+			}
 			if err := validateValuationSnapshot([]string{barsSymbol}, v); err != nil {
-				return model.QualityInvalid, "", nil, err
+				return model.QualityInvalid, sourceVersion, nil, err
 			}
 			recordProviderProbeEvidence(probeCtx, barsSymbol, v.ProviderReportDate, len(v.Items), len(v.Items), v.ProviderTimestamp)
-			return v.QualityStatus, v.SourceVersion, append([]string(nil), v.QualityReasons...), nil
+			return v.QualityStatus, sourceVersion, append([]string(nil), v.QualityReasons...), nil
 		})
 	}
 	for _, p := range s.hotRankingProviders {
