@@ -127,6 +127,9 @@ func TestStartRejectsNilContextAndClosedQueue(t *testing.T) {
 	if err := q.Start(context.Background()); !errors.Is(err, ErrQueueClosed) {
 		t.Fatalf("start after close = %v, want ErrQueueClosed", err)
 	}
+	if _, _, err := q.Create(context.Background(), domain.RunRequest{}, ""); !errors.Is(err, ErrQueueClosed) {
+		t.Fatalf("create after close = %v, want ErrQueueClosed", err)
+	}
 }
 
 func TestNewRejectsMissingDependencies(t *testing.T) {

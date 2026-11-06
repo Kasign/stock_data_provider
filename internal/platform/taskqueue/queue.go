@@ -148,6 +148,11 @@ func (q *Queue) Close() {
 }
 
 func (q *Queue) Create(ctx context.Context, req domain.RunRequest, idempotencyKey string) (Task, bool, error) {
+	q.lifecycleMu.Lock()
+	defer q.lifecycleMu.Unlock()
+	if q.closed {
+		return Task{}, false, ErrQueueClosed
+	}
 	q.createMu.Lock()
 	defer q.createMu.Unlock()
 	var zero Task
