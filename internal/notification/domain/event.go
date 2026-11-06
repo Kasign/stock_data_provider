@@ -29,7 +29,7 @@ type EventEnvelope struct {
 	SubjectRef         string          `json:"subject_ref"`
 	IdempotencyKey     string          `json:"idempotency_key"`
 	CorrelationID      string          `json:"correlation_id"`
-	PayloadFingerprint string         `json:"payload_fingerprint"`
+	PayloadFingerprint string          `json:"payload_fingerprint"`
 	Payload            json.RawMessage `json:"payload"`
 }
 
