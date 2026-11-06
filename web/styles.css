@@ -4757,11 +4757,13 @@ button:disabled {
   .run-flow-dialog .run-flow-events-column, .run-flow-dialog .run-flow-result-column { max-height:none; min-height:0; }
   .run-flow-dialog .run-flow-meta-content .task-facts { grid-template-columns:repeat(3,minmax(0,1fr)); }
 }
+@media (max-width:800px) {
+  .run-flow-dialog .run-flow-summary { grid-template-columns:repeat(2,minmax(0,1fr)); }
+}
 @media (max-width:600px) {
   .run-flow-dialog .task-status-panel { padding:12px 10px; }
   .run-flow-dialog .run-flow-header { flex-direction:row; align-items:flex-start; }
   .run-flow-dialog .run-flow-header-actions { max-width:55%; }
-  .run-flow-dialog .run-flow-summary { grid-template-columns:repeat(2,minmax(0,1fr)); }
   .run-flow-dialog .run-flow-meta-content .task-facts { grid-template-columns:repeat(2,minmax(0,1fr)); }
 }
 
