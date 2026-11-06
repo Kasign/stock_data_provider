@@ -579,6 +579,128 @@ Owner 使用**模块责任角色**而非个人姓名：生产方模块 Owner 对
 
 只有文字原则、字段名列表或伪代码，不构成字段级契约。
 
+### 16.2 CONTRACT-001 字段级候选决议（待 Owner 确认）
+
+**本节是可供实现和评审的唯一候选口径；状态仍为 `pending_decision`。** 在 Quant Owner 与直接消费方确认前，不得把本节当作冻结 Schema，也不得由实现者自行选择另一种 JSON 类型。
+
+#### 16.2.1 JSON 类型按数值语义固定
+
+| 语义类别 | JSON 类型 | 例子 | 约束 |
+|---|---|---|---|
+| 价格、金额、单价、成本、费用 | string（规范十进制） | `"12.345"`、`"125000000.00"` | 不经过 binary float；精度由指标/字段定义 |
+| 股数、样本数、证券数、事件数、交易日数 | integer | `100` | 不允许小数；计数为 0 表示真实统计为零 |
+| 比例、收益率、波动率、标准化分数、覆盖率 | number | `0.125` | 明确 unit、范围、输出精度和容差 |
+| 未知或不可用的数值 | null（仅 nullable 字段） | `null` | 原因必须由 status/quality/reason 字段表达，不得改写为 0 |
+
+JSON 类型由字段语义决定，不由 Go 内部类型决定。Go 内部可用 Decimal、整数或 float64，但必须通过专用序列化边界满足以上 JSON 契约。禁止同一字段或同一 metric_code 在不同响应中切换 string/number。
+
+#### 16.2.2 Decimal string 规范
+
+1. 仅用于需要十进制精确表达的价格和金额类字段；不得将所有数值一律转为 string。
+2. 格式为普通十进制字符串：可选前导负号、整数部分、可选小数部分；不允许千分位、货币符号、空格、前导加号或科学计数法。
+3. 正数整数部分除 `0` 外不得有前导零；小数部分至少一位数字。是否保留尾随零由字段的 canonical scale 决定，同一字段必须稳定。
+4. Schema 必须声明 `max_integer_digits`、`max_fraction_digits`、是否固定小数位、最小值/最大值和负值是否允许。不能只用一个无上限的通用 decimal pattern。
+5. 不得先转 float64 再格式化为 string。Data Adapter 对上游 JSON number 的转换必须从原始 JSON 数字文本或等价的精确十进制表示解析；如果上游解码路径已丢失精度，则必须拒绝标记为精确转换，不能伪造无损。
+6. Data 当前既有 OpenAPI number 字段不因本决议而强制改 API；由 Data Adapter 明确承接精确解析、可验证范围和无法保证精度时的失败/降级结果。
+
+建议正则基础形式（实际 Schema 还需叠加字段级长度、范围和 scale 约束）：
+
+```regex
+^-?(0|[1-9][0-9]*)(\\.[0-9]+)?$
+```
+
+#### 16.2.3 Integer 规范
+
+- JSON 使用整数，不允许 `1.0`、科学计数法或小数。
+- 公开 DTO 默认使用非负安全整数范围 `0..9007199254740991`，保证常见 JavaScript 消费端不发生整数精度损失。
+- 负数仅在字段语义明确允许时启用；有符号范围也必须显式声明。
+- Go 可使用 int/int64，但序列化前必须验证公开范围，不能因 Go int64 更宽就输出超出契约范围的值。
+- 大于安全整数范围的计数或累计量应改用 decimal string，并在字段 Schema 明确标记为精确整数文本；不能静默扩大 integer 范围。
+
+#### 16.2.4 Number 统计量规范
+
+- 仅用于有界统计数值；每个指标必须在 Metric Registry 声明 unit、允许范围、最大输出小数位、舍入模式、绝对误差和相对误差。
+- 舍入发生在结果输出边界，采用明确的 `half_even` 规则；不得依赖语言默认格式化或数据库隐式舍入。
+- Golden 比较同时检查 JSON 类型、范围和误差；不能只比较格式化字符串，也不能只使用一个全局 epsilon。
+- NaN、正负 Infinity、溢出和除零结果不得进入 JSON；按该指标定义返回 null + 明确状态，或返回 failed。禁止替换为 0。
+- 覆盖率、收益率等比例统一使用 `ratio`，范围通常为 `[0,1]`；如需表达百分数，必须另设 `percentage_point` 指标，不能只改显示格式。
+
+#### 16.2.5 QuantMetric 的字段级约束
+
+每个 `metric_code` 必须有且只有一个 Registry 定义，至少包含：
+
+| Registry 字段 | 类型 | 必需 | 说明 |
+|---|---|---:|---|
+| metric_code | string | 是 | 全局稳定编码 |
+| json_type | enum | 是 | `decimal_string` / `integer` / `number` |
+| unit | enum/string | 是 | 例如 CNY、CNY/share、shares、ratio、percentage_point |
+| nullable | boolean | 是 | 是否允许 value 为 null |
+| min_value / max_value | 与 json_type 对应 | 条件必需 | 有界指标必须声明 |
+| max_integer_digits | integer | decimal_string 必需 | 最大整数位数 |
+| max_fraction_digits | integer | decimal_string/number 必需 | 最大输出小数位 |
+| fixed_scale | integer/null | 否 | 固定小数位；null 表示按字段规则规范化 |
+| rounding_mode | enum | number 或需舍入的 decimal 必需 | 本候选统一 half_even |
+| abs_tolerance / rel_tolerance | number | number 必需 | Golden 数值容差 |
+| interval_supported | boolean | 是 | 是否允许 lower_bound/upper_bound |
+| calculation_version | string | 是 | 公式/算法版本 |
+
+`value`、`lower_bound`、`upper_bound` 必须引用同一 `metric_code` 的同一 Registry 类型定义。若 `interval_supported=false`，专属 Schema 不定义上下界字段；若为 true，上下界必须同时为有效值或同时为 null。不能在一个通用 Schema 中无约束地接受任意 string/number。
+
+#### 16.2.6 最小 JSON 样例
+
+```json
+{
+  "metric_code": "close_price",
+  "value": "12.345",
+  "unit": "CNY/share",
+  "period": "1d",
+  "quality_status": "valid",
+  "calculation_version": "price.v1"
+}
+```
+
+```json
+{
+  "metric_code": "sample_count",
+  "value": 240,
+  "unit": "shares",
+  "period": "20d",
+  "quality_status": "valid",
+  "calculation_version": "factor.v1"
+}
+```
+
+```json
+{
+  "metric_code": "coverage_ratio",
+  "value": 0.875,
+  "unit": "ratio",
+  "period": "1d",
+  "quality_status": "valid",
+  "calculation_version": "factor.v1"
+}
+```
+
+#### 16.2.7 与现有文档的冲突修正建议
+
+以下属于需要同步到 Quant 专项文档的明确修改项；本 Platform 文档不越权改写规划目录：
+
+1. `FactorRequest.minimum_coverage` 从 `decimal/number` 收敛为 JSON `number`，unit 固定为 `ratio`，范围 `[0,1]`；Go 内部可选 Decimal，但 JSON 不得有时 string、有时 number。
+2. Data 的百分比字段继续遵循 Data API 现有百分点语义；进入 Quant/Researchflow 后必须转换成明确命名的 `percentage_point` 或 `ratio`，不得仅凭字段名猜测。转换公式和边界样例写入 Adapter Golden。
+3. 价格、金额的 scale 不设全局固定两位；按来源字段和业务定义声明最大精度/固定 scale。展示层格式化不得反向污染存储值或跨模块 DTO。
+4. 任何不能证明精确的 Data number → decimal string 转换，不得标记为 lossless；该字段应失败或明确降级，并带可诊断原因。
+5. 首批 Registry 必须列出实际消费的全部 metric_code；未登记指标不得通过通用 QuantMetric 逃逸为任意数值。
+
+#### 16.2.8 Owner 确认与验收门槛
+
+- Quant Owner：确认 JSON 类型矩阵、Metric Registry 必需字段、舍入与容差规则。
+- Data Owner：确认 Adapter 可从实际响应保留原始数值精度；不能保证的字段列出明确例外。
+- Researchflow Owner：确认跨模块 DTO 的 number/string 解析和空值行为。
+- Research Owner：确认消费端不依赖隐式类型转换，明确展示/持久化边界。
+- 验收：至少覆盖 decimal 最大整数位/小数位、负值、尾随零、指数形式拒绝、超范围、number 容差、NaN/Inf、integer 上限、null 与真实零的区别，以及 Data Adapter 精确/不可精确转换两类样例。
+
+以上确认完成前，CONTRACT-001 保持 `pending_decision`；确认语义后转 `pending_evidence`，双向 Schema/Golden/Contract Test 通过后才能转 `frozen`。
+
 ## 17. GOV-004 / GOV-005 门禁分层
 
 门禁按**当前批次真实依赖的契约和集成范围**判断，不按整个项目所有模块是否全部完成判断。GOV-004 管理跨模块契约；GOV-005 管理模块独立开发和集成顺序。两者不是同一张“全部通过/全部不通过”的总开关。
