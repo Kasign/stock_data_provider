@@ -136,3 +136,19 @@ func TestCreateRunPersistsCompleteResolvedExecutionPolicy(t *testing.T) {
 		t.Fatalf("repository record does not contain complete resolved template semantics: %#v",snapshot)
 	}
 }
+
+func TestCreateRunPersistsCanonicalParameterAndSnapshotCollections(t *testing.T) {
+	now:=time.Date(2026,11,6,1,0,0,0,time.UTC)
+	cmd:=command(now)
+	cmd.InputSnapshotRefs=[]string{"snapshot_b","snapshot_a"}
+	cmd.Parameters=json.RawMessage(`{"z":2,"a":1}`)
+	repo:=&repositoryStub{}
+	service,err:=newService(t,repo,&idsStub{},&templatesStub{value:validTemplate()},now);if err!=nil{t.Fatal(err)}
+	_,err=service.CreateRun(context.Background(),cmd);if err!=nil{t.Fatal(err)}
+	if got:=repo.created.Run.InputSnapshotRefs;len(got)!=2||got[0]!="snapshot_a"||got[1]!="snapshot_b"{
+		t.Fatalf("input snapshot refs are not canonical set order: %#v",got)
+	}
+	if got:=string(repo.created.Parameters);got!=`{"a":1,"z":2}`{
+		t.Fatalf("parameters snapshot is not JCS canonical: %s",got)
+	}
+}

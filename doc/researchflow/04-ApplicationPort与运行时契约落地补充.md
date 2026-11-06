@@ -188,3 +188,6 @@ Fake Repository/Fake Clock/Fake Provider 只证明模块内逻辑；MariaDB/Redi
 - Stage 公开读取模型不包含 attempt_no；该字段只属于 Attempt。Domain 内部 Stage.AttemptNo 继续作为重试计数，不泄露为跨模块字段。
 - Worker Claim 必须由 Repository/Executor 在同一事务门禁下分配并注入正数 fencing_token；纯领域 Claim 函数拒绝 0，生成的 Attempt 回显该 token。Attempt Schema 对 fencing_token 的最小值同步改为 1。
 - 以上只统一字段语义和纯函数入参，不代表数据库 CAS、单调 token 分配或并发 fencing 已实现。
+
+
+- CreateRun 持久化前对输入快照引用按集合语义排序，并将已通过 typed Schema 校验的 parameters 保存为 RFC 8785 JCS canonical bytes；避免同一指纹语义请求因输入顺序/JSON 排版产生不同的运行快照。

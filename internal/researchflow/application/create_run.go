@@ -5,8 +5,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
+
+	"github.com/gowebpki/jcs"
 
 	"example.com/stock-analysis-flow/internal/researchflow/domain"
 	"example.com/stock-analysis-flow/internal/researchflow/template"
@@ -146,6 +149,9 @@ func (s *CreateRunService) CreateRun(ctx context.Context, command domain.CreateR
 		if err != nil { return CreateRunResult{}, fmt.Errorf("generate stage ref: %w", err) }
 		stageRefs[stage.Definition.Code] = ref
 	}
+	sort.Strings(command.InputSnapshotRefs)
+	canonicalParameters, err := jcs.Transform(command.Parameters)
+	if err != nil { return CreateRunResult{}, fmt.Errorf("%w: canonicalize parameters for snapshot: %v", domain.ErrInvalidCommand, err) }
 	stages := make([]domain.Stage, 0, len(resolved.Stages))
 	for _, resolvedStage := range resolved.Stages {
 		definition := resolvedStage.Definition
@@ -172,7 +178,7 @@ func (s *CreateRunService) CreateRun(ctx context.Context, command domain.CreateR
 	}
 	record := CreateRunRecord{
 		Scope:scope, Fingerprint:fingerprint, Run:run, Stages:stages,
-		ResolvedTemplate:resolved, Parameters:append(json.RawMessage(nil), command.Parameters...),
+		ResolvedTemplate:resolved, Parameters:append(json.RawMessage(nil), canonicalParameters...),
 	}
 	result, err := s.runs.CreateRunAtomic(ctx, record)
 	if err != nil { return CreateRunResult{}, fmt.Errorf("persist create run atomically: %w", err) }
