@@ -1201,8 +1201,8 @@ func TestDailyBarsDegradesWhenCoverageCalendarIsUnavailable(t *testing.T) {
 		bar.QualityStatus = model.QualityValid
 		bars = append(bars, bar)
 	}
-	provider := fakeProvider{name: "eastmoney", bars: bars}
-	svc := New([]provider.Provider{provider}, cache.NewDisabled(), nil, time.Second, time.Minute, 120,
+	barsProvider := fakeProvider{name: "eastmoney", bars: bars}
+	svc := New([]provider.Provider{barsProvider}, cache.NewDisabled(), nil, time.Second, time.Minute, 120,
 		slog.New(slog.NewTextHandler(io.Discard, nil)))
 
 	got, hit, warnings, err := svc.DailyBars(context.Background(), "600519.SH", "2026-10-19", "2026-10-23", 5, model.AdjustmentNone)
