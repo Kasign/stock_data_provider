@@ -17,10 +17,10 @@ func loadNewsAuthorizationGolden(t *testing.T) NewsAuthorizationBinding {
 
 	var fixture struct {
 		AuthorizationBinding NewsAuthorizationBinding `json:"authorization_binding"`
-		SourceGoldenRef     string                    `json:"source_golden_ref"`
-		ExpectedBinding     map[string]string         `json:"expected_binding"`
-		ExpectedDecision    string                    `json:"expected_decision"`
-		ExpectedContent     bool                      `json:"expected_content_returned"`
+		SourceGoldenRef      string                   `json:"source_golden_ref"`
+		ExpectedBinding      map[string]string        `json:"expected_binding"`
+		ExpectedDecision     string                   `json:"expected_decision"`
+		ExpectedContent      bool                     `json:"expected_content_returned"`
 	}
 	decoder := json.NewDecoder(file)
 	decoder.DisallowUnknownFields()
