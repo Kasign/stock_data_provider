@@ -106,8 +106,8 @@ func TestXueqiuHotRankingReportsInvalidNumericField(t *testing.T) {
 
 func TestXueqiuHotRankingReportsInvalidRankChangeWarning(t *testing.T) {
 	rows := []map[string]any{{
-		"symbol":  "SH600519",
-		"name":    "贵州茅台",
+		"symbol":      "SH600519",
+		"name":        "贵州茅台",
 		"current":     1500.0,
 		"rank_change": "not-an-integer",
 	}}
@@ -177,7 +177,7 @@ func TestXueqiuHotRankingRejectsMalformedErrorCode(t *testing.T) {
 			"data": map[string]any{
 				"timestamp": time.Now().Unix(),
 				"items": []map[string]any{{
-					"symbol": "SH600519", "name": "贵州茅台", "current":     1500.0,
+					"symbol": "SH600519", "name": "贵州茅台", "current": 1500.0,
 				}},
 			},
 		})
