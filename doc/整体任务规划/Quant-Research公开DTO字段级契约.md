@@ -187,6 +187,7 @@ Research 定义 Context 领域语义；Researchflow 负责单次 Run 的分区�
 | source_ref | 是 | string | 来源对象引用 |
 | source_version | 条件必需 | string | 版本化来源必须提供 |
 | source_locator | 否 | string | 来源定位符，不直接存未授权全文 |
+| derived_from_refs | 是 | string[] | 派生该 Evidence 的上游 Evidence 引用；fact/reported_fact 可为空，inference/hypothesis 必须非空，顺序稳定且无重复 |
 | claim_ref | 否 | string | 关联 Claim |
 | subject_refs | 是 | string[] | 证券/行业/Event 引用 |
 | published_at | 是 | RFC3339Nano UTC/null | 来源声明发布时间；无来源证据显式 null |
