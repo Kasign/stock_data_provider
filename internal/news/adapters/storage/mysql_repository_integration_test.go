@@ -87,6 +87,51 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 	if _, err := repository.GetAuthorizationSnapshot(ctx, "authorization-not-found"); !errors.Is(err, app.ErrAuthorizationSnapshotNotFound) {
 		t.Fatalf("missing authorization snapshot error = %v", err)
 	}
+
+	snapshotCreatedAt := time.Now().UTC().Truncate(time.Microsecond)
+	snapshot := app.EvidenceSnapshot{
+		SnapshotRef: fmt.Sprintf("news-snapshot-it-%d", time.Now().UnixNano()),
+		CallerRef: "service:researchflow",
+		FiltersFingerprint: strings.Repeat("a", 64),
+		PageSize: 20,
+		SystemAsOf: snapshotCreatedAt.Add(-time.Minute),
+		SortVersion: "news-evidence-v1",
+		CreatedAt: snapshotCreatedAt,
+		ExpiresAt: snapshotCreatedAt.Add(app.EvidenceSnapshotTTL),
+		Items: []app.EvidenceSnapshotItem{{
+			NewsID: "news-it-item-1", VersionID: "news-it-version-1",
+			ObservationID: "news-it-observation-1",
+			SystemObservedAt: snapshotCreatedAt.Add(-2 * time.Minute),
+		}},
+	}
+	if err := repository.CreateEvidenceSnapshot(ctx, snapshot); err != nil {
+		t.Fatalf("create evidence snapshot: %v", err)
+	}
+	if err := repository.CreateEvidenceSnapshot(ctx, snapshot); err != nil {
+		t.Fatalf("idempotent evidence snapshot create: %v", err)
+	}
+	loadedSnapshot, err := repository.GetEvidenceSnapshot(ctx, snapshot.SnapshotRef, snapshot.CallerRef, snapshotCreatedAt.Add(time.Minute))
+	if err != nil {
+		t.Fatalf("get evidence snapshot: %v", err)
+	}
+	if len(loadedSnapshot.Items) != 1 || loadedSnapshot.Items[0].VersionID != snapshot.Items[0].VersionID {
+		t.Fatalf("evidence snapshot payload changed: %+v", loadedSnapshot)
+	}
+	conflictingSnapshot := snapshot
+	conflictingSnapshot.PageSize++
+	if err := repository.CreateEvidenceSnapshot(ctx, conflictingSnapshot); !errors.Is(err, app.ErrEvidenceSnapshotConflict) {
+		t.Fatalf("conflicting evidence snapshot create error = %v", err)
+	}
+	if _, err := repository.GetEvidenceSnapshot(ctx, snapshot.SnapshotRef, "different-caller", snapshotCreatedAt.Add(time.Minute)); !errors.Is(err, app.ErrEvidenceSnapshotUnavailable) {
+		t.Fatalf("snapshot caller mismatch error = %v", err)
+	}
+	if _, err := repository.GetEvidenceSnapshot(ctx, snapshot.SnapshotRef, snapshot.CallerRef, snapshot.ExpiresAt); !errors.Is(err, app.ErrEvidenceSnapshotUnavailable) {
+		t.Fatalf("expired evidence snapshot error = %v", err)
+	}
+	deleted, err := repository.DeleteExpiredEvidenceSnapshots(ctx, snapshot.ExpiresAt, 100)
+	if err != nil || deleted < 1 {
+		t.Fatalf("delete expired evidence snapshots: deleted=%d err=%v", deleted, err)
+	}
 	var idSequence atomic.Uint64
 	newID := func() string { return fmt.Sprintf("news-it-%d", idSequence.Add(1)) }
 	ingest := app.NewIngestCandidate(repository, newID)

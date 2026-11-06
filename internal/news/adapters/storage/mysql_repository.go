@@ -605,6 +605,7 @@ var requiredNewsSchemaTables = []string{
 	"news_relation_evidence",
 	"news_item_relations",
 	"news_authorization_snapshots",
+	"news_evidence_snapshots",
 }
 
 // Ping verifies the borrowed SQL pool without taking ownership of it.
