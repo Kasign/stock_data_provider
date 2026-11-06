@@ -79,6 +79,11 @@ func xueqiuNumber(row map[string]json.RawMessage, fields ...string) (*float64, e
 }
 
 func xueqiuSymbol(row map[string]json.RawMessage) (string, error) {
+func xueqiuReportRowParseIssue(ctx context.Context, rowIndex int, field, providerField, code, expected string, raw json.RawMessage, message string) {
+	addProviderParseIssue(ctx, rowIndex, field, providerField, code, expected, providerJSONValueType(raw), providerJSONPreview(raw), message)
+}
+
+
 	raw := strings.ToUpper(strings.TrimSpace(xueqiuString(row, "symbol")))
 	if raw == "" {
 		raw = strings.ToUpper(strings.TrimSpace(xueqiuString(row, "code")))
@@ -299,9 +304,15 @@ func (p *Xueqiu) FetchHotStocks(ctx context.Context, rankingType string, limit i
 		}
 		symbol, symbolErr := xueqiuSymbol(row)
 		if symbolErr != nil {
+			providerField, rawSymbol := "symbol", row["symbol"]
+			if len(bytes.TrimSpace(rawSymbol)) == 0 || bytes.Equal(bytes.TrimSpace(rawSymbol), []byte("null")) {
+				providerField, rawSymbol = "code", row["code"]
+			}
+			xueqiuReportRowParseIssue(ctx, index, "symbol", providerField, "invalid_symbol", "valid A-share symbol with exchange", rawSymbol, "雪球榜单证券代码缺失或格式无效")
 			return nil, fmt.Errorf("雪球榜单第 %d 行证券代码无效: %w", index, symbolErr)
 		}
 		if _, duplicate := seen[symbol]; duplicate {
+			xueqiuReportRowParseIssue(ctx, index, "symbol", "symbol", "duplicate_symbol", "unique A-share symbol", row["symbol"], "雪球榜单返回重复证券代码")
 			return nil, fmt.Errorf("雪球榜单返回重复证券 %s", symbol)
 		}
 		seen[symbol] = struct{}{}
@@ -311,6 +322,11 @@ func (p *Xueqiu) FetchHotStocks(ctx context.Context, rankingType string, limit i
 		}
 		latestPrice, err := xueqiuNumber(row, "current", "current_price")
 		if err != nil {
+			field, raw := "current", row["current"]
+			if len(bytes.TrimSpace(raw)) == 0 || bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
+				field, raw = "current_price", row["current_price"]
+			}
+			xueqiuReportRowParseIssue(ctx, index, "latest_price", field, "invalid_number", "finite numeric price", raw, "雪球榜单最新价不是有效有限数值")
 			return nil, err
 		}
 		if latestPrice != nil && *latestPrice <= 0 {
@@ -318,14 +334,25 @@ func (p *Xueqiu) FetchHotStocks(ctx context.Context, rankingType string, limit i
 		}
 		change, err := xueqiuNumber(row, "change")
 		if err != nil {
+			xueqiuReportRowParseIssue(ctx, index, "change", "change", "invalid_number", "finite numeric change", row["change"], "雪球榜单涨跌额不是有效有限数值")
 			return nil, err
 		}
 		changePercent, err := xueqiuNumber(row, "percent", "change_percent")
 		if err != nil {
+			field, raw := "percent", row["percent"]
+			if len(bytes.TrimSpace(raw)) == 0 || bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
+				field, raw = "change_percent", row["change_percent"]
+			}
+			xueqiuReportRowParseIssue(ctx, index, "change_percent", field, "invalid_number", "finite numeric percentage", raw, "雪球榜单涨跌幅不是有效有限数值")
 			return nil, err
 		}
 		heat, err := xueqiuNumber(row, "value", "heat")
 		if err != nil {
+			field, raw := "value", row["value"]
+			if len(bytes.TrimSpace(raw)) == 0 || bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
+				field, raw = "heat", row["heat"]
+			}
+			xueqiuReportRowParseIssue(ctx, index, "heat", field, "invalid_number", "finite numeric heat value", raw, "雪球榜单热度值不是有效有限数值")
 			return nil, err
 		}
 		var rankChange *int
@@ -336,6 +363,7 @@ func (p *Xueqiu) FetchHotStocks(ctx context.Context, rankingType string, limit i
 				rankChange = &value
 			} else {
 				invalidRankChange = true
+				xueqiuReportRowParseIssue(ctx, index, "rank_change", "rank_change", "invalid_optional_integer", "integer in [-1000000, 1000000]", row["rank_change"], "雪球榜单排名变化字段无效，字段将被省略")
 			}
 		}
 		itemReasons := []string{"provider_hot_ranking_is_delayed_not_a_real_time_trading_signal"}
