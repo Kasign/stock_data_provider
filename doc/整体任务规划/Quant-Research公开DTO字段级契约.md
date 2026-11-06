@@ -65,6 +65,7 @@ QuantAnalysisRequest 的幂等作用域为 `(authenticated_caller_ref, use_case,
 | input_snapshot_refs | 是 | string[] | 输入快照引用 |
 | quality_status | 是 | valid/degraded/invalid/unknown | 结果质量 |
 | result_status | 是 | completed/insufficient_data/insufficient_sample/rejected/failed | 计算状态 |
+| authorization_ref | 是 | string | Quant 签发的 AuthorizationRef；policy_owner=quant，subject_ref=可信调用主体，resource_ref=result_id，purpose_code=quant_analysis，content_level=full |
 | created_at | 是 | RFC3339Nano UTC | 创建时间 |
 
 completed 不代表 valid；消费方必须同时检查 result_status 和 quality_status。invalid/unknown 不可作为有效数值事实。
@@ -144,6 +145,7 @@ Quant Application 返回的 QuantResult 使用共同 Envelope，不允许 `map[s
 | input_snapshot_refs | 是 | array<string> | 输入快照引用；无输入仅限模板白名单纯函数 |
 | quality_status | 是 | valid/degraded/invalid/unknown | 结果质量 |
 | result_status | 是 | completed/insufficient_data/insufficient_sample/rejected/failed | 计算状态 |
+| authorization_ref | 是 | string | Quant 签发的 AuthorizationRef；policy_owner=quant，subject_ref=可信调用主体，resource_ref=result_id，purpose_code=quant_analysis，content_level=full |
 | payload | 是 | discriminated union | 按 result_type + schema_version 命中唯一强类型子 Schema |
 
 同一 result_type/schema_version 的 payload 结构不可原地改变。Researchflow 只校验 discriminator、Schema 和版本并保存结果引用；Research 不解析未知 payload，也不自行计算或重解释指标。未知 result_type/schema_version 必须返回 unsupported_result_type/unsupported_schema，不回退旧版本。
