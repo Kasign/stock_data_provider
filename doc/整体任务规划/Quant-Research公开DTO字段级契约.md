@@ -155,7 +155,7 @@ Research 定义 Context 领域语义；Researchflow 负责单次 Run 的分区�
 | subject_refs | 是 | string[] | 证券/行业/Event 引用 |
 | published_at | 否 | timestamp | 来源声明发布时间 |
 | available_at | 否 | timestamp | 有证据支持的外部可获得时间 |
-| observed_at | 是 | timestamp | 本系统观察时间 |
+| system_observed_at | 是 | timestamp | 本系统观察时间 |
 | valid_time_start/end | 否 | timestamp | 业务有效区间 |
 | system_as_of | 是 | timestamp | 纳入研究时的知识截止时间 |
 | stance | 是 | supports/contradicts/neutral | 对 Claim 的立场 |
@@ -181,7 +181,7 @@ fact 必须有可验证来源与时间；reported_fact 只表示来源声称；i
 | occurred_at | 否 | timestamp | 事件发生时间 |
 | published_at | 否 | timestamp | 来源发布时间 |
 | available_at | 否 | timestamp | 有证据的外部可获得时间 |
-| observed_at | 是 | timestamp | 系统观察时间 |
+| system_observed_at | 是 | timestamp | 系统观察时间 |
 | system_as_of | 是 | timestamp | 当前版本知识截止时间 |
 | impact_hypothesis_refs | 是 | string[] | 影响假设引用 |
 | invalidation_conditions | 是 | string[] | 失效条件 |
@@ -302,7 +302,7 @@ Researchflow 是唯一跨模块组合者，并负责传播同一 Run 的 system_
 | quality_status | 是 | valid/degraded/invalid/unknown | 分区质量 |
 | required | 是 | boolean | 本研究模板是否要求该分区 |
 | included | 是 | boolean | 是否实际装入 Context |
-| observed_at | 是 | timestamp | 本次装配观察时间 |
+| system_observed_at | 是 | timestamp | 本次装配观察时间 |
 | system_as_of | 是 | timestamp | 分区知识截止时间 |
 
 同一 Context 中 section_id 唯一；同一 section_id 的不同版本不能同时作为当前版本装入，除非显式标记为对比研究。
@@ -612,7 +612,7 @@ available_at=null 表示没有可验证的外部可获得时间，不得用 publ
 1. CreateRun 时确定并持久化 UTC 时间；重试 Stage 不得自动刷新。
 2. QuantAnalysisRequest、ResearchContext、Evidence 写入/查询和 News Query 均接收同一 system_as_of。
 3. 子对象的 system_as_of 不得晚于 Run.system_as_of；若来源数据在该时点不可见，必须排除或标记不可用。
-4. observed_at 是事实被系统观察的实际时间，不能为了满足 PIT 而回填成 Run.system_as_of。
+4. system_observed_at 是事实被系统观察并持久化的实际时间，不能为了满足 PIT 而回填成 Run.system_as_of。
 5. trade_date 是交易日，不是知识截止时间；published_at 是来源声明时间，不是系统已知时间。
 6. 新建 Run 可选择新的 as_of；原 Run 的历史输入快照和结果不可被新时点覆盖。
 
@@ -633,7 +633,7 @@ available_at=null 表示没有可验证的外部可获得时间，不得用 publ
 ## 12. 五模块交叉契约映射补充（2026-11-06）
 
 - Researchflow `ResearchRun.system_as_of` 是 Run 唯一系统知识截止值。QuantAnalysisRequest/QuantResultRef、ResearchContext/Claim/Scenario 的 `system_as_of` 必须沿用该值；Evidence 的 `system_as_of` 与其语义相同，且不得晚于所属 Run。
-- `observed_at` 始终记录真实观察时间；不能用 system_as_of 回填。published_at/available_at/valid_time 保留各自来源时间和业务有效时间。Data API 查询参数 `as_of` 的映射由 Quant Data Adapter 负责，不改写 Data 自身时间语义。
+- `system_observed_at` 始终记录系统实际观察/持久化时间；不能用 system_as_of 回填。published_at/available_at/valid_time 保留各自来源时间和业务有效时间。Data API 查询参数 `as_of` 的映射由 Quant Data Adapter 负责，不改写 Data 自身时间语义。
 - Evidence.authorization_ref 指向 EvidenceAuthorizationRef 审计快照，包含 policy_owner、policy_version、decision、purpose、content_level、subject_ref、decided_at、expires_at、conditions 和 decision_fingerprint。它不是永久访问令牌；读取受限内容仍需来源 Owner 当前授权复核。Evidence 不用 authorization_status 替代该引用。
 - ResearchEvent 是多来源证据归并后的领域对象；NotificationEvent 是通知模块消费的版本化集成消息。两者 ID/版本空间独立，转换必须显式映射并生成独立 event_id。
 - quality_status、Quant result_status、RiskDecision、Run/Stage/Attempt、ModelResponse.status、Delivery.status 分域管理；同名状态不可直接转换。Run partial 表示覆盖不完整；Run succeeded 仍可有 degraded 质量摘要；Risk unknown 不可 pass。
