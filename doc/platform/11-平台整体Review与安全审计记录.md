@@ -240,3 +240,10 @@
 ### 8.4 验收限制
 
 本轮只完成平台认证原语的静态审查和回归测试代码。需以新提交 SHA 的 Platform Go checks 验证 gofmt、单测、race test 和 vet；仍未完成实际服务路由接入、Gateway 入口隔离、部署 Secret 随机生成与凭证轮换演练。
+
+
+## 9. 本轮 Request ID 实现收敛（2026-11-06）
+
+历史 Analysis HTTP API 曾维护私有 Request ID Context Key、校验和生成逻辑，与平台 `observability` 包重复。本轮将 HTTP API Middleware 和日志读取统一委托给 `observability.Middleware` / `observability.FromContext`，删除私有实现。平台 Middleware 对重复的 `X-Request-ID` Header 不再选取其中一个值，而是生成新的 Request ID；HTTP API 回归测试覆盖重复 Header。
+
+该修复只证明根模块 Analysis HTTP API 使用了平台 Request ID 原语并通过包级测试，不代表 Data、News、Research 或其他服务入口已完成接入。

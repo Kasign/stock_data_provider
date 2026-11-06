@@ -120,6 +120,16 @@ func TestRequestIDIsReturnedAndInvalidIDIsReplaced(t *testing.T) {
 	if got := invalidResponse.Header().Get("X-Request-ID"); got == "" || got == "value containing spaces" {
 		t.Fatalf("invalid request ID was not replaced safely: got %q", got)
 	}
+
+	duplicate := httptest.NewRequest(http.MethodGet, "/healthz", nil)
+	duplicate.Header.Add("X-Request-ID", "client-id-one")
+	duplicate.Header.Add("X-Request-ID", "client-id-two")
+	duplicateResponse := httptest.NewRecorder()
+	api.Handler().ServeHTTP(duplicateResponse, duplicate)
+	values := duplicateResponse.Header().Values("X-Request-ID")
+	if len(values) != 1 || values[0] == "client-id-one" || values[0] == "client-id-two" {
+		t.Fatalf("duplicate request IDs were not replaced with one generated value: %q", values)
+	}
 }
 
 func TestCreateRunRejectsOversizedBody(t *testing.T) {

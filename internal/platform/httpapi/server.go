@@ -3,8 +3,6 @@ package httpapi
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -17,6 +15,7 @@ import (
 
 	"example.com/stock-analysis-flow/internal/adapters/storage"
 	"example.com/stock-analysis-flow/internal/analysis/domain"
+	"example.com/stock-analysis-flow/internal/platform/observability"
 )
 
 type Runner interface {
@@ -318,43 +317,11 @@ func (w *commitTrackingWriter) Write(data []byte) (int, error) {
 	return w.ResponseWriter.Write(data)
 }
 func requestIDMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		id := strings.TrimSpace(r.Header.Get("X-Request-ID"))
-		if !validRequestID(id) {
-			id = newRequestID()
-		}
-		w.Header().Set("X-Request-ID", id)
-		ctx := context.WithValue(r.Context(), requestIDKey{}, id)
-		next.ServeHTTP(w, r.WithContext(ctx))
-	})
+	return observability.Middleware(next)
 }
-
-type requestIDKey struct{}
 
 func requestIDFromContext(r *http.Request) string {
-	value, _ := r.Context().Value(requestIDKey{}).(string)
-	return value
-}
-
-func validRequestID(value string) bool {
-	if value == "" || len(value) > 128 {
-		return false
-	}
-	for _, r := range value {
-		if !((r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') ||
-			(r >= '0' && r <= '9') || r == '-' || r == '_' || r == '.' || r == ':') {
-			return false
-		}
-	}
-	return true
-}
-
-func newRequestID() string {
-	var value [16]byte
-	if _, err := rand.Read(value[:]); err == nil {
-		return hex.EncodeToString(value[:])
-	}
-	return time.Now().UTC().Format("20060102T150405.000000000Z")
+	return observability.FromContext(r.Context())
 }
 
 // requestLog 只记录请求元数据，不记录请求体、响应体、查询参数或鉴权头。
