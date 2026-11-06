@@ -12,7 +12,7 @@
 | JSON 命名 | snake_case；发布后不随 Go 字段重命名自动变化 |
 | ID / Ref | 不透明非空字符串；消费方不解析、不拼接、不推导内部 ID |
 | 时间 | RFC3339 UTC；交易日期单独使用 YYYY-MM-DD（Asia/Shanghai） |
-| as_of | 系统知识截止时间，不与交易日、published_at、valid_at 混用 |
+| system_as_of | 系统知识截止时间，不与交易日、published_at、valid_at 混用 |
 | 单位 | 金额 CNY、价格 CNY/股、数量 shares；百分比明确百分点或比例 |
 | 缺失 | 区分 required、optional、nullable；unknown 不转 0 / false / 空字符串 |
 | 状态 | 稳定枚举；消费方对未知枚举采取 fail-safe |
@@ -34,7 +34,7 @@
 | request_id | 是 | string | 跨模块关联 ID |
 | security_id | 条件必需 | string | 单证券分析必需；市场分析可缺省 |
 | scope | 是 | stock/market/industry | 分析范围 |
-| as_of | 是 | timestamp | 系统知识截止时间 |
+| system_as_of | 是 | timestamp | 系统知识截止时间 |
 | trade_date | 否 | date | 目标交易日，不替代 as_of |
 | period | 是 | string/enum | 分析周期，允许值由接口版本约束 |
 | input_snapshot_refs | 是 | string[] | Data 快照引用，保留来源与 PIT 元数据 |
@@ -54,7 +54,7 @@ Market/Industry 范围必须有明确证券全集或分类版本引用。allow_d
 | result_type | 是 | indicator/factor/trend/market/industry/stock/strategy/backtest/risk/evaluation | 结果类型 |
 | scope | 是 | stock/market/industry/portfolio | 结果范围 |
 | security_id | 条件必需 | string | 单证券结果引用 |
-| as_of | 是 | timestamp | 计算采用的系统知识截止时间 |
+| system_as_of | 是 | timestamp | 计算采用的系统知识截止时间 |
 | trade_date | 否 | date | 对应交易日 |
 | period | 是 | string | 结果周期 |
 | algorithm_version | 是 | string | 算法实现版本 |
@@ -74,7 +74,7 @@ completed 不代表 valid；消费方必须同时检查 result_status 和 qualit
 | value | 是 | string/number/null（由 metric_code 对应 Schema 固定） | 无有效数值时必须显式 null，由 metric_status 解释；精确数值与统计数值采用不同且固定的 JSON 类型 |
 | unit | 是 | string/enum | CNY、CNY/share、shares、percentage_point、ratio、day 等 |
 | period | 是 | string | 统计周期 |
-| as_of | 是 | timestamp | 知识截止时间 |
+| system_as_of | 是 | timestamp | 知识截止时间 |
 | quality_status | 是 | valid/degraded/invalid/unknown | 质量 |
 | metric_status | 是 | available/insufficient_data/insufficient_sample/not_applicable/unknown | 数值可用性 |
 | calculation_version | 是 | string | 公式/实现版本 |
@@ -96,7 +96,7 @@ completed 不代表 valid；消费方必须同时检查 result_status 和 qualit
 | evidence_metrics | 是 | QuantMetric[] | 支撑指标 |
 | conflict_refs | 是 | string[] | 周期冲突/反向结构引用 |
 | quality_status | 是 | enum | 质量 |
-| as_of | 是 | timestamp | 截止时间 |
+| system_as_of | 是 | timestamp | 截止时间 |
 | algorithm_version | 是 | string | 算法版本 |
 
 direction 与 phase 必须分开；unknown 不得用 sideways 代替。跨周期冲突必须显式表达。
@@ -109,7 +109,7 @@ direction 与 phase 必须分开；unknown 不得用 sideways 代替。跨周期
 | status | 是 | pass/reject/unknown | 硬风险结论 |
 | rule_set_version | 是 | string | 规则集版本 |
 | evaluated_at | 是 | timestamp | 评估时间 |
-| as_of | 是 | timestamp | 输入知识截止时间 |
+| system_as_of | 是 | timestamp | 输入知识截止时间 |
 | reasons | 是 | RiskReason[] | 命中、拒绝或未知原因 |
 | input_refs | 是 | string[] | 输入结果/快照引用 |
 
@@ -131,7 +131,7 @@ RiskReason 至少包含 code、severity（block/warn/info）、status（triggere
 | research_question | 是 | string | 研究问题 |
 | scope | 是 | market/industry/stock/event | 研究范围 |
 | subject_refs | 是 | string[] | 证券/行业/Event 引用 |
-| as_of | 是 | timestamp | 系统知识截止时间 |
+| system_as_of | 是 | timestamp | 系统知识截止时间 |
 | section_refs | 是 | ContextSectionRef[] | 分区引用及版本 |
 | quality_summary | 是 | QualitySummary | 完整性/质量概览 |
 | included_sections | 是 | string[] | 已包含分区 |
@@ -199,7 +199,7 @@ fact 必须有可验证来源与时间；reported_fact 只表示来源声称；i
 | statement | 是 | string | 可验证陈述 |
 | epistemic_type | 是 | reported_fact/inference/hypothesis | 陈述性质 |
 | scope_refs | 是 | string[] | 适用主体/范围 |
-| as_of | 是 | timestamp | 知识截止时间 |
+| system_as_of | 是 | timestamp | 知识截止时间 |
 | supporting_evidence_refs | 是 | string[] | 支持证据，可为空数组 |
 | contradicting_evidence_refs | 是 | string[] | 反证，可为空数组 |
 | required_data_refs | 是 | string[] | 验证所需数据引用 |
@@ -218,7 +218,7 @@ Claim 与 Hypothesis 可共享存储基类，但公开 DTO 必须明确 epistemi
 | scenario_id | 是 | string | 不透明 ID |
 | scenario_version | 是 | integer | 版本 |
 | subject_refs | 是 | string[] | 适用证券/行业 |
-| as_of | 是 | timestamp | 基准知识时点 |
+| system_as_of | 是 | timestamp | 基准知识时点 |
 | horizon | 是 | string | 预测周期 |
 | conditions | 是 | ScenarioCondition[] | 触发/前提条件 |
 | expected_path | 是 | string | 条件化路径描述 |
@@ -404,7 +404,7 @@ Event 可保留规范化 occurred_at 作为研究归一结果，但必须同时�
   "value": null,
   "unit": "ratio",
   "period": "20d",
-  "as_of": "2026-11-04T08:00:00Z",
+  "system_as_of": "2026-11-04T08:00:00Z",
   "quality_status": "unknown",
   "metric_status": "insufficient_data",
   "calculation_version": "volatility.v1",
@@ -422,7 +422,7 @@ Event 可保留规范化 occurred_at 作为研究归一结果，但必须同时�
   "value": "125000000.00",
   "unit": "CNY",
   "period": "1d",
-  "as_of": "2026-11-04T08:00:00Z",
+  "system_as_of": "2026-11-04T08:00:00Z",
   "quality_status": "valid",
   "metric_status": "available",
   "calculation_version": "turnover.v1",
@@ -442,7 +442,7 @@ Event 可保留规范化 occurred_at 作为研究归一结果，但必须同时�
   "status": "unknown",
   "rule_set_version": "risk.rules.v1",
   "evaluated_at": "2026-11-04T08:01:00Z",
-  "as_of": "2026-11-04T08:00:00Z",
+  "system_as_of": "2026-11-04T08:00:00Z",
   "input_refs": ["quant_result_example"],
   "reasons": [
     {
@@ -607,36 +607,36 @@ available_at=null 表示没有可验证的外部可获得时间，不得用 publ
 
 ### 11.5 CONTRACT-005：system_as_of 传播
 
-建议将 ResearchRun.as_of 作为一次研究运行唯一的系统知识截止时间：
+建议将 ResearchRun.system_as_of 作为一次研究运行唯一的系统知识截止时间：
 
 1. CreateRun 时确定并持久化 UTC 时间；重试 Stage 不得自动刷新。
 2. QuantAnalysisRequest、ResearchContext、Evidence 写入/查询和 News Query 均接收同一 system_as_of。
-3. 子对象的 system_as_of 不得晚于 Run.as_of；若来源数据在该时点不可见，必须排除或标记不可用。
-4. observed_at 是事实被系统观察的实际时间，不能为了满足 PIT 而回填成 Run.as_of。
+3. 子对象的 system_as_of 不得晚于 Run.system_as_of；若来源数据在该时点不可见，必须排除或标记不可用。
+4. observed_at 是事实被系统观察的实际时间，不能为了满足 PIT 而回填成 Run.system_as_of。
 5. trade_date 是交易日，不是知识截止时间；published_at 是来源声明时间，不是系统已知时间。
 6. 新建 Run 可选择新的 as_of；原 Run 的历史输入快照和结果不可被新时点覆盖。
 
 **建议决议：Run 固定 system_as_of，所有下游模块只消费该值；禁止 Stage 各自取当前时间。**
 
-### 11.6 本轮 Review 状态
+### 11.6 历史 Review 状态（由项目统一契约目录覆盖）
 
 | 决策 | 建议 | 当前状态 |
 |---|---|---|
-| CONTRACT-001 | 精确数值 string、计数 integer、统计数值 number，按指标编码固定 Schema | 待 Quant Owner 确认 |
-| CONTRACT-002 | 八项 Indicator 候选及 typed 参数 Schema | 待 Quant Owner 确认 |
-| CONTRACT-003 | 三项首批 Factor + 可选候选；与 Indicator 解耦 | 待 Quant Owner 确认 |
-| CONTRACT-004 | 统一不透明授权引用、来源 Owner 当前复核 | 待 Research/News Owner 确认 |
-| CONTRACT-005 | Run 唯一固定 system_as_of | 待 Research/Researchflow Owner 确认 |
+| CONTRACT-001（历史别名） | 数值 JSON 类型与精度按 Registry 固定 | 项目决议已接受；QNT-CTR-001 待 Schema/Golden |
+| CONTRACT-002（历史别名） | 八项 Indicator 候选及 typed 参数 Schema | 项目决议已接受；QNT-CTR-002 待 Schema/Golden |
+| CONTRACT-003（历史别名） | 首批三个 Factor 与算法边界 | 项目决议已接受；QNT-CTR-003 待 Schema/Golden |
+| CONTRACT-004（历史别名） | 不透明 AuthorizationRef 与来源 Owner 当前复核 | 项目决议已接受；NEWS-CTR-002/RSC-CTR-001 待 Schema/Golden |
+| CONTRACT-005（历史别名） | Run 唯一固定 system_as_of | 项目决议已接受；FLOW-CTR-003 待 Adapter Golden |
 
-**本轮结论：形成可供 Owner 逐项接受/修改的明确建议；未收到 Owner 确认前，不勾选冻结状态，不进入 L2 Module Ready。**
+**历史说明：本表最初是规划侧建议，不再要求虚构具体 Owner 签字。当前统一决议与状态以 `doc/整体任务规划/跨模块契约目录与冻结状态.md` 为准；项目决议已接受不等于 Schema/Golden/Contract Test 已通过。**
 
 ## 12. 五模块交叉契约映射补充（2026-11-06）
 
-- Researchflow `ResearchRun.as_of` 是 Run 唯一系统知识截止值。QuantAnalysisRequest/QuantResultRef、ResearchContext/Claim/Scenario 的 `as_of` 必须沿用该值；Evidence 的 `system_as_of` 与其语义相同，且不得晚于所属 Run。
-- `observed_at` 始终记录真实观察时间；不能用 system_as_of 回填。published_at/available_at/valid_time 保留各自来源时间和业务有效时间。Data API 的 as_of 映射由 Quant Data Adapter 负责，不改写 Data 自身时间语义。
+- Researchflow `ResearchRun.system_as_of` 是 Run 唯一系统知识截止值。QuantAnalysisRequest/QuantResultRef、ResearchContext/Claim/Scenario 的 `system_as_of` 必须沿用该值；Evidence 的 `system_as_of` 与其语义相同，且不得晚于所属 Run。
+- `observed_at` 始终记录真实观察时间；不能用 system_as_of 回填。published_at/available_at/valid_time 保留各自来源时间和业务有效时间。Data API 查询参数 `as_of` 的映射由 Quant Data Adapter 负责，不改写 Data 自身时间语义。
 - Evidence.authorization_ref 指向 EvidenceAuthorizationRef 审计快照，包含 policy_owner、policy_version、decision、purpose、content_level、subject_ref、decided_at、expires_at、conditions 和 decision_fingerprint。它不是永久访问令牌；读取受限内容仍需来源 Owner 当前授权复核。Evidence 不用 authorization_status 替代该引用。
 - ResearchEvent 是多来源证据归并后的领域对象；NotificationEvent 是通知模块消费的版本化集成消息。两者 ID/版本空间独立，转换必须显式映射并生成独立 event_id。
 - quality_status、Quant result_status、RiskDecision、Run/Stage/Attempt、ModelResponse.status、Delivery.status 分域管理；同名状态不可直接转换。Run partial 表示覆盖不完整；Run succeeded 仍可有 degraded 质量摘要；Risk unknown 不可 pass。
 - request_id 标识一次调用；correlation_id 贯穿链路；event_id 标识稳定事件；idempotency_key 标识命令意图。幂等使用 Owner 定义作用域与 fingerprint；相同键同指纹返回原结果，不同指纹冲突。
 
-**以上是字段语义校准，不替代 CONTRACT-001~005 Owner 决议，也不构成 Schema 冻结。**
+**以上字段语义由项目级契约目录统一治理；历史 CONTRACT-001~005 仅作为追溯别名。字段名统一使用 system_as_of；Schema/Golden/Contract Test 未完成前不构成 frozen。**
