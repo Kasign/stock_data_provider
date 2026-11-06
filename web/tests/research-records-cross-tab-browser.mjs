@@ -22,7 +22,7 @@ let browser;
 const noteKey = "stock-provider-webui.research-notes.v1";
 const reportKey = "stock-provider-webui.research-reports.v1";
 const note = (id, title, content, updatedAt = "2026-11-04T01:00:00.000Z") => ({ id, title, content, symbol: "600519.SH", taskId: "task-1", runId: "run-1", tags: ["基本面"], createdAt: "2026-11-03T01:00:00.000Z", updatedAt });
-const report = (id = "report-1", runId = "run-1") => ({ id, runId, taskId: "task-1", analysisBase: "/analysis-api", symbols: ["600519.SH"], status: "completed", corePass: true, asOf: "2026-11-04T09:30:00+08:00", createdAt: "2026-11-04T01:00:00.000Z", result: { run_id: runId, status: "completed", request: { symbols: ["600519.SH"], as_of: "2026-11-04T09:30:00+08:00" }, quality: { core_pass: true }, signals: [], warnings: ["<img src=x onerror=alert(1)>"] } });
+const report = (id = "report-1", runId = "run-1") => ({ id, runId, taskId: "task-1", analysisBase: "/analysis-api", symbols: ["600519.SH"], status: "completed", corePass: true, asOf: "2026-11-04T09:30:00+08:00", createdAt: "2026-11-04T01:00:00.000Z", result: { run_id: runId, status: "completed", request: { symbols: ["600519.SH"], as_of: "2026-11-04T09:30:00+08:00" }, quality: { core_pass: true }, signals: [], warnings: ["<img src=x onerror=alert(1)>", ...Array.from({ length: 24 }, (_, index) => "长报告滚动验收内容 " + (index + 1))] } });
 
 try {
   browser = await chromium.launch({ headless: true });
@@ -71,6 +71,7 @@ try {
 
   await second.evaluate(({ key, item }) => localStorage.setItem(key, JSON.stringify([item])), { key: reportKey, item: report() });
   await first.locator(".research-report-card").filter({ hasText: "run-1" }).waitFor();
+  await first.locator("#research-report-search").fill("600519");
   await first.locator('[data-report-action="open-report"]').click();
   await first.locator("#research-report-detail:not([hidden])").waitFor();
   assert.equal(await first.locator("#research-report-list").isVisible(), false, "report list is replaced by a dedicated detail workspace");
@@ -78,6 +79,19 @@ try {
   assert.ok(await first.locator("#research-report-document h2").count() >= 4, "Run result sections render as semantic headings");
   assert.ok(await first.locator("#research-report-toc button[data-report-section]").count() >= 4, "table of contents exposes section navigation controls");
   assert.equal(await first.locator("#research-report-document img").count(), 0, "report content is rendered as text and never interpreted as HTML");
+  assert.ok(await first.locator("#research-report-document").evaluate(node => node.scrollHeight > window.innerHeight), "long report content remains readable in the page scroll area");
+  for (const width of [320, 768, 1280, 1600]) {
+    await first.setViewportSize({ width, height: 900 });
+    await first.waitForTimeout(50);
+    assert.ok(await first.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1), "report detail must not overflow at " + width + "px");
+    const bounds = await first.locator("#research-report-document").evaluate(node => {
+      const rect = node.getBoundingClientRect();
+      return { width: rect.width, right: rect.right };
+    });
+    assert.ok(bounds.width > 0 && bounds.right <= width + 1, "report document stays within viewport at " + width + "px");
+    assert.equal(await first.locator("#research-report-toc").isVisible(), true, "report table of contents remains available at " + width + "px");
+  }
+  await first.setViewportSize({ width: 1280, height: 900 });
   const firstSection = first.locator("#research-report-toc button[data-report-section]").first();
   const targetId = await firstSection.getAttribute("data-report-section");
   await firstSection.click();
@@ -85,6 +99,7 @@ try {
   await first.locator("#research-report-back").click();
   await first.locator("#research-report-list:not([hidden])").waitFor();
   assert.equal(await first.locator("#research-report-detail").isVisible(), false, "back action restores the report list");
+  assert.equal(await first.locator("#research-report-search").inputValue(), "600519", "back action preserves the report search filter");
   await first.locator('[data-note-action="edit"][data-note-id="' + recreated[0].id + '"]').click();
   await first.locator("#research-note-title").fill("冲突中的旧草稿");
   await second.evaluate(({ key, item }) => localStorage.setItem(key, JSON.stringify([item])), {
