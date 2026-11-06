@@ -38,8 +38,9 @@ func TestValidateValuationSnapshotAllowsNegativeMultiplesAndNullableMetrics(t *t
 func TestValidateValuationSnapshotReportsFieldAndCoverageIssues(t *testing.T) {
 	snapshot := validValuationSnapshot()
 	snapshot.Items[0].TurnoverRatePercent = valuationFloatPointer(-1)
+	snapshot.RequestedSymbols = []string{"600000.SH", "600001.SH"}
 	snapshot.MissingSymbols = []string{"600001.SH"}
-	report := ValidateValuationSnapshot(snapshot, []string{"600000.SH"})
+	report := ValidateValuationSnapshot(snapshot, []string{"600000.SH", "600001.SH"})
 	if !report.HasErrors() {
 		t.Fatal("expected negative ratio to be an error")
 	}
