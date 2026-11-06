@@ -87,3 +87,55 @@ func TestContextJSONRoundTripPreservesRequiredEmptyArrays(t *testing.T) {
         t.Fatal("required empty arrays must remain non-null after JSON round-trip")
     }
 }
+
+
+func TestContextValidateNextVersion(t *testing.T) {
+	previous := validContext()
+	next := validContext()
+	next.ContextVersion = 2
+	next.CreatedAt = next.CreatedAt.Add(time.Minute)
+	next.SystemAsOf = next.SystemAsOf.Add(time.Minute)
+	for i := range next.SectionRefs {
+		next.SectionRefs[i].SystemAsOf = next.SystemAsOf
+		next.SectionRefs[i].AssembledAt = next.SystemAsOf
+	}
+	if err := next.ValidateNextVersion(previous); err != nil {
+		t.Fatalf("valid next version unexpectedly failed: %v", err)
+	}
+}
+
+func TestContextValidateNextVersionRejectsInvalidProgression(t *testing.T) {
+	tests := []struct {
+		name   string
+		mutate func(*Context)
+		want   string
+	}{
+		{"context id changed", func(c *Context) { c.ContextID = "ctx-002" }, "context_id"},
+		{"version skipped", func(c *Context) { c.ContextVersion = 3 }, "increment by exactly one"},
+		{"knowledge cutoff moved backwards", func(c *Context) {
+			c.SystemAsOf = c.SystemAsOf.Add(-time.Minute)
+			for i := range c.SectionRefs {
+				c.SectionRefs[i].SystemAsOf = c.SystemAsOf
+			}
+		}, "system_as_of cannot move backwards"},
+		{"created time moved backwards", func(c *Context) { c.CreatedAt = c.CreatedAt.Add(-time.Minute) }, "created_at cannot move backwards"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			previous := validContext()
+			next := validContext()
+			next.ContextVersion = 2
+			next.CreatedAt = next.CreatedAt.Add(time.Minute)
+			next.SystemAsOf = next.SystemAsOf.Add(time.Minute)
+			for i := range next.SectionRefs {
+				next.SectionRefs[i].SystemAsOf = next.SystemAsOf
+				next.SectionRefs[i].AssembledAt = next.SystemAsOf
+			}
+			tt.mutate(&next)
+			err := next.ValidateNextVersion(previous)
+			if err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("ValidateNextVersion() error = %v, want containing %q", err, tt.want)
+			}
+		})
+	}
+}

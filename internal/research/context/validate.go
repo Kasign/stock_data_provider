@@ -244,3 +244,29 @@ func validateUniqueStrings(name string, values []string) error {
     }
     return nil
 }
+
+
+// ValidateNextVersion verifies immutable Context version progression.
+// It checks only version-chain invariants; referenced resources and their
+// current authorization remain the responsibility of their owning modules.
+func (next Context) ValidateNextVersion(previous Context) error {
+	if err := previous.Validate(); err != nil {
+		return fmt.Errorf("previous Context: %w", err)
+	}
+	if err := next.Validate(); err != nil {
+		return fmt.Errorf("next Context: %w", err)
+	}
+	if next.ContextID != previous.ContextID {
+		return fmt.Errorf("context_id cannot change across versions")
+	}
+	if next.ContextVersion != previous.ContextVersion+1 {
+		return fmt.Errorf("context_version must increment by exactly one")
+	}
+	if next.SystemAsOf.Before(previous.SystemAsOf) {
+		return fmt.Errorf("system_as_of cannot move backwards across Context versions")
+	}
+	if next.CreatedAt.Before(previous.CreatedAt) {
+		return fmt.Errorf("created_at cannot move backwards across Context versions")
+	}
+	return nil
+}
