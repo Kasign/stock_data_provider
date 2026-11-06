@@ -58,6 +58,7 @@ type Queue struct {
 	cancel      context.CancelFunc
 	runCtx      context.Context
 	wg          sync.WaitGroup
+	createWG    sync.WaitGroup
 	startOnce   sync.Once
 	closeOnce   sync.Once
 	lifecycleMu sync.Mutex
@@ -147,6 +148,7 @@ func (q *Queue) Close() {
 	q.lifecycleMu.Unlock()
 	q.closeOnce.Do(func() {
 		q.wg.Wait()
+		q.createWG.Wait()
 	})
 }
 
@@ -159,8 +161,10 @@ func (q *Queue) Create(ctx context.Context, req domain.RunRequest, idempotencyKe
 		q.lifecycleMu.Unlock()
 		return Task{}, false, ErrQueueClosed
 	}
+	q.createWG.Add(1)
 	runCtx := q.runCtx
 	q.lifecycleMu.Unlock()
+	defer q.createWG.Done()
 
 	createCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
