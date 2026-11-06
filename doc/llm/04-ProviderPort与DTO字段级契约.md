@@ -39,7 +39,7 @@
 
 使用 supported / unsupported / unknown 三态，默认 unknown。
 
-首批能力键：responses_json、responses_stream、structured_output_json_schema、function_tool_calls、reasoning_effort、usage_details。
+首批能力键：responses_json、responses_stream、structured_output_json_schema、function_tool_calls、reasoning_effort、sampling_parameters、usage_details。temperature/top_p 仅在 sampling_parameters=supported 时发送。
 
 能力状态必须绑定 provider_id、model_id、Gateway 版本和验证时间。Gateway 升级或模型更换后，历史结果不能自动沿用为 supported。路由存在只证明协议路径可达，不证明上游模型完整支持该能力。
 
