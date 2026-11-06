@@ -122,30 +122,24 @@ Research Application 至少提供 Context、Evidence、ResearchEvent、Claim/Hyp
 
 ```text
 ResearchRun {
-  run_id, request_id, request_type, security_ids[], as_of,
+  run_id, request_id, correlation_id, request_type, security_ids[], as_of,
   workflow_template_id, workflow_template_version, status,
-  termination_reason?, deadline_at,
-  input_snapshot_refs[], result_ref?, result_summary?,
-  created_at, started_at?, finished_at?
+  termination_reason?, deadline_at, version, idempotency_key,
+  input_snapshot_refs[], result_ref?, result_summary?, created_at, started_at?, finished_at?
 }
 ResearchStage {
-  stage_id, run_id, stage_code, stage_version, required,
-  depends_on[], status, latest_attempt_no, propagation_policy,
-  blocked_by_stage_codes[], reason_code?
+  stage_id, run_id, stage_code, stage_version, required, depends_on[],
+  status, latest_attempt_no, retry_policy, propagation_policy,
+  gate_type?, blocked_by_stage_codes[], reason_code?
 }
 ResearchAttempt {
   attempt_id, stage_id, attempt_no, status, started_at?, finished_at?,
   deadline_at, lease_owner?, lease_expires_at?, fencing_token,
-  input_refs[], output_ref?, error_code?, safe_message?
+  input_refs[], output_ref?, error_code?, retryable?, safe_message?
 }
 ```
 
-- Run：created/queued/running/cancelling 为非终态；succeeded/partial/failed/cancelled 为终态。Run 不设置 degraded/timed_out；质量降级由结果摘要表达，超时由 Stage/Attempt 表达并按模板归并。termination_reason 区分 user_cancelled 与 deadline_exceeded。
-- Stage：pending/ready/running/succeeded/degraded/skipped/failed/timed_out/cancelled/blocked；Attempt：running/succeeded/degraded/failed/timed_out/cancelled。blocked 不创建 Attempt；skipped 仅用于模板裁剪/不适用。
-- Stage 的传播策略随 Workflow Template 版本化；Stage degraded 可被接受但仍标记结果质量 degraded，也可映射 Run partial/failed。Run partial 必须给出缺失阶段、原因和 coverage。
-- 重试创建新 Attempt，不覆盖历史；Run cancel 先进入 cancelling，拒绝新执行并等待在途 Attempt 收敛；Run deadline 触发超时路径，不增加 Run.timed_out。
-- cancel/完成通过原子 CAS 决胜；deadline 是硬边界；Worker 租约过期后以 fencing token 阻止旧 Worker 迟到写入。DAG 必须无环；并行阶段共享同一 Run 的 as_of 与输入快照。
-- Workflow Template、Stage、算法均版本化。Run/Stage/Attempt 存储归 Researchflow，不归 Platform。
+状态枚举、传播矩阵、RetryPolicy、Hard Risk Gate、actionability_status、Cancel/Deadline 和 fencing 的权威语义见 [Researchflow CONTRACT-006/007 最终决议](../researchflow/03-CONTRACT-006与007最终决议.md)。Schema 摘要不得替代字段级契约；Run/Stage 使用 version/CAS，Attempt 终态不可变，所有领域 Repository/Migration 归 Researchflow。
 
 ## 7. LLM：模型调用
 
