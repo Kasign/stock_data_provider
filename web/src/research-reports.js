@@ -118,7 +118,7 @@ function appendInlineMarkdown(parent, value) {
   const text = String(value || "");
   const pattern = new RegExp("(\\x60+)(.+?)\\1", "g");
   const appendPlainText = value => parent.append(document.createTextNode(
-    value.replace(/\\([\x60\\*_{}\[\]|<>~])/g, "$1")
+    value.replace(/\\\\([\\\\x60*_{}\\[\\]()#+.!|>~-])/g, "$1")
   ));
   let offset = 0, match;
   while ((match = pattern.exec(text))) {
@@ -149,7 +149,7 @@ export function renderResearchReportMarkdown(markdown, contentHost, tocHost) {
     if (heading) {
       const level = heading[1].length;
       const element = document.createElement("h" + level);
-        element.textContent = heading[2].replace(/\\([\x60\\*_{}\[\]|<>~])/g, "$1");
+      element.textContent = heading[2].replace(/\\([\\x60*_{}\[\]()#+.!|>~-])/g, "$1");
       if (level === 1) {
         element.className = "research-report-document-title";
         activeContainer = contentHost;
@@ -168,7 +168,7 @@ export function renderResearchReportMarkdown(markdown, contentHost, tocHost) {
         link.type = "button";
         link.className = "research-report-toc-link";
         link.dataset.reportSection = section.id;
-        link.textContent = heading[2].replace(/\\([\x60\\*_{}\[\]|<>~])/g, "$1");
+        link.textContent = heading[2].replace(/\\\\([\\\\x60*_{}\\[\\]()#+.!|>~-])/g, "$1");
         item.append(link);
         tocHost.append(item);
       } else {
@@ -265,6 +265,7 @@ export function bindResearchReports({ root = document, storage, onOpenTask = () 
     renderActions(item, $("#research-report-detail-actions"), false);
     renderResearchReportMarkdown(buildRunResultMarkdown(item.result),
       $("#research-report-document"), $("#research-report-toc"));
+    host.replaceChildren();
     host.hidden = true;
     detail.hidden = false;
   };

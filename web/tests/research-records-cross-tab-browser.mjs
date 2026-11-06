@@ -104,7 +104,7 @@ try {
   await first.locator("#research-report-clear").click();
   assert.equal(await first.locator("#research-report-count").textContent(), "显示 1 / 1 份报告");
   assert.equal(await first.locator("#research-report-clear").isDisabled(), true);
-  await first.locator('[data-report-action="create-note"]').click();
+  await first.locator('#research-report-list [data-report-action="create-note"]').click();
   assert.equal(await first.locator(".research-note-conflict-actions").isVisible(), false,
     "creating a note from a report must clear the previous note conflict actions");
   assert.equal(await first.locator("#research-note-title").inputValue(), "Run run-1 研究记录");
