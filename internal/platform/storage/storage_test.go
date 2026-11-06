@@ -250,6 +250,7 @@ type migrationTestState struct {
 	failStatement            bool
 	statements               []string
 	failLockAcquire          bool
+	lockResultNull           bool
 	lockAcquired             bool
 	lockReleased             bool
 	failLockRelease          bool
@@ -302,9 +303,11 @@ func (c migrationTestConn) QueryContext(_ context.Context, query string, _ []dri
 		if c.state.failLockAcquire {
 			return nil, errors.New("private lock acquisition detail")
 		}
-		value := int64(0)
-		if c.state.lockAcquired {
-			value = 1
+		var value driver.Value = int64(0)
+		if c.state.lockResultNull {
+			value = nil
+		} else if c.state.lockAcquired {
+			value = int64(1)
 		}
 		return &migrationTestRows{columns: []string{"locked"}, values: [][]driver.Value{{value}}}, nil
 	case strings.Contains(query, "RELEASE_LOCK"):
