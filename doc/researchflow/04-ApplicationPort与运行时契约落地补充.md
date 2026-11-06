@@ -143,5 +143,5 @@ Fake Repository/Fake Clock/Fake Provider 只证明模块内逻辑；MariaDB/Redi
 - CreateRun parameters 以 RawMessage 纳入待规范化 JSON；避免先经 `UseNumber`/map 解码导致 duplicate-key 被静默覆盖。JCS canonicalizer 必须拒绝 duplicate key。
 - input_snapshot_refs、Template.Stages、Stage.Dependencies、RetryableReasonCodes 按契约集合语义排序；真正有序的参数数组保留原顺序。
 - 时间先显式转 UTC，再进入 JSON 对象；tracing 字段仍不参与 RequestFingerprint。
-- 依赖：`github.com/gowebpki/jcs@v0.0.0-20260921015938-f5011b64e085`（模块 Go 1.21）。
+- 依赖：`github.com/gowebpki/jcs@v1.0.2`（模块 Go 1.21）。
 - 当前提交只完成 JCS 接入和等价输入/重复键测试代码；Golden 固定摘要、RFC 8785 全量测试执行记录仍待补充。

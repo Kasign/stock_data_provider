@@ -52,7 +52,7 @@ func TestFingerprintCanonicalizesJSONAndSetLikeCollections(t *testing.T) {
 	a := testTemplate()
 	b := testTemplate()
 	b.Stages[0], b.Stages[1] = b.Stages[1], b.Stages[0]
-	b.Stages[1].Dependencies = []string{}
+	b.Stages[1].Dependencies = nil
 	b.Stages[0].Dependencies = []string{"market"}
 	fa, err := Fingerprint(a)
 	if err != nil { t.Fatal(err) }

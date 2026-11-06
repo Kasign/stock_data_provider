@@ -97,7 +97,7 @@ func RequestFingerprint(callerRef string, cmd CreateRunCommand) (string, error) 
 	if err != nil {
 		return "", fmt.Errorf("%w: canonicalize create run fingerprint: %v", ErrInvalidCommand, err)
 	}
-	sum := sha256.Sum256(raw)
+	sum := sha256.Sum256(canonical)
 	return hex.EncodeToString(sum[:]), nil
 }
 

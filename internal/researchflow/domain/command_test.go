@@ -36,6 +36,7 @@ func TestRequestFingerprintCanonicalizesParametersAndExcludesTracing(t *testing.
 	fa,err:=RequestFingerprint("caller-a",a);if err!=nil{t.Fatal(err)}
 	fb,err:=RequestFingerprint("caller-a",b);if err!=nil{t.Fatal(err)}
 	if fa!=fb{t.Fatal("semantic-equivalent request produced different fingerprint")}
+	if fa != "b6f556621d19608b4f6a71afe8c568ad855e320415bf83bf4c9d89d65d19b861" { t.Fatalf("RequestFingerprint golden mismatch: %s", fa) }
 	fc,err:=RequestFingerprint("caller-b",a);if err!=nil{t.Fatal(err)}
 	if fa==fc{t.Fatal("caller scope missing from fingerprint")}
 	if err:=ValidateIdempotentReplay(fa,fc);!errors.Is(err,ErrIdempotencyConflict){t.Fatalf("expected idempotency conflict, got %v",err)}
@@ -45,7 +46,7 @@ func TestRequestFingerprintCanonicalizesParametersAndExcludesTracing(t *testing.
 func TestRequestFingerprintUsesJCSNumberAndUnicodeRules(t *testing.T) {
 	now := time.Date(2026, 11, 6, 10, 0, 0, 0, time.UTC)
 	a, b := commandAt(now), commandAt(now)
-	a.Parameters = json.RawMessage(`{"value":1.0,"negative_zero":-0,"unicode":"\\u0065"}`)
+	a.Parameters = json.RawMessage(`{"value":1.0,"negative_zero":-0,"unicode":"\u0065"}`)
 	b.Parameters = json.RawMessage(`{ "unicode":"e", "negative_zero":0.0, "value":1 }`)
 	fa, err := RequestFingerprint("caller-a", a)
 	if err != nil { t.Fatal(err) }
