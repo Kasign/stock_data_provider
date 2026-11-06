@@ -16,13 +16,14 @@ const (
 	ClassInternal        Class = "internal"
 )
 
-// Fault 是内部错误链与跨层错误分类结构；HTTP transport 必须映射到独立公开 DTO，禁止直接序列化。
+// Fault 是仅供进程内部使用的错误结构。所有字段均禁止 JSON 序列化；
+ // HTTP transport 必须显式映射到独立公开 DTO。
 type Fault struct {
-	Class       Class  `json:"class"`
-	Code        string `json:"code"`
-	SafeMessage string `json:"safe_message"`
-	Dependency  string `json:"dependency,omitempty"`
-	Retryable   bool   `json:"retryable"`
+	Class       Class  `json:"-"`
+	Code        string `json:"-"`
+	SafeMessage string `json:"-"`
+	Dependency  string `json:"-"`
+	Retryable   bool   `json:"-"`
 	Cause       error  `json:"-"`
 }
 
