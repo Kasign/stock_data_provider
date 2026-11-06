@@ -49,20 +49,20 @@ type Event struct {
 }
 
 type Queue struct {
-	db        *sql.DB
-	runner    Runner
-	workers   int
-	maxQueued int
-	timeout   time.Duration
-	pollEvery time.Duration
-	cancel    context.CancelFunc
-	wg        sync.WaitGroup
-	startOnce    sync.Once
-	closeOnce    sync.Once
-	lifecycleMu  sync.Mutex
-	startErr     error
-	closed       bool
-	createMu     sync.Mutex
+	db          *sql.DB
+	runner      Runner
+	workers     int
+	maxQueued   int
+	timeout     time.Duration
+	pollEvery   time.Duration
+	cancel      context.CancelFunc
+	wg          sync.WaitGroup
+	startOnce   sync.Once
+	closeOnce   sync.Once
+	lifecycleMu sync.Mutex
+	startErr    error
+	closed      bool
+	createMu    sync.Mutex
 }
 
 func New(db *sql.DB, runner Runner, workers, maxQueued int, timeout, pollEvery time.Duration) (*Queue, error) {
@@ -196,7 +196,10 @@ func (q *Queue) Create(ctx context.Context, req domain.RunRequest, idempotencyKe
 	if err != nil {
 		if idempotencyKey != "" {
 			existing, storedRequest, findErr := q.findByIdempotencyKey(ctx, idempotencyKey)
-			if findErr == nil && sameRequest(storedRequest, req) {
+			if findErr == nil {
+				if !sameRequest(storedRequest, req) {
+					return zero, false, ErrIdempotency
+				}
 				current, getErr := q.Get(ctx, existing.TaskID)
 				if getErr == nil {
 					return current, false, nil
