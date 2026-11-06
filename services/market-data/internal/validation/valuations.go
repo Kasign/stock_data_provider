@@ -149,7 +149,7 @@ func ValidateValuationSnapshot(snapshot *model.ValuationSnapshot, requested []st
 	missing := make(map[string]struct{}, len(snapshot.MissingSymbols))
 	for i, symbol := range snapshot.MissingSymbols {
 		if _, ok := expected[symbol]; !ok {
-			add(symbol, fmt.Sprintf("missing_symbols[%d]", i), "missing_symbols", "requested symbol", "valuation snapshot marks an unrequested symbol as missing", SeverityError, i)
+			add(symbol, fmt.Sprintf("missing_symbols[%d]", i), "missing_symbols", "unrequested_symbol", "requested symbol", "valuation snapshot marks an unrequested symbol as missing", SeverityError, i)
 		}
 		if _, returned := seen[symbol]; returned {
 			add(symbol, "missing_symbols", "missing_symbols", "returned_and_missing", "symbol either returned or missing, never both", "valuation symbol is both returned and marked missing", SeverityError, i)
