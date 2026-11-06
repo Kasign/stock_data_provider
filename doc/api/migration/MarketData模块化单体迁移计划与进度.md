@@ -1846,7 +1846,7 @@ M2/M4 必须将 Worker 改为可管理对象或显式 Start/Stop/Wait：
 **当前状态：** M0 仍未通过，M1 不准入。审计已足以形成一组边界清晰的 MDM-001 修正任务；下一步应优先取得脱敏数据库 Schema 证据，同时等待/确认是否授权当前分支实施 CT-01～CT-06。不得把“测试覆盖不足”误写为“现有运行时校验不存在”。
 ### 2026-11-06：CT-01～CT-06 实施进度（用户已授权）
 
-实施基线：7e91042753f8ffe6b3b6b14b762219453bba0493。仅修改 feat/full-go-data-providers-api-switch；未触碰其他分支或其他模块；PR #1 仍保持 Open/Draft。
+实施基线：c44a7e8aea91243efa2285175eef00c9346809f5。仅修改 feat/full-go-data-providers-api-switch；未触碰其他分支或其他模块；PR #1 仍保持 Open/Draft。
 
 #### CT-01：认证与路由一致性
 - 经重新读取 Server.auth，Data HTTP Adapter 接受 X-API-Key 与 Authorization: Bearer 两种凭据格式，两者校验同一个 Data API Key。此前“只接受 X-API-Key”的审计结论错误。
@@ -1856,8 +1856,8 @@ M2/M4 必须将 Worker 改为可管理对象或显式 Start/Stop/Wait：
 
 #### CT-02：Error Response 契约
 - Error.error.required 已修正为 class/code/message/retryable；request_id 仍为可选字段。
-- 当前 OpenAPI 已声明的 118 个非成功响应均增加 application/json 内容并引用 components.schemas.Error。
-- 新增 YAML 解析测试，逐 Operation 验证所有已声明的 4xx/5xx 响应都引用统一 Error Schema。
+- 当前 OpenAPI 已声明的 119 个非成功响应均增加 application/json 内容并引用 components.schemas.Error。
+- 新增 YAML 解析测试，逐 Operation 验证所有已声明的 4xx/5xx 响应都引用统一 Error Schema，并要求全部 33 个受保护业务 Operation 声明 401；已补齐 diagnostics 的 401。
 - 尚需结合 Handler 状态码矩阵复核漏声明的状态码（特别是取消请求 408 的稳定可达性）；不能将 408 无差别添加到全部 Operation。
 
 #### CT-03：Model ↔ Schema
