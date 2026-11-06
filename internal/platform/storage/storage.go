@@ -251,7 +251,13 @@ func ApplyMigrations(ctx context.Context, db *sql.DB, namespace string, migratio
 		_ = conn.Raw(func(any) error { return driver.ErrBadConn })
 		return dependencyFault("sql", "platform.storage.migration_lock_failed", "could not acquire migration lock", err)
 	}
-	if !acquired.Valid || acquired.Int64 != 1 {
+	if !acquired.Valid {
+		// MariaDB returns NULL when GET_LOCK cannot determine a result. Treat
+		// ownership as ambiguous and discard the physical connection.
+		_ = conn.Raw(func(any) error { return driver.ErrBadConn })
+		return dependencyFault("sql", "platform.storage.migration_lock_failed", "could not confirm migration lock ownership", errors.New("migration lock result is NULL"))
+	}
+	if acquired.Int64 != 1 {
 		return dependencyFault("sql", "platform.storage.migration_lock_busy", "another migration is running", errMigrationLockUnavailable)
 	}
 

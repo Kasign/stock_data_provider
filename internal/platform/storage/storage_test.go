@@ -507,6 +507,29 @@ func TestApplyMigrationsDiscardsConnectionWhenLockAcquisitionIsAmbiguous(t *test
 	}
 }
 
+func TestApplyMigrationsDiscardsConnectionWhenLockResultIsNull(t *testing.T) {
+	state := &migrationTestState{
+		applied: make(map[uint64]string), pending: make(map[uint64]string),
+		failed: make(map[uint64]int), lockResultNull: true,
+	}
+	db := sql.OpenDB(migrationTestConnector{state: state})
+	defer db.Close()
+
+	err := ApplyMigrations(context.Background(), db, "analysis", []Migration{{
+		Version: 1, Description: "create", Statements: []string{"CREATE TABLE sample (id INT)"},
+	}})
+	var platformFault *fault.Fault
+	if !errors.As(err, &platformFault) || platformFault.Code != "platform.storage.migration_lock_failed" {
+		t.Fatalf("expected ambiguous lock result failure, got %v", err)
+	}
+	if !state.physicalConnClosed {
+		t.Fatal("connection with a NULL advisory-lock result was returned to the pool")
+	}
+	if state.historyCreated || len(state.statements) != 0 {
+		t.Fatalf("migration ran without confirmed lock ownership: %+v", state)
+	}
+}
+
 func TestApplyMigrationsDiscardsConnectionWhenLockReleaseFails(t *testing.T) {
 	state := &migrationTestState{
 		applied: make(map[uint64]string), pending: make(map[uint64]string),
