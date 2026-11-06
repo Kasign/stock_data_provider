@@ -274,6 +274,19 @@ func TestDraft2020SchemaRejectsOtherDialectAndRemoteRefs(t *testing.T) {
 	}
 }
 
+func TestDraft2020SchemaRejectsNestedOtherDialect(t *testing.T) {
+	mixedDialect := []byte(`{
+		"$schema":"https://json-schema.org/draft/2020-12/schema",
+		"$defs":{"legacy":{
+			"$schema":"http://json-schema.org/draft-07/schema#",
+			"type":"string"
+		}}
+	}`)
+	if _, err := CompileJSONSchema(mixedDialect); !errors.Is(err, ErrInvalidJSONSchema) {
+		t.Fatalf("nested non-2020 dialect must be rejected, got %v", err)
+	}
+}
+
 func TestDraft2020SchemaDepthLimit(t *testing.T) {
 	nested := `{"type":"integer"}`
 	for i := 0; i < MaxJSONDepth+1; i++ {

@@ -42,13 +42,8 @@ func CompileJSONSchema(raw []byte) (*jsonschema.Schema, error) {
 	if err != nil {
 		return nil, ErrInvalidJSONSchema
 	}
-	if object, ok := document.(map[string]any); ok {
-		if declared, exists := object["$schema"]; exists {
-			dialect, ok := declared.(string)
-			if !ok || dialect != draft2020SchemaURI {
-				return nil, ErrInvalidJSONSchema
-			}
-		}
+	if !schemaDialectsAreDraft2020(document) {
+		return nil, ErrInvalidJSONSchema
 	}
 
 	compiler := jsonschema.NewCompiler()
@@ -63,6 +58,31 @@ func CompileJSONSchema(raw []byte) (*jsonschema.Schema, error) {
 		return nil, ErrInvalidJSONSchema
 	}
 	return compiled, nil
+}
+
+// schemaDialectsAreDraft2020 rejects mixed-dialect embedded schema resources.
+func schemaDialectsAreDraft2020(value any) bool {
+	switch current := value.(type) {
+	case map[string]any:
+		if declared, exists := current["$schema"]; exists {
+			dialect, ok := declared.(string)
+			if !ok || dialect != draft2020SchemaURI {
+				return false
+			}
+		}
+		for _, child := range current {
+			if !schemaDialectsAreDraft2020(child) {
+				return false
+			}
+		}
+	case []any:
+		for _, child := range current {
+			if !schemaDialectsAreDraft2020(child) {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 // ValidateJSONAgainstSchema validates a bounded JSON instance against a
