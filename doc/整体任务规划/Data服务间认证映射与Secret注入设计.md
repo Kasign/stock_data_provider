@@ -137,7 +137,7 @@ Upstream Providers
 - caller principal 是服务端登记的稳定身份引用；同一 principal 的 Key 轮换不改变 subject_ref。Key 撤销、principal 禁用或 Scope 收窄必须在下一次读取生效。
 - Data v2 请求的 purpose_code 必填且受 Scope 限制；客户端不得提交 subject_ref/caller_ref。认证失败返回 401；认证成功但 Scope 不足返回 403；授权依赖不可用返回 503。不得把这些状态归类为 Provider 故障。
 - `schema/DATA-CTR-008-snapshot-manifest-1.0.0.schema.json` 定义授权引用绑定的最小 Snapshot Manifest。Manifest 只包含查询范围和来源版本元数据，不包含数据正文或任何 Secret。
-- Snapshot Manifest 的 `manifest_fingerprint` 对除 `snapshot_ref`、`manifest_fingerprint` 外的字段执行 RFC 8785 JCS + SHA-256；`snapshot_ref` 必须为 `data_snapshot:sha256:<manifest_fingerprint>`。同一规范化 Manifest 必须得到同一引用，任何绑定字段变化必须得到不同引用。
+- Snapshot Manifest 的 `manifest_fingerprint` 对除 `snapshot_ref`、`manifest_fingerprint` 外的字段执行 RFC 8785 JCS + SHA-256；`sources` 按 `(source_ref, source_version)` 字典序排序且不得重复；`snapshot_ref` 必须为 `data_snapshot:sha256:<manifest_fingerprint>`。同一规范化 Manifest 必须得到同一引用，任何绑定字段变化必须得到不同引用。Golden：`golden/DATA-CTR-008-snapshot-manifest.golden.json`。
 - GOV-CTR-006 的 `decision_fingerprint` 仍严格遵循公共算法；通过 resource_ref 指向内容寻址 snapshot_ref，避免为 Data 单独扩展或改变公共算法。
 - 授权检查与 Snapshot Manifest/数据读取必须处于同一可证明的策略版本边界；检查后策略版本变化时重新授权，无法证明一致性则丢弃结果并 fail closed。
 
