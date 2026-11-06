@@ -15,6 +15,7 @@ Notification 是独立通知业务模块，负责事件接收、Subscription、T
 - [Application Port 与投递状态契约](03-ApplicationPort与投递状态契约.md)
 - [契约 Fixture 与状态迁移验收清单](04-契约Fixture与状态迁移验收清单.md)
 - [首批业务事件映射决议（INT-CTR-001）](05-首批业务事件映射决议.md)
+- [事件接收与投递状态契约对齐补充](06-事件接收与投递状态契约对齐补充.md)
 - [首批 JSON Schema](schema/)
 - [首批 Golden 样例](golden/)
 
