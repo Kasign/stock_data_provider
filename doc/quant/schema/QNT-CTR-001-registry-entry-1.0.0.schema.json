@@ -17,6 +17,35 @@
     "quality_policy",
     "supports_interval"
   ],
+  "allOf": [
+    {
+      "if": { "properties": { "value_type": { "const": "decimal_string" } }, "required": ["value_type"] },
+      "then": {
+        "properties": {
+          "precision": { "properties": { "tolerance": { "type": "string" } } },
+          "range": { "properties": { "minimum": { "type": "string" }, "maximum": { "type": "string" } } }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "value_type": { "const": "integer" } }, "required": ["value_type"] },
+      "then": {
+        "properties": {
+          "precision": { "properties": { "max_fraction_digits": { "const": 0 }, "tolerance": { "type": "integer" } } },
+          "range": { "properties": { "minimum": { "type": "integer" }, "maximum": { "type": "integer" } } }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "value_type": { "const": "number" } }, "required": ["value_type"] },
+      "then": {
+        "properties": {
+          "precision": { "properties": { "tolerance": { "type": "number" } } },
+          "range": { "properties": { "minimum": { "type": "number" }, "maximum": { "type": "number" } } }
+        }
+      }
+    }
+  ],
   "properties": {
     "code": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
     "schema_version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.-]+)?$" },
