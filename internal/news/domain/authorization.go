@@ -219,9 +219,6 @@ func EvaluateNewsAuthorizationUse(binding NewsAuthorizationBinding, now time.Tim
 		if len(ref.Conditions) != 0 {
 			return AuthorizationUseDecision{ReasonCode: "news.authorization.allowed_with_conditions"}
 		}
-		if authorizationContentRank(ref.ContentLevel) < authorizationContentRank(binding.RequestedContentLevel) {
-			return AuthorizationUseDecision{ReasonCode: "news.authorization.content_level_exceeded"}
-		}
 		return AuthorizationUseDecision{Allowed: true}
 	case AuthorizationDecisionConditional:
 		return AuthorizationUseDecision{ReasonCode: "news.authorization.conditional_not_satisfied"}

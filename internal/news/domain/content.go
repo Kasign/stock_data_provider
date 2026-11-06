@@ -111,9 +111,11 @@ func RestrictContentLayers(layers ContentLayers, requested ContentKind) ContentL
 		bodyLevel, known := AuthorizationContentLevelForKind(layers.Body.Kind)
 		if !known || authorizationContentRank(bodyLevel) > maxRank {
 			layers.Body = nil
-			layers.BodyDeclaredTypeRaw = ""
-			layers.ExternalBodyReference = ""
 		}
+	}
+	if layers.Body == nil {
+		layers.BodyDeclaredTypeRaw = ""
+		layers.ExternalBodyReference = ""
 	}
 	layers.Attachments = nil
 	return NormalizeContentLayers(layers)

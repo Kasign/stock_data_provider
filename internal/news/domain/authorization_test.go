@@ -135,7 +135,7 @@ func TestEvaluateNewsAuthorizationUseChecksLevelAndTime(t *testing.T) {
 	lowerLevel := base
 	lowerLevel.AuthorizationRef.ContentLevel = AuthorizationContentMetadata
 	decision := EvaluateNewsAuthorizationUse(lowerLevel, now)
-	if decision.Allowed || decision.ReasonCode != "news.authorization.content_level_exceeded" {
+	if decision.Allowed || decision.ReasonCode != "news.authorization.binding_invalid" {
 		t.Fatalf("lower content level must be rejected: %+v", decision)
 	}
 

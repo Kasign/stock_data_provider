@@ -121,3 +121,14 @@ func TestRestrictContentLayersKeepsOnlyClassifiedBodyWithinCeiling(t *testing.T)
 		t.Fatalf("snippet must not be returned for abstract-only request: %+v", abstract)
 	}
 }
+
+func TestRestrictContentLayersClearsUnboundExternalBodyMetadata(t *testing.T) {
+	layers := ContentLayers{
+		BodyDeclaredTypeRaw:   "text/html",
+		ExternalBodyReference: "https://publisher.example/body",
+	}
+	got := RestrictContentLayers(layers, ContentMetadata)
+	if got.BodyDeclaredTypeRaw != "" || got.ExternalBodyReference != "" {
+		t.Fatalf("unbound external body metadata must be removed: %+v", got)
+	}
+}
