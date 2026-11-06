@@ -435,12 +435,14 @@ func (q *Queue) execute(parent context.Context, task claimedTask, workerID int) 
 // taskStatusForRun 将 Run 的终态映射为异步 Task 状态。Run 被拒绝时，Task 不能误报为 succeeded。
 func taskStatusForRun(status domain.RunStatus) string {
 	switch status {
+	case domain.RunStatusCompleted, domain.RunStatusBlocked:
+		return "succeeded"
 	case domain.RunStatusPartial:
 		return "partial"
-	case domain.RunStatusFailed, domain.RunStatusRejected:
+	case domain.RunStatusFailed, domain.RunStatusRejected, domain.RunStatusRunning:
 		return "failed"
 	default:
-		return "succeeded"
+		return "failed"
 	}
 }
 

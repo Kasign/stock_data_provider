@@ -46,6 +46,8 @@ func TestTaskStatusForRun(t *testing.T) {
 		{name: "partial run remains partial", status: domain.RunStatusPartial, want: "partial"},
 		{name: "failed run fails task", status: domain.RunStatusFailed, want: "failed"},
 		{name: "rejected request fails task", status: domain.RunStatusRejected, want: "failed"},
+		{name: "non-terminal running result fails task", status: domain.RunStatusRunning, want: "failed"},
+		{name: "unknown result status fails task", status: domain.RunStatus("future_status"), want: "failed"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
