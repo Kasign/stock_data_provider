@@ -31,6 +31,44 @@ func TestValidateRelationAssertionKeepsModelOutputProposed(t *testing.T) {
 	}
 }
 
+func TestValidateRelationAssertionRejectsNonCanonicalIdentifiers(t *testing.T) {
+	for name, mutate := range map[string]func(*RelationAssertion){
+		"padded id": func(v *RelationAssertion) { v.ID = " r1 " },
+		"padded news id": func(v *RelationAssertion) { v.NewsID = " news-1 " },
+		"padded parent id": func(v *RelationAssertion) { v.SupersedesRelationID = " r0 " },
+	} {
+		t.Run(name, func(t *testing.T) {
+			assertion := validSecurityRelation("r1", string(RelationConfirmed))
+			mutate(&assertion)
+			if !errors.Is(ValidateRelationAssertion(assertion), ErrRelationInvalid) {
+				t.Fatal("non-canonical relation identifiers must be rejected")
+			}
+		})
+	}
+}
+
+func TestValidateRelationEvidenceRejectsNonCanonicalReferences(t *testing.T) {
+	assertion := validSecurityRelation("r1", string(RelationConfirmed))
+	base := RelationEvidence{
+		RelationID: "r1", Type: RelationEvidenceSourceField,
+		ObservationID: "observation-1", FieldPath: "related_securities",
+	}
+	cases := map[string]func(*RelationEvidence){
+		"padded relation id": func(v *RelationEvidence) { v.RelationID = " r1 " },
+		"padded observation id": func(v *RelationEvidence) { v.ObservationID = " observation-1 " },
+		"padded source version id": func(v *RelationEvidence) { v.SourceVersionID = " version-1 " },
+	}
+	for name, mutate := range cases {
+		t.Run(name, func(t *testing.T) {
+			evidence := base
+			mutate(&evidence)
+			if !errors.Is(ValidateRelationEvidence(assertion, evidence), ErrRelationEvidenceInvalid) {
+				t.Fatal("non-canonical evidence references must be rejected")
+			}
+		})
+	}
+}
+
 func TestValidateRelationEvidenceMatchesMethod(t *testing.T) {
 	assertion := validSecurityRelation("r1", string(RelationConfirmed))
 	valid := RelationEvidence{

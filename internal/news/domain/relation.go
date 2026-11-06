@@ -101,7 +101,8 @@ var (
 )
 
 func ValidateRelationAssertion(assertion RelationAssertion) error {
-	if strings.TrimSpace(assertion.ID) == "" || strings.TrimSpace(assertion.NewsID) == "" ||
+	if assertion.ID == "" || assertion.ID != strings.TrimSpace(assertion.ID) ||
+		assertion.NewsID == "" || assertion.NewsID != strings.TrimSpace(assertion.NewsID) ||
 		assertion.Kind != RelationMentions && assertion.Kind != RelationPrimarySubject ||
 		assertion.ObservedAt.IsZero() {
 		return ErrRelationInvalid
@@ -140,17 +141,23 @@ func ValidateRelationAssertion(assertion RelationAssertion) error {
 	if assertion.Method == RelationModel && assertion.Status != RelationProposed {
 		return ErrRelationInvalid
 	}
-	if assertion.Status == RelationProposed && strings.TrimSpace(assertion.SupersedesRelationID) != "" {
+	if assertion.SupersedesRelationID != "" && assertion.SupersedesRelationID != strings.TrimSpace(assertion.SupersedesRelationID) {
 		return ErrRelationInvalid
 	}
-	if strings.TrimSpace(assertion.SupersedesRelationID) == assertion.ID && assertion.SupersedesRelationID != "" {
+	if assertion.Status == RelationProposed && assertion.SupersedesRelationID != "" {
+		return ErrRelationInvalid
+	}
+	if assertion.SupersedesRelationID == assertion.ID && assertion.SupersedesRelationID != "" {
 		return ErrRelationInvalid
 	}
 	return nil
 }
 
 func ValidateRelationEvidence(assertion RelationAssertion, evidence RelationEvidence) error {
-	if ValidateRelationAssertion(assertion) != nil || strings.TrimSpace(evidence.RelationID) != assertion.ID {
+	if ValidateRelationAssertion(assertion) != nil ||
+		evidence.RelationID == "" || evidence.RelationID != assertion.ID ||
+		evidence.SourceVersionID != strings.TrimSpace(evidence.SourceVersionID) ||
+		evidence.ObservationID != strings.TrimSpace(evidence.ObservationID) {
 		return ErrRelationEvidenceInvalid
 	}
 	if evidence.SourceVersionID == "" && evidence.ObservationID == "" {
