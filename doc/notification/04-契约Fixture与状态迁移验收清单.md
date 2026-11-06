@@ -2,7 +2,7 @@
 
 - 归属：NTF-001/004/005/006
 - 对应契约：NTF-CTR-001～003（历史别名 Platform CONTRACT-009/010）；状态以项目级契约目录为准
-- 状态：4 份 Draft 2020-12 Schema 与 6 个代表性 Golden 已校准；Go Draft 2020-12 Envelope/Payload Validator、Golden、非法 Payload、Inbox Fake 幂等/并发、Subscription 与 DeliveryPlan Repository Port/Fake 测试已写入；新增严格 JSON、资源上限边界与 DeliveryPlan 写入前双重校验测试；新增代码待本轮 CI 验证；NTF-CTR-001～003 仍为 pending_evidence；不要求个人 Owner 签字
+- 状态：4 份 Draft 2020-12 Schema 与 6 个代表性 Golden 已校准；Go Draft 2020-12 Envelope/Payload Validator、Golden、非法 Payload、Inbox Fake 幂等/并发、Subscription 与 DeliveryPlan Repository Port/Fake 测试已写入；新增严格 JSON、资源上限边界、DeliveryPlan 写入前双重校验及 Subscription Repository append-only/CAS 并发测试；上一提交的根模块 CI Run 42200295537 gofmt/go test/race/vet 已通过；本提交新增 Subscription Repository Fake/CAS 测试待下一轮 CI 复验；NTF-CTR-001～003 仍为 pending_evidence；不要求个人 Owner 签字
 - 日期：2026-11-06
 - 说明：以下均为合成数据与测试场景，不代表已有实现或真实渠道能力。
 
@@ -70,7 +70,7 @@
 
 ## 5. 幂等与并发 Fixture
 
-- `fanout_duplicate_concurrent.test`：相同 Event 并发 fan-out，唯一约束只生成一份 DeliveryPlan。
+- `subscription_append_version_concurrent.test`：多个并发更新竞争同一 expected_version，只允许一个版本追加成功，其他返回 version conflict。\n- `subscription_append_only.test`：更新生成新版本，旧版本保持不变；读取副本的修改不得反向污染 Repository。\n- `fanout_duplicate_concurrent.test`：相同 Event 并发 fan-out，唯一约束只生成一份 DeliveryPlan。
 - `delivery_two_workers_one_lease.test`：两个 Worker 竞争同一 Delivery，只允许一个 fencing token 有效。
 - `delivery_stale_worker_completion.test`：租约过期后旧 Worker 回写，必须拒绝。
 - `delivery_lease_expired_before_dispatch.test`：能证明请求未发出，允许安全回队。
@@ -128,7 +128,7 @@ Fake Adapter 只能验证分类和状态机，不证明真实渠道行为。每�
 6. Schema 兼容级别和版本命名规则需补兼容矩阵与 Registry 不可变性测试。
 7. Delivery deadline、max_attempts、max_elapsed 必须显式配置并测试边界，不依赖隐式默认值。
 
-**本清单是模块级测试设计基线；根模块 gofmt/go test/race/vet 已通过，但 Inbox/Subscription/DeliveryPlan 当前仍使用 Fake Repository；未连接 Notification 真实 MariaDB、Worker 或渠道，不能据此宣称 NTF-001 完整通过或 NTF-001~006 已通过。**
+**本清单是模块级测试设计基线；根模块 gofmt/go test/race/vet 已通过，Inbox/Subscription/DeliveryPlan 当前仍使用 Fake Repository；未连接 Notification 真实 MariaDB、Worker 或渠道，不能据此宣称 NTF-001 完整通过或 NTF-001~006 已通过。**
 
 ## 10. INT-CTR-001 / NTF-CTR-001～003 Contract Test 执行矩阵
 

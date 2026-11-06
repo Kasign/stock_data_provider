@@ -2,7 +2,7 @@
 
 - 归属：Notification 模块，NTF-001/004/005/006
 - 对应项目契约：NTF-CTR-001、NTF-CTR-002、NTF-CTR-003（历史别名 CONTRACT-009/010）
-- 状态：Notification 字段级契约输入；当前状态和阻断范围以 `doc/整体任务规划/跨模块契约目录与冻结状态.md` 为准
+- 状态：Notification 字段级契约输入；当前状态和阻断范围以 `doc/整体任务规划/02-契约治理/跨模块契约目录与冻结状态.md` 为准
 - 日期：2026-11-06
 - 代码边界：`internal/notification/**`；根 DI、HTTP、Worker、Migration 注册由 Integration Owner 负责
 
