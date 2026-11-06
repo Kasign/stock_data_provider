@@ -540,7 +540,6 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 				if normalize.HasQualityDegradingBarWarnings(warnings) {
 					quality = model.QualityDegraded
 				}
-				barDataQuality := quality
 				if len(validated) > 0 {
 					contextStartDate, contextEndDate := requestStartDate, requestEndDate
 					if contextStartDate == "" {
@@ -572,7 +571,7 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 				if len(snapshotBars) == len(validated) {
 					recordProviderProbeDailySnapshot(probeCtx, &provider.CrossProviderDailySnapshot{
 						Provider: p.Name(), SourceVersion: version, Symbol: barsSymbol,
-						AdjustmentBasis: string(adjustment), QualityStatus: string(barDataQuality), Bars: snapshotBars,
+						AdjustmentBasis: string(adjustment), QualityStatus: string(quality), Bars: snapshotBars,
 					})
 				}
 				return quality, version, reasons, nil

@@ -1452,6 +1452,44 @@ func TestProviderProbeDoesNotClassifyPytdxTransportFailureAsNotSupported(t *test
 	}
 }
 
+
+func TestProviderProbeCrossProviderSnapshotUsesTradingContextQuality(t *testing.T) {
+	left := providerProbeDailyBarsFake{name: "probe-context-left", close: 10.5, quality: model.QualityValid}
+	right := providerProbeDailyBarsFake{name: "probe-context-right", close: 10.5, quality: model.QualityValid}
+	ds := NewWithCapabilities(
+		[]provider.NamedProvider{left, right}, nil, []provider.DailyBarProvider{left, right},
+		cache.NewDisabled(), nil, time.Second, time.Minute, 120, 2000, ResilienceConfig{}, nil,
+	)
+	ds.SetTradingCalendarProviders([]provider.TradingCalendarProvider{
+		providerProbeContextCalendarFake{quality: model.QualityValid},
+	})
+	ds.SetSecurityTradingStatusProviders([]provider.SecurityTradingStatusProvider{
+		providerProbeContextSecurityStatusFake{fail: true},
+	})
+	run, err := ds.ProbeProviderCapabilitiesWithOptions(context.Background(), ProviderProbeOptions{
+		Scope: "all", Capabilities: []string{"daily_bars"},
+		DailyBarAdjustments: []model.AdjustmentBasis{model.AdjustmentNone},
+		Checks: []string{"quality", "cross_provider"}, TimeoutSeconds: 5,
+	})
+	if err != nil {
+		t.Fatalf("ProbeProviderCapabilitiesWithOptions() error = %v", err)
+	}
+	if len(run.CheckResults) != 1 {
+		t.Fatalf("expected one cross-provider comparison, got %+v", run.CheckResults)
+	}
+	result := run.CheckResults[0]
+	if result.Status != "skipped" || result.ErrorCode != "comparison_not_comparable" ||
+		result.LeftQualityStatus != model.QualityDegraded || result.RightQualityStatus != model.QualityDegraded {
+		t.Fatalf("cross-provider snapshots must inherit degraded trading-context quality: %+v", result)
+	}
+	for _, item := range run.Items {
+		if item.Status != "returned_degraded" ||
+			!containsProbeReason(item.QualityReasons, "daily_bar_context_security_status_unavailable:") {
+			t.Fatalf("provider result should retain the context degradation: %+v", item)
+		}
+	}
+}
+
 type providerProbeContextCalendarFake struct {
 	quality         model.QualityStatus
 	reasons         []string
