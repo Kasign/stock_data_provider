@@ -2621,3 +2621,12 @@ CSS AST 检查器进一步扩展：
 - [x] WebUI Checks #42199770455 通过。
 - [x] Chromium Browser Smoke #42199770387 通过，全部浏览器专项通过。
 - [x] 验收代码 HEAD：`0bca45c54b772856a90a713d44663b44941761bb`。
+
+
+## 2026-11-06 UIR-2 剩余优先级跨 selector 复核记录
+
+- [x] 剩余 13 处已按实际 DOM class、命中选择器、specificity 和源码顺序完成首轮分类。
+- [x] 涨跌语义色与组件强调色、市场理由 warning 色与 footer small、市场状态色与指数变化 span/strong 的覆盖关系已记录。
+- [x] reduced-motion 通用规则及导航/通知专用规则已核对后置 transition 覆盖；保留系统无障碍行为。
+- [ ] 语义颜色作用域化：评估是否可将组件文字色声明改为语义 token，减少全局 `!important`；必须覆盖默认/反向涨跌方案、dark/light 主题、市场指数/广度/活动表格及个股研究。
+- [ ] 作用域化改动完成后，执行 CSSOM 8 场景、响应式 Browser Smoke 与相关业务专项；无视觉或语义差异后再更新验收状态。

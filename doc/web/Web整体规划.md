@@ -2465,3 +2465,16 @@ CSS AST 检查器进一步扩展：
 - [x] 代码提交：`b9909f6632b0408252b12750aa1002842d71cb2f`（组件隐藏规则）；`0bca45c54b772856a90a713d44663b44941761bb`（龙虎榜换行优先级）。
 
 下一步仅审查剩余 13 处中的跨 selector / 主题 / 响应式必要性；不批量删除语义颜色或无障碍规则，不启动 CSS 物理拆分。
+
+
+## 2026-11-06 UIR-2：剩余 13 处优先级的跨 selector 证据复核
+
+本轮对剩余规则做了同节点命中关系和源码顺序核对，暂不修改：
+
+- **通用涨跌色 2 处**：`.positive` / `.negative` specificity 为 `(0,1,0)`；实际节点还可能命中 `.metric-primary .metric-value`（`(0,2,0)`）及 `.research-overview-metric strong.positive/negative`（`(0,2,1)`）。重要声明目前负责维持正负语义色，不被组件默认/强调色覆盖。后续若要去除，应先统一这些组件选择器的语义 token，再以浏览器 CSSOM 验证。
+- **市场理由色 1 处**：`.market-index-reasons`（`(0,1,0)`）与同一 small 节点命中的 `.market-index-card-footer small`（`(0,1,1)`）竞争；普通声明会被后者覆盖，warning 语义色需保持优先。
+- **市场数据状态色 4 处**：`.market-data-positive/negative/flat/unknown` 作用于市场指数变化的 span/strong，也作用于市场广度和市场活动表格节点；指数变化节点还命中 `.market-index-changes span/strong`（`(0,1,1)`），因此通用状态色不能简单改为普通低优先级声明。
+- **减少动态效果 5 处**：通用 `*, *::before, *::after` 规则需压过按钮、导航、图表等组件的具体 animation/transition 声明；导航/通知专用规则还需压过样式表后部的 `.text-button` / `.nav-link` transition 规则。均处于 `prefers-reduced-motion: reduce` 条件内，保留无障碍效果。
+- **全局隐藏 1 处**：全局 `[hidden]` 作为唯一强制隐藏基线；组件级重复规则已清理。
+
+当前剩余 13 处均有明确的跨 selector 覆盖对象或系统无障碍职责。本轮不为降低数字而调整它们。下一轮可评估将语义颜色改成作用域明确、无需 important 的组件规则；需先验证 A 股红涨绿跌/反向配色、浅色主题、市场指数、广度、活动表格和个股研究展示。
