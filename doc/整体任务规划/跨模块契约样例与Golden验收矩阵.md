@@ -92,6 +92,23 @@
 
 只有 Manifest/Golden、Quant Owner Scope/资源绑定、当前读取复核和竞态测试均有模块 CI 证据，QNT-CTR-005 才能 frozen。
 
+### RSC-CTR-001 Evidence Schema / Golden / Provenance Contract Test
+
+| Test ID | 场景 | 必须断言 | 失败结果 |
+|---|---|---|---|
+| RSC001-SCH-01 | Evidence DTO 正常样例 | Draft 2020-12 Schema 通过；RFC3339 date-time format assertion 开启 | CI 失败 |
+| RSC001-SCH-02 | 缺字段、未知字段、非法 enum/hash、valid_time 只提供单端 | 拒绝非法结构；不静默丢弃未知字段 | CI 失败 |
+| RSC001-SCH-03 | inference/hypothesis 无 derived_from_refs；confidence 非 null 但缺 method/version | 组合约束拒绝 | CI 失败 |
+| RSC001-FP-01 | 同一规范化 Evidence 内容 | RFC 8785 JCS + SHA-256 复算与 content_fingerprint 一致 | CI 失败 |
+| RSC001-FP-02 | 修改 source_ref/version、内容级别、主体、时间、质量或 limitations | content_fingerprint 必须变化；仅修改 evidence_id/authorization_ref 不改变内容摘要 | CI 失败 |
+| RSC001-AUTH-01 | source_owner=data/news/quant/research | authorization_ref 必须由对应 Owner 签发，policy_owner 与 source_owner 一致 | CI 失败 |
+| RSC001-AUTH-02 | Research 派生 inference/hypothesis | derived_from_refs 非空且完整；每条直接上游 Evidence 的授权引用可沿链追溯 | CI 失败 |
+| RSC001-AUTH-03 | 上游来源授权级别低于派生内容级别 | 拒绝超范围派生；Research allowed 不得扩大上游许可 | forbidden + 无受限内容 |
+| RSC001-READ-01 | 上游 Data/News/Quant 授权历史 allowed，但当前 revoked/expired/unknown | 读取时逐 Owner 重新复核；不使用历史快照放行 | forbidden + 无受限内容 |
+| RSC001-PIT-01 | available_at unknown/null 或晚于 system_as_of | 严格 PIT 不作为当时可用事实；保留 limitation/quality 状态 | 不进入有效事实集 |
+
+只有 Schema/Golden、来源 Owner 映射、派生链完整性、PIT 和当前授权复核均有模块 CI 证据，RSC-CTR-001 才能 frozen。
+
 ## 6. Researchflow 契约
 
 | 契约 | 正常样例 | 边界样例 | 异常样例 | 兼容样例 |

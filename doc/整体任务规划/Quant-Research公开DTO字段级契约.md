@@ -200,11 +200,12 @@ Research 定义 Context 领域语义；Researchflow 负责单次 Run 的分区�
 | confidence_method | 条件必需 | string | confidence 非 null 时必填，说明估计方法 |
 | confidence_method_version | 条件必需 | string | confidence 非 null 时必填，固定方法版本 |
 | quality_status | 是 | valid/degraded/invalid/unknown | 证据质量 |
+| content_level | 是 | metadata/summary/snippet/full | 本 Evidence 实际包含的内容级别；必须与其 authorization_ref 对应授权快照一致，派生 Evidence 不得高于任一上游来源允许级别 |
 | authorization_ref | 是 | string | 授权决策/安全状态引用 |
 | limitations | 是 | string[] | 使用限制 |
 | content_fingerprint | 是 | string | 规范化内容指纹，不替代来源版本；同一版本内容变化必须生成新 Evidence 版本 |
 
-fact 必须有可验证来源与时间；reported_fact 只表示来源声称；inference 必须附推导依据；hypothesis 不得伪装成已证实事实；unknown 表达证据不足。valid_time_start/end 必须同时为 null 或同时提供且 start<=end。支持与反证都必须可追溯。Research 不复制 News 未授权正文，历史读取仍需重新检查当前授权。Evidence 的 system_as_of 不得晚于所属 Run。
+fact 必须有可验证来源与时间；reported_fact 只表示来源声称；inference 必须附推导依据；hypothesis 不得伪装成已证实事实；unknown 表达证据不足。valid_time_start/end 必须同时为 null 或同时提供且 start<=end。支持与反证都必须可追溯。Research 不复制 News 未授权正文，历史读取仍需重新检查当前授权。Evidence 的 system_as_of 不得晚于所属 Run。 `content_level` 必须与 authorization_ref 对应的 GOV-CTR-006 快照一致。source_owner=data/news/quant 时，authorization_ref 由对应来源 Owner 签发；source_owner=research 时由 Research 签发。Research 派生 Evidence 必须通过 derived_from_refs 保留直接上游 Evidence 引用，沿引用链保留各来源 Owner 的 authorization_ref；Research 自己签发的 allowed 不得覆盖上游 denied/expired/revoked/unknown。content_fingerprint 对除 evidence_id、authorization_ref、content_fingerprint 外的规范化 Evidence 语义字段执行 RFC 8785 JCS + SHA-256。
 
 ### 3.3 ResearchEvent
 
