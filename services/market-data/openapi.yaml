@@ -43,7 +43,7 @@ components:
       enum: [none, forward_adjusted, backward_adjusted]
     Quote:
       type: object
-      required: [symbol, current_price, open, high, low, prev_close, volume, quote_time, fetched_at, normalized_at, source, volume_unit, amount_unit, adjustment_basis, quality_status, normalization_version]
+      required: [symbol, current_price, change, change_percent, open, high, low, prev_close, volume, amount, quote_time, fetched_at, normalized_at, source, volume_unit, amount_unit, adjustment_basis, quality_status, normalization_version]
       properties:
         symbol: {type: string, example: 600519.SH}
         name: {type: string}
@@ -75,18 +75,18 @@ components:
         adjustment_basis: {$ref: '#/components/schemas/AdjustmentBasis'}
         quality_status: {$ref: '#/components/schemas/QualityStatus'}
         quality_reasons: {type: array, items: {type: string}}
-        validation_total_count: {type: integer, minimum: 0, description: Total number of field validation issues before detail truncation}
-        validation_error_count: {type: integer, minimum: 0}
-        validation_warning_count: {type: integer, minimum: 0}
-        validation_info_count: {type: integer, minimum: 0}
-        validation_truncated: {type: boolean, description: True when validation_issues contains only a bounded subset of all issues}
-        validation_issues: {type: array, items: {$ref: '#/components/schemas/ProviderProbeFieldIssue'}, maxItems: 100}
+
+
+
+
+
+
         fallback_from: {type: string}
         fallback_reason: {type: string}
         normalization_version: {type: string}
     DailyBar:
       type: object
-      required: [symbol, trade_date, period, open, high, low, close, ma5, ma20, ma120, ma250, volume, adjustment_basis, source, fetched_at, normalized_at, volume_unit, amount_unit, quality_status, normalization_version]
+      required: [symbol, trade_date, period, open, high, low, close, ma5, ma20, ma120, ma250, volume, amount, change_percent, adjustment_basis, source, fetched_at, normalized_at, volume_unit, amount_unit, quality_status, normalization_version]
       properties:
         symbol: {type: string}
         trade_date: {type: string, format: date}
@@ -144,7 +144,7 @@ components:
         bars: {type: array, items: {$ref: '#/components/schemas/DailyBar'}}
     Bundle:
       type: object
-      required: [symbol, daily_bars, sources, warnings, snapshot_id, analysis_reference_time, fetched_at, quality_status]
+      required: [symbol, daily_bars, sources, snapshot_id, analysis_reference_time, fetched_at, quality_status]
       properties:
         symbol: {type: string}
         name: {type: string}
@@ -174,6 +174,7 @@ components:
         category: {type: string, enum: [profitability, operating, growth, solvency, cash_flow, dupont, income_statement, balance_sheet, cash_flow_statement]}
         report_date: {type: string, format: date}
         publication_date: {type: string, format: date, description: Disclosure date for the selected provider revision; not an as_of historical revision selector}
+        available_at: {type: string, format: date-time, description: First verifiable time this financial section was available to market participants; omitted when unknown}
         has_data: {type: boolean}
         metrics: {type: array, items: {$ref: '#/components/schemas/FundamentalMetric'}}
         quality_status: {$ref: '#/components/schemas/QualityStatus'}
@@ -200,10 +201,10 @@ components:
         code: {type: string, description: Eastmoney board code, for example BK0477}
         name: {type: string}
         change_percent: {type: number, nullable: true, description: Percentage points, not a ratio}
-        change_percent_5d: {type: number, nullable: true, description: Five-trading-session return derived from six daily closes; percentage points}
+
         source: {type: string}
         source_version: {type: string}
-        provider_report_date: {type: string, format: date, description: Source report date; not an exact snapshot time}
+
         fetched_at: {type: string, format: date-time}
         quality_status: {$ref: '#/components/schemas/QualityStatus'}
         quality_reasons:
@@ -239,7 +240,7 @@ components:
         effective_to: {type: string, format: date}
         source: {type: string}
         source_version: {type: string}
-        adjustment_basis: {$ref: '#/components/schemas/AdjustmentBasis'}
+
         quality_status: {$ref: '#/components/schemas/QualityStatus'}
         quality_reasons: {type: array, items: {type: string}}
         source_url: {type: string, format: uri}
@@ -343,7 +344,7 @@ components:
         quality_reasons: {type: array, items: {type: string}}
     StockAnnouncementSnapshot:
       type: object
-      required: [symbol, start_date, end_date, page, page_size, total, pages, returned, has_data, has_more, items, source, fetched_at, quality_status]
+      required: [symbol, start_date, end_date, page, page_size, total, pages, returned, has_data, has_more, items, source, source_version, fetched_at, quality_status]
       properties:
         symbol: {type: string}
         start_date: {type: string, format: date}
@@ -432,6 +433,7 @@ components:
         leading_stock: {type: string}
         leader_change_percent: {type: number, nullable: true}
         source: {type: string}
+        provider_report_date: {type: string, format: date, description: Provider report date when available; distinct from fetched_at}
         source_version: {type: string}
         fetched_at: {type: string, format: date-time}
         quality_status: {$ref: '#/components/schemas/QualityStatus'}
@@ -448,6 +450,7 @@ components:
         total: {type: integer, minimum: 0, description: Source-reported sector count or best available count; only a lower bound when total_is_lower_bound is true}
         provider_returned: {type: integer, minimum: 0, description: Raw CLIST rows or SW1 industry universes received before caller-limit truncation}
         excluded_rows: {type: integer, minimum: 0, description: Source ranking rows omitted due to invalid required fields or no usable constituent quote changes}
+        excluded_non_a_share_count: {type: integer, minimum: 0, description: Known non-A-share records excluded from the sector ranking}
         total_is_lower_bound: {type: boolean, description: True when source total is absent and only the normalized returned count is known}
         items:
           type: array
@@ -518,6 +521,10 @@ components:
         code: {type: string}
         name: {type: string}
         weight_percent: {type: number, nullable: true, description: Provider-reported constituent weight in percentage points}
+        effective_from: {type: string, format: date, description: Start date of the constituent membership interval; omitted when unknown}
+        effective_to: {type: string, format: date, description: End date of the constituent membership interval; omitted when unknown}
+        available_at: {type: string, format: date-time, description: Source availability time when verifiable; omitted when unknown}
+        system_observed_at: {type: string, format: date-time, description: System observation time of the selected membership revision; omitted when unknown}
     IndexConstituentSnapshot:
       type: object
       required: [index_symbol, items, total, provider_returned, source, fetched_at, quality_status]
@@ -618,6 +625,10 @@ components:
         right_provider: {type: string}
         left_source_version: {type: string}
         right_source_version: {type: string}
+        left_adjustment_method: {type: string, description: Left Provider adjustment algorithm identifier}
+        right_adjustment_method: {type: string, description: Right Provider adjustment algorithm identifier}
+        left_adjustment_reference_date: {type: string, format: date, description: Left Provider adjustment reference date}
+        right_adjustment_reference_date: {type: string, format: date, description: Right Provider adjustment reference date}
         adjustment_basis: {type: string, enum: [none, forward_adjusted, backward_adjusted, unknown]}
         left_quality_status: {$ref: '#/components/schemas/QualityStatus'}
         right_quality_status: {$ref: '#/components/schemas/QualityStatus'}
@@ -855,7 +866,7 @@ components:
           items: {type: string}
     MarketSentimentSnapshot:
       type: object
-      required: [market, trade_date, total_securities, covered_securities, advancing_count, declining_count, unchanged_count, unclassified_count, source, fetched_at, quality_status]
+      required: [market, trade_date, total_securities, covered_securities, advancing_count, declining_count, unchanged_count, unclassified_count, limit_up_count, limit_down_count, broken_board_count, source, source_version, fetched_at, quality_status]
       properties:
         market: {type: string, enum: [cn_a_share]}
         trade_date: {type: string, format: date}
@@ -890,7 +901,7 @@ components:
         total: {type: integer}
     MarketBreadthSnapshot:
       type: object
-      required: [market, total_securities, covered_securities, advancing_count, declining_count, unchanged_count, unclassified_count, limit_up_count, limit_down_count, amount_coverage_count, quote_timestamp_coverage_count, source, fetched_at, quality_status]
+      required: [market, total_securities, covered_securities, advancing_count, declining_count, unchanged_count, unclassified_count, limit_up_count, limit_down_count, total_amount_cny, amount_coverage_count, quote_timestamp_coverage_count, source, fetched_at, quality_status]
       properties:
         market: {type: string, enum: [cn_a_share]}
         total_securities: {type: integer, minimum: 1, description: Sum of source change-distribution bucket counts; not independently verified against a security master}
@@ -904,6 +915,7 @@ components:
         total_amount_cny: {type: number, nullable: true, description: Full A-share turnover sum in CNY; null unless all paginated securities have valid amounts, quote dates match provider_report_date, and security count matches the breadth distribution}
         amount_coverage_count: {type: integer, minimum: 0, description: Count of securities included in the aggregate; zero when full coverage or cross-source count alignment cannot be established}
         quote_timestamp_coverage_count: {type: integer, minimum: 0, description: Number of universe quotes with a valid source timestamp}
+        excluded_non_a_share_count: {type: integer, minimum: 0, description: Known non-A-share securities excluded from the source universe}
         oldest_quote_time: {type: string, format: date-time, nullable: true, description: Earliest valid source quote timestamp included in the universe snapshot; this is a conservative bound, not the exact snapshot time}
         newest_quote_time: {type: string, format: date-time, nullable: true, description: Latest valid source quote timestamp included in the universe snapshot}
         provider_report_date: {type: string, format: date, description: Source report date used to align breadth buckets, limit pools, and full-market quote rows}
@@ -970,18 +982,18 @@ components:
         quality_reasons: {type: array, items: {type: string}}
     HotRankingItem:
       type: object
-      required: [rank, symbol, code, source, source_version, fetched_at, quality_status]
+      required: [rank, symbol, code, source, fetched_at, quality_status]
       properties:
         rank: {type: integer, minimum: 1, description: Provider-assigned ranking position}
         symbol: {type: string, example: 600519.SH}
         code: {type: string, example: "600519"}
-        name: {type: string, nullable: true}
+        name: {type: string}
         latest_price: {type: number, nullable: true, description: Latest provider-enriched price in CNY/share}
         change: {type: number, nullable: true, description: Price change in CNY/share}
         change_percent: {type: number, nullable: true, description: Percentage points; 10 means 10 percent}
         rank_change: {type: integer, nullable: true, description: Surge ranking's provider-reported rank movement; sign follows upstream semantics}
         heat: {type: number, nullable: true, description: Provider-reported ranking heat; scale is provider-defined}
-        rank_trend: {type: string, nullable: true, description: Provider-reported ranking trend label}
+        rank_trend: {type: string, description: Provider-reported ranking trend label}
         source: {type: string}
         source_version: {type: string}
         fetched_at: {type: string, format: date-time}
@@ -989,7 +1001,7 @@ components:
         quality_reasons: {type: array, items: {type: string}}
     HotRankingSnapshot:
       type: object
-      required: [type, total, items, source, source_version, fetched_at, quality_status]
+      required: [type, total, items, source, fetched_at, quality_status]
       properties:
         type: {type: string, enum: [popular, surge, followers]}
         total: {type: integer, minimum: 0, description: Number of normalized rows in this response; not the full ranking count when total_is_lower_bound is true}
@@ -1010,13 +1022,15 @@ components:
         symbol: {type: string, example: 600519.SH}
         code: {type: string}
         name: {type: string}
-        change_percent: {type: number, description: Percentage points; 10 means 10 percent}
+        change_percent: {type: number, nullable: true, description: Percentage points; 10 means 10 percent}
         last_price: {type: number, nullable: true, description: Latest provider price in CNY/share when available}
         first_touch_time: {type: string, description: First limit touch time as reported by the provider}
         last_touch_time: {type: string, description: Last limit touch time as reported by the provider}
         open_times: {type: integer, nullable: true, description: Number of limit-up board openings for broken-board pool only}
         turnover_ratio_percent: {type: number, nullable: true, description: Provider-reported turnover ratio in percentage points}
         turnover: {type: number, nullable: true, description: Provider-reported turnover value; consult provider_amount_unit}
+        seal_money: {type: number, description: Provider-reported sealed amount; unit is CNY when provider_amount_unit is CNY}
+        max_seal_money: {type: number, description: Provider-reported maximum sealed amount; unit is CNY when provider_amount_unit is CNY}
         provider_amount_unit: {type: string, description: Unit of provider-sourced money fields; provider_defined does not mean CNY}
         consecutive_boards: {type: integer, nullable: true}
         broken_count: {type: integer, nullable: true}
@@ -1130,7 +1144,7 @@ components:
         quality_reasons: {type: array, items: {type: string}}
     SourceStatus:
       type: object
-      required: [name, enabled, quote_capable, daily_bar_capable]
+      required: [name, enabled, quote_capable, daily_bar_capable, historical_index_constituents_capable]
       properties:
         name: {type: string}
         enabled: {type: boolean}
@@ -1142,6 +1156,7 @@ components:
         index_quote_capable: {type: boolean}
         index_catalog_capable: {type: boolean}
         historical_index_constituents_capable: {type: boolean, description: Provider explicitly supports historical constituent report-date queries}
+        market_capital_flow_capable: {type: boolean, description: Provider declares support for market-wide capital flow}
         market_breadth_capable: {type: boolean}
         limit_pool_capable: {type: boolean}
         stock_boards_capable: {type: boolean}
