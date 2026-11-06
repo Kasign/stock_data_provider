@@ -15,4 +15,4 @@ Notification 是独立通知业务模块，负责事件接收、Subscription、T
 
 关键边界：recipient_scope 不等于真实发送目标；外部渠道不承诺 exactly-once；发送结果不确定时不得盲目重试。Platform 提供 Secret、HTTP、Storage 和 Worker 基础设施，领域状态与 Repository 归 Notification 所有。
 
-模块开工前需完成 CONTRACT-009/010 Owner Review；真实渠道、真实 Storage、根 DI/Worker/Migration 属独立集成门禁。
+Notification 领域开发可按 NTF-CTR-001～003 的已决语义和当前 pending_evidence 状态推进；依赖未完成 Schema/Golden 的事件调用点不得宣称 L2。首批跨模块事件映射 INT-CTR-001 仍为 pending_decision，只阻断对应自动事件发布，不阻断 Notification 独立 Domain、Inbox/Delivery 状态机和 Fake Channel 测试。真实渠道、真实 Storage、根 DI/Worker/Migration 属独立 L3 集成门禁。
