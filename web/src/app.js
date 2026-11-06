@@ -3045,7 +3045,15 @@ function renderTaskFlowSummary() {
 
 function renderSelectedTaskEvent(item) {
   const inspector = $(".run-flow-event-inspector");
-  if (inspector) inspector.open = Boolean(item);
+  if (inspector) {
+    const sequence = item ? String(item.sequence) : "";
+    const selectionChanged = inspector.dataset.selectedSequence !== sequence;
+    if (selectionChanged) {
+      inspector.open = Boolean(item);
+      if (item) inspector.scrollIntoView({ block: "nearest" });
+    }
+    inspector.dataset.selectedSequence = sequence;
+  }
   renderSelectedTaskEventView({
     panel: $("#task-event-detail"),
     detailLayout: $("#task-detail"),

@@ -1397,6 +1397,8 @@ test("Run Flow summary and event diagnostics remain grounded in persisted Task, 
   assert.match(app, /function renderTaskFlowSummary\(\)/);
   assert.match(app, /function renderSelectedTaskEvent\(item\)/);
   assert.match(app, /inspector\.open = Boolean\(item\)/);
+  assert.match(app, /inspector\.dataset\.selectedSequence/);
+  assert.match(app, /inspector\.scrollIntoView\(\{ block: "nearest" \}\)/);
   assert.match(html, /id="task-error"[^>]*role="alert"/);
   for (const id of ["task-error-title", "task-error-message", "task-error-code"]) {
     assert.match(html, new RegExp('id="' + id + '"'));
