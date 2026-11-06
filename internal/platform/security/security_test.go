@@ -4,8 +4,8 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"strconv"
+	"strings"
 	"testing"
 
 	"example.com/stock-analysis-flow/internal/platform/config"
