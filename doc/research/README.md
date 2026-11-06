@@ -82,3 +82,8 @@ R1/R2/R3/R5 当前实现 Context、Evidence、Event、Claim/Hypothesis 领域结
 
 
 - RSC-OPEN-007：Evidence 内容指纹排除 authorization_ref，但完整 payload 摘要包含它；同一 evidence_id 重新授权后的幂等/留档语义待项目契约确认。当前不覆盖旧 Evidence 行，Evidence SQL Adapter 暂缓该边界。
+
+
+
+- RSC-007 Repository Port 已明确追加事务边界、版本连续性、完整 payload 幂等与冲突规则；SQL Adapter 尚未实现。
+- RSC-OPEN-007 阻断 Evidence SQL Adapter 的授权快照续期边界，不阻断 Context/Event/Claim SQL Adapter。
