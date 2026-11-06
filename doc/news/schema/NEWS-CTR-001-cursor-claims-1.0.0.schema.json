@@ -1,0 +1,99 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kasign.github.io/stock_data_provider/news/NEWS-CTR-001-cursor-claims-1.0.0.schema.json",
+  "title": "News Evidence Cursor Claims",
+  "description": "The JSON payload signed with HMAC-SHA256 before base64url encoding; the external cursor token is payload.signature.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "token_version",
+    "key_id",
+    "caller_ref",
+    "purpose_code",
+    "requested_content_level",
+    "filters_fingerprint",
+    "page_size",
+    "system_as_of",
+    "snapshot_ref",
+    "sort_version",
+    "last_system_observed_at",
+    "last_news_id",
+    "last_version_id",
+    "issued_at",
+    "expires_at"
+  ],
+  "properties": {
+    "token_version": {
+      "const": 1
+    },
+    "key_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_.-]{1,64}$"
+    },
+    "caller_ref": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256
+    },
+    "purpose_code": {
+      "type": "string",
+      "enum": [
+        "research_analysis",
+        "risk_review",
+        "user_display"
+      ]
+    },
+    "requested_content_level": {
+      "type": "string",
+      "enum": [
+        "metadata",
+        "summary",
+        "snippet",
+        "full"
+      ]
+    },
+    "filters_fingerprint": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "page_size": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 100
+    },
+    "system_as_of": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "snapshot_ref": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256
+    },
+    "sort_version": {
+      "const": "news-evidence-v1"
+    },
+    "last_system_observed_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "last_news_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256
+    },
+    "last_version_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256
+    },
+    "issued_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "expires_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  }
+}
