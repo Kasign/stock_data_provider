@@ -1303,15 +1303,15 @@ M2/M4 必须将 Worker 改为可管理对象或显式 Start/Stop/Wait：
 #### 1. 路由与认证契约
 
 - OpenAPI 当前共有 35 个 Operation：2 个公开 Health + 33 个业务 Operation。
-- Server mux 当前注册 35 条路由；2 个 Health 公开，其余 33 个都包裹 `s.auth`，认证实现只读取 `X-API-Key`，使用常量时间比较；不接受 Authorization Bearer Token。
-- OpenAPI 根级 `security` 同时列出 `ApiKey` 与 `BearerAuth` 两个独立 Security Requirement Object。OpenAPI 语义是 OR，不是 AND。因此继承根级安全声明的业务 Operation 会被文档描述为同时支持 X-API-Key 或 Bearer Token；但 Server 实际只支持 X-API-Key。
-- 其中 11 个 Operation（market/quotes、data-sources/probe、diagnostics、price-limit-rule、trading-status、index-catalog、indices/{symbol}/constituents、indices/{symbol}/daily、indices、session、capital-flow，按当前文件逐项显式声明）使用 operation-level ApiKey 覆盖根级配置；其余业务 Operation 继承错误的 Bearer OR 声明。
+- Server mux 当前注册 35 条路由；2 个 Health 公开，其余 33 个都包裹 `s.auth`，认证实现同时读取 `X-API-Key` 和 `Authorization: Bearer`，两者都与同一个 Data API Key 做常量时间比较。
+- OpenAPI 根级 `security` 同时列出 `ApiKey` 与 `BearerAuth` 两个独立 Security Requirement Object。OpenAPI 语义是 OR，不是 AND。因此继承根级安全声明的业务 Operation 会被文档描述为同时支持 X-API-Key 或 Bearer Token；Server 实际也支持两种请求头形式，但 11 个 Operation 显式设置 operation-level ApiKey 后覆盖根级声明，造成 Operation 之间认证声明不一致。
+- 其中 11 个 Operation（market/quotes、data-sources/probe、diagnostics、price-limit-rule、trading-status、index-catalog、indices/{symbol}/constituents、indices/{symbol}/daily、indices、session、capital-flow，按当前文件逐项显式声明）使用 operation-level ApiKey 覆盖根级配置；其余业务 Operation 继承根级 ApiKey OR BearerAuth 声明。
 - `/health/live` 与 `/health/ready` 使用 `security: []`，与 Server 一致。
 - `/api/v1/data-sources/diagnostics` 是唯一未声明 401 响应的业务 Operation；Server auth 对缺失/无效 API Key 会返回 401。其 security 本身已声明 ApiKey，因此这是响应文档缺失，不是认证绕过。
 - 现有 `TestOpenAPIDataRoutesDeclareValidAPIKeySecurity` 只对固定的少数路径检查 operation-level ApiKey，没有验证根级 Bearer 声明，也没有要求每个受保护 Operation 都声明 401；所以未发现上述问题。
 
 **契约修正建议（需进入 MDM-001 实施，不在本轮直接改）：**
-1. 根级 security 仅保留 `ApiKey: []`；如未来确实实现 Bearer，再同步 Server auth 和逐 Operation 测试。
+1. 保留根级 `ApiKey OR BearerAuth`，移除业务 Operation 上不必要的 ApiKey 覆盖，使 33 个受保护 Operation 统一继承相同认证能力；Health 继续显式 `security: []`。
 2. 给 diagnostics 补 401。
 3. 将安全测试改为从 OpenAPI paths 自动枚举 33 个业务 Operation，与 Server 路由集合比对：每个受保护 Operation 必须要求 ApiKey 且声明 401，两个 Health 必须 security=[]。
 
@@ -1383,7 +1383,7 @@ M2/M4 必须将 Worker 改为可管理对象或显式 Start/Stop/Wait：
 #### 6. 本轮结论与 M0 状态
 
 - [x] 35 Operation / 35 Server 路由集合数量已复核。
-- [x] 认证实际只接受 X-API-Key；发现根级 BearerAuth 文档与实现不一致。
+- [x] 认证实际同时接受 X-API-Key 和 Authorization Bearer；发现 11 个 operation-level ApiKey 覆盖导致认证声明不一致。
 - [x] 发现 diagnostics 缺少 401 文档响应。
 - [x] Error Schema 与实际结构基本匹配，但完全未被 Operation 错误响应引用。
 - [x] 发现 5 个 Operation 漏声明可能返回的 503。
@@ -1394,7 +1394,7 @@ M2/M4 必须将 Worker 改为可管理对象或显式 Start/Stop/Wait：
 - [ ] Provider Request Golden 仍需单独核查 Provider HTTP 请求行为和测试覆盖。
 - [ ] MDM-001 契约修正尚未执行；本轮没有获得修改 OpenAPI、Handler 或测试代码的授权。
 
-**本轮结论：** M0 已找到明确且可定位的 OpenAPI 契约问题：BearerAuth 虚假支持声明、diagnostics 缺少 401、5 个 Operation 缺少 503、统一 Error Schema 未被引用，以及多项运行时参数约束没有进入 Schema/description。它们应作为 MDM-001 的契约修正输入。当前仍保持审计模式，不直接修改 API 契约或实现。
+**本轮结论：** M0 已找到明确且可定位的 OpenAPI 契约问题：11 个 operation-level ApiKey 覆盖与根级 OR 不一致、diagnostics 缺少 401、5 个 Operation 缺少 503、统一 Error Schema 未被引用，以及多项运行时参数约束没有进入 Schema/description。它们应作为 MDM-001 的契约修正输入。当前仍保持审计模式，不直接修改 API 契约或实现。
 
 
 ### 2026-11-06：M0 第二十三轮（Provider Request Golden 覆盖审计）
@@ -1519,13 +1519,13 @@ M2/M4 必须将 Worker 改为可管理对象或显式 Start/Stop/Wait：
 - 11 个业务 Operation 显式声明 operation-level `ApiKey: []`。
 - 其余 22 个业务 Operation 没有 operation-level security，继承 OpenAPI 根级 `security`。
 - 根级 `security` 包含两个独立 Security Requirement Object：`ApiKey: []` 和 `BearerAuth: []`。OpenAPI 语义是 OR，因此这 22 个 Operation **并非没有认证声明，也不是公开路由**；它们被文档描述为支持 X-API-Key 或 Bearer 两种方式。
-- Data 当前 Server `s.auth` 实际只读取并校验 `X-API-Key`，不接受 Authorization Bearer。故真实问题是根级 BearerAuth 对 22 个继承 Operation 造成虚假认证能力声明，而不是“22 条 Operation 漏了 ApiKey”。
+- Data 当前 Server `s.auth` 同时读取并校验 `X-API-Key` 与 `Authorization: Bearer`，两者使用同一个 Data API Key。故真实问题是 11 个 operation-level ApiKey 覆盖与其余 22 个继承根级 OR 的安全声明不一致，而不是 Bearer 虚假支持。
 - 11 个显式 ApiKey Operation 已覆盖 X-API-Key；Health 显式公开。所有 33 个业务 Operation 的实际 Handler 仍执行 X-API-Key 认证。
 
 **需要纠正的旧记录：** 本迁移文档早期 M0 记录及设计方案中“22 条受保护业务 Operation 漏声明 ApiKey”的表述不准确，应以本轮的 OpenAPI 继承语义结果替代。规划分支中的《Market Data并入Root Server模块化单体调整方案》《Data 服务间认证映射与 Secret 注入设计》和契约登记簿也有“业务 Operation 均 operation-level 声明 ApiKey”的过度概括；这些文档由 `feat/design_doc` 维护，本轮不越权修改，只将差异记录在 Data 审计文档中。
 
 **建议的 v1 修正：**
-1. 删除 Data OpenAPI 根级 `BearerAuth` 安全替代项，根级仅保留 `ApiKey: []`；或为所有业务 Operation 显式声明 ApiKey 并移除根级 security。优先前者，避免重复配置。
+1. 保留根级 ApiKey OR BearerAuth，移除 11 个业务 Operation 上重复且范围更窄的 operation-level ApiKey 覆盖；Health 保持匿名声明。
 2. 保留两条 Health 的 `security: []`。
 3. diagnostics 补 401。
 4. Contract Test 解析 YAML 结构，验证 33 个业务 Operation 的有效 Security Requirement 只有 ApiKey，Health 无认证；同时与 Server mux 路由集合自动比对。不要再以“每个 Operation 必须写一份 operation-level security”作为必要条件。
@@ -1816,7 +1816,7 @@ M2/M4 必须将 Worker 改为可管理对象或显式 Start/Stop/Wait：
 
 #### 2. 已明确的测试缺口
 
-1. **Security**：解析 OpenAPI YAML，遍历全部 35 Operation 与 mux 注册路由；验证 Health security: []、业务 Operation 只接受 ApiKey；拒绝 root-level BearerAuth OR 使未显式覆盖的 Operation 被误描述为支持 Bearer。
+1. **Security**：解析 OpenAPI YAML，遍历全部 35 Operation 与 mux 注册路由；验证 Health security: []、33 个业务 Operation 统一接受 ApiKey OR BearerAuth，并用运行时测试锁定两种请求头形式。
 2. **Response**：从 Handler/统一错误映射建立状态码矩阵；为每类稳定错误共享验证 Error JSON Golden，并校验 Operation response 引用 Error Schema。当前 Error Schema 仅通过文本包含断言，且内层 required 只有 code/message，与实际必输出 class/code/message/retryable 不一致。
 3. **Model**：将 51 组同名 Struct/Schema 的 JSON Tag、properties、required、nullable 自动比对；对 nullable 再区分 DTO serialization 和 Endpoint business invariant，不能只按指针判断。
 4. **Endpoint**：补充 LimitPool 两个条件分支负例；对有条件业务约束的 Schema 使用 description/组合结构表达，并通过 Handler Golden 验证。
@@ -1824,7 +1824,7 @@ M2/M4 必须将 Worker 改为可管理对象或显式 Start/Stop/Wait：
 
 #### 3. 最小实施拆分（仍属于 MDM-001）
 
-- CT-01：OpenAPI security 全量一致性测试；移除 Data OpenAPI 根级 BearerAuth OR，保留 ApiKey；Health 明确匿名。
+- CT-01：OpenAPI security 全量一致性测试；保留根级 ApiKey OR BearerAuth，移除 11 个不一致的 operation-level 覆盖；Health 明确匿名。
 - CT-02：Error Schema required 与共享 Error Response 引用；逐 Operation 修正状态码声明（不机械给所有接口添加全部错误码）。
 - CT-03：Go Model/OpenAPI Schema 全量字段与 required/nullable 对照测试；修正 DragonTigerSnapshot.source_version required。
 - CT-04：LimitPool 条件约束与缺失分支测试；补齐其他确认过的 endpoint 约束说明。
@@ -1844,3 +1844,39 @@ M2/M4 必须将 Worker 改为可管理对象或显式 Start/Stop/Wait：
 - [ ] 真实数据库 Schema 快照核验尚未执行。
 
 **当前状态：** M0 仍未通过，M1 不准入。审计已足以形成一组边界清晰的 MDM-001 修正任务；下一步应优先取得脱敏数据库 Schema 证据，同时等待/确认是否授权当前分支实施 CT-01～CT-06。不得把“测试覆盖不足”误写为“现有运行时校验不存在”。
+### 2026-11-06：CT-01～CT-06 实施进度（用户已授权）
+
+实施基线：7e91042753f8ffe6b3b6b14b762219453bba0493。仅修改 feat/full-go-data-providers-api-switch；未触碰其他分支或其他模块；PR #1 仍保持 Open/Draft。
+
+#### CT-01：认证与路由一致性
+- 经重新读取 Server.auth，Data HTTP Adapter 接受 X-API-Key 与 Authorization: Bearer 两种凭据格式，两者校验同一个 Data API Key。此前“只接受 X-API-Key”的审计结论错误。
+- OpenAPI 保留根级 ApiKey OR BearerAuth；移除 11 个 Operation 的 operation-level ApiKey 覆盖，避免其安全能力与另外 22 个 Operation 不一致。
+- 新增全量路由对照测试：35 个 OpenAPI Path/Method 与 Server.Handler 路由清单逐项一致；2 个 Health 接口匿名，33 个业务接口统一继承两种认证方式。
+- 新增运行时认证测试，覆盖 X-API-Key、Bearer、缺失凭据、错误凭据。
+
+#### CT-02：Error Response 契约
+- Error.error.required 已修正为 class/code/message/retryable；request_id 仍为可选字段。
+- 当前 OpenAPI 已声明的 118 个非成功响应均增加 application/json 内容并引用 components.schemas.Error。
+- 新增 YAML 解析测试，逐 Operation 验证所有已声明的 4xx/5xx 响应都引用统一 Error Schema。
+- 尚需结合 Handler 状态码矩阵复核漏声明的状态码（特别是取消请求 408 的稳定可达性）；不能将 408 无差别添加到全部 Operation。
+
+#### CT-03：Model ↔ Schema
+- 新增 51 组 Go Model / OpenAPI Schema 自动对照注册，比较 JSON 字段集合和 required 集合；对无 omitempty 的指针字段校验 Schema nullable。
+- DragonTigerSnapshot.source_version 已加入 OpenAPI required，与 Go json tag 对齐。
+- 原有代表性 JSON 序列化测试继续保留。剩余 nullable 需按 DTO serialization / Endpoint business invariant 分类，不将所有指针与 Schema nullable 差异机械判为错误。
+
+#### CT-04：LimitPool 条件语义
+- 新增 HasData=true 且 ChangePercent=nil、HasData=false 且 Items 非空两个 Validator 负例。
+- OpenAPI 已描述 has_data 条件约束：true 时 items 非空且每项 change_percent 非 null；false 时 total=0 且 items 为空。
+- 保留 v1 DTO 的 pointer 与 nullable wire contract，不改变既有 JSON 结构。
+
+#### CT-05：参数边界
+- 新增 15 个高风险参数边界负例，覆盖 Market Stocks 分页/布尔/复权、Sector/LimitPool limit、DragonTiger 分页、Stock Search 长度/limit、Announcements 分页和 Bundle lookback 下界。
+- 现有 DragonTiger、Announcements、Stock Search、日期、证券代码等 Handler 测试继续保留。
+- 35 Operation 的完整参数矩阵仍需与 OpenAPI Schema 做最终逐项核验；尚未覆盖的日期跨度/Body 大小等约束继续列为剩余项。
+
+#### CT-06：回归验收
+- 已触发 Market Data Go test、race、vet、Docker build 和 MariaDB/PIT 集成工作流；最终状态以最新提交的 Actions 结果为准。
+- 真实部署数据库 Schema 快照尚未提供，DDL 与生产现场的最终对照仍未完成；不得用 CI 临时 MariaDB 代替生产 Schema 证据。
+
+当前准入判断：CT-01～CT-04 的代码与契约修正已提交；CT-05 已完成第一批边界测试但完整参数矩阵仍待核对；CT-06 等待最新 CI 结果与数据库 Schema 证据。M0 暂不宣告通过，MDM-002 / M1 仍不准入。
