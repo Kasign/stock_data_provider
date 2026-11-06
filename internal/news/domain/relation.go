@@ -219,7 +219,7 @@ func ResolveCurrentRelations(assertions []RelationAssertion) ([]RelationAssertio
 			continue
 		}
 		parent, exists := byID[parentID]
-		if !exists || parent.NewsID != assertion.NewsID || parent.Kind != assertion.Kind {
+		if !exists || parent.NewsID != assertion.NewsID || parent.Kind != assertion.Kind || parent.Status == RelationRetracted {
 			return nil, ErrRelationHistoryConflict
 		}
 		if _, exists := superseded[parentID]; exists {

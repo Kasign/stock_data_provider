@@ -196,6 +196,19 @@ func TestResolveCurrentRelationsAllowsOnlyOneConfirmedPrimarySubjectPerNews(t *t
 	}
 }
 
+func TestResolveCurrentRelationsRejectsSuccessorAfterRetraction(t *testing.T) {
+	confirmed := validSecurityRelation("r1", string(RelationConfirmed))
+	retracted := validSecurityRelation("r2", string(RelationRetracted))
+	retracted.Method = RelationManual
+	retracted.SupersedesRelationID = confirmed.ID
+	replacement := validSecurityRelation("r3", string(RelationConfirmed))
+	replacement.Method = RelationManual
+	replacement.SupersedesRelationID = retracted.ID
+	if _, err := ResolveCurrentRelations([]RelationAssertion{confirmed, retracted, replacement}); !errors.Is(err, ErrRelationHistoryConflict) {
+		t.Fatalf("a retracted assertion must be terminal: %v", err)
+	}
+}
+
 func TestResolveCurrentRelationsRejectsMultipleSuccessors(t *testing.T) {
 	first := validSecurityRelation("r1", string(RelationConfirmed))
 	a := validSecurityRelation("r2", string(RelationConfirmed))
