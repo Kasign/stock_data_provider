@@ -79,6 +79,25 @@ export function filterResearchNotes(items, query = "", symbol = "", tag = "") {
   }).sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)));
 }
 
+export function serializeResearchNotesExport(items, exportedAt = new Date().toISOString()) {
+  if (!Array.isArray(items) || items.length > MAX_RESEARCH_NOTES) {
+    throw new TypeError("研究记录导出数据无效或超过数量上限。");
+  }
+  const normalized = items.map(normalizeNote);
+  if (normalized.some(item => !item) || new Set(normalized.map(item => item.id)).size !== normalized.length) {
+    throw new TypeError("研究记录包含无效或重复数据，已取消导出。");
+  }
+  if (typeof exportedAt !== "string" || exportedAt.length > 64) {
+    throw new TypeError("导出时间无效。");
+  }
+  return JSON.stringify({
+    format: "stock-provider-webui.research-notes",
+    version: 1,
+    exportedAt,
+    items: normalized
+  }, null, 2);
+}
+
 export function researchNoteEditState(items, editingId, originalSnapshot) {
   const current = (Array.isArray(items) ? items : []).find(item => item?.id === editingId);
   if (!current) return "missing";
@@ -88,6 +107,7 @@ export function researchNoteEditState(items, editingId, originalSnapshot) {
 export function bindResearchNotes({ root = document, getContext = () => ({}), storage } = {}) {
   const $ = selector => root.querySelector(selector.startsWith("#") ? selector : "#" + selector);
   const form = $("#research-note-form"), editor = $("#research-note-editor"), host = $("#research-note-list");
+  const exportButton = $("#research-note-export");
   if (!form || !editor || !host) return;
   let editingId = "", editingSnapshot = "", editorInitialFormSnapshot = "";
   const state = () => readResearchNotes(storage);
@@ -221,6 +241,7 @@ export function bindResearchNotes({ root = document, getContext = () => ({}), st
       count.textContent = "研究记录存储不可用";
       create.disabled = true;
       clear.disabled = true;
+      if (exportButton) exportButton.disabled = true;
       const p = document.createElement("p");
       p.className = "table-empty";
       p.textContent = "浏览器存储不可读取或数据格式异常；为保护原始记录，当前未修改数据。";
@@ -228,6 +249,7 @@ export function bindResearchNotes({ root = document, getContext = () => ({}), st
       return;
     }
     create.disabled = false;
+    if (exportButton) exportButton.disabled = result.items.length === 0;
     const selectedTag = tagFilter.value;
     const tags = [...new Set(result.items.flatMap(note => note.tags))].sort((a, b) => a.localeCompare(b, "zh-CN"));
     tagFilter.replaceChildren();
@@ -382,6 +404,35 @@ export function bindResearchNotes({ root = document, getContext = () => ({}), st
     snapshotForm();
     feedback("研究记录已保存在当前浏览器，不会同步到服务端。");
     render();
+  });
+
+  exportButton?.addEventListener("click", () => {
+    const current = state();
+    if (!current.readable || !current.valid) {
+      feedback("研究记录存储不可读或数据异常，已取消导出。", true);
+      render();
+      return;
+    }
+    if (!current.items.length) {
+      feedback("当前没有可导出的研究记录。", true);
+      render();
+      return;
+    }
+    let content;
+    try {
+      content = serializeResearchNotesExport(current.items);
+    } catch (error) {
+      feedback(error instanceof Error ? error.message : "研究记录导出失败。", true);
+      return;
+    }
+    const blob = new Blob([content], { type: "application/json;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = "research-notes-" + new Date().toISOString().slice(0, 10) + ".json";
+    anchor.click();
+    window.setTimeout(() => URL.revokeObjectURL(url), 0);
+    feedback("已导出全部 " + current.items.length + " 条研究记录 JSON；导出范围不受当前筛选条件影响。");
   });
 
   $("#research-note-create").addEventListener("click", openNewNote);

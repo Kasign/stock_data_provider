@@ -26,7 +26,7 @@ const report = (id = "report-1", runId = "run-1") => ({ id, runId, taskId: "task
 
 try {
   browser = await chromium.launch({ headless: true });
-  const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  const context = await browser.newContext({ viewport: { width: 1280, height: 900 }, acceptDownloads: true });
   const first = await context.newPage();
   const second = await context.newPage();
   const errors = [];
@@ -50,6 +50,26 @@ try {
   assert.equal(await first.locator("#research-note-count").textContent(), "显示 1 / 1 条记录");
   await first.locator("#research-note-tag-filter").selectOption("基本面");
   assert.equal(await first.locator(".research-note-card").count(), 1, "tag filter selects matching notes");
+  await second.evaluate(({ key, items }) => localStorage.setItem(key, JSON.stringify(items)), {
+    key: noteKey,
+    items: [note("note-1", "初始笔记", "初始内容"), note("note-2", "第二条记录", "不应被当前筛选排除")]
+  });
+  await first.locator(".research-note-card").filter({ hasText: "第二条记录" }).waitFor();
+  await first.locator("#research-note-search").fill("初始笔记");
+  assert.equal(await first.locator(".research-note-card").count(), 1, "search filter narrows the visible list");
+  const noteDownloadPromise = first.waitForEvent("download");
+  await first.locator("#research-note-export").click();
+  const noteDownload = await noteDownloadPromise;
+  assert.match(noteDownload.suggestedFilename(), /^research-notes-\\d{4}-\\d{2}-\\d{2}\\.json$/);
+  const noteStream = await noteDownload.createReadStream();
+  let noteExportText = "";
+  for await (const chunk of noteStream) noteExportText += chunk.toString("utf8");
+  const noteExport = JSON.parse(noteExportText);
+  assert.equal(noteExport.format, "stock-provider-webui.research-notes");
+  assert.equal(noteExport.version, 1);
+  assert.deepEqual(noteExport.items.map(item => item.id).sort(), ["note-1", "note-2"],
+    "export includes all stored notes rather than only the filtered view");
+  await first.locator("#research-note-search").fill("");
   await first.locator("#research-note-clear").click();
   await first.locator("#research-note-create").click();
   await first.locator("#research-note-editor:not([hidden])").waitFor();

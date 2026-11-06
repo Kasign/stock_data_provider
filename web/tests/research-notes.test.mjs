@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {buildResearchNoteContextFromReport,filterResearchNotes,readResearchNotes,writeResearchNotes,researchNoteEditState,RESEARCH_NOTES_KEY} from "../src/research-notes.js";
+import {buildResearchNoteContextFromReport,filterResearchNotes,readResearchNotes,writeResearchNotes,researchNoteEditState,serializeResearchNotesExport,RESEARCH_NOTES_KEY} from "../src/research-notes.js";
 function memory(){const data=new Map();return {getItem:k=>data.has(k)?data.get(k):null,setItem:(k,v)=>data.set(k,v),removeItem:k=>data.delete(k)};}
 const note=(id,title,content,symbol="600519.SH",tags=["基本面"])=>({id,title,content,symbol,tags,createdAt:"2026-01-01",updatedAt:"2026-01-02"});
 test("研究记录可写入并回读校验",()=>{const s=memory();assert.equal(writeResearchNotes([note("1","标题","内容")],s).ok,true);assert.equal(readResearchNotes(s).items.length,1);});
@@ -94,4 +94,23 @@ test("从报告创建笔记的关联字段不再静默截断", () => {
     ...note("note-long-context", "标题", "内容"),
     ...context
   }], memory()).reason, "invalid");
+});
+
+test("研究记录 JSON 导出保留完整字段并兼容旧版单标的", () => {
+  const legacy = note("legacy-export", "旧版记录", "正文");
+  const content = serializeResearchNotesExport([legacy], "2026-11-06T00:00:00.000Z");
+  const payload = JSON.parse(content);
+  assert.equal(payload.format, "stock-provider-webui.research-notes");
+  assert.equal(payload.version, 1);
+  assert.equal(payload.exportedAt, "2026-11-06T00:00:00.000Z");
+  assert.deepEqual(payload.items[0].symbols, ["600519.SH"]);
+  assert.equal(payload.items[0].symbol, "600519.SH");
+  assert.equal(payload.items[0].taskId, "");
+  assert.equal(payload.items[0].runId, "");
+});
+
+test("研究记录 JSON 导出拒绝无效记录和重复 ID", () => {
+  assert.throws(() => serializeResearchNotesExport([{ id: "bad" }]), /无效或重复数据/);
+  assert.throws(() => serializeResearchNotesExport([note("same", "一", "正文"), note("same", "二", "正文")]), /无效或重复数据/);
+  assert.throws(() => serializeResearchNotesExport(Array.from({ length: 201 }, (_, i) => note(String(i), "标题", "正文"))), /超过数量上限/);
 });
