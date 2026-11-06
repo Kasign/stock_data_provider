@@ -114,14 +114,19 @@ func ValidateRelationAssertion(assertion RelationAssertion) error {
 	switch assertion.SubjectType {
 	case RelationSubjectSecurity:
 		if assertion.Security == nil || assertion.Industry != nil ||
-			strings.TrimSpace(assertion.Security.Market) == "" || strings.TrimSpace(assertion.Security.Symbol) == "" {
+			assertion.Security.Market == "" || assertion.Security.Market != strings.TrimSpace(assertion.Security.Market) ||
+			assertion.Security.Symbol == "" || assertion.Security.Symbol != strings.TrimSpace(assertion.Security.Symbol) {
 			return ErrRelationInvalid
 		}
 	case RelationSubjectIndustry:
 		if assertion.Industry == nil || assertion.Security != nil ||
-			strings.TrimSpace(assertion.Industry.ClassificationSystem) == "" ||
-			strings.TrimSpace(assertion.Industry.ClassificationVersion) == "" ||
-			(strings.TrimSpace(assertion.Industry.IndustryCode) == "" && strings.TrimSpace(assertion.Industry.IndustryName) == "") {
+			assertion.Industry.ClassificationSystem == "" ||
+			assertion.Industry.ClassificationSystem != strings.TrimSpace(assertion.Industry.ClassificationSystem) ||
+			assertion.Industry.ClassificationVersion == "" ||
+			assertion.Industry.ClassificationVersion != strings.TrimSpace(assertion.Industry.ClassificationVersion) ||
+			(assertion.Industry.IndustryCode == "" && assertion.Industry.IndustryName == "") ||
+			assertion.Industry.IndustryCode != strings.TrimSpace(assertion.Industry.IndustryCode) ||
+			assertion.Industry.IndustryName != strings.TrimSpace(assertion.Industry.IndustryName) {
 			return ErrRelationInvalid
 		}
 	default:
@@ -157,7 +162,10 @@ func ValidateRelationEvidence(assertion RelationAssertion, evidence RelationEvid
 	if ValidateRelationAssertion(assertion) != nil ||
 		evidence.RelationID == "" || evidence.RelationID != assertion.ID ||
 		evidence.SourceVersionID != strings.TrimSpace(evidence.SourceVersionID) ||
-		evidence.ObservationID != strings.TrimSpace(evidence.ObservationID) {
+		evidence.ObservationID != strings.TrimSpace(evidence.ObservationID) ||
+		evidence.RuleVersion != strings.TrimSpace(evidence.RuleVersion) ||
+		evidence.ModelVersion != strings.TrimSpace(evidence.ModelVersion) ||
+		evidence.FieldPath != strings.TrimSpace(evidence.FieldPath) {
 		return ErrRelationEvidenceInvalid
 	}
 	if evidence.SourceVersionID == "" && evidence.ObservationID == "" {

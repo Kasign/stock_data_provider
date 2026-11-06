@@ -69,6 +69,76 @@ func TestValidateRelationEvidenceRejectsNonCanonicalReferences(t *testing.T) {
 	}
 }
 
+func TestValidateRelationAssertionRejectsNonCanonicalSubjectIdentifiers(t *testing.T) {
+	cases := map[string]func(*RelationAssertion){
+		"padded market": func(v *RelationAssertion) { v.Security.Market = " XSHG " },
+		"padded symbol": func(v *RelationAssertion) { v.Security.Symbol = " 600000 " },
+		"padded classification system": func(v *RelationAssertion) {
+			v.SubjectType = RelationSubjectIndustry
+			v.Security = nil
+			v.Industry = &IndustryRelationSubject{
+				ClassificationSystem: " CSI ", ClassificationVersion: "2026",
+				IndustryCode: "I01",
+			}
+		},
+		"padded classification version": func(v *RelationAssertion) {
+			v.SubjectType = RelationSubjectIndustry
+			v.Security = nil
+			v.Industry = &IndustryRelationSubject{
+				ClassificationSystem: "CSI", ClassificationVersion: " 2026 ",
+				IndustryCode: "I01",
+			}
+		},
+		"padded industry code": func(v *RelationAssertion) {
+			v.SubjectType = RelationSubjectIndustry
+			v.Security = nil
+			v.Industry = &IndustryRelationSubject{
+				ClassificationSystem: "CSI", ClassificationVersion: "2026",
+				IndustryCode: " I01 ",
+			}
+		},
+		"padded industry name": func(v *RelationAssertion) {
+			v.SubjectType = RelationSubjectIndustry
+			v.Security = nil
+			v.Industry = &IndustryRelationSubject{
+				ClassificationSystem: "CSI", ClassificationVersion: "2026",
+				IndustryName: " 软件服务 ",
+			}
+		},
+	}
+	for name, mutate := range cases {
+		t.Run(name, func(t *testing.T) {
+			assertion := validSecurityRelation("r1", string(RelationConfirmed))
+			mutate(&assertion)
+			if !errors.Is(ValidateRelationAssertion(assertion), ErrRelationInvalid) {
+				t.Fatal("non-canonical subject identifiers must be rejected")
+			}
+		})
+	}
+}
+
+func TestValidateRelationEvidenceRejectsNonCanonicalMetadata(t *testing.T) {
+	assertion := validSecurityRelation("r1", string(RelationConfirmed))
+	base := RelationEvidence{
+		RelationID: "r1", Type: RelationEvidenceSourceField,
+		ObservationID: "observation-1", FieldPath: "related_securities",
+	}
+	cases := map[string]func(*RelationEvidence){
+		"padded field path": func(v *RelationEvidence) { v.FieldPath = " related_securities " },
+		"padded rule version": func(v *RelationEvidence) { v.RuleVersion = " v1 " },
+		"padded model version": func(v *RelationEvidence) { v.ModelVersion = " model-v1 " },
+	}
+	for name, mutate := range cases {
+		t.Run(name, func(t *testing.T) {
+			evidence := base
+			mutate(&evidence)
+			if !errors.Is(ValidateRelationEvidence(assertion, evidence), ErrRelationEvidenceInvalid) {
+				t.Fatal("non-canonical evidence metadata must be rejected")
+			}
+		})
+	}
+}
+
 func TestValidateRelationEvidenceMatchesMethod(t *testing.T) {
 	assertion := validSecurityRelation("r1", string(RelationConfirmed))
 	valid := RelationEvidence{
