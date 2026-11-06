@@ -560,7 +560,7 @@ Owner 使用**模块责任角色**而非个人姓名：生产方模块 Owner 对
 | CONTRACT-009 | Notification Inbox、Delivery、Attempt 的幂等和外部结果 unknown 恢复 | Notification | 发送事件的模块 Owner | 首批通知命令/事件调用点 | pending_decision |
 | CONTRACT-010 | event_type + schema_version 到强类型 Payload Schema 的注册和兼容规则 | Notification（注册机制）；事件生产方（Payload） | 所有首批事件生产方 | 首批已启用 Event 类型 | pending_decision |
 | CONTRACT-011 | News PIT 过滤顺序、授权快照/当前撤销、Cursor 快照和稳定排序 | News | Research、Researchflow | Research 首批 News Evidence Query | pending_decision |
-| CONTRACT-012 | Data OpenAPI、Go JSON Tag、真实 Handler JSON 的双向一致性 | Data | Quant、Researchflow、Server Data Adapter | 首批被消费的 Data Operation；差异未解决的 Operation 不得进入 L2 | pending_evidence |
+| CONTRACT-012 | Data OpenAPI、Go JSON Tag、真实 Handler JSON 的双向一致性 | Data | Quant、Researchflow、Server Data Adapter | 首批被消费的 Data Operation；差异未解决的 Operation 不得进入 L2 | pending_decision |
 | CONTRACT-013 | Server 组合根的唯一归属、装配入口和 Migration 总注册边界 | Server/集成组合根 Owner | Platform 及所有提供 Facade/Migration 的模块 Owner | 仅阻断需要改动共享入口的集成任务；不阻断模块内部独立开发 | pending_decision |
 
 ### 16.1 每条契约的冻结证据
@@ -697,7 +697,7 @@ L2 不要求真实 Provider 在线成功、生产 DNS/出口 SSRF 演练、所�
 
 ### 本轮分支快照
 
-- Platform：`feat/platform-foundation` — `24f282ec8889ea51df9335a429cc719ad406512e`
+- Platform 变更前基线：`feat/platform-foundation` — `24f282ec8889ea51df9335a429cc719ad406512e`
 - Data：`feat/full-go-data-providers-api-switch` — `b7d60a97b78273cf653a2910b6d1a21ac7ad6ac7`
 - News：`feat/research-news-ingestion` — `7b509c184386028802699c7e3520b7944c4ed504`
 - Researchflow：`feat/research-analysis-flow-native-go` — `bc7952845cd812ab22a4dfda33a35fd2cabbcecc`
@@ -711,7 +711,7 @@ L2 不要求真实 Provider 在线成功、生产 DNS/出口 SSRF 演练、所�
 - 未运行 Go 构建、测试、Provider、数据库、模型或端到端验证。
 - 分支 SHA 仅是本轮审查快照；任何后续合并都会使快照失效，必须重新读取。
 
-## 19. 本轮范围与限制
+## 20. 本轮范围与限制
 
 本文件基于审查基线 dc85a9da 中的项目规划与契约文档完成静态交叉 Review。它没有证明 Data、News、Platform 或五模块当前代码已经满足本契约，也没有重新运行各分支 CI、Provider、模型、数据库或部署环境测试。
 
