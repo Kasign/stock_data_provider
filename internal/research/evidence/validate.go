@@ -236,8 +236,8 @@ func canonicalString(value string) (string, error) {
         return "", err
     }
     encoded := strings.TrimSuffix(builder.String(), "\n")
-    encoded = strings.ReplaceAll(encoded, \`\u2028\`, "\u2028")
-    encoded = strings.ReplaceAll(encoded, \`\u2029\`, "\u2029")
+    encoded = strings.ReplaceAll(encoded, `\u2028`, "\u2028")
+    encoded = strings.ReplaceAll(encoded, `\u2029`, "\u2029")
     return encoded, nil
 }
 
