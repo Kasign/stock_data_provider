@@ -26,6 +26,8 @@ internal/research/
     model.go
     validate.go
     validate_test.go
+    authorization.go
+    authorization_test.go
   evidence/
     model.go
     validate.go
@@ -39,7 +41,8 @@ R1/R2 当前只实现 Context、Evidence 领域结构、契约校验、Evidence 
 ## 当前契约状态
 
 - Context：字段依据 `doc/整体任务规划/Quant-Research公开DTO字段级契约.md` 第 3.1、9.1、9.2、9.8 节；尚无专属冻结 Schema/Golden。本模块当前实现是领域校验模型，不代表跨模块契约已冻结。
-- Evidence：遵循项目级 `RSC-CTR-001` Evidence Schema/Golden；当前已实现 Go Domain/Validator/JCS-SHA-256 指纹复算和严格 PIT 本地校验，但未完成 Owner 授权复核及真实来源接入。该契约属于 Evidence，不属于 Context。
+- Evidence：遵循项目级 `RSC-CTR-001` Evidence Schema/Golden；已实现 Go Domain、结构校验、JCS/SHA-256 内容指纹和严格 PIT 本地校验。当前补充 GOV-CTR-006 AuthorizationRef/PolicySnapshot 结构绑定、策略 tuple 校验、decision_fingerprint 复算及可信调用主体/资源/用途/内容级别绑定校验；这些本地校验不等于 Owner 当前授权复核或授权签发。真实来源接入仍未完成。该契约属于 Evidence，不属于 Context。
+- AuthorizationRef：只验证不可变快照结构和指纹，并绑定 Adapter 提供的可信调用上下文；不把引用当 bearer token，不以历史 allowed 代替读取时 Owner 当前策略复核。
 - News → Research 只读证据查询：目标契约尚未实现/冻结；不得据此宣称真实新闻接入通过。
 - Research → Researchflow 的 Context 消费接口：字段语义已形成设计基线，Schema/Golden/Contract Test 尚未完成。
 - RSC-DEC-001：Quant 结果通过 Researchflow 获取；Research 不新增 Quant Port、不直接调用 Quant、不自行解引用。

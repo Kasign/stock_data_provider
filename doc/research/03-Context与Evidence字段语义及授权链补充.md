@@ -61,8 +61,17 @@ AuthorizationRef 遵循 GOV-CTR-006，是审计快照引用，不是 bearer toke
 - source_owner=research：Research 对自己的 Evidence 资源签发引用；不得覆盖上游 denied、conditional、unknown、expired 或 revoked。
 - derived_from_refs 保存直接上游 Evidence 引用；沿引用链保留各来源 Owner 的 authorization_ref。混合来源中任一来源当前不可披露时，重新计算可安全披露范围；无法剥离则拒绝整个派生内容。
 - 每次读取受限内容都向资源 Owner 复核当前策略、Scope、有效期和撤销状态；授权服务不可用或结果不完整时 fail closed。
+- Research 本地 `AuthorizationRef.Validate(snapshot)` 只验证 GOV-CTR-006 快照结构、policy_version/snapshot_ref、策略 tuple 完整性/排序和 decision_fingerprint；`ValidateEvidenceAuthorizationBinding` 只将签发快照与 Adapter 提供的可信 subject/resource/purpose 及 Evidence.content_level 绑定。两者都不能证明授权当前有效，禁止单独作为正文读取许可。
 - content_level 不得高于任何上游来源当前允许级别；Research 摘要/推断不会自动获得更高披露等级。
 - content_fingerprint 用于内容一致性审计，不是签名或授权凭证。
+
+## 5.1 AuthorizationRef 本地校验边界
+
+- `AuthorizationRef` 与 `AuthorizationPolicySnapshot` 字段严格对应 GOV-CTR-006 1.0.0 Schema；`policy_version` 必须等于 `snapshot_ref`。
+- `policies` 必须非空、tuple 唯一且按 `(policy_type, policy_ref, policy_version)` 字典序排列；指纹必须按完整策略集合复算。
+- `allowed` 的 conditions 必须为空；`conditional` 必须有条件，且不能用于读取；`denied/unknown` 一律不可读取。
+- subject_ref 只能与认证上下文提供的可信主体比较；resource_ref 必须与 Owner 返回的精确资源引用比较；用途和 content_level 必须匹配本次调用。
+- 当前 Validator 不签发授权、不查询策略快照存储、不复核撤销/过期，不提供并发读取一致性保证。上述能力由各资源 Owner 实现并通过 GOV-CTR-006 L2 Contract Test 验收。
 
 ## 5. 时间与 PIT
 

@@ -221,6 +221,23 @@ func canonicalValue(value any) (string, error) {
         }
         builder.WriteByte(']')
         return builder.String(), nil
+    case []any:
+        var builder strings.Builder
+        builder.WriteByte('[')
+        for index, item := range typed {
+            if index > 0 {
+                builder.WriteByte(',')
+            }
+            encoded, err := canonicalValue(item)
+            if err != nil {
+                return "", err
+            }
+            builder.WriteString(encoded)
+        }
+        builder.WriteByte(']')
+        return builder.String(), nil
+    case map[string]any:
+        return canonicalObject(typed)
     case float64:
         return canonicalNumber(typed), nil
     default:
