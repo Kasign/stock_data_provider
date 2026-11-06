@@ -8,7 +8,7 @@
 
 Quant 负责确定性、可复算的数值分析：Indicator、Factor、Trend、Market、Industry、Stock、Strategy、Backtest、Risk、Evaluation。不得调用 LLM，不负责研究编排，不直接访问 Provider/HTTP/SQL/Redis。
 
-输入由 Data 提供证券、行情、财务、估值、交易日历、行业历史成分、PIT 和质量契约；输出由 Researchflow 消费。禁止依赖 Research、Researchflow、LLM、Notification。
+输入由 Data 提供证券、行情、财务、估值、交易日历、行业历史成分、PIT 和质量契约；输出主要由 Researchflow 消费。Quant 不直接依赖 Research、Researchflow、LLM 或 Notification 的领域实现；风险事件通过本地 Outbox 遵循 INT-CTR-001 发布。
 
 当前仅完成旧代码资产盘点和迁移边界识别，不代表 Quant 算法、Schema、Golden、Data Adapter 或真实数据验收完成。QNT-CTR-001～005 当前均为 `pending_evidence`，按具体调用点逐项解除阻断。
 
