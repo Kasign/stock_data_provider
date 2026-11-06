@@ -35,7 +35,7 @@
 | correlation_id | 是 | string | 关联所属 Run 的跨模块工作链 ID；从 Researchflow Run Execution Context 原样继承 |
 | security_id | 条件必需 | string | 单证券分析必需；市场分析可缺省 |
 | scope | 是 | stock/market/industry | 分析范围 |
-| system_as_of | 是 | timestamp | 系统知识截止时间 |
+| system_as_of | 是 | RFC3339Nano UTC | 必须不晚于服务端可信 UTC 当前时间；系统知识截止时间 |
 | trade_date | 否 | date | 目标交易日，不替代 as_of |
 | period | 是 | string/enum | 分析周期，允许值由接口版本约束 |
 | input_snapshot_refs | 是 | string[] | Data 快照引用，保留来源与 PIT 元数据 |
