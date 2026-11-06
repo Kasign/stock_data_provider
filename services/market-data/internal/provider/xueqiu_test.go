@@ -63,6 +63,22 @@ func hasXueqiuReason(reasons []string, expected string) bool {
 }
 
 func TestXueqiuHotRankingMarksRequestLimitCap(t *testing.T) {
+	server := newXueqiuFixtureServer(t, "50", xueqiuFixtureRows(50))
+	defer server.Close()
+
+	provider := NewXueqiuConfigured(2*time.Second, server.URL, "")
+	snapshot, err := provider.FetchHotStocks(context.Background(), "popular", 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if snapshot.Total != 50 || len(snapshot.Items) != 50 {
+		t.Fatalf("snapshot should expose the 50-row provider cap, total=%d items=%d", snapshot.Total, len(snapshot.Items))
+	}
+	if !hasXueqiuReason(snapshot.QualityReasons, "provider_request_limit_capped_at_50") {
+		t.Fatalf("missing explicit provider cap reason: %v", snapshot.QualityReasons)
+	}
+}
+
 func TestXueqiuHotRankingReportsInvalidNumericField(t *testing.T) {
 	rows := []map[string]any{{
 		"symbol": "SH600519",
@@ -115,23 +131,6 @@ func TestXueqiuHotRankingReportsInvalidRankChangeWarning(t *testing.T) {
 	issue := report.Issues[0]
 	if issue.Field != "rank_change" || issue.ProviderField != "rank_change" || issue.Code != "invalid_optional_integer" || issue.RowIndex != 0 {
 		t.Fatalf("unexpected optional integer diagnostic: %+v", issue)
-	}
-}
-
-
-	server := newXueqiuFixtureServer(t, "50", xueqiuFixtureRows(50))
-	defer server.Close()
-
-	provider := NewXueqiuConfigured(2*time.Second, server.URL, "")
-	snapshot, err := provider.FetchHotStocks(context.Background(), "popular", 100)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if snapshot.Total != 50 || len(snapshot.Items) != 50 {
-		t.Fatalf("snapshot should expose the 50-row provider cap, total=%d items=%d", snapshot.Total, len(snapshot.Items))
-	}
-	if !hasXueqiuReason(snapshot.QualityReasons, "provider_request_limit_capped_at_50") {
-		t.Fatalf("missing explicit provider cap reason: %v", snapshot.QualityReasons)
 	}
 }
 

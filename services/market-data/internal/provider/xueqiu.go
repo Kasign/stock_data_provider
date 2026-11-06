@@ -79,11 +79,6 @@ func xueqiuNumber(row map[string]json.RawMessage, fields ...string) (*float64, e
 }
 
 func xueqiuSymbol(row map[string]json.RawMessage) (string, error) {
-func xueqiuReportRowParseIssue(ctx context.Context, rowIndex int, field, providerField, code, expected string, raw json.RawMessage, message string) {
-	addProviderParseIssue(ctx, rowIndex, field, providerField, code, expected, providerJSONValueType(raw), providerJSONPreview(raw), message)
-}
-
-
 	raw := strings.ToUpper(strings.TrimSpace(xueqiuString(row, "symbol")))
 	if raw == "" {
 		raw = strings.ToUpper(strings.TrimSpace(xueqiuString(row, "code")))
@@ -122,6 +117,10 @@ func xueqiuReportRowParseIssue(ctx context.Context, rowIndex int, field, provide
 		return "", fmt.Errorf("雪球榜单返回了非 A 股证券 %q", symbol)
 	}
 	return symbol, nil
+}
+
+func xueqiuReportRowParseIssue(ctx context.Context, rowIndex int, field, providerField, code, expected string, raw json.RawMessage, message string) {
+	addProviderParseIssue(ctx, rowIndex, field, providerField, code, expected, providerJSONValueType(raw), providerJSONPreview(raw), message)
 }
 
 func xueqiuProviderTime(raw json.RawMessage, now time.Time) *time.Time {
