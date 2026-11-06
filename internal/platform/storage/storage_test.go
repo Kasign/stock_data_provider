@@ -249,13 +249,13 @@ type migrationTestState struct {
 	finished               map[uint64]bool
 	failStatement          bool
 	statements             []string
-	lockAcquired           bool
-	lockReleased           bool
-	failLockRelease        bool
+	lockAcquired             bool
+	lockReleased             bool
+	failLockRelease          bool
 	skipAppliedHistoryUpdate bool
-	physicalConnClosed     bool
-	historyCreated         bool
-	historyColumnsUpgraded bool
+	physicalConnClosed       bool
+	historyCreated           bool
+	historyColumnsUpgraded   bool
 }
 
 type migrationTestConnector struct {
