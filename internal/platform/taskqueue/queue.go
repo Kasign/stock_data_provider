@@ -468,43 +468,25 @@ func (q *Queue) finish(ctx context.Context, taskID, status, failureCode, message
 }
 
 // finishPanic 在同一事务中终结 Run 与 Task，避免 panic 恢复只更新其中一张表。
+
 func (q *Queue) finishPanic(ctx context.Context, task claimedTask) error {
 	tx, err := q.db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("begin panic finalization: %w", err)
 	}
 	defer tx.Rollback()
-	if _, err := tx.ExecContext(ctx, `UPDATE analysis_runs r JOIN analysis_tasks t ON t.run_id=r.run_id
-		SET r.status='failed', r.finished_at=UTC_TIMESTAMP(6),
-		r.result_json=JSON_OBJECT('run_id', r.run_id, 'status', 'failed',
-			'request', JSON_EXTRACT(t.request_json, '
 
-func newID() (string, error) {
-	var b [16]byte
-	if _, err := rand.Read(b[:]); err != nil {
-		return "", fmt.Errorf("generate task ID: %w", err)
-	}
-	return hex.EncodeToString(b[:]), nil
-}
-
-func safeMessage(value string) string {
-	value = strings.Map(func(r rune) rune {
-		if r < 32 && r != '\t' {
-			return -1
-		}
-		return r
-	}, value)
-	if len(value) > 300 {
-		return value[:300]
-	}
-	return value
-}
-),
-			'failure', JSON_OBJECT('code', 'worker_panic', 'stage', 'worker', 'message', 'Analysis worker recovered from an internal panic'))
-		WHERE t.task_id=?`, task.taskID); err != nil {
+	query := "UPDATE analysis_runs r JOIN analysis_tasks t ON t.run_id=r.run_id " +
+		"SET r.status='failed', r.finished_at=UTC_TIMESTAMP(6), " +
+		"r.result_json=JSON_OBJECT('run_id', r.run_id, 'status', 'failed', " +
+		"'request', JSON_EXTRACT(t.request_json, '$'), " +
+		"'failure', JSON_OBJECT('code', 'worker_panic', 'stage', 'worker', 'message', 'Analysis worker recovered from an internal panic')) " +
+		"WHERE t.task_id=?"
+	if _, err := tx.ExecContext(ctx, query, task.taskID); err != nil {
 		return fmt.Errorf("persist panic run result: %w", err)
 	}
-	res, err := tx.ExecContext(ctx, `UPDATE analysis_tasks SET status='failed',failure_code='worker_panic',error_message=?,finished_at=UTC_TIMESTAMP(6),updated_at=UTC_TIMESTAMP(6) WHERE task_id=? AND status='running'`, safeMessage("analysis worker recovered from an internal panic"), task.taskID)
+
+	res, err := tx.ExecContext(ctx, "UPDATE analysis_tasks SET status='failed',failure_code='worker_panic',error_message=?,finished_at=UTC_TIMESTAMP(6),updated_at=UTC_TIMESTAMP(6) WHERE task_id=? AND status='running'", safeMessage("analysis worker recovered from an internal panic"), task.taskID)
 	if err != nil {
 		return fmt.Errorf("persist panic task result: %w", err)
 	}
