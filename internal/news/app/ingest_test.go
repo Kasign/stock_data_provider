@@ -288,7 +288,6 @@ func TestIngestCandidateRejectsIncompletePolicyTrace(t *testing.T) {
 	}
 }
 
-
 func TestIngestCandidateIdempotencyIgnoresPerAttemptFetchAndNormalizeTimes(t *testing.T) {
 	repository := &memoryIdentityRepository{}
 	useCase := NewIngestCandidate(repository, func() string { return "observation-fetch-times" })

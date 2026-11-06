@@ -99,7 +99,6 @@ func TestNormalizeCandidatePreservesUnknownTimestampText(t *testing.T) {
 	}
 }
 
-
 func TestNormalizeCandidateNormalizesFetchAndNormalizationTimes(t *testing.T) {
 	fetchedAt := time.Date(2026, 11, 6, 10, 0, 0, 0, time.FixedZone("UTC+8", 8*60*60))
 	normalizedAt := fetchedAt.Add(time.Second)

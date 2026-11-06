@@ -313,7 +313,6 @@ func TestSourceTransportRetryableUsesAdapterClassification(t *testing.T) {
 	}
 }
 
-
 func TestCollectSourceRecordsFetchAndNormalizationTimesSeparately(t *testing.T) {
 	body := `<?xml version="1.0"?><rss version="2.0"><channel><item><guid>item-1</guid><title>标题</title><link>https://publisher.example/item-1</link></item></channel></rss>`
 	transport := &sourceTransportStub{response: feedResponse(body, "application/rss+xml", http.StatusOK)}
