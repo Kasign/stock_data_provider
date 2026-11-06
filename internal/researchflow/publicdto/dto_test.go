@@ -27,11 +27,11 @@ func TestRunDTOUsesPublicNamesAndExplicitNulls(t *testing.T) {
 
 func TestStageAndAttemptDTOUseStablePublicFieldNames(t *testing.T) {
 	stage:=StageFromDomain(domain.Stage{Ref:"stage_1",RunRef:"run_1",Code:"quote",Status:domain.StageReady}, "1.0.0")
-	attempt:=AttemptFromDomain(domain.Attempt{Ref:"attempt_1",StageRef:"stage_1",Status:domain.AttemptRunning}, "1.0.0")
+	attempt:=AttemptFromDomain(domain.Attempt{Ref:"attempt_1",StageRef:"stage_1",Number:1,Status:domain.AttemptRunning}, "1.0.0")
 	sraw,_:=json.Marshal(stage); araw,_:=json.Marshal(attempt)
 	var s,a map[string]any; _=json.Unmarshal(sraw,&s); _=json.Unmarshal(araw,&a)
 	if s["stage_ref"]!="stage_1" || s["dependency_stage_refs"]==nil {t.Fatalf("unexpected Stage DTO: %s",sraw)}
-	if a["attempt_ref"]!="attempt_1" || a["attempt_no"]!=float64(0) || a["lease_owner"]!=nil {t.Fatalf("unexpected Attempt DTO: %s",araw)}
+	if a["attempt_ref"]!="attempt_1" || a["attempt_no"]!=float64(1) || a["lease_owner"]!=nil {t.Fatalf("unexpected Attempt DTO: %s",araw)}
 }
 
 

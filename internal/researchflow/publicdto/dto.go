@@ -7,6 +7,25 @@ import (
 )
 
 // Run is the versioned public representation. Nullable fields are emitted as explicit nulls.
+type ExcludedStage struct {
+	StageCode string `json:"stage_code"`
+	RuleVersion string `json:"rule_version"`
+	ReasonCode string `json:"reason_code"`
+}
+
+type ResultSummary struct {
+	StageOutcomes map[string]string `json:"stage_outcomes"`
+	ExcludedStages []ExcludedStage `json:"excluded_stages"`
+	MissingStageCodes []string `json:"missing_stage_codes"`
+	DegradedStageCodes []string `json:"degraded_stage_codes"`
+	BlockedStageCodes []string `json:"blocked_stage_codes"`
+	ReasonCodes []string `json:"reason_codes"`
+	Coverage float64 `json:"coverage"`
+	QualityStatus string `json:"quality_status"`
+	RiskGateDecisions map[string]string `json:"risk_gate_decisions"`
+	ActionabilityStatus string `json:"actionability_status"`
+}
+
 type Run struct {
 	SchemaVersion string `json:"schema_version"`
 	RunRef string `json:"run_ref"`
@@ -18,7 +37,7 @@ type Run struct {
 	TemplateVersion string `json:"template_version"`
 	TemplateFingerprint string `json:"template_fingerprint"`
 	InputSnapshotRefs []string `json:"input_snapshot_refs"`
-	ResultSummary *domain.ResultSummary `json:"result_summary"`
+	ResultSummary *ResultSummary `json:"result_summary"`
 	OriginatingRequestID *string `json:"originating_request_id"`
 	CorrelationID string `json:"correlation_id"`
 	TerminationReason *string `json:"termination_reason"`
@@ -64,7 +83,7 @@ type Attempt struct {
 }
 
 func RunFromDomain(v domain.Run) Run {
-	return Run{SchemaVersion:v.SchemaVersion,RunRef:v.Ref,Status:v.Status,Version:v.Version,SystemAsOf:v.SystemAsOf,DeadlineAt:v.DeadlineAt,TemplateRef:v.TemplateRef,TemplateVersion:v.TemplateVersion,TemplateFingerprint:v.TemplateFingerprint,InputSnapshotRefs:cloneStrings(v.InputSnapshotRefs),ResultSummary:v.ResultSummary,OriginatingRequestID:v.OriginatingRequestID,CorrelationID:v.CorrelationID,TerminationReason:stringPointer(v.TerminationReason),CreatedAt:v.CreatedAt,StartedAt:v.StartedAt,FinishedAt:v.FinishedAt}
+	return Run{SchemaVersion:v.SchemaVersion,RunRef:v.Ref,Status:v.Status,Version:v.Version,SystemAsOf:v.SystemAsOf,DeadlineAt:v.DeadlineAt,TemplateRef:v.TemplateRef,TemplateVersion:v.TemplateVersion,TemplateFingerprint:v.TemplateFingerprint,InputSnapshotRefs:cloneStrings(v.InputSnapshotRefs),ResultSummary:resultSummaryFromDomain(v.ResultSummary),OriginatingRequestID:cloneStringPointer(v.OriginatingRequestID),CorrelationID:v.CorrelationID,TerminationReason:stringPointer(v.TerminationReason),CreatedAt:v.CreatedAt,StartedAt:cloneTimePointer(v.StartedAt),FinishedAt:cloneTimePointer(v.FinishedAt)}
 }
 func StageFromDomain(v domain.Stage, schemaVersion string) Stage {
 	return Stage{SchemaVersion:schemaVersion,StageRef:v.Ref,RunRef:v.RunRef,StageCode:v.Code,Status:v.Status,Version:v.Version,Required:v.Required,DependencyStageRefs:cloneStrings(v.Dependencies),RetryPolicyRef:v.RetryPolicyRef,AttemptNo:v.AttemptNo,RetryAt:v.RetryAt,OutputRef:v.OutputRef,QualityStatus:stringPointer(v.QualityStatus),ReasonCodes:cloneStrings(v.ReasonCodes),RiskDecision:stringPointer(v.RiskDecision),CreatedAt:v.CreatedAt,StartedAt:v.StartedAt,FinishedAt:v.FinishedAt}
@@ -74,3 +93,25 @@ func AttemptFromDomain(v domain.Attempt, schemaVersion string) Attempt {
 }
 func cloneStrings(v []string) []string { if v==nil{return []string{}}; return append([]string(nil),v...) }
 func stringPointer(v string) *string { if v=="" { return nil }; return &v }
+
+func resultSummaryFromDomain(v *domain.ResultSummary) *ResultSummary {
+	if v == nil { return nil }
+	out:=&ResultSummary{
+		StageOutcomes:make(map[string]string,len(v.StageOutcomes)),
+		ExcludedStages:make([]ExcludedStage,0,len(v.ExcludedStages)),
+		MissingStageCodes:cloneStrings(v.MissingStageCodes),
+		DegradedStageCodes:cloneStrings(v.DegradedStageCodes),
+		BlockedStageCodes:cloneStrings(v.BlockedStageCodes),
+		ReasonCodes:cloneStrings(v.ReasonCodes),
+		Coverage:v.Coverage,
+		QualityStatus:v.QualityStatus,
+		RiskGateDecisions:make(map[string]string,len(v.RiskGateDecisions)),
+		ActionabilityStatus:v.ActionabilityStatus,
+	}
+	for code,status:=range v.StageOutcomes { out.StageOutcomes[code]=string(status) }
+	for _,item:=range v.ExcludedStages { out.ExcludedStages=append(out.ExcludedStages,ExcludedStage{StageCode:item.StageCode,RuleVersion:item.RuleVersion,ReasonCode:item.ReasonCode}) }
+	for code,decision:=range v.RiskGateDecisions { out.RiskGateDecisions[code]=decision }
+	return out
+}
+func cloneStringPointer(v *string) *string { if v==nil{return nil}; out:=*v; return &out }
+func cloneTimePointer(v *time.Time) *time.Time { if v==nil{return nil}; out:=*v; return &out }
