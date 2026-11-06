@@ -2,7 +2,6 @@ package claim
 
 import (
 	"fmt"
-	"math"
 	"strings"
 	"time"
 )
@@ -60,7 +59,7 @@ func (next Claim) ValidateNextVersion(previous Claim) error {
 	if err := previous.Validate(); err != nil { return fmt.Errorf("previous claim: %w", err) }
 	if err := next.Validate(); err != nil { return fmt.Errorf("next claim: %w", err) }
 	if next.ClaimID != previous.ClaimID { return fmt.Errorf("claim_id cannot change across versions") }
-	if previous.ClaimVersion == math.MaxInt {
+	if previous.ClaimVersion == int(^uint(0)>>1) {
 		return fmt.Errorf("claim_version reached the supported integer limit")
 	}
 	if next.ClaimVersion != previous.ClaimVersion+1 { return fmt.Errorf("claim_version must increment by exactly one") }

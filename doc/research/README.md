@@ -133,4 +133,4 @@ R1/R2/R3/R5 当前实现 Context、Evidence、Event、Claim/Hypothesis 领域结
 - Context 诊断将 valid/degraded/unknown/invalid 映射为 healthy/degraded/unavailable/failed；Event/Claim 仅执行各自本地结构校验，不把生命周期状态或认识论状态误作质量等级。
 - Observation 仅输出稳定错误码、安全摘要及版本/质量状态属性，不输出研究问题、Evidence 内容或底层 Validator 原始错误。
 - Evidence 诊断暂不接入：本地结构与授权快照校验不能替代来源 Owner 当前授权复核。该 Adapter 也不查询 Repository、不创建 Run/Stage/Attempt、不代表完整研究质量诊断。
-- 新增 Context 质量映射、敏感字段不外泄和快照隔离测试；尚未执行。
+- 新增 Context 质量映射、Event/Claim 结构校验、敏感字段不外泄、快照隔离和 Runner 取消行为测试；尚未执行。

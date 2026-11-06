@@ -3,7 +3,6 @@ package event
 import (
 	"fmt"
 	"math"
-	"math"
 	"strings"
 	"time"
 )
@@ -95,7 +94,7 @@ func (next ResearchEvent) ValidateNextVersion(previous ResearchEvent) error {
 	if err := previous.Validate(); err != nil { return fmt.Errorf("previous event: %w", err) }
 	if err := next.Validate(); err != nil { return fmt.Errorf("next event: %w", err) }
 	if next.EventID != previous.EventID { return fmt.Errorf("event_id cannot change across versions") }
-	if previous.EventVersion == math.MaxInt {
+	if previous.EventVersion == int(^uint(0)>>1) {
 		return fmt.Errorf("event_version reached the supported integer limit")
 	}
 	if next.EventVersion != previous.EventVersion+1 { return fmt.Errorf("event_version must increment by exactly one") }

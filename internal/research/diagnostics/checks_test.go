@@ -6,7 +6,9 @@ import (
 	"time"
 
 	platformdiagnostics "example.com/stock-analysis-flow/internal/platform/diagnostics"
+	researchclaim "example.com/stock-analysis-flow/internal/research/claim"
 	researchcontext "example.com/stock-analysis-flow/internal/research/context"
+	researchevent "example.com/stock-analysis-flow/internal/research/event"
 )
 
 func validContextSnapshot() researchcontext.Context {
