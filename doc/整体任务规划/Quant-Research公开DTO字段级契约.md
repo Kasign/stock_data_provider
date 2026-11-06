@@ -415,6 +415,8 @@ required=true 的分区被省略时，Context 整体不能标记为 valid；必�
 
 该对象是某次访问决策的审计快照，不代表未来访问自动获准。subject_ref 对应被授权调用主体，resource_ref 对应目标资源。读取时必须由权威模块按当前策略重新授权；历史 Run 回放同时保留当时决策和当前访问决策，二者不能互相覆盖。
 
+当 `source_owner=research` 时，由 Research 为自己的派生 Evidence 签发 AuthorizationRef：policy_owner=research，subject_ref 为可信调用主体，resource_ref=evidence_id，purpose_code 按 research_analysis/risk_review 选择，content_level 按实际返回内容选择。公开/无限制的 Research Evidence 也必须签发 allowed 快照。若派生 Evidence 依赖 Data/News/Quant 受限内容，Research 的 allow 不得覆盖来源 Owner 的限制；必须保留来源 AuthorizationRef 链，读取时按各来源 Owner 的当前策略重新授权，并采用最严格的适用限制。
+
 ### 9.6 EventSourceTime
 
 Event 允许多来源时间并存，不以单一 occurred_at 覆盖冲突来源。
