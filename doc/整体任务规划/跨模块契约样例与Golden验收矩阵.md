@@ -84,7 +84,7 @@
 | 契约 | 正常样例 | 边界样例 | 异常样例 | 兼容样例 |
 |---|---|---|---|---|
 | SRV-CTR-001 Composition/Lifecycle | 单一 Bootstrap 创建共享 DB/Redis/HTTP Client，显式 Migration 后启动 Handler/Worker | Worker drain 达到 deadline 后按 fencing 撤权 | 模块重复创建共享连接、Migration 部分失败仍启动 Worker | 新模块通过构造函数注入依赖，不改变既有资源所有权 |
-| INT-CTR-001 Quant/Research/Researchflow→Notification | Run 终态、RiskDecision 实质变化、ResearchEvent 生命周期迁移分别映射到固定 event_type/schema_version；NotificationEvent.event_id 独立生成 | 同一领域版本重放保持 event_id/idempotency_key；风险多主体按 subject_ref 拆分 | 把领域 ID 直接复用为 NotificationEvent.event_id；重复状态触发重复通知；Notification 反推业务事实 | 4 份 Schema 与 6 个 Golden 已提交；Validator、重放/冲突/回滚 Contract Test 未完成；新增事件/语义必须新增 Schema 版本和映射决议 |
+| INT-CTR-001 Quant/Research/Researchflow→Notification | Run 终态、RiskDecision 实质变化、ResearchEvent 生命周期迁移分别映射到固定 event_type/schema_version；NotificationEvent.event_id 独立生成 | 同一领域版本重放保持 event_id/idempotency_key；风险多主体按 subject_ref 拆分 | 把领域 ID 直接复用为 NotificationEvent.event_id；重复状态触发重复通知；Notification 反推业务事实 | 4 份 Schema 与 6 个 Golden 已提交并通过本地 Draft 2020-12 Validator；模块 CI、重放/冲突/回滚 Contract Test 未完成；新增事件/语义必须新增 Schema 版本和映射决议 |
 
 ## 9. 使用与冻结规则
 

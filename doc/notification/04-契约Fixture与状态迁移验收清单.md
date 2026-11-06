@@ -2,7 +2,7 @@
 
 - 归属：NTF-001/004/005/006
 - 对应契约：NTF-CTR-001～003（历史别名 Platform CONTRACT-009/010）；状态以项目级契约目录为准
-- 状态：4 份 Draft 2020-12 Schema 与 6 个代表性 Golden 已提交；NTF-CTR-001～003 仍为 pending_evidence，自动化 Validator/Golden/Contract Test 未完成；不要求个人 Owner 签字
+- 状态：4 份 Draft 2020-12 Schema 与 6 个代表性 Golden 已提交；本地 Draft 2020-12 Validator 校验通过；NTF-CTR-001～003 仍为 pending_evidence，模块 CI Validator/自动化 Golden/Contract Test 未完成；不要求个人 Owner 签字
 - 日期：2026-11-06
 - 说明：以下均为合成数据与测试场景，不代表已有实现或真实渠道能力。
 
