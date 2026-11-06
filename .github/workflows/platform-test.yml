@@ -64,3 +64,51 @@ jobs:
         run: go test -race ./internal/platform/...
       - name: Run platform vet
         run: go vet ./internal/platform/...
+
+  storage-integration:
+    name: Storage integration
+    runs-on: ubuntu-latest
+    services:
+      mariadb:
+        image: mariadb:11.4
+        env:
+          MARIADB_ROOT_PASSWORD: root
+          MARIADB_DATABASE: platform_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+      redis:
+        image: redis:7.4-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=5s
+          --health-timeout=3s
+          --health-retries=10
+    env:
+      PLATFORM_STORAGE_INTEGRATION: "1"
+      PLATFORM_MARIADB_ADDR: 127.0.0.1:3306
+      PLATFORM_MARIADB_USER: root
+      PLATFORM_MARIADB_PASSWORD: root
+      PLATFORM_MARIADB_DATABASE: platform_test
+      PLATFORM_REDIS_ADDR: 127.0.0.1:6379
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache-dependency-path: go.sum
+
+      - name: Run real MariaDB and Redis integration tests
+        run: go test ./internal/platform/storage -run 'Test(MariaDB|Redis)StorageIntegration' -v
+
+      - name: Run storage integration race tests
+        run: go test -race ./internal/platform/storage -run 'Test(MariaDB|Redis)StorageIntegration' -v
