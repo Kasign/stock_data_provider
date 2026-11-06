@@ -1941,3 +1941,35 @@ Root Test Job 的失败发生在 gofmt 门禁，报告：
 
 **当前结论：** M0 仍为 `in_progress`，M1 不准入。Integration 合并没有改变 Data 专项代码，但改变了根 Module 的依赖和全仓 CI 基线，并暴露了其他模块的合并质量问题。下一批只在 Data 范围继续 CT-05 参数矩阵与 CT-06 验收证据收敛；不修复 Research/WebUI 代码，不提前实施 M1/M2/M4，不新增 API 或字段。
 
+
+
+### 2026-11-06：CT-05 参数矩阵第一批实施（CI 待验）
+
+代码基线：`0f574fb8c49899738b895c42d546cd9d562abb18`。本轮继续 M0 的 CT-05，仅修改 Data OpenAPI 与 Data HTTP Contract Test；未新增 API、请求字段或响应字段，未修改 Handler 运行时行为。
+
+#### 1. 参数矩阵核对与自动化
+
+- 对照 `services/market-data/internal/httpapi/server.go` 及分拆 Handler 文件，提取 35 个 Operation 的 Path/Query 参数名称、位置和 required 状态。
+- 新增 `TestOpenAPIParameterInventoryMatchesReviewedHandlerMatrix`，锁定全部 35 个 Operation 的参数清单、path/query 位置、required/optional 和 Probe requestBody 存在性。
+- 新增 `TestOpenAPIDocumentsHandlerParameterBounds`，锁定 Handler 已实施但原 OpenAPI 描述缺失的高风险限制。
+- 修正 OpenAPI 描述：指数日线最多 10 年/3660 自然日；交易日历最多 3660 自然日；市场情绪历史最多 366 自然日且 limit=1..500/default 366；Fundamentals 年份 2007..当前年、quarter 1..4、as_of 单值且非未来；Market Session 的 at 必须是单值 RFC3339；Provider Probe 非空请求体最多 8 KiB、仅接受一个 JSON 对象且拒绝未知字段。
+
+#### 2. 提交与 CI
+
+- OpenAPI 参数说明：`e01dbdadc95b87bad7c535fe6d5013c85501f70b`。
+- 35 Operation 参数矩阵测试：`c3960a33f8da7b479639e641f10a25e168eab37a`。
+- 测试格式修正：`0f574fb8c49899738b895c42d546cd9d562abb18`。
+- 中间格式提交 `093287b6` 已由后续提交再次修正；最终以 `0f574fb8` 为代码验收基线。
+- 当前 Go test suite Run `42206799834` 仍为 in_progress；Root Test Job 因 Integration 合并带入的 Research 文件非法字符而失败，Data Module Test Job 与 MariaDB/PIT Job 在本次记录时仍在运行。不能将 CT-05 标记为 CI 通过。
+- 上一轮已确认的 Data gofmt 失败仅由参数矩阵测试格式导致，已在 `0f574fb8` 修正；需以该 SHA 对应的 Data Module Job 最终结果验证。
+
+#### 3. 本批边界与后续
+
+- [x] 35 Operation 的参数名称、位置和 required 状态形成可执行矩阵。
+- [x] 补齐本轮发现的 6 组 Handler 参数边界说明。
+- [ ] 当前 SHA 的 Data Module Go Test / race / vet 最终通过。
+- [ ] 继续核对参数 schema 的 type/format/minimum/maximum/default/enum 与 Handler 约束，不把“参数清单一致”误判为“参数语义全部一致”。
+- [ ] 对尚未纳入本批的分页、批量数量、日期跨度和 Body 大小边界补齐实际负例测试。
+- [ ] 取得脱敏生产数据库 Schema 快照，完成 M0 的生产 DDL 对照。
+
+**当前状态：** CT-05 已从第一批 15 个 Handler 边界负例扩展为 35 Operation 参数清单自动化和 6 组文档约束补齐；参数值域/格式/默认值的全量语义核对仍未完成。M0 继续 in_progress，M1 不准入。CI 结果未最终确认前，不得把本批标记为通过。
