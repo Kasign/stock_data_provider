@@ -78,6 +78,7 @@ func ValidateValuationSnapshot(snapshot *model.ValuationSnapshot, requested []st
 		expected[symbol] = struct{}{}
 	}
 	seen := make(map[string]struct{}, len(snapshot.Items))
+	itemDegraded := false
 	for i, item := range snapshot.Items {
 		symbol, err := normalize.NormalizeSymbol(item.Symbol)
 		if err != nil || symbol != item.Symbol {
@@ -105,6 +106,7 @@ func ValidateValuationSnapshot(snapshot *model.ValuationSnapshot, requested []st
 		switch item.QualityStatus {
 		case model.QualityValid:
 		case model.QualityDegraded:
+			itemDegraded = true
 			add(symbol, "quality_status", "quality_status", "item_degraded", "valid or degraded", "valuation item is marked degraded", SeverityWarning, i)
 		default:
 			add(symbol, "quality_status", "quality_status", "invalid_enum", "valid|degraded", "valuation item quality status is unsupported", SeverityError, i)
@@ -161,6 +163,10 @@ func ValidateValuationSnapshot(snapshot *model.ValuationSnapshot, requested []st
 	}
 	if len(seen)+len(missing) != len(requested) {
 		add("", "items", "items", "coverage_mismatch", "every requested symbol is returned or explicitly missing", "valuation returned/missing symbol coverage does not match request", SeverityError, -1)
+	}
+	if snapshot.QualityStatus == model.QualityValid &&
+		(len(snapshot.MissingSymbols) > 0 || snapshot.ProviderTimestamp == nil || snapshot.ProviderReportDate == "" || itemDegraded) {
+		add("", "quality_status", "quality_status", "invalid_quality_claim", "degraded or unknown when required evidence is incomplete", "valuation snapshot claims valid quality despite missing source-time, coverage, or degraded item evidence", SeverityError, -1)
 	}
 	return report
 }

@@ -7,7 +7,7 @@ import (
 	"github.com/Kasign/stock_data_provider/services/market-data/internal/model"
 )
 
-func floatPointer(v float64) *float64 { return &v }
+func valuationFloatPointer(v float64) *float64 { return &v }
 
 func validValuationSnapshot() *model.ValuationSnapshot {
 	now := time.Now()
@@ -18,7 +18,7 @@ func validValuationSnapshot() *model.ValuationSnapshot {
 		Items: []model.ValuationItem{{
 			Symbol: "600000.SH", Code: "600000", Source: "test", SourceVersion: "v1",
 			FetchedAt: now, QualityStatus: model.QualityValid,
-			PETTM: floatPointer(-3.2), PBMRQ: floatPointer(1.1),
+			PETTM: valuationFloatPointer(-3.2), PBMRQ: valuationFloatPointer(1.1),
 		}},
 	}
 }
@@ -37,7 +37,7 @@ func TestValidateValuationSnapshotAllowsNegativeMultiplesAndNullableMetrics(t *t
 
 func TestValidateValuationSnapshotReportsFieldAndCoverageIssues(t *testing.T) {
 	snapshot := validValuationSnapshot()
-	snapshot.Items[0].TurnoverRatePercent = floatPointer(-1)
+	snapshot.Items[0].TurnoverRatePercent = valuationFloatPointer(-1)
 	snapshot.MissingSymbols = []string{"600001.SH"}
 	report := ValidateValuationSnapshot(snapshot, []string{"600000.SH"})
 	if !report.HasErrors() {
