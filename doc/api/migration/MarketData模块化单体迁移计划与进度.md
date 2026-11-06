@@ -539,3 +539,59 @@ internal/platform/httpclient.Client 使用 DestinationPolicy 精确 Host/Port al
 - Retention Worker 的实际实现为 runQuoteRetentionWorker：内部启动匿名 goroutine，首次立即执行清理，之后每 24 小时执行一次；使用 30 秒子 Context，但没有返回 Stop Handle、WaitGroup 或 done channel。Root main 当前只管理 Analysis Task Queue 的 Start/Close，并通过 HTTP Server Shutdown 等待服务停止；Data Worker 无法被 Root Shutdown 显式等待。M2 应将它改成具备 Start/Stop/Wait 的生命周期组件，并确保先停止 Worker，再关闭 Data Repository/共享 DB。
 - Root Store.Close 当前关闭 Root DB 和 Redis；Data Store.Close 关闭自己创建的 DB。Data Redis Cache 没有 Close 接口，每条命令 Dial、AUTH/SELECT、执行并关闭连接。统一资源时，Redis Cache Adapter 应借用 Root Redis Client，不应让 Data Module 再关闭 Root Redis Client。
 
+
+
+### 2026-11-06：M0 第十轮补充（Provider 请求语义矩阵初稿）
+
+本轮基于当前 Provider 源码与 config.Config 的实际构造路径，补充请求级矩阵。此处记录的是迁移前行为基线，不是 M4 的目标安全策略；具体请求的 query 字段和 JSON Body 字段仍需在后续逐调用点补齐。
+
+#### 1. Provider 请求矩阵（第一批）
+
+| Provider/能力 | 协议与认证 | 默认超时/请求约束 | 重试与重定向 | 响应限制/备注 |
+|---|---|---|---|---|
+| Eastmoney 行情、日 K、证券目录、板块、指数、市场宽度、涨停池、龙虎榜、公告、个股资金流 | HTTP GET；行情榜单等个别能力另有 POST JSON；公开 Web 参数，无私有 Key；UT 为可覆盖的前端公共参数 | Provider 默认 12s；Quote/Kline 等调用点常使用 6s/8s attempt timeout；Market turnover 特殊路径 60s | GET 通用 retry 最多 3 次，仅对 429/部分 5xx、timeout、连接类错误重试，退避 700ms/1400ms；部分语义不完整响应另有一次补偿重试；仅 HTTPS 且目标 Host 为 *.eastmoney.com 的重定向可跟随，最多 3 跳 | 通用 JSON 通过 readBoundedBody(maxProviderPayloadBytes)；错误响应最多读取 4096 bytes；热榜 POST 同样有重试与 bounded body |
+| Tencent 行情、日 K、证券搜索 | HTTP GET；无 Key；查询参数位于 URL Query | 默认 12s | 禁止重定向（返回 http.ErrUseLastResponse）；未发现统一请求重试 | maxProviderPayloadBytes；搜索结果需解码 GBK/解析 v_hint |
+| Sina 行情、日 K | HTTP GET；无 Key；行情代码拼接在 quote URL，日 K 使用 Query | 默认 12s | 禁止重定向；未发现统一请求重试 | 单次响应上限 1 MiB；超限显式失败 |
+| NetEase 行情、历史 CSV | HTTP GET；无 Key；证券代码拼接在行情 URL，历史请求使用完整配置 URL | 默认 12s | 禁止重定向；未发现统一请求重试 | 行情响应上限 1 MiB；历史 CSV 使用 maxProviderPayloadBytes；非 2xx 错误体最多读取 4096 bytes |
+| Yahoo Finance | HTTP GET；无 Key；Ticker 拼入 Chart URL，Query 传入区间等参数 | 默认 12s | 禁止重定向；未发现统一请求重试 | maxProviderPayloadBytes；公开非 SLA 数据源，默认可选启用 |
+| Tushare | HTTP POST JSON；Token 位于 JSON Body（不是 Header/Query） | 默认 12s | 默认 Go Client 重定向行为；未发现 Provider 内部重试 | 非 2xx 错误体最多读取 4096 bytes；响应读取需纳入统一 bounded body 核验 |
+| Hithink | HTTP GET；X-api-key Header | 默认 15s | 默认 Go Client 重定向行为；未发现 Provider 内部重试 | 走统一 JSON 请求封装；需核对响应读取是否所有路径均有上限 |
+| TickFlow 授权 API | HTTP GET/POST；x-api-key Header | 默认 20s；授权与免费 API 使用不同 Base URL | 默认 Go Client 重定向行为；未发现 Provider 内部重试 | 成功响应 maxProviderPayloadBytes；错误响应最多 2048 bytes，且会对 Key 脱敏 |
+| TickFlow 免费日 K | HTTP GET；无 Key，走独立 free Base URL | 默认 20s；调用间隔至少 1s | 同上 | 同上；不能将免费 Base URL 与授权 Host 混为同一信任域 |
+| MiaoXiang | HTTP POST JSON；apikey Header | 默认 10s；进程级全局互斥，非排队准入；两次请求至少间隔约 300ms | 禁止重定向；未发现重试 | 响应上限 2 MiB；错误响应最多读取 4096 bytes；日志不输出 Key |
+| Xueqiu | HTTP GET；可选 Cookie Header，同时发送 Referer/Origin | 默认 10s | 默认 Go Client 重定向行为；未发现 Provider 内部重试 | maxProviderPayloadBytes；Cookie 仅保存在内存，错误和日志不得泄漏 |
+| BaoStock | 自定义 TCP 协议 | Connect 默认 5s；Request 默认 15s；请求内部另有 4s Context 限制 | 非 HTTP redirect/retry；单连接请求串行，显式 Login/Logout | 不适用 HTTP DestinationPolicy；Host 默认 public-api.baostock.com，端口由客户端协议配置 |
+| Pytdx | TDX TCP 协议 | Provider timeout 默认 12s；单次 Dial 最多 1.5s | 使用 TDX Client WithRedial()；轮换候选 Host | 不适用 HTTP DestinationPolicy；需独立审计 Host 列表来源、端口及重连次数 |
+
+#### 2. Endpoint 覆盖与 Host 约束现状
+
+internal/config/config.go 当前对配置化 HTTP Endpoint 调用 validateEndpointURL，校验项为：
+- 必须是绝对 URL，Scheme 仅允许 http/https；
+- 必须有 Host；
+- 禁止 URL UserInfo、Query、ForceQuery 和 Fragment。
+
+当前没有校验 Host 是否属于对应 Provider 的官方域名白名单，也没有统一的 endpoint override 授权/风险分级。Eastmoney 的 redirect policy 只约束跳转目标，不约束初始 endpoint；因此将自定义 Eastmoney URL 配置为非 Eastmoney Host 时，首跳仍可能访问该 Host。其他采用默认 Go Redirect Policy 的 Provider 也可能跟随跨 Host 跳转；若请求携带 Tushare Token Body、Hithink/TickFlow/MiaoXiang Key Header 或 Xueqiu Cookie，必须验证重定向时敏感信息不会被转发至非预期域名。
+
+当前配置化 URL 环境变量包括：
+- Eastmoney：MARKET_DATA_EASTMONEY_*_URL（Quote、Kline、Stock Basic、Sector Ranking、Index、Market Stocks、Limit Pool Base、Stock Boards、Dragon Tiger、Announcements、Hot Rankings、Hot Surge、Capital Flow）。
+- Tencent：MARKET_DATA_TENCENT_*_URL（Quote、Kline、None Kline、Stock Search）。
+- Sina：MARKET_DATA_SINA_*_URL；NetEase：MARKET_DATA_NETEASE_*_URL；Yahoo：MARKET_DATA_YAHOO_CHART_URL。
+- Tushare：MARKET_DATA_TUSHARE_API_URL；Hithink：MARKET_DATA_HITHINK_BASE_URL；TickFlow：MARKET_DATA_TICKFLOW_API_URL 与 MARKET_DATA_TICKFLOW_FREE_API_URL；Xueqiu：MARKET_DATA_XUEQIU_BASE_URL；MiaoXiang：MARKET_DATA_MX_API_URL。
+- BaoStock/Pytdx 为 TCP Host 配置，必须与 HTTP Endpoint 策略分开治理。
+
+#### 3. M4 受控 HTTP Client 接入约束（审计结论，不改代码）
+
+1. 先建立 Provider→默认 Host 集合、Endpoint override 模式（仅默认 Host / 显式允许自定义 Host / 禁止自定义 Host）和 Redirect Host 集合；不能仅以 URL Scheme 校验代替出站目标约束。
+2. 认证信息必须绑定到 Provider 预期 Host；跨 Host 重定向默认禁止。若某 Provider 必须跳转，需显式列出目标域名，并测试 Authorization/Cookie/自定义 Key Header/Body Token 不会泄漏。
+3. 保留每个调用点的 GET/POST、Query/Body、Header、超时、重试次数和退避、速率控制、响应上限及错误体截断行为；不能将 Eastmoney 重试泛化到所有 Provider。
+4. Eastmoney 的 push2.eastmoney.com、push2his.eastmoney.com、push2ex.eastmoney.com、push2delay.eastmoney.com 等子域属于明确的重定向/服务域名集合；最终 allowlist 应基于实际配置和 live probe 记录核实，不应简单放行所有任意域名。
+5. BaoStock/Pytdx 使用独立 TCP Adapter；公共平台若没有 TCP 目标控制契约，必须单独定义边界或记录为平台能力阻断，不能伪装成 HTTP Client。
+
+#### 4. 本轮未完成项
+
+- 尚未逐一列出每个 Eastmoney/Tencent/Hithink/TickFlow 业务调用的完整 Query 字段和 Body Schema；本表按请求模式归并，不替代逐调用点清单。
+- 尚未完成所有 Provider 对 http.Client 默认 Redirect Policy 的敏感信息跨域转发测试。
+- 尚未对 Hithink、Tushare、Tencent Search 等每个独立请求入口的响应大小限制逐条确认。
+- 尚未将 Endpoint override 改造为 Host allowlist；本轮仅审计并记录，不提前修改 Provider 行为。
+
+**M0 状态继续保持 in_progress。** 请求级矩阵已从“源码文件覆盖”推进到“主要 Provider 请求模式和安全边界初稿”，仍未达到逐调用点完整度，不能据此进入 M1。
