@@ -184,13 +184,13 @@ Research 定义 Context 领域语义；Researchflow 负责单次 Run 的分区�
 | source_locator | 否 | string | 来源定位符，不直接存未授权全文 |
 | claim_ref | 否 | string | 关联 Claim |
 | subject_refs | 是 | string[] | 证券/行业/Event 引用 |
-| published_at | 否 | timestamp | 来源声明发布时间 |
-| available_at | 否 | timestamp | 有证据支持的外部可获得时间 |
+| published_at | 是 | timestamp/null | 来源声明发布时间；无来源证据显式 null |
+| available_at | 是 | timestamp/null | 有证据支持的外部可获得时间；无来源证据显式 null |
 | system_observed_at | 是 | timestamp | 本系统观察时间 |
-| valid_time_start/end | 否 | timestamp | 业务有效区间 |
+| valid_time_start/end | 是 | timestamp/null | 业务有效区间；必须同时为 null 或同时提供且 start<=end |
 | system_as_of | 是 | timestamp | 纳入研究时的知识截止时间 |
 | stance | 是 | supports/contradicts/neutral | 对 Claim 的立场 |
-| confidence | 否 | number/null | 仅允许 [0,1]；非 null 时 confidence_method 与 confidence_method_version 必填，不能使用 LLM 自评分冒充统计概率 |
+| confidence | 是 | number/null | 仅允许 [0,1]；无可信置信估计时 null；非 null 时 confidence_method 与 confidence_method_version 必填，不能使用 LLM 自评分冒充统计概率 |
 | confidence_method | 条件必需 | string | confidence 非 null 时必填，说明估计方法 |
 | confidence_method_version | 条件必需 | string | confidence 非 null 时必填，固定方法版本 |
 | quality_status | 是 | valid/degraded/invalid/unknown | 证据质量 |
@@ -211,9 +211,9 @@ fact 必须有可验证来源与时间；reported_fact 只表示来源声称；i
 | status | 是 | detected/consolidating/active/materializing/fading/invalidated/closed | 生命周期 |
 | subject_refs | 是 | string[] | 主体引用 |
 | evidence_refs | 是 | string[] | 支持/反证引用 |
-| occurred_at | 否 | timestamp/null | 规范化事件发生时间；无可靠时间时显式 null |
-| published_at | 否 | timestamp/null | 来源发布时间 |
-| available_at | 否 | timestamp/null | 有证据的外部可获得时间；无证据显式 null |
+| occurred_at | 是 | timestamp/null | 规范化事件发生时间；无可靠时间时显式 null |
+| published_at | 是 | timestamp/null | 单一规范化来源发布时间；多来源原始值以 source_times[] 为准，无统一值时 null |
+| available_at | 是 | timestamp/null | 单一规范化外部可获得时间；多来源原始值以 source_times[] 为准，无统一值时 null |
 | system_observed_at | 是 | timestamp | 系统观察时间 |
 | system_as_of | 是 | timestamp | 当前版本知识截止时间 |
 | impact_hypothesis_refs | 是 | string[] | 影响假设引用 |
@@ -403,7 +403,7 @@ required=true 的分区被省略时，Context 整体不能标记为 valid；必�
 | content_level | 是 | metadata/summary/snippet/full | 内容级别 |
 | subject_ref | 是 | string | 被授权来源对象 |
 | decided_at | 是 | timestamp | 决策时间 |
-| expires_at | 否 | timestamp | 授权到期时间 |
+| expires_at | 是 | timestamp/null | 无固定到期时显式 null，不代表永久授权 |
 | conditions | 是 | string[] | 限制条件，可为空 |
 | decision_fingerprint | 是 | string | 决策内容指纹 |
 
