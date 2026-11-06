@@ -65,6 +65,33 @@ func (v NullableDateTime) MarshalJSON() ([]byte, error) {
 	return json.Marshal(*v.Value)
 }
 
+// NullableOpaqueRef distinguishes explicit JSON null from a missing required field.
+type NullableOpaqueRef struct {
+	Present bool
+	Value   *string
+}
+
+func (v *NullableOpaqueRef) UnmarshalJSON(data []byte) error {
+	v.Present = true
+	if bytes.Equal(bytes.TrimSpace(data), []byte("null")) {
+		v.Value = nil
+		return nil
+	}
+	var value string
+	if err := json.Unmarshal(data, &value); err != nil {
+		return err
+	}
+	v.Value = &value
+	return nil
+}
+
+func (v NullableOpaqueRef) MarshalJSON() ([]byte, error) {
+	if v.Value == nil {
+		return []byte("null"), nil
+	}
+	return json.Marshal(*v.Value)
+}
+
 type NewsAuthorizationRef struct {
 	AuthorizationRef    string                    `json:"authorization_ref"`
 	PolicyOwner         string                    `json:"policy_owner"`
@@ -88,9 +115,9 @@ type NewsAuthorizationBinding struct {
 	ResourceRef           string                      `json:"resource_ref"`
 	PurposeCode           string                      `json:"purpose_code"`
 	RequestedContentLevel AuthorizationContentLevel   `json:"requested_content_level"`
-	ProviderRef           *string                     `json:"provider_ref"`
+	ProviderRef           NullableOpaqueRef `json:"provider_ref"`
 	SourceRef             string                      `json:"source_ref"`
-	EndpointRef           *string                     `json:"endpoint_ref"`
+	EndpointRef           NullableOpaqueRef `json:"endpoint_ref"`
 	AuthorizationRef      NewsAuthorizationRef        `json:"authorization_ref"`
 	PolicySnapshot        AuthorizationPolicySnapshot `json:"policy_snapshot"`
 }
@@ -109,10 +136,13 @@ func ValidateNewsAuthorizationBinding(binding NewsAuthorizationBinding) error {
 		!validAuthorizationContentLevel(binding.RequestedContentLevel) {
 		return ErrAuthorizationBindingInvalid
 	}
-	if binding.ProviderRef != nil && !canonicalOpaqueRef(*binding.ProviderRef) {
+	if !binding.ProviderRef.Present || !binding.EndpointRef.Present {
 		return ErrAuthorizationBindingInvalid
 	}
-	if binding.EndpointRef != nil && !canonicalOpaqueRef(*binding.EndpointRef) {
+	if binding.ProviderRef.Value != nil && !canonicalOpaqueRef(*binding.ProviderRef.Value) {
+		return ErrAuthorizationBindingInvalid
+	}
+	if binding.EndpointRef.Value != nil && !canonicalOpaqueRef(*binding.EndpointRef.Value) {
 		return ErrAuthorizationBindingInvalid
 	}
 
@@ -162,7 +192,7 @@ func ValidateNewsAuthorizationBinding(binding NewsAuthorizationBinding) error {
 }
 
 func validNewsPolicySnapshot(binding NewsAuthorizationBinding, snapshot AuthorizationPolicySnapshot) bool {
-	hasSource, hasProvider := false, false
+	hasSource, hasProvider, hasEndpoint := false, false, false
 	var previous AuthorizationPolicyVersion
 	for i, policy := range snapshot.Policies {
 		if !canonicalOpaqueRef(policy.PolicyType) ||
@@ -175,25 +205,26 @@ func validNewsPolicySnapshot(binding NewsAuthorizationBinding, snapshot Authoriz
 		}
 		switch policy.PolicyType {
 		case "source":
-			if policy.PolicyRef != binding.SourceRef {
+			if hasSource || policy.PolicyRef != binding.SourceRef {
 				return false
 			}
 			hasSource = true
 		case "provider_output":
-			if binding.ProviderRef == nil || policy.PolicyRef != *binding.ProviderRef {
+			if hasProvider || binding.ProviderRef.Value == nil || policy.PolicyRef != *binding.ProviderRef.Value {
 				return false
 			}
 			hasProvider = true
 		case "endpoint":
-			if binding.EndpointRef == nil || policy.PolicyRef != *binding.EndpointRef {
+			if hasEndpoint || binding.EndpointRef.Value == nil || policy.PolicyRef != *binding.EndpointRef.Value {
 				return false
 			}
+			hasEndpoint = true
 		default:
 			return false
 		}
 		previous = policy
 	}
-	return hasSource && (binding.ProviderRef == nil || hasProvider)
+	return hasSource && (binding.ProviderRef.Value == nil || hasProvider)
 }
 
 func comparePolicyVersion(a, b AuthorizationPolicyVersion) int {

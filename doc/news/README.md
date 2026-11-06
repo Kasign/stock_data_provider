@@ -38,7 +38,7 @@
 - [ ] N3 在线采集：Feed 解析与 Endpoint 传输分派已有代码；平台 PLAT-008 原语已实现并有专项 CI，但尚未进入当前 News 分支基线，且 PLAT-002 未冻结、生产 BoundDoer 注入/来源授权/出口验收未完成
 - [x] N4 Domain/Application 首批：身份识别、Observation 幂等语义、内容版本、证券/行业关系和转载关系规则已有实现与离线测试
 - [ ] N4/N6 后续：真实采集编排、生产 Repository、数据库唯一约束/事务并发与历史版本持久化仍未完成
-- [ ] N5：按公共契约接入 Config/Secret、Logger/Fault/Request ID、HTTP Client；NEWS-CTR-002 Binding DTO/Validator 已实现结构绑定、GOV-CTR-006 JCS/SHA-256 指纹复核和显式 null/缺失区分；尚未实现授权签发、当前策略读取时复核和授权竞态保护
+- [ ] N5：按公共契约接入 Config/Secret、Logger/Fault/Request ID、HTTP Client；NEWS-CTR-002 Binding DTO/Validator 已实现结构绑定和 nullable 字段显式 null/缺失区分；fingerprint JCS 复核等待公共 GOV-CTR-006 Verifier，尚未实现授权签发、当前策略读取时复核和授权竞态保护
 - [ ] N6：公共存储能力就绪后实现新闻自有 Repository/SQL/Migration；Redis 按需
 - [ ] N7：接入公共 Diagnostics；Task/Audit/Metrics 按真实需求评估
 - [ ] N8：完成 News 与公共平台集成验收
@@ -106,7 +106,7 @@ N1 已完成固定旧 Python 上游的三类新闻/情报持久化对象、旧 i
 
 - 已实现强类型 Binding / AuthorizationRef / PolicySnapshot DTO。
 - Validator 校验可信 caller、资源、用途、内容级别、策略版本引用、策略 tuple 唯一性和排序。
-- `expires_at` 区分字段缺失与显式 `null`；Schema 要求字段存在，null 只表示无固定过期时间。
+- `provider_ref`、`endpoint_ref`、`expires_at` 均区分字段缺失与显式 `null`；Schema 要求字段存在，null 按各字段契约表达不适用/无固定过期时间。
 - Fingerprint 当前只校验小写 64 位 SHA-256 hex；JCS + SHA-256 复核等待公共 GOV-CTR-006 Verifier 进入共同基线，不在 News 内复制算法。
 - 本 Validator 不签发授权、不读取当前策略、不提供受限内容，也不替代读取时 Owner 复核。
 - NEWS-CTR-002 仍为 pending_evidence，不标记 L2/frozen。

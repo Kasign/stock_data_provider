@@ -31,13 +31,54 @@ func loadNewsAuthorizationGolden(t *testing.T) NewsAuthorizationBinding {
 		fixture.ExpectedDecision != string(AuthorizationDecisionConditional) || fixture.ExpectedContent {
 		t.Fatalf("unexpected NEWS-CTR-002 golden metadata: %+v", fixture)
 	}
-	return fixture.AuthorizationBinding
+	binding := fixture.AuthorizationBinding
+	if fixture.ExpectedBinding["subject_ref"] != binding.CallerRef ||
+		fixture.ExpectedBinding["resource_ref"] != binding.ResourceRef ||
+		fixture.ExpectedBinding["purpose_code"] != binding.PurposeCode ||
+		fixture.ExpectedBinding["content_level"] != string(binding.RequestedContentLevel) ||
+		fixture.ExpectedBinding["policy_version"] != binding.PolicySnapshot.SnapshotRef {
+		t.Fatalf("NEWS-CTR-002 expected binding does not match DTO: %+v", fixture.ExpectedBinding)
+	}
+	return binding
 }
 
 func TestValidateNewsAuthorizationBindingGolden(t *testing.T) {
 	binding := loadNewsAuthorizationGolden(t)
 	if err := ValidateNewsAuthorizationBinding(binding); err != nil {
 		t.Fatalf("golden binding rejected: %v", err)
+	}
+}
+
+func TestValidateNewsAuthorizationBindingAcceptsExplicitNullableRefs(t *testing.T) {
+	base := loadNewsAuthorizationGolden(t)
+	base.ProviderRef = NullableOpaqueRef{Present: true}
+	base.EndpointRef = NullableOpaqueRef{Present: true}
+
+	policies := make([]AuthorizationPolicyVersion, 0, 1)
+	for _, policy := range base.PolicySnapshot.Policies {
+		if policy.PolicyType == "source" {
+			policies = append(policies, policy)
+		}
+	}
+	base.PolicySnapshot.Policies = policies
+	if err := ValidateNewsAuthorizationBinding(base); err != nil {
+		t.Fatalf("explicit null provider_ref/endpoint_ref with source inheritance rejected: %v", err)
+	}
+}
+
+func TestValidateNewsAuthorizationBindingRequiresNullableFields(t *testing.T) {
+	base := loadNewsAuthorizationGolden(t)
+
+	missingProviderField := base
+	missingProviderField.ProviderRef.Present = false
+	if !errors.Is(ValidateNewsAuthorizationBinding(missingProviderField), ErrAuthorizationBindingInvalid) {
+		t.Fatal("provider_ref must be present even when nullable")
+	}
+
+	missingEndpointField := base
+	missingEndpointField.EndpointRef.Present = false
+	if !errors.Is(ValidateNewsAuthorizationBinding(missingEndpointField), ErrAuthorizationBindingInvalid) {
+		t.Fatal("endpoint_ref must be present even when nullable")
 	}
 }
 
@@ -69,6 +110,15 @@ func TestValidateNewsAuthorizationBindingRejectsIncompleteOrUnsortedPolicySnapsh
 	}
 	if !errors.Is(ValidateNewsAuthorizationBinding(missingProvider), ErrAuthorizationBindingInvalid) {
 		t.Fatal("provider output policy version must be present when provider_ref is set")
+	}
+
+	duplicateSource := base
+	duplicateSource.PolicySnapshot.Policies = append([]AuthorizationPolicyVersion(nil), base.PolicySnapshot.Policies...)
+	duplicateSource.PolicySnapshot.Policies = append(duplicateSource.PolicySnapshot.Policies, AuthorizationPolicyVersion{
+		PolicyType: "source", PolicyRef: "sec-edgar", PolicyVersion: "2.2.0",
+	})
+	if !errors.Is(ValidateNewsAuthorizationBinding(duplicateSource), ErrAuthorizationBindingInvalid) {
+		t.Fatal("one snapshot cannot contain multiple effective versions for the same source policy")
 	}
 
 	unsorted := base
