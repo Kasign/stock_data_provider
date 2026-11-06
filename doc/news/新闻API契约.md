@@ -42,7 +42,7 @@
 新闻记录应尽可能返回：
 - 新闻 ID、标题、摘要、规范 URL。
 - 来源标识和来源类别。
-- published_at、available_at、fetched_at、system_system_observed_at。
+- published_at、available_at、fetched_at、system_observed_at。
 - 时间可信度和缺失状态。
 - 内容类型/完整度。
 - 证券/行业关联及关联证据状态。
