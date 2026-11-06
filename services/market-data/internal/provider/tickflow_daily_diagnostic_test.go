@@ -20,7 +20,7 @@ func TestTickFlowDailyBarsReportsRawFieldParseLocation(t *testing.T) {
 	date := time.Now().In(location).AddDate(0, 0, -1)
 	timestamp := time.Date(date.Year(), date.Month(), date.Day(), 12, 0, 0, 0, location).UnixMilli()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write([]byte(`{"code":0,"data":{"timestamp":[`+strconv.FormatInt(timestamp, 10) + `],"open":[100],"high":[102],"low":[99],"close":["bad-price"],"volume":[1000],"amount":[100000],"prev_close":[100]}}`))
+		_, _ = w.Write([]byte(`{"code":0,"data":{"timestamp":[` + strconv.FormatInt(timestamp, 10) + `],"open":[100],"high":[102],"low":[99],"close":["bad-price"],"volume":[1000],"amount":[100000],"prev_close":[100]}}`))
 	}))
 	defer server.Close()
 	reporter := validation.NewReporter(validation.DefaultMaxIssues)
