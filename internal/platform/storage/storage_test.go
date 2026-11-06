@@ -249,7 +249,7 @@ type migrationTestState struct {
 	finished                 map[uint64]bool
 	failStatement            bool
 	statements               []string
-	failLockAcquire           bool
+	failLockAcquire          bool
 	lockAcquired             bool
 	lockReleased             bool
 	failLockRelease          bool
