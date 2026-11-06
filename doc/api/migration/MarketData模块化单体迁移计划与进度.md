@@ -1395,3 +1395,70 @@ M2/M4 必须将 Worker 改为可管理对象或显式 Start/Stop/Wait：
 - [ ] MDM-001 契约修正尚未执行；本轮没有获得修改 OpenAPI、Handler 或测试代码的授权。
 
 **本轮结论：** M0 已找到明确且可定位的 OpenAPI 契约问题：BearerAuth 虚假支持声明、diagnostics 缺少 401、5 个 Operation 缺少 503、统一 Error Schema 未被引用，以及多项运行时参数约束没有进入 Schema/description。它们应作为 MDM-001 的契约修正输入。当前仍保持审计模式，不直接修改 API 契约或实现。
+
+
+### 2026-11-06：M0 第二十三轮（Provider Request Golden 覆盖审计）
+
+审计基线：`3076ab76262dee0ab2d08539ad4db38823d7c2c0`。本轮检查 Provider 测试文件清单，并抽查 12 个 Provider 的请求构造/HTTP mock 测试。这里的“Golden”指测试固定请求 Method、URL/Query、Header、Body、重定向与响应语义；仅验证解析结果或调用成功不算完整 Request Golden。未运行测试，也未修改 Provider 代码。
+
+#### 1. 现有测试覆盖矩阵
+
+| Provider | 已有请求级证据 | 当前判断 | 主要缺口 |
+|---|---|---|---|
+| Eastmoney | quote/Kline Query、UT、profile Referer/Query、sector ranking Query、index quote Query、stock-list 分页 Query、hot ranking Endpoint 配置；有外部 Redirect 拒绝与临时 502 重试测试 | 相对最完整，但仍非全调用族 Golden | Hot ranking POST Body、capital-flow、dragon-tiger、announcement、limit-pool、market breadth 等请求字段需按调用族补齐；Redirect 目前只覆盖部分策略，不是 301/302/303/307/308 全矩阵 |
+| Tushare | 日线 POST 方法和 JSON Body、复权/单位解析；市场资金流、复权因子、证券状态等有专用 Provider 测试 | 业务响应覆盖较多，通用请求契约不足 | Token Body 字段、API Name/Fields/Params、所有 POST 调用族和 endpoint override 未形成统一请求 Golden；跨 Host 307/308 与凭据不外泄未覆盖 |
+| Hithink | 日线 X-api-key Header、分页 offset；热榜/指数/财务等有独立业务测试 | 局部请求字段已验证 | 各 API endpoint、Query、分页终止条件、Header 与重定向组合缺少完整矩阵 |
+| TickFlow | Quote X-API-Key、日线/指数/板块/市场宽度等有独立测试 | 能力级测试较多，通用 HTTP 请求 Golden 不完整 | GET/POST 请求分支、Free API 限速、API Key 隔离、重定向与响应体边界未统一覆盖 |
+| MiaoXiang | POST、apikey Header、JSON Body、响应解析、缓存避免重复请求、无效 Key/Endpoint 测试 | 当前最明确的请求契约测试之一 | 全局 TryLock 并发跳过、300ms 限速边界、HTTP 失败不缓存、超大响应/错误体上限、取消和 Redirect 需补测试 |
+| Xueqiu | 热榜 Query（size/type）、响应字段与排序校验 | Query 级局部覆盖 | Cookie Header 精确值、敏感 Header 重定向隔离、错误码、timeout/响应体边界未覆盖 |
+| Tencent | Quote/Kline Query、调整接口参数、Referer/响应解析及日期边界测试 | 请求参数覆盖较好 | 禁止 Redirect、超时/取消、响应上限与 endpoint override 的显式断言不足 |
+| Sina | Quote/Kline Query、Referer、历史 datalen、编码和响应解析测试 | 请求参数覆盖较好 | 禁止/允许 Redirect 策略、timeout/取消、响应上限和 endpoint override 需补 |
+| NetEase | Kline Query、Quote callback、Referer、CSV/JSONP 解析 | 请求参数覆盖较好 | Redirect、timeout/取消、响应大小上限、endpoint override 需补 |
+| Yahoo Finance | Chart Query（range/interval 等）、Ticker/调整口径及响应解析 | Query 级局部覆盖 | 禁止 Redirect、跨 Host 凭据隔离、timeout/取消、响应上限和 endpoint override 需补 |
+| BaoStock | 协议帧、日线、交易日、复权因子、错误和数据规范化测试 | 主要是协议/数据语义测试 | TCP 请求帧字段 Golden、长度/CRC/压缩异常、断线重连、并发 gate、Close 等待和取消行为需形成独立协议矩阵 |
+| Pytdx | 日线 Client 创建/关闭、复权因子失败、金额与交易所映射测试 | 主要是调用/数据语义测试 | Host 轮转顺序、Dial timeout、每次调用 Close、重连目标、150ms rate limit、请求中取消不生效边界需要 fake dialer/协议层测试 |
+
+#### 2. 当前不能称为完整 Request Golden 的原因
+
+1. Provider 测试主要围绕业务能力和数据质量组织，缺少按 Endpoint/调用族固定 Method、完整 Query、Header、Body 的可复用断言层。
+2. Provider 的 HTTP Client 创建方式、Redirect policy、Timeout、响应体上限分散在构造器；测试没有统一验证这些传输行为。
+3. 现有 Eastmoney Redirect 测试覆盖自定义策略的可信 HTTPS Host 与外部目标拒绝，但不能替代其他 Provider 的跨 Host 凭据隔离测试；也不能推导 Tushare Body Token 在 307/308 下安全。
+4. 多数 httptest 只校验请求的一两个关键字段，不能证明未校验字段没有漂移；建议采用按调用族的 Query/Body Golden，而不是只断言某个参数非空。
+5. TCP Provider 不应套用 HTTP Golden；BaoStock 应按协议帧字段/CRC/压缩体，Pytdx 应按 Host 轮转和调用生命周期分别建立 fake transport 测试。
+
+#### 3. M0 剩余 Request Golden 的最小闭环
+
+按风险和收益排序，先补以下集合，避免对全部 Provider 做无差别重写：
+
+**P0：认证信息与请求目标**
+- Tushare：POST JSON 的 api_name、token、params、fields；断言 Token 不进入 URL/日志；对 301/302/303/307/308 的 Body/Method 行为建立测试。
+- Hithink/TickFlow：X-api-key / X-API-Key Header 名称和值、Endpoint host、Query/Body 精确字段。
+- Xueqiu：Cookie Header 的存在、精确作用域和跨 Host 不外泄。
+- MiaoXiang：apikey Header、POST Body、禁止 Redirect、缓存/全局并发语义。
+
+**P0：Eastmoney 关键调用族**
+- 热榜 POST Body：appId/globalId/marketType/pageNo/pageSize。
+- 资金流：secid/fields1/fields2/klt/lmt/end/ut。
+- 龙虎榜：reportName/columns/filter/sort/page/source/client。
+- 公告：sr/page_size/page_index/ann_type/client_source/f_node/s_node/begin_time/end_time/stock_list。
+- 涨跌停池：日期、类型、分页、字段集及 provider report date 语义。
+- 每个调用族固定 endpoint、method、完整 query/body、关键 Header；分页需覆盖第一页/中间页/终止页。
+
+**P1：HTTP 传输行为**
+- 同 Host 与跨 Host 301/302/303/307/308；HTTP→HTTPS 与 HTTPS→HTTP。
+- 有凭据与无凭据两类请求；跨 Host 不允许携带 API Key、Cookie 或 Body Token。
+- timeout、context cancel、429/5xx、重试次数/间隔、响应体大小边界。
+- endpoint override 与默认 endpoint 一致性。
+
+**P1：TCP**
+- BaoStock：header/body length、CRC、压缩/非压缩、错误 CDATA、超限、断线后重新登录、并发请求串行和 Close。
+- Pytdx：Host 轮转、超时、失败后重连、rate limit、Close、在途请求 Context 取消边界。
+
+#### 4. 本轮判断
+
+- Eastmoney、Tencent、Sina、NetEase 等已有不少请求参数断言，不能笼统评价为“没有请求测试”。
+- Tushare、Hithink、TickFlow、MiaoXiang、Xueqiu 已覆盖部分关键凭据/请求形态，但跨 Host 和传输边界证据不足。
+- BaoStock/Pytdx 当前测试重点是数据/协议结果，缺少完整连接生命周期和目标安全测试。
+- 现有测试文件数量较多，但测试数量不等于请求契约覆盖率；应以 Endpoint/调用族矩阵为覆盖分母。
+
+**M0 收敛建议：** Provider Request Golden 的全量补齐不应阻断 M1 的文档/模块边界设计。M0 可以把当前已证实的请求契约差异记录为迁移基线；涉及凭据泄露、重定向、目标地址的安全回归测试必须在 M4 平台出站 Client 接入前完成。MDM-001 OpenAPI 修正与 M1 Module 合并可并行推进，但当前仍需用户授权后才能修改 OpenAPI/Provider/测试代码。
