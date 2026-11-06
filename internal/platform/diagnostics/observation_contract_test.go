@@ -3,6 +3,7 @@ package diagnostics
 import (
 	"context"
 	"encoding/json"
+	"os"
 	"strconv"
 	"strings"
 	"testing"
@@ -97,5 +98,38 @@ func TestRunnerPreservesInputResultOrder(t *testing.T) {
 	}
 	if report.Results[0].CheckID != "slow-first" || report.Results[1].CheckID != "fast-second" {
 		t.Fatalf("result order changed: %+v", report.Results)
+	}
+}
+
+func TestPLATCTR004GoldenFixturesSatisfyGoValidator(t *testing.T) {
+	files := []string{
+		"../../../doc/platform/golden/PLAT-CTR-004-observation-healthy.golden.json",
+		"../../../doc/platform/golden/PLAT-CTR-004-observation-unavailable.golden.json",
+	}
+	for _, path := range files {
+		t.Run(path, func(t *testing.T) {
+			data, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var observation Observation
+			if err := json.Unmarshal(data, &observation); err != nil {
+				t.Fatal(err)
+			}
+			if err := observation.Validate(); err != nil {
+				t.Fatalf("Golden rejected by Go validator: %v", err)
+			}
+			encoded, err := json.Marshal(observation)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var roundTrip Observation
+			if err := json.Unmarshal(encoded, &roundTrip); err != nil {
+				t.Fatal(err)
+			}
+			if err := roundTrip.Validate(); err != nil {
+				t.Fatalf("serialized Observation violates contract: %v", err)
+			}
+		})
 	}
 }
