@@ -2,10 +2,12 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
-const [marketStocks, app, browserAcceptance] = await Promise.all([
+const [marketStocks, app, watchlistItemView, browserAcceptance, screeningBrowserAcceptance] = await Promise.all([
   readFile(new URL("../src/market-stocks.js", import.meta.url), "utf8"),
   readFile(new URL("../src/app.js", import.meta.url), "utf8"),
-  readFile(new URL("./stock-research-browser.mjs", import.meta.url), "utf8")
+  readFile(new URL("../src/watchlist-item-view.js", import.meta.url), "utf8"),
+  readFile(new URL("./stock-research-browser.mjs", import.meta.url), "utf8"),
+  readFile(new URL("./screening-local-browser.mjs", import.meta.url), "utf8")
 ]);
 
 test("全市场分页行情同时提供行情详情和深度研究入口", () => {
@@ -36,7 +38,7 @@ test("市场人气榜、涨跌停池和龙虎榜提供独立深度研究入口",
 
 test("自选股列表提供直达研究入口并同步标的名称", async () => {
   const appSource = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
-  assert.match(appSource, /\["query", "查行情"\], \["research", "研究"\]/);
+  assert.match(watchlistItemView, /\["query", "查行情"\], \["research", "研究"\]/);
   assert.match(appSource, /action === "query" \|\| action === "research"/);
   assert.match(appSource, /setView\(action === "research" \? "research" : "stocks"\)/);
   assert.match(browserAcceptance, /button\[data-watchlist-action="research"\]/);
@@ -64,4 +66,24 @@ test("板块领涨股仅展示名称；API 未提供证券代码时不得伪造�
   assert.doesNotMatch(sectorSchema, /leading_stock_(?:symbol|code)/);
   assert.match(overview, /cell\(tr,item\.leading_stock\|\|"—"\)/);
   assert.doesNotMatch(overview, /data-sector-leading-stock/);
+});
+
+test("全市场请求刷新期间使旧筛选快照失效", () => {
+  assert.match(marketStocks, /hasResult: state\.hasResult, busy: state\.busy, generation: state\.generation/);
+  assert.match(app, /!current\.busy && !snapshot\.busy/);
+  assert.match(app, /current\.generation === snapshot\.generation/);
+  assert.match(app, /全市场行情正在刷新，暂不能应用筛选条件/);
+  assert.match(screeningBrowserAcceptance, /holdSecondMarketStocksResponse/);
+  assert.match(screeningBrowserAcceptance, /旧快照不得继续用于筛选、导出或批量加入/);
+});
+
+test("全市场刷新保留旧快照时明确标记，连接切换后清空旧摘要和元数据", () => {
+  assert.match(marketStocks, /正在刷新 · 保留上次成功快照/);
+  assert.match(marketStocks, /表格暂时保留第 .* 页的上次成功快照/);
+  assert.match(marketStocks, /旧连接下的全市场行情快照已清除/);
+  assert.match(marketStocks, /旧连接下的分页行情元数据已失效/);
+  assert.match(marketStocks, /state\.controller\?\.abort\(\)/);
+  assert.match(marketStocks, /generation !== state\.generation/);
+  assert.match(screeningBrowserAcceptance, /holdThirdMarketStocksResponse/);
+  assert.match(screeningBrowserAcceptance, /旧连接下的分页行情元数据已失效/);
 });

@@ -320,6 +320,11 @@ func (p *Tencent) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endD
 			rejectedRows++
 			continue
 		}
+		if parsedDate, dateErr := time.Parse("2006-01-02", vals[0]); dateErr != nil || parsedDate.Format("2006-01-02") != vals[0] {
+			rejectedRows++
+			addProviderParseIssue(ctx, rowIndex, "trade_date", "kline_row[0]", "invalid_date", "YYYY-MM-DD", "string", vals[0], "Tencent K-line trade date is invalid")
+			continue
+		}
 		open, e1 := strconv.ParseFloat(vals[1], 64)
 		closeV, e2 := strconv.ParseFloat(vals[2], 64)
 		high, e3 := strconv.ParseFloat(vals[3], 64)
@@ -349,6 +354,7 @@ func (p *Tencent) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endD
 		shares, conversionErr := tencentDailyVolumeToShares(rawVol, symbol)
 		if conversionErr != nil {
 			rejectedRows++
+			addProviderParseIssue(ctx, rowIndex, "volume", "kline_row[5]", "invalid_volume_unit", "non-negative volume convertible to shares", "string", vals[5], "Tencent K-line volume cannot be normalized to shares")
 			continue
 		}
 		rv := rawVol

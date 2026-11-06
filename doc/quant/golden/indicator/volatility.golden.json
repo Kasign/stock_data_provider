@@ -1,0 +1,22 @@
+{
+  "fixture_type": "synthetic_fixture",
+  "schema_version": "1.0.0",
+  "indicator_code": "volatility",
+  "algorithm_version": "1.0.0",
+  "parameters": {
+    "window": 2,
+    "return_basis": "simple",
+    "annualization_factor": 1
+  },
+  "input": {
+    "close": [
+      100,
+      110,
+      100
+    ]
+  },
+  "expected": {
+    "value": 0.13499311277197734
+  },
+  "tolerance": 1e-12
+}

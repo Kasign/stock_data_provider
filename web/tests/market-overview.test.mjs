@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { defaultMarketCapitalFlowDateRange, describeMarketOverviewError, isCurrentSentimentHistoryRequest } from "../src/market-overview.js";
+import { defaultMarketCapitalFlowDateRange, describeMarketOverviewError, formatMarketSentimentCount, isCurrentSentimentHistoryRequest, marketSnapshotEvidence, validateMarketDateRange } from "../src/market-overview.js";
 
 test("market overview keeps authentication, permission, missing-route and provider errors distinct", () => {
   const cases = [
@@ -44,4 +44,43 @@ test("sentiment history requests are rejected after cancellation or supersession
   assert.equal(isCurrentSentimentHistoryRequest(2, 3, controller.signal), false);
   controller.abort();
   assert.equal(isCurrentSentimentHistoryRequest(3, 3, controller.signal), false);
+});
+
+test("market observation date ranges validate dates, order, and inclusive natural-day limits", () => {
+  const start = "2024-01-01";
+  const afterDays = days => new Date(Date.parse(start + "T00:00:00Z") + days * 86400000).toISOString().slice(0, 10);
+
+  assert.equal(validateMarketDateRange("", start, 2000), "请选择开始和结束日期。");
+  assert.equal(validateMarketDateRange(start, afterDays(1999), 2000), "");
+  assert.equal(validateMarketDateRange(start, afterDays(2000), 2000), "日期范围不能超过 2000 个自然日。");
+  assert.equal(validateMarketDateRange("2024-02-30", "2024-03-01"), "请选择有效的开始和结束日期。");
+  assert.equal(validateMarketDateRange("2024-03-02", "2024-03-01"), "开始日期不能晚于结束日期。");
+
+  // 情绪历史接口没有 2000 自然日上限，不能把资金流接口限制错误复用到该查询。
+  assert.equal(validateMarketDateRange(start, afterDays(2000)), "");
+});
+
+test("market sentiment counts retain lower-bound semantics without formatting missing values as zero", () => {
+  assert.equal(formatMarketSentimentCount(55, true), "≥55");
+  assert.equal(formatMarketSentimentCount(0, true), "≥0");
+  assert.equal(formatMarketSentimentCount(12, false), "12");
+  assert.equal(formatMarketSentimentCount(null, true), "—");
+  assert.equal(formatMarketSentimentCount(undefined, false), "—");
+});
+
+
+test("market snapshot evidence separates provider report/preparation time from server fetch time", () => {
+  const data = {
+    source: "eastmoney",
+    source_version: "v2026-11",
+    provider_report_date: "2026-11-03",
+    provider_time: "2026-11-03T15:00:00+08:00",
+    fetched_at: "2026-11-04T01:00:00Z"
+  };
+  const evidence = marketSnapshotEvidence(data, { reportDate: true, providerTime: true });
+  assert.ok(evidence.includes("源端报告日期 2026-11-03"));
+  assert.ok(evidence.includes("来源版本 v2026-11"));
+  assert.ok(evidence.some(value => value.startsWith("源端准备时间 ")));
+  assert.ok(evidence.some(value => value.startsWith("服务端采集时间 ")));
+  assert.equal(marketSnapshotEvidence({ source: "provider" }).some(value => value.includes("源端报告日期")), false);
 });

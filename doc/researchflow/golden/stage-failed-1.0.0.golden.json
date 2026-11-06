@@ -1,0 +1,24 @@
+{
+  "schema_version": "1.0.0",
+  "stage_ref": "stage_03",
+  "run_ref": "run_01",
+  "stage_code": "risk_review",
+  "status": "failed",
+  "version": 5,
+  "required": true,
+  "dependency_stage_refs": [
+    "quote_snapshot"
+  ],
+  "retry_policy_ref": "retry_default_v1",
+  "attempt_no": 2,
+  "retry_at": null,
+  "output_ref": null,
+  "quality_status": null,
+  "reason_codes": [
+    "provider_unavailable"
+  ],
+  "risk_decision": null,
+  "created_at": "2026-11-06T01:00:00Z",
+  "started_at": "2026-11-06T01:03:00Z",
+  "finished_at": "2026-11-06T01:04:00Z"
+}
