@@ -117,15 +117,18 @@ export function filterResearchReports(items, filters = {}) {
 function appendInlineMarkdown(parent, value) {
   const text = String(value || "");
   const pattern = new RegExp("(\\x60+)(.+?)\\1", "g");
+  const appendPlainText = value => parent.append(document.createTextNode(
+    value.replace(/\\([\x60\\*_{}\[\]|<>~])/g, "$1")
+  ));
   let offset = 0, match;
   while ((match = pattern.exec(text))) {
-    if (match.index > offset) parent.append(document.createTextNode(text.slice(offset, match.index)));
+    if (match.index > offset) appendPlainText(text.slice(offset, match.index));
     const code = document.createElement("code");
     code.textContent = match[2];
     parent.append(code);
     offset = pattern.lastIndex;
   }
-  if (offset < text.length) parent.append(document.createTextNode(text.slice(offset)));
+  if (offset < text.length) appendPlainText(text.slice(offset));
 }
 
 export function renderResearchReportMarkdown(markdown, contentHost, tocHost) {
@@ -146,7 +149,7 @@ export function renderResearchReportMarkdown(markdown, contentHost, tocHost) {
     if (heading) {
       const level = heading[1].length;
       const element = document.createElement("h" + level);
-      element.textContent = heading[2].replace(/\\([\\x60*_{}\[\]()#+.!|>~-])/g, "$1");
+        element.textContent = heading[2].replace(/\\([\x60\\*_{}\[\]|<>~])/g, "$1");
       if (level === 1) {
         element.className = "research-report-document-title";
         activeContainer = contentHost;
@@ -161,9 +164,11 @@ export function renderResearchReportMarkdown(markdown, contentHost, tocHost) {
         contentHost.append(section);
         activeContainer = section;
         const item = document.createElement("li");
-        const link = document.createElement("a");
-        link.href = "#" + section.id;
-        link.textContent = heading[2];
+        const link = document.createElement("button");
+        link.type = "button";
+        link.className = "research-report-toc-link";
+        link.dataset.reportSection = section.id;
+        link.textContent = heading[2].replace(/\\([\x60\\*_{}\[\]|<>~])/g, "$1");
         item.append(link);
         tocHost.append(item);
       } else {
@@ -366,6 +371,12 @@ export function bindResearchReports({ root = document, storage, onOpenTask = () 
     $("#research-report-from").value = "";
     $("#research-report-to").value = "";
     render();
+  });
+  $("#research-report-toc").addEventListener("click", event => {
+    const button = event.target.closest("[data-report-section]");
+    if (!button) return;
+    const section = $("#" + button.dataset.reportSection);
+    section?.scrollIntoView({ behavior: "smooth", block: "start" });
   });
   $("#research-report-back").addEventListener("click", () => {
     activeReportId = "";

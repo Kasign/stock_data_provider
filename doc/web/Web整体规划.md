@@ -2276,3 +2276,10 @@ CSS AST 检查器进一步扩展：
 - 不新增 API，不修改 `/doc/接口规范/WebUI与数据层接口协作清单.md`。
 - 不修改报告归档 key、字段、数量/容量限制、幂等规则和 Task/Run/API 地址关联语义。
 - 报告删除不级联删除研究记录；报告写笔记仍使用现有上下文继承规则。
+
+
+### 章节导航与全站路由冲突复核（2026-11-06）
+- [x] 首轮 Browser Smoke 发现目录使用 `href="#section-id"` 会触发页面级 hash 路由副作用，导致详情视图在返回按钮操作前被切换隐藏；失败记录为 Browser Smoke #42168856963。
+- [x] 章节导航改为按钮驱动的局部 `scrollIntoView`，不写入 location.hash，不参与全站页面路由。
+- [x] 正文普通文本按 Markdown 转义规则还原展示，代码片段保持原样；所有内容仍使用 text node / textContent，不执行 HTML。
+- [ ] 修正后的 Browser Smoke 与研究记录双标签页专项通过后，再完成 W3-A 验收。

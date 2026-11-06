@@ -22,7 +22,7 @@ let browser;
 const noteKey = "stock-provider-webui.research-notes.v1";
 const reportKey = "stock-provider-webui.research-reports.v1";
 const note = (id, title, content, updatedAt = "2026-11-04T01:00:00.000Z") => ({ id, title, content, symbol: "600519.SH", taskId: "task-1", runId: "run-1", tags: ["基本面"], createdAt: "2026-11-03T01:00:00.000Z", updatedAt });
-const report = (id = "report-1", runId = "run-1") => ({ id, runId, taskId: "task-1", analysisBase: "/analysis-api", symbols: ["600519.SH"], status: "completed", corePass: true, asOf: "2026-11-04T09:30:00+08:00", createdAt: "2026-11-04T01:00:00.000Z", result: { run_id: runId, status: "completed", request: { symbols: ["600519.SH"], as_of: "2026-11-04T09:30:00+08:00" }, quality: { core_pass: true }, signals: [], warnings: [] } });
+const report = (id = "report-1", runId = "run-1") => ({ id, runId, taskId: "task-1", analysisBase: "/analysis-api", symbols: ["600519.SH"], status: "completed", corePass: true, asOf: "2026-11-04T09:30:00+08:00", createdAt: "2026-11-04T01:00:00.000Z", result: { run_id: runId, status: "completed", request: { symbols: ["600519.SH"], as_of: "2026-11-04T09:30:00+08:00" }, quality: { core_pass: true }, signals: [], warnings: ["<img src=x onerror=alert(1)>"] } });
 
 try {
   browser = await chromium.launch({ headless: true });
@@ -76,9 +76,10 @@ try {
   assert.equal(await first.locator("#research-report-list").isVisible(), false, "report list is replaced by a dedicated detail workspace");
   assert.equal(await first.locator("#research-report-detail-title").textContent(), "600519.SH");
   assert.ok(await first.locator("#research-report-document h2").count() >= 4, "Run result sections render as semantic headings");
-  assert.ok(await first.locator("#research-report-toc a").count() >= 4, "table of contents exposes section anchors");
-  const firstSection = first.locator("#research-report-toc a").first();
-  const targetId = (await firstSection.getAttribute("href")).slice(1);
+  assert.ok(await first.locator("#research-report-toc button[data-report-section]").count() >= 4, "table of contents exposes section navigation controls");
+  assert.equal(await first.locator("#research-report-document img").count(), 0, "report content is rendered as text and never interpreted as HTML");
+  const firstSection = first.locator("#research-report-toc button[data-report-section]").first();
+  const targetId = await firstSection.getAttribute("data-report-section");
   await firstSection.click();
   assert.equal(await first.locator("#" + targetId).count(), 1, "table of contents points to a rendered report section");
   await first.locator("#research-report-back").click();
