@@ -10,7 +10,7 @@ import (
 )
 
 var (
-	ErrInvalidEndpointBinding = errors.New("news: invalid source endpoint transport binding")
+	ErrInvalidEndpointBinding    = errors.New("news: invalid source endpoint transport binding")
 	ErrEndpointTransportNotBound = errors.New("news: source endpoint transport not bound")
 )
 
