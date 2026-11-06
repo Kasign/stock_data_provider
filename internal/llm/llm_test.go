@@ -47,9 +47,27 @@ func TestModelRequestValidationAndCapabilityGate(t *testing.T) {
 		DeadlineAt: now.Add(time.Minute), CorrelationID: "run-1", SystemAsOf: now,
 	}
 	if err := r.Validate(); err != nil { t.Fatalf("valid request rejected: %v", err) }
-	if err := r.ValidateCapabilities(CapabilityState{}); err == nil || !strings.Contains(err.Error(), "unsupported_capability") {
-		t.Fatalf("expected unknown capability rejection, got %v", err)
+	if err := r.ValidateCapabilities(CapabilityState{}); err == nil || !strings.Contains(err.Error(), "capability evidence") {
+		t.Fatalf("expected missing capability evidence rejection, got %v", err)
 	}
+	verifiedAt := now
+	state := CapabilityState{
+		ProviderID: "gateway-1", ModelID: r.Model, GatewayVersion: "gateway-v1", VerifiedAt: &verifiedAt,
+		Values: map[Capability]CapabilityStatus{
+			CapabilityResponsesJSON: CapabilitySupported,
+			CapabilitySamplingParameters: CapabilityUnknown,
+		},
+	}
+	if err := r.ValidateCapabilities(state); err == nil || !strings.Contains(err.Error(), "sampling_parameters") {
+		t.Fatalf("expected sampling capability rejection, got %v", err)
+	}
+	state.Values[CapabilitySamplingParameters] = CapabilitySupported
+	if err := r.ValidateCapabilities(state); err != nil { t.Fatalf("verified capabilities rejected: %v", err) }
+	if err := r.ValidateStreamCapabilities(state); err == nil || !strings.Contains(err.Error(), "responses_stream") {
+		t.Fatalf("expected unverified stream capability rejection, got %v", err)
+	}
+	state.Values[CapabilityResponsesStream] = CapabilitySupported
+	if err := r.ValidateStreamCapabilities(state); err != nil { t.Fatalf("verified stream capability rejected: %v", err) }
 	r.InputText = " "
 	if err := r.Validate(); err == nil { t.Fatal("empty input must be rejected") }
 }
