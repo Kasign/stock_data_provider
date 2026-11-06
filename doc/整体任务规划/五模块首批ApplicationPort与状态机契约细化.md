@@ -3,7 +3,7 @@
 - 所属治理任务：GOV-004
 - 规划分支：feat/design_doc
 - 日期：2026-11-05
-- 状态：五模块首批接口设计基线；CONTRACT-006/007 已由项目统一决策关闭，其余契约按项目决议状态推进；不代表代码实现或自动化验收完成。
+- 状态：五模块首批接口字段级设计输入；契约编号、决策状态、权威路径和阻断范围以 `跨模块契约目录与冻结状态.md` 为准；不代表代码实现或自动化验收完成。
 - 适用范围：五模块第一批独立开发任务。
 
 ## 1. 设计约束
@@ -23,7 +23,7 @@
 | 字段 | 类型 | 必需 | 约束 |
 |---|---|---:|---|
 | request_id | string | 是 | 跨模块关联 ID |
-| as_of | timestamp | 是 | 系统知识截止时间，UTC |
+| system_as_of | timestamp | 是 | 系统知识截止时间，UTC |
 | trade_date | date | 条件必需 | 交易日语义，Asia/Shanghai |
 | period | enum/string | 是 | 使用稳定周期代码 |
 | input_snapshot_refs | string[] | 是 | 可为空数组仅限纯算法测试；生产分析至少一个 |
@@ -231,21 +231,11 @@ payload 不允许无约束 map 直接进入模板。事件版本升级不得静�
 | Research | News | Research Evidence Query Port | 来源授权与知识时间由 News 执行 |
 | 全部模块 | Platform | Fault / Config / Storage / Observability 等稳定能力 | Platform 不依赖业务领域 |
 
-## 8. 尚需 Owner 决策的事项
+## 8. 契约状态与未决事项索引
 
-| ID | 决策 | 建议 Owner | 影响 |
-|---|---|---|---|
-| CONTRACT-001 | Quant 价格/金额 decimal string 或 number 精度策略 | Quant | Quant DTO、JSON golden |
-| CONTRACT-002 | Indicator 首批指标代码与各自参数 Schema | Quant | QNT-001~003 |
-| CONTRACT-003 | Factor 首批因子、母体和标准化参数 | Quant | QNT-003 |
-| CONTRACT-004 | AuthorizationRef 字段和当前撤销检查责任 | Research + News | Research Evidence、News Query |
-| CONTRACT-005 | system_as_of 在 Context/Evidence/Run 的唯一传递规则 | Research + Researchflow | 历史研究一致性 |
-| CONTRACT-006 | Stage 结果传播矩阵、Run partial/degraded 语义与硬风险门禁策略 | 项目统一决策方 | closed；权威决议见 Researchflow/03 |
-| CONTRACT-007 | cancel/deadline/retry 竞争、cancelling 收敛、租约与 fencing 语义 | 项目统一决策方 | closed；权威决议见 Researchflow/03 |
-| CONTRACT-008 | LLM Gateway 真实协议调查 | LLM | ModelRequest/Response |
-| CONTRACT-009 | Notification Inbox/Delivery 幂等、recipient_scope、状态与未知结果恢复 | Notification + Platform | PublishEvent/Subscription/Delivery/Attempt |
-| CONTRACT-010 | 事件 Payload Schema 注册、不可变版本与兼容策略 | Notification + 各事件 Owner | PublishEvent/Template |
+本文件不再维护独立契约编号或 Owner 决策表。旧 CONTRACT-001~010 仅保留为历史别名；当前唯一编号、生产方/消费者、权威文档、状态、证据缺口和阻断调用点统一见 [跨模块契约目录与冻结状态](./跨模块契约目录与冻结状态.md)。
 
+模块责任角色负责字段映射和证据提交，不要求虚构具体人员签字。已接受的设计语义不等于 Schema/Golden/Contract Test 已完成；模块是否达到 L2 必须按真实调用点单独判定。
 ## 9. 评审和冻结要求
 
 本项目由统一决策方作出架构与契约决议，不再将不存在的独立模块 Owner 签字作为设计冻结门槛。每项决议至少记录：
