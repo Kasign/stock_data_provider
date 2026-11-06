@@ -102,6 +102,7 @@ try {
     const consoleErrors = [];
     const unexpectedNetworkFailures = [];
     const abortedNavigationRequests = [];
+    const rootRequestFailures = [];
     const abortedMarketRequests = [];
     page.on("pageerror", (error) => pageErrors.push(error.stack || error.message));
     page.on("console", (message) => {
@@ -117,6 +118,19 @@ try {
         /\/(?:health\/(?:ready|live)|readyz|healthz)$/.test(pathname);
       const failureText = request.failure()?.errorText || "request failed";
       const wasAborted = /ERR_ABORTED|aborted/i.test(failureText);
+      if (pathname === "/" && wasAborted) {
+        let frameUrl = "";
+        try { frameUrl = request.frame().url(); } catch {}
+        rootRequestFailures.push({
+          method: request.method(),
+          url: request.url(),
+          resourceType: request.resourceType(),
+          isNavigationRequest: request.isNavigationRequest(),
+          frameUrl,
+          redirectedFrom: request.redirectedFrom()?.url() || "",
+          failure: failureText
+        });
+      }
       // 被后续导航替代的主文档导航单独记录，不与静态资源和业务请求失败混淆。
       // 页面最终可用性仍由后续导航、页面错误和各视口交互断言验证。
       // Playwright 对部分被取消的顶层文档请求不稳定地报告 isNavigationRequest；
@@ -2284,7 +2298,7 @@ try {
 
     assert.deepEqual(pageErrors, [], "browser page errors at " + viewport.width + "px: " + pageErrors.join(" | "));
     assert.deepEqual(consoleErrors, [], "unexpected browser console errors at " + viewport.width + "px: " + consoleErrors.join(" | "));
-    assert.deepEqual(unexpectedNetworkFailures, [], "unexpected non-API network failures at " + viewport.width + "px: " + unexpectedNetworkFailures.join(" | "));
+    assert.deepEqual(unexpectedNetworkFailures, [], "unexpected non-API network failures at " + viewport.width + "px: " + unexpectedNetworkFailures.join(" | ") + "; rootRequestFailures=" + JSON.stringify(rootRequestFailures));
     console.log("PASS viewport " + viewport.width + "x" + viewport.height + ": navigation, overflow, focus, console, network, Run Flow layout; superseded navigations=" + abortedNavigationRequests.length);
 
     await context.close();

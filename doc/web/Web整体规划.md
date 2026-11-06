@@ -2218,3 +2218,11 @@ CSS AST 检查器进一步扩展：
 - [x] `216bcaaa` 运行后仍捕获 12 次 `GET /: net::ERR_ABORTED`，说明仅依赖 Playwright `isNavigationRequest()` 未能覆盖该请求形态。
 - [x] 将识别条件收窄为 `ERR_ABORTED + resourceType=document + pathname=/`，仅豁免被取消的根文档请求；静态资源、其他文档和非导航请求仍进入失败断言。
 - [ ] 等待最新 Browser Smoke 完整执行；后续专项全部通过前，W1 不予验收。
+
+
+### W1 Browser Smoke 根文档失败诊断
+
+- [x] `8cd13620` 的单 Job 重跑仍在 320px 视口捕获 12 次 `GET /: net::ERR_ABORTED`；此前 `isNavigationRequest()` 与 `resourceType=document` 两种分类均未命中。
+- [x] 已确认失败发生在 `web/tests/browser-smoke.mjs:2287` 的非 API 网络断言，后续专项因主脚本失败而全部跳过。
+- [ ] 增加根请求失败诊断字段（resourceType、isNavigationRequest、frame URL、redirect source），保留原有严格失败断言；根据下一轮日志定位真实触发源，不扩大豁免。
+- [ ] Browser Smoke 与全部专项通过后再验收 W1；当前仍未通过。
