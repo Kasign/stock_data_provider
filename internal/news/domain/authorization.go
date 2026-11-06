@@ -262,7 +262,9 @@ func validNewsPolicySnapshot(binding NewsAuthorizationBinding, snapshot Authoriz
 		}
 		previous = policy
 	}
-	return hasSource && (binding.ProviderRef.Value == nil || hasProvider)
+	return hasSource &&
+		(binding.ProviderRef.Value == nil || hasProvider) &&
+		(binding.EndpointRef.Value == nil || hasEndpoint)
 }
 
 func comparePolicyVersion(a, b AuthorizationPolicyVersion) int {

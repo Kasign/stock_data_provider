@@ -143,3 +143,8 @@ Review 发现 CollectSource 原先只校验请求 ContentKind，却将 FeedEntry
 - ProviderSummary 与来源授权内容分层，不被提升成来源摘要或正文。
 
 该裁剪是返回数据最小化，不替代 Provider/Source/Endpoint 当前策略复核，也不代表正文持久化已获授权。
+
+
+### NEWS-CTR-002 策略快照完整性补充（2026-11-06）
+
+Binding 中 `provider_ref` / `endpoint_ref` 非 null 时，PolicySnapshot 必须分别包含对应的 `provider_output` / `endpoint` 实际生效版本；显式 null 才表示该层不参与本次决策（Endpoint 可继承 Source）。缺失任一非 null 引用对应的 tuple 必须拒绝。

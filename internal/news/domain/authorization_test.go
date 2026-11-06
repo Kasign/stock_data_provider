@@ -236,6 +236,17 @@ func TestValidateNewsAuthorizationBindingRejectsIncompleteOrUnsortedPolicySnapsh
 		t.Fatal("provider output policy version must be present when provider_ref is set")
 	}
 
+	missingEndpoint := base
+	missingEndpoint.PolicySnapshot.Policies = make([]AuthorizationPolicyVersion, 0, len(base.PolicySnapshot.Policies)-1)
+	for _, policy := range base.PolicySnapshot.Policies {
+		if policy.PolicyType != "endpoint" {
+			missingEndpoint.PolicySnapshot.Policies = append(missingEndpoint.PolicySnapshot.Policies, policy)
+		}
+	}
+	if !errors.Is(ValidateNewsAuthorizationBinding(missingEndpoint), ErrAuthorizationBindingInvalid) {
+		t.Fatal("endpoint policy version must be present when endpoint_ref is set")
+	}
+
 	duplicateSource := base
 	duplicateSource.PolicySnapshot.Policies = append([]AuthorizationPolicyVersion(nil), base.PolicySnapshot.Policies...)
 	duplicateSource.PolicySnapshot.Policies = append(duplicateSource.PolicySnapshot.Policies, AuthorizationPolicyVersion{
