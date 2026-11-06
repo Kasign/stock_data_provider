@@ -91,6 +91,12 @@ ResearchEvent 是跨来源现实事件，不是 News Article 别名。创建、�
 
 2026-11-06 只读核对 Data 分支 `feat/full-go-data-providers-api-switch`，HEAD 为 `3a82139deb6e343fb651abb07512e909206f1b65`。代码树未发现 SecurityRef、IndustryRef、SecurityMaster、IndustryClassification 或独立 GetSecurity/ListIndustries 查询端口；旧 `internal/analysis/app/ports.go` 仅有泛化 UniverseResolver，不能视为 Data 所有的稳定实体契约。故 RSC-004 暂不开发 Adapter，也不在 Research 中复制 Security/Industry 模型。待 Data 提供稳定引用、历史版本/知识时间语义和公开 Application Port 后再继续。
 
+### RSC-OPEN-006：ScenarioCondition 缺少可执行的值类型与组合 Schema
+
+Quant-Research DTO 第 9.3 节将 `expected_value` 定义为 typed scalar/object，但没有按 condition_type、metric_ref、unit 给出类型映射或 JSON Schema；ConditionGroup（all/any）也没有明确与 `conditions[]` 的联合序列化结构。没有这些定义就无法可靠校验比较值类型、单位和组合语义。
+
+因此 RSC-006 暂不创建 `any`、任意 map 或 JSON RawMessage 作为伪类型实现。待项目契约补齐类型 Registry/oneOf Schema、空值和比较规则后再开发。
+
 ## 6.2 RSC-006 Scenario 契约准入检查
 
 Quant-Research DTO 已明确 Scenario 主体字段及 QuantResultRef 元数据；Research 不直接调用 Quant，Quant Evaluation 必须由 Researchflow 获取并完成当前授权复核后传入。但 ScenarioCondition 的 `expected_value` 目前仅描述为 typed scalar/object，没有给出按 condition_type、metric_ref、unit 的具体类型映射或 JSON Schema；ConditionGroup（all/any）也未明确与 `conditions[]` 的联合序列化结构。当前不创建 `any`、任意 map 或 JSON RawMessage 作为伪类型实现。待项目契约补齐类型 Registry/oneOf Schema、空值和比较规则后再实现 RSC-006。
