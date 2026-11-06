@@ -296,7 +296,7 @@ Researchflow 是唯一跨模块组合者，并负责传播同一 Run 的 system_
 6. 跨模块契约变更由生产模块提出、消费模块 Review；禁止消费模块复制生产模块私有结构。
 7. 时间字段需覆盖 UTC、Asia/Shanghai 交易日转换和缺失值行为。
 
-## 6. 待 Review 决策
+## 6. 历史 Review 决策（语义已确认）
 
 - [x] 精确价格/金额采用 decimal string；允许误差的统计值采用 number 并由 Registry 声明 precision/tolerance；Data v1 number 不作为精确计算输入，见 DATA-CTR-005。
 - [x] Quant 参数对象按 indicator_code/factor_code + schema_version 定义独立 typed Schema；首批参数不得使用任意 map，见本目录第 8.2/8.3 节。
@@ -320,7 +320,7 @@ Researchflow 是唯一跨模块组合者，并负责传播同一 Run 的 system_
 
 ## 8. 当前结论
 
-本文保留 Quant / Research 公开 DTO 的字段级细节。当前已接受的公共语义和待补证据以项目级契约目录为准；本文件不构成 Schema 冻结，也不授权创建模块分支。
+本节历史 Review 决策项均已完成语义选择；剩余未勾选项属于 Schema/Golden/Contract Test 等实现验收证据，不再作为语义待决。本文保留 Quant / Research 公开 DTO 的字段级细节。当前已接受的公共语义和待补证据以项目级契约目录为准；本文件不构成 Schema 冻结，也不授权创建模块分支。
 
 
 ## 9. 复合 DTO 字段级定义
