@@ -1,0 +1,38 @@
+{
+  "schema_version": "1.0.0",
+  "run_ref": "run_01JBY000000000000000000002",
+  "version": 3,
+  "system_as_of": "2026-11-06T01:00:00Z",
+  "deadline_at": "2026-11-06T02:00:00Z",
+  "template_ref": "daily_stock_research",
+  "template_version": "1.0.0",
+  "template_fingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "input_snapshot_refs": [
+    "snapshot_1"
+  ],
+  "originating_request_id": null,
+  "correlation_id": "corr_02",
+  "created_at": "2026-11-06T01:00:00Z",
+  "started_at": "2026-11-06T01:00:01Z",
+  "finished_at": "2026-11-06T01:10:00Z",
+  "status": "partial",
+  "result_summary": {
+    "stage_outcomes": {
+      "quote_snapshot": "failed"
+    },
+    "excluded_stages": [],
+    "missing_stage_codes": [
+      "risk_review"
+    ],
+    "degraded_stage_codes": [],
+    "blocked_stage_codes": [],
+    "reason_codes": [
+      "stage_failed"
+    ],
+    "coverage": 0.5,
+    "quality_status": "incomplete",
+    "risk_gate_decisions": {},
+    "actionability_status": "blocked"
+  },
+  "termination_reason": null
+}

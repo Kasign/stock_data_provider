@@ -1,0 +1,32 @@
+{
+  "items": [
+    {
+      "news_id": "news-example-001",
+      "observation_id": "observation-example-001",
+      "version_id": "version-example-001",
+      "version_no": 1,
+      "content_fingerprint": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+      "source_ref": "source-example-001",
+      "provider_ref": "provider-example-001",
+      "identity_status": "resolved",
+      "business_quality_status": "degraded",
+      "quality_status": "degraded",
+      "title": "示例公告标题",
+      "publisher_name": "示例发布者",
+      "publisher_domain": "example.com",
+      "published_at": "2026-11-06T08:30:00Z",
+      "published_at_raw": "2026-11-06T08:30:00+00:00",
+      "available_at": null,
+      "system_observed_at": "2026-11-06T08:35:00Z",
+      "content_level": "summary",
+      "authorization_ref": "authorization-example-001",
+      "authorization_status": "allowed",
+      "system_as_of": "2026-11-06T09:00:00Z",
+      "relation_refs": []
+    }
+  ],
+  "next_cursor": null,
+  "snapshot_ref": "snapshot-example-001",
+  "system_as_of": "2026-11-06T09:00:00Z",
+  "diagnostics": []
+}

@@ -1,0 +1,24 @@
+{
+  "fixture_type": "synthetic_fixture",
+  "schema_version": "1.0.0",
+  "indicator_code": "bollinger",
+  "algorithm_version": "1.0.0",
+  "parameters": {
+    "window": 3,
+    "multiplier": 2,
+    "stddev_method": "population"
+  },
+  "input": {
+    "close": [
+      1,
+      2,
+      3
+    ]
+  },
+  "expected": {
+    "middle": 2,
+    "upper": 3.632993161855452,
+    "lower": 0.36700683814454793
+  },
+  "tolerance": 1e-12
+}

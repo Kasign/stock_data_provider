@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ZhuLinsen/daily_stock_analysis/go-core/internal/domain"
+	"github.com/Kasign/stock_data_provider/go-core/internal/domain"
 )
 
 // filterNewsByReference prevents evidence published after the analysis reference

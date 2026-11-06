@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/ZhuLinsen/daily_stock_analysis/go-core/internal/adapters/marketdatahttp"
-	"github.com/ZhuLinsen/daily_stock_analysis/go-core/internal/contextpack"
-	"github.com/ZhuLinsen/daily_stock_analysis/go-core/internal/domain"
+	"github.com/Kasign/stock_data_provider/go-core/internal/adapters/marketdatahttp"
+	"github.com/Kasign/stock_data_provider/go-core/internal/contextpack"
+	"github.com/Kasign/stock_data_provider/go-core/internal/domain"
 )
 
 type MarketDataAdapter struct {

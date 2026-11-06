@@ -1,0 +1,176 @@
+export const SCREENING_PLANS_KEY = "stock-provider-webui.screening-plans.v1";
+export const MAX_SCREENING_PLANS = 30;
+export const SCREENING_FIELDS = Object.freeze({
+  change_pct: { label: "涨跌幅", unit: "%", min: -30, max: 30, step: 0.01 },
+  turnover_rate: { label: "换手率", unit: "%", min: 0, max: 100, step: 0.01 },
+  amount: { label: "成交额", unit: "元", min: 0, max: 100000000000, step: 10000 },
+  ma5: { label: "MA5", unit: "元", min: 0, max: 1000000, step: 0.01 },
+  ma20: { label: "MA20", unit: "元", min: 0, max: 1000000, step: 0.01 }
+});
+export const SCREENING_OPERATORS = Object.freeze({
+  gte: { label: "大于等于", symbol: "≥" },
+  lte: { label: "小于等于", symbol: "≤" }
+});
+function resolveStorage(storage) {
+  if (storage !== undefined) return storage;
+  try { return globalThis.localStorage; } catch { return null; }
+}
+function cleanPlanName(value) {
+  return String(value ?? "").replace(/[\u0000-\u001f\u007f]/g, "").trim().slice(0, 40).trim();
+}
+export function createScreeningCondition(field, operator, rawValue) {
+  const definition = SCREENING_FIELDS[field];
+  if (!definition || !SCREENING_OPERATORS[operator] || rawValue === null || rawValue === undefined || String(rawValue).trim() === "") return { valid: false, reason: "invalid" };
+  const value = Number(rawValue);
+  if (!Number.isFinite(value)) return { valid: false, reason: "invalid" };
+  if (value < definition.min || value > definition.max) return { valid: false, reason: "range" };
+  return { valid: true, condition: { field, operator, value } };
+}
+export function normalizeScreeningConditions(conditions = []) {
+  if (!Array.isArray(conditions)) return [];
+  return conditions.filter((item) => item && SCREENING_FIELDS[item.field] && SCREENING_OPERATORS[item.operator]
+    && Number.isFinite(item.value) && item.value >= SCREENING_FIELDS[item.field].min && item.value <= SCREENING_FIELDS[item.field].max)
+    .map(({ field, operator, value }) => ({ field, operator, value }));
+}
+export function formatScreeningCondition(condition) {
+  const field = SCREENING_FIELDS[condition.field], operator = SCREENING_OPERATORS[condition.operator];
+  if (!field || !operator) return "";
+  const digits = condition.field === "amount" ? 0 : 2;
+  return field.label + " " + operator.symbol + " " + Number(condition.value).toLocaleString("zh-CN", { minimumFractionDigits: digits, maximumFractionDigits: digits }) + (field.unit ? " " + field.unit : "");
+}
+function screeningFieldValue(item, field, expectedAdjustment) {
+  const quote = item?.quote && typeof item.quote === "object" ? item.quote : {};
+  if (field === "amount" && quote.amount_unit !== "CNY") return null;
+  if ((field === "ma5" || field === "ma20") && expectedAdjustment &&
+      item?.ma_adjustment_basis !== expectedAdjustment) return null;
+  const raw = field === "change_pct" ? quote.change_percent : field === "turnover_rate" ? quote.turnover_rate
+    : field === "amount" ? quote.amount : field === "ma5" ? item?.ma5 : field === "ma20" ? item?.ma20 : null;
+  if (raw === null || raw === undefined || (typeof raw !== "number" && typeof raw !== "string") || (typeof raw === "string" && !raw.trim())) return null;
+  const value = Number(raw);
+  return Number.isFinite(value) ? value : null;
+}
+
+// Tri-state evaluation keeps missing market fields unknown instead of coercing them to zero.
+export function evaluateScreeningConditions(items = [], conditions = [], logic = "and", options = {}) {
+  const normalized = normalizeScreeningConditions(conditions), rows = Array.isArray(items) ? items : [];
+  const normalizedLogic = logic === "or" ? "or" : "and";
+  if (!normalized.length) return { valid: false, reason: "empty-conditions", logic: normalizedLogic,
+    conditionCount: 0, examinedCount: rows.length, matchedItems: [], unmatchedItems: [], unknownItems: rows.slice() };
+  const matchedItems = [], unmatchedItems = [], unknownItems = [];
+  rows.forEach(item => {
+    const outcomes = normalized.map(condition => {
+      const value = screeningFieldValue(item, condition.field, options.expectedAdjustment);
+      if (value === null) return null;
+      return condition.operator === "gte" ? value >= condition.value : value <= condition.value;
+    });
+    const result = normalizedLogic === "and"
+      ? outcomes.includes(false) ? false : outcomes.includes(null) ? null : true
+      : outcomes.includes(true) ? true : outcomes.includes(null) ? null : false;
+    if (result === true) matchedItems.push(item);
+    else if (result === false) unmatchedItems.push(item);
+    else unknownItems.push(item);
+  });
+  return { valid: true, reason: "", logic: normalizedLogic, conditionCount: normalized.length,
+    examinedCount: rows.length, matchedItems, unmatchedItems, unknownItems };
+}
+
+export function selectScreeningResultRows(result, filter = "matched") {
+  if (!result?.valid) return [];
+  const groups = {
+    matched: ["命中", result.matchedItems],
+    unmatched: ["未命中", result.unmatchedItems],
+    unknown: ["待判断", result.unknownItems]
+  };
+  if (filter === "all") {
+    return Object.entries(groups).flatMap(([, [label, items]]) =>
+      (Array.isArray(items) ? items : []).map((item) => ({ item, status: label })));
+  }
+  const selected = groups[filter] || groups.matched;
+  return (Array.isArray(selected[1]) ? selected[1] : []).map((item) => ({ item, status: selected[0] }));
+}
+
+export function buildScreeningDraftSummary(conditions = [], logic = "and") {
+  const normalized = normalizeScreeningConditions(conditions), normalizedLogic = logic === "or" ? "or" : "and";
+  return {
+    count: normalized.length, logic: normalizedLogic, conditions: normalized.map(formatScreeningCondition),
+    description: normalized.length
+      ? "本地条件草稿 · " + normalized.length + " 条 · 组合关系 " + normalizedLogic.toUpperCase() + "；尚未提交，也未产生扫描结果。"
+      : "尚未添加条件。当前仅编辑本地草稿，不会提交服务端或生成扫描结果。"
+  };
+}
+function normalizePlan(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const id = String(value.id || "").trim(), name = cleanPlanName(value.name);
+  const logic = value.logic === "or" || value.logic === "and" ? value.logic : "";
+  const conditions = normalizeScreeningConditions(value.conditions);
+  if (!id || !name || !logic || !conditions.length || conditions.length !== value.conditions.length || !value.created_at || !value.updated_at) return null;
+  return { id, name, logic, conditions, created_at: String(value.created_at), updated_at: String(value.updated_at) };
+}
+export function screeningPlanSnapshot(plan) {
+  const normalized = normalizePlan(plan);
+  return normalized ? JSON.stringify(normalized) : "";
+}
+export function readScreeningPlans(storage) {
+  const target = resolveStorage(storage);
+  if (!target) return { plans: [], readable: false, valid: false, reason: "unavailable" };
+  let raw;
+  try { raw = target.getItem(SCREENING_PLANS_KEY); } catch { return { plans: [], readable: false, valid: false, reason: "unavailable" }; }
+  if (raw == null) return { plans: [], readable: true, valid: true, reason: "" };
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed) || parsed.length > MAX_SCREENING_PLANS) throw new Error("invalid");
+    const plans = parsed.map(normalizePlan);
+    const names = plans.map((item) => item?.name.toLocaleLowerCase());
+    if (plans.some((item) => !item) || new Set(plans.map((item) => item.id)).size !== plans.length ||
+        new Set(names).size !== names.length) throw new Error("invalid");
+    return { plans, readable: true, valid: true, reason: "" };
+  } catch { return { plans: [], readable: true, valid: false, reason: "invalid" }; }
+}
+function persistPlans(plans, storage) {
+  const target = resolveStorage(storage);
+  if (!target) return false;
+  let previous;
+  try {
+    previous = target.getItem(SCREENING_PLANS_KEY);
+    const serialized = JSON.stringify(plans);
+    target.setItem(SCREENING_PLANS_KEY, serialized);
+    if (target.getItem(SCREENING_PLANS_KEY) === serialized) return true;
+    if (previous == null) target.removeItem(SCREENING_PLANS_KEY); else target.setItem(SCREENING_PLANS_KEY, previous);
+    return false;
+  } catch {
+    try { if (previous == null) target.removeItem(SCREENING_PLANS_KEY); else target.setItem(SCREENING_PLANS_KEY, previous); } catch {}
+    return false;
+  }
+}
+export function saveScreeningPlan({ id = "", name, conditions, logic = "and", expectedSnapshot = null } = {}, storage, now = new Date().toISOString()) {
+  const state = readScreeningPlans(storage);
+  if (!state.readable || !state.valid) return { saved: false, reason: "storage-invalid", plans: state.plans };
+  const normalizedName = cleanPlanName(name), normalizedConditions = normalizeScreeningConditions(conditions);
+  const normalizedLogic = logic === "or" || logic === "and" ? logic : "";
+  if (!normalizedName) return { saved: false, reason: "invalid-name", plans: state.plans };
+  if (!Array.isArray(conditions)) return { saved: false, reason: "invalid-conditions", plans: state.plans };
+  if (!normalizedConditions.length && !conditions.length) return { saved: false, reason: "empty-conditions", plans: state.plans };
+  if (normalizedConditions.length !== conditions.length) return { saved: false, reason: "invalid-conditions", plans: state.plans };
+  if (!normalizedLogic) return { saved: false, reason: "invalid-logic", plans: state.plans };
+  const existing = id ? state.plans.find((item) => item.id === id) : null;
+  if (id && !existing) return { saved: false, reason: expectedSnapshot !== null ? "conflict-deleted" : "not-found", plans: state.plans };
+  if (id && expectedSnapshot !== null && screeningPlanSnapshot(existing) !== expectedSnapshot) return { saved: false, reason: "conflict-modified", plans: state.plans };
+  if (state.plans.some((item) => item.id !== id && item.name.toLocaleLowerCase() === normalizedName.toLocaleLowerCase())) return { saved: false, reason: "duplicate-name", plans: state.plans };
+  if (!existing && state.plans.length >= MAX_SCREENING_PLANS) return { saved: false, reason: "limit", plans: state.plans };
+  let nextId = id;
+  if (!nextId) { const baseId = "screening-" + Date.now() + "-" + Math.random().toString(36).slice(2, 8); nextId = baseId; let suffix = 1; while (state.plans.some((item) => item.id === nextId)) nextId = baseId + "-" + suffix++; }
+  const plan = { id: nextId, name: normalizedName, logic: normalizedLogic, conditions: normalizedConditions, created_at: existing?.created_at || now, updated_at: now };
+  const plans = existing ? state.plans.map((item) => item.id === id ? plan : item) : [plan, ...state.plans];
+  const persisted = persistPlans(plans, storage);
+  return { saved: persisted, reason: persisted ? "" : "persistence-failed", plan: persisted ? plan : null, plans: persisted ? plans : state.plans };
+}
+export function deleteScreeningPlan(id, storage, expectedSnapshot = null) {
+  const state = readScreeningPlans(storage);
+  if (!state.readable || !state.valid) return { deleted: false, reason: "storage-invalid", plans: state.plans };
+  const plans = state.plans.filter((item) => item.id !== id);
+  if (plans.length === state.plans.length) return { deleted: false, reason: expectedSnapshot !== null ? "conflict-deleted" : "not-found", plans: state.plans };
+  const existing = state.plans.find((item) => item.id === id);
+  if (expectedSnapshot !== null && screeningPlanSnapshot(existing) !== expectedSnapshot) return { deleted: false, reason: "conflict-modified", plans: state.plans };
+  const persisted = persistPlans(plans, storage);
+  return { deleted: persisted, reason: persisted ? "" : "persistence-failed", plans: persisted ? plans : state.plans };
+}

@@ -1,8 +1,107 @@
 {
-  "provider_priority": ["eastmoney", "tencent"],
+  "provider_priority": [
+    "eastmoney",
+    "baostock",
+    "hithink",
+    "tushare",
+    "tickflow",
+    "tencent",
+    "sina",
+    "netease",
+    "pytdx",
+    "xueqiu"
+  ],
   "adjustment_basis": "forward_adjusted",
   "providers": {
-    "eastmoney": {"enabled": true, "quote": true, "daily_bars": true},
-    "tencent": {"enabled": true, "quote": true, "daily_bars": true}
+    "eastmoney": {
+      "enabled": true,
+      "quote": true,
+      "daily_bars": true,
+      "stock_basic": true,
+      "stock_search": true,
+      "sector_rankings": true,
+      "index_quotes": true,
+      "market_breadth": true,
+      "limit_pools": true,
+      "stock_boards": true,
+      "dragon_tiger": true,
+      "announcements": true,
+      "chip_distribution": true,
+      "capital_flow": true,
+      "hot_rankings": true
+    },
+    "hithink": {
+      "enabled": false,
+      "quote": false,
+      "daily_bars": false,
+      "index_quotes": false,
+      "trading_calendar": false,
+      "limit_pools": false,
+      "dragon_tiger": false,
+      "fundamentals": false,
+      "valuations": false,
+      "index_catalog": false,
+      "hot_rankings": false
+    },
+    "baostock": {
+      "enabled": true,
+      "quote": false,
+      "daily_bars": true,
+      "trading_calendar": true,
+      "fundamentals": true
+    },
+    "yahoo": {
+      "enabled": false,
+      "quote": false,
+      "daily_bars": false
+    },
+    "tencent": {
+      "enabled": true,
+      "quote": true,
+      "daily_bars": true,
+      "stock_search": true
+    },
+    "sina": {
+      "enabled": true,
+      "quote": true,
+      "daily_bars": true
+    },
+    "netease": {
+      "enabled": true,
+      "quote": true,
+      "daily_bars": true
+    },
+    "tushare": {
+      "enabled": false,
+      "quote": false,
+      "daily_bars": false,
+      "stock_basic": false,
+      "trading_calendar": false,
+      "security_trading_status": false,
+      "fundamentals": false,
+      "valuations": false,
+      "limit_pools": false,
+      "dragon_tiger": false,
+      "announcements": false,
+      "index_catalog": false,
+      "market_capital_flow": false
+    },
+    "tickflow": {
+      "enabled": true,
+      "quote": false,
+      "daily_bars": true,
+      "sector_rankings": false,
+      "index_quotes": false,
+      "market_breadth": false
+    },
+    "pytdx": {
+      "enabled": true,
+      "quote": true,
+      "daily_bars": true
+    },
+    "xueqiu": {
+      "enabled": false,
+      "hot_rankings": false
+    }
   }
 }

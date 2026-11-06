@@ -1,0 +1,209 @@
+export const RECENT_TASKS_KEY = "stock-provider-webui.recent-analysis.v1";
+export const MAX_RECENT_TASKS = 10;
+
+function normalizeRecord(record) {
+  if (!record || typeof record.task_id !== "string" || !record.task_id.trim()) return null;
+  if (record.symbols !== undefined && (!Array.isArray(record.symbols) ||
+      record.symbols.length > 100 ||
+      record.symbols.some((item) => typeof item !== "string" || !item.trim()))) return null;
+  return {
+    task_id: record.task_id.trim(),
+    run_id: typeof record.run_id === "string" ? record.run_id.trim() : "",
+    created_at: typeof record.created_at === "string" ? record.created_at : "",
+    symbols: Array.isArray(record.symbols) ? [...new Set(record.symbols.map((item) => item.trim()))] : [],
+    task_type: typeof record.task_type === "string" ? record.task_type : "post_market_scan",
+    status: typeof record.status === "string" ? record.status : "",
+    failure_code: typeof record.failure_code === "string" ? record.failure_code.replace(/[\u0000-\u001f\u007f]/g, "").trim().slice(0, 120) : "",
+    error_message: typeof record.error_message === "string" ? record.error_message.replace(/[\u0000-\u001f\u007f]/g, " ").trim().slice(0, 240) : "",
+    analysis_base: typeof record.analysis_base === "string" ? record.analysis_base.trim() : "",
+    updated_at: typeof record.updated_at === "string" ? record.updated_at : ""
+  };
+}
+
+function normalizeLimit(limit) {
+  return Math.max(0, Number.isFinite(Number(limit)) ? Math.floor(Number(limit)) : MAX_RECENT_TASKS);
+}
+
+export function readRecentTasksState(storage, limit = MAX_RECENT_TASKS) {
+  let raw;
+  try {
+    raw = storage.getItem(RECENT_TASKS_KEY);
+  } catch {
+    return { items: [], storageReadable: false, storageValid: false, reason: "unavailable" };
+  }
+
+  let parsed;
+  try {
+    parsed = raw === null || raw === undefined ? [] : JSON.parse(raw);
+  } catch {
+    return { items: [], storageReadable: true, storageValid: false, reason: "invalid" };
+  }
+  if (!Array.isArray(parsed)) {
+    return { items: [], storageReadable: true, storageValid: false, reason: "invalid" };
+  }
+
+  let malformedRecord = false;
+  const records = [];
+  const seenReferences = new Set();
+  for (const item of parsed) {
+    const normalized = normalizeRecord(item);
+    if (!normalized) {
+      malformedRecord = true;
+      continue;
+    }
+    const identity = JSON.stringify([normalized.task_id, normalized.analysis_base]);
+    if (seenReferences.has(identity)) {
+      malformedRecord = true;
+      continue;
+    }
+    seenReferences.add(identity);
+    records.push(normalized);
+  }
+
+  return {
+    items: records.slice(0, normalizeLimit(limit)),
+    storageReadable: true,
+    storageValid: !malformedRecord,
+    reason: malformedRecord ? "invalid" : ""
+  };
+}
+
+// 最近任务的全局身份由服务端任务 ID 与分析服务地址共同组成。
+export function recentTaskIdentity(record) {
+  return JSON.stringify([
+    String(record?.task_id ?? "").trim(),
+    String(record?.analysis_base ?? "").trim()
+  ]);
+}
+
+// 导入合并时仅覆盖同一分析服务中的同一任务，保留其他服务的同 ID 任务。
+export function mergeRecentTaskReferences(current = [], incoming = []) {
+  const merged = new Map();
+  (Array.isArray(current) ? current : []).forEach((record) => merged.set(recentTaskIdentity(record), record));
+  (Array.isArray(incoming) ? incoming : []).forEach((record) => merged.set(recentTaskIdentity(record), record));
+  return [...merged.values()];
+}
+
+export function readRecentTasks(storage, limit = MAX_RECENT_TASKS) {
+  return readRecentTasksState(storage, limit).items;
+}
+
+export function upsertRecentTask(record, storage, limit = MAX_RECENT_TASKS) {
+  const currentState = readRecentTasksState(storage, limit);
+  if (!currentState.storageReadable || !currentState.storageValid) return currentState.items;
+
+  const normalized = normalizeRecord(record);
+  if (!normalized) return currentState.items;
+  const identity = recentTaskIdentity(normalized);
+  const records = [normalized, ...currentState.items.filter((item) =>
+    recentTaskIdentity(item) !== identity
+  )].slice(0, normalizeLimit(limit));
+
+  try {
+    storage.setItem(RECENT_TASKS_KEY, JSON.stringify(records));
+    const persistedState = readRecentTasksState(storage, limit);
+    if (!persistedState.storageReadable || !persistedState.storageValid) return currentState.items;
+    const persisted = persistedState.items.some((item) =>
+      item.task_id === normalized.task_id &&
+      item.run_id === normalized.run_id &&
+      item.created_at === normalized.created_at &&
+      item.task_type === normalized.task_type &&
+      item.status === normalized.status &&
+      item.failure_code === normalized.failure_code &&
+      item.error_message === normalized.error_message &&
+      item.analysis_base === normalized.analysis_base &&
+      item.updated_at === normalized.updated_at &&
+      JSON.stringify(item.symbols) === JSON.stringify(normalized.symbols)
+    );
+    // 只有回读确认成功后，才把新增记录交给界面展示为最近历史。
+    return persisted ? persistedState.items : currentState.items;
+  } catch {
+    // 最近任务历史是可选能力；写入失败时不把未持久化记录作为历史返回。
+    return currentState.items;
+  }
+}
+
+export function removeRecentTask(taskId, storage, limit = MAX_RECENT_TASKS, analysisBase = "") {
+  if (typeof taskId !== "string" || !taskId.trim()) return readRecentTasks(storage, limit);
+  const currentState = readRecentTasksState(storage, limit);
+  if (!currentState.storageReadable || !currentState.storageValid) return currentState.items;
+
+  const target = taskId.trim();
+  const targetBase = String(analysisBase ?? "").trim();
+  const targetIdentity = recentTaskIdentity({ task_id: target, analysis_base: targetBase });
+  const records = currentState.items.filter((item) => targetBase
+    ? recentTaskIdentity(item) !== targetIdentity
+    : item.task_id !== target
+  );
+  try {
+    storage.setItem(RECENT_TASKS_KEY, JSON.stringify(records));
+    const persistedState = readRecentTasksState(storage, limit);
+    if (!persistedState.storageReadable || !persistedState.storageValid) return currentState.items;
+    if (JSON.stringify(persistedState.items) !== JSON.stringify(records)) return currentState.items;
+    return persistedState.items;
+  } catch {
+    // 删除未成功持久化时保留原列表，避免界面误报已删除。
+    return currentState.items;
+  }
+}
+
+export function clearRecentTasks(storage) {
+  // 只有用户显式确认清空时才允许删除损坏的本地历史。
+  const currentState = readRecentTasksState(storage);
+  try {
+    storage.removeItem(RECENT_TASKS_KEY);
+  } catch {
+    try {
+      storage.setItem(RECENT_TASKS_KEY, "[]");
+    } catch {
+      // 浏览器存储不可写时保留原状态，避免界面误报已清空。
+      return currentState.items;
+    }
+  }
+
+  const clearedState = readRecentTasksState(storage);
+  if (!clearedState.storageReadable || !clearedState.storageValid || clearedState.items.length > 0) {
+    return currentState.items;
+  }
+  return [];
+}
+
+const RECENT_TASK_TYPE_LABELS = Object.freeze({
+  post_market_scan: "盘后扫描",
+  watchlist_scan: "自选股扫描",
+  position_review: "持仓复核"
+});
+
+export function recentTaskTypeLabel(taskType) {
+  const value = String(taskType || "").trim();
+  return RECENT_TASK_TYPE_LABELS[value] || (value ? "其他类型：" + value : "任务类型未报告");
+}
+
+function isValidDateOnly(value) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const [year, month, day] = value.split("-").map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
+}
+
+export function filterRecentTasks(items = [], filters = {}) {
+  if (!Array.isArray(items)) return [];
+  const keyword = String(filters.search || "").trim().toLocaleLowerCase();
+  const status = String(filters.status || "all");
+  const taskType = String(filters.taskType || "all");
+  const rawFrom = String(filters.from || ""), rawTo = String(filters.to || "");
+  if ((rawFrom && !isValidDateOnly(rawFrom)) || (rawTo && !isValidDateOnly(rawTo))) return [];
+  const from = rawFrom, to = rawTo;
+  if (from && to && from > to) return [];
+  const localDate = (value) => { const timestamp = Date.parse(value || ""); if (!Number.isFinite(timestamp)) return ""; const date = new Date(timestamp); return [date.getFullYear(), String(date.getMonth() + 1).padStart(2, "0"), String(date.getDate()).padStart(2, "0")].join("-"); };
+  return items.filter((record) => {
+    if (status !== "all" && String(record.status || "").toLowerCase() !== status) return false;
+    if (taskType !== "all" && String(record.task_type || "") !== taskType) return false;
+    if (from || to) { const createdDate = localDate(record.created_at); if (!createdDate || (from && createdDate < from) || (to && createdDate > to)) return false; }
+    if (!keyword) return true;
+    return [
+      record.task_id, record.run_id, ...(record.symbols || []), record.task_type,
+      record.status, record.failure_code, record.error_message, record.updated_at, record.created_at, record.analysis_base
+    ].some((value) => String(value || "").toLocaleLowerCase().includes(keyword));
+  });
+}

@@ -1,0 +1,22 @@
+{
+  "fixture_type": "synthetic_fixture",
+  "schema_version": "1.0.0",
+  "indicator_code": "ema",
+  "algorithm_version": "1.0.0",
+  "parameters": {
+    "window": 3,
+    "seed_method": "sma"
+  },
+  "input": {
+    "close": [
+      1,
+      2,
+      3,
+      4
+    ]
+  },
+  "expected": {
+    "value": 3
+  },
+  "tolerance": 1e-12
+}

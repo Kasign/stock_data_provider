@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"example.com/stock-analysis-flow/internal/adapters/marketdata"
 	"example.com/stock-analysis-flow/internal/adapters/pythonapi"
 	"example.com/stock-analysis-flow/internal/analysis/app"
 	"example.com/stock-analysis-flow/internal/analysis/domain"
@@ -431,6 +432,24 @@ func NewRunnerWithStores(pyCfg pythonapi.Config, store app.RunStore, snapshots a
 	if err != nil {
 		return nil, err
 	}
+	return newRunnerWithCollector(collector, store, snapshots)
+}
+
+// NewRunnerWithMarketDataStores builds the main API runner around the native Go
+// market-data service. It deliberately has no Python fallback.
+func NewRunnerWithMarketDataStores(cfg marketdata.Config, store app.RunStore, snapshots app.SnapshotStore) (*app.Runner, error) {
+	client, err := marketdata.NewClient(cfg)
+	if err != nil {
+		return nil, err
+	}
+	collector, err := marketdata.NewCollector(client, cfg)
+	if err != nil {
+		return nil, err
+	}
+	return newRunnerWithCollector(collector, store, snapshots)
+}
+
+func newRunnerWithCollector(collector app.DataCollector, store app.RunStore, snapshots app.SnapshotStore) (*app.Runner, error) {
 	factorRegistry := registry.New[modules.FactorCalculator]()
 	for _, f := range []modules.FactorCalculator{trendFactor{id: factorMADistance, window: 20, kind: "ma_distance"}, trendFactor{id: factorReturn5, window: 5, kind: "return"}, trendFactor{id: factorReturn20, window: 20, kind: "return"}} {
 		if err := factorRegistry.Register(f); err != nil {

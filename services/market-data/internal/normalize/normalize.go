@@ -4,48 +4,24 @@ import (
 	"errors"
 	"fmt"
 	"math"
-	"regexp"
 	"sort"
 	"strings"
 	"time"
 
-	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/model"
+	"github.com/Kasign/stock_data_provider/services/market-data/internal/model"
+	"github.com/Kasign/stock_data_provider/services/market-data/internal/symbol"
+	"github.com/Kasign/stock_data_provider/services/market-data/internal/validation"
 )
 
-const Version = "3"
+const Version = "4"
 
-var symbolPattern = regexp.MustCompile(`^[0-9]{6}(\.(SH|SZ|BJ))?$`)
+const (
+	quoteChangeToleranceCNY       = 0.02
+	quoteChangePercentTolerancePP = 0.15
+)
 
 func NormalizeSymbol(raw string) (string, error) {
-	s := strings.ToUpper(strings.TrimSpace(raw))
-	if !symbolPattern.MatchString(s) {
-		return "", fmt.Errorf("invalid A-share symbol %q", raw)
-	}
-	parts := strings.Split(s, ".")
-	code := parts[0]
-	// This service's normalized monetary contract is CNY and its lot conversion
-	// rules are for A-shares. Shanghai 900xxx and Shenzhen 200xxx are B-shares;
-	// accepting them would silently misstate their currency/volume semantics.
-	if strings.HasPrefix(code, "900") || strings.HasPrefix(code, "200") {
-		return "", fmt.Errorf("B-share code %q is outside the supported A-share data contract", code)
-	}
-	exchange := ""
-	switch {
-	case strings.HasPrefix(code, "92"):
-		exchange = "BJ"
-	case strings.HasPrefix(code, "4"), strings.HasPrefix(code, "8"):
-		exchange = "BJ"
-	case strings.HasPrefix(code, "6"), strings.HasPrefix(code, "5"), strings.HasPrefix(code, "9"):
-		exchange = "SH"
-	case strings.HasPrefix(code, "0"), strings.HasPrefix(code, "1"), strings.HasPrefix(code, "2"), strings.HasPrefix(code, "3"):
-		exchange = "SZ"
-	default:
-		return "", fmt.Errorf("cannot infer exchange for %q", raw)
-	}
-	if len(parts) == 2 && parts[1] != exchange {
-		return "", fmt.Errorf("symbol %q has exchange suffix %s but code prefix maps to %s", raw, parts[1], exchange)
-	}
-	return code + "." + exchange, nil
+	return symbol.Normalize(raw)
 }
 
 func Adjustment(v string) (model.AdjustmentBasis, error) {
@@ -70,6 +46,9 @@ func HandsToShares(raw float64) (int64, error) {
 	if !finite(raw) || raw < 0 {
 		return 0, errors.New("raw volume in hands must be finite and non-negative")
 	}
+	if math.Trunc(raw) != raw {
+		return 0, errors.New("raw volume in hands must be an integer; fractional volume is not supported")
+	}
 	if raw >= float64(math.MaxInt64)/100 {
 		return 0, errors.New("raw volume in hands overflows normalized shares")
 	}
@@ -84,10 +63,13 @@ func RawSharesToInt64(raw float64) (int64, error) {
 	if !finite(raw) || raw < 0 {
 		return 0, errors.New("raw volume in shares must be finite and non-negative")
 	}
+	if math.Trunc(raw) != raw {
+		return 0, errors.New("raw volume in shares must be an integer; fractional volume is not supported")
+	}
 	if raw >= float64(math.MaxInt64) {
 		return 0, errors.New("raw volume in shares overflows int64")
 	}
-	return int64(math.Round(raw)), nil
+	return int64(raw), nil
 }
 
 func ValidateQuote(q *model.Quote) error {
@@ -113,17 +95,53 @@ func ValidateQuote(q *model.Quote) error {
 	default:
 		return fmt.Errorf("quote adjustment basis %q is missing or unsupported", q.AdjustmentBasis)
 	}
-	for name, p := range map[string]*float64{"current_price": q.CurrentPrice, "open": q.Open, "high": q.High, "low": q.Low, "prev_close": q.PrevClose} {
-		if p == nil || !finite(*p) || *p <= 0 {
-			return fmt.Errorf("quote %s must be a positive finite value", name)
+	requiredPrices := []struct {
+		name  string
+		value *float64
+	}{
+		{"current_price", q.CurrentPrice},
+		{"open", q.Open},
+		{"high", q.High},
+		{"low", q.Low},
+		{"prev_close", q.PrevClose},
+	}
+	for _, item := range requiredPrices {
+		if item.value == nil || !finite(*item.value) || *item.value <= 0 {
+			return fmt.Errorf("quote %s must be a positive finite value", item.name)
 		}
 	}
 	if *q.Low > *q.High || *q.Open < *q.Low || *q.Open > *q.High || *q.CurrentPrice < *q.Low || *q.CurrentPrice > *q.High {
 		return errors.New("quote OHLC invariant failed")
 	}
-	for name, p := range map[string]*float64{"change": q.Change, "change_percent": q.ChangePercent, "volume_ratio": q.VolumeRatio, "turnover_rate": q.TurnoverRate} {
-		if p != nil && (!finite(*p) || ((name == "volume_ratio" || name == "turnover_rate") && *p < 0)) {
-			return fmt.Errorf("quote %s must be finite and non-negative when present", name)
+	optionalNumbers := []struct {
+		name        string
+		value       *float64
+		nonNegative bool
+	}{
+		{"change", q.Change, false},
+		{"change_percent", q.ChangePercent, false},
+		{"volume_ratio", q.VolumeRatio, true},
+		{"turnover_rate", q.TurnoverRate, true},
+	}
+	for _, item := range optionalNumbers {
+		if item.value == nil {
+			continue
+		}
+		if !finite(*item.value) {
+			return fmt.Errorf("quote %s must be finite when present", item.name)
+		}
+		if item.nonNegative && *item.value < 0 {
+			return fmt.Errorf("quote %s must be non-negative when present", item.name)
+		}
+	}
+	expectedChange := *q.CurrentPrice - *q.PrevClose
+	if q.Change != nil && math.Abs(*q.Change-expectedChange) > quoteChangeToleranceCNY {
+		return errors.New("quote change is inconsistent with current_price minus prev_close")
+	}
+	if q.ChangePercent != nil {
+		expectedChangePercent := expectedChange / *q.PrevClose * 100
+		if !finite(expectedChangePercent) || math.Abs(*q.ChangePercent-expectedChangePercent) > quoteChangePercentTolerancePP {
+			return errors.New("quote change_percent is inconsistent with current_price and prev_close")
 		}
 	}
 	if q.Volume == nil || *q.Volume < 0 {
@@ -168,35 +186,65 @@ func ValidateQuote(q *model.Quote) error {
 func ValidateAndSortBars(symbol string, bars []model.DailyBar, start, end string, limit int) ([]model.DailyBar, []string) {
 	warnings := make([]string, 0)
 	if start != "" {
-		if _, err := time.Parse("2006-01-02", start); err != nil {
+		parsed, err := time.Parse("2006-01-02", start)
+		if err != nil || parsed.Format("2006-01-02") != start {
 			return nil, []string{"invalid_start_date"}
 		}
 	}
 	if end != "" {
-		if _, err := time.Parse("2006-01-02", end); err != nil {
+		parsed, err := time.Parse("2006-01-02", end)
+		if err != nil || parsed.Format("2006-01-02") != end {
 			return nil, []string{"invalid_end_date"}
 		}
 	}
+	if start != "" && end != "" && start > end {
+		return nil, []string{"invalid_date_range"}
+	}
+	canonicalRequestedSymbol, symbolErr := NormalizeSymbol(symbol)
+	if symbolErr != nil || canonicalRequestedSymbol != symbol {
+		return nil, []string{"invalid_requested_symbol"}
+	}
+
 	seen := map[string]bool{}
 	valid := make([]model.DailyBar, 0, len(bars))
+	ohlcDiagnosticCount := 0
 	for _, b := range bars {
-		if _, err := time.Parse("2006-01-02", b.TradeDate); err != nil {
+		if strings.TrimSpace(b.Symbol) == "" {
+			warnings = append(warnings, "bar_with_missing_symbol_dropped")
+			continue
+		}
+		canonicalBarSymbol, barSymbolErr := NormalizeSymbol(b.Symbol)
+		if barSymbolErr != nil || canonicalBarSymbol != b.Symbol {
+			warnings = append(warnings, "bar_with_invalid_symbol_dropped")
+			continue
+		}
+		if canonicalBarSymbol != canonicalRequestedSymbol {
+			warnings = append(warnings, "bar_symbol_mismatch_dropped")
+			continue
+		}
+		parsedTradeDate, err := time.Parse("2006-01-02", b.TradeDate)
+		if err != nil || parsedTradeDate.Format("2006-01-02") != b.TradeDate {
 			warnings = append(warnings, "invalid_trade_date_dropped")
 			continue
 		}
 		if start != "" && b.TradeDate < start {
+			warnings = append(warnings, "bar_before_start_date_dropped")
 			continue
 		}
 		if end != "" && b.TradeDate > end {
 			warnings = append(warnings, "bar_after_end_date_dropped")
 			continue
 		}
-		if seen[b.TradeDate] {
-			warnings = append(warnings, "duplicate_trade_date_dropped")
-			continue
-		}
 		if !finite(b.Open) || !finite(b.High) || !finite(b.Low) || !finite(b.Close) || b.Open <= 0 || b.High <= 0 || b.Low <= 0 || b.Close <= 0 || b.Low > b.High || b.Open < b.Low || b.Open > b.High || b.Close < b.Low || b.Close > b.High {
 			warnings = append(warnings, "invalid_ohlc_bar_dropped")
+			// Keep the stable warning code and add bounded context so operators can
+			// identify the source row without logging or returning the raw response.
+			if ohlcDiagnosticCount < 5 {
+				warnings = append(warnings, fmt.Sprintf("invalid_ohlc_bar_detail:trade_date=%s,open=%v,high=%v,low=%v,close=%v", b.TradeDate, b.Open, b.High, b.Low, b.Close))
+			} else if ohlcDiagnosticCount == 5 {
+				warnings = append(warnings, "invalid_ohlc_bar_details_truncated")
+			}
+			ohlcDiagnosticCount++
 			continue
 		}
 		if b.Volume == nil || *b.Volume < 0 {
@@ -242,17 +290,18 @@ func ValidateAndSortBars(symbol string, bars []model.DailyBar, start, end string
 		}
 		if b.Source == "" {
 			b.Source = "unknown"
-			b.QualityStatus = model.QualityUnknown
-			b.QualityReasons = append(b.QualityReasons, "source_missing")
+			if b.QualityStatus == "" || b.QualityStatus == model.QualityValid {
+				b.QualityStatus = model.QualityUnknown
+			}
+			b.QualityReasons = appendReasonUnique(b.QualityReasons, "source_missing")
 		}
 		b.Symbol = symbol
 		if b.Amount == nil {
 			if b.QualityStatus == model.QualityValid || b.QualityStatus == "" {
 				b.QualityStatus = model.QualityDegraded
 			}
-			if strings.TrimSpace(b.AmountUnit) == "" {
-				b.AmountUnit = "unknown"
-			}
+			// AmountUnit describes the actual amount value. A provider cannot assert CNY when amount is null.
+			b.AmountUnit = "unknown"
 			b.QualityReasons = appendReasonUnique(b.QualityReasons, "amount_missing_from_provider")
 			b.QualityReasons = appendReasonUnique(b.QualityReasons, "amount_unit_unknown_because_amount_missing")
 		} else if b.AmountUnit != "CNY" {
@@ -272,6 +321,10 @@ func ValidateAndSortBars(symbol string, bars []model.DailyBar, start, end string
 			warnings = append(warnings, "unsupported_quality_status_bar_dropped")
 			continue
 		}
+		if seen[b.TradeDate] {
+			warnings = append(warnings, "duplicate_trade_date_dropped")
+			continue
+		}
 		seen[b.TradeDate] = true
 		valid = append(valid, b)
 	}
@@ -281,6 +334,18 @@ func ValidateAndSortBars(symbol string, bars []model.DailyBar, start, end string
 		warnings = append(warnings, "bars_truncated_to_limit")
 	}
 	return valid, unique(warnings)
+}
+
+// HasQualityDegradingBarWarnings distinguishes data-quality warnings from the
+// informational notice emitted when a response is capped to the requested limit.
+func HasQualityDegradingBarWarnings(warnings []string) bool {
+	for _, warning := range warnings {
+		if warning == "" || warning == "bars_truncated_to_limit" {
+			continue
+		}
+		return true
+	}
+	return false
 }
 
 func finite(v float64) bool { return !math.IsNaN(v) && !math.IsInf(v, 0) }
@@ -302,4 +367,121 @@ func unique(in []string) []string {
 		}
 	}
 	return out
+}
+
+// ValidateQuoteWithReport collects structured issues before invoking the legacy
+// validator. The legacy validator remains authoritative for historical errors
+// and amount-missing mutations.
+func ValidateQuoteWithReport(q *model.Quote) (validation.Report, error) {
+	report := validation.ValidateQuote(q)
+	err := ValidateQuote(q)
+	return report, err
+}
+
+// ValidateAndSortBarsWithReport combines field validation and normalization diagnostics.
+// Count is the number of affected rows for aggregate issues; Issues remains bounded.
+func ValidateAndSortBarsWithReport(symbolValue string, bars []model.DailyBar, start, end string, limit int) ([]model.DailyBar, []string, validation.Report) {
+	report := validation.NewReport(validation.DefaultMaxIssues)
+	if start != "" && !validISOTradeDate(start) {
+		report.Add(validation.FieldIssue{
+			Stage: validation.StageValidate, Field: "start_date", Code: "invalid_date",
+			Expected: "YYYY-MM-DD", Severity: validation.SeverityError,
+			Message: "requested start date is invalid",
+		})
+		return nil, []string{"invalid_start_date"}, report
+	}
+	if end != "" && !validISOTradeDate(end) {
+		report.Add(validation.FieldIssue{
+			Stage: validation.StageValidate, Field: "end_date", Code: "invalid_date",
+			Expected: "YYYY-MM-DD", Severity: validation.SeverityError,
+			Message: "requested end date is invalid",
+		})
+		return nil, []string{"invalid_end_date"}, report
+	}
+	if start != "" && end != "" && start > end {
+		report.Add(validation.FieldIssue{
+			Stage: validation.StageValidate, Field: "date_range", Code: "invalid_date_range",
+			Expected: "start_date must be on or before end_date", Severity: validation.SeverityError,
+			Message: "requested daily-bar date range is reversed",
+		})
+		return nil, []string{"invalid_date_range"}, report
+	}
+	canonicalRequestedSymbol, symbolErr := NormalizeSymbol(symbolValue)
+	if symbolErr != nil || canonicalRequestedSymbol != symbolValue {
+		report.Add(validation.FieldIssue{
+			Stage: validation.StageValidate, Field: "requested_symbol", Code: "invalid_symbol",
+			Expected: "canonical six-digit code with exchange suffix", Severity: validation.SeverityError,
+			Message: "requested symbol is not canonical",
+		})
+		return nil, []string{"invalid_requested_symbol"}, report
+	}
+	ctx := validation.DailyBarContext{RequestedSymbol: symbolValue, StartDate: start, EndDate: end, Period: "1d"}
+	rowHasErrors := make([]bool, len(bars))
+	for index, bar := range bars {
+		rowReport := validation.ValidateDailyBar(bar, ctx)
+		rowHasErrors[index] = rowReport.HasErrors()
+		for _, item := range rowReport.Issues {
+			rowIndex := index
+			item.RowIndex = &rowIndex
+			report.Add(item)
+		}
+		report.TotalCount += rowReport.TotalCount - len(rowReport.Issues)
+		report.ErrorCount += rowReport.ErrorCount - countSeverity(rowReport.Issues, validation.SeverityError)
+		report.WarningCount += rowReport.WarningCount - countSeverity(rowReport.Issues, validation.SeverityWarning)
+		report.InfoCount += rowReport.InfoCount - countSeverity(rowReport.Issues, validation.SeverityInfo)
+		report.Truncated = report.Truncated || rowReport.Truncated
+	}
+
+	// Duplicate-date rejection is a normalization-stage event, not a second
+	// field-validation error. Only rows that passed field validation participate.
+	seenDates := make(map[string]bool, len(bars))
+	for index, bar := range bars {
+		if rowHasErrors[index] || !validISOTradeDate(bar.TradeDate) {
+			continue
+		}
+		if start != "" && bar.TradeDate < start || end != "" && bar.TradeDate > end {
+			continue // range violations are already reported by ValidateDailyBar.
+		}
+		if seenDates[bar.TradeDate] {
+			rowIndex := index
+			report.Add(validation.FieldIssue{
+				Stage: validation.StageNormalize, Field: "trade_date",
+				Code: "duplicate_trade_date_dropped", Expected: "one daily bar per trade date",
+				Severity: validation.SeverityWarning, Message: "duplicate daily bar was dropped during normalization",
+				RowIndex: &rowIndex, Symbol: bar.Symbol, TradeDate: bar.TradeDate,
+			})
+			continue
+		}
+		seenDates[bar.TradeDate] = true
+	}
+
+	normalized, warnings := ValidateAndSortBars(symbolValue, bars, start, end, limit)
+	if limit > 0 {
+		unlimited, _ := ValidateAndSortBars(symbolValue, bars, start, end, 0)
+		truncatedCount := len(unlimited) - len(normalized)
+		if truncatedCount > 0 {
+			report.Add(validation.FieldIssue{
+				Stage: validation.StageNormalize, Field: "rows",
+				Code: "bars_truncated_to_limit", Expected: "all valid rows within requested limit",
+				Severity: validation.SeverityInfo, Message: "valid daily bars were truncated to the requested limit",
+				Count: truncatedCount,
+			})
+		}
+	}
+	return normalized, warnings, report
+}
+
+func validISOTradeDate(value string) bool {
+	parsed, err := time.Parse("2006-01-02", value)
+	return err == nil && parsed.Format("2006-01-02") == value
+}
+
+func countSeverity(issues []validation.FieldIssue, severity validation.Severity) int {
+	count := 0
+	for _, item := range issues {
+		if item.Severity == severity {
+			count++
+		}
+	}
+	return count
 }
