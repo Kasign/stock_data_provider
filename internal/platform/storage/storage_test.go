@@ -252,6 +252,7 @@ type migrationTestState struct {
 	lockAcquired           bool
 	lockReleased           bool
 	failLockRelease        bool
+	skipAppliedHistoryUpdate bool
 	physicalConnClosed     bool
 	historyCreated         bool
 	historyColumnsUpgraded bool
@@ -354,6 +355,9 @@ func (c migrationTestConn) ExecContext(_ context.Context, query string, args []d
 	case strings.Contains(query, "UPDATE platform_schema_migrations"):
 		versionArg := args[len(args)-1].Value.(int64)
 		version := uint64(versionArg)
+		if strings.Contains(query, "status = 'applied'") && c.state.skipAppliedHistoryUpdate {
+			return driver.RowsAffected(0), nil
+		}
 		if strings.Contains(query, "status = 'failed'") {
 			c.state.failed[version] = int(args[0].Value.(int64))
 			if c.state.failureCode == nil {
@@ -449,6 +453,30 @@ func TestApplyMigrationsRejectsChecksumDriftAndUnknownHistory(t *testing.T) {
 	}
 	if checksums[1] == "" {
 		t.Fatal("expected migration checksum")
+	}
+}
+
+func TestApplyMigrationsRejectsHistoryUpdateWithoutAffectedRow(t *testing.T) {
+	state := &migrationTestState{
+		applied: make(map[uint64]string), pending: make(map[uint64]string),
+		failed: make(map[uint64]int), lockAcquired: true,
+		skipAppliedHistoryUpdate: true,
+	}
+	db := sql.OpenDB(migrationTestConnector{state: state})
+	defer db.Close()
+
+	err := ApplyMigrations(context.Background(), db, "analysis", []Migration{{
+		Version: 1, Description: "create", Statements: []string{"CREATE TABLE sample (id INT)"},
+	}})
+	var platformFault *fault.Fault
+	if !errors.As(err, &platformFault) || platformFault.Code != "platform.storage.migration_record_failed" {
+		t.Fatalf("expected migration history update failure, got %v", err)
+	}
+	if len(state.statements) != 1 {
+		t.Fatalf("migration SQL should have executed exactly once, got %v", state.statements)
+	}
+	if len(state.applied) != 0 || state.pending[1] == "" {
+		t.Fatalf("migration must not be reported as applied when history update affects no row: applied=%v pending=%v", state.applied, state.pending)
 	}
 }
 

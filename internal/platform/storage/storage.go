@@ -366,12 +366,15 @@ func ApplyMigrations(ctx context.Context, db *sql.DB, namespace string, migratio
 		for index, statement := range migration.Statements {
 			if _, err := conn.ExecContext(ctx, statement); err != nil {
 				recordCtx, recordCancel := context.WithTimeout(context.Background(), defaultPingTimeout)
-				_, recordErr := conn.ExecContext(recordCtx, `UPDATE platform_schema_migrations
+				recordResult, recordErr := conn.ExecContext(recordCtx, `UPDATE platform_schema_migrations
 					SET status = 'failed', failure_statement = ?,
 						failure_code = 'platform.storage.migration_apply_failed',
 						finished_at = CURRENT_TIMESTAMP(6)
 					WHERE namespace = ? AND version = ? AND status = 'running'`,
 					index+1, namespace, migration.Version)
+				if recordErr == nil {
+					recordErr = requireSingleRowAffected(recordResult)
+				}
 				recordCancel()
 				cause := err
 				if recordErr != nil {
@@ -384,17 +387,35 @@ func ApplyMigrations(ctx context.Context, db *sql.DB, namespace string, migratio
 				}
 			}
 		}
-		if _, err := conn.ExecContext(ctx, `UPDATE platform_schema_migrations
+		result, err := conn.ExecContext(ctx, `UPDATE platform_schema_migrations
 			SET status = 'applied', failure_statement = 0, failure_code = '',
 				finished_at = CURRENT_TIMESTAMP(6)
 			WHERE namespace = ? AND version = ? AND status = 'running'`,
-			namespace, migration.Version); err != nil {
+			namespace, migration.Version)
+		if err == nil {
+			err = requireSingleRowAffected(result)
+		}
+		if err != nil {
 			return &fault.Fault{
 				Class: fault.ClassInternal, Code: "platform.storage.migration_record_failed",
 				SafeMessage: "migration statements completed but history update failed; inspect the database before retrying",
 				Dependency:  "sql", Retryable: false, Cause: err,
 			}
 		}
+	}
+	return nil
+}
+
+func requireSingleRowAffected(result sql.Result) error {
+	if result == nil {
+		return errors.New("migration history update returned no result")
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("could not verify migration history update: %w", err)
+	}
+	if affected != 1 {
+		return fmt.Errorf("migration history update affected %d rows, want 1", affected)
 	}
 	return nil
 }
