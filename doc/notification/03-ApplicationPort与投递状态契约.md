@@ -226,6 +226,21 @@ NTF-CTR-001（历史别名 CONTRACT-010）规则：
 6. 向后兼容规则按事件类型单独声明；新增可选字段是否兼容必须通过 Schema diff 和消费者测试，不仅依赖“字段是 optional”的推断。
 7. 未知事件版本不自动尝试旧 Schema；由事件 Owner 发布迁移/兼容策略。
 
+### 8.2 Template Definition 与 Renderer
+
+TemplateDefinition 的固定字段为：
+- `template_id`、正整数 `version`；
+- 精确绑定 `event_type` + `schema_version`；
+- `format`：`text` 或 `html`；
+- 可选 `subject_template`、必填 `body_template`；
+- `variable_bindings`：模板变量名到 payload JSON Pointer 的映射。
+
+版本注册键为 `(template_id, version)`。相同键、相同 JCS digest 可幂等注册；相同键、不同 digest 必须拒绝；内容变化必须增加版本。当前模块 Registry 是内存实现，不代表已有持久化 Template Repository。
+
+模板仅支持直接标量插值 `{{.variable}}`，不支持 if/range/模板嵌套/函数或任意表达式。变量必须显式列入 allowlist，并由 JSON Pointer 从 payload 取值；只允许 string/bool/number，不允许把整个 payload map 传入模板。缺失路径、非标量、未声明变量和未使用绑定均 fail closed。
+
+HTML body 使用 `html/template` 上下文转义；text body 使用纯文本渲染。Subject 作为纯文本输出，拒绝 CR/LF 和其他控制字符。模板定义字节数、合并渲染输出字节数、payload JSON 深度均由显式 Limits 注入；没有项目已批准的默认数值，不允许隐式放开。渲染结果保留 template digest 和 event payload fingerprint，供 Delivery 快照审计。
+
 ## 9. Application Port 建议
 
 ```go
@@ -241,6 +256,14 @@ type NotificationApplication interface {
 ```
 
 PublishResult 应明确 accepted/duplicate；冲突通过稳定错误返回。不要让上游直接调用 Channel Adapter 或 Repository。诊断/对账入口按权限独立暴露，不把运维能力塞入普通 PublishEvent。
+
+```go
+type TemplateRenderer interface {
+    Render(ctx context.Context, event NotificationEvent, templateID string, version int64) (RenderedContent, error)
+}
+```
+
+TemplateRenderer 只接受已通过 Event Schema/Envelope 校验的事件；具体实现仍须重新验证 payload fingerprint、event/schema 精确匹配和渲染资源限制。
 
 ## 10. NTF 任务验收映射
 

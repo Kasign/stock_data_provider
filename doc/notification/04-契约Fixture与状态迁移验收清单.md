@@ -2,7 +2,7 @@
 
 - 归属：NTF-001/004/005/006
 - 对应契约：NTF-CTR-001～003（历史别名 Platform CONTRACT-009/010）；状态以项目级契约目录为准
-- 状态：4 份 Draft 2020-12 Schema 与 6 个代表性 Golden 已校准；Go Draft 2020-12 Envelope/Payload Validator、Golden、非法 Payload、Inbox Fake 幂等/并发、Subscription 与 DeliveryPlan Repository Port/Fake 测试已写入；新增严格 JSON、资源上限边界、DeliveryPlan 写入前双重校验、Subscription Repository append-only/CAS 并发及 Inbox/Subscription/DeliveryPlan 失败注入恢复测试；完整 CI Run 42201893234 已通过，覆盖 gofmt/go test/race/vet、go-core、market-data、MariaDB 集成和 Docker build；NTF-CTR-001～003 仍为 pending_evidence；不要求个人 Owner 签字
+- 状态：4 份 Draft 2020-12 Schema 与 6 个代表性 Golden 已校准；Go Draft 2020-12 Envelope/Payload Validator、Golden、非法 Payload、Inbox Fake 幂等/并发、Subscription 与 DeliveryPlan Repository Port/Fake 测试已写入；新增严格 JSON、资源上限边界、DeliveryPlan 写入前双重校验、Subscription Repository append-only/CAS 并发及 Inbox/Subscription/DeliveryPlan 失败注入恢复测试；NTF-002 增加 Template Registry/Renderer 测试（新代码待 CI）；完整 CI Run 42201893234 已通过，覆盖 gofmt/go test/race/vet、go-core、market-data、MariaDB 集成和 Docker build；NTF-CTR-001～003 仍为 pending_evidence；不要求个人 Owner 签字
 - 日期：2026-11-06
 - 说明：以下均为合成数据与测试场景，不代表已有实现或真实渠道能力。
 
@@ -190,3 +190,15 @@ Fake Adapter 只能验证分类和状态机，不证明真实渠道行为。每�
 3. L2：NTF002-*、NTF003-* 在 Fake Repository/Fake Channel 下全通过。
 4. L3：MariaDB 唯一约束/事务、真实 Outbox/Inbox、Worker 崩溃恢复、真实渠道幂等/对账能力单独验收，不得混入 L2 结论。
 5. 任一契约只有在对应层级的全部适用测试都有可复现 CI 证据后才可升级状态；本清单本身不代表测试已经执行。
+
+
+## 12. Template/Renderer Fixture
+
+- `template_version_immutable.test`：相同 template_id/version 同 digest 幂等；不同 digest 拒绝覆盖；新版本允许注册。
+- `template_allowlist_json_pointer.test`：仅暴露显式 JSON Pointer 标量；缺失路径、非标量、未声明变量和未使用绑定均拒绝。
+- `template_html_escape.test` / `template_text_output.test`：HTML 上下文转义，纯文本不执行 HTML 转义。
+- `template_output_depth_limit.test`：模板源字节、输出字节和 payload 深度达到/超过上限。
+- `template_subject_header_injection.test`：Subject 中 CR/LF/控制字符拒绝。
+- `template_event_binding.test`：event_type/schema_version 不匹配或 payload fingerprint 不匹配拒绝。
+
+以上仅验证通用 Renderer 核心；没有真实业务文案和渠道样例，不代表三类首批通知内容或真实渠道渲染已验收。
