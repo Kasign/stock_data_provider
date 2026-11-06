@@ -60,8 +60,8 @@
 | tools | ToolDefinition[] | 否 | 只接受调用方授权后的定义；不执行 |
 | tool_choice | enum? | 否 | 默认 none；仅 tools 非空且 function_tool_calls=supported 时允许 auto；required/指定工具延后 |
 | deadline_at | UTC timestamp | 是 | 绝对截止时间，不得晚于调用方 Context deadline |
-| correlation_id | string | 否 | 跨模块关联 ID，不承载领域对象 |
-| system_as_of | UTC timestamp | 是 | Researchflow Run 的知识截止值；仅用于调用审计/上下文追溯，不自动注入 Prompt 或转发为 Responses wire 字段 |
+| correlation_id | string | 是 | Researchflow Run 的稳定跨模块关联 ID，不承载领域对象 |
+| system_as_of | RFC3339Nano UTC | 是 | 必须不晚于服务端可信 UTC 当前时间；Researchflow Run 的知识截止值；仅用于调用审计/上下文追溯，不自动注入 Prompt 或转发为 Responses wire 字段 |
 | trace_id | string | 否 | 受控追踪标识 |
 
 首批不接收任意 map、任意 JSON 或完整 Responses input item 数组。多轮对话、多模态、background response、previous_response_id、conversation_id 等 deferred；出现时返回 unsupported_capability，不得静默丢弃。
@@ -99,6 +99,7 @@ ToolDefinition 是 Researchflow Registry 筛选后的只读声明。LLM 只序�
 | 字段 | 类型 | 必需 | 约束 |
 |---|---|---:|---|
 | request_id | string | 是 | 回显 ModelRequest.request_id |
+| correlation_id | string | 是 | 原样回显 ModelRequest.correlation_id，不由 LLM Adapter 生成或刷新 |
 | system_as_of | UTC timestamp | 是 | 原样回显 ModelRequest.system_as_of，不由 LLM Adapter 刷新 |
 | provider_id | string | 是 | 实际选用的 Provider 配置 ID |
 | response_id | string | 条件必需 | 上游 Responses id；缺失需标记契约异常 |
