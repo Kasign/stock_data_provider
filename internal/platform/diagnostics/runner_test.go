@@ -201,4 +201,7 @@ func TestRunnerDoesNotRetainPanicPayload(t *testing.T) {
 	if strings.Contains(string(encoded), secret) {
 		t.Fatalf("panic payload leaked in report: %s", encoded)
 	}
+	if strings.Contains(string(encoded), `"fault"`) {
+		t.Fatalf("internal fault must not appear in report JSON: %s", encoded)
+	}
 }
