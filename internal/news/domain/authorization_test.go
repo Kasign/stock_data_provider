@@ -47,6 +47,49 @@ func loadNewsAuthorizationGolden(t *testing.T) NewsAuthorizationBinding {
 	return binding
 }
 
+func TestAuthorizationPurposeCodeForPurpose(t *testing.T) {
+	cases := []struct {
+		purpose Purpose
+		want    string
+		ok      bool
+	}{
+		{purpose: PurposeInternalPersonalResearch, want: "research_analysis", ok: true},
+		{purpose: PurposePublicDisplay, want: "user_display", ok: true},
+		{purpose: PurposeInternalBusiness},
+		{purpose: PurposeRedistribution},
+		{purpose: PurposeModelTraining},
+		{purpose: Purpose("unknown")},
+	}
+	for _, tc := range cases {
+		got, ok := AuthorizationPurposeCodeForPurpose(tc.purpose)
+		if got != tc.want || ok != tc.ok {
+			t.Errorf("purpose %q: got (%q, %t), want (%q, %t)", tc.purpose, got, ok, tc.want, tc.ok)
+		}
+	}
+}
+
+func TestAuthorizationContentLevelForKind(t *testing.T) {
+	cases := []struct {
+		kind ContentKind
+		want AuthorizationContentLevel
+		ok   bool
+	}{
+		{kind: ContentMetadata, want: AuthorizationContentMetadata, ok: true},
+		{kind: ContentTitle, want: AuthorizationContentMetadata, ok: true},
+		{kind: ContentAbstract, want: AuthorizationContentSummary, ok: true},
+		{kind: ContentSnippet, want: AuthorizationContentSnippet, ok: true},
+		{kind: ContentFullText, want: AuthorizationContentFull, ok: true},
+		{kind: ContentAttachment},
+		{kind: ContentKind("unknown")},
+	}
+	for _, tc := range cases {
+		got, ok := AuthorizationContentLevelForKind(tc.kind)
+		if got != tc.want || ok != tc.ok {
+			t.Errorf("content kind %q: got (%q, %t), want (%q, %t)", tc.kind, got, ok, tc.want, tc.ok)
+		}
+	}
+}
+
 func TestValidateNewsAuthorizationBindingGolden(t *testing.T) {
 	binding := loadNewsAuthorizationGolden(t)
 	if err := ValidateNewsAuthorizationBinding(binding); err != nil {

@@ -110,3 +110,12 @@ N1 已完成固定旧 Python 上游的三类新闻/情报持久化对象、旧 i
 - Fingerprint 当前只校验小写 64 位 SHA-256 hex；JCS + SHA-256 复核等待公共 GOV-CTR-006 Verifier 进入共同基线，不在 News 内复制算法。
 - 本 Validator 不签发授权、不读取当前策略、不提供受限内容，也不替代读取时 Owner 复核。
 - NEWS-CTR-002 仍为 pending_evidence，不标记 L2/frozen。
+
+
+## NEWS 授权用途与内容级别映射（2026-11-06）
+
+- `internal_personal_research` 明确映射为 `research_analysis`；`public_display` 明确映射为 `user_display`。
+- `internal_business` 不能自动推断为 `research_analysis` 或 `risk_review`；`redistribution`、`model_training` 不属于 NEWS-CTR-002 当前用途枚举，均拒绝隐式映射。
+- `ContentMetadata` / `ContentTitle` → `metadata`；`ContentAbstract` → `summary`；`ContentSnippet` → `snippet`；`ContentFullText` → `full`。
+- `ContentAttachment` 与未知内容类型不自动映射到 `full`，必须单独确认内容权限后才能处理。
+- `risk_review` 是显式授权用途，不从现有通用 `Purpose` 值推断。

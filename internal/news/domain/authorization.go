@@ -261,6 +261,36 @@ func validAuthorizationPurpose(value string) bool {
 	}
 }
 
+// AuthorizationPurposeCodeForPurpose maps only domain purposes with an
+// unambiguous NEWS-CTR-002 equivalent. Unsupported/ambiguous purposes fail closed.
+func AuthorizationPurposeCodeForPurpose(purpose Purpose) (string, bool) {
+	switch purpose {
+	case PurposeInternalPersonalResearch:
+		return "research_analysis", true
+	case PurposePublicDisplay:
+		return "user_display", true
+	default:
+		return "", false
+	}
+}
+
+// AuthorizationContentLevelForKind maps textual content kinds to the contract
+// disclosure hierarchy. Attachments are not implicitly equivalent to full text.
+func AuthorizationContentLevelForKind(kind ContentKind) (AuthorizationContentLevel, bool) {
+	switch kind {
+	case ContentMetadata, ContentTitle:
+		return AuthorizationContentMetadata, true
+	case ContentAbstract:
+		return AuthorizationContentSummary, true
+	case ContentSnippet:
+		return AuthorizationContentSnippet, true
+	case ContentFullText:
+		return AuthorizationContentFull, true
+	default:
+		return "", false
+	}
+}
+
 func validAuthorizationContentLevel(value AuthorizationContentLevel) bool {
 	switch value {
 	case AuthorizationContentMetadata, AuthorizationContentSummary, AuthorizationContentSnippet, AuthorizationContentFull:
