@@ -663,6 +663,12 @@ func validateLimitPoolSnapshot(poolType, tradeDate string, limit int, snapshot *
 			return fmt.Errorf("limit-pool provider report date does not match requested trade date: requested=%s returned=%s", tradeDate, snapshot.ProviderReportDate)
 		}
 	}
+	if !snapshot.HasData {
+		if snapshot.Total != 0 || len(snapshot.Items) != 0 || snapshot.QualityStatus != model.QualityUnknown {
+			return errors.New("empty limit pool must remain unknown, not a confirmed zero-event pool")
+		}
+		return nil
+	}
 	if snapshot.Total < len(snapshot.Items) || snapshot.Total < 0 || len(snapshot.Items) > limit {
 		return errors.New("limit-pool total is negative/below returned items or item count exceeds requested limit")
 	}
@@ -728,9 +734,6 @@ func validateLimitPoolSnapshot(poolType, tradeDate string, limit int, snapshot *
 			return errors.New("limit-pool snapshot cannot be valid when one or more items are degraded")
 		}
 		return nil
-	}
-	if snapshot.Total != 0 || len(snapshot.Items) != 0 || snapshot.QualityStatus != model.QualityUnknown {
-		return errors.New("empty limit pool must remain unknown, not a confirmed zero-event pool")
 	}
 	return nil
 }

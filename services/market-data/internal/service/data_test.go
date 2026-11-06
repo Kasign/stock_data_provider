@@ -1713,8 +1713,8 @@ func TestValidateLimitPoolRejectsInvalidNumericFieldsAndQualityMismatch(t *testi
 		snapshot.HasData = false
 		snapshot.Total = 0
 		snapshot.QualityStatus = model.QualityUnknown
-		if err := validateLimitPoolSnapshot("up", "2026-10-23", 30, snapshot); err == nil {
-			t.Fatal("HasData=false must reject a snapshot containing items")
+		if err := validateLimitPoolSnapshot("up", "2026-10-23", 30, snapshot); err == nil || !strings.Contains(err.Error(), "empty limit pool") {
+			t.Fatalf("HasData=false must reject a snapshot containing items through the empty-state invariant, got %v", err)
 		}
 	})
 
