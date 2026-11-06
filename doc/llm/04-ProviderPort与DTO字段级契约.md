@@ -107,6 +107,7 @@ ToolDefinition 是 Researchflow Registry 筛选后的只读声明。LLM 只序�
 | provider_id | string | 是 | 实际选用的 Provider 配置 ID |
 | response_id | string | 条件必需 | 上游 Responses id；缺失需标记契约异常 |
 | status | enum | 是 | completed / incomplete / failed |
+| sequence_number_status | enum? | 否 | Stream 序号状态：available / unavailable；仅全流连续提供或全流缺失时记录 |
 | output_items | OutputItem[] | 是 | 保留 item 类型和顺序；空数组必须有状态/错误解释 |
 | output_text | string | 否 | 按 output item 顺序聚合 message/output_text part 的便捷字段 |
 | structured_json | json.RawMessage? | 否 | 仅本地 Schema 校验成功后提供 |
@@ -180,9 +181,9 @@ Usage 是计量信息，不是输出质量证明；缺失、0 和 unknown 必须
 - Generate(ctx, ModelRequest) -> (ModelResponse, error)
 - Stream(ctx, ModelRequest, onEvent func(ModelEvent) error) -> (ModelResponse, error)
 
-Stream 使用同步回调提供背压，并返回最终聚合的 ModelResponse。Generate/Stream 的 Go error 表示传输、HTTP 非成功、协议解析/校验、本地 Schema 校验、回调或 Context 取消等 Adapter 执行错误；上游合法返回的 status=incomplete/failed 通过 ModelResponse.status 与 ModelResponse.error 表达，不重复包装成 Go error。Stream 收到 terminal event 后返回最终 Response；无 terminal event 的 EOF 返回部分 Response 与 stream_interrupted 类型错误。回调错误或 Context 取消必须停止读取上游，并返回已解析的部分 Response（若有）及对应 error。
+Stream 使用同步回调提供背压，并返回最终聚合的 ModelResponse。Generate/Stream 的 Go error 表示传输、HTTP 非成功、协议解析/校验、本地 Schema 校验、回调或 Context 取消等 Adapter 执行错误；上游合法返回的 status=incomplete/failed 通过 ModelResponse.status 与 ModelResponse.error 表达，不重复包装成 Go error。Stream 收到 terminal event 后返回最终 Response；无 terminal event 的 EOF 返回 status=incomplete 的部分 Response 与 stream_interrupted 类型错误。回调错误或 Context 取消必须停止读取上游，并返回已解析的部分 Response（若有）及对应 error。
 
-ModelEvent 字段：type、sequence_number?、response_id?、output_index?、content_index?、item_id?、call_id?、item?、content_part?、delta?、arguments?、usage?、error?、received_at。
+ModelEvent 字段：type、sequence_number?、response_id?、output_index?、content_index?、item_id?、call_id?、status?、item?、content_part?、delta?、arguments?、usage?、error?、received_at。
 
 首批识别 response.created、response.output_item.added/done、response.content_part.added/done、response.output_text.delta/done、response.refusal.delta/done、response.function_call_arguments.delta/done、response.completed、response.incomplete、response.failed、error。文本与函数参数增量均使用 delta 字段，但由 type 区分；item/content_part 字段承载已解析的结构对象。其他事件作为 UnknownEvent 保留类型和顺序，不执行副作用。上列是 Adapter parser 契约，不代表当前本地模型已产生所有事件。
 
@@ -299,3 +300,15 @@ ModelResponse.status=incomplete/failed 是协议响应结果，不自动等同�
 ## 12. 非流式 HTTP Adapter 接入约束
 
 ResponsesAdapter 只依赖窄 HTTPDoer，并且构造时必须注入 `Clock`。生产组合根必须注入 `internal/platform/httpclient.Client.Bind(...)` 创建的 `BoundDoer`，并为 Provider 配置固定目的地址策略；不得注入未绑定目的地址策略的通用 HTTP Client。Gateway caller key 由组合根通过 `config.Secret` 注入，LLM 不读取环境变量。Adapter 只负责请求/响应体和 Provider 级限制，不替代 Platform 的 DNS/SSRF/TLS/重定向/全局响应体策略。调用有效 deadline 取 `ModelRequest.deadline_at`、Context deadline、Provider timeout 的最早值；不得因为 request deadline 晚于 Context deadline 而拒绝，若最早 deadline 已到期则不得派发请求。Clock 用于能力有效期、时间校验、调用时间戳和 Retry-After 日期解析，生产组合根注入 SystemClock，测试注入固定/可推进 Clock。BoundDoer.Do 是缓冲式非流式接口，SSE 必须等待 Platform 受控流式能力。
+
+
+### 12.1 Clock 与 Deadline 注入
+
+- 核心时间判断使用注入的 Clock；生产使用 SystemClock，测试使用固定/可推进 Clock。
+- 单次调用有效 deadline 取 ModelRequest.deadline_at、调用 Context deadline、ProviderConfig.request_timeout 三者最早值。较晚的 request deadline 不构成请求错误。
+- 若有效 deadline 不晚于调用开始时刻，必须在 HTTPDoer 派发前返回 timeout。
+- Generate 与后续 Stream 必须共享同一有效 deadline；SSE 网络读取、等待事件、callback 和收尾均受该 Context 约束。
+
+### 12.2 SSE Parser 当前实现边界
+
+ParseResponsesSSE 只接收完整的有界字节切片并同步调用 callback，用于纯协议解析和 Golden 测试；它不是网络流读取器，也不提供网络取消/背压。真实 Stream 必须在 Platform 提供受控 streaming transport 后实现，禁止直接将 http.Response.Body 接入此 Parser 绕过 Platform。

@@ -353,6 +353,13 @@ type ModelErrorInfo struct {
 	SafeMessage string `json:"safe_message"`
 }
 
+type SequenceNumberStatus string
+
+const (
+	SequenceNumberAvailable SequenceNumberStatus = "available"
+	SequenceNumberUnavailable SequenceNumberStatus = "unavailable"
+)
+
 type ModelResponse struct {
 	RequestID string `json:"request_id"`
 	CorrelationID string `json:"correlation_id"`
@@ -360,6 +367,7 @@ type ModelResponse struct {
 	ProviderID string `json:"provider_id"`
 	ResponseID string `json:"response_id,omitempty"`
 	Status ResponseStatus `json:"status"`
+	SequenceNumberStatus SequenceNumberStatus `json:"sequence_number_status,omitempty"`
 	OutputItems []OutputItem `json:"output_items"`
 	OutputText string `json:"output_text,omitempty"`
 	StructuredJSON json.RawMessage `json:"structured_json,omitempty"`
@@ -385,6 +393,7 @@ type ModelEvent struct {
 	ContentIndex *int `json:"content_index,omitempty"`
 	ItemID string `json:"item_id,omitempty"`
 	CallID string `json:"call_id,omitempty"`
+	Status string `json:"status,omitempty"`
 	Item *OutputItem `json:"item,omitempty"`
 	ContentPart *ContentPart `json:"content_part,omitempty"`
 	Delta string `json:"delta,omitempty"`
