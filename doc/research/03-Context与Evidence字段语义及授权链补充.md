@@ -87,7 +87,11 @@ ResearchEvent 是跨来源现实事件，不是 News Article 别名。创建、�
 
 生命周期：detected/consolidating/active/materializing/fading/invalidated/closed。只有状态真正迁移并持久化后才按 INT-CTR-001 发布 lifecycle_changed；Evidence 追加、来源补录或描述修订但状态未变，不发布。事件通过 Research 本地事务 Outbox 发布，不直接调用 Notification 内部接口。
 
-## 6.1 Claim / Hypothesis 领域实现边界
+## 6.1 RSC-004 Data 实体引用依赖复核
+
+2026-11-06 只读核对 Data 分支 `feat/full-go-data-providers-api-switch`，HEAD 为 `3a82139deb6e343fb651abb07512e909206f1b65`。代码树未发现 SecurityRef、IndustryRef、SecurityMaster、IndustryClassification 或独立 GetSecurity/ListIndustries 查询端口；旧 `internal/analysis/app/ports.go` 仅有泛化 UniverseResolver，不能视为 Data 所有的稳定实体契约。故 RSC-004 暂不开发 Adapter，也不在 Research 中复制 Security/Industry 模型。待 Data 提供稳定引用、历史版本/知识时间语义和公开 Application Port 后再继续。
+
+## 6.2 Claim / Hypothesis 领域实现边界
 
 当前 `internal/research/claim/` 以单一 Claim DTO 表达 reported_fact、inference 和 hypothesis 三类认识论状态。Hypothesis 必须提供 validation_method、expected_observation 和非空 invalidation_conditions；支持与反证引用不能重叠。当前只验证本地结构、UTC 知识截止时间和版本号连续性，不查询 Evidence/Scope 资源，不持久化版本，也不推断支持度或概率。状态值按项目契约枚举校验；状态迁移和跨版本替代关系尚未接入。
 
