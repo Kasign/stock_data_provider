@@ -87,6 +87,107 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 	if _, err := repository.GetAuthorizationSnapshot(ctx, "authorization-not-found"); !errors.Is(err, app.ErrAuthorizationSnapshotNotFound) {
 		t.Fatalf("missing authorization snapshot error = %v", err)
 	}
+
+	var storedAuthorizationHash string
+	if err := db.QueryRowContext(ctx,
+		"SELECT payload_hash FROM news_authorization_snapshots WHERE authorization_ref = ?",
+		binding.AuthorizationRef.AuthorizationRef,
+	).Scan(&storedAuthorizationHash); err != nil {
+		t.Fatalf("read authorization payload hash: %v", err)
+	}
+	tamperedAuthorizationHash := strings.Repeat("0", 64)
+	if storedAuthorizationHash == tamperedAuthorizationHash {
+		tamperedAuthorizationHash = strings.Repeat("1", 64)
+	}
+	if _, err := db.ExecContext(ctx,
+		"UPDATE news_authorization_snapshots SET payload_hash = ? WHERE authorization_ref = ?",
+		tamperedAuthorizationHash, binding.AuthorizationRef.AuthorizationRef,
+	); err != nil {
+		t.Fatalf("tamper authorization payload hash: %v", err)
+	}
+	_, authorizationTamperErr := repository.GetAuthorizationSnapshot(ctx, binding.AuthorizationRef.AuthorizationRef)
+	if _, err := db.ExecContext(ctx,
+		"UPDATE news_authorization_snapshots SET payload_hash = ? WHERE authorization_ref = ?",
+		storedAuthorizationHash, binding.AuthorizationRef.AuthorizationRef,
+	); err != nil {
+		t.Fatalf("restore authorization payload hash: %v", err)
+	}
+	if !errors.Is(authorizationTamperErr, app.ErrInvalidAuthorizationSnapshot) {
+		t.Fatalf("tampered authorization snapshot error = %v, want invalid snapshot", authorizationTamperErr)
+	}
+
+	snapshotCreatedAt := time.Now().UTC().Truncate(time.Microsecond)
+	snapshot := app.EvidenceSnapshot{
+		SnapshotRef: fmt.Sprintf("news-snapshot-it-%d", time.Now().UnixNano()),
+		CallerRef: "service:researchflow",
+		FiltersFingerprint: strings.Repeat("a", 64),
+		PageSize: 20,
+		SystemAsOf: snapshotCreatedAt.Add(-time.Minute),
+		SortVersion: "news-evidence-v1",
+		CreatedAt: snapshotCreatedAt,
+		ExpiresAt: snapshotCreatedAt.Add(app.EvidenceSnapshotTTL),
+		Items: []app.EvidenceSnapshotItem{{
+			NewsID: "news-it-item-1", VersionID: "news-it-version-1",
+			ObservationID: "news-it-observation-1",
+			SystemObservedAt: snapshotCreatedAt.Add(-2 * time.Minute),
+		}},
+	}
+	if err := repository.CreateEvidenceSnapshot(ctx, snapshot); err != nil {
+		t.Fatalf("create evidence snapshot: %v", err)
+	}
+	if err := repository.CreateEvidenceSnapshot(ctx, snapshot); err != nil {
+		t.Fatalf("idempotent evidence snapshot create: %v", err)
+	}
+	loadedSnapshot, err := repository.GetEvidenceSnapshot(ctx, snapshot.SnapshotRef, snapshot.CallerRef, snapshotCreatedAt.Add(time.Minute))
+	if err != nil {
+		t.Fatalf("get evidence snapshot: %v", err)
+	}
+	if len(loadedSnapshot.Items) != 1 || loadedSnapshot.Items[0].VersionID != snapshot.Items[0].VersionID {
+		t.Fatalf("evidence snapshot payload changed: %+v", loadedSnapshot)
+	}
+
+	var storedEvidenceHash string
+	if err := db.QueryRowContext(ctx,
+		"SELECT payload_hash FROM news_evidence_snapshots WHERE snapshot_ref = ?",
+		snapshot.SnapshotRef,
+	).Scan(&storedEvidenceHash); err != nil {
+		t.Fatalf("read evidence payload hash: %v", err)
+	}
+	tamperedEvidenceHash := strings.Repeat("0", 64)
+	if storedEvidenceHash == tamperedEvidenceHash {
+		tamperedEvidenceHash = strings.Repeat("1", 64)
+	}
+	if _, err := db.ExecContext(ctx,
+		"UPDATE news_evidence_snapshots SET payload_hash = ? WHERE snapshot_ref = ?",
+		tamperedEvidenceHash, snapshot.SnapshotRef,
+	); err != nil {
+		t.Fatalf("tamper evidence snapshot payload hash: %v", err)
+	}
+	_, evidenceTamperErr := repository.GetEvidenceSnapshot(ctx, snapshot.SnapshotRef, snapshot.CallerRef, snapshotCreatedAt.Add(time.Minute))
+	if _, err := db.ExecContext(ctx,
+		"UPDATE news_evidence_snapshots SET payload_hash = ? WHERE snapshot_ref = ?",
+		storedEvidenceHash, snapshot.SnapshotRef,
+	); err != nil {
+		t.Fatalf("restore evidence snapshot payload hash: %v", err)
+	}
+	if !errors.Is(evidenceTamperErr, app.ErrInvalidEvidenceSnapshot) {
+		t.Fatalf("tampered evidence snapshot error = %v, want invalid snapshot", evidenceTamperErr)
+	}
+	conflictingSnapshot := snapshot
+	conflictingSnapshot.PageSize++
+	if err := repository.CreateEvidenceSnapshot(ctx, conflictingSnapshot); !errors.Is(err, app.ErrEvidenceSnapshotConflict) {
+		t.Fatalf("conflicting evidence snapshot create error = %v", err)
+	}
+	if _, err := repository.GetEvidenceSnapshot(ctx, snapshot.SnapshotRef, "different-caller", snapshotCreatedAt.Add(time.Minute)); !errors.Is(err, app.ErrEvidenceSnapshotUnavailable) {
+		t.Fatalf("snapshot caller mismatch error = %v", err)
+	}
+	if _, err := repository.GetEvidenceSnapshot(ctx, snapshot.SnapshotRef, snapshot.CallerRef, snapshot.ExpiresAt); !errors.Is(err, app.ErrEvidenceSnapshotUnavailable) {
+		t.Fatalf("expired evidence snapshot error = %v", err)
+	}
+	deleted, err := repository.DeleteExpiredEvidenceSnapshots(ctx, snapshot.ExpiresAt, 100)
+	if err != nil || deleted < 1 {
+		t.Fatalf("delete expired evidence snapshots: deleted=%d err=%v", deleted, err)
+	}
 	var idSequence atomic.Uint64
 	newID := func() string { return fmt.Sprintf("news-it-%d", idSequence.Add(1)) }
 	ingest := app.NewIngestCandidate(repository, newID)
