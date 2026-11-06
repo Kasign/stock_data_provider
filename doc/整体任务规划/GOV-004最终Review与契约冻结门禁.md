@@ -205,7 +205,7 @@ GOV-005 可以先做**规划设计**，包括：
 
 本次补齐 QuantAnalysisRequest、QuantResultRef、QuantMetric、TrendResult、RiskDecision，以及 ResearchContext、Evidence、Event、Claim/Hypothesis、Scenario 的主要字段、状态、时间和依赖边界。因此，原第 3.5 节所述“尚无字段级 DTO 草案”的设计缺口已有文档级进展。
 
-但以下内容仍未通过模块 Owner Review，不能将该阻断项标记为完成：
+以下是当时评审留下的历史问题记录；当前是否阻断及契约状态以项目级目录逐项登记为准，不再要求个人模块 Owner 签字：
 - 价格/金额 decimal 精度与 JSON 表达方式；
 - 每个 Quant Use Case 的独立参数结构及 Schema；
 - ContextSectionRef、OmittedSection、ScenarioCondition、RiskReason 等复合对象完整字段；
@@ -230,7 +230,7 @@ GOV-005 可以先做**规划设计**，包括：
 - 货币/价格优先采用 decimal string 的建议及 Data Adapter 边界转换策略。
 
 这使 Quant/Research 的文档级字段定义覆盖了主要复合对象和关键序列化行为，但仍不等于 Schema 已冻结。未完成项：
-1. 模块 Owner 对 decimal string 方案及 Data Adapter 转换精度的确认；
+1. GOV-CTR-001 的公共数值语义已 accepted；DATA-CTR-003/005、QNT-CTR-001 的字段精度与 Data Adapter 转换仍需 Schema/Golden 证据；
 2. 各 Use Case 的 typed parameters 完整定义；
 3. ContextSectionRef 等复合 DTO 的正式 JSON Schema 与 Go 类型；
 4. EvidenceAuthorizationRef 与 Data/News/Quant/Research 各自授权系统的映射；
@@ -540,7 +540,7 @@ Data 最新 HEAD 为 `7abd5078e85ec7e6a5785ec9a4253d862af2a39c`，相较 1358847
 1. Data：契约问题已定位并拆成 DATA-CONTRACT-001～008，但尚未在 Data 分支实施；当前 CI 另有 gofmt 阻断。
 2. News：N3/N4 纯领域能力进展明显；N6 Repository/Migration、PIT 知识时间查询 Facade、授权决策快照和稳定分页仍未完成。
 3. Platform：公共原语已有实现，但服务入口/DI/路由/领域 Adapter 接入和真实 MariaDB/Redis/SSRF 验收未完成。
-4. Quant/Research DTO 与三方契约尚未通过模块 Owner Review 和真实 Schema/Golden 验证。
+4. Quant/Research DTO 的 Schema/Golden/消费者映射尚未全部完成；具体状态以 QNT-CTR-001～005、RSC-CTR-001/002 登记为准。
 
 因此 GOV-004 仍为 **NO-GO**。当前可以继续推进 Data/News 的纯领域和契约工作；不得冻结五模块公共契约，不创建五个模块开发分支，不宣称整体模块开发已可启动。
 
@@ -609,7 +609,7 @@ DATA-CONTRACT-001 的 gofmt 子项已恢复；完整 CI 阻断转为测试编译
 
 | 门禁 | 验收对象 | 通过条件 | 不要求 |
 |---|---|---|---|
-| 公共契约冻结（GOV-004） | 当前批次跨模块 DTO/Port、字段语义、依赖方向和版本策略 | 契约文档/Schema/示例经 Owner Review；必需字段、单位、时间、质量、空值、错误和兼容规则明确 | 所有提供方业务实现完成；所有业务分支同时编译；真实 Provider/数据库/模型/渠道均可用 |
+| 公共契约冻结（GOV-004） | 当前批次跨模块 DTO/Port、字段语义、依赖方向和版本策略 | 项目统一决策明确语义；生产方/消费者责任角色和字段规则可追溯；Schema/Golden/Contract Test 证据齐备 | 所有提供方业务实现完成；所有业务分支同时编译；真实 Provider/数据库/模型/渠道均可用 |
 | 模块独立开工（GOV-005 L2） | 单个模块当前开发批次 | 本模块首批任务依赖的契约已冻结，未就绪依赖可隔离在 Adapter/调用点之外 | 与本模块无关的模块契约和 CI；其他模块真实环境验收 |
 | 跨模块集成（L3） | 明确 SHA 组合的完整系统 | 参与模块构建、契约测试、组合根、真实依赖和端到端测试通过 | 不适用；这是最终组合验收 |
 
@@ -624,7 +624,7 @@ DATA-CONTRACT-001 的 gofmt 子项已恢复；完整 CI 阻断转为测试编译
 | Platform 真实 MariaDB/Redis、Migration 故障演练 | 阻断 Platform Storage 的生产集成验收和依赖真实 Storage 的持久化集成；不阻断领域模型、Repository 接口及隔离测试开发 | 否 |
 | Platform 生产出口 SSRF 验收 | 阻断 News 在线抓取等受控出网功能的生产验收；不阻断离线解析和不联网领域逻辑 | 否 |
 | Data API Key 服务端注入/轮换验收 | 阻断 Server→Data 的真实服务间调用验收；不阻断 Quant 领域算法或基于契约 Fixture 的 Adapter 单测 | 否 |
-| Quant/Research DTO 未完成 Owner Review 的具体字段 | 阻断使用这些字段的模块间调用点；对应模块可继续不依赖该 DTO 的领域工作 | 只阻断相关调用点，不自动阻断全部模块 |
+| Quant/Research DTO 尚缺 Schema/Golden/消费者映射的具体字段 | 阻断使用这些字段的模块间调用点；对应模块可继续不依赖该 DTO 的领域工作 | 只阻断相关调用点，不自动阻断全部模块 |
 
 ### 30.3 GOV-004 的最小冻结范围
 
@@ -642,9 +642,9 @@ DATA-CONTRACT-001 的 gofmt 子项已恢复；完整 CI 阻断转为测试编译
 
 ### 30.4 当前结论修订
 
-- GOV-004 的总体架构和大量语义审查已完成；最小契约是否达到冻结条件，应逐项基于文档和 Owner Review 判断。
+- GOV-004 的总体架构和大量语义审查已完成；最小契约是否达到冻结条件，应逐项基于项目级目录、Schema/Golden、消费者映射和 Contract Test 证据判断。
 - Data/News/Platform 的真实实现与 CI 是各自模块/集成验收证据，不再作为所有五模块同时开工的共同前置条件。
-- Quant/Research 字段级 DTO Owner Review、News Query Port 公开 DTO、Researchflow 首批调用 Port 等，仍需完成后才能判断对应调用批次是否达到 Module Ready。
+- Quant/Research 字段级 Schema/Golden、News Query Port DTO、Researchflow 首批调用 Port 的消费者映射和契约测试仍需完成，之后才能判断对应调用批次是否达到 Module Ready。
 - 本节不把 GOV-004 自动改为 GO，也不授权创建分支；它只修正门禁范围，防止把实现集成阻断误判为全局开工阻断。
 
 **后续执行顺序：** 完成首批最小 DTO/Port 的字段级 Review → 按模块逐个确认 L2 Module Ready → 用户确认共同基线并授权后创建分支 → 模块独立 CI → 按明确参与 SHA 进行集成验收。
@@ -652,7 +652,7 @@ DATA-CONTRACT-001 的 gofmt 子项已恢复；完整 CI 阻断转为测试编译
 
 ## 31. 五模块首批开工契约预审
 
-本节只审查第一批任务实际需要的契约，不把后续高级能力或提供方生产实现作为全局开工条件。结论属于规划侧预审，必须由模块 Owner Review 后才能冻结。
+本节只审查第一批任务实际需要的契约，不把后续高级能力或提供方生产实现作为全局开工条件。语义决策由项目统一决策方完成；直接消费者确认与自动化证据齐备后，才可按项目级目录标记 frozen。
 
 ### 31.1 首批开发范围
 
@@ -667,7 +667,7 @@ DATA-CONTRACT-001 的 gofmt 子项已恢复；完整 CI 阻断转为测试编译
 ### 31.2 Quant 首批字段缺口
 
 - QuantAnalysisRequest.parameters 仍是 typed object 占位。QNT-001 必须先定义 IndicatorRequest 的指标代码、周期、窗口、输入引用和用例参数；Factor 参数需定义母体、分类版本、标准化和异常值策略。
-- QuantMetric.value 目前为 number/null，价格/金额的公开精度和 JSON 表达仍待 Owner 决定。不得在不同指标中随意混用浮点和 decimal string。
+- QuantMetric.value 的公共 JSON 类型语义以 GOV-CTR-001 为准；具体字段的 JSON 类型、精度、scale 和舍入由 QNT-CTR-001 Registry/Schema 明确，证据未齐前不得标记 frozen。
 - Data 百分比使用百分点，Quant 内部比例计算必须通过明确 unit 区分 percentage_point 与 ratio。
 - MarketDataSnapshotRef 的 payload_ref 应是不透明引用；输入快照必须保留 PIT、复权、来源版本和质量语义。
 - Data OpenAPI/Go JSON 未完成的字段只阻断对应 Data Adapter 和真实 Data 集成；不阻断 Indicator/Factor 纯计算实现。
@@ -778,15 +778,15 @@ Workflow Template 按 stage_code + template_version 固定 on_degraded、on_skip
 - Stream 采用同步 callback 事件接口，必须收到 terminal event；无 terminal 的 EOF 是 stream_interrupted，首个事件后不得透明重试。
 - CapabilityState 默认 unknown，必须绑定 Provider/Model/Gateway 版本与验证时间；本地 Responses、Structured Output、Tool Call 未经真实 E2E 不得设为 supported。
 - 本地 Schema 校验、Usage null、工具不执行和 SecretRef 隔离均纳入契约建议。
-- 当前仍待 LLM/Platform Owner Review；未选择 JSON Schema validator 具体库，未实现 Port/Adapter/Fixture，也未创建模块分支。GOV-004 继续 NO-GO。
+- 本段为历史 LLM 评审状态；当前 LLM-CTR-001～003 均为 pending_evidence。validator 选型、Port/Adapter/Fixture 和真实 Gateway E2E 仍需按对应验收层级完成，GOV-004 继续 NO-GO。
 
 
-## 35. LLM-002 Owner Review 建议决议（2026-11-05）
+## 35. LLM-002 历史评审建议决议（2026-11-05；当前状态以 LLM-CTR-001～003 为准）
 
 - 原 Port 存在 Stream 不能返回最终聚合 Response、Generate 未定义 Response.status 与 Go error 分工的问题，已在规划建议中修正为 Generate/Stream 均返回 (ModelResponse,error)。
 - MVP 输入单轮文本；ToolDefinition 受控纳入但默认 tool_choice=none；reasoning_effort 保留可选但默认关闭；JSON Schema 本地基线建议 Draft 2020-12；Usage.total_tokens 仅在分项完整时派生；SSE sequence_number 严格连续；四类 Request/Correlation ID 分开保存。
 - 上游合法 incomplete/failed 由 ModelResponse.status/error 表达；Adapter 执行错误由 Go error 表达；EOF 无 terminal event 返回部分 Response + stream_interrupted。
-- 本轮只形成规划侧建议，待 LLM/Platform Owner 签字；validator 库/许可证、真实 Gateway ID header 映射、本地模型 Responses/Schema/Tool/Reasoning/SSE E2E 尚未完成。
+- 本轮只形成规划侧建议；validator 库/许可证、真实 Gateway ID header 映射、本地模型 Responses/Schema/Tool/Reasoning/SSE E2E 尚未完成。当前不以个人签字作为门槛，按 LLM-CTR-001～003 补齐契约证据。
 - LLM-001 仍 partial；LLM-002 仅契约草案；不宣称 LLM-004/005 能力通过，不创建 feat/llm 分支，GOV-004 继续 NO-GO。
 
 
@@ -795,7 +795,7 @@ Workflow Template 按 stage_code + template_version 固定 on_degraded、on_skip
 - 已形成 Fixture 设计清单，覆盖 Responses JSON output item、status、Usage、Schema 校验和异常响应，以及 SSE terminal、未知事件、sequence_number 异常、EOF、callback error 和 Context cancel。
 - Fixture 验收必须断言原始 wire payload 到内部 DTO 的映射、状态与 typed error、Usage 来源、序号诊断及 completed 判定；不能仅断言 parser 不 panic。
 - Fixture 仅证明 Adapter 协议解析与归一化行为，不证明当前 Gateway/本地模型具备 Structured Output、Tool Call、Reasoning 或稳定 SSE 能力。
-- 本轮仍为规划设计；没有实现 Fixture 或执行测试。Owner Review、validator 选型和真实 Gateway E2E 仍未完成，GOV-004 NO-GO。
+- 本轮仍为规划设计；没有实现 Fixture 或执行测试。validator 选型和真实 Gateway E2E 仍未完成，LLM-CTR-001～003 继续保持 pending_evidence，GOV-004 NO-GO。
 
 
 ## 37. LLM-002 Stream Tool Call 事件契约补充
