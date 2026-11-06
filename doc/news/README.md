@@ -35,8 +35,9 @@
 - [x] N2：Domain、Application Port、Bocha/Tavily/Brave/SearXNG Adapter 与 fake 测试已提交；根模块 gofmt、test、race、vet 和分析服务镜像构建通过
 - [x] N3 首批：Provider/Source/Endpoint 授权交集评估、用途/保留期限限制、内容类型与存储模式一致性、HTTP(S) URL 规范化与精确主机/端口 allowlist；固定测试通过
 - [x] N3 离线业务质量：按元数据、内容、来源身份三个维度评估 valid/degraded/invalid/unknown；不把 Provider 摘要提升为来源正文，不把发布者文本视为已解析来源
-- [ ] N3 后续：附件元信息、Feed 内容类型识别及在线 Feed 获取继续开发；DNS/IP 与重定向安全由 PLAT-008 执行
-- [ ] N4：实现身份识别、去重、版本和证券关联业务规则
+- [ ] N3 在线采集：Feed 解析与 Endpoint 传输分派已有代码；平台 PLAT-008 原语已实现并有专项 CI，但尚未进入当前 News 分支基线，且 PLAT-002 未冻结、生产 BoundDoer 注入/来源授权/出口验收未完成
+- [x] N4 Domain/Application 首批：身份识别、Observation 幂等语义、内容版本、证券/行业关系和转载关系规则已有实现与离线测试
+- [ ] N4/N6 后续：真实采集编排、生产 Repository、数据库唯一约束/事务并发与历史版本持久化仍未完成
 - [ ] N5：按冻结契约接入 Config/Secret、Logger/Error/Trace、HTTP Client
 - [ ] N6：公共存储能力就绪后实现新闻自有 Repository/SQL/Migration；Redis 按需
 - [ ] N7：接入公共 Diagnostics；Task/Audit/Metrics 按真实需求评估
@@ -45,7 +46,7 @@
 
 ## 公共平台协作说明
 
-公共平台分支 feat/platform-foundation 的 PLAT-002 仍处于待评审状态；只读检查平台分支最新 HEAD `ac06a544`，当前已出现 PLAT-007 Diagnostics 首批代码，但尚无 PLAT-008 HTTP Client 实现。平台已接受 News 提出的 HTTP/SSRF、Diagnostics、Fault 契约意见。News 只读跟踪平台分支，不直接依赖未冻结的内部实现。PLAT-011 为业务接入、PLAT-012 为故障演练；Metrics/Audit 和 Redis 不作为新闻首期门禁。具体差异见《N1-A 公共平台规划对齐补充评审》和《新闻模块与公共平台接入矩阵》。
+公共平台分支 `feat/platform-foundation` 本轮只读核对 HEAD `1afcddc7cf08b0995ba872028f2ec4548ebb0d79`：PLAT-008 `httpclient.BoundDoer` 已实现并有平台专项 CI 通过记录；PLAT-002 仍标记待评审，PLAT-013 仍在设计/领域接入阶段，PLAT-010 已收敛为领域边界评审而非通用队列。当前 News 分支树中尚无 `internal/platform/httpclient`，因此不能直接导入 BoundDoer；必须等平台公共契约冻结、平台代码进入共同基线，并由 Server 组合根 Owner 明确接入位置后再集成。平台分支只读跟踪，不在本分支修改。生产 DNS/出口、真实 Provider 凭证/配额、Source/Endpoint 授权仍是独立验收门禁。Metrics/Audit 和 Redis 不作为新闻首期门禁。
 
 ## 重要说明
 
@@ -61,7 +62,7 @@ N1 已完成固定旧 Python 上游的三类新闻/情报持久化对象、旧 i
 
 ### N1-A 最终收口（2026-11-05）
 
-已完成旧 Python 主要调用链和历史表语义盘点、证券主数据核验、Provider/来源公开条款首轮核查、领域模型与 Application 契约设计。平台分支已接受 News 提出的 SSRF、Diagnostics、Fault 三项契约意见；只读检查最新平台 HEAD `ac06a544`，PLAT-007 首批代码已出现，但 PLAT-002 仍待正式冻结、PLAT-008 尚未实现和安全验收。N1-A 已评审确认，N2 根模块验证已通过；N3 已实现 Provider/Source/Endpoint 授权交集、HTTP(S) 来源 URL 离线校验、RSS 2.0 / Atom 1.0 与离线 HTML 解析、搜索候选标准化，以及 Provider 摘要/来源摘要/正文载荷分层映射；在线抓取和平台网络安全能力仍待完成。未获明确许可的来源保持 pending/restricted。
+已完成旧 Python 主要调用链和历史表语义盘点、证券主数据核验、Provider/来源公开条款首轮核查、领域模型与 Application 契约设计。N1-A 已评审确认，N2 根模块验证已通过；N3 已实现授权交集、URL 离线校验、RSS/Atom/HTML 离线解析、候选标准化和内容分层。平台分支当前已有 PLAT-008 BoundDoer 及专项 CI，但 News 分支尚未包含该实现，PLAT-002 也未冻结；在线抓取仍未开放。N4 Domain/Application 首批能力已有离线测试，生产编排与 Repository 仍待完成。未获明确许可的来源保持 pending/restricted。
 
 ## N1 已确认的架构决策（2026-11-05）
 
