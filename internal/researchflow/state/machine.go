@@ -164,8 +164,8 @@ func AggregateRun(run domain.Run,stages []domain.Stage,attempts []domain.Attempt
 	finalStatus := domain.RunSucceeded
 	if fail { finalStatus = domain.RunFailed } else if partial { finalStatus = domain.RunPartial }
 	if requiresHardRiskGate {
-		// Failed gate execution is not a business decision and must remain unevaluated.
-		if !gateExecutionFailed && gateCount > 0 {
+		// A failed Run or failed gate execution is not an evaluated business decision.
+		if !gateExecutionFailed && gateCount > 0 && finalStatus != domain.RunFailed {
 			summary.ActionabilityStatus = "blocked"
 			if gatePassed && finalStatus == domain.RunSucceeded {
 				summary.ActionabilityStatus = "actionable"

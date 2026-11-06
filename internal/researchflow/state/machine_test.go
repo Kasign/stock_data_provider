@@ -123,3 +123,20 @@ func TestAggregateProjectsAndDeduplicatesReasonCodes(t *testing.T) {
 	if len(got.ResultSummary.ReasonCodes) != len(want) { t.Fatalf("reason codes = %#v", got.ResultSummary.ReasonCodes) }
 	for i := range want { if got.ResultSummary.ReasonCodes[i] != want[i] { t.Fatalf("reason codes = %#v, want %#v", got.ResultSummary.ReasonCodes, want) } }
 }
+
+
+func TestAggregateHardRiskPassDoesNotEvaluateFailedRun(t *testing.T) {
+	now := time.Date(2026, 11, 6, 10, 0, 0, 0, time.UTC)
+	stages := []domain.Stage{
+		{Code:"risk", Status:domain.StageSucceeded, RiskDecision:"pass"},
+		{Code:"research", Status:domain.StageFailed, ReasonCodes:[]string{"research_failed"}},
+	}
+	policies := map[string]template.PropagationPolicy{
+		"risk": {OnDegraded:domain.PropagateFail, OnSkipped:domain.PropagateFail, OnFailed:domain.PropagateFail, OnTimedOut:domain.PropagateFail, OnBlocked:domain.PropagateFail},
+		"research": {OnFailed:domain.PropagateFail},
+	}
+	got, err := AggregateRun(domain.Run{Status:domain.RunRunning}, stages, nil, policies, map[string]bool{"risk":true}, true, now)
+	if err != nil { t.Fatal(err) }
+	if got.Status != domain.RunFailed { t.Fatalf("run status = %s, want failed", got.Status) }
+	if got.ResultSummary.ActionabilityStatus != "not_evaluated" { t.Fatalf("actionability = %s, want not_evaluated", got.ResultSummary.ActionabilityStatus) }
+}
