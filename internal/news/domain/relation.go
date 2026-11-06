@@ -245,13 +245,21 @@ func ResolveCurrentRelations(assertions []RelationAssertion) ([]RelationAssertio
 	}
 
 	result := make([]RelationAssertion, 0, len(assertions))
+	primarySubjects := make(map[string]string)
 	for _, assertion := range assertions {
 		if _, hasSuccessor := superseded[assertion.ID]; hasSuccessor {
 			continue
 		}
-		if assertion.Status == RelationConfirmed {
-			result = append(result, assertion)
+		if assertion.Status != RelationConfirmed {
+			continue
 		}
+		if assertion.Kind == RelationPrimarySubject {
+			if _, exists := primarySubjects[assertion.NewsID]; exists {
+				return nil, ErrRelationHistoryConflict
+			}
+			primarySubjects[assertion.NewsID] = assertion.ID
+		}
+		result = append(result, assertion)
 	}
 	return result, nil
 }

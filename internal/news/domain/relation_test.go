@@ -180,6 +180,22 @@ func TestResolveCurrentRelationsFollowsCorrectionAndRetraction(t *testing.T) {
 	}
 }
 
+func TestResolveCurrentRelationsAllowsOnlyOneConfirmedPrimarySubjectPerNews(t *testing.T) {
+	security := validSecurityRelation("r-security", string(RelationConfirmed))
+	security.Kind = RelationPrimarySubject
+	industry := validSecurityRelation("r-industry", string(RelationConfirmed))
+	industry.Kind = RelationPrimarySubject
+	industry.SubjectType = RelationSubjectIndustry
+	industry.Security = nil
+	industry.Industry = &IndustryRelationSubject{
+		ClassificationSystem: "CSI", ClassificationVersion: "2026",
+		IndustryCode: "I01", IndustryName: "软件服务",
+	}
+	if _, err := ResolveCurrentRelations([]RelationAssertion{security, industry}); !errors.Is(err, ErrRelationHistoryConflict) {
+		t.Fatalf("multiple confirmed primary subjects must conflict: %v", err)
+	}
+}
+
 func TestResolveCurrentRelationsRejectsMultipleSuccessors(t *testing.T) {
 	first := validSecurityRelation("r1", string(RelationConfirmed))
 	a := validSecurityRelation("r2", string(RelationConfirmed))
