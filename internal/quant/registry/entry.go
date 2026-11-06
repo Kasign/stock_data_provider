@@ -46,9 +46,9 @@ type InputRequirement struct {
 }
 
 type QualityPolicy struct {
-	MinimumCoverage      float64  `json:"minimum_coverage"`
-	MissingHandling      string   `json:"missing_handling"`
-	QualityStates        []string `json:"quality_states"`
+	MinimumCoverage       float64  `json:"minimum_coverage"`
+	MissingHandling       string   `json:"missing_handling"`
+	QualityStates         []string `json:"quality_states"`
 	UnavailableConditions []string `json:"unavailable_conditions"`
 }
 
@@ -69,12 +69,12 @@ type Entry struct {
 }
 
 var (
-	ErrInvalidEntry       = errors.New("invalid registry entry")
-	ErrDuplicateVersion   = errors.New("registry entry version already registered")
+	ErrInvalidEntry        = errors.New("invalid registry entry")
+	ErrDuplicateVersion    = errors.New("registry entry version already registered")
 	ErrActiveVersionExists = errors.New("active algorithm version already exists")
-	ErrUnknownEntry       = errors.New("registry entry not found")
-	ErrNoActiveVersion    = errors.New("active algorithm version not found")
-	ErrRegistryFrozen     = errors.New("registry is frozen")
+	ErrUnknownEntry        = errors.New("registry entry not found")
+	ErrNoActiveVersion     = errors.New("active algorithm version not found")
+	ErrRegistryFrozen      = errors.New("registry is frozen")
 )
 
 var (

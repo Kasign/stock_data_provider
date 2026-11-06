@@ -75,37 +75,53 @@ func TestIndicatorGoldenFixtures(t *testing.T) {
 			switch code {
 			case "sma":
 				got, err := SMA(fixture.Input.Close, SMAParams{Window: fixture.Parameters.Window})
-				if err != nil { t.Fatal(err) }
+				if err != nil {
+					t.Fatal(err)
+				}
 				closeExpected("value", got.Value, fixture.Expected.Value)
 			case "ema":
 				got, err := EMA(fixture.Input.Close, EMAParams{Window: fixture.Parameters.Window, SeedMethod: fixture.Parameters.SeedMethod})
-				if err != nil { t.Fatal(err) }
+				if err != nil {
+					t.Fatal(err)
+				}
 				closeExpected("value", got.Value, fixture.Expected.Value)
 			case "return":
 				got, err := Return(fixture.Input.Close, ReturnParams{Window: fixture.Parameters.Window, ReturnBasis: fixture.Parameters.ReturnBasis})
-				if err != nil { t.Fatal(err) }
+				if err != nil {
+					t.Fatal(err)
+				}
 				closeExpected("value", got.Value, fixture.Expected.Value)
 			case "volatility":
 				got, err := Volatility(fixture.Input.Close, VolatilityParams{Window: fixture.Parameters.Window, ReturnBasis: fixture.Parameters.ReturnBasis, AnnualizationFactor: fixture.Parameters.AnnualizationFactor})
-				if err != nil { t.Fatal(err) }
+				if err != nil {
+					t.Fatal(err)
+				}
 				closeExpected("value", got.Value, fixture.Expected.Value)
 			case "rsi":
 				got, err := RSI(fixture.Input.Close, RSIParams{Window: fixture.Parameters.Window, SmoothingMethod: fixture.Parameters.SmoothingMethod})
-				if err != nil { t.Fatal(err) }
+				if err != nil {
+					t.Fatal(err)
+				}
 				closeExpected("value", got.Value, fixture.Expected.Value)
 			case "macd":
 				got, err := MACD(fixture.Input.Close, MACDParams{FastWindow: fixture.Parameters.FastWindow, SlowWindow: fixture.Parameters.SlowWindow, SignalWindow: fixture.Parameters.SignalWindow})
-				if err != nil { t.Fatal(err) }
+				if err != nil {
+					t.Fatal(err)
+				}
 				closeExpected("dif", got.DIF, fixture.Expected.DIF)
 				closeExpected("dea", got.DEA, fixture.Expected.DEA)
 				closeExpected("histogram", got.Histogram, fixture.Expected.Histogram)
 			case "atr":
 				got, err := ATR(fixture.Input.High, fixture.Input.Low, fixture.Input.Close, fixture.Input.PreviousClose, ATRParams{Window: fixture.Parameters.Window, SmoothingMethod: fixture.Parameters.SmoothingMethod})
-				if err != nil { t.Fatal(err) }
+				if err != nil {
+					t.Fatal(err)
+				}
 				closeExpected("value", got.Value, fixture.Expected.Value)
 			case "bollinger":
 				got, err := Bollinger(fixture.Input.Close, BollingerParams{Window: fixture.Parameters.Window, Multiplier: fixture.Parameters.Multiplier, StdDevMethod: fixture.Parameters.StdDevMethod})
-				if err != nil { t.Fatal(err) }
+				if err != nil {
+					t.Fatal(err)
+				}
 				closeExpected("middle", got.Middle, fixture.Expected.Middle)
 				closeExpected("upper", got.Upper, fixture.Expected.Upper)
 				closeExpected("lower", got.Lower, fixture.Expected.Lower)
