@@ -119,7 +119,16 @@ Quant-Research DTO 已明确 Scenario 主体字段及 QuantResultRef 元数据�
 
 Fixture/Fake Adapter 只能证明 Research 自身模型和消费边界；真实 Data/News 授权、PIT 和分页能力须分别取得生产方证据后才能升级 A2。
 
-## 8. 跨模块边界决议与待决项
+## 8. Persistence 边界
+
+- Context/Event/Claim 按 ID + 版本保存不可变快照，读取使用精确版本，不提供未经契约定义的列表/搜索接口。
+- Evidence 当前契约没有 Research-owned version 字段，Repository 以 evidence_id 作为不可变键；相同 ID 的不同 content_fingerprint 必须拒绝，禁止自动生成替代 ID。语义变化如何形成新版本仍待项目契约明确；content_fingerprint 不替代上游 source_version。
+- Research 拥有领域表、SQL、Repository Port 和 Migration 定义；连接池、Ping/Close、Migration 执行与历史校验复用 `internal/platform/storage`。
+- Research Migration namespace 为 `research`，由组合根显式注册和执行；Research 分支不修改服务启动入口或根 Migration 注册表。
+- 所有 DATETIME(6) 按 UTC 写入；存储层 payload_sha256 只用于完整 DTO 序列化内容的幂等校验。
+- changed_at 的事务 Outbox 记录暂不创建，等待 RSC-OPEN-002 的 DTO/Envelope 映射决议。
+
+## 9. 跨模块边界决议与待决项
 
 ### RSC-DEC-001：Quant 来源引用不等于 Research 直接依赖 Quant
 

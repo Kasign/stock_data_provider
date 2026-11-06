@@ -4,7 +4,7 @@
 - 代码：`internal/research/**`
 - 任务前缀：RSC
 - 当前阶段：R1 Context + R2 Evidence + R3 Event + R5 Claim/Hypothesis 领域基础
-- 当前状态：Context/Evidence Domain 已有临时独立 Go 1.22 package 测试证据；Evidence 新增 GOV-CTR-006 授权快照校验、Event Domain/状态机及 Claim/Hypothesis Domain 测试已写入但尚未执行。未完成仓库完整构建/CI、真实 Data/News、Owner 当前授权复核、Application、Repository 和跨模块集成。
+- 当前状态：Context/Evidence/Event/Claim Domain 首批结构与校验已实现；Context 版本链、Evidence JCS/授权过期边界、Event 生命周期及 Claim 文本校验新增测试已写入但尚未执行。RSC-007 已新增四个领域 Repository Port 和 Research Migration v1，SQL Adapter/真实 DB 尚未完成。未完成仓库完整构建/CI、真实 Data/News、Owner 当前授权复核、Application、Outbox 和跨模块集成。
 
 ## 模块职责
 
@@ -26,23 +26,30 @@ internal/research/
     model.go
     validate.go
     validate_test.go
+    repository.go
   evidence/
     model.go
     validate.go
     validate_test.go
     authorization.go
     authorization_test.go
+    repository.go
   event/
     model.go
     validate.go
     validate_test.go
+    repository.go
   claim/
     model.go
     validate.go
     validate_test.go
+    repository.go
+  storage/
+    migrations.go
+    migrations_test.go
 ```
 
-R1/R2/R3/R5 当前只实现 Context、Evidence、Event、Claim/Hypothesis 领域结构及本地校验：包括 Evidence 内容指纹/PIT、GOV-CTR-006 授权快照完整性、Event 追加版本和生命周期转换、Claim/Hypothesis 认识论字段与验证条件。没有 HTTP 接口、真实数据 Adapter、Repository、Migration、Outbox 或 Run 编排接入。
+R1/R2/R3/R5 当前只实现 Context、Evidence、Event、Claim/Hypothesis 领域结构及本地校验：包括 Evidence 内容指纹/PIT、GOV-CTR-006 授权快照完整性、Event 追加版本和生命周期转换、Claim/Hypothesis 认识论字段与验证条件。没有 HTTP 接口、真实数据 Adapter、SQL Repository 实现、Migration 执行、Outbox 或 Run 编排接入；当前 Repository Port 与 Migration 清单仅完成首批定义。
 
 旧 `go-core/internal/contextpack` 和 `internal/analysis` 是历史分析流程，不等同于新 Research Domain；仅作为迁移行为参考，不重复建设其已有的数据整理能力。
 
