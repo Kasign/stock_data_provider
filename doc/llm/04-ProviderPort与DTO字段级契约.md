@@ -22,11 +22,12 @@
 | provider_id | opaque string | 是 | 稳定配置 ID |
 | protocol | enum | 是 | 首批固定 openai_responses |
 | base_url | URL | 是 | HTTPS Gateway 根地址，规范化后以 /v1 结尾；请求方不可覆盖 |
-| default_model | string | 是 | Gateway 可识别的模型 ID |
+| default_model | string | 是 | Gateway 可识别的模型 ID，必须属于 allowed_models |
+| allowed_models | string[] | 是 | 服务端 Provider 允许使用的模型白名单，调用方不可扩大 |
 | api_key_secret_ref | opaque string | 是 | Secret 引用，不存明文 Key |
-| request_timeout | duration | 是 | 正数总时限，并受调用方 deadline 约束 |
+| request_timeout_ms | integer milliseconds | 是 | 正数总时限，配置序列化固定毫秒单位，并受调用方 deadline 约束 |
 | max_request_bytes | integer | 是 | LLM 自身更小的请求上限 |
-| max_response_bytes | integer | 是 | 非流式响应上限 |
+| max_response_bytes | integer | 是 | 非流式响应上限；首批 LLM 上限不超过 8 MiB，且不得超过 Platform 上限 |
 | stream_enabled | bool | 是 | 当前部署本地上游 E2E 通过后才可设为 true |
 
 - 首批 endpoint 固定为 POST {base_url}/responses；base_url 已含 /v1，Adapter 不得重复拼接版本段。
@@ -39,24 +40,26 @@
 
 使用 supported / unsupported / unknown 三态，默认 unknown。
 
-首批能力键：responses_json、responses_stream、structured_output_json_schema、function_tool_calls、reasoning_effort、usage_details。
+首批能力键：responses_json、responses_stream、structured_output_json_schema、function_tool_calls、reasoning_effort、sampling_parameters、usage_details。temperature/top_p 仅在 sampling_parameters=supported 时发送。
 
-能力状态必须绑定 provider_id、model_id、Gateway 版本和验证时间。Gateway 升级或模型更换后，历史结果不能自动沿用为 supported。路由存在只证明协议路径可达，不证明上游模型完整支持该能力。
+能力状态必须绑定 provider_id、model_id、protocol、Gateway 版本、verified_at、valid_until 和 evidence_ref；还需记录当前模型已验证的 max_output_tokens_limit。缺少证据引用、有效期或模型上限时不得用于放行请求。Gateway 升级或模型更换后，历史结果不能自动沿用为 supported。路由存在只证明协议路径可达，不证明上游模型完整支持该能力。
 
 ## 4. ModelRequest
 
 | 字段 | 类型 | 必需 | 约束 |
 |---|---|---:|---|
+| provider_id | string | 是 | 必须命中服务端 ProviderConfig；不接受调用方自定义 endpoint |
 | request_id | string | 是 | 由调用方生成的本次 LLM 调用 Request ID；Response 原样回显，不承载 Secret |
 | purpose_code | string | 是 | 稳定调用用途代码，不写自由文本 Prompt |
-| model | string | 是 | 明确模型 ID，不依赖任意模型路由 |
+| model | string | 是 | 明确模型 ID，必须属于 provider_id 对应的 allowed_models，不依赖任意模型路由 |
 | instructions | string | 是 | 序列化到 Responses instructions；允许空字符串 |
 | input_text | string | 是 | 首批只支持非空单轮文本，序列化为 Responses input string |
-| max_output_tokens | integer | 是 | 正整数，受调用预算限制 |
+| max_output_tokens | integer | 是 | 正整数，同时不得超过当前 CapabilityState 的 max_output_tokens_limit |
 | temperature | *number | 否 | 仅 capability=supported 时发送 |
 | top_p | *number | 否 | 仅 capability=supported 时发送 |
 | reasoning_effort | enum | 否 | low/medium/high；默认不发送，仅 capability=supported 时允许 |
-| response_schema | JSONSchemaSpec? | 否 | 发送前做本地语法、大小和深度校验 |
+| response_schema | JSONSchemaSpec? | 否 | 发送前做本地 Schema 编译、dialect、大小和深度校验 |
+| local_validation_only | bool | 否 | true 时不要求上游 structured output 能力，只在本地校验模型输出；不代表模型受约束生成 |
 | tools | ToolDefinition[] | 否 | 只接受调用方授权后的定义；不执行 |
 | tool_choice | enum? | 否 | 默认 none；仅 tools 非空且 function_tool_calls=supported 时允许 auto；required/指定工具延后 |
 | deadline_at | UTC timestamp | 是 | 绝对截止时间，不得晚于调用方 Context deadline |
@@ -74,7 +77,7 @@
 | schema_json | json.RawMessage | 是 | 合法 JSON Schema Draft 2020-12，限制字节数和深度 |
 | strict | bool | 是 | 显式指定，不依赖上游默认值；上游 strict 子集另行检查 |
 
-Adapter 序列化到 Responses text.format 的 type=json_schema/name/strict/schema。Schema 编译失败属于本地 invalid_request；响应后必须再次校验 JSON。
+Adapter 序列化到 Responses text.format 的 type=json_schema/name/strict/schema。Schema 编译失败属于本地 invalid_request；响应后必须再次校验 JSON。当前实现固定 Draft 2020-12，显式启用 format assertion；调用方声明其他 dialect 时拒绝。远程 Schema 资源加载默认关闭，外部 $ref 不得触发网络访问。Schema/实例嵌套深度上限为 64。
 
 ### 4.2 ToolDefinition
 
@@ -104,6 +107,7 @@ ToolDefinition 是 Researchflow Registry 筛选后的只读声明。LLM 只序�
 | provider_id | string | 是 | 实际选用的 Provider 配置 ID |
 | response_id | string | 条件必需 | 上游 Responses id；缺失需标记契约异常 |
 | status | enum | 是 | completed / incomplete / failed |
+| sequence_number_status | enum? | 否 | Stream 序号状态：available / unavailable；仅全流连续提供或全流缺失时记录 |
 | output_items | OutputItem[] | 是 | 保留 item 类型和顺序；空数组必须有状态/错误解释 |
 | output_text | string | 否 | 按 output item 顺序聚合 message/output_text part 的便捷字段 |
 | structured_json | json.RawMessage? | 否 | 仅本地 Schema 校验成功后提供 |
@@ -126,13 +130,15 @@ OutputItem 首批类型：message、function_call、refusal、unknown。ContentP
 | 对象 | 字段 | 类型 | 约束 |
 |---|---|---|---|
 | OutputItem | type | enum | message / function_call / refusal / unknown |
+| OutputItem | unknown_type | string? | type=unknown 时保留原始 wire type，长度受限 |
 | OutputItem | item_id | string? | 上游 item id，缺失允许 |
 | OutputItem | status | string? | 原样保留上游状态；不映射成成功/失败的唯一依据 |
 | OutputItem | content_parts | ContentPart[] | message 的有序内容片段 |
 | OutputItem | tool_call | ModelToolCall? | 仅 function_call 类型可设置 |
 | ContentPart | type | enum | output_text / refusal / unknown |
+| ContentPart | unknown_type | string? | type=unknown 时保留原始 wire type，长度受限 |
 | ContentPart | text | string? | output_text 文本 |
-| ContentPart | annotations | Annotation[]? | 仅保留已识别且安全的引用元数据 |
+| ContentPart | annotations | Annotation[]? | 当前首批 Parser 不回传；后续仅允许已识别且安全的引用元数据 |
 | ModelToolCall | call_id | string | 上游调用 ID；缺失时标记协议异常 |
 | ModelToolCall | output_item_id | string? | 关联的 OutputItem ID |
 | ModelToolCall | name | string | 工具名；不直接执行 |
@@ -158,6 +164,7 @@ OutputItem 首批类型：message、function_call、refusal、unknown。ContentP
 | input_cached_tokens | *int64 | 可选明细 |
 | output_reasoning_tokens | *int64 | 可选明细 |
 | source | enum | upstream / derived / unknown |
+| diagnostics | string[]? | 受控诊断码，如 total_tokens_mismatch / total_tokens_overflow；不改写上游 total_tokens |
 
 Usage 是计量信息，不是输出质量证明；缺失、0 和 unknown 必须区分。
 
@@ -175,9 +182,9 @@ Usage 是计量信息，不是输出质量证明；缺失、0 和 unknown 必须
 - Generate(ctx, ModelRequest) -> (ModelResponse, error)
 - Stream(ctx, ModelRequest, onEvent func(ModelEvent) error) -> (ModelResponse, error)
 
-Stream 使用同步回调提供背压，并返回最终聚合的 ModelResponse。Generate/Stream 的 Go error 表示传输、HTTP 非成功、协议解析/校验、本地 Schema 校验、回调或 Context 取消等 Adapter 执行错误；上游合法返回的 status=incomplete/failed 通过 ModelResponse.status 与 ModelResponse.error 表达，不重复包装成 Go error。Stream 收到 terminal event 后返回最终 Response；无 terminal event 的 EOF 返回部分 Response 与 stream_interrupted 类型错误。回调错误或 Context 取消必须停止读取上游，并返回已解析的部分 Response（若有）及对应 error。
+Stream 使用同步回调提供背压，并返回最终聚合的 ModelResponse。Generate/Stream 的 Go error 表示传输、HTTP 非成功、协议解析/校验、本地 Schema 校验、回调或 Context 取消等 Adapter 执行错误；上游合法返回的 status=incomplete/failed 通过 ModelResponse.status 与 ModelResponse.error 表达，不重复包装成 Go error。Stream 收到 terminal event 后返回最终 Response；无 terminal event 的 EOF 返回 status=incomplete 的部分 Response 与 stream_interrupted 类型错误。回调错误或 Context 取消必须停止读取上游，并返回已解析的部分 Response（若有）及对应 error。
 
-ModelEvent 字段：type、sequence_number?、response_id?、output_index?、content_index?、item_id?、call_id?、item?、content_part?、delta?、arguments?、usage?、error?、received_at。
+ModelEvent 字段：type、sequence_number?、response_id?、output_index?、content_index?、item_id?、call_id?、status?、item?、content_part?、delta?、arguments?、usage?、error?、received_at。
 
 首批识别 response.created、response.output_item.added/done、response.content_part.added/done、response.output_text.delta/done、response.refusal.delta/done、response.function_call_arguments.delta/done、response.completed、response.incomplete、response.failed、error。文本与函数参数增量均使用 delta 字段，但由 type 区分；item/content_part 字段承载已解析的结构对象。其他事件作为 UnknownEvent 保留类型和顺序，不执行副作用。上列是 Adapter parser 契约，不代表当前本地模型已产生所有事件。
 
@@ -192,7 +199,14 @@ ModelEvent 字段：type、sequence_number?、response_id?、output_index?、con
 
 ModelErrorKind：invalid_request、unauthorized、rate_limited、overloaded、timeout、cancelled、upstream_unavailable、upstream_error、invalid_response、incomplete_response、schema_validation_failed、unsupported_capability、stream_interrupted、stream_sequence_gap、resource_limit。
 
-ModelErrorInfo 字段为 kind、stable_code、retryable、http_status?、retry_after?、safe_message；调用关联 ID 统一由 ModelResponse.request_id 承载，不在嵌套错误对象重复；底层 Cause 仅内部日志，不序列化给调用方。
+ModelErrorInfo 字段为 kind、stable_code、retryable、http_status?、retry_after_seconds?（秒）、safe_message；调用关联 ID 统一由 ModelResponse.request_id 承载，不在嵌套错误对象重复；底层 Cause 仅内部日志，不序列化给调用方。
+
+LLM 通过 `ModelErrorFromPlatformFault(error)` 将 `errors.As` 可识别的 `*platform/fault.Fault` 投影为 ModelErrorInfo：
+- validation → invalid_request；unauthenticated/forbidden → unauthorized；timeout 或 context deadline → timeout；context canceled → cancelled；unavailable → upstream_unavailable；其余类别 → upstream_error。
+- stable_code 保留 Fault.Code；缺失时使用 `platform.fault.<class>`。safe_message 只取 Fault.SafeMessage，缺失时使用固定安全摘要。
+- Retryable 原样保留为技术提示，不触发 LLM 内部重试。Dependency、Cause 和原始错误文本不进入 ModelErrorInfo。
+- 非 Platform Fault 返回 nil，调用方必须保留原始 Go error，不得伪装为平台错误。
+
 
 - 一次调用只能由一个层负责业务重试；首批建议由 Researchflow Run/Stage 策略决定，LLM Adapter 默认不自动重试。
 - 429/503 可返回 retry_after 提示，是否重试由调用方 deadline/预算决定。
@@ -231,7 +245,7 @@ DTO、Port、Fixture 和 parser 单元测试不依赖 Researchflow/Platform 生�
 2. **ToolDefinition：纳入 MVP 的受控可选字段。** 默认 tool_choice=none；仅当 tools 非空且 function_tool_calls=supported 时允许 auto。required、指定工具强制选择和并行工具策略延后。LLM 只解析 function_call，不执行、不批准。
 3. **reasoning_effort：保留可选 typed 字段，默认不发送。** 只有 CapabilityState 对当前 Provider + Model + Gateway 版本明确为 supported 才能发送；当前本地 Qwen/llama.cpp 未验证，不得因为 Gateway 配置样本出现 high 就启用。
 4. **JSON Schema：固定 Draft 2020-12 为本地 Schema 语义基线。** Adapter 本地完整校验输入 Schema 与模型输出；上游 Responses strict schema 子集兼容性单独判定，不支持的关键字不得静默移除。具体 Go validator 库可延后，但不得延后 dialect、格式校验和深度/字节限制。
-5. **Usage.total_tokens：允许受控派生。** 上游值优先；缺失时仅当 input_tokens 与 output_tokens 都明确且加法无溢出时派生，source=derived。上游 total 与分项不一致时保留上游原值并产生诊断，不覆盖。
+5. **Usage.total_tokens：允许受控派生。** 上游值优先；缺失时仅当 input_tokens 与 output_tokens 都明确且加法无溢出时派生，source=derived。上游 total 与分项不一致时保留上游原值，并在 Usage.diagnostics 记录 total_tokens_mismatch；溢出或负数同样记录稳定诊断码，不伪造派生值。
 6. **SSE sequence_number：严格校验。** 若整条流均提供，必须连续递增；重复/倒退为 invalid_response，缺号为 stream_sequence_gap，均不得标记 completed。整条流都未提供可继续但标记序号能力 unavailable；同流混合有无序号按协议异常处理。
 7. **Request ID：明确调用方/关联/Gateway/上游四层 ID。** ModelRequest.request_id 由调用方生成并由 ModelResponse 原样回显；correlation_id 用于跨模块关联；gateway_request_id 记录 Gateway 的 X-Request-ID，upstream_request_id 单独记录 Gateway 透传/回传的上游 Request-Id。四者不得相互覆盖或伪造。
 
@@ -259,7 +273,7 @@ Capability 记录唯一键为 `(provider_id, model_id, protocol, gateway_version
 
 - unsupported 必须有可复现的失败证据；unknown 表示未验证、证据过期或运行环境发生变化。
 - 可选能力只有 status=supported 且证据仍在有效期内才可使用；unknown/unsupported 不发送对应字段或能力。
-- ProviderConfig 的 request_timeout、max_request_bytes、max_response_bytes 必须为正数并显式配置；不得依赖 HTTP Client 隐式默认值，且不得超过 PLAT-CTR-005 的全局安全上限。
+- ProviderConfig 的 request_timeout_ms、max_request_bytes、max_response_bytes 必须为正数并显式配置；不得依赖 HTTP Client 隐式默认值，且不得超过 PLAT-CTR-005 的全局安全上限。
 - ModelRequest.max_output_tokens 必须大于 0，并不超过当前模型已验证的输出上限；instructions、input_text、Schema、Tool 数量及序列化后的总请求字节必须在发请求前校验。
 - JSON Schema Draft 2020-12 是本地校验基线。上游 strict 子集不支持的关键字必须明确拒绝，或按调用方显式选择的 local_validation_only 模式处理；不得静默删除关键字后继续发送。
 - 未知 SSE 事件保留 type、顺序和有界安全元数据；原始 Prompt、Response 和 SSE 默认不持久化。
@@ -282,3 +296,20 @@ LLM Adapter 内部执行错误使用 Platform Fault；对调用方公开时投�
 ModelResponse.request_id 是该次模型调用的关联 ID；ModelErrorInfo 不重复携带 request_id。gateway_request_id 与 upstream_request_id 分别记录；correlation_id 继续用于跨模块链路关联。
 
 ModelResponse.status=incomplete/failed 是协议响应结果，不自动等同于 Platform Fault。只有 Adapter 执行、传输、协议解析或本地校验失败才构造对应 Fault。上游 response.failed 的错误信息是安全归一化投影，不暴露原始响应正文。具体 Fault Go 类型与逐类映射表以 PLAT-CTR-001 为准；LLM 只维护 ModelErrorKind 投影，并以契约测试固定。
+
+
+## 12. 非流式 HTTP Adapter 接入约束
+
+ResponsesAdapter 只依赖窄 HTTPDoer，并且构造时必须注入 `Clock`。生产组合根必须注入 `internal/platform/httpclient.Client.Bind(...)` 创建的 `BoundDoer`，并为 Provider 配置固定目的地址策略；不得注入未绑定目的地址策略的通用 HTTP Client。Gateway caller key 由组合根通过 `config.Secret` 注入，LLM 不读取环境变量。Adapter 只负责请求/响应体和 Provider 级限制，不替代 Platform 的 DNS/SSRF/TLS/重定向/全局响应体策略。调用有效 deadline 取 `ModelRequest.deadline_at`、Context deadline、Provider timeout 的最早值；不得因为 request deadline 晚于 Context deadline 而拒绝，若最早 deadline 已到期则不得派发请求。Clock 用于能力有效期、时间校验、调用时间戳和 Retry-After 日期解析，生产组合根注入 SystemClock，测试注入固定/可推进 Clock。BoundDoer.Do 是缓冲式非流式接口，SSE 必须等待 Platform 受控流式能力。
+
+
+### 12.1 Clock 与 Deadline 注入
+
+- 核心时间判断使用注入的 Clock；生产使用 SystemClock，测试使用固定/可推进 Clock。
+- 单次调用有效 deadline 取 ModelRequest.deadline_at、调用 Context deadline、ProviderConfig.request_timeout 三者最早值。较晚的 request deadline 不构成请求错误。
+- 若有效 deadline 不晚于调用开始时刻，必须在 HTTPDoer 派发前返回 timeout。
+- Generate 与后续 Stream 必须共享同一有效 deadline；SSE 网络读取、等待事件、callback 和收尾均受该 Context 约束。
+
+### 12.2 SSE Parser 当前实现边界
+
+ParseResponsesSSE 只接收完整的有界字节切片并同步调用 callback，用于纯协议解析和 Golden 测试；它不是网络流读取器，也不提供网络取消/背压。真实 Stream 必须在 Platform 提供受控 streaming transport 后实现，禁止直接将 http.Response.Body 接入此 Parser 绕过 Platform。

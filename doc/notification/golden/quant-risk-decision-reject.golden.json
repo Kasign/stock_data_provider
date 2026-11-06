@@ -4,9 +4,11 @@
   "schema_version": "1.0.0",
   "source_module": "quant",
   "occurred_at": "2026-11-06T04:35:00Z",
+  "published_at": "2026-11-06T04:35:01Z",
   "subject_ref": "security_600000_SH",
   "idempotency_key": "risk-decision:security_600000_SH:risk_decision_002",
   "correlation_id": "corr_20261106_004",
+  "payload_fingerprint": "ad6a081d872fb8e84a1e77b6efdb26583a926c3ffea4548dd856396eed0d1c2e",
   "payload": {
     "source_event_ref": "risk_decision_002",
     "decision_id": "risk_decision_002",

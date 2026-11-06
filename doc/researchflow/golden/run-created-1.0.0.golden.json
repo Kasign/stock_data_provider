@@ -1,0 +1,19 @@
+{
+  "schema_version":"1.0.0",
+  "run_ref":"run_01JBY000000000000000000001",
+  "status":"created",
+  "version":0,
+  "system_as_of":"2026-11-06T01:00:00Z",
+  "deadline_at":"2026-11-06T02:00:00Z",
+  "template_ref":"daily_stock_research",
+  "template_version":"1.0.0",
+  "template_fingerprint":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "input_snapshot_refs":["snapshot_1"],
+  "result_summary":null,
+  "originating_request_id":null,
+  "correlation_id":"corr_01",
+  "termination_reason":null,
+  "created_at":"2026-11-06T01:00:00Z",
+  "started_at":null,
+  "finished_at":null
+}

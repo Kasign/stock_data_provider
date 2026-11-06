@@ -4,9 +4,11 @@
   "schema_version": "1.0.0",
   "source_module": "researchflow",
   "occurred_at": "2026-11-06T04:20:00Z",
+  "published_at": "2026-11-06T04:20:01Z",
   "subject_ref": "run_20261106_002",
   "idempotency_key": "run-terminal:run_20261106_002",
   "correlation_id": "corr_20261106_002",
+  "payload_fingerprint": "1c2ce269cd9908d3c79dfcbb7306e31d512c4207a0e1d0b37a9f816846c80feb",
   "payload": {
     "source_event_ref": "run_20261106_002",
     "run_ref": "run_20261106_002",

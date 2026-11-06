@@ -247,3 +247,26 @@
 历史 Analysis HTTP API 曾维护私有 Request ID Context Key、校验和生成逻辑，与平台 `observability` 包重复。本轮将 HTTP API Middleware 和日志读取统一委托给 `observability.Middleware` / `observability.FromContext`，删除私有实现。平台 Middleware 对重复的 `X-Request-ID` Header 不再选取其中一个值，而是生成新的 Request ID；HTTP API 回归测试覆盖重复 Header。
 
 该修复只证明根模块 Analysis HTTP API 使用了平台 Request ID 原语并通过包级测试，不代表 Data、News、Research 或其他服务入口已完成接入。
+
+
+## 10. 2026-11-06 Platform L1 与 Storage 真实集成状态复核
+
+本节更新早期审计中关于“真实 MariaDB/Redis 集成未完成”的历史描述。早期章节保留当时证据范围；当前状态以本节和《01-开发路线图与任务清单》为准。
+
+### 10.1 PLAT-009 已完成的 Platform L1 验证
+
+- MariaDB 11.4：真实 Connector 连接与 Ping；同一 namespace 的并发 Migration 由 advisory lock 串行化；历史记录唯一性、重复执行幂等、锁释放、DDL 隐式提交后的部分失败状态和人工恢复门禁均通过。
+- Redis 7.4：真实连接与 Ping；PoolSize、MaxActiveConns、MaxIdleConns 归一化；SET/GET 往返通过。
+- CI 对真实集成执行普通测试和 Race 测试。
+- 证据提交：c1736686a748c0a999e74a4e9d28e9a77c77884e；CI [42179599443](https://github.com/Kasign/stock_data_provider/actions/runs/42179599443)，Platform packages 与 Storage integration Job 均 success。
+
+### 10.2 风险分类修正
+
+- 已关闭：Platform CI 环境中真实 MariaDB/Redis 连接与基础 Migration/Redis 往返集成缺口。
+- 仍待 A3：生产 MariaDB 历史 Schema 升级、生产 Redis 连接池压力/耗尽、生产网络 ACL、Secret 注入、共享资源生命周期和故障恢复。
+- 仍待消费者接入：真实 Server Bootstrap 共享连接池、领域 Repository/Migration 注册、统一关闭顺序。
+- 不变：平台包级/容器集成 PASS 不等于 PLAT-CTR-006 跨模块 A2 或生产 A3 完成。
+
+### 10.3 当前安全审计边界
+
+Platform 自身可控的 L1 原语、输入边界和专项测试已完成阶段性审计。后续高风险项主要依赖 Server/领域/部署证据：全量路由默认拒绝、Gateway 信任边界、生产 Secret 轮换、日志与 Fault 响应脱敏、生产 DNS/egress、领域授权复核。Platform 分支不代替消费者实现这些逻辑；仅在消费者接入暴露出公共原语缺陷时修复。

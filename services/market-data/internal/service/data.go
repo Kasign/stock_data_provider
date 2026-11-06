@@ -663,6 +663,12 @@ func validateLimitPoolSnapshot(poolType, tradeDate string, limit int, snapshot *
 			return fmt.Errorf("limit-pool provider report date does not match requested trade date: requested=%s returned=%s", tradeDate, snapshot.ProviderReportDate)
 		}
 	}
+	if !snapshot.HasData {
+		if snapshot.Total != 0 || len(snapshot.Items) != 0 || snapshot.QualityStatus != model.QualityUnknown {
+			return errors.New("empty limit pool must remain unknown, not a confirmed zero-event pool")
+		}
+		return nil
+	}
 	if snapshot.Total < len(snapshot.Items) || snapshot.Total < 0 || len(snapshot.Items) > limit {
 		return errors.New("limit-pool total is negative/below returned items or item count exceeds requested limit")
 	}
@@ -728,9 +734,6 @@ func validateLimitPoolSnapshot(poolType, tradeDate string, limit int, snapshot *
 			return errors.New("limit-pool snapshot cannot be valid when one or more items are degraded")
 		}
 		return nil
-	}
-	if snapshot.Total != 0 || len(snapshot.Items) != 0 || snapshot.QualityStatus != model.QualityUnknown {
-		return errors.New("empty limit pool must remain unknown, not a confirmed zero-event pool")
 	}
 	return nil
 }
@@ -2802,6 +2805,7 @@ func (s *DataService) DailyBars(ctx context.Context, rawSymbol, start, end strin
 					} else if dailyBarsCacheNeedsPostCloseRefresh(validated, time.Now()) {
 						s.logger.Info("daily-bar cache has today's partial candle after close; refreshing provider", "symbol", symbol, "trade_date", validated[len(validated)-1].TradeDate)
 					} else if coverageOK, coverageWarnings := s.dailyBarCoverageSufficient(ctx, start, end, limit, len(validated)); coverageOK {
+						applyDailyBarCoverageWarnings(validated, coverageWarnings)
 						mergedWarnings := append(append([]string(nil), v.Warnings...), warnings...)
 						mergedWarnings = append(mergedWarnings, coverageWarnings...)
 						mergedWarnings = append(mergedWarnings, adjustmentWarnings...)
@@ -2968,6 +2972,7 @@ func (s *DataService) DailyBars(ctx context.Context, rawSymbol, start, end strin
 		}
 		coverageOK, coverageWarnings := s.dailyBarCoverageSufficient(ctx, start, end, limit, len(bars))
 		warnings = append(warnings, coverageWarnings...)
+		applyDailyBarCoverageWarnings(bars, coverageWarnings)
 		warnings = dedupeStrings(warnings)
 		if !coverageOK {
 			s.breaker.Failure(breakerKey)
@@ -3225,10 +3230,27 @@ func (s *DataService) dailyBarCoverageSufficient(ctx context.Context, start, end
 	minimum := minimumDailyBarCoverage(calendar.TradingDays, requested)
 	warnings := []string{}
 
-	if calendar.QualityStatus != model.QualityValid {
+	if calendar.QualityStatus != model.QualityValid && !historicalCalendarTimestampOnlyDegradation(calendar) {
 		warnings = append(warnings, "daily_bar_coverage_uses_degraded_trading_calendar")
 	}
 	return returned >= minimum, warnings
+}
+
+// applyDailyBarCoverageWarnings marks a series degraded when its coverage denominator
+// is based on an unavailable or unreliable exchange calendar. Historical calendars
+// degraded only because their publication timestamp is unavailable are handled as
+// informational by historicalCalendarTimestampOnlyDegradation.
+func applyDailyBarCoverageWarnings(bars []model.DailyBar, warnings []string) {
+	for _, warning := range warnings {
+		switch warning {
+		case "daily_bar_coverage_uses_weekday_estimate_calendar_unavailable",
+			"daily_bar_coverage_uses_degraded_trading_calendar":
+			for index := range bars {
+				degradeQualityStatus(&bars[index].QualityStatus)
+				appendReasonOnce(&bars[index].QualityReasons, warning)
+			}
+		}
+	}
 }
 
 func minimumDailyBarCoverage(expected, requested int) int {

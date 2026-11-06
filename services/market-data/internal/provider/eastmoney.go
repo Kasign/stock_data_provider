@@ -1370,35 +1370,70 @@ func (p *Eastmoney) FetchDailyBars(ctx context.Context, rawSymbol, startDate, en
 	}
 	out := make([]model.DailyBar, 0, len(payload.Data.KLines))
 	rejectedRows := 0
-	for _, line := range payload.Data.KLines {
+	for rowIndex, line := range payload.Data.KLines {
 		parts := strings.Split(line, ",")
 		if len(parts) < 7 {
 			rejectedRows++
+			addEastmoneyDailyBarParseIssue(ctx, rowIndex, symbol, "", "row", "kline", "missing_column_value", "date,open,close,high,low,volume,amount", "string", line, validation.SeverityError, "Eastmoney daily-bar row has fewer than seven fields")
 			continue
 		}
-		open, e1 := strconv.ParseFloat(parts[1], 64)
-		closeV, e2 := strconv.ParseFloat(parts[2], 64)
-		high, e3 := strconv.ParseFloat(parts[3], 64)
-		low, e4 := strconv.ParseFloat(parts[4], 64)
-		rawVol, e5 := strconv.ParseFloat(parts[5], 64)
-		amount, e6 := strconv.ParseFloat(parts[6], 64)
-		if e1 != nil || e2 != nil || e3 != nil || e4 != nil || e5 != nil || e6 != nil ||
-			!finiteNumber(open) || !finiteNumber(closeV) || !finiteNumber(high) || !finiteNumber(low) || !finiteNumber(amount) || amount < 0 {
+		tradeDate := strings.TrimSpace(parts[0])
+		if parsedDate, dateErr := time.Parse("2006-01-02", tradeDate); dateErr != nil || parsedDate.Format("2006-01-02") != tradeDate {
+			rejectedRows++
+			addEastmoneyDailyBarParseIssue(ctx, rowIndex, symbol, tradeDate, "trade_date", "f51", "invalid_date", "YYYY-MM-DD", "string", tradeDate, validation.SeverityError, "Eastmoney daily-bar trade date is invalid")
+			continue
+		}
+		values := []struct {
+			field, providerField string
+			value                float64
+			err                  error
+			positive             bool
+		}{
+			{field: "open", providerField: "f52", positive: true},
+			{field: "close", providerField: "f53", positive: true},
+			{field: "high", providerField: "f54", positive: true},
+			{field: "low", providerField: "f55", positive: true},
+			{field: "volume", providerField: "f56"},
+			{field: "amount", providerField: "f57"},
+		}
+		for i := range values {
+			values[i].value, values[i].err = strconv.ParseFloat(strings.TrimSpace(parts[i+1]), 64)
+		}
+		invalid := false
+		for i, item := range values {
+			bad := item.err != nil || !finiteNumber(item.value)
+			if item.positive && item.value <= 0 {
+				bad = true
+			}
+			if (item.field == "volume" || item.field == "amount") && item.value < 0 {
+				bad = true
+			}
+			if bad {
+				invalid = true
+				addEastmoneyDailyBarParseIssue(ctx, rowIndex, symbol, tradeDate, item.field, item.providerField, "invalid_number", "finite positive price or finite non-negative quantity", "string", parts[i+1], validation.SeverityError, "Eastmoney daily-bar numeric field is invalid")
+			}
+		}
+		open, closeV, high, low := values[0].value, values[1].value, values[2].value, values[3].value
+		rawVol, amount := values[4].value, values[5].value
+		if invalid {
 			rejectedRows++
 			continue
 		}
 		shares, conversionErr := normalize.HandsToShares(rawVol)
 		if conversionErr != nil {
 			rejectedRows++
+			addEastmoneyDailyBarParseIssue(ctx, rowIndex, symbol, tradeDate, "volume", "f56", "invalid_unit_value", "non-negative volume convertible from hands to shares", "string", parts[5], validation.SeverityError, "Eastmoney daily-bar volume cannot be normalized")
 			continue
 		}
 		amountValue := amount
 		rawVolume := rawVol
 		rawAmount := amount
-		bar := model.DailyBar{Symbol: symbol, TradeDate: parts[0], Period: "1d", Open: open, High: high, Low: low, Close: closeV, Volume: &shares, Amount: &amountValue, AdjustmentBasis: basis, AdjustmentMethod: "eastmoney_fqt_" + fqt, Source: p.Name(), SourceVersion: eastmoneyVersion, FetchedAt: time.Now().UTC(), NormalizedAt: time.Now().UTC(), RawVolume: &rawVolume, RawVolumeUnit: "hands", RawAmount: &rawAmount, RawAmountUnit: "CNY", RawAmountField: "kline_field_6", VolumeUnit: "shares", AmountUnit: "CNY", QualityStatus: model.QualityValid, NormalizationVer: normalize.Version}
-		if len(parts) > 8 {
-			if pct, e := strconv.ParseFloat(parts[8], 64); e == nil {
+		bar := model.DailyBar{Symbol: symbol, TradeDate: tradeDate, Period: "1d", Open: open, High: high, Low: low, Close: closeV, Volume: &shares, Amount: &amountValue, AdjustmentBasis: basis, AdjustmentMethod: "eastmoney_fqt_" + fqt, Source: p.Name(), SourceVersion: eastmoneyVersion, FetchedAt: time.Now().UTC(), NormalizedAt: time.Now().UTC(), RawVolume: &rawVolume, RawVolumeUnit: "hands", RawAmount: &rawAmount, RawAmountUnit: "CNY", RawAmountField: "kline_field_6", VolumeUnit: "shares", AmountUnit: "CNY", QualityStatus: model.QualityValid, NormalizationVer: normalize.Version}
+		if len(parts) > 8 && strings.TrimSpace(parts[8]) != "" && strings.TrimSpace(parts[8]) != "-" {
+			if pct, parseErr := strconv.ParseFloat(strings.TrimSpace(parts[8]), 64); parseErr == nil && finiteNumber(pct) {
 				bar.ChangePercent = &pct
+			} else {
+				addEastmoneyDailyBarParseIssue(ctx, rowIndex, symbol, tradeDate, "change_percent", "f59", "invalid_optional_number", "finite percentage number", "string", parts[8], validation.SeverityWarning, "Eastmoney optional daily-bar change percent is invalid and was omitted")
 			}
 		}
 		out = append(out, bar)
@@ -2991,4 +3026,19 @@ func normalizeEastmoneyCompactDate(value string) string {
 		return parsed.Format("2006-01-02")
 	}
 	return ""
+}
+
+func addEastmoneyDailyBarParseIssue(ctx context.Context, rowIndex int, symbol, tradeDate, field, providerField, code, expected, actualType, preview string, severity validation.Severity, message string) {
+	report := validation.NewReport(12)
+	issue := validation.FieldIssue{
+		Stage: validation.StageParse, Field: field, ProviderField: providerField,
+		Code: code, Expected: expected, ActualType: actualType,
+		ActualPreview: quoteIssuePreview(preview), Severity: severity,
+		Message: message, Symbol: symbol, TradeDate: tradeDate,
+	}
+	if rowIndex >= 0 {
+		issue.RowIndex = &rowIndex
+	}
+	report.Add(issue)
+	validation.AddContextReport(ctx, report)
 }
