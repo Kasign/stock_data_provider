@@ -48,13 +48,13 @@ R1/R2/R3/R5 当前只实现 Context、Evidence、Event、Claim/Hypothesis 领域
 
 ## 当前契约状态
 
-- Context：字段依据 `doc/整体任务规划/Quant-Research公开DTO字段级契约.md` 第 3.1、9.1、9.2、9.8 节；尚无专属冻结 Schema/Golden。本模块当前实现是领域校验模型，不代表跨模块契约已冻结。
+- Context：字段依据 `doc/整体任务规划/03-模块接口契约/Quant-Research公开DTO字段级契约.md` 第 3.1、9.1、9.2、9.8 节；尚无专属冻结 Schema/Golden。本模块当前实现是领域校验模型，不代表跨模块契约已冻结。
 - Evidence：遵循项目级 `RSC-CTR-001` Evidence Schema/Golden；已实现 Go Domain、结构校验、JCS/SHA-256 内容指纹和严格 PIT 本地校验。当前补充 GOV-CTR-006 AuthorizationRef/PolicySnapshot 结构绑定、策略 tuple 校验、decision_fingerprint 复算及可信调用主体/资源/用途/内容级别绑定校验；这些本地校验不等于 Owner 当前授权复核或授权签发。真实来源接入仍未完成。该契约属于 Evidence，不属于 Context。
 - AuthorizationRef：只验证不可变快照结构和指纹，并绑定 Adapter 提供的可信调用上下文；不把引用当 bearer token，不以历史 allowed 代替读取时 Owner 当前策略复核。
 - News → Research 只读证据查询：目标契约尚未实现/冻结；不得据此宣称真实新闻接入通过。
 - Research → Researchflow 的 Context 消费接口：字段语义已形成设计基线，Schema/Golden/Contract Test 尚未完成。
 - RSC-DEC-001：Quant 结果通过 Researchflow 获取；Research 不新增 Quant Port、不直接调用 Quant、不自行解引用。
-- RSC-OPEN-002：ResearchEvent.changed_at 与 INT-CTR-001 事件时间映射存在字段缺口；不阻断 Event Domain。
+- RSC-DEC-002：changed_at 的语义已确定为状态迁移提交时间，随 lifecycle_changed Outbox 事件持久化；RSC-OPEN-002 仅保留公开 DTO/Outbox 映射缺口。
 - RSC-OPEN-003：Event 规范化时间要求可追溯到规则版本，但当前 DTO 没有 normalization_rule_version；未决前不声称规范化时间来源链完整。
 - RSC-OPEN-004：Event 合并/拆分要求 source_refs/derived_from_refs，但 ResearchEvent 字段表未定义这两个字段；未决前不实现跨 Event 归并关系。
 - RSC-OPEN-005：Claim/Hypothesis 版本治理要求 supersedes_version，但字段表未定义该字段；当前仅验证版本号连续性，不能声称显式替代关系完整。

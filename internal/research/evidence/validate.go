@@ -10,6 +10,8 @@ import (
     "strconv"
     "strings"
     "time"
+    "unicode/utf16"
+    "unicode/utf8"
 )
 
 // Validate checks RSC-CTR-001 structure and verifies the content fingerprint.
@@ -52,6 +54,9 @@ func (e Evidence) Validate() error {
     }
     if err := validateRequiredUTC("system_as_of", e.SystemAsOf); err != nil {
         return err
+    }
+    if e.SystemAsOf.Before(e.SystemObservedAt) {
+        return fmt.Errorf("system_as_of must not be earlier than system_observed_at")
     }
     for _, item := range []struct {
         name  string
@@ -175,9 +180,14 @@ func (e Evidence) ComputeContentFingerprint() (string, error) {
 func canonicalObject(fields map[string]any) (string, error) {
     keys := make([]string, 0, len(fields))
     for key := range fields {
+        if !utf8.ValidString(key) {
+            return "", fmt.Errorf("canonical JSON object key is not valid UTF-8")
+        }
         keys = append(keys, key)
     }
-    sort.Strings(keys)
+    sort.Slice(keys, func(i, j int) bool {
+        return lessUTF16(keys[i], keys[j])
+    })
     var builder strings.Builder
     builder.WriteByte('{')
     for index, key := range keys {
@@ -206,21 +216,17 @@ func canonicalValue(value any) (string, error) {
         return "null", nil
     case string:
         return canonicalString(typed)
-    case []string:
-        var builder strings.Builder
-        builder.WriteByte('[')
-        for index, item := range typed {
-            if index > 0 {
-                builder.WriteByte(',')
-            }
-            encoded, err := canonicalString(item)
-            if err != nil {
-                return "", err
-            }
-            builder.WriteString(encoded)
+    case bool:
+        if typed {
+            return "true", nil
         }
-        builder.WriteByte(']')
-        return builder.String(), nil
+        return "false", nil
+    case []string:
+        values := make([]any, len(typed))
+        for i := range typed {
+            values[i] = typed[i]
+        }
+        return canonicalValue(values)
     case []any:
         var builder strings.Builder
         builder.WriteByte('[')
@@ -230,7 +236,7 @@ func canonicalValue(value any) (string, error) {
             }
             encoded, err := canonicalValue(item)
             if err != nil {
-                return "", err
+                return "", fmt.Errorf("array item %d: %w", index, err)
             }
             builder.WriteString(encoded)
         }
@@ -239,13 +245,34 @@ func canonicalValue(value any) (string, error) {
     case map[string]any:
         return canonicalObject(typed)
     case float64:
+        if math.IsNaN(typed) || math.IsInf(typed, 0) {
+            return "", fmt.Errorf("JCS does not permit NaN or Infinity")
+        }
         return canonicalNumber(typed), nil
     default:
         return "", fmt.Errorf("unsupported canonical JSON type %T", value)
     }
 }
 
+func lessUTF16(left, right string) bool {
+    leftUnits := utf16.Encode([]rune(left))
+    rightUnits := utf16.Encode([]rune(right))
+    limit := len(leftUnits)
+    if len(rightUnits) < limit {
+        limit = len(rightUnits)
+    }
+    for i := 0; i < limit; i++ {
+        if leftUnits[i] != rightUnits[i] {
+            return leftUnits[i] < rightUnits[i]
+        }
+    }
+    return len(leftUnits) < len(rightUnits)
+}
+
 func canonicalString(value string) (string, error) {
+    if !utf8.ValidString(value) {
+        return "", fmt.Errorf("canonical JSON string is not valid UTF-8")
+    }
     var builder strings.Builder
     encoder := json.NewEncoder(&builder)
     encoder.SetEscapeHTML(false)

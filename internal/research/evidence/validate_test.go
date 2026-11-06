@@ -98,6 +98,7 @@ func TestEvidenceValidateRejectsInvalidContractValues(t *testing.T) {
         {"unpaired valid time", func(e *Evidence) { v := mustTime(t, "2026-11-01T00:00:00Z"); e.ValidTimeStart = &v }, "both be null or both be set"},
         {"reversed valid time", func(e *Evidence) { start := mustTime(t, "2026-11-02T00:00:00Z"); end := mustTime(t, "2026-11-01T00:00:00Z"); e.ValidTimeStart = &start; e.ValidTimeEnd = &end }, "must not be after"},
         {"non-UTC observed time", func(e *Evidence) { e.SystemObservedAt = time.Date(2026, 11, 5, 16, 1, 0, 0, time.FixedZone("CST", 8*60*60)) }, "must be UTC"},
+        {"system cutoff before observation", func(e *Evidence) { e.SystemAsOf = e.SystemObservedAt.Add(-time.Second); setFingerprint(t, e) }, "must not be earlier"},
         {"uppercase fingerprint", func(e *Evidence) { e.ContentFingerprint = strings.ToUpper(e.ContentFingerprint) }, "lowercase SHA-256"},
     }
     for _, tt := range tests {
@@ -212,4 +213,49 @@ func TestCanonicalNumberUsesECMAScriptThresholds(t *testing.T) {
     if got := canonicalNumber(negativeZero); got != "0" {
         t.Errorf("canonicalNumber(-0) = %q, want 0", got)
     }
+}
+
+func TestCanonicalObjectSupportsNestedJCSValues(t *testing.T) {
+	value := map[string]any{
+		"evaluated_policy_versions": []any{
+			map[string]any{
+				"policy_type": "research_evidence_access",
+				"policy_ref": "research-evidence-access",
+				"policy_version": "1.0.0",
+			},
+		},
+		"allowed": true,
+		"conditions": []string{},
+	}
+	canonical, err := canonicalObject(value)
+	if err != nil {
+		t.Fatalf("canonicalObject() error = %v", err)
+	}
+	expected := `{"allowed":true,"conditions":[],"evaluated_policy_versions":[{"policy_ref":"research-evidence-access","policy_type":"research_evidence_access","policy_version":"1.0.0"}]}`
+	if canonical != expected {
+		t.Fatalf("canonical JSON = %s, want %s", canonical, expected)
+	}
+}
+
+func TestCanonicalObjectUsesUTF16PropertyOrdering(t *testing.T) {
+	canonical, err := canonicalObject(map[string]any{
+		"𐀀": "astral",
+		"": "bmp",
+	})
+	if err != nil {
+		t.Fatalf("canonicalObject() error = %v", err)
+	}
+	expected := `{"𐀀":"astral","":"bmp"}`
+	if canonical != expected {
+		t.Fatalf("canonical JSON = %q, want %q", canonical, expected)
+	}
+}
+
+func TestCanonicalValueRejectsNonFiniteNumbers(t *testing.T) {
+	if _, err := canonicalValue(math.NaN()); err == nil {
+		t.Fatal("NaN must be rejected by JCS")
+	}
+	if _, err := canonicalValue(math.Inf(1)); err == nil {
+		t.Fatal("Infinity must be rejected by JCS")
+	}
 }

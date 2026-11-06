@@ -114,3 +114,60 @@ func TestResearchEventLifecycleTerminalAndInvalidationRules(t *testing.T) {
 		if CanTransition(pair.from, pair.to) { t.Errorf("CanTransition(%s, %s) = true, want false", pair.from, pair.to) }
 	}
 }
+
+func TestResearchEventVersionCanOmitOptionalSupersedesReference(t *testing.T) {
+	previous := validEvent(t)
+	next := previous
+	next.EventVersion = 2
+	next.SystemAsOf = previous.SystemAsOf.Add(time.Minute)
+	next.SupersedesEventVersion = nil
+	if err := next.ValidateNextVersion(previous); err != nil {
+		t.Fatalf("optional supersedes_event_version should not be required: %v", err)
+	}
+}
+
+func TestLifecycleTransitionOnlyEmitsForStatusChange(t *testing.T) {
+	previous := validEvent(t)
+	next := previous
+	next.EventVersion = 2
+	next.SystemAsOf = previous.SystemAsOf.Add(time.Minute)
+	next.Status = StatusConsolidating
+	changedAt := eventTime(t, "2026-11-06T05:10:00Z")
+	transition, err := NewLifecycleTransition(previous, next, changedAt)
+	if err != nil {
+		t.Fatalf("NewLifecycleTransition() error = %v", err)
+	}
+	if transition == nil {
+		t.Fatal("status change should produce lifecycle transition")
+	}
+	if err := transition.Validate(); err != nil {
+		t.Fatalf("transition validation failed: %v", err)
+	}
+	if !transition.ChangedAt.Equal(changedAt) {
+		t.Fatalf("changed_at = %s, want %s", transition.ChangedAt, changedAt)
+	}
+
+	noChange := next
+	noChange.EventVersion = 3
+	noChange.SystemAsOf = next.SystemAsOf.Add(time.Minute)
+	noChange.Title = "修订标题但状态未变"
+	noTransition, err := NewLifecycleTransition(next, noChange, changedAt)
+	if err != nil {
+		t.Fatalf("same-status revision should pass: %v", err)
+	}
+	if noTransition != nil {
+		t.Fatal("same-status revision must not emit lifecycle_changed")
+	}
+}
+
+func TestLifecycleTransitionRejectsNonUTCTime(t *testing.T) {
+	previous := validEvent(t)
+	next := previous
+	next.EventVersion = 2
+	next.SystemAsOf = previous.SystemAsOf.Add(time.Minute)
+	next.Status = StatusConsolidating
+	changedAt := time.Date(2026, 11, 6, 13, 0, 0, 0, time.FixedZone("CST", 8*60*60))
+	if _, err := NewLifecycleTransition(previous, next, changedAt); err == nil || !strings.Contains(err.Error(), "must be UTC") {
+		t.Fatalf("non-UTC changed_at should fail, got %v", err)
+	}
+}

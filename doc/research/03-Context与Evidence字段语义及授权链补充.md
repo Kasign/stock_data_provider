@@ -147,13 +147,10 @@ Quant-Research DTO 第 3.3 节的 ResearchEvent 字段表没有 `source_refs` �
 
 Quant-Research DTO 第 3.4 节定义 claim_version，但没有 `supersedes_version`；第 9.9 节又要求修正声明 supersedes_version。当前实现只能验证 claim_version 从 1 起、相邻版本号连续和 system_as_of 不回退，不能验证显式替代关系。项目级契约补齐前不新增私有字段，也不把版本追加验收标记为完整。
 
-### RSC-OPEN-002：ResearchEvent.changed_at 与 INT-CTR-001 时间映射缺字段
+### RSC-DEC-002：Lifecycle changed_at 的事务时间语义
 
-项目级 ResearchEvent DTO（Quant-Research 公开 DTO 字段级契约第 3.3 节）包含 occurred_at、published_at、available_at、system_observed_at、system_as_of，但没有 changed_at。与此同时，INT-CTR-001 的 research.event.lifecycle_changed Payload 要求 changed_at，且 Envelope.occurred_at 映射为 ResearchEvent.changed_at。
+项目级决议已明确 changed_at 是 Event 状态迁移提交时间，必须随 Event 新版本和 Outbox 在同一领域事务内持久化；Outbox 重试复用持久化值。它不是 occurred_at 或 system_observed_at。当前 Domain 仅构造 lifecycle transition 负载，事务和 Outbox 接入仍待实现。
 
-这是生产 DTO 与通知事件映射的真实字段缺口，不能擅自把 occurred_at 或 system_observed_at 当作 changed_at：
-- 需要项目级决策：在 ResearchEvent 公开 DTO 增加明确的状态迁移提交时间 changed_at，或在 INT-CTR-001 中明确由 Research Outbox 生成并持久化的 transition_committed_at 作为事件时间。
-- 该时间必须在状态迁移事务中固定；Outbox 重试不得刷新；同一 event_version 的时间不得变化。
-- 决议完成前，Research 可以继续实现 Event 版本和状态迁移，但不得伪造 lifecycle_changed 的 changed_at/occurred_at，也不得将该事件生产接入标记为通过。
+### RSC-OPEN-002：ResearchEvent.changed_at 与 INT-CTR-001 DTO 映射缺口
 
-该问题只阻断 ResearchEvent lifecycle_changed 的通知生产映射，不阻断 Research Event Domain、版本追加和状态机独立测试。
+项目级 Quant-Research DTO 第 3.3 节没有 changed_at 字段，但 lifecycle_changed 事件要求该时间。语义已确定，字段/事件 Envelope 的具体映射仍待项目级契约统一；不得使用 occurred_at、system_observed_at 或 Outbox 重试时间替代。该缺口只阻断通知生产映射，不阻断 Event Domain 独立测试。

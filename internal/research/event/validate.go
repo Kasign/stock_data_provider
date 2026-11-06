@@ -37,10 +37,8 @@ func (e ResearchEvent) Validate() error {
 			if err := utc(item.name, *item.value); err != nil { return err }
 		}
 	}
-	if e.EventVersion == 1 {
-		if e.SupersedesEventVersion != nil { return fmt.Errorf("event version 1 must not supersede a prior version") }
-	} else if e.SupersedesEventVersion == nil || *e.SupersedesEventVersion != e.EventVersion-1 {
-		return fmt.Errorf("event version %d must supersede version %d", e.EventVersion, e.EventVersion-1)
+	if e.SupersedesEventVersion != nil && (*e.SupersedesEventVersion < 1 || *e.SupersedesEventVersion >= e.EventVersion) {
+		return fmt.Errorf("supersedes_event_version must be positive and less than event_version")
 	}
 	if e.SourceTimes == nil { return fmt.Errorf("source_times must be a non-null array") }
 	evidenceRefs := make(map[string]struct{}, len(e.EvidenceRefs))
@@ -97,14 +95,39 @@ func (next ResearchEvent) ValidateNextVersion(previous ResearchEvent) error {
 	if err := next.Validate(); err != nil { return fmt.Errorf("next event: %w", err) }
 	if next.EventID != previous.EventID { return fmt.Errorf("event_id cannot change across versions") }
 	if next.EventVersion != previous.EventVersion+1 { return fmt.Errorf("event_version must increment by exactly one") }
-	if next.SupersedesEventVersion == nil || *next.SupersedesEventVersion != previous.EventVersion {
-		return fmt.Errorf("next version must supersede the previous event version")
-	}
 	if next.SystemAsOf.Before(previous.SystemAsOf) { return fmt.Errorf("system_as_of cannot move backwards across event versions") }
 	if next.Status != previous.Status && !CanTransition(previous.Status, next.Status) {
 		return fmt.Errorf("invalid event status transition: %s -> %s", previous.Status, next.Status)
 	}
 	return nil
+}
+
+func NewLifecycleTransition(previous, next ResearchEvent, changedAt time.Time) (*LifecycleTransition, error) {
+	if err := next.ValidateNextVersion(previous); err != nil {
+		return nil, err
+	}
+	if previous.Status == next.Status {
+		return nil, nil
+	}
+	if err := utc("changed_at", changedAt); err != nil {
+		return nil, err
+	}
+	return &LifecycleTransition{
+		EventID: next.EventID,
+		EventVersion: next.EventVersion,
+		FromStatus: previous.Status,
+		ToStatus: next.Status,
+		ChangedAt: changedAt,
+	}, nil
+}
+
+func (t LifecycleTransition) Validate() error {
+	if err := required("event_id", t.EventID); err != nil { return err }
+	if t.EventVersion < 2 { return fmt.Errorf("lifecycle transition event_version must be >= 2") }
+	if err := validateStatus(t.FromStatus); err != nil { return fmt.Errorf("from_status: %w", err) }
+	if err := validateStatus(t.ToStatus); err != nil { return fmt.Errorf("to_status: %w", err) }
+	if t.FromStatus == t.ToStatus { return fmt.Errorf("lifecycle transition requires different statuses") }
+	return utc("changed_at", t.ChangedAt)
 }
 
 func CanTransition(from, to EventStatus) bool {

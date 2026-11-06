@@ -55,3 +55,15 @@ type ResearchEvent struct {
 	SupersedesEventVersion *int             `json:"supersedes_event_version,omitempty"`
 	SourceTimes           []EventSourceTime `json:"source_times"`
 }
+
+
+// LifecycleTransition is an immutable lifecycle_changed payload.
+// ChangedAt must be fixed by the same transaction that persists the new
+// event version and Outbox record; retries must reuse the persisted value.
+type LifecycleTransition struct {
+	EventID      string      `json:"event_id"`
+	EventVersion int         `json:"event_version"`
+	FromStatus   EventStatus `json:"from_status"`
+	ToStatus     EventStatus `json:"to_status"`
+	ChangedAt    time.Time   `json:"changed_at"`
+}
