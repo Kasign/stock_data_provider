@@ -70,6 +70,7 @@ type Run struct {
 	TemplateFingerprint string `json:"template_fingerprint"`
 	InputSnapshotRefs []string `json:"input_snapshot_refs"`
 	ResultSummary *ResultSummary `json:"result_summary,omitempty"`
+	ExcludedStages []ExcludedStage `json:"-"`
 	OriginatingRequestID *string `json:"originating_request_id"`
 	CorrelationID string `json:"correlation_id"`
 	TerminationReason string `json:"termination_reason,omitempty"`

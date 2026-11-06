@@ -173,6 +173,7 @@ func (s *CreateRunService) CreateRun(ctx context.Context, command domain.CreateR
 		Ref:runRef, SchemaVersion:command.SchemaVersion, Status:domain.RunCreated, Version:1,
 		SystemAsOf:command.SystemAsOf.UTC(), DeadlineAt:command.DeadlineAt.UTC(),
 		TemplateRef:resolved.Ref, TemplateVersion:resolved.Version, TemplateFingerprint:resolved.Fingerprint,
+		ExcludedStages:cloneExcludedStages(resolved.Excluded),
 		InputSnapshotRefs:append([]string{}, command.InputSnapshotRefs...),
 		OriginatingRequestID:cloneString(command.OriginatingRequestID), CorrelationID:command.CorrelationID,
 		CreatedAt:now,
@@ -190,4 +191,9 @@ func cloneString(value *string) *string {
 	if value == nil { return nil }
 	copy := *value
 	return &copy
+}
+
+func cloneExcludedStages(values []domain.ExcludedStage) []domain.ExcludedStage {
+	if values == nil { return []domain.ExcludedStage{} }
+	return append([]domain.ExcludedStage(nil), values...)
 }

@@ -191,3 +191,10 @@ Fake Repository/Fake Clock/Fake Provider 只证明模块内逻辑；MariaDB/Redi
 
 
 - CreateRun 持久化前对输入快照引用按集合语义排序，并将已通过 typed Schema 校验的 parameters 保存为 RFC 8785 JCS canonical bytes；避免同一指纹语义请求因输入顺序/JSON 排版产生不同的运行快照。
+
+
+### 2026-11-06 适用性排除证据进入终态摘要
+
+- Review 发现 ResolvedTemplate 已记录 excluded_stages，但状态机聚合/取消摘要此前始终初始化为空，导致 CreateRun 前的适用性裁剪证据没有进入 Run 终态 ResultSummary。
+- Domain Run 增加仅供内部归并使用的 excluded-stage 快照字段（不进入公开 Run DTO）；CreateRun 从 ResolvedTemplate 注入。正常聚合、排队取消和运行中取消最终摘要均保留该列表。
+- 新增成功聚合与取消终态的排除证据回归测试。真实持久化时仍须从不可变 ResolvedTemplate Snapshot 恢复该字段。

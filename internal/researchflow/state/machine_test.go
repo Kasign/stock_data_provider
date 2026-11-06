@@ -268,3 +268,21 @@ func TestWorkerClaimRequiresPositiveFencingToken(t *testing.T) {
 	if err!=nil{t.Fatal(err)}
 	if attempt.FencingToken!=1{t.Fatalf("fencing token = %d, want 1",attempt.FencingToken)}
 }
+
+func TestRunAggregationAndCancellationPreserveExcludedStageEvidence(t *testing.T) {
+	now:=time.Date(2026,11,6,10,0,0,0,time.UTC)
+	excluded:=[]domain.ExcludedStage{{StageCode:"optional_news",RuleVersion:"v2",ReasonCode:"market_closed"}}
+	policy:=template.PropagationPolicy{OnFailed:domain.PropagateFail}
+	run:=domain.Run{Status:domain.RunRunning,ExcludedStages:excluded}
+	aggregated,err:=AggregateRun(run,[]domain.Stage{{Code:"quote",Status:domain.StageSucceeded}},nil,map[string]template.PropagationPolicy{"quote":policy},nil,false,now)
+	if err!=nil{t.Fatal(err)}
+	if len(aggregated.ResultSummary.ExcludedStages)!=1||aggregated.ResultSummary.ExcludedStages[0].ReasonCode!="market_closed"{
+		t.Fatalf("Run aggregation lost applicability exclusions: %#v",aggregated.ResultSummary.ExcludedStages)
+	}
+	queued:=domain.Run{Status:domain.RunQueued,ExcludedStages:excluded}
+	cancelled,_,err:=CancelRun(queued,[]domain.Stage{{Code:"quote",Status:domain.StageReady}},now)
+	if err!=nil{t.Fatal(err)}
+	if cancelled.ResultSummary==nil||len(cancelled.ResultSummary.ExcludedStages)!=1{
+		t.Fatalf("cancellation summary lost applicability exclusions: %#v",cancelled.ResultSummary)
+	}
+}
