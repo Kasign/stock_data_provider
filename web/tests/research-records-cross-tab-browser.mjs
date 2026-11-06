@@ -71,6 +71,19 @@ try {
 
   await second.evaluate(({ key, item }) => localStorage.setItem(key, JSON.stringify([item])), { key: reportKey, item: report() });
   await first.locator(".research-report-card").filter({ hasText: "run-1" }).waitFor();
+  await first.locator('[data-report-action="open-report"]').click();
+  await first.locator("#research-report-detail:not([hidden])").waitFor();
+  assert.equal(await first.locator("#research-report-list").isVisible(), false, "report list is replaced by a dedicated detail workspace");
+  assert.equal(await first.locator("#research-report-detail-title").textContent(), "600519.SH");
+  assert.ok(await first.locator("#research-report-document h2").count() >= 4, "Run result sections render as semantic headings");
+  assert.ok(await first.locator("#research-report-toc a").count() >= 4, "table of contents exposes section anchors");
+  const firstSection = first.locator("#research-report-toc a").first();
+  const targetId = (await firstSection.getAttribute("href")).slice(1);
+  await firstSection.click();
+  assert.equal(await first.locator("#" + targetId).count(), 1, "table of contents points to a rendered report section");
+  await first.locator("#research-report-back").click();
+  await first.locator("#research-report-list:not([hidden])").waitFor();
+  assert.equal(await first.locator("#research-report-detail").isVisible(), false, "back action restores the report list");
   await first.locator('[data-note-action="edit"][data-note-id="' + recreated[0].id + '"]').click();
   await first.locator("#research-note-title").fill("冲突中的旧草稿");
   await second.evaluate(({ key, item }) => localStorage.setItem(key, JSON.stringify([item])), {
@@ -101,8 +114,12 @@ try {
   assert.equal(reportLinkedNotes[0].taskId, "task-1");
   assert.equal(reportLinkedNotes[0].symbol, "600519.SH");
 
+  await first.locator('[data-report-action="open-report"]').click();
+  await first.locator("#research-report-detail:not([hidden])").waitFor();
   await second.evaluate(key => localStorage.removeItem(key), reportKey);
   await first.locator("#research-report-list").getByText("尚无归档报告。").waitFor();
+  assert.equal(await first.locator("#research-report-detail").isVisible(), false, "cross-tab report deletion closes the stale detail workspace");
+  await first.locator("#research-report-feedback").filter({ hasText: "其他标签页删除" }).waitFor();
   assert.equal(await first.evaluate(key => JSON.parse(localStorage.getItem(key)).length, noteKey), 2,
     "deleting a report must not cascade-delete independent research notes");
 

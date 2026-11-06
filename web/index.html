@@ -425,6 +425,23 @@
             <p id="research-report-count" class="field-hint" aria-live="polite">显示 0 / 0 份报告</p>
             <p id="research-report-feedback" class="field-hint" role="status" aria-live="polite">最多保存 30 份真实 Run 结果；不会同步到服务端。</p>
             <div id="research-report-list" class="research-report-list" aria-live="polite"><p class="table-empty">尚无归档报告。</p></div>
+            <section id="research-report-detail" class="research-report-detail" aria-labelledby="research-report-detail-title" hidden>
+              <header class="research-report-detail-header">
+                <div class="research-report-detail-heading">
+                  <button class="text-button" id="research-report-back" type="button">返回报告列表</button>
+                  <h3 id="research-report-detail-title">研究报告</h3>
+                  <p id="research-report-detail-meta" class="research-report-meta"></p>
+                </div>
+                <div id="research-report-detail-actions" class="research-report-actions"></div>
+              </header>
+              <div class="research-report-reader">
+                <nav class="research-report-toc" aria-label="报告章节导航">
+                  <strong>报告目录</strong>
+                  <ol id="research-report-toc"></ol>
+                </nav>
+                <article id="research-report-document" class="research-report-document" tabindex="-1"></article>
+              </div>
+            </section>
           </section>
           <section class="panel existing-api-panel" aria-labelledby="stock-status-tools-title">
             <div class="panel-heading"><div><h2 id="stock-status-tools-title">历史交易状态与涨跌幅规则</h2><p>查询指定交易日的停复牌/风险警示证据和有效涨跌幅规则。未知状态代表证据不足，不会自动当作正常或无涨跌幅限制。</p></div></div>
