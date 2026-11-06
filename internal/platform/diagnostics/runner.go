@@ -104,7 +104,9 @@ func execute(parent context.Context, check Check) (result Result) {
 	func() {
 		defer func() {
 			if recovered := recover(); recovered != nil {
-				runErr = fmt.Errorf("check panic: %v", recovered)
+				// Panic payloads may contain credentials or upstream data; never retain them in Cause.
+				_ = recovered
+				runErr = errors.New("check panicked")
 			}
 		}()
 		observation, runErr = check.Run(ctx)
@@ -115,7 +117,7 @@ func execute(parent context.Context, check Check) (result Result) {
 		runErr = ctx.Err()
 	}
 	if runErr != nil {
-		f := normalizeFault(runErr, check.ID, ctx.Err())
+		f := normalizeFault(runErr, ctx.Err())
 		result.Fault = f
 		status := StatusFailed
 		if f.Class == fault.ClassTimeout || f.Class == fault.ClassUnavailable {
@@ -158,37 +160,52 @@ func execute(parent context.Context, check Check) (result Result) {
 	return result
 }
 
-func normalizeFault(err error, dependency string, contextErr error) *fault.Fault {
+func normalizeFault(err error, contextErr error) *fault.Fault {
 	var f *fault.Fault
 	if errors.As(err, &f) && f != nil {
-		copy := *f
-		if copy.Dependency == "" {
-			copy.Dependency = dependency
+		if !validFaultClass(f.Class) {
+			return &fault.Fault{
+				Class: fault.ClassInternal, Code: "platform.diagnostics.invalid_fault",
+				SafeMessage: "check returned an invalid fault", Cause: err,
+			}
 		}
+		copy := *f
 		if copy.Code == "" {
 			copy.Code = "platform.diagnostics.check_failed"
 		}
 		if copy.SafeMessage == "" {
 			copy.SafeMessage = "check failed"
 		}
+		if len(copy.Code) > 160 || !validStableCode(copy.Code) ||
+			len(copy.SafeMessage) > 512 || hasControlCharacters(copy.SafeMessage) ||
+			len(copy.Dependency) > 128 || hasControlCharacters(copy.Dependency) {
+			return &fault.Fault{
+				Class: fault.ClassInternal, Code: "platform.diagnostics.invalid_fault",
+				SafeMessage: "check returned an invalid fault", Cause: err,
+			}
+		}
 		return &copy
 	}
 	if errors.Is(contextErr, context.DeadlineExceeded) || errors.Is(err, context.DeadlineExceeded) {
 		return &fault.Fault{
 			Class: fault.ClassTimeout, Code: "platform.diagnostics.check_timeout",
-			SafeMessage: "check timed out", Dependency: dependency, Retryable: true, Cause: err,
+			SafeMessage: "check timed out", Retryable: true, Cause: err,
 		}
 	}
 	if errors.Is(contextErr, context.Canceled) || errors.Is(err, context.Canceled) {
 		return &fault.Fault{
 			Class: fault.ClassUnavailable, Code: "platform.diagnostics.check_canceled",
-			SafeMessage: "check was canceled", Dependency: dependency, Cause: err,
+			SafeMessage: "check was canceled", Cause: err,
 		}
 	}
 	return &fault.Fault{
 		Class: fault.ClassInternal, Code: "platform.diagnostics.check_failed",
-		SafeMessage: "check failed", Dependency: dependency, Cause: err,
+		SafeMessage: "check failed", Cause: err,
 	}
+}
+
+func validFaultClass(class fault.Class) bool {
+	return class.Valid()
 }
 
 func notStartedObservation(cause error) Observation {

@@ -41,6 +41,30 @@ func (s *DataService) assessDailyBarTradingContext(ctx context.Context, symbol s
 	return assessDailyBarTradingContext(calendar, bars, statuses, statusErrors)
 }
 
+// historicalCalendarTimestampOnlyDegradation accepts a complete historical date calendar
+// when the only provider quality gap is an unavailable source publication timestamp.
+func historicalCalendarTimestampOnlyDegradation(calendar *model.TradingCalendarSnapshot) bool {
+	if calendar == nil || calendar.QualityStatus != model.QualityDegraded || calendar.EndDate == "" {
+		return false
+	}
+	endDate, err := time.ParseInLocation("2006-01-02", calendar.EndDate, marketLocation())
+	today := time.Now().In(marketLocation()).Format("2006-01-02")
+	if err != nil || endDate.Format("2006-01-02") >= today {
+		return false
+	}
+	if len(calendar.QualityReasons) == 0 {
+		return false
+	}
+	for _, reason := range calendar.QualityReasons {
+		switch reason {
+		case "provider_snapshot_timestamp_missing", "provider_snapshot_timestamp_not_exposed":
+		default:
+			return false
+		}
+	}
+	return true
+}
+
 // assessDailyBarTradingContext never treats an unknown security state as a confirmed missing bar.
 func assessDailyBarTradingContext(calendar *model.TradingCalendarSnapshot, bars []model.DailyBar, statuses map[string]*model.SecurityTradingStatusSnapshot, statusErrors map[string]error) dailyBarTradingContextResult {
 	result := dailyBarTradingContextResult{QualityStatus: model.QualityValid}
@@ -50,8 +74,14 @@ func assessDailyBarTradingContext(calendar *model.TradingCalendarSnapshot, bars 
 		return result
 	}
 	if calendar.QualityStatus != model.QualityValid {
-		result.QualityStatus = model.QualityDegraded
-		result.Reasons = appendDailyBarContextReason(result.Reasons, "daily_bar_context_calendar_degraded")
+		if historicalCalendarTimestampOnlyDegradation(calendar) {
+			// 历史交易日历日期是稳定事实；缺少上游发布时间不应单独污染历史 K 线质量。
+			// 该元数据缺口仍显式保留，当前/未来日历则继续降级。
+			result.Reasons = appendDailyBarContextReason(result.Reasons, "daily_bar_context_calendar_snapshot_time_unverified")
+		} else {
+			result.QualityStatus = model.QualityDegraded
+			result.Reasons = appendDailyBarContextReason(result.Reasons, "daily_bar_context_calendar_degraded")
+		}
 	}
 	for _, reason := range calendar.QualityReasons {
 		if reason == "provider_trading_calendar_sources_disagree" {

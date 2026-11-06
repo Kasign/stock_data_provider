@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:kasign:stock_data_provider:notification:payload:researchflow-run-terminal:1.0.0",
+  "title": "Researchflow Run Terminal Notification Payload",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "source_event_ref",
+    "run_ref",
+    "status",
+    "termination_reason",
+    "system_as_of",
+    "finished_at",
+    "result_summary_ref",
+    "template_ref",
+    "template_version"
+  ],
+  "properties": {
+    "source_event_ref": {
+      "type": "string",
+      "minLength": 1
+    },
+    "run_ref": {
+      "type": "string",
+      "minLength": 1
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "succeeded",
+        "partial",
+        "failed",
+        "cancelled"
+      ]
+    },
+    "termination_reason": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "system_as_of": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "finished_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "result_summary_ref": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "template_ref": {
+      "type": "string",
+      "minLength": 1
+    },
+    "template_version": {
+      "type": "string",
+      "minLength": 1
+    }
+  }
+}

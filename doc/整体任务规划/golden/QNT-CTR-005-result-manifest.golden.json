@@ -1,0 +1,24 @@
+{
+  "manifest": {
+    "result_id": "quant_result:sha256:29e81fdc80342387b910ab2c50a2732e5010defc7ce3e8030de316b37f4b8299",
+    "manifest_fingerprint": "29e81fdc80342387b910ab2c50a2732e5010defc7ce3e8030de316b37f4b8299",
+    "result_type": "stock",
+    "schema_version": "1.0.0",
+    "system_as_of": "2026-11-06T05:02:00Z",
+    "input_snapshot_refs": [
+      "data_snapshot:sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    ],
+    "result_fingerprint": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+  },
+  "fingerprint_input": {
+    "result_type": "stock",
+    "schema_version": "1.0.0",
+    "system_as_of": "2026-11-06T05:02:00Z",
+    "input_snapshot_refs": [
+      "data_snapshot:sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    ],
+    "result_fingerprint": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+  },
+  "canonical_json": "{\"input_snapshot_refs\":[\"data_snapshot:sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"],\"result_fingerprint\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"result_type\":\"stock\",\"schema_version\":\"1.0.0\",\"system_as_of\":\"2026-11-06T05:02:00Z\"}",
+  "expected_sha256": "29e81fdc80342387b910ab2c50a2732e5010defc7ce3e8030de316b37f4b8299"
+}

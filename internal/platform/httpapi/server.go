@@ -3,19 +3,19 @@ package httpapi
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"log/slog"
+	"mime"
 	"net/http"
 	"strings"
 	"time"
 
 	"example.com/stock-analysis-flow/internal/adapters/storage"
 	"example.com/stock-analysis-flow/internal/analysis/domain"
+	"example.com/stock-analysis-flow/internal/platform/observability"
 )
 
 type Runner interface {
@@ -72,13 +72,13 @@ func (s *Server) handleReady(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 4*time.Second)
 	defer cancel()
 	if err := s.store.Health(ctx); err != nil {
-		writeError(w, http.StatusServiceUnavailable, "dependencies_unready", err.Error())
+		writeError(w, http.StatusServiceUnavailable, "dependencies_unready", "one or more dependencies are unavailable")
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"status": "ready", "dependencies": map[string]string{"mariadb": "ok", "redis": "ok"}, "time": time.Now().UTC()})
 }
 func (s *Server) handleCreateRun(w http.ResponseWriter, r *http.Request) {
-	if !strings.HasPrefix(strings.ToLower(r.Header.Get("Content-Type")), "application/json") {
+	if !isJSONContentType(r.Header.Get("Content-Type")) {
 		writeError(w, http.StatusUnsupportedMediaType, "content_type_required", "Content-Type must be application/json")
 		return
 	}
@@ -87,12 +87,12 @@ func (s *Server) handleCreateRun(w http.ResponseWriter, r *http.Request) {
 	decoder.DisallowUnknownFields()
 	var req domain.RunRequest
 	if err := decoder.Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", err.Error())
+		writeRequestDecodeError(w, err)
 		return
 	}
 	var trailing any
 	if err := decoder.Decode(&trailing); err != io.EOF {
-		writeError(w, http.StatusBadRequest, "invalid_json", "request body must contain one JSON object")
+		writeRequestDecodeError(w, err)
 		return
 	}
 	asOfExplicit := !req.AsOf.IsZero()
@@ -137,7 +137,7 @@ func (s *Server) handleCreateRun(w http.ResponseWriter, r *http.Request) {
 			"duration_ms", time.Since(started).Milliseconds(),
 			"error_type", fmt.Sprintf("%T", err),
 			"error", boundedLogText(err.Error(), 300))
-		writeJSON(w, http.StatusBadGateway, map[string]any{"error": map[string]string{"code": "analysis_failed", "message": err.Error()}, "partial_result": result})
+		writeJSON(w, http.StatusBadGateway, map[string]any{"error": map[string]string{"code": "analysis_failed", "message": "analysis execution failed"}, "partial_result": result})
 		return
 	}
 	status := http.StatusOK
@@ -177,9 +177,9 @@ func (s *Server) handleGetRun(w http.ResponseWriter, r *http.Request) {
 		events, err := s.store.GetEvents(ctx, runID)
 		if err != nil {
 			if errors.Is(err, storage.ErrRunNotFound) {
-				writeError(w, http.StatusNotFound, "run_not_found", err.Error())
+				writeError(w, http.StatusNotFound, "run_not_found", "analysis run not found")
 			} else {
-				writeError(w, http.StatusInternalServerError, "read_events_failed", err.Error())
+				writeError(w, http.StatusInternalServerError, "read_events_failed", "could not read analysis events")
 			}
 			return
 		}
@@ -190,11 +190,11 @@ func (s *Server) handleGetRun(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		switch {
 		case errors.Is(err, storage.ErrRunNotFound):
-			writeError(w, http.StatusNotFound, "run_not_found", err.Error())
+			writeError(w, http.StatusNotFound, "run_not_found", "analysis run not found")
 		case errors.Is(err, storage.ErrRunNotFinished):
-			writeError(w, http.StatusConflict, "run_not_finished", err.Error())
+			writeError(w, http.StatusConflict, "run_not_finished", "analysis run is not finished")
 		default:
-			writeError(w, http.StatusInternalServerError, "read_result_failed", err.Error())
+			writeError(w, http.StatusInternalServerError, "read_result_failed", "could not read analysis result")
 		}
 		return
 	}
@@ -253,6 +253,20 @@ func mustLocation(name string) *time.Location {
 	}
 	return loc
 }
+func isJSONContentType(value string) bool {
+	mediaType, _, err := mime.ParseMediaType(value)
+	return err == nil && strings.EqualFold(mediaType, "application/json")
+}
+
+func writeRequestDecodeError(w http.ResponseWriter, err error) {
+	var maxBytesErr *http.MaxBytesError
+	if errors.As(err, &maxBytesErr) {
+		writeError(w, http.StatusRequestEntityTooLarge, "request_too_large", "request body exceeds 1 MiB")
+		return
+	}
+	writeError(w, http.StatusBadRequest, "invalid_json", "request body must contain one valid JSON object")
+}
+
 func writeError(w http.ResponseWriter, status int, code, message string) {
 	writeJSON(w, status, map[string]any{"error": map[string]string{"code": code, "message": message}})
 }
@@ -266,53 +280,48 @@ func writeJSON(w http.ResponseWriter, status int, value any) {
 }
 func recoverer(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		tracked := &commitTrackingWriter{ResponseWriter: w}
 		defer func() {
 			if v := recover(); v != nil {
 				slog.Error("panic while handling HTTP request", "service", "stock-analysis-api", "request_id", requestIDFromContext(r), "method", r.Method, "path", boundedLogPath(r.URL.Path), "panic_type", fmt.Sprintf("%T", v))
-				writeError(w, http.StatusInternalServerError, "internal_error", "internal server error")
+				if !tracked.committed {
+					writeError(tracked, http.StatusInternalServerError, "internal_error", "internal server error")
+				}
 			}
 		}()
-		next.ServeHTTP(w, r)
+		next.ServeHTTP(tracked, r)
 	})
+}
+
+type commitTrackingWriter struct {
+	http.ResponseWriter
+	committed bool
+}
+
+func (w *commitTrackingWriter) Unwrap() http.ResponseWriter {
+	return w.ResponseWriter
+}
+
+func (w *commitTrackingWriter) WriteHeader(status int) {
+	if w.committed {
+		return
+	}
+	w.committed = true
+	w.ResponseWriter.WriteHeader(status)
+}
+
+func (w *commitTrackingWriter) Write(data []byte) (int, error) {
+	if !w.committed {
+		w.WriteHeader(http.StatusOK)
+	}
+	return w.ResponseWriter.Write(data)
 }
 func requestIDMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		id := strings.TrimSpace(r.Header.Get("X-Request-ID"))
-		if !validRequestID(id) {
-			id = newRequestID()
-		}
-		w.Header().Set("X-Request-ID", id)
-		ctx := context.WithValue(r.Context(), requestIDKey{}, id)
-		next.ServeHTTP(w, r.WithContext(ctx))
-	})
+	return observability.Middleware(next)
 }
-
-type requestIDKey struct{}
 
 func requestIDFromContext(r *http.Request) string {
-	value, _ := r.Context().Value(requestIDKey{}).(string)
-	return value
-}
-
-func validRequestID(value string) bool {
-	if value == "" || len(value) > 128 {
-		return false
-	}
-	for _, r := range value {
-		if !((r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') ||
-			(r >= '0' && r <= '9') || r == '-' || r == '_' || r == '.' || r == ':') {
-			return false
-		}
-	}
-	return true
-}
-
-func newRequestID() string {
-	var value [16]byte
-	if _, err := rand.Read(value[:]); err == nil {
-		return hex.EncodeToString(value[:])
-	}
-	return time.Now().UTC().Format("20060102T150405.000000000Z")
+	return observability.FromContext(r.Context())
 }
 
 // requestLog 只记录请求元数据，不记录请求体、响应体、查询参数或鉴权头。

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"unicode"
 )
 
 type Status string
@@ -41,6 +42,9 @@ func (o Observation) Validate() error {
 	if strings.TrimSpace(o.SafeMessage) == "" {
 		return errors.New("safe_message is required")
 	}
+	if hasControlCharacters(o.SafeMessage) || hasControlCharacters(o.EvidenceRef) {
+		return errors.New("observation text fields cannot contain control characters")
+	}
 	if o.CheckedAt.IsZero() {
 		return errors.New("checked_at is required")
 	}
@@ -50,6 +54,9 @@ func (o Observation) Validate() error {
 	if o.Status != StatusHealthy && strings.TrimSpace(o.ReasonCode) == "" {
 		return errors.New("reason_code is required for non-healthy observations")
 	}
+	if o.ReasonCode != "" && !validStableCode(o.ReasonCode) {
+		return errors.New("reason_code must be a stable lowercase identifier")
+	}
 	if len(o.ReasonCode) > 160 || len(o.SafeMessage) > 512 || len(o.EvidenceRef) > 512 {
 		return errors.New("observation field exceeds size limit")
 	}
@@ -58,7 +65,8 @@ func (o Observation) Validate() error {
 	}
 	total := 0
 	for key, value := range o.Attributes {
-		if strings.TrimSpace(key) == "" || len(key) > 64 || len(value) > 256 {
+		if strings.TrimSpace(key) == "" || len(key) > 64 || len(value) > 256 ||
+			hasControlCharacters(key) || hasControlCharacters(value) {
 			return errors.New("invalid observation attribute")
 		}
 		total += len(key) + len(value)
@@ -67,4 +75,23 @@ func (o Observation) Validate() error {
 		return errors.New("observation attributes exceed size limit")
 	}
 	return nil
+}
+
+// validStableCode accepts bounded machine identifiers, not free-form error text.
+func validStableCode(value string) bool {
+	if value == "" {
+		return false
+	}
+	for index, char := range value {
+		if (char >= 'a' && char <= 'z') || (char >= '0' && char <= '9') ||
+			(index > 0 && (char == '.' || char == '_' || char == '-')) {
+			continue
+		}
+		return false
+	}
+	return true
+}
+
+func hasControlCharacters(value string) bool {
+	return strings.IndexFunc(value, unicode.IsControl) >= 0
 }

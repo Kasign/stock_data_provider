@@ -71,7 +71,8 @@ func TestPytdxDailyBarsEmptyGbbqResponseIsNotReportedAsUnsupported(t *testing.T)
 	}
 }
 
-func TestPytdxForwardAdjustmentReferenceDateUsesLatestLoadedBar(t *testing.T) {
+// 请求结束日只限制返回 K 线范围；前复权基准可以使用请求区间之后的最新已加载交易日。
+func TestPytdxForwardAdjustmentReferenceDateMayExceedRequestedEnd(t *testing.T) {
 	client := &fakePytdxDailyClient{
 		klineResponse: &protocol.KlineResp{List: []*protocol.Kline{
 			pytdxTestDailyKline("2026-10-21", 10000, 10200, 9800, 10100, 10000),

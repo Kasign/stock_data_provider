@@ -1,0 +1,281 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:kasign:stock_data_provider:research:evidence:1.0.0",
+  "title": "RSC-CTR-001 Research Evidence",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "evidence_id",
+    "evidence_type",
+    "source_owner",
+    "source_ref",
+    "derived_from_refs",
+    "subject_refs",
+    "published_at",
+    "available_at",
+    "system_observed_at",
+    "valid_time_start",
+    "valid_time_end",
+    "system_as_of",
+    "stance",
+    "confidence",
+    "quality_status",
+    "content_level",
+    "authorization_ref",
+    "limitations",
+    "content_fingerprint"
+  ],
+  "properties": {
+    "evidence_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "evidence_type": {
+      "type": "string",
+      "enum": [
+        "fact",
+        "reported_fact",
+        "inference",
+        "hypothesis",
+        "unknown"
+      ]
+    },
+    "source_owner": {
+      "type": "string",
+      "enum": [
+        "data",
+        "news",
+        "quant",
+        "research"
+      ]
+    },
+    "source_ref": {
+      "type": "string",
+      "minLength": 1
+    },
+    "source_version": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "minLength": 1
+    },
+    "source_locator": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "derived_from_refs": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "claim_ref": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "minLength": 1
+    },
+    "subject_refs": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "published_at": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time"
+    },
+    "available_at": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time"
+    },
+    "system_observed_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "valid_time_start": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time"
+    },
+    "valid_time_end": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time"
+    },
+    "system_as_of": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "stance": {
+      "type": "string",
+      "enum": [
+        "supports",
+        "contradicts",
+        "neutral"
+      ]
+    },
+    "confidence": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 1
+    },
+    "confidence_method": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "minLength": 1
+    },
+    "confidence_method_version": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "minLength": 1
+    },
+    "quality_status": {
+      "type": "string",
+      "enum": [
+        "valid",
+        "degraded",
+        "invalid",
+        "unknown"
+      ]
+    },
+    "content_level": {
+      "type": "string",
+      "enum": [
+        "metadata",
+        "summary",
+        "snippet",
+        "full"
+      ]
+    },
+    "authorization_ref": {
+      "type": "string",
+      "minLength": 1
+    },
+    "limitations": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "content_fingerprint": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "evidence_type": {
+            "enum": [
+              "inference",
+              "hypothesis"
+            ]
+          }
+        },
+        "required": [
+          "evidence_type"
+        ]
+      },
+      "then": {
+        "properties": {
+          "derived_from_refs": {
+            "minItems": 1
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "confidence": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "confidence"
+        ]
+      },
+      "then": {
+        "required": [
+          "confidence_method",
+          "confidence_method_version"
+        ],
+        "properties": {
+          "confidence_method": {
+            "type": "string",
+            "minLength": 1
+          },
+          "confidence_method_version": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "valid_time_start": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "valid_time_start"
+        ]
+      },
+      "then": {
+        "properties": {
+          "valid_time_end": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "valid_time_end": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "valid_time_end"
+        ]
+      },
+      "then": {
+        "properties": {
+          "valid_time_start": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  ]
+}

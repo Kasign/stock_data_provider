@@ -21,6 +21,13 @@ on:
       - "services/market-data/internal/provider/pytdx_official_intraday_suspension_daily_live_test.go"
       - "services/market-data/internal/baostock/**"
       - "services/market-data/internal/service/provider_probe_live_test.go"
+      - "services/market-data/internal/service/provider_probe.go"
+      - "services/market-data/internal/service/data.go"
+      - "services/market-data/internal/service/data_test.go"
+      - "services/market-data/internal/service/adjustment_rebuild.go"
+      - "services/market-data/internal/service/adjustment_rebuild_basis_test.go"
+      - "services/market-data/internal/service/daily_bar_trading_context.go"
+      - "services/market-data/internal/service/daily_bar_trading_context_test.go"
   workflow_dispatch:
     inputs:
       quote_symbol:
@@ -64,6 +71,12 @@ on:
       - "services/market-data/internal/provider/**"
       - "services/market-data/internal/baostock/**"
       - "services/market-data/internal/model/**"
+      - "services/market-data/internal/service/data.go"
+      - "services/market-data/internal/service/data_test.go"
+      - "services/market-data/internal/service/adjustment_rebuild.go"
+      - "services/market-data/internal/service/adjustment_rebuild_basis_test.go"
+      - "services/market-data/internal/service/daily_bar_trading_context.go"
+      - "services/market-data/internal/service/daily_bar_trading_context_test.go"
       - "services/market-data/configs/**"
       - "services/market-data/.env.example"
       - "go-core/**"
@@ -144,7 +157,7 @@ jobs:
           path: live-provider-report.json
           if-no-files-found: warn
       - name: Run production historical Probe through the service diagnostic chain
-        if: github.event_name == 'push' && contains(github.event.head_commit.message, '[historical_service_probe]')
+        if: always() && github.event_name == 'push' && contains(github.event.head_commit.message, '[historical_service_probe]')
         env:
           MARKET_DATA_LIVE_HISTORICAL_PROBE: "1"
           LIVE_HISTORICAL_PROBE_REPORT_PATH: ${{ github.workspace }}/live-historical-probe-report.json
@@ -168,7 +181,7 @@ jobs:
           path: live-historical-probe-report.json
           if-no-files-found: warn
       - name: Run Tushare historical adjustment-factor and corporate-action evidence probe
-        if: github.event_name == 'push' && contains(github.event.head_commit.message, '[historical_tushare_adjustment]')
+        if: always() && github.event_name == 'push' && contains(github.event.head_commit.message, '[historical_tushare_adjustment]')
         env:
           MARKET_DATA_LIVE_TUSHARE_ADJUSTMENT_TESTS: "1"
           MARKET_DATA_TUSHARE_TOKEN: ${{ secrets.TUSHARE_TOKEN }}
@@ -194,7 +207,7 @@ jobs:
           path: live-tushare-adjustment-report.json
           if-no-files-found: warn
       - name: Run BaoStock historical adjustment-factor consistency probe
-        if: github.event_name == 'push' && contains(github.event.head_commit.message, '[historical_baostock_factors]')
+        if: always() && github.event_name == 'push' && contains(github.event.head_commit.message, '[historical_baostock_factors]')
         env:
           MARKET_DATA_LIVE_BAOSTOCK_ADJUSTMENT_TESTS: "1"
           LIVE_BAOSTOCK_ADJUSTMENT_REPORT_PATH: ${{ github.workspace }}/live-baostock-adjustment-report.json
@@ -216,7 +229,7 @@ jobs:
           path: live-baostock-adjustment-report.json
           if-no-files-found: warn
       - name: Run Pytdx historical daily-bar and GBBQ probe
-        if: github.event_name == 'push' && contains(github.event.head_commit.message, '[historical_pytdx_gbbq]')
+        if: always() && github.event_name == 'push' && contains(github.event.head_commit.message, '[historical_pytdx_gbbq]')
         env:
           MARKET_DATA_LIVE_PYTDX_HISTORICAL_TESTS: "1"
           LIVE_PROBE_DAILY_START_DATE: "2025-07-07"
@@ -242,7 +255,7 @@ jobs:
           path: live-pytdx-historical-report.json
           if-no-files-found: warn
       - name: Run Tushare intraday suspension and same-day daily-bar evidence probe
-        if: github.event_name == 'push' && contains(github.event.head_commit.message, '[historical_tushare_suspension]')
+        if: always() && github.event_name == 'push' && contains(github.event.head_commit.message, '[historical_tushare_suspension]')
         env:
           MARKET_DATA_LIVE_TUSHARE_SUSPENSION_TESTS: "1"
           MARKET_DATA_TUSHARE_TOKEN: ${{ secrets.TUSHARE_TOKEN }}
@@ -250,7 +263,7 @@ jobs:
         working-directory: services/market-data
         run: go test -run '^TestLiveTushareIntradaySuspensionSamples$' -count=1 -v ./internal/provider
       - name: Run Pytdx daily bars for official intraday-suspension dates
-        if: github.event_name == 'push' && contains(github.event.head_commit.message, '[historical_intraday_daily_bars]')
+        if: always() && github.event_name == 'push' && contains(github.event.head_commit.message, '[historical_intraday_daily_bars]')
         env:
           MARKET_DATA_LIVE_PYTDX_OFFICIAL_SUSPENSION_TESTS: "1"
           LIVE_PYTDX_OFFICIAL_SUSPENSION_REPORT_PATH: ${{ github.workspace }}/live-pytdx-official-suspension-report.json

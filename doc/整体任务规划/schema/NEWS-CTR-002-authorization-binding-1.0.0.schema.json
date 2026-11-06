@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:kasign:stock_data_provider:news:authorization-binding:1.0.0",
+  "title": "NEWS-CTR-002 Authorization Binding",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "caller_ref",
+    "resource_ref",
+    "purpose_code",
+    "requested_content_level",
+    "provider_ref",
+    "source_ref",
+    "endpoint_ref",
+    "authorization_ref",
+    "policy_snapshot"
+  ],
+  "properties": {
+    "caller_ref": {
+      "type": "string",
+      "minLength": 1
+    },
+    "resource_ref": {
+      "type": "string",
+      "minLength": 1
+    },
+    "purpose_code": {
+      "type": "string",
+      "enum": [
+        "research_analysis",
+        "risk_review",
+        "user_display"
+      ]
+    },
+    "requested_content_level": {
+      "type": "string",
+      "enum": [
+        "metadata",
+        "summary",
+        "snippet",
+        "full"
+      ]
+    },
+    "provider_ref": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "minLength": 1
+    },
+    "source_ref": {
+      "type": "string",
+      "minLength": 1
+    },
+    "endpoint_ref": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "minLength": 1
+    },
+    "authorization_ref": {
+      "$ref": "./GOV-CTR-006-authorization-ref-1.0.0.schema.json"
+    },
+    "policy_snapshot": {
+      "$ref": "./GOV-CTR-006-policy-snapshot-1.0.0.schema.json"
+    }
+  }
+}

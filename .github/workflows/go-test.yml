@@ -9,6 +9,7 @@ on:
       - 'cmd/**'
       - 'internal/**'
       - 'doc/news/**'
+      - 'doc/notification/**'
       - 'go-core/**'
       - 'services/market-data/**'
       - '.github/workflows/go-test.yml'
@@ -18,13 +19,14 @@ on:
       - 'docker-compose.yml'
       - 'scripts/**'
   push:
-    branches: [main, feat/full-go-data-providers-api-switch, feat/research-news-ingestion]
+    branches: [main, feat/full-go-data-providers-api-switch, feat/research-news-ingestion, feat/notification]
     paths:
       - 'go.mod'
       - 'go.sum'
       - 'cmd/**'
       - 'internal/**'
       - 'doc/news/**'
+      - 'doc/notification/**'
       - 'go-core/**'
       - 'services/market-data/**'
       - '.github/workflows/go-test.yml'
@@ -132,11 +134,45 @@ jobs:
         env:
           MARKET_DATA_TEST_MYSQL_DSN: "root:market-data-ci@tcp(127.0.0.1:3306)/market_data_test?parseTime=true&loc=UTC"
         run: go test ./internal/service -run TestDailyBarsMariaDBFallbackPreservesNormalizationWarnings -count=1 -v
+      - name: Run DataService PIT revision fallback integration
+        working-directory: services/market-data
+        env:
+          MARKET_DATA_TEST_MYSQL_DSN: "root:market-data-ci@tcp(127.0.0.1:3306)/market_data_test?parseTime=true&loc=UTC"
+        run: go test ./internal/service -run 'Test(AdjustmentFactors|CorporateActions)AsOfFallsBackToLatestProviderVisibleRevision' -count=1 -v
       - name: Run Probe HTTP and MariaDB end-to-end integration
         working-directory: services/market-data
         env:
           MARKET_DATA_TEST_MYSQL_DSN: "root:market-data-ci@tcp(127.0.0.1:3306)/market_data_test?parseTime=true&loc=UTC"
         run: go test ./internal/httpapi -run TestProviderProbeHTTPMariaDBEndToEnd -count=1 -v
+
+  news-mariadb-integration:
+    name: News MariaDB Repository and Migration integration
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      mariadb:
+        image: mariadb:11.4
+        env:
+          MARIADB_ROOT_PASSWORD: news-ci
+          MARIADB_DATABASE: news_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+      - name: Run News MariaDB migration and repository integration
+        env:
+          NEWS_MARIADB_TEST_DSN: "root:news-ci@tcp(127.0.0.1:3306)/news_test?parseTime=true&loc=UTC"
+        run: go test ./internal/news/adapters/storage -run TestNewsMariaDBRepositoryIntegration -count=1 -v
 
   container-build:
     name: Validate Compose and build Docker images
