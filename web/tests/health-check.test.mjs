@@ -85,3 +85,46 @@ test("contains synchronous setup errors from health checks", async () => {
     assert.equal(result.timedOut, false);
   });
 });
+
+
+test("aborts an in-flight health check when its owning refresh is invalidated", async () => {
+  await withWindowTimers(async () => {
+    const externalController = new AbortController();
+    let requestSignal;
+    let settled = false;
+    const pending = runHealthCheck((_settings, signal) => {
+      requestSignal = signal;
+      return new Promise(() => {});
+    }, {}, 1000, externalController.signal).then((result) => {
+      settled = true;
+      return result;
+    });
+
+    await Promise.resolve();
+    assert.equal(requestSignal.aborted, false);
+    externalController.abort();
+    const result = await pending;
+
+    assert.equal(settled, true);
+    assert.equal(requestSignal.aborted, true);
+    assert.equal(result.ok, false);
+    assert.equal(result.cancelled, true);
+    assert.equal(result.error.name, "AbortError");
+  });
+});
+
+test("does not start a health request when its owning refresh is already aborted", async () => {
+  await withWindowTimers(async () => {
+    const externalController = new AbortController();
+    externalController.abort();
+    let called = false;
+    const result = await runHealthCheck(() => {
+      called = true;
+      return { status: "ok" };
+    }, {}, 1000, externalController.signal);
+
+    assert.equal(called, false);
+    assert.equal(result.cancelled, true);
+    assert.equal(result.ok, false);
+  });
+});

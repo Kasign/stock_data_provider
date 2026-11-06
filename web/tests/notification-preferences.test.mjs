@@ -52,3 +52,18 @@ test("跨午夜免打扰区间有效，且允许关闭全部事件关注", () =>
   assert.equal(validateNotificationPreferences({ events: [], quietStart: "22:00", quietEnd: "08:00" }), "");
   assert.equal(writeNotificationPreferences({ events: [], quietStart: "22:00", quietEnd: "08:00" }, memory()).ok, true);
 });
+
+
+test("拒绝重复事件和超过支持集合上限的事件列表，损坏历史偏好不被覆盖", () => {
+  const duplicate = { ...valid, events: ["task_completed", "task_completed"] };
+  const oversized = { ...valid, events: ["task_completed", "task_failed", "risk_blocked", "system_error", "task_completed"] };
+  for (const item of [duplicate, oversized]) {
+    const storage = memory();
+    assert.equal(writeNotificationPreferences(item, storage).reason, "invalid-events");
+    const raw = JSON.stringify(item);
+    storage.setItem(NOTIFICATION_PREFERENCES_KEY, raw);
+    assert.equal(readNotificationPreferences(storage).valid, false);
+    assert.equal(writeNotificationPreferences(valid, storage).reason, "invalid-storage");
+    assert.equal(storage.getItem(NOTIFICATION_PREFERENCES_KEY), raw);
+  }
+});
