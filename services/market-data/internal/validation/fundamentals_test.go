@@ -42,3 +42,10 @@ func TestValidateFundamentalsSnapshotAcceptsValidSnapshot(t *testing.T) {
 		t.Fatalf("expected valid fundamentals snapshot, got %+v", report)
 	}
 }
+
+func TestValidateFundamentalsSnapshotReportsNilSnapshot(t *testing.T) {
+	report := ValidateFundamentalsSnapshot(nil, "600036.SH", 2026, 2)
+	if !report.HasErrors() || len(report.Issues) != 1 || report.Issues[0].Field != "snapshot" {
+		t.Fatalf("expected one nil snapshot issue, got %+v", report)
+	}
+}

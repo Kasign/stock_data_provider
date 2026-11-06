@@ -53,8 +53,7 @@ func ValidateFundamentalsSnapshot(snapshot *model.FundamentalsSnapshot, requeste
 	seen := make(map[string]bool, len(snapshot.Sections))
 	hasData := false
 	allValid := true
-	marketLocation := time.FixedZone("Asia/Shanghai", 8*60*60)
-	today := time.Now().In(marketLocation).Format("2006-01-02")
+	today := time.Now().UTC().Format("2006-01-02")
 	for index, section := range snapshot.Sections {
 		row := index
 		if !allowed[section.Category] || seen[section.Category] {
@@ -90,7 +89,7 @@ func ValidateFundamentalsSnapshot(snapshot *model.FundamentalsSnapshot, requeste
 				}
 			}
 			if section.AvailableAt != nil {
-				availableDate := section.AvailableAt.In(marketLocation).Format("2006-01-02")
+				availableDate := section.AvailableAt.In(time.UTC).Format("2006-01-02")
 				if section.AvailableAt.IsZero() || section.AvailableAt.After(time.Now().UTC()) || availableDate < section.ReportDate ||
 					(section.PublicationDate != "" && availableDate != section.PublicationDate) {
 					add("sections.available_at", "available_at", "invalid_availability_time", "non-future timestamp consistent with report/publication date", "fundamentals availability timestamp is invalid or conflicts with publication date", SeverityError, row)
