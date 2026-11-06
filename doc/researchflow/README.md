@@ -13,7 +13,7 @@ Researchflow 是研究应用编排层，通过 Data、News、Quant、Research、
 
 Application Port 与运行时契约补充：[04-ApplicationPort与运行时契约落地补充](04-ApplicationPort与运行时契约落地补充.md)。
 
-当前代码：`domain`（Run/Stage/Attempt 契约）、`template`（模板/DAG）、`state`（状态机/重试/归并）。当前不包含 HTTP、Repository、Migration、Worker 或跨模块 Adapter。
+当前代码：`domain`（Run/Stage/Attempt 领域模型）、`publicdto`（独立公开 DTO）、`parameterschema`（不可变参数 Schema 校验）、`template`（模板/DAG）、`state`（状态机/重试/归并）。公开 DTO Schema 与 Golden 位于 `doc/researchflow/schema/`、`doc/researchflow/golden/`。当前不包含 HTTP、Repository、Migration、Worker 或跨模块 Adapter。
 
 目标结构：
 ```text
