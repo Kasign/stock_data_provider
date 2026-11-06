@@ -90,17 +90,27 @@ ResearchEvent 是跨来源现实事件，不是 News Article 别名。创建、�
 
 Fixture/Fake Adapter 只能证明 Research 自身模型和消费边界；真实 Data/News 授权、PIT 和分页能力须分别取得生产方证据后才能升级 A2。
 
-## 8. 跨模块契约待决项（不得在模块内自行解释）
+## 8. 跨模块边界决议与待决项
 
-### RSC-OPEN-001：Research 对 Quant 结果的消费路径
+### RSC-DEC-001：Quant 来源引用不等于 Research 直接依赖 Quant
 
-当前项目材料存在一处需要总规划明确的边界差异：
+项目级 Quant-Research DTO 将 Evidence.source_owner 允许值定义为 data/news/quant/research，Scenario 也允许保存 quant_evaluation_ref；但同一 DTO 文档第 4 节明确 Research → Quant 不允许，Researchflow 是唯一跨模块组合者。模块边界按以下方式统一解释：
 
-- Quant-Research 公开 DTO 将 Evidence.source_owner 定义为 data/news/quant/research，并允许 Research Evidence 引用 Quant result。
-- GOV-CTR-006 为 Quant 定义了由 Quant 签发的 AuthorizationRef，resource_ref 指向 Quant result_id。
-- 但项目级依赖 DAG 明确 Research 不直接依赖 Quant；Research 允许的直接生产方列表未包含 Quant。
+- Research 不新增 Quant Application Port，不直接调用 Quant，不访问 Quant Repository/Domain。
+- Quant 结果如需进入 Research，由 Researchflow 通过公开 Quant Port 获取并完成调用主体、资源归属和当前 AuthorizationRef 复核，再把已授权的强类型 DTO 或不透明引用传入 Research。
+- Research 保存 source_owner=quant 时，保留 Quant result_ref/source_version/authorization_ref；不得把历史 allowed 当作持续读取许可，也不得自行解引用 Quant 资源。
+- 未收到可验证的授权结果 DTO 时，只能保存不透明引用和来源元数据，不得复制或重解释 Quant 结果内容。
+- Scenario.quant_evaluation_ref 是结果引用，不表示 Research 可以直接请求 Quant。
 
-在项目决议明确前，Research 不新增 Quant Application Port，不直接调用 Quant 或自行复核 Quant 授权。若上游流程传入 Quant 结果引用，Research 只能按不透明 source_ref 保存引用及其来源授权元数据，不得自行解引用、复制结果内容或将其重解释为 Research 计算结果。需要读取 Quant 受控内容时，必须由项目总规划明确调用路径、可信主体、当前授权复核责任和 DTO 传递边界。
+因此，该项是边界解释，不再作为 Research → Quant 直接调用的开放阻断；Quant 内容读取仍由 Researchflow 调用 Quant Owner 负责。
 
-该问题只阻断 Research 对 Quant 结果的直接读取/内容派生；不阻断 Context、Data/News Evidence、Event、Claim/Hypothesis 的独立开发。
+### RSC-OPEN-002：ResearchEvent.changed_at 与 INT-CTR-001 时间映射缺字段
 
+项目级 ResearchEvent DTO（Quant-Research 公开 DTO 字段级契约第 3.3 节）包含 occurred_at、published_at、available_at、system_observed_at、system_as_of，但没有 changed_at。与此同时，INT-CTR-001 的 research.event.lifecycle_changed Payload 要求 changed_at，且 Envelope.occurred_at 映射为 ResearchEvent.changed_at。
+
+这是生产 DTO 与通知事件映射的真实字段缺口，不能擅自把 occurred_at 或 system_observed_at 当作 changed_at：
+- 需要项目级决策：在 ResearchEvent 公开 DTO 增加明确的状态迁移提交时间 changed_at，或在 INT-CTR-001 中明确由 Research Outbox 生成并持久化的 transition_committed_at 作为事件时间。
+- 该时间必须在状态迁移事务中固定；Outbox 重试不得刷新；同一 event_version 的时间不得变化。
+- 决议完成前，Research 可以继续实现 Event 版本和状态迁移，但不得伪造 lifecycle_changed 的 changed_at/occurred_at，也不得将该事件生产接入标记为通过。
+
+该问题只阻断 ResearchEvent lifecycle_changed 的通知生产映射，不阻断 Research Event Domain、版本追加和状态机独立测试。
