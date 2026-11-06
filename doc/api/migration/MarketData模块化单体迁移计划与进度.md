@@ -491,3 +491,37 @@ internal/platform/httpclient.Client 使用 DestinationPolicy 精确 Host/Port al
 仍未完成：逐 Provider 请求语义完整矩阵（含所有 endpoint override、重定向目标、超时、重试、响应大小）；完整 HTTP DTO/OpenAPI 字段级校验；Root/Data Migration 的 schema owner 和真实部署库版本治理；配置、测试、fixtures、生成文件逐项迁移清单；当前最新 HEAD 的全部 CI 完成复核。
 
 **M0 状态继续保持 in_progress。** 本轮未改业务实现、Provider 算法、数据库结构或历史数据；尚不满足 M1 准入。
+
+### 2026-11-06：M0 第七轮补充（CI 收敛与 Provider 源文件覆盖）
+
+#### 1. Provider 源文件盘点覆盖
+
+已对 services/market-data/internal/provider/ 下 30 个非测试 Go 源文件进行首轮逐文件扫描，覆盖 Eastmoney（含公告、资金流、龙虎榜、板块扩展）、Tencent（含搜索）、Sina、NetEase、Tushare（含复权因子、能力、公司行动、资金流、交易状态）、TickFlow、Hithink、MiaoXiang、Xueqiu、Yahoo、BaoStock、Pytdx，以及 Provider 聚合/诊断/跨源比较代码。
+
+协议类别已确认：HTTP Provider 涵盖 GET 与 POST；Tushare、MiaoXiang、TickFlow 有 POST 请求；Eastmoney 混用 GET/POST；Sina/NetEase/Yahoo 对重定向有显式策略；Xueqiu 使用 Cookie；Hithink 使用 X-api-key；TickFlow 使用授权与免费 API 分离；BaoStock/Pytdx 是 TCP，不能接入 HTTP DestinationPolicy。
+
+该扫描确认了主要 Host 与协议类型，但尚未将每个调用点的 query/body、headers、超时、retry/backoff、redirect target、response size、Endpoint override 逐条形成表格。因此本轮只视为 Provider 源文件覆盖完成，不代表 HTTP Client 迁移适配设计已完成。M4 前仍需完成请求级矩阵。
+
+#### 2. 最新可用 CI 证据
+
+- dd36d129（修复 WebUI 契约文档路径）对应 WebUI checks：success；Platform Go checks：success；Live Provider probe workflow：success。
+- 同一提交的 Go test suite：Root Test . success；Market-data MariaDB migration/PIT persistence success；go-core tests success；services/market-data 测试 Job 后续 cancelled；Compose/Docker Job 仍 in_progress 后被新提交触发的并发策略中断，未获得完整 Go suite 结论。
+- 同一提交的 Go-Python parity Job 后续 cancelled，不能视为成功或失败。
+- 同一提交的 WebUI browser smoke 失败：320px viewport 检查在 Run Flow 弹窗测试期间记录到 12 次 GET / 的 net::ERR_ABORTED，被 browser-smoke.mjs:2062 判定为 unexpected non-API network failures。该失败发生在 WebUI unit checks 已通过之后，暂未证明与 API 文档目录移动有关；需要独立分析浏览器导航/重载与测试监听器，不在本轮无证据地放宽断言。
+- f19b556 是仅文档更新的 HEAD；上述 CI 证据来自最近一次含代码变更的 dd36d129，不能冒充 f19b556 的 checks。
+
+#### 3. 目录结构引用复核
+
+- 已修复 web/tests/ui-contract.test.mjs 对旧 OpenAPI 路径的引用，当前改为 doc/api/contracts/分析任务.openapi.yaml。
+- 已修复 data-quality-parity workflow 的旧 doc/api/接口规范/路径，改为 doc/api/provider-migration/。
+- GitHub Code Search 对上述两个旧路径字符串未返回残留命中；本次不据此宣称所有 Markdown 相对链接全部有效，文档内部链接仍需完整巡检。
+
+#### 4. M0 结论
+
+本轮完成 Provider 非测试源文件首轮覆盖、Data Migration DDL 与运行时升级行为对账、Analysis DTO 映射损失记录，以及文档移动导致的 WebUI 单测失败修复。仍有三项实质性准入工作未完成：
+
+1. 完成逐 Provider 请求调用点级矩阵与可配置 Endpoint 的最终 Host 约束；
+2. 完成 OpenAPI/HTTP DTO 的字段级契约差异核验，以及 Data→Analysis 字段保留/降级清单；
+3. 明确 Data/Analysis Migration 的版本治理和共享数据库真实部署配置，并获得最新完整 Go test、Parity、Compose/Docker 验收结果；另需定位 WebUI browser smoke 的 320px ERR_ABORTED。
+
+**M0 状态：in_progress。** 当前不开始 M1。先关闭上述准入项，避免 Module 归并后才发现 Provider 请求行为、PIT 元数据或数据库升级路径不兼容。
