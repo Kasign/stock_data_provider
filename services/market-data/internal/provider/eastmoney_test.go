@@ -1175,7 +1175,6 @@ func TestEastmoneyFetchSectorRankingsMarksMissingTotalAndExcludedRows(t *testing
 	}
 }
 
-
 func TestEastmoneyDailyBarsReportsFieldAndRowParseIssue(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprint(w, `{"rc":0,"data":{"code":"600519","name":"贵州茅台","klines":["2026-10-20,1321.01,not-a-close,1335.00,1316.14,34136,4525398959,1.42,0.81,10.87,0.23"]}}`)
