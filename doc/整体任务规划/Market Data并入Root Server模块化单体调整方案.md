@@ -88,13 +88,13 @@ docker-compose
 | `web/default.conf.template` | `/market-api/` 代理 Data:8091，`/analysis-api/` 代理 Server:8092 | 两个 API 前缀改为同一 Root Server 上游，保留 URL 兼容 |
 | `doc/整体任务规划/跨模块契约目录与冻结状态.md` | Server 是唯一组合根；News 已明确采用根 Module 同进程 Application Port | Data 应统一遵循该部署原则；逻辑依赖 DAG 不因同进程而放宽 |
 
-### 2.2 M0 初步审计结果（只读核对）
+### 2.1 M0 初步审计结果（只读核对）
 
 本轮继续核对了 Root Server、Data、WebUI 与旧迁移部署文件，得到以下已确认事实：
 
 | 检查项 | 代码证据 | 结论 |
 |---|---|---|
-| Root Server 数据库资源 | `internal/adapters/storage/mysqlredis/store.go` 的 `Open` 创建并 Ping `*sql.DB`，Store 暴露 `DB`；当 `DBAutoMigrate=true` 时执行 Analysis 表迁移 | Data Repository 可接收同一个 `*sql.DB`，但必须明确借用资源，不得在 Data Close 时关闭共享连接池 |
+| Root Server 数据库资源 | `internal/adapters/storage/mysqlredis/store.go` 的 `Open` 创建并 Ping `*sql.DB`，Store 暴露 `DB`；`DBAutoMigrate=true` 时在 Open 内部执行 Analysis Migration，随后执行 CheckSchema | Data Repository 可接收同一个 `*sql.DB`，但必须明确借用资源；Root Migration 也要从 Open 副作用中拆出，由 Server Bootstrap 显式编排，不能在连接创建时隐式执行 |
 | Data 数据库资源 | `services/market-data/internal/repository/mysql.go` 的 `OpenMySQL` 自行 `sql.Open`，连接池默认 MaxOpen=10/MaxIdle=3/ConnMaxLifetime=5m；Data main 根据 `MARKET_DATA_DB_AUTO_MIGRATE` 执行 Data Migration | 当前确实存在两套 DB Pool 和两个 Migration 入口；合并时要保留 Data Migration 内容，但由 Server 统一执行 |
 | Root Redis | Root Store 使用 `github.com/redis/go-redis/v9` 创建有连接池的 Client，并由 Store.Close 关闭 | 可作为统一 Redis 资源的基础 |
 | Data Redis | `services/market-data/internal/cache/redis.go` 是自定义 RESP Client，每次命令重新 Dial、AUTH/SELECT、执行命令后关闭连接 | 不应原样保留为同进程默认实现；建议提供基于共享 go-redis Client 的 Data Cache Adapter，按 Data key namespace/TTL 规则隔离 |
@@ -113,7 +113,7 @@ docker-compose
 5. Data HTTP Handler 拆分 Application 路由与 transport middleware，Root Server 负责入口认证、可信 Context、Request ID 和统一错误映射。
 6. 旧 `go-migration` profile 暂时保留为历史回滚/迁移材料，待确认不再使用后另行删除，不把它混入本次 Data 同进程改造。
 
-### 2.1 当前最重要的技术风险
+### 2.2 当前最重要的技术风险
 
 - **Go Module 版本：** 根模块 Go 1.22，Data 模块 Go 1.23.0。建议统一到 Go 1.23.x（以 Data 依赖与 CI 实际兼容结果为准），并同步 Docker Builder、CI、开发环境说明；不要为了维持旧版本而降级 Data 依赖。
 - **构造函数耦合：** Data 目前的大量 Provider capability 装配集中在独立 main 中。必须抽成可测试的 `marketdata.Module` 或等价 Bootstrap API，返回 Application Port、HTTP Handler、Diagnostics 和 Close 生命周期句柄。
@@ -276,7 +276,7 @@ Market Data Application
 - MariaDB 仍是事实源；本方案不更换数据库、不迁移历史数据、不改变表结构。
 - Server Bootstrap 创建共享 SQL 连接池，Data Repository 接收借用的 `*sql.DB` handle；Data 仍拥有所有 Data SQL、Repository 和 Migration 内容。Data Store 必须区分 borrowed/owned 资源，只有独立部署兼容入口可以关闭自有 DB Pool。
 - 各模块使用独立 Migration namespace/version；Server 统一按明确顺序调用各模块 Migration Runner。
-- Migration 只能由组合根执行一次；禁止 Server Store 和 Data Store 各自自动执行同一批迁移。当前两侧均有独立自动迁移入口，合并前必须关闭 Data 自动迁移默认值并迁到统一 Migration Registry。
+- Migration 只能由组合根执行一次；禁止 Server Store 和 Data Store 各自自动执行迁移。当前 Root Store.Open 会自动执行 Analysis Migration/CheckSchema，Data main 也会按配置执行 Data Migration；合并前必须把两侧 Migration 都改为显式注册，由 Server Bootstrap 按 namespace 顺序执行，随后分别 CheckSchema。
 - Migration 失败必须阻止 readiness/启动完成；不能继续接受请求并把缺表问题留到首次调用。
 - 连接池的 MaxOpen/MaxIdle/ConnMaxLifetime 应按总负载统一配置，模块不能各自重复创建池或覆盖全局参数。
 - 需要验证 MariaDB Driver 版本、时区、ParseTime、字符集、连接参数和现有表兼容。
@@ -451,15 +451,15 @@ Owner：Server + Data + Platform
 
 | 工作 | 估算 | 说明 |
 |---|---:|---|
-| M0 依赖/调用/迁移审计 | 1～2 人日 | 明确隐藏入口、配置和生命周期 |
+| M0 依赖/调用/迁移审计 | 1～2 人日 | 已完成初步只读核对；仍需逐 Provider/路由/迁移全量盘点 |
 | M1 Go Module 归并与依赖统一 | 1～2 人日 | import 路径、Go 版本、CI、Docker |
-| M2 Data Bootstrap / Port 提取 | 2～3 人日 | Provider 装配较大，需抽离 main |
-| M3 Server 同进程装配与资源复用 | 2～3 人日 | Data Application 注入、DB/Redis/Migration/Worker |
+| M2 Data Bootstrap / Port 提取 | 2～3 人日 | Provider 装配、Config 双模式、HTTP middleware 拆分 |
+| M3 Server 同进程装配与资源复用 | 2～3 人日 | Data Application 注入、双侧 Migration 显式编排、共享 DB/Redis、Worker |
 | M4 WebUI/Nginx/Compose 迁移 | 1～2 人日 | Key 清理、API 路由与部署 |
 | M5 回归与部署验收 | 1～2 人日 | 行为一致性、安全、PIT、生命周期 |
-| **合计** | **8～14 人日** | 不是承诺工期；不包含无关领域重构和新增业务功能 |
+| **合计** | **9～15 人日** | 不是承诺工期；包含 DB/Redis Adapter 与生命周期调整，不包含无关领域重构和新增业务功能 |
 
-相比此前 6.5～12 人日估算，本次核对发现 Data Bootstrap 的 Provider capability 装配集中在独立 main，且数据库/Redis 生命周期需要合并治理，因此将估算上调至 8～14 人日。
+相比此前 6.5～12 人日估算，本次核对进一步确认 Root 与 Data 各自创建 DB Pool、分别拥有 Migration 入口，Data Redis 还使用每条命令新建连接的自定义 RESP Client；因此将估算调整为 9～15 人日。
 
 ### 10.2 长期收益
 
