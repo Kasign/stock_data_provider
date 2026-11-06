@@ -879,6 +879,8 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outlin
 :root[data-theme="light"] .chart-foot, :root[data-theme="light"] .table-footer,
 :root[data-theme="light"] .page-footer, :root[data-theme="light"] .field-hint,
 :root[data-theme="light"] .dialog-intro, :root[data-theme="light"] .storage-boundary p { color: var(--text-dim); }
+:root[data-theme="light"] .metric-primary .metric-foot.positive { color: var(--positive); }
+:root[data-theme="light"] .metric-primary .metric-foot.negative { color: var(--negative); }
 :root[data-theme="light"] .metric-card, :root[data-theme="light"] .signal-result-card,
 :root[data-theme="light"] .task-result-metric, :root[data-theme="light"] .analysis-result-block,
 :root[data-theme="light"] .analysis-result-card, :root[data-theme="light"] .recent-analysis-item,
