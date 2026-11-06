@@ -1376,7 +1376,7 @@ paths:
         timeout_seconds 为单项 Provider 请求超时，范围 1 到 30 秒，默认 12 秒。
         daily_bar_adjustments 仅用于 daily_bars，支持 none、forward_adjusted、backward_adjusted；省略时仅探测 none，每种口径独立生成结果。
         daily_bar_start_date 与 daily_bar_end_date 必须同时提供，仅用于 daily_bars 的显式历史窗口；首尾包含，按 Asia/Shanghai 交易日解释，最多 31 个自然日，结束日期不能晚于今日。省略时保持原有近期 5 条探测行为。
-        探测与业务熔断统计隔离，并发上限为 4；敏感错误信息会脱敏。请求体最多 8 KiB，必须恰好包含一个 JSON 对象；未知字段拒绝。
+        探测与业务熔断统计隔离，并发上限为 4；敏感错误信息会脱敏。非空请求体最多 8 KiB，且必须恰好包含一个 JSON 对象；未知字段拒绝。
       requestBody:
         required: false
         content:

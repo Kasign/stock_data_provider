@@ -641,12 +641,12 @@ func TestOpenAPIDocumentsHandlerParameterBounds(t *testing.T) {
 		method  string
 		phrases []string
 	}{
-		{"/api/v1/market/indices/{symbol}/daily", "get", []string{"10 years / 3660 calendar days"}},
+		{"/api/v1/market/indices/{symbol}/daily", "get", []string{"10 年 / 3660 个自然日"}},
 		{"/api/v1/market/trading-calendar", "get", []string{"3660 calendar days"}},
 		{"/api/v1/market/sentiment/history", "get", []string{"366 calendar days", "1..500", "default of 366"}},
 		{"/api/v1/stocks/{symbol}/fundamentals", "get", []string{"2007 through the current calendar year", "single non-future RFC3339 timestamp"}},
 		{"/api/v1/market/session", "get", []string{"single RFC3339 timestamp"}},
-		{"/api/v1/data-sources/probe", "post", []string{"8 KiB", "exactly one JSON object", "unknown fields"}},
+		{"/api/v1/data-sources/probe", "post", []string{"8 KiB", "恰好包含一个 JSON 对象", "未知字段拒绝"}},
 	}
 	for _, check := range checks {
 		pathItem, ok := paths[check.path].(map[string]any)
