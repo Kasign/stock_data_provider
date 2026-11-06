@@ -2,7 +2,7 @@
 
 - 归属：NTF-001/004/005/006
 - 对应契约：NTF-CTR-001～003（历史别名 Platform CONTRACT-009/010）；状态以项目级契约目录为准
-- 状态：4 份 Draft 2020-12 Schema 与 6 个代表性 Golden 已校准；Go Draft 2020-12 Envelope/Payload Validator、Golden、非法 Payload、Inbox Fake 幂等/并发、Subscription 与 DeliveryPlan Repository Port/Fake 测试已写入；新增严格 JSON、资源上限边界、DeliveryPlan 写入前双重校验、Subscription Repository append-only/CAS 并发及 Inbox/Subscription/DeliveryPlan 失败注入恢复测试；NTF-002 增加 Template Registry/Renderer 测试（新代码待 CI）；完整 CI Run 42201893234 已通过，覆盖 gofmt/go test/race/vet、go-core、market-data、MariaDB 集成和 Docker build；NTF-CTR-001～003 仍为 pending_evidence；不要求个人 Owner 签字
+- 状态：4 份 Draft 2020-12 Schema 与 6 个代表性 Golden 已校准；Go Draft 2020-12 Envelope/Payload Validator、Golden、非法 Payload、Inbox Fake 幂等/并发、Subscription 与 DeliveryPlan Repository Port/Fake 测试已写入；新增严格 JSON、资源上限边界、DeliveryPlan 写入前双重校验、Subscription Repository append-only/CAS 并发及 Inbox/Subscription/DeliveryPlan 失败注入恢复测试；NTF-002 增加 Template Registry/Renderer 测试及 Subject C0/DEL/C1 控制字符回归（根模块 Test job 被跨模块 Research 源码错误阻断）；NTF-003 增加 Channel Domain/Port/内存 Registry/Fake Adapter 测试（同一 CI 阻断）；完整 CI Run 42201893234 已通过，覆盖 gofmt/go test/race/vet、go-core、market-data、MariaDB 集成和 Docker build；NTF-CTR-001～003 仍为 pending_evidence；不要求个人 Owner 签字
 - 日期：2026-11-06
 - 说明：以下均为合成数据与测试场景，不代表已有实现或真实渠道能力。
 
@@ -97,6 +97,11 @@
 ## 7. Channel Adapter Fixture
 
 Fake Adapter 至少覆盖：
+- ChannelConfigSnapshot 能力状态必须显式为 unknown/supported/unsupported，max_payload_bytes 必须为正数；重复或非法 retryable_error_code 拒绝；
+- ChannelResolver 只能解析精确 channel_ref + config_version，不得回退 latest；相同版本重复注册拒绝；
+- RecipientTarget 只允许 opaque ref，且必须绑定 channel_ref/config_version；URL/地址形态拒绝；
+- supports_idempotency 未验证/不支持时禁止发送 idempotency_key；支持时必须发送稳定 delivery_idempotency_key；
+- supports_retry_after 未验证时拒绝采信 Retry-After；Retry-After 仅适用于明确 rejected；
 - accepted + provider_message_ref；
 - 明确 retryable rejection + Retry-After；
 - 永久拒绝（无效目标/权限）；
@@ -105,9 +110,10 @@ Fake Adapter 至少覆盖：
 - 支持稳定 provider idempotency key；
 - 不支持 idempotency key；
 - 返回畸形响应/超大响应；
-- Secret 不存在、撤销或轮换。
+- Secret 不存在、撤销或轮换；仅在具体 Adapter 内显式读取 Platform config.Secret，日志/序列化不得泄露明文；
+- 最终序列化请求体超过 max_payload_bytes 时，在发起网络请求前拒绝。
 
-Fake Adapter 只能验证分类和状态机，不证明真实渠道行为。每个真实 Channel 的支持能力需要独立证据记录。
+Fake Adapter 只能验证分类和状态机，不证明真实渠道行为。RecipientTarget 的领域测试只证明不透明引用与版本绑定，不证明真实身份目录授权。每个真实 Channel 的支持能力需要独立证据记录。
 
 ## 8. 统一断言矩阵
 
