@@ -192,7 +192,7 @@ func ValidateNewsAuthorizationBinding(binding NewsAuthorizationBinding) error {
 }
 
 type AuthorizationUseDecision struct {
-	Allowed bool
+	Allowed    bool
 	ReasonCode string
 }
 
