@@ -238,3 +238,23 @@ func TestWorkerClaimIsSeparateFromRetryPromotion(t *testing.T) {
 		t.Fatalf("claim at deadline must be rejected, got %v", err)
 	}
 }
+
+
+func TestScheduleRetryDoesNotMutateCallerReasonCodeBackingArray(t *testing.T) {
+	now := time.Date(2026, 11, 6, 10, 0, 0, 0, time.UTC)
+	reasons := make([]string, 1, 3)
+	reasons[0] = "previous_reason"
+	stage := domain.Stage{Ref: "stage-1", Status: domain.StageRunning, AttemptNo: 1, ReasonCodes: reasons}
+	attempt := domain.Attempt{Ref: "attempt-1", StageRef: stage.Ref, Number: 1, Status: domain.AttemptRunning}
+	updated, _, err := ScheduleRetry(stage, attempt, template.RetryPolicy{
+		MaxAttempts: 2, RetryableReasonCodes: []string{"provider_unavailable"},
+		Backoff: template.BackoffPolicy{Algorithm: "exponential_full_jitter_v1", BaseDelayMS: 100, MaxDelayMS: 1000},
+	}, "provider_unavailable", domain.AttemptFailed, now, now.Add(time.Minute), 0.5)
+	if err != nil { t.Fatal(err) }
+	if got := reasons[:2]; got[1] != "" {
+		t.Fatalf("ScheduleRetry mutated caller-owned backing array: %#v", got)
+	}
+	if len(updated.ReasonCodes) != 2 || updated.ReasonCodes[1] != "provider_unavailable" {
+		t.Fatalf("updated reason codes missing retry reason: %#v", updated.ReasonCodes)
+	}
+}

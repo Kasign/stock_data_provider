@@ -147,7 +147,9 @@ func ScheduleRetry(stage domain.Stage,attempt domain.Attempt,policy template.Ret
 	retryAt:=now.UTC().Add(time.Duration(jitter*capMS*float64(time.Millisecond)))
 	if !retryAt.Before(runDeadline.UTC()){return stage,attempt,ErrDeadlineExceeded}
 	updated,err:=TransitionStage(stage,domain.StageRetryWait,now);if err!=nil{return stage,attempt,err}
-	updated.RetryAt=&retryAt;updated.ReasonCodes=append(updated.ReasonCodes,reasonCode)
+	updated.RetryAt=&retryAt
+	updated.ReasonCodes=append([]string(nil), stage.ReasonCodes...)
+	updated.ReasonCodes=append(updated.ReasonCodes,reasonCode)
 	return updated,terminal,nil
 }
 
@@ -179,7 +181,7 @@ func ClaimReadyStage(run domain.Run, stage domain.Stage, now time.Time, attemptR
 	if !now.UTC().Before(run.DeadlineAt.UTC()) {
 		return stage, domain.Attempt{}, ErrDeadlineExceeded
 	}
-	if stage.Status != domain.StageReady || strings.TrimSpace(attemptRef) == "" {
+	if stage.Status != domain.StageReady || strings.TrimSpace(stage.Ref) == "" || stage.AttemptNo < 0 || strings.TrimSpace(attemptRef) == "" {
 		return stage, domain.Attempt{}, fmt.Errorf("%w: stage is not claimable", ErrInvalidTransition)
 	}
 	updated, err := TransitionStage(stage, domain.StageRunning, now)
