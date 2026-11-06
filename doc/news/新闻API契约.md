@@ -181,3 +181,12 @@ News 为 News 来源内容签发 AuthorizationRef。公开或无限制内容也�
 - `doc/news/schema/NEWS-CTR-001-*.schema.json` 与 `doc/news/golden/NEWS-CTR-001-*.golden.json`。
 
 当前仅完成 DTO、请求边界校验、Schema 和 Golden；未实现 Facade、PIT Repository、授权快照当前复核、HMAC Cursor、固定 Snapshot，也没有对外 HTTP 路由。禁止将本阶段描述为 NEWS-CTR-001 已验收。
+
+
+### 11.6 Cursor HMAC Claims
+
+Cursor 外部格式为 `base64url(payload).base64url(signature)`，签名为 HMAC-SHA256。Claims JSON Schema 位于 `schema/NEWS-CTR-001-cursor-claims-1.0.0.schema.json`。
+
+News Application 已实现 `EvidenceCursorCodec`：签发与验证均绑定 caller_ref、purpose_code、requested_content_level、规范化 filters 指纹、page_size、system_as_of、snapshot_ref、`news-evidence-v1` 排序版本和最后一条排序键；TTL 固定 15 分钟。密钥由 Platform `config.Secret` 注入，轮换期间必须同时保留 active 与尚未过期 Cursor 使用的 previous keys。
+
+Cursor Codec 不保存分页结果快照。Snapshot Store 缺失、过期或不可用时仍必须明确失败，不得重新创建快照或退回 OFFSET。
