@@ -256,7 +256,7 @@ export function renderTaskResultView({ document, result, runStatusLabel, fallbac
   const failure = result.failure;
   if (failure) {
     const failureGrid = createResultSection(document, root, "运行失败信息");
-    appendResultCard(document, failureGrid, failure.message || "分析失败", resultPairs(failure, [
+    appendResultCard(document, failureGrid, "失败详情", resultPairs(failure, [
       ["错误代码", "code"], ["失败阶段", "stage"], ["消息", "message"]
     ]), failure.code || "Failure", "is-blocked");
   }

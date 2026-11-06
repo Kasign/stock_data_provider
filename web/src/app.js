@@ -3082,11 +3082,17 @@ function renderTask(task) {
   setText("#task-created", formatDateTime(task.created_at));
   setText("#task-started", formatDateTime(task.started_at));
   setText("#task-finished", formatDateTime(task.finished_at));
-  const failureCode = task.failure_code || "";
-  const message = task.error_message || "";
-  const diagnostics = [message, failureCode ? "错误代码：" + failureCode : ""].filter(Boolean).join(" · ");
-  $("#task-error").hidden = !diagnostics;
-  $("#task-error").textContent = diagnostics;
+  const failureCode = state.taskFailureCode;
+  const message = state.taskErrorMessage;
+  const errorRoot = $("#task-error");
+  errorRoot.hidden = !message && !failureCode;
+  $("#task-error-title").textContent = task.status === "failed" ? "任务执行失败" : "任务异常信息";
+  const errorMessage = $("#task-error-message");
+  errorMessage.hidden = !message;
+  errorMessage.textContent = message;
+  const errorCode = $("#task-error-code");
+  errorCode.hidden = !failureCode;
+  errorCode.textContent = failureCode ? "错误代码：" + failureCode : "";
   $("#task-poll-label").textContent = TERMINAL_TASK_STATUSES.has(task.status)
     ? "任务已结束"
     : state.taskEventsUnavailable

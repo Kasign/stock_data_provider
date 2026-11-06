@@ -364,6 +364,9 @@ tbody tr:hover { background: rgba(79, 112, 135, .06); }
 .task-facts small { color: var(--text-dim); font-size: 9px; }
 .task-facts strong { overflow-wrap: anywhere; color: var(--text); font-size: 11px; font-weight: 600; }
 .task-error { margin-top: 11px; padding: 10px; border-radius: 7px; color: #f0a2a9; background: rgba(240, 129, 138, .07); font-size: 12px; line-height: 1.6; }
+.task-failure-banner strong { display: block; font-size: 13px; }
+.task-failure-banner p { margin: 6px 0 0; overflow-wrap: anywhere; }
+.task-failure-banner small { display: block; margin-top: 6px; color: inherit; opacity: .88; overflow-wrap: anywhere; }
 .event-heading { display: flex; align-items: baseline; gap: 9px; margin-top: 22px; padding-bottom: 10px; border-bottom: 1px solid #263440; }
 .event-heading h3 { margin: 0; color: #d6e1e9; font-size: 13px; }
 .event-heading span { color: #6e8396; font-size: 12px; }

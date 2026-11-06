@@ -87,6 +87,8 @@ test("Run result view renders all report sections and preserves server values", 
   assert.match(allText, /计划拒绝原因/);
   assert.match(allText, /执行评估/);
   assert.match(allText, /运行失败信息/);
+  assert.match(allText, /失败详情/);
+  assert.equal((allText.match(/部分结果/g) || []).length, 1, "failure message appears once in the structured failure card");
   assert.equal(document.querySelector("#task-result-warnings").hidden, false);
   assert.equal(document.querySelector("#task-result-warnings").children[0].textContent, "服务端警告");
   assert.equal(document.querySelector("#task-result-json").textContent, JSON.stringify(result, null, 2));

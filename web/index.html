@@ -524,7 +524,11 @@
                 </div>
                 </div>
                 </details>
-                <div id="task-error" class="task-error" hidden></div>
+                <div id="task-error" class="task-error task-failure-banner" role="alert" aria-live="assertive" hidden>
+                  <strong id="task-error-title">任务异常信息</strong>
+                  <p id="task-error-message" hidden></p>
+                  <small id="task-error-code" hidden></small>
+                </div>
                 <div class="run-flow-workspace">
                   <div class="run-flow-events-column">
                 <div class="event-heading"><h3>阶段事件</h3><span>选择任一事件，在右侧查看状态、时间和诊断</span></div>
