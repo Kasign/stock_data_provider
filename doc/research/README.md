@@ -3,8 +3,8 @@
 - 分支：`feat/research`
 - 代码：`internal/research/**`
 - 任务前缀：RSC
-- 当前阶段：R1 Context + R2 Evidence + R3 Event + R5 Claim/Hypothesis 领域基础；R7 Storage Port/Schema/Context-Event-Claim SQL Adapter 第一阶段
-- 当前状态：Context/Evidence/Event/Claim Domain 首批结构与校验已实现；Context 版本链、Evidence JCS/授权过期边界、Event 生命周期及 Claim 文本校验新增测试已写入但尚未执行。RSC-007 已新增四个领域 Repository Port 和 Research Migration v1/v2/v3（v2 保留 RFC3339Nano PIT 纳秒精度）；Context/Event/Claim SQL Repository Adapter 已实现首批追加与精确版本读取；MariaDB 集成测试已增加环境变量门禁，覆盖并发追加、冲突竞争、孤立版本插入失败回滚、预先取消请求及 v3 列类型断言；尚未执行，组合根注册尚未验收，Evidence SQL Adapter 受 RSC-OPEN-007 阻断。未完成仓库完整构建/CI、真实 Data/News、Owner 当前授权复核、Application、Outbox 和跨模块集成。
+- 当前阶段：R1 Context + R2 Evidence + R3 Event + R5 Claim/Hypothesis 领域基础；R7 Storage Port/Schema/Context-Event-Claim SQL Adapter 第一阶段；R8 Diagnostics 领域快照 Adapter 第一批
+- 当前状态：Context/Evidence/Event/Claim Domain 首批结构与校验已实现；Context 版本链、Evidence JCS/授权过期边界、Event 生命周期及 Claim 文本校验新增测试已写入但尚未执行。RSC-008 已新增 Context/Event/Claim 快照诊断 Adapter，复用 Platform Check/Observation/Runner，不建设 Run/Stage/Attempt；Evidence 诊断仍需来源 Owner 当前授权复核能力。RSC-007 已新增四个领域 Repository Port 和 Research Migration v1/v2/v3（v2 保留 RFC3339Nano PIT 纳秒精度）；Context/Event/Claim SQL Repository Adapter 已实现首批追加与精确版本读取；MariaDB 集成测试已增加环境变量门禁，覆盖并发追加、冲突竞争、孤立版本插入失败回滚、预先取消请求及 v3 列类型断言；尚未执行，组合根注册尚未验收，Evidence SQL Adapter 受 RSC-OPEN-007 阻断。未完成仓库完整构建/CI、真实 Data/News、Owner 当前授权复核、Application、Outbox 和跨模块集成。
 
 ## 模块职责
 
@@ -125,3 +125,12 @@ R1/R2/R3/R5 当前实现 Context、Evidence、Event、Claim/Hypothesis 领域结
 - 新增 Migration v3，将 Event/Claim 版本列升级为 `BIGINT UNSIGNED`，不修改已发布的 v1/v2 历史迁移；Context/Event/Claim 的 `ValidateNextVersion` 在递增前检查整数上限。
 - MariaDB 集成测试增加 v3 后列类型断言。原 Context Cancel 用例是在调用前取消请求，只能证明预先取消不会创建版本行/head；不代表事务执行中取消回滚。事务中取消与锁等待取消仍待独立故障注入。
 - 新增测试尚未执行，未完成真实 MariaDB 升级验收。
+
+
+## RSC-008 本轮实现：Research 领域快照诊断 Adapter
+
+- 新增 `internal/research/diagnostics`，提供 Context/Event/Claim 的 Platform Check 工厂；构造时对输入 DTO 做 JSON 深拷贝，诊断期间不受调用方后续修改影响。
+- Context 诊断将 valid/degraded/unknown/invalid 映射为 healthy/degraded/unavailable/failed；Event/Claim 仅执行各自本地结构校验，不把生命周期状态或认识论状态误作质量等级。
+- Observation 仅输出稳定错误码、安全摘要及版本/质量状态属性，不输出研究问题、Evidence 内容或底层 Validator 原始错误。
+- Evidence 诊断暂不接入：本地结构与授权快照校验不能替代来源 Owner 当前授权复核。该 Adapter 也不查询 Repository、不创建 Run/Stage/Attempt、不代表完整研究质量诊断。
+- 新增 Context 质量映射、敏感字段不外泄和快照隔离测试；尚未执行。
