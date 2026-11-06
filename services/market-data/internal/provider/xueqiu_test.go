@@ -99,7 +99,7 @@ func TestXueqiuHotRankingReportsInvalidNumericField(t *testing.T) {
 		t.Fatalf("expected one parse warning and no errors, got %+v", report)
 	}
 	issue := report.Issues[0]
-	if issue.Field != "latest_price" || issue.ProviderField != "current" || issue.Code != "invalid_number" || issue.RowIndex != 0 {
+	if issue.Field != "latest_price" || issue.ProviderField != "current" || issue.Code != "invalid_number" || issue.RowIndex == nil || *issue.RowIndex != 0 {
 		t.Fatalf("unexpected row-level numeric diagnostic: %+v", issue)
 	}
 }
@@ -129,7 +129,7 @@ func TestXueqiuHotRankingReportsInvalidRankChangeWarning(t *testing.T) {
 		t.Fatalf("expected one warning and no errors, got %+v", report)
 	}
 	issue := report.Issues[0]
-	if issue.Field != "rank_change" || issue.ProviderField != "rank_change" || issue.Code != "invalid_optional_integer" || issue.RowIndex != 0 {
+	if issue.Field != "rank_change" || issue.ProviderField != "rank_change" || issue.Code != "invalid_optional_integer" || issue.RowIndex == nil || *issue.RowIndex != 0 {
 		t.Fatalf("unexpected optional integer diagnostic: %+v", issue)
 	}
 }
