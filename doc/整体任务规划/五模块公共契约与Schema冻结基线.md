@@ -1,6 +1,6 @@
 # 五模块公开契约与 Schema 冻结基线（GOV-004）
 
-- 状态：设计基线草案，待 Review 后冻结；不代表接口或数据库已经实现。
+- 状态：历史设计基线与交叉审查记录；当前契约编号、权威路径、语义状态和阻断范围以 `跨模块契约目录与冻结状态.md` 为准。本文件不代表接口或数据库已经实现。
 - 目标落点：根 Go Module 的 `internal/{quant,research,researchflow,llm,notification}`。
 - Data 是独立 Go Module，通过 HTTP/OpenAPI；News 与其他业务模块在根 Go Module 同进程调用；Platform 是根 Go Module 内公共包。
 
@@ -42,7 +42,7 @@ Quant 输入快照最小语义：
 ```text
 MarketDataSnapshotRef {
   snapshot_id, security_id, data_kind, trade_date?, period?,
-  as_of, source, source_version?, normalization_version?,
+  system_as_of, source, source_version?, normalization_version?,
   adjustment_basis?, quality_status, quality_reasons[],
   provider_time?, fetched_at, normalized_at,
   system_observed_at?, unit_metadata, payload_ref
@@ -50,7 +50,7 @@ MarketDataSnapshotRef {
 ```
 
 - Data 标准单位、复权口径、时间字段、质量状态、来源版本、标准化版本和 fallback 元数据必须保留。
-- `as_of` 是系统信息截止时间；之后才被系统观察到的修订数据不能进入该时点回测。
+- `system_as_of` 是系统信息截止时间；之后才被系统观察到的修订数据不能进入该时点回测。
 - Data Probe、Validation、Freshness、Coverage 是 Data 的权威领域诊断；Quant 只引用结果，不复制规则。
 - 输入 degraded 可按策略继续计算，但结果必须标记降级原因；invalid 输入不得作为有效数值事实。
 - HTTP 200 不等于 valid；unknown/null 不得转换为 0。
@@ -61,12 +61,12 @@ Quant 只暴露 Application 用例，不暴露 Domain/Repository 私有类型。
 
 ```text
 QuantResultRef {
-  result_id, schema_version, security_id, as_of, analysis_period,
+  result_id, schema_version, security_id, system_as_of, analysis_period,
   algorithm_version, strategy_version?, input_snapshot_refs[],
   quality_status, result_status, created_at
 }
 QuantMetric {
-  metric_code, value, unit, period, as_of,
+  metric_code, value, unit, period, system_as_of,
   quality_status, metric_status, sample_count?,
   lower_bound, upper_bound, calculation_version
 }
@@ -122,7 +122,7 @@ Research Application 至少提供 Context、Evidence、ResearchEvent、Claim/Hyp
 
 ```text
 ResearchRun {
-  run_id, request_id, correlation_id, request_type, security_ids[], as_of,
+  run_id, request_id, correlation_id, request_type, security_ids[], system_as_of,
   workflow_template_id, workflow_template_version, status,
   termination_reason?, deadline_at, version, idempotency_key,
   input_snapshot_refs[], result_ref?, result_summary?, created_at, started_at?, finished_at?
@@ -362,7 +362,7 @@ Quant 首期只建立自己的 Adapter DTO，不复制整个 Data Model：
 **新增模型的 PIT 与持久化边界**
 
 - 两类 Identity/Classification Resolver 当前只按业务有效时间（ValidFrom/ValidTo）解析；记录虽含 ObservedAt，但解析函数没有 system-known-at 参数，也不会自行过滤 ObservedAt。当前测试也未覆盖知识时间截断。
-- 这不代表有效时间解析逻辑本身错误，但 Researchflow 的历史 Run 若要求“当时已知事实”，必须由 Repository/Query Facade 在装配输入前执行 `ObservedAt <= system_as_of` 的知识时间过滤，或将双时间参数显式纳入 Resolver。不能只传一个 as_of 并把它同时解释为业务有效时间和系统观察时间。
+- 这不代表有效时间解析逻辑本身错误，但 Researchflow 的历史 Run 若要求“当时已知事实”，必须由 Repository/Query Facade 在装配输入前执行 `ObservedAt <= system_as_of` 的知识时间过滤，或将双时间参数显式纳入 Resolver。不能只传一个 system_as_of 并把它同时解释为业务有效时间和系统观察时间。
 - SecurityIdentityRecord 要求 IdentityNamespace/IdentityValue，但当前 ResolveSecurityIdentity 的查询键仍是 Market + Symbol + valid time；跨代码变更的同一证券身份链路仍需通过稳定 IdentityValue 或显式映射关系维护。
 - 新增内容目前是纯 Domain 类型与解析/校验函数，没有 Repository、Migration、Application 查询 Facade 或 Data Provider Adapter。不得将其描述为已接入 Data 证券主数据或已具备持久化 PIT 查询。
 - 新增关系的 `ResolveCurrentRelations` 是当前关系状态解析，不是历史知识时点查询；Research Evidence Snapshot 仍需固定本次运行看到的关系断言和证据版本。
@@ -564,8 +564,8 @@ type ResearchEvidenceQuery interface {
 
 ### 14.1 时间
 - 时间戳统一 RFC3339 UTC；交易日仍为 Asia/Shanghai 的 YYYY-MM-DD。
-- Researchflow 的 `ResearchRun.as_of` 是一次 Run 唯一系统知识截止时间。Quant Request/Result、Research Context/Claim/Scenario 的 `as_of`，以及 Evidence/News Query 的 `system_as_of`，在该 Run 语境中表达同一截止值；所有下游沿用原值，不得自行刷新。
-- `observed_at` 永远是真实观察时间，不得回填为 as_of；`occurred_at` 是业务事件发生时间；`published_at` 是来源声明时间；`available_at` 仅在有证据时提供；`fetched_at/normalized_at` 分别表示采集/标准化时间。
+- Researchflow 的 `ResearchRun.system_as_of` 是一次 Run 唯一系统知识截止时间。Quant Request/Result、Research Context/Claim/Scenario、Evidence/News Query 均使用字段名 `system_as_of`；所有下游沿用原值，不得自行刷新。Data 现有 HTTP 查询参数 `as_of` 仅作为兼容命名，由 Adapter 显式映射。
+- `observed_at` 永远是真实观察时间，不得回填为 system_as_of；`occurred_at` 是业务事件发生时间；`published_at` 是来源声明时间；`available_at` 仅在有证据时提供；`fetched_at/normalized_at` 分别表示采集/标准化时间。
 - NotificationEvent.occurred_at 不等于接收/投递时间；Delivery/Attempt 自行记录处理时间。
 
 ### 14.2 ID 与幂等
@@ -586,4 +586,4 @@ type ResearchEvidenceQuery interface {
 - QuantMetric 的 value/bounds 类型由 metric_code Schema 固定；Evidence 必须携带 system_as_of 和 authorization_ref。授权快照不代表当前访问授权。
 - 公共 Schema 对象是摘要，模块字段级文档是完整字段权威清单；二者不一致时必须先同步文档，禁止实现方自行猜测。
 
-本轮规则为规划建议，待各模块 Owner Review，不代表正式 JSON Schema 或 Go DTO 已实现。
+本轮规则的跨模块语义以项目级契约目录为准；各模块责任角色完成字段映射和证据 Review，不要求虚构具体人员签字。本文件不代表正式 JSON Schema 或 Go DTO 已实现。
