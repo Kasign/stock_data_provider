@@ -137,7 +137,7 @@ AuthorizationRef 是不可变授权审计快照，不是访问令牌。字段如
 | policy_owner | enum | data/news/quant/research；News 内容必须为 news |
 | policy_version | string | 不可变策略版本 |
 | decision | enum | allowed/denied/conditional/unknown |
-| purpose | enum | research_analysis/risk_review/user_display |
+| purpose_code | enum | research_analysis/risk_review/user_display |
 | content_level | enum | metadata/summary/snippet/full |
 | subject_ref | string | 授权主体引用 |
 | decided_at | RFC3339Nano UTC | 决策时间 |
