@@ -11,20 +11,20 @@ import (
 type SubscriptionStatus string
 
 const (
-	SubscriptionActive SubscriptionStatus = "active"
-	SubscriptionPaused SubscriptionStatus = "paused"
+	SubscriptionActive   SubscriptionStatus = "active"
+	SubscriptionPaused   SubscriptionStatus = "paused"
 	SubscriptionDisabled SubscriptionStatus = "disabled"
 )
 
 type RecipientScope string
 
 const (
-	RecipientScopeOwner RecipientScope = "subscription_owner"
+	RecipientScopeOwner               RecipientScope = "subscription_owner"
 	RecipientScopePreconfiguredTarget RecipientScope = "preconfigured_target"
 )
 
 var (
-	ErrInvalidSubscription = errors.New("notification: invalid subscription")
+	ErrInvalidSubscription         = errors.New("notification: invalid subscription")
 	ErrSubscriptionVersionConflict = errors.New("notification: subscription version conflict")
 )
 
@@ -35,20 +35,20 @@ type FilterSchemaValidator interface {
 }
 
 type Subscription struct {
-	SubscriptionID string `json:"subscription_id"`
-	OwnerRef string `json:"owner_ref"`
-	Version int64 `json:"version"`
-	Status SubscriptionStatus `json:"status"`
-	EventType string `json:"event_type"`
-	FilterSchemaVersion string `json:"filter_schema_version"`
-	Filters json.RawMessage `json:"filters"`
-	RecipientScope RecipientScope `json:"recipient_scope"`
-	RecipientRef string `json:"recipient_ref"`
-	ChannelRef string `json:"channel_ref"`
-	TemplateID string `json:"template_id"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
-	EffectiveAt time.Time `json:"effective_at"`
+	SubscriptionID      string             `json:"subscription_id"`
+	OwnerRef            string             `json:"owner_ref"`
+	Version             int64              `json:"version"`
+	Status              SubscriptionStatus `json:"status"`
+	EventType           string             `json:"event_type"`
+	FilterSchemaVersion string             `json:"filter_schema_version"`
+	Filters             json.RawMessage    `json:"filters"`
+	RecipientScope      RecipientScope     `json:"recipient_scope"`
+	RecipientRef        string             `json:"recipient_ref"`
+	ChannelRef          string             `json:"channel_ref"`
+	TemplateID          string             `json:"template_id"`
+	CreatedAt           time.Time          `json:"created_at"`
+	UpdatedAt           time.Time          `json:"updated_at"`
+	EffectiveAt         time.Time          `json:"effective_at"`
 }
 
 func (s Subscription) Validate(filterValidator FilterSchemaValidator) error {

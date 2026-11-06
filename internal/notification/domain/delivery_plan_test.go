@@ -11,11 +11,11 @@ func validDeliveryPlan() DeliveryPlan {
 		SubscriptionID: "sub-1", SubscriptionVersion: 2,
 		ChannelRef: "channel-1", ChannelConfigVersion: 3,
 		TemplateID: "template-1", TemplateVersion: 4,
-		RecipientRef: "recipient-1",
-		PayloadFingerprint: strings.Repeat("a", 64),
+		RecipientRef:                "recipient-1",
+		PayloadFingerprint:          strings.Repeat("a", 64),
 		AuthorizationPolicyVersions: []string{"policy-b:v2", "policy-a:v1"},
-		AuthorizationRefs: []string{"authz-ref-1"},
-		DeliveryID: "delivery-1", DeliveryIdempotencyKey: "delivery-key-1",
+		AuthorizationRefs:           []string{"authz-ref-1"},
+		DeliveryID:                  "delivery-1", DeliveryIdempotencyKey: "delivery-key-1",
 	}
 }
 

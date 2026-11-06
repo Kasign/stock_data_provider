@@ -15,34 +15,34 @@ import (
 var ErrInvalidDeliveryPlan = errors.New("notification: invalid delivery plan")
 
 type DeliveryPlan struct {
-	SourceModule string `json:"source_module"`
-	EventID string `json:"event_id"`
-	SubscriptionID string `json:"subscription_id"`
-	SubscriptionVersion int64 `json:"subscription_version"`
-	ChannelRef string `json:"channel_ref"`
-	ChannelConfigVersion int64 `json:"channel_config_version"`
-	TemplateID string `json:"template_id"`
-	TemplateVersion int64 `json:"template_version"`
-	RecipientRef string `json:"recipient_ref"`
-	PayloadFingerprint string `json:"payload_fingerprint"`
+	SourceModule                string   `json:"source_module"`
+	EventID                     string   `json:"event_id"`
+	SubscriptionID              string   `json:"subscription_id"`
+	SubscriptionVersion         int64    `json:"subscription_version"`
+	ChannelRef                  string   `json:"channel_ref"`
+	ChannelConfigVersion        int64    `json:"channel_config_version"`
+	TemplateID                  string   `json:"template_id"`
+	TemplateVersion             int64    `json:"template_version"`
+	RecipientRef                string   `json:"recipient_ref"`
+	PayloadFingerprint          string   `json:"payload_fingerprint"`
 	AuthorizationPolicyVersions []string `json:"authorization_policy_versions"`
-	AuthorizationRefs []string `json:"authorization_refs,omitempty"`
-	PlanFingerprint string `json:"plan_fingerprint"`
-	DeliveryID string `json:"delivery_id"`
-	DeliveryIdempotencyKey string `json:"delivery_idempotency_key"`
+	AuthorizationRefs           []string `json:"authorization_refs,omitempty"`
+	PlanFingerprint             string   `json:"plan_fingerprint"`
+	DeliveryID                  string   `json:"delivery_id"`
+	DeliveryIdempotencyKey      string   `json:"delivery_idempotency_key"`
 }
 
 type deliveryPlanFingerprintInput struct {
-	SourceModule string `json:"source_module"`
-	EventID string `json:"event_id"`
-	SubscriptionID string `json:"subscription_id"`
-	SubscriptionVersion int64 `json:"subscription_version"`
-	ChannelRef string `json:"channel_ref"`
-	ChannelConfigVersion int64 `json:"channel_config_version"`
-	TemplateID string `json:"template_id"`
-	TemplateVersion int64 `json:"template_version"`
-	RecipientRef string `json:"recipient_ref"`
-	PayloadFingerprint string `json:"payload_fingerprint"`
+	SourceModule                string   `json:"source_module"`
+	EventID                     string   `json:"event_id"`
+	SubscriptionID              string   `json:"subscription_id"`
+	SubscriptionVersion         int64    `json:"subscription_version"`
+	ChannelRef                  string   `json:"channel_ref"`
+	ChannelConfigVersion        int64    `json:"channel_config_version"`
+	TemplateID                  string   `json:"template_id"`
+	TemplateVersion             int64    `json:"template_version"`
+	RecipientRef                string   `json:"recipient_ref"`
+	PayloadFingerprint          string   `json:"payload_fingerprint"`
 	AuthorizationPolicyVersions []string `json:"authorization_policy_versions"`
 }
 
