@@ -15,6 +15,7 @@ import (
 	"sync"
 	texttemplate "text/template"
 	"text/template/parse"
+	"unicode"
 	"unicode/utf8"
 
 	"example.com/stock-analysis-flow/internal/notification/domain"
@@ -491,7 +492,7 @@ func (w *limitedWriter) String() string {
 
 func containsControlCharacter(value string) bool {
 	for _, character := range value {
-		if character < 0x20 || character == 0x7f {
+		if unicode.IsControl(character) {
 			return true
 		}
 	}

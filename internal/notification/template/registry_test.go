@@ -232,6 +232,34 @@ func TestRegistryRejectsSubjectHeaderInjection(t *testing.T) {
 	}
 }
 
+func TestRegistryRejectsAllUnicodeControlCharactersInSubject(t *testing.T) {
+	registry := testTemplateRegistry(t, Limits{
+		MaxTemplateBytes: 1024, MaxOutputBytes: 1024, MaxPayloadDepth: 4,
+	})
+	definition := baseDefinition(FormatText)
+	definition.SubjectTemplate = "{{.subject}}"
+	definition.VariableBindings["subject"] = "/subject"
+	if _, err := registry.Register(definition); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, testCase := range []struct {
+		name    string
+		payload string
+	}{
+		{name: "C0 line feed", payload: `{"message":"hello","subject":"hello\nBcc:attacker@example.com"}`},
+		{name: "DEL", payload: `{"message":"hello","subject":"hello\u007fheader"}`},
+		{name: "C1 next line", payload: `{"message":"hello","subject":"hello\u0085header"}`},
+		{name: "C1 application separator", payload: `{"message":"hello","subject":"hello\u009fheader"}`},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			if _, err := registry.Render(context.Background(), testTemplateEvent(testCase.payload), definition.TemplateID, definition.Version); !errors.Is(err, ErrInvalidTemplateSubject) {
+				t.Fatalf("expected control character to be rejected, got %v", err)
+			}
+		})
+	}
+}
+
 func TestRegistryEnforcesTemplateSourceLimit(t *testing.T) {
 	registry := testTemplateRegistry(t, Limits{
 		MaxTemplateBytes: 16, MaxOutputBytes: 1024, MaxPayloadDepth: 4,
