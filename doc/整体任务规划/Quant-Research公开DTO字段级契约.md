@@ -264,7 +264,7 @@ Researchflow 是唯一跨模块组合者，并负责传播同一 Run 的 system_
 - [ ] 价格/金额最终采用 decimal string，还是 JSON number + 明确精度；禁止实现中混用。
 - [ ] Quant 参数对象按每个 Use Case 定义独立结构并生成 JSON Schema。
 - [ ] input_snapshot_refs 是否允许空数组，仅限纯函数场景并在用例级白名单化。
-- [ ] Evidence 的 authorization_ref 对非 News 来源采用统一授权审计引用还是来源专属安全引用。
+- [x] Evidence 所有来源统一携带 authorization_ref；各 source_owner 签发自己的授权审计快照，公开/无限制访问也用 allow 决策记录，不设置绕过授权链的 not_required 空值。
 - [ ] ContextSectionRef、OmittedSection、ScenarioCondition、RiskReason 的完整字段和枚举。
 - [ ] Event 发生时间与来源发布时间冲突时保留来源级多值表达。
 - [ ] QuantResult 采用强类型子 DTO + 共同元数据，不使用任意 payload map。
@@ -389,6 +389,42 @@ Event 允许多来源时间并存，不以单一 occurred_at 覆盖冲突来源�
 | notes | 否 | string | 时间解释/冲突说明 |
 
 Event 可保留规范化 occurred_at 作为研究归一结果，但必须同时提供 source_times[]；规范化值必须能追溯到所采用的证据与规则版本。
+
+
+### 9.7 Evidence PIT、授权与内容指纹规则
+
+Evidence 必须保留来源事实、系统观察和研究纳入时间三条独立时间线：
+
+- `published_at`：来源声明的发布时间；无来源时间证据时 null。
+- `available_at`：来源内容可被外部获取的时间；无可验证证据时为 null/unknown，不得由 published_at、fetched_at 或 system_observed_at 推导。
+- `system_observed_at`：系统首次观察该来源事实/版本的时间，必填。
+- `system_as_of`：本次研究允许使用的知识截止时间，必填，且不得早于 system_observed_at。
+- `valid_time_start/end`：业务事实有效区间；与上述知识时间独立。
+
+严格 PIT 规则：available_at 为 null/unknown 的 Evidence 不得作为“在该时点已公开可得”的事实参与严格 PIT 研究；如果调用场景只要求“系统当时已观察”，必须由 Researchflow Template 显式声明非严格 PIT 模式及其风险，不得由 Research 自动降级。
+
+所有 Evidence 必须有 `authorization_ref`。授权快照由 `source_owner` 对应的权威模块签发：Data/News/Quant/Research 各自负责其拥有内容的访问策略。公开或无限制内容也必须签发 allow 快照；禁止 null、空字符串或 not_required 绕过授权审计。该快照不是访问令牌；读取敏感内容时仍由来源 Owner 重新执行当前授权检查。
+
+`content_fingerprint` 必填，使用 RFC 8785 JSON Canonicalization Scheme 规范化受控 Evidence 内容后计算 SHA-256。指纹覆盖 source_owner、source_ref、source_version（若有）、source_locator（若有）、evidence_type、subject_refs、来源时间字段、stance 和可被当前授权引用的内容摘要；不覆盖本系统接收时间、数据库主键和可变展示字段。不得将未经授权的全文纳入 Research 指纹输入；只对当前可访问的规范化表示计算。内容变更必须生成新 Evidence 版本/指纹，不覆盖历史记录。
+
+### 9.8 ResearchContext 与 QualitySummary 约束
+
+- `context_version` 必须单调递增；已发布版本不可原地修改。重新装配、增删分区或改变证据集合必须产生新版本。
+- `section_id` 在同一 Context 内唯一；`section_refs` 与 `included_sections` 必须一一对应，`omitted_sections` 不得与 included_sections 重叠。
+- `included_sections` 和 `omitted_sections` 按 Template 定义的稳定优先级排序；同优先级按 section_id 升序，保证 fingerprint 稳定。
+- `QualitySummary` 字段固定为 status、missing_required_count、missing_optional_count、conflict_count、stale_count、reason_codes；计数字段为非负 integer，reason_codes 去重并按字典序排序。
+- 任一 required section 被 omitted，Context.status 不得为 valid；具体是否阻断 Run 由 Researchflow Template 的 Stage 传播策略决定。Research 不自行把质量状态改写为 Run/Stage 执行状态。
+- `retryable` 仅表示来源/装配操作在技术层面可能重试，不替代 Researchflow 的重试预算、deadline 和幂等策略。
+
+### 9.9 ResearchEvent / Claim / Hypothesis 版本与状态约束
+
+- ResearchEvent、Claim、Hypothesis、Scenario 均采用追加式版本；同一对象的版本号从 1 开始严格递增，版本不可覆盖或复用。
+- 修正必须声明 supersedes_version；若对象被拆分/合并，必须记录 source_refs 与 derived_from_refs，禁止删除旧对象或重写历史引用。
+- ResearchEvent 状态迁移由 Research 领域规则注册；MVP 允许 detected -> consolidating -> active -> materializing -> fading -> closed，任一非终态可转 invalidated；禁止从 closed/invalidated 回到 active，恢复必须创建新 Event 并引用旧对象。
+- Claim/Hypothesis 状态迁移：proposed -> testing -> supported/contradicted/invalidated/unknown；supported/contradicted/invalidated 为终态。新证据改变结论时创建新版本，不回写历史版本状态。
+- confidence 若存在必须在 [0,1]，同时记录 confidence_method/version；未定义方法时 confidence 必须 null，不允许把 LLM 自评分当成统计概率。
+- Research 不自行生成 Quant probability/return/risk 数值；所有数值结论必须引用 QuantResult/Metric 的 code、schema_version、algorithm_version 和输入快照。
+
 
 ## 10. 最小 JSON 示例与空值规则
 
