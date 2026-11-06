@@ -28,7 +28,7 @@ Notification 不计算告警条件、不决定研究结论、不执行模型输�
 - `payload`：必须通过该 event_type + schema_version 对应的 Schema 校验。
 - `correlation_id`：跨模块关联 ID。
 
-接收规则建议：
+接收规则：
 1. 对 payload 做规范化后计算 fingerprint，覆盖 source_module、event_type、schema_version、subject_ref、occurred_at 和 payload；使用 RFC 8785 JSON Canonicalization Scheme 的 UTF-8 结果计算 SHA-256；不把 event_id、idempotency_key、correlation_id、published_at、接收时间或传输 Header 纳入 payload fingerprint。Envelope 必须携带 payload_fingerprint；接收方重新计算并拒绝不匹配的值。
 2. Inbox 唯一约束为 `(source_module, event_id)`；发布幂等唯一约束为 `(source_module, idempotency_key)`；同一 source_module 范围内该键全局唯一，不按 event_type 分桶，生产方不得跨发布意图复用。
 3. 相同 source_module/event_id 且 fingerprint 相同：返回原接收结果，不重复 fan-out。
