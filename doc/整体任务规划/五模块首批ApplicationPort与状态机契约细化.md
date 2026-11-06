@@ -3,7 +3,7 @@
 - 所属治理任务：GOV-004
 - 规划分支：feat/design_doc
 - 日期：2026-11-05
-- 状态：接口设计草案，待对应模块 Owner Review；不得视为已冻结或已实现。
+- 状态：五模块首批接口设计基线；CONTRACT-006/007 已由项目统一决策关闭，其余契约按项目决议状态推进；不代表代码实现或自动化验收完成。
 - 适用范围：五模块第一批独立开发任务。
 
 ## 1. 设计约束
@@ -240,15 +240,15 @@ payload 不允许无约束 map 直接进入模板。事件版本升级不得静�
 | CONTRACT-003 | Factor 首批因子、母体和标准化参数 | Quant | QNT-003 |
 | CONTRACT-004 | AuthorizationRef 字段和当前撤销检查责任 | Research + News | Research Evidence、News Query |
 | CONTRACT-005 | system_as_of 在 Context/Evidence/Run 的唯一传递规则 | Research + Researchflow | 历史研究一致性 |
-| CONTRACT-006 | Stage 结果传播矩阵、Run partial/degraded 语义与硬风险门禁策略 | Researchflow | 状态机和结果归并 |
-| CONTRACT-007 | cancel/deadline/retry 竞争、cancelling 收敛、租约与 fencing 语义 | Researchflow | Run 终态一致性 |
+| CONTRACT-006 | Stage 结果传播矩阵、Run partial/degraded 语义与硬风险门禁策略 | 项目统一决策方 | closed；权威决议见 Researchflow/03 |
+| CONTRACT-007 | cancel/deadline/retry 竞争、cancelling 收敛、租约与 fencing 语义 | 项目统一决策方 | closed；权威决议见 Researchflow/03 |
 | CONTRACT-008 | LLM Gateway 真实协议调查 | LLM | ModelRequest/Response |
 | CONTRACT-009 | Notification Inbox/Delivery 幂等、recipient_scope、状态与未知结果恢复 | Notification + Platform | PublishEvent/Subscription/Delivery/Attempt |
 | CONTRACT-010 | 事件 Payload Schema 注册、不可变版本与兼容策略 | Notification + 各事件 Owner | PublishEvent/Template |
 
 ## 9. 评审和冻结要求
 
-每项 Owner 决策至少记录：
+本项目由统一决策方作出架构与契约决议，不再将不存在的独立模块 Owner 签字作为设计冻结门槛。每项决议至少记录：
 - 决策 ID 与结论；
 - Owner 和 Review 日期；
 - DTO/Schema 版本；
@@ -259,4 +259,4 @@ payload 不允许无约束 map 直接进入模板。事件版本升级不得静�
 
 Owner 未确认的字段不得标为冻结。可以先冻结没有争议的 DTO 子集，并将未决字段隔离在独立能力/Adapter 中。
 
-**当前结论：本文件把首批 Application Port 与状态机细化到可评审粒度；仍待 Owner Review，不代表接口实现或契约冻结。**
+**当前结论：本文件定义首批 Application Port 的规划基线。CONTRACT-006/007 设计决策已关闭；其余契约须按项目决议逐项关闭。任何设计决议关闭均不代表 Go DTO、JSON Schema、Golden、自动化测试或 L2 Module Ready 已通过。**
