@@ -3,7 +3,7 @@
 - 目标分支：`feat/notification`
 - 代码目录：`internal/notification/**`
 - 任务前缀：NTF
-- 当前阶段：阶段 0（文档/契约校准）；NTF-001 尚未开始实现。
+- 当前阶段：阶段 0 已完成；下一阶段为 NTF-001 核心领域实现准备。NTF-001 尚未开始实现。
 - 当前代码事实：HEAD 尚无 `internal/notification/**`；现存 `python_bridge/capabilities/notification.py` 是旧通知调用适配，`web/src/notification-preferences.js` 和 `notification-state.js` 是 Web 本地偏好/展示状态，不属于 Go Notification Domain。
 - 契约证据：NTF-CTR-001～003 均为 `pending_evidence`。4 份 Schema、6 个 Golden 已提交，既有本地校验记录不等于模块 CI 证据；三生产方映射、重放/冲突、并发/恢复、真实 DB/渠道证据仍按各层级分别验收。
 
