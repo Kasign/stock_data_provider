@@ -3,7 +3,7 @@
 - 分支：`feat/quant`
 - 代码：`internal/quant/**`
 - 任务前缀：QNT
-- 当前状态：Q0-001～003 盘点/设计工作已完成；QNT-001 CalculationContext 与 Quant Registry 基础能力已提交，Registry 已增加数值精度/JSON 边界校验；QNT-002 八种 Indicator 计算函数、QNT-003 三种时间序列 Factor 函数及固定样本测试已提交。Indicator/Factor 已提交 11 份 synthetic Golden，并新增 Go 测试从文档读取样本、调用算法复算；测试源码尚未获得仓库 CI 通过证据。Registry 数值校验保留 JSON 十进制精度并展开指数记法，避免 float64 往返造成精度位数误判。已增加 CalculationContext 与 Registry 的组合门禁测试源码；当前最新节点 edb35de1 合入 integration，Go CI 对该 SHA 的 push/PR 运行均处于 queued。仍缺 Draft 2020-12 Schema/Golden Validator、首批 Registry 注册条目、交易日历/复权输入验证和真实 Data Adapter 证据。
+- 当前状态：Q0-001～003 盘点/设计工作已完成；QNT-001 CalculationContext 与 Quant Registry 基础能力已提交，Registry 已增加数值精度/JSON 边界校验；QNT-002 八种 Indicator 计算函数、QNT-003 三种时间序列 Factor 函数及固定样本测试已提交。Indicator/Factor 已提交 11 份 synthetic Golden，并新增 Go 测试从文档读取样本、调用算法复算；测试源码尚未获得仓库 CI 通过证据。Registry 数值校验保留 JSON 十进制精度并展开指数记法，避免 float64 往返造成精度位数误判。已增加 CalculationContext 与 Registry 的组合门禁测试源码；合并后 CI 发现 Registry 文件头历史重复声明导致语法失败，已在本轮修复并提交，等待修复后 SHA 的 CI 证据。仍缺 Draft 2020-12 Schema/Golden Validator、首批 Registry 注册条目、交易日历/复权输入验证和真实 Data Adapter 证据。
 - 初始共同基线：`0cb99a525de00d3c340891caa029b716c4d2f749`
 
 Quant 负责确定性、可复算的数值分析：Indicator、Factor、Trend、Market、Industry、Stock、Strategy、Backtest、Risk、Evaluation。不得调用 LLM，不负责研究编排，不直接访问 Provider/HTTP/SQL/Redis。
