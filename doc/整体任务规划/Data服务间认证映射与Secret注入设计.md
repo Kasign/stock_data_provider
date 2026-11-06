@@ -4,6 +4,8 @@
 - 状态：目标认证边界设计，待 Data / Server / Platform 对齐；不代表已实现统一服务身份系统。
 - 规划归属：`feat/design_doc`
 - 相关实现分支：Data `feat/full-go-data-providers-api-switch`、Platform `feat/platform-foundation`、Server 集成分支。
+
+> **架构决议更新（2026-11-06）：** 本文件原先以 Data 独立部署为默认前提；现已由《Market Data并入Root Server模块化单体调整方案》调整为同进程模块化单体默认模式。下文关于 Data API Key、Server 注入 `X-API-Key`、Data 独立 Module 的内容仅适用于保留的远程 HTTP Adapter/独立部署兼容模式。当前进程内调用通过 Root Server 注入可信 Principal/Scope Context 和 Data Application Port，不使用 Data API Key；不得因此取消 DATA-CTR-008 授权、Scope、Manifest 和读取时复核。
 - 核查文件：`services/market-data/openapi.yaml`（本轮读取 blob SHA：`9a15f7810a07c60887a574d82e1f84d56a8c9964`）。
 
 ## 1. 当前 Data API 认证事实
@@ -25,7 +27,7 @@ Data API 的 `X-API-Key`、根 Server owner Token、Platform service Secret、�
 
 不得把这些凭据混用、复用同一值或在日志/错误/诊断中回显。
 
-## 2. 首期推荐方案
+## 2. 远程部署兼容方案（非当前默认）
 
 **保持 Data 当前 `X-API-Key` API 契约；由根 Server 在服务端注入 Data 专用 Secret，Data Adapter 统一添加 Header。**
 
@@ -118,7 +120,7 @@ Upstream Providers
 ## 8. 验收清单
 
 - [ ] Data 业务 API 实际只接受已声明的服务端凭据；OpenAPI Operation Security 与 Handler Middleware 一致。
-- [ ] Root Server Data Adapter 服务端注入 Data 专用 Key。
+- [ ] 当前同进程模式由 Root Server 注入可信 Principal/Scope Context；远程兼容模式由 Root Server Data Adapter 服务端注入 Data 专用 Key。
 - [ ] WebUI/浏览器无法获得 Data Key、Platform Service Secret 或 Provider Token。
 - [ ] 用户请求 Header 无法覆盖 Data Adapter 认证 Header。
 - [ ] Data Service Base URL 固定且受 DestinationPolicy 限制。
@@ -126,7 +128,7 @@ Upstream Providers
 - [ ] 健康接口无认证且只暴露最小信息。
 - [ ] Secret 不出现在日志、Fault、诊断、任务参数、响应或 LLM 上下文。
 - [ ] dev/test/staging/prod 使用不同 Key，轮换/撤销流程通过演练。
-- [ ] Data 独立 Go Module 不 import 根模块 Platform internal。
+- [ ] 当前同进程模式 Data 与 Server 共用根 Go Module，Data Provider 依赖 Platform 公开受控 HTTP Client；远程独立 Module 兼容模式不得 import 根模块 internal。
 - [ ] Platform Service Secret 不被误当作 Data X-API-Key；未来统一身份改造单独评审。
 
 
@@ -141,8 +143,8 @@ Upstream Providers
 - GOV-CTR-006 的 `decision_fingerprint` 仍严格遵循公共算法；通过 resource_ref 指向内容寻址 snapshot_ref，避免为 Data 单独扩展或改变公共算法。
 - 授权检查与 Snapshot Manifest/数据读取必须处于同一可证明的策略版本边界；检查后策略版本变化时重新授权，无法证明一致性则丢弃结果并 fail closed。
 
-## 9. 当前结论
+## 9. 当前默认模式与远程兼容结论
 
-首期最优边界是：**Root Server 服务端持有 Data 专用 API Key，Data Adapter 在内部 HTTP 请求中注入 `X-API-Key`；浏览器只调用 Root Server，不接触 Data Key。** Platform Service Secret、Owner Token 和 Provider Token 保持独立。
+当前默认边界是：**Root Server 与 Data 同进程运行，通过 Data Application Port 调用；Root Server 在入口认证后将可信 Principal/Scope Context 注入 Data，不使用 Data API Key。** 浏览器不接触 Data Key、Platform Service Secret 或 Provider Token。\n\n若未来恢复 Data 独立部署，远程 HTTP Adapter 可沿用本文件第 2～8 节的 Data API Key 方案；Data API Key、Platform Service Secret、Owner Token 和 Provider Token 仍保持独立。
 
 该方案不需要为兼容旧服务增加复杂适配，也不要求 Data 立刻切换认证协议。实际环境仍需完成 Key 轮换、网络 ACL、服务端 Header 注入和安全日志验收。
