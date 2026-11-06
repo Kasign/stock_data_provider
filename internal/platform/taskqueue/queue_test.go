@@ -135,6 +135,21 @@ func TestStartRejectsNilContextAndClosedQueue(t *testing.T) {
 	}
 }
 
+func TestCreateRejectsCanceledWorkerContext(t *testing.T) {
+	db := sql.OpenDB(startFailureConnector{err: errors.New("unused")})
+	defer db.Close()
+	q, err := New(db, queueTestRunner{}, 1, 1, time.Second, time.Millisecond)
+	if err != nil {
+		t.Fatal(err)
+	}
+	workerCtx, cancel := context.WithCancel(context.Background())
+	cancel()
+	q.runCtx = workerCtx
+	if _, _, err := q.Create(context.Background(), domain.RunRequest{}, ""); !errors.Is(err, ErrQueueClosed) {
+		t.Fatalf("create after worker context cancellation = %v, want ErrQueueClosed", err)
+	}
+}
+
 func TestNewRejectsMissingDependencies(t *testing.T) {
 	q, err := New(nil, nil, 0, 0, 0, 0)
 	if err == nil || q != nil {

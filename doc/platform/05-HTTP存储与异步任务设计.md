@@ -53,7 +53,7 @@ Redis 仅承担缓存和可丢失的短期辅助状态。所有缓存有 TTL 和
 
 首期约束：
 - MariaDB 保存任务状态和幂等记录。
-- Worker 数量有上限，执行有总超时和取消 Context。
+- Worker 数量有上限，执行有总超时和取消 Context；队列根 Context 取消后必须停止接收新任务，入队过程中的数据库操作也必须响应该取消。
 - 状态至少包含 queued、running、succeeded、failed、cancelled。
 - 保存 task_id、任务类型、请求摘要、幂等键、创建来源、Request ID、开始/结束时间和安全失败原因。
 - 相同幂等键和请求摘要返回已有任务；相同键不同请求返回冲突。

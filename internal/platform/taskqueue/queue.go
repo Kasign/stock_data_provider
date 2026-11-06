@@ -56,6 +56,7 @@ type Queue struct {
 	timeout     time.Duration
 	pollEvery   time.Duration
 	cancel      context.CancelFunc
+	runCtx      context.Context
 	wg          sync.WaitGroup
 	startOnce   sync.Once
 	closeOnce   sync.Once
@@ -95,12 +96,14 @@ func (q *Queue) Start(parent context.Context) error {
 	}
 	q.lifecycleMu.Lock()
 	defer q.lifecycleMu.Unlock()
-	if q.closed {
+	if q.closed || (q.runCtx != nil && q.runCtx.Err() != nil) {
+		q.closed = true
 		return ErrQueueClosed
 	}
 	q.startOnce.Do(func() {
 		ctx, cancel := context.WithCancel(parent)
 		q.cancel = cancel
+		q.runCtx = ctx
 		tx, err := q.db.BeginTx(ctx, nil)
 		if err != nil {
 			q.startErr = err
@@ -148,10 +151,22 @@ func (q *Queue) Close() {
 }
 
 func (q *Queue) Create(ctx context.Context, req domain.RunRequest, idempotencyKey string) (Task, bool, error) {
+	if ctx == nil {
+		return Task{}, false, errors.New("task creation context is required")
+	}
 	q.lifecycleMu.Lock()
 	defer q.lifecycleMu.Unlock()
-	if q.closed {
+	if q.closed || (q.runCtx != nil && q.runCtx.Err() != nil) {
 		return Task{}, false, ErrQueueClosed
+	}
+	createCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	if q.runCtx != nil {
+		stopQueueCancellation := context.AfterFunc(q.runCtx, cancel)
+		defer stopQueueCancellation()
+		if q.runCtx.Err() != nil {
+			return Task{}, false, ErrQueueClosed
+		}
 	}
 	q.createMu.Lock()
 	defer q.createMu.Unlock()
@@ -161,12 +176,12 @@ func (q *Queue) Create(ctx context.Context, req domain.RunRequest, idempotencyKe
 		return zero, false, errors.New("Idempotency-Key must be at most 128 characters")
 	}
 	if idempotencyKey != "" {
-		existing, storedRequest, err := q.findByIdempotencyKey(ctx, idempotencyKey)
+		existing, storedRequest, err := q.findByIdempotencyKey(createCtx, idempotencyKey)
 		if err == nil {
 			if !sameRequest(storedRequest, req) {
 				return zero, false, ErrIdempotency
 			}
-			current, getErr := q.Get(ctx, existing.TaskID)
+			current, getErr := q.Get(createCtx, existing.TaskID)
 			if getErr != nil {
 				return zero, false, getErr
 			}
@@ -177,7 +192,7 @@ func (q *Queue) Create(ctx context.Context, req domain.RunRequest, idempotencyKe
 		}
 	}
 	var queued int
-	if err := q.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM analysis_tasks WHERE status='queued'`).Scan(&queued); err != nil {
+	if err := q.db.QueryRowContext(createCtx, `SELECT COUNT(*) FROM analysis_tasks WHERE status='queued'`).Scan(&queued); err != nil {
 		return zero, false, fmt.Errorf("count queued analysis tasks: %w", err)
 	}
 	if queued >= q.maxQueued {
@@ -197,15 +212,15 @@ func (q *Queue) Create(ctx context.Context, req domain.RunRequest, idempotencyKe
 		return zero, false, fmt.Errorf("encode analysis task request: %w", err)
 	}
 	now := time.Now().UTC()
-	_, err = q.db.ExecContext(ctx, `INSERT INTO analysis_tasks (task_id, run_id, status, task_type, request_json, idempotency_key, created_at, updated_at) VALUES (?, ?, 'queued', ?, ?, NULLIF(?, ''), ?, ?)`, taskID, runID, req.TaskType, string(raw), idempotencyKey, now, now)
+	_, err = q.db.ExecContext(createCtx, `INSERT INTO analysis_tasks (task_id, run_id, status, task_type, request_json, idempotency_key, created_at, updated_at) VALUES (?, ?, 'queued', ?, ?, NULLIF(?, ''), ?, ?)`, taskID, runID, req.TaskType, string(raw), idempotencyKey, now, now)
 	if err != nil {
 		if idempotencyKey != "" {
-			existing, storedRequest, findErr := q.findByIdempotencyKey(ctx, idempotencyKey)
+			existing, storedRequest, findErr := q.findByIdempotencyKey(createCtx, idempotencyKey)
 			if findErr == nil {
 				if !sameRequest(storedRequest, req) {
 					return zero, false, ErrIdempotency
 				}
-				current, getErr := q.Get(ctx, existing.TaskID)
+				current, getErr := q.Get(createCtx, existing.TaskID)
 				if getErr == nil {
 					return current, false, nil
 				}
