@@ -1,5 +1,7 @@
 # 五模块公共契约一致性 Review 记录
 
+> **架构修订提示（2026-11-06）：** 本记录中“Data 通过独立 HTTP/OpenAPI Module 接入”的结论反映当时的迁移前代码边界，已被方案 B 取代。当前目标是 Data 迁入根 Go Module 的 `internal/marketdata`，通过 Application Port 同进程调用；本文件保留历史 Review 结论，不再作为 Data 部署/Module 边界的现行依据。现行依据见《Market Data并入Root Server模块化单体调整方案》和《跨模块契约目录与冻结状态》。
+
 - 所属治理：GOV-004
 - 分支：`feat/design_doc`
 - 日期：2026-11-06

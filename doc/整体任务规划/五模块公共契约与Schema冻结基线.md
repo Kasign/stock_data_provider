@@ -1,8 +1,8 @@
 # 五模块公开契约与 Schema 冻结基线（GOV-004）
 
 - 状态：历史设计基线与交叉审查记录；当前契约编号、权威路径、语义状态和阻断范围以 `跨模块契约目录与冻结状态.md` 为准。本文件不代表接口或数据库已经实现。
-- 目标落点：根 Go Module 的 `internal/{quant,research,researchflow,llm,notification}`。
-- Data 是独立 Go Module，通过 HTTP/OpenAPI；News 与其他业务模块在根 Go Module 同进程调用；Platform 是根 Go Module 内公共包。
+- 目标落点：根 Go Module 的 `internal/{marketdata,quant,research,researchflow,llm,notification}`。
+- **2026-11-06 架构修订：** Data 采用方案 B，迁入根 Go Module 的 `internal/marketdata`，与 Root Server 同进程；Data 保留领域 Owner 和可选 HTTP Adapter。原“Data 独立 Go Module、必须经 HTTP/OpenAPI、不得 import 根 Platform internal”的文字是迁移前基线，已被本修订取代。Data 可依赖 Platform 公开技术 package，但跨业务模块仍只允许 Application Port/DTO，不允许 import 对方 internal。
 
 ## 1. 基础序列化约定
 
@@ -23,7 +23,7 @@
 
 ## 2. Data → Quant：数据输入契约
 
-Quant 通过自己的 Data Adapter 调用 `services/market-data` OpenAPI；Domain 不依赖 HTTP DTO，也不得 import Data 的 internal 包。Data Service Key 由服务端配置注入，不得进入浏览器、Research 或 LLM。
+Quant 通过 Data Public Application Port（必要时由 Remote Adapter 提供同契约）消费数据；Domain 不依赖 HTTP DTO，也不得 import Data 私有实现包。Data API Key 仅适用于远程兼容 Adapter；同进程调用使用 Root Server 可信 Principal/Scope Context。任何 Secret 不得进入浏览器、Research 或 LLM。
 
 首期优先数据能力：
 
@@ -214,7 +214,7 @@ Subscription、Template、Channel、Delivery、Retry 和投递历史归 Notifica
 | storage | SQL/Redis 生命周期、Ping、Migration Runner | Repository、表结构、SQL、保留策略 |
 | task | 未来经验证可复用的技术原语 | Research Run/Stage/DAG/Attempt |
 
-Data 独立 Module 通过 HTTP/JSON 使用服务，不 import 根模块 Platform internal。Platform Observation 是执行结果外壳，Data/News/Quant/Research/Researchflow/Notification 保留各自质量规则、证据和历史。
+Data 与 Root Server 同属根 Go Module，可依赖 Platform 公开技术 package；Provider 出站请求使用受控 HTTP Client。Data 对其他业务模块仍只暴露 Application Port/DTO，不暴露私有实现。Platform Observation 是执行结果外壳，Data/News/Quant/Research/Researchflow/Notification 保留各自质量规则、证据和历史。
 
 ## 10. Repository / Migration 所有权
 
@@ -225,20 +225,20 @@ Data 独立 Module 通过 HTTP/JSON 使用服务，不 import 根模块 Platform
 | Researchflow | Run、Stage、Attempt、Workflow Template、输入/输出引用 |
 | LLM | 仅必要调用元数据/用量摘要；默认不保存 Prompt 正文 |
 | Notification | Subscription、Template、Delivery、投递 Attempt/状态 |
-| Data | 证券、行情、财务、Provider、Probe、质量及历史（独立 Module） |
+| Data | 证券、行情、财务、Provider、Probe、质量及历史（根 Go Module 内独立领域模块） |
 
 Migration namespace 由模块固定且唯一，如 quant/research/researchflow/notification。Migration 版本不可变，修复使用更高版本。Migration 清单由模块提供，总注册和执行入口由服务端集成分支装配。任何模块分支不得提前修改根 Migration 总注册、DI、HTTP 路由或启动入口。MariaDB 是事实存储；Redis 只作缓存/短期辅助。
 
 ## 11. Go import 方向
 
-允许：Quant → Data HTTP Adapter/Platform；Research → Platform；Researchflow → Quant Application、Research Application、LLM Application、Notification Application、Platform；LLM → Platform；Notification → Platform。
+允许：Server/Quant/Researchflow → Data Public Application Port；Data → Platform 公开技术 package；Research → Platform；Researchflow → Quant Application、Research Application、LLM Application、Notification Application、Platform；LLM → Platform；Notification → Platform。
 
 禁止：
 - Quant ↔ Research；Research → Quant Go 包。
 - Quant/Research/LLM/Notification → Researchflow。
 - LLM/Notification → Quant 或 Research 领域包。
 - 任一模块引用其他模块 Domain/Repository/Adapter 私有包。
-- 任一根模块包引用 Data 独立 Module 的 internal 包。
+- 任一业务模块绕过 Data Public Application Port，直接引用 Data 的 Provider/Repository/Domain 私有实现。
 - Platform → 任一业务领域包。
 
 ## 12. GOV-004 验收门禁与未决项
@@ -252,7 +252,7 @@ Migration namespace 由模块固定且唯一，如 quant/research/researchflow/n
 - Repository/Migration 所有权明确；无共享万能 Repository/Task/Domain 包。
 - Data OpenAPI 的 Probe validation/coverage 字段需再次与 Go 响应模型逐项核对，不能沿用历史 Schema 缺口。
 - News N6 持久化需等待 Platform Storage 真实 MariaDB 集成验收。
-- Platform service Secret 与 Data 当前 X-API-Key 的映射需明确；服务间 Secret 只在服务端注入。
+- Data 同进程 Principal/Scope Context 与 DATA-CTR-008 授权映射需明确；远程兼容 Adapter 的 Data API Key 只在服务端注入，不得暴露浏览器。
 - Platform Task Queue 仍存在分析领域耦合；Researchflow 首期使用自有 Run/Stage/Attempt 存储和有界 Worker。
 - Platform Storage 包级 CI 通过不代表真实 MariaDB/Redis 集成和故障演练完成；HTTP Client 单测通过不代表生产网络出口安全验收完成。
 - 以上是语义基线草案；最终字段/Schema 需结合 Data OpenAPI、News Application 输出和各模块评审冻结。
@@ -515,7 +515,7 @@ type ResearchEvidenceQuery interface {
 - 领域所有权不转移：Repository/SQL/Migration、业务授权、领域诊断规则/历史、Researchflow Run/Stage/Attempt、Provider 配额和质量规则。
 - 真实 MariaDB/Redis、Migration 故障恢复、生产出口 SSRF、Diagnostics 路由/领域 Adapter、Worker Request ID 恢复仍需集成验收。
 
-**依赖规则：** Platform 不得反向依赖业务领域；Data 独立 Go Module 不得 import 根模块 Platform internal。模块分支不得提前修改根 DI、HTTP 路由、cmd 或 Migration 总注册入口。
+**依赖规则：** Platform 不得反向依赖业务领域；Data 迁入根 Go Module 后可依赖 Platform 公开技术 package，但不得依赖其私有实现。Data 的领域代码仍不得被其他模块直接 import。根 DI、HTTP 路由、cmd 或 Migration 总注册入口由 Server/集成 Owner 负责装配。
 
 本轮只更新规划文档，不修改 Platform 分支。GOV-004 仍未冻结。
 
@@ -530,7 +530,7 @@ type ResearchEvidenceQuery interface {
 - 全局 Security 声明两者 OR 关系，但业务 API Operation 显式使用 ApiKey；
 - `/health/live` 与 `/health/ready` 显式无认证。
 
-因此，不能因为 OpenAPI 顶层还声明 BearerAuth，就推断业务 Data API 已接受 Platform Service Secret。首期推荐保持 Data 当前认证协议：根 Server 服务端持有 Data 专用 Key，由 Quant/Data Adapter 注入 `X-API-Key`；WebUI 不接触该 Key。Data Provider Token、Data API Key、Root Server Owner Token、Platform Service Secret 各自独立。
+因此，不能因为 OpenAPI 顶层还声明 BearerAuth，就推断业务 Data API 已接受 Platform Service Secret。迁移前的 Data HTTP API 仍使用 X-API-Key；目标同进程调用改为可信 Principal/Scope Context。远程兼容 Adapter 可继续使用 Data 专用 Key，且只能由服务端注入。Data Provider Token、Data API Key、Root Server Owner Token、Platform Service Secret 各自独立。
 
 文档明确 Secret 注入、Header 覆盖、固定 DestinationPolicy、健康接口、环境隔离、轮换/撤销、日志脱敏和未来统一服务身份的迁移门槛。Data 独立 Go Module 不 import 根模块 Platform internal。
 

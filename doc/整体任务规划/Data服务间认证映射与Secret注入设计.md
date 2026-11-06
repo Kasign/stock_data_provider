@@ -6,7 +6,7 @@
 - 相关实现分支：Data `feat/full-go-data-providers-api-switch`、Platform `feat/platform-foundation`、Server 集成分支。
 
 > **架构决议更新（2026-11-06）：** 本文件原先以 Data 独立部署为默认前提；现已由《Market Data并入Root Server模块化单体调整方案》调整为同进程模块化单体默认模式。下文关于 Data API Key、Server 注入 `X-API-Key`、Data 独立 Module 的内容仅适用于保留的远程 HTTP Adapter/独立部署兼容模式。当前进程内调用通过 Root Server 注入可信 Principal/Scope Context 和 Data Application Port，不使用 Data API Key；不得因此取消 DATA-CTR-008 授权、Scope、Manifest 和读取时复核。
-- 核查文件：`services/market-data/openapi.yaml`（本轮读取 blob SHA：`9a15f7810a07c60887a574d82e1f84d56a8c9964`）。
+- 迁移前核查文件：`services/market-data/openapi.yaml`（本轮读取 blob SHA：`9a15f7810a07c60887a574d82e1f84d56a8c9964`）；MDM-002 后目标路径为 `internal/marketdata/httpapi/openapi.yaml`。
 
 ## 1. 当前 Data API 认证事实
 
@@ -145,7 +145,9 @@ Upstream Providers
 
 ## 9. 当前默认模式与远程兼容结论
 
-当前默认边界是：**Root Server 与 Data 同进程运行，通过 Data Application Port 调用；Root Server 在入口认证后将可信 Principal/Scope Context 注入 Data，不使用 Data API Key。** 浏览器不接触 Data Key、Platform Service Secret 或 Provider Token。
+当前目标边界是：**Root Server 与 Data 同进程运行，通过 Data Application Port 调用；Root Server 在入口认证后将可信 Principal/Scope Context 注入 Data，不使用 Data API Key。** 浏览器不接触 Data Key、Platform Service Secret 或 Provider Token。
+
+**迁移阶段顺序：** MDM-001～006 先完成 Module 归并、Port/Bootstrap、共享资源、部署切换和 v1 行为回归；不提前批量修改 DATA-CTR-005～008 的 DTO/授权语义。为避免迁移中断，旧 HTTP Handler 如暂时仍校验 Data API Key，只允许 Root Server 内部兼容 Adapter 在服务端注入；WebUI 必须在 MDM-005 删除 Key 输入、localStorage 和请求头。MDM-007 再移除同进程路径的 Key，按可信 Principal/Scope Context 完成 DATA-CTR-006/008。此处的短期兼容注入不是最终架构。
 
 若未来恢复 Data 独立部署，远程 HTTP Adapter 可沿用本文件第 2～8 节的 Data API Key 方案；Data API Key、Platform Service Secret、Owner Token 和 Provider Token 仍保持独立。
 

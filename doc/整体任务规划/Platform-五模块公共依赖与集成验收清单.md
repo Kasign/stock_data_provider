@@ -8,13 +8,13 @@
 
 ## 1. 目标与原则
 
-五模块（Quant、Research、Researchflow、LLM、Notification）只依赖 Platform 的技术原语，不把领域模型、领域策略或业务历史交给 Platform。
+五模块（Quant、Research、Researchflow、LLM、Notification）以及 Data/News 等服务端领域模块只依赖 Platform 的技术原语，不把领域模型、领域策略或业务历史交给 Platform。
 
 - Platform 是根 Go Module 内部公共包，不是独立服务或微服务。
 - 领域模块依赖 Platform 时，通过稳定、窄接口使用，不反向要求 Platform import 领域包。
 - 不建设共享万能 Domain、Repository、Task、Config 或 Diagnostics History。
 - Platform 包级测试通过只证明包级行为，不代表服务入口、真实 DB/Redis、生产网络出口和领域 Worker 已完成集成。
-- Data 位于独立 Go Module，禁止 import 根模块 `internal/platform/**`；Data 通过 HTTP/OpenAPI 和自己的 Adapter 使用数据服务契约。
+- Data 采用方案 B，迁入根 Go Module 的 `internal/marketdata`，可依赖 Platform 公开技术 package（尤其受控 HTTP Client、Storage、Config、Observability）；不得依赖 Platform 私有实现或其他业务模块 internal。跨模块业务调用仍通过 Data Application Port/DTO。
 
 ## 2. 包级依赖清单
 
@@ -39,13 +39,14 @@
 | Request ID / slog | 使用 | 使用 | 使用 | 使用 | 使用 |
 | Fault | 使用 | 使用 | 使用 | 使用 | 使用 |
 | Diagnostics Check | 领域 Adapter 暴露只读检查 | 领域 Adapter 暴露只读检查 | 可组合模块检查 | 暴露模型服务能力检查 | 暴露渠道能力检查 |
-| HTTP Client | Data Adapter 调用 | 不直接调用 Data；若有外部源须经 News | 通常调用内部 Application Facade | 调用外部模型 Provider | 调用外部投递渠道 |
+| HTTP Client | 不直接调用 Provider；由 Data 使用受控 Client | 不直接调用 Data；若有外部源须经 News | 通常调用内部 Application Facade | 调用外部模型 Provider | 调用外部投递渠道 |
 | Storage | 自有 Repository/Migration | 自有 Repository/Migration | 自有 Run/Stage/Attempt 存储 | 仅必要调用元数据 | 自有 Subscription/Delivery 存储 |
 | Platform Task Queue | 禁止 | 禁止 | 禁止作为 DAG/Run 引擎 | 禁止 | 禁止 |
 
 ### 3.1 依赖方向约束
 
 允许：
+- Data → Platform 公开技术 package；
 - Quant → Platform；
 - Research → Platform；
 - Researchflow → Platform + 各模块公开 Application Facade；
@@ -58,7 +59,7 @@
 - Quant ↔ Research；
 - Research → Quant Go 包；
 - 任何模块通过 Platform 包间接获取其他模块私有 Domain/Repository；
-- 根模块任一包 import Data 独立 Module 的 internal 包。
+- 任一业务模块绕过 Data Application Port，直接 import `internal/marketdata/provider`、`repository`、`domain` 等 Data 私有实现包。
 
 ## 4. 可视为首期稳定技术契约的内容
 
