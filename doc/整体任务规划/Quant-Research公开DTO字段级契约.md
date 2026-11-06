@@ -526,7 +526,7 @@ available_at=null 表示没有可验证的外部可获得时间，不得用 publ
 
 本节是供 Owner 确认的建议决议，不代表 Owner 已签字或 Schema 已冻结。
 
-### 11.1 CONTRACT-001：数值 JSON 类型与精度
+### 12.1 GOV-CTR-001 / QNT-CTR-001：数值 JSON 类型与精度（历史别名 CONTRACT-001）
 
 建议采用按指标语义固定类型的策略，而不是全局强制所有数值均为 string 或 number：
 
@@ -630,7 +630,7 @@ available_at=null 表示没有可验证的外部可获得时间，不得用 publ
 
 **历史说明：本表最初是规划侧建议，不再要求虚构具体 Owner 签字。当前统一决议与状态以 `doc/整体任务规划/跨模块契约目录与冻结状态.md` 为准；项目决议已接受不等于 Schema/Golden/Contract Test 已通过。**
 
-## 12. 五模块交叉契约映射补充（2026-11-06）
+## 13. 五模块交叉契约映射补充（2026-11-06）
 
 - Researchflow `ResearchRun.system_as_of` 是 Run 唯一系统知识截止值。QuantAnalysisRequest/QuantResultRef、ResearchContext/Claim/Scenario 的 `system_as_of` 必须沿用该值；Evidence 的 `system_as_of` 与其语义相同，且不得晚于所属 Run。
 - `system_observed_at` 始终记录系统实际观察/持久化时间；不能用 system_as_of 回填。published_at/available_at/valid_time 保留各自来源时间和业务有效时间。Data API 查询参数 `as_of` 的映射由 Quant Data Adapter 负责，不改写 Data 自身时间语义。
