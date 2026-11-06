@@ -2366,3 +2366,12 @@ CSS AST 检查器进一步扩展：
 - [x] `web/tests/css-structure-review.mjs` 增加 selector 唯一性断言，防止同一隐藏规则重复。
 - [x] WebUI Checks #42172661741、Chromium Browser Smoke #42172661924 均通过；CSS AST、Run Flow 交互及响应式专项通过。
 - [ ] 跨 selector DOM 命中、主题、@layer 和响应式级联关系仍需继续人工复核；本次只清理已证明完全重复的同 selector 同条件规则。
+
+
+## 2026-11-06 UIR-2：CSS Token 引用审查补充
+
+- [x] 对全量 `web/styles.css` 扫描自定义属性声明与 `var()` 引用，发现 7 类未定义 token：`--text-muted`、`--text-secondary`、`--line`、`--muted`、`--surface`、`--surface-subtle`、`--success`。
+- [x] 将遗留 token 映射到现有设计变量：`--text-dim`、`--text-soft`、`--border`、`--panel`、`--panel-raised`、`--accent`；不新增重复主题 token。
+- [x] 增加 CSS Token 单元测试，阻止未定义的自定义属性引用重新进入样式表。
+- [ ] WebUI Checks、CSSOM 与 Chromium Browser Smoke 在本批 HEAD 通过后验收；确认浅色主题、默认主题及相关组件状态没有视觉回归。
+- [ ] 继续审查跨 selector 的 DOM 命中范围及媒体查询覆盖；不以减少规则数量为目标，不进行无证据的批量合并。
