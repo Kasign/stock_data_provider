@@ -4,7 +4,7 @@
 - 代码：`internal/research/**`
 - 任务前缀：RSC
 - 当前阶段：R1 Context 领域基础
-- 当前状态：Context Domain 首批实现已完成本地单元测试；Application、Repository 和跨模块集成尚未完成。
+- 当前状态：Context Domain 首批实现已完成 7/7 临时独立 Go package 单元测试；这不等同于仓库完整构建/CI。Application、Repository 和跨模块集成尚未完成。
 
 ## 模块职责
 
