@@ -404,16 +404,16 @@ required=true 的分区被省略时，Context 整体不能标记为 valid；必�
 | policy_owner | 是 | data/news/quant/research | 授权策略权威模块 |
 | policy_version | 是 | string | 不可变策略注册版本；decision_fingerprint 覆盖本次判定采用的具体策略版本 |
 | decision | 是 | allowed/denied/conditional/unknown | 当时决策 |
-| purpose_code | 是 | enum | quant_analysis/quant_analysis/research_analysis/risk_review/user_display；受控用途代码 |
+| purpose_code | 是 | enum | quant_analysis/research_analysis/risk_review/user_display；受控用途代码 |
 | content_level | 是 | metadata/summary/snippet/full | 内容级别 |
 | subject_ref | 是 | string | 被授权调用主体 caller_ref |
 | resource_ref | 是 | string | 本次授权决策覆盖的来源/内容/Endpoint 资源引用 |
 | decided_at | 是 | RFC3339Nano UTC | 决策时间 |
 | expires_at | 是 | RFC3339Nano UTC/null | 无固定到期时显式 null，不代表永久授权 |
-| conditions | 是 | string[] | 限制条件，可为空 |
+| conditions | 是 | string[] | 稳定 condition_code 列表；无条件使用空数组 |
 | decision_fingerprint | 是 | string | 决策内容指纹 |
 
-该对象是某次访问决策的审计快照，不代表未来访问自动获准。subject_ref 对应被授权调用主体，resource_ref 对应目标资源。读取时必须由权威模块按当前策略重新授权；历史 Run 回放同时保留当时决策和当前访问决策，二者不能互相覆盖。
+该对象是某次访问决策的审计快照，不代表未来访问自动获准。subject_ref 对应被授权调用主体，resource_ref 对应目标资源。decision_fingerprint 按 GOV-CTR-006 的 JCS + SHA-256 规则计算。读取时必须由权威模块按当前策略重新授权；历史 Run 回放同时保留当时决策和当前访问决策，二者不能互相覆盖。
 
 当 `source_owner=research` 时，由 Research 为自己的派生 Evidence 签发 AuthorizationRef：policy_owner=research，subject_ref 为可信调用主体，resource_ref=evidence_id，purpose_code 按 research_analysis/risk_review 选择，content_level 按实际返回内容选择。公开/无限制的 Research Evidence 也必须签发 allowed 快照。若派生 Evidence 依赖 Data/News/Quant 受限内容，Research 的 allow 不得覆盖来源 Owner 的限制；必须保留来源 AuthorizationRef 链，读取时按各来源 Owner 的当前策略重新授权，并采用最严格的适用限制。
 
@@ -714,7 +714,7 @@ available_at=null 表示没有可验证的外部可获得时间，不得用 publ
 
 - Researchflow `ResearchRun.system_as_of` 是 Run 唯一系统知识截止值。QuantAnalysisRequest/QuantResultRef、ResearchContext/Claim/Scenario 的 `system_as_of` 必须沿用该值；Evidence 的 `system_as_of` 与其语义相同，且不得晚于所属 Run。
 - `system_observed_at` 始终记录系统实际观察/持久化时间；不能用 system_as_of 回填。published_at/available_at/valid_time 保留各自来源时间和业务有效时间。Data API 查询参数 `as_of` 的映射由 Quant Data Adapter 负责，不改写 Data 自身时间语义。
-- Evidence.authorization_ref 指向 EvidenceAuthorizationRef 审计快照，包含 policy_owner、policy_version、decision、purpose、content_level、subject_ref、decided_at、expires_at、conditions 和 decision_fingerprint。它不是永久访问令牌；读取受限内容仍需来源 Owner 当前授权复核。Evidence 不用 authorization_status 替代该引用。
+- Evidence.authorization_ref 指向 EvidenceAuthorizationRef 审计快照，包含 policy_owner、policy_version、decision、purpose_code、content_level、subject_ref、resource_ref、decided_at、expires_at、conditions 和 decision_fingerprint。它不是永久访问令牌；读取受限内容仍需来源 Owner 当前授权复核。Evidence 不用 authorization_status 替代该引用。
 - ResearchEvent 是多来源证据归并后的领域对象；NotificationEvent 是通知模块消费的版本化集成消息。两者 ID/版本空间独立，转换必须显式映射并生成独立 event_id。
 - quality_status、Quant result_status、RiskDecision、Run/Stage/Attempt、ModelResponse.status、Delivery.status 分域管理；同名状态不可直接转换。Run partial 表示覆盖不完整；Run succeeded 仍可有 degraded 质量摘要；Risk unknown 不可 pass。
 - request_id 标识一次调用；correlation_id 贯穿链路；event_id 标识稳定事件；idempotency_key 标识命令意图。幂等使用 Owner 定义作用域与 fingerprint；相同键同指纹返回原结果，不同指纹冲突。
