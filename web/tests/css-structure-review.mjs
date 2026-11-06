@@ -174,9 +174,22 @@ const sharedSelectors = [
   ".main-area", ".view", ".sidebar", ".topbar", ".nav-link",
   ".button", ".field", ".panel", ".panel-heading", ".page-heading"
 ];
-const runFlowHiddenRules = selectorRules.get(".run-flow-dialog .task-event-detail[hidden]") || [];
-if (runFlowHiddenRules.length !== 1) {
-  throw new Error(`Expected one Run Flow hidden-state rule, found ${runFlowHiddenRules.length}`);
+const globalHiddenRules = selectorRules.get("[hidden]") || [];
+if (globalHiddenRules.length !== 1) {
+  throw new Error(`Expected one global hidden-state rule, found ${globalHiddenRules.length}`);
+}
+const globalHiddenDeclaration = globalHiddenRules[0].declarations.find((item) =>
+  item.property === "display" && item.value === "none" && item.important
+);
+if (!globalHiddenDeclaration) {
+  throw new Error("The global [hidden] rule must enforce display:none !important");
+}
+const componentHiddenOverrides = rules.filter((rule) =>
+  rule.selectors.some(({ selector }) => selector.includes("[hidden]") && selector !== "[hidden]") &&
+  rule.declarations.some((item) => item.property === "display" && item.value === "none" && item.important)
+);
+if (componentHiddenOverrides.length) {
+  throw new Error(`Found ${componentHiddenOverrides.length} redundant component-level hidden overrides`);
 }
 const missing = sharedSelectors.filter((selector) => !selectorRules.has(selector));
 if (missing.length) throw new Error(`Missing shared shell selectors: ${missing.join(", ")}`);
