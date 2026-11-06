@@ -324,6 +324,7 @@ type Usage struct {
 	InputCachedTokens *int64 `json:"input_cached_tokens,omitempty"`
 	OutputReasoningTokens *int64 `json:"output_reasoning_tokens,omitempty"`
 	Source UsageSource `json:"source"`
+	Diagnostics []string `json:"diagnostics,omitempty"`
 }
 
 type ModelErrorKind string

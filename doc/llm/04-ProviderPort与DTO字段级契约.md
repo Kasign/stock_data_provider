@@ -164,6 +164,7 @@ OutputItem 首批类型：message、function_call、refusal、unknown。ContentP
 | input_cached_tokens | *int64 | 可选明细 |
 | output_reasoning_tokens | *int64 | 可选明细 |
 | source | enum | upstream / derived / unknown |
+| diagnostics | string[]? | 受控诊断码，如 total_tokens_mismatch / total_tokens_overflow；不改写上游 total_tokens |
 
 Usage 是计量信息，不是输出质量证明；缺失、0 和 unknown 必须区分。
 
@@ -198,7 +199,7 @@ ModelEvent 字段：type、sequence_number?、response_id?、output_index?、con
 
 ModelErrorKind：invalid_request、unauthorized、rate_limited、overloaded、timeout、cancelled、upstream_unavailable、upstream_error、invalid_response、incomplete_response、schema_validation_failed、unsupported_capability、stream_interrupted、stream_sequence_gap、resource_limit。
 
-ModelErrorInfo 字段为 kind、stable_code、retryable、http_status?、retry_after?、safe_message；调用关联 ID 统一由 ModelResponse.request_id 承载，不在嵌套错误对象重复；底层 Cause 仅内部日志，不序列化给调用方。
+ModelErrorInfo 字段为 kind、stable_code、retryable、http_status?、retry_after_seconds?（秒）、safe_message；调用关联 ID 统一由 ModelResponse.request_id 承载，不在嵌套错误对象重复；底层 Cause 仅内部日志，不序列化给调用方。
 
 LLM 通过 `ModelErrorFromPlatformFault(error)` 将 `errors.As` 可识别的 `*platform/fault.Fault` 投影为 ModelErrorInfo：
 - validation → invalid_request；unauthenticated/forbidden → unauthorized；timeout 或 context deadline → timeout；context canceled → cancelled；unavailable → upstream_unavailable；其余类别 → upstream_error。
@@ -244,7 +245,7 @@ DTO、Port、Fixture 和 parser 单元测试不依赖 Researchflow/Platform 生�
 2. **ToolDefinition：纳入 MVP 的受控可选字段。** 默认 tool_choice=none；仅当 tools 非空且 function_tool_calls=supported 时允许 auto。required、指定工具强制选择和并行工具策略延后。LLM 只解析 function_call，不执行、不批准。
 3. **reasoning_effort：保留可选 typed 字段，默认不发送。** 只有 CapabilityState 对当前 Provider + Model + Gateway 版本明确为 supported 才能发送；当前本地 Qwen/llama.cpp 未验证，不得因为 Gateway 配置样本出现 high 就启用。
 4. **JSON Schema：固定 Draft 2020-12 为本地 Schema 语义基线。** Adapter 本地完整校验输入 Schema 与模型输出；上游 Responses strict schema 子集兼容性单独判定，不支持的关键字不得静默移除。具体 Go validator 库可延后，但不得延后 dialect、格式校验和深度/字节限制。
-5. **Usage.total_tokens：允许受控派生。** 上游值优先；缺失时仅当 input_tokens 与 output_tokens 都明确且加法无溢出时派生，source=derived。上游 total 与分项不一致时保留上游原值并产生诊断，不覆盖。
+5. **Usage.total_tokens：允许受控派生。** 上游值优先；缺失时仅当 input_tokens 与 output_tokens 都明确且加法无溢出时派生，source=derived。上游 total 与分项不一致时保留上游原值，并在 Usage.diagnostics 记录 total_tokens_mismatch；溢出或负数同样记录稳定诊断码，不伪造派生值。
 6. **SSE sequence_number：严格校验。** 若整条流均提供，必须连续递增；重复/倒退为 invalid_response，缺号为 stream_sequence_gap，均不得标记 completed。整条流都未提供可继续但标记序号能力 unavailable；同流混合有无序号按协议异常处理。
 7. **Request ID：明确调用方/关联/Gateway/上游四层 ID。** ModelRequest.request_id 由调用方生成并由 ModelResponse 原样回显；correlation_id 用于跨模块关联；gateway_request_id 记录 Gateway 的 X-Request-ID，upstream_request_id 单独记录 Gateway 透传/回传的上游 Request-Id。四者不得相互覆盖或伪造。
 

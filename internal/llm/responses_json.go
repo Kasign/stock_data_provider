@@ -74,7 +74,7 @@ func MapResponsesRequestAt(request ModelRequest, now time.Time) ([]byte, error) 
 	if request.ReasoningEffort != "" {
 		wire.Reasoning = &responsesReasoning{Effort: request.ReasoningEffort}
 	}
-	if request.ResponseSchema != nil {
+	if request.ResponseSchema != nil && !request.LocalValidationOnly {
 		wire.Text = &responsesText{Format: responsesTextFormat{
 			Type: "json_schema", Name: request.ResponseSchema.Name,
 			Strict: request.ResponseSchema.Strict, Schema: request.ResponseSchema.SchemaJSON,
@@ -320,11 +320,23 @@ func normalizeResponsesUsage(wire *responsesUsage) *Usage {
 	if wire.OutputDetails != nil {
 		usage.OutputReasoningTokens = wire.OutputDetails.ReasoningTokens
 	}
-	if usage.TotalTokens == nil && usage.InputTokens != nil && usage.OutputTokens != nil &&
-		*usage.InputTokens >= 0 && *usage.OutputTokens >= 0 && *usage.InputTokens <= int64(^uint64(0)>>1)-*usage.OutputTokens {
-		total := *usage.InputTokens + *usage.OutputTokens
-		usage.TotalTokens = &total
-		usage.Source = UsageSourceDerived
+	if usage.TotalTokens != nil && *usage.TotalTokens < 0 {
+		usage.Diagnostics = append(usage.Diagnostics, "total_tokens_negative")
+	}
+	if usage.InputTokens != nil && usage.OutputTokens != nil {
+		if *usage.InputTokens < 0 || *usage.OutputTokens < 0 {
+			usage.Diagnostics = append(usage.Diagnostics, "token_count_negative")
+		} else if *usage.InputTokens > int64(^uint64(0)>>1)-*usage.OutputTokens {
+			usage.Diagnostics = append(usage.Diagnostics, "total_tokens_overflow")
+		} else {
+			derived := *usage.InputTokens + *usage.OutputTokens
+			if usage.TotalTokens == nil {
+				usage.TotalTokens = &derived
+				usage.Source = UsageSourceDerived
+			} else if *usage.TotalTokens != derived {
+				usage.Diagnostics = append(usage.Diagnostics, "total_tokens_mismatch")
+			}
+		}
 	}
 	return usage
 }

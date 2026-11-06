@@ -172,6 +172,27 @@ func TestParseResponsesSchemaValidation(t *testing.T) {
 }
 
 
+
+func TestMapResponsesRequestLocalValidationOnlyDoesNotRequestUpstreamSchemaMode(t *testing.T) {
+	request := validResponsesRequest()
+	request.LocalValidationOnly = true
+	request.ResponseSchema = &JSONSchemaSpec{
+		Name: "local_summary", Strict: true,
+		SchemaJSON: json.RawMessage(`{"type":"object","required":["summary"],"properties":{"summary":{"type":"string"}}}`),
+	}
+	body, err := MapResponsesRequest(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var wire map[string]json.RawMessage
+	if err := json.Unmarshal(body, &wire); err != nil {
+		t.Fatal(err)
+	}
+	if _, exists := wire["text"]; exists {
+		t.Fatalf("local_validation_only must not request upstream structured output: %s", body)
+	}
+}
+
 func TestParseResponsesRefusalAndUnknownContentPreserveTypes(t *testing.T) {
 	request := validResponsesRequest()
 	body := []byte(`{
@@ -209,8 +230,26 @@ func TestParseResponsesUpstreamTotalTokensTakesPrecedence(t *testing.T) {
 		t.Fatal(err)
 	}
 	if got.Usage == nil || got.Usage.TotalTokens == nil || *got.Usage.TotalTokens != 99 ||
-		got.Usage.Source != UsageSourceUpstream {
-		t.Fatalf("upstream total must take precedence: %+v", got.Usage)
+		got.Usage.Source != UsageSourceUpstream || len(got.Usage.Diagnostics) != 1 ||
+		got.Usage.Diagnostics[0] != "total_tokens_mismatch" {
+		t.Fatalf("upstream total must be retained with mismatch diagnostic: %+v", got.Usage)
+	}
+}
+
+
+func TestParseResponsesUsageOverflowIsNotDerived(t *testing.T) {
+	request := validResponsesRequest()
+	body := []byte(`{
+		"id":"resp-overflow","object":"response","model":"qwen-local","status":"completed",
+		"output":[],"usage":{"input_tokens":9223372036854775807,"output_tokens":1}
+	}`)
+	got, err := ParseResponsesResponse(body, request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Usage == nil || got.Usage.TotalTokens != nil || got.Usage.Source != UsageSourceUpstream ||
+		len(got.Usage.Diagnostics) != 1 || got.Usage.Diagnostics[0] != "total_tokens_overflow" {
+		t.Fatalf("overflow must not derive total tokens and must be diagnosed: %+v", got.Usage)
 	}
 }
 

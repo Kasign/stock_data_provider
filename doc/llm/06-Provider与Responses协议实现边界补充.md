@@ -32,7 +32,7 @@ ModelRequest 是 LLM 自己的应用 DTO，不允许传入任意 URL/Header/Gate
 - max_output_tokens：正整数且不超过当前 Model Capability 已验证上限。
 - temperature/top_p/reasoning_effort：只有对应 CapabilityState 当前有效且 supported 才允许发送，否则明确拒绝。
 - tools/tool_choice：默认关闭；仅 function_tool_calls=supported 且 Tool 定义通过本地 Schema 校验时允许受控 auto。LLM 只解析，不批准或执行。
-- deadline_at：必填绝对 UTC 截止时间，不得晚于调用方 Context deadline。
+- deadline_at：必填绝对 UTC 截止时间；有效 deadline 取 deadline_at、调用方 Context deadline、Provider request_timeout 三者最早值。deadline_at 晚于 Context deadline 时不拒绝请求，按 Context deadline 收敛；若最早 deadline 已到期则不派发。
 - system_as_of：必填 RFC3339Nano UTC，必须不晚于可信服务端当前时间；原样回显，仅用于审计/上下文追溯，不注入 Prompt 或 Responses wire 字段。
 - trace_id：可选受控追踪标识。
 
