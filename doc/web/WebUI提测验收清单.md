@@ -2572,3 +2572,12 @@ CSS AST 检查器进一步扩展：
 - [x] CSS AST 检查新增唯一性断言。
 - [x] `!important` 声明数由 25 降至 24；其余声明均保留，未进行批量清理。
 - [x] WebUI Checks #42172661741、Chromium Browser Smoke #42172661924 通过。
+
+
+## 2026-11-06 UIR-2 CSS Token / Screening CSSOM 最终验收
+- [x] 验收 HEAD：`3eded6114182d16b4a0639aa4bbe5f0d76531320`。
+- [x] WebUI Checks #42174320979 成功，CSS Token 未定义引用单测门禁通过。
+- [x] Chromium Browser Smoke #42174321184 成功，CSS AST、CSSOM、响应式主流程及所有跨标签页/业务专项通过。
+- [x] CSSOM fixture 覆盖 dark/light × 320/768/1280/1600px，共 8 场景 × 6 节点；新旧基线差异已归因并通过新基线回归。
+- [x] 仅恢复此前失效的边框样式；没有发现其他计算样式或尺寸变化。
+- [ ] 跨 selector DOM 命中、主题、@layer 和响应式级联关系仍需单独人工审查；未完成前不扩大 CSS 物理拆分。

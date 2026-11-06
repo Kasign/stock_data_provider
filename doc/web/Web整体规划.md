@@ -2373,7 +2373,7 @@ CSS AST 检查器进一步扩展：
 - [x] 对全量 `web/styles.css` 扫描自定义属性声明与 `var()` 引用，发现 7 类未定义 token：`--text-muted`、`--text-secondary`、`--line`、`--muted`、`--surface`、`--surface-subtle`、`--success`。
 - [x] 将遗留 token 映射到现有设计变量：`--text-dim`、`--text-soft`、`--border`、`--panel`、`--panel-raised`、`--accent`；不新增重复主题 token。
 - [x] 增加 CSS Token 单元测试，阻止未定义的自定义属性引用重新进入样式表。
-- [ ] WebUI Checks、CSSOM 与 Chromium Browser Smoke 在本批 HEAD 通过后验收；确认浅色主题、默认主题及相关组件状态没有视觉回归。
+- [x] WebUI Checks #42174320979、Chromium Browser Smoke #42174321184 均通过；CSS Token 单测、CSSOM 8 场景及全量浏览器专项通过。
 - [ ] 继续审查跨 selector 的 DOM 命中范围及媒体查询覆盖；不以减少规则数量为目标，不进行无证据的批量合并。
 
 
@@ -2381,7 +2381,7 @@ CSS AST 检查器进一步扩展：
 - [x] 首轮 CSSOM 比较发现筛选批量工具栏及其子控件的宽度出现 2px 级差异；差异集中于控件边界，需核实与修复未定义 `--line` 后边框恢复有关，不能直接刷新基线掩盖。
 - [x] 调整 CSSOM 捕获脚本：先保存完整观察 JSON，再执行基线断言；即使基线不一致，CI 也能上传实际快照供审查。
 - [x] 下载实际快照并与上一通过基线逐项比较：差异仅为 `.screening-condition-builder` 与 `.screening-local-filter` 原先因 `--line` 未定义而失效的边框恢复，导致批量工具栏内容区宽度减少 2px、纵向位置下移 2px；所有主题与视口一致，无额外计算样式变化。
-- [ ] 更新后的 CSSOM 压缩基线与完整 Browser Smoke 通过后，完成本轮 Token 修复验收。
+- [x] 更新后的 CSSOM 压缩基线在 HEAD `3eded6114182d16b4a0639aa4bbe5f0d76531320` 的完整 Browser Smoke 中通过，完成本轮 Token 修复验收。
 
 
 ### UIR-2 CSSOM 基线更新依据（2026-11-06）
@@ -2390,3 +2390,11 @@ CSS AST 检查器进一步扩展：
 - [x] 变化来源为修复未定义 `--line` 后恢复条件构建器和本地筛选区边框；属于此前失效样式恢复，不是布局意外漂移。
 - [x] 按实际观察重新生成 `screening-local-batch.cssom.json.gz`，保留原有 8 场景 / 6 目标覆盖范围。
 - [ ] 新基线在最终功能 HEAD 的 CSSOM、Browser Smoke 全部通过后关闭 UIR-2 本批验收。
+
+
+### UIR-2 CSS Token 与 CSSOM 最终验收（2026-11-06）
+- [x] WebUI Checks #42174320979 成功：语法、单元测试（含 CSS Token 未定义引用门禁）、Compose 校验和 Nginx 镜像构建通过。
+- [x] Chromium Browser Smoke #42174321184 成功：响应式主流程、CSS AST、CSSOM 8 场景、设置/研究记录/告警/自选股跨标签页、Run Flow、个股研究、数据中心、选股及市场分页专项全部通过。
+- [x] CSSOM 新基线覆盖 dark/light × 320/768/1280/1600px，共 8 个场景、每场景 6 个节点；与旧基线差异已逐项归因于恢复此前失效的边框，没有其他计算样式或尺寸变化。
+- [x] 本批只更新受控 CSSOM fixture 与 WebUI 文档，没有扩大 CSS 物理拆分范围。
+- [ ] 跨 selector DOM 命中、主题、@layer 和响应式级联仍需人工审查；完成前不进行批量 CSS 合并或迁移。
