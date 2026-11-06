@@ -210,6 +210,10 @@ function assertNormalDeclaration(selector, property, value) {
   [".market-index-card-footer .market-index-reasons", "color", "var(--warning)"],
   [".research-overview-metric strong.positive", "color", "var(--positive)"],
   [".research-overview-metric strong.negative", "color", "var(--negative)"],
+  [".metric-primary .metric-foot.positive", "color", "var(--positive)"],
+  [".metric-primary .metric-foot.negative", "color", "var(--negative)"],
+  [".technical-metric-card > small.positive", "color", "var(--positive)"],
+  [".technical-metric-card > small.negative", "color", "var(--negative)"],
   [":root", "--positive", "#f17683"],
   [":root", "--negative", "#55d6a6"],
   [':root[data-theme="light"]', "--positive", "#d63d4e"],
@@ -230,13 +234,8 @@ function assertNormalDeclaration(selector, property, value) {
     ];
   })
 ].forEach(([selector, property, value]) => assertNormalDeclaration(selector, property, value));
-for (const selector of [".positive", ".negative"]) {
-  const entries = selectorRules.get(selector) || [];
-  if (!entries.some((entry) => entry.declarations.some((item) =>
-    item.property === "color" && item.important
-  ))) {
-    throw new Error(`The shared ${selector} safety override must remain until all consumers are audited`);
-  }
+for (const [selector, value] of [[".positive", "var(--positive)"], [".negative", "var(--negative)"]]) {
+  assertNormalDeclaration(selector, "color", value);
 }
 const missing = sharedSelectors.filter((selector) => !selectorRules.has(selector));
 if (missing.length) throw new Error(`Missing shared shell selectors: ${missing.join(", ")}`);

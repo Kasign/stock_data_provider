@@ -261,8 +261,10 @@ h2 { margin: 0; color: #e5edf3; font-size: 14px; font-weight: 650; letter-spacin
 .metric-primary .metric-value { color: var(--accent); font-size: clamp(21px, 2.2vw, 28px); }
 .metric-source { font-size: clamp(13px, 1.2vw, 17px); letter-spacing: 0; }
 .metric-foot { overflow: hidden; margin-top: 6px; color: var(--text-dim); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
-.positive { color: var(--positive) !important; }
-.negative { color: var(--negative) !important; }
+.metric-primary .metric-foot.positive { color: var(--positive); }
+.metric-primary .metric-foot.negative { color: var(--negative); }
+.positive { color: var(--positive); }
+.negative { color: var(--negative); }
 .content-grid { display: grid; grid-template-columns: minmax(0, 1.56fr) minmax(285px, 1fr); gap: var(--layout-panel-gap); margin-top: var(--space-4); }
 .chart-panel, .source-panel, .bars-panel { padding: var(--layout-panel-padding-y) var(--layout-panel-padding-x) 14px; }
 .panel-heading {
@@ -3027,6 +3029,8 @@ button:disabled, input:disabled, select:disabled, textarea:disabled { cursor: no
   font-size: 12px;
   line-height: 1.5;
 }
+.technical-metric-card > small.positive { color: var(--positive); }
+.technical-metric-card > small.negative { color: var(--negative); }
 .technical-metric-card > small.is-emphasis { color: var(--warning); }
 .technical-macd-values {
   display: grid;

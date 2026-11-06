@@ -128,6 +128,132 @@ try {
       await context.close();
     }
   }
+  const marketSemanticColorChecks = [];
+  for (const theme of themes) {
+    for (const scheme of ["cn", "reverse"]) {
+      const context = await browser.newContext({
+        viewport: { width: 1280, height: 900 }, reducedMotion: "reduce"
+      });
+      const page = await context.newPage();
+      await page.addInitScript(({ themeValue, schemeValue }) => {
+        localStorage.setItem("stock-provider-webui.theme.v1", themeValue);
+        localStorage.setItem("stock-provider-webui.preferences.v1", JSON.stringify({
+          marketColorScheme: schemeValue
+        }));
+      }, { themeValue: theme, schemeValue: scheme });
+      await page.route("**/*", async (route) => {
+        const url = new URL(route.request().url());
+        if (url.origin === baseUrl && (url.pathname.includes("/api/") ||
+          /\/(?:health\/(?:ready|live)|readyz|healthz)$/.test(url.pathname))) {
+          return route.fulfill({
+            status: 503, contentType: "application/json",
+            body: JSON.stringify({ status: "unavailable", error: "isolated semantic color fixture" })
+          });
+        }
+        return route.continue();
+      });
+      await page.goto(baseUrl, { waitUntil: "domcontentloaded" });
+      await page.waitForFunction(({ themeValue, schemeValue }) =>
+        document.documentElement.dataset.theme === themeValue &&
+        document.documentElement.dataset.marketColorScheme === schemeValue,
+      { themeValue: theme, schemeValue: scheme });
+      const observation = await page.evaluate(() => {
+        const root = document.documentElement;
+        const required = (selector) => {
+          const element = document.querySelector(selector);
+          if (!element) throw new Error("Semantic color target not found: " + selector);
+          return element;
+        };
+        const tokenColor = (token) => {
+          const probe = document.createElement("span");
+          probe.style.color = "var(" + token + ")";
+          document.body.append(probe);
+          const color = getComputedStyle(probe).color;
+          probe.remove();
+          return color;
+        };
+        const expected = {
+          positive: tokenColor("--positive"),
+          negative: tokenColor("--negative"),
+          flat: tokenColor("--text-soft"),
+          unknown: tokenColor("--text-dim"),
+          warning: tokenColor("--warning")
+        };
+        const checks = {};
+        const record = (name, element, token) => {
+          checks[name] = { actual: getComputedStyle(element).color, expected: expected[token] };
+        };
+        const toggleAndRecord = (name, element, state, token) => {
+          element.classList.remove("positive", "negative");
+          element.classList.add(state);
+          record(name, element, token);
+        };
+        toggleAndRecord("quote-positive", required("#metric-change"), "positive", "positive");
+        toggleAndRecord("quote-negative", required("#metric-change"), "negative", "negative");
+        toggleAndRecord("research-positive", required("#research-overview-change"), "positive", "positive");
+        toggleAndRecord("research-negative", required("#research-overview-change"), "negative", "negative");
+        toggleAndRecord("technical-positive", required("#technical-ma-5-change"), "positive", "positive");
+        toggleAndRecord("technical-negative", required("#technical-ma-5-change"), "negative", "negative");
+
+        const indexChanges = document.createElement("div");
+        indexChanges.className = "market-index-changes";
+        document.body.append(indexChanges);
+        const breadth = document.createElement("div");
+        breadth.className = "market-breadth-metric";
+        document.body.append(breadth);
+        const marketLists = required("#market-lists-panel");
+        const marketActivity = required("#market-activity-panel");
+        for (const state of ["positive", "negative", "flat", "unknown"]) {
+          const token = state;
+          const indexNode = document.createElement(state === "negative" || state === "unknown" ? "strong" : "span");
+          indexNode.className = "market-data-" + state;
+          indexChanges.append(indexNode);
+          record("index-" + state, indexNode, token);
+          const breadthNode = document.createElement("strong");
+          breadthNode.className = "market-data-" + state;
+          breadth.append(breadthNode);
+          record("breadth-" + state, breadthNode, token);
+          const listNode = document.createElement("span");
+          listNode.className = "market-data-" + state;
+          marketLists.append(listNode);
+          record("lists-" + state, listNode, token);
+          const activityNode = document.createElement("span");
+          activityNode.className = "market-data-" + state;
+          marketActivity.append(activityNode);
+          record("activity-" + state, activityNode, token);
+        }
+        const footer = document.createElement("div");
+        footer.className = "market-index-card-footer";
+        const reason = document.createElement("small");
+        reason.className = "market-index-reasons";
+        footer.append(reason);
+        document.body.append(footer);
+        record("index-reason", reason, "warning");
+
+        const table = document.createElement("table");
+        const row = document.createElement("tr");
+        const cell = document.createElement("td");
+        cell.className = "positive";
+        row.append(cell);
+        table.append(row);
+        document.body.append(table);
+        record("table-positive", cell, "positive");
+        cell.className = "negative";
+        record("table-negative", cell, "negative");
+        return { theme: root.dataset.theme, scheme: root.dataset.marketColorScheme, checks };
+      });
+      assert.equal(observation.theme, theme);
+      assert.equal(observation.scheme, scheme);
+      for (const [name, value] of Object.entries(observation.checks)) {
+        assert.equal(value.actual, value.expected, `Semantic color mismatch: ${name} in ${theme}/${scheme}`);
+      }
+      marketSemanticColorChecks.push(observation);
+      await context.close();
+    }
+  }
+  snapshot.marketSemanticColorChecks = marketSemanticColorChecks;
+  console.log("Market semantic colors passed:", marketSemanticColorChecks.length, "theme/scheme scenarios");
+
   const fixturePath = path.join(webRoot, "tests", "fixtures", "screening-local-batch.cssom.json.gz");
   const fixture = JSON.parse(gunzipSync(await readFile(fixturePath)).toString("utf8"));
   assert.equal(fixture.schemaVersion, 1, "CSSOM fixture schema must be supported");
