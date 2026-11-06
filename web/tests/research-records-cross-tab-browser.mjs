@@ -75,6 +75,22 @@ try {
   assert.ok(importedItems.some(item => item.id !== "note-1" && item.title === "远端冲突版本"),
     "conflict copy must be assigned a new ID");
   assert.ok(importedItems.some(item => item.id === "note-3" && item.title === "导入新增"));
+  assert.ok(importedItems.some(item => item.id === "note-3" && item.title === "导入新增"));
+  await importInput.setInputFiles({ name: "research-notes-stale.json", mimeType: "application/json", buffer: Buffer.from(JSON.stringify({
+    format: "stock-provider-webui.research-notes", version: 1, items: [note("note-4", "过期预览记录", "不应导入")]
+  })) });
+  await first.locator("#research-note-import-preview:not([hidden])").waitFor();
+  await second.evaluate(({ key, item }) => {
+    const items = JSON.parse(localStorage.getItem(key));
+    localStorage.setItem(key, JSON.stringify([...items, item]));
+  }, { key: noteKey, item: note("remote-change", "远端新增", "导致预览过期") });
+  await first.locator(".research-note-card").filter({ hasText: "远端新增" }).waitFor();
+  await first.locator("#research-note-import-commit").click();
+  await first.locator("#research-note-import-feedback").filter({ hasText: "预览后本地研究记录已发生变化" }).waitFor();
+  const afterStale = await first.evaluate(key => JSON.parse(localStorage.getItem(key)), noteKey);
+  assert.ok(afterStale.some(item => item.id === "remote-change"), "remote write remains intact");
+  assert.ok(!afterStale.some(item => item.id === "note-4"), "stale preview is rejected");
+  await first.locator("#research-note-import-cancel").click();
   await first.locator("#research-note-search").fill("初始笔记");
   assert.equal(await first.locator(".research-note-card").count(), 1, "search filter narrows the visible list");
   const noteDownloadPromise = first.waitForEvent("download");

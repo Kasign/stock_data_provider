@@ -187,3 +187,18 @@ test("研究记录导入提交检查快照、容量并在回读失败时恢复�
   assert.equal(failedResult.rollback, true);
   assert.equal(failed.raw, raw, "failed import must restore the exact pre-import snapshot");
 });
+
+
+test("研究记录导入容量校验不超过 200 条", async () => {
+  const { previewResearchNotesImport, commitResearchNotesImport } = await import("../src/research-notes.js");
+  const s = memory();
+  const existing = Array.from({ length: 200 }, (_, i) => note("local-" + i, "本地记录 " + i, "正文"));
+  assert.equal(writeResearchNotes(existing, s).ok, true);
+  const raw = s.getItem(RESEARCH_NOTES_KEY);
+  const preview = previewResearchNotesImport(JSON.stringify({
+    format: "stock-provider-webui.research-notes", version: 1,
+    items: [note("remote", "导入记录", "正文")]
+  }), readResearchNotes(s));
+  assert.deepEqual(commitResearchNotesImport(preview, s, raw), { ok: false, reason: "limit" });
+  assert.equal(s.getItem(RESEARCH_NOTES_KEY), raw);
+});
