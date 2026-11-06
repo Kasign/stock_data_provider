@@ -23,7 +23,7 @@ type deliveryPlanKey struct {
 }
 
 type memoryDeliveryPlans struct {
-	mu    sync.Mutex
+	mu             sync.Mutex
 	byKey          map[deliveryPlanKey]domain.DeliveryPlan
 	failNextCreate bool
 }

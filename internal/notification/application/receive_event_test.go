@@ -42,7 +42,7 @@ type memoryInbox struct {
 	byEvent         map[inboxKey]domain.InboxRecord
 	byIdempotency   map[inboxKey]domain.InboxRecord
 	fanoutWorkItems int
-	failNextAccept bool
+	failNextAccept  bool
 }
 
 func newMemoryInbox() *memoryInbox {
