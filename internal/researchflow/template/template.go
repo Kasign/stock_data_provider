@@ -239,7 +239,10 @@ func Resolve(ctx context.Context, t WorkflowTemplate, parameters json.RawMessage
 	if err != nil { return ResolvedTemplate{}, err }
 	for _, code := range order {
 		stage := definitions[code]
-		resolved.Stages = append(resolved.Stages, ResolvedStage{Definition:stage, Dependencies:append([]string(nil), stage.Dependencies...)})
+		dependencies := append([]string(nil), stage.Dependencies...)
+		sort.Strings(dependencies)
+		stage.Dependencies = append([]string(nil), dependencies...)
+		resolved.Stages = append(resolved.Stages, ResolvedStage{Definition:stage, Dependencies:dependencies})
 	}
 	sort.Slice(resolved.Excluded, func(i,j int) bool { return resolved.Excluded[i].StageCode < resolved.Excluded[j].StageCode })
 	return resolved, nil

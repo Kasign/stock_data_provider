@@ -129,3 +129,23 @@ func TestResolvePreservesExecutionPolicyInImmutableSnapshot(t *testing.T) {
 		t.Fatalf("resolved template snapshot lost execution policy: %#v",resolved)
 	}
 }
+
+func TestResolveCanonicalizesDependencySetInSnapshot(t *testing.T) {
+	tmpl:=testTemplate()
+	audit:=StageDefinition{Code:"audit",Required:false,Applicability:ApplicabilityRule{RuleRef:"always",RuleVersion:"1"},Retry:testRetry(),Propagation:testPolicy()}
+	tmpl.Stages=append(tmpl.Stages,audit)
+	tmpl.Stages[1].Dependencies=[]string{"summary","audit"}
+	// Replace the dependent stage with a valid DAG node that depends on both roots.
+	tmpl.Stages[1].Dependencies=[]string{"audit","market"}
+	resolved,err:=Resolve(context.Background(),tmpl,json.RawMessage("{}"),testParameterSchemas{},testEvaluator{"always":true},nil)
+	if err!=nil{t.Fatal(err)}
+	var final *ResolvedStage
+	for i:=range resolved.Stages{if resolved.Stages[i].Definition.Code=="summary"{final=&resolved.Stages[i];break}}
+	if final==nil{t.Fatal("summary stage missing")}
+	if len(final.Dependencies)!=2||final.Dependencies[0]!="audit"||final.Dependencies[1]!="market"{
+		t.Fatalf("resolved dependency set is not canonical: %#v",final.Dependencies)
+	}
+	if len(final.Definition.Dependencies)!=2||final.Definition.Dependencies[0]!="audit"||final.Definition.Dependencies[1]!="market"{
+		t.Fatalf("resolved definition snapshot is not canonical: %#v",final.Definition.Dependencies)
+	}
+}
