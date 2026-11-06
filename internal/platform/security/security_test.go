@@ -179,7 +179,7 @@ func TestNewAuthenticatorRejectsTooManyServiceCredentials(t *testing.T) {
 	services := make([]ServiceCredential, maximumServiceCredentials+1)
 	for index := range services {
 		services[index] = ServiceCredential{
-			Name: "service-" + strconv.Itoa(index),
+			Name:   "service-" + strconv.Itoa(index),
 			Secret: makeSecret(dataToken),
 			Scopes: []string{ScopeDataRead},
 		}
