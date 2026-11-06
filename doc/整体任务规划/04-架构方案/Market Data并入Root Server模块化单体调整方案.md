@@ -105,7 +105,7 @@ docker-compose
 | Nginx | `web/default.conf.template` 的 `/market-api/` 当前代理到 Data 服务，`/analysis-api/` 代理 Server | 两个前缀可保留，但上游统一改为 Root Server |
 | go-core | `docker/docker-compose.go-migration.yml` 将 Python Bridge、go-core、Data 组成单独的 `go-migration` profile，并明确不与根 Compose 叠加；根 Compose 当前运行的是根模块 `cmd/analysis-api` | go-core 是仓库保留的旧迁移部署路径，不是根 Compose 的当前组合入口；本次不把 go-core 合并进 Root Server。仍需部署现场确认没有继续使用旧 profile |
 
-**M0 扩展分支复核（2026-11-06）：** 本轮只读审计以 Data 分支 `feat/full-go-data-providers-api-switch` HEAD `d34eb937eaae713220456c8e8ba7c62f1227b7c8` 为准。根 `go.mod` 仍是 `example.com/stock-analysis-flow` / Go 1.22；Data `go.mod` 仍是独立 Module / Go 1.23.0；根 Dockerfile Builder 为 Go 1.22，Data Dockerfile Builder 为 Go 1.23，CI Go setup 为 1.23.x。Data 归并尚未开始。Data 分支从代码基线 `4ca1da2` 到当前 HEAD `8c56936` 的比较仅显示迁移跟踪文档有变化，没有生产 Go/配置/部署代码变化；因此本段代码证据仍对应 `4ca1da2` 的实现状态，当前 HEAD 主要推进了审计记录。
+**M0 扩展分支复核（2026-11-06）：** 本轮只读审计以 Data 分支 `feat/full-go-data-providers-api-switch` HEAD `d34eb937eaae713220456c8e8ba7c62f1227b7c8` 为准。根 `go.mod` 仍是 `example.com/stock-analysis-flow` / Go 1.22；Data `go.mod` 仍是独立 Module / Go 1.23.0；根 Dockerfile Builder 为 Go 1.22，Data Dockerfile Builder 为 Go 1.23，CI Go setup 为 1.23.x。Data 归并尚未开始。Data 分支从代码基线 `4ca1da2` 到当前 HEAD `d34eb93` 的比较仅显示迁移跟踪文档有变化，没有生产 Go/配置/部署代码变化；因此本段代码证据仍对应 `4ca1da2` 的实现状态，当前 HEAD 主要推进了审计记录。
 
 本轮新增确认：
 
