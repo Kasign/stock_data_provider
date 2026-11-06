@@ -1565,3 +1565,127 @@ M2/M4 必须将 Worker 改为可管理对象或显式 Start/Stop/Wait：
 - [ ] M0 全量验收记录与 MDM-001 契约修正门禁。
 
 **当前结论：** 契约已明确 Data 同进程调用边界和 DATA-CTR-005～008 的后续接入语义；部分 v1 OpenAPI/Go 字段修正已在 Data 分支真实提交，但认证继承、错误 Schema 引用、部分 required/nullable 和错误状态码仍未闭环。M0 继续 `in_progress`，M1 不准入。本轮仍为只读审计，没有修改 API、业务实现、Provider、测试或规划分支文件。
+
+
+### 2026-11-06：M0 第二十五轮（Handler 状态码闭环与 Migration / Module 归并核查）
+
+审计基线：`b85e1874da80022095ee9dea08e95b50622e1d08`。本轮读取当前 35 条 mux 路由、所有 HTTP Handler、统一错误映射、OpenAPI responses、Repository Migration、SQL DDL、Root/Nested go.mod。仅更新本迁移审计文档。
+
+#### 1. 真实 HTTP 状态码规则（以 Handler 为准）
+
+统一错误出口 `writeDomainErr` 的确定映射：
+- 参数/领域输入错误：400 `VALIDATION_ERROR`。
+- 无启用能力 Provider：503 `PROVIDER_UNAVAILABLE`。
+- 上游超时：504 `PROVIDER_TIMEOUT`，retryable=true。
+- 请求 Context 取消：408 `REQUEST_CANCELED`。
+- 其他 Provider/上游错误：502 `PROVIDER_BAD_RESPONSE`。
+- `writeJSON` 序列化失败兜底为 500 `INTERNAL_ERROR`；该分支是通用防御性兜底，不代表每个响应 DTO 当前都存在可触发的序列化错误。
+- 所有 33 个业务路由在 auth middleware 层均可返回 401；两个 Health 路由不经过 auth。
+- Health Ready 独立返回 503 `DEPENDENCY_UNAVAILABLE`。
+- PIT 查询另有明确的 503（PIT storage disabled）和 404（指定 as_of 没有可用 revision）。
+- 批量行情有意将单只股票 Quote 失败放入 item.error_code，整体仍返回 200，不应错误地给该 Operation 加 502/503。
+
+#### 2. 35 Operation 状态码对照（OpenAPI 当前声明与 Handler 可达行为）
+
+| Operation | OpenAPI 当前响应 | Handler 可达状态 / 说明 |
+|---|---|---|
+| GET /health/live | 200 | 200 |
+| GET /health/ready | 200,503 | 200,503 |
+| GET /api/v1/market/quotes | 200,400,401 | 200,400,401；单只 Quote 失败内嵌 item，不改变整体状态 |
+| GET /api/v1/quotes/{symbol} | 200,400,401,502,504 | 200,400,401,408,502,503,504；缺 408/503 |
+| GET /api/v1/bars/{symbol}/daily | 200,400,401,404,502,503,504 | 200,400,401,404,408,502,503,504；缺 408 |
+| GET /api/v1/bundles/{symbol} | 200,400,401,502,504 | 200,400,401,408,502,503,504；缺 408/503 |
+| POST /api/v1/data-sources/probe | 200,400,401,500 | 200,400,401；500 是 JSON 序列化兜底 |
+| GET /api/v1/data-sources/probe/history | 200,400,401,503 | 200,400,401,408,502,503,504；缺 408/502/504 |
+| GET /api/v1/data-sources/diagnostics | 200 | 200,401；缺 401 |
+| GET /api/v1/data-sources | 200,401 | 200,401 |
+| GET /api/v1/stocks/search | 200,400,401,502,503 | 200,400,401,408,502,503,504；缺 408/504 |
+| GET /api/v1/stocks/{symbol}/announcements | 200,400,401,502 | 200,400,401,408,502,503,504；缺 408/503/504 |
+| GET /api/v1/stocks/{symbol}/profile | 200,400,401,502,503 | 200,400,401,408,502,503,504；缺 408/504 |
+| GET /api/v1/stocks/{symbol}/price-limit-rule | 200,400,401 | 200,400,401,408,502,503,504；缺 408/502/503/504 |
+| GET /api/v1/stocks/{symbol}/trading-status | 200,400,401,404,502,503 | 200,400,401,404,408,502,503,504；缺 408/504 |
+| GET /api/v1/stocks/{symbol}/fundamentals | 200,400,401,404,502,503 | 200,400,401,404,408,502,503,504；缺 408/504 |
+| GET /api/v1/stocks/{symbol}/chip-distribution | 200,400,401,502,503 | 200,400,401,408,502,503,504；缺 408/504 |
+| GET /api/v1/stocks/{symbol}/capital-flow | 200,400,401,502,503 | 200,400,401,408,502,503,504；缺 408/504 |
+| GET /api/v1/stocks/{symbol}/boards | 200,400,401,502,503 | 200,400,401,408,502,503,504；缺 408/504 |
+| GET /api/v1/market/valuations | 200,400,401,502,503 | 200,400,401,408,502,503,504；缺 408/504 |
+| GET /api/v1/market/sectors | 200,400,401,502,503 | 200,400,401,408,502,503,504；缺 408/504 |
+| GET /api/v1/market/index-catalog | 200,400,401,502,503 | 200,400,401,408,502,503,504；缺 408/504 |
+| GET /api/v1/market/indices/{symbol}/constituents | 200,400,401,502,503 | 200,400,401,408,502,503,504；缺 408/504 |
+| GET /api/v1/market/indices/{symbol}/daily | 200,400,401,502,503 | 200,400,401,408,502,503,504；缺 408/504 |
+| GET /api/v1/market/indices | 200,401,502,503 | 200,401,408,502,503,504；缺 408/504 |
+| GET /api/v1/market/trading-calendar | 200,400,401,502,503 | 200,400,401,408,502,503,504；缺 408/504 |
+| GET /api/v1/market/session | 200,400,401,502,503 | 200,400,401,408,502,503,504；缺 408/504 |
+| GET /api/v1/market/stocks | 200,400,401,502,503 | 200,400,401,408,502,503,504；缺 408/504 |
+| GET /api/v1/market/capital-flow | 200,400,401,502,503 | 200,400,401,408,502,503,504；缺 408/504 |
+| GET /api/v1/market/sentiment | 200,400,401,502 | 200,400,401,408,502,503,504；缺 408/503/504 |
+| GET /api/v1/market/sentiment/history | 200,400,401,503 | 200,400,401,408,502,503,504；缺 408/502/504 |
+| GET /api/v1/market/breadth | 200,401,502,503 | 200,401,408,502,503,504；缺 408/504 |
+| GET /api/v1/market/hot-stocks | 200,400,401,502,503 | 200,400,401,408,502,503,504；缺 408/504 |
+| GET /api/v1/market/dragon-tiger | 200,400,401,502 | 200,400,401,408,502,503,504；缺 408/503/504 |
+| GET /api/v1/market/limit-pools | 200,400,401,502,503 | 200,400,401,408,502,503,504；缺 408/504 |
+
+说明：
+- “Handler 可达”是按统一错误映射和各 Handler 的调用路径做静态推导，不是运行时逐一注入故障所得；后续 Contract Test 需要把这些映射变成可执行断言。
+- 上表将 domain error 分支按统一映射列出。对某个能力实际不会出现“无 Provider”或某类错误的，需要由 Service 实现和 Provider 组合再缩窄，不可仅因共用 writeDomainErr 就机械添加无意义响应。
+- diagnostics 缺 401 是本轮确认的文档遗漏；此前的“只有 diagnostics 缺 401”结论仍成立。
+- 之前只列出 5 个漏 503 的结论不完整：price-limit-rule 等共用 writeDomainErr 的 Operation 还需按实际 Service 能力核验；不应继续把 5 个视为完整差异集。
+
+#### 3. Error Schema / Contract Test 需要落地的最小范围
+
+- 先定义共享错误 Response 组件，将 Error Schema 引用到真实可达的错误状态码。
+- Error JSON 的 `class/code/message/retryable` 在当前编码器中始终写出；`request_id` 由 middleware 提供时写出。Schema required 应反映这一点。
+- 408 是否作为稳定公开响应保留，需要产品/API 决策；若保留，应为所有真实可达的 domain-error Operation 声明；若不保留，应调整 Handler 对 Context canceled 的 HTTP 映射，不能只删 OpenAPI 声明。
+- 500 目前仅是通用 JSON 序列化兜底；建议共享错误组件覆盖 500，但不要把它误判为常规 Provider 故障。
+- 503 必须按 Service 的真实能力空集分支确认。对于已明确 no enabled provider 的能力，Operation 必须声明 503。
+- 增加基于 mux/OpenAPI 的路由集合、认证继承、响应状态码映射测试；再对 400/401/404/408/502/503/504 错误体做共享 Golden，而不是为每个接口重复快照。
+
+#### 4. SQL DDL 与运行时 Migration 对照
+
+当前 Data 目录只存在一份 SQL 文件 `migrations/001_create_market_data.sql`，而真正运行迁移的入口是 `internal/repository/mysql.go:Store.Migrate` 中的 Go 字符串 DDL，并非读取/执行该 SQL 文件。
+
+已核对两侧基础表集合均为 9 张：
+1. market_data_quotes
+2. market_data_daily_bars
+3. market_data_daily_bar_versions
+4. market_data_fundamental_versions
+5. market_data_security_trading_status_versions
+6. market_data_sentiment_snapshots
+7. market_data_provider_probe_runs
+8. market_data_adjustment_factor_versions
+9. market_data_corporate_action_versions
+
+基础字段与核心索引设计总体同向，SQL 文件不是完整的历史迁移序列，也不是运行时唯一事实来源。运行时 Go Migration 额外承担旧库升级：
+- `ensureNonUniqueHistoryIndex` 检查并删除旧的内容哈希唯一索引，再建立允许 A→B→A 修订序列的非唯一复合索引；覆盖 daily-bar 与 fundamentals revision 表。
+- `ensureColumn` 为旧版 `market_data_quotes` 补充 `volume_ratio`、`turnover_rate`。
+- SQL 初始 DDL 已包含这两列和目标非唯一索引，但不包含上述旧库索引替换逻辑。
+- Migration 没有 schema_migrations/version 表，重复执行靠 CREATE IF NOT EXISTS + information_schema 幂等检查；DDL 多语句不是单一事务。
+- Root Compose 目前 Data 容器独立启动并执行 AutoMigrate；合并后应由 Root Composition Root 在唯一 DB Pool 上执行一次 Data migration。必须明确失败时不启动依赖 Data 的业务路由，且不能让 Data Store 关闭 Root 所有的 DB Pool。
+
+**迁移风险：** 不能把 `001_create_market_data.sql` 当作可重放全部历史数据库的版本化 migration。M1/M4 应先建立当前生产 Schema 基线与旧索引兼容测试，再决定采用现有幂等 Go Migration 迁入统一 Migration Registry，还是将其拆成有版本号的增量迁移。不得在未比对真实部署 Schema 前重建或重命名任何表/索引。
+
+#### 5. Go Module 归并前置发现
+
+当前 Root 与 Data 仍是两个 Go Module：
+- Root `go.mod`: module `example.com/stock-analysis-flow`，Go 1.22；MySQL Driver v1.9.3，Redis v9.7.3。
+- Data `services/market-data/go.mod`: module `github.com/Kasign/stock_data_provider/services/market-data`，Go 1.23.0；MySQL Driver v1.8.1，另有 `github.com/injoyai/tdx v0.0.86`、`golang.org/x/text v0.28.0` 等 Provider 依赖。
+- Data 生产代码大量使用嵌套 Module 的完整 import path；归并到 Root 后必须整体替换为 Root module path 下的 `internal/marketdata/...`，不能保留旧 module import。
+- Go 版本需从 1.22 升到至少 1.23.0（除非逐项验证并降级 Data 代码/依赖，不建议为迁移降低版本）。
+- MySQL Driver 需要选定单一版本；Root 现用 v1.9.3，Data v1.8.1，优先验证 v1.9.3 与 Data Store/Integration Test 兼容。
+- Data 依赖中的 SQLite/Xorm/leveldb 等大部分当前标记为 indirect，但是否仍被实际 package graph 引入需要通过 `go mod why` / `go list -deps` 验证；不能仅凭 indirect 就删除。
+- Root 模块路径当前是 `example.com/stock-analysis-flow`，需要确认这是有意的稳定 import path 还是历史占位符；M1 不应未经决策就随意更换 module path。
+- 根 Dockerfile 当前构建 Root Module；Data 独立 Dockerfile/Compose 构建嵌套 Module。M1 合并后应先让 Root 的 `go test ./...` 能覆盖迁移后的 Data 包，再改部署构建。
+
+#### 6. 本轮结论与下一步
+
+- [x] 35 Operation 的路由、认证入口和 OpenAPI response code 已重新对照。
+- [x] 统一错误映射及 408/500/502/503/504 产生条件已核对。
+- [x] 纠正“5 个 503 漏项就是全部差异”的过早结论，按各 Handler 的真实错误出口细化。
+- [x] 9 张 Data 表在 SQL 初始 DDL 与 Go Runtime Migration 中均有定义。
+- [x] 确认 Runtime Migration 额外负责旧索引替换与旧列补齐，SQL 文件不能替代迁移历史。
+- [x] 发现 Root/Data Go 版本和 MySQL Driver 版本冲突，列出 M1 依赖归并要求。
+- [ ] 在真实数据库 Schema（生产/测试脱敏快照）上执行完整 DDL 差异核验；当前只对仓库 DDL 做静态对照。
+- [ ] M0 全量 Contract Test 与 v1 OpenAPI 修正尚未执行。
+- [ ] M1 Go Module 归并仍未开始，当前仅完成依赖冲突清单。
+
+**当前状态：** M0 仍 `in_progress`，M1 暂不准入。下一轮优先把 Model ↔ OpenAPI 全量差异做成可复核的字段矩阵，并将本轮状态码结论纳入 MDM-001；若用户授权实施契约修正，则可在当前分支一次性修复 OpenAPI 与 Contract Test，不触碰其他模块代码。
