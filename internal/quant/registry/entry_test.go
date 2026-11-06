@@ -92,6 +92,18 @@ func TestEntryValidateAcceptsMathematicallyIntegralJSONNumber(t *testing.T) {
 	}
 }
 
+func TestEntryValidateCountsExponentExpandedDigits(t *testing.T) {
+	entry := validEntry("ratio_metric", "1.0.0")
+	entry.Precision.MaxIntegerDigits = 3
+	entry.Range = NumericRange{
+		Minimum: json.RawMessage("0"),
+		Maximum: json.RawMessage("1e4"),
+	}
+	if err := entry.Validate(); !errors.Is(err, ErrInvalidEntry) {
+		t.Fatalf("expected exponent-expanded integer digits to exceed precision, got %v", err)
+	}
+}
+
 func TestEntryValidatePreservesExactJSONNumberPrecision(t *testing.T) {
 	entry := validEntry("ratio_metric", "1.0.0")
 	entry.Precision.MaxFractionDigits = 18

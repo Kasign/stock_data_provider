@@ -10,6 +10,7 @@ import (
 	"math/big"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 )
@@ -78,7 +79,166 @@ var (
 
 var (
 	codePattern    = regexp.MustCompile(`^[a-z][a-z0-9_]*$`)
-	versionPattern = regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?$`)
+	versionPattern = regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?package registry
+
+import (
+	"bytes"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"math"
+	"math/big"
+	"regexp"
+	"sort"
+	"strings"
+	"sync"
+)
+
+type ValueType string
+
+const (
+	ValueTypeDecimalString ValueType = "decimal_string"
+	ValueTypeInteger       ValueType = "integer"
+	ValueTypeNumber        ValueType = "number"
+)
+
+type Precision struct {
+	MaxIntegerDigits   int             `json:"max_integer_digits"`
+	MaxFractionDigits int             `json:"max_fraction_digits"`
+	RoundingMode      string          `json:"rounding_mode"`
+	Tolerance         json.RawMessage `json:"tolerance"`
+}
+
+type NumericRange struct {
+	Minimum   json.RawMessage `json:"minimum,omitempty"`
+	Maximum   json.RawMessage `json:"maximum,omitempty"`
+	Unbounded bool            `json:"unbounded"`
+}
+
+type InputRequirement struct {
+	Fields           []string `json:"fields"`
+	Interval         string   `json:"interval"`
+	Adjustment       string   `json:"adjustment"`
+	PIT              bool     `json:"pit"`
+	Quality          []string `json:"quality"`
+	RequiresSnapshot bool     `json:"requires_snapshot"`
+}
+
+type QualityPolicy struct {
+	MinimumCoverage      float64  `json:"minimum_coverage"`
+	MissingHandling      string   `json:"missing_handling"`
+	QualityStates        []string `json:"quality_states"`
+	UnavailableConditions []string `json:"unavailable_conditions"`
+}
+
+// Entry 是 Quant 指标、Indicator 或 Factor 的不可变语义元数据。
+// ParametersSchema 保留 JSON Schema 原文，避免把参数定义降级为无约束 map。
+type Entry struct {
+	Code              string              `json:"code"`
+	SchemaVersion     string              `json:"schema_version"`
+	ValueType         ValueType           `json:"value_type"`
+	Unit              string              `json:"unit"`
+	Precision         Precision           `json:"precision"`
+	Range             NumericRange        `json:"range"`
+	AlgorithmVersion  string              `json:"algorithm_version"`
+	InputRequirements []InputRequirement  `json:"input_requirements"`
+	ParametersSchema  json.RawMessage     `json:"parameters_schema"`
+	QualityPolicy     QualityPolicy       `json:"quality_policy"`
+	SupportsInterval  bool                `json:"supports_interval"`
+}
+
+var (
+	ErrInvalidEntry       = errors.New("invalid registry entry")
+	ErrDuplicateVersion   = errors.New("registry entry version already registered")
+	ErrActiveVersionExists = errors.New("active algorithm version already exists")
+	ErrUnknownEntry       = errors.New("registry entry not found")
+	ErrNoActiveVersion    = errors.New("active algorithm version not found")
+	ErrRegistryFrozen     = errors.New("registry is frozen")
+)
+
+var (
+	codePattern    = regexp.MustCompile(`^[a-z][a-z0-9_]*$`))
+	jsonNumberPattern = regexp.MustCompile(`^(-?)(0|[1-9][0-9]*)(?:\.([0-9]+))?(?:[eE]([+-]?[0-9]+))?package registry
+
+import (
+	"bytes"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"math"
+	"math/big"
+	"regexp"
+	"sort"
+	"strings"
+	"sync"
+)
+
+type ValueType string
+
+const (
+	ValueTypeDecimalString ValueType = "decimal_string"
+	ValueTypeInteger       ValueType = "integer"
+	ValueTypeNumber        ValueType = "number"
+)
+
+type Precision struct {
+	MaxIntegerDigits   int             `json:"max_integer_digits"`
+	MaxFractionDigits int             `json:"max_fraction_digits"`
+	RoundingMode      string          `json:"rounding_mode"`
+	Tolerance         json.RawMessage `json:"tolerance"`
+}
+
+type NumericRange struct {
+	Minimum   json.RawMessage `json:"minimum,omitempty"`
+	Maximum   json.RawMessage `json:"maximum,omitempty"`
+	Unbounded bool            `json:"unbounded"`
+}
+
+type InputRequirement struct {
+	Fields           []string `json:"fields"`
+	Interval         string   `json:"interval"`
+	Adjustment       string   `json:"adjustment"`
+	PIT              bool     `json:"pit"`
+	Quality          []string `json:"quality"`
+	RequiresSnapshot bool     `json:"requires_snapshot"`
+}
+
+type QualityPolicy struct {
+	MinimumCoverage      float64  `json:"minimum_coverage"`
+	MissingHandling      string   `json:"missing_handling"`
+	QualityStates        []string `json:"quality_states"`
+	UnavailableConditions []string `json:"unavailable_conditions"`
+}
+
+// Entry 是 Quant 指标、Indicator 或 Factor 的不可变语义元数据。
+// ParametersSchema 保留 JSON Schema 原文，避免把参数定义降级为无约束 map。
+type Entry struct {
+	Code              string              `json:"code"`
+	SchemaVersion     string              `json:"schema_version"`
+	ValueType         ValueType           `json:"value_type"`
+	Unit              string              `json:"unit"`
+	Precision         Precision           `json:"precision"`
+	Range             NumericRange        `json:"range"`
+	AlgorithmVersion  string              `json:"algorithm_version"`
+	InputRequirements []InputRequirement  `json:"input_requirements"`
+	ParametersSchema  json.RawMessage     `json:"parameters_schema"`
+	QualityPolicy     QualityPolicy       `json:"quality_policy"`
+	SupportsInterval  bool                `json:"supports_interval"`
+}
+
+var (
+	ErrInvalidEntry       = errors.New("invalid registry entry")
+	ErrDuplicateVersion   = errors.New("registry entry version already registered")
+	ErrActiveVersionExists = errors.New("active algorithm version already exists")
+	ErrUnknownEntry       = errors.New("registry entry not found")
+	ErrNoActiveVersion    = errors.New("active algorithm version not found")
+	ErrRegistryFrozen     = errors.New("registry is frozen")
+)
+
+var (
+	codePattern    = regexp.MustCompile(`^[a-z][a-z0-9_]*$`))
 	decimalPattern = regexp.MustCompile(`^-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?$`)
 )
 
@@ -173,18 +333,16 @@ func parseNumeric(raw json.RawMessage, valueType ValueType, precision Precision)
 		if err != nil {
 			return nil, err
 		}
-		text = number.String()
+		text, err = normalizeJSONNumber(number.String())
+		if err != nil {
+			return nil, err
+		}
 		if valueType == ValueTypeInteger {
 			integer, ok := new(big.Rat).SetString(text)
 			if !ok || !integer.IsInt() {
 				return nil, errors.New("invalid integer")
 			}
 			text = integer.Num().String()
-		} else {
-			// 保留 JSON 十进制原文，避免 float64 往返造成精度位数丢失。
-			if _, ok := new(big.Rat).SetString(text); !ok {
-				return nil, errors.New("invalid finite number")
-			}
 		}
 	default:
 		return nil, errors.New("unsupported value type")
@@ -204,6 +362,41 @@ func parseNumeric(raw json.RawMessage, valueType ValueType, precision Precision)
 		return nil, errors.New("invalid numeric value")
 	}
 	return rat, nil
+}
+
+func normalizeJSONNumber(text string) (string, error) {
+	parts := jsonNumberPattern.FindStringSubmatch(text)
+	if parts == nil {
+		return "", errors.New("invalid JSON number")
+	}
+
+	exponent := 0
+	if parts[4] != "" {
+		value, err := strconv.Atoi(parts[4])
+		if err != nil || value > 10000 || value < -10000 {
+			return "", errors.New("JSON number exponent exceeds safety limit")
+		}
+		exponent = value
+	}
+
+	digits := parts[2] + parts[3]
+	if strings.Trim(digits, "0") == "" {
+		return "0", nil
+	}
+	decimalPosition := len(parts[2]) + exponent
+	var normalized string
+	switch {
+	case decimalPosition <= 0:
+		normalized = "0." + strings.Repeat("0", -decimalPosition) + digits
+	case decimalPosition >= len(digits):
+		normalized = digits + strings.Repeat("0", decimalPosition-len(digits))
+	default:
+		normalized = digits[:decimalPosition] + "." + digits[decimalPosition:]
+	}
+	if parts[1] == "-" {
+		normalized = "-" + normalized
+	}
+	return normalized, nil
 }
 
 func decodeJSONNumber(raw json.RawMessage) (json.Number, error) {
