@@ -161,7 +161,7 @@ func Bollinger(closes []float64,p BollingerParams)(BandsResult,error) {
 
 func emaSeries(values []float64,window int)([]float64,error) {
 	if window<1{return nil,ErrInvalidParameter}
-	if err:=validatePrices(values);err!=nil{return nil,err}
+	if err:=validateFinite(values);err!=nil{return nil,err}
 	if len(values)<window{return nil,nil}
 	out:=make([]float64,len(values))
 	seed:=mean(values[:window])
@@ -173,6 +173,10 @@ func emaSeries(values []float64,window int)([]float64,error) {
 
 func validatePrices(values []float64)error {
 	for _,value:=range values { if !finite(value)||value<=0{return ErrInvalidInput} }
+	return nil
+}
+func validateFinite(values []float64)error {
+	for _,value:=range values { if !finite(value){return ErrInvalidInput} }
 	return nil
 }
 func finite(value float64)bool{return !math.IsNaN(value)&&!math.IsInf(value,0)}
