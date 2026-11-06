@@ -199,6 +199,10 @@ func SameObservationPayload(a, b domain.Observation) bool {
 	aCandidate, bCandidate := a.Candidate, b.Candidate
 	aCandidate.ObservedAt = time.Time{}
 	bCandidate.ObservedAt = time.Time{}
+	aCandidate.FetchedAt = nil
+	bCandidate.FetchedAt = nil
+	aCandidate.NormalizedAt = nil
+	bCandidate.NormalizedAt = nil
 	return a.IdempotencyKey == b.IdempotencyKey &&
 		a.SourceID == b.SourceID &&
 		a.ProviderCode == b.ProviderCode &&

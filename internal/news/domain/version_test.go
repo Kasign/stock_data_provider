@@ -7,13 +7,20 @@ import (
 
 func TestBuildVersionFingerprintIgnoresObservationAndProviderSummary(t *testing.T) {
 	published := time.Date(2026, 11, 5, 9, 30, 0, 0, time.UTC)
+	firstFetchedAt := time.Date(2026, 11, 5, 9, 0, 0, 0, time.UTC)
+	firstNormalizedAt := time.Date(2026, 11, 5, 9, 1, 0, 0, time.UTC)
 	first := Candidate{
 		Title: "  市场 观察 ", PublisherName: "媒体", PublishedAt: &published,
 		ProviderSummary: "provider summary A", ObservedAt: time.Date(2026, 11, 5, 10, 0, 0, 0, time.UTC),
+		FetchedAt: &firstFetchedAt, NormalizedAt: &firstNormalizedAt,
 	}
 	second := first
 	second.ProviderSummary = "provider summary B"
 	second.ObservedAt = time.Date(2026, 11, 6, 10, 0, 0, 0, time.UTC)
+	secondFetchedAt := time.Date(2026, 11, 6, 9, 0, 0, 0, time.UTC)
+	secondNormalizedAt := time.Date(2026, 11, 6, 9, 1, 0, 0, time.UTC)
+	second.FetchedAt = &secondFetchedAt
+	second.NormalizedAt = &secondNormalizedAt
 	if a, b := BuildVersionFingerprint(first, ContentLayers{}), BuildVersionFingerprint(second, ContentLayers{}); a != b {
 		t.Fatalf("non-version fields changed fingerprint: %s != %s", a, b)
 	}

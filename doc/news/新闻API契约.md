@@ -190,3 +190,8 @@ Cursor 外部格式为 `base64url(payload).base64url(signature)`，签名为 HMA
 News Application 已实现 `EvidenceCursorCodec`：签发与验证均绑定 caller_ref、purpose_code、requested_content_level、规范化 filters 指纹、page_size、system_as_of、snapshot_ref、`news-evidence-v1` 排序版本和最后一条排序键；TTL 固定 15 分钟。密钥由 Platform `config.Secret` 注入，轮换期间必须同时保留 active 与尚未过期 Cursor 使用的 previous keys。
 
 Cursor Codec 不保存分页结果快照。Snapshot Store 缺失、过期或不可用时仍必须明确失败，不得重新创建快照或退回 OFFSET。
+
+
+### 11.7 采集时间字段语义
+
+Evidence DTO 的 `fetched_at` 和 `normalized_at` 来自 Observation 中的 Candidate 过程时间。News 当前不推断 `available_at`：未取得来源明确、可验证的公开可用时间证据时返回 JSON `null`。`observed_at` 对应系统观察时间，三者不可互相替代。

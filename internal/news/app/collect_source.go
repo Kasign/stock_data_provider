@@ -83,6 +83,8 @@ type CollectSourceResult struct {
 	FeedFormat              parser.FeedFormat
 	FeedTitle               string
 	ObservedAt              time.Time
+	FetchedAt               time.Time
+	NormalizedAt            time.Time
 	Entries                 []CollectedSourceEntry
 }
 
@@ -206,8 +208,8 @@ func (u *CollectSource) Execute(ctx context.Context, request CollectSourceReques
 		return CollectSourceResult{}, &SourceCollectionError{Code: "source_content_type_unsupported"}
 	}
 
-	observedAt := u.now().UTC()
-	feed, err := parser.ParseFeed(payload, observedAt)
+	fetchedAt := u.now().UTC()
+	feed, err := parser.ParseFeed(payload, fetchedAt)
 	if err != nil {
 		return CollectSourceResult{}, &SourceCollectionError{Code: "source_feed_parse_failed"}
 	}
@@ -223,14 +225,14 @@ func (u *CollectSource) Execute(ctx context.Context, request CollectSourceReques
 		PolicyEvaluatedAt:       policyEvaluatedAt,
 		FeedFormat:              feed.Format,
 		FeedTitle:               feed.Title,
-		ObservedAt:              observedAt,
+		FetchedAt:               fetchedAt,
 		Entries:                 make([]CollectedSourceEntry, 0, min(len(feed.Entries), request.MaxEntries)),
 	}
 	for _, entry := range feed.Entries {
 		if len(result.Entries) >= request.MaxEntries {
 			break
 		}
-		candidate := domain.NormalizeCandidate(entry.ToCandidate(registration.PublisherName, registration.PublisherDomain), observedAt, request.QueryDimension)
+		candidate := domain.NormalizeCandidate(entry.ToCandidate(registration.PublisherName, registration.PublisherDomain), fetchedAt, request.QueryDimension)
 		if candidate.RawURL != "" {
 			itemURL := domain.EvaluateSourceURL(candidate.RawURL, registration.URLPolicy)
 			if itemURL.Allowed {
@@ -241,6 +243,16 @@ func (u *CollectSource) Execute(ctx context.Context, request CollectSourceReques
 			Candidate: candidate,
 			Content:   domain.RestrictContentLayers(entry.ContentLayers(""), request.ContentKind),
 		})
+	}
+	normalizedAt := u.now().UTC()
+	result.NormalizedAt = normalizedAt
+	result.ObservedAt = normalizedAt
+	for index := range result.Entries {
+		fetched := fetchedAt
+		normalized := normalizedAt
+		result.Entries[index].Candidate.FetchedAt = &fetched
+		result.Entries[index].Candidate.NormalizedAt = &normalized
+		result.Entries[index].Candidate.ObservedAt = normalizedAt
 	}
 	return result, nil
 }

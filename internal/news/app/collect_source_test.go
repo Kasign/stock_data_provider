@@ -312,3 +312,41 @@ func TestSourceTransportRetryableUsesAdapterClassification(t *testing.T) {
 		t.Fatal("unknown transport error must remain non-retryable")
 	}
 }
+
+
+func TestCollectSourceRecordsFetchAndNormalizationTimesSeparately(t *testing.T) {
+	body := `<?xml version="1.0"?><rss version="2.0"><channel><item><guid>item-1</guid><title>标题</title><link>https://publisher.example/item-1</link></item></channel></rss>`
+	transport := &sourceTransportStub{response: feedResponse(body, "application/rss+xml", http.StatusOK)}
+	useCase := NewCollectSource(sourceCatalogStub{registration: approvedSourceRegistration()}, transport)
+	policyAt := time.Date(2026, 11, 6, 10, 0, 0, 0, time.UTC)
+	fetchedAt := policyAt.Add(time.Second)
+	normalizedAt := policyAt.Add(2 * time.Second)
+	times := []time.Time{policyAt, fetchedAt, normalizedAt}
+	index := 0
+	useCase.now = func() time.Time {
+		value := times[index]
+		index++
+		return value
+	}
+
+	result, err := useCase.Execute(context.Background(), validCollectRequest())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if index != len(times) {
+		t.Fatalf("clock calls=%d, want %d", index, len(times))
+	}
+	if !result.FetchedAt.Equal(fetchedAt) || !result.NormalizedAt.Equal(normalizedAt) ||
+		!result.ObservedAt.Equal(normalizedAt) {
+		t.Fatalf("collection timestamps=%+v", result)
+	}
+	if len(result.Entries) != 1 {
+		t.Fatalf("entries=%d, want 1", len(result.Entries))
+	}
+	candidate := result.Entries[0].Candidate
+	if candidate.FetchedAt == nil || !candidate.FetchedAt.Equal(fetchedAt) ||
+		candidate.NormalizedAt == nil || !candidate.NormalizedAt.Equal(normalizedAt) ||
+		!candidate.ObservedAt.Equal(normalizedAt) {
+		t.Fatalf("candidate timestamps=%+v", candidate)
+	}
+}

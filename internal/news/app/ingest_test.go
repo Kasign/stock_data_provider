@@ -287,3 +287,37 @@ func TestIngestCandidateRejectsIncompletePolicyTrace(t *testing.T) {
 		t.Fatalf("error=%v repository=%+v", err, repository)
 	}
 }
+
+
+func TestIngestCandidateIdempotencyIgnoresPerAttemptFetchAndNormalizeTimes(t *testing.T) {
+	repository := &memoryIdentityRepository{}
+	useCase := NewIngestCandidate(repository, func() string { return "observation-fetch-times" })
+	observedAt := time.Date(2026, 11, 6, 10, 0, 0, 0, time.UTC)
+	useCase.now = func() time.Time { return observedAt }
+
+	firstFetched := observedAt.Add(-2 * time.Second)
+	firstNormalized := observedAt.Add(-time.Second)
+	first, err := useCase.Execute(context.Background(), "source-1", "same-feed-entry-key", domain.Candidate{
+		SourceItemID: "item-1", Title: "headline",
+		FetchedAt: &firstFetched, NormalizedAt: &firstNormalized,
+	}, domain.SourceURLPolicy{})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	secondFetched := observedAt.Add(time.Second)
+	secondNormalized := observedAt.Add(2 * time.Second)
+	second, err := useCase.Execute(context.Background(), "source-1", "same-feed-entry-key", domain.Candidate{
+		SourceItemID: "item-1", Title: "headline",
+		FetchedAt: &secondFetched, NormalizedAt: &secondNormalized,
+	}, domain.SourceURLPolicy{})
+	if err != nil {
+		t.Fatalf("same payload with new attempt timestamps should replay: %v", err)
+	}
+	if second.ID != first.ID || second.Candidate.FetchedAt == nil ||
+		!second.Candidate.FetchedAt.Equal(firstFetched) ||
+		second.Candidate.NormalizedAt == nil ||
+		!second.Candidate.NormalizedAt.Equal(firstNormalized) {
+		t.Fatalf("idempotent replay did not return first observation snapshot: first=%+v second=%+v", first, second)
+	}
+}

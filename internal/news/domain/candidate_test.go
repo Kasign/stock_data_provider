@@ -98,3 +98,19 @@ func TestNormalizeCandidatePreservesUnknownTimestampText(t *testing.T) {
 		t.Fatalf("candidate=%+v", got)
 	}
 }
+
+
+func TestNormalizeCandidateNormalizesFetchAndNormalizationTimes(t *testing.T) {
+	fetchedAt := time.Date(2026, 11, 6, 10, 0, 0, 0, time.FixedZone("UTC+8", 8*60*60))
+	normalizedAt := fetchedAt.Add(time.Second)
+	got := NormalizeCandidate(Candidate{
+		FetchedAt: &fetchedAt, NormalizedAt: &normalizedAt,
+	}, time.Time{}, "")
+	if got.FetchedAt == nil || got.FetchedAt.Location() != time.UTC ||
+		got.NormalizedAt == nil || got.NormalizedAt.Location() != time.UTC {
+		t.Fatalf("fetch/normalize times were not normalized: %+v", got)
+	}
+	if !got.FetchedAt.Equal(fetchedAt.UTC()) || !got.NormalizedAt.Equal(normalizedAt.UTC()) {
+		t.Fatalf("fetch/normalize times changed: fetched=%v normalized=%v", got.FetchedAt, got.NormalizedAt)
+	}
+}

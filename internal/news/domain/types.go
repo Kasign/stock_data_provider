@@ -16,6 +16,8 @@ type Candidate struct {
 	CanonicalURL    string
 	PublishedAtRaw  string
 	PublishedAt     *time.Time
+	FetchedAt       *time.Time
+	NormalizedAt    *time.Time
 	ObservedAt      time.Time
 	QueryDimension  string
 	MissingFields   []string
