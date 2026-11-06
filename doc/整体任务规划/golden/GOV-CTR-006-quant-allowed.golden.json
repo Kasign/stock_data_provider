@@ -7,11 +7,11 @@
     "purpose_code": "quant_analysis",
     "content_level": "full",
     "subject_ref": "service:researchflow",
-    "resource_ref": "quant_result:result_001",
+    "resource_ref": "quant_result:sha256:29e81fdc80342387b910ab2c50a2732e5010defc7ce3e8030de316b37f4b8299",
     "decided_at": "2026-11-06T05:02:00Z",
     "expires_at": null,
     "conditions": [],
-    "decision_fingerprint": "01986d83f95f7117f3babc6efb0898229cef5725b342dceda9ce40652f293938"
+    "decision_fingerprint": "1bdec00088673e42e05f6fa1d398870d44607d44ee31e55f7b1289e50de14bea"
   },
   "policy_snapshot": {
     "snapshot_ref": "policy-snapshot:quant-result-access:v1",
@@ -30,7 +30,7 @@
     "purpose_code": "quant_analysis",
     "content_level": "full",
     "subject_ref": "service:researchflow",
-    "resource_ref": "quant_result:result_001",
+    "resource_ref": "quant_result:sha256:29e81fdc80342387b910ab2c50a2732e5010defc7ce3e8030de316b37f4b8299",
     "decided_at": "2026-11-06T05:02:00Z",
     "expires_at": null,
     "conditions": [],
@@ -42,6 +42,6 @@
       }
     ]
   },
-  "canonical_json": "{\"conditions\":[],\"content_level\":\"full\",\"decided_at\":\"2026-11-06T05:02:00Z\",\"decision\":\"allowed\",\"evaluated_policy_versions\":[{\"policy_ref\":\"quant-result-access\",\"policy_type\":\"quant_result_access\",\"policy_version\":\"1.0.0\"}],\"expires_at\":null,\"policy_owner\":\"quant\",\"policy_version\":\"policy-snapshot:quant-result-access:v1\",\"purpose_code\":\"quant_analysis\",\"resource_ref\":\"quant_result:result_001\",\"subject_ref\":\"service:researchflow\"}",
-  "expected_sha256": "01986d83f95f7117f3babc6efb0898229cef5725b342dceda9ce40652f293938"
+  "canonical_json": "{\"conditions\":[],\"content_level\":\"full\",\"decided_at\":\"2026-11-06T05:02:00Z\",\"decision\":\"allowed\",\"evaluated_policy_versions\":[{\"policy_ref\":\"quant-result-access\",\"policy_type\":\"quant_result_access\",\"policy_version\":\"1.0.0\"}],\"expires_at\":null,\"policy_owner\":\"quant\",\"policy_version\":\"policy-snapshot:quant-result-access:v1\",\"purpose_code\":\"quant_analysis\",\"resource_ref\":\"quant_result:sha256:29e81fdc80342387b910ab2c50a2732e5010defc7ce3e8030de316b37f4b8299\",\"subject_ref\":\"service:researchflow\"}",
+  "expected_sha256": "1bdec00088673e42e05f6fa1d398870d44607d44ee31e55f7b1289e50de14bea"
 }
