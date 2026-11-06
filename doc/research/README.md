@@ -3,8 +3,8 @@
 - 分支：`feat/research`
 - 代码：`internal/research/**`
 - 任务前缀：RSC
-- 当前阶段：R1 Context 领域基础 + R2 Evidence 领域基础
-- 当前状态：Context/Evidence Domain 首批实现已完成临时独立 Go 1.22 package 单元测试、Evidence Golden 指纹复算和 go vet；不等同于仓库完整构建/CI。真实 Data/News、授权复核、Application、Repository 和跨模块集成尚未完成。
+- 当前阶段：R1 Context + R2 Evidence + R3 Event 领域基础
+- 当前状态：Context/Evidence Domain 已有临时独立 Go 1.22 package 测试证据；Evidence 新增 GOV-CTR-006 授权快照校验与 Event Domain/状态机测试已写入但尚未执行。未完成仓库完整构建/CI、真实 Data/News、Owner 当前授权复核、Application、Repository 和跨模块集成。
 
 ## 模块职责
 
@@ -32,9 +32,13 @@ internal/research/
     validate_test.go
     authorization.go
     authorization_test.go
+  event/
+    model.go
+    validate.go
+    validate_test.go
 ```
 
-R1/R2 当前只实现 Context、Evidence 领域结构、契约校验、Evidence 指纹复算、严格 PIT 本地校验和 AuthorizationRef 快照完整性校验。没有 HTTP 接口、真实数据 Adapter、Repository、Migration 或 Run 编排接入。
+R1/R2/R3 当前只实现 Context、Evidence、Event 领域结构及本地校验：包括 Evidence 内容指纹/PIT、GOV-CTR-006 授权快照完整性、Event 追加版本和生命周期转换。没有 HTTP 接口、真实数据 Adapter、Repository、Migration、Outbox 或 Run 编排接入。
 
 旧 `go-core/internal/contextpack` 和 `internal/analysis` 是历史分析流程，不等同于新 Research Domain；仅作为迁移行为参考，不重复建设其已有的数据整理能力。
 
@@ -46,6 +50,7 @@ R1/R2 当前只实现 Context、Evidence 领域结构、契约校验、Evidence 
 - News → Research 只读证据查询：目标契约尚未实现/冻结；不得据此宣称真实新闻接入通过。
 - Research → Researchflow 的 Context 消费接口：字段语义已形成设计基线，Schema/Golden/Contract Test 尚未完成。
 - RSC-DEC-001：Quant 结果通过 Researchflow 获取；Research 不新增 Quant Port、不直接调用 Quant、不自行解引用。
-- RSC-OPEN-002：ResearchEvent.changed_at 与 INT-CTR-001 事件时间映射存在字段缺口；不阻断 Context/Evidence。
+- RSC-OPEN-002：ResearchEvent.changed_at 与 INT-CTR-001 事件时间映射存在字段缺口；不阻断 Event Domain。
+- RSC-OPEN-003：Event 规范化时间要求可追溯到规则版本，但当前 DTO 没有 normalization_rule_version；未决前不声称规范化时间来源链完整。
 
 详细设计见 [01-研究领域模型与证据体系](01-研究领域模型与证据体系.md)，字段与授权链补充见 [03-Context与Evidence字段语义及授权链补充](03-Context与Evidence字段语义及授权链补充.md)，任务与验收见 [02-任务拆分与验收](02-任务拆分与验收.md)。

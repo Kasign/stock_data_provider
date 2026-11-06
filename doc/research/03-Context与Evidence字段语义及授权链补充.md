@@ -83,6 +83,8 @@ AuthorizationRef 遵循 GOV-CTR-006，是审计快照引用，不是 bearer toke
 
 ResearchEvent 是跨来源现实事件，不是 News Article 别名。创建、合并、拆分、主体修正或生命周期迁移均追加版本；source_times 保留来源级时间冲突。
 
+当前 `internal/research/event/` 已实现 Event/SourceTime 领域结构、字段和时间校验、SourceTime 到 evidence_refs 的引用约束、版本追加校验及 MVP 生命周期转换。它不查询 Evidence Repository、不执行多来源事实归并、不持久化版本，也不发布 Outbox。非 null 的 occurred_at/published_at/available_at 至少要求存在相同 time_type 的 SourceTime；这只是来源类型存在性检查，不等于已验证规范化规则版本。
+
 生命周期：detected/consolidating/active/materializing/fading/invalidated/closed。只有状态真正迁移并持久化后才按 INT-CTR-001 发布 lifecycle_changed；Evidence 追加、来源补录或描述修订但状态未变，不发布。事件通过 Research 本地事务 Outbox 发布，不直接调用 Notification 内部接口。
 
 ## 7. 验收门禁
@@ -112,6 +114,10 @@ Fixture/Fake Adapter 只能证明 Research 自身模型和消费边界；真实 
 - Scenario.quant_evaluation_ref 是结果引用，不表示 Research 可以直接请求 Quant。
 
 因此，该项是边界解释，不再作为 Research → Quant 直接调用的开放阻断；Quant 内容读取仍由 Researchflow 调用 Quant Owner 负责。
+
+### RSC-OPEN-003：Event 规范化时间缺少规则版本字段
+
+Quant-Research DTO 要求非 null 的 occurred_at/published_at/available_at 规范化值可追溯到来源 Evidence 和采用的规则版本，但 ResearchEvent DTO 目前没有 normalization_rule_version 或等价的规则引用字段。当前 Domain 只能检查相应 time_type 的 SourceTime 存在，不能证明归一规则版本。未完成项目级字段/元数据决议前，不将规范化时间完整性标记通过；多来源冲突时保留 source_times 并将规范化值置 null。
 
 ### RSC-OPEN-002：ResearchEvent.changed_at 与 INT-CTR-001 时间映射缺字段
 
