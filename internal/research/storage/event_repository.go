@@ -29,7 +29,7 @@ func (r *EventRepository) Append(ctx context.Context, value researchevent.Resear
 	now := r.base.now().UTC()
 	insert := "INSERT INTO research_event_versions (event_id, event_version, status, system_as_of, payload_sha256, payload, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)"
 	return r.base.appendVersion(ctx, "event", value.EventID, int64(value.EventVersion),
-		eventTable, "event_id", "event_version", payload, insert,
+		eventTable, "event_id", "event_version", payload, now, insert,
 		[]any{value.EventID, value.EventVersion, string(value.Status), formatPIT(value.SystemAsOf), digest, string(payload), now},
 		func(previous []byte) error {
 			var prior researchevent.ResearchEvent

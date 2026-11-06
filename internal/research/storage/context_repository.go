@@ -29,7 +29,7 @@ func (r *ContextRepository) Append(ctx context.Context, value researchcontext.Co
 	now := r.base.now().UTC()
 	insert := "INSERT INTO research_context_versions (context_id, context_version, system_as_of, payload_sha256, payload, created_at) VALUES (?, ?, ?, ?, ?, ?)"
 	return r.base.appendVersion(ctx, "context", value.ContextID, value.ContextVersion,
-		contextTable, "context_id", "context_version", payload, insert,
+		contextTable, "context_id", "context_version", payload, now, insert,
 		[]any{value.ContextID, value.ContextVersion, formatPIT(value.SystemAsOf), digest, string(payload), now},
 		func(previous []byte) error {
 			var prior researchcontext.Context

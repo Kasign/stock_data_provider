@@ -47,14 +47,14 @@ func formatPIT(value time.Time) string {
 // appendVersion serializes writers on one aggregate-head row. SQL identifiers
 // are fixed by typed adapters and are never derived from caller input.
 func (r repositoryBase) appendVersion(ctx context.Context, aggregateType, aggregateID string,
-	version int64, table, idColumn, versionColumn string, payload []byte,
+	version int64, table, idColumn, versionColumn string, payload []byte, createdAt time.Time,
 	insertSQL string, insertArgs []any, validateNext func(previous []byte) error) error {
 	if r.db == nil { return ErrInvalidRepository }
 	if ctx == nil { return errors.New("context is nil") }
 	if aggregateID == "" || utf8.RuneCountInString(aggregateID) > 255 || version < 1 || len(payload) == 0 {
 		return fmt.Errorf("aggregate identity, version and payload are required")
 	}
-	now := r.now().UTC()
+	now := createdAt.UTC()
 	if now.IsZero() { return errors.New("repository clock returned zero time") }
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil { return fmt.Errorf("begin research append transaction: %w", err) }

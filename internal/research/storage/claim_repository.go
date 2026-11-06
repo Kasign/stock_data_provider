@@ -29,7 +29,7 @@ func (r *ClaimRepository) Append(ctx context.Context, value researchclaim.Claim)
 	now := r.base.now().UTC()
 	insert := "INSERT INTO research_claim_versions (claim_id, claim_version, epistemic_type, status, system_as_of, payload_sha256, payload, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
 	return r.base.appendVersion(ctx, "claim", value.ClaimID, int64(value.ClaimVersion),
-		claimTable, "claim_id", "claim_version", payload, insert,
+		claimTable, "claim_id", "claim_version", payload, now, insert,
 		[]any{value.ClaimID, value.ClaimVersion, string(value.EpistemicType), string(value.Status), formatPIT(value.SystemAsOf), digest, string(payload), now},
 		func(previous []byte) error {
 			var prior researchclaim.Claim

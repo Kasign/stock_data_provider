@@ -54,13 +54,13 @@ internal/research/
     repository_test.go
 ```
 
-R1/R2/R3/R5 当前实现 Context、Evidence、Event、Claim/Hypothesis 领域结构及本地校验；R7 当前仅完成 Repository Port 与 Migration Schema 清单：包括 Evidence 内容指纹/PIT、GOV-CTR-006 授权快照完整性、Event 追加版本和生命周期转换、Claim/Hypothesis 认识论字段与验证条件。没有 HTTP 接口、真实数据 Adapter、Migration 执行、Outbox 或 Run 编排接入；Context/Event/Claim SQL Repository Adapter 已按 Migration v1/v2 实现，但尚无真实 MariaDB 集成验收。
+R1/R2/R3/R5 当前实现 Context、Evidence、Event、Claim/Hypothesis 领域结构及本地校验；R7 已完成 Repository Port、Migration Schema 及 Context/Event/Claim SQL Adapter 第一批实现：包括 Evidence 内容指纹/PIT、GOV-CTR-006 授权快照完整性、Event 追加版本和生命周期转换、Claim/Hypothesis 认识论字段与验证条件。没有 HTTP 接口、真实数据 Adapter、Migration 执行、Outbox 或 Run 编排接入；Context/Event/Claim SQL Repository Adapter 已按 Migration v1/v2 实现，但尚无真实 MariaDB 集成验收。
 
 旧 `go-core/internal/contextpack` 和 `internal/analysis` 是历史分析流程，不等同于新 Research Domain；仅作为迁移行为参考，不重复建设其已有的数据整理能力。
 
 ## 当前契约状态
 
-- Context：字段依据 `doc/整体任务规划/03-模块接口契约/Quant-Research公开DTO字段级契约.md` 第 3.1、9.1、9.2、9.8 节；已实现结构校验和 ValidateNextVersion 版本链校验，但尚无专属冻结 Schema/Golden、Repository 追加存储或 CAS。本模块当前实现是领域校验模型，不代表跨模块契约已冻结。
+- Context：字段依据 `doc/整体任务规划/03-模块接口契约/Quant-Research公开DTO字段级契约.md` 第 3.1、9.1、9.2、9.8 节；已实现结构校验和 ValidateNextVersion 版本链校验，但尚无专属冻结 Schema/Golden；SQL Repository 已支持事务追加和版本链校验，尚待真实 MariaDB 验收。本模块当前实现是领域校验模型，不代表跨模块契约已冻结。
 - Evidence：遵循项目级 `RSC-CTR-001` Evidence Schema/Golden；已实现 Go Domain、结构校验、JCS/SHA-256 内容指纹和严格 PIT 本地校验。当前补充 GOV-CTR-006 AuthorizationRef/PolicySnapshot 结构绑定、策略 tuple 校验、decision_fingerprint 复算及可信调用主体/资源/用途/内容级别绑定校验；这些本地校验不等于 Owner 当前授权复核或授权签发。真实来源接入仍未完成。该契约属于 Evidence，不属于 Context。
 - AuthorizationRef：只验证不可变快照结构和指纹，并绑定 Adapter 提供的可信调用上下文；不把引用当 bearer token，不以历史 allowed 代替读取时 Owner 当前策略复核。
 - News → Research 只读证据查询：目标契约尚未实现/冻结；不得据此宣称真实新闻接入通过。
@@ -91,7 +91,7 @@ R1/R2/R3/R5 当前实现 Context、Evidence、Event、Claim/Hypothesis 领域结
 
 
 
-- RSC-007 Repository Port 已明确追加事务边界、版本连续性、完整 payload 幂等与冲突规则；SQL Adapter 尚未实现。
+- RSC-007 Context/Event/Claim SQL Adapter 已实现首批追加和精确版本读取；真实 MariaDB 集成、并发/故障注入与组合根注册尚未验收。
 - RSC-OPEN-007 阻断 Evidence SQL Adapter 的授权快照续期边界，不阻断 Context/Event/Claim SQL Adapter。
 
 
