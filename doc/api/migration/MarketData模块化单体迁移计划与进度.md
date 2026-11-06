@@ -1750,3 +1750,50 @@ M2/M4 必须将 Worker 改为可管理对象或显式 Start/Stop/Wait：
 - [ ] MDM-001 OpenAPI/Contract Test 修正尚未实施。
 
 **当前结论：** 近期字段名修复基本覆盖；Required 仅发现 DragonTigerSnapshot.source_version 一处明确遗漏；Nullable 有较大范围的“Schema 允许 null、Go 实际省略”差异，需按 v1 兼容性策略收敛。M0 仍未通过，但剩余问题已从笼统全量字段差异收敛为可定位的 required/nullable、错误响应和可执行契约测试任务。
+
+
+### 2026-11-06：M0 第二十七轮（LimitPool Nullable 条件语义复核与历史结论纠偏）
+
+审计基线：`3a82139deb6e343fb651abb07512e909206f1b65`。本轮读取 `validateLimitPoolSnapshot`、LimitPool Handler、服务测试、OpenAPI Contract Test 与 LimitPool Schema，解决第二十六轮遗留问题。
+
+#### 1. change_percent 的真实约束
+
+当前 `LimitPoolItem.ChangePercent` 是 `*float64 json:"change_percent"`，无 `omitempty`；OpenAPI 将其设为 required + nullable。当前实现语义如下：
+
+- 当 `snapshot.HasData == true`：Validator 遍历所有 Items，要求 Symbol、Code、Name 均非空且 `ChangePercent != nil`；否则整个 Provider Snapshot 被拒绝，进入 fallback。
+- 当 `snapshot.HasData == false`：Validator 要求 Total=0、Items 为空、QualityStatus=unknown；不允许返回带缺失涨跌幅的 Item。
+- 因此，合法 LimitPool API 响应中的每个 Item 都必须有非 null 的 change_percent；unknown/empty 快照没有 Item，不存在该字段的实例。
+- 但 Go DTO 本身允许零值或内部构造的 Item 将该指针序列化为 null；现有 OpenAPI Contract Test 的 `TestDataModelJSONSerializationMatchesOpenAPIRequiredAndNullableSemantics` 明确验证了 DTO 级别 `change_percent: null` 的序列化能力。
+
+**最终判断：** 这不是 Validator 与 OpenAPI 的简单矛盾，而是 DTO 级 JSON 表达能力与 Endpoint 级业务不变量不同。当前 OpenAPI 的 required + nullable 准确描述 DTO 层可序列化形态，但没有表达 Endpoint 对 HasData=true Items 的条件约束。建议保留当前 Go 类型和 v1 Schema，补充 `LimitPoolSnapshot` 的条件约束说明（has_data=true 时 items 非空且每项 change_percent 非 null；has_data=false 时 items 为空且 total=0、quality_status=unknown），并增加 API/Service Contract Test 覆盖条件分支。不要为了收紧 OpenAPI 而擅自把字段改成非指针或改变 JSON wire format。
+
+#### 2. 测试覆盖缺口
+
+当前 `data_test.go` 已覆盖 LimitPool 多类非法数据（source/version、total、symbol/code、非有限数值、负数计数、质量不一致、未来/错配 report date），但尚未发现专门测试以下两个分支：
+- HasData=true 且 Item.ChangePercent=nil 必须被 Validator 拒绝。
+- HasData=false 但 Items 非空必须被 Validator 拒绝。
+
+这两条应补为明确回归测试；目前代码逻辑已经实施，缺的是直接锁定该契约的测试用例。本轮未修改测试代码。
+
+#### 3. 对第二十六轮 nullable 统计的解释修正
+
+第二十六轮统计的 120 个 nullable 差异，是“Go DTO 的零值/缺省对象是否可能序列化 null”与“OpenAPI Schema nullable”之间的静态对应，不代表 120 个字段都会在真实 Handler 成功响应中出现 null。部分字段可能被 Service Validator、Provider 质量门禁或 Handler 投影约束排除。
+
+后续 nullable 治理应分三层，不得一刀切：
+1. **DTO serialization contract**：Go JSON Tag 实际能否输出 null/省略。
+2. **Endpoint business invariant**：成功响应在业务状态约束下是否允许 null。
+3. **OpenAPI wire contract**：Schema 描述的是 DTO 结构可表达范围，还是进一步描述成功响应的业务子集；必要时用 description/oneOf/条件说明表达。
+
+据此，第二十六轮“120 个 nullable 不一致”应降级为“120 个待分类字段”，不是 120 个已确认 OpenAPI 错误。普通非指针且 omitempty 字段（如 provider_amount_unit、provider_report_date）仍是优先复核对象；指针 + omitempty 字段必须结合 endpoint 约束判断，不能只看 Go Tag。
+
+#### 4. 本轮结论
+
+- [x] 确认 HasData=true 时 ChangePercent=nil 会被拒绝。
+- [x] 确认 HasData=false 时必须 Total=0 且 Items 为空，QualityStatus=unknown。
+- [x] 确认 OpenAPI required + nullable 与 DTO 级序列化行为一致。
+- [x] 纠正第二十六轮对 120 个 nullable 字段的过度定性。
+- [ ] 补充两个 Validator 条件分支的直接测试。
+- [ ] 对其余 nullable 差异按 DTO / Endpoint / OpenAPI 三层重新分类。
+- [ ] 为 LimitPoolSnapshot 增加条件业务约束描述与端到端响应断言。
+
+**当前状态：** LimitPool change_percent 不再作为确定的 Schema 缺陷；保留现有 v1 wire contract，转为条件语义文档和测试补强任务。M0 仍未通过；当前主要工作应转向将静态审计结论变为自动化、可重复验证的 Contract Test，以及数据库真实 Schema 基线核对。
