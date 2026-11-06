@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Go Market Data Service
-  version: 1.0.2
+  version: 1.1.0
   description: >-
     A-share market-data API. Standard volume is shares; amount is CNY; prices are
     CNY/share. Provider event time, fetch time, normalization time, adjustment
@@ -26,9 +26,11 @@ components:
           type: object
           required: [code, message]
           properties:
-            code: {type: string}
-            message: {type: string}
-            request_id: {type: string}
+            class: {type: string, enum: [validation, unauthenticated, forbidden, not_found, conflict, unavailable, timeout, internal], description: Stable public error class mapped from the HTTP status}
+            code: {type: string, description: Stable machine-readable domain error code}
+            message: {type: string, description: Safe summary; never contains raw provider responses or internal causes}
+            retryable: {type: boolean, description: Technical retry candidate only; callers must still enforce idempotency, policy, retry budget and deadline}
+            request_id: {type: string, description: Correlation identifier; the X-Request-ID response header is authoritative}
     QualityStatus:
       type: string
       enum: [valid, degraded, stale, invalid, unknown]
