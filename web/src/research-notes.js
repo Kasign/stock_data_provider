@@ -98,6 +98,110 @@ export function serializeResearchNotesExport(items, exportedAt = new Date().toIS
   }, null, 2);
 }
 
+
+export const MAX_RESEARCH_NOTES_IMPORT_BYTES = 2 * 1024 * 1024;
+
+function parseResearchNotesImport(text) {
+  if (typeof text !== "string") throw new TypeError("导入文件内容无效。");
+  if (new TextEncoder().encode(text).byteLength > MAX_RESEARCH_NOTES_IMPORT_BYTES) {
+    throw new RangeError("导入文件超过 2 MB，已拒绝读取。");
+  }
+  let payload;
+  try { payload = JSON.parse(text); } catch { throw new TypeError("JSON 文件格式损坏，无法解析。"); }
+  if (!payload || typeof payload !== "object" || Array.isArray(payload) ||
+      payload.format !== "stock-provider-webui.research-notes") {
+    throw new TypeError("文件格式不匹配：请选择研究记录 JSON 导出文件。");
+  }
+  if (payload.version !== 1) throw new TypeError("不支持的研究记录 JSON 版本。");
+  if (!Array.isArray(payload.items)) throw new TypeError("导入文件缺少研究记录数组。");
+  if (payload.items.length > MAX_RESEARCH_NOTES) throw new RangeError("导入记录超过 200 条上限。");
+  return payload.items;
+}
+
+export function previewResearchNotesImport(text, currentState) {
+  const sourceItems = parseResearchNotesImport(text);
+  if (!currentState?.readable || !currentState?.valid) {
+    throw new TypeError("当前研究记录存储不可读或数据异常，不能执行导入预览。");
+  }
+  const sourceIds = sourceItems.map(item => item && typeof item.id === "string" ? item.id.trim() : "");
+  const idCounts = new Map();
+  sourceIds.forEach(id => { if (id) idCounts.set(id, (idCounts.get(id) || 0) + 1); });
+  const invalid = [], additions = [], identical = [], conflicts = [];
+  const existingById = new Map(currentState.items.map(item => [item.id, item]));
+  sourceItems.forEach((raw, index) => {
+    const item = normalizeNote(raw);
+    if (!item || !item.id || idCounts.get(item.id) > 1) {
+      invalid.push({ index, reason: idCounts.get(sourceIds[index]) > 1 ? "导入文件内存在重复 ID" : "记录字段无效" });
+      return;
+    }
+    const existing = existingById.get(item.id);
+    if (!existing) additions.push(item);
+    else if (JSON.stringify(existing) === JSON.stringify(item)) identical.push(item);
+    else conflicts.push({ item, existing });
+  });
+  return {
+    additions, identical, conflicts, invalid,
+    currentCount: currentState.items.length,
+    sourceCount: sourceItems.length
+  };
+}
+
+export function buildResearchNotesImportItems(preview, conflictMode = "skip", createId = () =>
+  "note-import-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 10)) {
+  if (!preview || !Array.isArray(preview.additions) || !Array.isArray(preview.conflicts)) {
+    throw new TypeError("导入预览状态无效。");
+  }
+  const items = [...preview.additions];
+  if (conflictMode === "copy") {
+    preview.conflicts.forEach(({ item }) => {
+      let id = String(createId() || "").trim();
+      if (!id || id.length > 160 || items.some(existing => existing.id === id) ||
+          preview.additions.some(existing => existing.id === id)) {
+        throw new TypeError("冲突记录的新 ID 无效或重复，请重新生成。");
+      }
+      items.push({ ...item, id });
+    });
+  } else if (conflictMode !== "skip") {
+    throw new TypeError("未知的冲突处理方式。");
+  }
+  return items;
+}
+
+export function commitResearchNotesImport(preview, storage, expectedRaw, conflictMode = "skip", createId) {
+  const target = safeStorage(storage);
+  if (!target) return { ok: false, reason: "unavailable" };
+  let before;
+  try { before = target.getItem(RESEARCH_NOTES_KEY); }
+  catch { return { ok: false, reason: "unavailable" }; }
+  if (before !== expectedRaw) return { ok: false, reason: "stale" };
+  const current = readResearchNotes(target);
+  if (!current.readable || !current.valid) return { ok: false, reason: "invalid-storage" };
+  const imported = buildResearchNotesImportItems(preview, conflictMode, createId);
+  const ids = new Set(current.items.map(item => item.id));
+  if (imported.some(item => ids.has(item.id))) return { ok: false, reason: "conflict" };
+  const merged = [...imported, ...current.items];
+  if (merged.length > MAX_RESEARCH_NOTES) return { ok: false, reason: "limit" };
+  const normalized = merged.map(normalizeNote);
+  if (normalized.some(item => !item) || new Set(normalized.map(item => item.id)).size !== normalized.length) {
+    return { ok: false, reason: "invalid" };
+  }
+  const serialized = JSON.stringify(normalized);
+  try {
+    target.setItem(RESEARCH_NOTES_KEY, serialized);
+    const after = readResearchNotes(target);
+    if (after.readable && after.valid && JSON.stringify(after.items) === serialized) {
+      return { ok: true, importedCount: imported.length, totalCount: after.items.length };
+    }
+  } catch {}
+  let rollback = false;
+  try {
+    if (before === null) target.removeItem(RESEARCH_NOTES_KEY);
+    else target.setItem(RESEARCH_NOTES_KEY, before);
+    rollback = target.getItem(RESEARCH_NOTES_KEY) === before;
+  } catch {}
+  return { ok: false, reason: "verify", rollback };
+}
+
 export function researchNoteEditState(items, editingId, originalSnapshot) {
   const current = (Array.isArray(items) ? items : []).find(item => item?.id === editingId);
   if (!current) return "missing";

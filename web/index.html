@@ -409,10 +409,19 @@
               <div class="research-note-toolbar-actions">
                 <button class="button button-secondary" id="research-note-clear" type="button" disabled>清除筛选</button>
                 <button class="button button-secondary" id="research-note-export" type="button" disabled>导出全部 JSON</button>
+                <label class="button button-secondary research-note-import-picker" for="research-note-import-file">选择 JSON 导入</label>
+                <input id="research-note-import-file" type="file" accept="application/json,.json" hidden>
                 <button class="button button-primary" id="research-note-create" type="button">新建记录</button>
               </div>
             </div>
             <p id="research-note-count" class="research-note-count" aria-live="polite">显示 0 / 0 条记录</p>
+            <section id="research-note-import-preview" class="research-note-import-preview" aria-live="polite" hidden>
+              <div class="research-note-editor-heading"><h3>导入预览</h3><button class="text-button" id="research-note-import-cancel" type="button">取消导入</button></div>
+              <p id="research-note-import-summary"></p>
+              <label class="field"><span>同 ID 内容冲突</span><select id="research-note-import-conflict"><option value="skip">跳过冲突，保留本地记录</option><option value="copy">将冲突记录另存为新记录</option></select></label>
+              <p class="field-hint">预览不会修改本地数据。提交前会检查其他标签页是否更改了研究记录。</p>
+              <div class="research-note-actions"><button class="button button-primary" id="research-note-import-commit" type="button">确认导入</button><span id="research-note-import-feedback" role="status"></span></div>
+            </section>
             <section id="research-note-editor" class="research-note-editor" aria-labelledby="research-note-editor-title" hidden>
               <div class="research-note-editor-heading">
                 <h3 id="research-note-editor-title">新建研究记录</h3>

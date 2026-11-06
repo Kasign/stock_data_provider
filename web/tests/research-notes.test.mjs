@@ -114,3 +114,73 @@ test("研究记录 JSON 导出拒绝无效记录和重复 ID", () => {
   assert.throws(() => serializeResearchNotesExport([note("same", "一", "正文"), note("same", "二", "正文")]), /无效或重复数据/);
   assert.throws(() => serializeResearchNotesExport(Array.from({ length: 201 }, (_, i) => note(String(i), "标题", "正文"))), /超过数量上限/);
 });
+
+
+test("研究记录导入预览区分新增、相同、冲突和无效记录，且不修改存储", async () => {
+  const { previewResearchNotesImport } = await import("../src/research-notes.js");
+  const current = { readable: true, valid: true, items: [note("same", "本地", "正文"), note("conflict", "本地版本", "旧正文")] };
+  const payload = { format: "stock-provider-webui.research-notes", version: 1, items: [
+    note("new", "新增", "内容"), note("same", "本地", "正文"),
+    note("conflict", "导入版本", "新正文"), { id: "bad" }
+  ] };
+  const storage = memory();
+  const before = storage.getItem(RESEARCH_NOTES_KEY);
+  const preview = previewResearchNotesImport(JSON.stringify(payload), current);
+  assert.equal(preview.additions.length, 1);
+  assert.equal(preview.identical.length, 1);
+  assert.equal(preview.conflicts.length, 1);
+  assert.equal(preview.invalid.length, 1);
+  assert.equal(storage.getItem(RESEARCH_NOTES_KEY), before);
+});
+
+test("研究记录导入拒绝错误格式、版本、重复 ID、超量和超大文件", async () => {
+  const { previewResearchNotesImport, MAX_RESEARCH_NOTES_IMPORT_BYTES } = await import("../src/research-notes.js");
+  const current = { readable: true, valid: true, items: [] };
+  assert.throws(() => previewResearchNotesImport("{", current), /JSON/);
+  assert.throws(() => previewResearchNotesImport(JSON.stringify({ format: "other", version: 1, items: [] }), current), /格式/);
+  assert.throws(() => previewResearchNotesImport(JSON.stringify({ format: "stock-provider-webui.research-notes", version: 2, items: [] }), current), /版本/);
+  assert.throws(() => previewResearchNotesImport(JSON.stringify({ format: "stock-provider-webui.research-notes", version: 1, items: Array(201).fill(note("x", "标题", "内容")) }), current), /200/);
+  assert.throws(() => previewResearchNotesImport(" ".repeat(MAX_RESEARCH_NOTES_IMPORT_BYTES + 1), current), /2 MB/);
+  const duplicate = previewResearchNotesImport(JSON.stringify({ format: "stock-provider-webui.research-notes", version: 1, items: [note("dup", "一", "正文"), note("dup", "二", "正文")] }), current);
+  assert.equal(duplicate.invalid.length, 2);
+});
+
+test("研究记录导入冲突默认跳过，也可生成新 ID；禁止覆盖和重复 ID", async () => {
+  const { previewResearchNotesImport, buildResearchNotesImportItems } = await import("../src/research-notes.js");
+  const preview = previewResearchNotesImport(JSON.stringify({ format: "stock-provider-webui.research-notes", version: 1, items: [note("conflict", "导入版本", "新正文")] }), {
+    readable: true, valid: true, items: [note("conflict", "本地版本", "旧正文")]
+  });
+  assert.equal(buildResearchNotesImportItems(preview, "skip").length, 0);
+  const copied = buildResearchNotesImportItems(preview, "copy", () => "new-copy");
+  assert.equal(copied.length, 1);
+  assert.equal(copied[0].id, "new-copy");
+  assert.equal(copied[0].title, "导入版本");
+  assert.throws(() => buildResearchNotesImportItems(preview, "copy", () => "conflict"), /无效或重复/);
+});
+
+test("研究记录导入提交检查快照、容量并在回读失败时恢复原始数据", async () => {
+  const { previewResearchNotesImport, commitResearchNotesImport } = await import("../src/research-notes.js");
+  const s = memory();
+  const original = [note("local", "本地", "内容")];
+  writeResearchNotes(original, s);
+  const raw = s.getItem(RESEARCH_NOTES_KEY);
+  const preview = previewResearchNotesImport(JSON.stringify({ format: "stock-provider-webui.research-notes", version: 1, items: [note("remote", "远端", "内容")] }), readResearchNotes(s));
+  s.setItem(RESEARCH_NOTES_KEY, JSON.stringify([note("changed", "跨标签页", "修改")]));
+  assert.equal(commitResearchNotesImport(preview, s, raw).reason, "stale");
+  s.setItem(RESEARCH_NOTES_KEY, raw);
+  const result = commitResearchNotesImport(preview, s, raw);
+  assert.equal(result.ok, true);
+  assert.equal(result.importedCount, 1);
+  assert.deepEqual(readResearchNotes(s).items.map(item => item.id).sort(), ["local", "remote"]);
+  const failed = {
+    raw,
+    writes: 0,
+    getItem() { return this.raw; },
+    setItem(key, value) { this.writes++; if (this.writes === 1) this.raw = value; else if (this.writes === 2) throw new Error("quota"); },
+    removeItem() { this.raw = null; }
+  };
+  const brokenPreview = previewResearchNotesImport(JSON.stringify({ format: "stock-provider-webui.research-notes", version: 1, items: [note("remote-2", "远端", "内容")] }), readResearchNotes({ getItem: () => raw }));
+  const failedResult = commitResearchNotesImport(brokenPreview, failed, raw);
+  assert.equal(failedResult.ok, false);
+  assert.equal(failedResult.rollback, false);
+});

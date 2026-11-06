@@ -5155,3 +5155,9 @@ button:disabled {
 .research-note-card .research-note-preview{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;overflow:hidden;white-space:pre-wrap;overflow-wrap:anywhere;margin:10px 0;color:var(--text-soft);font-size:12px;line-height:1.7}
 @media(max-width:900px){.research-note-toolbar{grid-template-columns:repeat(2,minmax(0,1fr))}.research-note-toolbar-actions{grid-column:1/-1}}
 @media(max-width:640px){.research-note-toolbar{grid-template-columns:minmax(0,1fr)}.research-note-toolbar-actions{grid-column:auto}.research-note-toolbar-actions .button{flex:1}.research-note-editor{padding:12px}.research-note-editor-heading{align-items:flex-start;flex-direction:column}}
+
+.research-note-import-picker{display:inline-flex;align-items:center;justify-content:center;cursor:pointer}
+.research-note-import-preview{margin:12px 0;padding:14px;border:1px solid var(--border);border-radius:10px;background:var(--panel-raised)}
+.research-note-import-preview[hidden]{display:none}
+.research-note-import-preview p{line-height:1.65;overflow-wrap:anywhere}
+@media(max-width:640px){.research-note-import-preview .research-note-actions{align-items:stretch}.research-note-import-preview .research-note-actions .button{width:100%}}
