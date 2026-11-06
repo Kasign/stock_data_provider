@@ -17,7 +17,7 @@ Notification 不计算告警条件、不决定研究结论、不执行模型输�
 ### 2.1 NotificationEvent
 
 必需字段：
-- `event_id`：事件所有者生成的稳定、不透明 ID；同一逻辑事件重放时不得变化。
+- `event_id`：事件所有者生成的稳定、不透明 ID；同一逻辑 NotificationEvent 重放时不得变化；ResearchEvent.event_id 等领域事件 ID 不得直接复用为 NotificationEvent.event_id，领域来源通过 payload 中受控的 source_event_ref 表达。
 - `event_type`、`schema_version`：注册表中的精确键。
 - `source_module`：受控枚举 quant/research/researchflow。
 - `occurred_at`：业务事件发生时间，不作为投递时间。
