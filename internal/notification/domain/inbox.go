@@ -1,6 +1,16 @@
 package domain
 
-import "errors"
+import (
+	"errors"
+	"time"
+)
+
+// InboxRecord is the immutable accepted-event record. Repository adapters must persist
+// this record and its pending fan-out work item atomically.
+type InboxRecord struct {
+	Event      EventEnvelope
+	ReceivedAt time.Time
+}
 
 var ErrInboxIdempotencyConflict = errors.New("notification: inbox idempotency conflict")
 
