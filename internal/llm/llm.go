@@ -52,10 +52,11 @@ func (s CapabilityState) Status(key Capability) CapabilityStatus {
 }
 
 func (s CapabilityState) Supports(key Capability) bool {
+	now := time.Now()
 	return s.ProviderID != "" && s.ModelID != "" && s.Protocol == ProtocolOpenAIResponses &&
 		s.GatewayVersion != "" && s.EvidenceRef != "" && s.VerifiedAt != nil && !s.VerifiedAt.IsZero() &&
-		s.ValidUntil != nil && s.ValidUntil.After(*s.VerifiedAt) &&
-		time.Now().Before(*s.ValidUntil) && s.Status(key) == CapabilitySupported
+		!s.VerifiedAt.After(now) && s.ValidUntil != nil && s.ValidUntil.After(*s.VerifiedAt) &&
+		now.Before(*s.ValidUntil) && s.Status(key) == CapabilitySupported
 }
 
 // ProviderConfig 仅保存 Secret 引用，不保存凭据明文。
@@ -184,6 +185,9 @@ func (c ProviderConfig) ValidateCapabilityState(state CapabilityState) error {
 		if modelID == state.ModelID { allowed = true; break }
 	}
 	if !allowed { return errors.New("capability evidence model is outside provider allowlist") }
+	if state.MaxOutputTokensLimit <= 0 {
+		return errors.New("capability evidence max_output_tokens_limit must be positive")
+	}
 	if !state.Supports(CapabilityResponsesJSON) { return errors.New("responses_json capability is not currently supported") }
 	if c.StreamEnabled && !state.Supports(CapabilityResponsesStream) {
 		return errors.New("stream_enabled requires current responses_stream evidence")

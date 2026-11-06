@@ -38,6 +38,13 @@ func TestCapabilityUnknownByDefaultAndRequiresVersionedEvidence(t *testing.T) {
 	s.ProviderID, s.ModelID, s.Protocol, s.GatewayVersion, s.VerifiedAt = "p1", "m1", ProtocolOpenAIResponses, "gateway-v1", &now
 	s.ValidUntil, s.EvidenceRef = &validUntil, "test-evidence"
 	if !s.Supports(CapabilityResponsesJSON) { t.Fatal("complete evidence should enable capability") }
+
+	futureVerifiedAt := time.Now().UTC().Add(time.Minute)
+	futureValidUntil := futureVerifiedAt.Add(time.Hour)
+	s.VerifiedAt, s.ValidUntil = &futureVerifiedAt, &futureValidUntil
+	if s.Supports(CapabilityResponsesJSON) {
+		t.Fatal("future verification evidence must not enable capability")
+	}
 }
 
 func TestProviderStreamSwitchRequiresCurrentModelEvidence(t *testing.T) {
@@ -52,6 +59,11 @@ func TestProviderStreamSwitchRequiresCurrentModelEvidence(t *testing.T) {
 	}
 	if err := config.ValidateCapabilityState(state); err != nil {
 		t.Fatalf("JSON-only provider evidence rejected: %v", err)
+	}
+	invalidLimitState := state
+	invalidLimitState.MaxOutputTokensLimit = 0
+	if err := config.ValidateCapabilityState(invalidLimitState); err == nil {
+		t.Fatal("provider capability state must require a positive output token limit")
 	}
 	config.StreamEnabled = true
 	if err := config.ValidateCapabilityState(state); err == nil {
