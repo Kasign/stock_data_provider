@@ -269,6 +269,7 @@ const (
 
 type OutputItem struct {
 	Type OutputItemType `json:"type"`
+	UnknownType string `json:"unknown_type,omitempty"`
 	ItemID string `json:"item_id,omitempty"`
 	Status string `json:"status,omitempty"`
 	ContentParts []ContentPart `json:"content_parts,omitempty"`
@@ -276,6 +277,7 @@ type OutputItem struct {
 }
 type ContentPart struct {
 	Type ContentPartType `json:"type"`
+	UnknownType string `json:"unknown_type,omitempty"`
 	Text string `json:"text,omitempty"`
 	Annotations json.RawMessage `json:"annotations,omitempty"`
 }

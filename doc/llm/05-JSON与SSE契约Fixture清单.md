@@ -220,3 +220,13 @@ sequence_number 严格连续策略、Draft 2020-12 本地 Schema dialect、Reque
 4. 以上规则必须进入 JSON/SSE Golden 与 Contract Test；本清单不代表测试代码已实现或执行通过。
 
 **本清单是 LLM-002-F 测试设计基线；尚未生成实际 fixture 文件、测试代码或真实模型验收结果。**
+
+
+## 9. Responses JSON Parser 当前实现状态（2026-11-06）
+
+已新增非流式 Responses JSON Request Mapper / Response Parser 的首批单测，覆盖请求字段映射、应用层元数据不进入 wire body、tool_choice 默认 none、completed/incomplete/failed、message/refusal/function_call/unknown item、Usage total 优先与安全派生、Schema 输出二次校验、畸形 envelope 和未知类型安全保留。
+
+注意：
+- 以上是已提交的测试代码，不是独立 Golden Fixture 文件；本轮尚未执行 gofmt/go test。
+- 未知 OutputItem/ContentPart 仅保留受限的 wire type 元数据，不保留未知正文；annotations 暂不回传，避免任意上游元数据进入 DTO。
+- 非流式 JSON Parser 不代表 HTTP Adapter、SSE Parser 或真实 Gateway E2E 已完成。

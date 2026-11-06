@@ -3,10 +3,10 @@
 - 分支：`feat/llm`
 - 代码：`internal/llm/**`
 - 任务前缀：LLM
-- 状态：P1 LLM-002 基础 DTO/Provider Port 已提交；Platform Fault 映射和 Draft 2020-12 Schema 已实现，均待构建验证
-- 最近代码提交：44ac4bf1e5415d60e60d6ae9ffdd402d6e168881
+- 状态：LLM-002 DTO/Provider Port、Responses JSON Request Mapper/Response Parser 已实现，Platform Fault 映射与 Draft 2020-12 Schema 已实现；整体待构建验证
+- 最近代码提交：待本轮原子提交后更新
 - LLM-001：静态协议盘点完成；在线真实端点验收未执行
-- LLM-002：ProviderConfig、CapabilityState、ModelRequest/Response、Usage、Tool Call、ModelEvent 和 Provider Port 已有首批代码；Platform Fault 映射已实现待构建验证；Draft 2020-12 Schema 编译已实现待构建验证；JSON/SSE Golden、Responses Adapter 未完成
+- LLM-002：DTO/Provider Port、Responses JSON 请求映射/响应解析及对应单测已实现，待 gofmt/go test；Platform Fault 映射、Draft 2020-12 Schema 编译同样待构建验证；JSON/SSE 独立 Golden 文件、HTTP Adapter、SSE Parser 尚未完成
 
 只负责 Go 侧模型服务协议适配，复用现有独立模型服务；不重建推理 Gateway，不管理研究状态机、工具权限或业务结论。
 
