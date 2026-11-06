@@ -35,7 +35,7 @@ func TestMomentum60Requires61Closes(t *testing.T) {
 
 func TestVolatility20UsesSampleStdAndIsNotAnnualized(t *testing.T) {
 	closes:=make([]float64,21)
-	for i:=range closes { closes[i]=100+float64(i) }
+	for i:=range closes { closes[i]=100*math.Pow(1.01,float64(i)) }
 	got,err:=Volatility20(closes)
 	if err!=nil{t.Fatal(err)}
 	if got.Status!=StatusAvailable||got.SampleCount!=20||got.Unit!="ratio"{t.Fatalf("unexpected result: %+v",got)}
