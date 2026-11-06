@@ -57,7 +57,7 @@ Subscription 更新采用版本递增和不可变版本快照。任何影响匹�
 - delivery_id、delivery_idempotency_key。
 
 Delivery 唯一键固定为：
-`(event_id, subscription_id, subscription_version, channel_ref, channel_config_version, template_id, template_version, recipient_ref)`。
+`(source_module, event_id, subscription_id, subscription_version, channel_ref, channel_config_version, template_id, template_version, recipient_ref)`。
 
 所有版本均属于计划快照，不能在原版本上原地修改。
 
@@ -92,7 +92,8 @@ Template 版本必须由 Subscription 版本快照固定；如果实现允许同
 | 字段 | JSON 类型 | 必填/nullable | 约束 |
 |---|---|---|---|
 | delivery_id | string | 必填 / non-null | 不透明稳定 ID |
-| event_id | string | 必填 / non-null | 来源 NotificationEvent |
+| source_module | enum | 必填 / non-null | quant/research/researchflow，来源事件生产模块 |
+| event_id | string | 必填 / non-null | 在 source_module 范围内稳定唯一的来源事件 ID |
 | subscription_id / subscription_version | string/integer | 必填 / non-null | 创建 Delivery 时固定 |
 | channel_ref / channel_config_version | string | 必填 / non-null | 创建 Delivery 时固定 |
 | template_id / template_version | string | 必填 / non-null | 创建 Delivery 时固定 |
@@ -272,9 +273,9 @@ Payload fingerprint 使用 RFC 8785 JSON Canonicalization Scheme 的 UTF-8 结�
 ### 8.2 NTF-CTR-002 幂等与 Delivery 计划快照
 
 - Inbox 唯一键：`(source_module, event_id)`。
-- Publish 幂等唯一键：`(source_module, idempotency_key)`。
+- Publish 幂等唯一键：`(source_module, idempotency_key)`；同一 source_module 范围内 idempotency_key 全局唯一，不按 event_type 分桶，生产方不得跨发布意图复用。
 - 相同唯一键且 fingerprint 相同，返回原接收/发布结果，不重复 fan-out；相同唯一键不同 fingerprint 返回 idempotency_conflict。
-- Delivery 唯一键：`(event_id, subscription_id, subscription_version, channel_ref, channel_config_version, template_id, template_version, recipient_ref)`。
+- Delivery 唯一键：`(source_module, event_id, subscription_id, subscription_version, channel_ref, channel_config_version, template_id, template_version, recipient_ref)`。
 - delivery_idempotency_key 在同一 Delivery 全部 Attempt 间稳定，作用域为 channel_ref + recipient_ref + delivery_id；只有 Channel Capability 已验证 supports_idempotency=true 时才发送。
 - Subscription、Channel、Template 任一影响匹配、目标、渲染或发送行为的变更必须产生新版本；历史 Delivery 保留原版本。
 - Outbox/Inbox 只保证业务事件到 Notification 的本地可靠接收，不代表外部渠道 exactly-once。
