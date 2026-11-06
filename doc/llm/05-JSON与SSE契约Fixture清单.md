@@ -3,7 +3,7 @@
 - 归属任务：LLM-002-F
 - 对应协议：OpenAI Responses
 - 日期：2026-11-05
-- 状态：Fixture 设计基线与首批 Responses JSON Mapper/Parser 单测已存在；独立 Golden 文件和执行证据仍缺失，对应 LLM-CTR-001～003 当前为 pending_evidence；不代表真实模型能力证明。
+- 状态：Fixture 设计基线与首批 Responses JSON Mapper/Parser/HTTP Adapter 单测已存在；独立 Golden 文件和执行证据仍缺失，对应 LLM-CTR-001～003 当前为 pending_evidence；不代表真实模型能力证明。
 
 ## 1. Fixture 原则
 
@@ -230,3 +230,8 @@ sequence_number 严格连续策略、Draft 2020-12 本地 Schema dialect、Reque
 - 以上是已提交的测试代码，不是独立 Golden Fixture 文件；本轮尚未执行 gofmt/go test。
 - 未知 OutputItem/ContentPart 仅保留受限的 wire type 元数据，不保留未知正文；annotations 暂不回传，避免任意上游元数据进入 DTO。
 - 非流式 JSON Parser 不代表 HTTP Adapter、SSE Parser 或真实 Gateway E2E 已完成。
+
+
+## 10. HTTP Adapter 测试覆盖（2026-11-06）
+
+首批 fake-doer 单测覆盖固定 Responses endpoint、Bearer caller key 注入、X-Request-ID 与 Request-Id 分离、HTTP 429 与 Retry-After、传输错误脱敏、缺失 Secret/Doer 拒绝，以及 request deadline 不得晚于调用 Context。fake doer 只用于测试；真实网络必须经 Platform BoundDoer。测试代码尚未运行，不能作为通过证据。

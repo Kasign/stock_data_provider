@@ -294,3 +294,8 @@ LLM Adapter 内部执行错误使用 Platform Fault；对调用方公开时投�
 ModelResponse.request_id 是该次模型调用的关联 ID；ModelErrorInfo 不重复携带 request_id。gateway_request_id 与 upstream_request_id 分别记录；correlation_id 继续用于跨模块链路关联。
 
 ModelResponse.status=incomplete/failed 是协议响应结果，不自动等同于 Platform Fault。只有 Adapter 执行、传输、协议解析或本地校验失败才构造对应 Fault。上游 response.failed 的错误信息是安全归一化投影，不暴露原始响应正文。具体 Fault Go 类型与逐类映射表以 PLAT-CTR-001 为准；LLM 只维护 ModelErrorKind 投影，并以契约测试固定。
+
+
+### 9.1 非流式 HTTP Adapter 接入约束
+
+ResponsesAdapter 只依赖窄 HTTPDoer。生产组合根必须注入 `internal/platform/httpclient.Client.Bind(...)` 创建的 `BoundDoer`，并为 Provider 配置固定目的地址策略；不得注入未绑定目的地址策略的通用 HTTP Client。Gateway caller key 由组合根通过 `config.Secret` 注入，LLM 不读取环境变量。Adapter 只负责请求/响应体和 Provider 级限制，不替代 Platform 的 DNS/SSRF/TLS/重定向/全局响应体策略。BoundDoer.Do 是缓冲式非流式接口，SSE 必须等待 Platform 受控流式能力。
