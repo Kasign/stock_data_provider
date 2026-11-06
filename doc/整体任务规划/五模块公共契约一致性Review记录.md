@@ -43,20 +43,13 @@ request_id 标识一次调用；correlation_id 关联跨模块链路；event_id 
 - GOV-004 最终 Review 与契约冻结门禁
 - 整体任务规划总览
 
-## 5. Owner Review 与门禁
+## 5. 初始 Review 记录（历史快照，当前不作为 Owner/状态登记表）
 
-| 项目 | Owner | 状态 |
-|---|---|---|
-| QuantMetric 精度、指标类型和边界 | Quant | 待确认 |
-| EvidenceAuthorizationRef 与当前授权检查 | Research + News | 待确认 |
-| system_as_of 传播与字段语义 | Research + Researchflow + Quant | 待确认 |
-| ResearchEvent 到 NotificationEvent 映射 | Research + Notification | 待确认 |
-| Platform Fault 到 ModelErrorInfo 映射 | LLM + Platform | 待确认 |
-| 状态映射与幂等作用域 | 各模块 Owner | 待确认 |
+本节原始 Review 表格曾按模块列出待确认项，属于 2026-11-06 初始评审时点的过程记录，不再作为当前契约 Owner、决策状态或个人签字门槛。项目不存在独立模块 Owner；跨模块语义由项目统一决策方裁定，模块责任角色提供实现和测试证据。
 
-本轮未生成正式 JSON Schema、Go DTO、Mapper 或契约测试；未执行代码测试。GOV-004 继续 NO-GO。没有用户授权，不创建五模块开发分支。
+当前唯一有效的契约编号、生产方/消费者、权威定义位置、状态、证据缺口及阻断范围，以[跨模块契约目录与冻结状态](./跨模块契约目录与冻结状态.md)为准。本轮未生成正式 JSON Schema、Go DTO、Mapper 或契约测试；GOV-004 继续 NO-GO。
 
-**结论：规划文档间主要语义差异已完成校准；下一步由各模块 Owner 对建议决议签字，并将正式 JSON Schema/Golden 纳入模块契约测试。**
+**结论：规划文档间主要语义差异已完成校准；后续工作是按目录补齐正式 JSON Schema、Golden、Go DTO 和契约测试，不等待个人 Owner 签字。**
 
 
 ## 6. Researchflow 状态机项目决议更新（2026-11-06）
