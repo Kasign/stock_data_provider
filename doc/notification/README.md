@@ -3,7 +3,7 @@
 - 目标分支：`feat/notification`
 - 代码目录：`internal/notification/**`
 - 任务前缀：NTF
-- 当前状态：Design Ready；模块分支尚未创建，契约待 Owner Review。
+- 当前状态：Design Ready；模块分支尚未创建。契约语义以项目级目录为准：NTF-CTR-001～003 为 pending_evidence，INT-CTR-001 为 pending_decision；不以个人 Owner Review 作为开工门槛。
 
 Notification 是独立通知业务模块，负责事件接收、Subscription、Template、Channel、Dispatcher、Delivery、Attempt、幂等、重试和投递诊断。不计算业务告警条件，不依赖 Researchflow 内部实现。
 
