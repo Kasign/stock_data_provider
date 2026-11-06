@@ -67,7 +67,7 @@ func TestAuthorizationValidateRejectsPolicyAndDecisionInconsistency(t *testing.T
 
 func TestValidateEvidenceAuthorizationBindingUsesTrustedScope(t *testing.T) {
 	ref, snapshot := researchAuthorizationGolden(t)
-	e := Evidence{EvidenceID: "evidence_001", SourceOwner: SourceResearch, ContentLevel: ContentSummary}
+	e := Evidence{EvidenceID: "evidence_001", SourceOwner: SourceResearch, ContentLevel: ContentSummary, AuthorizationRef: "auth_research_001"}
 	if err := ValidateEvidenceAuthorizationBinding(e, ref, snapshot, "service:researchflow", "research_evidence:evidence_001", PurposeResearchAnalysis); err != nil {
 		t.Fatalf("valid binding rejected: %v", err)
 	}
@@ -94,6 +94,16 @@ func TestValidateEvidenceAuthorizationBindingUsesTrustedScope(t *testing.T) {
 			err := ValidateEvidenceAuthorizationBinding(candidate, ref, snapshot, tt.subject, tt.resource, tt.purpose)
 			if err == nil || !strings.Contains(err.Error(), tt.want) { t.Fatalf("binding error = %v, want containing %q", err, tt.want) }
 		})
+	}
+}
+
+func TestValidateEvidenceAuthorizationBindingRejectsDifferentAuthorizationRef(t *testing.T) {
+	ref, snapshot := researchAuthorizationGolden(t)
+	e := Evidence{SourceOwner: SourceResearch, ContentLevel: ContentSummary, AuthorizationRef: "auth_other"}
+	err := ValidateEvidenceAuthorizationBinding(e, ref, snapshot,
+		"service:researchflow", "research_evidence:evidence_001", PurposeResearchAnalysis)
+	if err == nil || !strings.Contains(err.Error(), "does not match supplied") {
+		t.Fatalf("expected mismatched authorization_ref to be rejected, got %v", err)
 	}
 }
 

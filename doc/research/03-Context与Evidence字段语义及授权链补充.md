@@ -65,7 +65,7 @@ AuthorizationRef 遵循 GOV-CTR-006，是审计快照引用，不是 bearer toke
 - content_level 不得高于任何上游来源当前允许级别；Research 摘要/推断不会自动获得更高披露等级。
 - content_fingerprint 用于内容一致性审计，不是签名或授权凭证。
 
-## 5.1 AuthorizationRef 本地校验边界
+### 4.1 AuthorizationRef 本地校验边界
 
 - `AuthorizationRef` 与 `AuthorizationPolicySnapshot` 字段严格对应 GOV-CTR-006 1.0.0 Schema；`policy_version` 必须等于 `snapshot_ref`。
 - `policies` 必须非空、tuple 唯一且按 `(policy_type, policy_ref, policy_version)` 字典序排列；指纹必须按完整策略集合复算。

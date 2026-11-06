@@ -26,15 +26,15 @@ internal/research/
     model.go
     validate.go
     validate_test.go
-    authorization.go
-    authorization_test.go
   evidence/
     model.go
     validate.go
     validate_test.go
+    authorization.go
+    authorization_test.go
 ```
 
-R1/R2 当前只实现 Context、Evidence 领域结构、契约校验、Evidence 指纹复算和严格 PIT 本地校验。没有 HTTP 接口、真实数据 Adapter、Repository、Migration 或 Run 编排接入。
+R1/R2 当前只实现 Context、Evidence 领域结构、契约校验、Evidence 指纹复算、严格 PIT 本地校验和 AuthorizationRef 快照完整性校验。没有 HTTP 接口、真实数据 Adapter、Repository、Migration 或 Run 编排接入。
 
 旧 `go-core/internal/contextpack` 和 `internal/analysis` 是历史分析流程，不等同于新 Research Domain；仅作为迁移行为参考，不重复建设其已有的数据整理能力。
 
