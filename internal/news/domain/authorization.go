@@ -172,7 +172,7 @@ func ValidateNewsAuthorizationBinding(binding NewsAuthorizationBinding) error {
 	if ref.ExpiresAt.Value != nil {
 		expiresAt, ok := parseUTCDateTime(*ref.ExpiresAt.Value)
 		decidedAt, decidedOK := parseUTCDateTime(ref.DecidedAt)
-		if !ok || !decidedOK || expiresAt.Before(decidedAt) {
+		if !ok || !decidedOK || !expiresAt.After(decidedAt) {
 			return ErrAuthorizationBindingInvalid
 		}
 	}

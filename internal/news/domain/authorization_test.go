@@ -328,3 +328,19 @@ func TestValidateNewsAuthorizationBindingRejectsNonCanonicalFingerprintAndTime(t
 		t.Fatal("authorization timestamps must use UTC Z form")
 	}
 }
+
+func TestValidateNewsAuthorizationBindingRejectsEmptyValidityWindow(t *testing.T) {
+	base := loadNewsAuthorizationGolden(t)
+	base.AuthorizationRef.Decision = AuthorizationDecisionAllowed
+	base.AuthorizationRef.Conditions = []string{}
+	decidedAt, ok := parseUTCDateTime(base.AuthorizationRef.DecidedAt)
+	if !ok {
+		t.Fatal("golden decided_at is invalid")
+	}
+	expiresAt := decidedAt.Format(time.RFC3339Nano)
+	base.AuthorizationRef.ExpiresAt.Value = &expiresAt
+
+	if !errors.Is(ValidateNewsAuthorizationBinding(base), ErrAuthorizationBindingInvalid) {
+		t.Fatal("expires_at equal to decided_at must not create an empty authorization validity window")
+	}
+}
