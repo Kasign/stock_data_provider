@@ -688,6 +688,7 @@ type providerProbeHistoricalDailyBarsFake struct {
 	startDate string
 	endDate   string
 	limit     int
+	rowCount  int
 }
 
 func (p *providerProbeHistoricalDailyBarsFake) Name() string { return p.name }
@@ -697,15 +698,30 @@ func (p *providerProbeHistoricalDailyBarsFake) FetchDailyBars(_ context.Context,
 	if tradeDate == "" {
 		tradeDate = endDate
 	}
+	end, err := time.ParseInLocation("2006-01-02", tradeDate, marketLocation())
+	if err != nil {
+		return nil, err
+	}
+	count := p.rowCount
+	if count <= 0 {
+		count = 1
+	}
 	now := time.Now().UTC()
 	volume := int64(10000)
 	amount := 100000.0
-	return []model.DailyBar{{
-		Symbol: symbol, TradeDate: tradeDate, Period: "1d", Open: 10, High: 11, Low: 9, Close: 10.5,
-		Volume: &volume, Amount: &amount, AdjustmentBasis: adjustment, AdjustmentMethod: "historical-test-none",
-		Source: p.name, SourceVersion: p.name + "-v1", ProviderTime: &now, FetchedAt: now, NormalizedAt: now,
-		VolumeUnit: "shares", RawVolumeUnit: "shares", AmountUnit: "CNY", QualityStatus: model.QualityValid,
-	}}, nil
+	bars := make([]model.DailyBar, 0, count)
+	for day := end; len(bars) < count; day = day.AddDate(0, 0, -1) {
+		if day.Weekday() == time.Saturday || day.Weekday() == time.Sunday {
+			continue
+		}
+		bars = append(bars, model.DailyBar{
+			Symbol: symbol, TradeDate: day.Format("2006-01-02"), Period: "1d", Open: 10, High: 11, Low: 9, Close: 10.5,
+			Volume: &volume, Amount: &amount, AdjustmentBasis: adjustment, AdjustmentMethod: "historical-test-none",
+			Source: p.name, SourceVersion: p.name + "-v1", ProviderTime: &now, FetchedAt: now, NormalizedAt: now,
+			VolumeUnit: "shares", RawVolumeUnit: "shares", AmountUnit: "CNY", QualityStatus: model.QualityValid,
+		})
+	}
+	return bars, nil
 }
 
 func TestProviderProbeDefaultDailyBarsExcludeCurrentIncompleteDay(t *testing.T) {
@@ -726,6 +742,43 @@ func TestProviderProbeDefaultDailyBarsExcludeCurrentIncompleteDay(t *testing.T) 
 	item, found := findProbeItem(run.Items, p.Name(), "daily_bars")
 	if !found || item.SampleDate != wantEnd {
 		t.Fatalf("default Probe should retain the latest completed date as sample evidence: found=%v item=%+v want=%s", found, item, wantEnd)
+	}
+}
+
+func TestProviderProbeCountsValidatedRowsBeforeLimitAndDoesNotDegradeForTruncation(t *testing.T) {
+	p := &providerProbeHistoricalDailyBarsFake{name: "limited-history-bars", rowCount: 7}
+	ds := NewWithCapabilities([]provider.NamedProvider{p}, nil, []provider.DailyBarProvider{p}, cache.NewDisabled(), nil, time.Second, time.Minute, 120, 2000, ResilienceConfig{}, nil)
+	run, err := ds.ProbeProviderCapabilitiesWithOptions(context.Background(), ProviderProbeOptions{
+		Scope: "all", Capabilities: []string{"daily_bars"}, Symbols: []string{"600036.SH"},
+		DailyBarAdjustments: []model.AdjustmentBasis{model.AdjustmentNone},
+		Checks: []string{"quality"}, TimeoutSeconds: 5,
+	})
+	if err != nil {
+		t.Fatalf("default Probe failed: %v", err)
+	}
+	item, found := findProbeItem(run.Items, p.Name(), "daily_bars")
+	if !found {
+		t.Fatalf("daily_bars result not found: %+v", run.Items)
+	}
+	if item.RowsReturned != 7 || item.RowsValidated != 7 {
+		t.Fatalf("row counters must describe raw and pre-limit validated populations: returned=%d validated=%d", item.RowsReturned, item.RowsValidated)
+	}
+	if item.ValidationInfoCount != 2 {
+		t.Fatalf("intentional limit must be recorded as two informational dropped rows: %+v", item)
+	}
+	foundTruncation := false
+	for _, issue := range item.ValidationIssues {
+		if issue.Code == "bars_truncated_to_limit" && issue.Count == 2 && issue.Severity == "info" {
+			foundTruncation = true
+		}
+	}
+	if !foundTruncation {
+		t.Fatalf("truncation count must be explicit and informational: %+v", item.ValidationIssues)
+	}
+	for _, reason := range item.QualityReasons {
+		if reason == "bars_truncated_to_limit" {
+			t.Fatalf("intentional limit must not appear as a quality-degrading reason: %+v", item.QualityReasons)
+		}
 	}
 }
 

@@ -478,6 +478,20 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 					validated, warnings, report = normalize.ValidateAndSortBarsWithReport(barsSymbol, bars, requestStartDate, requestEndDate, dailyBarLimit)
 					validation.AddContextReport(probeCtx, report)
 				}
+				// RowsValidated 表示通过字段校验、去重和日期范围过滤的全部行，不扣除展示 limit。
+				allValidated, _ := normalize.ValidateAndSortBars(barsSymbol, bars, requestStartDate, requestEndDate, 0)
+				if reporter != nil && reporter.Snapshot().HasStage(validation.StageValidate) {
+					truncatedCount := len(allValidated) - len(validated)
+					if truncatedCount > 0 {
+						report := validation.NewReport(validation.DefaultMaxIssues)
+						report.Add(validation.FieldIssue{
+							Stage: validation.StageNormalize, Field: "rows", Code: "bars_truncated_to_limit",
+							Expected: "all valid rows within requested limit", Severity: validation.SeverityInfo,
+							Message: "valid daily bars were truncated to the requested limit", Count: truncatedCount,
+						})
+						validation.AddContextReport(probeCtx, report)
+					}
+				}
 				latestDate := ""
 				var providerTime *time.Time
 				if len(validated) > 0 {
@@ -485,7 +499,7 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 					latestDate = latest.TradeDate
 					providerTime = latest.ProviderTime
 				}
-				recordProviderProbeEvidence(probeCtx, barsSymbol, latestDate, len(bars), len(validated), providerTime)
+				recordProviderProbeEvidence(probeCtx, barsSymbol, latestDate, len(bars), len(allValidated), providerTime)
 				if len(validated) == 0 {
 					if len(bars) > 0 {
 						return model.QualityInvalid, "", warnings, errors.New("daily-bars probe returned rows but none passed validation")
@@ -506,8 +520,13 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 				}
 				quality := model.QualityValid
 				version := ""
-				reasons := append([]string(nil), warnings...)
-				for _, bar := range validated {
+				reasons := make([]string, 0, len(warnings))
+				for _, warning := range warnings {
+					if warning != "bars_truncated_to_limit" {
+						reasons = appendReason(reasons, warning)
+					}
+				}
+				for _, bar := range allValidated {
 					if version == "" {
 						version = bar.SourceVersion
 					}
@@ -518,7 +537,7 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 						reasons = appendReason(reasons, reason)
 					}
 				}
-				if len(warnings) > 0 {
+				if normalize.HasQualityDegradingBarWarnings(warnings) {
 					quality = model.QualityDegraded
 				}
 				barDataQuality := quality

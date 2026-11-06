@@ -418,3 +418,9 @@
 
 
 - 2026-11-06 P0-52 当前验证：修正测试 gofmt 后代码 SHA `173c2f16faeb04ff7f54156ef7ef2f4ef377aa06` 的 Push/PR Go suite `42145575844` / `42145581694`、Parity `42145581855`、WebUI checks `42145581775` 均通过；Go suite 包含 gofmt、test、race、vet、MariaDB migration/PIT、Compose 和两个 Docker 镜像构建。Live Provider Probe Run `42145581739` 外层成功，但历史专项步骤 skipped，不代表真实历史 K 线或跨源验收通过。无 API、数据库或 WebUI 契约变化。
+
+
+## 27. 2026-11-06 API-06 P0-53 DailyBar 诊断计数语义
+
+- `RowsValidated` 统一表示通过字段校验、去重和日期范围过滤的完整有效行数，不受展示 limit 影响；limit 截断行数通过结构化 info issue 的 Count 表达。正常限量截断不再单独导致 DailyBar Probe quality degraded；真实数据问题仍触发降级。样本日期和跨源快照继续使用 limit 后的最新窗口。
+- 新增 7 行超过默认 limit 的服务层回归测试。无 API/DB/WebUI 契约变化，CI 待验。
