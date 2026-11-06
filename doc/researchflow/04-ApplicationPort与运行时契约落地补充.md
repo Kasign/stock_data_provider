@@ -157,3 +157,7 @@ Fake Repository/Fake Clock/Fake Provider 只证明模块内逻辑；MariaDB/Redi
 
 
 - ResolvedTemplate 只接受 64 位十六进制 SHA-256 Schema 指纹，并保留底层校验错误链，便于 Application 层按参数错误/Schema 缺失/Schema 不可变性冲突分类。
+
+
+- 参数 Schema Registry 的 not_found 与暂时不可用错误必须区分；调用方不得把 Registry 连接/超时故障伪装为模板配置不存在。
+- JSON Schema format assertion 显式开启；参数重复键、非对象、空 body 均在 schema 校验前拒绝。

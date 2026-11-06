@@ -63,7 +63,12 @@ func (v *Validator) Validate(ctx context.Context, ref string, parameters json.Ra
 		return template.ParameterSchemaSnapshot{}, fmt.Errorf("%w: parameters are not canonicalizable JSON: %v", ErrInvalidParameters, err)
 	}
 	definition, err := v.registry.Get(ctx, ref)
-	if err != nil { return template.ParameterSchemaSnapshot{}, fmt.Errorf("%w: %s: %v", ErrSchemaNotFound, ref, err) }
+	if err != nil {
+		if errors.Is(err, ErrSchemaNotFound) {
+			return template.ParameterSchemaSnapshot{}, fmt.Errorf("%w: %s", ErrSchemaNotFound, ref)
+		}
+		return template.ParameterSchemaSnapshot{}, fmt.Errorf("load parameter schema %q: %w", ref, err)
+	}
 	if definition.Ref != ref || strings.TrimSpace(definition.Version) == "" {
 		return template.ParameterSchemaSnapshot{}, fmt.Errorf("%w: registry returned mismatched ref or empty version", ErrInvalidSchema)
 	}
@@ -120,6 +125,7 @@ func compileSchema(ref string, document []byte) (*jsonschema.Schema, error) {
 	schemaURL := "https://researchflow.invalid/parameter-schemas/" + url.PathEscape(ref)
 	compiler := jsonschema.NewCompiler()
 	compiler.Draft = jsonschema.Draft2020
+	compiler.AssertFormat = true
 	compiler.LoadURL = func(uri string) (io.ReadCloser, error) {
 		return nil, fmt.Errorf("external schema reference is disabled: %s", uri)
 	}

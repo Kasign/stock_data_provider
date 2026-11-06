@@ -86,3 +86,26 @@ func TestValidatorRejectsRemoteRefs(t *testing.T) {
 		t.Fatalf("expected external ref rejection, got %v", err)
 	}
 }
+
+
+func TestValidatorRejectsDuplicateKeysAndNonObjectParameters(t *testing.T) {
+	validator, _ := NewValidator(memoryRegistry{definition:testDefinition()})
+	for _, input := range []string{
+		"{\"symbol\":\"600000\",\"symbol\":\"000001\"}",
+		"[]",
+		"null",
+		"",
+	} {
+		if _, err := validator.Validate(context.Background(), "stock-research-params-v1", json.RawMessage(input)); !errors.Is(err, ErrInvalidParameters) {
+			t.Errorf("expected invalid parameters for %q, got %v", input, err)
+		}
+	}
+}
+
+func TestValidatorPreservesRegistryAvailabilityError(t *testing.T) {
+	registryErr := errors.New("registry temporarily unavailable")
+	validator, _ := NewValidator(memoryRegistry{err:registryErr})
+	if _, err := validator.Validate(context.Background(), "stock-research-params-v1", json.RawMessage("{\"symbol\":\"600000\"}")); !errors.Is(err, registryErr) {
+		t.Fatalf("registry availability error was not preserved: %v", err)
+	}
+}
