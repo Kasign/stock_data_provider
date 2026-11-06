@@ -3,11 +3,13 @@
 - 分支：`feat/research`
 - 代码：`internal/research/**`
 - 任务前缀：RSC
-- 状态：规划中，尚未开始模块分支开发
+- 状态：模块文档与契约对齐已开始；Research Domain/Application 代码尚未开始
 
-Research 负责 Context、Evidence、Event、Claim、Hypothesis、Scenario 等研究语义模型。News 负责采集/原文/去重/检索；Data 负责行情/财务/PIT；Quant 负责数值计算。Research 不依赖 Quant 或 Researchflow。
+Research 负责 Context、Evidence、Event、Claim、Hypothesis、Scenario 等研究语义模型。News 负责采集/原文/去重/检索；Data 负责行情/财务/PIT；Quant 负责数值计算。Research 不依赖 Quant 或 Researchflow 的领域实现。Quant 结果若进入 Research，只能先按不透明引用传递；直接读取路径仍有 RSC-OPEN-001 待决项。
 
-设计文档：[01-研究领域模型与证据体系](01-研究领域模型与证据体系.md)。\n\n目标结构：
+设计文档：[01-研究领域模型与证据体系](01-研究领域模型与证据体系.md)。
+
+字段与授权链补充：[03-Context与Evidence字段语义及授权链补充](03-Context与Evidence字段语义及授权链补充.md)。\n\n目标结构：
 ```text
 internal/research/
   context/ evidence/ event/ claim/ hypothesis/ scenario/
