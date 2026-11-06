@@ -290,3 +290,12 @@ sequence_number 严格连续策略、Draft 2020-12 本地 Schema dialect、Reque
 新增 `dto_schema_test.go`：验证 ProviderConfig、CapabilityState、ModelRequest、ModelResponse、ModelEvent、ModelErrorInfo 的实际 JSON 序列化结果；并使用现有 JSON/SSE Golden 解析结果执行 Schema 校验，覆盖必填字段与公开错误枚举拒绝。CapabilityState 的 verification_method 与 ProviderConfig.capability_ttl_ms 同时纳入机器契约。
 
 以上为 Schema 与 Contract Test 代码交付，尚未执行 gofmt/go test；不代表 LLM-CTR-001～003 已冻结。
+
+
+## 15. Golden 覆盖扩展（2026-11-06）
+
+新增 JSON 原始 Fixture：refusal、unknown output item、failed、Usage missing/partial/derived/overflow、missing status、completed missing response id；新增 request_minimal_text.expected.json 固定默认请求映射。
+
+新增 SSE 原始 Fixture：failed terminal、sequence duplicate/decreasing/mixed-missing/all-missing。`responses_golden_test.go` 增加对应 Contract Golden 断言，覆盖 refusal 文本保留、未知正文脱敏、合法 failed 状态、Usage null/derived/overflow、非法 envelope、序号异常和 all-missing 标记。
+
+以上 Fixture/测试代码尚未执行；其余完整 SSE 网络读取、Context cancel/backpressure 和本地 Gateway E2E 仍待 Platform streaming transport 与真实部署验收。

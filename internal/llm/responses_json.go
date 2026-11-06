@@ -281,6 +281,7 @@ func parseResponsesContentPart(raw json.RawMessage) (ContentPart, error) {
 	var wire struct {
 		Type        string          `json:"type"`
 		Text        string          `json:"text"`
+		Refusal     string          `json:"refusal"`
 		Annotations json.RawMessage `json:"annotations"`
 	}
 	if len(raw) == 0 || len(raw) > MaxPayloadBytes || !json.Valid(raw) {
@@ -299,7 +300,10 @@ func parseResponsesContentPart(raw json.RawMessage) (ContentPart, error) {
 		part.Text = wire.Text
 	case "refusal":
 		part.Type = ContentPartRefusal
-		part.Text = wire.Text
+		part.Text = wire.Refusal
+		if part.Text == "" {
+			part.Text = wire.Text
+		}
 	default:
 		part.Type = ContentPartUnknown
 	}

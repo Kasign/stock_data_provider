@@ -1,0 +1,1 @@
+{"id":"resp-refusal","object":"response","model":"qwen-local","status":"completed","output":[{"id":"msg-refusal","type":"message","status":"completed","content":[{"type":"refusal","refusal":"I cannot assist with that request."}]}]}
