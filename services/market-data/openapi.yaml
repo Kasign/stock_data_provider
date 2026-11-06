@@ -990,7 +990,7 @@ components:
         name: {type: string}
         latest_price: {type: number, nullable: true, description: Latest provider-enriched price in CNY/share}
         change: {type: number, nullable: true, description: Price change in CNY/share}
-        change_percent: {type: number, nullable: true, description: Percentage points; 10 means 10 percent}
+        change_percent: {type: number, nullable: true, description: Percentage points; 10 means 10 percent. The DTO permits null for serialization compatibility, but a successful LimitPoolSnapshot with has_data=true must return a non-null value.}
         rank_change: {type: integer, nullable: true, description: Surge ranking's provider-reported rank movement; sign follows upstream semantics}
         heat: {type: number, nullable: true, description: Provider-reported ranking heat; scale is provider-defined}
         rank_trend: {type: string, description: Provider-reported ranking trend label}
@@ -1051,7 +1051,7 @@ components:
         provider_returned: {type: integer, minimum: 0, description: Raw source rows received before A-share filtering and caller-limit truncation; paginated providers count rows received across pages}
         excluded_non_a_share_count: {type: integer, minimum: 0, description: Non-A-share source records excluded from normalized items}
         total_is_lower_bound: {type: boolean, description: True when a provider row cap prevents treating total as the authoritative full count}
-        has_data: {type: boolean, description: False means unknown or unavailable, not a verified zero}
+        has_data: {type: boolean, description: False means unknown or unavailable, not a verified zero. When true, items must be non-empty and every item must have a non-null change_percent; when false, total must be zero and items must be empty.}
         items: {type: array, items: {$ref: '#/components/schemas/LimitPoolItem'}}
         source: {type: string}
         source_version: {type: string}

@@ -1701,6 +1701,23 @@ func TestValidateLimitPoolRejectsInvalidNumericFieldsAndQualityMismatch(t *testi
 			t.Fatalf("mismatched provider report date must be rejected to permit source fallback, got %v", err)
 		}
 	})
+	t.Run("has data requires non-null change percent", func(t *testing.T) {
+		snapshot := makeSnapshot()
+		snapshot.Items[0].ChangePercent = nil
+		if err := validateLimitPoolSnapshot("up", "2026-10-23", 30, snapshot); err == nil {
+			t.Fatal("HasData=true must reject an item with null change_percent")
+		}
+	})
+	t.Run("no data requires empty items and zero total", func(t *testing.T) {
+		snapshot := makeSnapshot()
+		snapshot.HasData = false
+		snapshot.Total = 0
+		snapshot.QualityStatus = model.QualityUnknown
+		if err := validateLimitPoolSnapshot("up", "2026-10-23", 30, snapshot); err == nil {
+			t.Fatal("HasData=false must reject a snapshot containing items")
+		}
+	})
+
 }
 
 func TestMarkLimitPoolTruncatedDowngradesIncompleteSnapshot(t *testing.T) {

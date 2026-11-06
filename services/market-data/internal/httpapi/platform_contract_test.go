@@ -141,3 +141,34 @@ func TestOpenAPIErrorSchemaDocumentsPlatformFaultProjection(t *testing.T) {
 		}
 	}
 }
+
+func TestDataHTTPAuthAcceptsBothDocumentedCredentialForms(t *testing.T) {
+	next := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	})
+	handler := (&Server{apiKey: "contract-test-secret"}).auth(next)
+	tests := []struct {
+		name       string
+		header     string
+		value      string
+		wantStatus int
+	}{
+		{name: "X-API-Key", header: "X-API-Key", value: "contract-test-secret", wantStatus: http.StatusNoContent},
+		{name: "Bearer", header: "Authorization", value: "Bearer contract-test-secret", wantStatus: http.StatusNoContent},
+		{name: "missing", wantStatus: http.StatusUnauthorized},
+		{name: "wrong key", header: "X-API-Key", value: "wrong", wantStatus: http.StatusUnauthorized},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/api/v1/market/quotes", nil)
+			if tt.header != "" {
+				req.Header.Set(tt.header, tt.value)
+			}
+			rec := httptest.NewRecorder()
+			handler.ServeHTTP(rec, req)
+			if rec.Code != tt.wantStatus {
+				t.Fatalf("status=%d want=%d body=%s", rec.Code, tt.wantStatus, rec.Body.String())
+			}
+		})
+	}
+}
