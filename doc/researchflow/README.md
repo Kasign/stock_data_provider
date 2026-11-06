@@ -3,15 +3,19 @@
 - 分支：`feat/researchflow`
 - 代码：`internal/researchflow/**`
 - 任务前缀：FLOW
-- 状态：规划中，尚未开始模块分支开发
+- 状态：P0 领域代码首轮已落地；测试执行、Golden 和并发/持久化验收待完成
 
-Researchflow 是研究应用编排层，通过公开 Application Port 调用 Data、News、Quant、Research、LLM。Run 终态通知通过本地 Outbox 和 INT-CTR-001 交付，不把 Notification 作为同步 DAG Stage 或直接调用其内部发送接口。它拥有 Run/Stage/Attempt 状态，不拥有其他模块内部领域规则。Platform Task Runner 只提供执行基础设施，不替代 Researchflow 业务状态机。
+Researchflow 是研究应用编排层，通过 Data、News、Quant、Research、LLM 的公开 Application Port 编排研究流程。Notification 不作为同步 DAG Stage；Run 终态 CAS 成功后按 INT-CTR-001 写本地 Outbox。它拥有 Run/Stage/Attempt 状态，不拥有其他模块内部领域规则。Platform Task Runner 只提供执行基础设施，不替代 Researchflow 业务状态机。
 
 设计文档：[01-研究流程与状态机设计](01-研究流程与状态机设计.md)。
 
 契约决议：[FLOW-CTR-001/002 最终决议（历史别名 CONTRACT-006/007）](03-CONTRACT-006与007最终决议.md)。
 
-Application Port 与运行时契约补充：[04-ApplicationPort与运行时契约落地补充](04-ApplicationPort与运行时契约落地补充.md)。\n\n目标结构：
+Application Port 与运行时契约补充：[04-ApplicationPort与运行时契约落地补充](04-ApplicationPort与运行时契约落地补充.md)。
+
+当前代码：`domain`（Run/Stage/Attempt 契约）、`template`（模板/DAG）、`state`（状态机/重试/归并）。当前不包含 HTTP、Repository、Migration、Worker 或跨模块 Adapter。
+
+目标结构：
 ```text
 internal/researchflow/
   application/ orchestration/ workflow/ contextbuilder/

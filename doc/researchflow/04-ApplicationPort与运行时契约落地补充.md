@@ -69,3 +69,35 @@ Stage Provider 只返回由 output_type + schema_version 注册的强类型 payl
 必须测试：请求幂等重放/冲突、模板 fingerprint、DAG 环/空 DAG、required/optional applicability、传播矩阵、Hard Risk pass/reject/unknown/未执行、deadline 边界、Cancel/claim 双向竞态、Retry/deadline 竞态、租约接管/fencing、迟到输出拒绝、外部副作用 ambiguous outcome、终态 Outbox 原子提交/回滚。
 
 Fake Repository/Fake Clock/Fake Provider 只证明模块内逻辑；MariaDB/Redis、进程崩溃恢复、真实模型/工具和跨模块 L2/L3 证据单独记录。
+
+
+## 8. 首批领域实现记录（2026-11-06）
+
+### 已新增代码
+
+- `internal/researchflow/domain/types.go`：Run/Stage/Attempt 状态、命令、读取实体和结果摘要类型。
+- `internal/researchflow/domain/command.go`：CreateRun 基础字段校验、时间边界、输入快照校验、参数对象校验、caller-scoped 请求指纹和幂等冲突判定。
+- `internal/researchflow/template/template.go`：模板必填字段、重试白名单、退避策略、传播矩阵、Hard Risk Registry、Applicability 接口、DAG 环检测、拓扑排序和 fingerprint。
+- `internal/researchflow/state/machine.go`：Run/Stage/Attempt 合法迁移、有限重试、retry_wait 推进、取消、deadline、Run 归并及 actionability 判定。
+- 对应 `*_test.go`：命令、模板、状态迁移和重试等单元测试。
+
+### 字段来源与语义
+
+| 字段/组 | 来源 | 语义与约束 |
+|---|---|---|
+| system_as_of / deadline_at | CreateRunCommand 显式调用参数 | 两者独立；前者不晚于可信服务端当前 UTC，后者晚于数据库 UTC 当前时间 |
+| input_snapshot_refs | 调用方提供的已存在快照引用 | 非 null 数组；空数组必须由模板 allow_empty_inputs 授权 |
+| originating_request_id | 可信 Request Context | 可空；内部触发为 null，不接受伪造客户端值 |
+| correlation_id | 可信父链路或 Researchflow 生成器 | 必填；当前领域包只校验非空，注入/生成由后续 Application 层实现 |
+| template_ref/version/fingerprint | 精确版本化 Template | 禁止隐式 latest；fingerprint 覆盖执行语义字段 |
+| retry_policy | Template 的 Stage 定义 | max_attempts 包含首次执行；reason code 精确白名单；退避单位毫秒 |
+| risk_decision | 已注册 Hard Risk Stage 的领域输出 | pass/reject/unknown 是业务决策；不得与 Stage 执行状态混为一谈 |
+
+### 当前实现限制
+
+- 参数目前校验为 JSON object，并通过 Template.ParameterSchemaRef 固定 Schema 引用；实际 JSON Schema Registry 校验仍未接入。
+- Output Registry 目前只固定版本引用；尚未验证 Provider 的 output_type/schema_version。
+- Applicability 和 Hard Risk Registry 由调用方注入；没有真实业务规则或注册数据，因此不能标记真实模板验收通过。
+- 状态迁移、重试、取消和 deadline 函数尚未绑定数据库 UTC 时钟、事务、Run.version CAS、租约或 fencing。deadline 下的在途 Attempt 必须先停止确认/撤销写入权，再将 Stage/Attempt 收敛。
+- 测试文件已新增，但当前没有测试运行结果；不报告通过。
+- 尚未实现 Run 终态 Outbox、Repository、Migration、Application Facade 和跨模块 Adapter。
