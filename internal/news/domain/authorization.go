@@ -129,10 +129,10 @@ type NewsAuthorizationBinding struct {
 }
 
 var (
-	ErrAuthorizationBindingInvalid      = errors.New("news.authorization.binding_invalid")
+	ErrAuthorizationBindingInvalid       = errors.New("news.authorization.binding_invalid")
 	ErrAuthorizationNullableFieldMissing = errors.New("news.authorization.nullable_field_missing")
 	// Fingerprint syntax is checked here; JCS verification waits for the shared GOV-CTR-006 verifier in the common baseline.
-	authorizationFingerprintPattern     = regexp.MustCompile(`^[0-9a-f]{64}$`)
+	authorizationFingerprintPattern = regexp.MustCompile(`^[0-9a-f]{64}$`)
 )
 
 func ValidateNewsAuthorizationBinding(binding NewsAuthorizationBinding) error {
