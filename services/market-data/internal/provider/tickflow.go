@@ -254,6 +254,49 @@ type tickflowIndexQuoteRaw struct {
 	Ext       map[string]json.RawMessage `json:"ext"`
 }
 
+func parseTickFlowIndexNumber(ctx context.Context, rowIndex int, field string, raw json.RawMessage, required bool) (*float64, error) {
+	trimmed := strings.TrimSpace(string(raw))
+	if trimmed == "" || trimmed == "null" {
+		if !required {
+			return nil, nil
+		}
+		code := "missing"
+		if trimmed == "null" {
+			code = "null_value"
+		}
+		addProviderParseIssue(ctx, rowIndex, field, field, code, "required finite number", "missing", trimmed, "TickFlow index quote required field is missing")
+		return nil, fmt.Errorf("required field is missing")
+	}
+	var value float64
+	if err := json.Unmarshal(raw, &value); err != nil {
+		var textValue string
+		if stringErr := json.Unmarshal(raw, &textValue); stringErr != nil {
+			addProviderParseIssue(ctx, rowIndex, field, field, "type_mismatch", "number or numeric string", providerJSONValueType(raw), providerJSONPreview(raw), "TickFlow index quote field has unsupported JSON type")
+			if required {
+				return nil, fmt.Errorf("unsupported JSON type")
+			}
+			return nil, nil
+		}
+		parsed, parseErr := strconv.ParseFloat(strings.TrimSpace(textValue), 64)
+		if parseErr != nil {
+			addProviderParseIssue(ctx, rowIndex, field, field, "invalid_number", "finite number", "string", providerJSONPreview(raw), "TickFlow index quote field is not numeric")
+			if required {
+				return nil, fmt.Errorf("invalid numeric string")
+			}
+			return nil, nil
+		}
+		value = parsed
+	}
+	if math.IsNaN(value) || math.IsInf(value, 0) {
+		addProviderParseIssue(ctx, rowIndex, field, field, "invalid_number", "finite number", providerJSONValueType(raw), providerJSONPreview(raw), "TickFlow index quote field is not finite")
+		if required {
+			return nil, fmt.Errorf("number is not finite")
+		}
+		return nil, nil
+	}
+	return &value, nil
+}
+
 func decodeTickFlowIndexQuoteRows(ctx context.Context, data []byte) ([]tickflowQuotePayload, error) {
 	var rows []json.RawMessage
 	if err := json.Unmarshal(data, &rows); err != nil {
@@ -283,7 +326,7 @@ func decodeTickFlowIndexQuoteRows(ctx context.Context, data []byte) ([]tickflowQ
 			{"amount", row.Amount, &quote.Amount, false},
 		}
 		for _, field := range fields {
-			parsed, err := parseProviderQuoteNumber(ctx, "tickflow", field.providerField, field.providerField, field.value, len(field.value) > 0, field.required)
+			parsed, err := parseTickFlowIndexNumber(ctx, rowIndex, field.providerField, field.value, field.required)
 			if err != nil {
 				return nil, fmt.Errorf("row %d field %s: %w", rowIndex, field.providerField, err)
 			}

@@ -2,11 +2,11 @@ package provider
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
-	"fmt"
 
 	"github.com/Kasign/stock_data_provider/services/market-data/internal/validation"
 )
@@ -15,7 +15,7 @@ func TestTickFlowIndexQuotesReportsRawFieldParseLocation(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		now := time.Now().UTC().Add(-time.Minute).UnixMilli()
 		for _, def := range tickflowTestRequestedIndexDefinitions(r) {
-			_, _ = w.Write([]byte(`{"code":0,"data":[{"symbol":"`+def.Symbol+`","name":"`+def.Name+`","last_price":"bad-price","prev_close":100,"open":99,"high":102,"low":98,"amount":123456,"timestamp":`+fmt.Sprint(now)+`}]}`))
+			_, _ = w.Write([]byte(fmt.Sprintf(`{"code":0,"data":[{"symbol":%q,"name":%q,"last_price":"bad-price","prev_close":100,"open":99,"high":102,"low":98,"amount":123456,"timestamp":%d}]}`, def.Symbol, def.Name, now)))
 			return
 		}
 	}))
