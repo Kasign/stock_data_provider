@@ -547,7 +547,7 @@ Shutdown 停止新请求和新任务派发，收敛在途请求/Attempt，关闭
 | Platform/跨模块决策表 CONTRACT-001 | 数值 JSON 类型、精度、舍入及 Data number 到 decimal 的无损边界 | GOV-CTR-001、DATA-CTR-003、DATA-CTR-005、QNT-CTR-001 | GOV-CTR-001=accepted；DATA-CTR-003=pending_evidence；DATA-CTR-005=pending_evidence；QNT-CTR-001=pending_evidence |
 | Platform/跨模块决策表 CONTRACT-002 | 首批 Indicator 代码、参数 Schema、默认值和版本规则 | QNT-CTR-001、QNT-CTR-002 | QNT-CTR-001=pending_evidence；QNT-CTR-002=pending_evidence |
 | Platform/跨模块决策表 CONTRACT-003 | 首批 Factor 代码、universe、分类版本、标准化和覆盖率口径 | QNT-CTR-001、QNT-CTR-003 | QNT-CTR-001=pending_evidence；QNT-CTR-003=pending_evidence |
-| Platform/跨模块决策表 CONTRACT-004 | AuthorizationRef 字段、快照不可变性、来源授权与当前撤销检查 | GOV-CTR-006、NEWS-CTR-002、RSC-CTR-001；签发方：DATA-CTR-008、QNT-CTR-005 | GOV-CTR-006=pending_evidence；NEWS-CTR-002=pending_evidence；RSC-CTR-001=pending_evidence；签发方：DATA-CTR-008=未在目录登记；QNT-CTR-005=pending_evidence |
+| Platform/跨模块决策表 CONTRACT-004 | AuthorizationRef 字段、快照不可变性、来源授权与当前撤销检查 | GOV-CTR-006、NEWS-CTR-002、RSC-CTR-001；签发方：DATA-CTR-008、QNT-CTR-005 | GOV-CTR-006=pending_evidence；NEWS-CTR-002=pending_evidence；RSC-CTR-001=pending_evidence；签发方：DATA-CTR-008=pending_evidence；QNT-CTR-005=pending_evidence |
 | Platform/跨模块决策表 CONTRACT-005 | Run 唯一 system_as_of 的产生、传递、持久化和重试 | GOV-CTR-002、FLOW-CTR-003 | GOV-CTR-002=accepted；FLOW-CTR-003=pending_evidence |
 | Platform/跨模块决策表 CONTRACT-006 | Stage 结果按模板策略归并为 Run 结果 | FLOW-CTR-001、FLOW-CTR-004 | FLOW-CTR-001=pending_evidence；FLOW-CTR-004=pending_evidence |
 | Platform/跨模块决策表 CONTRACT-007 | cancel/deadline/retry/lease/fencing 原子迁移和迟到写入拒绝 | FLOW-CTR-002 | FLOW-CTR-002=pending_evidence |
