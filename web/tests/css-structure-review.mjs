@@ -198,6 +198,34 @@ const dragonTigerReasonWrap = dragonTigerReasonRules
 if (!dragonTigerReasonWrap || dragonTigerReasonWrap.value !== "normal" || dragonTigerReasonWrap.important) {
   throw new Error("Dragon Tiger reason wrapping must use a normal declaration; the class selector outranks inherited table white-space");
 }
+function assertNormalDeclaration(selector, property, value) {
+  const entries = selectorRules.get(selector) || [];
+  const declaration = entries.flatMap((entry) => entry.declarations)
+    .find((item) => item.property === property);
+  if (!declaration || declaration.value !== value || declaration.important) {
+    throw new Error(`Expected ${selector} { ${property}: ${value} } without !important`);
+  }
+}
+[
+  [".market-index-card-footer .market-index-reasons", "color", "var(--warning)"],
+  [".research-overview-metric strong.positive", "color", "var(--positive)"],
+  [".research-overview-metric strong.negative", "color", "var(--negative)"],
+  [".market-index-changes .market-data-positive", "color", "var(--positive)"],
+  [".market-index-changes .market-data-negative", "color", "var(--negative)"],
+  [".market-index-changes .market-data-flat", "color", "var(--text-soft)"],
+  [".market-index-changes .market-data-unknown", "color", "var(--text-dim)"],
+  [".market-breadth-metric .market-data-positive", "color", "var(--positive)"],
+  ["#market-lists-panel .market-data-positive", "color", "var(--positive)"],
+  ["#market-activity-panel .market-data-positive", "color", "var(--positive)"]
+].forEach(([selector, property, value]) => assertNormalDeclaration(selector, property, value));
+for (const selector of [".positive", ".negative"]) {
+  const entries = selectorRules.get(selector) || [];
+  if (!entries.some((entry) => entry.declarations.some((item) =>
+    item.property === "color" && item.important
+  ))) {
+    throw new Error(`The shared ${selector} safety override must remain until all consumers are audited`);
+  }
+}
 const missing = sharedSelectors.filter((selector) => !selectorRules.has(selector));
 if (missing.length) throw new Error(`Missing shared shell selectors: ${missing.join(", ")}`);
 if (rules.length < 1000 || declarations.length < 2000) {

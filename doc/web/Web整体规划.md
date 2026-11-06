@@ -2478,3 +2478,13 @@ CSS AST 检查器进一步扩展：
 - **全局隐藏 1 处**：全局 `[hidden]` 作为唯一强制隐藏基线；组件级重复规则已清理。
 
 当前剩余 13 处均有明确的跨 selector 覆盖对象或系统无障碍职责。本轮不为降低数字而调整它们。下一轮可评估将语义颜色改成作用域明确、无需 important 的组件规则；需先验证 A 股红涨绿跌/反向配色、浅色主题、市场指数、广度、活动表格和个股研究展示。
+
+
+## 2026-11-06 UIR-2：语义颜色组件作用域化（第一批）
+
+- [x] 市场指数变化色按 `.market-index-changes` 作用域声明，选择器优先级高于其内部 `span/strong` 默认文字色。
+- [x] 市场广度状态色按 `.market-breadth-metric` 作用域声明；市场榜单与龙虎榜状态色分别限制在 `#market-lists-panel`、`#market-activity-panel`。
+- [x] 指数质量理由色改为 `.market-index-card-footer .market-index-reasons`，明确压过 footer 的 small 默认色。
+- [x] 个股研究概览正负值改用 `--positive` / `--negative`，遵循默认 A 股红涨绿跌、反向配色及 dark/light 主题变量。
+- [x] 新增 CSS 结构断言，锁定组件作用域、语义 token 和普通声明；通用 `.positive` / `.negative` 的重要声明暂时保留，避免未完成所有动态 class 消费点审计前降低优先级。
+- [ ] WebUI Checks、CSSOM 8 场景与完整 Chromium Browser Smoke 通过后关闭本批验收。

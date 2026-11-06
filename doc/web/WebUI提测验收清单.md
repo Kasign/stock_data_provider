@@ -2630,3 +2630,12 @@ CSS AST 检查器进一步扩展：
 - [x] reduced-motion 通用规则及导航/通知专用规则已核对后置 transition 覆盖；保留系统无障碍行为。
 - [ ] 语义颜色作用域化：评估是否可将组件文字色声明改为语义 token，减少全局 `!important`；必须覆盖默认/反向涨跌方案、dark/light 主题、市场指数/广度/活动表格及个股研究。
 - [ ] 作用域化改动完成后，执行 CSSOM 8 场景、响应式 Browser Smoke 与相关业务专项；无视觉或语义差异后再更新验收状态。
+
+
+## 2026-11-06 UIR-2 语义颜色作用域化（第一批，待浏览器验收）
+
+- [x] 市场指数、市场广度、市场榜单和龙虎榜状态色改为组件作用域选择器，不再依赖 4 处 `!important`。
+- [x] 指数质量理由 warning 色改为 footer 子元素作用域，不再依赖 1 处 `!important`。
+- [x] 个股研究正负值统一引用 `--positive` / `--negative`，覆盖 A 股默认/反向配色和浅色/深色主题。
+- [x] CSS 结构测试新增作用域与 token 断言；通用 `.positive` / `.negative` 两处重要声明仍保留。
+- [ ] CSSOM 8 场景、Browser Smoke 与 WebUI Checks 通过后关闭验收。

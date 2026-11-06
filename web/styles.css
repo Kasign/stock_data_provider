@@ -1667,21 +1667,33 @@ button:disabled, input:disabled, select:disabled, textarea:disabled { cursor: no
   gap:5px;
   margin-top:auto
 }
-.market-index-reasons {
-  color:var(--warning)!important;
+.market-index-card-footer .market-index-reasons {
+  color:var(--warning);
   overflow-wrap:anywhere
 }
-.market-data-positive {
-  color:var(--positive)!important
+.market-index-changes .market-data-positive,
+.market-breadth-metric .market-data-positive,
+#market-lists-panel .market-data-positive,
+#market-activity-panel .market-data-positive {
+  color:var(--positive)
 }
-.market-data-negative {
-  color:var(--negative)!important
+.market-index-changes .market-data-negative,
+.market-breadth-metric .market-data-negative,
+#market-lists-panel .market-data-negative,
+#market-activity-panel .market-data-negative {
+  color:var(--negative)
 }
-.market-data-flat {
-  color:var(--text-soft)!important
+.market-index-changes .market-data-flat,
+.market-breadth-metric .market-data-flat,
+#market-lists-panel .market-data-flat,
+#market-activity-panel .market-data-flat {
+  color:var(--text-soft)
 }
-.market-data-unknown {
-  color:var(--text-dim)!important
+.market-index-changes .market-data-unknown,
+.market-breadth-metric .market-data-unknown,
+#market-lists-panel .market-data-unknown,
+#market-activity-panel .market-data-unknown {
+  color:var(--text-dim)
 }
 .market-widget-meta {
   margin:10px 0 0;
@@ -4215,10 +4227,10 @@ body {
   font-variant-numeric: tabular-nums;
 }
 .research-overview-metric strong.positive {
-  color: var(--accent);
+  color: var(--positive);
 }
 .research-overview-metric strong.negative {
-  color: var(--danger);
+  color: var(--negative);
 }
 .research-overview-note {
   margin: 0;
