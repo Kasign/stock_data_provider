@@ -128,14 +128,16 @@ OutputItem 首批类型：message、function_call、refusal、unknown。ContentP
 
 | 对象 | 字段 | 类型 | 约束 |
 |---|---|---|---|
-| OutputItem | type | enum | message / function_call / refusal / unknown |\n| OutputItem | unknown_type | string? | type=unknown 时保留原始 wire type，长度受限 |
+| OutputItem | type | enum | message / function_call / refusal / unknown |
+| OutputItem | unknown_type | string? | type=unknown 时保留原始 wire type，长度受限 |
 | OutputItem | item_id | string? | 上游 item id，缺失允许 |
 | OutputItem | status | string? | 原样保留上游状态；不映射成成功/失败的唯一依据 |
 | OutputItem | content_parts | ContentPart[] | message 的有序内容片段 |
 | OutputItem | tool_call | ModelToolCall? | 仅 function_call 类型可设置 |
-| ContentPart | type | enum | output_text / refusal / unknown |\n| ContentPart | unknown_type | string? | type=unknown 时保留原始 wire type，长度受限 |
+| ContentPart | type | enum | output_text / refusal / unknown |
+| ContentPart | unknown_type | string? | type=unknown 时保留原始 wire type，长度受限 |
 | ContentPart | text | string? | output_text 文本 |
-| ContentPart | annotations | Annotation[]? | 仅保留已识别且安全的引用元数据 |
+| ContentPart | annotations | Annotation[]? | 当前首批 Parser 不回传；后续仅允许已识别且安全的引用元数据 |
 | ModelToolCall | call_id | string | 上游调用 ID；缺失时标记协议异常 |
 | ModelToolCall | output_item_id | string? | 关联的 OutputItem ID |
 | ModelToolCall | name | string | 工具名；不直接执行 |
