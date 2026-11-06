@@ -42,7 +42,7 @@
 新闻记录应尽可能返回：
 - 新闻 ID、标题、摘要、规范 URL。
 - 来源标识和来源类别。
-- published_at、available_at、fetched_at、system_observed_at。
+- published_at、available_at、fetched_at、system_system_observed_at。
 - 时间可信度和缺失状态。
 - 内容类型/完整度。
 - 证券/行业关联及关联证据状态。
@@ -145,7 +145,7 @@ AuthorizationRef 是不可变授权审计快照，不是访问令牌。字段如
 | conditions | array<string> | 稳定 condition_code；无条件为空数组 |
 | decision_fingerprint | string | 决策输入与策略版本指纹 |
 
-News 为 News 来源内容签发 AuthorizationRef。公开或无限制内容也签发 allowed 快照，不允许 null/not_required 绕过授权审计。每次当前受限内容读取仍必须重新检查 Source/Endpoint/Provider 策略、用途、内容级别、撤销和过期状态；历史 allowed 不构成当前放行凭据。当前决策 denied/unknown 或授权依赖不可用时，受限内容拒绝访问。
+News 为 News 来源内容签发 AuthorizationRef。公开或无限制内容也签发 allowed 快照，不允许 null/not_required 绕过授权审计。每次当前受限内容读取仍必须重新检查 Source/Endpoint/Provider 策略、用途、内容级别、撤销和过期状态；历史 allowed 不构成当前放行凭据。当前决策 denied/unknown 或授权依赖不可用时，受限内容拒绝访问；conditional 仅在 News 验证全部 condition_code 均满足后允许，否则拒绝。
 
 ### 11.3 PIT、Cursor 与稳定排序
 
