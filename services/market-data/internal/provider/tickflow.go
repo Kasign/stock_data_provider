@@ -1133,12 +1133,14 @@ func (p *TickFlow) FetchDailyBars(ctx context.Context, rawSymbol, startDate, end
 	}
 	for name, length := range map[string]int{"open": len(data.Open), "high": len(data.High), "low": len(data.Low), "close": len(data.Close), "volume": len(data.Volume)} {
 		if length != n {
+			addProviderParseIssue(ctx, -1, name, name, "array_length_mismatch", fmt.Sprintf("length %d matching timestamp", n), "array", strconv.Itoa(length), "TickFlow K-line required field array length does not match timestamp")
 			return nil, fmt.Errorf("TickFlow K-line %s length %d does not match timestamp length %d", name, length, n)
 		}
 	}
 	// 可选数组可以整体缺省，但一旦提供，必须与时间戳一一对应，避免静默错配。
 	for name, length := range map[string]int{"amount": len(data.Amount), "prev_close": len(data.PrevClose)} {
 		if length > 0 && length != n {
+			addProviderParseIssue(ctx, -1, name, name, "array_length_mismatch", fmt.Sprintf("length %d or omitted", n), "array", strconv.Itoa(length), "TickFlow K-line optional field array length does not match timestamp")
 			return nil, fmt.Errorf("TickFlow K-line %s length %d does not match timestamp length %d", name, length, n)
 		}
 	}
@@ -1148,6 +1150,7 @@ func (p *TickFlow) FetchDailyBars(ctx context.Context, rawSymbol, startDate, end
 	for i := 0; i < n; i++ {
 		timestamp, err := tickflowInt64(data.Timestamp[i])
 		if err != nil || timestamp <= 0 {
+			addProviderParseIssue(ctx, i, "trade_date", "timestamp", "invalid_timestamp", "positive Unix millisecond timestamp", providerJSONValueType(data.Timestamp[i]), providerJSONPreview(data.Timestamp[i]), "TickFlow K-line timestamp cannot be parsed")
 			return nil, fmt.Errorf("TickFlow K-line row %d has invalid timestamp", i)
 		}
 		tradeDate := time.UnixMilli(timestamp).In(loc).Format("2006-01-02")
@@ -1159,27 +1162,32 @@ func (p *TickFlow) FetchDailyBars(ctx context.Context, rawSymbol, startDate, end
 		}
 		seen[tradeDate] = struct{}{}
 		open, err := tickflowFloat(data.Open[i])
-		if err != nil {
+		if err != nil || !tickflowPositiveFinite(open) {
+			addProviderParseIssue(ctx, i, "open", "open", "invalid_number", "finite positive price", providerJSONValueType(data.Open[i]), providerJSONPreview(data.Open[i]), "TickFlow K-line price field is invalid")
 			return nil, fmt.Errorf("TickFlow invalid open on %s", tradeDate)
 		}
 		high, err := tickflowFloat(data.High[i])
-		if err != nil {
+		if err != nil || !tickflowPositiveFinite(high) {
+			addProviderParseIssue(ctx, i, "high", "high", "invalid_number", "finite positive price", providerJSONValueType(data.High[i]), providerJSONPreview(data.High[i]), "TickFlow K-line price field is invalid")
 			return nil, fmt.Errorf("TickFlow invalid high on %s", tradeDate)
 		}
 		low, err := tickflowFloat(data.Low[i])
-		if err != nil {
+		if err != nil || !tickflowPositiveFinite(low) {
+			addProviderParseIssue(ctx, i, "low", "low", "invalid_number", "finite positive price", providerJSONValueType(data.Low[i]), providerJSONPreview(data.Low[i]), "TickFlow K-line price field is invalid")
 			return nil, fmt.Errorf("TickFlow invalid low on %s", tradeDate)
 		}
 		closePrice, err := tickflowFloat(data.Close[i])
-		if err != nil {
+		if err != nil || !tickflowPositiveFinite(closePrice) {
+			addProviderParseIssue(ctx, i, "close", "close", "invalid_number", "finite positive price", providerJSONValueType(data.Close[i]), providerJSONPreview(data.Close[i]), "TickFlow K-line price field is invalid")
 			return nil, fmt.Errorf("TickFlow invalid close on %s", tradeDate)
 		}
-		if !tickflowPositiveFinite(open) || !tickflowPositiveFinite(high) || !tickflowPositiveFinite(low) || !tickflowPositiveFinite(closePrice) ||
-			low > high || open < low || open > high || closePrice < low || closePrice > high {
+		if low > high || open < low || open > high || closePrice < low || closePrice > high {
+			addProviderParseIssue(ctx, i, "ohlc", "open/high/low/close", "ohlc_invariant_violation", "low <= open/close <= high", "number", "", "TickFlow K-line OHLC values violate price range")
 			return nil, fmt.Errorf("TickFlow OHLC invariant failed on %s", tradeDate)
 		}
 		rawVolume, err := tickflowFloat(data.Volume[i])
-		if err != nil || rawVolume < 0 || math.Trunc(rawVolume) != rawVolume {
+		if err != nil || rawVolume < 0 || math.Trunc(rawVolume) != rawVolume || math.IsNaN(rawVolume) || math.IsInf(rawVolume, 0) {
+			addProviderParseIssue(ctx, i, "volume", "volume", "invalid_number", "finite non-negative integer hands", providerJSONValueType(data.Volume[i]), providerJSONPreview(data.Volume[i]), "TickFlow K-line volume is invalid")
 			return nil, fmt.Errorf("TickFlow has invalid volume on %s", tradeDate)
 		}
 		volume, err := normalize.HandsToShares(rawVolume)
@@ -1194,6 +1202,7 @@ func (p *TickFlow) FetchDailyBars(ctx context.Context, rawSymbol, startDate, end
 		if i < len(data.Amount) && len(bytesTrim(data.Amount[i])) > 0 && string(bytesTrim(data.Amount[i])) != "null" {
 			value, parseErr := tickflowFloat(data.Amount[i])
 			if parseErr != nil || value < 0 || math.IsNaN(value) || math.IsInf(value, 0) {
+				addProviderParseIssue(ctx, i, "amount", "amount", "invalid_optional_number", "finite non-negative CNY amount", providerJSONValueType(data.Amount[i]), providerJSONPreview(data.Amount[i]), "TickFlow K-line amount is invalid")
 				return nil, fmt.Errorf("TickFlow has invalid amount on %s", tradeDate)
 			}
 			amount, rawAmount = &value, &value
@@ -1212,6 +1221,9 @@ func (p *TickFlow) FetchDailyBars(ctx context.Context, rawSymbol, startDate, end
 				}
 			}
 			if pct == nil {
+				if parseErr != nil || !tickflowPositiveFinite(prev) {
+					addProviderParseIssue(ctx, i, "prev_close", "prev_close", "invalid_optional_number", "finite positive previous close", providerJSONValueType(data.PrevClose[i]), providerJSONPreview(data.PrevClose[i]), "TickFlow K-line previous close is invalid; change percent omitted")
+				}
 				quality = model.QualityDegraded
 				reasons = append(reasons, "provider_change_percent_missing_or_invalid")
 			}
