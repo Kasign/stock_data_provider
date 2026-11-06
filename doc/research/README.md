@@ -52,5 +52,6 @@ R1/R2/R3 当前只实现 Context、Evidence、Event 领域结构及本地校验�
 - RSC-DEC-001：Quant 结果通过 Researchflow 获取；Research 不新增 Quant Port、不直接调用 Quant、不自行解引用。
 - RSC-OPEN-002：ResearchEvent.changed_at 与 INT-CTR-001 事件时间映射存在字段缺口；不阻断 Event Domain。
 - RSC-OPEN-003：Event 规范化时间要求可追溯到规则版本，但当前 DTO 没有 normalization_rule_version；未决前不声称规范化时间来源链完整。
+- RSC-OPEN-004：Event 合并/拆分要求 source_refs/derived_from_refs，但 ResearchEvent 字段表未定义这两个字段；未决前不实现跨 Event 归并关系。
 
 详细设计见 [01-研究领域模型与证据体系](01-研究领域模型与证据体系.md)，字段与授权链补充见 [03-Context与Evidence字段语义及授权链补充](03-Context与Evidence字段语义及授权链补充.md)，任务与验收见 [02-任务拆分与验收](02-任务拆分与验收.md)。

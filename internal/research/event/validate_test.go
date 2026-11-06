@@ -87,7 +87,7 @@ func TestResearchEventVersionMustAppendAndPreserveLifecycle(t *testing.T) {
 	}
 	next = previous
 	next.EventVersion = 3
-	supersedes = 1
+	supersedes = 2
 	next.SupersedesEventVersion = &supersedes
 	if err := next.ValidateNextVersion(previous); err == nil || !strings.Contains(err.Error(), "increment by exactly one") {
 		t.Fatalf("version gap should fail, got %v", err)

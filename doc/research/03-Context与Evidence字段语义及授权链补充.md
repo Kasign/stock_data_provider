@@ -119,6 +119,12 @@ Fixture/Fake Adapter 只能证明 Research 自身模型和消费边界；真实 
 
 Quant-Research DTO 要求非 null 的 occurred_at/published_at/available_at 规范化值可追溯到来源 Evidence 和采用的规则版本，但 ResearchEvent DTO 目前没有 normalization_rule_version 或等价的规则引用字段。当前 Domain 只能检查相应 time_type 的 SourceTime 存在，不能证明归一规则版本。未完成项目级字段/元数据决议前，不将规范化时间完整性标记通过；多来源冲突时保留 source_times 并将规范化值置 null。
 
+### RSC-OPEN-004：Event 合并/拆分的来源关系字段缺失
+
+Quant-Research DTO 第 3.3 节的 ResearchEvent 字段表没有 `source_refs` 和 `derived_from_refs`，但第 9.9 节要求 Event 合并/拆分时记录这两类引用。现有 `supersedes_event_version` 只能表达同一 Event 内的版本替代，不能表达多个 Event 合并为一个或一个 Event 拆分为多个。
+
+在项目级契约明确字段、方向、基数和历史查询语义前，Research 只实现单 Event 版本追加与状态转换，不新增本地私有字段，不实现跨 Event 合并/拆分写入。
+
 ### RSC-OPEN-002：ResearchEvent.changed_at 与 INT-CTR-001 时间映射缺字段
 
 项目级 ResearchEvent DTO（Quant-Research 公开 DTO 字段级契约第 3.3 节）包含 occurred_at、published_at、available_at、system_observed_at、system_as_of，但没有 changed_at。与此同时，INT-CTR-001 的 research.event.lifecycle_changed Payload 要求 changed_at，且 Envelope.occurred_at 映射为 ResearchEvent.changed_at。
