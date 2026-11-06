@@ -131,19 +131,24 @@ func ValidateNewsItemRelationHistory(relations []NewsItemRelation) error {
 		}
 	}
 
-	// 沿替代链跳过 proposed 中间态：只要后续链上出现 confirmed/retracted，
-	// 所有祖先断言都应退出当前图，不能因直接后继仍是 proposed 而复活旧边。
+	// confirmed 后继可以穿过 proposed 中间态替代祖先；
+	// retracted 只撤销它直接指向的父断言，不能越过 proposed 撤销更早的确认关系。
 	effectivelyReplaced := func(id string) bool {
 		seen := make(map[string]struct{})
+		previousID := id
 		for nextID := successor[id]; nextID != ""; nextID = successor[nextID] {
 			if _, exists := seen[nextID]; exists {
 				return true
 			}
 			seen[nextID] = struct{}{}
 			next := byID[nextID]
-			if next.Status == NewsItemRelationConfirmed || next.Status == NewsItemRelationRetracted {
+			switch next.Status {
+			case NewsItemRelationConfirmed:
 				return true
+			case NewsItemRelationRetracted:
+				return previousID == id
 			}
+			previousID = nextID
 		}
 		return false
 	}

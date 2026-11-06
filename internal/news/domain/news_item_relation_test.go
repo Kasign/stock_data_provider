@@ -214,3 +214,17 @@ func TestValidateNewsItemRelationRejectsNonCanonicalIdentifiers(t *testing.T) {
 		t.Fatal("non-canonical relation ID must be rejected")
 	}
 }
+
+func TestValidateNewsItemRelationHistoryRetractingProposalPreservesEarlierConfirmedEdge(t *testing.T) {
+	old := relationFixture("rel-old", "news-repost", "news-original-a")
+	proposal := relationFixture("rel-proposal", "news-repost", "news-original-b")
+	proposal.Status = NewsItemRelationProposed
+	proposal.SupersedesRelationID = old.ID
+	retractedProposal := relationFixture("rel-proposal-retracted", "news-repost", "news-original-b")
+	retractedProposal.Status = NewsItemRelationRetracted
+	retractedProposal.SupersedesRelationID = proposal.ID
+
+	if err := ValidateNewsItemRelationHistory([]NewsItemRelation{old, proposal, retractedProposal}); err != nil {
+		t.Fatalf("retracting an unconfirmed proposal must preserve the prior confirmed edge: %v", err)
+	}
+}
