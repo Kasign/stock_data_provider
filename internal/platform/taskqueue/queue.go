@@ -96,7 +96,7 @@ func (q *Queue) Start(parent context.Context) error {
 	}
 	q.lifecycleMu.Lock()
 	defer q.lifecycleMu.Unlock()
-	if q.closed || (q.runCtx != nil && q.runCtx.Err() != nil) {
+	if q.closed || (q.startErr == nil && q.runCtx != nil && q.runCtx.Err() != nil) {
 		q.closed = true
 		return ErrQueueClosed
 	}
