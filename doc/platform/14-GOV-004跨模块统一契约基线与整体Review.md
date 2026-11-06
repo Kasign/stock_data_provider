@@ -663,7 +663,7 @@ JSON 类型由字段语义决定，不由 Go 内部类型决定。Go 内部可�
 {
   "metric_code": "sample_count",
   "value": 240,
-  "unit": "shares",
+  "unit": "samples",
   "period": "20d",
   "quality_status": "valid",
   "calculation_version": "factor.v1"
