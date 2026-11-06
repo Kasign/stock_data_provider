@@ -1692,7 +1692,6 @@ func TestProviderProbeDailyBarsReusesTradingContextDiagnosticsEndToEnd(t *testin
 	}
 }
 
-
 func TestApplyFreshnessProbeResultsDoesNotPromoteBusinessDatesOrFetchedAt(t *testing.T) {
 	checkedAt := time.Date(2026, 11, 3, 10, 0, 0, 0, marketLocation()).UTC()
 	fetchedAt := checkedAt.Add(-time.Second)
