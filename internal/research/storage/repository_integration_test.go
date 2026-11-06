@@ -33,6 +33,18 @@ func openResearchIntegrationDB(t *testing.T) *sql.DB {
 	if err := platformstorage.ApplyMigrations(ctx, db, MigrationNamespace, Migrations()); err != nil {
 		t.Fatalf("apply Research migrations: %v", err)
 	}
+	for _, column := range []struct{ table, name string }{
+		{"research_event_versions", "event_version"},
+		{"research_claim_versions", "claim_version"},
+	} {
+		var dataType string
+		if err := db.QueryRowContext(ctx, "SELECT DATA_TYPE FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?", column.table, column.name).Scan(&dataType); err != nil {
+			t.Fatalf("read %s.%s column type: %v", column.table, column.name, err)
+		}
+		if dataType != "bigint" {
+			t.Fatalf("%s.%s data type = %q, want bigint", column.table, column.name, dataType)
+		}
+	}
 	return db
 }
 
@@ -183,7 +195,7 @@ func TestResearchSQLRepositoriesAppendAndReadVersions(t *testing.T) {
 		t.Fatalf("concurrent conflicting append results: successes=%d conflicts=%d, want 1/1", successes, conflicts)
 	}
 
-	// Cancellation must not leave a partially-created aggregate.
+	// A request canceled before Append starts must not create an aggregate.
 	cancelledContext := contextV1
 	cancelledContext.ContextID = cancelledContextID
 	cancelCtx, cancelAppend := context.WithCancel(ctx)
@@ -193,6 +205,13 @@ func TestResearchSQLRepositoriesAppendAndReadVersions(t *testing.T) {
 	}
 	if _, err := contextRepo.GetVersion(ctx, cancelledContextID, 1); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("cancelled Context append GetVersion error = %v, want ErrNotFound", err)
+	}
+	var cancelledHeadCount int
+	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM research_aggregate_heads WHERE aggregate_type='context' AND aggregate_id=?", cancelledContextID).Scan(&cancelledHeadCount); err != nil {
+		t.Fatalf("check pre-canceled aggregate head: %v", err)
+	}
+	if cancelledHeadCount != 0 {
+		t.Fatalf("pre-canceled append left %d aggregate head rows, want 0", cancelledHeadCount)
 	}
 
 	eventV1 := researchevent.ResearchEvent{

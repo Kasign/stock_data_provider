@@ -4,7 +4,7 @@
 - 代码：`internal/research/**`
 - 任务前缀：RSC
 - 当前阶段：R1 Context + R2 Evidence + R3 Event + R5 Claim/Hypothesis 领域基础；R7 Storage Port/Schema/Context-Event-Claim SQL Adapter 第一阶段
-- 当前状态：Context/Evidence/Event/Claim Domain 首批结构与校验已实现；Context 版本链、Evidence JCS/授权过期边界、Event 生命周期及 Claim 文本校验新增测试已写入但尚未执行。RSC-007 已新增四个领域 Repository Port 和 Research Migration v1/v2（v2 保留 RFC3339Nano PIT 纳秒精度）；Context/Event/Claim SQL Repository Adapter 已实现首批追加与精确版本读取；MariaDB 集成测试已增加环境变量门禁，覆盖并发追加、冲突竞争、事务回滚和 Context Cancel；尚未执行，组合根注册尚未验收，Evidence SQL Adapter 受 RSC-OPEN-007 阻断。未完成仓库完整构建/CI、真实 Data/News、Owner 当前授权复核、Application、Outbox 和跨模块集成。
+- 当前状态：Context/Evidence/Event/Claim Domain 首批结构与校验已实现；Context 版本链、Evidence JCS/授权过期边界、Event 生命周期及 Claim 文本校验新增测试已写入但尚未执行。RSC-007 已新增四个领域 Repository Port 和 Research Migration v1/v2/v3（v2 保留 RFC3339Nano PIT 纳秒精度）；Context/Event/Claim SQL Repository Adapter 已实现首批追加与精确版本读取；MariaDB 集成测试已增加环境变量门禁，覆盖并发追加、冲突竞争、孤立版本插入失败回滚、预先取消请求及 v3 列类型断言；尚未执行，组合根注册尚未验收，Evidence SQL Adapter 受 RSC-OPEN-007 阻断。未完成仓库完整构建/CI、真实 Data/News、Owner 当前授权复核、Application、Outbox 和跨模块集成。
 
 ## 模块职责
 
@@ -55,7 +55,7 @@ internal/research/
     repository_integration_test.go
 ```
 
-R1/R2/R3/R5 当前实现 Context、Evidence、Event、Claim/Hypothesis 领域结构及本地校验；R7 已完成 Repository Port、Migration Schema 及 Context/Event/Claim SQL Adapter 第一批实现：包括 Evidence 内容指纹/PIT、GOV-CTR-006 授权快照完整性、Event 追加版本和生命周期转换、Claim/Hypothesis 认识论字段与验证条件。没有 HTTP 接口、真实数据 Adapter、Migration 执行、Outbox 或 Run 编排接入；Context/Event/Claim SQL Repository Adapter 已按 Migration v1/v2 实现，但尚无真实 MariaDB 集成验收。
+R1/R2/R3/R5 当前实现 Context、Evidence、Event、Claim/Hypothesis 领域结构及本地校验；R7 已完成 Repository Port、Migration Schema 及 Context/Event/Claim SQL Adapter 第一批实现：包括 Evidence 内容指纹/PIT、GOV-CTR-006 授权快照完整性、Event 追加版本和生命周期转换、Claim/Hypothesis 认识论字段与验证条件。没有 HTTP 接口、真实数据 Adapter、Migration 执行、Outbox 或 Run 编排接入；Context/Event/Claim SQL Repository Adapter 已按 Migration v1/v2/v3 实现，但尚无真实 MariaDB 集成验收。
 
 旧 `go-core/internal/contextpack` 和 `internal/analysis` 是历史分析流程，不等同于新 Research Domain；仅作为迁移行为参考，不重复建设其已有的数据整理能力。
 
@@ -117,3 +117,11 @@ R1/R2/R3/R5 当前实现 Context、Evidence、Event、Claim/Hypothesis 领域结
 - 新增 Migration v3，将 `research_event_versions.event_version`、`research_claim_versions.claim_version` 升级为 `BIGINT UNSIGNED`，不修改已发布的 v1/v2 历史迁移。
 - Context、Event、Claim 的 `ValidateNextVersion` 在执行 `previous+1` 前检查各自整数上限，避免极值回绕导致版本链校验错误。
 - Migration 单测和三个领域版本溢出测试已补充；尚未执行 Go 测试，也未在 MariaDB 验证 v1→v2→v3 升级。
+
+
+## RSC-007 本轮补充：版本列范围与测试边界
+
+- Event/Claim 的 Go 版本字段为 `int`，Repository 按有符号整数处理；Migration v1 的 `INT UNSIGNED` 列宽不足以覆盖 64 位 Go `int` 的范围。
+- 新增 Migration v3，将 Event/Claim 版本列升级为 `BIGINT UNSIGNED`，不修改已发布的 v1/v2 历史迁移；Context/Event/Claim 的 `ValidateNextVersion` 在递增前检查整数上限。
+- MariaDB 集成测试增加 v3 后列类型断言。原 Context Cancel 用例是在调用前取消请求，只能证明预先取消不会创建版本行/head；不代表事务执行中取消回滚。事务中取消与锁等待取消仍待独立故障注入。
+- 新增测试尚未执行，未完成真实 MariaDB 升级验收。
