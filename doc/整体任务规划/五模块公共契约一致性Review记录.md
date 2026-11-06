@@ -57,3 +57,8 @@ request_id 标识一次调用；correlation_id 关联跨模块链路；event_id 
 本轮未生成正式 JSON Schema、Go DTO、Mapper 或契约测试；未执行代码测试。GOV-004 继续 NO-GO。没有用户授权，不创建五模块开发分支。
 
 **结论：规划文档间主要语义差异已完成校准；下一步由各模块 Owner 对建议决议签字，并将正式 JSON Schema/Golden 纳入模块契约测试。**
+
+
+## 6. Researchflow 状态机项目决议更新（2026-11-06）
+
+CONTRACT-006/007 不再等待模块 Owner 签字，已由项目统一决策方形成最终设计决议。新增 Stage.retry_wait、有限自动重试、硬风险门禁/actionability、queued 取消与 Worker claim CAS、deadline 对未启动阶段处理、Run 终态不变量及副作用幂等边界。详细内容见 [Researchflow 最终决议](../researchflow/03-CONTRACT-006与007最终决议.md)。本轮只关闭设计决策，不代表实现或测试通过；其他模块决议仍按项目统一决策流程逐项完成。
