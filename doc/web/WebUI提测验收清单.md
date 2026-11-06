@@ -2453,3 +2453,10 @@ CSS AST 检查器进一步扩展：
 - [x] `8cd13620` 的单 Job 重跑确认 320px 下仍有 12 次 `GET /: net::ERR_ABORTED`，根文档豁免条件没有命中。
 - [ ] 在失败断言中输出根请求的资源类型、导航标记、frame URL 和重定向来源，保持网络失败断言严格，不把诊断调整视为验收通过。
 - [ ] 等待完整 Browser Smoke 及后续专项全部通过。
+
+
+### W1 根路径 Fetch 请求来源追踪
+
+- [x] 已确认 `GET /` 失败属于 Fetch，不是文档导航；不能作为导航取消豁免。
+- [ ] Browser Smoke 输出 Chromium CDP 请求 initiator 类型与调用栈，定位真实发起方。
+- [ ] 根路径请求问题修复后，完整 Browser Smoke 和全部专项通过再验收 W1。

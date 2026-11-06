@@ -2226,3 +2226,10 @@ CSS AST 检查器进一步扩展：
 - [x] 已确认失败发生在 `web/tests/browser-smoke.mjs:2287` 的非 API 网络断言，后续专项因主脚本失败而全部跳过。
 - [ ] 增加根请求失败诊断字段（resourceType、isNavigationRequest、frame URL、redirect source），保留原有严格失败断言；根据下一轮日志定位真实触发源，不扩大豁免。
 - [ ] Browser Smoke 与全部专项通过后再验收 W1；当前仍未通过。
+
+
+### W1 根路径 Fetch 请求来源追踪
+
+- [x] `1541d42f` 的 Browser Smoke 诊断确认 320px 视口的 12 次 `GET /` 均为 `resourceType=fetch`、`isNavigationRequest=false`，发生在 `#watchlist` / `#settings` 页面状态；因此不是被取消的文档导航。
+- [ ] 使用 Chromium CDP `Network.requestWillBeSent.initiator` 采集根路径请求发起类型与调用栈，保留严格网络失败断言。
+- [ ] 根据调用栈定位请求源，修复触发逻辑后重新执行完整 Browser Smoke 与全部专项。

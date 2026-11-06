@@ -86,6 +86,28 @@ try {
   for (const viewport of viewports) {
     const context = await browser.newContext({ viewport, reducedMotion: "reduce" });
     const page = await context.newPage();
+    const rootRequestInitiators = [];
+    const cdpSession = await context.newCDPSession(page);
+    await cdpSession.send("Network.enable");
+    cdpSession.on("Network.requestWillBeSent", (event) => {
+      let pathname = "";
+      try { pathname = new URL(event.request.url).pathname; } catch {}
+      if (pathname !== "/") return;
+      const frames = event.initiator?.stack?.callFrames || [];
+      rootRequestInitiators.push({
+        requestId: event.requestId,
+        url: event.request.url,
+        documentURL: event.documentURL,
+        initiatorType: event.initiator?.type || "",
+        initiatorURL: event.initiator?.url || "",
+        stack: frames.slice(0, 8).map((frame) => ({
+          functionName: frame.functionName,
+          url: frame.url,
+          lineNumber: frame.lineNumber,
+          columnNumber: frame.columnNumber
+        }))
+      });
+    });
     await page.addInitScript(() => {
       window.__pageErrorDetails = [];
       window.addEventListener("error", (event) => {
@@ -2298,9 +2320,10 @@ try {
 
     assert.deepEqual(pageErrors, [], "browser page errors at " + viewport.width + "px: " + pageErrors.join(" | "));
     assert.deepEqual(consoleErrors, [], "unexpected browser console errors at " + viewport.width + "px: " + consoleErrors.join(" | "));
-    assert.deepEqual(unexpectedNetworkFailures, [], "unexpected non-API network failures at " + viewport.width + "px: " + unexpectedNetworkFailures.join(" | ") + "; rootRequestFailures=" + JSON.stringify(rootRequestFailures));
+    assert.deepEqual(unexpectedNetworkFailures, [], "unexpected non-API network failures at " + viewport.width + "px: " + unexpectedNetworkFailures.join(" | ") + "; rootRequestFailures=" + JSON.stringify(rootRequestFailures) + "; rootRequestInitiators=" + JSON.stringify(rootRequestInitiators));
     console.log("PASS viewport " + viewport.width + "x" + viewport.height + ": navigation, overflow, focus, console, network, Run Flow layout; superseded navigations=" + abortedNavigationRequests.length);
 
+    await cdpSession.detach();
     await context.close();
   }
 
