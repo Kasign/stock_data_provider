@@ -91,7 +91,7 @@ completed 不代表 valid；消费方必须同时检查 result_status 和 qualit
 | trend_code | 是 | string | 趋势类型编码 |
 | direction | 是 | bullish/bearish/sideways/unknown | 方向 |
 | phase | 是 | emerging/accelerating/mature/weakening/reversing/unknown | 趋势阶段 |
-| strength | 是 | number/null | 归一化强度，需定义范围 |
+| strength | 是 | number/null | 归一化强度；非 null 时范围固定为 [0,1]，并由 algorithm_version 说明归一化方法 |
 | period | 是 | string | 周期 |
 | evidence_metrics | 是 | QuantMetric[] | 支撑指标 |
 | conflict_refs | 是 | string[] | 周期冲突/反向结构引用 |
@@ -114,6 +114,31 @@ direction 与 phase 必须分开；unknown 不得用 sideways 代替。跨周期
 | input_refs | 是 | string[] | 输入结果/快照引用 |
 
 RiskReason 至少包含 code、severity（block/warn/info）、status（triggered/not_triggered/unknown）、safe message 和 evidence_refs。数据缺失、规则无法评估或输入质量不足时，RiskDecision 必须为 unknown 或 reject，绝不能 pass。硬门禁不提供可由评分或 LLM 调整的 override 字段。
+
+
+### 2.7 QuantResult Envelope 与强类型 Payload
+
+Quant Application 返回的 QuantResult 使用共同 Envelope，不允许 `map[string]any` 或无约束 JSON payload。
+
+| 字段 | 必需 | 类型/约束 | 语义 |
+|---|---|---|---|
+| schema_version | 是 | string | Envelope Schema 版本 |
+| result_id | 是 | string | 不透明结果 ID |
+| result_type | 是 | indicator/factor/trend/market/industry/stock/strategy/backtest/risk/evaluation | 必须命中已注册结果类型 |
+| scope | 是 | stock/market/industry/portfolio | 结果范围 |
+| security_id | 条件必需 | string | 单证券结果必需 |
+| system_as_of | 是 | RFC3339Nano UTC | 计算知识截止时间 |
+| trade_date | 否 | YYYY-MM-DD | 对应交易日 |
+| period | 是 | string | 结果周期 |
+| algorithm_version | 是 | string | 算法语义版本 |
+| parameter_fingerprint | 是 | string | 规范化参数指纹 |
+| input_snapshot_refs | 是 | array<string> | 输入快照引用；无输入仅限模板白名单纯函数 |
+| quality_status | 是 | valid/degraded/invalid/unknown | 结果质量 |
+| result_status | 是 | completed/insufficient_data/insufficient_sample/rejected/failed | 计算状态 |
+| payload | 是 | discriminated union | 按 result_type + schema_version 命中唯一强类型子 Schema |
+
+同一 result_type/schema_version 的 payload 结构不可原地改变。Researchflow 只校验 discriminator、Schema 和版本并保存结果引用；Research 不解析未知 payload，也不自行计算或重解释指标。未知 result_type/schema_version 必须返回 unsupported_result_type/unsupported_schema，不回退旧版本。
+
 
 ### 2.6 Quant Facade 边界
 
@@ -159,7 +184,7 @@ Research 定义 Context 领域语义；Researchflow 负责单次 Run 的分区�
 | valid_time_start/end | 否 | timestamp | 业务有效区间 |
 | system_as_of | 是 | timestamp | 纳入研究时的知识截止时间 |
 | stance | 是 | supports/contradicts/neutral | 对 Claim 的立场 |
-| confidence | 否 | number/null | 置信表达及其方法来源 |
+| confidence | 否 | number/null | 仅允许 [0,1]；非 null 时必须同时提供 confidence_method/version，不能使用 LLM 自评分冒充统计概率 |
 | quality_status | 是 | valid/degraded/invalid/unknown | 证据质量 |
 | authorization_ref | 是 | string | 授权决策/安全状态引用 |
 | limitations | 是 | string[] | 使用限制 |
@@ -233,7 +258,7 @@ Scenario 语义由 Research 持有，概率和收益分布由 Quant 提供。没
 
 ### 3.6 QualitySummary
 
-最小字段：status（valid/degraded/invalid/unknown）、missing_required_count、missing_optional_count、conflict_count、stale_count、reason_codes。该汇总只描述 Research 自身 Context/Evidence 完整性，不覆盖 Data Probe、News 业务质量或 Platform Diagnostics。
+最小字段：status（valid/degraded/invalid/unknown）、missing_required_count、missing_optional_count、conflict_count、stale_count、reason_codes。该汇总只描述 Research 自身 Context/Evidence 完整性，不覆盖 Data Probe、News 业务质量或 Platform Diagnostics。计数字段为非负整数；reason_codes 去重并按字典序排序。
 
 ## 4. 模块调用关系和返回约束
 
@@ -261,13 +286,13 @@ Researchflow 是唯一跨模块组合者，并负责传播同一 Run 的 system_
 
 ## 6. 待 Review 决策
 
-- [ ] 价格/金额最终采用 decimal string，还是 JSON number + 明确精度；禁止实现中混用。
-- [ ] Quant 参数对象按每个 Use Case 定义独立结构并生成 JSON Schema。
-- [ ] input_snapshot_refs 是否允许空数组，仅限纯函数场景并在用例级白名单化。
+- [x] 精确价格/金额采用 decimal string；允许误差的统计值采用 number 并由 Registry 声明 precision/tolerance；Data v1 number 不作为精确计算输入，见 DATA-CTR-005。
+- [x] Quant 参数对象按 indicator_code/factor_code + schema_version 定义独立 typed Schema；首批参数不得使用任意 map，见本目录第 8.2/8.3 节。
+- [x] input_snapshot_refs 必填；仅模板注册时显式声明 allow_empty_inputs=true 的纯函数场景允许空数组，见 FLOW-CTR-003。
 - [x] Evidence 所有来源统一携带 authorization_ref；各 source_owner 签发自己的授权审计快照，公开/无限制访问也用 allow 决策记录，不设置绕过授权链的 not_required 空值。
-- [ ] ContextSectionRef、OmittedSection、ScenarioCondition、RiskReason 的完整字段和枚举。
-- [ ] Event 发生时间与来源发布时间冲突时保留来源级多值表达。
-- [ ] QuantResult 采用强类型子 DTO + 共同元数据，不使用任意 payload map。
+- [x] ContextSectionRef、OmittedSection、ScenarioCondition、RiskReason 的字段和枚举见第 9.1–9.4 节；Schema/Golden 仍待实现。
+- [x] Event 通过 source_times[] 保留来源级 occurred_at/published_at/available_at/system_observed_at，不以单一 occurred_at 覆盖冲突，见第 9.6 节。
+- [x] QuantResult 采用共同元数据 Envelope + 按 result_type 区分的强类型 payload；禁止任意 payload map，具体 Registry/Schema 仍待实现。
 
 ## 7. 验收清单
 
@@ -385,7 +410,7 @@ Event 允许多来源时间并存，不以单一 occurred_at 覆盖冲突来源�
 | time_type | 是 | occurred_at/published_at/available_at/system_observed_at | 时间语义 |
 | value | 是 | timestamp | 来源/系统时间值 |
 | asserted_by | 是 | string | 来源或系统主体引用 |
-| confidence | 否 | number/null | 时间可信程度及其评估方法 |
+| confidence | 否 | number/null | 仅允许 [0,1]；非 null 时必须同时提供 confidence_method/version |
 | notes | 否 | string | 时间解释/冲突说明 |
 
 Event 可保留规范化 occurred_at 作为研究归一结果，但必须同时提供 source_times[]；规范化值必须能追溯到所采用的证据与规则版本。
