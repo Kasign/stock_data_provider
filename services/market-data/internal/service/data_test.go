@@ -359,6 +359,17 @@ func TestDailyBarsAcceptsForwardReferenceAfterRequestedEnd(t *testing.T) {
 	bar.QualityStatus = model.QualityValid
 	svc := New([]provider.Provider{fakeProvider{name: "pytdx", bars: []model.DailyBar{bar}}},
 		cache.NewDisabled(), nil, time.Second, time.Minute, 120, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	calendarProvider := &testTradingCalendarProvider{name: "test-calendar", snapshot: &model.TradingCalendarSnapshot{
+		Market: "cn_a_share", StartDate: "2026-10-20", EndDate: "2026-10-21",
+		TotalDays: 2, TradingDays: 2,
+		Items: []model.TradingCalendarDay{
+			{Date: "2026-10-20", IsTradingDay: true},
+			{Date: "2026-10-21", IsTradingDay: true},
+		},
+		Source: "test-calendar", SourceVersion: "test-calendar-v1",
+		FetchedAt: time.Now().UTC(), QualityStatus: model.QualityValid,
+	}}
+	svc.SetTradingCalendarProviders([]provider.TradingCalendarProvider{calendarProvider})
 
 	bars, hit, _, err := svc.DailyBars(context.Background(), "600519.SH", "2026-10-20", "2026-10-21", 1, model.AdjustmentForward)
 	if err != nil || hit {
