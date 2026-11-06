@@ -145,6 +145,19 @@ func TestRunnerRejectsUnknownFaultClass(t *testing.T) {
 	}
 }
 
+func TestCheckRejectsUnsafeMetadata(t *testing.T) {
+	check := healthyCheck("valid", true)
+	check.Name = strings.Repeat("n", maxCheckNameLength+1)
+	if err := check.validate(); err == nil {
+		t.Fatal("expected oversized check name validation error")
+	}
+
+	check = healthyCheck("invalid\\nid", true)
+	if err := check.validate(); err == nil {
+		t.Fatal("expected check ID control character validation error")
+	}
+}
+
 func TestRunnerRejectsUnsafeFaultMetadata(t *testing.T) {
 	check := Check{ID: "unsafe-fault", Run: func(context.Context) (Observation, error) {
 		return Observation{}, &fault.Fault{
