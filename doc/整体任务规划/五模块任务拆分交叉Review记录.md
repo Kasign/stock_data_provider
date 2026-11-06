@@ -177,7 +177,7 @@ Domain/Contract 不得因为无关模块的 Adapter/Integration 未完成而被�
 - FLOW-003：覆盖状态合法迁移、blocked/skipped 区分、失败重试新 Attempt、partial 聚合、Run cancelling、deadline、CAS 竞争与迟到结果拒绝。
 - FLOW-004：覆盖容量满拒绝、并发上限、单 Run 并行上限、queued 恢复、租约过期回收、fencing token、单层重试和进程重启恢复。
 
-### 8.4 尚待 Researchflow Owner 确认
+### 8.4 历史待决项（已由第 17 节项目决议覆盖）
 
 - Stage 传播策略是否采用本轮五项枚举，以及是否需要针对特定 reason_code 增加更细粒度规则。
 - 硬风险门禁 Stage 的识别方式（Template 元数据标记或受控 stage_code Registry）；建议两者校验，不能仅靠自由文本。
@@ -185,7 +185,7 @@ Domain/Contract 不得因为无关模块的 Adapter/Integration 未完成而被�
 - deadline 到达时 optional Stage 的传播策略是否默认 partial；建议默认 partial，Owner 可在明确无影响时配置 no_impact，但不能放宽 required/risk gate。
 - 数据库 CAS、租约和 fencing token 的具体字段/唯一约束属于 FLOW-007 Repository/Schema 评审，当前为逻辑契约建议。
 
-**本轮结论：规划侧 CONTRACT-006/007 建议决议已形成，文档间状态语义已统一；仍待 Researchflow Owner Review，不代表实现、契约冻结或 L2 Module Ready。**
+**历史结论已由第 17 节项目最终决议覆盖；实现、自动化契约测试和 L2 Module Ready 仍未完成。**
 
 
 ## 9. LLM-001 现有 Gateway 协议盘点（2026-11-05）
@@ -276,3 +276,15 @@ Domain/Contract 不得因为无关模块的 Adapter/Integration 未完成而被�
 7. request_id/correlation_id/event_id/idempotency_key 分工明确；幂等使用 Owner 定义的作用域与 fingerprint。
 
 本轮未发现需要改变五模块依赖方向的架构冲突。字段级差异已在规划文档修订；Owner 签字、正式 JSON Schema、Go DTO/golden 和契约测试仍未完成。GOV-004 继续 NO-GO。
+
+
+## 17. CONTRACT-006 / 007 项目最终决议（2026-11-06）
+
+本节取代第 8 节中“待 Researchflow Owner 确认”的历史状态。项目不存在独立模块 Owner；由项目统一决策方形成决议。设计决策关闭，代码实现与自动化验收仍未完成。
+
+- CONTRACT-006：Run 只表达完成度；Stage 增加 retry_wait；Template 固定传播矩阵和有限 retry_policy；硬风险门禁使用 Registry + gate_type 双重标识；RiskDecision reject/unknown 是有效业务结果但 actionability blocked；门禁未执行或执行层失败必须 Run.failed。
+- CONTRACT-007：created/queued 无运行中 Attempt 时可直接取消；running 进入 cancelling；数据库 UTC 时钟决定 deadline 优先级；deadline 将未启动 Stage 标为 timed_out，在途 Attempt 停止/fence 后 timed_out；Run 终态必须无活动 Stage/Attempt，并以事务/CAS 固化。
+- 租约 fencing 仅阻止本地迟到写入；外部副作用必须使用下游幂等键，ambiguous outcome 不自动重试。
+- 详细决议与验收矩阵见 `doc/researchflow/03-CONTRACT-006与007最终决议.md`。
+
+本决议不代表 FLOW-001~004 已实现或测试通过，也不单独使 GOV-004/L2 Module Ready 通过。

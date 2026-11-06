@@ -834,3 +834,30 @@ Workflow Template 按 stage_code + template_version 固定 on_degraded、on_skip
 - 明确质量、计算结果、流程、模型响应和通知投递状态分域管理；统一幂等和关联 ID 基本规则。
 
 未发现需要调整五模块依赖方向的架构冲突。Owner 签字、正式 JSON Schema、Go DTO/golden 与契约测试仍未完成；GOV-004 保持 NO-GO，不创建模块分支。
+
+
+## 41. CONTRACT-006 / 007 项目最终决议（2026-11-06）
+
+本节为最新有效决议，取代第 32 节“待 Researchflow Owner Review”的历史状态。项目不存在独立模块 Owner；由项目统一决策方作出设计决议，不再把 Owner 签字作为门槛。
+
+### 41.1 最终设计决策
+
+- Run：created/queued/running/cancelling/succeeded/partial/failed/cancelled；不设置 Run.degraded/timed_out。
+- Stage 增加 retry_wait。Template 固定 max_attempts（含首次）、retryable_reason_codes、backoff_policy、attempt_timeout；仅白名单错误自动重试，Attempt 历史追加保存。
+- Template 固定 on_degraded、on_skipped、on_failed、on_timed_out、on_blocked 传播策略；required Stage 适用性在 CreateRun 前解析，不适用记录 excluded_stages；resolved DAG 不允许为空。
+- 硬风险门禁必须同时匹配 Registry stage_code 和 gate_type=hard_risk；执行层失败/降级/跳过/阻断/超时均 fail。RiskDecision=reject/unknown 是有效业务结果，actionability_status=blocked；只有 Run=succeeded 且所有适用硬门禁明确 pass 才可能 actionable。
+- RetryStage 只推进 retry_wait，不重开终态 Stage，不修改 Run.as_of、输入快照、Template 版本或重试预算；命令具备幂等键。
+- created/queued 无运行中 Attempt 时取消可直接终结；running 取消进入 cancelling。queued Worker claim 与取消由 CAS 决胜。
+- deadline 使用数据库 UTC 时钟；db_now >= deadline_at 时 deadline 优先。未启动 Stage 记 timed_out/run_deadline_exceeded；运行中 Attempt 停止或 fence 后记 timed_out；deadline 超时不重试。
+- Run 终态必须保证所有 Stage 终结、无 running Attempt、结果摘要固定；聚合使用事务和 Run.version CAS。
+- 租约使用单调 fencing token；fencing 仅保护本地写入。外部副作用必须具备下游幂等键；结果不确定且下游不支持幂等时禁止自动重发。
+
+### 41.2 实现验收边界
+
+- CONTRACT-006/007 的设计决策状态：closed。
+- FLOW-001~003 领域实现：not_started；需完成状态机、Template、聚合、取消/重试和内存/Repository 契约测试。
+- FLOW-004 Executor：not_started；需完成有界队列/并发、租约恢复、fencing 和重启恢复测试。
+- 真实数据库事务、进程崩溃、跨模块 Adapter、真实模型/工具副作用属于 L3 Integration，不作为设计决策关闭的前置条件。
+- 本轮只更新规划文档，没有生成 Go DTO/JSON Schema/Golden，没有运行代码测试。GOV-004 仍需完成其余模块契约和公共 Schema 自动化验收；不因本决议自动转为 GO。
+
+决议正文：[03-CONTRACT-006与007最终决议](../researchflow/03-CONTRACT-006与007最终决议.md)。
