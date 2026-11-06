@@ -787,3 +787,76 @@ M4 必须增加可自动化的回归测试：
 - 当前 OpenAPI 采用部分 Operation 内联 Schema、部分 components 引用；后续需核对 Handler JSON 编码字段与 Schema，不可只比较 DTO 名称。
 
 **M0 状态继续保持 in_progress。** 此发现列为 OpenAPI 契约阻断项，M1 前应完成契约修复并通过 contract test；本轮只更新迁移审计文档，没有修改 OpenAPI 或鉴权代码。
+
+
+### 2026-11-06：M0 第十五轮补充（OpenAPI Operation 级响应与契约测试审计）
+
+#### 1. 35 个 Operation 的逐项结构盘点
+
+本轮直接读取当前 HEAD 的 `services/market-data/openapi.yaml`，按 Path/Method 解析 Operation，并与 `internal/httpapi/server.go` 的 ServeMux 路由逐项对照。当前共 35 个 Operation：2 个公开 Health、33 个受 API Key 保护的业务路由；Path + Method 数量一致。
+
+下表记录每个 Operation 的参数名称、Request Body、响应状态码及鉴权声明。参数类型、required、format、默认值与 Handler 实际校验规则仍需下一轮逐项做语义比对，本表不将“存在参数定义”等同于“参数契约已核验”。
+
+| Method + Path | 参数 | Body | 响应状态码 | OpenAPI 鉴权 |
+|---|---|---|---|---|
+| GET /health/live | — | — | 200 | 公开 |
+| GET /health/ready | — | — | 200, 503 | 公开 |
+| GET /api/v1/market/quotes | symbols | — | 200, 400, 401 | ApiKey |
+| GET /api/v1/quotes/{symbol} | symbol | — | 200, 400, 401, 502, 504 | 缺失 |
+| GET /api/v1/bars/{symbol}/daily | symbol, start, end, limit, adjustment, as_of | — | 200, 400, 401, 404, 502, 503, 504 | 缺失 |
+| GET /api/v1/bundles/{symbol} | symbol, lookback_days, adjustment, as_of | — | 200, 400, 401, 502, 504 | 缺失 |
+| POST /api/v1/data-sources/probe | — | ProviderProbeRequest | 200, 400, 401, 500 | ApiKey |
+| GET /api/v1/data-sources/probe/history | limit | — | 200, 400, 401, 503 | 缺失 |
+| GET /api/v1/data-sources/diagnostics | — | — | 200 | ApiKey |
+| GET /api/v1/data-sources | — | — | 200, 401 | 缺失 |
+| GET /api/v1/stocks/search | q, limit | — | 200, 400, 401, 502, 503 | 缺失 |
+| GET /api/v1/stocks/{symbol}/announcements | symbol, start_date, end_date, page, page_size | — | 200, 400, 401, 502 | 缺失 |
+| GET /api/v1/stocks/{symbol}/profile | symbol | — | 200, 400, 401, 502, 503 | 缺失 |
+| GET /api/v1/stocks/{symbol}/price-limit-rule | symbol, date | — | 200, 400, 401 | ApiKey |
+| GET /api/v1/stocks/{symbol}/trading-status | symbol, date, as_of | — | 200, 400, 401, 404, 502, 503 | ApiKey |
+| GET /api/v1/stocks/{symbol}/fundamentals | symbol, year, quarter, as_of | — | 200, 400, 401, 404, 502, 503 | 缺失 |
+| GET /api/v1/stocks/{symbol}/chip-distribution | symbol | — | 200, 400, 401, 502, 503 | 缺失 |
+| GET /api/v1/stocks/{symbol}/capital-flow | symbol | — | 200, 400, 401, 502, 503 | 缺失 |
+| GET /api/v1/stocks/{symbol}/boards | symbol | — | 200, 400, 401, 502, 503 | 缺失 |
+| GET /api/v1/market/valuations | symbols | — | 200, 400, 401, 502, 503 | 缺失 |
+| GET /api/v1/market/sectors | type, limit, direction, sort_by | — | 200, 400, 401, 502, 503 | 缺失 |
+| GET /api/v1/market/index-catalog | tag | — | 200, 400, 401, 502, 503 | ApiKey |
+| GET /api/v1/market/indices/{symbol}/constituents | symbol, source, as_of | — | 200, 400, 401, 502, 503 | ApiKey |
+| GET /api/v1/market/indices/{symbol}/daily | symbol, start, end, source | — | 200, 400, 401, 502, 503 | ApiKey |
+| GET /api/v1/market/indices | — | — | 200, 401, 502, 503 | ApiKey |
+| GET /api/v1/market/trading-calendar | start, end | — | 200, 400, 401, 502, 503 | 缺失 |
+| GET /api/v1/market/session | at | — | 200, 400, 401, 502, 503 | ApiKey |
+| GET /api/v1/market/stocks | page, page_size, include_ma, adjustment | — | 200, 400, 401, 502, 503 | 缺失 |
+| GET /api/v1/market/capital-flow | start, end | — | 200, 400, 401, 502, 503 | ApiKey |
+| GET /api/v1/market/sentiment | date | — | 200, 400, 401, 502 | 缺失 |
+| GET /api/v1/market/sentiment/history | start, end, limit | — | 200, 400, 401, 503 | 缺失 |
+| GET /api/v1/market/breadth | — | — | 200, 401, 502, 503 | 缺失 |
+| GET /api/v1/market/hot-stocks | type, limit | — | 200, 400, 401, 502, 503 | 缺失 |
+| GET /api/v1/market/dragon-tiger | date, page, page_size | — | 200, 400, 401, 502 | 缺失 |
+| GET /api/v1/market/limit-pools | type, date, limit | — | 200, 400, 401, 502, 503 | 缺失 |
+
+#### 2. 本轮确认的契约问题
+
+1. **鉴权声明仍为 11/33。** 33 条受保护路由中仅 11 条显式声明 ApiKey；22 条未声明。两条 Health 明确声明 `security: []`，与 Server 一致。OpenAPI 顶层没有 global security。
+2. **诊断接口漏写 401。** `GET /api/v1/data-sources/diagnostics` 声明了 ApiKey，但只列出 200；Server 实际经过 `s.auth`，无效/缺失 API Key 会返回 401。
+3. **Error Schema 未被 Operation 响应引用。** OpenAPI 定义了 `components.schemas.Error`，但本轮检索 35 个 Operation 的响应定义，没有发现任何响应的 `content.application/json.schema` 引用该 Error Schema。多数错误响应只有 description，没有可供客户端生成器使用的错误 Body Schema。Server 的 `writeErr`/错误处理实际输出统一的 `error.class/code/message/retryable/request_id` 结构，因此文档没有表达真实错误体。
+4. **现有鉴权 contract test 覆盖不完整。** `TestOpenAPIDataRoutesDeclareValidAPIKeySecurity` 只硬编码检查 7 条 ApiKey 路由，没有枚举完整 33 条受保护路由，也没有对照 ServeMux 注册与 OpenAPI Operation。当前测试即使 22 条业务 Operation 漏声明 security，仍可能通过。
+5. **Operation 错误状态码不应简单统一成固定全集。** 各 Handler 的业务错误不同，需以实际错误映射为准；但每条受保护路由都必须描述 401，每个已声明错误状态码都应引用统一 Error Schema。Health ready 的 503 也应描述其实际 JSON 错误结构，Health live 无需添加错误响应。
+
+#### 3. 建议的契约修复与测试方案
+
+- OpenAPI 顶层设置 `security: [{ApiKey: []}]`；Health live/ready 保留显式 `security: []`。
+- 保留当前 Server 的 33 条 API Key 保护行为，不为匹配不完整文档而放开接口。
+- 给 diagnostics 补 401；给所有受保护业务 Operation 补齐 401 + Error Schema。
+- 为已声明的 400/404/409/422/429/500/502/503/504 等错误响应补充 `application/json` 和 Error Schema；按 Handler 实际可能返回的状态码核验，避免只补文档、不符合运行行为。
+- contract test 应从 OpenAPI YAML 读取全部 Path/Method，并与 ServeMux 路由清单做双向集合比较；再验证除 Health 外全部 Operation 有 ApiKey，Health 为 `security: []`，所有受保护 Operation 声明 401，所有错误响应引用 Error Schema。
+- 测试应覆盖未配置 API Key、错误 API Key、正确 API Key三类 HTTP 行为；避免仅对字符串片段做静态断言。
+
+#### 4. 当前审计结论与下一步
+
+- 已完成：35 个 Operation 的 method/path、参数名称、Request Body 存在性、响应状态码、ApiKey 声明情况初步盘点；35/35 与 Server 路由数量一致。
+- 已确认阻断：22 条 security 漏声明；diagnostics 缺少 401；Error Schema 没有被 Operation 错误响应引用；鉴权 contract test 仅覆盖 7 条受保护路由。
+- 尚未完成：逐参数 required/type/format/default 与 Handler 校验逻辑核对；所有成功 Response Schema 与 Handler JSON 的字段/nullable 对照；每个 Handler 的真实错误状态码与 Error Body golden 对照。
+- 本轮没有修改 OpenAPI、Server、Handler 或 contract test，仅补充迁移审计文档。
+
+**M0 状态保持 in_progress，不满足 M1 准入条件。**
