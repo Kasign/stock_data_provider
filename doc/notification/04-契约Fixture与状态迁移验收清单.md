@@ -2,7 +2,7 @@
 
 - 归属：NTF-001/004/005/006
 - 对应契约：NTF-CTR-001～003（历史别名 Platform CONTRACT-009/010）；状态以项目级契约目录为准
-- 状态：测试设计基线，待 Notification/Platform Owner Review
+- 状态：测试设计基线；NTF-CTR-001～003 当前为 pending_evidence，Schema/Golden/Contract Test 完成后再验收；不要求个人 Owner 签字
 - 日期：2026-11-06
 - 说明：以下均为合成数据与测试场景，不代表已有实现或真实渠道能力。
 
