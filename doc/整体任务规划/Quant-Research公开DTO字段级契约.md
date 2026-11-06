@@ -510,7 +510,7 @@ available_at=null 表示没有可验证的外部可获得时间，不得用 publ
 - 空数组表示已评估但集合为空；null 表示未知/不可得（仅在字段允许 nullable 时）。
 - 对于计数，0 表示确实统计为零；统计未执行或未知必须用状态字段表达，不能填 0 伪装成功。
 
-## 11. 精度策略建议（待 Owner 冻结）
+## 11. 精度策略基线（已由 GOV-CTR-001 接受）
 
 建议将所有货币和价格金额采用 JSON string decimal：
 - 金额：定点 decimal，单位字段明确；如 "125000000.00" CNY。
@@ -522,7 +522,7 @@ available_at=null 表示没有可验证的外部可获得时间，不得用 publ
 
 该建议优于 JSON number 的原因是避免跨语言 IEEE-754 精度损失，尤其金额、价格、成本和收益计算。但需要结合现有 Data OpenAPI 的 number 字段决定 Adapter 边界转换，不要求修改 Data 服务既有 API；Quant 内部和 Quant/Research/Researchflow 跨模块契约应统一。
 
-## 11. Quant / Research Owner Review 建议决议（2026-11-05）
+## 12. Quant / Research 历史决议记录（2026-11-05，现由领域契约目录接管）
 
 本节是供 Owner 确认的建议决议，不代表 Owner 已签字或 Schema 已冻结。
 
@@ -547,7 +547,7 @@ available_at=null 表示没有可验证的外部可获得时间，不得用 publ
 
 **建议决议：采纳按指标语义固定 JSON 类型；金额/价格 decimal string，计数 integer，统计比例 number。** 该决议已由 GOV-CTR-001/QNT-CTR-001 登记，Schema/Golden 未齐前不标记 frozen。
 
-### 11.2 QNT-CTR-002：Indicator 首批代码与参数 Schema（历史别名 CONTRACT-002）
+### 12.2 QNT-CTR-002：Indicator 首批代码与参数 Schema（历史别名 CONTRACT-002）
 
 首批只纳入可以由日线 OHLCV 稳定复算、定义成熟且能提供固定样本的指标：
 
@@ -571,7 +571,7 @@ available_at=null 表示没有可验证的外部可获得时间，不得用 publ
 
 **决议：以上八项作为首批范围；如需缩减或扩张，按项目契约变更流程更新 Registry、Schema 和消费者映射。**
 
-### 11.3 QNT-CTR-003：Factor 首批候选与横截面规则（历史别名 CONTRACT-003）
+### 12.3 QNT-CTR-003：Factor 首批候选与横截面规则（历史别名 CONTRACT-003）
 
 首批候选因子：
 
@@ -593,7 +593,7 @@ available_at=null 表示没有可验证的外部可获得时间，不得用 publ
 
 **决议：首批固定 momentum_20d、momentum_60d、volatility_20d；其余候选 deferred，见 QNT-CTR-003。**
 
-### 11.4 NEWS-CTR-002 / RSC-CTR-001：Evidence 授权引用（历史别名 CONTRACT-004）
+### 12.4 NEWS-CTR-002 / RSC-CTR-001：Evidence 授权引用（历史别名 CONTRACT-004）
 
 建议统一保留 authorization_ref 不透明字符串引用；授权决策快照本身由授权策略 Owner 管理，不由 Research 复制成自己的授权事实。
 
@@ -605,7 +605,7 @@ available_at=null 表示没有可验证的外部可获得时间，不得用 publ
 
 **决议：采用统一不透明 AuthorizationRef + 来源责任模块当前复核；不建立跨模块万能授权服务，见 NEWS-CTR-002/RSC-CTR-001。**
 
-### 11.5 GOV-CTR-002 / FLOW-CTR-003：system_as_of 传播（历史别名 CONTRACT-005）
+### 12.5 GOV-CTR-002 / FLOW-CTR-003：system_as_of 传播（历史别名 CONTRACT-005）
 
 建议将 ResearchRun.system_as_of 作为一次研究运行唯一的系统知识截止时间：
 
@@ -618,7 +618,7 @@ available_at=null 表示没有可验证的外部可获得时间，不得用 publ
 
 **决议：Run 固定 system_as_of，所有下游模块只消费该值；禁止 Stage 各自取当前时间，见 GOV-CTR-002/FLOW-CTR-003。**
 
-### 11.6 历史 Review 状态（由项目统一契约目录覆盖）
+### 12.6 历史 Review 状态（由项目统一契约目录覆盖）
 
 | 决策 | 建议 | 当前状态 |
 |---|---|---|
