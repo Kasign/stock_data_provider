@@ -118,6 +118,8 @@ func TestResolveRejectsNonHexSchemaFingerprint(t *testing.T) {
 func TestResolvePreservesExecutionPolicyInImmutableSnapshot(t *testing.T) {
 	tmpl:=testTemplate()
 	tmpl.RequiresHardRiskGate=true
+	tmpl.Stages[0].GateType="hard_risk"
+	tmpl.Stages[0].Propagation=PropagationPolicy{OnDegraded:domain.PropagateFail,OnSkipped:domain.PropagateFail,OnFailed:domain.PropagateFail,OnTimedOut:domain.PropagateFail,OnBlocked:domain.PropagateFail}
 	tmpl.AllowEmptyInputs=true
 	tmpl.OutputRegistryVersion="outputs-v7"
 	tmpl.ResourcePolicyRef="resource-v9"
