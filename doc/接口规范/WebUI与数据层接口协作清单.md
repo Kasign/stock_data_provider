@@ -441,4 +441,7 @@
 ## 29. 2026-11-06 API-06 P0-55 上市前日期状态
 
 - Tushare 对请求日期早于上市日期时，返回可验证上市日期和 `ListingTradingDayNumber=0`，同时保留市场交易日历状态；不再将未来上市日期当作无效状态，也不请求上市前不适用的 ST/名称/停复牌信息。服务层允许该证据组合，供 DailyBar 上市前缺失日期解释使用。
-- 新增 Provider 与服务层回归测试；无 API/DB/WebUI 契约变化，CI 待验。
+- 新增 Provider 与服务层回归测试；无 API/DB/WebUI 契约变化。最终 SHA a56a43dd241228f9a862799990c6e62346328acf 的 Push/PR Go suite、Parity、WebUI checks 均通过；Live Provider workflow 未启用历史专项，不构成真实历史行情验收。
+
+
+- P0-55 验收：Tushare 上市前状态通过 Provider httptest 和服务层校验回归；最终 Go suite（含 race/vet、MariaDB PIT、Compose、镜像构建）、Parity、WebUI checks 均通过。没有新增接口或字段。真实 Provider 专项未启用，不作为行情数据实测证据。
