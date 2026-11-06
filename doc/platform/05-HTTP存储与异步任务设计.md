@@ -172,6 +172,8 @@ HTTP Client 必须区分固定 Provider API Endpoint 与不可信来源 URL。�
 - 历史表 `platform_schema_migrations` 按 namespace/version 唯一记录 description、SQL SHA-256 checksum、status、失败语句序号、started_at、finished_at 和固定 failure_code。保留旧 applied_at 字段以兼容既有表结构，不再将其作为迁移完成时间。
 - Runner 启动时通过 MariaDB `ADD COLUMN IF NOT EXISTS` 补齐新增元数据列，兼容此前创建的历史表；旧记录不伪造 finished_at，只有本次执行的迁移写入准确开始/结束时间。
 - Migration 先写入 running 和 started_at，再逐条执行 SQL；成功后更新 applied、finished_at；SQL 失败时尽最大努力写入 failed、failure_statement、finished_at 和固定 failure_code。不得持久化原始 SQL 错误文本。历史中存在 running/failed 时拒绝自动重跑，必须先人工检查部分 DDL 结果并恢复。
+- Migration 状态转换必须校验 SQL `RowsAffected()` 恰好为 1。若 SQL 已执行但 `running → applied` 未实际更新一行，返回 `platform.storage.migration_record_failed`，保留人工检查入口，不得报告迁移成功；失败状态记录也必须核实更新行数。
+- MariaDB advisory lock 绑定物理连接。`GET_LOCK` 请求报错时，即使客户端无法确认服务端是否已加锁，也必须将连接标记为坏连接并丢弃；`RELEASE_LOCK` 失败或无法确认释放时同样丢弃物理连接，不能仅调用 `sql.Conn.Close()` 将其归还连接池。
 - 执行前验证完整 Migration 清单；拒绝重复版本、空 SQL、无效 namespace、历史 checksum 漂移、数据库存在未登记版本和历史版本缺口。
 - 每条 SQL 单独执行；MariaDB DDL 可能隐式提交，因此不能假设整个 Migration 可事务回滚。失败记录写入本身也可能因数据库不可用而失败，此时错误仍保持安全摘要，但需要通过数据库侧检查确认实际执行状态。修复应采用新的前向 Migration，不得修改已发布版本。
 
