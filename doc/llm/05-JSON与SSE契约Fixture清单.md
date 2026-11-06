@@ -3,7 +3,7 @@
 - 归属任务：LLM-002-F
 - 对应协议：OpenAI Responses
 - 日期：2026-11-05
-- 状态：测试设计基线，待 LLM/Platform Owner Review；不是已实现测试或真实模型能力证明。
+- 状态：测试设计基线；对应 LLM-CTR-001～003，当前为 pending_evidence。尚未生成实际 fixture 文件/测试代码，也不是真实模型能力证明；不设置个人 Owner 签字门槛。
 
 ## 1. Fixture 原则
 
@@ -217,4 +217,4 @@ data: {"type":"response.completed","sequence_number":7,"response":{"id":"resp_to
 4. unknown OutputItem/ContentPart 的安全元数据 allowlist。
 5. 对 terminal 后多余事件是立即失败还是只记录协议诊断；建议立即失败。
 
-**本清单是 LLM-002-F 的测试设计基线，待 Owner Review；尚未生成实际 fixture 文件、测试代码或真实模型验收结果。**
+**本清单是 LLM-002-F 的测试设计基线；尚未生成实际 fixture 文件、测试代码或真实模型验收结果。契约语义与状态以项目级契约目录为准，不以个人 Owner Review/签字作为门槛。**
