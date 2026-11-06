@@ -256,11 +256,17 @@ func ApplyMigrations(ctx context.Context, db *sql.DB, namespace string, migratio
 		defer releaseCancel()
 		var released sql.NullInt64
 		releaseErr := conn.QueryRowContext(releaseCtx, "SELECT RELEASE_LOCK(?)", lockName).Scan(&released)
-		if resultErr == nil && (releaseErr != nil || !released.Valid || released.Int64 != 1) {
-			if releaseErr != nil {
-				resultErr = dependencyFault("sql", "platform.storage.migration_lock_release_failed", "migration lock release could not be confirmed", releaseErr)
-			} else {
-				resultErr = fault.New(fault.ClassInternal, "platform.storage.migration_lock_release_failed", "migration lock release could not be confirmed", nil)
+		if releaseErr != nil || !released.Valid || released.Int64 != 1 {
+			// MariaDB advisory locks belong to the physical connection. If release
+			// cannot be confirmed, discard it instead of returning a locked
+			// connection to database/sql's pool.
+			_ = conn.Raw(func(any) error { return driver.ErrBadConn })
+			if resultErr == nil {
+				if releaseErr != nil {
+					resultErr = dependencyFault("sql", "platform.storage.migration_lock_release_failed", "migration lock release could not be confirmed", releaseErr)
+				} else {
+					resultErr = fault.New(fault.ClassInternal, "platform.storage.migration_lock_release_failed", "migration lock release could not be confirmed", nil)
+				}
 			}
 		}
 	}()

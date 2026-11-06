@@ -251,6 +251,8 @@ type migrationTestState struct {
 	statements             []string
 	lockAcquired           bool
 	lockReleased           bool
+	failLockRelease        bool
+	physicalConnClosed     bool
 	historyCreated         bool
 	historyColumnsUpgraded bool
 }
@@ -283,7 +285,10 @@ func (c migrationTestConn) Prepare(string) (driver.Stmt, error) {
 	return nil, errors.New("prepared statements are not supported in this test driver")
 }
 
-func (c migrationTestConn) Close() error { return nil }
+func (c migrationTestConn) Close() error {
+	c.state.physicalConnClosed = true
+	return nil
+}
 
 func (c migrationTestConn) Begin() (driver.Tx, error) {
 	return nil, errors.New("transactions are not supported in this test driver")
@@ -298,6 +303,9 @@ func (c migrationTestConn) QueryContext(_ context.Context, query string, _ []dri
 		}
 		return &migrationTestRows{columns: []string{"locked"}, values: [][]driver.Value{{value}}}, nil
 	case strings.Contains(query, "RELEASE_LOCK"):
+		if c.state.failLockRelease {
+			return nil, errors.New("private lock release detail")
+		}
 		c.state.lockReleased = true
 		return &migrationTestRows{columns: []string{"released"}, values: [][]driver.Value{{int64(1)}}}, nil
 	case strings.Contains(query, "SELECT version, checksum, status, failure_statement"):
@@ -441,6 +449,29 @@ func TestApplyMigrationsRejectsChecksumDriftAndUnknownHistory(t *testing.T) {
 	}
 	if checksums[1] == "" {
 		t.Fatal("expected migration checksum")
+	}
+}
+
+func TestApplyMigrationsDiscardsConnectionWhenLockReleaseFails(t *testing.T) {
+	state := &migrationTestState{
+		applied: make(map[uint64]string), pending: make(map[uint64]string),
+		failed: make(map[uint64]int), lockAcquired: true, failLockRelease: true,
+	}
+	db := sql.OpenDB(migrationTestConnector{state: state})
+	defer db.Close()
+
+	err := ApplyMigrations(context.Background(), db, "analysis", []Migration{{
+		Version: 1, Description: "create", Statements: []string{"CREATE TABLE sample (id INT)"},
+	}})
+	var platformFault *fault.Fault
+	if !errors.As(err, &platformFault) || platformFault.Code != "platform.storage.migration_lock_release_failed" {
+		t.Fatalf("expected lock release failure, got %v", err)
+	}
+	if state.lockReleased {
+		t.Fatal("test driver unexpectedly released the advisory lock")
+	}
+	if !state.physicalConnClosed {
+		t.Fatal("connection holding an unconfirmed advisory lock was returned to the pool")
 	}
 }
 
