@@ -415,3 +415,6 @@
 
 - 默认 DailyBar Probe 原先只将昨日用于交易上下文窗口，但 Provider 请求 end_date 仍为空，可能返回当日盘中未完成 K 线。现将默认请求、公共校验/归一化及上下文检查统一限制到 Asia/Shanghai 昨日；显式历史日期范围不变，仍按首尾包含处理。
 - 新增默认请求日期边界测试。仅服务端 Probe 行为和测试变化，无 API、数据库或 WebUI 契约变化；CI 待验，真实 Provider 未重跑。
+
+
+- 2026-11-06 P0-52 当前验证：修正测试 gofmt 后代码 SHA `173c2f16faeb04ff7f54156ef7ef2f4ef377aa06` 的 Push/PR Go suite `42145575844` / `42145581694`、Parity `42145581855`、WebUI checks `42145581775` 均通过；Go suite 包含 gofmt、test、race、vet、MariaDB migration/PIT、Compose 和两个 Docker 镜像构建。Live Provider Probe Run `42145581739` 外层成功，但历史专项步骤 skipped，不代表真实历史 K 线或跨源验收通过。无 API、数据库或 WebUI 契约变化。
