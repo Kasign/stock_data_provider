@@ -11,10 +11,10 @@ import (
 
 func validObservationForContractTest() Observation {
 	return Observation{
-		Status: StatusHealthy,
+		Status:      StatusHealthy,
 		SafeMessage: "ok",
-		CheckedAt: time.Date(2026, 11, 6, 14, 40, 0, 0, time.UTC),
-		Duration: time.Millisecond,
+		CheckedAt:   time.Date(2026, 11, 6, 14, 40, 0, 0, time.UTC),
+		Duration:    time.Millisecond,
 	}
 }
 
@@ -58,9 +58,9 @@ func TestRunnerNormalizesCheckedAtToUTC(t *testing.T) {
 	localZone := time.FixedZone("test-offset", 8*60*60)
 	check := Check{ID: "timezone", Run: func(context.Context) (Observation, error) {
 		return Observation{
-			Status: StatusHealthy,
+			Status:      StatusHealthy,
 			SafeMessage: "ok",
-			CheckedAt: time.Date(2026, 11, 6, 22, 40, 0, 0, localZone),
+			CheckedAt:   time.Date(2026, 11, 6, 22, 40, 0, 0, localZone),
 		}, nil
 	}}
 
