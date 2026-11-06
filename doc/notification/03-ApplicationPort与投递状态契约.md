@@ -38,7 +38,7 @@ Notification 不计算告警条件、不决定研究结论、不执行模型输�
 建议字段：
 - subscription_id、owner_ref、version；
 - status：active/paused/disabled；
-- event_type allowlist 与受限过滤条件；
+- event_type 与该事件类型对应的受限过滤条件；
 - recipient_scope、recipient_ref 来源；
 - channel_ref、template_ref；
 - created_at、updated_at、effective_at。
@@ -74,16 +74,16 @@ Template 版本必须由 Subscription 版本快照固定；如果实现允许同
 | owner_ref | string | 必填 / non-null | 订阅所有者引用，不是收件地址 |
 | version | integer | 必填 / non-null | 从 1 开始单调递增；每个版本不可变 |
 | status | enum | 必填 / non-null | active/paused/disabled |
-| event_types | array<string> | 必填 / non-null | 已注册 event_type 的唯一列表；空数组表示不订阅任何事件 |
-| filter_schema_version | string/null | 必填字段 / nullable | 非空时必须匹配对应 event_type 的受控过滤 Schema |
-| filters | object/null | 必填字段 / nullable | null 表示无附加过滤；非 null 必须按已注册 Schema 校验，禁止任意 map |
+| event_type | string | 必填 / non-null | 单个已注册事件类型；MVP 不在一个 Subscription 内混合不同事件 Schema，多个事件分别创建 Subscription |
+| filter_schema_version | string/null | 必填字段 / nullable | 非 null 时必须匹配该 event_type 的受控过滤 Schema |
+| filters | object/null | 必填字段 / nullable | null 表示无附加过滤；非 null 必须按 filter_schema_version 校验，禁止任意 map |
 | recipient_scope | enum | 必填 / non-null | subscription_owner/preconfigured_target |
 | recipient_ref | string/null | 必填字段 / nullable | 仅在预配置目标已解析并授权时填充；不存敏感地址 |
 | channel_ref | string | 必填 / non-null | 不透明渠道引用 |
 | template_id | string | 必填 / non-null | 不透明模板 ID |
 | created_at / updated_at / effective_at | RFC3339Nano UTC | 必填 / non-null | 创建、更新、当前版本生效时间 |
 
-更新 Subscription 必须产生新 version；旧版本只读保留。event_types/filter 的组合必须对每个 event_type 做 Schema 校验，不能以通用 JSON 查询语言执行任意逻辑。
+更新 Subscription 必须产生新 version；旧版本只读保留。单条 Subscription 只绑定一个 event_type，filters 必须由该事件类型的过滤 Schema 校验，不能以通用 JSON 查询语言执行任意逻辑。
 
 ### 2.5 DeliveryRecord 与 DeliveryAttempt 字段级契约
 
