@@ -545,9 +545,9 @@ available_at=null 表示没有可验证的外部可获得时间，不得用 publ
 5. JSON number 统计指标定义稳定舍入位数和 golden 容差；NaN、+Inf、-Inf 不允许序列化，必须转为明确的 unknown/failed 结果。
 6. QuantMetric 通用字段的 value 类型由指标编码 Schema 约束；JSON Schema 应按指标类型拆分 oneOf 或使用指标专属 DTO，不允许宽泛接受任意 string/number。
 
-**建议决议：采纳按指标语义固定 JSON 类型；金额/价格 decimal string，计数 integer，统计比例 number。** Owner 确认后更新 CONTRACT-001 状态。
+**建议决议：采纳按指标语义固定 JSON 类型；金额/价格 decimal string，计数 integer，统计比例 number。** 该决议已由 GOV-CTR-001/QNT-CTR-001 登记，Schema/Golden 未齐前不标记 frozen。
 
-### 11.2 CONTRACT-002：Indicator 首批代码与参数 Schema
+### 11.2 QNT-CTR-002：Indicator 首批代码与参数 Schema（历史别名 CONTRACT-002）
 
 首批只纳入可以由日线 OHLCV 稳定复算、定义成熟且能提供固定样本的指标：
 
@@ -569,9 +569,9 @@ available_at=null 表示没有可验证的外部可获得时间，不得用 publ
 - 输入序列必须包含交易日、质量、单位和复权语义；窗口按交易日有效样本计数，缺失日处理策略由指标定义明确。
 - 每个指标至少提供正常、边界、缺失、异常、复权切换五类固定样本；结果包含 algorithm_version 和输入快照引用。
 
-**建议决议：以上八项作为首批候选清单；Owner 可缩减，不应在首批无验收样本时扩张。**
+**决议：以上八项作为首批范围；如需缩减或扩张，按项目契约变更流程更新 Registry、Schema 和消费者映射。**
 
-### 11.3 CONTRACT-003：Factor 首批候选与横截面规则
+### 11.3 QNT-CTR-003：Factor 首批候选与横截面规则（历史别名 CONTRACT-003）
 
 首批候选因子：
 
@@ -591,9 +591,9 @@ available_at=null 表示没有可验证的外部可获得时间，不得用 publ
 - 缺失样本不能按 0 参与；minimum_coverage 不满足时结果为 insufficient_data/unknown，不输出可用于排序的有效因子值。
 - Indicator 与 Factor 是并列子系统；Factor 可直接消费标准化数据，不要求依赖 Indicator Engine。
 
-**建议决议：首批先实现 momentum_20d、momentum_60d、volatility_20d；其余候选在数据覆盖率评估后纳入。**
+**决议：首批固定 momentum_20d、momentum_60d、volatility_20d；其余候选 deferred，见 QNT-CTR-003。**
 
-### 11.4 CONTRACT-004：Evidence 授权引用
+### 11.4 NEWS-CTR-002 / RSC-CTR-001：Evidence 授权引用（历史别名 CONTRACT-004）
 
 建议统一保留 authorization_ref 不透明字符串引用；授权决策快照本身由授权策略 Owner 管理，不由 Research 复制成自己的授权事实。
 
@@ -603,9 +603,9 @@ available_at=null 表示没有可验证的外部可获得时间，不得用 publ
 - Research 派生内容由 Research 对自身派生记录负责；引用外部来源时仍保留原始来源授权链，不能用 Research 自身决策覆盖上游限制。
 - 授权状态 unknown/缺少决策引用时，不允许读取受限正文；可在允许范围内保留 metadata 引用并标记限制。
 
-**建议决议：采用统一不透明 AuthorizationRef + 来源 Owner 当前复核；不建立跨模块万能授权服务。**
+**决议：采用统一不透明 AuthorizationRef + 来源责任模块当前复核；不建立跨模块万能授权服务，见 NEWS-CTR-002/RSC-CTR-001。**
 
-### 11.5 CONTRACT-005：system_as_of 传播
+### 11.5 GOV-CTR-002 / FLOW-CTR-003：system_as_of 传播（历史别名 CONTRACT-005）
 
 建议将 ResearchRun.system_as_of 作为一次研究运行唯一的系统知识截止时间：
 
@@ -616,7 +616,7 @@ available_at=null 表示没有可验证的外部可获得时间，不得用 publ
 5. trade_date 是交易日，不是知识截止时间；published_at 是来源声明时间，不是系统已知时间。
 6. 新建 Run 可选择新的 as_of；原 Run 的历史输入快照和结果不可被新时点覆盖。
 
-**建议决议：Run 固定 system_as_of，所有下游模块只消费该值；禁止 Stage 各自取当前时间。**
+**决议：Run 固定 system_as_of，所有下游模块只消费该值；禁止 Stage 各自取当前时间，见 GOV-CTR-002/FLOW-CTR-003。**
 
 ### 11.6 历史 Review 状态（由项目统一契约目录覆盖）
 
