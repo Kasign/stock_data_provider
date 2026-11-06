@@ -454,3 +454,40 @@ internal/platform/httpclient.Client 使用 DestinationPolicy 精确 Host/Port al
 - Data 当前存在 services/market-data/migrations/001_create_market_data.sql，同时 repository/mysql.go 内还有运行时硬编码 DDL、ensureColumn 和 ensureNonUniqueHistoryIndex；Root Migration 则位于 internal/adapters/storage/mysqlredis.Store.Migrate 的代码语句中。M0 必须核对 SQL 文件与运行时 DDL 是否一致，确认是否存在只在历史部署升级时执行的增量迁移，再设计统一 Migration Runner；不能简单把 SQL 文件移动后就认定迁移资产完整。
 
 **M0 当前仍有未完成审计：** 需要检查 Data 全部 DTO 与 OpenAPI 双向差异，分析 RawSnapshot 映射细节，核对 SQL Migration 文件与运行时 DDL 的差异，盘点各 Provider 所有请求参数/重定向与认证方式，并查看 WebUI unit test 失败日志。当前仅形成了迁移方案和第一轮静态清单，不具备进入 M1 的准入条件。
+
+### 2026-11-06：M0 第六轮补充（DDL 等价、DTO 映射与目录回归）
+
+#### 1. Migration DDL 对账结果
+
+已将 migrations/001_create_market_data.sql 与 repository/mysql.go 的 Migrate() 内 9 个 CREATE TABLE 语句逐表规范化比较：9/9 表完全一致，未发现列、索引或约束差异。两者表清单均为 market_data_quotes、market_data_daily_bars、market_data_daily_bar_versions、market_data_fundamental_versions、market_data_security_trading_status_versions、market_data_sentiment_snapshots、market_data_provider_probe_runs、market_data_adjustment_factor_versions、market_data_corporate_action_versions。
+
+但运行时 Migrate() 还包含增量升级逻辑，SQL 文件没有表达：
+- 检查并删除历史 market_data_daily_bar_versions.uq_market_bar_revision_content 唯一索引，确保 A→B→A 内容回归修订可以追加；再创建 idx_market_bar_revision_identity_asof 普通索引。
+- 检查并删除历史 market_data_fundamental_versions.uq_market_fundamental_revision_content 唯一索引，再创建 idx_market_fundamental_identity_asof 普通索引。
+- 检查 market_data_quotes.volume_ratio、turnover_rate 列是否存在，不存在则 ALTER TABLE 增加。
+
+结论：DDL 当前不存在双份定义漂移，但 SQL 文件只是基础建表快照，不是完整的可执行升级历史。M2/M4 应把基础 Schema 与历史升级步骤拆成可版本化 Migration，并对已部署库做 migration version/dirty state 管理；迁移期间必须保留现有信息架构检查和索引纠正行为。禁止只执行 001 SQL 取代当前 Migrate()。
+
+#### 2. Data HTTP DTO → Analysis RawSnapshot 映射
+
+- Data HTTP API 直接 JSON 输出 internal/model Quote、DailyBar；Root adapter 再解码为 QuoteResponse、HistoryBar。Analysis app.DataCollector 是消费侧 Port，不是 Data Application Port。
+- Quote：Data Quote 的 current_price 是 *float64，Root QuoteResponse 却是 float64；Root Client 会拒绝非正数/非有限价格，但若 Data 返回 null，JSON 解码到 float64 会变成 0，再以 missing/non-positive 错误处理。该行为虽不静默制造有效价格，但丢失了“原始 null”与“明确为 0”的差异。Quote 的 fetched_at、quote_time、source 和部分价格/成交量字段被映射；source_version、normalization_version、raw_volume/raw_amount 及单位原始字段、fallback 信息没有完整传入 RawQuote。
+- DailyBar：Root HistoryBar 仅保留 trade_date、OHLC、volume、amount、change_percent、source/source_version、provider_timestamp、fetched_at、adjustment_basis、quality_status/reasons、volume_unit、amount_unit。Data DailyBar 另有 MA5/20/120/250、adjustment_method/reference_date/factor source/factor source version/factor system observed time、normalized_at、system_observed_at、raw volume/amount/unit/field、fallback、request ID、normalization version 等字段，当前 HistoryBar 未保留。
+- Collector convertBars 额外执行 OHLC 正数/有限/区间关系、成交量/额非负、日期唯一、as_of 截止和当日 K 线可用时点校验；缺失 volume/amount 保持 nil。它会把 adjustment_basis 缺失映射成 unknown，并把 available_at 记为缺失，因为现有 Data API 没有精确披露供应商发布时间。
+- Quote Collector 需要有效 quote_time，过滤未来时间/晚于显式 as_of 的报价；缺失可选字段会写入 SourceNote.MissingFields。RawSnapshot 当前不携带 Data 的 QualityReasons、FallbackFrom/Reason、NormalizationVer、SourceVersion 和 raw-unit 元数据，诊断只在 SourceNote 中保留部分摘要。
+
+迁移设计约束：InProcess Adapter 应直接映射 Data Application DTO 到 Analysis RawSnapshot，不能复用 HTTP DTO 作为内部契约；先定义字段保留策略，明确 RawSnapshot 当前确实不承载的元数据是被有意降级还是需要扩展。对历史 Analysis 输入兼容性，必须使用 Remote 与 InProcess 同输入 golden 对比，不能把“结构字段更多”直接等同于“分析结果等价”。
+
+#### 3. WebUI 目录移动回归修复
+
+- WebUI checks 在 977bf59c 失败的唯一单测为 web/tests/ui-contract.test.mjs：读取 doc/api/分析任务.openapi.yaml 时 ENOENT。
+- 已修复为 doc/api/contracts/分析任务.openapi.yaml，提交 dd36d129。该提交对应的 WebUI checks 已 success；修复仅调整测试文件引用路径，不改 WebUI 运行时代码或 API 行为。
+- data-quality-parity workflow 中旧 doc/api/接口规范/ 引用也已在 dc137543 修正为 doc/api/provider-migration/。
+
+#### 4. M0 进度更新
+
+已完成：DDL 基础定义逐表一致性比对；运行时增量升级步骤盘点；Analysis Collector 主要字段映射与时间/质量过滤逻辑审计；目录移动导致的 WebUI 单测失败定位和修复。
+
+仍未完成：逐 Provider 请求语义完整矩阵（含所有 endpoint override、重定向目标、超时、重试、响应大小）；完整 HTTP DTO/OpenAPI 字段级校验；Root/Data Migration 的 schema owner 和真实部署库版本治理；配置、测试、fixtures、生成文件逐项迁移清单；当前最新 HEAD 的全部 CI 完成复核。
+
+**M0 状态继续保持 in_progress。** 本轮未改业务实现、Provider 算法、数据库结构或历史数据；尚不满足 M1 准入。
