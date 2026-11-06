@@ -6,7 +6,8 @@
 - 总体规划：`doc/整体任务规划/整体任务规划总览.md`
 - 跨模块准入：`doc/整体任务规划/跨模块接入执行说明.md`、`doc/整体任务规划/跨模块接入准入清单.md`
 - 本记录建立时的代码基线：`d8595f408337f62be3697aac661ba1570fdd3667`
-- 当前实施状态：`not_started`（已建立执行计划；尚未执行代码迁移）
+- 最近一次 M0 审计基线：`f2b9e5fc637ea59bff87f5449823e98f746c8428`（文档目录整理后）
+- 当前实施状态：`M0_audit_in_progress`（文档结构已整理，开始逐项核对；尚未执行代码迁移）
 
 > 本文记录 Data 从独立 Go Module/服务迁入 Root Server 根 Go Module、同进程运行的实施计划和进度。若本文与上述架构决策文档冲突，以架构决策文档为准；公共平台及 DATA 契约以冻结契约文档为准。本文不重新定义契约。
 
@@ -306,3 +307,85 @@ internal/
 ## 7. 开始实施前检查
 
 进入 M0/M1 前必须重新读取当前分支 HEAD 和方案文档。本文创建时的 SHA 仅是记录基线，不是后续写入锁。任何提交都必须以当时最新 HEAD 创建 Tree/Commit，并使用 `expected_sha` 更新分支；发现并发提交时停止写入并重新审计。
+
+### 2026-11-06：M0 第一轮代码与部署审计
+
+审计基线：f2b9e5fc637ea59bff87f5449823e98f746c8428。本轮只读代码与配置，未修改业务实现。
+
+#### 1. Go Module 与命令入口
+
+| Module | 路径 | 声明版本 | 当前职责 | 本次迁移处理 |
+|---|---|---:|---|---|
+| Root | go.mod | Go 1.22 | 当前 Root Analysis API、Platform、Web/Server 组合基础 | 作为目标 Module；需评估提升到 Go 1.23 |
+| Market Data | services/market-data/go.mod | Go 1.23.0 | Provider、标准化、质量、PIT、Repository、HTTP API | M1 归并至 Root Module |
+| go-core | go-core/go.mod | Go 1.23 | 独立历史 Go Core 服务及其 Analysis/Transport | 本次明确不并入 Root；保留独立 Module 和历史 go-migration profile |
+
+依赖冲突已确认：Root 使用 github.com/go-sql-driver/mysql v1.9.3，Market Data 使用 v1.8.1；Root 直接依赖 github.com/redis/go-redis/v9 v9.7.3，Market Data 当前没有使用该客户端，而是自定义 RESP Cache Client。Market Data 另有 github.com/injoyai/tdx v0.0.86、golang.org/x/text v0.28.0 等依赖。合并时必须以全仓调用和测试结果决定版本，不应机械保留较低版本。
+
+命令入口：
+- cmd/analysis-api/main.go：当前 Root Server 主入口，启动 Analysis Runner、任务队列、HTTP API；通过 internal/adapters/marketdata 访问 Data。
+- services/market-data/cmd/market-data/main.go：当前 Data 独立服务入口，负责 Provider 注册、DataService、MariaDB/Redis、Retention Worker、Data HTTP Server 和 BaoStock Client。
+- go-core/cmd/analysisd/main.go：独立历史 go-core 入口，不纳入本次迁移。
+- 根 cmd/demo、cmd/pythonapi-smoke、cmd/storage-check 是辅助工具入口，需在 M1 后逐项确认是否继续保留根路径，不与 Data Server 入口混为一谈。
+
+#### 2. Root → Data 调用链与 HTTP 边界
+
+- Root 的 internal/adapters/marketdata/client.go 是独立 HTTP Client：读取 MARKET_DATA_BASE_URL、MARKET_DATA_API_KEY，默认地址为 http://127.0.0.1:8091，超时默认 135 秒，向 Data 发送 X-API-Key，并解码 Quote/DailyBar JSON DTO。
+- internal/adapters/marketdata/collector.go 实现 Analysis 的 app.DataCollector，通过该 Client 拉取行情、日 K 和指数数据，再映射到 Analysis Domain Snapshot。该适配器是当前 Root 与 Data 的主要耦合点。
+- Data 的 services/market-data/internal/httpapi/server.go 直接依赖 *service.DataService，自行注册 /api/v1/... 路由，并在 Handler 外包裹 security headers、request ID、access log、timeout context。迁入后应拆分路由注册与独立 HTTP Server Middleware，避免 Root Router 重复应用入口中间件。
+- 当前 Data HTTP DTO 与内部 model 类型存在直接耦合；M2 应明确 Application DTO 边界，不能让 Analysis 直接引用 Data 的内部 Model。
+- Root Remote Adapter 当前使用自建 net/http.Client，未使用 internal/platform/httpclient 的受控出站 Client。该差异在本次迁移中先记录；迁移后按冻结 Platform 契约统一 Provider 出站请求，不能将远程 Data Client 与 Provider Client 混为一个调用面。
+
+#### 3. 资源生命周期与迁移影响
+
+| 资源 | Root 当前实现 | Data 当前实现 | 迁移要求/风险 |
+|---|---|---|---|
+| MariaDB | internal/adapters/storage/mysqlredis.Store 创建并拥有 *sql.DB，配置连接池；Open 内可执行 Root Migration 和 Schema 检查；Close 关闭 Pool | repository.OpenMySQL 另建 *sql.DB，Store.Close 关闭；Data main 单独执行 Migrate | 目标由 Root Bootstrap 创建共享 Pool；Data Repository 接收 borrowed Pool；Data Migration 仍由 Data 提供 Runner、Root 显式执行。需核对两边 Schema、DSN、连接池参数和 Migration 幂等性 |
+| Redis | Root 使用共享 go-redis/v9 Client，由 Root Store 创建/关闭 | internal/cache/redis.go 每条命令重新 Dial TCP、AUTH/SELECT、执行后关闭连接 | 需新增基于共享 go-redis Client 的 Data Cache Adapter；保留 DB index、username/password、key namespace、TTL 和禁用缓存语义 |
+| Provider HTTP | Data Provider 各自构造请求客户端/传输配置（需继续逐 Provider 核验） | 由 Data Bootstrap 创建和注入 Provider | 迁移后逐 Provider 接入 Platform 受控 HTTP Client；需先盘点所有 Provider Host allowlist 和特殊协议（BaoStock TCP 等） |
+| BaoStock | 无对应资源 | Data main 创建 Client，退出时 Close | 由 Data Module 持有，Root 统一调用 Stop/Close |
+| Quote Retention Worker | Root Analysis Task Queue 通过 Start/Close 管理 | Data main 调用 runQuoteRetentionWorker 启动 ticker goroutine，ctx 取消后退出，但没有显式 Wait/Stop 完成确认 | 抽取 Worker 生命周期句柄，Start/Stop/Wait 可测试；Root 统一启动和 drain |
+| Migration | Root Store.Open 内可触发 Root Migration | Data main 在打开 Repository 后显式调用 Store.Migrate | 禁止把 Data Migration 藏进共享 Pool Open；由组合根按模块顺序注册执行，避免启动时重复迁移 |
+
+#### 4. 构建、部署与 CI
+
+- 默认 docker-compose.yml 当前部署三个容器：stock-analysis-data、stock-analysis-server、stock-analysis-web；Server 依赖 Data healthy，并通过容器 DNS + API Key 访问 Data。目标方案应调整为 Root Server + WebUI，Data 不再是默认独立容器。
+- 根 Dockerfile 当前使用 Go 1.22 构建 ./cmd/analysis-api；Data Dockerfile 使用 Go 1.23 构建 ./cmd/market-data。Module 归并后需统一 Builder 版本、依赖下载和单镜像构建上下文。
+- docker/docker-compose.go-migration.yml 是历史 Python Bridge + Data + go-core profile；不得误删或误改成当前 Root Server 部署定义。是否保留按非目标约束处理，后续另行决策。
+- .github/workflows/go-test.yml 当前矩阵分别测试 .、go-core、services/market-data，并独立运行 Data MariaDB/PIT 集成测试、Compose 校验及两个 Go 镜像构建。归并后应移除 Data 独立 Module 矩阵项，将 Data 测试纳入 Root Module，同时保留 go-core 独立矩阵项。
+- .github/workflows/data-quality-parity.yml 曾硬编码旧 doc/api/接口规范/ 路径；本次目录整理后已发现路径失效，需同步修正为 doc/api/provider-migration/。该项属于文档移动引发的 CI 配置修复。
+- 2026-11-06 当前 HEAD f2b9e5f 的 Actions：Platform Go checks success；Live Provider probe 外层 workflow success（不代表每项 Provider 数据验收通过）；Go test suite 尚有 Data Module Job in_progress，其 Root、go-core、MariaDB/PIT 和 Compose/Docker Job 已 success；Parity 因报告路径仍指向旧目录而失败；WebUI checks 的单元测试 Job 失败，需单独查看失败断言，不归因于 Data 迁移。
+
+#### 5. 首轮迁移对象清单（目录/文件组级）
+
+| 源路径 | 目标路径建议 | 依赖/风险 | 验证与回滚 |
+|---|---|---|---|
+| services/market-data/internal/baostock/** | internal/marketdata/provider/baostock/** | BaoStock TCP Client 有独立连接生命周期 | 保留协议/超时/关闭测试；回滚恢复 Data Module |
+| services/market-data/internal/provider/** | internal/marketdata/provider/** | 多 Provider、HTTP/TCP 协议、不同 Host 与重试边界 | Provider 全量单测、真实探测分开验收 |
+| services/market-data/internal/normalize/** | internal/marketdata/normalize/** | 标准化、单位、复权和质量语义不可变 | 黄金样例、Parity、质量测试；回滚不改数据库数据 |
+| services/market-data/internal/validation/**、freshness/** | internal/marketdata/quality/{validation,freshness}/** | 不能与 Platform Diagnostics 混淆领域规则 | 字段级测试、Freshness 测试 |
+| services/market-data/internal/model/** | internal/marketdata/domain/model/**（需拆分 HTTP/Application DTO） | 当前 HTTP Handler 直接使用内部 Model | JSON Golden/OpenAPI 双向契约；回滚保留原 DTO |
+| services/market-data/internal/service/** | internal/marketdata/app/service/** | DataService 当前是主要用例聚合，字段和构造器依赖较多 | 现有 Service/Repository 集成测试 |
+| services/market-data/internal/repository/** | internal/marketdata/repository/** | 需支持 borrowed/owned DB，Migration 拆出 Runner | MariaDB/PIT/重复写入/关闭所有权测试 |
+| services/market-data/internal/cache/** | internal/marketdata/cache/** | 自定义 RESP Client 改共享 Redis Adapter | Redis key/TTL/DB index/禁用语义测试 |
+| services/market-data/internal/config/**、configs/** | internal/marketdata/config/**、configs/marketdata/** | Provider Secret、旧服务地址/API Key 与进程内模式配置需分离 | 配置兼容测试；回滚恢复旧 env/config |
+| services/market-data/internal/httpapi/**、openapi.yaml | internal/marketdata/transport/http/**、internal/marketdata/openapi.yaml | 保留 HTTP DTO/路由；入口 Middleware 不能重复 | OpenAPI、Handler、路由兼容测试 |
+| services/market-data/cmd/market-data/main.go | 逻辑提取到 internal/marketdata/bootstrap/**；Root 新入口由 cmd/server 组合 | 入口包含 Provider 注册、资源创建、Worker 和 HTTP Server，不能整文件照搬 | Bootstrap 单测、启动/失败释放/Shutdown 测试；旧入口暂留兼容 |
+| internal/adapters/marketdata/** | 保留显式 Remote Adapter；新增 Analysis→Data InProcess Adapter | 当前 Client/Collector 是 HTTP DTO 到 Analysis Snapshot 的映射点 | 同样例 Remote/InProcess 结果一致；可回滚到 Remote Adapter |
+| Dockerfile、services/market-data/Dockerfile、docker-compose.yml | 根 Dockerfile、Compose 统一部署 | Go 版本、COPY 上下文、默认服务依赖改变 | Compose config、单镜像构建、旧部署回滚 |
+| .github/workflows/go-test.yml、Parity workflow | Root Module 测试矩阵与新文档路径 | 不能丢失 Data race/vet/MariaDB/PIT/Parity 覆盖 | 新旧 CI Job 覆盖矩阵对照 |
+
+#### 6. 当前明确风险与未关闭项
+
+1. Go 版本/依赖冲突（待决策）：Root Go 1.22 与 Data/go-core Go 1.23 不一致；MySQL Driver 1.9.3 与 1.8.1 不一致。进入 M1 前需确认部署 Go 版本、最低兼容性及 Data 全量测试结果。
+2. Data Application Port 缺失（M2 工作项）：当前只存在 HTTP Handler 与 DataService；尚无对外稳定 Application Port。不可让 Analysis 直接 import Data internal 子包作为迁移捷径。
+3. 双数据库 Pool（M4 工作项）：Root 和 Data 各自创建 MariaDB Pool；迁移后需明确一个共享 Pool owner、Data Repository borrowed semantics。
+4. 双 Redis Client/协议差异（M4 工作项）：Root go-redis Pool 与 Data per-command RESP Client 的连接、认证、DB、TTL 行为不同；需要 adapter 和集成测试，不能简单替换类型。
+5. Worker 停止确认缺失（M2/M4 工作项）：Retention Worker 目前依赖 context 退出但无 WaitGroup/Stop handle；Root Shutdown 必须等待其退出。
+6. HTTP Middleware 重叠（M2/M3 工作项）：Data Handler 已内置 Request ID、Access Log、Timeout 和 Security Headers；挂载到 Root 前要拆分 route handler 与 server middleware。
+7. Provider 出站安全适配（M4 后续）：Data Provider 目前尚未统一接入 Platform 受控 HTTP Client；需要逐个 Provider 主机白名单及协议清单。
+8. go-core 的独立性（已确认非本次迁移对象）：go-core 继续作为独立 Go Module 和历史 profile，不得因“统一 Module”误将其合并。
+9. Parity workflow 路径失效（本轮修复项）：目录移动后必须修正 workflow 的 paths 和报告校验路径。
+10. WebUI 检查失败（待定位）：f2b9e5f 对应 WebUI unit tests 失败；需查看具体失败用例，不能假设与文档移动无关，也不能归因于 Data 迁移。
+
+**M0 状态：进行中，未通过。** 已完成 Module/入口、主要调用链、主要资源所有权、默认 Compose 和关键 CI 的第一轮静态核对；尚未完成 WebUI/Nginx 路由、所有 Provider 出站 Host、Data 全量 package/config/testdata 清单、所有 Root 调用点及当前 HEAD CI 收敛复核。未完成前不进入 M1。
