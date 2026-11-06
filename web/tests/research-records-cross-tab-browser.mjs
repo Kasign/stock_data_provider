@@ -102,8 +102,8 @@ try {
   const noteExport = JSON.parse(noteExportText);
   assert.equal(noteExport.format, "stock-provider-webui.research-notes");
   assert.equal(noteExport.version, 1);
-  assert.deepEqual(noteExport.items.map(item => item.id).sort(), ["note-1", "note-2"],
-    "export includes all stored notes rather than only the filtered view");
+  assert.deepEqual(noteExport.items.map(item => item.id).sort(), afterStale.map(item => item.id).sort(),
+    "export includes every current stored note, including imported and cross-tab records, rather than only the filtered view");
   await first.locator("#research-note-search").fill("");
   await first.locator("#research-note-clear").click();
   await first.locator("#research-note-create").click();
