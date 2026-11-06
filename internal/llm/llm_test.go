@@ -85,6 +85,26 @@ func TestProviderModelAllowlistAndLocalSchemaMode(t *testing.T) {
 	if err := r.ValidateAgainstProvider(config); err == nil { t.Fatal("model outside allowlist must be rejected") }
 }
 
+func TestLocalValidationOnlyDoesNotRequireUpstreamStructuredOutput(t *testing.T) {
+	now := time.Now().UTC()
+	validUntil := now.Add(time.Hour)
+	r := ModelRequest{
+		ProviderID: "gateway-1", RequestID: "req-1", PurposeCode: "research.summary", Model: "qwen-local",
+		InputText: "Evidence", MaxOutputTokens: 128, DeadlineAt: now.Add(time.Minute),
+		CorrelationID: "run-1", SystemAsOf: now, LocalValidationOnly: true,
+		ResponseSchema: &JSONSchemaSpec{Name: "summary", SchemaJSON: json.RawMessage("{\"type\":\"object\"}")},
+	}
+	state := CapabilityState{
+		ProviderID: r.ProviderID, ModelID: r.Model, Protocol: ProtocolOpenAIResponses,
+		GatewayVersion: "gateway-v1", VerifiedAt: &now, ValidUntil: &validUntil,
+		EvidenceRef: "test-evidence", MaxOutputTokensLimit: 256,
+		Values: map[Capability]CapabilityStatus{CapabilityResponsesJSON: CapabilitySupported},
+	}
+	if err := r.ValidateCapabilities(state); err != nil {
+		t.Fatalf("local-only schema validation should not require upstream structured output: %v", err)
+	}
+}
+
 func TestUsageMissingValuesRemainNull(t *testing.T) {
 	b, err := json.Marshal(Usage{Source: UsageSourceUnknown})
 	if err != nil { t.Fatal(err) }
@@ -96,7 +116,7 @@ func TestUsageMissingValuesRemainNull(t *testing.T) {
 func TestSchemaAndToolJSONValidation(t *testing.T) {
 	now := time.Now().UTC()
 	r := ModelRequest{
-		RequestID: "req-1", PurposeCode: "research.summary", Model: "qwen-local",
+		ProviderID: "gateway-1", RequestID: "req-1", PurposeCode: "research.summary", Model: "qwen-local",
 		InputText: "Evidence", MaxOutputTokens: 128, DeadlineAt: now.Add(time.Minute),
 		CorrelationID: "run-1", SystemAsOf: now,
 		ResponseSchema: &JSONSchemaSpec{Name: "summary", SchemaJSON: json.RawMessage("{\"type\":\"object\"}")},
