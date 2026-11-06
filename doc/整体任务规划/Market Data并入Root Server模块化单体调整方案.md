@@ -105,7 +105,7 @@ docker-compose
 | Nginx | `web/default.conf.template` 的 `/market-api/` 当前代理到 Data 服务，`/analysis-api/` 代理 Server | 两个前缀可保留，但上游统一改为 Root Server |
 | go-core | `docker/docker-compose.go-migration.yml` 将 Python Bridge、go-core、Data 组成单独的 `go-migration` profile，并明确不与根 Compose 叠加；根 Compose 当前运行的是根模块 `cmd/analysis-api` | go-core 是仓库保留的旧迁移部署路径，不是根 Compose 的当前组合入口；本次不把 go-core 合并进 Root Server。仍需部署现场确认没有继续使用旧 profile |
 
-**M0 扩展分支复核（2026-11-06）：** 本轮只读审计以 Data 分支 `feat/full-go-data-providers-api-switch` HEAD `8c569366aff08738d632c7ea8856ac55f95c892d` 为准。根 `go.mod` 仍是 `example.com/stock-analysis-flow` / Go 1.22；Data `go.mod` 仍是独立 Module / Go 1.23.0；根 Dockerfile Builder 为 Go 1.22，Data Dockerfile Builder 为 Go 1.23，CI Go setup 为 1.23.x。Data 归并尚未开始。Data 分支从代码基线 `4ca1da2` 到当前 HEAD `8c56936` 的比较仅显示迁移跟踪文档有变化，没有生产 Go/配置/部署代码变化；因此本段代码证据仍对应 `4ca1da2` 的实现状态，当前 HEAD 主要推进了审计记录。
+**M0 扩展分支复核（2026-11-06）：** 本轮只读审计以 Data 分支 `feat/full-go-data-providers-api-switch` HEAD `d34eb937eaae713220456c8e8ba7c62f1227b7c8` 为准。根 `go.mod` 仍是 `example.com/stock-analysis-flow` / Go 1.22；Data `go.mod` 仍是独立 Module / Go 1.23.0；根 Dockerfile Builder 为 Go 1.22，Data Dockerfile Builder 为 Go 1.23，CI Go setup 为 1.23.x。Data 归并尚未开始。Data 分支从代码基线 `4ca1da2` 到当前 HEAD `8c56936` 的比较仅显示迁移跟踪文档有变化，没有生产 Go/配置/部署代码变化；因此本段代码证据仍对应 `4ca1da2` 的实现状态，当前 HEAD 主要推进了审计记录。
 
 本轮新增确认：
 
@@ -143,16 +143,16 @@ docker-compose
 
 上述 Host 是代码默认值，不是运行时最终 Host 的完整保证：Data Config 允许通过 `MARKET_DATA_*_URL` 覆盖多个 Provider Endpoint，PyTDX Host 也由环境变量注入。当前多数 Provider 的 `http.Client` 未显式设置 Transport，会沿用 Go 默认 Transport 的环境代理行为；Platform HTTP Client 当前显式 `Proxy: nil`。接入 Platform 前必须决定代理策略、精确 Host Allowlist、Redirect 跨域限制和各 Provider 响应体预算，不能仅把 Client 替换掉而忽略网络行为差异。
 
-**Data 分支迁移跟踪文档补充证据（当前 Data HEAD：`8c569366aff08738d632c7ea8856ac55f95c892d`）：** Data 分支新增 `doc/api/migration/MarketData模块化单体迁移计划与进度.md`，其 M0 仍为 `in_progress`，与本方案采用同一架构决策。该文档补充了以下迁移准入发现：
+**Data 分支迁移跟踪文档补充证据（当前 Data HEAD：`d34eb937eaae713220456c8e8ba7c62f1227b7c8`）：** Data 分支新增 `doc/api/migration/MarketData模块化单体迁移计划与进度.md`，其 M0 仍为 `in_progress`，与本方案采用同一架构决策。该文档补充了以下迁移准入发现：
 
 1. Data OpenAPI 与 HTTP Handler 的 Method+Path 双向核对为 35/35 匹配；这只证明路由路径/方法完整，不代表全部 Request/Response Schema、required/nullability、错误响应和鉴权 Header 已完成字段级核验。
 2. Data HTTP API 覆盖 35 个 Operation；DataService 还聚合证券主数据、搜索、市场统计、交易日历/状态、财务、估值、公告、筹码、资金流、诊断等能力。Application Port 应按领域拆分用例接口；Analysis InProcess Adapter 只实现 Analysis 所需的 Quote/DailyBars/IndexBars，不应暴露一个包含所有 Provider/Repository 的巨大接口；HTTP Adapter 仍需覆盖完整 Data 能力面。
 3. Root Remote Adapter 存在 DTO 信息损失：Quote 的 nullable `current_price` 被映射为非 nullable float64，Data 的 int64 volume 被映射为 float64；DailyBar 的均线、复权因子来源/版本/观察时间、标准化时间、原始单位/字段、fallback、Request ID 等字段没有完整进入 Root DTO。
 4. Data DailyBars API 支持 `as_of`，可按系统观察时点重建历史修订版本；当前 Root `GetHistory` 只传 `limit` 和 `adjustment`，Analysis Collector 仅过滤未来交易日期，没有传递 PIT cutoff。**过滤交易日期不等于按 as_of 重建版本**。M2/M3 必须把明确的 PIT 查询语义纳入 Application Port 和 Analysis Adapter；若 Analysis RunRequest.AsOf 与 Data revision cutoff 不是同一语义，必须定义映射，不得默默混用。
 5. Data 迁移跟踪文档已完成 Provider 请求模式矩阵初稿，但逐调用点 Query/Body/Header/Retry/Redirect/响应大小限制及跨域敏感信息转发测试仍未全部完成。
-6. Data 分支 M0 第十四轮发现 OpenAPI 鉴权声明与实际 Handler 不一致：35 个 Operation 中，Handler 有 33 条业务路由执行 API Key 认证、2 条 health 路由公开；OpenAPI 仅 11 条业务 Operation 显式声明 ApiKey，另 22 条漏声明；Diagnostics Operation 还缺少 401 响应。该问题是现有 v1 HTTP 契约描述错误，不是实际 Handler 放开了认证。应在 MDM-001 阶段修正 OpenAPI security/401 并通过逐 Operation Contract Test，作为 MDM-002 的前置门禁；这不等于提前实施 MDM-008 的新 Principal/Scope 契约。
+6. Data 分支 M0 第十四至十六轮确认 OpenAPI 与实际 HTTP 行为有多项契约描述错误：35 个 Operation 中 Handler 有 33 条业务路由执行 API Key 认证、2 条 health 路由公开；OpenAPI 仅 11 条业务 Operation 显式声明 ApiKey，另 22 条漏声明；Diagnostics 缺少 401。组件虽定义 `Error` Schema，但 35 个 Operation 的错误响应均未引用它；Server 实际输出 `error.class/code/message/retryable/request_id` 结构。现有鉴权 Contract Test 只检查 7 条路由，不能发现 22 条漏声明。公共 `writeDomainErr` 可产生 408/502/503/504，部分 Provider Operation 未声明实际可达的 504；参数默认值、边界、动态上限也尚未全部与 Handler 核对。该问题是现有 v1 HTTP 契约描述错误，不是实际 Handler 放开了认证。应在 MDM-001 阶段修正 security/401/Error Schema/实际可达错误状态码，并扩展逐 Operation Contract Test，作为 MDM-002 的前置门禁；这不等于提前实施 MDM-008 的新 Principal/Scope 契约。
 
-**MDM-001 当前结论：** 仓库内主要代码路径、HTTP 调用方、Provider 传输类型、资源入口、Worker、路由、Compose、部署脚本和主要 CI Workflow 已完成静态盘点；Data 分支也完成了 OpenAPI 路由完整性首轮核对和 DTO/PIT 风险识别。当前新增明确阻断：OpenAPI 22 条受保护业务 Operation 漏声明 ApiKey，且错误响应声明不完整，必须在 MDM-001 修正并通过逐 Operation Contract Test。部署现场是否仍使用 `go-migration` Profile、Provider 可配置 Host 的最终 Allowlist、SQL 文件与 Go Migration 的完整字段/索引 DDL 差异、全部 Schema/DTO 字段级核验及 PIT 时间语义映射仍需确认；SQL/Go Migration 的表名集合已确认 9/9 一致。因此 MDM-001 暂不关闭，MDM-002 不得提前开始删除旧入口/构建文件。
+**MDM-001 当前结论：** 仓库内主要代码路径、HTTP 调用方、Provider 传输类型、资源入口、Worker、路由、Compose、部署脚本和主要 CI Workflow 已完成静态盘点；Data 分支已完成 35 个 Operation 的路径/方法、参数名称、Body 存在性和状态码清单初稿，并识别 DTO/PIT 风险。当前明确阻断包括：22 条受保护业务 Operation 漏声明 ApiKey、Diagnostics 缺 401、Error Schema 未被任何 Operation 错误响应引用、现有 Contract Test 只检查 7 条路由，以及部分 Provider Handler 可达的 408/504 未被 OpenAPI 声明。必须在 MDM-001 修正并通过完整逐 Operation Contract Test。部署现场是否仍使用 `go-migration` Profile、Provider 可配置 Host 的最终 Allowlist、SQL 文件与 Go Migration 的完整字段/索引 DDL 差异、参数默认值/边界及成功响应 DTO Schema 对照、PIT 时间语义映射仍需确认；SQL/Go Migration 的表名集合已确认 9/9 一致。因此 MDM-001 暂不关闭，MDM-002 不得提前开始删除旧入口/构建文件。
 
 **结构迁移编号映射：** 与 Data 分支迁移跟踪文档统一采用 M0～M6 七个结构迁移阶段：MDM-001=M0 审计、MDM-002=M1 Module 归并、MDM-003=M2 Application Port/Bootstrap、MDM-004=M3 Root Server 装配、MDM-005=M4 共享资源与生命周期统一、MDM-006=M5 部署/WebUI 切换、MDM-007=M6 结构回归与稳定性验收。迁移验收后另执行 MDM-008 公共平台/数据契约接入；不得把 MDM-008 混入结构迁移验收。
 
@@ -399,14 +399,14 @@ Owner：项目总规划 + Server + Data
 
 交付：
 - Data 全量 import 依赖与 Go 版本清单。
-- OpenAPI 35 个 Operation 与 Handler 的 Method/Path/security/401/Error Schema 逐项核验；先修复现有 22 条 ApiKey 漏声明，再以 Contract Test 锁定实际认证行为。
+- OpenAPI 35 个 Operation 与 Handler 的 Method/Path/security/参数/Request Body/成功响应/错误状态码/Error Schema 逐项核验；修复 22 条 ApiKey 漏声明、Diagnostics 401、错误响应 Schema 引用和真实可达 408/504，再以全量 Contract Test 锁定实际行为。
 - Provider 构造、DataService 构造、Repository/Cache 构造和所有后台 Worker 清单。
 - 所有 Data HTTP 路由、WebUI API 使用点和 Nginx 转发规则清单。
 - Data 表/索引/Migration namespace 与现有 DB pool 配置清单。
 - DATA-CTR-006/008、PLAT-CTR-005/006/007、SRV-CTR-001 受影响点清单。
 - go-core 入口与 Compose 正式入口关系的明确结论；不得只按目录名称推断是否仍是生产入口。
 
-验收：每个迁移对象有当前路径、目标路径、Owner、兼容要求和测试证据；无未登记的 Data HTTP 调用点；OpenAPI 的 35 个 Operation 与实际 Handler 认证行为一致，M1 不得带着已确认的 security 声明错误进入归并。
+验收：每个迁移对象有当前路径、目标路径、Owner、兼容要求和测试证据；无未登记的 Data HTTP 调用点；OpenAPI 的 35 个 Operation 与实际 Handler 的认证、参数、错误状态码和 Error Body 一致，全量 Contract Test 通过，M1 不得带着已确认的契约描述错误进入归并。
 
 ### M1：Go Module 归并（不改变部署调用）
 
