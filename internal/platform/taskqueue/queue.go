@@ -393,7 +393,11 @@ func (q *Queue) claim(ctx context.Context) (*claimedTask, error) {
 	}
 	var req domain.RunRequest
 	if err := json.Unmarshal([]byte(raw), &req); err != nil {
-		_ = q.finish(context.Background(), taskID, "failed", "invalid_task_payload", "Persisted task request could not be decoded")
+		persistCtx, persistCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer persistCancel()
+		if finishErr := q.finish(persistCtx, taskID, "failed", "invalid_task_payload", "Persisted task request could not be decoded"); finishErr != nil {
+			slog.Error("保存无效任务载荷的终态失败", "component", "taskqueue", "task_id", taskID, "error", finishErr.Error())
+		}
 		return nil, nil
 	}
 	req.RunID = runID
