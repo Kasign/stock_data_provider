@@ -3561,10 +3561,6 @@ body {
   padding: 15px;
 }
 
-.run-flow-dialog .task-event-detail[hidden] {
-  display: none !important;
-}
-
 .run-flow-dialog .event-detail-grid {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }

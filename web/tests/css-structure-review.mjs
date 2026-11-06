@@ -174,6 +174,10 @@ const sharedSelectors = [
   ".main-area", ".view", ".sidebar", ".topbar", ".nav-link",
   ".button", ".field", ".panel", ".panel-heading", ".page-heading"
 ];
+const runFlowHiddenRules = selectorRules.get(".run-flow-dialog .task-event-detail[hidden]") || [];
+if (runFlowHiddenRules.length !== 1) {
+  throw new Error(`Expected one Run Flow hidden-state rule, found ${runFlowHiddenRules.length}`);
+}
 const missing = sharedSelectors.filter((selector) => !selectorRules.has(selector));
 if (missing.length) throw new Error(`Missing shared shell selectors: ${missing.join(", ")}`);
 if (rules.length < 1000 || declarations.length < 2000) {

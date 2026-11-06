@@ -301,7 +301,7 @@ localStorage + storage event 方案能解决“另一个标签页完成写入后
 - 当前功能验收 HEAD `49aa0eb8f9a2ce49b99c6c53f659208fff77b841`：WebUI Checks #42171720219、Chromium Browser Smoke #42171720084 均通过。
 
 **下一批：**
-1. 完成 CSS AST 的 at-rule 条件、selector specificity、源码顺序和跨 selector DOM 命中关系人工复核；当前 `!important` 约 48 处，保留语义状态、隐藏、无障碍和必要组件优先级，不以归零为目标。
+1. 完成 CSS AST 的 at-rule 条件、selector specificity、源码顺序和跨 selector DOM 命中关系人工复核；当前 `!important` 24 处，保留语义状态、隐藏、无障碍和必要组件优先级，不以归零为目标。
 2. 在人工级联审查通过后，选择低耦合组件继续 CSSOM computed-style 基线与迁移；不扩大物理拆分范围，不以移动 CSS 文件替代级联审查。
 3. 继续 P2 全站人工验收：macOS 中文字体、图表 SVG、交易日历、Run Flow、研究卡片、表格和弹层；真实部署验收独立记录。
 4. 数据中心统一诊断真实联调继续等待数据侧 ProviderProbeItem/OpenAPI、真实 Provider 覆盖率和 MariaDB 历史持久化证据，不在 Web 分支模拟。
@@ -1535,7 +1535,7 @@ JSR-6L 补充：连接配置变更取消草稿检查后，旧代际 finally 按�
 
 - [x] 当前功能验收 HEAD `49aa0eb8f9a2ce49b99c6c53f659208fff77b841` 的 WebUI Checks #42171720219 和 Chromium Browser Smoke #42171720084 均通过。
 - [x] JSR-6 请求生命周期与展示层边界主线完成；后续只处理可复现缺陷，不进行无目标拆分。
-- [ ] UIR-2 样式级联收尾：当前约 48 处 `!important` 需逐项分类，并完成人工 at-rule / specificity / source-order / DOM 命中关系复核；保留隐藏/可访问性/语义状态及确有必要的组件优先级，不以数量归零为验收目标。
+- [ ] UIR-2 样式级联收尾：当前 24 处 `!important` 需逐项分类，并完成人工 at-rule / specificity / source-order / DOM 命中关系复核；保留隐藏/可访问性/语义状态及确有必要的组件优先级，不以数量归零为验收目标。
 - [ ] 人工视觉验收：macOS 中文字体环境下检查 320/375/600/768/900/1280/1600px，重点覆盖图表 SVG、交易日历、Run Flow、研究报告/记录工作区、表格和弹层。
 - [ ] 真实部署验收：使用实际行情/分析服务配置，验证数据质量、时间语义、错误/降级、鉴权代理和真实 Provider 响应。CI 使用隔离 API fixture，不作为生产联调证据。
 
@@ -2350,3 +2350,12 @@ CSS AST 检查器进一步扩展：
 - [x] 研究记录列表态与编辑态分别覆盖 320 / 768 / 1280 / 1600px。
 - [x] 标签精确筛选、多标的筛选、筛选计数、清除筛选、编辑草稿保护、跨标签页更新/删除冲突、报告创建笔记均通过。
 - [x] 旧版单标的记录兼容；未修改存储 key、Schema、字段及容量限制。
+
+
+## 2026-11-06 UIR-2：Run Flow 隐藏状态重复规则清理
+
+- [x] 复核当前 CSS 中 25 个 `!important` 声明的实际用途：全局/组件隐藏状态、正负向语义色、减少动态效果、市场状态色和一个表格理由换行覆盖；这些声明不能按数量目标批量删除。
+- [x] 发现 `.run-flow-dialog .task-event-detail[hidden]` 在全局同一 at-rule 上下文中重复声明两次，均为 `display: none !important`；后置规则没有独立语义，删除前置重复规则。
+- [x] CSS AST 检查增加结构门禁，要求该 selector 仅保留一条规则，防止重复回归。
+- [x] `!important` 声明数从 25 降至 24；没有改变隐藏状态语义。
+- [ ] 继续人工审查跨 selector DOM 命中、主题和响应式覆盖；未完成前不扩大 CSS 物理拆分。
