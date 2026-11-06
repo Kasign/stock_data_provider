@@ -22,19 +22,14 @@
 
 ## 数据侧文档（统一位于 api/）
 
-1. api/数据侧整体规划.md：数据侧唯一整体开发任务入口，定义阶段顺序、优先级、状态和执行约束。
-2. api/数据层API清单.md：数据服务 API 与 WebUI 接入映射。
-3. api/数据质量与状态契约.md：时间、单位、质量、空数据和错误处理约定。
-4. api/行情数据服务说明.md：服务职责、Provider 能力和运行诊断边界。
-5. api/样例数据管理说明.md：黄金样例数据的脱敏要求、目录约定和基准维护规则。
-6. api/国内A股数据层阶段五统一验收计划.md：阶段五诊断细节和专项验收证据。
-7. api/国内A股数据层黄金样例对账记录.md：真实样本、差异和回归证据。
-8. api/字段校验与诊断体系实施方案.md：Validation、Reporter、Adapter、Probe 架构及实施记录。
-9. api/字段校验规则矩阵.md：Quote、DailyBar 等字段规则、Provider 覆盖和代码核对状态。
-10. api/Freshness SLA与评估契约.md：各数据域时间新鲜度策略和证据要求。
-11. api/阶段二三统一验收清单.md：数据服务阶段二、三专项验收记录。
-12. api/接口规范/：数据源扩展、真实环境验收、Go 迁移和 Python/Go 差分专项资料。
-13. api/分析任务.openapi.yaml、api/Python桥接.openapi.yaml：机器可读接口契约。
+1. api/README.md：数据侧文档分类索引与阅读顺序。
+2. api/数据侧整体规划.md：数据侧唯一整体开发任务入口。
+3. api/architecture/：服务职责与架构说明。
+4. api/contracts/：API 清单、OpenAPI 和数据质量/状态契约。
+5. api/quality/：字段校验、诊断、Freshness 与样例管理规则。
+6. api/acceptance/：阶段验收、黄金样例和对账证据。
+7. api/migration/：Market Data 并入 Root Server 的迁移计划。
+8. api/provider-migration/：Provider 扩展、Go 迁移及 Python/Go 差分专项资料。
 
 ## 权威代码与契约
 
