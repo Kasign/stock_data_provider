@@ -680,3 +680,57 @@ Root 使用 REDIS_ADDR/REDIS_PASSWORD/REDIS_DB 和独立的连接超时配置；
 - Root/Data Migration 需分模块版本命名空间并由 Root 组合根显式执行，不能简单把两个 Migrate() 合并成一个无边界函数。
 
 **M0 状态继续保持 in_progress。** 本轮仅补充部署配置与资源审计，没有改变 Compose、数据库配置或 Migration 行为。
+
+
+### 2026-11-06：M0 第十三轮补充（认证重定向风险与 OpenAPI 操作清单）
+
+#### 1. 认证信息跨域重定向风险（需按高优先级处理）
+
+本轮复核 Tushare、Hithink、TickFlow、Xueqiu 等 Provider 的 HTTP Client 初始化方式：
+- Eastmoney 有专用 redirect policy；Tencent/Sina/NetEase/Yahoo/MiaoXiang 显式禁止重定向。
+- Tushare、Hithink、TickFlow、Xueqiu 当前使用默认 Go HTTP Client redirect policy。
+- Tushare Token 放在 POST JSON Body；Hithink 的 X-api-key、TickFlow 的 x-api-key 是自定义 Header；Xueqiu 使用 Cookie Header。
+- Go 默认重定向逻辑对 Authorization/Cookie 等敏感 Header 有跨域处理，但自定义 Key Header 不应假设自动受到同样保护；对 307/308，POST Body 可能被重放。由此，当前不能仅凭默认 Client 就认定认证信息不会跨域泄漏。
+- 本轮未执行真实恶意重定向服务测试，因此记录为代码路径风险，而不是已复现的数据泄漏事件。
+
+M4 必须增加可自动化的回归测试：
+1. 起两个不同 Host 的本地 HTTP Test Server，源站返回 307/308 到目标站。
+2. 分别验证 Tushare Body Token、Hithink/TickFlow 自定义 Key Header、Xueqiu Cookie 不会到达未授权目标 Host。
+3. 覆盖同 Host、显式 allowlist Host、非 allowlist Host、HTTP→HTTPS、HTTPS→HTTP。
+4. 所有 Provider 默认禁止跨 Host；需要跨 Host 的 Provider 通过显式目标集合授权，不以 Go 默认行为代替安全策略。
+5. 认证 Header 与 Endpoint Host 必须绑定；对 POST Body 携带凭据的 Provider，跨 Host redirect 必须直接拒绝，不能只删除 Header。
+
+#### 2. 本轮补齐的调用模式细节
+
+- Tushare 日 K：POST / JSON，api_name=daily，params 为 ts_code/start_date/end_date，fields 为 ts_code,trade_date,open,high,low,close,pct_chg,vol,amount；Token 在 Body。统一请求限速间隔约 700ms。其他能力复用 fetchCapabilityTable，api_name 与 params/fields 随业务变化；资金流市场接口为 moneyflow_mkt_dc。
+- Hithink：GET，X-api-key Header；公共 get() 将 Query 编码到 URL，覆盖搜索 q/asset_type/limit、指数 thscodes、日 K thscode/interval/start/end/adjust/offset、财务 thscode/period/limit 等；请求之间至少间隔约 150ms。
+- TickFlow：GET /v1/quotes（symbols 或 universes）、GET /v1/universes、GET /v1/universes/CN_Equity_A、POST /v1/universes/batch（JSON ids）、GET /v1/klines；授权请求 x-api-key Header，免费日 K 使用独立 free Base URL；免费调用间隔至少 1 秒。
+- Tencent：GET，Quote 将证券代码拼入 URL Path/Query 形式，日 K 使用 param Query；搜索走 Smartbox endpoint，设置 v=2/t=all/c=1/q=关键词；User-Agent 与 Referer 固定；禁止重定向。
+- Eastmoney：主要 GET 参数通过 url.Values 组装；核心字段参数在各能力中显式定义，例如 Quote 使用 secid/fields/fltt/invt/时间戳，个股资金流使用 fields1/fields2，板块/指数榜单使用 fields、pn/pz、po、fid 等分页/排序字段；龙虎榜、公告使用 datacenter/announcement 对应 Query。热榜接口为 POST，需在逐调用点附表中继续列出完整 JSON Body。
+- 以上为请求结构摘要；尚未将每个 Provider 每个方法的完整 Query/Body 字段枚举为机器可读清单，也未逐一验证响应大小上限。
+
+#### 3. OpenAPI 操作清单复核
+
+本轮再次解析 services/market-data/openapi.yaml 的顶层 Path，确认共有 35 个路径操作（含 health、probe、diagnostics、quotes/bars/bundle、stocks、market 等）。本次仅确认 Operation 路径清单数量和名称，没有完成每个 Operation 的 method、requestBody、parameters、responses、security 与 Schema 引用的逐项核对；也未完成 Server Handler 的实际 JSON 字段与 OpenAPI Schema 的 golden 对照。
+
+下一轮应生成逐 Operation 核验矩阵，至少包含：
+- Method + Path；
+- Handler/UseCase；
+- Path/Query/Header 参数；
+- Request DTO 与 OpenAPI required/nullable；
+- Response DTO/字段；
+- 成功响应状态码；
+- 400/401/403/404/409/422/429/5xx 错误响应；
+- ApiKey/BearerAuth 是否与实际中间件一致；
+- 兼容性要求及对应测试。
+
+#### 4. 本轮 CI 状态（HEAD 1804a094）
+
+- WebUI checks：success。
+- Platform Go checks：success。
+- Live Provider probe：success。
+- Go-Python data quality parity：success。
+- Go test suite：仍在运行；Root Test、go-core Test、MariaDB migration/PIT persistence 已 success；services/market-data Test 与 Compose/Docker build 当时 in_progress。
+- 因此当前 CI 不能标记为全绿。
+
+**M0 状态继续保持 in_progress。** 本轮未改动 Provider 请求行为或 OpenAPI；发现的认证跨域风险必须进入 M4 安全验收项。
