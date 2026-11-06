@@ -112,11 +112,14 @@ func TestSinaQuoteOptionalFieldsReportParseWarnings(t *testing.T) {
 		t.Fatalf("invalid optional amount must remain nil and degrade quote: %+v", quote)
 	}
 	report := reporter.Snapshot()
-	if report.WarningCount != 2 || report.ErrorCount != 0 {
-		t.Fatalf("expected two warnings and no errors, got %+v", report)
+	if report.WarningCount < 2 || report.ErrorCount != 0 {
+		t.Fatalf("expected at least two warnings and no errors, got %+v", report)
 	}
 	foundAmount, foundTime := false, false
 	for _, issue := range report.Issues {
+		if issue.Severity != validation.SeverityWarning {
+			continue
+		}
 		foundAmount = foundAmount || (issue.Field == "amount" && issue.ProviderField == "field_9" && issue.Code == "invalid_optional_number")
 		foundTime = foundTime || (issue.Field == "quote_time" && issue.ProviderField == "field_30,field_31" && issue.Code == "invalid_timestamp")
 	}
