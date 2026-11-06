@@ -441,7 +441,7 @@ Evidence 必须保留来源事实、系统观察和研究纳入时间三条独�
 - `system_as_of`：本次研究允许使用的知识截止时间，必填，且不得早于 system_observed_at。
 - `valid_time_start/end`：业务事实有效区间；与上述知识时间独立。
 
-严格 PIT 规则：available_at 为 null/unknown 的 Evidence 不得作为“在该时点已公开可得”的事实参与严格 PIT 研究；如果调用场景只要求“系统当时已观察”，必须由 Researchflow Template 显式声明非严格 PIT 模式及其风险，不得由 Research 自动降级。
+严格 PIT 规则：仅当 available_at 非 null 且 available_at <= system_as_of 时，Evidence 才可作为“在该时点已公开可得”的事实参与严格 PIT 研究；available_at 晚于 system_as_of 或为 null/unknown 均排除；如果调用场景只要求“系统当时已观察”，必须由 Researchflow Template 显式声明非严格 PIT 模式及其风险，不得由 Research 自动降级。
 
 所有 Evidence 必须有 `authorization_ref`。授权快照由 `source_owner` 对应的权威模块签发：Data/News/Quant/Research 各自负责其拥有内容的访问策略。公开或无限制内容也必须签发 allow 快照；禁止 null、空字符串或 not_required 绕过授权审计。该快照不是访问令牌；读取敏感内容时仍由来源 Owner 重新执行当前授权检查。
 
