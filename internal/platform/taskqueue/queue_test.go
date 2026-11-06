@@ -316,7 +316,6 @@ func TestWaitForWorkerPollStopsOnContextCancellation(t *testing.T) {
 	}
 }
 
-
 type blockingCreateConnector struct {
 	entered chan struct{}
 }
