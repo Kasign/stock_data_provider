@@ -242,3 +242,8 @@ Brave/Bocha/Tavily 等具体 Provider 的策略值必须按实际账号套餐、
 5. Observation 的 attributes 仅允许白名单低敏计数/枚举；禁止正文、snippet、原始响应、URL Query、Token、Cookie、DSN 和模型上下文。
 6. 不新增 News Diagnostics HTTP 路由、Runner、Registry 或通用历史库。统一诊断路由的认证和注册由 Server Owner 负责；News Ingestion Run/Stage 若有真实采集触发需求，其事实记录仍由 News 持有。
 7. PLAT-CTR-004 仍为 `pending_evidence`；News Check Adapter 的 Schema/Golden/Runner Contract Test 和状态映射证据通过后，才申请对应调用点 A2。
+
+
+## 2026-11-06 当前 HTTP 适配 API 修正
+
+本规范历史段落中的 `BoundDoer` / `Client.Bind()` 描述已过时。当前 Platform HTTP Client API 为 `Client.Do(ctx, request, DestinationPolicy)`。News Provider 使用 `provider.NewPlatformHTTPDoer`，Source 使用 `source.NewPlatformHTTPDoer`；每个 endpoint 独立绑定精确 Host/Port 策略。响应体大小、总 Deadline、TLS、DNS/IP 校验和拨号仍完全由 Platform Client 执行。News 不创建裸 HTTP Client，不接管共享 Client 生命周期。

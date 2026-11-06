@@ -293,3 +293,23 @@ func TestCollectSourceReturnsEndpointPolicyVersionWhenApplied(t *testing.T) {
 		t.Fatalf("policy trace=%+v", result)
 	}
 }
+
+
+type sourceRetryableTestError struct {
+	retryable bool
+}
+
+func (e sourceRetryableTestError) Error() string { return "classified source transport error" }
+func (e sourceRetryableTestError) Retryable() bool { return e.retryable }
+
+func TestSourceTransportRetryableUsesAdapterClassification(t *testing.T) {
+	if !sourceTransportRetryable(sourceRetryableTestError{retryable: true}) {
+		t.Fatal("classified retryable transport error was not recognized")
+	}
+	if sourceTransportRetryable(sourceRetryableTestError{retryable: false}) {
+		t.Fatal("classified non-retryable transport error was marked retryable")
+	}
+	if sourceTransportRetryable(errors.New("unknown transport error")) {
+		t.Fatal("unknown transport error must remain non-retryable")
+	}
+}

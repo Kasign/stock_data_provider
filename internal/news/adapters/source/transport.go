@@ -21,7 +21,7 @@ type EndpointKey struct {
 }
 
 // EndpointTransport 将每个 Source Endpoint 固定映射到独立 HTTPDoer。
-// 生产组合根必须注入平台 BoundDoer；不得将裸 http.Client 作为生产绑定。
+// 生产组合根必须注入平台 Platform HTTP Client 策略适配器；不得将裸 http.Client 作为生产绑定。
 type EndpointTransport struct {
 	doers map[EndpointKey]app.HTTPDoer
 }

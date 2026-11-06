@@ -50,7 +50,7 @@ type SourceCatalog interface {
 }
 
 // SourceTransport 必须按 source_id + endpoint_id 选择固定策略的传输器。
-// 生产实现应为每个 endpoint 注入独立 BoundDoer；不得回退到裸 http.Client。
+// 生产实现应为每个 endpoint 注入独立 DestinationPolicy 适配器；不得回退到裸 http.Client。
 type SourceTransport interface {
 	Do(context.Context, string, string, *http.Request) (*http.Response, error)
 }
@@ -260,8 +260,8 @@ func SourceCollectionErrorCode(err error) string {
 	return "internal_error"
 }
 
-// sourceTransportRetryable only marks explicit timeout failures as retry candidates.
-// Unknown transport errors remain non-retryable until a domain policy classifies them.
+// sourceTransportRetryable accepts an explicit adapter classification first, then
+// recognizes timeout errors. Unknown transport errors remain non-retryable.
 func sourceTransportRetryable(err error) bool {
 	if errors.Is(err, context.DeadlineExceeded) {
 		return true
