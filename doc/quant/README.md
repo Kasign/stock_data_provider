@@ -4,7 +4,7 @@
 - 代码：`internal/quant/**`
 - 任务前缀：QNT
 - 当前状态：Q0-001～003 已完成；QNT-001 计算上下文开发中，Registry 元数据契约仍待实现
-- 最近盘点基线：`0cb99a525de00d3c340891caa029b716c4d2f749`
+- 初始共同基线：`0cb99a525de00d3c340891caa029b716c4d2f749`
 
 Quant 负责确定性、可复算的数值分析：Indicator、Factor、Trend、Market、Industry、Stock、Strategy、Backtest、Risk、Evaluation。不得调用 LLM，不负责研究编排，不直接访问 Provider/HTTP/SQL/Redis。
 
