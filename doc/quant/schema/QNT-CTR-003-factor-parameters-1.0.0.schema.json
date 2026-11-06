@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://stock-data-provider.local/schema/QNT-CTR-003-factor-parameters-1.0.0.schema.json",
+  "title": "Quant Factor Parameters",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "factor_code",
+    "parameters"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1.0.0"
+    },
+    "factor_code": {
+      "type": "string"
+    },
+    "parameters": {
+      "type": "object",
+      "additionalProperties": false,
+      "maxProperties": 0
+    }
+  },
+  "oneOf": [
+    {
+      "properties": {
+        "factor_code": {
+          "const": "momentum_20d"
+        }
+      }
+    },
+    {
+      "properties": {
+        "factor_code": {
+          "const": "momentum_60d"
+        }
+      }
+    },
+    {
+      "properties": {
+        "factor_code": {
+          "const": "volatility_20d"
+        }
+      }
+    }
+  ]
+}
