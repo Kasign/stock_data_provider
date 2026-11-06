@@ -72,20 +72,43 @@ func TestRegistryRequiresExplicitSingleActiveVersion(t *testing.T) {
 	r := New()
 	old := validEntry("momentum_20d", "1.0.0")
 	current := validEntry("momentum_20d", "2.0.0")
-	if err := r.Register(old, false); err != nil {
+	if err := r.Register(old, true); err != nil {
 		t.Fatal(err)
 	}
-	if err := r.Register(current, true); err != nil {
+	if err := r.Register(current, false); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := r.LookupActive("momentum_20d", "1.0.0"); err != nil {
+	if err := r.ActivateVersion("momentum_20d", "1.0.0", "2.0.0"); err != nil {
+		t.Fatal(err)
+	}
+	active, err := r.LookupActive("momentum_20d", "1.0.0")
+	if err != nil {
 		t.Fatalf("LookupActive() error = %v", err)
+	}
+	if active.AlgorithmVersion != "2.0.0" {
+		t.Fatalf("active algorithm version = %q, want 2.0.0", active.AlgorithmVersion)
 	}
 	if _, err := r.LookupVersion("momentum_20d", "1.0.0", "1.0.0"); err != nil {
 		t.Fatalf("LookupVersion() historical version error = %v", err)
 	}
 	if err := r.Register(validEntry("momentum_20d", "3.0.0"), true); !errors.Is(err, ErrActiveVersionExists) {
 		t.Fatalf("expected ErrActiveVersionExists, got %v", err)
+	}
+}
+
+func TestRegistryFreezeRequiresActiveVersion(t *testing.T) {
+	r := New()
+	if err := r.Register(validEntry("sma", "1.0.0"), false); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.Freeze(); !errors.Is(err, ErrNoActiveVersion) {
+		t.Fatalf("expected ErrNoActiveVersion, got %v", err)
+	}
+	if err := r.ActivateVersion("sma", "1.0.0", "1.0.0"); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.Freeze(); err != nil {
+		t.Fatalf("Freeze() error = %v", err)
 	}
 }
 
@@ -116,7 +139,9 @@ func TestRegistryFreezeAndStableSnapshot(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	r.Freeze()
+	if err := r.Freeze(); err != nil {
+		t.Fatalf("Freeze() error = %v", err)
+	}
 	if !r.IsFrozen() {
 		t.Fatal("registry should be frozen")
 	}

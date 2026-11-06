@@ -306,10 +306,35 @@ func (r *Registry) LookupVersion(code, schemaVersion, algorithmVersion string) (
 	return cloneEntry(entry), nil
 }
 
-func (r *Registry) Freeze() {
+func (r *Registry) ActivateVersion(code, schemaVersion, algorithmVersion string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	if r.frozen {
+		return ErrRegistryFrozen
+	}
+	key := metricKey{code: code, schemaVersion: schemaVersion}
+	version := versionKey{metricKey: key, algorithmVersion: algorithmVersion}
+	if _, exists := r.entries[version]; !exists {
+		return ErrUnknownEntry
+	}
+	r.active[key] = algorithmVersion
+	return nil
+}
+
+// Freeze 只有在每个已注册 code/schema_version 都有明确活动版本时才允许冻结。
+func (r *Registry) Freeze() error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.frozen {
+		return nil
+	}
+	for key := range r.entries {
+		if _, exists := r.active[key.metricKey]; !exists {
+			return fmt.Errorf("%w: %s/%s", ErrNoActiveVersion, key.code, key.schemaVersion)
+		}
+	}
 	r.frozen = true
+	return nil
 }
 
 func (r *Registry) IsFrozen() bool {
