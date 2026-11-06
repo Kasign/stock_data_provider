@@ -13,12 +13,12 @@
 
 文档权威顺序：
 
-1. 项目目标、模块职责、分支策略、阶段路线和全局门禁：整体任务规划总览。
-2. 项目级 GOV-004 冻结状态及阻断项：GOV-004 最终 Review 与契约冻结门禁。
-3. Platform 公共技术原语：08-公共平台契约规范。
-4. Data API 与 JSON 序列化：Data-OpenAPI与Go模型契约修正清单及 doc/api 下实际 OpenAPI。
-5. News 对 Research 的只读证据查询：News-Research只读证据查询契约。
-6. Quant / Research DTO：Quant-Research公开DTO字段级契约。
+1. 项目目标、模块职责、分支策略、阶段路线和全局门禁：[整体任务规划总览](../整体任务规划/整体任务规划总览.md)。
+2. 项目级 GOV-004 冻结状态及阻断项：[GOV-004 最终 Review 与契约冻结门禁](../整体任务规划/GOV-004最终Review与契约冻结门禁.md)。
+3. Platform 公共技术原语：[08-公共平台契约规范](08-公共平台契约规范.md)。
+4. Data API 与 JSON 序列化：[Data-OpenAPI与Go模型契约修正清单](../整体任务规划/Data-OpenAPI与Go模型契约修正清单.md) 及 doc/api 下实际 OpenAPI。
+5. News 对 Research 的只读证据查询：[News-Research只读证据查询契约](../整体任务规划/News-Research只读证据查询契约.md)。
+6. Quant / Research DTO：[Quant-Research公开DTO字段级契约](../整体任务规划/Quant-Research公开DTO字段级契约.md)。
 7. 五模块首批 Application Port、状态机和调用关系：五模块首批ApplicationPort与状态机契约细化。
 8. 各模块后续字段、算法、Provider、Migration 和测试细节：各自模块专项文档。
 
