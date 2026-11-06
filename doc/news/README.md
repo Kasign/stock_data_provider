@@ -177,3 +177,9 @@ Binding 中 `provider_ref` / `endpoint_ref` 非 null 时，PolicySnapshot 必须
 News MariaDB 集成测试新增两类篡改场景：授权快照和分页 Evidence Snapshot 的存储 payload_hash 被修改后，读取必须 fail closed。该测试随本分支 CI 执行，CI 成功前不记录为真实数据库验收通过。
 
 存储 payload_hash 仅验证持久化字节完整性，不等于 GOV-CTR-006 的 JCS decision_fingerprint 验证。当前公共 Runtime Verifier 尚未进入当前分支，News 不重复实现；当前授权策略复核、撤销竞态及内容读取 TOCTOU 仍未完成。
+
+
+### N6 快照存储篡改测试结果
+
+- MariaDB 11.4 News 集成 Job `42207154603` 已成功，授权快照和 Evidence Snapshot 的 payload_hash 篡改读取保护通过。
+- 同一 Workflow 根模块 gofmt Job 失败原因为 internal/research 下两个文件存在非法字符，不属于 News 修改范围；根模块整体 CI 仍不能标记全绿。
