@@ -12,12 +12,13 @@ test("拒绝缺少 Run ID、单份过大和超过数量上限的归档",()=>{ass
 test("拒绝异常或超长标的列表，不能静默截断归档内容", () => {
   const s = memory();
   const base = { id: "report-a", runId: "run-a", result: result("run-a") };
-  for (const symbols of ["600519.SH", [600519], ["", "600519.SH"], Array.from({ length: 51 }, () => "600519.SH"), ["x".repeat(33)]]) {
+  for (const symbols of ["600519.SH", [600519], ["", "600519.SH"], Array.from({ length: 101 }, () => "600519.SH"), ["x".repeat(33)]]) {
     assert.equal(writeResearchReports([{ ...base, symbols }], s).reason, "invalid");
     assert.equal(s.getItem(RESEARCH_REPORTS_KEY), null);
   }
   assert.equal(writeResearchReports([{ ...base, taskId: "x".repeat(161) }], s).reason, "invalid");
 });
+test("报告归档支持服务端上限 100 只标的，101 只拒绝",()=>{const s=memory();const symbols=Array.from({length:100},(_,i)=>"SH"+String(i).padStart(4,"0"));const item={id:"report-100",runId:"run-100",symbols,result:{...result("run-100"),request:{symbols}}};assert.equal(writeResearchReports([item],s).ok,true);assert.equal(writeResearchReports([{...item,id:"report-101",runId:"run-101",symbols:[...symbols,"SZ9999"],result:{...result("run-101"),request:{symbols:[...symbols,"SZ9999"]}}}],memory()).reason,"invalid");});
 
 test("拒绝重复归档 ID，避免写入后才发现存储无效",()=>{const s=memory();const item={id:"same",runId:"run-1",result:result("run-1")};assert.equal(writeResearchReports([item,{...item,runId:"run-2",result:result("run-2")}],s).reason,"invalid");assert.equal(s.getItem(RESEARCH_REPORTS_KEY),null);});
 
