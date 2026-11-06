@@ -13,7 +13,7 @@
 本轮已修正五份任务拆分文档的依赖列，并补充分层规则。以后任务依赖必须标明属于哪一层：
 
 - **Domain**：本模块领域对象、算法、状态机和内存实现依赖。
-- **Contract**：跨模块 DTO/Port 的 Owner Review 与版本冻结。
+- **Contract**：跨模块 DTO/Port 的项目级语义决议、版本管理和证据验收；不设置个人 Owner 签字门槛。
 - **Adapter**：调用外部模块、Provider、HTTP、Secret、Storage 的适配实现。
 - **Integration**：根 DI/HTTP/Worker/Migration、真实依赖和端到端验收。
 
@@ -107,7 +107,7 @@ Domain/Contract 不得因为无关模块的 Adapter/Integration 未完成而被�
 
 ## 5. 仍然不能宣称通过的事项
 
-- 所有 DTO/Port 仍待各模块 Owner Review；本轮规划 Review 不能代替 Owner 签字。
+- 本轮规划 Review 不代表 Schema/Golden/Contract Test 已通过；当前契约状态以项目级目录为准，语义由项目统一决策方裁定，模块责任角色提供实现和测试证据。
 - Quant 数值精度、Indicator/Factor 首批参数对应 GOV-CTR-001、QNT-CTR-001～003；公共语义已定，Schema/Golden 仍为 pending_evidence。
 - Research AuthorizationRef 与 system_as_of 分别对应 GOV-CTR-006/002、NEWS-CTR-002、RSC-CTR-001、FLOW-CTR-003；语义已形成基线，证据仍为 pending_evidence。
 - Researchflow FLOW-CTR-001/002（历史别名 CONTRACT-006/007）的设计决议已由项目统一决策方关闭；Schema/Golden、传播矩阵自动测试、CAS/竞态/fencing 证据仍未完成。
@@ -124,7 +124,7 @@ Domain/Contract 不得因为无关模块的 Adapter/Integration 未完成而被�
 - doc/llm/02-任务拆分与验收.md
 - doc/notification/02-任务拆分与验收.md
 
-**最终结论：五模块任务拆分的依赖边界已按 Domain / Contract / Adapter / Integration 分层修正。模块仍处于 Design Ready；Owner Review 通过后按模块确认 Module Ready。没有理由要求五个模块等待其他业务分支同时编译。**
+**最终结论：五模块任务拆分的依赖边界已按 Domain / Contract / Adapter / Integration 分层修正。模块可按已登记的契约状态和各自证据推进；不以个人 Owner Review 作为 Module Ready 前置，也不把设计评审完成等同于实现/集成验收通过。**
 
 
 ## 7. Quant / Research 字段级契约 Review（2026-11-05）
@@ -208,7 +208,7 @@ Domain/Contract 不得因为无关模块的 Adapter/Integration 未完成而被�
 - CapabilityState 使用 supported/unsupported/unknown，按 Provider + Model + Gateway 版本和验证日期记录；当前本地 Responses/Structured Output/Tool Call 真实能力均不能因 Mock 通过而标记 supported。
 - ToolDefinition 是受控声明，LLM 只传输和解析；Researchflow 仍负责白名单、权限、预算和执行。
 - 完整字段表、JSON Schema、错误分类、资源边界和 Owner 未决项见 doc/llm/04-ProviderPort与DTO字段级契约.md。
-- 本轮仅形成 LLM-002 规划侧建议稿，待 LLM/Platform Owner Review；不代表接口冻结或模块开工。
+- 本轮仅形成 LLM-002 规划侧建议稿；当前 LLM-CTR-001～003 状态以项目级目录为准，均未完成证据验收，不代表接口已 frozen 或模块已开工。
 
 
 ## 11. LLM-002 Owner Review 深化（2026-11-05）
@@ -217,7 +217,7 @@ Domain/Contract 不得因为无关模块的 Adapter/Integration 未完成而被�
 - 七项建议决议：MVP 单轮文本；ToolDefinition 纳入但默认禁用、只在能力 supported 时允许 auto；reasoning_effort 保留可选但默认关闭；本地 Schema 使用 Draft 2020-12、上游 strict 子集独立验证；Usage.total_tokens 有条件派生；SSE 序号严格校验；request/correlation/Gateway/upstream 四类 ID 分离。
 - SSE 若全流提供 sequence_number，必须连续递增；缺号/重号/倒退不能标记 completed。若整流均不提供可继续但记录序号能力 unavailable；混合有无按协议异常。
 - ModelResponse.status 表达上游合法终态；Go error 表达传输、HTTP、协议、Schema、callback 和 Context 错误。无 terminal EOF 返回部分 Response + stream_interrupted。
-- 以上为规划侧建议，待 LLM/Platform Owner Review；不构成签字冻结。详细字段和决议见 doc/llm/04-ProviderPort与DTO字段级契约.md。
+- 以上为规划侧建议，不构成证据冻结。详细字段见 doc/llm/04-ProviderPort与DTO字段级契约.md；当前状态以项目级目录为准。
 
 
 ## 12. LLM-002 JSON/SSE Fixture 设计
@@ -254,7 +254,7 @@ Domain/Contract 不得因为无关模块的 Adapter/Integration 未完成而被�
 - 退订会抑制尚未发送的 queued/retry_wait；sending 中的外部副作用不承诺可撤回。
 - Schema 注册键 `(event_type,schema_version)`，注册后不可原地修改；模板绑定明确版本和变量 allowlist。
 
-详细状态机、字段、唯一键、Port 和验收映射见 `doc/notification/03-ApplicationPort与投递状态契约.md`。上述为规划建议，待 Notification/Platform/事件 Owner 签字。
+详细状态机、字段、唯一键、Port 和验收映射见 `doc/notification/03-ApplicationPort与投递状态契约.md`。上述为规划建议；当前 NTF-CTR-001～003 的状态与证据缺口以项目级目录为准，不以个人 Owner 签字作为门槛。
 
 
 ## 15. Notification Fixture 与验收覆盖补充
@@ -262,7 +262,7 @@ Domain/Contract 不得因为无关模块的 Adapter/Integration 未完成而被�
 - 新增合成 Event JSON Golden、Inbox/Publish 幂等冲突、Subscription/recipient 变更、Delivery 状态迁移、unknown 对账、RetryDelivery、租约/fencing、Outbox/Inbox 恢复和 Channel Fake Adapter 场景。
 - 明确断言外部调用次数、Attempt 历史、幂等键、状态版本和敏感信息脱敏；不能只断言最终 status。
 - 真实渠道行为、MariaDB 事务和 Worker 崩溃恢复属于 L3，Fake Fixture 通过不代表真实集成通过。
-- 详细清单见 `doc/notification/04-契约Fixture与状态迁移验收清单.md`；仍待 Owner Review。
+- 详细清单见 `doc/notification/04-契约Fixture与状态迁移验收清单.md`；Schema/Golden/Contract Test 仍待完成。
 
 
 ## 16. 五模块公共契约一致性 Review（2026-11-06）
@@ -275,7 +275,7 @@ Domain/Contract 不得因为无关模块的 Adapter/Integration 未完成而被�
 6. quality_status、Quant result_status、Researchflow 状态、ModelResponse.status、Notification Delivery.status 分域管理，不按同名字符串直接转换。
 7. request_id/correlation_id/event_id/idempotency_key 分工明确；幂等使用 Owner 定义的作用域与 fingerprint。
 
-本轮未发现需要改变五模块依赖方向的架构冲突。字段级差异已在规划文档修订；Owner 签字、正式 JSON Schema、Go DTO/golden 和契约测试仍未完成。GOV-004 继续 NO-GO。
+本轮未发现需要改变五模块依赖方向的架构冲突。字段级差异已在规划文档修订；正式 JSON Schema、Go DTO/Golden 和契约测试仍未完成。GOV-004 继续 NO-GO。
 
 
 ## 17. FLOW-CTR-001/002 项目最终决议（历史别名 CONTRACT-006/007，2026-11-06）
