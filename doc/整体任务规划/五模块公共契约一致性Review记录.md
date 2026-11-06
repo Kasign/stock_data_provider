@@ -3,7 +3,7 @@
 - 所属治理：GOV-004
 - 分支：`feat/design_doc`
 - 日期：2026-11-06
-- 状态：规划侧交叉 Review 完成；Owner Review 和正式契约测试待完成
+- 状态：规划侧交叉 Review 完成；正式 Schema/Golden/Contract Test 待完成，语义决策由项目统一决策方负责，不设个人 Owner 签字门槛
 
 ## 1. 范围
 
