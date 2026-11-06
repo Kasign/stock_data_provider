@@ -1689,3 +1689,64 @@ M2/M4 必须将 Worker 改为可管理对象或显式 Start/Stop/Wait：
 - [ ] M1 Go Module 归并仍未开始，当前仅完成依赖冲突清单。
 
 **当前状态：** M0 仍 `in_progress`，M1 暂不准入。下一轮优先把 Model ↔ OpenAPI 全量差异做成可复核的字段矩阵，并将本轮状态码结论纳入 MDM-001；若用户授权实施契约修正，则可在当前分支一次性修复 OpenAPI 与 Contract Test，不触碰其他模块代码。
+
+
+### 2026-11-06：M0 第二十六轮（Go Model ↔ OpenAPI 字段/Required/Nullable 静态交叉核对）
+
+审计基线：`b1e8d7227ccabb4fb4b11ed7506e94b205e97060`。本轮读取 11 个 model 源文件与当前 OpenAPI components.schemas，按 Go JSON Tag 和 Schema properties/required/nullable 做静态提取比对；不是运行中的 Go reflection/YAML parser 测试，复杂嵌套/组合 Schema 仍需后续自动化测试确认。
+
+#### 1. 字段覆盖
+
+- Go Model 文件中提取到 57 个 struct。
+- OpenAPI 中提取到 60 个 Schema。
+- 51 个同名 Go Struct ↔ OpenAPI Schema 可以直接对照。
+- 这 51 组的 JSON 字段名集合一致：未发现 Go JSON Tag 字段缺失于 OpenAPI，也未发现 OpenAPI properties 中有额外字段。
+- 6 个 Go struct 当前没有同名 Schema：AdjustmentFactor、CorporateAction、StockUniverseSnapshot、MarketStockOverviewItem、ProviderProbeFieldComparison、PriceLimitRuleSnapshot；它们属于内部/嵌套/由 Handler 另行投影的模型，不能仅按名称判定缺失契约。
+- 9 个 Schema 没有同名 Go struct：Error、QualityStatus、AdjustmentBasis、RequestAdjustmentBasis、DailyBarsResponse、ProviderProbeRequest、DataSourcesResponse，以及两个 operation/response 局部 schema（get/post）；需通过 Handler/Wrapper 关系确认，而非要求每个 Schema 都有同名 struct。
+
+**字段名结论：** 当前已修正近期字段缺失/多余问题，51 组直接映射的字段名层面没有发现新差异；剩余主要集中在 Required、Nullable 和语义约束，而不是继续增加字段。
+
+#### 2. Required 差异
+
+51 组中发现 1 个明确差异：
+
+- `DragonTigerSnapshot.source_version`：Go 字段为 `SourceVersion string json:"source_version"`，没有 `omitempty`，JSON 必然输出；OpenAPI `DragonTigerSnapshot.required` 未包含 `source_version`。应补 required，并在字段契约测试中覆盖。
+
+其余 50 组按当前 JSON Tag 的 `omitempty` 与 OpenAPI required 列表静态比对，没有发现额外 Required 差异。该结论只覆盖直接同名 Struct/Schema；匿名嵌入、手工 map、Handler 投影、外层 Wrapper 仍需通过实际 JSON Golden 验证。
+
+#### 3. Nullable 差异（重要）
+
+在 51 个同名 Schema 中共提取到 150 个 `nullable: true` 字段：
+- 30 个对应 Go 的非 omitempty 指针字段，nil 时会由 encoding/json 输出 `null`，与 nullable 语义一致。
+- 120 个对应 Go 的 `omitempty` 指针字段或普通非指针字段；按当前 Go JSON 编码规则，nil/零空值会被省略，普通 string/int/bool 不会输出 null。OpenAPI 因而允许了当前 Go Response DTO 不会产生的 null 值，Schema 比实际响应更宽松。
+
+明确的普通非指针 nullable 误差包括：
+- `DragonTigerItem.provider_amount_unit`：Go string + omitempty，OpenAPI nullable。
+- `DragonTigerSnapshot.provider_report_date`：Go string + omitempty，OpenAPI nullable。
+- `StockBasic.industry`、`StockBasic.board_code`：Go string + omitempty，OpenAPI nullable。
+- `LimitPoolSnapshot.provider_report_date`：Go string + omitempty，OpenAPI nullable。
+- `ChipDistribution.date`、`ChipDistribution.provider_date`：Go string + omitempty，OpenAPI nullable。
+
+另外，Quote、DailyBar、Fundamentals、StockBoard、MarketCapitalFlow、SectorRanking、Index、DragonTiger、HotRanking、LimitPool、ChipDistribution、CapitalFlow、Valuation 等模型的大量 `*T,omitempty` 字段也声明为 nullable；这类字段在 nil 时实际省略，不会序列化为 null。若契约目标是“缺失值统一以 null 表达”，应调整 Go JSON Tag 去掉 omitempty，而不是只保留宽松的 Schema；若目标是保持现有响应字节兼容，则应去掉对应 Schema 的 nullable。
+
+**不能机械把 120 个 nullable 全部删掉：** 应按字段逐类确认是否有历史 API 客户端依赖“null”语义。由于当前 Go 类型的 omitempty 已决定实际 wire output，推荐 v1 保持现有 JSON 行为，Schema 与其对齐；若将来需要显式 null，应作为单独兼容性变更评估。
+
+#### 4. LimitPoolItem.change_percent 的条件约束冲突仍待最终裁决
+
+当前 Go 字段是 `*float64 json:"change_percent"`（没有 omitempty），OpenAPI 将其列为 required + nullable。这一组合与 Go 编码器一致：字段必然出现，nil 时为 null。
+
+但此前对 DataService Validator 的静态审计结论是：HasData=true 时拒绝 nil change_percent，HasData=false 时 Items 必须为空。若该 Validator 仍适用于每个 Item，则正常成功响应的 item.change_percent 实际不可能为 null，nullable 只是过宽；但如果保留 required + nullable，则必须存在明确的合法业务分支允许某个 Item 在成功响应中为 null。此项应以当前 Validator 单元测试和真实 JSON fixture 再确认，不能只凭 Go 类型决定。
+
+#### 5. 本轮结果与剩余工作
+
+- [x] 51 组同名 Go Struct/OpenAPI Schema 字段名集合静态对照。
+- [x] 发现 DragonTigerSnapshot.source_version required 漏项。
+- [x] 量化 150 个 nullable 中约 120 个与当前 Go omitempty/非指针输出行为不一致。
+- [x] 识别 7 个明确普通字符串 nullable 过宽字段。
+- [ ] 将 120 个 nullable 差异按客户端兼容性逐字段裁决。
+- [ ] LimitPoolItem.change_percent 结合 Validator 测试与实际 Handler JSON fixture 复核。
+- [ ] 将静态提取逻辑沉淀为可执行 Go Contract Test，避免每轮人工/脚本重复比对。
+- [ ] 覆盖 6 个无同名 Schema 的模型及 9 个无同名 Go struct 的 Schema，建立实际 Handler DTO 映射。
+- [ ] MDM-001 OpenAPI/Contract Test 修正尚未实施。
+
+**当前结论：** 近期字段名修复基本覆盖；Required 仅发现 DragonTigerSnapshot.source_version 一处明确遗漏；Nullable 有较大范围的“Schema 允许 null、Go 实际省略”差异，需按 v1 兼容性策略收敛。M0 仍未通过，但剩余问题已从笼统全量字段差异收敛为可定位的 required/nullable、错误响应和可执行契约测试任务。
