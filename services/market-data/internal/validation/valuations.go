@@ -170,7 +170,6 @@ func ValidateValuationSnapshot(snapshot *model.ValuationSnapshot, requested []st
 	return report
 }
 
-
 func isCanonicalValuationSymbol(symbol string) bool {
 	if len(symbol) != 9 || symbol[6] != '.' {
 		return false

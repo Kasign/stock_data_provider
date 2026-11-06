@@ -262,7 +262,6 @@ func TestValuationsReturnsUnknownOnlyAfterFallbackExhaustion(t *testing.T) {
 	}
 }
 
-
 func TestValuationsAcceptsNullableOptionalMetricsWhenSourceEvidenceIsValid(t *testing.T) {
 	snapshot := validValuationsForFallbackTest("eastmoney")
 	now := time.Now().UTC()
