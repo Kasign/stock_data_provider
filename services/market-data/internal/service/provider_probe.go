@@ -455,9 +455,15 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 				if options.DailyBarStartDate != "" {
 					dailyBarLimit = 2000
 				}
+				// 默认探测只纳入上一个完整自然日及之前的数据，避免 Provider 返回盘中日 K。
+				requestStartDate := options.DailyBarStartDate
+				requestEndDate := options.DailyBarEndDate
+				if requestEndDate == "" {
+					requestEndDate = dailyBarEndDate
+				}
 				// 请求前先记录目标证券，保证 Provider 在网络/登录阶段失败时仍能形成准确的失败侧配对。
 				recordProviderProbeEvidence(probeCtx, barsSymbol, "", 0, 0, nil)
-				bars, err := p.FetchDailyBars(probeCtx, barsSymbol, options.DailyBarStartDate, options.DailyBarEndDate, dailyBarLimit, adjustment)
+				bars, err := p.FetchDailyBars(probeCtx, barsSymbol, requestStartDate, requestEndDate, dailyBarLimit, adjustment)
 				if err != nil {
 					return model.QualityUnknown, "", nil, err
 				}
@@ -466,10 +472,10 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 				// 仅当 Adapter 已上报 Validate 阶段结果时复用该报告；Parse-only 报告不能跳过公共字段校验。
 				reporter := validation.ReporterFromContext(probeCtx)
 				if reporter != nil && reporter.Snapshot().HasStage(validation.StageValidate) {
-					validated, warnings = normalize.ValidateAndSortBars(barsSymbol, bars, options.DailyBarStartDate, options.DailyBarEndDate, dailyBarLimit)
+					validated, warnings = normalize.ValidateAndSortBars(barsSymbol, bars, requestStartDate, requestEndDate, dailyBarLimit)
 				} else {
 					var report validation.Report
-					validated, warnings, report = normalize.ValidateAndSortBarsWithReport(barsSymbol, bars, options.DailyBarStartDate, options.DailyBarEndDate, dailyBarLimit)
+					validated, warnings, report = normalize.ValidateAndSortBarsWithReport(barsSymbol, bars, requestStartDate, requestEndDate, dailyBarLimit)
 					validation.AddContextReport(probeCtx, report)
 				}
 				latestDate := ""
@@ -484,9 +490,9 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 					if len(bars) > 0 {
 						return model.QualityInvalid, "", warnings, errors.New("daily-bars probe returned rows but none passed validation")
 					}
-					contextStartDate, contextEndDate := options.DailyBarStartDate, options.DailyBarEndDate
+					contextStartDate, contextEndDate := requestStartDate, requestEndDate
 					if contextStartDate == "" {
-						contextStartDate, contextEndDate = calendarStart, dailyBarEndDate
+						contextStartDate = calendarStart
 					}
 					contextResult := s.assessDailyBarTradingContext(probeCtx, barsSymbol, validated, contextStartDate, contextEndDate)
 					reasons := []string{"daily_bar_empty_response"}
@@ -517,9 +523,9 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 				}
 				barDataQuality := quality
 				if len(validated) > 0 {
-					contextStartDate, contextEndDate := options.DailyBarStartDate, options.DailyBarEndDate
+					contextStartDate, contextEndDate := requestStartDate, requestEndDate
 					if contextStartDate == "" {
-						contextStartDate, contextEndDate = validated[0].TradeDate, dailyBarEndDate
+						contextStartDate = validated[0].TradeDate
 					}
 					contextResult := s.assessDailyBarTradingContext(probeCtx, barsSymbol, validated, contextStartDate, contextEndDate)
 					if contextResult.QualityStatus != model.QualityValid {

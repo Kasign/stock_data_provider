@@ -693,15 +693,40 @@ type providerProbeHistoricalDailyBarsFake struct {
 func (p *providerProbeHistoricalDailyBarsFake) Name() string { return p.name }
 func (p *providerProbeHistoricalDailyBarsFake) FetchDailyBars(_ context.Context, symbol, startDate, endDate string, limit int, adjustment model.AdjustmentBasis) ([]model.DailyBar, error) {
 	p.startDate, p.endDate, p.limit = startDate, endDate, limit
+	tradeDate := startDate
+	if tradeDate == "" {
+		tradeDate = endDate
+	}
 	now := time.Now().UTC()
 	volume := int64(10000)
 	amount := 100000.0
 	return []model.DailyBar{{
-		Symbol: symbol, TradeDate: startDate, Period: "1d", Open: 10, High: 11, Low: 9, Close: 10.5,
+		Symbol: symbol, TradeDate: tradeDate, Period: "1d", Open: 10, High: 11, Low: 9, Close: 10.5,
 		Volume: &volume, Amount: &amount, AdjustmentBasis: adjustment, AdjustmentMethod: "historical-test-none",
 		Source: p.name, SourceVersion: p.name + "-v1", ProviderTime: &now, FetchedAt: now, NormalizedAt: now,
 		VolumeUnit: "shares", RawVolumeUnit: "shares", AmountUnit: "CNY", QualityStatus: model.QualityValid,
 	}}, nil
+}
+
+func TestProviderProbeDefaultDailyBarsExcludeCurrentIncompleteDay(t *testing.T) {
+	p := &providerProbeHistoricalDailyBarsFake{name: "default-range-bars"}
+	ds := NewWithCapabilities([]provider.NamedProvider{p}, nil, []provider.DailyBarProvider{p}, cache.NewDisabled(), nil, time.Second, time.Minute, 120, 2000, ResilienceConfig{}, nil)
+	run, err := ds.ProbeProviderCapabilitiesWithOptions(context.Background(), ProviderProbeOptions{
+		Scope: "all", Capabilities: []string{"daily_bars"}, Symbols: []string{"600036.SH"},
+		DailyBarAdjustments: []model.AdjustmentBasis{model.AdjustmentNone},
+		Checks: []string{"quality"}, TimeoutSeconds: 5,
+	})
+	if err != nil {
+		t.Fatalf("default Probe failed: %v", err)
+	}
+	wantEnd := time.Now().In(marketLocation()).AddDate(0, 0, -1).Format("2006-01-02")
+	if p.startDate != "" || p.endDate != wantEnd || p.limit != 5 {
+		t.Fatalf("default Probe must request at most the previous complete day: start=%q end=%q limit=%d, want end=%q limit=5", p.startDate, p.endDate, p.limit, wantEnd)
+	}
+	item, found := findProbeItem(run.Items, p.Name(), "daily_bars")
+	if !found || item.SampleDate != wantEnd {
+		t.Fatalf("default Probe should retain the latest completed date as sample evidence: found=%v item=%+v want=%s", found, item, wantEnd)
+	}
 }
 
 func TestProviderProbePassesExplicitHistoricalRangeToDailyBarProvider(t *testing.T) {

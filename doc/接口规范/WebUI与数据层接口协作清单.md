@@ -409,3 +409,9 @@
 - 提交 `d236cacc` 首轮 Go suite 的 gofmt 检查因测试函数前多余空行失败，已在后续提交修正并等待 CI 复验。API-06 继续“接口层已接入，待真实数据验收”；WebUI 无需修改；PIT fail-closed 不变。阶段 B 继续，不进入 Fundamentals。
 
 - 最终 CI 复验：修正格式后的 SHA `72844f1de090cd3f91b173a0d1efa412cc115f10`，Push Go suite Run `42033189429` success（根模块、go-core、market-data gofmt/tests/race/vet、MariaDB migration/PIT、Compose 与两个 Docker 镜像构建均通过）；PR Go suite Run `42033199234`、Parity Run `42033199221`、WebUI checks Run `42033199193` 均 success。PR Live Provider Probe Run `42033198981` success，但没有 commit marker 启用专项历史请求，不计真实数据验收。
+
+
+## 26. 2026-11-06 API-06 P0-52 默认日 K 探测日期边界
+
+- 默认 DailyBar Probe 原先只将昨日用于交易上下文窗口，但 Provider 请求 end_date 仍为空，可能返回当日盘中未完成 K 线。现将默认请求、公共校验/归一化及上下文检查统一限制到 Asia/Shanghai 昨日；显式历史日期范围不变，仍按首尾包含处理。
+- 新增默认请求日期边界测试。仅服务端 Probe 行为和测试变化，无 API、数据库或 WebUI 契约变化；CI 待验，真实 Provider 未重跑。
