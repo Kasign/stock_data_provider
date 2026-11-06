@@ -272,7 +272,6 @@ func TestClaimRejectsInvalidPayloadWithinClaimTransaction(t *testing.T) {
 	}
 }
 
-
 func TestClaimRetryDelayUsesExponentialBackoffAndCaps(t *testing.T) {
 	base := 250 * time.Millisecond
 	got := initialClaimRetryDelay(base)
