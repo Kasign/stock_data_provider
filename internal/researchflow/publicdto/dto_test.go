@@ -57,8 +57,15 @@ func TestPublicDTOSchemaGoldens(t *testing.T) {
 			const schemaURL="https://researchflow.invalid/schema/golden-test"
 			if err:=compiler.AddResource(schemaURL,bytes.NewReader(schemaBytes));err!=nil{t.Fatal(err)}
 			schema,err:=compiler.Compile(schemaURL);if err!=nil{t.Fatal(err)}
-			instance,err:=jsonschema.UnmarshalJSON(bytes.NewReader(goldenBytes));if err!=nil{t.Fatal(err)}
+			decoder:=json.NewDecoder(bytes.NewReader(goldenBytes))
+			decoder.UseNumber()
+			var instance any
+			if err:=decoder.Decode(&instance);err!=nil{t.Fatal(err)}
 			if err:=schema.Validate(instance);err!=nil{t.Fatalf("golden rejected by public schema: %v",err)}
+			var object map[string]any
+			if err:=json.Unmarshal(goldenBytes,&object);err!=nil{t.Fatal(err)}
+			object["unexpected_public_field"]=true
+			if err:=schema.Validate(object);err==nil{t.Fatal("schema accepted an undeclared public field")}
 		})
 	}
 }
