@@ -3,6 +3,7 @@ package httpapi
 import (
 	"encoding/json"
 	"os"
+	"reflect"
 	"strconv"
 	"strings"
 	"testing"
@@ -401,6 +402,159 @@ func TestOpenAPIDataModelFieldsMatchKnownJSONContract(t *testing.T) {
 		if props("HotRankingItem")[field].(map[string]any)["nullable"] == true {
 			t.Errorf("HotRankingItem.%s must not be nullable", field)
 		}
+	}
+}
+
+
+func TestAllGoModelFieldsAndRequiredMatchOpenAPISchemas(t *testing.T) {
+	spec, err := os.ReadFile("../../openapi.yaml")
+	if err != nil {
+		t.Fatalf("read OpenAPI specification: %v", err)
+	}
+	var document map[string]any
+	if err := yaml.Unmarshal(spec, &document); err != nil {
+		t.Fatalf("OpenAPI must be valid YAML: %v", err)
+	}
+	schemas := document["components"].(map[string]any)["schemas"].(map[string]any)
+	models := []struct {
+		name  string
+		value any
+	}{
+		{"StockAnnouncement", model.StockAnnouncement{}},
+		{"StockAnnouncementSnapshot", model.StockAnnouncementSnapshot{}},
+		{"DragonTigerItem", model.DragonTigerItem{}},
+		{"DragonTigerSnapshot", model.DragonTigerSnapshot{}},
+		{"MarketSentimentSnapshot", model.MarketSentimentSnapshot{}},
+		{"MarketSentimentHistory", model.MarketSentimentHistory{}},
+		{"MarketSessionSnapshot", model.MarketSessionSnapshot{}},
+		{"MarketStocksSnapshot", model.MarketStocksSnapshot{}},
+		{"Quote", model.Quote{}},
+		{"DailyBar", model.DailyBar{}},
+		{"Bundle", model.Bundle{}},
+		{"StockBoard", model.StockBoard{}},
+		{"StockBoardSnapshot", model.StockBoardSnapshot{}},
+		{"StockBasic", model.StockBasic{}},
+		{"StockSearchItem", model.StockSearchItem{}},
+		{"StockSearchSnapshot", model.StockSearchSnapshot{}},
+		{"SectorRanking", model.SectorRanking{}},
+		{"SectorRankingSnapshot", model.SectorRankingSnapshot{}},
+		{"MarketIndexQuote", model.MarketIndexQuote{}},
+		{"IndexQuoteSnapshot", model.IndexQuoteSnapshot{}},
+		{"MarketBreadthSnapshot", model.MarketBreadthSnapshot{}},
+		{"LimitPoolItem", model.LimitPoolItem{}},
+		{"LimitPoolSnapshot", model.LimitPoolSnapshot{}},
+		{"FundamentalMetric", model.FundamentalMetric{}},
+		{"FundamentalSection", model.FundamentalSection{}},
+		{"FundamentalsSnapshot", model.FundamentalsSnapshot{}},
+		{"ValuationItem", model.ValuationItem{}},
+		{"ValuationSnapshot", model.ValuationSnapshot{}},
+		{"IndexCatalogItem", model.IndexCatalogItem{}},
+		{"IndexCatalogSnapshot", model.IndexCatalogSnapshot{}},
+		{"IndexConstituent", model.IndexConstituent{}},
+		{"IndexConstituentSnapshot", model.IndexConstituentSnapshot{}},
+		{"IndexDailyBar", model.IndexDailyBar{}},
+		{"IndexDailyBarsSnapshot", model.IndexDailyBarsSnapshot{}},
+		{"HotRankingItem", model.HotRankingItem{}},
+		{"HotRankingSnapshot", model.HotRankingSnapshot{}},
+		{"SourceStatus", model.SourceStatus{}},
+		{"ChipDistribution", model.ChipDistribution{}},
+		{"MarketCapitalFlowItem", model.MarketCapitalFlowItem{}},
+		{"MarketCapitalFlowSnapshot", model.MarketCapitalFlowSnapshot{}},
+		{"CapitalFlow", model.CapitalFlow{}},
+		{"ProviderProbeFieldIssue", model.ProviderProbeFieldIssue{}},
+		{"ProviderProbeCoverageDimension", model.ProviderProbeCoverageDimension{}},
+		{"ProviderProbeItem", model.ProviderProbeItem{}},
+		{"ProviderProbeCheckResult", model.ProviderProbeCheckResult{}},
+		{"ProviderProbeRun", model.ProviderProbeRun{}},
+		{"ProviderProbeHistory", model.ProviderProbeHistory{}},
+		{"SecurityTradingStatusSnapshot", model.SecurityTradingStatusSnapshot{}},
+		{"TradingCalendarDay", model.TradingCalendarDay{}},
+		{"TradingCalendarSnapshot", model.TradingCalendarSnapshot{}},
+		{"PriceLimitEventEvidence", model.PriceLimitEventEvidence{}},
+	}
+	if len(models) != 51 {
+		t.Fatalf("model contract registry has %d entries, want 51", len(models))
+	}
+
+	for _, entry := range models {
+		t.Run(entry.name, func(t *testing.T) {
+			rawSchema, ok := schemas[entry.name]
+			if !ok {
+				t.Fatalf("OpenAPI schema %s missing", entry.name)
+			}
+			schema, ok := rawSchema.(map[string]any)
+			if !ok {
+				t.Fatalf("OpenAPI schema %s is not an object", entry.name)
+			}
+			properties, ok := schema["properties"].(map[string]any)
+			if !ok {
+				t.Fatalf("OpenAPI schema %s has no properties", entry.name)
+			}
+			requiredSet := map[string]bool{}
+			if rawRequired, exists := schema["required"]; exists {
+				for _, field := range rawRequired.([]any) {
+					requiredSet[field.(string)] = true
+				}
+			}
+
+			typeOfModel := reflect.TypeOf(entry.value)
+			expectedFields := map[string]bool{}
+			expectedRequired := map[string]bool{}
+			for i := 0; i < typeOfModel.NumField(); i++ {
+				field := typeOfModel.Field(i)
+				if !field.IsExported() {
+					continue
+				}
+				tag := field.Tag.Get("json")
+				parts := strings.Split(tag, ",")
+				jsonName := parts[0]
+				if jsonName == "-" {
+					continue
+				}
+				if jsonName == "" {
+					jsonName = field.Name
+				}
+				expectedFields[jsonName] = true
+				omitEmpty := false
+				for _, option := range parts[1:] {
+					if option == "omitempty" {
+						omitEmpty = true
+						break
+					}
+				}
+				// encoding/json does not omit zero-valued struct fields with omitempty.
+				if !omitEmpty || field.Type.Kind() == reflect.Struct {
+					expectedRequired[jsonName] = true
+				}
+				if field.Type.Kind() == reflect.Pointer && !omitEmpty {
+					property, ok := properties[jsonName].(map[string]any)
+					if !ok || property["nullable"] != true {
+						t.Errorf("%s.%s is a non-omitempty pointer and must be nullable", entry.name, jsonName)
+					}
+				}
+			}
+
+			for field := range expectedFields {
+				if _, ok := properties[field]; !ok {
+					t.Errorf("%s.%s exists in Go JSON but is missing from OpenAPI", entry.name, field)
+				}
+			}
+			for field := range properties {
+				if !expectedFields[field] {
+					t.Errorf("%s.%s exists in OpenAPI but not in Go JSON", entry.name, field)
+				}
+			}
+			for field := range expectedRequired {
+				if !requiredSet[field] {
+					t.Errorf("%s.%s must be required", entry.name, field)
+				}
+			}
+			for field := range requiredSet {
+				if !expectedRequired[field] {
+					t.Errorf("%s.%s must be optional", entry.name, field)
+				}
+			}
+		})
 	}
 }
 
