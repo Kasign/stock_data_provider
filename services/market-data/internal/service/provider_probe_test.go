@@ -1691,3 +1691,41 @@ func TestProviderProbeDailyBarsReusesTradingContextDiagnosticsEndToEnd(t *testin
 		})
 	}
 }
+
+
+func TestApplyFreshnessProbeResultsDoesNotPromoteBusinessDatesOrFetchedAt(t *testing.T) {
+	checkedAt := time.Date(2026, 11, 3, 10, 0, 0, 0, marketLocation()).UTC()
+	fetchedAt := checkedAt.Add(-time.Second)
+	ds := NewWithCapabilities(nil, nil, nil, cache.NewDisabled(), nil, time.Second, time.Minute, 120, 2000, ResilienceConfig{}, nil)
+	ds.SetTradingCalendarProviders([]provider.TradingCalendarProvider{providerProbeFreshnessCalendarFake{}})
+	tests := []struct {
+		capability string
+		domain     string
+	}{
+		{capability: "sector_rankings", domain: freshness.DomainSector},
+		{capability: "market_capital_flow", domain: freshness.DomainFundFlow},
+	}
+	for _, tc := range tests {
+		t.Run(tc.capability, func(t *testing.T) {
+			run := &model.ProviderProbeRun{
+				FinishedAt: checkedAt,
+				Items: []model.ProviderProbeItem{{
+					Provider: "date-only-provider", Capability: tc.capability, FetchedAt: &fetchedAt,
+				}},
+				CheckResults: []model.ProviderProbeCheckResult{{
+					Check: "freshness", Provider: "date-only-provider", Capability: tc.capability,
+					FetchedAt: &fetchedAt, CheckedAt: checkedAt,
+				}},
+			}
+			ds.applyFreshnessProbeResults(context.Background(), run)
+			result := run.CheckResults[0]
+			if result.Status != "skipped" || result.FreshnessStatus != "unknown" ||
+				result.FreshnessReason != freshness.ReasonMissingDataTime || result.FreshnessDomain != tc.domain {
+				t.Fatalf("business date or fetched_at was incorrectly treated as source time: %+v", result)
+			}
+			if result.AgeSeconds != nil {
+				t.Fatalf("unknown source time must not produce an age: %+v", result)
+			}
+		})
+	}
+}
