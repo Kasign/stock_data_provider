@@ -638,9 +638,9 @@ func TestOpenAPIDocumentsHandlerParameterBounds(t *testing.T) {
 		t.Fatal("OpenAPI paths object missing")
 	}
 	checks := []struct {
-		path     string
-		method   string
-		phrases  []string
+		path    string
+		method  string
+		phrases []string
 	}{
 		{"/api/v1/market/indices/{symbol}/daily", "get", []string{"10 years / 3660 calendar days"}},
 		{"/api/v1/market/trading-calendar", "get", []string{"3660 calendar days"}},
@@ -669,6 +669,122 @@ func TestOpenAPIDocumentsHandlerParameterBounds(t *testing.T) {
 			if !strings.Contains(description, phrase) {
 				t.Errorf("%s %s description is missing handler constraint %q", check.method, check.path, phrase)
 			}
+		}
+	}
+}
+
+func TestOpenAPIParameterInventoryMatchesReviewedHandlerMatrix(t *testing.T) {
+	spec, err := os.ReadFile("../../openapi.yaml")
+	if err != nil {
+		t.Fatalf("read OpenAPI specification: %v", err)
+	}
+	var document map[string]any
+	if err := yaml.Unmarshal(spec, &document); err != nil {
+		t.Fatalf("OpenAPI must be valid YAML: %v", err)
+	}
+	paths, ok := document["paths"].(map[string]any)
+	if !ok {
+		t.Fatal("OpenAPI paths object missing")
+	}
+	expected := map[string][]string{
+		"GET /health/live": {},
+		"GET /health/ready": {},
+		"GET /api/v1/market/quotes": {"symbols@query!required"},
+		"GET /api/v1/quotes/{symbol}": {"symbol@path!required"},
+		"GET /api/v1/bars/{symbol}/daily": {"symbol@path!required", "start@query!optional", "end@query!optional", "limit@query!optional", "adjustment@query!optional", "as_of@query!optional"},
+		"GET /api/v1/bundles/{symbol}": {"symbol@path!required", "lookback_days@query!optional", "adjustment@query!optional", "as_of@query!optional"},
+		"POST /api/v1/data-sources/probe": {},
+		"GET /api/v1/data-sources/probe/history": {"limit@query!optional"},
+		"GET /api/v1/data-sources/diagnostics": {},
+		"GET /api/v1/data-sources": {},
+		"GET /api/v1/stocks/search": {"q@query!required", "limit@query!optional"},
+		"GET /api/v1/stocks/{symbol}/announcements": {"symbol@path!required", "start_date@query!optional", "end_date@query!optional", "page@query!optional", "page_size@query!optional"},
+		"GET /api/v1/stocks/{symbol}/profile": {"symbol@path!required"},
+		"GET /api/v1/stocks/{symbol}/price-limit-rule": {"symbol@path!required", "date@query!required"},
+		"GET /api/v1/stocks/{symbol}/trading-status": {"symbol@path!required", "date@query!required", "as_of@query!optional"},
+		"GET /api/v1/stocks/{symbol}/fundamentals": {"symbol@path!required", "year@query!required", "quarter@query!required", "as_of@query!optional"},
+		"GET /api/v1/stocks/{symbol}/chip-distribution": {"symbol@path!required"},
+		"GET /api/v1/stocks/{symbol}/capital-flow": {"symbol@path!required"},
+		"GET /api/v1/stocks/{symbol}/boards": {"symbol@path!required"},
+		"GET /api/v1/market/valuations": {"symbols@query!required"},
+		"GET /api/v1/market/sectors": {"type@query!optional", "limit@query!optional", "direction@query!optional", "sort_by@query!optional"},
+		"GET /api/v1/market/index-catalog": {"tag@query!optional"},
+		"GET /api/v1/market/indices/{symbol}/constituents": {"symbol@path!required", "source@query!optional", "as_of@query!optional"},
+		"GET /api/v1/market/indices/{symbol}/daily": {"symbol@path!required", "start@query!required", "end@query!required", "source@query!optional"},
+		"GET /api/v1/market/indices": {},
+		"GET /api/v1/market/trading-calendar": {"start@query!required", "end@query!required"},
+		"GET /api/v1/market/session": {"at@query!optional"},
+		"GET /api/v1/market/stocks": {"page@query!optional", "page_size@query!optional", "include_ma@query!optional", "adjustment@query!optional"},
+		"GET /api/v1/market/capital-flow": {"start@query!required", "end@query!required"},
+		"GET /api/v1/market/sentiment": {"date@query!optional"},
+		"GET /api/v1/market/sentiment/history": {"start@query!required", "end@query!required", "limit@query!optional"},
+		"GET /api/v1/market/breadth": {},
+		"GET /api/v1/market/hot-stocks": {"type@query!optional", "limit@query!optional"},
+		"GET /api/v1/market/dragon-tiger": {"date@query!optional", "page@query!optional", "page_size@query!optional"},
+		"GET /api/v1/market/limit-pools": {"type@query!optional", "date@query!optional", "limit@query!optional"},
+	}
+	if len(expected) != 35 {
+		t.Fatalf("reviewed parameter matrix has %d operations, want 35", len(expected))
+	}
+	for route, want := range expected {
+		parts := strings.SplitN(route, " ", 2)
+		if len(parts) != 2 {
+			t.Fatalf("invalid route key %q", route)
+		}
+		pathItem, ok := paths[parts[1]].(map[string]any)
+		if !ok {
+			t.Errorf("OpenAPI path missing: %s", parts[1])
+			continue
+		}
+		operation, ok := pathItem[strings.ToLower(parts[0])].(map[string]any)
+		if !ok {
+			t.Errorf("OpenAPI operation missing: %s", route)
+			continue
+		}
+		got := map[string]bool{}
+		if rawParameters, exists := operation["parameters"]; exists {
+			parameters, ok := rawParameters.([]any)
+			if !ok {
+				t.Errorf("%s parameters must be an array", route)
+				continue
+			}
+			for _, rawParameter := range parameters {
+				parameter, ok := rawParameter.(map[string]any)
+				if !ok {
+					t.Errorf("%s contains an invalid parameter entry", route)
+					continue
+				}
+				name, nameOK := parameter["name"].(string)
+				location, locationOK := parameter["in"].(string)
+				if !nameOK || !locationOK {
+					t.Errorf("%s parameter must declare name and in", route)
+					continue
+				}
+				required, _ := parameter["required"].(bool)
+				state := "optional"
+				if required {
+					state = "required"
+				}
+				got[name+"@"+location+"!"+state] = true
+			}
+		}
+		wantSet := map[string]bool{}
+		for _, item := range want {
+			wantSet[item] = true
+		}
+		if len(got) != len(wantSet) {
+			t.Errorf("%s parameter count=%d, want %d; got=%v", route, len(got), len(wantSet), got)
+			continue
+		}
+		for item := range wantSet {
+			if !got[item] {
+				t.Errorf("%s missing or misclassified parameter %q", route, item)
+			}
+		}
+		_, hasBody := operation["requestBody"]
+		wantBody := route == "POST /api/v1/data-sources/probe"
+		if hasBody != wantBody {
+			t.Errorf("%s requestBody presence=%v, want %v", route, hasBody, wantBody)
 		}
 	}
 }
