@@ -58,7 +58,7 @@ func TestRejectsFingerprintMismatch(t *testing.T) {
 	}
 	event["payload_fingerprint"] = strings.Repeat("0", 64)
 	raw, _ = json.Marshal(event)
-	if _, err := registry.ValidateEvent(raw); !errors.Is(err, ErrPayloadFingerprintMismatch) {
+	if _, err := registry.ValidateEvent(raw); !errors.Is(err, domain.ErrPayloadFingerprintMismatch) {
 		t.Fatalf("expected fingerprint mismatch, got %v", err)
 	}
 }
@@ -112,7 +112,7 @@ func TestSchemaDigestIsImmutable(t *testing.T) {
 	if !ok || len(digest) != 64 {
 		t.Fatalf("expected registered SHA-256 digest, got %q", digest)
 	}
-	if err := registry.registerDigest(key, "quant", strings.Repeat("0", 64)); !errors.Is(err, ErrSchemaImmutable) {
+	if err := registry.registerDigest(key, "quant", strings.Repeat("0", 64), nil); !errors.Is(err, ErrSchemaImmutable) {
 		t.Fatalf("expected immutable schema error, got %v", err)
 	}
 }
