@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 )
 
 var (
@@ -53,7 +54,11 @@ type responsesTool struct {
 // MapResponsesRequest maps the application DTO to the first-party Responses JSON
 // wire shape. It never accepts caller-supplied URLs, headers, or arbitrary JSON.
 func MapResponsesRequest(request ModelRequest) ([]byte, error) {
-	if err := request.Validate(); err != nil {
+	return MapResponsesRequestAt(request, SystemClock{}.Now())
+}
+
+func MapResponsesRequestAt(request ModelRequest, now time.Time) ([]byte, error) {
+	if err := request.ValidateAt(now); err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrInvalidResponsesRequest, err)
 	}
 

@@ -235,3 +235,11 @@ sequence_number 严格连续策略、Draft 2020-12 本地 Schema dialect、Reque
 ## 10. HTTP Adapter 测试覆盖（2026-11-06）
 
 首批 fake-doer 单测覆盖固定 Responses endpoint、Bearer caller key 注入、X-Request-ID 与 Request-Id 分离、HTTP 429 与 Retry-After、传输错误脱敏、缺失 Secret/Doer 拒绝，以及 request deadline 不得晚于调用 Context。fake doer 只用于测试；真实网络必须经 Platform BoundDoer。测试代码尚未运行，不能作为通过证据。
+
+
+## 11. Clock / Deadline 确定性测试（2026-11-06）
+
+- 使用固定/可推进 Clock，覆盖 ModelRequest deadline 校验与 CapabilityState 有效期边界。
+- HTTP Adapter 覆盖 ModelRequest deadline、Context deadline、Provider timeout 三者分别成为最早边界；deadline 已过时必须在 doer 调用前终止。
+- 通过可推进 Clock 验证 started_at / finished_at / duration_ms，不依赖测试机实际耗时。
+- 本轮新增测试代码尚未执行，仍为 pending_evidence。

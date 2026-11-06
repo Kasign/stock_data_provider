@@ -49,9 +49,10 @@ type ResponsesAdapter struct {
 	apiKey       config.Secret
 	doer         HTTPDoer
 	capabilities CapabilityState
+	clock        Clock
 }
 
-func NewResponsesAdapter(provider ProviderConfig, apiKey config.Secret, doer HTTPDoer, capabilities CapabilityState) (*ResponsesAdapter, error) {
+func NewResponsesAdapter(provider ProviderConfig, apiKey config.Secret, doer HTTPDoer, capabilities CapabilityState, clock Clock) (*ResponsesAdapter, error) {
 	if err := provider.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid LLM provider configuration: %w", err)
 	}
@@ -61,18 +62,21 @@ func NewResponsesAdapter(provider ProviderConfig, apiKey config.Secret, doer HTT
 	if doer == nil {
 		return nil, errors.New("Platform-bound HTTP doer is required")
 	}
+	if clock == nil {
+		return nil, errors.New("LLM clock is required")
+	}
 	if capabilities.ProviderID != provider.ProviderID || capabilities.Protocol != provider.Protocol {
 		return nil, errors.New("LLM capability evidence does not match provider configuration")
 	}
 	return &ResponsesAdapter{
-		provider: provider, apiKey: apiKey, doer: doer, capabilities: capabilities,
+		provider: provider, apiKey: apiKey, doer: doer, capabilities: capabilities, clock: clock,
 	}, nil
 }
 
 // Generate performs one non-streaming Responses request. It never retries.
 // The supplied doer must be a Platform BoundDoer configured for this provider.
 func (a *ResponsesAdapter) Generate(ctx context.Context, request ModelRequest) (ModelResponse, error) {
-	startedAt := time.Now().UTC()
+	startedAt := a.clock.Now().UTC()
 	result := ModelResponse{
 		RequestID: request.RequestID, CorrelationID: request.CorrelationID,
 		SystemAsOf: request.SystemAsOf, ProviderID: request.ProviderID,
@@ -80,7 +84,7 @@ func (a *ResponsesAdapter) Generate(ctx context.Context, request ModelRequest) (
 		OutputItems: []OutputItem{},
 	}
 	fail := func(info *ModelErrorInfo, cause error) (ModelResponse, error) {
-		finished := time.Now().UTC()
+		finished := a.clock.Now().UTC()
 		result.FinishedAt = finished
 		result.DurationMS = finished.Sub(startedAt).Milliseconds()
 		result.Error = info
@@ -89,20 +93,17 @@ func (a *ResponsesAdapter) Generate(ctx context.Context, request ModelRequest) (
 	if ctx == nil {
 		return fail(adapterError(ErrorInvalidRequest, "llm.request.invalid_context", false, nil), ErrInvalidResponsesRequest)
 	}
-	if err := request.Validate(); err != nil {
+	if err := request.ValidateAt(startedAt); err != nil {
 		return fail(adapterError(ErrorInvalidRequest, "llm.request.invalid", false, nil), err)
-	}
-	if parentDeadline, ok := ctx.Deadline(); ok && request.DeadlineAt.After(parentDeadline) {
-		return fail(adapterError(ErrorInvalidRequest, "llm.request.deadline_exceeds_context", false, nil), ErrInvalidResponsesRequest)
 	}
 	if err := request.ValidateAgainstProvider(a.provider); err != nil {
 		return fail(adapterError(ErrorInvalidRequest, "llm.provider.request_mismatch", false, nil), err)
 	}
-	if err := request.ValidateCapabilities(a.capabilities); err != nil {
+	if err := request.ValidateCapabilitiesAt(a.capabilities, startedAt); err != nil {
 		return fail(adapterError(ErrorUnsupportedCapability, "llm.provider.capability_unavailable", false, nil), err)
 	}
 
-	body, err := MapResponsesRequest(request)
+	body, err := MapResponsesRequestAt(request, startedAt)
 	if err != nil {
 		return fail(adapterError(ErrorInvalidRequest, "llm.responses.request_mapping_failed", false, nil), err)
 	}
@@ -110,7 +111,11 @@ func (a *ResponsesAdapter) Generate(ctx context.Context, request ModelRequest) (
 		return fail(adapterError(ErrorResourceLimit, "llm.responses.request_too_large", false, nil), ErrInvalidResponsesRequest)
 	}
 
-	callCtx, cancel := a.requestContext(ctx, request.DeadlineAt, startedAt)
+	deadline := a.effectiveDeadline(ctx, request.DeadlineAt, startedAt)
+	if !deadline.After(startedAt) {
+		return fail(adapterError(ErrorTimeout, "llm.request.deadline_exceeded", true, nil), context.DeadlineExceeded)
+	}
+	callCtx, cancel := context.WithDeadline(ctx, deadline)
 	defer cancel()
 	endpoint, err := responsesEndpoint(a.provider.BaseURL)
 	if err != nil {
@@ -146,12 +151,12 @@ func (a *ResponsesAdapter) Generate(ctx context.Context, request ModelRequest) (
 		return fail(adapterError(ErrorResourceLimit, "llm.responses.response_too_large", false, nil), ErrInvalidResponsesResponse)
 	}
 	if httpResponse.StatusCode < 200 || httpResponse.StatusCode >= 300 {
-		return fail(classifyAdapterHTTPError(httpResponse.StatusCode, httpResponse.Header), fmt.Errorf("upstream HTTP status %d", httpResponse.StatusCode))
+		return fail(classifyAdapterHTTPError(httpResponse.StatusCode, httpResponse.Header, a.clock.Now()), fmt.Errorf("upstream HTTP status %d", httpResponse.StatusCode))
 	}
 
 	parsed, parseErr := ParseResponsesResponse(responseBody, request)
 	parsed.StartedAt = startedAt
-	parsed.FinishedAt = time.Now().UTC()
+	parsed.FinishedAt = a.clock.Now().UTC()
 	parsed.DurationMS = parsed.FinishedAt.Sub(startedAt).Milliseconds()
 	parsed.GatewayRequestID = result.GatewayRequestID
 	parsed.UpstreamRequestID = result.UpstreamRequestID
@@ -168,7 +173,7 @@ func (a *ResponsesAdapter) Generate(ctx context.Context, request ModelRequest) (
 	return parsed, nil
 }
 
-func (a *ResponsesAdapter) requestContext(parent context.Context, requestDeadline time.Time, startedAt time.Time) (context.Context, context.CancelFunc) {
+func (a *ResponsesAdapter) effectiveDeadline(parent context.Context, requestDeadline time.Time, startedAt time.Time) time.Time {
 	maxDuration := time.Duration(1<<63 - 1)
 	maxTimeoutMS := int64(maxDuration / time.Millisecond)
 	timeout := maxDuration
@@ -182,7 +187,7 @@ func (a *ResponsesAdapter) requestContext(parent context.Context, requestDeadlin
 	if parentDeadline, ok := parent.Deadline(); ok && parentDeadline.Before(deadline) {
 		deadline = parentDeadline
 	}
-	return context.WithDeadline(parent, deadline)
+	return deadline
 }
 
 func responsesEndpoint(baseURL string) (string, error) {
@@ -208,7 +213,7 @@ func classifyAdapterTransportError(err error, ctx context.Context) *ModelErrorIn
 	return adapterError(ErrorUpstreamUnavailable, "llm.http.request_failed", true, nil)
 }
 
-func classifyAdapterHTTPError(status int, headers http.Header) *ModelErrorInfo {
+func classifyAdapterHTTPError(status int, headers http.Header, now time.Time) *ModelErrorInfo {
 	kind := ErrorUpstream
 	retryable := false
 	switch status {
@@ -234,7 +239,7 @@ func classifyAdapterHTTPError(status int, headers http.Header) *ModelErrorInfo {
 		}
 	}
 	info := adapterError(kind, fmt.Sprintf("llm.http.status_%d", status), retryable, &status)
-	if retryAfter := parseRetryAfter(headers.Get("Retry-After"), time.Now()); retryAfter > 0 {
+	if retryAfter := parseRetryAfter(headers.Get("Retry-After"), now); retryAfter > 0 {
 		info.RetryAfterSeconds = &retryAfter
 	}
 	return info

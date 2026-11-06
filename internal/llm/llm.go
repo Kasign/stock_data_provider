@@ -52,7 +52,11 @@ func (s CapabilityState) Status(key Capability) CapabilityStatus {
 }
 
 func (s CapabilityState) Supports(key Capability) bool {
-	now := time.Now()
+	return s.SupportsAt(key, SystemClock{}.Now())
+}
+
+func (s CapabilityState) SupportsAt(key Capability, now time.Time) bool {
+	now = now.UTC()
 	return s.ProviderID != "" && s.ModelID != "" && s.Protocol == ProtocolOpenAIResponses &&
 		s.GatewayVersion != "" && s.EvidenceRef != "" && s.VerifiedAt != nil && !s.VerifiedAt.IsZero() &&
 		!s.VerifiedAt.After(now) && s.ValidUntil != nil && s.ValidUntil.After(*s.VerifiedAt) &&
@@ -135,6 +139,11 @@ type ModelRequest struct {
 }
 
 func (r ModelRequest) Validate() error {
+	return r.ValidateAt(SystemClock{}.Now())
+}
+
+func (r ModelRequest) ValidateAt(now time.Time) error {
+	now = now.UTC()
 	if strings.TrimSpace(r.ProviderID) == "" || strings.TrimSpace(r.RequestID) == "" ||
 		strings.TrimSpace(r.CorrelationID) == "" || strings.TrimSpace(r.PurposeCode) == "" ||
 		strings.TrimSpace(r.Model) == "" {
@@ -144,8 +153,7 @@ func (r ModelRequest) Validate() error {
 		return errors.New("input_text must not be empty and max_output_tokens must be positive")
 	}
 	if r.DeadlineAt.IsZero() || r.SystemAsOf.IsZero() { return errors.New("deadline_at and system_as_of are required") }
-	if !r.DeadlineAt.After(time.Now()) { return errors.New("deadline_at must be in the future") }
-	if r.SystemAsOf.After(time.Now().UTC()) { return errors.New("system_as_of must not be in the future") }
+	if r.SystemAsOf.After(now) { return errors.New("system_as_of must not be in the future") }
 	_, deadlineOffset := r.DeadlineAt.Zone()
 	_, systemOffset := r.SystemAsOf.Zone()
 	if deadlineOffset != 0 || systemOffset != 0 { return errors.New("deadline_at and system_as_of must use UTC") }
@@ -178,6 +186,11 @@ func (r ModelRequest) Validate() error {
 // ValidateAgainstProvider 检查请求只能使用服务端 ProviderConfig 中允许的 Provider 和模型。
 // ValidateCapabilityState 将 Provider 级开关与指定模型的版本化实测证据绑定。
 func (c ProviderConfig) ValidateCapabilityState(state CapabilityState) error {
+	return c.ValidateCapabilityStateAt(state, SystemClock{}.Now())
+}
+
+func (c ProviderConfig) ValidateCapabilityStateAt(state CapabilityState, now time.Time) error {
+	now = now.UTC()
 	if err := c.Validate(); err != nil { return err }
 	if state.ProviderID != c.ProviderID || state.Protocol != c.Protocol {
 		return errors.New("capability evidence does not match provider configuration")
@@ -190,8 +203,8 @@ func (c ProviderConfig) ValidateCapabilityState(state CapabilityState) error {
 	if state.MaxOutputTokensLimit <= 0 {
 		return errors.New("capability evidence max_output_tokens_limit must be positive")
 	}
-	if !state.Supports(CapabilityResponsesJSON) { return errors.New("responses_json capability is not currently supported") }
-	if c.StreamEnabled && !state.Supports(CapabilityResponsesStream) {
+	if !state.SupportsAt(CapabilityResponsesJSON, now) { return errors.New("responses_json capability is not currently supported") }
+	if c.StreamEnabled && !state.SupportsAt(CapabilityResponsesStream, now) {
 		return errors.New("stream_enabled requires current responses_stream evidence")
 	}
 	return nil
@@ -208,16 +221,21 @@ func (r ModelRequest) ValidateAgainstProvider(config ProviderConfig) error {
 
 // ValidateCapabilities 不允许把 unknown 或旧版本能力当作当前 supported。
 func (r ModelRequest) ValidateCapabilities(s CapabilityState) error {
+	return r.ValidateCapabilitiesAt(s, SystemClock{}.Now())
+}
+
+func (r ModelRequest) ValidateCapabilitiesAt(s CapabilityState, now time.Time) error {
+	now = now.UTC()
 	if s.ModelID != r.Model || s.ProviderID != r.ProviderID || s.Protocol != ProtocolOpenAIResponses ||
 		s.GatewayVersion == "" || s.EvidenceRef == "" || s.VerifiedAt == nil || s.VerifiedAt.IsZero() ||
-		s.ValidUntil == nil || !time.Now().Before(*s.ValidUntil) {
+		s.VerifiedAt.After(now) || s.ValidUntil == nil || !now.Before(*s.ValidUntil) {
 		return errors.New("capability evidence does not match a current verified provider/model/protocol/gateway version")
 	}
 	if s.MaxOutputTokensLimit <= 0 || r.MaxOutputTokens > s.MaxOutputTokensLimit {
 		return errors.New("max_output_tokens exceeds the verified model capability limit")
 	}
 	require := func(key Capability) error {
-		if !s.Supports(key) { return fmt.Errorf("unsupported_capability: %s", key) }
+		if !s.SupportsAt(key, now) { return fmt.Errorf("unsupported_capability: %s", key) }
 		return nil
 	}
 	if err := require(CapabilityResponsesJSON); err != nil { return err }
@@ -238,8 +256,12 @@ func (r ModelRequest) ValidateCapabilities(s CapabilityState) error {
 
 // ValidateStreamCapabilities 在基础 Responses JSON 能力之外，单独要求真实 SSE 能力证据。
 func (r ModelRequest) ValidateStreamCapabilities(s CapabilityState) error {
-	if err := r.ValidateCapabilities(s); err != nil { return err }
-	if !s.Supports(CapabilityResponsesStream) {
+	return r.ValidateStreamCapabilitiesAt(s, SystemClock{}.Now())
+}
+
+func (r ModelRequest) ValidateStreamCapabilitiesAt(s CapabilityState, now time.Time) error {
+	if err := r.ValidateCapabilitiesAt(s, now); err != nil { return err }
+	if !s.SupportsAt(CapabilityResponsesStream, now) {
 		return fmt.Errorf("unsupported_capability: %s", CapabilityResponsesStream)
 	}
 	return nil

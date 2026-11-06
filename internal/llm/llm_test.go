@@ -20,6 +20,49 @@ func testProviderConfig() ProviderConfig {
 	}
 }
 
+
+type fixedLLMTestClock struct {
+	now time.Time
+}
+
+func (c fixedLLMTestClock) Now() time.Time {
+	return c.now
+}
+
+func TestModelRequestAndCapabilityValidationUseInjectedClock(t *testing.T) {
+	now := time.Date(2026, 11, 6, 10, 0, 0, 0, time.UTC)
+	clock := fixedLLMTestClock{now: now}
+	request := ModelRequest{
+		ProviderID: "p1", RequestID: "req-1", PurposeCode: "research.summary",
+		Model: "m1", InputText: "input", MaxOutputTokens: 128,
+		DeadlineAt: now.Add(time.Minute), CorrelationID: "run-1", SystemAsOf: now,
+	}
+	if err := request.ValidateAt(clock.Now()); err != nil {
+		t.Fatalf("request valid at injected clock was rejected: %v", err)
+	}
+	request.DeadlineAt = now
+	if err := request.ValidateAt(clock.Now()); err != nil {
+		t.Fatalf("deadline validity is enforced at dispatch, not DTO shape validation: %v", err)
+	}
+
+	verifiedAt := now.Add(-time.Minute)
+	validUntil := now.Add(time.Minute)
+	state := CapabilityState{
+		ProviderID: "p1", ModelID: "m1", Protocol: ProtocolOpenAIResponses,
+		GatewayVersion: "gateway-v1", VerifiedAt: &verifiedAt, ValidUntil: &validUntil,
+		EvidenceRef: "fixture://capability", MaxOutputTokensLimit: 256,
+		Values: map[Capability]CapabilityStatus{CapabilityResponsesJSON: CapabilitySupported},
+	}
+	request.DeadlineAt = now.Add(time.Minute)
+	if err := request.ValidateCapabilitiesAt(state, clock.Now()); err != nil {
+		t.Fatalf("capability valid at injected clock was rejected: %v", err)
+	}
+	expiredClock := fixedLLMTestClock{now: validUntil}
+	if err := request.ValidateCapabilitiesAt(state, expiredClock.Now()); err == nil {
+		t.Fatal("capability at valid_until must be expired")
+	}
+}
+
 func TestProviderConfigValidate(t *testing.T) {
 	c := testProviderConfig()
 	if err := c.Validate(); err != nil { t.Fatalf("valid config rejected: %v", err) }
