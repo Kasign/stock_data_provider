@@ -61,9 +61,9 @@ request_id 标识一次调用；correlation_id 关联跨模块链路；event_id 
 
 ## 6. Researchflow 状态机项目决议更新（2026-11-06）
 
-CONTRACT-006/007 不再等待模块 Owner 签字，已由项目统一决策方形成最终设计决议。新增 Stage.retry_wait、有限自动重试、硬风险门禁/actionability、queued 取消与 Worker claim CAS、deadline 对未启动阶段处理、Run 终态不变量及副作用幂等边界。详细内容见 [Researchflow 最终决议](../researchflow/03-CONTRACT-006与007最终决议.md)。本轮只关闭设计决策，不代表实现或测试通过；其他模块决议仍按项目统一决策流程逐项完成。
+FLOW-CTR-001/002（历史别名 CONTRACT-006/007）不再等待模块 Owner 签字，已由项目统一决策方形成最终设计决议；契约状态仍为 pending_evidence。新增 Stage.retry_wait、有限自动重试、硬风险门禁/actionability、queued 取消与 Worker claim CAS、deadline 对未启动阶段处理、Run 终态不变量及副作用幂等边界。详细内容见 [Researchflow 最终决议](../researchflow/03-CONTRACT-006与007最终决议.md)。本轮只关闭设计决策，不代表实现或测试通过；其他模块决议仍按项目统一决策流程逐项完成。
 
 
-## 7. Researchflow CONTRACT-006/007 当前有效决议（2026-11-06）
+## 7. Researchflow FLOW-CTR-001/002 当前有效决议（历史别名 CONTRACT-006/007，2026-11-06）
 
-本节优先于第 5 节历史表格中 Researchflow“待确认”的状态。CONTRACT-006/007 已由项目统一决策方关闭设计决策，不再等待模块 Owner 签字。当前权威文本为 [Researchflow 状态机最终决议](../researchflow/03-CONTRACT-006与007最终决议.md)。本轮补充 CAS 线性化、取消与 Worker claim 竞态、deadline 与 retry 竞争、Attempt 停止确认/fencing、容量原子预留和 actionability 优先级。FLOW-001~004 实现与自动化测试仍未开始。
+本节优先于第 5 节历史表格中 Researchflow“待确认”的状态。FLOW-CTR-001/002（历史别名 CONTRACT-006/007）已由项目统一决策方关闭设计决策，契约状态仍为 pending_evidence，不再等待模块 Owner 签字。当前权威文本为 [Researchflow 状态机最终决议](../researchflow/03-CONTRACT-006与007最终决议.md)。本轮补充 CAS 线性化、取消与 Worker claim 竞态、deadline 与 retry 竞争、Attempt 停止确认/fencing、容量原子预留和 actionability 优先级。FLOW-CTR-001～004 的实现与自动化测试仍需按项目级目录推进。
