@@ -10,9 +10,11 @@
     "schema_version",
     "source_module",
     "occurred_at",
+    "published_at",
     "subject_ref",
     "idempotency_key",
     "correlation_id",
+    "payload_fingerprint",
     "payload"
   ],
   "properties": {
@@ -58,6 +60,14 @@
     },
     "payload": {
       "type": "object"
+    },
+    "published_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "payload_fingerprint": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
     }
   },
   "oneOf": [

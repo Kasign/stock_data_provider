@@ -30,7 +30,7 @@
 - `quant-risk-decision-first-evaluation.golden.json`、`quant-risk-decision-reject.golden.json`
 - `research-event-lifecycle-created.golden.json`、`research-event-lifecycle-invalidated.golden.json`
 
-仍需自动化覆盖：相同事件重放、相同 event_id 不同 fingerprint、同 source_module 幂等键冲突、未知 Schema 版本、非法 Payload、Registry digest 不可变、未知 source_module、超大小拒绝，以及 Outbox 提交/回滚边界。
+仍需自动化覆盖：相同事件重放、相同 event_id 不同 fingerprint、同 source_module 幂等键冲突、未知 Schema 版本、非法 Payload、重复 JSON key、非法 Unicode/非 IEEE-754 数字、指纹不匹配、Registry digest 不可变、未知 source_module、超大小拒绝，以及 Outbox 提交/回滚边界。
 
 ## 3. Subscription 与 recipient Fixture
 
@@ -136,7 +136,7 @@ Fake Adapter 只能验证分类和状态机，不证明真实渠道行为。每�
 
 | Test ID | 场景 | 必须断言 |
 |---|---|---|
-| INT001-SCHEMA-01 | 四份 Schema + 六个 Golden | Draft 2020-12 校验通过；date-time format assertion 开启；Payload 按 event_type + schema_version 精确选择 |
+| INT001-SCHEMA-01 | 四份 Schema + 六个 Golden | Draft 2020-12 校验通过；date-time format assertion 开启；Payload 按 event_type + schema_version 精确选择；published_at/payload_fingerprint 必填；接收方重算指纹一致 |
 | INT001-SCHEMA-02 | 未知 event_type、未知 schema_version、未知 source_module | PublishEvent 明确拒绝；不回退旧 Schema；不写 Inbox/Delivery |
 | INT001-SCHEMA-03 | 缺字段、未知字段、错误 enum、错误时间、超大 Payload | 明确校验失败；无字段静默补全；无持久化副作用 |
 | INT001-ID-01 | 相同 event_id、相同 fingerprint 重放 | 返回原接收结果；只 fan-out 一次 |

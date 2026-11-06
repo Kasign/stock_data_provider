@@ -20,14 +20,16 @@ Notification 不计算告警条件、不决定研究结论、不执行模型输�
 - `event_id`：事件所有者生成的稳定、不透明 ID；同一逻辑 NotificationEvent 重放时不得变化；ResearchEvent.event_id 等领域事件 ID 不得直接复用为 NotificationEvent.event_id，领域来源通过 payload 中受控的 source_event_ref 表达。
 - `event_type`、`schema_version`：注册表中的精确键。
 - `source_module`：受控枚举 quant/research/researchflow；首批映射见 `doc/notification/05-首批业务事件映射决议.md`。
-- `occurred_at`：业务事件发生时间，不作为投递时间。
+- `occurred_at`：业务事实发生时间，不作为投递时间。
+- `published_at`：生产方将事件写入 Outbox 的发布时间；与 occurred_at 分离，重放时保持不变，不纳入 payload fingerprint。
+- `payload_fingerprint`：按 NTF-CTR-001 指定字段和 RFC 8785 计算的小写十六进制 SHA-256（64 字符），由生产方计算并随 Envelope 传输；接收方必须重新计算并比较。
 - `subject_ref`：业务主体不透明引用。
 - `idempotency_key`：调用方对本次发布意图提供的稳定键；重试 PublishEvent 时不得变化。
 - `payload`：必须通过该 event_type + schema_version 对应的 Schema 校验。
 - `correlation_id`：跨模块关联 ID。
 
 接收规则建议：
-1. 对 payload 做规范化后计算 fingerprint，覆盖 source_module、event_type、schema_version、subject_ref、occurred_at 和 payload；使用 RFC 8785 JSON Canonicalization Scheme 的 UTF-8 结果计算 SHA-256；不把 event_id、idempotency_key、correlation_id、接收时间或传输 Header 纳入 payload fingerprint。
+1. 对 payload 做规范化后计算 fingerprint，覆盖 source_module、event_type、schema_version、subject_ref、occurred_at 和 payload；使用 RFC 8785 JSON Canonicalization Scheme 的 UTF-8 结果计算 SHA-256；不把 event_id、idempotency_key、correlation_id、published_at、接收时间或传输 Header 纳入 payload fingerprint。Envelope 必须携带 payload_fingerprint；接收方重新计算并拒绝不匹配的值。
 2. Inbox 唯一约束为 `(source_module, event_id)`；发布幂等唯一约束为 `(source_module, idempotency_key)`；同一 source_module 范围内该键全局唯一，不按 event_type 分桶，生产方不得跨发布意图复用。
 3. 相同 source_module/event_id 且 fingerprint 相同：返回原接收结果，不重复 fan-out。
 4. event_id 或 idempotency_key 已存在但 fingerprint/事件身份不一致：返回 idempotency_conflict，不覆盖旧事件。
@@ -272,9 +274,11 @@ PublishResult 应明确 accepted/duplicate；冲突通过稳定错误返回。�
 | schema_version | string | 必填 / non-null | SemVer，精确命中注册项 |
 | source_module | enum | 必填 / non-null | MVP 为 quant/research/researchflow；新增生产模块须先登记并评审 |
 | occurred_at | RFC3339Nano UTC | 必填 / non-null | 业务事实发生时间，不是发布或接收时间 |
+| published_at | RFC3339Nano UTC | 必填 / non-null | 生产方写入 Outbox 的发布时间；重放不变，不参与 payload fingerprint |
 | subject_ref | string | 必填 / non-null | 不透明业务主体引用 |
 | idempotency_key | string | 必填 / non-null | 发布命令稳定键，重试时保持不变 |
 | correlation_id | string | 必填 / non-null | 跨模块关联，不作为去重键 |
+| payload_fingerprint | string | 必填 / non-null | 小写 64 位 SHA-256；接收方重新计算校验 |
 | payload | object | 必填 / non-null | 由 event_type + schema_version 唯一 Schema 校验 |
 
 Payload fingerprint 使用 RFC 8785 JSON Canonicalization Scheme 的 UTF-8 结果计算 SHA-256，覆盖 event_type、schema_version、source_module、subject_ref、occurred_at 和 payload。event_id/idempotency_key 不进入 payload fingerprint，而分别参与 Inbox/Publish 唯一性约束。Decimal string 不得规范化为 JSON number。
