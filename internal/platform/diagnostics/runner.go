@@ -176,6 +176,14 @@ func normalizeFault(err error, contextErr error) *fault.Fault {
 		if copy.SafeMessage == "" {
 			copy.SafeMessage = "check failed"
 		}
+		if len(copy.Code) > 160 || !validStableCode(copy.Code) ||
+			len(copy.SafeMessage) > 512 || hasControlCharacters(copy.SafeMessage) ||
+			len(copy.Dependency) > 128 || hasControlCharacters(copy.Dependency) {
+			return &fault.Fault{
+				Class: fault.ClassInternal, Code: "platform.diagnostics.invalid_fault",
+				SafeMessage: "check returned an invalid fault", Cause: err,
+			}
+		}
 		return &copy
 	}
 	if errors.Is(contextErr, context.DeadlineExceeded) || errors.Is(err, context.DeadlineExceeded) {

@@ -16,7 +16,7 @@ const (
 	ClassInternal        Class = "internal"
 )
 
-// Fault 是可安全序列化的错误结构；Cause 仅用于内部错误链，不输出到 JSON。
+// Fault 是内部错误链与跨层错误分类结构；HTTP transport 必须映射到独立公开 DTO，禁止直接序列化。
 type Fault struct {
 	Class       Class  `json:"class"`
 	Code        string `json:"code"`
