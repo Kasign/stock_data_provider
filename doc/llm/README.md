@@ -4,7 +4,7 @@
 - 代码：`internal/llm/**`
 - 任务前缀：LLM
 - 状态：LLM-002 DTO/Provider Port、Responses JSON Request Mapper/Response Parser 已实现，Platform Fault 映射与 Draft 2020-12 Schema 已实现；整体待构建验证
-- 最近代码提交：待本轮原子提交后更新
+- 最近代码提交：2672b3f701e269e52c2644f40d5cd3f390aa741e
 - LLM-001：静态协议盘点完成；在线真实端点验收未执行
 - LLM-002：DTO/Provider Port、Responses JSON 请求映射/响应解析及对应单测已实现，待 gofmt/go test；Platform Fault 映射、Draft 2020-12 Schema 编译同样待构建验证；JSON/SSE 独立 Golden 文件、HTTP Adapter、SSE Parser 尚未完成
 

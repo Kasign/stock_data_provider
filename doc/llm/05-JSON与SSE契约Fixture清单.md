@@ -3,7 +3,7 @@
 - 归属任务：LLM-002-F
 - 对应协议：OpenAI Responses
 - 日期：2026-11-05
-- 状态：测试设计基线；对应 LLM-CTR-001～003，当前为 pending_evidence。尚未生成实际 fixture 文件/测试代码，也不是真实模型能力证明；不设置个人 Owner 签字门槛。
+- 状态：Fixture 设计基线与首批 Responses JSON Mapper/Parser 单测已存在；独立 Golden 文件和执行证据仍缺失，对应 LLM-CTR-001～003 当前为 pending_evidence；不代表真实模型能力证明。
 
 ## 1. Fixture 原则
 
