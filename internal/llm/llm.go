@@ -37,8 +37,12 @@ const (
 type CapabilityState struct {
 	ProviderID string `json:"provider_id"`
 	ModelID string `json:"model_id"`
+	Protocol string `json:"protocol"`
 	GatewayVersion string `json:"gateway_version"`
 	VerifiedAt *time.Time `json:"verified_at,omitempty"`
+	ValidUntil *time.Time `json:"valid_until,omitempty"`
+	EvidenceRef string `json:"evidence_ref"`
+	MaxOutputTokensLimit int `json:"max_output_tokens_limit"`
 	Values map[Capability]CapabilityStatus `json:"values,omitempty"`
 }
 
@@ -48,8 +52,9 @@ func (s CapabilityState) Status(key Capability) CapabilityStatus {
 }
 
 func (s CapabilityState) Supports(key Capability) bool {
-	return s.ProviderID != "" && s.ModelID != "" && s.GatewayVersion != "" &&
-		s.VerifiedAt != nil && !s.VerifiedAt.IsZero() && s.Status(key) == CapabilitySupported
+	return s.ProviderID != "" && s.ModelID != "" && s.Protocol == ProtocolOpenAIResponses &&
+		s.GatewayVersion != "" && s.EvidenceRef != "" && s.VerifiedAt != nil && !s.VerifiedAt.IsZero() &&
+		s.ValidUntil != nil && time.Now().Before(*s.ValidUntil) && s.Status(key) == CapabilitySupported
 }
 
 // ProviderConfig 仅保存 Secret 引用，不保存凭据明文。
@@ -59,7 +64,8 @@ type ProviderConfig struct {
 	BaseURL string `json:"base_url"`
 	DefaultModel string `json:"default_model"`
 	APIKeySecretRef string `json:"api_key_secret_ref"`
-	RequestTimeout time.Duration `json:"request_timeout"`
+	RequestTimeoutMS int64 `json:"request_timeout_ms"`
+	AllowedModels []string `json:"allowed_models"`
 	MaxRequestBytes int64 `json:"max_request_bytes"`
 	MaxResponseBytes int64 `json:"max_response_bytes"`
 	StreamEnabled bool `json:"stream_enabled"`
@@ -76,7 +82,15 @@ func (c ProviderConfig) Validate() error {
 	if strings.TrimSpace(c.DefaultModel) == "" || strings.TrimSpace(c.APIKeySecretRef) == "" {
 		return errors.New("default_model and api_key_secret_ref are required")
 	}
-	if c.RequestTimeout <= 0 { return errors.New("request_timeout must be positive") }
+	if c.RequestTimeoutMS <= 0 { return errors.New("request_timeout_ms must be positive") }
+	if len(c.AllowedModels) == 0 { return errors.New("allowed_models must not be empty") }
+	allowed := make(map[string]struct{}, len(c.AllowedModels))
+	for _, modelID := range c.AllowedModels {
+		if strings.TrimSpace(modelID) == "" { return errors.New("allowed_models contains an empty model") }
+		if _, exists := allowed[modelID]; exists { return fmt.Errorf("duplicate allowed model %q", modelID) }
+		allowed[modelID] = struct{}{}
+	}
+	if _, ok := allowed[c.DefaultModel]; !ok { return errors.New("default_model must be included in allowed_models") }
 	if c.MaxRequestBytes <= 0 || c.MaxRequestBytes > MaxPayloadBytes ||
 		c.MaxResponseBytes <= 0 || c.MaxResponseBytes > MaxPayloadBytes {
 		return fmt.Errorf("request and response limits must be between 1 and %d", MaxPayloadBytes)
@@ -98,6 +112,7 @@ type ToolDefinition struct {
 }
 
 type ModelRequest struct {
+	ProviderID string `json:"provider_id"`
 	RequestID string `json:"request_id"`
 	PurposeCode string `json:"purpose_code"`
 	Model string `json:"model"`
@@ -114,12 +129,14 @@ type ModelRequest struct {
 	CorrelationID string `json:"correlation_id"`
 	SystemAsOf time.Time `json:"system_as_of"`
 	TraceID string `json:"trace_id,omitempty"`
+	LocalValidationOnly bool `json:"local_validation_only,omitempty"`
 }
 
 func (r ModelRequest) Validate() error {
-	if strings.TrimSpace(r.RequestID) == "" || strings.TrimSpace(r.CorrelationID) == "" ||
-		strings.TrimSpace(r.PurposeCode) == "" || strings.TrimSpace(r.Model) == "" {
-		return errors.New("request_id, correlation_id, purpose_code and model are required")
+	if strings.TrimSpace(r.ProviderID) == "" || strings.TrimSpace(r.RequestID) == "" ||
+		strings.TrimSpace(r.CorrelationID) == "" || strings.TrimSpace(r.PurposeCode) == "" ||
+		strings.TrimSpace(r.Model) == "" {
+		return errors.New("provider_id, request_id, correlation_id, purpose_code and model are required")
 	}
 	if strings.TrimSpace(r.InputText) == "" || r.MaxOutputTokens <= 0 {
 		return errors.New("input_text must not be empty and max_output_tokens must be positive")
@@ -149,11 +166,25 @@ func (r ModelRequest) Validate() error {
 	return nil
 }
 
+// ValidateAgainstProvider 检查请求只能使用服务端 ProviderConfig 中允许的 Provider 和模型。
+func (r ModelRequest) ValidateAgainstProvider(config ProviderConfig) error {
+	if err := config.Validate(); err != nil { return err }
+	if r.ProviderID != config.ProviderID { return errors.New("request provider_id does not match configured provider") }
+	for _, allowed := range config.AllowedModels {
+		if r.Model == allowed { return nil }
+	}
+	return fmt.Errorf("model %q is not allowed by provider %q", r.Model, config.ProviderID)
+}
+
 // ValidateCapabilities 不允许把 unknown 或旧版本能力当作当前 supported。
 func (r ModelRequest) ValidateCapabilities(s CapabilityState) error {
-	if s.ModelID != r.Model || s.ProviderID == "" || s.GatewayVersion == "" ||
-		s.VerifiedAt == nil || s.VerifiedAt.IsZero() {
-		return errors.New("capability evidence does not match a verified provider/model/gateway version")
+	if s.ModelID != r.Model || s.ProviderID != r.ProviderID || s.Protocol != ProtocolOpenAIResponses ||
+		s.GatewayVersion == "" || s.EvidenceRef == "" || s.VerifiedAt == nil || s.VerifiedAt.IsZero() ||
+		s.ValidUntil == nil || !time.Now().Before(*s.ValidUntil) {
+		return errors.New("capability evidence does not match a current verified provider/model/protocol/gateway version")
+	}
+	if s.MaxOutputTokensLimit <= 0 || r.MaxOutputTokens > s.MaxOutputTokensLimit {
+		return errors.New("max_output_tokens exceeds the verified model capability limit")
 	}
 	require := func(key Capability) error {
 		if !s.Supports(key) { return fmt.Errorf("unsupported_capability: %s", key) }
@@ -166,7 +197,7 @@ func (r ModelRequest) ValidateCapabilities(s CapabilityState) error {
 	if r.ReasoningEffort != "" {
 		if err := require(CapabilityReasoningEffort); err != nil { return err }
 	}
-	if r.ResponseSchema != nil {
+	if r.ResponseSchema != nil && !r.LocalValidationOnly {
 		if err := require(CapabilityStructuredOutput); err != nil { return err }
 	}
 	if len(r.Tools) > 0 || r.ToolChoice == "auto" {
