@@ -130,13 +130,14 @@ func loadCredentialProvider(env platformconfig.Env, endpointKey, secretKey strin
 func validateEndpoint(key, value string) error {
 	parsed, err := url.Parse(value)
 	if err != nil || parsed.Scheme == "" || parsed.Host == "" || parsed.Opaque != "" ||
-		parsed.User != nil || parsed.RawQuery != "" || parsed.ForceQuery || parsed.Fragment != "" {
+		parsed.User != nil || parsed.RawQuery != "" || parsed.ForceQuery || parsed.Fragment != "" || strings.HasSuffix(parsed.Host, ":") {
 		return fmt.Errorf(
 			"news config %s must be an absolute HTTP(S) endpoint without credentials, query, or fragment",
 			key,
 		)
 	}
-	if parsed.Scheme != "http" && parsed.Scheme != "https" {
+	scheme := strings.ToLower(parsed.Scheme)
+	if scheme != "http" && scheme != "https" {
 		return fmt.Errorf("news config %s must use HTTP or HTTPS", key)
 	}
 	if parsed.Hostname() == "" {
