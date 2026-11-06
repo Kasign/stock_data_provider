@@ -83,7 +83,7 @@ Template 与 Channel 配置版本始终属于唯一键和 Delivery 计划快照�
 | template_id | string | 必填 / non-null | 不透明模板 ID |
 | created_at / updated_at / effective_at | RFC3339Nano UTC | 必填 / non-null | 创建、更新、当前版本生效时间 |
 
-更新 Subscription 必须产生新 version；旧版本只读保留。单条 Subscription 只绑定一个 event_type，filters 必须由该事件类型的过滤 Schema 校验，不能以通用 JSON 查询语言执行任意逻辑。
+更新 Subscription 必须产生新 version；旧版本只读保留。单条 Subscription 只绑定一个 event_type；filters=null 时 filter_schema_version 必须为 null；filters 非 null 时 filter_schema_version 必填且必须由该 event_type 注册。不能以通用 JSON 查询语言执行任意逻辑。
 
 ### 2.5 DeliveryRecord 与 DeliveryAttempt 字段级契约
 
