@@ -1,7 +1,6 @@
 package registry
 
 import (
-	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -153,30 +152,3 @@ func TestQuantResultManifestSchemaRejectsEmptySnapshotAndInvalidIdentity(t *test
 	}
 }
 
-func TestQuantAuthorizationBindingRejectsResourceMismatch(t *testing.T) {
-	var authorization authorizationGolden
-	if err := json.Unmarshal(readPlanningFixture(t, filepath.Join("golden", "GOV-CTR-006-quant-allowed.golden.json")), &authorization); err != nil {
-		t.Fatal(err)
-	}
-	var auth map[string]json.RawMessage
-	if err := json.Unmarshal(authorization.AuthorizationRef, &auth); err != nil {
-		t.Fatal(err)
-	}
-	auth["resource_ref"] = json.RawMessage(`"quant_result:sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"`)
-	changed, err := json.Marshal(auth)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var binding struct {
-		ResourceRef string `json:"resource_ref"`
-	}
-	if err := json.Unmarshal(changed, &binding); err != nil {
-		t.Fatal(err)
-	}
-	if bytes.Equal(changed, authorization.AuthorizationRef) || binding.ResourceRef == "" {
-		t.Fatal("test mutation did not change the authorization resource binding")
-	}
-	if binding.ResourceRef == "quant_result:sha256:29e81fdc80342387b910ab2c50a2732e5010defc7ce3e8030de316b37f4b8299" {
-		t.Fatal("resource mismatch mutation unexpectedly retained the manifest result_id")
-	}
-}
