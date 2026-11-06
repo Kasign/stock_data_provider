@@ -194,7 +194,7 @@ Worker 取得 Delivery 时必须原子完成 queued/retry_wait -> sending 和租
 ## 6. 重试与外部 exactly-once 边界
 
 - 只对渠道明确拒绝且标记 retryable 的结果自动重试。
-- 永久错误不重试；Retry-After 优先于本地退避上限，但不得越过 Delivery deadline。
+- 永久错误不重试；存在有效 Retry-After 时，next_attempt_at = max(本地 full-jitter 退避时间, Retry-After 指定时间)，不得缩短本地退避，也不得达到或越过 Delivery deadline；若计算结果不早于 deadline_at，则结束为 failed（reason_code=deadline_exceeded），不再安排重试。
 - 使用 capped exponential full jitter；策略固定 max_attempts、max_elapsed_ms、per_attempt_timeout_ms、base_delay_ms、max_delay_ms 和总 deadline。所有 duration 为正整数 milliseconds；max_elapsed_ms/per_attempt_timeout_ms/base_delay_ms>0，max_delay_ms>=base_delay_ms。MVP 算法固定 exponential_full_jitter_v1：第 n 次 Attempt 失败后的上限 delay=min(max_delay_ms, base_delay_ms*2^(n-1))，实际等待从 [0,delay] 均匀抽取。单次调用截止=min(now+per_attempt_timeout_ms, deadline_at, first_attempt_at+max_elapsed_ms)。
 - attempt_count 只统计实际发起的渠道调用，不统计 Schema/权限/配置预检查。
 - 同一 Delivery 的渠道 idempotency key 在各 Attempt 间保持稳定；仅在渠道明确支持幂等时发送该键。
