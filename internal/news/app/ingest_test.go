@@ -116,7 +116,7 @@ func TestIngestCandidateMatchesExistingItemAndAddsOnlyNewAlias(t *testing.T) {
 	}
 }
 
-func TestIngestCandidateDoesNotTrustCallerCanonicalURL(t *testing.T) {
+func TestIngestCandidateDoesNotTrustCallerCanonicalURLButKeepsNativeID(t *testing.T) {
 	repository := &memoryIdentityRepository{}
 	usecase := NewIngestCandidate(repository, func() string { return "observation-untrusted-url" })
 	observation, err := usecase.Execute(context.Background(), "source-1", "run-1/untrusted-url", domain.Candidate{
@@ -130,8 +130,11 @@ func TestIngestCandidateDoesNotTrustCallerCanonicalURL(t *testing.T) {
 	if observation.Candidate.CanonicalURL != "" {
 		t.Fatalf("caller-supplied canonical URL must not survive policy rejection: %+v", observation.Candidate)
 	}
-	if observation.IdentityStatus != domain.ObservationConflict {
-		t.Fatalf("identity status=%s, want conflict", observation.IdentityStatus)
+	if observation.IdentityStatus != domain.ObservationNew || observation.NewsID == "" {
+		t.Fatalf("valid native source ID should still create identity, got %+v", observation)
+	}
+	if len(repository.credentials) != 1 || repository.credentials[0].Type != domain.IdentifierSourceNativeID {
+		t.Fatalf("rejected URL must not become an identity credential: %+v", repository.credentials)
 	}
 }
 
