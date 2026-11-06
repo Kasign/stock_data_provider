@@ -100,7 +100,7 @@ docker-compose
 | Data Redis | `services/market-data/internal/cache/redis.go` 是自定义 RESP Client，每次命令重新 Dial、AUTH/SELECT、执行命令后关闭连接 | 不应原样保留为同进程默认实现；建议提供基于共享 go-redis Client 的 Data Cache Adapter，按 Data key namespace/TTL 规则隔离 |
 | Data 配置 | `services/market-data/internal/config/config.go` 当前无条件校验 `MARKET_DATA_API_KEY`；Redis 地址可为空，允许禁用缓存；MySQL 可按 AllowNoStorage 配置 | 同进程模式必须将 Data API Key 从必填配置中移除；远程 Adapter 模式才要求 Key。Redis 可选语义不能被 Root Server 的 Redis 强依赖无意覆盖 |
 | Data HTTP Handler | `services/market-data/internal/httpapi/server.go` 的 Handler 内部包含 API Key 校验和独立 Request ID/超时/访问日志中间件 | 不能原样挂载后再绕过认证；应拆分路由 Handler 与传输中间件，由 Root Server 统一注入认证/Request Context |
-| WebUI 凭据 | `web/src/api.js` 将 `apiKey` 纳入设置对象，读取/写入 localStorage，并在请求时写入 `X-API-Key` | 浏览器暴露问题已由当前代码直接证实，M4 必须移除；迁移后需清理旧设置字段并轮换曾暴露的有效 Key |
+| WebUI 凭据 | `web/src/api.js` 将 `apiKey` 纳入设置对象，读取/写入 localStorage，并在请求时写入 `X-API-Key` | 浏览器暴露问题已由当前代码直接证实，M5 必须移除；迁移后需清理旧设置字段并轮换曾暴露的有效 Key |
 | Nginx | `web/default.conf.template` 的 `/market-api/` 当前代理到 Data 服务，`/analysis-api/` 代理 Server | 两个前缀可保留，但上游统一改为 Root Server |
 | go-core | `docker/docker-compose.go-migration.yml` 将 Python Bridge、go-core、Data 组成单独的 `go-migration` profile，并明确不与根 Compose 叠加；根 Compose 当前运行的是根模块 `cmd/analysis-api` | go-core 是仓库保留的旧迁移部署路径，不是根 Compose 的当前组合入口；本次不把 go-core 合并进 Root Server。仍需部署现场确认没有继续使用旧 profile |
 
