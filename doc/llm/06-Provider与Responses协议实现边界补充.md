@@ -27,11 +27,16 @@ ModelRequest 是 LLM 自己的应用 DTO，不允许传入任意 URL/Header/Gate
 - provider_id/model：必须命中服务端 ProviderConfig；model 必须属于 allowed_models。
 - purpose_code：必填稳定用途代码，不使用自由文本表达调用目的。
 - instructions/input_text：typed 文本字段；instructions 可为空，input_text 必须非空。
+- response_schema：可选 JSONSchemaSpec；发送前完成本地编译、dialect、大小和深度校验。
+- local_validation_only：可选 bool；true 时不要求上游 structured output 能力，只保证本地输出校验，不代表模型受约束生成。
 - max_output_tokens：正整数且不超过当前 Model Capability 已验证上限。
 - temperature/top_p/reasoning_effort：只有对应 CapabilityState 当前有效且 supported 才允许发送，否则明确拒绝。
 - tools/tool_choice：默认关闭；仅 function_tool_calls=supported 且 Tool 定义通过本地 Schema 校验时允许受控 auto。LLM 只解析，不批准或执行。
+- deadline_at：必填绝对 UTC 截止时间，不得晚于调用方 Context deadline。
+- system_as_of：必填 RFC3339Nano UTC，必须不晚于可信服务端当前时间；原样回显，仅用于审计/上下文追溯，不注入 Prompt 或 Responses wire 字段。
+- trace_id：可选受控追踪标识。
 
-ModelResponse 区分 response_id、request_id、correlation_id、gateway_request_id、upstream_request_id。状态为 completed/incomplete/failed；只有合法 completed 才是成功模型结果。Output item/content part 保留类型和顺序；refusal 不合并为普通文本。未知结构只保留有界安全元数据。
+ModelResponse 区分 response_id、request_id、correlation_id、system_as_of、gateway_request_id、upstream_request_id；request_id、correlation_id 和 system_as_of 必须分别原样回显 ModelRequest 对应值。状态为 completed/incomplete/failed；只有合法 completed 才是成功模型结果。Output item/content part 保留类型和顺序；refusal 不合并为普通文本。未知结构只保留有界安全元数据。
 
 Usage 缺失字段保持 null/unknown，不补 0。上游 total_tokens 优先；仅 input_tokens/output_tokens 均明确且加法无溢出时才可派生，并标记 source=derived。上游 total 与分项不一致时保留上游值并产生诊断。
 
