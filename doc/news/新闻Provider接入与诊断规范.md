@@ -247,3 +247,8 @@ Brave/Bocha/Tavily 等具体 Provider 的策略值必须按实际账号套餐、
 ## 2026-11-06 当前 HTTP 适配 API 修正
 
 本规范历史段落中的 `BoundDoer` / `Client.Bind()` 描述已过时。当前 Platform HTTP Client API 为 `Client.Do(ctx, request, DestinationPolicy)`。News Provider 使用 `provider.NewPlatformHTTPDoer`，Source 使用 `source.NewPlatformHTTPDoer`；每个 endpoint 独立绑定精确 Host/Port 策略。响应体大小、总 Deadline、TLS、DNS/IP 校验和拨号仍完全由 Platform Client 执行。News 不创建裸 HTTP Client，不接管共享 Client 生命周期。
+
+
+## 2026-11-06 接入状态更新
+
+Provider 适配器已落地 `provider.NewPlatformHTTPDoer`；Source 适配器已落地 `source.NewPlatformHTTPDoer`。二者均固定单个 endpoint 的 DestinationPolicy，拒绝重定向和平台自动重试；Platform Client 负责 DNS/IP、TLS、响应大小和 Deadline。Source endpoint 保留 query 参数，Provider endpoint 配置仍拒绝 query，避免将凭证放入 URL。生产组合根按每个 Provider/Source endpoint 独立注入。
