@@ -11,13 +11,13 @@ import (
 )
 
 type requestIDGolden struct {
-	Header              string   `json:"header"`
-	MaxLength           int      `json:"max_length"`
-	GeneratedRandomBytes int     `json:"generated_random_bytes"`
-	ValidValues         []string `json:"valid_values"`
-	InvalidValues       []string `json:"invalid_values"`
-	DuplicateValues     []string `json:"duplicate_values"`
-	OutboundWithContext struct {
+	Header               string   `json:"header"`
+	MaxLength            int      `json:"max_length"`
+	GeneratedRandomBytes int      `json:"generated_random_bytes"`
+	ValidValues          []string `json:"valid_values"`
+	InvalidValues        []string `json:"invalid_values"`
+	DuplicateValues      []string `json:"duplicate_values"`
+	OutboundWithContext  struct {
 		ContextID      string `json:"context_id"`
 		ExistingHeader string `json:"existing_header"`
 		ExpectedHeader string `json:"expected_header"`
