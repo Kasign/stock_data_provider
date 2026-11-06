@@ -38,6 +38,7 @@ R1 当前只实现 Context 领域结构和结构校验。没有 HTTP 接口、�
 - Evidence：遵循项目级 `RSC-CTR-001` Evidence Schema/Golden；该契约属于 Evidence，不属于 Context。
 - News → Research 只读证据查询：目标契约尚未实现/冻结；不得据此宣称真实新闻接入通过。
 - Research → Researchflow 的 Context 消费接口：字段语义已形成设计基线，Schema/Golden/Contract Test 尚未完成。
-- RSC-OPEN-001：Quant 结果消费路径存在项目级依赖 DAG 与 DTO 字段定义差异；决议前不新增 Quant Port、不解引用 Quant 结果。
+- RSC-DEC-001：Quant 结果通过 Researchflow 获取；Research 不新增 Quant Port、不直接调用 Quant、不自行解引用。
+- RSC-OPEN-002：ResearchEvent.changed_at 与 INT-CTR-001 事件时间映射存在字段缺口；不阻断 Context/Evidence。
 
 详细设计见 [01-研究领域模型与证据体系](01-研究领域模型与证据体系.md)，字段与授权链补充见 [03-Context与Evidence字段语义及授权链补充](03-Context与Evidence字段语义及授权链补充.md)，任务与验收见 [02-任务拆分与验收](02-任务拆分与验收.md)。
