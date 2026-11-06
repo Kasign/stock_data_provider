@@ -105,3 +105,70 @@ func TestContextCheckUsesImmutableSnapshot(t *testing.T) {
 		t.Fatalf("snapshot status = %q, want healthy", result.Observation.Status)
 	}
 }
+
+func TestEventAndClaimChecksValidateSnapshots(t *testing.T) {
+	cutoff := time.Date(2026, 11, 6, 8, 0, 0, 0, time.UTC)
+	event := researchevent.ResearchEvent{
+		EventID: "event-diagnostic", EventVersion: 1, EventType: "fixture",
+		Title: "诊断事件", Status: researchevent.StatusDetected,
+		SubjectRefs: []string{}, EvidenceRefs: []string{},
+		SystemObservedAt: cutoff, SystemAsOf: cutoff,
+		ImpactHypothesisRefs: []string{}, InvalidationConditions: []string{},
+		Uncertainty: []string{}, SourceTimes: []researchevent.EventSourceTime{},
+	}
+	eventCheck, err := NewEventCheck("research.event.snapshot", "Event 快照", true, event)
+	if err != nil {
+		t.Fatalf("NewEventCheck() error = %v", err)
+	}
+	if got := runCheck(t, eventCheck).Observation.Status; got != platformdiagnostics.StatusHealthy {
+		t.Fatalf("valid Event status = %q, want healthy", got)
+	}
+	event.Title = ""
+	invalidEventCheck, err := NewEventCheck("research.event.invalid", "无效 Event", true, event)
+	if err != nil {
+		t.Fatalf("NewEventCheck(invalid) error = %v", err)
+	}
+	if got := runCheck(t, invalidEventCheck).Observation.Status; got != platformdiagnostics.StatusFailed {
+		t.Fatalf("invalid Event status = %q, want failed", got)
+	}
+
+	claim := researchclaim.Claim{
+		ClaimID: "claim-diagnostic", ClaimVersion: 1, Statement: "fixture claim",
+		EpistemicType: researchclaim.EpistemicReportedFact,
+		ScopeRefs: []string{}, SystemAsOf: cutoff,
+		SupportingEvidenceRefs: []string{}, ContradictingEvidenceRefs: []string{},
+		RequiredDataRefs: []string{}, Status: researchclaim.StatusProposed,
+		Limitations: []string{},
+	}
+	claimCheck, err := NewClaimCheck("research.claim.snapshot", "Claim 快照", true, claim)
+	if err != nil {
+		t.Fatalf("NewClaimCheck() error = %v", err)
+	}
+	if got := runCheck(t, claimCheck).Observation.Status; got != platformdiagnostics.StatusHealthy {
+		t.Fatalf("valid Claim status = %q, want healthy", got)
+	}
+	claim.Statement = ""
+	invalidClaimCheck, err := NewClaimCheck("research.claim.invalid", "无效 Claim", true, claim)
+	if err != nil {
+		t.Fatalf("NewClaimCheck(invalid) error = %v", err)
+	}
+	if got := runCheck(t, invalidClaimCheck).Observation.Status; got != platformdiagnostics.StatusFailed {
+		t.Fatalf("invalid Claim status = %q, want failed", got)
+	}
+}
+
+func TestResearchCheckHonorsCanceledRunnerContext(t *testing.T) {
+	check, err := NewContextCheck("research.context.cancel", "Context 快照", true, validContextSnapshot())
+	if err != nil {
+		t.Fatalf("NewContextCheck() error = %v", err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	report, err := (platformdiagnostics.Runner{}).Run(ctx, []platformdiagnostics.Check{check})
+	if err != nil {
+		t.Fatalf("Runner.Run() error = %v", err)
+	}
+	if got := report.Results[0].Observation.Status; got != platformdiagnostics.StatusUnavailable {
+		t.Fatalf("canceled check status = %q, want unavailable", got)
+	}
+}
