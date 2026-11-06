@@ -73,41 +73,41 @@ func TestOpenAPISecurityMatchesDataHTTPAdapterRoutes(t *testing.T) {
 	// Keep this route inventory aligned with Server.Handler(). A mismatch means
 	// either an HTTP route is undocumented or an OpenAPI operation is stale.
 	expected := map[string]map[string]bool{
-		"/health/live":                                  {"get": true},
-		"/health/ready":                                 {"get": true},
-		"/api/v1/quotes/{symbol}":                       {"get": true},
-		"/api/v1/market/quotes":                         {"get": true},
-		"/api/v1/market/stocks":                         {"get": true},
-		"/api/v1/bars/{symbol}/daily":                   {"get": true},
-		"/api/v1/bundles/{symbol}":                      {"get": true},
-		"/api/v1/data-sources":                          {"get": true},
-		"/api/v1/data-sources/diagnostics":              {"get": true},
-		"/api/v1/data-sources/probe":                    {"post": true},
-		"/api/v1/data-sources/probe/history":            {"get": true},
-		"/api/v1/market/sectors":                        {"get": true},
-		"/api/v1/market/indices":                        {"get": true},
-		"/api/v1/market/valuations":                     {"get": true},
-		"/api/v1/market/index-catalog":                  {"get": true},
-		"/api/v1/market/indices/{symbol}/constituents":  {"get": true},
-		"/api/v1/market/indices/{symbol}/daily":         {"get": true},
-		"/api/v1/market/capital-flow":                   {"get": true},
-		"/api/v1/market/breadth":                        {"get": true},
-		"/api/v1/market/sentiment":                      {"get": true},
-		"/api/v1/market/sentiment/history":              {"get": true},
-		"/api/v1/market/hot-stocks":                     {"get": true},
-		"/api/v1/market/limit-pools":                    {"get": true},
-		"/api/v1/market/dragon-tiger":                   {"get": true},
-		"/api/v1/market/trading-calendar":               {"get": true},
-		"/api/v1/market/session":                        {"get": true},
-		"/api/v1/stocks/search":                         {"get": true},
-		"/api/v1/stocks/{symbol}/trading-status":        {"get": true},
-		"/api/v1/stocks/{symbol}/price-limit-rule":      {"get": true},
-		"/api/v1/stocks/{symbol}/profile":               {"get": true},
-		"/api/v1/stocks/{symbol}/boards":                {"get": true},
-		"/api/v1/stocks/{symbol}/announcements":         {"get": true},
-		"/api/v1/stocks/{symbol}/fundamentals":          {"get": true},
-		"/api/v1/stocks/{symbol}/chip-distribution":     {"get": true},
-		"/api/v1/stocks/{symbol}/capital-flow":          {"get": true},
+		"/health/live":                                 {"get": true},
+		"/health/ready":                                {"get": true},
+		"/api/v1/quotes/{symbol}":                      {"get": true},
+		"/api/v1/market/quotes":                        {"get": true},
+		"/api/v1/market/stocks":                        {"get": true},
+		"/api/v1/bars/{symbol}/daily":                  {"get": true},
+		"/api/v1/bundles/{symbol}":                     {"get": true},
+		"/api/v1/data-sources":                         {"get": true},
+		"/api/v1/data-sources/diagnostics":             {"get": true},
+		"/api/v1/data-sources/probe":                   {"post": true},
+		"/api/v1/data-sources/probe/history":           {"get": true},
+		"/api/v1/market/sectors":                       {"get": true},
+		"/api/v1/market/indices":                       {"get": true},
+		"/api/v1/market/valuations":                    {"get": true},
+		"/api/v1/market/index-catalog":                 {"get": true},
+		"/api/v1/market/indices/{symbol}/constituents": {"get": true},
+		"/api/v1/market/indices/{symbol}/daily":        {"get": true},
+		"/api/v1/market/capital-flow":                  {"get": true},
+		"/api/v1/market/breadth":                       {"get": true},
+		"/api/v1/market/sentiment":                     {"get": true},
+		"/api/v1/market/sentiment/history":             {"get": true},
+		"/api/v1/market/hot-stocks":                    {"get": true},
+		"/api/v1/market/limit-pools":                   {"get": true},
+		"/api/v1/market/dragon-tiger":                  {"get": true},
+		"/api/v1/market/trading-calendar":              {"get": true},
+		"/api/v1/market/session":                       {"get": true},
+		"/api/v1/stocks/search":                        {"get": true},
+		"/api/v1/stocks/{symbol}/trading-status":       {"get": true},
+		"/api/v1/stocks/{symbol}/price-limit-rule":     {"get": true},
+		"/api/v1/stocks/{symbol}/profile":              {"get": true},
+		"/api/v1/stocks/{symbol}/boards":               {"get": true},
+		"/api/v1/stocks/{symbol}/announcements":        {"get": true},
+		"/api/v1/stocks/{symbol}/fundamentals":         {"get": true},
+		"/api/v1/stocks/{symbol}/chip-distribution":    {"get": true},
+		"/api/v1/stocks/{symbol}/capital-flow":         {"get": true},
 	}
 	paths, ok := document["paths"].(map[string]any)
 	if !ok {
@@ -155,7 +155,6 @@ func TestOpenAPISecurityMatchesDataHTTPAdapterRoutes(t *testing.T) {
 		}
 	}
 }
-
 
 func TestOpenAPIErrorResponsesReferenceRuntimeErrorEnvelope(t *testing.T) {
 	spec, err := os.ReadFile("../../openapi.yaml")
@@ -404,7 +403,6 @@ func TestOpenAPIDataModelFieldsMatchKnownJSONContract(t *testing.T) {
 		}
 	}
 }
-
 
 func TestAllGoModelFieldsAndRequiredMatchOpenAPISchemas(t *testing.T) {
 	spec, err := os.ReadFile("../../openapi.yaml")
