@@ -302,7 +302,7 @@ Researchflow 是唯一跨模块组合者，并负责传播同一 Run 的 system_
 | quality_status | 是 | valid/degraded/invalid/unknown | 分区质量 |
 | required | 是 | boolean | 本研究模板是否要求该分区 |
 | included | 是 | boolean | 是否实际装入 Context |
-| system_observed_at | 是 | timestamp | 本次装配观察时间 |
+| assembled_at | 是 | timestamp | 本次 Context 分区装配时间 |
 | system_as_of | 是 | timestamp | 分区知识截止时间 |
 
 同一 Context 中 section_id 唯一；同一 section_id 的不同版本不能同时作为当前版本装入，除非显式标记为对比研究。
@@ -382,7 +382,7 @@ Event 允许多来源时间并存，不以单一 occurred_at 覆盖冲突来源�
 | JSON 字段 | 必需 | 类型/约束 | 语义 |
 |---|---|---|---|
 | evidence_ref | 是 | string | 对应来源证据 |
-| time_type | 是 | occurred_at/published_at/available_at/observed_at | 时间语义 |
+| time_type | 是 | occurred_at/published_at/available_at/system_observed_at | 时间语义 |
 | value | 是 | timestamp | 来源/系统时间值 |
 | asserted_by | 是 | string | 来源或系统主体引用 |
 | confidence | 否 | number/null | 时间可信程度及其评估方法 |
@@ -470,7 +470,7 @@ Event 可保留规范化 occurred_at 作为研究归一结果，但必须同时�
   "subject_refs": ["security_example"],
   "published_at": "2026-11-03T02:00:00Z",
   "available_at": null,
-  "observed_at": "2026-11-03T02:05:00Z",
+  "system_observed_at": "2026-11-03T02:05:00Z",
   "system_as_of": "2026-11-04T08:00:00Z",
   "stance": "supports",
   "confidence": null,
@@ -481,7 +481,7 @@ Event 可保留规范化 occurred_at 作为研究归一结果，但必须同时�
 }
 ```
 
-available_at=null 表示没有可验证的外部可获得时间，不得用 published_at 或 observed_at 自动填充。授权决策详情由 EvidenceAuthorizationRef 对应权威模块查询。
+available_at=null 表示没有可验证的外部可获得时间，不得用 published_at 或 system_observed_at 自动填充。授权决策详情由 EvidenceAuthorizationRef 对应权威模块查询。
 
 ### 10.4 ScenarioCondition：受限可执行条件
 
