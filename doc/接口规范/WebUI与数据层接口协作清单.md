@@ -427,3 +427,9 @@
 
 
 - P0-53 最终 CI：代码 SHA `91dfd465fc6cee738566d0b423e7e0b878e93d6e` 的 Push/PR Go suite `42147895923` / `42147902737`、Parity `42147902269`、WebUI checks `42147902274` 均 success；Go suite 含 gofmt、test、race、vet、MariaDB migration/PIT、Compose 和两个 Docker 镜像构建。Live Provider Probe `42147902279` 外层 success，但历史生产 Probe 与 BaoStock/Pytdx/Tushare 专项 skipped，不构成真实历史行情/跨源验收。接口字段既有，仅澄清 RowsValidated 语义，不增加 API/DB/WebUI 契约。
+
+
+## 28. 2026-11-06 API-06 P0-54 日历质量传递
+
+- DailyBars 在交易日历不可用、使用工作日估算覆盖率时，即使候选覆盖达标也会把 K 线质量标记为 degraded，并在 QualityReasons 中保留估算依据；日历冲突/推断导致的 degraded 同样传递到 K 线。仅历史日历缺少发布时间但日期覆盖完整时不单独降级。
+- 新增服务层与日历质量回归测试；无 API/DB/WebUI 契约变化，CI 待验。

@@ -1192,6 +1192,33 @@ func TestCoverageSufficientRejectsSparseLookback(t *testing.T) {
 	}
 }
 
+func TestDailyBarsDegradesWhenCoverageCalendarIsUnavailable(t *testing.T) {
+	tradeDates := []string{"2026-10-19", "2026-10-20", "2026-10-21", "2026-10-22", "2026-10-23"}
+	bars := make([]model.DailyBar, 0, len(tradeDates))
+	for _, tradeDate := range tradeDates {
+		bar := dailyBarForVersionContractTest("eastmoney-daily-bars-v1", tradeDate)
+		bar.AdjustmentBasis = model.AdjustmentNone
+		bar.QualityStatus = model.QualityValid
+		bars = append(bars, bar)
+	}
+	provider := fakeProvider{name: "eastmoney", bars: bars}
+	svc := New([]provider.Provider{provider}, cache.NewDisabled(), nil, time.Second, time.Minute, 120,
+		slog.New(slog.NewTextHandler(io.Discard, nil)))
+
+	got, hit, warnings, err := svc.DailyBars(context.Background(), "600519.SH", "2026-10-19", "2026-10-23", 5, model.AdjustmentNone)
+	if err != nil || hit {
+		t.Fatalf("DailyBars returned hit=%v err=%v", hit, err)
+	}
+	if len(got) != 5 || !containsTestWarning(warnings, "daily_bar_coverage_uses_weekday_estimate_calendar_unavailable") {
+		t.Fatalf("weekday estimate should preserve plausible coverage but expose unavailable calendar: bars=%+v warnings=%v", got, warnings)
+	}
+	for _, bar := range got {
+		if bar.QualityStatus != model.QualityDegraded || !containsReason(bar.QualityReasons, "daily_bar_coverage_uses_weekday_estimate_calendar_unavailable") {
+			t.Fatalf("calendar-unverified coverage must not be marked valid: %+v", bar)
+		}
+	}
+}
+
 func TestDailyBarsCachePartialCandleRefreshesAfterClose(t *testing.T) {
 	loc := marketLocation()
 	bar := model.DailyBar{SourceVersion: "test-v1", TradeDate: "2026-10-21", IsPartial: true}
