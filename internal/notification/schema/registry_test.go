@@ -2,13 +2,13 @@ package schema
 
 import (
 	"encoding/json"
-
-	"example.com/stock-analysis-flow/internal/notification/domain"
 	"errors"
 	"io/fs"
 	"os"
 	"strings"
 	"testing"
+
+	"example.com/stock-analysis-flow/internal/notification/domain"
 )
 
 func newTestRegistry(t *testing.T) *Registry {
