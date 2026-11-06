@@ -9,21 +9,45 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Kasign/stock_data_provider/services/market-data/internal/baostock"
 	"github.com/Kasign/stock_data_provider/services/market-data/internal/model"
 )
 
+type pytdxRawCrossProviderField struct {
+	Field      string  `json:"field"`
+	Status     string  `json:"status"`
+	Left       float64 `json:"left,omitempty"`
+	Right      float64 `json:"right,omitempty"`
+	Difference float64 `json:"difference,omitempty"`
+	Tolerance  float64 `json:"tolerance,omitempty"`
+	Reason     string  `json:"reason,omitempty"`
+}
+
+type pytdxRawCrossProviderResult struct {
+	Status                string                       `json:"status"`
+	Reason                string                       `json:"reason,omitempty"`
+	PytdxQualityStatus    string                       `json:"pytdx_quality_status,omitempty"`
+	BaoStockQualityStatus string                       `json:"baostock_quality_status,omitempty"`
+	BaoStockRows          int                          `json:"baostock_rows,omitempty"`
+	BaoStockFirstDate     string                       `json:"baostock_first_date,omitempty"`
+	BaoStockLastDate      string                       `json:"baostock_last_date,omitempty"`
+	ComparedDates         []string                     `json:"compared_dates,omitempty"`
+	Fields                []pytdxRawCrossProviderField `json:"fields,omitempty"`
+	Error                 string                       `json:"error,omitempty"`
+}
 type pytdxHistoricalProbeItem struct {
-	Symbol             string                `json:"symbol"`
-	Adjustment         model.AdjustmentBasis `json:"adjustment"`
-	Status             string                `json:"status"`
-	Rows               int                   `json:"rows,omitempty"`
-	FirstDate          string                `json:"first_date,omitempty"`
-	LastDate           string                `json:"last_date,omitempty"`
-	AdjustmentMethods  []string              `json:"adjustment_methods,omitempty"`
-	AdjustmentRefDates []string              `json:"adjustment_reference_dates,omitempty"`
-	QualityCounts      map[string]int        `json:"quality_counts,omitempty"`
-	Error              string                `json:"error,omitempty"`
-	Bars               []model.DailyBar      `json:"bars,omitempty"`
+	Symbol             string                       `json:"symbol"`
+	Adjustment         model.AdjustmentBasis        `json:"adjustment"`
+	Status             string                       `json:"status"`
+	Rows               int                          `json:"rows,omitempty"`
+	FirstDate          string                       `json:"first_date,omitempty"`
+	LastDate           string                       `json:"last_date,omitempty"`
+	AdjustmentMethods  []string                     `json:"adjustment_methods,omitempty"`
+	AdjustmentRefDates []string                     `json:"adjustment_reference_dates,omitempty"`
+	QualityCounts      map[string]int               `json:"quality_counts,omitempty"`
+	Error              string                       `json:"error,omitempty"`
+	RawCrossProvider   *pytdxRawCrossProviderResult `json:"raw_cross_provider,omitempty"`
+	Bars               []model.DailyBar             `json:"bars,omitempty"`
 }
 
 type pytdxHistoricalProbeReport struct {
@@ -35,6 +59,82 @@ type pytdxHistoricalProbeReport struct {
 
 // TestLivePytdxHistoricalDailyBars verifies the existing TDX/GBBQ adjustment
 // path on the same historical golden windows. It is opt-in and never gates CI.
+func comparePytdxAndBaoStockRawBars(ctx context.Context, symbol, startDate, endDate string, pytdxBars []model.DailyBar, baostockProvider *Baostock) *pytdxRawCrossProviderResult {
+	result := &pytdxRawCrossProviderResult{Status: CrossProviderDailyNotComparable}
+	if baostockProvider == nil {
+		result.Reason = "baostock_provider_unavailable"
+		result.Error = "BaoStock provider is not configured"
+		return result
+	}
+	baoBars, err := baostockProvider.FetchDailyBars(ctx, symbol, startDate, endDate, 40, model.AdjustmentNone)
+	if err != nil {
+		_, safe := liveProbeErrorSummary(err)
+		result.Reason = "baostock_provider_unavailable"
+		result.Error = safe
+		return result
+	}
+	if message := liveProbeDailyContractError(baoBars, "baostock", "baostock", symbol, model.AdjustmentNone, startDate, endDate, 40); message != "" {
+		result.Reason = "baostock_contract_invalid"
+		result.Error = message
+		return result
+	}
+	result.BaoStockRows = len(baoBars)
+	for _, bar := range baoBars {
+		if result.BaoStockFirstDate == "" || bar.TradeDate < result.BaoStockFirstDate {
+			result.BaoStockFirstDate = bar.TradeDate
+		}
+		if bar.TradeDate > result.BaoStockLastDate {
+			result.BaoStockLastDate = bar.TradeDate
+		}
+	}
+	left := crossProviderSnapshotFromDailyBars(pytdxBars)
+	right := crossProviderSnapshotFromDailyBars(baoBars)
+	result.PytdxQualityStatus = left.QualityStatus
+	result.BaoStockQualityStatus = right.QualityStatus
+	comparison := CompareCrossProviderDailyBars(left, right)
+	result.Status = comparison.Status
+	result.Reason = comparison.Reason
+	result.ComparedDates = comparison.ComparedDates
+	for _, field := range comparison.Fields {
+		result.Fields = append(result.Fields, pytdxRawCrossProviderField{
+			Field: field.Field, Status: field.Status, Left: field.Left, Right: field.Right,
+			Difference: field.Difference, Tolerance: field.Tolerance, Reason: field.Reason,
+		})
+	}
+	return result
+}
+
+func crossProviderSnapshotFromDailyBars(bars []model.DailyBar) CrossProviderDailySnapshot {
+	snapshot := CrossProviderDailySnapshot{QualityStatus: string(model.QualityUnknown)}
+	if len(bars) == 0 {
+		return snapshot
+	}
+	first := bars[0]
+	snapshot.Provider = first.Source
+	snapshot.SourceVersion = first.SourceVersion
+	snapshot.Symbol = first.Symbol
+	snapshot.AdjustmentBasis = string(first.AdjustmentBasis)
+	snapshot.QualityStatus = string(model.QualityValid)
+	for _, bar := range bars {
+		if bar.QualityStatus != model.QualityValid {
+			snapshot.QualityStatus = string(model.QualityDegraded)
+		}
+		snapshot.Bars = append(snapshot.Bars, CrossProviderDailyBar{
+			TradeDate: bar.TradeDate, Open: bar.Open, High: bar.High, Low: bar.Low, Close: bar.Close,
+			Volume: valueOrZero(bar.Volume), VolumeUnit: bar.VolumeUnit, VolumeGranularity: CrossProviderVolumeGranularity(bar.RawVolumeUnit), Amount: bar.Amount, AmountUnit: bar.AmountUnit,
+			AmountErrorBound: CrossProviderAmountErrorBound(bar.Source, bar.RawAmountUnit, bar.RawAmountField, bar.RawAmount),
+			AdjustmentMethod: bar.AdjustmentMethod, AdjustmentRefDate: bar.AdjustmentRefDate,
+		})
+	}
+	return snapshot
+}
+
+func valueOrZero(value *int64) int64 {
+	if value == nil {
+		return -1
+	}
+	return *value
+}
 func TestLivePytdxHistoricalDailyBars(t *testing.T) {
 	if os.Getenv("MARKET_DATA_LIVE_PYTDX_HISTORICAL_TESTS") != "1" {
 		t.Skip("set MARKET_DATA_LIVE_PYTDX_HISTORICAL_TESTS=1 to probe Pytdx historical bars")
@@ -58,6 +158,9 @@ func TestLivePytdxHistoricalDailyBars(t *testing.T) {
 		symbols = strings.Split(configured, ",")
 	}
 	client := NewPytdx(20 * time.Second)
+	baostockClient := baostock.NewClient(baostock.Config{ConnectTimeout: 8 * time.Second, RequestTimeout: 20 * time.Second})
+	defer func() { _ = baostockClient.Close() }()
+	baostockProvider := NewBaostock(baostockClient)
 	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Minute)
 	defer cancel()
 	report := pytdxHistoricalProbeReport{
@@ -149,6 +252,14 @@ func TestLivePytdxHistoricalDailyBars(t *testing.T) {
 				item.Status = "contract_invalid"
 				item.Error = "unadjusted daily bars must not declare an adjustment reference date"
 				failures = append(failures, symbol+"/"+string(adjustment)+": "+item.Error)
+			} else {
+				item.RawCrossProvider = comparePytdxAndBaoStockRawBars(ctx, symbol, startDate, endDate, bars, baostockProvider)
+				if item.RawCrossProvider.Status == CrossProviderDailyMismatch {
+					failures = append(failures, symbol+"/raw cross-provider mismatch")
+				}
+				if item.RawCrossProvider.Error != "" && item.RawCrossProvider.Reason == "baostock_contract_invalid" {
+					failures = append(failures, symbol+"/BaoStock raw contract invalid: "+item.RawCrossProvider.Error)
+				}
 			}
 			report.Items = append(report.Items, item)
 		}

@@ -20,7 +20,7 @@ type Result struct {
 	Name        string       `json:"name,omitempty"`
 	Required    bool         `json:"required"`
 	Observation Observation  `json:"observation"`
-	Fault       *fault.Fault `json:"fault,omitempty"`
+	Fault       *fault.Fault `json:"-"`
 }
 
 type Report struct {

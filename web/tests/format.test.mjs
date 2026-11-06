@@ -159,3 +159,34 @@ test("numeric formatters reject booleans and non-scalar API values", () => {
   assert.equal(finiteNumberOrNull("12.5"), 12.5);
   assert.equal(formatPrice("12.5"), "12.50");
 });
+
+test("applies saved precision and amount/volume unit preferences consistently", () => {
+  const original = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
+  let stored = JSON.stringify({
+    priceDigits: 3,
+    percentDigits: 3,
+    amountDisplayUnit: "raw"
+  });
+  Object.defineProperty(globalThis, "localStorage", {
+    configurable: true,
+    value: { getItem: () => stored }
+  });
+
+  try {
+    assert.equal(formatPrice(12.5), "12.500");
+    assert.equal(formatPercent(1.2), "+1.200%");
+    assert.equal(formatCompact(12345), "12,345");
+
+    stored = JSON.stringify({
+      priceDigits: 2,
+      percentDigits: 2,
+      amountDisplayUnit: "compact"
+    });
+    assert.equal(formatPrice(12.5), "12.50");
+    assert.equal(formatPercent(1.2), "+1.20%");
+    assert.equal(formatCompact(12345), "1.23万");
+  } finally {
+    if (original) Object.defineProperty(globalThis, "localStorage", original);
+    else delete globalThis.localStorage;
+  }
+});

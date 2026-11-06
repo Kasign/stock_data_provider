@@ -2,12 +2,12 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
-const [html, appSource, format, domain, openapi, recentTaskModule, stylesheet, watchlistModule, apiClient, taskQueue, marketActivity, stockResearch, marketOverview, serviceWiring, dataCenter, healthCheck, marketHTTPServer, marketOpenAPI, marketStocksModule, notificationPreferences, taskWorkflow] = await Promise.all([
+const [html, appSource, format, domain, openapi, recentTaskModule, stylesheet, watchlistModule, apiClient, taskQueue, marketActivity, stockResearch, marketOverview, serviceWiring, dataCenter, healthCheck, marketHTTPServer, marketOpenAPI, marketStocksModule, notificationPreferences, taskWorkflow, localAlertDrafts, taskEventFormat, taskEventView, taskEventNode, taskResultView, watchlistItemView] = await Promise.all([
   readFile(new URL("../index.html", import.meta.url), "utf8"),
   readFile(new URL("../src/app.js", import.meta.url), "utf8"),
   readFile(new URL("../src/format.js", import.meta.url), "utf8"),
   readFile(new URL("../../internal/analysis/domain/types.go", import.meta.url), "utf8"),
-  readFile(new URL("../../doc/api/分析任务.openapi.yaml", import.meta.url), "utf8"),
+  readFile(new URL("../../doc/api/contracts/分析任务.openapi.yaml", import.meta.url), "utf8"),
   readFile(new URL("../src/recent-tasks.js", import.meta.url), "utf8"),
   readFile(new URL("../styles.css", import.meta.url), "utf8"),
   readFile(new URL("../src/watchlist.js", import.meta.url), "utf8"),
@@ -23,11 +23,25 @@ const [html, appSource, format, domain, openapi, recentTaskModule, stylesheet, w
   readFile(new URL("../../services/market-data/openapi.yaml", import.meta.url), "utf8"),
   readFile(new URL("../src/market-stocks.js", import.meta.url), "utf8"),
   readFile(new URL("../src/notification-preferences.js", import.meta.url), "utf8"),
-  readFile(new URL("../src/task-workflow.js", import.meta.url), "utf8")
+  readFile(new URL("../src/task-workflow.js", import.meta.url), "utf8"),
+  readFile(new URL("../src/local-alert-drafts.js", import.meta.url), "utf8"),
+  readFile(new URL("../src/task-event-format.js", import.meta.url), "utf8"),
+  readFile(new URL("../src/task-event-view.js", import.meta.url), "utf8"),
+  readFile(new URL("../src/task-event-node.js", import.meta.url), "utf8"),
+  readFile(new URL("../src/task-result-view.js", import.meta.url), "utf8"),
+  readFile(new URL("../src/watchlist-item-view.js", import.meta.url), "utf8")
 ]);
+const settingsNavigation = await readFile(new URL("../src/settings-navigation.js", import.meta.url), "utf8");
+const recentTaskView = await readFile(new URL("../src/recent-task-view.js", import.meta.url), "utf8");
+const stockSearchView = await readFile(new URL("../src/stock-search-view.js", import.meta.url), "utf8");
+const watchlistImportPreviewView = await readFile(new URL("../src/watchlist-import-preview-view.js", import.meta.url), "utf8");
+const watchlistTrackingViewModel = await readFile(new URL("../src/watchlist-tracking-view-model.js", import.meta.url), "utf8");
+const watchlistListViewModel = await readFile(new URL("../src/watchlist-list-view-model.js", import.meta.url), "utf8");
+const taskEventListViewModel = await readFile(new URL("../src/task-event-list-view-model.js", import.meta.url), "utf8");
+const taskFlowSummaryViewModel = await readFile(new URL("../src/task-flow-summary-view-model.js", import.meta.url), "utf8");
 
 // UI 控制器和功能模块分拆后，跨模块契约应检查实际参与运行的源码集合。
-const app = [appSource, recentTaskModule, watchlistModule, marketOverview, marketActivity, stockResearch, dataCenter, healthCheck, marketStocksModule, taskWorkflow].join("\n");
+const app = [appSource, recentTaskModule, watchlistModule, marketOverview, marketActivity, stockResearch, dataCenter, healthCheck, marketStocksModule, taskWorkflow, watchlistItemView, watchlistImportPreviewView, watchlistTrackingViewModel, watchlistListViewModel].join("\n");
 
 function finalCssRuleBody(selector) {
   const start = stylesheet.lastIndexOf(selector);
@@ -41,6 +55,12 @@ function finalCssRuleBody(selector) {
 function baseCssDeclarationBlock(selector) {
   const rules = [...stylesheet.matchAll(/([^{}]+)[{]([^{}]*)[}]/g)];
   const rule = rules.find((match) => match[1].split(",").some((part) => part.trim() === selector));
+  return rule?.[2] || "";
+}
+
+function exactCssDeclarationBlock(selector) {
+  const rules = [...stylesheet.matchAll(/([^{}]+)[{]([^{}]*)[}]/g)];
+  const rule = rules.find((match) => match[1].trim() === selector);
   return rule?.[2] || "";
 }
 
@@ -71,8 +91,12 @@ test("自选股辅助字段顺序与工作区导入预览契约完整", () => {
   assert.equal([...html.matchAll(/data-watchlist-field-order="/g)].length, 5);
   assert.equal([...html.matchAll(/data-watchlist-field-order-move="(?:up|down)"/g)].length, 10);
   assert.match(app, /watchlistDisplayOrder: \[\.\.\.document\.querySelectorAll\("\[data-watchlist-field-order\]"\)\]/);
-  assert.match(app, /const visibleTrackingNodes = \(preferences\.watchlistDisplayOrder/);
-  assert.match(app, /updated: meta/);
+  assert.match(app, /buildWatchlistTrackingFields\(\{/);
+  assert.match(watchlistTrackingViewModel, /const displayFieldNodes = \{/);
+  assert.match(watchlistTrackingViewModel, /updated: \{ className: "watchlist-item-meta"/);
+  assert.match(watchlistTrackingViewModel, /\.filter\(\(field\) => Array\.isArray\(displayFields\) && displayFields\.includes\(field\)\)/);
+  assert.match(watchlistItemView, /trackingFields\.forEach\(\(field\)/);
+  assert.match(watchlistItemView, /className = "watchlist-tracking-summary"/);
   assert.match(app, /const BROWSER_DATA_VERSION = 3/);
   assert.match(app, /!\[1, 2, BROWSER_DATA_VERSION\]\.includes\(payload\.version\)/);
   assert.match(html, /<dialog[^>]+id="browser-data-import-dialog"/);
@@ -83,6 +107,16 @@ test("自选股辅助字段顺序与工作区导入预览契约完整", () => {
   assert.match(app, /rollbackFailures/);
   assert.match(app, /apiKey: state\.settings\.apiKey/);
   assert.doesNotMatch(app, /window\.prompt\(preview/);
+});
+
+test("自选股导入预览视图模块只构建 DOM，不接管页面状态或存储", () => {
+  assert.match(appSource, /import \{ buildWatchlistImportPreviewView \} from "\.\/watchlist-import-preview-view\.js"/);
+  assert.match(appSource, /buildWatchlistImportPreviewView\(\{ document, preview \}\)/);
+  assert.match(appSource, /root\.replaceChildren\(\.\.\.view\.nodes\)/);
+  assert.match(appSource, /state\.watchlistImportPreview = preview/);
+  assert.match(watchlistImportPreviewView, /document\.createElement\("table"\)/);
+  assert.match(watchlistImportPreviewView, /cell\.textContent = String\(value\)/);
+  assert.doesNotMatch(watchlistImportPreviewView, /localStorage|document\.querySelector|addEventListener|fetch\s*\(/);
 });
 
 test("structured result renderer uses fields declared by Go RunResult", () => {
@@ -100,9 +134,9 @@ test("structured result renderer uses fields declared by Go RunResult", () => {
   ];
   for (const field of requiredFields) {
     assert.match(domain, new RegExp('json:"' + field + '(?:,[^"]*)?"'), "Go domain model must declare " + field);
-    assert.ok(app.includes("result." + field), "WebUI must render result." + field);
+    assert.ok(taskResultView.includes("result." + field), "Run result adapter must render result." + field);
   }
-  assert.doesNotMatch(app, /signal\.(score|confidence|rationale|reason)\b/, "do not display fields absent from CandidateSignal");
+  assert.doesNotMatch(taskResultView, /signal\.(score|confidence|rationale|reason)\b/, "do not display fields absent from CandidateSignal");
   assert.doesNotMatch(app, /completed_stages\s*\?\?\s*0/, "missing stage counts must not be fabricated as zero");
   assert.match(html, /id="task-create-feedback"/, "task submission errors should be shown inline");
 });
@@ -172,18 +206,18 @@ test("watchlist marks a retained Run result when re-reading fails and refreshes 
   const watchlistStart = app.indexOf("function renderWatchlist(");
   const watchlistEnd = app.indexOf("\nfunction addCurrentSymbolToWatchlist(", watchlistStart);
   const watchlist = app.slice(watchlistStart, watchlistEnd);
-  assert.match(watchlist, /readState === "loading"[\s\S]*?正在重读，尚未确认/);
-  assert.match(watchlist, /readState === "retrying"[\s\S]*?重试中，尚未确认/);
-  assert.match(watchlist, /readState === "error"[\s\S]*?本次读取失败/);
+  assert.match(watchlistTrackingViewModel, /正在重读，尚未确认/);
+  assert.match(watchlistTrackingViewModel, /重试中，尚未确认/);
+  assert.match(watchlistTrackingViewModel, /本次读取失败/);
   const resultStart = app.indexOf("function renderTaskResult(result) {");
   const resultEnd = app.indexOf("\nfunction ", resultStart + 10);
   assert.match(app.slice(resultStart, resultEnd), /state\.runResultReadStatus = "";[\s\S]*?state\.runResultReadError = ""/);
   const loaderStart = app.indexOf("async function loadTaskRunResult(runId, expectedTaskId) {");
   const loaderEnd = app.indexOf("\nfunction stopTaskPolling()", loaderStart);
   const loader = app.slice(loaderStart, loaderEnd);
-  assert.match(watchlist, /activeRunReadMatches[\s\S]*?当前 Run 结果：正在读取服务端结果/);
-  assert.match(watchlist, /当前 Run 结果：暂时不可读，正在自动重试/);
-  assert.match(watchlist, /当前 Run 结果：读取失败/);
+  assert.match(watchlistTrackingViewModel, /当前 Run 结果：正在读取服务端结果/);
+  assert.match(watchlistTrackingViewModel, /当前 Run 结果：暂时不可读，正在自动重试/);
+  assert.match(watchlistTrackingViewModel, /当前 Run 结果：读取失败/);
   assert.match(loader, /state\.runResultReadStatus = "loading"/);
   assert.match(loader, /state\.runResultReadStatus = "retrying"[\s\S]*?if \(state\.view === "watchlist"\) renderWatchlist\(\)/);
   assert.match(loader, /state\.runResultReadStatus = "error"[\s\S]*?if \(state\.view === "watchlist"\) renderWatchlist\(\)/);
@@ -211,8 +245,8 @@ test("task restoration and manual refresh mark cached status as unconfirmed", ()
   const watchStart = app.indexOf("function renderWatchlist(");
   const watchEnd = app.indexOf("\nfunction addCurrentSymbolToWatchlist(", watchStart);
   const watchlist = app.slice(watchStart, watchEnd);
-  assert.match(watchlist, /state\.taskStatusLoading \|\| Boolean\(state\.taskStatusError\)/);
-  assert.match(watchlist, /正在确认服务端状态（上次状态：/);
+  assert.match(watchlistTrackingViewModel, /currentTask\.statusLoading \|\| Boolean\(currentTask\.statusError\)/);
+  assert.match(watchlistTrackingViewModel, /正在确认服务端状态（上次状态：/);
   const manualStart = app.indexOf('$("#refresh-task").addEventListener("click"');
   const manualEnd = app.indexOf('$("#recent-analysis-search")', manualStart);
   const manual = app.slice(manualStart, manualEnd);
@@ -249,17 +283,27 @@ test("数据源能力刷新初始化或最终解锁异常不会产生未处理 r
   assert.match(refresh, /let button = null;[\s\S]*?let list = null;[\s\S]*?try \{/);
   assert.match(refresh, /showMessage\("正在读取当前连接配置对应的数据源能力…"/);
   assert.match(refresh, /try \{\s*if \(button\) \{\s*button\.disabled = true;[\s\S]*?catch \{/);
-  assert.match(refresh, /const payload = await getDataSources\(settings\);[\s\S]*?generation !== sourceRefreshGeneration/);
-  assert.match(refresh, /catch \(error\) \{\s*if \(generation !== sourceRefreshGeneration\) return;[\s\S]*?showMessage\(message, "empty-row error-text"\)/);
-  assert.match(refresh, /finally \{[\s\S]*?if \(generation === sourceRefreshGeneration\) \{[\s\S]*?try \{[\s\S]*?button\.disabled = false;[\s\S]*?catch \{/);
+  assert.ok(refresh.includes("const payload = await getDataSources(settings, controller.signal);"));
+  assert.ok(refresh.includes("controller.signal.aborted || generation !== sourceRefreshGeneration"));
+  assert.ok(refresh.includes("if (controller.signal.aborted || generation !== sourceRefreshGeneration) return;"));
+  assert.ok(refresh.includes('showMessage(message, "empty-row error-text")'));
+  assert.ok(refresh.includes("if (generation === sourceRefreshGeneration && sourceRefreshController === controller) {"));
+  assert.ok(refresh.includes("button.disabled = false;"));
+
 });
 
 test("已保存连接检查与草稿检查的初始化/解锁异常不会产生未处理 rejection", () => {
   const saved = app.match(/async function checkConnectionFromSettings\(\) \{[\s\S]*?\n\}/)?.[0] || "";
   const draft = app.match(/async function checkDraftConnectionFromSettings\(\) \{[\s\S]*?\n\}/)?.[0] || "";
   assert.match(saved, /generation !== savedConnectionCheckGeneration/);
+  assert.match(saved, /savedConnectionCheckController = controller/);
+  assert.match(saved, /runHealthCheck\(marketHealth, settingsToCheck, 6000, controller\.signal\)/);
+  assert.match(saved, /finally[\s\S]*?savedConnectionCheckController === controller/);
   assert.match(saved, /finally[\s\S]*?releaseSettingsCheckButtonSafely/);
   assert.match(draft, /generation !== draftConnectionCheckGeneration/);
+  assert.match(draft, /draftConnectionCheckController = controller/);
+  assert.match(draft, /runHealthCheck\(marketHealth, settingsToCheck, 6000, controller\.signal\)/);
+  assert.match(draft, /finally[\s\S]*?draftConnectionCheckController === controller/);
   assert.match(draft, /finally[\s\S]*?releaseSettingsCheckButtonSafely/);
   assert.match(draft, /testedDraft = readConnectionDraft\(\)/);
 });
@@ -270,6 +314,9 @@ test("applySettings 的单项清理失败不会阻断其余配置应用步骤", 
   assert.ok(apply);
   assert.match(apply, /runSettingsApplyStep\("清理旧分析任务失败："/);
   assert.match(apply, /runSettingsApplyStep\("失效市场总览请求失败："/);
+  assert.match(apply, /savedConnectionCheckController\?\.abort\(\)/);
+  assert.match(apply, /draftConnectionCheckController\?\.abort\(\)/);
+  assert.match(apply, /恢复草稿连接检查按钮失败：[\s\S]*?releaseSettingsCheckButtonSafely\(\$\("#settings-check-draft-connection"\), "检查未保存配置"\)/);
   assert.match(apply, /runSettingsApplyStep\("刷新服务健康状态失败："/);
   assert.match(apply, /reportSettingsApplyFailures\(failures\)/);
 });
@@ -394,8 +441,8 @@ test("task polling errors mark last-known status stale and successful refresh cl
   assert.ok(poller.includes('state.taskStatusError = "";'), "下一次有效 Task 回包清除旧错误");
   assert.ok(poller.includes('setQualityPill($("#task-status-pill"), "unknown", state.taskStatusErrorRetrying ? "状态刷新失败" : "状态读取失败")'), "任务状态徽标不得继续冒充为已确认的 running/succeeded");
   const watchlistRenderer = app.slice(app.indexOf("function renderWatchlist("), app.indexOf("\nfunction addCurrentSymbolToWatchlist("));
-  assert.ok(watchlistRenderer.includes("状态读取异常（上次状态："), "自选卡片应将上次状态标为未验证");
-  assert.ok(watchlistRenderer.includes("自动重试中") && watchlistRenderer.includes("自动刷新已暂停"), "自选卡片应区分临时错误与永久错误");
+  assert.ok(watchlistTrackingViewModel.includes("状态读取异常（上次状态："), "自选卡片应将上次状态标为未验证");
+  assert.ok(watchlistTrackingViewModel.includes("自动重试中") && watchlistTrackingViewModel.includes("自动刷新已暂停"), "自选卡片应区分临时错误与永久错误");
   const manualStart = app.indexOf('$("#refresh-task").addEventListener("click"');
   const manualEnd = app.indexOf('$("#recent-analysis-search")', manualStart);
   const manualRefresh = app.slice(manualStart, manualEnd);
@@ -460,17 +507,103 @@ test("polling pauses on permanent API errors and Run reads use bounded, stale-sa
 });
 
 
+test("分析结果与诊断文本字号由组件基础规则负责", () => {
+  const expected = [
+    [".task-result-note", "12px"],
+    [".task-result-metric small", "13px"],
+    [".signal-result-card strong", "12px"],
+    [".signal-result-card p", "12px"],
+    [".task-result-warnings p", "13px"],
+    [".raw-result", "12px"],
+    [".raw-result pre", "12px"],
+    [".analysis-result-block > p", "13px"],
+    [".analysis-result-badge", "12px"],
+    [".analysis-result-fields dt", "12px"],
+    [".analysis-result-fields dd", "13px"],
+    [".analysis-result-empty", "13px"]
+  ];
+
+  for (const [selector, size] of expected) {
+    const declarations = exactCssDeclarationBlock(selector);
+    assert.ok(declarations.includes("font-size: " + size + ";"), selector + " should own its readability baseline");
+    assert.doesNotMatch(declarations, /!important/);
+  }
+
+  const actionDeclarations = exactCssDeclarationBlock(".task-result-actions .text-button");
+  assert.ok(actionDeclarations.includes("font-size: 11px;"), "task result actions retain compact typography");
+  assert.doesNotMatch(actionDeclarations, /!important/);
+  assert.ok(!stylesheet.includes(':root[data-theme="light"] .task-result-actions .text-button'));
+  assert.ok(!stylesheet.includes(':root[data-theme="light"] .task-result-metric small'));
+});
+
+test("最近分析与自选股文字字号由组件基础规则负责", () => {
+  const expected = [
+    [".recent-analysis-item-main strong", "12px"],
+    [".recent-analysis-item-main small", "12px"],
+    [".recent-analysis-item-status", "12px"],
+    [".watchlist-panel .panel-heading p", "13px"],
+    [".watchlist-name-field", "13px"],
+    [".watchlist-item-meta", "12px"],
+    [".watchlist-action", "13px"],
+    [".watchlist-feedback", "13px"]
+  ];
+
+  for (const [selector, size] of expected) {
+    const declarations = exactCssDeclarationBlock(selector);
+    assert.ok(declarations.includes("font-size: " + size + ";"), selector + " should own its readability baseline");
+    assert.doesNotMatch(declarations, /!important/);
+  }
+
+  assert.ok(!stylesheet.includes(".recent-analysis-item-main strong { font-size: 12px !important; }"));
+  assert.ok(!stylesheet.includes(".watchlist-panel .panel-heading p { font-size: 13px !important; }"));
+});
+
+test("个股补充资料文字字号由组件基础规则负责", () => {
+  const expected = [
+    [".supplemental-heading p", "13px"],
+    [".supplemental-heading .button", "13px"],
+    [".supplemental-context", "12px"],
+    [".supplemental-feedback", "13px"],
+    [".supplemental-card-heading small", "12px"],
+    [".supplement-quality", "12px"],
+    [".supplemental-fields dt", "13px"],
+    [".supplemental-fields dd", "13px"],
+    [".supplemental-reasons", "12px"],
+    [".supplemental-error", "13px"]
+  ];
+
+  for (const [selector, size] of expected) {
+    const declarations = exactCssDeclarationBlock(selector);
+    assert.ok(declarations.includes("font-size: " + size + ";"), selector + " should own its readability baseline");
+    assert.doesNotMatch(declarations, /!important/);
+  }
+
+  assert.match(stylesheet, /@media \(max-width: 800px\) \{ \.supplemental-grid \{ grid-template-columns: minmax\(0, 1fr\); \} \}/);
+  assert.match(stylesheet, /@media \(max-width: 600px\)[\s\S]*?\.supplemental-fields \{ grid-template-columns:/);
+});
+
 test("structured analysis results use readable typography and mobile-safe layouts", () => {
-  assert.match(stylesheet, /\.task-result-metric small \{[^}]*font-size: 11px/);
+  assert.match(stylesheet, /\.task-result-metric small \{[^}]*font-size: 13px/);
   assert.match(stylesheet, /\.task-result-metric strong \{[^}]*font-size: 14px/);
   assert.match(stylesheet, /\.analysis-result-block > h3 \{[^}]*font-size: 14px/);
-  assert.match(stylesheet, /\.analysis-result-fields dt \{[^}]*font-size: 11px/);
-  assert.match(stylesheet, /\.analysis-result-fields dd \{[^}]*font-size: 12px/);
+  assert.match(stylesheet, /\.analysis-result-fields dt \{[^}]*font-size: 12px/);
+  assert.match(stylesheet, /\.analysis-result-fields dd \{[^}]*font-size: 13px/);
   assert.match(stylesheet, /\.task-result-actions \.text-button \{[^}]*font-size: 11px/);
   assert.match(stylesheet, /@media \(max-width: 600px\)[\s\S]*?\.analysis-result-grid \{ grid-template-columns: minmax\(0, 1fr\); \}/);
   assert.match(stylesheet, /overflow-wrap: anywhere/);
 });
 
+
+test("watchlist list projection is pure and reuses the existing sort domain", () => {
+  assert.match(appSource, /buildWatchlistListViewModel\(\{/);
+  assert.match(watchlistListViewModel, /import \{ sortWatchlistItems \} from "\.\/watchlist-sort\.js"/);
+  assert.match(watchlistListViewModel, /export function buildWatchlistListViewModel\(/);
+  assert.doesNotMatch(watchlistListViewModel, /\bstate\.|localStorage|document\.|querySelector|addEventListener|fetch\(/);
+  assert.match(watchlistListViewModel, /groupAssignments|assignments/);
+  assert.match(watchlistListViewModel, /filterCountText/);
+  assert.match(appSource, /syncWatchlistQuoteMembership\(records\)/);
+  assert.match(appSource, /renderResearchStockList\(\)/);
+});
 
 test("browser-local watchlist is wired to existing query/analysis flows and stores only references", () => {
   for (const id of ["add-to-watchlist-button", "watchlist-count", "watchlist-feedback", "watchlist-list"]) {
@@ -479,7 +612,12 @@ test("browser-local watchlist is wired to existing query/analysis flows and stor
   assert.match(app, /function renderWatchlist\(/);
   assert.match(app, /addWatchlistSymbol\(symbol, defaultName, localStorage\)/);
   assert.match(app, /removeWatchlistSymbol\(symbol, localStorage\)/);
-  assert.match(app, /renameWatchlistSymbol\(record\.symbol, aliasInput\.value, localStorage\)/);
+  assert.match(appSource, /function handleWatchlistNameChange\(aliasInput\)/);
+  assert.match(appSource, /renameWatchlistSymbol\(symbol, aliasInput\.value, localStorage\)/);
+  assert.match(appSource, /input\[data-watchlist-name-symbol\]/);
+  assert.match(appSource, /buildWatchlistItemNode\(/);
+  assert.match(watchlistItemView, /export function buildWatchlistItemNode\(/);
+  assert.doesNotMatch(watchlistItemView, /state[.]|localStorage|fetch[(]|addEventListener|querySelector/);
   assert.match(app, /function startAnalysisForSymbol\(input\)/);
   assert.match(app, /function startAnalysisForSymbol\(input\) \{[\s\S]*?symbol = normalizeAnalysisSymbol\(input\);[\s\S]*?\$\("#task-symbols"\)\.value = symbol;[\s\S]*?setView\("tasks"\);[\s\S]*?\$\("#task-form"\)\.requestSubmit\(\);/);
   assert.match(watchlistModule, /WATCHLIST_KEY/);
@@ -554,11 +692,11 @@ test("restoring a task resets the previous stage-event selection", () => {
 });
 
 test("watchlist labels task history from a different analysis API address", () => {
-  assert.ok(app.includes('const isOtherAnalysisBase = (task) => Boolean(task && String(task.analysis_base || state.settings.analysisBase) !== String(state.settings.analysisBase));'));
-  assert.ok(app.includes('todayLine.textContent = "今日分析：有本地记录" + (todayTaskUsesOtherEndpoint ? "（旧分析 API 地址）" : "")'));
-  assert.ok(app.includes('(recentTaskUsesOtherEndpoint ? " · 旧分析 API 地址" : "")'));
-  const todayTaskDeclaration = app.indexOf("const todayTask = [...matchingTasks]");
-  const todayEndpointUse = app.indexOf("const todayTaskUsesOtherEndpoint = isOtherAnalysisBase(todayTask)");
+  assert.ok(watchlistTrackingViewModel.includes("function isOtherAnalysisBase(task, currentAnalysisBase)"));
+  assert.ok(watchlistTrackingViewModel.includes('todayText = "今日分析：有本地记录" + (todayTaskUsesOtherEndpoint ? "（旧分析 API 地址）" : "")'));
+  assert.ok(watchlistTrackingViewModel.includes('(recentTaskUsesOtherEndpoint ? " · 旧分析 API 地址" : "")'));
+  const todayTaskDeclaration = watchlistTrackingViewModel.indexOf("const todayTask = [...matchingTasks]");
+  const todayEndpointUse = watchlistTrackingViewModel.indexOf("const todayTaskUsesOtherEndpoint = isOtherAnalysisBase(todayTask");
   assert.ok(todayTaskDeclaration >= 0 && todayTaskDeclaration < todayEndpointUse, "必须先计算 todayTask 再读取其来源地址，避免暂时性死区");
 });
 
@@ -682,13 +820,17 @@ test("task polling and saved task references are scoped to the analysis API base
 });
 
 test("topbar service health checks have bounded timeouts and pass abort signals", () => {
-  assert.ok(healthCheck.includes("export async function runHealthCheck(check, settings, timeoutMs = 6000)"));
+  assert.ok(healthCheck.includes("export async function runHealthCheck(check, settings, timeoutMs = 6000, externalSignal = null)"));
+  assert.match(healthCheck, /externalSignal\.addEventListener\("abort", abortListener, \{ once: true \}\)/);
   assert.ok(healthCheck.includes("controller.abort()"));
   assert.match(app, /async function refreshServices\(\)[\s\S]*?Promise\.all\(\[[\s\S]*?runHealthCheck\(marketHealth, settings\)[\s\S]*?runHealthCheck\(analysisHealth, settings\)/);
 });
 
 test("data-center checks are invalidated when a saved API connection changes", () => {
-  assert.match(dataCenter, /let generation = 0;/);
+  assert.match(dataCenter, /let generation = 0;[\s\S]*?let refreshController = null;/);
+  assert.match(dataCenter, /const controller = new AbortController\(\);[\s\S]*?refreshController = controller;/);
+  assert.match(dataCenter, /runHealthCheck\(marketHealth, settings, 6000, controller\.signal\)/);
+  assert.match(dataCenter, /refreshController\?\.abort\(\);[\s\S]*?refreshController = null;/);
   assert.match(dataCenter, /if \(current !== generation\) return;/);
   assert.match(dataCenter, /function invalidate\(message = "连接配置已变更，之前的检查结果已作废。请重新检查。"\) \{[\s\S]*?generation \+= 1;[\s\S]*?checking = false;[\s\S]*?setBadge\("#data-center-summary-status", "unknown", "需重新检查"\)/);
   assert.match(dataCenter, /finally \{[\s\S]*?if \(current === generation\) \{[\s\S]*?checking = false;/);
@@ -715,6 +857,11 @@ test("market connection changes invalidate all in-flight stock-research panels",
 test("service health and provider-list refreshes ignore superseded responses", () => {
   assert.match(app, /let serviceRefreshGeneration = 0;/);
   assert.match(app, /let sourceRefreshGeneration = 0;/);
+  assert.match(app, /let sourceRefreshController = null;/);
+  assert.ok(app.includes("function invalidateSourceRefresh("));
+  assert.ok(app.includes("sourceRefreshGeneration += 1;"));
+  assert.ok(app.includes("controller?.abort()"));
+  assert.ok(app.includes("runSettingsApplyStep(\"失效数据源能力读取失败：\", () => invalidateSourceRefresh(), failures)"));
   assert.match(app, /async function refreshServices\(\) \{[\s\S]*?const generation = \+\+serviceRefreshGeneration;[\s\S]*?if \(generation !== serviceRefreshGeneration\) \{\s*return \{ marketOK, analysisOK, marketState, analysisState, stale: true \};\s*\}/);
   assert.match(app, /async function refreshSources\(\) \{[\s\S]*?const generation = \+\+sourceRefreshGeneration;[\s\S]*?if \(generation !== sourceRefreshGeneration\) return;/);
   assert.match(app, /if \(generation !== serviceRefreshGeneration\) \{\s*return \{ marketOK, analysisOK, marketState, analysisState, stale: true \};\s*\}[\s\S]*?setText\("#connection-label", connectionLabel\)/);
@@ -727,7 +874,9 @@ test("provider capability refresh clears old connection data and owns its loadin
   assert.match(refreshSources, /button\.disabled = true;[\s\S]*?button\.setAttribute\("aria-busy", "true"\)/);
   assert.match(refreshSources, /正在读取当前连接配置对应的数据源能力/);
   assert.match(refreshSources, /showMessage\(message, "empty-row error-text"\)/);
-  assert.match(refreshSources, /finally \{[\s\S]*?if \(generation === sourceRefreshGeneration\) \{[\s\S]*?if \(!button\) button = \$\("#reload-sources"\);[\s\S]*?if \(button\) \{[\s\S]*?button\.disabled = false;[\s\S]*?button\.removeAttribute\("aria-busy"\)/);
+  assert.ok(refreshSources.includes("if (generation === sourceRefreshGeneration && sourceRefreshController === controller) {"));
+  assert.ok(refreshSources.includes("sourceRefreshController = null;"));
+  assert.ok(refreshSources.includes('button.removeAttribute("aria-busy")'));
 });
 
 test("filter changes clear stale errors even when a prior query returned no data", () => {
@@ -748,8 +897,11 @@ test("main quote query invalidates old snapshots when the symbol or filters chan
 
 test("dynamic API and browser-local data are not rendered through HTML strings", () => {
   assert.doesNotMatch(app, /\.innerHTML\s*=/, "dynamic views should build DOM nodes and use textContent");
-  assert.match(app, /document\.createElement\("label"\)[\s\S]*?settings-nav-search/);
-  assert.match(app, /textContent = "搜索设置分组"/);
+  assert.match(app, /setupSettingsNavigation\(document\)/);
+  assert.match(settingsNavigation, /settings-nav-search/);
+  assert.match(settingsNavigation, /settings-section-toggle/);
+  assert.doesNotMatch(app, /function setupSettingsNavigation\(/);
+  assert.doesNotMatch(settingsNavigation, /\bstate\.|localStorage|fetch\(|addEventListener\("storage"/);
 });
 test("analysis task submission prevents concurrent duplicate requests and releases the guard", () => {
   assert.match(app, /isCreatingTask: false/);
@@ -786,7 +938,7 @@ test("watchlist bulk selection keeps select-all checked and indeterminate state 
 
 test("recent analysis history exposes historical-only task types", () => {
   assert.match(html, /<option value="position_review">持仓复核（历史记录）<\/option>/);
-  assert.match(app, /recentTaskTypeLabel\(record\.task_type\)/);
+  assert.ok(recentTaskView.includes("recentTaskTypeLabel(record.task_type)"));
   assert.match(recentTaskModule, /export function recentTaskTypeLabel\(/);
 });
 
@@ -794,7 +946,11 @@ test("recent analysis history supports search, single removal and local-only cle
   for (const id of ["recent-analysis-search", "clear-recent-analysis", "recent-analysis-feedback", "recent-analysis-list"]) {
     assert.match(html, new RegExp('id="' + id + '"'), "recent-history control must exist: " + id);
   }
-  assert.match(app, /function renderRecentTasks\([\s\S]*?recent-analysis-search[\s\S]*?record\.task_id[\s\S]*?taskStatusLabel\(record\.status\)/);
+  assert.ok(app.includes("function renderRecentTasks(records)"));
+  assert.ok(app.includes("renderRecentTaskList({"));
+  assert.ok(recentTaskView.includes("export function renderRecentTaskList("));
+  assert.ok(recentTaskView.includes("record.task_id"));
+  assert.ok(recentTaskView.includes("taskStatusLabel(record.status)"));
   assert.match(app, /function removeRecentTaskReference\(taskId, analysisBase = ""\)[\s\S]*?removeRecentTask\(taskId, localStorage, undefined, analysisBase\)[\s\S]*?const persistedState = safeReadRecentTasksState\(\)[\s\S]*?targetStillExists[\s\S]*?服务端任务和报告不会被删除/);
   assert.match(app, /function removeRecentTaskReference[\s\S]*?无法确认最近任务引用已移除/);
   assert.match(app, /function clearRecentTaskHistory\(\)[\s\S]*?clearRecentTasks\(localStorage\)[\s\S]*?const clearedState = safeReadRecentTasksState\(\)[\s\S]*?未能确认最近任务历史已清空[\s\S]*?服务端记录未删除/);
@@ -822,6 +978,15 @@ test("light/dark theme is accessible, persisted locally, and independent of back
   assert.match(stylesheet, /:root\[data-theme="light"\] \.settings-dialog/);
   assert.match(stylesheet, /:root\[data-theme="light"\] \.analysis-result-card/);
   assert.match(stylesheet, /:root\[data-theme="light"\] \.raw-result pre/);
+  const rawResultPreBase = baseCssDeclarationBlock(".raw-result pre");
+  assert.match(rawResultPreBase, /line-height:\s*1\.7\s*;/);
+  assert.doesNotMatch(rawResultPreBase, /line-height:\s*1\.6\s*;/);
+  assert.match(rawResultPreBase, /font-size:\s*12px\s*;/);
+   assert.doesNotMatch(rawResultPreBase, /!important/);
+  const rawResultPreLineHeightRules = [...stylesheet.matchAll(/\.raw-result pre\s*\{([^}]*)\}/g)]
+    .filter((match) => /line-height:\s*1\.7\s*;/.test(match[1]));
+  assert.equal(rawResultPreLineHeightRules.length, 1, "raw result pre line-height must be declared once in the base rule");
+  assert.match(stylesheet, /:root\[data-theme="light"\] \.raw-result pre\s*\{[^}]*color:\s*#334b5a[^}]*background:\s*#f5f8fa[^}]*border-color:\s*#d6e1e8/);
   assert.match(module, /stock-provider-webui\.theme\.v1/);
   assert.doesNotMatch(module, /fetch\(|\/api\//, "theme preference must not call backend APIs");
 });
@@ -871,21 +1036,71 @@ test("task detail opens an accessible run-flow drawer with separate Task and Run
   assert.match(app, /function openRunFlowDrawer\(\)[\s\S]*?dialog\.show\(\)/);
   assert.match(stylesheet, /\.run-flow-dialog\[open\]\s*\{[^}]*pointer-events:\s*none/);
   assert.match(stylesheet, /\.run-flow-dialog\[open\]\s*\.task-status-panel\s*\{[^}]*pointer-events:\s*auto/);
-  assert.match(app, /function renderSelectedTaskEvent\(item\)[\s\S]*?detailLayout\?\.classList\.remove\("has-selected-event"\)[\s\S]*?detailLayout\?\.classList\.add\("has-selected-event"\)/);
+  assert.match(app, /function renderSelectedTaskEvent\(item\)[\s\S]*?renderSelectedTaskEventView\(/);
+  assert.match(taskEventView, /export function renderSelectedTaskEventView\([\s\S]*?detailLayout\?\.classList\.remove\("has-selected-event"\)[\s\S]*?detailLayout\?\.classList\.add\("has-selected-event"\)/);
   assert.match(stylesheet, /\.run-flow-dialog #task-detail:not\(\[hidden\]\):not\(\.has-selected-event\)\s*\{\s*grid-template-columns:\s*minmax\(0,\s*1fr\);\s*\}/);
   assert.match(app, /function activateTaskReference\(record\)[\s\S]*?openRunFlowDrawer\(\)[\s\S]*?pollTaskSafely\(state\.pollGeneration\)/);
   assert.match(app, /function renderTask\(task\)[\s\S]*?task\.started_at[\s\S]*?task\.finished_at/);
-  assert.match(app, /function renderRunStatus\(status = ""\)[\s\S]*?runStatusLabel\(normalized\)/);
+  assert.match(app, /function renderRunStatus\(status = ""\)[\s\S]*?renderRunStatusView\(/);
+  assert.match(taskEventView, /export function renderRunStatusView\([\s\S]*?runStatusLabel\(normalized\)/);
   assert.match(app, /function renderTaskResult\(result\)[\s\S]*?renderRunStatus\(result\.status \|\| ""\)/);
   assert.match(app, /close-run-flow-dialog/);
 });
 
+test("Run Flow 字号覆盖由组件级联负责，不依赖全局 important", () => {
+  for (const [selector, size] of [
+    [".event-heading h3", "13px"],
+    [".event-heading span", "12px"],
+    [".event-status", "12px"],
+    [".event-body strong", "12px"],
+    [".event-body p", "12px"],
+    [".event-row > small", "12px"]
+  ]) {
+    const declarations = exactCssDeclarationBlock(selector);
+    assert.ok(declarations.includes("font-size: " + size + ";"), selector + " should own its readable base font size");
+    assert.doesNotMatch(declarations, /!important/);
+  }
+
+  for (const [selector, size] of [
+    [".run-flow-dialog .event-heading h3", "14px"],
+    [".run-flow-dialog .event-heading span", "12px"],
+    [".run-flow-dialog .event-row > small", "11px"],
+    [".run-flow-dialog .event-row-message", "12px"]
+  ]) {
+    const declarations = exactCssDeclarationBlock(selector);
+    assert.ok(declarations.includes("font-size: " + size + ";"), selector + " should retain its component font size");
+    assert.doesNotMatch(declarations, /!important/);
+  }
+
+  assert.match(stylesheet, /\.run-flow-dialog \.event-row > small \{ grid-column: 2; max-width: none; font-size: 11px; \}/);
+  assert.doesNotMatch(stylesheet, /\.run-flow-dialog \.event-row > small \{[^}]*!important/);
+});
+
+test("Run result DOM adapter owns structured result rendering while app retains task state", () => {
+  const rendererStart = app.indexOf("function renderTaskResult(result) {");
+  const rendererEnd = app.indexOf("\nfunction normalizedTaskSymbolSet(", rendererStart);
+  const renderer = rendererStart >= 0 && rendererEnd > rendererStart
+    ? app.slice(rendererStart, rendererEnd)
+    : "";
+  assert.ok(renderer.includes("state.lastRunResult = result"));
+  assert.ok(renderer.includes('state.runResultReadStatus = ""'));
+  assert.ok(renderer.includes("persistTaskReference()"));
+  assert.ok(renderer.includes('renderRunStatus(result.status || "")'));
+  assert.ok(renderer.includes("renderTaskResultView({ document, result, runStatusLabel, fallbackRunId: state.runId })"));
+  assert.ok(renderer.includes('if (state.view === "watchlist") renderWatchlist()'));
+  assert.ok(taskResultView.includes("export function renderTaskResultView("));
+  assert.ok(taskResultView.includes('document.querySelector("#task-result-structured")'));
+  assert.doesNotMatch(taskResultView, /\bstate\b|localStorage|fetch\(/);
+});
+
 test("run-flow events expose only server-provided durations and diagnostics", () => {
-  assert.match(app, /event\.duration_ms !== undefined && event\.duration_ms !== null/);
-  assert.match(app, /event\.error_code/);
-  assert.match(app, /parts\.join\(" · "\)/);
+  assert.match(taskEventFormat, /export function taskEventDurationLabel\(value\)/);
+  assert.match(taskEventNode, /taskEventDurationLabel\(event\.duration_ms\)/);
+  assert.match(taskEventView, /taskEventDurationLabel\(event\.duration_ms\)/);
+  assert.match(taskEventNode, /event\.error_code/);
+  assert.match(taskEventNode, /parts\.join\(" · "\)/);
   assert.match(apiClient, /after_sequence/);
-  assert.match(app, /\.sort\(\(a, b\) => a\.sequence - b\.sequence\)/);
+  assert.match(taskEventListViewModel, /\.sort\(\(a, b\) => Number\(a\.sequence\) - Number\(b\.sequence\)\)/);
   assert.doesNotMatch(app, /completed_stages\s*\/\s*total_stages|progressPercent|fakeDAG/i);
 });
 
@@ -894,7 +1109,7 @@ test("run-flow keeps cached events explicit during read errors and exports diagn
   assert.match(html, /id="task-events-read-status"[^>]*role="status"[^>]*aria-live="polite"/);
   assert.match(app, /const readStatus = \$\("#task-events-read-status"\)/);
   assert.match(app, /已保留当前可用事件/);
-  assert.match(app, /eventsCount\.textContent = state\.taskEventsError[\s\S]*?读取失败/);
+  assert.match(taskFlowSummaryViewModel, /taskEventsError[\s\S]*?读取失败/);
   assert.match(app, /task_error:\s*\$\("#task-error"\)\.textContent\.trim\(\) \|\| null/);
   assert.match(app, /task_poll_status:\s*\$\("#task-poll-label"\)\.textContent \|\| null/);
   assert.match(app, /event_read_status:\s*\{[\s\S]*?last_error:\s*state\.taskEventsError \|\| null[\s\S]*?known_event_count:\s*state\.taskEvents\.size/);
@@ -969,12 +1184,12 @@ test("provider capability definitions expose each backend capability once", () =
 });
 
 test("run-flow event details share normalized status labels and tones with the timeline", () => {
-  assert.match(app, /function taskEventStatusKey\(status\)/);
-  assert.match(app, /function taskEventStatusLabel\(status, statusKey = taskEventStatusKey\(status\)\)/);
-  assert.match(app, /function taskEventStatusTone\(statusKey\)/);
-  assert.match(app, /status\.textContent = statusLabel/);
-  assert.match(app, /\["事件状态", statusLabel\]/);
-  assert.match(app, /const statusKey = taskEventStatusKey\(event\.status\)/);
+  assert.match(taskEventFormat, /export function taskEventStatusKey\(status\)/);
+  assert.match(taskEventFormat, /export function taskEventStatusLabel\(status, statusKey = taskEventStatusKey\(status\)\)/);
+  assert.match(taskEventFormat, /export function taskEventStatusTone\(statusKey\)/);
+  assert.match(taskEventView, /status\.textContent = statusText/);
+  assert.match(taskEventView, /\["事件状态", statusText\]/);
+  assert.match(taskEventView, /const statusKey = taskEventStatusKey\(event\.status\)/);
   assert.match(stylesheet, /\.availability-pill\.is-error/);
   assert.match(stylesheet, /\.availability-pill\.is-warning/);
 });
@@ -1073,6 +1288,11 @@ test("screening workbench distinguishes unavailable capability from disabled and
   assert.match(app, /renderScreeningHistory\(\{ supported: false \}\)/);
   assert.match(screeningView, /id="screening-submit" type="button" disabled/);
   assert.match(screeningView, /当前页本地筛选/);
+  assert.match(screeningView, /id="screening-ma-capability-hint"/);
+  for (const period of ["ma60", "ma120", "ma250"]) {
+    assert.match(screeningView, new RegExp(`<option value="${period}" disabled>.*待数据侧支持`), period + " must remain disabled until the market page API provides it");
+  }
+  assert.match(screeningView, /不会为每只股票额外请求日 K/);
   for (const id of ["screening-condition-logic", "screening-condition-field", "screening-condition-operator", "screening-condition-value", "screening-condition-add", "screening-plan-save", "screening-plan-save-as", "screening-saved-plan-list"]) {
     assert.match(screeningView, new RegExp('id="' + id + '"'), "missing local screening control: " + id);
   }
@@ -1082,11 +1302,26 @@ test("screening workbench distinguishes unavailable capability from disabled and
   assert.match(app, /researchNotes\.createFromReport\(item\)/);
   assert.match(app, /onCreateNote:/);
   assert.match(app, /getCurrentPageSnapshot\(\)/);
-  assert.match(app, /evaluateScreeningConditions\(snapshot\.items, screeningDraftConditions, screeningDraftLogic\)/);
+  assert.match(app, /evaluateScreeningConditions\(snapshot\.items, screeningDraftConditions, screeningDraftLogic, \{ expectedAdjustment: snapshot\.adjustment \}\)/);
   assert.match(app, /不代表全市场扫描/);
   assert.doesNotMatch(app, /screening.*localStorage/i);
 });
 
+
+test("当前页选股结果 DOM adapter 只构建行节点，分页快照与选择状态仍由 app 协调", async () => {
+  const view = await readFile(new URL("../src/screening-result-view.js", import.meta.url), "utf8");
+  assert.match(app, /renderScreeningLocalResultRowsView\(\{[\s\S]*?document, body, rows, filter, snapshot/);
+  assert.match(app, /function isCurrentScreeningSnapshot\(snapshot\)[\s\S]*?generation === snapshot\.generation/);
+  assert.match(app, /screeningSelectedSymbols\.clear\(\);[\s\S]*?renderScreeningLocalResultRowsView/);
+  assert.match(app, /screeningSelectedSymbols\.add\(checkbox\.value\)/);
+  assert.match(app, /buildScreeningCSV\(/);
+  assert.match(app, /addScreeningResultsToWatchlist\(/);
+  assert.match(view, /export function renderScreeningLocalResultRowsView\(/);
+  assert.match(view, /screeningLocalSelectSymbol/);
+  assert.match(view, /screeningLocalSymbol/);
+  assert.match(view, /质量原因未报告/);
+  assert.doesNotMatch(view, /\bstate\.|localStorage|fetch\(|addEventListener|screeningSelectedSymbols|isCurrentScreeningSnapshot/);
+});
 
 test("alert center separates rule CRUD, evaluation state, trigger history and delivery attempts", () => {
   for (const id of [
@@ -1130,9 +1365,14 @@ test("stock-name autocomplete uses the real market API and accessible, stale-saf
   assert.match(html, /id="stock-search-results"[^>]*role="listbox"/);
   assert.match(html, /id="stock-search-status"[^>]*role="status"/);
   assert.match(apiClient, /export function searchStocks\(/);
+  assert.match(appSource, /import \{ normalizeStockSearchItems, renderStockSearchResultsView, updateStockSearchActiveOptionView \} from "\.\/stock-search-view\.js"/);
   assert.match(app, /function scheduleStockSearch\(\)/);
   assert.match(app, /new AbortController\(\)/);
   assert.match(app, /generation !== state\.stockSearchGeneration/);
+  assert.match(stockSearchView, /export function normalizeStockSearchItems/);
+  assert.match(stockSearchView, /export function renderStockSearchResultsView/);
+  assert.match(stockSearchView, /export function updateStockSearchActiveOptionView/);
+  assert.doesNotMatch(stockSearchView, /localStorage|fetch\s*\(|AbortController|setTimeout|state\./);
   assert.match(app, /addEventListener\("compositionstart"/);
   assert.match(app, /addEventListener\("compositionend"/);
   assert.match(app, /function chooseStockSearchResult\(/);
@@ -1156,12 +1396,22 @@ test("Run Flow summary and event diagnostics remain grounded in persisted Task, 
   }
   assert.match(app, /function renderTaskFlowSummary\(\)/);
   assert.match(app, /function renderSelectedTaskEvent\(item\)/);
+  assert.match(app, /inspector\.open = Boolean\(item\)/);
+  assert.match(app, /inspector\.dataset\.selectedSequence/);
+  assert.match(app, /inspector\.scrollIntoView\(\{ block: "nearest" \}\)/);
+  assert.match(html, /id="task-error"[^>]*role="alert"/);
+  for (const id of ["task-error-title", "task-error-message", "task-error-code"]) {
+    assert.match(html, new RegExp('id="' + id + '"'));
+  }
+  assert.match(app, /task-error-title/);
+  assert.match(taskResultView, /appendResultCard\(document, failureGrid, "失败详情"/);
+  assert.match(taskEventNode, /select\.dataset\.taskEventSequence = String\(item\.sequence\)/);
   assert.match(app, /button\[data-task-event-sequence\]/);
   assert.match(app, /state\.taskEventsLoaded/);
-  assert.match(app, /event\.duration_ms/);
-  assert.match(app, /event\.error_code/);
-  assert.match(app, /result\?\.quality\?\.core_pass/);
-  assert.match(app, /Array\.isArray\(warnings\)/);
+  assert.match(taskEventNode, /event\.duration_ms/);
+  assert.match(taskEventNode, /event\.error_code/);
+  assert.match(taskFlowSummaryViewModel, /lastRunResult\?\.quality\?\.core_pass/);
+  assert.match(taskFlowSummaryViewModel, /Array\.isArray\(warnings\)/);
   assert.match(stylesheet, /\.run-flow-summary/);
   assert.match(stylesheet, /\.event-row\[aria-pressed="true"\]/);
   assert.doesNotMatch(app, /completed_stages\s*\/\s*\w+|progressPercent|100\s*\*\s*.*completed_stages/i,
@@ -1180,33 +1430,153 @@ test("stock research toolbar controls use readable labels and touch-sized target
 
 test("market overview and activity use readable secondary text and touch-sized controls", () => {
   assert.match(finalCssRuleBody(".market-overview-updated"), /font-size: 12px/);
-  assert.match(finalCssRuleBody(".market-overview-subheading p"), /font-size: 12px/);
-  assert.match(finalCssRuleBody(".market-index-identity small"), /font-size: 12px/);
-  assert.match(finalCssRuleBody(".market-index-changes span"), /font-size: 12px/);
-  assert.match(finalCssRuleBody(".market-widget-meta"), /font-size: 12px/);
-  assert.match(finalCssRuleBody(".market-breadth-metric small"), /font-size: 12px/);
-  assert.match(finalCssRuleBody(".market-table-primary"), /font-size: 12px/);
-  assert.match(finalCssRuleBody(".market-table-secondary"), /font-size: 12px/);
-  assert.match(finalCssRuleBody(".market-touch-time"), /font-size: 12px/);
-  assert.match(finalCssRuleBody(".market-activity-heading p"), /font-size: 12px/);
-  assert.match(finalCssRuleBody(".market-activity-controls label"), /font-size: 12px/);
-  assert.match(finalCssRuleBody(".market-activity-controls input"), /min-height: 38px/);
-  assert.match(finalCssRuleBody(".market-activity-controls .button"), /min-height: 38px/);
+  const marketOverviewHeadingDescriptionBase = baseCssDeclarationBlock(".market-overview-subheading p");
+  const marketOverviewWidgetDescriptionBase = baseCssDeclarationBlock(".market-overview-widget-heading p");
+  assert.equal(marketOverviewHeadingDescriptionBase, marketOverviewWidgetDescriptionBase, "both heading description selectors should share one base declaration block");
+  assert.match(marketOverviewHeadingDescriptionBase, /font-size:\s*12px\s*;/);
+  assert.match(marketOverviewHeadingDescriptionBase, /line-height:\s*1\.65\s*;?/);
+  assert.match(marketOverviewHeadingDescriptionBase, /margin:\s*5px 0 0\s*;/);
+  assert.match(marketOverviewHeadingDescriptionBase, /color:\s*var\(--text-dim\)\s*;/);
+  assert.equal((stylesheet.match(/\.market-overview-subheading p,\.market-overview-widget-heading p\s*\{/g) || []).length, 1, "market overview heading descriptions should share one base rule");
+  assert.doesNotMatch(stylesheet, /market-overview-subheading p,\s*\.market-overview-widget-heading p\s*\{\s*font-size:\s*12px/);
+  const marketIndexSecondaryBase = baseCssDeclarationBlock(".market-index-identity small");
+  assert.match(marketIndexSecondaryBase, /font-size:\s*12px\s*;/);
+  assert.match(marketIndexSecondaryBase, /line-height:\s*1\.5\s*;?/);
+  assert.match(marketIndexSecondaryBase, /color:\s*var\(--text-dim\)\s*;/);
+  assert.equal((stylesheet.match(/\.market-index-identity small,\.market-index-card-footer small\s*\{/g) || []).length, 1, "index identity and footer metadata should share one base rule");
+  assert.doesNotMatch(stylesheet, /market-index-identity small,\s*\.market-index-card-footer small\s*\{\s*font-size:\s*12px/);
+  const marketIndexChangeBase = baseCssDeclarationBlock(".market-index-changes span");
+  assert.match(marketIndexChangeBase, /font-size:\s*12px\s*;/);
+  assert.match(marketIndexChangeBase, /color:var\(--text-soft\)/);
+  assert.match(marketIndexChangeBase, /font-variant-numeric:tabular-nums/);
+  assert.equal((stylesheet.match(/\.market-index-changes span\s*\{/g) || []).length, 1, "index change detail text should have one base rule");
+  const marketWidgetMetaBase = baseCssDeclarationBlock(".market-widget-meta");
+  assert.match(marketWidgetMetaBase, /font-size:\s*12px\s*;/);
+  assert.match(marketWidgetMetaBase, /line-height:\s*1\.65\s*;/);
+  assert.match(marketWidgetMetaBase, /margin:10px 0 0/);
+  assert.match(marketWidgetMetaBase, /overflow-wrap:anywhere/);
+  assert.equal((stylesheet.match(/\.market-widget-meta\s*\{/g) || []).length, 1, "market widget metadata should have one base rule");
+  const stockResearchFootnoteBase = baseCssDeclarationBlock(".stock-research-footnote");
+  assert.match(stockResearchFootnoteBase, /font-size:\s*12px\s*;/);
+  assert.match(stockResearchFootnoteBase, /line-height:\s*1\.65\s*;?/);
+  assert.match(stockResearchFootnoteBase, /margin:\s*9px 0 0\s*;/);
+  assert.match(stockResearchFootnoteBase, /color:\s*var\(--text-dim\)\s*;/);
+  assert.doesNotMatch(stylesheet, /market-widget-meta,[\\s\\S]{0,120}stock-research-footnote/);
+  const marketBreadthMetricLabelBase = baseCssDeclarationBlock(".market-breadth-metric small");
+  assert.match(marketBreadthMetricLabelBase, /font-size:\s*12px\s*;/);
+  assert.match(marketBreadthMetricLabelBase, /line-height:\s*1\.45\s*;?/);
+  assert.match(marketBreadthMetricLabelBase, /color:\s*var\(--text-dim\)\s*;/);
+  assert.equal((stylesheet.match(/\.market-breadth-metric small\s*\{/g) || []).length, 1, "market breadth metric labels should have one base rule");
+  const marketTablePrimaryBase = exactCssDeclarationBlock(".market-table-primary");
+  assert.match(marketTablePrimaryBase, /font-size:\s*12px\s*;/);
+  assert.match(marketTablePrimaryBase, /line-height:\s*1\.5\s*;?/);
+  assert.match(marketTablePrimaryBase, /font-weight:\s*650\s*;?/);
+  assert.match(marketTablePrimaryBase, /color:\s*var\(--text\)\s*;?/);
+  assert.equal((stylesheet.match(/(?:^|})\s*\.market-table-primary\s*\{/g) || []).length, 1, "market table primary text should have one exact base rule");
+  const marketTableSecondaryBase = exactCssDeclarationBlock(".market-table-secondary");
+  assert.match(marketTableSecondaryBase, /font-size:\s*12px\s*;/);
+  assert.match(marketTableSecondaryBase, /line-height:\s*1\.45\s*;?/);
+  assert.match(marketTableSecondaryBase, /margin-top:\s*4px\s*;?/);
+  assert.match(marketTableSecondaryBase, /color:\s*var\(--text-dim\)\s*;?/);
+  assert.match(marketTableSecondaryBase, /font-variant-numeric:\s*tabular-nums\s*;?/);
+  assert.equal((stylesheet.match(/(?:^|})\s*\.market-table-secondary\s*\{/g) || []).length, 1, "market table secondary text should have one exact base rule");
+  const marketTouchTimeBase = exactCssDeclarationBlock(".market-touch-time");
+  assert.match(marketTouchTimeBase, /font-size:\s*12px\s*;/);
+  assert.match(marketTouchTimeBase, /line-height:\s*1\.5\s*;?/);
+  assert.match(marketTouchTimeBase, /color:\s*var\(--text-soft\)\s*;?/);
+  assert.equal((stylesheet.match(/(?:^|})\s*\.market-touch-time\s*\{/g) || []).length, 1, "market touch time should have one exact base rule");
+  const marketQualityReasonsBase = exactCssDeclarationBlock(".market-quality-reasons");
+  assert.match(marketQualityReasonsBase, /margin-top:\s*9px\s*;?/);
+  assert.match(marketQualityReasonsBase, /color:\s*var\(--text-dim\)\s*;?/);
+  assert.match(marketQualityReasonsBase, /font-size:\s*12px\s*;/);
+  assert.match(marketQualityReasonsBase, /line-height:\s*1\.7\s*;?/);
+  assert.equal((stylesheet.match(/(?:^|})\s*\.market-quality-reasons\s*\{/g) || []).length, 1, "market quality reasons should have one exact base rule");
+  assert.match(finalCssRuleBody(".market-quality-reasons li"), /overflow-wrap:\s*anywhere/);
+  assert.match(finalCssRuleBody(".market-activity-widget .market-quality-reasons"), /padding-left:\s*18px/);
+  const marketActivityHeadingDescriptionBase = exactCssDeclarationBlock(".market-activity-heading p");
+  assert.match(marketActivityHeadingDescriptionBase, /margin:\s*5px 0 0\s*;?/);
+  assert.match(marketActivityHeadingDescriptionBase, /color:\s*var\(--text-dim\)\s*;?/);
+  assert.match(marketActivityHeadingDescriptionBase, /font-size:\s*12px\s*;/);
+  assert.match(marketActivityHeadingDescriptionBase, /line-height:\s*1\.65\s*;?/);
+  assert.equal((stylesheet.match(/(?:^|})\s*\.market-activity-heading p\s*\{/g) || []).length, 1, "market activity heading descriptions should have one exact base rule");
+  assert.match(finalCssRuleBody(".market-activity-heading"), /flex-direction:\s*column/);
+  const marketActivityControlLabelBase = exactCssDeclarationBlock(".market-activity-controls label");
+  assert.match(marketActivityControlLabelBase, /display:\s*flex\s*;?/);
+  assert.match(marketActivityControlLabelBase, /flex-direction:\s*column\s*;?/);
+  assert.match(marketActivityControlLabelBase, /gap:\s*5px\s*;?/);
+  assert.match(marketActivityControlLabelBase, /color:\s*var\(--text-soft\)\s*;?/);
+  assert.match(marketActivityControlLabelBase, /font-size:\s*12px\s*;/);
+  assert.match(marketActivityControlLabelBase, /line-height:\s*1\.4\s*;?/);
+  assert.equal((stylesheet.match(/\.market-activity-controls label\s*\{/g) || []).length, 3, "market activity control labels should have one base rule and two responsive layout rules");
+  assert.match(stylesheet, /\.market-activity-controls label \{\s*flex:1;\s*min-width:130px\s*\}/);
+  assert.match(stylesheet, /\.market-activity-controls label \{ min-width: 0; flex: 1 1 140px; \}/);
+  assert.ok(stylesheet.includes(".market-activity-controls label { min-width: 0; flex: 1 1 140px; }"), "600px mobile label layout should remain without typography overrides");
+  const marketActivityControlInputBase = exactCssDeclarationBlock(".market-activity-controls input");
+  assert.match(marketActivityControlInputBase, /min-height:\s*38px\s*;?/);
+  assert.match(marketActivityControlInputBase, /max-width:\s*170px\s*;?/);
+  assert.match(marketActivityControlInputBase, /padding:\s*6px 8px\s*;?/);
+  assert.equal((stylesheet.match(/\.market-activity-controls input\s*\{/g) || []).length, 2, "market activity date inputs should have one base rule and one responsive width rule");
+  assert.match(stylesheet, /\.market-activity-controls input \{\s*width:100%;\s*max-width:none\s*\}/);
+  const marketActivityControlButtonBase = exactCssDeclarationBlock(".market-activity-controls .button");
+  assert.match(marketActivityControlButtonBase, /min-height:\s*38px\s*;?/);
+  assert.match(marketActivityControlButtonBase, /padding:\s*6px 10px\s*;?/);
+  assert.match(marketActivityControlButtonBase, /font-size:\s*12px\s*;?/);
+  assert.equal((stylesheet.match(/\.market-activity-controls \.button\s*\{/g) || []).length, 2, "market activity controls should have one base button rule and one mobile flex rule");
+  assert.ok(stylesheet.includes(".market-activity-controls .button { flex: 1 1 100%; }"), "mobile button width behavior should remain without typography overrides");
+  const marketActivityFooterMetaBase = exactCssDeclarationBlock(".market-activity-footer span");
+  assert.match(marketActivityFooterMetaBase, /color:\s*var\(--text-dim\)\s*;?/);
+  assert.match(marketActivityFooterMetaBase, /font-size:\s*12px\s*;?/);
+  assert.equal((stylesheet.match(/\.market-activity-footer span\s*\{/g) || []).length, 1, "market activity footer metadata should have one exact base rule");
+  assert.match(exactCssDeclarationBlock(".market-activity-footer"), /flex-wrap:\s*wrap/);
+  const marketActivityFooterButtonBase = exactCssDeclarationBlock(".market-activity-footer .button");
+  assert.match(marketActivityFooterButtonBase, /min-height:\s*36px\s*;?/);
+  assert.match(marketActivityFooterButtonBase, /padding:\s*5px 9px\s*;?/);
+  assert.match(marketActivityFooterButtonBase, /font-size:\s*12px\s*;?/);
+  assert.equal((stylesheet.match(/\.market-activity-footer \.button\s*\{/g) || []).length, 1, "market activity footer button should have one exact base rule");
   const readabilityStart = stylesheet.indexOf("/* 2026-10-27 readability pass: market overview, activity table, and calendar. */");
   const mobileOverrideStart = stylesheet.indexOf("@media (max-width: 700px)", readabilityStart);
   assert.ok(readabilityStart >= 0 && mobileOverrideStart > readabilityStart, "the general readability pass should precede responsive overrides");
   const generalRules = stylesheet.slice(readabilityStart, mobileOverrideStart);
-  assert.match(generalRules, /\.market-activity-controls label \{[^}]*font-size: 12px;/, "desktop labels need a readable baseline");
-  assert.match(generalRules, /\.market-activity-controls input \{ min-height: 38px; \}/, "desktop date inputs need a 38px target");
-  assert.match(generalRules, /\.market-activity-controls \.button \{ min-height: 38px; font-size: 12px; \}/, "desktop buttons need a readable 38px baseline");
-  assert.match(finalCssRuleBody(".activity-stock-link"), /min-height: 38px/);
-  assert.match(finalCssRuleBody(".calendar-month-navigation .icon-button"), /min-width: 38px; min-height: 38px/);
-  assert.match(finalCssRuleBody(".trading-calendar-weekdays span"), /font-size: 11px/);
-  assert.match(stylesheet, /\.trading-calendar-day span \{ font-size: 11px; line-height: 1\.25; text-align: center; overflow-wrap: anywhere; \}/);
-  assert.match(finalCssRuleBody(".trading-calendar-day span"), /font-size: 10px/);
+  assert.match(marketActivityControlLabelBase, /font-size:\s*12px\s*;/, "desktop labels need a readable base font size");
+  assert.match(marketActivityControlLabelBase, /line-height:\s*1\.4\s*;?/, "desktop labels need a readable base line height");
+  assert.match(marketActivityControlInputBase, /min-height:\s*38px\s*;?/, "date inputs need a 38px base touch target");
+  assert.match(marketActivityControlButtonBase, /min-height:\s*38px\s*;?/, "market activity buttons need a 38px base touch target");
+  assert.match(marketActivityControlButtonBase, /font-size:\s*12px\s*;?/, "market activity button labels need a readable base font size");
+  const activityStockLinkBase = exactCssDeclarationBlock(".activity-stock-link");
+  assert.match(activityStockLinkBase, /display:\s*block\s*;?/);
+  assert.match(activityStockLinkBase, /min-height:\s*38px\s*;?/);
+  assert.match(activityStockLinkBase, /margin-top:\s*5px\s*;?/);
+  assert.match(activityStockLinkBase, /padding:\s*5px 0\s*;?/);
+  assert.match(activityStockLinkBase, /font-size:\s*12px\s*;?/);
+  assert.equal((stylesheet.match(/(?:^|})\s*\.activity-stock-link\s*\{/g) || []).length, 1, "activity stock links should have one exact base rule");
+  assert.match(finalCssRuleBody(".activity-stock-link:hover"), /text-decoration:\s*underline/);
+  const calendarMonthButtonBase = exactCssDeclarationBlock(".calendar-month-navigation .icon-button");
+  assert.match(calendarMonthButtonBase, /min-width:\s*38px\s*;?/);
+  assert.match(calendarMonthButtonBase, /min-height:\s*38px\s*;?/);
+  assert.match(calendarMonthButtonBase, /padding:\s*4px 8px\s*;?/);
+  assert.match(calendarMonthButtonBase, /font-size:\s*13px\s*;?/);
+  assert.equal((stylesheet.match(/\.calendar-month-navigation \.icon-button\s*\{/g) || []).length, 1, "calendar month buttons should have one exact base rule");
+  const tradingCalendarWeekdayBase = exactCssDeclarationBlock(".trading-calendar-weekdays span");
+  assert.match(tradingCalendarWeekdayBase, /font-size:\s*11px\s*;?/);
+  assert.match(tradingCalendarWeekdayBase, /font-weight:\s*650\s*;?/);
+  assert.match(tradingCalendarWeekdayBase, /padding:\s*5px 0\s*;?/);
+  assert.equal((stylesheet.match(/\.trading-calendar-weekdays span\s*\{/g) || []).length, 1, "trading calendar weekdays should have one exact base rule");
+  const tradingCalendarDayBase = exactCssDeclarationBlock(".trading-calendar-day");
+  assert.match(tradingCalendarDayBase, /min-height:\s*56px\s*;?/);
+  assert.match(tradingCalendarDayBase, /padding:\s*6px 2px\s*;?/);
+  assert.match(tradingCalendarDayBase, /gap:\s*5px\s*;?/);
+  assert.equal((stylesheet.match(/(?:^|})\s*\.trading-calendar-day\s*\{/g) || []).length, 2, "trading calendar day should have one base rule and one mobile override");
+  const tradingCalendarDayLabelBase = exactCssDeclarationBlock(".trading-calendar-day span");
+  assert.match(tradingCalendarDayLabelBase, /font-size:\s*11px\s*;?/);
+  assert.match(tradingCalendarDayLabelBase, /line-height:\s*1\.25\s*;?/);
+  assert.match(tradingCalendarDayLabelBase, /text-align:\s*center\s*;?/);
+  assert.match(tradingCalendarDayLabelBase, /overflow-wrap:\s*anywhere\s*;?/);
+  assert.equal((stylesheet.match(/(?:^|})\s*\.trading-calendar-day span\s*\{/g) || []).length, 2, "trading calendar day label should have one base rule and one mobile override");
+  assert.match(stylesheet, /\.trading-calendar-day \{ min-height: 50px; padding: 5px 1px; \}/, "mobile calendar day sizing must remain in the exact responsive rule");
+  assert.match(finalCssRuleBody(".trading-calendar-day span"), /font-size:\s*10px/);
   assert.match(stylesheet, /@media \(max-width: 700px\) \{[\s\S]*?\.market-overview-actions \.button \{ width: 100%; min-height: 40px; \}/);
   assert.match(stylesheet, /@media \(max-width: 600px\) \{[\s\S]*?\.trading-calendar-day span \{ font-size: 10px; \}/);
-  assert.match(finalCssRuleBody(".market-activity-table"), /-webkit-overflow-scrolling: touch/);
+  assert.match(baseCssDeclarationBlock(".table-scroll"), /-webkit-overflow-scrolling:\s*touch\s*;/);
 });
 
 
@@ -1384,11 +1754,11 @@ test("新增市场、数据中心与研究区块保持 12px 辅助文字基线",
   }
 });
 
-test("研究与设置分区导航会移动键盘焦点并按全部可见区块同步高亮", () => {
-  assert.match(
-    app,
-    /function bindSectionNavigation\([\s\S]*?focusTarget\.focus\(\{ preventScroll: true \}\)[\s\S]*?const current = targets[\s\S]*?getBoundingClientRect\(\)/
-  );
+test("研究与设置分区导航会移动键盘焦点并按全部可见区块同步高亮", async () => {
+  const sectionNavigation = await readFile(new URL("../src/section-navigation.js", import.meta.url), "utf8");
+  assert.match(sectionNavigation, /focusTarget\.focus\(\{ preventScroll: true \}\)/);
+  assert.match(sectionNavigation, /const current = targets[\s\S]*?getBoundingClientRect\(\)/);
+  assert.match(sectionNavigation, /window\.matchMedia/);
 });
 
 test("分区导航的程序化焦点在研究和设置页中可见", () => {
@@ -1568,7 +1938,7 @@ test("最近任务本地存储不可读或损坏时不覆盖原始历史，导�
   assert.match(recentTaskModule, /export function readRecentTasksState\(storage, limit = MAX_RECENT_TASKS\)/);
   assert.match(recentTaskModule, /if \(!currentState\.storageReadable \|\| !currentState\.storageValid\) return currentState\.items/);
   assert.match(app, /function safeReadRecentTasksState\(\)/);
-  assert.match(app, /function renderRecentTasks\(records\)[\s\S]*?historyState\.storageReadable[\s\S]*?historyState\.storageValid[\s\S]*?历史修改已暂停/);
+  assert.match(recentTaskView, /historyState\.storageReadable[\s\S]*?historyState\.storageValid[\s\S]*?历史修改已暂停/);
   assert.match(app, /recent_tasks: \(\(\) => \{[\s\S]*?recentTasksState\.storageReadable[\s\S]*?recentTasksState\.storageValid[\s\S]*?导出已取消/);
 });
 
@@ -1740,8 +2110,8 @@ test("自选股报价和任务引用的股票代码比较兼容交易所后缀�
   assert.match(app, /function normalizeWatchlistQuoteSymbol\(value\) \{\s*try \{ return comparableMarketSymbol\(value\);/);
   assert.match(app, /const normalizeLocalSymbol = normalizeWatchlistQuoteSymbol/);
   assert.match(app, /const quoteMatches = Boolean\(state\.quote\?\.symbol\) && normalizeLocalSymbol\(state\.quote\.symbol\) === itemSymbol/);
-  assert.match(app, /task\.symbols\.some\(\(value\) => normalizeLocalSymbol\(value\) === itemSymbol\)/);
-  assert.match(app, /state\.taskSymbols\.some\(\(value\) => normalizeLocalSymbol\(value\) === itemSymbol\)/);
+  assert.match(watchlistTrackingViewModel, /task\.symbols\.some\(\(value\) => normalizeSymbol\(value\) === itemSymbol\)/);
+  assert.match(watchlistTrackingViewModel, /currentTask\.symbols\.some\(\(value\) => normalizeSymbol\(value\) === itemSymbol\)/);
   assert.match(app, /state\.quote\?\.name && state\.quote\?\.symbol && sameMarketSymbol\(state\.quote\.symbol, symbol\)/);
 });
 
@@ -1923,7 +2293,7 @@ test("个股行情默认请求复用统一快照；旧服务仅在 404 时回退
 
 test("数据中心读取并展示真实 Provider 运行诊断，且不将未观测标记为健康", () => {
   assert.match(apiClient, /export function getDataSourceDiagnostics\(settings, signal\)/);
-  assert.match(dataCenter, /runHealthCheck\(getDataSourceDiagnostics, settings\)/);
+  assert.match(dataCenter, /runHealthCheck\(getDataSourceDiagnostics, settings, 6000, controller\.signal\)/);
   assert.match(dataCenter, /function renderProviderDiagnostics\(payload\)/);
   assert.match(dataCenter, /not_observed: "尚无业务观测"/);
   assert.match(dataCenter, /DIAGNOSTIC_STATUS\[status\]/);
@@ -1951,10 +2321,13 @@ test("数据中心读取并展示真实 Provider 运行诊断，且不将未观�
 
 
 test("自选股批量行情只请求当前本地清单并在连接变更时清除旧快照", () => {
-  assert.match(apiClient, /export function getMarketQuotes\(settings, symbols, signal\)/);
+  assert.match(apiClient, /export function getMarketQuotes\(settings, symbols, signal, \{ timeoutMs = 30000 \} = \{\}\)/);
+  assert.match(apiClient, /timeoutMs = 30000/);
   assert.match(app, /function refreshWatchlistQuotes\(\)/);
   assert.match(app, /getMarketQuotes\(state\.settings, symbols, controller\.signal\)/);
   assert.match(app, /state\.watchlistQuotes = nextQuotes/);
+  assert.match(app, /state\.watchlistQuoteSymbols = new Set\(requestedSymbols\)/);
+  assert.match(app, /function syncWatchlistQuoteMembership\(records\)/);
   assert.match(app, /invalidateWatchlistQuotes\(\)/);
   assert.match(html, /id="refresh-watchlist-quotes"/);
   assert.match(html, /id="watchlist-quote-refresh-status"/);
@@ -1967,7 +2340,7 @@ test("运行流采用全屏双栏工作区，节点和质量诊断可折叠", ()
   assert.match(html, /class="run-flow-event-inspector"/);
   assert.match(app, /expandedTaskEventSequences/);
   assert.match(app, /node\.addEventListener\("toggle"/);
-  assert.match(app, /title === "数据质量与策略门禁"[\s\S]*?analysis-result-disclosure/);
+  assert.match(taskResultView, /title === "数据质量与策略门禁"[\s\S]*?analysis-result-disclosure/);
   assert.match(stylesheet, /grid-template-columns:minmax\(300px,\.82fr\) minmax\(0,1\.18fr\)/);
   assert.match(stylesheet, /\.run-flow-node\[open\]/);
   assert.match(stylesheet, /@media \(max-width:900px\)[\s\S]*?run-flow-workspace/);
@@ -2093,4 +2466,523 @@ test("行情服务接口文档、Handler 与 WebUI 调用边界明确区分", ()
   assert.match(marketHTTPServer, /mux\.Handle\("GET \/api\/v1\/stocks\/\{symbol\}\/capital-flow"/, "个股资金流 Handler 已注册");
   assert.match(apiClient, /export function getCapitalFlow/);
   assert.match(apiClient, /export function getMarketCapitalFlow/, "已注册的市场级资金流接口应由 WebUI 显式封装");
+});
+
+test("告警草稿与通知偏好跨标签页同步，并在编辑冲突时阻止旧数据覆盖", () => {
+  assert.match(appSource, /const localAlertDrafts = bindLocalAlertDrafts/);
+  assert.match(appSource, /const notificationPreferences = bindNotificationPreferences/);
+  assert.match(appSource, /localAlertDrafts\?\.handleStorageChange\(event\)/);
+  assert.match(appSource, /notificationPreferences\?\.handleStorageChange\(event\)/);
+  assert.match(localAlertDrafts, /handleStorageChange\(event\)/);
+  assert.match(localAlertDrafts, /itemSnapshot\(latest\) !== editingSnapshot/);
+  assert.match(localAlertDrafts, /当前编辑未保存/);
+  assert.match(notificationPreferences, /canonical\(current\.value\) !== baselineSnapshot/);
+  assert.match(notificationPreferences, /当前表单已保留且未保存/);
+  assert.match(notificationPreferences, /if \(isDirty\(\)\)/);
+});
+
+
+test("run-flow event node builder only constructs DOM and leaves state/event wiring to app", () => {
+  assert.match(appSource, /buildTaskEventNode\(\{[\s\S]*?expanded: state\.expandedTaskEventSequences\.has\(sequence\)/);
+  assert.match(appSource, /node\.addEventListener\("toggle"/);
+  assert.match(appSource, /state\.selectedTaskEventSequence = Number\(row\.dataset\.taskEventSequence\)/);
+  assert.match(taskEventNode, /export function buildTaskEventNode\(/);
+  assert.match(taskEventNode, /node\.dataset\.eventSequence = String\(item\.sequence\)/);
+  assert.match(taskEventNode, /node\.setAttribute\("aria-pressed", String\(selected\)\)/);
+  assert.match(taskEventNode, /node\.open = selected \|\| expanded/);
+  assert.doesNotMatch(taskEventNode, /\bstate\.|localStorage|addEventListener|querySelector|fetch\(/);
+  assert.match(taskEventNode, /textContent = event\.message \|\| "服务端事件未提供描述"/);
+  assert.match(taskEventNode, /diagnostic\.textContent = "错误代码：" \+ String\(event\.error_code\)/);
+});
+
+
+test("导入偏好规范化由 preferences 领域模块负责，不留在 app 协调层", async () => {
+  const preferencesModule = await readFile(new URL("../src/preferences.js", import.meta.url), "utf8");
+  assert.match(preferencesModule, /export function normalizeImportedPreferences\(/);
+  assert.match(appSource, /normalizeImportedPreferences/);
+  assert.doesNotMatch(appSource, /function normalizeImportedPreferences\(/);
+});
+
+
+test("偏好控件同步由独立 DOM adapter 管理，持久化仍留在 app 协调层", async () => {
+  const preferencesView = await readFile(new URL("../src/settings-preferences-view.js", import.meta.url), "utf8");
+  assert.match(appSource, /syncPreferencesControls\(document, preferences\)/);
+  assert.match(preferencesView, /export function syncPreferencesControls\(/);
+  assert.doesNotMatch(preferencesView, /localStorage|savePreferences|fetch\(|\bstate\./);
+  assert.doesNotMatch(preferencesView, /\$\(/);
+  assert.match(appSource, /function persistLocalPreferences\(/);
+});
+
+
+test("task event list projection is pure and app retains DOM/state coordination", () => {
+  assert.match(appSource, /buildTaskEventListViewModel\(/);
+  assert.match(appSource, /node\.addEventListener\("toggle"/);
+  assert.match(taskEventListViewModel, /export function buildTaskEventListViewModel\(/);
+  assert.doesNotMatch(taskEventListViewModel, /\bstate\.|localStorage|document\.|addEventListener|fetch\(/);
+});
+
+
+test("task flow summary projection is pure and render adapter only applies its output", async () => {
+  const summaryViewModel = await readFile(new URL("../src/task-flow-summary-view-model.js", import.meta.url), "utf8");
+  assert.match(appSource, /buildTaskFlowSummaryViewModel\(/);
+  assert.match(appSource, /quality\.className = "run-flow-summary-value " \+ viewModel\.qualityClass/);
+  assert.match(summaryViewModel, /export function buildTaskFlowSummaryViewModel\(/);
+  assert.doesNotMatch(summaryViewModel, /\bstate\.|localStorage|document\.|addEventListener|fetch\(/);
+});
+
+
+test("section navigation is a closed DOM behavior module and app only configures it", async () => {
+  const sectionNavigation = await readFile(new URL("../src/section-navigation.js", import.meta.url), "utf8");
+  assert.match(appSource, /setupSectionNavigation\(\{ document, window, IntersectionObserver: window\.IntersectionObserver, linkSelector:/);
+  assert.doesNotMatch(appSource, /function bindSectionNavigation\(/);
+  assert.match(sectionNavigation, /export function setupSectionNavigation\(/);
+  assert.doesNotMatch(sectionNavigation, /\bstate\.|localStorage|fetch\(|\$\(/);
+});
+
+
+test("UIR-2 基础布局间距使用语义 token", () => {
+  assert.match(stylesheet, /--space-1:\s*4px/);
+  assert.match(stylesheet, /--space-2:\s*8px/);
+  assert.match(stylesheet, /--space-3:\s*12px/);
+  assert.match(stylesheet, /--space-4:\s*16px/);
+  assert.match(stylesheet, /--space-6:\s*24px/);
+  assert.match(stylesheet, /\.sidebar\s*\{[^}]*padding:\s*var\(--space-6\) 15px 17px/);
+  assert.match(stylesheet, /\.search-panel\s*\{[^}]*gap:\s*var\(--space-6\)/);
+  assert.match(stylesheet, /\.button\s*\{[^}]*gap:\s*var\(--space-2\)/);
+  assert.match(stylesheet, /\.metric-grid\s*\{[^}]*gap:\s*var\(--space-3\)/);
+  assert.match(stylesheet, /\.content-grid\s*\{[^}]*margin-top:\s*var\(--space-4\)/);
+});
+
+
+test("UIR-2 typography roles use semantic tokens without changing their baseline values", () => {
+  assert.match(stylesheet, /--font-size-support:\s*12px/);
+  assert.match(stylesheet, /--font-size-secondary:\s*13px/);
+  assert.match(stylesheet, /--font-size-control:\s*13px/);
+  assert.match(stylesheet, /--font-size-input:\s*14px/);
+  assert.match(stylesheet, /\.page-subtitle \{ font-size: var\(--font-size-secondary\); \}/);
+  assert.match(baseCssDeclarationBlock(".panel-muted"), /font-size:\s*12px\s*;/);
+  assert.doesNotMatch(baseCssDeclarationBlock(".panel-muted"), /!important/);
+  assert.match(stylesheet, /\.button \{ font-size: var\(--font-size-control\); \}/);
+  assert.match(stylesheet, /\.field input, \.field select, \.field textarea, \.recent-analysis-search input \{ font-size: var\(--font-size-input\); \}/);
+});
+
+
+test("UIR-2 全局减少动态效果规则只保留一份", () => {
+  const globalMotionRules = stylesheet.match(/\*,\s*\*::before,\s*\*::after\s*\{/g) || [];
+  assert.equal(globalMotionRules.length, 1, "global reduced-motion declarations should have one authoritative rule");
+  assert.match(stylesheet, /@media \(prefers-reduced-motion: reduce\) \{\s*\*, \*::before, \*::after \{[\s\S]*?scroll-behavior: auto !important;[\s\S]*?animation-duration: \.01ms !important;[\s\S]*?animation-iteration-count: 1 !important;[\s\S]*?transition-duration: \.01ms !important;/);
+});
+
+test("UIR-2 正文与常规控件使用统一的最终计算基线", () => {
+  assert.ok(stylesheet.includes("--control-height-base: 40px;"));
+  assert.ok(stylesheet.includes("--font-size-body-readable: 14px;"));
+  assert.ok(stylesheet.includes("--line-height-body: 1.55;"));
+  assert.ok(stylesheet.includes("font-size: var(--font-size-body-readable);"));
+  assert.ok(stylesheet.includes("line-height: var(--line-height-body);"));
+  assert.ok(stylesheet.includes(".button {") && stylesheet.includes("min-height: var(--control-height-base);"));
+  assert.ok(stylesheet.includes(".field input,") && stylesheet.includes("min-height: var(--control-height-base);"));
+  assert.ok(stylesheet.includes(".settings-dialog .field input { min-height: var(--control-height-base); }"));
+});
+
+
+test("UIR-2 shared page frame rules merge only redundant global overrides", () => {
+  const newline = String.fromCharCode(10);
+  assert.ok(stylesheet.includes(".main-area { min-height: 100vh; margin-left: var(--layout-sidebar-width); padding: 0 var(--space-page); }"));
+  assert.ok(stylesheet.includes(".view { width: 100%; max-width: 1680px; min-width: 0; margin-inline: auto; padding-top: var(--layout-page-top); padding-bottom: var(--layout-page-bottom); }"));
+  assert.ok(stylesheet.includes([".panel {", "   min-width: 0;", "   border: 1px solid var(--border);"].join(newline)));
+  assert.ok(!stylesheet.includes([".main-area {", "  padding-left: var(--space-page);"].join(newline)));
+  assert.ok(!stylesheet.includes([".view {", "  max-width: 1680px;", "  margin-inline: auto;"].join(newline)));
+  assert.ok(!stylesheet.includes([".panel {", "  box-shadow: 0 8px 26px rgba(0, 0, 0, .10);"].join(newline)));
+  assert.ok(stylesheet.includes("--space-page: clamp(16px, 2.1vw, 30px);"));
+  assert.ok(stylesheet.includes("transition: border-color .16s ease, box-shadow .16s ease;"));
+});
+
+test("UIR-2 panel heading base rules include their final shared layout constraints", () => {
+  const newline = String.fromCharCode(10);
+  assert.ok(stylesheet.includes(["  gap: 14px;", "  min-width: 0;"].join(newline)));
+  assert.ok(stylesheet.includes(["  letter-spacing: -.2px;", "  line-height: 1.4;", "  overflow-wrap: anywhere;"].join(newline)));
+  assert.ok(!stylesheet.includes(".panel-heading { min-width: 0; }"));
+  assert.ok(!stylesheet.includes([".panel-heading {", "  gap: 14px;", "}"].join(newline)));
+  assert.ok(!stylesheet.includes([".panel-heading h2 {", "  letter-spacing: -.2px;", "}"].join(newline)));
+  assert.ok(!stylesheet.includes([".panel-heading h2 {", "  min-width: 0;", "  line-height: 1.4;"].join(newline)));
+});
+
+test("UIR-2 settings section heading final values are consolidated", () => {
+  const newline = String.fromCharCode(10);
+  assert.ok(stylesheet.includes([".settings-section-heading {", "  display: flex;", "  align-items: center;", "  justify-content: space-between;", "  flex-wrap: wrap;", "  gap: 14px;", "  margin: 0 0 11px;", "}"].join(newline)));
+  assert.ok(stylesheet.includes([".settings-section-heading h2 {", "  margin: 0 0 5px;", "  color: var(--text);", "  font-size: 17px;", "}"].join(newline)));
+  assert.ok(stylesheet.includes([".settings-section-heading p {", "  font-size: 12px;", "  line-height: 1.65;", "}"].join(newline)));
+  assert.ok(stylesheet.includes(".settings-section { margin: 0 0 22px; }"));
+  assert.ok(!stylesheet.includes(".settings-section-heading { display:flex;"));
+  assert.ok(!stylesheet.includes(".settings-section-heading { align-items:center; }"));
+  assert.ok(!stylesheet.includes(".settings-section { margin-bottom:22px; }"));
+  assert.ok(stylesheet.includes("@media (max-width:640px) {"));
+  assert.ok(stylesheet.includes(".settings-section-heading { align-items:flex-start; }"));
+});
+
+test("UIR-2 text button height is consolidated with responsive and task-action exceptions", () => {
+  const newline = String.fromCharCode(10);
+  assert.ok(stylesheet.includes(".text-button { min-height: 32px;"));
+  assert.ok(!stylesheet.includes([".text-button {", "  min-height: 32px;", "  font-size: 12px;", "}"].join(newline)));
+  assert.ok(stylesheet.includes(["  .text-button {", "    min-height: 36px;", "  }"].join(newline)));
+  assert.ok(stylesheet.includes(".task-result-actions .text-button { min-height: 30px; font-size: 11px; }"));
+  assert.doesNotMatch(stylesheet, /\.task-result-actions \.text-button \{[^}]*!important/);
+  assert.ok(!stylesheet.includes(".task-result-actions .text-button { font-size: 13px !important; }"));
+});
+
+test("UIR-2 settings feedback layout constraints are consolidated", () => {
+  assert.ok(stylesheet.includes(".settings-feedback { min-height: 1.5em; margin: 9px 0 0; overflow-wrap: anywhere;"));
+  assert.ok(!stylesheet.includes(".settings-feedback { min-height: 1.5em; overflow-wrap: anywhere; }"));
+  assert.ok(stylesheet.includes(".settings-connection-form .settings-feedback { margin: 0; }"));
+  assert.match(baseCssDeclarationBlock(".settings-feedback"), /font-size:\s*12px\s*;/);
+  assert.doesNotMatch(baseCssDeclarationBlock(".settings-feedback"), /!important/);
+  assert.ok(stylesheet.includes(":root[data-theme=\"light\"] .settings-feedback"));
+  const inlineStatus = exactCssDeclarationBlock(".settings-inline-status");
+  assert.match(inlineStatus, /margin:\s*11px 0 0\s*;/);
+  assert.match(inlineStatus, /color:\s*var\(--text-dim\)\s*;/);
+  assert.match(inlineStatus, /font-size:\s*12px\s*;/);
+  assert.doesNotMatch(inlineStatus, /!important/);
+  assert.match(stylesheet, /\.settings-browser-data-panel > \.settings-inline-status,\s*\.settings-browser-data-panel > \.field-hint \{[^}]*margin:\s*0\s*;/, "browser data panel status and field hint share the zero-margin grid rule");
+  const browserErrorStatus = exactCssDeclarationBlock(".settings-browser-data-panel .settings-inline-status.is-error");
+  assert.match(browserErrorStatus, /color:\s*var\(--danger\)\s*;/);
+});
+
+
+test("UIR-2 图表 HTML 与 SVG 文字字号归并到组件基础规则", () => {
+  const expectedSizes = [
+    [".chart-legend", /font-size:\s*12px\s*;/],
+    [".chart-summary span", /font-size:\s*12px\s*;/],
+    [".chart-axis-label", /font-size:\s*12px\s*;/],
+    [".chart-empty", /font-size:\s*13px\s*;/],
+    [".chart-foot", /font-size:\s*12px\s*;/],
+    [".chart-view-button", /font-size:\s*13px\s*;/],
+    [".chart-volume-unavailable", /font-size:\s*12px\s*;/]
+  ];
+  for (const [selector, sizePattern] of expectedSizes) {
+    const declaration = baseCssDeclarationBlock(selector);
+    assert.match(declaration, sizePattern, selector + " must own its readable base font size");
+    assert.doesNotMatch(declaration, /!important/);
+  }
+  assert.match(stylesheet, /:root\[data-theme="light"\] \.chart-axis-label, :root\[data-theme="light"\] \.chart-volume-unavailable \{ fill: var\(--text-dim\); \}/);
+  assert.match(stylesheet, /:root\[data-theme="light"\] \.chart-view-button\.is-active/);
+  assert.match(stylesheet, /@media \(max-width: 800px\) \{[\s\S]*?\.chart-heading-actions/);
+  assert.match(stylesheet, /@media \(max-width: 600px\) \{[\s\S]*?\.chart-view-button \{ flex: 1 1 50%; \}/);
+});
+
+
+test("UIR-2 侧栏品牌、分组标签与服务状态文字使用组件基础字号", () => {
+  const expectedSizes = [
+    [".brand-copy small", /font-size:\s*12px\s*;/],
+    [".side-label", /font-size:\s*12px\s*;/],
+    [".mini-service strong", /font-size:\s*13px\s*;/],
+    [".mini-service small", /font-size:\s*12px\s*;/],
+    [".sidebar-footnote", /font-size:\s*12px\s*;/]
+  ];
+  for (const [selector, sizePattern] of expectedSizes) {
+    const declaration = baseCssDeclarationBlock(selector);
+    assert.match(declaration, sizePattern, selector + " must own its readable base font size");
+    assert.doesNotMatch(declaration, /!important/);
+  }
+  assert.doesNotMatch(stylesheet, /:root\[data-theme="light"\] \.brand-copy small \{[^}]*font-size/);
+  assert.match(stylesheet, /:root\[data-theme="light"\] \.side-label \{ color: var\(--text-dim\); \}/);
+  assert.match(stylesheet, /:root\[data-theme="light"\] \.sidebar-footnote \{ color: var\(--text-dim\); \}/);
+  assert.match(stylesheet, /@media \(max-width: 900px\) \{[\s\S]*?\.brand-copy, \.side-label[\s\S]*?\.sidebar-footnote \{ display: none; \}/);
+  assert.match(stylesheet, /@media \(max-width: 600px\) \{[\s\S]*?\.sidebar \.side-label, \.sidebar \.sidebar-footnote \{ display: block; \}/);
+});
+
+
+test("UIR-2 表格元信息、质量标记与页面辅助区域使用组件基础字号", () => {
+  const expectedSizes = [
+    [".table-meta", /font-size:\s*12px\s*;/],
+    [".mini-quality", /font-size:\s*12px\s*;/],
+    [".table-footer", /font-size:\s*12px\s*;/],
+    [".page-footer", /font-size:\s*12px\s*;/],
+    [".soft-badge", /font-size:\s*12px\s*;/]
+  ];
+  for (const [selector, sizePattern] of expectedSizes) {
+    const declaration = baseCssDeclarationBlock(selector);
+    assert.match(declaration, sizePattern, selector + " must own its readable base font size");
+    assert.doesNotMatch(declaration, /!important/);
+  }
+  assert.match(stylesheet, /@media \(max-width: 600px\) \{[\s\S]*?\.chart-foot, \.table-footer, \.page-footer \{ align-items: flex-start; flex-direction: column; gap: 6px; \}/);
+  assert.match(stylesheet, /:root\[data-theme="light"\] \.soft-badge \{ color: #245d95; background: #eaf3ff; \}/);
+});
+
+
+test("UIR-2 任务空态、任务标识与边界说明使用组件基础字号", () => {
+  const expectedSizes = [
+    [".task-empty strong", /font-size:\s*13px\s*;/],
+    [".task-empty span", /font-size:\s*12px\s*;/],
+    [".task-id-row > span", /font-size:\s*12px\s*;/],
+    [".task-id-row code", /font-size:\s*12px\s*;/],
+    [".task-error", /font-size:\s*12px\s*;/],
+    [".task-actions > span", /font-size:\s*12px\s*;/],
+    [".boundary-grid span", /font-size:\s*12px\s*;/],
+    [".boundary-grid strong", /font-size:\s*13px\s*;/],
+    [".boundary-grid p", /font-size:\s*12px\s*;/],
+    [".empty-row", /font-size:\s*12px\s*;/],
+    [".inline-callout", /font-size:\s*12px\s*;/]
+  ];
+  for (const [selector, sizePattern] of expectedSizes) {
+    const declaration = baseCssDeclarationBlock(selector);
+    assert.match(declaration, sizePattern, selector + " must own its readable base font size");
+    assert.doesNotMatch(declaration, /!important/);
+  }
+  assert.match(stylesheet, /:root\[data-theme="light"\] \.task-error/);
+  assert.match(stylesheet, /:root\[data-theme="light"\] \.inline-callout strong \{ color: #80540b; \}/);
+  assert.match(stylesheet, /\.task-id-row code \{[^}]*overflow:\s*hidden;[^}]*text-overflow:\s*ellipsis;/);
+  assert.match(stylesheet, /\.task-facts small \{[^}]*font-size:\s*9px;/, "Run Flow compact fact labels retain their component-specific sizing");
+  assert.match(stylesheet, /\.run-flow-dialog \.task-facts strong \{\s*font-size:\s*12px;/, "Run Flow compact fact values retain their component-specific sizing");
+});
+
+
+test("UIR-2 最近分析搜索、反馈和移除操作使用组件基础字号", () => {
+  const expectedSizes = [
+    [".recent-analysis-search", /font-size:\s*13px\s*;/],
+    [".recent-analysis-feedback", /font-size:\s*13px\s*;/],
+    [".recent-analysis-remove", /font-size:\s*12px\s*;/],
+    [".quote-heading-actions .button", /font-size:\s*12px\s*;/]
+  ];
+  for (const [selector, sizePattern] of expectedSizes) {
+    const declaration = baseCssDeclarationBlock(selector);
+    assert.match(declaration, sizePattern, selector + " must own its readable base font size");
+    assert.doesNotMatch(declaration, /!important/);
+  }
+  assert.match(stylesheet, /\.recent-analysis-search input \{[^}]*font: inherit;/, "search input keeps inheriting the label font family and size");
+  assert.match(stylesheet, /\.recent-analysis-feedback\.is-error \{ color: #f0a2a9; \}/, "error feedback retains its semantic color");
+  assert.match(stylesheet, /\.recent-analysis-open:focus-visible, \.recent-analysis-remove:focus-visible \{ outline: 2px solid #8fb6cf;/);
+  assert.match(stylesheet, /@media \(max-width: 600px\) \{[\s\S]*?\.recent-analysis-tools \{ align-items: stretch; flex-direction: column; \}/);
+  assert.match(stylesheet, /@media \(max-width: 600px\) \{[\s\S]*?\.quote-heading-actions \.button \{ padding: 0 9px; \}/);
+});
+
+
+test("UIR-2 Run Flow 事件标题与事件区辅助文字由组件选择器控制字号", () => {
+  assert.match(stylesheet, /\.run-flow-dialog \.event-body strong \{[\s\S]*?font-size:\s*13px\s*;/);
+  assert.match(stylesheet, /\.run-flow-dialog \.run-flow-events-column \.event-heading h3 \{\s*font-size:\s*14px\s*;/);
+  assert.match(stylesheet, /\.run-flow-dialog \.run-flow-events-column \.event-heading span \{\s*color:\s*var\(--text-dim\);\s*font-size:\s*11px\s*;/);
+  assert.doesNotMatch(stylesheet, /\.run-flow-dialog \.event-body strong \{[^}]*!important/);
+  assert.doesNotMatch(stylesheet, /\.run-flow-dialog \.run-flow-events-column \.event-heading h3 \{[^}]*!important/);
+  assert.doesNotMatch(stylesheet, /\.run-flow-dialog \.run-flow-events-column \.event-heading span \{[^}]*!important/);
+  assert.match(stylesheet, /\.run-flow-dialog \.event-row-succeeded \.event-state-label,[\s\S]*?\.run-flow-dialog \.event-row-completed \.event-state-label \{[\s\S]*?color:\s*var\(--accent\);/);
+  assert.match(stylesheet, /\.run-flow-dialog \.event-row-failed \.event-state-label,[\s\S]*?\.run-flow-dialog \.event-row-rejected \.event-state-label \{[\s\S]*?color:\s*var\(--danger\);/);
+  assert.match(stylesheet, /\.run-flow-dialog \.event-row-running \.event-state-label,[\s\S]*?\.run-flow-dialog \.event-row-processing \.event-state-label \{[\s\S]*?color:\s*var\(--blue\);/);
+  assert.match(stylesheet, /\.run-flow-dialog \.event-row-pending \.event-state-label \{[\s\S]*?color:\s*var\(--warning\);/);
+  assert.match(stylesheet, /@media \(max-width: 600px\) \{[\s\S]*?\.run-flow-dialog \.event-heading \{ align-items: flex-start; flex-direction: column;/);
+});
+
+
+test("UIR-2 Provider 数据源卡片字号由组件基础规则控制", () => {
+  const expectedSizes = [
+    [".source-summary", /font-size:\s*12px\s*;/],
+    [".source-version", /font-size:\s*12px\s*;/],
+    [".source-main strong", /font-size:\s*13px\s*;/],
+    [".source-main small", /font-size:\s*12px\s*;/],
+    [".source-state", /font-size:\s*12px\s*;/]
+  ];
+  for (const [selector, sizePattern] of expectedSizes) {
+    const declaration = baseCssDeclarationBlock(selector);
+    assert.match(declaration, sizePattern, selector + " must own its readable base font size");
+    assert.doesNotMatch(declaration, /!important/);
+  }
+  assert.match(stylesheet, /:root\[data-theme="light"\] \.source-state-on, :root\[data-theme="light"\] \.mini-quality-valid \{ color: #08765e; background: #e3f6ef; \}/);
+  assert.match(stylesheet, /:root\[data-theme="light"\] \.source-state-off, :root\[data-theme="light"\] \.mini-quality-unknown \{ color: #607383; background: #eef2f5; \}/);
+  assert.match(stylesheet, /\.source-main strong \{[^}]*text-overflow:\s*ellipsis;[^}]*white-space:\s*nowrap;/);
+});
+
+
+test("UIR-2 行情质量标记与指标辅助文字由组件基础规则控制", () => {
+  const expectedSizes = [
+    [".quality-pill", /font-size:\s*12px\s*;/],
+    [".metric-label", /font-size:\s*12px\s*;/],
+    [".metric-foot", /font-size:\s*12px\s*;/]
+  ];
+  for (const [selector, sizePattern] of expectedSizes) {
+    const declaration = baseCssDeclarationBlock(selector);
+    assert.match(declaration, sizePattern, selector + " must own its readable base font size");
+    assert.doesNotMatch(declaration, /!important/);
+  }
+  assert.doesNotMatch(stylesheet, /\.quality-pill \{[^}]*!important/);
+  assert.doesNotMatch(stylesheet, /\.metric-label \{[^}]*!important/);
+  assert.doesNotMatch(stylesheet, /\.metric-foot \{[^}]*!important/);
+  assert.match(stylesheet, /\.section-heading p, \.panel-heading p \{ font-size: var\(--font-size-support\); \}/);
+  assert.match(stylesheet, /\.quality-valid \{[^}]*color:[^}]*background:/);
+  assert.match(stylesheet, /\.quality-degraded \{[^}]*color:[^}]*background:/);
+  assert.match(stylesheet, /\.quality-stale \{[^}]*color:[^}]*background:/);
+  assert.match(stylesheet, /\.quality-invalid \{[^}]*color:[^}]*background:/);
+  assert.match(stylesheet, /@media \(max-width: 600px\) \{[\s\S]*?\.metric-grid \{ grid-template-columns: repeat\(2, minmax\(0, 1fr\)\);/);
+});
+
+
+test("UIR-2 页面眉题、查询辅助与设置提示字号由组件基础规则控制", () => {
+  const expectedSizes = [
+    [".eyebrow", /font-size:\s*12px\s*;/],
+    [".panel-muted", /font-size:\s*12px\s*;/],
+    [".query-hint", /font-size:\s*12px\s*;/],
+    [".security-note", /font-size:\s*12px\s*;/],
+    [".settings-feedback", /font-size:\s*12px\s*;/]
+  ];
+  for (const [selector, sizePattern] of expectedSizes) {
+    const declaration = baseCssDeclarationBlock(selector);
+    assert.match(declaration, sizePattern, selector + " must own its readable base font size");
+    assert.doesNotMatch(declaration, /!important/);
+  }
+  assert.doesNotMatch(stylesheet, /\.eyebrow \{[^}]*!important/);
+  assert.doesNotMatch(stylesheet, /\.panel-muted \{[^}]*!important/);
+  assert.doesNotMatch(stylesheet, /\.query-hint \{[^}]*!important/);
+  assert.doesNotMatch(stylesheet, /\.security-note \{[^}]*!important/);
+  assert.doesNotMatch(stylesheet, /\.settings-feedback \{[^}]*!important/);
+  assert.match(stylesheet, /\.settings-feedback \{[^}]*color: #f0a2a9/);
+  assert.match(stylesheet, /:root\[data-theme="light"\] \.settings-feedback[^}]*color: #b92f41/);
+  assert.match(stylesheet, /\.security-note \{[\s\S]*?color: #c0aa85/);
+  assert.match(stylesheet, /\.query-hint \{[^}]*padding-left: 150px/);
+  assert.match(stylesheet, /@media \(max-width: 1200px\) \{[\s\S]*?\.query-hint \{ padding-left: 0; \}/);
+});
+
+
+test("UIR-2 page timestamp and panel kicker typography use component baselines", () => {
+  const lastUpdated = baseCssDeclarationBlock(".last-updated");
+  const lastUpdatedValue = baseCssDeclarationBlock(".last-updated strong");
+  const panelKicker = baseCssDeclarationBlock(".panel-kicker");
+  assert.match(lastUpdated, /font-size:\s*12px\s*;/);
+  assert.match(lastUpdatedValue, /font-size:\s*12px\s*;/);
+  assert.match(panelKicker, /font-size:\s*var\(--font-size-secondary\)\s*;/);
+  assert.doesNotMatch(lastUpdated, /!important/);
+  assert.doesNotMatch(lastUpdatedValue, /!important/);
+  assert.doesNotMatch(panelKicker, /!important/);
+  assert.match(stylesheet, /@media \(max-width: 640px\) \{[\s\S]*?\.last-updated \{[\s\S]*?white-space: normal;/);
+  assert.match(stylesheet, /:root\[data-theme="light"\] \.last-updated strong[^}]*color: var\(--text\)/);
+  assert.match(stylesheet, /:root\[data-theme="light"\] h2, :root\[data-theme="light"\] \.panel-kicker/);
+});;
+
+
+test("UIR-2 form field labels use a readable component baseline without forced priority", () => {
+  const field = baseCssDeclarationBlock(".field");
+  assert.match(field, /font-size:\s*12px\s*;/);
+  assert.doesNotMatch(field, /!important/);
+  assert.match(stylesheet, /\.field > span \{\s*font-size: 12px;\s*line-height: 1\.5;/);
+  assert.match(stylesheet, /:root\[data-theme="light"\] \.field \{ color: #536879; \}/);
+});
+
+
+test("UIR-2 table typography uses component baselines and scoped readable table overrides", () => {
+  const header = baseCssDeclarationBlock("th");
+  const cell = baseCssDeclarationBlock("td");
+  assert.match(header, /font-size:\s*11px\s*;/);
+  assert.match(header, /padding-block:\s*11px\s*;/);
+  assert.doesNotMatch(header, /!important/);
+  assert.match(cell, /font-size:\s*12px\s*;/);
+  assert.match(cell, /line-height:\s*1\.5\s*;/);
+  assert.doesNotMatch(cell, /!important/);
+  assert.match(stylesheet, /\.table-scroll th \{ font-size: 12px; \}/);
+  assert.match(stylesheet, /\.table-scroll td \{ font-size: 13px; \}/);
+  assert.doesNotMatch(stylesheet, /(?:^|\n)th \{ font-size: 12px !important; \}/);
+  assert.doesNotMatch(stylesheet, /(?:^|\n)td \{ font-size: 12px !important; \}/);
+  assert.match(stylesheet, /\.watchlist-import-preview th, \.watchlist-import-preview td \{[^}]*font-size: 12px;/);
+  assert.match(stylesheet, /@media \(max-width: 600px\)[\s\S]*?th, td \{ padding: 9px 10px; \}/);
+});
+
+
+test("UIR-2 table white-space behavior is inherited from the shared table baseline", () => {
+  assert.match(stylesheet, /table \{[^}]*white-space: nowrap;/);
+  assert.doesNotMatch(stylesheet, /\.market-overview-table-scroll th\s*,\s*\.market-overview-table-scroll td\s*\{[^}]*white-space\s*:/);
+  assert.doesNotMatch(stylesheet, /\.research-list-table-scroll th\s*,\s*\.research-list-table-scroll td\s*\{[^}]*white-space\s*:/);
+  assert.match(stylesheet, /\.market-overview-table-scroll td \{\s*vertical-align:middle\s*\}/);
+  assert.match(stylesheet, /\.market-activity-table td \{\s*vertical-align:middle\s*\}/);
+});
+
+
+test("UIR-2 shared table scrollers contain horizontal chaining and enable touch momentum", () => {
+  const tableScroller = baseCssDeclarationBlock(".table-scroll");
+  assert.match(tableScroller, /overflow-x:\s*auto\s*;/);
+  assert.match(tableScroller, /overscroll-behavior-x:\s*contain\s*;/);
+  assert.match(tableScroller, /-webkit-overflow-scrolling:\s*touch\s*;/);
+  assert.match(stylesheet, /\.market-activity-table \{\s*overscroll-behavior: contain;\s*\}/);
+  assert.doesNotMatch(stylesheet, /\.market-activity-table \{[^}]*-webkit-overflow-scrolling:/);
+});
+
+
+test("UIR-2 table viewport constraints keep wide data inside local scrollers", () => {
+  assert.match(stylesheet, /body \{[^}]*min-width:\s*320px/);
+  assert.match(stylesheet, /\.main-area \{[^}]*min-width:\s*0/);
+  assert.match(stylesheet, /\.view \{[^}]*width:\s*100%[^}]*min-width:\s*0/);
+  assert.match(stylesheet, /\.panel \{[^}]*min-width:\s*0/);
+  assert.match(stylesheet, /\.table-scroll \{[^}]*overflow-x:\s*auto/);
+  assert.match(stylesheet, /\.market-overview-table-scroll \{[^}]*overflow:\s*auto/);
+  assert.match(stylesheet, /\.market-overview-table-scroll table \{\s*min-width:\s*500px\s*\}/);
+  assert.match(stylesheet, /\.market-stocks-table-scroll table\{min-width:980px\}/);
+  assert.match(stylesheet, /\.existing-api-results-grid > section \{ min-width: 0;/);
+  assert.match(stylesheet, /@media \(max-width: 900px\) \{ \.existing-api-results-grid \{ grid-template-columns: minmax\(0, 1fr\); \} \}/);
+  assert.match(html, /class="table-scroll research-list-table-scroll"/);
+  assert.match(html, /class="table-scroll market-stocks-table-scroll"/);
+  assert.match(html, /class="existing-api-results-grid"/);
+});
+
+
+test("UIR-2 market stocks pagination controls wrap within narrow panels", () => {
+  assert.match(stylesheet, /\.market-stocks-pagination\{[^}]*display:flex;[^}]*flex-wrap:wrap/);
+  assert.match(stylesheet, /\.market-stocks-pagination>div\{[^}]*display:flex;[^}]*flex-wrap:wrap/);
+  assert.match(html, /class="market-stocks-pagination"><span id="market-stocks-page-label"/);
+  assert.match(html, /id="market-stocks-prev"/);
+  assert.match(html, /id="market-stocks-next"/);
+});
+
+
+test("UIR-2 local alert draft text wraps inside flex cards", () => {
+  assert.match(stylesheet, /\.local-alert-draft-card > div\s*\{[^}]*min-width:\s*0;[^}]*overflow-wrap:\s*anywhere;/);
+  assert.match(stylesheet, /\.local-alert-draft-card h4,\s*\.local-alert-draft-card p\s*\{[^}]*overflow-wrap:\s*anywhere;/);
+  assert.match(localAlertDrafts, /const copy = document\.createElement\("div"\);[\s\S]*?title\.textContent = item\.name;/);
+  assert.match(localAlertDrafts, /name\.length > 80/);
+});
+
+
+test("UIR-2 dialogs and Run Flow contain scrolling and long content on narrow viewports", () => {
+  assert.match(html, /<dialog class="run-flow-dialog" id="run-flow-dialog"/);
+  assert.match(stylesheet, /\.settings-dialog\s*\{\s*max-height:\s*calc\(100vh - 24px\);\s*overflow-y:\s*auto;/);
+  assert.match(stylesheet, /\.run-flow-dialog \{[^}]*position:\s*fixed;[^}]*inset:\s*2vh 2vw;[^}]*overflow:\s*hidden;/);
+  assert.match(stylesheet, /\.run-flow-dialog \.task-status-panel \{[^}]*height:\s*100%;[^}]*max-height:\s*100%;[^}]*overflow-y:\s*auto;[^}]*overscroll-behavior:\s*contain;/);
+  assert.match(stylesheet, /\.event-body p \{[^}]*overflow-wrap:\s*anywhere;/);
+  assert.match(stylesheet, /\.raw-result pre \{[^}]*max-height:\s*320px;[^}]*overflow:\s*auto;[\s\S]*?white-space:\s*pre-wrap;[^}]*overflow-wrap:\s*anywhere;/);
+  assert.match(stylesheet, /#close-chart \{[^}]*width:\s*100%;[^}]*height:\s*auto;/);
+  assert.match(stylesheet, /@media \(max-width: 600px\) \{[\s\S]*?\.run-flow-header \{ flex-direction: column; \}[\s\S]*?\.run-flow-dialog \.task-facts \{ grid-template-columns: repeat\(2, minmax\(0, 1fr\)\); \}/);
+});
+
+
+test("UIR-2 narrow Run Flow workspace allocates remaining height to independent panes", () => {
+  assert.match(stylesheet, /@media\s*\(max-width:\s*900px\)\s*\{[\s\S]*?\.run-flow-dialog \.run-flow-workspace\s*\{[^}]*grid-template-columns:\s*minmax\(0,1fr\);[^}]*grid-template-rows:\s*minmax\(0,1fr\) minmax\(0,1\.2fr\);/);
+  assert.match(stylesheet, /\.run-flow-dialog \.run-flow-events-column, \.run-flow-dialog \.run-flow-result-column\s*\{[^}]*max-height:\s*none;[^}]*min-height:\s*0;/);
+  assert.doesNotMatch(stylesheet.slice(stylesheet.lastIndexOf("@media (max-width:900px)"), stylesheet.length), /\.run-flow-events-column\s*\{[^}]*max-height:\s*4[26]dvh/);
+  assert.match(stylesheet, /\.browser-data-import-dialog\{[^}]*max-height:calc\(100dvh - 24px\);overflow-y:auto;/);
+  assert.match(html, /<dialog class="browser-data-import-dialog" id="browser-data-import-dialog"/);
+});
+
+
+test("UIR-2 settings navigation uses a two-column grid on narrow screens", () => {
+  const mobileStart = stylesheet.indexOf("@media (max-width: 600px) {\n  .settings-nav");
+  assert.notEqual(mobileStart, -1);
+  const mobileSettingsNav = stylesheet.slice(mobileStart, mobileStart + 360);
+  assert.match(mobileSettingsNav, /\.settings-nav \{[^}]*display:\s*grid;[^}]*grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\);/);
+  assert.match(stylesheet, /\.settings-nav \{[^}]*display:\s*flex;[^}]*flex-direction:\s*column;/);
+  assert.match(html, /<nav class="settings-nav" aria-label="设置分组">[\s\S]*?data-settings-target="settings-security-section"/);
+});
+
+
+test("UIR-2 technical chart legends wrap without forcing narrow chart panels wider", () => {
+  const legendStart = stylesheet.indexOf(".technical-chart-legend {");
+  assert.notEqual(legendStart, -1);
+  const legendRule = stylesheet.slice(legendStart, stylesheet.indexOf("}", legendStart) + 1);
+  assert.match(legendRule, /display:\s*flex;/);
+  assert.match(legendRule, /flex-wrap:\s*wrap;/);
+  assert.match(legendRule, /gap:\s*12px;/);
+  assert.match(stylesheet, /\.technical-chart-panel\s*\{[^}]*min-width:\s*0;/);
+  assert.match(stylesheet, /\.technical-chart\s*\{[^}]*width:\s*100%;[^}]*height:\s*auto;/);
+  assert.match(html, /class="technical-chart-legend"><span class="technical-legend-dif">DIF<\/span><span class="technical-legend-signal">DEA<\/span><span>柱体<\/span>/);
+});
+
+
+test("UIR-2 research chart anchors clear the sticky section navigation", () => {
+  assert.match(stylesheet, /#research-view #daily-chart-panel,[\s\S]*?#research-view #technical-indicators-panel,[\s\S]*?#research-view #historical-bars-panel,[\s\S]*?#research-view \[id\^="research-detail-"\] \{ scroll-margin-top: 82px; \}/);
+  assert.ok(stylesheet.includes(".research-workspace-nav { position: sticky;"));
+  assert.match(html, /data-research-detail-target="daily-chart-panel"/);
+  assert.match(html, /data-research-detail-target="technical-indicators-panel"/);
+  assert.match(html, /data-research-detail-target="historical-bars-panel"/);
 });

@@ -25,6 +25,43 @@ type CrossProviderDailySnapshot struct {
 	Bars            []CrossProviderDailyBar
 }
 
+// CrossProviderVolumeGranularity 根据原始成交量单位返回归一化股数粒度。
+// hands/hands_inferred 的源值以手计，每手 100 股；shares 的源值以股计，粒度为 1。
+// 未知原始单位返回 0，比较器据此判定 not_comparable。
+func CrossProviderVolumeGranularity(rawVolumeUnit string) int64 {
+	switch strings.ToLower(strings.TrimSpace(rawVolumeUnit)) {
+	case "hands", "hands_inferred":
+		return 100
+	case "shares":
+		return 1
+	default:
+		return 0
+	}
+}
+
+// CrossProviderAmountErrorBound 根据已验证的 Provider 原始字段契约计算绝对误差上界。
+// Pytdx float32 舍入误差不超过半个 ULP，随后转为厘的 Price 时还会截断不足 0.001 CNY 的部分。
+// BaoStock 文档声明 amount 精度为 4 位小数；因未声明舍入方式，按完整 0.0001 CNY 量化步长保守估计。
+// 未知来源或字段语义返回 0，调用方必须将成交额标记为 not_comparable。
+func CrossProviderAmountErrorBound(source, rawAmountUnit, rawAmountField string, rawAmount *float64) float64 {
+	if rawAmount == nil || strings.TrimSpace(rawAmountUnit) != "CNY" || strings.TrimSpace(rawAmountField) != "amount" {
+		return 0
+	}
+	switch strings.ToLower(strings.TrimSpace(source)) {
+	case "pytdx":
+		value := float32(*rawAmount)
+		if math.IsNaN(float64(value)) || math.IsInf(float64(value), 0) || value < 0 {
+			return 0
+		}
+		step := float64(math.Nextafter32(value, float32(math.Inf(1))) - value)
+		return step/2 + 0.001
+	case "baostock":
+		return 0.0001
+	default:
+		return 0
+	}
+}
+
 // CrossProviderDailyBar 表示一个交易日的标准化日 K。
 type CrossProviderDailyBar struct {
 	TradeDate         string
@@ -34,8 +71,10 @@ type CrossProviderDailyBar struct {
 	Close             float64
 	Volume            int64
 	VolumeUnit        string
+	VolumeGranularity int64
 	Amount            *float64
 	AmountUnit        string
+	AmountErrorBound  float64
 	AdjustmentMethod  string
 	AdjustmentRefDate string
 }
@@ -115,6 +154,17 @@ func CompareCrossProviderDailyBars(left, right CrossProviderDailySnapshot) Cross
 			result.Reason = "volume_unit_must_be_shares"
 			return result
 		}
+		if a.VolumeGranularity <= 0 || b.VolumeGranularity <= 0 {
+			result.Reason = "volume_granularity_missing"
+			return result
+		}
+		volumeTolerance := int64(1)
+		if a.VolumeGranularity > volumeTolerance {
+			volumeTolerance = a.VolumeGranularity
+		}
+		if b.VolumeGranularity > volumeTolerance {
+			volumeTolerance = b.VolumeGranularity
+		}
 		if reason := validateCrossProviderDailyBar(a); reason != "" {
 			result.Reason = "left_" + date + "_" + reason
 			return result
@@ -132,7 +182,7 @@ func CompareCrossProviderDailyBars(left, right CrossProviderDailySnapshot) Cross
 			{"high", a.High, b.High, 0.001},
 			{"low", a.Low, b.Low, 0.001},
 			{"close", a.Close, b.Close, 0.001},
-			{"volume", float64(a.Volume), float64(b.Volume), 50},
+			{"volume", float64(a.Volume), float64(b.Volume), float64(volumeTolerance)},
 		} {
 			difference := math.Abs(field.left - field.right)
 			status := "matched"
@@ -154,17 +204,25 @@ func CompareCrossProviderDailyBars(left, right CrossProviderDailySnapshot) Cross
 			})
 			continue
 		}
+		if a.AmountErrorBound <= 0 || b.AmountErrorBound <= 0 {
+			result.Fields = append(result.Fields, CrossProviderFieldResult{
+				Field: date + ".amount", Status: "not_comparable",
+				Reason: "amount_precision_unknown",
+			})
+			continue
+		}
 		difference := math.Abs(*a.Amount - *b.Amount)
+		tolerance := a.AmountErrorBound + b.AmountErrorBound
 		status := "matched"
 		if math.IsNaN(*a.Amount) || math.IsInf(*a.Amount, 0) ||
 			math.IsNaN(*b.Amount) || math.IsInf(*b.Amount, 0) {
 			status = "not_comparable"
-		} else if difference > 1 {
+		} else if difference > tolerance {
 			status = "mismatch"
 		}
 		result.Fields = append(result.Fields, CrossProviderFieldResult{
 			Field: date + ".amount", Status: status, Left: *a.Amount, Right: *b.Amount,
-			Difference: difference, Tolerance: 1,
+			Difference: difference, Tolerance: tolerance,
 		})
 	}
 

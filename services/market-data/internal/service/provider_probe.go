@@ -455,7 +455,15 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 				if options.DailyBarStartDate != "" {
 					dailyBarLimit = 2000
 				}
-				bars, err := p.FetchDailyBars(probeCtx, barsSymbol, options.DailyBarStartDate, options.DailyBarEndDate, dailyBarLimit, adjustment)
+				// 默认探测只纳入上一个完整自然日及之前的数据，避免 Provider 返回盘中日 K。
+				requestStartDate := options.DailyBarStartDate
+				requestEndDate := options.DailyBarEndDate
+				if requestEndDate == "" {
+					requestEndDate = dailyBarEndDate
+				}
+				// 请求前先记录目标证券，保证 Provider 在网络/登录阶段失败时仍能形成准确的失败侧配对。
+				recordProviderProbeEvidence(probeCtx, barsSymbol, "", 0, 0, nil)
+				bars, err := p.FetchDailyBars(probeCtx, barsSymbol, requestStartDate, requestEndDate, dailyBarLimit, adjustment)
 				if err != nil {
 					return model.QualityUnknown, "", nil, err
 				}
@@ -464,11 +472,25 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 				// 仅当 Adapter 已上报 Validate 阶段结果时复用该报告；Parse-only 报告不能跳过公共字段校验。
 				reporter := validation.ReporterFromContext(probeCtx)
 				if reporter != nil && reporter.Snapshot().HasStage(validation.StageValidate) {
-					validated, warnings = normalize.ValidateAndSortBars(barsSymbol, bars, options.DailyBarStartDate, options.DailyBarEndDate, dailyBarLimit)
+					validated, warnings = normalize.ValidateAndSortBars(barsSymbol, bars, requestStartDate, requestEndDate, dailyBarLimit)
 				} else {
 					var report validation.Report
-					validated, warnings, report = normalize.ValidateAndSortBarsWithReport(barsSymbol, bars, options.DailyBarStartDate, options.DailyBarEndDate, dailyBarLimit)
+					validated, warnings, report = normalize.ValidateAndSortBarsWithReport(barsSymbol, bars, requestStartDate, requestEndDate, dailyBarLimit)
 					validation.AddContextReport(probeCtx, report)
+				}
+				// RowsValidated 表示通过字段校验、去重和日期范围过滤的全部行，不扣除展示 limit。
+				allValidated, _ := normalize.ValidateAndSortBars(barsSymbol, bars, requestStartDate, requestEndDate, 0)
+				if reporter != nil && reporter.Snapshot().HasStage(validation.StageValidate) {
+					truncatedCount := len(allValidated) - len(validated)
+					if truncatedCount > 0 {
+						report := validation.NewReport(validation.DefaultMaxIssues)
+						report.Add(validation.FieldIssue{
+							Stage: validation.StageNormalize, Field: "rows", Code: "bars_truncated_to_limit",
+							Expected: "all valid rows within requested limit", Severity: validation.SeverityInfo,
+							Message: "valid daily bars were truncated to the requested limit", Count: truncatedCount,
+						})
+						validation.AddContextReport(probeCtx, report)
+					}
 				}
 				latestDate := ""
 				var providerTime *time.Time
@@ -477,14 +499,14 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 					latestDate = latest.TradeDate
 					providerTime = latest.ProviderTime
 				}
-				recordProviderProbeEvidence(probeCtx, barsSymbol, latestDate, len(bars), len(validated), providerTime)
+				recordProviderProbeEvidence(probeCtx, barsSymbol, latestDate, len(bars), len(allValidated), providerTime)
 				if len(validated) == 0 {
 					if len(bars) > 0 {
 						return model.QualityInvalid, "", warnings, errors.New("daily-bars probe returned rows but none passed validation")
 					}
-					contextStartDate, contextEndDate := options.DailyBarStartDate, options.DailyBarEndDate
+					contextStartDate, contextEndDate := requestStartDate, requestEndDate
 					if contextStartDate == "" {
-						contextStartDate, contextEndDate = calendarStart, dailyBarEndDate
+						contextStartDate = calendarStart
 					}
 					contextResult := s.assessDailyBarTradingContext(probeCtx, barsSymbol, validated, contextStartDate, contextEndDate)
 					reasons := []string{"daily_bar_empty_response"}
@@ -498,8 +520,13 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 				}
 				quality := model.QualityValid
 				version := ""
-				reasons := append([]string(nil), warnings...)
-				for _, bar := range validated {
+				reasons := make([]string, 0, len(warnings))
+				for _, warning := range warnings {
+					if warning != "bars_truncated_to_limit" {
+						reasons = appendReason(reasons, warning)
+					}
+				}
+				for _, bar := range allValidated {
 					if version == "" {
 						version = bar.SourceVersion
 					}
@@ -510,14 +537,13 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 						reasons = appendReason(reasons, reason)
 					}
 				}
-				if len(warnings) > 0 {
+				if normalize.HasQualityDegradingBarWarnings(warnings) {
 					quality = model.QualityDegraded
 				}
-				barDataQuality := quality
 				if len(validated) > 0 {
-					contextStartDate, contextEndDate := options.DailyBarStartDate, options.DailyBarEndDate
+					contextStartDate, contextEndDate := requestStartDate, requestEndDate
 					if contextStartDate == "" {
-						contextStartDate, contextEndDate = validated[0].TradeDate, dailyBarEndDate
+						contextStartDate = validated[0].TradeDate
 					}
 					contextResult := s.assessDailyBarTradingContext(probeCtx, barsSymbol, validated, contextStartDate, contextEndDate)
 					if contextResult.QualityStatus != model.QualityValid {
@@ -538,14 +564,14 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 					}
 					snapshotBars = append(snapshotBars, provider.CrossProviderDailyBar{
 						TradeDate: bar.TradeDate, Open: bar.Open, High: bar.High, Low: bar.Low, Close: bar.Close,
-						Volume: *bar.Volume, VolumeUnit: bar.VolumeUnit, Amount: bar.Amount, AmountUnit: bar.AmountUnit,
+						Volume: *bar.Volume, VolumeUnit: bar.VolumeUnit, VolumeGranularity: provider.CrossProviderVolumeGranularity(bar.RawVolumeUnit), Amount: bar.Amount, AmountUnit: bar.AmountUnit, AmountErrorBound: provider.CrossProviderAmountErrorBound(bar.Source, bar.RawAmountUnit, bar.RawAmountField, bar.RawAmount),
 						AdjustmentMethod: bar.AdjustmentMethod, AdjustmentRefDate: bar.AdjustmentRefDate,
 					})
 				}
 				if len(snapshotBars) == len(validated) {
 					recordProviderProbeDailySnapshot(probeCtx, &provider.CrossProviderDailySnapshot{
 						Provider: p.Name(), SourceVersion: version, Symbol: barsSymbol,
-						AdjustmentBasis: string(adjustment), QualityStatus: string(barDataQuality), Bars: snapshotBars,
+						AdjustmentBasis: string(adjustment), QualityStatus: string(quality), Bars: snapshotBars,
 					})
 				}
 				return quality, version, reasons, nil
@@ -840,8 +866,17 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 			if err != nil {
 				return model.QualityUnknown, "", nil, err
 			}
+			report := validation.ValidateFundamentalsSnapshot(v, barsSymbol, nowLocal.Year(), 2)
+			validation.AddContextReport(probeCtx, report)
+			sourceVersion := ""
+			if v != nil {
+				sourceVersion = v.SourceVersion
+			}
+			if report.HasErrors() {
+				return model.QualityInvalid, sourceVersion, nil, errors.New("fundamentals field validation failed")
+			}
 			if err := validateFundamentalsSnapshot(barsSymbol, nowLocal.Year(), 2, v); err != nil {
-				return model.QualityInvalid, "", nil, err
+				return model.QualityInvalid, sourceVersion, nil, err
 			}
 			recordProviderProbeEvidence(probeCtx, barsSymbol, "", len(v.Sections), len(v.Sections), nil)
 			return v.QualityStatus, v.SourceVersion, append([]string(nil), v.QualityReasons...), nil
@@ -854,11 +889,20 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 			if err != nil {
 				return model.QualityUnknown, "", nil, err
 			}
+			report := validation.ValidateValuationSnapshot(v, []string{barsSymbol})
+			validation.AddContextReport(probeCtx, report)
+			sourceVersion := ""
+			if v != nil {
+				sourceVersion = v.SourceVersion
+			}
+			if report.HasErrors() {
+				return model.QualityInvalid, sourceVersion, nil, errors.New("valuation field validation failed")
+			}
 			if err := validateValuationSnapshot([]string{barsSymbol}, v); err != nil {
-				return model.QualityInvalid, "", nil, err
+				return model.QualityInvalid, sourceVersion, nil, err
 			}
 			recordProviderProbeEvidence(probeCtx, barsSymbol, v.ProviderReportDate, len(v.Items), len(v.Items), v.ProviderTimestamp)
-			return v.QualityStatus, v.SourceVersion, append([]string(nil), v.QualityReasons...), nil
+			return v.QualityStatus, sourceVersion, append([]string(nil), v.QualityReasons...), nil
 		})
 	}
 	for _, p := range s.hotRankingProviders {
@@ -1104,7 +1148,7 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 	}
 	if selectedChecks["cross_provider"] {
 		if selected["daily_bars"] {
-			run.CheckResults = append(run.CheckResults, buildCrossProviderProbeCheckResults(dailySnapshots, run.FinishedAt)...)
+			run.CheckResults = append(run.CheckResults, buildCrossProviderProbeCheckResults(dailySnapshots, run.Items, run.FinishedAt)...)
 		} else {
 			run.CheckResults = append(run.CheckResults, model.ProviderProbeCheckResult{
 				Check:        "cross_provider",
@@ -1358,6 +1402,21 @@ func buildProviderProbeCheckResults(items []model.ProviderProbeItem, requestedCh
 	return results
 }
 
+func crossProviderProbeFailureCode(item model.ProviderProbeItem) string {
+	switch item.ErrorStage {
+	case "connect", "timeout", "http", "provider":
+		return "provider_unavailable"
+	case "rate_limit":
+		return "provider_rate_limited"
+	case "provider_auth", "provider_permission":
+		return "provider_access_denied"
+	case "contract":
+		return "provider_contract_failed"
+	default:
+		return "provider_probe_failed"
+	}
+}
+
 func firstCrossProviderAdjustmentMethod(snapshot *provider.CrossProviderDailySnapshot) string {
 	if snapshot == nil || len(snapshot.Bars) == 0 {
 		return ""
@@ -1372,7 +1431,7 @@ func firstCrossProviderAdjustmentRefDate(snapshot *provider.CrossProviderDailySn
 	return snapshot.Bars[0].AdjustmentRefDate
 }
 
-func buildCrossProviderProbeCheckResults(snapshots []*provider.CrossProviderDailySnapshot, checkedAt time.Time) []model.ProviderProbeCheckResult {
+func buildCrossProviderProbeCheckResults(snapshots []*provider.CrossProviderDailySnapshot, items []model.ProviderProbeItem, checkedAt time.Time) []model.ProviderProbeCheckResult {
 	results := make([]model.ProviderProbeCheckResult, 0)
 	validSnapshots := make([]*provider.CrossProviderDailySnapshot, 0, len(snapshots))
 	for _, snapshot := range snapshots {
@@ -1444,6 +1503,38 @@ func buildCrossProviderProbeCheckResults(snapshots []*provider.CrossProviderDail
 				result.FieldComparisons = append(result.FieldComparisons, fieldEvidence)
 			}
 			results = append(results, result)
+		}
+	}
+	// 成功快照两两比较之外，保留“另一侧 Provider 探测失败”的配对证据。
+	// 单 Provider 检查仍是原始失败事实；这里将其关联到可用快照，避免跨源结果只剩系统级泛化 skipped。
+	for _, item := range items {
+		if item.Capability != "daily_bars" || item.Status != "failed" || item.Provider == "" || item.Provider == "system" {
+			continue
+		}
+		for _, snapshot := range validSnapshots {
+			if snapshot.Provider == item.Provider || item.SampleSymbol == "" || item.SampleSymbol != snapshot.Symbol || string(item.AdjustmentBasis) != snapshot.AdjustmentBasis {
+				continue
+			}
+			message := "provider=" + item.Provider + " status=" + item.Status
+			if item.ErrorCode != "" {
+				message += " error_code=" + item.ErrorCode
+			}
+			if item.ErrorStage != "" {
+				message += " error_stage=" + item.ErrorStage
+			}
+			if item.ErrorMessage != "" {
+				message += " error=" + item.ErrorMessage
+			}
+			results = append(results, model.ProviderProbeCheckResult{
+				Check: "cross_provider", Provider: snapshot.Provider + "+" + item.Provider,
+				Capability: "daily_bars", Status: "failed", ErrorCode: crossProviderProbeFailureCode(item),
+				ErrorMessage: message, CheckedAt: checkedAt,
+				ComparedSymbol: snapshot.Symbol,
+				LeftProvider:   snapshot.Provider, RightProvider: item.Provider,
+				LeftSourceVersion: snapshot.SourceVersion, RightSourceVersion: item.SourceVersion,
+				AdjustmentBasis:   snapshot.AdjustmentBasis,
+				LeftQualityStatus: model.QualityStatus(snapshot.QualityStatus),
+			})
 		}
 	}
 	if len(results) == 0 {

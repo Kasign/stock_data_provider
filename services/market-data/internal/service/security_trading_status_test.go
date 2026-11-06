@@ -48,6 +48,24 @@ func validSecurityTradingStatusFixture(source string) *model.SecurityTradingStat
 	}
 }
 
+func TestSecurityTradingStatusAcceptsVerifiedPreListingDate(t *testing.T) {
+	snapshot := &model.SecurityTradingStatusSnapshot{
+		Symbol: "600519.SH", TradeDate: "2026-10-19",
+		RiskWarningStatus: model.RiskWarningUnknown, DelistingStatus: model.DelistingStatusUnknown,
+		ListingDate: "2026-10-20", ListingTradingDayNumber: 0, ListingStatusKnown: true,
+		IsTradingDay: true, TradingDayKnown: true, SuspensionStatus: model.SuspensionStatusUnknown,
+		Source: "tushare", SourceVersion: "fixture-v1", FetchedAt: time.Now().UTC(),
+		QualityStatus: model.QualityUnknown, QualityReasons: []string{"security_not_yet_listed_on_requested_date"},
+	}
+	if err := validateSecurityTradingStatusSnapshot(snapshot.Symbol, snapshot.TradeDate, snapshot.Source, snapshot); err != nil {
+		t.Fatalf("verified pre-listing status should be accepted as explicit evidence: %v", err)
+	}
+	snapshot.ListingTradingDayNumber = 1
+	if err := validateSecurityTradingStatusSnapshot(snapshot.Symbol, snapshot.TradeDate, snapshot.Source, snapshot); err == nil {
+		t.Fatal("pre-listing status must not claim a positive listing trading-day number")
+	}
+}
+
 func TestSecurityTradingStatusReturnsValidatedHistoricalEvidence(t *testing.T) {
 	first := &securityTradingStatusTestProvider{name: "bad-source", snapshot: validSecurityTradingStatusFixture("different-source")}
 	second := &securityTradingStatusTestProvider{name: "good-source", snapshot: validSecurityTradingStatusFixture("good-source")}

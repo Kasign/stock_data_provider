@@ -1,0 +1,119 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kasign.github.io/stock_data_provider/news/NEWS-CTR-001-list-evidence-request-1.0.0.schema.json",
+  "title": "News ListEvidence Request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "caller_ref",
+    "purpose_code",
+    "requested_content_level",
+    "system_as_of",
+    "filters",
+    "page_size"
+  ],
+  "properties": {
+    "caller_ref": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256
+    },
+    "purpose_code": {
+      "type": "string",
+      "enum": [
+        "research_analysis",
+        "risk_review",
+        "user_display"
+      ]
+    },
+    "requested_content_level": {
+      "type": "string",
+      "enum": [
+        "metadata",
+        "summary",
+        "snippet",
+        "full"
+      ]
+    },
+    "system_as_of": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "filters": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "news_ids": {
+          "type": "array",
+          "maxItems": 100,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          }
+        },
+        "source_refs": {
+          "type": "array",
+          "maxItems": 50,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          }
+        },
+        "canonical_symbols": {
+          "type": "array",
+          "maxItems": 100,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          }
+        },
+        "published_at_from": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "published_at_to": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "quality_statuses": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "enum": [
+              "valid",
+              "degraded",
+              "stale",
+              "invalid",
+              "unknown"
+            ]
+          }
+        }
+      }
+    },
+    "business_time_from": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "business_time_to": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "page_size": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 100
+    },
+    "cursor": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4096
+    }
+  }
+}

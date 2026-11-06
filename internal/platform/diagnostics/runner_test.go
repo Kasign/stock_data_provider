@@ -2,7 +2,9 @@ package diagnostics
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -105,5 +107,101 @@ func TestRunnerTotalDeadlineMarksQueuedOptionalCheckUnavailable(t *testing.T) {
 	}
 	if report.Results[1].Observation.Status != StatusUnavailable {
 		t.Fatalf("expected queued optional check unavailable, got %s", report.Results[1].Observation.Status)
+	}
+}
+
+func TestRunnerDoesNotInferDependencyFromCheckID(t *testing.T) {
+	check := Check{ID: "storage.mariadb.ping", Required: true, Run: func(context.Context) (Observation, error) {
+		return Observation{}, &fault.Fault{
+			Class: fault.ClassUnavailable, Code: "storage.mariadb.unavailable",
+			SafeMessage: "database unavailable",
+		}
+	}}
+	report, err := (Runner{}).Run(context.Background(), []Check{check})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := report.Results[0].Fault.Dependency; got != "" {
+		t.Fatalf("check ID must not be misrepresented as dependency: %q", got)
+	}
+}
+
+func TestRunnerRejectsUnknownFaultClass(t *testing.T) {
+	check := Check{ID: "invalid-fault", Required: true, Run: func(context.Context) (Observation, error) {
+		return Observation{}, &fault.Fault{
+			Class: fault.Class("custom"), Code: "custom.failure",
+			SafeMessage: "untrusted message",
+		}
+	}}
+	report, err := (Runner{}).Run(context.Background(), []Check{check})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := report.Results[0].Fault
+	if got == nil || got.Class != fault.ClassInternal ||
+		got.Code != "platform.diagnostics.invalid_fault" ||
+		got.SafeMessage != "check returned an invalid fault" {
+		t.Fatalf("unexpected normalized fault: %+v", got)
+	}
+}
+
+func TestCheckRejectsUnsafeMetadata(t *testing.T) {
+	check := healthyCheck("valid", true)
+	check.Name = strings.Repeat("n", maxCheckNameLength+1)
+	if err := check.validate(); err == nil {
+		t.Fatal("expected oversized check name validation error")
+	}
+
+	check = healthyCheck("invalid\nid", true)
+	if err := check.validate(); err == nil {
+		t.Fatal("expected check ID control character validation error")
+	}
+}
+
+func TestRunnerRejectsUnsafeFaultMetadata(t *testing.T) {
+	check := Check{ID: "unsafe-fault", Run: func(context.Context) (Observation, error) {
+		return Observation{}, &fault.Fault{
+			Class:       fault.ClassUnavailable,
+			Code:        "provider.failure\nAuthorization",
+			SafeMessage: "upstream failed\nBearer secret",
+			Dependency:  "provider\nsecret",
+		}
+	}}
+	report, err := (Runner{}).Run(context.Background(), []Check{check})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := report.Results[0].Fault
+	if got == nil || got.Code != "platform.diagnostics.invalid_fault" ||
+		got.SafeMessage != "check returned an invalid fault" || got.Dependency != "" {
+		t.Fatalf("unsafe fault metadata was not normalized: %+v", got)
+	}
+}
+
+func TestRunnerDoesNotRetainPanicPayload(t *testing.T) {
+	const secret = "panic-payload-secret"
+	check := Check{ID: "panic", Required: true, Run: func(context.Context) (Observation, error) {
+		panic(secret)
+	}}
+	report, err := (Runner{}).Run(context.Background(), []Check{check})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := report.Results[0]
+	if got.Observation.Status != StatusFailed || got.Fault == nil {
+		t.Fatalf("expected failed result with fault, got %+v", got)
+	}
+	if got.Fault.Cause == nil || strings.Contains(got.Fault.Cause.Error(), secret) {
+		t.Fatalf("panic payload was retained in cause: %v", got.Fault.Cause)
+	}
+	encoded, err := json.Marshal(report)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(encoded), secret) {
+		t.Fatalf("panic payload leaked in report: %s", encoded)
+	}
+	if strings.Contains(string(encoded), `"fault"`) {
+		t.Fatalf("internal fault must not appear in report JSON: %s", encoded)
 	}
 }

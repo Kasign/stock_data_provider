@@ -92,6 +92,66 @@ func TestSinaQuoteParseFailureReportsProviderField(t *testing.T) {
 	}
 }
 
+func TestSinaQuoteOptionalFieldsReportParseWarnings(t *testing.T) {
+	fields := make([]string, 32)
+	fields[0] = "SinaTest"
+	fields[1], fields[2], fields[3] = "10.00", "9.80", "10.20"
+	fields[4], fields[5], fields[8], fields[9] = "10.50", "9.50", "10000", "not-a-number"
+	fields[30], fields[31] = "2026-10-21", "invalid-time"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = fmt.Fprintf(w, "var hq_str_sh600519=\"%s\";", strings.Join(fields, ","))
+	}))
+	defer server.Close()
+	reporter := validation.NewReporter(10)
+	ctx := validation.WithReporter(context.Background(), reporter)
+	quote, err := NewSina(0, server.URL+"/list=").FetchQuote(ctx, "600519.SH")
+	if err != nil {
+		t.Fatalf("optional field issues must not reject otherwise valid quote: %v", err)
+	}
+	if quote.Amount != nil || quote.QualityStatus != model.QualityDegraded {
+		t.Fatalf("invalid optional amount must remain nil and degrade quote: %+v", quote)
+	}
+	report := reporter.Snapshot()
+	if report.WarningCount < 2 || report.ErrorCount != 0 {
+		t.Fatalf("expected at least two warnings and no errors, got %+v", report)
+	}
+	foundAmount, foundTime := false, false
+	for _, issue := range report.Issues {
+		if issue.Severity != validation.SeverityWarning {
+			continue
+		}
+		foundAmount = foundAmount || (issue.Field == "amount" && issue.ProviderField == "field_9" && issue.Code == "invalid_optional_number")
+		foundTime = foundTime || (issue.Field == "quote_time" && issue.ProviderField == "field_30,field_31" && issue.Code == "invalid_timestamp")
+	}
+	if !foundAmount || !foundTime {
+		t.Fatalf("missing optional field diagnostics: %+v", report.Issues)
+	}
+}
+
+func TestSinaQuoteOHLCInvariantReportsParseIssue(t *testing.T) {
+	fields := make([]string, 32)
+	fields[0] = "SinaTest"
+	fields[1], fields[2], fields[3] = "11.00", "9.80", "10.20"
+	fields[4], fields[5], fields[8], fields[9] = "10.50", "9.50", "10000", "102000"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = fmt.Fprintf(w, "var hq_str_sh600519=\"%s\";", strings.Join(fields, ","))
+	}))
+	defer server.Close()
+	reporter := validation.NewReporter(10)
+	ctx := validation.WithReporter(context.Background(), reporter)
+	if _, err := NewSina(0, server.URL+"/list=").FetchQuote(ctx, "600519.SH"); err == nil {
+		t.Fatal("OHLC invariant violation must remain rejected")
+	}
+	report := reporter.Snapshot()
+	if report.ErrorCount != 1 || len(report.Issues) != 1 {
+		t.Fatalf("expected one OHLC parse error, got %+v", report)
+	}
+	issue := report.Issues[0]
+	if issue.Field != "ohlc" || issue.Code != "ohlc_invariant_violation" || issue.Stage != validation.StageParse {
+		t.Fatalf("unexpected OHLC diagnostic: %+v", issue)
+	}
+}
+
 func TestSinaFetchQuoteRejectsResponseVariableSymbolMismatch(t *testing.T) {
 	fields := make([]string, 32)
 	fields[0] = "WrongSymbol"
