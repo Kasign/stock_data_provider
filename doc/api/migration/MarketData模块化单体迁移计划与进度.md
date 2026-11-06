@@ -1103,3 +1103,80 @@ validateEndpointURL 当前要求绝对 URL、Host 非空、Scheme 为 http/https
 - [ ] 对 HTTP/TCP Provider 做连接池、并发上限、响应分配和 Close 生命周期审计。
 
 **本轮结论：** Eastmoney 参数矩阵和 MiaoXiang 缓存/限速行为已由源码确认；Endpoint 当前只做 URL 形态校验，不提供目标主机授权。该问题应纳入 M4 统一出站安全边界，但不能在 M0 文档中误报为已存在可远程利用的 SSRF 漏洞。M0 继续 in_progress。
+
+
+### 2026-11-06：M0 第二十轮补充（Provider 装配与连接资源生命周期）
+
+审计基线：`71f969e8f48cebec4ff8bb44cfb963b1f902d3a0`。本轮只读核查配置、独立入口、Provider 构造器、HTTP/TCP Client 和 Cache 资源；未修改业务实现。
+
+#### 1. 配置到 Provider 的装配链
+
+已核对 `config.Load()`、`services/market-data/cmd/market-data/main.go` 的 Provider 构造和 DataService 注册：
+
+- Eastmoney 的 13 组 Endpoint（含 Hot Rankings、Hot Surge、Capital Flow）均传入构造器/With 方法；UT 作为独立参数传入。
+- Hithink BaseURL/API Key、Tencent 4 组 URL、Sina 2 组 URL、Yahoo Chart URL、NetEase Quote/History URL、Tushare API URL/Token、TickFlow API/Free API URL/API Key、Xueqiu BaseURL/Cookie 均从 Config 传入对应构造器。
+- BaoStock Host/Port/UserID/Password/ConnectTimeout/RequestTimeout 组装为 `baostock.Config` 后创建单实例 Client。
+- Pytdx Hosts 传入 `NewPytdx`；其 Timeout 使用 ProviderTimeout。
+- MiaoXiang 不在常规 Provider map 中，而是在 `MXEnabled` 时单独创建 SupplementProvider；API Key、URL、Timeout 均来自 Config。
+- Config.Load 对 HTTP Endpoint 进行 URL 形态校验，但 BaoStock Host/Port 和 Pytdx Hosts 是 TCP 目标，未经过同等的目标主机/端口策略校验。HTTP Endpoint 允许明文 HTTP 的既有发现仍然成立。
+
+本轮确认的是源码默认值和 Config→构造器映射，不代表已核对生产 Compose/部署环境的最终覆盖值；部署变量映射仍需单独对照。
+
+#### 2. HTTP Provider Client 与连接池现状
+
+静态核查 10 个 HTTP Provider 源文件：
+
+| Provider | Client 创建方式 | Redirect / Transport 特征 |
+|---|---|---|
+| Eastmoney | 构造器内创建独立 `*http.Client` | 自定义 `eastmoneyRedirectPolicy` |
+| Hithink | 构造器内创建独立 `*http.Client` | 默认 Redirect；未显式注入 Transport |
+| Tencent | 构造器内创建独立 `*http.Client` | 禁止自动 Redirect |
+| Sina | 构造器内创建独立 `*http.Client` | 独立默认 Transport |
+| Yahoo | 构造器内创建独立 `*http.Client` | 禁止自动 Redirect |
+| NetEase | 构造器内创建独立 `*http.Client` | 默认 Transport |
+| Tushare | 构造器内创建独立 `*http.Client` | 默认 Redirect |
+| TickFlow | 构造器内创建独立 `*http.Client` | 默认 Redirect |
+| Xueqiu | 构造器内创建独立 `*http.Client` | 默认 Redirect |
+| MiaoXiang | 构造器内创建独立 `*http.Client` | 禁止自动 Redirect |
+
+结论：
+- 当前各 Provider 构造器分别创建 Client，没有共享 Transport/连接池的组合根注入点；未发现 Provider 对这些 Client 提供 Close 或统一 CloseIdleConnections。
+- 这些 Client 使用 Go 默认 Transport（除 Client 级 Timeout/CheckRedirect 外未显式配置 Transport），因此连接复用由各自默认 Transport 独立管理；不同 Provider 之间不能共享连接池，也无法由 Root 统一控制空闲连接回收。
+- 仓库已有 `internal/platform/httpclient.New`，具备受控 Dial、目标地址解析策略、并发限制、响应体上限和重试等能力；但本轮检查的 Data Provider 构造器尚未使用该平台 Client。M4 接入必须逐 Provider 对照请求语义、超时、重试和响应上限，不能简单替换 `http.Client`。
+- 当前不宜在 M0 直接把 Client 改造成全局单例。目标应是由 Data Bootstrap 创建受控 Client/依赖，并按依赖目标与策略注入 Provider；共享 Transport 的边界、限流配额和关闭 owner 应显式定义。
+
+#### 3. TCP Provider 与资源所有权
+
+**BaoStock**
+- 独立入口只创建一个 `baostock.Client`，注入 `provider.NewBaostock`；入口 defer 调用 Close。
+- Client 内部以容量为 1 的 gate 串行化 socket 请求，持有单个 TCP 连接和 Reader；断连/协议错误会丢弃连接，后续请求重新 Dial/Login。
+- Dial 使用 ConnectTimeout，协议读写使用 RequestTimeout 与 Context deadline；Close 最多等待 4 秒获取 gate，执行 logout 后关闭 socket。
+- 该 Client 是长生命周期、串行复用连接；Root Bootstrap 迁入时应保留单实例和串行语义，不能让每个 UseCase/请求重复创建，也不能让多个 owner 重复 Close。
+- TCP Host/Port 来自配置，当前未发现目标地址 allowlist/私网地址策略。需纳入平台 TCP 出站目标治理或明确可信上游配置。
+
+**Pytdx**
+- Provider 不持有长连接；每次日线/复权查询通过 `dailyClient()` 创建 TDX Client，并在调用路径 defer Close。
+- 每次 Dial 最多轮转 6 个 Host，单 Host Dial timeout 上限 1.5 秒；Client 请求 Timeout 使用 Provider Timeout。
+- Provider 实例内部用 rateMu 同步 Host index 和 150ms 最小请求间隔；连接生命周期属于单次调用，不是可由 Root 关闭的常驻资源。
+- 迁移时需保留按调用创建/关闭的语义；若未来改为连接池，必须另做并发、重连、取消和 Close 设计，不能当作无行为变化的优化。
+- Pytdx Hosts 来自配置或库内默认列表，当前未发现对自定义 Host 做目标地址授权。
+
+#### 4. Redis Cache 与 Worker 资源补充
+
+- `cache.Cache` 接口只有 Get/Set/Ping，没有 Close；当前 Redis Adapter 每条命令都新建 TCP 连接、执行 AUTH/SELECT/命令后立即关闭，不维护长连接池。因此不存在一个可关闭的共享 Redis Pool，但会产生每次操作 Dial/AUTH/SELECT 开销。
+- Root 若改为注入平台 Redis Client，应保留 key、TTL、错误降级和禁用语义；同时需明确 Client owner，避免 Data Cache 关闭 Root borrowed Client。
+- Data 入口启动 Quote Retention Worker 后没有保存 Stop/Wait 句柄；Worker 生命周期仍未满足 Root 统一 Shutdown 的要求。该项需在 M2/M4 提取 Bootstrap 时解决。
+- MariaDB Store 有明确 Close，当前独立入口 defer 关闭；迁入 Root 后应改为 borrowed Pool，不允许 Store 关闭 Root 持有的共享 DB。
+
+#### 5. 本轮结论与 M0 状态
+
+- [x] Config→Provider 构造器映射已核对（仅源码默认配置和装配链）。
+- [x] HTTP Provider 独立 Client 创建、默认 Transport/Redirect 差异和缺少统一 Close 已核对。
+- [x] BaoStock 长连接与串行 gate、Pytdx 单次调用连接生命周期已核对。
+- [x] Redis 当前为逐命令短连接、Cache 接口无 Close 已核对。
+- [ ] 生产部署环境变量与 Compose/Nginx 实际覆盖值尚未完成对照。
+- [ ] HTTP 双 Host Redirect、凭据隔离、目标 IP/端口拒绝测试尚未执行。
+- [ ] BaoStock/Pytdx TCP 目标地址限制、协议边界和取消行为仍需测试验证。
+- [ ] Retention Worker Stop/Wait 生命周期尚未实现；当前仅记录为迁移阻断项。
+
+**本轮结论：** 当前 Data Provider 的 HTTP Client 彼此独立，尚未接入已存在的 Platform HTTP Client；BaoStock 是单实例长连接且显式关闭，Pytdx 是按调用创建并关闭；Redis 当前不是连接池而是逐命令短连接。M0 已补齐主要配置装配与资源模型的静态证据，但安全行为测试、部署覆盖值和 Worker 生命周期仍未闭环，不能准入 M1。
