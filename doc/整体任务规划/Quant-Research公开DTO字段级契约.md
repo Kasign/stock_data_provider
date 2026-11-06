@@ -1,7 +1,7 @@
 # Quant / Research 公开 DTO 字段级契约
 
 - 所属治理任务：GOV-004
-- 状态：字段级设计草案，待 Quant / Research / Researchflow Review；不是已实现代码，也不是最终冻结 Schema。
+- 状态：字段级设计与项目统一决议输入；当前各契约状态以 `doc/整体任务规划/跨模块契约目录与冻结状态.md` 为准。本文件不是已实现代码，也不是冻结 Schema。
 - 规划归属：仅维护于 feat/design_doc；模块实现分别归未来 feat/quant、feat/research。
 - 目标：跨模块只传稳定 Application DTO 和不透明引用，不暴露 Domain、Repository、Adapter 类型。
 
@@ -283,7 +283,7 @@ Researchflow 是唯一跨模块组合者，并负责传播同一 Run 的 system_
 
 ## 8. 当前结论
 
-本文将 Quant / Research 公开 DTO 从概念性字段推进到字段级草案，可进入模块 Owner Review，但价格精度、参数结构、授权引用和复合子对象仍有未决项。GOV-004 仍未通过；本文不构成 Schema 冻结，也不授权创建模块分支。
+本文保留 Quant / Research 公开 DTO 的字段级细节。当前已接受的公共语义和待补证据以项目级契约目录为准；本文件不构成 Schema 冻结，也不授权创建模块分支。
 
 
 ## 9. 复合 DTO 字段级定义
@@ -432,7 +432,7 @@ Event 可保留规范化 occurred_at 作为研究归一结果，但必须同时�
 }
 ```
 
-注意：示例使用 decimal string 表达金额，作为当前推荐方向；最终需在模块 Owner Review 中冻结。若采用该方案，所有金额/价格字段统一 decimal string，不能同一 DTO 中混用 number 和 string。
+注意：示例使用 decimal string 表达精确金额/价格；该类型规则已纳入 GOV-CTR-001 与 QNT-CTR-001。具体字段精度和范围仍需 Registry/Schema 固定。
 
 ### 10.2 RiskDecision：未知不得放行
 
