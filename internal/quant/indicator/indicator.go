@@ -59,6 +59,7 @@ func SMA(closes []float64, p SMAParams) (Result, error) {
 
 func EMA(closes []float64, p EMAParams) (Result, error) {
 	if p.Window < 1 || p.SeedMethod != "sma" { return Result{}, ErrInvalidParameter }
+	if err := validatePrices(closes); err != nil { return Result{}, err }
 	values, err := emaSeries(closes, p.Window)
 	if err != nil { return Result{}, err }
 	if len(values) == 0 { return Result{Status: StatusInsufficientData, SampleCount: len(closes)}, nil }

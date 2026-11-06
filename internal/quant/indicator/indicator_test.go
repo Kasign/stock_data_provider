@@ -71,5 +71,6 @@ func TestInsufficientDataAndInvalidInputs(t *testing.T) {
 	if got.Status!=StatusInsufficientData{t.Fatalf("unexpected status: %+v",got)}
 	if _,err:=EMA([]float64{1,2,3},EMAParams{Window:2,SeedMethod:"implicit"});!errors.Is(err,ErrInvalidParameter){t.Fatalf("expected invalid seed method, got %v",err)}
 	if _,err:=SMA([]float64{1,math.NaN()},SMAParams{Window:2});!errors.Is(err,ErrInvalidInput){t.Fatalf("expected invalid price, got %v",err)}
+	if _,err:=EMA([]float64{1,-2,3},EMAParams{Window:2,SeedMethod:"sma"});!errors.Is(err,ErrInvalidInput){t.Fatalf("expected non-positive close to fail, got %v",err)}
 	if _,err:=MACD([]float64{1,2,3},MACDParams{FastWindow:3,SlowWindow:2,SignalWindow:1});!errors.Is(err,ErrInvalidParameter){t.Fatalf("expected invalid MACD windows, got %v",err)}
 }
