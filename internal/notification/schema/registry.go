@@ -25,7 +25,9 @@ var (
 	ErrSourceModuleMismatch = errors.New("notification: event source module does not match schema")
 	ErrSchemaValidation     = errors.New("notification: event schema validation failed")
 	ErrSchemaImmutable      = errors.New("notification: registered schema digest is immutable")
-	ErrInvalidEventJSON     = errors.New("notification: invalid event JSON")
+	ErrInvalidEventJSON           = errors.New("notification: invalid event JSON")
+	ErrInvalidResourceLimits      = errors.New("notification: invalid event resource limits")
+	ErrEventResourceLimitExceeded = errors.New("notification: event resource limit exceeded")
 )
 
 type SchemaKey struct {
@@ -64,12 +66,30 @@ type registryEntry struct {
 }
 
 // Registry is read-only after construction and safe for concurrent validation.
+type ResourceLimits struct {
+	MaxEnvelopeBytes int
+	MaxPayloadBytes  int
+	MaxJSONDepth     int
+}
+
+func (l ResourceLimits) Validate() error {
+	if l.MaxEnvelopeBytes <= 0 || l.MaxPayloadBytes <= 0 ||
+		l.MaxPayloadBytes > l.MaxEnvelopeBytes || l.MaxJSONDepth <= 0 {
+		return ErrInvalidResourceLimits
+	}
+	return nil
+}
+
 type Registry struct {
 	envelope *jsonschema.Schema
 	entries  map[SchemaKey]registryEntry
+	limits   ResourceLimits
 }
 
-func NewRegistry(schemaFS fs.FS) (*Registry, error) {
+func NewRegistry(schemaFS fs.FS, limits ResourceLimits) (*Registry, error) {
+	if err := limits.Validate(); err != nil {
+		return nil, err
+	}
 	if schemaFS == nil {
 		return nil, errors.New("notification: schema filesystem is required")
 	}
@@ -93,7 +113,7 @@ func NewRegistry(schemaFS fs.FS) (*Registry, error) {
 	})
 	compiler.AssertFormat()
 
-	registry := &Registry{entries: make(map[SchemaKey]registryEntry)}
+	registry := &Registry{entries: make(map[SchemaKey]registryEntry), limits: limits}
 	resources := append([]schemaResource(nil), payloadResources...)
 	resources = append(resources, schemaResource{file: envelopeSchemaFile})
 
@@ -176,6 +196,22 @@ func (r *Registry) ValidateEvent(raw []byte) (domain.EventEnvelope, error) {
 	var event domain.EventEnvelope
 	if r == nil || r.envelope == nil {
 		return event, errors.New("notification: schema registry is not initialized")
+	}
+	if len(raw) > r.limits.MaxEnvelopeBytes {
+		return event, ErrEventResourceLimitExceeded
+	}
+	if err := validateStrictJSON(raw, r.limits.MaxJSONDepth); err != nil {
+		if errors.Is(err, ErrEventResourceLimitExceeded) {
+			return event, err
+		}
+		return event, fmt.Errorf("%w: %v", ErrInvalidEventJSON, err)
+	}
+	var rawFields map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &rawFields); err != nil || rawFields == nil {
+		return event, fmt.Errorf("%w: envelope must be a JSON object", ErrInvalidEventJSON)
+	}
+	if payload, exists := rawFields["payload"]; exists && len(payload) > r.limits.MaxPayloadBytes {
+		return event, ErrEventResourceLimitExceeded
 	}
 
 	canonical, err := jcs.Transform(raw)

@@ -11,13 +11,22 @@ import (
 	"example.com/stock-analysis-flow/internal/notification/domain"
 )
 
-func newTestRegistry(t *testing.T) *Registry {
+func testResourceLimits() ResourceLimits {
+	return ResourceLimits{MaxEnvelopeBytes: 1 << 20, MaxPayloadBytes: 768 << 10, MaxJSONDepth: 32}
+}
+
+func newTestRegistryWithLimits(t *testing.T, limits ResourceLimits) *Registry {
 	t.Helper()
-	registry, err := NewRegistry(os.DirFS("../../../doc/notification/schema"))
+	registry, err := NewRegistry(os.DirFS("../../../doc/notification/schema"), limits)
 	if err != nil {
 		t.Fatalf("create schema registry: %v", err)
 	}
 	return registry
+}
+
+func newTestRegistry(t *testing.T) *Registry {
+	t.Helper()
+	return newTestRegistryWithLimits(t, testResourceLimits())
 }
 
 func TestValidateAllGoldenEvents(t *testing.T) {
@@ -154,5 +163,87 @@ func TestRegistryEventTypeLookup(t *testing.T) {
 	}
 	if registry.HasEventType("unknown.event") {
 		t.Fatal("unknown event type must not be registered")
+	}
+}
+
+func TestRegistryResourceLimitBoundaries(t *testing.T) {
+	goldenFS := os.DirFS("../../../doc/notification/golden")
+	raw, err := fs.ReadFile(goldenFS, "quant-risk-decision-first-evaluation.golden.json")
+	if err != nil { t.Fatal(err) }
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &fields); err != nil { t.Fatal(err) }
+	payload := fields["payload"]
+
+	registry := newTestRegistryWithLimits(t, ResourceLimits{
+		MaxEnvelopeBytes: len(raw), MaxPayloadBytes: len(payload), MaxJSONDepth: 32,
+	})
+	if _, err := registry.ValidateEvent(raw); err != nil {
+		t.Fatalf("input exactly at configured byte limits should pass: %v", err)
+	}
+
+	registry = newTestRegistryWithLimits(t, ResourceLimits{
+		MaxEnvelopeBytes: len(raw)-1, MaxPayloadBytes: len(payload), MaxJSONDepth: 32,
+	})
+	if _, err := registry.ValidateEvent(raw); !errors.Is(err, ErrEventResourceLimitExceeded) {
+		t.Fatalf("expected envelope byte limit error, got %v", err)
+	}
+
+	registry = newTestRegistryWithLimits(t, ResourceLimits{
+		MaxEnvelopeBytes: len(raw), MaxPayloadBytes: len(payload)-1, MaxJSONDepth: 32,
+	})
+	if _, err := registry.ValidateEvent(raw); !errors.Is(err, ErrEventResourceLimitExceeded) {
+		t.Fatalf("expected payload byte limit error, got %v", err)
+	}
+}
+
+func TestRegistryRequiresExplicitPositiveResourceLimits(t *testing.T) {
+	_, err := NewRegistry(os.DirFS("../../../doc/notification/schema"), ResourceLimits{})
+	if !errors.Is(err, ErrInvalidResourceLimits) {
+		t.Fatalf("expected invalid resource limits, got %v", err)
+	}
+	if err := (ResourceLimits{MaxEnvelopeBytes: 10, MaxPayloadBytes: 11, MaxJSONDepth: 1}).Validate(); !errors.Is(err, ErrInvalidResourceLimits) {
+		t.Fatalf("payload limit larger than envelope limit must fail, got %v", err)
+	}
+}
+
+func TestStrictJSONRejectsDuplicateKeysAndInvalidUnicode(t *testing.T) {
+	cases := [][]byte{
+		[]byte(`{"outer":{"value":1,"value":2}}`),
+		[]byte(`{"value":"\uD800"}`),
+		[]byte(`{"value":"\uDC00"}`),
+		[]byte(`{"value":"\uD800\u0041"}`),
+		{'{', '"', 'v', '"', ':', '"', 0xff, '"', '}'},
+	}
+	for i, raw := range cases {
+		if err := validateStrictJSON(raw, 32); err == nil {
+			t.Errorf("case %d: expected strict JSON rejection", i)
+		}
+	}
+	if err := validateStrictJSON([]byte(`{"value":"\uD83D\uDE00"}`), 32); err != nil {
+		t.Fatalf("valid surrogate pair should pass: %v", err)
+	}
+}
+
+func TestStrictJSONEnforcesContainerDepth(t *testing.T) {
+	raw := []byte(`{"a":{"b":[1]}}`)
+	if err := validateStrictJSON(raw, 3); err != nil {
+		t.Fatalf("depth exactly at limit should pass: %v", err)
+	}
+	if err := validateStrictJSON(raw, 2); !errors.Is(err, ErrEventResourceLimitExceeded) {
+		t.Fatalf("expected depth limit error, got %v", err)
+	}
+}
+
+func TestRegistryRejectsJSONDepthLimit(t *testing.T) {
+	goldenFS := os.DirFS("../../../doc/notification/golden")
+	raw, err := fs.ReadFile(goldenFS, "quant-risk-decision-first-evaluation.golden.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	registry := newTestRegistryWithLimits(t, ResourceLimits{
+		MaxEnvelopeBytes: 1 << 20, MaxPayloadBytes: 768 << 10, MaxJSONDepth: 1,
+	})
+	if _, err := registry.ValidateEvent(raw); !errors.Is(err, ErrEventResourceLimitExceeded) {
+		t.Fatalf("expected JSON depth limit error, got %v", err)
 	}
 }

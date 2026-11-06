@@ -29,6 +29,7 @@ Notification 不计算告警条件、不决定研究结论、不执行模型输�
 - `correlation_id`：跨模块关联 ID。
 
 接收规则：
+0. Registry 构造必须显式提供正数 ResourceLimits：MaxEnvelopeBytes、MaxPayloadBytes、MaxJSONDepth；不得使用未审批的隐式默认值。ValidateEvent 先检查原始 Envelope 字节数，再严格解析 JSON（重复对象键、非法 UTF-8、非法 Unicode surrogate、非法 JSON 和超过深度均拒绝），再检查原始 Payload 字节数，之后才允许 JCS 规范化、Schema 和指纹计算。深度按整个 JSON 文档中的 object/array 容器层级计数，Envelope 根对象计为 1；字节上限按原始输入字节计，包含空白和转义文本。超限返回稳定 resource-limit 错误，不截断、不降级。项目级 Review 建议的 Envelope 1 MiB / Payload 768 KiB / depth 32 尚未被统一批准，不能作为模块默认值或 frozen 契约；由集成配置显式注入最终值，并确保 Envelope 上限不超过 HTTP 入口限制。
 1. 对 payload 做规范化后计算 fingerprint，覆盖 source_module、event_type、schema_version、subject_ref、occurred_at 和 payload；使用 RFC 8785 JSON Canonicalization Scheme 的 UTF-8 结果计算 SHA-256；不把 event_id、idempotency_key、correlation_id、published_at、接收时间或传输 Header 纳入 payload fingerprint。Envelope 必须携带 payload_fingerprint；接收方重新计算并拒绝不匹配的值。
 2. Inbox 唯一约束为 `(source_module, event_id)`；发布幂等唯一约束为 `(source_module, idempotency_key)`；同一 source_module 范围内该键全局唯一，不按 event_type 分桶，生产方不得跨发布意图复用。
 3. 相同 source_module/event_id 且 fingerprint 相同：返回原接收结果，不重复 fan-out。
@@ -61,7 +62,7 @@ Subscription 更新采用版本递增和不可变版本快照。任何影响匹�
 Delivery 唯一键固定为：
 `(source_module, event_id, subscription_id, subscription_version, channel_ref, channel_config_version, template_id, template_version, recipient_ref)`。
 
-所有版本均属于计划快照，不能在原版本上原地修改。
+所有版本均属于计划快照，不能在原版本上原地修改。 Application 写入前必须先独立执行 DeliveryPlan.Validate()，再执行 VerifyFingerprint()；任一步失败均不得调用 Repository。Repository Adapter 仍须在自身事务边界再次验证唯一键和指纹，避免绕过 Application 的直接写入路径。
 
 Template 与 Channel 配置版本始终属于唯一键和 Delivery 计划快照；任何影响渲染/发送行为的变更都必须创建新版本，禁止原版本原地修改。Channel 只保存版本化 Secret 引用，不在 Delivery 中复制 Secret 明文。
 

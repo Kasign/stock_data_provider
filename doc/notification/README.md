@@ -3,9 +3,9 @@
 - 目标分支：`feat/notification`
 - 代码目录：`internal/notification/**`
 - 任务前缀：NTF
-- 当前阶段：NTF-001 核心领域实现进行中；EventEnvelope、JCS Fingerprint、Envelope/Payload Schema Registry/Validator、EventReceiver、Inbox replay、Subscription 校验、DeliveryPlan 指纹及 Repository Port 已实现；真实 Repository Adapter 与快照持久化尚未完成。
-- 当前代码事实：`internal/notification/domain`、`internal/notification/schema` 和 `internal/notification/application` 已建立；InboxRepository、SubscriptionRepository、DeliveryPlanRepository 已定义 Port。当前仅有 Fake Repository 测试，没有真实持久化 Adapter。旧 Python/Web 通知能力不属于 Go Notification Domain。
-- 契约证据：NTF-CTR-001～003 均为 `pending_evidence`。4 份 Schema、6 个 Golden 已校准；根模块 gofmt、go test、race、vet 已通过（Run 42194930035）；完整 workflow 的其他任务仍执行中。
+- 当前阶段：NTF-001 核心领域实现进行中；EventEnvelope、JCS Fingerprint、Envelope/Payload Schema Registry/Validator、EventReceiver、Inbox replay、Subscription 校验、DeliveryPlan 指纹及 Repository Port 已实现；Envelope 资源上限和严格 JSON 入口校验已补入；真实 Repository Adapter 与快照持久化尚未完成。
+- 当前代码事实：`internal/notification/domain`、`internal/notification/schema` 和 `internal/notification/application` 已建立；InboxRepository、SubscriptionRepository、DeliveryPlanRepository 已定义 Port。当前仅有 Fake Repository 测试，没有真实持久化 Adapter。Registry 资源限制必须显式配置，项目建议值尚未冻结，不在模块内设隐式默认值。旧 Python/Web 通知能力不属于 Go Notification Domain。
+- 契约证据：NTF-CTR-001～003 均为 `pending_evidence`。4 份 Schema、6 个 Golden 已校准；上一轮根模块 gofmt、go test、race、vet 已通过（Run 42194930035）；本轮新增严格 JSON/资源限制与 DeliveryPlan Writer 后尚待 CI 复验。
 
 Notification 是独立通知业务模块，负责事件接收、Subscription、Template、Channel、Dispatcher、Delivery、Attempt、幂等、重试和投递诊断。不计算业务告警条件，不依赖 Researchflow 内部实现。
 

@@ -42,6 +42,9 @@ func deliveryPlanKeyFor(plan domain.DeliveryPlan) deliveryPlanKey {
 }
 
 func (m *memoryDeliveryPlans) CreateOrGet(_ context.Context, plan domain.DeliveryPlan) (domain.DeliveryPlan, bool, error) {
+	if err := plan.Validate(); err != nil {
+		return domain.DeliveryPlan{}, false, err
+	}
 	if err := plan.VerifyFingerprint(); err != nil {
 		return domain.DeliveryPlan{}, false, err
 	}

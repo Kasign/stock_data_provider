@@ -2,7 +2,7 @@
 
 - 归属：NTF-001/004/005/006
 - 对应契约：NTF-CTR-001～003（历史别名 Platform CONTRACT-009/010）；状态以项目级契约目录为准
-- 状态：4 份 Draft 2020-12 Schema 与 6 个代表性 Golden 已校准；Go Draft 2020-12 Envelope/Payload Validator、Golden、非法 Payload、Inbox Fake 幂等/并发、Subscription 与 DeliveryPlan Repository Port/Fake 测试已写入；根模块 gofmt/go test/race/vet 已通过（Run 42194930035）；NTF-CTR-001～003 仍为 pending_evidence；不要求个人 Owner 签字
+- 状态：4 份 Draft 2020-12 Schema 与 6 个代表性 Golden 已校准；Go Draft 2020-12 Envelope/Payload Validator、Golden、非法 Payload、Inbox Fake 幂等/并发、Subscription 与 DeliveryPlan Repository Port/Fake 测试已写入；新增严格 JSON、资源上限边界与 DeliveryPlan 写入前双重校验测试；新增代码待本轮 CI 验证；NTF-CTR-001～003 仍为 pending_evidence；不要求个人 Owner 签字
 - 日期：2026-11-06
 - 说明：以下均为合成数据与测试场景，不代表已有实现或真实渠道能力。
 
@@ -30,7 +30,7 @@
 - `quant-risk-decision-first-evaluation.golden.json`、`quant-risk-decision-reject.golden.json`
 - `research-event-lifecycle-created.golden.json`、`research-event-lifecycle-invalidated.golden.json`
 
-仍需自动化覆盖：相同事件重放、相同 event_id 不同 fingerprint、同 source_module 幂等键冲突、未知 Schema 版本、非法 Payload、重复 JSON key、非法 Unicode/非 IEEE-754 数字、指纹不匹配、Registry digest 不可变、未知 source_module、超大小拒绝，以及 Outbox 提交/回滚边界。
+资源上限需覆盖 Envelope/Payload 字节数恰好达到上限、超过 1 字节、JSON 容器深度达到/超过上限；严格解析需覆盖嵌套重复键、非法 UTF-8、孤立 surrogate、合法 surrogate pair。\n\n仍需自动化覆盖：相同事件重放、相同 event_id 不同 fingerprint、同 source_module 幂等键冲突、未知 Schema 版本、非法 Payload、重复 JSON key、非法 Unicode/非 IEEE-754 数字、指纹不匹配、Registry digest 不可变、未知 source_module、超大小拒绝，以及 Outbox 提交/回滚边界。
 
 ## 3. Subscription 与 recipient Fixture
 
@@ -122,7 +122,7 @@ Fake Adapter 只能验证分类和状态机，不证明真实渠道行为。每�
 
 1. recipient_scope 的允许值、解析路径和未授权拒绝行为需由 Schema/Contract Test 固化。
 2. Event Inbox 与 PublishEvent 双唯一键、相同指纹重放和不同指纹冲突需完成并发测试。
-3. DeliveryPlan 在 fan-out 时冻结 Subscription/Channel/Template 版本的行为需有回归测试。
+3. DeliveryPlan 在 fan-out 时冻结 Subscription/Channel/Template 版本的行为需有回归测试；Application 写入前须分别执行 Validate() 和 VerifyFingerprint()，任一步失败不得调用 Repository。
 4. unknown 的自动对账能力和人工处理 SLA 按真实渠道逐项登记；不支持对账时不得自动重发。
 5. 渠道幂等键支持情况及保留期限按 Channel Capability 提供证据；未验证不得标记 supported。
 6. Schema 兼容级别和版本命名规则需补兼容矩阵与 Registry 不可变性测试。
