@@ -1,0 +1,640 @@
+# GOV-004 跨模块统一契约基线与整体 Review
+
+- 所属任务：GOV-004（项目级跨模块契约治理）；Platform 子契约对应 PLAT-002
+- 文档归属：feat/platform-foundation / doc/platform
+- 审查基线：dc85a9da4881b74da3c010c164369114e438c4a4
+- 文档状态：统一契约候选基线，待各契约 Owner Review；**不是已冻结版本**
+- Review 类型：规划文档静态交叉审查；不等同于当前所有业务分支的最新代码审计
+- 适用范围：Data、News、Quant、Research、Researchflow、LLM、Notification、Platform、Server/API、WebUI 的服务端协作边界
+
+## 1. 文档定位与权威关系
+
+本文件把已有总规划和专项契约串成一套可执行的契约基线，负责统一解释、交叉约束、未决决策和冻结门禁；不复制每个模块的完整 Schema，也不取代模块自己的权威文档。
+
+文档权威顺序：
+
+1. 项目目标、模块职责、分支策略、阶段路线和全局门禁：整体任务规划总览。
+2. 项目级 GOV-004 冻结状态及阻断项：GOV-004 最终 Review 与契约冻结门禁。
+3. Platform 公共技术原语：08-公共平台契约规范。
+4. Data API 与 JSON 序列化：Data-OpenAPI与Go模型契约修正清单及 doc/api 下实际 OpenAPI。
+5. News 对 Research 的只读证据查询：News-Research只读证据查询契约。
+6. Quant / Research DTO：Quant-Research公开DTO字段级契约。
+7. 五模块首批 Application Port、状态机和调用关系：五模块首批ApplicationPort与状态机契约细化。
+8. 各模块后续字段、算法、Provider、Migration 和测试细节：各自模块专项文档。
+
+发生冲突时，不以本文件中的概括性文字覆盖更具体的领域契约；应登记 Decision ID，确定生产方和消费方后修订权威文档。Platform 分支只维护 doc/platform；项目级总规划文档仍由规划文档 Owner 维护。本文件的定位是 Platform 侧跨模块 Review 和接入索引。
+
+## 2. Review 总结
+
+### 2.1 已形成一致的架构基线
+
+- Data、News、Quant、Research、Researchflow、LLM、Notification 各自拥有领域事实和领域规则。
+- Platform 提供技术原语，不拥有业务领域模型、Repository、业务状态机或领域诊断历史。
+- Researchflow 是五模块中唯一跨业务模块的编排者；Server/API Bootstrap 负责技术装配，不承接研究业务编排。
+- Quant 与 Research 不互相依赖；Research 不 import Quant。Quant 结果由 Researchflow 通过公开 Port 获取并装配为 Research 所需输入/证据。
+- Notification 不依赖 Researchflow；上游通过版本化、与业务领域解耦的 Notification Command/Event 调用。
+- LLM 不执行 Tool Call；工具授权、预算、执行和结果回填由 Researchflow 负责。
+- Data 是独立 Go Module，通过 HTTP/OpenAPI 和本地 Adapter 对接；禁止跨 Module import 根模块 internal。
+- News 的 Research Evidence Query 是同一根 Go Module 内的 News Application Facade，不新增 News HTTP 服务，也不把 News Repository 暴露给 Research。
+- 根 DI、HTTP 路由、Worker 启动、Migration 总注册和部署入口由 Server/集成组合根集中装配；模块分支不抢占共享入口。
+- MariaDB 保存事实；Redis 仅作缓存或短期辅助，不作为唯一事实来源。
+
+### 2.2 本轮发现的主要治理问题
+
+| 编号 | 问题 | 影响 | 本文件处理 |
+|---|---|---|---|
+| GOVR-01 | 总规划、GOV-004、Platform、News、Quant/Research 契约分散 | 同一语义可能被重复定义或发生漂移 | 建立权威文档层级与引用关系 |
+| GOVR-02 | Research 消费 Quant 结果的描述容易被误读为直接依赖 | 造成 Go import 反向依赖 | 明确只能由 Researchflow 装配 |
+| GOVR-03 | Notification 与 Researchflow 的依赖关系存在文字误读风险 | 可能引入不必要的模块依赖 | 明确通用版本化 Command/Event |
+| GOVR-04 | 平台通用 Task、Trace、Storage 抽象容易被过度扩展 | 把平台做成万能框架 | 按现有 Platform 最小契约收敛 |
+| GOVR-05 | GOV-004 契约冻结与真实生产集成门禁混在一起 | 模块无法独立开工，门禁范围过宽 | 拆分 L2 契约就绪与 L3 集成就绪 |
+| GOVR-06 | 规划草案中的字段示例容易被误认为实现或冻结 Schema | 下游按未确认字段编码 | 统一状态标签和冻结证据要求 |
+| GOVR-07 | Data API Key、Platform Service Secret、Owner Token 容易混淆 | 服务间认证和密钥注入错误 | 明确凭证分离和 Server Adapter 注入 |
+| GOVR-08 | available_at、observed_at、fetched_at 等时间容易被互相推导 | 产生 PIT 未来数据泄漏 | 明确时间字段语义和 unknown 处理 |
+
+### 2.3 当前结论
+
+架构职责和依赖 DAG 已形成可用设计基线；字段级 Schema、部分 Application Port 和状态机仍有 Owner 未决项。Data OpenAPI/Go JSON 差异、News 查询/PIT/授权/分页实现、Platform 生产集成也仍有证据缺口。
+
+因此当前状态仍是 **GOV-004 NO-GO / 未冻结**。本文件形成候选契约与审查结论，不把文档存在等同于契约冻结。
+
+## 3. 模块所有权与依赖契约
+
+### 3.1 领域事实所有权
+
+| 模块 | 唯一权威所有权 | 不得接管的职责 |
+|---|---|---|
+| Data | Security Master、行情、财务、估值、交易日历、行业分类、PIT、数据来源与数据质量 | 研究语义、Quant 算法、News 事件解释 |
+| News | Source/Endpoint/Provider、授权、采集、Observation、News Item Identity/Version、关系断言、内容引用和新闻查询 | Research Evidence/Event、Quant 结论 |
+| Quant | Indicator、Factor、Trend、Market/Industry/Stock Analysis、Strategy、Backtest、Risk、Evaluation | 数据采集、新闻采集、研究语义、流程调度 |
+| Research | Context、Evidence、Event、Claim、Hypothesis、Scenario | 新闻原文/授权事实、Quant 算法和数值计算、流程状态机 |
+| Researchflow | Run、Stage、Attempt、Workflow Template、DAG、Context Assembly、Tool Policy、结果校验/综合、恢复 | Quant 算法、Research 领域事实、LLM 协议、通知渠道 |
+| LLM | Model Request/Response、Provider Adapter、Structured Output、Stream Event、Usage/Invocation Metadata | Tool 权限与执行、研究状态、数值事实、风险门禁 |
+| Notification | Subscription、Template、Channel、Dispatcher、Delivery、DeliveryAttempt、幂等与重试 | 告警条件计算、业务规则和研究状态 |
+| Platform | Auth、Config/Secret 原语、Fault、Request ID、slog 约定、HTTP Client、Storage Bootstrap、Diagnostics Runner | 领域模型、领域 Repository、领域质量规则、Researchflow 状态机 |
+| Server / 集成根 | Bootstrap、依赖注入、HTTP 路由/Middleware、Worker 注册、Migration 总注册、服务生命周期 | 领域规则、算法和跨模块业务决策 |
+| WebUI | 页面、交互、API 消费和结果展示 | 服务端事实、质量判断、权限决策、计算和状态迁移 |
+
+### 3.2 Go 依赖 DAG
+
+允许的主要依赖：
+
+- Quant → Platform；Quant 的数据输入经 Data HTTP/OpenAPI Adapter。
+- Research → Platform；Research 的来源证据经 News Application Facade。
+- Researchflow → Platform + Quant/Research/LLM/Notification 的公开 Application Facade；Data/News 输入通过明确的 Adapter/Facade。
+- LLM → Platform。
+- Notification → Platform。
+- Server/Bootstrap → 各模块公开 Application Facade + Platform。
+- WebUI → 已发布 HTTP/OpenAPI，不 import Go 包。
+
+明确禁止：
+
+- Platform → 任一业务模块。
+- Quant ↔ Research。
+- Research → Quant 或 Researchflow Go 包。
+- Quant / Research / LLM / Notification → Researchflow。
+- LLM → Quant、Research、Researchflow Domain。
+- Notification → Researchflow 或具体业务 Domain。
+- 任一模块访问其他模块的私有 Domain、Repository、SQL、Migration 实现或 Adapter。
+- 根 Go Module import Data 独立 Module 的 internal 包。
+- 通过 Platform 建设共享万能 Domain、Repository、Task Framework 或动态工作流框架。
+
+### 3.3 业务调用与 Go import 必须区分
+
+业务上需要 Quant 结果，不代表 Research 可以 import Quant；由 Researchflow 调用 Quant Facade，再把经过版本、质量和时间校验的结果转换成 Research 自己的 Evidence/Context DTO。
+
+业务上需要发送通知，不代表 Notification 依赖 Researchflow；调用方通过 Notification 自有、版本化的 Command/Event DTO 发起请求。
+
+API/Worker Bootstrap 只装配 Researchflow Facade 和必要 Platform 能力，不直接拼接 Quant/Research/LLM/Notification 私有实现。
+
+## 4. 跨模块 DTO 与 Schema 通用规范
+
+### 4.1 DTO 边界
+
+- 模块公开边界只暴露 Application Port 和公开 DTO。
+- Domain Entity、Repository、SQL Model、Provider SDK 类型和内部 Adapter 均为私有。
+- 同一进程内调用也必须遵守公开 DTO 语义，不因同一 Go Module 直接传递对方 Domain Entity。
+- Transport DTO、Application DTO、Domain Model 分层；HTTP Handler 不应把内部 Repository/SQL Model 当作公共 API。
+- 不建设无边界的 common/shared 包；共享内容仅限稳定、最小、版本化的基础值和不透明引用。
+- 不允许任意扩展 map[string]any 作为跨模块主 DTO；需要扩展时使用有命名空间和 Schema 版本的受控对象。
+
+### 4.2 字段存在性
+
+Schema 必须区分：
+
+- required：响应/请求中必须出现；
+- optional：允许缺省；
+- nullable：字段出现时允许 null；
+- empty：空字符串、空数组或空对象的合法性由字段逐项声明。
+
+禁止把 unknown、missing、not_configured、not_supported、degraded、invalid 统一折叠成 0、false、空字符串、null 或成功状态。
+
+Go JSON Tag、omitempty、指针、slice/map 的运行时输出不能单独决定 Schema。每个公开 DTO 必须有 JSON Schema/OpenAPI、Go JSON Tag 和真实 JSON Golden 对照。
+
+### 4.3 命名、标识与枚举
+
+- JSON 字段使用 snake_case。
+- ID/Ref 为不透明、稳定、非空字符串；消费者不得解析内部格式。
+- DTO、Event Payload 和可独立演进的 Application Contract 有明确 schema_version。
+- 枚举值使用稳定机器标识；未知枚举必须按安全策略处理，不得默认为成功或放行。
+- 不用模块软件版本代替 Schema 版本。
+- 不暴露数据库主键类型、表名、SQL 字段或内部包路径。
+
+### 4.4 时间字段
+
+所有跨模块绝对时间使用 RFC3339 时间戳并带时区，持久化和比较统一 UTC。交易日期使用 YYYY-MM-DD，并明确 Asia/Shanghai 交易日语义。
+
+必须区分：
+
+| 字段 | 定义 | 禁止替代 |
+|---|---|---|
+| published_at | 来源声明的发布时间 | available_at、observed_at |
+| available_at | 有来源证据证明外部可获得的时间 | published_at、fetched_at |
+| valid_from / valid_to | 业务事实有效区间 | system_as_of |
+| provider_time | Provider 声明的数据时间 | fetched_at |
+| observed_at / system_observed_at | 本系统观察到该记录的时间 | available_at |
+| fetched_at | 实际采集/下载完成时间 | observed_at |
+| normalized_at | 解析/规范化完成时间 | fetched_at |
+| system_as_of | Run 允许使用的系统知识截止时间 | trade_date、published_at |
+| created_at / updated_at | 本地记录生命周期时间 | 来源时间、业务有效时间 |
+
+没有可验证的 available_at 必须保持 unknown/null/缺省，不能从 published_at、observed_at 或 fetched_at 推导。observed_at 也不能为满足 PIT 被回填成 system_as_of。
+
+### 4.5 system_as_of 传播
+
+- Researchflow 在 CreateRun 时确定并持久化唯一的 UTC system_as_of。
+- 所有下游请求、查询、Evidence/Context 写入、News Query 和 Quant 请求继承同一值。
+- Stage 重试不得刷新 system_as_of。
+- 子对象的 system_as_of 不得晚于 Run 的 system_as_of。
+- 各模块仍需独立校验数据可见性、引用归属和质量状态，不能信任调用方伪造的质量标记。
+- trade_date 是交易日，不是知识截止时间。
+
+### 4.6 单位和数值精度
+
+- 价格：CNY/股；成交额：CNY；成交量：shares。
+- Data 现有百分比按其 API 约定使用百分点；比例/概率必须明确 ratio 或 percentage_point。
+- 金额、价格、单价、成本和费用在 Quant/Research/Researchflow 跨模块 DTO 中建议使用 decimal string；计数使用 integer；比例、收益率、波动率和标准化统计量使用 number，并声明精度、舍入和误差容忍。
+- 该建议与 Data 现有 API 的 number 字段通过 Data Adapter 转换，不要求为了新模块契约而无条件重写 Data API。
+- 精确数值转换必须避免 float64 中间损失；Data Adapter 应使用精确解析/转换并提供边界测试。
+- 上述数值策略仍需 Quant Owner 确认后才能标记冻结。
+
+## 5. 请求上下文、身份和错误契约
+
+### 5.1 Request ID 与关联标识
+
+- X-Request-ID 标识一次 HTTP 请求；入口缺失或非法时由可信入口生成。
+- 响应返回最终 Request ID；内部 HTTP 调用按信任边界传播。
+- Request ID 不是身份、权限或幂等键。
+- 异步 Run/任务持久化 originating_request_id 作为创建来源元数据，并使用 correlation_id 关联后续 Worker 和重试。
+- Worker 执行时使用自己的执行请求上下文，不把 originating_request_id 冒充当前 Request ID。
+- 当前 Platform 契约不要求 traceparent、span_id、baggage、Trace SDK 或独立 Trace Collector。
+
+### 5.2 身份类型与凭证隔离
+
+首期只区分 anonymous、owner、service。所有路由必须显式声明访问模式，默认拒绝。
+
+凭证必须分离：
+
+| 凭证 | 用途 | 持有方 |
+|---|---|---|
+| PLATFORM_ADMIN_TOKEN | Owner 管理操作 | 部署环境 / Server |
+| Platform Service Secret | 内部服务身份 | 对应服务端 Adapter |
+| Data API Key | Data API 当前 X-API-Key 认证 | Server 的 Data Adapter |
+| Provider Token | 外部 Data Provider | Data |
+| News Source Credential | 新闻来源采集 | News |
+| LLM Gateway/API Key | 模型服务调用 | LLM Adapter |
+| Notification Channel Credential | 外部投递渠道 | Notification Adapter |
+
+Platform Service Secret 不等于 Data API Key。首期 Data 保持现有 X-API-Key；Server 持有 Data 专用 Key 并在服务端 Adapter 注入 Header。浏览器、WebUI、Research 和 LLM 不得获得 Data Key。
+
+401 表示身份缺失/无效；403 表示身份有效但无权限。Owner Token 与 Service Secret 分离；Service 不得获得 platform:admin。动态 Service Key CRUD 不属于首期契约。
+
+### 5.3 Config / Secret
+
+- 每个服务拥有自己的 Config Struct、字段 Schema 和 Validate；Platform 不集中定义业务配置。
+- 环境变量只在 Bootstrap/Config 装载边界读取；配置装载后作为不可变快照使用。
+- dotenv 仅用于本地辅助，不覆盖已有进程环境变量。
+- 生产 Secret 由部署环境注入；Secret 的格式化、日志和序列化必须脱敏。
+- 配置错误只报告键名和期望格式，不包含原始敏感值。
+- Platform 不提供远程配置中心、热更新或动态 Secret 管理。
+
+### 5.4 Fault
+
+Platform 通用 Fault 最小语义：
+
+- class：validation、unauthenticated、forbidden、not_found、conflict、unavailable、timeout、internal。
+- code：稳定机器标识，领域模块使用自己的命名空间。
+- safe_message：脱敏、安全、可展示摘要。
+- dependency：可选逻辑依赖名，不得包含 URL、IP、DSN、Secret 或用户输入。
+- retryable：默认 false，仅表示技术层面可作为重试候选。
+- cause：仅内部错误链，不序列化。
+
+HTTP 状态映射由 Transport 层负责。retryable 不自动触发重试；调用方还必须校验幂等、请求体可重放、重试预算、Deadline 和领域策略。原始 err.Error()、SQL、DSN、Token、上游完整响应和堆栈不得进入 safe_message 或 API 响应。
+
+## 6. Platform 技术能力契约
+
+### 6.1 Security
+
+Platform 提供 owner/service 身份基础、可信调用上下文、显式 RoutePolicy 和默认拒绝。业务模块仍负责资源级业务授权；Platform 不建设用户中心、租户体系或动态策略引擎。
+
+### 6.2 Diagnostics
+
+Platform 负责 Check Contract、有限并发 Runner、Timeout/Deadline 和基础聚合。领域模块负责诊断规则、领域状态、reason_code、safe_message、evidence_ref、历史和证据。
+
+Observation 最小字段：status、reason_code、safe_message、checked_at、duration、evidence_ref（可选）、attributes（可选）。
+
+- reason_code 使用领域命名空间。
+- evidence_ref 是不透明引用，由领域证据 Owner 解释、授权和决定保留期限。
+- attributes 必须有界、白名单、低敏感结构化标量，不承载正文、snippet、原始响应。
+- required 依赖缺失不得伪装 skipped；optional 未配置可 skipped 且必须有 reason。
+- required Check 返回 skipped 按契约错误处理；因总 Deadline/取消而未启动的 Check 是 unavailable，不是 skipped。
+- Runner 不提供 HTTP 路由，不负责认证授权，不建设通用诊断历史库。
+- Data 的 Probe/Validation/Freshness/Coverage 仍归 Data，不被 Platform Observation 取代。
+
+### 6.3 HTTP Client
+
+调用方必须为每个外部服务/Provider 提供固定 DestinationPolicy。平台网络安全执行至少包括：
+
+- 精确 Host/Port/协议约束；
+- DNS A/AAAA 解析和私有、保留、特殊地址拦截；
+- 受控 DialContext 连接已校验 IP，避免校验与实际拨号二次解析；
+- 默认禁止重定向，显式允许时逐跳重新校验；
+- 不可信来源默认禁用环境代理；
+- Context Deadline、连接/响应头超时、响应体大小上限和并发上限；
+- 仅对明确幂等且请求体可重放的请求有限重试。
+
+News 负责 Source/Endpoint 授权和允许访问的来源策略；Platform 负责 DNS、拨号、重定向和代理等网络层安全执行。Provider 配额、业务错误、数据质量和熔断归领域 Adapter。单测通过不等于部署出口 SSRF 验收通过。
+
+### 6.4 Storage / Migration
+
+Platform 负责 SQL/Redis 连接生命周期、Ping、连接池、Migration Runner 等技术原语。
+
+领域模块负责自己的 Repository、SQL、表结构、事务边界、Migration 文件、保留策略和领域审计历史。
+
+- MariaDB 是事实存储；Redis 只作缓存或短期辅助。
+- Migration namespace/version 唯一；已发布 Migration 不可修改，修复新增版本。
+- 根注册和启动执行顺序由 Server/集成根负责。
+- 领域模块分支不修改根 Migration 总注册、DI、cmd、全局路由。
+- 不建设公共万能 Repository。
+- Platform Storage 包级测试不等于真实 MariaDB/Redis 集成通过。
+
+### 6.5 Task / Workflow
+
+Platform 只提供必要的通用执行基础设施，不定义 ResearchRun、Stage、Attempt、DAG 或研究恢复语义。当前 Platform Task Queue 不作为 Researchflow 引擎；不因理论上的未来复用提前建设通用 Task Framework、分布式调度、消息队列或多集群租约系统。
+
+## 7. Data 契约
+
+### 7.1 边界与认证
+
+Data 是独立 Go Module，公开入口为 HTTP/OpenAPI。根模块不 import Data internal。调用方使用自己的 Data Adapter 映射 Data API DTO 到 Quant/Research 所需 DTO。
+
+首期 Data 认证保持 X-API-Key。Data Key 由 Server 端 Data Adapter 注入，不暴露给浏览器或业务模块。Provider Token 与 Data API Key 也必须分离。
+
+### 7.2 数据引用与质量
+
+Data 对 Security、MarketData、Financial、Calendar、Industry、PIT、Snapshot、Provider 和 Data Quality 负责。
+
+研究输入应保留可追溯信息：数据类型、证券/范围、交易日、来源及版本、单位、复权口径、质量、覆盖率、Provider 时间、fetched_at、normalized_at、system_observed_at 和快照引用。
+
+HTTP 200、Provider Probe success 不等于业务数据 valid。missing、unknown、not_supported、not_configured、degraded、invalid 必须保留各自语义。质量状态由 Data 产生，消费者不能自行伪造或升级。
+
+### 7.3 OpenAPI ↔ Go JSON 冻结要求
+
+- 从实际 Go Model、JSON Tag、Handler 和 OpenAPI Operation 生成双向差异报告。
+- 对 Go 有而 Schema 缺失、Schema 有而 Go 无来源、required、nullable、枚举、类型、format、单位、精度和嵌套引用逐项处理。
+- 以真实 Handler JSON Golden 验证，不只 marshal 单个 Model。
+- nil slice、空数组、null、字段缺席、零值必须逐字段确定。
+- Schema 多余字段必须证明有真实响应来源，否则删除；Go 字段必须确认对外是否公开。
+- 允许存在有理由的显式白名单，但不得用白名单掩盖未审查差异。
+- DATA-CONTRACT-001～008 的执行拆分以 Data 专项清单为准；本文件不复制旧统计数字作为当前事实。
+
+## 8. News → Research 契约
+
+### 8.1 所有权与调用路径
+
+News 拥有 Source、Provider、授权、采集、Observation、News Item Identity/Version、关系断言、内容层和授权内容读取。
+
+News Application 提供只读 ResearchEvidenceQuery Facade。Research 只依赖公开接口/DTO，不访问 News 私有 Domain、Repository、SQL 或 Adapter。Researchflow 把 Run 的 system_as_of、用途和内容级别传入 News Facade。该 Facade 是同一根 Go Module 内调用，不新增 News HTTP 服务。
+
+News DTO 转换为 Research 自己的 Evidence Domain，由 Research 完成；News 不创建 Research Event、Claim、Hypothesis 或 Scenario。
+
+### 8.2 最小查询能力
+
+- GetEvidence：按 news_id 和可选 version_id 查询。
+- ListEvidence：按固定过滤条件、知识时间、业务时间和受控内容级别分页。
+- 请求必须包含可信 caller_ref、受控 purpose、requested_content_level；历史查询必须包含 system_as_of。
+- 不接受任意 URL、SQL 条件、字段名、排序表达式或抓取指令。
+- page_size 有硬上限；Cursor 不透明、防篡改，绑定 snapshot、system_as_of、过滤指纹、排序版本和稳定唯一排序键。
+- 分页会话读取同一知识快照；不能仅依赖 OFFSET 保证并发一致性。
+
+### 8.3 公开记录与授权
+
+News 对外记录应区分 news_id、observation_id、version_id、source_ref、provider_ref、identity_status、business_quality_status、published_at、available_at、observed_at、fetched_at、normalized_at、content_level、content_ref、authorization_ref 和 system_as_of。
+
+字段是否 required/optional/nullable 以 News 专项 DTO/Schema 决策为准。当前没有来源证据的 available_at 必须 unknown；当前模型未分别提供的 fetched_at/normalized_at 不得由 observed_at 推导。
+
+Source、Endpoint、Provider Output Policy 的授权取交集。授权决策必须可追溯到不可变策略版本/快照；历史授权引用用于审计，当前读取仍需检查撤销、过期、用途和内容级别。未经授权的全文不得被 Research、LLM 或 WebUI 复制、展示或持久化。
+
+### 8.4 PIT 查询顺序
+
+对于 system_as_of=T，先过滤 T 时已被系统观察到的 Observation、Version、Identity、Classification、Relation，再在过滤结果上按 published_at、valid_from/valid_to 等业务时间解析。不得先解析当前关系再伪装历史状态；不得用当前版本覆盖历史版本；不得由发布时间早于 T 推导系统已知。
+
+详细字段、错误状态、历史关系解析和分页策略以 News-Research只读证据查询契约为准。
+
+## 9. Quant 契约
+
+Quant 提供公开 Application Facade，首批 Port 草案包括：
+
+- CalculateIndicators
+- CalculateFactors
+- EvaluateRisk
+- GetResult
+
+输入上下文应明确 request_id、system_as_of/as_of、trade_date（条件必需）、period、input_snapshot_refs、adjustment_basis（价格序列场景必需）、quality_policy、algorithm_version 和 deadline_at。
+
+规则：
+
+- indicator_codes/factor_codes 使用稳定代码。
+- 每个 Indicator 参数使用独立 typed、版本化 Schema，不使用任意 map。
+- 窗口样本不足返回 insufficient_data，不补零、不复制首值。
+- Factor 必须绑定 universe_ref、交易日、分类版本和可用时点，输出样本数、覆盖率和排除原因。
+- 质量和结果状态分离；completed 不等于 valid。
+- RiskDecision 的 pass/reject/unknown 必须显式；规则缺失、输入质量不足或未知状态不得 pass。
+- 硬风险 block 不可被 LLM、评分、Research 解释或人工摘要覆盖。
+- 同一 idempotency_key + 相同规范化请求返回同一逻辑结果；相同 key 对应不同请求返回冲突。
+
+价格/金额精度、Indicator/Factor 首批代码和参数 Schema 仍需 Quant Owner Review；详见 Quant-Research公开DTO字段级契约和首批 Application Port 文档。
+
+## 10. Research 契约
+
+Research 拥有 Context、Evidence、Event、Claim、Hypothesis、Scenario。
+
+Evidence 至少表达 evidence_type（fact/reported_fact/inference/hypothesis/unknown）、source_owner/ref/version、时间、system_as_of、subject_refs、stance、quality_status、limitations 和 authorization_ref。
+
+- fact 必须有可验证来源与时间。
+- reported_fact 只表示来源声称。
+- inference 必须附推导依据。
+- hypothesis 不得伪装成已证实事实。
+- unknown 表示证据不足。
+- 支持证据和反证均可追溯。
+- Research 不复制 News 未授权正文；历史读取仍检查当前授权。
+- Event、Claim、Hypothesis、Scenario 的修订追加新版本，不覆盖历史事实。
+- Scenario 的概率和收益分布由 Quant Evaluation 提供；Research 负责情景语义和证据，不自行生成伪精确概率。
+- Research 不 import Quant 或 Researchflow；Quant 结果由 Researchflow 转换为 Research 所需公开 DTO。
+
+Research DTO 的字段、复合类型、授权引用和 JSON 示例以 Quant-Research公开DTO字段级契约为准。
+
+## 11. Researchflow 契约
+
+Researchflow 是唯一跨业务模块编排者，拥有 Run、Stage、Attempt、Workflow Template、DAG、Context Assembly、Tool Policy、结果验证、恢复和综合。
+
+### 11.1 Run / Stage / Attempt 状态
+
+Run：
+
+- 非终态：created、queued、running、cancelling。
+- 终态：succeeded、partial、failed、cancelled。
+- 不设置 Run.degraded 或 Run.timed_out；degraded 是阶段输出质量，timed_out 是执行结果。
+
+Stage：
+
+- pending、ready、running、succeeded、degraded、skipped、failed、timed_out、cancelled、blocked。
+- blocked 是调度前置条件或依赖不满足，不创建 Attempt。
+- skipped 只用于模板明确裁剪/不适用的阶段，必须有 reason_code。
+- 运行期依赖失败不得伪装 skipped。
+
+Attempt：
+
+- running、succeeded、degraded、failed、timed_out、cancelled。
+- 每次 Attempt 表示一次真实执行；创建后只从 running 写入一次终态，终态不可修改或重开。
+- Stage failed/timed_out 在重试预算未耗尽时可作为中间结果；Run deadline 到达导致的 timed_out 不得重试。
+
+### 11.2 状态迁移和并发
+
+- 状态更新使用带前置状态条件的原子更新；重复命令返回已提交状态，不重复产生副作用。
+- Stage failed/timed_out 仅在 Run=running、未 cancelling、未过 deadline、依赖输出仍有效、预算允许时，经显式 RetryStage 回到 ready；每次重试创建新的 attempt_no。
+- RetryStage 复用原 Run.as_of 和输入快照。
+- 不允许重开终态 Run；重新研究创建新 Run，可通过 parent_run_ref 关联。
+- Run cancel/deadline 与正常完成使用数据库 CAS/事务作为线性化点。
+- 进入 cancelling 后拒绝新 Stage/Attempt/Retry；向在途 Attempt 传播取消并等待收敛。
+- context cancellation 只是协作信号，不证明 Worker 已停止；超过 grace period 由租约/看门狗回收，fencing token 拒绝旧 Worker 迟到写入。
+- Run 终态时不得仍有 running Attempt。
+- DAG 必须无环；Executor 必须有全局 Worker、排队容量、单 Run 并行上限和 deadline。
+
+### 11.3 结果传播
+
+Workflow Template 必须按 stage_code + template_version 显式定义：
+
+- on_degraded：accept / partial / fail；
+- on_skipped：no_impact / partial / fail；
+- on_failed：partial / fail；
+- on_timed_out：partial / fail；
+- on_blocked：partial / fail。
+
+required Stage 不允许 on_skipped=no_impact。硬风险门禁不能配置为忽略失败/降级。Run 归并：
+
+1. 任一 Stage 传播结果为 fail，Run=failed。
+2. 没有 fail，但至少一个 Stage 传播结果为 partial，Run=partial。
+3. 全部 Stage 完成且传播结果均为 accept/no_impact，Run=succeeded。
+4. Run result_summary 至少包含 stage_outcomes、missing_stage_codes、degraded_stage_codes、blocked_stage_codes、reason_codes 和 coverage。
+5. Stage degraded 不必然导致 Run partial，必须按模板策略归并；即使 accept，也要保留结果质量摘要。
+
+具体迁移表、取消/deadline 竞争和 Executor 租约细节以五模块首批 Application Port 与状态机契约细化为准。
+
+## 12. LLM 契约
+
+LLM 只提供模型协议 Adapter，不执行工具、不管理研究状态、不拥有领域数据。
+
+当前 Gateway 盘点以 OpenAI Responses 为首期主协议。建议 Port：
+
+- Generate(ctx, ModelRequest) -> ModelResponse
+- Stream(ctx, ModelRequest, onEvent) -> ModelResponse
+
+规则：
+
+- ModelRequest 首期使用 instructions + input_text；不把 Chat Completions messages 作为内部默认结构。
+- 仅在模型 Capability=supported 时发送 temperature、top_p、reasoning_effort 等可选参数。
+- 解析 output item、status、incomplete_details 和 usage；usage 缺失保持 unknown/null。
+- Tool Call 作为结构化输出返回，由 Researchflow 校验权限、预算、参数 Schema 后执行。
+- structured output 必须在 Adapter/调用方校验 Schema；不能因 Gateway 接受 text.format 就认定模型输出有效。
+- Stream 必须识别 terminal event；无 terminal event 的 EOF 为 stream_interrupted，不得伪装成功。
+- 区分 request_id、correlation_id、gateway_request_id、upstream_request_id。
+- 本地模型真实 E2E 未验收的能力必须标记 blocked/not_run/unsupported，不能用 Fixture 代替。
+
+## 13. Notification 契约
+
+Notification 只负责事件接收、订阅匹配、模板渲染、渠道发送、Delivery 幂等/重试/记录和诊断；业务告警条件由上游模块计算。
+
+公开边界采用通用、版本化 Notification Command/Event，不要求 Notification import 业务模块 Domain，也不依赖 Researchflow。
+
+最小事件语义：
+
+- event_id、event_type、schema_version、occurred_at、source_module、subject_ref、idempotency_key、payload、correlation_id。
+- payload 必须由 event_type + schema_version 对应强类型 Schema 约束，不允许无约束任意 map。
+- Subscription、Template、Channel、Delivery、DeliveryAttempt 由 Notification 拥有。
+- Inbox/Event 幂等与 Delivery 幂等分开；相同幂等键和相同 fingerprint 返回原结果，不同 fingerprint 冲突。
+- 外部渠道不承诺 exactly-once；结果不确定时记录 unknown，不盲目重试。
+- 发送失败不回滚业务研究结果；永久错误不无限重试。
+- Secret 由部署环境注入并按渠道边界脱敏。
+
+具体 Event Schema、recipient_scope、状态和恢复决策由 Notification Owner Review。
+
+## 14. Repository、Migration 与生命周期
+
+### 14.1 Repository / Migration 所有权
+
+| 模块 | 领域持久化所有权 |
+|---|---|
+| Data | 证券、行情、财务、Provider、Probe、质量和历史 |
+| News | Observation、Version、Identity、Relation、Authorization |
+| Quant | 指标、策略、回测、评估、风险结果 |
+| Research | Context、Evidence、Event、Claim、Hypothesis、Scenario |
+| Researchflow | Run、Stage、Attempt、Workflow Template |
+| LLM | 必要调用元数据和 Usage；默认不持久化完整敏感 Prompt/Response |
+| Notification | Subscription、Template、Delivery、Attempt |
+| Platform | 不拥有领域业务表 |
+
+每个领域模块拥有 Repository、SQL、事务、Migration 文件和保留策略。Platform 提供连接生命周期和 Migration Runner。Migration namespace/version 必须唯一，已发布版本不可修改；修复新增版本。根 Migration 注册由 Server/集成根维护。
+
+### 14.2 服务生命周期
+
+Server Bootstrap 统一组织：
+
+1. Config Load / Validate；
+2. Secret Load；
+3. Storage Initialize；
+4. Migration；
+5. 必需依赖检查；
+6. Application / Adapter 构造；
+7. HTTP 路由和 Worker 注册；
+8. Ready；
+9. Graceful Shutdown。
+
+必需依赖初始化失败不得伪装 ready。可选依赖失败按模块策略明确 degraded 或 skipped，不把缺失能力伪装成功。
+
+Shutdown 停止新请求和新任务派发，收敛在途请求/Attempt，关闭 HTTP Server，再关闭 Redis/MariaDB。具体超时和顺序由 Server 集成设计验证。
+
+## 15. 兼容性与契约变更流程
+
+### 15.1 兼容性
+
+- 新增可选字段通常可兼容，但消费者必须能处理未知字段。
+- 新增必需字段、删除字段、修改字段类型/单位/时间语义、改变枚举含义、改变状态迁移或默认传播策略均视为破坏性变更。
+- 新增枚举值也可能破坏旧消费者；消费者必须对未知值 fail safe。
+- Schema 版本独立于软件版本。
+- 不允许静默改变默认值来改变业务语义。
+
+### 15.2 变更流程
+
+1. 生产模块提出契约变更提案，列出 DTO/Schema、字段语义、兼容性和迁移方式。
+2. 消费模块 Review；跨三个及以上模块或改变依赖 DAG 的变更需 GOV Review。
+3. 更新 Application Port、OpenAPI/JSON Schema、Go JSON Tag、示例 JSON、Golden 和契约测试。
+4. 明确旧消费者兼容窗口和切换顺序。
+5. 通过后更新契约版本/冻结记录；不得先在消费分支复制生产方私有结构。
+
+## 16. 冻结决策登记表
+
+下列决策在 Owner 明确确认前保持 pending，不得标记冻结。
+
+| ID | 决策 | 建议结论 | Owner / Review 方 | 当前状态 |
+|---|---|---|---|---|
+| CONTRACT-001 | 精确数值与 JSON 类型 | 金额/价格 decimal string；计数 integer；统计比例 number；Data Adapter 精确转换 | Quant / Data / Researchflow | pending |
+| CONTRACT-002 | 首批 Indicator 与参数 Schema | 每个 indicator_code 独立 typed、版本化参数 Schema | Quant | pending |
+| CONTRACT-003 | 首批 Factor、母体与标准化 | 固定 universe_ref、分类版本、样本覆盖和排除原因 | Quant | pending |
+| CONTRACT-004 | Evidence AuthorizationRef 与撤销检查 | Research 保存不透明不可变引用；来源 Owner 负责当前访问复核 | Research / News / Data | pending |
+| CONTRACT-005 | system_as_of 唯一传播 | CreateRun 固定 UTC system_as_of，下游继承且重试不刷新 | Researchflow / Research / Quant / News | pending |
+| CONTRACT-006 | Stage 结果传播矩阵 | 按 stage_code + template_version 显式定义，不依赖隐式默认 | Researchflow | pending |
+| CONTRACT-007 | cancel/deadline/retry/lease/fencing | 以状态机文档的原子迁移、预算和 fencing 规则为准 | Researchflow / Server | pending |
+| CONTRACT-008 | LLM Gateway 与 Stream 能力 | 以真实 Responses/SSE 盘点和本地 E2E 决定支持状态 | LLM / Platform | pending |
+| CONTRACT-009 | Notification 幂等与 unknown 恢复 | Inbox 与 Delivery 分离；外部副作用不确定时记录 unknown | Notification / 上游事件 Owner | pending |
+| CONTRACT-010 | Event Payload Schema 注册 | event_type + schema_version 绑定强类型 Schema 和兼容策略 | Notification / 各事件 Owner | pending |
+| CONTRACT-011 | News PIT、授权快照和稳定分页 | 双时间轴、不可变授权快照、当前撤销检查、稳定 Cursor | News / Research | pending |
+| CONTRACT-012 | Data OpenAPI ↔ Go JSON | 以真实 Handler Golden 和双向差异测试为准 | Data | pending |
+| CONTRACT-013 | Server 组合根与 Migration 总注册 | 集中在明确的集成分支；模块分支只提供 Facade/Adapter/Migration | 集成 Owner / Platform / 各模块 | pending |
+
+## 17. GOV-004 / GOV-005 门禁分层
+
+现有规划中 GOV-004 的设计冻结和真实生产集成条件有混写。为避免把模块独立开发与所有 Provider/部署验收绑死，建议按 GOV-005 的 L1/L2/L3 分层执行。
+
+### L1 Design Ready
+
+- 模块职责、依赖 DAG、数据所有权明确。
+- 首批模块 Application Port、DTO、状态机和模块任务明确。
+- 未决事项有 Decision ID、Owner 和阻断范围。
+- 允许继续设计与拆分任务；不代表公开契约可冻结。
+
+### L2 Module Ready（契约冻结）
+
+- 本批次所有跨模块公开 Port/DTO/Schema 已完成生产方与消费方 Review。
+- required/optional/nullable、枚举、时间、单位、精度、错误和状态语义明确。
+- 示例 JSON、Schema、Go JSON Tag/OpenAPI 映射和 Golden Fixture 齐备。
+- 依赖 DAG、Repository/Migration Owner、认证和 Secret 边界无冲突。
+- 契约测试可独立执行；未实现的提供方业务功能可用明确 Fixture/Contract Test 支撑模块开发，但不得宣称真实集成通过。
+- 所有 P0 Decision 已决策；其余 pending 项明确不阻断的模块范围和延期版本。
+- 记录契约版本、参与模块确认 SHA 和测试证据。
+
+L2 不要求真实 Provider 在线成功、生产 DNS/出口 SSRF 演练、所有模块真实数据库部署或完整端到端研究 Run；这些属于 L3。
+
+### L3 Integration Ready
+
+- Data API、News Facade、Quant/Research/Researchflow/LLM/Notification 的真实 Adapter/Facade 接入完成。
+- 真实 MariaDB/Redis、Migration、Worker、取消/重试/恢复通过集成测试。
+- Platform HTTP Client 生产出口 SSRF/DNS/重定向/代理安全门禁通过。
+- Diagnostics、Fault、Request ID、认证/授权在真实 Server 路由和 Worker 接入。
+- LLM 真实模型调用/Stream、Notification 真实渠道、News 授权内容访问按实际启用能力完成验收。
+- 端到端 Run 可追溯输入快照、算法/模型版本、证据、质量、Stage/Attempt 和失败原因。
+- 所有证据关联精确提交 SHA、Workflow/测试运行和部署环境。
+
+### GOV-004 当前状态
+
+- 架构职责和依赖 DAG：设计基线已形成，需在模块代码/Owner Review 持续核对。
+- Platform 公共技术语义：PLAT-002 文档已形成，跨模块 Review 待完成。
+- Data OpenAPI/Go JSON：存在已知字段和序列化差异，L2 阻断。
+- News Query Facade/PIT/授权/分页：目标契约已形成，DTO/Owner Review 和实现证据待补。
+- Quant/Research DTO：字段级草案存在，CONTRACT-001～005 等待 Owner 决策和 Schema/Golden。
+- Researchflow 状态机：已有详细草案，CONTRACT-006/007 等待 Owner 决策。
+- LLM/Notification：边界基线存在，首批 Port/事件 Schema 仍需 Owner Review。
+- Server 组合根：职责原则明确，具体集成分支/Owner 和入口清单仍需确认。
+
+**结论：当前未达到 L2，不冻结契约；但不应把 L3 生产验收全部作为五模块独立开发的前置条件。**
+
+## 18. 整体 Review 发现与后续动作
+
+### P0：冻结前必须处理
+
+1. 确认本文件与整体任务规划、GOV-004、Platform 08、News Query、Quant/Research DTO、Application Port 文档之间的引用关系，避免维护重复 Schema。
+2. 由 Quant Owner 确认 CONTRACT-001～003，特别是 Data API number 到内部 decimal 的精确转换。
+3. 由 Research / News / Data Owner 确认 CONTRACT-004 和 CONTRACT-011，明确 AuthorizationRef 的所有者、当前撤销检查和历史引用保留。
+4. 由 Researchflow / Research / Quant / News Owner 确认 CONTRACT-005，固定 Run 的 system_as_of 传播。
+5. 由 Researchflow Owner 确认 CONTRACT-006/007，完成状态传播矩阵、取消/deadline 竞争和重试恢复边界。
+6. Data Owner 按 DATA-CONTRACT-001～008 完成 OpenAPI/Go JSON 差异修复和双向契约测试；这是 Data 对外 API 契约 L2 阻断。
+7. 明确 Server/集成根 Owner 和目标分支，登记 cmd、DI、HTTP 路由、Worker、Migration 总注册的实际入口。
+
+### P1：模块 L2 / 集成前完成
+
+8. News Owner 实现并测试 ResearchEvidenceQuery Facade、PIT 双时间过滤、授权快照、当前撤销检查和稳定分页；模块契约可先用 Contract Test 评审，生产接入属于 L3。
+9. LLM Owner 完成 Responses/SSE DTO 和真实能力状态 Review；不支持的能力明确 unsupported。
+10. Notification Owner 完成 Event Schema 注册、recipient_scope、Inbox/Delivery 幂等和 unknown 恢复语义。
+11. Platform 与 Server 明确真实 MariaDB/Redis、Migration 失败恢复和服务路由接入验收计划。
+12. 所有公开 DTO 补齐 JSON Schema、正反向 Golden 和未知枚举测试。
+
+### P2：L3 集成和生产验收
+
+13. 真实 Data/News/LLM/Notification Adapter 联调。
+14. 生产 HTTP 出口 SSRF、安全 DNS、重定向、代理和响应大小演练。
+15. 真实数据库、Worker Lease/Fencing、Migration 恢复、Run 取消/超时/重试故障演练。
+16. 端到端 Run、通知和 WebUI 真实结果闭环。
+
+## 19. 本轮范围与限制
+
+本文件基于审查基线 dc85a9da 中的项目规划与契约文档完成静态交叉 Review。它没有证明 Data、News、Platform 或五模块当前代码已经满足本契约，也没有重新运行各分支 CI、Provider、模型、数据库或部署环境测试。
+
+任何状态从 pending 转为 accepted/frozen/passed，都必须记录：
+- Decision ID；
+- 决策结论与适用 Schema/Port 版本；
+- Owner 和消费方 Review；
+- 精确分支/提交 SHA；
+- 契约测试/CI 证据；
+- 未覆盖范围和后续集成条件。
+
+本文件不授权创建模块分支、不授权跨分支合并，也不代表 GOV-004 已通过。
