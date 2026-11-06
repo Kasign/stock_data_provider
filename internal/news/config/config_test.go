@@ -21,10 +21,11 @@ func TestLoadLeavesOptionalProvidersUnconfigured(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
+
 	for name, provider := range map[string]ProviderConfig{
-		"bocha": got.Bocha(),
-		"tavily": got.Tavily(),
-		"brave": got.Brave(),
+		"bocha":   got.Bocha(),
+		"tavily":  got.Tavily(),
+		"brave":   got.Brave(),
 		"searxng": got.SearXNG(),
 	} {
 		if provider.Configured() {
@@ -35,20 +36,25 @@ func TestLoadLeavesOptionalProvidersUnconfigured(t *testing.T) {
 
 func TestLoadCredentialProvidersAsPairedSettings(t *testing.T) {
 	const apiKey = "secret-provider-key"
+
 	got, err := Load(env(map[string]string{
-		BochaEndpointEnv: "https://bocha.example.com/v1/search",
-		BochaAPIKeyEnv: apiKey,
-		TavilyEndpointEnv: "https://api.tavily.example/search",
-		TavilyAPIKeyEnv: "tavily-secret",
-		BraveEndpointEnv: "https://api.brave.example/news",
-		BraveAPIKeyEnv: "brave-secret",
-		SearXNGEndpointEnv: "http://search.internal.example",
+		BochaEndpointEnv:    "https://bocha.example.com/v1/search",
+		BochaAPIKeyEnv:      apiKey,
+		TavilyEndpointEnv:   "https://api.tavily.example/search",
+		TavilyAPIKeyEnv:     "tavily-secret",
+		BraveEndpointEnv:    "https://api.brave.example/news",
+		BraveAPIKeyEnv:      "brave-secret",
+		SearXNGEndpointEnv:  "http://search.internal.example",
 	}))
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
 	if !got.Bocha().Configured() || got.Bocha().Endpoint() != "https://bocha.example.com/v1/search" {
-		t.Fatalf("unexpected Bocha config: configured=%v endpoint=%q", got.Bocha().Configured(), got.Bocha().Endpoint())
+		t.Fatalf(
+			"unexpected Bocha config: configured=%v endpoint=%q",
+			got.Bocha().Configured(),
+			got.Bocha().Endpoint(),
+		)
 	}
 	if got.Bocha().APIKey().Value() != apiKey {
 		t.Fatal("Bocha API key was not preserved in Secret")
@@ -63,23 +69,38 @@ func TestLoadCredentialProvidersAsPairedSettings(t *testing.T) {
 
 func TestLoadRejectsIncompleteCredentialPairsWithoutLeakingValues(t *testing.T) {
 	tests := []struct {
-		name string
+		name   string
 		values map[string]string
 	}{
-		{name: "endpoint without key", values: map[string]string{BochaEndpointEnv: "https://provider.example/path"}},
-		{name: "key without endpoint", values: map[string]string{BochaAPIKeyEnv: "do-not-leak-this-secret"}},
-		{name: "whitespace key", values: map[string]string{BochaEndpointEnv: "https://provider.example/path", BochaAPIKeyEnv: "   "}},
+		{
+			name:   "endpoint without key",
+			values: map[string]string{BochaEndpointEnv: "https://provider.example/path"},
+		},
+		{
+			name:   "key without endpoint",
+			values: map[string]string{BochaAPIKeyEnv: "do-not-leak-this-secret"},
+		},
+		{
+			name: "whitespace key",
+			values: map[string]string{
+				BochaEndpointEnv: "https://provider.example/path",
+				BochaAPIKeyEnv:   "   ",
+			},
+		},
 	}
+
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			_, err := Load(env(test.values))
 			if err == nil {
 				t.Fatal("Load() error = nil, want incomplete-pair error")
 			}
-			if !strings.Contains(err.Error(), BochaEndpointEnv) || !strings.Contains(err.Error(), BochaAPIKeyEnv) {
+			if !strings.Contains(err.Error(), BochaEndpointEnv) ||
+				!strings.Contains(err.Error(), BochaAPIKeyEnv) {
 				t.Fatalf("error does not identify configuration keys: %v", err)
 			}
-			if strings.Contains(err.Error(), "do-not-leak-this-secret") || strings.Contains(err.Error(), "provider.example") {
+			if strings.Contains(err.Error(), "do-not-leak-this-secret") ||
+				strings.Contains(err.Error(), "provider.example") {
 				t.Fatalf("error leaked configuration value: %v", err)
 			}
 		})
@@ -88,7 +109,7 @@ func TestLoadRejectsIncompleteCredentialPairsWithoutLeakingValues(t *testing.T) 
 
 func TestLoadRejectsUnsafeOrMalformedEndpoints(t *testing.T) {
 	tests := []struct {
-		name string
+		name     string
 		endpoint string
 	}{
 		{name: "non HTTP scheme", endpoint: "file:///etc/passwd"},
@@ -98,6 +119,7 @@ func TestLoadRejectsUnsafeOrMalformedEndpoints(t *testing.T) {
 		{name: "invalid port", endpoint: "https://provider.example:70000/path"},
 		{name: "relative URL", endpoint: "/provider/search"},
 	}
+
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			_, err := Load(env(map[string]string{SearXNGEndpointEnv: test.endpoint}))
@@ -114,17 +136,22 @@ func TestLoadRejectsUnsafeOrMalformedEndpoints(t *testing.T) {
 func TestProviderSecretFormattingAndJSONAreRedacted(t *testing.T) {
 	got, err := Load(env(map[string]string{
 		BochaEndpointEnv: "https://bocha.example.com/search",
-		BochaAPIKeyEnv: "sensitive-value",
+		BochaAPIKeyEnv:   "sensitive-value",
 	}))
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
+
 	secret := got.Bocha().APIKey()
-	for _, rendered := range []string{fmt.Sprintf("%v", secret), fmt.Sprintf("%#v", secret)} {
+	for _, rendered := range []string{
+		fmt.Sprintf("%v", secret),
+		fmt.Sprintf("%#v", secret),
+	} {
 		if strings.Contains(rendered, "sensitive-value") || !strings.Contains(rendered, "[REDACTED]") {
 			t.Fatalf("secret formatting was not redacted: %q", rendered)
 		}
 	}
+
 	encoded, err := json.Marshal(secret)
 	if err != nil {
 		t.Fatalf("json.Marshal() error = %v", err)
