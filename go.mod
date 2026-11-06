@@ -4,7 +4,9 @@ go 1.22
 
 require (
 	github.com/go-sql-driver/mysql v1.9.3
+	github.com/gowebpki/jcs v1.0.2
 	github.com/redis/go-redis/v9 v9.7.3
+	github.com/santhosh-tekuri/jsonschema/v6 v6.0.3
 )
 
 require (

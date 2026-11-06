@@ -3,9 +3,9 @@
 - 目标分支：`feat/notification`
 - 代码目录：`internal/notification/**`
 - 任务前缀：NTF
-- 当前阶段：阶段 0 已完成；NTF-001 核心领域实现进行中，先校准 Envelope Schema/Golden 与已接受契约，Go Domain 尚未开始。
+- 当前阶段：NTF-001 核心领域实现进行中；EventEnvelope、JCS Fingerprint、Draft 2020-12 Schema Registry/Validator 已建立，Inbox/Subscription/DeliveryPlan 尚未实现。
 - 当前代码事实：HEAD 尚无 `internal/notification/**`；现存 `python_bridge/capabilities/notification.py` 是旧通知调用适配，`web/src/notification-preferences.js` 和 `notification-state.js` 是 Web 本地偏好/展示状态，不属于 Go Notification Domain。
-- 契约证据：NTF-CTR-001～003 均为 `pending_evidence`。4 份 Schema、6 个 Golden 已提交；本轮发现并正在修复 Envelope Schema 缺少 published_at/payload_fingerprint 的契约差异。既有本地校验记录不等于模块 CI 证据；三生产方映射、重放/冲突、并发/恢复、真实 DB/渠道证据仍按各层级分别验收。
+- 契约证据：NTF-CTR-001～003 均为 `pending_evidence`。4 份 Schema、6 个 Golden 已按补充契约校准；Validator/Golden 自动化测试已写入，尚待 CI 执行。NTF-CTR-001～003 仍为 pending_evidence；三生产方映射、重放/冲突、并发/恢复、真实 DB/渠道证据仍按各层级分别验收。
 
 Notification 是独立通知业务模块，负责事件接收、Subscription、Template、Channel、Dispatcher、Delivery、Attempt、幂等、重试和投递诊断。不计算业务告警条件，不依赖 Researchflow 内部实现。
 
@@ -25,8 +25,8 @@ Notification 是独立通知业务模块，负责事件接收、Subscription、T
 | 范围 | 状态 | 证据/限制 |
 |---|---|---|
 | 领域设计与字段契约 | 已建立 | 以 01/03 文档为准；发现契约矛盾先修正文档并评审 |
-| Schema/Golden 资产 | 契约校准中 | 4 Schema、6 Golden；Envelope 增补发布时间和指纹字段，自动化验证待实现 |
-| Go Notification Domain/Application | 未开始 | `internal/notification/**` 尚不存在 |
+| Schema/Golden 资产 | 已校准，待 CI | 4 Schema、6 Golden；Draft 2020-12 Validator 和 Golden 测试已编写，执行证据待补 |
+| Go Notification Domain/Application | 部分实现 | EventEnvelope、JCS Fingerprint、Schema Registry/Validator 已提交；CI 待执行 |
 | Inbox/Subscription/DeliveryPlan | 未开始 | 无实现和模块测试证据 |
 | Template/Channel/Dispatcher/Retry | 未开始 | 无实现；不得以旧 Python 通知能力替代 |
 | Repository/Migration | 未开始 | Platform Storage 已有通用基础能力；Notification 专属模型/迁移尚无 |
