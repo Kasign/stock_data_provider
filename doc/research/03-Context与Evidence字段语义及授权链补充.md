@@ -89,3 +89,18 @@ ResearchEvent 是跨来源现实事件，不是 News Article 别名。创建、�
 | Security | 未授权正文不进入 DTO/日志/Fixture；模型输出不得生成来源授权或统计置信概率 |
 
 Fixture/Fake Adapter 只能证明 Research 自身模型和消费边界；真实 Data/News 授权、PIT 和分页能力须分别取得生产方证据后才能升级 A2。
+
+## 8. 跨模块契约待决项（不得在模块内自行解释）
+
+### RSC-OPEN-001：Research 对 Quant 结果的消费路径
+
+当前项目材料存在一处需要总规划明确的边界差异：
+
+- Quant-Research 公开 DTO 将 Evidence.source_owner 定义为 data/news/quant/research，并允许 Research Evidence 引用 Quant result。
+- GOV-CTR-006 为 Quant 定义了由 Quant 签发的 AuthorizationRef，resource_ref 指向 Quant result_id。
+- 但项目级依赖 DAG 明确 Research 不直接依赖 Quant；Research 允许的直接生产方列表未包含 Quant。
+
+在项目决议明确前，Research 不新增 Quant Application Port，不直接调用 Quant 或自行复核 Quant 授权。若上游流程传入 Quant 结果引用，Research 只能按不透明 source_ref 保存引用及其来源授权元数据，不得自行解引用、复制结果内容或将其重解释为 Research 计算结果。需要读取 Quant 受控内容时，必须由项目总规划明确调用路径、可信主体、当前授权复核责任和 DTO 传递边界。
+
+该问题只阻断 Research 对 Quant 结果的直接读取/内容派生；不阻断 Context、Data/News Evidence、Event、Claim/Hypothesis 的独立开发。
+
