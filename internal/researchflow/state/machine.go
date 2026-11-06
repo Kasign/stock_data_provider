@@ -55,33 +55,63 @@ func TransitionAttempt(attempt domain.Attempt,next domain.AttemptStatus,now time
 	attempt.Status=next;v:=now.UTC();attempt.FinishedAt=&v;return attempt,nil
 }
 
-func CancelRun(run domain.Run,stages []domain.Stage,now time.Time)(domain.Run,[]domain.Stage,error){
-	if run.Status.Terminal(){return run,stages,ErrAlreadyTerminal}
-	if run.Status==domain.RunCreated||run.Status==domain.RunQueued{
-		updated,err:=TransitionRun(run,domain.RunCancelled,now);if err!=nil{return run,stages,err}
-		updated.TerminationReason="user_cancelled"
-		for i:=range stages{if stages[i].Status==domain.StageRunning{return run,stages,errors.New("queued or created run cannot contain a running stage")};if !stages[i].Status.Terminal(){stages[i],err=TransitionStage(stages[i],domain.StageCancelled,now);if err!=nil{return run,stages,err}}}
-		return updated,stages,nil
+func CancelRun(run domain.Run, stages []domain.Stage, now time.Time) (domain.Run, []domain.Stage, error) {
+	if run.Status.Terminal() { return run, stages, ErrAlreadyTerminal }
+	updatedStages := append([]domain.Stage(nil), stages...)
+	if run.Status == domain.RunCreated || run.Status == domain.RunQueued {
+		// Validate the whole input before changing any Stage; callers may reuse the slice on error.
+		for _, stage := range updatedStages {
+			if stage.Status == domain.StageRunning {
+				return run, stages, errors.New("queued or created run cannot contain a running stage")
+			}
+		}
+		updatedRun, err := TransitionRun(run, domain.RunCancelled, now)
+		if err != nil { return run, stages, err }
+		updatedRun.TerminationReason = "user_cancelled"
+		for i := range updatedStages {
+			if !updatedStages[i].Status.Terminal() {
+				updatedStages[i], err = TransitionStage(updatedStages[i], domain.StageCancelled, now)
+				if err != nil { return run, stages, err }
+			}
+		}
+		return updatedRun, updatedStages, nil
 	}
-	if run.Status==domain.RunRunning{
-		updated,err:=TransitionRun(run,domain.RunCancelling,now);if err!=nil{return run,stages,err}
-		updated.TerminationReason="user_cancelled"
-		for i:=range stages{switch stages[i].Status{case domain.StagePending,domain.StageReady,domain.StageRetryWait:stages[i],err=TransitionStage(stages[i],domain.StageCancelled,now);if err!=nil{return run,stages,err}}}
-		return updated,stages,nil
+	if run.Status == domain.RunRunning {
+		updatedRun, err := TransitionRun(run, domain.RunCancelling, now)
+		if err != nil { return run, stages, err }
+		updatedRun.TerminationReason = "user_cancelled"
+		for i := range updatedStages {
+			switch updatedStages[i].Status {
+			case domain.StagePending, domain.StageReady, domain.StageRetryWait:
+				updatedStages[i], err = TransitionStage(updatedStages[i], domain.StageCancelled, now)
+				if err != nil { return run, stages, err }
+			}
+		}
+		return updatedRun, updatedStages, nil
 	}
-	return run,stages,nil
+	return run, stages, nil
 }
 
-func ApplyDeadline(run domain.Run,stages []domain.Stage,dbNow time.Time)(domain.Run,[]domain.Stage,error){
-	if run.Status.Terminal()||dbNow.UTC().Before(run.DeadlineAt.UTC()){return run,stages,nil}
-	if run.Status!=domain.RunQueued&&run.Status!=domain.RunRunning{return run,stages,nil}
-	updated,err:=TransitionRun(run,domain.RunCancelling,dbNow);if err!=nil{return run,stages,err}
-	updated.TerminationReason="run_deadline_exceeded"
-	for i:=range stages{switch stages[i].Status{case domain.StagePending,domain.StageReady,domain.StageRetryWait:
-		stages[i],err=TransitionStage(stages[i],domain.StageTimedOut,dbNow);if err!=nil{return run,stages,err}
-		stages[i].ReasonCodes=append(stages[i].ReasonCodes,"run_deadline_exceeded")
-	}}
-	return updated,stages,nil
+func ApplyDeadline(run domain.Run, stages []domain.Stage, dbNow time.Time) (domain.Run, []domain.Stage, error) {
+	if run.Status.Terminal() || dbNow.UTC().Before(run.DeadlineAt.UTC()) {
+		return run, stages, nil
+	}
+	if run.Status != domain.RunQueued && run.Status != domain.RunRunning {
+		return run, stages, nil
+	}
+	updatedStages := append([]domain.Stage(nil), stages...)
+	updatedRun, err := TransitionRun(run, domain.RunCancelling, dbNow)
+	if err != nil { return run, stages, err }
+	updatedRun.TerminationReason = "run_deadline_exceeded"
+	for i := range updatedStages {
+		switch updatedStages[i].Status {
+		case domain.StagePending, domain.StageReady, domain.StageRetryWait:
+			updatedStages[i], err = TransitionStage(updatedStages[i], domain.StageTimedOut, dbNow)
+			if err != nil { return run, stages, err }
+			updatedStages[i].ReasonCodes = append(updatedStages[i].ReasonCodes, "run_deadline_exceeded")
+		}
+	}
+	return updatedRun, updatedStages, nil
 }
 
 // ScheduleRetry finalizes the current Attempt and moves its Stage to retry_wait.
@@ -132,7 +162,7 @@ func AggregateRun(run domain.Run,stages []domain.Stage,attempts []domain.Attempt
 			if p.OnDegraded==domain.PropagateFail{fail=true}else if p.OnDegraded==domain.PropagatePartial{partial=true}
 		case domain.StageSkipped:
 			summary.MissingStageCodes=append(summary.MissingStageCodes,s.Code)
-			if s.Required || p.OnSkipped==domain.PropagateFail { fail=true } else if p.OnSkipped==domain.PropagatePartial { partial=true }
+			if s.Required || p.OnSkipped==domain.PropagateFail { fail=true } else if p.OnSkipped==domain.PropagatePartial { partial=true } else if p.OnSkipped==domain.PropagateNoImpact { completed++ }
 		case domain.StageFailed:
 			summary.MissingStageCodes=append(summary.MissingStageCodes,s.Code)
 			if p.OnFailed==domain.PropagateFail{fail=true}else{partial=true}
@@ -147,10 +177,16 @@ func AggregateRun(run domain.Run,stages []domain.Stage,attempts []domain.Attempt
 		if hardRiskStageCodes[s.Code]{
 			gateCount++
 			summary.RiskGateDecisions[s.Code]=s.RiskDecision
-			if s.Status!=domain.StageSucceeded {
+			if s.Status != domain.StageSucceeded {
 				gateExecutionFailed = true
-			} else if s.RiskDecision != "pass" {
-				gatePassed = false
+			} else {
+				switch s.RiskDecision {
+				case "pass":
+				case "reject", "unknown":
+					gatePassed = false
+				default:
+					return run, fmt.Errorf("hard risk stage %s returned invalid risk decision %q", s.Code, s.RiskDecision)
+				}
 			}
 		}
 		for _, reason := range s.ReasonCodes {
@@ -181,11 +217,56 @@ func AggregateRun(run domain.Run,stages []domain.Stage,attempts []domain.Attempt
 	return updated, nil
 }
 
-func FinalizeCancellation(run domain.Run,stages []domain.Stage,attempts []domain.Attempt,now time.Time)(domain.Run,error){
-	if run.Status!=domain.RunCancelling || run.TerminationReason!="user_cancelled" {return run,fmt.Errorf("%w: run is not a user cancellation",ErrInvalidTransition)}
-	for _,s:=range stages{if !s.Status.Terminal(){return run,errors.New("cannot finalize while a stage is active")}}
-	for _,a:=range attempts{if a.Status==domain.AttemptRunning{return run,errors.New("cannot finalize while an attempt is running")}}
-	return TransitionRun(run,domain.RunCancelled,now)
+func FinalizeCancellation(run domain.Run, stages []domain.Stage, attempts []domain.Attempt, now time.Time) (domain.Run, error) {
+	if run.Status != domain.RunCancelling || run.TerminationReason != "user_cancelled" {
+		return run, fmt.Errorf("%w: run is not a user cancellation", ErrInvalidTransition)
+	}
+	for _, stage := range stages {
+		if !stage.Status.Terminal() { return run, errors.New("cannot finalize while a stage is active") }
+	}
+	for _, attempt := range attempts {
+		if attempt.Status == domain.AttemptRunning { return run, errors.New("cannot finalize while an attempt is running") }
+	}
+	summary := buildTerminalSummary(stages)
+	updated, err := TransitionRun(run, domain.RunCancelled, now)
+	if err != nil { return run, err }
+	updated.ResultSummary = &summary
+	return updated, nil
+}
+
+func buildTerminalSummary(stages []domain.Stage) domain.ResultSummary {
+	summary := domain.ResultSummary{
+		StageOutcomes: map[string]domain.StageStatus{}, RiskGateDecisions: map[string]string{},
+		ExcludedStages: []domain.ExcludedStage{}, MissingStageCodes: []string{},
+		DegradedStageCodes: []string{}, BlockedStageCodes: []string{}, ReasonCodes: []string{},
+		QualityStatus: "valid", ActionabilityStatus: "not_evaluated",
+	}
+	completed := 0
+	for _, stage := range stages {
+		summary.StageOutcomes[stage.Code] = stage.Status
+		switch stage.Status {
+		case domain.StageSucceeded:
+			completed++
+		case domain.StageDegraded:
+			completed++
+			summary.DegradedStageCodes = append(summary.DegradedStageCodes, stage.Code)
+			summary.QualityStatus = "degraded"
+		case domain.StageSkipped, domain.StageFailed, domain.StageTimedOut:
+			summary.MissingStageCodes = append(summary.MissingStageCodes, stage.Code)
+		case domain.StageBlocked:
+			summary.MissingStageCodes = append(summary.MissingStageCodes, stage.Code)
+			summary.BlockedStageCodes = append(summary.BlockedStageCodes, stage.Code)
+		}
+		for _, reason := range stage.ReasonCodes {
+			if reason != "" { summary.ReasonCodes = append(summary.ReasonCodes, reason) }
+		}
+	}
+	sort.Strings(summary.MissingStageCodes)
+	sort.Strings(summary.DegradedStageCodes)
+	sort.Strings(summary.BlockedStageCodes)
+	summary.ReasonCodes = uniqueSorted(summary.ReasonCodes)
+	if len(stages) > 0 { summary.Coverage = float64(completed) / float64(len(stages)) }
+	return summary
 }
 
 func contains(values []string,value string)bool{for _,v:=range values{if v==value{return true}};return false}

@@ -140,3 +140,60 @@ func TestAggregateHardRiskPassDoesNotEvaluateFailedRun(t *testing.T) {
 	if got.Status != domain.RunFailed { t.Fatalf("run status = %s, want failed", got.Status) }
 	if got.ResultSummary.ActionabilityStatus != "not_evaluated" { t.Fatalf("actionability = %s, want not_evaluated", got.ResultSummary.ActionabilityStatus) }
 }
+
+
+func TestCancelRunDoesNotMutateInputWhenValidationFails(t *testing.T) {
+	now := time.Date(2026, 11, 6, 10, 0, 0, 0, time.UTC)
+	stages := []domain.Stage{{Status:domain.StageReady}, {Status:domain.StageRunning}}
+	original := append([]domain.Stage(nil), stages...)
+	if _, _, err := CancelRun(domain.Run{Status:domain.RunQueued}, stages, now); err == nil {
+		t.Fatal("expected queued run with running stage to be rejected")
+	}
+	for i := range stages { if stages[i].Status != original[i].Status { t.Fatalf("input stage %d mutated on error", i) } }
+}
+
+func TestApplyDeadlineDoesNotMutateInputAndKeepsUserCancellation(t *testing.T) {
+	now := time.Date(2026, 11, 6, 10, 0, 0, 0, time.UTC)
+	stages := []domain.Stage{{Status:domain.StageReady}}
+	updated, got, err := ApplyDeadline(domain.Run{Status:domain.RunRunning, DeadlineAt:now}, stages, now)
+	if err != nil { t.Fatal(err) }
+	if updated.Status != domain.RunCancelling || got[0].Status != domain.StageTimedOut { t.Fatal("deadline must time out not-yet-started stages") }
+	if stages[0].Status != domain.StageReady { t.Fatal("deadline mutated caller-owned input slice") }
+	cancelRun := domain.Run{Status:domain.RunCancelling, TerminationReason:"user_cancelled", DeadlineAt:now}
+	unchanged, unchangedStages, err := ApplyDeadline(cancelRun, stages, now)
+	if err != nil { t.Fatal(err) }
+	if unchanged.TerminationReason != "user_cancelled" || unchanged.Status != domain.RunCancelling || unchangedStages[0].Status != domain.StageReady { t.Fatal("deadline overwrote accepted user cancellation") }
+}
+
+func TestOptionalNoImpactSkipDoesNotReduceCoverage(t *testing.T) {
+	now := time.Date(2026, 11, 6, 10, 0, 0, 0, time.UTC)
+	stages := []domain.Stage{{Code:"required", Required:true, Status:domain.StageSucceeded}, {Code:"optional", Required:false, Status:domain.StageSkipped}}
+	policies := map[string]template.PropagationPolicy{
+		"required": {OnSkipped:domain.PropagateFail},
+		"optional": {OnSkipped:domain.PropagateNoImpact},
+	}
+	got, err := AggregateRun(domain.Run{Status:domain.RunRunning}, stages, nil, policies, nil, false, now)
+	if err != nil { t.Fatal(err) }
+	if got.Status != domain.RunSucceeded || got.ResultSummary.Coverage != 1 { t.Fatalf("no-impact skip reduced coverage: %#v", got.ResultSummary) }
+}
+
+func TestAggregateRejectsInvalidHardRiskDecision(t *testing.T) {
+	now := time.Date(2026, 11, 6, 10, 0, 0, 0, time.UTC)
+	policy := template.PropagationPolicy{OnDegraded:domain.PropagateFail, OnSkipped:domain.PropagateFail, OnFailed:domain.PropagateFail, OnTimedOut:domain.PropagateFail, OnBlocked:domain.PropagateFail}
+	_, err := AggregateRun(domain.Run{Status:domain.RunRunning}, []domain.Stage{{Code:"risk", Status:domain.StageSucceeded, RiskDecision:""}}, nil, map[string]template.PropagationPolicy{"risk":policy}, map[string]bool{"risk":true}, true, now)
+	if err == nil { t.Fatal("empty hard risk decision was accepted") }
+}
+
+func TestFinalizeCancellationPersistsTerminalSummary(t *testing.T) {
+	now := time.Date(2026, 11, 6, 10, 0, 0, 0, time.UTC)
+	run := domain.Run{Status:domain.RunCancelling, TerminationReason:"user_cancelled"}
+	stages := []domain.Stage{
+		{Code:"done", Status:domain.StageSucceeded},
+		{Code:"pending", Status:domain.StageCancelled, ReasonCodes:[]string{"user_cancelled"}},
+	}
+	got, err := FinalizeCancellation(run, stages, nil, now)
+	if err != nil { t.Fatal(err) }
+	if got.Status != domain.RunCancelled || got.ResultSummary == nil { t.Fatal("cancelled terminal Run must have a fixed result summary") }
+	if got.ResultSummary.StageOutcomes["done"] != domain.StageSucceeded || got.ResultSummary.StageOutcomes["pending"] != domain.StageCancelled { t.Fatal("terminal summary omitted stage outcomes") }
+	if got.ResultSummary.ActionabilityStatus != "not_evaluated" { t.Fatal("cancelled Run must not be actionable") }
+}

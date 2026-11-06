@@ -109,3 +109,12 @@ Fake Repository/Fake Clock/Fake Provider 只证明模块内逻辑；MariaDB/Redi
 - required Stage 的 skipped 不允许被 `no_impact` 吸收；optional Stage 才可 no-impact。
 - ResultSummary.reason_codes 汇总各 Stage 的 reason_codes，排序去重，避免诊断信息在 Run 聚合时丢失。
 - 对应单元测试已增加，等待执行证据。
+
+
+## 10. 状态机契约对齐补充（2026-11-06）
+
+本轮按 FLOW-CTR-001/002 最终决议补齐：
+- optional skipped 且传播为 no_impact 时，coverage 按已完成计；required Stage 不允许 no_impact。
+- CancelRun / ApplyDeadline 使用复制后的 Stage 切片，输入非法时不对调用方切片产生部分修改。
+- FinalizeCancellation 在所有 Stage 终结且无 running Attempt 后固化 ResultSummary，再提交 Run=cancelled；取消结果 actionability 为 not_evaluated。
+- 硬风险 Stage 成功返回的 RiskDecision 必须为 pass/reject/unknown，缺失或非法值拒绝聚合。
