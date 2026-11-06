@@ -280,6 +280,8 @@ Payload fingerprint 使用 RFC 8785 JSON Canonicalization Scheme 的 UTF-8 结�
 - Subscription、Channel、Template 任一影响匹配、目标、渲染或发送行为的变更必须产生新版本；历史 Delivery 保留原版本。
 - Outbox/Inbox 只保证业务事件到 Notification 的本地可靠接收，不代表外部渠道 exactly-once。
 
+Delivery plan fingerprint 使用 RFC 8785 JSON Canonicalization Scheme + SHA-256，覆盖 source_module/event_id、subscription_id/version、channel_ref/config_version、template_id/version、recipient_ref、payload_fingerprint 和授权策略版本；不覆盖 delivery_id、创建时间、Attempt、lease 和可变状态。相同 Delivery 唯一键且 plan_fingerprint 相同返回原 Delivery；唯一键相同但 fingerprint 不同视为契约冲突，不覆盖旧计划。
+
 ### 8.3 NTF-CTR-003 状态迁移与渠道能力
 
 - 状态迁移通过 Delivery.version CAS；每次成功迁移递增 version，并追加不可变状态事件。
