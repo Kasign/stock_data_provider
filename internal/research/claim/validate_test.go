@@ -95,3 +95,14 @@ func TestClaimVersionMustBeAppendOnly(t *testing.T) {
 		t.Fatalf("changed ID should fail, got %v", err)
 	}
 }
+
+
+func TestClaimValidateNextVersionRejectsIntegerOverflow(t *testing.T) {
+	previous := validHypothesis(t)
+	previous.ClaimVersion = int(^uint(0) >> 1)
+	next := previous
+	next.ClaimVersion = 1
+	if err := next.ValidateNextVersion(previous); err == nil || !strings.Contains(err.Error(), "integer limit") {
+		t.Fatalf("ValidateNextVersion() error = %v, want integer limit rejection", err)
+	}
+}

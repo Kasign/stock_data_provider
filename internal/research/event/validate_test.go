@@ -171,3 +171,14 @@ func TestLifecycleTransitionRejectsNonUTCTime(t *testing.T) {
 		t.Fatalf("non-UTC changed_at should fail, got %v", err)
 	}
 }
+
+
+func TestResearchEventValidateNextVersionRejectsIntegerOverflow(t *testing.T) {
+	previous := validEvent(t)
+	previous.EventVersion = int(^uint(0) >> 1)
+	next := previous
+	next.EventVersion = 1
+	if err := next.ValidateNextVersion(previous); err == nil || !strings.Contains(err.Error(), "integer limit") {
+		t.Fatalf("ValidateNextVersion() error = %v, want integer limit rejection", err)
+	}
+}

@@ -109,3 +109,11 @@ R1/R2/R3/R5 当前实现 Context、Evidence、Event、Claim/Hypothesis 领域结
 
 
 - 新增环境变量门禁的 MariaDB 集成测试：设置 `RESEARCH_TEST_MYSQL_DSN` 后执行 Research Migration，并验证 Context/Event/Claim 的首次追加、相同 payload 重放、冲突重放、版本跳号、连续追加和精确版本读取；并验证 Context 并发相同 payload 幂等、并发不同 payload 仅一个胜出、插入失败时 aggregate head 回滚、请求取消不遗留部分记录。未设置 DSN 时测试会 Skip。当前尚未执行该测试。
+
+
+## RSC-007 本轮补充：版本列范围与溢出保护
+
+- 复核发现 Event/Claim 的 Go 版本字段为 `int`，Repository 内部按有符号整数处理，而 Migration v1 使用 `INT UNSIGNED`；数据库列宽与代码支持范围不一致。
+- 新增 Migration v3，将 `research_event_versions.event_version`、`research_claim_versions.claim_version` 升级为 `BIGINT UNSIGNED`，不修改已发布的 v1/v2 历史迁移。
+- Context、Event、Claim 的 `ValidateNextVersion` 在执行 `previous+1` 前检查各自整数上限，避免极值回绕导致版本链校验错误。
+- Migration 单测和三个领域版本溢出测试已补充；尚未执行 Go 测试，也未在 MariaDB 验证 v1→v2→v3 升级。

@@ -2,6 +2,7 @@ package context
 
 import (
     "encoding/json"
+    "math"
     "strings"
     "testing"
     "time"
@@ -137,5 +138,16 @@ func TestContextValidateNextVersionRejectsInvalidProgression(t *testing.T) {
 				t.Fatalf("ValidateNextVersion() error = %v, want containing %q", err, tt.want)
 			}
 		})
+	}
+}
+
+
+func TestContextValidateNextVersionRejectsIntegerOverflow(t *testing.T) {
+	previous := validContext()
+	previous.ContextVersion = math.MaxInt64
+	next := previous
+	next.ContextVersion = 1
+	if err := next.ValidateNextVersion(previous); err == nil || !strings.Contains(err.Error(), "integer limit") {
+		t.Fatalf("ValidateNextVersion() error = %v, want integer limit rejection", err)
 	}
 }

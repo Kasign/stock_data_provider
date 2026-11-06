@@ -2,6 +2,7 @@ package context
 
 import (
     "fmt"
+    "math"
     "regexp"
     "slices"
     "strings"
@@ -258,6 +259,9 @@ func (next Context) ValidateNextVersion(previous Context) error {
 	}
 	if next.ContextID != previous.ContextID {
 		return fmt.Errorf("context_id cannot change across versions")
+	}
+	if previous.ContextVersion == math.MaxInt64 {
+		return fmt.Errorf("context_version reached the supported integer limit")
 	}
 	if next.ContextVersion != previous.ContextVersion+1 {
 		return fmt.Errorf("context_version must increment by exactly one")

@@ -93,5 +93,13 @@ func Migrations() []platformstorage.Migration {
 				"ALTER TABLE research_claim_versions DROP INDEX idx_research_claim_status_asof, DROP COLUMN system_as_of, CHANGE COLUMN system_as_of_exact system_as_of CHAR(30) CHARACTER SET ascii COLLATE ascii_bin NOT NULL, ADD KEY idx_research_claim_status_asof (status, system_as_of)",
 			},
 		},
+		{
+			Version:     3,
+			Description: "align Event and Claim version columns with Go int range",
+			Statements: []string{
+				"ALTER TABLE research_event_versions MODIFY COLUMN event_version BIGINT UNSIGNED NOT NULL",
+				"ALTER TABLE research_claim_versions MODIFY COLUMN claim_version BIGINT UNSIGNED NOT NULL",
+			},
+		},
 }
 }
