@@ -944,8 +944,13 @@ func TestProviderProbeRunsCrossProviderDailyBarComparison(t *testing.T) {
 		[]provider.NamedProvider{left, right}, nil, []provider.DailyBarProvider{left, right},
 		cache.NewDisabled(), nil, time.Second, time.Minute, 120, 2000, ResilienceConfig{}, nil,
 	)
+	ds.SetTradingCalendarProviders([]provider.TradingCalendarProvider{
+		providerProbeContextCalendarFake{quality: model.QualityValid},
+	})
 	run, err := ds.ProbeProviderCapabilitiesWithOptions(context.Background(), ProviderProbeOptions{
-		Scope: "all", Capabilities: []string{"daily_bars"}, Checks: []string{"cross_provider"}, TimeoutSeconds: 5,
+		Scope: "all", Capabilities: []string{"daily_bars"},
+		DailyBarStartDate: "2026-10-29", DailyBarEndDate: "2026-10-29",
+		Checks: []string{"cross_provider"}, TimeoutSeconds: 5,
 	})
 	if err != nil {
 		t.Fatalf("ProbeProviderCapabilitiesWithOptions() error = %v", err)
@@ -988,8 +993,12 @@ func TestProviderProbeDailyBarCrossComparisonEnforcesAdjustmentMetadata(t *testi
 				[]provider.NamedProvider{left, right}, nil, []provider.DailyBarProvider{left, right},
 				cache.NewDisabled(), nil, time.Second, time.Minute, 120, 2000, ResilienceConfig{}, nil,
 			)
+	ds.SetTradingCalendarProviders([]provider.TradingCalendarProvider{
+		providerProbeContextCalendarFake{quality: model.QualityValid},
+	})
 			run, err := ds.ProbeProviderCapabilitiesWithOptions(context.Background(), ProviderProbeOptions{
 				Scope: "all", Capabilities: []string{"daily_bars"},
+				DailyBarStartDate: "2026-10-29", DailyBarEndDate: "2026-10-29",
 				DailyBarAdjustments: []model.AdjustmentBasis{model.AdjustmentBackward},
 				Checks:              []string{"cross_provider"}, TimeoutSeconds: 5,
 			})
