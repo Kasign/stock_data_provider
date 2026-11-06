@@ -25,7 +25,7 @@ func TestValidatorAcceptsTypedParametersAndReturnsImmutableSnapshot(t *testing.T
 	if err != nil { t.Fatal(err) }
 	snapshot, err := validator.Validate(context.Background(), "stock-research-params-v1", json.RawMessage("{\"symbol\":\"600000\",\"lookback_days\":60}"))
 	if err != nil { t.Fatal(err) }
-	if snapshot.Ref != "stock-research-params-v1" || snapshot.Version != "1" || len(snapshot.Fingerprint) != 64 {
+	if snapshot.Ref != "stock-research-params-v1" || snapshot.Version != "1" || snapshot.Fingerprint != "7b82c379f72297871193074939a937b5a4d61ceab879df392d277cd623e0c2c4" {
 		t.Fatalf("unexpected schema snapshot: %#v", snapshot)
 	}
 }

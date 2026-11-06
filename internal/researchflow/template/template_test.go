@@ -39,7 +39,7 @@ func TestResolveOrdersDAGAndRejectsExcludedDependency(t *testing.T){
 	if err!=nil{t.Fatal(err)}
 	if len(resolved.Stages)!=2||resolved.Stages[0].Definition.Code!="market"||resolved.Stages[1].Definition.Code!="summary"{t.Fatalf("unexpected order: %#v",resolved.Stages)}
 	tmpl.Stages[0].Applicability.RuleRef="market-only"
-	_,err=Resolve(context.Background(),tmpl,json.RawMessage(`{}`),testEvaluator{"always":true},nil)
+	_,err=Resolve(context.Background(),tmpl,json.RawMessage(`{}`),testParameterSchemas{},testEvaluator{"always":true},nil)
 	if err==nil{t.Fatal("applicable stage depending on excluded stage was accepted")}
 }
 

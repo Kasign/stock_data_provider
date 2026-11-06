@@ -154,3 +154,6 @@ Fake Repository/Fake Clock/Fake Provider 只证明模块内逻辑；MariaDB/Redi
 - JSON Schema Draft 2020-12；根类型必须为 object，根对象必须关闭额外属性。MVP 禁止远程 $ref/任意 URL 加载，仅允许文档内局部引用，避免运行时联网和 Schema 供应链漂移。
 - Schema 内容使用 RFC 8785 JCS 后计算 SHA-256。ResolvedTemplate 保留 Schema Ref、Registry Version、Fingerprint，Application 持久化到 resolved template snapshot；Registry 对相同 Ref 的版本/内容变更必须拒绝。
 - 实现依赖 github.com/santhosh-tekuri/jsonschema/v5 v5.3.1（Apache-2.0，Go 1.19），固定 JSON Schema Draft 2020-12。
+
+
+- ResolvedTemplate 只接受 64 位十六进制 SHA-256 Schema 指纹，并保留底层校验错误链，便于 Application 层按参数错误/Schema 缺失/Schema 不可变性冲突分类。

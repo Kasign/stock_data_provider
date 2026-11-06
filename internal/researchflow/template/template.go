@@ -174,9 +174,12 @@ func Resolve(ctx context.Context, t WorkflowTemplate, parameters json.RawMessage
 	if parameterSchemas == nil { return ResolvedTemplate{}, fmt.Errorf("%w: parameter schema validator is required", ErrInvalidTemplate) }
 	if evaluator == nil { return ResolvedTemplate{}, fmt.Errorf("%w: applicability evaluator is required", ErrInvalidTemplate) }
 	parameterSchema, err := parameterSchemas.Validate(ctx, t.ParameterSchemaRef, parameters)
-	if err != nil { return ResolvedTemplate{}, fmt.Errorf("%w: validate parameters against %q: %v", ErrInvalidTemplate, t.ParameterSchemaRef, err) }
-	if parameterSchema.Ref != t.ParameterSchemaRef || strings.TrimSpace(parameterSchema.Version) == "" || strings.TrimSpace(parameterSchema.Fingerprint) == "" {
+	if err != nil { return ResolvedTemplate{}, fmt.Errorf("%w: validate parameters against %q: %w", ErrInvalidTemplate, t.ParameterSchemaRef, err) }
+	if parameterSchema.Ref != t.ParameterSchemaRef || strings.TrimSpace(parameterSchema.Version) == "" || len(parameterSchema.Fingerprint) != 64 {
 		return ResolvedTemplate{}, fmt.Errorf("%w: parameter schema validator returned an incomplete or mismatched immutable snapshot", ErrInvalidTemplate)
+	}
+	if _, err := hex.DecodeString(parameterSchema.Fingerprint); err != nil {
+		return ResolvedTemplate{}, fmt.Errorf("%w: parameter schema fingerprint must be lowercase SHA-256 hex", ErrInvalidTemplate)
 	}
 	fingerprint, err := Fingerprint(t)
 	if err != nil { return ResolvedTemplate{}, err }
