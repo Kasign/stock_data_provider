@@ -66,7 +66,6 @@
 | correlation_id | string | 是 | Researchflow Run 的稳定跨模块关联 ID，不承载领域对象 |
 | system_as_of | RFC3339Nano UTC | 是 | 必须不晚于服务端可信 UTC 当前时间；Researchflow Run 的知识截止值；仅用于调用审计/上下文追溯，不自动注入 Prompt 或转发为 Responses wire 字段 |
 | trace_id | string | 否 | 受控追踪标识 |
-| local_validation_only | bool | 否 | true 时只执行本地 Schema 校验，不声明上游受约束生成能力 |
 
 首批不接收任意 map、任意 JSON 或完整 Responses input item 数组。多轮对话、多模态、background response、previous_response_id、conversation_id 等 deferred；出现时返回 unsupported_capability，不得静默丢弃。
 
@@ -263,7 +262,7 @@ Capability 记录唯一键为 `(provider_id, model_id, protocol, gateway_version
 
 - unsupported 必须有可复现的失败证据；unknown 表示未验证、证据过期或运行环境发生变化。
 - 可选能力只有 status=supported 且证据仍在有效期内才可使用；unknown/unsupported 不发送对应字段或能力。
-- ProviderConfig 的 request_timeout、max_request_bytes、max_response_bytes 必须为正数并显式配置；不得依赖 HTTP Client 隐式默认值，且不得超过 PLAT-CTR-005 的全局安全上限。
+- ProviderConfig 的 request_timeout_ms、max_request_bytes、max_response_bytes 必须为正数并显式配置；不得依赖 HTTP Client 隐式默认值，且不得超过 PLAT-CTR-005 的全局安全上限。
 - ModelRequest.max_output_tokens 必须大于 0，并不超过当前模型已验证的输出上限；instructions、input_text、Schema、Tool 数量及序列化后的总请求字节必须在发请求前校验。
 - JSON Schema Draft 2020-12 是本地校验基线。上游 strict 子集不支持的关键字必须明确拒绝，或按调用方显式选择的 local_validation_only 模式处理；不得静默删除关键字后继续发送。
 - 未知 SSE 事件保留 type、顺序和有界安全元数据；原始 Prompt、Response 和 SSE 默认不持久化。
