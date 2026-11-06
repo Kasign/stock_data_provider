@@ -197,3 +197,15 @@ func TestFinalizeCancellationPersistsTerminalSummary(t *testing.T) {
 	if got.ResultSummary.StageOutcomes["done"] != domain.StageSucceeded || got.ResultSummary.StageOutcomes["pending"] != domain.StageCancelled { t.Fatal("terminal summary omitted stage outcomes") }
 	if got.ResultSummary.ActionabilityStatus != "not_evaluated" { t.Fatal("cancelled Run must not be actionable") }
 }
+
+
+func TestQueuedCancellationCreatesTerminalSummary(t *testing.T) {
+	now := time.Date(2026, 11, 6, 10, 0, 0, 0, time.UTC)
+	run := domain.Run{Status:domain.RunQueued}
+	stages := []domain.Stage{{Code:"market", Status:domain.StageReady}}
+	got, updated, err := CancelRun(run, stages, now)
+	if err != nil { t.Fatal(err) }
+	if got.Status != domain.RunCancelled || got.ResultSummary == nil { t.Fatal("queued cancellation must persist terminal summary") }
+	if got.ResultSummary.StageOutcomes["market"] != domain.StageCancelled || updated[0].Status != domain.StageCancelled { t.Fatal("cancelled stage missing from terminal summary") }
+	if stages[0].Status != domain.StageReady { t.Fatal("CancelRun mutated caller-owned input slice") }
+}

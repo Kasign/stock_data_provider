@@ -74,6 +74,7 @@ func CancelRun(run domain.Run, stages []domain.Stage, now time.Time) (domain.Run
 				if err != nil { return run, stages, err }
 			}
 		}
+		updatedRun.ResultSummary = ptrSummary(buildTerminalSummary(updatedStages))
 		return updatedRun, updatedStages, nil
 	}
 	if run.Status == domain.RunRunning {
@@ -100,6 +101,9 @@ func ApplyDeadline(run domain.Run, stages []domain.Stage, dbNow time.Time) (doma
 		return run, stages, nil
 	}
 	updatedStages := append([]domain.Stage(nil), stages...)
+	for i := range updatedStages {
+		updatedStages[i].ReasonCodes = append([]string(nil), stages[i].ReasonCodes...)
+	}
 	updatedRun, err := TransitionRun(run, domain.RunCancelling, dbNow)
 	if err != nil { return run, stages, err }
 	updatedRun.TerminationReason = "run_deadline_exceeded"
@@ -233,6 +237,8 @@ func FinalizeCancellation(run domain.Run, stages []domain.Stage, attempts []doma
 	updated.ResultSummary = &summary
 	return updated, nil
 }
+
+func ptrSummary(summary domain.ResultSummary) *domain.ResultSummary { return &summary }
 
 func buildTerminalSummary(stages []domain.Stage) domain.ResultSummary {
 	summary := domain.ResultSummary{
