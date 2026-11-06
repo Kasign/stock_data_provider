@@ -1,0 +1,27 @@
+{
+  "$schema":"https://json-schema.org/draft/2020-12/schema",
+  "$id":"https://researchflow.invalid/schema/run-1.0.0",
+  "title":"Researchflow Run",
+  "type":"object",
+  "additionalProperties":false,
+  "required":["schema_version","run_ref","status","version","system_as_of","deadline_at","template_ref","template_version","template_fingerprint","input_snapshot_refs","result_summary","originating_request_id","correlation_id","termination_reason","created_at","started_at","finished_at"],
+  "properties":{
+    "schema_version":{"const":"1.0.0"},
+    "run_ref":{"type":"string","minLength":1},
+    "status":{"enum":["created","queued","running","cancelling","succeeded","partial","failed","cancelled"]},
+    "version":{"type":"integer","minimum":0},
+    "system_as_of":{"type":"string","format":"date-time"},
+    "deadline_at":{"type":"string","format":"date-time"},
+    "template_ref":{"type":"string","minLength":1},
+    "template_version":{"type":"string","minLength":1},
+    "template_fingerprint":{"type":"string","pattern":"^[a-f0-9]{64}$"},
+    "input_snapshot_refs":{"type":"array","items":{"type":"string","minLength":1},"uniqueItems":true},
+    "result_summary":{"type":["object","null"]},
+    "originating_request_id":{"type":["string","null"]},
+    "correlation_id":{"type":"string","minLength":1},
+    "termination_reason":{"type":["string","null"]},
+    "created_at":{"type":"string","format":"date-time"},
+    "started_at":{"type":["string","null"],"format":"date-time"},
+    "finished_at":{"type":["string","null"],"format":"date-time"}
+  }
+}
