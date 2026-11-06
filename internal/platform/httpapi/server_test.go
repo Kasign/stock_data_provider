@@ -178,3 +178,30 @@ func TestReadResultDoesNotExposeStorageError(t *testing.T) {
 		t.Fatalf("unexpected response: status=%d body=%s", w.Code, w.Body.String())
 	}
 }
+
+func TestRecovererWritesInternalErrorBeforeResponseCommit(t *testing.T) {
+	handler := recoverer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		panic("unexpected")
+	}))
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/", nil))
+	if w.Code != http.StatusInternalServerError {
+		t.Fatalf("status=%d body=%s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "internal_error") {
+		t.Fatalf("missing sanitized panic response: %s", w.Body.String())
+	}
+}
+
+func TestRecovererDoesNotWriteAfterResponseCommit(t *testing.T) {
+	handler := recoverer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("partial response"))
+		panic("unexpected")
+	}))
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/", nil))
+	if w.Code != http.StatusOK || w.Body.String() != "partial response" {
+		t.Fatalf("panic recovery corrupted committed response: status=%d body=%q", w.Code, w.Body.String())
+	}
+}

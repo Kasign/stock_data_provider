@@ -281,14 +281,41 @@ func writeJSON(w http.ResponseWriter, status int, value any) {
 }
 func recoverer(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		tracked := &commitTrackingWriter{ResponseWriter: w}
 		defer func() {
 			if v := recover(); v != nil {
 				slog.Error("panic while handling HTTP request", "service", "stock-analysis-api", "request_id", requestIDFromContext(r), "method", r.Method, "path", boundedLogPath(r.URL.Path), "panic_type", fmt.Sprintf("%T", v))
-				writeError(w, http.StatusInternalServerError, "internal_error", "internal server error")
+				if !tracked.committed {
+					writeError(tracked, http.StatusInternalServerError, "internal_error", "internal server error")
+				}
 			}
 		}()
-		next.ServeHTTP(w, r)
+		next.ServeHTTP(tracked, r)
 	})
+}
+
+type commitTrackingWriter struct {
+	http.ResponseWriter
+	committed bool
+}
+
+func (w *commitTrackingWriter) Unwrap() http.ResponseWriter {
+	return w.ResponseWriter
+}
+
+func (w *commitTrackingWriter) WriteHeader(status int) {
+	if w.committed {
+		return
+	}
+	w.committed = true
+	w.ResponseWriter.WriteHeader(status)
+}
+
+func (w *commitTrackingWriter) Write(data []byte) (int, error) {
+	if !w.committed {
+		w.WriteHeader(http.StatusOK)
+	}
+	return w.ResponseWriter.Write(data)
 }
 func requestIDMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
