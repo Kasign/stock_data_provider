@@ -40,6 +40,29 @@ func TestCapabilityUnknownByDefaultAndRequiresVersionedEvidence(t *testing.T) {
 	if !s.Supports(CapabilityResponsesJSON) { t.Fatal("complete evidence should enable capability") }
 }
 
+func TestProviderStreamSwitchRequiresCurrentModelEvidence(t *testing.T) {
+	config := testProviderConfig()
+	now := time.Now().UTC()
+	validUntil := now.Add(time.Hour)
+	state := CapabilityState{
+		ProviderID: config.ProviderID, ModelID: config.DefaultModel, Protocol: config.Protocol,
+		GatewayVersion: "gateway-v1", VerifiedAt: &now, ValidUntil: &validUntil,
+		EvidenceRef: "test-evidence", MaxOutputTokensLimit: 1024,
+		Values: map[Capability]CapabilityStatus{CapabilityResponsesJSON: CapabilitySupported},
+	}
+	if err := config.ValidateCapabilityState(state); err != nil {
+		t.Fatalf("JSON-only provider evidence rejected: %v", err)
+	}
+	config.StreamEnabled = true
+	if err := config.ValidateCapabilityState(state); err == nil {
+		t.Fatal("stream_enabled must require current SSE evidence")
+	}
+	state.Values[CapabilityResponsesStream] = CapabilitySupported
+	if err := config.ValidateCapabilityState(state); err != nil {
+		t.Fatalf("verified stream evidence rejected: %v", err)
+	}
+}
+
 func TestModelRequestValidationAndCapabilityGate(t *testing.T) {
 	now := time.Now().UTC()
 	temperature := 0.2
