@@ -993,9 +993,9 @@ func TestProviderProbeDailyBarCrossComparisonEnforcesAdjustmentMetadata(t *testi
 				[]provider.NamedProvider{left, right}, nil, []provider.DailyBarProvider{left, right},
 				cache.NewDisabled(), nil, time.Second, time.Minute, 120, 2000, ResilienceConfig{}, nil,
 			)
-	ds.SetTradingCalendarProviders([]provider.TradingCalendarProvider{
-		providerProbeContextCalendarFake{quality: model.QualityValid},
-	})
+			ds.SetTradingCalendarProviders([]provider.TradingCalendarProvider{
+				providerProbeContextCalendarFake{quality: model.QualityValid},
+			})
 			run, err := ds.ProbeProviderCapabilitiesWithOptions(context.Background(), ProviderProbeOptions{
 				Scope: "all", Capabilities: []string{"daily_bars"},
 				DailyBarStartDate: "2026-10-29", DailyBarEndDate: "2026-10-29",
@@ -1482,10 +1482,26 @@ func TestProviderProbeCrossProviderSnapshotUsesTradingContextQuality(t *testing.
 	if err != nil {
 		t.Fatalf("ProbeProviderCapabilitiesWithOptions() error = %v", err)
 	}
-	if len(run.CheckResults) != 1 {
+	var crossProviderResults []model.ProviderProbeCheckResult
+	qualityResults := 0
+	for _, result := range run.CheckResults {
+		switch result.Check {
+		case "quality":
+			qualityResults++
+			if result.Status != "degraded" {
+				t.Errorf("trading-context degradation must be visible in provider quality result: %+v", result)
+			}
+		case "cross_provider":
+			crossProviderResults = append(crossProviderResults, result)
+		}
+	}
+	if qualityResults != 2 {
+		t.Fatalf("expected two provider quality results, got %+v", run.CheckResults)
+	}
+	if len(crossProviderResults) != 1 {
 		t.Fatalf("expected one cross-provider comparison, got %+v", run.CheckResults)
 	}
-	result := run.CheckResults[0]
+	result := crossProviderResults[0]
 	if result.Status != "skipped" || result.ErrorCode != "comparison_not_comparable" ||
 		result.LeftQualityStatus != model.QualityDegraded || result.RightQualityStatus != model.QualityDegraded {
 		t.Fatalf("cross-provider snapshots must inherit degraded trading-context quality: %+v", result)

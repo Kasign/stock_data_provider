@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -61,7 +62,7 @@ func (p httpProbeMariaDBTradingCalendar) FetchTradingCalendar(_ context.Context,
 	return &model.TradingCalendarSnapshot{
 		Market: "cn_a_share", StartDate: startDate, EndDate: endDate,
 		TotalDays: 1, TradingDays: 1,
-		Items: []model.TradingCalendarDay{{Date: startDate, IsTradingDay: true}},
+		Items:  []model.TradingCalendarDay{{Date: startDate, IsTradingDay: true}},
 		Source: p.Name(), SourceVersion: "calendar-v1", FetchedAt: time.Now().UTC(),
 		QualityStatus: model.QualityValid,
 	}, nil
