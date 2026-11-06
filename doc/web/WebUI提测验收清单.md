@@ -2434,3 +2434,9 @@ CSS AST 检查器进一步扩展：
 - [x] 新增 `web/screening-local-batch.css`，仅承载批量工具栏、全选、已选数量及移动端规则。
 - [x] `index.html` 在 `styles.css` 后加载组件样式；共享控件、反馈提示和结果 checkbox 规则仍留在公共样式表。
 - [ ] Chromium CSSOM 回归确认迁移前后计算样式一致。
+
+
+### W1 Browser Smoke 复核补充
+
+- [ ] 对 `GET /` 的 `ERR_ABORTED` 导航取消单独记录；真实静态资源失败仍阻断验收。
+- [ ] 重新运行完整 Browser Smoke，确认 Run Flow、研究记录、选股等后续专项均执行并通过。

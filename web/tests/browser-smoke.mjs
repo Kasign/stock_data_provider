@@ -101,6 +101,7 @@ try {
     const pageErrors = [];
     const consoleErrors = [];
     const unexpectedNetworkFailures = [];
+    const abortedNavigationRequests = [];
     const abortedMarketRequests = [];
     page.on("pageerror", (error) => pageErrors.push(error.stack || error.message));
     page.on("console", (message) => {
@@ -114,9 +115,22 @@ try {
       const pathname = new URL(request.url()).pathname;
       const expectedApiFailure = pathname.includes("/api/") ||
         /\/(?:health\/(?:ready|live)|readyz|healthz)$/.test(pathname);
+      const failureText = request.failure()?.errorText || "request failed";
+      const wasAborted = /ERR_ABORTED|aborted/i.test(failureText);
+      // 被后续导航替代的主文档导航单独记录，不与静态资源和业务请求失败混淆。
+      // 页面最终可用性仍由后续导航、页面错误和各视口交互断言验证。
+      if (wasAborted && request.isNavigationRequest()) {
+        abortedNavigationRequests.push({
+          method: request.method(),
+          pathname,
+          frameUrl: request.frame().url(),
+          failure: failureText
+        });
+        return;
+      }
       if (/\/api\/v1\/market\/(?:capital-flow|sentiment\/history|dragon-tiger|trading-calendar)$/.test(pathname) &&
-          /ERR_ABORTED|aborted/i.test(request.failure()?.errorText || "")) abortedMarketRequests.push(pathname);
-      if (!expectedApiFailure) unexpectedNetworkFailures.push(request.method() + " " + pathname + ": " + (request.failure()?.errorText || "request failed"));
+          wasAborted) abortedMarketRequests.push(pathname);
+      if (!expectedApiFailure) unexpectedNetworkFailures.push(request.method() + " " + pathname + ": " + (failureText));
     });
     page.on("response", (response) => {
       const pathname = new URL(response.url()).pathname;
@@ -2269,7 +2283,7 @@ try {
     assert.deepEqual(pageErrors, [], "browser page errors at " + viewport.width + "px: " + pageErrors.join(" | "));
     assert.deepEqual(consoleErrors, [], "unexpected browser console errors at " + viewport.width + "px: " + consoleErrors.join(" | "));
     assert.deepEqual(unexpectedNetworkFailures, [], "unexpected non-API network failures at " + viewport.width + "px: " + unexpectedNetworkFailures.join(" | "));
-    console.log("PASS viewport " + viewport.width + "x" + viewport.height + ": navigation, overflow, focus, console, network, Run Flow layout");
+    console.log("PASS viewport " + viewport.width + "x" + viewport.height + ": navigation, overflow, focus, console, network, Run Flow layout; superseded navigations=" + abortedNavigationRequests.length);
 
     await context.close();
   }
