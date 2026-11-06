@@ -118,3 +118,11 @@ Fake Repository/Fake Clock/Fake Provider 只证明模块内逻辑；MariaDB/Redi
 - CancelRun / ApplyDeadline 使用复制后的 Stage 切片，输入非法时不对调用方切片产生部分修改。
 - FinalizeCancellation 在所有 Stage 终结且无 running Attempt 后固化 ResultSummary，再提交 Run=cancelled；取消结果 actionability 为 not_evaluated。
 - 硬风险 Stage 成功返回的 RiskDecision 必须为 pass/reject/unknown，缺失或非法值拒绝聚合。
+
+
+## 11. 项目级契约复核后的明确缺口（2026-11-06）
+
+- 项目级 Review 已要求普通命令 Request Fingerprint 使用 RFC 8785 JCS + SHA-256。当前 `domain.RequestFingerprint` 仍使用 `json.Marshal`，不满足该要求；必须完成公共规范化实现和 Golden 后才能验收幂等契约。
+- `CreateRunCommand.Parameters` 当前只检查 JSON object，缺少按不可变 template_version 绑定的 typed Parameter Schema Validator。
+- 当前 Domain 类型的 JSON Tags 不构成公开 DTO。公开 Run/Stage/Attempt DTO 的字段、nullable、引用、状态和版本约束必须由独立 Schema/Golden 明确。
+- 取消终态现在补充固化 ResultSummary；但数据库事务、Run.version CAS、固定锁顺序、Worker claim、容量原子预留、lease/fencing 和崩溃恢复仍未实现，不能将领域纯函数描述为并发安全。
