@@ -404,13 +404,14 @@ required=true 的分区被省略时，Context 整体不能标记为 valid；必�
 | decision | 是 | allowed/denied/conditional/unknown | 当时决策 |
 | purpose_code | 是 | enum | research_analysis/risk_review/user_display；受控用途代码 |
 | content_level | 是 | metadata/summary/snippet/full | 内容级别 |
-| subject_ref | 是 | string | 被授权来源对象 |
+| subject_ref | 是 | string | 被授权调用主体 caller_ref |
+| resource_ref | 是 | string | 本次授权决策覆盖的来源/内容/Endpoint 资源引用 |
 | decided_at | 是 | timestamp | 决策时间 |
 | expires_at | 是 | timestamp/null | 无固定到期时显式 null，不代表永久授权 |
 | conditions | 是 | string[] | 限制条件，可为空 |
 | decision_fingerprint | 是 | string | 决策内容指纹 |
 
-该对象是决策审计快照，不代表未来访问自动获准。读取时必须由权威模块按当前策略重新授权；历史 Run 回放同时保留当时决策和当前访问决策，二者不能互相覆盖。
+该对象是某次访问决策的审计快照，不代表未来访问自动获准。subject_ref 对应被授权调用主体，resource_ref 对应目标资源。读取时必须由权威模块按当前策略重新授权；历史 Run 回放同时保留当时决策和当前访问决策，二者不能互相覆盖。
 
 ### 9.6 EventSourceTime
 
