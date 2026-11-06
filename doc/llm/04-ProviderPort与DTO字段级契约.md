@@ -22,7 +22,8 @@
 | provider_id | opaque string | 是 | 稳定配置 ID |
 | protocol | enum | 是 | 首批固定 openai_responses |
 | base_url | URL | 是 | HTTPS Gateway 根地址，规范化后以 /v1 结尾；请求方不可覆盖 |
-| default_model | string | 是 | Gateway 可识别的模型 ID，必须属于 allowed_models |\n| allowed_models | string[] | 是 | 服务端 Provider 允许使用的模型白名单，调用方不可扩大 |
+| default_model | string | 是 | Gateway 可识别的模型 ID，必须属于 allowed_models |
+| allowed_models | string[] | 是 | 服务端 Provider 允许使用的模型白名单，调用方不可扩大 |
 | api_key_secret_ref | opaque string | 是 | Secret 引用，不存明文 Key |
 | request_timeout_ms | integer milliseconds | 是 | 正数总时限，配置序列化固定毫秒单位，并受调用方 deadline 约束 |
 | max_request_bytes | integer | 是 | LLM 自身更小的请求上限 |
@@ -47,7 +48,8 @@
 
 | 字段 | 类型 | 必需 | 约束 |
 |---|---|---:|---|
-| provider_id | string | 是 | 必须命中服务端 ProviderConfig；不接受调用方自定义 endpoint |\n| request_id | string | 是 | 由调用方生成的本次 LLM 调用 Request ID；Response 原样回显，不承载 Secret |
+| provider_id | string | 是 | 必须命中服务端 ProviderConfig；不接受调用方自定义 endpoint |
+| request_id | string | 是 | 由调用方生成的本次 LLM 调用 Request ID；Response 原样回显，不承载 Secret |
 | purpose_code | string | 是 | 稳定调用用途代码，不写自由文本 Prompt |
 | model | string | 是 | 明确模型 ID，必须属于 provider_id 对应的 allowed_models，不依赖任意模型路由 |
 | instructions | string | 是 | 序列化到 Responses instructions；允许空字符串 |
@@ -56,7 +58,8 @@
 | temperature | *number | 否 | 仅 capability=supported 时发送 |
 | top_p | *number | 否 | 仅 capability=supported 时发送 |
 | reasoning_effort | enum | 否 | low/medium/high；默认不发送，仅 capability=supported 时允许 |
-| response_schema | JSONSchemaSpec? | 否 | 发送前做本地 Schema 编译、dialect、大小和深度校验 |\n| local_validation_only | bool | 否 | true 时不要求上游 structured output 能力，只在本地校验模型输出；不代表模型受约束生成 |
+| response_schema | JSONSchemaSpec? | 否 | 发送前做本地 Schema 编译、dialect、大小和深度校验 |
+| local_validation_only | bool | 否 | true 时不要求上游 structured output 能力，只在本地校验模型输出；不代表模型受约束生成 |
 | tools | ToolDefinition[] | 否 | 只接受调用方授权后的定义；不执行 |
 | tool_choice | enum? | 否 | 默认 none；仅 tools 非空且 function_tool_calls=supported 时允许 auto；required/指定工具延后 |
 | deadline_at | UTC timestamp | 是 | 绝对截止时间，不得晚于调用方 Context deadline |
