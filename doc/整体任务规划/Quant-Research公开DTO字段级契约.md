@@ -31,7 +31,8 @@
 | JSON 字段 | 必需 | 类型/约束 | 语义 |
 |---|---|---|---|
 | schema_version | 是 | string | 请求 Schema 版本 |
-| request_id | 是 | string | 跨模块关联 ID |
+| request_id | 是 | string | 本次 Quant Application 调用的 Request ID；由 Researchflow 当前 Worker/Adapter 生成或传播，不是 Run 长期关联 ID |
+| correlation_id | 是 | string | 关联所属 Run 的跨模块工作链 ID；从 Researchflow Run Execution Context 原样继承 |
 | security_id | 条件必需 | string | 单证券分析必需；市场分析可缺省 |
 | scope | 是 | stock/market/industry | 分析范围 |
 | system_as_of | 是 | timestamp | 系统知识截止时间 |
@@ -44,6 +45,8 @@
 | idempotency_key | 是 | string | 同一请求重试的幂等键 |
 
 Market/Industry 范围必须有明确证券全集或分类版本引用。allow_degraded 只允许按用例规则处理 degraded，不得放行 invalid 或把 unknown 当有效数值。
+
+QuantAnalysisRequest 的幂等作用域为 `(authenticated_caller_ref, use_case, idempotency_key)`。请求指纹覆盖 security_id、scope、system_as_of、trade_date、period、input_snapshot_refs、adjustment_basis、parameters 和 quality_policy；不覆盖 request_id、correlation_id 和接收时间。相同键/相同指纹返回原 QuantResultRef；相同键/不同指纹返回 idempotency_conflict。Quant 首批计算为无外部副作用的纯计算，不允许把幂等键当作结果 ID。
 
 ### 2.2 QuantResultRef
 
