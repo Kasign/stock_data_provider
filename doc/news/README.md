@@ -38,7 +38,7 @@
 - [ ] N3 在线采集：Feed 解析与 Endpoint 传输分派已有代码；平台 PLAT-008 原语已实现并有专项 CI，但尚未进入当前 News 分支基线，且 PLAT-002 未冻结、生产 BoundDoer 注入/来源授权/出口验收未完成
 - [x] N4 Domain/Application 首批：身份识别、Observation 幂等语义、内容版本、证券/行业关系和转载关系规则已有实现与离线测试
 - [ ] N4/N6 后续：真实采集编排、生产 Repository、数据库唯一约束/事务并发与历史版本持久化仍未完成
-- [ ] N5：按冻结契约接入 Config/Secret、Logger/Error/Trace、HTTP Client
+- [ ] N5：按公共契约接入 Config/Secret、Logger/Fault/Request ID、HTTP Client；NEWS-CTR-002 Binding DTO/Validator 已开始实现，签发、JCS 指纹和读取复核未完成
 - [ ] N6：公共存储能力就绪后实现新闻自有 Repository/SQL/Migration；Redis 按需
 - [ ] N7：接入公共 Diagnostics；Task/Audit/Metrics 按真实需求评估
 - [ ] N8：完成 News 与公共平台集成验收
@@ -46,7 +46,7 @@
 
 ## 公共平台协作说明
 
-公共平台分支 `feat/platform-foundation` 本轮只读核对 HEAD `1afcddc7cf08b0995ba872028f2ec4548ebb0d79`：PLAT-008 `httpclient.BoundDoer` 已实现并有平台专项 CI 通过记录；PLAT-002 仍标记待评审，PLAT-013 仍在设计/领域接入阶段，PLAT-010 已收敛为领域边界评审而非通用队列。当前 News 分支树中尚无 `internal/platform/httpclient`，因此不能直接导入 BoundDoer；必须等平台公共契约冻结、平台代码进入共同基线，并由 Server 组合根 Owner 明确接入位置后再集成。平台分支只读跟踪，不在本分支修改。生产 DNS/出口、真实 Provider 凭证/配额、Source/Endpoint 授权仍是独立验收门禁。Metrics/Audit 和 Redis 不作为新闻首期门禁。
+公共平台分支 `feat/platform-foundation` 本轮只读核对 HEAD `55cbd0d642ac2a9b37e0ebfb8e7be0034af87f5e`：PLAT-008 `httpclient.BoundDoer` 已实现并有平台专项 CI 通过记录；PLAT-002 仍标记待评审，PLAT-013 仍在设计/领域接入阶段，PLAT-010 已收敛为领域边界评审而非通用队列。当前 News 分支包含较早版本的 `internal/platform/httpclient`，但尚无平台最新的 `BoundDoer` 与 `storage`；平台分支与 News 分支已分叉，必须等公共契约冻结、平台实现进入共同基线，并由 Server 组合根 Owner 明确接入位置后再集成。平台分支只读跟踪，不在本分支修改。生产 DNS/出口、真实 Provider 凭证/配额、Source/Endpoint 授权仍是独立验收门禁。Metrics/Audit 和 Redis 不作为新闻首期门禁。
 
 ## 重要说明
 
