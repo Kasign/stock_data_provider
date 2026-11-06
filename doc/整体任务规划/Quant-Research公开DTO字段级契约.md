@@ -398,7 +398,7 @@ required=true 的分区被省略时，Context 整体不能标记为 valid；必�
 | policy_owner | 是 | data/news/quant/research | 授权策略权威模块 |
 | policy_version | 是 | string | 策略版本 |
 | decision | 是 | allowed/denied/conditional/unknown | 当时决策 |
-| purpose | 是 | string/enum | 使用目的 |
+| purpose_code | 是 | enum | research_analysis/risk_review/user_display；受控用途代码 |
 | content_level | 是 | metadata/summary/snippet/full | 内容级别 |
 | subject_ref | 是 | string | 被授权来源对象 |
 | decided_at | 是 | timestamp | 决策时间 |
