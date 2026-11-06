@@ -92,6 +92,19 @@ func TestEntryValidateAcceptsMathematicallyIntegralJSONNumber(t *testing.T) {
 	}
 }
 
+func TestEntryValidatePreservesExactJSONNumberPrecision(t *testing.T) {
+	entry := validEntry("ratio_metric", "1.0.0")
+	entry.Precision.MaxFractionDigits = 18
+	entry.Precision.Tolerance = json.RawMessage("0.000000000000000001")
+	entry.Range = NumericRange{
+		Minimum: json.RawMessage("0"),
+		Maximum: json.RawMessage("0.1234567890123456789"),
+	}
+	if err := entry.Validate(); !errors.Is(err, ErrInvalidEntry) {
+		t.Fatalf("expected exact 19-digit fraction to exceed precision 18, got %v", err)
+	}
+}
+
 func TestEntryValidateRejectsQuotedJSONNumber(t *testing.T) {
 	entry := validEntry("momentum_20d", "1.0.0")
 	entry.Precision.Tolerance = json.RawMessage("\"0.000001\"")

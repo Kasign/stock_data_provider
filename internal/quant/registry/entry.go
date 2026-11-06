@@ -10,7 +10,6 @@ import (
 	"math/big"
 	"regexp"
 	"sort"
-	"strconv"
 	"strings"
 	"sync"
 )
@@ -182,11 +181,10 @@ func parseNumeric(raw json.RawMessage, valueType ValueType, precision Precision)
 			}
 			text = integer.Num().String()
 		} else {
-			value, err := strconv.ParseFloat(text, 64)
-			if err != nil || math.IsNaN(value) || math.IsInf(value, 0) {
+			// 保留 JSON 十进制原文，避免 float64 往返造成精度位数丢失。
+			if _, ok := new(big.Rat).SetString(text); !ok {
 				return nil, errors.New("invalid finite number")
 			}
-			text = strconv.FormatFloat(value, 'f', -1, 64)
 		}
 	default:
 		return nil, errors.New("unsupported value type")
