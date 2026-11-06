@@ -396,7 +396,7 @@ internal/
 - WebUI 的 web/default.conf.template 中，/market-api/ 通过 proxy_pass 到 MARKET_DATA_SERVICE_NAME:8091/，Nginx 会剥离 /market-api/ 前缀；/analysis-api/ 同样剥离前缀并代理到 ANALYSIS_SERVICE_NAME:8092/。M5 切换时应将两个 location 指向 Root Server 同一个 upstream，并保留原外部路径及 URI 剥离语义；Root Router 内部注册 Data 与 Analysis 路由时需确认不存在 pattern 冲突。
 - 当前 Data Handler 自己处理 X-API-Key；WebUI 通过同源 /market-api/ 访问独立 Data 容器。M5 需要改变的是浏览器凭据边界与代理目标，不是删除 Data 的领域授权语义。Root 入口认证和 Data Scope/授权应按冻结契约组合。
 - Data Provider 主体至少可确认 Eastmoney、Tushare 等直接持有 *http.Client 并自行发请求；BaoStock 使用独立 TCP Client。所有 Provider 的 endpoint 环境覆盖、重定向、DNS、请求方法、Body、Host 清单尚未逐项完成，不能据此直接把全部 Provider 统一替换为 Platform HTTP Client。
-- Root Store 的配置使用 DB_HOST/DB_PORT/DB_USER/DB_PASSWORD/DB_NAME 与 REDIS_ADDR/REDIS_PASSWORD/REDIS_DB；Data 使用独立 MARKET_DATA_MYSQL_DSN（需复核实际 env 解析）、MARKET_DATA_REDIS_ADDR/USERNAME/PASSWORD/DB 等配置。迁移时不能只复用 Root Pool 而忽略 Data 可能连接不同 schema/database 的配置差异；应先明确最终是否同库、同账号、同 Redis DB，以及 Data key namespace。
+- Root Store 的配置使用 DB_HOST/DB_PORT/DB_USER/DB_PASSWORD/DB_NAME 与 REDIS_ADDR/REDIS_PASSWORD/REDIS_DB；Data 使用 MARKET_DATA_DB_HOST/PORT/USER/PASSWORD/NAME 等独立字段（旧 MARKET_DATA_MYSQL_DSN 仅兼容），以及 MARKET_DATA_REDIS_ADDR/USERNAME/PASSWORD/DB。迁移时不能只复用 Root Pool 而忽略 Data 独立配置语义；需核对部署实际值并明确统一账号、schema、Redis DB 和 Data key namespace。
 - 已修复 .github/workflows/data-quality-parity.yml 中旧 doc/api/接口规范/ 路径，改为 doc/api/provider-migration/。修复提交为 dc137543；该提交之后的 Parity Run 尚需观察，不能引用修复前失败结果作为当前状态。
 
 **M0 仍未通过。** 还需完成：确认 Data 配置的 DSN/Redis 环境变量及实际部署样例；逐 Provider 出站请求/Host/重定向/协议清单；Data 与 Root 所有 API 调用点和 DTO 字段映射清单；Root/Data Migration 完整表清单及版本治理；Retention Worker 生命周期测试设计；所有 Data 配置、Migration、testdata 和生成/工具文件的逐项迁移登记；当前 HEAD CI 复核。
@@ -413,3 +413,34 @@ internal/
 - Data Migration 当前由独立 repository.Store.Migrate 执行，默认自动迁移开启；Root mysqlredis.Open 可按 DB_AUTO_MIGRATE 执行 Analysis Migration，并随后检查 analysis_runs、analysis_stage_events、analysis_snapshots、analysis_tasks。两套 Migration 作用于同一示例数据库但拥有不同表，归并后应保留 Data/Analysis 各自 Migration Owner，由 Root 统一显式编排，避免重复执行或把 Data Migration 混入通用 Pool Open。
 
 本轮不改变代码配置和数据库行为，只补充审计证据。M0 仍需完成逐 Provider 请求边界、调用点/DTO 全量清单、Schema/Migration 对照与当前 HEAD CI 收敛。
+
+### 2026-11-06：M0 第四轮补充（生产调用链与 Provider 出站协议）
+
+#### 1. Root 生产调用链已定位
+
+cmd/analysis-api/main.go → internal/service.NewRunnerWithMarketDataStores → internal/adapters/marketdata.NewClient → NewCollector → analysis/app.DataCollector → Analysis Runner。该路径当前没有 Python fallback；Collector 通过远程 HTTP API 获取 Quote/DailyBar/Index 数据，再转换为 Analysis Domain RawSnapshot。M3 应替换的是 Collector 的数据访问 Adapter，而不是重写 Analysis Runner、Normalizer 或策略流程。
+
+#### 2. Provider 出站协议首轮矩阵
+
+| Provider | 默认 HTTP Host / 协议 | 关键边界 |
+|---|---|---|
+| Eastmoney | push2.eastmoney.com、push2his.eastmoney.com、push2ex.eastmoney.com、datacenter.eastmoney.com、datacenter-web.eastmoney.com、np-anotice-stock.eastmoney.com、emappdata.eastmoney.com | 多端点；部分请求自定义重定向策略；Endpoint 可通过配置覆盖，需按实际 URL Host 动态校验 |
+| Tencent | web.sqt.gtimg.cn、web.ifzq.gtimg.cn、smartbox.gtimg.cn | Quote/Kline/Search 多 Host；请求 Header 与响应编码有差异 |
+| Sina | hq.sinajs.cn、money.finance.sina.com.cn | Quote/Kline 两 Host；当前明确禁止重定向，响应存在 GBK/JSONP 处理 |
+| NetEase | api.money.126.net、quotes.money.163.com | Quote JSONP + History CSV；当前明确禁止重定向，涉及 GBK/CSV 解码 |
+| Tushare | api.tushare.pro | POST JSON、Token、请求节流；需保留 Body 重放/重试语义和脱敏 |
+| Hithink | fuyao.aicubes.cn | X-api-key Header；默认关闭；REST 多能力 |
+| TickFlow | api.tickflow.org、free-api.tickflow.org | 授权与免费端点分离；POST/GET 混用、速率限制、API Key Header |
+| Yahoo | query1.finance.yahoo.com | 海外 Provider，默认关闭；不属于当前国内 A 股核心链 |
+| Xueqiu | stock.xueqiu.com | Cookie 登录态，默认关闭；敏感凭据需脱敏 |
+| MiaoXiang | mkapi2.dfcfs.com | 可选补充接口，默认关闭；Key 与响应字段有独立约束 |
+| BaoStock | public-api.baostock.com:10030 TCP | 原生 TCP 会话，需保留连接/登录/关闭和请求超时，不适用 HTTP Client |
+| Pytdx | 通达信 TCP Host 列表（配置或 github.com/injoyai/tdx 内置 Hosts），默认端口 7709 | 轮转尝试有限 Host，TCP 协议；不能套用 HTTP DestinationPolicy |
+
+以上 Host 来自当前配置默认值与 Provider 实现的首轮核对；Endpoint 环境覆盖仍可能改变最终 Host。进入 M4 前应形成配置解析后的 Host allowlist 和 Provider × 请求能力清单，并为重定向目标单独登记；不得仅按 Provider 名称写死单 Host。
+
+#### 3. Platform HTTP Client 适配限制
+
+internal/platform/httpclient.Client 使用 DestinationPolicy 精确 Host/Port allowlist、DNS 公网地址校验、默认不读取系统代理、响应体大小限制、依赖级并发和可控重试。Data Provider 当前多数自建 *http.Client；其 redirect 策略不一致（例如 Sina/NetEase 明确禁止、Eastmoney 有专用策略，其他实现需逐项核对）。M4 不能直接把 *http.Client 全局替换为 Platform Client：需提供 Data Provider 的受控传输 Adapter，保留每个接口的方法、Header、Body、超时、重定向、速率限制、响应大小与错误分类语义。BaoStock/Pytdx 继续走独立 TCP Client，不纳入 HTTP Adapter。
+
+**M0 进度判断：** Root→Data 主生产调用链和主要 Provider 协议类别已定位；仍未对 30 个 Provider 源文件逐个核对所有请求方法/重定向/Body/错误语义，也未完成全量 API DTO 字段映射、Data Migration SQL 与实际部署库的对照。M0 继续保持进行中。
