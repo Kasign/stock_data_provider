@@ -2542,3 +2542,8 @@ CSS AST 检查器进一步扩展：
 - [ ] 跨标签页修改/删除冲突、报告创建笔记和草稿保护专项通过。
 - [ ] 320 / 768 / 1280 / 1600px 列表与编辑区响应式验收通过。
 - [ ] WebUI Checks 与 Chromium Browser Smoke 均在本批功能 HEAD 通过。
+
+
+### W3-B1 编辑区关闭断言修正
+- [x] Browser Smoke #42170830350 定位测试断言默认等待 visible 与预期 hidden 不一致；已明确等待 hidden 状态。
+- [ ] 修正后研究记录专项及完整 Browser Smoke 通过。

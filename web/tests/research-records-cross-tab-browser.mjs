@@ -54,7 +54,7 @@ try {
   await first.locator("#research-note-create").click();
   await first.locator("#research-note-editor:not([hidden])").waitFor();
   await first.locator("#research-note-editor-back").click();
-  await first.locator("#research-note-editor[hidden]").waitFor();
+  await first.locator("#research-note-editor[hidden]").waitFor({ state: "hidden" });
   await first.locator('[data-note-action="edit"][data-note-id="note-1"]').click();
   await first.locator("#research-note-editor:not([hidden])").waitFor();
   assert.equal(await first.locator(".research-note-card").filter({ hasText: "远端新版本" }).isVisible(), true, "note list remains visible while editing");
