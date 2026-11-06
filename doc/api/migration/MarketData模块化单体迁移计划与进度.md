@@ -1305,7 +1305,7 @@ M2/M4 必须将 Worker 改为可管理对象或显式 Start/Stop/Wait：
 - OpenAPI 当前共有 35 个 Operation：2 个公开 Health + 33 个业务 Operation。
 - Server mux 当前注册 35 条路由；2 个 Health 公开，其余 33 个都包裹 `s.auth`，认证实现只读取 `X-API-Key`，使用常量时间比较；不接受 Authorization Bearer Token。
 - OpenAPI 根级 `security` 同时列出 `ApiKey` 与 `BearerAuth` 两个独立 Security Requirement Object。OpenAPI 语义是 OR，不是 AND。因此继承根级安全声明的业务 Operation 会被文档描述为同时支持 X-API-Key 或 Bearer Token；但 Server 实际只支持 X-API-Key。
-- 其中 7 个 Operation（market/quotes、data-sources/probe、diagnostics、price-limit-rule、trading-status、index-catalog、indices/{symbol}/constituents、indices/{symbol}/daily、indices、session、capital-flow，按当前文件逐项显式声明）使用 operation-level ApiKey 覆盖根级配置；其余业务 Operation 继承错误的 Bearer OR 声明。
+- 其中 11 个 Operation（market/quotes、data-sources/probe、diagnostics、price-limit-rule、trading-status、index-catalog、indices/{symbol}/constituents、indices/{symbol}/daily、indices、session、capital-flow，按当前文件逐项显式声明）使用 operation-level ApiKey 覆盖根级配置；其余业务 Operation 继承错误的 Bearer OR 声明。
 - `/health/live` 与 `/health/ready` 使用 `security: []`，与 Server 一致。
 - `/api/v1/data-sources/diagnostics` 是唯一未声明 401 响应的业务 Operation；Server auth 对缺失/无效 API Key 会返回 401。其 security 本身已声明 ApiKey，因此这是响应文档缺失，不是认证绕过。
 - 现有 `TestOpenAPIDataRoutesDeclareValidAPIKeySecurity` 只对固定的少数路径检查 operation-level ApiKey，没有验证根级 Bearer 声明，也没有要求每个受保护 Operation 都声明 401；所以未发现上述问题。
