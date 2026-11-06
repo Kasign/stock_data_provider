@@ -14,7 +14,9 @@ import (
 
 func TestTickFlowDailyBarsReportsRawFieldParseLocation(t *testing.T) {
 	location, err := time.LoadLocation("Asia/Shanghai")
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	date := time.Now().In(location).AddDate(0, 0, -1)
 	timestamp := time.Date(date.Year(), date.Month(), date.Day(), 12, 0, 0, 0, location).UnixMilli()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -24,9 +26,13 @@ func TestTickFlowDailyBarsReportsRawFieldParseLocation(t *testing.T) {
 	reporter := validation.NewReporter(validation.DefaultMaxIssues)
 	ctx := validation.WithReporter(context.Background(), reporter)
 	provider := NewTickFlowConfigured(2*time.Second, server.URL, "", "test-key")
-	if _, err := provider.FetchDailyBars(ctx, "600519.SH", date.Format("2006-01-02"), date.Format("2006-01-02"), 10, model.AdjustmentNone); err == nil { t.Fatal("expected invalid close field") }
+	if _, err := provider.FetchDailyBars(ctx, "600519.SH", date.Format("2006-01-02"), date.Format("2006-01-02"), 10, model.AdjustmentNone); err == nil {
+		t.Fatal("expected invalid close field")
+	}
 	issues := reporter.Snapshot().Issues
-	if len(issues) != 1 || issues[0].Stage != validation.StageParse || issues[0].Field != "close" || issues[0].ProviderField != "close" || issues[0].Code != "invalid_number" || issues[0].RowIndex == nil || *issues[0].RowIndex != 0 { t.Fatalf("unexpected TickFlow parse issue: %+v", issues) }
+	if len(issues) != 1 || issues[0].Stage != validation.StageParse || issues[0].Field != "close" || issues[0].ProviderField != "close" || issues[0].Code != "invalid_number" || issues[0].RowIndex == nil || *issues[0].RowIndex != 0 {
+		t.Fatalf("unexpected TickFlow parse issue: %+v", issues)
+	}
 }
 
 func TestTickFlowDailyBarsReportsArrayLengthMismatchWithoutRowIndex(t *testing.T) {
@@ -41,7 +47,11 @@ func TestTickFlowDailyBarsReportsArrayLengthMismatchWithoutRowIndex(t *testing.T
 	reporter := validation.NewReporter(validation.DefaultMaxIssues)
 	ctx := validation.WithReporter(context.Background(), reporter)
 	provider := NewTickFlowConfigured(2*time.Second, server.URL, "", "test-key")
-	if _, err := provider.FetchDailyBars(ctx, "600519.SH", date.Format("2006-01-02"), date.Format("2006-01-02"), 10, model.AdjustmentNone); err == nil { t.Fatal("expected required array length mismatch") }
+	if _, err := provider.FetchDailyBars(ctx, "600519.SH", date.Format("2006-01-02"), date.Format("2006-01-02"), 10, model.AdjustmentNone); err == nil {
+		t.Fatal("expected required array length mismatch")
+	}
 	issues := reporter.Snapshot().Issues
-	if len(issues) != 1 || issues[0].Field != "open" || issues[0].Code != "array_length_mismatch" || issues[0].RowIndex != nil { t.Fatalf("unexpected array length diagnostic: %+v", issues) }
+	if len(issues) != 1 || issues[0].Field != "open" || issues[0].Code != "array_length_mismatch" || issues[0].RowIndex != nil {
+		t.Fatalf("unexpected array length diagnostic: %+v", issues)
+	}
 }
