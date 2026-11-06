@@ -152,6 +152,9 @@ func ValidateRelationAssertion(assertion RelationAssertion) error {
 	if assertion.Status == RelationProposed && assertion.SupersedesRelationID != "" {
 		return ErrRelationInvalid
 	}
+	if assertion.Status == RelationRetracted && assertion.SupersedesRelationID == "" {
+		return ErrRelationInvalid
+	}
 	if assertion.SupersedesRelationID == assertion.ID && assertion.SupersedesRelationID != "" {
 		return ErrRelationInvalid
 	}

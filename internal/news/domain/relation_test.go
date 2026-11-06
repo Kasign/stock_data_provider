@@ -196,6 +196,18 @@ func TestResolveCurrentRelationsAllowsOnlyOneConfirmedPrimarySubjectPerNews(t *t
 	}
 }
 
+func TestValidateRelationAssertionRequiresRetractionTarget(t *testing.T) {
+	assertion := validSecurityRelation("r1", string(RelationRetracted))
+	assertion.Method = RelationManual
+	if !errors.Is(ValidateRelationAssertion(assertion), ErrRelationInvalid) {
+		t.Fatal("a retraction must identify the assertion it withdraws")
+	}
+	assertion.SupersedesRelationID = "r0"
+	if err := ValidateRelationAssertion(assertion); err != nil {
+		t.Fatalf("a retraction with a target must be valid: %v", err)
+	}
+}
+
 func TestResolveCurrentRelationsRejectsSuccessorAfterRetraction(t *testing.T) {
 	confirmed := validSecurityRelation("r1", string(RelationConfirmed))
 	retracted := validSecurityRelation("r2", string(RelationRetracted))
