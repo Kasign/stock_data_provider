@@ -241,14 +241,14 @@ var _ driver.Pinger = (*testConn)(nil)
 var _ driver.Connector = (*testConnector)(nil)
 
 type migrationTestState struct {
-	applied                map[uint64]string
-	pending                map[uint64]string
-	failed                 map[uint64]int
-	failureCode            map[uint64]string
-	started                map[uint64]bool
-	finished               map[uint64]bool
-	failStatement          bool
-	statements             []string
+	applied                  map[uint64]string
+	pending                  map[uint64]string
+	failed                   map[uint64]int
+	failureCode              map[uint64]string
+	started                  map[uint64]bool
+	finished                 map[uint64]bool
+	failStatement            bool
+	statements               []string
 	lockAcquired             bool
 	lockReleased             bool
 	failLockRelease          bool
