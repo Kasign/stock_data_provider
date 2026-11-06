@@ -50,6 +50,16 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if err := repository.Ping(ctx); err != nil {
+		t.Fatalf("News storage ping: %v", err)
+	}
+	missingTables, err := repository.MissingSchemaTables(ctx)
+	if err != nil {
+		t.Fatalf("News schema probe: %v", err)
+	}
+	if len(missingTables) != 0 {
+		t.Fatalf("News schema missing tables: %v", missingTables)
+	}
 	var idSequence atomic.Uint64
 	newID := func() string { return fmt.Sprintf("news-it-%d", idSequence.Add(1)) }
 	ingest := app.NewIngestCandidate(repository, newID)

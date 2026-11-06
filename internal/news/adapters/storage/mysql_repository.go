@@ -595,3 +595,62 @@ func nullableString(value string) any {
 	}
 	return value
 }
+
+
+var requiredNewsSchemaTables = []string{
+	"news_items",
+	"news_identifiers",
+	"news_observations",
+	"news_item_versions",
+	"news_relation_assertions",
+	"news_relation_evidence",
+	"news_item_relations",
+}
+
+// Ping verifies the borrowed SQL pool without taking ownership of it.
+func (r *MySQLRepository) Ping(ctx context.Context) error {
+	if r == nil || r.db == nil || ctx == nil {
+		return app.ErrInvalidRequest
+	}
+	return r.db.PingContext(ctx)
+}
+
+// MissingSchemaTables returns only the names of News-owned tables that are absent.
+// It is read-only and does not attempt to apply migrations.
+func (r *MySQLRepository) MissingSchemaTables(ctx context.Context) ([]string, error) {
+	if r == nil || r.db == nil || ctx == nil {
+		return nil, app.ErrInvalidRequest
+	}
+	placeholders := strings.TrimRight(strings.Repeat("?,", len(requiredNewsSchemaTables)), ",")
+	args := make([]any, 0, len(requiredNewsSchemaTables))
+	for _, table := range requiredNewsSchemaTables {
+		args = append(args, table)
+	}
+	rows, err := r.db.QueryContext(ctx, fmt.Sprintf(
+		"SELECT table_name FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name IN (%s)",
+		placeholders,
+	), args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	present := make(map[string]struct{}, len(requiredNewsSchemaTables))
+	for rows.Next() {
+		var table string
+		if err := rows.Scan(&table); err != nil {
+			return nil, err
+		}
+		present[table] = struct{}{}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	missing := make([]string, 0)
+	for _, table := range requiredNewsSchemaTables {
+		if _, ok := present[table]; !ok {
+			missing = append(missing, table)
+		}
+	}
+	return missing, nil
+}
