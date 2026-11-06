@@ -2458,7 +2458,7 @@ CSS AST 检查器进一步扩展：
 ### W1 根路径 Fetch 请求来源追踪
 
 - [x] 已确认 `GET /` 失败属于 Fetch，不是文档导航；不能作为导航取消豁免。
-- [ ] Browser Smoke 输出 Chromium CDP 请求 initiator 类型与调用栈，定位真实发起方。
+- [x] `2bed6a91` Browser Smoke 输出 Chromium CDP 请求 initiator 类型与调用栈，定位真实发起方。
 - [ ] 根路径请求问题修复后，完整 Browser Smoke 和全部专项通过再验收 W1。
 
 
@@ -2471,6 +2471,6 @@ CSS AST 检查器进一步扩展：
 
 ### W2 Run Flow 交互优化
 
-- [ ] 选中阶段事件时自动展开节点详情诊断区，并由浏览器测试验证；保持原有事件状态与请求生命周期。
+- [x] `5af6e6a1` 选中阶段事件时自动展开节点详情诊断区；WebUI Checks #42160890946、Browser Smoke #42160890992 通过。
 - [ ] 明确任务级失败、阶段事件错误、Run 结果 warnings 的展示优先级和归属。
 - [ ] 复核任务摘要/任务信息在桌面与窄屏下的信息层级，不展示后端未提供的数据。

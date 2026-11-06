@@ -2231,8 +2231,8 @@ CSS AST 检查器进一步扩展：
 ### W1 根路径 Fetch 请求来源追踪
 
 - [x] `1541d42f` 的 Browser Smoke 诊断确认 320px 视口的 12 次 `GET /` 均为 `resourceType=fetch`、`isNavigationRequest=false`，发生在 `#watchlist` / `#settings` 页面状态；因此不是被取消的文档导航。
-- [ ] 使用 Chromium CDP `Network.requestWillBeSent.initiator` 采集根路径请求发起类型与调用栈，保留严格网络失败断言。
-- [ ] 根据调用栈定位请求源，修复触发逻辑后重新执行完整 Browser Smoke 与全部专项。
+- [x] `2bed6a91` 使用 Chromium CDP `Network.requestWillBeSent.initiator` 采集根路径请求发起类型与调用栈，保留严格网络失败断言。
+- [x] 根据调用栈定位 `checkWebUI()` 的重复 Fetch 并由 `ce0aaa6a` 修复；完整 Browser Smoke 与全部专项在 #42160395337 通过。
 
 
 ### W1 根路径 Fetch 真实来源修复
@@ -2244,7 +2244,7 @@ CSS AST 检查器进一步扩展：
 
 ### W2 Run Flow 体验优化
 
-- [ ] 选中阶段事件后自动展开右侧“节点详情与诊断”，避免用户先手动展开诊断区再查看详情；不改变事件分页、去重、选择状态和请求生命周期。
+- [x] `5af6e6a1` 选中阶段事件后自动展开右侧“节点详情与诊断”，不改变事件分页、去重、选择状态和请求生命周期；WebUI Checks #42160890946、Browser Smoke #42160890992 通过。
 - [ ] 梳理任务级错误、阶段级错误、Run 结果警告的展示层级，避免重复堆叠或错误归因；保持服务端字段原义。
 - [ ] 复核任务摘要与任务信息区的默认可见性、信息密度和窄屏布局；不增加服务端不存在的进度或历史字段。
 - [ ] 每个体验改动补充浏览器交互断言，WebUI Checks 与 Browser Smoke 全通过后逐项验收。
