@@ -83,6 +83,13 @@ try {
 
   await second.evaluate(({ key, item }) => localStorage.setItem(key, JSON.stringify([item])), { key: reportKey, item: report() });
   await first.locator(".research-report-card").filter({ hasText: "run-1" }).waitFor();
+  assert.equal(await first.locator("#research-report-count").textContent(), "显示 1 / 1 份报告");
+  await first.locator("#research-report-search").fill("no-such-report");
+  assert.equal(await first.locator("#research-report-count").textContent(), "显示 0 / 1 份报告");
+  await first.locator("#research-report-list").getByText("没有匹配的研究报告。").waitFor();
+  await first.locator("#research-report-clear").click();
+  assert.equal(await first.locator("#research-report-count").textContent(), "显示 1 / 1 份报告");
+  assert.equal(await first.locator("#research-report-clear").isDisabled(), true);
   await first.locator('[data-report-action="create-note"]').click();
   assert.equal(await first.locator(".research-note-conflict-actions").isVisible(), false,
     "creating a note from a report must clear the previous note conflict actions");

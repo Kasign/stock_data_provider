@@ -420,7 +420,9 @@
               <label class="field"><span>检索报告</span><input id="research-report-search" type="search" placeholder="股票代码、Task ID、Run ID 或状态"></label>
               <label class="field"><span>归档日期起</span><input id="research-report-from" type="date"></label>
               <label class="field"><span>归档日期止</span><input id="research-report-to" type="date"></label>
+              <button class="button button-secondary" id="research-report-clear" type="button">清除筛选</button>
             </div>
+            <p id="research-report-count" class="field-hint" aria-live="polite">显示 0 / 0 份报告</p>
             <p id="research-report-feedback" class="field-hint" role="status" aria-live="polite">最多保存 30 份真实 Run 结果；不会同步到服务端。</p>
             <div id="research-report-list" class="research-report-list" aria-live="polite"><p class="table-empty">尚无归档报告。</p></div>
           </section>

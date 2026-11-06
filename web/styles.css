@@ -4974,6 +4974,8 @@ button:disabled {
 .research-note-form .field:nth-child(6){grid-column:1/-1}
 #research-note-feedback[data-state="error"],#research-report-feedback[data-state="error"]{color:var(--danger)}
 .research-report-toolbar{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:14px 0}
+.research-report-toolbar .button{align-self:end;min-height:38px}
+#research-report-count{margin:0 0 8px;color:var(--text-dim);font-size:11px}
 .research-report-list{display:grid;gap:10px}
 .research-report-card{padding:13px;border:1px solid var(--border);border-radius:10px;background:var(--panel-raised)}
 .research-report-card h3{margin:0 0 5px;font-size:14px}

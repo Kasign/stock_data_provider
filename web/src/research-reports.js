@@ -120,8 +120,13 @@ export function bindResearchReports({ root = document, storage, onOpenTask = () 
   const feedback = (message, error = false) => { const node = $("#research-report-feedback"); node.textContent = message; node.dataset.state = error ? "error" : "ok"; };
   const render = () => {
     host.replaceChildren(); const state = readResearchReports(storage);
-    if (!state.readable || !state.valid) { const p = document.createElement("p"); p.className = "table-empty"; p.textContent = "报告归档存储不可读取或格式异常；为保护原始报告，当前未修改数据。"; host.append(p); return; }
-    const items = filterResearchReports(state.items, { search: $("#research-report-search").value, from: $("#research-report-from").value, to: $("#research-report-to").value });
+    const count = $("#research-report-count");
+    const clear = $("#research-report-clear");
+    if (!state.readable || !state.valid) { count.textContent = "报告归档不可用"; clear.disabled = true; const p = document.createElement("p"); p.className = "table-empty"; p.textContent = "报告归档存储不可读取或格式异常；为保护原始报告，当前未修改数据。"; host.append(p); return; }
+    const filters = { search: $("#research-report-search").value, from: $("#research-report-from").value, to: $("#research-report-to").value };
+    const items = filterResearchReports(state.items, filters);
+    count.textContent = "显示 " + items.length + " / " + state.items.length + " 份报告";
+    clear.disabled = !filters.search.trim() && !filters.from && !filters.to;
     if (!items.length) { const p = document.createElement("p"); p.className = "table-empty"; p.textContent = state.items.length ? "没有匹配的研究报告。" : "尚无归档报告。请在分析任务的真实 Run 结果中选择“归档到研究记录”。"; host.append(p); return; }
     items.forEach(item => {
       const card = document.createElement("article"); card.className = "research-report-card";
@@ -149,6 +154,12 @@ export function bindResearchReports({ root = document, storage, onOpenTask = () 
     feedback(out.duplicate ? "该 Run 已归档，无需重复保存。" : "Run 报告已归档到当前浏览器。"); render(); return out;
   };
   $("#research-report-search").addEventListener("input", render); $("#research-report-from").addEventListener("change", render); $("#research-report-to").addEventListener("change", render);
+  $("#research-report-clear").addEventListener("click", () => {
+    $("#research-report-search").value = "";
+    $("#research-report-from").value = "";
+    $("#research-report-to").value = "";
+    render();
+  });
   host.addEventListener("click", event => {
     const button = event.target.closest("[data-report-action]"); if (!button) return;
     const current = readResearchReports(storage); if (!current.readable || !current.valid) { feedback("归档存储异常，未执行操作。", true); return; }
