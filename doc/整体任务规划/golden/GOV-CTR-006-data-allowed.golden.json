@@ -1,0 +1,47 @@
+{
+  "authorization_ref": {
+    "authorization_ref": "auth_data_001",
+    "policy_owner": "data",
+    "policy_version": "policy-snapshot:data:dailybars:v1",
+    "decision": "allowed",
+    "purpose_code": "research_analysis",
+    "content_level": "full",
+    "subject_ref": "principal:data:research-service",
+    "resource_ref": "data_snapshot:snapshot_001",
+    "decided_at": "2026-11-06T05:00:00Z",
+    "expires_at": null,
+    "conditions": [],
+    "decision_fingerprint": "882a7acfdf106aab32cd04905b7f8b20be9195300b6d1e1d212f5592052d1da2"
+  },
+  "policy_snapshot": {
+    "snapshot_ref": "policy-snapshot:data:dailybars:v1",
+    "policies": [
+      {
+        "policy_type": "data_access",
+        "policy_ref": "dailybars-v2-access",
+        "policy_version": "1.0.0"
+      }
+    ]
+  },
+  "fingerprint_input": {
+    "policy_owner": "data",
+    "policy_version": "policy-snapshot:data:dailybars:v1",
+    "decision": "allowed",
+    "purpose_code": "research_analysis",
+    "content_level": "full",
+    "subject_ref": "principal:data:research-service",
+    "resource_ref": "data_snapshot:snapshot_001",
+    "decided_at": "2026-11-06T05:00:00Z",
+    "expires_at": null,
+    "conditions": [],
+    "evaluated_policy_versions": [
+      {
+        "policy_type": "data_access",
+        "policy_ref": "dailybars-v2-access",
+        "policy_version": "1.0.0"
+      }
+    ]
+  },
+  "canonical_json": "{\"conditions\":[],\"content_level\":\"full\",\"decided_at\":\"2026-11-06T05:00:00Z\",\"decision\":\"allowed\",\"evaluated_policy_versions\":[{\"policy_ref\":\"dailybars-v2-access\",\"policy_type\":\"data_access\",\"policy_version\":\"1.0.0\"}],\"expires_at\":null,\"policy_owner\":\"data\",\"policy_version\":\"policy-snapshot:data:dailybars:v1\",\"purpose_code\":\"research_analysis\",\"resource_ref\":\"data_snapshot:snapshot_001\",\"subject_ref\":\"principal:data:research-service\"}",
+  "expected_sha256": "882a7acfdf106aab32cd04905b7f8b20be9195300b6d1e1d212f5592052d1da2"
+}

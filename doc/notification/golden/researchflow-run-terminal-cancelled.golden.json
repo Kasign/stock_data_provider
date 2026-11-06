@@ -1,0 +1,21 @@
+{
+  "event_id": "ntf_evt_run_002",
+  "event_type": "researchflow.run.terminal",
+  "schema_version": "1.0.0",
+  "source_module": "researchflow",
+  "occurred_at": "2026-11-06T04:20:00Z",
+  "subject_ref": "run_20261106_002",
+  "idempotency_key": "run-terminal:run_20261106_002",
+  "correlation_id": "corr_20261106_002",
+  "payload": {
+    "source_event_ref": "run_20261106_002",
+    "run_ref": "run_20261106_002",
+    "status": "cancelled",
+    "termination_reason": "user_cancelled",
+    "system_as_of": "2026-11-05T16:00:00Z",
+    "finished_at": "2026-11-06T04:20:00Z",
+    "result_summary_ref": null,
+    "template_ref": "daily_stock_analysis",
+    "template_version": "1.0.0"
+  }
+}

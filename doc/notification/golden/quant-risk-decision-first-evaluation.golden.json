@@ -1,0 +1,22 @@
+{
+  "event_id": "ntf_evt_risk_001",
+  "event_type": "quant.risk_decision.changed",
+  "schema_version": "1.0.0",
+  "source_module": "quant",
+  "occurred_at": "2026-11-06T04:30:00Z",
+  "subject_ref": "security_600000_SH",
+  "idempotency_key": "risk-decision:security_600000_SH:risk_decision_001",
+  "correlation_id": "corr_20261106_003",
+  "payload": {
+    "source_event_ref": "risk_decision_001",
+    "decision_id": "risk_decision_001",
+    "previous_status": null,
+    "current_status": "unknown",
+    "rule_set_version": "risk.rules.v1",
+    "changed_block_reason_codes": [
+      "required_data_unavailable"
+    ],
+    "system_as_of": "2026-11-05T16:00:00Z",
+    "evaluated_at": "2026-11-06T04:30:00Z"
+  }
+}

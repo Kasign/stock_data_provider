@@ -1,0 +1,63 @@
+{
+  "evidence": {
+    "evidence_id": "evidence:research:0001",
+    "evidence_type": "reported_fact",
+    "source_owner": "news",
+    "source_ref": "news_evidence_version:news_001:v1",
+    "source_version": "v1",
+    "source_locator": "news://news_001/version/v1",
+    "derived_from_refs": [],
+    "claim_ref": null,
+    "subject_refs": [
+      "600000.SH"
+    ],
+    "published_at": "2026-11-05T08:00:00Z",
+    "available_at": "2026-11-05T08:00:00Z",
+    "system_observed_at": "2026-11-05T08:01:00Z",
+    "valid_time_start": null,
+    "valid_time_end": null,
+    "system_as_of": "2026-11-06T05:00:00Z",
+    "stance": "supports",
+    "confidence": null,
+    "confidence_method": null,
+    "confidence_method_version": null,
+    "quality_status": "valid",
+    "content_level": "snippet",
+    "authorization_ref": "auth_news_001",
+    "limitations": [
+      "source_attribution_required",
+      "snippet_only"
+    ],
+    "content_fingerprint": "56ddf6b7f4c1964ebaa0489dc26e3f34a8a37950080d9e31dd687bddcd7af3cd"
+  },
+  "fingerprint_input": {
+    "evidence_type": "reported_fact",
+    "source_owner": "news",
+    "source_ref": "news_evidence_version:news_001:v1",
+    "source_version": "v1",
+    "source_locator": "news://news_001/version/v1",
+    "derived_from_refs": [],
+    "claim_ref": null,
+    "subject_refs": [
+      "600000.SH"
+    ],
+    "published_at": "2026-11-05T08:00:00Z",
+    "available_at": "2026-11-05T08:00:00Z",
+    "system_observed_at": "2026-11-05T08:01:00Z",
+    "valid_time_start": null,
+    "valid_time_end": null,
+    "system_as_of": "2026-11-06T05:00:00Z",
+    "stance": "supports",
+    "confidence": null,
+    "confidence_method": null,
+    "confidence_method_version": null,
+    "quality_status": "valid",
+    "content_level": "snippet",
+    "limitations": [
+      "source_attribution_required",
+      "snippet_only"
+    ]
+  },
+  "canonical_json": "{\"available_at\":\"2026-11-05T08:00:00Z\",\"claim_ref\":null,\"confidence\":null,\"confidence_method\":null,\"confidence_method_version\":null,\"content_level\":\"snippet\",\"derived_from_refs\":[],\"evidence_type\":\"reported_fact\",\"limitations\":[\"source_attribution_required\",\"snippet_only\"],\"published_at\":\"2026-11-05T08:00:00Z\",\"quality_status\":\"valid\",\"source_locator\":\"news://news_001/version/v1\",\"source_owner\":\"news\",\"source_ref\":\"news_evidence_version:news_001:v1\",\"source_version\":\"v1\",\"stance\":\"supports\",\"subject_refs\":[\"600000.SH\"],\"system_as_of\":\"2026-11-06T05:00:00Z\",\"system_observed_at\":\"2026-11-05T08:01:00Z\",\"valid_time_end\":null,\"valid_time_start\":null}",
+  "expected_sha256": "56ddf6b7f4c1964ebaa0489dc26e3f34a8a37950080d9e31dd687bddcd7af3cd"
+}
