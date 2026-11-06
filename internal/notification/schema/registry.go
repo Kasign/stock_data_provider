@@ -21,10 +21,10 @@ const (
 )
 
 var (
-	ErrUnknownSchema        = errors.New("notification: unknown event schema")
-	ErrSourceModuleMismatch = errors.New("notification: event source module does not match schema")
-	ErrSchemaValidation     = errors.New("notification: event schema validation failed")
-	ErrSchemaImmutable      = errors.New("notification: registered schema digest is immutable")
+	ErrUnknownSchema              = errors.New("notification: unknown event schema")
+	ErrSourceModuleMismatch       = errors.New("notification: event source module does not match schema")
+	ErrSchemaValidation           = errors.New("notification: event schema validation failed")
+	ErrSchemaImmutable            = errors.New("notification: registered schema digest is immutable")
 	ErrInvalidEventJSON           = errors.New("notification: invalid event JSON")
 	ErrInvalidResourceLimits      = errors.New("notification: invalid event resource limits")
 	ErrEventResourceLimitExceeded = errors.New("notification: event resource limit exceeded")

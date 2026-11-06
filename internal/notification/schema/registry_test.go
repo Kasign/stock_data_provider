@@ -169,9 +169,13 @@ func TestRegistryEventTypeLookup(t *testing.T) {
 func TestRegistryResourceLimitBoundaries(t *testing.T) {
 	goldenFS := os.DirFS("../../../doc/notification/golden")
 	raw, err := fs.ReadFile(goldenFS, "quant-risk-decision-first-evaluation.golden.json")
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	var fields map[string]json.RawMessage
-	if err := json.Unmarshal(raw, &fields); err != nil { t.Fatal(err) }
+	if err := json.Unmarshal(raw, &fields); err != nil {
+		t.Fatal(err)
+	}
 	payload := fields["payload"]
 
 	registry := newTestRegistryWithLimits(t, ResourceLimits{
@@ -182,14 +186,14 @@ func TestRegistryResourceLimitBoundaries(t *testing.T) {
 	}
 
 	registry = newTestRegistryWithLimits(t, ResourceLimits{
-		MaxEnvelopeBytes: len(raw)-1, MaxPayloadBytes: len(payload), MaxJSONDepth: 32,
+		MaxEnvelopeBytes: len(raw) - 1, MaxPayloadBytes: len(payload), MaxJSONDepth: 32,
 	})
 	if _, err := registry.ValidateEvent(raw); !errors.Is(err, ErrEventResourceLimitExceeded) {
 		t.Fatalf("expected envelope byte limit error, got %v", err)
 	}
 
 	registry = newTestRegistryWithLimits(t, ResourceLimits{
-		MaxEnvelopeBytes: len(raw), MaxPayloadBytes: len(payload)-1, MaxJSONDepth: 32,
+		MaxEnvelopeBytes: len(raw), MaxPayloadBytes: len(payload) - 1, MaxJSONDepth: 32,
 	})
 	if _, err := registry.ValidateEvent(raw); !errors.Is(err, ErrEventResourceLimitExceeded) {
 		t.Fatalf("expected payload byte limit error, got %v", err)

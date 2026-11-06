@@ -26,7 +26,7 @@ func validPlanForWriter() domain.DeliveryPlan {
 		TemplateID: "template-1", TemplateVersion: 1,
 		RecipientRef: "recipient-1", PayloadFingerprint: strings.Repeat("a", 64),
 		AuthorizationPolicyVersions: []string{"policy:v1"},
-		DeliveryID: "delivery-1", DeliveryIdempotencyKey: "delivery-key-1",
+		DeliveryID:                  "delivery-1", DeliveryIdempotencyKey: "delivery-key-1",
 	}
 	plan.PlanFingerprint, _ = plan.CalculateFingerprint()
 	return plan
