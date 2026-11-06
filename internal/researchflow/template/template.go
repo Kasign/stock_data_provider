@@ -178,6 +178,9 @@ func Resolve(ctx context.Context, t WorkflowTemplate, parameters json.RawMessage
 	if parameterSchema.Ref != t.ParameterSchemaRef || strings.TrimSpace(parameterSchema.Version) == "" || len(parameterSchema.Fingerprint) != 64 {
 		return ResolvedTemplate{}, fmt.Errorf("%w: parameter schema validator returned an incomplete or mismatched immutable snapshot", ErrInvalidTemplate)
 	}
+	if parameterSchema.Fingerprint != strings.ToLower(parameterSchema.Fingerprint) {
+		return ResolvedTemplate{}, fmt.Errorf("%w: parameter schema fingerprint must be lowercase SHA-256 hex", ErrInvalidTemplate)
+	}
 	if _, err := hex.DecodeString(parameterSchema.Fingerprint); err != nil {
 		return ResolvedTemplate{}, fmt.Errorf("%w: parameter schema fingerprint must be lowercase SHA-256 hex", ErrInvalidTemplate)
 	}
