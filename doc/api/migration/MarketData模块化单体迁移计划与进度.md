@@ -1973,3 +1973,11 @@ Root Test Job 的失败发生在 gofmt 门禁，报告：
 - [ ] 取得脱敏生产数据库 Schema 快照，完成 M0 的生产 DDL 对照。
 
 **当前状态：** CT-05 已从第一批 15 个 Handler 边界负例扩展为 35 Operation 参数清单自动化和 6 组文档约束补齐；参数值域/格式/默认值的全量语义核对仍未完成。M0 继续 in_progress，M1 不准入。CI 结果未最终确认前，不得把本批标记为通过。
+
+
+### 2026-11-06：CT-05 断言修正与复验状态
+
+- 前一代码基线 `0f574fb8` 的 Data Module Test Job 失败，根因是新增文档约束测试使用英文断言，而 OpenAPI 说明使用中文；另有 Probe 请求体说明需明确“非空请求体”才要求一个 JSON 对象。失败仅涉及测试断言/说明文本，不涉及 Handler 参数校验。
+- 已在 `c5e67526324e556f85faa2a8e3922484ee14bc41` 将断言改为匹配中文契约，并将 Probe 描述修正为“非空请求体最多 8 KiB，且必须恰好包含一个 JSON 对象；未知字段拒绝”。
+- 新 SHA 对应 Go test suite Run `42207170280`：Data Module Test Job 在本次记录时仍为 in_progress；MariaDB migration/PIT Job success；Root Test Job 因 Research 模块非法字符失败；Compose/Docker Job 仍在运行。最终状态以该 Run 完成后的 Job 结果为准。
+- 因而 CT-05 参数清单与说明修正已提交，但自动化验证仍未通过最终门禁；不将本批标记为完成或 M0 通过。
