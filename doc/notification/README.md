@@ -26,9 +26,9 @@ Notification 是独立通知业务模块，负责事件接收、Subscription、T
 | 范围 | 状态 | 证据/限制 |
 |---|---|---|
 | 领域设计与字段契约 | 已建立 | 以 01/03 文档为准；发现契约矛盾先修正文档并评审 |
-| Schema/Golden 资产 | 已校准，待 CI | 4 Schema、6 Golden；Draft 2020-12 Envelope/Payload Validator 和 Golden 测试已编写；CI 曾因 go.mod 缺少间接依赖声明失败，修复后待重跑 |
-| Go Notification Domain/Application | 部分实现 | EventEnvelope、JCS Fingerprint、Schema Registry/Validator 已提交，包含按 event_type + schema_version 编译并验证 Payload Schema；CI 待重跑 |
-| Inbox/Subscription/DeliveryPlan | 未开始 | 无实现和模块测试证据 |
+| Schema/Golden 资产 | 已校准，待 CI | 4 Schema、6 Golden；Draft 2020-12 Envelope/Payload Validator 和 Golden 测试已编写；根模块 go test、race、vet 已通过（Run 42192962140）；其余 workflow job 仍在执行 |
+| Go Notification Domain/Application | 部分实现 | EventEnvelope、JCS Fingerprint、Schema Registry/Validator 已提交，包含按 event_type + schema_version 编译并验证 Payload Schema；根模块 go test/race/vet 已通过 |
+| Inbox/Subscription/DeliveryPlan | 部分实现 | 已有 Inbox replay 比较、Subscription/recipient_scope 校验、DeliveryPlan fingerprint/唯一键基础类型；双唯一 Repository、不可变版本持久化与 fan-out 尚未实现 |
 | Template/Channel/Dispatcher/Retry | 未开始 | 无实现；不得以旧 Python 通知能力替代 |
 | Repository/Migration | 未开始 | Platform Storage 已有通用基础能力；Notification 专属模型/迁移尚无 |
 | 三生产方事件接入 | 未验收 | 仅按各生产方契约和真实测试证据逐项开放 |
