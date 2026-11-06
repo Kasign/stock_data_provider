@@ -156,9 +156,11 @@ func (r ModelRequest) Validate() error {
 	if r.ToolChoice != "" && r.ToolChoice != "none" && r.ToolChoice != "auto" { return errors.New("unsupported tool_choice") }
 	if r.ToolChoice == "auto" && len(r.Tools) == 0 { return errors.New("tool_choice auto requires tools") }
 	if r.ResponseSchema != nil {
-		if strings.TrimSpace(r.ResponseSchema.Name) == "" || len(r.ResponseSchema.SchemaJSON) == 0 ||
-			len(r.ResponseSchema.SchemaJSON) > MaxSchemaBytes || !json.Valid(r.ResponseSchema.SchemaJSON) {
-			return errors.New("response_schema requires a name and valid bounded JSON")
+		if strings.TrimSpace(r.ResponseSchema.Name) == "" {
+			return errors.New("response_schema requires a name")
+		}
+		if _, err := CompileJSONSchema(r.ResponseSchema.SchemaJSON); err != nil {
+			return errors.New("response_schema must be a valid bounded Draft 2020-12 schema")
 		}
 	}
 	seen := make(map[string]struct{}, len(r.Tools))
@@ -166,8 +168,8 @@ func (r ModelRequest) Validate() error {
 		if strings.TrimSpace(tool.Name) == "" || len(tool.Name) > 128 { return errors.New("invalid tool name") }
 		if _, exists := seen[tool.Name]; exists { return fmt.Errorf("duplicate tool name %q", tool.Name) }
 		seen[tool.Name] = struct{}{}
-		if len(tool.ParametersJSON) == 0 || !json.Valid(tool.ParametersJSON) {
-			return fmt.Errorf("tool %q parameters_json must be valid JSON", tool.Name)
+		if _, err := CompileJSONSchema(tool.ParametersJSON); err != nil {
+			return fmt.Errorf("tool %q parameters_json must be a valid bounded Draft 2020-12 schema", tool.Name)
 		}
 	}
 	return nil

@@ -6,7 +6,7 @@
 - 状态：P0 LLM-002 基础 DTO/Provider Port 已提交；能力门禁完成一轮静态 Review；gofmt/go test 尚未执行，构建验证待执行
 - 最近代码提交：d621cfa44dd3efd75fbbd15f14490f9b0578a5de；后续文档同步提交不改变代码基线
 - LLM-001：静态协议盘点完成；在线真实端点验收未执行
-- LLM-002：ProviderConfig、CapabilityState、ModelRequest/Response、Usage、Tool Call、ModelEvent 和 Provider Port 已有首批代码；Platform Fault 映射已实现待构建验证；Draft 2020-12 Schema 编译、JSON/SSE Golden、Responses Adapter 未完成
+- LLM-002：ProviderConfig、CapabilityState、ModelRequest/Response、Usage、Tool Call、ModelEvent 和 Provider Port 已有首批代码；Platform Fault 映射已实现待构建验证；Draft 2020-12 Schema 编译已实现待构建验证；JSON/SSE Golden、Responses Adapter 未完成
 
 只负责 Go 侧模型服务协议适配，复用现有独立模型服务；不重建推理 Gateway，不管理研究状态机、工具权限或业务结论。
 

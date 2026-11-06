@@ -77,7 +77,7 @@
 | schema_json | json.RawMessage | 是 | 合法 JSON Schema Draft 2020-12，限制字节数和深度 |
 | strict | bool | 是 | 显式指定，不依赖上游默认值；上游 strict 子集另行检查 |
 
-Adapter 序列化到 Responses text.format 的 type=json_schema/name/strict/schema。Schema 编译失败属于本地 invalid_request；响应后必须再次校验 JSON。
+Adapter 序列化到 Responses text.format 的 type=json_schema/name/strict/schema。Schema 编译失败属于本地 invalid_request；响应后必须再次校验 JSON。当前实现固定 Draft 2020-12，显式启用 format assertion；调用方声明其他 dialect 时拒绝。远程 Schema 资源加载默认关闭，外部 $ref 不得触发网络访问。Schema/实例嵌套深度上限为 64。
 
 ### 4.2 ToolDefinition
 

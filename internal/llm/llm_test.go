@@ -230,3 +230,67 @@ func TestModelErrorFromPlatformFaultCancellationAndUnknown(t *testing.T) {
 		t.Fatalf("non-platform error must not be silently mapped: %+v", got)
 	}
 }
+
+func TestDraft2020SchemaCompileAndFormatAssertion(t *testing.T) {
+	schema := []byte(`{
+		"$schema":"https://json-schema.org/draft/2020-12/schema",
+		"type":"object",
+		"required":["created_at"],
+		"properties":{"created_at":{"type":"string","format":"date-time"}},
+		"additionalProperties":false
+	}`)
+	if _, err := CompileJSONSchema(schema); err != nil {
+		t.Fatalf("valid Draft 2020-12 schema rejected: %v", err)
+	}
+	if err := ValidateJSONAgainstSchema(schema, []byte(`{"created_at":"2026-11-06T10:00:00Z"}`)); err != nil {
+		t.Fatalf("valid instance rejected: %v", err)
+	}
+	if err := ValidateJSONAgainstSchema(schema, []byte(`{"created_at":"not-a-date"}`)); !errors.Is(err, ErrJSONSchemaMismatch) {
+		t.Fatalf("format assertion should reject invalid date-time, got %v", err)
+	}
+	if err := ValidateJSONAgainstSchema(schema, []byte(`{"created_at":"2026-11-06T10:00:00Z","extra":true}`)); !errors.Is(err, ErrJSONSchemaMismatch) {
+		t.Fatalf("additionalProperties should be enforced, got %v", err)
+	}
+}
+
+func TestDraft2020SchemaRejectsOtherDialectAndRemoteRefs(t *testing.T) {
+	otherDialect := []byte(`{"$schema":"http://json-schema.org/draft-07/schema#","type":"object"}`)
+	if _, err := CompileJSONSchema(otherDialect); !errors.Is(err, ErrInvalidJSONSchema) {
+		t.Fatalf("non-2020 dialect must be rejected, got %v", err)
+	}
+	remoteRef := []byte(`{"$schema":"https://json-schema.org/draft/2020-12/schema","$ref":"https://attacker.invalid/schema.json"}`)
+	if _, err := CompileJSONSchema(remoteRef); !errors.Is(err, ErrInvalidJSONSchema) {
+		t.Fatalf("remote $ref must be rejected without fetching, got %v", err)
+	}
+}
+
+func TestDraft2020SchemaDepthLimit(t *testing.T) {
+	nested := `{"type":"integer"}`
+	for i := 0; i < MaxJSONDepth+1; i++ {
+		nested = `{"type":"array","items":` + nested + `}`
+	}
+	if _, err := CompileJSONSchema([]byte(nested)); !errors.Is(err, ErrInvalidJSONSchema) {
+		t.Fatalf("schema nesting above limit must be rejected, got %v", err)
+	}
+	deepInstance := strings.Repeat("[", MaxJSONDepth+1) + "0" + strings.Repeat("]", MaxJSONDepth+1)
+	if err := ValidateJSONAgainstSchema([]byte(`{"type":"array"}`), []byte(deepInstance)); !errors.Is(err, ErrJSONSchemaMismatch) {
+		t.Fatalf("instance nesting above limit must be rejected, got %v", err)
+	}
+}
+
+func TestToolParametersMustCompileAsDraft2020Schema(t *testing.T) {
+	now := time.Now().UTC()
+	r := ModelRequest{
+		ProviderID: "gateway-1", RequestID: "req-1", PurposeCode: "research.summary", Model: "qwen-local",
+		InputText: "Evidence", MaxOutputTokens: 128, DeadlineAt: now.Add(time.Minute),
+		CorrelationID: "run-1", SystemAsOf: now,
+		Tools: []ToolDefinition{{Name: "lookup_quote", ParametersJSON: json.RawMessage(`{"type":"object"}`)}},
+	}
+	if err := r.Validate(); err != nil {
+		t.Fatalf("valid tool schema rejected: %v", err)
+	}
+	r.Tools[0].ParametersJSON = json.RawMessage(`{"type":"object","properties":{"x":{"type":"unknown-type"}}}`)
+	if err := r.Validate(); err == nil {
+		t.Fatal("invalid JSON Schema keyword value must be rejected")
+	}
+}
