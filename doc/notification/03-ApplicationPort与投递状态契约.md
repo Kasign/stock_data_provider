@@ -195,7 +195,7 @@ Worker 取得 Delivery 时必须原子完成 queued/retry_wait -> sending 和租
 
 - 只对渠道明确拒绝且标记 retryable 的结果自动重试。
 - 永久错误不重试；Retry-After 优先于本地退避上限，但不得越过 Delivery deadline。
-- 使用 capped exponential full jitter；策略固定 max_attempts、max_elapsed_ms、per_attempt_timeout_ms、base_delay_ms、max_delay_ms、jitter_ratio 和总 deadline。所有 duration 为正整数 milliseconds；max_elapsed_ms/per_attempt_timeout_ms/base_delay_ms>0，max_delay_ms>=base_delay_ms，jitter_ratio 范围 [0,1]。MVP 算法固定 exponential_full_jitter_v1：第 n 次 Attempt 失败后的上限 delay=min(max_delay_ms, base_delay_ms*2^(n-1))，实际等待从 [0,delay] 均匀抽取。单次调用截止=min(now+per_attempt_timeout_ms, deadline_at, first_attempt_at+max_elapsed_ms)。
+- 使用 capped exponential full jitter；策略固定 max_attempts、max_elapsed_ms、per_attempt_timeout_ms、base_delay_ms、max_delay_ms 和总 deadline。所有 duration 为正整数 milliseconds；max_elapsed_ms/per_attempt_timeout_ms/base_delay_ms>0，max_delay_ms>=base_delay_ms。MVP 算法固定 exponential_full_jitter_v1：第 n 次 Attempt 失败后的上限 delay=min(max_delay_ms, base_delay_ms*2^(n-1))，实际等待从 [0,delay] 均匀抽取。单次调用截止=min(now+per_attempt_timeout_ms, deadline_at, first_attempt_at+max_elapsed_ms)。
 - attempt_count 只统计实际发起的渠道调用，不统计 Schema/权限/配置预检查。
 - 同一 Delivery 的渠道 idempotency key 在各 Attempt 间保持稳定；仅在渠道明确支持幂等时发送该键。
 - 超时、连接中断或进程崩溃发生在请求可能已到达渠道之后时，标记 unknown；只有渠道查询/回执/幂等重放能证明安全时才可自动收敛。
@@ -287,7 +287,7 @@ Delivery plan fingerprint 使用 RFC 8785 JSON Canonicalization Scheme + SHA-256
 - 状态迁移通过 Delivery.version CAS；每次成功迁移递增 version，并追加不可变状态事件。
 - sending -> skipped 仅在可证明渠道调用尚未发出时允许；请求可能到达渠道时必须进入 unknown 或等待明确回执，不得以退订/取消覆盖外部副作用不确定性。
 - unknown -> retry_wait 仅在对账证明未接受，或已验证同一幂等键安全重放时允许；否则保持 unknown。
-- max_attempts 包含首次发送，必须为正整数；max_elapsed_ms、per_attempt_timeout_ms、base_delay_ms、max_delay_ms、jitter_ratio 和总 deadline 必须显式配置且满足上面的范围，不设隐式全局重试默认值。
+- max_attempts 包含首次发送，必须为正整数；max_elapsed_ms、per_attempt_timeout_ms、base_delay_ms、max_delay_ms 和总 deadline 必须显式配置且满足上面的范围，不设隐式全局重试默认值。
 - 自动重试仅针对渠道明确 rejected 且 reason_code 在该 Channel 的 retryable 白名单内；有效 Retry-After 与本地退避取较晚时间（不得缩短本地退避）；若 next_attempt_at 不早于总 deadline，则不再重试并按 deadline_exceeded 结束。ambiguous、timeout-after-write、连接中断且无法证明未发送均进入 unknown。
 - Channel Capability 必须逐渠道注册 supports_idempotency、supports_delivery_lookup、supports_retry_after、max_payload_bytes；未验证能力按 false/unknown 处理。
 - sent 仅表示渠道明确接受，不代表最终用户已送达/阅读。若渠道提供 delivered/read 回执，使用独立 DeliveryReceipt 事实，不改写 sent 语义。
