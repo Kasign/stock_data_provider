@@ -12,7 +12,7 @@ import (
 
 const (
 	ProtocolOpenAIResponses = "openai_responses"
-	MaxPayloadBytes = 16 << 20
+	MaxPayloadBytes = 8 << 20
 	MaxSchemaBytes = 1 << 20
 )
 
@@ -159,6 +159,7 @@ func (r ModelRequest) ValidateCapabilities(s CapabilityState) error {
 		if !s.Supports(key) { return fmt.Errorf("unsupported_capability: %s", key) }
 		return nil
 	}
+	if err := require(CapabilityResponsesJSON); err != nil { return err }
 	if r.Temperature != nil || r.TopP != nil {
 		if err := require(CapabilitySamplingParameters); err != nil { return err }
 	}
@@ -170,6 +171,15 @@ func (r ModelRequest) ValidateCapabilities(s CapabilityState) error {
 	}
 	if len(r.Tools) > 0 || r.ToolChoice == "auto" {
 		if err := require(CapabilityFunctionToolCalls); err != nil { return err }
+	}
+	return nil
+}
+
+// ValidateStreamCapabilities 在基础 Responses JSON 能力之外，单独要求真实 SSE 能力证据。
+func (r ModelRequest) ValidateStreamCapabilities(s CapabilityState) error {
+	if err := r.ValidateCapabilities(s); err != nil { return err }
+	if !s.Supports(CapabilityResponsesStream) {
+		return fmt.Errorf("unsupported_capability: %s", CapabilityResponsesStream)
 	}
 	return nil
 }
