@@ -135,7 +135,7 @@ AuthorizationRef 是不可变授权审计快照，不是访问令牌。字段如
 |---|---|---|
 | authorization_ref | string | 不透明稳定引用 |
 | policy_owner | enum | data/news/quant/research；News 内容必须为 news |
-| policy_version | string | 不可变策略版本 |
+| policy_version | string | 不可变 News Authorization Policy Registry 版本；decision_fingerprint 同时覆盖本次判定采用的 Provider Output Policy、Source Policy、Endpoint Policy 版本 |
 | decision | enum | allowed/denied/conditional/unknown |
 | purpose_code | enum | research_analysis/risk_review/user_display |
 | content_level | enum | metadata/summary/snippet/full |
