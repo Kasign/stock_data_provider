@@ -38,8 +38,14 @@ func TestStageAndAttemptDTOUseStablePublicFieldNames(t *testing.T) {
 func TestPublicDTOSchemaGoldens(t *testing.T) {
 	cases := []struct{ schema, golden string }{
 		{"run-1.0.0.schema.json","run-created-1.0.0.golden.json"},
+		{"run-1.0.0.schema.json","run-partial-1.0.0.golden.json"},
+		{"run-1.0.0.schema.json","run-failed-1.0.0.golden.json"},
+		{"run-1.0.0.schema.json","run-cancelled-1.0.0.golden.json"},
 		{"stage-1.0.0.schema.json","stage-ready-1.0.0.golden.json"},
+		{"stage-1.0.0.schema.json","stage-degraded-1.0.0.golden.json"},
+		{"stage-1.0.0.schema.json","stage-failed-1.0.0.golden.json"},
 		{"attempt-1.0.0.schema.json","attempt-running-1.0.0.golden.json"},
+		{"attempt-1.0.0.schema.json","attempt-failed-1.0.0.golden.json"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.golden,func(t *testing.T){
