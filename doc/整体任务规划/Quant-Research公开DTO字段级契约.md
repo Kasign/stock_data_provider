@@ -450,7 +450,7 @@ Evidence 必须保留来源事实、系统观察和研究纳入时间三条独�
 ### 9.8 ResearchContext 与 QualitySummary 约束
 
 - `context_version` 必须单调递增；已发布版本不可原地修改。重新装配、增删分区或改变证据集合必须产生新版本。
-- `section_id` 在同一 Context 内唯一；`section_refs` 与 `included_sections` 必须一一对应，`omitted_sections` 不得与 included_sections 重叠。
+- `section_id` 在同一 Context 内唯一；`section_refs` 包含本次评估的全部分区；`included_sections` 必须恰好等于其中 included=true 的 section_id 集合；`omitted_sections` 必须恰好等于 included=false 的 section_id 集合，并为每个 omitted 分区提供唯一 reason_code。三者 section_id 并集一致，不得重叠或遗漏。
 - `included_sections` 和 `omitted_sections` 按 Template 定义的稳定优先级排序；同优先级按 section_id 升序，保证 fingerprint 稳定。
 - `QualitySummary` 字段固定为 status、missing_required_count、missing_optional_count、conflict_count、stale_count、reason_codes；计数字段为非负 integer，reason_codes 去重并按字典序排序。
 - 任一 required section 被 omitted，Context.status 不得为 valid；具体是否阻断 Run 由 Researchflow Template 的 Stage 传播策略决定。Research 不自行把质量状态改写为 Run/Stage 执行状态。
