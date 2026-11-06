@@ -8,12 +8,12 @@ import (
 
 func validEntry(code, algorithmVersion string) Entry {
 	return Entry{
-		Code:             code,
-		SchemaVersion:    "1.0.0",
-		ValueType:        ValueTypeNumber,
-		Unit:             "ratio",
+		Code:          code,
+		SchemaVersion: "1.0.0",
+		ValueType:     ValueTypeNumber,
+		Unit:          "ratio",
 		Precision: Precision{
-			MaxIntegerDigits:   8,
+			MaxIntegerDigits:  8,
 			MaxFractionDigits: 6,
 			RoundingMode:      "half_even",
 			Tolerance:         json.RawMessage("0.000001"),
@@ -31,7 +31,7 @@ func validEntry(code, algorithmVersion string) Entry {
 			Quality:          []string{"valid"},
 			RequiresSnapshot: true,
 		}},
-		ParametersSchema: json.RawMessage(`{"type":"object","additionalProperties":false}`),
+		ParametersSchema: json.RawMessage(`{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","additionalProperties":false}`),
 		QualityPolicy: QualityPolicy{
 			MinimumCoverage:       1,
 			MissingHandling:       "reject",
@@ -89,6 +89,44 @@ func TestEntryValidateAcceptsMathematicallyIntegralJSONNumber(t *testing.T) {
 	}
 	if err := entry.Validate(); err != nil {
 		t.Fatalf("expected mathematically integral JSON number to pass, got %v", err)
+	}
+}
+
+func TestEntryValidateNormalizesLeadingZerosAfterExponentExpansion(t *testing.T) {
+	entry := validEntry("ratio_metric", "1.0.0")
+	entry.Precision.MaxIntegerDigits = 1
+	entry.Precision.Tolerance = json.RawMessage("0")
+	entry.Range = NumericRange{
+		Minimum: json.RawMessage("0"),
+		Maximum: json.RawMessage("0.001e3"),
+	}
+	if err := entry.Validate(); err != nil {
+		t.Fatalf("expected 0.001e3 to normalize to integer 1, got %v", err)
+	}
+}
+
+func TestEntryValidateCountsExponentExpandedDigits(t *testing.T) {
+	entry := validEntry("ratio_metric", "1.0.0")
+	entry.Precision.MaxIntegerDigits = 3
+	entry.Range = NumericRange{
+		Minimum: json.RawMessage("0"),
+		Maximum: json.RawMessage("1e4"),
+	}
+	if err := entry.Validate(); !errors.Is(err, ErrInvalidEntry) {
+		t.Fatalf("expected exponent-expanded integer digits to exceed precision, got %v", err)
+	}
+}
+
+func TestEntryValidatePreservesExactJSONNumberPrecision(t *testing.T) {
+	entry := validEntry("ratio_metric", "1.0.0")
+	entry.Precision.MaxFractionDigits = 18
+	entry.Precision.Tolerance = json.RawMessage("0.000000000000000001")
+	entry.Range = NumericRange{
+		Minimum: json.RawMessage("0"),
+		Maximum: json.RawMessage("0.1234567890123456789"),
+	}
+	if err := entry.Validate(); !errors.Is(err, ErrInvalidEntry) {
+		t.Fatalf("expected exact 19-digit fraction to exceed precision 18, got %v", err)
 	}
 }
 

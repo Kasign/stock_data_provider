@@ -24,7 +24,7 @@ const (
 )
 
 type Precision struct {
-	MaxIntegerDigits   int             `json:"max_integer_digits"`
+	MaxIntegerDigits  int             `json:"max_integer_digits"`
 	MaxFractionDigits int             `json:"max_fraction_digits"`
 	RoundingMode      string          `json:"rounding_mode"`
 	Tolerance         json.RawMessage `json:"tolerance"`
@@ -46,41 +46,41 @@ type InputRequirement struct {
 }
 
 type QualityPolicy struct {
-	MinimumCoverage      float64  `json:"minimum_coverage"`
-	MissingHandling      string   `json:"missing_handling"`
-	QualityStates        []string `json:"quality_states"`
+	MinimumCoverage       float64  `json:"minimum_coverage"`
+	MissingHandling       string   `json:"missing_handling"`
+	QualityStates         []string `json:"quality_states"`
 	UnavailableConditions []string `json:"unavailable_conditions"`
 }
 
 // Entry 是 Quant 指标、Indicator 或 Factor 的不可变语义元数据。
 // ParametersSchema 保留 JSON Schema 原文，避免把参数定义降级为无约束 map。
 type Entry struct {
-	Code              string              `json:"code"`
-	SchemaVersion     string              `json:"schema_version"`
-	ValueType         ValueType           `json:"value_type"`
-	Unit              string              `json:"unit"`
-	Precision         Precision           `json:"precision"`
-	Range             NumericRange        `json:"range"`
-	AlgorithmVersion  string              `json:"algorithm_version"`
-	InputRequirements []InputRequirement  `json:"input_requirements"`
-	ParametersSchema  json.RawMessage     `json:"parameters_schema"`
-	QualityPolicy     QualityPolicy       `json:"quality_policy"`
-	SupportsInterval  bool                `json:"supports_interval"`
+	Code              string             `json:"code"`
+	SchemaVersion     string             `json:"schema_version"`
+	ValueType         ValueType          `json:"value_type"`
+	Unit              string             `json:"unit"`
+	Precision         Precision          `json:"precision"`
+	Range             NumericRange       `json:"range"`
+	AlgorithmVersion  string             `json:"algorithm_version"`
+	InputRequirements []InputRequirement `json:"input_requirements"`
+	ParametersSchema  json.RawMessage    `json:"parameters_schema"`
+	QualityPolicy     QualityPolicy      `json:"quality_policy"`
+	SupportsInterval  bool               `json:"supports_interval"`
 }
 
 var (
-	ErrInvalidEntry       = errors.New("invalid registry entry")
-	ErrDuplicateVersion   = errors.New("registry entry version already registered")
+	ErrInvalidEntry        = errors.New("invalid registry entry")
+	ErrDuplicateVersion    = errors.New("registry entry version already registered")
 	ErrActiveVersionExists = errors.New("active algorithm version already exists")
-	ErrUnknownEntry       = errors.New("registry entry not found")
-	ErrNoActiveVersion    = errors.New("active algorithm version not found")
-	ErrRegistryFrozen     = errors.New("registry is frozen")
+	ErrUnknownEntry        = errors.New("registry entry not found")
+	ErrNoActiveVersion     = errors.New("active algorithm version not found")
+	ErrRegistryFrozen      = errors.New("registry is frozen")
 )
 
 var (
-	codePattern    = regexp.MustCompile(`^[a-z][a-z0-9_]*$`)
-	versionPattern = regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?$`)
-	decimalPattern = regexp.MustCompile(`^-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?$`)
+	codePattern       = regexp.MustCompile(`^[a-z][a-z0-9_]*$`)
+	versionPattern    = regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?$`)
+	jsonNumberPattern = regexp.MustCompile(`^(-?)(0|[1-9][0-9]*)(?:\.([0-9]+))?(?:[eE]([+-]?[0-9]+))?$`)
 )
 
 func (e Entry) Validate() error {
@@ -121,6 +121,9 @@ func (e Entry) Validate() error {
 	}
 	if !isJSONObject(e.ParametersSchema) {
 		return invalid("parameters_schema must be a JSON object")
+	}
+	if _, err := compileJSONSchema(e.ParametersSchema); err != nil {
+		return invalid("parameters_schema: " + err.Error())
 	}
 	if math.IsNaN(e.QualityPolicy.MinimumCoverage) || math.IsInf(e.QualityPolicy.MinimumCoverage, 0) || e.QualityPolicy.MinimumCoverage < 0 || e.QualityPolicy.MinimumCoverage > 1 {
 		return invalid("quality_policy.minimum_coverage")
@@ -174,19 +177,16 @@ func parseNumeric(raw json.RawMessage, valueType ValueType, precision Precision)
 		if err != nil {
 			return nil, err
 		}
-		text = number.String()
+		text, err = normalizeJSONNumber(number.String())
+		if err != nil {
+			return nil, err
+		}
 		if valueType == ValueTypeInteger {
 			integer, ok := new(big.Rat).SetString(text)
 			if !ok || !integer.IsInt() {
 				return nil, errors.New("invalid integer")
 			}
 			text = integer.Num().String()
-		} else {
-			value, err := strconv.ParseFloat(text, 64)
-			if err != nil || math.IsNaN(value) || math.IsInf(value, 0) {
-				return nil, errors.New("invalid finite number")
-			}
-			text = strconv.FormatFloat(value, 'f', -1, 64)
 		}
 	default:
 		return nil, errors.New("unsupported value type")
@@ -206,6 +206,50 @@ func parseNumeric(raw json.RawMessage, valueType ValueType, precision Precision)
 		return nil, errors.New("invalid numeric value")
 	}
 	return rat, nil
+}
+
+func normalizeJSONNumber(text string) (string, error) {
+	parts := jsonNumberPattern.FindStringSubmatch(text)
+	if parts == nil {
+		return "", errors.New("invalid JSON number")
+	}
+
+	exponent := 0
+	if parts[4] != "" {
+		value, err := strconv.Atoi(parts[4])
+		if err != nil || value > 10000 || value < -10000 {
+			return "", errors.New("JSON number exponent exceeds safety limit")
+		}
+		exponent = value
+	}
+
+	digits := parts[2] + parts[3]
+	if strings.Trim(digits, "0") == "" {
+		return "0", nil
+	}
+	decimalPosition := len(parts[2]) + exponent
+	var normalized string
+	switch {
+	case decimalPosition <= 0:
+		normalized = "0." + strings.Repeat("0", -decimalPosition) + digits
+	case decimalPosition >= len(digits):
+		normalized = digits + strings.Repeat("0", decimalPosition-len(digits))
+	default:
+		normalized = digits[:decimalPosition] + "." + digits[decimalPosition:]
+	}
+	decimalParts := strings.SplitN(normalized, ".", 2)
+	integerPart := strings.TrimLeft(decimalParts[0], "0")
+	if integerPart == "" {
+		integerPart = "0"
+	}
+	normalized = integerPart
+	if len(decimalParts) == 2 {
+		normalized += "." + decimalParts[1]
+	}
+	if parts[1] == "-" {
+		normalized = "-" + normalized
+	}
+	return normalized, nil
 }
 
 func decodeJSONNumber(raw json.RawMessage) (json.Number, error) {
@@ -325,7 +369,7 @@ func (r *Registry) LookupVersion(code, schemaVersion, algorithmVersion string) (
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	entry, exists := r.entries[versionKey{
-		metricKey: metricKey{code: code, schemaVersion: schemaVersion},
+		metricKey:        metricKey{code: code, schemaVersion: schemaVersion},
 		algorithmVersion: algorithmVersion,
 	}]
 	if !exists {
