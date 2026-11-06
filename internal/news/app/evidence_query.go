@@ -54,84 +54,84 @@ var ErrInvalidEvidenceQuery = errors.New("news.evidence.invalid_query")
 // EvidenceQueryFilters is a closed filter set. It deliberately has no SQL,
 // field-name, URL, or caller-supplied ordering fields.
 type EvidenceQueryFilters struct {
-	NewsIDs          []string               `json:"news_ids,omitempty"`
-	SourceRefs       []string               `json:"source_refs,omitempty"`
-	CanonicalSymbols []string               `json:"canonical_symbols,omitempty"`
-	PublishedAtFrom  *time.Time             `json:"published_at_from,omitempty"`
-	PublishedAtTo    *time.Time             `json:"published_at_to,omitempty"`
-	QualityStatuses  []EvidenceQualityStatus `json:"quality_statuses,omitempty"`
+	NewsIDs         	[]string               	`json:"news_ids,omitempty"`
+	SourceRefs      	[]string               	`json:"source_refs,omitempty"`
+	CanonicalSymbols	[]string               	`json:"canonical_symbols,omitempty"`
+	PublishedAtFrom 	*time.Time             	`json:"published_at_from,omitempty"`
+	PublishedAtTo   	*time.Time             	`json:"published_at_to,omitempty"`
+	QualityStatuses 	[]EvidenceQualityStatus	`json:"quality_statuses,omitempty"`
 }
 
 // ListEvidenceRequest is an in-process Application request. CallerRef must be
 // injected from trusted call context; it must never be copied from an untrusted
 // public HTTP request.
 type ListEvidenceRequest struct {
-	CallerRef             string                 `json:"caller_ref"`
-	PurposeCode           EvidencePurposeCode    `json:"purpose_code"`
-	RequestedContentLevel EvidenceContentLevel   `json:"requested_content_level"`
-	SystemAsOf            time.Time              `json:"system_as_of"`
-	Filters               *EvidenceQueryFilters  `json:"filters"`
-	BusinessTimeFrom      *time.Time             `json:"business_time_from,omitempty"`
-	BusinessTimeTo        *time.Time             `json:"business_time_to,omitempty"`
-	PageSize              int                    `json:"page_size"`
-	Cursor                *string                `json:"cursor,omitempty"`
+	CallerRef            	string               	`json:"caller_ref"`
+	PurposeCode          	EvidencePurposeCode  	`json:"purpose_code"`
+	RequestedContentLevel	EvidenceContentLevel 	`json:"requested_content_level"`
+	SystemAsOf           	time.Time            	`json:"system_as_of"`
+	Filters              	*EvidenceQueryFilters	`json:"filters"`
+	BusinessTimeFrom     	*time.Time           	`json:"business_time_from,omitempty"`
+	BusinessTimeTo       	*time.Time           	`json:"business_time_to,omitempty"`
+	PageSize             	int                  	`json:"page_size"`
+	Cursor               	*string              	`json:"cursor,omitempty"`
 }
 
 // GetEvidenceRequest identifies one News Item and an optional immutable
 // version. SystemAsOf is mandatory even when VersionID is supplied.
 type GetEvidenceRequest struct {
-	CallerRef             string               `json:"caller_ref"`
-	PurposeCode           EvidencePurposeCode  `json:"purpose_code"`
-	RequestedContentLevel EvidenceContentLevel `json:"requested_content_level"`
-	SystemAsOf            time.Time            `json:"system_as_of"`
-	NewsID                string               `json:"news_id"`
-	VersionID             string               `json:"version_id,omitempty"`
+	CallerRef            	string              	`json:"caller_ref"`
+	PurposeCode          	EvidencePurposeCode 	`json:"purpose_code"`
+	RequestedContentLevel	EvidenceContentLevel	`json:"requested_content_level"`
+	SystemAsOf           	time.Time           	`json:"system_as_of"`
+	NewsID               	string              	`json:"news_id"`
+	VersionID            	string              	`json:"version_id,omitempty"`
 }
 
 // ResearchEvidenceRecord is the stable, read-only DTO consumed by Research.
 // Nullable source times remain nil when News has no verifiable evidence.
 type ResearchEvidenceRecord struct {
-	NewsID                string                `json:"news_id"`
-	ObservationID         string                `json:"observation_id"`
-	VersionID             string                `json:"version_id"`
-	VersionNo             int                   `json:"version_no"`
-	ContentFingerprint    string                `json:"content_fingerprint"`
-	SourceRef             string                `json:"source_ref"`
-	ProviderRef           *string               `json:"provider_ref,omitempty"`
-	IdentityStatus        string                `json:"identity_status"`
-	BusinessQualityStatus EvidenceBusinessQualityStatus `json:"business_quality_status"`
-	QualityStatus         EvidenceQualityStatus `json:"quality_status"`
-	Title                 *string               `json:"title,omitempty"`
-	PublisherName         *string               `json:"publisher_name,omitempty"`
-	PublisherDomain       *string               `json:"publisher_domain,omitempty"`
-	PublishedAt           *time.Time            `json:"published_at"`
-	PublishedAtRaw        *string               `json:"published_at_raw,omitempty"`
-	AvailableAt           *time.Time            `json:"available_at"`
-	SystemObservedAt      time.Time             `json:"system_observed_at"`
-	FetchedAt             *time.Time            `json:"fetched_at,omitempty"`
-	NormalizedAt          *time.Time            `json:"normalized_at,omitempty"`
-	ContentLevel          EvidenceContentLevel  `json:"content_level"`
-	ContentRef            *string              `json:"content_ref,omitempty"`
-	ContentExcerpt        *string              `json:"content_excerpt,omitempty"`
-	AuthorizationRef      string                `json:"authorization_ref"`
-	AuthorizationStatus   string                `json:"authorization_status"`
-	SystemAsOf            time.Time             `json:"system_as_of"`
-	RelationRefs          []string              `json:"relation_refs"`
+	NewsID               	string                       	`json:"news_id"`
+	ObservationID        	string                       	`json:"observation_id"`
+	VersionID            	string                       	`json:"version_id"`
+	VersionNo            	int                          	`json:"version_no"`
+	ContentFingerprint   	string                       	`json:"content_fingerprint"`
+	SourceRef            	string                       	`json:"source_ref"`
+	ProviderRef          	*string                      	`json:"provider_ref,omitempty"`
+	IdentityStatus       	string                       	`json:"identity_status"`
+	BusinessQualityStatus	EvidenceBusinessQualityStatus	`json:"business_quality_status"`
+	QualityStatus        	EvidenceQualityStatus        	`json:"quality_status"`
+	Title                	*string                      	`json:"title,omitempty"`
+	PublisherName        	*string                      	`json:"publisher_name,omitempty"`
+	PublisherDomain      	*string                      	`json:"publisher_domain,omitempty"`
+	PublishedAt          	*time.Time                   	`json:"published_at"`
+	PublishedAtRaw       	*string                      	`json:"published_at_raw,omitempty"`
+	AvailableAt          	*time.Time                   	`json:"available_at"`
+	SystemObservedAt     	time.Time                    	`json:"system_observed_at"`
+	FetchedAt            	*time.Time                   	`json:"fetched_at,omitempty"`
+	NormalizedAt         	*time.Time                   	`json:"normalized_at,omitempty"`
+	ContentLevel         	EvidenceContentLevel         	`json:"content_level"`
+	ContentRef           	*string                      	`json:"content_ref,omitempty"`
+	ContentExcerpt       	*string                      	`json:"content_excerpt,omitempty"`
+	AuthorizationRef     	string                       	`json:"authorization_ref"`
+	AuthorizationStatus  	string                       	`json:"authorization_status"`
+	SystemAsOf           	time.Time                    	`json:"system_as_of"`
+	RelationRefs         	[]string                     	`json:"relation_refs"`
 }
 
 type ResearchEvidencePage struct {
-	Items       []ResearchEvidenceRecord `json:"items"`
-	NextCursor  *string                  `json:"next_cursor"`
-	SnapshotRef string                   `json:"snapshot_ref"`
-	SystemAsOf  time.Time                `json:"system_as_of"`
-	Diagnostics []string                 `json:"diagnostics"`
+	Items      	[]ResearchEvidenceRecord	`json:"items"`
+	NextCursor 	*string                 	`json:"next_cursor"`
+	SnapshotRef	string                  	`json:"snapshot_ref"`
+	SystemAsOf 	time.Time               	`json:"system_as_of"`
+	Diagnostics	[]string                	`json:"diagnostics"`
 }
 
 func NewResearchEvidencePage(systemAsOf time.Time) ResearchEvidencePage {
 	return ResearchEvidencePage{
-		Items: make([]ResearchEvidenceRecord, 0),
+		Items:       make([]ResearchEvidenceRecord, 0),
 		Diagnostics: make([]string, 0),
-		SystemAsOf: systemAsOf.UTC(),
+		SystemAsOf:  systemAsOf.UTC(),
 	}
 }
 

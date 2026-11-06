@@ -9,15 +9,15 @@ import (
 
 func validEvidenceListRequest(now time.Time) ListEvidenceRequest {
 	return ListEvidenceRequest{
-		CallerRef: "research",
-		PurposeCode: EvidencePurposeResearchAnalysis,
+		CallerRef:             "research",
+		PurposeCode:           EvidencePurposeResearchAnalysis,
 		RequestedContentLevel: EvidenceContentSummary,
-		SystemAsOf: now.Add(-time.Minute),
+		SystemAsOf:            now.Add(-time.Minute),
 		Filters: &EvidenceQueryFilters{
-			NewsIDs: []string{"news-1"},
-			SourceRefs: []string{"source-1"},
+			NewsIDs:          []string{"news-1"},
+			SourceRefs:       []string{"source-1"},
 			CanonicalSymbols: []string{"SSE:600000"},
-			QualityStatuses: []EvidenceQualityStatus{EvidenceQualityValid, EvidenceQualityDegraded},
+			QualityStatuses:  []EvidenceQualityStatus{EvidenceQualityValid, EvidenceQualityDegraded},
 		},
 		PageSize: 20,
 	}
@@ -35,7 +35,7 @@ func TestListEvidenceRequestValidateRejectsMissingRequiredFields(t *testing.T) {
 	now := time.Now().UTC()
 	base := validEvidenceListRequest(now)
 	cases := []struct {
-		name string
+		name   string
 		mutate func(*ListEvidenceRequest)
 	}{
 		{"caller", func(r *ListEvidenceRequest) { r.CallerRef = "" }},
@@ -63,16 +63,20 @@ func TestListEvidenceRequestValidateRejectsMissingRequiredFields(t *testing.T) {
 func TestListEvidenceRequestValidateRejectsOutOfRangeAndDuplicateFilters(t *testing.T) {
 	now := time.Now().UTC()
 	cases := []struct {
-		name string
+		name   string
 		mutate func(*EvidenceQueryFilters)
 	}{
 		{"duplicate news id", func(f *EvidenceQueryFilters) { f.NewsIDs = []string{"news-1", "news-1"} }},
 		{"too many source refs", func(f *EvidenceQueryFilters) {
 			f.SourceRefs = make([]string, 51)
-			for i := range f.SourceRefs { f.SourceRefs[i] = "source-" + string(rune('a'+i%26)) + string(rune('A'+i/26)) }
+			for i := range f.SourceRefs {
+				f.SourceRefs[i] = "source-" + string(rune('a'+i%26)) + string(rune('A'+i/26))
+			}
 		}},
 		{"invalid quality status", func(f *EvidenceQueryFilters) { f.QualityStatuses = []EvidenceQualityStatus{"fresh"} }},
-		{"duplicate quality status", func(f *EvidenceQueryFilters) { f.QualityStatuses = []EvidenceQualityStatus{EvidenceQualityValid, EvidenceQualityValid} }},
+		{"duplicate quality status", func(f *EvidenceQueryFilters) {
+			f.QualityStatuses = []EvidenceQualityStatus{EvidenceQualityValid, EvidenceQualityValid}
+		}},
 		{"blank source ref", func(f *EvidenceQueryFilters) { f.SourceRefs = []string{" "} }},
 		{"control character", func(f *EvidenceQueryFilters) { f.NewsIDs = []string{"news\n1"} }},
 		{"reversed published range", func(f *EvidenceQueryFilters) {
@@ -119,12 +123,12 @@ func TestEvidenceQueryRejectsFutureOrNonUTCSystemAsOf(t *testing.T) {
 func TestGetEvidenceRequestRequiresNewsAndKnowledgeTime(t *testing.T) {
 	now := time.Now().UTC()
 	request := GetEvidenceRequest{
-		CallerRef: "research",
-		PurposeCode: EvidencePurposeRiskReview,
+		CallerRef:             "research",
+		PurposeCode:           EvidencePurposeRiskReview,
 		RequestedContentLevel: EvidenceContentMetadata,
-		SystemAsOf: now,
-		NewsID: "news-1",
-		VersionID: "version-1",
+		SystemAsOf:            now,
+		NewsID:                "news-1",
+		VersionID:             "version-1",
 	}
 	if err := request.Validate(now); err != nil {
 		t.Fatalf("valid GetEvidence request: %v", err)
