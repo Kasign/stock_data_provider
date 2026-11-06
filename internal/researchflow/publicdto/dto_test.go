@@ -150,3 +150,16 @@ func domainRunSummaryForTest() *domain.ResultSummary {
 		ActionabilityStatus:"blocked",
 	}
 }
+
+func TestTerminalRunSchemaRequiresSummaryReference(t *testing.T) {
+	raw,err:=json.Marshal(RunFromDomain(domain.Run{SchemaVersion:"1.0.0",Ref:"run_terminal",Status:domain.RunFailed,Version:2}))
+	if err!=nil{t.Fatal(err)}
+	schemaBytes,err:=os.ReadFile(filepath.Join("../../../doc/researchflow/schema","run-1.0.0.schema.json"));if err!=nil{t.Fatal(err)}
+	compiler:=jsonschema.NewCompiler();compiler.Draft=jsonschema.Draft2020
+	const schemaURL="https://researchflow.invalid/schema/terminal-reference-test"
+	if err:=compiler.AddResource(schemaURL,bytes.NewReader(schemaBytes));err!=nil{t.Fatal(err)}
+	compiled,err:=compiler.Compile(schemaURL);if err!=nil{t.Fatal(err)}
+	decoder:=json.NewDecoder(bytes.NewReader(raw));decoder.UseNumber()
+	var instance any;if err:=decoder.Decode(&instance);err!=nil{t.Fatal(err)}
+	if err:=compiled.Validate(instance);err==nil{t.Fatal("terminal Run without result_summary_ref passed public schema")}
+}

@@ -10,7 +10,6 @@
     "quote_snapshot"
   ],
   "retry_policy_ref": "retry_default_v1",
-  "attempt_no": 2,
   "retry_at": null,
   "output_ref": null,
   "reason_codes": [

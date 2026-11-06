@@ -65,6 +65,8 @@ type CreateRunRecord struct {
 // in one transaction. It must recheck deadline_at against database UTC time at commit.
 // A concurrent duplicate with the same fingerprint returns the original result
 // with Replayed=true; a different fingerprint returns ErrIdempotencyConflict.
+// Terminal finalization must allocate result_summary_ref and persist the ResultSummary
+// resource and terminal Run atomically; terminal Run DTOs without that ref are invalid.
 type RunRepository interface {
 	FindIdempotentRun(context.Context, IdempotencyScope) (CreateRunResult, string, bool, error)
 	CreateRunAtomic(context.Context, CreateRunRecord) (CreateRunResult, error)

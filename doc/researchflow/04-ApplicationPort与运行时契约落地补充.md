@@ -209,3 +209,6 @@ Fake Repository/Fake Clock/Fake Provider 只证明模块内逻辑；MariaDB/Redi
 - Stage 公开 DTO 按项目字段级契约暴露 `quality_summary_ref`、`diagnostic_refs`，移除 Domain 内部的 `quality_status` 与 `risk_decision`；质量状态与风险门禁决策留在 ResultSummary 领域汇总。
 - Run Schema 对终态状态增加条件约束：succeeded/partial/failed/cancelled 必须有非空 result_summary_ref；非终态允许显式 null。
 - Domain 保留 ResultSummary 内容用于状态归并，ResultSummaryRef 由持久化终态提交时分配；Repository 必须与 Run 终态和 ResultSummary 在同一事务内写入。该持久化能力尚未实现。
+
+
+- RunRepository / 终态 Repository 的后续实现必须在终态事务内分配 result_summary_ref，并原子保存 ResultSummary 资源和 Run 终态；公开 Schema 已通过条件约束拒绝缺少该引用的终态 Run。
