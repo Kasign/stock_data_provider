@@ -4,7 +4,7 @@
 - 代码：`internal/llm/**`
 - 任务前缀：LLM
 - 状态：P1 LLM-002 基础 DTO/Provider Port 已提交；Platform Fault 映射和 Draft 2020-12 Schema 已实现，均待构建验证
-- 最近代码提交：543b60438d9d6b56c369b6d62c96277fb77c109a
+- 最近代码提交：a7e889b1cfd20b57ea26b80070cf9320dfdce94e
 - LLM-001：静态协议盘点完成；在线真实端点验收未执行
 - LLM-002：ProviderConfig、CapabilityState、ModelRequest/Response、Usage、Tool Call、ModelEvent 和 Provider Port 已有首批代码；Platform Fault 映射已实现待构建验证；Draft 2020-12 Schema 编译已实现待构建验证；JSON/SSE Golden、Responses Adapter 未完成
 
