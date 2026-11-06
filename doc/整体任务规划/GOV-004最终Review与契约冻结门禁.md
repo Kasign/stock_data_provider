@@ -813,3 +813,11 @@ Workflow Template 按 stage_code + template_version 固定 on_degraded、on_skip
 - Schema 注册按 `(event_type,schema_version)` 不可变；模板只暴露变量 allowlist。
 - 任务拆分将领域模块测试与真实渠道、Storage、Worker、根 Migration 的 L3 集成验收分开。
 - 本轮只更新规划文档，未实现代码、Migration、Worker 或真实渠道测试；CONTRACT-009/010 仍待 Owner Review，GOV-004 不因此转为 GO。
+
+
+## 39. Notification Fixture 验收准备
+
+- 已形成 NTF-001/004/005/006 的模块级 Fixture 设计，覆盖事件幂等、Schema 版本、订阅变更、投递状态、unknown 对账、重试预算、并发租约/fencing、Outbox/Inbox 和渠道错误分类。
+- 测试需断言实际外部调用次数、Attempt 追加历史、幂等键稳定性、状态迁移和敏感信息脱敏。
+- Fake Adapter/内存 Repository 只证明模块逻辑，不证明真实渠道、MariaDB、Worker 或根 Outbox/Migration 集成。
+- 本轮没有生成测试代码或执行测试；CONTRACT-009/010 仍待 Owner Review，GOV-004 NO-GO。

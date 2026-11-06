@@ -255,3 +255,11 @@ Domain/Contract 不得因为无关模块的 Adapter/Integration 未完成而被�
 - Schema 注册键 `(event_type,schema_version)`，注册后不可原地修改；模板绑定明确版本和变量 allowlist。
 
 详细状态机、字段、唯一键、Port 和验收映射见 `doc/notification/03-ApplicationPort与投递状态契约.md`。上述为规划建议，待 Notification/Platform/事件 Owner 签字。
+
+
+## 15. Notification Fixture 与验收覆盖补充
+
+- 新增合成 Event JSON Golden、Inbox/Publish 幂等冲突、Subscription/recipient 变更、Delivery 状态迁移、unknown 对账、RetryDelivery、租约/fencing、Outbox/Inbox 恢复和 Channel Fake Adapter 场景。
+- 明确断言外部调用次数、Attempt 历史、幂等键、状态版本和敏感信息脱敏；不能只断言最终 status。
+- 真实渠道行为、MariaDB 事务和 Worker 崩溃恢复属于 L3，Fake Fixture 通过不代表真实集成通过。
+- 详细清单见 `doc/notification/04-契约Fixture与状态迁移验收清单.md`；仍待 Owner Review。

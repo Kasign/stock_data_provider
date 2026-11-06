@@ -11,6 +11,7 @@ Notification 是独立通知业务模块，负责事件接收、Subscription、T
 - [通知领域与投递设计](01-通知领域与投递设计.md)
 - [任务拆分与验收](02-任务拆分与验收.md)
 - [Application Port 与投递状态契约](03-ApplicationPort与投递状态契约.md)
+- [契约 Fixture 与状态迁移验收清单](04-契约Fixture与状态迁移验收清单.md)
 
 关键边界：recipient_scope 不等于真实发送目标；外部渠道不承诺 exactly-once；发送结果不确定时不得盲目重试。Platform 提供 Secret、HTTP、Storage 和 Worker 基础设施，领域状态与 Repository 归 Notification 所有。
 
