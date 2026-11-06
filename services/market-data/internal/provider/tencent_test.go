@@ -536,7 +536,6 @@ func TestTencentQuoteParseFailureReportsProviderField(t *testing.T) {
 	t.Fatalf("expected structured Tencent parse issue for f3, got %+v", report.Issues)
 }
 
-
 func TestTencentDailyBarsReportsInvalidTradeDate(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		fmt.Fprint(w, `{"data":{"sh600519":{"qfqday":[
