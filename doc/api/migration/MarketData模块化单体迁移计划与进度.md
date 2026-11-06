@@ -1018,3 +1018,88 @@ Server 的 `writeErrWithRetryable` 始终输出 JSON：
 - [ ] 完成双 Host 重定向测试和 Endpoint 非法配置测试；本轮只有静态源码证据，不能将风险写成已复现漏洞或已通过安全验收。
 
 **本轮结论：** Provider 请求语义已形成覆盖 12 个 Provider 的首版矩阵，但仍未达到逐调用点完整盘点；出站安全风险明确，需在 M4 受控 HTTP Client 接入时做行为等价和安全回归。M0 继续保持 in_progress，不满足 M1 准入。
+
+
+### 2026-11-06：M0 第十九轮补充（Eastmoney 调用点与 MiaoXiang 缓存/限速）
+
+#### 1. Eastmoney 调用点矩阵（源码核查）
+
+本轮继续拆分 Eastmoney 的独立调用族，避免把多个接口共用 getJSON/getJSONWithRetry 误认为同一个请求契约。
+
+| 能力/调用族 | 方法 | 主要 Query 字段 | Body / Header | Endpoint 来源 | 超时/重试 |
+|---|---|---|---|---|---|
+| 个股实时行情 | GET | secid、fields、fltt、invt、ut、时间戳 _ | UA、Referer、Accept | EASTMONEY_QUOTE_URL | Client 默认 12s；该调用走 getJSON，不额外覆盖 attempt timeout |
+| 个股基础资料/市场画像 | GET | reportName、columns、quoteColumns、filter、pageNumber、pageSize、sortTypes、sortColumns、source、client、版本时间戳；画像补充 quote 请求另有 secid/fields/fltt/invt/ut | UA、Referer、Accept | STOCK_BASIC_URL；行情补充复用 QUOTE_URL | 基础资料 6s attempt；画像行情 8s attempt |
+| 个股日 K / 筹码分布 | GET | secid、fields1、fields2、klt、fqt、beg、end、lmt、ut、时间戳；筹码分布固定日线窗口和 limit | UA、Referer、Accept | KLINE_URL | 日 K 走 getJSON；筹码分布 8s attempt |
+| 热门/飙升榜原始榜单 | POST JSON | Body: appId、globalId、marketType、pageNo、pageSize | Content-Type/Accept/UA/Referer；无私密 API Key | HOT_RANKINGS_URL / HOT_SURGE_URL | 每次 8s Context；最多 3 次；本调用的重试与通用 GET 退避需分别验证 |
+| 热榜行情补全 | GET | secids、fields、ut、fltt、invt | UA、Referer、Accept | INDEX_URL | 8s attempt |
+| 证券目录/搜索/市场成交额 | GET | pn、pz、po、np、ut、fltt、invt、fid、fs、fields、时间戳；不同调用的 fs/fields/page size 不同 | UA、Referer、Accept | SECTOR_RANKING_URL（市场股票列表可独立覆盖） | 搜索/成交额 6s attempt；部分调用分页 |
+| 板块排名/五日候选 | GET | pn、pz、po、np、ut、fltt、invt、fid、fs、fields、时间戳 | UA、Referer、Accept | SECTOR_RANKING_URL | 排名 6s；五日候选 8s；候选最多 20 页/2000 行 |
+| 板块五日日 K | GET | secid、fields1、fields2、klt、fqt、beg、end、lmt、ut、时间戳 | UA、Referer、Accept | KLINE_URL | 8s attempt |
+| 指数行情 | GET | secids、fields、fltt、invt、ut、时间戳 | UA、Referer、Accept | INDEX_URL | 走 getJSON；Client 默认 12s |
+| 市场涨跌分布 | GET | dpt、ut、时间戳 | UA、Referer、Accept | MARKET_STOCKS_URL | 8s attempt |
+| 涨跌停/炸板池 | GET | ut、dpt、Pageindex、pagesize、sort、date、时间戳 | UA、Referer、Accept | LIMIT_POOL_BASE_URL + 固定路径 getTopicZTPool/getTopicDTPool/getTopicZBPool | 6s attempt；DTPool 特定异常响应存在第二次请求路径 |
+| 个股板块归属 | GET | forcect、spt、fields、pi、pz、po、fid、fid0、invt、secid、ut、时间戳 | UA、Referer、Accept | STOCK_BOARDS_URL | 6s attempt |
+| 个股资金流 | GET | secid、fields1、fields2、klt、lmt、end、ut、时间戳 | UA、Referer、Accept | CAPITAL_FLOW_URL | 8s attempt |
+| 龙虎榜 | GET | reportName、columns、filter(TRADE_DATE)、pageNumber、pageSize、sortColumns、sortTypes、source、client | UA、Referer、Accept | DRAGON_TIGER_URL | 8s attempt |
+| 个股公告 | GET | sr、page_size、page_index、ann_type、client_source、f_node、s_node、begin_time、end_time、stock_list | UA、Referer、Accept | ANNOUNCEMENTS_URL | 8s attempt |
+
+补充说明：
+- Eastmoney 的 UT 是公开前端请求参数，不应按私密 Token 管理；但仍需按配置/代码版本跟踪其变化。
+- Hot ranking POST 的 Body 包含 appId/globalId，但当前代码注释和配置语义未将其定义为部署密钥；不可与 Tushare Token 混为一谈。
+- GET 参数由 url.Values 编码，getJSON 会覆盖 URL 原有 RawQuery；Endpoint 配置契约因此要求基础 URL 不携带 Query。
+- 上表是按调用族归并的参数清单，不代表每个分页循环、Fallback URL、异常重试分支都已逐调用点验收。M0 仍需补充请求级 Golden 覆盖。
+
+#### 2. Eastmoney Endpoint 配置映射与校验发现
+
+当前 services/market-data/internal/config/config.go 对以下环境变量读取并调用 validateEndpointURL：
+- Eastmoney：QUOTE、KLINE、STOCK_BASIC、SECTOR_RANKING、INDEX、MARKET_STOCKS、LIMIT_POOL_BASE、STOCK_BOARDS、DRAGON_TIGER、ANNOUNCEMENTS、HOT_RANKINGS、HOT_SURGE、CAPITAL_FLOW。
+- Tencent：QUOTE、KLINE、NONE_KLINE、STOCK_SEARCH。
+- Sina：QUOTE、KLINE。
+- Yahoo：CHART。
+- NetEase：HISTORY、QUOTE。
+- Tushare：API_URL。
+- Hithink：BASE_URL。
+- Xueqiu：BASE_URL。
+- TickFlow：API_URL、FREE_API_URL。
+- MiaoXiang：API_URL。
+
+validateEndpointURL 当前要求绝对 URL、Host 非空、Scheme 为 http/https，且不允许 UserInfo、Query、ForceQuery、Fragment；**但明确允许明文 HTTP，也没有对 Host/IP/DNS 目标做 allowlist 限制**。这意味着当前检查解决的是 URL 形态和凭据嵌入问题，不是 SSRF/出站目标授权。
+
+另外，Eastmoney Provider 构造器存在 WithHotRankingURLs、WithCapitalFlowURL 等二次覆盖入口；这些方法主要做 TrimSpace/空值处理，没有独立调用 validateEndpointURL。必须确认配置构造链路确实先经过 config 校验，且后续不会从不可信动态配置绕过。
+
+迁移到统一 HTTP Client 时建议拆成两层：
+1. 配置层：保留现有 endpoint 字段与默认值；拒绝非 HTTPS（如需本地测试则通过显式测试开关，而不是生产默认放行）；拒绝 UserInfo/Query/Fragment。
+2. Transport 层：校验解析后的目标 Host、端口、解析 IP 和重定向目标；DNS 解析后防止私网/回环/链路本地地址绕过；对重定向重新执行策略。是否允许自建代理或私有上游应通过显式可信目标配置表达，不应隐式放开全部内网地址。
+
+#### 3. MiaoXiang 限速、并发准入与缓存边界
+
+源码确认：
+- 请求间隔目标为全局至少 300ms，状态由包级 miaoXiangRateMu / miaoXiangLastRequest 维护，而不是 Provider 实例字段。
+- 同时存在包级 miaoXiangRequestLock.TryLock()；任一实例正在请求时，其他实例不会排队等待，而是立即返回 “request already in progress; supplemental query skipped”。
+- 锁覆盖限速等待、HTTP 请求、响应读取、JSON 解码和结果提取全过程；不是只保护网络发送瞬间。
+- LastRequest 在 client.Do 返回后更新（无论成功响应还是网络错误），因此网络失败也会占用下一次 300ms 节流窗口；在 Do 前取消则不会更新。
+- 每实例独立缓存，TTL 为 5 分钟；缓存命中不经过全局请求锁，也不占用限速窗口。
+- 缓存键由调用路径传入，当前 Chip Distribution / Capital Flow 分别构造 dataset + canonical symbol 键；成功解析出非空受支持表格后才写缓存，失败、HTTP 非 2xx、超限或解码失败不会写缓存。
+- 缓存过期判断为 now - storedAt >= TTL，命中后删除过期项；当前未发现周期清理任务，因此长期不再访问的过期键会留在 map，直到同键再次读取或实例生命周期结束。
+- 成功响应上限 2 MiB；错误响应最多丢弃读取 4096 bytes；请求通过 apikey Header 认证，POST JSON Body 只有 toolQuery。
+- 构造器要求绝对 HTTP(S) URL，禁止 UserInfo、Query、Fragment；但仍允许 HTTP，且未做目标 Host allowlist。
+
+迁移影响：
+1. 同进程多实例时，包级全局 TryLock 会让一个实例的慢请求阻塞其他实例的补充数据请求准入；这不是“跨实例共享限速”这么简单，而是全局单飞 + 全局最小间隔。
+2. 如果后续拆分成多个 Server 组合根/测试并行运行，包级锁和时间戳会跨实例共享，测试之间可能产生非确定性；应明确将其变为显式共享 RateLimiter 依赖，或明确约束单实例。
+3. 如果未来改成排队限流器，会改变当前“繁忙时快速跳过”的行为，必须保留该行为或经产品/调用方确认后再改。
+4. 缓存目前没有容量上限和全局清理策略；当前数据集/股票组合有限，但仍应增加容量/生命周期边界或证明实例短生命周期足够。
+5. 多实例各自缓存不共享，可能造成重复上游请求；若迁移时合并缓存，需明确 key、数据类型不可变性和 TTL 语义，避免跨实例共享可变 slice。
+
+#### 4. 本轮审计结论与待办状态
+
+- [x] Eastmoney 主要调用族的 Method、Query/Body、Endpoint、attempt timeout 已形成矩阵。
+- [x] MiaoXiang 300ms 全局间隔、全局 TryLock、每实例 5 分钟缓存和成功写缓存边界已确认。
+- [x] 明确 Endpoint URL 校验并不等同于出站 Host/IP 授权。
+- [ ] Eastmoney 所有调用点的逐字段 Request Golden、Fallback 与重试分支仍需测试覆盖核验。
+- [ ] 完成 Provider 构造/配置实际调用链核对，确认所有环境变量都传入正确的 Provider 字段。
+- [ ] 补齐 MiaoXiang 缓存容量/实例生命周期决策。
+- [ ] 对 HTTP/TCP Provider 做连接池、并发上限、响应分配和 Close 生命周期审计。
+
+**本轮结论：** Eastmoney 参数矩阵和 MiaoXiang 缓存/限速行为已由源码确认；Endpoint 当前只做 URL 形态校验，不提供目标主机授权。该问题应纳入 M4 统一出站安全边界，但不能在 M0 文档中误报为已存在可远程利用的 SSRF 漏洞。M0 继续 in_progress。
