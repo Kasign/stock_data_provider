@@ -603,9 +603,14 @@ export function bindResearchNotes({ root = document, getContext = () => ({}), st
       return;
     }
     const count = result.importedCount;
-    clearImportPreview();
+    pendingImport = null;
+    pendingImportRaw = null;
+    importFile.value = "";
+    importCommit.disabled = true;
+    importSummary.textContent = "导入完成：新增 " + count + " 条；当前共 " + result.totalCount + " 条。";
+    importFeedback.textContent = "记录仅保存在当前浏览器；可关闭此预览继续使用。";
+    importFeedback.dataset.state = "ok";
     render();
-    feedback("导入完成：新增 " + count + " 条；当前共 " + result.totalCount + " 条。记录仅保存在当前浏览器。");
   });
 
   $("#research-note-create").addEventListener("click", openNewNote);
