@@ -1,8 +1,8 @@
 # Notification Application Port 与投递状态契约
 
 - 归属：Notification 模块，NTF-001/004/005/006
-- 对应治理决议：CONTRACT-009、CONTRACT-010
-- 状态：规划侧 Owner Review 建议稿，未冻结
+- 对应项目契约：NTF-CTR-001、NTF-CTR-002、NTF-CTR-003（历史别名 CONTRACT-009/010）
+- 状态：Notification 字段级契约输入；当前状态和阻断范围以 `doc/整体任务规划/跨模块契约目录与冻结状态.md` 为准
 - 日期：2026-11-06
 - 代码边界：`internal/notification/**`；根 DI、HTTP、Worker、Migration 注册由 Integration Owner 负责
 
@@ -184,17 +184,14 @@ PublishResult 应明确 accepted/duplicate；冲突通过稳定错误返回。�
 | NTF-006 | Repository Port、唯一约束、Outbox/Inbox Schema 设计 | MariaDB 事务、唯一冲突、锁竞争、Migration/恢复演练 |
 | NTF-007 | Delivery 查询、脱敏诊断、reason_code 和审计 | 根 HTTP/权限/监控接入 |
 
-## 11. Owner Review 待确认
+## 11. 项目统一契约决议与证据状态
 
-| 决议 | 建议 | Owner |
+| 新契约 | 已接受语义 | 当前状态 |
 |---|---|---|
-| CONTRACT-009-A Event Inbox 幂等键 | source_module + event_id；同一 key 不同 fingerprint 冲突 | Notification |
-| CONTRACT-009-B PublishEvent 幂等键 | source_module + idempotency_key；稳定重放返回原结果 | Notification |
-| CONTRACT-009-C Delivery 唯一键 | event + subscription/version + channel/config version + recipient_ref | Notification |
-| CONTRACT-009-D 状态集合 | 增加 retry_wait、blocked、unknown；unknown 先对账再重试 | Notification + Platform |
-| CONTRACT-009-E 交付语义 | 明确不承诺外部 exactly-once；按渠道能力使用幂等键/对账 | Notification |
-| CONTRACT-010-A Schema 注册 | event_type + schema_version 不可变注册表 | Notification + 各事件 Owner |
-| CONTRACT-010-B 兼容策略 | 逐事件类型声明兼容级别，禁止隐式旧版本回退 | Notification + 各事件 Owner |
-| CONTRACT-010-C 模板绑定 | Template 固定事件 Schema 和版本，变量 allowlist | Notification |
+| NTF-CTR-001 Event Schema Registry | event_type + schema_version 不可变注册键；生产方拥有 payload 语义；未知版本拒绝，不回退旧 Schema | pending_evidence：首批事件 Schema/Golden/兼容矩阵未齐 |
+| NTF-CTR-002 Inbox/Publish/Delivery 幂等与状态机 | Inbox=(source_module,event_id)；Publish=(source_module,idempotency_key)；Delivery 唯一键含 event/subscription version/channel config/recipient；unknown 先对账，不盲目重发 | pending_evidence：DB 唯一约束、并发/重复命令/恢复测试未齐 |
+| NTF-CTR-003 Channel 重试与外部副作用 | 不承诺外部 exactly-once；仅明确未被渠道接受且可重试的错误自动重试；ambiguous outcome 进入 unknown | pending_evidence：逐渠道能力声明、超时/回执丢失/幂等测试未齐 |
 
-**本文件是设计建议和 Review 基线，不代表 Owner 已批准、Schema 已冻结或任何实现/测试已通过。**
+
+
+**本文件保留 Notification 领域字段与状态机细节；项目级语义和契约状态以统一契约目录为准。当前 NTF-CTR-001~003 均未达到 frozen；不代表任何真实渠道或 L3 集成验收已通过。**
