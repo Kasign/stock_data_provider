@@ -424,3 +424,6 @@
 
 - `RowsValidated` 统一表示通过字段校验、去重和日期范围过滤的完整有效行数，不受展示 limit 影响；limit 截断行数通过结构化 info issue 的 Count 表达。正常限量截断不再单独导致 DailyBar Probe quality degraded；真实数据问题仍触发降级。样本日期和跨源快照继续使用 limit 后的最新窗口。
 - 新增 7 行超过默认 limit 的服务层回归测试。无 API/DB/WebUI 契约变化，CI 待验。
+
+
+- P0-53 最终 CI：代码 SHA `91dfd465fc6cee738566d0b423e7e0b878e93d6e` 的 Push/PR Go suite `42147895923` / `42147902737`、Parity `42147902269`、WebUI checks `42147902274` 均 success；Go suite 含 gofmt、test、race、vet、MariaDB migration/PIT、Compose 和两个 Docker 镜像构建。Live Provider Probe `42147902279` 外层 success，但历史生产 Probe 与 BaoStock/Pytdx/Tushare 专项 skipped，不构成真实历史行情/跨源验收。接口字段既有，仅澄清 RowsValidated 语义，不增加 API/DB/WebUI 契约。
