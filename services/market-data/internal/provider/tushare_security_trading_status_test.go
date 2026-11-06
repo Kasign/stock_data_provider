@@ -483,4 +483,3 @@ func containsSecurityStatusReason(reasons []string, expected string) bool {
 	}
 	return false
 }
-

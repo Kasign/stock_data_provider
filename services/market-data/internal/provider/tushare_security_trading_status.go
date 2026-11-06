@@ -79,7 +79,7 @@ func (p *Tushare) FetchSecurityTradingStatus(ctx context.Context, rawSymbol, raw
 				ListingDate: listingDate, ListingTradingDayNumber: 0, ListingStatusKnown: true,
 				IsTradingDay: tradingDay, TradingDayKnown: true, SuspensionStatus: suspension,
 				Source: p.Name(), SourceVersion: tushareSecurityTradingStatusVersion, FetchedAt: time.Now().UTC(),
-				QualityStatus: model.QualityUnknown,
+				QualityStatus:  model.QualityUnknown,
 				QualityReasons: []string{"security_not_yet_listed_on_requested_date"},
 			}, nil
 		}
