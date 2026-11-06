@@ -139,7 +139,7 @@ ResearchAttempt {
 }
 ```
 
-状态枚举、传播矩阵、RetryPolicy、Hard Risk Gate、actionability_status、Cancel/Deadline 和 fencing 的权威语义见 [Researchflow FLOW-CTR-001/002 最终决议（历史别名 CONTRACT-006/007）](../researchflow/03-CONTRACT-006与007最终决议.md)。Schema 摘要不得替代字段级契约；Run/Stage 使用 version/CAS，Attempt 终态不可变，所有领域 Repository/Migration 归 Researchflow。
+状态枚举、传播矩阵、RetryPolicy、Hard Risk Gate、actionability_status、Cancel/Deadline 和 fencing 的权威语义见 [Researchflow FLOW-CTR-001/002 最终决议（历史别名 CONTRACT-006/007）](../../researchflow/03-CONTRACT-006与007最终决议.md)。Schema 摘要不得替代字段级契约；Run/Stage 使用 version/CAS，Attempt 终态不可变，所有领域 Repository/Migration 归 Researchflow。
 
 ## 7. LLM：模型调用
 
