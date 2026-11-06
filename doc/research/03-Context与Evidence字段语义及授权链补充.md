@@ -87,6 +87,10 @@ ResearchEvent 是跨来源现实事件，不是 News Article 别名。创建、�
 
 生命周期：detected/consolidating/active/materializing/fading/invalidated/closed。只有状态真正迁移并持久化后才按 INT-CTR-001 发布 lifecycle_changed；Evidence 追加、来源补录或描述修订但状态未变，不发布。事件通过 Research 本地事务 Outbox 发布，不直接调用 Notification 内部接口。
 
+## 6.1 Claim / Hypothesis 领域实现边界
+
+当前 `internal/research/claim/` 以单一 Claim DTO 表达 reported_fact、inference 和 hypothesis 三类认识论状态。Hypothesis 必须提供 validation_method、expected_observation 和非空 invalidation_conditions；支持与反证引用不能重叠。当前只验证本地结构、UTC 知识截止时间和版本号连续性，不查询 Evidence/Scope 资源，不持久化版本，也不推断支持度或概率。状态值按项目契约枚举校验；状态迁移和跨版本替代关系尚未接入。
+
 ## 7. 验收门禁
 
 | 范围 | 必须覆盖 |
@@ -124,6 +128,10 @@ Quant-Research DTO 要求非 null 的 occurred_at/published_at/available_at 规�
 Quant-Research DTO 第 3.3 节的 ResearchEvent 字段表没有 `source_refs` 和 `derived_from_refs`，但第 9.9 节要求 Event 合并/拆分时记录这两类引用。现有 `supersedes_event_version` 只能表达同一 Event 内的版本替代，不能表达多个 Event 合并为一个或一个 Event 拆分为多个。
 
 在项目级契约明确字段、方向、基数和历史查询语义前，Research 只实现单 Event 版本追加与状态转换，不新增本地私有字段，不实现跨 Event 合并/拆分写入。
+
+### RSC-OPEN-005：Claim/Hypothesis 版本替代字段缺失
+
+Quant-Research DTO 第 3.4 节定义 claim_version，但没有 `supersedes_version`；第 9.9 节又要求修正声明 supersedes_version。当前实现只能验证 claim_version 从 1 起、相邻版本号连续和 system_as_of 不回退，不能验证显式替代关系。项目级契约补齐前不新增私有字段，也不把版本追加验收标记为完整。
 
 ### RSC-OPEN-002：ResearchEvent.changed_at 与 INT-CTR-001 时间映射缺字段
 

@@ -3,8 +3,8 @@
 - 分支：`feat/research`
 - 代码：`internal/research/**`
 - 任务前缀：RSC
-- 当前阶段：R1 Context + R2 Evidence + R3 Event 领域基础
-- 当前状态：Context/Evidence Domain 已有临时独立 Go 1.22 package 测试证据；Evidence 新增 GOV-CTR-006 授权快照校验与 Event Domain/状态机测试已写入但尚未执行。未完成仓库完整构建/CI、真实 Data/News、Owner 当前授权复核、Application、Repository 和跨模块集成。
+- 当前阶段：R1 Context + R2 Evidence + R3 Event + R5 Claim/Hypothesis 领域基础
+- 当前状态：Context/Evidence Domain 已有临时独立 Go 1.22 package 测试证据；Evidence 新增 GOV-CTR-006 授权快照校验、Event Domain/状态机及 Claim/Hypothesis Domain 测试已写入但尚未执行。未完成仓库完整构建/CI、真实 Data/News、Owner 当前授权复核、Application、Repository 和跨模块集成。
 
 ## 模块职责
 
@@ -36,9 +36,13 @@ internal/research/
     model.go
     validate.go
     validate_test.go
+  claim/
+    model.go
+    validate.go
+    validate_test.go
 ```
 
-R1/R2/R3 当前只实现 Context、Evidence、Event 领域结构及本地校验：包括 Evidence 内容指纹/PIT、GOV-CTR-006 授权快照完整性、Event 追加版本和生命周期转换。没有 HTTP 接口、真实数据 Adapter、Repository、Migration、Outbox 或 Run 编排接入。
+R1/R2/R3/R5 当前只实现 Context、Evidence、Event、Claim/Hypothesis 领域结构及本地校验：包括 Evidence 内容指纹/PIT、GOV-CTR-006 授权快照完整性、Event 追加版本和生命周期转换、Claim/Hypothesis 认识论字段与验证条件。没有 HTTP 接口、真实数据 Adapter、Repository、Migration、Outbox 或 Run 编排接入。
 
 旧 `go-core/internal/contextpack` 和 `internal/analysis` 是历史分析流程，不等同于新 Research Domain；仅作为迁移行为参考，不重复建设其已有的数据整理能力。
 
@@ -53,5 +57,6 @@ R1/R2/R3 当前只实现 Context、Evidence、Event 领域结构及本地校验�
 - RSC-OPEN-002：ResearchEvent.changed_at 与 INT-CTR-001 事件时间映射存在字段缺口；不阻断 Event Domain。
 - RSC-OPEN-003：Event 规范化时间要求可追溯到规则版本，但当前 DTO 没有 normalization_rule_version；未决前不声称规范化时间来源链完整。
 - RSC-OPEN-004：Event 合并/拆分要求 source_refs/derived_from_refs，但 ResearchEvent 字段表未定义这两个字段；未决前不实现跨 Event 归并关系。
+- RSC-OPEN-005：Claim/Hypothesis 版本治理要求 supersedes_version，但字段表未定义该字段；当前仅验证版本号连续性，不能声称显式替代关系完整。
 
 详细设计见 [01-研究领域模型与证据体系](01-研究领域模型与证据体系.md)，字段与授权链补充见 [03-Context与Evidence字段语义及授权链补充](03-Context与Evidence字段语义及授权链补充.md)，任务与验收见 [02-任务拆分与验收](02-任务拆分与验收.md)。
