@@ -9,7 +9,7 @@
     "schema_version":{"const":"1.0.0"},
     "run_ref":{"type":"string","minLength":1},
     "status":{"enum":["created","queued","running","cancelling","succeeded","partial","failed","cancelled"]},
-    "version":{"type":"integer","minimum":0},
+    "version":{"type":"integer","minimum":1},
     "system_as_of":{"type":"string","format":"date-time"},
     "deadline_at":{"type":"string","format":"date-time"},
     "template_ref":{"type":"string","minLength":1},

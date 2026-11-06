@@ -56,7 +56,7 @@ type Stage struct {
 	Required bool `json:"required"`
 	DependencyStageRefs []string `json:"dependency_stage_refs"`
 	RetryPolicyRef string `json:"retry_policy_ref"`
-	AttemptNo int `json:"attempt_no"`
+
 	RetryAt *time.Time `json:"retry_at"`
 	OutputRef *string `json:"output_ref"`
 	QualityStatus *string `json:"quality_status"`
@@ -86,7 +86,7 @@ func RunFromDomain(v domain.Run) Run {
 	return Run{SchemaVersion:v.SchemaVersion,RunRef:v.Ref,Status:string(v.Status),Version:v.Version,SystemAsOf:v.SystemAsOf,DeadlineAt:v.DeadlineAt,TemplateRef:v.TemplateRef,TemplateVersion:v.TemplateVersion,TemplateFingerprint:v.TemplateFingerprint,InputSnapshotRefs:cloneStrings(v.InputSnapshotRefs),ResultSummary:resultSummaryFromDomain(v.ResultSummary),OriginatingRequestID:cloneStringPointer(v.OriginatingRequestID),CorrelationID:v.CorrelationID,TerminationReason:stringPointer(v.TerminationReason),CreatedAt:v.CreatedAt,StartedAt:cloneTimePointer(v.StartedAt),FinishedAt:cloneTimePointer(v.FinishedAt)}
 }
 func StageFromDomain(v domain.Stage, schemaVersion string) Stage {
-	return Stage{SchemaVersion:schemaVersion,StageRef:v.Ref,RunRef:v.RunRef,StageCode:v.Code,Status:string(v.Status),Version:v.Version,Required:v.Required,DependencyStageRefs:cloneStrings(v.Dependencies),RetryPolicyRef:v.RetryPolicyRef,AttemptNo:v.AttemptNo,RetryAt:cloneTimePointer(v.RetryAt),OutputRef:cloneStringPointer(v.OutputRef),QualityStatus:stringPointer(v.QualityStatus),ReasonCodes:cloneStrings(v.ReasonCodes),RiskDecision:stringPointer(v.RiskDecision),CreatedAt:v.CreatedAt,StartedAt:cloneTimePointer(v.StartedAt),FinishedAt:cloneTimePointer(v.FinishedAt)}
+	return Stage{SchemaVersion:schemaVersion,StageRef:v.Ref,RunRef:v.RunRef,StageCode:v.Code,Status:string(v.Status),Version:v.Version,Required:v.Required,DependencyStageRefs:cloneStrings(v.Dependencies),RetryPolicyRef:v.RetryPolicyRef,RetryAt:cloneTimePointer(v.RetryAt),OutputRef:cloneStringPointer(v.OutputRef),QualityStatus:stringPointer(v.QualityStatus),ReasonCodes:cloneStrings(v.ReasonCodes),RiskDecision:stringPointer(v.RiskDecision),CreatedAt:v.CreatedAt,StartedAt:cloneTimePointer(v.StartedAt),FinishedAt:cloneTimePointer(v.FinishedAt)}
 }
 func AttemptFromDomain(v domain.Attempt, schemaVersion string) Attempt {
 	return Attempt{SchemaVersion:schemaVersion,AttemptRef:v.Ref,StageRef:v.StageRef,AttemptNo:v.Number,Status:string(v.Status),LeaseOwner:stringPointer(v.LeaseOwner),LeaseExpiresAt:cloneTimePointer(v.LeaseExpiresAt),FencingToken:v.FencingToken,StartedAt:v.StartedAt,FinishedAt:cloneTimePointer(v.FinishedAt),FaultRef:cloneStringPointer(v.FaultRef),OutputRef:cloneStringPointer(v.OutputRef)}
