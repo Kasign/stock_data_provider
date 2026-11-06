@@ -436,3 +436,9 @@
 
 
 - P0-54 最终 CI：代码 SHA `b7d60a97b78273cf653a2910b6d1a21ac7ad6ac7` 的 Push/PR Go suite `42149506735` / `42149513937`、Parity `42149513908`、WebUI checks `42149513999` 均 success；Go suite 含 gofmt、test、race、vet、MariaDB migration/PIT、Compose 和两个 Docker 镜像构建。Live Provider `42149506723` / `42149513877` 外层 success，但生产历史 Probe 与 BaoStock/Pytdx/Tushare 专项 skipped，不代表真实历史行情/跨源验收。
+
+
+## 29. 2026-11-06 API-06 P0-55 上市前日期状态
+
+- Tushare 对请求日期早于上市日期时，返回可验证上市日期和 `ListingTradingDayNumber=0`，同时保留市场交易日历状态；不再将未来上市日期当作无效状态，也不请求上市前不适用的 ST/名称/停复牌信息。服务层允许该证据组合，供 DailyBar 上市前缺失日期解释使用。
+- 新增 Provider 与服务层回归测试；无 API/DB/WebUI 契约变化，CI 待验。

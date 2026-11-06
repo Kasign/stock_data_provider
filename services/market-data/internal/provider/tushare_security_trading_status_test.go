@@ -422,3 +422,65 @@ func TestTushareFetchSecurityTradingStatusDoesNotInferNormalSTStateOnNonTradingD
 	}
 	t.Fatalf("expected explicit non-trading-date quality reason: %v", got.QualityReasons)
 }
+
+func TestTushareFetchSecurityTradingStatusRecognizesPreListingTradingDate(t *testing.T) {
+	var calls []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var request struct {
+			APIName string            `json:"api_name"`
+			Params  map[string]string `json:"params"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Errorf("decode request: %v", err)
+			http.Error(w, "bad request", http.StatusBadRequest)
+			return
+		}
+		calls = append(calls, request.APIName)
+		var fields []string
+		var items [][]any
+		switch request.APIName {
+		case "stock_basic":
+			fields = []string{"ts_code", "list_status", "list_date", "market"}
+			items = [][]any{{"600519.SH", "L", "20261020", "主板"}}
+		case "trade_cal":
+			fields = []string{"exchange", "cal_date", "is_open"}
+			items = [][]any{{"SSE", "20261019", "1"}}
+		default:
+			t.Errorf("pre-listing status must not query %q", request.APIName)
+			http.Error(w, "unexpected API", http.StatusBadRequest)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"code": 0, "msg": "", "data": map[string]any{"fields": fields, "items": items},
+		})
+	}))
+	defer server.Close()
+
+	client := NewTushareConfigured(2*time.Second, server.URL, "fixture-token")
+	got, err := client.FetchSecurityTradingStatus(context.Background(), "600519.SH", "2026-10-19")
+	if err != nil {
+		t.Fatalf("FetchSecurityTradingStatus: %v", err)
+	}
+	if got.TradeDate != "2026-10-19" || !got.TradingDayKnown || !got.IsTradingDay {
+		t.Fatalf("pre-listing market session should retain verified market calendar status: %+v", got)
+	}
+	if !got.ListingStatusKnown || got.ListingDate != "2026-10-20" || got.ListingTradingDayNumber != 0 {
+		t.Fatalf("pre-listing date must be explicit with zero listing trading-day number: %+v", got)
+	}
+	if got.QualityStatus != model.QualityUnknown || !containsSecurityStatusReason(got.QualityReasons, "security_not_yet_listed_on_requested_date") {
+		t.Fatalf("pre-listing status must remain unknown for non-applicable risk/suspension fields: %+v", got)
+	}
+	if len(calls) != 2 || calls[0] != "stock_basic" || calls[1] != "trade_cal" {
+		t.Fatalf("pre-listing status should avoid unrelated historical status queries: %v", calls)
+	}
+}
+
+func containsSecurityStatusReason(reasons []string, expected string) bool {
+	for _, reason := range reasons {
+		if reason == expected {
+			return true
+		}
+	}
+	return false
+}
+

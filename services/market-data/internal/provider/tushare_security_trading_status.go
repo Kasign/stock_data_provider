@@ -61,6 +61,29 @@ func (p *Tushare) FetchSecurityTradingStatus(ctx context.Context, rawSymbol, raw
 	if err != nil {
 		return nil, fmt.Errorf("Tushare trade_cal for %s: %w", date, err)
 	}
+	// 上市前的交易日不是“上市状态未知”：上市日期本身是可验证事实，
+	// 交易日序号为 0。无需再用 namechange/stock_st/suspend_d 推断尚未上市证券的状态。
+	if listingDate != "" {
+		listingDateValue, parseErr := time.Parse("2006-01-02", listingDate)
+		if parseErr != nil || listingDateValue.Format("2006-01-02") != listingDate {
+			return nil, fmt.Errorf("Tushare stock_basic returned invalid listing date %q", listingDate)
+		}
+		if listingDateValue.After(tradeDate) {
+			suspension := model.SuspensionStatusUnknown
+			if !tradingDay {
+				suspension = model.SuspensionStatusNotTradingDay
+			}
+			return &model.SecurityTradingStatusSnapshot{
+				Symbol: symbol, TradeDate: date,
+				RiskWarningStatus: model.RiskWarningUnknown, DelistingStatus: model.DelistingStatusUnknown,
+				ListingDate: listingDate, ListingTradingDayNumber: 0, ListingStatusKnown: true,
+				IsTradingDay: tradingDay, TradingDayKnown: true, SuspensionStatus: suspension,
+				Source: p.Name(), SourceVersion: tushareSecurityTradingStatusVersion, FetchedAt: time.Now().UTC(),
+				QualityStatus: model.QualityUnknown,
+				QualityReasons: []string{"security_not_yet_listed_on_requested_date"},
+			}, nil
+		}
+	}
 	name, nameErr := p.fetchEffectiveSecurityName(ctx, symbol, compactDate)
 	suspension, suspensionTiming, suspensionType, suspensionReasons, suspensionErr := p.fetchSuspensionOnDate(ctx, symbol, compactDate, tradingDay)
 
@@ -142,10 +165,16 @@ func (p *Tushare) FetchSecurityTradingStatus(ctx context.Context, rawSymbol, raw
 		result.QualityReasons = appendUniqueSecurityStatusReason(result.QualityReasons, "listing_date_missing")
 	} else {
 		listingDateValue, parseErr := time.Parse("2006-01-02", listingDate)
-		if parseErr != nil || listingDateValue.Format("2006-01-02") != listingDate || listingDateValue.After(tradeDate) {
+		if parseErr != nil || listingDateValue.Format("2006-01-02") != listingDate {
 			result.ListingStatusKnown = false
 			result.QualityStatus = model.QualityUnknown
-			result.QualityReasons = appendUniqueSecurityStatusReason(result.QualityReasons, "listing_date_invalid_or_after_requested_trade_date")
+			result.QualityReasons = appendUniqueSecurityStatusReason(result.QualityReasons, "listing_date_invalid")
+		} else if listingDateValue.After(tradeDate) {
+			// 上市日期晚于请求日期时，证券尚未上市；0 是准确的上市交易日序号。
+			result.ListingTradingDayNumber = 0
+			result.ListingStatusKnown = true
+			result.QualityStatus = model.QualityUnknown
+			result.QualityReasons = appendUniqueSecurityStatusReason(result.QualityReasons, "security_not_yet_listed_on_requested_date")
 		} else if exchange == "BSE" {
 			// Tushare trade_cal documents SSE/SZSE calendars, but does not provide a
 			// sufficiently verified BSE listing-session count. Do not approximate it.
