@@ -2,9 +2,9 @@
 
 - 维护分支：`feat/full-go-data-providers-api-switch`
 - 迁移决策：采用 Root Server 同进程模块化单体
-- 方案依据：`doc/整体任务规划/Market Data并入Root Server模块化单体调整方案.md`
-- 总体规划：`doc/整体任务规划/整体任务规划总览.md`
-- 跨模块准入：`doc/整体任务规划/跨模块接入执行说明.md`、`doc/整体任务规划/跨模块接入准入清单.md`
+- 方案依据：`doc/整体任务规划/04-架构方案/Market Data并入Root Server模块化单体调整方案.md`
+- 总体规划：`doc/整体任务规划/01-项目总览/整体任务规划总览.md`
+- 跨模块准入：`doc/整体任务规划/01-项目总览/跨模块接入执行说明.md`、`doc/整体任务规划/01-项目总览/跨模块接入准入清单.md`
 - 本记录建立时的代码基线：`d8595f408337f62be3697aac661ba1570fdd3667`
 - 最近一次 M0 审计基线：`f2b9e5fc637ea59bff87f5449823e98f746c8428`（文档目录整理后）
 - 当前实施状态：`M0_audit_in_progress`（文档结构已整理，开始逐项核对；尚未执行代码迁移）
@@ -1880,3 +1880,64 @@ M2/M4 必须将 Worker 改为可管理对象或显式 Start/Stop/Wait：
 - 真实部署数据库 Schema 快照尚未提供，DDL 与生产现场的最终对照仍未完成；不得用 CI 临时 MariaDB 代替生产 Schema 证据。
 
 当前准入判断：CT-01～CT-04 的代码与契约修正已提交；CT-05 已完成第一批边界测试但完整参数矩阵仍待核对；CT-06 等待最新 CI 结果与数据库 Schema 证据。M0 暂不宣告通过，MDM-002 / M1 仍不准入。
+
+
+### 2026-11-06：M0 第二十九轮（Integration 合并后分支与契约复核）
+
+审计基线：`d077eb39afd1dd199b88567de3510baea609a6f1`。本轮先读取当前分支 HEAD，再复核项目总览、跨模块契约登记簿、接入准入清单、模块化单体方案、Data 专项计划和最新 Actions。仅更新本迁移进度文档；未修改其他模块代码、Data 业务代码、OpenAPI、数据库或部署配置。
+
+#### 1. 分支合并影响核对
+
+- 当前分支最新 HEAD 从上一轮 `469c5c09e99e9fc224c5d326fc7febf977a57a56` 前进到 `d077eb39afd1dd199b88567de3510baea609a6f1`，最新提交为合并 `integration` 的 PR #31。
+- 对比两个节点的 Git Tree，`services/market-data/**`、`internal/adapters/marketdata/**`、`doc/api/**` 的文件路径和 Blob SHA 均未变化；本次 Integration 合并没有直接改写 Data Provider、Data API 或 Data 专项文档。
+- 合并新增/更新了五模块、News、Platform、WebUI 代码与文档，并修改根 `go.mod`、`go.sum` 和 CI Workflow。Data 的后续迁移不能再只按旧 Root 依赖图估算，M1 前需要重新做全仓依赖归并审计。
+- 当前根 `go.mod` 仍声明 Go 1.22，Data 子 Module 仍声明 Go 1.23.0；根依赖清单出现重复的 `github.com/gowebpki/jcs v1.0.2` 声明。该项是合并后根 Module 的待核查项，本轮不擅自改动；M1 必须通过 `go mod tidy`/依赖图和全仓测试确定统一结果。
+- Data 仍位于 `services/market-data/**`，Root Remote Adapter 仍位于 `internal/adapters/marketdata/**`；Application Port、同进程 Bootstrap、共享资源所有权和默认部署切换均未实施。M0/M1 状态不因 Integration 合并而自动变化。
+
+#### 2. 项目总规划与跨模块契约复核
+
+当前项目总览仍确定方案 B：Market Data 与 Root Server 同 Go Module、同进程部署；Data 是行情领域唯一 Owner，Server 是唯一组合根，模块间通过公开 Application Port 调用，HTTP API 保留为兼容/远程 Adapter。
+
+本次重点核对到的契约边界：
+
+- `DATA-CTR-001`～`DATA-CTR-004`：Data v1 DTO、单位/复权/PIT、Provider 精度保真、质量/覆盖状态均为 `pending_evidence`；仍需以当前生产分支代码、Schema、Golden 和 Contract Test 证明，不因设计文档合入而冻结。
+- `DATA-CTR-005`：首批跨模块精度输入确定为 DailyBars v2 Decimal DTO；v1 float64 继续兼容，但不得作为精确数值证据。v2 需显式传入日期范围、limit、adjustment_basis、purpose_code、system_as_of，并返回 snapshot_ref/authorization_ref；当前尚未实现。
+- `DATA-CTR-006`：进程内调用使用 Root 注入的可信 Principal/Scope，不使用 Data API Key；远程 HTTP Adapter 继续按 Data 自有认证契约验证。不能把 Platform Service Secret、Data API Key、Provider Token 混为一类凭据。
+- `DATA-CTR-008`：Data 对不可变 Snapshot 签发 AuthorizationRef；subject_ref 来自可信 Principal，resource_ref 绑定 snapshot_ref。该契约仍为 `pending_evidence`，不能先实现一个弱化授权的临时 Port。
+- `PLAT-CTR-005/006/007`：受控 HTTP Client、Storage/Migration 生命周期、Typed Config/Secret 是 M4 资源接入的公共依赖；复用 Platform 既有实现，不复制安全实现。Platform 当前契约状态仍为 `pending_evidence`，接入时必须核对具体包 API 和测试证据。
+- `GOV-CTR-002/003/006`：PIT 时间、Request/Correlation 身份和 AuthorizationRef 语义必须由 Data Adapter 显式映射；历史授权快照不是持续访问许可。
+
+准入解释：以上契约语义已足以指导 M1/M2 的结构设计，但不代表 v2 DailyBars、AuthorizationRef 或跨模块真实 Adapter 已达到 A2/A3。M0 的 OpenAPI v1 核对仍独立进行；不得把所有跨模块契约 pending_evidence 误当成 Go Module 归并的统一阻断，也不得绕过其明确阻断的真实消费者调用点。
+
+#### 3. 当前 HEAD CI 与验收证据
+
+当前 HEAD `d077eb39` 的 Actions 记录：
+
+| Workflow Run | 当前结果 | Data 迁移判断 |
+|---|---|---|
+| Go test suite `42204894236` | in_progress；Root Test Job failure；Data Module Job 检查时仍 in_progress | 尚不能判定 Data Module 全量测试完成 |
+| Platform Go checks `42204904782` | queued | 待执行 |
+| WebUI checks `42204904839` | failure，527 项中 526 通过，1 项失败 | 失败用例为 Researchflow Run 状态到任务状态映射，不属于 Data 范围 |
+| Go-Python parity `42204904760` | success | 仅证明该 SHA 的 Parity Workflow 通过 |
+| Live provider probe `42204904770` | success | 公开 Provider Probe Job 通过；生产历史 Probe、Tushare 复权/公司行动、BaoStock/Pytdx 历史专项均 skipped，不计真实历史 PIT 验收 |
+
+Root Test Job 的失败发生在 gofmt 门禁，报告：
+- `internal/research/context/validate.go` 存在非法反斜杠及后续语法错误；
+- `internal/research/evidence/authorization.go` 存在 NUL 字节。
+
+这些文件属于合并进入当前分支的 Research 模块，不属于 Data 代码范围。本轮不越权修改；应反馈给 Research/Integration 责任分支修复。Data Module 的 MariaDB migration/PIT Job 已 success，Compose 与 Docker 构建 Job 已 success，但不能替代 Data Module 全量测试 Job 的最终结果。
+
+#### 4. M0 状态与下一批执行边界
+
+- [x] 重新读取当前分支 HEAD 和最近提交。
+- [x] 对比 Integration 合并前后 Data/API 专项目录的 Tree/Blob，确认 Data 代码未被该合并直接改写。
+- [x] 复核整体架构方案、Data 契约、Platform 公共能力和跨模块准入语义。
+- [x] 核对合并后根 Module/ Data Module 的 Go 版本与依赖差异。
+- [x] 获取当前 HEAD 的 Workflow 状态和失败 Job 证据，区分 Data 与其他模块失败。
+- [ ] CT-05：完成 35 Operation 的参数矩阵与 OpenAPI/Handler 逐项核对；现有 15 个高风险边界负例只覆盖第一批，不能标记完整参数验收。
+- [ ] CT-06：等待当前 HEAD Data Module 全量测试、race、vet 的最终结果；确认 CI 覆盖仍包含 MariaDB/PIT、Compose 和镜像构建。
+- [ ] M0：取得脱敏生产数据库 DDL/Schema 快照，完成生产表结构与 Migration 对照。
+- [ ] M0：把尚未完成的 Provider 请求级 Golden/重定向/凭据隔离/响应上限测试逐项归类；仅保留 M0 必需的审计门禁，M4 运行时接入改造不得提前实施。
+
+**当前结论：** M0 仍为 `in_progress`，M1 不准入。Integration 合并没有改变 Data 专项代码，但改变了根 Module 的依赖和全仓 CI 基线，并暴露了其他模块的合并质量问题。下一批只在 Data 范围继续 CT-05 参数矩阵与 CT-06 验收证据收敛；不修复 Research/WebUI 代码，不提前实施 M1/M2/M4，不新增 API 或字段。
+
