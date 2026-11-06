@@ -39,6 +39,7 @@
 | DATA-CTR-004 Quality | valid 且 coverage/source/time 完整 | empty result + coverage unknown 保持 unknown | 把空结果直接转成 0 或 valid | 增加新 reason_code 不改变既有质量状态语义 |
 | DATA-CTR-005 精度 v2 | `close="123.4500"`、`amount="123456.78"`、`volume=100000` | volume 达 JS safe integer 上限 | v1 float64/number 被 Quant 当成精确输入；拒绝 | v1 保持 number 兼容；v2 新增 Decimal DTO，不破坏 v1 |
 | DATA-CTR-006 Data API Auth | Server Adapter 发送一个 X-API-Key 或 Bearer 凭据 | Key 轮换后新值成功、旧值失败 | 两种 Header 同时存在且冲突、空 Key、日志泄漏 | Data API Key 不与 Platform Service Secret 自动互换 |
+| DATA-CTR-008 AuthorizationRef | 已认证 Key 映射稳定 caller principal；Snapshot Manifest 内容寻址并绑定请求范围/来源版本；每个响应携带 allowed AuthorizationRef | Key 轮换保持 principal；公开数据仍签发 allowed；同范围相同 Manifest 得到同一 fingerprint | 自报 caller_ref、越权 purpose、Manifest 被改写、策略版本竞态、unknown 时返回正文 | 新增 Manifest 字段升级 Schema；已签发 snapshot_ref 永不改义 |
 
 ## 4. News → Research 契约
 
