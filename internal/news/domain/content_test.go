@@ -110,7 +110,7 @@ func TestRestrictContentLayersHonorsRequestedContentCeiling(t *testing.T) {
 func TestRestrictContentLayersKeepsOnlyClassifiedBodyWithinCeiling(t *testing.T) {
 	layers := ContentLayers{
 		SourceSummary: "summary",
-		Body: &ContentPayload{Kind: ContentSnippet, Text: "snippet"},
+		Body:          &ContentPayload{Kind: ContentSnippet, Text: "snippet"},
 	}
 	snippet := RestrictContentLayers(layers, ContentSnippet)
 	if snippet.Body == nil || snippet.Body.Text != "snippet" {
