@@ -84,7 +84,7 @@ internal/
 
 ### M0：迁移前代码审计与清单冻结
 
-状态：`pending`
+状态：`in_progress`
 
 工作项：
 
@@ -282,7 +282,7 @@ internal/
 
 | 阶段 | 状态 | 说明 |
 |---|---|---|
-| M0 迁移前审计 | pending | 已定位主要目录，需逐项核对依赖、调用点、资源和 CI |
+| M0 迁移前审计 | in_progress | 已完成多轮静态审计，逐 Provider、DTO、Migration 与 CI 收敛仍未完成 |
 | M1 Go Module 归并 | pending | 未开始 |
 | M2 Application Port/Bootstrap | pending | 未开始 |
 | M3 Root Server 装配 | pending | 未开始 |
