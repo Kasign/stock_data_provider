@@ -163,3 +163,9 @@ Quant-Research DTO 第 3.4 节定义 claim_version，但没有 `supersedes_versi
 ### RSC-OPEN-002：ResearchEvent.changed_at 与 INT-CTR-001 DTO 映射缺口
 
 项目级 Quant-Research DTO 第 3.3 节没有 changed_at 字段，但 lifecycle_changed 事件要求该时间。语义已确定，字段/事件 Envelope 的具体映射仍待项目级契约统一；不得使用 occurred_at、system_observed_at 或 Outbox 重试时间替代。该缺口只阻断通知生产映射，不阻断 Event Domain 独立测试。
+
+
+
+### RSC-OPEN-007：Evidence 授权快照续期与存储幂等边界
+
+Evidence.content_fingerprint 排除 authorization_ref，而存储层 payload_sha256 覆盖完整 DTO。相同 evidence_id、相同内容但不同 AuthorizationRef 会导致内容指纹相同、完整 payload 摘要不同。当前采用完整 DTO 不可变、冲突拒绝策略；不允许原地覆盖历史 AuthorizationRef，也不自动生成替代 evidence_id。若需要持久化授权续期历史，须由项目契约定义独立授权记录或关联结构。此问题不阻断 Context/Event/Claim Repository Adapter，但阻断 Evidence SQL Adapter 对“相同内容不同授权快照”的幂等语义定稿。
