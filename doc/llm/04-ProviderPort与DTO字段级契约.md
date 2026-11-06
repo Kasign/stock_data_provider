@@ -4,7 +4,7 @@
 - 前置调查：LLM-001 静态协议盘点
 - 首批协议：OpenAI Responses API
 - 日期：2026-11-05
-- 状态：契约草案，待 LLM/Platform Owner Review；不代表实现、真实端点验收或接口冻结。
+- 状态：LLM 字段级契约输入；跨模块编号、语义状态和阻断范围以 `doc/整体任务规划/跨模块契约目录与冻结状态.md` 为准；不代表实现、真实端点验收或接口冻结。
 
 ## 1. 目标与边界
 
@@ -220,17 +220,17 @@ ModelErrorInfo 字段为 kind、stable_code、retryable、http_status?、retry_a
 
 DTO、Port、Fixture 和 parser 单元测试不依赖 Researchflow/Platform 生产实现。真实 Gateway E2E 与当前本地模型能力验证是 L3，不反向阻断纯协议/领域设计。
 
-## 10. Owner 未决项
+## 10. 项目统一决议与待验证项
 
-### 10.1 Owner Review 建议决议（规划侧，待 Owner 确认）
+### 10.1 已接受的协议决议（历史 CONTRACT-008 候选）
 
-1. **单轮文本输入：建议接受为 MVP。** ModelRequest 固定 instructions + input_text；input_text 非空。多轮消息、previous_response_id、conversation_id、图片/音频/视频和任意 input item 延后，不允许静默降级或丢弃。
-2. **ToolDefinition：建议纳入 MVP 的受控可选字段。** 默认 tool_choice=none；仅当 tools 非空且 function_tool_calls=supported 时允许 auto。required、指定工具强制选择和并行工具策略延后。LLM 只解析 function_call，不执行、不批准。
-3. **reasoning_effort：保留可选 typed 字段，但默认关闭。** 只有 CapabilityState 对当前 Provider + Model + Gateway 版本明确为 supported 才能发送；当前本地 Qwen/llama.cpp 未验证，不得因为 Gateway 配置样本出现 high 就启用。
-4. **JSON Schema：建议固定 Draft 2020-12 为本地 Schema 语义基线。** Adapter 本地完整校验输入 Schema 与模型输出；上游 Responses strict schema 子集兼容性单独判定，不支持的关键字不得静默移除。具体 Go validator 库可延后，但不得延后 dialect、格式校验和深度/字节限制。
+1. **单轮文本输入：接受为 MVP。** ModelRequest 固定 instructions + input_text；input_text 非空。多轮消息、previous_response_id、conversation_id、图片/音频/视频和任意 input item 延后，不允许静默降级或丢弃。
+2. **ToolDefinition：纳入 MVP 的受控可选字段。** 默认 tool_choice=none；仅当 tools 非空且 function_tool_calls=supported 时允许 auto。required、指定工具强制选择和并行工具策略延后。LLM 只解析 function_call，不执行、不批准。
+3. **reasoning_effort：保留可选 typed 字段，默认不发送。** 只有 CapabilityState 对当前 Provider + Model + Gateway 版本明确为 supported 才能发送；当前本地 Qwen/llama.cpp 未验证，不得因为 Gateway 配置样本出现 high 就启用。
+4. **JSON Schema：固定 Draft 2020-12 为本地 Schema 语义基线。** Adapter 本地完整校验输入 Schema 与模型输出；上游 Responses strict schema 子集兼容性单独判定，不支持的关键字不得静默移除。具体 Go validator 库可延后，但不得延后 dialect、格式校验和深度/字节限制。
 5. **Usage.total_tokens：允许受控派生。** 上游值优先；缺失时仅当 input_tokens 与 output_tokens 都明确且加法无溢出时派生，source=derived。上游 total 与分项不一致时保留上游原值并产生诊断，不覆盖。
-6. **SSE sequence_number：建议严格校验。** 若整条流均提供，必须连续递增；重复/倒退为 invalid_response，缺号为 stream_sequence_gap，均不得标记 completed。整条流都未提供可继续但标记序号能力 unavailable；同流混合有无序号按协议异常处理。
-7. **Request ID：明确三层 ID。** ModelRequest.request_id 由调用方生成并由 ModelResponse 原样回显；correlation_id 用于跨模块关联；gateway_request_id 记录 Gateway 的 X-Request-ID，upstream_request_id 单独记录 Gateway 透传/回传的上游 Request-Id。四者不得相互覆盖或伪造。
+6. **SSE sequence_number：严格校验。** 若整条流均提供，必须连续递增；重复/倒退为 invalid_response，缺号为 stream_sequence_gap，均不得标记 completed。整条流都未提供可继续但标记序号能力 unavailable；同流混合有无序号按协议异常处理。
+7. **Request ID：明确调用方/关联/Gateway/上游四层 ID。** ModelRequest.request_id 由调用方生成并由 ModelResponse 原样回显；correlation_id 用于跨模块关联；gateway_request_id 记录 Gateway 的 X-Request-ID，upstream_request_id 单独记录 Gateway 透传/回传的上游 Request-Id。四者不得相互覆盖或伪造。
 
 ### 10.2 Port 返回值语义
 
@@ -239,14 +239,14 @@ DTO、Port、Fixture 和 parser 单元测试不依赖 Researchflow/Platform 生�
 - EOF 无 terminal event、sequence gap、重复/倒退序号均返回 typed error；可同时返回部分 Response 供诊断，但部分结果不得标记 completed。
 - Tool Call 默认关闭；工具定义和工具调用能力都需显式 supported，调用结果交回 Researchflow。
 
-### 10.3 尚待确认/验证
+### 10.3 尚待实现证据与 L3 验证
 
-- LLM/Platform Owner 对上述七项建议决议签字确认。
+- 为七项已接受决议补齐 JSON Schema、JSON/SSE Golden、未知事件/序号异常/断流和错误映射 Contract Test。
 - 选择并锁定 Draft 2020-12 validator 实现库与许可证审查；补齐格式校验、深度/大小限制和 golden fixtures。
 - 以真实 Gateway 验证 X-Request-ID、上游 Request-Id 的响应头映射；当前文档只确认两者是不同 ID。
 - 对当前本地 llama.cpp/Qwen 验证 Responses JSON/SSE、Tool Call、Structured Output、reasoning_effort 和断流行为；未验证能力继续为 unknown。
 
-**当前结论：规划侧已形成七项建议决议和一致的 Port 返回值语义，仍待 LLM/Platform Owner 确认；不代表接口冻结、实现完成或 L2 Module Ready。**
+**当前结论：七项协议语义已接受；Schema、Golden、Contract Test 未齐，LLM-CTR-001/002/003 仍为 pending_evidence，不代表实现完成或 L2 Module Ready。**
 
 
 ## 11. Platform Fault 映射与关联 ID 一致性
@@ -264,4 +264,4 @@ LLM Adapter 内部执行错误使用 Platform Fault；对调用方公开时投�
 
 ModelResponse.request_id 是该次模型调用的关联 ID；ModelErrorInfo 不重复携带 request_id。gateway_request_id 与 upstream_request_id 分别记录；correlation_id 继续用于跨模块链路关联。
 
-ModelResponse.status=incomplete/failed 是协议响应结果，不自动等同于 Platform Fault。只有 Adapter 执行、传输、协议解析或本地校验失败才构造对应 Fault。上游 response.failed 的错误信息是安全归一化投影，不暴露原始响应正文。具体 Fault Go 类型与映射表待 LLM/Platform Owner Review，并以契约测试固定。
+ModelResponse.status=incomplete/failed 是协议响应结果，不自动等同于 Platform Fault。只有 Adapter 执行、传输、协议解析或本地校验失败才构造对应 Fault。上游 response.failed 的错误信息是安全归一化投影，不暴露原始响应正文。具体 Fault Go 类型与逐类映射表以 PLAT-CTR-001 为准；LLM 只维护 ModelErrorKind 投影，并以契约测试固定。
