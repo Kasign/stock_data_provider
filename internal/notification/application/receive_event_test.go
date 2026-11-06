@@ -42,6 +42,7 @@ type memoryInbox struct {
 	byEvent         map[inboxKey]domain.InboxRecord
 	byIdempotency   map[inboxKey]domain.InboxRecord
 	fanoutWorkItems int
+	failNextAccept bool
 }
 
 func newMemoryInbox() *memoryInbox {
@@ -54,6 +55,10 @@ func newMemoryInbox() *memoryInbox {
 func (m *memoryInbox) Accept(_ context.Context, event domain.EventEnvelope, receivedAt time.Time) (domain.InboxRecord, bool, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if m.failNextAccept {
+		m.failNextAccept = false
+		return domain.InboxRecord{}, false, errInjectedRepositoryFailure
+	}
 
 	eventKey := inboxKey{source: event.SourceModule, value: event.EventID}
 	idempotencyKey := inboxKey{source: event.SourceModule, value: event.IdempotencyKey}

@@ -2,7 +2,7 @@
 
 - 归属：NTF-001/004/005/006
 - 对应契约：NTF-CTR-001～003（历史别名 Platform CONTRACT-009/010）；状态以项目级契约目录为准
-- 状态：4 份 Draft 2020-12 Schema 与 6 个代表性 Golden 已校准；Go Draft 2020-12 Envelope/Payload Validator、Golden、非法 Payload、Inbox Fake 幂等/并发、Subscription 与 DeliveryPlan Repository Port/Fake 测试已写入；新增严格 JSON、资源上限边界、DeliveryPlan 写入前双重校验及 Subscription Repository append-only/CAS 并发测试；上一提交的根模块 CI Run 42200295537 gofmt/go test/race/vet 已通过；本提交新增 Subscription Repository Fake/CAS 测试待下一轮 CI 复验；NTF-CTR-001～003 仍为 pending_evidence；不要求个人 Owner 签字
+- 状态：4 份 Draft 2020-12 Schema 与 6 个代表性 Golden 已校准；Go Draft 2020-12 Envelope/Payload Validator、Golden、非法 Payload、Inbox Fake 幂等/并发、Subscription 与 DeliveryPlan Repository Port/Fake 测试已写入；新增严格 JSON、资源上限边界、DeliveryPlan 写入前双重校验、Subscription Repository append-only/CAS 并发及 Inbox/Subscription/DeliveryPlan 失败注入恢复测试；上一提交的根模块 CI Run 42200295537 gofmt/go test/race/vet 已通过；本提交新增 Subscription Repository Fake/CAS 测试待下一轮 CI 复验；NTF-CTR-001～003 仍为 pending_evidence；不要求个人 Owner 签字
 - 日期：2026-11-06
 - 说明：以下均为合成数据与测试场景，不代表已有实现或真实渠道能力。
 
@@ -30,7 +30,9 @@
 - `quant-risk-decision-first-evaluation.golden.json`、`quant-risk-decision-reject.golden.json`
 - `research-event-lifecycle-created.golden.json`、`research-event-lifecycle-invalidated.golden.json`
 
-资源上限需覆盖 Envelope/Payload 字节数恰好达到上限、超过 1 字节、JSON 容器深度达到/超过上限；严格解析需覆盖嵌套重复键、非法 UTF-8、孤立 surrogate、合法 surrogate pair。\n\n仍需自动化覆盖：相同事件重放、相同 event_id 不同 fingerprint、同 source_module 幂等键冲突、未知 Schema 版本、非法 Payload、重复 JSON key、非法 Unicode/非 IEEE-754 数字、指纹不匹配、Registry digest 不可变、未知 source_module、超大小拒绝，以及 Outbox 提交/回滚边界。
+资源上限需覆盖 Envelope/Payload 字节数恰好达到上限、超过 1 字节、JSON 容器深度达到/超过上限；严格解析需覆盖嵌套重复键、非法 UTF-8、孤立 surrogate、合法 surrogate pair。
+
+仍需自动化覆盖：相同事件重放、相同 event_id 不同 fingerprint、同 source_module 幂等键冲突、未知 Schema 版本、非法 Payload、重复 JSON key、非法 Unicode/非 IEEE-754 数字、指纹不匹配、Registry digest 不可变、未知 source_module、超大小拒绝，以及 Outbox 提交/回滚边界。
 
 ## 3. Subscription 与 recipient Fixture
 
@@ -70,7 +72,10 @@
 
 ## 5. 幂等与并发 Fixture
 
-- `subscription_append_version_concurrent.test`：多个并发更新竞争同一 expected_version，只允许一个版本追加成功，其他返回 version conflict。\n- `subscription_append_only.test`：更新生成新版本，旧版本保持不变；读取副本的修改不得反向污染 Repository。\n- `fanout_duplicate_concurrent.test`：相同 Event 并发 fan-out，唯一约束只生成一份 DeliveryPlan。
+- `subscription_append_version_concurrent.test`：多个并发更新竞争同一 expected_version，只允许一个版本追加成功，其他返回 version conflict。
+- `subscription_append_only.test`：更新生成新版本，旧版本保持不变；读取副本的修改不得反向污染 Repository。
+- `repository_failure_no_partial_write.test`：Inbox、Subscription、DeliveryPlan Fake 在持久化前注入失败，不得留下部分记录；再次执行后可成功写入。
+- `fanout_duplicate_concurrent.test`：相同 Event 并发 fan-out，唯一约束只生成一份 DeliveryPlan。
 - `delivery_two_workers_one_lease.test`：两个 Worker 竞争同一 Delivery，只允许一个 fencing token 有效。
 - `delivery_stale_worker_completion.test`：租约过期后旧 Worker 回写，必须拒绝。
 - `delivery_lease_expired_before_dispatch.test`：能证明请求未发出，允许安全回队。

@@ -23,6 +23,8 @@ type memorySubscriptions struct {
 	versions        map[string][]domain.Subscription
 	eventTypes      domain.EventTypeLookup
 	filterValidator domain.FilterSchemaValidator
+	failNextCreate  bool
+	failNextAppend  bool
 }
 
 func newMemorySubscriptions() *memorySubscriptions {
@@ -51,6 +53,10 @@ func (m *memorySubscriptions) Create(ctx context.Context, subscription domain.Su
 
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if m.failNextCreate {
+		m.failNextCreate = false
+		return errInjectedRepositoryFailure
+	}
 	if _, exists := m.versions[subscription.SubscriptionID]; exists {
 		return domain.ErrSubscriptionVersionConflict
 	}
@@ -92,6 +98,10 @@ func (m *memorySubscriptions) AppendVersion(ctx context.Context, expectedVersion
 	}
 	if err := next.Validate(m.eventTypes, m.filterValidator); err != nil {
 		return err
+	}
+	if m.failNextAppend {
+		m.failNextAppend = false
+		return errInjectedRepositoryFailure
 	}
 	m.versions[next.SubscriptionID] = append(versions, cloneSubscription(next))
 	return nil

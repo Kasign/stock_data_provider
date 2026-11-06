@@ -24,7 +24,8 @@ type deliveryPlanKey struct {
 
 type memoryDeliveryPlans struct {
 	mu    sync.Mutex
-	byKey map[deliveryPlanKey]domain.DeliveryPlan
+	byKey          map[deliveryPlanKey]domain.DeliveryPlan
+	failNextCreate bool
 }
 
 func newMemoryDeliveryPlans() *memoryDeliveryPlans {
@@ -50,6 +51,10 @@ func (m *memoryDeliveryPlans) CreateOrGet(_ context.Context, plan domain.Deliver
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if m.failNextCreate {
+		m.failNextCreate = false
+		return domain.DeliveryPlan{}, false, errInjectedRepositoryFailure
+	}
 
 	key := deliveryPlanKeyFor(plan)
 	if existing, ok := m.byKey[key]; ok {
