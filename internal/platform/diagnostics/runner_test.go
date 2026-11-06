@@ -149,9 +149,9 @@ func TestRunnerRejectsUnsafeFaultMetadata(t *testing.T) {
 	check := Check{ID: "unsafe-fault", Run: func(context.Context) (Observation, error) {
 		return Observation{}, &fault.Fault{
 			Class: fault.ClassUnavailable,
-			Code: "provider.failure\\nAuthorization",
-			SafeMessage: "upstream failed\\nBearer secret",
-			Dependency: "provider\\nsecret",
+			Code: "provider.failure\nAuthorization",
+			SafeMessage: "upstream failed\nBearer secret",
+			Dependency: "provider\nsecret",
 		}
 	}}
 	report, err := (Runner{}).Run(context.Background(), []Check{check})
