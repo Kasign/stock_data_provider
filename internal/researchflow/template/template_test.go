@@ -113,3 +113,17 @@ func TestResolveRejectsNonHexSchemaFingerprint(t *testing.T) {
 	_,err:=Resolve(context.Background(),testTemplate(),json.RawMessage("{}"),schemas,testEvaluator{"always":true},nil)
 	if err==nil{t.Fatal("non-hex schema fingerprint accepted")}
 }
+
+
+func TestResolvePreservesExecutionPolicyInImmutableSnapshot(t *testing.T) {
+	tmpl:=testTemplate()
+	tmpl.RequiresHardRiskGate=true
+	tmpl.AllowEmptyInputs=true
+	tmpl.OutputRegistryVersion="outputs-v7"
+	tmpl.ResourcePolicyRef="resource-v9"
+	resolved,err:=Resolve(context.Background(),tmpl,json.RawMessage("{}"),testParameterSchemas{},testEvaluator{"always":true},testGates{"market":true})
+	if err!=nil{t.Fatal(err)}
+	if !resolved.RequiresHardRiskGate||!resolved.AllowEmptyInputs||resolved.OutputRegistryVersion!="outputs-v7"||resolved.ResourcePolicyRef!="resource-v9" {
+		t.Fatalf("resolved template snapshot lost execution policy: %#v",resolved)
+	}
+}

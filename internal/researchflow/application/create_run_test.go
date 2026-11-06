@@ -120,3 +120,19 @@ func TestCreateRunOverridesUntrustedTracingFields(t *testing.T){
 	got,err:=service.CreateRun(context.Background(),cmd);if err!=nil{t.Fatal(err)}
 	if got.Run.CorrelationID!="trusted-correlation"||got.Run.OriginatingRequestID==nil||*got.Run.OriginatingRequestID!="trusted-request"{t.Fatalf("trusted request metadata not injected: %#v",got.Run)}
 }
+
+
+func TestCreateRunPersistsCompleteResolvedExecutionPolicy(t *testing.T) {
+	now:=time.Date(2026,11,6,1,0,0,0,time.UTC)
+	tmpl:=validTemplate()
+	tmpl.AllowEmptyInputs=true
+	tmpl.OutputRegistryVersion="outputs-v3"
+	tmpl.ResourcePolicyRef="resource-v4"
+	repo:=&repositoryStub{}
+	service,err:=newService(t,repo,&idsStub{},&templatesStub{value:tmpl},now);if err!=nil{t.Fatal(err)}
+	_,err=service.CreateRun(context.Background(),command(now));if err!=nil{t.Fatal(err)}
+	snapshot:=repo.created.ResolvedTemplate
+	if !snapshot.AllowEmptyInputs||snapshot.OutputRegistryVersion!="outputs-v3"||snapshot.ResourcePolicyRef!="resource-v4" {
+		t.Fatalf("repository record does not contain complete resolved template semantics: %#v",snapshot)
+	}
+}

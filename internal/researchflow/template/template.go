@@ -78,6 +78,10 @@ type ResolvedTemplate struct {
 	Ref string
 	Version string
 	Fingerprint string
+	RequiresHardRiskGate bool
+	AllowEmptyInputs bool
+	OutputRegistryVersion string
+	ResourcePolicyRef string
 	ParameterSchema ParameterSchemaSnapshot
 	Stages []ResolvedStage
 	Excluded []domain.ExcludedStage
@@ -203,7 +207,12 @@ func Resolve(ctx context.Context, t WorkflowTemplate, parameters json.RawMessage
 	if err != nil { return ResolvedTemplate{}, err }
 	fingerprint, err := resolvedFingerprint(templateFingerprint, parameterSchema)
 	if err != nil { return ResolvedTemplate{}, err }
-	resolved := ResolvedTemplate{Ref:t.Ref, Version:t.Version, Fingerprint:fingerprint, ParameterSchema:parameterSchema}
+	resolved := ResolvedTemplate{
+		Ref:t.Ref, Version:t.Version, Fingerprint:fingerprint,
+		RequiresHardRiskGate:t.RequiresHardRiskGate, AllowEmptyInputs:t.AllowEmptyInputs,
+		OutputRegistryVersion:t.OutputRegistryVersion, ResourcePolicyRef:t.ResourcePolicyRef,
+		ParameterSchema:parameterSchema,
+	}
 	included := map[string]bool{}
 	definitions := map[string]StageDefinition{}
 	for _, stage := range t.Stages {

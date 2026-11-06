@@ -177,3 +177,6 @@ Fake Repository/Fake Clock/Fake Provider 只证明模块内逻辑；MariaDB/Redi
 - Run/Stage、完整 ResolvedTemplate（包括 ParameterSchema version/digest 与 applicability 排除记录）、原始参数快照及幂等键/指纹必须在 Repository 同一事务提交。
 - Repository `CreateRunAtomic` 必须保证唯一键 `(caller_ref, operation, idempotency_key)`；若并发竞争中已存在记录，必须在事务内比较 fingerprint，相同返回原 Run，不同返回 idempotency_conflict。必须在写入前以数据库 UTC 时钟复核 deadline。
 - 当前 Fake Repository 只证明 Application 编排，不证明 SQL/Redis/事务/CAS；持久化实现与 MariaDB 集成留在 FLOW-007/根集成阶段。
+
+
+- Review 发现 ResolvedTemplate 首版快照虽保存了 Stage DAG 和指纹，但未显式保留 `requires_hard_risk_gate`、`allow_empty_inputs`、`output_registry_version`、`resource_policy_ref`，无法仅凭快照完整还原执行配置。现已将四项纳入 ResolvedTemplate 并由 Resolve 固定，CreateRun Repository Port 持久化该完整快照；增加回归测试。
