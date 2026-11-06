@@ -3,7 +3,7 @@
 - 分支：`feat/llm`
 - 代码：`internal/llm/**`
 - 任务前缀：LLM
-- 状态：P1 基础 DTO/Provider Port 已提交；能力门禁完成一轮静态 Review；gofmt/go test 尚未执行，构建验证待执行
+- 状态：P0 LLM-002 基础 DTO/Provider Port 已提交；能力门禁完成一轮静态 Review；gofmt/go test 尚未执行，构建验证待执行
 - 最近代码提交：d621cfa44dd3efd75fbbd15f14490f9b0578a5de；后续文档同步提交不改变代码基线
 - LLM-001：静态协议盘点完成；在线真实端点验收未执行
 - LLM-002：ProviderConfig、CapabilityState、ModelRequest/Response、Usage、Tool Call、ModelEvent 和 Provider Port 已有首批代码；能力门禁回归用例已补充；Draft 2020-12 Schema 编译、JSON/SSE Golden、Responses Adapter 与 Platform Fault 映射未完成
