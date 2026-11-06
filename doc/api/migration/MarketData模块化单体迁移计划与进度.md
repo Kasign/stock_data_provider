@@ -444,3 +444,13 @@ cmd/analysis-api/main.go → internal/service.NewRunnerWithMarketDataStores → 
 internal/platform/httpclient.Client 使用 DestinationPolicy 精确 Host/Port allowlist、DNS 公网地址校验、默认不读取系统代理、响应体大小限制、依赖级并发和可控重试。Data Provider 当前多数自建 *http.Client；其 redirect 策略不一致（例如 Sina/NetEase 明确禁止、Eastmoney 有专用策略，其他实现需逐项核对）。M4 不能直接把 *http.Client 全局替换为 Platform Client：需提供 Data Provider 的受控传输 Adapter，保留每个接口的方法、Header、Body、超时、重定向、速率限制、响应大小与错误分类语义。BaoStock/Pytdx 继续走独立 TCP Client，不纳入 HTTP Adapter。
 
 **M0 进度判断：** Root→Data 主生产调用链和主要 Provider 协议类别已定位；仍未对 30 个 Provider 源文件逐个核对所有请求方法/重定向/Body/错误语义，也未完成全量 API DTO 字段映射、Data Migration SQL 与实际部署库的对照。M0 继续保持进行中。
+
+### 2026-11-06：M0 第五轮补充（Application Port、DTO 与 Migration 资产）
+
+- Analysis 当前已有 internal/analysis/app.DataCollector 接口，但这是 Analysis 消费数据的 Port，不是 Data 模块对外 Application Port。当前实现 internal/adapters/marketdata.Collector 通过 HTTP Client 实现该接口。M2 需要在 Data 侧新增独立 Application Port/UseCase，再由 Root 新建 InProcess Adapter 实现 Analysis 的 DataCollector；不能把现有 Analysis Port 误认为 Data Port 已存在。
+- Data HTTP Handler 当前直接输出 internal/model 的 Quote、DailyBar、Bundle 等类型；Root HTTP Adapter 自己定义 QuoteResponse、HistoryBar、apiHistory DTO。两侧结构并不完全一致：Data Quote 的 current_price 为 nullable pointer、volume 为 int64，Root QuoteResponse 的 current_price 为非 nullable float64、volume 为 *float64；Data DailyBar OHLC 为非 nullable float64，并包含 MA、normalized_at、system_observed_at、raw unit、fallback、normalization version 等字段，Root HistoryBar 只保留部分字段。M2 Application DTO 必须以 Data 领域语义为基准，并由 InProcess Adapter 映射到 Analysis Domain；不要将现有 HTTP DTO 直接当作内部 Port。
+- Analysis RawSnapshot/SourceNote 已承载 Source、FetchedAt、QualityStatus、Diagnostic、MissingFields 等信息；迁移前后应对照 RawSnapshot golden，确认 InProcess Adapter 不丢失 Provider 来源、版本、时间、质量和缺失字段语义。
+- Data 的 HTTP Handler 注册 /api/v1/quotes/{symbol}、/api/v1/bars/{symbol}/daily、/api/v1/bundles/{symbol}、/api/v1/market/**、/api/v1/stocks/**、/api/v1/data-sources/** 等路由；Root Analysis API 当前使用 /api/v1/analysis/**。Nginx 对 /market-api/ 与 /analysis-api/ 均剥离前缀，因此 Root Router 可以注册对应路由组，但必须做最终 pattern 冲突测试，并保留外部 URI 行为。
+- Data 当前存在 services/market-data/migrations/001_create_market_data.sql，同时 repository/mysql.go 内还有运行时硬编码 DDL、ensureColumn 和 ensureNonUniqueHistoryIndex；Root Migration 则位于 internal/adapters/storage/mysqlredis.Store.Migrate 的代码语句中。M0 必须核对 SQL 文件与运行时 DDL 是否一致，确认是否存在只在历史部署升级时执行的增量迁移，再设计统一 Migration Runner；不能简单把 SQL 文件移动后就认定迁移资产完整。
+
+**M0 当前仍有未完成审计：** 需要检查 Data 全部 DTO 与 OpenAPI 双向差异，分析 RawSnapshot 映射细节，核对 SQL Migration 文件与运行时 DDL 的差异，盘点各 Provider 所有请求参数/重定向与认证方式，并查看 WebUI unit test 失败日志。当前仅形成了迁移方案和第一轮静态清单，不具备进入 M1 的准入条件。
