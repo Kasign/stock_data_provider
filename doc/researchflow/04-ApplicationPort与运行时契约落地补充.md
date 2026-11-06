@@ -201,3 +201,11 @@ Fake Repository/Fake Clock/Fake Provider 只证明模块内逻辑；MariaDB/Redi
 
 
 - Template Resolve 输出的 Stage 依赖引用现按集合语义排序，并同步写回 ResolvedStage.Definition，确保相同 Template fingerprint 对应稳定的 ResolvedTemplate Snapshot/Run Stage 依赖序列。
+
+
+### 2026-11-06 Run / Stage / ResultSummary 公开引用字段对齐
+
+- Run 公开 DTO 改为 `result_summary_ref`，不再内嵌 ResultSummary；ResultSummary 作为独立公开资源，单独定义 `result-summary-1.0.0.schema.json` 与 Golden。
+- Stage 公开 DTO 按项目字段级契约暴露 `quality_summary_ref`、`diagnostic_refs`，移除 Domain 内部的 `quality_status` 与 `risk_decision`；质量状态与风险门禁决策留在 ResultSummary 领域汇总。
+- Run Schema 对终态状态增加条件约束：succeeded/partial/failed/cancelled 必须有非空 result_summary_ref；非终态允许显式 null。
+- Domain 保留 ResultSummary 内容用于状态归并，ResultSummaryRef 由持久化终态提交时分配；Repository 必须与 Run 终态和 ResultSummary 在同一事务内写入。该持久化能力尚未实现。

@@ -78,7 +78,7 @@ func TestRunDTOClonesNestedResultSummaryAndNormalizesCollections(t *testing.T) {
 		t.Fatalf("result summary mapping lost values: %#v",got)
 	}
 	if got.ExcludedStages==nil || got.MissingStageCodes==nil || got.ReasonCodes==nil {
-		t.Fatalf("public collections must be arrays, not null: %#v",got.ResultSummary)
+		t.Fatalf("public collections must be arrays, not null: %#v",got)
 	}
 	got.StageOutcomes["quote"]="failed"
 	if summary.StageOutcomes["quote"]!=domain.StageSucceeded {t.Fatal("DTO mapping must not share mutable map with domain")}
