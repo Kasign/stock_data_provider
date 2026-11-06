@@ -3,12 +3,14 @@
 - 分支：`feat/llm`
 - 代码：`internal/llm/**`
 - 任务前缀：LLM
-- 状态：规划中，尚未开始模块分支开发
+- 状态：LLM-002 DTO/Provider Port、Responses JSON Mapper/Parser、非流式 HTTP Adapter、Clock/Deadline 注入与纯 SSE Parser 已实现；Platform Fault 映射与 Draft 2020-12 Schema 已实现，整体待构建验证
+- 最近代码提交：0bb2f1ccca5344d7825a7b05053d9d49275b8799
 - LLM-001：静态协议盘点完成；在线真实端点验收未执行
+- LLM-002：DTO/Provider Port、Responses JSON 请求映射/响应解析、非流式 HTTP Adapter 及对应单测已实现，待 gofmt/go test；Platform Fault 映射、Draft 2020-12 Schema 编译同样待构建验证；首批 JSON/SSE Golden 文件已加入，完整矩阵与 Platform 受控流读取尚未完成；local_validation_only 与 Usage 诊断码已纳入 Mapper/DTO
 
 只负责 Go 侧模型服务协议适配，复用现有独立模型服务；不重建推理 Gateway，不管理研究状态机、工具权限或业务结论。
 
-设计文档：[01-模型适配与工具边界设计](01-模型适配与工具边界设计.md)；协议调查：[03-现有模型Gateway协议盘点](03-现有模型Gateway协议盘点.md)；Port/DTO 契约：[04-ProviderPort与DTO字段级契约](04-ProviderPort与DTO字段级契约.md)；JSON/SSE Fixture 清单：[05-JSON与SSE契约Fixture清单](05-JSON与SSE契约Fixture清单.md)。
+设计文档：[01-模型适配与工具边界设计](01-模型适配与工具边界设计.md)；协议调查：[03-现有模型Gateway协议盘点](03-现有模型Gateway协议盘点.md)；Port/DTO 契约：[04-ProviderPort与DTO字段级契约](04-ProviderPort与DTO字段级契约.md)；JSON/SSE Fixture 清单：[05-JSON与SSE契约Fixture清单](05-JSON与SSE契约Fixture清单.md)；Provider/Responses 实现边界补充：[06-Provider与Responses协议实现边界补充](06-Provider与Responses协议实现边界补充.md)。
 
 目标结构：
 ```text

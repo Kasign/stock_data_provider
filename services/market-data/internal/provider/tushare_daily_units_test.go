@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/Kasign/stock_data_provider/services/market-data/internal/model"
+	"github.com/Kasign/stock_data_provider/services/market-data/internal/validation"
 )
 
 func TestTushareDailyBarsNormalizesHandsAndThousandCNY(t *testing.T) {
@@ -89,4 +90,27 @@ func containsProviderReason(reasons []string, expected string) bool {
 		}
 	}
 	return false
+}
+
+func TestTushareDailyBarsReportsFieldAndRowForParseFailure(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"code":0,"msg":"","data":{"fields":["ts_code","trade_date","open","high","low","close","pct_chg","vol","amount"],"items":[["600519.SH","20261028",10,11,9,"bad",1.0,100,100]]}}`)
+	}))
+	defer server.Close()
+
+	ctx := validation.WithReporter(context.Background(), validation.NewReporter(20))
+	client := NewTushareConfigured(0, server.URL, "test-token")
+	if _, err := client.FetchDailyBars(ctx, "600519.SH", "2026-10-28", "2026-10-28", 10, model.AdjustmentNone); err == nil {
+		t.Fatal("expected invalid close field to fail parsing")
+	}
+	report := validation.ReporterFromContext(ctx).Snapshot()
+	for _, issue := range report.Issues {
+		if issue.Field == "close" && issue.ProviderField == "close" &&
+			issue.Stage == validation.StageParse && issue.Code == "invalid_number" &&
+			issue.RowIndex != nil && *issue.RowIndex == 0 {
+			return
+		}
+	}
+	t.Fatalf("expected close field diagnostic with original row index, got %+v", report.Issues)
 }

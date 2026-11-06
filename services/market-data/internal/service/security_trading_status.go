@@ -157,9 +157,16 @@ func validateSecurityTradingStatusSnapshot(symbol, tradeDate, providerName strin
 	}
 	if snapshot.ListingStatusKnown {
 		listingDate, parseErr := time.Parse("2006-01-02", snapshot.ListingDate)
-		if parseErr != nil || listingDate.Format("2006-01-02") != snapshot.ListingDate ||
-			listingDate.After(parsedDateOrZero(tradeDate)) || snapshot.ListingTradingDayNumber < 1 {
-			return errors.New("listing trading-day metadata is inconsistent")
+		if parseErr != nil || listingDate.Format("2006-01-02") != snapshot.ListingDate {
+			return errors.New("listing date is invalid")
+		}
+		requestedDate := parsedDateOrZero(tradeDate)
+		if listingDate.After(requestedDate) {
+			if snapshot.ListingTradingDayNumber != 0 {
+				return errors.New("pre-listing status must have a zero listing trading-day number")
+			}
+		} else if snapshot.ListingTradingDayNumber < 1 {
+			return errors.New("listed security must have a positive listing trading-day number")
 		}
 	}
 	switch snapshot.QualityStatus {

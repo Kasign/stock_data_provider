@@ -79,12 +79,7 @@ func (s *SearchCandidates) Execute(ctx context.Context, request domain.SearchReq
 
 		for i := range candidates {
 			candidates[i].ProviderCode = code
-			if candidates[i].ObservedAt.IsZero() {
-				candidates[i].ObservedAt = finished
-			}
-			if candidates[i].QueryDimension == "" {
-				candidates[i].QueryDimension = request.QueryDimension
-			}
+			candidates[i] = domain.NormalizeCandidate(candidates[i], finished, request.QueryDimension)
 		}
 		result.Candidates = append(result.Candidates, candidates...)
 	}
