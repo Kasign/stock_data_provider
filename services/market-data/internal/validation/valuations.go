@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/Kasign/stock_data_provider/services/market-data/internal/model"
-	"github.com/Kasign/stock_data_provider/services/market-data/internal/normalize"
 )
 
 // ValidateValuationSnapshot reports structural and field-level valuation issues.
@@ -80,9 +79,9 @@ func ValidateValuationSnapshot(snapshot *model.ValuationSnapshot, requested []st
 	seen := make(map[string]struct{}, len(snapshot.Items))
 	itemDegraded := false
 	for i, item := range snapshot.Items {
-		symbol, err := normalize.NormalizeSymbol(item.Symbol)
-		if err != nil || symbol != item.Symbol {
-			add(item.Symbol, "symbol", "symbol", "invalid_symbol", "canonical A-share symbol", "valuation item symbol is invalid or noncanonical", SeverityError, i)
+		symbol := item.Symbol
+		if !isCanonicalValuationSymbol(symbol) {
+			add(item.Symbol, "symbol", "symbol", "invalid_symbol", "six digits plus .SH/.SZ/.BJ", "valuation item symbol is invalid or noncanonical", SeverityError, i)
 		}
 		if _, ok := expected[symbol]; !ok {
 			add(item.Symbol, "symbol", "symbol", "unrequested_symbol", "symbol included in request", "valuation provider returned an unrequested symbol", SeverityError, i)
@@ -169,4 +168,22 @@ func ValidateValuationSnapshot(snapshot *model.ValuationSnapshot, requested []st
 		add("", "quality_status", "quality_status", "invalid_quality_claim", "degraded or unknown when required evidence is incomplete", "valuation snapshot claims valid quality despite missing source-time, coverage, or degraded item evidence", SeverityError, -1)
 	}
 	return report
+}
+
+
+func isCanonicalValuationSymbol(symbol string) bool {
+	if len(symbol) != 9 || symbol[6] != '.' {
+		return false
+	}
+	switch symbol[7:] {
+	case "SH", "SZ", "BJ":
+	default:
+		return false
+	}
+	for _, digit := range symbol[:6] {
+		if digit < '0' || digit > '9' {
+			return false
+		}
+	}
+	return true
 }
