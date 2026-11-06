@@ -260,7 +260,7 @@ PublishResult 应明确 accepted/duplicate；冲突通过稳定错误返回。�
 - `schema/quant-risk-decision-changed-1.0.0.schema.json`
 - `schema/research-event-lifecycle-changed-1.0.0.schema.json`
 
-上述文件是 NTF-CTR-001/INT-CTR-001 的机器可读设计基线；尚需在模块测试中执行 JSON Schema Validator、Golden 和 Registry 不可变性测试。
+上述文件是 NTF-CTR-001/INT-CTR-001 的机器可读设计基线；本地 Draft 2020-12 Validator 已校验当前 Schema/Golden；模块 CI 仍需直接加载仓库文件执行 Validator、Golden、Registry 不可变性与兼容矩阵测试。
 
 
 首批 Event Envelope 字段：
@@ -306,9 +306,9 @@ Delivery plan fingerprint 使用 RFC 8785 JSON Canonicalization Scheme + SHA-256
 
 | 新契约 | 已接受语义 | 当前状态 |
 |---|---|---|
-| NTF-CTR-001 Event Schema Registry | event_type + schema_version 不可变注册键；生产方拥有 payload 语义；未知版本拒绝，不回退旧 Schema | pending_evidence：首批事件 Schema/Golden/兼容矩阵未齐 |
-| NTF-CTR-002 Inbox/Publish/Delivery 幂等与状态机 | Inbox=(source_module,event_id)；Publish=(source_module,idempotency_key)；Delivery 唯一键含 source_module/event/subscription/channel config/template/recipient；unknown 先对账，不盲目重发 | pending_evidence：DB 唯一约束、并发/重复命令/恢复测试未齐 |
-| NTF-CTR-003 Channel 重试与外部副作用 | 不承诺外部 exactly-once；仅明确未被渠道接受且可重试的错误自动重试；ambiguous outcome 进入 unknown | pending_evidence：逐渠道能力声明、超时/回执丢失/幂等测试未齐 |
+| NTF-CTR-001 Event Schema Registry | event_type + schema_version 不可变注册键；生产方拥有 payload 语义；未知版本拒绝，不回退旧 Schema | pending_evidence：首批 Schema/Golden 已提交，仍待模块 CI、Registry digest 不可变和兼容矩阵测试 |
+| NTF-CTR-002 Inbox/Publish/Delivery 幂等与状态机 | Inbox=(source_module,event_id)；Publish=(source_module,idempotency_key)；Delivery 唯一键含 source_module/event/subscription/channel config/template/recipient；unknown 先对账，不盲目重发 | pending_evidence：测试矩阵已定义，仍待模块 CI、DB 唯一约束、并发/重复命令/恢复测试 |
+| NTF-CTR-003 Channel 重试与外部副作用 | 不承诺外部 exactly-once；仅明确未被渠道接受且可重试的错误自动重试；ambiguous outcome 进入 unknown | pending_evidence：错误分类/unknown/Retry-After 测试矩阵已定义，仍待模块 CI 与逐渠道能力声明 |
 
 
 
