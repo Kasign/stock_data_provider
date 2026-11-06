@@ -4820,6 +4820,7 @@ button:disabled {
 .research-note-form textarea{width:100%;resize:vertical}
 .research-note-actions{grid-column:1/-1;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .research-note-actions span{color:var(--text-dim);font-size:11px}
+
 .research-note-toolbar{grid-template-columns:repeat(2,minmax(0,1fr));padding-top:12px;border-top:1px solid var(--border-soft)}
 .research-note-list{display:grid;gap:10px}
 .research-note-card{padding:13px;border:1px solid var(--border);border-radius:10px;background:var(--panel-raised)}
@@ -5141,3 +5142,20 @@ button:disabled {
     overflow-wrap: anywhere;
   }
 }
+.research-note-toolbar{grid-template-columns:minmax(220px,2fr) minmax(150px,1fr) minmax(140px,1fr) auto;align-items:end}
+.research-note-toolbar-actions{display:flex;align-items:end;gap:7px;flex-wrap:wrap}
+.research-note-toolbar-actions .button{min-height:38px}
+.research-note-count{margin:0 0 10px;color:var(--text-dim);font-size:11px}
+.research-note-editor{margin:14px 0;padding:16px;border:1px solid var(--border);border-radius:10px;background:var(--panel-raised)}
+.research-note-editor-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}
+.research-note-editor-heading h3{margin:0;font-size:15px}
+.research-note-card header{display:block}
+.research-note-card header h3{margin-bottom:4px}
+.research-note-card .research-note-meta{margin:0;line-height:1.5;overflow-wrap:anywhere}
+.research-note-symbols,.research-note-tags{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0}
+.research-note-chip{display:inline-flex;align-items:center;max-width:100%;padding:3px 7px;border:1px solid var(--border-soft);border-radius:999px;color:var(--text-soft);background:var(--panel);font-size:10px;overflow-wrap:anywhere}
+.research-note-chip.is-muted{color:var(--text-dim)}
+.research-note-chip.is-tag{color:var(--accent)}
+.research-note-card .research-note-preview{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;overflow:hidden;white-space:pre-wrap;overflow-wrap:anywhere;margin:10px 0;color:var(--text-soft);font-size:12px;line-height:1.7}
+@media(max-width:900px){.research-note-toolbar{grid-template-columns:repeat(2,minmax(0,1fr))}.research-note-toolbar-actions{grid-column:1/-1}}
+@media(max-width:640px){.research-note-toolbar{grid-template-columns:minmax(0,1fr)}.research-note-toolbar-actions{grid-column:auto}.research-note-toolbar-actions .button{flex:1}.research-note-editor{padding:12px}.research-note-editor-heading{align-items:flex-start;flex-direction:column}}

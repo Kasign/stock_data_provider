@@ -6,6 +6,18 @@ const note=(id,title,content,symbol="600519.SH",tags=["基本面"])=>({id,title,
 test("研究记录可写入并回读校验",()=>{const s=memory();assert.equal(writeResearchNotes([note("1","标题","内容")],s).ok,true);assert.equal(readResearchNotes(s).items.length,1);});
 test("笔记保留任务和 Run 关联并支持关联 ID 检索",()=>{const s=memory();assert.equal(writeResearchNotes([{...note("1","研究判断","观察内容"),taskId:"task-42",runId:"run-42"}],s).ok,true);const item=readResearchNotes(s).items[0];assert.equal(item.taskId,"task-42");assert.equal(item.runId,"run-42");assert.equal(filterResearchNotes([item],"task-42").length,1);assert.equal(filterResearchNotes([item],"run-42").length,1);});
 test("检索覆盖标题正文代码与标签并支持代码筛选",()=>{const items=[note("1","贵州茅台","现金流良好"),note("2","观察记录","等待验证","000858.SZ",["技术面"])];assert.equal(filterResearchNotes(items,"现金流").length,1);assert.equal(filterResearchNotes(items,"技术面").length,1);assert.equal(filterResearchNotes(items,"","000858").length,1);});
+
+test("研究记录筛选支持多标的与标签精确匹配", () => {
+  const items = [
+    { ...note("multi", "组合研究", "观察组合", "600519.SH", ["基本面", "观察中"]), symbols: ["600519.SH", "000858.SZ"] },
+    note("single", "技术观察", "等待确认", "000001.SZ", ["技术面"])
+  ];
+  assert.equal(filterResearchNotes(items, "", "", "基本面").length, 1);
+  assert.equal(filterResearchNotes(items, "", "000858", "基本面").length, 1);
+  assert.equal(filterResearchNotes(items, "", "000001", "基本面").length, 0);
+  assert.equal(filterResearchNotes(items, "", "", "基本").length, 0, "tag filter is exact rather than substring matching");
+});
+
 test("损坏数据不会被误判为空且不覆盖原值",()=>{const s=memory();s.setItem(RESEARCH_NOTES_KEY,"{");const before=s.getItem(RESEARCH_NOTES_KEY);assert.equal(readResearchNotes(s).valid,false);assert.equal(writeResearchNotes([],s).ok,false);assert.equal(s.getItem(RESEARCH_NOTES_KEY),before);});
 test("超过条数限制拒绝写入",()=>{assert.equal(writeResearchNotes(Array.from({length:201},(_,i)=>note(String(i),"标题","内容")),memory()).ok,false);});
 test("关键词检索不执行 HTML",()=>{const x=note("1","<img src=x>","<script>alert(1)</script>");assert.equal(filterResearchNotes([x],"<img").length,1);});

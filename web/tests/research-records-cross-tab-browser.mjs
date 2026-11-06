@@ -46,7 +46,18 @@ try {
 
   await second.evaluate(({ key, item }) => localStorage.setItem(key, JSON.stringify([item])), { key: noteKey, item: note("note-1", "初始笔记", "初始内容") });
   await first.locator(".research-note-card").filter({ hasText: "初始笔记" }).waitFor();
+  assert.equal(await first.locator("#research-note-editor").isVisible(), false, "note editor is not permanently occupying the list workspace");
+  assert.equal(await first.locator("#research-note-count").textContent(), "显示 1 / 1 条记录");
+  await first.locator("#research-note-tag-filter").selectOption("基本面");
+  assert.equal(await first.locator(".research-note-card").count(), 1, "tag filter selects matching notes");
+  await first.locator("#research-note-clear").click();
+  await first.locator("#research-note-create").click();
+  await first.locator("#research-note-editor:not([hidden])").waitFor();
+  await first.locator("#research-note-editor-back").click();
+  await first.locator("#research-note-editor[hidden]").waitFor();
   await first.locator('[data-note-action="edit"][data-note-id="note-1"]').click();
+  await first.locator("#research-note-editor:not([hidden])").waitFor();
+  assert.equal(await first.locator(".research-note-card").filter({ hasText: "远端新版本" }).isVisible(), true, "note list remains visible while editing");
   await first.locator("#research-note-title").fill("本地旧草稿");
   await second.evaluate(({ key, item }) => localStorage.setItem(key, JSON.stringify([item])), { key: noteKey, item: note("note-1", "远端新版本", "远端内容", "2026-11-04T02:00:00.000Z") });
   await first.locator(".research-note-card").filter({ hasText: "远端新版本" }).waitFor();
@@ -119,6 +130,7 @@ try {
   await first.locator("#research-report-clear").click();
   assert.equal(await first.locator("#research-report-count").textContent(), "显示 1 / 1 份报告");
   assert.equal(await first.locator("#research-report-clear").isDisabled(), true);
+  first.once("dialog", dialog => dialog.accept());
   await first.locator('#research-report-list [data-report-action="create-note"]').click();
   assert.equal(await first.locator(".research-note-conflict-actions").isVisible(), false,
     "creating a note from a report must clear the previous note conflict actions");
