@@ -71,16 +71,15 @@ func TestNormalizeContentLayersCanonicalizesCRLFWithoutChangingParagraphs(t *tes
 	}
 }
 
-
 func TestRestrictContentLayersHonorsRequestedContentCeiling(t *testing.T) {
 	layers := ContentLayers{
-		ProviderSummary: "provider summary",
-		SourceSummary: "source summary",
-		SourceSummaryOrigin: ContentOriginFeedSummary,
-		Body: &ContentPayload{Origin: ContentOriginFeedBody, Format: ContentFormatPlainText, Text: "unclassified body"},
-		BodyDeclaredTypeRaw: "text/html",
+		ProviderSummary:       "provider summary",
+		SourceSummary:         "source summary",
+		SourceSummaryOrigin:   ContentOriginFeedSummary,
+		Body:                  &ContentPayload{Origin: ContentOriginFeedBody, Format: ContentFormatPlainText, Text: "unclassified body"},
+		BodyDeclaredTypeRaw:   "text/html",
 		ExternalBodyReference: "https://publisher.example/body",
-		Attachments: []ContentAttachmentMetadata{{URL: "https://publisher.example/file.pdf"}},
+		Attachments:           []ContentAttachmentMetadata{{URL: "https://publisher.example/file.pdf"}},
 	}
 
 	metadata := RestrictContentLayers(layers, ContentMetadata)
@@ -103,7 +102,7 @@ func TestRestrictContentLayersHonorsRequestedContentCeiling(t *testing.T) {
 	}
 
 	attachments := RestrictContentLayers(layers, ContentAttachment)
-	if len(attachments.Attachments) != 1 || attachments.SourceSummary != "" || attachments.Body != nil {
+	if len(attachments.Attachments) != 1 || attachments.ProviderSummary != "" || attachments.SourceSummary != "" || attachments.Body != nil {
 		t.Fatalf("attachment request must expose attachment metadata only: %+v", attachments)
 	}
 }

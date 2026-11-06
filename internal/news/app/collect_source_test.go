@@ -101,6 +101,28 @@ func TestCollectSourceFeedSuccessUsesRegisteredEndpointAndPolicy(t *testing.T) {
 	}
 }
 
+func TestCollectSourceDoesNotReturnContentAboveRequestedMetadata(t *testing.T) {
+	body := `<?xml version="1.0"?><rss version="2.0" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>媒体 Feed</title><item><guid>item-1</guid><title>新闻标题</title><link>https://publisher.example/story/1</link><description>来源摘要</description><content:encoded><![CDATA[正文内容不应返回]]></content:encoded><enclosure url="https://publisher.example/file.pdf" type="application/pdf" length="10"/></item></channel></rss>`
+	transport := &sourceTransportStub{response: feedResponse(body, "application/rss+xml", http.StatusOK)}
+	useCase := NewCollectSource(sourceCatalogStub{registration: approvedSourceRegistration()}, transport)
+	request := validCollectRequest()
+	request.ContentKind = domain.ContentMetadata
+
+	result, err := useCase.Execute(context.Background(), request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Entries) != 1 {
+		t.Fatalf("entries=%+v", result.Entries)
+	}
+	content := result.Entries[0].Content
+	if content.SourceSummary != "" || content.Body != nil ||
+		content.BodyDeclaredTypeRaw != "" || content.ExternalBodyReference != "" ||
+		len(content.Attachments) != 0 {
+		t.Fatalf("metadata-only request returned higher-level payload: %+v", content)
+	}
+}
+
 func TestCollectSourceRejectsUnauthorizedSourceBeforeNetwork(t *testing.T) {
 	registration := approvedSourceRegistration()
 	registration.SourcePolicy.Status = domain.AuthorizationPending

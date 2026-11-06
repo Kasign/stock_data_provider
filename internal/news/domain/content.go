@@ -86,10 +86,10 @@ func NormalizeContentLayers(layers ContentLayers) ContentLayers {
 	return layers
 }
 
-
 // RestrictContentLayers removes payloads that are not covered by the requested
 // content ceiling. Unknown body kinds and external references are never promoted.
 func RestrictContentLayers(layers ContentLayers, requested ContentKind) ContentLayers {
+	layers.ProviderSummary = ""
 	if requested == ContentAttachment {
 		layers.SourceSummary = ""
 		layers.SourceSummaryOrigin = ""
