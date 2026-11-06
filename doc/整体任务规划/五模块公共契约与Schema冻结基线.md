@@ -532,7 +532,7 @@ type ResearchEvidenceQuery interface {
 
 因此，不能因为 OpenAPI 顶层还声明 BearerAuth，就推断业务 Data API 已接受 Platform Service Secret。迁移前的 Data HTTP API 仍使用 X-API-Key；目标同进程调用改为可信 Principal/Scope Context。远程兼容 Adapter 可继续使用 Data 专用 Key，且只能由服务端注入。Data Provider Token、Data API Key、Root Server Owner Token、Platform Service Secret 各自独立。
 
-文档明确 Secret 注入、Header 覆盖、固定 DestinationPolicy、健康接口、环境隔离、轮换/撤销、日志脱敏和未来统一服务身份的迁移门槛。Data 独立 Go Module 不 import 根模块 Platform internal。
+文档明确远程兼容 Adapter 的 Secret 注入、Header 覆盖、固定 DestinationPolicy、健康接口、环境隔离、轮换/撤销和日志脱敏；这些要求只约束远程 HTTP Adapter。方案 B 下同进程 Data 不再以独立 Go Module 边界限制 Platform 公开 package 的复用。
 
 本轮只更新规划文档，不修改 Data/Platform/Server 代码。该设计待 Server/Data 负责人确认后成为实现契约；GOV-004 仍未冻结。
 

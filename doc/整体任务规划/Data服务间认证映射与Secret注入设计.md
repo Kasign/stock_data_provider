@@ -20,7 +20,7 @@
 因此，业务 Data API 的实际契约应按 Operation 级 `X-API-Key` 处理，不能仅因 OpenAPI 全局声明还出现 BearerAuth，就认为 Data API 已经接受 Platform Service Secret/Bearer Token。
 
 Data API 的 `X-API-Key`、根 Server owner Token、Platform service Secret、各 Provider Token 是四种不同凭据：
-- Data API Key：允许根 Server 的 Data Adapter 调用行情服务；
+- Data API Key：仅用于远程/独立部署时，允许根 Server 的 Remote Data Adapter 调用行情服务；方案 B 的同进程 Application Port 不使用该 Key；
 - Owner Token：保护根 Server 的管理/用户级接口；
 - Platform Service Secret：平台内部服务身份凭据，若启用，应有自己的签发、校验和轮换语义；
 - Provider Token：Data 服务访问上游供应商的凭据。

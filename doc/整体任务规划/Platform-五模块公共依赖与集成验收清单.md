@@ -39,7 +39,7 @@
 | Request ID / slog | 使用 | 使用 | 使用 | 使用 | 使用 |
 | Fault | 使用 | 使用 | 使用 | 使用 | 使用 |
 | Diagnostics Check | 领域 Adapter 暴露只读检查 | 领域 Adapter 暴露只读检查 | 可组合模块检查 | 暴露模型服务能力检查 | 暴露渠道能力检查 |
-| HTTP Client | 不直接调用 Provider；由 Data 使用受控 Client | 不直接调用 Data；若有外部源须经 News | 通常调用内部 Application Facade | 调用外部模型 Provider | 调用外部投递渠道 |
+| HTTP Client | 不直接调用 Provider；通过 Data Application Port 获取行情 | 不直接调用 Data；若有外部源须经 News | 通常调用内部 Application Facade | 调用外部模型 Provider | 调用外部投递渠道 |
 | Storage | 自有 Repository/Migration | 自有 Repository/Migration | 自有 Run/Stage/Attempt 存储 | 仅必要调用元数据 | 自有 Subscription/Delivery 存储 |
 | Platform Task Queue | 禁止 | 禁止 | 禁止作为 DAG/Run 引擎 | 禁止 | 禁止 |
 
