@@ -71,10 +71,10 @@ func BusinessQualityCheck(
 				attributes["issue_codes"] = strings.Join(issueCodes, ",")
 			}
 			return platformdiag.Observation{
-				Status: platformdiag.StatusHealthy,
+				Status:      platformdiag.StatusHealthy,
 				SafeMessage: "News business quality assessment completed",
-				CheckedAt: time.Now().UTC(),
-				Attributes: attributes,
+				CheckedAt:   time.Now().UTC(),
+				Attributes:  attributes,
 			}, nil
 		},
 	}, nil
@@ -92,4 +92,3 @@ func validQualityIssueCode(value string) bool {
 	}
 	return true
 }
-
