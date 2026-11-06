@@ -944,6 +944,8 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outlin
 :root[data-theme="light"] thead { background: #edf2f5; }
 :root[data-theme="light"] th { color: #596f80; border-color: var(--border-soft); }
 :root[data-theme="light"] td { color: #354c5c; border-color: var(--border-soft); }
+:root[data-theme="light"] td.positive { color: var(--positive); }
+:root[data-theme="light"] td.negative { color: var(--negative); }
 :root[data-theme="light"] tbody tr:hover { background: #f2f7f9; }
 :root[data-theme="light"] .raw-result pre { color: #334b5a; background: #f5f8fa; border-color: #d6e1e8; }
 :root[data-theme="light"] .empty-icon { color: var(--accent); background: #e7f6f1; border-color: #c9e8de; }

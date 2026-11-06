@@ -214,6 +214,8 @@ function assertNormalDeclaration(selector, property, value) {
   [".metric-primary .metric-foot.negative", "color", "var(--negative)"],
   [':root[data-theme="light"] .metric-primary .metric-foot.positive', "color", "var(--positive)"],
   [':root[data-theme="light"] .metric-primary .metric-foot.negative', "color", "var(--negative)"],
+  [':root[data-theme="light"] td.positive', "color", "var(--positive)"],
+  [':root[data-theme="light"] td.negative', "color", "var(--negative)"],
   [".technical-metric-card > small.positive", "color", "var(--positive)"],
   [".technical-metric-card > small.negative", "color", "var(--negative)"],
   [":root", "--positive", "#f17683"],
