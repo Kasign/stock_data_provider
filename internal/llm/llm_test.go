@@ -11,7 +11,7 @@ func testProviderConfig() ProviderConfig {
 	return ProviderConfig{
 		ProviderID: "local-gateway", Protocol: ProtocolOpenAIResponses,
 		BaseURL: "https://gateway.example.com:8443/v1", DefaultModel: "qwen-local",
-		APIKeySecretRef: "secret://llm/gateway", RequestTimeout: 30 * time.Second,
+		APIKeySecretRef: "secret://llm/gateway", RequestTimeoutMS: 30000, AllowedModels: []string{"qwen-local"},
 		MaxRequestBytes: 1 << 20, MaxResponseBytes: 2 << 20,
 	}
 }
@@ -34,7 +34,9 @@ func TestCapabilityUnknownByDefaultAndRequiresVersionedEvidence(t *testing.T) {
 	if s.Status(CapabilityResponsesStream) != CapabilityUnknown { t.Fatal("missing capability must be unknown") }
 	if s.Supports(CapabilityResponsesJSON) { t.Fatal("unversioned capability evidence must not be trusted") }
 	now := time.Now().UTC()
-	s.ProviderID, s.ModelID, s.GatewayVersion, s.VerifiedAt = "p1", "m1", "gateway-v1", &now
+	validUntil := now.Add(time.Hour)
+	s.ProviderID, s.ModelID, s.Protocol, s.GatewayVersion, s.VerifiedAt = "p1", "m1", ProtocolOpenAIResponses, "gateway-v1", &now
+	s.ValidUntil, s.EvidenceRef = &validUntil, "test-evidence"
 	if !s.Supports(CapabilityResponsesJSON) { t.Fatal("complete evidence should enable capability") }
 }
 
@@ -42,7 +44,7 @@ func TestModelRequestValidationAndCapabilityGate(t *testing.T) {
 	now := time.Now().UTC()
 	temperature := 0.2
 	r := ModelRequest{
-		RequestID: "req-1", PurposeCode: "research.summary", Model: "qwen-local",
+		ProviderID: "gateway-1", RequestID: "req-1", PurposeCode: "research.summary", Model: "qwen-local",
 		InputText: "Evidence", MaxOutputTokens: 128, Temperature: &temperature,
 		DeadlineAt: now.Add(time.Minute), CorrelationID: "run-1", SystemAsOf: now,
 	}
@@ -51,8 +53,11 @@ func TestModelRequestValidationAndCapabilityGate(t *testing.T) {
 		t.Fatalf("expected missing capability evidence rejection, got %v", err)
 	}
 	verifiedAt := now
+	validUntil := now.Add(time.Hour)
 	state := CapabilityState{
-		ProviderID: "gateway-1", ModelID: r.Model, GatewayVersion: "gateway-v1", VerifiedAt: &verifiedAt,
+		ProviderID: r.ProviderID, ModelID: r.Model, Protocol: ProtocolOpenAIResponses,
+		GatewayVersion: "gateway-v1", VerifiedAt: &verifiedAt, ValidUntil: &validUntil,
+		EvidenceRef: "test-evidence", MaxOutputTokensLimit: 512,
 		Values: map[Capability]CapabilityStatus{
 			CapabilityResponsesJSON: CapabilitySupported,
 			CapabilitySamplingParameters: CapabilityUnknown,
@@ -70,6 +75,14 @@ func TestModelRequestValidationAndCapabilityGate(t *testing.T) {
 	if err := r.ValidateStreamCapabilities(state); err != nil { t.Fatalf("verified stream capability rejected: %v", err) }
 	r.InputText = " "
 	if err := r.Validate(); err == nil { t.Fatal("empty input must be rejected") }
+}
+
+func TestProviderModelAllowlistAndLocalSchemaMode(t *testing.T) {
+	config := testProviderConfig()
+	r := ModelRequest{ProviderID: config.ProviderID, Model: "qwen-local"}
+	if err := r.ValidateAgainstProvider(config); err != nil { t.Fatalf("allowed provider/model rejected: %v", err) }
+	r.Model = "other-model"
+	if err := r.ValidateAgainstProvider(config); err == nil { t.Fatal("model outside allowlist must be rejected") }
 }
 
 func TestUsageMissingValuesRemainNull(t *testing.T) {
