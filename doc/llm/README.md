@@ -3,10 +3,10 @@
 - 分支：`feat/llm`
 - 代码：`internal/llm/**`
 - 任务前缀：LLM
-- 状态：P1 基础 DTO/Provider Port 首批代码已提交；尚未运行 gofmt/go test，待构建验证
-- 当前基线：0cb99a525de00d3c340891caa029b716c4d2f749；首批实现提交：9ae3168575e3126cc7e10692bf8dbe5a6df9c90a
+- 状态：P1 基础 DTO/Provider Port 已提交；能力门禁完成一轮静态 Review；gofmt/go test 尚未执行，构建验证待执行
+- 当前分支 HEAD：d621cfa44dd3efd75fbbd15f14490f9b0578a5de
 - LLM-001：静态协议盘点完成；在线真实端点验收未执行
-- LLM-002：ProviderConfig、CapabilityState、ModelRequest/Response、Usage、Tool Call、ModelEvent 和 Provider Port 已有首批代码；Contract Test/Golden 未完成
+- LLM-002：ProviderConfig、CapabilityState、ModelRequest/Response、Usage、Tool Call、ModelEvent 和 Provider Port 已有首批代码；能力门禁回归用例已补充；Draft 2020-12 Schema 编译、JSON/SSE Golden、Responses Adapter 与 Platform Fault 映射未完成
 
 只负责 Go 侧模型服务协议适配，复用现有独立模型服务；不重建推理 Gateway，不管理研究状态机、工具权限或业务结论。
 
