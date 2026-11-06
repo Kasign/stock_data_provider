@@ -82,3 +82,57 @@ func TestRunDTOClonesNestedResultSummaryAndNormalizesCollections(t *testing.T) {
 	got.ResultSummary.StageOutcomes["quote"]="failed"
 	if summary.StageOutcomes["quote"]!=domain.StageSucceeded {t.Fatal("DTO mapping must not share mutable map with domain")}
 }
+
+
+func TestDomainProjectionsValidateAgainstTheirPublicSchemas(t *testing.T) {
+	now:=time.Date(2026,11,6,1,0,0,0,time.UTC)
+	run:=RunFromDomain(domain.Run{
+		Ref:"run_schema",SchemaVersion:"1.0.0",Status:domain.RunPartial,Version:2,
+		SystemAsOf:now,DeadlineAt:now.Add(time.Hour),TemplateRef:"daily",TemplateVersion:"1.0.0",
+		TemplateFingerprint:"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+		InputSnapshotRefs:[]string{"snapshot_1"},CorrelationID:"corr_1",CreatedAt:now,
+		StartedAt:&now,FinishedAt:timePointer(now.Add(time.Minute)),
+		ResultSummary:&domain.ResultSummary{
+			StageOutcomes:map[string]domain.StageStatus{"quote":domain.StageDegraded},
+			ExcludedStages:[]domain.ExcludedStage{},MissingStageCodes:[]string{"risk"},
+			DegradedStageCodes:[]string{"quote"},BlockedStageCodes:[]string{},ReasonCodes:[]string{"source_partial"},
+			Coverage:0.5,QualityStatus:"incomplete",RiskGateDecisions:map[string]string{},
+			ActionabilityStatus:"blocked",
+		},
+	})
+	stage:=StageFromDomain(domain.Stage{
+		Ref:"stage_schema",RunRef:"run_schema",Code:"quote",Status:domain.StageDegraded,Version:2,
+		Required:false,Dependencies:[]string{},RetryPolicyRef:"retry_v1",AttemptNo:1,
+		ReasonCodes:[]string{"source_partial"},CreatedAt:now,StartedAt:&now,FinishedAt:timePointer(now.Add(time.Second)),
+	}, "1.0.0")
+	attempt:=AttemptFromDomain(domain.Attempt{
+		Ref:"attempt_schema",StageRef:"stage_schema",Number:1,Status:domain.AttemptFailed,
+		LeaseOwner:"worker_1",FencingToken:1,StartedAt:now,FinishedAt:timePointer(now.Add(time.Second)),
+		FaultRef:stringPointer("fault_1"),
+	}, "1.0.0")
+
+	assertDTO:=func(name,schemaPath string,value any){
+		t.Helper()
+		raw,err:=json.Marshal(value);if err!=nil{t.Fatalf("%s marshal: %v",name,err)}
+		schemaBytes,err:=os.ReadFile(filepath.Join("../../../doc/researchflow/schema",schemaPath));if err!=nil{t.Fatal(err)}
+		compiler:=jsonschema.NewCompiler();compiler.Draft=jsonschema.Draft2020;compiler.AssertFormat=true
+		const schemaURL="https://researchflow.invalid/schema/runtime-test"
+		if err:=compiler.AddResource(schemaURL,bytes.NewReader(schemaBytes));err!=nil{t.Fatal(err)}
+		compiled,err:=compiler.Compile(schemaURL);if err!=nil{t.Fatal(err)}
+		decoder:=json.NewDecoder(bytes.NewReader(raw));decoder.UseNumber()
+		var instance any;if err:=decoder.Decode(&instance);err!=nil{t.Fatal(err)}
+		if err:=compiled.Validate(instance);err!=nil{t.Fatalf("%s DTO violates public schema: %v; json=%s",name,err,raw)}
+	}
+	assertDTO("Run","run-1.0.0.schema.json",run)
+	assertDTO("Stage","stage-1.0.0.schema.json",stage)
+	assertDTO("Attempt","attempt-1.0.0.schema.json",attempt)
+}
+
+func TestAttemptDTOClonesNullableTimePointers(t *testing.T) {
+	finished:=time.Date(2026,11,6,1,0,0,0,time.UTC)
+	got:=AttemptFromDomain(domain.Attempt{FinishedAt:&finished},"1.0.0")
+	*got.FinishedAt=got.FinishedAt.Add(time.Hour)
+	if !finished.Equal(time.Date(2026,11,6,1,0,0,0,time.UTC)){t.Fatal("DTO must not share nullable time pointer with domain")}
+}
+
+func timePointer(v time.Time) *time.Time { return &v }

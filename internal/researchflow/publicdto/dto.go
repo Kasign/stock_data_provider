@@ -89,7 +89,7 @@ func StageFromDomain(v domain.Stage, schemaVersion string) Stage {
 	return Stage{SchemaVersion:schemaVersion,StageRef:v.Ref,RunRef:v.RunRef,StageCode:v.Code,Status:string(v.Status),Version:v.Version,Required:v.Required,DependencyStageRefs:cloneStrings(v.Dependencies),RetryPolicyRef:v.RetryPolicyRef,AttemptNo:v.AttemptNo,RetryAt:cloneTimePointer(v.RetryAt),OutputRef:cloneStringPointer(v.OutputRef),QualityStatus:stringPointer(v.QualityStatus),ReasonCodes:cloneStrings(v.ReasonCodes),RiskDecision:stringPointer(v.RiskDecision),CreatedAt:v.CreatedAt,StartedAt:cloneTimePointer(v.StartedAt),FinishedAt:cloneTimePointer(v.FinishedAt)}
 }
 func AttemptFromDomain(v domain.Attempt, schemaVersion string) Attempt {
-	return Attempt{SchemaVersion:schemaVersion,AttemptRef:v.Ref,StageRef:v.StageRef,AttemptNo:v.Number,Status:string(v.Status),LeaseOwner:stringPointer(v.LeaseOwner),LeaseExpiresAt:cloneTimePointer(v.LeaseExpiresAt),FencingToken:v.FencingToken,StartedAt:v.StartedAt,FinishedAt:v.FinishedAt,FaultRef:cloneStringPointer(v.FaultRef),OutputRef:cloneStringPointer(v.OutputRef)}
+	return Attempt{SchemaVersion:schemaVersion,AttemptRef:v.Ref,StageRef:v.StageRef,AttemptNo:v.Number,Status:string(v.Status),LeaseOwner:stringPointer(v.LeaseOwner),LeaseExpiresAt:cloneTimePointer(v.LeaseExpiresAt),FencingToken:v.FencingToken,StartedAt:v.StartedAt,FinishedAt:cloneTimePointer(v.FinishedAt),FaultRef:cloneStringPointer(v.FaultRef),OutputRef:cloneStringPointer(v.OutputRef)}
 }
 func cloneStrings(v []string) []string { if v==nil{return []string{}}; return append([]string(nil),v...) }
 func stringPointer(v string) *string { if v=="" { return nil }; return &v }
