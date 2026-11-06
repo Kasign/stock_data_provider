@@ -119,15 +119,15 @@ Upstream Providers
 
 ## 8. 验收清单
 
-- [ ] Data 业务 API 实际只接受已声明的服务端凭据；OpenAPI Operation Security 与 Handler Middleware 一致。
+- [ ] 同进程模式由 Root Server 路由层认证并注入可信 Context；远程模式 Data 业务 API 只接受已声明的服务端凭据，OpenAPI Operation Security 与 Handler Middleware 一致。
 - [ ] 当前同进程模式由 Root Server 注入可信 Principal/Scope Context；远程兼容模式由 Root Server Data Adapter 服务端注入 Data 专用 Key。
 - [ ] WebUI/浏览器无法获得 Data Key、Platform Service Secret 或 Provider Token。
-- [ ] 用户请求 Header 无法覆盖 Data Adapter 认证 Header。
-- [ ] Data Service Base URL 固定且受 DestinationPolicy 限制。
+- [ ] 远程模式下用户请求 Header 无法覆盖 Data Adapter 认证 Header；同进程模式下不接受客户端自报 Principal/Scope。
+- [ ] 远程模式下 Data Service Base URL 固定且受 DestinationPolicy 限制；同进程模式不配置 Data Base URL。
 - [ ] 401/403、网络不可达、Provider 错误可区分。
 - [ ] 健康接口无认证且只暴露最小信息。
 - [ ] Secret 不出现在日志、Fault、诊断、任务参数、响应或 LLM 上下文。
-- [ ] dev/test/staging/prod 使用不同 Key，轮换/撤销流程通过演练。
+- [ ] 远程模式下 dev/test/staging/prod 使用不同 Key，轮换/撤销流程通过演练；同进程模式不配置 Data API Key。
 - [ ] 当前同进程模式 Data 与 Server 共用根 Go Module，Data Provider 依赖 Platform 公开受控 HTTP Client；远程独立 Module 兼容模式不得 import 根模块 internal。
 - [ ] Platform Service Secret 不被误当作 Data X-API-Key；未来统一身份改造单独评审。
 
@@ -135,9 +135,9 @@ Upstream Providers
 
 ## DATA-CTR-008 与 Data API 凭据的边界
 
-- Data API Key 只用于认证；通过认证后由服务端映射到稳定 caller principal 和 Scope。Key 字符串本身不得写入 AuthorizationRef、Snapshot Manifest 或 fingerprint input。
-- caller principal 是服务端登记的稳定身份引用；同一 principal 的 Key 轮换不改变 subject_ref。Key 撤销、principal 禁用或 Scope 收窄必须在下一次读取生效。
-- Data v2 请求的 purpose_code 必填且受 Scope 限制；客户端不得提交 subject_ref/caller_ref。认证失败返回 401；认证成功但 Scope 不足返回 403；授权依赖不可用返回 503。不得把这些状态归类为 Provider 故障。
+- 同进程模式由 Root Server 认证层提供可信 Principal/Scope Context；远程模式由 Data API Key 认证后映射到稳定 caller principal 和 Scope。Data API Key 字符串本身不得写入 AuthorizationRef、Snapshot Manifest 或 fingerprint input。
+- caller principal 是服务端登记的稳定身份引用；同一 principal 的远程 Key 轮换不改变 subject_ref。Key 撤销、principal 禁用或 Scope 收窄必须在下一次读取生效。
+- Data v2 请求的 purpose_code 必填且受 Scope 限制；客户端不得提交 subject_ref/caller_ref。同进程模式的认证由 Root Server 路由层完成，远程模式认证失败返回 401；可信主体 Scope 不足返回 403；授权依赖不可用返回 503。不得把这些状态归类为 Provider 故障。
 - `schema/DATA-CTR-008-snapshot-manifest-1.0.0.schema.json` 定义授权引用绑定的最小 Snapshot Manifest。Manifest 只包含查询范围和来源版本元数据，不包含数据正文或任何 Secret。
 - Snapshot Manifest 的 `manifest_fingerprint` 对除 `snapshot_ref`、`manifest_fingerprint` 外的字段执行 RFC 8785 JCS + SHA-256；`sources` 按 `(source_ref, source_version)` 字典序排序且不得重复；`snapshot_ref` 必须为 `data_snapshot:sha256:<manifest_fingerprint>`。同一规范化 Manifest 必须得到同一引用，任何绑定字段变化必须得到不同引用。Golden：`golden/DATA-CTR-008-snapshot-manifest.golden.json`。
 - GOV-CTR-006 的 `decision_fingerprint` 仍严格遵循公共算法；通过 resource_ref 指向内容寻址 snapshot_ref，避免为 Data 单独扩展或改变公共算法。
@@ -145,6 +145,8 @@ Upstream Providers
 
 ## 9. 当前默认模式与远程兼容结论
 
-当前默认边界是：**Root Server 与 Data 同进程运行，通过 Data Application Port 调用；Root Server 在入口认证后将可信 Principal/Scope Context 注入 Data，不使用 Data API Key。** 浏览器不接触 Data Key、Platform Service Secret 或 Provider Token。\n\n若未来恢复 Data 独立部署，远程 HTTP Adapter 可沿用本文件第 2～8 节的 Data API Key 方案；Data API Key、Platform Service Secret、Owner Token 和 Provider Token 仍保持独立。
+当前默认边界是：**Root Server 与 Data 同进程运行，通过 Data Application Port 调用；Root Server 在入口认证后将可信 Principal/Scope Context 注入 Data，不使用 Data API Key。** 浏览器不接触 Data Key、Platform Service Secret 或 Provider Token。
+
+若未来恢复 Data 独立部署，远程 HTTP Adapter 可沿用本文件第 2～8 节的 Data API Key 方案；Data API Key、Platform Service Secret、Owner Token 和 Provider Token 仍保持独立。
 
 当前同进程默认模式不需要 Server→Data Data API Key、Data Base URL 或内部 HTTP 请求；仍需完成 Root Server 路由认证、可信 Principal/Scope 注入和安全日志验收。若未来启用远程兼容模式，则必须另行完成 Key 轮换、网络 ACL、服务端 Header 注入和安全日志验收。
