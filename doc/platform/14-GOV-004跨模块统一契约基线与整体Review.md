@@ -3,7 +3,7 @@
 - 所属任务：GOV-004（项目级跨模块契约治理）；Platform 子契约对应 PLAT-002
 - 文档归属：feat/platform-foundation / doc/platform
 - 审查基线：dc85a9da4881b74da3c010c164369114e438c4a4
-- 文档状态：统一契约候选基线，待各契约 Owner Review；**不是已冻结版本**
+- 文档状态：Platform 侧跨模块 Review 与接入索引；项目级契约状态以 `feat/design_doc` 的契约目录为准；**不是全局冻结声明**
 - Review 类型：规划文档静态交叉审查；不等同于当前所有业务分支的最新代码审计
 - 适用范围：Data、News、Quant、Research、Researchflow、LLM、Notification、Platform、Server/API、WebUI 的服务端协作边界
 
@@ -54,7 +54,7 @@
 
 ### 2.3 当前结论
 
-架构职责和依赖 DAG 已形成可用设计基线；字段级 Schema、部分 Application Port 和状态机仍有 Owner 未决项。Data OpenAPI/Go JSON 差异、News 查询/PIT/授权/分页实现、Platform 生产集成也仍有证据缺口。
+架构职责和依赖 DAG 已形成可用设计基线；字段级 Schema、部分 Application Port 和状态机仍有证据缺口。未决语义与待补证据以项目级契约目录逐项登记；Data OpenAPI/Go JSON 差异、News 查询/PIT/授权/分页实现、Platform 生产集成仍需按实际调用点验收。
 
 因此当前状态仍是 **GOV-004 NO-GO / 未冻结**。本文件形成候选契约与审查结论，不把文档存在等同于契约冻结。
 
@@ -176,7 +176,7 @@ Go JSON Tag、omitempty、指针、slice/map 的运行时输出不能单独决�
 - 金额、价格、单价、成本和费用在 Quant/Research/Researchflow 跨模块 DTO 中建议使用 decimal string；计数使用 integer；比例、收益率、波动率和标准化统计量使用 number，并声明精度、舍入和误差容忍。
 - 该建议与 Data 现有 API 的 number 字段通过 Data Adapter 转换，不要求为了新模块契约而无条件重写 Data API。
 - 精确数值转换必须避免 float64 中间损失；Data Adapter 应使用精确解析/转换并提供边界测试。
-- 上述数值策略仍需 Quant Owner 确认后才能标记冻结。
+- 数值公共表达规则以 GOV-CTR-001 为准；各字段精度、scale、舍入与容差由 DATA/QNT 对应 Schema/Registry 明确，证据未齐前不得标记 frozen。
 
 ## 5. 请求上下文、身份和错误契约
 
@@ -363,7 +363,7 @@ Quant 提供公开 Application Facade，首批 Port 草案包括：
 - 硬风险 block 不可被 LLM、评分、Research 解释或人工摘要覆盖。
 - 同一 idempotency_key + 相同规范化请求返回同一逻辑结果；相同 key 对应不同请求返回冲突。
 
-价格/金额精度、Indicator/Factor 首批代码和参数 Schema 仍需 Quant Owner Review；详见 Quant-Research公开DTO字段级契约和首批 Application Port 文档。
+价格/金额精度、Indicator/Factor 首批代码和参数 Schema 的语义与证据状态分别登记在 DATA-CTR-003/005、QNT-CTR-001/002/003；详见 Quant-Research公开DTO字段级契约和首批 Application Port 文档。
 
 ## 10. Research 契约
 
@@ -477,7 +477,7 @@ Notification 只负责事件接收、订阅匹配、模板渲染、渠道发送�
 - 发送失败不回滚业务研究结果；永久错误不无限重试。
 - Secret 由部署环境注入并按渠道边界脱敏。
 
-具体 Event Schema、recipient_scope、状态和恢复决策由 Notification Owner Review。
+具体 Event Schema、recipient_scope、状态和恢复语义以 NTF-CTR-001～003 及 INT-CTR-001 的项目级登记为准；首批事件映射仍为 pending_decision。
 
 ## 14. Repository、Migration 与生命周期
 
@@ -532,176 +532,63 @@ Shutdown 停止新请求和新任务派发，收敛在途请求/Attempt，关闭
 4. 明确旧消费者兼容窗口和切换顺序。
 5. 通过后更新契约版本/冻结记录；不得先在消费分支复制生产方私有结构。
 
-## 16. 冻结决策登记表
+## 16. 新编号契约索引与历史编号迁移
 
-本节是唯一的跨模块决策索引，不替代各模块权威 Schema。每条记录必须区分“语义决策”和“实现证据”，不能用一个 pending 同时表达两种不同问题。
+本节只保留 Platform 对跨模块契约的接入索引。项目级语义、编号、状态和阻断范围的唯一权威来源为 `feat/design_doc` 分支的 `doc/整体任务规划/跨模块契约目录与冻结状态.md`；Platform 分支不复制领域字段级 Schema，也不自行裁决业务契约。
 
-状态只允许以下取值：
+状态解释以项目级目录为准：`accepted` 仅表示语义已确定；`pending_evidence` 表示语义已确定但 Schema/Golden/消费者映射/Contract Test 等证据未齐；只有证据齐备才可标记 `frozen`。不得将旧表的 `pending_decision` 批量继承为新契约状态，也不得因编号映射完成就将新契约标记为 frozen。
 
-- `pending_decision`：契约语义尚未由责任模块确认；禁止消费者自行猜测。
-- `accepted`：生产方与所有直接消费者已书面确认语义；尚不代表实现通过。
-- `pending_evidence`：语义已确认，但 Schema、Golden、Contract Test 或实现证据尚未齐备。
-- `frozen`：语义、版本、示例、Schema、消费者确认和契约测试证据齐备，可作为该批次实现基线。
-- `deferred`：明确不属于当前批次；必须写明不阻断的模块/调用点和目标版本。
-- `rejected`：该方案被明确否决，必须记录替代方案，不能继续被消费者引用。
+### 16.1 Platform 历史编号迁移表
 
-Owner 使用**模块责任角色**而非个人姓名：生产方模块 Owner 对字段定义和行为负责；每个直接消费模块 Owner 对消费语义负责；跨模块裁决由 GOV Review 记录。个人执行者可在专项文档登记，不改变责任归属。
+以下旧编号仅指本文件历史版本中的 Platform/跨模块决策表，不代表仓库内其他同号历史编号。旧编号保留在此用于追溯；新文档、代码注释、测试和提交不得继续使用旧编号作为有效契约标识。
 
-| ID | 必须裁决的唯一问题 | 生产方责任角色 | 必须 Review 的消费方 | L2 阻断范围 | 当前状态 |
-|---|---|---|---|---|---|
-| CONTRACT-001 | 数值 JSON 类型、精度、舍入及 Data number 到 decimal 的无损边界 | Quant（Data Adapter 由 Data/调用方负责） | Researchflow、Research | 使用这些数值字段的 Quant/Researchflow/Research 调用点 | pending_decision |
-| CONTRACT-002 | 首批 Indicator 代码、每项参数 Schema、默认值和版本规则 | Quant | Researchflow | 首批调用的 Indicator Port | pending_decision |
-| CONTRACT-003 | 首批 Factor 代码、universe、分类版本、标准化和覆盖率口径 | Quant | Researchflow | 首批调用的 Factor Port | pending_decision |
-| CONTRACT-004 | AuthorizationRef 的字段、快照不可变性、来源 Owner 当前撤销检查 | Research（引用模型）；News/Data（各自授权决策） | News、Data、Researchflow | 读取受保护来源内容的 Evidence Adapter | pending_decision |
-| CONTRACT-005 | Run 唯一 system_as_of 的产生、传递、持久化和重试规则 | Researchflow | Research、Quant、News | 所有依赖历史知识时点的首批调用点 | pending_decision |
-| CONTRACT-006 | Stage 结果如何按模板策略归并为 Run 结果 | Researchflow | Server/Worker 集成方 | 首批 Workflow Template 与结果消费者 | pending_decision |
-| CONTRACT-007 | cancel/deadline/retry/lease/fencing 的原子迁移和迟到写入拒绝规则 | Researchflow | Server/Worker、Platform（仅技术执行边界） | 需要后台执行、取消或重试的首批流程 | pending_decision |
-| CONTRACT-008 | 首批 Responses 请求/响应字段、SSE 事件和 unsupported 能力表达 | LLM | Researchflow | 首批实际调用的 LLM Port；未使用能力可 deferred | pending_decision |
-| CONTRACT-009 | Notification Inbox、Delivery、Attempt 的幂等和外部结果 unknown 恢复 | Notification | 发送事件的模块 Owner | 首批通知命令/事件调用点 | pending_decision |
-| CONTRACT-010 | event_type + schema_version 到强类型 Payload Schema 的注册和兼容规则 | Notification（注册机制）；事件生产方（Payload） | 所有首批事件生产方 | 首批已启用 Event 类型 | pending_decision |
-| CONTRACT-011 | News PIT 过滤顺序、授权快照/当前撤销、Cursor 快照和稳定排序 | News | Research、Researchflow | Research 首批 News Evidence Query | pending_decision |
-| CONTRACT-012 | Data OpenAPI、Go JSON Tag、真实 Handler JSON 的双向一致性 | Data | Quant、Researchflow、Server Data Adapter | 首批被消费的 Data Operation；差异未解决的 Operation 不得进入 L2 | pending_decision |
-| CONTRACT-013 | Server 组合根的唯一归属、装配入口和 Migration 总注册边界 | Server/集成组合根 Owner | Platform 及所有提供 Facade/Migration 的模块 Owner | 仅阻断需要改动共享入口的集成任务；不阻断模块内部独立开发 | pending_decision |
-
-### 16.1 每条契约的冻结证据
-
-任何 Decision 从 pending 转为 accepted/frozen，必须能回答以下问题，缺一不可：
-
-1. **谁生产**：唯一字段/行为生产方模块，以及负责的公开 Port/DTO。
-2. **谁消费**：列出所有直接消费者；没有消费者时明确写“无”。
-3. **输入输出**：完整字段表，逐字段声明类型、required/optional、nullable、空值语义、单位、精度、枚举和默认值。
-4. **行为**：成功、部分成功、无数据、未知、不支持、超时、取消、冲突、重试和权限拒绝的结果。
-5. **时间**：业务时间、系统知识时间、截止时间和时区规则；不得用一个泛化的 `as_of` 代替不同语义。
-6. **兼容**：Schema 版本、兼容窗口、未知字段/枚举处理和破坏性变更策略。
-7. **样例**：至少一个正常样例、一个边界/缺失样例、一个失败样例；样例必须通过 Schema 校验。
-8. **自动验证**：Contract Test/Golden Fixture 的执行入口、精确 SHA 和结果。
-9. **决策记录**：生产方与消费方确认结论；未确认的异议及最终裁决记录。
-
-只有文字原则、字段名列表或伪代码，不构成字段级契约。
-
-### 16.2 CONTRACT-001 字段级候选决议（待 Owner 确认）
-
-**本节是可供实现和评审的唯一候选口径；状态仍为 `pending_decision`。** 在 Quant Owner 与直接消费方确认前，不得把本节当作冻结 Schema，也不得由实现者自行选择另一种 JSON 类型。
-
-#### 16.2.1 JSON 类型按数值语义固定
-
-| 语义类别 | JSON 类型 | 例子 | 约束 |
+| 历史编号（来源限定） | 历史语义 | 新契约编号 | 当前状态（逐项按项目级目录） |
 |---|---|---|---|
-| 价格、金额、单价、成本、费用 | string（规范十进制） | `"12.345"`、`"125000000.00"` | 不经过 binary float；精度由指标/字段定义 |
-| 股数、样本数、证券数、事件数、交易日数 | integer | `100` | 不允许小数；计数为 0 表示真实统计为零 |
-| 比例、收益率、波动率、标准化分数、覆盖率 | number | `0.125` | 明确 unit、范围、输出精度和容差 |
-| 未知或不可用的数值 | null（仅 nullable 字段） | `null` | 原因必须由 status/quality/reason 字段表达，不得改写为 0 |
+| Platform/跨模块决策表 CONTRACT-001 | 数值 JSON 类型、精度、舍入及 Data number 到 decimal 的无损边界 | GOV-CTR-001、DATA-CTR-003、DATA-CTR-005、QNT-CTR-001 | GOV-CTR-001=accepted；DATA-CTR-003=pending_evidence；DATA-CTR-005=pending_evidence；QNT-CTR-001=pending_evidence |
+| Platform/跨模块决策表 CONTRACT-002 | 首批 Indicator 代码、参数 Schema、默认值和版本规则 | QNT-CTR-001、QNT-CTR-002 | QNT-CTR-001=pending_evidence；QNT-CTR-002=pending_evidence |
+| Platform/跨模块决策表 CONTRACT-003 | 首批 Factor 代码、universe、分类版本、标准化和覆盖率口径 | QNT-CTR-001、QNT-CTR-003 | QNT-CTR-001=pending_evidence；QNT-CTR-003=pending_evidence |
+| Platform/跨模块决策表 CONTRACT-004 | AuthorizationRef 字段、快照不可变性、来源授权与当前撤销检查 | GOV-CTR-006、NEWS-CTR-002、RSC-CTR-001；签发方：DATA-CTR-008、QNT-CTR-005 | GOV-CTR-006=pending_evidence；NEWS-CTR-002=pending_evidence；RSC-CTR-001=pending_evidence；签发方：DATA-CTR-008=未在目录登记；QNT-CTR-005=pending_evidence |
+| Platform/跨模块决策表 CONTRACT-005 | Run 唯一 system_as_of 的产生、传递、持久化和重试 | GOV-CTR-002、FLOW-CTR-003 | GOV-CTR-002=accepted；FLOW-CTR-003=pending_evidence |
+| Platform/跨模块决策表 CONTRACT-006 | Stage 结果按模板策略归并为 Run 结果 | FLOW-CTR-001、FLOW-CTR-004 | FLOW-CTR-001=pending_evidence；FLOW-CTR-004=pending_evidence |
+| Platform/跨模块决策表 CONTRACT-007 | cancel/deadline/retry/lease/fencing 原子迁移和迟到写入拒绝 | FLOW-CTR-002 | FLOW-CTR-002=pending_evidence |
+| Platform/跨模块决策表 CONTRACT-008 | Responses 请求/响应字段、SSE 事件及 unsupported 能力表达 | LLM-CTR-001、LLM-CTR-002、LLM-CTR-003 | LLM-CTR-001=pending_evidence；LLM-CTR-002=pending_evidence；LLM-CTR-003=pending_evidence |
+| Platform/跨模块决策表 CONTRACT-009 | Notification Inbox、Delivery、Attempt 幂等及 unknown 恢复 | NTF-CTR-002、NTF-CTR-003 | NTF-CTR-002=pending_evidence；NTF-CTR-003=pending_evidence |
+| Platform/跨模块决策表 CONTRACT-010 | event_type + schema_version 到强类型 Payload Schema 注册 | NTF-CTR-001 | NTF-CTR-001=pending_evidence |
+| Platform/跨模块决策表 CONTRACT-011 | News PIT 过滤、授权快照/当前撤销、Cursor 快照和稳定排序 | GOV-CTR-002、NEWS-CTR-001、NEWS-CTR-002、NEWS-CTR-003 | GOV-CTR-002=accepted；NEWS-CTR-001=pending_evidence；NEWS-CTR-002=pending_evidence；NEWS-CTR-003=pending_evidence |
+| Platform/跨模块决策表 CONTRACT-012 | Data OpenAPI、Go JSON Tag、真实 Handler JSON 双向一致性 | DATA-CTR-001、DATA-CTR-002 | DATA-CTR-001=pending_evidence；DATA-CTR-002=pending_evidence |
+| Platform/跨模块决策表 CONTRACT-013 | Server 唯一组合根、装配入口和 Migration 总注册边界 | SRV-CTR-001 | SRV-CTR-001=pending_evidence |
 
-JSON 类型由字段语义决定，不由 Go 内部类型决定。Go 内部可用 Decimal、整数或 float64，但必须通过专用序列化边界满足以上 JSON 契约。禁止同一字段或同一 metric_code 在不同响应中切换 string/number。
+### 16.2 Platform 技术契约状态
 
-#### 16.2.2 Decimal string 规范
+| 新契约编号 | 契约 | 权威文档 | 当前状态 |
+|---|---|---|---|
+| PLAT-CTR-001 | Fault 结构与分类 | `doc/platform/08-公共平台契约规范.md` 第 4 节 | pending_evidence |
+| PLAT-CTR-002 | Request Context 与身份关联原语 | `doc/platform/08-公共平台契约规范.md` 第 5 节；标识符语义以 GOV-CTR-003 为准 | pending_evidence |
+| PLAT-CTR-003 | 身份、授权、ServiceKey、Secret 边界 | `doc/platform/03-安全认证与ServiceKey设计.md` | pending_evidence |
+| PLAT-CTR-004 | Diagnostics Observation 与 Runner | `doc/platform/04-配置日志诊断与可观测性设计.md` 第 7 节 | pending_evidence |
+| PLAT-CTR-005 | HTTP Client、SSRF 与出口安全 | `doc/platform/05-HTTP存储与异步任务设计.md` 第 8、15、18、19、23 节 | pending_evidence |
+| PLAT-CTR-006 | Storage、Repository、Migration 生命周期 | `doc/platform/05-HTTP存储与异步任务设计.md` 第 9、20 节 | pending_evidence |
+| PLAT-CTR-007 | Typed Config 与 Secret 生命周期 | `doc/platform/08-公共平台契约规范.md` 第 6 节 | pending_evidence |
 
-1. 仅用于需要十进制精确表达的价格和金额类字段；不得将所有数值一律转为 string。
-2. 格式为普通十进制字符串：可选前导负号、整数部分、可选小数部分；不允许千分位、货币符号、空格、前导加号或科学计数法。
-3. 正数整数部分除 `0` 外不得有前导零；小数部分至少一位数字。是否保留尾随零由字段的 canonical scale 决定，同一字段必须稳定。
-4. Schema 必须声明 `max_integer_digits`、`max_fraction_digits`、是否固定小数位、最小值/最大值和负值是否允许。不能只用一个无上限的通用 decimal pattern。
-5. 不得先转 float64 再格式化为 string。Data Adapter 对上游 JSON number 的转换必须从原始 JSON 数字文本或等价的精确十进制表示解析；如果上游解码路径已丢失精度，则必须拒绝标记为精确转换，不能伪造无损。
-6. Data 当前既有 OpenAPI number 字段不因本决议而强制改 API；由 Data Adapter 明确承接精确解析、可验证范围和无法保证精度时的失败/降级结果。
+### 16.3 数值契约候选内容的迁移处理
 
-建议正则基础形式（实际 Schema 还需叠加字段级长度、范围和 scale 约束）：
+历史 CONTRACT-001 下的数值候选决议不再作为 Platform 文档中的独立字段级定义。公共 JSON 类型、Decimal、Integer、比例和 null/缺失规则归 GOV-CTR-001；Data Provider 原始精度与 v2 DTO 分别归 DATA-CTR-003、DATA-CTR-005；Quant Metric/Indicator/Factor Registry 归 QNT-CTR-001。具体字段的 JSON 类型、scale、范围、舍入和容差必须以各生产方 Schema/Registry 为准。Platform 不统一规定所有业务数值的舍入模式，也不要求 Data v1 API 为迁移而改变既有 number 类型。
 
-```regex
-^-?(0|[1-9][0-9]*)(\.[0-9]+)?$
-```
+### 16.4 冻结门禁
 
-#### 16.2.3 Integer 规范
+- 每条契约必须能定位生产方、直接消费者、权威 DTO/Port、字段语义、行为/错误/时间/幂等规则、Schema 版本、正常/边界/失败样例和自动验证证据。
+- `accepted` 不等于实现完成；`pending_evidence` 不得用于宣称 L2 已通过；`frozen` 必须具备可复核的 Schema、Golden、Contract Test 和消费者确认记录。
+- 冻结和阻断按“模块 + 当前批次 + 实际调用点”判断。未冻结契约只阻断其直接依赖调用点，不扩大为无关模块的全局阻断。
+- Platform 只负责 PLAT-CTR 技术原语及其实现证据；业务契约由对应领域生产方定义，项目级目录负责跨模块编号、状态和裁决索引。
 
-- JSON 使用整数，不允许 `1.0`、科学计数法或小数。
-- 公开 DTO 默认使用非负安全整数范围 `0..9007199254740991`，保证常见 JavaScript 消费端不发生整数精度损失。
-- 负数仅在字段语义明确允许时启用；有符号范围也必须显式声明。
-- Go 可使用 int/int64，但序列化前必须验证公开范围，不能因 Go int64 更宽就输出超出契约范围的值。
-- 大于安全整数范围的计数或累计量应改用 decimal string，并在字段 Schema 明确标记为精确整数文本；不能静默扩大 integer 范围。
+### 16.5 本轮迁移记录
 
-#### 16.2.4 Number 统计量规范
+- 迁移基线：`feat/platform-foundation`，提交 `fa25033e5e58deea235be14c023e20694d942031`。
+- 对照来源：`feat/design_doc` 当前项目级契约目录及临时新旧编号对照表；本次按目录逐条读取状态，不继承历史表中的 `pending_decision`。
+- 迁移结果：旧 CONTRACT-001～013 全部建立来源限定映射；历史数值候选段落移交 GOV/DATA/QNT 权威契约；Platform 技术契约 PLAT-CTR-001～007 单独列示。
+- 本次仅完成文档编号和索引迁移，不代表任何契约新增冻结证据，不改变项目级目录中的状态。
 
-- 仅用于有界统计数值；每个指标必须在 Metric Registry 声明 unit、允许范围、最大输出小数位、舍入模式、绝对误差和相对误差。
-- 舍入发生在结果输出边界，采用明确的 `half_even` 规则；不得依赖语言默认格式化或数据库隐式舍入。
-- Golden 比较同时检查 JSON 类型、范围和误差；不能只比较格式化字符串，也不能只使用一个全局 epsilon。
-- NaN、正负 Infinity、溢出和除零结果不得进入 JSON；按该指标定义返回 null + 明确状态，或返回 failed。禁止替换为 0。
-- 覆盖率、收益率等比例统一使用 `ratio`，范围通常为 `[0,1]`；如需表达百分数，必须另设 `percentage_point` 指标，不能只改显示格式。
-
-#### 16.2.5 QuantMetric 的字段级约束
-
-每个 `metric_code` 必须有且只有一个 Registry 定义，至少包含：
-
-| Registry 字段 | 类型 | 必需 | 说明 |
-|---|---|---:|---|
-| metric_code | string | 是 | 全局稳定编码 |
-| json_type | enum | 是 | `decimal_string` / `integer` / `number` |
-| unit | enum/string | 是 | 例如 CNY、CNY/share、shares、ratio、percentage_point |
-| nullable | boolean | 是 | 是否允许 value 为 null |
-| min_value / max_value | 与 json_type 对应 | 条件必需 | 有界指标必须声明 |
-| max_integer_digits | integer | decimal_string 必需 | 最大整数位数 |
-| max_fraction_digits | integer | decimal_string/number 必需 | 最大输出小数位 |
-| fixed_scale | integer/null | 否 | 固定小数位；null 表示按字段规则规范化 |
-| rounding_mode | enum | number 或需舍入的 decimal 必需 | 本候选统一 half_even |
-| abs_tolerance / rel_tolerance | number | number 必需 | Golden 数值容差 |
-| interval_supported | boolean | 是 | 是否允许 lower_bound/upper_bound |
-| calculation_version | string | 是 | 公式/算法版本 |
-
-`value`、`lower_bound`、`upper_bound` 必须引用同一 `metric_code` 的同一 Registry 类型定义。若 `interval_supported=false`，专属 Schema 不定义上下界字段；若为 true，上下界必须同时为有效值或同时为 null。不能在一个通用 Schema 中无约束地接受任意 string/number。
-
-#### 16.2.6 最小 JSON 样例
-
-```json
-{
-  "metric_code": "close_price",
-  "value": "12.345",
-  "unit": "CNY/share",
-  "period": "1d",
-  "quality_status": "valid",
-  "calculation_version": "price.v1"
-}
-```
-
-```json
-{
-  "metric_code": "sample_count",
-  "value": 240,
-  "unit": "samples",
-  "period": "20d",
-  "quality_status": "valid",
-  "calculation_version": "factor.v1"
-}
-```
-
-```json
-{
-  "metric_code": "coverage_ratio",
-  "value": 0.875,
-  "unit": "ratio",
-  "period": "1d",
-  "quality_status": "valid",
-  "calculation_version": "factor.v1"
-}
-```
-
-#### 16.2.7 与现有文档的冲突修正建议
-
-以下属于需要同步到 Quant 专项文档的明确修改项；本 Platform 文档不越权改写规划目录：
-
-1. `FactorRequest.minimum_coverage` 从 `decimal/number` 收敛为 JSON `number`，unit 固定为 `ratio`，范围 `[0,1]`；Go 内部可选 Decimal，但 JSON 不得有时 string、有时 number。
-2. Data 的百分比字段继续遵循 Data API 现有百分点语义；进入 Quant/Researchflow 后必须转换成明确命名的 `percentage_point` 或 `ratio`，不得仅凭字段名猜测。转换公式和边界样例写入 Adapter Golden。
-3. 价格、金额的 scale 不设全局固定两位；按来源字段和业务定义声明最大精度/固定 scale。展示层格式化不得反向污染存储值或跨模块 DTO。
-4. 任何不能证明精确的 Data number → decimal string 转换，不得标记为 lossless；该字段应失败或明确降级，并带可诊断原因。
-5. 首批 Registry 必须列出实际消费的全部 metric_code；未登记指标不得通过通用 QuantMetric 逃逸为任意数值。
-
-#### 16.2.8 Owner 确认与验收门槛
-
-- Quant Owner：确认 JSON 类型矩阵、Metric Registry 必需字段、舍入与容差规则。
-- Data Owner：确认 Adapter 可从实际响应保留原始数值精度；不能保证的字段列出明确例外。
-- Researchflow Owner：确认跨模块 DTO 的 number/string 解析和空值行为。
-- Research Owner：确认消费端不依赖隐式类型转换，明确展示/持久化边界。
-- 验收：至少覆盖 decimal 最大整数位/小数位、负值、尾随零、指数形式拒绝、超范围、number 容差、NaN/Inf、integer 上限、null 与真实零的区别，以及 Data Adapter 精确/不可精确转换两类样例。
-
-以上确认完成前，CONTRACT-001 保持 `pending_decision`；确认语义后转 `pending_evidence`，双向 Schema/Golden/Contract Test 通过后才能转 `frozen`。
-
-## 17. GOV-004 / GOV-005 门禁分层
+## 17. GOV-004 / GOV-005 门禁分层## 17. GOV-004 / GOV-005 门禁分层
 
 门禁按**当前批次真实依赖的契约和集成范围**判断，不按整个项目所有模块是否全部完成判断。GOV-004 管理跨模块契约；GOV-005 管理模块独立开发和集成顺序。两者不是同一张“全部通过/全部不通过”的总开关。
 
@@ -758,9 +645,9 @@ L2 只表示该模块批次具备按契约独立实现的技术条件，**不自
 - 架构职责和依赖 DAG：设计基线已形成，仍需结合各模块最新代码复核。
 - Platform 公共技术语义：文档已形成；跨模块消费边界仍需逐项确认。
 - Data OpenAPI/Go JSON：当前分支存在已记录差异；按 Operation 逐项核对，未通过的 Operation 不得作为 L2 消费契约。
-- News Query：目标 Port 已描述；字段级 DTO、授权、PIT、Cursor 和 Owner Review 尚未全部闭合。
-- Quant/Research：字段级草案存在；CONTRACT-001～005 仍需决策及 Schema/Golden。
-- Researchflow：状态机草案较完整；CONTRACT-006/007 仍需生产方与集成方确认。
+- News Query：目标 Port 已描述；NEWS-CTR-001～003 的 Schema、Golden、Cursor 与授权竞态证据尚未全部闭合。
+- Quant/Research：字段级草案存在；QNT-CTR-001～005、RSC-CTR-001～002 仍需按目录补齐 Schema/Golden/Contract Test；GOV-CTR-001/002 的公共语义已 accepted，不能据此宣称相关字段实现已冻结。
+- Researchflow：FLOW-CTR-001～004 的设计语义已形成基线，当前登记为 pending_evidence；需补状态迁移、CAS/竞态、传播矩阵及 Adapter Golden。
 - LLM/Notification：首批 Port/Event Schema 仍需明确哪些能力属于当前批次。
 - Server 组合根：责任角色定义为 Server/集成组合根 Owner；具体仓库入口和目标集成分支仍需登记。
 
@@ -770,11 +657,11 @@ L2 只表示该模块批次具备按契约独立实现的技术条件，**不自
 
 ### P0：当前首批契约必须完成
 
-1. Quant Owner 决策 CONTRACT-001～003，形成可验证的数值类型、Indicator 参数和 Factor 母体 Schema。
-2. Research、News、Data Owner 决策 CONTRACT-004/011，明确 AuthorizationRef、当前撤销检查、PIT 过滤顺序和稳定 Cursor。
-3. Researchflow、Research、Quant、News Owner 决策 CONTRACT-005，固定唯一 system_as_of 的生成、传播和重试规则。
-4. Researchflow Owner 决策 CONTRACT-006/007，给出状态传播矩阵、取消/deadline 竞争、Attempt 终态和 fencing 规则。
-5. Data Owner 按 DATA-CONTRACT-001～008 完成首批被消费 Operation 的 OpenAPI/Go JSON 双向 Golden；未通过 Operation 从当前 L2 消费清单中排除。
+1. 按 GOV-CTR-001、DATA-CTR-003/005、QNT-CTR-001/002/003 的权威定义补齐数值类型、精度链路、Indicator 参数和 Factor Registry 的 Schema/Golden。
+2. 按 GOV-CTR-006、DATA-CTR-008、NEWS-CTR-001/002/003、QNT-CTR-005、RSC-CTR-001 补齐 AuthorizationRef Schema/Golden、当前撤销竞态、PIT 过滤和稳定 Cursor 证据。
+3. GOV-CTR-002 的公共时间语义已 accepted；继续补齐 FLOW-CTR-003 及各 DATA/NEWS/QNT/RSC 字段映射 Golden，验证唯一 system_as_of 传播与重试不刷新。
+4. 按 FLOW-CTR-001/002/004 完成状态传播矩阵、取消/deadline 竞争、Attempt 终态、CAS/fencing 与迟到写入 Contract Test。
+5. Data 专项历史执行编号 DATA-CONTRACT-001～008（不属于新 `<DOMAIN>-CTR-NNN` 编号空间）继续按 Data 专项清单追踪；首批 Operation 对应 DATA-CTR-001/002 的 OpenAPI/Go JSON 双向 Golden 未通过前，不纳入该 Operation 的 L2 消费清单。
 6. Server/集成组合根 Owner 登记 cmd、DI、HTTP 路由、Worker、Migration 总注册的实际入口；模块 Owner 只提交公开 Facade、Adapter 和独立 Migration。
 
 ### P1：对应模块批次启用前完成
