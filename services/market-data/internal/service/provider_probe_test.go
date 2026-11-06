@@ -1452,7 +1452,6 @@ func TestProviderProbeDoesNotClassifyPytdxTransportFailureAsNotSupported(t *test
 	}
 }
 
-
 func TestProviderProbeCrossProviderSnapshotUsesTradingContextQuality(t *testing.T) {
 	left := providerProbeDailyBarsFake{name: "probe-context-left", close: 10.5, quality: model.QualityValid}
 	right := providerProbeDailyBarsFake{name: "probe-context-right", close: 10.5, quality: model.QualityValid}
@@ -1469,7 +1468,7 @@ func TestProviderProbeCrossProviderSnapshotUsesTradingContextQuality(t *testing.
 	run, err := ds.ProbeProviderCapabilitiesWithOptions(context.Background(), ProviderProbeOptions{
 		Scope: "all", Capabilities: []string{"daily_bars"},
 		DailyBarAdjustments: []model.AdjustmentBasis{model.AdjustmentNone},
-		Checks: []string{"quality", "cross_provider"}, TimeoutSeconds: 5,
+		Checks:              []string{"quality", "cross_provider"}, TimeoutSeconds: 5,
 	})
 	if err != nil {
 		t.Fatalf("ProbeProviderCapabilitiesWithOptions() error = %v", err)
