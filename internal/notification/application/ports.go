@@ -22,3 +22,9 @@ type SubscriptionRepository interface {
 type DeliveryPlanRepository interface {
 	CreateOrGet(ctx context.Context, plan domain.DeliveryPlan) (existing domain.DeliveryPlan, duplicate bool, err error)
 }
+
+// TemplateRenderer renders one immutable template version against a validated event.
+// Implementations must expose only declared scalar variables and enforce output limits.
+type TemplateRenderer interface {
+	Render(ctx context.Context, event domain.EventEnvelope, templateID string, version int64) (domain.RenderedContent, error)
+}

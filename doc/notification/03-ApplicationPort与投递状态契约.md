@@ -57,6 +57,8 @@ Subscription 更新采用版本递增和不可变版本快照。任何影响匹�
 - template_id + template_version；
 - recipient_ref（由已授权 Subscription/Channel 解析得到）；
 - payload_fingerprint、plan_fingerprint；
+- authorization_policy_versions：完整策略版本 tuple 数组，每项包含 policy_type、policy_ref、policy_version；不得只保留 policy_version 字符串；
+- authorization_refs：对应 AuthorizationRef 的不透明审计引用；不是 bearer token，不参与 plan_fingerprint。
 - delivery_id、delivery_idempotency_key。
 
 Delivery 唯一键固定为：
@@ -226,6 +228,21 @@ NTF-CTR-001（历史别名 CONTRACT-010）规则：
 6. 向后兼容规则按事件类型单独声明；新增可选字段是否兼容必须通过 Schema diff 和消费者测试，不仅依赖“字段是 optional”的推断。
 7. 未知事件版本不自动尝试旧 Schema；由事件 Owner 发布迁移/兼容策略。
 
+### 8.2 Template Definition 与 Renderer
+
+TemplateDefinition 的固定字段为：
+- `template_id`、正整数 `version`；
+- 精确绑定 `event_type` + `schema_version`；
+- `format`：`text` 或 `html`；
+- 可选 `subject_template`、必填 `body_template`；
+- `variable_bindings`：模板变量名到 payload JSON Pointer 的映射。
+
+版本注册键为 `(template_id, version)`。相同键、相同 JCS digest 可幂等注册；相同键、不同 digest 必须拒绝；内容变化必须增加版本。当前模块 Registry 是内存实现，不代表已有持久化 Template Repository。
+
+模板仅支持直接标量插值 `{{.variable}}`，不支持 if/range/模板嵌套/函数或任意表达式。变量必须显式列入 allowlist，并由 JSON Pointer 从 payload 取值；只允许 string/bool/number，不允许把整个 payload map 传入模板。缺失路径、非标量、未声明变量和未使用绑定均 fail closed。
+
+HTML body 使用 `html/template` 上下文转义；text body 使用纯文本渲染。Subject 作为纯文本输出，拒绝 CR/LF 和其他控制字符。模板定义字节数、合并渲染输出字节数、payload JSON 深度均由显式 Limits 注入；没有项目已批准的默认数值，不允许隐式放开。渲染结果保留 template digest 和 event payload fingerprint，供 Delivery 快照审计。
+
 ## 9. Application Port 建议
 
 ```go
@@ -241,6 +258,54 @@ type NotificationApplication interface {
 ```
 
 PublishResult 应明确 accepted/duplicate；冲突通过稳定错误返回。不要让上游直接调用 Channel Adapter 或 Repository。诊断/对账入口按权限独立暴露，不把运维能力塞入普通 PublishEvent。
+
+```go
+type TemplateRenderer interface {
+    Render(ctx context.Context, event NotificationEvent, templateID string, version int64) (RenderedContent, error)
+}
+```
+
+TemplateRenderer 只接受已通过 Event Schema/Envelope 校验的事件；具体实现仍须重新验证 payload fingerprint、event/schema 精确匹配和渲染资源限制。
+
+### 8.4 NTF-003 Channel Config 与 Adapter Port
+
+Channel 配置是不可变版本快照，注册键为 `(channel_ref, config_version)`。同一键不得原地修改；Resolver 必须精确解析指定版本，不允许回退到 latest。
+
+**ChannelConfigSnapshot：**
+
+| 字段 | 类型 | 约束 |
+|---|---|---|
+| channel_ref | string | 不透明稳定引用，必填 |
+| config_version | integer | 正整数，影响发送行为的配置变更必须递增 |
+| channel_kind | string | 适配器注册类型；不由用户输入动态加载代码 |
+| enabled | boolean | 当前配置是否允许执行发送 |
+| secret_ref | string/null | Platform Secret 引用；不保存 Secret 明文 |
+| capabilities | object | supports_idempotency / supports_delivery_lookup / supports_retry_after，取 unknown/supported/unsupported；max_payload_bytes 必须为正整数 |
+| retryable_error_codes | array<string> | 渠道适配器归一化后的稳定错误码白名单，去重；不接受原始 HTTP 文本或 Provider 错误描述 |
+
+能力未验证时必须为 unknown；unknown 与 unsupported 一样不能启用对应行为。只有 supports_idempotency=supported 才能向渠道发送稳定 delivery_idempotency_key；只有 supports_retry_after=supported 才能采信 Retry-After；只有 supports_delivery_lookup=supported 才能执行渠道查询对账。
+
+**ChannelAdapter / Resolver：**
+
+`ChannelResolver.Resolve(ctx, channel_ref, config_version)` 返回绑定该精确版本的 Adapter。Adapter 提供只读 ConfigSnapshot 和 Send。发送请求只包含 delivery_id、稳定 recipient_ref/adapter_target_ref、已渲染内容快照，以及在已验证幂等能力下才允许携带的 idempotency_key。
+
+`RecipientResolver` 根据 Subscription 与 ChannelConfigSnapshot 解析目标，返回 channel_ref、config_version、recipient_ref 和 adapter_target_ref。所有字段均为不透明引用；不得返回邮箱、手机号、URL 或其他明文地址。目标必须与 Channel 的精确配置版本绑定，版本不一致时拒绝发送。实际地址解析只在具体 Adapter 内完成。
+
+**发送结果与重试分类：**
+
+- accepted：渠道明确接受；error_code/retry_after 必须为空。
+- rejected：渠道明确拒绝；必须返回稳定 error_code；只有命中该 Channel 的 retryable_error_codes 白名单才是自动重试候选。
+- ambiguous：请求可能已到达渠道但结果不确定；必须返回稳定 error_code，进入 unknown/对账，不自动重试。
+- not_sent：适配器能够证明请求尚未发出；必须返回稳定 error_code，不自动按 rejected 重试。
+- retry_after 只允许出现在 rejected 结果，且必须同时满足 supports_retry_after=supported；时间使用 RFC3339Nano UTC。
+- Adapter 返回 Go error 时仍必须给出可验证的 Outcome；无法证明请求未发出时按 ambiguous 处理。不得把网络超时一律映射为 rejected。
+- 不把 Provider 原始错误、响应 Body、目标地址或 Secret 写入 error_code、日志或 Attempt 摘要。
+
+**Platform 接入边界：**
+
+具体 Adapter 由组合根注入 Platform `config.Secret` 与固定 DestinationPolicy 的 `httpclient.BoundDoer`；不得自行读取环境变量、创建裸 `http.Client/Transport` 或绕过 DestinationPolicy。Secret 明文只在 Adapter 构造/请求认证的必要路径通过显式 `Value()` 访问，禁止日志和序列化。Platform 没有通用动态 Secret Store，本阶段不新增重复 Secret Repository/Secret Port；SecretRef 到部署 Secret 的映射由服务配置/组合根负责。
+
+`max_payload_bytes` 是渠道最终序列化请求体的硬上限。Domain 对 subject+body 做前置字节数检查；具体 Adapter 必须在序列化后再次检查真实请求体字节数，不能以渲染文本长度代替最终 Payload 大小。
 
 ## 10. NTF 任务验收映射
 
@@ -294,7 +359,7 @@ Payload fingerprint 使用 RFC 8785 JSON Canonicalization Scheme 的 UTF-8 结�
 - Subscription、Channel、Template 任一影响匹配、目标、渲染或发送行为的变更必须产生新版本；历史 Delivery 保留原版本。
 - Outbox/Inbox 只保证业务事件到 Notification 的本地可靠接收，不代表外部渠道 exactly-once。
 
-Delivery plan fingerprint 使用 RFC 8785 JSON Canonicalization Scheme + SHA-256，覆盖 source_module/event_id、subscription_id/version、channel_ref/config_version、template_id/version、recipient_ref、payload_fingerprint 和授权策略版本；不覆盖 delivery_id、创建时间、Attempt、lease 和可变状态。相同 Delivery 唯一键且 plan_fingerprint 相同返回原 Delivery；唯一键相同但 fingerprint 不同视为契约冲突，不覆盖旧计划。
+Delivery plan fingerprint 使用 RFC 8785 JSON Canonicalization Scheme + SHA-256，覆盖 source_module/event_id、subscription_id/version、channel_ref/config_version、template_id/version、recipient_ref、payload_fingerprint，以及完整授权策略版本 tuple 数组（policy_type、policy_ref、policy_version，按三元组字典序规范排序）；不得把不同 policy_type/policy_ref 下的相同 policy_version 合并。authorization_refs 仅用于审计，不参与 plan_fingerprint；不覆盖 delivery_id、创建时间、Attempt、lease 和可变状态。相同 Delivery 唯一键且 plan_fingerprint 相同返回原 Delivery；唯一键相同但 fingerprint 不同视为契约冲突，不覆盖旧计划。
 
 ### 8.3 NTF-CTR-003 状态迁移与渠道能力
 

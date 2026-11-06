@@ -88,7 +88,9 @@ func TestDeliveryPlanRepositoryFailureDoesNotPartiallyCreate(t *testing.T) {
 		ChannelRef: "channel-failure", ChannelConfigVersion: 1,
 		TemplateID: "template-failure", TemplateVersion: 1,
 		RecipientRef: "recipient-failure", PayloadFingerprint: strings.Repeat("a", 64),
-		AuthorizationPolicyVersions: []string{"policy:v1"},
+		AuthorizationPolicyVersions: []domain.AuthorizationPolicyVersion{
+			{PolicyType: "source", PolicyRef: "source-1", PolicyVersion: "v1"},
+		},
 		DeliveryID:                  "delivery-failure", DeliveryIdempotencyKey: "delivery-key-failure",
 	}
 	plan.PlanFingerprint, err = plan.CalculateFingerprint()
