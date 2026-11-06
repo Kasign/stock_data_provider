@@ -863,12 +863,12 @@ Workflow Template 按 stage_code + template_version 固定 on_degraded、on_skip
 - 真实数据库事务、进程崩溃、跨模块 Adapter、真实模型/工具副作用属于 L3 Integration，不作为设计决策关闭的前置条件。
 - 本轮只更新规划文档，没有生成 Go DTO/JSON Schema/Golden，没有运行代码测试。GOV-004 仍需完成其余模块契约和公共 Schema 自动化验收；不因本决议自动转为 GO。
 
-决议正文：[03-CONTRACT-006与007最终决议](../researchflow/03-CONTRACT-006与007最终决议.md)。
+决议正文：[03-CONTRACT-006与007最终决议](../../researchflow/03-CONTRACT-006与007最终决议.md)。
 
 
 ## 16. FLOW-CTR-001/002 当前有效状态（历史别名 CONTRACT-006/007，2026-11-06）
 
-本节优先于本文历史章节中“待 Owner Review”的旧表述。项目不存在独立模块 Owner；FLOW-CTR-001/002（历史别名 CONTRACT-006/007）已由项目统一决策方关闭设计决策，当前登记状态为 pending_evidence。当前权威文本为 [Researchflow 状态机最终决议](../researchflow/03-CONTRACT-006与007最终决议.md)。本轮进一步补齐取消/Worker claim/重试/deadline 的 CAS 线性化规则、Attempt 停止确认与 fencing 收敛、队列容量原子预留，以及纯观察模板与可执行建议模板的 actionability 优先级。
+本节优先于本文历史章节中“待 Owner Review”的旧表述。项目不存在独立模块 Owner；FLOW-CTR-001/002（历史别名 CONTRACT-006/007）已由项目统一决策方关闭设计决策，当前登记状态为 pending_evidence。当前权威文本为 [Researchflow 状态机最终决议](../../researchflow/03-CONTRACT-006与007最终决议.md)。本轮进一步补齐取消/Worker claim/重试/deadline 的 CAS 线性化规则、Attempt 停止确认与 fencing 收敛、队列容量原子预留，以及纯观察模板与可执行建议模板的 actionability 优先级。
 
 设计决策关闭不代表实现验收通过：FLOW-001~004 尚未实现；Go DTO、JSON Schema、Golden、状态迁移 Fixture、模块 CI 和 L3 真实集成仍按各自层级验收。GOV-004 整体仍为 NO-GO，不创建模块分支。
 
