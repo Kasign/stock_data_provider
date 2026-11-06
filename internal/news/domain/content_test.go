@@ -83,7 +83,7 @@ func TestRestrictContentLayersHonorsRequestedContentCeiling(t *testing.T) {
 	}
 
 	metadata := RestrictContentLayers(layers, ContentMetadata)
-	if metadata.ProviderSummary != "provider summary" || metadata.SourceSummary != "" ||
+	if metadata.ProviderSummary != "" || metadata.SourceSummary != "" ||
 		metadata.Body != nil || metadata.BodyDeclaredTypeRaw != "" ||
 		metadata.ExternalBodyReference != "" || len(metadata.Attachments) != 0 {
 		t.Fatalf("metadata request exposed higher-level content: %+v", metadata)
