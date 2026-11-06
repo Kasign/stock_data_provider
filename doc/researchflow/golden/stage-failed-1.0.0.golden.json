@@ -13,12 +13,14 @@
   "attempt_no": 2,
   "retry_at": null,
   "output_ref": null,
-  "quality_status": null,
   "reason_codes": [
     "provider_unavailable"
   ],
-  "risk_decision": null,
   "created_at": "2026-11-06T01:00:00Z",
   "started_at": "2026-11-06T01:03:00Z",
-  "finished_at": "2026-11-06T01:04:00Z"
+  "finished_at": "2026-11-06T01:04:00Z",
+  "quality_summary_ref": null,
+  "diagnostic_refs": [
+    "diagnostic_03"
+  ]
 }
