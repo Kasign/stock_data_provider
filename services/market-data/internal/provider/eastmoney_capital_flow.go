@@ -13,6 +13,7 @@ import (
 
 	"github.com/Kasign/stock_data_provider/services/market-data/internal/model"
 	"github.com/Kasign/stock_data_provider/services/market-data/internal/normalize"
+	"github.com/Kasign/stock_data_provider/services/market-data/internal/validation"
 )
 
 const eastmoneyCapitalFlowVersion = "eastmoney-stock-capital-flow-v1"
@@ -93,17 +94,21 @@ func (p *Eastmoney) FetchCapitalFlow(ctx context.Context, rawSymbol string) (*mo
 	for index, line := range payload.Data.KLines {
 		fields := strings.Split(line, ",")
 		if len(fields) < 2 {
+			addEastmoneyCapitalFlowParseIssue(ctx, index, "row", "kline", "missing_column_value", "date and main net-inflow amount", "string", line, "Eastmoney capital-flow row has fewer than two fields")
 			return nil, fmt.Errorf("Eastmoney capital-flow row %d has fewer than two fields", index)
 		}
 		date := strings.TrimSpace(fields[0])
 		parsedDate, dateErr := time.Parse("2006-01-02", date)
 		if dateErr != nil || parsedDate.Format("2006-01-02") != date {
+			addEastmoneyCapitalFlowParseIssue(ctx, index, "trade_date", "f51", "invalid_date", "YYYY-MM-DD", "string", date, "Eastmoney capital-flow trade date is invalid")
 			return nil, fmt.Errorf("Eastmoney capital-flow row %d has an invalid date", index)
 		}
 		if date > today {
+			addEastmoneyCapitalFlowParseIssue(ctx, index, "trade_date", "f51", "future_date", "date not later than current Shanghai date", "string", date, "Eastmoney capital-flow trade date is in the future")
 			return nil, fmt.Errorf("Eastmoney capital-flow row date %s is in the future", date)
 		}
 		if _, exists := seen[date]; exists {
+			addEastmoneyCapitalFlowParseIssue(ctx, index, "trade_date", "f51", "duplicate_date", "unique trade date", "string", date, "Eastmoney capital-flow response contains a duplicate trade date")
 			return nil, fmt.Errorf("Eastmoney capital-flow response contains duplicate date %s", date)
 		}
 		seen[date] = struct{}{}
@@ -113,6 +118,7 @@ func (p *Eastmoney) FetchCapitalFlow(ctx context.Context, rawSymbol string) (*mo
 		if rawAmount != "" && rawAmount != "-" && !strings.EqualFold(rawAmount, "null") {
 			value, parseErr := strconv.ParseFloat(rawAmount, 64)
 			if parseErr != nil || math.IsNaN(value) || math.IsInf(value, 0) {
+				addEastmoneyCapitalFlowParseIssue(ctx, index, "main_net_inflow", "f52", "invalid_number", "finite number", "string", rawAmount, "Eastmoney capital-flow amount is not a finite number")
 				return nil, fmt.Errorf("Eastmoney capital-flow row %s has an invalid main net-inflow amount", date)
 			}
 			amount = &value
@@ -166,4 +172,18 @@ func sumEastmoneyCapitalFlowWindow(observations []eastmoneyCapitalFlowObservatio
 		}
 	}
 	return &sum
+}
+
+func addEastmoneyCapitalFlowParseIssue(ctx context.Context, rowIndex int, field, providerField, code, expected, actualType, preview, message string) {
+	report := validation.NewReport(8)
+	issue := validation.FieldIssue{
+		Stage: validation.StageParse, Field: field, ProviderField: providerField,
+		Code: code, Expected: expected, ActualType: actualType,
+		ActualPreview: quoteIssuePreview(preview), Severity: validation.SeverityError, Message: message,
+	}
+	if rowIndex >= 0 {
+		issue.RowIndex = &rowIndex
+	}
+	report.Add(issue)
+	validation.AddContextReport(ctx, report)
 }
