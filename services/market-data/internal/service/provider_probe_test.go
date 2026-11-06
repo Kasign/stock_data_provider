@@ -751,7 +751,7 @@ func TestProviderProbeCountsValidatedRowsBeforeLimitAndDoesNotDegradeForTruncati
 	run, err := ds.ProbeProviderCapabilitiesWithOptions(context.Background(), ProviderProbeOptions{
 		Scope: "all", Capabilities: []string{"daily_bars"}, Symbols: []string{"600036.SH"},
 		DailyBarAdjustments: []model.AdjustmentBasis{model.AdjustmentNone},
-		Checks: []string{"quality"}, TimeoutSeconds: 5,
+		Checks:              []string{"quality"}, TimeoutSeconds: 5,
 	})
 	if err != nil {
 		t.Fatalf("default Probe failed: %v", err)
