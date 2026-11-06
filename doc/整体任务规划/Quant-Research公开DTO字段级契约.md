@@ -84,6 +84,12 @@ completed 不代表 valid；消费方必须同时检查 result_status 和 qualit
 
 金额和价格必须采用明确 decimal 精度策略；若统计指标使用 float64，必须声明误差容忍、舍入策略和固定样本。value 为 null 时必须说明原因，禁止用 0 代替缺失。
 
+**QuantMetric 组合约束：**
+- `metric_status=available` 时 value 必须非 null；`insufficient_data/insufficient_sample/not_applicable/unknown` 时 value 必须为 null。
+- `quality_status=invalid/unknown` 时 metric_status 不得为 available；degraded 是否允许 available 必须由该 metric 的 quality_policy 明确声明。
+- lower_bound/upper_bound 必须同时为 null 或同时非 null；非 null 时类型与 value 一致且 lower_bound <= value <= upper_bound。value 为 null 时区间必须均为 null。
+- sample_count 为非负整数；Registry 声明 sample_count 是否必需及其统计口径，不得用输入行数冒充有效样本数。
+
 ### 2.4 TrendResult
 
 | JSON 字段 | 必需 | 类型/约束 | 语义 |
@@ -184,7 +190,9 @@ Research 定义 Context 领域语义；Researchflow 负责单次 Run 的分区�
 | valid_time_start/end | 否 | timestamp | 业务有效区间 |
 | system_as_of | 是 | timestamp | 纳入研究时的知识截止时间 |
 | stance | 是 | supports/contradicts/neutral | 对 Claim 的立场 |
-| confidence | 否 | number/null | 仅允许 [0,1]；非 null 时必须同时提供 confidence_method/version，不能使用 LLM 自评分冒充统计概率 |
+| confidence | 否 | number/null | 仅允许 [0,1]；非 null 时 confidence_method 与 confidence_method_version 必填，不能使用 LLM 自评分冒充统计概率 |
+| confidence_method | 条件必需 | string | confidence 非 null 时必填，说明估计方法 |
+| confidence_method_version | 条件必需 | string | confidence 非 null 时必填，固定方法版本 |
 | quality_status | 是 | valid/degraded/invalid/unknown | 证据质量 |
 | authorization_ref | 是 | string | 授权决策/安全状态引用 |
 | limitations | 是 | string[] | 使用限制 |
@@ -410,7 +418,9 @@ Event 允许多来源时间并存，不以单一 occurred_at 覆盖冲突来源�
 | time_type | 是 | occurred_at/published_at/available_at/system_observed_at | 时间语义 |
 | value | 是 | timestamp | 来源/系统时间值 |
 | asserted_by | 是 | string | 来源或系统主体引用 |
-| confidence | 否 | number/null | 仅允许 [0,1]；非 null 时必须同时提供 confidence_method/version |
+| confidence | 否 | number/null | 仅允许 [0,1]；非 null 时 confidence_method 与 confidence_method_version 必填 |
+| confidence_method | 条件必需 | string | confidence 非 null 时必填 |
+| confidence_method_version | 条件必需 | string | confidence 非 null 时必填 |
 | notes | 否 | string | 时间解释/冲突说明 |
 
 Event 可保留规范化 occurred_at 作为研究归一结果，但必须同时提供 source_times[]；规范化值必须能追溯到所采用的证据与规则版本。
