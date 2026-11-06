@@ -261,3 +261,26 @@ func TestValuationsReturnsUnknownOnlyAfterFallbackExhaustion(t *testing.T) {
 		t.Fatalf("missing fallback exhaustion marker or incomplete fallback: reasons=%v calls=%d/%d", got.QualityReasons, first.calls, second.calls)
 	}
 }
+
+
+func TestValuationsAcceptsNullableOptionalMetricsWhenSourceEvidenceIsValid(t *testing.T) {
+	snapshot := validValuationsForFallbackTest("eastmoney")
+	now := time.Now().UTC()
+	snapshot.QualityStatus = model.QualityValid
+	snapshot.QualityReasons = nil
+	snapshot.ProviderReportDate = now.Format("2006-01-02")
+	snapshot.ProviderTimestamp = &now
+	snapshot.Items[0].QualityStatus = model.QualityValid
+	snapshot.Items[0].QualityReasons = nil
+	// Optional turnover, volume-ratio and dividend fields remain null; they are
+	// not silently converted to zero and do not downgrade otherwise valid data.
+	got, hit, err := valuationFallbackService(&valuationFallbackTestProvider{
+		name: "eastmoney", snapshot: snapshot,
+	}).Valuations(context.Background(), []string{"600519.SH"})
+	if err != nil || hit {
+		t.Fatalf("Valuations returned hit=%v err=%v", hit, err)
+	}
+	if got == nil || got.QualityStatus != model.QualityValid {
+		t.Fatalf("expected valid snapshot with nullable optional metrics, got %+v", got)
+	}
+}
