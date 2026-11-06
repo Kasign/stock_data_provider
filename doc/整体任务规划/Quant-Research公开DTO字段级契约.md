@@ -196,9 +196,9 @@ Research 定义 Context 领域语义；Researchflow 负责单次 Run 的分区�
 | quality_status | 是 | valid/degraded/invalid/unknown | 证据质量 |
 | authorization_ref | 是 | string | 授权决策/安全状态引用 |
 | limitations | 是 | string[] | 使用限制 |
-| content_fingerprint | 否 | string | 内容指纹，不替代来源版本 |
+| content_fingerprint | 是 | string | 规范化内容指纹，不替代来源版本；同一版本内容变化必须生成新 Evidence 版本 |
 
-fact 必须有可验证来源与时间；reported_fact 只表示来源声称；inference 必须附推导依据；hypothesis 不得伪装成已证实事实；unknown 表达证据不足。支持与反证都必须可追溯。Research 不复制 News 未授权正文，历史读取仍需重新检查当前授权。Evidence 的 system_as_of 不得晚于所属 Run。
+fact 必须有可验证来源与时间；reported_fact 只表示来源声称；inference 必须附推导依据；hypothesis 不得伪装成已证实事实；unknown 表达证据不足。valid_time_start/end 必须同时为 null 或同时提供且 start<=end。支持与反证都必须可追溯。Research 不复制 News 未授权正文，历史读取仍需重新检查当前授权。Evidence 的 system_as_of 不得晚于所属 Run。
 
 ### 3.3 ResearchEvent
 
@@ -211,15 +211,16 @@ fact 必须有可验证来源与时间；reported_fact 只表示来源声称；i
 | status | 是 | detected/consolidating/active/materializing/fading/invalidated/closed | 生命周期 |
 | subject_refs | 是 | string[] | 主体引用 |
 | evidence_refs | 是 | string[] | 支持/反证引用 |
-| occurred_at | 否 | timestamp | 事件发生时间 |
-| published_at | 否 | timestamp | 来源发布时间 |
-| available_at | 否 | timestamp | 有证据的外部可获得时间 |
+| occurred_at | 否 | timestamp/null | 规范化事件发生时间；无可靠时间时显式 null |
+| published_at | 否 | timestamp/null | 来源发布时间 |
+| available_at | 否 | timestamp/null | 有证据的外部可获得时间；无证据显式 null |
 | system_observed_at | 是 | timestamp | 系统观察时间 |
 | system_as_of | 是 | timestamp | 当前版本知识截止时间 |
 | impact_hypothesis_refs | 是 | string[] | 影响假设引用 |
 | invalidation_conditions | 是 | string[] | 失效条件 |
 | uncertainty | 是 | string[] | 不确定因素 |
 | supersedes_event_version | 否 | integer | 被修正版本 |
+| source_times | 是 | EventSourceTime[] | 来源级时间证据；无来源时间证据使用空数组，不压缩或覆盖冲突值 |
 
 合并、拆分、主体修正和状态变化均追加新版本并保留证据；禁止覆盖历史版本或把 Article 直接当 Event。多来源时间冲突需保留来源级时间，不得压成一个无来源的时间值。
 
@@ -423,7 +424,7 @@ Event 允许多来源时间并存，不以单一 occurred_at 覆盖冲突来源�
 | confidence_method_version | 条件必需 | string | confidence 非 null 时必填 |
 | notes | 否 | string | 时间解释/冲突说明 |
 
-Event 可保留规范化 occurred_at 作为研究归一结果，但必须同时提供 source_times[]；规范化值必须能追溯到所采用的证据与规则版本。
+Event 的 source_times 必填为非 null 数组；无来源时间时为空数组。Event 可保留规范化 occurred_at 作为研究归一结果，但必须同时提供 source_times[]；规范化值必须能追溯到所采用的证据与规则版本。
 
 
 ### 9.7 Evidence PIT、授权与内容指纹规则
