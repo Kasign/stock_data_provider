@@ -1177,13 +1177,13 @@ func TestEastmoneyFetchSectorRankingsMarksMissingTotalAndExcludedRows(t *testing
 
 func TestEastmoneyDailyBarsReportsFieldAndRowParseIssue(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprint(w, `{"rc":0,"data":{"code":"600519","name":"贵州茅台","klines":["2026-10-20,1321.01,not-a-close,1335.00,1316.14,34136,4525398959,1.42,0.81,10.87,0.23"]}}`)
+		fmt.Fprint(w, `{"rc":0,"data":{"code":"600519","name":"贵州茅台","klines":["2026-10-20,1321.01,not-a-close,1335.00,1316.14,34136,4525398959,1.42,0.81,10.87,0.23","2026-10-21,1321.01,1331.88,1335.00,1316.14,34136,4525398959,1.42,0.81,10.87,0.23"]}}`)
 	}))
 	defer server.Close()
 	ctx := validation.WithReporter(context.Background(), validation.NewReporter(10))
-	_, err := NewEastmoney(2*time.Second, server.URL, server.URL).FetchDailyBars(ctx, "600519.SH", "2026-10-01", "2026-10-21", 100, model.AdjustmentForward)
-	if err == nil {
-		t.Fatal("invalid close must continue to reject the source row")
+	bars, err := NewEastmoney(2*time.Second, server.URL, server.URL).FetchDailyBars(ctx, "600519.SH", "2026-10-01", "2026-10-21", 100, model.AdjustmentForward)
+	if err != nil || len(bars) != 1 || bars[0].TradeDate != "2026-10-21" {
+		t.Fatalf("invalid close row must be rejected without dropping valid rows: bars=%+v err=%v", bars, err)
 	}
 	report := validation.ReporterFromContext(ctx).Snapshot()
 	if report.TotalCount == 0 || len(report.Issues) == 0 {
