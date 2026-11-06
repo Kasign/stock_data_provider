@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"testing"
+	"time"
 )
 
 func loadNewsAuthorizationGolden(t *testing.T) NewsAuthorizationBinding {
@@ -87,6 +88,81 @@ func TestAuthorizationContentLevelForKind(t *testing.T) {
 		if got != tc.want || ok != tc.ok {
 			t.Errorf("content kind %q: got (%q, %t), want (%q, %t)", tc.kind, got, ok, tc.want, tc.ok)
 		}
+	}
+}
+
+func TestEvaluateNewsAuthorizationUseFailsClosed(t *testing.T) {
+	base := loadNewsAuthorizationGolden(t)
+	decidedAt, ok := parseUTCDateTime(base.AuthorizationRef.DecidedAt)
+	if !ok {
+		t.Fatal("golden decided_at is invalid")
+	}
+	now := decidedAt.Add(time.Minute)
+
+	decision := EvaluateNewsAuthorizationUse(base, now)
+	if decision.Allowed || decision.ReasonCode != "news.authorization.conditional_not_satisfied" {
+		t.Fatalf("conditional authorization must not disclose content: %+v", decision)
+	}
+
+	denied := base
+	denied.AuthorizationRef.Decision = AuthorizationDecisionDenied
+	denied.AuthorizationRef.Conditions = []string{}
+	decision = EvaluateNewsAuthorizationUse(denied, now)
+	if decision.Allowed || decision.ReasonCode != "news.authorization.denied" {
+		t.Fatalf("denied authorization must not disclose content: %+v", decision)
+	}
+
+	unknown := base
+	unknown.AuthorizationRef.Decision = AuthorizationDecisionUnknown
+	decision = EvaluateNewsAuthorizationUse(unknown, now)
+	if decision.Allowed || decision.ReasonCode != "news.authorization.decision_unknown" {
+		t.Fatalf("unknown authorization must not disclose content: %+v", decision)
+	}
+}
+
+func TestEvaluateNewsAuthorizationUseChecksLevelAndTime(t *testing.T) {
+	base := loadNewsAuthorizationGolden(t)
+	base.AuthorizationRef.Decision = AuthorizationDecisionAllowed
+	base.AuthorizationRef.Conditions = []string{}
+	base.AuthorizationRef.ContentLevel = AuthorizationContentFull
+	decidedAt, _ := parseUTCDateTime(base.AuthorizationRef.DecidedAt)
+	now := decidedAt.Add(time.Minute)
+
+	if decision := EvaluateNewsAuthorizationUse(base, now); !decision.Allowed {
+		t.Fatalf("valid allowed authorization rejected: %+v", decision)
+	}
+
+	lowerLevel := base
+	lowerLevel.AuthorizationRef.ContentLevel = AuthorizationContentMetadata
+	decision := EvaluateNewsAuthorizationUse(lowerLevel, now)
+	if decision.Allowed || decision.ReasonCode != "news.authorization.content_level_exceeded" {
+		t.Fatalf("lower content level must be rejected: %+v", decision)
+	}
+
+	decision = EvaluateNewsAuthorizationUse(base, decidedAt.Add(-time.Second))
+	if decision.Allowed || decision.ReasonCode != "news.authorization.not_yet_effective" {
+		t.Fatalf("future authorization must be rejected: %+v", decision)
+	}
+
+	expired := base
+	expiry := decidedAt.Add(time.Minute).Format(time.RFC3339Nano)
+	expired.AuthorizationRef.ExpiresAt.Value = &expiry
+	decision = EvaluateNewsAuthorizationUse(expired, decidedAt.Add(time.Minute))
+	if decision.Allowed || decision.ReasonCode != "news.authorization.expired" {
+		t.Fatalf("authorization at expiry boundary must be rejected: %+v", decision)
+	}
+}
+
+func TestEvaluateNewsAuthorizationUseRejectsInvalidClockAndBinding(t *testing.T) {
+	base := loadNewsAuthorizationGolden(t)
+	if decision := EvaluateNewsAuthorizationUse(base, time.Time{}); decision.Allowed ||
+		decision.ReasonCode != "news.authorization.clock_invalid" {
+		t.Fatalf("zero clock must be rejected: %+v", decision)
+	}
+	base.CallerRef = "service:tampered"
+	if decision := EvaluateNewsAuthorizationUse(base, time.Now().UTC()); decision.Allowed ||
+		decision.ReasonCode != "news.authorization.binding_invalid" {
+		t.Fatalf("invalid binding must be rejected: %+v", decision)
 	}
 }
 

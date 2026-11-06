@@ -119,3 +119,14 @@ N1 已完成固定旧 Python 上游的三类新闻/情报持久化对象、旧 i
 - `ContentMetadata` / `ContentTitle` → `metadata`；`ContentAbstract` → `summary`；`ContentSnippet` → `snippet`；`ContentFullText` → `full`。
 - `ContentAttachment` 与未知内容类型不自动映射到 `full`，必须单独确认内容权限后才能处理。
 - `risk_review` 是显式授权用途，不从现有通用 `Purpose` 值推断。
+
+
+## NEWS-CTR-002 授权内容放行门禁（2026-11-06）
+
+新增 `EvaluateNewsAuthorizationUse`，对已提供的 AuthorizationRef 执行本地 fail-closed 判定：
+
+- 仅显式 `allowed` 且授权内容级别覆盖请求级别时允许披露。
+- `conditional` 在授权 Owner 完成条件评估前一律拒绝；Conditions 非空不等于条件已满足。
+- `denied`、`unknown`、未生效、过期、无效时钟和 Binding 不一致均拒绝。
+- 过期边界为 `now >= expires_at` 即拒绝。
+- 该门禁不刷新当前策略目录、不复算 GOV-CTR-006 JCS 指纹、不提供撤销实时性，也不保护数据库读取竞态。生产读取仍需先由 News Owner 复核当前策略，再在同一一致性边界内读取内容。

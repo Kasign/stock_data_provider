@@ -191,6 +191,47 @@ func ValidateNewsAuthorizationBinding(binding NewsAuthorizationBinding) error {
 	return nil
 }
 
+type AuthorizationUseDecision struct {
+	Allowed bool
+	ReasonCode string
+}
+
+func EvaluateNewsAuthorizationUse(binding NewsAuthorizationBinding, now time.Time) AuthorizationUseDecision {
+	if err := ValidateNewsAuthorizationBinding(binding); err != nil {
+		return AuthorizationUseDecision{ReasonCode: "news.authorization.binding_invalid"}
+	}
+	if now.IsZero() {
+		return AuthorizationUseDecision{ReasonCode: "news.authorization.clock_invalid"}
+	}
+	ref := binding.AuthorizationRef
+	decidedAt, ok := parseUTCDateTime(ref.DecidedAt)
+	if !ok || now.Before(decidedAt) {
+		return AuthorizationUseDecision{ReasonCode: "news.authorization.not_yet_effective"}
+	}
+	if ref.ExpiresAt.Value != nil {
+		expiresAt, valid := parseUTCDateTime(*ref.ExpiresAt.Value)
+		if !valid || !now.Before(expiresAt) {
+			return AuthorizationUseDecision{ReasonCode: "news.authorization.expired"}
+		}
+	}
+	switch ref.Decision {
+	case AuthorizationDecisionAllowed:
+		if len(ref.Conditions) != 0 {
+			return AuthorizationUseDecision{ReasonCode: "news.authorization.allowed_with_conditions"}
+		}
+		if authorizationContentRank(ref.ContentLevel) < authorizationContentRank(binding.RequestedContentLevel) {
+			return AuthorizationUseDecision{ReasonCode: "news.authorization.content_level_exceeded"}
+		}
+		return AuthorizationUseDecision{Allowed: true}
+	case AuthorizationDecisionConditional:
+		return AuthorizationUseDecision{ReasonCode: "news.authorization.conditional_not_satisfied"}
+	case AuthorizationDecisionDenied:
+		return AuthorizationUseDecision{ReasonCode: "news.authorization.denied"}
+	default:
+		return AuthorizationUseDecision{ReasonCode: "news.authorization.decision_unknown"}
+	}
+}
+
 func validNewsPolicySnapshot(binding NewsAuthorizationBinding, snapshot AuthorizationPolicySnapshot) bool {
 	hasSource, hasProvider, hasEndpoint := false, false, false
 	var previous AuthorizationPolicyVersion
