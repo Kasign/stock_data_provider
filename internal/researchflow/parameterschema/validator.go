@@ -104,8 +104,12 @@ func (v *Validator) Validate(ctx context.Context, ref string, parameters json.Ra
 }
 
 func (v *Validator) validateInstance(ref, fingerprint string, compiled compiledSchema, parameters []byte) (template.ParameterSchemaSnapshot, error) {
-	instance, err := jsonschema.UnmarshalJSON(bytes.NewReader(parameters))
-	if err != nil { return template.ParameterSchemaSnapshot{}, fmt.Errorf("%w: decode parameters: %v", ErrInvalidParameters, err) }
+	decoder := json.NewDecoder(bytes.NewReader(parameters))
+	decoder.UseNumber()
+	var instance any
+	if err := decoder.Decode(&instance); err != nil {
+		return template.ParameterSchemaSnapshot{}, fmt.Errorf("%w: decode parameters: %v", ErrInvalidParameters, err)
+	}
 	if err := compiled.schema.Validate(instance); err != nil {
 		return template.ParameterSchemaSnapshot{}, fmt.Errorf("%w: %v", ErrInvalidParameters, err)
 	}
