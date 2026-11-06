@@ -860,3 +860,54 @@ M4 必须增加可自动化的回归测试：
 - 本轮没有修改 OpenAPI、Server、Handler 或 contract test，仅补充迁移审计文档。
 
 **M0 状态保持 in_progress，不满足 M1 准入条件。**
+
+
+### 2026-11-06：M0 第十六轮补充（参数校验与错误状态码映射）
+
+#### 1. 参数定义与 Handler 校验的交叉核验
+
+本轮抽查了关键参数组，并对照 OpenAPI 参数 required/type/range 与 Handler 实际校验：
+
+- `GET /api/v1/market/quotes`：`symbols` 在 OpenAPI 标为 required；Handler 拒绝缺失、空值、重复证券、非法代码及超过 50 项，基本一致。
+- `GET /api/v1/stocks/search`：`q` required，长度 1..64；Handler 对空值及超过 64 个 Unicode 字符拒绝。可选 `limit` 默认 10、范围 1..50，与 OpenAPI 默认值/边界一致。
+- `GET /api/v1/market/valuations`：`symbols` required；Handler 限制最多 100 个原始 token，拒绝空 token、非法代码和非 A 股代码，与文档描述基本一致。
+- `GET /api/v1/stocks/{symbol}/fundamentals`：`year`、`quarter` required，year 最小 2007，quarter 1..4；Handler 还将 year 上界限制为当前年份，OpenAPI 未显式描述动态上界。
+- `GET /api/v1/stocks/{symbol}/price-limit-rule` 与 `GET /api/v1/stocks/{symbol}/trading-status`：`date` required、`as_of` optional；Handler 对 date 使用 YYYY-MM-DD 并拒绝未来日期，对 as_of 要求单个 RFC3339 时间戳且不能晚于当前时间，文档总体一致。
+- `GET /api/v1/market/capital-flow`、`GET /api/v1/market/trading-calendar`、`GET /api/v1/market/sentiment/history`：start/end 均 required；Handler 对范围、日期格式和最大跨度执行校验，OpenAPI 的 required 声明一致。
+- `GET /api/v1/market/session`：`at` optional；Handler 未提供时使用当前服务时间，提供时要求单个 RFC3339 时间戳，与文档描述一致。
+- `GET /api/v1/market/stocks`：page/page_size/include_ma/adjustment 均 optional；Handler 分别校验整数范围、布尔值和复权枚举，默认值由 Handler 决定。后续仍需核对 OpenAPI schema 的 default 是否与 Handler 默认值完全一致。
+- `GET /api/v1/market/limit-pools`、`GET /api/v1/market/dragon-tiger`、`GET /api/v1/stocks/{symbol}/announcements`：Handler 存在分页/条数默认值及上限；需把 OpenAPI 的 minimum/maximum/default 与 Handler 逐字段对照，当前不将参数名称清单视为完成核验。
+
+本轮抽查暂未发现上述必填参数在 OpenAPI 中被错误标成 optional 的明确案例；但 fundamentals year 的动态上界、分页默认值/范围仍需逐 Operation 完成机器化核验。
+
+#### 2. 错误状态码与实际公共错误映射不完整
+
+Server 的 `writeDomainErr` 统一映射：
+- Provider 无效/异常响应：502；
+- 无可用 Provider：503；
+- `context.DeadlineExceeded`：504；
+- `context.Canceled`：408；
+- 参数/日期/复权校验：400。
+
+因此，调用 `writeDomainErr` 的 Operation 不仅可能返回文档中常见的 502/503，也可能返回 504；请求取消时还会尝试返回 408。当前 OpenAPI 只有 Quote、Daily Bars、Bundle 等少数 Operation 声明了 504。比如 stock search、profile、fundamentals、chip-distribution、capital-flow、boards、valuations、sectors、index catalog、index constituents/daily、indices、trading-calendar、session、breadth、hot-stocks、dragon-tiger、limit-pools 等 Operation 的响应列表没有 504，但对应 Handler 的 Provider 错误路径使用公共 `writeDomainErr` 映射，超时会产生 504。
+
+这意味着 OpenAPI 的错误状态码并非仅缺统一 Schema，还存在实际可达状态码漏声明。需要在后续逐 Handler 矩阵中标注是否使用 `writeDomainErr`、是否可能返回 408/504，以及是否存在专属 404/503/500 分支。不要机械地给不访问 Provider 的历史存储接口添加 504。
+
+#### 3. Error Body 结构已与 Server 实现确认
+
+Server 的 `writeErrWithRetryable` 始终输出 JSON：
+- 顶层 `error`；
+- `error.class`、`error.code`、`error.message`、`error.retryable`；
+- `error.request_id` 在非空时输出（`omitempty`）。
+
+`error.class` 由 HTTP 状态映射为 validation / unauthenticated / forbidden / not_found / conflict / timeout / unavailable / internal。OpenAPI 的 `components.schemas.Error` 已定义上述结构，但当前 Operation 响应未引用它。该问题可通过共享响应组件或各响应引用同一 Error Schema 解决，不需要改变 Server 错误 Body。
+
+#### 4. 下一步
+
+1. 为 35 个 Operation 建立参数级矩阵：name、in、required、type、format、enum、minimum/maximum、default、Handler 默认值和实际校验。
+2. 对每个 Handler 标注错误产生路径：直接 writeErr、writeDomainErr、专属业务错误；据此补齐真实可达状态码，重点是 504。
+3. 将所有错误响应统一引用 Error Schema；diagnostics 增加 401。
+4. 扩展 contract test，避免只测 7 条静态路径；以完整 Operation 与路由集合为基准验证。
+5. 继续做成功响应 JSON 与 OpenAPI Schema 的实际字段/nullable golden 对照。
+
+**M0 状态保持 in_progress。** 本轮只更新迁移审计文档，没有修改 OpenAPI 或 Handler 行为。
