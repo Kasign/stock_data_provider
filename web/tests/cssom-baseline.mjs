@@ -181,7 +181,11 @@ try {
         };
         const checks = {};
         const record = (name, element, token) => {
-          checks[name] = { actual: getComputedStyle(element).color, expected: expected[token] };
+          checks[name] = {
+            actual: getComputedStyle(element).color,
+            expected: expected[token],
+            className: element.className
+          };
         };
         const toggleAndRecord = (name, element, state, token) => {
           element.classList.remove("positive", "negative");
@@ -232,20 +236,23 @@ try {
 
         const table = document.createElement("table");
         const row = document.createElement("tr");
-        const cell = document.createElement("td");
-        cell.className = "positive";
-        row.append(cell);
-        table.append(row);
+        const positiveCell = document.createElement("td");
+        positiveCell.classList.add("positive");
+        row.append(positiveCell);
+        const negativeRow = document.createElement("tr");
+        const negativeCell = document.createElement("td");
+        negativeCell.classList.add("negative");
+        negativeRow.append(negativeCell);
+        table.append(row, negativeRow);
         document.body.append(table);
-        record("table-positive", cell, "positive");
-        cell.className = "negative";
-        record("table-negative", cell, "negative");
+        record("table-positive", positiveCell, "positive");
+        record("table-negative", negativeCell, "negative");
         return { theme: root.dataset.theme, scheme: root.dataset.marketColorScheme, checks };
       });
       assert.equal(observation.theme, theme);
       assert.equal(observation.scheme, scheme);
       for (const [name, value] of Object.entries(observation.checks)) {
-        assert.equal(value.actual, value.expected, `Semantic color mismatch: ${name} in ${theme}/${scheme}`);
+        assert.equal(value.actual, value.expected, `Semantic color mismatch: ${name} class=${value.className} in ${theme}/${scheme}`);
       }
       marketSemanticColorChecks.push(observation);
       await context.close();
