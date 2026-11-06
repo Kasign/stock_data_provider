@@ -46,14 +46,11 @@ function safeError(error) {
     .filter(Boolean).join(" · ") || "未返回错误详情";
 }
 
-async function checkWebUI(_settings, signal) {
-  const response = await fetch(window.location.pathname || "/", { method: "GET", credentials: "same-origin", cache: "no-store", signal });
-  if (!response.ok) {
-    const error = new Error("WebUI 页面返回 HTTP " + response.status);
-    error.status = response.status;
-    throw error;
+async function checkWebUI() {
+  if (!document.documentElement || document.readyState === "loading") {
+    throw new Error("WebUI 文档尚未完成初始化。");
   }
-  return { status: "ok" };
+  return { status: "ok", readyState: document.readyState };
 }
 
 

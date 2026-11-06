@@ -2460,3 +2460,11 @@ CSS AST 检查器进一步扩展：
 - [x] 已确认 `GET /` 失败属于 Fetch，不是文档导航；不能作为导航取消豁免。
 - [ ] Browser Smoke 输出 Chromium CDP 请求 initiator 类型与调用栈，定位真实发起方。
 - [ ] 根路径请求问题修复后，完整 Browser Smoke 和全部专项通过再验收 W1。
+
+
+### W1 根路径 Fetch 来源修复
+
+- [x] CDP 日志定位到 `web/src/data-center.js` 的 `checkWebUI()`；原实现每次数据中心刷新都请求 `/`，造成 320px 场景下重复 Fetch 被取消。
+- [x] 自检改为检查当前文档已初始化状态，避免重复下载 HTML；市场服务与分析服务的健康/就绪接口检查保持不变。
+- [x] Browser Smoke 删除临时 CDP 诊断代码，保留所有非 API 网络失败的严格断言。
+- [ ] 重新执行完整 Browser Smoke，确认主流程及后续专项全部通过。

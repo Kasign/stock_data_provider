@@ -2233,3 +2233,11 @@ CSS AST 检查器进一步扩展：
 - [x] `1541d42f` 的 Browser Smoke 诊断确认 320px 视口的 12 次 `GET /` 均为 `resourceType=fetch`、`isNavigationRequest=false`，发生在 `#watchlist` / `#settings` 页面状态；因此不是被取消的文档导航。
 - [ ] 使用 Chromium CDP `Network.requestWillBeSent.initiator` 采集根路径请求发起类型与调用栈，保留严格网络失败断言。
 - [ ] 根据调用栈定位请求源，修复触发逻辑后重新执行完整 Browser Smoke 与全部专项。
+
+
+### W1 根路径 Fetch 真实来源修复
+
+- [x] `2bed6a91` 的 CDP 调用栈确认，根路径 Fetch 来自 `data-center.js` 的 `checkWebUI()`，由 `health-check.js` 调用；不是浏览器预取或 Playwright 路由误拦截。
+- [x] WebUI 自检改为检查当前文档初始化状态，不再对当前页面根路径发起重复 Fetch；服务端健康探针仍独立执行。
+- [x] Browser Smoke 移除临时 CDP 诊断采集，恢复简洁的非 API 网络失败断言；不扩大网络失败豁免范围。
+- [ ] 等待完整 Browser Smoke 与所有后续专项通过后验收 W1；数据侧未就绪项继续按 API 缺口记录，不阻塞 WebUI 独立功能开发。
