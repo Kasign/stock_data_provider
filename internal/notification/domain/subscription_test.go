@@ -38,16 +38,16 @@ func TestSubscriptionRecipientScope(t *testing.T) {
 		t.Fatalf("subscription_owner should be valid: %v", err)
 	}
 	sub.RecipientRef = "recipient-1"
-	if err := sub.Validate(nil); !errors.Is(err, ErrInvalidSubscription) {
+	if err := sub.Validate(acceptingEventTypeLookup{}, nil); !errors.Is(err, ErrInvalidSubscription) {
 		t.Fatalf("expected invalid subscription_owner recipient_ref, got %v", err)
 	}
 	sub = validSubscription()
 	sub.RecipientScope = RecipientScopePreconfiguredTarget
-	if err := sub.Validate(nil); !errors.Is(err, ErrInvalidSubscription) {
+	if err := sub.Validate(acceptingEventTypeLookup{}, nil); !errors.Is(err, ErrInvalidSubscription) {
 		t.Fatalf("expected preconfigured target to require recipient_ref, got %v", err)
 	}
 	sub.RecipientRef = "target-1"
-	if err := sub.Validate(nil); err != nil {
+	if err := sub.Validate(acceptingEventTypeLookup{}, nil); err != nil {
 		t.Fatalf("preconfigured target should be valid: %v", err)
 	}
 }
@@ -56,18 +56,18 @@ func TestSubscriptionFiltersFailClosed(t *testing.T) {
 	sub := validSubscription()
 	sub.Filters = json.RawMessage(`{"current_status":"reject"}`)
 	sub.FilterSchemaVersion = "1.0.0"
-	if err := sub.Validate(nil); !errors.Is(err, ErrInvalidSubscription) {
+	if err := sub.Validate(acceptingEventTypeLookup{}, nil); !errors.Is(err, ErrInvalidSubscription) {
 		t.Fatalf("expected unavailable filter validator to fail closed, got %v", err)
 	}
 	if err := sub.Validate(acceptingEventTypeLookup{}, acceptingFilterValidator{}); err != nil {
 		t.Fatalf("valid registered filter should pass: %v", err)
 	}
 	sub.Filters = json.RawMessage(`[]`)
-	if err := sub.Validate(acceptingFilterValidator{}); !errors.Is(err, ErrInvalidSubscription) {
+	if err := sub.Validate(acceptingEventTypeLookup{}, acceptingFilterValidator{}); !errors.Is(err, ErrInvalidSubscription) {
 		t.Fatalf("expected non-object filters to fail, got %v", err)
 	}
 	sub.Filters = json.RawMessage(`null`)
-	if err := sub.Validate(acceptingFilterValidator{}); !errors.Is(err, ErrInvalidSubscription) {
+	if err := sub.Validate(acceptingEventTypeLookup{}, acceptingFilterValidator{}); !errors.Is(err, ErrInvalidSubscription) {
 		t.Fatalf("null filters must not carry filter schema version, got %v", err)
 	}
 }
