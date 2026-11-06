@@ -191,6 +191,13 @@ const componentHiddenOverrides = rules.filter((rule) =>
 if (componentHiddenOverrides.length) {
   throw new Error(`Found ${componentHiddenOverrides.length} redundant component-level hidden overrides`);
 }
+const dragonTigerReasonRules = selectorRules.get(".dragon-tiger-reason") || [];
+const dragonTigerReasonWrap = dragonTigerReasonRules
+  .flatMap((rule) => rule.declarations)
+  .find((item) => item.property === "white-space");
+if (!dragonTigerReasonWrap || dragonTigerReasonWrap.value !== "normal" || dragonTigerReasonWrap.important) {
+  throw new Error("Dragon Tiger reason wrapping must use a normal declaration; the class selector outranks inherited table white-space");
+}
 const missing = sharedSelectors.filter((selector) => !selectorRules.has(selector));
 if (missing.length) throw new Error(`Missing shared shell selectors: ${missing.join(", ")}`);
 if (rules.length < 1000 || declarations.length < 2000) {
