@@ -61,7 +61,7 @@ type VolatilityParams struct {
 }
 
 type RSIParams struct {
-	Window         int
+	Window          int
 	SmoothingMethod string
 }
 

@@ -8,12 +8,12 @@ import (
 
 func validEntry(code, algorithmVersion string) Entry {
 	return Entry{
-		Code:             code,
-		SchemaVersion:    "1.0.0",
-		ValueType:        ValueTypeNumber,
-		Unit:             "ratio",
+		Code:          code,
+		SchemaVersion: "1.0.0",
+		ValueType:     ValueTypeNumber,
+		Unit:          "ratio",
 		Precision: Precision{
-			MaxIntegerDigits:   8,
+			MaxIntegerDigits:  8,
 			MaxFractionDigits: 6,
 			RoundingMode:      "half_even",
 			Tolerance:         json.RawMessage("0.000001"),
