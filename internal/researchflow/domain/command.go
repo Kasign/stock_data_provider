@@ -15,7 +15,7 @@ import (
 )
 
 var (
-	ErrInvalidCommand = errors.New("invalid create run command")
+	ErrInvalidCommand      = errors.New("invalid create run command")
 	ErrIdempotencyConflict = errors.New("idempotency key conflicts with a different request")
 )
 
@@ -97,14 +97,14 @@ func RequestFingerprint(callerRef string, cmd CreateRunCommand) (string, error) 
 		return "", fmt.Errorf("%w: parameters must be a valid JSON object", ErrInvalidCommand)
 	}
 	payload := struct {
-		CallerRef string          `json:"caller_ref"`
-		Operation string          `json:"operation"`
-		TemplateRef string        `json:"template_ref"`
-		TemplateVersion string    `json:"template_version"`
-		SystemAsOf time.Time      `json:"system_as_of"`
-		DeadlineAt time.Time      `json:"deadline_at"`
-		InputSnapshotRefs []string `json:"input_snapshot_refs"`
-		Parameters json.RawMessage `json:"parameters"`
+		CallerRef         string          `json:"caller_ref"`
+		Operation         string          `json:"operation"`
+		TemplateRef       string          `json:"template_ref"`
+		TemplateVersion   string          `json:"template_version"`
+		SystemAsOf        time.Time       `json:"system_as_of"`
+		DeadlineAt        time.Time       `json:"deadline_at"`
+		InputSnapshotRefs []string        `json:"input_snapshot_refs"`
+		Parameters        json.RawMessage `json:"parameters"`
 	}{callerRef, "CreateRun", cmd.TemplateRef, cmd.TemplateVersion, cmd.SystemAsOf.UTC(), cmd.DeadlineAt.UTC(), refs, parameters}
 	raw, err := json.Marshal(payload)
 	if err != nil {
