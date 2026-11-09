@@ -15,6 +15,7 @@ func newEastmoneyProvider(cfg config.Config) *provider.Eastmoney {
 		cfg.EastmoneyDragonTigerURL, cfg.EastmoneyAnnouncementsURL, cfg.EastmoneyUT,
 	).WithHotRankingURLs(cfg.EastmoneyHotRankingsURL, cfg.EastmoneyHotSurgeURL).WithCapitalFlowURL(cfg.EastmoneyCapitalFlowURL)
 }
+
 // validateEgressDependencies 仅校验实际启用 Provider 的出站注入是否完整。
 // 具体 BoundDoer/BoundDialer 的目标地址、DNS/IP 和重定向策略由 Root 负责。
 func validateEgressDependencies(cfg config.Config, deps Dependencies) error {
