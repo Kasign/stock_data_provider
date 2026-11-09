@@ -149,6 +149,7 @@ type CreateEventCommand struct {
 	ImpactHypothesisRefs []string
 	InvalidationConditions []string
 	Uncertainty []string
+	SupersedesEventVersion *int
 	SourceTimes []EventSourceTime
 }
 type EventRef struct { EventID string; EventVersion int }
@@ -448,7 +449,8 @@ func (s *Service) CreateEvent(ctx context.Context, command CreateEventCommand) (
 		SystemObservedAt:command.SystemObservedAt, SystemAsOf:command.SystemAsOf,
 		ImpactHypothesisRefs:cloneStrings(command.ImpactHypothesisRefs),
 		InvalidationConditions:cloneStrings(command.InvalidationConditions),
-		Uncertainty:cloneStrings(command.Uncertainty), SourceTimes:toDomainEventTimes(command.SourceTimes),
+		Uncertainty:cloneStrings(command.Uncertainty), SupersedesEventVersion:cloneInt(command.SupersedesEventVersion),
+		SourceTimes:toDomainEventTimes(command.SourceTimes),
 	}
 	if err := value.Validate(); err != nil { return ResearchEvent{}, validationFault("invalid_research_event", "Research Event is invalid", err) }
 	if err := s.events.Append(ctx, value); err != nil { return ResearchEvent{}, mapRepositoryError(err) }
