@@ -36,7 +36,9 @@ func TestGetRunReturnsValidatedAggregate(t *testing.T) {
 		t.Fatal(err)
 	}
 	got, err := service.GetRun(context.Background(), "run-1")
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	if got.Run.Ref != "run-1" || len(got.Stages) != 1 || reader.called != "run-1" {
 		t.Fatalf("unexpected GetRun result: %#v", got)
 	}
@@ -66,7 +68,7 @@ func TestGetRunRejectsCrossRunAndDuplicateStages(t *testing.T) {
 			{Ref: "stage-1", RunRef: "run-1", Code: "quant", Version: 1},
 		}},
 		{name: "duplicate code", stages: []domain.Stage{
-			{Ref:"stage-1", RunRef:"run-1", Code:"context", Version:1},
+			{Ref: "stage-1", RunRef: "run-1", Code: "context", Version: 1},
 			{Ref: "stage-2", RunRef: "run-1", Code: "context", Version: 1},
 		}},
 	}
@@ -85,7 +87,7 @@ func TestGetRunRejectsCrossRunAndDuplicateStages(t *testing.T) {
 func TestGetRunRequiresResultSummaryForTerminalRun(t *testing.T) {
 	result := validReadResult()
 	result.Run.Status = domain.RunSucceeded
-	service, _ := NewGetRunService(&runReaderStub{result:result})
+	service, _ := NewGetRunService(&runReaderStub{result: result})
 	if _, err := service.GetRun(context.Background(), "run-1"); err == nil {
 		t.Fatal("terminal Run without ResultSummary must be rejected")
 	}

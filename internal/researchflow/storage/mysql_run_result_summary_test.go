@@ -16,7 +16,7 @@ func validResultSummaryPayload() []byte {
 		BlockedStageCodes:   []string{},
 		ReasonCodes:         []string{},
 		Coverage:            1,
-		QualityStatus:      "complete",
+		QualityStatus:       "complete",
 		RiskGateDecisions:   map[string]string{},
 		ActionabilityStatus: "not_evaluated",
 	}
