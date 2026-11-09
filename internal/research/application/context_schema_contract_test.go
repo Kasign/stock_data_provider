@@ -68,7 +68,6 @@ func TestResearchContextApplicationDTOMatchesSchemaAndGolden(t *testing.T) {
 	}
 }
 
-
 func assertContextSchemaValueType(t *testing.T, name string, typ reflect.Type, schema map[string]any) {
 	t.Helper()
 	if typ.Kind() == reflect.Pointer {
