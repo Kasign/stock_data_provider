@@ -24,10 +24,10 @@ func unknownReconciliationFixture(t *testing.T) (domain.DeliveryRecord, domain.C
 		ChannelRef: unknown.ChannelRef, ConfigVersion: unknown.ChannelConfigVersion,
 		ChannelKind: "test", Enabled: true,
 		Capabilities: domain.ChannelCapabilities{
-			SupportsIdempotency: domain.CapabilityUnknown,
+			SupportsIdempotency:    domain.CapabilityUnknown,
 			SupportsDeliveryLookup: domain.CapabilitySupported,
-			SupportsRetryAfter: domain.CapabilityUnknown,
-			MaxPayloadBytes: 4096,
+			SupportsRetryAfter:     domain.CapabilityUnknown,
+			MaxPayloadBytes:        4096,
 		},
 		RetryableErrorCodes: []string{"provider_busy"},
 	}

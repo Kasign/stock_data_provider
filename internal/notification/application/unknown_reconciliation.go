@@ -31,10 +31,10 @@ type UnknownDeliveryEvidence struct {
 type UnknownReconciliationAction string
 
 const (
-	UnknownReconciliationRemainUnknown   UnknownReconciliationAction = "remain_unknown"
-	UnknownReconciliationFinalizeSent    UnknownReconciliationAction = "finalize_sent"
+	UnknownReconciliationRemainUnknown    UnknownReconciliationAction = "remain_unknown"
+	UnknownReconciliationFinalizeSent     UnknownReconciliationAction = "finalize_sent"
 	UnknownReconciliationApplyRetryPolicy UnknownReconciliationAction = "apply_retry_policy"
-	UnknownReconciliationFinalizeFailed  UnknownReconciliationAction = "finalize_failed"
+	UnknownReconciliationFinalizeFailed   UnknownReconciliationAction = "finalize_failed"
 )
 
 type UnknownReconciliationAssessment struct {
@@ -98,12 +98,12 @@ func AssessUnknownDelivery(
 	}
 
 	result := UnknownReconciliationAssessment{
-		DeliveryID: delivery.DeliveryID,
-		AttemptID: matched.AttemptID,
+		DeliveryID:   delivery.DeliveryID,
+		AttemptID:    matched.AttemptID,
 		FencingToken: matched.FencingToken,
-		Action: UnknownReconciliationRemainUnknown,
-		ReasonCode: "channel_lookup_indeterminate",
-		EvidenceRef: evidence.EvidenceRef,
+		Action:       UnknownReconciliationRemainUnknown,
+		ReasonCode:   "channel_lookup_indeterminate",
+		EvidenceRef:  evidence.EvidenceRef,
 	}
 	switch evidence.Outcome {
 	case UnknownLookupIndeterminate:
