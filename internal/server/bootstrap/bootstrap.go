@@ -28,6 +28,7 @@ import (
 	serverresources "example.com/stock-analysis-flow/internal/server/resources"
 	"example.com/stock-analysis-flow/internal/service"
 )
+
 // Run loads process configuration, assembles the currently supported runtime,
 // and serves until the parent context is canceled or the HTTP server exits.
 func Run(ctx context.Context) error {
@@ -188,7 +189,6 @@ func logLevel(raw string) slog.Level {
 		return slog.LevelInfo
 	}
 }
-
 
 // newMigrationRegistry assembles only module migrations already present in this
 // root Go module. Module SQL remains in each module's storage package.
