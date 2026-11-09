@@ -84,3 +84,10 @@ Platform 的 PLAT-CTR-005 流式传输 A1 已在 `feat/platform-foundation` 验�
 - Body 由 LLM Adapter 关闭；EOF、协议失败、callback 中断、Context 取消和读取失败均须确保关闭，Platform Body Close 负责取消底层流并释放并发额度。
 - `stream_enabled=true` 及当前 Provider/Model/Gateway 版本的 `responses_stream=supported` 证据仍是派发前门禁；本地 fake 测试不构成真实 Gateway 能力证据。
 - 当前 LLM 代码已增加 Stream Adapter、stream 请求映射和 Reader Parser；尚待包级 gofmt/go test/race/vet、Server 组合根包装接入及本地 llama.cpp/Qwen 真实 E2E。Platform A1 通过不代表 LLM A2 已验收。
+
+
+### Provider 级流式响应字节上限
+
+- `ParseResponsesSSEReader` 的 Fixture 默认入口使用协议上限 `MaxPayloadBytes`；真实 Stream 必须调用内部限额入口并传入 `ProviderConfig.MaxResponseBytes`。
+- 不得仅依赖全局 8 MiB 上限，因为 Provider 可以配置更严格的响应预算。达到配置预算时返回 `llm.sse.total_too_large`，并由 Adapter 关闭 Body。
+- 本地回归测试覆盖配置上限触发和 Body 释放；真实 Gateway 超限行为仍需 E2E。
