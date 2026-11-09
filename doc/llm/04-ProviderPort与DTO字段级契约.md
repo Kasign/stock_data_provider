@@ -302,9 +302,9 @@ ModelResponse.request_id 是该次模型调用的关联 ID；ModelErrorInfo 不�
 ModelResponse.status=incomplete/failed 是协议响应结果，不自动等同于 Platform Fault。只有 Adapter 执行、传输、协议解析或本地校验失败才构造对应 Fault。上游 response.failed 的错误信息是安全归一化投影，不暴露原始响应正文。具体 Fault Go 类型与逐类映射表以 PLAT-CTR-001 为准；LLM 只维护 ModelErrorKind 投影，并以契约测试固定。
 
 
-## 12. 非流式 HTTP Adapter 接入约束
+## 12. Responses HTTP Adapter 接入约束
 
-ResponsesAdapter 只依赖窄 HTTPDoer，并且构造时必须注入 `Clock`。生产组合根必须注入 `internal/platform/httpclient.Client.Bind(...)` 创建的 `BoundDoer`，并为 Provider 配置固定目的地址策略；不得注入未绑定目的地址策略的通用 HTTP Client。Gateway caller key 由组合根通过 `config.Secret` 注入，LLM 不读取环境变量。Adapter 只负责请求/响应体和 Provider 级限制，不替代 Platform 的 DNS/SSRF/TLS/重定向/全局响应体策略。调用有效 deadline 取 `ModelRequest.deadline_at`、Context deadline、Provider timeout 的最早值；不得因为 request deadline 晚于 Context deadline 而拒绝，若最早 deadline 已到期则不得派发请求。Clock 用于能力有效期、时间校验、调用时间戳和 Retry-After 日期解析，生产组合根注入 SystemClock，测试注入固定/可推进 Clock。BoundDoer.Do 是缓冲式非流式接口，SSE 必须等待 Platform 受控流式能力。
+ResponsesAdapter 只依赖窄 HTTPDoer，并且构造时必须注入 `Clock`。生产组合根必须注入 `internal/platform/httpclient.Client.Bind(...)` 创建的 `BoundDoer`，并为 Provider 配置固定目的地址策略；不得注入未绑定目的地址策略的通用 HTTP Client。Gateway caller key 由组合根通过 `config.Secret` 注入，LLM 不读取环境变量。Adapter 只负责请求/响应体和 Provider 级限制，不替代 Platform 的 DNS/SSRF/TLS/重定向/全局响应体策略。调用有效 deadline 取 `ModelRequest.deadline_at`、Context deadline、Provider timeout 的最早值；不得因为 request deadline 晚于 Context deadline 而拒绝，若最早 deadline 已到期则不得派发请求。Clock 用于能力有效期、时间校验、调用时间戳和 Retry-After 日期解析，生产组合根注入 SystemClock，测试注入固定/可推进 Clock。Generate 使用缓冲式 BoundDoer.Do；Stream 使用 BoundDoer.OpenStream。LLM 通过 HTTPStreamDoer 窄接口接收响应头与 io.ReadCloser，组合根负责将 Platform 的 *httpclient.StreamResponse 包装为 LLM HTTPStreamResponse；LLM 不创建 HTTP Client、不接收 DestinationPolicy，也不绕过 BoundDoer。
 
 
 ### 12.1 Clock 与 Deadline 注入
@@ -316,7 +316,7 @@ ResponsesAdapter 只依赖窄 HTTPDoer，并且构造时必须注入 `Clock`。�
 
 ### 12.2 SSE Parser 当前实现边界
 
-ParseResponsesSSE 只接收完整的有界字节切片并同步调用 callback，用于纯协议解析和 Golden 测试；它不是网络流读取器，也不提供网络取消/背压。真实 Stream 必须在 Platform 提供受控 streaming transport 后实现，禁止直接将 http.Response.Body 接入此 Parser 绕过 Platform。
+ParseResponsesSSE([]byte, ...) 是 Golden/Fixture 入口，委托给 ParseResponsesSSEReader(io.Reader, ...)；Reader 版本按行增量扫描，在总字节、单行、单事件和事件数量上限内同步调用 callback。读取错误原样返回给 Adapter，由其区分 Platform Fault 与协议错误；callback 错误原样返回并保留部分 Response。真实 Stream 只允许消费 Platform BoundDoer.OpenStream 返回的受控 Body，不能自行创建 http.Client 或直接接入未受控的 http.Response.Body。
 
 
 ## Responses Structured Outputs strict 子集契约
