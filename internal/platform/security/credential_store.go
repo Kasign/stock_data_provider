@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"math"
 
 	"github.com/go-sql-driver/mysql"
 
@@ -155,7 +154,7 @@ func (s *SQLCredentialStore) UpdateOwnerPassword(ctx context.Context, expectedVe
 	if err := validateEncodedPasswordHash(passwordHash); err != nil {
 		return OwnerCredential{}, fault.New(fault.ClassValidation, "platform.security.invalid_password_hash", "password hash is invalid", err)
 	}
-	if expectedVersion == math.MaxUint64 {
+	if expectedVersion == ^uint64(0) {
 		return OwnerCredential{}, fault.New(fault.ClassConflict, "platform.security.credential_version_exhausted", "owner credential version cannot be advanced", nil)
 	}
 

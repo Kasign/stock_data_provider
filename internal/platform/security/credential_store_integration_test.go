@@ -43,7 +43,7 @@ func TestMariaDBCredentialStoreIntegration(t *testing.T) {
 	}
 	defer db.Close()
 
-		suffix := strconv.FormatInt(time.Now().UnixNano(), 10)
+	suffix := strconv.FormatInt(time.Now().UnixNano(), 10)
 	tableName := "platform_owner_credentials_it_" + suffix
 	namespace := "platform.security.it." + suffix
 	if err := storage.ApplyMigrations(ctx, db, namespace, ownerCredentialMigrations(tableName)); err != nil {
