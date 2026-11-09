@@ -74,12 +74,12 @@ type WorkerExecution struct {
 }
 
 type Worker struct {
-	store         WorkerStore
-	executor      StageExecutor
-	clock         DatabaseClock
-	config        WorkerConfig
-	now           func() time.Time
-	cancellations *workerCancellationRegistry
+	store           WorkerStore
+	executor        StageExecutor
+	clock           DatabaseClock
+	config          WorkerConfig
+	now             func() time.Time
+	cancellations   *workerCancellationRegistry
 	faultNormalizer ExecutionFaultNormalizer
 }
 
