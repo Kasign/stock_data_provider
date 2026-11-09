@@ -28,3 +28,9 @@ Record 测试覆盖合法 Manifest/payload 绑定、payload 篡改和 Manifest �
 - Repository 实现若要保留 Record、交给异步任务或在返回后继续处理，必须先取得并使用该快照；不得仅复制 Record struct，因为其切片字段仍共享底层数组。
 - 快照只隔离 Go 进程内的可变内存，不代表业务 payload Schema 已验证，也不提供跨进程/持久化层的不可变性；持久化仍须依靠内容寻址、事务和唯一约束。
 - 单元测试覆盖源记录修改不影响快照、快照修改不影响源记录，以及无效记录不能生成已校验快照。
+
+## QuantResultRef 元数据规范化边界
+
+- `BuildRef` 对 security_id（若提供）、period、algorithm_version、parameter_fingerprint、authorization_ref 拒绝空白值及首尾空白，避免同一引用身份以不同文本形式通过 Go 构造器。
+- 对应 QNT-CTR-004 Schema 同步要求上述字符串至少包含一个非空白字符。
+- 此校验只约束文本表示，不解释 security_id、fingerprint 或 authorization_ref 的业务格式，也不证明授权有效。

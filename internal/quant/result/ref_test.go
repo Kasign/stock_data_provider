@@ -242,3 +242,26 @@ func TestBuildRefRejectsInvalidUTF8SnapshotReference(t *testing.T) {
 		t.Fatalf("BuildRef() error = %v, want ErrInvalidResultRef", err)
 	}
 }
+
+func TestBuildRefRejectsBlankOrNonCanonicalMetadata(t *testing.T) {
+	tests := []struct {
+		name string
+		mutate func(*RefInput)
+	}{
+		{"security_id whitespace", func(v *RefInput) { v.SecurityID = "   " }},
+		{"period whitespace", func(v *RefInput) { v.Period = "   " }},
+		{"period leading whitespace", func(v *RefInput) { v.Period = " 20d" }},
+		{"algorithm version whitespace", func(v *RefInput) { v.AlgorithmVersion = " " }},
+		{"parameter fingerprint trailing whitespace", func(v *RefInput) { v.ParameterFingerprint = "sha256:x " }},
+		{"authorization ref whitespace", func(v *RefInput) { v.AuthorizationRef = "\\t" }},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			input := validRefInput()
+			tc.mutate(&input)
+			if _, err := BuildRef(input, testManifest(t)); !errors.Is(err, ErrInvalidResultRef) {
+				t.Fatalf("BuildRef() error = %v, want ErrInvalidResultRef", err)
+			}
+		})
+	}
+}
