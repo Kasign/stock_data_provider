@@ -2578,7 +2578,7 @@ func (s *DataService) Ready(ctx context.Context) error {
 	if availability, ok := s.cache.(cache.Availability); ok {
 		cacheEnabled = availability.Enabled()
 	}
-	storeEnabled := s.store != nil
+	storeEnabled := s.store != nil && s.store.Configured()
 	checks := []platformdiagnostics.Check{
 		{
 			ID: "market-data.redis", Name: "Redis", Required: cacheEnabled, Timeout: 3 * time.Second,
