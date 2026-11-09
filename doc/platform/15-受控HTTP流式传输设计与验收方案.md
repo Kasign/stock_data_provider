@@ -174,10 +174,10 @@ Read 错误必须通过稳定 Fault Code 区分；Fault 的 SafeMessage 为固�
 |---|---|---|---|
 | 目标策略拒绝 | `platform.httpclient.stream_destination_rejected` | validation | false |
 | 响应头超过上限 | `platform.httpclient.stream_headers_too_large` | validation | false |
-| 建连失败 | `platform.httpclient.stream_connect_failed` | unavailable | 仅在策略明确幂等且尚未返回响应时可为 true |
-| 建连超时 | `platform.httpclient.stream_connect_timeout` | timeout | 按请求幂等性判断 |
-| TLS 握手超时 | `platform.httpclient.stream_tls_handshake_timeout` | timeout | 按请求幂等性判断 |
-| 响应头超时 | `platform.httpclient.stream_header_timeout` | timeout | 按请求幂等性判断 |
+| 建连失败 | `platform.httpclient.stream_connect_failed` | unavailable | 仅在策略明确幂等、请求体可重放且尚未返回响应时可为 true |
+| 建连超时 | `platform.httpclient.stream_connect_timeout` | timeout | 按请求幂等性及请求体可重放性判断 |
+| TLS 握手超时 | `platform.httpclient.stream_tls_handshake_timeout` | timeout | 按请求幂等性及请求体可重放性判断 |
+| 响应头超时 | `platform.httpclient.stream_header_timeout` | timeout | 按请求幂等性及请求体可重放性判断 |
 | 单次读取空闲超时 | `platform.httpclient.stream_idle_timeout` | timeout | false |
 | 调用方 Context 取消 | `platform.httpclient.stream_canceled` | unavailable | false |
 | Context / Stream 总期限到期 | `platform.httpclient.stream_deadline_exceeded` | timeout | false |
@@ -187,7 +187,7 @@ Read 错误必须通过稳定 Fault Code 区分；Fault 的 SafeMessage 为固�
 
 补充规则：
 
-- Platform 不执行应用层重试；Go Transport 的复用连接恢复重试属于底层传输行为，可能发生在响应头交付前。Retryable 仅表达调用方是否可考虑重新发起一条新请求，不授权 Platform 应用层重放。
+- Platform 不执行应用层重试；Go Transport 的复用连接恢复重试属于底层传输行为，可能发生在响应头交付前。Retryable 仅表达调用方是否可考虑重新发起一条新请求，不授权 Platform 应用层重放。流式请求只有在策略明确幂等，且请求体为空、为 `http.NoBody` 或提供 `GetBody` 可重建请求体时，才可将响应头前的传输错误标记为 Retryable。
 - 已向调用方交付任何响应数据后，所有读取终止错误 Retryable 必须为 false。
 - 调用方主动 Close 不作为上游故障，不生成 timeout/failed Fault。
 - 父 Context 取消与父 Context deadline 必须分别分类；不能把调用方取消记为上游不可用。

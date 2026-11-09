@@ -358,7 +358,9 @@ func (c *Client) OpenStream(ctx context.Context, request *http.Request, policy D
 	observability.PropagateRequestID(requestCtx, current)
 	response, err := c.httpClient.Do(current)
 	if err != nil {
-		streamFault := c.streamOpenFault(err, requestCtx, policy)
+		retryPolicy := policy
+		retryPolicy.Idempotent = streamRequestRetryable(request, policy)
+		streamFault := c.streamOpenFault(err, requestCtx, retryPolicy)
 		if response != nil && response.Body != nil {
 			_ = response.Body.Close()
 		}
@@ -438,6 +440,15 @@ func classifyStreamOpenError(err error) streamOpenErrorKind {
 	default:
 		return streamOpenErrorOther
 	}
+}
+
+// streamRequestRetryable 判断流式请求是否具备被调用方重新发起的基本条件。
+// 除显式幂等外，请求体必须为空或可通过 GetBody 重新创建。
+func streamRequestRetryable(request *http.Request, policy DestinationPolicy) bool {
+	if request == nil || !policy.Idempotent {
+		return false
+	}
+	return request.Body == nil || request.Body == http.NoBody || request.GetBody != nil
 }
 
 func (c *Client) streamOpenFault(err error, ctx context.Context, policy DestinationPolicy) *fault.Fault {

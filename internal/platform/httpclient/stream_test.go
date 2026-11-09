@@ -343,27 +343,61 @@ func TestOpenStreamPreservesRequestIDAndSafeStats(t *testing.T) {
 	}
 }
 
-func TestStreamOpenFaultRetryabilityRespectsIdempotency(t *testing.T) {
+func TestStreamOpenFaultRetryabilityRespectsIdempotencyAndReplayability(t *testing.T) {
 	err := &net.OpError{Op: "dial", Net: "tcp", Err: syscall.ECONNREFUSED}
-	for _, test := range []struct {
-		idempotent bool
-		retryable  bool
+	nonReplayableBody := io.NopCloser(strings.NewReader("payload"))
+	replayableRequest, requestErr := http.NewRequest(http.MethodPost, "https://example.com", strings.NewReader("payload"))
+	if requestErr != nil {
+		t.Fatal(requestErr)
+	}
+	nonReplayableRequest, requestErr := http.NewRequest(http.MethodPost, "https://example.com", nil)
+	if requestErr != nil {
+		t.Fatal(requestErr)
+	}
+	nonReplayableRequest.Body = nonReplayableBody
+
+	tests := []struct {
+		name      string
+		request   *http.Request
+		policy    DestinationPolicy
+		retryable bool
 	}{
-		{idempotent: false, retryable: false},
-		{idempotent: true, retryable: true},
-	} {
-		policy := DestinationPolicy{Dependency: "news.fetch", Idempotent: test.idempotent}
-		got := (&Client{}).streamOpenFault(err, context.Background(), policy)
-		if got.Class != fault.ClassUnavailable || got.Retryable != test.retryable {
-			t.Fatalf("streamOpenFault(idempotent=%v) = class %q retryable %v, want unavailable/%v",
-				test.idempotent, got.Class, got.Retryable, test.retryable)
-		}
-		if err := got.Validate(); err != nil {
-			t.Fatalf("streamOpenFault returned invalid Fault: %v", err)
-		}
+		{
+			name: "non idempotent without body", request: &http.Request{},
+			policy: DestinationPolicy{Idempotent: false}, retryable: false,
+		},
+		{
+			name: "idempotent without body", request: &http.Request{},
+			policy: DestinationPolicy{Idempotent: true}, retryable: true,
+		},
+		{
+			name: "idempotent with non replayable body", request: nonReplayableRequest,
+			policy: DestinationPolicy{Idempotent: true}, retryable: false,
+		},
+		{
+			name: "idempotent with replayable body", request: replayableRequest,
+			policy: DestinationPolicy{Idempotent: true}, retryable: true,
+		},
+		{
+			name: "idempotent with NoBody", request: &http.Request{Body: http.NoBody},
+			policy: DestinationPolicy{Idempotent: true}, retryable: true,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			policy := test.policy
+			policy.Dependency = "news.fetch"
+			policy.Idempotent = streamRequestRetryable(test.request, policy)
+			got := (&Client{}).streamOpenFault(err, context.Background(), policy)
+			if got.Class != fault.ClassUnavailable || got.Retryable != test.retryable {
+				t.Fatalf("Retryable = %v, want %v", got.Retryable, test.retryable)
+			}
+			if err := got.Validate(); err != nil {
+				t.Fatalf("streamOpenFault returned invalid Fault: %v", err)
+			}
+		})
 	}
 }
-
 func TestStreamOpenErrorClassificationCompatibility(t *testing.T) {
 	cases := []struct {
 		name string
