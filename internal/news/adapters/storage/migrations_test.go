@@ -60,3 +60,46 @@ func TestMigrationsReturnIndependentStatementSlices(t *testing.T) {
 		t.Fatal("migration statements are shared across calls")
 	}
 }
+
+
+func TestMigrationsPreserveEvidencePITAndSnapshotAccessPaths(t *testing.T) {
+	migrations := Migrations()
+	if len(migrations) != 3 {
+		t.Fatalf("Migrations() count = %d, want 3", len(migrations))
+	}
+
+	versionSchema := strings.Join(migrations[0].Statements, "\n")
+	for _, fragment := range []string{
+		"KEY idx_news_observations_news_time (news_id, observed_at)",
+		"KEY idx_news_versions_observed (news_id, observed_at, version_no)",
+		"CONSTRAINT fk_news_versions_observation FOREIGN KEY (observation_id) REFERENCES news_observations (observation_id)",
+	} {
+		if !strings.Contains(versionSchema, fragment) {
+			t.Errorf("V1 schema is missing PIT access-path fragment %q", fragment)
+		}
+	}
+
+	authorizationSchema := strings.Join(migrations[1].Statements, "\n")
+	for _, fragment := range []string{
+		"PRIMARY KEY (authorization_ref)",
+		"decision_fingerprint CHAR(64)",
+		"payload_hash CHAR(64)",
+	} {
+		if !strings.Contains(authorizationSchema, fragment) {
+			t.Errorf("V2 schema is missing authorization integrity fragment %q", fragment)
+		}
+	}
+
+	snapshotSchema := strings.Join(migrations[2].Statements, "\n")
+	for _, fragment := range []string{
+		"PRIMARY KEY (snapshot_ref)",
+		"KEY idx_news_snapshot_caller_expiry (caller_ref, expires_at)",
+		"KEY idx_news_snapshot_expiry (expires_at)",
+		"payload_json JSON NOT NULL",
+		"payload_hash CHAR(64)",
+	} {
+		if !strings.Contains(snapshotSchema, fragment) {
+			t.Errorf("V3 schema is missing snapshot integrity/access fragment %q", fragment)
+		}
+	}
+}
