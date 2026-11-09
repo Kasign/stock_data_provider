@@ -20,6 +20,9 @@ func TestContextJSONSchemaMatchesDTOFields(t *testing.T) {
 	if err := json.Unmarshal(data, &document); err != nil {
 		t.Fatalf("parse Context JSON Schema: %v", err)
 	}
+	if strings.Count(string(data), `"maximum": 9223372036854775807`) != 5 {
+		t.Fatal("all five Context integer fields must use the exact Go int64 maximum")
+	}
 	if document["$schema"] != "https://json-schema.org/draft/2020-12/schema" {
 		t.Fatalf("unexpected JSON Schema dialect: %v", document["$schema"])
 	}
@@ -147,6 +150,16 @@ func TestContextJSONSchemaValidatesGoldenAndRejectsInvalidPayloads(t *testing.T)
 	}
 	if err := schema.Validate(instance); err != nil {
 		t.Fatalf("Context v1 golden fixture does not satisfy JSON Schema: %v", err)
+	}
+
+	maxInt64Fixture := strings.Replace(string(golden), `"context_version": 1`, `"context_version": 9223372036854775807`, 1)
+	maxInt64Fixture = strings.Replace(maxInt64Fixture, `"conflict_count": 0`, `"conflict_count": 9223372036854775807`, 1)
+	maxInt64Instance, err := jsonschema.UnmarshalJSON(strings.NewReader(maxInt64Fixture))
+	if err != nil {
+		t.Fatalf("parse max int64 boundary fixture: %v", err)
+	}
+	if err := schema.Validate(maxInt64Instance); err != nil {
+		t.Fatalf("Context int64 maximum boundary must be accepted: %v", err)
 	}
 
 	tests := []struct {
