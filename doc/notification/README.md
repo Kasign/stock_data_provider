@@ -289,3 +289,11 @@ Notification 是独立通知业务模块，负责事件接收、Subscription、T
 - 所有记录先完成身份、Digest、定义校验和模板编译，再在 Registry 写锁内统一检查已有版本冲突；全部通过后一次性登记。
 - 仓储缺失、Digest 错配、定义无效、重复请求键或与已装载定义冲突时，整批失败且不留下部分新增版本。
 - 完全相同的已装载版本允许重复批量装载；新增测试覆盖中途损坏、成功装载、重复装载和已有版本冲突的原子性。
+
+
+### 渠道配置精确版本加载边界（2026-11-09）
+
+- 新增 `LoadChannelConfigSnapshot`，统一按 `channel_ref + config_version` 精确读取；缺失版本返回 `ErrChannelConfigNotFound`，仓储不可用、持久化记录损坏分别有独立错误分类。
+- 加载层检查领域约束、请求身份与 SHA-256 Digest 格式，并复制可变切片；Digest 内容完整性由 Repository（MySQL 实现已校验 JCS 摘要）负责。
+- `SecretRef` 的解析、密钥可用性检查及 Adapter 构造仍归 Server/Secret Provider；Notification 不解析密钥、不读取明文。SecretRef 无法解析时由 Server 映射为启动依赖故障，不伪装成配置记录损坏。
+- 新增精确版本、缺失、摘要格式错误、身份错配、仓储错误及取消上下文测试。
