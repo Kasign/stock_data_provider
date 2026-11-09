@@ -91,6 +91,7 @@
 - 服务端只保存 SHA-256 摘要用于匹配；每次认证遍历全部凭证摘要并执行固定长度常量时间比较。高熵随机 Token 使摘要被离线猜测的风险保持在可接受边界。
 - service 必须配置至少一个固定 Scope；拒绝未知 Scope、重复 Scope 和 owner 专属 `platform:admin` Scope。
 - `Guard` 只信任 Bearer 凭证生成的 Principal，忽略客户端身份 Header；Principal 通过 Context 提供给 handler。
+- Principal 写入 Context 和通过 `PrincipalFromContext` 读取时均复制 Scope 切片；调用方修改自己的 Principal 副本不能改变同一请求上下文中的授权快照。
 - `Router.Handle/HandleFunc` 要求每条注册路由显式传入策略；未配置策略不能注册，未注册路由由 ServeMux 返回 404。禁止注册 `/`、host 根路径以及 `/{path...}`、`host/{path...}` 等 ServeMux 根级兜底模式，避免匿名/宽权限 Handler 意外接管所有未匹配 URL；精确根路由使用 Go 1.22 的 `/{$}`。
 - `OwnerOrServiceAccess` 表示 owner 被路由显式允许，service 必须同时满足该路由声明的全部 Scope。owner 不会被自动映射成 service，也不会隐式继承业务 Scope。
 - 匿名路由仅使用 `AnonymousAccess()`；若匿名请求携带错误 Bearer 凭证，仍返回 401，避免错误凭证被静默忽略。
@@ -176,3 +177,11 @@
 ### 9.5 服务凭据数量上限
 
 Authenticator 当前采用逐个摘要比较，确保认证结果不因首个匹配位置提前返回而泄漏匹配位置。为限制每次认证的固定工作量，单个 Authenticator 最多接受 128 个 service 凭据；超出上限时必须在启动构造阶段失败，不得截断配置或静默忽略凭据。该上限是平台实现的资源保护边界，不代表建议实际部署配置 128 个调用方；首期仍应按真实服务调用关系配置最小数量的独立凭据。
+
+## 10. ServiceCredential 主体名称约束（2026-11-09）
+
+`ServiceCredential.Name` 会成为认证后 `Principal.Subject`，因此不能把它当作任意显示名称。Authenticator 构造时先去除首尾空白，再要求名称为 1～64 字节；仅允许小写 ASCII 字母、数字、点、下划线和连字符，且首字符必须为小写字母或数字。同一 Authenticator 内名称必须唯一。
+
+不符合格式的名称在启动配置构造阶段直接拒绝。该字段不得承载用户输入、凭证明文或其他敏感信息。对应实现位于 `internal/platform/security/security.go`，边界测试覆盖合法名称、空名称、超长名称、大小写混合、空格、斜线、控制字符和非法前缀。
+
+验收提交：`348b8a692dade915c1d11f35663e57a9777a3422`；Platform Go checks Run [42578653237](https://github.com/Kasign/stock_data_provider/actions/runs/42578653237) 全部通过。

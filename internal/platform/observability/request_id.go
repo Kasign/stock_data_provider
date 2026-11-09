@@ -19,16 +19,37 @@ type requestIDKey struct{}
 
 var fallbackIDCounter atomic.Uint64
 
-// Middleware validates or creates a request ID, stores it in the request
-// context, and returns it to the caller in the response header.
+// Middleware preserves the historical behavior for backwards compatibility:
+// it accepts one valid incoming Request ID. It must only be used behind a
+// trusted gateway that overwrites the header and cannot be bypassed.
+//
+// Deprecated: use MiddlewareWithOptions. Its zero-value options regenerate
+// incoming IDs and are safe for directly reachable HTTP boundaries.
 func Middleware(next http.Handler) http.Handler {
+	return MiddlewareWithOptions(next, MiddlewareOptions{TrustIncomingRequestID: true})
+}
+
+// MiddlewareOptions controls which incoming correlation metadata may be trusted.
+type MiddlewareOptions struct {
+	// TrustIncomingRequestID must only be enabled when a trusted gateway
+	// overwrites X-Request-ID and the service cannot be reached around it.
+	TrustIncomingRequestID bool
+}
+
+// MiddlewareWithOptions validates or creates a Request ID, stores it in the
+// request context, and returns it to the caller in the response header.
+func MiddlewareWithOptions(next http.Handler, options MiddlewareOptions) http.Handler {
+	if next == nil {
+		next = http.NotFoundHandler()
+	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Reject duplicate header values rather than selecting one
-		// from an ambiguous client-supplied correlation identifier.
-		values := r.Header.Values(RequestIDHeader)
 		requestID := ""
-		if len(values) == 1 {
-			requestID = strings.TrimSpace(values[0])
+		if options.TrustIncomingRequestID {
+			// Reject duplicate values rather than selecting an ambiguous ID.
+			values := r.Header.Values(RequestIDHeader)
+			if len(values) == 1 {
+				requestID = strings.TrimSpace(values[0])
+			}
 		}
 		if !ValidRequestID(requestID) {
 			requestID = newRequestID()
