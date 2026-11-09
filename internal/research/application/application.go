@@ -297,7 +297,7 @@ func (s *Service) AddEvidence(ctx context.Context, command AddEvidenceCommand) (
 	value.ContentFingerprint = fingerprint
 	if err := value.Validate(); err != nil { return EvidenceRecord{}, validationFault("invalid_evidence", "Research Evidence is invalid", err) }
 	if err := s.authorizer.AuthorizeEvidence(ctx, command.CallerRef, purpose, cloneDomainEvidence(value)); err != nil {
-		return EvidenceRecord{}, applicationFault(fault.ClassForbidden, "evidence_authorization_rejected", "Evidence is not authorized for this Research operation", err)
+		return EvidenceRecord{}, mapAuthorizationError(err)
 	}
 	if err := s.evidence.Append(ctx, cloneDomainEvidence(value)); err != nil { return EvidenceRecord{}, mapRepositoryError(err) }
 	return fromDomainEvidence(value), nil
@@ -331,7 +331,7 @@ func (s *Service) GetEvidence(ctx context.Context, ref EvidenceRef) (EvidenceRec
 	purpose := researchevidence.PurposeCode(ref.PurposeCode)
 	if purpose == "" { purpose = researchevidence.PurposeResearchAnalysis }
 	if err := s.authorizer.AuthorizeEvidence(ctx, ref.CallerRef, purpose, cloneDomainEvidence(value)); err != nil {
-		return EvidenceRecord{}, applicationFault(fault.ClassForbidden, "evidence_authorization_rejected", "Evidence is not currently authorized for this Research operation", err)
+		return EvidenceRecord{}, mapAuthorizationError(err)
 	}
 	return fromDomainEvidence(value), nil
 }
