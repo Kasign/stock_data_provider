@@ -74,6 +74,9 @@ func TestContextCheckMapsQualityStates(t *testing.T) {
 			if result.Observation.ReasonCode != test.code {
 				t.Fatalf("reason_code = %q, want %q", result.Observation.ReasonCode, test.code)
 			}
+			if result.Observation.EvidenceRef != "" {
+				t.Fatalf("snapshot-only diagnostic must not expose an unqualified Evidence ID as evidence_ref: %q", result.Observation.EvidenceRef)
+			}
 		})
 	}
 }

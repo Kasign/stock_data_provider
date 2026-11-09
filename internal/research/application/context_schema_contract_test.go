@@ -72,7 +72,8 @@ func TestResearchContextApplicationDTOMatchesSchemaAndGolden(t *testing.T) {
 func assertContextSchemaValueType(t *testing.T, name string, typ reflect.Type, schema map[string]any) {
 	t.Helper()
 	if typ.Kind() == reflect.Pointer {
-		typ = typ.Elem()
+		t.Errorf("%s pointer DTO type requires an explicit nullable Schema mapping", name)
+		return
 	}
 	switch typ.Kind() {
 	case reflect.String:
