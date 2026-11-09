@@ -146,8 +146,11 @@ recipient_scope 不是地址，也不是 recipient_ref。建议 MVP 仅允许：
 发送前重新校验：
 - Subscription 当前未退订/禁用；
 - recipient_ref 当前仍在授权范围；
-- Channel 当前可用且 Secret 可读取；
+- Delivery 固定的 ChannelConfigVersion 必须精确解析，不能回退 latest；
+- Channel 当前可用，具体 Adapter 必须在构造/解析阶段通过 Platform Config.Secret 取得所需 Secret；
 - 测试发送的目标是调用方显式指定并通过 allowlist 的目标。
+
+`application.DeliveryPreflight` 已实现只读发送前复核：重新读取当前 Subscription，缺失/暂停/禁用时返回 skip；按 Delivery 固定的 channel_ref + config_version 解析 Adapter，缺失版本/禁用配置时返回 block；通过 RecipientResolver 重新解析当前授权目标，recipient_ref 不再匹配或显式未授权时返回 skip；依赖故障返回 block 类结果和原始 error，不能伪装为用户退订。Subscription 仅版本递增但仍 active、且原 recipient_ref 仍获授权时，历史 Delivery 继续使用原 Channel 版本与原投递快照，不重写 DeliveryPlan。该函数不发送、不写状态、不证明真实 Secret 已可读取；实际 Secret 可用性仍由具体 ChannelAdapter/Resolver 在真实集成时证明。
 
 未匹配订阅/过滤条件不创建 Delivery，记录受控的 fan-out 统计；因用户退订而不再发送的已排队 Delivery 转为 skipped，并记录 reason_code。不能将系统依赖不可用伪装成 skipped。
 
