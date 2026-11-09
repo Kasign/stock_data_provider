@@ -19,6 +19,7 @@ import (
 	"example.com/stock-analysis-flow/internal/platform/config"
 	"example.com/stock-analysis-flow/internal/platform/httpapi"
 	"example.com/stock-analysis-flow/internal/platform/taskqueue"
+	serverconfig "example.com/stock-analysis-flow/internal/server/config"
 	"example.com/stock-analysis-flow/internal/service"
 )
 
@@ -72,21 +73,9 @@ func Run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	readTimeout, err := service.EnvDuration("HTTP_READ_TIMEOUT", 15*time.Second)
+	httpConfig, err := serverconfig.LoadHTTP(config.NewEnv(), analysisTimeout)
 	if err != nil {
-		return fmt.Errorf("读取 HTTP_READ_TIMEOUT 失败: %w", err)
-	}
-	writeTimeout, err := service.EnvDuration("HTTP_WRITE_TIMEOUT", analysisTimeout+10*time.Second)
-	if err != nil {
-		return fmt.Errorf("读取 HTTP_WRITE_TIMEOUT 失败: %w", err)
-	}
-	idleTimeout, err := service.EnvDuration("HTTP_IDLE_TIMEOUT", 60*time.Second)
-	if err != nil {
-		return fmt.Errorf("读取 HTTP_IDLE_TIMEOUT 失败: %w", err)
-	}
-	addr := strings.TrimSpace(os.Getenv("HTTP_ADDR"))
-	if addr == "" {
-		addr = ":8092"
+		return fmt.Errorf("HTTP 服务配置无效: %w", err)
 	}
 
 	tasks, err := taskqueue.New(store.DB, runner, workers, maxQueued, analysisTimeout, 250*time.Millisecond)
@@ -103,19 +92,19 @@ func Run(ctx context.Context) error {
 		return fmt.Errorf("创建旧 Analysis HTTP API 失败: %w", err)
 	}
 	server := &http.Server{
-		Addr:              addr,
+		Addr:              httpConfig.Address,
 		Handler:           api.Handler(),
-		ReadHeaderTimeout: 5 * time.Second,
-		ReadTimeout:       readTimeout,
-		WriteTimeout:      writeTimeout,
-		IdleTimeout:       idleTimeout,
+		ReadHeaderTimeout: httpConfig.ReadHeaderTimeout,
+		ReadTimeout:       httpConfig.ReadTimeout,
+		WriteTimeout:      httpConfig.WriteTimeout,
+		IdleTimeout:       httpConfig.IdleTimeout,
 	}
 
 	serveErr := make(chan error, 1)
 	go func() {
 		slog.Info("股票分析 Go API 已启动",
 			"service", "stock-analysis-api",
-			"addr", addr,
+			"addr", httpConfig.Address,
 			"market_data_base_url", marketDataCfg.BaseURL,
 			"db_auto_migrate", storageCfg.DBAutoMigrate)
 		serveErr <- server.ListenAndServe()
@@ -128,7 +117,7 @@ func Run(ctx context.Context) error {
 		}
 		return fmt.Errorf("HTTP 服务异常退出: %w", err)
 	case <-ctx.Done():
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), httpConfig.ShutdownTimeout)
 		defer cancel()
 		if err := server.Shutdown(shutdownCtx); err != nil {
 			_ = server.Close()

@@ -450,9 +450,10 @@ flowchart TD
 
 审计边界：以上结论只确认 Server 当前入口、旧链路和本轮可见模块接入面，不替代各模块自己的功能验收；模块未就绪项在 SRV-004/SRV-008/SRV-010 中按依赖条件推进。旧 API 当前未见认证中间件挂载，这是部署暴露面风险，必须在 SRV-005 接入统一认证策略前保持网络边界受控。
 
-### 12.4 SRV-002 第一阶段实施记录（提交 `7cc71ce720ace0cbd48036796ecbe9560dc3a970`）
+### 12.4 SRV-002 Bootstrap 与配置实施记录（提交 `7cc71ce720ace0cbd48036796ecbe9560dc3a970` 及后续配置提交）
 
 - 新增 `internal/server/bootstrap/bootstrap.go`，将 .env/配置读取、旧 Analysis Runner、旧 Task Queue、旧 HTTP API 和 HTTP Server 生命周期集中到 Bootstrap。
+- 新增 `internal/server/config`，集中解析 HTTP_ADDR、HTTP_READ_TIMEOUT、HTTP_WRITE_TIMEOUT、HTTP_IDLE_TIMEOUT 和新增的 HTTP_SHUTDOWN_TIMEOUT；复用 Platform Env/校验能力，并为默认值、空地址兼容和非法超时增加单元测试。
 - `cmd/analysis-api/main.go` 收敛为默认日志、SIGINT/SIGTERM 上下文和 Bootstrap 委托；未新增第二个进程入口。
 - Bootstrap 使用父 Context 控制运行；收到取消后先 Shutdown HTTP Server，再按 defer 顺序关闭旧 Worker 和 Store。
 - 旧 `mysqlredis.Store` 仍负责旧 Analysis 四表 Migration/Schema 检查；本阶段没有把旧 DDL 错误地并入 Platform Migration Runner。
@@ -487,7 +488,7 @@ Server 层完成不是“服务能够启动”这么简单。至少同时满足�
 | 任务 | 状态 | 说明 |
 |---|---|---|
 | SRV-001 | 完成 | 已记录旧入口、路由与认证现状、旧 Analysis Migration 四表、Worker/Storage 生命周期、部署边界及各模块接入就绪度；详细见 12.3 节 |
-| SRV-002 | 进行中 | 已创建 internal/server/bootstrap 并将旧运行装配从 main.go 移出；下一步继续将配置与 Platform 资源装配解耦 |
+| SRV-002 | 进行中 | 已创建 internal/server/bootstrap，入口已委托 Bootstrap；Server HTTP 配置已集中到 internal/server/config；下一步拆分 Platform 资源生命周期 |
 | SRV-003 | 未开始 | 尚未建立 Server 统一资源装配 |
 | SRV-004 | 未开始 | 等待各模块公开装配入口 |
 | SRV-005 | 未开始 | 旧 HTTP API 尚待迁移映射 |
