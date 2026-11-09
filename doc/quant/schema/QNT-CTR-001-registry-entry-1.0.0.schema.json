@@ -141,7 +141,7 @@
     "unit": {
       "type": "string",
       "minLength": 1,
-      "pattern": "^\\\\S(?:[\\\\s\\\\S]*\\\\S)?$"
+      "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
     },
     "precision": {
       "type": "object",
@@ -164,7 +164,7 @@
         "rounding_mode": {
           "type": "string",
           "minLength": 1,
-          "pattern": "^\\\\S(?:[\\\\s\\\\S]*\\\\S)?$"
+          "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
         },
         "tolerance": {}
       }
@@ -222,7 +222,7 @@
     "algorithm_version": {
       "type": "string",
       "minLength": 1,
-      "pattern": "^\\\\S(?:[\\\\s\\\\S]*\\\\S)?$"
+      "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
     },
     "input_requirements": {
       "type": "array",
@@ -245,19 +245,19 @@
             "items": {
               "type": "string",
               "minLength": 1,
-              "pattern": "^\\\\S(?:[\\\\s\\\\S]*\\\\S)?$"
+              "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
             },
             "uniqueItems": true
           },
           "interval": {
             "type": "string",
             "minLength": 1,
-            "pattern": "^\\\\S(?:[\\\\s\\\\S]*\\\\S)?$"
+            "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
           },
           "adjustment": {
             "type": "string",
             "minLength": 1,
-            "pattern": "^\\\\S(?:[\\\\s\\\\S]*\\\\S)?$"
+            "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
           },
           "pit": {
             "type": "boolean"
@@ -268,7 +268,7 @@
             "items": {
               "type": "string",
               "minLength": 1,
-              "pattern": "^\\\\S(?:[\\\\s\\\\S]*\\\\S)?$"
+              "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
             },
             "uniqueItems": true
           },
@@ -299,7 +299,7 @@
         "missing_handling": {
           "type": "string",
           "minLength": 1,
-          "pattern": "^\\\\S(?:[\\\\s\\\\S]*\\\\S)?$"
+          "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
         },
         "quality_states": {
           "type": "array",
@@ -307,7 +307,7 @@
           "items": {
             "type": "string",
             "minLength": 1,
-            "pattern": "^\\\\S(?:[\\\\s\\\\S]*\\\\S)?$"
+            "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
           },
           "uniqueItems": true
         },
@@ -319,7 +319,8 @@
             "minLength": 1,
             "pattern": "^\\\\S(?:[\\\\s\\\\S]*\\\\S)?$"
           },
-          "uniqueItems": true
+          "uniqueItems": true,
+          "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
         }
       }
     },
