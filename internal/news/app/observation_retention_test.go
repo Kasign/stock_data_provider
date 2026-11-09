@@ -85,7 +85,7 @@ func TestObservationRetentionCleanerHonorsContextCancellation(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 		repository := &observationRetentionRepositoryStub{
-			result:     ObservationPayloadPurgeResult{Scanned: 2, Purged: 2},
+			result: ObservationPayloadPurgeResult{Scanned: 2, Purged: 2},
 			afterPurge: cancel,
 		}
 		cleaner, err := NewObservationRetentionCleaner(repository)
