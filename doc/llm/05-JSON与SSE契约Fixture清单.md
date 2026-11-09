@@ -316,3 +316,12 @@ sequence_number 严格连续策略、Draft 2020-12 本地 Schema dialect、Reque
 - SSE：新增 CRLF + 注释行 + 多条 data 拼接解析测试；新增超过 MaxSSEEvents 的 resource_limit 测试。
 - 上述测试是纯解析器/DTO 层验证，不代表网络读取取消、HTTP Body Close、背压或 Platform 流式传输验收完成。
 - 新增测试代码尚未执行 gofmt/go test，不能标记通过。
+
+
+## 18. SSE 资源限制分类回归（2026-11-09）
+
+- 单事件大小按所有 data 字段值及字段间拼接换行累计，超过 1 MiB 返回 `resource_limit`。
+- 即使每一条 data 行均小于 64 KiB，多行拼接后超过单事件上限也必须返回 `resource_limit`。
+- 整个 SSE 输入超过 8 MiB 时，在扫描前返回 `resource_limit`，稳定码为 `llm.sse.total_too_large`。
+- 对应测试：`TestParseResponsesSSEClassifiesMultilineEventLimitAsResourceLimit`、`TestParseResponsesSSERejectsTotalPayloadAboveLimit`。
+- 测试代码尚未执行；此处只定义验收预期，不构成通过证据。
