@@ -176,24 +176,18 @@ return updated
 // The stored JSON includes millisecond fields used by Lua. This explicit wire
 // shape avoids Lua date parsing and keeps expiry comparisons atomic.
 type redisSessionRecord struct {
-	Subject           string `json:"subject"`
-	CreatedAt         time.Time `json:"created_at"`
-	LastSeenAt        time.Time `json:"last_seen_at"`
-	IdleExpiresAt     time.Time `json:"idle_expires_at"`
-	AbsoluteExpiresAt time.Time `json:"absolute_expires_at"`
-	CredentialVersion uint64    `json:"credential_version"`
-	CSRFTokenDigest   string    `json:"csrf_token_digest,omitempty"`
-	CreatedAtMS       int64     `json:"created_at_ms"`
-	LastSeenAtMS      int64     `json:"last_seen_at_ms"`
-	IdleExpiresAtMS   int64     `json:"idle_expires_at_ms"`
-	AbsoluteExpiresAtMS int64   `json:"absolute_expires_at_ms"`
+	Subject string `json:"subject"`
+	CredentialVersion uint64 `json:"credential_version"`
+	CSRFTokenDigest string `json:"csrf_token_digest,omitempty"`
+	CreatedAtMS int64 `json:"created_at_ms"`
+	LastSeenAtMS int64 `json:"last_seen_at_ms"`
+	IdleExpiresAtMS int64 `json:"idle_expires_at_ms"`
+	AbsoluteExpiresAtMS int64 `json:"absolute_expires_at_ms"`
 }
 
 func toRedisSessionRecord(record SessionRecord) redisSessionRecord {
 	return redisSessionRecord{
-		Subject: record.Subject, CreatedAt: record.CreatedAt.UTC(),
-		LastSeenAt: record.LastSeenAt.UTC(), IdleExpiresAt: record.IdleExpiresAt.UTC(),
-		AbsoluteExpiresAt: record.AbsoluteExpiresAt.UTC(), CredentialVersion: record.CredentialVersion,
+		Subject: record.Subject, CredentialVersion: record.CredentialVersion,
 		CSRFTokenDigest: record.CSRFTokenDigest,
 		CreatedAtMS: record.CreatedAt.UnixMilli(), LastSeenAtMS: record.LastSeenAt.UnixMilli(),
 		IdleExpiresAtMS: record.IdleExpiresAt.UnixMilli(), AbsoluteExpiresAtMS: record.AbsoluteExpiresAt.UnixMilli(),
@@ -202,8 +196,8 @@ func toRedisSessionRecord(record SessionRecord) redisSessionRecord {
 
 func fromRedisSessionRecord(record redisSessionRecord) SessionRecord {
 	return SessionRecord{
-		Subject: record.Subject, CreatedAt: record.CreatedAt.UTC(),
-		LastSeenAt: time.UnixMilli(record.CreatedAtMS).UTC(),
+		Subject: record.Subject, CreatedAt: time.UnixMilli(record.CreatedAtMS).UTC(),
+		LastSeenAt: time.UnixMilli(record.LastSeenAtMS).UTC(),
 		IdleExpiresAt: time.UnixMilli(record.IdleExpiresAtMS).UTC(),
 		AbsoluteExpiresAt: time.UnixMilli(record.AbsoluteExpiresAtMS).UTC(),
 		CredentialVersion: record.CredentialVersion, CSRFTokenDigest: record.CSRFTokenDigest,
@@ -238,6 +232,7 @@ var rotateSessionScript = redis.NewScript(`
 local old_raw = redis.call('GET', KEYS[1])
 if not old_raw then return 0 end
 local old = cjson.decode(old_raw)
+local new = cjson.decode(ARGV[3])
 local now = tonumber(ARGV[1])
 local old_idle = tonumber(old.idle_expires_at_ms or '0')
 local old_absolute = tonumber(old.absolute_expires_at_ms or '0')
@@ -246,6 +241,8 @@ if old_idle <= now or old_absolute <= now then
   return 0
 end
 if redis.call('EXISTS', KEYS[2]) == 1 then return -1 end
+if new.subject ~= old.subject or new.credential_version ~= old.credential_version or
+   tonumber(new.absolute_expires_at_ms or '0') ~= old_absolute then return 0 end
 local ttl = tonumber(ARGV[2]) - now
 if ttl <= 0 then return 0 end
 redis.call('SET', KEYS[2], ARGV[3], 'PX', ttl, 'NX')
