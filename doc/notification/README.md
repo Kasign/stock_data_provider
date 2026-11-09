@@ -3,7 +3,7 @@
 - 目标分支：`feat/notification`
 - 代码目录：`internal/notification/**`
 - 任务前缀：NTF
-- 当前 HEAD：`f389f357d9d848c4f4cb84d5af07def62774f324`。当前阶段：NTF-001～005 的领域、Schema、Fake、Renderer、RetryPolicy、Preflight、unknown 对账能力已建立；NTF-006 已有五表 Migration、DeliveryPlan、Delivery、DeliveryAttempt 与 Subscription MySQL Adapter。unknown 对账使用独立 CAS Repository，并验证外部证据、Attempt 历史、不可变预算快照和 StateEvent 一致性。Inbox MySQL Adapter 与 Inbox+Fanout 同事务写入扩展点已建立；Fanout 生产 Writer/WorkItem 执行语义、活跃 Subscription 分页查询及完整 Dispatcher/Worker 仍未完成；其中依赖契约冻结的部分不得自行猜测实现。
+- 当前 HEAD：`cdac763a6e613a99855c72be1375080c9b10c389`。当前阶段：NTF-001～005 的领域、Schema、Fake、Renderer、RetryPolicy、Preflight、unknown 对账能力已建立；NTF-006 已有五表 Migration、DeliveryPlan、Delivery、DeliveryAttempt 与 Subscription MySQL Adapter。unknown 对账使用独立 CAS Repository，并验证外部证据、Attempt 历史、不可变预算快照和 StateEvent 一致性。Inbox MySQL Adapter 与 Inbox+Fanout 同事务写入扩展点已建立；Fanout 生产 Writer/WorkItem 执行语义、活跃 Subscription 分页查询及完整 Dispatcher/Worker 仍未完成；其中依赖契约冻结的部分不得自行猜测实现。
 - 当前代码事实：`internal/notification/storage` 已包含五表 Migration、DeliveryPlan、Delivery、DeliveryAttempt 与 Subscription MySQL Adapter。Subscription Adapter 注入 Server 管理的共享 `*sql.DB`、EventTypeLookup 和 FilterSchemaValidator；Create 仅接受 version=1，GetLatest 读取最新不可变版本，AppendVersion 在事务内锁定最新版本、比较 expectedVersion 并插入新版本，不更新历史行。Delivery Adapter 实现初始 queued 记录创建、读取、事务行锁领取、fencing token 递增、版本 CAS、状态事件同事务追加，以及离开 sending 时释放租约。Attempt Adapter 实现 StartWithLease、CompleteWithLease、ListByDelivery；Start 将 Attempt 插入与 Delivery.attempt_count 投影更新放在同一事务，Start/Complete 均在事务内用 `UTC_TIMESTAMP(6)` 校验数据库权威时钟、Delivery 版本、Worker、fencing token 和租约有效期；同一 Delivery 行锁串行化 Attempt 启动，并依赖 DDL 唯一索引作最终约束。三个 Adapter 均借用调用方提供的共享 `*sql.DB`，不管理连接池生命周期。
 - Delivery MariaDB 测试覆盖 Delivery 与不可变 Plan 快照一致性、唯一性、读取、16 Worker 单赢家、状态 CAS、状态事件追加失败回滚和租约释放。Attempt MariaDB 测试覆盖同一租约 8 路并发仅一个 Attempt 成功、attempt_count 投影、运行中/完成记录读取、重复完成拒绝和同 fencing token 二次追加拒绝。上述测试均为已编写的验收代码；DeliveryPlan、Delivery、Attempt、Subscription、Inbox 五组 MariaDB 集成测试统一通过 `openNotificationIntegrationDB` 调用 Platform Storage.OpenSQL 初始化连接池，Migration 统一使用 Platform ApplyMigrations。当前 HEAD 的 Go workflow 尚未完成，真实 MariaDB DSN 执行证据仍缺，不能据此标记通过。
 - 本轮新增 Inbox MySQL Repository 与 v2 Migration；新增事务内 Fanout Writer 扩展点和可选 MariaDB 集成测试。Fanout 表结构/生产 Writer、claim/ack/retry 语义仍未实现；没有把扩展点误记为完整 Fanout。真实 MariaDB DSN 执行证据仍缺失。历史验收基线 `338d0ced374d5fdc42672812450d897d89cbe1d0` 对应 Run `42593868099`：`Test go-core` 通过（含测试、Race Detector、go vet）；根模块 `Test .` 在 gofmt 阶段被 `internal/quant/**` 阻断，Notification 文件未出现在差异列表，根模块测试未执行。真实 MariaDB DSN 执行证据仍缺。
@@ -86,3 +86,11 @@ Notification 是独立通知业务模块，负责事件接收、Subscription、T
 - `ClaimDue` 返回的 Delivery 是开始本次 Attempt 前的快照，`attempt_count` 只会由 `StartWithLease` 原子递增；因此完成服务必须校验 `attempt_no == claim.delivery.attempt_count + 1`，不能要求二者相等。
 - 修正完成服务的序号边界校验。保留 Delivery 版本、Worker、fencing token、租约截止时间及渠道配置版本校验；Attempt 历史仍由 Repository 负责原子落库。
 - 现有完成服务测试覆盖 accepted、ambiguous、not_sent 和 retryable rejection 的完整路径，修复后应由 Notification go-core CI 统一验证。真实 MariaDB L3 仍需 `NOTIFICATION_MARIADB_TEST_DSN`。
+
+
+### 本轮增量：DeliveryPlan 快照与冗余列一致性
+
+- DeliveryPlan 幂等重放现在同时读取 `plan_json` 和全部冗余列，校验 Delivery 身份、订阅/渠道/模板版本、接收目标、Payload/Plan Fingerprint、授权策略版本、审计授权引用及幂等键完全一致。
+- 任一冗余列与不可变 JSON 快照不一致，或授权 JSON 列无法解析，均 fail closed，不返回幂等成功。
+- 新增存储层单元测试，覆盖身份字段、版本、Fingerprint、授权策略/引用 JSON、幂等键及非法 JSON。
+- 真实 MariaDB 行损坏/重放场景仍需 `NOTIFICATION_MARIADB_TEST_DSN` 执行；当前不标记 L3 通过。
