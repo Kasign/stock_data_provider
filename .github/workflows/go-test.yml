@@ -140,7 +140,7 @@ jobs:
         run: go vet ./...
 
   market-data-module-test:
-    if: ${{ github.event_name == 'workflow_dispatch' }}
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/feat/full-go-data-providers-api-switch') }}
     name: Test Market Data in root module
     runs-on: ubuntu-latest
     steps:
@@ -251,6 +251,14 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: '1.23.x'
+      - name: Diagnose root module dependency drift
+        run: |
+          set +e
+          go mod tidy -diff > /tmp/go-mod-tidy.diff 2>&1
+          status=$?
+          cat /tmp/go-mod-tidy.diff
+          echo "go mod tidy -diff exit code: $status"
+          exit 0
       - name: Run News MariaDB migration and repository integration
         env:
           NEWS_MARIADB_TEST_DSN: "root:news-ci@tcp(127.0.0.1:3306)/news_test?parseTime=true&loc=UTC"
