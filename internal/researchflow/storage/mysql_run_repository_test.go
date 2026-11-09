@@ -76,3 +76,117 @@ func TestMySQLRunRepositoryValidatesResolvedSnapshotIdentity(t *testing.T) {
 		t.Fatal("expected mismatched resolved-template version to be rejected")
 	}
 }
+
+
+func TestMariaDBCreateRunAtomicConcurrentIdempotency(t *testing.T) {
+	if os.Getenv("PLATFORM_STORAGE_INTEGRATION") != "1" {
+		t.Skip("set PLATFORM_STORAGE_INTEGRATION=1 to run Researchflow MariaDB integration tests")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+	defer cancel()
+	dsn := fmt.Sprintf("%s:%s@tcp(%s)/%s?parseTime=true",
+		os.Getenv("PLATFORM_MARIADB_USER"),
+		os.Getenv("PLATFORM_MARIADB_PASSWORD"),
+		os.Getenv("PLATFORM_MARIADB_ADDR"),
+		os.Getenv("PLATFORM_MARIADB_DATABASE"),
+	)
+	config, err := mysql.ParseDSN(dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	connector, err := mysql.NewConnector(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	db, err := platformstorage.OpenSQL(ctx, connector, platformstorage.DefaultSQLConfig())
+	if err != nil {
+		t.Fatalf("open MariaDB: %v", err)
+	}
+	defer db.Close()
+	if err := platformstorage.ApplyMigrations(ctx, db, MigrationNamespace, Migrations()); err != nil {
+		t.Fatalf("apply Researchflow migrations: %v", err)
+	}
+	repository, err := NewMySQLRunRepository(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	suffix := fmt.Sprintf("%d", time.Now().UnixNano())
+	now := time.Now().UTC()
+	fingerprint := "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	templateFingerprint := "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+	makeRecord := func(runRef, stageRef string) application.CreateRunRecord {
+		return application.CreateRunRecord{
+			Scope: application.IdempotencyScope{
+				CallerRef: "researchflow-integration-test", Operation: "CreateRun", Key: "create-" + suffix,
+			},
+			Fingerprint: fingerprint,
+			Run: domain.Run{
+				Ref: runRef, SchemaVersion: "v1", Status: domain.RunCreated, Version: 1,
+				SystemAsOf: now.Add(-time.Minute), DeadlineAt: now.Add(5 * time.Minute),
+				TemplateRef: "integration-template", TemplateVersion: "v1",
+				TemplateFingerprint: templateFingerprint, InputSnapshotRefs: []string{"snapshot-" + suffix},
+				CorrelationID: "correlation-" + suffix,
+			},
+			Stages: []domain.Stage{{
+				Ref: stageRef, RunRef: runRef, Code: "context", Status: domain.StagePending,
+				Version: 1, Required: true, Dependencies: []string{}, RetryPolicyRef: "retry-v1",
+				DiagnosticRefs: []string{}, ReasonCodes: []string{},
+			}},
+			ResolvedTemplate: template.ResolvedTemplate{
+				Ref: "integration-template", Version: "v1", Fingerprint: templateFingerprint,
+				Stages: []template.ResolvedStage{{
+					Definition: template.StageDefinition{Code: "context"},
+				}},
+			},
+			Parameters: json.RawMessage(`{}`),
+		}
+	}
+
+	records := []application.CreateRunRecord{
+		makeRecord("run-"+suffix+"-a", "stage-"+suffix+"-a"),
+		makeRecord("run-"+suffix+"-b", "stage-"+suffix+"-b"),
+	}
+	type outcome struct {
+		result application.CreateRunResult
+		err    error
+	}
+	outcomes := make(chan outcome, len(records))
+	var wait sync.WaitGroup
+	for _, record := range records {
+		record := record
+		wait.Add(1)
+		go func() {
+			defer wait.Done()
+			result, err := repository.CreateRunAtomic(ctx, record)
+			outcomes <- outcome{result: result, err: err}
+		}()
+	}
+	wait.Wait()
+	close(outcomes)
+
+	var winningRunRef string
+	replayed := 0
+	for item := range outcomes {
+		if item.err != nil {
+			t.Fatalf("concurrent CreateRunAtomic failed: %v", item.err)
+		}
+		if item.result.Replayed {
+			replayed++
+		}
+		if winningRunRef == "" {
+			winningRunRef = item.result.Run.Ref
+		} else if item.result.Run.Ref != winningRunRef {
+			t.Fatalf("concurrent calls returned different runs: %q and %q", winningRunRef, item.result.Run.Ref)
+		}
+	}
+	if replayed != 1 {
+		t.Fatalf("replayed calls = %d, want exactly 1", replayed)
+	}
+
+	conflict := makeRecord("run-"+suffix+"-conflict", "stage-"+suffix+"-conflict")
+	conflict.Fingerprint = "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+	if _, err := repository.CreateRunAtomic(ctx, conflict); !errors.Is(err, domain.ErrIdempotencyConflict) {
+		t.Fatalf("different request fingerprint error = %v, want ErrIdempotencyConflict", err)
+	}
+}
