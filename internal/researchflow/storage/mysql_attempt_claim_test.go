@@ -159,6 +159,7 @@ func TestMariaDBClaimAttemptLeaseAndFencing(t *testing.T) {
 		RunRef: runRef, StageRef: stageRef, AttemptRef: second.Ref,
 		WorkerID: "worker-b", FencingToken: second.FencingToken,
 		AttemptStatus: domain.AttemptSucceeded, Stage: nextStage,
+		OutputRef: nextStage.OutputRef,
 	}
 	if err := repository.CommitAttemptResult(ctx, currentCommit); err != nil {
 		t.Fatalf("current worker result commit: %v", err)
