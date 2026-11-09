@@ -142,17 +142,21 @@ func (p *Eastmoney) FetchCapitalFlow(ctx context.Context, rawSymbol string) (*mo
 		Source: p.Name(), FetchedAt: now, QualityStatus: model.QualityDegraded,
 		QualityReasons: []string{"provider_snapshot_timestamp_not_exposed", "eastmoney_daily_main_net_inflow_series"},
 	}
+	addEastmoneyCapitalFlowWarning(ctx, -1, "provider_time", "capital-flow snapshot", "not_exposed_by_provider_contract", "source publication timestamp", "unavailable", "Eastmoney capital-flow endpoint does not expose an exact source snapshot/publication timestamp")
 	out.MainNetInflow = observations[0].amount
 	out.Inflow5D = sumEastmoneyCapitalFlowWindow(observations, 5)
 	out.Inflow10D = sumEastmoneyCapitalFlowWindow(observations, 10)
 	if out.MainNetInflow == nil {
 		out.QualityReasons = append(out.QualityReasons, "latest_main_net_inflow_missing_or_invalid")
+		addEastmoneyCapitalFlowWarning(ctx, 0, "main_net_inflow", "f52", "missing_or_invalid_amount", "finite monetary amount", "missing_or_invalid", "latest Eastmoney capital-flow observation has no usable monetary amount")
 	}
 	if out.Inflow5D == nil {
 		out.QualityReasons = append(out.QualityReasons, "inflow_5d_requires_5_complete_observations")
+		addEastmoneyCapitalFlowWarning(ctx, -1, "inflow_5d", "f51/f52", "incomplete_window", "5 consecutive complete monetary observations", "incomplete", "Eastmoney five-day inflow aggregate is unavailable because the observation window is incomplete")
 	}
 	if out.Inflow10D == nil {
 		out.QualityReasons = append(out.QualityReasons, "inflow_10d_requires_10_complete_observations")
+		addEastmoneyCapitalFlowWarning(ctx, -1, "inflow_10d", "f51/f52", "incomplete_window", "10 consecutive complete monetary observations", "incomplete", "Eastmoney ten-day inflow aggregate is unavailable because the observation window is incomplete")
 	}
 	return out, nil
 }
@@ -180,6 +184,21 @@ func addEastmoneyCapitalFlowParseIssue(ctx context.Context, rowIndex int, field,
 		Stage: validation.StageParse, Field: field, ProviderField: providerField,
 		Code: code, Expected: expected, ActualType: actualType,
 		ActualPreview: quoteIssuePreview(preview), Severity: validation.SeverityError, Message: message,
+	}
+	if rowIndex >= 0 {
+		issue.RowIndex = &rowIndex
+	}
+	report.Add(issue)
+	validation.AddContextReport(ctx, report)
+}
+
+
+func addEastmoneyCapitalFlowWarning(ctx context.Context, rowIndex int, field, providerField, code, expected, actualType, message string) {
+	report := validation.NewReport(8)
+	issue := validation.FieldIssue{
+		Stage: validation.StageValidate, Field: field, ProviderField: providerField,
+		Code: code, Expected: expected, ActualType: actualType,
+		Severity: validation.SeverityWarning, Message: message,
 	}
 	if rowIndex >= 0 {
 		issue.RowIndex = &rowIndex

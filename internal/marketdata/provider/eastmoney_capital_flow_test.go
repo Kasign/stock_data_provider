@@ -133,3 +133,31 @@ func TestEastmoneyCapitalFlowReportsFieldAndRowParseIssue(t *testing.T) {
 		})
 	}
 }
+
+
+func TestEastmoneyCapitalFlowReportsDegradedSnapshotAndIncompleteWindows(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"rc":0,"data":{"code":"600519","klines":["2026-10-26,-","2026-10-25,100"]}}`))
+	}))
+	defer server.Close()
+	reporter := validation.NewReporter(10)
+	ctx := validation.WithReporter(context.Background(), reporter)
+	_, err := NewEastmoney(time.Second, "", "").WithCapitalFlowURL(server.URL).FetchCapitalFlow(ctx, "600519.SH")
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := map[string]bool{
+		"provider_time": false, "main_net_inflow": false, "inflow_5d": false, "inflow_10d": false,
+	}
+	for _, issue := range reporter.Snapshot().Issues {
+		if _, ok := found[issue.Field]; ok && issue.Stage == validation.StageValidate && issue.Severity == validation.SeverityWarning {
+			found[issue.Field] = true
+		}
+	}
+	for field, ok := range found {
+		if !ok {
+			t.Errorf("missing degraded capital-flow evidence for %s: %+v", field, reporter.Snapshot().Issues)
+		}
+	}
+}
