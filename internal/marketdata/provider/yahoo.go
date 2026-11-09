@@ -18,6 +18,7 @@ import (
 	"example.com/stock-analysis-flow/internal/marketdata/model"
 	"example.com/stock-analysis-flow/internal/marketdata/normalize"
 	"example.com/stock-analysis-flow/internal/marketdata/validation"
+	"example.com/stock-analysis-flow/internal/marketdata/validation"
 )
 
 const yahooFinanceVersion = "yahoo-finance-chart-v1"
@@ -232,8 +233,10 @@ func (p *YahooFinance) FetchQuote(ctx context.Context, rawSymbol string) (*model
 		AdjustmentBasis: model.AdjustmentNone, QualityStatus: model.QualityDegraded,
 		QualityReasons: []string{"provider_amount_unavailable"}, NormalizationVer: normalize.Version,
 	}
+	addProviderParseIssue(ctx, -1, "amount", "chart.meta", "not_exposed_by_provider_contract", "provider-reported CNY turnover amount", "unavailable", "", "Yahoo Finance Quote metadata does not expose turnover amount; amount remains unknown", validation.SeverityWarning)
 	if name == "" {
 		q.QualityReasons = append(q.QualityReasons, "provider_name_missing")
+		addProviderParseIssue(ctx, -1, "name", "chart.meta.longName/shortName", "missing", "non-empty provider security name", "missing", "", "Yahoo Finance Quote metadata omitted both longName and shortName", validation.SeverityWarning)
 	}
 	report, err := normalize.ValidateQuoteWithReport(q)
 	validation.AddContextReport(ctx, report)
