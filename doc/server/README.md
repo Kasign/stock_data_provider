@@ -552,7 +552,7 @@ Server 层完成不是“服务能够启动”这么简单。至少同时满足�
 | SRV-002 | 进行中 | 已创建 internal/server/bootstrap，入口已委托 Bootstrap；HTTP 配置和 Platform 资源创建已拆出；剩余模块 Registry 与统一装配 |
 | SRV-003 | 进行中 | DB、Redis、HTTP Client 已由 Resources 统一创建和关闭；后续接入模块资源注入与诊断贡献项 |
 | SRV-004 | 阻塞 | 已复核模块接入面；Researchflow/Quant/LLM/Notification 缺少完整生产装配入口，News/Research 也有关键查询/授权接入缺口；详见 12.6 节 |
-| SRV-005 | 进行中 | `/healthz` 匿名白名单；`/readyz`、旧 Analysis 业务路由和根信息路由由 Platform Security Router 显式 owner 认证；模块业务 Handler/Scope 映射、统一 Fault 映射和中间件仍待接入 |
+| SRV-005 | 进行中 | 已接入 Platform Bearer Owner 认证；Web Session/密码登录、CSRF、登录限流、模块 Service Scope、统一 Fault 映射和可信代理边界仍待契约与实现；现有 WebUI 尚未携带 Analysis Owner 凭证，不能视为浏览器认证链路已完成 |
 | SRV-006 | 进行中 | SERVER_ROLE=api|worker|all 已控制旧 Analysis Worker 与 HTTP API 的启动集合；统一 Lifecycle Manager、模块 Worker 接入、失败回滚和完整 SIGTERM 矩阵仍待完成 |
 | SRV-007 | 进行中 | 已建立 Server Migration Registry，并注册 News/Research/Notification；显式配置执行；其他模块 Migration 和 MariaDB 集成验收待完成，详见 12.7 节 |
 | SRV-008 | 待契约 | Dispatcher 所有权未冻结 |
@@ -610,3 +610,19 @@ Server 层完成不是“服务能够启动”这么简单。至少同时满足�
 当前 Platform Security 提供 Owner/Service Bearer 认证和路由策略，但没有 Web 密码验证、服务端 Session Store、Cookie 签发/轮换/撤销、CSRF Token、登录限流等公共实现。Server 不应在此分支复制通用安全框架。Web 登录进入实现前，需要在项目级契约中明确账号初始化/恢复方式、密码哈希算法与参数、Session 存储/撤销、CSRF、Cookie 属性、用户角色与审计事件，并由 Platform 提供可复用的公共安全原语；Server 负责装配，Web 负责登录交互。
 
 在上述能力具备前，当前 Owner Bearer 只作为临时的可信管理入口；不得为了让浏览器调用方便而把 Owner Token 写入 Web localStorage 或静态 Nginx 配置。现有 WebUI 与 Root Server 的 Owner 认证存在接入缺口，必须在 Web 登录契约落地前保持部署入口受限，不能宣称已具备完整用户访问体验。
+### 12.11 SRV-006 运行角色第一阶段与安全接入缺口（2026-11-09）
+
+- 新增 SERVER_ROLE：api、worker、all；默认 all 保持既有单进程行为，未知值启动失败。
+- api 角色创建旧 Analysis Task Queue 但不调用 Start，因此不启动后台轮询 Worker；仍可持久化异步任务，由 worker 角色消费。
+- worker 角色启动旧 Analysis Worker，不构造、不监听业务 HTTP API；等待进程取消后关闭 Worker 与共享资源。
+- all 角色保持现有 API + Worker 组合运行。
+- 当前仍是旧 Analysis Queue 的角色隔离，不代表新模块 Worker Registry/Lifecycle Manager 已完成；启动失败逆序回滚、组件错误传播和完整 SIGTERM 测试仍待实现。
+- `.env.example` 已加入 SERVER_ROLE=all，并说明 api/worker 的部署切分方式。
+- CI 曾对 `ea6b3b3` 报 gofmt 失败；随后已修复格式并触发新 SHA 验证。以最新 Workflow 结果为准，不将旧失败误报为当前通过。
+
+#### Web 与 API 的当前兼容性缺口
+
+- Server 的 Analysis 路由现在要求 Authorization: Bearer Owner Token；Web Nginx 只是反向代理，不注入凭证；当前 web/src/api.js 对 Analysis API 的请求也没有附加 Owner Bearer Token。因此现有浏览器 Analysis 请求与新认证策略不兼容，预计会收到 401。
+- 不允许通过 Nginx 静态配置注入 PLATFORM_ADMIN_TOKEN，也不允许把 Owner Token 放进浏览器 localStorage 解决该问题。
+- 正确的后续方案是先由 Platform 提供服务端 Session/CSRF 等公共安全能力，再由 Server 装配登录、会话和用户权限路由，Web 通过同源 HttpOnly Cookie 调用 API。Web 分支负责登录页面与客户端会话状态，不负责保存服务端凭证。
+- 在 Web Session 契约和实现完成前，Analysis API 应继续保持 Owner Bearer 保护和受限网络入口；不能为了当前 UI 可用而回退成匿名业务 API。
