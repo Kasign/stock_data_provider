@@ -70,7 +70,7 @@ func SessionTokenDigest(rawToken string) (string, error) {
 		return "", fault.New(fault.ClassUnauthenticated, "platform.security.invalid_session_token", "session token is invalid", nil)
 	}
 	decoded, err := base64.RawURLEncoding.DecodeString(rawToken)
-	if err != nil || len(decoded) != SessionTokenBytes {
+	if err != nil || len(decoded) != SessionTokenBytes || base64.RawURLEncoding.EncodeToString(decoded) != rawToken {
 		return "", fault.New(fault.ClassUnauthenticated, "platform.security.invalid_session_token", "session token is invalid", nil)
 	}
 	digest := sha256.Sum256([]byte(rawToken))
@@ -96,7 +96,8 @@ func (r SessionRecord) validate() error {
 	idle := r.IdleExpiresAt.UTC()
 	absolute := r.AbsoluteExpiresAt.UTC()
 	if lastSeen.Before(created) || idle.After(absolute) || !idle.After(lastSeen) ||
-		!absolute.After(created) {
+		!absolute.After(created) || absolute.Sub(created) > DefaultSessionAbsoluteTTL ||
+		idle.Sub(lastSeen) > DefaultSessionIdleTTL {
 		return errors.New("session record time bounds are invalid")
 	}
 	if r.CSRFTokenDigest != "" && !validSessionDigest(r.CSRFTokenDigest) {
@@ -137,7 +138,7 @@ func (s *RedisSessionStore) Create(ctx context.Context, digest string, record Se
 	if ttl <= 0 {
 		return fault.New(fault.ClassValidation, "platform.security.session_expired", "session is already expired", nil)
 	}
-	payload, err := json.Marshal(record)
+	payload, err := json.Marshal(toRedisSessionRecord(record))
 	if err != nil {
 		return fault.New(fault.ClassInternal, "platform.security.session_encode_failed", "session could not be stored", err)
 	}
