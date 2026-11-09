@@ -269,3 +269,22 @@ func TestRegistryEnforcesTemplateSourceLimit(t *testing.T) {
 		t.Fatalf("expected template source byte limit error, got %v", err)
 	}
 }
+
+func TestRegistryRejectsNilAndCancelledRenderContext(t *testing.T) {
+	registry := testTemplateRegistry(t, Limits{
+		MaxTemplateBytes: 1024, MaxOutputBytes: 1024, MaxPayloadDepth: 4,
+	})
+	definition := baseDefinition(FormatText)
+	if _, err := registry.Register(definition); err != nil {
+		t.Fatal(err)
+	}
+	event := testTemplateEvent(`{"message":"hello"}`)
+	if _, err := registry.Render(nil, event, definition.TemplateID, definition.Version); err == nil {
+		t.Fatal("nil context must be rejected")
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := registry.Render(ctx, event, definition.TemplateID, definition.Version); !errors.Is(err, context.Canceled) {
+		t.Fatalf("cancelled context must be returned unchanged, got %v", err)
+	}
+}

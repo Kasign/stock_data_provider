@@ -468,3 +468,16 @@ Delivery plan fingerprint 使用 RFC 8785 JSON Canonicalization Scheme + SHA-256
 
 
 **本文件保留 Notification 领域字段与状态机细节；项目级语义和契约状态以统一契约目录为准。当前 NTF-CTR-001~003 均未达到 frozen；不代表任何真实渠道或 L3 集成验收已通过。**
+
+
+## 8.5 Delivery 快照到 ChannelSendRequest 的绑定
+
+渠道发送请求必须由 Notification Application 根据同一份不可变 Delivery 快照构造，不允许由调用方分别拼接 delivery、recipient、template 和 payload 字段。`BuildChannelSendRequest` 执行以下绑定校验：
+
+- Channel 的 `channel_ref/config_version` 必须与 Delivery 完全一致，且该版本已启用。
+- Recipient 的 `recipient_ref/channel_ref/config_version` 必须与 Delivery 和 Channel 快照完全一致。
+- RenderedContent 的 `template_id/template_version/event_payload_fingerprint` 必须与 Delivery 冻结快照完全一致。
+- 只有 Channel 明确声明 `supports_idempotency=supported` 时，才将 Delivery 稳定的 `delivery_idempotency_key` 放入请求；unknown/unsupported 均不发送。
+- 最终请求仍须通过 `ChannelSendRequest.Validate` 的能力和 payload 字节数校验。
+
+该构造器是 Worker/Dispatcher 调用 Adapter 前的统一边界，防止合法但属于另一 Delivery 的内容或接收目标被错误发送。
