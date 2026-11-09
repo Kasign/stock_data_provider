@@ -141,3 +141,30 @@ func TestDeliveryConsistencyResultDoesNotExposeSensitiveReferences(t *testing.T)
 		t.Fatalf("evidence summary should expose only the count, got %+v", result.Evidence)
 	}
 }
+
+func TestAssessDeliveryConsistencyRetainsAllIssuesInStableOrder(t *testing.T) {
+	delivery, lease, _ := recoveryFixture(t)
+	delivery.Status = domain.DeliverySent
+	delivery.AttemptCount = 1
+	running := recoveryAttempt(t, delivery, lease, domain.DeliveryAttemptAccepted, false)
+
+	result := AssessDeliveryConsistency(DeliveryConsistencyInput{
+		Delivery: delivery,
+		Attempts: []domain.DeliveryAttempt{running},
+		AttemptsComparable: true,
+		StateEvents: []domain.DeliveryStateEvent{{}},
+		StateEventsComparable: true,
+	})
+	if result.Status != DeliveryConsistencyFail {
+		t.Fatalf("status=%q want fail", result.Status)
+	}
+	want := []string{"attempt_history_conflict", "state_event_history_conflict"}
+	if len(result.ReasonCodes) != len(want) {
+		t.Fatalf("reason codes=%v want=%v", result.ReasonCodes, want)
+	}
+	for i := range want {
+		if result.ReasonCodes[i] != want[i] {
+			t.Fatalf("reason codes=%v want ordered=%v", result.ReasonCodes, want)
+		}
+	}
+}
