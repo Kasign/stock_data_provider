@@ -133,6 +133,23 @@ func TestComposeResultRejectsIncompleteOrToolCallingLLMResponse(t *testing.T) {
 	}
 }
 
+func TestComposeResultRejectsRequiredOmittedSectionMarkedValid(t *testing.T) {
+	input := validCompositionInput()
+	input.Context.SectionRefs[0].Included = false
+	input.Context.IncludedSections = []string{}
+	input.Context.OmittedSections = []researchapp.ContextOmittedSection{{
+		SectionID: "market", SourceOwner: "data", ReasonCode: "unavailable",
+		Required: true, SourceRefs: []string{}, SafeMessage: "必需数据暂不可用",
+	}}
+	if _, err := ComposeResult(input, nil); !errors.Is(err, ErrInvalidResultComposition) {
+		t.Fatalf("required omitted section cannot remain valid, got %v", err)
+	}
+	input.Context.QualitySummary.Status = "degraded"
+	if _, err := ComposeResult(input, nil); err != nil {
+		t.Fatalf("degraded Context should preserve required omission, got %v", err)
+	}
+}
+
 func TestComposeResultRejectsBrokenContextAndRiskReferenceClosure(t *testing.T) {
 	input := validCompositionInput()
 	input.Context.IncludedSections = []string{"missing-section"}
