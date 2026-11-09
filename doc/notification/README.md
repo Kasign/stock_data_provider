@@ -229,3 +229,10 @@ Notification 是独立通知业务模块，负责事件接收、Subscription、T
 - `LeaseRecoveryService` 对 `not_sent`/无当前 Attempt 等安全重试路径补齐 MaxElapsed 检查；即使状态评估判定可安全重试，也不能越过首次 Attempt 起算的 MaxElapsed 或 Delivery Deadline。
 - 新增测试覆盖 MaxElapsed 收紧渠道 deadline，以及 MaxElapsed 已耗尽时安全恢复仍必须终止为 failed/deadline_exceeded。
 - 本轮测试代码已加入；CI 尚未提供该提交的 Notification 根模块测试执行结果，MariaDB L3 仍待真实 DSN。
+
+
+### 过期租约扫描并发窗口收紧
+
+- 过期租约扫描在初次批量查询 ID 后，逐条回读租约时再次使用数据库 UTC 时钟过滤 `lease_expires_at <= UTC_TIMESTAMP(6)`。
+- 防止初次扫描后租约已被续期、但二次读取仍把该 Delivery 返回为过期候选；最终恢复写入仍由 Repository 通过版本、fencing token 和数据库时钟 CAS 兜底。
+- MariaDB 集成用例增加 active → expired → renewed 场景，验证扫描候选随数据库当前租约状态变化；真实 DSN 尚未执行。
