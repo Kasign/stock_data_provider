@@ -56,7 +56,6 @@ func (a *deadlineAwareExecutionAdapter) Send(ctx context.Context, _ domain.Chann
 		ErrorCode: "provider_timeout",
 	}, context.DeadlineExceeded
 }
-
 type deadlineRecordingExecutionAdapter struct {
 	snapshot domain.ChannelConfigSnapshot
 	deadline time.Time
