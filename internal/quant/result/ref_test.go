@@ -200,9 +200,32 @@ func TestBuildRefOutputMatchesQNTCTR004Schema(t *testing.T) {
 		invalid[key] = value
 	}
 	invalid["unexpected"] = true
+	
 	if err := schema.Validate(invalid); err == nil {
 		t.Fatal("schema accepted an unknown QuantResultRef field")
 	}
+
+	for _, field := range []string{"period", "algorithm_version", "parameter_fingerprint", "authorization_ref"} {
+		invalid = make(map[string]any)
+		for key, value := range instance.(map[string]any) {
+			invalid[key] = value
+		}
+		invalid[field] = "   "
+		if err := schema.Validate(invalid); err == nil {
+			t.Fatalf("schema accepted whitespace-only %s", field)
+		}
+	}
+
+	nonStock := make(map[string]any)
+	for key, value := range instance.(map[string]any) {
+		nonStock[key] = value
+	}
+	nonStock["scope"] = "market"
+	delete(nonStock, "security_id")
+	if err := schema.Validate(nonStock); err != nil {
+		t.Fatalf("schema rejected market ref without security_id: %v", err)
+	}
+
 }
 
 
@@ -253,7 +276,7 @@ func TestBuildRefRejectsBlankOrNonCanonicalMetadata(t *testing.T) {
 		{"period leading whitespace", func(v *RefInput) { v.Period = " 20d" }},
 		{"algorithm version whitespace", func(v *RefInput) { v.AlgorithmVersion = " " }},
 		{"parameter fingerprint trailing whitespace", func(v *RefInput) { v.ParameterFingerprint = "sha256:x " }},
-		{"authorization ref whitespace", func(v *RefInput) { v.AuthorizationRef = "\\t" }},
+		{"authorization ref whitespace", func(v *RefInput) { v.AuthorizationRef = "\t" }},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
