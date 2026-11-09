@@ -58,6 +58,17 @@ func lockAttemptDelivery(ctx context.Context, tx *sql.Tx, deliveryID string) (lo
 	return current, nil
 }
 
+func normalizeAttemptDatabaseTime(value time.Time) time.Time {
+	return value.UTC().Truncate(time.Microsecond)
+}
+
+func nullableAttemptDatabaseTime(value *time.Time) any {
+	if value == nil {
+		return nil
+	}
+	return normalizeAttemptDatabaseTime(*value)
+}
+
 func attemptDatabaseNow(ctx context.Context, tx *sql.Tx) (time.Time, error) {
 	var value []byte
 	if err := tx.QueryRowContext(ctx, `SELECT DATE_FORMAT(UTC_TIMESTAMP(6), '%Y-%m-%d %H:%i:%s.%f')`).Scan(&value); err != nil {
@@ -81,7 +92,7 @@ func validateAttemptLease(
 	if err != nil {
 		return time.Time{}, err
 	}
-	if !expiry.Equal(leaseExpiresAt) || !now.Before(expiry) {
+	if !expiry.Equal(normalizeAttemptDatabaseTime(leaseExpiresAt)) || !now.Before(expiry) {
 		return time.Time{}, application.ErrDeliveryLeaseConflict
 	}
 	return expiry, nil
@@ -168,7 +179,7 @@ func (r *MySQLDeliveryAttemptRepository) StartWithLease(
 		attempt_id, delivery_id, attempt_no, worker_id, fencing_token, lease_expires_at, started_at
 	) VALUES (?, ?, ?, ?, ?, ?, ?)`,
 		attempt.AttemptID, attempt.DeliveryID, attempt.AttemptNo, attempt.WorkerID,
-		attempt.FencingToken, attempt.LeaseExpiresAt.UTC(), attempt.StartedAt.UTC(),
+		attempt.FencingToken, normalizeAttemptDatabaseTime(attempt.LeaseExpiresAt), normalizeAttemptDatabaseTime(attempt.StartedAt),
 	)
 	if err != nil {
 		if isMySQLDuplicateKey(err) {
@@ -270,7 +281,7 @@ func (r *MySQLDeliveryAttemptRepository) CompleteWithLease(
 	}
 	if existingDeliveryID != completed.DeliveryID || existingAttemptNo != completed.AttemptNo ||
 		existingWorkerID != completed.WorkerID || existingFencingToken != fencingToken ||
-		!leaseExpiry.Equal(completed.LeaseExpiresAt) || !startedAt.Equal(completed.StartedAt) {
+		!leaseExpiry.Equal(normalizeAttemptDatabaseTime(completed.LeaseExpiresAt)) || !startedAt.Equal(normalizeAttemptDatabaseTime(completed.StartedAt)) {
 		return application.ErrDeliveryAttemptConflict
 	}
 	if len(finishedAt) != 0 {
