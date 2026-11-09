@@ -428,7 +428,6 @@ func TestResponsesAdapterRejectsUnsupportedStrictSchemaBeforeDispatch(t *testing
 	}
 }
 
-
 func streamAdapterTestConfig() (ProviderConfig, config.Secret, CapabilityState, Clock) {
 	provider, secret, capabilities, clock := adapterTestConfig()
 	provider.StreamEnabled = true
