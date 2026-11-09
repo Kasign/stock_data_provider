@@ -398,6 +398,48 @@ func (r *MySQLDeliveryRepository) UpdateWithLease(
 	return nil
 }
 
+
+func (r *MySQLDeliveryRepository) ListStateEvents(ctx context.Context, deliveryID string) ([]domain.DeliveryStateEvent, error) {
+	if r == nil || r.db == nil || ctx == nil || deliveryID == "" {
+		return nil, errors.New("notification storage: repository or delivery id is invalid")
+	}
+	rows, err := r.db.QueryContext(ctx, `SELECT delivery_id, version, from_status, to_status,
+		DATE_FORMAT(changed_at, '%Y-%m-%d %H:%i:%s.%f'),
+		reason_code, evidence_ref, actor_ref, request_id, actor_reason
+		FROM notification_delivery_state_events WHERE delivery_id = ? ORDER BY version ASC`, deliveryID)
+	if err != nil {
+		return nil, fmt.Errorf("notification storage: list delivery state events: %w", err)
+	}
+	defer rows.Close()
+
+	events := make([]domain.DeliveryStateEvent, 0)
+	for rows.Next() {
+		var event domain.DeliveryStateEvent
+		var fromStatus, toStatus string
+		var changedAt []byte
+		var reason, evidence, actor, request, actorReason sql.NullString
+		if err := rows.Scan(&event.DeliveryID, &event.Version, &fromStatus, &toStatus, &changedAt,
+			&reason, &evidence, &actor, &request, &actorReason); err != nil {
+			return nil, fmt.Errorf("notification storage: scan delivery state event: %w", err)
+		}
+		event.From = domain.DeliveryStatus(fromStatus)
+		event.To = domain.DeliveryStatus(toStatus)
+		if event.ChangedAt, err = parseDatabaseTime(changedAt); err != nil {
+			return nil, err
+		}
+		event.ReasonCode = nullableString(reason)
+		event.EvidenceRef = nullableString(evidence)
+		event.ActorRef = nullableString(actor)
+		event.RequestID = nullableString(request)
+		event.ActorReason = nullableString(actorReason)
+		events = append(events, event)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("notification storage: iterate delivery state events: %w", err)
+	}
+	return events, nil
+}
+
 func insertDeliveryStateEvent(ctx context.Context, tx *sql.Tx, event domain.DeliveryStateEvent) error {
 	_, err := tx.ExecContext(ctx, `INSERT INTO notification_delivery_state_events (
 		delivery_id, version, from_status, to_status, changed_at, reason_code,

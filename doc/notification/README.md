@@ -315,3 +315,11 @@ Notification 是独立通知业务模块，负责事件接收、Subscription、T
 - `sending` 允许无 Attempt（StartWithLease 前退出）、运行中 Attempt，以及 Attempt 已完成但 Delivery CAS 尚未完成的两阶段写入中间态；后者明确返回 intermediate，不误报损坏。
 - `queued` 保留人工重试和 not_sent 恢复语义；`blocked` 不凭 Attempt 快照单独推断矛盾。该评估不替代 StateEvent/Repository CAS 核验，也不执行修复写入。
 - 新增纯单元测试覆盖 sending/unknown 合法中间态与 sent/运行中 Attempt 的明确矛盾。CI 尚未验证。
+
+
+### Delivery StateEvent 历史连续性校验（2026-11-09）
+
+- 新增只读 `ValidateDeliveryStateHistory`，核验事件数量与 Delivery.version 对应关系、版本连续性、DeliveryID、From/To 状态链、事件时间单调性，以及末事件与当前快照的状态/版本/更新时间一致性。
+- 明确创建快照 `queued/version=1` 不产生初始 StateEvent；因此状态事件从 version=2 开始，不能错误要求存在 version=1 事件。
+- MySQL Repository 新增完整状态事件读取接口，按 version 升序返回，不做静默截断；事件与快照仍由现有事务原子提交，不存在合法的两阶段中间态。
+- 新增初始快照、完整链、缺失事件、版本跳号、状态链断裂、快照不一致和时间倒退测试。该校验为显式只读能力，不自动修复数据。
