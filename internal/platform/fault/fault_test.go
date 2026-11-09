@@ -28,3 +28,60 @@ func contains(value, part string) bool {
 	}
 	return false
 }
+
+func TestFaultValidateEnforcesStableMetadata(t *testing.T) {
+	tests := []struct {
+		name    string
+		fault   *Fault
+		wantErr bool
+	}{
+		{
+			name: "valid retryable dependency fault",
+			fault: &Fault{
+				Class: ClassUnavailable, Code: "news.provider.unavailable",
+				SafeMessage: "provider unavailable", Dependency: "news.provider.tavily",
+				Retryable: true,
+			},
+		},
+		{
+			name: "retryable validation fault",
+			fault: &Fault{
+				Class: ClassValidation, Code: "data.input.invalid",
+				SafeMessage: "invalid input", Retryable: true,
+			},
+			wantErr: true,
+		},
+		{
+			name: "URL dependency",
+			fault: &Fault{
+				Class: ClassUnavailable, Code: "storage.unavailable",
+				SafeMessage: "storage unavailable", Dependency: "https://db.example/path",
+			},
+			wantErr: true,
+		},
+		{
+			name: "IP dependency",
+			fault: &Fault{
+				Class: ClassUnavailable, Code: "storage.unavailable",
+				SafeMessage: "storage unavailable", Dependency: "127.0.0.1",
+			},
+			wantErr: true,
+		},
+		{
+			name: "unstable code",
+			fault: &Fault{
+				Class: ClassInternal, Code: "Internal Error",
+				SafeMessage: "operation failed",
+			},
+			wantErr: true,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			err := test.fault.Validate()
+			if (err != nil) != test.wantErr {
+				t.Fatalf("Validate() error = %v, wantErr %v", err, test.wantErr)
+			}
+		})
+	}
+}
