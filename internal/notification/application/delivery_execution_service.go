@@ -135,7 +135,7 @@ func (s *DeliveryExecutionService) Execute(
 	attempt := domain.DeliveryAttempt{
 		AttemptID: attemptID, DeliveryID: claim.Delivery.DeliveryID,
 		AttemptNo: int(claim.Delivery.AttemptCount + 1),
-		WorkerID: claim.Lease.WorkerID, FencingToken: claim.Lease.FencingToken,
+		WorkerID:  claim.Lease.WorkerID, FencingToken: claim.Lease.FencingToken,
 		LeaseExpiresAt: claim.Lease.ExpiresAt, StartedAt: startedAt,
 	}
 	if err := attempt.Validate(); err != nil {
