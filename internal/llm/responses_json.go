@@ -17,6 +17,7 @@ var (
 
 type responsesRequest struct {
 	Model           string              `json:"model"`
+	Stream          bool                `json:"stream,omitempty"`
 	Instructions    string              `json:"instructions"`
 	Input           string              `json:"input"`
 	MaxOutputTokens int                 `json:"max_output_tokens"`
@@ -58,6 +59,15 @@ func MapResponsesRequest(request ModelRequest) ([]byte, error) {
 }
 
 func MapResponsesRequestAt(request ModelRequest, now time.Time) ([]byte, error) {
+	return mapResponsesRequestAt(request, now, false)
+}
+
+// MapResponsesStreamRequestAt 将同一请求契约映射为 Responses SSE 请求。
+func MapResponsesStreamRequestAt(request ModelRequest, now time.Time) ([]byte, error) {
+	return mapResponsesRequestAt(request, now, true)
+}
+
+func mapResponsesRequestAt(request ModelRequest, now time.Time, stream bool) ([]byte, error) {
 	if err := request.ValidateAt(now); err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrInvalidResponsesRequest, err)
 	}
@@ -75,7 +85,7 @@ func MapResponsesRequestAt(request ModelRequest, now time.Time) ([]byte, error) 
 	}
 
 	wire := responsesRequest{
-		Model: request.Model, Instructions: request.Instructions,
+		Model: request.Model, Stream: stream, Instructions: request.Instructions,
 		Input: request.InputText, MaxOutputTokens: request.MaxOutputTokens,
 		Temperature: request.Temperature, TopP: request.TopP,
 		ToolChoice: request.ToolChoice,
