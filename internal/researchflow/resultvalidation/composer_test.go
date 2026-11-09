@@ -149,6 +149,16 @@ func TestComposeResultRejectsBrokenContextAndRiskReferenceClosure(t *testing.T) 
 	}
 
 	input = validCompositionInput()
+	input.Context.SectionRefs[0].Included = false
+	input.Context.IncludedSections = []string{}
+	risk = validRiskDecision()
+	risk.InputRefs = []string{"snapshot-1"}
+	input.RiskDecision = &risk
+	if _, err := ComposeResult(input, nil); !errors.Is(err, ErrInvalidResultComposition) {
+		t.Fatalf("omitted section source must not satisfy RiskDecision input, got %v", err)
+	}
+
+	input = validCompositionInput()
 	risk = validRiskDecision()
 	risk.Reasons[0].EvidenceRefs = []string{"missing-evidence"}
 	input.RiskDecision = &risk
