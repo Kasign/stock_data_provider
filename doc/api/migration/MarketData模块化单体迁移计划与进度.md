@@ -2115,3 +2115,14 @@ CI：本轮 SHA 对应 Go test suite Run `42549171549`。截至本次文档提�
 - 本批测试尚未执行；后续在 integration 集成验收中确认。
 
 **当前结论：** CT-05 的 35 Operation 参数清单已覆盖，但剩余参数语义仍需逐项审计；M0 继续 `in_progress`，M1 不准入。
+
+
+### 2026-11-09：CT-05 本轮提交后的自动工作流状态
+
+- Contract Test / OpenAPI 代码变更提交：`7915b6257336338ef8b8695a48ed4c8a2f6f53ed`。
+- GitHub Push 工作流自动触发 Go test suite Run `42551812248`。截至本次核对：`Test services/market-data`、Market Data MariaDB/PIT 集成、Compose/Docker 构建仍在运行；`Test .` 已失败在根模块 gofmt 门禁，属于合并进入该分支的其他模块范围，不据此修改 Data 之外代码。
+- WebUI checks Run `42551819436` 的单测 Job 失败，同样不属于本分支 Data 代码范围；不在 Data 分支修复。
+- 该自动工作流不是按项目约定在 `origin/integration` 执行的集成验收。当前不引用其未完成 Job 作为通过证据；后续仍以 integration 集成构建结果作为最终验收依据。
+- 当前 HEAD：`962ae41e8151a4c8ec070a725bcd3a96072be3f7`（本次之后为文档记录提交）。
+
+**结论：** 本轮 OpenAPI/Contract Test 修改尚无完整 Data CI 结论；CT-05 继续进行，M0 不准入 M1。
