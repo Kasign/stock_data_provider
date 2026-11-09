@@ -406,7 +406,7 @@ func TestResponsesAdapterRejectsUnsupportedStrictSchemaBeforeDispatch(t *testing
 	request.ProviderID = provider.ProviderID
 	request.ResponseSchema = &JSONSchemaSpec{
 		Name: "summary", Strict: true,
-		SchemaJSON: json.RawMessage(`{"type":"object","properties":{},"required":[],"additionalProperties":false,"allOf":[]}`),
+		SchemaJSON: json.RawMessage(`{"type":"object","properties":{},"required":[],"additionalProperties":false,"allOf":[{"type":"object","properties":{},"required":[],"additionalProperties":false}]}`),
 	}
 	dispatched := false
 	adapter, err := NewResponsesAdapter(provider, secret, doerFunc(func(*http.Request) (*http.Response, error) {

@@ -38,7 +38,7 @@ func TestValidateResponsesStrictSchemaSubsetRejectsUnsupportedFeatures(t *testin
 		},
 		{
 			name:   "allOf",
-			schema: `{"type":"object","properties":{},"required":[],"additionalProperties":false,"allOf":[]}`,
+			schema: `{"type":"object","properties":{},"required":[],"additionalProperties":false,"allOf":[{"type":"object","properties":{},"required":[],"additionalProperties":false}]}`,
 		},
 		{
 			name:   "missing required property",
@@ -79,7 +79,7 @@ func TestMapResponsesRequestRejectsUnsupportedStrictSchemaButAllowsLocalValidati
 	request := validResponsesRequest()
 	request.ResponseSchema = &JSONSchemaSpec{
 		Name: "summary", Strict: true,
-		SchemaJSON: json.RawMessage(`{"type":"object","properties":{},"required":[],"additionalProperties":false,"allOf":[]}`),
+		SchemaJSON: json.RawMessage(`{"type":"object","properties":{},"required":[],"additionalProperties":false,"allOf":[{"type":"object","properties":{},"required":[],"additionalProperties":false}]}`),
 	}
 	if _, err := MapResponsesRequest(request); !errors.Is(err, ErrUnsupportedResponsesSchemaSubset) {
 		t.Fatalf("unsupported upstream schema must be rejected: %v", err)
@@ -95,7 +95,7 @@ func TestMapResponsesRequestRejectsUnsupportedStrictToolSchema(t *testing.T) {
 	request := validResponsesRequest()
 	request.Tools = []ToolDefinition{{
 		Name: "lookup_quote", Strict: true,
-		ParametersJSON: json.RawMessage(`{"type":"object","properties":{},"required":[],"additionalProperties":false,"allOf":[]}`),
+		ParametersJSON: json.RawMessage(`{"type":"object","properties":{},"required":[],"additionalProperties":false,"allOf":[{"type":"object","properties":{},"required":[],"additionalProperties":false}]}`),
 	}}
 	if _, err := MapResponsesRequest(request); !errors.Is(err, ErrUnsupportedResponsesSchemaSubset) {
 		t.Fatalf("unsupported strict tool schema must be rejected: %v", err)
