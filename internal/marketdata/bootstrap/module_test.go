@@ -112,12 +112,11 @@ func TestNewRejectsUnknownProvider(t *testing.T) {
 	}
 }
 
-
 type typedNilCache struct{}
 
-func (*typedNilCache) Get(context.Context, string) ([]byte, bool, error) { return nil, false, nil }
+func (*typedNilCache) Get(context.Context, string) ([]byte, bool, error)        { return nil, false, nil }
 func (*typedNilCache) Set(context.Context, string, []byte, time.Duration) error { return nil }
-func (*typedNilCache) Ping(context.Context) error { return nil }
+func (*typedNilCache) Ping(context.Context) error                               { return nil }
 
 func TestNewRejectsTypedNilCacheWhenRedisIsConfigured(t *testing.T) {
 	cfg := testConfig()
