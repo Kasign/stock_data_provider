@@ -598,7 +598,7 @@ Server 层完成不是“服务能够启动”这么简单。至少同时满足�
 | SRV-003 | 进行中 | DB、Redis、HTTP Client 已由 Resources 统一创建和关闭；后续接入模块资源注入与诊断贡献项 |
 | SRV-004 | 阻塞 | 已复核模块接入面；Researchflow/Quant/LLM/Notification 缺少完整生产装配入口，News/Research 也有关键查询/授权接入缺口；详见 12.6 节 |
 | SRV-005 | 进行中 | 已接入 Platform Bearer Owner 认证；Web Session/密码登录、CSRF、登录限流、模块 Service Scope、统一 Fault 映射和可信代理边界仍待契约与实现；现有 WebUI 尚未携带 Analysis Owner 凭证，不能视为浏览器认证链路已完成 |
-| SRV-006 | 进行中 | SERVER_ROLE=api|worker|all 已控制旧 Analysis Worker 与 HTTP API；统一 Lifecycle 已接入旧 Worker 并覆盖顺序启停、启动失败回滚、幂等停止；HTTP Server 纳入统一生命周期、模块 Worker 接入和完整 SIGTERM 集成测试仍待完成 |
+| SRV-006 | 进行中 | 旧 Analysis Worker 与 HTTP Server 均已纳入统一 Lifecycle；HTTP Listener 在 Start 阶段同步绑定，Readiness 在 HTTP Shutdown 前切换为 not-ready，Shutdown 超时后强制 Close；模块 Worker 接入和真实进程 SIGTERM 集成测试仍待完成 |
 | SRV-007 | 进行中 | 已建立 Server Migration Registry，并注册 News/Research/Notification；显式配置执行；其他模块 Migration 和 MariaDB 集成验收待完成，详见 12.7 节 |
 | SRV-008 | 待契约 | Dispatcher 所有权未冻结 |
 | SRV-009 | 进行中 | 已实现 Platform Runner 聚合、严格 Readiness 判定及 MariaDB/Redis 资源检查；尚待 Transport 暴露和真实依赖集成验收，详见 12.8 节 |
@@ -733,3 +733,28 @@ Server 层完成不是“服务能够启动”这么简单。至少同时满足�
 - Required Check 任何非 healthy 状态均不得 Ready；Optional Check 异常保留诊断结果但按策略不阻断 Ready。
 - 所有共享资源在消费者停止后关闭；启动失败必须逆序回滚；关闭错误必须汇总且不能跳过其他组件。
 - 对外业务 API 必须有显式认证授权策略；网络隔离只是纵深防御，不替代应用认证。
+
+
+### 12.14 SRV-006 HTTP Server 纳入统一生命周期（2026-11-09）
+
+#### 实施内容
+
+- 新增 `httpServerComponent` 并实现 `runtime.Component`；Listener 在 Start 阶段同步创建，端口占用等绑定错误直接导致启动失败。
+- HTTP Server 注册在旧 Analysis Worker 之后，逆序关闭时先停止 HTTP 接入，再停止 Worker；Storage 在 Lifecycle 停止后关闭，保证在途请求和 Worker 退出时 DB/Redis 仍可用。
+- Stop 首先调用 Health Handler 的 `MarkDraining`，Readiness 立即返回 503；随后调用 `http.Server.Shutdown` 停止接收新连接并等待在途请求。
+- Shutdown 超时或失败时执行 `http.Server.Close` 强制释放连接，并汇总关闭错误；Serve 非预期退出通过 Done 通知 Bootstrap。
+- Lifecycle Stop 使用 `HTTP_SHUTDOWN_TIMEOUT`；Worker-only 角色使用 10 秒默认关闭预算。
+- `/healthz` 语义不变；draining 状态下 Readiness 不再调用依赖诊断 Runner。
+
+#### 新增验收覆盖
+
+- Listener 地址占用时 Start 同步失败。
+- 在途请求未结束时 Stop 不提前返回；Readiness 先降级，再等待请求完成。
+- Shutdown 超时触发强制 Close 并返回关闭错误。
+- Readiness draining 状态返回 503，且不调用依赖诊断 Runner。
+
+#### 未完成门禁
+
+- 本批次新增测试尚未在当前执行环境运行；由当前分支 Go Workflow 验证编译、竞态及包测试。
+- 当前覆盖组件级取消/Stop 路径，尚未启动独立子进程并发送真实 SIGTERM；真实进程信号和生产容器退出验收仍待 L2/L3。
+- 模块 Worker 尚未全部具备公开生产装配入口，继续按模块交付状态逐个接入，不注册占位组件。

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"net/http"
 	"time"
+	"sync/atomic"
 
 	serverdiagnostics "example.com/stock-analysis-flow/internal/server/diagnostics"
 )
@@ -17,6 +18,7 @@ type readinessChecker interface {
 
 type Handler struct {
 	checker readinessChecker
+	draining atomic.Bool
 }
 
 func NewHandler(checker readinessChecker) (*Handler, error) {
@@ -24,6 +26,11 @@ func NewHandler(checker readinessChecker) (*Handler, error) {
 		return nil, errors.New("readiness checker is required")
 	}
 	return &Handler{checker: checker}, nil
+}
+
+// MarkDraining 在关闭 HTTP Listener 前立即撤销 Readiness。
+func (h *Handler) MarkDraining() {
+	h.draining.Store(true)
 }
 
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -39,6 +46,12 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case "/healthz":
 		writeJSON(w, r, http.StatusOK, map[string]any{"status": "ok", "time": time.Now().UTC()})
 	case "/readyz":
+		if h.draining.Load() {
+			writeJSON(w, r, http.StatusServiceUnavailable, map[string]any{
+				"error": map[string]string{"code": "server_draining", "message": "server is shutting down"},
+			})
+			return
+		}
 		report, err := h.checker.Run(r.Context())
 		if err != nil || !report.Readiness.Ready {
 			writeJSON(w, r, http.StatusServiceUnavailable, map[string]any{

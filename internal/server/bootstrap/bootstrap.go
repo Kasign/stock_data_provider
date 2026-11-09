@@ -133,74 +133,67 @@ func Run(ctx context.Context) error {
 	if err := lifecycle.Register(legacyAnalysisWorker{name: "legacy-analysis-worker", queue: tasks, enabled: serverRole == serverconfig.RoleWorker || serverRole == serverconfig.RoleAll}); err != nil {
 		return fmt.Errorf("注册旧 Analysis Worker 生命周期失败: %w", err)
 	}
+	var httpComponent *httpServerComponent
+	if serverRole != serverconfig.RoleWorker {
+		api, err := httpapi.NewWithTasks(runner, store, analysisTimeout, tasks)
+		if err != nil {
+			return fmt.Errorf("创建旧 Analysis HTTP API 失败: %w", err)
+		}
+		diagnosticsService, err := serverdiagnostics.NewService(storageResources)
+		if err != nil {
+			return fmt.Errorf("创建 Server 诊断服务失败: %w", err)
+		}
+		healthHandler, err := serverhealth.NewHandler(diagnosticsService)
+		if err != nil {
+			return fmt.Errorf("创建 Health/Readiness Handler 失败: %w", err)
+		}
+		handler, err := newHTTPHandler(authenticator, healthHandler, api.Handler())
+		if err != nil {
+			return fmt.Errorf("注册 HTTP 路由失败: %w", err)
+		}
+		server := &http.Server{
+			Addr:              httpConfig.Address,
+			Handler:           handler,
+			ReadHeaderTimeout: httpConfig.ReadHeaderTimeout,
+			ReadTimeout:       httpConfig.ReadTimeout,
+			WriteTimeout:      httpConfig.WriteTimeout,
+			IdleTimeout:       httpConfig.IdleTimeout,
+		}
+		httpComponent, err = newHTTPServerComponent(server, httpConfig.Address, healthHandler)
+		if err != nil {
+			return fmt.Errorf("创建 HTTP 生命周期组件失败: %w", err)
+		}
+		if err := lifecycle.Register(httpComponent); err != nil {
+			return fmt.Errorf("注册 HTTP Server 生命周期失败: %w", err)
+		}
+	}
+
+	shutdownTimeout := 10 * time.Second
+	if httpComponent != nil {
+		shutdownTimeout = httpConfig.ShutdownTimeout
+	}
 	defer func() {
-		if err := lifecycle.Stop(context.Background()); err != nil {
+		stopCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
+		defer cancel()
+		if err := lifecycle.Stop(stopCtx); err != nil {
 			slog.Warn("停止 Server 运行组件失败", "error", err.Error())
 		}
 	}()
+
 	if err := lifecycle.Start(ctx); err != nil {
 		return fmt.Errorf("启动 Server 运行组件失败: %w", err)
 	}
-
 	if serverRole == serverconfig.RoleWorker {
 		slog.Info("股票分析 Worker 已启动", "service", "stock-analysis-worker", "role", serverRole)
 		<-ctx.Done()
 		return nil
 	}
 
-	api, err := httpapi.NewWithTasks(runner, store, analysisTimeout, tasks)
-	if err != nil {
-		return fmt.Errorf("创建旧 Analysis HTTP API 失败: %w", err)
-	}
-	diagnosticsService, err := serverdiagnostics.NewService(storageResources)
-	if err != nil {
-		return fmt.Errorf("创建 Server 诊断服务失败: %w", err)
-	}
-	healthHandler, err := serverhealth.NewHandler(diagnosticsService)
-	if err != nil {
-		return fmt.Errorf("创建 Health/Readiness Handler 失败: %w", err)
-	}
-	handler, err := newHTTPHandler(authenticator, healthHandler, api.Handler())
-	if err != nil {
-		return fmt.Errorf("注册 HTTP 路由失败: %w", err)
-	}
-
-	server := &http.Server{
-		Addr:              httpConfig.Address,
-		Handler:           handler,
-		ReadHeaderTimeout: httpConfig.ReadHeaderTimeout,
-		ReadTimeout:       httpConfig.ReadTimeout,
-		WriteTimeout:      httpConfig.WriteTimeout,
-		IdleTimeout:       httpConfig.IdleTimeout,
-	}
-
-	serveErr := make(chan error, 1)
-	go func() {
-		slog.Info("股票分析 Go API 已启动",
-			"service", "stock-analysis-api",
-			"addr", httpConfig.Address,
-			"market_data_base_url", marketDataCfg.BaseURL,
-			"db_auto_migrate", storageCfg.DBAutoMigrate)
-		serveErr <- server.ListenAndServe()
-	}()
-
 	select {
-	case err := <-serveErr:
-		if errors.Is(err, http.ErrServerClosed) {
-			return nil
-		}
-		return fmt.Errorf("HTTP 服务异常退出: %w", err)
 	case <-ctx.Done():
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), httpConfig.ShutdownTimeout)
-		defer cancel()
-		if err := server.Shutdown(shutdownCtx); err != nil {
-			_ = server.Close()
-			return fmt.Errorf("HTTP 服务优雅关闭失败: %w", err)
-		}
-		if err := <-serveErr; err != nil && !errors.Is(err, http.ErrServerClosed) {
-			return fmt.Errorf("HTTP 服务停止时返回错误: %w", err)
-		}
 		return nil
+	case <-httpComponent.Done():
+		return httpComponent.Result()
 	}
 }
 

@@ -111,3 +111,20 @@ func TestReadyzPreservesExistingResponseShapeWhenReady(t *testing.T) {
 		t.Fatalf("unexpected readiness response: %s", response.Body.String())
 	}
 }
+
+func TestReadyzFailsImmediatelyWhenDraining(t *testing.T) {
+	checker := &fakeReadinessChecker{report: serverdiagnostics.Report{Readiness: serverdiagnostics.Readiness{Ready: true}}}
+	handler, err := NewHandler(checker)
+	if err != nil {
+		t.Fatalf("NewHandler() error = %v", err)
+	}
+	handler.MarkDraining()
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/readyz", nil))
+	if response.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, want %d", response.Code, http.StatusServiceUnavailable)
+	}
+	if checker.calls != 0 {
+		t.Fatalf("readiness checker calls = %d, want 0", checker.calls)
+	}
+}
