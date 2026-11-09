@@ -213,6 +213,7 @@ func TestResearchSQLRepositoriesAppendAndReadVersions(t *testing.T) {
 	eventID := "event-it-" + suffix
 	claimID := "claim-it-" + suffix
 	evidenceID := "evidence-it-" + suffix
+	concurrentEvidenceID := "evidence-concurrent-it-" + suffix
 	cancelledContextID := "ctx-cancel-it-" + suffix
 	orphanContextID := "ctx-orphan-it-" + suffix
 	lockedContextID := "ctx-lock-cancel-it-" + suffix
@@ -221,7 +222,7 @@ func TestResearchSQLRepositoriesAppendAndReadVersions(t *testing.T) {
 		_, _ = db.ExecContext(context.Background(), "DELETE FROM research_context_versions WHERE context_id IN (?, ?, ?)", contextID, orphanContextID, lockedContextID)
 		_, _ = db.ExecContext(context.Background(), "DELETE FROM research_event_versions WHERE event_id=?", eventID)
 		_, _ = db.ExecContext(context.Background(), "DELETE FROM research_claim_versions WHERE claim_id=?", claimID)
-		_, _ = db.ExecContext(context.Background(), "DELETE FROM research_evidence_records WHERE evidence_id=?", evidenceID)
+		_, _ = db.ExecContext(context.Background(), "DELETE FROM research_evidence_records WHERE evidence_id IN (?, ?)", evidenceID, concurrentEvidenceID)
 		_, _ = db.ExecContext(context.Background(), "DELETE FROM research_aggregate_heads WHERE aggregate_id IN (?, ?, ?, ?, ?, ?)", contextID, eventID, claimID, cancelledContextID, orphanContextID, lockedContextID)
 	})
 
@@ -572,6 +573,53 @@ func TestResearchSQLRepositoriesAppendAndReadVersions(t *testing.T) {
 	if err := evidenceRepo.Append(ctx, evidenceV1); err != nil {
 		t.Fatalf("append Evidence: %v", err)
 	}
+
+	// Two writers with different immutable authorization snapshots must not
+	// overwrite each other when they race to create the same Evidence ID.
+	concurrentEvidence := evidenceV1
+	concurrentEvidence.EvidenceID = concurrentEvidenceID
+	concurrentEvidence.ContentFingerprint, err = concurrentEvidence.ComputeContentFingerprint()
+	if err != nil {
+		t.Fatalf("compute concurrent Evidence fingerprint: %v", err)
+	}
+	competingEvidence := concurrentEvidence
+	competingEvidence.AuthorizationRef = "auth-integration-competing"
+	writeErrors := make(chan error, 2)
+	var writers sync.WaitGroup
+	writers.Add(2)
+	go func() {
+		defer writers.Done()
+		writeErrors <- evidenceRepo.Append(ctx, concurrentEvidence)
+	}()
+	go func() {
+		defer writers.Done()
+		writeErrors <- evidenceRepo.Append(ctx, competingEvidence)
+	}()
+	writers.Wait()
+	close(writeErrors)
+	successes, conflicts := 0, 0
+	for writeErr := range writeErrors {
+		switch {
+		case writeErr == nil:
+			successes++
+		case errors.Is(writeErr, ErrConflict):
+			conflicts++
+		default:
+			t.Fatalf("concurrent Evidence append returned unexpected error: %v", writeErr)
+		}
+	}
+	if successes != 1 || conflicts != 1 {
+		t.Fatalf("concurrent Evidence append results: successes=%d conflicts=%d, want 1/1", successes, conflicts)
+	}
+	storedConcurrent, err := evidenceRepo.Get(ctx, concurrentEvidenceID)
+	if err != nil {
+		t.Fatalf("read winning concurrent Evidence: %v", err)
+	}
+	if storedConcurrent.AuthorizationRef != concurrentEvidence.AuthorizationRef &&
+		storedConcurrent.AuthorizationRef != competingEvidence.AuthorizationRef {
+		t.Fatalf("stored concurrent authorization_ref = %q, not either submitted snapshot", storedConcurrent.AuthorizationRef)
+	}
+
 	assertResearchPITColumn(t, ctx, db, "SELECT system_as_of FROM research_evidence_records WHERE evidence_id=?", []any{evidenceID}, cutoff)
 	assertResearchPITColumn(t, ctx, db, "SELECT system_observed_at FROM research_evidence_records WHERE evidence_id=?", []any{evidenceID}, cutoff)
 	assertResearchPITColumn(t, ctx, db, "SELECT available_at FROM research_evidence_records WHERE evidence_id=?", []any{evidenceID}, availableAt)
