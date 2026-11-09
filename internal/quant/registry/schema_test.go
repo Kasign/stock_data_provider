@@ -94,7 +94,6 @@ func TestIndicatorParameterSchemaEnforcesWindowAndAnnualizationBounds(t *testing
 		}
 	}
 }
-}
 
 func TestCompileJSONSchemaRejectsUnsupportedDraftAndExternalReferences(t *testing.T) {
 	cases := []string{
