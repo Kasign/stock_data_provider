@@ -224,7 +224,7 @@ func StorageChecks(probe StorageProbe) []platformdiag.Check {
 				}
 				return platformdiag.Observation{
 					Status: platformdiag.StatusHealthy, SafeMessage: "News storage schema is ready",
-					CheckedAt: time.Now().UTC(), Attributes: map[string]string{"required_tables": "7"},
+					CheckedAt: time.Now().UTC(), Attributes: map[string]string{"required_tables": "10"},
 				}, nil
 			},
 		},
