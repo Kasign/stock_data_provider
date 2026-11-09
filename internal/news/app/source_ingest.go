@@ -88,6 +88,7 @@ func (u *IngestCollectedSource) Execute(ctx context.Context, request IngestColle
 	trace := ObservationPolicyTrace{
 		SourcePolicyVersionID: result.SourcePolicyVersionID,
 		PolicyEvaluatedAt:     result.PolicyEvaluatedAt.UTC(),
+		Retention:             request.Retention,
 	}
 	if registration.EndpointPolicy != nil {
 		trace.EndpointID = endpointID
