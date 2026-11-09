@@ -228,3 +228,57 @@ func TestResolveRejectsApplicableStageDependingOnSkippedOptionalStage(t *testing
 		t.Fatalf("applicable Stage depending on skipped optional Stage must fail closed, got %v", err)
 	}
 }
+
+func TestResolveSnapshotOwnsCanonicalStageDefinitionSlices(t *testing.T) {
+	tmpl := testTemplate()
+	tmpl.Stages[1].Dependencies = []string{"market"}
+	tmpl.Stages[1].Retry.RetryableReasonCodes = []string{"z_provider_error", "a_provider_error"}
+	tmpl.Stages = append(tmpl.Stages, StageDefinition{
+		Code: "optional_news", Required: false,
+		Dependencies: []string{"summary", "market"},
+		Applicability: ApplicabilityRule{RuleRef: "optional-news", RuleVersion: "v3"},
+		Retry: testRetry(), Propagation: testPolicy(),
+	})
+
+	resolved, err := Resolve(context.Background(), tmpl, json.RawMessage(`{}`), testParameterSchemas{}, testEvaluator{
+		"always": true,
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var summary, skipped *ResolvedStage
+	for i := range resolved.Stages {
+		switch resolved.Stages[i].Definition.Code {
+		case "summary":
+			summary = &resolved.Stages[i]
+		case "optional_news":
+			skipped = &resolved.Stages[i]
+		}
+	}
+	if summary == nil || skipped == nil {
+		t.Fatalf("expected summary and optional skipped stages, got %#v", resolved.Stages)
+	}
+	if got := summary.Definition.Retry.RetryableReasonCodes; len(got) != 2 || got[0] != "a_provider_error" || got[1] != "z_provider_error" {
+		t.Fatalf("retry reason codes are not canonical: %#v", got)
+	}
+	if got := skipped.Definition.Dependencies; len(got) != 2 || got[0] != "market" || got[1] != "summary" {
+		t.Fatalf("skipped stage definition dependencies are not canonical: %#v", got)
+	}
+	if len(skipped.Dependencies) != 0 {
+		t.Fatalf("skipped stage must not carry executable dependencies: %#v", skipped.Dependencies)
+	}
+
+	// Mutating the registry-owned template after resolution must not mutate the
+	// resolved execution snapshot that will later be persisted with the Run.
+	tmpl.Stages[1].Dependencies[0] = "mutated"
+	tmpl.Stages[1].Retry.RetryableReasonCodes[0] = "mutated"
+	tmpl.Stages[2].Dependencies[0] = "mutated"
+	if summary.Definition.Dependencies[0] != "market" ||
+		summary.Definition.Retry.RetryableReasonCodes[0] != "a_provider_error" {
+		t.Fatalf("resolved active stage changed after source template mutation: %#v", summary.Definition)
+	}
+	if skipped.Definition.Dependencies[0] != "market" {
+		t.Fatalf("resolved skipped stage changed after source template mutation: %#v", skipped.Definition)
+	}
+}
