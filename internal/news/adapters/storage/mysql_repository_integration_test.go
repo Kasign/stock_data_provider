@@ -816,12 +816,13 @@ func TestObservationRetentionPurgeIntegration(t *testing.T) {
 
 	// 用数据库触发器在载荷 UPDATE 阶段注入失败，验证清理事务不会留下半成品。
 	rollbackObservation := domain.Observation{
-		ID: fmt.Sprintf("news-retention-rollback-%d", time.Now().UnixNano()),
-		IdempotencyKey: fmt.Sprintf("news-retention-rollback-key-%d", time.Now().UnixNano()),
-		SourceID: "news-retention-integration",
-		Candidate: domain.Candidate{SourceItemID: "retention-rollback-item", Title: "must survive rollback"},
-		ObservedAt: now.Add(-2 * time.Hour), RetentionUntil: now.Add(-time.Hour),
-		IdentityStatus: domain.ObservationUnidentified,
+		ID:              fmt.Sprintf("news-retention-rollback-%d", time.Now().UnixNano()),
+		IdempotencyKey:  fmt.Sprintf("news-retention-rollback-key-%d", time.Now().UnixNano()),
+		SourceID:        "news-retention-integration",
+		Candidate:       domain.Candidate{SourceItemID: "retention-rollback-item", Title: "must survive rollback"},
+		ObservedAt:      now.Add(-2 * time.Hour),
+		RetentionUntil:  now.Add(-time.Hour),
+		IdentityStatus:  domain.ObservationUnidentified,
 	}
 	if err := repository.WithinIdentityTransaction(ctx, func(tx app.IdentityTransaction) error {
 		_, err := tx.AppendObservation(ctx, rollbackObservation)
@@ -844,7 +845,10 @@ func TestObservationRetentionPurgeIntegration(t *testing.T) {
 	}
 	var rollbackCandidateJSON []byte
 	var rollbackPurgedAt sql.NullTime
-	if err := db.QueryRowContext(ctx, "SELECT candidate_json, payload_purged_at FROM news_observations WHERE observation_id = ?", rollbackObservation.ID).Scan(&rollbackCandidateJSON, &rollbackPurgedAt); err != nil {
+	if err := db.QueryRowContext(ctx,
+		"SELECT candidate_json, payload_purged_at FROM news_observations WHERE observation_id = ?",
+		rollbackObservation.ID,
+	).Scan(&rollbackCandidateJSON, &rollbackPurgedAt); err != nil {
 		t.Fatalf("read rollback observation after failed purge: %v", err)
 	}
 	var rollbackCandidate domain.Candidate

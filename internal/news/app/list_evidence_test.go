@@ -202,7 +202,10 @@ func TestListEvidenceStopsResolvingItemsWhenContextIsCanceled(t *testing.T) {
 		},
 		afterRead: cancel,
 	}
-	usecase, _ := NewListEvidence(evidenceSnapshotPageReaderStub{page:page}, reader)
+	usecase, err := NewListEvidence(evidenceSnapshotPageReaderStub{page: page}, reader)
+	if err != nil {
+		t.Fatal(err)
+	}
 	usecase.now = func() time.Time { return now }
 	if _, err := usecase.Execute(ctx, request); !errors.Is(err, context.Canceled) {
 		t.Fatalf("Execute() error = %v, want context.Canceled", err)
