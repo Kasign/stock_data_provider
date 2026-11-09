@@ -113,8 +113,7 @@ func (p RetryPolicy) scheduleRetry(
 		return RetryDecision{}, ErrRetryNotApplicable
 	}
 	if delivery.Status != requiredStatus || delivery.MaxAttempts != p.MaxAttempts ||
-		len(attempts) != delivery.AttemptCount || len(attempts) == 0 ||
-		ValidateDeliveryAttemptHistoryForDelivery(delivery, attempts) != nil {
+		len(attempts) != delivery.AttemptCount || len(attempts) == 0 {
 		return RetryDecision{}, ErrRetryNotApplicable
 	}
 

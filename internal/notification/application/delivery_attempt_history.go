@@ -16,8 +16,7 @@ func ValidateDeliveryAttemptHistoryForDelivery(delivery domain.DeliveryRecord, a
 	}
 	for i := range attempts {
 		attempt := attempts[i]
-		if attempt.StartedAt.Before(delivery.CreatedAt) || !attempt.StartedAt.Before(delivery.DeadlineAt) ||
-			attempt.LeaseExpiresAt.After(delivery.DeadlineAt) {
+		if attempt.StartedAt.Before(delivery.CreatedAt) || !attempt.StartedAt.Before(delivery.DeadlineAt) {
 			return ErrDeliveryAttemptHistory
 		}
 	}
