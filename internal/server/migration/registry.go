@@ -155,7 +155,6 @@ func (r *Registry) RunWithReport(ctx context.Context, db *sql.DB) (RunReport, er
 	return finish(nil)
 }
 
-
 // ValidateApplied performs a read-only check that every registered migration
 // version is present and marked applied. It never creates or changes history.
 // Checksum verification remains owned by Platform's migration runner.
@@ -230,7 +229,6 @@ func validateAppliedVersions(expected []platformstorage.Migration, applied map[u
 	}
 	return nil
 }
-
 
 // migrationFailureDetails converts internal migration failures to stable,
 // non-sensitive diagnostics and marks cases that require operator inspection.
