@@ -243,7 +243,6 @@ func validateUniqueStrings(name string, values []string) error {
 	return nil
 }
 
-
 // ValidateNextVersion verifies immutable Context version progression.
 // It checks only version-chain invariants; referenced resources and their
 // current authorization remain the responsibility of their owning modules.
@@ -271,7 +270,6 @@ func (next Context) ValidateNextVersion(previous Context) error {
 	}
 	return nil
 }
-
 
 func isUTC(value time.Time) bool {
 	return value.Location() == time.UTC
