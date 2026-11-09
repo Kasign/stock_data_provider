@@ -39,7 +39,7 @@
 
 ## 3. CapabilityState
 
-使用 supported / unsupported / unknown 三态，默认 unknown。
+使用 supported / unsupported / unknown 三态，默认 unknown。`values` 中未出现的能力键（包括整个 `values` 缺失）均按 unknown 处理；只有显式记录且证据有效的 supported 才能放行。
 
 首批能力键：responses_json、responses_stream、structured_output_json_schema、structured_output_advanced_constraints、function_tool_calls、reasoning_effort、sampling_parameters、usage_details。temperature/top_p 仅在 sampling_parameters=supported 时发送；发送上游 Schema/Function Tool 参数 Schema 使用高级约束时，还必须有当前版本的 structured_output_advanced_constraints=supported 证据。
 
@@ -148,6 +148,13 @@ Usage 是计量信息，不是输出质量证明；缺失、0 和 unknown 必须
 - 非流式响应缺少 status 或 output 结构异常时，不自动判为 completed。
 - Tool Call 输出不能等同于文本回答完成；必须作为 output item 独立返回。
 
+### 5.3 条件必需字段
+
+- status=completed：response_id 必须存在；output_items 必须是数组，允许为空数组。
+- status=incomplete：保留 incomplete_reason；若上游给出 incomplete_details.reason 则必须透传。
+- status=failed：error 必须存在，且只包含稳定错误码与安全摘要。
+- response_id、model_actual、gateway_request_id 在上游未提供时可空；但 completed 不允许缺 response_id，也不得从 request_id 伪造。
+
 ### 5.4 OutputItem / ContentPart / ModelToolCall
 
 | 对象 | 字段 | 类型 | 约束 |
@@ -169,13 +176,6 @@ Usage 是计量信息，不是输出质量证明；缺失、0 和 unknown 必须
 | ModelToolCall | status | string? | 上游 function_call 状态 |
 
 未知 OutputItem/ContentPart 必须保留 type 与有界安全元数据；不能把未知内容丢弃后仍报告完整成功。ToolCall arguments_json 需在 Researchflow 的 Tool Registry/Schema 下重新验证。
-
-### 5.3 条件必需字段
-
-- status=completed：response_id 必须存在；output_items 必须是数组，允许为空数组。
-- status=incomplete：保留 incomplete_reason；若上游给出 incomplete_details.reason 则必须透传。
-- status=failed：error 必须存在，且只包含稳定错误码与安全摘要。
-- response_id、model_actual、gateway_request_id 在上游未提供时可空；但 completed 不允许缺 response_id，也不得从 request_id 伪造。
 
 ## 6. Stream Port 与事件
 
@@ -319,7 +319,7 @@ ResponsesAdapter 只依赖窄 HTTPDoer，并且构造时必须注入 `Clock`。�
 ParseResponsesSSE([]byte, ...) 是 Golden/Fixture 入口，委托给 ParseResponsesSSEReader(io.Reader, ...)；Reader 版本按行增量扫描，在总字节、单行、单事件和事件数量上限内同步调用 callback。读取错误原样返回给 Adapter，由其区分 Platform Fault 与协议错误；callback 错误原样返回并保留部分 Response。真实 Stream 只允许消费 Platform BoundDoer.OpenStream 返回的受控 Body，不能自行创建 http.Client 或直接接入未受控的 http.Response.Body。
 
 
-## Responses Structured Outputs strict 子集契约
+## 13. Responses Structured Outputs strict 子集契约
 
 本地 JSON Schema 语义基线仍为 Draft 2020-12，但上游 Responses `strict: true` 仅接受官方文档定义的子集。Adapter 必须在发送前拒绝不支持的 Schema，不能删除关键字后继续发送。
 
@@ -333,7 +333,7 @@ ParseResponsesSSE([]byte, ...) 是 Golden/Fixture 入口，委托给 ParseRespon
 - `local_validation_only=true` 不向上游发送 Schema，允许使用完整本地 Draft 2020-12；但不代表模型受约束生成。
 - 官方依据：https://developers.openai.com/api/docs/guides/structured-outputs
 
-### 12.3 上游 Schema 高级约束的模型级能力证据
+### 13.1 上游 Schema 高级约束的模型级能力证据
 
 Responses 文档指出，部分高级约束在 fine-tuned 模型上支持范围更窄。LLM 不得仅凭模型支持基础 Structured Output 就推断所有约束均可用。
 
@@ -343,7 +343,7 @@ Responses 文档指出，部分高级约束在 fine-tuned 模型上支持范围�
 - `local_validation_only=true` 不向上游发送 Response Schema，因此不要求该能力；Function Tool Schema 仍按上游 strict 能力检查。
 - 未验证或过期一律视为 unknown 并拒绝派发；不自动删除约束降级。
 
-### 12.4 Usage 明细一致性诊断
+### 13.2 Usage 明细一致性诊断
 
 Usage 上游值保留原值和来源，但缓存/推理明细需要做范围诊断：
 
