@@ -143,7 +143,6 @@ func (r *MySQLRunRepository) ConfirmAttemptCancellation(
 	return true, nil
 }
 
-
 // FenceExpiredCancellationAttempt closes an in-flight Attempt after its lease
 // expires while the Run is cancelling. The Attempt is recorded timed_out,
 // while its Stage is cancelled by the user request; the fencing generation is
