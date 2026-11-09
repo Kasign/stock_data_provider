@@ -1470,13 +1470,17 @@ func (p *Hithink) FetchValuations(ctx context.Context, rawSymbols []string) (*mo
 			{key: "pcf_ttm", value: &pcft},
 		}
 		for _, field := range metricFields {
+			rawValue := row[field.key]
 			*field.value = hithinkFieldNumber(row, field.key)
 			if *field.value == nil {
 				metricIssue = true
-				reason := "valuation_metric_missing:" + field.key
-				if hithinkValuationMetricInputInvalid(row[field.key]) {
-					reason = "valuation_metric_invalid:" + field.key
+				code, reason := "missing_value", "valuation_metric_missing:"+field.key
+				if hithinkValuationMetricInputInvalid(rawValue) {
+					code, reason = "invalid_number", "valuation_metric_invalid:"+field.key
 				}
+				actualType := providerJSONValueType(rawValue)
+				addProviderFieldParseIssue(ctx, symbol, field.key, field.key, code,
+					"finite number or numeric string", actualType, string(rawValue), rowIndex)
 				itemReasons = append(itemReasons, reason)
 			}
 		}
@@ -1887,7 +1891,7 @@ func (p *Hithink) FetchFundamentals(ctx context.Context, rawSymbol string, year,
 				if len(item.IndexID) == 0 || strings.TrimSpace(string(item.IndexID)) == "" || strings.TrimSpace(string(item.IndexID)) == "null" {
 					code = "missing_field"
 				}
-				addFundamentalParseIssue(ctx, symbol, "metric_key", "index_id", code, "non-empty string", fundamentalJSONValueType(item.IndexID), string(item.IndexID), rowIndex)
+				addProviderFieldParseIssue(ctx, symbol, "metric_key", "index_id", code, "non-empty string", providerJSONValueType(item.IndexID), string(item.IndexID), rowIndex)
 				continue
 			}
 			indexID = strings.TrimSpace(indexID)
@@ -1900,11 +1904,11 @@ func (p *Hithink) FetchFundamentals(ctx context.Context, rawSymbol string, year,
 			if !ok {
 				invalidValueCount++
 				code := "invalid_number"
-				actualType := fundamentalJSONValueType(item.Value)
+				actualType := providerJSONValueType(item.Value)
 				if actualType == "missing" || actualType == "null" || (actualType == "string" && strings.TrimSpace(strings.Trim(string(item.Value), "\"")) == "") {
 					code = "missing_value"
 				}
-				addFundamentalParseIssue(ctx, symbol, indexID, "value", code, "finite number or numeric string", actualType, string(item.Value), rowIndex)
+				addProviderFieldParseIssue(ctx, symbol, indexID, "value", code, "finite number or numeric string", actualType, string(item.Value), rowIndex)
 				continue
 			}
 			section.Metrics = append(section.Metrics, model.FundamentalMetric{
@@ -2123,11 +2127,11 @@ func (p *Hithink) fetchFinancialStatementSection(ctx context.Context, symbol str
 		if !exists {
 			missingMetrics++
 			code := "invalid_number"
-			actualType := fundamentalJSONValueType(rawValue)
+			actualType := providerJSONValueType(rawValue)
 			if !present || actualType == "missing" || actualType == "null" || (actualType == "string" && strings.TrimSpace(strings.Trim(string(rawValue), "\"")) == "") {
 				code = "missing_value"
 			}
-			addFundamentalParseIssue(ctx, symbol, field.Key, field.Key, code, "finite number or numeric string", actualType, string(rawValue), selectedRowIndex)
+			addProviderFieldParseIssue(ctx, symbol, field.Key, field.Key, code, "finite number or numeric string", actualType, string(rawValue), selectedRowIndex)
 			continue
 		}
 		section.Metrics = append(section.Metrics, model.FundamentalMetric{

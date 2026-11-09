@@ -163,7 +163,7 @@ func (p *Baostock) FetchFundamentals(ctx context.Context, rawSymbol string, year
 			if issue, invalid := invalidProviderFields[metric.SourceField]; invalid {
 				degraded = true
 				section.QualityReasons = appendFundamentalReason(section.QualityReasons, "one_or_more_metrics_invalid")
-				addFundamentalParseIssue(ctx, symbol, metric.Key, metric.SourceField, issue.Code, "string or finite numeric cell", issue.ActualType, issue.Preview, issue.RowIndex)
+				addProviderFieldParseIssue(ctx, symbol, metric.Key, metric.SourceField, issue.Code, "string or finite numeric cell", issue.ActualType, issue.Preview, issue.RowIndex)
 				continue
 			}
 			rawValue, present := record.Fields[metric.SourceField]
@@ -171,14 +171,14 @@ func (p *Baostock) FetchFundamentals(ctx context.Context, rawSymbol string, year
 			if !present || raw == "" {
 				degraded = true
 				section.QualityReasons = appendFundamentalReason(section.QualityReasons, "one_or_more_metrics_missing")
-				addFundamentalParseIssue(ctx, symbol, metric.Key, metric.SourceField, "missing_value", "finite numeric string", "missing_or_empty", rawValue, 0)
+				addProviderFieldParseIssue(ctx, symbol, metric.Key, metric.SourceField, "missing_value", "finite numeric string", "missing_or_empty", rawValue, 0)
 				continue
 			}
 			value, parseErr := strconv.ParseFloat(raw, 64)
 			if parseErr != nil || math.IsNaN(value) || math.IsInf(value, 0) {
 				degraded = true
 				section.QualityReasons = appendFundamentalReason(section.QualityReasons, "one_or_more_metrics_invalid")
-				addFundamentalParseIssue(ctx, symbol, metric.Key, metric.SourceField, "invalid_number", "finite numeric string", "string", rawValue, 0)
+				addProviderFieldParseIssue(ctx, symbol, metric.Key, metric.SourceField, "invalid_number", "finite numeric string", "string", rawValue, 0)
 				continue
 			}
 			section.Metrics = append(section.Metrics, model.FundamentalMetric{
