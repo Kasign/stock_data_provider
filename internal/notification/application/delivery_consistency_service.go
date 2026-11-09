@@ -3,15 +3,14 @@ package application
 import (
 	"context"
 	"errors"
-	"time"
 
 	"example.com/stock-analysis-flow/internal/notification/domain"
 )
 
 // DeliveryConsistencySnapshot is a single database-consistent read set.
 type DeliveryConsistencySnapshot struct {
-	Delivery domain.DeliveryRecord
-	Attempts []domain.DeliveryAttempt
+	Delivery   domain.DeliveryRecord
+	Attempts   []domain.DeliveryAttempt
 	StateEvents []domain.DeliveryStateEvent
 }
 
@@ -46,8 +45,8 @@ func (s *DeliveryConsistencyService) Assess(ctx context.Context, deliveryID stri
 	result := AssessDeliveryConsistency(DeliveryConsistencyInput{
 		Delivery: snapshot.Delivery,
 		Attempts: snapshot.Attempts,
-		AttemptsComparable: true,
-		StateEvents: snapshot.StateEvents,
+		AttemptsComparable:    true,
+		StateEvents:            snapshot.StateEvents,
 		StateEventsComparable: true,
 	})
 	return result, true, nil
