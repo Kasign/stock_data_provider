@@ -3,6 +3,7 @@ package factor
 import (
 	"encoding/json"
 	"errors"
+	"math"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -73,9 +74,6 @@ func TestNewQuantMetricMatchesFactorResultGolden(t *testing.T) {
 			if !reflect.DeepEqual(decoded, want) {
 				t.Fatalf("serialized metric mismatch\n got: %s\nwant: %s", encoded, raw)
 			}
-			if tc.result.Status == StatusInsufficientData && string(encoded) == "" {
-				t.Fatal("unreachable empty JSON encoding")
-			}
 		})
 	}
 }
@@ -113,7 +111,9 @@ func TestNewQuantMetricRejectsInvalidMetadataAndNonFiniteValues(t *testing.T) {
 		{name: "invalid version", result: valid, asOf: now, quality: QualityValid, version: "v1"},
 		{name: "unknown quality", result: valid, asOf: now, quality: "not_known", version: "1.0.0"},
 		{name: "negative sample count", result: Result{Code: "momentum_20d", Unit: "ratio", Status: StatusInsufficientData, SampleCount: -1}, asOf: now, quality: QualityValid, version: "1.0.0"},
-		{name: "non finite value", result: Result{Code: "momentum_20d", Unit: "ratio", Status: StatusAvailable, Value: 1.0/0.0, SampleCount: 21}, asOf: now, quality: QualityValid, version: "1.0.0"},
+		{name: "non finite value", result: Result{Code: "momentum_20d", Unit: "ratio", Status: StatusAvailable, Value: math.Inf(1), SampleCount: 21}, asOf: now, quality: QualityValid, version: "1.0.0"},
+		{name: "available below sample threshold", result: Result{Code: "momentum_20d", Unit: "ratio", Status: StatusAvailable, Value: 0.2, SampleCount: 20}, asOf: now, quality: QualityValid, version: "1.0.0"},
+		{name: "insufficient despite enough samples", result: Result{Code: "momentum_20d", Unit: "ratio", Status: StatusInsufficientData, SampleCount: 21}, asOf: now, quality: QualityValid, version: "1.0.0"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

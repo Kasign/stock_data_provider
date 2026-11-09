@@ -42,7 +42,7 @@ func NewQuantMetric(result Result, systemAsOf time.Time, quality QualityStatus, 
 	if systemAsOf.IsZero() || !validQualityStatus(quality) || !semanticVersionPattern.MatchString(calculationVersion) {
 		return QuantMetric{}, ErrInvalidMetric
 	}
-	period, ok := factorPeriod(result.Code)
+	period, minimumSamples, ok := factorPeriod(result.Code)
 	if !ok || result.Unit != "ratio" || result.SampleCount < 0 {
 		return QuantMetric{}, ErrInvalidMetric
 	}
@@ -59,6 +59,9 @@ func NewQuantMetric(result Result, systemAsOf time.Time, quality QualityStatus, 
 	}
 	switch result.Status {
 	case StatusAvailable:
+		if result.SampleCount < minimumSamples {
+			return QuantMetric{}, ErrInvalidMetric
+		}
 		if quality == QualityInvalid || quality == QualityUnknown ||
 			math.IsNaN(result.Value) || math.IsInf(result.Value, 0) {
 			return QuantMetric{}, ErrInvalidMetric
@@ -66,6 +69,9 @@ func NewQuantMetric(result Result, systemAsOf time.Time, quality QualityStatus, 
 		value := result.Value
 		metric.Value = &value
 	case StatusInsufficientData:
+		if result.SampleCount >= minimumSamples {
+			return QuantMetric{}, ErrInvalidMetric
+		}
 		// 零值不是缺失值的替代；Value 保持 nil，序列化为显式 JSON null。
 	default:
 		return QuantMetric{}, ErrInvalidMetric
@@ -73,14 +79,16 @@ func NewQuantMetric(result Result, systemAsOf time.Time, quality QualityStatus, 
 	return metric, nil
 }
 
-func factorPeriod(code string) (string, bool) {
+func factorPeriod(code string) (string, int, bool) {
 	switch code {
-	case "momentum_20d", "volatility_20d":
-		return "20d", true
+	case "momentum_20d":
+		return "20d", 21, true
 	case "momentum_60d":
-		return "60d", true
+		return "60d", 61, true
+	case "volatility_20d":
+		return "20d", 20, true
 	default:
-		return "", false
+		return "", 0, false
 	}
 }
 
