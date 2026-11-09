@@ -30,7 +30,6 @@ func TestMemoryRepositorySaveIsIdempotentAndRejectsTamperedIdentity(t *testing.T
 	}
 }
 
-
 func TestMemoryRepositoryZeroValueIsUsable(t *testing.T) {
 	var repository MemoryRepository
 	record := validRecord(t, `{"metric_code":"momentum_20d","value":0.12}`)
@@ -72,7 +71,6 @@ func TestMemoryRepositorySaveHonorsCancellation(t *testing.T) {
 		t.Fatalf("cancelled Save() persisted %d records", len(repository.records))
 	}
 }
-
 
 func TestMemoryRepositorySaveHonorsCancellationWhileWaitingForLock(t *testing.T) {
 	repository := NewMemoryRepository()
@@ -120,7 +118,6 @@ func TestMemoryRepositoryConcurrentIdempotentSave(t *testing.T) {
 		t.Fatalf("stored record count = %d, want 1", len(repository.records))
 	}
 }
-
 
 func TestMemoryRepositoryCanonicalPayloadIsIdempotent(t *testing.T) {
 	repository := NewMemoryRepository()

@@ -85,6 +85,7 @@ var (
 	jsonNumberPattern = regexp.MustCompile(`^(-?)(0|[1-9][0-9]*)(?:\.([0-9]+))?(?:[eE]([+-]?[0-9]+))?$`)
 	decimalPattern    = regexp.MustCompile(`^-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?$`)
 )
+
 func (e Entry) Validate() error {
 	if !codePattern.MatchString(e.Code) || !versionPattern.MatchString(e.SchemaVersion) || !validText(e.AlgorithmVersion) {
 		return invalid("code, schema_version or algorithm_version")
