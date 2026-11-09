@@ -509,10 +509,12 @@ flowchart TD
 - 空 Required 检查集直接返回 `ErrNoRequiredChecks`，避免 Platform 对空集合返回 `skipped` 后被误判为 Ready。
 - 新增共享资源检查 `StorageChecks`：MariaDB 使用 `PingContext`，Redis 使用带 Context 的 `Ping`；二者均为 Required、只读、带独立超时，不执行 Schema 修改或 Migration。
 - Research/News 已有 Diagnostics Adapter，但当前公开构造函数主要检查调用方传入的快照或模块配置，不等同于模块运行实例的动态健康状态。本轮不把静态快照检查冒充生产模块 Readiness，也不虚构 Quant/Researchflow/LLM/Notification 的运行检查。
-- 本轮增加 Readiness 规则测试：无 Required、Required 各状态、Optional 降级不阻塞、重复 Check ID。
+- 新增 `diagnostics.Service` 作为统一检查集组合入口：固定注入共享 MariaDB/Redis 检查，接受模块拥有的 Check 分组；每次 Run 都实时执行，不缓存 Ready 状态。重复 Check ID 由 Platform Runner 统一拒绝。
+- 本轮增加 Readiness 规则和 Service 组合测试：无 Required、Required 各状态、Optional 降级不阻塞、重复 Check ID、缺失资源不可 Ready。
 - 尚未接入 HTTP 路由：旧 Analysis Handler 仍在迁移，Health/Readiness 暴露应由 SRV-005 统一 Transport 和认证策略承接；本轮不新增独立 HTTP Server 或未经批准的匿名端点。
 - GitHub API 已写入实现和测试；尚未执行 gofmt/go test，也没有真实 MariaDB/Redis 连通性集成结果。不能标记为编译或测试通过。
-- 相关代码提交：`f9c879c`（Aggregator）、`e787b3c`（聚合测试）、`4c65a1e`（共享存储检查）。
+- Go workflow 原 push 分支白名单不包含 Server，本轮已将当前 Server 分支加入白名单，后续本分支代码提交会触发 Go 测试工作流；不改变其他分支的任务范围。
+- 相关代码提交：`f9c879c`（Aggregator）、`e787b3c`（聚合测试）、`4c65a1e`（共享存储检查）、`1d83680`（Service 组合入口）、`aad2ed1`（Service 测试）。
 
 
 ## 13. 分支与协作规则
