@@ -256,7 +256,7 @@ Fake Adapter 只能验证分类和状态机，不证明真实渠道行为。Reci
 
 ## 11. DeliveryExecutionService 执行链路验收
 
-调用边界：上层 Server Worker 完成有界 Claim 后，提供 DeliveryClaim、已验证事件快照、唯一 Attempt ID、UTC Clock 时间、RetryPolicy 随机采样值及诊断 evidence_ref。Notification 不扫描队列，也不创建 Worker 生命周期。
+调用边界：上层 Server Worker 完成有界 Claim 后，提供 DeliveryClaim、已验证事件快照、唯一 Attempt ID、注入的 UTC Clock、RetryPolicy 随机采样值及诊断 evidence_ref；开始/完成时间在实际执行边界由服务内部采样。Notification 不扫描队列，也不创建 Worker 生命周期。
 
 执行顺序与门禁：
 
@@ -268,3 +268,8 @@ Fake Adapter 只能验证分类和状态机，不证明真实渠道行为。Reci
 6. Completion 持久化失败时保留 Attempt 历史供租约恢复评估，不得重新发起同一租约下的第二次渠道调用。
 
 已提交测试：accepted 完整执行后 Delivery=sent 且 AttemptCount=1；Attempt 启动失败后渠道调用次数=0、Delivery 保持 sending、AttemptCount 不变。当前测试提交尚待 CI，不标记通过。
+
+
+### 执行服务验证证据更新
+
+Run `42601621426` 对应 HEAD `37b375a14163bf312871c76015167c6c65ef2d1f`。`Test go-core` 通过但不包含 Notification；根模块 `Test .` 在 gofmt 阶段被 Quant/Market Data 格式差异阻断，Notification 文件无 gofmt 差异，根模块测试未执行。因此本清单中的执行服务测试仅标记为已编写、待 CI 执行；MariaDB L3 仍未执行。
