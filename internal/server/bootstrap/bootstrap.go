@@ -10,7 +10,6 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
-	"strconv"
 	"strings"
 	"time"
 
@@ -40,12 +39,17 @@ func Run(ctx context.Context) error {
 		return errors.New("bootstrap context is required")
 	}
 
-	slog.SetDefault(newJSONLogger("info"))
 	if err := config.LoadDotEnvIfExists(".env"); err != nil {
 		return fmt.Errorf("加载 .env 失败: %w", err)
 	}
-	slog.SetDefault(newJSONLogger(os.Getenv("LOG_LEVEL")))
 
+	processConfig, err := serverconfig.LoadProcess(config.NewEnv())
+	if err != nil {
+		return fmt.Errorf("Server 进程配置无效: %w", err)
+	}
+	slog.SetDefault(newJSONLogger(processConfig.LogLevel))
+
+	// 存储与行情配置仍由各自兼容 Adapter 负责解析；Server 不复制其领域配置 Schema。
 	storageCfg, err := mysqlredis.LoadConfigFromEnv()
 	if err != nil {
 		return fmt.Errorf("存储配置无效: %w", err)
@@ -54,21 +58,15 @@ func Run(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("Go 行情服务配置无效: %w", err)
 	}
-	migrationCfg, err := serverconfig.LoadMigration(config.NewEnv())
-	if err != nil {
-		return fmt.Errorf("Migration 配置无效: %w", err)
-	}
-	serverRole, err := serverconfig.LoadRole(config.NewEnv())
-	if err != nil {
-		return fmt.Errorf("Server 运行角色配置无效: %w", err)
-	}
+	migrationCfg := processConfig.Migration
+	serverRole := processConfig.Role
+	analysisTimeout := processConfig.AnalysisTimeout
+	workers := processConfig.AnalysisWorkers
+	maxQueued := processConfig.AnalysisMaxQueued
+
 	var authenticator *platformsecurity.Authenticator
 	if serverRole != serverconfig.RoleWorker {
-		securityCfg, err := serverconfig.LoadSecurity(config.NewEnv())
-		if err != nil {
-			return fmt.Errorf("安全认证配置无效: %w", err)
-		}
-		authenticator, err = platformsecurity.NewAuthenticator(securityCfg.OwnerToken, nil)
+		authenticator, err = platformsecurity.NewAuthenticator(processConfig.Security.OwnerToken, nil)
 		if err != nil {
 			return fmt.Errorf("创建 HTTP 认证器失败: %w", err)
 		}
@@ -104,25 +102,7 @@ func Run(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("创建分析 Runner 失败: %w", err)
 	}
-	analysisTimeout, err := service.EnvDuration("ANALYSIS_TIMEOUT", 5*time.Minute)
-	if err != nil {
-		return fmt.Errorf("读取 ANALYSIS_TIMEOUT 失败: %w", err)
-	}
-	workers, err := boundedIntEnv("ANALYSIS_WORKERS", 2, 1, 32)
-	if err != nil {
-		return err
-	}
-	maxQueued, err := boundedIntEnv("ANALYSIS_MAX_QUEUED", 100, workers, 10000)
-	if err != nil {
-		return err
-	}
-	var httpConfig serverconfig.HTTP
-	if serverRole != serverconfig.RoleWorker {
-		httpConfig, err = serverconfig.LoadHTTP(config.NewEnv(), analysisTimeout)
-		if err != nil {
-			return fmt.Errorf("HTTP 服务配置无效: %w", err)
-		}
-	}
+	httpConfig := processConfig.HTTP
 
 	tasks, err := taskqueue.New(store.DB, runner, workers, maxQueued, analysisTimeout, 250*time.Millisecond)
 	if err != nil {
@@ -222,25 +202,6 @@ func (w legacyAnalysisWorker) Start(ctx context.Context) error {
 func (w legacyAnalysisWorker) Stop(context.Context) error {
 	w.queue.Close()
 	return nil
-}
-
-func boundedIntEnv(name string, fallback, minimum, maximum int) (int, error) {
-	return boundedIntValue(os.Getenv(name), name, fallback, minimum, maximum)
-}
-
-func boundedIntValue(raw, name string, fallback, minimum, maximum int) (int, error) {
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
-		return fallback, nil
-	}
-	value, err := strconv.Atoi(raw)
-	if err != nil {
-		return 0, fmt.Errorf("%s 必须是整数: %w", name, err)
-	}
-	if value < minimum || value > maximum {
-		return 0, fmt.Errorf("%s 必须在 %d 到 %d 之间", name, minimum, maximum)
-	}
-	return value, nil
 }
 
 func newJSONLogger(rawLevel string) *slog.Logger {
