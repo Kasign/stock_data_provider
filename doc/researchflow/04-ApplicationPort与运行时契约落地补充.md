@@ -301,3 +301,11 @@ Fake Repository/Fake Clock/Fake Provider 只证明模块内逻辑；MariaDB/Redi
 - Claim 前读取的 RetryPolicy 用于传入 ClaimAttempt.max_attempts；Claim 后必须重新读取 Snapshot 并比较完整 RetryPolicy，策略缺失、错配或漂移拒绝执行。
 - 参数、输入快照引用在交给 Provider 前复制；system_as_of、template fingerprint、correlation_id 和 deadline 继承 Run，不允许 Provider 改写。
 - 当前尚未落地 Server Composition Root Adapter、Worker 生命周期启动、取消确认 Port、deadline 扫描器与 MariaDB Worker 集成测试；模块内 Fake Port 测试不等于部署验收。
+
+
+### 9.4 Worker 协作取消 Port（2026-11-09）
+
+- Worker.CancelRun(runRef) 只负责当前进程内活动 Attempt 的协作取消；不是取消持久化入口。调用方必须先执行 Storage BeginRunCancellation，再广播本地/跨进程取消信号。
+- Worker 为每个活动 Attempt 注册 context.CancelCauseFunc；Run 取消信号触发后 Provider Context 被取消。Provider 返回后 Worker 通过 ConfirmAttemptCancellation Port 原子确认 Attempt/Stage 取消，参数包含 Worker、fencing token 与 Claim 后的 Stage version。
+- 确认成功不再执行 CommitWorkerResult；确认失败、lease 失效或 fencing 冲突均 fail-closed。进程外 Worker 未收到广播或崩溃时，由 Storage FenceExpiredCancellationAttempt 回收。
+- 真实 Adapter 必须映射 MySQLRunRepository.ConfirmAttemptCancellation，并保持 Run → Stage → Attempt 锁顺序和数据库 UTC lease 检查。当前仅 Fake Port 测试，未完成跨进程通知与 MariaDB 集成验收。
