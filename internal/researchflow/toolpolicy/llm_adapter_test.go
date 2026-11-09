@@ -2,7 +2,8 @@ package toolpolicy
 
 import (
 	"errors"
-	"testing"\n\t"time"
+	"testing"
+	"time"
 
 	"example.com/stock-analysis-flow/internal/llm"
 )
