@@ -30,7 +30,7 @@ func TestHTTPHandlerEnforcesExplicitRoutePolicies(t *testing.T) {
 	}
 	tests := []struct {
 		name, method, path, authorization string
-		want int
+		want                              int
 	}{
 		{name: "匿名存活检查", method: http.MethodGet, path: "/healthz", want: http.StatusOK},
 		{name: "Readiness 未认证", method: http.MethodGet, path: "/readyz", want: http.StatusUnauthorized},
