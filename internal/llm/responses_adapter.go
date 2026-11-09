@@ -97,6 +97,7 @@ func (a *ResponsesAdapter) Generate(ctx context.Context, request ModelRequest) (
 		OutputItems: []OutputItem{},
 	}
 	fail := func(info *ModelErrorInfo, cause error) (ModelResponse, error) {
+		result.Status = ResponseFailed
 		finished := a.clock.Now().UTC()
 		result.FinishedAt = finished
 		result.DurationMS = finished.Sub(startedAt).Milliseconds()
