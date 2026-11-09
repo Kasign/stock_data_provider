@@ -623,6 +623,77 @@ var requiredNewsSchemaTables = []string{
 	"news_evidence_snapshots",
 }
 
+// ObservationPayloadPurgeResult 描述一次到期载荷清理批次的实际结果。
+type ObservationPayloadPurgeResult struct {
+	Scanned int
+	Purged  int
+}
+
+// PurgeExpiredObservationPayloads 在单个事务内领取并清除一批到期 Observation 候选载荷。
+// Observation 行及其身份、关系、版本外键引用均保留；重复执行不会重复清除。
+func (r *MySQLRepository) PurgeExpiredObservationPayloads(ctx context.Context, now time.Time, limit int) (ObservationPayloadPurgeResult, error) {
+	if r == nil || r.db == nil || ctx == nil || now.IsZero() || limit <= 0 || limit > 1000 {
+		return ObservationPayloadPurgeResult{}, app.ErrInvalidRequest
+	}
+	result := ObservationPayloadPurgeResult{}
+	err := r.withTransaction(ctx, "news_observation_retention", func(tx *sql.Tx, _ func(string) error) error {
+		rows, err := tx.QueryContext(ctx, `SELECT observation_id
+			FROM news_observations
+			WHERE retention_until IS NOT NULL
+			  AND retention_until <= ?
+			  AND payload_purged_at IS NULL
+			ORDER BY retention_until, observation_id
+			LIMIT ?
+			FOR UPDATE SKIP LOCKED`, now.UTC(), limit)
+		if err != nil {
+			return err
+		}
+		ids := make([]string, 0, limit)
+		for rows.Next() {
+			var id string
+			if err := rows.Scan(&id); err != nil {
+				_ = rows.Close()
+				return err
+			}
+			ids = append(ids, id)
+		}
+		if err := rows.Err(); err != nil {
+			_ = rows.Close()
+			return err
+		}
+		if err := rows.Close(); err != nil {
+			return err
+		}
+		result.Scanned = len(ids)
+		if len(ids) == 0 {
+			return nil
+		}
+		placeholders := strings.TrimRight(strings.Repeat("?,", len(ids)), ",")
+		args := make([]any, 0, len(ids)+1)
+		args = append(args, now.UTC())
+		for _, id := range ids {
+			args = append(args, id)
+		}
+		update := fmt.Sprintf(`UPDATE news_observations
+			SET candidate_json = JSON_OBJECT(), payload_purged_at = ?
+			WHERE payload_purged_at IS NULL AND observation_id IN (%s)`, placeholders)
+		res, err := tx.ExecContext(ctx, update, args...)
+		if err != nil {
+			return err
+		}
+		affected, err := res.RowsAffected()
+		if err != nil {
+			return err
+		}
+		result.Purged = int(affected)
+		return nil
+	})
+	if err != nil {
+		return ObservationPayloadPurgeResult{}, err
+	}
+	return result, nil
+}
+
 // Ping verifies the borrowed SQL pool without taking ownership of it.
 func (r *MySQLRepository) Ping(ctx context.Context) error {
 	if r == nil || r.db == nil || ctx == nil {
