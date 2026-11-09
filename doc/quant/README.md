@@ -4,7 +4,6 @@
 - 代码范围：`internal/quant/**`
 - 文档范围：`doc/quant/**`
 - 任务前缀：QNT
-- 当前文档基线：2026-11-09，分支 HEAD `41fc0dc0dcffae90f3ba82a4179729d0d348ceb8`
 
 ## 当前状态
 
