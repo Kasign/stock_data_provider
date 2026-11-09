@@ -8,7 +8,7 @@ import (
 	"example.com/stock-analysis-flow/internal/notification/domain"
 )
 
-var ErrDeliveryExecutionUnavailable = errors.New("notification: delivery execution unavailable")
+var (\n\tErrDeliveryExecutionUnavailable = errors.New("notification: delivery execution unavailable")\n\tErrDeliveryExecutionEventMismatch = errors.New("notification: execution event does not match Delivery snapshot")\n)
 
 // DeliveryExecutionResult 汇总一次 Worker 对单条 Delivery 的执行结果。
 // 最终状态以 Delivery 与 Attempt Repository 中的持久化事实为准。

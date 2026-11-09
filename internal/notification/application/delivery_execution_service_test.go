@@ -80,15 +80,15 @@ func executionFixture(t *testing.T) (*DeliveryExecutionService, *memoryDeliverie
 	if err != nil {
 		t.Fatal(err)
 	}
-	return service, repository, adapter, claim
+	return service, repository, adapter, claim, event
 }
 
 func TestDeliveryExecutionCallsChannelOnlyAfterAttemptStarts(t *testing.T) {
-	service, repository, adapter, claim := executionFixture(t)
+	service, repository, adapter, claim, event := executionFixture(t)
 	repository.now = claim.Lease.ExpiresAt.Add(-time.Second)
 
 	result, err := service.Execute(
-		context.Background(), claim, domain.EventEnvelope{}, "attempt-execution-1",
+		context.Background(), claim, event, "attempt-execution-1",
 		0.5, "evidence-execution-1",
 	)
 	if err != nil {
@@ -110,7 +110,7 @@ func TestDeliveryExecutionAttemptStartFailureNeverCallsChannel(t *testing.T) {
 	repository.now = claim.Lease.ExpiresAt.Add(-time.Second)
 
 	_, err := service.Execute(
-		context.Background(), claim, domain.EventEnvelope{}, "attempt-execution-2",
+		context.Background(), claim, event, "attempt-execution-2",
 		0.5, "evidence-execution-2",
 	)
 	if err == nil {
@@ -134,7 +134,7 @@ func TestDeliveryExecutionAmbiguousResultConvergesToUnknown(t *testing.T) {
 	repository.now = claim.Lease.ExpiresAt.Add(-time.Second)
 
 	result, err := service.Execute(
-		context.Background(), claim, domain.EventEnvelope{}, "attempt-execution-3",
+		context.Background(), claim, event, "attempt-execution-3",
 		0.5, "evidence-execution-3",
 	)
 	if err != nil {
@@ -155,7 +155,7 @@ func TestDeliveryExecutionRenderFailureBlocksWithoutChannelCall(t *testing.T) {
 	repository.now = claim.Lease.ExpiresAt.Add(-time.Second)
 
 	_, err := service.Execute(
-		context.Background(), claim, domain.EventEnvelope{}, "attempt-execution-4",
+		context.Background(), claim, event, "attempt-execution-4",
 		0.5, "evidence-execution-4",
 	)
 	if err == nil {
@@ -167,5 +167,26 @@ func TestDeliveryExecutionRenderFailureBlocksWithoutChannelCall(t *testing.T) {
 	delivery, found, getErr := repository.Get(context.Background(), claim.Delivery.DeliveryID)
 	if getErr != nil || !found || delivery.Status != domain.DeliveryBlocked {
 		t.Fatalf("render failure must persist blocked state: delivery=%+v found=%v err=%v", delivery, found, getErr)
+	}
+}
+
+func TestDeliveryExecutionRejectsEventFromAnotherDelivery(t *testing.T) {
+	service, repository, adapter, claim, event := executionFixture(t)
+	event.EventID = "another-event"
+	repository.now = claim.Lease.ExpiresAt.Add(-time.Second)
+
+	_, err := service.Execute(
+		context.Background(), claim, event, "attempt-execution-5",
+		0.5, "evidence-execution-5",
+	)
+	if err == nil {
+		t.Fatal("event identity mismatch must fail closed")
+	}
+	if adapter.calls != 0 {
+		t.Fatalf("mismatched event must not call channel, calls=%d", adapter.calls)
+	}
+	delivery, found, getErr := repository.Get(context.Background(), claim.Delivery.DeliveryID)
+	if getErr != nil || !found || delivery.Status != domain.DeliverySending || delivery.AttemptCount != 0 {
+		t.Fatalf("mismatched event must not mutate Delivery: delivery=%+v found=%v err=%v", delivery, found, getErr)
 	}
 }
