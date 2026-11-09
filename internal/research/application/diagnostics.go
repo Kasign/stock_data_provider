@@ -4,6 +4,8 @@ import (
 	"context"
 	"strings"
 
+	"example.com/stock-analysis-flow/internal/platform/fault"
+
 	platformdiagnostics "example.com/stock-analysis-flow/internal/platform/diagnostics"
 	researchdiagnostics "example.com/stock-analysis-flow/internal/research/diagnostics"
 	researcherrors "example.com/stock-analysis-flow/internal/research"
@@ -20,7 +22,7 @@ var _ DiagnosticsPort = (*Service)(nil)
 // BuildContextCheck 从指定的不可变 Context 版本构造诊断项；执行调度由调用方交给 Platform Runner。
 func (s *Service) BuildContextCheck(ctx context.Context, ref ContextRef, required bool) (platformdiagnostics.Check, error) {
 	if s == nil || s.contexts == nil {
-		return platformdiagnostics.Check{}, applicationFault("internal", "research_context_repository_not_configured", "Research Context Repository is not configured", researcherrors.ErrInvalidRepository)
+		return platformdiagnostics.Check{}, applicationFault(fault.ClassInternal, "research_context_repository_not_configured", "Research Context Repository is not configured", researcherrors.ErrInvalidRepository)
 	}
 	if ctx == nil || strings.TrimSpace(ref.ContextID) == "" || ref.ContextVersion < 1 {
 		return platformdiagnostics.Check{}, validationFault("invalid_context_ref", "Context reference is invalid", nil)
