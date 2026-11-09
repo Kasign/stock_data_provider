@@ -1,6 +1,7 @@
 package httpclient
 
 import (
+	"context"
 	"net/http"
 
 	"example.com/stock-analysis-flow/internal/platform/fault"
@@ -50,4 +51,25 @@ func (d *BoundDoer) Do(request *http.Request) (*http.Response, error) {
 		)
 	}
 	return d.client.Do(request.Context(), request, d.policy)
+}
+
+// OpenStream 使用绑定时固定的目标策略发起流式请求。返回的 Body 由调用方拥有，消费结束后必须关闭。
+func (d *BoundDoer) OpenStream(ctx context.Context, request *http.Request) (*StreamResponse, error) {
+	if d == nil || d.client == nil {
+		return nil, fault.New(
+			fault.ClassValidation,
+			"platform.httpclient.invalid_client",
+			"HTTP client is not configured",
+			nil,
+		)
+	}
+	if request == nil {
+		return nil, fault.New(
+			fault.ClassValidation,
+			"platform.httpclient.invalid_request",
+			"invalid HTTP request",
+			nil,
+		)
+	}
+	return d.client.OpenStream(ctx, request, d.policy)
 }

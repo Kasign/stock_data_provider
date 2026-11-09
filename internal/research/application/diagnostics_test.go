@@ -1,0 +1,172 @@
+package application
+
+import (
+	"context"
+	"errors"
+	"testing"
+	"time"
+
+	platformdiagnostics "example.com/stock-analysis-flow/internal/platform/diagnostics"
+	platformfault "example.com/stock-analysis-flow/internal/platform/fault"
+	researchclaim "example.com/stock-analysis-flow/internal/research/claim"
+	researchcontext "example.com/stock-analysis-flow/internal/research/context"
+	researchevent "example.com/stock-analysis-flow/internal/research/event"
+	researchevidence "example.com/stock-analysis-flow/internal/research/evidence"
+)
+
+func TestDiagnosticsApplicationBuildsChecksFromExactVersions(t *testing.T) {
+	now := time.Date(2026, 11, 9, 5, 0, 0, 0, time.UTC)
+	contextRepo := &contextRepoFake{value: researchcontext.Context{
+		SchemaVersion: researchcontext.SchemaVersion, ContextID: "ctx_diag", ContextVersion: 1,
+		ResearchQuestion: "诊断快照", Scope: researchcontext.ScopeStock,
+		SubjectRefs: []string{"security:600000"}, SystemAsOf: now,
+		SectionRefs: []researchcontext.SectionRef{{
+			SectionID: "profile", SectionVersion: "v1", SourceOwner: researchcontext.SourceOwnerData,
+			SourceRefs: []string{"data:profile:1"}, EvidenceRefs: []string{},
+			QualityStatus: researchcontext.QualityValid, Required: true, Included: true,
+			AssembledAt: now, SystemAsOf: now,
+		}},
+		QualitySummary:   researchcontext.QualitySummary{Status: researchcontext.QualityValid, ReasonCodes: []string{}},
+		IncludedSections: []string{"profile"}, OmittedSections: []researchcontext.OmittedSection{},
+		BuilderVersion: "test", CreatedAt: now,
+	}}
+	eventRepo := &eventRepoFake{value: researchevent.ResearchEvent{
+		EventID: "evt_diag", EventVersion: 1, EventType: "earnings_guidance",
+		Title: "业绩指引变化", Status: researchevent.StatusDetected,
+		SubjectRefs: []string{"security:600000"}, EvidenceRefs: []string{"ev_source_1"},
+		SystemObservedAt: now, SystemAsOf: now, ImpactHypothesisRefs: []string{},
+		InvalidationConditions: []string{"后续公告撤回"}, Uncertainty: []string{},
+		SourceTimes: []researchevent.EventSourceTime{{
+			EvidenceRef: "ev_source_1", TimeType: researchevent.TimeSystemObservedAt,
+			Value: now, AssertedBy: "news:observation",
+		}},
+	}}
+	claimRepo := &claimRepoFake{value: researchclaim.Claim{
+		ClaimID: "clm_diag", ClaimVersion: 1, Statement: "盈利改善判断",
+		EpistemicType: researchclaim.EpistemicReportedFact, ScopeRefs: []string{"security:600000"},
+		SystemAsOf: now, SupportingEvidenceRefs: []string{"ev_source_1"},
+		ContradictingEvidenceRefs: []string{}, RequiredDataRefs: []string{},
+		Status: researchclaim.StatusProposed, Limitations: []string{},
+	}}
+	service, err := NewServiceWithClaims(contextRepo, &evidenceRepoFake{}, claimRepo, &authorizerFake{}, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	service.events = eventRepo
+
+	checks := []struct {
+		name  string
+		build func() (platformdiagnostics.Check, error)
+	}{
+		{"context", func() (platformdiagnostics.Check, error) {
+			return service.BuildContextCheck(context.Background(), ContextRef{ContextID: "ctx_diag", ContextVersion: 1}, now, true)
+		}},
+		{"event", func() (platformdiagnostics.Check, error) {
+			return service.BuildEventCheck(context.Background(), EventRef{EventID: "evt_diag", EventVersion: 1}, now, true)
+		}},
+		{"claim", func() (platformdiagnostics.Check, error) {
+			return service.BuildClaimCheck(context.Background(), ClaimRef{ClaimID: "clm_diag", ClaimVersion: 1}, now, true)
+		}},
+	}
+	for _, item := range checks {
+		t.Run(item.name, func(t *testing.T) {
+			check, err := item.build()
+			if err != nil {
+				t.Fatalf("build diagnostic check: %v", err)
+			}
+			if !check.Required {
+				t.Fatal("required flag was not preserved")
+			}
+			observation, err := check.Run(context.Background())
+			if err != nil {
+				t.Fatalf("run diagnostic check: %v", err)
+			}
+			if observation.Status != platformdiagnostics.StatusHealthy {
+				t.Fatalf("status = %q, want healthy", observation.Status)
+			}
+		})
+	}
+}
+
+func TestDiagnosticsApplicationRejectsInvalidReferences(t *testing.T) {
+	service, err := NewServiceWithClaims(&contextRepoFake{}, &evidenceRepoFake{}, &claimRepoFake{}, &authorizerFake{}, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.BuildContextCheck(context.Background(), ContextRef{ContextID: " ", ContextVersion: 1}, time.Time{}, true); err == nil {
+		t.Fatal("blank Context ID must be rejected")
+	}
+	if _, err := service.BuildClaimCheck(context.Background(), ClaimRef{ClaimID: "clm_1", ClaimVersion: 0}, time.Now().UTC(), true); err == nil {
+		t.Fatal("non-positive Claim version must be rejected")
+	}
+	if _, err := service.BuildContextCheck(context.Background(), ContextRef{ContextID: "ctx_1", ContextVersion: 1}, time.Time{}, true); err == nil {
+		t.Fatal("missing Run system_as_of must be rejected before Repository access")
+	}
+	if _, err := service.BuildEventCheck(context.Background(), EventRef{EventID: "evt_1", EventVersion: 1}, time.FixedZone("UTC+0", 0), true); err == nil {
+		t.Fatal("non-UTC Run system_as_of Location must be rejected")
+	}
+	if _, err := service.BuildEvidenceCheck(context.Background(), EvidenceRef{
+		EvidenceID: "ev_1", CallerRef: "researchflow:worker-1",
+	}, time.Time{}, true); err == nil {
+		t.Fatal("missing Run system_as_of must be rejected before Owner access")
+	}
+}
+
+func TestBuildEvidenceCheckRechecksOwnerAuthorization(t *testing.T) {
+	now := time.Date(2026, 11, 9, 5, 0, 0, 123456789, time.UTC)
+	value := researchevidence.Evidence{
+		EvidenceID: "ev_diag_authorized", EvidenceType: researchevidence.TypeFact,
+		SourceOwner: researchevidence.SourceData, SourceRef: "data:fixture:1",
+		DerivedFromRefs: []string{}, SubjectRefs: []string{"security:600000"},
+		AvailableAt: &now, SystemObservedAt: now, SystemAsOf: now,
+		Stance: researchevidence.StanceNeutral, QualityStatus: researchevidence.QualityValid,
+		ContentLevel: researchevidence.ContentMetadata, AuthorizationRef: "auth:current",
+		Limitations: []string{},
+	}
+	fingerprint, err := value.ComputeContentFingerprint()
+	if err != nil {
+		t.Fatalf("compute Evidence fingerprint: %v", err)
+	}
+	value.ContentFingerprint = fingerprint
+	repo := &evidenceRepoFake{value: value}
+	authorizer := &authorizerFake{}
+	service, err := NewService(&contextRepoFake{}, repo, authorizer, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	check, err := service.BuildEvidenceCheck(context.Background(), EvidenceRef{
+		EvidenceID: value.EvidenceID, CallerRef: "researchflow:worker-1",
+	}, now, true)
+	if err != nil {
+		t.Fatalf("BuildEvidenceCheck() error = %v", err)
+	}
+	if authorizer.calls != 1 {
+		t.Fatalf("Owner authorization calls = %d, want 1", authorizer.calls)
+	}
+	if !check.Required {
+		t.Fatal("required flag was not preserved")
+	}
+	observation, err := check.Run(context.Background())
+	if err != nil {
+		t.Fatalf("run Evidence check: %v", err)
+	}
+	if observation.Status != platformdiagnostics.StatusHealthy {
+		t.Fatalf("authorized Evidence status = %q, want healthy", observation.Status)
+	}
+
+	authorizer.err = NewAuthorizationError(AuthorizationDenied, errors.New("owner revoked access"))
+	_, err = service.BuildEvidenceCheck(context.Background(), EvidenceRef{
+		EvidenceID: value.EvidenceID, CallerRef: "researchflow:worker-1",
+	}, now, true)
+	if err == nil {
+		t.Fatal("revoked Owner authorization must prevent diagnostic check construction")
+	}
+	var authorizationFault *platformfault.Fault
+	if !errors.As(err, &authorizationFault) || authorizationFault.Class != platformfault.ClassForbidden {
+		t.Fatalf("revoked Owner authorization error = %v, want Forbidden Fault", err)
+	}
+	if authorizer.calls != 2 {
+		t.Fatalf("Owner authorization calls after revocation = %d, want 2", authorizer.calls)
+	}
+}

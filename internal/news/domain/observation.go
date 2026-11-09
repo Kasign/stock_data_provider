@@ -19,8 +19,11 @@ type Observation struct {
 	SourceID                string
 	ProviderCode            string
 	QueryDimension          string
+	EndpointID              string
 	SourcePolicyVersionID   string
 	EndpointPolicyVersionID string
+	ProviderOutputPolicyRef string
+	ProviderOutputPolicyVersionID string
 	PolicyEvaluatedAt       time.Time
 	Candidate               Candidate
 	ObservedAt              time.Time

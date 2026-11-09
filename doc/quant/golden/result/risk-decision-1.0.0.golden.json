@@ -1,0 +1,15 @@
+{
+  "decision_id": "risk-decision-001",
+  "status": "unknown",
+  "rule_set_version": "1.0.0",
+  "evaluated_at": "2026-11-09T01:00:00Z",
+  "system_as_of": "2026-11-09T00:59:00Z",
+  "reasons": [{
+    "code": "INPUT_QUALITY_UNKNOWN",
+    "severity": "block",
+    "status": "unknown",
+    "safe_message": "输入质量无法确认",
+    "evidence_refs": ["evidence:quality:001"]
+  }],
+  "input_refs": ["quant_result:001"]
+}

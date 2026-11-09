@@ -1,90 +1,58 @@
 # Research 模块
 
 - 分支：`feat/research`
-- 代码：`internal/research/**`
-- 任务前缀：RSC
-- 当前阶段：R1 Context + R2 Evidence + R3 Event + R5 Claim/Hypothesis 领域基础；R7 Storage Port/Schema 第一阶段
-- 当前状态：Context/Evidence/Event/Claim Domain 首批结构与校验已实现；Context 版本链、Evidence JCS/授权过期边界、Event 生命周期及 Claim 文本校验新增测试已写入但尚未执行。RSC-007 已新增四个领域 Repository Port 和 Research Migration v1/v2（v2 保留 RFC3339Nano PIT 纳秒精度）；Context/Event/Claim SQL Adapter 尚未完成，Evidence SQL Adapter 受 RSC-OPEN-007 阻断。未完成仓库完整构建/CI、真实 Data/News、Owner 当前授权复核、Application、Outbox 和跨模块集成。
+- 代码复核基线：`51cde38549d8861a71cf5333ed35a56649bd872e`（2026-11-09，合并 Data 与 integration 更新）
+- 已聚合到 integration：`a5ac63c2caa71153332d1229475139fd8b637c53`（PR #53）
+- 代码范围：`internal/research/**`
+- 文档范围：`doc/research/**`
+- 任务与验收权威记录：[02-任务拆分与验收](./02-任务拆分与验收.md)
+- 领域设计：[01-研究领域模型与证据体系](./01-研究领域模型与证据体系.md)
+- 字段语义及授权链：[03-Context与Evidence字段语义及授权链补充](./03-Context与Evidence字段语义及授权链补充.md)
 
 ## 模块职责
 
-Research 负责 Context、Evidence、Event、Claim、Hypothesis、Scenario 等研究语义模型。
+Research 拥有 Context、Evidence、Event、Claim、Hypothesis、Scenario 等研究语义模型。
 
 - Data：行情、财务、证券主数据、PIT 数据及其质量。
 - News：新闻采集、原文、身份、版本、授权和只读证据查询。
 - Quant：确定性数值计算及其版本化结果；Research 不直接依赖或调用 Quant。
-- Research：组织研究语义、证据、事件、主张、假设和情景。
 - Researchflow：Run/Stage/Attempt 生命周期、单次 Run 的 Context Assembly、分区选择、Token Budget 和裁剪。
+- Platform：提供 Fault、Storage、Diagnostics Runner 等公共基础能力，不接管 Research 领域规则。
 
-Research 不采集新闻、不拥有行情事实、不重算 Quant 指标，不依赖 Quant 或 Researchflow。Research 保存上游稳定引用，不访问其他模块私有 Repository、SQL 或 Domain。
+Research 不采集新闻、不拥有行情事实、不重算 Quant 指标，不依赖 Quant 或 Researchflow。跨模块输入必须经公开 Application Port/Adapter；不得访问其他模块私有 Repository、SQL 或 Domain。Research 不因本地 Fixture 验收而宣称真实 Data/News 接入通过。
 
-## 当前代码
+## 当前实现
 
-```text
-internal/research/
-  context/
-    model.go
-    validate.go
-    validate_test.go
-    repository.go
-  evidence/
-    model.go
-    validate.go
-    validate_test.go
-    authorization.go
-    authorization_test.go
-    repository.go
-  event/
-    model.go
-    validate.go
-    validate_test.go
-    repository.go
-  claim/
-    model.go
-    validate.go
-    validate_test.go
-    repository.go
-  storage/
-    migrations.go
-    migrations_test.go
-```
+| 任务 | 当前实现 | 未完成边界 |
+|---|---|---|
+| RSC-001 Context | Domain、结构与版本链校验、v1 Golden/Schema Validator、Application Create/Get、SQL Repository | 完整 CI 门禁、消费方 Contract Test、远端引用与授权版本验证 |
+| RSC-002 Evidence | Domain、JCS/SHA-256 指纹、严格 PIT、AuthorizationRef 绑定、Application Add/Get、SQL Repository | News 生产 Adapter、Owner 当前授权 E2E、ListEvidence 查询契约 |
+| RSC-003 Event | Domain、SourceTime、版本追加、生命周期、事务 Outbox、Application Create/Update | 多来源归并/拆分、规范化时间规则版本、Server Relay 接线 |
+| RSC-004 实体关联 | 未实现 | 等待 Data 提供稳定 Security/Industry 引用及公开 Application Port |
+| RSC-005 Claim/Hypothesis | Domain、认识论校验、状态迁移、版本追加、Application、SQL Repository | Evidence/Scope 真实引用解析、supersedes_version 契约缺口、真实样本 |
+| RSC-006 Scenario | 仅有部分引用模型 | 等待 typed expected_value 与 ConditionGroup 机器契约 |
+| RSC-007 Storage/Outbox | Context/Event/Claim/Evidence Repository、Migration v1-v5、事务 Outbox、领取/租约/重试/确认/拒绝 | 专用 MariaDB 实测、组合根 Migration 注册、故障注入验收 |
+| RSC-008 Diagnostics | Context/Event/Claim/Evidence 快照 Check；Evidence Check 通过 Application GetEvidence 先执行 Owner 当前授权复核，并用 Researchflow RunSystemAsOf 执行严格 PIT；复用 Platform Runner | 真实 Owner Adapter、完整 CI 执行、Researchflow FLOW-009 Facade 接线 |
 
-R1/R2/R3/R5 当前实现 Context、Evidence、Event、Claim/Hypothesis 领域结构及本地校验；R7 当前仅完成 Repository Port 与 Migration Schema 清单：包括 Evidence 内容指纹/PIT、GOV-CTR-006 授权快照完整性、Event 追加版本和生命周期转换、Claim/Hypothesis 认识论字段与验证条件。没有 HTTP 接口、真实数据 Adapter、SQL Repository 实现、Migration 执行、Outbox 或 Run 编排接入；当前 Repository Port 与 Migration 清单仅完成首批定义。
+## 诊断边界
 
-旧 `go-core/internal/contextpack` 和 `internal/analysis` 是历史分析流程，不等同于新 Research Domain；仅作为迁移行为参考，不重复建设其已有的数据整理能力。
+- Context：结构非法或必需分区缺失却标 valid 为失败；可选分区缺失且原因明确为降级；知识截止/引用版本缺少可比较证据时不可比较。
+- Evidence：结构或指纹错误、明确授权拒绝/撤销、明确 PIT 越界为失败；来源质量受限且 Owner 明确允许为降级；available_at 未知、授权服务不可用或状态 unknown 为不可比较/不可用。严格 PIT 不得将不可比较证据纳入有效事实集合。
+- Event：结构、来源时间引用或生命周期版本非法为失败；来源时间冲突但完整保留为降级；缺少时间/精度证据时不可比较。
+- Claim/Hypothesis：结构、状态迁移或正反 Evidence 冲突规则非法为失败；证据覆盖不足但引用可解析为降级；引用版本或知识时点不可比较时不得推断结论。
+- Platform Runner 负责 Check 调度、并发、超时和聚合；Research 只提供领域 Check，不建设 Run/Stage/Attempt 或第二套诊断 Runner。
 
-## 当前契约状态
+## 当前验收结论
 
-- Context：字段依据 `doc/整体任务规划/03-模块接口契约/Quant-Research公开DTO字段级契约.md` 第 3.1、9.1、9.2、9.8 节；已实现结构校验和 ValidateNextVersion 版本链校验，但尚无专属冻结 Schema/Golden、Repository 追加存储或 CAS。本模块当前实现是领域校验模型，不代表跨模块契约已冻结。
-- Evidence：遵循项目级 `RSC-CTR-001` Evidence Schema/Golden；已实现 Go Domain、结构校验、JCS/SHA-256 内容指纹和严格 PIT 本地校验。当前补充 GOV-CTR-006 AuthorizationRef/PolicySnapshot 结构绑定、策略 tuple 校验、decision_fingerprint 复算及可信调用主体/资源/用途/内容级别绑定校验；这些本地校验不等于 Owner 当前授权复核或授权签发。真实来源接入仍未完成。该契约属于 Evidence，不属于 Context。
-- AuthorizationRef：只验证不可变快照结构和指纹，并绑定 Adapter 提供的可信调用上下文；不把引用当 bearer token，不以历史 allowed 代替读取时 Owner 当前策略复核。
-- News → Research 只读证据查询：目标契约尚未实现/冻结；不得据此宣称真实新闻接入通过。
-- Research → Researchflow 的 Context 消费接口：字段语义已形成设计基线，Schema/Golden/Contract Test 尚未完成。
-- RSC-DEC-001：Quant 结果通过 Researchflow 获取；Research 不新增 Quant Port、不直接调用 Quant、不自行解引用。
-- RSC-DEC-002：changed_at 的语义已确定为状态迁移提交时间，随 lifecycle_changed Outbox 事件持久化。
-- RSC-OPEN-002：Quant-Research DTO 尚未定义 changed_at 字段，具体 DTO/Outbox 映射仍待项目级契约统一。
-- RSC-OPEN-003：Event 规范化时间要求可追溯到规则版本，但当前 DTO 没有 normalization_rule_version；未决前不声称规范化时间来源链完整。
-- RSC-OPEN-004：Event 合并/拆分要求 source_refs/derived_from_refs，但 ResearchEvent 字段表未定义这两个字段；未决前不实现跨 Event 归并关系。
-- RSC-OPEN-005：Claim/Hypothesis 版本治理要求 supersedes_version，但字段表未定义该字段；当前仅验证版本号连续性，不能声称显式替代关系完整。
-- RSC-004 等待 Data 提供稳定 Security/Industry 引用和公开查询端口；不基于旧 Analysis 的 UniverseResolver 提前开发实体 Adapter。
-- RSC-OPEN-006：ScenarioCondition.expected_value 的 typed scalar/object 具体类型、ConditionGroup 联合结构和按 metric_ref/unit 的校验规则尚未形成机器契约；不使用 any/map 假装完成。
-- RSC-OPEN-007：Evidence.content_fingerprint 排除 authorization_ref，但完整 payload_sha256 包含该字段；授权续期后的同 evidence_id 留档/幂等语义未决，暂缓 Evidence SQL Adapter。
+- 本次代码复核以 `51cde385` 为基线；文档对齐提交为 `05b3400`，并已通过 PR #53 聚合到 integration。
+- 截至本次检查，未发现以 integration 合并提交 `a5ac63c` 为 head 的新 Workflow Run；旧 Research 分支 Workflow 不能作为当前合并提交的构建证据。此前失败项包含跨模块 gofmt、News MariaDB 和 Market-data 镜像构建，不得误判为 Research 代码失败。
+- Research 的新增领域、Application、Diagnostics 与 MariaDB 集成测试尚未在当前 HEAD 完整执行；没有真实 Data/News Owner Adapter 和真实来源证据，因此不标记真实数据验收通过。
+- 构建/集成验收按项目约束在 `origin/integration` 聚合后执行；不得直接修改 integration 分支。
 
-详细设计见 [01-研究领域模型与证据体系](01-研究领域模型与证据体系.md)，字段与授权链补充见 [03-Context与Evidence字段语义及授权链补充](03-Context与Evidence字段语义及授权链补充.md)，任务与验收见 [02-任务拆分与验收](02-任务拆分与验收.md)。
+## 维护规则
 
-
-## 本轮补充：Evidence 固定过期时间与 Claim 字段规范化
-
-- Evidence 新增 `ValidateEvidenceAuthorizationBindingAt`：在已有 AuthorizationRef 指纹、主体/资源/用途/Owner/内容级别绑定校验后，使用调用方传入的可信 UTC 检查时点执行固定过期时间门禁；`now >= expires_at` 拒绝读取，`expires_at=null` 不构成固定过期。
-- 该方法不替代来源 Owner 的实时策略复核、撤销检查和策略检查至内容读取之间的一致性保护。生产 Adapter 仍须由 Owner 执行完整授权读取流程；Research 不得仅凭历史 allowed 快照读取上游受限内容。
-- Claim/Hypothesis 的 validation_method 与 expected_observation 现在复用统一必填字符串校验，拒绝空白及首尾空格；不新增状态迁移或 supersedes 私有字段。
-- 固定过期时间前/到期/过期后、无固定过期和无效检查时点测试已写入，尚未执行；不代表 Owner 授权 E2E 或真实来源验收通过。
-
-
-
-- RSC-OPEN-007：Evidence 内容指纹排除 authorization_ref，但完整 payload 摘要包含它；同一 evidence_id 重新授权后的幂等/留档语义待项目契约确认。当前不覆盖旧 Evidence 行，Evidence SQL Adapter 暂缓该边界。
-
-
-
-- RSC-007 Repository Port 已明确追加事务边界、版本连续性、完整 payload 幂等与冲突规则；SQL Adapter 尚未实现。
-- RSC-OPEN-007 阻断 Evidence SQL Adapter 的授权快照续期边界，不阻断 Context/Event/Claim SQL Adapter。
+1. 先核对现有代码和公共 Platform 能力，已有能力只修缺陷。
+2. 新接口必须对应明确调用场景；新字段必须记录来源和语义。
+3. 不新增无真实调用场景的查询/API，不为 WebUI 提前扩展 DTO。
+4. 阶段状态、诊断标准和测试证据更新在本目录现有文档；不重复创建进度文档。
+5. 契约字段定义以项目级契约目录和生产方 DTO 为准；本模块文档只记录 Research 的消费规则与实现进度。

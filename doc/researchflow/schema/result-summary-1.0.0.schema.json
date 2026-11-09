@@ -1,0 +1,119 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://researchflow.invalid/schema/result-summary-1.0.0",
+  "title": "Researchflow Result Summary",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "stage_outcomes",
+    "excluded_stages",
+    "missing_stage_codes",
+    "degraded_stage_codes",
+    "blocked_stage_codes",
+    "reason_codes",
+    "coverage",
+    "quality_status",
+    "risk_gate_decisions",
+    "actionability_status"
+  ],
+  "properties": {
+    "stage_outcomes": {
+      "type": "object",
+      "additionalProperties": {
+        "enum": [
+          "pending",
+          "ready",
+          "running",
+          "retry_wait",
+          "succeeded",
+          "degraded",
+          "skipped",
+          "failed",
+          "timed_out",
+          "cancelled",
+          "blocked"
+        ]
+      }
+    },
+    "excluded_stages": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "stage_code",
+          "rule_version",
+          "reason_code"
+        ],
+        "properties": {
+          "stage_code": {
+            "type": "string",
+            "minLength": 1
+          },
+          "rule_version": {
+            "type": "string",
+            "minLength": 1
+          },
+          "reason_code": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "missing_stage_codes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "uniqueItems": true
+    },
+    "degraded_stage_codes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "uniqueItems": true
+    },
+    "blocked_stage_codes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "uniqueItems": true
+    },
+    "reason_codes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "uniqueItems": true
+    },
+    "coverage": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "quality_status": {
+      "type": "string",
+      "minLength": 1
+    },
+    "risk_gate_decisions": {
+      "type": "object",
+      "additionalProperties": {
+        "enum": [
+          "pass",
+          "reject",
+          "unknown"
+        ]
+      }
+    },
+    "actionability_status": {
+      "enum": [
+        "not_evaluated",
+        "blocked",
+        "actionable"
+      ]
+    }
+  }
+}

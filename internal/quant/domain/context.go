@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 type AdjustmentBasis string
@@ -22,6 +23,8 @@ const (
 	QualityPolicyStrict        QualityPolicy = "strict"
 	QualityPolicyAllowDegraded QualityPolicy = "allow_degraded"
 )
+
+const maxSnapshotRefBytes = 128
 
 var (
 	ErrMissingSystemAsOf      = errors.New("system_as_of is required")
@@ -76,7 +79,7 @@ func (c CalculationContext) Validate(now time.Time, requiresPrice bool) error {
 	}
 	seen := make(map[string]struct{}, len(c.InputSnapshotRefs))
 	for _, ref := range c.InputSnapshotRefs {
-		if strings.TrimSpace(ref) == "" {
+		if ref == "" || !utf8.ValidString(ref) || strings.TrimSpace(ref) != ref || len([]byte(ref)) > maxSnapshotRefBytes {
 			return ErrInvalidSnapshotRef
 		}
 		if _, exists := seen[ref]; exists {

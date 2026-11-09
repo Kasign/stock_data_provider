@@ -4,6 +4,8 @@ package context
 
 import "time"
 
+const SchemaVersion = "1.0.0"
+
 type Scope string
 
 const (
