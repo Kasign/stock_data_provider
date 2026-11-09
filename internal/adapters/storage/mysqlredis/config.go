@@ -56,6 +56,9 @@ func LoadConfig(env platformconfig.Env) (Config, error) {
 	if c.RedisDialTimeout, err = env.Duration("REDIS_DIAL_TIMEOUT", 3*time.Second); err != nil { return c, err }
 	if c.RedisReadTimeout, err = env.Duration("REDIS_READ_TIMEOUT", 2*time.Second); err != nil { return c, err }
 	if c.RedisWriteTimeout, err = env.Duration("REDIS_WRITE_TIMEOUT", 2*time.Second); err != nil { return c, err }
+	if c.DBConnMaxLifetime <= 0 || c.RedisCacheTTL <= 0 || c.RedisDialTimeout <= 0 || c.RedisReadTimeout <= 0 || c.RedisWriteTimeout <= 0 {
+		return c, fmt.Errorf("database and Redis durations must be positive")
+	}
 	if strings.TrimSpace(c.DBHost) == "" || strings.TrimSpace(c.DBUser) == "" || strings.TrimSpace(c.DBName) == "" {
 		return c, fmt.Errorf("DB_HOST, DB_USER and DB_NAME must not be empty")
 	}
