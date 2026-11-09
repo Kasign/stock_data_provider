@@ -66,6 +66,26 @@ func TestReturnAndVolatility(t *testing.T) {
 	closeTo(t, vol.Value, expected, 1e-9)
 }
 
+func TestVolatilityAvoidsIntermediateOverflowForFiniteReturns(t *testing.T) {
+	closes := make([]float64, 21)
+	for i := range closes {
+		if i%2 == 0 {
+			closes[i] = 1e-308
+		} else {
+			closes[i] = 1
+		}
+	}
+
+	got, err := Volatility(closes, VolatilityParams{Window: 20, ReturnBasis: "simple", AnnualizationFactor: 1})
+	if err != nil {
+		t.Fatalf("Volatility() rejected finite returns: %v", err)
+	}
+	want := math.Sqrt(5.0/19.0) * 1e308
+	if !finite(got.Value) || math.Abs(got.Value-want)/want > 1e-12 {
+		t.Fatalf("Volatility() = %.17g, want approximately %.17g", got.Value, want)
+	}
+}
+
 func TestRSIWilderSeedAndSmoothing(t *testing.T) {
 	got, err := RSI([]float64{1, 2, 3, 2, 1}, RSIParams{Window: 2, SmoothingMethod: "wilder"})
 	if err != nil {
