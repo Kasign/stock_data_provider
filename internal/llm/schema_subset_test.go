@@ -30,31 +30,31 @@ func TestValidateResponsesStrictSchemaSubsetRejectsUnsupportedFeatures(t *testin
 		schema string
 	}{
 		{
-			name: "root anyOf",
+			name:   "root anyOf",
 			schema: `{"anyOf":[{"type":"object","properties":{},"required":[],"additionalProperties":false}]}`,
 		},
 		{
-			name: "allOf",
+			name:   "allOf",
 			schema: `{"type":"object","properties":{},"required":[],"additionalProperties":false,"allOf":[]}`,
 		},
 		{
-			name: "missing required property",
+			name:   "missing required property",
 			schema: `{"type":"object","properties":{"name":{"type":"string"}},"required":[],"additionalProperties":false}`,
 		},
 		{
-			name: "additional properties enabled",
+			name:   "additional properties enabled",
 			schema: `{"type":"object","properties":{},"required":[],"additionalProperties":true}`,
 		},
 		{
-			name: "unsupported string format",
+			name:   "unsupported string format",
 			schema: `{"type":"object","properties":{"value":{"type":"string","format":"ulid"}},"required":["value"],"additionalProperties":false}`,
 		},
 		{
-			name: "unsupported keyword",
+			name:   "unsupported keyword",
 			schema: `{"type":"object","properties":{},"required":[],"additionalProperties":false,"minProperties":1}`,
 		},
 		{
-			name: "external reference",
+			name:   "external reference",
 			schema: `{"type":"object","properties":{"value":{"$ref":"https://example.com/schema.json"}},"required":["value"],"additionalProperties":false}`,
 		},
 	}

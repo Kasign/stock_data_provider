@@ -17,9 +17,9 @@ const (
 )
 
 type responsesSchemaSubsetBudget struct {
-	properties int
+	properties  int
 	stringChars int
-	enumValues int
+	enumValues  int
 }
 
 var responsesSchemaSubsetKeywords = map[string]struct{}{
