@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"sort"
 	"strings"
 	"time"
 )
@@ -17,6 +18,17 @@ const (
 )
 
 var ErrInvalidResponsesSSE = errors.New("invalid Responses SSE stream")
+
+type sseOutputTextKey struct {
+	outputIndex  int
+	contentIndex int
+}
+
+type sseOutputTextState struct {
+	text     string
+	sawDelta bool
+	done     bool
+}
 
 type responsesSSEWireEvent struct {
 	Type           string          `json:"type"`
@@ -91,7 +103,7 @@ func ParseResponsesSSE(data []byte, request ModelRequest, clock Clock, onEvent f
 	var previousSequence int64
 	hasPreviousSequence := false
 	sawOutputTextEvent := false
-	sawOutputTextDelta := false
+	outputTextParts := make(map[sseOutputTextKey]sseOutputTextState)
 	var parseErr error
 	var terminalErr error
 	functionArguments := make(map[string]string)
@@ -189,19 +201,40 @@ func ParseResponsesSSE(data []byte, request ModelRequest, clock Clock, onEvent f
 			}
 			result.ResponseID = event.ResponseID
 		}
-		if event.Type == "response.output_text.delta" {
+		if event.Type == "response.output_text.delta" || event.Type == "response.output_text.done" {
 			sawOutputTextEvent = true
-			sawOutputTextDelta = true
-			result.OutputText += event.Delta
-		}
-		if event.Type == "response.output_text.done" {
-			sawOutputTextEvent = true
-			if sawOutputTextDelta && result.OutputText != event.Delta {
-				parseErr = invalidSSEError("llm.sse.output_text_mismatch")
+			key := sseOutputTextKey{}
+			if event.OutputIndex != nil {
+				key.outputIndex = *event.OutputIndex
+			}
+			if event.ContentIndex != nil {
+				key.contentIndex = *event.ContentIndex
+			}
+			if key.outputIndex < 0 || key.contentIndex < 0 {
+				parseErr = invalidSSEError("llm.sse.invalid_output_text_index")
 				resetEvent()
 				return
 			}
-			result.OutputText = event.Delta
+			state := outputTextParts[key]
+			if event.Type == "response.output_text.delta" {
+				if state.done {
+					parseErr = invalidSSEError("llm.sse.output_text_after_done")
+					resetEvent()
+					return
+				}
+				state.text += event.Delta
+				state.sawDelta = true
+			} else {
+				if state.sawDelta && state.text != event.Delta {
+					parseErr = invalidSSEError("llm.sse.output_text_mismatch")
+					resetEvent()
+					return
+				}
+				state.text = event.Delta
+				state.done = true
+			}
+			outputTextParts[key] = state
+			result.OutputText = aggregateSSEOutputText(outputTextParts)
 		}
 		if event.Usage != nil {
 			result.Usage = event.Usage
@@ -367,6 +400,25 @@ func ParseResponsesSSE(data []byte, request ModelRequest, clock Clock, onEvent f
 	}
 	finish()
 	return result, nil
+}
+
+
+func aggregateSSEOutputText(parts map[sseOutputTextKey]sseOutputTextState) string {
+	keys := make([]sseOutputTextKey, 0, len(parts))
+	for key := range parts {
+		keys = append(keys, key)
+	}
+	sort.Slice(keys, func(i, j int) bool {
+		if keys[i].outputIndex != keys[j].outputIndex {
+			return keys[i].outputIndex < keys[j].outputIndex
+		}
+		return keys[i].contentIndex < keys[j].contentIndex
+	})
+	var output strings.Builder
+	for _, key := range keys {
+		output.WriteString(parts[key].text)
+	}
+	return output.String()
 }
 
 func normalizeResponsesSSEEvent(wire responsesSSEWireEvent, request ModelRequest, receivedAt time.Time) (ModelEvent, bool, error) {
