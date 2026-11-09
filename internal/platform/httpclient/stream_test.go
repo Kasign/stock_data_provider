@@ -510,7 +510,7 @@ func TestOpenStreamDependencyWaitDoesNotBlockOtherDependencies(t *testing.T) {
 	defer server.Close()
 
 	client, err := New(Config{
-		Resolver: staticResolver{addresses: []netip.Addr{netip.MustParseAddr("8.8.8.8")}},
+		Resolver:      staticResolver{addresses: []netip.Addr{netip.MustParseAddr("8.8.8.8")}},
 		StreamTimeout: 3 * time.Second, StreamIdleTimeout: time.Second,
 		MaxStreamBytes: 1024, MaxConcurrentStreams: 2,
 		StreamDependencyLimits: map[string]int{"dep.a": 1},
@@ -532,7 +532,9 @@ func TestOpenStreamDependencyWaitDoesNotBlockOtherDependencies(t *testing.T) {
 	defer first.Body.Close()
 	select {
 	case path := <-started:
-		if path != "/a1" { t.Fatalf("expected /a1 to start, got %s", path) }
+		if path != "/a1" {
+			t.Fatalf("expected /a1 to start, got %s", path)
+		}
 	case <-time.After(time.Second):
 		t.Fatal("first dependency A request did not start")
 	}
@@ -543,7 +545,9 @@ func TestOpenStreamDependencyWaitDoesNotBlockOtherDependencies(t *testing.T) {
 	secondResult := make(chan error, 1)
 	go func() {
 		response, openErr := client.OpenStream(secondCtx, secondRequest, policyA)
-		if openErr == nil { _ = response.Body.Close() }
+		if openErr == nil {
+			_ = response.Body.Close()
+		}
 		secondResult <- openErr
 	}()
 	// 等待第二个 A 请求进入额度等待；它不应占用全局槽位。
@@ -558,7 +562,9 @@ func TestOpenStreamDependencyWaitDoesNotBlockOtherDependencies(t *testing.T) {
 	_ = third.Body.Close()
 	select {
 	case path := <-started:
-		if path != "/b1" { t.Fatalf("expected dependency B to start, got %s", path) }
+		if path != "/b1" {
+			t.Fatalf("expected dependency B to start, got %s", path)
+		}
 	case <-time.After(time.Second):
 		t.Fatal("dependency B request did not reach server")
 	}
@@ -566,7 +572,9 @@ func TestOpenStreamDependencyWaitDoesNotBlockOtherDependencies(t *testing.T) {
 	secondCancel()
 	select {
 	case err := <-secondResult:
-		if err == nil { t.Fatal("expected waiting dependency A request to be canceled") }
+		if err == nil {
+			t.Fatal("expected waiting dependency A request to be canceled")
+		}
 	case <-time.After(time.Second):
 		t.Fatal("dependency A waiter did not stop after cancellation")
 	}
