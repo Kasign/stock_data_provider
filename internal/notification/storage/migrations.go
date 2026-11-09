@@ -156,5 +156,25 @@ func Migrations() []platformstorage.Migration {
 				) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
 			},
 		},
+		{
+			Version:     3,
+			Description: "create immutable notification template versions",
+			Statements: []string{
+				`CREATE TABLE notification_template_versions (
+					template_id VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+					version BIGINT UNSIGNED NOT NULL,
+					event_type VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+					schema_version VARCHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+					format VARCHAR(16) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+					subject_template MEDIUMTEXT NOT NULL,
+					body_template MEDIUMTEXT NOT NULL,
+					variable_bindings JSON NOT NULL,
+					digest CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+					created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+					PRIMARY KEY (template_id, version),
+					KEY idx_notification_template_event (event_type, schema_version, template_id, version)
+				) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+			},
+		},
 	}
 }
