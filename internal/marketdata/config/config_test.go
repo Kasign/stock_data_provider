@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -430,8 +431,8 @@ func TestLoadBuildsMySQLDSNFromSeparateServiceSettings(t *testing.T) {
 	if parsed.Addr != "Mariadb:3306" || parsed.DBName != "stock_analysis_server" {
 		t.Fatalf("unexpected generated DSN target: address=%q database=%q", parsed.Addr, parsed.DBName)
 	}
-	if !parsed.ParseTime || parsed.Loc.String() != "UTC" || parsed.Params["charset"] != "utf8mb4" {
-		t.Fatalf("unexpected generated DSN options: parseTime=%t location=%q params=%v", parsed.ParseTime, parsed.Loc, parsed.Params)
+	if !parsed.ParseTime || parsed.Loc.String() != "UTC" || !strings.Contains(cfg.MySQLDSN, "charset=utf8mb4") {
+		t.Fatalf("unexpected generated DSN options: parseTime=%t location=%q dsn=%q", parsed.ParseTime, parsed.Loc, cfg.MySQLDSN)
 	}
 }
 

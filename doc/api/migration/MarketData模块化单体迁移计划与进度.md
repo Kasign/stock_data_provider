@@ -588,3 +588,12 @@ internal/
 - 迁移后 CI Run `42566947023` 已启动：Data 根 Module gofmt/test/race/vet、go-core、根模块、MariaDB/PIT、News MariaDB 和容器构建分别执行中；结果未完成前不标记验收通过。
 - 复核发现旧 `docker/docker-compose.go-migration.yml` 仍使用独立 Module 的 Docker build context，且 `services/market-data/.env.example` 显式指定旧 Provider 配置路径。已同步修正这两个回滚入口，并将同样的修正规则纳入迁移脚本。
 - 当前 M1-2 状态：源码迁移已提交，CI 验收待完成；后续进入 M2 Application Port/Bootstrap 提取。
+
+
+### 2026-11-09：M1-2 迁移后 Data 单测失败修复
+
+- 对应迁移验收 Run：`42567249940`，Data 根模块 Job：`128996359612`。
+- 失败一：`TestLoadBuildsMySQLDSNFromSeparateServiceSettings` 仍检查 `mysql.Config.Params["charset"]`。根模块依赖合并后 MySQL Driver 从 Data 原有的 v1.8.1 统一为根模块 v1.9.3；v1.9.3 将 DSN 的 `charset` 解析进驱动内部字段，不再暴露在 `Params`。生产 DSN 仍由 `FormatDSN` 输出 charset 参数。本修复改为检查最终 DSN 字符串包含 `charset=utf8mb4`，并继续检查 ParseTime/Loc/用户/地址/库名；不改连接配置行为。
+- 失败二：HTTP API Contract Tests 仍按旧目录层级读取 `../../openapi.yaml`。源码迁入 `internal/marketdata/httpapi` 后相对路径已变化，OpenAPI 文件仍由原 Data 服务目录持有。本修复将测试读取路径更新为 `../../../services/market-data/openapi.yaml`，不复制、不新增 OpenAPI 文件，也不改变 API 契约。
+- 本批仅修复 Data 自有测试对迁移后目录和根模块 Driver 版本的兼容；不调整 Provider 领域逻辑、API DTO、OpenAPI 内容、数据库 Schema。
+- 待新 SHA 的 Data gofmt/test/race/vet 与 MariaDB/PIT CI 复验后再关闭 M1-2。
