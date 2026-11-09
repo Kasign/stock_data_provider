@@ -127,7 +127,6 @@ func TestBuildSchedulePlanRejectsExpiredRunDeadline(t *testing.T) {
 	}
 }
 
-
 type schedulePlanStoreFake struct {
 	applied    []domain.Stage
 	conflictAt int
