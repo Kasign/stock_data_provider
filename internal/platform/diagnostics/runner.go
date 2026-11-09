@@ -202,7 +202,6 @@ func normalizeFault(err error, contextErr error) *fault.Fault {
 	}
 }
 
-
 func notStartedObservation(cause error) Observation {
 	code := "platform.diagnostics.deadline_exceeded"
 	message := "check was not completed before the execution deadline"
