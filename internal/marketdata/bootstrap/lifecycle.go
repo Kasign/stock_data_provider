@@ -138,9 +138,6 @@ func (m *Module) Close(ctx context.Context) error {
 		select {
 		case <-done:
 		case <-ctx.Done():
-			m.lifecycleMu.Lock()
-			m.closing = false
-			m.lifecycleMu.Unlock()
 			return ctx.Err()
 		}
 	}

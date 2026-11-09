@@ -84,3 +84,47 @@ func TestModuleStartStopWaitAndCloseLifecycle(t *testing.T) {
 		t.Fatalf("retention worker calls = %d, want at least 2", got)
 	}
 }
+
+
+func TestModuleCloseTimeoutKeepsModuleInClosingState(t *testing.T) {
+	started := make(chan struct{})
+	release := make(chan struct{})
+	module := &Module{
+		retentionStore: blockingRetentionStore{started: started, release: release},
+		retention:      24 * time.Hour,
+		logger:         slog.New(slog.NewTextHandler(io.Discard, nil)),
+	}
+	if err := module.Start(context.Background()); err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+	select {
+	case <-started:
+	case <-time.After(time.Second):
+		t.Fatal("retention worker did not enter blocking purge")
+	}
+
+	closeCtx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer cancel()
+	if err := module.Close(closeCtx); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("Close() error = %v, want deadline while purge is blocked", err)
+	}
+	if err := module.Start(context.Background()); !errors.Is(err, errModuleClosed) {
+		t.Fatalf("Start() during retryable close error = %v, want errModuleClosed", err)
+	}
+
+	close(release)
+	if err := module.Close(context.Background()); err != nil {
+		t.Fatalf("Close() retry error = %v", err)
+	}
+}
+
+type blockingRetentionStore struct {
+	started chan struct{}
+	release chan struct{}
+}
+
+func (s blockingRetentionStore) PurgeQuotesBefore(context.Context, time.Time) (int64, error) {
+	close(s.started)
+	<-s.release
+	return 1, nil
+}

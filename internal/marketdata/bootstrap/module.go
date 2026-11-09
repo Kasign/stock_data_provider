@@ -129,8 +129,6 @@ func (m *Module) ProviderSummary() ProviderSummary {
 	}
 }
 
-// Close 只关闭 Module 自己创建的 BaoStock 客户端，不关闭调用方注入的 Store/Cache。
-
 func (m *Module) build(cfg config.Config) error {
 	store := m.store
 	c := m.cache

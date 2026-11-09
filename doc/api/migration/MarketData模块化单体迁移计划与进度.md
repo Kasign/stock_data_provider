@@ -691,3 +691,6 @@ internal/
 - `Close(ctx)` 使用独立关闭锁与生命周期锁，阻止关闭过程中重新 Start；若等待 Worker 超时，保留可重试状态，不关闭 BaoStock Client，也不释放调用方 Store/Cache。
 - 命令入口在退出时为 Close 创建 35 秒独立 Context，避免复用已经取消的进程 Context。
 - `ProviderSummary` 字段来源为已通过 ProviderSettings/ProviderPriority 校验并实际注册的 Provider `Name()`；Quotes/DailyBars 分别来自对应能力集合。
+
+
+- 生命周期补充边界：Close 等待超时后 Module 保持 `closing` 状态，禁止重新 Start；调用方可释放阻塞任务后重试 Close。新增忽略 Context 的阻塞 Store 测试验证该行为，避免关闭超时后后台任务被意外重启。
