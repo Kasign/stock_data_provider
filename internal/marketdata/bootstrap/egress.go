@@ -4,8 +4,17 @@ import (
 	"fmt"
 
 	"example.com/stock-analysis-flow/internal/marketdata/config"
+	"example.com/stock-analysis-flow/internal/marketdata/provider"
 )
 
+func newEastmoneyProvider(cfg config.Config) *provider.Eastmoney {
+	return provider.NewEastmoneyConfiguredWithAnnouncements(
+		cfg.ProviderTimeout, cfg.EastmoneyQuoteURL, cfg.EastmoneyKlineURL,
+		cfg.EastmoneyStockBasicURL, cfg.EastmoneySectorRankingURL, cfg.EastmoneyIndexURL,
+		cfg.EastmoneyMarketStocksURL, cfg.EastmoneyLimitPoolBaseURL, cfg.EastmoneyStockBoardsURL,
+		cfg.EastmoneyDragonTigerURL, cfg.EastmoneyAnnouncementsURL, cfg.EastmoneyUT,
+	).WithHotRankingURLs(cfg.EastmoneyHotRankingsURL, cfg.EastmoneyHotSurgeURL).WithCapitalFlowURL(cfg.EastmoneyCapitalFlowURL)
+}
 // validateEgressDependencies 仅校验实际启用 Provider 的出站注入是否完整。
 // 具体 BoundDoer/BoundDialer 的目标地址、DNS/IP 和重定向策略由 Root 负责。
 func validateEgressDependencies(cfg config.Config, deps Dependencies) error {
