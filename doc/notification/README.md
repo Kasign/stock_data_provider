@@ -52,3 +52,11 @@ Notification 是独立通知业务模块，负责事件接收、Subscription、T
 - Application 与 MySQL Inbox Repository 统一将接收时间截断到微秒，匹配 MariaDB `DATETIME(6)`；首次接收与重复接收返回同一持久化时间精度。
 - 新增纳秒时钟输入回归测试，验证 AcceptedAt 微秒精度及重放稳定性。
 - 当前 HEAD：`f7eb85a0ed185a3ce28a749a51c9ae66292382d7`；Go workflow Run `42597043749` 已排队，尚无测试结果。
+
+
+### Inbox 时间精度修复 CI 结果
+
+- 代码提交：`f7eb85a0ed185a3ce28a749a51c9ae66292382d7`；Run `42597043749`。
+- `Test go-core`：通过（gofmt、单测、Race Detector、go vet）。
+- 根模块 `Test .`：仍在 gofmt 阶段失败；失败门禁来自仓库其他目录的格式差异，根模块测试未执行。本次不能据此声称 Notification 根模块测试通过。
+- MariaDB 集成 Job 未执行；真实 DSN 验收仍缺。
