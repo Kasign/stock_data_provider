@@ -2072,3 +2072,17 @@ Go test suite Run `42207170280` 已全部结束：
 CI：本轮 SHA 对应 Go test suite Run `42549171549`。截至本次文档提交时，Data Module gofmt 已通过，`go test ./...` 仍在运行，race/vet 尚未开始；不得标记本轮测试通过。上一 SHA `3d561d2c` 的 Data Module gofmt、Go Test、race、vet、MariaDB/PIT、Compose/Docker 已全部通过。
 
 **当前结论：** Probe 请求 Schema 自动化核对已补充，等待当前 SHA CI。CT-05 仍进行中；M0 继续 `in_progress`，M1 不准入。
+
+
+### 2026-11-09：CT-05 Probe Schema 测试缺口修正
+
+代码基线：`f8931bb7877b3575ca0c99e324a1b814eae38732`。本轮复核最新 Probe Schema 测试及其历史差异，发现当前测试虽然覆盖了 markets/symbols 的数组上限，但漏掉了 `symbols.items.pattern` 的断言；此前同名重复测试副本包含该检查，清理重复副本时未保留这一项。
+
+- 补回 `symbols.items.type=string` 与六位证券代码、SH/SZ/BJ 后缀的正则契约断言。
+- 为 markets/checks 等枚举数组统一检查 items.type，避免 OpenAPI 仅有 enum 而元素类型漂移。
+- 仅修改 HTTP Contract Test；不修改 Probe Handler、Provider 行为、请求 DTO、OpenAPI 字段或数据库。
+- 本轮提交的 Data Module 测试尚未执行；按分支构建约束，后续通过 integration 集成验收，不在本分支宣称构建通过。
+
+**CI 复核补充：** SHA `2d050c32` 对应 Run `42549171549` 已结束：Data Module gofmt、Go tests、race、vet、MariaDB/PIT/Probe 集成、Compose 和 Docker 构建均 success；Root Test Job 因 Research 文件 gofmt 失败。该失败不属于 Data 范围。
+
+**当前结论：** CT-05 仍为进行中；M0 仍为 `in_progress`，M1 不准入。下一步继续核对 35 个 Operation 剩余参数的 type/format/minimum/maximum/default/enum 与 Handler 语义，并完成生产 DDL 快照对照；不新增 API 或字段。
