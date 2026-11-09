@@ -572,4 +572,5 @@ Server 层完成不是“服务能够启动”这么简单。至少同时满足�
 - 移除旧 API 的根路径 catch-all 作为 Root Server 路由注册方式，改为逐条显式注册受保护路径；未登记路径由 Router 返回 404。
 - 新增配置测试和 Router 访问矩阵测试，覆盖匿名 liveness、readiness 未认证、业务路由未认证/owner 认证、未注册路径。
 - 当前属于兼容期安全收口：旧 Analysis 仍是业务 Handler 的所有者；待各模块公开 Handler 和真实 Scope 契约具备后，按模块替换 owner-only 临时策略。Readiness 仅对 owner 开放，部署探针需使用受保护的内网代理/认证探针配置。
+- `.env.example` 已补充 `PLATFORM_ADMIN_TOKEN` 必填项说明；部署时必须替换为密码学安全随机生成的 32～256 字节 URL-safe Token。
 - 本轮尚未执行 gofmt/go test/CI；不能标记编译或测试通过。
