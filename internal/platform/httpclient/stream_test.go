@@ -339,7 +339,6 @@ func TestOpenStreamSlowConsumerDoesNotPrebuffer(t *testing.T) {
 	_, _ = io.Copy(io.Discard, response.Body)
 }
 
-
 func TestOpenStreamRejectsOversizedResponseHeaders(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("X-Large", strings.Repeat("x", 4096))
