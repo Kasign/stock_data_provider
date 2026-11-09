@@ -402,3 +402,37 @@ func TestValidateJSONSchemaInstanceRejectsDuplicateObjectKeys(t *testing.T) {
 		})
 	}
 }
+
+
+func TestFirstFactorQuantMetricSchemaValidatesGoldenAndRejectsInvalidStates(t *testing.T) {
+	schema := compileQuantSchemaFile(t, "QNT-CTR-004-factor-quant-metric-1.0.0.schema.json")
+	files, err := filepath.Glob(filepath.Join("..", "..", "..", "doc", "quant", "golden", "result", "factor", "*.golden.json"))
+	if err != nil {
+		t.Fatalf("list factor QuantMetric Golden fixtures: %v", err)
+	}
+	if len(files) != 6 {
+		t.Fatalf("factor QuantMetric Golden fixture count = %d, want 6", len(files))
+	}
+	for _, path := range files {
+		content, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read Golden %s: %v", path, err)
+		}
+		if err := validateJSONSchemaInstance(schema, content); err != nil {
+			t.Errorf("Golden %s violates QNT-CTR-004: %v", filepath.Base(path), err)
+		}
+	}
+	invalid := []string{
+		`{"metric_code":"momentum_20d","value":null,"unit":"ratio","period":"20d","system_as_of":"2026-11-09T00:00:00Z","quality_status":"valid","metric_status":"available","calculation_version":"1.0.0","sample_count":21,"lower_bound":null,"upper_bound":null}`,
+		`{"metric_code":"momentum_20d","value":0.2,"unit":"ratio","period":"60d","system_as_of":"2026-11-09T00:00:00Z","quality_status":"valid","metric_status":"available","calculation_version":"1.0.0","sample_count":21,"lower_bound":null,"upper_bound":null}`,
+		`{"metric_code":"momentum_20d","value":0.2,"unit":"ratio","period":"20d","system_as_of":"2026-11-09T00:00:00Z","quality_status":"unknown","metric_status":"available","calculation_version":"1.0.0","sample_count":21,"lower_bound":null,"upper_bound":null}`,
+		`{"metric_code":"momentum_20d","value":0.2,"unit":"ratio","period":"20d","system_as_of":"2026-11-09T00:00:00Z","quality_status":"valid","metric_status":"insufficient_data","calculation_version":"1.0.0","sample_count":21,"lower_bound":null,"upper_bound":null}`,
+		`{"metric_code":"momentum_20d","value":0.2,"unit":"ratio","period":"20d","system_as_of":"2026-11-09T00:00:00Z","quality_status":"valid","metric_status":"available","calculation_version":"1.0.0","sample_count":21,"lower_bound":0.1,"upper_bound":null}`,
+		`{"metric_code":"momentum_20d","value":0.2,"unit":"ratio","period":"20d","system_as_of":"2026-11-09T00:00:00+08:00","quality_status":"valid","metric_status":"available","calculation_version":"1.0.0","sample_count":21,"lower_bound":null,"upper_bound":null}`,
+	}
+	for _, instance := range invalid {
+		if err := validateJSONSchemaInstance(schema, []byte(instance)); err == nil {
+			t.Errorf("invalid QuantMetric unexpectedly passed: %s", instance)
+		}
+	}
+}

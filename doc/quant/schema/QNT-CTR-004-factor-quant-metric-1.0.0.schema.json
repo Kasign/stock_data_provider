@@ -1,0 +1,247 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://stock-data-provider.local/schema/QNT-CTR-004-factor-quant-metric-1.0.0.schema.json",
+  "title": "Quant CTR-004 First Factor QuantMetric",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "metric_code",
+    "value",
+    "unit",
+    "period",
+    "system_as_of",
+    "quality_status",
+    "metric_status",
+    "calculation_version",
+    "sample_count",
+    "lower_bound",
+    "upper_bound"
+  ],
+  "properties": {
+    "metric_code": {
+      "type": "string",
+      "enum": [
+        "momentum_20d",
+        "momentum_60d",
+        "volatility_20d"
+      ]
+    },
+    "value": {
+      "type": [
+        "number",
+        "null"
+      ]
+    },
+    "unit": {
+      "const": "ratio"
+    },
+    "period": {
+      "type": "string",
+      "enum": [
+        "20d",
+        "60d"
+      ]
+    },
+    "system_as_of": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "Z$"
+    },
+    "quality_status": {
+      "type": "string",
+      "enum": [
+        "valid",
+        "degraded",
+        "invalid",
+        "unknown"
+      ]
+    },
+    "metric_status": {
+      "type": "string",
+      "enum": [
+        "available",
+        "insufficient_data",
+        "insufficient_sample",
+        "not_applicable",
+        "unknown"
+      ]
+    },
+    "calculation_version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.-]+)?$"
+    },
+    "sample_count": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 0
+    },
+    "lower_bound": {
+      "type": [
+        "number",
+        "null"
+      ]
+    },
+    "upper_bound": {
+      "type": [
+        "number",
+        "null"
+      ]
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "metric_code": {
+            "const": "momentum_20d"
+          }
+        },
+        "required": [
+          "metric_code"
+        ]
+      },
+      "then": {
+        "properties": {
+          "period": {
+            "const": "20d"
+          },
+          "sample_count": {
+            "minimum": 21
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "metric_code": {
+            "const": "momentum_60d"
+          }
+        },
+        "required": [
+          "metric_code"
+        ]
+      },
+      "then": {
+        "properties": {
+          "period": {
+            "const": "60d"
+          },
+          "sample_count": {
+            "minimum": 61
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "metric_code": {
+            "const": "volatility_20d"
+          }
+        },
+        "required": [
+          "metric_code"
+        ]
+      },
+      "then": {
+        "properties": {
+          "period": {
+            "const": "20d"
+          },
+          "sample_count": {
+            "minimum": 20
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "metric_status": {
+            "const": "available"
+          }
+        },
+        "required": [
+          "metric_status"
+        ]
+      },
+      "then": {
+        "properties": {
+          "value": {
+            "type": "number"
+          },
+          "quality_status": {
+            "const": "valid"
+          },
+          "sample_count": {
+            "type": "integer"
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "value": {
+            "type": "null"
+          },
+          "lower_bound": {
+            "type": "null"
+          },
+          "upper_bound": {
+            "type": "null"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "quality_status": {
+            "enum": [
+              "invalid",
+              "unknown"
+            ]
+          }
+        },
+        "required": [
+          "quality_status"
+        ]
+      },
+      "then": {
+        "properties": {
+          "metric_status": {
+            "not": {
+              "const": "available"
+            }
+          }
+        }
+      }
+    },
+    {
+      "oneOf": [
+        {
+          "properties": {
+            "lower_bound": {
+              "type": "null"
+            },
+            "upper_bound": {
+              "type": "null"
+            }
+          }
+        },
+        {
+          "properties": {
+            "lower_bound": {
+              "type": "number"
+            },
+            "upper_bound": {
+              "type": "number"
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
