@@ -7,7 +7,7 @@
 - 跨模块准入：`doc/整体任务规划/01-项目总览/跨模块接入执行说明.md`、`doc/整体任务规划/01-项目总览/跨模块接入准入清单.md`
 - 本记录建立时的代码基线：`d8595f408337f62be3697aac661ba1570fdd3667`
 - 最近一次 M0 审计基线：`9687337743ff5ad8b5b81209831d43689693ae47`
-- 当前开发分支 HEAD（2026-11-09 07:22:59 UTC）：`db69e4a17967e450a8b6cf1d7417df625c1bf0ea`（增加共享 go-redis Cache 适配器）
+- 当前开发分支 HEAD（本轮最后代码提交）：`e25afee8d6e1c28b880d805d653edacd5073d9b8`（补齐共享 Redis Cache 错误语义测试）
 - 当前实施状态：`M1_completed / M2_completed / M3_in_progress / M4_in_progress`；M3 的 Data 侧进程内路由准备已完成，Root Server 实际装配仍待 Server 组合根完成；M4 的 borrowed DB 与 go-redis Cache Adapter 已实现，Root 侧资源注入/配置一致性及 Provider 网络出口适配仍未完成。
 
 > 本文记录 Data 从独立 Go Module/服务迁入 Root Server 根 Go Module、同进程运行的实施计划和进度。若本文与上述架构决策文档冲突，以架构决策文档为准；公共平台及 DATA 契约以冻结契约文档为准。本文不重新定义契约。
@@ -855,3 +855,13 @@ internal/
   3. Provider HTTP 出站接入复用 `internal/platform/httpclient` 的 BoundDoer/DestinationPolicy；逐 Provider 明确 endpoint Host/Port、HTTP/HTTPS、重定向和请求体/响应限制。不得在 Data 重写 SSRF、DNS/IP 或连接池能力。
   4. BaoStock/Pytdx TCP 出站策略单独处理，不包装成 HTTP，也不扩大 HTTP Client 职责。
   5. M3/M4 代码集成验收仍按用户要求在 `origin/integration` 执行；本分支不执行构建、不修改 integration。
+
+
+### 2026-11-09：M4-Redis Cache 契约回归补充
+
+- 代码基线：`e25afee8d6e1c28b880d805d653edacd5073d9b8`。
+- 在既有 `cache.Cache` 接口与 `GoRedis` 实现不变的前提下，补齐测试对 GET key 原样传递、GET 非 miss 错误透传、SET 错误透传的断言。
+- 本次只增加回归覆盖，不新增接口、字段、缓存 key、TTL 规则或公共平台代码；既有 `redis.Nil` 仍是唯一映射为 cache miss 的错误。
+- 本次提交后尚未执行构建或测试。按当前约束，不在功能分支执行构建；如需构建，须先按既定流程在 integration 验收，且不得直接修改 integration。
+- 因此当前判定为：实现与测试代码已提交，新增断言待集成构建验证；不能标记 M4 Redis 完整验收通过。
+- 下一步：完成 Tushare 这一类携带 Token JSON Body 的 HTTP Provider 受控出口接入评估/实现，使用既有 `internal/platform/httpclient` 的 BoundDoer 与固定 DestinationPolicy；保持 Tushare 请求/响应字段和数据语义不变。之后再按 Provider 分组扩展，不一次性重写全部 HTTP Provider。
