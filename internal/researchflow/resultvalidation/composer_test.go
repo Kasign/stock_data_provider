@@ -133,6 +133,49 @@ func TestComposeResultRejectsIncompleteOrToolCallingLLMResponse(t *testing.T) {
 	}
 }
 
+func TestComposeResultRejectsBrokenContextAndRiskReferenceClosure(t *testing.T) {
+	input := validCompositionInput()
+	input.Context.IncludedSections = []string{"missing-section"}
+	if _, err := ComposeResult(input, nil); !errors.Is(err, ErrInvalidResultComposition) {
+		t.Fatalf("included section without ContextSectionRef should fail, got %v", err)
+	}
+
+	input = validCompositionInput()
+	risk := validRiskDecision()
+	risk.InputRefs = []string{"missing-quant-or-snapshot"}
+	input.RiskDecision = &risk
+	if _, err := ComposeResult(input, nil); !errors.Is(err, ErrInvalidResultComposition) {
+		t.Fatalf("unknown RiskDecision input should fail, got %v", err)
+	}
+
+	input = validCompositionInput()
+	risk = validRiskDecision()
+	risk.Reasons[0].EvidenceRefs = []string{"missing-evidence"}
+	input.RiskDecision = &risk
+	if _, err := ComposeResult(input, nil); !errors.Is(err, ErrInvalidResultComposition) {
+		t.Fatalf("unknown RiskDecision evidence should fail, got %v", err)
+	}
+}
+
+func TestComposeResultAcceptsRiskReferencesResolvedByContextAndQuant(t *testing.T) {
+	input := validCompositionInput()
+	input.QuantResults = []QuantResultEnvelope{validQuantResult()}
+	registry := NewRegistry()
+	if err := registry.Register("indicator", "1.0.0", PayloadValidatorFunc(func(json.RawMessage) error { return nil })); err != nil {
+		t.Fatal(err)
+	}
+	risk := validRiskDecision()
+	risk.InputRefs = []string{"qres_1", "snapshot-1"}
+	input.RiskDecision = &risk
+	result, err := ComposeResult(input, registry)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.RiskDecision == nil {
+		t.Fatal("validated RiskDecision was dropped")
+	}
+}
+
 func TestComposeResultRejectsRiskPassContradiction(t *testing.T) {
 	input := validCompositionInput()
 	risk := validRiskDecision()
