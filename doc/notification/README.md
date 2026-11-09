@@ -3,9 +3,10 @@
 - 目标分支：`feat/notification`
 - 代码目录：`internal/notification/**`
 - 任务前缀：NTF
-- 当前阶段：NTF-001～005 的领域、Schema、Fake、Renderer、RetryPolicy、Preflight 契约已建立；NTF-006 已有五表 Migration、DeliveryPlan MySQL Adapter 和 Delivery MySQL Adapter。Delivery 的真实 MariaDB 并发领取、CAS、状态事件事务测试已编写，尚待当前分支 CI 执行及真实 DSN 验证。Attempt、Subscription、Inbox 的真实 Repository Adapter，租约恢复事务与 Fanout/Dispatcher/Worker 仍未完成。
-- 当前代码事实：`internal/notification/storage` 已包含五表 Migration、DeliveryPlan MySQL Adapter 与 Delivery MySQL Adapter。Delivery Adapter 实现初始 queued 记录创建、读取、事务行锁领取、fencing token 递增、版本 CAS、状态事件同事务追加，以及离开 sending 时释放租约；共享 `*sql.DB` 由调用方管理。MariaDB 集成测试代码覆盖 Delivery 与不可变 Plan 一致性、唯一性、读取、16 Worker 单赢家、fencing token、状态 CAS、状态事件追加失败回滚、租约释放；由于根模块测试未执行，不能据此标记测试通过；真实 DSN 执行证据尚缺。Delivery Adapter 尚未实现 Attempt 持久化，也未实现过期租约扫描/恢复。
-- 本轮功能提交：`c85e539`（Delivery MariaDB Repository）、`cdbf8bd`（MariaDB 集成测试）、`2e7102d`（gofmt 修复）、`4bcb0fa`（Delivery 快照与不可变 Plan 一致性校验、StateEvent 插入失败回滚验收）。PR #48 指向 `integration`。最新 CI Run `42574033768` 的根模块在 gofmt 阶段被 Quant/Research 文件格式问题阻断；Notification 文件未出现在失败列表中，Go tests/race/vet 未执行。Notification MariaDB 真实 DSN 测试尚无执行证据。
+- 当前阶段：NTF-001～005 的领域、Schema、Fake、Renderer、RetryPolicy、Preflight 契约已建立；NTF-006 已有五表 Migration、DeliveryPlan、Delivery 和 DeliveryAttempt MySQL Adapter。DeliveryAttempt 的 MariaDB 并发/事务集成测试已编写，尚待当前分支 CI 执行及真实 DSN 验证。Subscription、Inbox Adapter、租约恢复事务与 Fanout/Dispatcher/Worker 仍未完成。
+- 当前代码事实：`internal/notification/storage` 已包含五表 Migration、DeliveryPlan、Delivery 与 DeliveryAttempt MySQL Adapter。Delivery Adapter 实现初始 queued 记录创建、读取、事务行锁领取、fencing token 递增、版本 CAS、状态事件同事务追加，以及离开 sending 时释放租约。Attempt Adapter 实现 StartWithLease、CompleteWithLease、ListByDelivery；Start 将 Attempt 插入与 Delivery.attempt_count 投影更新放在同一事务，Start/Complete 均在事务内用 `UTC_TIMESTAMP(6)` 校验数据库权威时钟、Delivery 版本、Worker、fencing token 和租约有效期；同一 Delivery 行锁串行化 Attempt 启动，并依赖 DDL 唯一索引作最终约束。两个 Adapter 均借用调用方提供的共享 `*sql.DB`，不管理连接池生命周期。
+- Delivery MariaDB 测试覆盖 Delivery 与不可变 Plan 快照一致性、唯一性、读取、16 Worker 单赢家、状态 CAS、状态事件追加失败回滚和租约释放。Attempt MariaDB 测试覆盖同一租约 8 路并发仅一个 Attempt 成功、attempt_count 投影、运行中/完成记录读取、重复完成拒绝和同 fencing token 二次追加拒绝。上述测试均为已编写的验收代码；当前 HEAD 的 Go workflow 尚未完成，真实 MariaDB DSN 执行证据仍缺，不能据此标记通过。
+- 本轮功能提交：`c85e539`（Delivery MariaDB Repository）、`cdbf8bd`（Delivery 集成测试）、`2e7102d`（gofmt 修复）、`4bcb0fa`（Delivery 快照一致性与事务回滚）、`d38c8d1`（DeliveryAttempt Adapter）、`c61c132`（Attempt 完成租约校验修正）、`c548ebd`（Attempt MariaDB 集成测试）。PR #48 指向 `integration`；PR 最新 HEAD 为 `c548ebd`，对应 Go workflow Run `42575041566` 正在执行。此前 Run `42574272594` 在全仓测试中失败，需读取当前 Run 的具体 Job/步骤结果后再判定是否为本分支问题。
 
 Notification 是独立通知业务模块，负责事件接收、Subscription、Template、Channel、Dispatcher、Delivery、Attempt、幂等、重试和投递诊断。不计算业务告警条件，不依赖 Researchflow 内部实现。
 
@@ -27,11 +28,11 @@ Notification 是独立通知业务模块，负责事件接收、Subscription、T
 |---|---|---|
 | 领域设计与字段契约 | 已建立 | 以 01/03 文档为准；发现契约矛盾先修正文档并评审 |
 | Schema/Golden 资产 | 模块 CI 已通过，跨模块证据待补 | 4 Schema、6 Golden；Draft 2020-12 Envelope/Payload Validator 和 Golden 测试已编写；完整 CI Run 42201893234 已通过；NTF-CTR-001～003 仍因跨模块/真实 Adapter 证据不足保持 pending_evidence |
-| Go Notification Domain/Application | 部分实现 | EventEnvelope、JCS Fingerprint、Envelope/Payload Validator、EventReceiver、Subscription/DeliveryPlan 领域校验已实现；真实 Repository Adapter 尚未实现 |
-| Inbox/Subscription/DeliveryPlan | 部分实现 | 双唯一 Inbox Port/Fake、Subscription append-only Repository Port/Fake（版本追加、CAS 并发）与 DeliveryPlan 唯一性 Port/Fake、完整授权策略 tuple 指纹冲突测试已实现；真实持久化和 fan-out 事务仍待实现 |
+| Go Notification Domain/Application | 部分实现 | EventEnvelope、JCS Fingerprint、Envelope/Payload Validator、EventReceiver、Subscription/DeliveryPlan 领域校验已实现；Inbox/Subscription 真实 Repository Adapter 尚未实现 |
+| Inbox/Subscription/DeliveryPlan | 部分实现 | 双唯一 Inbox Port/Fake、Subscription append-only Repository Port/Fake（版本追加、CAS 并发）与 DeliveryPlan 唯一性 Port/Fake、完整授权策略 tuple 指纹冲突测试已实现；DeliveryPlan MariaDB Adapter 已实现；Inbox/Subscription 真实持久化和 fan-out 事务仍待实现 |
 | Template/Renderer | 部分实现 | 固定版本 Registry、JSON Pointer 标量 allowlist、text/HTML 渲染、HTML 自动转义、CRLF Subject 拒绝和显式资源限制已实现；生产模板内容/持久化尚未实现 |
-| Channel/Dispatcher/Retry | 部分实现 | Channel Domain、精确版本内存 Registry、Adapter/RecipientResolver Port 与 Fake Adapter 测试已建立；Delivery 状态领域模型/迁移测试及 Repository Port/Fake、Claim/CAS 并发测试已编写；DeliveryAttempt 领域模型与 Attempt Repository Port/Fake 也已建立，测试尚未获得本轮 CI 通过证据；真实 Repository Adapter、Dispatcher/Worker、租约恢复和 Retry 尚未实现 |
-| Repository/Migration | 进行中 | 已建立首批 DDL、DeliveryPlan MySQL Adapter 和可选 MariaDB 集成测试；Delivery/Attempt/Subscription/Inbox Adapter、根 Migration 注册和真实 MariaDB 执行证据仍缺 |
+| Channel/Dispatcher/Retry | 部分实现 | Channel Domain、精确版本内存 Registry、Adapter/RecipientResolver Port 与 Fake Adapter 测试已建立；Delivery/Attempt 领域模型、Repository Port/Fake、RetryPolicy、Preflight 已建立；真实 Dispatcher/Worker、租约恢复仍未实现 |
+| Repository/Migration | 进行中 | 已建立五表 DDL、DeliveryPlan/Delivery/DeliveryAttempt MySQL Adapter 和可选 MariaDB 集成测试；Subscription/Inbox Adapter、根 Migration 注册和真实 MariaDB 执行证据仍缺 |
 | 三生产方事件接入 | 未验收 | 仅按各生产方契约和真实测试证据逐项开放 |
 | 真实渠道与 L3 集成 | 未开始/不可比较 | 无真实凭据、回执、MariaDB/Worker 集成证据时不得标记通过 |
 
