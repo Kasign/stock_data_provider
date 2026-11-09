@@ -317,3 +317,12 @@ Fake Repository/Fake Clock/Fake Provider 只证明模块内逻辑；MariaDB/Redi
 - Normalizer 不提供 retryable、RetryAt 或退避参数。Worker 只按 Run Snapshot 内不可变 RetryPolicy 的精确 ReasonCode allowlist、MaxAttempts 和指数 full jitter 计算是否重试。
 - 未注入 Normalizer 时 Provider error 仍 fail-closed，不会被自动猜测为 provider_unavailable；Normalizer 返回空 FaultRef/ReasonCode 或自身错误时不得提交。
 - 上下文取消和 deadline 不进入 Provider Fault 分类。真实 Platform Fault 创建/查询 Adapter 及 Server 注入仍待根组合层接入。
+
+
+### 9.6 Run Deadline 到期收敛
+
+- Deadline expiration 与用户取消是互斥路径：仅处理 Run=created/queued/running 且数据库 UTC 已达到 deadline_at 的 Run；Run=cancelling 不允许进入 deadline expiration，不得混用 `user_cancelled` 与 `deadline_exceeded`。
+- Storage `ExpireRunDeadline` 锁顺序 Run → Stage（stage_ref 排序）→ Attempt（stage_ref/attempt_no 排序）；所有非终态 Stage 转 timed_out，追加 `run_deadline_exceeded`；所有 running Attempt 立即转 timed_out、清除 lease、fencing_token+1。该操作不等待 lease expiry。
+- Run 保持 running 以便 Application 使用已有 Domain 聚合规则计算 failed/partial 与 ResultSummary；Storage 只写 termination_reason=`deadline_exceeded` 并递增 Run.version。随后必须用新 version 调用既有 FinalizeRun，ResultSummary/Outbox/Run 终态仍原子提交。
+- FinalizeRun 对 deadline_exceeded 增加终态限制，只允许 failed/partial，禁止 deadline 已过仍以 succeeded 终结。
+- 当前仅实现 Storage 原语和终结门禁；Deadline Scanner、Application 聚合/Finalize 编排、Server 周期任务和 MariaDB 集成验收尚未完成。
