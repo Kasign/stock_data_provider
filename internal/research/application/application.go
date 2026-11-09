@@ -197,9 +197,15 @@ type ClaimRepository interface {
 	Append(context.Context, researchclaim.Claim) error
 	GetVersion(context.Context, string, int) (researchclaim.Claim, error)
 }
+type UpdateClaimCommand struct {
+	ClaimID string
+	ExpectedVersion int
+	Revision CreateClaimCommand
+}
 type ClaimPort interface {
 	CreateClaim(context.Context, CreateClaimCommand) (Claim, error)
 	GetClaim(context.Context, ClaimRef) (Claim, error)
+	UpdateClaim(context.Context, UpdateClaimCommand) (Claim, error)
 }
 
 type CreateContextCommand struct {
@@ -448,6 +454,19 @@ func NewServiceWithClaims(contexts ContextRepository, evidence EvidenceRepositor
 	return service, nil
 }
 
+func fromDomainClaim(value researchclaim.Claim) Claim {
+	return Claim{
+		ClaimID: value.ClaimID, ClaimVersion: value.ClaimVersion, Statement: value.Statement,
+		EpistemicType: string(value.EpistemicType), ScopeRefs: cloneStrings(value.ScopeRefs),
+		SystemAsOf: value.SystemAsOf, SupportingEvidenceRefs: cloneStrings(value.SupportingEvidenceRefs),
+		ContradictingEvidenceRefs: cloneStrings(value.ContradictingEvidenceRefs),
+		RequiredDataRefs: cloneStrings(value.RequiredDataRefs), ValidationMethod: cloneString(value.ValidationMethod),
+		ExpectedObservation: cloneString(value.ExpectedObservation),
+		InvalidationConditions: cloneStrings(value.InvalidationConditions), Status: string(value.Status),
+		Limitations: cloneStrings(value.Limitations),
+	}
+}
+
 func (s *Service) CreateClaim(ctx context.Context, command CreateClaimCommand) (Claim, error) {
 	if s == nil || s.claims == nil {
 		return Claim{}, applicationFault(fault.ClassInternal, "research_claim_repository_not_configured", "Research Claim Repository is not configured", researcherrors.ErrInvalidRepository)
@@ -469,6 +488,45 @@ func (s *Service) CreateClaim(ctx context.Context, command CreateClaimCommand) (
 	if err := value.Validate(); err != nil { return Claim{}, validationFault("invalid_research_claim", "Research Claim is invalid", err) }
 	if err := s.claims.Append(ctx, value); err != nil { return Claim{}, mapRepositoryError(err) }
 	return fromDomainClaim(value), nil
+}
+
+func (s *Service) UpdateClaim(ctx context.Context, command UpdateClaimCommand) (Claim, error) {
+	if s == nil || s.claims == nil {
+		return Claim{}, applicationFault(fault.ClassInternal, "research_claim_repository_not_configured", "Research Claim Repository is not configured", researcherrors.ErrInvalidRepository)
+	}
+	if ctx == nil || strings.TrimSpace(command.ClaimID) == "" || command.ExpectedVersion < 1 {
+		return Claim{}, validationFault("invalid_claim_revision_ref", "Claim revision reference is invalid", nil)
+	}
+	previous, err := s.claims.GetVersion(ctx, command.ClaimID, command.ExpectedVersion)
+	if err != nil {
+		return Claim{}, mapRepositoryError(err)
+	}
+	if err := previous.Validate(); err != nil {
+		return Claim{}, applicationFault(fault.ClassInternal, "stored_claim_invalid", "Stored Research Claim is invalid", err)
+	}
+	if command.ExpectedVersion == int(^uint(0)>>1) {
+		return Claim{}, validationFault("claim_version_exhausted", "Claim version cannot be incremented", nil)
+	}
+	revision := command.Revision
+	next := researchclaim.Claim{
+		ClaimID: previous.ClaimID, ClaimVersion: command.ExpectedVersion + 1,
+		Statement: revision.Statement, EpistemicType: researchclaim.EpistemicType(revision.EpistemicType),
+		ScopeRefs: cloneStrings(revision.ScopeRefs), SystemAsOf: revision.SystemAsOf,
+		SupportingEvidenceRefs: cloneStrings(revision.SupportingEvidenceRefs),
+		ContradictingEvidenceRefs: cloneStrings(revision.ContradictingEvidenceRefs),
+		RequiredDataRefs: cloneStrings(revision.RequiredDataRefs),
+		ValidationMethod: cloneString(revision.ValidationMethod),
+		ExpectedObservation: cloneString(revision.ExpectedObservation),
+		InvalidationConditions: cloneStrings(revision.InvalidationConditions),
+		Status: researchclaim.ClaimStatus(revision.Status), Limitations: cloneStrings(revision.Limitations),
+	}
+	if err := next.ValidateNextVersion(previous); err != nil {
+		return Claim{}, validationFault("invalid_claim_revision", "Research Claim revision is invalid", err)
+	}
+	if err := s.claims.Append(ctx, next); err != nil {
+		return Claim{}, mapRepositoryError(err)
+	}
+	return fromDomainClaim(next), nil
 }
 
 func (s *Service) GetClaim(ctx context.Context, ref ClaimRef) (Claim, error) {

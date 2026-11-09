@@ -211,3 +211,10 @@ R1/R2/R3/R5 当前实现 Context、Evidence、Event、Claim/Hypothesis 领域结
 - `ClaimPort` 提供 `CreateClaim` 与 `GetClaim`；Hypothesis 使用 `epistemic_type=hypothesis`，复用同一 Claim 聚合。
 - 创建时由 Research 服务端生成 ClaimID，版本固定为 1；领域校验强制 Hypothesis 验证方法、预期观察和失效条件。
 - 版本更新接口暂不暴露，等待终态修订和 supersedes_version 契约明确。
+
+
+### Research Claim Application 状态迁移用例（2026-11-09）
+- 增加 UpdateClaim Application 用例，调用方必须提交 ClaimID 与 ExpectedVersion；Research 读取指定前版并构造连续的新版本，不允许调用方覆盖聚合 ID 或版本号。
+- 新版本在写入前执行 Domain ValidateNextVersion，复用已冻结的 proposed→testing、testing→终态/unknown、同状态修订规则；终态和 unknown 不开放恢复路径。
+- Repository Append 继续负责事务内最新版本连续性与并发冲突检测；Application 的前读不替代 Repository 的原子约束。过期 ExpectedVersion 会因精确版本不存在或 Repository 冲突而失败。
+- 本批增加成功迁移与旧版本重放拒绝测试；Go 测试及 MariaDB 并发验收尚未执行。

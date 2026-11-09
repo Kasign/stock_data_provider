@@ -117,8 +117,11 @@ func TestCreateEventRejectsInvalidEventBeforePersistence(t *testing.T) {
 	if repo.appended { t.Fatal("invalid Event must not be persisted") }
 }
 
-type claimRepoFake struct { value researchclaim.Claim; appended bool }
-func (f *claimRepoFake) Append(_ context.Context, value researchclaim.Claim) error { f.value=value; f.appended=true; return nil }
+type claimRepoFake struct { value researchclaim.Claim; appended bool; appendErr error }
+func (f *claimRepoFake) Append(_ context.Context, value researchclaim.Claim) error {
+	if f.appendErr != nil { return f.appendErr }
+	f.value=value; f.appended=true; return nil
+}
 func (f *claimRepoFake) GetVersion(_ context.Context, id string, version int) (researchclaim.Claim,error) {
 	if f.value.ClaimID!=id || f.value.ClaimVersion!=version { return researchclaim.Claim{}, errors.New("missing") }
 	return f.value,nil
@@ -163,3 +166,35 @@ func TestCreateHypothesisRequiresValidationContract(t *testing.T) {
 	if repo.appended { t.Fatal("invalid Hypothesis must not be persisted") }
 }
 
+
+func TestUpdateClaimEnforcesExpectedVersionAndDomainTransition(t *testing.T) {
+	now := time.Date(2026, 11, 9, 2, 0, 0, 0, time.UTC)
+	repo := &claimRepoFake{value: researchclaim.Claim{
+		ClaimID: "clm_existing", ClaimVersion: 1, Statement: "待验证的盈利改善判断",
+		EpistemicType: researchclaim.EpistemicHypothesis, ScopeRefs: []string{"security:600000"},
+		SystemAsOf: now.Add(-time.Minute), SupportingEvidenceRefs: []string{},
+		ContradictingEvidenceRefs: []string{}, RequiredDataRefs: []string{"data:forecast"},
+		ValidationMethod: stringPointer("比较预测修订"), ExpectedObservation: stringPointer("预测上调"),
+		InvalidationConditions: []string{"预测持续下调"}, Status: researchclaim.StatusProposed, Limitations: []string{},
+	}}
+	service, err := NewServiceWithClaims(&contextRepoFake{}, &evidenceRepoFake{}, repo, &authorizerFake{}, nil, &fixedIDs{})
+	if err != nil { t.Fatal(err) }
+	revision := CreateClaimCommand{
+		Statement: "盈利改善判断进入验证阶段", EpistemicType: string(researchclaim.EpistemicHypothesis),
+		ScopeRefs: []string{"security:600000"}, SystemAsOf: now,
+		SupportingEvidenceRefs: []string{"ev_support_1"}, ContradictingEvidenceRefs: []string{},
+		RequiredDataRefs: []string{"data:forecast"}, ValidationMethod: stringPointer("比较预测修订"),
+		ExpectedObservation: stringPointer("预测上调"), InvalidationConditions: []string{"预测持续下调"},
+		Status: string(researchclaim.StatusTesting), Limitations: []string{},
+	}
+	got, err := service.UpdateClaim(context.Background(), UpdateClaimCommand{ClaimID: "clm_existing", ExpectedVersion: 1, Revision: revision})
+	if err != nil { t.Fatal(err) }
+	if got.ClaimID != "clm_existing" || got.ClaimVersion != 2 || got.Status != string(researchclaim.StatusTesting) {
+		t.Fatalf("unexpected Claim revision: %+v", got)
+	}
+	if _, err := service.UpdateClaim(context.Background(), UpdateClaimCommand{ClaimID: "clm_existing", ExpectedVersion: 1, Revision: revision}); err == nil {
+		t.Fatal("stale expected version must not be accepted")
+	}
+}
+
+func stringPointer(value string) *string { return &value }
