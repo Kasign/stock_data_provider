@@ -102,6 +102,20 @@ func ToResearchCreateContextCommand(
 	if len(included)+len(omitted) != len(candidateByID) {
 		return researchapp.CreateContextCommand{}, fmt.Errorf("%w: plan does not partition all candidates", ErrInvalidResearchContextProjection)
 	}
+	var accountedTokens int
+	for id := range included {
+		accountedTokens += candidateByID[id].EstimatedTokens
+	}
+	if accountedTokens != plan.UsedTokens {
+		return researchapp.CreateContextCommand{}, fmt.Errorf("%w: used token count does not match included sections", ErrInvalidResearchContextProjection)
+	}
+	for id, value := range omitted {
+		candidate := candidateByID[id]
+		if candidate.Required || len(candidate.ProtectedEvidenceRefs) > 0 ||
+			value.Retryable || value.SafeMessage != ContextBudgetMessage {
+			return researchapp.CreateContextCommand{}, fmt.Errorf("%w: mandatory or protected section %q cannot be omitted", ErrInvalidResearchContextProjection, id)
+		}
+	}
 
 	sectionRefs := make([]researchapp.ContextSectionRef, 0, len(candidates))
 	missingRequired, missingOptional := 0, 0

@@ -109,3 +109,32 @@ func TestToResearchCreateContextCommandRejectsNonUTCMetadata(t *testing.T) {
 		t.Fatalf("expected non-UTC metadata rejection, got %v", err)
 	}
 }
+
+func TestToResearchCreateContextCommandRejectsForgedMandatoryOmissionAndTokenCount(t *testing.T) {
+	now := time.Date(2026, 11, 9, 8, 0, 0, 0, time.UTC)
+	candidates := []SectionCandidate{{ID: "required", SourceOwner: "data", Required: true, EstimatedTokens: 2, SourceRefs: []string{"snapshot-1"}}}
+	metadata := map[string]SectionMetadata{"required": {Version: "1", QualityStatus: "valid", AssembledAt: now}}
+	snapshot := ResearchContextSnapshot{
+		ResearchQuestion: "分析", Scope: "stock", SubjectRefs: []string{"600000.SH"},
+		SystemAsOf: now, BuilderVersion: "v1",
+		QualitySummary: researchapp.ContextQualitySummary{Status: "degraded", MissingRequiredCount: 1, ReasonCodes: []string{"required_missing"}},
+	}
+	forged := Plan{
+		IncludedSections: []string{}, UsedTokens: 0, BudgetTokens: 2,
+		OmittedSections: []OmittedSection{{
+			SectionID: "required", SourceOwner: "data", ReasonCode: OmissionBudgetExceeded,
+			Required: true, SourceRefs: []string{"snapshot-1"}, SafeMessage: ContextBudgetMessage,
+		}},
+	}
+	if _, err := ToResearchCreateContextCommand(snapshot, candidates, metadata, forged); !errors.Is(err, ErrInvalidResearchContextProjection) {
+		t.Fatalf("mandatory omission should be rejected, got %v", err)
+	}
+	plan, err := BuildPlan(candidates, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	plan.UsedTokens = 1
+	if _, err := ToResearchCreateContextCommand(snapshot, candidates, metadata, plan); !errors.Is(err, ErrInvalidResearchContextProjection) {
+		t.Fatalf("inconsistent token accounting should be rejected, got %v", err)
+	}
+}
