@@ -93,6 +93,17 @@ func TestSourceEndpointCheckDoesNotExposeCatalogErrors(t *testing.T) {
 }
 
 func TestStorageChecksReportHealthyAndIncompleteSchema(t *testing.T) {
+	healthyChecks := StorageChecks(storageProbeStub{})
+	healthyReport, err := (platformdiag.Runner{}).Run(context.Background(), healthyChecks)
+	if err != nil {
+		t.Fatal(err)
+	}
+	healthySchema := healthyReport.Results[1].Observation
+	if healthySchema.Status != platformdiag.StatusHealthy ||
+		healthySchema.Attributes["required_tables"] != "10" {
+		t.Fatalf("healthy schema=%+v, want all 10 News tables", healthySchema)
+	}
+
 	checks := StorageChecks(storageProbeStub{missing: []string{"news_item_versions", "news_observations"}})
 	report, err := (platformdiag.Runner{}).Run(context.Background(), checks)
 	if err != nil {
