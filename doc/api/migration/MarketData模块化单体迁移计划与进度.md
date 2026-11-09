@@ -1004,3 +1004,12 @@ internal/
 - Provider 构造仍显式读取对应依赖字段；不改变依赖所有权、默认兼容行为、Provider 优先级或资源关闭语义。
 - 该调整减少新增 Provider 注入项时的签名同步风险，保持 Root 注入契约集中在 `Dependencies`。
 - 本次未运行构建/测试；不宣称编译通过。当前已知 Data gofmt 门禁仍有 6 个文件待修复，后续需在 integration 统一验收。
+
+
+### 2026-11-09：M4 出站依赖严格装配校验
+
+- bootstrap.Dependencies.RequireEgressDependencies 为 Root 生产组合根提供显式严格装配开关；默认关闭，旧独立部署/兼容构造不改变行为。
+- 严格模式在 Module 构造前检查 ProviderPriority 中实际启用 Provider 的 HTTPDoer/TCP DialContext 注入；未启用 Provider 不要求注入，MiaoXiang 仅在 MXEnabled 时要求执行器。
+- Eastmoney 按全部配置 endpoint 计算 scheme://host，逐个要求 origin 对应执行器，不能仅以 map 非 nil 作为通过条件。
+- 校验失败时构造直接返回可定位的缺失依赖错误，不会静默回退标准 HTTP Client/默认 TCP Dialer。严格模式只证明注入入口完整，不证明注入实现具备 SSRF/DNS/IP 防护；Root 仍须使用 Platform 受控执行器。
+- 新增测试源码覆盖禁用 Provider 豁免、启用 Provider 缺失依赖、Eastmoney origin 缺项及 TCP Dialer 缺失。按分支约定未运行构建/测试，待 integration 统一验收。
