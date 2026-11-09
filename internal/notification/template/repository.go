@@ -59,7 +59,6 @@ func (r *Registry) LoadFromRepository(ctx context.Context, repository Repository
 	return nil
 }
 
-
 // VersionRef 标识需要在启动阶段精确装载的模板版本。
 type VersionRef struct {
 	TemplateID string
