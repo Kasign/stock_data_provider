@@ -126,8 +126,12 @@ func equalTemplateDefinitions(left, right template.Definition) bool {
 }
 
 func cloneTemplateBindings(source map[string]string) map[string]string {
-	if source == nil { return nil }
+	if source == nil {
+		return nil
+	}
 	result := make(map[string]string, len(source))
-	for key, value := range source { result[key] = value }
+	for key, value := range source {
+		result[key] = value
+	}
 	return result
 }
