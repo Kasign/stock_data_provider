@@ -42,8 +42,8 @@ func validateAdjustmentFactorRecord(value model.AdjustmentFactor) error {
 	if value.ProviderTime != nil && value.ProviderTime.IsZero() {
 		return errors.New("provider_time must be a non-zero timestamp when supplied")
 	}
-	if value.AvailableAt != nil && (value.AvailableAt.IsZero() || value.AvailableAt.After(value.FetchedAt)) {
-		return errors.New("available_at must be a non-zero timestamp no later than fetched_at")
+	if value.AvailableAt != nil && value.AvailableAt.IsZero() {
+		return errors.New("available_at must be a non-zero timestamp when supplied")
 	}
 	return nil
 }
