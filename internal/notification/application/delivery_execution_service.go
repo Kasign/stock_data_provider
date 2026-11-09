@@ -158,7 +158,9 @@ func (s *DeliveryExecutionService) Execute(
 		return output, err
 	}
 
-	result, sendErr := preflight.Channel.Send(ctx, request)
+	sendCtx, cancelSend := context.WithTimeout(ctx, s.completion.retry.PerAttemptTimeout)
+	result, sendErr := preflight.Channel.Send(sendCtx, request)
+	cancelSend()
 	output.AttemptID = attemptID
 	output.ChannelResult = &result
 	finishedAt, timeErr := s.executionTime()
