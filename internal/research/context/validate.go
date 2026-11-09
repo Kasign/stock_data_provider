@@ -3,7 +3,6 @@ package context
 import (
     "fmt"
     "math"
-    "regexp"
     "slices"
     "strings"
     "time"
@@ -14,8 +13,8 @@ var schemaVersionPattern = regexp.MustCompile(\`^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*
 // Validate checks the ResearchContext DTO invariants. It does not fetch or
 // authorize referenced resources; those checks belong to source-owner adapters.
 func (c Context) Validate() error {
-    if !schemaVersionPattern.MatchString(c.SchemaVersion) {
-        return fmt.Errorf("schema_version must use MAJOR.MINOR.PATCH")
+    if c.SchemaVersion != SchemaVersion {
+        return fmt.Errorf("schema_version must equal the supported version %q", SchemaVersion)
     }
     if c.ContextID == "" || c.ContextID != strings.TrimSpace(c.ContextID) {
         return fmt.Errorf("context_id is required without surrounding whitespace")
@@ -35,11 +34,11 @@ func (c Context) Validate() error {
     if err := validateUniqueStrings("subject_refs", c.SubjectRefs); err != nil {
         return err
     }
-    if c.SystemAsOf.IsZero() {
-        return fmt.Errorf("system_as_of is required")
+    if c.SystemAsOf.IsZero() || !isUTC(c.SystemAsOf) {
+        return fmt.Errorf("system_as_of is required and must use UTC")
     }
-    if c.CreatedAt.IsZero() {
-        return fmt.Errorf("created_at is required")
+    if c.CreatedAt.IsZero() || !isUTC(c.CreatedAt) {
+        return fmt.Errorf("created_at is required and must use UTC")
     }
     if c.BuilderVersion == "" || c.BuilderVersion != strings.TrimSpace(c.BuilderVersion) {
         return fmt.Errorf("builder_version is required without surrounding whitespace")
@@ -84,10 +83,10 @@ func (c Context) Validate() error {
         if err := validateQualityStatus(section.QualityStatus); err != nil {
             return fmt.Errorf("section %q: %w", section.SectionID, err)
         }
-        if section.AssembledAt.IsZero() {
-            return fmt.Errorf("section %q assembled_at is required", section.SectionID)
+        if section.AssembledAt.IsZero() || !isUTC(section.AssembledAt) {
+            return fmt.Errorf("section %q assembled_at is required and must use UTC", section.SectionID)
         }
-        if section.SystemAsOf.IsZero() || !section.SystemAsOf.Equal(c.SystemAsOf) {
+        if section.SystemAsOf.IsZero() || !isUTC(section.SystemAsOf) || !section.SystemAsOf.Equal(c.SystemAsOf) {
             return fmt.Errorf("section %q system_as_of does not match Context", section.SectionID)
         }
         sections[section.SectionID] = section
@@ -273,4 +272,10 @@ func (next Context) ValidateNextVersion(previous Context) error {
 		return fmt.Errorf("created_at cannot move backwards across Context versions")
 	}
 	return nil
+}
+
+
+func isUTC(value time.Time) bool {
+	_, offset := value.Zone()
+	return offset == 0
 }
