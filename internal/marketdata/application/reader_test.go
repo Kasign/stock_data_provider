@@ -11,17 +11,17 @@ import (
 )
 
 type fakeDataService struct {
-	quote          *model.Quote
-	quoteErr       error
-	currentBars    []model.DailyBar
+	quote           *model.Quote
+	quoteErr        error
+	currentBars     []model.DailyBar
 	currentWarnings []string
-	currentErr     error
-	pitBars        []model.DailyBar
-	pitWarnings    []string
-	pitErr         error
-	currentCalls   int
-	pitCalls       int
-	lastAsOf       time.Time
+	currentErr      error
+	pitBars         []model.DailyBar
+	pitWarnings     []string
+	pitErr          error
+	currentCalls    int
+	pitCalls        int
+	lastAsOf        time.Time
 }
 
 func (f *fakeDataService) Quote(context.Context, string) (*model.Quote, bool, error) {
@@ -100,16 +100,16 @@ func TestReaderGetDailyBarsSelectsCurrentAndPITUseCases(t *testing.T) {
 		AdjustmentMethod: "provider_forward", AdjustmentRefDate: "2026-11-06",
 		AdjustmentFactorSource: "eastmoney", AdjustmentFactorSourceVersion: "factor-v2",
 		AdjustmentFactorSystemObservedAt: &factorObservedAt,
-		Source: "eastmoney", SourceVersion: "bars-v3", ProviderTime: &providerTime,
+		Source:                           "eastmoney", SourceVersion: "bars-v3", ProviderTime: &providerTime,
 		FetchedAt: providerTime.Add(3 * time.Minute), NormalizedAt: providerTime.Add(4 * time.Minute),
 		SystemObservedAt: &systemObservedAt, VolumeUnit: "shares", AmountUnit: "CNY",
 		QualityStatus: model.QualityValid, RequestID: "req-bars", NormalizationVer: "norm-v1",
 	}
 	backend := &fakeDataService{
-		currentBars: []model.DailyBar{current},
+		currentBars:     []model.DailyBar{current},
 		currentWarnings: []string{"bars_truncated_to_limit"},
-		pitBars: []model.DailyBar{current},
-		pitWarnings: []string{"daily_bars_reconstructed_from_recorded_revisions"},
+		pitBars:         []model.DailyBar{current},
+		pitWarnings:     []string{"daily_bars_reconstructed_from_recorded_revisions"},
 	}
 	reader := &Reader{backend: backend}
 
