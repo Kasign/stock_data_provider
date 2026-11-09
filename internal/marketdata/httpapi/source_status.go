@@ -34,6 +34,14 @@ type SourceCapabilities struct {
 	Supplements             []provider.SupplementProvider
 }
 
+func sourceProviderNames[T interface{ Name() string }](providers []T) []string {
+	names := make([]string, 0, len(providers))
+	for _, p := range providers {
+		names = append(names, p.Name())
+	}
+	return names
+}
+
 // BuildSourceStatuses 从已注册的 Provider 能力集合生成 HTTP 数据源能力快照。
 // 数据来源是 Bootstrap 校验后实际启用的 Provider Name 和对应能力接口，不读取配置推测能力。
 func BuildSourceStatuses(capabilities SourceCapabilities) []model.SourceStatus {
@@ -44,34 +52,27 @@ func BuildSourceStatuses(capabilities SourceCapabilities) []model.SourceStatus {
 		}
 		return result
 	}
-	providerNames := func[T interface{ Name() string }](providers []T) []string {
-		names := make([]string, 0, len(providers))
-		for _, p := range providers {
-			names = append(names, p.Name())
-		}
-		return names
-	}
-	known := enabled(providerNames(capabilities.All))
-	quoteEnabled := enabled(providerNames(capabilities.Quotes))
-	barsEnabled := enabled(providerNames(capabilities.DailyBars))
-	stockBasicEnabled := enabled(providerNames(capabilities.StockBasic))
-	stockSearchEnabled := enabled(providerNames(capabilities.StockSearch))
-	sectorRankingEnabled := enabled(providerNames(capabilities.SectorRankings))
-	indexQuoteEnabled := enabled(providerNames(capabilities.IndexQuotes))
-	marketBreadthEnabled := enabled(providerNames(capabilities.MarketBreadth))
-	limitPoolEnabled := enabled(providerNames(capabilities.LimitPools))
-	dragonTigerEnabled := enabled(providerNames(capabilities.DragonTiger))
-	announcementsEnabled := enabled(providerNames(capabilities.Announcements))
-	stockBoardsEnabled := enabled(providerNames(capabilities.StockBoards))
-	tradingCalendarEnabled := enabled(providerNames(capabilities.TradingCalendar))
-	securityTradingStatusEnabled := enabled(providerNames(capabilities.SecurityTradingStatus))
-	fundamentalsEnabled := enabled(providerNames(capabilities.Fundamentals))
-	valuationEnabled := enabled(providerNames(capabilities.Valuations))
-	indexCatalogEnabled := enabled(providerNames(capabilities.IndexCatalog))
-	chipEnabled := enabled(providerNames(capabilities.ChipDistribution))
-	capitalFlowEnabled := enabled(providerNames(capabilities.CapitalFlow))
-	marketCapitalFlowEnabled := enabled(providerNames(capabilities.MarketCapitalFlow))
-	hotRankingEnabled := enabled(providerNames(capabilities.HotRankings))
+	known := enabled(sourceProviderNames(capabilities.All))
+	quoteEnabled := enabled(sourceProviderNames(capabilities.Quotes))
+	barsEnabled := enabled(sourceProviderNames(capabilities.DailyBars))
+	stockBasicEnabled := enabled(sourceProviderNames(capabilities.StockBasic))
+	stockSearchEnabled := enabled(sourceProviderNames(capabilities.StockSearch))
+	sectorRankingEnabled := enabled(sourceProviderNames(capabilities.SectorRankings))
+	indexQuoteEnabled := enabled(sourceProviderNames(capabilities.IndexQuotes))
+	marketBreadthEnabled := enabled(sourceProviderNames(capabilities.MarketBreadth))
+	limitPoolEnabled := enabled(sourceProviderNames(capabilities.LimitPools))
+	dragonTigerEnabled := enabled(sourceProviderNames(capabilities.DragonTiger))
+	announcementsEnabled := enabled(sourceProviderNames(capabilities.Announcements))
+	stockBoardsEnabled := enabled(sourceProviderNames(capabilities.StockBoards))
+	tradingCalendarEnabled := enabled(sourceProviderNames(capabilities.TradingCalendar))
+	securityTradingStatusEnabled := enabled(sourceProviderNames(capabilities.SecurityTradingStatus))
+	fundamentalsEnabled := enabled(sourceProviderNames(capabilities.Fundamentals))
+	valuationEnabled := enabled(sourceProviderNames(capabilities.Valuations))
+	indexCatalogEnabled := enabled(sourceProviderNames(capabilities.IndexCatalog))
+	chipEnabled := enabled(sourceProviderNames(capabilities.ChipDistribution))
+	capitalFlowEnabled := enabled(sourceProviderNames(capabilities.CapitalFlow))
+	marketCapitalFlowEnabled := enabled(sourceProviderNames(capabilities.MarketCapitalFlow))
+	hotRankingEnabled := enabled(sourceProviderNames(capabilities.HotRankings))
 	historicalIndexConstituentsEnabled := make(map[string]bool)
 	for _, p := range capabilities.IndexCatalog {
 		if _, ok := p.(provider.HistoricalIndexConstituentProvider); ok {
