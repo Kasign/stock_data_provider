@@ -197,3 +197,28 @@ func TestFingerprintPayloadRejectsInvalidUTF8(t *testing.T) {
 		t.Fatalf("FingerprintPayload error = %v, want ErrInvalidPayload", err)
 	}
 }
+
+
+func TestFingerprintPayloadRejectsDuplicateObjectKeys(t *testing.T) {
+	cases := []struct {
+		name    string
+		payload json.RawMessage
+	}{
+		{
+			name:    "duplicate top-level key",
+			payload: json.RawMessage(`{"value":1,"value":2}`),
+		},
+		{
+			name:    "duplicate nested key after escape decoding",
+			payload: json.RawMessage(`{"nested":{"a":1,"\\u0061":2}}`),
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := FingerprintPayload(tc.payload); !errors.Is(err, ErrInvalidPayload) {
+				t.Fatalf("FingerprintPayload error = %v, want ErrInvalidPayload", err)
+			}
+		})
+	}
+}
