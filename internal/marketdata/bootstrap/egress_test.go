@@ -69,3 +69,17 @@ func TestValidateEgressDependenciesRequiresTCPDialers(t *testing.T) {
 		t.Fatalf("expected missing BaoStock dialer, got %v", err)
 	}
 }
+
+func TestValidateEgressDependenciesUsesEffectiveEastmoneyDefaults(t *testing.T) {
+	cfg := config.Config{
+		ProviderPriority: []string{"eastmoney"},
+		ProviderSettings: map[string]config.ProviderSettings{"eastmoney": {Enabled: true}},
+	}
+	err := validateEgressDependencies(cfg, Dependencies{EastmoneyHTTPDoers: map[string]provider.HTTPDoer{}})
+	if err == nil || !strings.Contains(err.Error(), "push2.eastmoney.com") {
+		t.Fatalf("expected missing default Eastmoney origin, got %v", err)
+	}
+	if strings.Contains(err.Error(), "invalid Eastmoney endpoint origin") {
+		t.Fatalf("default endpoint was not resolved before validation: %v", err)
+	}
+}

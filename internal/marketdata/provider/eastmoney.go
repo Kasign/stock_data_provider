@@ -182,6 +182,32 @@ func (p *Eastmoney) WithHTTPDoers(doers map[string]HTTPDoer) *Eastmoney {
 	return p
 }
 
+// HTTPOrigins 返回当前 Eastmoney Provider 实际配置的全部 endpoint origin（去重并排序）。
+// 从构造完成后的 Provider 读取，确保包含 Provider 自身补齐的默认 URL。
+func (p *Eastmoney) HTTPOrigins() ([]string, error) {
+	if p == nil {
+		return nil, errors.New("Eastmoney provider is nil")
+	}
+	endpoints := []string{
+		p.quoteURL, p.klineURL, p.stockBasicURL, p.sectorRankingURL, p.stockListURL,
+		p.indexURL, p.marketBreadthURL, p.limitPoolBaseURL, p.stockBoardsURL,
+		p.capitalFlowURL, p.dragonTigerURL, p.announcementURL, p.hotRankingURL, p.hotSurgeURL,
+	}
+	origins := make(map[string]struct{}, len(endpoints))
+	for _, endpoint := range endpoints {
+		origin, err := EastmoneyHTTPOrigin(endpoint)
+		if err != nil {
+			return nil, err
+		}
+		origins[origin] = struct{}{}
+	}
+	result := make([]string, 0, len(origins))
+	for origin := range origins {
+		result = append(result, origin)
+	}
+	sort.Strings(result)
+	return result, nil
+}
 // EastmoneyHTTPOrigin 返回 Eastmoney endpoint 的规范 origin，供 Root 按 origin 创建 BoundDoer。
 func EastmoneyHTTPOrigin(rawURL string) (string, error) {
 	parsed, err := url.Parse(strings.TrimSpace(rawURL))

@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	"example.com/stock-analysis-flow/internal/marketdata/config"
-	"example.com/stock-analysis-flow/internal/marketdata/provider"
 )
 
 // validateEgressDependencies 仅校验实际启用 Provider 的出站注入是否完整。
@@ -14,32 +13,23 @@ func validateEgressDependencies(cfg config.Config, deps Dependencies) error {
 		if !cfg.ProviderSettings[name].Enabled {
 			continue
 		}
-		switch name {
-		case "eastmoney":
-			endpoints := []string{
-				cfg.EastmoneyQuoteURL, cfg.EastmoneyKlineURL, cfg.EastmoneyStockBasicURL,
-				cfg.EastmoneySectorRankingURL, cfg.EastmoneyIndexURL, cfg.EastmoneyMarketStocksURL,
-				cfg.EastmoneyLimitPoolBaseURL, cfg.EastmoneyStockBoardsURL, cfg.EastmoneyDragonTigerURL,
-				cfg.EastmoneyAnnouncementsURL, cfg.EastmoneyHotRankingsURL, cfg.EastmoneyHotSurgeURL,
-				cfg.EastmoneyCapitalFlowURL,
+		if name == "eastmoney" {
+			origins, err := newEastmoneyProvider(cfg).HTTPOrigins()
+			if err != nil {
+				return fmt.Errorf("controlled egress for eastmoney: %w", err)
 			}
-			for _, endpoint := range endpoints {
-				origin, err := provider.EastmoneyHTTPOrigin(endpoint)
-				if err != nil {
-					return fmt.Errorf("controlled egress for eastmoney: %w", err)
-				}
+			for _, origin := range origins {
 				if deps.EastmoneyHTTPDoers[origin] == nil {
 					return fmt.Errorf("controlled egress dependency missing: eastmoney origin %q", origin)
 				}
 			}
+			continue
+		}
+		switch name {
 		case "hithink":
-			if deps.HithinkHTTPDoer == nil {
-				return missingEgress("hithink HTTP")
-			}
+			if deps.HithinkHTTPDoer == nil { return missingEgress("hithink HTTP") }
 		case "baostock":
-			if deps.BaoStockDialContext == nil {
-				return missingEgress("baostock TCP")
-			}
+			if deps.BaoStockDialContext == nil { return missingEgress("baostock TCP") }
 		case "tencent":
 			if deps.TencentQuoteHTTPDoer == nil || deps.TencentKlineHTTPDoer == nil ||
 				deps.TencentNoneKlineHTTPDoer == nil || deps.TencentSearchHTTPDoer == nil {
@@ -50,29 +40,21 @@ func validateEgressDependencies(cfg config.Config, deps Dependencies) error {
 				return missingEgress("sina HTTP endpoints")
 			}
 		case "yahoo":
-			if deps.YahooHTTPDoer == nil {
-				return missingEgress("yahoo HTTP")
-			}
+			if deps.YahooHTTPDoer == nil { return missingEgress("yahoo HTTP") }
 		case "netease":
 			if deps.NeteaseQuoteHTTPDoer == nil || deps.NeteaseHistoryHTTPDoer == nil {
 				return missingEgress("netease HTTP endpoints")
 			}
 		case "tushare":
-			if deps.TushareHTTPDoer == nil {
-				return missingEgress("tushare HTTP")
-			}
+			if deps.TushareHTTPDoer == nil { return missingEgress("tushare HTTP") }
 		case "tickflow":
 			if deps.TickFlowAuthenticatedHTTPDoer == nil || deps.TickFlowPublicHTTPDoer == nil {
 				return missingEgress("tickflow authenticated/public HTTP endpoints")
 			}
 		case "pytdx":
-			if deps.PytdxDialContext == nil {
-				return missingEgress("pytdx TCP")
-			}
+			if deps.PytdxDialContext == nil { return missingEgress("pytdx TCP") }
 		case "xueqiu":
-			if deps.XueqiuHTTPDoer == nil {
-				return missingEgress("xueqiu HTTP")
-			}
+			if deps.XueqiuHTTPDoer == nil { return missingEgress("xueqiu HTTP") }
 		default:
 			return fmt.Errorf("controlled egress validation does not recognize provider %q", name)
 		}
@@ -86,3 +68,4 @@ func validateEgressDependencies(cfg config.Config, deps Dependencies) error {
 func missingEgress(name string) error {
 	return fmt.Errorf("controlled egress dependency missing: %s", name)
 }
+
