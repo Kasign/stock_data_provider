@@ -2,7 +2,6 @@ package context
 
 import (
 	"encoding/json"
-	"fmt"
 	"os"
 	"reflect"
 	"strings"
@@ -200,7 +199,5 @@ func TestContextJSONSchemaRejectsNullNestedObject(t *testing.T) {
 	payload["quality_summary"] = nil
 	if err := schema.Validate(payload); err == nil {
 		t.Fatal("null quality_summary unexpectedly satisfied Context JSON Schema")
-	} else if !strings.Contains(fmt.Sprint(err), "quality_summary") {
-		t.Logf("Schema rejected null quality_summary: %v", err)
 	}
 }
