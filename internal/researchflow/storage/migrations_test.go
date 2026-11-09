@@ -21,7 +21,7 @@ func TestMigrationsAreExplicitAndVersioned(t *testing.T) {
 	if outboxMigration.Description == "" || len(outboxMigration.Statements) != 2 {
 		t.Fatalf("Outbox migration metadata/statements are incomplete: %+v", outboxMigration)
 	}
-	outboxDDL := strings.Join(outboxMigration.Statements, "\\n")
+	outboxDDL := strings.Join(outboxMigration.Statements, "\n")
 	for _, fragment := range []string{
 		"lease_owner VARCHAR(128)",
 		"lease_expires_at CHAR(30)",

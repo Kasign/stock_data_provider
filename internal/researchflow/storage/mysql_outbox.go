@@ -153,9 +153,9 @@ func (r *MySQLRunRepository) RenewOutboxLease(
 	expiresAt := now.Add(leaseDuration)
 	result, err := tx.ExecContext(ctx, `UPDATE researchflow_outbox SET lease_expires_at = ?
 		WHERE outbox_ref = ? AND published_at IS NULL AND lease_owner = ?
-			AND lease_generation = ? AND lease_expires_at > ?`,
+			AND lease_generation = ? AND lease_expires_at > DATE_FORMAT(UTC_TIMESTAMP(6), '%Y-%m-%dT%H:%i:%s.%f000Z')`,
 		formatResearchflowTimeValue(expiresAt), outboxRef, workerID,
-		leaseGeneration, formatResearchflowTimeValue(now))
+		leaseGeneration)
 	if err != nil {
 		return time.Time{}, false, fmt.Errorf("renew Researchflow Outbox lease %q: %w", outboxRef, err)
 	}
