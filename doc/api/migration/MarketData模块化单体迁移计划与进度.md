@@ -2152,3 +2152,6 @@ CI：本轮 SHA 对应 Go test suite Run `42549171549`。截至本次文档提�
 - 当前提交尚未执行测试，后续在 integration 验收。
 
 **当前结论：** 35 Operation 的参数名称、位置、required、类型、日期/时间格式已形成独立自动化矩阵；默认值、枚举和值域仍需逐项继续审计。M0 继续 `in_progress`，M1 不准入。
+
+
+- 矩阵复核补充：35 个 Operation 中包含 7 个无 Path/Query 参数的接口（健康检查、数据源列表/诊断、Probe Body、指数行情和市场宽度）。已将这些空参数 Operation 显式纳入矩阵，避免把“无参数接口”误算为遗漏；参数类型矩阵现覆盖全部 35 个 Operation。

@@ -1054,6 +1054,13 @@ func TestOpenAPIParameterTypesAndFormatsMatchReviewedHandlerMatrix(t *testing.T)
 	}
 	paths := document["paths"].(map[string]any)
 	expected := map[string]map[string]map[string]any{
+		"GET /health/live": {},
+		"GET /health/ready": {},
+		"GET /api/v1/data-sources/probe": {},
+		"GET /api/v1/data-sources/diagnostics": {},
+		"GET /api/v1/data-sources": {},
+		"GET /api/v1/market/indices": {},
+		"GET /api/v1/market/breadth": {},
 		"GET /api/v1/market/quotes": {"symbols": {"type": "string"}},
 		"GET /api/v1/quotes/{symbol}": {"symbol": {"type": "string"}},
 		"GET /api/v1/bars/{symbol}/daily": {
