@@ -18,3 +18,13 @@ func TestStorageCloseIsNilSafe(t *testing.T) {
 		t.Fatalf("Close() error = %v", err)
 	}
 }
+
+func TestResourcesCloseIsIdempotent(t *testing.T) {
+	resources := &Resources{}
+	if err := resources.Close(); err != nil {
+		t.Fatalf("first Close() error = %v", err)
+	}
+	if err := resources.Close(); err != nil {
+		t.Fatalf("second Close() error = %v", err)
+	}
+}
