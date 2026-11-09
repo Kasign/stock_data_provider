@@ -322,4 +322,4 @@ Notification 是独立通知业务模块，负责事件接收、Subscription、T
 - 新增只读 `ValidateDeliveryStateHistory`，核验事件数量与 Delivery.version 对应关系、版本连续性、DeliveryID、From/To 状态链、事件时间单调性，以及末事件与当前快照的状态/版本/更新时间一致性。
 - 明确创建快照 `queued/version=1` 不产生初始 StateEvent；因此状态事件从 version=2 开始，不能错误要求存在 version=1 事件。
 - MySQL Repository 新增完整状态事件读取接口，按 version 升序返回，不做静默截断；事件与快照仍由现有事务原子提交，不存在合法的两阶段中间态。
-- 新增初始快照、完整链、缺失事件、版本跳号、状态链断裂、快照不一致和时间倒退测试。该校验为显式只读能力，不自动修复数据。
+- 新增初始快照、完整链、缺失事件、版本跳号、状态链断裂、快照不一致和时间倒退测试。 同时按领域迁移图校验每条 From/To，拒绝终态逆转和非法跳转，并验证 unknown 离开时的 EvidenceRef、sending→skipped 的 not_sent 证据及 failed→queued 的人工重试审计字段。该校验为显式只读能力，不自动修复数据。
