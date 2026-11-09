@@ -75,6 +75,7 @@ var (
 	ErrUnknownEntry        = errors.New("registry entry not found")
 	ErrNoActiveVersion     = errors.New("active algorithm version not found")
 	ErrRegistryFrozen      = errors.New("registry is frozen")
+	ErrInvalidParameters   = errors.New("invalid quant metric parameters")
 )
 
 var (
@@ -376,6 +377,23 @@ func (r *Registry) LookupVersion(code, schemaVersion, algorithmVersion string) (
 		return Entry{}, ErrUnknownEntry
 	}
 	return cloneEntry(entry), nil
+}
+
+ // ValidateParameters 按明确的指标 Schema 与算法版本校验参数对象。
+ // 不隐式选择活动版本，避免历史请求因 Registry 活动版本切换而改变参数语义。
+ func (r *Registry) ValidateParameters(code, schemaVersion, algorithmVersion string, parameters json.RawMessage) error {
+	entry, err := r.LookupVersion(code, schemaVersion, algorithmVersion)
+	if err != nil {
+		return err
+	}
+	schema, err := compileJSONSchema(entry.ParametersSchema)
+	if err != nil {
+		return fmt.Errorf("%w: registered parameters schema is invalid: %v", ErrInvalidEntry, err)
+	}
+	if err := validateJSONSchemaInstance(schema, parameters); err != nil {
+		return fmt.Errorf("%w: %v", ErrInvalidParameters, err)
+	}
+	return nil
 }
 
 func (r *Registry) ActivateVersion(code, schemaVersion, algorithmVersion string) error {
