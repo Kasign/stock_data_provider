@@ -317,3 +317,18 @@ ResponsesAdapter 只依赖窄 HTTPDoer，并且构造时必须注入 `Clock`。�
 ### 12.2 SSE Parser 当前实现边界
 
 ParseResponsesSSE 只接收完整的有界字节切片并同步调用 callback，用于纯协议解析和 Golden 测试；它不是网络流读取器，也不提供网络取消/背压。真实 Stream 必须在 Platform 提供受控 streaming transport 后实现，禁止直接将 http.Response.Body 接入此 Parser 绕过 Platform。
+
+
+## Responses Structured Outputs strict 子集契约
+
+本地 JSON Schema 语义基线仍为 Draft 2020-12，但上游 Responses `strict: true` 仅接受官方文档定义的子集。Adapter 必须在发送前拒绝不支持的 Schema，不能删除关键字后继续发送。
+
+- 根节点必须是 `type: object`，根节点不允许 `anyOf`。
+- 每个 object 必须声明 `properties`、完整的 `required`，并设置 `additionalProperties: false`；所有属性都必须 required。可选字段使用包含 `null` 的类型联合表达。
+- 支持 `string/number/integer/boolean/object/array/null`、`enum`、嵌套 `anyOf`、`const`、`$defs` 与本地 `$ref`。
+- 支持的约束：字符串 `pattern` 与官方格式；数字 `multipleOf/maximum/exclusiveMaximum/minimum/exclusiveMinimum`；数组 `items/minItems/maxItems`。
+- 不支持 `allOf/not/dependentRequired/dependentSchemas/if/then/else` 等组合关键字，也不接受 allowlist 以外的关键字。
+- 限制：对象嵌套最多 10 层、对象属性总数最多 5000、属性名/定义名/enum/const 字符总量最多 120000、enum 值总数最多 1000；单个字符串 enum 超过 250 项时字符总量最多 15000。
+- 远程 `$ref` 禁止；本地 `$ref` 仍受 Draft 2020-12 编译器约束。
+- `local_validation_only=true` 不向上游发送 Schema，允许使用完整本地 Draft 2020-12；但不代表模型受约束生成。
+- 官方依据：https://developers.openai.com/api/docs/guides/structured-outputs

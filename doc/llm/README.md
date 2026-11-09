@@ -4,7 +4,7 @@
 - 代码：`internal/llm/**`
 - 任务前缀：LLM
 - 状态：LLM-002 DTO/Provider Port、Responses JSON Mapper/Parser、非流式 HTTP Adapter、Clock/Deadline 注入、纯 SSE Parser、公共 DTO Draft 2020-12 Schema 已实现；整体仍待 LLM 包级构建验证
-- 最近代码提交：`c244c8d2fbd322b1caaabd72cda1becd2169d1e4`
+- 最近代码提交：`fdd43b81ebc1fc6cf223e8892dd2d7fec2e88e43`
 - LLM-001：静态协议盘点完成；在线真实端点验收未执行
 - LLM-002：DTO/Provider Port、Responses JSON 请求映射/响应解析、非流式 HTTP Adapter 及对应单测已实现，待 gofmt/go test；Platform Fault 映射、Draft 2020-12 Schema 编译及 DTO Schema Contract Test 均待构建验证；JSON/SSE Golden 已扩展覆盖拒绝、未知项、Usage 边界、终态和序号异常；新增完整 Request Mapper Golden，覆盖 sampling、reasoning、strict schema、function tool 与 tool_choice；新增 Adapter 能力门禁测试，验证可选能力证据缺失时不会派发请求；已补充 SSE callback error（普通事件中断、终态回调拒绝）、CRLF/multiline data、事件数量、单事件累计字节、总输入字节上限、终态后事件拒绝回归测试，以及 Structured Output 非法 JSON/空输出/incomplete 边界测试（待执行）；完整矩阵仍待执行；Platform 受控流读取尚未提供；local_validation_only、Usage 诊断码、Capability verification_method 与 capability_ttl_ms 已纳入 Mapper/DTO
 
@@ -51,3 +51,14 @@ internal/llm/
 - 格式化后最新 CI 的根模块 gofmt 清单已不再包含任何 `internal/llm/**` 文件；但全仓检查仍被 News、Notification、Quant、Research、Researchflow 模块的未格式化文件阻断。
 - 因根模块 job 在 gofmt 步骤失败，依赖下载、`go test ./...`、race、vet 均未执行；当前没有 LLM 包级测试通过证据。
 - LLM 分支不修改上述模块；待模块负责人修复后再跑根模块完整验证。
+
+
+## Responses Strict Schema 子集门禁（2026-11-09）
+
+- 本地 Draft 2020-12 Schema 编译与 Responses strict 子集检查分离：本地验证仍使用完整 Draft 2020-12；只有即将发送到上游的 `strict: true` Response Schema / Function Tool 参数 Schema 才执行子集门禁。
+- 根 Schema 必须是 object；对象属性必须全部列入 required，并设置 `additionalProperties: false`；根层不允许 anyOf。
+- 支持类型、枚举、anyOf、$defs、本地 $ref、const、items，以及官方列明的字符串/数字/数组约束；未知关键字、allOf/not/条件组合等不支持能力直接拒绝，不做静默改写。
+- 应用官方结构限制：对象最多 10 层、对象属性总数最多 5000、属性名/定义名/enum/const 字符总量最多 120000、enum 值最多 1000；超过 250 个字符串 enum 值时，该 enum 字符总量不超过 15000。
+- `local_validation_only=true` 不发送上游 Schema，因此跳过 Responses strict 子集门禁，但仍执行本地完整 Schema 编译与响应校验。
+- 来源：OpenAI Structured Outputs 文档 https://developers.openai.com/api/docs/guides/structured-outputs （Supported schemas / limitations）。
+- 当前仅有静态契约测试，尚未完成本地 Gateway 对该子集的 E2E 验证；细分模型能力继续以 capability evidence 为准。

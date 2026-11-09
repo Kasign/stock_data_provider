@@ -12,10 +12,11 @@ func TestValidateResponsesStrictSchemaSubsetAcceptsSupportedSchema(t *testing.T)
 		"properties":{
 			"summary":{"type":"string","format":"email"},
 			"tags":{"type":"array","items":{"type":"string"},"minItems":1,"maxItems":5},
+			"label":{"$ref":"#/$defs/label"},
 			"optional_note":{"type":["string","null"]},
 			"status":{"anyOf":[{"type":"string","enum":["ok","partial"]},{"type":"null"}]}
 		},
-		"required":["summary","tags","optional_note","status"],
+		"required":["summary","tags","label","optional_note","status"],
 		"additionalProperties":false,
 		"$defs":{"label":{"type":"string"}}
 	}`)

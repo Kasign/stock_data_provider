@@ -7,6 +7,7 @@ import (
 	"unicode/utf8"
 )
 
+// ErrUnsupportedResponsesSchemaSubset 表示 Schema 不属于 Responses strict 模式支持的子集。
 var ErrUnsupportedResponsesSchemaSubset = errors.New("schema is outside the Responses strict JSON Schema subset")
 
 const (
@@ -100,7 +101,7 @@ func validateResponsesSchemaNode(node map[string]any, parentObjectDepth int, roo
 			}
 			types[value] = struct{}{}
 		case []any:
-			if len(value) < 2 {
+			if len(value) == 0 {
 				return errors.New("type arrays must contain at least two types")
 			}
 			for _, item := range value {

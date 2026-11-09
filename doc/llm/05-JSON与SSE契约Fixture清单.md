@@ -358,3 +358,12 @@ sequence_number 严格连续策略、Draft 2020-12 本地 Schema dialect、Reque
 - 终态 Response 中的 ToolCall.arguments_json 必须与已累计参数一致。
 - 对应测试：`TestParseResponsesSSEFunctionCallAggregationAndConsistency`、`TestParseResponsesSSERejectsFunctionArgumentDeltaAfterDone`。
 - 测试代码尚未执行，不构成通过证据。
+
+
+## 23. Responses Strict Schema 子集回归
+
+- 接受标准：根 object、所有对象属性 required、additionalProperties=false；允许嵌套 anyOf、nullable 类型联合、$defs 与本地 $ref。
+- 拒绝标准：根 anyOf、allOf/其他未知关键字、缺失 required 属性、additionalProperties=true、未知 string format、远程 $ref。
+- 上游 strict Response Schema 与 strict Function Tool 参数 Schema 都必须执行门禁；local_validation_only 仅跳过上游子集检查。
+- 限制覆盖：对象深度、属性总数、字符串元数据总长度、enum 数量与大 enum 字符数。
+- 对应测试：`TestValidateResponsesStrictSchemaSubsetAcceptsSupportedSchema`、`TestValidateResponsesStrictSchemaSubsetRejectsUnsupportedFeatures`、`TestMapResponsesRequestRejectsUnsupportedStrictSchemaButAllowsLocalValidation`、`TestMapResponsesRequestRejectsUnsupportedStrictToolSchema`。
