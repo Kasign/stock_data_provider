@@ -149,3 +149,36 @@ func TestResolveCanonicalizesDependencySetInSnapshot(t *testing.T) {
 		t.Fatalf("resolved definition snapshot is not canonical: %#v",final.Definition.Dependencies)
 	}
 }
+
+
+func TestResolveMaterializesNonApplicableOptionalStageAsSkipped(t *testing.T) {
+	tmpl := testTemplate()
+	tmpl.Stages = append(tmpl.Stages, StageDefinition{
+		Code: "optional_news", Required: false,
+		Applicability: ApplicabilityRule{RuleRef: "optional-news", RuleVersion: "v3"},
+		Retry: testRetry(), Propagation: testPolicy(),
+	})
+	resolved, err := Resolve(context.Background(), tmpl, json.RawMessage(`{}`), testParameterSchemas{}, testEvaluator{"always": true}, nil)
+	if err != nil { t.Fatal(err) }
+	if len(resolved.Stages) != 3 { t.Fatalf("expected two executable stages and one skipped optional stage, got %d", len(resolved.Stages)) }
+	last := resolved.Stages[2]
+	if last.Definition.Code != "optional_news" || last.InitialStatus != domain.StageSkipped || len(last.ReasonCodes) != 1 || last.ReasonCodes[0] != "not_applicable" {
+		t.Fatalf("optional non-applicable stage was not resolved as skipped: %#v", last)
+	}
+	if len(last.Dependencies) != 0 { t.Fatalf("terminal skipped stage must not carry executable dependencies: %#v", last.Dependencies) }
+	if len(resolved.Excluded) != 0 { t.Fatalf("optional skipped stage must not be recorded as an excluded required stage: %#v", resolved.Excluded) }
+}
+
+func TestResolveExcludesNonApplicableRequiredStage(t *testing.T) {
+	tmpl := testTemplate()
+	tmpl.Stages = append(tmpl.Stages, StageDefinition{
+		Code: "required_optional_dependency", Required: true,
+		Applicability: ApplicabilityRule{RuleRef: "required-off", RuleVersion: "v2"},
+		Retry: testRetry(), Propagation: testPolicy(),
+	})
+	resolved, err := Resolve(context.Background(), tmpl, json.RawMessage(`{}`), testParameterSchemas{}, testEvaluator{"always": true}, nil)
+	if err != nil { t.Fatal(err) }
+	if len(resolved.Stages) != 2 || len(resolved.Excluded) != 1 || resolved.Excluded[0].StageCode != "required_optional_dependency" || resolved.Excluded[0].RuleVersion != "v2" {
+		t.Fatalf("required non-applicable stage must be excluded from Run DAG: stages=%#v excluded=%#v", resolved.Stages, resolved.Excluded)
+	}
+}
