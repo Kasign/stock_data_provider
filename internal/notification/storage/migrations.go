@@ -176,5 +176,20 @@ func Migrations() []platformstorage.Migration {
 				) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
 			},
 		},
+		{
+			Version:     4,
+			Description: "create immutable notification channel config versions",
+			Statements: []string{
+				`CREATE TABLE notification_channel_config_versions (
+					channel_ref VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+					config_version BIGINT UNSIGNED NOT NULL,
+					snapshot_json JSON NOT NULL,
+					digest CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+					created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+					PRIMARY KEY (channel_ref, config_version),
+					KEY idx_notification_channel_config_kind (channel_ref, config_version)
+				) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+			},
+		},
 	}
 }

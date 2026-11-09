@@ -7,7 +7,7 @@ import (
 
 func TestMigrationsDeclareImmutableVersionAndRequiredUniqueness(t *testing.T) {
 	migrations := Migrations()
-	if len(migrations) != 3 || migrations[0].Version != 1 || migrations[1].Version != 2 || migrations[2].Version != 3 ||
+	if len(migrations) != 4 || migrations[0].Version != 1 || migrations[1].Version != 2 || migrations[2].Version != 3 || migrations[3].Version != 4 ||
 		migrations[0].Description == "" || len(migrations[0].Statements) != 5 ||
 		migrations[1].Description == "" || len(migrations[1].Statements) != 1 {
 		t.Fatalf("unexpected notification migration set: %+v", migrations)
@@ -66,12 +66,23 @@ func TestMigrationsDeclareImmutableVersionAndRequiredUniqueness(t *testing.T) {
 			t.Errorf("Template migration is missing required schema element %q", required)
 		}
 	}
+	channelDDL := strings.Join(migrations[3].Statements, "\n")
+	for _, required := range []string{
+		"CREATE TABLE notification_channel_config_versions",
+		"PRIMARY KEY (channel_ref, config_version)",
+		"snapshot_json JSON NOT NULL",
+		"digest CHAR(64)",
+	} {
+		if !strings.Contains(channelDDL, required) {
+			t.Errorf("Channel config migration is missing required schema element %q", required)
+		}
+	}
 }
 
 func TestMigrationsReturnIndependentStatementSlices(t *testing.T) {
 	first := Migrations()
 	second := Migrations()
-	if len(first) != 3 || len(second) != 3 {
+	if len(first) != 4 || len(second) != 4 {
 		t.Fatal("migration set must be stable")
 	}
 	first[0].Statements[0] = "mutated"
