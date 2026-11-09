@@ -208,6 +208,7 @@ func TestSourceEndpointCheckFailsClosedForUnsafeRegistrations(t *testing.T) {
 				return value
 			}(),
 			wantStatus: platformdiag.StatusUnavailable,
+			wantReason: "news.source.registration_mismatch",
 		},
 		{
 			name: "disabled endpoint",
