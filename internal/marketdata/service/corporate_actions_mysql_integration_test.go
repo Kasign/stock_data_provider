@@ -114,3 +114,45 @@ func TestCorporateActionsAsOfFallsBackToLatestProviderVisibleRevision(t *testing
 		t.Fatalf("service must return latest provider-visible revision v1, got %+v", got)
 	}
 }
+
+func TestSaveAdjustmentFactorsRejectsDuplicateIdentityInBatch(t *testing.T) {
+	dsn := os.Getenv("MARKET_DATA_TEST_MYSQL_DSN")
+	if dsn == "" {
+		t.Skip("MARKET_DATA_TEST_MYSQL_DSN is not configured")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	store, err := repository.OpenMySQL(ctx, dsn)
+	if err != nil {
+		t.Fatalf("open MariaDB: %v", err)
+	}
+	defer store.Close()
+	if err := store.Migrate(ctx); err != nil {
+		t.Fatalf("migrate MariaDB: %v", err)
+	}
+
+	now := time.Now().UTC()
+	available := now.Add(-time.Minute)
+	first := model.AdjustmentFactor{
+		Symbol: "688001.SH", TradeDate: "2026-11-06", Factor: 1.1,
+		Basis: model.AdjustmentFactorShared, Source: "batch-atomicity-test",
+		SourceVersion: "v1", FetchedAt: now, AvailableAt: &available,
+		QualityStatus: model.QualityValid,
+	}
+	duplicate := first
+	duplicate.Factor = 1.2
+	if err := store.SaveAdjustmentFactors(ctx, []model.AdjustmentFactor{first, duplicate}); err == nil {
+		t.Fatal("duplicate identity in one refresh batch must be rejected")
+	}
+
+	values, err := store.ListAdjustmentFactorsAsOf(ctx, first.Symbol, first.TradeDate, first.TradeDate, time.Now().UTC())
+	if err != nil {
+		t.Fatalf("query adjustment factors after rejected batch: %v", err)
+	}
+	if len(values) != 0 {
+		t.Fatalf("rejected batch must not persist any revision, got %+v", values)
+	}
+}
+
