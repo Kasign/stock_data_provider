@@ -297,3 +297,12 @@ Notification 是独立通知业务模块，负责事件接收、Subscription、T
 - 加载层检查领域约束、请求身份与 SHA-256 Digest 格式，并复制可变切片；Digest 内容完整性由 Repository（MySQL 实现已校验 JCS 摘要）负责。
 - `SecretRef` 的解析、密钥可用性检查及 Adapter 构造仍归 Server/Secret Provider；Notification 不解析密钥、不读取明文。SecretRef 无法解析时由 Server 映射为启动依赖故障，不伪装成配置记录损坏。
 - 新增精确版本、缺失、摘要格式错误、身份错配、仓储错误及取消上下文测试。
+
+
+### Attempt 历史校验复用（2026-11-09）
+
+- 新增 `ValidateDeliveryAttemptHistory`，统一校验 Attempt 数量、连续序号、Delivery 身份、Attempt ID 唯一性、FencingToken 单调递增、时间顺序及前序结果可重试约束。
+- 最后一条 Attempt 允许仍在运行，以支持租约恢复识别“渠道调用期间 Worker 退出”；任何前序 Attempt 必须完成且只能是可重试拒绝或已证明未发送。
+- Delivery 执行前与租约恢复评估均调用该校验；各自仍保留当前租约 Worker/Token/ExpiresAt 的专项校验。
+- 新增纯单元测试覆盖运行中末条记录、数量不符、终态后续 Attempt、重复 ID 与 fencing token 不递增。
+- 本次仅增加代码和测试，尚未取得该提交的 CI 执行证据；真实 MariaDB L3 不受此单测替代。

@@ -54,6 +54,9 @@ func AssessExpiredDeliveryLease(
 		!isRecoveryUTC(now) || now.Before(lease.ExpiresAt) {
 		return LeaseRecoveryAssessment{}, ErrLeaseRecoveryNotApplicable
 	}
+	if err := ValidateDeliveryAttemptHistory(delivery.DeliveryID, delivery.AttemptCount, attempts); err != nil {
+		return LeaseRecoveryAssessment{}, ErrLeaseRecoveryHistory
+	}
 	if len(attempts) != delivery.AttemptCount {
 		return LeaseRecoveryAssessment{}, ErrLeaseRecoveryHistory
 	}

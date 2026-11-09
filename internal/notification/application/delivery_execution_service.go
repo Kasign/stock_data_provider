@@ -149,6 +149,9 @@ func (s *DeliveryExecutionService) Execute(
 	if err != nil {
 		return output, err
 	}
+	if err := ValidateDeliveryAttemptHistory(claim.Delivery.DeliveryID, int(claim.Delivery.AttemptCount), history); err != nil {
+		return output, ErrLeaseRecoveryHistory
+	}
 	if len(history) != claim.Delivery.AttemptCount {
 		return output, ErrLeaseRecoveryHistory
 	}
