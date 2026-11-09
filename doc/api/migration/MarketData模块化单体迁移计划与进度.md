@@ -419,7 +419,7 @@ internal/
 | M1 Go Module 归并 | completed（代码归并） | Data 源码已位于根 Module 的 `internal/marketdata/**`；根 `go.mod` 为 Go 1.23.0；当前 Data 根模块 gofmt/test/race/vet 专项通过 |
 | M2 Application Port/Bootstrap | completed（Data 侧） | M2-1～M2-6 已完成：Application Port、Bootstrap、Worker 生命周期、HTTP 用例接口拆分、来源能力快照和 Migration Runner |
 | M3 Root Server 装配 | in_progress | Data 已提供 `InProcessHandler()`、Application Port 和 `MigrationRunner()`；Root Router、共享资源注入、Remote→InProcess 切换属于 Server 组合根任务，本分支不越界修改 |
-| M4 共享资源统一 | in_progress | Data Repository borrowed DB、`cache.NewGoRedis` 已实现；Tushare、Hithink、TickFlow（认证/免费双出口）、Xueqiu、Yahoo、NetEase（报价/历史双出口）、Tencent（四 endpoint）、Sina（报价/K 线双出口）、Eastmoney（按 origin 统一映射多个 endpoint）已提供 HTTPDoer 注入入口；Root 侧真实 BoundDoer 创建与注入、Redis 配置匹配、MiaoXiang 等 Provider 和 TCP 出站策略仍待完成 |
+| M4 共享资源统一 | in_progress | Data Repository borrowed DB、`cache.NewGoRedis` 已实现；Tushare、Hithink、TickFlow（认证/免费双出口）、Xueqiu、Yahoo、NetEase（报价/历史双出口）、Tencent（四 endpoint）、Sina（报价/K 线双出口）、Eastmoney（按 origin 统一映射多个 endpoint）、MiaoXiang（单 API endpoint）已提供 HTTPDoer 注入入口；Root 侧真实 BoundDoer 创建与注入、Redis 配置匹配、TCP 出站策略仍待完成 |
 | M5 部署/WebUI 切换 | pending | Root 同进程装配和共享资源验收后执行 |
 | M6 迁移验收 | pending | 结构迁移、API/PIT/质量、真实 Provider 和部署验收分开形成证据 |
 | 公共平台契约接入 | in_progress（按依赖） | 当前分支已有 Platform 基础代码；Data 仅适配已冻结能力，不复制 HTTP Client、Diagnostics Runner、Storage 等公共实现 |
@@ -972,4 +972,14 @@ internal/
 - Bootstrap Dependencies 新增 `EastmoneyHTTPDoers map[string]provider.HTTPDoer`。Root 后续需从实际配置 URL（包括 LimitPoolBaseURL 和默认值）汇总 origin，逐个创建精确 HTTPS/443 BoundDoer，再按 `provider.EastmoneyHTTPOrigin` 的返回值填入 map。Module 不拥有、不关闭执行器。
 - 尚未在 Root 侧实现 origin 汇总与注入；新增代码/测试未运行，不能视为 SSRF 防护已生效或真实 Eastmoney 数据验收通过。
 - 下一步处理 MiaoXiang 等剩余 HTTP Provider，再单独梳理 BaoStock/Pytdx TCP 出站；最后进入 Root Server 实际装配。
+
+
+
+### 2026-11-09：M4-HTTP-10 MiaoXiang 补充数据 API 受控 HTTP 执行器注入
+
+- 代码基线：`a59c767f62b31a94a6dad3cc6cf8b5a1763147fd`。MiaoXiang 仅有一个可配置 API endpoint（默认 `mkapi2.dfcfs.com/finskillshub/api/claw/query`），请求为携带 `apikey` Header 的 JSON POST。
+- 新增 `NewMiaoXiangWithHTTPDoer`；旧 `NewMiaoXiang` 保留并委托新构造器。注入执行器只负责传输，不改变 API Key 校验、全局串行准入、300ms 频率控制、缓存、10 秒默认超时、禁止重定向、2 MiB 响应体上限和解析逻辑。
+- Bootstrap Dependencies 增加 `MiaoXiangHTTPDoer`，仅在 `MXEnabled` 时传给 Provider。Root 应按运行时 `MXAPIURL` 精确创建 HTTPS/443 BoundDoer，执行 DNS/IP 校验、拒绝重定向并保留 2 MiB 响应体上限；Module 不拥有、不关闭执行器。
+- 新增测试源码覆盖注入执行器、POST URL、apikey/Content-Type Header、502 错误路径和旧构造器兼容；测试尚未运行。
+- 当前 Data 侧 Provider HTTP 执行器注入入口已覆盖已识别 Provider；下一阶段应盘点遗漏的非标准请求路径与 TCP Provider，再集中完成 Root 实际装配，而不是继续无差别增加接口。
 

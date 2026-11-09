@@ -42,6 +42,7 @@ type Dependencies struct {
 	SinaQuoteHTTPDoer             provider.HTTPDoer            // Root 注入的新浪实时报价出口；Module 不拥有、不关闭。
 	SinaKlineHTTPDoer             provider.HTTPDoer            // Root 注入的新浪历史 K 线出口；Module 不拥有、不关闭。
 	EastmoneyHTTPDoers            map[string]provider.HTTPDoer // Root 按 scheme://host 注入东方财富受控出口；Module 不拥有、不关闭。
+	MiaoXiangHTTPDoer             provider.HTTPDoer // Root 注入 MiaoXiang 补充数据 API 受控出口；Module 不拥有、不关闭。
 }
 
 // Diagnostics 暴露模块就绪状态和 Provider 诊断，不暴露具体 DataService。
@@ -109,7 +110,7 @@ func New(cfg config.Config, deps Dependencies) (*Module, error) {
 		retentionStore: deps.Store,
 		retention:      cfg.QuoteRetention,
 	}
-	if err := module.build(cfg, deps.TushareHTTPDoer, deps.HithinkHTTPDoer, deps.TickFlowAuthenticatedHTTPDoer, deps.TickFlowPublicHTTPDoer, deps.XueqiuHTTPDoer, deps.YahooHTTPDoer, deps.NeteaseQuoteHTTPDoer, deps.NeteaseHistoryHTTPDoer, deps.TencentQuoteHTTPDoer, deps.TencentKlineHTTPDoer, deps.TencentNoneKlineHTTPDoer, deps.TencentSearchHTTPDoer, deps.SinaQuoteHTTPDoer, deps.SinaKlineHTTPDoer, deps.EastmoneyHTTPDoers); err != nil {
+	if err := module.build(cfg, deps.TushareHTTPDoer, deps.HithinkHTTPDoer, deps.TickFlowAuthenticatedHTTPDoer, deps.TickFlowPublicHTTPDoer, deps.XueqiuHTTPDoer, deps.YahooHTTPDoer, deps.NeteaseQuoteHTTPDoer, deps.NeteaseHistoryHTTPDoer, deps.TencentQuoteHTTPDoer, deps.TencentKlineHTTPDoer, deps.TencentNoneKlineHTTPDoer, deps.TencentSearchHTTPDoer, deps.SinaQuoteHTTPDoer, deps.SinaKlineHTTPDoer, deps.EastmoneyHTTPDoers, deps.MiaoXiangHTTPDoer); err != nil {
 		_ = module.Close(context.Background())
 		return nil, err
 	}
@@ -169,7 +170,7 @@ func (m *Module) ProviderSummary() ProviderSummary {
 	}
 }
 
-func (m *Module) build(cfg config.Config, tushareHTTPDoer, hithinkHTTPDoer, tickflowAuthenticatedHTTPDoer, tickflowPublicHTTPDoer, xueqiuHTTPDoer, yahooHTTPDoer, neteaseQuoteHTTPDoer, neteaseHistoryHTTPDoer, tencentQuoteHTTPDoer, tencentKlineHTTPDoer, tencentNoneKlineHTTPDoer, tencentSearchHTTPDoer, sinaQuoteHTTPDoer, sinaKlineHTTPDoer provider.HTTPDoer, eastmoneyHTTPDoers map[string]provider.HTTPDoer) error {
+func (m *Module) build(cfg config.Config, tushareHTTPDoer, hithinkHTTPDoer, tickflowAuthenticatedHTTPDoer, tickflowPublicHTTPDoer, xueqiuHTTPDoer, yahooHTTPDoer, neteaseQuoteHTTPDoer, neteaseHistoryHTTPDoer, tencentQuoteHTTPDoer, tencentKlineHTTPDoer, tencentNoneKlineHTTPDoer, tencentSearchHTTPDoer, sinaQuoteHTTPDoer, sinaKlineHTTPDoer provider.HTTPDoer, eastmoneyHTTPDoers map[string]provider.HTTPDoer, miaoxiangHTTPDoer provider.HTTPDoer) error {
 	store := m.store
 	c := m.cache
 	logger := m.logger
@@ -396,7 +397,7 @@ func (m *Module) build(cfg config.Config, tushareHTTPDoer, hithinkHTTPDoer, tick
 	ds := service.NewWithCapabilities(allProviders, quoteProviders, barProviders, c, store, cfg.QuoteCacheTTL, cfg.BarsCacheTTL, cfg.DefaultDailyBars, cfg.MaxDailyBars, service.ResilienceConfig{Retries: cfg.ProviderRetries, CircuitFailureThreshold: cfg.CircuitFailureThreshold, CircuitCooldown: cfg.CircuitCooldown}, logger)
 	supplementProviders := make([]provider.SupplementProvider, 0, 1)
 	if cfg.MXEnabled {
-		mx, mxErr := provider.NewMiaoXiang(cfg.MXAPIKey, cfg.MXAPIURL, cfg.MXAPITimeout)
+		mx, mxErr := provider.NewMiaoXiangWithHTTPDoer(cfg.MXAPIKey, cfg.MXAPIURL, cfg.MXAPITimeout, miaoxiangHTTPDoer)
 		if mxErr != nil {
 			return fmt.Errorf("configure MiaoXiang supplemental provider: %w", mxErr)
 		}
