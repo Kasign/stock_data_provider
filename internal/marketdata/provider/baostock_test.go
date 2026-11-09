@@ -244,3 +244,29 @@ func containsReason(reasons []string, want string) bool {
 	}
 	return false
 }
+
+
+func TestBaostockDailyBarsReportsUnsupportedRawCellType(t *testing.T) {
+	client := &fakeBaostockClient{rows: []baostock.DailyKLine{{
+		Date: "2026-10-21", Code: "sh.600519",
+		FieldIssues: []baostock.DailyKLineFieldIssue{{
+			SourceField: "close", Code: "invalid_field", ActualType: "object", Preview: "object",
+		}},
+	}}}
+	reporter := validation.NewReporter(20)
+	ctx := validation.WithReporter(context.Background(), reporter)
+	_, err := NewBaostock(client).FetchDailyBars(ctx, "600519.SH", "2026-10-21", "2026-10-21", 10, model.AdjustmentForward)
+	if err == nil {
+		t.Fatal("unsupported raw close cell type must reject the BaoStock response")
+	}
+	found := false
+	for _, issue := range reporter.Snapshot().Issues {
+		if issue.Field == "close" && issue.ProviderField == "close" && issue.Code == "invalid_field" &&
+			issue.ActualType == "object" && issue.RowIndex != nil && *issue.RowIndex == 0 {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("expected raw close cell type issue at row 0, got %+v", reporter.Snapshot().Issues)
+	}
+}

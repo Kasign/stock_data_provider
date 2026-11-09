@@ -918,3 +918,44 @@ func TestParseQuarterlyFinancialPageRetainsMetricCellTypeIssue(t *testing.T) {
 		t.Fatalf("invalid object cell must not be converted into a metric: %+v", record.Fields)
 	}
 }
+
+
+func TestParseKLinePageRetainsUnsupportedCellTypeIssue(t *testing.T) {
+	fields := strings.Split(dailyKLineFields, ",")
+	row := make([]any, len(fields))
+	for index, field := range fields {
+		switch field {
+		case "date":
+			row[index] = "2026-10-21"
+		case "code":
+			row[index] = "sh.600519"
+		default:
+			row[index] = "10.0"
+		}
+		if field == "close" {
+			row[index] = map[string]any{"unexpected": "object"}
+		}
+	}
+	raw, err := json.Marshal(map[string]any{"record": [][]any{row}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := strings.Join([]string{
+		"0", "success", "query_history_k_data_plus", "anonymous", "1",
+		strconv.Itoa(defaultPageSize), string(raw), "sh.600519", strings.Join(fields, ","),
+	}, messageSplit)
+	page, err := parseKLinePage(body)
+	if err != nil {
+		t.Fatalf("unsupported metric cell should be retained for adapter diagnostics: %v", err)
+	}
+	if len(page.rows) != 1 || len(page.rows[0].FieldIssues) != 1 {
+		t.Fatalf("expected one row with one field issue, got %+v", page.rows)
+	}
+	issue := page.rows[0].FieldIssues[0]
+	if issue.SourceField != "close" || issue.Code != "invalid_field" || issue.ActualType != "object" {
+		t.Fatalf("unexpected daily K-line field issue: %+v", issue)
+	}
+	if page.rows[0].Close != "" {
+		t.Fatalf("invalid object cell must not be converted into a close price: %+v", page.rows[0])
+	}
+}

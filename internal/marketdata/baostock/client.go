@@ -42,6 +42,13 @@ type Config struct {
 
 // DailyKLine contains the source fields needed by the daily-bar adapter.
 // Values are kept as strings until the adapter applies field-level validation.
+type DailyKLineFieldIssue struct {
+	SourceField string
+	Code        string
+	ActualType  string
+	Preview     string
+}
+
 type DailyKLine struct {
 	Date        string
 	Code        string
@@ -57,6 +64,7 @@ type DailyKLine struct {
 	TradeStatus string
 	PctChg      string
 	IsST        string
+	FieldIssues []DailyKLineFieldIssue
 }
 
 // TradeDate is one calendar date and the provider's explicit trading-day flag.
@@ -234,7 +242,7 @@ func parseQuarterlyFinancialPage(body string, spec financialQuerySpec, userID, c
 			}
 			fieldIssues = append(fieldIssues, QuarterlyFinancialFieldIssue{
 				SourceField: spec.fields[i], Code: "invalid_field",
-				ActualType: quarterlyFinancialCellType(raw), Preview: quarterlyFinancialCellPreview(string(raw)),
+				ActualType: baoStockCellType(raw), Preview: baoStockCellPreview(string(raw)),
 				RowIndex: 0,
 			})
 			values[spec.fields[i]] = ""
@@ -871,10 +879,19 @@ func parseKLinePage(body string) (queryPage, error) {
 			return queryPage{}, fmt.Errorf("row %d has %d columns, fields specify %d", rowIndex, len(rawRow), len(page.fields))
 		}
 		values := make([]string, len(rawRow))
+		fieldIssues := make([]DailyKLineFieldIssue, 0)
 		for columnIndex, rawValue := range rawRow {
 			value, err := decodeCell(rawValue)
 			if err != nil {
-				return queryPage{}, fmt.Errorf("row %d column %d: %w", rowIndex, columnIndex, err)
+				sourceField := fmt.Sprintf("column_%d", columnIndex)
+				if columnIndex < len(page.fields) {
+					sourceField = page.fields[columnIndex]
+				}
+				fieldIssues = append(fieldIssues, DailyKLineFieldIssue{
+					SourceField: sourceField, Code: "invalid_field",
+					ActualType: baoStockCellType(rawValue), Preview: baoStockCellPreview(string(rawValue)),
+				})
+				continue
 			}
 			values[columnIndex] = value
 		}
@@ -882,12 +899,13 @@ func parseKLinePage(body string) (queryPage, error) {
 			Date: values[0], Code: values[1], Open: values[2], High: values[3], Low: values[4],
 			Close: values[5], PreClose: values[6], Volume: values[7], Amount: values[8],
 			AdjustFlag: values[9], Turn: values[10], TradeStatus: values[11], PctChg: values[12], IsST: values[13],
+			FieldIssues: fieldIssues,
 		})
 	}
 	return page, nil
 }
 
-func quarterlyFinancialCellType(raw json.RawMessage) string {
+func baoStockCellType(raw json.RawMessage) string {
 	value := strings.TrimSpace(string(raw))
 	switch {
 	case value == "":
@@ -907,7 +925,7 @@ func quarterlyFinancialCellType(raw json.RawMessage) string {
 	}
 }
 
-func quarterlyFinancialCellPreview(value string) string {
+func baoStockCellPreview(value string) string {
 	value = strings.Map(func(r rune) rune {
 		if r < 0x20 || r == 0x7f {
 			return ' '
