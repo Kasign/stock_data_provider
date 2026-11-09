@@ -70,6 +70,22 @@ func TestNotificationMariaDBExpiredDeliveryLeaseRecoveryIntegration(t *testing.T
 	if err != nil || !claimed {
 		t.Fatalf("claim delivery: claimed=%v err=%v", claimed, err)
 	}
+	expiredClaims, err := repository.ListExpiredLeases(ctx, 10)
+	if err != nil {
+		t.Fatalf("scan expired leases: %v", err)
+	}
+	foundExpired := false
+	for _, expired := range expiredClaims {
+		if expired.Delivery.DeliveryID == delivery.DeliveryID &&
+			expired.Lease.FencingToken == claim.Lease.FencingToken &&
+			expired.Lease.WorkerID == claim.Lease.WorkerID {
+			foundExpired = true
+			break
+		}
+	}
+	if !foundExpired {
+		t.Fatalf("bounded scan must return the expired lease for %s", delivery.DeliveryID)
+	}
 	recoveryAt := now
 	nextAttemptAt := recoveryAt.Add(time.Second)
 	next, event, err := claim.Delivery.Transition(domain.DeliveryTransition{
