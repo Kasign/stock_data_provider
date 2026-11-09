@@ -96,6 +96,18 @@ func TestMariaDBClaimAttemptLeaseAndFencing(t *testing.T) {
 	if first.Number != 1 || first.FencingToken != 1 || first.Status != domain.AttemptRunning {
 		t.Fatalf("first claim returned unexpected attempt: %#v", first)
 	}
+	originalExpiry := *first.LeaseExpiresAt
+	renewedExpiry, err := repository.RenewAttemptLease(
+		ctx, runRef, stageRef, first.Ref, "worker-a", first.FencingToken, 2*time.Minute,
+	)
+	if err != nil || !renewedExpiry.After(originalExpiry) {
+		t.Fatalf("renew lease expiry=%s original=%s err=%v", renewedExpiry, originalExpiry, err)
+	}
+	first.LeaseExpiresAt = &renewedExpiry
+	if loaded, err := repository.GetAttempt(ctx, first.Ref); err != nil ||
+		loaded.LeaseExpiresAt == nil || !loaded.LeaseExpiresAt.Equal(renewedExpiry) {
+		t.Fatalf("renewed lease was not persisted: attempt=%#v err=%v", loaded, err)
+	}
 
 	// A running Attempt and a non-running Stage indicate inconsistent state;
 	// Claim must fail closed instead of creating another Attempt.
