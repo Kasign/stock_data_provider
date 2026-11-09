@@ -107,25 +107,33 @@ func (w *Worker) Execute(ctx context.Context, runRef, stageRef, attemptRef strin
 	if snapshot.Run.Ref != runRef || snapshot.Stage.Ref != stageRef ||
 		snapshot.Stage.RunRef != runRef || snapshot.Stage.Status != domain.StageRunning ||
 		snapshot.Stage.AttemptNo != attempt.Number || snapshot.Run.Status != domain.RunRunning ||
-		snapshot.Run.DeadlineAt.IsZero() || !reflect.DeepEqual(snapshot.RetryPolicy, policySnapshot.RetryPolicy) {
+		snapshot.Run.DeadlineAt.IsZero() || snapshot.RetryPolicy.AttemptTimeoutMS <= 0 ||
+		!reflect.DeepEqual(snapshot.RetryPolicy, policySnapshot.RetryPolicy) {
 		return WorkerExecution{Attempt: attempt}, errors.New("Researchflow execution snapshot is inconsistent with claimed Attempt")
 	}
 	if !w.now().Before(snapshot.Run.DeadlineAt) {
 		return WorkerExecution{Attempt: attempt}, ErrWorkerDeadline
 	}
 
-	execCtx, cancel := context.WithDeadline(ctx, snapshot.Run.DeadlineAt)
-	defer cancel()
+	runCtx, cancelRun := context.WithDeadline(ctx, snapshot.Run.DeadlineAt)
+	defer cancelRun()
+	attemptDeadline := attempt.StartedAt.Add(time.Duration(snapshot.RetryPolicy.AttemptTimeoutMS) * time.Millisecond)
+	if attemptDeadline.After(snapshot.Run.DeadlineAt) {
+		attemptDeadline = snapshot.Run.DeadlineAt
+	}
+	execCtx, cancelExecution := context.WithDeadline(runCtx, attemptDeadline)
+	defer cancelExecution()
 	stopHeartbeat := make(chan struct{})
 	heartbeatDone := make(chan struct{})
 	heartbeatErr := make(chan error, 1)
-	go w.heartbeat(execCtx, cancel, snapshot, attempt, stopHeartbeat, heartbeatDone, heartbeatErr)
+	go w.heartbeat(runCtx, cancelRun, snapshot, attempt, stopHeartbeat, heartbeatDone, heartbeatErr)
 
 	request := StageExecutionRequest{
 		Run: snapshot.Run, Stage: snapshot.Stage, Attempt: attempt,
 		Parameters:        append([]byte(nil), snapshot.Parameters...),
 		InputSnapshotRefs: append([]string(nil), snapshot.InputSnapshotRefs...),
 		SystemAsOf:        snapshot.Run.SystemAsOf, DeadlineAt: snapshot.Run.DeadlineAt,
+		AttemptDeadlineAt: attemptDeadline,
 		CorrelationID: snapshot.Run.CorrelationID,
 	}
 	result, executeErr := w.executor.ExecuteStage(execCtx, request)
@@ -139,14 +147,29 @@ func (w *Worker) Execute(ctx context.Context, runRef, stageRef, attemptRef strin
 		return WorkerExecution{Attempt: attempt}, fmt.Errorf("%w: %v", ErrWorkerLeaseLost, heartbeatFailure)
 	default:
 	}
-	if errors.Is(execCtx.Err(), context.DeadlineExceeded) || !w.now().Before(snapshot.Run.DeadlineAt) {
+	if errors.Is(runCtx.Err(), context.DeadlineExceeded) || !w.now().Before(snapshot.Run.DeadlineAt) {
 		return WorkerExecution{Attempt: attempt}, ErrWorkerDeadline
 	}
-	if executeErr != nil {
+	attemptTimedOut := errors.Is(execCtx.Err(), context.DeadlineExceeded) && !w.now().Before(attemptDeadline)
+	if attemptTimedOut {
+		result := StageExecutionResult{
+			AttemptStatus: domain.AttemptTimedOut,
+			StageStatus: domain.StageTimedOut,
+			ReasonCodes: []string{"attempt_timeout"},
+		}
+		// A timeout is eligible for retry only when the immutable policy allows it.
+		result.StageStatus = domain.StageRetryWait
+		if err := ValidateStageExecutionResult(result); err != nil {
+			return WorkerExecution{Attempt: attempt}, err
+		}
+	} else if executeErr != nil {
 		return WorkerExecution{Attempt: attempt}, fmt.Errorf("execute Researchflow Stage: %w", executeErr)
 	}
 	if err := ValidateStageExecutionResult(result); err != nil {
 		return WorkerExecution{Attempt: attempt}, err
+	}
+	if attemptTimedOut {
+		result = StageExecutionResult{AttemptStatus: domain.AttemptTimedOut, StageStatus: domain.StageRetryWait, ReasonCodes: []string{"attempt_timeout"}}
 	}
 	if result.StageStatus == domain.StageRetryWait {
 		retryNow, retryErr := w.clock.NowUTC(ctx)
@@ -160,7 +183,11 @@ func (w *Worker) Execute(ctx context.Context, runRef, stageRef, attemptRef strin
 		if retryAllowed {
 			result.RetryAt = &retryAt
 		} else {
-			result.StageStatus = domain.StageFailed
+			if result.AttemptStatus == domain.AttemptTimedOut {
+				result.StageStatus = domain.StageTimedOut
+			} else {
+				result.StageStatus = domain.StageFailed
+			}
 			result.RetryAt = nil
 		}
 	}
