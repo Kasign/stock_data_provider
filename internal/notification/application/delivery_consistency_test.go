@@ -1,6 +1,8 @@
 package application
 
 import (
+	"encoding/json"
+	"strings"
 	"testing"
 
 	"example.com/stock-analysis-flow/internal/notification/domain"
@@ -94,5 +96,48 @@ func TestAssessDeliveryConsistency(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestDeliveryConsistencyResultDoesNotExposeSensitiveReferences(t *testing.T) {
+	delivery := validDeliveryForRepository()
+	secretDeliveryRef := delivery.DeliveryID
+	secretRecipientRef := delivery.RecipientRef
+	secretPayloadFingerprint := delivery.PayloadFingerprint
+	evidence := "private-evidence-reference"
+	providerMessage := "private-provider-message"
+	actor := "private-operator"
+	request := "private-request"
+
+	attempt := domain.DeliveryAttempt{
+		DeliveryID: delivery.DeliveryID,
+		EvidenceRef: &evidence,
+		ProviderMessageRef: &providerMessage,
+	}
+	event := domain.DeliveryStateEvent{
+		DeliveryID: delivery.DeliveryID,
+		EvidenceRef: &evidence,
+		ActorRef: &actor,
+		RequestID: &request,
+	}
+	result := AssessDeliveryConsistency(DeliveryConsistencyInput{
+		Delivery: delivery,
+		Attempts: []domain.DeliveryAttempt{attempt},
+		StateEvents: []domain.DeliveryStateEvent{event},
+	})
+	encoded, err := json.Marshal(result)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, forbidden := range []string{
+		secretDeliveryRef, secretRecipientRef, secretPayloadFingerprint,
+		evidence, providerMessage, actor, request,
+	} {
+		if forbidden != "" && strings.Contains(string(encoded), forbidden) {
+			t.Fatalf("diagnostic response leaked sensitive value %q: %s", forbidden, encoded)
+		}
+	}
+	if result.Evidence.EvidenceRefCount != 2 {
+		t.Fatalf("evidence summary should expose only the count, got %+v", result.Evidence)
 	}
 }
