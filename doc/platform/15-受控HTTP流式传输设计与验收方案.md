@@ -44,7 +44,7 @@
 
 ## 3. 公共 API 方向
 
-建议保留现有 `BoundDoer`，在其上增加固定策略的流式入口：
+现有 `BoundDoer` 已增加固定策略的流式入口：
 
 ```go
 type StreamResponse struct {
@@ -118,9 +118,9 @@ _ = stats // 由调用方写入自身的结构化日志/诊断记录
 
 流式额度必须从请求执行前持有到流终止，不能在收到响应头后释放。流式额度与缓冲式请求额度分离，避免长连接占满普通 Provider 请求的全部并发槽位；未配置专属 Dependency 的流共享有界默认池，不能按请求输入动态创建 Semaphore。
 
-### 4.2 建议的独立配置
+### 4.2 已实现的独立配置
 
-以下是首期建议默认值和硬上限，编码前需在 Platform 配置约束中固化：
+以下为当前实现的默认值和硬上限；`New()` 会归一化默认值并拒绝超过硬上限的配置：
 
 | 配置 | 建议默认值 | 建议硬上限 | 说明 |
 |---|---:|---:|---|
@@ -225,19 +225,20 @@ Read 错误必须通过稳定 Fault Code 区分；Fault 的 SafeMessage 为固�
 | 13 | 附加资源边界 | 响应头上限、解压后 Body 上限、BoundDoer 固定策略和无自动重试均有回归测试 |
 | 14 | 建连超时分类 | Dial timeout 与 TLS handshake timeout 不误归类为响应头超时 |
 | 15 | 诊断耗时 | StreamStats.Duration 覆盖 OpenStream 到流终止的完整耗时 |
+| 16 | HTTP/2 生命周期 | HTTP/2 增量读取在 EOF 前交付首段，Context cancel 能终止阻塞 Read |
 
-测试覆盖 HTTP/1.1 与 HTTP/2 的增量读取及取消；使用本地 httptest、可控 Resolver/Dial 和短超时，不依赖公网。提交 `742d6cf` 的 Platform CI 已完成 gofmt、契约 Schema/Golden、平台包单测、Race、Vet 和 Storage 集成 Race，全部通过。
+测试覆盖 HTTP/1.1 与 HTTP/2 的增量读取及取消；使用本地 httptest、可控 Resolver/Dial 和短超时，不依赖公网。提交 `b9e8be6` 的 Platform CI 已完成 gofmt、契约 Schema/Golden、平台包单测、Race、Vet 和 Storage 集成 Race，全部通过。
 
-## 9. 实施顺序与准入门禁
+## 9. 验收状态与后续准入
 
-1. 先冻结本设计中的 API、默认值、错误码和终止状态语义。
-2. 实现流式并发额度、Context 生命周期和幂等清理。
-3. 实现增量 Body、空闲读取超时、解压后字节上限和响应头上限。
-4. 接入 Fault 与终态统计。
-5. 完成第 8 节全部测试及 Race/Vet。
-6. 更新 Platform 接入示例；由 LLM 使用 BoundDoer 流式入口做跨模块验收。
+Platform A1 已完成：API、配置、Fault、终止状态、流式并发额度、Context 生命周期、增量 Body、空闲读取超时、解压后字节上限、响应头上限和终态统计均已实现；第 8 节 16 项验收矩阵、Race 和 Vet 已通过。
 
-A1 的 gofmt、Platform 单测、Race、Vet、Schema/Golden 和 Storage integration 已全部通过，当前可供业务模块接入。A2 需要 LLM 真实调用与取消/关闭联调；A3 仍需部署网络和运行时证据。
+后续准入：
+1. A2：LLM 使用 `BoundDoer.OpenStream` 接入真实上游，验证 SSE Parser 与传输层解耦、真实取消/关闭、超限和超时映射；不得另建 HTTP Client。
+2. A3：部署环境验证 DNS/IP、egress、防火墙、Secret、Go Runtime/Transport 版本和长连接资源限制。
+3. 若 A2/A3 暴露公共传输缺陷，再回到 Platform 修复；SSE/模型协议语义仍由 LLM 负责。
+
+A1 通过只表示 Platform 流式技术原语可供领域模块接入，不代表跨模块联调或生产部署验收完成。
 
 ## 10. 明确不做
 
@@ -250,8 +251,8 @@ A1 的 gofmt、Platform 单测、Race、Vet、Schema/Golden 和 Storage integrat
 
 ## 11. Platform A1 验收记录
 
-- 验收提交：`742d6cf9f7f2fa8eef20f3e94082086e934da7d5`
-- GitHub Actions：`https://github.com/Kasign/stock_data_provider/actions/runs/42555342449`
+- 验收提交：`b9e8be6932523e176aa9aa6380142caa15620bae`
+- GitHub Actions：`https://github.com/Kasign/stock_data_provider/actions/runs/42555612898`
 - Platform packages：gofmt、契约 Schema/Golden、`go test ./internal/platform/...`、`go test -race ./internal/platform/...`、`go vet ./internal/platform/...` 全部通过。
 - Storage integration：MariaDB 11.4 / Redis 7.4 真实服务容器测试及 Race 全部通过。
 - 流式专项覆盖：HTTP/1.1 与 HTTP/2 增量读取/取消、慢消费者、主动关闭、并发额度释放、上游截断、Body/响应头上限、解压后字节限制、空闲超时、重定向、BoundDoer 固定策略、无自动重试、Fault 脱敏、连接/TLS/响应头超时分类。
