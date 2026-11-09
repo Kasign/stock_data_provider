@@ -12,13 +12,20 @@ import (
 
 func TestHTTPHandlerEnforcesExplicitRoutePolicies(t *testing.T) {
 	token := strings.Repeat("a", 43)
+	serviceToken := strings.Repeat("b", 43)
 	env := platformconfig.NewEnvWithLookup(func(key string) (string, bool) {
-		if key == "PLATFORM_ADMIN_TOKEN" {
+		switch key {
+		case "PLATFORM_ADMIN_TOKEN":
 			return token, true
+		case "RESEARCHFLOW_SERVICE_TOKEN":
+			return serviceToken, true
+		default:
+			return "", false
 		}
-		return "", false
 	})
-	auth, err := platformsecurity.NewAuthenticator(env.Secret("PLATFORM_ADMIN_TOKEN"), nil)
+	auth, err := platformsecurity.NewAuthenticator(env.Secret("PLATFORM_ADMIN_TOKEN"), []platformsecurity.ServiceCredential{
+		{Name: "researchflow", Secret: env.Secret("RESEARCHFLOW_SERVICE_TOKEN"), Scopes: []string{platformsecurity.ScopeResearchRun}},
+	})
 	if err != nil {
 		t.Fatalf("NewAuthenticator() error = %v", err)
 	}
@@ -33,8 +40,12 @@ func TestHTTPHandlerEnforcesExplicitRoutePolicies(t *testing.T) {
 		want                              int
 	}{
 		{name: "匿名存活检查", method: http.MethodGet, path: "/healthz", want: http.StatusOK},
+		{name: "匿名 HEAD 存活检查", method: http.MethodHead, path: "/healthz", want: http.StatusOK},
 		{name: "Readiness 未认证", method: http.MethodGet, path: "/readyz", want: http.StatusUnauthorized},
 		{name: "业务路由未认证", method: http.MethodPost, path: "/api/v1/analysis/runs", want: http.StatusUnauthorized},
+		{name: "错误 Owner 凭证", method: http.MethodPost, path: "/api/v1/analysis/runs", authorization: "Bearer " + strings.Repeat("c", 43), want: http.StatusUnauthorized},
+		{name: "Service Scope 不得访问 Owner 路由", method: http.MethodPost, path: "/api/v1/analysis/runs", authorization: "Bearer " + serviceToken, want: http.StatusForbidden},
+		{name: "Service Scope 不得访问 Owner Readiness", method: http.MethodGet, path: "/readyz", authorization: "Bearer " + serviceToken, want: http.StatusForbidden},
 		{name: "Owner 创建 Run", method: http.MethodPost, path: "/api/v1/analysis/runs", authorization: "Bearer " + token, want: http.StatusNoContent},
 		{name: "Owner 查询事件", method: http.MethodGet, path: "/api/v1/analysis/runs/run-1/events", authorization: "Bearer " + token, want: http.StatusNoContent},
 		{name: "未注册路由", method: http.MethodGet, path: "/internal/debug", authorization: "Bearer " + token, want: http.StatusNotFound},
