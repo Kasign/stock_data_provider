@@ -53,6 +53,23 @@ func (r *MySQLRunRepository) LoadDeadlineFinalizationSnapshot(ctx context.Contex
 		}
 	}
 
+	if len(policies) != len(created.Stages) {
+		return application.DeadlineFinalizationSnapshot{}, errors.New("Researchflow persisted Stage set does not match the immutable resolved template")
+	}
+	seenStageCodes := make(map[string]struct{}, len(created.Stages))
+	for _, stage := range created.Stages {
+		if stage.RunRef != runRef {
+			return application.DeadlineFinalizationSnapshot{}, fmt.Errorf("Researchflow Stage %q belongs to another Run", stage.Ref)
+		}
+		if _, exists := policies[stage.Code]; !exists {
+			return application.DeadlineFinalizationSnapshot{}, fmt.Errorf("Researchflow Stage %q is absent from the immutable resolved template", stage.Code)
+		}
+		if _, exists := seenStageCodes[stage.Code]; exists {
+			return application.DeadlineFinalizationSnapshot{}, fmt.Errorf("Researchflow persisted Stage code %q is duplicated", stage.Code)
+		}
+		seenStageCodes[stage.Code] = struct{}{}
+	}
+
 	rows, err := r.db.QueryContext(ctx, `SELECT
 		attempt_ref, stage_ref, attempt_no, status, lease_owner, lease_expires_at,
 		fencing_token, started_at, finished_at, fault_ref, output_ref
