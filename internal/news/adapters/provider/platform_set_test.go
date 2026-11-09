@@ -12,10 +12,10 @@ import (
 
 func TestNewPlatformProviderSetBindsConfiguredProviders(t *testing.T) {
 	values := map[string]string{
-		newsconfig.BochaEndpointEnv: "https://bocha.example.com/v1/search",
-		newsconfig.BochaAPIKeyEnv: "bocha-secret",
-		newsconfig.TavilyEndpointEnv: "https://api.tavily.example/search",
-		newsconfig.TavilyAPIKeyEnv: "tavily-secret",
+		newsconfig.BochaEndpointEnv:   "https://bocha.example.com/v1/search",
+		newsconfig.BochaAPIKeyEnv:     "bocha-secret",
+		newsconfig.TavilyEndpointEnv:  "https://api.tavily.example/search",
+		newsconfig.TavilyAPIKeyEnv:    "tavily-secret"
 		newsconfig.SearXNGEndpointEnv: "https://search.example.com",
 	}
 	env := platformconfig.NewEnvWithLookup(func(key string) (string, bool) {
