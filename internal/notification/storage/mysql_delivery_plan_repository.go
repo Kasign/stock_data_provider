@@ -6,7 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"reflect"
+	"slices"
 
 	mysql "github.com/go-sql-driver/mysql"
 
@@ -180,8 +180,8 @@ func validateDeliveryPlanColumns(plan domain.DeliveryPlan, columns deliveryPlanC
 		columns.templateVersion != plan.TemplateVersion ||
 		columns.recipientRef != plan.RecipientRef ||
 		columns.payloadFingerprint != plan.PayloadFingerprint ||
-		!reflect.DeepEqual(policyVersions, plan.AuthorizationPolicyVersions) ||
-		!reflect.DeepEqual(authorizationRefs, plan.AuthorizationRefs) ||
+		!slices.Equal(policyVersions, plan.AuthorizationPolicyVersions) ||
+		!slices.Equal(authorizationRefs, plan.AuthorizationRefs) ||
 		columns.planFingerprint != plan.PlanFingerprint ||
 		columns.deliveryIdempotencyKey != plan.DeliveryIdempotencyKey {
 		return errDeliveryPlanSnapshotColumnsMismatch
