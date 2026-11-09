@@ -24,6 +24,17 @@ func (c testComponent) Stop(context.Context) error {
 	return c.stopErr
 }
 
+type cancelOnStartComponent struct {
+	testComponent
+	cancel context.CancelFunc
+}
+
+func (c cancelOnStartComponent) Start(context.Context) error {
+	*c.log = append(*c.log, "start:"+c.name)
+	c.cancel()
+	return nil
+}
+
 func TestLifecycleStartsInOrderAndStopsInReverse(t *testing.T) {
 	var events []string
 	lifecycle := NewLifecycle()
@@ -64,6 +75,40 @@ func TestLifecycleRollsBackFailedComponentAndPriorComponents(t *testing.T) {
 	}
 	if err := lifecycle.Stop(context.Background()); err != nil {
 		t.Fatalf("Stop after rollback = %v", err)
+	}
+}
+
+func TestLifecycleDoesNotStartComponentsWithCanceledContext(t *testing.T) {
+	var events []string
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	lifecycle := NewLifecycle()
+	_ = lifecycle.Register(testComponent{name: "worker", log: &events})
+	err := lifecycle.Start(ctx)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("Start() error = %v, want context.Canceled", err)
+	}
+	if len(events) != 0 {
+		t.Fatalf("components ran with canceled context: %v", events)
+	}
+}
+
+func TestLifecycleRollsBackWhenContextCanceledDuringStartup(t *testing.T) {
+	var events []string
+	ctx, cancel := context.WithCancel(context.Background())
+	lifecycle := NewLifecycle()
+	_ = lifecycle.Register(cancelOnStartComponent{
+		testComponent: testComponent{name: "worker", log: &events},
+		cancel: cancel,
+	})
+	_ = lifecycle.Register(testComponent{name: "transport", log: &events})
+	err := lifecycle.Start(ctx)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("Start() error = %v, want context.Canceled", err)
+	}
+	want := []string{"start:worker", "stop:worker"}
+	if !reflect.DeepEqual(events, want) {
+		t.Fatalf("events = %v, want %v", events, want)
 	}
 }
 
