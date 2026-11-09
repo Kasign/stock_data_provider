@@ -65,3 +65,46 @@ func TestResearchMigrationsAreExplicitAndVersioned(t *testing.T) {
 		}
 	}
 }
+
+
+func TestResearchMigrationPreservesExistingPITAndOutboxValuesInOrder(t *testing.T) {
+	migrations := Migrations()
+	if len(migrations) != 5 { t.Fatalf("migration count = %d, want 5", len(migrations)) }
+	assertOrdered := func(name string, statements []string, fragments ...string) {
+		t.Helper()
+		joined := strings.Join(statements, "\n")
+		last := -1
+		for _, fragment := range fragments {
+			index := strings.Index(joined, fragment)
+			if index < 0 { t.Errorf("%s is missing SQL fragment %q", name, fragment); return }
+			if index <= last { t.Errorf("%s SQL fragment %q is out of order", name, fragment); return }
+			last = index
+		}
+	}
+	assertOrdered("Context PIT conversion", migrations[1].Statements,
+		"ALTER TABLE research_context_versions ADD COLUMN system_as_of_exact",
+		"UPDATE research_context_versions SET system_as_of_exact = CONCAT(DATE_FORMAT(system_as_of",
+		"ALTER TABLE research_context_versions DROP INDEX idx_research_context_asof")
+	assertOrdered("Evidence PIT conversion", migrations[1].Statements,
+		"ALTER TABLE research_evidence_records ADD COLUMN available_at_exact",
+		"UPDATE research_evidence_records SET available_at_exact = CASE WHEN available_at IS NULL THEN NULL",
+		"system_observed_at_exact = CONCAT(DATE_FORMAT(system_observed_at",
+		"system_as_of_exact = CONCAT(DATE_FORMAT(system_as_of",
+		"ALTER TABLE research_evidence_records DROP INDEX idx_research_evidence_pit")
+	assertOrdered("Event PIT conversion", migrations[1].Statements,
+		"ALTER TABLE research_event_versions ADD COLUMN system_as_of_exact",
+		"UPDATE research_event_versions SET system_as_of_exact = CONCAT(DATE_FORMAT(system_as_of",
+		"ALTER TABLE research_event_versions DROP INDEX idx_research_event_status_asof")
+	assertOrdered("Claim PIT conversion", migrations[1].Statements,
+		"ALTER TABLE research_claim_versions ADD COLUMN system_as_of_exact",
+		"UPDATE research_claim_versions SET system_as_of_exact = CONCAT(DATE_FORMAT(system_as_of",
+		"ALTER TABLE research_claim_versions DROP INDEX idx_research_claim_status_asof")
+	assertOrdered("Outbox delivery state backfill", migrations[4].Statements,
+		"ALTER TABLE research_notification_outbox ADD COLUMN delivery_status",
+		"available_at CHAR(30)",
+		"attempt_count INT UNSIGNED NOT NULL DEFAULT 0",
+		"UPDATE research_notification_outbox SET available_at = CONCAT(DATE_FORMAT(created_at",
+		"ALTER TABLE research_notification_outbox MODIFY COLUMN available_at")
+	if !strings.Contains(migrations[1].Statements[4], "CASE WHEN available_at IS NULL THEN NULL") { t.Fatal("Evidence migration must preserve NULL available_at values") }
+	if !strings.Contains(migrations[4].Statements[1], "updated_at = created_at") { t.Fatal("Outbox migration must backfill updated_at from the original created_at") }
+}
