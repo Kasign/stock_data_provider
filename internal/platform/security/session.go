@@ -21,7 +21,7 @@ const (
 	DefaultSessionIdleTTL     = 12 * time.Hour
 	DefaultSessionAbsoluteTTL = 7 * 24 * time.Hour
 	SessionTokenBytes         = 32
-	maxSessionSubjectBytes    = 128
+	maxSessionSubjectBytes   = 128
 	maxSessionPrefixBytes     = 128
 )
 
@@ -134,6 +134,9 @@ func (s *RedisSessionStore) Create(ctx context.Context, digest string, record Se
 		return fault.New(fault.ClassValidation, "platform.security.invalid_session", "session is invalid", err)
 	}
 	now := time.Now().UTC()
+	if record.CreatedAt.After(now) || record.LastSeenAt.After(now) {
+		return fault.New(fault.ClassValidation, "platform.security.invalid_session", "session time bounds are invalid", nil)
+	}
 	ttl := record.AbsoluteExpiresAt.Sub(now)
 	if ttl <= 0 {
 		return fault.New(fault.ClassValidation, "platform.security.session_expired", "session is already expired", nil)
@@ -206,7 +209,7 @@ func fromRedisSessionRecord(record redisSessionRecord) SessionRecord {
 
 func (s *RedisSessionStore) LookupAndTouch(ctx context.Context, digest string, now time.Time, idleTTL time.Duration) (SessionRecord, error) {
 	if s == nil || s.client == nil || ctx == nil || !validSessionDigest(digest) ||
-		now.IsZero() || idleTTL <= 0 || idleTTL > DefaultSessionAbsoluteTTL {
+		now.IsZero() || idleTTL <= 0 || idleTTL > DefaultSessionIdleTTL {
 		return SessionRecord{}, fault.New(fault.ClassValidation, "platform.security.invalid_session_lookup", "session lookup parameters are invalid", nil)
 	}
 	result, err := lookupAndTouchSessionScript.Run(ctx, s.client, []string{s.key(digest)},
