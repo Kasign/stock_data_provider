@@ -124,6 +124,39 @@ func TestNotificationMariaDBUnknownReconciliationIntegration(t *testing.T) {
 		}
 	})
 
+	t.Run("不可变重试预算拒绝篡改", func(t *testing.T) {
+		unknown := createMariaDBUnknownDelivery(t, ctx, db, repository, "immutable-budget")
+		next, event := unknownSentTransition(t, unknown, "provider-immutable-budget")
+
+		tampered := next
+		tampered.MaxAttempts++
+		if err := repository.ReconcileUnknown(ctx, unknown.Version, tampered, event); !errors.Is(err, application.ErrUnknownReconciliationConflict) {
+			t.Fatalf("changed max_attempts must conflict, got %v", err)
+		}
+
+		tampered = next
+		tampered.AttemptCount++
+		if err := repository.ReconcileUnknown(ctx, unknown.Version, tampered, event); !errors.Is(err, application.ErrUnknownReconciliationConflict) {
+			t.Fatalf("changed attempt_count must conflict, got %v", err)
+		}
+
+		tampered = next
+		tampered.DeadlineAt = unknown.DeadlineAt.Add(time.Minute)
+		if err := repository.ReconcileUnknown(ctx, unknown.Version, tampered, event); !errors.Is(err, application.ErrUnknownReconciliationConflict) {
+			t.Fatalf("changed deadline_at must conflict, got %v", err)
+		}
+
+		tampered = next
+		tampered.CreatedAt = unknown.CreatedAt.Add(time.Second)
+		if err := repository.ReconcileUnknown(ctx, unknown.Version, tampered, event); !errors.Is(err, application.ErrUnknownReconciliationConflict) {
+			t.Fatalf("changed created_at must conflict, got %v", err)
+		}
+
+		if err := repository.ReconcileUnknown(ctx, unknown.Version, next, event); err != nil {
+			t.Fatalf("valid immutable snapshot should still reconcile: %v", err)
+		}
+	})
+
 	t.Run("永久拒绝收敛failed", func(t *testing.T) {
 		unknown := createMariaDBUnknownDelivery(t, ctx, db, repository, "rejected")
 		next, event, err := unknown.Transition(domain.DeliveryTransition{
