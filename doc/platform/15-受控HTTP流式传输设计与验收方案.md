@@ -40,7 +40,7 @@
 - Transport 已显式配置 `MaxResponseHeaderBytes`；默认值和硬上限已进入配置校验，仍需 CI 验证边界行为。
 - 独立流式累计字节数上限已通过边界测试（含解压后字节计数）。
 - 流式并发额度、空闲读取超时和流生命周期统计已通过单测及 Race。
-- 流式入口的响应头超时、连接超时、TLS 握手超时和 DNS 失败 Fault 分类已通过专项测试。
+- 流式入口的响应头超时、连接超时、TLS 握手超时和 DNS 失败 Fault 分类已通过专项测试。Go `net/http` 对响应头大小、TLS 握手和响应头超时未提供稳定公开的专用错误类型；对应文本匹配集中在 `classifyStreamOpenError` 兼容层，其他错误仍优先使用 `errors.Is` / `errors.As`。升级 Go 版本时必须运行该分类测试并复核标准库错误文本。
 
 ## 3. 公共 API 方向
 
@@ -229,12 +229,15 @@ Read 错误必须通过稳定 Fault Code 区分；Fault 的 SafeMessage 为固�
 | 16 | HTTP/2 生命周期 | HTTP/2 增量读取在 EOF 前交付首段，Context cancel 能终止阻塞 Read |
 | 17 | Dependency 并发隔离 | Dependency 额度等待不占用全局额度；等待期间取消能释放已持有资源 |
 | 18 | Close 中断阻塞 Read | HTTP/1.1 主动 Close 能中断正在等待上游数据的 Read，并释放流额度 |
+| 19 | HTTP/2 Close 中断阻塞 Read | HTTP/2 主动 Close 能中断正在等待上游数据的 Read |
+| 20 | 调用方处理时间 | 两次 Read 之间的调用方处理时间不计入 StreamIdleTimeout |
+| 21 | Transport 错误分类兼容层 | 将 net/http 未公开类型化的错误文本集中在兼容分类函数，并覆盖已知错误文本与未知错误 |
 
 测试覆盖 HTTP/1.1 与 HTTP/2 的增量读取及取消；使用本地 httptest、可控 Resolver/Dial 和短超时，不依赖公网。提交 `b9e8be6` 的 Platform CI 已完成 gofmt、契约 Schema/Golden、平台包单测、Race、Vet 和 Storage 集成 Race，全部通过。
 
 ## 9. 验收状态与后续准入
 
-Platform A1 已完成：API、配置、Fault、终止状态、流式并发额度、Context 生命周期、增量 Body、空闲读取超时、解压后字节上限、响应头上限和终态统计均已实现；第 8 节 18 项验收矩阵、Race 和 Vet 已通过。
+Platform A1 已完成：API、配置、Fault、终止状态、流式并发额度、Context 生命周期、增量 Body、空闲读取超时、解压后字节上限、响应头上限和终态统计均已实现；第 8 节 21 项验收矩阵、Race 和 Vet 已通过。
 
 后续准入：
 1. A2：LLM 使用 `BoundDoer.OpenStream` 接入真实上游，验证 SSE Parser 与传输层解耦、真实取消/关闭、超限和超时映射；不得另建 HTTP Client。
@@ -258,5 +261,5 @@ A1 通过只表示 Platform 流式技术原语可供领域模块接入，不代�
 - GitHub Actions：`https://github.com/Kasign/stock_data_provider/actions/runs/42555612898`
 - Platform packages：gofmt、契约 Schema/Golden、`go test ./internal/platform/...`、`go test -race ./internal/platform/...`、`go vet ./internal/platform/...` 全部通过。
 - Storage integration：MariaDB 11.4 / Redis 7.4 真实服务容器测试及 Race 全部通过。
-- 流式专项覆盖：HTTP/1.1 与 HTTP/2 增量读取/取消、慢消费者、主动关闭、并发额度释放、上游截断、Body/响应头上限、解压后字节限制、空闲超时、重定向、BoundDoer 固定策略、应用层不重试约束、Fault 脱敏、连接/TLS/响应头超时分类。
+- 流式专项覆盖：HTTP/1.1 与 HTTP/2 增量读取/取消、慢消费者、主动关闭、并发额度释放、上游截断、Body/响应头上限、解压后字节限制、空闲超时、重定向、BoundDoer 固定策略、应用层不重试约束、Fault 脱敏、连接/TLS/响应头超时分类、HTTP/2 主动 Close、调用方处理时间与错误分类兼容层。
 - 当前准入：Platform A1 通过；LLM A2 真实调用联调尚未完成；生产 A3 DNS/egress、Secret 和运行时验收尚未完成。不得将 A1 通过表述为整个 PLAT-CTR 跨模块交付完成。
