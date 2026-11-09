@@ -273,3 +273,6 @@ Fake Repository/Fake Clock/Fake Provider 只证明模块内逻辑；MariaDB/Redi
 - AggregateRun、FinalizeCancellation 共用校验；FinalizeDeadline 复用 AggregateRun，因此同样受保护。
 - 新增回归测试覆盖空状态、queued、unknown 三种非终态输入，分别验证聚合和取消终结拒绝。
 - 本修正仍需定向 Go Test/Race/Vet 执行证据；不将静态增加的测试描述为通过。
+
+
+- 终态收敛还要求 Stage 集合完整且唯一：空 Stage 集合、空 stage_code、重复 stage_code 或非终态 Stage 均 fail-closed；Attempt 集合中的每一项也必须处于明确终态，未知/空状态不能视为已停止。AggregateRun、FinalizeCancellation 共用这些校验，FinalizeDeadline 通过 AggregateRun 复用。
