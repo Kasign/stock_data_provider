@@ -16,7 +16,6 @@ var (
 	ErrInvalidLLMExplanation    = errors.New("invalid non-authoritative LLM explanation")
 )
 
-
 const LLMExplanationAuthority = "non_authoritative"
 
 // ResultCompositionInput keeps facts, evidence, risk and model explanation in
@@ -170,7 +169,6 @@ func ComposeResult(input ResultCompositionInput, quantRegistry *Registry) (Compo
 		Limitations: limitations,
 	}, nil
 }
-
 
 func validateContextReferences(value researchapp.ResearchContext, evidenceIDs map[string]struct{}) (map[string]struct{}, error) {
 	included := make(map[string]struct{}, len(value.IncludedSections))
