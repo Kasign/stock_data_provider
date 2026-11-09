@@ -18,37 +18,37 @@ var (
 // model. Source references are retained so the model can cite, not invent,
 // provenance.
 type ModelInputSection struct {
-	SectionID     string   `json:"section_id"`
-	SectionVersion string  `json:"section_version"`
-	SourceOwner   string   `json:"source_owner"`
-	SourceRefs    []string `json:"source_refs"`
-	EvidenceRefs  []string `json:"evidence_refs"`
+	SectionID             string   `json:"section_id"`
+	SectionVersion        string   `json:"section_version"`
+	SourceOwner           string   `json:"source_owner"`
+	SourceRefs            []string `json:"source_refs"`
+	EvidenceRefs          []string `json:"evidence_refs"`
 	ProtectedEvidenceRefs []string `json:"protected_evidence_refs"`
-	QualityStatus string   `json:"quality_status"`
-	Required      bool     `json:"required"`
-	AssembledAt   string   `json:"assembled_at"`
-	Text          string   `json:"text"`
+	QualityStatus         string   `json:"quality_status"`
+	Required              bool     `json:"required"`
+	AssembledAt           string   `json:"assembled_at"`
+	Text                  string   `json:"text"`
 }
 
 // ModelInputEnvelope is the deterministic JSON payload passed as LLM input.
 type ModelInputEnvelope struct {
-	SchemaVersion   string              `json:"schema_version"`
-	ResearchQuestion string             `json:"research_question"`
-	Scope            string             `json:"scope"`
-	SubjectRefs      []string            `json:"subject_refs"`
-	SystemAsOf       string              `json:"system_as_of"`
-	BuilderVersion   string              `json:"builder_version"`
-	QualitySummary   researchapp.ContextQualitySummary `json:"quality_summary"`
-	OmittedSections []researchapp.ContextOmittedSection `json:"omitted_sections"`
-	Sections         []ModelInputSection `json:"sections"`
+	SchemaVersion    string                                `json:"schema_version"`
+	ResearchQuestion string                                `json:"research_question"`
+	Scope            string                                `json:"scope"`
+	SubjectRefs      []string                              `json:"subject_refs"`
+	SystemAsOf       string                                `json:"system_as_of"`
+	BuilderVersion   string                                `json:"builder_version"`
+	QualitySummary   researchapp.ContextQualitySummary     `json:"quality_summary"`
+	OmittedSections  []researchapp.ContextOmittedSection   `json:"omitted_sections"`
+	Sections         []ModelInputSection                   `json:"sections"`
 }
 
 // ComposedModelInput contains the final serialized input and exact tokenizer
 // count for that serialization. It contains authorized content only in memory.
 type ComposedModelInput struct {
-	Text            string
-	TokenCount       int
-	Tokenizer       TokenizerProvenance
+	Text      string
+	TokenCount int
+	Tokenizer TokenizerProvenance
 }
 
 // ComposeModelInput serializes only the sections selected by Plan, then counts
