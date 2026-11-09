@@ -1,7 +1,11 @@
 package risk
 
 import (
+	"encoding/json"
 	"errors"
+	"os"
+	"path/filepath"
+	"reflect"
 	"testing"
 )
 
@@ -73,5 +77,37 @@ func TestDecisionValidateAllowsPresentEmptyArrays(t *testing.T) {
 	decision.InputRefs = []string{}
 	if err := decision.Validate(); err != nil {
 		t.Fatalf("empty but present arrays rejected: %v", err)
+	}
+}
+
+
+func TestDecisionMatchesGoldenJSON(t *testing.T) {
+	path := filepath.Join("..", "..", "..", "doc", "quant", "golden", "result", "risk-decision-1.0.0.golden.json")
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read RiskDecision Golden: %v", err)
+	}
+
+	var decision Decision
+	if err := json.Unmarshal(raw, &decision); err != nil {
+		t.Fatalf("decode RiskDecision Golden: %v", err)
+	}
+	if err := decision.Validate(); err != nil {
+		t.Fatalf("RiskDecision Golden failed DTO validation: %v", err)
+	}
+
+	encoded, err := json.Marshal(decision)
+	if err != nil {
+		t.Fatalf("marshal RiskDecision: %v", err)
+	}
+	var got, want any
+	if err := json.Unmarshal(encoded, &got); err != nil {
+		t.Fatalf("decode marshaled RiskDecision: %v", err)
+	}
+	if err := json.Unmarshal(raw, &want); err != nil {
+		t.Fatalf("decode expected Golden: %v", err)
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("RiskDecision JSON mismatch: got %s, want %s", encoded, raw)
 	}
 }
