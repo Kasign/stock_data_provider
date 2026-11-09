@@ -113,7 +113,7 @@ func New(cfg config.Config, deps Dependencies) (*Module, error) {
 		retentionStore: deps.Store,
 		retention:      cfg.QuoteRetention,
 	}
-	if err := module.build(cfg, deps.TushareHTTPDoer, deps.HithinkHTTPDoer, deps.TickFlowAuthenticatedHTTPDoer, deps.TickFlowPublicHTTPDoer, deps.XueqiuHTTPDoer, deps.YahooHTTPDoer, deps.NeteaseQuoteHTTPDoer, deps.NeteaseHistoryHTTPDoer, deps.TencentQuoteHTTPDoer, deps.TencentKlineHTTPDoer, deps.TencentNoneKlineHTTPDoer, deps.TencentSearchHTTPDoer, deps.SinaQuoteHTTPDoer, deps.SinaKlineHTTPDoer, deps.EastmoneyHTTPDoers, deps.MiaoXiangHTTPDoer, deps.PytdxDialContext, deps.BaoStockDialContext); err != nil {
+	if err := module.build(cfg, deps); err != nil {
 		_ = module.Close(context.Background())
 		return nil, err
 	}
@@ -173,7 +173,7 @@ func (m *Module) ProviderSummary() ProviderSummary {
 	}
 }
 
-func (m *Module) build(cfg config.Config, tushareHTTPDoer, hithinkHTTPDoer, tickflowAuthenticatedHTTPDoer, tickflowPublicHTTPDoer, xueqiuHTTPDoer, yahooHTTPDoer, neteaseQuoteHTTPDoer, neteaseHistoryHTTPDoer, tencentQuoteHTTPDoer, tencentKlineHTTPDoer, tencentNoneKlineHTTPDoer, tencentSearchHTTPDoer, sinaQuoteHTTPDoer, sinaKlineHTTPDoer provider.HTTPDoer, eastmoneyHTTPDoers map[string]provider.HTTPDoer, miaoxiangHTTPDoer provider.HTTPDoer, pytdxDialContext, baostockDialContext transport.DialContextFunc) error {
+func (m *Module) build(cfg config.Config, deps Dependencies) error {
 	store := m.store
 	c := m.cache
 	logger := m.logger
@@ -184,21 +184,21 @@ func (m *Module) build(cfg config.Config, tushareHTTPDoer, hithinkHTTPDoer, tick
 		Password:       cfg.BaostockPassword,
 		ConnectTimeout: cfg.BaostockConnectTimeout,
 		RequestTimeout: cfg.BaostockRequestTimeout,
-		DialContext:    baostockDialContext,
+		DialContext:    deps.BaoStockDialContext,
 	})
 	m.baostockClient = baostockClient
 	available := map[string]provider.NamedProvider{
-		"eastmoney": provider.NewEastmoneyConfiguredWithAnnouncements(cfg.ProviderTimeout, cfg.EastmoneyQuoteURL, cfg.EastmoneyKlineURL, cfg.EastmoneyStockBasicURL, cfg.EastmoneySectorRankingURL, cfg.EastmoneyIndexURL, cfg.EastmoneyMarketStocksURL, cfg.EastmoneyLimitPoolBaseURL, cfg.EastmoneyStockBoardsURL, cfg.EastmoneyDragonTigerURL, cfg.EastmoneyAnnouncementsURL, cfg.EastmoneyUT).WithHotRankingURLs(cfg.EastmoneyHotRankingsURL, cfg.EastmoneyHotSurgeURL).WithCapitalFlowURL(cfg.EastmoneyCapitalFlowURL).WithHTTPDoers(eastmoneyHTTPDoers),
-		"hithink":   provider.NewHithinkConfiguredWithHTTPDoer(cfg.ProviderTimeout, cfg.HithinkBaseURL, cfg.HithinkAPIKey, hithinkHTTPDoer),
+		"eastmoney": provider.NewEastmoneyConfiguredWithAnnouncements(cfg.ProviderTimeout, cfg.EastmoneyQuoteURL, cfg.EastmoneyKlineURL, cfg.EastmoneyStockBasicURL, cfg.EastmoneySectorRankingURL, cfg.EastmoneyIndexURL, cfg.EastmoneyMarketStocksURL, cfg.EastmoneyLimitPoolBaseURL, cfg.EastmoneyStockBoardsURL, cfg.EastmoneyDragonTigerURL, cfg.EastmoneyAnnouncementsURL, cfg.EastmoneyUT).WithHotRankingURLs(cfg.EastmoneyHotRankingsURL, cfg.EastmoneyHotSurgeURL).WithCapitalFlowURL(cfg.EastmoneyCapitalFlowURL).WithHTTPDoers(deps.EastmoneyHTTPDoers),
+		"hithink":   provider.NewHithinkConfiguredWithHTTPDoer(cfg.ProviderTimeout, cfg.HithinkBaseURL, cfg.HithinkAPIKey, deps.HithinkHTTPDoer),
 		"baostock":  provider.NewBaostock(baostockClient),
-		"tencent":   provider.NewTencentConfiguredWithHTTPDoers(cfg.ProviderTimeout, cfg.TencentQuoteURL, cfg.TencentKlineURL, cfg.TencentNoneKlineURL, cfg.TencentStockSearchURL, tencentQuoteHTTPDoer, tencentKlineHTTPDoer, tencentNoneKlineHTTPDoer, tencentSearchHTTPDoer),
-		"sina":      provider.NewSinaConfiguredWithHTTPDoers(cfg.ProviderTimeout, cfg.SinaQuoteURL, cfg.SinaKlineURL, sinaQuoteHTTPDoer, sinaKlineHTTPDoer),
-		"yahoo":     provider.NewYahooFinanceWithHTTPDoer(cfg.ProviderTimeout, cfg.YahooChartURL, yahooHTTPDoer),
-		"netease":   provider.NewNeteaseConfiguredWithHTTPDoers(cfg.ProviderTimeout, cfg.NeteaseQuoteURL, cfg.NeteaseHistoryURL, neteaseQuoteHTTPDoer, neteaseHistoryHTTPDoer),
-		"tushare":   provider.NewTushareConfiguredWithHTTPDoer(cfg.ProviderTimeout, cfg.TushareAPIURL, cfg.TushareToken, tushareHTTPDoer),
-		"tickflow":  provider.NewTickFlowConfiguredWithHTTPDoers(cfg.ProviderTimeout, cfg.TickFlowAPIURL, cfg.TickFlowFreeAPIURL, cfg.TickFlowAPIKey, tickflowAuthenticatedHTTPDoer, tickflowPublicHTTPDoer),
-		"pytdx":     provider.NewPytdxWithDialContext(cfg.ProviderTimeout, pytdxDialContext, cfg.PytdxHosts...),
-		"xueqiu":    provider.NewXueqiuConfiguredWithHTTPDoer(cfg.ProviderTimeout, cfg.XueqiuBaseURL, cfg.XueqiuCookie, xueqiuHTTPDoer),
+		"tencent":   provider.NewTencentConfiguredWithHTTPDoers(cfg.ProviderTimeout, cfg.TencentQuoteURL, cfg.TencentKlineURL, cfg.TencentNoneKlineURL, cfg.TencentStockSearchURL, deps.TencentQuoteHTTPDoer, deps.TencentKlineHTTPDoer, deps.TencentNoneKlineHTTPDoer, deps.TencentSearchHTTPDoer),
+		"sina":      provider.NewSinaConfiguredWithHTTPDoers(cfg.ProviderTimeout, cfg.SinaQuoteURL, cfg.SinaKlineURL, deps.SinaQuoteHTTPDoer, deps.SinaKlineHTTPDoer),
+		"yahoo":     provider.NewYahooFinanceWithHTTPDoer(cfg.ProviderTimeout, cfg.YahooChartURL, deps.YahooHTTPDoer),
+		"netease":   provider.NewNeteaseConfiguredWithHTTPDoers(cfg.ProviderTimeout, cfg.NeteaseQuoteURL, cfg.NeteaseHistoryURL, deps.NeteaseQuoteHTTPDoer, deps.NeteaseHistoryHTTPDoer),
+		"tushare":   provider.NewTushareConfiguredWithHTTPDoer(cfg.ProviderTimeout, cfg.TushareAPIURL, cfg.TushareToken, deps.TushareHTTPDoer),
+		"tickflow":  provider.NewTickFlowConfiguredWithHTTPDoers(cfg.ProviderTimeout, cfg.TickFlowAPIURL, cfg.TickFlowFreeAPIURL, cfg.TickFlowAPIKey, deps.TickFlowAuthenticatedHTTPDoer, deps.TickFlowPublicHTTPDoer),
+		"pytdx":     provider.NewPytdxWithDialContext(cfg.ProviderTimeout, deps.PytdxDialContext, cfg.PytdxHosts...),
+		"xueqiu":    provider.NewXueqiuConfiguredWithHTTPDoer(cfg.ProviderTimeout, cfg.XueqiuBaseURL, cfg.XueqiuCookie, deps.XueqiuHTTPDoer),
 	}
 	allProviders := make([]provider.NamedProvider, 0, len(available))
 	quoteProviders := make([]provider.QuoteProvider, 0, len(available))
@@ -401,7 +401,7 @@ func (m *Module) build(cfg config.Config, tushareHTTPDoer, hithinkHTTPDoer, tick
 	ds := service.NewWithCapabilities(allProviders, quoteProviders, barProviders, c, store, cfg.QuoteCacheTTL, cfg.BarsCacheTTL, cfg.DefaultDailyBars, cfg.MaxDailyBars, service.ResilienceConfig{Retries: cfg.ProviderRetries, CircuitFailureThreshold: cfg.CircuitFailureThreshold, CircuitCooldown: cfg.CircuitCooldown}, logger)
 	supplementProviders := make([]provider.SupplementProvider, 0, 1)
 	if cfg.MXEnabled {
-		mx, mxErr := provider.NewMiaoXiangWithHTTPDoer(cfg.MXAPIKey, cfg.MXAPIURL, cfg.MXAPITimeout, miaoxiangHTTPDoer)
+		mx, mxErr := provider.NewMiaoXiangWithHTTPDoer(cfg.MXAPIKey, cfg.MXAPIURL, cfg.MXAPITimeout, deps.MiaoXiangHTTPDoer)
 		if mxErr != nil {
 			return fmt.Errorf("configure MiaoXiang supplemental provider: %w", mxErr)
 		}
