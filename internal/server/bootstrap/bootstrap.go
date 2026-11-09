@@ -208,7 +208,9 @@ func (w legacyAnalysisWorker) Start(ctx context.Context) error {
 	if !w.enabled {
 		return nil
 	}
-	return w.queue.Start(ctx)
+	// Worker 的停止由 Lifecycle 统一控制，避免 SIGTERM 先取消 Worker、
+	// 反而早于 HTTP 在途请求完成；Queue.Close 会取消内部运行 Context。
+	return w.queue.Start(context.WithoutCancel(ctx))
 }
 func (w legacyAnalysisWorker) Stop(context.Context) error {
 	w.queue.Close()

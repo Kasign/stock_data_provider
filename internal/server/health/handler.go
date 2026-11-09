@@ -6,8 +6,8 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
-	"sync/atomic"
 	"time"
+	"sync/atomic"
 
 	serverdiagnostics "example.com/stock-analysis-flow/internal/server/diagnostics"
 )

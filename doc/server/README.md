@@ -740,7 +740,7 @@ Server 层完成不是“服务能够启动”这么简单。至少同时满足�
 #### 实施内容
 
 - 新增 `httpServerComponent` 并实现 `runtime.Component`；Listener 在 Start 阶段同步创建，端口占用等绑定错误直接导致启动失败。
-- HTTP Server 注册在旧 Analysis Worker 之后，逆序关闭时先停止 HTTP 接入，再停止 Worker；Storage 在 Lifecycle 停止后关闭，保证在途请求和 Worker 退出时 DB/Redis 仍可用。
+- HTTP Server 注册在旧 Analysis Worker 之后，逆序关闭时先停止 HTTP 接入，再停止 Worker；Worker 运行 Context 不直接绑定 SIGTERM Context，避免信号到达时 Worker 提前退出，实际停止由 Lifecycle 在 HTTP 排空后调用 Queue.Close；Storage 在 Lifecycle 停止后关闭，保证在途请求和 Worker 退出时 DB/Redis 仍可用。
 - Stop 首先调用 Health Handler 的 `MarkDraining`，Readiness 立即返回 503；随后调用 `http.Server.Shutdown` 停止接收新连接并等待在途请求。
 - Shutdown 超时或失败时执行 `http.Server.Close` 强制释放连接，并汇总关闭错误；Serve 非预期退出通过 Done 通知 Bootstrap。
 - Lifecycle Stop 使用 `HTTP_SHUTDOWN_TIMEOUT`；Worker-only 角色使用 10 秒默认关闭预算。
