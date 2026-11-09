@@ -50,10 +50,10 @@ func MeasureBudgetReservations(
 	}
 	budget := BudgetInput{
 		ModelContextTokens: input.ModelContextTokens,
-		SystemTokens: systemTokens,
-		ToolSchemaTokens: toolTokens,
-		OutputReserve: input.OutputReserve,
-		SafetyMargin: input.SafetyMargin,
+		SystemTokens:       systemTokens,
+		ToolSchemaTokens:   toolTokens,
+		OutputReserve:      input.OutputReserve,
+		SafetyMargin:       input.SafetyMargin,
 	}
 	if _, err := AvailableBudget(budget); err != nil {
 		return BudgetInput{}, TokenizerProvenance{}, err

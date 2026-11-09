@@ -10,7 +10,7 @@ import (
 )
 
 var (
-	ErrInvalidModelInput = errors.New("invalid model input composition")
+	ErrInvalidModelInput    = errors.New("invalid model input composition")
 	ErrModelInputOverBudget = errors.New("composed model input exceeds available token budget")
 )
 
@@ -32,23 +32,23 @@ type ModelInputSection struct {
 
 // ModelInputEnvelope is the deterministic JSON payload passed as LLM input.
 type ModelInputEnvelope struct {
-	SchemaVersion    string                                `json:"schema_version"`
-	ResearchQuestion string                                `json:"research_question"`
-	Scope            string                                `json:"scope"`
-	SubjectRefs      []string                              `json:"subject_refs"`
-	SystemAsOf       string                                `json:"system_as_of"`
-	BuilderVersion   string                                `json:"builder_version"`
-	QualitySummary   researchapp.ContextQualitySummary     `json:"quality_summary"`
-	OmittedSections  []researchapp.ContextOmittedSection   `json:"omitted_sections"`
-	Sections         []ModelInputSection                   `json:"sections"`
+	SchemaVersion    string                              `json:"schema_version"`
+	ResearchQuestion string                              `json:"research_question"`
+	Scope            string                              `json:"scope"`
+	SubjectRefs      []string                            `json:"subject_refs"`
+	SystemAsOf       string                              `json:"system_as_of"`
+	BuilderVersion   string                              `json:"builder_version"`
+	QualitySummary   researchapp.ContextQualitySummary   `json:"quality_summary"`
+	OmittedSections  []researchapp.ContextOmittedSection `json:"omitted_sections"`
+	Sections         []ModelInputSection                 `json:"sections"`
 }
 
 // ComposedModelInput contains the final serialized input and exact tokenizer
 // count for that serialization. It contains authorized content only in memory.
 type ComposedModelInput struct {
-	Text      string
+	Text       string
 	TokenCount int
-	Tokenizer TokenizerProvenance
+	Tokenizer  TokenizerProvenance
 }
 
 // ComposeModelInput serializes only the sections selected by Plan, then counts
@@ -109,19 +109,19 @@ func ComposeModelInput(
 		section := metadata[id]
 		sections = append(sections, ModelInputSection{
 			SectionID: id, SectionVersion: section.Version,
-			SourceOwner: candidate.SourceOwner,
-			SourceRefs: append([]string{}, candidate.SourceRefs...),
-			EvidenceRefs: append([]string{}, candidate.EvidenceRefs...),
+			SourceOwner:           candidate.SourceOwner,
+			SourceRefs:            append([]string{}, candidate.SourceRefs...),
+			EvidenceRefs:          append([]string{}, candidate.EvidenceRefs...),
 			ProtectedEvidenceRefs: append([]string{}, candidate.ProtectedEvidenceRefs...),
-			QualityStatus: section.QualityStatus, Required: candidate.Required,
+			QualityStatus:         section.QualityStatus, Required: candidate.Required,
 			AssembledAt: section.AssembledAt.Format("2006-01-02T15:04:05.999999999Z"), Text: content,
 		})
 	}
 	envelope := ModelInputEnvelope{
-		SchemaVersion: "researchflow.context-input.v1",
+		SchemaVersion:    "researchflow.context-input.v1",
 		ResearchQuestion: snapshot.ResearchQuestion, Scope: snapshot.Scope,
-		SubjectRefs: append([]string{}, snapshot.SubjectRefs...),
-		SystemAsOf: snapshot.SystemAsOf.Format("2006-01-02T15:04:05.999999999Z"),
+		SubjectRefs:    append([]string{}, snapshot.SubjectRefs...),
+		SystemAsOf:     snapshot.SystemAsOf.Format("2006-01-02T15:04:05.999999999Z"),
 		BuilderVersion: snapshot.BuilderVersion, QualitySummary: command.QualitySummary,
 		OmittedSections: command.OmittedSections, Sections: sections,
 	}

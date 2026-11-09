@@ -219,7 +219,6 @@ func AssembleResearchContext(
 	return ResearchContextAssembly{Command: command, Plan: plan, AvailableTokens: available}, nil
 }
 
-
 // AssembleResearchContextWithTokenizer executes the model-specific assembly
 // path: count authorized section text, measure fixed request reservations,
 // select sections, project the Research DTO, then count the exact final JSON
