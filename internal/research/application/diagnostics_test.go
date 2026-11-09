@@ -4,11 +4,13 @@ import (
 	"context"
 	"testing"
 	"time"
+	"errors"
 
 	platformdiagnostics "example.com/stock-analysis-flow/internal/platform/diagnostics"
 	researchclaim "example.com/stock-analysis-flow/internal/research/claim"
 	researchcontext "example.com/stock-analysis-flow/internal/research/context"
 	researchevent "example.com/stock-analysis-flow/internal/research/event"
+	researchevidence "example.com/stock-analysis-flow/internal/research/evidence"
 )
 
 func TestDiagnosticsApplicationBuildsChecksFromExactVersions(t *testing.T) {
@@ -95,5 +97,59 @@ func TestDiagnosticsApplicationRejectsInvalidReferences(t *testing.T) {
 	}
 	if _, err := service.BuildClaimCheck(context.Background(), ClaimRef{ClaimID: "clm_1", ClaimVersion: 0}, true); err == nil {
 		t.Fatal("non-positive Claim version must be rejected")
+	}
+}
+
+func TestBuildEvidenceCheckRechecksOwnerAuthorization(t *testing.T) {
+	now := time.Date(2026, 11, 9, 5, 0, 0, 123456789, time.UTC)
+	value := researchevidence.Evidence{
+		EvidenceID: "ev_diag_authorized", EvidenceType: researchevidence.TypeFact,
+		SourceOwner: researchevidence.SourceData, SourceRef: "data:fixture:1",
+		DerivedFromRefs: []string{}, SubjectRefs: []string{"security:600000"},
+		SystemObservedAt: now, SystemAsOf: now,
+		Stance: researchevidence.StanceNeutral, QualityStatus: researchevidence.QualityValid,
+		ContentLevel: researchevidence.ContentMetadata, AuthorizationRef: "auth:current",
+		Limitations: []string{},
+	}
+	fingerprint, err := value.ComputeContentFingerprint()
+	if err != nil {
+		t.Fatalf("compute Evidence fingerprint: %v", err)
+	}
+	value.ContentFingerprint = fingerprint
+	repo := &evidenceRepoFake{value: value}
+	authorizer := &authorizerFake{}
+	service, err := NewService(&contextRepoFake{}, repo, authorizer, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	check, err := service.BuildEvidenceCheck(context.Background(), EvidenceRef{
+		EvidenceID: value.EvidenceID, CallerRef: "researchflow:worker-1",
+	}, true)
+	if err != nil {
+		t.Fatalf("BuildEvidenceCheck() error = %v", err)
+	}
+	if authorizer.calls != 1 {
+		t.Fatalf("Owner authorization calls = %d, want 1", authorizer.calls)
+	}
+	if !check.Required {
+		t.Fatal("required flag was not preserved")
+	}
+	observation, err := check.Run(context.Background())
+	if err != nil {
+		t.Fatalf("run Evidence check: %v", err)
+	}
+	if observation.Status != platformdiagnostics.StatusHealthy {
+		t.Fatalf("authorized Evidence status = %q, want healthy", observation.Status)
+	}
+
+	authorizer.err = errors.New("owner revoked access")
+	if _, err := service.BuildEvidenceCheck(context.Background(), EvidenceRef{
+		EvidenceID: value.EvidenceID, CallerRef: "researchflow:worker-1",
+	}, true); err == nil {
+		t.Fatal("revoked Owner authorization must prevent diagnostic check construction")
+	}
+	if authorizer.calls != 2 {
+		t.Fatalf("Owner authorization calls after revocation = %d, want 2", authorizer.calls)
 	}
 }
