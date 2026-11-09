@@ -4,8 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
-	"time"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"example.com/stock-analysis-flow/internal/quant/manifest"
@@ -86,17 +86,15 @@ func BuildRef(input RefInput, source manifest.Manifest) (Ref, error) {
 		return Ref{}, fmt.Errorf("%w: manifest: %v", ErrInvalidResultRef, err)
 	}
 	if !refSchemaVersionRE.MatchString(input.SchemaVersion) ||
-		!validText(input.SecurityID) ||
+		(input.SecurityID != "" && !validText(input.SecurityID)) ||
 		!validText(input.Period) ||
 		!validText(input.AlgorithmVersion) ||
 		!validText(input.ParameterFingerprint) ||
 		!validText(input.AuthorizationRef) ||
 		!validSnapshotRefsUTF8(source.InputSnapshotRefs) ||
 		!validScope(input.Scope) ||
-		(input.Scope == ScopeStock && input.SecurityID == "") ||
-		input.Period == "" || input.AlgorithmVersion == "" ||
-		input.ParameterFingerprint == "" || !validQuality(input.QualityStatus) ||
-		!validResultStatus(input.ResultStatus) || input.AuthorizationRef == "" ||
+		(input.Scope == ScopeStock && !validText(input.SecurityID)) ||
+		!validQuality(input.QualityStatus) || !validResultStatus(input.ResultStatus) ||
 		input.CreatedAt.IsZero() {
 		return Ref{}, ErrInvalidResultRef
 	}
