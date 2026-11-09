@@ -90,12 +90,13 @@ func Run(ctx context.Context) error {
 			return fmt.Errorf("注册模块 Migration 失败: %w", err)
 		}
 		migrationCtx, migrationCancel := context.WithTimeout(ctx, migrationCfg.Timeout)
-		err = migrationRegistry.Run(migrationCtx, storageResources.DB)
+		migrationReport, migrationErr := migrationRegistry.RunWithReport(migrationCtx, storageResources.DB)
 		migrationCancel()
-		if err != nil {
-			return fmt.Errorf("执行模块 Migration 失败: %w", err)
+		if migrationErr != nil {
+			slog.Error("模块 Migration 执行失败", "report", migrationReport, "error", migrationErr.Error())
+			return fmt.Errorf("执行模块 Migration 失败: %w", migrationErr)
 		}
-		slog.Info("模块 Migration 执行完成", "namespaces", migrationRegistry.Namespaces())
+		slog.Info("模块 Migration 执行完成", "report", migrationReport)
 	}
 
 	runner, err := service.NewRunnerWithMarketDataStores(marketDataCfg, store, store)
