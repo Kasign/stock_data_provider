@@ -341,3 +341,12 @@ sequence_number 严格连续策略、Draft 2020-12 本地 Schema dialect、Reque
 - 若终态文本与已累计文本不一致，返回 `ErrorInvalidResponse / llm.sse.terminal_output_text_mismatch`；不得以终态结果覆盖已交付给消费者的文本。
 - 对应测试：`TestParseResponsesSSERejectsTerminalOutputTextMismatch`。
 - 此规则属于本地 Parser 一致性测试，仍待执行。
+
+
+## 21. 多文本分段 SSE 一致性回归
+
+- 文本事件按 `output_index + content_index` 分段累计，多个分段可交错到达；最终 ModelResponse.output_text 按索引顺序聚合。
+- 每个分段的 delta 与 done 独立比对，不能把一个分段的累计文本与另一个分段的 done 文本比较。
+- done 后再次收到同一分段 delta 必须拒绝；负 output_index/content_index 必须拒绝。
+- 对应测试：`TestParseResponsesSSEAggregatesMultipleTextPartsByIndex`、`TestParseResponsesSSERejectsTextDeltaAfterDone`。
+- 测试代码尚未执行，不构成通过证据。
