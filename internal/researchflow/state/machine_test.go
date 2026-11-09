@@ -407,3 +407,13 @@ func TestClaimRetryStageFailureDoesNotReturnIntermediateReadyState(t *testing.T)
 		t.Fatalf("failed atomic retry claim leaked intermediate state: stage=%#v attempt=%#v", got, attempt)
 	}
 }
+
+
+func TestSkippedIsNotA_RuntimeStageTransition(t *testing.T) {
+	now := time.Date(2026, 11, 6, 10, 0, 0, 0, time.UTC)
+	for _, status := range []domain.StageStatus{domain.StagePending, domain.StageReady, domain.StageRunning} {
+		if _, err := TransitionStage(domain.Stage{Status:status}, domain.StageSkipped, now); !errors.Is(err, ErrInvalidTransition) {
+			t.Fatalf("runtime transition %s -> skipped must be rejected, got %v", status, err)
+		}
+	}
+}
