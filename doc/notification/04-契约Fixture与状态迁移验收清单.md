@@ -182,6 +182,11 @@ Fake Adapter 只能验证分类和状态机，不证明真实渠道行为。Reci
 | NTF002-PLAN-02 | 同一 Event 并发 fan-out | 唯一约束/幂等只生成一份 DeliveryPlan |
 | NTF002-CAS-01 | 两个 Worker 同时领取同一 Delivery | 仅一个 lease/fencing token 有效；旧 Worker 回写被拒绝 |
 | NTF002-CAS-02 | 旧 Worker lease 过期后提交成功结果 | CAS 拒绝迟到状态覆盖；保留审计记录 |
+| NTF002-ATT-01 | 有效租约开始真实渠道调用 | Attempt ID 唯一、attempt_no 连续递增；attempt_count 与追加历史原子更新 |
+| NTF002-ATT-02 | 旧版本、旧 fencing token 或其他 Worker 尝试开始 Attempt | 拒绝追加，不修改 attempt_count 和 Attempt 历史 |
+| NTF002-ATT-03 | 当前有效租约完成 Attempt | 仅允许运行中记录完成一次；完成后不可覆盖 |
+| NTF002-ATT-04 | Attempt 完成时租约已过期 | 拒绝旧 Worker 迟到完成，交由恢复流程判定 unknown/安全重排 |
+| NTF002-ATT-05 | Attempt 追加/完成持久化失败 | 不产生部分 Attempt 或计数投影更新 |
 | NTF003-RETRY-01 | 明确 retryable rejection + 有效 Retry-After | next_attempt_at 取本地退避与 Retry-After 的较晚值；不超过总 deadline |
 | NTF003-RETRY-02 | permanent rejection / retry budget exhausted | 结束为 failed；不超过 max_attempts |
 | NTF003-RETRY-03 | timeout-after-write / 请求可能已到渠道 | 进入 unknown；不自动重发 |

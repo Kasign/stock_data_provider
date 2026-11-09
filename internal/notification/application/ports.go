@@ -40,10 +40,13 @@ type DeliveryClaim struct {
 }
 
 var (
-	ErrDeliveryAlreadyExists   = errors.New("notification: delivery already exists")
-	ErrDeliveryNotFound        = errors.New("notification: delivery not found")
-	ErrDeliveryVersionConflict = errors.New("notification: delivery version conflict")
-	ErrDeliveryLeaseConflict    = errors.New("notification: delivery lease conflict")
+	ErrDeliveryAlreadyExists        = errors.New("notification: delivery already exists")
+	ErrDeliveryNotFound             = errors.New("notification: delivery not found")
+	ErrDeliveryVersionConflict      = errors.New("notification: delivery version conflict")
+	ErrDeliveryLeaseConflict        = errors.New("notification: delivery lease conflict")
+	ErrDeliveryAttemptAlreadyExists = errors.New("notification: delivery attempt already exists")
+	ErrDeliveryAttemptNotFound      = errors.New("notification: delivery attempt not found")
+	ErrDeliveryAttemptConflict      = errors.New("notification: delivery attempt conflict")
 )
 
 // DeliveryRepository 负责 Delivery 当前快照与追加式状态事件。
@@ -54,6 +57,16 @@ type DeliveryRepository interface {
 	Get(ctx context.Context, deliveryID string) (delivery domain.DeliveryRecord, found bool, err error)
 	ClaimDue(ctx context.Context, workerID string, now, leaseExpiresAt time.Time) (claim DeliveryClaim, claimed bool, err error)
 	UpdateWithLease(ctx context.Context, expectedVersion, fencingToken int64, next domain.DeliveryRecord, event domain.DeliveryStateEvent, now time.Time) error
+}
+
+// DeliveryAttemptRepository 管理单次渠道调用的追加式历史。
+// StartWithLease 必须校验当前 Delivery 版本/租约并原子分配连续 attempt_no、追加运行中 Attempt。
+// attempt_count 是 Attempt 历史的计数投影，随 StartWithLease 原子更新，不改变 Delivery 状态版本。
+// CompleteWithLease 只允许当前有效租约将运行中 Attempt 完成一次；完成记录不可再次覆盖。
+type DeliveryAttemptRepository interface {
+	StartWithLease(ctx context.Context, expectedDeliveryVersion, fencingToken int64, attempt domain.DeliveryAttempt) error
+	CompleteWithLease(ctx context.Context, expectedDeliveryVersion, fencingToken int64, completed domain.DeliveryAttempt, now time.Time) error
+	ListByDelivery(ctx context.Context, deliveryID string) (attempts []domain.DeliveryAttempt, err error)
 }
 
 // TemplateRenderer renders one immutable template version against a validated event.

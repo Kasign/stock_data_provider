@@ -19,8 +19,10 @@ type memoryDeliveries struct {
 	records  map[string]domain.DeliveryRecord
 	leases   map[string]DeliveryLease
 	tokens   map[string]int64
-	events   map[string][]domain.DeliveryStateEvent
-	failNext bool
+	events          map[string][]domain.DeliveryStateEvent
+	attempts        map[string]domain.DeliveryAttempt
+	failNext        bool
+	failAttemptNext bool
 }
 
 func newMemoryDeliveries() *memoryDeliveries {
@@ -28,7 +30,8 @@ func newMemoryDeliveries() *memoryDeliveries {
 		records: make(map[string]domain.DeliveryRecord),
 		leases:  make(map[string]DeliveryLease),
 		tokens:  make(map[string]int64),
-		events:  make(map[string][]domain.DeliveryStateEvent),
+		events:   make(map[string][]domain.DeliveryStateEvent),
+		attempts: make(map[string]domain.DeliveryAttempt),
 	}
 }
 

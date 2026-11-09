@@ -234,7 +234,16 @@ DeliveryStateEvent 的 version/from/to/changed_at 来自每次状态迁移；evi
 
 `DeliveryAttempt.Complete` 返回新快照，不修改原对象。accepted 不允许携带 error_code/retryable；rejected 和 ambiguous 必须携带稳定 error_code；not_sent 必须同时携带 error_code 与 evidence_ref，且不能携带 provider_message_ref。ambiguous 即使 retryable=true 也不构成自动重试授权，最终决策属于 NTF-005。
 
-本切片只完成领域模型与纯函数测试代码；Attempt 的 attempt_no 原子分配、追加式 Repository、与 Delivery 状态事件/租约的事务绑定、Worker 崩溃恢复和真实渠道证据仍未实现。Fake/单测代码未获得 CI 通过证据前不得标记模块级验收通过。
+本切片已补充 DeliveryAttemptRepository Port/Fake：StartWithLease 原子追加运行中 Attempt 并更新 attempt_count 计数投影；CompleteWithLease 仅允许当前有效租约完成一次；ListByDelivery 返回按序深拷贝。具体原子边界如下：
+
+Attempt Repository 的模块级原子边界：
+- StartWithLease：校验当前 Delivery 为 sending、expected version 与 fencing token 匹配、Worker 与租约一致、Attempt 尚未完成、attempt_no 等于当前 Attempt 数量 + 1；在同一 Repository 原子操作中追加运行中 Attempt 并更新 attempt_count 投影。
+- CompleteWithLease：只允许当前有效租约、当前 Delivery 版本和同一 Attempt 身份将运行中记录完成一次；完成时间不得越过租约截止；旧 Worker 的迟到完成必须拒绝。
+- ListByDelivery：按 attempt_no 顺序返回深拷贝历史；未知 Delivery 返回 not found。
+- attempt_count 是已追加 Attempt 数量的计数投影；StartWithLease 与 Attempt 追加同事务更新，不改变 Delivery 状态版本，也不产生伪造的状态迁移事件。真实 Repository 必须保证 Attempt 行、计数投影和租约检查的事务原子性。
+
+当前仅有模块内 Fake；其锁只能证明单进程测试语义，不证明数据库事务、跨进程租约 fencing 或崩溃恢复。
+Fake/单测代码未获得 CI 通过证据前不得标记模块级验收通过；真实 MariaDB Adapter、Worker 崩溃恢复和真实渠道证据仍未实现。
 
 ## 5. Attempt、租约与并发恢复
 
