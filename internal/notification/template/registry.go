@@ -101,7 +101,7 @@ func (r *Registry) Register(definition Definition) (string, error) {
 	if r == nil {
 		return "", ErrInvalidTemplateLimits
 	}
-	if err := validateDefinition(definition, r.limits); err != nil {
+	if err := ValidateDefinition(definition, r.limits); err != nil {
 		return "", err
 	}
 	digest, err := DefinitionDigest(definition)
@@ -221,7 +221,7 @@ func (r *Registry) Render(ctx context.Context, event domain.EventEnvelope, templ
 	return result, nil
 }
 
-func validateDefinition(definition Definition, limits Limits) error {
+func ValidateDefinition(definition Definition, limits Limits) error {
 	if strings.TrimSpace(definition.TemplateID) == "" || definition.TemplateID != strings.TrimSpace(definition.TemplateID) ||
 		len(definition.TemplateID) > 128 || len(definition.EventType) > 128 ||
 		len(definition.SchemaVersion) > 64 || definition.Version <= 0 ||
