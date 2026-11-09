@@ -91,13 +91,13 @@ func TestResultValidateRejectsInvalidUTF8Text(t *testing.T) {
 		mutate func(*Result)
 	}{
 		{"trend code", func(r *Result) { r.TrendCode = string([]byte{0xff}) }},
-		{"trend code padded", func(r *Result) { r.TrendCode = " price_trend "}},
+		{"trend code padded", func(r *Result) { r.TrendCode = " price_trend " }},
 		{"period", func(r *Result) { r.Period = string([]byte{0xff}) }},
 		{"period padded", func(r *Result) { r.Period = " 20d " }},
 		{"algorithm version", func(r *Result) { r.AlgorithmVersion = string([]byte{0xff}) }},
 		{"algorithm version padded", func(r *Result) { r.AlgorithmVersion = " 1.0.0 " }},
 		{"conflict ref", func(r *Result) { r.ConflictRefs = []string{string([]byte{0xff})} }},
-		{"conflict ref padded", func(r *Result) { r.ConflictRefs = []string{" ref:trend "}}},
+		{"conflict ref padded", func(r *Result) { r.ConflictRefs = []string{" ref:trend "} }},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
