@@ -391,3 +391,19 @@ func TestClaimRetryStageRejectsEarlyOrExhaustedRetry(t *testing.T) {
 		t.Fatalf("expected exhausted retry budget, got %v", err)
 	}
 }
+
+
+func TestClaimRetryStageFailureDoesNotReturnIntermediateReadyState(t *testing.T) {
+	now := time.Date(2026, 11, 6, 10, 0, 0, 0, time.UTC)
+	retryAt := now.Add(-time.Second)
+	stage := domain.Stage{Ref: "stage-1", Status: domain.StageRetryWait, Version: 4, AttemptNo: 1, RetryAt: &retryAt}
+	run := domain.Run{Status: domain.RunRunning, DeadlineAt: now.Add(time.Minute)}
+	policy := template.RetryPolicy{MaxAttempts: 2}
+	got, attempt, err := ClaimRetryStage(run, stage, policy, now, "", 2)
+	if !errors.Is(err, ErrInvalidTransition) {
+		t.Fatalf("expected invalid claim to fail, got %v", err)
+	}
+	if got.Status != stage.Status || got.Version != stage.Version || got.RetryAt == nil || attempt.Ref != "" {
+		t.Fatalf("failed atomic retry claim leaked intermediate state: stage=%#v attempt=%#v", got, attempt)
+	}
+}
