@@ -15,8 +15,8 @@ const (
 )
 
 var (
-	ErrInvalidEvidenceSnapshot    = errors.New("news.evidence.snapshot_invalid")
-	ErrEvidenceSnapshotConflict   = errors.New("news.evidence.snapshot_conflict")
+	ErrInvalidEvidenceSnapshot     = errors.New("news.evidence.snapshot_invalid")
+	ErrEvidenceSnapshotConflict    = errors.New("news.evidence.snapshot_conflict")
 	ErrEvidenceSnapshotUnavailable = errors.New("news.evidence.snapshot_unavailable")
 )
 

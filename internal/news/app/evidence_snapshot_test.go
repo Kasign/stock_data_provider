@@ -30,20 +30,20 @@ func (s *evidenceSnapshotRepositoryStub) DeleteExpiredEvidenceSnapshots(context.
 func validEvidenceSnapshot(now time.Time) EvidenceSnapshot {
 	asOf := now.Add(-time.Minute)
 	return EvidenceSnapshot{
-		SnapshotRef: "snapshot-1",
-		CallerRef: "research",
-		PurposeCode: EvidencePurposeResearchAnalysis,
+		SnapshotRef:           "snapshot-1",
+		CallerRef:             "research",
+		PurposeCode:           EvidencePurposeResearchAnalysis,
 		RequestedContentLevel: EvidenceContentSummary,
-		FiltersFingerprint: strings.Repeat("a", 64),
-		PageSize: 20,
-		SystemAsOf: asOf,
-		SortVersion: evidenceSortVersion,
-		CreatedAt: now,
-		ExpiresAt: now.Add(EvidenceSnapshotTTL),
+		FiltersFingerprint:    strings.Repeat("a", 64),
+		PageSize:              20,
+		SystemAsOf:            asOf,
+		SortVersion:           evidenceSortVersion,
+		CreatedAt:             now,
+		ExpiresAt:             now.Add(EvidenceSnapshotTTL),
 		Items: []EvidenceSnapshotItem{
 			{NewsID: "news-2", VersionID: "version-1", ObservationID: "observation-2", SystemObservedAt: asOf.Add(-time.Minute)},
-			{NewsID: "news-1", VersionID: "version-2", ObservationID: "observation-1", SystemObservedAt: asOf.Add(-2*time.Minute)},
-			{NewsID: "news-3", VersionID: "version-3", ObservationID: "observation-3", SystemObservedAt: asOf.Add(-3*time.Minute)},
+			{NewsID: "news-1", VersionID: "version-2", ObservationID: "observation-1", SystemObservedAt: asOf.Add(-2 * time.Minute)},
+			{NewsID: "news-3", VersionID: "version-3", ObservationID: "observation-3", SystemObservedAt: asOf.Add(-3 * time.Minute)},
 		},
 	}
 }
@@ -102,7 +102,7 @@ func TestEvidenceSnapshotMatchesExactQueryContext(t *testing.T) {
 func TestEvidenceSnapshotValidateRejectsInvalidTTLFingerprintAndPITKey(t *testing.T) {
 	now := time.Now().UTC()
 	cases := []struct {
-		name string
+		name   string
 		mutate func(*EvidenceSnapshot)
 	}{
 		{"wrong ttl", func(s *EvidenceSnapshot) { s.ExpiresAt = s.ExpiresAt.Add(time.Second) }},
@@ -132,7 +132,6 @@ func TestEvidenceSnapshotValidateRejectsInvalidTTLFingerprintAndPITKey(t *testin
 	}
 }
 
-
 func TestEvidenceSnapshotPageAfterUsesExactStableSortPosition(t *testing.T) {
 	now := time.Now().UTC()
 	snapshot := validEvidenceSnapshot(now)
@@ -143,10 +142,10 @@ func TestEvidenceSnapshotPageAfterUsesExactStableSortPosition(t *testing.T) {
 	}
 	last := firstPage[len(firstPage)-1]
 	position := &EvidenceCursorPosition{
-		SnapshotRef: snapshot.SnapshotRef,
+		SnapshotRef:          snapshot.SnapshotRef,
 		LastSystemObservedAt: last.SystemObservedAt,
-		LastNewsID: last.NewsID,
-		LastVersionID: last.VersionID,
+		LastNewsID:           last.NewsID,
+		LastVersionID:        last.VersionID,
 	}
 	secondPage, hasMore, err := snapshot.PageAfter(position)
 	if err != nil || hasMore || len(secondPage) != 1 || secondPage[0].NewsID != "news-3" {

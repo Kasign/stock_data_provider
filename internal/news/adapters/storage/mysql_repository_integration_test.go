@@ -118,19 +118,19 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 
 	snapshotCreatedAt := time.Now().UTC().Truncate(time.Microsecond)
 	snapshot := app.EvidenceSnapshot{
-		SnapshotRef: fmt.Sprintf("news-snapshot-it-%d", time.Now().UnixNano()),
-		CallerRef: "service:researchflow",
-		PurposeCode: app.EvidencePurposeResearchAnalysis,
+		SnapshotRef:           fmt.Sprintf("news-snapshot-it-%d", time.Now().UnixNano()),
+		CallerRef:             "service:researchflow",
+		PurposeCode:           app.EvidencePurposeResearchAnalysis,
 		RequestedContentLevel: app.EvidenceContentSummary,
-		FiltersFingerprint: strings.Repeat("a", 64),
-		PageSize: 20,
-		SystemAsOf: snapshotCreatedAt.Add(-time.Minute),
-		SortVersion: "news-evidence-v1",
-		CreatedAt: snapshotCreatedAt,
-		ExpiresAt: snapshotCreatedAt.Add(app.EvidenceSnapshotTTL),
+		FiltersFingerprint:    strings.Repeat("a", 64),
+		PageSize:              20,
+		SystemAsOf:            snapshotCreatedAt.Add(-time.Minute),
+		SortVersion:           "news-evidence-v1",
+		CreatedAt:             snapshotCreatedAt,
+		ExpiresAt:             snapshotCreatedAt.Add(app.EvidenceSnapshotTTL),
 		Items: []app.EvidenceSnapshotItem{{
 			NewsID: "news-it-item-1", VersionID: "news-it-version-1",
-			ObservationID: "news-it-observation-1",
+			ObservationID:    "news-it-observation-1",
 			SystemObservedAt: snapshotCreatedAt.Add(-2 * time.Minute),
 		}},
 	}
@@ -356,15 +356,15 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 
 	// Both the version and its owning Observation must be visible at system_as_of.
 	beforeVersion := app.GetEvidenceRequest{
-		NewsID: secondObservation.NewsID,
+		NewsID:     secondObservation.NewsID,
 		SystemAsOf: secondVersion.Version.ObservedAt.Add(-time.Second),
 	}
 	if _, err := repository.GetEvidenceVersionAt(ctx, beforeVersion); !errors.Is(err, app.ErrEvidencePITNotFound) {
 		t.Fatalf("version before system_as_of error = %v, want PIT not found", err)
 	}
 	atVersion := app.GetEvidenceRequest{
-		NewsID: secondObservation.NewsID,
-		VersionID: secondVersion.Version.ID,
+		NewsID:     secondObservation.NewsID,
+		VersionID:  secondVersion.Version.ID,
 		SystemAsOf: secondVersion.Version.ObservedAt.Add(time.Second),
 	}
 	pitRecord, err := repository.GetEvidenceVersionAt(ctx, atVersion)
