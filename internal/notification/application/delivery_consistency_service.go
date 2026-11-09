@@ -3,6 +3,7 @@ package application
 import (
 	"context"
 	"errors"
+	"strings"
 
 	"example.com/stock-analysis-flow/internal/notification/domain"
 )
@@ -20,7 +21,10 @@ type DeliveryConsistencySnapshotReader interface {
 	ReadDeliveryConsistencySnapshot(ctx context.Context, deliveryID string) (snapshot DeliveryConsistencySnapshot, found bool, err error)
 }
 
-var ErrDeliveryConsistencyReaderUnavailable = errors.New("notification: consistency snapshot reader unavailable")
+var (
+	ErrDeliveryConsistencyReaderUnavailable = errors.New("notification: consistency snapshot reader unavailable")
+	ErrInvalidDeliveryConsistencyQuery       = errors.New("notification: invalid delivery consistency query")
+)
 
 // DeliveryConsistencyService assesses one atomically-read persistence snapshot.
 type DeliveryConsistencyService struct {
@@ -35,8 +39,11 @@ func NewDeliveryConsistencyService(reader DeliveryConsistencySnapshotReader) (*D
 }
 
 func (s *DeliveryConsistencyService) Assess(ctx context.Context, deliveryID string) (DeliveryConsistencyResult, bool, error) {
-	if s == nil || s.reader == nil || ctx == nil || deliveryID == "" {
+	if s == nil || s.reader == nil {
 		return DeliveryConsistencyResult{}, false, ErrDeliveryConsistencyReaderUnavailable
+	}
+	if ctx == nil || strings.TrimSpace(deliveryID) == "" {
+		return DeliveryConsistencyResult{}, false, ErrInvalidDeliveryConsistencyQuery
 	}
 	snapshot, found, err := s.reader.ReadDeliveryConsistencySnapshot(ctx, deliveryID)
 	if err != nil || !found {
