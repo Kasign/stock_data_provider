@@ -210,7 +210,7 @@ func TestFingerprintPayloadRejectsDuplicateObjectKeys(t *testing.T) {
 		},
 		{
 			name:    "duplicate nested key after escape decoding",
-			payload: json.RawMessage(`{"nested":{"a":1,"\\u0061":2}}`),
+			payload: json.RawMessage(`{"nested":{"a":1,"\u0061":2}}`),
 		},
 	}
 
