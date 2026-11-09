@@ -33,7 +33,9 @@ func TestDeadlineScannerExpiresCandidatesAndCountsConflicts(t *testing.T) {
 		t.Fatal(err)
 	}
 	got, err := scanner.ScanBatch(context.Background())
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	if got.Scanned != 2 || got.Expired != 1 || got.Conflicts != 1 {
 		t.Fatalf("unexpected deadline scan result: %+v", got)
 	}
@@ -42,11 +44,13 @@ func TestDeadlineScannerExpiresCandidatesAndCountsConflicts(t *testing.T) {
 func TestDeadlineScannerRejectsDuplicateAndPropagatesErrors(t *testing.T) {
 	store := &deadlineStoreFake{candidates: []DeadlineCandidate{{RunRef: "run-a"}, {RunRef: "run-a"}}}
 	scanner, err := NewDeadlineScanner(store, DeadlineScanConfig{BatchSize: 2})
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	if _, err := scanner.ScanBatch(context.Background()); err == nil {
 		t.Fatal("expected duplicate candidate to fail")
 	}
-	store.candidates = []DeadlineCandidate{{RunRef:"run-a"}}
+	store.candidates = []DeadlineCandidate{{RunRef: "run-a"}}
 	store.expireErr = errors.New("database unavailable")
 	if _, err := scanner.ScanBatch(context.Background()); err == nil {
 		t.Fatal("expected expiration error to propagate")
