@@ -4,8 +4,8 @@
 - 代码目录：`internal/notification/**`
 - 任务前缀：NTF
 - 当前阶段：NTF-001～005 的领域、Schema、Fake、Renderer、RetryPolicy、Preflight 契约已建立；NTF-006 已有五表 Migration、DeliveryPlan MySQL Adapter 和 Delivery MySQL Adapter。Delivery 的真实 MariaDB 并发领取、CAS、状态事件事务测试已编写，尚待当前分支 CI 执行及真实 DSN 验证。Attempt、Subscription、Inbox 的真实 Repository Adapter，租约恢复事务与 Fanout/Dispatcher/Worker 仍未完成。
-- 当前代码事实：`internal/notification/storage` 已包含五表 Migration、DeliveryPlan MySQL Adapter 与 Delivery MySQL Adapter。Delivery Adapter 实现初始 queued 记录创建、读取、事务行锁领取、fencing token 递增、版本 CAS、状态事件同事务追加，以及离开 sending 时释放租约；共享 `*sql.DB` 由调用方管理。MariaDB 集成测试覆盖唯一性、读取、16 Worker 单赢家、状态更新和状态事件数量；真实 DSN 执行证据尚缺。Delivery Adapter 尚未实现 Attempt 持久化，也未实现过期租约扫描/恢复。
-- 本轮代码变更提交：`c85e539`（新增 Delivery MariaDB Repository）、`cdbf8bd`（新增 Delivery MariaDB 集成验收）。此前 `386e04e`、`c61e735`、`39f6983`、`7883908` 为租约 DDL、DeliveryPlan Adapter、快照修复及格式修复。当前分支 HEAD：`cdbf8bddf0a61963288df1cb7b37016d536642ef`。本轮新增 Adapter/测试尚未取得 CI 通过证据；MariaDB 集成测试要求 `NOTIFICATION_MARIADB_TEST_DSN`，未配置时为 skipped，不可记为真实通过。
+- 当前代码事实：`internal/notification/storage` 已包含五表 Migration、DeliveryPlan MySQL Adapter 与 Delivery MySQL Adapter。Delivery Adapter 实现初始 queued 记录创建、读取、事务行锁领取、fencing token 递增、版本 CAS、状态事件同事务追加，以及离开 sending 时释放租约；共享 `*sql.DB` 由调用方管理。MariaDB 集成测试覆盖 Delivery 与不可变 Plan 一致性、唯一性、读取、16 Worker 单赢家、fencing token、状态 CAS、状态事件追加失败回滚、租约释放；真实 DSN 执行证据尚缺。Delivery Adapter 尚未实现 Attempt 持久化，也未实现过期租约扫描/恢复。
+- 本轮代码变更提交：`c85e539`（新增 Delivery MariaDB Repository）、`cdbf8bd`（新增 MariaDB 集成验收）、`2e7102d`（修复 gofmt）、`4bcb0fa`（校验 Delivery 与不可变 DeliveryPlan 快照一致，并增加状态事件插入失败时的事务回滚验收）。当前分支 HEAD：`4bcb0fa5b6bf1e7de47f632abbd283b872586e67`。PR #48 指向 `integration`，CI Run `42573962029` 正在排队/执行；尚无通过证据。MariaDB 集成测试要求 `NOTIFICATION_MARIADB_TEST_DSN`，未配置时为 skipped，不可记为真实通过。
 
 Notification 是独立通知业务模块，负责事件接收、Subscription、Template、Channel、Dispatcher、Delivery、Attempt、幂等、重试和投递诊断。不计算业务告警条件，不依赖 Researchflow 内部实现。
 
