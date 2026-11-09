@@ -212,3 +212,52 @@ Fake Repository/Fake Clock/Fake Provider 只证明模块内逻辑；MariaDB/Redi
 
 
 - RunRepository / 终态 Repository 的后续实现必须在终态事务内分配 result_summary_ref，并原子保存 ResultSummary 资源和 Run 终态；公开 Schema 已通过条件约束拒绝缺少该引用的终态 Run。
+
+
+## 16. FLOW-007 Repository 持久化模型与事务边界
+
+本节定义 Researchflow 自有 Repository/Schema 的逻辑模型与原子边界；不包含可直接执行的 Migration SQL，也不代表 MariaDB 已验收。Platform Storage 仅提供连接、事务可用的 SQL DB 资源和 Migration Runner；业务表、SQL、Repository、事务内容由 Researchflow 自有。
+
+### 16.1 逻辑表与字段映射
+
+统一约束：表使用 InnoDB；所有绝对时间以 UTC 存储，精度至少微秒（DATETIME(6)）；引用字段使用不透明字符串，不从引用内容推导业务含义。JSON 文档由模块按对应 Schema 校验后写入，读取时仍校验版本与结构。实际字段长度、索引长度须在目标 MariaDB 版本验证后冻结。
+
+| 逻辑表 | 主键/唯一约束 | 持久化内容 | 字段来源与语义 |
+|---|---|---|---|
+| `researchflow_runs` | `run_ref` 主键 | schema_version、status、version、system_as_of、deadline_at、template_ref/version/fingerprint、input_snapshot_refs、result_summary_ref、originating_request_id、correlation_id、termination_reason、created_at/started_at/finished_at | Run 来自 CreateRun 与状态机；version 是单调 CAS 版本；result_summary_ref 仅在终态提交时分配 |
+| `researchflow_resolved_templates` | `run_ref` 主键/外键 | schema_version、template fingerprint、parameter schema ref/version/fingerprint、完整 ResolvedTemplate JSON、canonical parameters JSON、created_at | 来源为 CreateRun 的不可变解析快照；必须包含 DAG、required/optional、依赖、适用性排除、传播/重试策略、Hard Risk 声明、allow_empty_inputs、Output Registry、Resource Policy |
+| `researchflow_stages` | `stage_ref` 主键；唯一 `(run_ref, stage_code)` | status、version、required、dependency_stage_refs、retry_policy_ref、attempt_no、retry_at、output_ref、quality_summary_ref、diagnostic_refs、reason_codes、时间字段、fencing_token_high_water | Stage 来源为 ResolvedTemplate；attempt_no 是已分配尝试序号；fencing_token_high_water 是该 Stage 历史已发放 token 的单调高水位，不进入公开 Stage DTO |
+| `researchflow_attempts` | `attempt_ref` 主键；唯一 `(stage_ref, attempt_no)`；唯一 `(stage_ref, fencing_token)` | run_ref、stage_ref、attempt_no、status、lease_owner、lease_expires_at、fencing_token、started_at/finished_at、fault_ref、output_ref | 每次实际执行追加一条 Attempt；已终结 Attempt 不覆盖；fencing_token 由 Repository 在事务内分配并回显 |
+| `researchflow_result_summaries` | `summary_ref` 主键；唯一 `run_ref` | schema_version、summary JSON、created_at | 来源为状态机最终归并；一条 Run 仅允许一个不可变终态摘要；按独立 ResultSummary Schema 校验 |
+| `researchflow_idempotency` | 唯一 `(caller_ref, operation, idempotency_key)` | request_fingerprint、run_ref、created_at | caller_ref 来自可信认证 Context；operation 固定 CreateRun；fingerprint 为 JCS+SHA-256；重放相同指纹返回原 Run，不同指纹冲突 |
+| `researchflow_outbox` | `event_id` 主键；唯一业务事件幂等键 | aggregate_ref、event_type、schema_version、payload、occurred_at、publish 状态/尝试信息 | 来源为 Run 终态提交；仅在终态 CAS 成功的同一事务写入。事件字段和版本必须遵循 INT-CTR-001；不在本阶段自创事件 Schema |
+
+建议索引（除主键/唯一约束外）：Run 按 `(status, deadline_at, created_at, run_ref)` 支持恢复/截止扫描；Stage 按 `(run_ref, status, retry_at, priority)` 支持依赖内调度；Attempt 按 `(status, lease_expires_at)` 支持租约扫描；Outbox 按 `(publish_status, occurred_at, event_id)` 支持发布扫描。索引最终以真实查询计划和目标数据量验证，不为未实现查询预建索引。
+
+### 16.2 必须原子提交的用例
+
+1. **CreateRun**：在同一事务中确认/占有幂等唯一键，使用数据库 UTC 时钟复核 deadline，插入 Run、完整 ResolvedTemplate Snapshot、全部 Stage 和幂等记录。并发相同键请求由唯一约束裁决；相同 fingerprint 返回已存在 Run，不同 fingerprint 返回幂等冲突。不得先写 Run 再补 Stage。
+2. **Worker Claim**：按 Run → Stage 的锁顺序读取并校验 Run=running、未取消、数据库时间早于 deadline、Stage=ready；同事务递增 Stage.version 与 fencing_token_high_water，分配 attempt_no，插入新 Attempt 并将 Stage 置 running。Run.version 必须参与同一命令门禁/CAS，防止与 Cancel/Deadline/Retry 竞争。
+3. **Attempt 输出提交/完成**：校验 Run 仍允许执行、Attempt 仍 running、提交 token 等于 Stage 当前 fencing 高水位且 lease 未失效；同事务保存 Output 引用并推进 Attempt/Stage。旧 token、已取消 Run、已终结 Attempt 的迟到结果必须拒绝，不能覆盖既有输出。
+4. **Retry Promotion**：按 Run → Stage 锁顺序确认 Run=running、未到 deadline、未取消、Stage=retry_wait、retry_at 已到且预算可用；同事务推进 Stage=ready 并分配下一 Attempt 的唯一序号/执行权。不得在 Run 已 cancelling/terminal 时创建新 Attempt。
+5. **Cancel/Deadline**：与 Worker Claim、Retry 使用同一 Run.version CAS 线性化；进入 cancelling 后禁止新 Claim/Retry。未启动 Stage 的收敛和在途 Attempt 停止确认/fencing 分开记录，不能仅因发出取消就假设 Worker 已停止。
+6. **Run Finalize**：按 Run → Stage（stage_ref 升序）→ Attempt（attempt_ref 升序）固定锁顺序，验证所有 Stage 终态且不存在 running Attempt；在同一事务写入不可变 ResultSummary、分配 result_summary_ref、CAS 更新 Run 终态/version，并写入 Outbox。任一环节失败必须整体回滚，禁止出现终态 Run 无摘要或摘要无终态 Run。
+
+任何用例不得跨事务持有数据库锁调用 Data/News/Quant/Research/LLM 或 Notification；外部调用在事务外执行，结果通过带 fencing token 的提交命令回写。
+
+### 16.3 CAS、时钟、唯一性与冲突语义
+
+- Run 更新使用 `WHERE run_ref=? AND version=? AND status IN (...)` 并在成功时 `version=version+1`；Stage 使用独立 version CAS。受 Run 状态约束的写命令必须先通过 Run CAS 门禁，不能只 CAS Stage。
+- 所有 deadline/lease/retry 到期判定使用数据库 UTC 时钟（`UTC_TIMESTAMP(6)` 或等价数据库时钟表达式），应用进程时间仅用于非裁决性展示；不得将 Go Clock 读数当成并发裁决依据。
+- Attempt 序号由 Stage 行锁内递增并受 `(stage_ref, attempt_no)` 唯一约束；fencing token 由 Stage 行内高水位递增并受唯一约束。禁止用进程内计数器、Redis INCR 或 MAX 查询替代同一数据库事务内的分配。
+- 锁顺序固定为 Run → Stage（按 stage_ref 升序）→ Attempt（按 attempt_ref 升序）；批量更新也遵守相同排序，降低死锁概率。遇到死锁可按明确次数重试整个幂等事务，但必须重新读取并重新验证状态，不能盲目重放 SQL。
+- CAS 未命中是并发冲突，不等于存储不可用；应用层重新读取后按当前状态返回 already_terminal、claim_lost、deadline_exceeded、retry_not_due 或 conflict 等稳定业务结果。数据库连接/超时故障映射 Platform Fault，不能伪装为 CAS 冲突。
+- 结果摘要和 Outbox 都是 append-only/不可变事实；Outbox 发布状态可变，但原始事件 payload、event_id、schema_version 不可变。Notification 发布成功与否不回滚已完成的 Run。
+
+### 16.4 明确延期与禁止事项
+
+- 本阶段不新增 SQL 实现、Migration 文件、Server DI、Worker 启动、HTTP 路由，也不修改 `internal/platform/**`。Platform Storage 的连接和 Migration Runner 已存在，Researchflow 只消费其公开能力。
+- 全局 Worker/队列容量原子预留属于 FLOW-004 Executor 资源预算实现；在资源策略和调度入口尚未落地前，不在本阶段臆造容量表。
+- Lease 心跳、过期接管、进程崩溃恢复及真实外部副作用对账属于 FLOW-004；本节只固定持久化字段和 fencing 提交门禁。
+- 表名为模块私有逻辑名，最终 Migration 可按项目命名规范调整，但不得改变唯一键、字段语义、事务边界和锁顺序。
+- 该设计当前状态为 `design_ready_pending_review`；未经过目标 MariaDB 版本 DDL 验证、并发集成测试和崩溃恢复测试，不得标记实现完成或 L3 通过。
