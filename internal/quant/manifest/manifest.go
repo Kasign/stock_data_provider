@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/gowebpki/jcs"
 )
@@ -65,7 +66,7 @@ type fingerprintInput struct {
 // 调用方应传入 payload 本身，不应把 AuthorizationRef 或 Manifest Envelope 混入 payload。
 func FingerprintPayload(payload json.RawMessage) (string, error) {
 	trimmed := strings.TrimSpace(string(payload))
-	if trimmed == "" || trimmed[0] != '{' || !json.Valid(payload) {
+	if trimmed == "" || trimmed[0] != '{' || !utf8.Valid(payload) || !json.Valid(payload) {
 		return "", fmt.Errorf("%w: payload must be a JSON object", ErrInvalidPayload)
 	}
 	canonical, err := jcs.Transform(payload)

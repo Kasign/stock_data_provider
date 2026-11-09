@@ -188,3 +188,12 @@ func TestVerifyRejectsNonCanonicalUTCSystemAsOf(t *testing.T) {
 		t.Fatalf("expected non-canonical UTC timestamp to be rejected, got %v", err)
 	}
 }
+
+
+func TestFingerprintPayloadRejectsInvalidUTF8(t *testing.T) {
+	payload := append([]byte(`{"value":"`), 0xff)
+	payload = append(payload, []byte(`"}`)...)
+	if _, err := FingerprintPayload(payload); !errors.Is(err, ErrInvalidPayload) {
+		t.Fatalf("FingerprintPayload error = %v, want ErrInvalidPayload", err)
+	}
+}
