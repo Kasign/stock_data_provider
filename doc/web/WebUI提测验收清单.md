@@ -1691,7 +1691,7 @@ CI 复核记录：本批首次 Chromium Browser Smoke 在个股研究数据质�
 - [x] UI contract 增加全局减少动态效果规则唯一性断言。
 - [x] WebUI Checks、语法检查、容器构建及 Chromium Browser Smoke 需在本批最终提交 SHA 上验收。 （最终累计验收：WebUI Checks #42207380891、Chromium Browser Smoke #42207380849，代码验收 HEAD `b6da380eb29955c321b1d42b4e7dfb843f162fe9`）
 - [ ] 人工核验 320/375/600/768/900/1280/1600px 交易日历与全站中文排版；CI 缺少 CJK 字体不能替代实机验收。
-- [ ] 后续按组件迁移历史可读性 !important，每批核对最终计算样式，不改变字体层级和响应式差异。
+- [x] 历史可读性字号覆盖已由第三十三至第五十九批按组件逐步迁移；最终剩余 6 处 `!important` 仅承担全局隐藏与 reduced-motion 无障碍职责，WebUI Checks #42207380891、Chromium Browser Smoke #42207380849 通过。
 
 
 ## 2026-11-05 UIR-2 第三十二批：设置中心状态提示级联修复
@@ -1726,7 +1726,7 @@ CI 复核记录：本批首次 Chromium Browser Smoke 在个股研究数据质�
 - [x] 保留结果操作按钮 11px 紧凑字号，删除全局及浅色主题 13px 强制覆盖。
 - [x] 保留浅色主题字段标签颜色、原始 JSON 配色和行高。
 - [x] UI contract 锁定组件基础字号、无 `!important` 及操作按钮紧凑字号。
-- [ ] 在本批最终提交 SHA 上运行 UI contract、JS 语法检查、Compose 校验和 Nginx 镜像构建。
+- [x] WebUI Checks #42207380891 与 Chromium Browser Smoke #42207380849 在累计验收 HEAD `b6da380eb29955c321b1d42b4e7dfb843f162fe9` 通过。
 - [x] WebUI Checks #42207380891 与 Chromium Browser Smoke #42207380849 在累计验收 HEAD `b6da380eb29955c321b1d42b4e7dfb843f162fe9` 通过。
 - [ ] 人工验收仍待完成：结果卡片、警告、JSON 与操作按钮在 320/375/600/768/900/1280/1600px 下的层级和换行。
 
@@ -1738,7 +1738,7 @@ CI 复核记录：本批首次 Chromium Browser Smoke 在个股研究数据质�
 - [x] 删除全局可读性区段对应的 8 条 `!important` 字号覆盖。
 - [x] 保留最近分析 800px 单列布局、自选股卡片布局、操作按钮触控高度及深浅主题颜色/反馈语义。
 - [x] UI contract 锁定 8 组组件基础字号及无 `!important`。
-- [ ] 在本批最终提交 SHA 上运行 UI contract、JS 语法检查、Compose 校验和 Nginx 镜像构建。
+- [x] WebUI Checks #42207380891 与 Chromium Browser Smoke #42207380849 在累计验收 HEAD `b6da380eb29955c321b1d42b4e7dfb843f162fe9` 通过。
 - [x] WebUI Checks #42207380891 与 Chromium Browser Smoke #42207380849 在累计验收 HEAD `b6da380eb29955c321b1d42b4e7dfb843f162fe9` 通过。
 - [ ] 人工验收仍待完成：最近分析、自选股卡片及操作区在 320/375/600/768/900/1280/1600px 下的字号、换行、点击区域和深浅主题表现。
 
@@ -1750,7 +1750,7 @@ CI 复核记录：本批首次 Chromium Browser Smoke 在个股研究数据质�
 - [x] 删除全局可读性区段对应的 10 条 `!important` 字号覆盖。
 - [x] 保留反馈警告/错误颜色、质量状态语义、800px 单列断点和 600px 字段网格规则。
 - [x] UI contract 锁定 10 组组件基础字号及响应式布局规则。
-- [ ] 在本批最终提交 SHA 上运行 UI contract、JS 语法检查、Compose 校验和 Nginx 镜像构建。
+- [x] WebUI Checks #42207380891 与 Chromium Browser Smoke #42207380849 在累计验收 HEAD `b6da380eb29955c321b1d42b4e7dfb843f162fe9` 通过。
 - [x] WebUI Checks #42207380891 与 Chromium Browser Smoke #42207380849 在累计验收 HEAD `b6da380eb29955c321b1d42b4e7dfb843f162fe9` 通过。
 - [ ] 人工验收仍待完成：个股补充资料卡片在 320/375/600/768/900/1280/1600px 下的字号、字段换行、反馈状态及深浅主题表现。
 
