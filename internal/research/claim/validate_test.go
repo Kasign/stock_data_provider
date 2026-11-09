@@ -179,3 +179,11 @@ func TestClaimValidateNextVersionEnforcesStatusTransitions(t *testing.T) {
 		})
 	}
 }
+
+func TestClaimValidateRejectsZeroOffsetNonUTCLocation(t *testing.T) {
+	value := validHypothesis(t)
+	value.SystemAsOf = time.Date(2026, 11, 6, 5, 0, 0, 0, time.FixedZone("non-UTC", 0))
+	if err := value.Validate(); err == nil || !strings.Contains(err.Error(), "must be UTC") {
+		t.Fatalf("Validate() error = %v, want strict UTC Location rejection", err)
+	}
+}

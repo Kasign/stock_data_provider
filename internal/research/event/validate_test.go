@@ -259,3 +259,40 @@ func TestEventSourceTimeConfidenceRequiresMethodAndVersion(t *testing.T) {
 		})
 	}
 }
+
+func TestResearchEventRejectsZeroOffsetNonUTCLocations(t *testing.T) {
+	fixedZero := time.FixedZone("non-UTC", 0)
+	nonUTC := time.Date(2026, 11, 5, 8, 0, 0, 0, fixedZero)
+	tests := []struct {
+		name string
+		mutate func(*ResearchEvent)
+	}{
+		{"system_observed_at", func(e *ResearchEvent) { e.SystemObservedAt = nonUTC }},
+		{"system_as_of", func(e *ResearchEvent) { e.SystemAsOf = nonUTC }},
+		{"occurred_at", func(e *ResearchEvent) { e.OccurredAt = &nonUTC }},
+		{"published_at", func(e *ResearchEvent) { e.PublishedAt = &nonUTC }},
+		{"available_at", func(e *ResearchEvent) { e.AvailableAt = &nonUTC }},
+		{"source_times.value", func(e *ResearchEvent) { e.SourceTimes[0].Value = nonUTC }},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			value := validEvent(t)
+			tt.mutate(&value)
+			if err := value.Validate(); err == nil || !strings.Contains(err.Error(), "must be UTC") {
+				t.Fatalf("Validate() error = %v, want strict UTC Location rejection", err)
+			}
+		})
+	}
+}
+
+func TestLifecycleTransitionRejectsZeroOffsetNonUTCLocation(t *testing.T) {
+	previous := validEvent(t)
+	next := previous
+	next.EventVersion = 2
+	next.Status = StatusConsolidating
+	next.SystemAsOf = previous.SystemAsOf.Add(time.Minute)
+	nonUTC := time.Date(2026, 11, 6, 5, 10, 0, 0, time.FixedZone("non-UTC", 0))
+	if _, err := NewLifecycleTransition(previous, next, nonUTC); err == nil || !strings.Contains(err.Error(), "must be UTC") {
+		t.Fatalf("NewLifecycleTransition() error = %v, want strict UTC Location rejection", err)
+	}
+}
