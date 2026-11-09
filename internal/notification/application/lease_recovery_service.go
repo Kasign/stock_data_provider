@@ -88,6 +88,14 @@ func (s *LeaseRecoveryService) recoverClaim(ctx context.Context, claim DeliveryC
 	if err != nil {
 		return err
 	}
+	if assessment.Action == LeaseRecoverySafeToRetry && len(attempts) > 0 {
+		elapsedCutoff := attempts[0].StartedAt.Add(s.RetryPolicy.MaxElapsed)
+		cutoff := earlierTime(claim.Delivery.DeadlineAt, elapsedCutoff)
+		if !now.Before(cutoff) {
+			assessment.Action = LeaseRecoveryFinalizeFailed
+			assessment.ReasonCode = RetryReasonDeadlineExceeded
+		}
+	}
 
 	change := domain.DeliveryTransition{At: now, ReasonCode: assessment.ReasonCode, EvidenceRef: assessment.EvidenceRef}
 	if assessment.AttemptID != "" {
@@ -101,7 +109,11 @@ func (s *LeaseRecoveryService) recoverClaim(ctx context.Context, claim DeliveryC
 	switch assessment.Action {
 	case LeaseRecoverySafeToRetry:
 		nextAttemptAt := now.Add(time.Microsecond)
-		if !nextAttemptAt.Before(claim.Delivery.DeadlineAt) {
+		retryCutoff := claim.Delivery.DeadlineAt
+		if len(attempts) > 0 {
+			retryCutoff = earlierTime(retryCutoff, attempts[0].StartedAt.Add(s.RetryPolicy.MaxElapsed))
+		}
+		if !nextAttemptAt.Before(retryCutoff) {
 			change.To = domain.DeliveryFailed
 			change.ReasonCode = RetryReasonDeadlineExceeded
 		} else {

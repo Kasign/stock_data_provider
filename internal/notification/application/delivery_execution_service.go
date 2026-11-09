@@ -145,6 +145,47 @@ func (s *DeliveryExecutionService) Execute(
 	if err != nil {
 		return output, err
 	}
+	history, err := s.attempts.ListByDelivery(ctx, claim.Delivery.DeliveryID)
+	if err != nil {
+		return output, err
+	}
+	if len(history) != claim.Delivery.AttemptCount {
+		return output, ErrLeaseRecoveryHistory
+	}
+	firstAttemptAt := startedAt
+	for i := range history {
+		previous := history[i]
+		if err := previous.Validate(); err != nil ||
+			previous.DeliveryID != claim.Delivery.DeliveryID ||
+			previous.AttemptNo != i+1 || previous.FinishedAt == nil || previous.Outcome == nil {
+			return output, ErrLeaseRecoveryHistory
+		}
+		if i == 0 {
+			firstAttemptAt = previous.StartedAt
+		} else {
+			prior := history[i-1]
+			if previous.FencingToken <= prior.FencingToken ||
+				previous.StartedAt.Before(*prior.FinishedAt) {
+				return output, ErrLeaseRecoveryHistory
+			}
+			switch *prior.Outcome {
+			case domain.DeliveryAttemptRejected:
+				if !prior.Retryable {
+					return output, ErrLeaseRecoveryHistory
+				}
+			case domain.DeliveryAttemptNotSent:
+			default:
+				return output, ErrLeaseRecoveryHistory
+			}
+		}
+	}
+	attemptDeadline, err := s.completion.retry.AttemptDeadline(
+		startedAt, firstAttemptAt, claim.Delivery.DeadlineAt,
+	)
+	if err != nil {
+		// 总体预算已耗尽：不追加 Attempt、不触发渠道；由租约恢复路径收敛状态。
+		return output, err
+	}
 	attempt := domain.DeliveryAttempt{
 		AttemptID: attemptID, DeliveryID: claim.Delivery.DeliveryID,
 		AttemptNo: int(claim.Delivery.AttemptCount + 1),
@@ -158,7 +199,7 @@ func (s *DeliveryExecutionService) Execute(
 		return output, err
 	}
 
-	sendCtx, cancelSend := context.WithTimeout(ctx, s.completion.retry.PerAttemptTimeout)
+	sendCtx, cancelSend := context.WithDeadline(ctx, attemptDeadline)
 	result, sendErr := preflight.Channel.Send(sendCtx, request)
 	cancelSend()
 	output.AttemptID = attemptID

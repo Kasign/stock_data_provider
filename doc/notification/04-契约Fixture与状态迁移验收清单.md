@@ -418,3 +418,20 @@ Run `42602399686` 对应 HEAD `8d08cf07a651efcd42a514f3dafd94d659f21f97`。`Test
 - Go workflow Run `42611257814` 对应 HEAD `f4d100a`：`Test go-core` 成功，但不覆盖 Notification；根模块 `Test .` 在全仓 gofmt 门禁失败，差异来自 Market Data、News、Quant 等其他目录，日志未列出 `internal/notification/**` 差异。
 - 根模块单测、Race Detector、go vet 未执行；Notification 新增执行期限/恢复预算测试及 MariaDB 扫描集成用例尚无实际执行通过证据。
 - MariaDB 集成 Job skipped；真实 `NOTIFICATION_MARIADB_TEST_DSN` L3 未执行。
+
+
+### 执行期限与 Attempt 历史一致性（代码复核修正，2026-11-09）
+
+- 当前代码已将 `RetryPolicy.AttemptDeadline` 接入 `DeliveryExecutionService`：渠道调用 deadline 取单次超时、首次 Attempt 起算 MaxElapsed、Delivery Deadline 的最早值；预算耗尽时不创建 Attempt、不调用渠道。
+- 执行前读取完整 Attempt 历史，校验数量、连续序号、完成状态、FencingToken 递增、时间顺序，以及前序 Attempt 必须为可重试拒绝或 `not_sent`；拒绝接受终态后又出现新 Attempt 的历史。
+- 租约恢复评估采用相同历史约束；安全重试路径补充首次 Attempt 起算的 MaxElapsed 检查，避免恢复流程绕过执行预算。
+- 新增历史不可能性回归测试；既有 MaxElapsed 执行 deadline 与恢复测试对应当前代码。
+
+
+## 19. 执行历史一致性约束
+
+- [x] 执行前完整校验 Attempt 历史及其前序结果是否允许继续尝试。
+- [x] 租约恢复校验 AttemptNo、FencingToken、完成时间及前序结果。
+- [x] 执行 deadline 合并 PerAttemptTimeout、MaxElapsed、Delivery Deadline。
+- [x] 恢复安全重试遵守首次 Attempt 起算的 MaxElapsed。
+- [x] 增加终态后续出现新 Attempt 的拒绝测试。
