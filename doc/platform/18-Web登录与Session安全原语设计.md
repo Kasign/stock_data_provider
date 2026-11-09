@@ -3,7 +3,7 @@
 - 所属仓库：Kasign/stock_data_provider
 - 所属分支：feat/platform-foundation
 - 适用范围：Platform 公共安全原语候选设计
-- 状态：安全模型与跨层职责已明确；PLAT-015/016/017 Platform L1 已实现并通过 CI；Server A2 业务接入及 PLAT-018/019 平台原语仍待完成
+- 状态：安全模型与跨层职责已明确；PLAT-015/016/017/018 Platform L1 已实现并通过 CI；Server A2 业务接入及 PLAT-019 平台原语仍待完成
 - 关联文档：《03-安全认证与ServiceKey设计》《08-公共平台契约规范》《01-开发路线图与任务清单》《16-公共平台剩余开发任务与跨模块接入责任清单》
 
 ## 1. 设计结论
@@ -97,6 +97,7 @@ Platform 提供 RateLimiter 接口和 Redis 原子窗口计数/退避实现；Se
 - 来源 IP 默认取直接连接地址；只有配置可信代理链时才读取对应转发头，禁止无条件信任 X-Forwarded-For。
 - 成功登录按策略清理/衰减失败计数；返回结果不得泄露账号是否存在。
 - Redis 限流操作失败时首期 fail closed，不允许无保护登录。
+- `ResetAccount` 仅清理账号维度失败计数和阻断；来源 IP 维度保留，避免成功登录清空 IP 风险计数。
 
 ## 7. 安全审计
 
@@ -154,11 +155,11 @@ Platform 提供 SecurityAuditEvent Schema、字段约束/脱敏和注入式 Audi
 
 初始设计审查代码基线为 `fd45b6c299dfb54d2530bd1436589fe4708d8e96`；当前实现状态以本节后续 PLAT-015 记录为准：
 - 现有 `internal/platform/security` 只有 Bearer Authenticator、Router Policy 和测试。
-- `internal/platform/storage.OpenRedis` 提供统一 Redis Client 生命周期；`security.RedisSessionStore` 注入并复用该 Client，不创建第二套连接池。RateLimiter 尚未实现。
+- `internal/platform/storage.OpenRedis` 提供统一 Redis Client 生命周期；`security.RedisSessionStore` 与 `security.RedisLoginRateLimiter` 均注入并复用该 Client，不创建第二套连接池。
 - go.mod 已引入成熟依赖 `golang.org/x/crypto/argon2`；不自研密码学算法。
-- Argon2id Hash/Verify/NeedsRehash 与 MariaDB CredentialStore 已新增；Hasher 使用显式参数，不提供未经硬件基准确认的生产默认值。PLAT-016 已新增 Session Token 摘要、Redis SessionStore 原子 Touch/Rotate/Revoke 和 Cookie helper，Platform L1 CI 已通过。PLAT-017 已新增 CSRF Token 生成、摘要与常量时间校验原语并通过 CI；RateLimiter 和 Security Audit 原语仍未实现。
+- Argon2id Hash/Verify/NeedsRehash 与 MariaDB CredentialStore 已新增；Hasher 使用显式参数，不提供未经硬件基准确认的生产默认值。PLAT-016 已新增 Session Token 摘要、Redis SessionStore 原子 Touch/Rotate/Revoke 和 Cookie helper，Platform L1 CI 已通过。PLAT-017 已新增 CSRF Token 生成、摘要与常量时间校验原语并通过 CI；PLAT-018 已新增 Redis 双维度登录限流与退避原语并通过 CI；仅 Security Audit 原语仍未实现。
 - 已新增 Platform 自有 `platform.security` Migration 与 `platform_owner_credentials` 单 Owner 表；Server 必须显式注册 Migration，SQLCredentialStore 不自动建表。Session Redis Key 使用配置前缀加 `session:` 与 64 位摘要，不保存原始 Token。
-- Argon2id 生产参数需目标硬件基准；Server 需显式注册 Platform 自有 Migration。PLAT-016 的 Redis 原子脚本、TTL、并发轮换及故障策略已有真实 Redis CI 证据；PLAT-018 限流策略和 PLAT-019 Audit Writer 后端仍需实现/评审。
+- Argon2id 生产参数需目标硬件基准；Server 需显式注册 Platform 自有 Migration。PLAT-016 的 Redis 原子脚本、TTL、并发轮换及故障策略已有真实 Redis CI 证据；PLAT-018 双维度限流、窗口 TTL、退避和 fail-closed 已有真实 Redis CI 证据；PLAT-019 Audit Writer 仍需实现/评审。
 - 本文是 Platform 技术设计与实现边界文档；Web 登录路由/权限/交互契约由 Server Owner 跟进，Platform 不代替 Server 修改其业务文档，也不改变项目级契约登记簿状态。
 
 ### 11.1 PLAT-015 实现状态补充（2026-11-09）
@@ -203,3 +204,13 @@ Platform 提供 SecurityAuditEvent Schema、字段约束/脱敏和注入式 Audi
 - 单元测试覆盖 token 格式、摘要一致性、跨 Session 拒绝、畸形输入拒绝，以及 SessionRecord digest 接受。
 - CI：[42609718243](https://github.com/Kasign/stock_data_provider/actions/runs/42609718243)，success；gofmt、Schema/Golden、Platform test/race/vet、MariaDB/Redis storage integration/race 全部通过。
 - Platform L1 已完成。Server A2 仍负责 CSRF token 发放/响应、Cookie Session 解析、请求 Header 校验和 Origin/Host/HTTP Method 安全策略；Platform 不提供业务 HTTP Middleware。
+
+
+### 11.4 PLAT-018 实现状态补充（2026-11-09）
+
+- `internal/platform/security/rate_limit.go` 提供 `LoginRateLimiter`、`LoginRateLimitPolicy`、`LoginRateLimitResult` 与 `RedisLoginRateLimiter`。调用方必须传入账号标识摘要和来源 IP 摘要；原始账号/IP 不进入 Redis Key。
+- `Check` 原子读取账号/IP 失败计数和 block TTL；`RecordFailure` 在同一 Lua 脚本内递增两个维度的固定窗口计数，并按阈值计算指数退避，block TTL 不会超过策略 MaxBackoff。
+- `ResetAccount` 只删除账号维度计数和 block key，来源 IP 维度不清理；固定窗口与临时 block 均有 TTL，不产生永久账号锁定。
+- Redis 故障和异常持久状态返回 Redis Dependency Fault，调用方必须 fail closed。Platform 不解析 X-Forwarded-For、不选择真实来源 IP、不定义登录 HTTP 响应；这些由 Server 负责。
+- 真实 Redis integration/race 覆盖双维度阈值、指数退避、窗口过期、并发计数、账号清理/IP 保留和故障 fail closed。CI：[42610511560](https://github.com/Kasign/stock_data_provider/actions/runs/42610511560)，success。
+- Platform L1 已完成；Server A2 仍需配置账号/IP 策略、可信代理与来源识别、登录前 Check、认证失败 RecordFailure、成功登录 ResetAccount 和 retry_after 响应映射。
