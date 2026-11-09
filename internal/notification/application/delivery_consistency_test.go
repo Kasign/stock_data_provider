@@ -75,6 +75,12 @@ func TestAssessDeliveryConsistency(t *testing.T) {
 			if got.Status != tc.want {
 				t.Fatalf("status=%q want=%q reasons=%v", got.Status, tc.want, got.ReasonCodes)
 			}
+			if got.Evidence.DeliveryStatus != tc.input.Delivery.Status ||
+				got.Evidence.DeliveryVersion != tc.input.Delivery.Version ||
+				got.Evidence.ObservedAttemptCount != len(tc.input.Attempts) ||
+				got.Evidence.StateEventCount != len(tc.input.StateEvents) {
+				t.Fatalf("unexpected safe evidence summary: %+v", got.Evidence)
+			}
 			if tc.wantReason != "" {
 				found := false
 				for _, reason := range got.ReasonCodes {
