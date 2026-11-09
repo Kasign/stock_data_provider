@@ -1,6 +1,7 @@
 package result
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"os"
@@ -8,6 +9,8 @@ import (
 	"reflect"
 	"testing"
 	"time"
+
+	"github.com/santhosh-tekuri/jsonschema/v5"
 
 	"example.com/stock-analysis-flow/internal/quant/manifest"
 )
@@ -143,5 +146,99 @@ func TestBuildRefMatchesQNTCTR004Golden(t *testing.T) {
 	}
 	if !reflect.DeepEqual(decoded, want) {
 		t.Fatalf("QuantResultRef Golden mismatch: got=%s want=%s", encoded, goldenBytes)
+	}
+}
+
+
+func TestBuildRefOutputMatchesQNTCTR004Schema(t *testing.T) {
+	schemaPath := filepath.Join("..", "..", "..", "doc", "quant", "schema", "QNT-CTR-004-quant-result-ref-1.0.0.schema.json")
+	schemaDocument, err := os.ReadFile(schemaPath)
+	if err != nil {
+		t.Fatalf("read QuantResultRef schema: %v", err)
+	}
+
+	compiler := jsonschema.NewCompiler()
+	compiler.Draft = jsonschema.Draft2020
+	compiler.AssertFormat = true
+	const schemaURL = "https://quant.invalid/quant-result-ref.schema.json"
+	if err := compiler.AddResource(schemaURL, bytes.NewReader(schemaDocument)); err != nil {
+		t.Fatalf("add QuantResultRef schema: %v", err)
+	}
+	schema, err := compiler.Compile(schemaURL)
+	if err != nil {
+		t.Fatalf("compile QuantResultRef schema: %v", err)
+	}
+
+	ref, err := BuildRef(validRefInput(), testManifest(t))
+	if err != nil {
+		t.Fatalf("BuildRef() error = %v", err)
+	}
+	encoded, err := json.Marshal(ref)
+	if err != nil {
+		t.Fatalf("marshal QuantResultRef: %v", err)
+	}
+	decoder := json.NewDecoder(bytes.NewReader(encoded))
+	decoder.UseNumber()
+	var instance any
+	if err := decoder.Decode(&instance); err != nil {
+		t.Fatalf("decode QuantResultRef: %v", err)
+	}
+	if err := schema.Validate(instance); err != nil {
+		t.Fatalf("BuildRef output does not satisfy QNT-CTR-004 schema: %v", err)
+	}
+
+	invalid := make(map[string]any)
+	for key, value := range instance.(map[string]any) {
+		invalid[key] = value
+	}
+	delete(invalid, "authorization_ref")
+	if err := schema.Validate(invalid); err == nil {
+		t.Fatal("schema accepted QuantResultRef without required authorization_ref")
+	}
+	invalid = make(map[string]any)
+	for key, value := range instance.(map[string]any) {
+		invalid[key] = value
+	}
+	invalid["unexpected"] = true
+	if err := schema.Validate(invalid); err == nil {
+		t.Fatal("schema accepted an unknown QuantResultRef field")
+	}
+}
+
+
+func TestBuildRefRejectsInvalidUTF8Metadata(t *testing.T) {
+	tests := []struct {
+		name   string
+		mutate func(*RefInput)
+	}{
+		{"security_id", func(v *RefInput) { v.SecurityID = string([]byte{0xff}) }},
+		{"period", func(v *RefInput) { v.Period = string([]byte{0xff}) }},
+		{"algorithm_version", func(v *RefInput) { v.AlgorithmVersion = string([]byte{0xff}) }},
+		{"parameter_fingerprint", func(v *RefInput) { v.ParameterFingerprint = string([]byte{0xff}) }},
+		{"authorization_ref", func(v *RefInput) { v.AuthorizationRef = string([]byte{0xff}) }},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			input := validRefInput()
+			tc.mutate(&input)
+			if _, err := BuildRef(input, testManifest(t)); !errors.Is(err, ErrInvalidResultRef) {
+				t.Fatalf("BuildRef() error = %v, want ErrInvalidResultRef", err)
+			}
+		})
+	}
+}
+
+func TestBuildRefRejectsInvalidUTF8SnapshotReference(t *testing.T) {
+	source, err := manifest.Build(manifest.Input{
+		ResultType: "factor", SchemaVersion: "1.0.0",
+		SystemAsOf: time.Date(2026, 11, 9, 0, 0, 0, 0, time.UTC),
+		InputSnapshotRefs: []string{string([]byte{0xff})},
+		ResultFingerprint: testManifest(t).ResultFingerprint,
+	})
+	if err != nil {
+		t.Fatalf("Build() error = %v", err)
+	}
+	if _, err := BuildRef(validRefInput(), source); !errors.Is(err, ErrInvalidResultRef) {
+		t.Fatalf("BuildRef() error = %v, want ErrInvalidResultRef", err)
 	}
 }

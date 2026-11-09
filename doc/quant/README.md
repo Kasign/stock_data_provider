@@ -32,3 +32,15 @@ internal/quant/
 首期只按实际任务创建 `domain`、`indicator`、`factor` 等必要包，不为目录齐全创建空包。旧代码迁移结论见 [01-量化引擎总体设计](01-量化引擎总体设计.md) 第 6 节；输入输出契约和 Golden 设计见 [03-首批输入输出契约与验收补充](03-首批输入输出契约与验收补充.md)。
 
 详细任务见 [02-任务拆分与验收](02-任务拆分与验收.md)。
+
+
+最近一次 Quant 代码验证（2026-11-09）：`e8df200a6843df87a43f2dc4930037e7b12d61b1` 的 Push Workflow `42575135544` 中 `Test go-core` 已通过 gofmt、Go tests、Race Detector 和 go vet。根模块 `Test .` 仍被 Research 文件格式/字节问题阻断，不能标记全仓 CI 通过。
+
+
+ATR 边界已补充独立 synthetic Golden：明确窗口 N 需要 N 根 OHLC bar，首个 TR 使用输入窗口前一交易日的 previous_close，并以不同 previous_close 的双结果断言证明其参与计算。该样本只锁定算法边界，不代表真实 Data PIT 输入验收。
+
+
+首批 Factor 已增加 `CalculationContext` 入口，执行前复用共享上下文校验，强制价格计算具备已知复权口径、可信 UTC 截止时间和快照引用；原有纯函数入口保留用于算法复算。该接入不代表交易日连续性验收：Data 交易日历版本的输入字段来源仍待契约明确，Quant 不猜字段、不按自然日推断。
+
+
+QuantResultRef 已补充构造器输出与 QNT-CTR-004 Draft 2020-12 Schema 的直接一致性测试，覆盖必需授权引用缺失和未知字段拒绝；不将结构校验等同于运行时授权验证。

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"regexp"
 	"time"
+	"unicode/utf8"
 
 	"example.com/stock-analysis-flow/internal/quant/manifest"
 )
@@ -84,6 +85,12 @@ func BuildRef(input RefInput, source manifest.Manifest) (Ref, error) {
 		return Ref{}, fmt.Errorf("%w: manifest: %v", ErrInvalidResultRef, err)
 	}
 	if !refSchemaVersionRE.MatchString(input.SchemaVersion) ||
+		!utf8.ValidString(input.SecurityID) ||
+		!utf8.ValidString(input.Period) ||
+		!utf8.ValidString(input.AlgorithmVersion) ||
+		!utf8.ValidString(input.ParameterFingerprint) ||
+		!utf8.ValidString(input.AuthorizationRef) ||
+		!validSnapshotRefsUTF8(source.InputSnapshotRefs) ||
 		!validScope(input.Scope) ||
 		(input.Scope == ScopeStock && input.SecurityID == "") ||
 		input.Period == "" || input.AlgorithmVersion == "" ||
@@ -118,6 +125,15 @@ func BuildRef(input RefInput, source manifest.Manifest) (Ref, error) {
 		AuthorizationRef:     input.AuthorizationRef,
 		CreatedAt:            input.CreatedAt.UTC().Format(time.RFC3339Nano),
 	}, nil
+}
+
+func validSnapshotRefsUTF8(refs []string) bool {
+	for _, ref := range refs {
+		if !utf8.ValidString(ref) {
+			return false
+		}
+	}
+	return true
 }
 
 func validScope(scope Scope) bool {
