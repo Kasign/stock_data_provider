@@ -40,8 +40,10 @@ type repositoryStub struct {
 	existing *CreateRunResult
 	existingFingerprint string
 	created *CreateRunRecord
+	lookupCalls int
 }
 func (s *repositoryStub) FindIdempotentRun(_ context.Context,_ IdempotencyScope)(CreateRunResult,string,bool,error){
+	s.lookupCalls++
 	if s.existing==nil{return CreateRunResult{},"",false,nil}
 	return *s.existing,s.existingFingerprint,true,nil
 }
@@ -65,6 +67,20 @@ func newService(t *testing.T, repo *repositoryStub, ids *idsStub, templateReader
 }
 func command(now time.Time)domain.CreateRunCommand{
 	return domain.CreateRunCommand{SchemaVersion:"1.0.0",IdempotencyKey:"idem_1",TemplateRef:"daily",TemplateVersion:"1.0.0",SystemAsOf:now.Add(-time.Minute),DeadlineAt:now.Add(time.Hour),InputSnapshotRefs:[]string{"snapshot_1"},Parameters:json.RawMessage("{}")}
+}
+
+func TestCreateRunRejectsInvalidSnapshotRefBeforeIdempotencyLookup(t *testing.T) {
+	now := time.Date(2026, 11, 6, 1, 0, 0, 0, time.UTC)
+	repo := &repositoryStub{}
+	reader := &templatesStub{value: validTemplate()}
+	service, err := newService(t, repo, &idsStub{}, reader, now)
+	if err != nil { t.Fatal(err) }
+	cmd := command(now)
+	cmd.InputSnapshotRefs = []string{" snapshot_1"}
+	_, err = service.CreateRun(context.Background(), cmd)
+	if !errors.Is(err, domain.ErrInvalidCommand) || repo.lookupCalls != 0 || reader.calls != 0 {
+		t.Fatalf("invalid snapshot ref must be rejected before idempotency lookup: err=%v lookups=%d template_calls=%d", err, repo.lookupCalls, reader.calls)
+	}
 }
 
 func TestCreateRunResolvesAndPersistsRunStagesAndSnapshot(t *testing.T){
