@@ -111,7 +111,7 @@ func TestIngestCollectedSourceRequiresSeparateMetadataPersistenceGrant(t *testin
 	}
 }
 
-func TestIngestCollectedSourceRejectsUnsealedResult(t *testing.T) {
+func TestIngestCollectedSourceRejectsTamperedEntries(t *testing.T) {
 	repository := &memoryIdentityRepository{}
 	ingest := NewIngestCandidate(repository, func() string { return "must-not-persist" })
 	usecase, err := NewIngestCollectedSource(ingest, providerIngestCatalogStub{registration: sourcePersistenceRegistration()})
@@ -129,7 +129,7 @@ func TestIngestCollectedSourceRejectsUnsealedResult(t *testing.T) {
 	}
 }
 
-func TestIngestCollectedSourceRejectsTamperedCollectedResult(t *testing.T) {
+func TestIngestCollectedSourceRejectsTamperedPolicyVersion(t *testing.T) {
 	repository := &memoryIdentityRepository{}
 	ingest := NewIngestCandidate(repository, func() string { return "must-not-persist" })
 	usecase, err := NewIngestCollectedSource(ingest, providerIngestCatalogStub{registration: sourcePersistenceRegistration()})
