@@ -853,3 +853,100 @@ func TestOpenAPIParameterDefaultsMatchHandlerDefaults(t *testing.T) {
 		"type": "integer", "minimum": 1, "maximum": 500, "default": 366,
 	})
 }
+
+
+func TestProviderProbeRequestSchemaMatchesHandlerValidation(t *testing.T) {
+	spec, err := os.ReadFile("../../openapi.yaml")
+	if err != nil {
+		t.Fatalf("read OpenAPI specification: %v", err)
+	}
+	var document map[string]any
+	if err := yaml.Unmarshal(spec, &document); err != nil {
+		t.Fatalf("OpenAPI must be valid YAML: %v", err)
+	}
+	schemas := document["components"].(map[string]any)["schemas"].(map[string]any)
+	requestSchema, ok := schemas["ProviderProbeRequest"].(map[string]any)
+	if !ok {
+		t.Fatal("ProviderProbeRequest schema missing")
+	}
+	if requestSchema["type"] != "object" || requestSchema["additionalProperties"] != false {
+		t.Fatalf("ProviderProbeRequest must be a closed JSON object, got %#v", requestSchema)
+	}
+	properties, ok := requestSchema["properties"].(map[string]any)
+	if !ok {
+		t.Fatal("ProviderProbeRequest properties missing")
+	}
+	assertProperty := func(name string, want map[string]any) {
+		t.Helper()
+		property, ok := properties[name].(map[string]any)
+		if !ok {
+			t.Errorf("ProviderProbeRequest.%s missing or invalid", name)
+			return
+		}
+		for field, expected := range want {
+			if !reflect.DeepEqual(property[field], expected) {
+				t.Errorf("ProviderProbeRequest.%s.%s=%#v, want %#v", name, field, property[field], expected)
+			}
+		}
+	}
+	assertArrayItemEnum := func(name string, want []any) {
+		t.Helper()
+		property, ok := properties[name].(map[string]any)
+		if !ok {
+			t.Errorf("ProviderProbeRequest.%s missing or invalid", name)
+			return
+		}
+		items, ok := property["items"].(map[string]any)
+		if !ok || !reflect.DeepEqual(items["enum"], want) {
+			t.Errorf("ProviderProbeRequest.%s.items.enum=%#v, want %#v", name, items["enum"], want)
+		}
+	}
+
+	assertProperty("scope", map[string]any{
+		"type": "string", "enum": []any{"all", "core"}, "default": "all",
+	})
+	assertProperty("markets", map[string]any{"type": "array", "maxItems": 1})
+	assertArrayItemEnum("markets", []any{"SH_MAIN", "SZ_MAIN", "CHINEXT", "STAR", "BSE"})
+	assertProperty("symbols", map[string]any{"type": "array", "maxItems": 1})
+	assertProperty("checks", map[string]any{"type": "array", "uniqueItems": true})
+	assertArrayItemEnum("checks", []any{"connectivity", "contract", "quality", "freshness", "cross_provider", "storage"})
+	assertProperty("capabilities", map[string]any{"type": "array", "uniqueItems": true})
+	capabilityItems, ok := properties["capabilities"].(map[string]any)["items"].(map[string]any)
+	if !ok {
+		t.Fatal("ProviderProbeRequest.capabilities.items missing")
+	}
+	capabilityEnums, ok := capabilityItems["enum"].([]any)
+	if !ok {
+		t.Fatal("ProviderProbeRequest.capabilities.items.enum missing")
+	}
+	wantCapabilities := make([]any, 0, len(model.ProviderProbeCapabilities()))
+	for _, capability := range model.ProviderProbeCapabilities() {
+		wantCapabilities = append(wantCapabilities, capability)
+	}
+	if !reflect.DeepEqual(capabilityEnums, wantCapabilities) {
+		t.Errorf("ProviderProbeRequest.capabilities enum=%#v, want model capabilities %#v", capabilityEnums, wantCapabilities)
+	}
+	assertProperty("daily_bar_adjustments", map[string]any{"type": "array", "uniqueItems": true, "maxItems": 3})
+	adjustments := properties["daily_bar_adjustments"].(map[string]any)["items"].(map[string]any)
+	if adjustments["$ref"] != "#/components/schemas/RequestAdjustmentBasis" {
+		t.Errorf("daily_bar_adjustments.items.$ref=%v, want RequestAdjustmentBasis", adjustments["$ref"])
+	}
+	assertProperty("daily_bar_start_date", map[string]any{"type": "string", "format": "date"})
+	assertProperty("daily_bar_end_date", map[string]any{"type": "string", "format": "date"})
+	assertProperty("timeout_seconds", map[string]any{
+		"type": "integer", "minimum": 1, "maximum": 30, "default": 12,
+	})
+
+	paths := document["paths"].(map[string]any)
+	probeOperation := paths["/api/v1/data-sources/probe"].(map[string]any)["post"].(map[string]any)
+	requestBody := probeOperation["requestBody"].(map[string]any)
+	if requestBody["required"] != false {
+		t.Error("Provider Probe request body must remain optional; an empty body runs the default all-capability probe")
+	}
+	bodyContent := requestBody["content"].(map[string]any)
+	jsonContent := bodyContent["application/json"].(map[string]any)
+	bodySchema := jsonContent["schema"].(map[string]any)
+	if bodySchema["$ref"] != "#/components/schemas/ProviderProbeRequest" {
+		t.Errorf("Probe requestBody schema ref=%v, want ProviderProbeRequest", bodySchema["$ref"])
+	}
+}
