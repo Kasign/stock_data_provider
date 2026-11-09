@@ -177,3 +177,11 @@
 ### 9.5 服务凭据数量上限
 
 Authenticator 当前采用逐个摘要比较，确保认证结果不因首个匹配位置提前返回而泄漏匹配位置。为限制每次认证的固定工作量，单个 Authenticator 最多接受 128 个 service 凭据；超出上限时必须在启动构造阶段失败，不得截断配置或静默忽略凭据。该上限是平台实现的资源保护边界，不代表建议实际部署配置 128 个调用方；首期仍应按真实服务调用关系配置最小数量的独立凭据。
+
+## 10. ServiceCredential 主体名称约束（2026-11-09）
+
+`ServiceCredential.Name` 会成为认证后 `Principal.Subject`，因此不能把它当作任意显示名称。Authenticator 构造时先去除首尾空白，再要求名称为 1～64 字节；仅允许小写 ASCII 字母、数字、点、下划线和连字符，且首字符必须为小写字母或数字。同一 Authenticator 内名称必须唯一。
+
+不符合格式的名称在启动配置构造阶段直接拒绝。该字段不得承载用户输入、凭证明文或其他敏感信息。对应实现位于 `internal/platform/security/security.go`，边界测试覆盖合法名称、空名称、超长名称、大小写混合、空格、斜线、控制字符和非法前缀。
+
+验收提交：`348b8a692dade915c1d11f35663e57a9777a3422`；Platform Go checks Run [42578653237](https://github.com/Kasign/stock_data_provider/actions/runs/42578653237) 全部通过。

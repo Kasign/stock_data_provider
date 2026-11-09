@@ -270,3 +270,25 @@
 ### 10.3 当前安全审计边界
 
 Platform 自身可控的 L1 原语、输入边界和专项测试已完成阶段性审计。后续高风险项主要依赖 Server/领域/部署证据：全量路由默认拒绝、Gateway 信任边界、生产 Secret 轮换、日志与 Fault 响应脱敏、生产 DNS/egress、领域授权复核。Platform 分支不代替消费者实现这些逻辑；仅在消费者接入暴露出公共原语缺陷时修复。
+
+## 11. 2026-11-09 Platform 消费者视角 Review 收尾
+
+### 11.1 Review 基线与结论
+
+- 当前分支代码提交：`348b8a692dade915c1d11f35663e57a9777a3422`。
+- GitHub Actions：[Platform Go checks #350](https://github.com/Kasign/stock_data_provider/actions/runs/42578653237)，精确 SHA 全部通过。
+- 上一轮消费者视角 Review 发现的 P2 项已修复：`ServiceCredential.Name` 不再只检查非空和唯一，而是按稳定主体标识格式校验。
+- 新增合法/非法名称回归测试，并同步更新《08-公共平台契约规范》和《03-安全认证与ServiceKey设计》。
+- 本轮没有发现需要继续增加的 Platform 公共功能；没有将 Server/领域消费者接入缺口误记为 Platform 代码缺陷。
+
+### 11.2 当前风险分层
+
+| 类别 | 当前结论 | 责任方 |
+|---|---|---|
+| Platform 本地代码 | 本地 Review 未发现未关闭的 P0/P1/P2；当前精确 SHA CI 全部通过 | Platform |
+| 公共契约冻结 | PLAT-002 仍需生产方/消费者逐项确认；Platform 不单方面冻结 | 项目规划 Owner、各接口 Owner |
+| 消费者接入 | 真实路由、Bootstrap、Diagnostics Adapter、BoundDoer、Storage 生命周期仍需接线 | Server / 各领域 Owner |
+| 生产验收 | DNS/egress、部署 Secret、生产 DB/Redis 拓扑和故障恢复仍需运行证据 | 部署 Owner / Server |
+| 历史目录边界 | `internal/platform/httpapi`、`internal/platform/taskqueue` 保留历史 Analysis 依赖，不作为新模块公共 API | Server / Analysis Owner |
+
+本节的“本地 Review 通过”只表示当前 Platform 分支自身可交付，不表示 PLAT-002、A2、A3 或项目整体完成。
