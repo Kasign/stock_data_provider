@@ -13,7 +13,7 @@ import (
 )
 
 func TestOpenAPISecurityMatchesDataHTTPAdapterRoutes(t *testing.T) {
-	spec, err := os.ReadFile("../../../services/market-data/openapi.yaml")
+	spec, err := os.ReadFile("openapi.yaml")
 	if err != nil {
 		t.Fatalf("read OpenAPI specification: %v", err)
 	}
@@ -157,7 +157,7 @@ func TestOpenAPISecurityMatchesDataHTTPAdapterRoutes(t *testing.T) {
 }
 
 func TestOpenAPIErrorResponsesReferenceRuntimeErrorEnvelope(t *testing.T) {
-	spec, err := os.ReadFile("../../../services/market-data/openapi.yaml")
+	spec, err := os.ReadFile("openapi.yaml")
 	if err != nil {
 		t.Fatalf("read OpenAPI specification: %v", err)
 	}
@@ -248,7 +248,7 @@ func containsContractString(values []any, want string) bool {
 }
 
 func TestProviderProbeValidationSchemaIsDocumented(t *testing.T) {
-	spec, err := os.ReadFile("../../../services/market-data/openapi.yaml")
+	spec, err := os.ReadFile("openapi.yaml")
 	if err != nil {
 		t.Fatalf("read OpenAPI specification: %v", err)
 	}
@@ -282,7 +282,7 @@ func TestProviderProbeValidationSchemaIsDocumented(t *testing.T) {
 }
 
 func TestSectorRankingFiveDayChangeSchemaIsDocumented(t *testing.T) {
-	spec, err := os.ReadFile("../../../services/market-data/openapi.yaml")
+	spec, err := os.ReadFile("openapi.yaml")
 	if err != nil {
 		t.Fatalf("read OpenAPI specification: %v", err)
 	}
@@ -302,7 +302,7 @@ func TestSectorRankingFiveDayChangeSchemaIsDocumented(t *testing.T) {
 }
 
 func TestOpenAPIDataModelFieldsMatchKnownJSONContract(t *testing.T) {
-	spec, err := os.ReadFile("../../../services/market-data/openapi.yaml")
+	spec, err := os.ReadFile("openapi.yaml")
 	if err != nil {
 		t.Fatalf("read OpenAPI specification: %v", err)
 	}
@@ -410,7 +410,7 @@ func TestOpenAPIDataModelFieldsMatchKnownJSONContract(t *testing.T) {
 }
 
 func TestAllGoModelFieldsAndRequiredMatchOpenAPISchemas(t *testing.T) {
-	spec, err := os.ReadFile("../../../services/market-data/openapi.yaml")
+	spec, err := os.ReadFile("openapi.yaml")
 	if err != nil {
 		t.Fatalf("read OpenAPI specification: %v", err)
 	}
@@ -624,7 +624,7 @@ func TestDataModelJSONSerializationMatchesOpenAPIRequiredAndNullableSemantics(t 
 }
 
 func TestOpenAPIDocumentsHandlerParameterBounds(t *testing.T) {
-	spec, err := os.ReadFile("../../../services/market-data/openapi.yaml")
+	spec, err := os.ReadFile("openapi.yaml")
 	if err != nil {
 		t.Fatalf("read OpenAPI specification: %v", err)
 	}
@@ -677,7 +677,7 @@ func TestOpenAPIDocumentsHandlerParameterBounds(t *testing.T) {
 }
 
 func TestOpenAPIParameterInventoryMatchesReviewedHandlerMatrix(t *testing.T) {
-	spec, err := os.ReadFile("../../../services/market-data/openapi.yaml")
+	spec, err := os.ReadFile("openapi.yaml")
 	if err != nil {
 		t.Fatalf("read OpenAPI specification: %v", err)
 	}
@@ -793,7 +793,7 @@ func TestOpenAPIParameterInventoryMatchesReviewedHandlerMatrix(t *testing.T) {
 }
 
 func TestOpenAPIParameterDefaultsMatchHandlerDefaults(t *testing.T) {
-	spec, err := os.ReadFile("../../../services/market-data/openapi.yaml")
+	spec, err := os.ReadFile("openapi.yaml")
 	if err != nil {
 		t.Fatalf("read OpenAPI specification: %v", err)
 	}
@@ -906,7 +906,7 @@ func TestOpenAPIParameterDefaultsMatchHandlerDefaults(t *testing.T) {
 }
 
 func TestProviderProbeRequestSchemaMatchesHandlerValidation(t *testing.T) {
-	spec, err := os.ReadFile("../../../services/market-data/openapi.yaml")
+	spec, err := os.ReadFile("openapi.yaml")
 	if err != nil {
 		t.Fatalf("read OpenAPI specification: %v", err)
 	}
@@ -1022,7 +1022,7 @@ func TestProviderProbeRequestSchemaMatchesHandlerValidation(t *testing.T) {
 }
 
 func TestStockSearchQueryDocumentsTrimmedValueSemantics(t *testing.T) {
-	spec, err := os.ReadFile("../../../services/market-data/openapi.yaml")
+	spec, err := os.ReadFile("openapi.yaml")
 	if err != nil {
 		t.Fatalf("read OpenAPI specification: %v", err)
 	}
@@ -1054,7 +1054,7 @@ func TestStockSearchQueryDocumentsTrimmedValueSemantics(t *testing.T) {
 }
 
 func TestOpenAPIParameterTypesAndFormatsMatchReviewedHandlerMatrix(t *testing.T) {
-	spec, err := os.ReadFile("../../../services/market-data/openapi.yaml")
+	spec, err := os.ReadFile("openapi.yaml")
 	if err != nil {
 		t.Fatalf("read OpenAPI specification: %v", err)
 	}
@@ -1180,7 +1180,7 @@ func TestOpenAPIParameterTypesAndFormatsMatchReviewedHandlerMatrix(t *testing.T)
 }
 
 func TestBatchQuotesParameterDocumentsHandlerConstraints(t *testing.T) {
-	spec, err := os.ReadFile("../../../services/market-data/openapi.yaml")
+	spec, err := os.ReadFile("openapi.yaml")
 	if err != nil {
 		t.Fatalf("read OpenAPI specification: %v", err)
 	}
@@ -1241,7 +1241,7 @@ func TestIndexProviderSourceValidationMatchesOpenAPIEnum(t *testing.T) {
 		})
 	}
 
-	spec, err := os.ReadFile("../../../services/market-data/openapi.yaml")
+	spec, err := os.ReadFile("openapi.yaml")
 	if err != nil {
 		t.Fatalf("read OpenAPI specification: %v", err)
 	}

@@ -14,6 +14,9 @@ fi
 mkdir -p internal cmd configs/marketdata
 git mv services/market-data/internal internal/marketdata
 git mv services/market-data/cmd/market-data cmd/market-data
+if [[ -f services/market-data/openapi.yaml ]]; then
+  git mv services/market-data/openapi.yaml internal/marketdata/httpapi/openapi.yaml
+fi
 if [[ -f services/market-data/configs/providers.json ]]; then
   git mv services/market-data/configs/providers.json configs/marketdata/providers.json
 fi

@@ -607,3 +607,11 @@ internal/
 - 本分支拥有根 Module 的依赖归并，因此在迁移工作流中加入根 `go mod tidy`，由 CI 按当前分支 push 自动整理 `go.mod/go.sum` 并提交；不修改 News 业务代码。整理范围由根 Module 全部源码/测试实际 import 决定，删除未使用依赖并补齐实际依赖校验和。
 - Data 根模块测试门禁已改为在当前分支 push 时执行，避免只在手动 workflow_dispatch 时执行而日常 push 被跳过。
 - 根模块全仓 gofmt 当前仍因 Research 两个文件失败，责任归 Research；本分支不修改这两个文件。
+
+
+### 2026-11-09：OpenAPI 规范归位到 Data HTTP Adapter
+
+- 架构方案 MDM-008 明确规定 M1 后 OpenAPI 规范路径为 `internal/marketdata/httpapi/openapi.yaml`；上一轮为快速修复测试路径，暂时继续读取旧 `services/market-data/openapi.yaml`，与冻结架构文档不一致。
+- 本批将唯一 OpenAPI 文件迁至 `internal/marketdata/httpapi/openapi.yaml`，不复制第二份；`openapi_contract_test.go` 和 `platform_contract_test.go` 改为读取同目录文件。
+- 自动迁移脚本同步增加 OpenAPI 文件迁移步骤，确保迁移重放行为与当前仓库树一致。
+- 不修改 OpenAPI 内容、35 个 Operation、认证/参数/响应/错误 Schema；本次仅调整规范文件归属和测试读取路径。
