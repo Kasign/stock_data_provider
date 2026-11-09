@@ -51,6 +51,7 @@ internal/research/
     context_repository.go
     event_repository.go
     claim_repository.go
+    evidence_repository.go
     repository_test.go
     repository_integration_test.go
 ```
@@ -90,12 +91,12 @@ R1/R2/R3/R5 当前实现 Context、Evidence、Event、Claim/Hypothesis 领域结
 
 
 
-- RSC-OPEN-007：Evidence 内容指纹排除 authorization_ref，但完整 payload 摘要包含它；同一 evidence_id 重新授权后的幂等/留档语义待项目契约确认。当前不覆盖旧 Evidence 行，Evidence SQL Adapter 暂缓该边界。
+- RSC-OPEN-007：Evidence 内容指纹排除 authorization_ref，但完整 payload 摘要包含它；同一 evidence_id 重新授权后的幂等/留档语义待项目契约确认。当前不覆盖旧 Evidence 行；Evidence SQL Adapter 已按完整 payload 不可变策略实现。
 
 
 
 - RSC-007 Context/Event/Claim SQL Adapter 已实现首批追加和精确版本读取；真实 MariaDB 集成、并发/故障注入与组合根注册尚未验收。
-- RSC-OPEN-007 阻断 Evidence SQL Adapter 的授权快照续期边界，不阻断 Context/Event/Claim SQL Adapter。
+- RSC-OPEN-007 仍阻断多次授权签发历史留档，不阻断当前 Evidence 不可变写入和读取。
 
 
 ## RSC-007 本轮实现：Context/Event/Claim SQL Repository Adapter
