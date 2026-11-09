@@ -221,7 +221,7 @@ func (u *CollectSource) Execute(ctx context.Context, request CollectSourceReques
 	}
 
 	result := CollectSourceResult{
-		collectionSeal:         sourceCollectionResultSeal,
+		collectionSeal:          sourceCollectionResultSeal,
 		SourceID:                request.SourceID,
 		EndpointID:              request.EndpointID,
 		SourcePolicyVersionID:   registration.SourcePolicyVersionID,
