@@ -1,6 +1,7 @@
 package application
 
 import (
+	"context"
 	"errors"
 
 	"example.com/stock-analysis-flow/internal/platform/fault"
@@ -31,9 +32,6 @@ func (e *AuthorizationError) Error() string {
 	if e == nil {
 		return ""
 	}
-	if e.Cause != nil {
-		return "Research Evidence authorization failed: " + string(e.Kind)
-	}
 	return "Research Evidence authorization failed: " + string(e.Kind)
 }
 
@@ -56,19 +54,27 @@ func NewAuthorizationError(kind AuthorizationFailureKind, cause error) error {
 
 func mapAuthorizationError(err error) error {
 	var authorizationErr *AuthorizationError
-	if !errors.As(err, &authorizationErr) || authorizationErr == nil {
-		return fault.New(fault.ClassInternal, "evidence_authorization_failed", "Evidence authorization check failed", err)
+	if errors.As(err, &authorizationErr) && authorizationErr != nil {
+		switch authorizationErr.Kind {
+		case AuthorizationDenied:
+			return fault.New(fault.ClassForbidden, "evidence_authorization_rejected", "Evidence is not authorized for this Research operation", err)
+		case AuthorizationUnavailable:
+			return fault.New(fault.ClassUnavailable, "evidence_authorization_unavailable", "Evidence authorization service is unavailable", err)
+		case AuthorizationTimeout:
+			return fault.New(fault.ClassTimeout, "evidence_authorization_timeout", "Evidence authorization check timed out", err)
+		case AuthorizationInternal:
+			return fault.New(fault.ClassInternal, "evidence_authorization_failed", "Evidence authorization check failed", err)
+		default:
+			return fault.New(fault.ClassInternal, "evidence_authorization_failed", "Evidence authorization check failed", err)
+		}
 	}
 
-	switch authorizationErr.Kind {
-	case AuthorizationDenied:
-		return fault.New(fault.ClassForbidden, "evidence_authorization_rejected", "Evidence is not authorized for this Research operation", err)
-	case AuthorizationUnavailable:
-		return fault.New(fault.ClassUnavailable, "evidence_authorization_unavailable", "Evidence authorization service is unavailable", err)
-	case AuthorizationTimeout:
+	// 即使旧 Adapter 尚未返回类型化错误，也能准确识别标准 Context 终止原因。
+	switch {
+	case errors.Is(err, context.Canceled):
+		return fault.New(fault.ClassTimeout, "evidence_authorization_canceled", "Evidence authorization check was canceled", err)
+	case errors.Is(err, context.DeadlineExceeded):
 		return fault.New(fault.ClassTimeout, "evidence_authorization_timeout", "Evidence authorization check timed out", err)
-	case AuthorizationInternal:
-		return fault.New(fault.ClassInternal, "evidence_authorization_failed", "Evidence authorization check failed", err)
 	default:
 		return fault.New(fault.ClassInternal, "evidence_authorization_failed", "Evidence authorization check failed", err)
 	}

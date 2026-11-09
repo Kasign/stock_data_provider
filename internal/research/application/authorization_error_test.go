@@ -1,6 +1,7 @@
 package application
 
 import (
+	"context"
 	"errors"
 	"testing"
 
@@ -23,19 +24,7 @@ func TestMapAuthorizationErrorPreservesFailureSemantics(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			cause := errors.New("sensitive owner adapter detail")
 			got := mapAuthorizationError(NewAuthorizationError(tt.kind, cause))
-			var gotFault *fault.Fault
-			if !errors.As(got, &gotFault) {
-				t.Fatalf("expected Platform Fault, got %T", got)
-			}
-			if gotFault.Class != tt.class || gotFault.Code != tt.code {
-				t.Fatalf("unexpected mapping: class=%q code=%q", gotFault.Class, gotFault.Code)
-			}
-			if !errors.Is(got, cause) {
-				t.Fatal("authorization cause was not preserved")
-			}
-			if got.Error() == "" || got.Error() == cause.Error() {
-				t.Fatal("public error message must not expose adapter detail")
-			}
+			assertAuthorizationFault(t, got, tt.class, tt.code, cause)
 		})
 	}
 }
@@ -43,14 +32,39 @@ func TestMapAuthorizationErrorPreservesFailureSemantics(t *testing.T) {
 func TestMapAuthorizationErrorTreatsUntypedFailureAsInternal(t *testing.T) {
 	cause := errors.New("unclassified owner failure")
 	got := mapAuthorizationError(cause)
+	assertAuthorizationFault(t, got, fault.ClassInternal, "evidence_authorization_failed", cause)
+}
+
+func TestMapAuthorizationErrorRecognizesContextTermination(t *testing.T) {
+	tests := []struct {
+		name string
+		err error
+		code string
+	}{
+		{name: "调用取消", err: context.Canceled, code: "evidence_authorization_canceled"},
+		{name: "截止时间超时", err: context.DeadlineExceeded, code: "evidence_authorization_timeout"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := mapAuthorizationError(tt.err)
+			assertAuthorizationFault(t, got, fault.ClassTimeout, tt.code, tt.err)
+		})
+	}
+}
+
+func assertAuthorizationFault(t *testing.T, got error, class fault.Class, code string, cause error) {
+	t.Helper()
 	var gotFault *fault.Fault
 	if !errors.As(got, &gotFault) {
 		t.Fatalf("expected Platform Fault, got %T", got)
 	}
-	if gotFault.Class != fault.ClassInternal || gotFault.Code != "evidence_authorization_failed" {
-		t.Fatalf("untyped failure must fail closed as internal: %+v", gotFault)
+	if gotFault.Class != class || gotFault.Code != code {
+		t.Fatalf("unexpected mapping: class=%q code=%q", gotFault.Class, gotFault.Code)
 	}
 	if !errors.Is(got, cause) {
-		t.Fatal("untyped authorization cause was not preserved")
+		t.Fatal("authorization cause was not preserved")
+	}
+	if got.Error() == "" || got.Error() == cause.Error() {
+		t.Fatal("public error message must not expose adapter detail")
 	}
 }
