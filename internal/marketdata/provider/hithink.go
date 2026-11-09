@@ -977,6 +977,26 @@ func hithinkFieldString(row map[string]json.RawMessage, key string) string {
 	return ""
 }
 
+
+// hithinkValuationMetricInputInvalid 区分源端未提供值与提供了不可解析的值。
+// 空字段、JSON null 和空字符串表示缺失；其他无法解析的内容表示源端值无效。
+func hithinkValuationMetricInputInvalid(raw json.RawMessage) bool {
+	trimmed := strings.TrimSpace(string(raw))
+	if trimmed == "" || trimmed == "null" {
+		return false
+	}
+	var textValue string
+	if json.Unmarshal(raw, &textValue) == nil {
+		return strings.TrimSpace(textValue) != "" && !hithinkParseableFiniteNumber(textValue)
+	}
+	return !hithinkParseableFiniteNumber(trimmed)
+}
+
+func hithinkParseableFiniteNumber(value string) bool {
+	number, err := strconv.ParseFloat(strings.TrimSpace(value), 64)
+	return err == nil && hithinkFinite(number)
+}
+
 func hithinkFieldNumber(row map[string]json.RawMessage, key string) *float64 {
 	value, ok := hithinkParseFundamentalValue(row[key])
 	if !ok || math.IsNaN(value) || math.IsInf(value, 0) {
@@ -1437,11 +1457,30 @@ func (p *Hithink) FetchValuations(ctx context.Context, rawSymbols []string) (*mo
 		if name == "" {
 			itemReasons = append(itemReasons, "provider_stock_name_missing")
 		}
-		pet := hithinkFieldNumber(row, "pe_ttm")
-		pem := hithinkFieldNumber(row, "pe_mrq")
-		pbm := hithinkFieldNumber(row, "pb_mrq")
-		pst := hithinkFieldNumber(row, "ps_ttm")
-		pcft := hithinkFieldNumber(row, "pcf_ttm")
+		var pet, pem, pbm, pst, pcft *float64
+		metricFields := []struct {
+			key string
+			value **float64
+		}{
+			{key: "pe_ttm", value: &pet},
+			{key: "pe_mrq", value: &pem},
+			{key: "pb_mrq", value: &pbm},
+			{key: "ps_ttm", value: &pst},
+			{key: "pcf_ttm", value: &pcft},
+		}
+		for _, field := range metricFields {
+			*field.value = hithinkFieldNumber(row, field.key)
+			if *field.value == nil {
+				reason := "valuation_metric_missing:" + field.key
+				if hithinkValuationMetricInputInvalid(row[field.key]) {
+					reason = "valuation_metric_invalid:" + field.key
+				}
+				itemReasons = append(itemReasons, reason)
+			}
+		}
+		if len(itemReasons) > 0 {
+			itemReasons = append(itemReasons, "one_or_more_valuation_metrics_missing_or_invalid")
+		}
 		if pet == nil || pem == nil || pbm == nil || pst == nil || pcft == nil {
 			itemReasons = append(itemReasons, "one_or_more_valuation_metrics_missing_or_invalid")
 		}
