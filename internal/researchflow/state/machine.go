@@ -113,6 +113,28 @@ func ApplyDeadline(run domain.Run, stages []domain.Stage, dbNow time.Time) (doma
 	if run.Status != domain.RunQueued && run.Status != domain.RunRunning {
 		return run, stages, nil
 	}
+	// A deadline worker may run after all work has completed but before the
+	// normal aggregation transaction. Preserve the running Run so its success
+	// can be finalized instead of forcing an invalid cancelling -> succeeded path.
+	if run.Status == domain.RunRunning && len(stages) > 0 {
+		allStagesTerminal := true
+		for _, stage := range stages {
+			if !stage.Status.Terminal() {
+				allStagesTerminal = false
+				break
+			}
+		}
+		noRunningAttempts := true
+		for _, attempt := range []domain.Attempt{} {
+			if attempt.Status == domain.AttemptRunning {
+				noRunningAttempts = false
+				break
+			}
+		}
+		if allStagesTerminal && noRunningAttempts {
+			return run, stages, nil
+		}
+	}
 	updatedStages := append([]domain.Stage(nil), stages...)
 	for i := range updatedStages {
 		updatedStages[i].ReasonCodes = append([]string(nil), stages[i].ReasonCodes...)
