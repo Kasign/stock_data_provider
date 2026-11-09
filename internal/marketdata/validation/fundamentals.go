@@ -120,6 +120,11 @@ func ValidateFundamentalsSnapshot(snapshot *model.FundamentalsSnapshot, requeste
 			add("sections", "category", "required_section_missing", category, "required fundamentals indicator section is missing", SeverityError, -1)
 		}
 	}
+	switch snapshot.QualityStatus {
+	case model.QualityValid, model.QualityDegraded, model.QualityUnknown:
+	default:
+		add("quality_status", "quality_status", "invalid_enum", "valid|degraded|unknown", "fundamentals snapshot quality status is unsupported", SeverityError, -1)
+	}
 	if snapshot.HasData != hasData {
 		add("has_data", "has_data", "inconsistent_presence", "matches populated sections", "fundamentals snapshot data flag is inconsistent", SeverityError, -1)
 	}
