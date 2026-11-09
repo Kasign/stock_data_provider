@@ -128,7 +128,7 @@ func TestDeliveryExecutionAttemptStartFailureNeverCallsChannel(t *testing.T) {
 func TestDeliveryExecutionAmbiguousResultConvergesToUnknown(t *testing.T) {
 	service, repository, adapter, claim := executionFixture(t)
 	adapter.result = domain.ChannelSendResult{
-		Outcome: domain.ChannelOutcomeAmbiguous,
+		Outcome:   domain.ChannelOutcomeAmbiguous,
 		ErrorCode: "provider_timeout",
 	}
 	repository.now = claim.Lease.ExpiresAt.Add(-time.Second)
