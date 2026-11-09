@@ -27,9 +27,13 @@ func validateEgressDependencies(cfg config.Config, deps Dependencies) error {
 		}
 		switch name {
 		case "hithink":
-			if deps.HithinkHTTPDoer == nil { return missingEgress("hithink HTTP") }
+			if deps.HithinkHTTPDoer == nil {
+				return missingEgress("hithink HTTP")
+			}
 		case "baostock":
-			if deps.BaoStockDialContext == nil { return missingEgress("baostock TCP") }
+			if deps.BaoStockDialContext == nil {
+				return missingEgress("baostock TCP")
+			}
 		case "tencent":
 			if deps.TencentQuoteHTTPDoer == nil || deps.TencentKlineHTTPDoer == nil ||
 				deps.TencentNoneKlineHTTPDoer == nil || deps.TencentSearchHTTPDoer == nil {
@@ -40,21 +44,29 @@ func validateEgressDependencies(cfg config.Config, deps Dependencies) error {
 				return missingEgress("sina HTTP endpoints")
 			}
 		case "yahoo":
-			if deps.YahooHTTPDoer == nil { return missingEgress("yahoo HTTP") }
+			if deps.YahooHTTPDoer == nil {
+				return missingEgress("yahoo HTTP")
+			}
 		case "netease":
 			if deps.NeteaseQuoteHTTPDoer == nil || deps.NeteaseHistoryHTTPDoer == nil {
 				return missingEgress("netease HTTP endpoints")
 			}
 		case "tushare":
-			if deps.TushareHTTPDoer == nil { return missingEgress("tushare HTTP") }
+			if deps.TushareHTTPDoer == nil {
+				return missingEgress("tushare HTTP")
+			}
 		case "tickflow":
 			if deps.TickFlowAuthenticatedHTTPDoer == nil || deps.TickFlowPublicHTTPDoer == nil {
 				return missingEgress("tickflow authenticated/public HTTP endpoints")
 			}
 		case "pytdx":
-			if deps.PytdxDialContext == nil { return missingEgress("pytdx TCP") }
+			if deps.PytdxDialContext == nil {
+				return missingEgress("pytdx TCP")
+			}
 		case "xueqiu":
-			if deps.XueqiuHTTPDoer == nil { return missingEgress("xueqiu HTTP") }
+			if deps.XueqiuHTTPDoer == nil {
+				return missingEgress("xueqiu HTTP")
+			}
 		default:
 			return fmt.Errorf("controlled egress validation does not recognize provider %q", name)
 		}
@@ -68,4 +80,3 @@ func validateEgressDependencies(cfg config.Config, deps Dependencies) error {
 func missingEgress(name string) error {
 	return fmt.Errorf("controlled egress dependency missing: %s", name)
 }
-
