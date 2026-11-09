@@ -2155,3 +2155,13 @@ CI：本轮 SHA 对应 Go test suite Run `42549171549`。截至本次文档提�
 
 
 - 矩阵复核补充：35 个 Operation 中包含 7 个无 Path/Query 参数的接口（健康检查、数据源列表/诊断、Probe Body、指数行情和市场宽度）。已将这些空参数 Operation 显式纳入矩阵，避免把“无参数接口”误算为遗漏；参数类型矩阵现覆盖全部 35 个 Operation。
+
+
+### 2026-11-09：CT-05 参数类型矩阵 gofmt 门禁修复
+
+- Run `42553013422` 的 Data Module `Check gofmt` 明确指出 `internal/httpapi/openapi_contract_test.go` 存在两处多余空行及 map literal 键值列未按 gofmt 对齐；Docker 的 Market Data 镜像构建失败也发生在 Dockerfile 的 gofmt 前置检查，尚未进入 go test/go build，不能归类为业务编译失败。
+- 已按 CI 输出的 gofmt diff 修正上述纯格式问题；不改变测试逻辑和契约矩阵内容。
+- Root `Test .` gofmt 失败仍是其他模块问题，本分支不越界处理。
+- 修正后 SHA 尚未通过新的 CI 复验；必须等待 Data Module gofmt、测试、race、vet、MariaDB/PIT 和 Docker 构建最终状态。
+
+**当前结论：** CT-05 继续进行，M0 仍为 `in_progress`，M1 不准入。

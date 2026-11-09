@@ -1009,7 +1009,6 @@ func TestProviderProbeRequestSchemaMatchesHandlerValidation(t *testing.T) {
 	}
 }
 
-
 func TestStockSearchQueryDocumentsTrimmedValueSemantics(t *testing.T) {
 	spec, err := os.ReadFile("../../openapi.yaml")
 	if err != nil {
@@ -1042,7 +1041,6 @@ func TestStockSearchQueryDocumentsTrimmedValueSemantics(t *testing.T) {
 	t.Fatal("stocks/search q parameter missing")
 }
 
-
 func TestOpenAPIParameterTypesAndFormatsMatchReviewedHandlerMatrix(t *testing.T) {
 	spec, err := os.ReadFile("../../openapi.yaml")
 	if err != nil {
@@ -1054,15 +1052,15 @@ func TestOpenAPIParameterTypesAndFormatsMatchReviewedHandlerMatrix(t *testing.T)
 	}
 	paths := document["paths"].(map[string]any)
 	expected := map[string]map[string]map[string]any{
-		"GET /health/live": {},
-		"GET /health/ready": {},
-		"GET /api/v1/data-sources/probe": {},
+		"GET /health/live":                     {},
+		"GET /health/ready":                    {},
+		"GET /api/v1/data-sources/probe":       {},
 		"GET /api/v1/data-sources/diagnostics": {},
-		"GET /api/v1/data-sources": {},
-		"GET /api/v1/market/indices": {},
-		"GET /api/v1/market/breadth": {},
-		"GET /api/v1/market/quotes": {"symbols": {"type": "string"}},
-		"GET /api/v1/quotes/{symbol}": {"symbol": {"type": "string"}},
+		"GET /api/v1/data-sources":             {},
+		"GET /api/v1/market/indices":           {},
+		"GET /api/v1/market/breadth":           {},
+		"GET /api/v1/market/quotes":            {"symbols": {"type": "string"}},
+		"GET /api/v1/quotes/{symbol}":          {"symbol": {"type": "string"}},
 		"GET /api/v1/bars/{symbol}/daily": {
 			"symbol": {"type": "string"}, "start": {"type": "string", "format": "date"},
 			"end": {"type": "string", "format": "date"}, "limit": {"type": "integer"},
@@ -1073,12 +1071,12 @@ func TestOpenAPIParameterTypesAndFormatsMatchReviewedHandlerMatrix(t *testing.T)
 			"adjustment": {"$ref": "#/components/schemas/RequestAdjustmentBasis"}, "as_of": {"type": "string", "format": "date-time"},
 		},
 		"GET /api/v1/data-sources/probe/history": {"limit": {"type": "integer"}},
-		"GET /api/v1/stocks/search": {"q": {"type": "string"}, "limit": {"type": "integer"}},
+		"GET /api/v1/stocks/search":              {"q": {"type": "string"}, "limit": {"type": "integer"}},
 		"GET /api/v1/stocks/{symbol}/announcements": {
 			"symbol": {"type": "string"}, "start_date": {"type": "string", "format": "date"},
 			"end_date": {"type": "string", "format": "date"}, "page": {"type": "integer"}, "page_size": {"type": "integer"},
 		},
-		"GET /api/v1/stocks/{symbol}/profile": {"symbol": {"type": "string"}},
+		"GET /api/v1/stocks/{symbol}/profile":          {"symbol": {"type": "string"}},
 		"GET /api/v1/stocks/{symbol}/price-limit-rule": {"symbol": {"type": "string"}, "date": {"type": "string", "format": "date"}},
 		"GET /api/v1/stocks/{symbol}/trading-status": {
 			"symbol": {"type": "string"}, "date": {"type": "string", "format": "date"}, "as_of": {"type": "string", "format": "date-time"},
@@ -1087,9 +1085,9 @@ func TestOpenAPIParameterTypesAndFormatsMatchReviewedHandlerMatrix(t *testing.T)
 			"symbol": {"type": "string"}, "year": {"type": "integer"}, "quarter": {"type": "integer"}, "as_of": {"type": "string", "format": "date-time"},
 		},
 		"GET /api/v1/stocks/{symbol}/chip-distribution": {"symbol": {"type": "string"}},
-		"GET /api/v1/stocks/{symbol}/capital-flow": {"symbol": {"type": "string"}},
-		"GET /api/v1/stocks/{symbol}/boards": {"symbol": {"type": "string"}},
-		"GET /api/v1/market/valuations": {"symbols": {"type": "string"}},
+		"GET /api/v1/stocks/{symbol}/capital-flow":      {"symbol": {"type": "string"}},
+		"GET /api/v1/stocks/{symbol}/boards":            {"symbol": {"type": "string"}},
+		"GET /api/v1/market/valuations":                 {"symbols": {"type": "string"}},
 		"GET /api/v1/market/sectors": {
 			"type": {"type": "string"}, "limit": {"type": "integer"}, "direction": {"type": "string"}, "sort_by": {"type": "string"},
 		},
@@ -1102,13 +1100,13 @@ func TestOpenAPIParameterTypesAndFormatsMatchReviewedHandlerMatrix(t *testing.T)
 			"end": {"type": "string", "format": "date"}, "source": {"type": "string"},
 		},
 		"GET /api/v1/market/trading-calendar": {"start": {"type": "string", "format": "date"}, "end": {"type": "string", "format": "date"}},
-		"GET /api/v1/market/session": {"at": {"type": "string", "format": "date-time"}},
+		"GET /api/v1/market/session":          {"at": {"type": "string", "format": "date-time"}},
 		"GET /api/v1/market/stocks": {
 			"page": {"type": "integer"}, "page_size": {"type": "integer"}, "include_ma": {"type": "boolean"},
 			"adjustment": {"$ref": "#/components/schemas/RequestAdjustmentBasis"},
 		},
 		"GET /api/v1/market/capital-flow": {"start": {"type": "string", "format": "date"}, "end": {"type": "string", "format": "date"}},
-		"GET /api/v1/market/sentiment": {"date": {"type": "string", "format": "date"}},
+		"GET /api/v1/market/sentiment":    {"date": {"type": "string", "format": "date"}},
 		"GET /api/v1/market/sentiment/history": {
 			"start": {"type": "string", "format": "date"}, "end": {"type": "string", "format": "date"}, "limit": {"type": "integer"},
 		},
