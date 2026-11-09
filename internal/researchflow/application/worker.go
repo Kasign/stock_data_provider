@@ -117,7 +117,14 @@ func (w *Worker) Execute(ctx context.Context, runRef, stageRef, attemptRef strin
 
 	runCtx, cancelRun := context.WithDeadline(ctx, snapshot.Run.DeadlineAt)
 	defer cancelRun()
-	attemptDeadline := attempt.StartedAt.Add(time.Duration(snapshot.RetryPolicy.AttemptTimeoutMS) * time.Millisecond)
+	if attempt.StartedAt.IsZero() {
+		return WorkerExecution{Attempt: attempt}, errors.New("Researchflow Attempt start time is missing")
+	}
+	attemptTimeout := time.Duration(snapshot.RetryPolicy.AttemptTimeoutMS) * time.Millisecond
+	if attemptTimeout <= 0 || int64(attemptTimeout/time.Millisecond) != snapshot.RetryPolicy.AttemptTimeoutMS {
+		return WorkerExecution{Attempt: attempt}, errors.New("Researchflow Attempt timeout is outside supported duration")
+	}
+	attemptDeadline := attempt.StartedAt.Add(attemptTimeout)
 	if attemptDeadline.After(snapshot.Run.DeadlineAt) {
 		attemptDeadline = snapshot.Run.DeadlineAt
 	}
@@ -152,24 +159,16 @@ func (w *Worker) Execute(ctx context.Context, runRef, stageRef, attemptRef strin
 	}
 	attemptTimedOut := errors.Is(execCtx.Err(), context.DeadlineExceeded) && !w.now().Before(attemptDeadline)
 	if attemptTimedOut {
-		result := StageExecutionResult{
+		result = StageExecutionResult{
 			AttemptStatus: domain.AttemptTimedOut,
-			StageStatus: domain.StageTimedOut,
+			StageStatus: domain.StageRetryWait,
 			ReasonCodes: []string{"attempt_timeout"},
-		}
-		// A timeout is eligible for retry only when the immutable policy allows it.
-		result.StageStatus = domain.StageRetryWait
-		if err := ValidateStageExecutionResult(result); err != nil {
-			return WorkerExecution{Attempt: attempt}, err
 		}
 	} else if executeErr != nil {
 		return WorkerExecution{Attempt: attempt}, fmt.Errorf("execute Researchflow Stage: %w", executeErr)
 	}
 	if err := ValidateStageExecutionResult(result); err != nil {
 		return WorkerExecution{Attempt: attempt}, err
-	}
-	if attemptTimedOut {
-		result = StageExecutionResult{AttemptStatus: domain.AttemptTimedOut, StageStatus: domain.StageRetryWait, ReasonCodes: []string{"attempt_timeout"}}
 	}
 	if result.StageStatus == domain.StageRetryWait {
 		retryNow, retryErr := w.clock.NowUTC(ctx)
