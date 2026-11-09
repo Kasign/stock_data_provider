@@ -160,6 +160,37 @@ func (httpMarketCapitalFlowFake) FetchMarketCapitalFlow(_ context.Context, start
 	}, nil
 }
 
+func TestBuildSourceStatusesUsesOnlyRegisteredProviderCapabilities(t *testing.T) {
+	p := httpFakeProvider{}
+	sources := BuildSourceStatuses(SourceCapabilities{
+		All: []provider.NamedProvider{p},
+		Quotes: []provider.QuoteProvider{p},
+		DailyBars: []provider.DailyBarProvider{p},
+		StockBasic: []provider.StockBasicProvider{p},
+		StockSearch: []provider.StockSearchProvider{p},
+		SectorRankings: []provider.SectorRankingProvider{p},
+		IndexQuotes: []provider.IndexQuoteProvider{p},
+		MarketBreadth: []provider.MarketBreadthProvider{p},
+		LimitPools: []provider.LimitPoolProvider{p},
+		DragonTiger: []provider.DragonTigerProvider{p},
+		Announcements: []provider.AnnouncementProvider{p},
+		StockBoards: []provider.StockBoardsProvider{p},
+	})
+	if len(sources) != 1 {
+		t.Fatalf("source count = %d, want 1: %+v", len(sources), sources)
+	}
+	got := sources[0]
+	if got.Name != "eastmoney" || !got.Enabled || !got.QuoteCapable || !got.DailyBarCapable ||
+		!got.StockBasicCapable || !got.StockSearchCapable || !got.SectorRankingCapable ||
+		!got.IndexQuoteCapable || !got.MarketBreadthCapable || !got.LimitPoolCapable ||
+		!got.DragonTigerCapable || !got.AnnouncementsCapable || !got.StockBoardsCapable {
+		t.Fatalf("registered Provider capabilities were not reflected: %+v", got)
+	}
+	if got.TradingCalendarCapable || got.FundamentalsCapable || got.ValuationCapable || got.IndexCatalogCapable {
+		t.Fatalf("unregistered capabilities must remain false: %+v", got)
+	}
+}
+
 func TestNewWithApplicationUsesInjectedUseCasesAndCopiesSourceSnapshot(t *testing.T) {
 	sources := []model.SourceStatus{{Name: "eastmoney", Enabled: true, QuoteCapable: true}}
 	server := NewWithApplication(

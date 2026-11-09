@@ -381,7 +381,33 @@ func (m *Module) build(cfg config.Config) error {
 	ds.SetCapitalFlowProviders(capitalFlowProviders)
 	ds.SetMarketCapitalFlowProviders(marketCapitalFlowProviders)
 	ds.SetHotRankingProviders(hotRankingProviders)
-	handler := httpapi.NewWithCapabilityInterfaces(cfg.APIKey, cfg.Adjustment, ds, allProviders, quoteProviders, barProviders, cfg.MaxDailyBars, cfg.RequestTimeout, logger)
+	var priceLimitEventProviders []provider.PriceLimitEventProvider
+	for _, p := range allProviders {
+		if eventProvider, ok := p.(provider.PriceLimitEventProvider); ok {
+			priceLimitEventProviders = append(priceLimitEventProviders, eventProvider)
+		}
+	}
+	if len(priceLimitEventProviders) > 0 {
+		ds.SetPriceLimitEventProviders(priceLimitEventProviders)
+	}
+
+	sourceStatuses := httpapi.BuildSourceStatuses(httpapi.SourceCapabilities{
+		All: allProviders, Quotes: quoteProviders, DailyBars: barProviders,
+		StockBasic: stockBasicProviders, StockSearch: stockSearchProviders,
+		SectorRankings: sectorRankingProviders, IndexQuotes: indexQuoteProviders,
+		MarketBreadth: marketBreadthProviders, LimitPools: limitPoolProviders,
+		DragonTiger: dragonTigerProviders, Announcements: announcementProviders,
+		StockBoards: stockBoardsProviders, TradingCalendar: tradingCalendarProviders,
+		SecurityTradingStatus: securityTradingStatusProviders, Fundamentals: fundamentalsProviders,
+		Valuations: valuationProviders, IndexCatalog: indexCatalogProviders,
+		ChipDistribution: chipDistributionProviders, CapitalFlow: capitalFlowProviders,
+		MarketCapitalFlow: marketCapitalFlowProviders, HotRankings: hotRankingProviders,
+		Supplements: supplementProviders,
+	})
+	handler := httpapi.NewWithApplication(cfg.APIKey, cfg.Adjustment, httpapi.ApplicationDependencies{
+		Quotes: ds, MarketOverview: ds, Securities: ds, Fundamentals: ds,
+		Index: ds, Trading: ds, Diagnostics: ds,
+	}, sourceStatuses, cfg.MaxDailyBars, cfg.RequestTimeout, logger)
 	m.diagnostics = ds
 	reader, err := application.NewReader(ds)
 	if err != nil {

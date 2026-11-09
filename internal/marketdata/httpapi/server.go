@@ -82,48 +82,6 @@ func NewWithConfig(apiKey, defaultAdjustment string, svc *service.DataService, a
 }
 
 func NewWithCapabilityInterfaces(apiKey, defaultAdjustment string, svc *service.DataService, allProviders []provider.NamedProvider, quoteProviders []provider.QuoteProvider, barProviders []provider.DailyBarProvider, maxBars int, requestTimeout time.Duration, logger *slog.Logger) *Server {
-	if logger == nil {
-		logger = slog.Default()
-	}
-	if maxBars <= 0 || maxBars > 2000 {
-		maxBars = 2000
-	}
-	quoteEnabled, barsEnabled := map[string]bool{}, map[string]bool{}
-	for _, p := range quoteProviders {
-		quoteEnabled[p.Name()] = true
-	}
-	for _, p := range barProviders {
-		barsEnabled[p.Name()] = true
-	}
-	known := map[string]bool{}
-	for _, p := range allProviders {
-		known[p.Name()] = true
-	}
-	names := make([]string, 0, len(known))
-	for name := range known {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-	sources := make([]model.SourceStatus, 0, len(names))
-	stockBasicEnabled := map[string]bool{}
-	stockSearchEnabled := map[string]bool{}
-	sectorRankingEnabled := map[string]bool{}
-	indexQuoteEnabled := map[string]bool{}
-	marketBreadthEnabled := map[string]bool{}
-	limitPoolEnabled := map[string]bool{}
-	dragonTigerEnabled := map[string]bool{}
-	announcementsEnabled := map[string]bool{}
-	stockBoardsEnabled := map[string]bool{}
-	tradingCalendarEnabled := map[string]bool{}
-	securityTradingStatusEnabled := map[string]bool{}
-	fundamentalsEnabled := map[string]bool{}
-	valuationEnabled := map[string]bool{}
-	indexCatalogEnabled := map[string]bool{}
-	historicalIndexConstituentsEnabled := map[string]bool{}
-	chipEnabled := map[string]bool{}
-	capitalFlowEnabled := map[string]bool{}
-	marketCapitalFlowEnabled := map[string]bool{}
-	hotRankingEnabled := map[string]bool{}
 	if svc != nil {
 		var priceLimitEventProviders []provider.PriceLimitEventProvider
 		for _, p := range allProviders {
@@ -134,82 +92,39 @@ func NewWithCapabilityInterfaces(apiKey, defaultAdjustment string, svc *service.
 		if len(priceLimitEventProviders) > 0 {
 			svc.SetPriceLimitEventProviders(priceLimitEventProviders)
 		}
-		for _, p := range svc.StockBasicProviders() {
-			stockBasicEnabled[p.Name()] = true
-		}
-		for _, p := range svc.StockSearchProviders() {
-			stockSearchEnabled[p.Name()] = true
-		}
-		for _, p := range svc.SectorRankingProviders() {
-			sectorRankingEnabled[p.Name()] = true
-		}
-		for _, p := range svc.IndexQuoteProviders() {
-			indexQuoteEnabled[p.Name()] = true
-		}
-		for _, p := range svc.MarketBreadthProviders() {
-			marketBreadthEnabled[p.Name()] = true
-		}
-		for _, p := range svc.LimitPoolProviders() {
-			limitPoolEnabled[p.Name()] = true
-		}
-		for _, p := range svc.DragonTigerProviders() {
-			dragonTigerEnabled[p.Name()] = true
-		}
-		for _, p := range svc.AnnouncementProviders() {
-			announcementsEnabled[p.Name()] = true
-		}
-		for _, p := range svc.StockBoardsProviders() {
-			stockBoardsEnabled[p.Name()] = true
-		}
-		for _, p := range svc.TradingCalendarProviders() {
-			tradingCalendarEnabled[p.Name()] = true
-		}
-		for _, p := range svc.SecurityTradingStatusProviders() {
-			securityTradingStatusEnabled[p.Name()] = true
-		}
-		for _, p := range svc.FundamentalsProviders() {
-			fundamentalsEnabled[p.Name()] = true
-		}
-		for _, p := range svc.ValuationProviders() {
-			valuationEnabled[p.Name()] = true
-		}
-		for _, p := range svc.IndexCatalogProviders() {
-			indexCatalogEnabled[p.Name()] = true
-			if _, ok := p.(provider.HistoricalIndexConstituentProvider); ok {
-				historicalIndexConstituentsEnabled[p.Name()] = true
-			}
-		}
-		for _, p := range svc.ChipDistributionProviders() {
-			chipEnabled[p.Name()] = true
-		}
-		for _, p := range svc.CapitalFlowProviders() {
-			capitalFlowEnabled[p.Name()] = true
-		}
-		for _, p := range svc.MarketCapitalFlowProviders() {
-			marketCapitalFlowEnabled[p.Name()] = true
-		}
-		for _, p := range svc.HotRankingProviders() {
-			hotRankingEnabled[p.Name()] = true
-		}
 	}
-	for _, name := range names {
-		sources = append(sources, model.SourceStatus{
-			Name: name, Enabled: true,
-			QuoteCapable: quoteEnabled[name], DailyBarCapable: barsEnabled[name],
-			StockBasicCapable: stockBasicEnabled[name], StockSearchCapable: stockSearchEnabled[name], SectorRankingCapable: sectorRankingEnabled[name],
-			IndexQuoteCapable: indexQuoteEnabled[name], MarketBreadthCapable: marketBreadthEnabled[name], LimitPoolCapable: limitPoolEnabled[name],
-			StockBoardsCapable: stockBoardsEnabled[name], TradingCalendarCapable: tradingCalendarEnabled[name],
-			SecurityTradingStatusCapable: securityTradingStatusEnabled[name], FundamentalsCapable: fundamentalsEnabled[name], ValuationCapable: valuationEnabled[name], IndexCatalogCapable: indexCatalogEnabled[name], HistoricalIndexConstituentsCapable: historicalIndexConstituentsEnabled[name], ChipCapable: chipEnabled[name], CapitalFlowCapable: capitalFlowEnabled[name], MarketCapitalFlowCapable: marketCapitalFlowEnabled[name], HotRankingCapable: hotRankingEnabled[name], DragonTigerCapable: dragonTigerEnabled[name], AnnouncementsCapable: announcementsEnabled[name],
-		})
+
+	capabilities := SourceCapabilities{
+		All: allProviders, Quotes: quoteProviders, DailyBars: barProviders,
 	}
+	var apps ApplicationDependencies
 	if svc != nil {
-		for _, p := range svc.SupplementProviders() {
-			sources = append(sources, model.SourceStatus{
-				Name: p.Name(), Enabled: true, ChipCapable: true, CapitalFlowCapable: true,
-			})
+		capabilities.StockBasic = svc.StockBasicProviders()
+		capabilities.StockSearch = svc.StockSearchProviders()
+		capabilities.SectorRankings = svc.SectorRankingProviders()
+		capabilities.IndexQuotes = svc.IndexQuoteProviders()
+		capabilities.MarketBreadth = svc.MarketBreadthProviders()
+		capabilities.LimitPools = svc.LimitPoolProviders()
+		capabilities.DragonTiger = svc.DragonTigerProviders()
+		capabilities.Announcements = svc.AnnouncementProviders()
+		capabilities.StockBoards = svc.StockBoardsProviders()
+		capabilities.TradingCalendar = svc.TradingCalendarProviders()
+		capabilities.SecurityTradingStatus = svc.SecurityTradingStatusProviders()
+		capabilities.Fundamentals = svc.FundamentalsProviders()
+		capabilities.Valuations = svc.ValuationProviders()
+		capabilities.IndexCatalog = svc.IndexCatalogProviders()
+		capabilities.ChipDistribution = svc.ChipDistributionProviders()
+		capabilities.CapitalFlow = svc.CapitalFlowProviders()
+		capabilities.MarketCapitalFlow = svc.MarketCapitalFlowProviders()
+		capabilities.HotRankings = svc.HotRankingProviders()
+		capabilities.Supplements = svc.SupplementProviders()
+		apps = ApplicationDependencies{
+			Quotes: svc, MarketOverview: svc, Securities: svc, Fundamentals: svc,
+			Index: svc, Trading: svc, Diagnostics: svc,
 		}
 	}
-	return NewWithApplication(apiKey, defaultAdjustment, ApplicationDependencies{Quotes: svc, MarketOverview: svc, Securities: svc, Fundamentals: svc, Index: svc, Trading: svc, Diagnostics: svc}, sources, maxBars, requestTimeout, logger)
+	sources := BuildSourceStatuses(capabilities)
+	return NewWithApplication(apiKey, defaultAdjustment, apps, sources, maxBars, requestTimeout, logger)
 }
 
 // NewWithApplication 使用显式 Application 用例实现和来源能力快照构造 HTTP Adapter。

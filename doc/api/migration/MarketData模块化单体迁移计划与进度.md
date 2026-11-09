@@ -767,3 +767,14 @@ internal/
 - 更新价格限制规则单测的 Server 装配字段，从旧 `svc` 改为 `trading`；测试仍验证缺少可信 Provider 证据时返回 unknown，不改变 fail-closed 规则。
 - 清理 Provider Probe 模型文件多余空行，修复 Data 专项 gofmt 门禁。
 - 上一轮 CI 已确认 Provider Probe 模型定义恢复后，MariaDB 编译缺失类型问题已定位到旧提交；全仓 gofmt 仍被 Research 两个文件阻断，归属不变。
+
+
+### 2026-11-09：M2-5 第二阶段——Bootstrap 直连 Application 接口
+
+- Bootstrap 不再调用 `NewWithCapabilityInterfaces` 兼容构造器；生产装配直接传入七组 Application 用例接口、来源能力快照和超时配置调用 `NewWithApplication`。
+- Provider 能力状态的输入来自 Bootstrap 已通过配置校验并实际注册的能力接口切片；新增 `httpapi.SourceCapabilities` / `BuildSourceStatuses` 仅将这些真实注册能力映射为既有 `model.SourceStatus`，不读取配置猜测、不执行探测、不新增响应字段。
+- 补充 Provider 的 Chip/CapitalFlow 状态仍按原规则生成；历史指数成分能力仍通过实际 Provider 是否实现 `HistoricalIndexConstituentProvider` 判定。
+- `PriceLimitEventProvider` 的注册从 HTTP Adapter 兼容构造器迁回 Bootstrap；只在实际配置 Provider 存在该能力时注入 DataService，保持原有调用顺序和能力语义。
+- 兼容构造器继续保留给现有测试和旧调用点，并复用同一个 `BuildSourceStatuses` 映射逻辑，避免重复维护能力矩阵；当 `svc == nil` 时保持 nil Application 依赖，不制造 typed-nil 接口。
+- 新增来源能力映射测试，验证已注册能力为 true、未注册能力保持 false；不增加新 Provider、API、字段或诊断规则。
+- 验收：Data gofmt/test/race/vet、HTTP API Contract 和 MariaDB/PIT 集成通过；全仓门禁继续单独记录 Research 语法阻断。
