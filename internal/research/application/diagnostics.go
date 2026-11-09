@@ -45,6 +45,9 @@ func (s *Service) BuildEventCheck(ctx context.Context, ref EventRef, required bo
 	if err != nil {
 		return platformdiagnostics.Check{}, mapRepositoryError(err)
 	}
+	if value.EventID != ref.EventID || value.EventVersion != ref.EventVersion {
+		return platformdiagnostics.Check{}, applicationFault(fault.ClassInternal, "stored_event_identity_mismatch", "Stored Research Event identity does not match the requested version", researcherrors.ErrCorruptRecord)
+	}
 	if err := value.Validate(); err != nil {
 		return platformdiagnostics.Check{}, applicationFault(fault.ClassInternal, "stored_event_invalid", "Stored Research Event is invalid", err)
 	}
@@ -62,6 +65,9 @@ func (s *Service) BuildClaimCheck(ctx context.Context, ref ClaimRef, required bo
 	value, err := s.claims.GetVersion(ctx, ref.ClaimID, ref.ClaimVersion)
 	if err != nil {
 		return platformdiagnostics.Check{}, mapRepositoryError(err)
+	}
+	if value.ClaimID != ref.ClaimID || value.ClaimVersion != ref.ClaimVersion {
+		return platformdiagnostics.Check{}, applicationFault(fault.ClassInternal, "stored_claim_identity_mismatch", "Stored Research Claim identity does not match the requested version", researcherrors.ErrCorruptRecord)
 	}
 	if err := value.Validate(); err != nil {
 		return platformdiagnostics.Check{}, applicationFault(fault.ClassInternal, "stored_claim_invalid", "Stored Research Claim is invalid", err)

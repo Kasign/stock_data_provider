@@ -206,3 +206,55 @@ func TestUpdateClaimEnforcesExpectedVersionAndDomainTransition(t *testing.T) {
 }
 
 func stringPointer(value string) *string { return &value }
+
+
+type mismatchedContextRepo struct { contextRepoFake }
+func (f *mismatchedContextRepo) GetVersion(context.Context, string, int64) (researchcontext.Context, error) { return f.value, nil }
+type mismatchedEventRepo struct { eventRepoFake }
+func (f *mismatchedEventRepo) GetVersion(context.Context, string, int) (researchevent.ResearchEvent, error) { return f.value, nil }
+type mismatchedClaimRepo struct { claimRepoFake }
+func (f *mismatchedClaimRepo) GetVersion(context.Context, string, int) (researchclaim.Claim, error) { return f.value, nil }
+
+func TestApplicationRejectsRepositoryIdentityMismatch(t *testing.T) {
+	now := time.Date(2026, 11, 9, 3, 0, 0, 0, time.UTC)
+	contextRepo := &mismatchedContextRepo{contextRepoFake: contextRepoFake{value: researchcontext.Context{
+		SchemaVersion: researchcontext.SchemaVersion, ContextID: "ctx_other", ContextVersion: 1,
+		ResearchQuestion: "identity mismatch", Scope: researchcontext.ScopeStock,
+		SubjectRefs: []string{"security:600000"}, SystemAsOf: now,
+		SectionRefs: []researchcontext.SectionRef{}, QualitySummary: researchcontext.QualitySummary{
+			Status: researchcontext.QualityValid, ReasonCodes: []string{},
+		}, IncludedSections: []string{}, OmittedSections: []researchcontext.OmittedSection{},
+		BuilderVersion: "test", CreatedAt: now,
+	}}}
+	service, err := NewService(contextRepo, &evidenceRepoFake{}, &authorizerFake{}, nil, nil)
+	if err != nil { t.Fatal(err) }
+	if _, err := service.GetContext(context.Background(), ContextRef{ContextID: "ctx_requested", ContextVersion: 1}); err == nil {
+		t.Fatal("Context repository identity mismatch must be rejected")
+	}
+
+	eventRepo := &mismatchedEventRepo{eventRepoFake: eventRepoFake{value: researchevent.ResearchEvent{
+		EventID: "evt_other", EventVersion: 1, EventType: "earnings_guidance", Title: "快照",
+		Status: researchevent.StatusDetected, SubjectRefs: []string{"security:600000"},
+		EvidenceRefs: []string{"ev_source_1"}, SystemObservedAt: now, SystemAsOf: now,
+		ImpactHypothesisRefs: []string{}, InvalidationConditions: []string{}, Uncertainty: []string{},
+		SourceTimes: []researchevent.EventSourceTime{{EvidenceRef: "ev_source_1", TimeType: researchevent.TimeSystemObservedAt, Value: now, AssertedBy: "news"}},
+	}}}
+	service, err = NewServiceWithEvents(&contextRepoFake{}, &evidenceRepoFake{}, eventRepo, &authorizerFake{}, nil, nil)
+	if err != nil { t.Fatal(err) }
+	if _, err := service.GetEvent(context.Background(), EventRef{EventID: "evt_requested", EventVersion: 1}); err == nil {
+		t.Fatal("Event repository identity mismatch must be rejected")
+	}
+
+	claimRepo := &mismatchedClaimRepo{claimRepoFake: claimRepoFake{value: researchclaim.Claim{
+		ClaimID: "clm_other", ClaimVersion: 1, Statement: "研究判断",
+		EpistemicType: researchclaim.EpistemicReportedFact, ScopeRefs: []string{"security:600000"},
+		SystemAsOf: now, SupportingEvidenceRefs: []string{"ev_source_1"},
+		ContradictingEvidenceRefs: []string{}, RequiredDataRefs: []string{},
+		Status: researchclaim.StatusProposed, Limitations: []string{},
+	}}}
+	service, err = NewServiceWithClaims(&contextRepoFake{}, &evidenceRepoFake{}, claimRepo, &authorizerFake{}, nil, nil)
+	if err != nil { t.Fatal(err) }
+	if _, err := service.GetClaim(context.Background(), ClaimRef{ClaimID: "clm_requested", ClaimVersion: 1}); err == nil {
+		t.Fatal("Claim repository identity mismatch must be rejected")
+	}
+}

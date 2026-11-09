@@ -310,6 +310,9 @@ func (s *Service) GetContext(ctx context.Context, ref ContextRef) (ResearchConte
 	}
 	value, err := s.contexts.GetVersion(ctx, ref.ContextID, ref.ContextVersion)
 	if err != nil { return ResearchContext{}, mapRepositoryError(err) }
+	if value.ContextID != ref.ContextID || value.ContextVersion != ref.ContextVersion {
+		return ResearchContext{}, applicationFault(fault.ClassInternal, "stored_context_identity_mismatch", "Stored Research Context identity does not match the requested version", researcherrors.ErrCorruptRecord)
+	}
 	if err := value.Validate(); err != nil { return ResearchContext{}, applicationFault(fault.ClassInternal, "stored_context_invalid", "Stored Research Context is invalid", err) }
 	return fromDomainContext(value), nil
 }
@@ -408,6 +411,9 @@ func (s *Service) GetEvent(ctx context.Context, ref EventRef) (ResearchEvent, er
 	}
 	value, err := s.events.GetVersion(ctx, ref.EventID, ref.EventVersion)
 	if err != nil { return ResearchEvent{}, mapRepositoryError(err) }
+	if value.EventID != ref.EventID || value.EventVersion != ref.EventVersion {
+		return ResearchEvent{}, applicationFault(fault.ClassInternal, "stored_event_identity_mismatch", "Stored Research Event identity does not match the requested version", researcherrors.ErrCorruptRecord)
+	}
 	if err := value.Validate(); err != nil { return ResearchEvent{}, applicationFault(fault.ClassInternal, "stored_event_invalid", "Stored Research Event is invalid", err) }
 	return fromDomainEvent(value), nil
 }
@@ -480,6 +486,9 @@ func (s *Service) GetClaim(ctx context.Context, ref ClaimRef) (Claim, error) {
 	}
 	value, err := s.claims.GetVersion(ctx, ref.ClaimID, ref.ClaimVersion)
 	if err != nil { return Claim{}, mapRepositoryError(err) }
+	if value.ClaimID != ref.ClaimID || value.ClaimVersion != ref.ClaimVersion {
+		return Claim{}, applicationFault(fault.ClassInternal, "stored_claim_identity_mismatch", "Stored Research Claim identity does not match the requested version", researcherrors.ErrCorruptRecord)
+	}
 	if err := value.Validate(); err != nil { return Claim{}, applicationFault(fault.ClassInternal, "stored_claim_invalid", "Stored Research Claim is invalid", err) }
 	return fromDomainClaim(value), nil
 }
