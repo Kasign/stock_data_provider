@@ -48,6 +48,9 @@ func (r *MySQLRunRepository) BeginRunCancellation(
 	if runStatus.Terminal() {
 		return false, ErrRunAlreadyTerminal
 	}
+	if terminationReason.Valid && terminationReason.String == "deadline_exceeded" {
+		return false, ErrClaimRunUnavailable
+	}
 	if runStatus == domain.RunCancelling {
 		if terminationReason.Valid && terminationReason.String == "user_cancelled" {
 			if err := tx.Commit(); err != nil {
