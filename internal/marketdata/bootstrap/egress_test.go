@@ -61,6 +61,46 @@ func TestValidateEgressDependenciesChecksEastmoneyOrigins(t *testing.T) {
 	}
 }
 
+
+func TestEastmoneyHTTPOriginsForCapabilitiesUsesOnlyRequiredEndpoints(t *testing.T) {
+	cfg := config.Config{
+		EastmoneyQuoteURL: "https://quote.example.test/api",
+		EastmoneyKlineURL: "https://kline.example.test/api",
+		EastmoneyStockBasicURL: "https://basic.example.test/api",
+		EastmoneySectorRankingURL: "https://sector.example.test/api",
+		EastmoneyIndexURL: "https://index.example.test/api",
+		EastmoneyMarketStocksURL: "https://stocks.example.test/api",
+		EastmoneyLimitPoolBaseURL: "https://limit.example.test",
+		EastmoneyStockBoardsURL: "https://boards.example.test/api",
+		EastmoneyDragonTigerURL: "https://dragon.example.test/api",
+		EastmoneyAnnouncementsURL: "https://ann.example.test/api",
+		EastmoneyHotRankingsURL: "https://hot.example.test/api",
+		EastmoneyHotSurgeURL: "https://surge.example.test/api",
+		EastmoneyCapitalFlowURL: "https://flow.example.test/api",
+	}
+	origins, err := newEastmoneyProvider(cfg).HTTPOriginsForCapabilities(provider.EastmoneyCapabilities{Quote: true})
+	if err != nil { t.Fatalf("HTTPOriginsForCapabilities() error = %v", err) }
+	if len(origins) != 1 || origins[0] != "https://quote.example.test" {
+		t.Fatalf("quote-only origins = %#v, want only quote origin", origins)
+	}
+}
+
+func TestEastmoneyHTTPOriginsForCapabilitiesIncludesDependentEndpoints(t *testing.T) {
+	cfg := config.Config{
+		EastmoneyKlineURL: "https://kline.example.test/api",
+		EastmoneySectorRankingURL: "https://sector.example.test/api",
+		EastmoneyIndexURL: "https://index.example.test/api",
+		EastmoneyMarketStocksURL: "https://stocks.example.test/api",
+		EastmoneyLimitPoolBaseURL: "https://limit.example.test",
+	}
+	origins, err := newEastmoneyProvider(cfg).HTTPOriginsForCapabilities(provider.EastmoneyCapabilities{MarketBreadth: true, SectorRankings: true, HotRankings: true})
+	if err != nil { t.Fatalf("HTTPOriginsForCapabilities() error = %v", err) }
+	got := strings.Join(origins, ",")
+	for _, want := range []string{"https://kline.example.test", "https://sector.example.test", "https://index.example.test", "https://stocks.example.test", "https://limit.example.test"} {
+		if !strings.Contains(got, want) { t.Fatalf("origins %v missing dependency %s", origins, want) }
+	}
+}
+
 func TestValidateEgressDependenciesRequiresTCPDialers(t *testing.T) {
 	for _, name := range []string{"baostock", "pytdx"} {
 		t.Run(name, func(t *testing.T) {

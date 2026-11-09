@@ -182,6 +182,46 @@ func (p *Eastmoney) WithHTTPDoers(doers map[string]HTTPDoer) *Eastmoney {
 	return p
 }
 
+// EastmoneyCapabilities 描述本次装配启用的 Eastmoney 业务能力，用于计算最小出站依赖集。
+type EastmoneyCapabilities struct {
+	Quote, DailyBars, StockBasic, StockSearch bool
+	SectorRankings, IndexQuotes, MarketBreadth bool
+	LimitPools, StockBoards, Announcements, DragonTiger bool
+	ChipDistribution, CapitalFlow, HotRankings bool
+}
+
+// HTTPOriginsForCapabilities 只返回指定业务能力真实请求路径涉及的 endpoint origin。
+// MarketBreadth 会读取证券列表并查询涨跌停池；HotRankings 会调用指数行情补全报价；
+// SectorRankings 的五日榜会读取 K 线；ChipDistribution 通过日 K 计算。
+func (p *Eastmoney) HTTPOriginsForCapabilities(c EastmoneyCapabilities) ([]string, error) {
+	if p == nil { return nil, errors.New("Eastmoney provider is nil") }
+	endpoints := make([]string, 0, 8)
+	add := func(enabled bool, values ...string) { if enabled { endpoints = append(endpoints, values...) } }
+	add(c.Quote, p.quoteURL)
+	add(c.DailyBars || c.SectorRankings || c.ChipDistribution, p.klineURL)
+	add(c.StockBasic, p.stockBasicURL)
+	add(c.StockSearch || c.MarketBreadth, p.stockListURL)
+	add(c.SectorRankings, p.sectorRankingURL)
+	add(c.IndexQuotes || c.HotRankings, p.indexURL)
+	add(c.MarketBreadth, p.marketBreadthURL, p.limitPoolBaseURL)
+	add(c.LimitPools, p.limitPoolBaseURL)
+	add(c.StockBoards, p.stockBoardsURL)
+	add(c.Announcements, p.announcementURL)
+	add(c.DragonTiger, p.dragonTigerURL)
+	add(c.CapitalFlow, p.capitalFlowURL)
+	add(c.HotRankings, p.hotRankingURL, p.hotSurgeURL)
+	origins := make(map[string]struct{}, len(endpoints))
+	for _, endpoint := range endpoints {
+		origin, err := EastmoneyHTTPOrigin(endpoint)
+		if err != nil { return nil, err }
+		origins[origin] = struct{}{}
+	}
+	result := make([]string, 0, len(origins))
+	for origin := range origins { result = append(result, origin) }
+	sort.Strings(result)
+	return result, nil
+}
+
 // HTTPOrigins 返回当前 Eastmoney Provider 实际配置的全部 endpoint origin（去重并排序）。
 // 从构造完成后的 Provider 读取，确保包含 Provider 自身补齐的默认 URL。
 func (p *Eastmoney) HTTPOrigins() ([]string, error) {
