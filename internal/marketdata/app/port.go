@@ -1,5 +1,5 @@
-// Package app defines the Market Data application boundary consumed by other modules.
-// It intentionally exposes neither Provider, Repository, Cache nor HTTP transport types.
+// Package app 定义 Market Data 对其他模块公开的 Application Port。
+// 该包不暴露 Provider、Repository、Cache 或 HTTP 传输类型。
 package app
 
 import (
@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-// AdjustmentBasis describes the price adjustment basis of a returned quote/bar.
+// AdjustmentBasis 表示返回行情或日线数据的复权口径。
 type AdjustmentBasis string
 
 const (
@@ -17,7 +17,7 @@ const (
 	AdjustmentUnknown  AdjustmentBasis = "unknown"
 )
 
-// QualityStatus is the Data-owned quality state of a value or snapshot.
+// QualityStatus 表示由 Data 负责判定的数据质量状态。
 type QualityStatus string
 
 const (
@@ -28,8 +28,8 @@ const (
 	QualityUnknown  QualityStatus = "unknown"
 )
 
-// QuoteSnapshot is an application DTO, not the Data HTTP JSON response.
-// Nullable numeric values remain pointers; Volume remains int64 to preserve share precision.
+// QuoteSnapshot 是 Application DTO，不复用 Data HTTP JSON 响应结构。
+// 可空数值继续使用指针；Volume 使用 int64 保留股数精度。
 type QuoteSnapshot struct {
 	Symbol               string
 	Name                 string
@@ -66,8 +66,8 @@ type QuoteSnapshot struct {
 	NormalizationVersion string
 }
 
-// DailyBar is an application DTO carrying the provenance and point-in-time
-// metadata required by downstream analysis. Unknown numeric fields stay nil.
+// DailyBar 是供下游分析使用的 Application DTO，保留来源和时点元数据。
+// 未知数值字段保持 nil，不使用零值代替未知。
 type DailyBar struct {
 	Symbol                           string
 	TradeDate                        string
@@ -111,9 +111,9 @@ type DailyBar struct {
 	NormalizationVersion             string
 }
 
-// DailyBarsQuery is the explicit read contract for current or historical bars.
-// SystemObservedAtCutoff is the system-observation/revision cutoff, not a trade
-// date and not the ProviderTime of a quote/bar. Nil requests the current view.
+// DailyBarsQuery 定义当前视图或历史日线读取的显式参数。
+// SystemObservedAtCutoff 是系统观察/修订截止时点，不是交易日期，也不是行情的 ProviderTime。
+// 该字段为 nil 时读取当前视图。
 type DailyBarsQuery struct {
 	Symbol                 string
 	StartDate              string
@@ -123,8 +123,8 @@ type DailyBarsQuery struct {
 	SystemObservedAtCutoff *time.Time
 }
 
-// DailyBarsSnapshot preserves per-bar metadata and Data's aggregate quality assessment.
-// Aggregate QualityStatus is derived from returned bar quality and Data warnings.
+// DailyBarsSnapshot 保留逐条日线元数据和 Data 汇总质量判定。
+// QualityStatus 根据返回日线的质量状态及 Data warnings 汇总得出。
 type DailyBarsSnapshot struct {
 	Symbol                 string
 	AdjustmentBasis        AdjustmentBasis
@@ -136,19 +136,19 @@ type DailyBarsSnapshot struct {
 	Bars                   []DailyBar
 }
 
-// QuoteReader is the narrow quote use case. It does not expose Provider selection.
+// QuoteReader 是窄化的行情读取用例，不暴露 Provider 选择与调度。
 type QuoteReader interface {
 	GetQuote(ctx context.Context, symbol string) (QuoteSnapshot, error)
 }
 
-// DailyBarsReader is the narrow historical-data use case. A non-nil
-// SystemObservedAtCutoff requires revision-backed point-in-time reconstruction.
+// DailyBarsReader 是窄化的历史日线读取用例。
+// SystemObservedAtCutoff 非 nil 时，必须基于已记录的历史修订版本进行 PIT 重建。
 type DailyBarsReader interface {
 	GetDailyBars(ctx context.Context, query DailyBarsQuery) (DailyBarsSnapshot, error)
 }
 
-// MarketDataReader is the current consumer-facing port used by Analysis.
-// Future consumers should depend on the narrowest interface they need.
+// MarketDataReader 是当前供 Analysis 使用的消费者 Port。
+// 后续消费者应只依赖自己实际需要的最窄接口。
 type MarketDataReader interface {
 	QuoteReader
 	DailyBarsReader

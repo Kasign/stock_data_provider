@@ -627,3 +627,12 @@ internal/
 - PIT 输入字段明确命名为 `SystemObservedAtCutoff`，语义是 Data 历史修订的系统观察时点，不是交易日期，也不默认等同于 Analysis.AsOf。Server Adapter 后续必须显式定义映射；本批不修改 Server/Analysis 远程 Adapter。
 - 不暴露 Provider、Repository、Cache、SQL、HTTP Handler；不新增外部 API、字段存储或诊断行为。
 - 下一步 M2-2：实现 DataService 到 Application Port 的 Facade/映射，并补齐 DTO 映射、nil/精度/来源/PIT 元数据测试；M2-3 再让 HTTP Handler 依赖独立 Application 接口。
+
+
+### 2026-11-09：M2-1 Port 编译验收与 M1-2 Data 专项验收确认
+
+- 当前 SHA：`6a986d9815b6d05f2d451a8b804331a7a5ff3fa1`；M2-1 首批 Application Port 已通过 Data 根模块 gofmt、go test、race、vet（Run `42569000978`）。
+- 同一 Run 中 Data MariaDB Migration/PIT、News MariaDB 集成、go-core、迁移工作流均通过；Root 全仓 `Test .` 仍仅在 gofmt 阶段被 Research 文件阻断，测试/race/vet 因前置 gofmt 失败未执行。
+- M1-2 的 Data 专项验收条件已满足；根模块全仓门禁作为跨模块阻断单独跟踪，不影响 Data 专项结果。
+- M2-1 的 DTO/Port 注释统一使用中文；接口仍只覆盖当前真实消费者 Quote 与 DailyBars，PIT cutoff 继续明确表示 SystemObservedAt 修订时点。
+- 下一步：M2-2 实现 DataService 到 Application Port 的映射适配，并以测试验证 nullable、整数精度、单位、来源版本、ProviderTime、复权、质量、fallback、系统观察时点不丢失。
