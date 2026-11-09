@@ -33,11 +33,11 @@ func (s *Server) priceLimitRule(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	status, statusErr := s.svc.SecurityTradingStatus(r.Context(), symbol, tradeDate)
+	status, statusErr := s.trading.SecurityTradingStatus(r.Context(), symbol, tradeDate)
 	var evidence *model.PriceLimitEventEvidence
 	var evidenceErr error
 	if statusErr == nil {
-		evidence, evidenceErr = s.svc.PriceLimitEventEvidence(r.Context(), symbol, tradeDate)
+		evidence, evidenceErr = s.trading.PriceLimitEventEvidence(r.Context(), symbol, tradeDate)
 	}
 	result, resolveErr := service.ResolvePriceLimitRuleFromTradingStatus(symbol, tradeDate, status, evidence)
 	if resolveErr != nil {

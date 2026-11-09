@@ -20,38 +20,28 @@ import (
 	"example.com/stock-analysis-flow/internal/marketdata/service"
 )
 
-// marketDataApplication 是 HTTP Adapter 实际调用的用例集合。
-//
-// 该接口只描述现有 HTTP 路由使用的能力，不暴露 DataService、Provider、Repository
-// 或缓存实现；DataService 当前作为默认实现，测试和后续组合根可注入其他实现。
-type marketDataApplication interface {
-	Ready(context.Context) error
-	Quote(context.Context, string) (*model.Quote, bool, error)
-	DailyBars(context.Context, string, string, string, int, model.AdjustmentBasis) ([]model.DailyBar, bool, []string, error)
-	DailyBarsAsOf(context.Context, string, string, string, int, model.AdjustmentBasis, time.Time) ([]model.DailyBar, []string, error)
-	Bundle(context.Context, string, int, time.Time, bool, model.AdjustmentBasis) (*model.Bundle, error)
-	ProviderDiagnostics() []map[string]any
-	IndexQuotes(context.Context) (*model.IndexQuoteSnapshot, bool, error)
-	MarketBreadth(context.Context) (*model.MarketBreadthSnapshot, bool, error)
-	LimitPool(context.Context, string, string, int) (*model.LimitPoolSnapshot, bool, error)
-	DragonTiger(context.Context, string, int, int) (*model.DragonTigerSnapshot, bool, error)
-	SectorRankingsByMetric(context.Context, string, string, string, int) (*model.SectorRankingSnapshot, bool, error)
-	StockBasic(context.Context, string) (*model.StockBasic, bool, error)
-	SearchStocks(context.Context, string, int) (*model.StockSearchSnapshot, error)
-	StockBoards(context.Context, string) (*model.StockBoardSnapshot, bool, error)
-	ChipDistribution(context.Context, string) (*model.ChipDistribution, bool, error)
-	CapitalFlow(context.Context, string) (*model.CapitalFlow, bool, error)
-	StockAnnouncements(context.Context, string, string, string, int, int) (*model.StockAnnouncementSnapshot, bool, error)
-}
-
-var _ marketDataApplication = (*service.DataService)(nil)
+var (
+	_ QuoteApplication          = (*service.DataService)(nil)
+	_ MarketOverviewApplication = (*service.DataService)(nil)
+	_ SecurityApplication       = (*service.DataService)(nil)
+	_ FundamentalsApplication   = (*service.DataService)(nil)
+	_ IndexApplication          = (*service.DataService)(nil)
+	_ TradingApplication        = (*service.DataService)(nil)
+	_ DiagnosticsApplication    = (*service.DataService)(nil)
+)
 
 type Server struct {
 	apiKey            string
 	defaultAdjustment string
 	maxBars           int
 	requestTimeout    time.Duration
-	app               marketDataApplication
+	quotes            QuoteApplication
+	marketOverview    MarketOverviewApplication
+	securities        SecurityApplication
+	fundamentals      FundamentalsApplication
+	index             IndexApplication
+	trading           TradingApplication
+	diagnostics       DiagnosticsApplication
 	sources           []model.SourceStatus
 	logger            *slog.Logger
 }
@@ -219,12 +209,12 @@ func NewWithCapabilityInterfaces(apiKey, defaultAdjustment string, svc *service.
 			})
 		}
 	}
-	return NewWithApplication(apiKey, defaultAdjustment, svc, sources, maxBars, requestTimeout, logger)
+	return NewWithApplication(apiKey, defaultAdjustment, ApplicationDependencies{Quotes: svc, MarketOverview: svc, Securities: svc, Fundamentals: svc, Index: svc, Trading: svc, Diagnostics: svc}, sources, maxBars, requestTimeout, logger)
 }
 
 // NewWithApplication 使用显式 Application 用例实现和来源能力快照构造 HTTP Adapter。
 // sources 由 Bootstrap 根据已启用的 Provider 能力生成；Server 不再查询 Provider 集合。
-func NewWithApplication(apiKey, defaultAdjustment string, app marketDataApplication, sources []model.SourceStatus, maxBars int, requestTimeout time.Duration, logger *slog.Logger) *Server {
+func NewWithApplication(apiKey, defaultAdjustment string, apps ApplicationDependencies, sources []model.SourceStatus, maxBars int, requestTimeout time.Duration, logger *slog.Logger) *Server {
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -237,7 +227,7 @@ func NewWithApplication(apiKey, defaultAdjustment string, app marketDataApplicat
 	sourceSnapshot := append([]model.SourceStatus(nil), sources...)
 	return &Server{
 		apiKey: apiKey, defaultAdjustment: defaultAdjustment, maxBars: maxBars,
-		requestTimeout: requestTimeout, app: app, sources: sourceSnapshot, logger: logger,
+		requestTimeout: requestTimeout, quotes: apps.Quotes, marketOverview: apps.MarketOverview, securities: apps.Securities, fundamentals: apps.Fundamentals, index: apps.Index, trading: apps.Trading, diagnostics: apps.Diagnostics, sources: sourceSnapshot, logger: logger,
 	}
 }
 func (s *Server) Handler() http.Handler {
@@ -285,14 +275,14 @@ func (s *Server) live(w http.ResponseWriter, r *http.Request) {
 func (s *Server) ready(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
 	defer cancel()
-	if err := s.app.Ready(ctx); err != nil {
+	if err := s.diagnostics.Ready(ctx); err != nil {
 		writeErr(w, 503, "DEPENDENCY_UNAVAILABLE", "market-data dependencies are not ready", requestID(r))
 		return
 	}
 	writeJSON(w, 200, map[string]any{"status": "ready", "service": "market-data"})
 }
 func (s *Server) quote(w http.ResponseWriter, r *http.Request) {
-	q, cacheHit, err := s.app.Quote(r.Context(), r.PathValue("symbol"))
+	q, cacheHit, err := s.quotes.Quote(r.Context(), r.PathValue("symbol"))
 	if err != nil {
 		writeDomainErr(w, err, requestID(r))
 		return
@@ -346,7 +336,7 @@ func (s *Server) bars(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if hasAsOf {
-		bars, warnings, err := s.app.DailyBarsAsOf(r.Context(), symbol, start, end, limit, basis, asOf)
+		bars, warnings, err := s.quotes.DailyBarsAsOf(r.Context(), symbol, start, end, limit, basis, asOf)
 		switch {
 		case errors.Is(err, service.ErrDailyBarsAsOfUnavailable):
 			writeErr(w, http.StatusServiceUnavailable, "PIT_STORAGE_UNAVAILABLE", "daily-bar point-in-time storage is not enabled", requestID(r))
@@ -376,7 +366,7 @@ func (s *Server) bars(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	bars, hit, warnings, err := s.app.DailyBars(r.Context(), symbol, start, end, limit, basis)
+	bars, hit, warnings, err := s.quotes.DailyBars(r.Context(), symbol, start, end, limit, basis)
 	if err != nil {
 		writeDomainErr(w, err, requestID(r))
 		return
@@ -427,7 +417,7 @@ func (s *Server) bundle(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, 400, "VALIDATION_ERROR", err.Error(), requestID(r))
 		return
 	}
-	b, err := s.app.Bundle(r.Context(), r.PathValue("symbol"), lookback, asOf, provided, basis)
+	b, err := s.quotes.Bundle(r.Context(), r.PathValue("symbol"), lookback, asOf, provided, basis)
 	if err != nil {
 		writeDomainErr(w, err, requestID(r))
 		return
@@ -447,14 +437,14 @@ func (s *Server) dataSourceDiagnostics(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"items":         s.app.ProviderDiagnostics(),
+		"items":         s.diagnostics.ProviderDiagnostics(),
 		"scope":         []string{"quote", "daily_bars"},
 		"observed_from": "in_process_circuit_breaker",
 	})
 }
 
 func (s *Server) indexQuotes(w http.ResponseWriter, r *http.Request) {
-	snapshot, cacheHit, err := s.app.IndexQuotes(r.Context())
+	snapshot, cacheHit, err := s.marketOverview.IndexQuotes(r.Context())
 	if err != nil {
 		writeDomainErr(w, err, requestID(r))
 		return
@@ -500,7 +490,7 @@ func (s *Server) sectorRankings(w http.ResponseWriter, r *http.Request) {
 		}
 		limit = parsed
 	}
-	snapshot, cacheHit, err := s.app.SectorRankingsByMetric(r.Context(), category, sortBy, direction, limit)
+	snapshot, cacheHit, err := s.marketOverview.SectorRankingsByMetric(r.Context(), category, sortBy, direction, limit)
 	if err != nil {
 		writeDomainErr(w, err, requestID(r))
 		return
@@ -514,7 +504,7 @@ func (s *Server) sectorRankings(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) marketBreadth(w http.ResponseWriter, r *http.Request) {
-	snapshot, cacheHit, err := s.app.MarketBreadth(r.Context())
+	snapshot, cacheHit, err := s.marketOverview.MarketBreadth(r.Context())
 	if err != nil {
 		writeDomainErr(w, err, requestID(r))
 		return
@@ -552,7 +542,7 @@ func (s *Server) limitPool(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "VALIDATION_ERROR", "type must be up, down or broken", requestID(r))
 		return
 	}
-	snapshot, cacheHit, err := s.app.LimitPool(r.Context(), poolType, date, limit)
+	snapshot, cacheHit, err := s.marketOverview.LimitPool(r.Context(), poolType, date, limit)
 	if err != nil {
 		writeDomainErr(w, err, requestID(r))
 		return
@@ -591,7 +581,7 @@ func (s *Server) dragonTiger(w http.ResponseWriter, r *http.Request) {
 		}
 		pageSize = n
 	}
-	item, hit, err := s.app.DragonTiger(r.Context(), date, page, pageSize)
+	item, hit, err := s.marketOverview.DragonTiger(r.Context(), date, page, pageSize)
 	if err != nil {
 		writeDomainErr(w, err, requestID(r))
 		return
@@ -619,7 +609,7 @@ func (s *Server) searchStocks(w http.ResponseWriter, r *http.Request) {
 		}
 		limit = parsed
 	}
-	snapshot, err := s.app.SearchStocks(r.Context(), query, limit)
+	snapshot, err := s.securities.SearchStocks(r.Context(), query, limit)
 	if err != nil {
 		writeDomainErr(w, err, requestID(r))
 		return
@@ -632,7 +622,7 @@ func (s *Server) searchStocks(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) stockBasic(w http.ResponseWriter, r *http.Request) {
-	item, hit, err := s.app.StockBasic(r.Context(), r.PathValue("symbol"))
+	item, hit, err := s.securities.StockBasic(r.Context(), r.PathValue("symbol"))
 	if err != nil {
 		writeDomainErr(w, err, requestID(r))
 		return
@@ -666,7 +656,7 @@ func (s *Server) stockAnnouncements(w http.ResponseWriter, r *http.Request) {
 		}
 		pageSize = n
 	}
-	snapshot, cacheHit, err := s.app.StockAnnouncements(r.Context(), r.PathValue("symbol"), startDate, endDate, page, pageSize)
+	snapshot, cacheHit, err := s.securities.StockAnnouncements(r.Context(), r.PathValue("symbol"), startDate, endDate, page, pageSize)
 	if err != nil {
 		writeDomainErr(w, err, requestID(r))
 		return
@@ -676,7 +666,7 @@ func (s *Server) stockAnnouncements(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) stockBoards(w http.ResponseWriter, r *http.Request) {
-	item, hit, err := s.app.StockBoards(r.Context(), r.PathValue("symbol"))
+	item, hit, err := s.securities.StockBoards(r.Context(), r.PathValue("symbol"))
 	if err != nil {
 		writeDomainErr(w, err, requestID(r))
 		return
@@ -686,7 +676,7 @@ func (s *Server) stockBoards(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) chipDistribution(w http.ResponseWriter, r *http.Request) {
-	item, hit, err := s.app.ChipDistribution(r.Context(), r.PathValue("symbol"))
+	item, hit, err := s.securities.ChipDistribution(r.Context(), r.PathValue("symbol"))
 	if err != nil {
 		writeDomainErr(w, err, requestID(r))
 		return
@@ -696,7 +686,7 @@ func (s *Server) chipDistribution(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) capitalFlow(w http.ResponseWriter, r *http.Request) {
-	item, hit, err := s.app.CapitalFlow(r.Context(), r.PathValue("symbol"))
+	item, hit, err := s.securities.CapitalFlow(r.Context(), r.PathValue("symbol"))
 	if err != nil {
 		writeDomainErr(w, err, requestID(r))
 		return

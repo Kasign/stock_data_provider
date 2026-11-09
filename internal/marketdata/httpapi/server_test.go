@@ -160,14 +160,10 @@ func (httpMarketCapitalFlowFake) FetchMarketCapitalFlow(_ context.Context, start
 	}, nil
 }
 
-type stubMarketDataApplication struct {
-	marketDataApplication
-}
-
 func TestNewWithApplicationUsesInjectedUseCasesAndCopiesSourceSnapshot(t *testing.T) {
 	sources := []model.SourceStatus{{Name: "eastmoney", Enabled: true, QuoteCapable: true}}
 	server := NewWithApplication(
-		"secret", "forward_adjusted", &stubMarketDataApplication{},
+		"secret", "forward_adjusted", ApplicationDependencies{},
 		sources, 2000, time.Second, slog.New(slog.NewTextHandler(io.Discard, nil)),
 	)
 	sources[0].Name = "mutated-after-construction"

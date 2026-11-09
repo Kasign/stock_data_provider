@@ -36,7 +36,7 @@ func (s *Server) tradingCalendar(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "VALIDATION_ERROR", validationErr, requestID(r))
 		return
 	}
-	snapshot, cacheHit, err := s.svc.TradingCalendar(r.Context(), startDate, endDate)
+	snapshot, cacheHit, err := s.trading.TradingCalendar(r.Context(), startDate, endDate)
 	if err != nil {
 		writeDomainErr(w, err, requestID(r))
 		return

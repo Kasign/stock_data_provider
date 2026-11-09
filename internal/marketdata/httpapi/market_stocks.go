@@ -44,7 +44,7 @@ func (s *Server) marketStocks(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "VALIDATION_ERROR", err.Error(), requestID(r))
 		return
 	}
-	snapshot, err := s.svc.MarketStocks(r.Context(), page, pageSize, includeMA, basis)
+	snapshot, err := s.marketOverview.MarketStocks(r.Context(), page, pageSize, includeMA, basis)
 	if err != nil {
 		writeDomainErr(w, err, requestID(r))
 		return

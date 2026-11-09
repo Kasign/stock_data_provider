@@ -17,7 +17,7 @@ func (s *Server) indexCatalog(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "VALIDATION_ERROR", "tag must be cn_concept, region, tszs, industry or tushare", requestID(r))
 		return
 	}
-	snapshot, cacheHit, err := s.svc.IndexCatalog(r.Context(), tag)
+	snapshot, cacheHit, err := s.index.IndexCatalog(r.Context(), tag)
 	if err != nil {
 		writeDomainErr(w, err, requestID(r))
 		return
@@ -75,7 +75,7 @@ func (s *Server) indexConstituents(w http.ResponseWriter, r *http.Request) {
 			writeErr(w, http.StatusBadRequest, "VALIDATION_ERROR", "as_of queries currently require source=tushare or automatic selection; hithink only supports current constituents", requestID(r))
 			return
 		}
-		snapshot, cacheHit, err := s.svc.IndexConstituentsAsOfFromSource(r.Context(), indexSymbol, asOfDate, source)
+		snapshot, cacheHit, err := s.index.IndexConstituentsAsOfFromSource(r.Context(), indexSymbol, asOfDate, source)
 		if err != nil {
 			writeDomainErr(w, err, requestID(r))
 			return
@@ -84,7 +84,7 @@ func (s *Server) indexConstituents(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, snapshot)
 		return
 	}
-	snapshot, cacheHit, err := s.svc.IndexConstituentsFromSource(r.Context(), indexSymbol, source)
+	snapshot, cacheHit, err := s.index.IndexConstituentsFromSource(r.Context(), indexSymbol, source)
 	if err != nil {
 		writeDomainErr(w, err, requestID(r))
 		return
@@ -129,7 +129,7 @@ func (s *Server) indexDailyBars(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "VALIDATION_ERROR", sourceErr, requestID(r))
 		return
 	}
-	snapshot, cacheHit, err := s.svc.IndexDailyBarsFromSource(r.Context(), r.PathValue("symbol"), start, end, source)
+	snapshot, cacheHit, err := s.index.IndexDailyBarsFromSource(r.Context(), r.PathValue("symbol"), start, end, source)
 	if err != nil {
 		writeDomainErr(w, err, requestID(r))
 		return

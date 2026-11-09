@@ -735,3 +735,12 @@ internal/
 - `NewWithApplication` 对来源状态切片执行防御性复制，并沿用原有 maxBars/requestTimeout/logger 默认值。
 - 新增测试使用仅实现接口形状的 Stub 构造 Server，验证无需具体 DataService/Provider 即可装配 HTTP Adapter，且构造后的来源快照不受调用方切片修改影响。
 - 当前 Bootstrap 仍使用兼容构造器；将其切换到新构造入口并迁移来源状态生成逻辑作为 M2-5 第二阶段，不在本批混入。
+
+
+### 2026-11-09：M2-5 HTTP Handler 按用例域拆分接口
+
+- 将单一 `marketDataApplication` 拆为 Quote、MarketOverview、Security、Fundamentals、Index、Trading、Diagnostics 七组接口；Server 不再持有 `*service.DataService`，也不扩大 Analysis 使用的公共 `app.MarketDataReader`。
+- 将全部 HTTP Handler 中的 `s.svc`/旧 `s.app` 调用迁移到对应接口字段；接口签名与现有 DataService 方法一致，不新增业务方法、路由、DTO 或数据字段。
+- 新增编译期断言，确认当前 DataService 实现七组接口；`ProviderProbeOptions` 定义移至 `model`，`service.ProviderProbeOptions` 保留类型别名，HTTP Adapter 不再为探测请求类型导入 service。
+- `NewWithApplication` 改为接收 `ApplicationDependencies`，按用例域注入，避免再次引入单一巨型接口；旧构造器继续兼容现有 Bootstrap，来源能力快照仍由原构造逻辑提供。
+- 现阶段尚未完成 M2-5 第二阶段：Bootstrap 仍调用兼容构造器，下一步将 Provider 能力来源状态构建迁入 Bootstrap，并让生产装配直接调用 `NewWithApplication`。

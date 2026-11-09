@@ -164,17 +164,8 @@ func recordProviderProbeEvidence(ctx context.Context, symbol, sampleDate string,
 }
 
 // ProviderProbeOptions 控制主动诊断的执行范围和单项超时。
-type ProviderProbeOptions struct {
-	Scope               string
-	Capabilities        []string
-	Checks              []string
-	Markets             []string
-	Symbols             []string
-	DailyBarAdjustments []model.AdjustmentBasis
-	DailyBarStartDate   string
-	DailyBarEndDate     string
-	TimeoutSeconds      int
-}
+// ProviderProbeOptions 保留 service 包兼容名，定义统一归属 Data model。
+type ProviderProbeOptions = model.ProviderProbeOptions
 
 // normalizeDailyBarProbeRange 校验显式历史日 K 探测窗口；日期按 Asia/Shanghai 交易日解释。
 func normalizeDailyBarProbeRange(startText, endText string) (string, string, error) {

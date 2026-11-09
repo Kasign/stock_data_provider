@@ -27,7 +27,7 @@ func (s *Server) marketCapitalFlow(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "VALIDATION_ERROR", "end must not be in the future in Asia/Shanghai", requestID(r))
 		return
 	}
-	result, _, err := s.svc.MarketCapitalFlow(r.Context(), start, end)
+	result, _, err := s.marketOverview.MarketCapitalFlow(r.Context(), start, end)
 	if err != nil {
 		if strings.Contains(err.Error(), "no market-capital-flow provider enabled") {
 			writeErr(w, http.StatusServiceUnavailable, "PROVIDER_UNAVAILABLE", "no market-capital-flow provider is enabled", requestID(r))

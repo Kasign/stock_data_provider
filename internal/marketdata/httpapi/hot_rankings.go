@@ -24,7 +24,7 @@ func (s *Server) hotStocks(w http.ResponseWriter, r *http.Request) {
 		}
 		limit = value
 	}
-	snapshot, cacheHit, err := s.svc.HotStocks(r.Context(), rankingType, limit)
+	snapshot, cacheHit, err := s.marketOverview.HotStocks(r.Context(), rankingType, limit)
 	if err != nil {
 		writeDomainErr(w, err, requestID(r))
 		return

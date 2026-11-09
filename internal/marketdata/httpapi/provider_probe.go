@@ -110,7 +110,7 @@ func (s *Server) dataSourceProbe(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	run, err := s.svc.ProbeProviderCapabilitiesWithOptions(r.Context(), service.ProviderProbeOptions{
+	run, err := s.diagnostics.ProbeProviderCapabilitiesWithOptions(r.Context(), service.ProviderProbeOptions{
 		Scope: request.Scope, Capabilities: request.Capabilities, Checks: request.Checks, Markets: request.Markets, Symbols: request.Symbols, DailyBarAdjustments: request.DailyBarAdjustments, DailyBarStartDate: request.DailyBarStartDate, DailyBarEndDate: request.DailyBarEndDate, TimeoutSeconds: timeoutSeconds,
 	})
 	if err != nil {
@@ -130,7 +130,7 @@ func (s *Server) dataSourceProbeHistory(w http.ResponseWriter, r *http.Request) 
 		}
 		limit = value
 	}
-	history, err := s.svc.ProviderProbeHistory(r.Context(), limit)
+	history, err := s.diagnostics.ProviderProbeHistory(r.Context(), limit)
 	if err != nil {
 		if strings.Contains(err.Error(), "storage is not enabled") {
 			writeErr(w, http.StatusServiceUnavailable, "STORAGE_UNAVAILABLE", "provider-probe history storage is not enabled", requestID(r))

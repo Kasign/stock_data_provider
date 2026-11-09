@@ -24,7 +24,7 @@ func (s *Server) marketSentiment(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	snapshot, err := s.svc.MarketSentiment(r.Context(), date)
+	snapshot, err := s.marketOverview.MarketSentiment(r.Context(), date)
 	if err != nil {
 		writeDomainErr(w, err, requestID(r))
 		return
@@ -54,7 +54,7 @@ func (s *Server) marketSentimentHistory(w http.ResponseWriter, r *http.Request) 
 		writeErr(w, http.StatusBadRequest, "VALIDATION_ERROR", "start/end must be valid dates with an inclusive range no longer than 366 days", requestID(r))
 		return
 	}
-	result, err := s.svc.MarketSentimentHistory(r.Context(), start, end, limit)
+	result, err := s.marketOverview.MarketSentimentHistory(r.Context(), start, end, limit)
 	if err != nil {
 		if strings.Contains(err.Error(), "storage is not enabled") {
 			writeErr(w, http.StatusServiceUnavailable, "STORAGE_UNAVAILABLE", "market-sentiment history storage is not enabled", requestID(r))

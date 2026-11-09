@@ -59,7 +59,7 @@ func (s *Server) batchQuotes(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			defer func() { <-sem }()
-			quote, _, err := s.svc.Quote(r.Context(), symbol)
+			quote, _, err := s.quotes.Quote(r.Context(), symbol)
 			if err != nil || quote == nil {
 				items[index].ErrorCode = "QUOTE_UNAVAILABLE"
 				return

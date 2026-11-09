@@ -37,7 +37,7 @@ func (s *Server) fundamentals(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if hasAsOf {
-		item, err := s.svc.FundamentalsAsOf(r.Context(), r.PathValue("symbol"), year, quarter, asOf)
+		item, err := s.fundamentals.FundamentalsAsOf(r.Context(), r.PathValue("symbol"), year, quarter, asOf)
 		switch {
 		case errors.Is(err, service.ErrFundamentalsAsOfUnavailable):
 			writeErr(w, http.StatusServiceUnavailable, "PIT_STORAGE_UNAVAILABLE", "fundamentals point-in-time storage is not enabled", requestID(r))
@@ -53,7 +53,7 @@ func (s *Server) fundamentals(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, item)
 		return
 	}
-	item, hit, err := s.svc.Fundamentals(r.Context(), r.PathValue("symbol"), year, quarter)
+	item, hit, err := s.fundamentals.Fundamentals(r.Context(), r.PathValue("symbol"), year, quarter)
 	if err != nil {
 		writeDomainErr(w, err, requestID(r))
 		return

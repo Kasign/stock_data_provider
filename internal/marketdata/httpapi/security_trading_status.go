@@ -39,7 +39,7 @@ func (s *Server) securityTradingStatus(w http.ResponseWriter, r *http.Request) {
 			writeErr(w, http.StatusBadRequest, "VALIDATION_ERROR", "as_of must be a valid non-future RFC3339 timestamp", requestID(r))
 			return
 		}
-		snapshot, snapshotErr = s.svc.SecurityTradingStatusAsOf(r.Context(), r.PathValue("symbol"), date, asOf)
+		snapshot, snapshotErr = s.trading.SecurityTradingStatusAsOf(r.Context(), r.PathValue("symbol"), date, asOf)
 		switch {
 		case errors.Is(snapshotErr, service.ErrSecurityTradingStatusAsOfUnavailable):
 			writeErr(w, http.StatusServiceUnavailable, "PIT_STORAGE_UNAVAILABLE", "security-trading-status point-in-time storage is not enabled", requestID(r))
@@ -49,7 +49,7 @@ func (s *Server) securityTradingStatus(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	} else {
-		snapshot, snapshotErr = s.svc.SecurityTradingStatus(r.Context(), r.PathValue("symbol"), date)
+		snapshot, snapshotErr = s.trading.SecurityTradingStatus(r.Context(), r.PathValue("symbol"), date)
 	}
 	if snapshotErr != nil {
 		writeDomainErr(w, snapshotErr, requestID(r))

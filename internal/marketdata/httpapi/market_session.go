@@ -22,7 +22,7 @@ func (s *Server) marketSession(w http.ResponseWriter, r *http.Request) {
 		at = parsed
 	}
 
-	snapshot, err := s.svc.MarketSession(r.Context(), at)
+	snapshot, err := s.marketOverview.MarketSession(r.Context(), at)
 	if err != nil {
 		writeDomainErr(w, err, requestID(r))
 		return
