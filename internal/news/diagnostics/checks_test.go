@@ -265,3 +265,35 @@ func TestSourceEndpointCheckFailsClosedForUnsafeRegistrations(t *testing.T) {
 		})
 	}
 }
+
+
+func TestProviderOutputPolicyCheckReportsFailClosedBoundary(t *testing.T) {
+	report, err := (platformdiag.Runner{}).Run(context.Background(), []platformdiag.Check{
+		ProviderOutputPolicyCheck(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	observation := report.Results[0].Observation
+	if observation.Status != platformdiag.StatusDegraded ||
+		observation.ReasonCode != "news.provider.output_policy_unavailable" ||
+		observation.Attributes["provider_persistence"] != "blocked" ||
+		observation.Attributes["policy_catalog"] != "unavailable" {
+		t.Fatalf("provider policy readiness=%+v", observation)
+	}
+	if observation.SafeMessage == "" || observation.CheckedAt.IsZero() {
+		t.Fatalf("incomplete diagnostic observation=%+v", observation)
+	}
+}
+
+func TestProviderOutputPolicyCheckHonorsCanceledContext(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	report, err := (platformdiag.Runner{}).Run(ctx, []platformdiag.Check{ProviderOutputPolicyCheck()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report.Results[0].Observation.Status != platformdiag.StatusUnavailable {
+		t.Fatalf("status=%s, want unavailable", report.Results[0].Observation.Status)
+	}
+}
