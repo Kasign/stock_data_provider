@@ -14,16 +14,16 @@ import (
 )
 
 const (
-	argon2idVersion = 19
-	maxPasswordBytes = 1024
+	argon2idVersion     = 19
+	maxPasswordBytes    = 1024
 	maxEncodedHashBytes = 512
-	maxArgonMemoryKiB = 256 * 1024
-	maxArgonIterations = 10
+	maxArgonMemoryKiB   = 256 * 1024
+	maxArgonIterations  = 10
 	maxArgonParallelism = 8
-	minArgonSaltBytes = 16
-	maxArgonSaltBytes = 64
-	minArgonKeyBytes = 16
-	maxArgonKeyBytes = 64
+	minArgonSaltBytes   = 16
+	maxArgonSaltBytes   = 64
+	minArgonKeyBytes    = 16
+	maxArgonKeyBytes    = 64
 )
 
 var (
