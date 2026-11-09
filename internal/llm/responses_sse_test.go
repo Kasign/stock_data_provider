@@ -77,7 +77,7 @@ func TestParseResponsesSSESequencePolicies(t *testing.T) {
 			lines = append(lines, "event: response.output_text.delta")
 			sequence := ""
 			if seq != "" {
-				sequence = ",\"sequence_number\":"+seq
+				sequence = ",\"sequence_number\":" + seq
 			}
 			lines = append(lines, "data: {\"type\":\"response.output_text.delta\""+sequence+",\"delta\":\"x\"}", "")
 			_ = i
@@ -96,7 +96,7 @@ func TestParseResponsesSSESequencePolicies(t *testing.T) {
 	}
 	tests := []struct {
 		name string
-		seq []string
+		seq  []string
 		want ModelErrorKind
 	}{
 		{name: "contiguous", seq: []string{"10", "11"}},
@@ -227,15 +227,14 @@ func TestParseResponsesSSEUnknownEventKeepsOnlyAllowlistedMetadata(t *testing.T)
 	}
 }
 
-
 func TestParseResponsesSSETerminalIncompleteAndFailedAreResponseStates(t *testing.T) {
 	request := validSSERequest()
 	clock := sseTestClock{now: request.SystemAsOf.Add(time.Second)}
 	cases := []struct {
-		name string
+		name  string
 		event string
-		body string
-		want ResponseStatus
+		body  string
+		want  ResponseStatus
 	}{
 		{
 			name: "incomplete", event: "response.incomplete",
@@ -250,7 +249,7 @@ func TestParseResponsesSSETerminalIncompleteAndFailedAreResponseStates(t *testin
 	}
 	for _, tt := range cases {
 		t.Run(tt.name, func(t *testing.T) {
-			data := []byte("event: "+tt.event+"\ndata: "+tt.body+"\n\n")
+			data := []byte("event: " + tt.event + "\ndata: " + tt.body + "\n\n")
 			got, err := ParseResponsesSSE(data, request, clock, nil)
 			if err != nil || got.Status != tt.want {
 				t.Fatalf("valid non-completed terminal must be a Response state: status=%s err=%v", got.Status, err)
@@ -285,7 +284,6 @@ func TestParseResponsesSSEEnforcesLineAndEventLimits(t *testing.T) {
 	}
 }
 
-
 func TestParseResponsesSSESupportsCRLFAndMultilineData(t *testing.T) {
 	request := validSSERequest()
 	clock := sseTestClock{now: request.SystemAsOf.Add(time.Second)}
@@ -318,8 +316,6 @@ func TestParseResponsesSSEEnforcesEventCountLimit(t *testing.T) {
 		t.Fatalf("event count above limit must be rejected: response=%+v err=%v", got, err)
 	}
 }
-
-
 
 func TestParseResponsesSSEClassifiesMultilineEventLimitAsResourceLimit(t *testing.T) {
 	request := validSSERequest()
@@ -356,7 +352,6 @@ func TestParseResponsesSSERejectsTotalPayloadAboveLimit(t *testing.T) {
 	}
 }
 
-
 func TestParseResponsesSSERejectsEventAfterTerminal(t *testing.T) {
 	request := validSSERequest()
 	clock := sseTestClock{now: request.SystemAsOf.Add(time.Second)}
@@ -376,7 +371,6 @@ func TestParseResponsesSSERejectsEventAfterTerminal(t *testing.T) {
 		t.Fatalf("event after terminal must reject the stream: response=%+v err=%v", got, err)
 	}
 }
-
 
 func TestParseResponsesSSERejectsTerminalOutputTextMismatch(t *testing.T) {
 	request := validSSERequest()
@@ -398,7 +392,6 @@ func TestParseResponsesSSERejectsTerminalOutputTextMismatch(t *testing.T) {
 		t.Fatalf("terminal output differing from streamed text must be rejected: response=%+v err=%v", got, err)
 	}
 }
-
 
 // TestParseResponsesSSECallbackAdapterErrorRemainsConsumerError 验证消费者错误不会被重新归类为 Parser 错误。
 func TestParseResponsesSSECallbackAdapterErrorRemainsConsumerError(t *testing.T) {
@@ -422,7 +415,6 @@ func TestParseResponsesSSECallbackAdapterErrorRemainsConsumerError(t *testing.T)
 		t.Fatalf("consumer error must preserve an incomplete partial response: %+v", got)
 	}
 }
-
 
 // TestParseResponsesSSERejectsNegativeSequenceNumber 验证首个事件的序号也必须是非负数。
 func TestParseResponsesSSERejectsNegativeSequenceNumber(t *testing.T) {
@@ -469,7 +461,6 @@ func TestParseResponsesSSERejectsResponseIDChange(t *testing.T) {
 	}
 }
 
-
 // TestParseResponsesSSERejectsTerminalTextAfterEmptyTextEvent 验证空文本事件也必须参与终态文本一致性校验。
 func TestParseResponsesSSERejectsTerminalTextAfterEmptyTextEvent(t *testing.T) {
 	request := validSSERequest()
@@ -510,7 +501,6 @@ func TestParseResponsesSSERejectsTerminalTextAfterEmptyTextEvent(t *testing.T) {
 		})
 	}
 }
-
 
 // TestParseResponsesSSEAggregatesMultipleTextPartsByIndex 验证多个输出项的文本按索引聚合且分别校验 done。
 func TestParseResponsesSSEAggregatesMultipleTextPartsByIndex(t *testing.T) {
@@ -563,7 +553,6 @@ func TestParseResponsesSSERejectsTextDeltaAfterDone(t *testing.T) {
 		t.Fatalf("text delta after done must be rejected: response=%+v err=%v", got, err)
 	}
 }
-
 
 // TestParseResponsesSSERejectsFunctionArgumentDeltaAfterDone 验证函数参数完成后不再接受增量。
 func TestParseResponsesSSERejectsFunctionArgumentDeltaAfterDone(t *testing.T) {

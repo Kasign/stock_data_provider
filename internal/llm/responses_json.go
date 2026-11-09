@@ -16,16 +16,16 @@ var (
 )
 
 type responsesRequest struct {
-	Model           string          `json:"model"`
-	Instructions    string          `json:"instructions"`
-	Input           string          `json:"input"`
-	MaxOutputTokens int             `json:"max_output_tokens"`
-	Temperature     *float64        `json:"temperature,omitempty"`
-	TopP            *float64        `json:"top_p,omitempty"`
+	Model           string              `json:"model"`
+	Instructions    string              `json:"instructions"`
+	Input           string              `json:"input"`
+	MaxOutputTokens int                 `json:"max_output_tokens"`
+	Temperature     *float64            `json:"temperature,omitempty"`
+	TopP            *float64            `json:"top_p,omitempty"`
 	Reasoning       *responsesReasoning `json:"reasoning,omitempty"`
-	Text            *responsesText `json:"text,omitempty"`
-	Tools           []responsesTool `json:"tools,omitempty"`
-	ToolChoice      string          `json:"tool_choice"`
+	Text            *responsesText      `json:"text,omitempty"`
+	Tools           []responsesTool     `json:"tools,omitempty"`
+	ToolChoice      string              `json:"tool_choice"`
 }
 
 type responsesReasoning struct {
@@ -100,16 +100,16 @@ func MapResponsesRequestAt(request ModelRequest, now time.Time) ([]byte, error) 
 }
 
 type responsesEnvelope struct {
-	ID               string          `json:"id"`
-	Object           string          `json:"object"`
-	Model            string          `json:"model"`
-	Status           string          `json:"status"`
-	Output           []json.RawMessage `json:"output"`
-	Usage            *responsesUsage `json:"usage"`
+	ID                string            `json:"id"`
+	Object            string            `json:"object"`
+	Model             string            `json:"model"`
+	Status            string            `json:"status"`
+	Output            []json.RawMessage `json:"output"`
+	Usage             *responsesUsage   `json:"usage"`
 	IncompleteDetails *struct {
 		Reason string `json:"reason"`
 	} `json:"incomplete_details"`
-	Error            *responsesError `json:"error"`
+	Error *responsesError `json:"error"`
 }
 
 type responsesError struct {

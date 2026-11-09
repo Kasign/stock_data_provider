@@ -426,7 +426,6 @@ func ParseResponsesSSE(data []byte, request ModelRequest, clock Clock, onEvent f
 	return result, nil
 }
 
-
 func aggregateSSEOutputText(parts map[sseOutputTextKey]sseOutputTextState) string {
 	keys := make([]sseOutputTextKey, 0, len(parts))
 	for key := range parts {
@@ -448,7 +447,7 @@ func aggregateSSEOutputText(parts map[sseOutputTextKey]sseOutputTextState) strin
 func normalizeResponsesSSEEvent(wire responsesSSEWireEvent, request ModelRequest, receivedAt time.Time) (ModelEvent, bool, error) {
 	event := ModelEvent{
 		Type: safeStableCode(wire.Type), SequenceNumber: wire.SequenceNumber,
-		ResponseID: safeProtocolValue(wire.ResponseID, 256),
+		ResponseID:  safeProtocolValue(wire.ResponseID, 256),
 		OutputIndex: wire.OutputIndex, ContentIndex: wire.ContentIndex,
 		ItemID: safeProtocolValue(wire.ItemID, 256), CallID: safeProtocolValue(wire.CallID, 256),
 		Status: safeProtocolValue(wire.Status, 64), ReceivedAt: receivedAt,
@@ -456,7 +455,7 @@ func normalizeResponsesSSEEvent(wire responsesSSEWireEvent, request ModelRequest
 	switch wire.Type {
 	case "response.created":
 		var response struct {
-			ID string `json:"id"`
+			ID    string `json:"id"`
 			Model string `json:"model"`
 		}
 		if len(wire.Response) == 0 || json.Unmarshal(wire.Response, &response) != nil || response.ID == "" {
@@ -567,8 +566,8 @@ func parseSSEUnknownItemMetadata(raw json.RawMessage) (OutputItem, error) {
 		return OutputItem{}, ErrInvalidResponsesSSE
 	}
 	var wire struct {
-		Type string `json:"type"`
-		ID string `json:"id"`
+		Type   string `json:"type"`
+		ID     string `json:"id"`
 		Status string `json:"status"`
 	}
 	if err := json.Unmarshal(raw, &wire); err != nil || safeStableCode(wire.Type) == "" {
@@ -593,7 +592,9 @@ func parseSSEUnknownContentMetadata(raw json.RawMessage) (ContentPart, error) {
 	if len(raw) == 0 || len(raw) > MaxSSEEventBytes || !json.Valid(raw) {
 		return ContentPart{}, ErrInvalidResponsesSSE
 	}
-	var wire struct { Type string `json:"type"` }
+	var wire struct {
+		Type string `json:"type"`
+	}
 	if err := json.Unmarshal(raw, &wire); err != nil || safeStableCode(wire.Type) == "" {
 		return ContentPart{}, ErrInvalidResponsesSSE
 	}
@@ -612,14 +613,14 @@ func parseResponsesStreamOutputItem(raw json.RawMessage) (OutputItem, error) {
 		return OutputItem{}, ErrInvalidResponsesSSE
 	}
 	var wire struct {
-		Type string `json:"type"`
-		ID string `json:"id"`
-		Status string `json:"status"`
-		Content []json.RawMessage `json:"content"`
-		CallID string `json:"call_id"`
-		Name string `json:"name"`
-		Arguments string `json:"arguments"`
-		Refusal string `json:"refusal"`
+		Type      string            `json:"type"`
+		ID        string            `json:"id"`
+		Status    string            `json:"status"`
+		Content   []json.RawMessage `json:"content"`
+		CallID    string            `json:"call_id"`
+		Name      string            `json:"name"`
+		Arguments string            `json:"arguments"`
+		Refusal   string            `json:"refusal"`
 	}
 	if err := json.Unmarshal(raw, &wire); err != nil || safeStableCode(wire.Type) == "" {
 		return OutputItem{}, ErrInvalidResponsesSSE
@@ -731,4 +732,3 @@ func invalidSSEError(code string) error {
 func newSSEAdapterError(info *ModelErrorInfo) *AdapterError {
 	return &AdapterError{Info: info, cause: ErrInvalidResponsesSSE}
 }
-

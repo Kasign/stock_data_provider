@@ -60,7 +60,6 @@ func adapterTestConfig() (ProviderConfig, config.Secret, CapabilityState, Clock)
 	return provider, secret, capabilities, clock
 }
 
-
 func TestResponsesAdapterRejectsCapabilityEvidenceBeyondProviderTTL(t *testing.T) {
 	provider, secret, capabilities, clock := adapterTestConfig()
 	validUntil := capabilities.VerifiedAt.Add(time.Duration(provider.CapabilityTTLMS)*time.Millisecond + time.Nanosecond)
@@ -71,7 +70,6 @@ func TestResponsesAdapterRejectsCapabilityEvidenceBeyondProviderTTL(t *testing.T
 		t.Fatal("adapter must reject capability evidence exceeding configured Provider TTL")
 	}
 }
-
 
 func TestResponsesAdapterRechecksCapabilityExpiryBeforeDispatch(t *testing.T) {
 	provider, secret, capabilities, _ := adapterTestConfig()
@@ -149,8 +147,8 @@ func TestResponsesAdapterMapsHTTPStatusAndRetryAfter(t *testing.T) {
 	doer := doerFunc(func(*http.Request) (*http.Response, error) {
 		return &http.Response{
 			StatusCode: http.StatusTooManyRequests,
-			Header: http.Header{"Retry-After": []string{"30"}},
-			Body: io.NopCloser(strings.NewReader(`{"error":{"type":"rate_limit_error"}}`)),
+			Header:     http.Header{"Retry-After": []string{"30"}},
+			Body:       io.NopCloser(strings.NewReader(`{"error":{"type":"rate_limit_error"}}`)),
 		}, nil
 	})
 	adapter, err := NewResponsesAdapter(provider, secret, doer, capabilities, clock)
@@ -187,7 +185,6 @@ func TestResponsesAdapterDoesNotExposeTransportError(t *testing.T) {
 	}
 }
 
-
 func TestResponsesAdapterUsesEarliestRequestContextAndProviderDeadline(t *testing.T) {
 	provider, secret, capabilities, clock := adapterTestConfig()
 	request := validResponsesRequest()
@@ -205,7 +202,7 @@ func TestResponsesAdapterUsesEarliestRequestContextAndProviderDeadline(t *testin
 		}
 		return &http.Response{
 			StatusCode: http.StatusOK,
-			Header: http.Header{},
+			Header:     http.Header{},
 			Body: io.NopCloser(strings.NewReader(`{
 				"id":"resp-deadline","object":"response","model":"qwen-local","status":"completed","output":[]
 			}`)),
@@ -227,12 +224,16 @@ func TestResponsesAdapterUsesEarliestRequestContextAndProviderDeadline(t *testin
 	adapter, err = NewResponsesAdapter(provider, secret, doerFunc(func(req *http.Request) (*http.Response, error) {
 		var ok bool
 		observedDeadline, ok = req.Context().Deadline()
-		if !ok { t.Fatal("request context must have a deadline") }
+		if !ok {
+			t.Fatal("request context must have a deadline")
+		}
 		return &http.Response{StatusCode: http.StatusOK, Header: http.Header{}, Body: io.NopCloser(strings.NewReader(`{
 			"id":"resp-provider-deadline","object":"response","model":"qwen-local","status":"completed","output":[]
 		}`))}, nil
 	}), capabilities, clock)
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	if _, err := adapter.Generate(context.Background(), request); err != nil {
 		t.Fatalf("Provider timeout should bound request: %v", err)
 	}
@@ -240,7 +241,6 @@ func TestResponsesAdapterUsesEarliestRequestContextAndProviderDeadline(t *testin
 		t.Fatalf("Provider timeout did not win: got %s", observedDeadline)
 	}
 }
-
 
 func TestResponsesAdapterUsesRequestDeadlineWhenItIsEarliest(t *testing.T) {
 	provider, secret, capabilities, clock := adapterTestConfig()
@@ -258,10 +258,14 @@ func TestResponsesAdapterUsesRequestDeadlineWhenItIsEarliest(t *testing.T) {
 		}, nil
 	})
 	adapter, err := NewResponsesAdapter(provider, secret, doer, capabilities, clock)
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	ctx, cancel := context.WithDeadline(context.Background(), clock.Now().Add(5*time.Second))
 	defer cancel()
-	if _, err := adapter.Generate(ctx, request); err != nil { t.Fatal(err) }
+	if _, err := adapter.Generate(ctx, request); err != nil {
+		t.Fatal(err)
+	}
 	if !observed.Equal(request.DeadlineAt) {
 		t.Fatalf("request deadline should win: got %s want %s", observed, request.DeadlineAt)
 	}
@@ -281,9 +285,13 @@ func TestResponsesAdapterUsesInjectedClockForTiming(t *testing.T) {
 		}, nil
 	})
 	adapter, err := NewResponsesAdapter(provider, secret, doer, capabilities, clock)
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	got, err := adapter.Generate(context.Background(), request)
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	if got.DurationMS != 125 {
 		t.Fatalf("duration must use injected clock: got %dms", got.DurationMS)
 	}
@@ -299,7 +307,9 @@ func TestResponsesAdapterDoesNotDispatchWhenEffectiveDeadlineExpired(t *testing.
 		called = true
 		return nil, errors.New("must not dispatch")
 	}), capabilities, clock)
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	ctx, cancel := context.WithDeadline(context.Background(), clock.Now().Add(-time.Second))
 	defer cancel()
 	_, err = adapter.Generate(ctx, request)
@@ -328,7 +338,7 @@ func TestResponsesAdapterRejectsUnconfiguredSecretOrDoer(t *testing.T) {
 
 func TestResponsesAdapterBlocksOptionalFeaturesWithoutCapabilityEvidence(t *testing.T) {
 	cases := []struct {
-		name string
+		name      string
 		configure func(*ModelRequest)
 	}{
 		{
@@ -348,8 +358,8 @@ func TestResponsesAdapterBlocksOptionalFeaturesWithoutCapabilityEvidence(t *test
 			name: "structured output",
 			configure: func(request *ModelRequest) {
 				request.ResponseSchema = &JSONSchemaSpec{
-					Name: "summary",
-					Strict: true,
+					Name:       "summary",
+					Strict:     true,
 					SchemaJSON: json.RawMessage(`{"type":"object","properties":{"summary":{"type":"string"}}}`),
 				}
 			},
@@ -358,7 +368,7 @@ func TestResponsesAdapterBlocksOptionalFeaturesWithoutCapabilityEvidence(t *test
 			name: "function tool calls",
 			configure: func(request *ModelRequest) {
 				request.Tools = []ToolDefinition{{
-					Name: "lookup_quote",
+					Name:           "lookup_quote",
 					ParametersJSON: json.RawMessage(`{"type":"object","properties":{"symbol":{"type":"string"}}}`),
 				}}
 				request.ToolChoice = "auto"

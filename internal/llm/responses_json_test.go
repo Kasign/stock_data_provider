@@ -52,9 +52,9 @@ func TestMapResponsesRequest(t *testing.T) {
 	}
 	var textFormat struct {
 		Format struct {
-			Type string `json:"type"`
-			Name string `json:"name"`
-			Strict bool `json:"strict"`
+			Type   string `json:"type"`
+			Name   string `json:"name"`
+			Strict bool   `json:"strict"`
 		} `json:"format"`
 	}
 	if err := json.Unmarshal(got["text"], &textFormat); err != nil {
@@ -171,8 +171,6 @@ func TestParseResponsesSchemaValidation(t *testing.T) {
 	}
 }
 
-
-
 func TestMapResponsesRequestLocalValidationOnlyDoesNotRequestUpstreamSchemaMode(t *testing.T) {
 	request := validResponsesRequest()
 	request.LocalValidationOnly = true
@@ -236,7 +234,6 @@ func TestParseResponsesUpstreamTotalTokensTakesPrecedence(t *testing.T) {
 	}
 }
 
-
 func TestParseResponsesUsageOverflowIsNotDerived(t *testing.T) {
 	request := validResponsesRequest()
 	body := []byte(`{
@@ -267,11 +264,10 @@ func TestParseResponsesRejectsMalformedEnvelopeAndFunctionCall(t *testing.T) {
 	}
 }
 
-
 func TestParseResponsesStructuredOutputRejectsInvalidJSONAndEmptyOutput(t *testing.T) {
 	request := validResponsesRequest()
 	request.ResponseSchema = &JSONSchemaSpec{
-		Name: "summary",
+		Name:       "summary",
 		SchemaJSON: json.RawMessage(`{"type":"object","required":["summary"],"properties":{"summary":{"type":"string"}}}`),
 	}
 	cases := []struct {
@@ -287,7 +283,7 @@ func TestParseResponsesStructuredOutputRejectsInvalidJSONAndEmptyOutput(t *testi
 				"id": "resp-structured-invalid", "object": "response", "model": "qwen-local",
 				"status": "completed",
 				"output": []any{map[string]any{
-					"type": "message",
+					"type":    "message",
 					"content": []any{map[string]any{"type": "output_text", "text": tt.text}},
 				}},
 			})
@@ -306,7 +302,7 @@ func TestParseResponsesStructuredOutputRejectsInvalidJSONAndEmptyOutput(t *testi
 func TestParseResponsesIncompleteStructuredOutputIsNotValidatedAsCompleted(t *testing.T) {
 	request := validResponsesRequest()
 	request.ResponseSchema = &JSONSchemaSpec{
-		Name: "summary",
+		Name:       "summary",
 		SchemaJSON: json.RawMessage(`{"type":"object","required":["summary"],"properties":{"summary":{"type":"string"}}}`),
 	}
 	body := []byte(`{
