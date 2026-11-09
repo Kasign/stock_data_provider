@@ -69,7 +69,7 @@ Session 记录至少包括 token_digest、owner subject、created_at、last_seen
 - Cookie Max-Age/Expires 不得超过 Session 剩余有效期；滑动续期同步更新 Cookie。
 
 ### 4.3 Redis 故障策略
-复用 `storage.OpenRedis` 返回的既有 go-redis Client；Platform security 不得自行创建第二套 Redis 连接池。现有 Storage 仅提供 Redis 生命周期和 Ping，并未提供 Session Store 或原子限流。
+复用 `storage.OpenRedis` 返回的既有 go-redis Client；Platform security 不得自行创建第二套 Redis 连接池。现有 Storage 提供 Redis Client 生命周期和 Ping；PLAT-016 Session Store 直接复用该 Client，不创建第二套连接池。
 
 Redis 是短期可丢失 Session/限流状态存储，不是 Owner Credential 的事实源。Session Store 读写、Touch、Rotate、Revoke 失败时认证 fail closed；不回退内存 Session、Bearer 或匿名模式。Redis 数据丢失时所有 Session 视为失效，用户重新登录。
 
@@ -156,7 +156,7 @@ Platform 提供 SecurityAuditEvent Schema、字段约束/脱敏和注入式 Audi
 - 现有 `internal/platform/security` 只有 Bearer Authenticator、Router Policy 和测试。
 - 现有 `internal/platform/storage.OpenRedis` 只提供 Redis Client 生命周期，没有 Session Store 或 RateLimiter。
 - go.mod 已引入成熟依赖 `golang.org/x/crypto/argon2`；不自研密码学算法。
-- Argon2id Hash/Verify/NeedsRehash 与 MariaDB CredentialStore 已新增；Hasher 使用显式参数，不提供未经硬件基准确认的生产默认值。Session、Cookie、CSRF、RateLimiter 和 Security Audit 原语仍未实现。
+- Argon2id Hash/Verify/NeedsRehash 与 MariaDB CredentialStore 已新增；Hasher 使用显式参数，不提供未经硬件基准确认的生产默认值。PLAT-016 已新增 Session Token 摘要、Redis SessionStore 原子 Touch/Rotate/Revoke 和 Cookie helper；真实 Redis 集成与 CI 验收中。CSRF、RateLimiter 和 Security Audit 原语仍未实现。
 - 已新增 Platform 自有 `platform.security` Migration 与 `platform_owner_credentials` 单 Owner 表；Server 必须显式注册 Migration，SQLCredentialStore 不自动建表。尚未新增 Redis Key。
 - Argon2id 生产参数需目标硬件基准；Server 需显式注册 Platform 自有 Migration。Redis 原子脚本、限流阈值和 Audit Writer 持久化后端仍需评审。
 - 本文是 Platform 技术设计与实现边界文档；Web 登录路由/权限/交互契约由 Server Owner 跟进，Platform 不代替 Server 修改其业务文档，也不改变项目级契约登记簿状态。
@@ -181,3 +181,14 @@ Platform 提供 SecurityAuditEvent Schema、字段约束/脱敏和注入式 Audi
 6. 不信任未配置的代理头、Host 或客户端身份 Header。
 7. Platform 只交付技术原语，Server 负责流程与入口，Web 负责交互。
 8. 设计完成不等于实现完成；L1/A2/A3 分别验收。
+
+
+### 11.2 PLAT-016 首批实现记录（2026-11-09）
+
+- `NewSessionToken/SessionTokenDigest`：CSPRNG 生成 256-bit token，URL-safe Base64 无填充；Redis 只接收 64 位小写 SHA-256 摘要。
+- `SessionStore` 与 `RedisSessionStore`：构造时注入既有 `*redis.Client`，不创建连接池；Redis Key 只包含摘要，不包含原始 Token。
+- Redis Lua 原子执行 LookupAndTouch 与 Rotate。Touch 校验 idle/absolute 双过期，滑动 idle 期限但不延长 absolute 期限；Rotate 并发竞争时只允许一个旧 Token 成功，旧 Key 同步删除；Revoke 删除当前摘要 Key。
+- Session 记录限制 Owner Subject、Credential Version、时间边界和可选 CSRF digest；Redis 依赖故障返回 Fault，不提供内存/Bearer 降级。
+- Cookie helper 固定 HttpOnly、SameSite=Lax、无 Domain、受限 Path；Secure 由 Server 根据部署 HTTPS 显式设置；清除 Cookie 复用相同作用域。
+- Server 仍负责登录签发、Cookie 解析与续期响应、MariaDB credential_version 对照、路由权限、CSRF/Origin/Host 和可信代理策略。本分支不修改 Server/Web 契约。
+- 当前状态：代码和测试已提交，等待真实 Redis integration、race、gofmt、go test 和 vet 结果；未通过前不标记完成。
