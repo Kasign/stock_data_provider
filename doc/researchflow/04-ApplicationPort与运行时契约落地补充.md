@@ -421,3 +421,13 @@ Application 的 `RunFinalizationCoordinator` 是三种终态聚合路径的路�
 - RetryStage 不单独将 retry_wait 持久化为 ready。领域 `ClaimRetryStage` 中 ready 仅为逻辑中间态；持久化操作直接以一次 Stage version 增量完成 retry_wait -> running，并插入下一 running Attempt。
 - 不重新计算 retry backoff，不修改 system_as_of、deadline、template_ref/version/fingerprint、parameters 或 input_snapshot_refs；重试沿用原 Run 的不可变执行快照。
 - RetryStage 返回 WorkerExecution 表示 Worker 执行/Claim 结果，不代表 Run 终态。终态聚合继续由 Run Finalizer 处理。
+
+
+## 13. GetWorkflowTemplate Application 查询契约（2026-11-09）
+
+- GetWorkflowTemplateService.GetWorkflowTemplate(ctx, ref, version) 只允许精确 Ref + Version 查询；不允许 latest、默认版本、别名回退或缺省版本。
+- Application 复用 CreateRun 已使用的 TemplateRegistry.Get Port。Registry 错误原样保留错误链；返回 Ref/Version 与请求不完全一致时返回 ErrTemplateVersionMismatch。
+- Application 使用 template.Fingerprint 对返回 Template 的执行语义字段重新计算指纹。Registry 若提供非空 Fingerprint，必须与计算值相等；缺省时由 Application 返回计算值。该校验用于发现 Registry 内容漂移，不替代注册阶段的 Template Validate。
+- 返回 Template 的 Stages、Dependencies、RetryableReasonCodes 必须深拷贝，禁止将 Registry 内部可变切片直接暴露给调用方。
+- 查询 Facade 不负责授权。Server 必须在调用前完成认证和按 Template 资源策略授权；公开响应 DTO 不得直接暴露内部 Template 结构或内部错误。
+- Template Registry Adapter 的发布/写入路径必须执行 template.Validate（注入真实 HardRiskGateRegistry）、固化 Fingerprint，并拒绝同一 Ref/Version 的内容覆盖；该真实 Registry Adapter/持久化由模块集成阶段完成。
