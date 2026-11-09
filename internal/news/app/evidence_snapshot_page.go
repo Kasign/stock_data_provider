@@ -21,21 +21,19 @@ type EvidenceSnapshotPage struct {
 // continuation without returning article content or re-running PIT on later pages.
 type ListEvidenceSnapshotPage struct {
 	factory    *CreateEvidenceSnapshotForQuery
-	repository EvidenceSnapshotRepository
 	codec      *EvidenceCursorCodec
 	now        func() time.Time
 }
 
 func NewListEvidenceSnapshotPage(
 	factory *CreateEvidenceSnapshotForQuery,
-	repository EvidenceSnapshotRepository,
 	codec *EvidenceCursorCodec,
 ) (*ListEvidenceSnapshotPage, error) {
-	if factory == nil || repository == nil || codec == nil {
+	if factory == nil || factory.repository == nil || codec == nil {
 		return nil, ErrInvalidEvidenceQuery
 	}
 	return &ListEvidenceSnapshotPage{
-		factory: factory, repository: repository, codec: codec, now: time.Now,
+		factory: factory, codec: codec, now: time.Now,
 	}, nil
 }
 
@@ -43,7 +41,7 @@ func (u *ListEvidenceSnapshotPage) Execute(
 	ctx context.Context,
 	request ListEvidenceRequest,
 ) (EvidenceSnapshotPage, error) {
-	if u == nil || u.factory == nil || u.repository == nil || u.codec == nil ||
+	if u == nil || u.factory == nil || u.factory.repository == nil || u.codec == nil ||
 		u.now == nil || ctx == nil {
 		return EvidenceSnapshotPage{}, ErrInvalidEvidenceQuery
 	}
@@ -65,7 +63,7 @@ func (u *ListEvidenceSnapshotPage) Execute(
 		if err != nil {
 			return EvidenceSnapshotPage{}, err
 		}
-		loaded, err := u.repository.GetEvidenceSnapshot(ctx, decoded.SnapshotRef, request.CallerRef, now)
+		loaded, err := u.factory.repository.GetEvidenceSnapshot(ctx, decoded.SnapshotRef, request.CallerRef, now)
 		if err != nil {
 			return EvidenceSnapshotPage{}, err
 		}

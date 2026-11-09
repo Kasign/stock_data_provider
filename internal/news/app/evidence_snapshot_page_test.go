@@ -65,7 +65,7 @@ func TestListEvidenceSnapshotPageCreatesOnceAndContinuesWithoutPIT(t *testing.T)
 		t.Fatal(err)
 	}
 	codec := newTestEvidenceCursorCodec(t, "active", map[string]string{"active": strings.Repeat("k", 32)})
-	service, err := NewListEvidenceSnapshotPage(factory, store, codec)
+	service, err := NewListEvidenceSnapshotPage(factory, codec)
 	if err != nil {
 		t.Fatal(err)
 	}

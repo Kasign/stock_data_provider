@@ -39,7 +39,7 @@ func (u *CreateEvidenceSnapshotForQuery) Execute(
 	ctx context.Context,
 	request ListEvidenceRequest,
 ) (EvidenceSnapshot, error) {
-	if u == nil || u.query == nil || u.repository == nil || u.newID == nil || ctx == nil {
+	if u == nil || u.query == nil || u.repository == nil || u.newID == nil || u.now == nil || ctx == nil {
 		return EvidenceSnapshot{}, ErrInvalidEvidenceQuery
 	}
 	now := u.now().UTC()
