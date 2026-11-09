@@ -12,9 +12,9 @@ import (
 type Role string
 
 const (
-	RoleAPI Role = "api"
+	RoleAPI    Role = "api"
 	RoleWorker Role = "worker"
-	RoleAll Role = "all"
+	RoleAll    Role = "all"
 )
 
 // LoadRole parses the process role. The default preserves the historical combined runtime.
@@ -28,6 +28,7 @@ func LoadRole(env platformconfig.Env) (Role, error) {
 		return "", fmt.Errorf("SERVER_ROLE 必须是 api、worker 或 all")
 	}
 }
+
 // HTTP contains the HTTP listener and graceful-shutdown settings owned by Server.
 type HTTP struct {
 	Address           string
