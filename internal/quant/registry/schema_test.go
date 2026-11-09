@@ -229,3 +229,30 @@ func TestIndicatorParameterSchemaEnforcesOneOfCodeAndParameters(t *testing.T) {
 		t.Fatal("MACD code with SMA parameters unexpectedly passed oneOf")
 	}
 }
+
+
+func TestCompileJSONSchemaRejectsInvalidUTF8(t *testing.T) {
+	document := append([]byte(`{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","additionalProperties":false,"description":"`), 0xff)
+	document = append(document, []byte(`"}`)...)
+	if _, err := compileJSONSchema(document); err == nil {
+		t.Fatal("schema containing invalid UTF-8 unexpectedly compiled")
+	}
+}
+
+func TestValidateJSONSchemaInstanceRejectsInvalidUTF8(t *testing.T) {
+	schema, err := compileJSONSchema([]byte(`{
+		"$schema":"https://json-schema.org/draft/2020-12/schema",
+		"type":"object",
+		"additionalProperties":false,
+		"required":["value"],
+		"properties":{"value":{"type":"string"}}
+	}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	instance := append([]byte(`{"value":"`), 0xff)
+	instance = append(instance, []byte(`"}`)...)
+	if err := validateJSONSchemaInstance(schema, instance); err == nil {
+		t.Fatal("instance containing invalid UTF-8 unexpectedly passed")
+	}
+}

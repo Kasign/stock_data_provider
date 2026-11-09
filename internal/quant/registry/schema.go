@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"unicode/utf8"
 
 	"github.com/santhosh-tekuri/jsonschema/v5"
 )
@@ -13,7 +14,7 @@ const draft202012SchemaURI = "https://json-schema.org/draft/2020-12/schema"
 
 func compileJSONSchema(document []byte) (*jsonschema.Schema, error) {
 	document = bytes.TrimSpace(document)
-	if len(document) == 0 || !json.Valid(document) {
+	if len(document) == 0 || !utf8.Valid(document) || !json.Valid(document) {
 		return nil, fmt.Errorf("schema document must be valid JSON")
 	}
 
@@ -50,6 +51,9 @@ func compileJSONSchema(document []byte) (*jsonschema.Schema, error) {
 func validateJSONSchemaInstance(schema *jsonschema.Schema, instanceJSON []byte) error {
 	if schema == nil {
 		return fmt.Errorf("compiled schema is required")
+	}
+	if !utf8.Valid(instanceJSON) {
+		return fmt.Errorf("schema instance must be valid UTF-8")
 	}
 	decoder := json.NewDecoder(bytes.NewReader(instanceJSON))
 	decoder.UseNumber()
