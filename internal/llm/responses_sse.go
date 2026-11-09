@@ -56,16 +56,18 @@ type responsesSSEWireEvent struct {
 	Error          *responsesError `json:"error"`
 }
 
-// ParseResponsesSSE parses a complete, bounded SSE byte fixture. It does not
-// own a network connection or perform streaming HTTP reads. A future Stream
-// transport can feed bounded events through the same normalization rules once
-// Platform exposes a controlled streaming transport.
+// ParseResponsesSSE 解析完整、有界的 SSE Fixture；网络流应使用受控 Reader 入口。
 func ParseResponsesSSE(data []byte, request ModelRequest, clock Clock, onEvent func(ModelEvent) error) (ModelResponse, error) {
 	return ParseResponsesSSEReader(bytes.NewReader(data), request, clock, onEvent)
 }
 
-// ParseResponsesSSEReader 从有界 Reader 增量解析 SSE，并将读取错误原样交给传输适配层分类。
+// ParseResponsesSSEReader 使用协议默认上限增量解析 SSE Reader。
 func ParseResponsesSSEReader(reader io.Reader, request ModelRequest, clock Clock, onEvent func(ModelEvent) error) (ModelResponse, error) {
+	return parseResponsesSSEReaderLimit(reader, request, clock, onEvent, MaxPayloadBytes)
+}
+
+// parseResponsesSSEReaderLimit 在 Provider 配置的响应字节上限内增量解析 SSE。
+func parseResponsesSSEReaderLimit(reader io.Reader, request ModelRequest, clock Clock, onEvent func(ModelEvent) error, maxBytes int64) (ModelResponse, error) {
 	if clock == nil {
 		return ModelResponse{}, errors.New("LLM clock is required")
 	}
@@ -101,7 +103,7 @@ func ParseResponsesSSEReader(reader io.Reader, request ModelRequest, clock Clock
 		return fail(adapterError(ErrorInvalidRequest, "llm.sse.nil_reader", false, nil), ErrInvalidResponsesSSE)
 	}
 
-	limitedReader := &io.LimitedReader{R: reader, N: int64(MaxPayloadBytes) + 1}
+	if maxBytes <= 0 || maxBytes > MaxPayloadBytes {\n\t\tmaxBytes = MaxPayloadBytes\n\t}\n\tlimitedReader := &io.LimitedReader{R: reader, N: maxBytes + 1}
 	scanner := bufio.NewScanner(limitedReader)
 	scanner.Buffer(make([]byte, 4096), MaxSSELineBytes)
 	eventName := ""
