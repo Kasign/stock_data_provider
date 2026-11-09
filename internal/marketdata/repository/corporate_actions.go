@@ -219,6 +219,16 @@ func (s *Store) SaveCorporateActions(ctx context.Context, values []model.Corpora
 	if s == nil || s.db == nil {
 		return errors.New("MariaDB corporate-action storage disabled")
 	}
+	if len(values) == 0 {
+		return nil
+	}
+
+	type revision struct {
+		value model.CorporateAction
+		hash  string
+	}
+	revisions := make([]revision, 0, len(values))
+	seen := make(map[string]struct{}, len(values))
 	for _, value := range values {
 		if strings.TrimSpace(value.Symbol) == "" || strings.TrimSpace(value.ProviderEventID) == "" ||
 			strings.TrimSpace(value.EventType) == "" || strings.TrimSpace(value.Source) == "" ||
@@ -233,42 +243,65 @@ func (s *Store) SaveCorporateActions(ctx context.Context, values []model.Corpora
 				return fmt.Errorf("corporate-action event %s has invalid numeric terms", value.ProviderEventID)
 			}
 		}
+		identity := value.Symbol + "|" + value.ProviderEventID + "|" + value.Source
+		if _, exists := seen[identity]; exists {
+			return fmt.Errorf("duplicate corporate-action revision identity: %s", identity)
+		}
+		seen[identity] = struct{}{}
 		hash, err := corporateActionHash(value)
 		if err != nil {
 			return err
 		}
-		stored := value
-		stored.SystemObservedAt = nil
-		metadata, err := json.Marshal(stored)
-		if err != nil {
-			return err
+		revisions = append(revisions, revision{value: value, hash: hash})
+	}
+	// 批次按相同事件身份顺序加锁，降低并发刷新时的死锁概率。
+	sort.Slice(revisions, func(i, j int) bool {
+		left, right := revisions[i].value, revisions[j].value
+		leftKey := left.Symbol + "|" + left.ProviderEventID + "|" + left.Source
+		rightKey := right.Symbol + "|" + right.ProviderEventID + "|" + right.Source
+		return leftKey < rightKey
+	})
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin corporate-action batch revision: %w", err)
+	}
+	committed := false
+	defer func() {
+		if !committed {
+			_ = tx.Rollback()
 		}
-		tx, err := s.db.BeginTx(ctx, nil)
-		if err != nil {
-			return err
-		}
+	}()
+
+	for _, item := range revisions {
+		value := item.value
 		var latest string
 		lookupErr := tx.QueryRowContext(ctx, `SELECT revision_hash FROM market_data_corporate_action_versions
 WHERE symbol=? AND provider_event_id=? AND source=? ORDER BY recorded_at DESC,id DESC LIMIT 1 FOR UPDATE`,
 			value.Symbol, value.ProviderEventID, value.Source).Scan(&latest)
 		if lookupErr != nil && !errors.Is(lookupErr, sql.ErrNoRows) {
-			tx.Rollback()
-			return lookupErr
+			return fmt.Errorf("lock latest corporate-action revision for %s: %w", value.ProviderEventID, lookupErr)
 		}
-		if lookupErr != nil || latest != hash {
-			_, err = tx.ExecContext(ctx, `INSERT INTO market_data_corporate_action_versions
+		if lookupErr != nil || latest != item.hash {
+			stored := value
+			stored.SystemObservedAt = nil
+			metadata, marshalErr := json.Marshal(stored)
+			if marshalErr != nil {
+				return marshalErr
+			}
+			_, insertErr := tx.ExecContext(ctx, `INSERT INTO market_data_corporate_action_versions
 (symbol,provider_event_id,source,ex_date,announcement_date,revision_hash,recorded_at,fetched_at,available_at,quality_status,metadata)
-VALUES (?,?,?,?,?,?,?,?,?,?,?)`, value.Symbol, value.ProviderEventID, value.Source, nullableDate(value.ExDate), nullableDate(value.AnnouncementDate), hash,
+VALUES (?,?,?,?,?,?,?,?,?,?,?)`, value.Symbol, value.ProviderEventID, value.Source, nullableDate(value.ExDate), nullableDate(value.AnnouncementDate), item.hash,
 				time.Now().UTC(), value.FetchedAt.UTC(), nullableTime(value.AvailableAt), string(value.QualityStatus), metadata)
-			if err != nil {
-				tx.Rollback()
-				return fmt.Errorf("insert corporate-action revision: %w", err)
+			if insertErr != nil {
+				return fmt.Errorf("insert corporate-action revision for %s: %w", value.ProviderEventID, insertErr)
 			}
 		}
-		if err := tx.Commit(); err != nil {
-			return err
-		}
 	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit corporate-action batch revision: %w", err)
+	}
+	committed = true
 	return nil
 }
 
