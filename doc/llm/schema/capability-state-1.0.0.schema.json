@@ -73,8 +73,7 @@
     "max_output_tokens_limit",
     "verified_at",
     "valid_until",
-    "verification_method",
-    "values"
+    "verification_method"
   ],
   "additionalProperties": false
 }
