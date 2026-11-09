@@ -15,7 +15,7 @@ func (s *Server) marketCapitalFlow(w http.ResponseWriter, r *http.Request) {
 	}
 	startDate, startErr := time.Parse("2006-01-02", start)
 	endDate, endErr := time.Parse("2006-01-02", end)
-	if startErr != nil || endErr != nil || startDate.Format("2006-01-02") != start || endDate.Format("2006-01-02") != end || endDate.Before(startDate) || endDate.Sub(startDate) > 2000*24*time.Hour {
+	if startErr != nil || endErr != nil || startDate.Format("2006-01-02") != start || endDate.Format("2006-01-02") != end || endDate.Before(startDate) || inclusiveCalendarDays(startDate, endDate) > 2000 {
 		writeErr(w, http.StatusBadRequest, "VALIDATION_ERROR", "start/end must be valid YYYY-MM-DD dates with an inclusive range no longer than 2000 calendar days", requestID(r))
 		return
 	}
