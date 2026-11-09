@@ -232,3 +232,10 @@ Platform 提供 SecurityAuditEvent Schema、字段约束/脱敏和注入式 Audi
 - RateLimiter Lua 脚本检查账号/IP 失败计数 Key 的 TTL；无 TTL 的异常持久计数返回 Redis Fault，保持 fail closed。真实 Redis 集成测试覆盖该异常状态的 Check 与 RecordFailure 拒绝行为。
 - `.github/workflows/platform-test.yml` 的 Redis Race 命令已覆盖 SessionStore 与 LoginRateLimiter；此前仅覆盖 SessionStore 的测试选择遗漏已修复。
 - CI：限流 TTL 防护及双维度 Race [42612388681](https://github.com/Kasign/stock_data_provider/actions/runs/42612388681)，success；单 Owner Session 收紧 [42612564289](https://github.com/Kasign/stock_data_provider/actions/runs/42612564289)，success。
+
+
+### 11.7 PLAT-015 PHC 解析安全 Review 补充（2026-11-09）
+
+- Argon2id PHC 参数解析使用独立 seen 集合检测重复键，不依赖参数值是否为零；m/t/p 的必需值和安全上限仍在调用 Argon2 前校验。
+- Salt 与 Derived Key 使用 RawStdEncoding 解码后必须与重新编码结果逐字节一致，拒绝 decoder 可忽略的换行及非规范编码。
+- 新增重复零值参数和带换行 Base64 回归测试。CI：[42612962271](https://github.com/Kasign/stock_data_provider/actions/runs/42612962271)，success，含 Platform 全量 Race/Vet 与真实 MariaDB/Redis integration/race。
