@@ -148,6 +148,9 @@ func (a *ResponsesAdapter) Generate(ctx context.Context, request ModelRequest) (
 	httpRequest.Header.Set("Content-Type", "application/json")
 	httpRequest.Header.Set("Accept", "application/json")
 	httpRequest.Header.Set("Authorization", "Bearer "+a.apiKey.Value())
+	if err := callCtx.Err(); err != nil {
+		return fail(classifyAdapterTransportError(err, callCtx), err)
+	}
 
 	httpResponse, err := a.doer.Do(httpRequest)
 	if err != nil {
