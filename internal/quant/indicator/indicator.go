@@ -57,7 +57,7 @@ type ReturnParams struct {
 type VolatilityParams struct {
 	Window              int
 	ReturnBasis         string
-	AnnualizationFactor float64
+	AnnualizationFactor int
 }
 
 type RSIParams struct {
@@ -83,7 +83,7 @@ type BollingerParams struct {
 }
 
 func SMA(closes []float64, p SMAParams) (Result, error) {
-	if p.Window < 1 {
+	if !validWindow(p.Window, 1) {
 		return Result{}, ErrInvalidParameter
 	}
 	if err := validatePrices(closes); err != nil {
@@ -106,7 +106,7 @@ func SMA(closes []float64, p SMAParams) (Result, error) {
 }
 
 func EMA(closes []float64, p EMAParams) (Result, error) {
-	if p.Window < 1 || p.SeedMethod != "sma" {
+	if !validWindow(p.Window, 1) || p.SeedMethod != "sma" {
 		return Result{}, ErrInvalidParameter
 	}
 	if err := validatePrices(closes); err != nil {
@@ -132,7 +132,7 @@ func EMA(closes []float64, p EMAParams) (Result, error) {
 }
 
 func Return(closes []float64, p ReturnParams) (Result, error) {
-	if p.Window < 1 || (p.ReturnBasis != "simple" && p.ReturnBasis != "log") {
+	if !validWindow(p.Window, 1) || (p.ReturnBasis != "simple" && p.ReturnBasis != "log") {
 		return Result{}, ErrInvalidParameter
 	}
 	if err := validatePrices(closes); err != nil {
@@ -146,7 +146,7 @@ func Return(closes []float64, p ReturnParams) (Result, error) {
 	end := closes[len(closes)-1]
 	value := end/start - 1
 	if p.ReturnBasis == "log" {
-		value = math.Log(end / start)
+		value = math.Log(end) - math.Log(start)
 	}
 	if !finite(value) {
 		return Result{}, ErrInvalidInput
@@ -155,9 +155,8 @@ func Return(closes []float64, p ReturnParams) (Result, error) {
 }
 
 func Volatility(closes []float64, p VolatilityParams) (Result, error) {
-	if p.Window < 2 ||
+	if !validWindow(p.Window, 2) ||
 		(p.ReturnBasis != "simple" && p.ReturnBasis != "log") ||
-		!finite(p.AnnualizationFactor) ||
 		p.AnnualizationFactor <= 0 {
 		return Result{}, ErrInvalidParameter
 	}
@@ -174,11 +173,11 @@ func Volatility(closes []float64, p VolatilityParams) (Result, error) {
 	start := len(closes) - p.Window - 1
 	returns := make([]float64, p.Window)
 	for i := range returns {
-		ratio := closes[start+i+1] / closes[start+i]
+		previous, current := closes[start+i], closes[start+i+1]
 		if p.ReturnBasis == "simple" {
-			returns[i] = ratio - 1
+			returns[i] = current/previous - 1
 		} else {
-			returns[i] = math.Log(ratio)
+			returns[i] = math.Log(current) - math.Log(previous)
 		}
 	}
 	average := mean(returns)
@@ -187,7 +186,7 @@ func Volatility(closes []float64, p VolatilityParams) (Result, error) {
 		delta := value - average
 		sum += delta * delta
 	}
-	value := math.Sqrt(sum/float64(len(returns)-1)) * math.Sqrt(p.AnnualizationFactor)
+	value := math.Sqrt(sum/float64(len(returns)-1)) * math.Sqrt(float64(p.AnnualizationFactor))
 	if !finite(value) {
 		return Result{}, ErrInvalidInput
 	}
@@ -195,7 +194,7 @@ func Volatility(closes []float64, p VolatilityParams) (Result, error) {
 }
 
 func RSI(closes []float64, p RSIParams) (Result, error) {
-	if p.Window < 1 || p.SmoothingMethod != "wilder" {
+	if !validWindow(p.Window, 1) || p.SmoothingMethod != "wilder" {
 		return Result{}, ErrInvalidParameter
 	}
 	if err := validatePrices(closes); err != nil {
@@ -250,10 +249,10 @@ func RSI(closes []float64, p RSIParams) (Result, error) {
 }
 
 func MACD(closes []float64, p MACDParams) (MACDResult, error) {
-	if p.FastWindow < 1 ||
-		p.SlowWindow < 2 ||
+	if !validWindow(p.FastWindow, 1) ||
+		!validWindow(p.SlowWindow, 2) ||
 		p.FastWindow >= p.SlowWindow ||
-		p.SignalWindow < 1 {
+		!validWindow(p.SignalWindow, 1) {
 		return MACDResult{}, ErrInvalidParameter
 	}
 	if err := validatePrices(closes); err != nil {
@@ -300,7 +299,7 @@ func MACD(closes []float64, p MACDParams) (MACDResult, error) {
 
 // ATR 的 previousClose 是输入窗口前一交易日的收盘价；window 个 TR 需要 window 根 OHLC bar。
 func ATR(highs, lows, closes []float64, previousClose float64, p ATRParams) (Result, error) {
-	if p.Window < 1 || p.SmoothingMethod != "wilder" {
+	if !validWindow(p.Window, 1) || p.SmoothingMethod != "wilder" {
 		return Result{}, ErrInvalidParameter
 	}
 	if len(highs) != len(lows) || len(lows) != len(closes) {
@@ -347,7 +346,7 @@ func ATR(highs, lows, closes []float64, previousClose float64, p ATRParams) (Res
 }
 
 func Bollinger(closes []float64, p BollingerParams) (BandsResult, error) {
-	if p.Window < 2 || !finite(p.Multiplier) || p.Multiplier <= 0 || p.StdDevMethod != "population" {
+	if !validWindow(p.Window, 2) || !finite(p.Multiplier) || p.Multiplier <= 0 || p.StdDevMethod != "population" {
 		return BandsResult{}, ErrInvalidParameter
 	}
 	if err := validatePrices(closes); err != nil {
@@ -380,7 +379,7 @@ func Bollinger(closes []float64, p BollingerParams) (BandsResult, error) {
 }
 
 func emaSeries(values []float64, window int) ([]float64, error) {
-	if window < 1 {
+	if !validWindow(window, 1) {
 		return nil, ErrInvalidParameter
 	}
 	if err := validateFinite(values); err != nil {
@@ -397,6 +396,12 @@ func emaSeries(values []float64, window int) ([]float64, error) {
 		out[i] = alpha*values[i] + (1-alpha)*out[i-1]
 	}
 	return out, nil
+}
+
+const maxIndicatorWindow = 1000
+
+func validWindow(window, minimum int) bool {
+	return window >= minimum && window <= maxIndicatorWindow
 }
 
 func validatePrices(values []float64) error {
