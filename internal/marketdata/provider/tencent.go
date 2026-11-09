@@ -195,25 +195,25 @@ func (p *Tencent) FetchQuote(ctx context.Context, rawSymbol string) (*model.Quot
 	if amount == nil {
 		q.QualityStatus = model.QualityDegraded
 		q.QualityReasons = append(q.QualityReasons, "amount_missing_or_unit_unconfirmed")
-		addProviderQuoteFieldIssue(ctx, "amount", "f35.amount,f37", "missing_or_unverified", "verified CNY turnover amount", "string", quoteIssuePreview(strings.Join([]string{fieldAt(fields, 35), fieldAt(fields, 37)}, " | ")), "Tencent quote has no verified turnover amount", validation.SeverityWarning)
+		addProviderQuoteFieldIssue(ctx, "amount", "f35.amount,f37", "missing_or_unverified", "verified CNY turnover amount", "string", quoteIssuePreview(strings.Join([]string{tencentQuoteFieldAt(fields, 35), tencentQuoteFieldAt(fields, 37)}, " | ")), "Tencent quote has no verified turnover amount", validation.SeverityWarning)
 	} else if amountField == "f37" {
 		q.QualityStatus = model.QualityDegraded
 		q.QualityReasons = append(q.QualityReasons, "lower_precision_turnover_field_used")
-		addProviderQuoteFieldIssue(ctx, "amount", "f37", "lower_precision_source", "high-precision CNY turnover", "string", quoteIssuePreview(fieldAt(fields, 37)), "Tencent quote used the lower-precision legacy turnover field", validation.SeverityWarning)
+		addProviderQuoteFieldIssue(ctx, "amount", "f37", "lower_precision_source", "high-precision CNY turnover", "string", quoteIssuePreview(tencentQuoteFieldAt(fields, 37)), "Tencent quote used the lower-precision legacy turnover field", validation.SeverityWarning)
 	}
 	if !volumeVerified {
 		q.QualityStatus = model.QualityDegraded
 		q.QualityReasons = append(q.QualityReasons, "volume_unit_unverified")
-		addProviderQuoteFieldIssue(ctx, "volume", "f6,f38,f44", "unit_unverified", "volume unit cross-check supported by turnover rate and circulating market value", "string", quoteIssuePreview(strings.Join([]string{fieldAt(fields, 6), fieldAt(fields, 38), fieldAt(fields, 44)}, " | ")), "Tencent quote volume unit could not be verified from turnover metrics", validation.SeverityWarning)
+		addProviderQuoteFieldIssue(ctx, "volume", "f6,f38,f44", "unit_unverified", "volume unit cross-check supported by turnover rate and circulating market value", "string", quoteIssuePreview(strings.Join([]string{tencentQuoteFieldAt(fields, 6), tencentQuoteFieldAt(fields, 38), tencentQuoteFieldAt(fields, 44)}, " | ")), "Tencent quote volume unit could not be verified from turnover metrics", validation.SeverityWarning)
 	} else if strings.HasSuffix(rawVolumeUnit, "_inferred") {
 		q.QualityStatus = model.QualityDegraded
 		q.QualityReasons = append(q.QualityReasons, "volume_unit_inferred_from_turnover_metrics")
-		addProviderQuoteFieldIssue(ctx, "volume", "f6,f38,f44", "unit_inferred", "provider-declared volume unit", "string", quoteIssuePreview(strings.Join([]string{fieldAt(fields, 6), fieldAt(fields, 38), fieldAt(fields, 44)}, " | ")), "Tencent quote volume unit was inferred rather than declared", validation.SeverityWarning)
+		addProviderQuoteFieldIssue(ctx, "volume", "f6,f38,f44", "unit_inferred", "provider-declared volume unit", "string", quoteIssuePreview(strings.Join([]string{tencentQuoteFieldAt(fields, 6), tencentQuoteFieldAt(fields, 38), tencentQuoteFieldAt(fields, 44)}, " | ")), "Tencent quote volume unit was inferred rather than declared", validation.SeverityWarning)
 	}
 	if qtime == nil {
 		q.QualityStatus = model.QualityDegraded
 		q.QualityReasons = append(q.QualityReasons, "provider_timestamp_missing")
-		addProviderQuoteFieldIssue(ctx, "quote_time", "f30", "missing_or_invalid_timestamp", "valid provider snapshot timestamp", "string", quoteIssuePreview(fieldAt(fields, 30)), "Tencent quote provider timestamp is missing, invalid, or outside the accepted time window", validation.SeverityWarning)
+		addProviderQuoteFieldIssue(ctx, "quote_time", "f30", "missing_or_invalid_timestamp", "valid provider snapshot timestamp", "string", quoteIssuePreview(tencentQuoteFieldAt(fields, 30)), "Tencent quote provider timestamp is missing, invalid, or outside the accepted time window", validation.SeverityWarning)
 	}
 	q.QualityReasons = append(q.QualityReasons, "volume_ratio_unsupported_by_tencent_quote_contract")
 	report, err := normalize.ValidateQuoteWithReport(q)
@@ -420,7 +420,7 @@ func (p *Tencent) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endD
 // documented turnover source in the reference adapter and must not be used.
 // Every candidate is checked against price range and normalized volume before
 // being accepted; uncertain values remain missing rather than being rescaled.
-func fieldAt(fields []string, index int) string {
+func tencentQuoteFieldAt(fields []string, index int) string {
 	if index < 0 || index >= len(fields) {
 		return ""
 	}
