@@ -78,18 +78,32 @@ func TestHTTPMiddlewareWrapsChunkedBodyWithMaxBytesReader(t *testing.T) {
 func TestHTTPMiddlewareKeepsHeadLivenessAvailableDuringOverload(t *testing.T) {
 	entered, release := make(chan struct{}), make(chan struct{})
 	handler, err := newHTTPMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/slow" { close(entered); <-release }
+		if r.URL.Path == "/slow" {
+			close(entered)
+			<-release
+		}
 		w.WriteHeader(http.StatusNoContent)
 	}), httpMiddlewareConfig{maxRequestBodyBytes: 1024, maxConcurrentRequests: 1})
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	firstDone := make(chan struct{})
-	go func() { defer close(firstDone); handler.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/slow", nil)) }()
+	go func() {
+		defer close(firstDone)
+		handler.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/slow", nil))
+	}()
 	<-entered
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, httptest.NewRequest(http.MethodHead, "/healthz", nil))
-	if response.Code != http.StatusNoContent { t.Fatalf("HEAD liveness status = %d, want %d", response.Code, http.StatusNoContent) }
+	if response.Code != http.StatusNoContent {
+		t.Fatalf("HEAD liveness status = %d, want %d", response.Code, http.StatusNoContent)
+	}
 	close(release)
-	select { case <-firstDone: case <-time.After(time.Second): t.Fatal("blocked request did not finish") }
+	select {
+	case <-firstDone:
+	case <-time.After(time.Second):
+		t.Fatal("blocked request did not finish")
+	}
 }
 
 func TestHTTPMiddlewareBoundsConcurrentRequestsButKeepsLivenessAvailable(t *testing.T) {

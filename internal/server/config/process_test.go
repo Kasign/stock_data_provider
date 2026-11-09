@@ -65,3 +65,25 @@ func TestLoadProcessRejectsInvalidProcessSettings(t *testing.T) {
 		})
 	}
 }
+
+func TestLoadProcessReturnsStableSnapshot(t *testing.T) {
+	values := map[string]string{
+		"LOG_LEVEL": "debug",
+		"ANALYSIS_WORKERS": "4",
+		"ANALYSIS_MAX_QUEUED": "200",
+		"SERVER_ROLE": "worker",
+	}
+	env := platformconfig.NewEnvWithLookup(func(key string) (string, bool) {
+		value, ok := values[key]
+		return value, ok
+	})
+	cfg, err := LoadProcess(env)
+	if err != nil {
+		t.Fatalf("LoadProcess() error = %v", err)
+	}
+	values["LOG_LEVEL"] = "error"
+	values["ANALYSIS_WORKERS"] = "8"
+	if cfg.LogLevel != "debug" || cfg.AnalysisWorkers != 4 {
+		t.Fatalf("process snapshot changed after source mutation: %+v", cfg)
+	}
+}
