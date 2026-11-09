@@ -186,10 +186,30 @@ func TestValidateCapabilitiesRequiresAdvancedSchemaConstraintEvidence(t *testing
 		t.Fatalf("verified advanced strict schema capability must be accepted: %v", err)
 	}
 
+	request.ResponseSchema.Strict = false
+	delete(capabilities.Values, CapabilityStructuredOutputAdvancedConstraints)
+	if err := request.ValidateCapabilitiesAt(capabilities, clock.Now()); err == nil ||
+		!strings.Contains(err.Error(), string(CapabilityStructuredOutputAdvancedConstraints)) {
+		t.Fatalf("non-strict upstream schemas must also require advanced constraint evidence: %v", err)
+	}
+
+	request.ResponseSchema.Strict = true
 	request.LocalValidationOnly = true
 	delete(capabilities.Values, CapabilityStructuredOutput)
 	delete(capabilities.Values, CapabilityStructuredOutputAdvancedConstraints)
 	if err := request.ValidateCapabilitiesAt(capabilities, clock.Now()); err != nil {
 		t.Fatalf("local_validation_only must not require upstream schema capabilities: %v", err)
+	}
+
+	request.LocalValidationOnly = false
+	request.ResponseSchema = nil
+	request.Tools = []ToolDefinition{{
+		Name: "lookup_quote", Strict: false,
+		ParametersJSON: json.RawMessage(`{"type":"object","properties":{"code":{"type":"string","pattern":"^[A-Z]+$"}},"required":["code"],"additionalProperties":false}`),
+	}}
+	capabilities.Values[CapabilityFunctionToolCalls] = CapabilitySupported
+	if err := request.ValidateCapabilitiesAt(capabilities, clock.Now()); err == nil ||
+		!strings.Contains(err.Error(), string(CapabilityStructuredOutputAdvancedConstraints)) {
+		t.Fatalf("non-strict Function Tool schemas must require advanced constraint evidence: %v", err)
 	}
 }

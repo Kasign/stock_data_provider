@@ -327,10 +327,10 @@ func (r ModelRequest) ValidateCapabilitiesAt(s CapabilityState, now time.Time) e
 			return err
 		}
 	}
-	needsAdvancedSchemaConstraints := r.ResponseSchema != nil && r.ResponseSchema.Strict &&
-		!r.LocalValidationOnly && responsesStrictSchemaUsesAdvancedConstraints(r.ResponseSchema.SchemaJSON)
+	needsAdvancedSchemaConstraints := r.ResponseSchema != nil && !r.LocalValidationOnly &&
+		responsesStrictSchemaUsesAdvancedConstraints(r.ResponseSchema.SchemaJSON)
 	for _, tool := range r.Tools {
-		if tool.Strict && responsesStrictSchemaUsesAdvancedConstraints(tool.ParametersJSON) {
+		if responsesStrictSchemaUsesAdvancedConstraints(tool.ParametersJSON) {
 			needsAdvancedSchemaConstraints = true
 			break
 		}
