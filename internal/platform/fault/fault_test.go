@@ -68,6 +68,22 @@ func TestFaultValidateEnforcesStableMetadata(t *testing.T) {
 			wantErr: true,
 		},
 		{
+			name: "IPv6 dependency",
+			fault: &Fault{
+				Class: ClassUnavailable, Code: "storage.unavailable",
+				SafeMessage: "storage unavailable", Dependency: "2001:4860:4860::8888",
+			},
+			wantErr: true,
+		},
+		{
+			name: "IPv4-mapped IPv6 dependency",
+			fault: &Fault{
+				Class: ClassUnavailable, Code: "storage.unavailable",
+				SafeMessage: "storage unavailable", Dependency: "::ffff:8.8.8.8",
+			},
+			wantErr: true,
+		},
+		{
 			name: "unstable code",
 			fault: &Fault{
 				Class: ClassInternal, Code: "Internal Error",

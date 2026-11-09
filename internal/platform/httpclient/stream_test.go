@@ -12,6 +12,7 @@ import (
 	"net/netip"
 	"strconv"
 	"strings"
+	"syscall"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -339,6 +340,21 @@ func TestOpenStreamPreservesRequestIDAndSafeStats(t *testing.T) {
 	}
 	if strings.Contains(strings.Join([]string{stats.RequestID, stats.Dependency, stats.TerminationReason}, " "), "do-not-log") {
 		t.Fatal("stats leaked URL query")
+	}
+}
+
+func TestStreamOpenFaultRetryabilityIsTechnicalCandidate(t *testing.T) {
+	err := &net.OpError{Op: "dial", Net: "tcp", Err: syscall.ECONNREFUSED}
+	for _, idempotent := range []bool{false, true} {
+		policy := DestinationPolicy{Dependency: "news.fetch", Idempotent: idempotent}
+		got := (&Client{}).streamOpenFault(err, context.Background(), policy)
+		if got.Class != fault.ClassUnavailable || !got.Retryable {
+			t.Fatalf("streamOpenFault(idempotent=%v) = class %q retryable %v, want unavailable/true",
+				idempotent, got.Class, got.Retryable)
+		}
+		if err := got.Validate(); err != nil {
+			t.Fatalf("streamOpenFault returned invalid Fault: %v", err)
+		}
 	}
 }
 

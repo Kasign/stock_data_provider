@@ -1176,7 +1176,7 @@ func TestValidDependencyRequiresStableLowercaseIdentifier(t *testing.T) {
 			t.Errorf("validDependency(%q) = false, want true", value)
 		}
 	}
-	for _, value := range []string{"News.fetch", "news fetch", "https://provider.example", "8.8.8.8"} {
+	for _, value := range []string{"News.fetch", "news fetch", "https://provider.example", "8.8.8.8", "2001:4860:4860::8888", "::ffff:8.8.8.8"} {
 		if validDependency(value) {
 			t.Errorf("validDependency(%q) = true, want false", value)
 		}
