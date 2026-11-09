@@ -24,3 +24,11 @@
 - `NewGoRedis` 原先只检查 interface 是否为 nil；传入 `(*redis.Client)(nil)` 等 typed nil 指针时，interface 本身非 nil，会绕过构造校验并在首次调用时触发空指针风险。
 - 构造入口现在同时检查 nil interface 与 nil 底层指针/接口/映射等 nil-able 动态值；增加 typed nil 回归测试。未改变 Adapter 的资源所有权，仍由 Root 持有并关闭 Redis Client。
 - 本批未运行测试，待 integration 统一验收。
+
+
+### 2026-11-09：TCP 严格校验测试覆盖修正
+
+- 测试提交：`a4886d8d8f8bc0ce0d6a00e6f1bf6be63ad2f853`。
+- 原 TCP 依赖测试同时配置 BaoStock 与 Pytdx，但断言在 BaoStock 首个失败后即结束，未真正覆盖 Pytdx 缺失 DialContext 的分支。
+- 改为两个独立子测试，分别验证 BaoStock 与 Pytdx 缺少 TCP 注入时均 fail-closed；两者均显式开启 DailyBars，避免零能力跳过。
+- 未执行测试，待 integration 统一验收。
