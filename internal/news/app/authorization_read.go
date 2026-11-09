@@ -9,7 +9,7 @@ import (
 )
 
 var (
-	ErrNewsAuthorizationFingerprintInvalid = errors.New("news.authorization.fingerprint_invalid")
+	ErrNewsAuthorizationFingerprintInvalid  = errors.New("news.authorization.fingerprint_invalid")
 	ErrNewsAuthorizationVerifierUnavailable = errors.New("news.authorization.verifier_unavailable")
 	ErrNewsCurrentPolicyUnavailable         = errors.New("news.authorization.current_policy_unavailable")
 	ErrNewsCurrentPolicyDenied              = errors.New("news.authorization.current_policy_denied")
