@@ -266,3 +266,57 @@ func TestParseResponsesRejectsMalformedEnvelopeAndFunctionCall(t *testing.T) {
 		}
 	}
 }
+
+
+func TestParseResponsesStructuredOutputRejectsInvalidJSONAndEmptyOutput(t *testing.T) {
+	request := validResponsesRequest()
+	request.ResponseSchema = &JSONSchemaSpec{
+		Name: "summary",
+		SchemaJSON: json.RawMessage(`{"type":"object","required":["summary"],"properties":{"summary":{"type":"string"}}}`),
+	}
+	cases := []struct {
+		name string
+		text string
+	}{
+		{name: "invalid JSON", text: `{"summary":`},
+		{name: "empty output", text: ""},
+	}
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			body, err := json.Marshal(map[string]any{
+				"id": "resp-structured-invalid", "object": "response", "model": "qwen-local",
+				"status": "completed",
+				"output": []any{map[string]any{
+					"type": "message",
+					"content": []any{map[string]any{"type": "output_text", "text": tt.text}},
+				}},
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			got, err := ParseResponsesResponse(body, request)
+			if !errors.Is(err, ErrResponsesSchemaMismatch) || got.Error == nil ||
+				got.Error.Kind != ErrorSchemaValidationFailed || len(got.StructuredJSON) != 0 {
+				t.Fatalf("invalid structured output must not be accepted: response=%+v err=%v", got, err)
+			}
+		})
+	}
+}
+
+func TestParseResponsesIncompleteStructuredOutputIsNotValidatedAsCompleted(t *testing.T) {
+	request := validResponsesRequest()
+	request.ResponseSchema = &JSONSchemaSpec{
+		Name: "summary",
+		SchemaJSON: json.RawMessage(`{"type":"object","required":["summary"],"properties":{"summary":{"type":"string"}}}`),
+	}
+	body := []byte(`{
+		"id":"resp-structured-incomplete","object":"response","model":"qwen-local",
+		"status":"incomplete","incomplete_details":{"reason":"max_output_tokens"},
+		"output":[{"type":"message","content":[{"type":"output_text","text":"{\"summary\":"}]}]
+	}`)
+	got, err := ParseResponsesResponse(body, request)
+	if err != nil || got.Status != ResponseIncomplete || got.StructuredJSON != nil ||
+		got.IncompleteReason != "max_output_tokens" {
+		t.Fatalf("incomplete output must remain incomplete and must not expose structured JSON: response=%+v err=%v", got, err)
+	}
+}
