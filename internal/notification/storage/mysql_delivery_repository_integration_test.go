@@ -122,6 +122,15 @@ func TestNotificationMariaDBDeliveryRepositoryIntegration(t *testing.T) {
 		t.Fatalf("read claimed consistency snapshot: snapshot=%+v found=%v err=%v", claimedSnapshot, snapshotFound, err)
 	}
 
+	consistencyService, err := application.NewDeliveryConsistencyService(snapshotReader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	consistency, consistencyFound, err := consistencyService.Assess(ctx, delivery.DeliveryID)
+	if err != nil || !consistencyFound || consistency.Status != application.DeliveryConsistencyPass {
+		t.Fatalf("assess claimed delivery snapshot: result=%+v found=%v err=%v", consistency, consistencyFound, err)
+	}
+
 	scanner := application.ExpiredDeliveryLeaseScanner(repository)
 	if expired, err := scanner.ListExpiredLeases(ctx, 10); err != nil || len(expired) != 0 {
 		t.Fatalf("active lease must not be returned by expired scanner: claims=%+v err=%v", expired, err)
