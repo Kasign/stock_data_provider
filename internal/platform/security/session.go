@@ -176,13 +176,13 @@ return updated
 // The stored JSON includes millisecond fields used by Lua. This explicit wire
 // shape avoids Lua date parsing and keeps expiry comparisons atomic.
 type redisSessionRecord struct {
-	Subject string `json:"subject"`
-	CredentialVersion uint64 `json:"credential_version"`
-	CSRFTokenDigest string `json:"csrf_token_digest,omitempty"`
-	CreatedAtMS int64 `json:"created_at_ms"`
-	LastSeenAtMS int64 `json:"last_seen_at_ms"`
-	IdleExpiresAtMS int64 `json:"idle_expires_at_ms"`
-	AbsoluteExpiresAtMS int64 `json:"absolute_expires_at_ms"`
+	Subject             string `json:"subject"`
+	CredentialVersion   uint64 `json:"credential_version"`
+	CSRFTokenDigest     string `json:"csrf_token_digest,omitempty"`
+	CreatedAtMS         int64  `json:"created_at_ms"`
+	LastSeenAtMS        int64  `json:"last_seen_at_ms"`
+	IdleExpiresAtMS     int64  `json:"idle_expires_at_ms"`
+	AbsoluteExpiresAtMS int64  `json:"absolute_expires_at_ms"`
 }
 
 func toRedisSessionRecord(record SessionRecord) redisSessionRecord {

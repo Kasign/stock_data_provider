@@ -22,7 +22,7 @@ type SessionCookieConfig struct {
 // Validate rejects cookie configurations that broaden scope or weaken the
 // browser-side protections required for an authenticated session.
 func (c SessionCookieConfig) Validate() error {
-	if strings.TrimSpace(c.Name) == "" || strings.ContainsAny(c.Name, "=; ,\t\r\n") ||
+	if c.Name == "" || !validCookieName(c.Name) ||
 		c.Path == "" || !strings.HasPrefix(c.Path, "/") ||
 		strings.ContainsAny(c.Path, ";\r\n") ||
 		strings.Contains(c.Path, "..") || c.Path == "/" ||
