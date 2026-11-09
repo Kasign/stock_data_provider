@@ -75,7 +75,10 @@ func validPlanForRepository() domain.DeliveryPlan {
 		TemplateID: "template-1", TemplateVersion: 4,
 		RecipientRef:                "recipient-1",
 		PayloadFingerprint:          strings.Repeat("a", 64),
-		AuthorizationPolicyVersions: []string{"policy-a:v1", "policy-b:v2"},
+		AuthorizationPolicyVersions: []domain.AuthorizationPolicyVersion{
+			{PolicyType: "provider_output", PolicyRef: "provider-1", PolicyVersion: "v1"},
+			{PolicyType: "source", PolicyRef: "source-1", PolicyVersion: "v2"},
+		},
 		DeliveryID:                  "delivery-1", DeliveryIdempotencyKey: "delivery-key-1",
 	}
 }
@@ -127,7 +130,10 @@ func TestDeliveryPlanRepositoryRejectsFingerprintConflict(t *testing.T) {
 	}
 
 	conflict := plan
-	conflict.AuthorizationPolicyVersions = []string{"policy-a:v9"}
+	conflict.AuthorizationPolicyVersions = []domain.AuthorizationPolicyVersion{
+		{PolicyType: "provider_output", PolicyRef: "provider-1", PolicyVersion: "v9"},
+		{PolicyType: "source", PolicyRef: "source-1", PolicyVersion: "v2"},
+	}
 	conflict.PlanFingerprint, _ = conflict.CalculateFingerprint()
 	if _, _, err := repo.CreateOrGet(context.Background(), conflict); err != domain.ErrDeliveryPlanConflict {
 		t.Fatalf("expected plan conflict, got %v", err)

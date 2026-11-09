@@ -3,9 +3,9 @@
 - 目标分支：`feat/notification`
 - 代码目录：`internal/notification/**`
 - 任务前缀：NTF
-- 当前阶段：NTF-001 核心领域实现进行中；EventEnvelope、JCS Fingerprint、Envelope/Payload Schema Registry/Validator、EventReceiver、Inbox replay、Subscription 校验、DeliveryPlan 指纹及 Repository Port 已实现；Envelope 资源上限和严格 JSON 入口校验已补入；真实 Repository Adapter 与快照持久化尚未完成。
-- 当前代码事实：`internal/notification/domain`、`internal/notification/schema` 和 `internal/notification/application` 已建立；InboxRepository、SubscriptionRepository、DeliveryPlanRepository 已定义 Port。当前有 Inbox/Subscription/DeliveryPlan Fake Repository 测试覆盖并发、CAS、不可变版本和失败后无部分写入/重试，没有真实持久化 Adapter。Registry 资源限制必须显式配置，项目建议值尚未冻结，不在模块内设隐式默认值。旧 Python/Web 通知能力不属于 Go Notification Domain。
-- 契约证据：NTF-CTR-001～003 均为 `pending_evidence`。4 份 Schema、6 个 Golden 已校准；完整 CI Run 42201893234 已通过（gofmt、go test、race、vet、go-core、market-data、MariaDB 集成、Docker build）；NTF-CTR-001～003 仍因跨模块/真实 Adapter 证据不足保持 pending_evidence。
+- 当前阶段：NTF-001 Fake/Domain 测试已覆盖并发与失败恢复，真实 Repository Adapter 留待 NTF-006；NTF-002 Renderer 核心已实现；NTF-003 已建立 Channel Domain/Port/精确版本内存 Registry 与 Fake Adapter 测试；NTF-004 已实现 Delivery 状态领域模型与迁移测试，并新增 DeliveryRepository Port/Fake、原子 ClaimDue、状态事件追加、CAS/fencing 和失败无部分写入测试；真实 Dispatcher/Worker、Attempt 与持久化 Adapter 尚未实现。
+- 当前代码事实：`internal/notification/domain`、`schema`、`application` 和 `template` 已建立；ChannelConfigSnapshot、ChannelAdapter/Resolver、RecipientResolver Port 与内存 ChannelRegistry 已建立；InboxRepository、SubscriptionRepository、DeliveryPlanRepository 已定义 Port。当前有 Inbox/Subscription/DeliveryPlan Fake Repository 测试覆盖并发、CAS、不可变版本和失败后无部分写入/重试；DeliveryPlan 授权策略版本按 GOV-CTR-006 完整 tuple 保存并参与指纹，没有真实持久化 Adapter。Event/Template 资源限制均显式配置，项目建议值尚未冻结，不在模块内设隐式默认值。Template Registry 仅提供内存不可变版本和 Renderer 核心，尚无生产模板内容或持久化 Adapter。旧 Python/Web 通知能力不属于 Go Notification Domain。
+- 契约证据：NTF-CTR-001～003 均为 `pending_evidence`。4 份 Schema、6 个 Golden 已校准；上一轮完整 CI Run 42201893234 已通过；前一 HEAD `eed8b817c7872cb1f07106fc901f15024e93e074` 对应 Run 42208589747 的根模块 Test job 在 gofmt 阶段被其他模块的 `internal/research/context/validate.go` 语法错误及 `internal/research/evidence/authorization.go` 非法 NUL 字符阻断；未修改其他模块，Delivery 状态迁移新增测试尚未获得通过证据；本轮新增 DeliveryRepository Port/Fake 与并发测试尚无 CI 运行结果。NTF-CTR-001～003 仍因跨模块/真实 Adapter 证据不足保持 pending_evidence。
 
 Notification 是独立通知业务模块，负责事件接收、Subscription、Template、Channel、Dispatcher、Delivery、Attempt、幂等、重试和投递诊断。不计算业务告警条件，不依赖 Researchflow 内部实现。
 
@@ -19,7 +19,7 @@ Notification 是独立通知业务模块，负责事件接收、Subscription、T
 - [首批 JSON Schema](schema/)
 - [首批 Golden 样例](golden/)
 
-关键边界：recipient_scope 不等于真实发送目标；外部渠道不承诺 exactly-once；发送结果不确定时不得盲目重试。Platform 提供 Secret、HTTP、Storage 和 Worker 基础设施，领域状态与 Repository 归 Notification 所有。
+关键边界：recipient_scope 不等于真实发送目标；外部渠道不承诺 exactly-once；发送结果不确定时不得盲目重试。Platform 提供 Secret、HTTP Client、Storage 等公共技术原语；Notification 自己拥有领域状态、Repository 和有界 Dispatcher。当前 `internal/platform/taskqueue` 耦合旧 Analysis 领域，不作为 Notification Worker 复用；根 Worker/DI 装配由集成方负责。
 
 ## 当前开发状态
 
@@ -28,9 +28,10 @@ Notification 是独立通知业务模块，负责事件接收、Subscription、T
 | 领域设计与字段契约 | 已建立 | 以 01/03 文档为准；发现契约矛盾先修正文档并评审 |
 | Schema/Golden 资产 | 模块 CI 已通过，跨模块证据待补 | 4 Schema、6 Golden；Draft 2020-12 Envelope/Payload Validator 和 Golden 测试已编写；完整 CI Run 42201893234 已通过；NTF-CTR-001～003 仍因跨模块/真实 Adapter 证据不足保持 pending_evidence |
 | Go Notification Domain/Application | 部分实现 | EventEnvelope、JCS Fingerprint、Envelope/Payload Validator、EventReceiver、Subscription/DeliveryPlan 领域校验已实现；真实 Repository Adapter 尚未实现 |
-| Inbox/Subscription/DeliveryPlan | 部分实现 | 双唯一 Inbox Port/Fake、Subscription append-only Repository Port/Fake（版本追加、CAS 并发）与 DeliveryPlan 唯一性 Port/Fake、指纹冲突测试已实现；真实持久化和 fan-out 事务仍待实现 |
-| Template/Channel/Dispatcher/Retry | 未开始 | 无实现；不得以旧 Python 通知能力替代 |
-| Repository/Migration | 未开始 | Platform Storage 已有通用基础能力；Notification 专属模型/迁移尚无 |
+| Inbox/Subscription/DeliveryPlan | 部分实现 | 双唯一 Inbox Port/Fake、Subscription append-only Repository Port/Fake（版本追加、CAS 并发）与 DeliveryPlan 唯一性 Port/Fake、完整授权策略 tuple 指纹冲突测试已实现；真实持久化和 fan-out 事务仍待实现 |
+| Template/Renderer | 部分实现 | 固定版本 Registry、JSON Pointer 标量 allowlist、text/HTML 渲染、HTML 自动转义、CRLF Subject 拒绝和显式资源限制已实现；生产模板内容/持久化尚未实现 |
+| Channel/Dispatcher/Retry | 部分实现 | Channel Domain、精确版本内存 Registry、Adapter/RecipientResolver Port 与 Fake Adapter 测试已建立；Delivery 状态领域模型/迁移测试及 Repository Port/Fake、Claim/CAS 并发测试已编写，尚未获得本轮 CI 通过证据；真实 Repository Adapter、Dispatcher/Worker、Attempt 和 Retry 尚未实现 |
+| Repository/Migration | 未开始 | Platform Storage 已有连接/事务/Migration Runner 原语；Notification 专属 Repository、表模型和迁移尚无 |
 | 三生产方事件接入 | 未验收 | 仅按各生产方契约和真实测试证据逐项开放 |
 | 真实渠道与 L3 集成 | 未开始/不可比较 | 无真实凭据、回执、MariaDB/Worker 集成证据时不得标记通过 |
 
