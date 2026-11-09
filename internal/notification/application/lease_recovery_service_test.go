@@ -151,3 +151,22 @@ func TestLeaseRecoveryServiceRejectsInvalidBatchAndScannerOverflow(t *testing.T)
 		t.Fatalf("scanner over-return must fail closed, got %v", err)
 	}
 }
+
+func TestLeaseRecoveryServiceAppliesMaxElapsedToSafeRetry(t *testing.T) {
+	delivery, lease, _ := recoveryFixture(t)
+	attempt := recoveryAttempt(t, delivery, lease, domain.DeliveryAttemptNotSent, true)
+	delivery.AttemptCount = 1
+	service, claim, now, repository := recoveryServiceFixture(t, []domain.DeliveryAttempt{attempt})
+	claim.Delivery = delivery
+	service.Scanner.(*recoveryScannerFake).claims[0] = claim
+	service.RetryPolicy.MaxElapsed = time.Second
+
+	report, err := service.RecoverExpiredOnce(context.Background(), now, 5)
+	if err != nil || report.Recovered != 1 {
+		t.Fatalf("expired MaxElapsed should be recovered as a terminal state: report=%+v err=%v", report, err)
+	}
+	if repository.next.Status != domain.DeliveryFailed || repository.next.ReasonCode == nil ||
+		*repository.next.ReasonCode != RetryReasonDeadlineExceeded {
+		t.Fatalf("safe-to-retry recovery must still obey MaxElapsed: next=%+v", repository.next)
+	}
+}

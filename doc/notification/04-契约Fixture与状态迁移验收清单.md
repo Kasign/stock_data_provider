@@ -387,3 +387,20 @@ Run `42602399686` 对应 HEAD `8d08cf07a651efcd42a514f3dafd94d659f21f97`。`Test
 - [x] 预算已耗尽时不创建 Attempt、不触发渠道副作用，保留租约恢复路径。
 - [x] 增加 MaxElapsed 收紧渠道 context deadline 的执行服务测试。
 - [ ] 当前提交对应 CI 根模块 Notification 测试实际执行通过；真实 MariaDB L3 仍待 DSN。
+
+
+### 完整执行期限与租约恢复预算统一（2026-11-09）
+
+- `DeliveryExecutionService` 在创建 Attempt 前读取并校验完整历史，随后通过 `RetryPolicy.AttemptDeadline` 将 `PerAttemptTimeout`、首次 Attempt 起算的 `MaxElapsed`、Delivery `DeadlineAt` 合并为最早 deadline；渠道调用使用该绝对 deadline。
+- `DeliveryAttemptRepository.ListByDelivery` 明确要求按 AttemptNo 升序返回完整历史；执行服务检查数量、连续序号、Delivery 身份、FencingToken 单调递增和前序完成时间。
+- `LeaseRecoveryService` 对 `not_sent`/无当前 Attempt 等安全重试路径补齐 MaxElapsed 检查；即使状态评估判定可安全重试，也不能越过首次 Attempt 起算的 MaxElapsed 或 Delivery Deadline。
+- 新增测试覆盖 MaxElapsed 收紧渠道 deadline，以及 MaxElapsed 已耗尽时安全恢复仍必须终止为 failed/deadline_exceeded。
+- 本轮测试代码已加入；CI 尚未提供该提交的 Notification 根模块测试执行结果，MariaDB L3 仍待真实 DSN。
+
+
+## 17. 租约恢复 MaxElapsed 预算
+
+- [x] 安全重试恢复路径同时遵守首次 Attempt 起算的 MaxElapsed 与 Delivery Deadline。
+- [x] 即使 Attempt 为 `not_sent`，也不得在 MaxElapsed 耗尽后安排重试。
+- [x] 增加恢复服务回归测试，断言预算耗尽收敛为 `failed/deadline_exceeded`。
+- [ ] CI 根模块 Notification 测试实际执行通过；真实 MariaDB L3 待 DSN。
