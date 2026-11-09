@@ -18,7 +18,9 @@
 
 ## 2. 行情服务接口映射
 
-当前 `web/src/api.js` 的行情接口封装应与 `internal/marketdata/httpapi/server.go` 的 Adapter 路由注册逐项对照。核心已注册并由 WebUI 封装使用的接口包括：
+当前 `web/src/api.js` 的行情接口封装应与 `internal/marketdata/httpapi/server.go` 的 Adapter 路由注册逐项对照。注意以下事实分层：OpenAPI 声明仅代表协议描述；`Server.routes()` 注册仅代表 Adapter 自身存在 Handler；`InProcessHandler()` 仅提供不带认证中间件的进程内路由。Root Server 是否已装配该 Adapter、对外路由是否可达、由何种认证保护，必须以 Root Server 装配代码和部署实测分别确认。当前 WebUI 分支未取得 Root Server 实际挂载及生产路由可达的验收证据，因此本表的“已注册”不得解读为浏览器生产环境可用。
+
+核心已注册并由 WebUI 封装使用的接口包括：
 
 | 能力 | 方法与路径 | WebUI 封装 | 说明 |
 |---|---|---|---|
@@ -53,6 +55,8 @@ WebUI 使用独立的 `analysisBase` 调用：
 - 健康检查：`GET /healthz`、`GET /readyz`。
 
 这些路径属于 Analysis/Researchflow 业务边界，不属于 Market Data Adapter。目标由 Root Server 注册并统一承载；当前 Server 的 Analysis 路由使用 Owner Bearer，而 WebUI 不发送该凭证，因此浏览器请求预期 401。Web Session/Cookie、CSRF、登录限流与资源授权契约完成前，Analysis API 继续受 Owner Bearer 保护并限制网络入口，不得匿名开放或把 Owner Token 写入浏览器。分析任务字段契约以 `doc/api/分析任务.openapi.yaml` 为准。
+
+当前 WebUI 的“最近任务”仅保存浏览器本地任务引用（有限数量），用于恢复用户最近访问上下文；它不是服务端任务历史列表，也不代表服务端仅存在这些任务。服务端任务历史分页与筛选由 Researchflow Application Facade 提供用例能力，再由 Root Server 注册 HTTP 路由；没有真实 Handler、认证和分页契约前，WebUI 不新增请求或将本地引用标记为服务端历史。
 
 ## 4. 设置中心能力状态
 
