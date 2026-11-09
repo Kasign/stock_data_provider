@@ -99,7 +99,6 @@ func TestBuildSortsSnapshotRefsAndRejectsInvalidInputs(t *testing.T) {
 	}
 }
 
-
 func TestBuildRejectsInvalidUTF8SnapshotReference(t *testing.T) {
 	input := Input{
 		ResultType:        "factor",
@@ -251,7 +250,6 @@ func TestFingerprintPayloadRejectsDuplicateObjectKeys(t *testing.T) {
 		})
 	}
 }
-
 
 // FuzzFingerprintPayloadNoPanic 验证任意字节输入都不会导致 payload 指纹计算 panic；
 // 被接受的输入必须产生稳定的小写 SHA-256 十六进制指纹。
