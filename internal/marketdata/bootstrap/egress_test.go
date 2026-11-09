@@ -253,3 +253,53 @@ func TestValidateEgressDependenciesRequiresOnlyEnabledEastmoneyCapabilityOrigins
 		t.Fatalf("quote-only Eastmoney configuration must not require unused origins: %v", err)
 	}
 }
+
+
+func TestValidateEgressDependenciesCoversSingleExecutorProviders(t *testing.T) {
+	tests := []struct {
+		name string
+		cfg config.Config
+		deps Dependencies
+		wantErr string
+	}{
+		{
+			name: "hithink",
+			cfg: config.Config{ProviderPriority: []string{"hithink"}, ProviderSettings: map[string]config.ProviderSettings{"hithink": {Enabled: true, DailyBars: true}}},
+			wantErr: "hithink HTTP",
+		},
+		{
+			name: "yahoo",
+			cfg: config.Config{ProviderPriority: []string{"yahoo"}, ProviderSettings: map[string]config.ProviderSettings{"yahoo": {Enabled: true, DailyBars: true}}},
+			wantErr: "yahoo HTTP",
+		},
+		{
+			name: "xueqiu",
+			cfg: config.Config{ProviderPriority: []string{"xueqiu"}, ProviderSettings: map[string]config.ProviderSettings{"xueqiu": {Enabled: true, Quote: true}}},
+			wantErr: "xueqiu HTTP",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateEgressDependencies(tt.cfg, tt.deps)
+			if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+				t.Fatalf("expected missing %q dependency, got %v", tt.wantErr, err)
+			}
+		})
+	}
+}
+
+func TestValidateEgressDependenciesRequiresBothTencentDailyBarExecutors(t *testing.T) {
+	cfg := config.Config{
+		ProviderPriority: []string{"tencent"},
+		ProviderSettings: map[string]config.ProviderSettings{"tencent": {Enabled: true, DailyBars: true}},
+	}
+	if err := validateEgressDependencies(cfg, Dependencies{TencentKlineHTTPDoer: egressHTTPDoerStub{}}); err == nil ||
+		!strings.Contains(err.Error(), "tencent daily-bars HTTP endpoints") {
+		t.Fatalf("daily bars must require both adjusted and unadjusted executors, got %v", err)
+	}
+	if err := validateEgressDependencies(cfg, Dependencies{
+		TencentKlineHTTPDoer: egressHTTPDoerStub{}, TencentNoneKlineHTTPDoer: egressHTTPDoerStub{},
+	}); err != nil {
+		t.Fatalf("both daily-bar executors supplied, got %v", err)
+	}
+}
