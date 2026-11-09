@@ -160,7 +160,7 @@ func TestContextGoldenJSONV1(t *testing.T) {
 	if err != nil {
 		t.Fatalf("MarshalIndent() error = %v", err)
 	}
-	encoded = append(encoded, '\\n')
+	encoded = append(encoded, '\n')
 
 	golden, err := os.ReadFile("testdata/context_v1.golden.json")
 	if err != nil {
