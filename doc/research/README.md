@@ -168,3 +168,10 @@ R1/R2/R3/R5 当前实现 Context、Evidence、Event、Claim/Hypothesis 领域结
 - Golden：`internal/research/context/testdata/context_v1.golden.json`。
 - 一致性测试：`internal/research/context/schema_test.go`；覆盖 JSON 可解析、DTO JSON Tag 与 Schema properties/required 双向一致及 schema_version。
 - 完整 Schema Validator CI、跨模块 Contract Test 和跨字段约束仍未完成；当前新增测试尚未执行。
+
+
+## Context v1 Schema / Domain 一致性补充
+
+- v1 当前只接受 `schema_version=1.0.0`，常量定义于 `context.SchemaVersion`。
+- Context 与 Section 的四个时间字段要求零时区偏移；JSON Schema 进一步要求 RFC3339 date-time 字符串以 `Z` 结尾。
+- 新增版本门禁、非 UTC 时间测试和 Schema 时间字段约束测试；均尚未执行。
