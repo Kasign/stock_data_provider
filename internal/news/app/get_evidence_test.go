@@ -144,6 +144,57 @@ func TestGetEvidenceAppliesAuthorizationAndContentLevelBeforeReturningDTO(t *tes
 	}
 }
 
+func TestGetEvidenceSuppressesCandidateMetadataAfterRetentionDeadline(t *testing.T) {
+	now := time.Date(2026, 11, 9, 12, 0, 0, 0, time.UTC)
+	request, pit, binding := validGetEvidenceFixture(now)
+	expired := now.Add(-time.Minute)
+	pit.Observation.RetentionUntil = expired
+	pit.Observation.Candidate = domain.Candidate{
+		PublishedAtRaw: "raw-source-time",
+		FetchedAt: func() *time.Time { value := now.Add(-2 * time.Hour); return &value }(),
+	}
+	authorizer := &getEvidenceAuthorizerStub{}
+	usecase, err := NewGetEvidence(
+		getEvidencePITRepositoryStub{record: pit},
+		getEvidenceAuthorizationSnapshotStub{binding: binding},
+		authorizer,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	usecase.now = func() time.Time { return now }
+	result, err := usecase.Execute(context.Background(), request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.PublishedAtRaw != nil || result.FetchedAt != nil || result.NormalizedAt != nil {
+		t.Fatalf("expired candidate metadata was disclosed: %+v", result)
+	}
+	if result.Title == nil || result.ContentExcerpt == nil || *result.ContentExcerpt != "source summary" {
+		t.Fatalf("separately authorized version evidence should remain available: %+v", result)
+	}
+}
+
+func TestGetEvidenceRejectsPITRepositoryRecordOutsideRequestedBoundary(t *testing.T) {
+	now := time.Date(2026, 11, 9, 12, 0, 0, 0, time.UTC)
+	request, pit, binding := validGetEvidenceFixture(now)
+	pit.Version.ObservedAt = request.SystemAsOf.Add(time.Second)
+	authorizer := &getEvidenceAuthorizerStub{}
+	usecase, err := NewGetEvidence(
+		getEvidencePITRepositoryStub{record: pit},
+		getEvidenceAuthorizationSnapshotStub{binding: binding},
+		authorizer,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	usecase.now = func() time.Time { return now }
+	result, err := usecase.Execute(context.Background(), request)
+	if !errors.Is(err, ErrInvalidEvidenceQuery) || authorizer.calls != 0 || result.Title != nil {
+		t.Fatalf("PIT boundary violation was not rejected: result=%+v err=%v calls=%d", result, err, authorizer.calls)
+	}
+}
+
 func TestGetEvidenceReturnsNoDTOWhenCurrentAuthorizationDenies(t *testing.T) {
 	now := time.Date(2026, 11, 9, 12, 0, 0, 0, time.UTC)
 	request, pit, binding := validGetEvidenceFixture(now)
