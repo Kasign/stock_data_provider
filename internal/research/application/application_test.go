@@ -627,3 +627,18 @@ func TestGetEvidenceRejectsRepositoryIdentityMismatch(t *testing.T) {
 		t.Fatal("Evidence repository identity mismatch must be rejected")
 	}
 }
+
+func TestCloneStringsAlwaysReturnsNonNilIndependentSlice(t *testing.T) {
+	for _, input := range [][]string{nil, {}} {
+		got := cloneStrings(input)
+		if got == nil {
+			t.Fatal("cloneStrings must normalize nil and empty input to a non-nil empty slice")
+		}
+	}
+	input := []string{"evidence:1"}
+	got := cloneStrings(input)
+	got[0] = "changed"
+	if input[0] != "evidence:1" {
+		t.Fatal("cloneStrings must return an independent copy")
+	}
+}
