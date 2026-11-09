@@ -197,6 +197,24 @@ DeliveryStateEvent 的 version/from/to/changed_at 来自每次状态迁移；evi
 
 当前只完成领域模型与纯函数迁移测试；DeliveryAttempt、Repository CAS、租约/fencing 和 Dispatcher 仍属于 NTF-004 后续切片，不能据此宣称 Worker 或投递已实现。
 
+
+### 4.2 DeliveryRepository Port 与 Fake 的第一阶段实现
+
+当前 `internal/notification/application/ports.go` 定义 DeliveryRepository；`delivery_repository_test.go` 提供内存 Fake。接口调用场景仅限 Notification Dispatcher：创建初始 Delivery、读取状态、领取到期任务，以及持有有效租约的 Worker 完成状态迁移。
+
+| 接口/字段 | 来源 | 语义与边界 |
+|---|---|---|
+| Create(delivery) | 已校验 DeliveryPlan + 显式 max_attempts/deadline_at + Clock | 只接受 queued、version=1、attempt_count=0 的初始快照；DeliveryID 唯一 |
+| Get(delivery_id) | Delivery 稳定 ID | 返回深拷贝快照；不存在时 found=false，不伪造空记录 |
+| ClaimDue(worker_id, now, lease_expires_at) | Dispatcher Worker 身份 + 注入 Clock + 显式租约时长 | 原子选择 queued 或到期 retry_wait；同时迁移 sending、追加状态事件、分配单调 fencing_token；不增加 attempt_count，因为尚未证明已发起渠道调用 |
+| DeliveryLease.worker_id | Worker 注册/启动时分配的稳定引用 | 不透明 Worker 标识，不包含主机敏感信息 |
+| DeliveryLease.fencing_token | Repository 对每个 Delivery 单调递增计数 | 旧 token 永久失效；不可由调用方指定或回退 |
+| DeliveryLease.expires_at | Claim 时的 UTC now + 显式 lease duration | 仅用于当前租约有效性判定；不得晚于 Delivery.deadline_at；过期后不允许旧 Worker 写入 |
+| UpdateWithLease(expected_version, fencing_token, next, event, now) | Delivery.Transition 输出 + 当前 Worker Lease | 同一原子操作内校验版本/token/租约、更新快照并追加事件；终止本次 sending 后释放租约 |
+| ErrDeliveryVersionConflict / ErrDeliveryLeaseConflict | Repository CAS 判定 | 分别表示快照版本竞争和租约/token 失效；调用方不得将冲突当作可覆盖更新 |
+
+当前 Fake 只证明模块内并发/CAS 语义，不代表 MariaDB 锁、事务、跨进程 fencing 或崩溃恢复已验收。ClaimDue 将租约截止限制为 min(调用方请求截止, Delivery.deadline_at)，不回收过期 sending；后续 Dispatcher Recovery 必须先判断请求是否发出，能证明未发出才可安全重排，结果不明必须进入 unknown。
+
 ## 5. Attempt、租约与并发恢复
 
 DeliveryAttempt 是追加式执行历史，至少记录：

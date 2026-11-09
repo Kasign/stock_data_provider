@@ -4,7 +4,8 @@
 - 对应契约：NTF-CTR-001～003（历史别名 Platform CONTRACT-009/010）；状态以项目级契约目录为准
 - 状态：4 份 Draft 2020-12 Schema 与 6 个代表性 Golden 已校准；Go Draft 2020-12 Envelope/Payload Validator、Golden、非法 Payload、Inbox Fake 幂等/并发、Subscription 与 DeliveryPlan Repository Port/Fake 测试已写入；新增严格 JSON、资源上限边界、DeliveryPlan 写入前双重校验、Subscription Repository append-only/CAS 并发及 Inbox/Subscription/DeliveryPlan 失败注入恢复测试；NTF-002 增加 Template Registry/Renderer 测试及 Subject C0/DEL/C1 控制字符回归（根模块 Test job 被跨模块 Research 源码错误阻断）；NTF-003 增加 Channel Domain/Port/内存 Registry/Fake Adapter 测试；DeliveryPlan 授权策略 tuple 指纹与 GOV-CTR-006 对齐（同一 CI 阻断）；完整 CI Run 42201893234 已通过，覆盖 gofmt/go test/race/vet、go-core、market-data、MariaDB 集成和 Docker build；NTF-CTR-001～003 仍为 pending_evidence；不要求个人 Owner 签字
 - 日期：2026-11-09
-- NTF-004 增量：已新增 DeliveryRecord/DeliveryStateEvent 领域实现与纯迁移测试；覆盖 queued→sending、sending→skipped 证明要求、unknown 对账证据、retry_wait 截止时间、failed 人工重试审计和 UTC/nullable 字段一致性。当前分支最新全仓 CI 仍在其他模块 gofmt 阶段失败，新增测试尚未获得通过证据。
+- NTF-004 第一批增量：已新增 DeliveryRecord/DeliveryStateEvent 领域实现与纯迁移测试；覆盖 queued→sending、sending→skipped 证明要求、unknown 对账证据、retry_wait 截止时间、failed 人工重试审计和 UTC/nullable 字段一致性。
+- NTF-004 第二批增量：新增 DeliveryRepository Port 与内存 Fake；覆盖 32 Worker 并发领取仅一个赢家、领取时原子追加 sending 事件、租约过期拒绝、fencing token 不匹配拒绝、版本 CAS 冲突、retry_wait 未到期不领取/到期可领取、旧 Worker 迟到写入拒绝、Create/Update 失败均无部分写入，以及租约截止不越过 Delivery deadline。以上为新增测试设计和代码事实，尚未取得本轮 CI 通过证据。
 - 说明：以下均为合成数据与测试场景，不代表已有实现或真实渠道能力。
 
 ## 1. Fixture 原则
@@ -72,6 +73,8 @@
 | delivery_invalid_transition | 非法状态迁移 | CAS/领域错误；原状态不变 |
 
 ## 5. 幂等与并发 Fixture
+
+NTF-004 Delivery Repository Fake 还覆盖：多 Worker 原子领取、单活租约、过期租约和错误 fencing token 拒绝、版本 CAS 冲突、状态事件与快照同步追加、retry_wait 到期调度和旧 Worker 迟到回写拒绝。该 Fake 不证明真实数据库锁或跨进程崩溃恢复。
 
 NTF-004 Delivery 领域迁移测试已覆盖：状态版本递增且原对象不变、sending 未证明未发送不得转 skipped、sent 终态不可回退、unknown 无 evidence_ref 不得收敛、retry_wait 时间必须早于 deadline、failed 人工重试必须携带授权结果和审计上下文、非 UTC 时间与不匹配的 next_attempt_at 必须拒绝。
 
