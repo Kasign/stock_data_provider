@@ -875,3 +875,46 @@ func TestQueryQuarterlyFinancialDataRejectsInvalidInputsBeforeNetworkIO(t *testi
 		t.Fatal("wire-format symbol should be required")
 	}
 }
+
+
+func TestParseQuarterlyFinancialPageRetainsMetricCellTypeIssue(t *testing.T) {
+	spec := quarterlyFinancialSpecs["profitability"]
+	row := make([]any, len(spec.fields))
+	for index, field := range spec.fields {
+		switch field {
+		case "code":
+			row[index] = "sh.600519"
+		case "pubDate":
+			row[index] = "2026-08-29"
+		case "statDate":
+			row[index] = "2026-06-30"
+		default:
+			row[index] = "1.25"
+		}
+		if field == "roeAvg" {
+			row[index] = map[string]any{"unexpected": "object"}
+		}
+	}
+	raw, err := json.Marshal(map[string]any{"record": [][]any{row}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := strings.Join([]string{
+		"0", "success", spec.method, "anonymous", "1", strconv.Itoa(quarterlyFinancialPageSize),
+		string(raw), "sh.600519", "2026", "2", strings.Join(spec.fields, ","),
+	}, messageSplit)
+	record, err := parseQuarterlyFinancialPage(body, spec, "anonymous", "sh.600519", 2026, 2)
+	if err != nil {
+		t.Fatalf("invalid metric cell should be retained as a field issue: %v", err)
+	}
+	if record == nil || len(record.FieldIssues) != 1 {
+		t.Fatalf("expected one field issue, got %+v", record)
+	}
+	issue := record.FieldIssues[0]
+	if issue.SourceField != "roeAvg" || issue.Code != "invalid_field" || issue.ActualType != "object" || issue.RowIndex != 0 {
+		t.Fatalf("unexpected financial field issue: %+v", issue)
+	}
+	if record.Fields["roeAvg"] != "" {
+		t.Fatalf("invalid object cell must not be converted into a metric: %+v", record.Fields)
+	}
+}
