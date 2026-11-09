@@ -24,21 +24,38 @@ const tushareVersion = "tushare-pro-daily-v2-adjustment-factor"
 // Tushare 通过 HTTP JSON 接口读取 A 股日 K。需要用户自己的 Token，默认关闭。
 // daily 接口返回原始 OHLC；前/后复权通过 adj_factor 明确换算，因子不完整时拒绝结果。
 type Tushare struct {
-	client   *http.Client
+	client   HTTPDoer
 	endpoint string
 	token    string
 	rateMu   sync.Mutex
 	lastCall time.Time
 }
 
+// HTTPDoer 是 Provider 调用外部 HTTP 服务所需的最小接口。
+//
+// Root Server 可注入 Platform BoundDoer，使 Tushare 请求固定绑定目标 Host/Port、
+// DNS/IP 校验、重定向策略和响应体上限；独立兼容部署继续使用标准 http.Client。
+type HTTPDoer interface {
+	Do(*http.Request) (*http.Response, error)
+}
+
 func NewTushareConfigured(timeout time.Duration, endpoint, token string) *Tushare {
+	return NewTushareConfiguredWithHTTPDoer(timeout, endpoint, token, nil)
+}
+
+// NewTushareConfiguredWithHTTPDoer 创建 Tushare Provider。
+// doer 非 nil 时由调用方负责其超时、目标策略和生命周期；Provider 不关闭共享执行器。
+func NewTushareConfiguredWithHTTPDoer(timeout time.Duration, endpoint, token string, doer HTTPDoer) *Tushare {
 	if timeout <= 0 {
 		timeout = 12 * time.Second
 	}
 	if strings.TrimSpace(endpoint) == "" {
 		endpoint = "https://api.tushare.pro"
 	}
-	return &Tushare{client: &http.Client{Timeout: timeout}, endpoint: strings.TrimSpace(endpoint), token: strings.TrimSpace(token)}
+	if doer == nil {
+		doer = &http.Client{Timeout: timeout}
+	}
+	return &Tushare{client: doer, endpoint: strings.TrimSpace(endpoint), token: strings.TrimSpace(token)}
 }
 
 func (p *Tushare) Name() string { return "tushare" }

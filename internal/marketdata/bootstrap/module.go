@@ -24,9 +24,10 @@ import (
 
 // Dependencies 是由调用方创建并拥有的基础设施依赖；Module 不负责关闭 Store/Cache。
 type Dependencies struct {
-	Store  *repository.Store // 调用方创建并持有；Module 不负责关闭。
-	Cache  cache.Cache       // 调用方创建并持有；Module 不负责关闭。
-	Logger *slog.Logger      // 模块日志依赖；nil 时使用 slog.Default。
+	Store           *repository.Store // 调用方创建并持有；Module 不负责关闭。
+	Cache           cache.Cache       // 调用方创建并持有；Module 不负责关闭。
+	Logger          *slog.Logger      // 模块日志依赖；nil 时使用 slog.Default。
+	TushareHTTPDoer provider.HTTPDoer // Root 注入的受控 Tushare HTTP 执行器；Module 不拥有、不关闭。
 }
 
 // Diagnostics 暴露模块就绪状态和 Provider 诊断，不暴露具体 DataService。
@@ -94,7 +95,7 @@ func New(cfg config.Config, deps Dependencies) (*Module, error) {
 		retentionStore: deps.Store,
 		retention:      cfg.QuoteRetention,
 	}
-	if err := module.build(cfg); err != nil {
+	if err := module.build(cfg, deps.TushareHTTPDoer); err != nil {
 		_ = module.Close(context.Background())
 		return nil, err
 	}
@@ -154,7 +155,7 @@ func (m *Module) ProviderSummary() ProviderSummary {
 	}
 }
 
-func (m *Module) build(cfg config.Config) error {
+func (m *Module) build(cfg config.Config, tushareHTTPDoer provider.HTTPDoer) error {
 	store := m.store
 	c := m.cache
 	logger := m.logger
@@ -175,7 +176,7 @@ func (m *Module) build(cfg config.Config) error {
 		"sina":      provider.NewSinaConfigured(cfg.ProviderTimeout, cfg.SinaQuoteURL, cfg.SinaKlineURL),
 		"yahoo":     provider.NewYahooFinance(cfg.ProviderTimeout, cfg.YahooChartURL),
 		"netease":   provider.NewNeteaseConfigured(cfg.ProviderTimeout, cfg.NeteaseQuoteURL, cfg.NeteaseHistoryURL),
-		"tushare":   provider.NewTushareConfigured(cfg.ProviderTimeout, cfg.TushareAPIURL, cfg.TushareToken),
+		"tushare":   provider.NewTushareConfiguredWithHTTPDoer(cfg.ProviderTimeout, cfg.TushareAPIURL, cfg.TushareToken, tushareHTTPDoer),
 		"tickflow":  provider.NewTickFlowConfigured(cfg.ProviderTimeout, cfg.TickFlowAPIURL, cfg.TickFlowFreeAPIURL, cfg.TickFlowAPIKey),
 		"pytdx":     provider.NewPytdx(cfg.ProviderTimeout, cfg.PytdxHosts...),
 		"xueqiu":    provider.NewXueqiuConfigured(cfg.ProviderTimeout, cfg.XueqiuBaseURL, cfg.XueqiuCookie),
