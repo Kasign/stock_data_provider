@@ -573,7 +573,7 @@ func TestResponsesAdapterStreamDoesNotDispatchWithCancelledContext(t *testing.T)
 	_, err = adapter.Stream(ctx, request, nil)
 	var adapterErr *AdapterError
 	if !errors.As(err, &adapterErr) || adapterErr.Info.Kind != ErrorCancelled ||
-		adapterErr.Info.StableCode != "llm.http.cancelled" || called {
+		adapterErr.Info.StableCode != "llm.http.cancelled" || got.Status != ResponseFailed || called {
 		t.Fatalf("cancelled context must stop before transport dispatch: err=%v called=%v", err, called)
 	}
 }
