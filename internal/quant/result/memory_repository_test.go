@@ -120,3 +120,22 @@ func TestMemoryRepositoryConcurrentIdempotentSave(t *testing.T) {
 		t.Fatalf("stored record count = %d, want 1", len(repository.records))
 	}
 }
+
+
+func TestMemoryRepositoryCanonicalPayloadIsIdempotent(t *testing.T) {
+	repository := NewMemoryRepository()
+	first := validRecord(t, `{"metric_code":"momentum_20d","value":0.12}`)
+	equivalent := validRecord(t, `{ "value": 0.12, "metric_code": "momentum_20d" }`)
+	if first.Manifest.ResultID != equivalent.Manifest.ResultID {
+		t.Fatal("canonical-equivalent payloads produced different result identities")
+	}
+	if err := repository.Save(context.Background(), first); err != nil {
+		t.Fatalf("first Save() error = %v", err)
+	}
+	if err := repository.Save(context.Background(), equivalent); err != nil {
+		t.Fatalf("Save() of canonical-equivalent payload error = %v", err)
+	}
+	if len(repository.records) != 1 {
+		t.Fatalf("stored record count = %d, want 1 for canonical-equivalent payloads", len(repository.records))
+	}
+}
