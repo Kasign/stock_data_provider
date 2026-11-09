@@ -98,6 +98,14 @@ func (r *MySQLRunRepository) ExpireRunDeadline(
 			return false, version, fmt.Errorf("scan Researchflow deadline Stage: %w", err)
 		}
 		item.status = domain.StageStatus(stageStatus)
+		switch item.status {
+		case domain.StagePending, domain.StageReady, domain.StageRunning, domain.StageRetryWait,
+			domain.StageSucceeded, domain.StageDegraded, domain.StageSkipped, domain.StageFailed,
+			domain.StageTimedOut, domain.StageCancelled, domain.StageBlocked:
+		default:
+			_ = stageRows.Close()
+			return false, version, fmt.Errorf("Researchflow Stage %q has an unknown status %q", item.ref, item.status)
+		}
 		if err := json.Unmarshal([]byte(reasonJSON), &item.reasons); err != nil {
 			_ = stageRows.Close()
 			return false, version, fmt.Errorf("decode Researchflow deadline Stage reasons: %w", err)
@@ -140,6 +148,10 @@ func (r *MySQLRunRepository) ExpireRunDeadline(
 			return false, version, fmt.Errorf("scan Researchflow deadline Attempt: %w", err)
 		}
 		item.status = domain.AttemptStatus(attemptStatus)
+		if item.status != domain.AttemptRunning && !item.status.Terminal() {
+			_ = attemptRows.Close()
+			return false, version, fmt.Errorf("Researchflow Attempt %q has an unknown status %q", item.ref, item.status)
+		}
 		if item.status == domain.AttemptRunning {
 			stage, ok := stageByRef[item.stageRef]
 			if !ok || stage.status != domain.StageRunning || uint32(stage.attemptNo) != item.attemptNo {
