@@ -180,13 +180,8 @@ func Volatility(closes []float64, p VolatilityParams) (Result, error) {
 			returns[i] = math.Log(current) - math.Log(previous)
 		}
 	}
-	average := mean(returns)
-	var sum float64
-	for _, value := range returns {
-		delta := value - average
-		sum += delta * delta
-	}
-	value := math.Sqrt(sum/float64(len(returns)-1)) * math.Sqrt(float64(p.AnnualizationFactor))
+	standardDeviation := sampleStdDev(returns, true)
+	value := standardDeviation * math.Sqrt(float64(p.AnnualizationFactor))
 	if !finite(value) {
 		return Result{}, ErrInvalidInput
 	}
@@ -402,6 +397,34 @@ const maxIndicatorWindow = 1000
 
 func validWindow(window, minimum int) bool {
 	return window >= minimum && window <= maxIndicatorWindow
+}
+
+// sampleStdDev 先按最大绝对值缩放，再计算样本/总体标准差，避免平方和或均值中间溢出。
+func sampleStdDev(values []float64, sample bool) float64 {
+	var scale float64
+	for _, value := range values {
+		if absolute := math.Abs(value); absolute > scale {
+			scale = absolute
+		}
+	}
+	if scale == 0 {
+		return 0
+	}
+
+	var average float64
+	for _, value := range values {
+		average += (value / scale) / float64(len(values))
+	}
+	var sum float64
+	for _, value := range values {
+		delta := value/scale - average
+		sum += delta * delta
+	}
+	denominator := len(values)
+	if sample {
+		denominator--
+	}
+	return scale * math.Sqrt(sum/float64(denominator))
 }
 
 func validatePrices(values []float64) error {
