@@ -235,7 +235,6 @@ func (r *MySQLRunRepository) FinalizeRun(ctx context.Context, input RunFinalizat
 	return true, nil
 }
 
-
 // FinalizeDeadlineRun adapts the Application deadline-finalization record to
 // the existing atomic Run + ResultSummary + Outbox transaction.
 func (r *MySQLRunRepository) FinalizeDeadlineRun(ctx context.Context, record application.DeadlineFinalizationRecord) (bool, error) {
