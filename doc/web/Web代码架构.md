@@ -44,28 +44,53 @@ WebUI 当前采用原生 HTML/CSS/JavaScript ES Modules，构建和测试以 Nod
 
 ## 3. 当前依赖关系
 
-当前主要装配方向：
+当前基线（分支 HEAD `54d80936f04497cee0e9416265be58c451f8689e`）共有 51 个 `web/src/*.js` 文件，其中 `app.js` 直接静态 import 47 个模块；另外 3 个模块仅作为传递依赖被领域模块引用：`research-meta.js`、`task-event-filter.js`、`watchlist-sort.js`。
+
+应用组合根的直接依赖按职责分组如下：
+
+| 分组 | `app.js` 直接依赖 |
+|---|---|
+| 应用基础与设置 | `theme.js`、`preferences.js`、`settings-draft.js`、`settings-navigation.js`、`settings-preferences-view.js`、`section-navigation.js` |
+| API 与数据领域 | `api.js`、`format.js`、`health-check.js`、`data-center.js`、`existing-api-tools.js` |
+| 市场与个股 | `chart.js`、`market-overview.js`、`market-stocks.js`、`market-activity.js`、`stock-research.js`、`stock-search-view.js` |
+| 自选股 | `watchlist.js`、`watchlist-batch.js`、`watchlist-groups.js`、`watchlist-item-view.js`、`watchlist-list-view-model.js`、`watchlist-import-preview.js`、`watchlist-import-preview-view.js`、`watchlist-tracking-view-model.js` |
+| Task / Run 与报告 | `task-workflow.js`、`task-poll-lifecycle.js`、`task-event-list-view-model.js`、`task-event-format.js`、`task-event-view.js`、`task-event-node.js`、`task-flow-summary-view-model.js`、`task-result-view.js`、`recent-tasks.js`、`recent-task-view.js`、`report.js` |
+| 选股 | `screening-state.js`、`screening-draft.js`、`screening-export.js`、`screening-result-view.js` |
+| 告警、通知与问股 | `alert-state.js`、`local-alert-drafts.js`、`notification-state.js`、`notification-preferences.js`、`chat-state.js` |
+| 研究归档 | `research-notes.js`、`research-reports.js` |
+
+领域模块之间的静态依赖边（不含 `app.js` 的装配边）：
 
 ```text
-HTML / CSS
-    |
-    v
-app.js  (启动、全局 state、页面协调)
-    |---- api.js
-    |---- format.js / chart.js / theme.js / preferences.js
-    |---- market-* / stock-research.js
-    |---- watchlist-* / recent-tasks.js
-    |---- task-workflow.js / task-event-* / report.js
-    |---- screening-* / alert-* / notification-* / chat-state.js
-    |---- data-center.js / health-check.js / existing-api-tools.js
-    |---- research-notes.js / research-reports.js
+api.js                         -> format.js
+format.js                      -> preferences.js
+data-center.js                 -> api.js, health-check.js, format.js
+existing-api-tools.js           -> api.js, format.js
+market-activity.js              -> api.js, format.js
+market-overview.js              -> api.js, format.js
+market-stocks.js                -> api.js, format.js
+research-meta.js                -> format.js
+research-reports.js             -> report.js
+stock-research.js               -> api.js, format.js, research-meta.js
+settings-draft.js               -> format.js
+settings-preferences-view.js    -> preferences.js
+task-event-list-view-model.js   -> task-event-filter.js, task-event-format.js
+task-event-node.js              -> task-event-format.js
+task-event-view.js              -> task-event-format.js
+watchlist-batch.js              -> watchlist.js, format.js, watchlist-groups.js
+watchlist-groups.js             -> format.js
+watchlist-import-preview.js     -> format.js, watchlist.js
+watchlist-list-view-model.js    -> format.js, watchlist-groups.js, watchlist-sort.js
+watchlist-sort.js               -> format.js
 ```
 
-约束与已知边界：
-- `app.js` 是当前主要组合根，直接 import 多个领域模块；这不意味着领域模块可以反向依赖 app。
-- 已观察到 `api.js` 依赖 `format.js`，`data-center.js` 依赖 `api.js`、`health-check.js` 和 `format.js`，`format.js` 当前依赖 `preferences.js`。
-- 上述是已核实的部分依赖，不作为“全量无循环依赖”的结论。完整 import/export 依赖图和循环扫描列入架构治理验收。
-- 新增模块必须使用相对路径显式 import/export；禁止动态拼接模块路径和隐式全局注册。
+本轮对 51 个源文件的静态相对 `import` 声明完成依赖扫描，确认 **0 个静态 import 循环**；未发现领域模块反向 import `app.js`。这项结果只描述当前静态 import 图，不代表函数调用图、运行时动态加载或状态读写依赖不存在。
+
+架构约束：
+- `app.js` 是组合根，领域模块不得反向 import app。
+- 领域模块可依赖 API/格式化/纯领域工具；基础工具不得依赖页面模块。
+- `research-meta.js`、`task-event-filter.js`、`watchlist-sort.js` 是传递依赖，不应为了凑齐入口依赖列表而强行由 app 直接 import。
+- 新增模块必须使用相对路径显式 import/export；新增依赖前先判断是否会形成领域反向依赖或循环。
 
 ## 4. 状态所有权与生命周期
 
@@ -146,9 +171,9 @@ app.js  (启动、全局 state、页面协调)
 
 ## 8. 当前迁移基线
 
-- 当前入口 `app.js` 为 6,256 行；仍承担全局 state、页面装配、多个领域页面协调和任务/行情请求生命周期。
-- 当前已存在三十余个 ES Module；任务展示已逐步抽离为 `task-event-format.js`、`task-event-view.js`、`task-event-node.js`，最近任务列表 DOM 由 `recent-task-view.js` 构建。
-- 当前基线提交为 `b6781f2cae649390f658d43de74e74307fd40710`。WebUI Checks #41810819659 与 Chromium Browser Smoke #41810819828 均通过。
+- 当前入口 `app.js` 为 5,547 行，包含 70 个 `state` 对象字段；直接静态 import 47 个模块。
+- `web/src/` 共 51 个 JavaScript 文件；其中 `research-meta.js`、`task-event-filter.js`、`watchlist-sort.js` 是传递依赖。
+- 当前架构盘点基线为 `54d80936f04497cee0e9416265be58c451f8689e`；当前功能代码验收基线为 `b6da380eb29955c321b1d42b4e7dfb843f162fe9`。
 - JSR-2C2 只迁移单个任务事件节点 DOM 构建；列表排序、筛选、选中/展开状态、事件监听、详情联动和异步请求生命周期仍由 `app.js` 管理，不将 `renderTaskEvents` 整体搬迁。
 - 下一阶段转向自选股领域。现有 `watchlist.js`、`watchlist-groups.js`、`watchlist-sort.js`、`watchlist-batch.js` 已分别承担本地 CRUD/校验/存储、分组、排序和批量事务；页面 DOM、交互、批量行情请求生命周期和跨页协调仍集中在 `app.js`。迁移前必须建立完整调用图和 state 读写映射。
 
@@ -712,3 +737,16 @@ API client 会把调用方 AbortSignal 与超时 controller 合并，再传给 f
 - 不把 app.js 的全局 helper 直接搬入新建 common.js；先确认输入/输出、DOM 访问和错误语义均可显式化。
 - 模块依赖方向保持 app.js 装配领域模块；领域模块不反向 import app.js。
 - JSR-6M 为只读审查，无运行时代码变更。JSR 主线收尾，后续开发重心转入 UIR-2。
+
+### 12.33 JSR-7 当前模块静态依赖图与循环审计（2026-11-09）
+
+审查基线：`54d80936f04497cee0e9416265be58c451f8689e`。
+
+- `web/src/` 共 51 个 JavaScript 文件；`app.js` 为 5,547 行，直接静态 import 47 个模块。
+- 3 个模块仅作为传递依赖：`research-meta.js`、`task-event-filter.js`、`watchlist-sort.js`。
+- 已补齐 app 组合根直接依赖分组和领域模块间静态依赖边。
+- 静态相对 import 图未发现循环；未发现领域模块反向 import app。
+- 当前 `app.js` 的 state 对象为 70 个字段，旧架构快照中“69 个字段”的统计已更新。
+- 本轮只读扫描，没有代码迁移，也没有新增公共工具层、全局 Store、EventBus 或 Controller。
+
+审计边界：本轮覆盖静态相对 import 声明，不将其扩大解释为完整函数调用图、运行时动态加载图或 state 读写图。后续若要迁移某个业务闭包，再针对该闭包补齐调用点、state 读写和请求生命周期映射；当前不为了补齐一份庞大的全局清单而启动无明确收益的拆分。
