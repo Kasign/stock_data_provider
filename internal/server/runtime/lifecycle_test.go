@@ -261,3 +261,56 @@ func TestLifecycleConcurrentStopWaitsForStartupToFinish(t *testing.T) {
 		t.Fatalf("events = %v, want %v", events, want)
 	}
 }
+
+
+type contextAwareBlockingStartComponent struct {
+	name    string
+	entered chan struct{}
+	stopped chan struct{}
+}
+
+func (c contextAwareBlockingStartComponent) Name() string { return c.name }
+func (c contextAwareBlockingStartComponent) Start(ctx context.Context) error {
+	close(c.entered)
+	<-ctx.Done()
+	return ctx.Err()
+}
+func (c contextAwareBlockingStartComponent) Stop(context.Context) error {
+	close(c.stopped)
+	return nil
+}
+
+func TestLifecycleCancellationReleasesBlockingStartBeforeRollback(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	component := contextAwareBlockingStartComponent{
+		name: "context-aware-start", entered: make(chan struct{}), stopped: make(chan struct{}),
+	}
+	lifecycle := NewLifecycle()
+	if err := lifecycle.Register(component); err != nil {
+		t.Fatal(err)
+	}
+
+	startDone := make(chan error, 1)
+	go func() { startDone <- lifecycle.Start(ctx) }()
+	select {
+	case <-component.entered:
+	case <-time.After(time.Second):
+		t.Fatal("component Start did not begin")
+	}
+	cancel()
+
+	select {
+	case err := <-startDone:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("Start() error = %v, want context.Canceled", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Start did not return after its process context was canceled")
+	}
+	select {
+	case <-component.stopped:
+	case <-time.After(time.Second):
+		t.Fatal("started component was not stopped after cancellation")
+	}
+}

@@ -1146,3 +1146,11 @@ Lifecycle.Stop 原实现通过 stopped 标记保证重复调用幂等，但并�
 - Namespaces 只读查询不触发冻结；执行快照仍复用 Register 时已深拷贝的不可变 Migration 定义。
 - 新增执行快照后拒绝注册测试，以及并发 Register/执行快照竞争测试。
 - 本批次尚未运行 Go 单测或 race；当前仅完成代码与回归测试修改，等待统一验证。
+
+
+### 12.38 SRV-006 Lifecycle Context 取消释放阻塞启动回归测试（2026-11-09）
+
+- 补充覆盖组件 Start 正在等待进程 Context、收到取消后返回 context.Canceled 的场景。
+- 验证 Lifecycle.Start 在取消后完成回滚，并调用该组件 Stop；避免仅凭并发 Stop 测试推断生产组件遵守 Context 约定。
+- 该测试明确 Lifecycle 的启动契约：组件 Start 必须响应传入 Context；Lifecycle 不会在 Start 仍运行时越过启动屏障并提前关闭共享资源。
+- 尚未运行当前 SHA 的 Go 测试和 Race；真实容器宽限期仍属于部署验收。
