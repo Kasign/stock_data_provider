@@ -499,6 +499,7 @@ flowchart TD
 - 新增 `MIGRATION_ENABLED`（默认 false）和 `MIGRATION_TIMEOUT`（默认 2m，最大 30m）。只有显式启用时才在模块运行组件构造前执行；执行失败立即中止 Bootstrap，不启动 Worker/HTTP。
 - 旧 Analysis 四表仍由兼容 Store 的既有迁移开关管理，本次不将其混入模块 namespace。
 - 本轮已增加 Registry 校验/不可变快照/重复 namespace/确定性排序测试、Bootstrap 三模块注册测试和配置测试。GitHub API 已写入代码；本轮尚未执行 gofmt/go test 或真实 MariaDB 集成，不能标记测试通过。
+- 相关代码提交：`b345d6c`（Registry）、`d210ac8`/`f8774a7`（Registry 测试）、`9c6866e`/`00910e6`（执行配置与测试）、`1ee90ee`/`7a1270d`（Bootstrap 接入与测试）、`6e0cf82`（依赖导入格式整理）。
 
 ## 13. 分支与协作规则
 
