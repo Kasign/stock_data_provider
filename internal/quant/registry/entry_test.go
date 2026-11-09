@@ -373,3 +373,35 @@ func assertOriginalEntryNestedValues(t *testing.T, entry Entry) {
 		t.Errorf("QualityPolicy.UnavailableConditions = %v, want [missing_input]", entry.QualityPolicy.UnavailableConditions)
 	}
 }
+
+func TestRegistryValidateMetricAppliesRegisteredSemantics(t *testing.T) {
+	registry := New()
+	entry := validEntry("sample_metric", "1.0.0")
+	entry.Precision.MaxFractionDigits = 4
+	entry.Range = NumericRange{Minimum: json.RawMessage("-0.5"), Maximum: json.RawMessage("0.5")}
+	entry.QualityPolicy.QualityStates = []string{"valid", "degraded"}
+	if err := registry.Register(entry, true); err != nil {
+		t.Fatal(err)
+	}
+
+	valid := json.RawMessage(`{"metric_code":"sample_metric","value":0.25,"unit":"ratio","period":"20d","system_as_of":"2026-11-09T01:00:00Z","quality_status":"valid","metric_status":"available","calculation_version":"1.0.0","lower_bound":null,"upper_bound":null}`)
+	if err := registry.ValidateMetric("sample_metric", "1.0.0", "1.0.0", valid); err != nil {
+		t.Fatalf("valid metric rejected: %v", err)
+	}
+	badCases := []json.RawMessage{
+		json.RawMessage(`{"metric_code":"sample_metric","value":0.25,"unit":"wrong","period":"20d","system_as_of":"2026-11-09T01:00:00Z","quality_status":"valid","metric_status":"available","calculation_version":"1.0.0","lower_bound":null,"upper_bound":null}`),
+		json.RawMessage(`{"metric_code":"sample_metric","value":0.123456,"unit":"ratio","period":"20d","system_as_of":"2026-11-09T01:00:00Z","quality_status":"valid","metric_status":"available","calculation_version":"1.0.0","lower_bound":null,"upper_bound":null}`),
+		json.RawMessage(`{"metric_code":"sample_metric","value":0.75,"unit":"ratio","period":"20d","system_as_of":"2026-11-09T01:00:00Z","quality_status":"valid","metric_status":"available","calculation_version":"1.0.0","lower_bound":null,"upper_bound":null}`),
+		json.RawMessage(`{"metric_code":"sample_metric","value":0.25,"unit":"ratio","period":"20d","system_as_of":"2026-11-09T01:00:00Z","quality_status":"unknown","metric_status":"available","calculation_version":"1.0.0","lower_bound":null,"upper_bound":null}`),
+		json.RawMessage(`{"metric_code":"sample_metric","value":0.25,"unit":"ratio","period":"20d","system_as_of":"2026-11-09T01:00:00Z","quality_status":"valid","metric_status":"available","calculation_version":"2.0.0","lower_bound":null,"upper_bound":null}`),
+		json.RawMessage(`{"metric_code":"sample_metric","value":0.25,"unit":"ratio","period":"20d","system_as_of":"2026-11-09T01:00:00Z","quality_status":"valid","metric_status":"available","calculation_version":"1.0.0","lower_bound":0.3,"upper_bound":0.4}`),
+	}
+	for i, raw := range badCases {
+		if err := registry.ValidateMetric("sample_metric", "1.0.0", "1.0.0", raw); err == nil {
+			t.Errorf("invalid metric case %d accepted", i)
+		}
+	}
+	if err := registry.ValidateMetric("unknown", "1.0.0", "1.0.0", valid); !errors.Is(err, ErrUnknownEntry) {
+		t.Fatalf("unknown metric code should fail lookup, got %v", err)
+	}
+}

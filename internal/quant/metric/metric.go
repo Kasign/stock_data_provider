@@ -83,10 +83,12 @@ func (m Metric) Validate() error {
 		if m.MetricStatus == StatusAvailable || !lowerNull {
 			return ErrInvalidMetric
 		}
-	} else if m.MetricStatus != StatusAvailable || lowerNull ||
-		valueKind != lowerKind || valueKind != upperKind {
+	} else if m.MetricStatus != StatusAvailable {
 		return ErrInvalidMetric
-	} else {
+	} else if !lowerNull {
+		if valueKind != lowerKind || valueKind != upperKind {
+			return ErrInvalidMetric
+		}
 		lower, err := decimalValue(m.LowerBound, lowerKind)
 		if err != nil {
 			return ErrInvalidMetric

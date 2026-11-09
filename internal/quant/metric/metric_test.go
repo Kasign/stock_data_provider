@@ -75,3 +75,16 @@ func TestMetricValidateComparesDecimalStringBoundsExactly(t *testing.T) {
 		t.Fatal("upper bound below exact decimal value unexpectedly accepted")
 	}
 }
+
+func TestMetricValidateAllowsUnavailableBoundsForAvailableValue(t *testing.T) {
+	value := Metric{
+		MetricCode: "sample_metric", Value: json.RawMessage("0.25"),
+		Unit: "ratio", Period: "20d", SystemAsOf: "2026-11-09T01:00:00Z",
+		QualityStatus: QualityValid, MetricStatus: StatusAvailable,
+		CalculationVersion: "1.0.0", LowerBound: json.RawMessage("null"),
+		UpperBound: json.RawMessage("null"),
+	}
+	if err := value.Validate(); err != nil {
+		t.Fatalf("available metric with absent optional bounds rejected: %v", err)
+	}
+}
