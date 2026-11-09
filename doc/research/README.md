@@ -145,3 +145,10 @@ R1/R2/R3/R5 当前实现 Context、Evidence、Event、Claim/Hypothesis 领域结
 
 
 - RSC-007 新增真实 MariaDB 锁等待取消故障注入用例：事务 A 持有 Context aggregate head 行锁，事务 B 在 Append 中等待；测试通过 `information_schema.PROCESSLIST` 确认 Append SQL 已到达数据库后取消 Context，验收要求 Append 返回 `context.Canceled`、head 仍为旧版本且没有新版本行。该用例依赖 `RESEARCH_TEST_MYSQL_DSN`，尚未执行。
+
+## MariaDB 集成测试环境前置条件
+
+- `RESEARCH_TEST_MYSQL_DSN` 必须指向可执行 Research Migration 的专用 MariaDB 测试库；测试会创建/升级 Research 自有表并清理测试聚合数据，不得指向生产库。
+- 锁等待取消故障注入用例通过 `information_schema.PROCESSLIST` 观察独立连接正在执行的 Research aggregate-head SQL。测试账号必须具有查看其他连接进程信息的 `PROCESS` 权限；仅能查看自身连接的账号会导致测试无法确认真实锁等待，不能将其结果解释为取消路径通过。
+- 若环境不允许授予 `PROCESS`，应在独立的受控测试实例验证该用例，或调整测试观测机制；不得删除“确认 SQL 已进入锁等待后再取消”的断言来规避权限问题。
+- 当前未连接真实 MariaDB，以上是执行前置条件，不代表锁等待取消、事务回滚或 Migration 升级已验收。
