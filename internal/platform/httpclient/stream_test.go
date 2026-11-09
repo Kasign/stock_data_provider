@@ -490,3 +490,67 @@ func TestOpenStreamFaultDoesNotExposeSensitiveQuery(t *testing.T) {
 		t.Fatal("stream Fault exposed a sensitive URL query")
 	}
 }
+
+
+func TestOpenStreamConnectTimeoutIsClassified(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	defer server.Close()
+	client := newLocalStreamClient(t, server, 1024, time.Second, 1)
+	client.config.DialTimeout = 40 * time.Millisecond
+	client.dial = func(ctx context.Context, _, _ string) (net.Conn, error) {
+		<-ctx.Done()
+		return nil, ctx.Err()
+	}
+	_, err := client.OpenStream(context.Background(), localRequest(t, server, "/connect-timeout"), localPolicy(server))
+	var platformFault *fault.Fault
+	if !errors.As(err, &platformFault) || platformFault.Code != "platform.httpclient.stream_connect_timeout" {
+		t.Fatalf("expected connect timeout Fault, got %v", err)
+	}
+}
+
+func TestOpenStreamTLSHandshakeTimeoutIsClassified(t *testing.T) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer listener.Close()
+	releaseServer := make(chan struct{})
+	defer close(releaseServer)
+	go func() {
+		connection, acceptErr := listener.Accept()
+		if acceptErr != nil {
+			return
+		}
+		defer connection.Close()
+		<-releaseServer
+	}()
+
+	port := listener.Addr().(*net.TCPAddr).Port
+	client, err := New(Config{
+		Resolver: staticResolver{addresses: []netip.Addr{netip.MustParseAddr("8.8.8.8")}},
+		TLSHandshakeTimeout: 40 * time.Millisecond,
+		StreamTimeout:       time.Second,
+		StreamIdleTimeout:   time.Second,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer client.CloseIdleConnections()
+	client.dial = func(ctx context.Context, network, _ string) (net.Conn, error) {
+		return (&net.Dialer{}).DialContext(ctx, network, listener.Addr().String())
+	}
+	policy := DestinationPolicy{
+		Dependency:   "news.fetch",
+		AllowedHosts: []string{"example.com"},
+		AllowedPorts: []uint16{uint16(port)},
+	}
+	request, err := http.NewRequest(http.MethodGet, "https://example.com:"+strconv.Itoa(port)+"/tls-timeout", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = client.OpenStream(context.Background(), request, policy)
+	var platformFault *fault.Fault
+	if !errors.As(err, &platformFault) || platformFault.Code != "platform.httpclient.stream_tls_handshake_timeout" {
+		t.Fatalf("expected TLS handshake timeout Fault, got %v", err)
+	}
+}
