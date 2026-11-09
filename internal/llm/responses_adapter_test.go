@@ -551,7 +551,6 @@ func TestResponsesAdapterStreamMapsPlatformReadFailureAndPreservesPartialOutput(
 	}
 }
 
-
 // TestResponsesAdapterStreamDoesNotDispatchWithCancelledContext 验证已取消的调用上下文不会进入传输层。
 func TestResponsesAdapterStreamDoesNotDispatchWithCancelledContext(t *testing.T) {
 	provider, secret, capabilities, clock := streamAdapterTestConfig()
