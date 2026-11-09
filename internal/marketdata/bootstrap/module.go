@@ -42,7 +42,7 @@ type Dependencies struct {
 	SinaQuoteHTTPDoer             provider.HTTPDoer            // Root 注入的新浪实时报价出口；Module 不拥有、不关闭。
 	SinaKlineHTTPDoer             provider.HTTPDoer            // Root 注入的新浪历史 K 线出口；Module 不拥有、不关闭。
 	EastmoneyHTTPDoers            map[string]provider.HTTPDoer // Root 按 scheme://host 注入东方财富受控出口；Module 不拥有、不关闭。
-	MiaoXiangHTTPDoer             provider.HTTPDoer // Root 注入 MiaoXiang 补充数据 API 受控出口；Module 不拥有、不关闭。
+	MiaoXiangHTTPDoer             provider.HTTPDoer            // Root 注入 MiaoXiang 补充数据 API 受控出口；Module 不拥有、不关闭。
 }
 
 // Diagnostics 暴露模块就绪状态和 Provider 诊断，不暴露具体 DataService。
