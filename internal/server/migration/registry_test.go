@@ -2,6 +2,7 @@ package migration
 
 import (
 	"context"
+	"errors"
 	"database/sql"
 	"fmt"
 	"reflect"
@@ -166,10 +167,13 @@ func TestMigrationFailureDetails(t *testing.T) {
 	}
 }
 
-func TestMigrationHistoryMismatchRequiresRecovery(t *testing.T) {
-	gotCode, gotRecovery := migrationFailureDetails(fmt.Errorf("wrapped: %w", errMigrationHistoryMismatch))
-	if gotCode != "server.migration.history_mismatch" || !gotRecovery {
-		t.Fatalf("migrationFailureDetails() = (%q, %v), want history mismatch requiring recovery", gotCode, gotRecovery)
+func TestMigrationFailureDetailsDoesNotParseOpaqueHistoryErrors(t *testing.T) {
+	// Platform currently returns history/checksum mismatch as an opaque wrapped
+	// error rather than a public Fault code. Server must not parse private text.
+	err := errors.New("migration history does not match the registered migrations: checksum changed")
+	gotCode, gotRecovery := migrationFailureDetails(err)
+	if gotCode != "server.migration.namespace_failed" || gotRecovery {
+		t.Fatalf("migrationFailureDetails() = (%q, %v), want generic non-recovery classification", gotCode, gotRecovery)
 	}
 }
 

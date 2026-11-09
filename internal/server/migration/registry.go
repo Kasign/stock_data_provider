@@ -158,9 +158,6 @@ func (r *Registry) RunWithReport(ctx context.Context, db *sql.DB) (RunReport, er
 // migrationFailureDetails converts internal migration failures to stable,
 // non-sensitive diagnostics and marks cases that require operator inspection.
 func migrationFailureDetails(err error) (reasonCode string, recoveryRequired bool) {
-	if errors.Is(err, errMigrationHistoryMismatch) {
-		return "server.migration.history_mismatch", true
-	}
 	var platformErr *platformfault.Fault
 	if !errors.As(err, &platformErr) || platformErr.Validate() != nil {
 		return "server.migration.namespace_failed", false

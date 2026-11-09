@@ -641,7 +641,7 @@ flowchart TD
 
 - namespace 失败结果新增 `recovery_required`。
 - Platform 返回 `platform.storage.migration_requires_recovery`、`migration_apply_failed`、`migration_record_failed`、`migration_lock_release_failed` 时标记需要人工检查/恢复。
-- 已应用历史与当前 Migration 定义不一致（未知版本、缺失中间版本或 checksum 不匹配）时，映射为 `server.migration.history_mismatch` 并标记需要恢复。
+- 当前 Platform `storage.ApplyMigrations` 对未知历史版本、缺失中间版本和 checksum 不匹配返回未导出的 sentinel 包装错误，没有稳定公开 Fault Code；Server 不解析私有错误文本。此类错误暂映射为 `server.migration.namespace_failed`，不能可靠标记 `recovery_required`。需要 Platform 提供稳定 Fault Code 后再恢复精确分类；`migration_requires_recovery` 等已公开 Fault Code 仍标记需要人工恢复。
 - 普通连接失败保留 Platform 稳定故障码，但不错误标记为部分 DDL 已执行。
 - 无效 Fault 元数据不会进入诊断报告，统一降级为 `server.migration.namespace_failed`。
 - 新增上述原因码及恢复标记单元测试；未模拟真实 MariaDB DDL 中断，真实恢复流程仍需集成环境验收。
@@ -1208,3 +1208,11 @@ Lifecycle.Stop 原实现通过 stopped 标记保证重复调用幂等，但并�
 
 - Run `42617165666` 对应 SHA `ccab13f`，根模块仍在 gofmt 门禁发现新增 Transport 与测试文件中的多余空行、Map 字段对齐差异；根模块依赖下载、单测、Race、Vet 未执行。
 - 已按 Workflow 给出的 gofmt diff 修正，不改动业务逻辑；新 SHA 将重新触发根模块格式和测试门禁。
+
+
+### 12.45 SRV-007 Migration 历史不匹配错误边界修正（2026-11-09）
+
+- 根模块 Workflow Run `42617421851` 的 gofmt 与依赖下载已通过，根模块 `go test ./...` 暴露 Server 编译错误：Registry 引用未定义的 `errMigrationHistoryMismatch`。同时确认 Platform `storage.ApplyMigrations` 内部虽有同名私有 sentinel，但 Server 无法引用该私有变量；该错误目前以普通包装错误返回，没有稳定 Fault Code。
+- 删除 Server 对不存在 sentinel 的引用，不通过字符串解析或复制 Platform 私有错误常量伪造稳定分类。公开 Fault Code `platform.storage.migration_requires_recovery`、`migration_apply_failed`、`migration_record_failed`、`migration_lock_release_failed` 仍按原规则标记人工恢复。
+- 未知历史版本、缺失中间版本、checksum 不匹配暂时归入 `server.migration.namespace_failed` 且不设置 recovery_required；这是明确的 Platform 契约缺口，需 Platform 提供稳定 Fault Code 后再精确分类。更新回归测试和 12.25 节描述。
+- 同一 Run 中其余模块编译/测试失败属于 News、LLM、Notification、Quant、Research、Researchflow；Server 不越权修改。LLM 包未编译成功也连带阻断 `server/llmtransport` 测试执行。
