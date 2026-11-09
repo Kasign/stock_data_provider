@@ -137,7 +137,7 @@ func TestListEvidenceSnapshotPageRejectsCursorAndSnapshotFailures(t *testing.T) 
 	}
 	token, err := codec.EncodeNextCursor(ListEvidenceRequest{
 		CallerRef: request.CallerRef, PurposeCode: request.PurposeCode,
-		RequestedContentLevel: request.RequestedContentLevel, SystemAsOf: request.SystemAsOf,
+		RequestedContentLevel: request.RequestedContentLevel, SystemAsOf:       request.SystemAsOf,
 		Filters: request.Filters, PageSize: request.PageSize,
 	}, "snapshot-1", position, now)
 	if err != nil {
@@ -151,7 +151,6 @@ func TestListEvidenceSnapshotPageRejectsCursorAndSnapshotFailures(t *testing.T) 
 		t.Fatalf("cursor continuation unexpectedly reran PIT: PIT=%d get=%d", query.calls, store.gets)
 	}
 }
-
 
 func TestListEvidenceSnapshotPageRejectsStoredSnapshotContextMismatch(t *testing.T) {
 	now := time.Date(2026, 11, 9, 10, 0, 0, 0, time.UTC)
