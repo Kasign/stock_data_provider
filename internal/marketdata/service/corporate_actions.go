@@ -78,7 +78,8 @@ func (s *DataService) RefreshAdjustmentFactors(ctx context.Context, rawSymbol, s
 					return normalizeErr != nil || got != symbol
 				}() ||
 				strings.TrimSpace(value.Source) != p.Name() || !hasIdentifiableSourceVersion(value.SourceVersion) ||
-				value.FetchedAt.IsZero() || value.FetchedAt.After(now.Add(time.Minute)) {
+				value.FetchedAt.IsZero() || value.FetchedAt.After(now.Add(time.Minute)) ||
+				(value.ProviderTime != nil && value.ProviderTime.IsZero()) {
 				fetchErr = fmt.Errorf("provider returned invalid adjustment-factor contract for %s", value.TradeDate)
 				break
 			}

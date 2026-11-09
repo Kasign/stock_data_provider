@@ -31,6 +31,23 @@ func validObservedQuality(value model.QualityStatus) bool {
 	return value == model.QualityValid || value == model.QualityDegraded || value == model.QualityUnknown
 }
 
+func validateAdjustmentFactorRecord(value model.AdjustmentFactor) error {
+	if strings.TrimSpace(value.Symbol) == "" || !validISODate(value.TradeDate, false) ||
+		value.Factor <= 0 || math.IsNaN(value.Factor) || math.IsInf(value.Factor, 0) ||
+		!validAdjustmentFactorBasis(model.NormalizeAdjustmentFactorBasis(value.Basis)) ||
+		strings.TrimSpace(value.Source) == "" || strings.TrimSpace(value.SourceVersion) == "" ||
+		value.FetchedAt.IsZero() || !validObservedQuality(value.QualityStatus) {
+		return errors.New("identity, factor, source/version, fetched_at or quality is invalid")
+	}
+	if value.ProviderTime != nil && value.ProviderTime.IsZero() {
+		return errors.New("provider_time must be a non-zero timestamp when supplied")
+	}
+	if value.AvailableAt != nil && (value.AvailableAt.IsZero() || value.AvailableAt.After(value.FetchedAt)) {
+		return errors.New("available_at must be a non-zero timestamp no later than fetched_at")
+	}
+	return nil
+}
+
 func adjustmentFactorHash(value model.AdjustmentFactor) (string, error) {
 	value.Basis = model.NormalizeAdjustmentFactorBasis(value.Basis)
 	value.SystemObservedAt = nil
@@ -49,11 +66,8 @@ func (s *Store) SaveAdjustmentFactors(ctx context.Context, values []model.Adjust
 		return errors.New("MariaDB adjustment-factor storage disabled")
 	}
 	for _, value := range values {
-		if strings.TrimSpace(value.Symbol) == "" || !validISODate(value.TradeDate, false) ||
-			value.Factor <= 0 || math.IsNaN(value.Factor) || math.IsInf(value.Factor, 0) ||
-			!validAdjustmentFactorBasis(model.NormalizeAdjustmentFactorBasis(value.Basis)) ||
-			strings.TrimSpace(value.Source) == "" || value.FetchedAt.IsZero() || !validObservedQuality(value.QualityStatus) {
-			return fmt.Errorf("invalid adjustment factor observation for %s on %s", value.Symbol, value.TradeDate)
+		if err := validateAdjustmentFactorRecord(value); err != nil {
+			return fmt.Errorf("invalid adjustment factor observation for %s on %s: %w", value.Symbol, value.TradeDate, err)
 		}
 		hash, err := adjustmentFactorHash(value)
 		if err != nil {

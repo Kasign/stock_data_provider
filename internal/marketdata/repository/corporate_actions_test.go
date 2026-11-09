@@ -106,3 +106,36 @@ func TestAdjustmentFactorHashIncludesBasis(t *testing.T) {
 		t.Fatal("an omitted single-factor basis must normalize to shared")
 	}
 }
+
+
+func TestValidateAdjustmentFactorRecordRequiresSourceAndValidTimeEvidence(t *testing.T) {
+	fetched := time.Date(2026, 11, 9, 1, 0, 0, 0, time.UTC)
+	available := fetched.Add(-time.Hour)
+	providerTime := fetched.Add(-time.Minute)
+	base := model.AdjustmentFactor{
+		Symbol: "600519.SH", TradeDate: "2026-11-06", Factor: 1.25,
+		Basis: model.AdjustmentFactorShared, Source: "tushare", SourceVersion: "tushare-adj-factor-v1",
+		FetchedAt: fetched, AvailableAt: &available, ProviderTime: &providerTime,
+		QualityStatus: model.QualityDegraded,
+	}
+	if err := validateAdjustmentFactorRecord(base); err != nil {
+		t.Fatalf("valid factor record rejected: %v", err)
+	}
+	missingVersion := base
+	missingVersion.SourceVersion = ""
+	if err := validateAdjustmentFactorRecord(missingVersion); err == nil {
+		t.Fatal("factor record without source version must be rejected at persistence boundary")
+	}
+	futureAvailable := base
+	afterFetch := fetched.Add(time.Second)
+	futureAvailable.AvailableAt = &afterFetch
+	if err := validateAdjustmentFactorRecord(futureAvailable); err == nil {
+		t.Fatal("available_at after fetched_at must be rejected")
+	}
+	zeroProviderTime := base
+	zero := time.Time{}
+	zeroProviderTime.ProviderTime = &zero
+	if err := validateAdjustmentFactorRecord(zeroProviderTime); err == nil {
+		t.Fatal("zero provider_time must be rejected when supplied")
+	}
+}
