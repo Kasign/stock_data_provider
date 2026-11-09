@@ -179,7 +179,7 @@ func TestNewResponsesAdapterUsesSharedBoundTransport(t *testing.T) {
 		VerificationMethod: "integration-test", EvidenceRef: "capability-evidence",
 		MaxOutputTokensLimit: 4096,
 		Values: map[llm.Capability]llm.CapabilityStatus{
-			llm.CapabilityResponsesJSON: llm.CapabilitySupported,
+			llm.CapabilityResponsesJSON:   llm.CapabilitySupported,
 			llm.CapabilityResponsesStream: llm.CapabilitySupported,
 		},
 	}

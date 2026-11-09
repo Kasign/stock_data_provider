@@ -1202,3 +1202,9 @@ Lifecycle.Stop 原实现通过 stopped 标记保证重复调用幂等，但并�
 - 复核 `NewResponsesAdapter` 测试时发现测试缺少 Server Resources 包导入；已补齐，避免构造测试无法编译。
 - 同步清理新增声明之间的多余空行，并更新 SRV-003 总表与当前进度摘要，准确区分“传输适配已实现”和“生产配置/能力证据尚未接入”。
 - Run `42617165666` 对应前一 SHA `e7542450`，因 gofmt 门禁失败，根模块单测、Race、Vet 未执行；go-core 四项检查通过。当前 HEAD `ccab13f` 的 Workflow `42617165666` 后续状态以新 SHA 的 Run 为准。
+
+
+### 12.44 LLM 组合构造入口 gofmt 门禁修正（2026-11-09）
+
+- Run `42617165666` 对应 SHA `ccab13f`，根模块仍在 gofmt 门禁发现新增 Transport 与测试文件中的多余空行、Map 字段对齐差异；根模块依赖下载、单测、Race、Vet 未执行。
+- 已按 Workflow 给出的 gofmt diff 修正，不改动业务逻辑；新 SHA 将重新触发根模块格式和测试门禁。
