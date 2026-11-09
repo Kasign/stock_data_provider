@@ -636,3 +636,14 @@ internal/
 - M1-2 的 Data 专项验收条件已满足；根模块全仓门禁作为跨模块阻断单独跟踪，不影响 Data 专项结果。
 - M2-1 的 DTO/Port 注释统一使用中文；接口仍只覆盖当前真实消费者 Quote 与 DailyBars，PIT cutoff 继续明确表示 SystemObservedAt 修订时点。
 - 下一步：M2-2 实现 DataService 到 Application Port 的映射适配，并以测试验证 nullable、整数精度、单位、来源版本、ProviderTime、复权、质量、fallback、系统观察时点不丢失。
+
+
+### 2026-11-09：M2-2 DataService 到 Application Port 的映射适配
+
+- 新增 `internal/marketdata/application.Reader`，通过窄接口包装既有 DataService 的 `Quote`、`DailyBars`、`DailyBarsAsOf`；不改变 Provider 选择、缓存、持久化和 fallback 规则。
+- `GetQuote` 映射既有 `model.Quote` 到 `app.QuoteSnapshot`；`GetDailyBars` 根据 `SystemObservedAtCutoff` 显式选择当前视图或历史修订视图。
+- 映射完整保留 nil 指针、int64 成交量、OHLC/均线、单位、复权方法/基准日/因子来源与版本、ProviderTime、FetchedAt、NormalizedAt、SystemObservedAt、质量、fallback、RequestID 和 normalization version。
+- 指针与 slice 在边界处深拷贝，避免消费者修改 Application DTO 反向影响 DataService 返回对象。
+- 汇总质量沿用 HTTP Handler 的现有判定：任意质量降级 warning 或任意非 valid bar → degraded；空数据集 → unknown；仅信息性 `bars_truncated_to_limit` 不单独降级。
+- PIT 参数只使用 `SystemObservedAtCutoff`，原样传入 `DailyBarsAsOf`；不把 Analysis.AsOf、交易日期或 ProviderTime 混为一谈。
+- 新增 fake backend 单元测试覆盖 Quote nullable/int64/来源/质量/fallback、当前日线与 PIT 路由、修订时点透传、单位/因子元数据及深拷贝。
