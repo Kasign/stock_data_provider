@@ -522,7 +522,7 @@ Server 层完成不是“服务能够启动”这么简单。至少同时满足�
 | SRV-001 | 完成 | 已记录旧入口、路由与认证现状、旧 Analysis Migration 四表、Worker/Storage 生命周期、部署边界及各模块接入就绪度；详细见 12.3 节 |
 | SRV-002 | 进行中 | 已创建 internal/server/bootstrap，入口已委托 Bootstrap；HTTP 配置和 Platform 资源创建已拆出；剩余模块 Registry 与统一装配 |
 | SRV-003 | 进行中 | DB、Redis、HTTP Client 已由 Resources 统一创建和关闭；后续接入模块资源注入与诊断贡献项 |
-| SRV-004 | 未开始 | 等待各模块公开装配入口 |
+| SRV-004 | 阻塞 | 已复核模块接入面；Researchflow/Quant/LLM/Notification 缺少完整生产装配入口，News/Research 也有关键查询/授权接入缺口；详见 12.6 节 |
 | SRV-005 | 未开始 | 旧 HTTP API 尚待迁移映射 |
 | SRV-006 | 未开始 | 运行角色和生命周期尚未建立 |
 | SRV-007 | 未开始 | Platform Migration Runner 已有实现；待 Server 资源装配及模块 Migration 注册入口就绪 |
