@@ -6,9 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"time"
 
-	mysql "github.com/go-sql-driver/mysql"
 
 	"example.com/stock-analysis-flow/internal/notification/application"
 	"example.com/stock-analysis-flow/internal/notification/domain"
@@ -207,5 +205,3 @@ func cloneStoredSubscription(value domain.Subscription) domain.Subscription {
 	return value
 }
 
-var _ = time.Microsecond
-var _ = mysql.MySQLError{}
