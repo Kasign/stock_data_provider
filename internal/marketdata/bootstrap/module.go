@@ -30,6 +30,13 @@ type Dependencies struct {
 }
 
 // Diagnostics 暴露模块就绪状态和 Provider 诊断，不暴露具体 DataService。
+// MigrationRunner 暴露 Data 自有 Schema 迁移能力，由 Root Server 组合根显式调度。
+type MigrationRunner interface {
+	Migrate(ctx context.Context) error
+}
+
+var _ MigrationRunner = (*repository.Store)(nil)
+
 type Diagnostics interface {
 	Ready(ctx context.Context) error
 	ProviderDiagnostics() []map[string]any
@@ -115,6 +122,15 @@ func (m *Module) Diagnostics() Diagnostics {
 		return nil
 	}
 	return m.diagnostics
+}
+
+// MigrationRunner 返回 Data 自有迁移执行器；未配置持久化时返回 nil。
+ // 迁移由组合根显式执行，Module 构造和 Store 打开均不隐式修改 Schema。
+func (m *Module) MigrationRunner() MigrationRunner {
+	if m == nil || m.store == nil {
+		return nil
+	}
+	return m.store
 }
 
 // ProviderSummary 返回启动日志使用的 Provider 名称快照。

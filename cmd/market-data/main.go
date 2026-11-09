@@ -39,11 +39,6 @@ func run(ctx context.Context, logger *slog.Logger) error {
 	}
 	if store != nil {
 		defer store.Close()
-		if cfg.AutoMigrate {
-			if err := store.Migrate(ctx); err != nil {
-				return err
-			}
-		}
 	}
 	var c cache.Cache = cache.NewDisabled()
 	if cfg.RedisAddr != "" {
@@ -71,6 +66,13 @@ func run(ctx context.Context, logger *slog.Logger) error {
 			logger.Warn("关闭 Market Data Module 失败", "error", err)
 		}
 	}()
+	if cfg.AutoMigrate {
+		if runner := module.MigrationRunner(); runner != nil {
+			if err := runner.Migrate(ctx); err != nil {
+				return fmt.Errorf("market-data migration: %w", err)
+			}
+		}
+	}
 	if err := module.Start(ctx); err != nil {
 		return err
 	}

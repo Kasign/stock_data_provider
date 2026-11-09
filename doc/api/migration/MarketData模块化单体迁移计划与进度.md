@@ -258,7 +258,7 @@ internal/
 
 ### M2：Data Application Port 与 Bootstrap 提取
 
-状态：`pending`
+状态：`in_progress`
 
 工作项：
 
@@ -778,3 +778,14 @@ internal/
 - 兼容构造器继续保留给现有测试和旧调用点，并复用同一个 `BuildSourceStatuses` 映射逻辑，避免重复维护能力矩阵；当 `svc == nil` 时保持 nil Application 依赖，不制造 typed-nil 接口。
 - 新增来源能力映射测试，验证已注册能力为 true、未注册能力保持 false；不增加新 Provider、API、字段或诊断规则。
 - 验收：Data gofmt/test/race/vet、HTTP API Contract 和 MariaDB/PIT 集成通过；全仓门禁继续单独记录 Research 语法阻断。
+
+
+### 2026-11-09：M2-6 暴露 Data Migration Runner
+
+- 代码复核发现 Data Migration 仍由独立命令直接调用 `repository.Store.Migrate`，Bootstrap Module 尚未向 Root Server 暴露迁移能力，不满足 M2“模块返回 Migration Runner”的组合契约。
+- 新增 `bootstrap.MigrationRunner` 窄接口及 `Module.MigrationRunner()`；底层仍复用 Data Repository 已有的 `Store.Migrate`，不复制 SQL、不新增迁移框架、不改变 Schema。
+- 未配置 Store 时返回 nil，表示当前部署没有 Data 持久化迁移任务；不构造 typed-nil 接口。
+- 独立兼容命令改为先构造 Module，再从 Module 获取 Runner 并按配置显式执行迁移；迁移失败时通过既有 Module Close 释放模块自有资源，Store 仍由命令持有并关闭。
+- Root Server 后续可在自己的 Migration Registry 中注册该 Runner，决定与 Analysis/其他模块的执行顺序；Data 仍拥有迁移内容，Platform 不接管业务表和 SQL。
+- 新增无存储配置时 MigrationRunner 返回 nil 的单测；Repository 的迁移幂等和 MariaDB/PIT 集成测试继续作为迁移行为证据。
+- 当前 SHA `33760950` 的 Data Module gofmt/test/race/vet、MariaDB/PIT、News MariaDB、Platform、Live Probe、Go/Python parity 均通过；Root 全仓 gofmt 仍被 Research 文件阻断，WebUI 门禁失败归 WebUI Owner。本次修改后的结果以新 SHA CI 为准。

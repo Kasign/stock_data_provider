@@ -75,6 +75,18 @@ func TestNewExposesApplicationHTTPAndDiagnostics(t *testing.T) {
 	}
 }
 
+func TestModuleMigrationRunnerIsNilWhenStorageDisabled(t *testing.T) {
+	module, err := New(testConfig(), testDependencies())
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	defer module.Close(context.Background())
+
+	if runner := module.MigrationRunner(); runner != nil {
+		t.Fatalf("MigrationRunner() = %T, want nil when storage is disabled", runner)
+	}
+}
+
 func TestNewRejectsMissingConfiguredInfrastructure(t *testing.T) {
 	cfg := testConfig()
 	cfg.MySQLDSN = "market-data-test-dsn"
