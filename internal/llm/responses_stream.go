@@ -142,7 +142,7 @@ func (a *ResponsesAdapter) Stream(ctx context.Context, request ModelRequest, onE
 			return nil
 		}
 	}
-	parsed, parseErr := ParseResponsesSSEReader(stream.Body, request, a.clock, callback)
+	parsed, parseErr := parseResponsesSSEReaderLimit(stream.Body, request, a.clock, callback, a.provider.MaxResponseBytes)
 	parsed.StartedAt = startedAt
 	parsed.GatewayRequestID = result.GatewayRequestID
 	parsed.UpstreamRequestID = result.UpstreamRequestID
