@@ -2139,3 +2139,16 @@ CI：本轮 SHA 对应 Go test suite Run `42549171549`。截至本次文档提�
 - 本批测试尚未执行；按项目约定后续在 integration 进行构建和测试，不在当前分支宣称通过。
 
 **当前结论：** CT-05 已覆盖 35 Operation 参数名称/位置/required、已审计的 Handler 边界、Probe Schema、部分默认值及本批分页默认值。剩余工作继续覆盖未纳入断言的参数类型/格式/值域和多值输入语义；M0 继续 `in_progress`，M1 不准入。
+
+
+### 2026-11-09：CT-05 35 Operation 参数类型与格式矩阵
+
+代码基线：`60c57a9966cc50b5a0fcab959e9749eddb9bb34d`。
+
+- 新增 TestOpenAPIParameterTypesAndFormatsMatchReviewedHandlerMatrix，对 35 个 Operation 的全部 Path/Query 参数建立类型与格式矩阵。
+- 覆盖 string/integer/boolean、date/date-time 格式，以及 RequestAdjustmentBasis 引用；与已存在的参数名称/位置/required 矩阵、边界描述测试和默认值测试互补。
+- 矩阵按 Handler 的输入语义人工审阅：日期参数使用 YYYY-MM-DD；时间截点使用 RFC3339 date-time；页码/数量使用 integer；include_ma 使用 boolean；复权请求引用仅包含可请求的三种 basis。
+- 本批只增加契约测试，不更改 OpenAPI 参数定义和运行时行为；不新增 API/字段。
+- 当前提交尚未执行测试，后续在 integration 验收。
+
+**当前结论：** 35 Operation 的参数名称、位置、required、类型、日期/时间格式已形成独立自动化矩阵；默认值、枚举和值域仍需逐项继续审计。M0 继续 `in_progress`，M1 不准入。

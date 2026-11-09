@@ -1041,3 +1041,123 @@ func TestStockSearchQueryDocumentsTrimmedValueSemantics(t *testing.T) {
 	}
 	t.Fatal("stocks/search q parameter missing")
 }
+
+
+func TestOpenAPIParameterTypesAndFormatsMatchReviewedHandlerMatrix(t *testing.T) {
+	spec, err := os.ReadFile("../../openapi.yaml")
+	if err != nil {
+		t.Fatalf("read OpenAPI specification: %v", err)
+	}
+	var document map[string]any
+	if err := yaml.Unmarshal(spec, &document); err != nil {
+		t.Fatalf("OpenAPI must be valid YAML: %v", err)
+	}
+	paths := document["paths"].(map[string]any)
+	expected := map[string]map[string]map[string]any{
+		"GET /api/v1/market/quotes": {"symbols": {"type": "string"}},
+		"GET /api/v1/quotes/{symbol}": {"symbol": {"type": "string"}},
+		"GET /api/v1/bars/{symbol}/daily": {
+			"symbol": {"type": "string"}, "start": {"type": "string", "format": "date"},
+			"end": {"type": "string", "format": "date"}, "limit": {"type": "integer"},
+			"adjustment": {"$ref": "#/components/schemas/RequestAdjustmentBasis"}, "as_of": {"type": "string", "format": "date-time"},
+		},
+		"GET /api/v1/bundles/{symbol}": {
+			"symbol": {"type": "string"}, "lookback_days": {"type": "integer"},
+			"adjustment": {"$ref": "#/components/schemas/RequestAdjustmentBasis"}, "as_of": {"type": "string", "format": "date-time"},
+		},
+		"GET /api/v1/data-sources/probe/history": {"limit": {"type": "integer"}},
+		"GET /api/v1/stocks/search": {"q": {"type": "string"}, "limit": {"type": "integer"}},
+		"GET /api/v1/stocks/{symbol}/announcements": {
+			"symbol": {"type": "string"}, "start_date": {"type": "string", "format": "date"},
+			"end_date": {"type": "string", "format": "date"}, "page": {"type": "integer"}, "page_size": {"type": "integer"},
+		},
+		"GET /api/v1/stocks/{symbol}/profile": {"symbol": {"type": "string"}},
+		"GET /api/v1/stocks/{symbol}/price-limit-rule": {"symbol": {"type": "string"}, "date": {"type": "string", "format": "date"}},
+		"GET /api/v1/stocks/{symbol}/trading-status": {
+			"symbol": {"type": "string"}, "date": {"type": "string", "format": "date"}, "as_of": {"type": "string", "format": "date-time"},
+		},
+		"GET /api/v1/stocks/{symbol}/fundamentals": {
+			"symbol": {"type": "string"}, "year": {"type": "integer"}, "quarter": {"type": "integer"}, "as_of": {"type": "string", "format": "date-time"},
+		},
+		"GET /api/v1/stocks/{symbol}/chip-distribution": {"symbol": {"type": "string"}},
+		"GET /api/v1/stocks/{symbol}/capital-flow": {"symbol": {"type": "string"}},
+		"GET /api/v1/stocks/{symbol}/boards": {"symbol": {"type": "string"}},
+		"GET /api/v1/market/valuations": {"symbols": {"type": "string"}},
+		"GET /api/v1/market/sectors": {
+			"type": {"type": "string"}, "limit": {"type": "integer"}, "direction": {"type": "string"}, "sort_by": {"type": "string"},
+		},
+		"GET /api/v1/market/index-catalog": {"tag": {"type": "string"}},
+		"GET /api/v1/market/indices/{symbol}/constituents": {
+			"symbol": {"type": "string"}, "source": {"type": "string"}, "as_of": {"type": "string", "format": "date"},
+		},
+		"GET /api/v1/market/indices/{symbol}/daily": {
+			"symbol": {"type": "string"}, "start": {"type": "string", "format": "date"},
+			"end": {"type": "string", "format": "date"}, "source": {"type": "string"},
+		},
+		"GET /api/v1/market/trading-calendar": {"start": {"type": "string", "format": "date"}, "end": {"type": "string", "format": "date"}},
+		"GET /api/v1/market/session": {"at": {"type": "string", "format": "date-time"}},
+		"GET /api/v1/market/stocks": {
+			"page": {"type": "integer"}, "page_size": {"type": "integer"}, "include_ma": {"type": "boolean"},
+			"adjustment": {"$ref": "#/components/schemas/RequestAdjustmentBasis"},
+		},
+		"GET /api/v1/market/capital-flow": {"start": {"type": "string", "format": "date"}, "end": {"type": "string", "format": "date"}},
+		"GET /api/v1/market/sentiment": {"date": {"type": "string", "format": "date"}},
+		"GET /api/v1/market/sentiment/history": {
+			"start": {"type": "string", "format": "date"}, "end": {"type": "string", "format": "date"}, "limit": {"type": "integer"},
+		},
+		"GET /api/v1/market/hot-stocks": {"type": {"type": "string"}, "limit": {"type": "integer"}},
+		"GET /api/v1/market/dragon-tiger": {
+			"date": {"type": "string", "format": "date"}, "page": {"type": "integer"}, "page_size": {"type": "integer"},
+		},
+		"GET /api/v1/market/limit-pools": {
+			"type": {"type": "string"}, "date": {"type": "string", "format": "date"}, "limit": {"type": "integer"},
+		},
+	}
+	if len(expected) != 35 {
+		t.Fatalf("reviewed parameter schema matrix has %d operations, want 35", len(expected))
+	}
+	for route, wantParameters := range expected {
+		parts := strings.SplitN(route, " ", 2)
+		if len(parts) != 2 {
+			t.Fatalf("invalid route key %q", route)
+		}
+		pathItem, ok := paths[parts[1]].(map[string]any)
+		if !ok {
+			t.Errorf("OpenAPI path missing: %s", parts[1])
+			continue
+		}
+		operation, ok := pathItem[strings.ToLower(parts[0])].(map[string]any)
+		if !ok {
+			t.Errorf("OpenAPI operation missing: %s", route)
+			continue
+		}
+		parameters, _ := operation["parameters"].([]any)
+		gotParameters := make(map[string]map[string]any, len(parameters))
+		for _, raw := range parameters {
+			parameter, ok := raw.(map[string]any)
+			if !ok {
+				continue
+			}
+			name, _ := parameter["name"].(string)
+			schema, _ := parameter["schema"].(map[string]any)
+			if name != "" && schema != nil {
+				gotParameters[name] = schema
+			}
+		}
+		for name, wantSchema := range wantParameters {
+			gotSchema, ok := gotParameters[name]
+			if !ok {
+				t.Errorf("%s parameter %q schema missing", route, name)
+				continue
+			}
+			for field, expectedValue := range wantSchema {
+				if !reflect.DeepEqual(gotSchema[field], expectedValue) {
+					t.Errorf("%s parameter %q schema.%s=%#v, want %#v", route, name, field, gotSchema[field], expectedValue)
+				}
+			}
+		}
+		if len(gotParameters) != len(wantParameters) {
+			t.Errorf("%s parameter schema count=%d, reviewed count=%d", route, len(gotParameters), len(wantParameters))
+		}
+	}
+}
