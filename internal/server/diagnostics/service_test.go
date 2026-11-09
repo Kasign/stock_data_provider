@@ -6,6 +6,8 @@ import (
 	"testing"
 
 	platformdiagnostics "example.com/stock-analysis-flow/internal/platform/diagnostics"
+	platformstorage "example.com/stock-analysis-flow/internal/platform/storage"
+	servermigration "example.com/stock-analysis-flow/internal/server/migration"
 )
 
 func TestNewServiceComposesRequiredStorageAndModuleChecks(t *testing.T) {
@@ -76,5 +78,26 @@ func TestNewServiceRejectsDuplicateIDsAcrossModuleGroups(t *testing.T) {
 	)
 	if err == nil || !strings.Contains(err.Error(), "module.shared.check") {
 		t.Fatalf("NewService() error = %v, want duplicate module check ID", err)
+	}
+}
+
+
+func TestNewServiceWithMigrationRegistersRequiredSchemaReadiness(t *testing.T) {
+	registry := servermigration.NewRegistry()
+	if err := registry.Register("sample", []platformstorage.Migration{{
+		Version: 1, Description: "initial schema", Statements: []string{"SELECT 1"},
+	}}); err != nil {
+		t.Fatalf("Register() error = %v", err)
+	}
+	service, err := NewServiceWithMigration(nil, registry)
+	if err != nil {
+		t.Fatalf("NewServiceWithMigration() error = %v", err)
+	}
+	if len(service.checks) != 3 {
+		t.Fatalf("check count = %d, want 3", len(service.checks))
+	}
+	schemaCheck := service.checks[2]
+	if schemaCheck.ID != "server.storage.schema" || !schemaCheck.Required {
+		t.Fatalf("schema check = (%q, required=%v), want required server.storage.schema", schemaCheck.ID, schemaCheck.Required)
 	}
 }
