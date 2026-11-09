@@ -579,7 +579,9 @@ flowchart TD
 
 - 本阶段完成的是 Server 进程级配置快照，不代表所有领域模块配置已完成统一装载。
 - .env 文件仍由 Bootstrap 在配置解析前加载；敏感值仍通过 Platform Env Secret 类型进入 Security 配置。
-- 本批次尚未运行当前 SHA 的 gofmt、Server 包测试或 Go Workflow；不得标记编译/测试通过。
+- 代码提交：`c39ff76fba2cec50a6a6d1dff5a1ec3001e1fb37`（Process 配置）、`d544d13547072270a787b901c744e98edc2461cf`（Bootstrap 接入）、`6abb254909431bc22b27a75d904d6e4449272f20`（保留旧 Analysis 超时兼容范围）。
+- 测试提交：`f025acd773ff6a7b0cd2314e786f3a841df94b53`、`e30678d9813e7d93a82963c7ee0857f211c4f8b0`（Process 配置测试）、`676112dd32921677b88474cd5542417a056f61f4`（清理迁移后的 Bootstrap 测试）。
+- 本批次尚未运行当前 SHA 的 gofmt、Server 包测试或 Go Workflow；GitHub 当前 SHA Combined Status 尚无状态记录，不得标记编译/测试通过。
 
 ## 13. 分支与协作规则
 
