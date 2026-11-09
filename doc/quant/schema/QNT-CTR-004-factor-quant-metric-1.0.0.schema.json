@@ -96,10 +96,14 @@
         "properties": {
           "metric_code": {
             "const": "momentum_20d"
+          },
+          "metric_status": {
+            "const": "available"
           }
         },
         "required": [
-          "metric_code"
+          "metric_code",
+          "metric_status"
         ]
       },
       "then": {
@@ -118,10 +122,14 @@
         "properties": {
           "metric_code": {
             "const": "momentum_60d"
+          },
+          "metric_status": {
+            "const": "available"
           }
         },
         "required": [
-          "metric_code"
+          "metric_code",
+          "metric_status"
         ]
       },
       "then": {
@@ -140,10 +148,14 @@
         "properties": {
           "metric_code": {
             "const": "volatility_20d"
+          },
+          "metric_status": {
+            "const": "available"
           }
         },
         "required": [
-          "metric_code"
+          "metric_code",
+          "metric_status"
         ]
       },
       "then": {
