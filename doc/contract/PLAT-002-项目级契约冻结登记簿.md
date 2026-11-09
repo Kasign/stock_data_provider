@@ -152,6 +152,30 @@
 
 因此，本文当前只能作为项目级契约审查登记簿的初始版本，不能声明整个 PLAT-002 已冻结。
 
+## 8.1 integration 与模块分支提交图核验（2026-11-09）
+
+本轮使用 GitHub compare 以 `integration` 为 base、各活动模块分支为 head，检查分支提交图差异。结果如下：
+
+| 分支 | 相对 integration 的提交图状态 | 分支独有提交数（ahead_by） | integration 独有提交数（behind_by） | 判断 |
+|---|---:|---:|---:|---|
+| `feat/design_doc` | behind | 0 | 48 | 规划分支落后；其契约目录维护权不能仅凭旧文档头部视为当前事实 |
+| `feat/full-go-data-providers-api-switch` | diverged | 126 | 90 | Data 分支仍有未进入 integration 的提交 |
+| `feat/llm` | diverged | 2 | 969 | LLM 分支仍有少量未进入 integration 的提交 |
+| `feat/notification` | diverged | 144 | 100 | Notification 分支仍有未进入 integration 的提交 |
+| `feat/platform-foundation` | diverged | 79 | 47 | Platform 分支仍有未进入 integration 的提交 |
+| `feat/quant` | diverged | 87 | 935 | Quant 分支仍有未进入 integration 的提交 |
+| `feat/research` | diverged | 55 | 27 | Research 分支仍有未进入 integration 的提交 |
+| `feat/research-analysis-flow-native-go` | diverged | 182 | 100 | Server 分支仍有未进入 integration 的提交 |
+| `feat/research-news-ingestion` | diverged | 123 | 53 | News 分支仍有未进入 integration 的提交 |
+| `feat/researchflow` | diverged | 172 | 439 | Researchflow 分支仍有未进入 integration 的提交 |
+| `feat/webui-market-data-console` | behind | 0 | 4 | WebUI 当前没有领先 integration 的提交 |
+
+**重要解释：** `ahead_by` 是提交图上分支独有的提交数量，不等同于未合并功能数量；其中可能包含文档、后续修复、合并提交或已通过其他路径等价整合的变更。但这些结果足以证明：不能把“integration 是聚合分支”解释为“所有模块分支最新 HEAD 已完整进入 integration”。
+
+因此，本次契约核验只能声明以 integration 的实际代码和文档为准，不能声称已经覆盖每个模块分支的最新工作。对照各模块分支的领先提交、识别实际功能差异并决定是否补入 integration，是后续独立的集成盘点任务；本轮不擅自合并任何分支，也不修改业务代码。
+
+本次 compare 发生在项目级文档建立后，审查时 integration 最新 HEAD 为 `80ca7a99d9398be8797b315fa7f6dc5e0e68d96f`。最初代码审查基线仍为 `bb8cf3495b9591ede2a29b554d9121b06b983f0b`，两者用途不同：前者是本轮文档写入后的分支 HEAD，后者是本轮文档写入前的代码审查基线。
+
 ## 8. 后续执行与审批
 
 1. 项目负责人确认项目级契约权威维护位置由原 `feat/design_doc` 转为 `integration`，并确认本目录为新的项目级冻结入口。
