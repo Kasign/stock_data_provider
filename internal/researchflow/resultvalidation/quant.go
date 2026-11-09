@@ -12,35 +12,14 @@ import (
 )
 
 var (
-	ErrUnsupportedResultType = errors.New("unsupported Quant result type")
-	ErrUnsupportedSchema = errors.New("unsupported Quant result schema")
-	ErrInvalidQuantResult = errors.New("invalid Quant result envelope")
-	ErrInvalidQuantPayload = errors.New("invalid Quant result payload")
+	ErrUnsupportedResultType       = errors.New("unsupported Quant result type")
+	ErrUnsupportedSchema           = errors.New("unsupported Quant result schema")
+	ErrInvalidQuantResult          = errors.New("invalid Quant result envelope")
+	ErrInvalidQuantPayload         = errors.New("invalid Quant result payload")
 	ErrPayloadValidatorUnavailable = errors.New("Quant payload validator is unavailable")
 )
 
-var schemaVersionRE = regexp.MustCompile(`^[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.-]+)?package resultvalidation
-
-import (
-	"encoding/json"
-	"errors"
-	"fmt"
-	"regexp"
-	"sort"
-	"strings"
-	"sync"
-	"time"
-)
-
-var (
-	ErrUnsupportedResultType = errors.New("unsupported Quant result type")
-	ErrUnsupportedSchema = errors.New("unsupported Quant result schema")
-	ErrInvalidQuantResult = errors.New("invalid Quant result envelope")
-	ErrInvalidQuantPayload = errors.New("invalid Quant result payload")
-	ErrPayloadValidatorUnavailable = errors.New("Quant payload validator is unavailable")
-)
-
-)
+var schemaVersionRE = regexp.MustCompile(`^[0-9]+[.][0-9]+[.][0-9]+(-[0-9A-Za-z.-]+)?$`)
 
 var supportedResultTypes = map[string]struct{}{
 	"indicator": {}, "factor": {}, "trend": {}, "market": {}, "industry": {},
@@ -50,25 +29,25 @@ var supportedResultTypes = map[string]struct{}{
 // QuantResultEnvelope is the stable Quant Application envelope. Payload stays
 // raw until the exact result_type/schema_version validator accepts it.
 type QuantResultEnvelope struct {
-	SchemaVersion       string          `json:"schema_version"`
-	ResultID            string          `json:"result_id"`
-	ResultType          string          `json:"result_type"`
-	Scope               string          `json:"scope"`
-	SecurityID          string          `json:"security_id,omitempty"`
-	SystemAsOf          time.Time       `json:"system_as_of"`
-	TradeDate           string          `json:"trade_date,omitempty"`
-	Period              string          `json:"period"`
-	AlgorithmVersion    string          `json:"algorithm_version"`
-	ParameterFingerprint string         `json:"parameter_fingerprint"`
-	InputSnapshotRefs   []string        `json:"input_snapshot_refs"`
-	QualityStatus       string          `json:"quality_status"`
-	ResultStatus        string          `json:"result_status"`
-	AuthorizationRef    string          `json:"authorization_ref"`
-	CreatedAt           time.Time       `json:"created_at"`
-	Payload             json.RawMessage `json:"payload"`
+	SchemaVersion        string          `json:"schema_version"`
+	ResultID             string          `json:"result_id"`
+	ResultType           string          `json:"result_type"`
+	Scope                string          `json:"scope"`
+	SecurityID           string          `json:"security_id,omitempty"`
+	SystemAsOf           time.Time       `json:"system_as_of"`
+	TradeDate            string          `json:"trade_date,omitempty"`
+	Period               string          `json:"period"`
+	AlgorithmVersion     string          `json:"algorithm_version"`
+	ParameterFingerprint string          `json:"parameter_fingerprint"`
+	InputSnapshotRefs    []string        `json:"input_snapshot_refs"`
+	QualityStatus        string          `json:"quality_status"`
+	ResultStatus         string          `json:"result_status"`
+	AuthorizationRef     string          `json:"authorization_ref"`
+	CreatedAt            time.Time       `json:"created_at"`
+	Payload              json.RawMessage `json:"payload"`
 }
 
-// PayloadValidator must validate one exact result_type/schema_version payload
+// PayloadValidator validates one exact result_type/schema_version payload
 // against its frozen strong schema. Implementations must not accept arbitrary
 // object properties or perform remote schema resolution.
 type PayloadValidator interface {
@@ -86,8 +65,8 @@ type schemaKey struct {
 	version    string
 }
 
-// Registry binds each supported discriminator pair to one immutable payload
-// validator. Unknown pairs fail closed; no fallback to older schema versions.
+// Registry binds each supported discriminator pair to one payload validator.
+// Unknown pairs fail closed; no fallback to older schema versions.
 type Registry struct {
 	mu         sync.RWMutex
 	validators map[schemaKey]PayloadValidator
@@ -105,7 +84,7 @@ func (r *Registry) Register(resultType, schemaVersion string, validator PayloadV
 		return fmt.Errorf("%w: %q", ErrUnsupportedResultType, resultType)
 	}
 	if !schemaVersionRE.MatchString(schemaVersion) || schemaVersion != strings.TrimSpace(schemaVersion) {
-		return fmt.Errorf("%w: empty or non-canonical schema version", ErrUnsupportedSchema)
+		return fmt.Errorf("%w: invalid schema version", ErrUnsupportedSchema)
 	}
 	key := schemaKey{resultType: resultType, version: schemaVersion}
 	r.mu.Lock()
@@ -124,8 +103,8 @@ type ValidationPolicy struct {
 }
 
 type QuantValidation struct {
-	Result     QuantResultEnvelope
-	Usable     bool
+	Result      QuantResultEnvelope
+	Usable      bool
 	ReasonCodes []string
 }
 
@@ -139,8 +118,8 @@ func (r *Registry) Validate(result QuantResultEnvelope, policy ValidationPolicy)
 	if _, ok := supportedResultTypes[result.ResultType]; !ok {
 		return QuantValidation{}, fmt.Errorf("%w: %q", ErrUnsupportedResultType, result.ResultType)
 	}
-	if result.SchemaVersion == "" || result.SchemaVersion != strings.TrimSpace(result.SchemaVersion) {
-		return QuantValidation{}, fmt.Errorf("%w: schema_version is required", ErrUnsupportedSchema)
+	if !schemaVersionRE.MatchString(result.SchemaVersion) || result.SchemaVersion != strings.TrimSpace(result.SchemaVersion) {
+		return QuantValidation{}, fmt.Errorf("%w: %q", ErrUnsupportedSchema, result.SchemaVersion)
 	}
 	r.mu.RLock()
 	validator, exists := r.validators[schemaKey{resultType: result.ResultType, version: result.SchemaVersion}]
@@ -209,9 +188,6 @@ func validateEnvelope(result QuantResultEnvelope, policy ValidationPolicy) error
 		policy.ExpectedSystemAsOf.IsZero() || !isUTC(policy.ExpectedSystemAsOf) ||
 		!result.SystemAsOf.Equal(policy.ExpectedSystemAsOf) {
 		return fmt.Errorf("%w: system_as_of must match the Run and timestamps must be UTC", ErrInvalidQuantResult)
-	}
-	if result.CreatedAt.IsZero() {
-		return fmt.Errorf("%w: created_at is required", ErrInvalidQuantResult)
 	}
 	if result.TradeDate != "" {
 		date, err := time.Parse("2006-01-02", result.TradeDate)
