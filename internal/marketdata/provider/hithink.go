@@ -273,7 +273,11 @@ func (p *Hithink) FetchIndexQuotes(ctx context.Context) (*model.IndexQuoteSnapsh
 	if quoteTime == nil {
 		snapshot.QualityStatus = model.QualityDegraded
 		snapshot.QualityReasons = append(snapshot.QualityReasons, "provider_snapshot_timestamp_missing_or_invalid")
-		addHithinkFieldIssue(ctx, nil, "provider_time", "timestamp", "missing_or_invalid_value", "valid provider snapshot timestamp in milliseconds", "missing_or_invalid", fmt.Sprint(data.Timestamp), "同花顺指数行情快照时间缺失或非法；不使用本地采集时间替代")
+		timestampPreview := "missing"
+		if data.Timestamp != nil {
+			timestampPreview = strconv.FormatInt(*data.Timestamp, 10)
+		}
+		addHithinkFieldIssue(ctx, nil, "provider_time", "timestamp", "missing_or_invalid_value", "valid provider snapshot timestamp in milliseconds", "missing_or_invalid", timestampPreview, "同花顺指数行情快照时间缺失或非法；不使用本地采集时间替代")
 	}
 	bySymbol := make(map[string]model.MarketIndexQuote, len(hithinkCoreIndexDefinitions))
 	seen := make(map[string]struct{}, len(hithinkCoreIndexDefinitions))
