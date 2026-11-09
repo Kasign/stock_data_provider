@@ -220,12 +220,11 @@ func TestContextJSONSchemaRejectsNullNestedObject(t *testing.T) {
 		t.Fatalf("decode Context v1 golden fixture: %v", err)
 	}
 	payload["quality_summary"] = nil
-	payload["quality_summary"] = nil
 	encoded, err := json.Marshal(payload)
 	if err != nil {
 		t.Fatalf("encode null nested object fixture: %v", err)
 	}
-	instance, err = jsonschema.UnmarshalJSON(bytes.NewReader(encoded))
+	instance, err := jsonschema.UnmarshalJSON(bytes.NewReader(encoded))
 	if err != nil {
 		t.Fatalf("parse null nested object fixture: %v", err)
 	}
