@@ -33,13 +33,13 @@ var (
 // SessionRecord contains only server-side session metadata. The bearer token
 // itself is never part of this value; Redis keys use its SHA-256 digest.
 type SessionRecord struct {
-	Subject             string    `json:"subject"`
-	CreatedAt           time.Time `json:"created_at"`
-	LastSeenAt          time.Time `json:"last_seen_at"`
-	IdleExpiresAt       time.Time `json:"idle_expires_at"`
-	AbsoluteExpiresAt   time.Time `json:"absolute_expires_at"`
-	CredentialVersion   uint64    `json:"credential_version"`
-	CSRFTokenDigest     string    `json:"csrf_token_digest,omitempty"`
+	Subject           string    `json:"subject"`
+	CreatedAt         time.Time `json:"created_at"`
+	LastSeenAt        time.Time `json:"last_seen_at"`
+	IdleExpiresAt     time.Time `json:"idle_expires_at"`
+	AbsoluteExpiresAt time.Time `json:"absolute_expires_at"`
+	CredentialVersion uint64    `json:"credential_version"`
+	CSRFTokenDigest   string    `json:"csrf_token_digest,omitempty"`
 }
 
 // SessionStore accepts token digests only. Implementations must make
