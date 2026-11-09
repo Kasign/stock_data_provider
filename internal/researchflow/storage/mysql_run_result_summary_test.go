@@ -9,15 +9,15 @@ import (
 
 func validResultSummaryPayload() []byte {
 	summary := domain.ResultSummary{
-		StageOutcomes: map[string]domain.StageStatus{"context": domain.StageSucceeded},
-		ExcludedStages: []domain.ExcludedStage{},
-		MissingStageCodes: []string{},
-		DegradedStageCodes: []string{},
-		BlockedStageCodes: []string{},
-		ReasonCodes: []string{},
-		Coverage: 1,
-		QualityStatus: "complete",
-		RiskGateDecisions: map[string]string{},
+		StageOutcomes:       map[string]domain.StageStatus{"context": domain.StageSucceeded},
+		ExcludedStages:      []domain.ExcludedStage{},
+		MissingStageCodes:   []string{},
+		DegradedStageCodes:  []string{},
+		BlockedStageCodes:   []string{},
+		ReasonCodes:         []string{},
+		Coverage:            1,
+		QualityStatus:      "complete",
+		RiskGateDecisions:   map[string]string{},
 		ActionabilityStatus: "not_evaluated",
 	}
 	payload, _ := json.Marshal(summary)
@@ -36,7 +36,7 @@ func TestDecodeResultSummaryAcceptsCompletePayload(t *testing.T) {
 
 func TestDecodeResultSummaryRejectsIncompletePayload(t *testing.T) {
 	tests := []struct {
-		name string
+		name    string
 		payload []byte
 	}{
 		{name: "empty", payload: []byte(" ")},
