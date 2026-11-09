@@ -43,6 +43,7 @@ func TestPublicDTOSchemaGoldens(t *testing.T) {
 		{"run-1.0.0.schema.json","run-cancelled-1.0.0.golden.json"},
 		{"result-summary-1.0.0.schema.json","result-summary-partial-1.0.0.golden.json"},
 		{"stage-1.0.0.schema.json","stage-ready-1.0.0.golden.json"},
+		{"stage-1.0.0.schema.json","stage-skipped-1.0.0.golden.json"},
 		{"stage-1.0.0.schema.json","stage-degraded-1.0.0.golden.json"},
 		{"stage-1.0.0.schema.json","stage-failed-1.0.0.golden.json"},
 		{"attempt-1.0.0.schema.json","attempt-running-1.0.0.golden.json"},
