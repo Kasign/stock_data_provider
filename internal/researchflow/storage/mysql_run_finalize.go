@@ -273,7 +273,6 @@ func (r *MySQLRunRepository) FinalizeRunResult(ctx context.Context, record appli
 	})
 }
 
-
 // FinalizeCancellationRun adapts the Application cancellation record to the
 // existing atomic Run + ResultSummary + Outbox transaction.
 func (r *MySQLRunRepository) FinalizeCancellationRun(ctx context.Context, record application.CancellationFinalizationRecord) (bool, error) {
