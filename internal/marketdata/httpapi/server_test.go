@@ -163,18 +163,18 @@ func (httpMarketCapitalFlowFake) FetchMarketCapitalFlow(_ context.Context, start
 func TestBuildSourceStatusesUsesOnlyRegisteredProviderCapabilities(t *testing.T) {
 	p := httpFakeProvider{}
 	sources := BuildSourceStatuses(SourceCapabilities{
-		All: []provider.NamedProvider{p},
-		Quotes: []provider.QuoteProvider{p},
-		DailyBars: []provider.DailyBarProvider{p},
-		StockBasic: []provider.StockBasicProvider{p},
-		StockSearch: []provider.StockSearchProvider{p},
+		All:            []provider.NamedProvider{p},
+		Quotes:         []provider.QuoteProvider{p},
+		DailyBars:      []provider.DailyBarProvider{p},
+		StockBasic:     []provider.StockBasicProvider{p},
+		StockSearch:    []provider.StockSearchProvider{p},
 		SectorRankings: []provider.SectorRankingProvider{p},
-		IndexQuotes: []provider.IndexQuoteProvider{p},
-		MarketBreadth: []provider.MarketBreadthProvider{p},
-		LimitPools: []provider.LimitPoolProvider{p},
-		DragonTiger: []provider.DragonTigerProvider{p},
-		Announcements: []provider.AnnouncementProvider{p},
-		StockBoards: []provider.StockBoardsProvider{p},
+		IndexQuotes:    []provider.IndexQuoteProvider{p},
+		MarketBreadth:  []provider.MarketBreadthProvider{p},
+		LimitPools:     []provider.LimitPoolProvider{p},
+		DragonTiger:    []provider.DragonTigerProvider{p},
+		Announcements:  []provider.AnnouncementProvider{p},
+		StockBoards:    []provider.StockBoardsProvider{p},
 	})
 	if len(sources) != 1 {
 		t.Fatalf("source count = %d, want 1: %+v", len(sources), sources)

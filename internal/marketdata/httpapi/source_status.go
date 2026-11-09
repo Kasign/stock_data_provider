@@ -10,27 +10,27 @@ import (
 // SourceCapabilities 是 Bootstrap 已完成 Provider 配置和能力校验后的只读能力集合。
 // BuildSourceStatuses 只把这些已启用能力映射为既有 HTTP SourceStatus，不执行探测或 Provider 调用。
 type SourceCapabilities struct {
-	All                    []provider.NamedProvider
-	Quotes                 []provider.QuoteProvider
-	DailyBars              []provider.DailyBarProvider
-	StockBasic             []provider.StockBasicProvider
-	StockSearch            []provider.StockSearchProvider
-	SectorRankings         []provider.SectorRankingProvider
-	IndexQuotes            []provider.IndexQuoteProvider
-	MarketBreadth          []provider.MarketBreadthProvider
-	LimitPools             []provider.LimitPoolProvider
+	All                   []provider.NamedProvider
+	Quotes                []provider.QuoteProvider
+	DailyBars             []provider.DailyBarProvider
+	StockBasic            []provider.StockBasicProvider
+	StockSearch           []provider.StockSearchProvider
+	SectorRankings        []provider.SectorRankingProvider
+	IndexQuotes           []provider.IndexQuoteProvider
+	MarketBreadth         []provider.MarketBreadthProvider
+	LimitPools            []provider.LimitPoolProvider
 	DragonTiger            []provider.DragonTigerProvider
-	Announcements          []provider.AnnouncementProvider
+	Announcements         []provider.AnnouncementProvider
 	StockBoards            []provider.StockBoardsProvider
 	TradingCalendar        []provider.TradingCalendarProvider
 	SecurityTradingStatus  []provider.SecurityTradingStatusProvider
-	Fundamentals            []provider.FundamentalsProvider
-	Valuations              []provider.ValuationProvider
-	IndexCatalog            []provider.IndexCatalogProvider
-	ChipDistribution        []provider.ChipDistributionProvider
-	CapitalFlow             []provider.CapitalFlowProvider
-	MarketCapitalFlow       []provider.MarketCapitalFlowProvider
-	HotRankings             []provider.HotRankingProvider
+	Fundamentals          []provider.FundamentalsProvider
+	Valuations            []provider.ValuationProvider
+	IndexCatalog          []provider.IndexCatalogProvider
+	ChipDistribution      []provider.ChipDistributionProvider
+	CapitalFlow           []provider.CapitalFlowProvider
+	MarketCapitalFlow     []provider.MarketCapitalFlowProvider
+	HotRankings           []provider.HotRankingProvider
 	Supplements             []provider.SupplementProvider
 }
 
@@ -97,7 +97,7 @@ func BuildSourceStatuses(capabilities SourceCapabilities) []model.SourceStatus {
 			SecurityTradingStatusCapable: securityTradingStatusEnabled[name], FundamentalsCapable: fundamentalsEnabled[name],
 			ValuationCapable: valuationEnabled[name], IndexCatalogCapable: indexCatalogEnabled[name],
 			HistoricalIndexConstituentsCapable: historicalIndexConstituentsEnabled[name],
-			ChipCapable: chipEnabled[name], CapitalFlowCapable: capitalFlowEnabled[name],
+			ChipCapable:                        chipEnabled[name], CapitalFlowCapable: capitalFlowEnabled[name],
 			MarketCapitalFlowCapable: marketCapitalFlowEnabled[name], HotRankingCapable: hotRankingEnabled[name],
 			DragonTigerCapable: dragonTigerEnabled[name], AnnouncementsCapable: announcementsEnabled[name],
 		})
