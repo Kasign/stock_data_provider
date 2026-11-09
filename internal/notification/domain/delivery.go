@@ -224,7 +224,7 @@ func deliveryTransitionAllowed(from, to DeliveryStatus, change DeliveryTransitio
 		if to == DeliverySkipped {
 			return change.RequestNotSent
 		}
-		return to == DeliverySent || to == DeliveryRetryWait ||
+		return to == DeliveryBlocked || to == DeliverySent || to == DeliveryRetryWait ||
 			to == DeliveryFailed || to == DeliveryUnknown
 	case DeliveryRetryWait:
 		return to == DeliverySending || to == DeliverySkipped ||

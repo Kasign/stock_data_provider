@@ -481,3 +481,8 @@ Delivery plan fingerprint 使用 RFC 8785 JSON Canonicalization Scheme + SHA-256
 - 最终请求仍须通过 `ChannelSendRequest.Validate` 的能力和 payload 字节数校验。
 
 该构造器是 Worker/Dispatcher 调用 Adapter 前的统一边界，防止合法但属于另一 Delivery 的内容或接收目标被错误发送。
+
+
+## 8.6 Preflight 决策的状态收敛
+
+Preflight 在 Delivery 已领取为 sending、但尚未创建 Attempt/调用渠道前执行。ready 保持 sending 并继续执行；skip 收敛为 skipped；block 收敛为 blocked。skip/block 必须携带指向本次 Preflight 判定记录的 evidence_ref，状态事件与 Delivery CAS 更新原子写入，并由 Repository 同时释放租约。sending -> blocked 仅用于明确发生在外部渠道调用之前的 Preflight 阻断；不得用于渠道调用后的结果，后者由 DeliveryCompletionService 处理。
