@@ -25,6 +25,9 @@ import (
 
 // Dependencies 是由调用方创建并拥有的基础设施依赖；Module 不负责关闭 Store/Cache。
 type Dependencies struct {
+	// RequireEgressDependencies 要求所有已启用 Provider 的出站执行器均由 Root 注入。
+	// 该开关只校验依赖完整性，不判断注入实现是否真正执行目的地址/DNS/IP 安全策略。
+	RequireEgressDependencies bool
 	Store                         *repository.Store            // 调用方创建并持有；Module 不负责关闭。
 	Cache                         cache.Cache                  // 调用方创建并持有；Module 不负责关闭。
 	Logger                        *slog.Logger                 // 模块日志依赖；nil 时使用 slog.Default。
@@ -94,6 +97,11 @@ type Module struct {
 // New 根据已加载配置和调用方提供的基础设施依赖创建 Market Data Module。
 // Store/Cache 由调用方持有；Module 只拥有并关闭自身创建的 BaoStock 客户端。
 func New(cfg config.Config, deps Dependencies) (*Module, error) {
+	if deps.RequireEgressDependencies {
+		if err := validateEgressDependencies(cfg, deps); err != nil {
+			return nil, err
+		}
+	}
 	if strings.TrimSpace(cfg.MySQLDSN) != "" && deps.Store == nil {
 		return nil, errors.New("MariaDB is configured but Store was not injected")
 	}
