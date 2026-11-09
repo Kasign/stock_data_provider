@@ -2,6 +2,8 @@ package app
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/json"
 	"errors"
 	"io"
 	"net"
@@ -73,11 +75,9 @@ type CollectedSourceEntry struct {
 	Content   domain.ContentLayers
 }
 
-const sourceCollectionResultSeal = "news.collect_source.result.v1"
-
-// collectionSeal 仅由 CollectSource 设置，阻止跨包调用方手工构造可持久化结果。
+// collectionSeal 绑定完整采集结果，防止调用方修改已采集的策略版本或候选载荷。
 type CollectSourceResult struct {
-	collectionSeal          string
+	collectionSeal          [sha256.Size]byte
 	SourceID                string
 	EndpointID              string
 	SourcePolicyVersionID   string
@@ -258,7 +258,35 @@ func (u *CollectSource) Execute(ctx context.Context, request CollectSourceReques
 		result.Entries[index].Candidate.NormalizedAt = &normalized
 		result.Entries[index].Candidate.ObservedAt = normalizedAt
 	}
+	if err := sealCollectSourceResult(&result); err != nil {
+		return CollectSourceResult{}, &SourceCollectionError{Code: "source_result_seal_failed"}
+	}
 	return result, nil
+}
+
+// sealCollectSourceResult binds all exported result fields into an unexported digest.
+// The digest is intentionally package-private so external callers cannot mint a valid result.
+func sealCollectSourceResult(result *CollectSourceResult) error {
+	if result == nil {
+		return ErrSourceCollectionRequest
+	}
+	result.collectionSeal = [sha256.Size]byte{}
+	payload, err := json.Marshal(result)
+	if err != nil {
+		return err
+	}
+	result.collectionSeal = sha256.Sum256(payload)
+	return nil
+}
+
+func (r CollectSourceResult) hasValidCollectionSeal() bool {
+	expected := r.collectionSeal
+	if expected == [sha256.Size]byte{} {
+		return false
+	}
+	r.collectionSeal = [sha256.Size]byte{}
+	payload, err := json.Marshal(r)
+	return err == nil && sha256.Sum256(payload) == expected
 }
 
 // SourceCollectionErrorCode returns the stable business code without exposing wrapped transport errors.
