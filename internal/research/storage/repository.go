@@ -130,6 +130,9 @@ func (r repositoryBase) appendVersionWithHook(ctx context.Context, aggregateType
 		var previous []byte
 		query := fmt.Sprintf("SELECT payload_sha256, payload FROM %s WHERE %s=? AND %s=?", table, idColumn, versionColumn)
 		if err := tx.QueryRowContext(ctx, query, aggregateID, latest).Scan(&previousDigest, &previous); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return corruptStoredRecord(aggregateType, "aggregate head references a missing latest version", nil)
+			}
 			return fmt.Errorf("read previous research version: %w", err)
 		}
 		if err := verifyStoredPayload(previous, previousDigest); err != nil {

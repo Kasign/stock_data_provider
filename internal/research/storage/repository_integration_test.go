@@ -689,3 +689,56 @@ func TestResearchSQLRepositoriesAppendAndReadVersions(t *testing.T) {
 		t.Fatalf("append after tampered previous Claim error = %v, want ErrCorruptRecord", err)
 	}
 }
+
+func TestResearchAppendRejectsAggregateHeadWithMissingLatestVersion(t *testing.T) {
+	db := openResearchIntegrationDB(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+
+	eventID := fmt.Sprintf("event-missing-latest-%d", time.Now().UnixNano())
+	now := time.Date(2026, 11, 9, 5, 0, 0, 123456789, time.UTC)
+	t.Cleanup(func() {
+		_, _ = db.ExecContext(context.Background(), "DELETE FROM research_event_versions WHERE event_id=?", eventID)
+		_, _ = db.ExecContext(context.Background(), "DELETE FROM research_aggregate_heads WHERE aggregate_type='event' AND aggregate_id=?", eventID)
+	})
+
+	// A head claiming version 1 without the corresponding immutable row is
+	// persisted-state corruption, not a normal version conflict or DB outage.
+	if _, err := db.ExecContext(ctx,
+		"INSERT INTO research_aggregate_heads (aggregate_type, aggregate_id, latest_version, created_at, updated_at) VALUES ('event', ?, 1, ?, ?)",
+		eventID, now, now); err != nil {
+		t.Fatalf("seed aggregate head without version row: %v", err)
+	}
+
+	repo, err := NewEventRepository(db, func() time.Time { return now })
+	if err != nil {
+		t.Fatal(err)
+	}
+	next := researchevent.ResearchEvent{
+		EventID: eventID, EventVersion: 2, EventType: "integration_fixture",
+		Title: "Missing latest version fixture", Status: researchevent.StatusDetected,
+		SubjectRefs: []string{}, EvidenceRefs: []string{},
+		SystemObservedAt: now, SystemAsOf: now,
+		ImpactHypothesisRefs: []string{}, InvalidationConditions: []string{},
+		Uncertainty: []string{}, SourceTimes: []researchevent.EventSourceTime{},
+	}
+	if err := repo.Append(ctx, next); !errors.Is(err, ErrCorruptRecord) {
+		t.Fatalf("append with missing latest Event row = %v, want ErrCorruptRecord", err)
+	}
+	var latest int64
+	if err := db.QueryRowContext(ctx,
+		"SELECT latest_version FROM research_aggregate_heads WHERE aggregate_type='event' AND aggregate_id=?", eventID).Scan(&latest); err != nil {
+		t.Fatalf("read aggregate head after rejected append: %v", err)
+	}
+	if latest != 1 {
+		t.Fatalf("aggregate head advanced to %d after missing-version rejection, want 1", latest)
+	}
+	var versionCount int
+	if err := db.QueryRowContext(ctx,
+		"SELECT COUNT(*) FROM research_event_versions WHERE event_id=?", eventID).Scan(&versionCount); err != nil {
+		t.Fatalf("count Event versions after rejected append: %v", err)
+	}
+	if versionCount != 0 {
+		t.Fatalf("append created %d Event versions despite missing previous version", versionCount)
+	}
+}
