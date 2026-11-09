@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"example.com/stock-analysis-flow/internal/marketdata/model"
+	"example.com/stock-analysis-flow/internal/marketdata/validation"
 )
 
 func TestHithinkValuationsWithoutReportDateRemainDegraded(t *testing.T) {
@@ -60,8 +61,10 @@ func TestHithinkValuationsDistinguishesMissingAndInvalidMetrics(t *testing.T) {
 	}))
 	t.Cleanup(server.Close)
 
+	reporter := validation.NewReporter(validation.DefaultMaxIssues)
+	ctx := validation.WithReporter(context.Background(), reporter)
 	snapshot, err := NewHithinkConfigured(3*time.Second, server.URL, "unit-test-key").
-		FetchValuations(context.Background(), []string{"600519.SH"})
+		FetchValuations(ctx, []string{"600519.SH"})
 	if err != nil {
 		t.Fatalf("FetchValuations returned error: %v", err)
 	}
@@ -96,5 +99,21 @@ func TestHithinkValuationsDistinguishesMissingAndInvalidMetrics(t *testing.T) {
 	if item.QualityStatus != model.QualityDegraded || snapshot.QualityStatus != model.QualityDegraded {
 		t.Fatalf("missing/invalid metrics must degrade item and snapshot, got item=%q snapshot=%q",
 			item.QualityStatus, snapshot.QualityStatus)
+	}
+	issues := reporter.Snapshot().Issues
+	wantIssues := map[string]string{"pb_mrq": "missing_value", "pcf_ttm": "invalid_number"}
+	for field, code := range wantIssues {
+		found := false
+		for _, issue := range issues {
+			if issue.Field == field && issue.ProviderField == field && issue.Code == code &&
+				issue.Stage == validation.StageParse && issue.Symbol == "600519.SH" &&
+				issue.RowIndex != nil && *issue.RowIndex == 0 {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("expected valuation parse issue %s/%s, got %+v", field, code, issues)
+		}
 	}
 }
