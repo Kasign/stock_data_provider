@@ -219,6 +219,9 @@ func RSI(closes []float64, p RSIParams) (Result, error) {
 	}
 	averageGain := gains / float64(p.Window)
 	averageLoss := losses / float64(p.Window)
+	if !finite(averageGain) || !finite(averageLoss) {
+		return Result{}, ErrInvalidInput
+	}
 
 	for i := p.Window + 1; i < len(closes); i++ {
 		change := closes[i] - closes[i-1]
@@ -230,6 +233,9 @@ func RSI(closes []float64, p RSIParams) (Result, error) {
 		}
 		averageGain = (averageGain*float64(p.Window-1) + gain) / float64(p.Window)
 		averageLoss = (averageLoss*float64(p.Window-1) + loss) / float64(p.Window)
+		if !finite(averageGain) || !finite(averageLoss) {
+			return Result{}, ErrInvalidInput
+		}
 	}
 
 	value := rsiValue(averageGain, averageLoss)
