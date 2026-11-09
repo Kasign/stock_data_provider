@@ -9,6 +9,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	platformdiagnostics "example.com/stock-analysis-flow/internal/platform/diagnostics"
 	serverdiagnostics "example.com/stock-analysis-flow/internal/server/diagnostics"
 )
 
@@ -74,7 +75,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		dependencies := make(map[string]string, len(report.Diagnostics.Results))
 		for _, result := range report.Diagnostics.Results {
-			dependencies[result.CheckID] = string(result.Observation.Status)
+			dependencies[result.CheckID] = readinessDependencyStatus(result.Observation.Status)
 		}
 		writeJSON(w, r, http.StatusOK, map[string]any{
 			"status":       "ready",
@@ -84,6 +85,15 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	default:
 		http.NotFound(w, r)
 	}
+}
+
+// readinessDependencyStatus preserves the legacy "ok" value for healthy
+// dependencies while exposing non-healthy diagnostic states without hiding them.
+func readinessDependencyStatus(status platformdiagnostics.Status) string {
+	if status == platformdiagnostics.StatusHealthy {
+		return "ok"
+	}
+	return string(status)
 }
 
 func writeJSON(w http.ResponseWriter, r *http.Request, status int, value any) {
