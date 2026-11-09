@@ -171,7 +171,6 @@ func assertContextSchemaValueType(t *testing.T, name string, typ reflect.Type, s
 	}
 }
 
-
 func requiredFieldNames(typ reflect.Type) map[string]struct{} {
 	fields := make(map[string]struct{}, typ.NumField())
 	for i := 0; i < typ.NumField(); i++ {

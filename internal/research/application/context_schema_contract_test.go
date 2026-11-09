@@ -129,7 +129,6 @@ func assertContextSchemaValueType(t *testing.T, name string, typ reflect.Type, s
 	}
 }
 
-
 func mustApplicationSchemaDocument(t *testing.T, data []byte) any {
 	t.Helper()
 	document, err := jsonschema.UnmarshalJSON(bytes.NewReader(data))
