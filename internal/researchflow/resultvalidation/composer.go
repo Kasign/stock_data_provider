@@ -76,8 +76,16 @@ func ComposeResult(input ResultCompositionInput, quantRegistry *Registry) (Compo
 	if err != nil {
 		return ComposedResearchResult{}, err
 	}
-	if err := validateResearchClaims(input.Claims, evidenceIDs, input.SystemAsOf); err != nil {
+	claimIDs, err := validateResearchClaims(input.Claims, evidenceIDs, input.SystemAsOf)
+	if err != nil {
 		return ComposedResearchResult{}, err
+	}
+	for _, evidence := range input.Evidence {
+		if evidence.ClaimRef != nil {
+			if _, exists := claimIDs[*evidence.ClaimRef]; !exists {
+				return ComposedResearchResult{}, fmt.Errorf("%w: Evidence %q references missing Claim %q", ErrInvalidResultComposition, evidence.EvidenceID, *evidence.ClaimRef)
+			}
+		}
 	}
 
 	quantResults := make([]QuantValidation, 0, len(input.QuantResults))
@@ -199,10 +207,13 @@ func validateResearchEvidence(values []researchapp.EvidenceRecord, expectedSyste
 	}
 	for _, value := range values {
 		for _, ref := range value.DerivedFromRefs {
-			if _, exists := ids[ref]; !exists {
-				return nil, fmt.Errorf("%w: Evidence %q references missing upstream Evidence %q", ErrInvalidResultComposition, value.EvidenceID, ref)
+			if _, exists := ids[ref]; !exists || ref == value.EvidenceID {
+				return nil, fmt.Errorf("%w: Evidence %q references missing or self Evidence %q", ErrInvalidResultComposition, value.EvidenceID, ref)
 			}
 		}
+	}
+	if evidenceGraphHasCycle(values) {
+		return nil, fmt.Errorf("%w: Research Evidence derivation contains a cycle", ErrInvalidResultComposition)
 	}
 	return ids, nil
 }
@@ -224,8 +235,9 @@ func validEvidenceTimes(value researchapp.EvidenceDraft) bool {
 	return true
 }
 
-func validateResearchClaims(values []researchapp.Claim, evidenceIDs map[string]struct{}, expectedSystemAsOf time.Time) error {
+func validateResearchClaims(values []researchapp.Claim, evidenceIDs map[string]struct{}, expectedSystemAsOf time.Time) (map[string]struct{}, error) {
 	seen := make(map[string]struct{}, len(values))
+	claimIDs := make(map[string]struct{}, len(values))
 	for _, value := range values {
 		if strings.TrimSpace(value.ClaimID) == "" || value.ClaimVersion <= 0 ||
 			strings.TrimSpace(value.Statement) == "" || !validClaimType(value.EpistemicType) ||
@@ -237,36 +249,68 @@ func validateResearchClaims(values []researchapp.Claim, evidenceIDs map[string]s
 			hasDuplicateOrInvalidRefs(value.ContradictingEvidenceRefs) || hasDuplicateOrInvalidRefs(value.RequiredDataRefs) ||
 			hasDuplicateOrInvalidRefs(value.InvalidationConditions) || hasDuplicateOrInvalidRefs(value.Limitations) ||
 			!validClaimStatus(value.Status) {
-			return fmt.Errorf("%w: invalid Research Claim %q", ErrInvalidResultComposition, value.ClaimID)
+			return nil, fmt.Errorf("%w: invalid Research Claim %q", ErrInvalidResultComposition, value.ClaimID)
 		}
 		key := fmt.Sprintf("%s/%d", value.ClaimID, value.ClaimVersion)
 		if _, exists := seen[key]; exists {
-			return fmt.Errorf("%w: duplicate Research Claim %q", ErrInvalidResultComposition, key)
+			return nil, fmt.Errorf("%w: duplicate Research Claim %q", ErrInvalidResultComposition, key)
 		}
 		seen[key] = struct{}{}
+		claimIDs[value.ClaimID] = struct{}{}
 		referenced := make(map[string]struct{}, len(value.SupportingEvidenceRefs)+len(value.ContradictingEvidenceRefs))
 		for _, ref := range value.SupportingEvidenceRefs {
 			if _, exists := evidenceIDs[ref]; !exists || ref == "" {
-				return fmt.Errorf("%w: Claim %q references missing supporting Evidence %q", ErrInvalidResultComposition, key, ref)
+				return nil, fmt.Errorf("%w: Claim %q references missing supporting Evidence %q", ErrInvalidResultComposition, key, ref)
 			}
 			referenced[ref] = struct{}{}
 		}
 		for _, ref := range value.ContradictingEvidenceRefs {
 			if _, exists := evidenceIDs[ref]; !exists || ref == "" {
-				return fmt.Errorf("%w: Claim %q references missing contradicting Evidence %q", ErrInvalidResultComposition, key, ref)
+				return nil, fmt.Errorf("%w: Claim %q references missing contradicting Evidence %q", ErrInvalidResultComposition, key, ref)
 			}
 			if _, overlaps := referenced[ref]; overlaps {
-				return fmt.Errorf("%w: Claim %q uses one Evidence as both support and contradiction", ErrInvalidResultComposition, key)
+				return nil, fmt.Errorf("%w: Claim %q uses one Evidence as both support and contradiction", ErrInvalidResultComposition, key)
 			}
 		}
 		if value.EpistemicType == "hypothesis" &&
 			(value.InvalidationConditions == nil || strings.TrimSpace(pointerValue(value.ValidationMethod)) == "" ||
 				strings.TrimSpace(pointerValue(value.ExpectedObservation)) == "" ||
 				len(value.InvalidationConditions) == 0) {
-			return fmt.Errorf("%w: Hypothesis %q lacks validation or invalidation fields", ErrInvalidResultComposition, key)
+			return nil, fmt.Errorf("%w: Hypothesis %q lacks validation or invalidation fields", ErrInvalidResultComposition, key)
 		}
 	}
-	return nil
+	return claimIDs, nil
+}
+
+func evidenceGraphHasCycle(values []researchapp.EvidenceRecord) bool {
+	graph := make(map[string][]string, len(values))
+	for _, value := range values {
+		graph[value.EvidenceID] = value.DerivedFromRefs
+	}
+	state := make(map[string]uint8, len(graph))
+	var visit func(string) bool
+	visit = func(id string) bool {
+		switch state[id] {
+		case 1:
+			return true
+		case 2:
+			return false
+		}
+		state[id] = 1
+		for _, parent := range graph[id] {
+			if visit(parent) {
+				return true
+			}
+		}
+		state[id] = 2
+		return false
+	}
+	for id := range graph {
+		if visit(id) {
+			return true
+		}
+	}
+	return false
 }
 
 func validateLLMExplanation(value llmapp.ModelResponse, expectedSystemAsOf time.Time) (LLMExplanation, error) {
