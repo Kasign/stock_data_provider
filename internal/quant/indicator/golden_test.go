@@ -18,7 +18,7 @@ type indicatorGolden struct {
 		Window              int     `json:"window"`
 		SeedMethod          string  `json:"seed_method"`
 		ReturnBasis         string  `json:"return_basis"`
-		AnnualizationFactor float64 `json:"annualization_factor"`
+		AnnualizationFactor int `json:"annualization_factor"`
 		SmoothingMethod     string  `json:"smoothing_method"`
 		FastWindow          int     `json:"fast_window"`
 		SlowWindow          int     `json:"slow_window"`
