@@ -119,8 +119,8 @@ jobs:
       - name: Run MariaDB credential store race tests
         run: go test -race ./internal/platform/security -run "TestMariaDBCredentialStoreIntegration" -v
 
-      - name: Run Redis session integration tests
+      - name: Run Redis session and rate limit integration tests
         run: go test ./internal/platform/security -run "Test(RedisSessionStore|RedisLoginRateLimiter)Integration" -v
 
-      - name: Run Redis session integration race tests
+      - name: Run Redis session and rate limit integration race tests
         run: go test -race ./internal/platform/security -run "TestRedisSessionStoreIntegration" -v

@@ -73,7 +73,7 @@ Session 记录至少包括 token_digest、owner subject、created_at、last_seen
 
 Redis 是短期可丢失 Session/限流状态存储，不是 Owner Credential 的事实源。Session Store 读写、Touch、Rotate、Revoke 失败时认证 fail closed；不回退内存 Session、Bearer 或匿名模式。Redis 数据丢失时所有 Session 视为失效，用户重新登录。
 
-SessionStore 的原子性覆盖创建、读取并刷新、轮换、撤销和 TTL 更新；推荐使用 Redis Lua/事务实现关键多键操作，并用真实 Redis integration + 并发测试证明语义。具体 Key 格式和脚本在实现前评审。
+SessionStore 的原子性覆盖创建、读取并刷新、轮换、撤销和 TTL 更新；当前 Redis 实现使用 Lua 脚本，并已通过真实 Redis integration/race。Key 使用配置前缀加 `session:` 与 Token SHA-256 摘要；Touch/Rotate 同时校验 idle/absolute expiry，Rotate 保留原始 created_at、subject、credential_version 和 absolute_expires_at。
 
 ## 5. Cookie 与 CSRF
 
@@ -123,12 +123,12 @@ Platform 提供 SecurityAuditEvent Schema、字段约束/脱敏和注入式 Audi
 | 编号 | 任务 | 主要交付 | 依赖 |
 |---|---|---|---|
 | PLAT-015 | Owner Password / Credential Store | Argon2id、参数版本、CredentialStore、MariaDB 事实源 | Config/Secret、Storage |
-| PLAT-016 | Web Session / Cookie | SessionStore、Redis 原子实现、过期/轮换/撤销、Cookie helper | PLAT-009、PLAT-015 |
-| PLAT-017 | CSRF | Session 绑定 Token 原语 | PLAT-016 |
-| PLAT-018 | Login RateLimit | RateLimiter、Redis 原子窗口计数和退避 | PLAT-009 |
-| PLAT-019 | Security Audit Contract | 事件 Schema、脱敏、AuditWriter | Logging/Fault |
+| PLAT-016 | Web Session / Cookie | SessionStore、Redis 原子实现、过期/轮换/撤销、Cookie helper | PLAT-009、PLAT-015 | Platform L1 已完成；Server A2 待接入 |
+| PLAT-017 | CSRF | Session 绑定 Token 原语 | PLAT-016 | Platform L1 已完成；Server A2 待接入 |
+| PLAT-018 | Login RateLimit | RateLimiter、Redis 原子窗口计数和退避 | PLAT-009 | Platform L1 已完成；Server A2 待接入 |
+| PLAT-019 | Security Audit Contract | 事件 Schema、脱敏、AuditWriter | Logging/Fault | Platform L1 已完成；Server A2 待接入 |
 
-执行顺序：契约评审 → PLAT-015 → PLAT-016 → PLAT-017/018 → PLAT-019 → Server A2 → 部署 A3。接口稳定后 PLAT-017/018/019 可并行。
+执行顺序（已完成 Platform L1）：PLAT-015 → PLAT-016 → PLAT-017/018 → PLAT-019。后续由 Server 负责 A2 业务接入，再进行部署 A3；不再由 Platform 分支定义 Web 登录业务契约。
 
 ## 10. 验收分层
 
@@ -153,8 +153,8 @@ Platform 提供 SecurityAuditEvent Schema、字段约束/脱敏和注入式 Audi
 
 ## 11. 当前状态与未决门禁
 
-初始设计审查代码基线为 `fd45b6c299dfb54d2530bd1436589fe4708d8e96`；当前实现状态以本节后续 PLAT-015 记录为准：
-- 现有 `internal/platform/security` 只有 Bearer Authenticator、Router Policy 和测试。
+初始设计审查代码基线为 `fd45b6c299dfb54d2530bd1436589fe4708d8e96`；当前实现状态以 PLAT-015～019 L1 验收记录为准：
+- `internal/platform/security` 现提供 Bearer Authenticator/Router Policy、Argon2id CredentialStore、Redis SessionStore/Cookie、CSRF Token、Redis LoginRateLimiter 和 SecurityAuditEvent/Writer 公共原语；Web 登录业务路由仍由 Server 实现。
 - `internal/platform/storage.OpenRedis` 提供统一 Redis Client 生命周期；`security.RedisSessionStore` 与 `security.RedisLoginRateLimiter` 均注入并复用该 Client，不创建第二套连接池。
 - go.mod 已引入成熟依赖 `golang.org/x/crypto/argon2`；不自研密码学算法。
 - Argon2id Hash/Verify/NeedsRehash 与 MariaDB CredentialStore 已新增；Hasher 使用显式参数，不提供未经硬件基准确认的生产默认值。PLAT-016 已新增 Session Token 摘要、Redis SessionStore 原子 Touch/Rotate/Revoke 和 Cookie helper，Platform L1 CI 已通过。PLAT-017 已新增 CSRF Token 生成、摘要与常量时间校验原语并通过 CI；PLAT-018 已新增 Redis 双维度登录限流与退避原语并通过 CI；PLAT-019 Security Audit Event/Writer 契约也已实现并通过 CI。
