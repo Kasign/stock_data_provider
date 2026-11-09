@@ -76,6 +76,20 @@ func FingerprintPayload(payload json.RawMessage) (string, error) {
 	return hex.EncodeToString(sum[:]), nil
 }
 
+// BuildWithPayload 根据 payload 计算结果指纹并生成 Manifest。
+// 若调用方同时提供 ResultFingerprint，则必须与实际 payload 指纹一致。
+func BuildWithPayload(input Input, payload json.RawMessage) (Manifest, error) {
+	fingerprint, err := FingerprintPayload(payload)
+	if err != nil {
+		return Manifest{}, err
+	}
+	if input.ResultFingerprint != "" && input.ResultFingerprint != fingerprint {
+		return Manifest{}, fmt.Errorf("%w: supplied result_fingerprint does not match payload", ErrInvalidPayload)
+	}
+	input.ResultFingerprint = fingerprint
+	return Build(input)
+}
+
 // Build 按 QNT-CTR-005 生成不可变 Manifest；快照引用会排序，重复或空引用直接拒绝。
 func Build(input Input) (Manifest, error) {
 	if _, ok := allowedResultTypes[input.ResultType]; !ok {
@@ -157,6 +171,21 @@ func (m Manifest) Verify() error {
 	}
 	if expected != m.ManifestFingerprint || m.ResultID != resultIDPrefix+expected {
 		return invalid("content-addressed identity mismatch")
+	}
+	return nil
+}
+
+// VerifyPayload 同时验证 Manifest 自身身份和其绑定的 payload 内容。
+func (m Manifest) VerifyPayload(payload json.RawMessage) error {
+	if err := m.Verify(); err != nil {
+		return err
+	}
+	fingerprint, err := FingerprintPayload(payload)
+	if err != nil {
+		return err
+	}
+	if fingerprint != m.ResultFingerprint {
+		return fmt.Errorf("%w: payload fingerprint mismatch", ErrInvalidPayload)
 	}
 	return nil
 }
