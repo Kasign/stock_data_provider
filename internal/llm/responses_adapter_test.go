@@ -427,3 +427,127 @@ func TestResponsesAdapterRejectsUnsupportedStrictSchemaBeforeDispatch(t *testing
 		t.Fatal("unsupported strict schema must be rejected before HTTP dispatch")
 	}
 }
+
+
+func streamAdapterTestConfig() (ProviderConfig, config.Secret, CapabilityState, Clock) {
+	provider, secret, capabilities, clock := adapterTestConfig()
+	provider.StreamEnabled = true
+	capabilities.Values[CapabilityResponsesStream] = CapabilitySupported
+	return provider, secret, capabilities, clock
+}
+
+func TestResponsesAdapterStreamUsesPlatformStreamAndParsesIncrementally(t *testing.T) {
+	provider, secret, capabilities, clock := streamAdapterTestConfig()
+	request := validResponsesRequest()
+	request.ProviderID = provider.ProviderID
+	sse := strings.Join([]string{
+		"event: response.output_text.delta",
+		"data: {\"type\":\"response.output_text.delta\",\"delta\":\"streamed\"}",
+		"",
+		"event: response.completed",
+		"data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp-stream\",\"object\":\"response\",\"model\":\"qwen-local\",\"status\":\"completed\",\"output\":[{\"id\":\"msg-stream\",\"type\":\"message\",\"content\":[{\"type\":\"output_text\",\"text\":\"streamed\"}]}]}}",
+		"",
+	}, "\n")
+	var opened bool
+	streamDoer := HTTPStreamDoerFunc(func(ctx context.Context, req *http.Request) (*HTTPStreamResponse, error) {
+		opened = true
+		if req.Method != http.MethodPost || req.URL.String() != "https://gateway.example.com:8443/v1/responses" {
+			t.Fatalf("unexpected stream request target: %s %s", req.Method, req.URL)
+		}
+		if req.Header.Get("Accept") != "text/event-stream" ||
+			req.Header.Get("Authorization") != "Bearer gateway-caller-secret" {
+			t.Fatalf("stream headers are incomplete: %#v", req.Header)
+		}
+		body, err := io.ReadAll(req.Body)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var wire map[string]any
+		if err := json.Unmarshal(body, &wire); err != nil || wire["stream"] != true {
+			t.Fatalf("stream request body must include stream=true: %s err=%v", body, err)
+		}
+		return &HTTPStreamResponse{
+			StatusCode: http.StatusOK,
+			Header: http.Header{
+				"Content-Type": []string{"text/event-stream; charset=utf-8"},
+				"X-Request-ID": []string{"gateway-stream-1"},
+				"Request-Id":   []string{"upstream-stream-1"},
+			},
+			Body: io.NopCloser(strings.NewReader(sse)),
+		}, nil
+	})
+	adapter, err := NewResponsesAdapterWithStream(provider, secret,
+		doerFunc(func(*http.Request) (*http.Response, error) { return nil, errors.New("unused") }),
+		streamDoer, capabilities, clock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var sawDelta bool
+	got, err := adapter.Stream(context.Background(), request, func(event ModelEvent) error {
+		if event.Type == "response.output_text.delta" && event.Delta == "streamed" {
+			sawDelta = true
+		}
+		return nil
+	})
+	if err != nil || !opened || !sawDelta || got.Status != ResponseCompleted || got.OutputText != "streamed" {
+		t.Fatalf("unexpected stream result: opened=%v delta=%v response=%+v err=%v", opened, sawDelta, got, err)
+	}
+	if got.GatewayRequestID != "gateway-stream-1" || got.UpstreamRequestID != "upstream-stream-1" {
+		t.Fatalf("stream request IDs were not preserved: %+v", got)
+	}
+}
+
+func TestResponsesAdapterStreamReturnsConsumerErrorUnchanged(t *testing.T) {
+	provider, secret, capabilities, clock := streamAdapterTestConfig()
+	request := validResponsesRequest()
+	request.ProviderID = provider.ProviderID
+	sse := strings.Join([]string{
+		"event: response.output_text.delta",
+		"data: {\"type\":\"response.output_text.delta\",\"delta\":\"partial\"}",
+		"",
+		"event: response.completed",
+		"data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp-callback\",\"object\":\"response\",\"status\":\"completed\",\"output\":[]}}",
+		"",
+	}, "\n")
+	callbackErr := &AdapterError{Info: adapterError(ErrorCancelled, "consumer.cancelled", false, nil)}
+	streamDoer := HTTPStreamDoerFunc(func(context.Context, *http.Request) (*HTTPStreamResponse, error) {
+		return &HTTPStreamResponse{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": []string{"text/event-stream"}}, Body: io.NopCloser(strings.NewReader(sse))}, nil
+	})
+	adapter, err := NewResponsesAdapterWithStream(provider, secret,
+		doerFunc(func(*http.Request) (*http.Response, error) { return nil, errors.New("unused") }),
+		streamDoer, capabilities, clock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := adapter.Stream(context.Background(), request, func(ModelEvent) error { return callbackErr })
+	if err != callbackErr || got.Status != ResponseIncomplete || got.OutputText != "partial" {
+		t.Fatalf("consumer error must pass through and preserve partial output: response=%+v err=%v", got, err)
+	}
+}
+
+func TestResponsesAdapterStreamMapsPlatformReadFailureAndPreservesPartialOutput(t *testing.T) {
+	provider, secret, capabilities, clock := streamAdapterTestConfig()
+	request := validResponsesRequest()
+	request.ProviderID = provider.ProviderID
+	readErr := errors.New("upstream socket closed")
+	partial := []byte(strings.Join([]string{
+		"event: response.output_text.delta",
+		"data: {\"type\":\"response.output_text.delta\",\"delta\":\"partial\"}",
+		"",
+	}, "\n"))
+	streamDoer := HTTPStreamDoerFunc(func(context.Context, *http.Request) (*HTTPStreamResponse, error) {
+		return &HTTPStreamResponse{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": []string{"text/event-stream"}}, Body: io.NopCloser(&errorAfterSSEDataReader{data: partial, err: readErr})}, nil
+	})
+	adapter, err := NewResponsesAdapterWithStream(provider, secret,
+		doerFunc(func(*http.Request) (*http.Response, error) { return nil, errors.New("unused") }),
+		streamDoer, capabilities, clock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := adapter.Stream(context.Background(), request, nil)
+	var adapterErr *AdapterError
+	if !errors.As(err, &adapterErr) || adapterErr.Info.Kind != ErrorUpstreamUnavailable ||
+		got.Status != ResponseIncomplete || got.OutputText != "partial" {
+		t.Fatalf("read failure must be normalized without losing partial output: response=%+v err=%v", got, err)
+	}
+}
