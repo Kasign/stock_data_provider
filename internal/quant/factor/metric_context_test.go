@@ -39,7 +39,6 @@ func TestNewQuantMetricWithContextAppliesQualityPolicy(t *testing.T) {
 	}
 }
 
-
 func TestNewQuantMetricWithContextPreservesDegradedInsufficientDataUnderStrictPolicy(t *testing.T) {
 	ctx := validFactorContext()
 	now := time.Date(2026, 11, 9, 7, 0, 0, 0, time.UTC)
