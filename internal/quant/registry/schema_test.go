@@ -253,3 +253,79 @@ func TestValidateJSONSchemaInstanceRejectsInvalidUTF8(t *testing.T) {
 		t.Fatal("instance containing invalid UTF-8 unexpectedly passed")
 	}
 }
+
+func TestRegistryEntrySchemaEnforcesRangeAndUniqueInputConstraints(t *testing.T) {
+	schema := compileQuantSchemaFile(t, "QNT-CTR-001-registry-entry-1.0.0.schema.json")
+	cases := []struct {
+		name   string
+		mutate func(*Entry)
+	}{
+		{
+			name: "unbounded range cannot include bounds",
+			mutate: func(entry *Entry) {
+				entry.Range.Unbounded = true
+			},
+		},
+		{
+			name: "bounded range requires both bounds",
+			mutate: func(entry *Entry) {
+				entry.Range.Maximum = nil
+			},
+		},
+		{
+			name: "input fields must be unique",
+			mutate: func(entry *Entry) {
+				entry.InputRequirements[0].Fields = []string{"close", "close"}
+			},
+		},
+		{
+			name: "quality states must be unique",
+			mutate: func(entry *Entry) {
+				entry.InputRequirements[0].Quality = []string{"valid", "valid"}
+			},
+		},
+		{
+			name: "metric code must match the registered code pattern",
+			mutate: func(entry *Entry) {
+				entry.Code = "Momentum-20D"
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			entry := validEntry("momentum_20d", "1.0.0")
+			tc.mutate(&entry)
+			encoded, err := json.Marshal(entry)
+			if err != nil {
+				t.Fatalf("marshal Registry entry: %v", err)
+			}
+			if err := validateJSONSchemaInstance(schema, encoded); err == nil {
+				t.Fatalf("invalid Registry entry unexpectedly passed: %s", encoded)
+			}
+		})
+	}
+}
+
+func TestIndicatorAndFactorSchemasEnforceNumericAndEmptyParameterBoundaries(t *testing.T) {
+	indicatorSchema := compileQuantSchemaFile(t, "QNT-CTR-002-indicator-parameters-1.0.0.schema.json")
+	validVolatility := []byte(`{"schema_version":"1.0.0","indicator_code":"volatility","parameters":{"window":20,"return_basis":"simple","annualization_factor":252}}`)
+	if err := validateJSONSchemaInstance(indicatorSchema, validVolatility); err != nil {
+		t.Fatalf("valid volatility parameters rejected: %v", err)
+	}
+	zeroAnnualization := []byte(`{"schema_version":"1.0.0","indicator_code":"volatility","parameters":{"window":20,"return_basis":"simple","annualization_factor":0}}`)
+	if err := validateJSONSchemaInstance(indicatorSchema, zeroAnnualization); err == nil {
+		t.Fatal("zero annualization_factor unexpectedly passed exclusiveMinimum")
+	}
+
+	factorSchema := compileQuantSchemaFile(t, "QNT-CTR-003-factor-parameters-1.0.0.schema.json")
+	validFactor := []byte(`{"schema_version":"1.0.0","factor_code":"momentum_20d","parameters":{}}`)
+	if err := validateJSONSchemaInstance(factorSchema, validFactor); err != nil {
+		t.Fatalf("valid empty Factor parameters rejected: %v", err)
+	}
+	nonEmptyFactor := []byte(`{"schema_version":"1.0.0","factor_code":"momentum_20d","parameters":{"window":20}}`)
+	if err := validateJSONSchemaInstance(factorSchema, nonEmptyFactor); err == nil {
+		t.Fatal("non-empty Factor parameters unexpectedly passed maxProperties")
+	}
+}
+
