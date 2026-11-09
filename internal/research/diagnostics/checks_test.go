@@ -2,8 +2,8 @@ package diagnostics
 
 import (
 	"context"
-	"sync"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
