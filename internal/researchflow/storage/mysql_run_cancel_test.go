@@ -94,11 +94,11 @@ func TestMariaDBBeginRunCancellationLinearizesWorkerOperations(t *testing.T) {
 	if _, err := repository.CreateRunAtomic(ctx, record); err != nil {
 		t.Fatalf("create cancellation fixture: %v", err)
 	}
-	attempt, replayed, err := repository.ClaimAttempt(ctx, runRef, runningStageRef, "cancel-attempt-"+suffix, "worker-a", time.Minute, 2)
+	attempt, replayed, err := repository.ClaimAttempt(ctx, runRef, runningStageRef, "cancel-attempt-"+suffix, "worker-a", time.Minute, 2, 8)
 	if err != nil || replayed {
 		t.Fatalf("claim running stage replayed=%v err=%v", replayed, err)
 	}
-	fencedAttempt, replayed, err := repository.ClaimAttempt(ctx, runRef, fencedStageRef, "fenced-attempt-"+suffix, "worker-b", time.Minute, 2)
+	fencedAttempt, replayed, err := repository.ClaimAttempt(ctx, runRef, fencedStageRef, "fenced-attempt-"+suffix, "worker-b", time.Minute, 2, 8)
 	if err != nil || replayed {
 		t.Fatalf("claim fenced stage replayed=%v err=%v", replayed, err)
 	}
@@ -110,7 +110,7 @@ func TestMariaDBBeginRunCancellationLinearizesWorkerOperations(t *testing.T) {
 	if err != nil || changed {
 		t.Fatalf("idempotent cancellation changed=%v err=%v", changed, err)
 	}
-	if _, _, err := repository.ClaimAttempt(ctx, runRef, readyStageRef, "late-claim-"+suffix, "worker-b", time.Minute, 2); !errors.Is(err, ErrClaimRunUnavailable) {
+	if _, _, err := repository.ClaimAttempt(ctx, runRef, readyStageRef, "late-claim-"+suffix, "worker-b", time.Minute, 2, 8); !errors.Is(err, ErrClaimRunUnavailable) {
 		t.Fatalf("claim after cancellation error=%v, want ErrClaimRunUnavailable", err)
 	}
 	runningStage, err := repository.GetStage(ctx, runningStageRef)

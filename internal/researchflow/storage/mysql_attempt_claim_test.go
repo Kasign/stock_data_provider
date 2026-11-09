@@ -19,7 +19,7 @@ import (
 
 func TestClaimAttemptValidatesArgumentsWithoutDatabase(t *testing.T) {
 	repository := &MySQLRunRepository{}
-	_, _, err := repository.ClaimAttempt(context.Background(), "run", "stage", "attempt", "worker", time.Minute, 3)
+	_, _, err := repository.ClaimAttempt(context.Background(), "run", "stage", "attempt", "worker", time.Minute, 3, 8)
 	if err == nil {
 		t.Fatal("expected missing database to be rejected")
 	}
@@ -61,7 +61,7 @@ func TestMariaDBClaimAttemptLeaseAndFencing(t *testing.T) {
 	suffix := fmt.Sprintf("%d", time.Now().UnixNano())
 	now := time.Now().UTC()
 	templateFingerprint := "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
-	runRef, stageRef := "claim-run-"+suffix, "claim-stage-"+suffix
+	runRef, stageRef, secondStageRef := "claim-run-"+suffix, "claim-stage-"+suffix, "claim-stage-second-"+suffix
 	record := application.CreateRunRecord{
 		Scope: application.IdempotencyScope{
 			CallerRef: "researchflow-claim-test", Operation: "CreateRun", Key: "claim-" + suffix,
@@ -74,14 +74,21 @@ func TestMariaDBClaimAttemptLeaseAndFencing(t *testing.T) {
 			TemplateFingerprint: templateFingerprint, InputSnapshotRefs: []string{"snapshot-" + suffix},
 			CorrelationID: "claim-correlation-" + suffix,
 		},
-		Stages: []domain.Stage{{
-			Ref: stageRef, RunRef: runRef, Code: "context", Status: domain.StageReady,
-			Version: 1, Required: true, Dependencies: []string{}, RetryPolicyRef: "retry-v1",
-			DiagnosticRefs: []string{}, ReasonCodes: []string{},
-		}},
+		Stages: []domain.Stage{
+			{
+				Ref: stageRef, RunRef: runRef, Code: "context", Status: domain.StageReady,
+				Version: 1, Required: true, Dependencies: []string{}, RetryPolicyRef: "retry-v1",
+				DiagnosticRefs: []string{}, ReasonCodes: []string{},
+			},
+			{
+				Ref: secondStageRef, RunRef: runRef, Code: "quant", Status: domain.StageReady,
+				Version: 1, Required: true, Dependencies: []string{}, RetryPolicyRef: "retry-v1",
+				DiagnosticRefs: []string{}, ReasonCodes: []string{},
+			},
+		},
 		ResolvedTemplate: template.ResolvedTemplate{
 			Ref: "claim-template", Version: "v1", Fingerprint: templateFingerprint,
-			Stages: []template.ResolvedStage{{Definition: template.StageDefinition{Code: "context"}}},
+			Stages: []template.ResolvedStage{{Definition: template.StageDefinition{Code: "context"}}, {Definition: template.StageDefinition{Code: "quant"}}},
 		},
 		Parameters: json.RawMessage(`{}`),
 	}
@@ -89,12 +96,16 @@ func TestMariaDBClaimAttemptLeaseAndFencing(t *testing.T) {
 		t.Fatalf("create run fixture: %v", err)
 	}
 
-	first, replayed, err := repository.ClaimAttempt(ctx, runRef, stageRef, "claim-attempt-1-"+suffix, "worker-a", time.Minute, 3)
+	first, replayed, err := repository.ClaimAttempt(ctx, runRef, stageRef, "claim-attempt-1-"+suffix, "worker-a", time.Minute, 3, 8)
 	if err != nil || replayed {
 		t.Fatalf("first claim replayed=%v err=%v", replayed, err)
 	}
 	if first.Number != 1 || first.FencingToken != 1 || first.Status != domain.AttemptRunning {
 		t.Fatalf("first claim returned unexpected attempt: %#v", first)
+	}
+	if _, _, err := repository.ClaimAttempt(ctx, runRef, secondStageRef,
+		"claim-attempt-over-limit-"+suffix, "worker-limit", time.Minute, 3, 1); !errors.Is(err, ErrRunConcurrencyLimit) {
+		t.Fatalf("claim above Run parallel limit error=%v, want ErrRunConcurrencyLimit", err)
 	}
 	originalExpiry := *first.LeaseExpiresAt
 	renewedExpiry, err := repository.RenewAttemptLease(
@@ -114,18 +125,18 @@ func TestMariaDBClaimAttemptLeaseAndFencing(t *testing.T) {
 	if _, err := db.ExecContext(ctx, `UPDATE researchflow_stages SET status = ? WHERE stage_ref = ?`, string(domain.StageSucceeded), stageRef); err != nil {
 		t.Fatalf("make stage state inconsistent: %v", err)
 	}
-	if _, _, err := repository.ClaimAttempt(ctx, runRef, stageRef, "invalid-claim-"+suffix, "worker-a", time.Minute, 3); !errors.Is(err, ErrClaimStageUnavailable) {
+	if _, _, err := repository.ClaimAttempt(ctx, runRef, stageRef, "invalid-claim-"+suffix, "worker-a", time.Minute, 3, 8); !errors.Is(err, ErrClaimStageUnavailable) {
 		t.Fatalf("claim with inconsistent stage state error=%v, want ErrClaimStageUnavailable", err)
 	}
 	if _, err := db.ExecContext(ctx, `UPDATE researchflow_stages SET status = ? WHERE stage_ref = ?`, string(domain.StageRunning), stageRef); err != nil {
 		t.Fatalf("restore stage state: %v", err)
 	}
 
-	replay, replayed, err := repository.ClaimAttempt(ctx, runRef, stageRef, "ignored-attempt-"+suffix, "worker-a", time.Minute, 3)
+	replay, replayed, err := repository.ClaimAttempt(ctx, runRef, stageRef, "ignored-attempt-"+suffix, "worker-a", time.Minute, 3, 8)
 	if err != nil || !replayed || replay.Ref != first.Ref || replay.FencingToken != first.FencingToken {
 		t.Fatalf("same-worker claim replay=%v attempt=%#v err=%v", replayed, replay, err)
 	}
-	if _, _, err := repository.ClaimAttempt(ctx, runRef, stageRef, "claim-attempt-other-"+suffix, "worker-b", time.Minute, 3); !errors.Is(err, ErrAttemptLeaseHeld) {
+	if _, _, err := repository.ClaimAttempt(ctx, runRef, stageRef, "claim-attempt-other-"+suffix, "worker-b", time.Minute, 3, 8); !errors.Is(err, ErrAttemptLeaseHeld) {
 		t.Fatalf("other-worker claim error=%v, want ErrAttemptLeaseHeld", err)
 	}
 
@@ -136,7 +147,7 @@ func TestMariaDBClaimAttemptLeaseAndFencing(t *testing.T) {
 	if _, err := repository.RenewAttemptLease(ctx, runRef, stageRef, first.Ref, "worker-a", first.FencingToken, time.Minute); !errors.Is(err, ErrAttemptLeaseHeld) {
 		t.Fatalf("expired lease renewal error=%v, want ErrAttemptLeaseHeld", err)
 	}
-	second, replayed, err := repository.ClaimAttempt(ctx, runRef, stageRef, "claim-attempt-2-"+suffix, "worker-b", time.Minute, 3)
+	second, replayed, err := repository.ClaimAttempt(ctx, runRef, stageRef, "claim-attempt-2-"+suffix, "worker-b", time.Minute, 3, 8)
 	if err != nil || replayed {
 		t.Fatalf("reclaim replayed=%v err=%v", replayed, err)
 	}
@@ -210,7 +221,7 @@ func TestMariaDBClaimAttemptLeaseAndFencing(t *testing.T) {
 		string(domain.StageRetryWait), retryAt, stageRef); err != nil {
 		t.Fatalf("prepare retry with successful latest attempt: %v", err)
 	}
-	if _, _, err := repository.ClaimAttempt(ctx, runRef, stageRef, "invalid-retry-history-"+suffix, "worker-c", time.Minute, 3); !errors.Is(err, ErrClaimStageUnavailable) {
+	if _, _, err := repository.ClaimAttempt(ctx, runRef, stageRef, "invalid-retry-history-"+suffix, "worker-c", time.Minute, 3, 8); !errors.Is(err, ErrClaimStageUnavailable) {
 		t.Fatalf("retry after successful attempt error=%v, want ErrClaimStageUnavailable", err)
 	}
 
@@ -221,7 +232,7 @@ func TestMariaDBClaimAttemptLeaseAndFencing(t *testing.T) {
 	if _, err := db.ExecContext(ctx, `UPDATE researchflow_stages SET retry_at = NULL WHERE stage_ref = ?`, stageRef); err != nil {
 		t.Fatalf("clear retry_at: %v", err)
 	}
-	if _, _, err := repository.ClaimAttempt(ctx, runRef, stageRef, "invalid-retry-time-"+suffix, "worker-c", time.Minute, 3); !errors.Is(err, ErrClaimStageUnavailable) {
+	if _, _, err := repository.ClaimAttempt(ctx, runRef, stageRef, "invalid-retry-time-"+suffix, "worker-c", time.Minute, 3, 8); !errors.Is(err, ErrClaimStageUnavailable) {
 		t.Fatalf("retry without retry_at error=%v, want ErrClaimStageUnavailable", err)
 	}
 
@@ -231,7 +242,7 @@ func TestMariaDBClaimAttemptLeaseAndFencing(t *testing.T) {
 	if _, err := db.ExecContext(ctx, `UPDATE researchflow_runs SET status = ? WHERE run_ref = ?`, string(domain.RunQueued), runRef); err != nil {
 		t.Fatalf("move run out of running state: %v", err)
 	}
-	if _, _, err := repository.ClaimAttempt(ctx, runRef, stageRef, "invalid-retry-run-state-"+suffix, "worker-c", time.Minute, 3); !errors.Is(err, ErrClaimStageUnavailable) {
+	if _, _, err := repository.ClaimAttempt(ctx, runRef, stageRef, "invalid-retry-run-state-"+suffix, "worker-c", time.Minute, 3, 8); !errors.Is(err, ErrClaimStageUnavailable) {
 		t.Fatalf("retry while run is queued error=%v, want ErrClaimStageUnavailable", err)
 	}
 }

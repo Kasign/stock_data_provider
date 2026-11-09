@@ -16,6 +16,7 @@ var (
 	ErrClaimStageUnavailable = errors.New("Researchflow stage is not claimable")
 	ErrAttemptLeaseHeld      = errors.New("Researchflow attempt lease is held by another worker")
 	ErrAttemptLimitReached   = errors.New("Researchflow stage attempt limit reached")
+	ErrRunConcurrencyLimit   = errors.New("Researchflow run parallel stage limit reached")
 )
 
 // ClaimAttempt atomically claims a ready stage and creates its next attempt.
@@ -27,13 +28,14 @@ func (r *MySQLRunRepository) ClaimAttempt(
 	runRef, stageRef, attemptRef, workerID string,
 	leaseDuration time.Duration,
 	maxAttempts int,
+	maxParallel int,
 ) (domain.Attempt, bool, error) {
 	if r == nil || r.db == nil {
 		return domain.Attempt{}, false, errors.New("researchflow SQL database is not configured")
 	}
 	if strings.TrimSpace(runRef) == "" || strings.TrimSpace(stageRef) == "" ||
 		strings.TrimSpace(attemptRef) == "" || strings.TrimSpace(workerID) == "" ||
-		len(workerID) > 128 || leaseDuration <= 0 || maxAttempts <= 0 {
+		len(workerID) > 128 || leaseDuration <= 0 || maxAttempts <= 0 || maxParallel <= 0 {
 		return domain.Attempt{}, false, errors.New("Researchflow attempt claim arguments are invalid")
 	}
 
@@ -171,6 +173,33 @@ func (r *MySQLRunRepository) ClaimAttempt(
 	}
 	if stage.AttemptNo >= maxAttempts {
 		return domain.Attempt{}, false, ErrAttemptLimitReached
+	}
+
+	// Run is locked above, so every ClaimAttempt for this Run serializes before
+	// reading the active Stage count. This is the cross-worker concurrency gate.
+	var runningStages, activeLeases int
+	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM researchflow_stages
+		WHERE run_ref = ? AND status = ? AND stage_ref <> ?`,
+		runRef, string(domain.StageRunning), stageRef).Scan(&runningStages); err != nil {
+		return domain.Attempt{}, false, fmt.Errorf("count running Researchflow stages: %w", err)
+	}
+	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM researchflow_stages s
+		WHERE s.run_ref = ? AND s.status = ? AND s.stage_ref <> ?
+			AND EXISTS (
+				SELECT 1 FROM researchflow_attempts a
+				WHERE a.stage_ref = s.stage_ref AND a.run_ref = s.run_ref
+					AND a.status = ? AND a.lease_expires_at > ?
+					AND a.attempt_no = s.attempt_no
+			)`,
+		runRef, string(domain.StageRunning), stageRef, string(domain.AttemptRunning),
+		formatResearchflowTimeValue(now)).Scan(&activeLeases); err != nil {
+		return domain.Attempt{}, false, fmt.Errorf("count active Researchflow Attempt leases: %w", err)
+	}
+	if runningStages != activeLeases {
+		return domain.Attempt{}, false, errors.New("Researchflow running Stage and active Attempt lease counts are inconsistent")
+	}
+	if activeLeases >= maxParallel {
+		return domain.Attempt{}, false, ErrRunConcurrencyLimit
 	}
 
 	var maxToken uint64
