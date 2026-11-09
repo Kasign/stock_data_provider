@@ -8,10 +8,11 @@ import (
 	"fmt"
 	"strings"
 
+	"example.com/stock-analysis-flow/internal/researchflow/application"
 	"example.com/stock-analysis-flow/internal/researchflow/domain"
 )
 
-var ErrRunAlreadyTerminal = errors.New("Researchflow run is already terminal")
+var ErrRunAlreadyTerminal = application.ErrRunAlreadyTerminal
 
 // BeginRunCancellation establishes the cancellation linearization point.
 // It serializes with ClaimAttempt and CommitAttemptResult through the Run row
@@ -49,7 +50,7 @@ func (r *MySQLRunRepository) BeginRunCancellation(
 		return false, ErrRunAlreadyTerminal
 	}
 	if terminationReason.Valid && terminationReason.String == "deadline_exceeded" {
-		return false, ErrClaimRunUnavailable
+		return false, errors.Join(ErrClaimRunUnavailable, application.ErrRunCancellationUnavailable)
 	}
 	if runStatus == domain.RunCancelling {
 		if terminationReason.Valid && terminationReason.String == "user_cancelled" {
@@ -58,10 +59,10 @@ func (r *MySQLRunRepository) BeginRunCancellation(
 			}
 			return false, nil
 		}
-		return false, ErrClaimRunUnavailable
+		return false, errors.Join(ErrClaimRunUnavailable, application.ErrRunCancellationUnavailable)
 	}
 	if runStatus != domain.RunCreated && runStatus != domain.RunQueued && runStatus != domain.RunRunning {
-		return false, ErrClaimRunUnavailable
+		return false, errors.Join(ErrClaimRunUnavailable, application.ErrRunCancellationUnavailable)
 	}
 	if version != expectedVersion {
 		return false, nil
