@@ -45,6 +45,17 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch r.URL.Path {
 	case "/healthz":
 		writeJSON(w, r, http.StatusOK, map[string]any{"status": "ok", "time": time.Now().UTC()})
+	case "/diagnostics":
+		report, err := h.checker.Run(r.Context())
+		if err != nil {
+			writeJSON(w, r, http.StatusServiceUnavailable, map[string]any{
+				"error": map[string]string{
+					"code": "diagnostics_unavailable", "message": "diagnostics could not be completed",
+				},
+			})
+			return
+		}
+		writeJSON(w, r, http.StatusOK, report)
 	case "/readyz":
 		if h.draining.Load() {
 			writeJSON(w, r, http.StatusServiceUnavailable, map[string]any{
