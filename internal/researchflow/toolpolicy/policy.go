@@ -124,7 +124,7 @@ func (r *Registry) Authorize(intent Intent, budget Budget) (AuthorizedCall, erro
 		}
 	}
 	if budget.MaxCalls <= 0 || budget.CallsUsed < 0 || budget.CallsUsed >= budget.MaxCalls ||
-		budget.CallsByName[intent.Name] >= definition.MaxCallsPerRun || budget.MaxTotalTimeout <= 0 ||
+		budget.CallsByName[intent.Name] < 0 || budget.CallsByName[intent.Name] >= definition.MaxCallsPerRun || budget.MaxTotalTimeout <= 0 ||
 		budget.TimeoutUsed < 0 || budget.TimeoutUsed >= budget.MaxTotalTimeout {
 		return AuthorizedCall{}, ErrCallBudgetExceeded
 	}
