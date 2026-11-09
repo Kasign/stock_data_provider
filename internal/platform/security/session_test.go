@@ -104,7 +104,7 @@ func TestRedisSessionStoreIntegration(t *testing.T) {
 	}
 	record := SessionRecord{
 		Subject: "owner", CreatedAt: now, LastSeenAt: now,
-		IdleExpiresAt: now.Add(DefaultSessionIdleTTL),
+		IdleExpiresAt:     now.Add(DefaultSessionIdleTTL),
 		AbsoluteExpiresAt: now.Add(DefaultSessionAbsoluteTTL), CredentialVersion: 1,
 	}
 	if err := store.Create(ctx, digest, record); err != nil {

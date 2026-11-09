@@ -134,7 +134,7 @@ func (s *RedisSessionStore) Create(ctx context.Context, digest string, record Se
 		return fault.New(fault.ClassValidation, "platform.security.invalid_session", "session is invalid", err)
 	}
 	now := time.Now().UTC()
-	if record.CreatedAt.After(now) || record.LastSeenAt.After(now) {
+	if record.CreatedAt.After(now) || record.LastSeenAt.After(now) || !record.IdleExpiresAt.After(now) {
 		return fault.New(fault.ClassValidation, "platform.security.invalid_session", "session time bounds are invalid", nil)
 	}
 	ttl := record.AbsoluteExpiresAt.Sub(now)
@@ -261,7 +261,8 @@ func (s *RedisSessionStore) Rotate(ctx context.Context, oldDigest, newDigest str
 	if err := record.validate(); err != nil {
 		return fault.New(fault.ClassValidation, "platform.security.invalid_session", "session is invalid", err)
 	}
-	if record.CreatedAt.After(now) || !record.AbsoluteExpiresAt.After(now) {
+	if record.CreatedAt.After(now) || record.LastSeenAt.After(now) ||
+		!record.IdleExpiresAt.After(now) || !record.AbsoluteExpiresAt.After(now) {
 		return fault.New(fault.ClassValidation, "platform.security.invalid_session", "rotated session time bounds are invalid", nil)
 	}
 	payload, err := json.Marshal(toRedisSessionRecord(record))
