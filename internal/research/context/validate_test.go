@@ -170,3 +170,26 @@ func TestContextGoldenJSONV1(t *testing.T) {
 		t.Fatalf("Context v1 JSON differs from golden fixture; update the fixture only after reviewing the public DTO contract")
 	}
 }
+
+func TestContextValidateRejectsUnsupportedSchemaVersionAndNonUTCTimes(t *testing.T) {
+	tests := []struct {
+		name   string
+		mutate func(*Context)
+		want   string
+	}{
+		{"unsupported schema version", func(c *Context) { c.SchemaVersion = "1.0.1" }, "supported version"},
+		{"non UTC context cutoff", func(c *Context) { c.SystemAsOf = c.SystemAsOf.In(time.FixedZone("UTC+8", 8*60*60)) }, "system_as_of"},
+		{"non UTC created time", func(c *Context) { c.CreatedAt = c.CreatedAt.In(time.FixedZone("UTC+8", 8*60*60)) }, "created_at"},
+		{"non UTC section assembled time", func(c *Context) { c.SectionRefs[0].AssembledAt = c.SectionRefs[0].AssembledAt.In(time.FixedZone("UTC+8", 8*60*60)) }, "assembled_at"},
+		{"non UTC section cutoff", func(c *Context) { c.SectionRefs[0].SystemAsOf = c.SectionRefs[0].SystemAsOf.In(time.FixedZone("UTC+8", 8*60*60)) }, "system_as_of"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			value := validContext()
+			tt.mutate(&value)
+			if err := value.Validate(); err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("Validate() error = %v, want containing %q", err, tt.want)
+			}
+		})
+	}
+}
