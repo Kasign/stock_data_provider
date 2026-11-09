@@ -177,6 +177,83 @@ func (r *MySQLRunRepository) CreateRunAtomic(
 	}, nil
 }
 
+// CompareAndSwapRun updates mutable run state only when the persisted version matches.
+func (r *MySQLRunRepository) CompareAndSwapRun(
+	ctx context.Context,
+	expectedVersion uint64,
+	next domain.Run,
+) (bool, error) {
+	if err := r.validateRunRef(next.Ref); err != nil {
+		return false, err
+	}
+	if expectedVersion == ^uint64(0) || next.Version != expectedVersion+1 || next.Status == "" {
+		return false, errors.New("Researchflow Run CAS version or status is invalid")
+	}
+	result, err := r.db.ExecContext(ctx, `UPDATE researchflow_runs SET
+		status = ?, version = ?, started_at = ?, finished_at = ?,
+		result_summary_ref = ?, termination_reason = ?
+		WHERE run_ref = ? AND version = ?`,
+		string(next.Status), next.Version, nullableTime(next.StartedAt),
+		nullableTime(next.FinishedAt), nullableString(next.ResultSummaryRef),
+		nullableText(next.TerminationReason), next.Ref, expectedVersion,
+	)
+	if err != nil {
+		return false, fmt.Errorf("compare-and-swap Researchflow run %q: %w", next.Ref, err)
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return false, fmt.Errorf("read Researchflow Run CAS affected rows: %w", err)
+	}
+	return affected == 1, nil
+}
+
+// CompareAndSwapStage updates mutable stage state while preserving its run,
+// code, required flag, dependency graph and retry-policy identity.
+func (r *MySQLRunRepository) CompareAndSwapStage(
+	ctx context.Context,
+	expectedVersion uint64,
+	next domain.Stage,
+) (bool, error) {
+	if err := r.validateRunRef(next.Ref); err != nil {
+		return false, err
+	}
+	if strings.TrimSpace(next.RunRef) == "" || expectedVersion == ^uint64(0) ||
+		next.Version != expectedVersion+1 || next.Status == "" || next.AttemptNo < 0 {
+		return false, errors.New("Researchflow Stage CAS version or state is invalid")
+	}
+	result, err := r.db.ExecContext(ctx, `UPDATE researchflow_stages SET
+		status = ?, version = ?, attempt_no = ?, retry_at = ?,
+		output_ref = ?, quality_summary_ref = ?, diagnostic_refs = ?,
+		quality_status = ?, reason_codes = ?, risk_decision = ?,
+		started_at = ?, finished_at = ?
+		WHERE stage_ref = ? AND run_ref = ? AND version = ?`,
+		string(next.Status), next.Version, next.AttemptNo, nullableTime(next.RetryAt),
+		nullableString(next.OutputRef), nullableString(next.QualitySummaryRef),
+		mustMarshalStrings(next.DiagnosticRefs), nullableText(next.QualityStatus),
+		mustMarshalStrings(next.ReasonCodes), nullableText(next.RiskDecision),
+		nullableTime(next.StartedAt), nullableTime(next.FinishedAt),
+		next.Ref, next.RunRef, expectedVersion,
+	)
+	if err != nil {
+		return false, fmt.Errorf("compare-and-swap Researchflow stage %q: %w", next.Ref, err)
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return false, fmt.Errorf("read Researchflow Stage CAS affected rows: %w", err)
+	}
+	return affected == 1, nil
+}
+
+func mustMarshalStrings(values []string) string {
+	encoded, err := json.Marshal(nonNilStrings(values))
+	if err != nil {
+		// A string slice cannot fail JSON encoding; retain a valid empty value
+		// rather than allowing an impossible encoding error to alter the write.
+		return "[]"
+	}
+	return string(encoded)
+}
+
 // GetRun loads a persisted run and its stages by immutable run reference.
 func (r *MySQLRunRepository) GetRun(ctx context.Context, runRef string) (application.CreateRunResult, error) {
 	if err := r.validateRunRef(runRef); err != nil {
