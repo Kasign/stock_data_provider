@@ -22,6 +22,8 @@ type Lifecycle struct {
 	started    []Component
 	startedOK  bool
 	stopped    bool
+	stopDone   chan struct{}
+	stopErr    error
 }
 
 func NewLifecycle() *Lifecycle { return &Lifecycle{} }
@@ -86,13 +88,25 @@ func (l *Lifecycle) Stop(ctx context.Context) error {
 	}
 	l.mu.Lock()
 	if l.stopped {
+		done := l.stopDone
 		l.mu.Unlock()
-		return nil
+		select {
+		case <-done:
+			l.mu.Lock()
+			err := l.stopErr
+			l.mu.Unlock()
+			return err
+		case <-ctx.Done():
+			return ctx.Err()
+		}
 	}
 	l.stopped = true
+	l.stopDone = make(chan struct{})
+	done := l.stopDone
 	started := append([]Component(nil), l.started...)
 	l.started = nil
 	l.mu.Unlock()
+
 	var result error
 	for i := len(started) - 1; i >= 0; i-- {
 		component := started[i]
@@ -100,5 +114,10 @@ func (l *Lifecycle) Stop(ctx context.Context) error {
 			result = errors.Join(result, fmt.Errorf("stop component %q: %w", component.Name(), err))
 		}
 	}
+
+	l.mu.Lock()
+	l.stopErr = result
+	close(done)
+	l.mu.Unlock()
 	return result
 }
