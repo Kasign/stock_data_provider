@@ -31,14 +31,14 @@ type ProviderOutputPolicyResolver interface {
 
 // IngestProviderCandidateRequest 描述将 Provider 搜索候选写入 News 的授权意图。
 type IngestProviderCandidateRequest struct {
-	SourceID       string
-	EndpointID     string
-	IdempotencyKey string
-	Candidate      domain.Candidate
-	Purpose        domain.Purpose
-	ContentKind    domain.ContentKind
-	StorageMode    domain.StorageMode
-	Retention      time.Duration
+	SourceID          string
+	EndpointID        string
+	IdempotencyKey    string
+	Candidate         domain.Candidate
+	Purpose           domain.Purpose
+	ContentKind       domain.ContentKind
+	StorageMode       domain.StorageMode
+	Retention         time.Duration
 	CrossRequestCache bool
 }
 
@@ -96,11 +96,11 @@ func (u *IngestProviderCandidate) Execute(ctx context.Context, request IngestPro
 
 	evaluatedAt := u.now().UTC()
 	policyRequest := domain.CollectionPolicyRequest{
-		AccessMethod: registration.AccessMethod,
-		Purpose: request.Purpose,
-		ContentKind: request.ContentKind,
-		StorageMode: request.StorageMode,
-		Retention: request.Retention,
+		AccessMethod:      registration.AccessMethod,
+		Purpose:           request.Purpose,
+		ContentKind:       request.ContentKind,
+		StorageMode:       request.StorageMode,
+		Retention:         request.Retention,
 		CrossRequestCache: request.CrossRequestCache,
 	}
 	decision := domain.EvaluateCandidateCollectionPolicy(
@@ -111,10 +111,10 @@ func (u *IngestProviderCandidate) Execute(ctx context.Context, request IngestPro
 	}
 
 	trace := ObservationPolicyTrace{
-		SourcePolicyVersionID: registration.SourcePolicyVersionID,
-		ProviderOutputPolicyRef: strings.TrimSpace(providerBinding.PolicyRef),
+		SourcePolicyVersionID:         registration.SourcePolicyVersionID,
+		ProviderOutputPolicyRef:       strings.TrimSpace(providerBinding.PolicyRef),
 		ProviderOutputPolicyVersionID: strings.TrimSpace(providerBinding.PolicyVersion),
-		PolicyEvaluatedAt: evaluatedAt,
+		PolicyEvaluatedAt:             evaluatedAt,
 	}
 	if registration.EndpointPolicy != nil {
 		trace.EndpointID = registration.EndpointID

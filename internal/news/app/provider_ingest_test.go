@@ -11,7 +11,7 @@ import (
 
 type providerIngestCatalogStub struct {
 	registration SourceEndpointRegistration
-	err error
+	err          error
 }
 
 func (s providerIngestCatalogStub) LookupEndpoint(context.Context, string, string) (SourceEndpointRegistration, error) {
@@ -20,7 +20,7 @@ func (s providerIngestCatalogStub) LookupEndpoint(context.Context, string, strin
 
 type providerIngestPolicyStub struct {
 	binding ProviderOutputPolicyBinding
-	err error
+	err     error
 }
 
 func (s providerIngestPolicyStub) ResolveProviderOutputPolicy(context.Context, string) (ProviderOutputPolicyBinding, error) {
@@ -31,15 +31,15 @@ func validProviderIngestRegistration() SourceEndpointRegistration {
 	return SourceEndpointRegistration{
 		SourceID: "source-1", EndpointID: "endpoint-1", Enabled: true,
 		AccessMethod: domain.AccessRSS, URL: "https://news.example/feed",
-		URLPolicy: domain.SourceURLPolicy{AllowedSchemes: []string{"https"}, AllowedHosts: []string{"news.example"}},
+		URLPolicy:             domain.SourceURLPolicy{AllowedSchemes: []string{"https"}, AllowedHosts: []string{"news.example"}},
 		SourcePolicyVersionID: "source-policy-v2",
 		SourcePolicy: domain.SourcePolicy{
-			Status: domain.AuthorizationApproved,
+			Status:               domain.AuthorizationApproved,
 			AllowedAccessMethods: []domain.AccessMethod{domain.AccessRSS},
-			AllowedPurposes: []domain.Purpose{domain.PurposeInternalPersonalResearch},
-			AllowedContentKinds: []domain.ContentKind{domain.ContentSnippet},
-			AllowedStorageModes: []domain.StorageMode{domain.StorageTransient},
-			MaxRetention: time.Hour, EvidenceRef: "source-evidence-v2",
+			AllowedPurposes:      []domain.Purpose{domain.PurposeInternalPersonalResearch},
+			AllowedContentKinds:  []domain.ContentKind{domain.ContentSnippet},
+			AllowedStorageModes:  []domain.StorageMode{domain.StorageTransient},
+			MaxRetention:         time.Hour, EvidenceRef: "source-evidence-v2",
 		},
 	}
 }
@@ -48,9 +48,9 @@ func validProviderIngestPolicy() ProviderOutputPolicyBinding {
 	return ProviderOutputPolicyBinding{
 		ProviderCode: "brave", PolicyRef: "brave-output", PolicyVersion: "policy-v4",
 		Policy: domain.ProviderOutputPolicy{
-			Status: domain.AuthorizationApproved,
-			AllowedPurposes: []domain.Purpose{domain.PurposeInternalPersonalResearch},
-			AllowedContentKinds: []domain.ContentKind{domain.ContentSnippet},
+			Status:                 domain.AuthorizationApproved,
+			AllowedPurposes:        []domain.Purpose{domain.PurposeInternalPersonalResearch},
+			AllowedContentKinds:    []domain.ContentKind{domain.ContentSnippet},
 			AllowRequestProcessing: true, MaxRequestRetention: time.Hour,
 			EvidenceRef: "provider-evidence-v4",
 		},
@@ -72,7 +72,7 @@ func TestIngestProviderCandidateEvaluatesTrustedPolicyBeforePersistence(t *testi
 	observation, err := usecase.Execute(context.Background(), IngestProviderCandidateRequest{
 		SourceID: "source-1", EndpointID: "endpoint-1", IdempotencyKey: "run-1/item-1",
 		Candidate: domain.Candidate{ProviderCode: "brave", SourceItemID: "native-1", Title: "headline"},
-		Purpose: domain.PurposeInternalPersonalResearch, ContentKind: domain.ContentSnippet,
+		Purpose:   domain.PurposeInternalPersonalResearch, ContentKind: domain.ContentSnippet,
 		StorageMode: domain.StorageTransient, Retention: 5 * time.Minute,
 	})
 	if err != nil {
@@ -91,14 +91,14 @@ func TestIngestProviderCandidateEvaluatesTrustedPolicyBeforePersistence(t *testi
 
 func TestIngestProviderCandidateFailsClosedBeforePersistence(t *testing.T) {
 	tests := []struct {
-		name string
+		name         string
 		registration SourceEndpointRegistration
-		policy ProviderOutputPolicyBinding
-		policyErr error
-		want error
+		policy       ProviderOutputPolicyBinding
+		policyErr    error
+		want         error
 	}{
 		{
-			name: "provider policy denied",
+			name:         "provider policy denied",
 			registration: validProviderIngestRegistration(),
 			policy: func() ProviderOutputPolicyBinding {
 				value := validProviderIngestPolicy()
@@ -108,10 +108,10 @@ func TestIngestProviderCandidateFailsClosedBeforePersistence(t *testing.T) {
 			want: ErrProviderOutputPolicyDenied,
 		},
 		{
-			name: "provider policy unavailable",
+			name:         "provider policy unavailable",
 			registration: validProviderIngestRegistration(),
-			policyErr: errors.New("catalog unavailable"),
-			want: ErrProviderOutputPolicyUnavailable,
+			policyErr:    errors.New("catalog unavailable"),
+			want:   ErrProviderOutputPolicyUnavailable,
 		},
 		{
 			name: "source policy version missing",
@@ -138,7 +138,7 @@ func TestIngestProviderCandidateFailsClosedBeforePersistence(t *testing.T) {
 			_, err = usecase.Execute(context.Background(), IngestProviderCandidateRequest{
 				SourceID: "source-1", EndpointID: "endpoint-1", IdempotencyKey: "run-1/item-1",
 				Candidate: domain.Candidate{ProviderCode: "brave", SourceItemID: "native-1"},
-				Purpose: domain.PurposeInternalPersonalResearch, ContentKind: domain.ContentSnippet,
+				Purpose:   domain.PurposeInternalPersonalResearch, ContentKind: domain.ContentSnippet,
 				StorageMode: domain.StorageTransient, Retention: time.Minute,
 			})
 			if !errors.Is(err, test.want) {
@@ -166,7 +166,7 @@ func TestIngestProviderCandidateRejectsProviderIdentityMismatch(t *testing.T) {
 	_, err = usecase.Execute(context.Background(), IngestProviderCandidateRequest{
 		SourceID: "source-1", EndpointID: "endpoint-1", IdempotencyKey: "run-1/item-1",
 		Candidate: domain.Candidate{ProviderCode: "brave", SourceItemID: "native-1"},
-		Purpose: domain.PurposeInternalPersonalResearch, ContentKind: domain.ContentSnippet,
+		Purpose:   domain.PurposeInternalPersonalResearch, ContentKind: domain.ContentSnippet,
 		StorageMode: domain.StorageTransient, Retention: time.Minute,
 	})
 	if !errors.Is(err, ErrProviderOutputPolicyUnavailable) || len(repository.observations) != 0 {
