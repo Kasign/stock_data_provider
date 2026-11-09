@@ -18,10 +18,10 @@ func channelResultFixture() (domain.DeliveryAttempt, domain.ChannelConfigSnapsho
 		ChannelRef: "channel-1", ConfigVersion: 1, ChannelKind: "test",
 		Enabled: true, SecretRef: "secret://channel-1/v1",
 		Capabilities: domain.ChannelCapabilities{
-			SupportsIdempotency: domain.CapabilityUnknown,
+			SupportsIdempotency:    domain.CapabilityUnknown,
 			SupportsDeliveryLookup: domain.CapabilityUnknown,
-			SupportsRetryAfter: domain.CapabilitySupported,
-			MaxPayloadBytes: 4096,
+			SupportsRetryAfter:     domain.CapabilitySupported,
+			MaxPayloadBytes:        4096,
 		},
 		RetryableErrorCodes: []string{"rate_limited"},
 	}
@@ -32,8 +32,8 @@ func TestCompleteAttemptFromChannelResultUsesChannelRetryableAllowlist(t *testin
 	attempt, channel, finishedAt := channelResultFixture()
 	retryAfter := finishedAt.Add(30 * time.Second)
 	result := domain.ChannelSendResult{
-		Outcome: domain.ChannelOutcomeRejected,
-		ErrorCode: "rate_limited",
+		Outcome:    domain.ChannelOutcomeRejected,
+		ErrorCode:  "rate_limited",
 		RetryAfter: &retryAfter,
 	}
 	completed, err := CompleteAttemptFromChannelResult(attempt, channel, result, finishedAt, "")
@@ -59,7 +59,7 @@ func TestCompleteAttemptFromChannelResultUsesChannelRetryableAllowlist(t *testin
 func TestCompleteAttemptFromChannelResultNeverRetriesAmbiguousAndRequiresNotSentEvidence(t *testing.T) {
 	attempt, channel, finishedAt := channelResultFixture()
 	ambiguous := domain.ChannelSendResult{
-		Outcome: domain.ChannelOutcomeAmbiguous,
+		Outcome:   domain.ChannelOutcomeAmbiguous,
 		ErrorCode: "request_timeout",
 	}
 	completed, err := CompleteAttemptFromChannelResult(attempt, channel, ambiguous, finishedAt, "")
@@ -71,7 +71,7 @@ func TestCompleteAttemptFromChannelResultNeverRetriesAmbiguousAndRequiresNotSent
 	}
 
 	notSent := domain.ChannelSendResult{
-		Outcome: domain.ChannelOutcomeNotSent,
+		Outcome:   domain.ChannelOutcomeNotSent,
 		ErrorCode: "connection_not_opened",
 	}
 	if _, err := CompleteAttemptFromChannelResult(attempt, channel, notSent, finishedAt, ""); err == nil {

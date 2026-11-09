@@ -78,7 +78,7 @@ type DeliveryTransition struct {
 	ErrorCode             string
 	EvidenceRef           string
 	ProviderMessageRef    string
-	NextAttemptAt          *time.Time
+	NextAttemptAt         *time.Time
 	RequestNotSent        bool
 	AuthorizedManualRetry bool
 	ActorRef              string

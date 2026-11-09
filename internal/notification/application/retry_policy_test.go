@@ -39,11 +39,11 @@ func retryPolicyFixture(t *testing.T, count, maxAttempts int) (domain.DeliveryRe
 
 func standardRetryPolicy() RetryPolicy {
 	return RetryPolicy{
-		MaxAttempts: 3,
-		MaxElapsed: 10 * time.Minute,
+		MaxAttempts:       3,
+		MaxElapsed:        10 * time.Minute,
 		PerAttemptTimeout: 5 * time.Second,
-		BaseDelay: time.Second,
-		MaxDelay: 4 * time.Second,
+		BaseDelay:         time.Second,
+		MaxDelay:          4 * time.Second,
 	}
 }
 

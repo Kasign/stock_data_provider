@@ -9,21 +9,21 @@ import (
 )
 
 var (
-	ErrInvalidRetryPolicy  = errors.New("notification: invalid retry policy")
-	ErrRetryNotApplicable  = errors.New("notification: retry is not applicable")
+	ErrInvalidRetryPolicy = errors.New("notification: invalid retry policy")
+	ErrRetryNotApplicable = errors.New("notification: retry is not applicable")
 )
 
 const (
-	RetryReasonBudgetExhausted = "retry_budget_exhausted"
+	RetryReasonBudgetExhausted  = "retry_budget_exhausted"
 	RetryReasonDeadlineExceeded = "deadline_exceeded"
 )
 
 type RetryPolicy struct {
-	MaxAttempts        int
-	MaxElapsed         time.Duration
-	PerAttemptTimeout  time.Duration
-	BaseDelay          time.Duration
-	MaxDelay           time.Duration
+	MaxAttempts       int
+	MaxElapsed        time.Duration
+	PerAttemptTimeout time.Duration
+	BaseDelay         time.Duration
+	MaxDelay          time.Duration
 }
 
 type RetryDecision struct {
@@ -33,11 +33,11 @@ type RetryDecision struct {
 	FencingToken    int64
 	EvaluatedAt     time.Time
 	Retry           bool
-	ReasonCode     string
-	NextAttemptAt  *time.Time
-	DelayCap       time.Duration
-	ChosenDelay    time.Duration
-	RetryAfterUsed bool
+	ReasonCode      string
+	NextAttemptAt   *time.Time
+	DelayCap        time.Duration
+	ChosenDelay     time.Duration
+	RetryAfterUsed  bool
 }
 
 // Validate requires explicit, positive millisecond policy values.
