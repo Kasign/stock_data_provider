@@ -247,9 +247,9 @@ func TestIngestCandidatePersistsSourcePolicyTrace(t *testing.T) {
 	usecase := NewIngestCandidate(repository, func() string { return "observation-policy-trace" })
 	evaluatedAt := time.Date(2026, 11, 5, 10, 0, 0, 0, time.FixedZone("UTC+8", 8*60*60))
 	trace := ObservationPolicyTrace{
-		SourcePolicyVersionID:   "source-policy-v3",
-		EndpointID: "endpoint-v1", EndpointPolicyVersionID: "endpoint-policy-v2",
-		PolicyEvaluatedAt:       evaluatedAt,
+		SourcePolicyVersionID: "source-policy-v3",
+		EndpointID:            "endpoint-v1", EndpointPolicyVersionID: "endpoint-policy-v2",
+		PolicyEvaluatedAt: evaluatedAt,
 	}
 	observation, err := usecase.ExecuteWithPolicyTrace(
 		context.Background(), "source-1", "feed-run-1/item-1",
