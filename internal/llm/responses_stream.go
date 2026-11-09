@@ -100,6 +100,9 @@ func (a *ResponsesAdapter) Stream(ctx context.Context, request ModelRequest, onE
 	httpRequest.Header.Set("Content-Type", "application/json")
 	httpRequest.Header.Set("Accept", "text/event-stream")
 	httpRequest.Header.Set("Authorization", "Bearer "+a.apiKey.Value())
+	if err := callCtx.Err(); err != nil {
+		return fail(classifyAdapterTransportError(err, callCtx), err)
+	}
 
 	stream, err := a.streamDoer.OpenStream(callCtx, httpRequest)
 	if err != nil {
