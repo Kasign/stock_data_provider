@@ -83,3 +83,27 @@ func TestValidateEgressDependenciesUsesEffectiveEastmoneyDefaults(t *testing.T) 
 		t.Fatalf("default endpoint was not resolved before validation: %v", err)
 	}
 }
+
+func TestValidateEgressDependenciesSkipsProviderWithoutCapabilities(t *testing.T) {
+	cfg := config.Config{
+		ProviderPriority: []string{"tushare", "eastmoney"},
+		ProviderSettings: map[string]config.ProviderSettings{
+			"tushare": {Enabled: true}, "eastmoney": {Enabled: true},
+		},
+	}
+	if err := validateEgressDependencies(cfg, Dependencies{}); err != nil {
+		t.Fatalf("providers without enabled capabilities must not require egress dependencies: %v", err)
+	}
+}
+
+func TestHasConfiguredProviderCapability(t *testing.T) {
+	if hasConfiguredProviderCapability(config.ProviderSettings{}) {
+		t.Fatal("empty provider settings must not report an enabled capability")
+	}
+	if !hasConfiguredProviderCapability(config.ProviderSettings{DailyBars: true}) {
+		t.Fatal("DailyBars must be recognized as an enabled capability")
+	}
+	if !hasConfiguredProviderCapability(config.ProviderSettings{Announcements: true}) {
+		t.Fatal("Announcements must be recognized as an enabled capability")
+	}
+}
