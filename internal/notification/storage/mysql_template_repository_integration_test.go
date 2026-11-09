@@ -20,14 +20,18 @@ func TestNotificationMariaDBTemplateRepositoryIntegration(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 	db, err := openNotificationIntegrationDB(ctx, dsn)
-	if err != nil { t.Fatalf("open MariaDB through Platform Storage: %v", err) }
+	if err != nil {
+		t.Fatalf("open MariaDB through Platform Storage: %v", err)
+	}
 	defer db.Close()
 	if err := platformstorage.ApplyMigrations(ctx, db, "notification", Migrations()); err != nil {
 		t.Fatalf("apply Notification migrations: %v", err)
 	}
 	limits := template.Limits{MaxTemplateBytes: 8192, MaxOutputBytes: 8192, MaxPayloadDepth: 16}
 	repository, err := NewMySQLTemplateRepository(db, limits)
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	definition := template.Definition{
 		TemplateID: fmt.Sprintf("template-%d", time.Now().UnixNano()), Version: 1,
 		EventType: "quant.risk_decision.changed", SchemaVersion: "1.0.0",
@@ -36,9 +40,13 @@ func TestNotificationMariaDBTemplateRepositoryIntegration(t *testing.T) {
 		VariableBindings: map[string]string{"status": "/status", "message": "/message"},
 	}
 	digest, duplicate, err := repository.Create(ctx, definition)
-	if err != nil || duplicate || digest == "" { t.Fatalf("create template: digest=%q duplicate=%v err=%v", digest, duplicate, err) }
+	if err != nil || duplicate || digest == "" {
+		t.Fatalf("create template: digest=%q duplicate=%v err=%v", digest, duplicate, err)
+	}
 	repeatedDigest, duplicate, err := repository.Create(ctx, definition)
-	if err != nil || !duplicate || repeatedDigest != digest { t.Fatalf("identical create must be idempotent: digest=%q duplicate=%v err=%v", repeatedDigest, duplicate, err) }
+	if err != nil || !duplicate || repeatedDigest != digest {
+		t.Fatalf("identical create must be idempotent: digest=%q duplicate=%v err=%v", repeatedDigest, duplicate, err)
+	}
 	changed := definition
 	changed.BodyTemplate = "Changed: {{.message}}"
 	if _, _, err := repository.Create(ctx, changed); !errors.Is(err, template.ErrTemplateImmutable) {
