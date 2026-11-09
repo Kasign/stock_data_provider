@@ -38,18 +38,18 @@
 - [x] N3 离线业务质量：按元数据、内容、来源身份三个维度评估 valid/degraded/invalid/unknown；不把 Provider 摘要提升为来源正文，不把发布者文本视为已解析来源
 - [ ] N3 在线采集：Feed 解析与 Endpoint 传输分派已有代码；BoundDoer 已合并且接口兼容；逐 endpoint 生产注入、触发入口/CollectionRunID、持久化授权和部署 DNS/出口验收未完成
 - [x] N4 Domain/Application 首批：身份识别、Observation 幂等语义、内容版本、证券/行业关系和转载关系规则已有实现与离线测试
-- [ ] N4/N6 后续：真实采集编排、生产 Repository、数据库唯一约束/事务并发与历史版本持久化仍未完成
+- [ ] N3/N4/N6 生产闭环：真实采集触发/CollectionRunID、生产采集编排和授权内容持久化未完成；News Repository、事务/唯一约束及关系历史代码已有实现，V7 MariaDB 兼容验收待完成
 - [x] N5 A1：Platform Config/Secret、Provider/Source BoundDoer 策略适配、Fault 安全映射与 Request ID 传播代码已实现；真实公网/DNS 出口及 Server 生产注入仍待集成验收
-- [x] N6 A1：News MySQLRepository、Migration V1-V3、不可变授权快照和只读分页 Snapshot Store 已实现；V1/V2 MariaDB 11.4 集成已通过，V3 等待最新 CI；Server 共享 DB 注入和总 Migration 注册不在 News 分支修改范围
+- [x] N6 A1：News MySQLRepository、Migration V1-V7、不可变授权快照和只读分页 Snapshot Store 已实现；V1/V2 有 MariaDB 11.4 集成通过记录；V3-V7 尚无完整 MariaDB 验收证据；Server 共享 DB 注入和总 Migration 注册不在 News 分支修改范围
 - [x] N7 A1：Provider Config、Parser Self、Source Endpoint Readiness、Storage 和单条 BusinessQuality Checks 已实现；Platform Runner 注册仍由 Server 组合根完成
-- [x] NEWS-CTR-001 首批：Request/Response DTO、JSON Schema/Golden、HMAC Cursor Codec、只存引用的 15 分钟 Snapshot Store 已实现；Query Facade、List PIT/关系历史查询、available_at 证据过滤和内容裁剪未完成；GetEvidence 单版本 PIT Repository 首批已实现
-- [x] NEWS-CTR-002 首批：AuthorizationBinding 校验和不可变快照 MariaDB 存储已实现；JCS Runtime Verifier、当前策略版本复核、撤销/过期竞态和内容读取 TOCTOU 保护未完成
+- [ ] NEWS-CTR-001：DTO/Schema/Golden、Get/List PIT Repository、身份/关系历史查询、HMAC Cursor、15 分钟 Snapshot Store 和只返回引用的分页已实现；完整内容查询 Facade、授权后内容裁剪、available_at 证据过滤仍未完成
+- [ ] NEWS-CTR-002：Binding 校验、不可变授权快照存储、当前策略版本/撤销预检和 GOV-CTR-006 Verifier 应用端口已实现；公共 JCS 实现/真实 Resolver 注入、同一致性边界读取和撤销/过期竞态仍未完成
 - [ ] N8 / PLAT-013：完成 A2 契约测试、Server 装配、Migration 注册、News/Research Facade 接入验收；A3 故障演练对应 PLAT-014
 - [x] N1-A 用户评审确认；N2 已完成并进入 N3
 
 ## 公共平台协作说明
 
-Platform 原语已在当前分支，不再等待代码迁入。PLAT-002 与 PLAT-CTR-001～007 的契约证据仍未全部冻结；当前完成的是 News 模块 A1 适配，不宣称 A2/A3。News 的 Provider/Source BoundDoer 适配、Repository/Migration、授权快照和 Diagnostics Check 已有首批实现；真实生产注入、JCS 验证、当前授权复核、严格 PIT Query Facade 与 Server 共享资源/注册仍待完成。PLAT-013 是领域接入，PLAT-014 是跨模块故障演练；PLAT-011 为按需 Metrics，PLAT-012 为安全审计。
+Platform 原语已在当前分支，不再等待代码迁入。PLAT-002 与 PLAT-CTR-001～007 的契约证据仍未全部冻结；当前完成的是 News 模块 A1 适配，不宣称 A2/A3。News 的 Provider/Source BoundDoer 适配、Repository/Migration、授权快照、当前策略预检和 Diagnostics Check 已有首批实现；真实生产注入、JCS 运行时验证、授权读取一致性边界、完整 Evidence Query Facade 与 Server 共享资源/注册仍待完成。PLAT-013 是领域接入，PLAT-014 是跨模块故障演练；PLAT-011 为按需 Metrics，PLAT-012 为安全审计。
 
 ## 重要说明
 
