@@ -565,3 +565,16 @@ internal/
 | Analysis API Docker image | 运行中（记录时） | 继续等待结果；若失败按文件归属拆分 |
 
 **本轮结论：** 当前 CI 已明确的失败项没有落在 Data 生产源码、Data 测试或 Data MariaDB/PIT 测试中，因此本分支不为通过全仓门禁而修改其他模块。M1-2 继续推进 Data Module 归并；全仓 gofmt、News 依赖闭包和 WebUI 失败分别交由对应 Owner 处理，只有确认涉及本分支拥有的根构建文件时才在此修复。
+
+
+
+### M1-2：Data 源码归并（自动迁移批次）
+
+- Data 生产代码、测试与 testdata 从 `services/market-data/internal/**` 迁入 `internal/marketdata/**`，保留现有 package 边界，暂不做领域包重命名。
+- 独立命令从 `services/market-data/cmd/market-data` 迁入 `cmd/market-data`。
+- Data 内部 import 统一切换为根 Module 路径；嵌套 `services/market-data/go.mod` 与 `go.sum` 删除，依赖由根 Module 管理。
+- Provider 配置迁入 `configs/marketdata/providers.json`，默认路径同步调整。
+- Data 独立 Dockerfile 改为根目录 build context；Compose 保留双容器回滚部署，Data 镜像由根 Module 构建。
+- CI 增加独立 Market Data 测试门禁，MariaDB/PIT 测试与 Data 镜像构建改用根 Module 路径。
+- 本批只做 Module/路径归并，不抽取 Bootstrap、不切换 Root InProcess Adapter，也不改变 Provider/领域逻辑。
+- 待 CI 验证：Data gofmt、单测、race、vet、MariaDB/PIT、Docker；全仓失败按文件归属单独处理。
