@@ -70,6 +70,11 @@ func (u *EvaluateNewsEvidenceReadAuthorization) Execute(
 	if err := ctx.Err(); err != nil {
 		return err
 	}
+	now := u.now().UTC()
+	snapshotDecision := domain.EvaluateNewsAuthorizationUse(binding, now)
+	if !snapshotDecision.Allowed {
+		return errors.Join(ErrNewsCurrentPolicyDenied, errors.New(snapshotDecision.ReasonCode))
+	}
 	if err := u.verifier.VerifyNewsAuthorizationFingerprint(ctx, binding); err != nil {
 		return ErrNewsAuthorizationFingerprintInvalid
 	}
@@ -77,7 +82,7 @@ func (u *EvaluateNewsEvidenceReadAuthorization) Execute(
 	if err != nil {
 		return ErrNewsCurrentPolicyUnavailable
 	}
-	decision := domain.EvaluateNewsAuthorizationAgainstCurrentPolicies(binding, current, u.now().UTC())
+	decision := domain.EvaluateNewsAuthorizationAgainstCurrentPolicies(binding, current, now)
 	if !decision.Allowed {
 		return errors.Join(ErrNewsCurrentPolicyDenied, errors.New(decision.ReasonCode))
 	}

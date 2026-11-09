@@ -165,3 +165,21 @@ func TestEvaluateNewsEvidenceReadAuthorizationRejectsRequestBindingMismatch(t *t
 		t.Fatalf("err=%v verifier=%d resolver=%d", err, verifier.calls, resolver.calls)
 	}
 }
+
+func TestEvaluateNewsEvidenceReadAuthorizationRejectsConditionalBeforeExternalChecks(t *testing.T) {
+	binding := loadAppAuthorizationBinding(t)
+	observation, version := appAuthorizationEvidence()
+	now := time.Date(2026, 11, 9, 10, 0, 0, 0, time.UTC)
+	verifier := &authorizationFingerprintVerifierStub{}
+	resolver := &currentAuthorizationPolicyResolverStub{}
+	usecase, err := NewEvaluateNewsEvidenceReadAuthorization(verifier, resolver)
+	if err != nil {
+		t.Fatal(err)
+	}
+	usecase.now = func() time.Time { return now }
+	err = usecase.Execute(context.Background(), binding, observation, version,
+		binding.CallerRef, binding.PurposeCode, binding.RequestedContentLevel)
+	if !errors.Is(err, ErrNewsCurrentPolicyDenied) || verifier.calls != 0 || resolver.calls != 0 {
+		t.Fatalf("err=%v verifier=%d resolver=%d", err, verifier.calls, resolver.calls)
+	}
+}
