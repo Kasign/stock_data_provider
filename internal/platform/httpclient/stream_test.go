@@ -386,7 +386,8 @@ func TestOpenStreamIdleTimeoutExcludesCallerProcessingTime(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 	close(allowSecond)
 	buffer = make([]byte, 6)
-	if n, err := response.Body.Read(buffer); err != nil || string(buffer[:n]) != "second" {
+	n, err := response.Body.Read(buffer)
+	if string(buffer[:n]) != "second" || (err != nil && !errors.Is(err, io.EOF)) {
 		t.Fatalf("second read after caller processing = %q, %v", buffer[:n], err)
 	}
 }
