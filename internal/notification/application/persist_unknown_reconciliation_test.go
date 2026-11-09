@@ -10,11 +10,11 @@ import (
 )
 
 type unknownReconciliationRepositoryFake struct {
-	calls int
+	calls   int
 	version int64
-	next domain.DeliveryRecord
-	event domain.DeliveryStateEvent
-	err error
+	next    domain.DeliveryRecord
+	event   domain.DeliveryStateEvent
+	err     error
 }
 
 func (f *unknownReconciliationRepositoryFake) ReconcileUnknown(
@@ -27,7 +27,7 @@ func (f *unknownReconciliationRepositoryFake) ReconcileUnknown(
 
 func TestPersistUnknownReconciliationAcceptedAndFailed(t *testing.T) {
 	for _, tc := range []struct {
-		name string
+		name   string
 		action UnknownReconciliationAction
 		status domain.DeliveryStatus
 	}{
