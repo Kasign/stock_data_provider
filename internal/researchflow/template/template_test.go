@@ -3,6 +3,7 @@ package template
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -280,5 +281,39 @@ func TestResolveSnapshotOwnsCanonicalStageDefinitionSlices(t *testing.T) {
 	}
 	if skipped.Definition.Dependencies[0] != "market" {
 		t.Fatalf("resolved skipped stage changed after source template mutation: %#v", skipped.Definition)
+	}
+}
+
+type mutatingParameterSchemas struct{}
+func (mutatingParameterSchemas) Validate(_ context.Context, ref string, parameters json.RawMessage) (ParameterSchemaSnapshot, error) {
+	parameters[0] = '['
+	return ParameterSchemaSnapshot{Ref: ref, Version: "1", Fingerprint: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}, nil
+}
+
+type mutatingApplicabilityEvaluator struct { calls int }
+func (e *mutatingApplicabilityEvaluator) Evaluate(_ context.Context, _ ApplicabilityRule, parameters json.RawMessage) (bool, string, error) {
+	e.calls++
+	if string(parameters) != `{"symbol":"600000"}` {
+		return false, "", fmt.Errorf("applicability received mutated parameters: %s", parameters)
+	}
+	parameters[0] = '['
+	return true, "", nil
+}
+
+func TestResolveIsolatesParameterBytesAcrossInjectedBoundaries(t *testing.T) {
+	parameters := json.RawMessage(`{"symbol":"600000"}`)
+	evaluator := &mutatingApplicabilityEvaluator{}
+	resolved, err := Resolve(context.Background(), testTemplate(), parameters, mutatingParameterSchemas{}, evaluator, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if evaluator.calls != 2 {
+		t.Fatalf("expected each Stage to receive an isolated parameter copy, got %d calls", evaluator.calls)
+	}
+	if string(parameters) != `{"symbol":"600000"}` {
+		t.Fatalf("Resolve mutated caller-owned parameters: %s", parameters)
+	}
+	if len(resolved.Stages) != 2 {
+		t.Fatalf("unexpected resolved stages after evaluator mutation: %#v", resolved.Stages)
 	}
 }
