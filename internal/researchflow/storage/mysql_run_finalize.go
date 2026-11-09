@@ -93,13 +93,14 @@ func (r *MySQLRunRepository) FinalizeRun(ctx context.Context, input RunFinalizat
 	}
 	currentStatus := domain.RunStatus(runStatus)
 	switch currentStatus {
-	case domain.RunRunning:
+	case domain.RunCreated, domain.RunQueued, domain.RunRunning:
 		if existingReason.Valid && existingReason.String == "deadline_exceeded" {
 			if input.TerminalStatus != domain.RunFailed && input.TerminalStatus != domain.RunPartial {
 				return false, errors.New("deadline-expired Researchflow Run cannot finalize as succeeded")
 			}
-		} else if input.TerminalStatus != domain.RunSucceeded && input.TerminalStatus != domain.RunPartial && input.TerminalStatus != domain.RunFailed {
-			return false, errors.New("running Researchflow Run cannot finalize to the requested status")
+		} else if currentStatus != domain.RunRunning ||
+			(input.TerminalStatus != domain.RunSucceeded && input.TerminalStatus != domain.RunPartial && input.TerminalStatus != domain.RunFailed) {
+			return false, errors.New("Researchflow Run cannot finalize from its current state")
 		}
 	case domain.RunCancelling:
 		if input.TerminalStatus != domain.RunCancelled && input.TerminalStatus != domain.RunPartial && input.TerminalStatus != domain.RunFailed {
