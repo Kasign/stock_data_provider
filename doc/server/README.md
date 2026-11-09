@@ -511,10 +511,11 @@ flowchart TD
 - Research/News 已有 Diagnostics Adapter，但当前公开构造函数主要检查调用方传入的快照或模块配置，不等同于模块运行实例的动态健康状态。本轮不把静态快照检查冒充生产模块 Readiness，也不虚构 Quant/Researchflow/LLM/Notification 的运行检查。
 - 新增 `diagnostics.Service` 作为统一检查集组合入口：固定注入共享 MariaDB/Redis 检查，接受模块拥有的 Check 分组；每次 Run 都实时执行，不缓存 Ready 状态。重复 Check ID 由 Platform Runner 统一拒绝。
 - 本轮增加 Readiness 规则和 Service 组合测试：无 Required、Required 各状态、Optional 降级不阻塞、重复 Check ID、缺失资源不可 Ready。
-- 尚未接入 HTTP 路由：旧 Analysis Handler 仍在迁移，Health/Readiness 暴露应由 SRV-005 统一 Transport 和认证策略承接；本轮不新增独立 HTTP Server 或未经批准的匿名端点。
+- 已通过 `internal/server/health.Handler` 接入统一 `http.ServeMux`：`/healthz` 只反映进程存活，不触发依赖检查；`/readyz` 每次实时执行 Platform Runner 检查 MariaDB/Redis，未就绪返回 503。两个接口保留旧 Analysis API 的响应字段形态，避免现有探针/部署脚本发生不必要变化。旧 API Handler 暂作为其他路径的 fallback，未新增第二个 HTTP Server。
+- 当前 Health/Readiness 不输出底层错误、连接串或诊断详情；`/readyz` 对外只返回通用依赖不可用错误。详细诊断报告尚未公开暴露，后续需结合认证/运维访问策略再决定接口。
 - GitHub API 已写入实现和测试；尚未执行 gofmt/go test，也没有真实 MariaDB/Redis 连通性集成结果。不能标记为编译或测试通过。
-- Go workflow 原 push 分支白名单不包含 Server，本轮已将当前 Server 分支加入白名单，后续本分支代码提交会触发 Go 测试工作流；不改变其他分支的任务范围。
-- 相关代码提交：`f9c879c`（Aggregator）、`e787b3c`（聚合测试）、`4c65a1e`（共享存储检查）、`1d83680`（Service 组合入口）、`aad2ed1`（Service 测试）。
+- Go workflow 原 push 分支白名单不包含 Server，本轮已将当前 Server 分支加入白名单，并将该分支的 gofmt 检查范围限定为 `cmd/analysis-api` 与 `internal/server`，避免替其他模块修复其格式问题；其他模块仍由各自分支负责。另修复了 Workflow shell 中错误的反斜杠续行写法。
+- 相关代码提交：`f9c879c`（Aggregator）、`e787b3c`（聚合测试）、`4c65a1e`（共享存储检查）、`1d83680`（Service 组合入口）、`aad2ed1`（Service 测试）、`50286bc`/`984c25e`（Health Handler）、`ad21cd4`（统一宿主接入）、`3f0a876`（Handler 测试）。
 
 
 ## 13. 分支与协作规则
@@ -550,7 +551,7 @@ Server 层完成不是“服务能够启动”这么简单。至少同时满足�
 | SRV-002 | 进行中 | 已创建 internal/server/bootstrap，入口已委托 Bootstrap；HTTP 配置和 Platform 资源创建已拆出；剩余模块 Registry 与统一装配 |
 | SRV-003 | 进行中 | DB、Redis、HTTP Client 已由 Resources 统一创建和关闭；后续接入模块资源注入与诊断贡献项 |
 | SRV-004 | 阻塞 | 已复核模块接入面；Researchflow/Quant/LLM/Notification 缺少完整生产装配入口，News/Research 也有关键查询/授权接入缺口；详见 12.6 节 |
-| SRV-005 | 未开始 | 旧 HTTP API 尚待迁移映射 |
+| SRV-005 | 进行中 | 已由 Server 统一宿主接管 `/healthz`、`/readyz`，旧 Analysis API 暂作根路由回退；业务路由和认证授权迁移仍待完成 |
 | SRV-006 | 未开始 | 运行角色和生命周期尚未建立 |
 | SRV-007 | 进行中 | 已建立 Server Migration Registry，并注册 News/Research/Notification；显式配置执行；其他模块 Migration 和 MariaDB 集成验收待完成，详见 12.7 节 |
 | SRV-008 | 待契约 | Dispatcher 所有权未冻结 |
