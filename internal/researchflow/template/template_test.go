@@ -182,3 +182,18 @@ func TestResolveExcludesNonApplicableRequiredStage(t *testing.T) {
 		t.Fatalf("required non-applicable stage must be excluded from Run DAG: stages=%#v excluded=%#v", resolved.Stages, resolved.Excluded)
 	}
 }
+
+
+func TestResolveRejectsApplicableStageDependingOnSkippedOptionalStage(t *testing.T) {
+	tmpl := testTemplate()
+	tmpl.Stages = append(tmpl.Stages, StageDefinition{
+		Code: "optional_news", Required: false,
+		Applicability: ApplicabilityRule{RuleRef: "optional-news", RuleVersion: "v3"},
+		Retry: testRetry(), Propagation: testPolicy(),
+	})
+	tmpl.Stages[1].Dependencies = []string{"market", "optional_news"}
+	_, err := Resolve(context.Background(), tmpl, json.RawMessage(`{}`), testParameterSchemas{}, testEvaluator{"always": true}, nil)
+	if err == nil || !strings.Contains(err.Error(), "depends on non-applicable stage optional_news") {
+		t.Fatalf("applicable Stage depending on skipped optional Stage must fail closed, got %v", err)
+	}
+}
