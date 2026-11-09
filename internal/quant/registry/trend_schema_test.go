@@ -5,7 +5,6 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-
 )
 
 func TestTrendResultSchemaValidatesGoldenAndRejectsInvalidDiscriminators(t *testing.T) {
