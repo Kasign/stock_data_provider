@@ -374,3 +374,10 @@ sequence_number 严格连续策略、Draft 2020-12 本地 Schema dialect、Reque
 - 推理 Token 不能为负，且不能超过 output_tokens。
 - 越界时保留上游原始值并追加 Usage.Diagnostics，不把异常明细当作可信正常值。
 - 对应测试：`TestParseResponsesUsageDetailsAreRangeChecked`。
+
+## 25. 高级 Schema 约束能力证据
+
+- 发送上游的 Response Schema / Function Tool 参数，只要包含 `pattern`、`format`、数字边界、`multipleOf`、`minItems/maxItems`，必须要求 `structured_output_advanced_constraints=supported`。
+- 该能力绑定 Provider、Model、Protocol、Gateway 版本和有效期；unknown/unsupported 一律不派发。
+- strict 与 non-strict 都执行高级约束能力门禁；`local_validation_only` 只对 Response Schema 跳过上游能力要求。
+- 对应测试：`TestValidateCapabilitiesRequiresAdvancedSchemaConstraintEvidence`。
