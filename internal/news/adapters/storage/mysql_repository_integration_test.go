@@ -386,7 +386,7 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 		CallerRef:             "service:research",
 		PurposeCode:           app.EvidencePurposeResearchAnalysis,
 		RequestedContentLevel: app.EvidenceContentSummary,
-		SystemAsOf:            secondVersion.Version.ObservedAt.Add(time.Second),
+		SystemAsOf:            time.Now().UTC(),
 		Filters: &app.EvidenceQueryFilters{
 			NewsIDs:    []string{secondObservation.NewsID},
 			SourceRefs: []string{secondSourceID},
@@ -409,7 +409,7 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 	if len(listed) != 0 {
 		t.Fatalf("ListEvidence PIT exposed %d future records", len(listed))
 	}
-	listRequest.SystemAsOf = secondVersion.Version.ObservedAt.Add(time.Second)
+	listRequest.SystemAsOf = time.Now().UTC()
 	listRequest.Filters.CanonicalSymbols = []string{"SSE:600000"}
 	if _, err := repository.ListEvidenceVersionsAt(ctx, listRequest); !errors.Is(err, app.ErrInvalidEvidenceQuery) {
 		t.Fatalf("unsupported temporal symbol filter error = %v, want invalid query", err)
