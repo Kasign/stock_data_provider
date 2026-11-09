@@ -780,7 +780,7 @@ func TestResearchOutboxRejectsExpiredLeaseEvenWithBackdatedActionTime(t *testing
 	// Advance the trusted repository clock beyond the lease deadline, but
 	// deliberately supply action timestamps from before that deadline.
 	now = now.Add(2 * time.Minute)
-	backdated := now.Add(-time.Minute)
+	backdated := now.Add(-2 * time.Minute)
 	if err := repo.base.MarkOutboxPublished(ctx, claimed[0].EventID, "worker_expired", claimed[0].LeaseToken, backdated); !errors.Is(err, ErrConflict) {
 		t.Fatalf("confirm with expired lease and backdated timestamp = %v, want ErrConflict", err)
 	}
