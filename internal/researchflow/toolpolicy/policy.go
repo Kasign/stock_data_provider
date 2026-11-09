@@ -20,6 +20,7 @@ var (
 // SchemaValidator 必须使用本地、有限制的 JSON Schema Draft 2020-12 校验器；
 // Tool Policy 不加载远程 $ref，也不自行执行工具。
 type SchemaValidator interface {
+	ValidateSchema(schemaJSON []byte) error
 	Validate(schemaJSON, valueJSON []byte) error
 }
 
@@ -51,6 +52,9 @@ func NewRegistry(definitions []Definition, validator SchemaValidator) (*Registry
 		if definition.Name == "" || len(definition.Name) > 128 || definition.Timeout <= 0 || definition.MaxCallsPerRun <= 0 ||
 			len(definition.ParametersJSON) == 0 || !json.Valid(definition.ParametersJSON) {
 			return nil, fmt.Errorf("%w: tool identity, schema, timeout and call limit are required", ErrInvalidPolicy)
+		}
+		if err := validator.ValidateSchema(definition.ParametersJSON); err != nil {
+			return nil, fmt.Errorf("%w: invalid schema for tool %q", ErrInvalidPolicy, definition.Name)
 		}
 		if _, exists := registry.definitions[definition.Name]; exists {
 			return nil, fmt.Errorf("%w: duplicate tool %q", ErrInvalidPolicy, definition.Name)

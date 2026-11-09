@@ -12,6 +12,11 @@ var ErrInvalidModelToolCall = errors.New("invalid model tool call")
 
 type llmSchemaValidator struct{}
 
+func (llmSchemaValidator) ValidateSchema(schemaJSON []byte) error {
+	_, err := llm.CompileJSONSchema(schemaJSON)
+	return err
+}
+
 func (llmSchemaValidator) Validate(schemaJSON, valueJSON []byte) error {
 	return llm.ValidateJSONAgainstSchema(schemaJSON, valueJSON)
 }
@@ -62,4 +67,46 @@ func IntentsFromModelResponse(response llm.ModelResponse) ([]Intent, error) {
 		intents = append(intents, intent)
 	}
 	return intents, nil
+}
+
+
+// ToolDefinitionsFor 只向模型暴露当前 Scope 和预算允许的工具。
+// 返回值用于 ModelRequest.Tools；工具调用响应仍必须经过 Authorize。
+func (r *Registry) ToolDefinitionsFor(budget Budget) []llm.ToolDefinition {
+	if r == nil || budget.MaxCalls <= budget.CallsUsed || budget.MaxCalls <= 0 ||
+		budget.MaxTotalTimeout <= budget.TimeoutUsed || budget.MaxTotalTimeout <= 0 ||
+		budget.Now.IsZero() || !budget.RunDeadline.After(budget.Now) {
+		return nil
+	}
+	granted := make(map[string]struct{}, len(budget.GrantedScopes))
+	for _, scope := range budget.GrantedScopes {
+		granted[scope] = struct{}{}
+	}
+	names := make([]string, 0, len(r.definitions))
+	for name, definition := range r.definitions {
+		if budget.CallsByName[name] < 0 || budget.CallsByName[name] >= definition.MaxCallsPerRun {
+			continue
+		}
+		allowed := true
+		for _, required := range definition.RequiredScopes {
+			if _, exists := granted[required]; !exists {
+				allowed = false
+				break
+			}
+		}
+		if allowed {
+			names = append(names, name)
+		}
+	}
+	sort.Strings(names)
+	result := make([]llm.ToolDefinition, 0, len(names))
+	for _, name := range names {
+		definition := r.definitions[name]
+		result = append(result, llm.ToolDefinition{
+			Name: definition.Name, Description: definition.Description,
+			ParametersJSON: append(json.RawMessage(nil), definition.ParametersJSON...),
+			Strict: definition.Strict,
+		})
+	}
+	return result
 }

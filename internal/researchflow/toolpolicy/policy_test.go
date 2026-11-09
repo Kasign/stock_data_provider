@@ -1,12 +1,19 @@
 package toolpolicy
 
 import (
-	"errors"
+	"errors"\n\t"encoding/json"
 	"testing"
 	"time"
 )
 
 type schemaValidatorFunc func(schemaJSON, valueJSON []byte) error
+
+func (f schemaValidatorFunc) ValidateSchema(schemaJSON []byte) error {
+	if !json.Valid(schemaJSON) {
+		return errors.New("invalid schema")
+	}
+	return nil
+}
 
 func (f schemaValidatorFunc) Validate(schemaJSON, valueJSON []byte) error {
 	return f(schemaJSON, valueJSON)
@@ -107,5 +114,24 @@ func TestAuthorizeEnforcesPerToolCallLimit(t *testing.T) {
 	intent := Intent{CallID: "call-3", Name: "research.lookup", ArgumentsJSON: `{"symbol":"600000.SH"}`}
 	if _, err := testRegistry(t).Authorize(intent, budget); !errors.Is(err, ErrCallBudgetExceeded) {
 		t.Fatalf("per-tool call limit error = %v", err)
+	}
+}
+
+func TestToolDefinitionsForOnlyAdvertisesScopedToolsWithinBudget(t *testing.T) {
+	registry := testRegistry(t)
+	now := time.Date(2026, 11, 9, 9, 0, 0, 0, time.UTC)
+	budget := validBudget(now)
+	definitions := registry.ToolDefinitionsFor(budget)
+	if len(definitions) != 1 || definitions[0].Name != "research.lookup" {
+		t.Fatalf("unexpected advertised tools: %+v", definitions)
+	}
+	budget.GrantedScopes = nil
+	if got := registry.ToolDefinitionsFor(budget); len(got) != 0 {
+		t.Fatalf("tool without scope was advertised: %+v", got)
+	}
+	budget = validBudget(now)
+	budget.CallsUsed = budget.MaxCalls
+	if got := registry.ToolDefinitionsFor(budget); len(got) != 0 {
+		t.Fatalf("tool advertised after global budget exhausted: %+v", got)
 	}
 }
