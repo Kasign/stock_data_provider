@@ -174,6 +174,8 @@ Read 错误必须通过稳定 Fault Code 区分；Fault 的 SafeMessage 为固�
 | 目标策略拒绝 | `platform.httpclient.stream_destination_rejected` | validation | false |
 | 响应头超过上限 | `platform.httpclient.stream_headers_too_large` | validation | false |
 | 建连失败 | `platform.httpclient.stream_connect_failed` | unavailable | 仅在策略明确幂等且尚未返回响应时可为 true |
+| 建连超时 | `platform.httpclient.stream_connect_timeout` | timeout | 按请求幂等性判断 |
+| TLS 握手超时 | `platform.httpclient.stream_tls_handshake_timeout` | timeout | 按请求幂等性判断 |
 | 响应头超时 | `platform.httpclient.stream_header_timeout` | timeout | 按请求幂等性判断 |
 | 单次读取空闲超时 | `platform.httpclient.stream_idle_timeout` | timeout | false |
 | 调用方 Context 取消 | `platform.httpclient.stream_canceled` | unavailable | false |
@@ -221,6 +223,7 @@ Read 错误必须通过稳定 Fault Code 区分；Fault 的 SafeMessage 为固�
 | 11 | Fault/脱敏 | 错误码分类稳定，Cause 不进入公开统计/日志字段 |
 | 12 | 并发退出 | 并发 Close/Cancel/Read Error 后额度只释放一次，无 goroutine/连接泄漏 |
 | 13 | 附加资源边界 | 响应头上限、解压后 Body 上限、BoundDoer 固定策略和无自动重试均有回归测试 |
+| 14 | 建连超时分类 | Dial timeout 与 TLS handshake timeout 不误归类为响应头超时 |
 
 测试必须同时覆盖 HTTP/1.1 和 HTTP/2 可适用的生命周期行为；使用本地 httptest、可控 Resolver/Dial 和短超时，不依赖公网。至少执行 gofmt、平台包单测、Race、Vet。
 

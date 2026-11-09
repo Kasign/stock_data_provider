@@ -417,9 +417,18 @@ func (c *Client) streamOpenFault(err error, ctx context.Context, policy Destinat
 		return newStreamFault(fault.ClassUnavailable, "platform.httpclient.stream_dns_failed", "HTTP stream destination DNS resolution failed", err, policy.Dependency, false)
 	}
 	retryable := policy.Idempotent && retryableTransportError(err)
+	if strings.Contains(strings.ToLower(err.Error()), "tls handshake timeout") {
+		return newStreamFault(fault.ClassTimeout, "platform.httpclient.stream_tls_handshake_timeout", "HTTP stream TLS handshake timed out", err, policy.Dependency, retryable)
+	}
 	var operationError *net.OpError
 	if errors.As(err, &operationError) && operationError.Op == "dial" {
+		if operationError.Timeout() {
+			return newStreamFault(fault.ClassTimeout, "platform.httpclient.stream_connect_timeout", "HTTP stream connection timed out", err, policy.Dependency, retryable)
+		}
 		return newStreamFault(fault.ClassUnavailable, "platform.httpclient.stream_connect_failed", "HTTP stream connection failed", err, policy.Dependency, retryable)
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		return newStreamFault(fault.ClassTimeout, "platform.httpclient.stream_connect_timeout", "HTTP stream connection timed out", err, policy.Dependency, retryable)
 	}
 	var networkError net.Error
 	if errors.As(err, &networkError) && networkError.Timeout() {
