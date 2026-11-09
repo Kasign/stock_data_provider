@@ -47,7 +47,7 @@ func (r *EventRepository) AppendWithLifecycle(ctx context.Context, value researc
 	if !validCorrelationID(correlationID) {
 		return fmt.Errorf("trusted correlation ID is required")
 	}
-	if reasonCode != nil && (strings.TrimSpace(*reasonCode) == "" || *reasonCode != strings.TrimSpace(*reasonCode)) {
+	if reasonCode != nil && !validCorrelationID(*reasonCode) {
 		return fmt.Errorf("reason_code must be null or a non-empty trimmed value")
 	}
 	payload, digest, err := encodePayload(value)
