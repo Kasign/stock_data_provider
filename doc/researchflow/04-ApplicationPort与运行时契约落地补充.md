@@ -309,3 +309,11 @@ Fake Repository/Fake Clock/Fake Provider 只证明模块内逻辑；MariaDB/Redi
 - Worker 为每个活动 Attempt 注册 context.CancelCauseFunc；Run 取消信号触发后 Provider Context 被取消。Provider 返回后 Worker 通过 ConfirmAttemptCancellation Port 原子确认 Attempt/Stage 取消，参数包含 Worker、fencing token 与 Claim 后的 Stage version。
 - 确认成功不再执行 CommitWorkerResult；确认失败、lease 失效或 fencing 冲突均 fail-closed。进程外 Worker 未收到广播或崩溃时，由 Storage FenceExpiredCancellationAttempt 回收。
 - 真实 Adapter 必须映射 MySQLRunRepository.ConfirmAttemptCancellation，并保持 Run → Stage → Attempt 锁顺序和数据库 UTC lease 检查。当前仅 Fake Port 测试，未完成跨进程通知与 MariaDB 集成验收。
+
+
+### 9.5 Provider Fault 归一化边界（2026-11-09）
+
+- Worker 可通过 ExecutionFaultNormalizer Port 将 Provider error 映射为 ExecutionFault{FaultRef, ReasonCode}；FaultRef 必须指向已持久化 Fault 事实，ReasonCode 必须是稳定、可审计的领域原因码。
+- Normalizer 不提供 retryable、RetryAt 或退避参数。Worker 只按 Run Snapshot 内不可变 RetryPolicy 的精确 ReasonCode allowlist、MaxAttempts 和指数 full jitter 计算是否重试。
+- 未注入 Normalizer 时 Provider error 仍 fail-closed，不会被自动猜测为 provider_unavailable；Normalizer 返回空 FaultRef/ReasonCode 或自身错误时不得提交。
+- 上下文取消和 deadline 不进入 Provider Fault 分类。真实 Platform Fault 创建/查询 Adapter 及 Server 注入仍待根组合层接入。

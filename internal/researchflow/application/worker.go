@@ -40,6 +40,18 @@ type WorkerResultCommit struct {
 
 // WorkerStore is the Application boundary. Its persistence adapter must map
 // CommitWorkerResult to the atomic storage CommitAttemptResult transaction.
+type ExecutionFault struct {
+	FaultRef  string
+	ReasonCode string
+}
+
+// ExecutionFaultNormalizer maps provider/adapter errors to a persisted Fault
+// reference and a stable reason code. Retryability remains controlled only by
+// the immutable template RetryPolicy allowlist.
+type ExecutionFaultNormalizer interface {
+	NormalizeExecutionError(context.Context, error) (ExecutionFault, error)
+}
+
 type WorkerStore interface {
 	ClaimAttempt(context.Context, string, string, string, string, time.Duration, int, int) (domain.Attempt, bool, error)
 	LoadStageExecutionSnapshot(context.Context, string, string) (StageExecutionSnapshot, error)
@@ -68,6 +80,7 @@ type Worker struct {
 	config        WorkerConfig
 	now           func() time.Time
 	cancellations *workerCancellationRegistry
+	faultNormalizer ExecutionFaultNormalizer
 }
 
 func NewWorker(store WorkerStore, executor StageExecutor, clock DatabaseClock, config WorkerConfig) (*Worker, error) {
@@ -78,6 +91,20 @@ func NewWorker(store WorkerStore, executor StageExecutor, clock DatabaseClock, c
 		return nil, errors.New("Researchflow worker dependencies or configuration are invalid")
 	}
 	return &Worker{store: store, executor: executor, clock: clock, config: config, now: time.Now, cancellations: newWorkerCancellationRegistry()}, nil
+}
+
+// NewWorkerWithFaultNormalizer enables controlled Provider error normalization.
+// Without this port, Provider errors remain fail-closed and are not committed.
+func NewWorkerWithFaultNormalizer(store WorkerStore, executor StageExecutor, clock DatabaseClock, config WorkerConfig, normalizer ExecutionFaultNormalizer) (*Worker, error) {
+	if normalizer == nil {
+		return nil, errors.New("Researchflow execution fault normalizer is required")
+	}
+	worker, err := NewWorker(store, executor, clock, config)
+	if err != nil {
+		return nil, err
+	}
+	worker.faultNormalizer = normalizer
+	return worker, nil
 }
 
 // CancelRun signals all locally active Attempts for a durably-cancelling Run.
@@ -190,7 +217,26 @@ func (w *Worker) Execute(ctx context.Context, runRef, stageRef, attemptRef strin
 			ReasonCodes:   []string{"attempt_timeout"},
 		}
 	} else if executeErr != nil {
-		return WorkerExecution{Attempt: attempt}, fmt.Errorf("execute Researchflow Stage: %w", executeErr)
+		if execCtx.Err() != nil {
+			return WorkerExecution{Attempt: attempt}, fmt.Errorf("Researchflow Stage execution context ended: %w", execCtx.Err())
+		}
+		if w.faultNormalizer == nil {
+			return WorkerExecution{Attempt: attempt}, fmt.Errorf("execute Researchflow Stage: %w", executeErr)
+		}
+		fault, normalizeErr := w.faultNormalizer.NormalizeExecutionError(ctx, executeErr)
+		if normalizeErr != nil {
+			return WorkerExecution{Attempt: attempt}, fmt.Errorf("normalize Researchflow execution fault: %w", normalizeErr)
+		}
+		if strings.TrimSpace(fault.FaultRef) == "" || strings.TrimSpace(fault.ReasonCode) == "" {
+			return WorkerExecution{Attempt: attempt}, errors.New("Researchflow execution fault normalizer returned incomplete evidence")
+		}
+		faultRef := fault.FaultRef
+		result = StageExecutionResult{
+			AttemptStatus: domain.AttemptFailed,
+			StageStatus:   domain.StageRetryWait,
+			FaultRef:      &faultRef,
+			ReasonCodes:   []string{fault.ReasonCode},
+		}
 	}
 	if err := ValidateStageExecutionResult(result); err != nil {
 		return WorkerExecution{Attempt: attempt}, err
