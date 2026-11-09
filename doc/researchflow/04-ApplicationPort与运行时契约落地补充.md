@@ -323,7 +323,7 @@ Fake Repository/Fake Clock/Fake Provider 只证明模块内逻辑；MariaDB/Redi
 
 - Deadline expiration 与用户取消是互斥路径：仅处理 Run=created/queued/running 且数据库 UTC 已达到 deadline_at 的 Run；Run=cancelling 不允许进入 deadline expiration，不得混用 `user_cancelled` 与 `deadline_exceeded`。
 - Storage `ExpireRunDeadline` 锁顺序 Run → Stage（stage_ref 排序）→ Attempt（stage_ref/attempt_no 排序）；所有非终态 Stage 转 timed_out，追加 `run_deadline_exceeded`；所有 running Attempt 立即转 timed_out、清除 lease、fencing_token+1。该操作不等待 lease expiry。
-- Run 保持 running 以便 Application 使用已有 Domain 聚合规则计算 failed/partial 与 ResultSummary；Storage 只写 termination_reason=`deadline_exceeded` 并递增 Run.version。随后必须用新 version 调用既有 FinalizeRun，ResultSummary/Outbox/Run 终态仍原子提交。
+- Run 保持 running 以便 Application `FinalizeDeadline` 使用 Domain 聚合规则计算 failed/partial 与 ResultSummary；Storage 只写 termination_reason=`deadline_exceeded` 并递增 Run.version。`FinalizeDeadline` 只接受 `running + deadline_exceeded`，随后使用新 version 调用既有 `FinalizeRun`，ResultSummary/Outbox/Run 终态仍原子提交。
 - FinalizeRun 对 deadline_exceeded 增加终态限制，只允许 failed/partial，禁止 deadline 已过仍以 succeeded 终结。
 - 当前仅实现 Storage 原语和终结门禁；Deadline Scanner、Application 聚合/Finalize 编排、Server 周期任务和 MariaDB 集成验收尚未完成。
 
@@ -332,7 +332,7 @@ Fake Repository/Fake Clock/Fake Provider 只证明模块内逻辑；MariaDB/Redi
 
 - Application `DeadlineExpirationStore` 只暴露有界候选查询与按 Run.version 执行过期收敛；Storage 的候选查询使用 DB UTC 和稳定顺序，返回非锁定快照，Expire 方法重新锁 Run 并校验 deadline/version。
 - `DeadlineScanner` 按 BatchSize 顺序执行，记录扫描/成功/版本冲突数量；错误立即停止本批，避免吞掉存储故障。
-- Scanner 不直接生成 ResultSummary 或终结 Run。完成 Stage/Attempt fencing 后，Server/Application 聚合器必须读取新快照，按既有领域规则计算 failed/partial，再调用 FinalizeRun 写 ResultSummary + Outbox + Run 终态。
+- Scanner 不直接生成 ResultSummary 或终结 Run。完成 Stage/Attempt fencing 后，`DeadlineFinalizer` 读取完整执行快照，按既有领域规则计算 failed/partial，并调用 Finalization Store Port 写入 ResultSummary + Outbox + Run 终态。真实 Storage Snapshot/Finalize Adapter 和 Server 周期调度仍待完成。
 
 
 ### 9.8 Deadline 与用户取消互斥及幂等
@@ -346,3 +346,9 @@ Fake Repository/Fake Clock/Fake Provider 只证明模块内逻辑；MariaDB/Redi
 - `ExpireRunDeadline` 的持久化线性化结果为 Run=`running`、termination_reason=`deadline_exceeded`；Stage/Attempt 已在同一事务内超时并 fencing。
 - `FinalizeDeadline` 只接受上述状态组合，调用 `AggregateRun` 计算 failed/partial 和 ResultSummary；拒绝旧的 `cancelling + run_deadline_exceeded` 组合及 `user_cancelled`。
 - 后续 Application Finalizer 必须使用 Expire 返回的新 Run.version 调用 Storage `FinalizeRun`，由后者原子写入 ResultSummary、Outbox 与 Run 终态。该编排和真实 MariaDB 集成仍待完成。
+
+### 9.10 Deadline Application Finalizer 首轮实现（2026-11-09）
+
+- `DeadlineFinalizer` 读取 Run/Stage/Attempt 与 ResolvedTemplate 派生的传播策略/硬风险门禁快照，使用 DatabaseClock 调用 Domain `FinalizeDeadline`。
+- Finalizer 生成 ResultSummary/Outbox 引用，并通过 `DeadlineFinalizationStore` 传递预期 Run.version、终态、termination_reason 和摘要；Store Adapter 必须映射 Storage `FinalizeRun`，确保摘要、Outbox、Run 终态同事务。
+- Application 只依赖 Port，不直接依赖 SQL/Storage。当前 Fake Port 测试已补，未执行；真实快照装配、Storage Adapter、MariaDB 集成和 Server 周期调度仍未完成。

@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"time"
 
 	"example.com/stock-analysis-flow/internal/researchflow/domain"
 	"example.com/stock-analysis-flow/internal/researchflow/state"
@@ -115,5 +114,3 @@ func (f *DeadlineFinalizer) Finalize(ctx context.Context, runRef string) (Deadli
 	return DeadlineFinalizationResult{Run: run, Finalized: finalized}, nil
 }
 
-// Keep time imported in this file's public contract tests deterministic.
-var _ = time.Time{}
