@@ -9,13 +9,13 @@ import (
 )
 
 const (
-	MaxJSONDepth = 64
-	draft2020SchemaURI = "https://json-schema.org/draft/2020-12/schema"
+	MaxJSONDepth              = 64
+	draft2020SchemaURI        = "https://json-schema.org/draft/2020-12/schema"
 	responseSchemaResourceURI = "https://llm.invalid/schema/root.json"
 )
 
 var (
-	ErrInvalidJSONSchema = errors.New("invalid JSON Schema Draft 2020-12")
+	ErrInvalidJSONSchema  = errors.New("invalid JSON Schema Draft 2020-12")
 	ErrJSONSchemaMismatch = errors.New("JSON value does not match schema")
 )
 

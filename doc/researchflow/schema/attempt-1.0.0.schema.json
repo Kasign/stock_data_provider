@@ -13,7 +13,7 @@
     "status":{"enum":["running","succeeded","degraded","failed","timed_out","cancelled"]},
     "lease_owner":{"type":["string","null"]},
     "lease_expires_at":{"type":["string","null"],"format":"date-time"},
-    "fencing_token":{"type":"integer","minimum":0},
+    "fencing_token":{"type":"integer","minimum":1},
     "started_at":{"type":"string","format":"date-time"},
     "finished_at":{"type":["string","null"],"format":"date-time"},
     "fault_ref":{"type":["string","null"]},

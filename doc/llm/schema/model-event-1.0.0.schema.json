@@ -1,0 +1,254 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://llm.invalid/contracts/llm-modelevent-1.0.0.schema.json",
+  "title": "LLM ModelEvent",
+  "$defs": {
+    "Usage": {
+      "type": "object",
+      "properties": {
+        "input_tokens": {
+          "type": "integer"
+        },
+        "output_tokens": {
+          "type": "integer"
+        },
+        "total_tokens": {
+          "type": "integer"
+        },
+        "input_cached_tokens": {
+          "type": "integer"
+        },
+        "output_reasoning_tokens": {
+          "type": "integer"
+        },
+        "source": {
+          "type": "string",
+          "enum": [
+            "upstream",
+            "derived",
+            "unknown"
+          ]
+        },
+        "diagnostics": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "source"
+      ],
+      "additionalProperties": false
+    },
+    "ModelErrorInfo": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "invalid_request",
+            "unauthorized",
+            "rate_limited",
+            "overloaded",
+            "timeout",
+            "cancelled",
+            "upstream_unavailable",
+            "upstream_error",
+            "invalid_response",
+            "incomplete_response",
+            "schema_validation_failed",
+            "unsupported_capability",
+            "stream_interrupted",
+            "stream_sequence_gap",
+            "resource_limit"
+          ]
+        },
+        "stable_code": {
+          "type": "string",
+          "minLength": 1
+        },
+        "retryable": {
+          "type": "boolean"
+        },
+        "http_status": {
+          "type": "integer",
+          "minimum": 100,
+          "maximum": 599
+        },
+        "retry_after_seconds": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "safe_message": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "kind",
+        "stable_code",
+        "retryable",
+        "safe_message"
+      ],
+      "additionalProperties": false
+    },
+    "ContentPart": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": [
+            "output_text",
+            "refusal",
+            "unknown"
+          ]
+        },
+        "unknown_type": {
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        },
+        "annotations": true
+      },
+      "required": [
+        "type"
+      ],
+      "additionalProperties": false
+    },
+    "ModelToolCall": {
+      "type": "object",
+      "properties": {
+        "call_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "output_item_id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "arguments_json": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "call_id",
+        "name",
+        "arguments_json"
+      ],
+      "additionalProperties": false
+    },
+    "OutputItem": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": [
+            "message",
+            "function_call",
+            "refusal",
+            "unknown"
+          ]
+        },
+        "unknown_type": {
+          "type": "string"
+        },
+        "item_id": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        },
+        "content_parts": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/ContentPart"
+          }
+        },
+        "tool_call": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ModelToolCall"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "type": "object",
+  "properties": {
+    "type": {
+      "type": "string",
+      "minLength": 1
+    },
+    "sequence_number": {
+      "type": "integer"
+    },
+    "response_id": {
+      "type": "string"
+    },
+    "output_index": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "content_index": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "item_id": {
+      "type": "string"
+    },
+    "call_id": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string"
+    },
+    "item": {
+      "$ref": "#/$defs/OutputItem"
+    },
+    "content_part": {
+      "$ref": "#/$defs/ContentPart"
+    },
+    "delta": {
+      "type": "string"
+    },
+    "arguments": {
+      "type": "string"
+    },
+    "usage": {
+      "$ref": "#/$defs/Usage"
+    },
+    "error": {
+      "$ref": "#/$defs/ModelErrorInfo"
+    },
+    "received_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "required": [
+    "type",
+    "received_at"
+  ],
+  "additionalProperties": false
+}

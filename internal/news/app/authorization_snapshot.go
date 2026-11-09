@@ -8,7 +8,7 @@ import (
 )
 
 var (
-	ErrInvalidAuthorizationSnapshot = errors.New("news.authorization.snapshot_invalid")
+	ErrInvalidAuthorizationSnapshot  = errors.New("news.authorization.snapshot_invalid")
 	ErrAuthorizationSnapshotConflict = errors.New("news.authorization.snapshot_conflict")
 	ErrAuthorizationSnapshotNotFound = errors.New("news.authorization.snapshot_not_found")
 )

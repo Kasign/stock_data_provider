@@ -93,5 +93,45 @@ func Migrations() []platformstorage.Migration {
 				"ALTER TABLE research_claim_versions DROP INDEX idx_research_claim_status_asof, DROP COLUMN system_as_of, CHANGE COLUMN system_as_of_exact system_as_of CHAR(30) CHARACTER SET ascii COLLATE ascii_bin NOT NULL, ADD KEY idx_research_claim_status_asof (status, system_as_of)",
 			},
 		},
-}
+		{
+			Version:     3,
+			Description: "align Event and Claim version columns with Go int range",
+			Statements: []string{
+				"ALTER TABLE research_event_versions MODIFY COLUMN event_version BIGINT UNSIGNED NOT NULL",
+				"ALTER TABLE research_claim_versions MODIFY COLUMN claim_version BIGINT UNSIGNED NOT NULL",
+			},
+		},
+		{
+			Version:     4,
+			Description: "add transactional Research lifecycle notification Outbox",
+			Statements: []string{
+				"CREATE TABLE research_notification_outbox (\n" +
+					"event_id VARCHAR(255) NOT NULL,\n" +
+					"event_type VARCHAR(128) NOT NULL,\n" +
+					"schema_version VARCHAR(32) NOT NULL,\n" +
+					"source_module VARCHAR(32) NOT NULL,\n" +
+					"occurred_at CHAR(30) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n" +
+					"published_at CHAR(30) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n" +
+					"subject_ref VARCHAR(512) NOT NULL,\n" +
+					"idempotency_key VARCHAR(512) NOT NULL,\n" +
+					"correlation_id VARCHAR(128) NOT NULL,\n" +
+					"payload_fingerprint CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n" +
+					"payload LONGTEXT NOT NULL,\n" +
+					"created_at DATETIME(6) NOT NULL,\n" +
+					"PRIMARY KEY (event_id),\n" +
+					"UNIQUE KEY uq_research_outbox_idempotency (source_module, idempotency_key),\n" +
+					"KEY idx_research_outbox_created (created_at)\n" +
+					") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin",
+			},
+		},
+		{
+			Version: 5,
+			Description: "add reliable Research Outbox delivery leases and retry state",
+			Statements: []string{
+				"ALTER TABLE research_notification_outbox ADD COLUMN delivery_status VARCHAR(16) NOT NULL DEFAULT 'pending', ADD COLUMN available_at CHAR(30) CHARACTER SET ascii COLLATE ascii_bin NULL, ADD COLUMN lease_owner VARCHAR(128) NULL, ADD COLUMN lease_token CHAR(32) CHARACTER SET ascii COLLATE ascii_bin NULL, ADD COLUMN lease_until CHAR(30) CHARACTER SET ascii COLLATE ascii_bin NULL, ADD COLUMN attempt_count INT UNSIGNED NOT NULL DEFAULT 0, ADD COLUMN last_error_code VARCHAR(128) NULL, ADD COLUMN delivered_at CHAR(30) CHARACTER SET ascii COLLATE ascii_bin NULL, ADD COLUMN updated_at DATETIME(6) NULL",
+				"UPDATE research_notification_outbox SET available_at = CONCAT(DATE_FORMAT(created_at, '%Y-%m-%dT%H:%i:%s.%f'), '000Z'), updated_at = created_at",
+				"ALTER TABLE research_notification_outbox MODIFY COLUMN available_at CHAR(30) CHARACTER SET ascii COLLATE ascii_bin NOT NULL, MODIFY COLUMN updated_at DATETIME(6) NOT NULL, ADD KEY idx_research_outbox_delivery (delivery_status, available_at, created_at)",
+			},
+		},
+	}
 }

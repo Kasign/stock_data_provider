@@ -8,12 +8,12 @@ import (
 
 func validEntry(code, algorithmVersion string) Entry {
 	return Entry{
-		Code:             code,
-		SchemaVersion:    "1.0.0",
-		ValueType:        ValueTypeNumber,
-		Unit:             "ratio",
+		Code:          code,
+		SchemaVersion: "1.0.0",
+		ValueType:     ValueTypeNumber,
+		Unit:          "ratio",
 		Precision: Precision{
-			MaxIntegerDigits:   8,
+			MaxIntegerDigits:  8,
 			MaxFractionDigits: 6,
 			RoundingMode:      "half_even",
 			Tolerance:         json.RawMessage("0.000001"),
@@ -31,7 +31,7 @@ func validEntry(code, algorithmVersion string) Entry {
 			Quality:          []string{"valid"},
 			RequiresSnapshot: true,
 		}},
-		ParametersSchema: json.RawMessage(`{"type":"object","additionalProperties":false}`),
+		ParametersSchema: json.RawMessage(`{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","additionalProperties":false}`),
 		QualityPolicy: QualityPolicy{
 			MinimumCoverage:       1,
 			MissingHandling:       "reject",
@@ -89,6 +89,44 @@ func TestEntryValidateAcceptsMathematicallyIntegralJSONNumber(t *testing.T) {
 	}
 	if err := entry.Validate(); err != nil {
 		t.Fatalf("expected mathematically integral JSON number to pass, got %v", err)
+	}
+}
+
+func TestEntryValidateNormalizesLeadingZerosAfterExponentExpansion(t *testing.T) {
+	entry := validEntry("ratio_metric", "1.0.0")
+	entry.Precision.MaxIntegerDigits = 1
+	entry.Precision.Tolerance = json.RawMessage("0")
+	entry.Range = NumericRange{
+		Minimum: json.RawMessage("0"),
+		Maximum: json.RawMessage("0.001e3"),
+	}
+	if err := entry.Validate(); err != nil {
+		t.Fatalf("expected 0.001e3 to normalize to integer 1, got %v", err)
+	}
+}
+
+func TestEntryValidateCountsExponentExpandedDigits(t *testing.T) {
+	entry := validEntry("ratio_metric", "1.0.0")
+	entry.Precision.MaxIntegerDigits = 3
+	entry.Range = NumericRange{
+		Minimum: json.RawMessage("0"),
+		Maximum: json.RawMessage("1e4"),
+	}
+	if err := entry.Validate(); !errors.Is(err, ErrInvalidEntry) {
+		t.Fatalf("expected exponent-expanded integer digits to exceed precision, got %v", err)
+	}
+}
+
+func TestEntryValidatePreservesExactJSONNumberPrecision(t *testing.T) {
+	entry := validEntry("ratio_metric", "1.0.0")
+	entry.Precision.MaxFractionDigits = 18
+	entry.Precision.Tolerance = json.RawMessage("0.000000000000000001")
+	entry.Range = NumericRange{
+		Minimum: json.RawMessage("0"),
+		Maximum: json.RawMessage("0.1234567890123456789"),
+	}
+	if err := entry.Validate(); !errors.Is(err, ErrInvalidEntry) {
+		t.Fatalf("expected exact 19-digit fraction to exceed precision 18, got %v", err)
 	}
 }
 
@@ -218,5 +256,150 @@ func TestRegistryFreezeAndStableSnapshot(t *testing.T) {
 	}
 	if again.InputRequirements[0].Fields[0] != "close" || string(again.ParametersSchema) == string(entries[0].ParametersSchema) {
 		t.Fatal("registry exposed mutable internal state")
+	}
+}
+
+func TestRegistryValidateParametersUsesExplicitAlgorithmVersion(t *testing.T) {
+	registry := New()
+	entry := validEntry("sma", "1.0.0")
+	entry.ParametersSchema = json.RawMessage(`{
+		"$schema":"https://json-schema.org/draft/2020-12/schema",
+		"type":"object",
+		"additionalProperties":false,
+		"required":["window"],
+		"properties":{"window":{"type":"integer","minimum":1}}
+	}`)
+	if err := registry.Register(entry, true); err != nil {
+		t.Fatal(err)
+	}
+	nextVersion := validEntry("sma", "2.0.0")
+	nextVersion.ParametersSchema = json.RawMessage(`{
+		"$schema":"https://json-schema.org/draft/2020-12/schema",
+		"type":"object",
+		"additionalProperties":false,
+		"required":["window"],
+		"properties":{"window":{"type":"integer","minimum":2}}
+	}`)
+	if err := registry.Register(nextVersion, false); err != nil {
+		t.Fatal(err)
+	}
+	if err := registry.ActivateVersion("sma", "1.0.0", "2.0.0"); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := registry.ValidateParameters("sma", "1.0.0", "1.0.0", json.RawMessage(`{"window":1}`)); err != nil {
+		t.Fatalf("historical algorithm version changed after activation: %v", err)
+	}
+	if err := registry.ValidateParameters("sma", "1.0.0", "2.0.0", json.RawMessage(`{"window":1}`)); !errors.Is(err, ErrInvalidParameters) {
+		t.Fatalf("new active version must apply its own schema, got %v", err)
+	}
+	if err := registry.ValidateParameters("sma", "1.0.0", "1.0.0", json.RawMessage(`{"window":5}`)); err != nil {
+		t.Fatalf("valid parameters rejected: %v", err)
+	}
+	if err := registry.ValidateParameters("sma", "1.0.0", "1.0.0", json.RawMessage(`{"window":0}`)); !errors.Is(err, ErrInvalidParameters) {
+		t.Fatalf("expected invalid parameters error, got %v", err)
+	}
+	if err := registry.ValidateParameters("sma", "1.0.0", "9.9.9", json.RawMessage(`{"window":5}`)); !errors.Is(err, ErrUnknownEntry) {
+		t.Fatalf("expected unknown explicit algorithm version, got %v", err)
+	}
+	if err := registry.ValidateParameters("sma", "1.0.0", "1.0.0", json.RawMessage(`{"window":5} trailing`)); !errors.Is(err, ErrInvalidParameters) {
+		t.Fatalf("expected malformed JSON rejection, got %v", err)
+	}
+}
+
+func TestRegistryDeepCopiesEntryOnRegisterAndLookup(t *testing.T) {
+	registry := New()
+	source := validEntry("copy_metric", "1.0.0")
+	if err := registry.Register(source, true); err != nil {
+		t.Fatal(err)
+	}
+
+	// 注册后修改调用方持有的所有嵌套可变字段，不得影响 Registry。
+	source.Precision.Tolerance[0] = '9'
+	source.Range.Minimum[0] = '9'
+	source.Range.Maximum[0] = '9'
+	source.InputRequirements[0].Fields[0] = "mutated_field"
+	source.InputRequirements[0].Quality[0] = "mutated_quality"
+	source.ParametersSchema[0] = 'x'
+	source.QualityPolicy.QualityStates[0] = "mutated_state"
+	source.QualityPolicy.UnavailableConditions[0] = "mutated_condition"
+
+	got, err := registry.LookupVersion("copy_metric", "1.0.0", "1.0.0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertOriginalEntryNestedValues(t, got)
+
+	// Lookup 返回值同样必须与 Registry 内部状态隔离。
+	got.Precision.Tolerance[0] = '8'
+	got.Range.Minimum[0] = '8'
+	got.Range.Maximum[0] = '8'
+	got.InputRequirements[0].Fields[0] = "lookup_field"
+	got.InputRequirements[0].Quality[0] = "lookup_quality"
+	got.ParametersSchema[0] = 'y'
+	got.QualityPolicy.QualityStates[0] = "lookup_state"
+	got.QualityPolicy.UnavailableConditions[0] = "lookup_condition"
+
+	again, err := registry.LookupActive("copy_metric", "1.0.0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertOriginalEntryNestedValues(t, again)
+}
+
+func assertOriginalEntryNestedValues(t *testing.T, entry Entry) {
+	t.Helper()
+	if string(entry.Precision.Tolerance) != "0.000001" {
+		t.Errorf("Precision.Tolerance = %s, want 0.000001", entry.Precision.Tolerance)
+	}
+	if string(entry.Range.Minimum) != "-1" || string(entry.Range.Maximum) != "1" {
+		t.Errorf("Range = (%s, %s), want (-1, 1)", entry.Range.Minimum, entry.Range.Maximum)
+	}
+	if entry.InputRequirements[0].Fields[0] != "close" {
+		t.Errorf("InputRequirements.Fields = %v, want [close]", entry.InputRequirements[0].Fields)
+	}
+	if entry.InputRequirements[0].Quality[0] != "valid" {
+		t.Errorf("InputRequirements.Quality = %v, want [valid]", entry.InputRequirements[0].Quality)
+	}
+	if string(entry.ParametersSchema) != `{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","additionalProperties":false}` {
+		t.Errorf("ParametersSchema was mutated: %s", entry.ParametersSchema)
+	}
+	if entry.QualityPolicy.QualityStates[0] != "valid" {
+		t.Errorf("QualityPolicy.QualityStates = %v, want [valid]", entry.QualityPolicy.QualityStates)
+	}
+	if entry.QualityPolicy.UnavailableConditions[0] != "missing_input" {
+		t.Errorf("QualityPolicy.UnavailableConditions = %v, want [missing_input]", entry.QualityPolicy.UnavailableConditions)
+	}
+}
+
+func TestRegistryValidateMetricAppliesRegisteredSemantics(t *testing.T) {
+	registry := New()
+	entry := validEntry("sample_metric", "1.0.0")
+	entry.Precision.MaxFractionDigits = 4
+	entry.Range = NumericRange{Minimum: json.RawMessage("-0.5"), Maximum: json.RawMessage("0.5")}
+	entry.QualityPolicy.QualityStates = []string{"valid", "degraded"}
+	if err := registry.Register(entry, true); err != nil {
+		t.Fatal(err)
+	}
+
+	valid := json.RawMessage(`{"metric_code":"sample_metric","value":0.25,"unit":"ratio","period":"20d","system_as_of":"2026-11-09T01:00:00Z","quality_status":"valid","metric_status":"available","calculation_version":"1.0.0","lower_bound":null,"upper_bound":null}`)
+	if err := registry.ValidateMetric("sample_metric", "1.0.0", "1.0.0", valid); err != nil {
+		t.Fatalf("valid metric rejected: %v", err)
+	}
+	badCases := []json.RawMessage{
+		json.RawMessage(`{"metric_code":"sample_metric","value":0.25,"unit":"wrong","period":"20d","system_as_of":"2026-11-09T01:00:00Z","quality_status":"valid","metric_status":"available","calculation_version":"1.0.0","lower_bound":null,"upper_bound":null}`),
+		json.RawMessage(`{"metric_code":"sample_metric","value":0.123456,"unit":"ratio","period":"20d","system_as_of":"2026-11-09T01:00:00Z","quality_status":"valid","metric_status":"available","calculation_version":"1.0.0","lower_bound":null,"upper_bound":null}`),
+		json.RawMessage(`{"metric_code":"sample_metric","value":0.75,"unit":"ratio","period":"20d","system_as_of":"2026-11-09T01:00:00Z","quality_status":"valid","metric_status":"available","calculation_version":"1.0.0","lower_bound":null,"upper_bound":null}`),
+		json.RawMessage(`{"metric_code":"sample_metric","value":0.25,"unit":"ratio","period":"20d","system_as_of":"2026-11-09T01:00:00Z","quality_status":"unknown","metric_status":"available","calculation_version":"1.0.0","lower_bound":null,"upper_bound":null}`),
+		json.RawMessage(`{"metric_code":"sample_metric","value":0.25,"unit":"ratio","period":"20d","system_as_of":"2026-11-09T01:00:00Z","quality_status":"valid","metric_status":"available","calculation_version":"2.0.0","lower_bound":null,"upper_bound":null}`),
+		json.RawMessage(`{"metric_code":"sample_metric","value":0.25,"unit":"ratio","period":"20d","system_as_of":"2026-11-09T01:00:00Z","quality_status":"valid","metric_status":"available","calculation_version":"1.0.0","lower_bound":0.3,"upper_bound":0.4}`),
+	}
+	for i, raw := range badCases {
+		if err := registry.ValidateMetric("sample_metric", "1.0.0", "1.0.0", raw); err == nil {
+			t.Errorf("invalid metric case %d accepted", i)
+		}
+	}
+	if err := registry.ValidateMetric("unknown", "1.0.0", "1.0.0", valid); !errors.Is(err, ErrUnknownEntry) {
+		t.Fatalf("unknown metric code should fail lookup, got %v", err)
 	}
 }

@@ -153,5 +153,27 @@ func Migrations() []platformstorage.Migration {
 				) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
 			},
 		},
+		{
+			Version:     3,
+			Description: "persist immutable point-in-time evidence pagination snapshots",
+			Statements: []string{
+				`CREATE TABLE news_evidence_snapshots (
+					snapshot_ref VARCHAR(256) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
+					caller_ref VARCHAR(256) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
+					filters_fingerprint CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+					page_size SMALLINT UNSIGNED NOT NULL,
+					system_as_of DATETIME(6) NOT NULL,
+					sort_version VARCHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+					created_at DATETIME(6) NOT NULL,
+					expires_at DATETIME(6) NOT NULL,
+					item_count INT UNSIGNED NOT NULL,
+					payload_json JSON NOT NULL,
+					payload_hash CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+					PRIMARY KEY (snapshot_ref),
+					KEY idx_news_snapshot_caller_expiry (caller_ref, expires_at),
+					KEY idx_news_snapshot_expiry (expires_at)
+				) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+			},
+		},
 	}
 }

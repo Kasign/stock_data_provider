@@ -10,15 +10,16 @@
     "quote_snapshot"
   ],
   "retry_policy_ref": "retry_default_v1",
-  "attempt_no": 1,
   "retry_at": null,
   "output_ref": "output_02",
-  "quality_status": "degraded",
   "reason_codes": [
     "source_partial"
   ],
-  "risk_decision": null,
   "created_at": "2026-11-06T01:00:00Z",
   "started_at": "2026-11-06T01:01:00Z",
-  "finished_at": "2026-11-06T01:02:00Z"
+  "finished_at": "2026-11-06T01:02:00Z",
+  "quality_summary_ref": "quality_02",
+  "diagnostic_refs": [
+    "diagnostic_02"
+  ]
 }

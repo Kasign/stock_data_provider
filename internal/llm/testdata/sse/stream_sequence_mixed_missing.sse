@@ -1,0 +1,9 @@
+event: response.output_text.delta
+data: {"type":"response.output_text.delta","sequence_number":1,"delta":"a"}
+
+event: response.output_text.delta
+data: {"type":"response.output_text.delta","delta":"b"}
+
+event: response.completed
+data: {"type":"response.completed","sequence_number":3,"response":{"id":"resp-mixed","object":"response","status":"completed","output":[]}}
+

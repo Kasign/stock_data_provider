@@ -1,0 +1,138 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kasign.dev/schemas/quant-result-ref-1.0.0.schema.json",
+  "title": "QuantResultRef",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.-]+)?$"
+    },
+    "result_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "result_type": {
+      "type": "string",
+      "enum": [
+        "indicator",
+        "factor",
+        "trend",
+        "market",
+        "industry",
+        "stock",
+        "strategy",
+        "backtest",
+        "risk",
+        "evaluation"
+      ]
+    },
+    "scope": {
+      "type": "string",
+      "enum": [
+        "stock",
+        "market",
+        "industry",
+        "portfolio"
+      ]
+    },
+    "security_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "system_as_of": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "Z$"
+    },
+    "trade_date": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+      "format": "date"
+    },
+    "period": {
+      "type": "string",
+      "minLength": 1
+    },
+    "algorithm_version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "parameter_fingerprint": {
+      "type": "string",
+      "minLength": 1
+    },
+    "input_snapshot_refs": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "quality_status": {
+      "type": "string",
+      "enum": [
+        "valid",
+        "degraded",
+        "invalid",
+        "unknown"
+      ]
+    },
+    "result_status": {
+      "type": "string",
+      "enum": [
+        "completed",
+        "insufficient_data",
+        "insufficient_sample",
+        "rejected",
+        "failed"
+      ]
+    },
+    "authorization_ref": {
+      "type": "string",
+      "minLength": 1
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "Z$"
+    }
+  },
+  "required": [
+    "schema_version",
+    "result_id",
+    "result_type",
+    "scope",
+    "system_as_of",
+    "period",
+    "algorithm_version",
+    "parameter_fingerprint",
+    "input_snapshot_refs",
+    "quality_status",
+    "result_status",
+    "authorization_ref",
+    "created_at"
+  ],
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "scope": {
+            "const": "stock"
+          }
+        },
+        "required": [
+          "scope"
+        ]
+      },
+      "then": {
+        "required": [
+          "security_id"
+        ]
+      }
+    }
+  ]
+}
