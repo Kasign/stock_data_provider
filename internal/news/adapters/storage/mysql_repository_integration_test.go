@@ -505,6 +505,37 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
+	// Knowledge-time reads retain old assertions but hide assertions not yet observed.
+	beforeRelation := relation.ObservedAt.Add(-time.Microsecond)
+	history, err := repository.ListNewsItemRelationsAt(ctx, app.NewsItemRelationHistoryRequest{
+		NewsID: newsID, SystemAsOf: beforeRelation,
+	})
+	if err != nil {
+		t.Fatalf("read relation history before assertion: %v", err)
+	}
+	if len(history) != 0 {
+		t.Fatalf("relation history before assertion = %#v, want empty", history)
+	}
+	afterRelation := relation.ObservedAt.Add(time.Microsecond)
+	history, err = repository.ListNewsItemRelationsAt(ctx, app.NewsItemRelationHistoryRequest{
+		NewsID: newsID, SystemAsOf: afterRelation,
+	})
+	if err != nil {
+		t.Fatalf("read relation history from source item: %v", err)
+	}
+	if len(history) != 1 || history[0].ID != relation.ID {
+		t.Fatalf("source-side relation history = %#v, want relation %q", history, relation.ID)
+	}
+	history, err = repository.ListNewsItemRelationsAt(ctx, app.NewsItemRelationHistoryRequest{
+		NewsID: secondObservation.NewsID, SystemAsOf: afterRelation,
+	})
+	if err != nil {
+		t.Fatalf("read relation history from target item: %v", err)
+	}
+	if len(history) != 1 || history[0].ID != relation.ID {
+		t.Fatalf("target-side relation history = %#v, want relation %q", history, relation.ID)
+	}
 }
 
 func loadIntegrationAuthorizationBinding(t *testing.T) domain.NewsAuthorizationBinding {
