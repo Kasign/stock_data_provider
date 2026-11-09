@@ -7,7 +7,7 @@
 ## 接口
 
 - `RuleEvaluator` 接收调用上下文并返回单条 `Reason`。
-- `EvaluateRuleSet` 按 RuleSet 声明顺序执行，不依赖 map 遍历顺序；入口复制规则清单和 evaluator 注册表，避免 evaluator 回调修改调用方原始配置影响本次执行。
+- `EvaluateRuleSet` 按 RuleSet 声明顺序执行，不依赖 map 遍历顺序；入口复制规则清单和 evaluator 注册表，并在每条规则返回后立即复制 `EvidenceRefs`，避免后续回调复用底层数组改写已产生的结论。
 - 规则执行器必须返回与 RuleDefinition 相同的 code/severity。
 - 未注册的 evaluator、未知规则、规则身份/严重级别不匹配均拒绝构造决策。
 - 所有 `block` 规则必须声明为 required；规则集校验拒绝 `block + optional`，避免缺少 evaluator 时静默跳过硬门禁。
@@ -22,7 +22,7 @@
 
 ## 验收
 
-测试覆盖声明顺序、必需规则缺失、执行错误 fail-closed、未知 evaluator、返回身份不匹配和 context 取消。该实现提供通用执行骨架，不代表已有真实风险规则或生产规则集。
+测试覆盖声明顺序、必需规则缺失、执行错误 fail-closed、未知 evaluator、返回身份不匹配、返回证据引用快照隔离和 context 取消。该实现提供通用执行骨架，不代表已有真实风险规则或生产规则集。
 
 ## 补充验收
 

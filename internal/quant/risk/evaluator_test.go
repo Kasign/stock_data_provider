@@ -208,3 +208,23 @@ func TestEvaluateRuleSetStopsWhenContextIsCancelledDuringEvaluation(t *testing.T
 		t.Fatalf("error = %v, want context.Canceled", err)
 	}
 }
+func TestEvaluateRuleSetSnapshotsReturnedEvidenceRefs(t *testing.T) {
+	set := validRuleSet()
+	sharedRefs := []string{"snapshot:original"}
+	evaluators := map[string]RuleEvaluator{
+		"INPUT_QUALITY": func(context.Context) (Reason, error) {
+			return Reason{Code: "INPUT_QUALITY", Severity: SeverityBlock, Status: ReasonNotTriggered, SafeMessage: "输入质量合格", EvidenceRefs: sharedRefs}, nil
+		},
+		"TRADING_STATUS": func(context.Context) (Reason, error) {
+			sharedRefs[0] = "snapshot:mutated"
+			return Reason{Code: "TRADING_STATUS", Severity: SeverityBlock, Status: ReasonNotTriggered, SafeMessage: "交易状态正常", EvidenceRefs: []string{}}, nil
+		},
+	}
+	decision, err := EvaluateRuleSet(context.Background(), set, decisionInput(set.Version, nil), evaluators)
+	if err != nil {
+		t.Fatalf("EvaluateRuleSet() error = %v", err)
+	}
+	if got := decision.Reasons[0].EvidenceRefs[0]; got != "snapshot:original" {
+		t.Fatalf("first evaluator evidence ref = %q, want original snapshot", got)
+	}
+}
