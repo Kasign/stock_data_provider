@@ -129,8 +129,8 @@ func TestValidateAdjustmentFactorRecordRequiresSourceAndValidTimeEvidence(t *tes
 	futureAvailable := base
 	afterFetch := fetched.Add(time.Second)
 	futureAvailable.AvailableAt = &afterFetch
-	if err := validateAdjustmentFactorRecord(futureAvailable); err == nil {
-		t.Fatal("available_at after fetched_at must be rejected")
+	if err := validateAdjustmentFactorRecord(futureAvailable); err != nil {
+		t.Fatalf("repository must preserve future availability revisions for PIT visibility filtering: %v", err)
 	}
 	zeroProviderTime := base
 	zero := time.Time{}
