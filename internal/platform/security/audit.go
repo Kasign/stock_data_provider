@@ -2,7 +2,6 @@ package security
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -143,6 +142,9 @@ type SecurityAuditWriter interface {
 type SecurityAuditWriterFunc func(ctx context.Context, event SecurityAuditEvent) error
 
 func (f SecurityAuditWriterFunc) Write(ctx context.Context, event SecurityAuditEvent) error {
+	if f == nil {
+		return fmt.Errorf("security audit writer function is nil")
+	}
 	return f(ctx, event)
 }
 
@@ -165,4 +167,3 @@ func WriteSecurityAudit(ctx context.Context, writer SecurityAuditWriter, event S
 	return nil
 }
 
-var _ = errors.New

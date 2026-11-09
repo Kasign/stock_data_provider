@@ -38,7 +38,7 @@ func TestSecurityAuditEventValidation(t *testing.T) {
 		t.Fatal("unregistered event type must be rejected")
 	}
 	event = validTestSecurityAuditEvent()
-	event.RequestID = "header:Bearer-secret"
+	event.RequestID = "request-id\nsecret"
 	if err := event.Validate(); err == nil {
 		t.Fatal("request ID containing unsafe characters must be rejected")
 	}
