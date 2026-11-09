@@ -258,3 +258,32 @@ func TestRegistryFreezeAndStableSnapshot(t *testing.T) {
 		t.Fatal("registry exposed mutable internal state")
 	}
 }
+
+
+func TestRegistryValidateParametersUsesExplicitAlgorithmVersion(t *testing.T) {
+	registry := New()
+	entry := validEntry("sma", "1.0.0")
+	entry.ParametersSchema = json.RawMessage(`{
+		"$schema":"https://json-schema.org/draft/2020-12/schema",
+		"type":"object",
+		"additionalProperties":false,
+		"required":["window"],
+		"properties":{"window":{"type":"integer","minimum":1}}
+	}`)
+	if err := registry.Register(entry, true); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := registry.ValidateParameters("sma", "1.0.0", "1.0.0", json.RawMessage(`{"window":5}`)); err != nil {
+		t.Fatalf("valid parameters rejected: %v", err)
+	}
+	if err := registry.ValidateParameters("sma", "1.0.0", "1.0.0", json.RawMessage(`{"window":0}`)); !errors.Is(err, ErrInvalidParameters) {
+		t.Fatalf("expected invalid parameters error, got %v", err)
+	}
+	if err := registry.ValidateParameters("sma", "1.0.0", "9.9.9", json.RawMessage(`{"window":5}`)); !errors.Is(err, ErrUnknownEntry) {
+		t.Fatalf("expected unknown explicit algorithm version, got %v", err)
+	}
+	if err := registry.ValidateParameters("sma", "1.0.0", "1.0.0", json.RawMessage(`{"window":5} trailing`)); !errors.Is(err, ErrInvalidParameters) {
+		t.Fatalf("expected malformed JSON rejection, got %v", err)
+	}
+}
