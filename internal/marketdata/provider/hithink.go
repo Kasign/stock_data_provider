@@ -1416,7 +1416,7 @@ func (p *Hithink) FetchValuations(ctx context.Context, rawSymbols []string) (*mo
 	}
 	if data.Timestamp != nil && *data.Timestamp > 0 {
 		timestamp := time.UnixMilli(*data.Timestamp).UTC()
-		if !timestamp.After(now.Add(5*time.Minute)) && !timestamp.Before(now.AddDate(-10, 0, 0)) {
+		if !timestamp.After(now.Add(time.Minute)) && !timestamp.Before(now.AddDate(-10, 0, 0)) {
 			snapshot.ProviderTimestamp = &timestamp
 		}
 	}

@@ -117,3 +117,28 @@ func TestHithinkValuationsDistinguishesMissingAndInvalidMetrics(t *testing.T) {
 		}
 	}
 }
+
+
+func TestHithinkValuationsRejectsTimestampBeyondServiceFutureSkew(t *testing.T) {
+	timestamp := time.Now().UTC().Add(2 * time.Minute).UnixMilli()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = fmt.Fprintf(w, `{"code":0,"data":{"timestamp":%d,"total":1,"item":[{"thscode":"600519.SH","ticker":"600519","pe_ttm":25,"pe_mrq":24,"pb_mrq":8,"ps_ttm":10,"pcf_ttm":20}]}}`, timestamp)
+	}))
+	t.Cleanup(server.Close)
+
+	snapshot, err := NewHithinkConfigured(3*time.Second, server.URL, "unit-test-key").
+		FetchValuations(context.Background(), []string{"600519.SH"})
+	if err != nil {
+		t.Fatalf("FetchValuations returned error: %v", err)
+	}
+	if snapshot.ProviderTimestamp != nil {
+		t.Fatalf("provider timestamp beyond service's one-minute future skew must be rejected: %v", snapshot.ProviderTimestamp)
+	}
+	if snapshot.QualityStatus != model.QualityDegraded {
+		t.Fatalf("missing/invalid provider timestamp must degrade snapshot: %+v", snapshot)
+	}
+	if !containsHithinkReason(snapshot.QualityReasons, "provider_valuation_timestamp_missing_or_invalid") {
+		t.Fatalf("invalid timestamp reason missing: %+v", snapshot.QualityReasons)
+	}
+}
