@@ -42,3 +42,18 @@ func TestNewRepositoryBaseRequiresDatabase(t *testing.T) {
 		t.Fatalf("newRepositoryBase(nil) error = %v, want ErrInvalidRepository", err)
 	}
 }
+
+
+func TestVerifyStoredPayloadRejectsDigestMismatch(t *testing.T) {
+	payload := []byte(`{"context_id":"ctx-1","context_version":1}`)
+	validDigest := payloadDigest(payload)
+	if err := verifyStoredPayload(payload, validDigest); err != nil {
+		t.Fatalf("valid stored payload rejected: %v", err)
+	}
+	if err := verifyStoredPayload([]byte(`{"context_id":"ctx-1","context_version":2}`), validDigest); !errors.Is(err, ErrCorruptRecord) {
+		t.Fatalf("tampered stored payload error = %v, want ErrCorruptRecord", err)
+	}
+	if err := verifyStoredPayload(payload, ""); !errors.Is(err, ErrCorruptRecord) {
+		t.Fatalf("missing stored digest error = %v, want ErrCorruptRecord", err)
+	}
+}

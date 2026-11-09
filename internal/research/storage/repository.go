@@ -18,6 +18,7 @@ var (
 	ErrNotFound = errors.New("research record not found")
 	ErrConflict = errors.New("research version conflict")
 	ErrInvalidRepository = errors.New("research repository is not configured")
+	ErrCorruptRecord = errors.New("research stored record is corrupt")
 )
 
 const pitTimeLayout = "2006-01-02T15:04:05.000000000Z"
@@ -90,7 +91,7 @@ func (r repositoryBase) appendVersion(ctx context.Context, aggregateType, aggreg
 	}
 	if latest > 0 {
 		var previous []byte
-		query := fmt.Sprintf("SELECT payload FROM %s WHERE %s=? AND %s=?", table, idColumn, versionColumn)
+		query := fmt.Sprintf("SELECT payload_sha256, payload FROM %s WHERE %s=? AND %s=?", table, idColumn, versionColumn)
 		if err := tx.QueryRowContext(ctx, query, aggregateID, latest).Scan(&previous); err != nil {
 			return fmt.Errorf("read previous research version: %w", err)
 		}
@@ -115,12 +116,23 @@ func (r repositoryBase) getVersion(ctx context.Context, table, idColumn, version
 	if ctx == nil { return nil, errors.New("context is nil") }
 	if aggregateID == "" || version < 1 { return nil, fmt.Errorf("aggregate identity and positive version are required") }
 	query := fmt.Sprintf("SELECT payload FROM %s WHERE %s=? AND %s=?", table, idColumn, versionColumn)
+	var storedDigest string
 	var payload []byte
-	if err := r.db.QueryRowContext(ctx, query, aggregateID, version).Scan(&payload); err != nil {
+	if err := r.db.QueryRowContext(ctx, query, aggregateID, version).Scan(&storedDigest, &payload); err != nil {
 		if errors.Is(err, sql.ErrNoRows) { return nil, ErrNotFound }
 		return nil, fmt.Errorf("read research version: %w", err)
 	}
+	if err := verifyStoredPayload(payload, storedDigest); err != nil {
+		return nil, err
+	}
 	return payload, nil
+}
+
+func verifyStoredPayload(payload []byte, storedDigest string) error {
+	if storedDigest != payloadDigest(payload) {
+		return fmt.Errorf("%w: payload SHA-256 does not match stored content", ErrCorruptRecord)
+	}
+	return nil
 }
 
 func encodePayload(value any) ([]byte, string, error) {
