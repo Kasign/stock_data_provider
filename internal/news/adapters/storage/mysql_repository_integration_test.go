@@ -415,6 +415,47 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 		t.Fatalf("unsupported temporal symbol filter error = %v, want invalid query", err)
 	}
 
+	// A later source revision must not rewrite the version visible at an earlier
+	// knowledge time; the latest version changes only after its observation.
+	revisedCandidate := secondCandidate
+	revisedCandidate.Title = "Second news item revised"
+	revisedObservation, err := ingest.Execute(
+		ctx, secondSourceID, "news-it-second-revision-key", revisedCandidate, domain.SourceURLPolicy{},
+	)
+	if err != nil {
+		t.Fatalf("ingest second news revision: %v", err)
+	}
+	if revisedObservation.NewsID != secondObservation.NewsID {
+		t.Fatalf("revision NewsID = %q, want %q", revisedObservation.NewsID, secondObservation.NewsID)
+	}
+	revisedVersion, err := updater.Execute(ctx, app.ResearchUpdateRequest{
+		NewsID: revisedObservation.NewsID, Candidate: revisedCandidate,
+		ObservationID: revisedObservation.ID,
+		Content: domain.ContentLayers{
+			SourceSummary: "revised source summary", SourceSummaryOrigin: domain.ContentOriginFeedSummary,
+		},
+	})
+	if err != nil {
+		t.Fatalf("append second news revision: %v", err)
+	}
+	listRequest.Filters.CanonicalSymbols = nil
+	listRequest.SystemAsOf = revisedVersion.Version.ObservedAt.Add(-time.Second)
+	listed, err = repository.ListEvidenceVersionsAt(ctx, listRequest)
+	if err != nil {
+		t.Fatalf("list evidence before later revision: %v", err)
+	}
+	if len(listed) != 1 || listed[0].Version.ID != secondVersion.Version.ID {
+		t.Fatalf("historical PIT version = %+v, want original version %q", listed, secondVersion.Version.ID)
+	}
+	listRequest.SystemAsOf = time.Now().UTC()
+	listed, err = repository.ListEvidenceVersionsAt(ctx, listRequest)
+	if err != nil {
+		t.Fatalf("list evidence after later revision: %v", err)
+	}
+	if len(listed) != 1 || listed[0].Version.ID != revisedVersion.Version.ID {
+		t.Fatalf("latest PIT version = %+v, want revised version %q", listed, revisedVersion.Version.ID)
+	}
+
 	relationService := app.NewApplyNewsItemRelation(repository, newID)
 	relation, err := relationService.Execute(ctx, app.NewsItemRelationRequest{
 		Relation: domain.NewsItemRelation{
