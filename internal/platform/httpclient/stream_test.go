@@ -104,8 +104,8 @@ func TestOpenStreamHTTP2IncrementalReadAndCancel(t *testing.T) {
 	defer client.CloseIdleConnections()
 	serverTransport := server.Client().Transport.(*http.Transport)
 	client.transport.TLSClientConfig = serverTransport.TLSClientConfig.Clone()
-	// 仅 HTTP/2 本地测试夹具跳过证书主机名校验，不改变生产 Client 的 TLS 配置。
-	client.transport.TLSClientConfig.InsecureSkipVerify = true
+	// 测试服务证书包含 127.0.0.1 SAN；使用该名称校验 TLS，同时 HTTP Host 仍为 localhost。
+	client.transport.TLSClientConfig.ServerName = "127.0.0.1"
 	client.dial = func(ctx context.Context, network, _ string) (net.Conn, error) {
 		return (&net.Dialer{}).DialContext(ctx, network, server.Listener.Addr().String())
 	}
