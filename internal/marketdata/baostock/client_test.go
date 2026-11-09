@@ -5,8 +5,8 @@ import (
 	"bytes"
 	"compress/zlib"
 	"context"
-	"errors"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"hash/crc32"
 	"net"
@@ -970,6 +970,8 @@ func TestParseQuarterlyFinancialPageReportsRequiredStructureFieldEvidence(t *tes
 	}{
 		{name: "code non-scalar", field: "code", code: "invalid_field", expected: "string scalar", mutate: func(row []any) { row[0] = map[string]any{"unexpected": "object"} }},
 		{name: "statDate non-scalar", field: "statDate", code: "invalid_field", expected: "string scalar", mutate: func(row []any) { row[2] = []any{"2026-06-30"} }},
+		{name: "code null", field: "code", code: "missing_value", expected: "non-empty string scalar", mutate: func(row []any) { row[0] = nil }},
+		{name: "statDate empty", field: "statDate", code: "missing_value", expected: "non-empty string scalar", mutate: func(row []any) { row[2] = "" }},
 		{name: "security mismatch", field: "code", code: "symbol_mismatch", expected: "sh.600519", mutate: func(row []any) { row[0] = "sz.000001" }},
 		{name: "report period mismatch", field: "statDate", code: "report_period_mismatch", expected: "2026-06-30", mutate: func(row []any) { row[2] = "2026-03-31" }},
 	}
