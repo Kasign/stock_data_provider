@@ -637,7 +637,9 @@ func (r *MySQLRepository) ObservationRetentionBacklog(ctx context.Context, now t
 	return count, &value, nil
 }
 
-// PurgeExpiredObservationPayloads 清除到期候选载荷并保留 Observation tombstone。\n// Scanned 仅统计本事务成功锁定的记录；SKIP LOCKED 跳过的行不计入。\n// 被锁定记录必须全部更新成功，否则回滚整批，避免报告部分清理。
+// PurgeExpiredObservationPayloads 清除到期候选载荷并保留 Observation tombstone。
+// Scanned 仅统计本事务成功锁定的记录；SKIP LOCKED 跳过的行不计入。
+// 被锁定记录必须全部更新成功，否则回滚整批，避免报告部分清理。
 func (r *MySQLRepository) PurgeExpiredObservationPayloads(ctx context.Context, now time.Time, limit int) (app.ObservationPayloadPurgeResult, error) {
 	if r == nil || r.db == nil || ctx == nil || now.IsZero() || limit < 1 || limit > 1000 {
 		return app.ObservationPayloadPurgeResult{}, app.ErrInvalidRequest
