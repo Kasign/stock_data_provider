@@ -128,6 +128,15 @@ func (p *Baostock) FetchFundamentals(ctx context.Context, rawSymbol string, year
 		}
 		record, queryErr := client.QueryQuarterlyFinancialData(ctx, code, mapping.Category, year, quarter)
 		if queryErr != nil {
+			var structureErr *baostock.QuarterlyFinancialStructureError
+			if errors.As(queryErr, &structureErr) {
+				standardField := "provider." + structureErr.SourceField
+				if structureErr.SourceField == "code" { standardField = "symbol" }
+				if structureErr.SourceField == "statDate" { standardField = "report_date" }
+				addProviderFieldParseIssue(ctx, symbol, standardField, structureErr.SourceField,
+					structureErr.Code, structureErr.Expected, structureErr.ActualType,
+					structureErr.Preview, structureErr.RowIndex)
+			}
 			if ctx.Err() != nil {
 				return nil, ctx.Err()
 			}
@@ -144,6 +153,8 @@ func (p *Baostock) FetchFundamentals(ctx context.Context, rawSymbol string, year
 			continue
 		}
 		if record.ReportDate != fundamentalQuarterEnd(year, quarter) {
+			addProviderFieldParseIssue(ctx, symbol, "report_date", "statDate", "report_period_mismatch",
+				fundamentalQuarterEnd(year, quarter), record.FieldTypes["statDate"], record.FieldPreviews["statDate"], 0)
 			return nil, fmt.Errorf("BaoStock %s report date %s differs from requested quarter", mapping.Category, record.ReportDate)
 		}
 		section.ReportDate, section.PublicationDate = record.ReportDate, record.PublicationDate
