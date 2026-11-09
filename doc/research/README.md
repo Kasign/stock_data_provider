@@ -159,7 +159,7 @@ R1/R2/R3/R5 当前实现 Context、Evidence、Event、Claim/Hypothesis 领域结
 - 内部回归样例：`internal/research/context/testdata/context_v1.golden.json`。
 - 测试：`TestContextGoldenJSONV1`，校验 Context v1.0.0 的确定性 JSON 序列化结果。
 - Golden 变更必须先 Review 字段契约和兼容性，不得仅为通过测试而直接刷新样例。
-- 正式 JSON Schema、Schema Validator CI 和跨模块 Contract Test 尚未完成；新增测试尚未执行。
+- JSON Schema 和真实 Validator 测试已补齐；GitHub Actions 强制门禁和跨模块 Contract Test 尚未完成，新增测试尚未执行。
 
 
 ## RSC-001 Context v1 Schema 候选
@@ -167,7 +167,7 @@ R1/R2/R3/R5 当前实现 Context、Evidence、Event、Claim/Hypothesis 领域结
 - Schema：`internal/research/context/schema/context-v1.schema.json`（JSON Schema Draft 2020-12）。
 - Golden：`internal/research/context/testdata/context_v1.golden.json`。
 - 一致性测试：`internal/research/context/schema_test.go`；覆盖 JSON 可解析、DTO JSON Tag 与 Schema properties/required 双向一致及 schema_version。
-- 完整 Schema Validator CI、跨模块 Contract Test 和跨字段约束仍未完成；当前新增测试尚未执行。
+- 实际 Schema Validator 测试已接入；CI 强制门禁、跨模块 Contract Test 和跨字段语义由 Go Validator 覆盖的联合验收仍未完成。
 
 
 ## Context v1 Schema / Domain 一致性补充
