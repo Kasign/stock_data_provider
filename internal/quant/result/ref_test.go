@@ -1,8 +1,8 @@
 package result
 
 import (
-	"errors"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -119,7 +119,6 @@ func TestBuildRefAllowsNonStockScopeWithoutSecurityID(t *testing.T) {
 		t.Fatalf("unexpected market ref: %+v", got)
 	}
 }
-
 
 func TestBuildRefMatchesQNTCTR004Golden(t *testing.T) {
 	got, err := BuildRef(validRefInput(), testManifest(t))

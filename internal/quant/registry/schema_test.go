@@ -453,3 +453,19 @@ func TestFirstFactorQuantMetricSchemaAllowsDegradedAvailabilityForRegistryPolicy
 		t.Fatalf("structurally valid degraded metric rejected before Registry quality_policy gate: %v", err)
 	}
 }
+
+
+func TestQuantResultRefSchemaEnforcesConditionalAndReferenceConstraints(t *testing.T) {
+	schema := compileQuantSchemaFile(t, "QNT-CTR-004-quant-result-ref-1.0.0.schema.json")
+	invalid := []string{
+		`{"schema_version":"1.0.0","result_id":"result-1","result_type":"factor","scope":"stock","system_as_of":"2026-11-09T00:00:00Z","period":"20d","algorithm_version":"momentum.v1","parameter_fingerprint":"sha256:abc","input_snapshot_refs":["snapshot-1"],"quality_status":"valid","result_status":"completed","authorization_ref":"authorization-1","created_at":"2026-11-09T00:01:00Z"}`,
+		`{"schema_version":"1.0.0","result_id":"result-1","result_type":"factor","scope":"market","system_as_of":"2026-11-09T00:00:00Z","period":"20d","algorithm_version":"momentum.v1","parameter_fingerprint":"sha256:abc","input_snapshot_refs":["snapshot-1","snapshot-1"],"quality_status":"valid","result_status":"completed","authorization_ref":"authorization-1","created_at":"2026-11-09T00:01:00Z"}`,
+		`{"schema_version":"1.0.0","result_id":"result-1","result_type":"factor","scope":"market","system_as_of":"2026-11-09T00:00:00+08:00","period":"20d","algorithm_version":"momentum.v1","parameter_fingerprint":"sha256:abc","input_snapshot_refs":["snapshot-1"],"quality_status":"valid","result_status":"completed","authorization_ref":"authorization-1","created_at":"2026-11-09T00:01:00Z"}`,
+		`{"schema_version":"1.0.0","result_id":"result-1","result_type":"factor","scope":"market","trade_date":"2026-02-30","system_as_of":"2026-11-09T00:00:00Z","period":"20d","algorithm_version":"momentum.v1","parameter_fingerprint":"sha256:abc","input_snapshot_refs":["snapshot-1"],"quality_status":"valid","result_status":"completed","authorization_ref":"authorization-1","created_at":"2026-11-09T00:01:00Z"}`,
+	}
+	for i, instance := range invalid {
+		if err := validateJSONSchemaInstance(schema, []byte(instance)); err == nil {
+			t.Errorf("invalid QuantResultRef instance %d unexpectedly passed", i)
+		}
+	}
+}
