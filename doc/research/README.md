@@ -22,6 +22,9 @@ Research 不采集新闻、不拥有行情事实、不重算 Quant 指标，不�
 
 ```text
 internal/research/
+  application/
+    application.go
+    application_test.go
   context/
     model.go
     validate.go
