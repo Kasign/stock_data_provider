@@ -11,6 +11,43 @@
 
 > 本文记录 Data 从独立 Go Module/服务迁入 Root Server 根 Go Module、同进程运行的实施计划和进度。若本文与上述架构决策文档冲突，以架构决策文档为准；公共平台及 DATA 契约以冻结契约文档为准。本文不重新定义契约。
 
+## 当前 Review 与执行收敛决议（2026-11-09）
+
+**Review 结论：原计划方向没有问题，执行管理方式需要修正。** 方案 B（Data 与 Root Server 同 Go Module、同进程；Data 保留领域所有权；Server 作为唯一组合根）与项目总览一致，不需要重新讨论架构，也不需要再增加一份方案文档。
+
+此前反复推进的根因是：M0 没有把“已审计”“已自动化”“已通过 CI”“需要外部生产证据”分开；CT-05 每轮都扩大参数测试范围，却没有固定关闭条件。现按上面的 M0-A～M0-D 收敛，历史审计记录只作为证据，不再生成新的审计轮次。
+
+### 当前代码与 CI 基线
+
+- 当前分支 HEAD：`5a25e3321e6cbea9dcc94fd75ca3fddd8ad8dfc7`。
+- Data Module Job：Run `42553757978`，gofmt、go test、race、vet 全部 success。
+- MariaDB Migration/PIT/Probe HTTP 集成：同一 Run 的 Job success。
+- Compose 校验及 Market Data / Analysis API 镜像构建：success。
+- go-core：gofmt、test、race、vet success。
+- Root `Test .`：失败于 gofmt，测试/race/vet 被跳过；当前失败涉及其他模块文件，不在 Data 分支范围内。
+- WebUI checks：failure，不属于本分支 Data 修改范围。
+- Platform Go checks、Go-Python parity：success。
+- 上述是当前分支 Push workflow 证据。按分支约定，尚未完成 `origin/integration` 合并后的集成验收，不能把 Push CI 记为 M0-D 通过。
+- Live Provider workflow 外层 success 不代表所有 Provider 真实数据验收通过；按 Provider/能力/证券/日期/复权口径单独记录。
+
+### 方案边界校准
+
+1. MDM-001/M0 只做迁移前盘点、契约差异修复和证据冻结；不做 Module 归并。
+2. MDM-002/M1 才处理根与 Data Module 的 Go 版本、依赖、go.mod/go.sum 和目录迁移。
+3. CT-01～CT-06 是 M0 的验收切片，不是与 M0 并列的第二套主计划。
+4. Data 领域数据质量/Provider 阶段 A～I 与 MDM 结构迁移是两条独立轨道；不得用 DailyBar 真实数据验收代替 MDM，也不得用 Module CI 代替真实 Provider 验收。
+5. DATA-CTR、PLAT-CTR、GOV-CTR 的语义和冻结状态以项目契约登记簿及生产方文档为准；本迁移文档只记录迁移适配，不复制字段定义。
+
+### 下一批唯一执行顺序
+
+1. 完成 M0-A：对现有 35 Operation 参数矩阵做最后一次差异核对，只修真实差异，输出差异归零表。
+2. 完成 M0-B：把 Provider 请求安全审计收敛成调用点矩阵；已有测试只引用，不重复实现。只补影响迁移安全且缺少证据的测试。
+3. 取得脱敏生产 DDL，完成 M0-C；这是外部输入，不再通过反复读取仓库替代。
+4. M0-A～C 完成后，按用户既定流程将当前分支合入 integration 并在 integration 验收，关闭 M0。
+5. M0 关闭后才开始 M1；M1 只处理 Module 归并，不顺带重写 API、Provider 或质量规则。
+
+**停止条件：** M0-A/M0-B 完成一次最终差异审查后，不再为了追求“测试数量更多”继续扩张；除非出现新的 Handler 行为或真实故障证据，否则不重新打开已关闭项。
+
 ## 1. 目标与边界
 
 ### 1.1 目标
@@ -84,26 +121,47 @@ internal/
 
 ### M0：迁移前代码审计与清单冻结
 
-状态：`in_progress`
+状态：`in_progress`（审计收敛阶段；不再无限扩展审计轮次）
 
-工作项：
+**本阶段只关闭迁移前置事实，不实施 Module 归并、Bootstrap 重构或部署切换。** 历史 M0 第一轮至第二十九轮记录作为审计证据，不再作为新的任务队列；CT-01～CT-06 是 MDM-001 的验收切片，不是六条可以无限扩张的独立主线。
 
-- [ ] 获取迁移执行时最新 HEAD、分支状态和工作区/远端变更基线。
-- [ ] 盘点根 Module、Data Module 的 Go 版本、依赖、replace、生成代码和工具链。
-- [ ] 盘点 Data 全部 package、命令入口、测试、testdata、配置文件、脚本和 Docker 构建上下文。
-- [ ] 盘点 Root Server 到 Data 的所有调用点，标记请求/响应 DTO、认证和超时行为。
-- [ ] 盘点 Data HTTP 路由、中间件、OpenAPI、WebUI/Nginx 路由依赖。
-- [ ] 盘点 MariaDB Pool、Redis Client、Migration、Probe 持久化和 Worker 的创建/关闭路径。
-- [ ] 盘点 Compose、Dockerfile、CI workflow、部署脚本及 go-migration profile。
-- [ ] 为每项迁移对象记录源路径、目标路径、依赖、风险、测试和回滚方式。
-- [ ] 标记迁移阻断项；没有明确处理策略的阻断项不得进入对应阶段。
+#### 已完成并有代码/文档依据的审计项
 
-验收：
+- [x] 根 Module 与 Data Module 的版本、依赖、入口、目录和构建边界已盘点；Go 版本/依赖冲突留给 M1 解决，不在 M0 提前改动。
+- [x] Data package、Provider、HTTP API、Model、Repository、Cache、Config、Migration、Worker、测试与 Docker 上下文已形成目录级清单。
+- [x] Root → Data 调用链、Remote Adapter、DTO 映射、认证方式、超时和 WebUI/Nginx 路由依赖已定位。
+- [x] MariaDB Pool、Redis Client、Migration、Probe 持久化、Retention Worker 的创建、所有权和关闭风险已记录。
+- [x] Compose、Dockerfile、CI workflow、部署脚本和历史 go-migration profile 已盘点。
+- [x] CT-01 路由/认证、CT-02 Error Response、CT-03 Model/Schema、CT-04 LimitPool 条件语义已有实现与自动化测试；不重复重做。
+- [x] 35 Operation 的参数名称/位置/required 清单和类型/格式矩阵已建立；Probe Body Schema 已有独立校验。
+- [x] 当前 SHA `5a25e332` 的 Data Module gofmt、go test、race、vet、MariaDB/PIT/Probe 集成及 Market Data Docker 构建通过（Push workflow 证据，非 integration 最终验收）。
 
-- [ ] 有完整迁移对象清单，覆盖生产代码、测试、配置、构建和部署文件。
-- [ ] 所有跨 Module import 与内部包边界有明确处理方式。
-- [ ] 资源所有权和生命周期有明确图示/清单。
-- [ ] 迁移前基线测试和 CI 状态可追溯。
+#### M0 仅剩的关闭项
+
+| 编号 | 剩余项 | 完成条件 | 当前判定 |
+|---|---|---|---|
+| M0-A / CT-05 | 35 Operation 参数语义最终核对 | 一次性核对仍有实际约束的 enum、minimum/maximum、default、数组/重复值、日期范围；已有 Schema/Test 覆盖的直接引用，不再重复造测试；输出差异清单，差异归零或逐项登记例外 | `in_progress` |
+| M0-B | Provider 请求行为安全证据 | 对真实出站调用逐项确认 method、URL/Host、query/body、超时、响应大小、重定向和凭据转发；已有测试覆盖的引用测试名，缺少且影响迁移安全的才补测试；不把 TCP Provider 误纳入 HTTP Client | `in_progress` |
+| M0-C | 生产数据库 DDL 对照 | 获取脱敏生产 Schema/DDL；逐表对照 Data Migration、索引、唯一键、字段类型/精度/NULL/默认值；CI 临时 MariaDB 不能替代生产证据 | `blocked_external_evidence` |
+| M0-D / CT-06 | 集成基线验收 | 将当前分支合入 `origin/integration` 后，在 integration SHA 执行根模块、Data、race、vet、MariaDB/PIT、Compose/Docker；只记录结果，不直接修改 integration 代码 | `pending_integration` |
+
+#### CT-05 停止扩张规则
+
+1. 参数核对以 35 Operation 为固定全集，不再增加接口范围。
+2. 只检查 Handler 实际实施、且 OpenAPI Schema 能表达的限制；无运行时依据的“建议限制”不写入契约。
+3. 已有参数清单、类型/格式矩阵、Probe Schema、默认值测试和边界描述测试不重复实现。
+4. 对每个剩余参数只记录：Handler 校验位置、OpenAPI 当前值、差异、是否需要修复、对应测试。没有差异即关闭，不再为了增加测试数量增加测试。
+5. 本轮最终输出一张差异表；完成后 CT-05 关闭。后续若 Handler 规则变化，由对应代码变更同步更新测试，不再持续做无边界的“全量审计”。
+
+#### M0 退出门槛
+
+- M0-A、M0-B 的代码侧审计差异归零；如有非阻断例外，必须明确影响和后续阶段归属。
+- M0-C 取得生产 DDL 并完成对照；若暂时无法提供，只能保持外部阻断，不得假称通过。
+- M0-D 在 integration 完成验收；Push workflow 的成功只能作为模块级辅助证据。
+- 所有迁移对象均有源路径、目标路径、Owner、测试和回滚策略。
+- 满足以上条件后，才允许开始 M1。M1 期间解决 Go 版本和依赖冲突，不在 M0 先改 go.mod/go.sum。
+
+**当前明确不做：** 不新增 API/DTO/数据库字段；不扩展 OpenAPI 测试到没有 Handler 依据的规则；不修改 Provider 业务算法；不接入 Platform HTTP Client；不搬迁目录；不修改 Root Server、WebUI 或其他模块。
 
 ### M1：Go Module 归并
 
@@ -282,14 +340,14 @@ internal/
 
 | 阶段 | 状态 | 说明 |
 |---|---|---|
-| M0 迁移前审计 | in_progress | 已完成多轮静态审计，逐 Provider、DTO、Migration 与 CI 收敛仍未完成 |
-| M1 Go Module 归并 | pending | 未开始 |
-| M2 Application Port/Bootstrap | pending | 未开始 |
-| M3 Root Server 装配 | pending | 未开始 |
-| M4 共享资源统一 | pending | 未开始 |
-| M5 部署/WebUI 切换 | pending | 未开始 |
-| M6 迁移验收 | pending | 未开始 |
-| 公共平台契约接入 | blocked_by_migration | 迁移完成后按冻结契约执行 |
+| M0 迁移前审计 | in_progress | 审计范围已冻结；仅剩 CT-05 一次性参数差异核对、Provider 请求安全证据、生产 DDL 外部证据和 integration 验收 |
+| M1 Go Module 归并 | blocked_by_M0 | M0 未关闭；不得提前改 go.mod/go.sum 或搬迁目录 |
+| M2 Application Port/Bootstrap | pending | M1 完成后执行 |
+| M3 Root Server 装配 | pending | M2 完成后执行 |
+| M4 共享资源统一 | pending | 按 M3/M4 资源所有权方案执行，复用 Platform 公共能力 |
+| M5 部署/WebUI 切换 | pending | M4 验收后执行 |
+| M6 迁移验收 | pending | 结构迁移、真实数据和部署验收 |
+| 公共平台契约接入 | blocked_by_migration | 按冻结契约接入；不得复制 Platform 能力 |
 
 ### 变更记录模板
 
@@ -2187,3 +2245,14 @@ CI：本轮 SHA 对应 Go test suite Run `42549171549`。截至本次文档提�
 
 
 - 后续 Run `42553644056` 的 Data Module gofmt 再次指出新增 Batch Quotes 测试前存在一处多余空行；已按 CI diff 删除。该轮 Go Test 未开始，尚未验证 Probe 方法和指数成分中文断言修复。
+
+
+### 2026-11-09：MDM 执行计划 Review 与 M0 收敛
+
+- Review 结论：方案 B 与项目总览一致，不重新开架构讨论；问题在于 M0/CT-05 缺少固定关闭条件，审计轮次和参数测试持续扩张。
+- 已在本文件将 M0 改为 M0-A～M0-D 四个有限交付：CT-05 参数最终差异核对、Provider 请求安全证据、生产 DDL 外部证据、integration 集成验收。
+- 明确 CT-01～CT-06 属于 MDM-001/M0 验收切片；数据领域阶段 A～I 与 MDM M0～M6 是两条独立轨道。
+- 当前代码 SHA `5a25e3321e6cbea9dcc94fd75ca3fddd8ad8dfc7`：Data Module gofmt/test/race/vet、MariaDB/PIT/Probe 集成、Compose 和 Docker 镜像构建均通过 Push workflow；Root gofmt 与 WebUI checks 失败属于其他范围。Push workflow 不替代 integration 验收。
+- 当前 M0 不通过，M1 不准入。生产 DDL 需用户提供脱敏快照；未取得前保持 external evidence blocker，不得伪造或以 CI 临时数据库代替。
+- 本次只修改文档，不改业务代码、OpenAPI、数据库、部署配置或其他模块。
+
