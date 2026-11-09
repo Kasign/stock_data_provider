@@ -24,23 +24,23 @@ import (
 
 // Dependencies 是由调用方创建并拥有的基础设施依赖；Module 不负责关闭 Store/Cache。
 type Dependencies struct {
-	Store                         *repository.Store // 调用方创建并持有；Module 不负责关闭。
-	Cache                         cache.Cache       // 调用方创建并持有；Module 不负责关闭。
-	Logger                        *slog.Logger      // 模块日志依赖；nil 时使用 slog.Default。
-	TushareHTTPDoer               provider.HTTPDoer // Root 注入的受控 Tushare HTTP 执行器；Module 不拥有、不关闭。
-	HithinkHTTPDoer               provider.HTTPDoer // Root 注入的受控同花顺 HTTP 执行器；Module 不拥有、不关闭。
-	TickFlowAuthenticatedHTTPDoer provider.HTTPDoer // Root 注入的 TickFlow 认证 API 出口；Module 不拥有、不关闭。
-	TickFlowPublicHTTPDoer        provider.HTTPDoer // Root 注入的 TickFlow 免费 API 出口；Module 不拥有、不关闭。
-	XueqiuHTTPDoer                provider.HTTPDoer // Root 注入的雪球受控 HTTP 执行器；Module 不拥有、不关闭。
-	YahooHTTPDoer                 provider.HTTPDoer // Root 注入的 Yahoo Finance 受控 HTTP 执行器；Module 不拥有、不关闭。
-	NeteaseQuoteHTTPDoer          provider.HTTPDoer // Root 注入的 NetEase 行情出口；Module 不拥有、不关闭。
-	NeteaseHistoryHTTPDoer        provider.HTTPDoer // Root 注入的 NetEase 历史 CSV 出口；Module 不拥有、不关闭。
-	TencentQuoteHTTPDoer          provider.HTTPDoer // Root 注入的腾讯报价出口；Module 不拥有、不关闭。
-	TencentKlineHTTPDoer          provider.HTTPDoer // Root 注入的腾讯复权 K 线出口；Module 不拥有、不关闭。
-	TencentNoneKlineHTTPDoer      provider.HTTPDoer // Root 注入的腾讯未复权 K 线出口；Module 不拥有、不关闭。
-	TencentSearchHTTPDoer         provider.HTTPDoer // Root 注入的腾讯 Smartbox 搜索出口；Module 不拥有、不关闭。
-	SinaQuoteHTTPDoer             provider.HTTPDoer // Root 注入的新浪实时报价出口；Module 不拥有、不关闭。
-	SinaKlineHTTPDoer             provider.HTTPDoer // Root 注入的新浪历史 K 线出口；Module 不拥有、不关闭。
+	Store                         *repository.Store            // 调用方创建并持有；Module 不负责关闭。
+	Cache                         cache.Cache                  // 调用方创建并持有；Module 不负责关闭。
+	Logger                        *slog.Logger                 // 模块日志依赖；nil 时使用 slog.Default。
+	TushareHTTPDoer               provider.HTTPDoer            // Root 注入的受控 Tushare HTTP 执行器；Module 不拥有、不关闭。
+	HithinkHTTPDoer               provider.HTTPDoer            // Root 注入的受控同花顺 HTTP 执行器；Module 不拥有、不关闭。
+	TickFlowAuthenticatedHTTPDoer provider.HTTPDoer            // Root 注入的 TickFlow 认证 API 出口；Module 不拥有、不关闭。
+	TickFlowPublicHTTPDoer        provider.HTTPDoer            // Root 注入的 TickFlow 免费 API 出口；Module 不拥有、不关闭。
+	XueqiuHTTPDoer                provider.HTTPDoer            // Root 注入的雪球受控 HTTP 执行器；Module 不拥有、不关闭。
+	YahooHTTPDoer                 provider.HTTPDoer            // Root 注入的 Yahoo Finance 受控 HTTP 执行器；Module 不拥有、不关闭。
+	NeteaseQuoteHTTPDoer          provider.HTTPDoer            // Root 注入的 NetEase 行情出口；Module 不拥有、不关闭。
+	NeteaseHistoryHTTPDoer        provider.HTTPDoer            // Root 注入的 NetEase 历史 CSV 出口；Module 不拥有、不关闭。
+	TencentQuoteHTTPDoer          provider.HTTPDoer            // Root 注入的腾讯报价出口；Module 不拥有、不关闭。
+	TencentKlineHTTPDoer          provider.HTTPDoer            // Root 注入的腾讯复权 K 线出口；Module 不拥有、不关闭。
+	TencentNoneKlineHTTPDoer      provider.HTTPDoer            // Root 注入的腾讯未复权 K 线出口；Module 不拥有、不关闭。
+	TencentSearchHTTPDoer         provider.HTTPDoer            // Root 注入的腾讯 Smartbox 搜索出口；Module 不拥有、不关闭。
+	SinaQuoteHTTPDoer             provider.HTTPDoer            // Root 注入的新浪实时报价出口；Module 不拥有、不关闭。
+	SinaKlineHTTPDoer             provider.HTTPDoer            // Root 注入的新浪历史 K 线出口；Module 不拥有、不关闭。
 	EastmoneyHTTPDoers            map[string]provider.HTTPDoer // Root 按 scheme://host 注入东方财富受控出口；Module 不拥有、不关闭。
 }
 
