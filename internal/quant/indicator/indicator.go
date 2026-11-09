@@ -94,8 +94,12 @@ func SMA(closes []float64, p SMAParams) (Result, error) {
 	}
 
 	window := closes[len(closes)-p.Window:]
+	value := mean(window)
+	if !finite(value) {
+		return Result{}, ErrInvalidInput
+	}
 	return Result{
-		Value:       mean(window),
+		Value:       value,
 		Status:      StatusAvailable,
 		SampleCount: len(window),
 	}, nil
@@ -116,8 +120,12 @@ func EMA(closes []float64, p EMAParams) (Result, error) {
 	if len(values) == 0 {
 		return Result{Status: StatusInsufficientData, SampleCount: len(closes)}, nil
 	}
+	value := values[len(values)-1]
+	if !finite(value) {
+		return Result{}, ErrInvalidInput
+	}
 	return Result{
-		Value:       values[len(values)-1],
+		Value:       value,
 		Status:      StatusAvailable,
 		SampleCount: len(closes),
 	}, nil
@@ -224,8 +232,12 @@ func RSI(closes []float64, p RSIParams) (Result, error) {
 		averageLoss = (averageLoss*float64(p.Window-1) + loss) / float64(p.Window)
 	}
 
+	value := rsiValue(averageGain, averageLoss)
+	if !finite(value) {
+		return Result{}, ErrInvalidInput
+	}
 	return Result{
-		Value:       rsiValue(averageGain, averageLoss),
+		Value:       value,
 		Status:      StatusAvailable,
 		SampleCount: len(closes) - 1,
 	}, nil
@@ -267,10 +279,14 @@ func MACD(closes []float64, p MACDParams) (MACDResult, error) {
 
 	lastDIF := dif[len(dif)-1]
 	lastDEA := dea[len(dea)-1]
+	histogram := 2 * (lastDIF - lastDEA)
+	if !finite(lastDIF) || !finite(lastDEA) || !finite(histogram) {
+		return MACDResult{}, ErrInvalidInput
+	}
 	return MACDResult{
 		DIF:         lastDIF,
 		DEA:         lastDEA,
-		Histogram:   2 * (lastDIF - lastDEA),
+		Histogram:   histogram,
 		Status:      StatusAvailable,
 		SampleCount: len(closes),
 	}, nil
@@ -318,6 +334,9 @@ func ATR(highs, lows, closes []float64, previousClose float64, p ATRParams) (Res
 	for i := p.Window; i < len(trueRanges); i++ {
 		average = (average*float64(p.Window-1) + trueRanges[i]) / float64(p.Window)
 	}
+	if !finite(average) {
+		return Result{}, ErrInvalidInput
+	}
 	return Result{Value: average, Status: StatusAvailable, SampleCount: len(trueRanges)}, nil
 }
 
@@ -341,10 +360,14 @@ func Bollinger(closes []float64, p BollingerParams) (BandsResult, error) {
 	}
 	standardDeviation := math.Sqrt(sum / float64(p.Window))
 	band := p.Multiplier * standardDeviation
+	upper, lower := middle+band, middle-band
+	if !finite(middle) || !finite(standardDeviation) || !finite(upper) || !finite(lower) {
+		return BandsResult{}, ErrInvalidInput
+	}
 	return BandsResult{
 		Middle:      middle,
-		Upper:       middle + band,
-		Lower:       middle - band,
+		Upper:       upper,
+		Lower:       lower,
 		Status:      StatusAvailable,
 		SampleCount: p.Window,
 	}, nil
