@@ -144,4 +144,4 @@ R1/R2/R3/R5 当前实现 Context、Evidence、Event、Claim/Hypothesis 领域结
 - Research Check 只在 Run 开始时检查 Context 取消；本地结构校验是有界 CPU 工作，不提供可中断的远端 I/O。超时由 Platform Runner 的 Check.Timeout/TotalTimeout 统一约束。
 
 
-- RSC-007 新增真实 MariaDB 锁等待取消故障注入用例：事务 A 持有 Context aggregate head 行锁，事务 B 在 Append 中等待并触发 Context deadline；验收要求 Append 返回 deadline 错误、head 仍为旧版本且没有新版本行。该用例依赖 `RESEARCH_TEST_MYSQL_DSN`，尚未执行。
+- RSC-007 新增真实 MariaDB 锁等待取消故障注入用例：事务 A 持有 Context aggregate head 行锁，事务 B 在 Append 中等待；测试通过 `information_schema.PROCESSLIST` 确认 Append SQL 已到达数据库后取消 Context，验收要求 Append 返回 `context.Canceled`、head 仍为旧版本且没有新版本行。该用例依赖 `RESEARCH_TEST_MYSQL_DSN`，尚未执行。
