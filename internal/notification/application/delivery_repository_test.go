@@ -15,20 +15,24 @@ import (
 )
 
 type memoryDeliveries struct {
-	mu       sync.Mutex
-	records  map[string]domain.DeliveryRecord
-	leases   map[string]DeliveryLease
-	tokens   map[string]int64
-	events   map[string][]domain.DeliveryStateEvent
-	failNext bool
+	mu              sync.Mutex
+	now             time.Time
+	records         map[string]domain.DeliveryRecord
+	leases          map[string]DeliveryLease
+	tokens          map[string]int64
+	events          map[string][]domain.DeliveryStateEvent
+	attempts        map[string]domain.DeliveryAttempt
+	failNext        bool
+	failAttemptNext bool
 }
 
 func newMemoryDeliveries() *memoryDeliveries {
 	return &memoryDeliveries{
-		records: make(map[string]domain.DeliveryRecord),
-		leases:  make(map[string]DeliveryLease),
-		tokens:  make(map[string]int64),
-		events:  make(map[string][]domain.DeliveryStateEvent),
+		records:  make(map[string]domain.DeliveryRecord),
+		leases:   make(map[string]DeliveryLease),
+		tokens:   make(map[string]int64),
+		events:   make(map[string][]domain.DeliveryStateEvent),
+		attempts: make(map[string]domain.DeliveryAttempt),
 	}
 }
 

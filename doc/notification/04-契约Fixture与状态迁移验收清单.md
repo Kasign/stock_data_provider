@@ -2,10 +2,10 @@
 
 - 归属：NTF-001/002/003/004/005/006
 - 对应契约：NTF-CTR-001～003（历史别名 Platform CONTRACT-009/010）；状态以项目级契约目录为准
-- 状态：4 份 Draft 2020-12 Schema 与 6 个代表性 Golden 已校准；Go Draft 2020-12 Envelope/Payload Validator、Golden、非法 Payload、Inbox Fake 幂等/并发、Subscription 与 DeliveryPlan Repository Port/Fake 测试已写入；新增严格 JSON、资源上限边界、DeliveryPlan 写入前双重校验、Subscription Repository append-only/CAS 并发及 Inbox/Subscription/DeliveryPlan 失败注入恢复测试；NTF-002 增加 Template Registry/Renderer 测试及 Subject C0/DEL/C1 控制字符回归（根模块 Test job 被跨模块 Research 源码错误阻断）；NTF-003 增加 Channel Domain/Port/内存 Registry/Fake Adapter 测试；DeliveryPlan 授权策略 tuple 指纹与 GOV-CTR-006 对齐（同一 CI 阻断）；完整 CI Run 42201893234 已通过，覆盖 gofmt/go test/race/vet、go-core、market-data、MariaDB 集成和 Docker build；NTF-CTR-001～003 仍为 pending_evidence；不要求个人 Owner 签字
+- 状态：4 份 Draft 2020-12 Schema 与 6 个代表性 Golden 已校准；Go Envelope/Payload Validator、Golden、Inbox/Subscription/DeliveryPlan Fake 测试、Renderer/Channel Registry 测试已建立；NTF-004 新增 Attempt Repository 租约测试、过期租约恢复评估、Retry-After 持久化、RetryPolicy、ApplyRetryDecision 和 DeliveryPreflight 测试；NTF-005 新增 Channel retryable 白名单归一化、完整 Attempt 历史安全校验、Full Jitter/Retry-After/deadline 与状态事件/租约释放测试。当前 HEAD f72ce74 的 CI 已排队；最近完整根模块 Test Run 42558780012 仍被 Research context/validate.go 非法反斜杠和 evidence/authorization.go 非法 NUL 阻断，Notification tests 未执行；日志未再列出 Notification gofmt 差异。完整 CI Run 42201893234 是历史通过基线，不代表本轮新增测试通过。NTF-CTR-001～003 仍为 pending_evidence；不要求个人 Owner 签字
 - 日期：2026-11-09
 - NTF-004 第一批增量：已新增 DeliveryRecord/DeliveryStateEvent 领域实现与纯迁移测试；覆盖 queued→sending、sending→skipped 证明要求、unknown 对账证据、retry_wait 截止时间、failed 人工重试审计和 UTC/nullable 字段一致性。
-- NTF-004 第二批增量：新增 DeliveryRepository Port 与内存 Fake；覆盖 32 Worker 并发领取仅一个赢家、领取时原子追加 sending 事件、租约过期拒绝、fencing token 不匹配拒绝、版本 CAS 冲突、retry_wait 未到期不领取/到期可领取、旧 Worker 迟到写入拒绝、Create/Update 失败均无部分写入，以及租约截止不越过 Delivery deadline。以上为新增测试设计和代码事实，尚未取得本轮 CI 通过证据；Run 42550387738 在根模块 gofmt 阶段失败，Notification package tests 未执行。
+- NTF-004 第二批增量：新增 DeliveryRepository Port 与内存 Fake；覆盖 32 Worker 并发领取仅一个赢家、sending 事件、租约/版本/fencing CAS、retry_wait 到期领取、旧 Worker 迟到写入拒绝和失败原子性。第三批新增 Attempt Repository Port/Fake，覆盖 Start/Complete 租约约束、Repository 权威时钟、单 claim 单 Attempt 和失败原子性。第四批新增只读过期租约恢复评估与 Retry-After 持久化；第五批新增 DeliveryPreflight 发送前复核。新增测试仍未取得 CI 通过证据。
 - 说明：以下均为合成数据与测试场景，不代表已有实现或真实渠道能力。
 
 ## 1. Fixture 原则
@@ -182,6 +182,12 @@ Fake Adapter 只能验证分类和状态机，不证明真实渠道行为。Reci
 | NTF002-PLAN-02 | 同一 Event 并发 fan-out | 唯一约束/幂等只生成一份 DeliveryPlan |
 | NTF002-CAS-01 | 两个 Worker 同时领取同一 Delivery | 仅一个 lease/fencing token 有效；旧 Worker 回写被拒绝 |
 | NTF002-CAS-02 | 旧 Worker lease 过期后提交成功结果 | CAS 拒绝迟到状态覆盖；保留审计记录 |
+| NTF002-ATT-01 | 有效租约开始真实渠道调用 | Attempt ID 唯一、attempt_no 连续递增；attempt_count 与追加历史原子更新 |
+| NTF002-ATT-02 | 旧版本、旧 fencing token 或其他 Worker 尝试开始 Attempt | 拒绝追加，不修改 attempt_count 和 Attempt 历史 |
+| NTF002-ATT-03 | 当前有效租约完成 Attempt | 仅允许运行中记录完成一次；完成后不可覆盖 |
+| NTF002-ATT-04 | Attempt 完成时租约已过期 | 拒绝旧 Worker 迟到完成，交由恢复流程判定 unknown/安全重排 |
+| NTF002-ATT-05 | Attempt 追加/完成持久化失败 | 不产生部分 Attempt 或计数投影更新 |
+| NTF002-ATT-06 | 同一 fencing token 重复启动第二个 Attempt（前一条运行中或已完成） | 拒绝第二次启动；重试必须经过状态迁移并重新领取新 token |
 | NTF003-RETRY-01 | 明确 retryable rejection + 有效 Retry-After | next_attempt_at 取本地退避与 Retry-After 的较晚值；不超过总 deadline |
 | NTF003-RETRY-02 | permanent rejection / retry budget exhausted | 结束为 failed；不超过 max_attempts |
 | NTF003-RETRY-03 | timeout-after-write / 请求可能已到渠道 | 进入 unknown；不自动重发 |
@@ -216,3 +222,33 @@ Fake Adapter 只能验证分类和状态机，不证明真实渠道行为。Reci
 - `template_event_binding.test`：event_type/schema_version 不匹配或 payload fingerprint 不匹配拒绝。
 
 以上仅验证通用 Renderer 核心；没有真实业务文案和渠道样例，不代表三类首批通知内容或真实渠道渲染已验收。
+
+
+## 13. NTF-004/005 Attempt 恢复、RetryPolicy 与发送前复核增量
+
+以下场景已在 internal/notification/application 下建立测试代码；当前全仓根模块 Test job 被 Research 语法/NUL 错误阻断，尚未执行，不得标记通过。
+
+| Test ID | 场景 | 必须断言 |
+|---|---|---|
+| NTF004-REC-01 | 已过期租约且当前 fencing token 没有 Attempt | 仅在完整历史、预算和 deadline 允许时判 safe_to_retry |
+| NTF004-REC-02 | 当前 Attempt 仍运行或结果 ambiguous | 判 unknown；不得直接重发 |
+| NTF004-REC-03 | Attempt accepted | 收敛 sent，并保留 provider_message_ref |
+| NTF004-REC-04 | Attempt rejected | 按持久化 retryable 与预算返回 RetryPolicy 决策；保留 retry_after_at |
+| NTF004-REC-05 | Attempt not_sent | 必须保留 evidence_ref 才能安全重试 |
+| NTF004-REC-06 | Attempt 历史数量、Delivery/Worker/token/租约不一致 | fail closed，不产生恢复动作 |
+| NTF005-RETRY-01 | 首次与后续 Attempt 的 Full Jitter | delay cap 按 base_delay × 2^(attempt_no-1) 指数增长并受 max_delay 限制；随机样本由调用方注入 |
+| NTF005-RETRY-02 | Retry-After 晚于本地退避 | next_attempt_at 取 Retry-After；不得缩短本地退避 |
+| NTF005-RETRY-03 | Retry-After 早于本地退避 | 使用本地退避，不被过去的 Retry-After 提前 |
+| NTF005-RETRY-04 | jitter 低于数据库微秒精度 | 结果至少 1µs；不能被 TIMESTAMP(6) 截断为 now |
+| NTF005-RETRY-05 | max_attempts、max_elapsed、deadline 到期 | 不再 retry；返回稳定 retry_budget_exhausted/deadline_exceeded |
+| NTF005-RETRY-06 | 非法策略 duration、NaN/Inf/越界随机样本 | 拒绝计算 |
+| NTF005-RETRY-07 | Attempt 历史顺序/唯一性 | attempt_no 连续、Attempt ID 唯一、fencing token 严格递增、调用时间不重叠；前序 accepted/ambiguous/永久 rejected 后不得继续自动重试 |
+| NTF005-RETRY-08 | Channel rejected 错误分类 | retryable 仅由精确 ChannelConfigSnapshot 的 retryable_error_codes 白名单决定；白名单外错误不可自动重试 |
+| NTF005-RETRY-09 | RetryDecision 应用 | 决策绑定 Delivery ID/version、Attempt ID、fencing token、evaluated_at；通过 DeliveryRepository CAS 追加 retry_wait/failed 事件并释放租约 |
+| NTF004-PREFLIGHT-01 | Subscription 仍 active、版本已递增、历史 Channel 版本仍可解析且 recipient_ref 未变 | ready；保留 Delivery 的旧 Channel 配置版本 |
+| NTF004-PREFLIGHT-02 | Subscription 缺失/paused/disabled | skip；不调用 RecipientResolver/ChannelAdapter.Send |
+| NTF004-PREFLIGHT-03 | 当前 recipient_ref 不匹配或显式未授权 | skip；不得发送历史 Delivery |
+| NTF004-PREFLIGHT-04 | Channel 精确版本缺失、配置禁用或 Adapter 为空 | block；不得回退 latest 或发送 |
+| NTF004-PREFLIGHT-05 | Subscription/Recipient 依赖故障 | block 并保留 error；不得伪装成 skip |
+| NTF004-PREFLIGHT-06 | 当前 Subscription 状态非法或版本落后于 Delivery | block；fail closed |
+| NTF004-PREFLIGHT-07 | Secret 缺失/撤销/轮换 | 真实 Adapter/Resolver L3 验收；当前 Fake Preflight 不证明真实 Secret 可读 |

@@ -28,7 +28,7 @@ func validPlanForWriter() domain.DeliveryPlan {
 		AuthorizationPolicyVersions: []domain.AuthorizationPolicyVersion{
 			{PolicyType: "source", PolicyRef: "source-1", PolicyVersion: "v1"},
 		},
-		DeliveryID:                  "delivery-1", DeliveryIdempotencyKey: "delivery-key-1",
+		DeliveryID: "delivery-1", DeliveryIdempotencyKey: "delivery-key-1",
 	}
 	plan.PlanFingerprint, _ = plan.CalculateFingerprint()
 	return plan

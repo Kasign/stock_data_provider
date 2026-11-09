@@ -146,8 +146,11 @@ recipient_scope 不是地址，也不是 recipient_ref。建议 MVP 仅允许：
 发送前重新校验：
 - Subscription 当前未退订/禁用；
 - recipient_ref 当前仍在授权范围；
-- Channel 当前可用且 Secret 可读取；
+- Delivery 固定的 ChannelConfigVersion 必须精确解析，不能回退 latest；
+- Channel 当前可用，具体 Adapter 必须在构造/解析阶段通过 Platform Config.Secret 取得所需 Secret；
 - 测试发送的目标是调用方显式指定并通过 allowlist 的目标。
+
+`application.DeliveryPreflight` 已实现只读发送前复核：重新读取当前 Subscription，缺失/暂停/禁用时返回 skip；按 Delivery 固定的 channel_ref + config_version 解析 Adapter，缺失版本/禁用配置时返回 block；通过 RecipientResolver 重新解析当前授权目标，recipient_ref 不再匹配或显式未授权时返回 skip；依赖故障返回 block 类结果和原始 error，不能伪装为用户退订。Subscription 仅版本递增但仍 active、且原 recipient_ref 仍获授权时，历史 Delivery 继续使用原 Channel 版本与原投递快照，不重写 DeliveryPlan。该函数不发送、不写状态、不证明真实 Secret 已可读取；实际 Secret 可用性仍由具体 ChannelAdapter/Resolver 在真实集成时证明。
 
 未匹配订阅/过滤条件不创建 Delivery，记录受控的 fan-out 统计；因用户退订而不再发送的已排队 Delivery 转为 skipped，并记录 reason_code。不能将系统依赖不可用伪装成 skipped。
 
@@ -228,13 +231,25 @@ DeliveryStateEvent 的 version/from/to/changed_at 来自每次状态迁移；evi
 | started_at | 注入 Clock，在真实渠道调用开始边界记录 | UTC；不能用 Claim 时间代替渠道调用开始时间 |
 | finished_at / outcome | ChannelAdapter 的受控 Send 结果与注入 Clock | accepted/rejected/ambiguous/not_sent；完成后不可通过 Complete 再次修改 |
 | provider_message_ref / error_code | ChannelAdapter 归一化结果 | 仅保存不透明回执引用和稳定错误码，不保存原始异常/响应正文 |
-| retryable | Channel 错误分类的技术建议 | 不直接授权重试；还须经过 Channel retryable 白名单、RetryPolicy、预算和 deadline 判断 |
+| retryable | Channel 错误分类的技术建议 | 不直接授权重试；必须由 `ChannelSendResult.IsRetryable` 基于精确 Channel 快照白名单得出，再经过 RetryPolicy、预算和 deadline 判断 |
+| retry_after_at | ChannelAdapter 验证后的 Retry-After 绝对时间 | 仅 rejected 可携带；只有 supports_retry_after=supported 时采信；持久化供 Worker 崩溃恢复使用 |
 | duration_ms | finished_at - started_at | 由领域方法计算，毫秒整数；运行中为 null |
 | evidence_ref | 能证明 not_sent 或支持后续对账的受控证据系统 | 不透明引用；not_sent 必须提供证明，不能仅凭普通错误字符串推断未发送 |
 
-`DeliveryAttempt.Complete` 返回新快照，不修改原对象。accepted 不允许携带 error_code/retryable；rejected 和 ambiguous 必须携带稳定 error_code；not_sent 必须同时携带 error_code 与 evidence_ref，且不能携带 provider_message_ref。ambiguous 即使 retryable=true 也不构成自动重试授权，最终决策属于 NTF-005。
+`DeliveryAttempt.Complete` 返回新快照，不修改原对象。accepted 不允许携带 error_code/retryable；rejected 和 ambiguous 必须携带稳定 error_code；not_sent 必须同时携带 error_code 与 evidence_ref，且不能携带 provider_message_ref。ambiguous 即使 retryable=true 也不构成自动重试授权。`CompleteWithRetryAfter` 仅为 rejected 保存 UTC `retry_after_at`；实际重试决策由 NTF-005 完成。
 
-本切片只完成领域模型与纯函数测试代码；Attempt 的 attempt_no 原子分配、追加式 Repository、与 Delivery 状态事件/租约的事务绑定、Worker 崩溃恢复和真实渠道证据仍未实现。Fake/单测代码未获得 CI 通过证据前不得标记模块级验收通过。
+本切片已补充 DeliveryAttemptRepository Port/Fake：StartWithLease 原子追加运行中 Attempt 并更新 attempt_count 计数投影；CompleteWithLease 仅允许当前有效租约完成一次；ListByDelivery 返回按序深拷贝。具体原子边界如下：
+
+Attempt Repository 的模块级原子边界：
+- StartWithLease：使用 Repository 内部权威时钟（MariaDB Adapter 在事务 SQL 中使用 UTC_TIMESTAMP(6)，Fake 使用可控时钟），校验租约在 now 时刻仍有效、StartedAt 不晚于 now 且不早于本次 sending 领取时间；同时校验当前 Delivery 为 sending、expected version 与 fencing token 匹配、Worker 与租约一致、attempt_no 等于当前 Attempt 数量 + 1，并确保同一 fencing token 最多只能创建一个 Attempt（无论前一 Attempt 是否已完成）；在同一 Repository 原子操作中追加运行中 Attempt 并更新 attempt_count 投影。重试必须先完成 sending -> retry_wait 等状态迁移并释放旧租约，再重新 ClaimDue 获得新 fencing token，不能在同一 claim 下启动第二次渠道调用。不能仅凭调用方传入的 StartedAt 早于 ExpiresAt 推断租约当前仍有效。
+- CompleteWithLease：只允许当前有效租约、当前 Delivery 版本和同一 Attempt 身份将运行中记录完成一次；完成时间不得越过租约截止；旧 Worker 的迟到完成必须拒绝。
+- ListByDelivery：按 attempt_no 顺序返回深拷贝历史；未知 Delivery 返回 not found。
+- attempt_count 是已追加 Attempt 数量的计数投影；StartWithLease 与 Attempt 追加同事务更新，不改变 Delivery 状态版本，也不产生伪造的状态迁移事件。真实 Repository 必须保证 Attempt 行、计数投影和租约检查的事务原子性；建议数据库增加 `UNIQUE(delivery_id, fencing_token)`，并在事务中锁定 Delivery 行，防止同一 claim 并发创建第二个 Attempt。
+
+新增只读 `AssessExpiredDeliveryLease` 恢复评估：要求完整 Attempt 历史与已过期租约；当前 fencing token 无 Attempt 表示外部 Send 尚未开始，可在剩余预算内安全重试；运行中 Attempt 或 ambiguous 结果必须进入 unknown；accepted 可收敛 sent 并保留 provider_message_ref；明确 rejected 按持久化 retryable 标志交给 RetryPolicy 或结束 failed，同时保留 retry_after_at；not_sent 必须保留 evidence_ref。评估函数不执行状态写入，调用方仍须以当前 Delivery version + fencing token 做 CAS，并在同一事务中释放租约/追加状态事件。
+
+当前仅有模块内 Fake；其锁只能证明单进程测试语义，不证明数据库事务、跨进程租约 fencing 或真实进程崩溃恢复。只读评估不等于已实现恢复扫描器或 MariaDB 恢复事务。
+Fake/单测代码未获得 CI 通过证据前不得标记模块级验收通过；真实 MariaDB Adapter、Worker 崩溃恢复和真实渠道证据仍未实现。
 
 ## 5. Attempt、租约与并发恢复
 
@@ -244,20 +259,23 @@ DeliveryAttempt 是追加式执行历史，至少记录：
 - started_at、finished_at；
 - outcome：accepted/rejected/ambiguous/not_sent；
 - provider_message_ref（如有）、error_code、retryable、duration；
+- `retry_after_at`：仅当渠道已验证支持 Retry-After，且 Adapter 返回的 rejected 结果通过能力校验后持久化；用于 Worker 崩溃恢复，不能只保存在内存中；
 - 安全摘要和受控 evidence_ref。
 
 每次真实渠道调用创建一个新 Attempt。完成后的 Attempt 结果不可覆盖；修正通过新的对账记录/状态事件追加。
 
 Worker 取得 Delivery 时必须原子完成 queued/retry_wait -> sending 和租约分配。租约过期后：
-- 若可证明请求尚未发送，允许释放回 queued/retry_wait；
-- 若请求可能已发出，必须转 unknown；
+- 若当前 fencing token 没有 Attempt，且 Attempt 历史完整，可证明 StartWithLease 尚未成功，允许在预算内安全重试；
+- 若当前 Attempt 仍运行或结果为 ambiguous，必须转 unknown；
+- 若 Attempt 已完成为 accepted，恢复为 sent；明确 rejected 根据 Attempt.retryable 与 RetryPolicy 决定重试或 failed；not_sent 必须携带 evidence_ref；
 - 旧 Worker 的迟到完成写入必须因 fencing token 失效而被拒绝。
 
 同一 Delivery 同时最多一个有效发送租约。并发上限按 Channel/Provider 设有界容量，不允许无界 goroutine 或无限队列。
 
 ## 6. 重试与外部 exactly-once 边界
 
-- 只对渠道明确拒绝且标记 retryable 的结果自动重试。
+- 只对渠道明确拒绝且标记 retryable 的结果自动重试。`retryable` 必须来自 `ChannelSendResult.IsRetryable` 对当前精确 ChannelConfigSnapshot 的 retryable_error_codes 白名单判断，不得直接采信 Provider 原始布尔字段。
+
 - 永久错误不重试；存在有效 Retry-After 时，next_attempt_at = max(本地 full-jitter 退避时间, Retry-After 指定时间)，不得缩短本地退避，也不得达到或越过 Delivery deadline；若计算结果不早于 deadline_at，则结束为 failed（reason_code=deadline_exceeded），不再安排重试。
 - 使用 capped exponential full jitter；策略固定 max_attempts、max_elapsed_ms、per_attempt_timeout_ms、base_delay_ms、max_delay_ms 和总 deadline。所有 duration 为正整数 milliseconds；max_elapsed_ms/per_attempt_timeout_ms/base_delay_ms>0，max_delay_ms>=base_delay_ms。MVP 算法固定 exponential_full_jitter_v1：第 n 次 Attempt 失败后的上限 delay=min(max_delay_ms, base_delay_ms*2^(n-1))，实际等待从 [0,delay] 均匀抽取。单次调用截止=min(now+per_attempt_timeout_ms, deadline_at, first_attempt_at+max_elapsed_ms)。
 - attempt_count 只统计实际发起的渠道调用，不统计 Schema/权限/配置预检查。
@@ -265,6 +283,12 @@ Worker 取得 Delivery 时必须原子完成 queued/retry_wait -> sending 和租
 - 超时、连接中断或进程崩溃发生在请求可能已到达渠道之后时，标记 unknown；只有渠道查询/回执/幂等重放能证明安全时才可自动收敛。
 - 不支持幂等且无法查询结果的渠道，unknown 进入人工/运维对账，不自动重发。
 - Outbox + Inbox 可保障本地事件接收可靠性；不能声称外部渠道 exactly-once。实际语义是受限 at-least-once 尝试 + 幂等/对账控制重复风险。
+
+当前 `application.RetryPolicy` 提供纯函数重试决策：策略参数必须显式提供，所有 duration 使用正整数毫秒；`ScheduleRetry` 接收完整 Attempt 历史与外部注入的 `[0,1)` 随机样本，校验 Delivery/Attempt 关联、连续序号、Attempt ID 唯一性、fencing token 严格递增和调用时间不重叠；只允许前序 Attempt 为 retryable rejected 或有证据的 not_sent，不允许历史出现 accepted、ambiguous 或 permanent rejected 后继续自动重试；当前 Attempt 必须是明确 rejected 且 retryable；按 `min(max_delay, base_delay*2^(attempt_no-1))` 计算 capped full-jitter 上限，所有小于数据库微秒精度的延迟提升到 1µs，取本地退避与 Retry-After 的较晚时间，并以 `min(deadline_at, first_attempt_at+max_elapsed)` 截止；达到 `max_attempts` 返回 `retry_budget_exhausted`，越过总时间边界返回 `deadline_exceeded`。`AttemptDeadline` 返回 `min(now+per_attempt_timeout, deadline_at, first_attempt_at+max_elapsed)`。
+
+`CompleteAttemptFromChannelResult` 校验精确 ChannelConfigSnapshot 与 ChannelSendResult，映射 accepted/rejected/ambiguous/not_sent；Attempt.retryable 只由 `ChannelSendResult.IsRetryable` 对该 Channel 的 retryable_error_codes 白名单计算；Retry-After 只有在 supports_retry_after=supported 且结果为 rejected 时才能进入 Attempt；not_sent 必须附 evidence_ref。`RetryPolicy` 还校验完整 Attempt 历史的 attempt_no 连续、Attempt ID 唯一、fencing token 严格递增、前一 Attempt 已完成且后续 Attempt 未早于前一完成时间。
+
+`RetryDecision` 绑定 delivery_id、delivery_version、attempt_id、fencing_token 和 evaluated_at，避免跨 Delivery/Attempt/版本复用决策。`ApplyRetryDecision` 校验当前 sending 租约、已完成的 retryable rejected Attempt 和决策绑定后，将结果转换为 retry_wait 或 failed，再调用 `DeliveryRepository.UpdateWithLease`；该 Port 的原子契约要求同一操作 CAS 快照、追加状态事件，并在状态离开 sending 时释放租约。Fake 测试覆盖 retry_wait 与失败收敛、事件追加、租约释放和旧 token/非法决策拒绝。此处仍未实现真实 MariaDB 事务、随机数生成、Worker 调度或渠道端到端验证。
 
 ## 7. RetryDelivery 与取消/退订竞态
 
@@ -376,6 +400,8 @@ Channel 配置是不可变版本快照，注册键为 `(channel_ref, config_vers
 | NTF-004 | 有界 Dispatcher、状态机、CAS、租约/fencing、单 Delivery 单活 Worker | 真实 Worker 并发和进程崩溃恢复 |
 | NTF-005 | retryable/permanent/ambiguous 分类、退避预算、Retry-After、unknown 不盲重试 | 真实渠道超时/回执丢失/幂等行为验证 |
 | NTF-006 | Repository Port、唯一约束、Outbox/Inbox Schema 设计 | MariaDB 事务、唯一冲突、锁竞争、Migration/恢复演练 |
+
+当前 `internal/notification/storage.Migrations()` v1 仅定义 Subscription、DeliveryPlan、Delivery、Attempt、DeliveryStateEvent 五类持久化表。Delivery/DeliveryPlan 唯一键和 Attempt 的 `(delivery_id, fencing_token)` 唯一约束已进入 DDL。Delivery 表还需持久化当前 `lease_worker_id`、`lease_expires_at` 和单调递增 `fencing_token`；过期租约恢复扫描使用 `(status, lease_expires_at)` 索引。ClaimDue、StartWithLease、CompleteWithLease 与 UpdateWithLease 必须在事务中锁定 Delivery 行，并用数据库时钟校验有效租约，Delivery 快照、Attempt 计数投影和状态事件分别按其原子边界提交。Inbox/FanoutWorkItem 表暂缓，等待项目级 FanoutWorkItem claim/ack/retry 与 Subscription active 分页契约冻结；不得在模块层猜测队列字段。已新增 `MySQLDeliveryPlanRepository`：通过数据库 Delivery 唯一 tuple 保证跨进程幂等，重复键时读取并校验原始 plan_json 与 fingerprint；delivery_id 冲突不得误判为业务重放。配套 MariaDB 集成测试由 `NOTIFICATION_MARIADB_TEST_DSN` 显式启用，目前尚无执行证据。Migration 未接入 Server 根注册，DDL 静态测试不等于真实数据库验收。
 | NTF-007 | Delivery 查询、脱敏诊断、reason_code 和审计 | 根 HTTP/权限/监控接入 |
 
 

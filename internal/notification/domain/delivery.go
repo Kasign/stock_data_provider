@@ -72,18 +72,18 @@ type DeliveryStateEvent struct {
 // RequestNotSent 只能由调用方在能够证明外部请求未发出时设置。
 // AuthorizedManualRetry 必须由 Application 层完成身份/权限检查后设置。
 type DeliveryTransition struct {
-	To                     DeliveryStatus
-	At                     time.Time
-	ReasonCode             string
-	ErrorCode              string
-	EvidenceRef            string
-	ProviderMessageRef     string
-	NextAttemptAt          *time.Time
-	RequestNotSent         bool
-	AuthorizedManualRetry  bool
-	ActorRef               string
-	RequestID              string
-	ManualRetryReason      string
+	To                    DeliveryStatus
+	At                    time.Time
+	ReasonCode            string
+	ErrorCode             string
+	EvidenceRef           string
+	ProviderMessageRef    string
+	NextAttemptAt         *time.Time
+	RequestNotSent        bool
+	AuthorizedManualRetry bool
+	ActorRef              string
+	RequestID             string
+	ManualRetryReason     string
 }
 
 func (d DeliveryRecord) Validate() error {
@@ -200,15 +200,15 @@ func (d DeliveryRecord) Transition(change DeliveryTransition) (DeliveryRecord, D
 	}
 
 	event := DeliveryStateEvent{
-		DeliveryID: next.DeliveryID,
-		Version: next.Version,
-		From: d.Status,
-		To: next.Status,
-		ChangedAt: change.At,
-		ReasonCode: stringPointer(change.ReasonCode),
+		DeliveryID:  next.DeliveryID,
+		Version:     next.Version,
+		From:        d.Status,
+		To:          next.Status,
+		ChangedAt:   change.At,
+		ReasonCode:  stringPointer(change.ReasonCode),
 		EvidenceRef: stringPointer(change.EvidenceRef),
-		ActorRef: stringPointer(change.ActorRef),
-		RequestID: stringPointer(change.RequestID),
+		ActorRef:    stringPointer(change.ActorRef),
+		RequestID:   stringPointer(change.RequestID),
 		ActorReason: stringPointer(change.ManualRetryReason),
 	}
 	return next, event, nil

@@ -65,6 +65,27 @@ func TestDeliveryAttemptCompletionOutcomesRequireConsistentEvidence(t *testing.T
 	}
 }
 
+func TestDeliveryAttemptPersistsRetryAfterOnlyForRejectedOutcome(t *testing.T) {
+	attempt := validDeliveryAttempt()
+	finished := attempt.StartedAt.Add(time.Second)
+	retryAfter := finished.Add(30 * time.Second)
+	completed, err := attempt.CompleteWithRetryAfter(finished, DeliveryAttemptRejected, "", "rate_limited", true, "", &retryAfter)
+	if err != nil {
+		t.Fatalf("retryable rejection with Retry-After should be valid: %v", err)
+	}
+	if completed.RetryAfterAt == nil || !completed.RetryAfterAt.Equal(retryAfter) {
+		t.Fatalf("Retry-After timestamp was not retained: %+v", completed)
+	}
+	cloned := cloneDeliveryAttempt(completed)
+	*cloned.RetryAfterAt = retryAfter.Add(time.Minute)
+	if !completed.RetryAfterAt.Equal(retryAfter) {
+		t.Fatal("Attempt clone must deep-copy Retry-After timestamp")
+	}
+	if _, err := attempt.CompleteWithRetryAfter(finished, DeliveryAttemptAccepted, "", "", false, "", &retryAfter); !errors.Is(err, ErrInvalidDeliveryAttempt) {
+		t.Fatalf("accepted outcome cannot carry Retry-After: %v", err)
+	}
+}
+
 func TestDeliveryAttemptRejectsInvalidLeaseAndTime(t *testing.T) {
 	attempt := validDeliveryAttempt()
 	attempt.LeaseExpiresAt = attempt.StartedAt

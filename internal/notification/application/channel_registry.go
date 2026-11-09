@@ -30,7 +30,7 @@ type channelRegistration struct {
 // ChannelRegistry stores immutable adapter registrations. It is an in-memory
 // runtime registry, not the persistent Channel configuration Repository.
 type ChannelRegistry struct {
-	mu          sync.RWMutex
+	mu            sync.RWMutex
 	registrations map[channelKey]channelRegistration
 }
 

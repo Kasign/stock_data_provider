@@ -25,6 +25,8 @@ type ChannelResolver interface {
 
 // RecipientResolver converts a Subscription into an opaque adapter target.
 // The returned target must not contain a plaintext address or arbitrary URL.
+// Return ErrRecipientNotAuthorized only for a current authorization denial; dependency
+// or directory failures must remain ordinary errors so the caller can block/retry safely.
 type RecipientResolver interface {
 	Resolve(ctx context.Context, subscription domain.Subscription, channel domain.ChannelConfigSnapshot) (domain.RecipientTarget, error)
 }
