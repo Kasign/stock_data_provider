@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"math"
 	"strings"
 	"testing"
 	"time"
@@ -280,5 +282,27 @@ func TestDeliveryExecutionRetryableRejectionSchedulesRetry(t *testing.T) {
 	delivery, found, getErr := repository.Get(context.Background(), claim.Delivery.DeliveryID)
 	if getErr != nil || !found || delivery.Status != domain.DeliveryRetryWait || delivery.NextAttemptAt == nil || delivery.AttemptCount != 1 {
 		t.Fatalf("retryable rejection must schedule retry without sending twice: delivery=%+v found=%v err=%v", delivery, found, getErr)
+	}
+}
+
+func TestDeliveryExecutionRejectsInvalidRetrySampleBeforeChannelCall(t *testing.T) {
+	for _, sample := range []float64{-0.1, 1, math.NaN(), math.Inf(1)} {
+		t.Run(fmt.Sprintf("sample_%v", sample), func(t *testing.T) {
+			service, repository, adapter, claim, event := executionFixture(t)
+			_, err := service.Execute(
+				context.Background(), claim, event, "attempt-invalid-random",
+				sample, "evidence-invalid-random",
+			)
+			if !errors.Is(err, ErrRetryNotApplicable) {
+				t.Fatalf("invalid retry sample must be rejected before execution, got %v", err)
+			}
+			if adapter.calls != 0 {
+				t.Fatalf("invalid retry sample must not call channel, calls=%d", adapter.calls)
+			}
+			delivery, found, getErr := repository.Get(context.Background(), claim.Delivery.DeliveryID)
+			if getErr != nil || !found || delivery.AttemptCount != 0 || delivery.Status != domain.DeliverySending {
+				t.Fatalf("invalid retry sample must not mutate delivery: delivery=%+v found=%v err=%v", delivery, found, getErr)
+			}
+		})
 	}
 }
