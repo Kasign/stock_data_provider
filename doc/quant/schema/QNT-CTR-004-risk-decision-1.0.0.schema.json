@@ -8,7 +8,7 @@
     "decision_id": {
       "type": "string",
       "minLength": 1,
-      "pattern": "^\\\\S(?:[\\\\s\\\\S]*\\\\S)?$"
+      "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
     },
     "status": {
       "type": "string",
@@ -21,7 +21,7 @@
     "rule_set_version": {
       "type": "string",
       "minLength": 1,
-      "pattern": "^\\\\S(?:[\\\\s\\\\S]*\\\\S)?$"
+      "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
     },
     "evaluated_at": {
       "type": "string",
@@ -42,7 +42,7 @@
           "code": {
             "type": "string",
             "minLength": 1,
-            "pattern": "^\\\\S(?:[\\\\s\\\\S]*\\\\S)?$"
+            "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
           },
           "severity": {
             "type": "string",
@@ -63,14 +63,14 @@
           "safe_message": {
             "type": "string",
             "minLength": 1,
-            "pattern": "^\\\\S(?:[\\\\s\\\\S]*\\\\S)?$"
+            "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
           },
           "evidence_refs": {
             "type": "array",
             "items": {
               "type": "string",
               "minLength": 1,
-              "pattern": "^\\\\S(?:[\\\\s\\\\S]*\\\\S)?$"
+              "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
             }
           }
         },
@@ -88,7 +88,7 @@
       "items": {
         "type": "string",
         "minLength": 1,
-        "pattern": "^\\\\S(?:[\\\\s\\\\S]*\\\\S)?$"
+        "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
       }
     }
   },
