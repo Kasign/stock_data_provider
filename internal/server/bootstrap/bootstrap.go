@@ -20,8 +20,8 @@ import (
 	"example.com/stock-analysis-flow/internal/platform/httpapi"
 	"example.com/stock-analysis-flow/internal/platform/taskqueue"
 	serverconfig "example.com/stock-analysis-flow/internal/server/config"
-	"example.com/stock-analysis-flow/internal/service"
 	serverresources "example.com/stock-analysis-flow/internal/server/resources"
+	"example.com/stock-analysis-flow/internal/service"
 )
 
 // Run loads process configuration, assembles the currently supported runtime,

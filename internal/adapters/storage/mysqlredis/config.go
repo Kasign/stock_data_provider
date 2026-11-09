@@ -156,8 +156,6 @@ func (c Config) mysqlDriverConfig() (*mysqlDriver.Config, error) {
 	return driverConfig, nil
 }
 
-
- 
 // SQLConnector returns the MariaDB driver connector for Platform-owned SQL lifecycle management.
 func (c Config) SQLConnector() (driver.Connector, error) {
 	driverConfig, err := c.mysqlDriverConfig()
