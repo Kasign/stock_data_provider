@@ -204,16 +204,17 @@ func Run(ctx context.Context) error {
 	}
 }
 
-
 type legacyAnalysisWorker struct {
-	name string
-	queue *taskqueue.Queue
+	name    string
+	queue   *taskqueue.Queue
 	enabled bool
 }
 
 func (w legacyAnalysisWorker) Name() string { return w.name }
 func (w legacyAnalysisWorker) Start(ctx context.Context) error {
-	if !w.enabled { return nil }
+	if !w.enabled {
+		return nil
+	}
 	return w.queue.Start(ctx)
 }
 func (w legacyAnalysisWorker) Stop(context.Context) error {
