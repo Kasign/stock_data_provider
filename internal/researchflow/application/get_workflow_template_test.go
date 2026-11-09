@@ -10,9 +10,9 @@ import (
 )
 
 type workflowTemplateRegistryStub struct {
-	value template.WorkflowTemplate
-	err error
-	calls int
+	value        template.WorkflowTemplate
+	err          error
+	calls        int
 	ref, version string
 }
 
@@ -26,7 +26,7 @@ func validWorkflowTemplateForQuery() template.WorkflowTemplate {
 	retry := template.RetryPolicy{
 		Ref: "retry-v1", MaxAttempts: 2,
 		RetryableReasonCodes: []string{"provider_unavailable"},
-		Backoff: template.BackoffPolicy{Algorithm: "exponential_full_jitter_v1", BaseDelayMS: 100, MaxDelayMS: 1000},
+		Backoff:          template.BackoffPolicy{Algorithm: "exponential_full_jitter_v1", BaseDelayMS: 100, MaxDelayMS: 1000},
 		AttemptTimeoutMS: 5000,
 	}
 	propagation := template.PropagationPolicy{
