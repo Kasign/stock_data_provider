@@ -1,6 +1,7 @@
 package mysqlredis
 
 import (
+	"database/sql/driver"
 	"fmt"
 	"net"
 	"net/url"
@@ -10,6 +11,7 @@ import (
 	"time"
 
 	mysqlDriver "github.com/go-sql-driver/mysql"
+	"github.com/redis/go-redis/v9"
 )
 
 type Config struct {
@@ -152,6 +154,29 @@ func (c Config) mysqlDriverConfig() (*mysqlDriver.Config, error) {
 		driverConfig.Params[name] = items[0]
 	}
 	return driverConfig, nil
+}
+
+
+ 
+// SQLConnector returns the MariaDB driver connector for Platform-owned SQL lifecycle management.
+func (c Config) SQLConnector() (driver.Connector, error) {
+	driverConfig, err := c.mysqlDriverConfig()
+	if err != nil {
+		return nil, err
+	}
+	return mysqlDriver.NewConnector(driverConfig)
+}
+
+// RedisOptions returns connection options for Platform-owned Redis lifecycle management.
+func (c Config) RedisOptions() redis.Options {
+	return redis.Options{
+		Addr:         c.RedisAddr,
+		Password:     c.RedisPassword,
+		DB:           c.RedisDB,
+		DialTimeout:  c.RedisDialTimeout,
+		ReadTimeout:  c.RedisReadTimeout,
+		WriteTimeout: c.RedisWriteTimeout,
+	}
 }
 
 func (c Config) RedisKey(key string) string { return c.RedisKeyPrefix + strings.TrimLeft(key, ":") }

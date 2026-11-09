@@ -21,6 +21,7 @@ import (
 	"example.com/stock-analysis-flow/internal/platform/taskqueue"
 	serverconfig "example.com/stock-analysis-flow/internal/server/config"
 	"example.com/stock-analysis-flow/internal/service"
+	serverresources "example.com/stock-analysis-flow/internal/server/resources"
 )
 
 // Run loads process configuration, assembles the currently supported runtime,
@@ -46,13 +47,13 @@ func Run(ctx context.Context) error {
 	}
 
 	startupCtx, startupCancel := context.WithTimeout(ctx, 15*time.Second)
-	store, err := mysqlredis.Open(startupCtx, storageCfg)
+	storageResources, store, err := serverresources.OpenLegacyAnalysisStorage(startupCtx, storageCfg)
 	startupCancel()
 	if err != nil {
 		return fmt.Errorf("连接 MariaDB/Redis 失败（检查 DB_HOST/DB_PASSWORD/REDIS_ADDR 和 DB_AUTO_MIGRATE）: %w", err)
 	}
 	defer func() {
-		if closeErr := store.Close(); closeErr != nil {
+		if closeErr := storageResources.Close(); closeErr != nil {
 			slog.Warn("关闭数据库/缓存依赖失败", "service", "stock-analysis-api", "error", closeErr.Error())
 		}
 	}()
