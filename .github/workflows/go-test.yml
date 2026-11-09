@@ -66,6 +66,10 @@ jobs:
         run: |
           go mod tidy
           git add go.mod go.sum
+      - name: Format Data Application Port
+        run: |
+          gofmt -w ./internal/marketdata/app ./internal/marketdata/application
+          git add internal/marketdata/app internal/marketdata/application
       - name: Commit and push migration
         id: commit
         run: |
@@ -76,7 +80,7 @@ jobs:
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git commit -m "refactor(api): 迁移 Market Data 到根 Go Module"
+          git commit -m "chore(api): 整理 Data 模块迁移与根模块依赖"
           git push origin HEAD:refs/heads/feat/full-go-data-providers-api-switch
           echo "changed=true" >> "$GITHUB_OUTPUT"
       - name: Trigger validation for migrated commit
