@@ -19,11 +19,11 @@ type SourceCapabilities struct {
 	IndexQuotes           []provider.IndexQuoteProvider
 	MarketBreadth         []provider.MarketBreadthProvider
 	LimitPools            []provider.LimitPoolProvider
-	DragonTiger            []provider.DragonTigerProvider
+	DragonTiger           []provider.DragonTigerProvider
 	Announcements         []provider.AnnouncementProvider
-	StockBoards            []provider.StockBoardsProvider
-	TradingCalendar        []provider.TradingCalendarProvider
-	SecurityTradingStatus  []provider.SecurityTradingStatusProvider
+	StockBoards           []provider.StockBoardsProvider
+	TradingCalendar       []provider.TradingCalendarProvider
+	SecurityTradingStatus []provider.SecurityTradingStatusProvider
 	Fundamentals          []provider.FundamentalsProvider
 	Valuations            []provider.ValuationProvider
 	IndexCatalog          []provider.IndexCatalogProvider
@@ -31,9 +31,8 @@ type SourceCapabilities struct {
 	CapitalFlow           []provider.CapitalFlowProvider
 	MarketCapitalFlow     []provider.MarketCapitalFlowProvider
 	HotRankings           []provider.HotRankingProvider
-	Supplements             []provider.SupplementProvider
+	Supplements           []provider.SupplementProvider
 }
-
 func sourceProviderNames[T interface{ Name() string }](providers []T) []string {
 	names := make([]string, 0, len(providers))
 	for _, p := range providers {
