@@ -165,12 +165,21 @@ func (r *MySQLRunRepository) ExpireRunDeadline(
 	if err := attemptRows.Close(); err != nil {
 		return false, version, fmt.Errorf("close Researchflow deadline Attempts: %w", err)
 	}
+	allStagesTerminal := true
 	for _, stage := range stages {
 		if stage.status == domain.StageRunning {
 			if _, ok := activeByStage[stage.ref]; !ok {
 				return false, version, fmt.Errorf("Researchflow running Stage %q has no running Attempt", stage.ref)
 			}
 		}
+		if !stage.status.Terminal() {
+			allStagesTerminal = false
+		}
+	}
+	// Completed work must use the normal Run aggregation path. Marking it as
+	// deadline_exceeded would forbid a valid succeeded finalization.
+	if allStagesTerminal {
+		return false, version, nil
 	}
 
 	finishedAt := formatResearchflowTimeValue(now)

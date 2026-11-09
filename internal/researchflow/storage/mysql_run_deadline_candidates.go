@@ -23,8 +23,16 @@ func (r *MySQLRunRepository) ListExpiredRunCandidates(ctx context.Context, limit
 	rows, err := r.db.QueryContext(ctx, `SELECT run_ref, version FROM researchflow_runs
 		WHERE status IN (?, ?, ?) AND (termination_reason IS NULL OR termination_reason = '')
 		AND deadline_at <= DATE_FORMAT(UTC_TIMESTAMP(6), '%Y-%m-%dT%H:%i:%s.%f000Z')
+		AND EXISTS (
+			SELECT 1 FROM researchflow_stages s
+			WHERE s.run_ref = researchflow_runs.run_ref
+				AND s.status NOT IN (?, ?, ?, ?, ?, ?, ?)
+		)
 		ORDER BY deadline_at, run_ref LIMIT ?`,
-		string(domain.RunCreated), string(domain.RunQueued), string(domain.RunRunning), limit)
+		string(domain.RunCreated), string(domain.RunQueued), string(domain.RunRunning),
+		string(domain.StageSucceeded), string(domain.StageDegraded), string(domain.StageSkipped),
+		string(domain.StageFailed), string(domain.StageTimedOut), string(domain.StageCancelled),
+		string(domain.StageBlocked), limit)
 	if err != nil {
 		return nil, fmt.Errorf("query expired Researchflow Runs: %w", err)
 	}
