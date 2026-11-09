@@ -75,12 +75,24 @@ func (tx memoryIdentityTransaction) AppendObservation(_ context.Context, observa
 	return observation, nil
 }
 
+func TestIngestCandidateRejectsProviderOutputWithoutPolicyTrace(t *testing.T) {
+	repository := &memoryIdentityRepository{}
+	usecase := NewIngestCandidate(repository, func() string { return "observation-provider-policy-required" })
+	_, err := usecase.Execute(context.Background(), "source-1", "provider-result-key", domain.Candidate{ProviderCode: "brave", SourceItemID: "item-1"}, domain.SourceURLPolicy{})
+	if !errors.Is(err, ErrProviderOutputPolicyRequired) || len(repository.observations) != 0 {
+		t.Fatalf("err=%v repository=%+v", err, repository)
+	}
+}
+
 func TestIngestCandidateCreatesNewsItemAndObservation(t *testing.T) {
 	repository := &memoryIdentityRepository{}
 	usecase := NewIngestCandidate(repository, func() string { return "observation-1" })
-	observation, err := usecase.Execute(context.Background(), "source-1", "run-1/provider-a/item-1", domain.Candidate{
+	observation, err := usecase.ExecuteWithPolicyTrace(context.Background(), "source-1", "run-1/provider-a/item-1", domain.Candidate{
 		ProviderCode: "provider-a", ProviderItemID: "provider-result-1", SourceItemID: "item-1", Title: " headline ",
-	}, domain.SourceURLPolicy{})
+	}, domain.SourceURLPolicy{}, ObservationPolicyTrace{
+		SourcePolicyVersionID: "source-policy-v1", ProviderOutputPolicyRef: "provider-policy-test",
+		ProviderOutputPolicyVersionID: "provider-policy-v1", PolicyEvaluatedAt: time.Date(2026, 11, 9, 0, 0, 0, 0, time.UTC),
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -201,11 +213,12 @@ func TestIngestCandidateRetriesIdempotently(t *testing.T) {
 		return "observation-" + string(rune('0'+nextID))
 	})
 	candidate := domain.Candidate{ProviderCode: "provider-a", ProviderItemID: "provider-result-1", SourceItemID: "source-item-1", Title: "headline"}
-	first, err := usecase.Execute(context.Background(), "source-1", "run-1/provider-a/item-1", candidate, domain.SourceURLPolicy{})
+	trace := ObservationPolicyTrace{SourcePolicyVersionID: "source-policy-v1", ProviderOutputPolicyRef: "provider-policy-test", ProviderOutputPolicyVersionID: "provider-policy-v1", PolicyEvaluatedAt: time.Date(2026, 11, 9, 0, 0, 0, 0, time.UTC)}
+	first, err := usecase.ExecuteWithPolicyTrace(context.Background(), "source-1", "run-1/provider-a/item-1", candidate, domain.SourceURLPolicy{}, trace)
 	if err != nil {
 		t.Fatal(err)
 	}
-	second, err := usecase.Execute(context.Background(), "source-1", "run-1/provider-a/item-1", candidate, domain.SourceURLPolicy{})
+	second, err := usecase.ExecuteWithPolicyTrace(context.Background(), "source-1", "run-1/provider-a/item-1", candidate, domain.SourceURLPolicy{}, trace)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -278,6 +291,17 @@ func TestIngestCandidatePolicyTraceIsPartOfIdempotencyPayload(t *testing.T) {
 	_, err := usecase.ExecuteWithPolicyTrace(context.Background(), "source-1", "feed-run-1/item-1", candidate, domain.SourceURLPolicy{}, secondTrace)
 	if !errors.Is(err, ErrIdentityTransaction) || !errors.Is(err, ErrObservationIdempotencyConflict) {
 		t.Fatalf("changed policy version should conflict on idempotency key reuse, got %v", err)
+	}
+}
+
+func TestIngestCandidateRejectsProviderPolicyReferenceWithoutVersion(t *testing.T) {
+	repository := &memoryIdentityRepository{}
+	usecase := NewIngestCandidate(repository, func() string { return "observation-provider-policy-incomplete" })
+	_, err := usecase.ExecuteWithPolicyTrace(context.Background(), "source-1", "provider-result-incomplete", domain.Candidate{ProviderCode: "brave", SourceItemID: "item-1"}, domain.SourceURLPolicy{}, ObservationPolicyTrace{
+		SourcePolicyVersionID: "source-policy-v1", ProviderOutputPolicyRef: "provider-policy-brave", PolicyEvaluatedAt: time.Now().UTC(),
+	})
+	if !errors.Is(err, ErrProviderOutputPolicyRequired) || len(repository.observations) != 0 {
+		t.Fatalf("err=%v repository=%+v", err, repository)
 	}
 }
 

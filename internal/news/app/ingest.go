@@ -13,7 +13,7 @@ import (
 var (
 	ErrIdentityTransaction            = errors.New("news: identity transaction failed")
 	ErrObservationIdempotencyConflict = errors.New("news: observation idempotency key reused with different payload")
-	ErrProviderOutputPolicyRequired = errors.New("news: provider output policy evaluation required")
+	ErrProviderOutputPolicyRequired   = errors.New("news: provider output policy evaluation required")
 )
 
 // IdentityRepository 要求在单一事务中读取身份、创建主体/凭据并追加 Observation。
@@ -50,16 +50,21 @@ func NewIngestCandidate(repository IdentityRepository, newID func() string) *Ing
 // IdempotencyKey 必须由上游按一次采集操作稳定生成；重试同一操作必须复用该值。
 // ObservationPolicyTrace 将在线采集时使用的授权策略版本传递给 Observation。
 type ObservationPolicyTrace struct {
-	SourcePolicyVersionID   string
-	EndpointID              string
-	EndpointPolicyVersionID string
-	ProviderOutputPolicyRef string
-	ProviderOutputPolicyVersionID string
-	PolicyEvaluatedAt       time.Time
+	SourcePolicyVersionID          string
+	EndpointID                     string
+	EndpointPolicyVersionID        string
+	ProviderOutputPolicyRef        string
+	ProviderOutputPolicyVersionID  string
+	PolicyEvaluatedAt              time.Time
 }
 
-// Execute 保留 Provider 候选等无 Source 策略版本场景的既有入口。
+// Execute 仅用于不依赖搜索 Provider 输出的来源候选。
+// Provider 搜索结果必须经过可信组合根完成 Provider Output Policy 评估后，
+// 通过 ExecuteWithPolicyTrace 传入策略引用和版本；缺少追踪信息时拒绝持久化。
 func (u *IngestCandidate) Execute(ctx context.Context, sourceID, idempotencyKey string, candidate domain.Candidate, policy domain.SourceURLPolicy) (domain.Observation, error) {
+	if strings.TrimSpace(candidate.ProviderCode) != "" {
+		return domain.Observation{}, ErrProviderOutputPolicyRequired
+	}
 	return u.execute(ctx, sourceID, idempotencyKey, candidate, policy, ObservationPolicyTrace{})
 }
 
@@ -72,6 +77,11 @@ func (u *IngestCandidate) ExecuteWithPolicyTrace(ctx context.Context, sourceID, 
 	trace.ProviderOutputPolicyVersionID = strings.TrimSpace(trace.ProviderOutputPolicyVersionID)
 	if trace.SourcePolicyVersionID == "" || trace.PolicyEvaluatedAt.IsZero() {
 		return domain.Observation{}, ErrInvalidRequest
+	}
+	providerPolicyBound := trace.ProviderOutputPolicyRef != "" && trace.ProviderOutputPolicyVersionID != ""
+	providerPolicyPartial := (trace.ProviderOutputPolicyRef == "") != (trace.ProviderOutputPolicyVersionID == "")
+	if providerPolicyPartial || (strings.TrimSpace(candidate.ProviderCode) != "" && !providerPolicyBound) {
+		return domain.Observation{}, ErrProviderOutputPolicyRequired
 	}
 	trace.PolicyEvaluatedAt = trace.PolicyEvaluatedAt.UTC()
 	return u.execute(ctx, sourceID, idempotencyKey, candidate, policy, trace)
