@@ -580,3 +580,48 @@ func TestParseResponsesSSERejectsFunctionArgumentDeltaAfterDone(t *testing.T) {
 		t.Fatalf("function argument delta after done must be rejected: response=%+v err=%v", got, err)
 	}
 }
+
+
+// TestParseResponsesSSERejectsFunctionArgumentsMismatchAfterEmptyDelta 验证空参数增量也会参与终态一致性校验。
+func TestParseResponsesSSERejectsFunctionArgumentsMismatchAfterEmptyDelta(t *testing.T) {
+	request := validSSERequest()
+	clock := sseTestClock{now: request.SystemAsOf.Add(time.Second)}
+	cases := []struct {
+		name string
+		done string
+		code string
+	}{
+		{
+			name: "arguments done",
+			done: `{"type":"response.function_call_arguments.done","call_id":"call-empty-delta","arguments":"{}"}`,
+			code: "llm.sse.function_arguments_mismatch",
+		},
+		{
+			name: "output item done",
+			done: `{"type":"response.output_item.done","item":{"id":"fc-empty-delta","type":"function_call","status":"completed","call_id":"call-empty-delta","name":"lookup_quote","arguments":"{}"}}`,
+			code: "llm.sse.output_item_arguments_mismatch",
+		},
+	}
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			data := strings.Join([]string{
+				"event: response.output_item.added",
+				"data: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc-empty-delta\",\"type\":\"function_call\",\"status\":\"in_progress\",\"call_id\":\"call-empty-delta\",\"name\":\"lookup_quote\",\"arguments\":\"\"}}",
+				"",
+				"event: response.function_call_arguments.delta",
+				"data: {\"type\":\"response.function_call_arguments.delta\",\"call_id\":\"call-empty-delta\",\"delta\":\"\"}",
+				"",
+				"event: " + map[bool]string{true: "response.output_item.done", false: "response.function_call_arguments.done"}[tt.name == "output item done"],
+				"data: " + tt.done,
+				"",
+			}, "\n")
+
+			got, err := ParseResponsesSSE([]byte(data), request, clock, nil)
+			var adapterErr *AdapterError
+			if !errors.As(err, &adapterErr) || adapterErr.Info.StableCode != tt.code ||
+				got.Status != ResponseFailed {
+				t.Fatalf("empty function argument delta must still be checked against done value: response=%+v err=%v", got, err)
+			}
+		})
+	}
+}
