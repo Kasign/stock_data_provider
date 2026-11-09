@@ -85,3 +85,9 @@ internal/llm/
 - LLM 已实现 `MapResponsesStreamRequestAt`、`ParseResponsesSSEReader`、`HTTPStreamDoer` 和 `ResponsesAdapter.Stream`；Stream 使用同步 callback、受控 Body、固定 SSE Accept、流式请求标志和已有能力证据门禁。
 - 组合根需要将 Platform `*httpclient.StreamResponse` 包装为 LLM `HTTPStreamResponse`；当前 integration 基线尚未包含 Platform A1 新 API，不能直接宣称跨分支集成完成。
 - 最新代码有 fake transport 回归测试，但 LLM 包级测试尚未执行；待根模块其他模块 gofmt 问题修复后补齐 go test/race/vet，并进行本地 Gateway E2E。
+
+
+## 最近一次格式检查（2026-11-09）
+
+- CI：`42560516644`。根模块 gofmt 清单已不包含 `internal/llm/**`；仍被其他模块未格式化文件阻断，根模块 go test/race/vet 未执行。
+- LLM 新增 Stream Adapter/Reader Parser 与取消门禁回归测试尚无包级执行证据；不标记通过。
