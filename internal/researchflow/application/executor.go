@@ -22,6 +22,7 @@ type StageExecutionRequest struct {
 	InputSnapshotRefs []string
 	SystemAsOf        time.Time
 	DeadlineAt        time.Time
+	AttemptDeadlineAt time.Time
 	CorrelationID     string
 }
 
