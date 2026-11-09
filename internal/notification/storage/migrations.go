@@ -3,8 +3,8 @@ package storage
 import platformstorage "example.com/stock-analysis-flow/internal/platform/storage"
 
 // Migrations 返回 Notification 自有持久化结构。
-// Inbox/Fanout 表暂不在此版本创建：FanoutWorkItem 与分页订阅查询契约尚未冻结，
-// 不在存储层先行猜测队列状态、租约字段或游标语义。
+// Inbox 表只保存不可变事件与双唯一身份；Fanout 表结构尚未冻结，
+// 通过同一事务注入的 FanoutWriter 完成原子写入，不在此处猜测队列状态、租约字段或游标语义。
 func Migrations() []platformstorage.Migration {
 	return []platformstorage.Migration{
 		{
