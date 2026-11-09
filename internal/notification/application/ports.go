@@ -51,7 +51,7 @@ var (
 
 // DeliveryRepository 负责 Delivery 当前快照与追加式状态事件。
 // ClaimDue 原子领取一条到期的 queued/retry_wait 记录，迁移为 sending，追加状态事件并分配新 fencing token。
-// UpdateWithLease 必须在同一原子操作中 CAS 更新快照并追加事件；过期租约、旧 token、旧版本或不匹配事件均须拒绝。
+// UpdateWithLease 必须在同一原子操作中 CAS 更新快照并追加事件；过期租约、旧 token、旧版本或不匹配事件均须拒绝；next.Status 不再是 sending 时必须同时释放租约。
 type DeliveryRepository interface {
 	Create(ctx context.Context, delivery domain.DeliveryRecord) error
 	Get(ctx context.Context, deliveryID string) (delivery domain.DeliveryRecord, found bool, err error)
