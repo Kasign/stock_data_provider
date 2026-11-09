@@ -123,7 +123,9 @@ func assertContextSchemaValueType(t *testing.T, name string, typ reflect.Type, s
 		if schema["type"] != "boolean" {
 			t.Errorf("%s schema type = %v, want boolean", name, schema["type"])
 		}
-	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64, reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32,
+		reflect.Int64, reflect.Uint, reflect.Uint8, reflect.Uint16,
+		reflect.Uint32, reflect.Uint64:
 		if schema["type"] != "integer" {
 			t.Errorf("%s schema type = %v, want integer", name, schema["type"])
 		}
