@@ -1137,3 +1137,12 @@ Lifecycle.Stop 原实现通过 stopped 标记保证重复调用幂等，但并�
 - Review 发现上一批新增的资源清理测试引用 errors 与 reflect，但测试文件未导入对应标准库，修正测试导入。
 - 同步清理新增代码周围多余空行，保持 gofmt 风格。
 - 本修正尚未执行 Go 测试；后续统一验证当前最新 SHA。
+
+
+### 12.37 SRV-007 Migration Registry 执行快照冻结（2026-11-09）
+
+- Review 发现 Registry 在 RunWithReport 获取一次快照后仍允许 Register；若模块注册与迁移执行并发发生，晚到的 namespace 会被本次执行静默遗漏。
+- 首次有效执行快照通过同一把 Registry 写锁原子冻结注册集合；并发 Register 要么先完成并进入本次快照，要么在冻结后明确失败，不存在成功注册但不参与本次执行的状态。
+- Namespaces 只读查询不触发冻结；执行快照仍复用 Register 时已深拷贝的不可变 Migration 定义。
+- 新增执行快照后拒绝注册测试，以及并发 Register/执行快照竞争测试。
+- 本批次尚未运行 Go 单测或 race；当前仅完成代码与回归测试修改，等待统一验证。

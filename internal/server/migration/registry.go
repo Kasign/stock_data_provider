@@ -23,6 +23,7 @@ var namespacePattern = regexp.MustCompile(`^[a-z0-9._-]{1,64}$`)
 type Registry struct {
 	mu      sync.RWMutex
 	entries map[string][]platformstorage.Migration
+	started bool
 }
 
 // NewRegistry creates an empty migration registry.
@@ -66,6 +67,9 @@ func (r *Registry) Register(namespace string, migrations []platformstorage.Migra
 	defer r.mu.Unlock()
 	if r.entries == nil {
 		r.entries = make(map[string][]platformstorage.Migration)
+	}
+	if r.started {
+		return errors.New("cannot register migration namespace after execution has started")
 	}
 	if _, exists := r.entries[namespace]; exists {
 		return fmt.Errorf("migration namespace %q is already registered", namespace)
@@ -121,7 +125,7 @@ func (r *Registry) RunWithReport(ctx context.Context, db *sql.DB) (RunReport, er
 	if db == nil {
 		return finish(errors.New("migration database is required"))
 	}
-	entries := r.snapshot()
+	entries := r.snapshotForRun()
 	if len(entries) == 0 {
 		return finish(errors.New("no module migrations are registered"))
 	}
@@ -170,6 +174,22 @@ func migrationFailureDetails(err error) (reasonCode string, recoveryRequired boo
 	default:
 		return platformErr.Code, false
 	}
+}
+
+// snapshotForRun freezes registration and returns the exact immutable set for execution.
+// Register and the first execution snapshot are serialized by the same mutex.
+func (r *Registry) snapshotForRun() map[string][]platformstorage.Migration {
+	if r == nil {
+		return nil
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.started = true
+	entries := make(map[string][]platformstorage.Migration, len(r.entries))
+	for namespace, migrations := range r.entries {
+		entries[namespace] = migrations
+	}
+	return entries
 }
 
 // Namespaces returns the registered namespace names in deterministic order.

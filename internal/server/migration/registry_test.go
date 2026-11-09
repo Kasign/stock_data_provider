@@ -243,3 +243,59 @@ func TestRegistryConcurrentDuplicateRegistrationHasSingleWinner(t *testing.T) {
 		t.Fatalf("successful registrations = %d, want exactly 1", successes)
 	}
 }
+
+
+func TestRegistryFreezesRegistrationsWhenExecutionSnapshotStarts(t *testing.T) {
+	registry := NewRegistry()
+	migration := []platformstorage.Migration{{Version: 1, Description: "init", Statements: []string{"SELECT 1"}}}
+	if err := registry.Register("research", migration); err != nil {
+		t.Fatalf("initial Register() error = %v", err)
+	}
+
+	snapshot := registry.snapshotForRun()
+	if got := len(snapshot); got != 1 {
+		t.Fatalf("execution snapshot namespaces = %d, want 1", got)
+	}
+	if err := registry.Register("news", migration); err == nil {
+		t.Fatal("Register() after execution snapshot must fail")
+	}
+	if got := registry.Namespaces(); !reflect.DeepEqual(got, []string{"research"}) {
+		t.Fatalf("Namespaces() after freeze = %v, want [research]", got)
+	}
+}
+
+func TestRegistryConcurrentRegisterAndExecutionSnapshotHaveNoLostNamespace(t *testing.T) {
+	registry := NewRegistry()
+	migration := []platformstorage.Migration{{Version: 1, Description: "init", Statements: []string{"SELECT 1"}}}
+	start := make(chan struct{})
+	var workers sync.WaitGroup
+	registerErr := make(chan error, 1)
+	snapshotDone := make(chan map[string][]platformstorage.Migration, 1)
+
+	workers.Add(2)
+	go func() {
+		defer workers.Done()
+		<-start
+		registerErr <- registry.Register("news", migration)
+	}()
+	go func() {
+		defer workers.Done()
+		<-start
+		snapshotDone <- registry.snapshotForRun()
+	}()
+	close(start)
+	workers.Wait()
+
+	err := <-registerErr
+	snapshot := <-snapshotDone
+	if err == nil {
+		if _, exists := snapshot["news"]; !exists {
+			t.Fatal("successful registration was omitted from execution snapshot")
+		}
+	} else if len(snapshot) != 0 {
+		t.Fatalf("rejected concurrent registration appeared in snapshot: %v", registry.Namespaces())
+	}
+	if err := registry.Register("late", migration); err == nil {
+		t.Fatal("registration after execution snapshot must fail")
+	}
+}
