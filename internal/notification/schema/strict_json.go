@@ -162,3 +162,12 @@ func parseHexCodeUnit(raw []byte) (uint16, bool) {
 	}
 	return value, true
 }
+
+// ValidateStrictJSON applies the same duplicate-key, Unicode, UTF-8 and depth
+// checks used by Event Registry before a consumer parses an event payload.
+func ValidateStrictJSON(raw []byte, maxDepth int) error {
+	if maxDepth <= 0 {
+		return ErrInvalidResourceLimits
+	}
+	return validateStrictJSON(raw, maxDepth)
+}

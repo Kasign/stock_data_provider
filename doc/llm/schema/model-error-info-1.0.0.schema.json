@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://llm.invalid/contracts/llm-modelerrorinfo-1.0.0.schema.json",
+  "title": "LLM ModelErrorInfo",
+  "$defs": {},
+  "type": "object",
+  "properties": {
+    "kind": {
+      "type": "string",
+      "enum": [
+        "invalid_request",
+        "unauthorized",
+        "rate_limited",
+        "overloaded",
+        "timeout",
+        "cancelled",
+        "upstream_unavailable",
+        "upstream_error",
+        "invalid_response",
+        "incomplete_response",
+        "schema_validation_failed",
+        "unsupported_capability",
+        "stream_interrupted",
+        "stream_sequence_gap",
+        "resource_limit"
+      ]
+    },
+    "stable_code": {
+      "type": "string",
+      "minLength": 1
+    },
+    "retryable": {
+      "type": "boolean"
+    },
+    "http_status": {
+      "type": "integer",
+      "minimum": 100,
+      "maximum": 599
+    },
+    "retry_after_seconds": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "safe_message": {
+      "type": "string",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "kind",
+    "stable_code",
+    "retryable",
+    "safe_message"
+  ],
+  "additionalProperties": false
+}

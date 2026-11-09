@@ -455,7 +455,7 @@ localStorage + storage event 方案能解决“另一个标签页完成写入后
 - [x] 修复公告卡片只显示质量等级、不展示记录级质量原因的问题。
 - [x] 有记录级质量原因时，在对应公告卡片内展示可折叠质量说明；没有原因时不增加空容器。
 - [x] 浏览器测试增加单条公告质量降级及原因可见断言。
-- [ ] WebUI Checks 与 Chromium Browser Smoke 待本批代码提交后验收。
+- [x] WebUI Checks #42207380891 与 Chromium Browser Smoke #42207380849 均通过（验收代码基线 `b6da380eb29955c321b1d42b4e7dfb843f162fe9`）；Browser Smoke 执行 `stock-research-data-browser.mjs`。
 
 验收边界：仅展示数据侧已返回的公告记录级质量原因，不修改公告数据、Provider 或 API 契约。
 
@@ -466,7 +466,7 @@ localStorage + storage event 方案能解决“另一个标签页完成写入后
 - [x] 财务指标分类卡片增加可用时间；快照元数据单独展示可选 `system_observed_at` 系统观测时间；缺失时显示“未提供”，不推算时间，也不与 `fetched_at` 混淆。
 - [x] 所属板块逐条展示质量等级、记录级质量原因、来源、来源版本与记录采集时间；模型未提供源端报告日期字段，不伪造源端日期。
 - [x] 浏览器测试覆盖财务可用时间和板块记录质量降级原因。
-- [ ] WebUI Checks 与 Chromium Browser Smoke 待本批代码提交后验收。
+- [x] WebUI Checks #42207380891 与 Chromium Browser Smoke #42207380849 均通过（验收代码基线 `b6da380eb29955c321b1d42b4e7dfb843f162fe9`）；Browser Smoke 执行 `stock-research-data-browser.mjs`。
 
 验收边界：仅展示数据侧已返回的 `available_at`、`quality_status`、`quality_reasons`，不补造时间或质量原因。
 
@@ -588,24 +588,24 @@ CI 复核记录：首次浏览器验收因测试夹具切换为板块记录后�
 - [x] 核对页面切换与请求状态：全市场分页离开/返回、自选股/研究列表成员变化、个股标的切换、财务报告期切换均已有专项覆盖。
 - [x] 核对本地存储清空：研究笔记/报告、筛选方案、告警草稿/通知偏好均有跨标签页清空恢复覆盖；设置偏好和自选股各自有对应存储保护测试。
 - [x] 本轮未发现已实现代码路径中的确定性功能缺陷，不修改业务代码。
-- [ ] 补充一个组合场景的独立浏览器断言：个股研究资料请求在途时，由另一标签页切换行情 API 地址，验证研究请求取消、按钮恢复及旧响应不回填。当前实现已由 `applySettings()` 调用 `stockResearch.invalidate()`，属于专项组合覆盖增强，不是已确认的运行时缺陷。
+- [x] 组合场景浏览器断言已由下方 P0 专项完成：个股研究资料请求在途时，另一标签页切换行情 API 地址；验证请求失效、按钮恢复、反馈更新及旧响应不回填。
 
 审查边界：测试夹具验证浏览器状态与请求生命周期，不代表真实 Provider 联调、生产数据准确性或服务端诊断能力验收。
 
 
-### 2026-11-04 P0 跨标签页个股研究请求组合回归（待 CI 验收）
+### 2026-11-04 P0 跨标签页个股研究请求组合回归（已完成）
 
 - [x] 增加组合场景：个股研究公司资料请求在途时，另一标签页修改行情 API 连接配置。
 - [x] 验证连接变更后研究加载按钮恢复、反馈提示更新，延迟旧连接响应释放后不得覆盖当前研究内容。
 - [x] 删除依赖浏览器必然触发 `requestfailed` 事件的无限等待断言；Playwright 路由拦截场景中，浏览器取消请求与路由处理器结束并非同一时序，不能用该事件作为唯一验收条件。
 - [x] 组合场景实现提交：`60a23f76f71cee8e84fbf4f0c6fd6cdd5b544193`；WebUI Checks 通过（运行记录 #41797556875）。
-- [x] 为请求启动和路由结束等待增加明确超时；后续发现原测试在跨标签页场景后仍等待 `600519.SH` 的旧请求，但当前标的已切换为 `000001.SZ`，导致旧 Promise 无法完成。已修正为先恢复 `600519.SH` 再运行原用例，并为旧标的/报告期请求启动增加超时。最终修正提交：`3d84e3a18ee615c1888aa26dca50fcac9921499e`；其 CI 待验收。
-- [ ] 历史运行 #41797557059、#41798082682、#41798354435、#41798494008 均使用过存在等待缺陷的版本，不作为通过证据；最终修正版本以提交 `3d84e3a18ee615c1888aa26dca50fcac9921499e` 的 Browser Smoke 为准。
-- [ ] 完整 Browser Smoke 通过后，回填本节最终验收状态和运行记录。
+- [x] 为请求启动和路由结束等待增加明确超时；修正跨标签页场景后的测试标的恢复顺序，并为旧标的/报告期请求启动增加超时。最终修正提交：`3d84e3a18ee615c1888aa26dca50fcac9921499e`。
+- [x] 历史运行 #41797557059、#41798082682、#41798354435、#41798494008 使用过存在等待缺陷的版本，不作为通过证据；验收以最终修正版本及后续累计完整 Browser Smoke 为准。
+- [x] 累计验收 HEAD `b6da380eb29955c321b1d42b4e7dfb843f162fe9` 的 WebUI Checks #42207380891 与 Chromium Browser Smoke #42207380849 均通过；Browser Smoke 已执行 `stock-research-browser.mjs`，本专项通过。
 
 验收边界：本用例验证跨标签页连接变化后的 UI 状态恢复与迟到响应隔离；不将 Playwright route 的内部结束时序等同于真实网络请求取消，也不代表真实 Provider 联调。
 
-### 2026-11-04 P1 全站 UI 样式一致性 Review（已纳入计划，尚未开始修复）
+### 2026-11-04 P1 全站 UI 样式一致性 Review（分阶段推进，人工验收未完成）
 
 用户反馈当前部分页面存在文字边界和模块间距问题。本阶段先做全站审查，再按模块修复；不在没有截图证据前盲目重写样式。
 
@@ -653,7 +653,13 @@ CI 复核记录：首次浏览器验收因测试夹具切换为板块记录后�
 
 截图限制：GitHub Linux Runner 未安装可用的中文字体，当前截图中的中文显示为方框；截图可用于核对容器/间距/滚动结构，但不能作为中文文字换行、字宽和截断的最终证据。当前分支范围不包含 `.github/workflows/**`，因此不擅自修改 Runner 字体安装步骤；中文排版最终验收需要实际 macOS/带 CJK 字体环境截图，或另行批准调整 CI 环境。
 
-下一步：先建立统一 typography/spacing/container 规则建议，再按高频共用组件和页面分批修复；每批使用相同视口截图对比，禁止直接全文件重写 CSS。
+截至 2026-11-09 的进展与边界：
+
+- UIR-1 页面盘点与 44 张结构截图基线已完成。
+- UIR-2 已完成可由代码和自动化证据验证的设计 token、组件字号/布局迁移，以及 CSS AST、CSSOM、主题/响应式级联审查；剩余 6 处 `!important` 仅用于全局隐藏和 reduced-motion 无障碍规则。对应最新代码验收见 #42207380891 / #42207380849。
+- 这不等于中文排版和视觉验收完成：CI Runner 缺少 CJK 字体，仍需 macOS/带 CJK 字体环境检查中文换行、字重、图表 SVG、交易日历、Run Flow、研究工作区、表格和弹层。
+- UIR-5 CSS 物理拆分仍未启动。共享 selector ownership、完整页面截图基线和迁移前后 CSSOM 对照门槛未满足前，不移动或批量合并规则。
+- 当前不因历史 CSS 行数、重复选择器数量或 `app.js` 行数继续做无明确收益的结构迁移；后续只处理可复现的布局缺陷，或在补齐人工视觉证据后启动有边界的专项修复。
 
 
 ### UIR-2 统一布局基础规范（2026-11-04，规范制定中）
@@ -756,13 +762,13 @@ Web 数据中心已接入被动 Provider 运行诊断、主动 Probe、六个诊
 - 每个拆分批次 WebUI Checks、相关 Browser Smoke 通过后再进入下一批。
 
 
-### JSR-1 首批迁移：任务事件状态展示纯函数（待 CI）
+### JSR-1 首批迁移：任务事件状态展示纯函数（已验收）
 
 - [x] 将任务事件状态归一化、中文标签和展示色调从 `app.js` 抽离到无副作用模块 `task-event-format.js`。
 - [x] 保持原有状态映射、未知状态回退、CSS class 和调用参数不变。
 - [x] 增加 Node 单元测试覆盖成功、失败、部分完成、未知状态和空状态。
 - [x] 模块不读取 DOM、全局 state、localStorage 或网络，不引入新的模块依赖。
-- [ ] WebUI Checks 与 Browser Smoke 通过后标记验收完成。
+- [x] WebUI Checks #42207380891 与 Chromium Browser Smoke #42207380849 均通过（验收代码基线 `b6da380eb29955c321b1d42b4e7dfb843f162fe9`）；单元测试执行 `task-event-format.test.mjs`。
 
 迁移边界：本次仅抽离任务事件状态展示，不迁移任务请求、轮询、事件分页或 generation 状态；这些仍留在 app.js，后续 JSR-2 按请求生命周期整体规划迁移。
 
@@ -1533,9 +1539,9 @@ JSR-6L 补充：连接配置变更取消草稿检查后，旧代际 finally 按�
 
 ### WebUI 分支内
 
-- [x] 当前功能验收 HEAD `49aa0eb8f9a2ce49b99c6c53f659208fff77b841` 的 WebUI Checks #42171720219 和 Chromium Browser Smoke #42171720084 均通过。
+- [x] 当前功能验收 HEAD `b6da380eb29955c321b1d42b4e7dfb843f162fe9` 的 WebUI Checks #42207380891 和 Chromium Browser Smoke #42207380849 均通过。
 - [x] JSR-6 请求生命周期与展示层边界主线完成；后续只处理可复现缺陷，不进行无目标拆分。
-- [ ] UIR-2 样式级联收尾：当前 13 处 `!important`；全局隐藏、语义状态色和 reduced-motion 规则已保留，继续核对主题/响应式/跨 selector 命中关系；保留确有必要的优先级，不以数量归零为验收目标。
+- [x] UIR-2 样式级联审查完成：`!important` 从 13 处降至 6 处；仅保留全局 `[hidden]` 及 reduced-motion 无障碍规则，语义颜色已按组件作用域和主题优先级验收；不启动 CSS 物理拆分。
 - [ ] 人工视觉验收：macOS 中文字体环境下检查 320/375/600/768/900/1280/1600px，重点覆盖图表 SVG、交易日历、Run Flow、研究报告/记录工作区、表格和弹层。
 - [ ] 真实部署验收：使用实际行情/分析服务配置，验证数据质量、时间语义、错误/降级、鉴权代理和真实 Provider 响应。CI 使用隔离 API fixture，不作为生产联调证据。
 
@@ -1772,7 +1778,7 @@ JSR-6L 补充：连接配置变更取消草稿检查后，旧代际 finally 按�
 - [x] 研究笔记增加 `symbols` 数组，最多 100 只；保留 `symbol` 主标的字段，旧版单标的记录读取时兼容为单元素数组。
 - [x] 报告创建笔记时继承完整标的列表；笔记卡片、编辑、关键词检索和股票筛选支持全部关联标的。
 - [x] 报告打开任务不再查找本地最近任务列表；使用报告中的 `analysisBase + taskId` 构造任务引用，复用既有 `activateTaskReference()`，由现有任务状态/事件轮询确认服务端身份。
-- [ ] 待 CI 验证新增 100/101 标的边界、旧笔记兼容、报告任务恢复及完整 WebUI 回归。
+- [x] WebUI Checks #42207380891 与 Chromium Browser Smoke #42207380849 均通过（验收代码基线 `b6da380eb29955c321b1d42b4e7dfb843f162fe9`）；单测覆盖 100/101 标的边界、旧笔记兼容；Browser Smoke 覆盖报告/任务关联操作。
 
 ## 2026-11-05 P0 研究报告归档边界审查
 
@@ -1780,7 +1786,7 @@ JSR-6L 补充：连接配置变更取消草稿检查后，旧代际 finally 按�
 - [x] 发现归档记录 ID、Run ID 与分析服务地址缺少长度上限；异常服务端响应或损坏的本地数据可形成过长下载文件名和不必要的大字段。
 - [x] 为记录 ID、Run ID 增加 160 字符上限，为分析服务地址增加 2048 字符上限；写入与读取共用归一化约束，拒绝异常数据且不覆盖原始存储。
 - [x] 新增边界回归测试，覆盖三类超长字段。
-- [ ] 本批新提交 CI 待运行。
+- [x] WebUI Checks #42207380891 与 Chromium Browser Smoke #42207380849 均通过（验收代码基线 `b6da380eb29955c321b1d42b4e7dfb843f162fe9`）；报告归档边界由 `research-reports.test.mjs` 覆盖。
 
 
 ## 2026-11-05 P0 研究报告与笔记跨模块状态切换
@@ -1789,7 +1795,7 @@ JSR-6L 补充：连接配置变更取消草稿检查后，旧代际 finally 按�
 - [x] 发现从报告创建笔记时只清空了编辑 ID，没有清空编辑快照与冲突操作区；冲突中的旧笔记草稿会把旧操作按钮带入新笔记表单。
 - [x] 创建报告关联笔记时同步清空编辑快照并隐藏冲突操作区；不改变报告与笔记的独立存储模型。
 - [x] 扩展 Chromium 跨标签页专项：覆盖冲突状态切换到报告建笔记、股票/Task/Run 关联继承，以及删除报告后独立笔记仍保留。
-- [ ] 当前提交 SHA 的 WebUI Checks 与 Chromium Browser Smoke 尚待运行；真实多设备同步仍不属于浏览器本地存储能力。
+- [x] WebUI Checks #42207380891 与 Chromium Browser Smoke #42207380849 均通过（验收代码基线 `b6da380eb29955c321b1d42b4e7dfb843f162fe9`）；`research-records-cross-tab-browser.mjs` 覆盖跨标签页状态切换；真实多设备同步仍不属于浏览器本地存储能力。
 
 
 ## 2026-11-05 P0 本地告警草稿字段边界
@@ -1797,7 +1803,7 @@ JSR-6L 补充：连接配置变更取消草稿检查后，旧代际 finally 按�
 - [x] 本地告警草稿的启用状态必须为布尔值；不再把字符串、null 等异常值静默转换为停用状态。
 - [x] 为草稿 ID 设置 160 字符上限，为创建/更新时间设置 64 字符上限；读取和写入共用同一归一化边界。
 - [x] 增加异常字段写入拒绝、历史异常数据读取拒绝、原始存储不被覆盖的回归测试。
-- [ ] 当前提交 SHA 的 WebUI Checks 与 Browser Smoke 待运行；服务端告警规则和投递能力仍未接入，本地草稿不代表已启用监控。
+- [x] WebUI Checks #42207380891 与 Chromium Browser Smoke #42207380849 均通过（验收代码基线 `b6da380eb29955c321b1d42b4e7dfb843f162fe9`）；`local-alert-drafts.test.mjs` 覆盖本地草稿边界。服务端告警规则和投递能力仍未接入，本地草稿不代表已启用监控。
 
 
 ## 2026-11-05 P0 通知偏好事件集合完整性
@@ -1805,7 +1811,7 @@ JSR-6L 补充：连接配置变更取消草稿检查后，旧代际 finally 按�
 - [x] 通知事件只接受当前定义的四类事件；事件列表不得包含重复项，也不得超过支持集合大小。
 - [x] 不再在读取时静默去重异常历史偏好；异常存储标记为无效并保留原始内容，阻止覆盖。
 - [x] 增加重复事件、超长事件列表的写入拒绝与历史存储保护测试。
-- [ ] 当前提交 SHA 的 WebUI Checks 与 Browser Smoke 待运行。
+- [x] WebUI Checks #42207380891 与 Chromium Browser Smoke #42207380849 均通过（验收代码基线 `b6da380eb29955c321b1d42b4e7dfb843f162fe9`）；通知偏好单测及跨标签页专项均通过。
 - [x] 通知偏好保存文案明确限定为本地草稿；通知中心仍将接口未接入与服务端空结果分开，告警规则草稿仍明确不执行监控或真实发送。
 
 
@@ -1815,21 +1821,21 @@ JSR-6L 补充：连接配置变更取消草稿检查后，旧代际 finally 按�
 - [x] 发现编辑规则 A 后直接点击规则 B 的“编辑”，会静默覆盖 A 的未保存表单；编辑中点击“新建规则”也会静默退出当前编辑。
 - [x] 增加编辑器字段快照；切换编辑对象或从编辑模式进入新建模式前，先确认是否放弃未保存修改。取消确认时保留原表单。
 - [x] 扩展 Chromium 双标签页专项，覆盖切换编辑对象与进入新建模式的确认接受/取消路径。
-- [ ] 当前提交 SHA 的 WebUI Checks 与 Browser Smoke 待运行。
+- [x] WebUI Checks #42207380891 与 Chromium Browser Smoke #42207380849 均通过（验收代码基线 `b6da380eb29955c321b1d42b4e7dfb843f162fe9`）；告警编辑器接受/取消路径由 `alerts-notifications-cross-tab-browser.mjs` 覆盖。
 - [x] 启停和删除仍以操作时重新读取的最新本地列表为基础；跨标签页编辑冲突仍由规则快照阻止过期覆盖。
 
 ## 2026-11-05 P0 本地告警草稿存储故障边界
 
 - [x] 补齐浏览器存储 API 异常测试：读取抛出 SecurityError 时标记为不可读取；写入抛出 QuotaExceededError 时明确返回失败，不报告保存成功。
 - [x] 验证存储故障与数据格式损坏保持不同结果语义；不尝试清空或覆盖用户原始数据。
-- [ ] 当前提交 SHA 的 WebUI Checks 与 Chromium Browser Smoke 待运行。
+- [x] WebUI Checks #42207380891 与 Chromium Browser Smoke #42207380849 均通过（验收代码基线 `b6da380eb29955c321b1d42b4e7dfb843f162fe9`）；存储 API 异常边界由单测覆盖，相关跨标签页专项通过。
 
 ## 2026-11-05 P0 研究记录存储 API 故障验证
 
 - [x] 复核笔记/报告模块的跨标签页事件路由、列表重绘、编辑快照冲突保护、远端删除防复活与报告删除不级联笔记；现有代码和 Chromium 专项已覆盖这些行为。
 - [x] 补齐研究笔记与报告归档的存储 API 故障单测：读取抛出 SecurityError 时标记不可读取；写入抛出 QuotaExceededError 时返回 unavailable，不报告保存成功。
 - [x] 明确历史“实施前现状核验”仅描述开发前基线；当前实现已接入 storage 事件和 render 刷新，避免规划文档被误读为未完成。
-- [ ] 当前提交 SHA 的 WebUI Checks 与 Chromium Browser Smoke 待运行。
+- [x] WebUI Checks #42207380891 与 Chromium Browser Smoke #42207380849 均通过（验收代码基线 `b6da380eb29955c321b1d42b4e7dfb843f162fe9`）；研究笔记/报告存储 API 故障由对应单测覆盖，跨标签页专项通过。
 - [ ] localStorage 读—改—写仍非事务；快照比较不能消除最后比较与写入之间的并发竞态。
 
 
@@ -1838,7 +1844,7 @@ JSR-6L 补充：连接配置变更取消草稿检查后，旧代际 finally 按�
 - [x] 笔记 ID 增加 160 字符上限；创建/更新时间增加 64 字符上限；报告归档创建时间增加 64 字符上限，读写共用相同校验。
 - [x] 从报告创建笔记时不再静默截断股票代码和 Task ID；超长关联字段交由笔记归一化统一拒绝，避免研究关联被悄悄改写。
 - [x] 保留历史时间字符串兼容，不强制 ISO 日期格式；新增超长字段拒绝和历史格式保留测试。
-- [ ] 当前提交 SHA 的 WebUI Checks 与 Chromium Browser Smoke 待运行。
+- [x] WebUI Checks #42207380891 与 Chromium Browser Smoke #42207380849 均通过（验收代码基线 `b6da380eb29955c321b1d42b4e7dfb843f162fe9`）；研究记录字段长度和静默截断边界由 `research-notes.test.mjs`、`research-reports.test.mjs` 覆盖。
 
 
 ## 2026-11-05 P0 研究报告 JSON 深层序列化完整性
@@ -1847,7 +1853,7 @@ JSR-6L 补充：连接配置变更取消草稿检查后，旧代际 finally 按�
 - [x] 允许对象图中重复引用同一普通对象；重复引用经 JSON 编码后会成为独立副本，不视为循环引用。
 - [x] 保存入口在克隆前验证，避免 JSON.stringify 静默丢字段或改写值；本地归档读写入口复用相同校验。
 - [x] 保持结果深层业务字段可选：报告渲染器已有“未报告/格式无效”处理，不以臆测的完整 schema 拒绝服务端新增字段。
-- [ ] 当前提交 SHA 的 WebUI Checks 与 Chromium Browser Smoke 待运行。
+- [x] WebUI Checks #42207380891 与 Chromium Browser Smoke #42207380849 均通过（验收代码基线 `b6da380eb29955c321b1d42b4e7dfb843f162fe9`）；深层 JSON 序列化约束由 `research-reports.test.mjs` 覆盖。
 
 ## 2026-11-05 Web 静态结构拆分评估
 
@@ -1861,7 +1867,7 @@ JSR-6L 补充：连接配置变更取消草稿检查后，旧代际 finally 按�
 - [x] 审查全局可读性覆盖区的 10 处 `!important`：对应选择器均为后置同级规则，或已有同级后置字号声明，不需要强制优先级。
 - [x] 移除上述 10 处无必要的 `!important`，保留既有字号值和规则顺序；未触碰隐藏状态、语义涨跌颜色、减少动态效果和局部组件状态规则。
 - [x] 当前样式表剩余 22 处 `!important`，后续继续按具体级联冲突逐项审查，不以归零为目标。
-- [ ] 当前提交 WebUI Checks 与 Chromium Browser Smoke 待运行。
+- [x] WebUI Checks #42207380891 与 Chromium Browser Smoke #42207380849 均通过（验收代码基线 `b6da380eb29955c321b1d42b4e7dfb843f162fe9`）；浏览器工作流执行 PostCSS CSS 结构审查、CSSOM 基线及完整 Browser Smoke。
 
 
 ## 2026-11-05 CSS 清理后的契约测试同步
@@ -1869,7 +1875,7 @@ JSR-6L 补充：连接配置变更取消草稿检查后，旧代际 finally 按�
 - [x] WebUI Checks 发现 2 条 UI 契约测试仍要求全局字号覆盖必须带 `!important`；这与本轮移除冗余优先级后的实际级联规则不一致。
 - [x] 更新契约断言：继续验证字号语义 token 与目标值，但不再把 `!important` 当作实现要求。
 - [x] 本次 Actions 的 511 项测试中 509 项通过、2 项为上述过时断言；修正测试后重新运行完整 CI。
-- [ ] 新提交 WebUI Checks 与 Chromium Browser Smoke 待运行。
+- [x] WebUI Checks #42207380891 与 Chromium Browser Smoke #42207380849 均通过（验收代码基线 `b6da380eb29955c321b1d42b4e7dfb843f162fe9`）；UI 契约单测、PostCSS CSS 结构审查与完整 Browser Smoke 均通过。
 
 
 ## 2026-11-05 CSS 拆分可行性与优先级复核
@@ -2205,7 +2211,7 @@ CSS AST 检查器进一步扩展：
 - [x] 将 Screening 批量工具栏局部规则迁移至 `web/screening-local-batch.css`，由 `index.html` 在 `/styles.css` 后加载。
 - [x] 公共 `.field`、`.button`、主题变量、批量反馈提示、结果 checkbox 和其他页面规则继续留在 `styles.css`，避免扩大首轮拆分边界。
 - [x] 保持原有 CSS 声明与媒体查询内容，仅调整文件归属；新样式表后置加载，维持组件局部规则相对公共控件规则的级联优先级。
-- [ ] 等待 Chromium CSSOM fixture 回归，确认 8 场景计算样式和宽高与迁移前一致。
+- [x] 最终 CSSOM 8 场景回归已通过 Chromium Browser Smoke #42207380849（验收 HEAD `b6da380e`）；未发现未归因的计算样式或宽高差异。
 
 
 ### W1 Browser Smoke 导航取消分类复核
@@ -2358,14 +2364,14 @@ CSS AST 检查器进一步扩展：
 - [x] 发现 `.run-flow-dialog .task-event-detail[hidden]` 在全局同一 at-rule 上下文中重复声明两次，均为 `display: none !important`；后置规则没有独立语义，删除前置重复规则。
 - [x] CSS AST 检查增加结构门禁，要求该 selector 仅保留一条规则，防止重复回归。
 - [x] `!important` 声明数从 25 降至 24；没有改变隐藏状态语义。
-- [ ] 继续人工审查跨 selector DOM 命中、主题和响应式覆盖；未完成前不扩大 CSS 物理拆分。
+- [x] 本阶段与隐藏/语义色/reduced-motion 相关的跨 selector、主题和响应式覆盖审查已完成；CSS 全站 selector ownership 与物理拆分仍是独立门槛，不在本轮扩大范围。
 
 
 ### UIR-2 Run Flow 隐藏规则清理验收（2026-11-06）
 - [x] 当前 `web/styles.css` 的 `!important` 声明数为 24；前置重复的 `.run-flow-dialog .task-event-detail[hidden]` 已移除。
 - [x] `web/tests/css-structure-review.mjs` 增加 selector 唯一性断言，防止同一隐藏规则重复。
 - [x] WebUI Checks #42172661741、Chromium Browser Smoke #42172661924 均通过；CSS AST、Run Flow 交互及响应式专项通过。
-- [ ] 跨 selector DOM 命中、主题、@layer 和响应式级联关系仍需继续人工复核；本次只清理已证明完全重复的同 selector 同条件规则。
+- [x] 后续已完成本阶段隐藏状态、语义颜色、reduced-motion 的跨 selector 与主题级联复核；本条历史清理记录由最终验收 #42207380891 / #42207380849 关闭。全站 CSS 物理拆分仍需独立评审。
 
 
 ## 2026-11-06 UIR-2：CSS Token 引用审查补充
@@ -2374,7 +2380,7 @@ CSS AST 检查器进一步扩展：
 - [x] 将遗留 token 映射到现有设计变量：`--text-dim`、`--text-soft`、`--border`、`--panel`、`--panel-raised`、`--accent`；不新增重复主题 token。
 - [x] 增加 CSS Token 单元测试，阻止未定义的自定义属性引用重新进入样式表。
 - [x] WebUI Checks #42174320979、Chromium Browser Smoke #42174321184 均通过；CSS Token 单测、CSSOM 8 场景及全量浏览器专项通过。
-- [ ] 继续审查跨 selector 的 DOM 命中范围及媒体查询覆盖；不以减少规则数量为目标，不进行无证据的批量合并。
+- [x] 本阶段跨 selector DOM 命中、主题与相关媒体条件已通过后续 UIR-2 审查完成；不以减少规则数量为目标，未进行无证据的批量合并。
 
 
 ### UIR-2 CSSOM 差异审查（2026-11-06）
@@ -2389,7 +2395,7 @@ CSS AST 检查器进一步扩展：
 - [x] 与上一通过 HEAD `999ca8a8` 的 CSSOM 观察逐项比较，除批量工具栏容器宽度减少 2px、内容区元素 X 坐标增加 1px 和 Y 坐标增加 2px 外，其余计算样式、尺寸和属性均一致。
 - [x] 变化来源为修复未定义 `--line` 后恢复条件构建器和本地筛选区边框；属于此前失效样式恢复，不是布局意外漂移。
 - [x] 按实际观察重新生成 `screening-local-batch.cssom.json.gz`，保留原有 8 场景 / 6 目标覆盖范围。
-- [ ] 新基线在最终功能 HEAD 的 CSSOM、Browser Smoke 全部通过后关闭 UIR-2 本批验收。
+- [x] 最终功能 HEAD `b6da380eb29955c321b1d42b4e7dfb843f162fe9` 的 CSSOM、Browser Smoke #42207380849 与 WebUI Checks #42207380891 全部通过，关闭本批验收。
 
 
 ### UIR-2 CSS Token 与 CSSOM 最终验收（2026-11-06）
@@ -2397,7 +2403,7 @@ CSS AST 检查器进一步扩展：
 - [x] Chromium Browser Smoke #42174321184 成功：响应式主流程、CSS AST、CSSOM 8 场景、设置/研究记录/告警/自选股跨标签页、Run Flow、个股研究、数据中心、选股及市场分页专项全部通过。
 - [x] CSSOM 新基线覆盖 dark/light × 320/768/1280/1600px，共 8 个场景、每场景 6 个节点；与旧基线差异已逐项归因于恢复此前失效的边框，没有其他计算样式或尺寸变化。
 - [x] 本批只更新受控 CSSOM fixture 与 WebUI 文档，没有扩大 CSS 物理拆分范围。
-- [ ] 跨 selector DOM 命中、主题、@layer 和响应式级联仍需人工审查；完成前不进行批量 CSS 合并或迁移。
+- [x] 本阶段隐藏、语义颜色和 reduced-motion 相关跨 selector / 主题 / 响应式级联审查已完成；全站 selector ownership 与 CSS 物理拆分仍未启动，继续作为独立门槛。
 
 
 ## 2026-11-06 W3-B2：研究记录独立 JSON 导出（已完成）
@@ -2487,4 +2493,31 @@ CSS AST 检查器进一步扩展：
 - [x] 指数质量理由色改为 `.market-index-card-footer .market-index-reasons`，明确压过 footer 的 small 默认色。
 - [x] 个股研究概览正负值改用 `--positive` / `--negative`，遵循默认 A 股红涨绿跌、反向配色及 dark/light 主题变量。
 - [x] 新增 CSS 结构断言，锁定组件作用域、语义 token 和普通声明；通用 `.positive` / `.negative` 的重要声明暂时保留，避免未完成所有动态 class 消费点审计前降低优先级。
-- [ ] WebUI Checks、CSSOM 8 场景与完整 Chromium Browser Smoke 通过后关闭本批验收。
+- [x] WebUI Checks #42205877204（测试 HEAD `fb45b214`）与 Chromium Browser Smoke #42205877304 通过；Browser Smoke 包含 CSS AST、CSSOM 8 场景及全量浏览器专项。
+- [x] 最终集成基线 HEAD `77689d7c` 的 Browser Smoke #42205026193 通过；第一批语义颜色组件作用域化验收关闭。
+
+## 2026-11-06 UIR-2：通用涨跌语义色作用域化（第二批，已完成）
+
+- [x] 将通用 `.positive` / `.negative` 从 `!important` 改为普通语义色声明。
+- [x] 个股报价摘要增加 `.metric-primary .metric-foot.positive/negative` 作用域规则；技术指标增加 `.technical-metric-card > small.positive/negative` 作用域规则。
+- [x] 研究概览继续使用更具体的 `strong.positive/negative` 语义 token 规则；历史日 K 与自选列表的表格单元格由 class 选择器覆盖普通 `td` 默认色。
+- [x] 修复并锁定浅色主题级联：报价摘要的浅色主题默认 `.metric-foot` 规则、浅色主题通用 `td` 规则均不得覆盖正负语义色。
+- [x] CSS 结构测试验证正负语义色声明为普通声明，并锁定报价、技术指标、研究概览、浅色主题报价/表格及四类市场状态的作用域规则。
+- [x] CSSOM 浏览器检查覆盖 dark/light × cn/reverse 共 4 组场景，每组 25 个实际计算颜色断言，覆盖报价、研究概览、技术指标、指数、广度、市场榜单、市场活动、质量理由和表格单元格。
+- [x] 当前 `web/styles.css` 的 `!important` 从 8 处降至 **6 处**；剩余仅全局 `[hidden]` 强制隐藏 1 处及 reduced-motion 无障碍规则 5 处。均保留，不再为数量目标删除。
+- [x] WebUI Checks #42207380891 通过。
+- [x] Chromium Browser Smoke #42207380849 通过：响应式主流程、CSS AST、CSSOM、设置/研究记录/告警/自选股跨标签页、Run Flow、个股研究、数据中心、选股及市场分页专项全部通过。
+- [x] 最终代码验收 HEAD：`b6da380eb29955c321b1d42b4e7dfb843f162fe9`。
+
+**UIR-2 结论：** 隐藏、语义颜色和无障碍减少动态效果的级联职责均已完成审查；没有理由继续压缩剩余 6 处 `!important`。本轮不启动 CSS 物理拆分。
+
+## 2026-11-09 JSR-7：当前模块静态依赖图审计（已完成）
+
+- [x] 核对当前分支最新代码；基线 HEAD `54d80936f04497cee0e9416265be58c451f8689e`。
+- [x] 扫描 `web/src/` 的 51 个 JavaScript 文件，核对 `app.js` 的 47 个直接静态依赖及领域模块之间的传递依赖。
+- [x] 确认静态相对 import 图无循环；未发现领域模块反向 import `app.js`。
+- [x] 更新 `Web代码架构.md` 的依赖分组、传递依赖和当前代码规模：app.js 5,547 行、70 个 state 字段。
+- [x] 修复 `WebUI功能说明.md` 指向不存在的 `整体规划.md` 链接，统一指向唯一总规划 `Web整体规划.md`。
+- [x] 本轮为文档/架构审计，无运行时代码改动；不启动没有明确边界收益的进一步 JS 拆分。
+
+**下一步：** WebUI 分支当前可独立推进的剩余工作以 macOS/CJK 字体人工视觉验收为主；真实部署联调和全市场筛选、任务历史、告警、通知、AI 问股、调度、板块资金流等仍等待服务端契约与部署环境，不在 WebUI 侧模拟。

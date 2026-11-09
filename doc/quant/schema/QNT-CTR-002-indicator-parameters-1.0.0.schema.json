@@ -35,7 +35,8 @@
           "properties": {
             "window": {
               "type": "integer",
-              "minimum": 1
+              "minimum": 1,
+              "maximum": 1000
             }
           }
         }
@@ -56,7 +57,8 @@
           "properties": {
             "window": {
               "type": "integer",
-              "minimum": 1
+              "minimum": 1,
+              "maximum": 1000
             },
             "seed_method": {
               "const": "sma"
@@ -80,7 +82,8 @@
           "properties": {
             "window": {
               "type": "integer",
-              "minimum": 1
+              "minimum": 1,
+              "maximum": 1000
             },
             "return_basis": {
               "enum": [
@@ -108,7 +111,8 @@
           "properties": {
             "window": {
               "type": "integer",
-              "minimum": 2
+              "minimum": 2,
+              "maximum": 1000
             },
             "return_basis": {
               "enum": [
@@ -117,8 +121,8 @@
               ]
             },
             "annualization_factor": {
-              "type": "number",
-              "exclusiveMinimum": 0
+              "type": "integer",
+              "minimum": 1
             }
           }
         }
@@ -139,7 +143,8 @@
           "properties": {
             "window": {
               "type": "integer",
-              "minimum": 1
+              "minimum": 1,
+              "maximum": 1000
             },
             "smoothing_method": {
               "const": "wilder"
@@ -164,15 +169,18 @@
           "properties": {
             "fast_window": {
               "type": "integer",
-              "minimum": 1
+              "minimum": 1,
+              "maximum": 1000
             },
             "slow_window": {
               "type": "integer",
-              "minimum": 2
+              "minimum": 2,
+              "maximum": 1000
             },
             "signal_window": {
               "type": "integer",
-              "minimum": 1
+              "minimum": 1,
+              "maximum": 1000
             }
           }
         }
@@ -193,7 +201,8 @@
           "properties": {
             "window": {
               "type": "integer",
-              "minimum": 1
+              "minimum": 1,
+              "maximum": 1000
             },
             "smoothing_method": {
               "const": "wilder"
@@ -218,7 +227,8 @@
           "properties": {
             "window": {
               "type": "integer",
-              "minimum": 2
+              "minimum": 2,
+              "maximum": 1000
             },
             "multiplier": {
               "type": "number",

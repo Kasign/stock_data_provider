@@ -1,0 +1,1 @@
+{"id":"resp-unknown","object":"response","model":"qwen-local","status":"completed","output":[{"id":"future-item-1","type":"future_item","sensitive_payload":"must-not-survive"}]}

@@ -1,6 +1,7 @@
 package event
 
 import (
+	"math"
 	"strings"
 	"testing"
 	"time"
@@ -9,7 +10,9 @@ import (
 func eventTime(t *testing.T, value string) time.Time {
 	t.Helper()
 	parsed, err := time.Parse(time.RFC3339Nano, value)
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	return parsed
 }
 
@@ -35,11 +38,17 @@ func validEvent(t *testing.T) ResearchEvent {
 
 func TestResearchEventValidate(t *testing.T) {
 	value := validEvent(t)
-	if err := value.Validate(); err != nil { t.Fatalf("Validate() error = %v", err) }
+	if err := value.Validate(); err != nil {
+		t.Fatalf("Validate() error = %v", err)
+	}
 }
 
 func TestResearchEventRejectsInvalidStructureAndTimeEvidence(t *testing.T) {
-	tests := []struct { name string; mutate func(*ResearchEvent); want string }{
+	tests := []struct {
+		name   string
+		mutate func(*ResearchEvent)
+		want   string
+	}{
 		{"zero version", func(e *ResearchEvent) { e.EventVersion = 0 }, "event_version"},
 		{"unknown status", func(e *ResearchEvent) { e.Status = "archived" }, "unknown status"},
 		{"nil evidence refs", func(e *ResearchEvent) { e.EvidenceRefs = nil }, "non-null array"},
@@ -47,7 +56,9 @@ func TestResearchEventRejectsInvalidStructureAndTimeEvidence(t *testing.T) {
 		{"system cutoff before observation", func(e *ResearchEvent) { e.SystemAsOf = e.SystemObservedAt.Add(-time.Second) }, "must not be earlier"},
 		{"source time evidence missing", func(e *ResearchEvent) { e.SourceTimes[0].EvidenceRef = "evidence:missing" }, "must exist in evidence_refs"},
 		{"invalid time type", func(e *ResearchEvent) { e.SourceTimes[0].TimeType = "received_at" }, "time_type"},
-		{"source time non UTC", func(e *ResearchEvent) { e.SourceTimes[0].Value = time.Date(2026, 11, 5, 9, 0, 0, 0, time.FixedZone("CST", 8*60*60)) }, "must be UTC"},
+		{"source time non UTC", func(e *ResearchEvent) {
+			e.SourceTimes[0].Value = time.Date(2026, 11, 5, 9, 0, 0, 0, time.FixedZone("CST", 8*60*60))
+		}, "must be UTC"},
 		{"confidence without method", func(e *ResearchEvent) { confidence := 0.8; e.SourceTimes[0].Confidence = &confidence }, "confidence_method is required"},
 		{"method without confidence", func(e *ResearchEvent) { method := "source_rank"; e.SourceTimes[0].ConfidenceMethod = &method }, "require a non-null confidence"},
 		{"version one supersedes", func(e *ResearchEvent) { version := 0; e.SupersedesEventVersion = &version }, "must not supersede"},
@@ -78,9 +89,13 @@ func TestResearchEventVersionMustAppendAndPreserveLifecycle(t *testing.T) {
 	supersedes := 1
 	next.SupersedesEventVersion = &supersedes
 	next.SystemAsOf = previous.SystemAsOf.Add(time.Minute)
-	if err := next.ValidateNextVersion(previous); err != nil { t.Fatalf("same-status append should pass: %v", err) }
+	if err := next.ValidateNextVersion(previous); err != nil {
+		t.Fatalf("same-status append should pass: %v", err)
+	}
 	next.Status = StatusConsolidating
-	if err := next.ValidateNextVersion(previous); err != nil { t.Fatalf("valid lifecycle transition should pass: %v", err) }
+	if err := next.ValidateNextVersion(previous); err != nil {
+		t.Fatalf("valid lifecycle transition should pass: %v", err)
+	}
 	next.Status = StatusActive
 	if err := next.ValidateNextVersion(previous); err == nil || !strings.Contains(err.Error(), "invalid event status transition") {
 		t.Fatalf("skipped lifecycle state should fail, got %v", err)
@@ -103,7 +118,9 @@ func TestResearchEventLifecycleTerminalAndInvalidationRules(t *testing.T) {
 		{StatusMaterializing, StatusInvalidated}, {StatusFading, StatusInvalidated},
 	}
 	for _, pair := range allowed {
-		if !CanTransition(pair.from, pair.to) { t.Errorf("CanTransition(%s, %s) = false, want true", pair.from, pair.to) }
+		if !CanTransition(pair.from, pair.to) {
+			t.Errorf("CanTransition(%s, %s) = false, want true", pair.from, pair.to)
+		}
 	}
 	for _, pair := range []struct{ from, to EventStatus }{
 		{StatusDetected, StatusActive}, {StatusActive, StatusConsolidating},
@@ -111,7 +128,9 @@ func TestResearchEventLifecycleTerminalAndInvalidationRules(t *testing.T) {
 		{StatusClosed, StatusInvalidated}, {StatusInvalidated, StatusClosed},
 		{StatusActive, StatusActive},
 	} {
-		if CanTransition(pair.from, pair.to) { t.Errorf("CanTransition(%s, %s) = true, want false", pair.from, pair.to) }
+		if CanTransition(pair.from, pair.to) {
+			t.Errorf("CanTransition(%s, %s) = true, want false", pair.from, pair.to)
+		}
 	}
 }
 
@@ -169,5 +188,127 @@ func TestLifecycleTransitionRejectsNonUTCTime(t *testing.T) {
 	changedAt := time.Date(2026, 11, 6, 13, 0, 0, 0, time.FixedZone("CST", 8*60*60))
 	if _, err := NewLifecycleTransition(previous, next, changedAt); err == nil || !strings.Contains(err.Error(), "must be UTC") {
 		t.Fatalf("non-UTC changed_at should fail, got %v", err)
+	}
+}
+
+func TestResearchEventValidateNextVersionRejectsIntegerOverflow(t *testing.T) {
+	previous := validEvent(t)
+	previous.EventVersion = int(^uint(0) >> 1)
+	next := previous
+	next.EventVersion = 1
+	if err := next.ValidateNextVersion(previous); err == nil || !strings.Contains(err.Error(), "integer limit") {
+		t.Fatalf("ValidateNextVersion() error = %v, want integer limit rejection", err)
+	}
+}
+
+func TestEventSourceTimeConfidenceBoundaries(t *testing.T) {
+	method := "source_rank"
+	methodVersion := "source_rank.v1"
+
+	for _, boundary := range []struct {
+		name  string
+		value float64
+	}{
+		{"zero", 0},
+		{"one", 1},
+	} {
+		t.Run("valid boundary "+boundary.name, func(t *testing.T) {
+			value := validEvent(t)
+			value.SourceTimes[0].Confidence = &boundary.value
+			value.SourceTimes[0].ConfidenceMethod = &method
+			value.SourceTimes[0].ConfidenceMethodVersion = &methodVersion
+			if err := value.Validate(); err != nil {
+				t.Fatalf("Validate() error = %v, want success", err)
+			}
+		})
+	}
+
+	for _, confidence := range []struct {
+		name  string
+		value float64
+	}{
+		{"below zero", -0.0001},
+		{"above one", 1.0001},
+		{"NaN", math.NaN()},
+		{"positive infinity", math.Inf(1)},
+		{"negative infinity", math.Inf(-1)},
+	} {
+		t.Run(confidence.name, func(t *testing.T) {
+			value := validEvent(t)
+			value.SourceTimes[0].Confidence = &confidence.value
+			value.SourceTimes[0].ConfidenceMethod = &method
+			value.SourceTimes[0].ConfidenceMethodVersion = &methodVersion
+			if err := value.Validate(); err == nil || !strings.Contains(err.Error(), "confidence must be within [0,1]") {
+				t.Fatalf("Validate() error = %v, want confidence range rejection", err)
+			}
+		})
+	}
+}
+
+func TestEventSourceTimeConfidenceRequiresMethodAndVersion(t *testing.T) {
+	confidence := 0.5
+	method := "source_rank"
+	methodVersion := "source_rank.v1"
+	tests := []struct {
+		name string
+		set  func(*EventSourceTime)
+		want string
+	}{
+		{"missing method", func(value *EventSourceTime) { value.ConfidenceMethod = nil }, "confidence_method is required"},
+		{"blank method", func(value *EventSourceTime) { blank := " "; value.ConfidenceMethod = &blank }, "confidence_method is required"},
+		{"missing method version", func(value *EventSourceTime) { value.ConfidenceMethodVersion = nil }, "confidence_method_version is required"},
+		{"blank method version", func(value *EventSourceTime) { blank := " "; value.ConfidenceMethodVersion = &blank }, "confidence_method_version is required"},
+		{"method without confidence", func(value *EventSourceTime) { value.Confidence = nil }, "require a non-null confidence"},
+		{"method version without confidence", func(value *EventSourceTime) { value.Confidence = nil; value.ConfidenceMethod = nil }, "require a non-null confidence"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			value := validEvent(t)
+			sourceTime := &value.SourceTimes[0]
+			sourceTime.Confidence = &confidence
+			sourceTime.ConfidenceMethod = &method
+			sourceTime.ConfidenceMethodVersion = &methodVersion
+			tt.set(sourceTime)
+			if err := value.Validate(); err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("Validate() error = %v, want containing %q", err, tt.want)
+			}
+		})
+	}
+}
+
+func TestResearchEventRejectsZeroOffsetNonUTCLocations(t *testing.T) {
+	fixedZero := time.FixedZone("non-UTC", 0)
+	nonUTC := time.Date(2026, 11, 5, 8, 0, 0, 0, fixedZero)
+	tests := []struct {
+		name   string
+		mutate func(*ResearchEvent)
+	}{
+		{"system_observed_at", func(e *ResearchEvent) { e.SystemObservedAt = nonUTC }},
+		{"system_as_of", func(e *ResearchEvent) { e.SystemAsOf = nonUTC }},
+		{"occurred_at", func(e *ResearchEvent) { e.OccurredAt = &nonUTC }},
+		{"published_at", func(e *ResearchEvent) { e.PublishedAt = &nonUTC }},
+		{"available_at", func(e *ResearchEvent) { e.AvailableAt = &nonUTC }},
+		{"source_times.value", func(e *ResearchEvent) { e.SourceTimes[0].Value = nonUTC }},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			value := validEvent(t)
+			tt.mutate(&value)
+			if err := value.Validate(); err == nil || !strings.Contains(err.Error(), "must be UTC") {
+				t.Fatalf("Validate() error = %v, want strict UTC Location rejection", err)
+			}
+		})
+	}
+}
+
+func TestLifecycleTransitionRejectsZeroOffsetNonUTCLocation(t *testing.T) {
+	previous := validEvent(t)
+	next := previous
+	next.EventVersion = 2
+	next.Status = StatusConsolidating
+	next.SystemAsOf = previous.SystemAsOf.Add(time.Minute)
+	nonUTC := time.Date(2026, 11, 6, 5, 10, 0, 0, time.FixedZone("non-UTC", 0))
+	if _, err := NewLifecycleTransition(previous, next, nonUTC); err == nil || !strings.Contains(err.Error(), "must be UTC") {
+		t.Fatalf("NewLifecycleTransition() error = %v, want strict UTC Location rejection", err)
 	}
 }

@@ -13,11 +13,11 @@ Researchflow 决定调用时机、调用预算和业务重试；LLM 负责一次
 
 ## 2. ProviderConfig 与 Secret
 
-ProviderConfig 是服务端受控配置，不是调用方请求参数。首批固定 provider_id、protocol=openai_responses、base_url、default_model、allowed_models、api_key_secret_ref、request_timeout_ms、max_request_bytes、max_response_bytes、stream_enabled 与 Capability 有效期策略。
+ProviderConfig 是服务端受控配置，不是调用方请求参数。首批固定 provider_id、protocol=openai_responses、base_url、default_model、allowed_models、api_key_secret_ref、request_timeout_ms、max_request_bytes、max_response_bytes、stream_enabled、capability_ttl_ms。
 
-base_url 必须是服务端配置的 HTTPS Gateway 根地址并规范化为 /v1 结尾；请求方不得覆盖 URL、Provider、Header 或 Secret。Adapter 固定 POST {base_url}/responses，不得重复拼接 /v1。API Key 只通过 SecretRef 在调用时读取，禁止写入 DTO、日志、错误、Fixture 或持久化请求快照。
+base_url 必须是服务端配置的 HTTPS Gateway 根地址并规范化为 /v1 结尾；请求方不得覆盖 URL、Provider、Header 或 Secret。Adapter 固定 POST {base_url}/responses，不得重复拼接 /v1。API Key 只通过 SecretRef 在调用时读取，禁止写入 DTO、日志、错误、Fixture 或持久化请求快照。CapabilityState 必须携带非空 verification_method；valid_until 不得超过 verified_at + capability_ttl_ms，Adapter 构造时和每次派发前均校验证据有效期。
 
-request_timeout_ms、max_request_bytes、max_response_bytes 必须为正数并显式配置；max_response_bytes 首批不超过 8 MiB；配置序列化时间单位固定为 integer milliseconds，不得把 Go duration 纳秒整数直接暴露为 JSON。所有限制不得超过 PLAT-CTR-005 公共上限。HTTP 重定向、代理、DNS/SSRF、TLS 和连接资源策略交给 Platform HTTP Client。
+request_timeout_ms、capability_ttl_ms、max_request_bytes、max_response_bytes 必须为正数并显式配置；max_response_bytes 首批不超过 8 MiB；配置序列化时间单位固定为 integer milliseconds，不得把 Go duration 纳秒整数直接暴露为 JSON。所有限制不得超过 PLAT-CTR-005 公共上限。HTTP 重定向、代理、DNS/SSRF、TLS 和连接资源策略交给 Platform HTTP Client。
 
 ## 3. ModelRequest / ModelResponse
 
@@ -71,3 +71,23 @@ request_id 是调用方单次模型调用身份；correlation_id 是 Run 链路�
 ProviderConfig/SecretRef/URL/超时和字节上限；DTO required/nullable 和 ID；JSON request/response/Usage；Draft 2020-12 和 strict 子集；SSE terminal/EOF/sequence/callback/backpressure；错误映射；能力状态有效期；无透明重试；Secret 脱敏。
 
 JSON/SSE Fixture 全通过只证明 Adapter 协议解析达到模块级要求，不代表本地 llama.cpp/Qwen 的真实能力 supported。真实 Gateway E2E、响应头 ID 映射和模型能力测试单独记录 L3。
+
+
+## 10. Platform 受控 SSE 流式接入（A2）
+
+Platform 的 PLAT-CTR-005 流式传输 A1 已在 `feat/platform-foundation` 验收通过，API 为 `BoundDoer.OpenStream(ctx, request)`。LLM 负责 Responses 请求映射、SSE 事件解析、终态一致性、callback 和 ModelResponse 归一化；Platform 负责安全连接、流 Body 生命周期、并发额度、取消、空闲超时、Body 上限和 Fault。
+
+- 非流式 `Generate` 继续使用 `BoundDoer.Do`；流式 `Stream` 使用 `BoundDoer.OpenStream`，两者不能互相替代。
+- LLM 定义窄 `HTTPStreamDoer` / `HTTPStreamResponse` 契约；Server/组合根负责包装 Platform 的 `*httpclient.StreamResponse`，不把 Platform 实现类型扩散到 LLM DTO，也不允许 LLM 接收任意 DestinationPolicy。
+- 流式请求必须发送 `stream: true` 和 `Accept: text/event-stream`；认证仍由 LLM 从注入的 Secret 设置 Gateway caller Bearer Key。
+- `ParseResponsesSSEReader` 增量消费受控 Body，同步调用 callback 形成背压；Reader 错误保留为传输错误交由 Adapter 映射，callback 错误必须原样透传。
+- Body 由 LLM Adapter 关闭；EOF、协议失败、callback 中断、Context 取消和读取失败均须确保关闭，Platform Body Close 负责取消底层流并释放并发额度。
+- `stream_enabled=true` 及当前 Provider/Model/Gateway 版本的 `responses_stream=supported` 证据仍是派发前门禁；本地 fake 测试不构成真实 Gateway 能力证据。
+- 当前 LLM 代码已增加 Stream Adapter、stream 请求映射和 Reader Parser；尚待包级 gofmt/go test/race/vet、Server 组合根包装接入及本地 llama.cpp/Qwen 真实 E2E。Platform A1 通过不代表 LLM A2 已验收。
+
+
+### Provider 级流式响应字节上限
+
+- `ParseResponsesSSEReader` 的 Fixture 默认入口使用协议上限 `MaxPayloadBytes`；真实 Stream 必须调用内部限额入口并传入 `ProviderConfig.MaxResponseBytes`。
+- 不得仅依赖全局 8 MiB 上限，因为 Provider 可以配置更严格的响应预算。达到配置预算时返回 `llm.sse.total_too_large`，并由 Adapter 关闭 Body。
+- 本地回归测试覆盖配置上限触发和 Body 释放；真实 Gateway 超限行为仍需 E2E。
