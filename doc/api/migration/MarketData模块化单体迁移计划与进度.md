@@ -1047,3 +1047,12 @@ internal/
 - Data 侧 HTTP 出口注入和严格依赖门禁已完成代码准备；Root 实际创建 Platform BoundDoer、配置 DestinationPolicy 并注入仍未完成。
 - TCP 受控拨号仍等待 Platform BoundDialer；BaoStock/Pytdx 的 Data 注入接口和 fail-closed 校验已准备，不在 Data 复制平台安全实现。
 - 本轮未执行构建或测试；新增测试源码和本轮静态审查结果待 integration CI 统一验收。
+
+
+### P1-M4 补充：兼容性 Schema 修复尚未纳入统一迁移锁（2026-11-09）
+
+- 代码复核确认 `Store.Migrate` 的基础表结构已通过 `platform/storage.ApplyMigrations` 执行，但其后仍调用 `ensureNonUniqueHistoryIndex` 和 `ensureColumn`，执行旧修订索引替换及 `market_data_quotes.volume_ratio/turnover_rate` 兼容补列。
+- 这些兼容性 DDL 当前位于 Migration Runner 的 namespace advisory lock、版本历史和 checksum 管理范围之外。多个 Root 实例并发启动时，可能同时通过 information_schema 检查并尝试相同 ALTER/CREATE/DROP；当前幂等检查不能替代跨进程迁移锁。
+- Data 不能自行复制一套 Migration Runner，也不能修改已发布的 migration version 1。当前代码保留既有兼容逻辑，暂不做有风险的 SQL 重排。
+- 这是 Platform Migration Runner 的能力缺口：需要评估提供受统一锁保护的迁移前置/兼容检查步骤，或支持可版本化的条件迁移操作；执行、历史记录和失败恢复仍由同一 Runner 负责。Root Server 必须保证迁移阶段只执行一次/由单一受控生命周期触发，直到该能力补齐。
+- 状态：`blocked_by_platform_migration_runner`。Data 侧待公共能力落地后，将两项兼容修复迁入受控版本化流程，再删除 Runner 外 DDL；不可把当前“单实例幂等”描述为“多实例迁移安全”。
