@@ -10,7 +10,9 @@ import (
 func eventTime(t *testing.T, value string) time.Time {
 	t.Helper()
 	parsed, err := time.Parse(time.RFC3339Nano, value)
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	return parsed
 }
 
@@ -36,11 +38,17 @@ func validEvent(t *testing.T) ResearchEvent {
 
 func TestResearchEventValidate(t *testing.T) {
 	value := validEvent(t)
-	if err := value.Validate(); err != nil { t.Fatalf("Validate() error = %v", err) }
+	if err := value.Validate(); err != nil {
+		t.Fatalf("Validate() error = %v", err)
+	}
 }
 
 func TestResearchEventRejectsInvalidStructureAndTimeEvidence(t *testing.T) {
-	tests := []struct { name string; mutate func(*ResearchEvent); want string }{
+	tests := []struct {
+		name   string
+		mutate func(*ResearchEvent)
+		want   string
+	}{
 		{"zero version", func(e *ResearchEvent) { e.EventVersion = 0 }, "event_version"},
 		{"unknown status", func(e *ResearchEvent) { e.Status = "archived" }, "unknown status"},
 		{"nil evidence refs", func(e *ResearchEvent) { e.EvidenceRefs = nil }, "non-null array"},
@@ -48,7 +56,9 @@ func TestResearchEventRejectsInvalidStructureAndTimeEvidence(t *testing.T) {
 		{"system cutoff before observation", func(e *ResearchEvent) { e.SystemAsOf = e.SystemObservedAt.Add(-time.Second) }, "must not be earlier"},
 		{"source time evidence missing", func(e *ResearchEvent) { e.SourceTimes[0].EvidenceRef = "evidence:missing" }, "must exist in evidence_refs"},
 		{"invalid time type", func(e *ResearchEvent) { e.SourceTimes[0].TimeType = "received_at" }, "time_type"},
-		{"source time non UTC", func(e *ResearchEvent) { e.SourceTimes[0].Value = time.Date(2026, 11, 5, 9, 0, 0, 0, time.FixedZone("CST", 8*60*60)) }, "must be UTC"},
+		{"source time non UTC", func(e *ResearchEvent) {
+			e.SourceTimes[0].Value = time.Date(2026, 11, 5, 9, 0, 0, 0, time.FixedZone("CST", 8*60*60))
+		}, "must be UTC"},
 		{"confidence without method", func(e *ResearchEvent) { confidence := 0.8; e.SourceTimes[0].Confidence = &confidence }, "confidence_method is required"},
 		{"method without confidence", func(e *ResearchEvent) { method := "source_rank"; e.SourceTimes[0].ConfidenceMethod = &method }, "require a non-null confidence"},
 		{"version one supersedes", func(e *ResearchEvent) { version := 0; e.SupersedesEventVersion = &version }, "must not supersede"},
@@ -79,9 +89,13 @@ func TestResearchEventVersionMustAppendAndPreserveLifecycle(t *testing.T) {
 	supersedes := 1
 	next.SupersedesEventVersion = &supersedes
 	next.SystemAsOf = previous.SystemAsOf.Add(time.Minute)
-	if err := next.ValidateNextVersion(previous); err != nil { t.Fatalf("same-status append should pass: %v", err) }
+	if err := next.ValidateNextVersion(previous); err != nil {
+		t.Fatalf("same-status append should pass: %v", err)
+	}
 	next.Status = StatusConsolidating
-	if err := next.ValidateNextVersion(previous); err != nil { t.Fatalf("valid lifecycle transition should pass: %v", err) }
+	if err := next.ValidateNextVersion(previous); err != nil {
+		t.Fatalf("valid lifecycle transition should pass: %v", err)
+	}
 	next.Status = StatusActive
 	if err := next.ValidateNextVersion(previous); err == nil || !strings.Contains(err.Error(), "invalid event status transition") {
 		t.Fatalf("skipped lifecycle state should fail, got %v", err)
@@ -104,7 +118,9 @@ func TestResearchEventLifecycleTerminalAndInvalidationRules(t *testing.T) {
 		{StatusMaterializing, StatusInvalidated}, {StatusFading, StatusInvalidated},
 	}
 	for _, pair := range allowed {
-		if !CanTransition(pair.from, pair.to) { t.Errorf("CanTransition(%s, %s) = false, want true", pair.from, pair.to) }
+		if !CanTransition(pair.from, pair.to) {
+			t.Errorf("CanTransition(%s, %s) = false, want true", pair.from, pair.to)
+		}
 	}
 	for _, pair := range []struct{ from, to EventStatus }{
 		{StatusDetected, StatusActive}, {StatusActive, StatusConsolidating},
@@ -112,7 +128,9 @@ func TestResearchEventLifecycleTerminalAndInvalidationRules(t *testing.T) {
 		{StatusClosed, StatusInvalidated}, {StatusInvalidated, StatusClosed},
 		{StatusActive, StatusActive},
 	} {
-		if CanTransition(pair.from, pair.to) { t.Errorf("CanTransition(%s, %s) = true, want false", pair.from, pair.to) }
+		if CanTransition(pair.from, pair.to) {
+			t.Errorf("CanTransition(%s, %s) = true, want false", pair.from, pair.to)
+		}
 	}
 }
 
@@ -173,7 +191,6 @@ func TestLifecycleTransitionRejectsNonUTCTime(t *testing.T) {
 	}
 }
 
-
 func TestResearchEventValidateNextVersionRejectsIntegerOverflow(t *testing.T) {
 	previous := validEvent(t)
 	previous.EventVersion = int(^uint(0) >> 1)
@@ -183,7 +200,6 @@ func TestResearchEventValidateNextVersionRejectsIntegerOverflow(t *testing.T) {
 		t.Fatalf("ValidateNextVersion() error = %v, want integer limit rejection", err)
 	}
 }
-
 
 func TestEventSourceTimeConfidenceBoundaries(t *testing.T) {
 	method := "source_rank"
@@ -235,7 +251,7 @@ func TestEventSourceTimeConfidenceRequiresMethodAndVersion(t *testing.T) {
 	methodVersion := "source_rank.v1"
 	tests := []struct {
 		name string
-		set func(*EventSourceTime)
+		set  func(*EventSourceTime)
 		want string
 	}{
 		{"missing method", func(value *EventSourceTime) { value.ConfidenceMethod = nil }, "confidence_method is required"},
@@ -264,7 +280,7 @@ func TestResearchEventRejectsZeroOffsetNonUTCLocations(t *testing.T) {
 	fixedZero := time.FixedZone("non-UTC", 0)
 	nonUTC := time.Date(2026, 11, 5, 8, 0, 0, 0, fixedZero)
 	tests := []struct {
-		name string
+		name   string
 		mutate func(*ResearchEvent)
 	}{
 		{"system_observed_at", func(e *ResearchEvent) { e.SystemObservedAt = nonUTC }},

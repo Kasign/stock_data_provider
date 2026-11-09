@@ -23,7 +23,7 @@ func TestDiagnosticsApplicationBuildsChecksFromExactVersions(t *testing.T) {
 			QualityStatus: researchcontext.QualityValid, Required: true, Included: true,
 			AssembledAt: now, SystemAsOf: now,
 		}},
-		QualitySummary: researchcontext.QualitySummary{Status: researchcontext.QualityValid, ReasonCodes: []string{}},
+		QualitySummary:   researchcontext.QualitySummary{Status: researchcontext.QualityValid, ReasonCodes: []string{}},
 		IncludedSections: []string{"profile"}, OmittedSections: []researchcontext.OmittedSection{},
 		BuilderVersion: "test", CreatedAt: now,
 	}}
@@ -46,11 +46,13 @@ func TestDiagnosticsApplicationBuildsChecksFromExactVersions(t *testing.T) {
 		Status: researchclaim.StatusProposed, Limitations: []string{},
 	}}
 	service, err := NewServiceWithClaims(contextRepo, &evidenceRepoFake{}, claimRepo, &authorizerFake{}, nil, nil)
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	service.events = eventRepo
 
 	checks := []struct {
-		name string
+		name  string
 		build func() (platformdiagnostics.Check, error)
 	}{
 		{"context", func() (platformdiagnostics.Check, error) {
@@ -66,10 +68,16 @@ func TestDiagnosticsApplicationBuildsChecksFromExactVersions(t *testing.T) {
 	for _, item := range checks {
 		t.Run(item.name, func(t *testing.T) {
 			check, err := item.build()
-			if err != nil { t.Fatalf("build diagnostic check: %v", err) }
-			if !check.Required { t.Fatal("required flag was not preserved") }
+			if err != nil {
+				t.Fatalf("build diagnostic check: %v", err)
+			}
+			if !check.Required {
+				t.Fatal("required flag was not preserved")
+			}
 			observation, err := check.Run(context.Background())
-			if err != nil { t.Fatalf("run diagnostic check: %v", err) }
+			if err != nil {
+				t.Fatalf("run diagnostic check: %v", err)
+			}
 			if observation.Status != platformdiagnostics.StatusHealthy {
 				t.Fatalf("status = %q, want healthy", observation.Status)
 			}
@@ -79,7 +87,9 @@ func TestDiagnosticsApplicationBuildsChecksFromExactVersions(t *testing.T) {
 
 func TestDiagnosticsApplicationRejectsInvalidReferences(t *testing.T) {
 	service, err := NewServiceWithClaims(&contextRepoFake{}, &evidenceRepoFake{}, &claimRepoFake{}, &authorizerFake{}, nil, nil)
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	if _, err := service.BuildContextCheck(context.Background(), ContextRef{ContextID: " ", ContextVersion: 1}, true); err == nil {
 		t.Fatal("blank Context ID must be rejected")
 	}

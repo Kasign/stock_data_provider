@@ -111,7 +111,6 @@ func requiredFieldNames(typ reflect.Type) map[string]struct{} {
 	return fields
 }
 
-
 func TestContextJSONSchemaValidatesGoldenAndRejectsInvalidPayloads(t *testing.T) {
 	schemaData, err := os.ReadFile("schema/context-v1.schema.json")
 	if err != nil {
