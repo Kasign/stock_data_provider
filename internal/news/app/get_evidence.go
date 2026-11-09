@@ -47,7 +47,8 @@ func (u *GetEvidence) Execute(ctx context.Context, request GetEvidenceRequest) (
 	if err := ctx.Err(); err != nil {
 		return ResearchEvidenceRecord{}, err
 	}
-	if request.Validate(u.now().UTC()) != nil {
+	now := u.now().UTC()
+	if request.Validate(now) != nil {
 		return ResearchEvidenceRecord{}, ErrInvalidEvidenceQuery
 	}
 	pit, err := u.repository.GetEvidenceVersionAt(ctx, request)
@@ -59,7 +60,7 @@ func (u *GetEvidence) Execute(ctx context.Context, request GetEvidenceRequest) (
 	}
 	// 到期或历史期限未知的候选载荷不得通过读取路径继续披露，即使清理任务尚未执行。
 	if pit.Observation.PayloadPurgedAt != nil || pit.Observation.RetentionUntil.IsZero() ||
-		!pit.Observation.RetentionUntil.After(u.now().UTC()) {
+		!pit.Observation.RetentionUntil.After(now) {
 		pit.Observation.Candidate = domain.Candidate{}
 	}
 	resourceRef, err := domain.NewsEvidenceResourceRef(pit.Version.NewsID, pit.Version.VersionNo)
