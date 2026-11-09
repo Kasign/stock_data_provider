@@ -828,3 +828,13 @@ internal/
 - 单测验证 `InProcessHandler` 不要求 Data API Key、不覆盖 Root Request ID、不暴露 Data health 路由；`Handler` 独立部署认证测试仍保留。
 - Root `Test .` 在同一 Run 仍被 Research 的语法/NUL 问题阻断；Data 专项不受影响。
 - 当前只完成 Adapter/Config 边界准备，尚未修改 `cmd/analysis-api`，也未实际将 Data Module 装入 Root Server；M3 总体验收不能标记通过。
+
+
+### 2026-11-09：M4-Redis 共享 go-redis Cache Adapter
+
+- 新增 `cache.NewGoRedis`，只依赖 Cache 所需的最小 Redis 命令接口，将 Root Server 已持有的 `*redis.Client` 适配为 Data 既有 `cache.Cache`。
+- Adapter 不创建、不 Ping、不关闭 Redis Client；Root Server 负责连接池生命周期。Data 仍拥有 Cache key、TTL 和 fallback 语义。
+- 保持现有 Cache 契约：GET 的 `redis.Nil` 映射为 cache miss；其他错误原样返回；SET 保留原始 value 和 TTL，低于 1ms 继续拒绝；Ping 透传依赖错误。
+- 原自定义 RESP Adapter 保留给独立兼容部署，Root 同进程装配不再使用每条命令单独 Dial 的实现。
+- 新增 fake go-redis 命令测试，覆盖命中/未命中、TTL、value 和 Ping 错误语义；不新增 Redis key、缓存字段或公共平台代码。
+- Root 与 Data Redis 配置是否完全一致、是否复用同一 Client，由后续 Root Bootstrap 按 Addr/Username/Password/DB 明确判定；不匹配时由组合根创建并关闭独立 Client。
