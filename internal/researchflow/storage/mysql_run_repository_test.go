@@ -198,6 +198,18 @@ func TestMariaDBCreateRunAtomicConcurrentIdempotency(t *testing.T) {
 	if loadedRun.Run.Ref != winningRunRef || len(loadedRun.Stages) != 1 {
 		t.Fatalf("GetRun returned unexpected run/stages: run=%q stages=%d", loadedRun.Run.Ref, len(loadedRun.Stages))
 	}
+	nextRun := loadedRun.Run
+	nextRun.Version++
+	nextRun.Status = domain.RunQueued
+	updated, err := repository.CompareAndSwapRun(ctx, loadedRun.Run.Version, nextRun)
+	if err != nil || !updated {
+		t.Fatalf("CompareAndSwapRun updated=%v err=%v", updated, err)
+	}
+	updated, err = repository.CompareAndSwapRun(ctx, loadedRun.Run.Version, nextRun)
+	if err != nil || updated {
+		t.Fatalf("stale CompareAndSwapRun updated=%v err=%v, want false without error", updated, err)
+	}
+
 	stageRef := loadedRun.Stages[0].Ref
 	loadedStage, err := repository.GetStage(ctx, stageRef)
 	if err != nil {
@@ -205,6 +217,17 @@ func TestMariaDBCreateRunAtomicConcurrentIdempotency(t *testing.T) {
 	}
 	if loadedStage.Ref != stageRef || loadedStage.RunRef != winningRunRef {
 		t.Fatalf("GetStage returned unexpected stage: %#v", loadedStage)
+	}
+	nextStage := loadedStage
+	nextStage.Version++
+	nextStage.Status = domain.StageReady
+	updated, err = repository.CompareAndSwapStage(ctx, loadedStage.Version, nextStage)
+	if err != nil || !updated {
+		t.Fatalf("CompareAndSwapStage updated=%v err=%v", updated, err)
+	}
+	updated, err = repository.CompareAndSwapStage(ctx, loadedStage.Version, nextStage)
+	if err != nil || updated {
+		t.Fatalf("stale CompareAndSwapStage updated=%v err=%v, want false without error", updated, err)
 	}
 
 	attemptRef := "attempt-" + suffix
