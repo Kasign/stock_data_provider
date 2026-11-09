@@ -57,17 +57,17 @@ type Config struct {
 	DialTimeout            time.Duration
 	TLSHandshakeTimeout    time.Duration
 	ResponseHeaderTimeout  time.Duration
-	MaxResponseHeaderBytes int64
+	MaxResponseHeaderBytes int64 // 共享 Transport 的响应头字节上限。
 	MaxResponseBytes       int64
 	MaxRetries             int
 	MaxConcurrent          int
 	DependencyLimits       map[string]int
 
-	StreamTimeout          time.Duration
-	StreamIdleTimeout      time.Duration
-	MaxStreamBytes         int64
-	MaxConcurrentStreams   int
-	StreamDependencyLimits map[string]int
+	StreamTimeout          time.Duration // 单条流的总生命周期上限，父 Context 可以进一步缩短。
+	StreamIdleTimeout      time.Duration // 单次阻塞 Read 等待上游数据的最长时间。
+	MaxStreamBytes         int64         // 单条流允许交付的解压后累计字节上限。
+	MaxConcurrentStreams   int           // 全局并发流上限，与缓冲请求并发池隔离。
+	StreamDependencyLimits map[string]int // 按 Dependency 设置的并发流子上限。
 
 	Resolver Resolver
 }

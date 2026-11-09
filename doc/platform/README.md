@@ -4,7 +4,7 @@
 - 所属分支：feat/platform-foundation
 - 当前基线：以分支最新 HEAD 为准
 - 当前目标：个人使用、单一所有者、少量服务与低并发
-- 当前阶段：Platform L1 公共原语与专项 CI 已完成；PLAT-009 已通过 MariaDB 11.4 / Redis 7.4 真实服务容器集成及 Race。PLAT-003/005/006/007/008 的服务入口、领域 Adapter、BoundDoer 生产装配仍待消费者/Server 接入；PLAT-008 流式入口代码已提交，等待专项 CI 验证；PLAT-009 的生产拓扑、Secret、共享资源生命周期和故障恢复仍待 A3；PLAT-002 尚未冻结，A2 跨模块联调与 PLAT-014 均未准入。
+- 当前阶段：Platform L1 公共原语与专项 CI 已完成；PLAT-009 已通过 MariaDB 11.4 / Redis 7.4 真实服务容器集成及 Race。PLAT-003/005/006/007/008 的服务入口、领域 Adapter、BoundDoer 生产装配仍待消费者/Server 接入；PLAT-008 流式传输 A1 验收已通过，可供领域模块接入；LLM A2 联调与生产 A3 验收仍待完成；PLAT-009 的生产拓扑、Secret、共享资源生命周期和故障恢复仍待 A3；PLAT-002 尚未冻结，A2 跨模块联调与 PLAT-014 均未准入。
 
 本目录是公共平台的唯一专项文档入口。平台的目标不是建设通用 SaaS 底座，而是为个人使用的股票研究系统提供足够可靠、性能可控、故障可定位的公共能力。
 

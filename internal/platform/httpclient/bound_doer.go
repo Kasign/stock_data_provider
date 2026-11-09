@@ -53,8 +53,7 @@ func (d *BoundDoer) Do(request *http.Request) (*http.Response, error) {
 	return d.client.Do(request.Context(), request, d.policy)
 }
 
-// OpenStream executes a streaming request with the immutable endpoint policy.
-// The caller owns the returned Body and must close it when consumption ends.
+// OpenStream 使用绑定时固定的目标策略发起流式请求。返回的 Body 由调用方拥有，消费结束后必须关闭。
 func (d *BoundDoer) OpenStream(ctx context.Context, request *http.Request) (*StreamResponse, error) {
 	if d == nil || d.client == nil {
 		return nil, fault.New(

@@ -3,7 +3,7 @@
 - 所属模块：Platform
 - 实现分支：`feat/platform-foundation`
 - 代码范围：`internal/platform/httpclient/**`
-- 文档状态：实现验证中；代码已提交，尚未通过 CI
+- 文档状态：A1 验收通过，可供领域模块接入；A2/A3 仍待完成
 - 消费方：LLM 首个消费者；其他领域按实际需求接入
 - 契约归属：现有 PLAT-CTR-005（HTTP Client）扩展，不另行创建第二套 HTTP Client
 
@@ -237,7 +237,7 @@ Read 错误必须通过稳定 Fault Code 区分；Fault 的 SafeMessage 为固�
 5. 完成第 8 节全部测试及 Race/Vet。
 6. 更新 Platform 接入示例；由 LLM 使用 BoundDoer 流式入口做跨模块验收。
 
-在全部 A1 测试通过前，状态只能是开发中，不得声明可供业务模块接入。A2 需要 LLM 真实调用与取消/关闭联调；A3 仍需部署网络和运行时证据。
+A1 的 gofmt、Platform 单测、Race、Vet、Schema/Golden 和 Storage integration 已全部通过，当前可供业务模块接入。A2 需要 LLM 真实调用与取消/关闭联调；A3 仍需部署网络和运行时证据。
 
 ## 10. 明确不做
 

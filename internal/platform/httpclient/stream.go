@@ -20,6 +20,7 @@ var (
 	errStreamBodyTooLarge = errors.New("stream body exceeds configured limit")
 )
 
+// StreamStats 记录单条流的安全统计信息，不包含 URL、凭据或响应正文。
 type StreamStats struct {
 	RequestID         string
 	Dependency        string
@@ -30,6 +31,7 @@ type StreamStats struct {
 	TerminationReason string
 }
 
+// StreamResponse 在响应头到达后立即返回。Body 的所有权交给调用方，调用方必须负责关闭。
 type StreamResponse struct {
 	StatusCode int
 	Header     http.Header
@@ -37,6 +39,7 @@ type StreamResponse struct {
 	state      *streamState
 }
 
+// Stats 返回当前流的统计快照；流终止后 Duration 和终止原因固定。
 func (r *StreamResponse) Stats() StreamStats {
 	if r == nil || r.state == nil {
 		return StreamStats{}
@@ -102,6 +105,7 @@ func (s *streamState) finish(reason string, terminalErr error) error {
 	return s.finishLocked(reason, terminalErr)
 }
 
+// finishLocked 只能在持有 deliveryMu 时调用，用于串行化终止事件与 Read 的最终数据交付。
 func (s *streamState) finishLocked(reason string, terminalErr error) error {
 	s.mu.Lock()
 	if !s.closed {
@@ -293,8 +297,7 @@ func newStreamFault(class fault.Class, code, message string, cause error, depend
 	}
 }
 
-// OpenStream returns response metadata without buffering the response body.
-// The caller owns Body and must close it. StreamTimeout bounds the full stream.
+// OpenStream 受控地发起流式请求，不缓冲完整响应体。调用方拥有 Body，并必须在消费结束后关闭；StreamTimeout 限制整个流生命周期。
 func (c *Client) OpenStream(ctx context.Context, request *http.Request, policy DestinationPolicy) (*StreamResponse, error) {
 	if c == nil || ctx == nil || request == nil || request.URL == nil {
 		return nil, fault.New(fault.ClassValidation, "platform.httpclient.invalid_request", "invalid HTTP request", nil)
