@@ -353,7 +353,7 @@ Server 不重写模块业务 Handler 的校验和领域错误，不在路由层�
 
 ### SRV-005：HTTP Transport
 
-- 状态：进行中（Health/Readiness 已接入统一宿主；旧 Analysis 路由已使用 Platform 显式认证 Router；Fault→HTTP 统一映射、请求限制和模块 Handler 接入仍待完成）
+- 状态：进行中（旧 Analysis 路由已使用 Platform 显式认证 Router；Server 已接入不信任外部 Request ID 的 Platform Middleware、Fault→HTTP 映射工具、请求体上限和并发准入限制；现有旧 Analysis Handler 仍保留自身业务错误 DTO，后续模块 Handler 接入时使用统一 Fault 映射；Web Session、CSRF、可信代理边界仍受项目契约与 Platform 原语交付门禁约束）
 - 前置：SRV-004；认证、Fault、Request ID 等公共契约可用
 - 工作内容：建立 Router、通用中间件、统一错误映射、路由注册和 OpenAPI 汇总机制。
 - 交付物：HTTP Server、路由清单、安全配置和 Transport 测试。
@@ -758,3 +758,35 @@ Server 层完成不是“服务能够启动”这么简单。至少同时满足�
 - 本批次新增测试尚未在当前执行环境运行；由当前分支 Go Workflow 验证编译、竞态及包测试。
 - 当前覆盖组件级取消/Stop 路径，尚未启动独立子进程并发送真实 SIGTERM；真实进程信号和生产容器退出验收仍待 L2/L3。
 - 模块 Worker 尚未全部具备公开生产装配入口，继续按模块交付状态逐个接入，不注册占位组件。
+
+
+### 12.15 SRV-005 HTTP Transport 安全基线第一阶段（2026-11-09）
+
+#### Platform 契约复核结论
+
+- 本次只读核对 `feat/platform-foundation` HEAD `7e8f0f8d3b96fbd79040952127b247f74a3099c5` 及 `feat/design_doc` 契约登记簿：Platform 的 Web Session 设计仍是候选稿，PLAT-CTR-001～007 在项目登记簿仍为 `pending_evidence`，GOV-004 仍为 NO-GO。
+- 本分支不实现密码、Credential Store、Session、Cookie Session、CSRF、登录限流或 Security Audit 的替代版本；保持 Owner Bearer 保护，不向浏览器下发 Owner Token，不开放匿名业务 API。
+- Web Session 后续严格按 Platform 提供公共原语、Server 装配登录/登出与路由策略、Web 实现交互的边界推进；参数/Schema/API 必须以项目契约正式批准版本为准。
+
+#### 本批次实现
+
+- HTTP 入口使用 Platform `observability.MiddlewareWithOptions`，零值选项不信任客户端提供的 `X-Request-ID`；每个请求生成新的 Request ID，并通过响应头回传。
+- 新增 Server-owned Fault HTTP mapper：仅映射经过 `Fault.Validate()` 的 Platform Fault；按项目候选映射 400/401/403/404/409/503/504/500，公开响应仅包含 `class/code/message/retryable`，不输出 Dependency 或 Cause。无效 Fault 元数据归一化为通用 500。
+- 新增全局请求体上限（默认 4 MiB，可配置 1 KiB～64 MiB），Content-Length 超限直接返回 413；未知长度请求通过 `http.MaxBytesReader` 限制实际读取。
+- 新增全局并发准入限制（默认 64，可配置 1～1024）；超限返回 503 和 Retry-After: 1。GET/HEAD `/healthz` 绕过业务并发闸门，避免过载时失去存活探针。
+- HTTP ReadTimeout/WriteTimeout/IdleTimeout/ShutdownTimeout 继续在 `http.Server` 层强制执行；不新增全局 Handler Context 截止时间，避免覆盖模块自己的业务 deadline 或未来流式响应生命周期。长任务仍使用业务配置的 `ANALYSIS_TIMEOUT`，模块路由接入时必须声明自己的 Context deadline。
+
+#### 验收覆盖
+
+- 外部伪造 Request ID 会被重新生成，响应回传新 ID。
+- Content-Length 超限直接拒绝；Chunked/未知长度请求被 MaxBytesReader 限制。
+- 并发达到上限后拒绝新业务请求，且 liveness 仍可访问。
+- Fault 各稳定类别映射到约定 HTTP 状态；Dependency/Cause 不进入响应；非法 Fault 元数据不泄露。
+
+#### 当前边界与剩余工作
+
+- Fault mapper 已提供给 Server Transport 使用；当前旧 Analysis Handler 尚未统一改造成 Platform Fault 返回路径，其原有业务 DTO 保持兼容，避免在没有领域错误契约的情况下强行重写旧 API。
+- 当前路由清单已显式使用 Platform Router：匿名仅 GET/HEAD `/healthz`，Readiness 和全部业务路由要求 Owner Bearer；未注册路由 404。尚无生产模块 Service Scope 路由，因此不添加虚构 Service Principal。
+- Platform `MiddlewareWithOptions` 当前只负责 Request ID 原语；Server 负责入口装配。Server 直连端口仍可访问，因此不启用 TrustIncomingRequestID。
+- Web Session/CSRF/登录限流、安全审计需待项目契约评审和 Platform PLAT-015～019 公共原语交付；本批次不修改 Platform 或项目契约分支。
+- 本批次新增测试尚未在当前执行环境运行；由当前分支 Go Workflow 对精确提交 SHA 验证 gofmt、单测、race 和 vet。

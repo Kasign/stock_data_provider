@@ -151,6 +151,13 @@ func Run(ctx context.Context) error {
 		if err != nil {
 			return fmt.Errorf("注册 HTTP 路由失败: %w", err)
 		}
+		handler, err = newHTTPMiddleware(handler, httpMiddlewareConfig{
+			maxRequestBodyBytes:   httpConfig.MaxRequestBodyBytes,
+			maxConcurrentRequests: httpConfig.MaxConcurrentRequests,
+		})
+		if err != nil {
+			return fmt.Errorf("配置 HTTP 请求限制失败: %w", err)
+		}
 		server := &http.Server{
 			Addr:              httpConfig.Address,
 			Handler:           handler,

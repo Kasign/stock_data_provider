@@ -16,7 +16,8 @@ func TestLoadHTTPDefaults(t *testing.T) {
 	}
 	if cfg.Address != ":8092" || cfg.ReadTimeout != 15*time.Second ||
 		cfg.WriteTimeout != 5*time.Minute+10*time.Second ||
-		cfg.IdleTimeout != 60*time.Second || cfg.ShutdownTimeout != 10*time.Second {
+		cfg.IdleTimeout != 60*time.Second || cfg.ShutdownTimeout != 10*time.Second ||
+		cfg.MaxRequestBodyBytes != 4<<20 || cfg.MaxConcurrentRequests != 64 {
 		t.Fatalf("unexpected HTTP defaults: %+v", cfg)
 	}
 }
@@ -46,6 +47,53 @@ func TestLoadHTTPRejectsInvalidTimeout(t *testing.T) {
 	})
 	if _, err := LoadHTTP(env, 5*time.Minute); err == nil {
 		t.Fatal("LoadHTTP() error = nil, want invalid timeout error")
+	}
+}
+
+func TestLoadHTTPRejectsInvalidAdmissionLimits(t *testing.T) {
+	tests := []struct {
+		name string
+		key  string
+		raw  string
+	}{
+		{name: "request body too small", key: "HTTP_MAX_REQUEST_BYTES", raw: "512"},
+		{name: "request body too large", key: "HTTP_MAX_REQUEST_BYTES", raw: "67108865"},
+		{name: "concurrency zero", key: "HTTP_MAX_CONCURRENT_REQUESTS", raw: "0"},
+		{name: "concurrency too large", key: "HTTP_MAX_CONCURRENT_REQUESTS", raw: "1025"},
+		{name: "non integer", key: "HTTP_MAX_CONCURRENT_REQUESTS", raw: "many"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			env := platformconfig.NewEnvWithLookup(func(key string) (string, bool) {
+				if key == test.key {
+					return test.raw, true
+				}
+				return "", false
+			})
+			if _, err := LoadHTTP(env, 5*time.Minute); err == nil {
+				t.Fatal("LoadHTTP() error = nil, want validation error")
+			}
+		})
+	}
+}
+
+func TestLoadHTTPAcceptsConfiguredAdmissionLimits(t *testing.T) {
+	env := platformconfig.NewEnvWithLookup(func(key string) (string, bool) {
+		switch key {
+		case "HTTP_MAX_REQUEST_BYTES":
+			return "8388608", true
+		case "HTTP_MAX_CONCURRENT_REQUESTS":
+			return "128", true
+		default:
+			return "", false
+		}
+	})
+	cfg, err := LoadHTTP(env, 5*time.Minute)
+	if err != nil {
+		t.Fatalf("LoadHTTP() error = %v", err)
+	}
+	if cfg.MaxRequestBodyBytes != 8<<20 || cfg.MaxConcurrentRequests != 128 {
+		t.Fatalf("unexpected admission limits: %+v", cfg)
 	}
 }
 
