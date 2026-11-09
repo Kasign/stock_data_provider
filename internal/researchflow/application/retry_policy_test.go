@@ -42,7 +42,7 @@ func TestCalculateRetryAtCapsExponentialBackoff(t *testing.T) {
 	policy := template.RetryPolicy{
 		MaxAttempts: 8,
 		RetryableReasonCodes: []string{"temporary"},
-		Backoff: template.BackoffPolicy{Algorithm: "exponential_full_jitter_v1", BaseDelayMS: 1000, MaxDelayMS: 3000},
+		Backoff:              template.BackoffPolicy{Algorithm: "exponential_full_jitter_v1", BaseDelayMS: 1000, MaxDelayMS: 3000},
 	}
 	got, allowed, err := CalculateRetryAt(policy, 4, []string{"temporary"}, now, fixedRetryJitter(0))
 	if err != nil || !allowed || !got.Equal(now) {

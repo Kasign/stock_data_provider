@@ -17,6 +17,7 @@ type workerStoreFake struct {
 	commit      WorkerResultCommit
 	commits     int
 }
+
 func (f *workerStoreFake) ClaimAttempt(context.Context, string, string, string, string, time.Duration, int, int) (domain.Attempt, bool, error) {
 	return f.attempt, f.claimReplay, nil
 }
