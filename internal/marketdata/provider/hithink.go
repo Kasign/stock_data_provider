@@ -113,23 +113,34 @@ func (p *Hithink) SearchStocks(ctx context.Context, queryText string, limit int)
 		FetchedAt: now, QualityStatus: model.QualityValid,
 	}
 	seen := make(map[string]struct{}, len(data.Item))
-	for _, item := range data.Item {
+	for rowIndex, item := range data.Item {
 		if !strings.EqualFold(strings.TrimSpace(item.AssetType), "a-share") {
 			continue
 		}
 		symbol, symbolErr := hithinkDomesticSymbol(item.THSCode)
 		if symbolErr != nil {
 			snapshot.QualityStatus = model.QualityDegraded
-			snapshot.QualityReasons = append(snapshot.QualityReasons, "one_or_more_provider_symbols_were_invalid")
+			snapshot.QualityReasons = appendUniqueHithinkReason(snapshot.QualityReasons, "one_or_more_provider_symbols_were_invalid")
+			addHithinkStockSearchIssue(ctx, rowIndex, "symbol", "thscode", "invalid_symbol", "valid A-share symbol with exchange", item.THSCode, "同花顺证券目录返回了无效 A 股证券代码")
+			continue
+		}
+		code := strings.TrimSpace(item.Ticker)
+		expectedCode := strings.Split(symbol, ".")[0]
+		if code != "" && code != expectedCode {
+			snapshot.QualityStatus = model.QualityDegraded
+			snapshot.QualityReasons = appendUniqueHithinkReason(snapshot.QualityReasons, "one_or_more_provider_stock_codes_mismatched")
+			addHithinkStockSearchIssue(ctx, rowIndex, "code", "ticker", "symbol_code_mismatch", expectedCode, code, "同花顺证券目录 ticker 与 thscode 不匹配")
 			continue
 		}
 		if _, exists := seen[symbol]; exists {
+			snapshot.QualityStatus = model.QualityDegraded
+			snapshot.QualityReasons = appendUniqueHithinkReason(snapshot.QualityReasons, "duplicate_provider_symbols_dropped")
+			addHithinkStockSearchIssue(ctx, rowIndex, "symbol", "thscode", "duplicate_identity", "unique A-share symbol", item.THSCode, "同花顺证券目录返回了重复证券记录")
 			continue
 		}
 		seen[symbol] = struct{}{}
-		code := strings.TrimSpace(item.Ticker)
 		if code == "" {
-			code = strings.Split(symbol, ".")[0]
+			code = expectedCode
 		}
 		exchange := strings.ToUpper(strings.TrimSpace(item.Exchange))
 		if exchange == "" {
@@ -148,6 +159,18 @@ func (p *Hithink) SearchStocks(ctx context.Context, queryText string, limit int)
 		snapshot.QualityReasons = append(snapshot.QualityReasons, "no_a_share_matches")
 	}
 	return snapshot, nil
+}
+
+func addHithinkStockSearchIssue(ctx context.Context, rowIndex int, field, providerField, code, expected, preview, message string) {
+	report := validation.NewReport(validation.DefaultMaxIssues)
+	index := rowIndex
+	report.Add(validation.FieldIssue{
+		Stage: validation.StageValidate, Field: field, ProviderField: providerField,
+		Code: code, Expected: expected, ActualType: "string",
+		ActualPreview: providerFieldIssuePreview(preview), Severity: validation.SeverityWarning,
+		Message: message, RowIndex: &index,
+	})
+	validation.AddContextReport(ctx, report)
 }
 
 type hithinkIndexDefinition struct {
