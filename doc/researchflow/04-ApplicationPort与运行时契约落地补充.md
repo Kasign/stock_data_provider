@@ -277,3 +277,27 @@ Fake Repository/Fake Clock/Fake Provider 只证明模块内逻辑；MariaDB/Redi
 
 
 - 终态收敛还要求 Stage 集合完整且唯一：空 Stage 集合、空 stage_code、重复 stage_code 或非终态 Stage 均 fail-closed；Attempt 集合中的每一项也必须处于明确终态，未知/空状态不能视为已停止。AggregateRun、FinalizeCancellation 共用这些校验，FinalizeDeadline 通过 AggregateRun 复用。
+
+
+## 9. Worker 与 StageExecutor 运行时契约（2026-11-09）
+
+### 9.1 执行边界
+
+- Application Worker 只依赖 `WorkerStore`、`DatabaseClock` 和 `StageExecutor` Port；不得直接 import Storage、SQL Model 或其他业务模块包。
+- Worker 执行顺序：读取不可变 Stage/RetryPolicy Snapshot → ClaimAttempt → 幂等 Claim replay 直接返回 → 重新读取 running Stage Snapshot → 校验 RetryPolicy 未漂移 → StageExecutor → 校验结果 → CommitWorkerResult。
+- WorkerStore Adapter 的 `CommitWorkerResult` 必须映射到 Storage `CommitAttemptResult`，不得绕过 Run/Stage/Attempt 锁顺序、lease expiry、owner、fencing token、Stage.version CAS。
+- Provider 不得自行写 Researchflow DB，不得生成/覆盖 Run/Stage/Attempt 身份，不得决定 retry_at。
+
+### 9.2 Lease、Deadline 与 Attempt Timeout
+
+- Lease heartbeat 在 Provider 执行期间持续续租；续租失败立即取消执行 Context，当前 Worker 不得再提交结果。
+- Run deadline 是绝对截止；Attempt deadline 为 `min(Run.deadline_at, Attempt.started_at + RetryPolicy.attempt_timeout_ms)`。StageExecutionRequest 同时携带两者。
+- Attempt 超时映射为 Attempt=timed_out、reason_code=`attempt_timeout`，再经模板 RetryPolicy 决定 retry_wait 或 Stage=timed_out；Run deadline 不得误记为 Attempt timeout。
+- RetryAt 使用 DatabaseClock UTC；算法为 `exponential_full_jitter_v1`，重试必须命中精确 reason-code allowlist，max_attempts 包含首次执行。
+- Provider 技术错误当前不自动映射为可重试结果；必须先由 Fault/ReasonCode 归一化层产出受控结果，未完成该层前 fail closed。
+
+### 9.3 Snapshot 与依赖约束
+
+- Claim 前读取的 RetryPolicy 用于传入 ClaimAttempt.max_attempts；Claim 后必须重新读取 Snapshot 并比较完整 RetryPolicy，策略缺失、错配或漂移拒绝执行。
+- 参数、输入快照引用在交给 Provider 前复制；system_as_of、template fingerprint、correlation_id 和 deadline 继承 Run，不允许 Provider 改写。
+- 当前尚未落地 Server Composition Root Adapter、Worker 生命周期启动、取消确认 Port、deadline 扫描器与 MariaDB Worker 集成测试；模块内 Fake Port 测试不等于部署验收。
