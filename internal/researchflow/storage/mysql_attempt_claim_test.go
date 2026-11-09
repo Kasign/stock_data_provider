@@ -97,6 +97,18 @@ func TestMariaDBClaimAttemptLeaseAndFencing(t *testing.T) {
 		t.Fatalf("first claim returned unexpected attempt: %#v", first)
 	}
 
+	// A running Attempt and a non-running Stage indicate inconsistent state;
+	// Claim must fail closed instead of creating another Attempt.
+	if _, err := db.ExecContext(ctx, `UPDATE researchflow_stages SET status = ? WHERE stage_ref = ?`, string(domain.StageSucceeded), stageRef); err != nil {
+		t.Fatalf("make stage state inconsistent: %v", err)
+	}
+	if _, _, err := repository.ClaimAttempt(ctx, runRef, stageRef, "invalid-claim-"+suffix, "worker-a", time.Minute, 3); !errors.Is(err, ErrClaimStageUnavailable) {
+		t.Fatalf("claim with inconsistent stage state error=%v, want ErrClaimStageUnavailable", err)
+	}
+	if _, err := db.ExecContext(ctx, `UPDATE researchflow_stages SET status = ? WHERE stage_ref = ?`, string(domain.StageRunning), stageRef); err != nil {
+		t.Fatalf("restore stage state: %v", err)
+	}
+
 	replay, replayed, err := repository.ClaimAttempt(ctx, runRef, stageRef, "ignored-attempt-"+suffix, "worker-a", time.Minute, 3)
 	if err != nil || !replayed || replay.Ref != first.Ref || replay.FencingToken != first.FencingToken {
 		t.Fatalf("same-worker claim replay=%v attempt=%#v err=%v", replayed, replay, err)
