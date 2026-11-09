@@ -519,3 +519,19 @@ func TestRegistryEntrySchemaMatchesGoCanonicalTextValidation(t *testing.T) {
 		})
 	}
 }
+
+func TestRegistryEntrySchemaAcceptsCanonicalTextAndRejectsWhitespace(t *testing.T) {
+	schema := compileQuantSchemaFile(t, "QNT-CTR-001-registry-entry-1.0.0.schema.json")
+	entry := validEntry("sample_metric", "1.0.0")
+	encoded, err := json.Marshal(entry)
+	if err != nil { t.Fatal(err) }
+	if err := validateJSONSchemaInstance(schema, encoded); err != nil {
+		t.Fatalf("canonical Registry entry rejected: %v", err)
+	}
+	entry.Unit = " ratio "
+	encoded, err = json.Marshal(entry)
+	if err != nil { t.Fatal(err) }
+	if err := validateJSONSchemaInstance(schema, encoded); err == nil {
+		t.Fatal("Registry entry with surrounding whitespace unexpectedly passed")
+	}
+}
