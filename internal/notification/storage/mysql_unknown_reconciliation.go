@@ -28,7 +28,7 @@ func (r *MySQLDeliveryRepository) ReconcileUnknown(
 		(next.Status != domain.DeliverySent && next.Status != domain.DeliveryFailed && next.Status != domain.DeliveryRetryWait) ||
 		event.DeliveryID != next.DeliveryID || event.Version != next.Version ||
 		event.From != domain.DeliveryUnknown || event.To != next.Status ||
-		event.EvidenceRef == nil || *event.EvidenceRef == "" ||
+		event.EvidenceRef == nil || !validUnknownEvidenceRef(*event.EvidenceRef) ||
 		!event.ChangedAt.Equal(next.UpdatedAt) {
 		return domain.ErrInvalidDeliveryChange
 	}
@@ -83,4 +83,19 @@ func (r *MySQLDeliveryRepository) ReconcileUnknown(
 		return fmt.Errorf("notification storage: commit unknown reconciliation: %w", err)
 	}
 	return nil
+}
+
+func validUnknownEvidenceRef(value string) bool {
+	if value == "" || len(value) > 256 || value != strings.TrimSpace(value) {
+		return false
+	}
+	for _, character := range value {
+		if !(character >= 'a' && character <= 'z') &&
+			!(character >= 'A' && character <= 'Z') &&
+			!(character >= '0' && character <= '9') &&
+			character != '-' && character != '_' && character != '.' && character != ':' {
+			return false
+		}
+	}
+	return true
 }
