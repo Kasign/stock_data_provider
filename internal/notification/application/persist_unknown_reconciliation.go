@@ -64,18 +64,34 @@ func PersistUnknownReconciliation(
 			retryDecision.DeliveryVersion != delivery.Version ||
 			retryDecision.AttemptID != assessment.AttemptID ||
 			retryDecision.FencingToken != assessment.FencingToken ||
-			!retryDecision.EvaluatedAt.Equal(at) || !retryDecision.Retry ||
-			retryDecision.ReasonCode != "" || retryDecision.NextAttemptAt == nil ||
-			!isRecoveryUTC(*retryDecision.NextAttemptAt) ||
-			!retryDecision.NextAttemptAt.After(at) ||
-			!retryDecision.NextAttemptAt.Before(delivery.DeadlineAt) ||
+			!retryDecision.EvaluatedAt.Equal(at) ||
+			retryDecision.EvidenceRef != assessment.EvidenceRef ||
+			!isRecoveryUTC(retryDecision.EvidenceObservedAt) ||
+			retryDecision.EvidenceObservedAt.After(at) ||
+			retryDecision.EvidenceRef == "" ||
 			assessment.ErrorCode == "" || assessment.ProviderMessageRef != "" {
 			return ErrRetryDecisionConflict
 		}
-		change.To = domain.DeliveryRetryWait
-		change.ReasonCode = "retry_scheduled"
 		change.ErrorCode = assessment.ErrorCode
-		change.NextAttemptAt = cloneRetryTime(retryDecision.NextAttemptAt)
+		if retryDecision.Retry {
+			if retryDecision.ReasonCode != "" || retryDecision.NextAttemptAt == nil ||
+				!isRecoveryUTC(*retryDecision.NextAttemptAt) ||
+				!retryDecision.NextAttemptAt.After(at) ||
+				!retryDecision.NextAttemptAt.Before(delivery.DeadlineAt) {
+				return ErrRetryDecisionConflict
+			}
+			change.To = domain.DeliveryRetryWait
+			change.ReasonCode = "retry_scheduled"
+			change.NextAttemptAt = cloneRetryTime(retryDecision.NextAttemptAt)
+		} else {
+			if retryDecision.NextAttemptAt != nil ||
+				(retryDecision.ReasonCode != RetryReasonBudgetExhausted &&
+					retryDecision.ReasonCode != RetryReasonDeadlineExceeded) {
+				return ErrRetryDecisionConflict
+			}
+			change.To = domain.DeliveryFailed
+			change.ReasonCode = retryDecision.ReasonCode
+		}
 	default:
 		return ErrUnknownReconciliationNotApplicable
 	}
