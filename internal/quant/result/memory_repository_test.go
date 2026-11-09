@@ -29,6 +29,21 @@ func TestMemoryRepositorySaveIsIdempotentAndRejectsTamperedIdentity(t *testing.T
 	}
 }
 
+
+func TestMemoryRepositoryZeroValueIsUsable(t *testing.T) {
+	var repository MemoryRepository
+	record := validRecord(t, `{"metric_code":"momentum_20d","value":0.12}`)
+	if err := repository.Save(context.Background(), record); err != nil {
+		t.Fatalf("zero-value Save() error = %v", err)
+	}
+	if len(repository.records) != 1 {
+		t.Fatalf("stored record count = %d, want 1", len(repository.records))
+	}
+	if err := repository.Save(context.Background(), record); err != nil {
+		t.Fatalf("zero-value idempotent Save() error = %v", err)
+	}
+}
+
 func TestMemoryRepositorySaveSnapshotsCallerMemory(t *testing.T) {
 	repository := NewMemoryRepository()
 	record := validRecord(t, `{"metric_code":"momentum_20d","value":0.12}`)
