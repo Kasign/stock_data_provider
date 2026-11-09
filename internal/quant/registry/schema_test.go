@@ -469,3 +469,29 @@ func TestQuantResultRefSchemaEnforcesConditionalAndReferenceConstraints(t *testi
 		}
 	}
 }
+
+
+func TestRiskDecisionSchemaValidatesGoldenAndFailClosedStructure(t *testing.T) {
+	schema := compileQuantSchemaFile(t, "QNT-CTR-004-risk-decision-1.0.0.schema.json")
+	goldenPath := filepath.Join("..", "..", "..", "doc", "quant", "golden", "result", "risk-decision-1.0.0.golden.json")
+	golden, err := os.ReadFile(goldenPath)
+	if err != nil {
+		t.Fatalf("read RiskDecision Golden: %v", err)
+	}
+	if err := validateJSONSchemaInstance(schema, golden); err != nil {
+		t.Fatalf("RiskDecision Golden violates schema: %v", err)
+	}
+	invalid := []string{
+		`{"decision_id":"d1","status":"allow","rule_set_version":"1.0.0","evaluated_at":"2026-11-09T01:00:00Z","system_as_of":"2026-11-09T00:59:00Z","reasons":[],"input_refs":[]}`,
+		`{"decision_id":"d1","status":"pass","rule_set_version":"1.0.0","evaluated_at":"2026-11-09T01:00:00+08:00","system_as_of":"2026-11-09T00:59:00Z","reasons":[],"input_refs":[]}`,
+		`{"decision_id":"d1","status":"pass","rule_set_version":"1.0.0","evaluated_at":"2026-11-09T01:00:00Z","system_as_of":"2026-11-09T00:59:00Z","reasons":[{"code":"R1","severity":"critical","status":"triggered","safe_message":"blocked","evidence_refs":[]}],"input_refs":[]}`,
+		`{"decision_id":"d1","status":"unknown","rule_set_version":"1.0.0","evaluated_at":"2026-11-09T01:00:00Z","system_as_of":"2026-11-09T00:59:00Z","reasons":[{"code":"R1","severity":"block","status":"unknown","safe_message":" ","evidence_refs":[]}],"input_refs":[]}`,
+		`{"decision_id":"d1","status":"reject","rule_set_version":"1.0.0","evaluated_at":"2026-11-09T01:00:00Z","system_as_of":"2026-11-09T00:59:00Z","reasons":[],"input_refs":[""]}`,
+		`{"decision_id":"d1","status":"pass","rule_set_version":"1.0.0","evaluated_at":"2026-11-09T01:00:00Z","system_as_of":"2026-11-09T00:59:00Z","reasons":[],"input_refs":[],"override":true}`,
+	}
+	for _, instance := range invalid {
+		if err := validateJSONSchemaInstance(schema, []byte(instance)); err == nil {
+			t.Errorf("invalid RiskDecision unexpectedly passed: %s", instance)
+		}
+	}
+}
