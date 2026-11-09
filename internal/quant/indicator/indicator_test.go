@@ -198,6 +198,54 @@ func TestATRRejectsInvalidOHLCBoundaries(t *testing.T) {
 	}
 }
 
+func TestIndicatorsRejectNonFiniteCalculatedResults(t *testing.T) {
+	max := math.MaxFloat64
+	tests := []struct {
+		name string
+		run  func() error
+	}{
+		{"sma overflow", func() error {
+			_, err := SMA([]float64{max, max}, SMAParams{Window: 2})
+			return err
+		}},
+		{"ema overflow", func() error {
+			_, err := EMA([]float64{max, max}, EMAParams{Window: 2, SeedMethod: "sma"})
+			return err
+		}},
+		{"simple return overflow", func() error {
+			_, err := Return([]float64{1, max}, ReturnParams{Window: 1, ReturnBasis: "simple"})
+			return err
+		}},
+		{"volatility overflow", func() error {
+			_, err := Volatility([]float64{1, max, 1}, VolatilityParams{Window: 2, ReturnBasis: "simple", AnnualizationFactor: 1})
+			return err
+		}},
+		{"rsi intermediate overflow", func() error {
+			_, err := RSI([]float64{1, max, 1, max}, RSIParams{Window: 3, SmoothingMethod: "wilder"})
+			return err
+		}},
+		{"macd overflow", func() error {
+			_, err := MACD([]float64{1, max, 1, max}, MACDParams{FastWindow: 1, SlowWindow: 2, SignalWindow: 1})
+			return err
+		}},
+		{"atr overflow", func() error {
+			_, err := ATR([]float64{max, max}, []float64{1, 1}, []float64{1, 1}, 1, ATRParams{Window: 2, SmoothingMethod: "wilder"})
+			return err
+		}},
+		{"bollinger overflow", func() error {
+			_, err := Bollinger([]float64{max, max}, BollingerParams{Window: 2, Multiplier: 2, StdDevMethod: "population"})
+			return err
+		}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := tt.run(); !errors.Is(err, ErrInvalidInput) {
+				t.Fatalf("expected ErrInvalidInput, got %v", err)
+			}
+		})
+	}
+}
+
 func TestInsufficientDataAndInvalidInputs(t *testing.T) {
 	got, err := SMA([]float64{1, 2}, SMAParams{Window: 3})
 	if err != nil {
