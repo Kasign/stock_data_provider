@@ -259,3 +259,37 @@ func TestCanonicalValueRejectsNonFiniteNumbers(t *testing.T) {
 		t.Fatal("Infinity must be rejected by JCS")
 	}
 }
+
+func TestEvidenceValidateRejectsZeroOffsetNonUTCLocations(t *testing.T) {
+	fixedZero := time.FixedZone("non-UTC", 0)
+	nonUTC := time.Date(2026, 11, 5, 8, 0, 0, 0, fixedZero)
+	tests := []struct {
+		name string
+		mutate func(*Evidence)
+	}{
+		{"system_observed_at", func(e *Evidence) { e.SystemObservedAt = nonUTC }},
+		{"system_as_of", func(e *Evidence) { e.SystemAsOf = nonUTC }},
+		{"published_at", func(e *Evidence) { e.PublishedAt = &nonUTC }},
+		{"available_at", func(e *Evidence) { e.AvailableAt = &nonUTC }},
+		{"valid_time_start", func(e *Evidence) {
+			end := nonUTC.Add(time.Hour)
+			e.ValidTimeStart = &nonUTC
+			e.ValidTimeEnd = &end
+		}},
+		{"valid_time_end", func(e *Evidence) {
+			start := nonUTC.Add(-time.Hour)
+			e.ValidTimeStart = &start
+			e.ValidTimeEnd = &nonUTC
+		}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			value := goldenEvidence(t)
+			tt.mutate(&value)
+			setFingerprint(t, &value)
+			if err := value.Validate(); err == nil || !strings.Contains(err.Error(), "must be UTC") {
+				t.Fatalf("Validate() error = %v, want strict UTC Location rejection", err)
+			}
+		})
+	}
+}
