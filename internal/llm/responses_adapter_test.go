@@ -428,6 +428,42 @@ func TestResponsesAdapterRejectsUnsupportedStrictSchemaBeforeDispatch(t *testing
 	}
 }
 
+// closeTrackingReader 用于验证 Adapter 在传输层同时返回响应和错误时释放 Body。
+type closeTrackingReader struct {
+	io.Reader
+	closed bool
+}
+
+func (r *closeTrackingReader) Close() error {
+	r.closed = true
+	return nil
+}
+
+func TestResponsesAdapterStreamClosesBodyReturnedWithError(t *testing.T) {
+	provider, secret, capabilities, clock := streamAdapterTestConfig()
+	request := validResponsesRequest()
+	request.ProviderID = provider.ProviderID
+	body := &closeTrackingReader{Reader: strings.NewReader("")}
+	streamDoer := HTTPStreamDoerFunc(func(context.Context, *http.Request) (*HTTPStreamResponse, error) {
+		return &HTTPStreamResponse{
+			StatusCode: http.StatusOK,
+			Header: http.Header{"Content-Type": []string{"text/event-stream"}},
+			Body: body,
+		}, errors.New("open stream failed")
+	})
+	adapter, err := NewResponsesAdapterWithStream(provider, secret,
+		doerFunc(func(*http.Request) (*http.Response, error) { return nil, errors.New("unused") }),
+		streamDoer, capabilities, clock)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = adapter.Stream(context.Background(), request, nil)
+	if err == nil || !body.closed {
+		t.Fatalf("body returned with transport error must be closed: err=%v closed=%v", err, body.closed)
+	}
+}
+
 func streamAdapterTestConfig() (ProviderConfig, config.Secret, CapabilityState, Clock) {
 	provider, secret, capabilities, clock := adapterTestConfig()
 	provider.StreamEnabled = true
