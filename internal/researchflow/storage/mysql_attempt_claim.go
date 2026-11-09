@@ -146,12 +146,26 @@ func (r *MySQLRunRepository) ClaimAttempt(
 		stageState != domain.StageRunning {
 		return domain.Attempt{}, false, ErrClaimStageUnavailable
 	}
-	if domain.StageStatus(stageStatus) == domain.StageRetryWait {
+	if stageState == domain.StageReady {
+		// ready is only the initial, never-attempted state. Retry promotion is
+		// persisted atomically as retry_wait -> running with a new Attempt.
+		if hasAttempt || stage.AttemptNo != 0 {
+			return domain.Attempt{}, false, ErrClaimStageUnavailable
+		}
+	}
+	if stageState == domain.StageRetryWait {
+		// A retry is only legal on an active Run and must follow a failed or
+		// timed-out Attempt. Missing retry_at/history is corrupt state, not due work.
+		if domain.RunStatus(runStatus) != domain.RunRunning || !retryAt.Valid ||
+			!hasAttempt || (domain.AttemptStatus(currentStatus) != domain.AttemptFailed &&
+				domain.AttemptStatus(currentStatus) != domain.AttemptTimedOut) {
+			return domain.Attempt{}, false, ErrClaimStageUnavailable
+		}
 		retryTime, parseErr := parseNullableResearchflowTime(retryAt)
 		if parseErr != nil {
 			return domain.Attempt{}, false, parseErr
 		}
-		if retryTime != nil && retryTime.After(now) {
+		if retryTime == nil || retryTime.After(now) {
 			return domain.Attempt{}, false, ErrClaimStageUnavailable
 		}
 	}

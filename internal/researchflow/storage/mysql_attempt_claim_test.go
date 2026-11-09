@@ -201,6 +201,39 @@ func TestMariaDBClaimAttemptLeaseAndFencing(t *testing.T) {
 	if loadedStage.Status != domain.StageSucceeded || loadedStage.Version != nextStage.Version {
 		t.Fatalf("committed stage has unexpected state: %#v", loadedStage)
 	}
+
+	// RetryWait must follow a failed/timed-out attempt, carry a due retry_at,
+	// and belong to a still-running Run. Corrupt states must fail closed.
+	retryAt := formatResearchflowTimeValue(time.Now().UTC().Add(-time.Second))
+	if _, err := db.ExecContext(ctx, `UPDATE researchflow_stages
+		SET status = ?, retry_at = ?, version = version + 1 WHERE stage_ref = ?`,
+		string(domain.StageRetryWait), retryAt, stageRef); err != nil {
+		t.Fatalf("prepare retry with successful latest attempt: %v", err)
+	}
+	if _, _, err := repository.ClaimAttempt(ctx, runRef, stageRef, "invalid-retry-history-"+suffix, "worker-c", time.Minute, 3); !errors.Is(err, ErrClaimStageUnavailable) {
+		t.Fatalf("retry after successful attempt error=%v, want ErrClaimStageUnavailable", err)
+	}
+
+	if _, err := db.ExecContext(ctx, `UPDATE researchflow_attempts SET status = ? WHERE attempt_ref = ?`,
+		string(domain.AttemptFailed), second.Ref); err != nil {
+		t.Fatalf("prepare failed retry attempt: %v", err)
+	}
+	if _, err := db.ExecContext(ctx, `UPDATE researchflow_stages SET retry_at = NULL WHERE stage_ref = ?`, stageRef); err != nil {
+		t.Fatalf("clear retry_at: %v", err)
+	}
+	if _, _, err := repository.ClaimAttempt(ctx, runRef, stageRef, "invalid-retry-time-"+suffix, "worker-c", time.Minute, 3); !errors.Is(err, ErrClaimStageUnavailable) {
+		t.Fatalf("retry without retry_at error=%v, want ErrClaimStageUnavailable", err)
+	}
+
+	if _, err := db.ExecContext(ctx, `UPDATE researchflow_stages SET retry_at = ? WHERE stage_ref = ?`, retryAt, stageRef); err != nil {
+		t.Fatalf("restore retry_at: %v", err)
+	}
+	if _, err := db.ExecContext(ctx, `UPDATE researchflow_runs SET status = ? WHERE run_ref = ?`, string(domain.RunQueued), runRef); err != nil {
+		t.Fatalf("move run out of running state: %v", err)
+	}
+	if _, _, err := repository.ClaimAttempt(ctx, runRef, stageRef, "invalid-retry-run-state-"+suffix, "worker-c", time.Minute, 3); !errors.Is(err, ErrClaimStageUnavailable) {
+		t.Fatalf("retry while run is queued error=%v, want ErrClaimStageUnavailable", err)
+	}
 }
 
 func stringRef(value string) *string { return &value }
