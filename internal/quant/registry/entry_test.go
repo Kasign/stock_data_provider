@@ -307,3 +307,69 @@ func TestRegistryValidateParametersUsesExplicitAlgorithmVersion(t *testing.T) {
 		t.Fatalf("expected malformed JSON rejection, got %v", err)
 	}
 }
+
+
+func TestRegistryDeepCopiesEntryOnRegisterAndLookup(t *testing.T) {
+	registry := New()
+	source := validEntry("copy_metric", "1.0.0")
+	if err := registry.Register(source, true); err != nil {
+		t.Fatal(err)
+	}
+
+	// 注册后修改调用方持有的所有嵌套可变字段，不得影响 Registry。
+	source.Precision.Tolerance[0] = '9'
+	source.Range.Minimum[0] = '9'
+	source.Range.Maximum[0] = '9'
+	source.InputRequirements[0].Fields[0] = "mutated_field"
+	source.InputRequirements[0].Quality[0] = "mutated_quality"
+	source.ParametersSchema[0] = 'x'
+	source.QualityPolicy.QualityStates[0] = "mutated_state"
+	source.QualityPolicy.UnavailableConditions[0] = "mutated_condition"
+
+	got, err := registry.LookupVersion("copy_metric", "1.0.0", "1.0.0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertOriginalEntryNestedValues(t, got)
+
+	// Lookup 返回值同样必须与 Registry 内部状态隔离。
+	got.Precision.Tolerance[0] = '8'
+	got.Range.Minimum[0] = '8'
+	got.Range.Maximum[0] = '8'
+	got.InputRequirements[0].Fields[0] = "lookup_field"
+	got.InputRequirements[0].Quality[0] = "lookup_quality"
+	got.ParametersSchema[0] = 'y'
+	got.QualityPolicy.QualityStates[0] = "lookup_state"
+	got.QualityPolicy.UnavailableConditions[0] = "lookup_condition"
+
+	again, err := registry.LookupActive("copy_metric", "1.0.0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertOriginalEntryNestedValues(t, again)
+}
+
+func assertOriginalEntryNestedValues(t *testing.T, entry Entry) {
+	t.Helper()
+	if string(entry.Precision.Tolerance) != "0.000001" {
+		t.Errorf("Precision.Tolerance = %s, want 0.000001", entry.Precision.Tolerance)
+	}
+	if string(entry.Range.Minimum) != "-1" || string(entry.Range.Maximum) != "1" {
+		t.Errorf("Range = (%s, %s), want (-1, 1)", entry.Range.Minimum, entry.Range.Maximum)
+	}
+	if entry.InputRequirements[0].Fields[0] != "close" {
+		t.Errorf("InputRequirements.Fields = %v, want [close]", entry.InputRequirements[0].Fields)
+	}
+	if entry.InputRequirements[0].Quality[0] != "valid" {
+		t.Errorf("InputRequirements.Quality = %v, want [valid]", entry.InputRequirements[0].Quality)
+	}
+	if string(entry.ParametersSchema) != `{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","additionalProperties":false}` {
+		t.Errorf("ParametersSchema was mutated: %s", entry.ParametersSchema)
+	}
+	if entry.QualityPolicy.QualityStates[0] != "valid" {
+		t.Errorf("QualityPolicy.QualityStates = %v, want [valid]", entry.QualityPolicy.QualityStates)
+	}
+	if entry.QualityPolicy.UnavailableConditions[0] != "missing_input" {
+		t.Errorf("QualityPolicy.UnavailableConditions = %v, want [missing_input]", entry.QualityPolicy.UnavailableConditions)
+	}
+}
