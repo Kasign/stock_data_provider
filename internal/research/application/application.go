@@ -14,12 +14,14 @@ import (
 	researcherrors "example.com/stock-analysis-flow/internal/research"
 	researchcontext "example.com/stock-analysis-flow/internal/research/context"
 	researchevidence "example.com/stock-analysis-flow/internal/research/evidence"
+	researchevent "example.com/stock-analysis-flow/internal/research/event"
 	"example.com/stock-analysis-flow/internal/platform/fault"
 )
 
 const (
 	ContextIDPrefix = "ctx_"
 	EvidenceIDPrefix = "ev_"
+	EventIDPrefix = "evt_"
 )
 
 type Clock func() time.Time
@@ -101,6 +103,62 @@ type EvidenceRecord struct {
 	ContentFingerprint string `json:"content_fingerprint"`
 }
 
+
+type EventSourceTime struct {
+	EvidenceRef string `json:"evidence_ref"`
+	TimeType string `json:"time_type"`
+	Value time.Time `json:"value"`
+	AssertedBy string `json:"asserted_by"`
+	Confidence *float64 `json:"confidence"`
+	ConfidenceMethod *string `json:"confidence_method"`
+	ConfidenceMethodVersion *string `json:"confidence_method_version"`
+	Notes *string `json:"notes"`
+}
+type ResearchEvent struct {
+	EventID string `json:"event_id"`
+	EventVersion int `json:"event_version"`
+	EventType string `json:"event_type"`
+	Title string `json:"title"`
+	Status string `json:"status"`
+	SubjectRefs []string `json:"subject_refs"`
+	EvidenceRefs []string `json:"evidence_refs"`
+	OccurredAt *time.Time `json:"occurred_at"`
+	PublishedAt *time.Time `json:"published_at"`
+	AvailableAt *time.Time `json:"available_at"`
+	SystemObservedAt time.Time `json:"system_observed_at"`
+	SystemAsOf time.Time `json:"system_as_of"`
+	ImpactHypothesisRefs []string `json:"impact_hypothesis_refs"`
+	InvalidationConditions []string `json:"invalidation_conditions"`
+	Uncertainty []string `json:"uncertainty"`
+	SupersedesEventVersion *int `json:"supersedes_event_version"`
+	SourceTimes []EventSourceTime `json:"source_times"`
+}
+type CreateEventCommand struct {
+	EventType string
+	Title string
+	Status string
+	SubjectRefs []string
+	EvidenceRefs []string
+	OccurredAt *time.Time
+	PublishedAt *time.Time
+	AvailableAt *time.Time
+	SystemObservedAt time.Time
+	SystemAsOf time.Time
+	ImpactHypothesisRefs []string
+	InvalidationConditions []string
+	Uncertainty []string
+	SourceTimes []EventSourceTime
+}
+type EventRef struct { EventID string; EventVersion int }
+type EventRepository interface {
+	Append(context.Context, researchevent.ResearchEvent) error
+	GetVersion(context.Context, string, int) (researchevent.ResearchEvent, error)
+}
+type EventPort interface {
+	CreateEvent(context.Context, CreateEventCommand) (ResearchEvent, error)
+	GetEvent(context.Context, EventRef) (ResearchEvent, error)
+}
+
 type CreateContextCommand struct {
 	ResearchQuestion string
 	Scope string
@@ -143,10 +201,12 @@ type Service struct {
 	contexts ContextRepository
 	evidence EvidenceRepository
 	authorizer EvidenceAuthorizer
+	events EventRepository
 	clock Clock
 	ids IDGenerator
 }
 var _ Port = (*Service)(nil)
+var _ EventPort = (*Service)(nil)
 
 func NewService(contexts ContextRepository, evidence EvidenceRepository, authorizer EvidenceAuthorizer, clock Clock, ids IDGenerator) (*Service, error) {
 	if contexts == nil || evidence == nil || authorizer == nil {
@@ -260,6 +320,77 @@ func toDomainEvidence(v EvidenceDraft) researchevidence.Evidence {
 func fromDomainEvidence(v researchevidence.Evidence) EvidenceRecord {
 	return EvidenceRecord{EvidenceDraft:EvidenceDraft{EvidenceType:string(v.EvidenceType),SourceOwner:string(v.SourceOwner),SourceRef:v.SourceRef,SourceVersion:v.SourceVersion,SourceLocator:v.SourceLocator,DerivedFromRefs:cloneStrings(v.DerivedFromRefs),ClaimRef:v.ClaimRef,SubjectRefs:cloneStrings(v.SubjectRefs),PublishedAt:v.PublishedAt,AvailableAt:v.AvailableAt,SystemObservedAt:v.SystemObservedAt,ValidTimeStart:v.ValidTimeStart,ValidTimeEnd:v.ValidTimeEnd,SystemAsOf:v.SystemAsOf,Stance:string(v.Stance),Confidence:v.Confidence,ConfidenceMethod:v.ConfidenceMethod,ConfidenceMethodVersion:v.ConfidenceMethodVersion,QualityStatus:string(v.QualityStatus),ContentLevel:string(v.ContentLevel),AuthorizationRef:v.AuthorizationRef,Limitations:cloneStrings(v.Limitations)},EvidenceID:v.EvidenceID,ContentFingerprint:v.ContentFingerprint}
 }
+
+
+func NewServiceWithEvents(contexts ContextRepository, evidence EvidenceRepository, events EventRepository, authorizer EvidenceAuthorizer, clock Clock, ids IDGenerator) (*Service, error) {
+	if events == nil {
+		return nil, fault.New(fault.ClassInternal, "research_event_repository_not_configured", "Research Event Repository is not configured", researcherrors.ErrInvalidRepository)
+	}
+	service, err := NewService(contexts, evidence, authorizer, clock, ids)
+	if err != nil { return nil, err }
+	service.events = events
+	return service, nil
+}
+
+func (s *Service) CreateEvent(ctx context.Context, command CreateEventCommand) (ResearchEvent, error) {
+	if s == nil || s.events == nil {
+		return ResearchEvent{}, applicationFault(fault.ClassInternal, "research_event_repository_not_configured", "Research Event Repository is not configured", researcherrors.ErrInvalidRepository)
+	}
+	if ctx == nil { return ResearchEvent{}, validationFault("request_context_required", "request context is required", nil) }
+	id, err := s.ids.NewID(EventIDPrefix)
+	if err != nil { return ResearchEvent{}, applicationFault(fault.ClassInternal, "research_id_generation_failed", "Research identifier generation failed", err) }
+	value := researchevent.ResearchEvent{
+		EventID:id, EventVersion:1, EventType:command.EventType, Title:command.Title,
+		Status:researchevent.EventStatus(command.Status), SubjectRefs:cloneStrings(command.SubjectRefs),
+		EvidenceRefs:cloneStrings(command.EvidenceRefs), OccurredAt:cloneTime(command.OccurredAt),
+		PublishedAt:cloneTime(command.PublishedAt), AvailableAt:cloneTime(command.AvailableAt),
+		SystemObservedAt:command.SystemObservedAt, SystemAsOf:command.SystemAsOf,
+		ImpactHypothesisRefs:cloneStrings(command.ImpactHypothesisRefs),
+		InvalidationConditions:cloneStrings(command.InvalidationConditions),
+		Uncertainty:cloneStrings(command.Uncertainty), SourceTimes:toDomainEventTimes(command.SourceTimes),
+	}
+	if err := value.Validate(); err != nil { return ResearchEvent{}, validationFault("invalid_research_event", "Research Event is invalid", err) }
+	if err := s.events.Append(ctx, value); err != nil { return ResearchEvent{}, mapRepositoryError(err) }
+	return fromDomainEvent(value), nil
+}
+
+func (s *Service) GetEvent(ctx context.Context, ref EventRef) (ResearchEvent, error) {
+	if s == nil || s.events == nil {
+		return ResearchEvent{}, applicationFault(fault.ClassInternal, "research_event_repository_not_configured", "Research Event Repository is not configured", researcherrors.ErrInvalidRepository)
+	}
+	if ctx == nil || strings.TrimSpace(ref.EventID) == "" || ref.EventVersion < 1 {
+		return ResearchEvent{}, validationFault("invalid_event_ref", "Event reference is invalid", nil)
+	}
+	value, err := s.events.GetVersion(ctx, ref.EventID, ref.EventVersion)
+	if err != nil { return ResearchEvent{}, mapRepositoryError(err) }
+	if err := value.Validate(); err != nil { return ResearchEvent{}, applicationFault(fault.ClassInternal, "stored_event_invalid", "Stored Research Event is invalid", err) }
+	return fromDomainEvent(value), nil
+}
+
+func toDomainEventTimes(values []EventSourceTime) []researchevent.EventSourceTime {
+	out:=make([]researchevent.EventSourceTime,len(values))
+	for i,v:=range values {
+		out[i]=researchevent.EventSourceTime{EvidenceRef:v.EvidenceRef,TimeType:researchevent.EventTimeType(v.TimeType),Value:v.Value,AssertedBy:v.AssertedBy,Confidence:cloneFloat(v.Confidence),ConfidenceMethod:cloneString(v.ConfidenceMethod),ConfidenceMethodVersion:cloneString(v.ConfidenceMethodVersion),Notes:cloneString(v.Notes)}
+	}
+	return out
+}
+func fromDomainEvent(value researchevent.ResearchEvent) ResearchEvent {
+	out:=ResearchEvent{
+		EventID:value.EventID,EventVersion:value.EventVersion,EventType:value.EventType,Title:value.Title,Status:string(value.Status),
+		SubjectRefs:cloneStrings(value.SubjectRefs),EvidenceRefs:cloneStrings(value.EvidenceRefs),
+		OccurredAt:cloneTime(value.OccurredAt),PublishedAt:cloneTime(value.PublishedAt),AvailableAt:cloneTime(value.AvailableAt),
+		SystemObservedAt:value.SystemObservedAt,SystemAsOf:value.SystemAsOf,
+		ImpactHypothesisRefs:cloneStrings(value.ImpactHypothesisRefs),
+		InvalidationConditions:cloneStrings(value.InvalidationConditions),Uncertainty:cloneStrings(value.Uncertainty),
+		SupersedesEventVersion:cloneInt(value.SupersedesEventVersion),SourceTimes:make([]EventSourceTime,len(value.SourceTimes)),
+	}
+	for i,v:=range value.SourceTimes { out.SourceTimes[i]=EventSourceTime{EvidenceRef:v.EvidenceRef,TimeType:string(v.TimeType),Value:v.Value,AssertedBy:v.AssertedBy,Confidence:cloneFloat(v.Confidence),ConfidenceMethod:cloneString(v.ConfidenceMethod),ConfidenceMethodVersion:cloneString(v.ConfidenceMethodVersion),Notes:cloneString(v.Notes)} }
+	return out
+}
+func cloneTime(value *time.Time) *time.Time { if value==nil{return nil}; copy:=*value; return &copy }
+func cloneFloat(value *float64) *float64 { if value==nil{return nil}; copy:=*value; return &copy }
+func cloneString(value *string) *string { if value==nil{return nil}; copy:=*value; return &copy }
+func cloneInt(value *int) *int { if value==nil{return nil}; copy:=*value; return &copy }
 
 func mapRepositoryError(err error) error {
 	switch {

@@ -197,3 +197,10 @@ R1/R2/R3/R5 当前实现 Context、Evidence、Event、Claim/Hypothesis 领域结
 - Context/Evidence 标识由 Research 服务端生成；Evidence 内容指纹由服务端计算，调用方提供的 ID/指纹不会被信任。
 - `AddEvidence` 和 `GetEvidence` 均必须通过 `EvidenceAuthorizer`，由来源 Owner Adapter 执行当前授权/撤销检查；读取在授权成功前不得向调用方返回内容，不能以历史 AuthorizationRef 快照校验替代。
 - `ListEvidence` 尚未实现：当前 Evidence Repository Port 只有 Get/Append，且项目契约对 Cursor 查询尚无冻结 Schema；不提供假分页接口。
+
+
+### Event Application
+
+- `EventPort` 提供 `CreateEvent` 与 `GetEvent`，对外只暴露 Application DTO。
+- 创建时由服务端生成 EventID，版本固定为 1；精确版本读取在返回前重新执行领域校验。
+- 生命周期版本追加和 Outbox 暂不接入，等待 changed_at / INT-CTR-001 与事务边界冻结。

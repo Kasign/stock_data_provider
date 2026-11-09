@@ -8,6 +8,7 @@ import (
 
 	researchcontext "example.com/stock-analysis-flow/internal/research/context"
 	researchevidence "example.com/stock-analysis-flow/internal/research/evidence"
+	researchevent "example.com/stock-analysis-flow/internal/research/event"
 )
 
 type fixedIDs struct { next int }
@@ -76,4 +77,41 @@ func TestAddEvidenceGeneratesIdentityFingerprintAndRequiresCurrentAuthorization(
 func TestNewServiceRequiresSourceOwnerAuthorizationAdapter(t *testing.T) {
 	_,err:=NewService(&contextRepoFake{},&evidenceRepoFake{},nil,nil,nil)
 	if err==nil { t.Fatal("missing EvidenceAuthorizer must be rejected") }
+}
+
+type eventRepoFake struct { value researchevent.ResearchEvent; appended bool; appendErr error }
+func (f *eventRepoFake) Append(_ context.Context, value researchevent.ResearchEvent) error { f.value=value; f.appended=true; return f.appendErr }
+func (f *eventRepoFake) GetVersion(_ context.Context, id string, version int) (researchevent.ResearchEvent,error) {
+	if f.value.EventID!=id || f.value.EventVersion!=version { return researchevent.ResearchEvent{}, errors.New("missing") }
+	return f.value,nil
+}
+
+func TestCreateAndGetEventUseApplicationDTOAndServerIdentity(t *testing.T) {
+	now:=time.Date(2026,11,9,1,0,0,0,time.UTC)
+	repo:=&eventRepoFake{}
+	service,err:=NewServiceWithEvents(&contextRepoFake{},&evidenceRepoFake{},repo,&authorizerFake{},func()time.Time{return now},&fixedIDs{})
+	if err!=nil { t.Fatal(err) }
+	command:=CreateEventCommand{
+		EventType:"earnings_guidance",Title:"公司调整年度业绩指引",Status:string(researchevent.StatusDetected),
+		SubjectRefs:[]string{"security:600000"},EvidenceRefs:[]string{"ev_source_1"},
+		SystemObservedAt:now,SystemAsOf:now,ImpactHypothesisRefs:[]string{},
+		InvalidationConditions:[]string{"后续公告撤回该指引"},Uncertainty:[]string{},
+		SourceTimes:[]EventSourceTime{{EvidenceRef:"ev_source_1",TimeType:string(researchevent.TimeSystemObservedAt),Value:now,AssertedBy:"news:observation"}},
+	}
+	got,err:=service.CreateEvent(context.Background(),command)
+	if err!=nil { t.Fatal(err) }
+	if got.EventID!="evt_test-1" || got.EventVersion!=1 || !repo.appended { t.Fatalf("Event was not created with server identity: %+v",got) }
+	read,err:=service.GetEvent(context.Background(),EventRef{EventID:got.EventID,EventVersion:1})
+	if err!=nil { t.Fatalf("GetEvent failed: %v",err) }
+	if read.EventID!=got.EventID || read.Status!=command.Status { t.Fatalf("unexpected Event DTO: %+v",read) }
+}
+
+func TestCreateEventRejectsInvalidEventBeforePersistence(t *testing.T) {
+	now:=time.Date(2026,11,9,1,0,0,0,time.UTC)
+	repo:=&eventRepoFake{}
+	service,err:=NewServiceWithEvents(&contextRepoFake{},&evidenceRepoFake{},repo,&authorizerFake{},nil,&fixedIDs{})
+	if err!=nil { t.Fatal(err) }
+	_,err=service.CreateEvent(context.Background(),CreateEventCommand{EventType:"",Title:"",Status:"unknown",SystemObservedAt:now,SystemAsOf:now,SubjectRefs:[]string{},EvidenceRefs:[]string{},ImpactHypothesisRefs:[]string{},InvalidationConditions:[]string{},Uncertainty:[]string{},SourceTimes:[]EventSourceTime{}})
+	if err==nil { t.Fatal("invalid Event must be rejected") }
+	if repo.appended { t.Fatal("invalid Event must not be persisted") }
 }
