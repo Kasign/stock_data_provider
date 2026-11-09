@@ -478,7 +478,7 @@ flowchart TD
 | Research | Context/Evidence/Event/Claim Application Port、SQL Repository Adapter、Migration、Context/Event/Claim Diagnostics Port | Owner 当前授权复核与真实来源 Adapter 未完成；Migration 和诊断 Runner 尚未由 Server 统一装配 | 基础 Port 可用，生产链路不完整 |
 | Researchflow | CreateRun Application、Domain、模板/DAG、Context Assembly、Tool Policy、Result Validation | 缺生产模块 Facade、Repository、Migration、Worker；Research/Quant 等生产 Adapter 未就绪 | 不可装配 |
 | Quant | CalculationContext、Indicator/Factor 函数和 Registry 基础能力 | 缺可供 Server 注入的 Application Facade、持久化/结果输出边界及完整模块生命周期 | 不可装配 |
-| LLM | Provider Port、Responses JSON/SSE Adapter、Schema 校验 | 当前公共 HTTP Client 的流式能力与 LLM 所需接口仍需核对/适配；缺模块级生产构造入口和生命周期 | 部分协议能力可用，不可独立注册 |
+| LLM | Provider Port、Responses JSON/SSE Adapter、Schema 校验；当前分支已有 Platform Client.OpenStream 与 BoundDoer.OpenStream | LLM 的 HTTPStreamDoer 使用模块自有响应 DTO，Server 需提供窄包装适配；还需注入 ProviderConfig、Platform Secret、CapabilityState 和时钟 | 协议能力可用，Server 组合装配尚未完成 |
 | Notification | Application Ports、Migration、Subscription/Delivery/Attempt Storage Adapter | Inbox 持久化、Fanout/Dispatcher/Worker 尚未完成 | 不可装配 |
 | Data | 独立 Data 服务及迁移工作 | 模块化单体迁移门禁、公开 Application Port 和配置/生命周期契约未满足 | SRV-010 保持阻塞 |
 
