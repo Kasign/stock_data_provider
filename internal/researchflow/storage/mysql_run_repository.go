@@ -79,6 +79,14 @@ func (r *MySQLRunRepository) CreateRunAtomic(
 	if !record.Run.DeadlineAt.After(dbNow) {
 		return application.CreateRunResult{}, fmt.Errorf("%w: deadline elapsed before persistence", domain.ErrInvalidCommand)
 	}
+	record.Run.CreatedAt = dbNow
+	for index := range record.Stages {
+		record.Stages[index].CreatedAt = dbNow
+		if record.Stages[index].Status == domain.StageSkipped {
+			finished := dbNow
+			record.Stages[index].FinishedAt = &finished
+		}
+	}
 
 	resolvedSnapshot, err := json.Marshal(record.ResolvedTemplate)
 	if err != nil {
@@ -159,14 +167,6 @@ func (r *MySQLRunRepository) CreateRunAtomic(
 	}
 	if err := tx.Commit(); err != nil {
 		return application.CreateRunResult{}, fmt.Errorf("commit Researchflow create-run transaction: %w", err)
-	}
-	record.Run.CreatedAt = dbNow
-	for index := range record.Stages {
-		record.Stages[index].CreatedAt = dbNow
-		if record.Stages[index].Status == domain.StageSkipped {
-			finished := dbNow
-			record.Stages[index].FinishedAt = &finished
-		}
 	}
 	return application.CreateRunResult{
 		Run: record.Run, Stages: append([]domain.Stage(nil), record.Stages...),
@@ -325,8 +325,12 @@ func (r *MySQLRunRepository) validateRecord(record application.CreateRunRecord) 
 		record.Run.CorrelationID == "" || record.Run.Version == 0 || record.Run.Status != domain.RunCreated {
 		return errors.New("Researchflow create-run record is incomplete")
 	}
-	if !json.Valid(record.Parameters) || len(record.Parameters) == 0 || !json.Valid(mustJSON(record.ResolvedTemplate)) {
-		return errors.New("Researchflow create-run snapshots must be valid JSON")
+	parameters := bytes.TrimSpace(record.Parameters)
+	if len(parameters) == 0 || !json.Valid(parameters) || parameters[0] != '{' ||
+		record.ResolvedTemplate.Ref != record.Run.TemplateRef ||
+		record.ResolvedTemplate.Version != record.Run.TemplateVersion ||
+		record.ResolvedTemplate.Fingerprint != record.Run.TemplateFingerprint {
+		return errors.New("Researchflow create-run snapshots must be valid and match the run identity")
 	}
 	if len(record.Stages) == 0 {
 		return errors.New("Researchflow create-run requires at least one stage")
@@ -445,30 +449,21 @@ func nonNilStrings(values []string) []string {
 	return values
 }
 
-func mustJSON(value any) []byte {
-	encoded, _ := json.Marshal(value)
-	return encoded
-}
-
 func isMySQLDuplicateKey(err error) bool {
 	var mysqlErr *mysql.MySQLError
 	return errors.As(err, &mysqlErr) && mysqlErr.Number == 1062
 }
 
 func sortResearchflowStages(stages []domain.Stage, order map[string]int) {
-	for i := 1; i < len(stages); i++ {
-		for j := i; j > 0; j-- {
-			left, leftOK := order[stages[j-1].Code]
-			right, rightOK := order[stages[j].Code]
-			if leftOK && rightOK && left <= right {
-				break
-			}
-			if leftOK && !rightOK {
-				break
-			}
-			if !leftOK && rightOK || leftOK && rightOK && left > right {
-				stages[j-1], stages[j] = stages[j], stages[j-1]
-			}
+	sort.SliceStable(stages, func(i, j int) bool {
+		left, leftOK := order[stages[i].Code]
+		right, rightOK := order[stages[j].Code]
+		if leftOK != rightOK {
+			return leftOK
 		}
-	}
+		if leftOK {
+			return left < right
+		}
+		return stages[i].Code < stages[j].Code
+	})
 }
