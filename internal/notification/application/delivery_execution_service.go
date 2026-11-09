@@ -27,6 +27,7 @@ type DeliveryExecutionService struct {
 	renderer            TemplateRenderer
 	attempts            DeliveryAttemptRepository
 	completion          *DeliveryCompletionService
+	clock               Clock
 }
 
 func NewDeliveryExecutionService(
@@ -35,32 +36,40 @@ func NewDeliveryExecutionService(
 	renderer TemplateRenderer,
 	attempts DeliveryAttemptRepository,
 	completion *DeliveryCompletionService,
+	clock Clock,
 ) (*DeliveryExecutionService, error) {
-	if preflight == nil || preflightCompletion == nil || renderer == nil || attempts == nil || completion == nil {
+	if preflight == nil || preflightCompletion == nil || renderer == nil ||
+		attempts == nil || completion == nil || clock == nil {
 		return nil, ErrDeliveryExecutionUnavailable
 	}
 	return &DeliveryExecutionService{
 		preflight: preflight, preflightCompletion: preflightCompletion,
-		renderer: renderer, attempts: attempts, completion: completion,
+		renderer: renderer, attempts: attempts, completion: completion, clock: clock,
 	}, nil
 }
 
-// Execute 执行一条已领取的 Delivery。attemptID、startedAt、finishedAt 和 evidenceRef
-// 由 Worker 提供，以复用 Server 的 ID、Clock 与诊断证据生成能力。
-// Preflight/渲染/请求构建失败会 fail closed；Attempt 启动失败时绝不调用渠道。
+func (s *DeliveryExecutionService) executionTime() (time.Time, error) {
+	now := s.clock.Now()
+	if !isRecoveryUTC(now) {
+		return time.Time{}, errors.New("notification: execution clock must return UTC time")
+	}
+	return now.Truncate(time.Microsecond), nil
+}
+
+// Execute 执行一条已领取的 Delivery。Attempt ID、RetryPolicy 随机采样值和
+// 诊断 evidence_ref 由 Worker 提供；开始/完成时间由注入的 Clock 在真实边界采样。
+// Attempt.StartWithLease 失败时绝不调用渠道；发送结果不确定时沿用 Unknown 对账流程。
 func (s *DeliveryExecutionService) Execute(
 	ctx context.Context,
 	claim DeliveryClaim,
 	event domain.EventEnvelope,
 	attemptID string,
-	startedAt time.Time,
-	finishedAt time.Time,
 	randomUnit float64,
 	evidenceRef string,
 ) (DeliveryExecutionResult, error) {
 	var output DeliveryExecutionResult
 	if s == nil || s.preflight == nil || s.preflightCompletion == nil ||
-		s.renderer == nil || s.attempts == nil || s.completion == nil {
+		s.renderer == nil || s.attempts == nil || s.completion == nil || s.clock == nil {
 		return output, ErrDeliveryExecutionUnavailable
 	}
 	if ctx == nil {
@@ -76,7 +85,11 @@ func (s *DeliveryExecutionService) Execute(
 		if preflight.Action == "" {
 			return output, preflightErr
 		}
-		if applyErr := s.preflightCompletion.Apply(ctx, claim, preflight, startedAt, evidenceRef); applyErr != nil {
+		at, timeErr := s.executionTime()
+		if timeErr != nil {
+			return output, errors.Join(preflightErr, timeErr)
+		}
+		if applyErr := s.preflightCompletion.Apply(ctx, claim, preflight, at, evidenceRef); applyErr != nil {
 			return output, errors.Join(preflightErr, applyErr)
 		}
 		return output, preflightErr
@@ -88,7 +101,11 @@ func (s *DeliveryExecutionService) Execute(
 	content, err := s.renderer.Render(ctx, event, claim.Delivery.TemplateID, claim.Delivery.TemplateVersion)
 	if err != nil {
 		block := DeliveryPreflightResult{Action: DeliveryPreflightBlock, ReasonCode: "template_render_failed"}
-		if applyErr := s.preflightCompletion.Apply(ctx, claim, block, startedAt, evidenceRef); applyErr != nil {
+		at, timeErr := s.executionTime()
+		if timeErr != nil {
+			return output, errors.Join(err, timeErr)
+		}
+		if applyErr := s.preflightCompletion.Apply(ctx, claim, block, at, evidenceRef); applyErr != nil {
 			return output, errors.Join(err, applyErr)
 		}
 		output.Action, output.ReasonCode = block.Action, block.ReasonCode
@@ -100,13 +117,21 @@ func (s *DeliveryExecutionService) Execute(
 	)
 	if err != nil {
 		block := DeliveryPreflightResult{Action: DeliveryPreflightBlock, ReasonCode: "channel_request_invalid"}
-		if applyErr := s.preflightCompletion.Apply(ctx, claim, block, startedAt, evidenceRef); applyErr != nil {
+		at, timeErr := s.executionTime()
+		if timeErr != nil {
+			return output, errors.Join(err, timeErr)
+		}
+		if applyErr := s.preflightCompletion.Apply(ctx, claim, block, at, evidenceRef); applyErr != nil {
 			return output, errors.Join(err, applyErr)
 		}
 		output.Action, output.ReasonCode = block.Action, block.ReasonCode
 		return output, err
 	}
 
+	startedAt, err := s.executionTime()
+	if err != nil {
+		return output, err
+	}
 	attempt := domain.DeliveryAttempt{
 		AttemptID: attemptID, DeliveryID: claim.Delivery.DeliveryID,
 		AttemptNo: int(claim.Delivery.AttemptCount + 1),
@@ -123,6 +148,10 @@ func (s *DeliveryExecutionService) Execute(
 	result, sendErr := preflight.Channel.Send(ctx, request)
 	output.AttemptID = attemptID
 	output.ChannelResult = &result
+	finishedAt, timeErr := s.executionTime()
+	if timeErr != nil {
+		return output, errors.Join(sendErr, timeErr)
+	}
 	if err := s.completion.Complete(
 		ctx, claim, attempt, preflight.ChannelSnapshot, result,
 		finishedAt, randomUnit, evidenceRef,
