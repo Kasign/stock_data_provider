@@ -1155,35 +1155,40 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 			})
 		}
 	}
-	if selectedChecks["storage"] && s.store == nil {
-		run.CheckResults = append(run.CheckResults, model.ProviderProbeCheckResult{
-			Check: "storage", Provider: "system", Capability: "provider_probe_history",
-			Status: "not_configured", ErrorCode: "storage_not_configured",
-			ErrorMessage: "MariaDB provider-probe history storage is not enabled", CheckedAt: run.FinishedAt,
-		})
+	if selectedChecks["storage"] {
+		if s.store == nil {
+			run.CheckResults = append(run.CheckResults, model.ProviderProbeCheckResult{
+				Check: "storage", Provider: "system", Capability: "provider_probe_history",
+				Status: "not_configured", ErrorCode: "storage_not_configured",
+				ErrorMessage: "MariaDB provider-probe history storage is not enabled", CheckedAt: run.FinishedAt,
+			})
+		} else {
+			// 将存储检查结果与探测报告一次性写入；避免先写入报告、再二次更新造成历史状态不一致。
+			// passed 表示本次历史写入尝试已执行，最终是否成功由 SaveProviderProbeRun 的返回值确认。
+			run.CheckResults = append(run.CheckResults, model.ProviderProbeCheckResult{
+				Check: "storage", Provider: "system", Capability: "provider_probe_history",
+				Status: "passed", CheckedAt: time.Now().UTC(),
+			})
+		}
 	}
 	if s.store != nil {
 		run.Persisted = true
 		if err := s.store.SaveProviderProbeRun(ctx, run); err != nil {
 			run.Persisted = false
 			if selectedChecks["storage"] {
-				run.CheckResults = append(run.CheckResults, model.ProviderProbeCheckResult{
-					Check: "storage", Provider: "system", Capability: "provider_probe_history",
-					Status: "failed", ErrorCode: "storage_write_failed",
-					ErrorMessage: sanitizeProbeError(err), CheckedAt: time.Now().UTC(),
-				})
+				for i := len(run.CheckResults) - 1; i >= 0; i-- {
+					result := &run.CheckResults[i]
+					if result.Check != "storage" || result.Capability != "provider_probe_history" {
+						continue
+					}
+					result.Status = "failed"
+					result.ErrorCode = "storage_write_failed"
+					result.ErrorMessage = sanitizeProbeError(err)
+					result.CheckedAt = time.Now().UTC()
+					break
+				}
 			}
 			return run, fmt.Errorf("persist provider-probe run: %w", err)
-		}
-		if selectedChecks["storage"] {
-			run.CheckResults = append(run.CheckResults, model.ProviderProbeCheckResult{
-				Check: "storage", Provider: "system", Capability: "provider_probe_history",
-				Status: "passed", CheckedAt: time.Now().UTC(),
-			})
-			if err := s.store.SaveProviderProbeRun(ctx, run); err != nil {
-				run.Persisted = false
-				return run, fmt.Errorf("persist provider-probe storage check result: %w", err)
-			}
 		}
 	}
 	return run, nil
