@@ -564,3 +564,38 @@ func TestTencentDailyBarsReportsInvalidTradeDate(t *testing.T) {
 		t.Fatalf("expected trade-date diagnostic with original row index, got %+v", reporter.Snapshot())
 	}
 }
+
+
+func TestTencentQuoteReportsDegradedOptionalFieldEvidence(t *testing.T) {
+	fields := make([]string, 60)
+	for i := range fields {
+		fields[i] = "0"
+	}
+	fields[1], fields[2] = "贵州茅台", ""
+	fields[3], fields[4], fields[5], fields[6] = "100", "99", "99", "1234"
+	fields[30], fields[31], fields[32], fields[33], fields[34] = "", "1", "1.01", "101", "98"
+	fields[35], fields[37], fields[38], fields[44] = "-", "-", "0", "0"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		fmt.Fprintf(w, "v_sh600519=%q;", strings.Join(fields, "~"))
+	}))
+	defer server.Close()
+	reporter := validation.NewReporter(20)
+	ctx := validation.WithReporter(context.Background(), reporter)
+	p := NewTencent(2*time.Second)
+	p.quoteURL = server.URL + "/quote"
+	if _, err := p.FetchQuote(ctx, "600519.SH"); err == nil {
+		t.Fatal("unverifiable Tencent volume unit must reject the quote")
+	}
+	report := reporter.Snapshot()
+	checks := map[string]bool{"symbol": false, "amount": false, "volume": false, "quote_time": false}
+	for _, issue := range report.Issues {
+		if _, ok := checks[issue.Field]; ok && issue.Severity == validation.SeverityWarning {
+			checks[issue.Field] = true
+		}
+	}
+	for field, found := range checks {
+		if !found {
+			t.Errorf("missing degraded field evidence for %s: %+v", field, report.Issues)
+		}
+	}
+}
