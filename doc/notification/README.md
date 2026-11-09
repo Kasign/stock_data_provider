@@ -3,7 +3,7 @@
 - 目标分支：`feat/notification`
 - 代码目录：`internal/notification/**`
 - 任务前缀：NTF
-- 当前 HEAD：`37b375a14163bf312871c76015167c6c65ef2d1f`。当前阶段：NTF-001～005 的领域、Schema、Fake、Renderer、RetryPolicy、Preflight、unknown 对账能力已建立；NTF-006 已有五表 Migration、DeliveryPlan、Delivery、DeliveryAttempt 与 Subscription MySQL Adapter。unknown 对账使用独立 CAS Repository，并验证外部证据、Attempt 历史、不可变预算快照和 StateEvent 一致性。Inbox MySQL Adapter 与 Inbox+Fanout 同事务写入扩展点已建立；Fanout 生产 Writer/WorkItem 执行语义、活跃 Subscription 分页查询及完整 Dispatcher/Worker 仍未完成；其中依赖契约冻结的部分不得自行猜测实现。
+- 当前 HEAD：`8d08cf07a651efcd42a514f3dafd94d659f21f97`。当前阶段：NTF-001～005 的领域、Schema、Fake、Renderer、RetryPolicy、Preflight、unknown 对账能力已建立；NTF-006 已有五表 Migration、DeliveryPlan、Delivery、DeliveryAttempt 与 Subscription MySQL Adapter。unknown 对账使用独立 CAS Repository，并验证外部证据、Attempt 历史、不可变预算快照和 StateEvent 一致性。Inbox MySQL Adapter 与 Inbox+Fanout 同事务写入扩展点已建立；Fanout 生产 Writer/WorkItem 执行语义、活跃 Subscription 分页查询及完整 Dispatcher/Worker 仍未完成；其中依赖契约冻结的部分不得自行猜测实现。
 - 当前代码事实：`internal/notification/storage` 已包含五表 Migration、DeliveryPlan、Delivery、DeliveryAttempt 与 Subscription MySQL Adapter。Subscription Adapter 注入 Server 管理的共享 `*sql.DB`、EventTypeLookup 和 FilterSchemaValidator；Create 仅接受 version=1，GetLatest 读取最新不可变版本，AppendVersion 在事务内锁定最新版本、比较 expectedVersion 并插入新版本，不更新历史行。Delivery Adapter 实现初始 queued 记录创建、读取、事务行锁领取、fencing token 递增、版本 CAS、状态事件同事务追加，以及离开 sending 时释放租约。Attempt Adapter 实现 StartWithLease、CompleteWithLease、ListByDelivery；Start 将 Attempt 插入与 Delivery.attempt_count 投影更新放在同一事务，Start/Complete 均在事务内用 `UTC_TIMESTAMP(6)` 校验数据库权威时钟、Delivery 版本、Worker、fencing token 和租约有效期；同一 Delivery 行锁串行化 Attempt 启动，并依赖 DDL 唯一索引作最终约束。三个 Adapter 均借用调用方提供的共享 `*sql.DB`，不管理连接池生命周期。
 - Delivery MariaDB 测试覆盖 Delivery 与不可变 Plan 快照一致性、唯一性、读取、16 Worker 单赢家、状态 CAS、状态事件追加失败回滚和租约释放。Attempt MariaDB 测试覆盖同一租约 8 路并发仅一个 Attempt 成功、attempt_count 投影、运行中/完成记录读取、重复完成拒绝和同 fencing token 二次追加拒绝。上述测试均为已编写的验收代码；DeliveryPlan、Delivery、Attempt、Subscription、Inbox 五组 MariaDB 集成测试统一通过 `openNotificationIntegrationDB` 调用 Platform Storage.OpenSQL 初始化连接池，Migration 统一使用 Platform ApplyMigrations。当前 HEAD 的 Go workflow 尚未完成，真实 MariaDB DSN 执行证据仍缺，不能据此标记通过。
 - 本轮新增 Inbox MySQL Repository 与 v2 Migration；新增事务内 Fanout Writer 扩展点和可选 MariaDB 集成测试。Fanout 表结构/生产 Writer、claim/ack/retry 语义仍未实现；没有把扩展点误记为完整 Fanout。真实 MariaDB DSN 执行证据仍缺失。历史验收基线 `338d0ced374d5fdc42672812450d897d89cbe1d0` 对应 Run `42593868099`：`Test go-core` 通过（含测试、Race Detector、go vet）；根模块 `Test .` 在 gofmt 阶段被 `internal/quant/**` 阻断，Notification 文件未出现在差异列表，根模块测试未执行。真实 MariaDB DSN 执行证据仍缺。
@@ -98,12 +98,12 @@ Notification 是独立通知业务模块，负责事件接收、Subscription、T
 
 ### 本轮增量：单条 Delivery 执行链路
 
-- 新增 `DeliveryExecutionService`，由 Server/Worker 将已 Claim 的 Delivery、事件快照、Attempt ID、注入的 Clock 及诊断 evidence_ref 传入；服务不扫描队列、不负责 Worker 生命周期。
+- 新增 `DeliveryExecutionService`，由 Server/Worker 将已 Claim 的 Delivery、事件快照、Attempt ID、注入的 Clock 及诊断 evidence_ref 传入；执行前核对 EventID、SourceModule 和 Payload Fingerprint 与 Delivery 快照一致；服务不扫描队列、不负责 Worker 生命周期。
 - 执行顺序固定为 Preflight → TemplateRenderer → BuildChannelSendRequest → Attempt.StartWithLease → ChannelAdapter.Send → DeliveryCompletionService.Complete。
 - Preflight 的 skip/block 结果通过 DeliveryPreflightCompletionService 持久化并释放租约；渲染或请求构建失败时 fail closed。
 - Attempt.StartWithLease 失败立即返回，禁止调用渠道；渠道结果沿用 accepted/rejected/ambiguous/not_sent 分类，ambiguous 由 Completion 收敛到 unknown。
 - 新增执行服务测试，覆盖 accepted 完整执行，以及 Attempt 持久化失败时渠道调用次数为 0。该提交尚待 CI；不得将测试代码存在视为通过。
-- 当前 HEAD：`37b375a14163bf312871c76015167c6c65ef2d1f`。真实 MariaDB DSN、真实渠道与 Worker 端到端 L3 仍未验收。
+- 当前 HEAD：`8d08cf07a651efcd42a514f3dafd94d659f21f97`。真实 MariaDB DSN、真实渠道与 Worker 端到端 L3 仍未验收。
 
 
 ### 当前执行服务 CI 证据（Run `42601621426`）
@@ -112,3 +112,11 @@ Notification 是独立通知业务模块，负责事件接收、Subscription、T
 - 根模块 `Test .`：失败于 `Check gofmt`，差异位于 `internal/quant/**` 与 `internal/marketdata/provider/sina.go`；本轮日志未列出 Notification 文件差异。
 - 根模块依赖下载、单测、Race Detector、go vet 均因 gofmt 门禁失败而跳过；Notification 执行服务测试尚无 CI 运行证据。
 - MariaDB 集成 Job 未执行；真实 `NOTIFICATION_MARIADB_TEST_DSN` 仍缺。
+
+
+### 最新 CI 证据（Run `42602399686`，HEAD `8d08cf07a651efcd42a514f3dafd94d659f21f97`）
+
+- `Test go-core`：通过；不覆盖 Notification。
+- 根模块 `Test .`：失败于 gofmt，差异仅来自 Quant 与 Market Data 目录；Notification 文件未出现在本轮差异列表。
+- 根模块测试、Race Detector、go vet 未执行；本轮执行服务测试仍未取得 CI 执行通过证据。
+- MariaDB 集成 Job 未执行，真实 DSN 验收仍缺。
