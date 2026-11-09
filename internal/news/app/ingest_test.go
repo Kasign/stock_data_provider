@@ -268,6 +268,7 @@ func TestIngestCandidatePolicyTraceIsPartOfIdempotencyPayload(t *testing.T) {
 	}
 	secondTrace := ObservationPolicyTrace{
 		SourcePolicyVersionID: "source-policy-v4",
+		ProviderOutputPolicyRef: "provider-policy-ref-v2",
 		ProviderOutputPolicyVersionID: "provider-policy-v2",
 		PolicyEvaluatedAt:     time.Date(2026, 11, 5, 10, 1, 0, 0, time.UTC),
 	}
