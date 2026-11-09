@@ -1,6 +1,7 @@
 package resultvalidation
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -19,7 +20,7 @@ type RiskReason struct {
 	SafeMessage     string   `json:"safe_message"`
 	RuleRef         string   `json:"rule_ref"`
 	EvidenceRefs    []string `json:"evidence_refs"`
-	ObservedValue   *string  `json:"observed_value,omitempty"`
+	ObservedValue   json.RawMessage `json:"observed_value,omitempty"`
 	ExpectedRange   *string  `json:"expected_range,omitempty"`
 	RemediationCode *string  `json:"remediation_code,omitempty"`
 }
@@ -51,7 +52,7 @@ func ValidateRiskDecision(decision RiskDecision, expectedSystemAsOf time.Time) e
 	for _, reason := range decision.Reasons {
 		if strings.TrimSpace(reason.Code) == "" || strings.TrimSpace(reason.RuleRef) == "" ||
 			strings.TrimSpace(reason.SafeMessage) == "" || reason.EvidenceRefs == nil ||
-			hasDuplicateOrInvalidRefs(reason.EvidenceRefs) {
+			hasDuplicateOrInvalidRefs(reason.EvidenceRefs) || !validObservedValue(reason.ObservedValue) {
 			return fmt.Errorf("%w: incomplete risk reason", ErrInvalidRiskDecision)
 		}
 		if reason.Severity != "block" && reason.Severity != "warn" && reason.Severity != "info" {
@@ -68,4 +69,23 @@ func ValidateRiskDecision(decision RiskDecision, expectedSystemAsOf time.Time) e
 		return ErrRiskPassContradictsBlock
 	}
 	return nil
+}
+
+
+func validObservedValue(value json.RawMessage) bool {
+	if len(value) == 0 {
+		return true
+	}
+	decoder := json.NewDecoder(strings.NewReader(string(value)))
+	decoder.UseNumber()
+	var decoded any
+	if err := decoder.Decode(&decoded); err != nil {
+		return false
+	}
+	switch decoded.(type) {
+	case nil, string, json.Number:
+		return true
+	default:
+		return false
+	}
 }

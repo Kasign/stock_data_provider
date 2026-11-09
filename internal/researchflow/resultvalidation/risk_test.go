@@ -49,3 +49,23 @@ func TestValidateRiskDecisionRequiresSameRunSystemAsOf(t *testing.T) {
 		t.Fatalf("as-of mismatch should fail, got %v", err)
 	}
 }
+
+func TestValidateRiskDecisionAcceptsOnlyScalarObservedValues(t *testing.T) {
+	base := validRiskDecision()
+	for _, raw := range []string{`"10.25"`, "10.25", "null"} {
+		value := base
+		value.Reasons = append([]RiskReason(nil), base.Reasons...)
+		value.Reasons[0].ObservedValue = []byte(raw)
+		if err := ValidateRiskDecision(value, base.SystemAsOf); err != nil {
+			t.Fatalf("scalar observed value %s should be accepted: %v", raw, err)
+		}
+	}
+	for _, raw := range []string{"true", `{"value":10}`, "[10]"} {
+		value := base
+		value.Reasons = append([]RiskReason(nil), base.Reasons...)
+		value.Reasons[0].ObservedValue = []byte(raw)
+		if err := ValidateRiskDecision(value, base.SystemAsOf); !errors.Is(err, ErrInvalidRiskDecision) {
+			t.Fatalf("non-scalar observed value %s should be rejected: %v", raw, err)
+		}
+	}
+}
