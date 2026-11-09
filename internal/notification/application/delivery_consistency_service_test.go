@@ -49,3 +49,28 @@ func TestDeliveryConsistencyService(t *testing.T) {
 		t.Fatalf("missing delivery must be distinct from read failure: found=%v err=%v", found, err)
 	}
 }
+
+func TestDeliveryConsistencyServiceRejectsInvalidQueries(t *testing.T) {
+	service, err := NewDeliveryConsistencyService(consistencySnapshotReaderFake{found: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		name string
+		ctx context.Context
+		id string
+	}{
+		{name: "nil context", ctx: nil, id: "delivery-1"},
+		{name: "empty id", ctx: context.Background(), id: ""},
+		{name: "blank id", ctx: context.Background(), id: "  "},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, found, err := service.Assess(tc.ctx, tc.id); !errors.Is(err, ErrInvalidDeliveryConsistencyQuery) || found {
+				t.Fatalf("found=%v err=%v, want invalid query", found, err)
+			}
+		})
+	}
+	if _, _, err := (*DeliveryConsistencyService)(nil).Assess(context.Background(), "delivery-1"); !errors.Is(err, ErrDeliveryConsistencyReaderUnavailable) {
+		t.Fatalf("nil service error=%v, want reader unavailable", err)
+	}
+}
