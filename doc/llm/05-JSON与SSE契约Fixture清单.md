@@ -333,3 +333,51 @@ sequence_number 严格连续策略、Draft 2020-12 本地 Schema dialect、Reque
 - `response.completed`、`response.incomplete` 或 `response.failed` 终态后若仍出现携带 data 的事件，必须拒绝整个流。
 - 当前覆盖 completed 后追加普通事件，预期错误为 `ErrorInvalidResponse / llm.sse.event_after_terminal`。
 - 测试代码尚未执行，不构成通过证据。
+
+
+## 20. SSE 终态文本一致性
+
+- 输入先发送一个或多个 `response.output_text.delta`（或 `response.output_text.done`），终态 `response.output` 必须还原出完全相同的文本。
+- 若终态文本与已累计文本不一致，返回 `ErrorInvalidResponse / llm.sse.terminal_output_text_mismatch`；不得以终态结果覆盖已交付给消费者的文本。
+- 对应测试：`TestParseResponsesSSERejectsTerminalOutputTextMismatch`。
+- 此规则属于本地 Parser 一致性测试，仍待执行。
+
+
+## 21. 多文本分段 SSE 一致性回归
+
+- 文本事件按 `output_index + content_index` 分段累计，多个分段可交错到达；最终 ModelResponse.output_text 按索引顺序聚合。
+- 每个分段的 delta 与 done 独立比对，不能把一个分段的累计文本与另一个分段的 done 文本比较。
+- done 后再次收到同一分段 delta 必须拒绝；负 output_index/content_index 必须拒绝。
+- 对应测试：`TestParseResponsesSSEAggregatesMultipleTextPartsByIndex`、`TestParseResponsesSSERejectsTextDeltaAfterDone`。
+- 测试代码尚未执行，不构成通过证据。
+
+## 22. Function Call 参数终态一致性
+
+- 每个 call_id 的 arguments delta 独立累计；arguments.done 必须与此前累计值一致。
+- 收到 arguments.done 或对应 output_item.done 后，该 call_id 的参数流进入终态；后续 delta 必须拒绝。
+- 终态 Response 中的 ToolCall.arguments_json 必须与已累计参数一致。
+- 对应测试：`TestParseResponsesSSEFunctionCallAggregationAndConsistency`、`TestParseResponsesSSERejectsFunctionArgumentDeltaAfterDone`。
+- 测试代码尚未执行，不构成通过证据。
+
+
+## 23. Responses Strict Schema 子集回归
+
+- 接受标准：根 object、所有对象属性 required、additionalProperties=false；允许嵌套 anyOf、nullable 类型联合、$defs 与本地 $ref。
+- 拒绝标准：根 anyOf、allOf/其他未知关键字、缺失 required 属性、additionalProperties=true、未知 string format、远程 $ref。
+- 上游 strict Response Schema 与 strict Function Tool 参数 Schema 都必须执行门禁；local_validation_only 仅跳过上游子集检查。
+- 限制覆盖：对象深度、属性总数、字符串元数据总长度、enum 数量与大 enum 字符数。
+- 对应测试：`TestValidateResponsesStrictSchemaSubsetAcceptsSupportedSchema`、`TestValidateResponsesStrictSchemaSubsetRejectsUnsupportedFeatures`、`TestMapResponsesRequestRejectsUnsupportedStrictSchemaButAllowsLocalValidation`、`TestMapResponsesRequestRejectsUnsupportedStrictToolSchema`。
+
+## 24. Usage 明细范围诊断
+
+- 缓存 Token 不能为负，且不能超过 input_tokens。
+- 推理 Token 不能为负，且不能超过 output_tokens。
+- 越界时保留上游原始值并追加 Usage.Diagnostics，不把异常明细当作可信正常值。
+- 对应测试：`TestParseResponsesUsageDetailsAreRangeChecked`。
+
+## 25. 高级 Schema 约束能力证据
+
+- 发送上游的 Response Schema / Function Tool 参数，只要包含 `pattern`、`format`、数字边界、`multipleOf`、`minItems/maxItems`，必须要求 `structured_output_advanced_constraints=supported`。
+- 该能力绑定 Provider、Model、Protocol、Gateway 版本和有效期；unknown/unsupported 一律不派发。
+- strict 与 non-strict 都执行高级约束能力门禁；`local_validation_only` 只对 Response Schema 跳过上游能力要求。
+- 对应测试：`TestValidateCapabilitiesRequiresAdvancedSchemaConstraintEvidence`。

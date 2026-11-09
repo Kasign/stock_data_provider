@@ -24,11 +24,11 @@ func TestMapResponsesRequest(t *testing.T) {
 	request.Temperature, request.TopP, request.ReasoningEffort = &temperature, &topP, "high"
 	request.ResponseSchema = &JSONSchemaSpec{
 		Name: "summary", Strict: true,
-		SchemaJSON: json.RawMessage(`{"type":"object","required":["summary"],"properties":{"summary":{"type":"string"}}}`),
+		SchemaJSON: json.RawMessage(`{"type":"object","required":["summary"],"properties":{"summary":{"type":"string"}},"additionalProperties":false}`),
 	}
 	request.Tools = []ToolDefinition{{
 		Name: "lookup_quote", Description: "Look up a quote", Strict: true,
-		ParametersJSON: json.RawMessage(`{"type":"object","properties":{"symbol":{"type":"string"}}}`),
+		ParametersJSON: json.RawMessage(`{"type":"object","properties":{"symbol":{"type":"string"}},"required":["symbol"],"additionalProperties":false}`),
 	}}
 	request.ToolChoice = "auto"
 
@@ -52,9 +52,9 @@ func TestMapResponsesRequest(t *testing.T) {
 	}
 	var textFormat struct {
 		Format struct {
-			Type string `json:"type"`
-			Name string `json:"name"`
-			Strict bool `json:"strict"`
+			Type   string `json:"type"`
+			Name   string `json:"name"`
+			Strict bool   `json:"strict"`
 		} `json:"format"`
 	}
 	if err := json.Unmarshal(got["text"], &textFormat); err != nil {
@@ -171,8 +171,6 @@ func TestParseResponsesSchemaValidation(t *testing.T) {
 	}
 }
 
-
-
 func TestMapResponsesRequestLocalValidationOnlyDoesNotRequestUpstreamSchemaMode(t *testing.T) {
 	request := validResponsesRequest()
 	request.LocalValidationOnly = true
@@ -236,7 +234,6 @@ func TestParseResponsesUpstreamTotalTokensTakesPrecedence(t *testing.T) {
 	}
 }
 
-
 func TestParseResponsesUsageOverflowIsNotDerived(t *testing.T) {
 	request := validResponsesRequest()
 	body := []byte(`{
@@ -267,11 +264,10 @@ func TestParseResponsesRejectsMalformedEnvelopeAndFunctionCall(t *testing.T) {
 	}
 }
 
-
 func TestParseResponsesStructuredOutputRejectsInvalidJSONAndEmptyOutput(t *testing.T) {
 	request := validResponsesRequest()
 	request.ResponseSchema = &JSONSchemaSpec{
-		Name: "summary",
+		Name:       "summary",
 		SchemaJSON: json.RawMessage(`{"type":"object","required":["summary"],"properties":{"summary":{"type":"string"}}}`),
 	}
 	cases := []struct {
@@ -287,7 +283,7 @@ func TestParseResponsesStructuredOutputRejectsInvalidJSONAndEmptyOutput(t *testi
 				"id": "resp-structured-invalid", "object": "response", "model": "qwen-local",
 				"status": "completed",
 				"output": []any{map[string]any{
-					"type": "message",
+					"type":    "message",
 					"content": []any{map[string]any{"type": "output_text", "text": tt.text}},
 				}},
 			})
@@ -306,7 +302,7 @@ func TestParseResponsesStructuredOutputRejectsInvalidJSONAndEmptyOutput(t *testi
 func TestParseResponsesIncompleteStructuredOutputIsNotValidatedAsCompleted(t *testing.T) {
 	request := validResponsesRequest()
 	request.ResponseSchema = &JSONSchemaSpec{
-		Name: "summary",
+		Name:       "summary",
 		SchemaJSON: json.RawMessage(`{"type":"object","required":["summary"],"properties":{"summary":{"type":"string"}}}`),
 	}
 	body := []byte(`{
@@ -318,5 +314,79 @@ func TestParseResponsesIncompleteStructuredOutputIsNotValidatedAsCompleted(t *te
 	if err != nil || got.Status != ResponseIncomplete || got.StructuredJSON != nil ||
 		got.IncompleteReason != "max_output_tokens" {
 		t.Fatalf("incomplete output must remain incomplete and must not expose structured JSON: response=%+v err=%v", got, err)
+	}
+}
+
+// TestParseResponsesUsageDetailsAreRangeChecked 验证缓存与推理 Token 详情不超过对应总量且不为负数。
+func TestParseResponsesUsageDetailsAreRangeChecked(t *testing.T) {
+	request := validResponsesRequest()
+	cases := []struct {
+		name  string
+		usage string
+		want  string
+	}{
+		{
+			name:  "cached tokens exceed input",
+			usage: `{"input_tokens":10,"output_tokens":5,"input_tokens_details":{"cached_tokens":11},"output_tokens_details":{"reasoning_tokens":1}}`,
+			want:  "input_cached_tokens_exceeds_input",
+		},
+		{
+			name:  "reasoning tokens exceed output",
+			usage: `{"input_tokens":10,"output_tokens":5,"input_tokens_details":{"cached_tokens":2},"output_tokens_details":{"reasoning_tokens":6}}`,
+			want:  "output_reasoning_tokens_exceeds_output",
+		},
+		{
+			name:  "negative details",
+			usage: `{"input_tokens":10,"output_tokens":5,"input_tokens_details":{"cached_tokens":-1},"output_tokens_details":{"reasoning_tokens":-1}}`,
+			want:  "input_cached_tokens_negative",
+		},
+	}
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			body := []byte(`{"id":"resp-usage-detail","object":"response","model":"qwen-local","status":"completed","output":[],"usage":` + tt.usage + `}`)
+			got, err := ParseResponsesResponse(body, request)
+			if err != nil || got.Usage == nil {
+				t.Fatalf("usage details should be preserved with diagnostics: %+v err=%v", got, err)
+			}
+			for _, want := range tt.want {
+				found := false
+				for _, diagnostic := range got.Usage.Diagnostics {
+					if diagnostic == want {
+						found = true
+						break
+					}
+				}
+				if !found {
+					t.Fatalf("expected diagnostic %q, got %v", want, got.Usage.Diagnostics)
+				}
+			}
+		})
+	}
+}
+
+func TestMapResponsesStreamRequestSetsStreamFlag(t *testing.T) {
+	request := validResponsesRequest()
+	now := request.SystemAsOf.Add(time.Second)
+	body, err := MapResponsesStreamRequestAt(request, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var wire map[string]any
+	if err := json.Unmarshal(body, &wire); err != nil {
+		t.Fatal(err)
+	}
+	if wire["stream"] != true {
+		t.Fatalf("stream request must set stream=true: %s", body)
+	}
+	regular, err := MapResponsesRequestAt(request, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var regularWire map[string]any
+	if err := json.Unmarshal(regular, &regularWire); err != nil {
+		t.Fatal(err)
+	}
+	if _, exists := regularWire["stream"]; exists {
+		t.Fatalf("non-stream request must omit stream flag: %s", regular)
 	}
 }

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"sort"
 	"strings"
 	"time"
 )
@@ -17,6 +18,23 @@ const (
 )
 
 var ErrInvalidResponsesSSE = errors.New("invalid Responses SSE stream")
+
+type sseOutputTextKey struct {
+	outputIndex  int
+	contentIndex int
+}
+
+type sseOutputTextState struct {
+	text     string
+	sawDelta bool
+	done     bool
+}
+
+type sseFunctionArgumentsState struct {
+	arguments string
+	sawDelta  bool
+	done      bool
+}
 
 type responsesSSEWireEvent struct {
 	Type           string          `json:"type"`
@@ -38,11 +56,18 @@ type responsesSSEWireEvent struct {
 	Error          *responsesError `json:"error"`
 }
 
-// ParseResponsesSSE parses a complete, bounded SSE byte fixture. It does not
-// own a network connection or perform streaming HTTP reads. A future Stream
-// transport can feed bounded events through the same normalization rules once
-// Platform exposes a controlled streaming transport.
+// ParseResponsesSSE 解析完整、有界的 SSE Fixture；网络流应使用受控 Reader 入口。
 func ParseResponsesSSE(data []byte, request ModelRequest, clock Clock, onEvent func(ModelEvent) error) (ModelResponse, error) {
+	return ParseResponsesSSEReader(bytes.NewReader(data), request, clock, onEvent)
+}
+
+// ParseResponsesSSEReader 使用协议默认上限增量解析 SSE Reader。
+func ParseResponsesSSEReader(reader io.Reader, request ModelRequest, clock Clock, onEvent func(ModelEvent) error) (ModelResponse, error) {
+	return parseResponsesSSEReaderLimit(reader, request, clock, onEvent, MaxPayloadBytes)
+}
+
+// parseResponsesSSEReaderLimit 在 Provider 配置的响应字节上限内增量解析 SSE。
+func parseResponsesSSEReaderLimit(reader io.Reader, request ModelRequest, clock Clock, onEvent func(ModelEvent) error, maxBytes int64) (ModelResponse, error) {
 	if clock == nil {
 		return ModelResponse{}, errors.New("LLM clock is required")
 	}
@@ -53,7 +78,9 @@ func ParseResponsesSSE(data []byte, request ModelRequest, clock Clock, onEvent f
 		ModelRequested: request.Model, Status: ResponseIncomplete,
 		OutputItems: []OutputItem{}, StartedAt: startedAt,
 	}
+	outputTextParts := make(map[sseOutputTextKey]sseOutputTextState)
 	finish := func() {
+		result.OutputText = aggregateSSEOutputText(outputTextParts)
 		result.FinishedAt = clock.Now().UTC()
 		result.DurationMS = result.FinishedAt.Sub(startedAt).Milliseconds()
 	}
@@ -72,14 +99,15 @@ func ParseResponsesSSE(data []byte, request ModelRequest, clock Clock, onEvent f
 	if err := request.ValidateAt(startedAt); err != nil {
 		return fail(adapterError(ErrorInvalidRequest, "llm.sse.invalid_request", false, nil), err)
 	}
-	if len(data) == 0 {
-		return interrupted(streamInterruptedError(), io.EOF)
-	}
-	if len(data) > MaxPayloadBytes {
-		return fail(adapterError(ErrorResourceLimit, "llm.sse.total_too_large", false, nil), ErrInvalidResponsesSSE)
+	if reader == nil {
+		return fail(adapterError(ErrorInvalidRequest, "llm.sse.nil_reader", false, nil), ErrInvalidResponsesSSE)
 	}
 
-	scanner := bufio.NewScanner(bytes.NewReader(data))
+	if maxBytes <= 0 || maxBytes > MaxPayloadBytes {
+		maxBytes = MaxPayloadBytes
+	}
+	limitedReader := &io.LimitedReader{R: reader, N: maxBytes + 1}
+	scanner := bufio.NewScanner(limitedReader)
 	scanner.Buffer(make([]byte, 4096), MaxSSELineBytes)
 	eventName := ""
 	eventNameSet := false
@@ -90,9 +118,12 @@ func ParseResponsesSSE(data []byte, request ModelRequest, clock Clock, onEvent f
 	sequenceMode := 0 // 1 = all events carry sequence_number; 2 = none do.
 	var previousSequence int64
 	hasPreviousSequence := false
+	sawOutputTextEvent := false
 	var parseErr error
+	var readErr error
 	var terminalErr error
-	functionArguments := make(map[string]string)
+	callbackError := false
+	functionArguments := make(map[string]sseFunctionArgumentsState)
 
 	resetEvent := func() {
 		eventName = ""
@@ -146,6 +177,11 @@ func ParseResponsesSSE(data []byte, request ModelRequest, clock Clock, onEvent f
 			}
 			sequenceMode = 2
 		} else {
+			if *wire.SequenceNumber < 0 {
+				parseErr = invalidSSEError("llm.sse.invalid_sequence")
+				resetEvent()
+				return
+			}
 			if sequenceMode == 2 {
 				parseErr = invalidSSEError("llm.sse.mixed_sequence_presence")
 				resetEvent()
@@ -175,40 +211,79 @@ func ParseResponsesSSE(data []byte, request ModelRequest, clock Clock, onEvent f
 			return
 		}
 		if event.ResponseID != "" {
-			result.ResponseID = event.ResponseID
-		}
-		if event.Type == "response.output_text.delta" {
-			result.OutputText += event.Delta
-		}
-		if event.Type == "response.output_text.done" {
-			if result.OutputText != "" && result.OutputText != event.Delta {
-				parseErr = invalidSSEError("llm.sse.output_text_mismatch")
+			if result.ResponseID != "" && result.ResponseID != event.ResponseID {
+				parseErr = invalidSSEError("llm.sse.response_id_mismatch")
 				resetEvent()
 				return
 			}
-			result.OutputText = event.Delta
+			result.ResponseID = event.ResponseID
+		}
+		if event.Type == "response.output_text.delta" || event.Type == "response.output_text.done" {
+			sawOutputTextEvent = true
+			key := sseOutputTextKey{}
+			if event.OutputIndex != nil {
+				key.outputIndex = *event.OutputIndex
+			}
+			if event.ContentIndex != nil {
+				key.contentIndex = *event.ContentIndex
+			}
+			if key.outputIndex < 0 || key.contentIndex < 0 {
+				parseErr = invalidSSEError("llm.sse.invalid_output_text_index")
+				resetEvent()
+				return
+			}
+			state := outputTextParts[key]
+			if event.Type == "response.output_text.delta" {
+				if state.done {
+					parseErr = invalidSSEError("llm.sse.output_text_after_done")
+					resetEvent()
+					return
+				}
+				state.text += event.Delta
+				state.sawDelta = true
+			} else {
+				if state.sawDelta && state.text != event.Delta {
+					parseErr = invalidSSEError("llm.sse.output_text_mismatch")
+					resetEvent()
+					return
+				}
+				state.text = event.Delta
+				state.done = true
+			}
+			outputTextParts[key] = state
 		}
 		if event.Usage != nil {
 			result.Usage = event.Usage
 		}
 		if event.Item != nil {
 			if event.Type == "response.output_item.done" && event.Item.ToolCall != nil {
-				if accumulated, ok := functionArguments[event.Item.ToolCall.CallID]; ok &&
-					accumulated != event.Item.ToolCall.ArgumentsJSON {
+				state := functionArguments[event.Item.ToolCall.CallID]
+				if state.sawDelta && state.arguments != event.Item.ToolCall.ArgumentsJSON {
 					parseErr = invalidSSEError("llm.sse.output_item_arguments_mismatch")
 					resetEvent()
 					return
 				}
+				state.arguments = event.Item.ToolCall.ArgumentsJSON
+				state.done = true
+				functionArguments[event.Item.ToolCall.CallID] = state
 			}
 			upsertSSEOutputItem(&result, *event.Item)
 		}
 		if event.Type == "response.function_call_arguments.delta" && event.CallID != "" {
-			functionArguments[event.CallID] += event.Delta
-			if len(functionArguments[event.CallID]) > MaxSSEEventBytes {
+			state := functionArguments[event.CallID]
+			if state.done {
+				parseErr = invalidSSEError("llm.sse.function_arguments_after_done")
+				resetEvent()
+				return
+			}
+			state.arguments += event.Delta
+			state.sawDelta = true
+			if len(state.arguments) > MaxSSEEventBytes {
 				parseErr = newSSEAdapterError(adapterError(ErrorResourceLimit, "llm.sse.function_arguments_too_large", false, nil))
 				resetEvent()
 				return
 			}
+			functionArguments[event.CallID] = state
 			for i := range result.ToolCalls {
 				if result.ToolCalls[i].CallID == event.CallID {
 					result.ToolCalls[i].ArgumentsJSON += event.Delta
@@ -221,12 +296,20 @@ func ParseResponsesSSE(data []byte, request ModelRequest, clock Clock, onEvent f
 			}
 		}
 		if event.Type == "response.function_call_arguments.done" && event.CallID != "" {
-			if previous, ok := functionArguments[event.CallID]; ok && previous != event.Arguments {
+			state := functionArguments[event.CallID]
+			if state.done {
+				parseErr = invalidSSEError("llm.sse.function_arguments_after_done")
+				resetEvent()
+				return
+			}
+			if state.sawDelta && state.arguments != event.Arguments {
 				parseErr = invalidSSEError("llm.sse.function_arguments_mismatch")
 				resetEvent()
 				return
 			}
-			functionArguments[event.CallID] = event.Arguments
+			state.arguments = event.Arguments
+			state.done = true
+			functionArguments[event.CallID] = state
 			for i := range result.ToolCalls {
 				if result.ToolCalls[i].CallID == event.CallID {
 					result.ToolCalls[i].ArgumentsJSON = event.Arguments
@@ -241,7 +324,7 @@ func ParseResponsesSSE(data []byte, request ModelRequest, clock Clock, onEvent f
 		if isTerminal {
 			if event.Type == "response.completed" || event.Type == "response.incomplete" || event.Type == "response.failed" {
 				for _, call := range terminalToolCalls(wire.Response, request) {
-					if accumulated, ok := functionArguments[call.CallID]; ok && accumulated != call.ArgumentsJSON {
+					if accumulated, ok := functionArguments[call.CallID]; ok && accumulated.arguments != call.ArgumentsJSON {
 						parseErr = invalidSSEError("llm.sse.terminal_arguments_mismatch")
 						resetEvent()
 						return
@@ -254,8 +337,9 @@ func ParseResponsesSSE(data []byte, request ModelRequest, clock Clock, onEvent f
 				result.Status = ResponseFailed
 				result.Error = event.Error
 			} else {
+				result.OutputText = aggregateSSEOutputText(outputTextParts)
 				var terminalParseErr error
-				result, terminalParseErr = terminalResponseFromEvent(wire, request, startedAt, result)
+				result, terminalParseErr = terminalResponseFromEvent(wire, request, startedAt, result, sawOutputTextEvent)
 				if terminalParseErr != nil {
 					parseErr = terminalParseErr
 					resetEvent()
@@ -269,6 +353,7 @@ func ParseResponsesSSE(data []byte, request ModelRequest, clock Clock, onEvent f
 				result.Error = nil
 				terminal = false
 				terminalErr = err
+				callbackError = true
 				parseErr = err
 			}
 		}
@@ -319,10 +404,13 @@ func ParseResponsesSSE(data []byte, request ModelRequest, clock Clock, onEvent f
 		if strings.Contains(strings.ToLower(scanner.Err().Error()), "token too long") {
 			parseErr = newSSEAdapterError(adapterError(ErrorResourceLimit, "llm.sse.line_too_large", false, nil))
 		} else {
-			parseErr = invalidSSEError("llm.sse.read_failed")
+			readErr = scanner.Err()
 		}
 	}
-	if parseErr == nil {
+	if parseErr == nil && limitedReader.N == 0 {
+		parseErr = newSSEAdapterError(adapterError(ErrorResourceLimit, "llm.sse.total_too_large", false, nil))
+	}
+	if parseErr == nil && readErr == nil {
 		dispatch()
 		parseErr = terminalErr
 	}
@@ -332,16 +420,22 @@ func ParseResponsesSSE(data []byte, request ModelRequest, clock Clock, onEvent f
 	case 2:
 		result.SequenceNumberStatus = SequenceNumberUnavailable
 	}
+	if readErr != nil {
+		result.Status = ResponseIncomplete
+		result.Error = nil
+		finish()
+		return result, readErr
+	}
 	if parseErr != nil {
+		// 消费者回调错误优先于 AdapterError 分类；部分响应必须保持 incomplete。
+		if callbackError {
+			finish()
+			return result, parseErr
+		}
 		var adapterErr *AdapterError
 		if errors.As(parseErr, &adapterErr) {
 			result.Status = ResponseFailed
 			result.Error = adapterErr.Info
-			finish()
-			return result, parseErr
-		}
-		// Callback errors are returned unchanged with the partial response.
-		if terminalErr == parseErr {
 			finish()
 			return result, parseErr
 		}
@@ -354,10 +448,28 @@ func ParseResponsesSSE(data []byte, request ModelRequest, clock Clock, onEvent f
 	return result, nil
 }
 
+func aggregateSSEOutputText(parts map[sseOutputTextKey]sseOutputTextState) string {
+	keys := make([]sseOutputTextKey, 0, len(parts))
+	for key := range parts {
+		keys = append(keys, key)
+	}
+	sort.Slice(keys, func(i, j int) bool {
+		if keys[i].outputIndex != keys[j].outputIndex {
+			return keys[i].outputIndex < keys[j].outputIndex
+		}
+		return keys[i].contentIndex < keys[j].contentIndex
+	})
+	var output strings.Builder
+	for _, key := range keys {
+		output.WriteString(parts[key].text)
+	}
+	return output.String()
+}
+
 func normalizeResponsesSSEEvent(wire responsesSSEWireEvent, request ModelRequest, receivedAt time.Time) (ModelEvent, bool, error) {
 	event := ModelEvent{
 		Type: safeStableCode(wire.Type), SequenceNumber: wire.SequenceNumber,
-		ResponseID: safeProtocolValue(wire.ResponseID, 256),
+		ResponseID:  safeProtocolValue(wire.ResponseID, 256),
 		OutputIndex: wire.OutputIndex, ContentIndex: wire.ContentIndex,
 		ItemID: safeProtocolValue(wire.ItemID, 256), CallID: safeProtocolValue(wire.CallID, 256),
 		Status: safeProtocolValue(wire.Status, 64), ReceivedAt: receivedAt,
@@ -365,7 +477,7 @@ func normalizeResponsesSSEEvent(wire responsesSSEWireEvent, request ModelRequest
 	switch wire.Type {
 	case "response.created":
 		var response struct {
-			ID string `json:"id"`
+			ID    string `json:"id"`
 			Model string `json:"model"`
 		}
 		if len(wire.Response) == 0 || json.Unmarshal(wire.Response, &response) != nil || response.ID == "" {
@@ -476,8 +588,8 @@ func parseSSEUnknownItemMetadata(raw json.RawMessage) (OutputItem, error) {
 		return OutputItem{}, ErrInvalidResponsesSSE
 	}
 	var wire struct {
-		Type string `json:"type"`
-		ID string `json:"id"`
+		Type   string `json:"type"`
+		ID     string `json:"id"`
 		Status string `json:"status"`
 	}
 	if err := json.Unmarshal(raw, &wire); err != nil || safeStableCode(wire.Type) == "" {
@@ -502,7 +614,9 @@ func parseSSEUnknownContentMetadata(raw json.RawMessage) (ContentPart, error) {
 	if len(raw) == 0 || len(raw) > MaxSSEEventBytes || !json.Valid(raw) {
 		return ContentPart{}, ErrInvalidResponsesSSE
 	}
-	var wire struct { Type string `json:"type"` }
+	var wire struct {
+		Type string `json:"type"`
+	}
 	if err := json.Unmarshal(raw, &wire); err != nil || safeStableCode(wire.Type) == "" {
 		return ContentPart{}, ErrInvalidResponsesSSE
 	}
@@ -521,14 +635,14 @@ func parseResponsesStreamOutputItem(raw json.RawMessage) (OutputItem, error) {
 		return OutputItem{}, ErrInvalidResponsesSSE
 	}
 	var wire struct {
-		Type string `json:"type"`
-		ID string `json:"id"`
-		Status string `json:"status"`
-		Content []json.RawMessage `json:"content"`
-		CallID string `json:"call_id"`
-		Name string `json:"name"`
-		Arguments string `json:"arguments"`
-		Refusal string `json:"refusal"`
+		Type      string            `json:"type"`
+		ID        string            `json:"id"`
+		Status    string            `json:"status"`
+		Content   []json.RawMessage `json:"content"`
+		CallID    string            `json:"call_id"`
+		Name      string            `json:"name"`
+		Arguments string            `json:"arguments"`
+		Refusal   string            `json:"refusal"`
 	}
 	if err := json.Unmarshal(raw, &wire); err != nil || safeStableCode(wire.Type) == "" {
 		return OutputItem{}, ErrInvalidResponsesSSE
@@ -588,7 +702,7 @@ func upsertSSEOutputItem(response *ModelResponse, item OutputItem) {
 	}
 }
 
-func terminalResponseFromEvent(wire responsesSSEWireEvent, request ModelRequest, startedAt time.Time, partial ModelResponse) (ModelResponse, error) {
+func terminalResponseFromEvent(wire responsesSSEWireEvent, request ModelRequest, startedAt time.Time, partial ModelResponse, sawOutputTextEvent bool) (ModelResponse, error) {
 	var parsed ModelResponse
 	if len(wire.Response) == 0 {
 		return partial, invalidSSEError("llm.sse.missing_terminal_response")
@@ -605,6 +719,9 @@ func terminalResponseFromEvent(wire responsesSSEWireEvent, request ModelRequest,
 		parsed.Status = ResponseFailed
 		parsed.Error = invalidResponsesError("llm.sse.invalid_terminal_response")
 		return parsed, invalidSSEError("llm.sse.invalid_terminal_response")
+	}
+	if sawOutputTextEvent && parsed.OutputText != partial.OutputText {
+		return partial, invalidSSEError("llm.sse.terminal_output_text_mismatch")
 	}
 	return parsed, nil
 }
@@ -637,4 +754,3 @@ func invalidSSEError(code string) error {
 func newSSEAdapterError(info *ModelErrorInfo) *AdapterError {
 	return &AdapterError{Info: info, cause: ErrInvalidResponsesSSE}
 }
-

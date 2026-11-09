@@ -50,7 +50,7 @@ func TestLLMPublicDTOJSONSchemas(t *testing.T) {
 		VerifiedAt: &verifiedAt, ValidUntil: &validUntil, VerificationMethod: "automated_e2e", EvidenceRef: "test:evidence/1",
 		MaxOutputTokensLimit: 4096,
 		Values: map[Capability]CapabilityStatus{
-			CapabilityResponsesJSON: CapabilitySupported,
+			CapabilityResponsesJSON:   CapabilitySupported,
 			CapabilityResponsesStream: CapabilityUnknown,
 		},
 	}

@@ -42,14 +42,15 @@ func (e *AdapterError) Unwrap() error {
 	return e.cause
 }
 
-// ResponsesAdapter implements non-streaming Responses calls only. Streaming
-// must use a separately approved Platform streaming transport.
+// ResponsesAdapter implements non-streaming and SSE Responses calls through
+// separate, explicitly injected Platform-bound transport interfaces.
 type ResponsesAdapter struct {
 	provider     ProviderConfig
 	apiKey       config.Secret
 	doer         HTTPDoer
 	capabilities CapabilityState
 	clock        Clock
+	streamDoer   HTTPStreamDoer
 }
 
 func NewResponsesAdapter(provider ProviderConfig, apiKey config.Secret, doer HTTPDoer, capabilities CapabilityState, clock Clock) (*ResponsesAdapter, error) {
@@ -73,6 +74,18 @@ func NewResponsesAdapter(provider ProviderConfig, apiKey config.Secret, doer HTT
 	}, nil
 }
 
+func NewResponsesAdapterWithStream(provider ProviderConfig, apiKey config.Secret, doer HTTPDoer, streamDoer HTTPStreamDoer, capabilities CapabilityState, clock Clock) (*ResponsesAdapter, error) {
+	if streamDoer == nil {
+		return nil, errors.New("Platform-bound HTTP stream doer is required")
+	}
+	adapter, err := NewResponsesAdapter(provider, apiKey, doer, capabilities, clock)
+	if err != nil {
+		return nil, err
+	}
+	adapter.streamDoer = streamDoer
+	return adapter, nil
+}
+
 // Generate performs one non-streaming Responses request. It never retries.
 // The supplied doer must be a Platform BoundDoer configured for this provider.
 func (a *ResponsesAdapter) Generate(ctx context.Context, request ModelRequest) (ModelResponse, error) {
@@ -84,6 +97,7 @@ func (a *ResponsesAdapter) Generate(ctx context.Context, request ModelRequest) (
 		OutputItems: []OutputItem{},
 	}
 	fail := func(info *ModelErrorInfo, cause error) (ModelResponse, error) {
+		result.Status = ResponseFailed
 		finished := a.clock.Now().UTC()
 		result.FinishedAt = finished
 		result.DurationMS = finished.Sub(startedAt).Milliseconds()
@@ -108,7 +122,11 @@ func (a *ResponsesAdapter) Generate(ctx context.Context, request ModelRequest) (
 
 	body, err := MapResponsesRequestAt(request, startedAt)
 	if err != nil {
-		return fail(adapterError(ErrorInvalidRequest, "llm.responses.request_mapping_failed", false, nil), err)
+		code := "llm.responses.request_mapping_failed"
+		if errors.Is(err, ErrUnsupportedResponsesSchemaSubset) {
+			code = "llm.responses.unsupported_schema_subset"
+		}
+		return fail(adapterError(ErrorInvalidRequest, code, false, nil), err)
 	}
 	if int64(len(body)) > a.provider.MaxRequestBytes {
 		return fail(adapterError(ErrorResourceLimit, "llm.responses.request_too_large", false, nil), ErrInvalidResponsesRequest)
@@ -131,9 +149,16 @@ func (a *ResponsesAdapter) Generate(ctx context.Context, request ModelRequest) (
 	httpRequest.Header.Set("Content-Type", "application/json")
 	httpRequest.Header.Set("Accept", "application/json")
 	httpRequest.Header.Set("Authorization", "Bearer "+a.apiKey.Value())
+	if err := callCtx.Err(); err != nil {
+		return fail(classifyAdapterTransportError(err, callCtx), err)
+	}
 
 	httpResponse, err := a.doer.Do(httpRequest)
 	if err != nil {
+		// 遵循 HTTP Doer 约定：若错误同时返回了响应体，仍由 Adapter 释放资源。
+		if httpResponse != nil && httpResponse.Body != nil {
+			_ = httpResponse.Body.Close()
+		}
 		return fail(classifyAdapterTransportError(err, callCtx), err)
 	}
 	if httpResponse == nil {

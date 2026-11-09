@@ -49,7 +49,7 @@ func assertResponseGolden(t *testing.T, got ModelResponse, expectedPath string) 
 func TestParseResponsesJSONGoldenFixtures(t *testing.T) {
 	request := validResponsesRequest()
 	cases := []struct {
-		name string
+		name     string
 		expected string
 	}{
 		{name: "response_completed_text.json", expected: "json/response_completed_text.expected.json"},
@@ -72,7 +72,7 @@ func TestParseResponsesSSEGoldenFixtures(t *testing.T) {
 	request := validSSERequest()
 	clock := sseTestClock{now: request.SystemAsOf.Add(time.Second)}
 	cases := []struct {
-		name string
+		name     string
 		expected string
 	}{
 		{name: "stream_completed_text.sse", expected: "sse/stream_completed_text.expected.json"},
