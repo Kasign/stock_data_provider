@@ -418,8 +418,8 @@ func TestRegistryBatchRepositoryLoadIsAtomic(t *testing.T) {
 		t.Fatal(err)
 	}
 	repository := registryTemplateRepositoryMap{
-		{ id: first.TemplateID, version: first.Version }: {definition: first, digest: firstDigest, found: true},
-		{ id: second.TemplateID, version: second.Version }: {definition: second, digest: "corrupt", found: true},
+		{id: first.TemplateID, version: first.Version}: {definition: first, digest: firstDigest, found: true},
+		{id: second.TemplateID, version: second.Version}: {definition: second, digest: "corrupt", found: true},
 	}
 	versions := []VersionRef{
 		{TemplateID: first.TemplateID, Version: first.Version},
@@ -466,7 +466,7 @@ func TestRegistryBatchRepositoryLoadChecksConflictsBeforeMutation(t *testing.T) 
 	conflictDigest, _ := DefinitionDigest(conflict)
 	repository := registryTemplateRepositoryMap{
 		{ id: first.TemplateID, version: first.Version }: {definition: first, digest: firstDigest, found: true},
-		{ id: conflict.TemplateID, version: conflict.Version }: {definition: conflict, digest: conflictDigest, found: true},
+		{id: conflict.TemplateID, version: conflict.Version}: {definition: conflict, digest: conflictDigest, found: true},
 	}
 	err := registry.LoadVersionsFromRepository(context.Background(), repository, []VersionRef{
 		{TemplateID: first.TemplateID, Version: first.Version},
