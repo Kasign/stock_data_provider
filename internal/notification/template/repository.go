@@ -13,8 +13,8 @@ type Repository interface {
 }
 
 var (
-	ErrRepositoryNotFound = errors.New("notification: template repository record not found")
-	ErrRepositoryUnavailable = errors.New("notification: template repository is unavailable")
+	ErrRepositoryNotFound       = errors.New("notification: template repository record not found")
+	ErrRepositoryUnavailable    = errors.New("notification: template repository is unavailable")
 	ErrRepositoryDigestMismatch = errors.New("notification: template repository digest mismatch")
 )
 
