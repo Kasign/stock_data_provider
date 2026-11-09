@@ -125,6 +125,23 @@ func TestAssessDailyBarTradingContextDoesNotUseConflictingCalendarToConfirmMissi
 	}
 }
 
+func TestAssessDailyBarTradingContextDegradedCalendarDoesNotConfirmMissingBars(t *testing.T) {
+	calendar := &model.TradingCalendarSnapshot{
+		QualityStatus:  model.QualityDegraded,
+		QualityReasons: []string{"provider_returns_trading_days_only_non_trading_dates_inferred"},
+		Items:          []model.TradingCalendarDay{{Date: "2026-10-20", IsTradingDay: true}},
+	}
+	statuses := map[string]*model.SecurityTradingStatusSnapshot{
+		"2026-10-20": dailyBarContextStatus("2026-10-20", "2026-10-01", true, model.SuspensionStatusNoEvent),
+	}
+	result := assessDailyBarTradingContext(calendar, nil, statuses, nil)
+	if result.QualityStatus != model.QualityDegraded ||
+		!hasDailyBarContextReason(result.Reasons, "daily_bar_context_calendar_degraded") ||
+		hasDailyBarContextReason(result.Reasons, "daily_bar_missing_on_confirmed_trading_day:2026-10-20") {
+		t.Fatalf("degraded calendar must not confirm a missing bar: %+v", result)
+	}
+}
+
 func TestAssessDailyBarTradingContextHistoricalCalendarTimestampGapIsWarningOnly(t *testing.T) {
 	calendar := &model.TradingCalendarSnapshot{
 		StartDate: "2025-07-07", EndDate: "2025-07-07",
