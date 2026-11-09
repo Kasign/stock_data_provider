@@ -17,6 +17,9 @@ func compileJSONSchema(document []byte) (*jsonschema.Schema, error) {
 	if len(document) == 0 || !utf8.Valid(document) || !json.Valid(document) {
 		return nil, fmt.Errorf("schema document must be valid JSON")
 	}
+	if err := validateUniqueJSONKeys(document); err != nil {
+		return nil, fmt.Errorf("schema document contains duplicate object keys: %w", err)
+	}
 
 	var root map[string]json.RawMessage
 	if err := json.Unmarshal(document, &root); err != nil || root == nil {
@@ -55,6 +58,12 @@ func validateJSONSchemaInstance(schema *jsonschema.Schema, instanceJSON []byte) 
 	if !utf8.Valid(instanceJSON) {
 		return fmt.Errorf("schema instance must be valid UTF-8")
 	}
+	if !json.Valid(instanceJSON) {
+		return fmt.Errorf("schema instance must be valid JSON")
+	}
+	if err := validateUniqueJSONKeys(instanceJSON); err != nil {
+		return fmt.Errorf("schema instance contains duplicate object keys: %w", err)
+	}
 	decoder := json.NewDecoder(bytes.NewReader(instanceJSON))
 	decoder.UseNumber()
 	var instance any
@@ -67,6 +76,77 @@ func validateJSONSchemaInstance(schema *jsonschema.Schema, instanceJSON []byte) 
 	}
 	if err := schema.Validate(instance); err != nil {
 		return fmt.Errorf("schema instance validation failed: %w", err)
+	}
+	return nil
+}
+
+func validateUniqueJSONKeys(document []byte) error {
+	decoder := json.NewDecoder(bytes.NewReader(document))
+	decoder.UseNumber()
+	if err := consumeJSONValue(decoder); err != nil {
+		return err
+	}
+	if _, err := decoder.Token(); err != io.EOF {
+		if err == nil {
+			return fmt.Errorf("document contains trailing JSON")
+		}
+		return err
+	}
+	return nil
+}
+
+func consumeJSONValue(decoder *json.Decoder) error {
+	token, err := decoder.Token()
+	if err != nil {
+		return err
+	}
+	delimiter, ok := token.(json.Delim)
+	if !ok {
+		return nil
+	}
+
+	switch delimiter {
+	case '{':
+		seen := make(map[string]struct{})
+		for decoder.More() {
+			keyToken, err := decoder.Token()
+			if err != nil {
+				return err
+			}
+			key, ok := keyToken.(string)
+			if !ok {
+				return fmt.Errorf("object key is not a string")
+			}
+			if _, exists := seen[key]; exists {
+				return fmt.Errorf("duplicate object key %q", key)
+			}
+			seen[key] = struct{}{}
+			if err := consumeJSONValue(decoder); err != nil {
+				return err
+			}
+		}
+		closing, err := decoder.Token()
+		if err != nil {
+			return err
+		}
+		if closing != json.Delim('}') {
+			return fmt.Errorf("object is not closed")
+		}
+	case '[':
+		for decoder.More() {
+			if err := consumeJSONValue(decoder); err != nil {
+				return err
+			}
+		}
+		closing, err := decoder.Token()
+		if err != nil {
+			return err
+		}
+		if closing != json.Delim(']') {
+			return fmt.Errorf("array is not closed")
+		}
+	default:
+		return fmt.Errorf("unexpected JSON delimiter %q", delimiter)
 	}
 	return nil
 }

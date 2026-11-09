@@ -329,3 +329,38 @@ func TestIndicatorAndFactorSchemasEnforceNumericAndEmptyParameterBoundaries(t *t
 	}
 }
 
+
+
+func TestCompileJSONSchemaRejectsDuplicateObjectKeys(t *testing.T) {
+	document := []byte(`{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","type":"array","additionalProperties":false}`)
+	if _, err := compileJSONSchema(document); err == nil {
+		t.Fatal("schema with duplicate type keys unexpectedly compiled")
+	}
+}
+
+func TestValidateJSONSchemaInstanceRejectsDuplicateObjectKeys(t *testing.T) {
+	schema, err := compileJSONSchema([]byte(`{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","additionalProperties":false}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	cases := []struct {
+		name     string
+		instance []byte
+	}{
+		{
+			name:     "duplicate top-level key",
+			instance: []byte(`{"value":1,"value":2}`),
+		},
+		{
+			name:     "duplicate nested key after escape decoding",
+			instance: []byte(`{"nested":{"a":1,"\u0061":2}}`),
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if err := validateJSONSchemaInstance(schema, tc.instance); err == nil {
+				t.Fatalf("instance with duplicate keys unexpectedly passed: %s", tc.instance)
+			}
+		})
+	}
+}
