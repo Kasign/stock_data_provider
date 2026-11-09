@@ -292,7 +292,7 @@ Server 不重写模块业务 Handler 的校验和领域错误，不在路由层�
 - 验收：配置错误可诊断；启动失败返回非零退出；入口不包含业务逻辑；有启动和失败路径测试。
 ### SRV-003：Platform 资源装配
 
-- 状态：未开始
+- 状态：进行中（DB、Redis、HTTP Client 已纳入 Server 统一资源容器；后续补齐模块资源注入和诊断接入）
 - 前置：SRV-002；依赖 Platform 已公开能力
 - 工作内容：创建 DB、Redis、HTTP Client 等公共资源；明确资源共享、超时、关闭顺序和失败回滚。
 - 交付物：资源 Registry/Container 和生命周期管理。
