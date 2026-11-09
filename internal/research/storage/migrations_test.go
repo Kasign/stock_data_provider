@@ -77,16 +77,13 @@ func TestResearchMigrationPreservesExistingPITAndOutboxValuesInOrder(t *testing.
 		joined := strings.Join(statements, "\n")
 		last := -1
 		for _, fragment := range fragments {
-			index := strings.Index(joined, fragment)
-			if index < 0 {
-				t.Errorf("%s is missing SQL fragment %q", name, fragment)
+			searchFrom := last + 1
+			relativeIndex := strings.Index(joined[searchFrom:], fragment)
+			if relativeIndex < 0 {
+				t.Errorf("%s is missing or out of order SQL fragment %q", name, fragment)
 				return
 			}
-			if index <= last {
-				t.Errorf("%s SQL fragment %q is out of order", name, fragment)
-				return
-			}
-			last = index
+			last = searchFrom + relativeIndex
 		}
 	}
 
