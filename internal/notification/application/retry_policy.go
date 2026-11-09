@@ -128,8 +128,8 @@ func (p RetryPolicy) ScheduleRetry(
 		scaledDelay = uint64(decision.DelayCap)
 	}
 	decision.ChosenDelay = time.Duration(scaledDelay)
-	if decision.ChosenDelay <= 0 {
-		// Delivery timestamps are persisted at microsecond precision; avoid a zero-delay hot loop.
+	if decision.ChosenDelay < time.Microsecond {
+		// Delivery timestamps are persisted at microsecond precision; prevent a rounded zero-delay retry.
 		decision.ChosenDelay = time.Microsecond
 	}
 	next := now.Add(decision.ChosenDelay)

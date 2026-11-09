@@ -83,6 +83,17 @@ func TestRetryPolicyUsesCappedExponentialFullJitter(t *testing.T) {
 	}
 }
 
+func TestRetryPolicyQuantizesSubMicrosecondJitter(t *testing.T) {
+	delivery, attempts, now := retryPolicyFixture(t, 1, 3)
+	policy := standardRetryPolicy()
+	policy.BaseDelay = time.Millisecond
+	policy.MaxDelay = time.Millisecond
+	got, err := policy.ScheduleRetry(delivery, attempts, now, 0.0001)
+	if err != nil || got.ChosenDelay != time.Microsecond {
+		t.Fatalf("sub-microsecond jitter must be clamped to database precision: %+v err=%v", got, err)
+	}
+}
+
 func TestRetryPolicyCapsExponentialDelayAndHonorsRetryAfter(t *testing.T) {
 	delivery, attempts, now := retryPolicyFixture(t, 4, 5)
 	policy := standardRetryPolicy()
