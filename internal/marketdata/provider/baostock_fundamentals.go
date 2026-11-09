@@ -156,16 +156,19 @@ func (p *Baostock) FetchFundamentals(ctx context.Context, rawSymbol string, year
 			return nil, fmt.Errorf("BaoStock %s publication date %s is after China market date %s", mapping.Category, publicationDate, chinaToday)
 		}
 		for _, metric := range mapping.Fields {
-			raw := strings.TrimSpace(record.Fields[metric.SourceField])
-			if raw == "" {
+			rawValue, present := record.Fields[metric.SourceField]
+			raw := strings.TrimSpace(rawValue)
+			if !present || raw == "" {
 				degraded = true
 				section.QualityReasons = appendFundamentalReason(section.QualityReasons, "one_or_more_metrics_missing")
+				addFundamentalParseIssue(ctx, symbol, metric.Key, metric.SourceField, "missing_value", "finite numeric string", "missing_or_empty", rawValue, 0)
 				continue
 			}
 			value, parseErr := strconv.ParseFloat(raw, 64)
 			if parseErr != nil || math.IsNaN(value) || math.IsInf(value, 0) {
 				degraded = true
 				section.QualityReasons = appendFundamentalReason(section.QualityReasons, "one_or_more_metrics_invalid")
+				addFundamentalParseIssue(ctx, symbol, metric.Key, metric.SourceField, "invalid_number", "finite numeric string", "string", rawValue, 0)
 				continue
 			}
 			section.Metrics = append(section.Metrics, model.FundamentalMetric{

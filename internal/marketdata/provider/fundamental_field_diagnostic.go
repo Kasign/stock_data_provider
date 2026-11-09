@@ -1,0 +1,57 @@
+package provider
+
+import (
+	"context"
+	"encoding/json"
+	"strings"
+
+	"example.com/stock-analysis-flow/internal/marketdata/validation"
+)
+
+// addFundamentalParseIssue 将 Provider 原始字段问题写入本次请求的统一字段 Reporter。
+// 字段诊断属于 Data 领域质量证据；Platform Observation 只承载领域无关的检查结果。
+func addFundamentalParseIssue(ctx context.Context, symbol, field, providerField, code, expected, actualType, preview string, rowIndex int) {
+	report := validation.NewReport(1)
+	row := rowIndex
+	report.Add(validation.FieldIssue{
+		Stage: validation.StageParse, Field: field, ProviderField: providerField,
+		Code: code, Expected: expected, ActualType: actualType,
+		ActualPreview: fundamentalIssuePreview(preview), Severity: validation.SeverityWarning,
+		Message: "fundamentals provider field is missing or invalid",
+		RowIndex: &row, Symbol: symbol,
+	})
+	validation.AddContextReport(ctx, report)
+}
+
+func fundamentalJSONValueType(raw json.RawMessage) string {
+	value := strings.TrimSpace(string(raw))
+	switch {
+	case value == "":
+		return "missing"
+	case value == "null":
+		return "null"
+	case strings.HasPrefix(value, "{"):
+		return "object"
+	case strings.HasPrefix(value, "["):
+		return "array"
+	case value == "true" || value == "false":
+		return "boolean"
+	case strings.HasPrefix(value, "\""):
+		return "string"
+	default:
+		return "number_or_invalid"
+	}
+}
+
+func fundamentalIssuePreview(value string) string {
+	value = strings.Map(func(r rune) rune {
+		if r < 0x20 || r == 0x7f {
+			return ' '
+		}
+		return r
+	}, value)
+	if len(value) > 160 {
+		return value[:160]
+	}
+	return value
+}
