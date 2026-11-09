@@ -24,7 +24,6 @@ func TestFinalizeRunResultRejectsInvalidNormalTerminalState(t *testing.T) {
 	}
 }
 
-
 func TestFinalizeCancellationRunRejectsMismatchedTermination(t *testing.T) {
 	r := &MySQLRunRepository{}
 	record := application.CancellationFinalizationRecord{
