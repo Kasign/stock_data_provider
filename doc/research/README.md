@@ -1,8 +1,8 @@
 # Research 模块
 
 - 分支：`feat/research`
-- 当前分支 HEAD：`2d78bd48afc3b416f00f9c0466df593e58171f21`（2026-11-09；本次复核基线）
-- 最近代码验收 SHA：`16852396e5904cf9a9b5ce88a7d5255b3d2a7d75`；HEAD 后续提交仅更新任务文档。
+- 本轮复核起点：`2d78bd48afc3b416f00f9c0466df593e58171f21`。
+- 本轮代码修复提交/验收 SHA：`0129675185ab29905b0ef14a21e1d564961e3dde`。
 - 代码范围：`internal/research/**`
 - 文档范围：`doc/research/**`
 - 任务与验收权威记录：[02-任务拆分与验收](./02-任务拆分与验收.md)
@@ -44,10 +44,10 @@ Research 不采集新闻、不拥有行情事实、不重算 Quant 指标，不�
 
 ## 当前验收结论
 
-- Research 全模块独立 Job 和 Research Storage/Migration MariaDB Job 均在 Workflow Run [42614335240](https://github.com/Kasign/stock_data_provider/actions/runs/42614335240) 通过，测试代码 SHA 为 `16852396e5904cf9a9b5ce88a7d5255b3d2a7d75`。
+- Research 全模块独立 Job 和 Research Storage/Migration MariaDB Job 均在本轮 Workflow Run [42616788237](https://github.com/Kasign/stock_data_provider/actions/runs/42616788237) 通过，测试代码 SHA 为 `0129675185ab29905b0ef14a21e1d564961e3dde`。Research gofmt、全包 go test、race、vet 及 MariaDB Storage/Migration 集成均通过。
 - 同一 Workflow 的整体 conclusion 是 failure：根模块 `Test .` 被 Marketdata、News、Notification、Quant 的 gofmt 差异阻断。该失败不属于 Research 文件；因此不能表述为全仓 Go Workflow 通过，也不能把根模块全量编译/测试视为已验收。
 - 本地 MariaDB Job 覆盖 Migration v1→v5 历史升级、PIT 纳秒/NULL 回填、Context/Event/Claim/Evidence Repository、并发追加、损坏记录 fail-closed、Outbox 原子写入/并发领取/租约过期。
-- 当前 HEAD `2d78bd4` 是上述代码验收之后的文档提交；本次代码复核发现并修复 Event.available_at PIT 边界，修复后的代码需由新 SHA 的 Research 独立 Job 重新验收。
+- 本轮代码复核发现并修复 Event.available_at PIT 边界；修复后的代码已由上述新 SHA 的 Research 独立 Job 和 MariaDB Job 验收通过。
 - 尚无真实 Data/News Owner Adapter 与完整来源证据；跨模块接入及真实数据验收仍未完成。根 Server Migration 注册和 Notification Relay 由 Server 组合根负责。
 
 ## 维护规则
