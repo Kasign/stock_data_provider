@@ -68,6 +68,7 @@ R1/R2/R3/R5 当前实现 Context、Evidence、Event、Claim/Hypothesis 领域结
 - Research → Researchflow 的 Context 消费接口：字段语义已形成设计基线，Schema/Golden/Contract Test 尚未完成。
 - RSC-DEC-001：Quant 结果通过 Researchflow 获取；Research 不新增 Quant Port、不直接调用 Quant、不自行解引用。
 - RSC-DEC-002：changed_at 的语义已确定为状态迁移提交时间，随 lifecycle_changed Outbox 事件持久化。
+- Claim/Hypothesis 状态迁移已按项目契约第 9.9 节补充 Domain 门禁：proposed→testing→结论状态，同状态允许追加修订；明确终态不允许回退。unknown 的恢复路径尚无契约定义，当前按 fail-closed 处理。测试尚未执行。
 - RSC-OPEN-002：Quant-Research DTO 尚未定义 changed_at 字段，具体 DTO/Outbox 映射仍待项目级契约统一。
 - RSC-OPEN-003：Event 规范化时间要求可追溯到规则版本，但当前 DTO 没有 normalization_rule_version；未决前不声称规范化时间来源链完整。
 - RSC-OPEN-004：Event 合并/拆分要求 source_refs/derived_from_refs，但 ResearchEvent 字段表未定义这两个字段；未决前不实现跨 Event 归并关系。

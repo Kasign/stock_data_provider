@@ -64,7 +64,26 @@ func (next Claim) ValidateNextVersion(previous Claim) error {
 	}
 	if next.ClaimVersion != previous.ClaimVersion+1 { return fmt.Errorf("claim_version must increment by exactly one") }
 	if next.SystemAsOf.Before(previous.SystemAsOf) { return fmt.Errorf("system_as_of cannot move backwards across claim versions") }
+	if next.Status != previous.Status && !CanTransition(previous.Status, next.Status) {
+		return fmt.Errorf("invalid claim status transition: %s -> %s", previous.Status, next.Status)
+	}
 	return nil
+}
+
+// CanTransition reports whether a Claim/Hypothesis status change is allowed.
+// Same-status revisions are handled by ValidateNextVersion, not by this function.
+// StatusUnknown has no outgoing transition in the current contract and therefore
+// remains closed until a later contract explicitly defines a recovery path.
+func CanTransition(from, to ClaimStatus) bool {
+	switch from {
+	case StatusProposed:
+		return to == StatusTesting
+	case StatusTesting:
+		return to == StatusSupported || to == StatusContradicted ||
+			to == StatusInvalidated || to == StatusUnknown
+	default:
+		return false
+	}
 }
 
 func rejectEvidenceStanceOverlap(supporting, contradicting []string) error {
