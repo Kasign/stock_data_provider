@@ -124,14 +124,7 @@ func ApplyDeadline(run domain.Run, stages []domain.Stage, dbNow time.Time) (doma
 				break
 			}
 		}
-		noRunningAttempts := true
-		for _, attempt := range []domain.Attempt{} {
-			if attempt.Status == domain.AttemptRunning {
-				noRunningAttempts = false
-				break
-			}
-		}
-		if allStagesTerminal && noRunningAttempts {
+		if allStagesTerminal {
 			return run, stages, nil
 		}
 	}
