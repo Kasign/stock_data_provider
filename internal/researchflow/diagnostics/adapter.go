@@ -34,17 +34,17 @@ const (
 // StageAssessment 是 Researchflow 领域诊断的安全投影输入。
 // SafeMessage 必须是可公开展示的摘要；不得传入原始 Provider/LLM 错误。
 type StageAssessment struct {
-	StageRef   string
-	StageCode  string
-	Kind       DiagnosticKind
-	Required   bool
-	Status     AssessmentStatus
-	ReasonCode string
+	StageRef    string
+	StageCode   string
+	Kind        DiagnosticKind
+	Required    bool
+	Status      AssessmentStatus
+	ReasonCode  string
 	SafeMessage string
 	EvidenceRef string
-	CheckedAt  time.Time
-	Duration   time.Duration
-	Attributes map[string]string
+	CheckedAt   time.Time
+	Duration    time.Duration
+	Attributes  map[string]string
 }
 
 // NewStageCheck 将 Researchflow 的四态诊断映射到公共 Platform Diagnostics。
@@ -55,13 +55,13 @@ func NewStageCheck(assessment StageAssessment) (platformdiagnostics.Check, error
 		return platformdiagnostics.Check{}, err
 	}
 	observation := platformdiagnostics.Observation{
-		Status: platformStatus(assessment.Status),
-		ReasonCode: assessment.ReasonCode,
+		Status:      platformStatus(assessment.Status),
+		ReasonCode:  assessment.ReasonCode,
 		SafeMessage: assessment.SafeMessage,
-		CheckedAt: assessment.CheckedAt,
-		Duration: assessment.Duration,
+		CheckedAt:   assessment.CheckedAt,
+		Duration:    assessment.Duration,
 		EvidenceRef: assessment.EvidenceRef,
-		Attributes: cloneAttributes(assessment.Attributes),
+		Attributes:  cloneAttributes(assessment.Attributes),
 	}
 	if observation.Attributes == nil {
 		observation.Attributes = make(map[string]string, 4)
