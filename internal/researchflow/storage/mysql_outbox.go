@@ -3,12 +3,12 @@ package storage
 import (
 	"context"
 	"database/sql"
-
-	"example.com/stock-analysis-flow/internal/researchflow/application"
 	"errors"
 	"fmt"
 	"strings"
 	"time"
+
+	"example.com/stock-analysis-flow/internal/researchflow/application"
 )
 
 // ClaimOutbox atomically leases due unpublished messages to one worker.

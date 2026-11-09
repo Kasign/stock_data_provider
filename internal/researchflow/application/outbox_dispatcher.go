@@ -140,13 +140,13 @@ func (d *OutboxDispatcher) DispatchBatch(ctx context.Context) (OutboxDispatchRes
 			publishErr := d.publisher.Publish(publishCtx, message)
 			cancel()
 
-			mu.Lock()
-			defer mu.Unlock()
 			if publishErr != nil {
 				errorCode := outboxErrorCode(publishErr)
 				nextAttempt := d.config.RetryPolicy.NextAttemptAt(message.AttemptCount, d.now())
 				retried, retryErr := d.store.RetryOutbox(ctx, message.Ref, d.config.WorkerID,
 					message.LeaseGeneration, nextAttempt, errorCode)
+				mu.Lock()
+				defer mu.Unlock()
 				if retryErr != nil {
 					failures = append(failures, fmt.Errorf("persist Outbox retry %q: %w", message.Ref, retryErr))
 					return
@@ -160,6 +160,8 @@ func (d *OutboxDispatcher) DispatchBatch(ctx context.Context) (OutboxDispatchRes
 			}
 			acknowledged, ackErr := d.store.AcknowledgeOutbox(ctx, message.Ref,
 				d.config.WorkerID, message.LeaseGeneration)
+			mu.Lock()
+			defer mu.Unlock()
 			if ackErr != nil {
 				failures = append(failures, fmt.Errorf("acknowledge Outbox %q: %w", message.Ref, ackErr))
 				return

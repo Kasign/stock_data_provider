@@ -139,7 +139,7 @@ func TestOutboxDispatcherCountsStaleLeaseAndClaimFailure(t *testing.T) {
 
 func TestOutboxDispatcherRejectsUnsafeLeaseConfiguration(t *testing.T) {
 	_, err := NewOutboxDispatcher(&fakeOutboxStore{}, &fakeOutboxPublisher{},
-		OutboxDispatcherConfig{WorkerID: "worker", BatchSize: 1, LeaseDuration: time.Second, PublishTimeout: time.Second})
+		OutboxDispatcherConfig{WorkerID: "worker", BatchSize: 1, MaxConcurrency: 1, LeaseDuration: time.Second, PublishTimeout: time.Second})
 	if err == nil {
 		t.Fatal("publish timeout must be shorter than the lease")
 	}
