@@ -965,3 +965,11 @@
 - [x] 增加“写入成功后立即取消”的 Application 回归测试，确认请求返回 context.Canceled，同时明确不可变 Snapshot 可能已经落库。
 - [x] 已落库但未返回给调用方的 Snapshot 不执行补偿删除；它不含新闻正文或摘要，依靠既有 TTL 与过期清理回收，避免取消路径误删可能已被并发重试使用的快照。
 - [ ] 仍需在 MariaDB 环境覆盖真实数据库写入与客户端取消的竞态；Application 测试仅验证调用边界，不代表数据库事务回滚。
+
+
+## Observation 清理批次计数语义（2026-11-09）
+
+- `Scanned` 表示本次清理事务通过 `FOR UPDATE SKIP LOCKED` 成功领取并锁定的到期 Observation 数，不代表全库到期 backlog，也不包含被其他事务锁定而跳过的记录。
+- `Purged` 表示本批实际更新并清除候选载荷的记录数。全局剩余到期量和最早到期时间必须通过只读 `ObservationRetentionBacklog` 查询，不能用 `Scanned - Purged` 推算。
+- 对当前 MySQL Repository，已锁定记录在同一事务内必须全部更新；若 `RowsAffected` 与领取数量不一致，整批返回错误并回滚，不把异常部分更新报告为成功结果。
+- 本语义修正尚未通过 MariaDB 11.4 实际运行验证；并发锁跳过、回滚和结果计数仍属于待执行集成验收。

@@ -2,10 +2,16 @@ package app
 
 import (
 	"context"
+	"errors"
 	"time"
 )
 
+// ErrObservationRetentionResultInvalid 表示 Repository 返回了不可能的批量清理计数。
+var ErrObservationRetentionResultInvalid = errors.New("news.observation.retention_result_invalid")
+
 // ObservationPayloadPurgeResult 描述单次批量载荷清理结果。
+// Scanned 是本批事务成功领取并锁定的到期记录数，不是全局 backlog 数。
+// Purged 是本批实际清除载荷的记录数；全局剩余量应通过 ObservationRetentionBacklog 查询。
 type ObservationPayloadPurgeResult struct {
 	Scanned int
 	Purged  int
