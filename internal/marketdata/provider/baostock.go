@@ -35,12 +35,20 @@ func baoStockDailyBarStandardField(providerField string) string {
 		return "trade_date"
 	case "code":
 		return "symbol"
-	case "open", "high", "low", "close", "preclose", "volume", "amount", "adjustflag", "turn", "tradestatus", "pctChg", "isST":
-		return map[string]string{
-			"preclose": "prev_close", "adjustflag": "adjustment_basis",
-			"turn": "turnover_rate", "tradestatus": "trade_status",
-			"pctChg": "change_percent", "isST": "is_st",
-		}[providerField]
+	case "open", "high", "low", "close", "volume", "amount":
+		return providerField
+	case "preclose":
+		return "prev_close"
+	case "adjustflag":
+		return "adjustment_basis"
+	case "turn":
+		return "turnover_rate"
+	case "tradestatus":
+		return "trade_status"
+	case "pctChg":
+		return "change_percent"
+	case "isST":
+		return "is_st"
 	default:
 		return "provider." + providerField
 	}
