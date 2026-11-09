@@ -408,7 +408,8 @@ func TestOpenStreamHTTP2CloseInterruptsBlockedRead(t *testing.T) {
 	client.dial = func(ctx context.Context, network, _ string) (net.Conn, error) {
 		return (&net.Dialer{}).DialContext(ctx, network, server.Listener.Addr().String())
 	}
-	request, err := http.NewRequest(http.MethodGet, strings.Replace(server.URL, "http://", "https://", 1)+"/h2-close-blocked-read", nil)
+	port := server.Listener.Addr().(*net.TCPAddr).Port
+	request, err := http.NewRequest(http.MethodGet, "https://example.com:"+strconv.Itoa(port)+"/h2-close-blocked-read", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
