@@ -99,3 +99,25 @@ func TestRunValidatesInputsBeforeDatabaseAccess(t *testing.T) {
 		t.Fatal("Run() error = nil for empty registry")
 	}
 }
+
+func TestRegisterSortsMigrationsByVersion(t *testing.T) {
+	registry := NewRegistry()
+	migrations := []platformstorage.Migration{
+		{Version: 30, Description: "third", Statements: []string{"SELECT 3"}},
+		{Version: 10, Description: "first", Statements: []string{"SELECT 1"}},
+		{Version: 20, Description: "second", Statements: []string{"SELECT 2"}},
+	}
+	if err := registry.Register("research", migrations); err != nil {
+		t.Fatalf("Register() error = %v", err)
+	}
+	got := registry.entries["research"]
+	want := []uint64{10, 20, 30}
+	if len(got) != len(want) {
+		t.Fatalf("migration count = %d, want %d", len(got), len(want))
+	}
+	for i := range want {
+		if got[i].Version != want[i] {
+			t.Fatalf("migration version at index %d = %d, want %d", i, got[i].Version, want[i])
+		}
+	}
+}
