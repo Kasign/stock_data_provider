@@ -350,7 +350,10 @@ func (c *Client) semaphore(dependency string) chan struct{} {
 }
 
 func (c *Client) dialContext(ctx context.Context, network, address string) (net.Conn, error) {
-	policy, ok := ctx.Value(policyContextKey{}).(DestinationPolicy)
+	dialCtx, cancel := context.WithTimeout(ctx, c.config.DialTimeout)
+	defer cancel()
+
+	policy, ok := dialCtx.Value(policyContextKey{}).(DestinationPolicy)
 	if !ok {
 		return nil, errPolicyRejected
 	}
@@ -358,20 +361,23 @@ func (c *Client) dialContext(ctx context.Context, network, address string) (net.
 	if err != nil {
 		return nil, errPolicyRejected
 	}
-	addresses, err := c.resolveAndValidate(ctx, host, port, policy)
+	addresses, err := c.resolveAndValidate(dialCtx, host, port, policy)
 	if err != nil {
+		if dialCtx.Err() != nil {
+			return nil, dialCtx.Err()
+		}
 		return nil, err
 	}
 
 	var lastErr error
 	for _, ip := range addresses {
-		connection, dialErr := c.dial(ctx, network, net.JoinHostPort(ip.String(), port))
+		connection, dialErr := c.dial(dialCtx, network, net.JoinHostPort(ip.String(), port))
 		if dialErr == nil {
 			return connection, nil
 		}
 		lastErr = dialErr
-		if ctx.Err() != nil {
-			return nil, ctx.Err()
+		if dialCtx.Err() != nil {
+			return nil, dialCtx.Err()
 		}
 	}
 	if lastErr == nil {
