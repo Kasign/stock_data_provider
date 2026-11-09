@@ -72,6 +72,53 @@ func TestEvaluateRuleSetRequiredEvaluatorErrorFailsClosed(t *testing.T) {
 	}
 }
 
+func TestEvaluateRuleSetEvaluatorPanicFailsClosed(t *testing.T) {
+	set := validRuleSet()
+	evaluators := map[string]RuleEvaluator{
+		"INPUT_QUALITY": func(context.Context) (Reason, error) {
+			panic("sensitive panic detail")
+		},
+		"TRADING_STATUS": func(context.Context) (Reason, error) {
+			return Reason{Code: "TRADING_STATUS", Severity: SeverityBlock, Status: ReasonNotTriggered, SafeMessage: "交易状态正常", EvidenceRefs: []string{}}, nil
+		},
+	}
+	decision, err := EvaluateRuleSet(context.Background(), set, decisionInput(set.Version, nil), evaluators)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if decision.Status != DecisionUnknown || decision.Reasons[0].Status != ReasonUnknown {
+		t.Fatalf("required evaluator panic must fail closed: %+v", decision)
+	}
+	if decision.Reasons[0].SafeMessage != "风险规则执行失败，无法确认结论" {
+		t.Fatalf("unexpected panic diagnostic: %q", decision.Reasons[0].SafeMessage)
+	}
+}
+
+func TestEvaluateRuleSetOptionalEvaluatorPanicIsDiagnosticOnly(t *testing.T) {
+	set := validRuleSet()
+	evaluators := map[string]RuleEvaluator{
+		"INPUT_QUALITY": func(context.Context) (Reason, error) {
+			return Reason{Code: "INPUT_QUALITY", Severity: SeverityBlock, Status: ReasonNotTriggered, SafeMessage: "输入质量合格", EvidenceRefs: []string{}}, nil
+		},
+		"TRADING_STATUS": func(context.Context) (Reason, error) {
+			return Reason{Code: "TRADING_STATUS", Severity: SeverityBlock, Status: ReasonNotTriggered, SafeMessage: "交易状态正常", EvidenceRefs: []string{}}, nil
+		},
+		"CONCENTRATION": func(context.Context) (Reason, error) {
+			panic("optional panic detail")
+		},
+	}
+	decision, err := EvaluateRuleSet(context.Background(), set, decisionInput(set.Version, nil), evaluators)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if decision.Status != DecisionPass || len(decision.Reasons) != 3 {
+		t.Fatalf("optional evaluator panic must remain diagnostic-only: %+v", decision)
+	}
+	if decision.Reasons[2].Status != ReasonUnknown || decision.Reasons[2].SafeMessage != "风险规则执行失败，无法确认结论" {
+		t.Fatalf("optional panic diagnostic is invalid: %+v", decision.Reasons[2])
+	}
+}
+
 func TestEvaluateRuleSetRejectsUnknownEvaluatorAndMismatchedResult(t *testing.T) {
 	set := validRuleSet()
 	unknown := map[string]RuleEvaluator{"NOT_REGISTERED": func(context.Context) (Reason, error) { return Reason{}, nil }}

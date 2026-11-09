@@ -61,7 +61,7 @@ func EvaluateRuleSet(
 			continue
 		}
 
-		reason, err := evaluator(ctx)
+		reason, err := invokeRuleEvaluator(ctx, evaluator)
 		if ctxErr := ctx.Err(); ctxErr != nil {
 			return Decision{}, ctxErr
 		}
@@ -84,6 +84,18 @@ func EvaluateRuleSet(
 		return Decision{}, err
 	}
 	return decision, nil
+}
+
+// invokeRuleEvaluator 将外部注入规则的 panic 转换为普通执行失败，避免中断整个风险评估。
+// panic 内容可能包含敏感实现细节，因此不进入公开诊断文本。
+func invokeRuleEvaluator(ctx context.Context, evaluator RuleEvaluator) (reason Reason, err error) {
+	defer func() {
+		if recover() != nil {
+			reason = Reason{}
+			err = ErrRuleEvaluation
+		}
+	}()
+	return evaluator(ctx)
 }
 
 func unknownRuleReason(rule RuleDefinition) Reason {
