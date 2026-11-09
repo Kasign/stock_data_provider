@@ -71,3 +71,12 @@ Notification 是独立通知业务模块，负责事件接收、Subscription、T
 - Delivery 修复提交 `af05f6595b18717408e91a7650e3e89b3b6de236` 的 Run `42597457159`：go-core 全部通过；根模块在 gofmt 阶段失败，未执行根模块测试，不能认定为 Notification 根模块测试失败或通过。失败门禁来自 Quant 目录格式问题。
 - Subscription 修复提交 `28d0a2b1111a65bf6c8b52402557f4fedfa87ad4` 的 Run `42597527290`：go-core 已通过；根模块 gofmt 门禁失败，根模块测试未执行。MariaDB 集成 Job 未执行。
 - 当前真实 MariaDB 验收仍缺 `NOTIFICATION_MARIADB_TEST_DSN`。
+
+
+### 补充：恢复与对账路径时间精度
+
+- 复核发现 Delivery 时间精度统一还遗漏两条写入路径：过期租约恢复 `RecoverExpiredLease` 与 Unknown 对账 `ReconcileUnknown`。两者同样写入 `DATETIME(6)`，此前可能保留领域纳秒时间并在数据库中截断。
+- 已在 Repository 边界统一规范化 Delivery 快照时间与 StateEvent.changed_at；过期租约恢复同时规范化传入的 now，再执行时间边界校验。
+- 补齐 Subscription 时间精度辅助函数所需的标准库依赖，避免根模块编译遗漏。
+- 最近一次 CI Run `42598066759`：go-core 的 gofmt、单测、Race Detector、go vet 全部通过；根模块在 gofmt 阶段仍失败，根模块测试未执行。该 Run 对应提交 `d65b57d`，后续恢复/对账精度修复提交 `722f5fb` 尚待 CI。
+- 真实 MariaDB L3 仍未执行，缺少 `NOTIFICATION_MARIADB_TEST_DSN`。
