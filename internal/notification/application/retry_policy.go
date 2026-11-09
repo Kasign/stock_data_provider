@@ -27,7 +27,12 @@ type RetryPolicy struct {
 }
 
 type RetryDecision struct {
-	Retry          bool
+	DeliveryID      string
+	DeliveryVersion int64
+	AttemptID       string
+	FencingToken    int64
+	EvaluatedAt     time.Time
+	Retry           bool
 	ReasonCode     string
 	NextAttemptAt  *time.Time
 	DelayCap       time.Duration
@@ -102,7 +107,10 @@ func (p RetryPolicy) ScheduleRetry(
 		return RetryDecision{}, ErrRetryNotApplicable
 	}
 
-	decision := RetryDecision{}
+	decision := RetryDecision{
+		DeliveryID: delivery.DeliveryID, DeliveryVersion: delivery.Version,
+		AttemptID: latest.AttemptID, FencingToken: latest.FencingToken, EvaluatedAt: now,
+	}
 	if latest.AttemptNo >= p.MaxAttempts {
 		decision.ReasonCode = RetryReasonBudgetExhausted
 		return decision, nil

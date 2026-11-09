@@ -114,7 +114,11 @@ func TestApplyRetryDecisionRejectsStaleOrAmbiguousInputs(t *testing.T) {
 	delivery, _, _ := repository.Get(context.Background(), claim.Delivery.DeliveryID)
 	claim.Delivery = delivery
 	now := repository.now
-	validDecision := RetryDecision{Retry: true, NextAttemptAt: timePointerForRetry(now.Add(time.Second))}
+	validDecision := RetryDecision{
+		Retry: true, NextAttemptAt: timePointerForRetry(now.Add(time.Second)),
+		DeliveryID: delivery.DeliveryID, DeliveryVersion: delivery.Version,
+		AttemptID: attempt.AttemptID, FencingToken: attempt.FencingToken, EvaluatedAt: now,
+	}
 	claim.Lease.FencingToken++
 	if err := ApplyRetryDecision(context.Background(), repository, claim, attempt, validDecision, now); !errors.Is(err, ErrRetryDecisionConflict) {
 		t.Fatalf("stale fencing token must fail: %v", err)

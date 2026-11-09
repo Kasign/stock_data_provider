@@ -32,6 +32,9 @@ func ApplyRetryDecision(
 		return err
 	}
 	if delivery.Status != domain.DeliverySending ||
+		decision.DeliveryID != delivery.DeliveryID || decision.DeliveryVersion != delivery.Version ||
+		decision.AttemptID != attempt.AttemptID || decision.FencingToken != attempt.FencingToken ||
+		!decision.EvaluatedAt.Equal(now) ||
 		claim.Lease.FencingToken < 1 ||
 		!isRecoveryUTC(claim.Lease.ExpiresAt) ||
 		!now.Before(claim.Lease.ExpiresAt) ||
