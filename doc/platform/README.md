@@ -4,8 +4,7 @@
 - 所属分支：feat/platform-foundation
 - 当前基线：以分支最新 HEAD 为准
 - 当前目标：个人使用、单一所有者、少量服务与低并发
-- 当前阶段：原 Bearer/Storage 等 Platform 本地公共原语、包级契约测试和专项 CI 已完成；Web Owner 登录安全原语（PLAT-015～019）已形成候选设计，尚未实现；最新代码提交 `348b8a692dade915c1d11f35663e57a9777a3422` 的 Platform packages 与 Storage integration 均通过。PLAT-002 仍是待消费者评审的候选契约，不能由 Platform 单方面冻结；服务入口、领域 Adapter、Server 组合根、真实消费者联调和生产部署验收仍由对应 Owner 完成。PLAT-008 流式能力仅代表 A1 通过，LLM A2 与生产 A3 仍待完成。
-
+- 当前阶段：PLAT-001～019 的 Platform 本地原语、包级契约测试和专项 CI 已完成；PLAT-015～019 Web Owner 登录安全原语已实现并通过 Platform L1 验收。当前代码验收基线为 `61c0f15d3958b1d2b6190c1fa4d0fbd96403de81`，GitHub Actions [42612962271](https://github.com/Kasign/stock_data_provider/actions/runs/42612962271) success；分支最新 HEAD 可能包含后续纯文档提交，应以 GitHub 分支为准。PLAT-002 仍待项目级契约 Owner 与消费者评审冻结；Server A2 业务接入、生产 A3 验收、Argon2id 目标硬件参数基准及领域 Adapter 均不属于 Platform L1 完成范围。PLAT-008 流式能力仅代表 A1 通过，LLM A2 与生产 A3 仍待完成。\n
 本目录是公共平台的唯一专项文档入口。平台的目标不是建设通用 SaaS 底座，而是为个人使用的股票研究系统提供足够可靠、性能可控、故障可定位的公共能力。
 
 ## 文档索引
@@ -30,7 +29,7 @@
 | 14-GOV-004跨模块统一契约基线与整体Review.md | 项目级契约交叉索引、模块依赖/DTO/状态机基线、未决决策及 L1/L2/L3 冻结门禁；不替代各专项 Schema |
 | 15-受控HTTP流式传输设计与验收方案.md | PLAT-CTR-005 流式扩展的现状审查、API、生命周期、安全、错误和验收设计 |
 | 16-公共平台剩余开发任务与跨模块接入责任清单.md | Platform 本地任务收口状态、消费者接入责任与跨模块剩余事项 |
-| 17-PLAT-002公共契约差异与待决事项.md | Platform 候选契约差异、待决事项、责任归属和本地 API Review |\n| 18-Web登录与Session安全原语设计.md | 单一 Owner Web Session、密码、Redis Store、Cookie、CSRF、登录限流和安全审计候选设计 |
+| 17-PLAT-002公共契约差异与待决事项.md | Platform 候选契约差异、待决事项、责任归属和本地 API Review |\n| 18-Web登录与Session安全原语设计.md | 单一 Owner Web Session、密码、Redis Store、Cookie、CSRF、登录限流和安全审计原语及 Server 接入边界 |
 
 ## 规则
 
