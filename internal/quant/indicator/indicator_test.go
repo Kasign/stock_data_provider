@@ -43,6 +43,19 @@ func TestReturnAndVolatility(t *testing.T) {
 	}
 	closeTo(t, logRet.Value, math.Log(1.21), 1e-12)
 
+	extremeLog, err := Return([]float64{math.SmallestNonzeroFloat64, math.MaxFloat64}, ReturnParams{Window: 1, ReturnBasis: "log"})
+	if err != nil {
+		t.Fatalf("finite extreme log return was rejected: %v", err)
+	}
+	closeTo(t, extremeLog.Value, math.Log(math.MaxFloat64)-math.Log(math.SmallestNonzeroFloat64), 1e-12)
+
+	extremeVolatility, err := Volatility([]float64{math.SmallestNonzeroFloat64, math.MaxFloat64, math.SmallestNonzeroFloat64}, VolatilityParams{Window: 2, ReturnBasis: "log", AnnualizationFactor: 1})
+	if err != nil {
+		t.Fatalf("finite extreme log volatility was rejected: %v", err)
+	}
+	extremeLogReturn := math.Log(math.MaxFloat64) - math.Log(math.SmallestNonzeroFloat64)
+	closeTo(t, extremeVolatility.Value, math.Sqrt(2)*extremeLogReturn, 1e-9)
+
 	vol, err := Volatility([]float64{100, 110, 100}, VolatilityParams{
 		Window: 2, ReturnBasis: "simple", AnnualizationFactor: 1,
 	})
@@ -241,6 +254,30 @@ func TestIndicatorsRejectNonFiniteCalculatedResults(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			if err := tt.run(); !errors.Is(err, ErrInvalidInput) {
 				t.Fatalf("expected ErrInvalidInput, got %v", err)
+			}
+		})
+	}
+}
+
+func TestIndicatorsRejectWindowsAboveContractMaximum(t *testing.T) {
+	cases := []struct {
+		name string
+		run  func() error
+	}{
+		{"sma", func() error { _, err := SMA(nil, SMAParams{Window: 1001}); return err }},
+		{"ema", func() error { _, err := EMA(nil, EMAParams{Window: 1001, SeedMethod: "sma"}); return err }},
+		{"return", func() error { _, err := Return(nil, ReturnParams{Window: 1001, ReturnBasis: "simple"}); return err }},
+		{"volatility", func() error { _, err := Volatility(nil, VolatilityParams{Window: 1001, ReturnBasis: "simple", AnnualizationFactor: 252}); return err }},
+		{"rsi", func() error { _, err := RSI(nil, RSIParams{Window: 1001, SmoothingMethod: "wilder"}); return err }},
+		{"macd slow", func() error { _, err := MACD(nil, MACDParams{FastWindow: 1, SlowWindow: 1001, SignalWindow: 1}); return err }},
+		{"macd signal", func() error { _, err := MACD(nil, MACDParams{FastWindow: 1, SlowWindow: 2, SignalWindow: 1001}); return err }},
+		{"atr", func() error { _, err := ATR(nil, nil, nil, 1, ATRParams{Window: 1001, SmoothingMethod: "wilder"}); return err }},
+		{"bollinger", func() error { _, err := Bollinger(nil, BollingerParams{Window: 1001, Multiplier: 2, StdDevMethod: "population"}); return err }},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if err := tc.run(); !errors.Is(err, ErrInvalidParameter) {
+				t.Fatalf("expected ErrInvalidParameter, got %v", err)
 			}
 		})
 	}
