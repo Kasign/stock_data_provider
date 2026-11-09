@@ -891,6 +891,18 @@ func TestOpenAPIParameterDefaultsMatchHandlerDefaults(t *testing.T) {
 	assertParameterSchema("/api/v1/market/dragon-tiger", "page", map[string]any{
 		"type": "integer", "minimum": 1, "maximum": 1000, "default": 1,
 	})
+	assertParameterSchema("/api/v1/bars/{symbol}/daily", "limit", map[string]any{
+		"type": "integer", "minimum": 1, "maximum": 2000,
+	})
+	assertParameterSchema("/api/v1/bundles/{symbol}", "lookback_days", map[string]any{
+		"type": "integer", "minimum": 20, "maximum": 2000,
+	})
+	assertParameterSchema("/api/v1/stocks/{symbol}/fundamentals", "year", map[string]any{
+		"type": "integer", "minimum": 2007,
+	})
+	assertParameterSchema("/api/v1/stocks/{symbol}/fundamentals", "quarter", map[string]any{
+		"type": "integer", "minimum": 1, "maximum": 4,
+	})
 }
 
 func TestProviderProbeRequestSchemaMatchesHandlerValidation(t *testing.T) {

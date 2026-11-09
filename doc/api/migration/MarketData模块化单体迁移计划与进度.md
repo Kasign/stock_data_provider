@@ -140,7 +140,7 @@ internal/
 
 | 编号 | 剩余项 | 完成条件 | 当前判定 |
 |---|---|---|---|
-| M0-A / CT-05 | 35 Operation 参数语义最终核对 | 一次性核对仍有实际约束的 enum、minimum/maximum、default、数组/重复值、日期范围；已有 Schema/Test 覆盖的直接引用，不再重复造测试；输出差异清单，差异归零或逐项登记例外 | `in_progress` |
+| M0-A / CT-05 | 35 Operation 参数语义最终核对 | 已覆盖全部 Operation 参数清单、类型/格式、已声明枚举、固定数值边界/默认值、日期范围和 CSV/重复值语义；新增指数来源枚举及 bars/bundle/fundamentals 数值边界断言，等待最新 Data CI 确认 | `pending_ci` |
 | M0-B | Provider 请求行为安全证据 | 已完成 HTTP/TCP 出站调用矩阵；当前配置边界与重定向风险明确登记，归入 M4 Platform HTTP Client / TCP 出站策略整改 | `completed_with_M4_followups` |
 | M0-C | 生产数据库 DDL 对照 | 获取脱敏生产 Schema/DDL；逐表对照 Data Migration、索引、唯一键、字段类型/精度/NULL/默认值；CI 临时 MariaDB 不能替代生产证据 | `blocked_external_evidence` |
 | M0-D / CT-06 | 集成基线验收 | 将当前分支合入 `origin/integration` 后，在 integration SHA 执行根模块、Data、race、vet、MariaDB/PIT、Compose/Docker；只记录结果，不直接修改 integration 代码 | `pending_integration` |
@@ -2299,4 +2299,18 @@ CI：本轮 SHA 对应 Go test suite Run `42549171549`。截至本次文档提�
 - DNS/IP 解析后地址限制、私网/保留地址拒绝、DNS rebinding 防护尚未统一落地；登记为 M4 Platform HTTP Client 接入整改。BaoStock/Pytdx 是 TCP，单列 TCP egress policy，不纳入 HTTP Client。
 - 当前仅提交测试和审计文档；不修改 Provider、API、DTO、数据库、部署配置或其他模块。
 - 新 SHA 的 Data Module CI 待确认后，M0-A 才能关闭；M0-C 仍等待脱敏生产 DDL，M0-D 仍等待 integration 验收。
+
+
+
+### 2026-11-09：CT-05 固定参数矩阵最终核对补充
+
+代码基线：`e04c2e4ab07ff2383db54ced47dbd5bd57afe617`。
+
+- 已逐项对照 35 Operation 参数清单、类型/格式矩阵、OpenAPI query enum 与对应 Handler。Query enum 全集为 sectors(type/direction/sort_by)、index-catalog(tag)、index constituents/daily(source)、hot-stocks(type)、limit-pools(type)；调整口径通过 RequestAdjustmentBasis 引用。新增指数两个 source 参数的 Handler/OpenAPI 双向断言后，未发现其他 query enum 漂移。
+- 补齐尚未纳入固定数值断言的参数：daily bars limit 1..2000、bundle lookback_days 20..2000、fundamentals year 最小 2007（最大值由当前日历年动态决定，Handler 校验）、quarter 1..4。
+- 其余固定数值边界/default 已由现有测试覆盖：probe history、stock search、announcements page/page_size、sectors limit、market stocks page/page_size、sentiment history limit、hot-stocks limit、dragon-tiger page/page_size、limit-pools limit。
+- 日期边界已通过现有 Handler 描述/边界测试锁定：index daily 10 年/3660 自然日、trading calendar 3660 自然日、sentiment history 366 个包含首尾自然日、capital flow 2000 个包含首尾自然日、announcements 366 日、Probe 历史窗口最多 31 个自然日。
+- Query 多值语义：接口没有声明 OpenAPI array 参数；批量 symbols/valuations 使用逗号分隔的单字符串。普通标量参数由 `URL.Query().Get` 读取首个值；bars/fundamentals 的 `as_of`、market session 的 `at`、价格限制规则与证券交易状态的日期（及后者 `as_of`）显式拒绝重复值。契约不承诺重复标量参数的多值解释，调用方应每个参数只发送一次。
+- 当前新增测试已在 SHA `e04c2e4a` 的 Data Module Go Test 步骤通过，gofmt 通过；race detector 尚在运行，vet 和 Docker 镜像构建尚未全部完成。故 M0-A 标记为 pending_ci，不提前关闭。
+- 未修改 OpenAPI、Handler、DTO、Provider、数据库或其他模块。
 
