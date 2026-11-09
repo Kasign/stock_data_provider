@@ -9,16 +9,16 @@
 
 | 配置项 | 目标服务 | 用途 | 浏览器保存范围 |
 |---|---|---|---|
-| 行情 API 基础路径 | `stock-analysis-data` | 行情、证券资料、数据源清单与运行诊断 | 当前浏览器 |
-| 行情服务 API Key | 行情服务 | 通过 `X-API-Key` 访问受保护的行情接口 | 当前浏览器；不回显 |
-| 分析 API 基础路径 | `stock-analysis-server` | 创建分析任务、查询任务/Run/阶段事件 | 当前浏览器 |
-| 分析服务认证 | 分析服务 | 当前 WebUI 不复用行情 API Key | 由分析服务自身决定 |
+| 行情 API 基础路径 | 迁移期行情兼容路由；目标为 Root Server 内 Market Data Adapter | 行情、证券资料、数据源清单与运行诊断 | 当前迁移期配置仍保存在浏览器 |
+| 行情服务 API Key | 迁移期 Market Data Adapter | 当前通过 `X-API-Key` 访问受保护行情接口 | 当前浏览器暂存；目标架构禁止浏览器持有 |
+| 分析 API 基础路径 | `/analysis-api` 兼容前缀；目标为 Root Server 注册的模块路由 | 创建分析任务、查询任务/Run/阶段事件 | 当前浏览器配置代理路径 |
+| 分析服务认证 | 当前 Server Owner Bearer | WebUI 不携带 Owner Bearer；当前 Analysis 请求预期 401 | 不得把 Owner Token 写入浏览器；等待 Web Session/Cookie + CSRF + 资源授权 |
 
 行情服务健康检查使用 `GET /health/live`、`GET /health/ready`。分析服务健康检查使用 `GET /healthz`、`GET /readyz`，属于独立服务路径，不应拿行情服务 Handler 代替分析服务契约。
 
 ## 2. 行情服务接口映射
 
-当前 `web/src/api.js` 的行情接口封装与 `services/market-data/internal/httpapi/server.go` 的路由注册应逐项对照。核心已注册并由 WebUI 封装使用的接口包括：
+当前 `web/src/api.js` 的行情接口封装应与 `internal/marketdata/httpapi/server.go` 的 Adapter 路由注册逐项对照。核心已注册并由 WebUI 封装使用的接口包括：
 
 | 能力 | 方法与路径 | WebUI 封装 | 说明 |
 |---|---|---|---|
@@ -52,7 +52,7 @@ WebUI 使用独立的 `analysisBase` 调用：
 - `GET /api/v1/analysis/runs/{run_id}`：读取分析结果。
 - 健康检查：`GET /healthz`、`GET /readyz`。
 
-这些路径属于分析服务，不属于行情服务 `server.go`。分析任务接口的字段契约以 `doc/api/分析任务.openapi.yaml` 为准。
+这些路径属于 Analysis/Researchflow 业务边界，不属于 Market Data Adapter。目标由 Root Server 注册并统一承载；当前 Server 的 Analysis 路由使用 Owner Bearer，而 WebUI 不发送该凭证，因此浏览器请求预期 401。Web Session/Cookie、CSRF、登录限流与资源授权契约完成前，Analysis API 继续受 Owner Bearer 保护并限制网络入口，不得匿名开放或把 Owner Token 写入浏览器。分析任务字段契约以 `doc/api/分析任务.openapi.yaml` 为准。
 
 ## 4. 设置中心能力状态
 
@@ -69,7 +69,14 @@ WebUI 使用独立的 `analysisBase` 调用：
 | 选股默认项 | 待接入 | 无策略 Schema、条件选股配置和扫描任务 API |
 | 安全与备份 | 待接入 | 无管理员认证、服务密钥轮换、审计和服务器备份恢复 API |
 
-## 5. 验收规则
+## 5. 当前认证与迁移边界
+
+1. Data API Key 当前仍由浏览器配置并用于行情请求，这是迁移期兼容状态，不是目标安全模型。MDM-006 与 Root Server 登录认证切换完成后，移除 Key 的浏览器读写和请求头注入，清理 localStorage 旧字段，并轮换已暴露凭据。
+2. OpenAPI 声明、Market Data Adapter Handler 注册、Root Server 实际挂载、Nginx/部署路由可达、认证通过是五个独立事实；必须分别提供证据，不得用其中任一项替代其他项。
+3. Analysis API 当前要求 Owner Bearer，WebUI 不携带该 Token，故当前浏览器请求预期 401。此状态不得通过把 Owner Token 放入 localStorage、静态 Nginx 配置或匿名降级解决。
+4. Root Server Web Session/Cookie、CSRF、登录限流、资源授权和可信代理边界完成前，Analysis API 继续保持受限网络入口。
+
+## 6. 验收规则
 
 1. “已注册”只表示 Handler 存在；“OpenAPI 已声明”只表示协议文档存在；“WebUI 已封装”只表示有前端请求函数。这三者必须分别核对。
 2. 未配置 Provider Key、未观测到真实业务请求、服务端接口不可读，必须显示为不同状态；不得互相推断。
