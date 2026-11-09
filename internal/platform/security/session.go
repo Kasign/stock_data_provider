@@ -21,7 +21,7 @@ const (
 	DefaultSessionIdleTTL     = 12 * time.Hour
 	DefaultSessionAbsoluteTTL = 7 * 24 * time.Hour
 	SessionTokenBytes         = 32
-	maxSessionSubjectBytes   = 128
+	maxSessionSubjectBytes    = 128
 	maxSessionPrefixBytes     = 128
 )
 
