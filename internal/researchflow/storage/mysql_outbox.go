@@ -125,6 +125,53 @@ func (r *MySQLRunRepository) ClaimOutbox(
 	return messages, nil
 }
 
+// RenewOutboxLease extends a live lease without changing its generation.
+// An expired lease must be reclaimed, which increments the fencing generation.
+func (r *MySQLRunRepository) RenewOutboxLease(
+	ctx context.Context,
+	outboxRef, workerID string,
+	leaseGeneration uint64,
+	leaseDuration time.Duration,
+) (time.Time, bool, error) {
+	if r == nil || r.db == nil {
+		return time.Time{}, false, errors.New("researchflow SQL database is not configured")
+	}
+	if strings.TrimSpace(outboxRef) == "" || len(outboxRef) > 255 ||
+		strings.TrimSpace(workerID) == "" || len(workerID) > 128 ||
+		leaseGeneration == 0 || leaseDuration <= 0 {
+		return time.Time{}, false, errors.New("Researchflow Outbox lease renewal arguments are invalid")
+	}
+	tx, err := r.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
+	if err != nil {
+		return time.Time{}, false, fmt.Errorf("begin Researchflow Outbox lease renewal: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	now, err := readDatabaseUTC(tx, ctx)
+	if err != nil {
+		return time.Time{}, false, err
+	}
+	expiresAt := now.Add(leaseDuration)
+	result, err := tx.ExecContext(ctx, `UPDATE researchflow_outbox SET lease_expires_at = ?
+		WHERE outbox_ref = ? AND published_at IS NULL AND lease_owner = ?
+			AND lease_generation = ? AND lease_expires_at > ?`,
+		formatResearchflowTimeValue(expiresAt), outboxRef, workerID,
+		leaseGeneration, formatResearchflowTimeValue(now))
+	if err != nil {
+		return time.Time{}, false, fmt.Errorf("renew Researchflow Outbox lease %q: %w", outboxRef, err)
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return time.Time{}, false, fmt.Errorf("verify Researchflow Outbox lease renewal: %w", err)
+	}
+	if affected != 1 {
+		return time.Time{}, false, nil
+	}
+	if err := tx.Commit(); err != nil {
+		return time.Time{}, false, fmt.Errorf("commit Researchflow Outbox lease renewal: %w", err)
+	}
+	return expiresAt, true, nil
+}
+
 // AcknowledgeOutbox marks delivery complete only for the current, unexpired
 // lease. A stale worker cannot acknowledge a message reclaimed by another.
 func (r *MySQLRunRepository) AcknowledgeOutbox(
