@@ -44,31 +44,58 @@ type CredentialStore interface {
 // It never applies migrations implicitly; the Server Migration Registry must
 // explicitly register OwnerCredentialMigrations.
 type SQLCredentialStore struct {
-	db *sql.DB
+	db        *sql.DB
+	tableName string
 }
 
 func NewSQLCredentialStore(db *sql.DB) (*SQLCredentialStore, error) {
 	if db == nil {
 		return nil, fault.New(fault.ClassValidation, "platform.security.invalid_credential_store", "credential store database is not configured", nil)
 	}
-	return &SQLCredentialStore{db: db}, nil
+	return newSQLCredentialStore(db, ownerCredentialTable)
+}
+
+func newSQLCredentialStore(db *sql.DB, tableName string) (*SQLCredentialStore, error) {
+	if db == nil || !validCredentialTableName(tableName) {
+		return nil, fault.New(fault.ClassValidation, "platform.security.invalid_credential_store", "credential store database or table is not configured", nil)
+	}
+	return &SQLCredentialStore{db: db, tableName: tableName}, nil
+}
+
+func validCredentialTableName(value string) bool {
+	if value == "" || len(value) > 64 {
+		return false
+	}
+	for index, char := range value {
+		if (char >= 'a' && char <= 'z') || (char >= '0' && char <= '9') || (index > 0 && char == '_') {
+			continue
+		}
+		return false
+	}
+	return true
 }
 
 // OwnerCredentialMigrations returns the Platform-owned schema migration.
 // The Server is responsible for registering it with the Platform Migration Runner.
 func OwnerCredentialMigrations() []storage.Migration {
+	return ownerCredentialMigrations(ownerCredentialTable)
+}
+
+func ownerCredentialMigrations(tableName string) []storage.Migration {
+	if !validCredentialTableName(tableName) {
+		return nil
+	}
+	statement := fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %s (
+		owner_id TINYINT UNSIGNED NOT NULL PRIMARY KEY,
+		password_hash VARCHAR(512) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+		credential_version BIGINT UNSIGNED NOT NULL,
+		created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+		updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+		CHECK (owner_id = 1)
+	) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`, tableName)
 	return []storage.Migration{{
-		Version:     1,
-		Description: "create single owner credential store",
-		Statements: []string{`CREATE TABLE IF NOT EXISTS platform_owner_credentials (
-			owner_id TINYINT UNSIGNED NOT NULL,
-			password_hash VARCHAR(512) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
-			credential_version BIGINT UNSIGNED NOT NULL,
-			created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
-			updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
-			PRIMARY KEY (owner_id),
-			CONSTRAINT chk_platform_owner_credentials_singleton CHECK (owner_id = 1)
-		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`},
+		Version: 1, Description: "create single owner credential store",
+		Statements: []string{statement},
 	}}
 }
 
@@ -79,7 +106,7 @@ func (s *SQLCredentialStore) GetOwnerCredential(ctx context.Context) (OwnerCrede
 	var credential OwnerCredential
 	credential.Subject = "owner"
 	err := s.db.QueryRowContext(ctx,
-		"SELECT password_hash, credential_version FROM "+ownerCredentialTable+" WHERE owner_id = ?",
+		"SELECT password_hash, credential_version FROM "+s.tableName+" WHERE owner_id = ?",
 		ownerCredentialID,
 	).Scan(&credential.PasswordHash, &credential.CredentialVersion)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -105,7 +132,7 @@ func (s *SQLCredentialStore) InitializeOwnerCredential(ctx context.Context, pass
 		return OwnerCredential{}, fault.New(fault.ClassValidation, "platform.security.invalid_password_hash", "password hash is invalid", err)
 	}
 	_, err := s.db.ExecContext(ctx,
-		"INSERT INTO "+ownerCredentialTable+" (owner_id, password_hash, credential_version) VALUES (?, ?, 1)",
+		"INSERT INTO "+s.tableName+" (owner_id, password_hash, credential_version) VALUES (?, ?, 1)",
 		ownerCredentialID, passwordHash,
 	)
 	if err != nil {
@@ -133,7 +160,7 @@ func (s *SQLCredentialStore) UpdateOwnerPassword(ctx context.Context, expectedVe
 	}
 
 	result, err := s.db.ExecContext(ctx,
-		"UPDATE "+ownerCredentialTable+" SET password_hash = ?, credential_version = credential_version + 1 WHERE owner_id = ? AND credential_version = ?",
+		"UPDATE "+s.tableName+" SET password_hash = ?, credential_version = credential_version + 1 WHERE owner_id = ? AND credential_version = ?",
 		passwordHash, ownerCredentialID, expectedVersion,
 	)
 	if err != nil {
@@ -146,7 +173,7 @@ func (s *SQLCredentialStore) UpdateOwnerPassword(ctx context.Context, expectedVe
 	if affected != 1 {
 		var currentVersion uint64
 		err := s.db.QueryRowContext(ctx,
-			"SELECT credential_version FROM "+ownerCredentialTable+" WHERE owner_id = ?",
+			"SELECT credential_version FROM "+s.tableName+" WHERE owner_id = ?",
 			ownerCredentialID,
 		).Scan(&currentVersion)
 		if errors.Is(err, sql.ErrNoRows) {
