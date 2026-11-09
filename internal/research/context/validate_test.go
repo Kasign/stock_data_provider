@@ -1,7 +1,7 @@
 package context
 
 import (
-    "encoding/json"
+    "bytes"\n\t"encoding/json"\n\t"os"
     "math"
     "strings"
     "testing"
@@ -149,5 +149,22 @@ func TestContextValidateNextVersionRejectsIntegerOverflow(t *testing.T) {
 	next.ContextVersion = 1
 	if err := next.ValidateNextVersion(previous); err == nil || !strings.Contains(err.Error(), "integer limit") {
 		t.Fatalf("ValidateNextVersion() error = %v, want integer limit rejection", err)
+	}
+}
+
+func TestContextGoldenJSONV1(t *testing.T) {
+	want := validContext()
+	encoded, err := json.MarshalIndent(want, "", "  ")
+	if err != nil {
+		t.Fatalf("MarshalIndent() error = %v", err)
+	}
+	encoded = append(encoded, '\\n')
+
+	golden, err := os.ReadFile("testdata/context_v1.golden.json")
+	if err != nil {
+		t.Fatalf("read Context v1 golden fixture: %v", err)
+	}
+	if !bytes.Equal(encoded, golden) {
+		t.Fatalf("Context v1 JSON differs from golden fixture; update the fixture only after reviewing the public DTO contract")
 	}
 }
