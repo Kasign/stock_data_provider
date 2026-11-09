@@ -11,7 +11,7 @@ func TestResearchMigrationsAreExplicitAndVersioned(t *testing.T) {
 	}
 	migrations := Migrations()
 	if len(migrations) != 4 {
-		t.Fatalf("migration count = %d, want 4", len(migrations))
+		t.Fatalf("migration count = %d, want 5", len(migrations))
 	}
 	if migrations[0].Version != 1 || migrations[1].Version != 2 || migrations[2].Version != 3 || migrations[3].Version != 4 {
 		t.Fatalf("migration versions = %d,%d,%d,%d, want 1,2,3,4", migrations[0].Version, migrations[1].Version, migrations[2].Version, migrations[3].Version)

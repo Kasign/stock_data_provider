@@ -124,5 +124,14 @@ func Migrations() []platformstorage.Migration {
 					") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin",
 			},
 		},
-}
+		{
+			Version: 5,
+			Description: "add reliable Research Outbox delivery leases and retry state",
+			Statements: []string{
+				"ALTER TABLE research_notification_outbox ADD COLUMN delivery_status VARCHAR(16) NOT NULL DEFAULT 'pending', ADD COLUMN available_at CHAR(30) CHARACTER SET ascii COLLATE ascii_bin NULL, ADD COLUMN lease_owner VARCHAR(128) NULL, ADD COLUMN lease_token CHAR(32) CHARACTER SET ascii COLLATE ascii_bin NULL, ADD COLUMN lease_until CHAR(30) CHARACTER SET ascii COLLATE ascii_bin NULL, ADD COLUMN attempt_count INT UNSIGNED NOT NULL DEFAULT 0, ADD COLUMN last_error_code VARCHAR(128) NULL, ADD COLUMN delivered_at CHAR(30) CHARACTER SET ascii COLLATE ascii_bin NULL, ADD COLUMN updated_at DATETIME(6) NULL",
+				"UPDATE research_notification_outbox SET available_at = CONCAT(DATE_FORMAT(created_at, '%Y-%m-%dT%H:%i:%s.%f'), '000Z'), updated_at = created_at",
+				"ALTER TABLE research_notification_outbox MODIFY COLUMN available_at CHAR(30) CHARACTER SET ascii COLLATE ascii_bin NOT NULL, MODIFY COLUMN updated_at DATETIME(6) NOT NULL, ADD KEY idx_research_outbox_delivery (delivery_status, available_at, created_at)",
+			},
+		},
+	}
 }
