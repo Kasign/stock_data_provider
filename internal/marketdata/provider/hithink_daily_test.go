@@ -78,3 +78,54 @@ func TestHithinkDailyPaginationDuplicateReportsPageOffsetAndRow(t *testing.T) {
 		t.Fatalf("unexpected pagination offsets: %v", offsets)
 	}
 }
+
+
+func TestHithinkIndexDailyBarsReportsOptionalFieldIssues(t *testing.T) {
+	loc := time.FixedZone("CST", 8*60*60)
+	dateMS := time.Date(2026, time.November, 6, 0, 0, 0, 0, loc).UnixMilli()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/a-share-index/prices/historical" {
+			t.Errorf("unexpected request path %q", r.URL.Path)
+			http.NotFound(w, r)
+			return
+		}
+		payload := map[string]any{
+			"code": 0,
+			"data": map[string]any{
+				"item": []map[string]any{{
+					"date_ms": dateMS, "open_price": 10.0, "high_price": 11.0,
+					"low_price": 9.0, "close_price": 10.5, "volume": -1.0, "turnover": -2.0,
+				}},
+			},
+		}
+		_ = json.NewEncoder(w).Encode(payload)
+	}))
+	defer server.Close()
+
+	reporter := validation.NewReporter(10)
+	ctx := validation.WithReporter(context.Background(), reporter)
+	p := NewHithinkConfigured(time.Second, server.URL, "test-key")
+	got, err := p.FetchIndexDailyBars(ctx, "000001.SH", "2026-11-06", "2026-11-06")
+	if err != nil {
+		t.Fatalf("FetchIndexDailyBars: %v", err)
+	}
+	if len(got.Items) != 1 || got.QualityStatus != model.QualityDegraded {
+		t.Fatalf("expected one degraded index bar, got %+v", got)
+	}
+	seen := map[string]bool{}
+	for _, issue := range reporter.Snapshot().Issues {
+		seen[issue.Field+":"+issue.ProviderField+":"+issue.Code] = true
+		if issue.Field != "provider_time" && (issue.RowIndex == nil || *issue.RowIndex != 0) {
+			t.Errorf("row-level issue must point to row 0: %+v", issue)
+		}
+	}
+	for _, key := range []string{
+		"provider_time:timestamp:missing_or_invalid_value",
+		"volume:volume:missing_or_invalid_value",
+		"amount:turnover:missing_or_invalid_value",
+	} {
+		if !seen[key] {
+			t.Errorf("missing Reporter issue %q; got %+v", key, reporter.Snapshot().Issues)
+		}
+	}
+}
