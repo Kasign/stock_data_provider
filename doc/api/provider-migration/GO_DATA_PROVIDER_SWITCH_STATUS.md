@@ -14,7 +14,7 @@
 - 修复既有严格校验测试的配置前置条件：Tushare、Eastmoney、BaoStock、Pytdx 测试显式启用至少一项业务能力，避免被“零能力 Provider 跳过”规则提前短路，造成测试误通过。
 - 根据 TickFlow 实际调用点确认：Quote、IndexQuotes、MarketBreadth、SectorRankings 使用认证 API；DailyBars 在配置 API Key 时使用认证 API，否则使用 Free API。严格校验现在只要求对应请求模式的执行器，不再无条件要求认证与公开两个执行器同时存在。
 - 新增 TickFlow 组合测试源码覆盖 Quote-only、无 Key 日 K、带 Key 日 K，以及缺失对应执行器的失败场景。
-- Eastmoney 暂保留 Provider 实际配置的全部 origin 校验。原因是当前 endpoint 被跨能力复用（例如 Quote enrichment、MarketBreadth 的 LimitPool 与 StockList 分页）；尚未完成所有调用点到领域能力的可靠映射，不能仅按 endpoint 字段名称推断最小依赖集。
+- 当时 Eastmoney 暂保留全部 origin 校验；该临时策略已由文档后续“Eastmoney 出站依赖按业务能力收敛”阶段替代，当前以 `HTTPOriginsForCapabilities` 的调用链映射为准。
 - 本批未执行构建或测试，按约定留待 integration 统一验收；本次仅完成静态请求路径核对和回归测试源码，不代表真实 BoundDoer 安全策略已接通。
 
 
