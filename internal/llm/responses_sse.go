@@ -90,6 +90,8 @@ func ParseResponsesSSE(data []byte, request ModelRequest, clock Clock, onEvent f
 	sequenceMode := 0 // 1 = all events carry sequence_number; 2 = none do.
 	var previousSequence int64
 	hasPreviousSequence := false
+	sawOutputTextEvent := false
+	sawOutputTextDelta := false
 	var parseErr error
 	var terminalErr error
 	functionArguments := make(map[string]string)
@@ -188,10 +190,13 @@ func ParseResponsesSSE(data []byte, request ModelRequest, clock Clock, onEvent f
 			result.ResponseID = event.ResponseID
 		}
 		if event.Type == "response.output_text.delta" {
+			sawOutputTextEvent = true
+			sawOutputTextDelta = true
 			result.OutputText += event.Delta
 		}
 		if event.Type == "response.output_text.done" {
-			if result.OutputText != "" && result.OutputText != event.Delta {
+			sawOutputTextEvent = true
+			if sawOutputTextDelta && result.OutputText != event.Delta {
 				parseErr = invalidSSEError("llm.sse.output_text_mismatch")
 				resetEvent()
 				return
@@ -265,7 +270,7 @@ func ParseResponsesSSE(data []byte, request ModelRequest, clock Clock, onEvent f
 				result.Error = event.Error
 			} else {
 				var terminalParseErr error
-				result, terminalParseErr = terminalResponseFromEvent(wire, request, startedAt, result)
+				result, terminalParseErr = terminalResponseFromEvent(wire, request, startedAt, result, sawOutputTextEvent)
 				if terminalParseErr != nil {
 					parseErr = terminalParseErr
 					resetEvent()
@@ -598,7 +603,7 @@ func upsertSSEOutputItem(response *ModelResponse, item OutputItem) {
 	}
 }
 
-func terminalResponseFromEvent(wire responsesSSEWireEvent, request ModelRequest, startedAt time.Time, partial ModelResponse) (ModelResponse, error) {
+func terminalResponseFromEvent(wire responsesSSEWireEvent, request ModelRequest, startedAt time.Time, partial ModelResponse, sawOutputTextEvent bool) (ModelResponse, error) {
 	var parsed ModelResponse
 	if len(wire.Response) == 0 {
 		return partial, invalidSSEError("llm.sse.missing_terminal_response")
@@ -616,7 +621,7 @@ func terminalResponseFromEvent(wire responsesSSEWireEvent, request ModelRequest,
 		parsed.Error = invalidResponsesError("llm.sse.invalid_terminal_response")
 		return parsed, invalidSSEError("llm.sse.invalid_terminal_response")
 	}
-	if partial.OutputText != "" && parsed.OutputText != partial.OutputText {
+	if sawOutputTextEvent && parsed.OutputText != partial.OutputText {
 		return partial, invalidSSEError("llm.sse.terminal_output_text_mismatch")
 	}
 	return parsed, nil
