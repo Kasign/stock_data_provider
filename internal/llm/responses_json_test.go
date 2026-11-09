@@ -317,29 +317,28 @@ func TestParseResponsesIncompleteStructuredOutputIsNotValidatedAsCompleted(t *te
 	}
 }
 
-
 // TestParseResponsesUsageDetailsAreRangeChecked 验证缓存与推理 Token 详情不超过对应总量且不为负数。
 func TestParseResponsesUsageDetailsAreRangeChecked(t *testing.T) {
 	request := validResponsesRequest()
 	cases := []struct {
-		name string
+		name  string
 		usage string
-		want string
+		want  string
 	}{
 		{
-			name: "cached tokens exceed input",
+			name:  "cached tokens exceed input",
 			usage: `{"input_tokens":10,"output_tokens":5,"input_tokens_details":{"cached_tokens":11},"output_tokens_details":{"reasoning_tokens":1}}`,
-			want: "input_cached_tokens_exceeds_input",
+			want:  "input_cached_tokens_exceeds_input",
 		},
 		{
-			name: "reasoning tokens exceed output",
+			name:  "reasoning tokens exceed output",
 			usage: `{"input_tokens":10,"output_tokens":5,"input_tokens_details":{"cached_tokens":2},"output_tokens_details":{"reasoning_tokens":6}}`,
-			want: "output_reasoning_tokens_exceeds_output",
+			want:  "output_reasoning_tokens_exceeds_output",
 		},
 		{
-			name: "negative details",
+			name:  "negative details",
 			usage: `{"input_tokens":10,"output_tokens":5,"input_tokens_details":{"cached_tokens":-1},"output_tokens_details":{"reasoning_tokens":-1}}`,
-			want: "input_cached_tokens_negative",
+			want:  "input_cached_tokens_negative",
 		},
 	}
 	for _, tt := range cases {
