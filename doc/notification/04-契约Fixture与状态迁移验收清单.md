@@ -404,3 +404,10 @@ Run `42602399686` 对应 HEAD `8d08cf07a651efcd42a514f3dafd94d659f21f97`。`Test
 - [x] 即使 Attempt 为 `not_sent`，也不得在 MaxElapsed 耗尽后安排重试。
 - [x] 增加恢复服务回归测试，断言预算耗尽收敛为 `failed/deadline_exceeded`。
 - [ ] CI 根模块 Notification 测试实际执行通过；真实 MariaDB L3 待 DSN。
+
+
+## 18. 过期租约扫描二次过滤
+
+- [x] 二次读取租约时重新检查数据库权威过期时间，排除初次扫描后已续期的租约。
+- [x] MariaDB 集成测试覆盖 active、expired、renewed 三种状态。
+- [ ] 真实 MariaDB DSN L3 执行仍待配置。

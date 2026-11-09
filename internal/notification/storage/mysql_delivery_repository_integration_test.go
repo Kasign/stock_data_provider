@@ -106,6 +106,24 @@ func TestNotificationMariaDBDeliveryRepositoryIntegration(t *testing.T) {
 		t.Fatalf("unexpected winning claim: %+v", winner)
 	}
 
+	scanner := application.ExpiredDeliveryLeaseScanner(repository)
+	if expired, err := scanner.ListExpiredLeases(ctx, 10); err != nil || len(expired) != 0 {
+		t.Fatalf("active lease must not be returned by expired scanner: claims=%+v err=%v", expired, err)
+	}
+	if _, err := db.ExecContext(ctx, "UPDATE notification_deliveries SET lease_expires_at = ? WHERE delivery_id = ?", now.Add(-time.Second), delivery.DeliveryID); err != nil {
+		t.Fatalf("expire lease fixture: %v", err)
+	}
+	if expired, err := scanner.ListExpiredLeases(ctx, 10); err != nil || len(expired) != 1 ||
+		expired[0].Lease.FencingToken != winner.Lease.FencingToken {
+		t.Fatalf("expired lease must be returned with current fencing token: claims=%+v err=%v", expired, err)
+	}
+	if _, err := db.ExecContext(ctx, "UPDATE notification_deliveries SET lease_expires_at = ? WHERE delivery_id = ?", now.Add(2*time.Minute), delivery.DeliveryID); err != nil {
+		t.Fatalf("renew lease fixture: %v", err)
+	}
+	if expired, err := scanner.ListExpiredLeases(ctx, 10); err != nil || len(expired) != 0 {
+		t.Fatalf("renewed lease must not remain a recovery candidate: claims=%+v err=%v", expired, err)
+	}
+
 	finishedAt := now.Add(3 * time.Second)
 	next, event, err := winner.Delivery.Transition(domain.DeliveryTransition{
 		To: domain.DeliverySent, At: finishedAt, ProviderMessageRef: "provider-message-it",
