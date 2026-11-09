@@ -47,7 +47,7 @@ func Run(ctx context.Context) error {
 	}
 
 	startupCtx, startupCancel := context.WithTimeout(ctx, 15*time.Second)
-	storageResources, store, err := serverresources.OpenLegacyAnalysisStorage(startupCtx, storageCfg)
+	storageResources, store, err := serverresources.OpenLegacyAnalysisResources(startupCtx, storageCfg)
 	startupCancel()
 	if err != nil {
 		return fmt.Errorf("连接 MariaDB/Redis 失败（检查 DB_HOST/DB_PASSWORD/REDIS_ADDR 和 DB_AUTO_MIGRATE）: %w", err)
