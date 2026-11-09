@@ -42,6 +42,10 @@ func TestNotificationMariaDBDeliveryPlanRepositoryIntegration(t *testing.T) {
 	}
 
 	plan := integrationDeliveryPlan()
+	plan.PlanFingerprint, err = plan.CalculateFingerprint()
+	if err != nil {
+		t.Fatal(err)
+	}
 	created, duplicate, err := repository.CreateOrGet(ctx, plan)
 	if err != nil || duplicate || created.DeliveryID != plan.DeliveryID {
 		t.Fatalf("first create: duplicate=%v plan=%+v err=%v", duplicate, created, err)
@@ -92,6 +96,5 @@ func integrationDeliveryPlan() domain.DeliveryPlan {
 		DeliveryID:              "delivery-" + suffix,
 		DeliveryIdempotencyKey: "idempotency-" + suffix,
 	}
-	plan.PlanFingerprint, _ = plan.CalculateFingerprint()
 	return plan
 }

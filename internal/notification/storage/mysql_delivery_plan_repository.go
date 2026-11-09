@@ -9,6 +9,7 @@ import (
 
 	mysql "github.com/go-sql-driver/mysql"
 
+	"example.com/stock-analysis-flow/internal/notification/application"
 	"example.com/stock-analysis-flow/internal/notification/domain"
 )
 
@@ -18,9 +19,7 @@ type MySQLDeliveryPlanRepository struct {
 	db *sql.DB
 }
 
-var _ interface {
-	CreateOrGet(context.Context, domain.DeliveryPlan) (domain.DeliveryPlan, bool, error)
-} = (*MySQLDeliveryPlanRepository)(nil)
+var _ application.DeliveryPlanRepository = (*MySQLDeliveryPlanRepository)(nil)
 
 // NewMySQLDeliveryPlanRepository wraps the shared MariaDB connection pool.
 func NewMySQLDeliveryPlanRepository(db *sql.DB) (*MySQLDeliveryPlanRepository, error) {
