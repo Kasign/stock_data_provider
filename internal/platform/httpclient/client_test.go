@@ -1167,7 +1167,6 @@ func TestFaultForRetryabilityMatchesTransportRetryPolicy(t *testing.T) {
 	}
 }
 
-
 func TestValidDependencyRequiresStableLowercaseIdentifier(t *testing.T) {
 	for _, value := range []string{"news.fetch", "provider_1", "market-data"} {
 		if !validDependency(value) {
