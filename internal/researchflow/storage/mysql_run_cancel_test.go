@@ -2,7 +2,6 @@ package storage
 
 import (
 	"context"
-	"errors"
 	"testing"
 )
 
@@ -15,5 +14,4 @@ func TestBeginRunCancellationValidatesRepositoryAndArguments(t *testing.T) {
 	if _, err := repository.BeginRunCancellation(context.Background(), "", 1); err == nil {
 		t.Fatal("expected missing database to be rejected before argument validation")
 	}
-	_ = errors.Is
 }
