@@ -28,6 +28,7 @@ func TestAssessDeliveryAttemptConsistencyDistinguishesIntermediateAndConflict(t 
 			snapshot:=delivery
 			snapshot.Status=tc.status
 			snapshot.AttemptCount=len(tc.attempts)
+			if tc.status==domain.DeliveryUnknown { reason:="test_unknown"; snapshot.ReasonCode=&reason }
 			if tc.status==domain.DeliverySending { snapshot.AttemptCount=len(tc.attempts) }
 			got,err:=AssessDeliveryAttemptConsistency(snapshot,tc.attempts)
 			if tc.wantErr {
