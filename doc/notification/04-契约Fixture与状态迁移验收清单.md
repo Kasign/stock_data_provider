@@ -460,3 +460,10 @@ Run `42602399686` 对应 HEAD `8d08cf07a651efcd42a514f3dafd94d659f21f97`。`Test
 - [x] 校验 Adapter 自报配置与持久化快照逐字段一致。
 - [x] RetryableErrorCodes 按集合语义比较。
 - [x] 覆盖匹配、配置错配和集合顺序差异测试。
+
+
+### CI 阻断记录（Run `42612681306`）
+
+- `Test go-core` 成功；根模块 `Test .` 在全仓 gofmt 门禁失败，日志列出的差异来自 Market Data、News、Quant 等其他目录，未列出 `internal/notification/**`。
+- 因门禁失败，根模块测试、Race、vet 未执行；Notification 新增测试尚无 CI 实际执行通过证据。
+- MariaDB 集成 Job skipped，未获得真实 DSN L3 证据。
