@@ -89,7 +89,7 @@ ResearchEvent 是跨来源现实事件，不是 News Article 别名。创建、�
 
 ## 6.1 RSC-004 Data 实体引用依赖复核
 
-2026-11-06 只读核对 Data 分支 `feat/full-go-data-providers-api-switch`，HEAD 为 `3a82139deb6e343fb651abb07512e909206f1b65`。代码树未发现 SecurityRef、IndustryRef、SecurityMaster、IndustryClassification 或独立 GetSecurity/ListIndustries 查询端口；旧 `internal/analysis/app/ports.go` 仅有泛化 UniverseResolver，不能视为 Data 所有的稳定实体契约。故 RSC-004 暂不开发 Adapter，也不在 Research 中复制 Security/Industry 模型。待 Data 提供稳定引用、历史版本/知识时间语义和公开 Application Port 后再继续。
+2026-11-09 只读核对 Data 分支 `feat/full-go-data-providers-api-switch`，HEAD 为 `7b3aa2a099b29b841caf93b0890985ecbc002cf4`。Market Data 已迁入根 Go Module（`internal/marketdata` 存在，`services/market-data/go.mod` 已不存在）；代码树仍未发现 SecurityRef、IndustryRef、SecurityMaster、IndustryClassification 或独立 GetSecurity/ListIndustries 查询端口。当前 `SecurityTradingStatus` 是具体状态数据，不是稳定证券主数据身份；旧 `internal/analysis/app/ports.go` 泛化 UniverseResolver 也不能视为 Data 所有的稳定实体契约。故 RSC-004 暂不开发 Adapter，也不在 Research 中复制 Security/Industry 模型。待 Data 提供稳定引用、历史版本/知识时间语义和公开 Application Port 后再继续。
 
 ### RSC-OPEN-006：ScenarioCondition 缺少可执行的值类型与组合 Schema
 
