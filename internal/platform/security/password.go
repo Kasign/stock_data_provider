@@ -27,7 +27,7 @@ const (
 )
 
 var (
-	errInvalidPassword = errors.New("password input is invalid")
+	errInvalidPassword     = errors.New("password input is invalid")
 	errInvalidPasswordHash = errors.New("password hash is invalid")
 )
 

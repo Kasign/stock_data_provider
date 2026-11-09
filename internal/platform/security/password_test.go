@@ -17,7 +17,7 @@ func testPasswordHasher(t *testing.T, memory uint32) *Argon2idHasher {
 }
 
 func TestArgon2idHashVerifyAndSaltUniqueness(t *testing.T) {
-	hasher := testPasswordHasher(t, 8*1024)
+	hasher := testPasswordHasher(t, 8 * 1024)
 	password := []byte("a long test password")
 	first, err := hasher.Hash(password)
 	if err != nil {
@@ -39,8 +39,8 @@ func TestArgon2idHashVerifyAndSaltUniqueness(t *testing.T) {
 }
 
 func TestArgon2idNeedsRehash(t *testing.T) {
-	oldHasher := testPasswordHasher(t, 8*1024)
-	newHasher := testPasswordHasher(t, 16*1024)
+	oldHasher := testPasswordHasher(t, 8 * 1024)
+	newHasher := testPasswordHasher(t, 16 * 1024)
 	encoded, err := oldHasher.Hash([]byte("test password"))
 	if err != nil {
 		t.Fatal(err)
@@ -57,10 +57,10 @@ func TestArgon2idNeedsRehash(t *testing.T) {
 
 func TestArgon2idRejectsInvalidInputsAndParameters(t *testing.T) {
 	invalid := []Argon2idParams{
-		{Memory: 8*1024, Iterations: 1, Parallelism: 0, SaltLength: 16, KeyLength: 32},
-		{Memory: 8*1024, Iterations: 0, Parallelism: 1, SaltLength: 16, KeyLength: 32},
-		{Memory: 8*1024, Iterations: 1, Parallelism: 1, SaltLength: 8, KeyLength: 32},
-		{Memory: 8*1024, Iterations: 1, Parallelism: 1, SaltLength: 16, KeyLength: 8},
+		{Memory: 8 * 1024, Iterations: 1, Parallelism: 0, SaltLength: 16, KeyLength: 32},
+		{Memory: 8 * 1024, Iterations: 0, Parallelism: 1, SaltLength: 16, KeyLength: 32},
+		{Memory: 8 * 1024, Iterations: 1, Parallelism: 1, SaltLength: 8, KeyLength: 32},
+		{Memory: 8 * 1024, Iterations: 1, Parallelism: 1, SaltLength: 16, KeyLength: 8},
 		{Memory: maxArgonMemoryKiB + 1, Iterations: 1, Parallelism: 1, SaltLength: 16, KeyLength: 32},
 	}
 	for _, params := range invalid {
@@ -68,7 +68,7 @@ func TestArgon2idRejectsInvalidInputsAndParameters(t *testing.T) {
 			t.Errorf("accepted invalid parameters: %+v", params)
 		}
 	}
-	hasher := testPasswordHasher(t, 8*1024)
+	hasher := testPasswordHasher(t, 8 * 1024)
 	for _, password := range [][]byte{nil, {}, []byte(strings.Repeat("x", maxPasswordBytes+1))} {
 		if _, err := hasher.Hash(password); err == nil {
 			t.Error("accepted invalid password length")
@@ -77,7 +77,7 @@ func TestArgon2idRejectsInvalidInputsAndParameters(t *testing.T) {
 }
 
 func TestArgon2idRejectsMalformedAndExpensiveEncodedHashes(t *testing.T) {
-	hasher := testPasswordHasher(t, 8*1024)
+	hasher := testPasswordHasher(t, 8 * 1024)
 	for _, encoded := range []string{
 		"", "$argon2i$v=19$m=8192,t=1,p=1$YWJjZGVmZ2hpamtsbW5vcA$YWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXowMTIzNDU2",
 		"$argon2id$v=18$m=8192,t=1,p=1$YWJjZGVmZ2hpamtsbW5vcA$YWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXowMTIzNDU2",
