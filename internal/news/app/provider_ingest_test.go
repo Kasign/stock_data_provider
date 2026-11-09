@@ -111,7 +111,7 @@ func TestIngestProviderCandidateFailsClosedBeforePersistence(t *testing.T) {
 			name:         "provider policy unavailable",
 			registration: validProviderIngestRegistration(),
 			policyErr:    errors.New("catalog unavailable"),
-			want:   ErrProviderOutputPolicyUnavailable,
+			want:         ErrProviderOutputPolicyUnavailable,
 		},
 		{
 			name: "source policy version missing",
