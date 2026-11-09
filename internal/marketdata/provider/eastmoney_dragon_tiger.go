@@ -12,6 +12,7 @@ import (
 
 	"example.com/stock-analysis-flow/internal/marketdata/model"
 	"example.com/stock-analysis-flow/internal/marketdata/normalize"
+	"example.com/stock-analysis-flow/internal/marketdata/validation"
 )
 
 const defaultEastmoneyDragonTigerURL = "https://datacenter-web.eastmoney.com/api/data/v1/get"
@@ -118,6 +119,7 @@ func (p *Eastmoney) FetchDragonTiger(ctx context.Context, tradeDate string, page
 	if pages <= 0 {
 		pages = expectedPages
 		reasons = append(reasons, "provider_pages_field_missing_or_invalid")
+		addEastmoneyDragonTigerIssue(ctx, nil, "pages", "pages", "missing_or_invalid_value", "non-negative page count", "missing_or_invalid", "", "东方财富龙虎榜分页总数缺失或非法，已按 count/page_size 计算")
 	} else if pages != expectedPages {
 		return nil, fmt.Errorf("Eastmoney dragon-tiger provider pages=%d disagree with count=%d and page_size=%d (expected %d pages)", pages, total, pageSize, expectedPages)
 	}
@@ -148,6 +150,7 @@ func (p *Eastmoney) FetchDragonTiger(ctx context.Context, tradeDate string, page
 		}
 		code := strings.TrimSpace(parseEastmoneyBoardString(raw, "SECURITY_CODE"))
 		if securityType == "060" {
+			addEastmoneyDragonTigerIssue(ctx, &index, "security_type", "SECURITY_TYPE_CODE", "non_a_share_row_excluded", "A-share security type", "string", securityType, "东方财富龙虎榜可转债记录已排除")
 			// 东方财富龙虎榜返回中包含可转债（例如代码 113711），不能把它混入 A 股股票分析。
 			// 保留供应商原始总数与分页，并单独统计排除行数。
 			snapshot.ExcludedNonAShareCount++
@@ -155,6 +158,7 @@ func (p *Eastmoney) FetchDragonTiger(ctx context.Context, tradeDate string, page
 			continue
 		}
 		if securityType == "058001002" || strings.HasPrefix(code, "900") || strings.HasPrefix(code, "200") {
+			addEastmoneyDragonTigerIssue(ctx, &index, "security_type", "SECURITY_TYPE_CODE", "non_a_share_row_excluded", "A-share security type", "string", securityType, "东方财富龙虎榜 B 股记录已排除")
 			// B 股同样不属于当前 A 股数据契约；仅排除并计数，不让单条 B 股污染整页 A 股数据。
 			snapshot.ExcludedNonAShareCount++
 			snapshot.QualityReasons = appendUniqueEastmoneyReason(snapshot.QualityReasons, "provider_b_share_security_rows_excluded")
@@ -176,11 +180,15 @@ func (p *Eastmoney) FetchDragonTiger(ctx context.Context, tradeDate string, page
 		deal := parseEastmoneyBoardNumber(raw, "BILLBOARD_DEAL_AMT")
 		if netBuy == nil || buy == nil || sell == nil {
 			itemReasons = append(itemReasons, "provider_billboard_amount_fields_incomplete")
+			if netBuy == nil { addEastmoneyDragonTigerIssue(ctx, &index, "net_buy_amount", "BILLBOARD_NET_AMT", "missing_or_invalid_value", "finite net-buy amount", "missing_or_invalid", "", "龙虎榜净买入金额缺失或非法") }
+			if buy == nil { addEastmoneyDragonTigerIssue(ctx, &index, "buy_amount", "BILLBOARD_BUY_AMT", "missing_or_invalid_value", "finite non-negative buy amount", "missing_or_invalid", "", "龙虎榜买入金额缺失或非法") }
+			if sell == nil { addEastmoneyDragonTigerIssue(ctx, &index, "sell_amount", "BILLBOARD_SELL_AMT", "missing_or_invalid_value", "finite non-negative sell amount", "missing_or_invalid", "", "龙虎榜卖出金额缺失或非法") }
 		}
 		reason := strings.TrimSpace(parseEastmoneyBoardString(raw, "EXPLAIN"))
 		explanation := strings.TrimSpace(parseEastmoneyBoardString(raw, "EXPLANATION"))
 		if reason == "" && explanation == "" {
 			itemReasons = append(itemReasons, "provider_list_reason_missing")
+			addEastmoneyDragonTigerIssue(ctx, &index, "reason", "EXPLAIN/EXPLANATION", "missing_value", "list reason or explanation", "missing", "", "龙虎榜上榜原因和说明均缺失")
 		}
 		for _, amount := range []*float64{buy, sell, deal} {
 			if amount != nil && (!finiteNumber(*amount) || *amount < 0) {
@@ -268,4 +276,17 @@ func eastmoneyDragonTigerSymbol(raw map[string]json.RawMessage, rawCode string) 
 		return "", "", fmt.Errorf("Eastmoney security identity mismatch for %q", code)
 	}
 	return symbol, code, nil
+}
+
+
+func addEastmoneyDragonTigerIssue(ctx context.Context, rowIndex *int, field, providerField, code, expected, actualType, preview, message string) {
+	report := validation.NewReport(16)
+	issue := validation.FieldIssue{
+		Stage: validation.StageValidate, Field: field, ProviderField: providerField,
+		Code: code, Expected: expected, ActualType: actualType,
+		ActualPreview: quoteIssuePreview(preview), Severity: validation.SeverityWarning,
+		Message: message, RowIndex: rowIndex,
+	}
+	report.Add(issue)
+	validation.AddContextReport(ctx, report)
 }
