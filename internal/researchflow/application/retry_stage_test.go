@@ -121,9 +121,9 @@ func TestRetryStageRejectsIneligibleSnapshotsBeforeDispatch(t *testing.T) {
 func TestRetryStageRejectsNotDueAndExpiredDeadline(t *testing.T) {
 	now := time.Date(2026, 11, 9, 10, 0, 0, 0, time.UTC)
 	for _, tc := range []struct {
-		name string
+		name   string
 		change func(*StageExecutionSnapshot)
-		want error
+		want   error
 	}{
 		{name: "retry time future", change: func(s *StageExecutionSnapshot) { future := now.Add(time.Minute); s.Stage.RetryAt = &future }, want: ErrRetryStageNotDue},
 		{name: "run deadline reached", change: func(s *StageExecutionSnapshot) { s.Run.DeadlineAt = now }, want: state.ErrDeadlineExceeded},
