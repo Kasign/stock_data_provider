@@ -19,14 +19,16 @@
 
 ### 当前代码与 CI 基线
 
-- 当前分支 HEAD：`77ebff659b6bb8ba86a24f4924230c747aae0f1b`。
-- Go test suite Run `42556374146`：Data Module gofmt、go test、race、vet 全部 success；go-core 同样全部 success。
-- Market Data MariaDB Migration/PIT 集成 Job：success；News MariaDB 集成 Job：success。
-- Compose 校验、Market Data 镜像和 Analysis API 镜像构建：success。
-- Root `Test .`：失败于 gofmt，tests/race/vet 被跳过；失败不属于 Data 文件范围，本分支不越界修改。
-- WebUI checks Run `42556374143`：failure，不属于本分支 Data 修改范围。
-- Platform Go checks Run `42556374153`、Go-Python parity Run `42556374202`、Live Provider probe Run `42556374131`：workflow success。Live Provider 外层 success 不代表所有 Provider/能力/证券/日期/复权口径均完成真实数据验收。
-- Data 代码与契约测试在当前 SHA 已通过模块级 CI；Push workflow 仍不能替代 `origin/integration` 集成验收。
+- 当前开发分支 HEAD：`b97181d1d03b9e2898ebb2acad29b1d084bb5e37`；已通过 PR #46 合入 integration，Merge Commit：`354c3e83db21ae1bca48a19caa9fea11d8cc15fd`。
+- 当前 integration 集成验证使用 PR workflow Run `42557067351`（head `b97181d1`，目标分支 integration）。
+- Data Module Job `128965072448`：gofmt、go test、race、vet 全部 success。
+- Market Data MariaDB Migration/PIT Job `128965072409`：success；News MariaDB integration Job：success。
+- Compose 校验与 Market Data / Analysis API 两个镜像构建 Job `128965072015`：success。
+- go-core Job：gofmt、test、race、vet 全部 success。
+- Root `Test .` Job `128965072366`：失败于全仓 gofmt，测试/race/vet 被跳过。失败文件均属于其他模块：`internal/llm/**`、`internal/news/app/authorization_snapshot.go`、`internal/notification/**`、`internal/quant/**`、`internal/research/**`、`internal/researchflow/**`；Data 目录不在失败清单内。本分支不越界修改。
+- Platform Go checks、Go-Python parity、Live Provider probe workflow success；Live Provider 外层 success 不等于每个 Provider/能力/证券/日期/复权口径均完成真实数据验收。
+- WebUI checks failure 属于独立 WebUI 门禁，不计入 M0-D 的 Data 模块验收。
+- **M0-D 尚未关闭：** 需其他模块完成 gofmt 后，在最新 integration HEAD 重新执行根模块 gofmt/test/race/vet；Data 自身集成 Job 已通过。
 
 ### 方案边界校准
 
@@ -141,7 +143,7 @@ internal/
 | M0-A / CT-05（CT-03 复核） | 35 Operation 参数语义最终核对 | 固定参数全集的 inventory、类型/格式、枚举、数值边界/默认值、日期与重复值语义已覆盖；CT-03 Go Model/OpenAPI 全字段、required/nullable、序列化测试复核无当前差异；SHA `77ebff65` Data gofmt/test/race/vet 全通过 | `completed` |
 | M0-B | Provider 请求行为安全证据 | 已完成 HTTP/TCP 出站调用矩阵；当前配置边界与重定向风险明确登记，归入 M4 Platform HTTP Client / TCP 出站策略整改 | `completed_with_M4_followups` |
 | M0-C | 生产数据库 DDL 对照 | 获取脱敏生产 Schema/DDL；逐表对照 Data Migration、索引、唯一键、字段类型/精度/NULL/默认值；CI 临时 MariaDB 不能替代生产证据 | `blocked_external_evidence` |
-| M0-D / CT-06 | 集成基线验收 | 当前 `integration` HEAD=`0ad30515`；本分支相对 integration 为 ahead 43 / behind 115、状态 diverged。先确认 PR/合并基线和冲突，不直接强行合并；验收时只记录结果，不修改 integration 代码 | `pending_integration` |
+| M0-D / CT-06 | 集成基线验收 | PR #46 已以 Merge Commit 合入，integration HEAD=`354c3e83`；Data gofmt/test/race/vet、MariaDB/PIT、Compose/双镜像通过；Root `Test .` 被其他模块 gofmt 阻断，等待模块 Owner 修复后重跑 | `blocked_by_other_modules` |
 
 #### CT-05 停止扩张规则
 
@@ -479,4 +481,16 @@ internal/
 - Integration 对比：`integration` HEAD `0ad30515dc40af5e4e48d6f624880aadcea0242d`；本分支 ahead 43、behind 115，状态 `diverged`，merge-base `41e4d1d442f22e9258c576b402a123b110b886bd`。
 - 不在当前分支直接制造 integration 合并提交。M0-D 等待集成窗口确认 PR 可合并性和冲突责任；不通过改写 integration 代码解决冲突。
 - 当前 M0 只剩 M0-C 生产 DDL 外部证据与 M0-D integration 验收；M1 仍不准入。
+
+
+
+### 2026-11-09：M0-D 首次集成验证结果（PR #46）
+
+- PR：`#46`，`feat/full-go-data-providers-api-switch` → `integration`，已 Merge。
+- Merge Commit：`354c3e83db21ae1bca48a19caa9fea11d8cc15fd`。本次合并仅涉及 Data 分支的 10 个文件；没有在 integration 手工修改其他模块代码。
+- PR 集成 Go Test Run：`42557067351`。
+- Data Module gofmt/test/race/vet、MariaDB/PIT、Compose、Market Data 镜像和 Analysis API 镜像全部通过。
+- Root `Test .` 失败于全仓 gofmt，列出的未格式化文件归属 LLM、News、Notification、Quant、Research、Researchflow；因此 Root tests/race/vet 未执行。此问题不属于 Data 范围，M0-D 保持 `blocked_by_other_modules`。
+- 当前 Data 分支不修复其他模块文件。待相关模块合并格式修复后，在最新 integration HEAD 重跑根模块门禁；无需重新审计 Data 参数或 Provider 矩阵。
+- M0-C 仍等待脱敏生产 DDL；M0-A/M0-B 已关闭。
 
