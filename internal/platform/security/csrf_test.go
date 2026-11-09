@@ -49,7 +49,7 @@ func TestSessionRecordAcceptsCSRFTokenDigest(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Millisecond)
 	record := SessionRecord{
 		Subject: "owner", CreatedAt: now, LastSeenAt: now,
-		IdleExpiresAt: now.Add(DefaultSessionIdleTTL),
+		IdleExpiresAt:     now.Add(DefaultSessionIdleTTL),
 		AbsoluteExpiresAt: now.Add(DefaultSessionAbsoluteTTL),
 		CredentialVersion: 1, CSRFTokenDigest: digest,
 	}
