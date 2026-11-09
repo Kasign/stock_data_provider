@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"reflect"
 
 	mysql "github.com/go-sql-driver/mysql"
 
@@ -21,6 +22,8 @@ type MySQLDeliveryPlanRepository struct {
 
 var _ application.DeliveryPlanRepository = (*MySQLDeliveryPlanRepository)(nil)
 
+var errDeliveryPlanSnapshotColumnsMismatch = errors.New("notification storage: delivery plan snapshot columns mismatch")
+
 // NewMySQLDeliveryPlanRepository wraps the shared MariaDB connection pool.
 func NewMySQLDeliveryPlanRepository(db *sql.DB) (*MySQLDeliveryPlanRepository, error) {
 	if db == nil {
@@ -30,8 +33,8 @@ func NewMySQLDeliveryPlanRepository(db *sql.DB) (*MySQLDeliveryPlanRepository, e
 }
 
 // CreateOrGet relies on the database unique identity tuple for cross-process
-// idempotency. A duplicate is accepted only after loading and verifying the
-// original immutable snapshot and comparing its complete fingerprint.
+// idempotency. A duplicate is accepted only after checking both the immutable
+// JSON snapshot and every denormalized column against the same persisted row.
 func (r *MySQLDeliveryPlanRepository) CreateOrGet(
 	ctx context.Context,
 	plan domain.DeliveryPlan,
@@ -97,14 +100,26 @@ func (r *MySQLDeliveryPlanRepository) getByIdentity(
 	plan domain.DeliveryPlan,
 ) (domain.DeliveryPlan, bool, error) {
 	var snapshot []byte
-	err := r.db.QueryRowContext(ctx, `SELECT plan_json FROM notification_delivery_plans
+	var columns deliveryPlanColumns
+	err := r.db.QueryRowContext(ctx, `SELECT
+		delivery_id, source_module, event_id, subscription_id, subscription_version,
+		channel_ref, channel_config_version, template_id, template_version, recipient_ref,
+		payload_fingerprint, authorization_policy_versions, authorization_refs,
+		plan_fingerprint, delivery_idempotency_key, plan_json
+		FROM notification_delivery_plans
 		WHERE source_module = ? AND event_id = ? AND subscription_id = ? AND subscription_version = ?
 		AND channel_ref = ? AND channel_config_version = ? AND template_id = ? AND template_version = ?
 		AND recipient_ref = ?`,
 		plan.SourceModule, plan.EventID, plan.SubscriptionID, plan.SubscriptionVersion,
 		plan.ChannelRef, plan.ChannelConfigVersion, plan.TemplateID, plan.TemplateVersion,
 		plan.RecipientRef,
-	).Scan(&snapshot)
+	).Scan(
+		&columns.deliveryID, &columns.sourceModule, &columns.eventID, &columns.subscriptionID,
+		&columns.subscriptionVersion, &columns.channelRef, &columns.channelConfigVersion,
+		&columns.templateID, &columns.templateVersion, &columns.recipientRef,
+		&columns.payloadFingerprint, &columns.policyVersionsJSON, &columns.authorizationRefsJSON,
+		&columns.planFingerprint, &columns.deliveryIdempotencyKey, &snapshot,
+	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return domain.DeliveryPlan{}, false, nil
 	}
@@ -121,7 +136,57 @@ func (r *MySQLDeliveryPlanRepository) getByIdentity(
 	if err := existing.VerifyFingerprint(); err != nil {
 		return domain.DeliveryPlan{}, false, fmt.Errorf("notification storage: stored delivery plan fingerprint is invalid: %w", err)
 	}
+	if err := validateDeliveryPlanColumns(existing, columns); err != nil {
+		return domain.DeliveryPlan{}, false, err
+	}
 	return existing, true, nil
+}
+
+type deliveryPlanColumns struct {
+	deliveryID             string
+	sourceModule           string
+	eventID                string
+	subscriptionID         string
+	subscriptionVersion    int64
+	channelRef             string
+	channelConfigVersion   int64
+	templateID             string
+	templateVersion        int64
+	recipientRef           string
+	payloadFingerprint     string
+	policyVersionsJSON     []byte
+	authorizationRefsJSON  []byte
+	planFingerprint        string
+	deliveryIdempotencyKey string
+}
+
+func validateDeliveryPlanColumns(plan domain.DeliveryPlan, columns deliveryPlanColumns) error {
+	var policyVersions []domain.AuthorizationPolicyVersion
+	if err := json.Unmarshal(columns.policyVersionsJSON, &policyVersions); err != nil {
+		return fmt.Errorf("%w: invalid authorization policy versions JSON", errDeliveryPlanSnapshotColumnsMismatch)
+	}
+	var authorizationRefs []string
+	if err := json.Unmarshal(columns.authorizationRefsJSON, &authorizationRefs); err != nil {
+		return fmt.Errorf("%w: invalid authorization references JSON", errDeliveryPlanSnapshotColumnsMismatch)
+	}
+	if columns.deliveryID != plan.DeliveryID ||
+		columns.sourceModule != plan.SourceModule ||
+		columns.eventID != plan.EventID ||
+		columns.subscriptionID != plan.SubscriptionID ||
+		columns.subscriptionVersion != plan.SubscriptionVersion ||
+		columns.channelRef != plan.ChannelRef ||
+		columns.channelConfigVersion != plan.ChannelConfigVersion ||
+		columns.templateID != plan.TemplateID ||
+		columns.templateVersion != plan.TemplateVersion ||
+		columns.recipientRef != plan.RecipientRef ||
+		columns.payloadFingerprint != plan.PayloadFingerprint ||
+		!reflect.DeepEqual(policyVersions, plan.AuthorizationPolicyVersions) ||
+		!reflect.DeepEqual(authorizationRefs, plan.AuthorizationRefs) ||
+		columns.planFingerprint != plan.PlanFingerprint ||
+		columns.deliveryIdempotencyKey != plan.DeliveryIdempotencyKey {
+		return errDeliveryPlanSnapshotColumnsMismatch
+	}
+	return nil
 }
 
 func isMySQLDuplicateKey(err error) bool {
