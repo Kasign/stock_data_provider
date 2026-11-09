@@ -42,7 +42,12 @@ func (f fakeBaoStockFinancialClient) QueryQuarterlyFinancialData(_ context.Conte
 			}
 		}
 	}
-	values["roeAvg"], values["netProfit"] = "0.074617", "28522000000"
+	if f.invalidField != "roeAvg" && f.missingField != "roeAvg" {
+		values["roeAvg"] = "0.074617"
+	}
+	if f.invalidField != "netProfit" && f.missingField != "netProfit" {
+		values["netProfit"] = "28522000000"
+	}
 	return &baostock.QuarterlyFinancialRecord{Code: code, PublicationDate: values["pubDate"], ReportDate: values["statDate"], Fields: values}, nil
 }
 
