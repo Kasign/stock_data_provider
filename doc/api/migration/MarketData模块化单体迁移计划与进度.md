@@ -7,7 +7,7 @@
 - 跨模块准入：`doc/整体任务规划/01-项目总览/跨模块接入执行说明.md`、`doc/整体任务规划/01-项目总览/跨模块接入准入清单.md`
 - 本记录建立时的代码基线：`d8595f408337f62be3697aac661ba1570fdd3667`
 - 最近一次 M0 审计基线：`9687337743ff5ad8b5b81209831d43689693ae47`
-- 当前开发分支 HEAD（合并 integration 后、本轮最新代码提交）：`be892d89f4247670efd1c64774d4866e03ccc454`（合并 integration；本轮后续代码以新提交为准）
+- 当前开发分支 HEAD（本轮最新代码提交）：`c7f55374356028b905813f6051f1b03e3c836b91`（Hithink 受控 HTTP 执行器注入）
 - 当前实施状态：`M1_completed / M2_completed / M3_in_progress / M4_in_progress`；M3 的 Data 侧进程内路由准备已完成，Root Server 实际装配仍待 Server 组合根完成；M4 的 borrowed DB 与 go-redis Cache Adapter 已实现，Root 侧资源注入/配置一致性及 Provider 网络出口适配仍未完成。
 
 > 本文记录 Data 从独立 Go Module/服务迁入 Root Server 根 Go Module、同进程运行的实施计划和进度。若本文与上述架构决策文档冲突，以架构决策文档为准；公共平台及 DATA 契约以冻结契约文档为准。本文不重新定义契约。
@@ -419,7 +419,7 @@ internal/
 | M1 Go Module 归并 | completed（代码归并） | Data 源码已位于根 Module 的 `internal/marketdata/**`；根 `go.mod` 为 Go 1.23.0；当前 Data 根模块 gofmt/test/race/vet 专项通过 |
 | M2 Application Port/Bootstrap | completed（Data 侧） | M2-1～M2-6 已完成：Application Port、Bootstrap、Worker 生命周期、HTTP 用例接口拆分、来源能力快照和 Migration Runner |
 | M3 Root Server 装配 | in_progress | Data 已提供 `InProcessHandler()`、Application Port 和 `MigrationRunner()`；Root Router、共享资源注入、Remote→InProcess 切换属于 Server 组合根任务，本分支不越界修改 |
-| M4 共享资源统一 | in_progress | Data Repository borrowed DB、`cache.NewGoRedis`、Tushare Platform HTTPDoer 注入入口已实现；Root 侧实际资源/BoundDoer 注入、Redis 配置匹配、其余 HTTP Provider 与 TCP 出站策略仍待完成 |
+| M4 共享资源统一 | in_progress | Data Repository borrowed DB、`cache.NewGoRedis`、Tushare/Hithink Platform HTTPDoer 注入入口已实现；Root 侧实际资源/BoundDoer 注入、Redis 配置匹配、TickFlow/Xueqiu/Eastmoney 等 Provider 与 TCP 出站策略仍待完成 |
 | M5 部署/WebUI 切换 | pending | Root 同进程装配和共享资源验收后执行 |
 | M6 迁移验收 | pending | 结构迁移、API/PIT/质量、真实 Provider 和部署验收分开形成证据 |
 | 公共平台契约接入 | in_progress（按依赖） | 当前分支已有 Platform 基础代码；Data 仅适配已冻结能力，不复制 HTTP Client、Diagnostics Runner、Storage 等公共实现 |
@@ -888,3 +888,12 @@ internal/
 - 新增测试只验证注入执行器被调用、GET URL/Accept/X-api-key 保持既有语义、502 错误仍可见；不输出或记录真实 API Key，不增加 API/字段/数据语义。
 - Root 注入策略要求：按实际 `HithinkBaseURL` 解析并精确绑定单一 Host；默认 HTTPS/443，除明确的本地测试配置外禁止 HTTP；不允许重定向（携带 X-api-key）；GET 可按 Platform 幂等策略配置，但不能因重试导致超出 Provider 速率限制。Platform Client 响应上限必须覆盖现有 `maxProviderPayloadBytes`，超限判定由公共层完成。
 - 本批提交后不在当前分支执行构建/测试；Hithink 受控出口仅完成注入接口和单测源码，待 integration 验收。下一步为 M4-HTTP-03 TickFlow：分别处理认证 API URL 与免费 API URL 的不同目的地址策略，不能共用一个无区分 BoundDoer。
+
+
+### 2026-11-09：M4-HTTP-02 提交后基线
+
+- 当前代码 HEAD：`c7f55374356028b905813f6051f1b03e3c836b91`。
+- 本轮新增提交 `c7f5537` 修改 Hithink Provider、Bootstrap Dependencies、Hithink HTTPDoer 回归测试；保留旧构造器和独立部署默认 HTTP Client。
+- 合并后的 `go.mod`、`go.sum` 已检查无冲突标记；根 Module 仍为 Go 1.23.0。未执行构建，因此仅记录静态检查结果，不宣称依赖图或构建验收通过。
+- Hithink 的测试源码覆盖注入调用、GET 目标、认证 Header、Accept Header 和 502 错误路径；待 integration 执行测试后再更新验收状态。
+- 本分支下一任务：M4-HTTP-03 TickFlow 双目的地址注入。TickFlow 同时访问配置的认证 API URL 和免费 API URL，必须使用两个独立 BoundDoer/依赖字段；认证 URL 携带 X-API-Key，免费 URL 不携带凭据。两者分别限制精确 Host/Port、协议、重定向和响应体上限。
