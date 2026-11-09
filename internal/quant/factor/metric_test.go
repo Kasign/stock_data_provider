@@ -39,7 +39,7 @@ func TestNewQuantMetricMatchesFactorResultGolden(t *testing.T) {
 		},
 		{
 			name: "volatility available",
-			result: Result{Code: "volatility_20d", Value: 0.01, Unit: "ratio", Status: StatusAvailable, SampleCount: 20},
+			result: Result{Code: "volatility_20d", Value: 0.012, Unit: "ratio", Status: StatusAvailable, SampleCount: 20},
 			golden: "volatility_20d-available.golden.json",
 		},
 		{
