@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Kasign/stock_data_provider/internal/quant/manifest"
+	"example.com/stock-analysis-flow/internal/quant/manifest"
 )
 
 func testManifest(t *testing.T) manifest.Manifest {
