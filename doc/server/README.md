@@ -583,6 +583,25 @@ flowchart TD
 - 测试提交：`f025acd773ff6a7b0cd2314e786f3a841df94b53`、`e30678d9813e7d93a82963c7ee0857f211c4f8b0`（Process 配置测试）、`676112dd32921677b88474cd5542417a056f61f4`（清理迁移后的 Bootstrap 测试）。
 - 本批次尚未运行当前 SHA 的 gofmt、Server 包测试或 Go Workflow；GitHub 当前 SHA Combined Status 尚无状态记录，不得标记编译/测试通过。
 
+### 12.23 SRV-007 Migration 执行报告第一阶段（2026-11-09）
+
+#### 实施内容
+
+- 在 Server Migration Registry 增加 `RunWithReport`，保留原 `Run` error-only 接口作为兼容封装，现有调用方不需要一次性迁移。
+- 报告记录整体开始/结束时间、耗时、总状态，以及按 namespace 字典序执行的逐项结果和耗时。
+- namespace 执行失败时记录 `failed` 和稳定 `reason_code=server.migration.namespace_failed`，保留已完成 namespace 的结果，并在首个失败处停止后续 namespace。
+- 报告不输出 SQL、数据库驱动错误详情或连接凭据；原始错误仅作为内部启动错误链和受控服务端日志，不进入公开 HTTP 响应。
+- Bootstrap 在 Migration 成功和失败时均结构化记录报告；失败仍阻止启动流程继续，不会将未完成 Migration 的服务标记为 Ready。
+- 新增空 Registry 前置失败报告测试，覆盖状态、时间边界和空结果。
+
+#### 当前边界
+
+- Platform 仍拥有 Migration 锁、版本历史、Checksum 和 SQL 执行；Server 报告只记录 namespace 级执行尝试，不自行推断每条 SQL 的执行/跳过状态。
+- 当前 Registry 仍只注册 News、Research、Notification 已公开的 Migration；其他模块接入依赖其公开 Migration 入口。
+- 本批次尚未运行 gofmt、Server 包测试或 Go Workflow；MariaDB 成功/失败集成验收未完成。
+- 代码提交：`698eef3e5b57ff2476219dd191e1e9d939c60aae`（执行报告）、`584bc2889d92241cd8567a15097b3eea9370c0d6`（Bootstrap 结构化日志）。
+- 测试提交：`a31e9e5f858fd864f501fd27da8eb19902e1425a`。
+
 ## 13. 分支与协作规则
 
 - 本规划及 Server 代码实施位于 `feat/research-analysis-flow-native-go`。
