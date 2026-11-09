@@ -13,6 +13,7 @@ import (
 var (
 	ErrIdentityTransaction            = errors.New("news: identity transaction failed")
 	ErrObservationIdempotencyConflict = errors.New("news: observation idempotency key reused with different payload")
+	ErrProviderOutputPolicyRequired = errors.New("news: provider output policy evaluation required")
 )
 
 // IdentityRepository 要求在单一事务中读取身份、创建主体/凭据并追加 Observation。
@@ -62,7 +63,7 @@ func (u *IngestCandidate) Execute(ctx context.Context, sourceID, idempotencyKey 
 	return u.execute(ctx, sourceID, idempotencyKey, candidate, policy, ObservationPolicyTrace{})
 }
 
-// ExecuteWithPolicyTrace 用于 CollectSource 等已完成 Source/Endpoint 授权评估的候选。
+// ExecuteWithPolicyTrace 仅供可信组合根在完成 Source/Endpoint/Provider 策略评估后调用。
 func (u *IngestCandidate) ExecuteWithPolicyTrace(ctx context.Context, sourceID, idempotencyKey string, candidate domain.Candidate, policy domain.SourceURLPolicy, trace ObservationPolicyTrace) (domain.Observation, error) {
 	trace.SourcePolicyVersionID = strings.TrimSpace(trace.SourcePolicyVersionID)
 	trace.EndpointID = strings.TrimSpace(trace.EndpointID)
