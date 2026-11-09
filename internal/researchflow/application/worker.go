@@ -41,7 +41,7 @@ type WorkerResultCommit struct {
 // WorkerStore is the Application boundary. Its persistence adapter must map
 // CommitWorkerResult to the atomic storage CommitAttemptResult transaction.
 type ExecutionFault struct {
-	FaultRef  string
+	FaultRef   string
 	ReasonCode string
 }
 
