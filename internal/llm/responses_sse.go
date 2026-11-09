@@ -117,7 +117,12 @@ func ParseResponsesSSE(data []byte, request ModelRequest, clock Clock, onEvent f
 			return
 		}
 		rawData := []byte(strings.Join(dataLines, "\n"))
-		if len(rawData) == 0 || len(rawData) > MaxSSEEventBytes || !json.Valid(rawData) {
+		if len(rawData) > MaxSSEEventBytes {
+			parseErr = newSSEAdapterError(adapterError(ErrorResourceLimit, "llm.sse.event_too_large", false, nil))
+			resetEvent()
+			return
+		}
+		if len(rawData) == 0 || !json.Valid(rawData) {
 			parseErr = invalidSSEError("llm.sse.invalid_event_data")
 			resetEvent()
 			return
@@ -292,6 +297,9 @@ func ParseResponsesSSE(data []byte, request ModelRequest, clock Clock, onEvent f
 		case "event":
 			eventName, eventNameSet = value, true
 		case "data":
+			if len(dataLines) > 0 {
+				eventBytes++ // SSE 多条 data 行拼接时会插入一个换行符。
+			}
 			eventBytes += len(value)
 			if eventBytes > MaxSSEEventBytes {
 				parseErr = newSSEAdapterError(adapterError(ErrorResourceLimit, "llm.sse.event_too_large", false, nil))

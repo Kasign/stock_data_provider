@@ -15,7 +15,7 @@ func testProviderConfig() ProviderConfig {
 	return ProviderConfig{
 		ProviderID: "local-gateway", Protocol: ProtocolOpenAIResponses,
 		BaseURL: "https://gateway.example.com:8443/v1", DefaultModel: "qwen-local",
-		APIKeySecretRef: "secret://llm/gateway", RequestTimeoutMS: 30000, AllowedModels: []string{"qwen-local"},
+		APIKeySecretRef: "secret://llm/gateway", RequestTimeoutMS: 30000, CapabilityTTLMS: 24 * 60 * 60 * 1000, AllowedModels: []string{"qwen-local"},
 		MaxRequestBytes: 1 << 20, MaxResponseBytes: 2 << 20,
 	}
 }
@@ -50,7 +50,7 @@ func TestModelRequestAndCapabilityValidationUseInjectedClock(t *testing.T) {
 	state := CapabilityState{
 		ProviderID: "p1", ModelID: "m1", Protocol: ProtocolOpenAIResponses,
 		GatewayVersion: "gateway-v1", VerifiedAt: &verifiedAt, ValidUntil: &validUntil,
-		EvidenceRef: "fixture://capability", MaxOutputTokensLimit: 256,
+		VerificationMethod: "automated_e2e", EvidenceRef: "fixture://capability", MaxOutputTokensLimit: 256,
 		Values: map[Capability]CapabilityStatus{CapabilityResponsesJSON: CapabilitySupported},
 	}
 	request.DeadlineAt = now.Add(time.Minute)
@@ -83,7 +83,7 @@ func TestCapabilityUnknownByDefaultAndRequiresVersionedEvidence(t *testing.T) {
 	now := time.Now().UTC()
 	validUntil := now.Add(time.Hour)
 	s.ProviderID, s.ModelID, s.Protocol, s.GatewayVersion, s.VerifiedAt = "p1", "m1", ProtocolOpenAIResponses, "gateway-v1", &now
-	s.ValidUntil, s.EvidenceRef = &validUntil, "test-evidence"
+	s.ValidUntil, s.VerificationMethod, s.EvidenceRef = &validUntil, "automated_e2e", "test-evidence"
 	if !s.Supports(CapabilityResponsesJSON) { t.Fatal("complete evidence should enable capability") }
 
 	futureVerifiedAt := time.Now().UTC().Add(time.Minute)
@@ -94,6 +94,43 @@ func TestCapabilityUnknownByDefaultAndRequiresVersionedEvidence(t *testing.T) {
 	}
 }
 
+
+func TestCapabilityEvidenceRequiresMethodAndProviderTTL(t *testing.T) {
+	config := testProviderConfig()
+	now := time.Date(2026, 11, 6, 10, 0, 0, 0, time.UTC)
+	verifiedAt := now.Add(-time.Minute)
+	validUntil := verifiedAt.Add(time.Duration(config.CapabilityTTLMS)*time.Millisecond)
+	state := CapabilityState{
+		ProviderID: config.ProviderID, ModelID: config.DefaultModel,
+		Protocol: config.Protocol, GatewayVersion: "gateway-v1",
+		VerifiedAt: &verifiedAt, ValidUntil: &validUntil,
+		VerificationMethod: "automated_e2e", EvidenceRef: "test:evidence",
+		MaxOutputTokensLimit: 1024,
+		Values: map[Capability]CapabilityStatus{CapabilityResponsesJSON: CapabilitySupported},
+	}
+	if err := config.ValidateCapabilityStateAt(state, now); err != nil {
+		t.Fatalf("evidence within configured TTL rejected: %v", err)
+	}
+	tooLong := state
+	tooLongValidUntil := validUntil.Add(time.Nanosecond)
+	tooLong.ValidUntil = &tooLongValidUntil
+	if err := config.ValidateCapabilityStateAt(tooLong, now); err == nil {
+		t.Fatal("evidence validity beyond ProviderConfig capability_ttl_ms must be rejected")
+	}
+	missingMethod := state
+	missingMethod.VerificationMethod = ""
+	if missingMethod.SupportsAt(CapabilityResponsesJSON, now) {
+		t.Fatal("capability without verification method must not be supported")
+	}
+	if err := config.ValidateCapabilityStateAt(missingMethod, now); err == nil {
+		t.Fatal("provider validation must reject missing verification method")
+	}
+	config.CapabilityTTLMS = 0
+	if err := config.Validate(); err == nil {
+		t.Fatal("provider capability TTL must be explicitly positive")
+	}
+}
+
 func TestProviderStreamSwitchRequiresCurrentModelEvidence(t *testing.T) {
 	config := testProviderConfig()
 	now := time.Now().UTC()
@@ -101,7 +138,7 @@ func TestProviderStreamSwitchRequiresCurrentModelEvidence(t *testing.T) {
 	state := CapabilityState{
 		ProviderID: config.ProviderID, ModelID: config.DefaultModel, Protocol: config.Protocol,
 		GatewayVersion: "gateway-v1", VerifiedAt: &now, ValidUntil: &validUntil,
-		EvidenceRef: "test-evidence", MaxOutputTokensLimit: 1024,
+		VerificationMethod: "automated_e2e", EvidenceRef: "test-evidence", MaxOutputTokensLimit: 1024,
 		Values: map[Capability]CapabilityStatus{CapabilityResponsesJSON: CapabilitySupported},
 	}
 	if err := config.ValidateCapabilityState(state); err != nil {
@@ -139,7 +176,7 @@ func TestModelRequestValidationAndCapabilityGate(t *testing.T) {
 	state := CapabilityState{
 		ProviderID: r.ProviderID, ModelID: r.Model, Protocol: ProtocolOpenAIResponses,
 		GatewayVersion: "gateway-v1", VerifiedAt: &verifiedAt, ValidUntil: &validUntil,
-		EvidenceRef: "test-evidence", MaxOutputTokensLimit: 512,
+		VerificationMethod: "automated_e2e", EvidenceRef: "test-evidence", MaxOutputTokensLimit: 512,
 		Values: map[Capability]CapabilityStatus{
 			CapabilityResponsesJSON: CapabilitySupported,
 			CapabilitySamplingParameters: CapabilityUnknown,
@@ -179,7 +216,7 @@ func TestLocalValidationOnlyDoesNotRequireUpstreamStructuredOutput(t *testing.T)
 	state := CapabilityState{
 		ProviderID: r.ProviderID, ModelID: r.Model, Protocol: ProtocolOpenAIResponses,
 		GatewayVersion: "gateway-v1", VerifiedAt: &now, ValidUntil: &validUntil,
-		EvidenceRef: "test-evidence", MaxOutputTokensLimit: 256,
+		VerificationMethod: "automated_e2e", EvidenceRef: "test-evidence", MaxOutputTokensLimit: 256,
 		Values: map[Capability]CapabilityStatus{CapabilityResponsesJSON: CapabilitySupported},
 	}
 	if err := r.ValidateCapabilities(state); err != nil {
@@ -221,6 +258,8 @@ func TestModelErrorFromPlatformFault(t *testing.T) {
 		{name: "forbidden", class: fault.ClassForbidden, want: ErrorUnauthorized},
 		{name: "unavailable", class: fault.ClassUnavailable, want: ErrorUpstreamUnavailable, retryable: true},
 		{name: "timeout", class: fault.ClassTimeout, want: ErrorTimeout, retryable: true},
+		{name: "not_found", class: fault.ClassNotFound, want: ErrorUpstream},
+		{name: "conflict", class: fault.ClassConflict, want: ErrorUpstream},
 		{name: "internal", class: fault.ClassInternal, want: ErrorUpstream},
 	}
 	for _, tt := range tests {
@@ -237,6 +276,16 @@ func TestModelErrorFromPlatformFault(t *testing.T) {
 				t.Fatalf("stable code or safe message lost: %+v", got)
 			}
 		})
+	}
+}
+
+
+func TestModelErrorFromPlatformFaultUsesStableFallbacks(t *testing.T) {
+	got := ModelErrorFromPlatformFault(&fault.Fault{Class: fault.ClassConflict})
+	if got == nil || got.Kind != ErrorUpstream ||
+		got.StableCode != "platform.fault.conflict" ||
+		got.SafeMessage != "model provider request failed" {
+		t.Fatalf("missing code/message must use stable safe fallbacks: %+v", got)
 	}
 }
 

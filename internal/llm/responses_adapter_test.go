@@ -2,6 +2,7 @@ package llm
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
@@ -47,7 +48,7 @@ func adapterTestConfig() (ProviderConfig, config.Secret, CapabilityState, Clock)
 		ProviderID: provider.ProviderID, ModelID: provider.DefaultModel,
 		Protocol: provider.Protocol, GatewayVersion: "gateway-v1",
 		VerifiedAt: &verifiedAt, ValidUntil: &validUntil,
-		EvidenceRef: "fixture://gateway-v1/qwen-local",
+		VerificationMethod: "automated_e2e", EvidenceRef: "fixture://gateway-v1/qwen-local",
 		MaxOutputTokensLimit: 1024,
 		Values: map[Capability]CapabilityStatus{
 			CapabilityResponsesJSON: CapabilitySupported,
@@ -57,6 +58,40 @@ func adapterTestConfig() (ProviderConfig, config.Secret, CapabilityState, Clock)
 		return "gateway-caller-secret", key == "LLM_GATEWAY_KEY"
 	}).Secret("LLM_GATEWAY_KEY")
 	return provider, secret, capabilities, clock
+}
+
+
+func TestResponsesAdapterRejectsCapabilityEvidenceBeyondProviderTTL(t *testing.T) {
+	provider, secret, capabilities, clock := adapterTestConfig()
+	validUntil := capabilities.VerifiedAt.Add(time.Duration(provider.CapabilityTTLMS)*time.Millisecond + time.Nanosecond)
+	capabilities.ValidUntil = &validUntil
+	if _, err := NewResponsesAdapter(provider, secret, doerFunc(func(*http.Request) (*http.Response, error) {
+		return nil, errors.New("must not be called")
+	}), capabilities, clock); err == nil {
+		t.Fatal("adapter must reject capability evidence exceeding configured Provider TTL")
+	}
+}
+
+
+func TestResponsesAdapterRechecksCapabilityExpiryBeforeDispatch(t *testing.T) {
+	provider, secret, capabilities, _ := adapterTestConfig()
+	base := time.Now().UTC().Add(time.Second)
+	clock := &steppingTestClock{now: base, step: 2 * time.Hour}
+	var dispatched bool
+	adapter, err := NewResponsesAdapter(provider, secret, doerFunc(func(*http.Request) (*http.Response, error) {
+		dispatched = true
+		return nil, errors.New("must not dispatch with expired capability evidence")
+	}), capabilities, clock)
+	if err != nil {
+		t.Fatalf("adapter should accept evidence valid at construction: %v", err)
+	}
+	request := validResponsesRequest()
+	request.ProviderID = provider.ProviderID
+	_, err = adapter.Generate(context.Background(), request)
+	var adapterErr *AdapterError
+	if !errors.As(err, &adapterErr) || adapterErr.Info.Kind != ErrorUnsupportedCapability || dispatched {
+		t.Fatalf("expired evidence must block dispatch: err=%v dispatched=%v", err, dispatched)
+	}
 }
 
 func TestResponsesAdapterGenerateUsesInjectedPlatformDoer(t *testing.T) {
@@ -288,5 +323,67 @@ func TestResponsesAdapterRejectsUnconfiguredSecretOrDoer(t *testing.T) {
 		return nil, nil
 	}), capabilities, nil); err == nil {
 		t.Fatal("missing Clock must be rejected")
+	}
+}
+
+func TestResponsesAdapterBlocksOptionalFeaturesWithoutCapabilityEvidence(t *testing.T) {
+	cases := []struct {
+		name string
+		configure func(*ModelRequest)
+	}{
+		{
+			name: "sampling parameters",
+			configure: func(request *ModelRequest) {
+				temperature := 0.2
+				request.Temperature = &temperature
+			},
+		},
+		{
+			name: "reasoning effort",
+			configure: func(request *ModelRequest) {
+				request.ReasoningEffort = "high"
+			},
+		},
+		{
+			name: "structured output",
+			configure: func(request *ModelRequest) {
+				request.ResponseSchema = &JSONSchemaSpec{
+					Name: "summary",
+					Strict: true,
+					SchemaJSON: json.RawMessage(`{"type":"object","properties":{"summary":{"type":"string"}}}`),
+				}
+			},
+		},
+		{
+			name: "function tool calls",
+			configure: func(request *ModelRequest) {
+				request.Tools = []ToolDefinition{{
+					Name: "lookup_quote",
+					ParametersJSON: json.RawMessage(`{"type":"object","properties":{"symbol":{"type":"string"}}}`),
+				}}
+				request.ToolChoice = "auto"
+			},
+		},
+	}
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			provider, secret, capabilities, clock := adapterTestConfig()
+			request := validResponsesRequest()
+			request.ProviderID = provider.ProviderID
+			tt.configure(&request)
+			dispatched := false
+			adapter, err := NewResponsesAdapter(provider, secret, doerFunc(func(*http.Request) (*http.Response, error) {
+				dispatched = true
+				return nil, errors.New("must not dispatch without capability evidence")
+			}), capabilities, clock)
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, err = adapter.Generate(context.Background(), request)
+			var adapterErr *AdapterError
+			if !errors.As(err, &adapterErr) || adapterErr.Info.Kind != ErrorUnsupportedCapability || dispatched {
+				t.Fatalf("feature without current capability evidence must be blocked: err=%v dispatched=%v", err, dispatched)
+			}
+		})
 	}
 }

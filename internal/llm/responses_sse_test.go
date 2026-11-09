@@ -284,3 +284,95 @@ func TestParseResponsesSSEEnforcesLineAndEventLimits(t *testing.T) {
 		t.Fatalf("oversized line must be rejected as resource limit: %+v err=%v", got, err)
 	}
 }
+
+
+func TestParseResponsesSSESupportsCRLFAndMultilineData(t *testing.T) {
+	request := validSSERequest()
+	clock := sseTestClock{now: request.SystemAsOf.Add(time.Second)}
+	data := strings.Join([]string{
+		": keepalive",
+		"event: response.completed",
+		"data: {\"type\":\"response.completed\",",
+		"data: \"response\":{\"id\":\"resp-multiline\",\"object\":\"response\",",
+		"data: \"status\":\"completed\",\"output\":[]}}",
+		"",
+	}, "\r\n")
+	got, err := ParseResponsesSSE([]byte(data), request, clock, nil)
+	if err != nil || got.Status != ResponseCompleted || got.ResponseID != "resp-multiline" {
+		t.Fatalf("CRLF and multiline SSE data must be parsed: response=%+v err=%v", got, err)
+	}
+}
+
+func TestParseResponsesSSEEnforcesEventCountLimit(t *testing.T) {
+	request := validSSERequest()
+	clock := sseTestClock{now: request.SystemAsOf.Add(time.Second)}
+	var data strings.Builder
+	for i := 0; i <= MaxSSEEvents; i++ {
+		data.WriteString("event: response.future_event\n")
+		data.WriteString("data: {\"type\":\"response.future_event\"}\n\n")
+	}
+	got, err := ParseResponsesSSE([]byte(data.String()), request, clock, nil)
+	var adapterErr *AdapterError
+	if !errors.As(err, &adapterErr) || adapterErr.Info.Kind != ErrorResourceLimit ||
+		got.Status == ResponseCompleted {
+		t.Fatalf("event count above limit must be rejected: response=%+v err=%v", got, err)
+	}
+}
+
+
+
+func TestParseResponsesSSEClassifiesMultilineEventLimitAsResourceLimit(t *testing.T) {
+	request := validSSERequest()
+	clock := sseTestClock{now: request.SystemAsOf.Add(time.Second)}
+	var data strings.Builder
+	data.WriteString("event: response.future_event\n")
+	data.WriteString("data: {\"type\":\"response.future_event\",\"padding\":[\n")
+	for i := 0; i < 40; i++ {
+		data.WriteString("data: ")
+		data.WriteString(strings.Repeat("\"padding\",", 3000))
+		data.WriteByte('\n')
+	}
+	data.WriteString("data: null]}\n\n")
+
+	got, err := ParseResponsesSSE([]byte(data.String()), request, clock, nil)
+	var adapterErr *AdapterError
+	if !errors.As(err, &adapterErr) || adapterErr.Info.Kind != ErrorResourceLimit ||
+		got.Status == ResponseCompleted {
+		t.Fatalf("oversized multiline event must be resource_limit: response=%+v err=%v", got, err)
+	}
+}
+
+func TestParseResponsesSSERejectsTotalPayloadAboveLimit(t *testing.T) {
+	request := validSSERequest()
+	clock := sseTestClock{now: request.SystemAsOf.Add(time.Second)}
+	line := ":" + strings.Repeat("x", 60<<10) + "\n"
+	data := []byte(strings.Repeat(line, MaxPayloadBytes/(60<<10)+2))
+
+	got, err := ParseResponsesSSE(data, request, clock, nil)
+	var adapterErr *AdapterError
+	if !errors.As(err, &adapterErr) || adapterErr.Info.Kind != ErrorResourceLimit ||
+		adapterErr.Info.StableCode != "llm.sse.total_too_large" || got.Status == ResponseCompleted {
+		t.Fatalf("oversized total payload must be resource_limit: response=%+v err=%v", got, err)
+	}
+}
+
+
+func TestParseResponsesSSERejectsEventAfterTerminal(t *testing.T) {
+	request := validSSERequest()
+	clock := sseTestClock{now: request.SystemAsOf.Add(time.Second)}
+	data := strings.Join([]string{
+		"event: response.completed",
+		"data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp-terminal-extra\",\"object\":\"response\",\"status\":\"completed\",\"output\":[]}}",
+		"",
+		"event: response.future_event",
+		"data: {\"type\":\"response.future_event\"}",
+		"",
+	}, "\n")
+
+	got, err := ParseResponsesSSE([]byte(data), request, clock, nil)
+	var adapterErr *AdapterError
+	if !errors.As(err, &adapterErr) || adapterErr.Info.StableCode != "llm.sse.event_after_terminal" ||
+		adapterErr.Info.Kind != ErrorInvalidResponse || got.Status != ResponseFailed {
+		t.Fatalf("event after terminal must reject the stream: response=%+v err=%v", got, err)
+	}
+}

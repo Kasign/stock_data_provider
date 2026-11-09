@@ -13,11 +13,11 @@ Researchflow 决定调用时机、调用预算和业务重试；LLM 负责一次
 
 ## 2. ProviderConfig 与 Secret
 
-ProviderConfig 是服务端受控配置，不是调用方请求参数。首批固定 provider_id、protocol=openai_responses、base_url、default_model、allowed_models、api_key_secret_ref、request_timeout_ms、max_request_bytes、max_response_bytes、stream_enabled 与 Capability 有效期策略。
+ProviderConfig 是服务端受控配置，不是调用方请求参数。首批固定 provider_id、protocol=openai_responses、base_url、default_model、allowed_models、api_key_secret_ref、request_timeout_ms、max_request_bytes、max_response_bytes、stream_enabled、capability_ttl_ms。
 
-base_url 必须是服务端配置的 HTTPS Gateway 根地址并规范化为 /v1 结尾；请求方不得覆盖 URL、Provider、Header 或 Secret。Adapter 固定 POST {base_url}/responses，不得重复拼接 /v1。API Key 只通过 SecretRef 在调用时读取，禁止写入 DTO、日志、错误、Fixture 或持久化请求快照。
+base_url 必须是服务端配置的 HTTPS Gateway 根地址并规范化为 /v1 结尾；请求方不得覆盖 URL、Provider、Header 或 Secret。Adapter 固定 POST {base_url}/responses，不得重复拼接 /v1。API Key 只通过 SecretRef 在调用时读取，禁止写入 DTO、日志、错误、Fixture 或持久化请求快照。CapabilityState 必须携带非空 verification_method；valid_until 不得超过 verified_at + capability_ttl_ms，Adapter 构造时和每次派发前均校验证据有效期。
 
-request_timeout_ms、max_request_bytes、max_response_bytes 必须为正数并显式配置；max_response_bytes 首批不超过 8 MiB；配置序列化时间单位固定为 integer milliseconds，不得把 Go duration 纳秒整数直接暴露为 JSON。所有限制不得超过 PLAT-CTR-005 公共上限。HTTP 重定向、代理、DNS/SSRF、TLS 和连接资源策略交给 Platform HTTP Client。
+request_timeout_ms、capability_ttl_ms、max_request_bytes、max_response_bytes 必须为正数并显式配置；max_response_bytes 首批不超过 8 MiB；配置序列化时间单位固定为 integer milliseconds，不得把 Go duration 纳秒整数直接暴露为 JSON。所有限制不得超过 PLAT-CTR-005 公共上限。HTTP 重定向、代理、DNS/SSRF、TLS 和连接资源策略交给 Platform HTTP Client。
 
 ## 3. ModelRequest / ModelResponse
 

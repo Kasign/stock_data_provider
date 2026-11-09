@@ -19,6 +19,7 @@
 | Fixture | 输入条件 | 预期检查 |
 |---|---|---|
 | request_minimal_text.json | model、instructions、input_text、max_output_tokens | Responses `instructions` / `input` / `max_output_tokens` 映射准确；不发送空 tools 或默认采样参数 |
+| request_full_options.expected.json | temperature/top_p/reasoning_effort + strict JSON Schema + function tool + tool_choice=auto | 一次固定完整 wire 请求，校验采样、reasoning、text.format、schema、tool parameters/strict 和工具选择映射 |
 | request_sampling_supported.json | temperature/top_p/reasoning_effort + 对应 capability=supported | 仅支持字段发送，值不被改写 |
 | request_sampling_unknown_rejected.json | 可选采样字段存在但 capability=unknown | 返回 unsupported_capability；不静默丢弃或透传 |
 | request_tool_auto_supported.json | tools 非空、tool_choice=auto、function_tool_calls=supported | tools/name/description/parameters/strict 映射准确 |
@@ -273,4 +274,62 @@ sequence_number 严格连续策略、Draft 2020-12 本地 Schema dialect、Reque
 - `internal/llm/testdata/sse/stream_incomplete.sse` + `.expected.json`
 - 错误/边界原始样例：sequence_gap、EOF_without_terminal、unknown_event、terminal_then_extra_event、error_event。
 
-`responses_golden_test.go` 将原始 wire 与 expected DTO 比较；错误/边界 fixture 断言错误类型和安全行为。此集合只是第一批，Usage missing/partial/derived/overflow、mixed/duplicate/decreasing sequence、callback error、CRLF/multiline data、资源限制等仍需补充独立 fixture。
+`responses_golden_test.go` 将原始 wire 与 expected DTO 比较；错误/边界 fixture 断言错误类型和安全行为。此集合只是第一批，Usage missing/partial/derived/overflow、mixed/duplicate/decreasing sequence、callback error、CRLF/multiline data、资源限制等仍需补充独立 fixture。部分边界目前由内联单测覆盖，尚未全部拆成独立 Fixture。
+
+
+## 14. LLM 公共 DTO Draft 2020-12 Schema
+
+已新增模块机器契约 Schema，版本 1.0.0：
+
+- `schema/provider-config-1.0.0.schema.json`
+- `schema/capability-state-1.0.0.schema.json`
+- `schema/model-request-1.0.0.schema.json`
+- `schema/model-response-1.0.0.schema.json`
+- `schema/model-event-1.0.0.schema.json`
+- `schema/model-error-info-1.0.0.schema.json`
+
+新增 `dto_schema_test.go`：验证 ProviderConfig、CapabilityState、ModelRequest、ModelResponse、ModelEvent、ModelErrorInfo 的实际 JSON 序列化结果；并使用现有 JSON/SSE Golden 解析结果执行 Schema 校验，覆盖必填字段与公开错误枚举拒绝。CapabilityState 的 verification_method 与 ProviderConfig.capability_ttl_ms 同时纳入机器契约。
+
+以上为 Schema 与 Contract Test 代码交付，尚未执行 gofmt/go test；不代表 LLM-CTR-001～003 已冻结。
+
+
+## 15. Golden 覆盖扩展（2026-11-06）
+
+新增 JSON 原始 Fixture：refusal、unknown output item、failed、Usage missing/partial/derived/overflow、missing status、completed missing response id；新增 request_minimal_text.expected.json 固定默认请求映射。
+
+新增 SSE 原始 Fixture：failed terminal、sequence duplicate/decreasing/mixed-missing/all-missing。`responses_golden_test.go` 增加对应 Contract Golden 断言，覆盖 refusal 文本保留、未知正文脱敏、合法 failed 状态、Usage null/derived/overflow、非法 envelope、序号异常和 all-missing 标记。
+
+以上 Fixture/测试代码尚未执行；其余完整 SSE 网络读取、Context cancel/backpressure 和本地 Gateway E2E 仍待 Platform streaming transport 与真实部署验收。
+
+## 16. SSE Callback 中断回归覆盖
+
+- 新增 `TestParseResponsesSSECallbackErrorReturnsPartialResponse`，使用 EOF 前已有文本增量的 Fixture，在消费者收到文本增量时返回 sentinel error。
+- 新增 `TestParseResponsesSSECallbackErrorAtTerminalDoesNotComplete`，在合法 completed terminal 回调时返回 sentinel error，验证消费者拒绝终态事件后不能向上层暴露 completed。
+- 两项测试均断言 Parser 原样返回 callback error、保留已接收的部分文本、状态保持 incomplete、不生成 ModelErrorInfo；普通事件中断另检查结束时间和耗时元数据。
+- 此测试只覆盖纯 Parser 的同步回调中断语义，不代表网络读取取消、Body 关闭或 Platform backpressure 已实现。
+- 测试代码已提交，尚未执行 gofmt/go test。
+
+
+## 17. 新增内联边界测试（2026-11-09）
+
+- Structured Output：非法 JSON 与空输出均拒绝并返回 schema_validation_failed；incomplete 响应不生成 structured_json，保留 incomplete_reason。
+- SSE：新增 CRLF + 注释行 + 多条 data 拼接解析测试；新增超过 MaxSSEEvents 的 resource_limit 测试。
+- 上述测试是纯解析器/DTO 层验证，不代表网络读取取消、HTTP Body Close、背压或 Platform 流式传输验收完成。
+- 新增测试代码尚未执行 gofmt/go test，不能标记通过。
+
+
+## 18. SSE 资源限制分类回归（2026-11-09）
+
+- 单事件大小按所有 data 字段值及字段间拼接换行累计，超过 1 MiB 返回 `resource_limit`。
+- 即使每一条 data 行均小于 64 KiB，多行拼接后超过单事件上限也必须返回 `resource_limit`。
+- 整个 SSE 输入超过 8 MiB 时，在扫描前返回 `resource_limit`，稳定码为 `llm.sse.total_too_large`。
+- 对应测试：`TestParseResponsesSSEClassifiesMultilineEventLimitAsResourceLimit`、`TestParseResponsesSSERejectsTotalPayloadAboveLimit`。
+- 测试代码尚未执行；此处只定义验收预期，不构成通过证据。
+
+
+## 19. SSE 终态后事件拒绝（2026-11-09）
+
+- 对应测试：`TestParseResponsesSSERejectsEventAfterTerminal`。
+- `response.completed`、`response.incomplete` 或 `response.failed` 终态后若仍出现携带 data 的事件，必须拒绝整个流。
+- 当前覆盖 completed 后追加普通事件，预期错误为 `ErrorInvalidResponse / llm.sse.event_after_terminal`。
+- 测试代码尚未执行，不构成通过证据。
