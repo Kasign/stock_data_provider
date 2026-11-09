@@ -450,7 +450,7 @@ flowchart TD
 
 审计边界：以上结论只确认 Server 当前入口、旧链路和本轮可见模块接入面，不替代各模块自己的功能验收；模块未就绪项在 SRV-004/SRV-008/SRV-010 中按依赖条件推进。旧 API 当前未见认证中间件挂载，这是部署暴露面风险，必须在 SRV-005 接入统一认证策略前保持网络边界受控。
 
-### 12.4 SRV-002 第一阶段实施记录（HEAD 待本次提交生成）
+### 12.4 SRV-002 第一阶段实施记录（提交 `7cc71ce720ace0cbd48036796ecbe9560dc3a970`）
 
 - 新增 `internal/server/bootstrap/bootstrap.go`，将 .env/配置读取、旧 Analysis Runner、旧 Task Queue、旧 HTTP API 和 HTTP Server 生命周期集中到 Bootstrap。
 - `cmd/analysis-api/main.go` 收敛为默认日志、SIGINT/SIGTERM 上下文和 Bootstrap 委托；未新增第二个进程入口。
