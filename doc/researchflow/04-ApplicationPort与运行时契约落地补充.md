@@ -128,12 +128,13 @@ Fake Repository/Fake Clock/Fake Provider 只证明模块内逻辑；MariaDB/Redi
 - 取消终态现在补充固化 ResultSummary；但数据库事务、Run.version CAS、固定锁顺序、Worker claim、容量原子预留、lease/fencing 和崩溃恢复仍未实现，不能将领域纯函数描述为并发安全。
 
 
-## 12. Run 终态与 Retry/Worker Claim 边界复核（2026-11-06）
+## 12. Run 终态与 Retry/Worker Claim 边界复核（2026-11-06，按最终契约修订）
 
 - `TransitionRun` 对外拒绝直接进入任何终态；只有 AggregateRun、FinalizeCancellation 等完成 Stage/Attempt 校验并固化 ResultSummary 的收敛入口可调用包内迁移函数提交终态。
-- `PromoteRetry` 是 Scheduler promotion，只能将到期的 `retry_wait` Stage 推进到 `ready`；不得提前创建 Attempt 或将 Stage 推进为 running。
-- `ClaimReadyStage` 表达 Worker claim：校验 Run 仍 running、未取消且未到 deadline，再将 Stage 推进 running 并创建递增编号的 Attempt。调用方必须在同一事务/CAS 门禁下持久化 Stage 与 Attempt，并保证 Attempt Ref 唯一。
-- 以上函数不提供数据库并发保证；Worker claim、Cancel、Deadline、Scheduler retry 仍须共享 Run.version CAS/事务门禁。
+- 2026-11-09 复核发现此前将 Scheduler Retry 与 Worker Claim 拆成两个可分别提交的事务，与 FLOW-CTR-001/002 最终决议冲突。最终契约明确：`retry_wait -> ready` 与下一 Attempt 创建必须同事务提交；Run.version CAS 必须同时协调 Retry、Cancel、Deadline 和 Worker Claim。
+- 因 Attempt 只有 running/终态，没有 queued 状态，Researchflow 领域决策函数现提供 `ClaimRetryStage`：在一次原子用例中校验 retry_at、Run 状态、deadline 和 max_attempts，逻辑推进 `retry_wait -> ready -> running` 并构造下一 running Attempt。Repository 必须在同一事务内分配 attempt_no/fencing token、CAS 更新 Stage、插入 Attempt；不得单独提交中间 ready 状态。
+- 首次执行仍使用 `ClaimReadyStage`；其 Repository 写入同样必须与 Run.version CAS、Stage.version CAS 和 Attempt 唯一键在一个事务中完成。
+- 纯函数不提供数据库并发保证；任何 claim/retry 决策都不能替代持久化 CAS、锁顺序、lease 和 fencing。
 - 取消终态 ResultSummary 将 cancelled Stage 计入 MissingStageCodes；actionability 仍固定 not_evaluated。
 
 
@@ -239,7 +240,7 @@ Fake Repository/Fake Clock/Fake Provider 只证明模块内逻辑；MariaDB/Redi
 1. **CreateRun**：先在事务外执行幂等快速读取；未命中后开启事务，使用数据库 UTC 时钟复核 deadline，插入 Run、完整 ResolvedTemplate Snapshot 和全部 Stage，最后插入幂等记录以竞争 `(caller_ref, operation, idempotency_key)` 唯一键。幂等记录依赖 Run 引用，因此不能在 Run 尚未插入时先占位。并发相同键请求由唯一约束裁决：唯一键冲突时回滚本事务，再在新事务读取胜出记录并比较 fingerprint；相同 fingerprint 返回原 Run，不同 fingerprint 返回幂等冲突。不得先提交 Run 再补 Stage/快照/幂等记录。
 2. **Worker Claim**：按 Run → Stage 的锁顺序读取并校验 Run=running、未取消、数据库时间早于 deadline、Stage=ready；同事务递增 Stage.version 与 fencing_token_high_water，分配 attempt_no，插入新 Attempt 并将 Stage 置 running。Run.version 必须参与同一命令门禁/CAS，防止与 Cancel/Deadline/Retry 竞争。
 3. **Attempt 输出提交/完成**：校验 Run 仍允许执行、Attempt 仍 running、提交 token 等于 Stage 当前 fencing 高水位且 lease 未失效；同事务保存 Output 引用并推进 Attempt/Stage。旧 token、已取消 Run、已终结 Attempt 的迟到结果必须拒绝，不能覆盖既有输出。
-4. **Retry Promotion**：按 Run → Stage 锁顺序确认 Run=running、未到 deadline、未取消、Stage=retry_wait、retry_at 已到且重试预算仍可用；同事务只将 Stage 从 `retry_wait` 推进为 `ready` 并更新 Stage.version。不得在此步骤递增 attempt_no、分配 fencing token 或插入 Attempt；下一次真正执行权和 Attempt 序号只由 Worker Claim 在同一事务内分配。不得在 Run 已 cancelling/terminal 时推进 Retry。
+4. **RetryStage（Promotion + Claim）**：按 Run → Stage 锁顺序确认 Run=running、未到 deadline、未取消、Stage=retry_wait、retry_at 已到且 max_attempts 预算仍可用；在同一事务/CAS 中逻辑推进 `retry_wait -> ready -> running`，递增 Stage.version，分配下一 attempt_no 和 fencing token，插入 running Attempt。不得把中间 ready 状态单独提交；不得在 Run 已 cancelling/terminal 时推进 Retry。
 5. **Cancel/Deadline**：与 Worker Claim、Retry 使用同一 Run.version CAS 线性化；进入 cancelling 后禁止新 Claim/Retry。未启动 Stage 的收敛和在途 Attempt 停止确认/fencing 分开记录，不能仅因发出取消就假设 Worker 已停止。
 6. **Run Finalize**：按 Run → Stage（stage_ref 升序）→ Attempt（attempt_ref 升序）固定锁顺序，验证所有 Stage 终态且不存在 running Attempt；在同一事务写入不可变 ResultSummary、分配 result_summary_ref、CAS 更新 Run 终态/version，并写入 Outbox。任一环节失败必须整体回滚，禁止出现终态 Run 无摘要或摘要无终态 Run。
 
@@ -249,7 +250,7 @@ Fake Repository/Fake Clock/Fake Provider 只证明模块内逻辑；MariaDB/Redi
 
 - Run 更新使用 `WHERE run_ref=? AND version=? AND status IN (...)` 并在成功时 `version=version+1`；Stage 使用独立 version CAS。受 Run 状态约束的写命令必须先通过 Run CAS 门禁，不能只 CAS Stage。
 - 所有 deadline/lease/retry 到期判定使用数据库 UTC 时钟（`UTC_TIMESTAMP(6)` 或等价数据库时钟表达式），应用进程时间仅用于非裁决性展示；不得将 Go Clock 读数当成并发裁决依据。
-- Attempt 序号只在 Worker Claim 成功时由 Stage 行锁内递增，并受 `(stage_ref, attempt_no)` 唯一约束；Retry Promotion 不分配序号。fencing token 同样只在 Worker Claim 时由 Stage 行内高水位递增并受唯一约束。禁止用进程内计数器、Redis INCR 或 MAX 查询替代同一数据库事务内的分配。
+- Attempt 序号只在首次 Worker Claim 或 RetryStage 原子 Promotion+Claim 成功时由 Stage 行锁内递增，并受 `(stage_ref, attempt_no)` 唯一约束；RetryStage 与新 Attempt 必须同事务。fencing token 同样只在上述 Claim 事务中由 Stage 行内高水位递增并受唯一约束。禁止用进程内计数器、Redis INCR 或 MAX 查询替代同一数据库事务内的分配。
 - 锁顺序固定为 Run → Stage（按 stage_ref 升序）→ Attempt（按 attempt_ref 升序）；批量更新也遵守相同排序，降低死锁概率。遇到死锁可按明确次数重试整个幂等事务，但必须重新读取并重新验证状态，不能盲目重放 SQL。
 - CAS 未命中是并发冲突，不等于存储不可用；应用层重新读取后按当前状态返回 already_terminal、claim_lost、deadline_exceeded、retry_not_due 或 conflict 等稳定业务结果。数据库连接/超时故障映射 Platform Fault，不能伪装为 CAS 冲突。
 - 结果摘要和 Outbox 都是 append-only/不可变事实；Outbox 发布状态可变，但原始事件 payload、event_id、schema_version 不可变。Notification 发布成功与否不回滚已完成的 Run。
