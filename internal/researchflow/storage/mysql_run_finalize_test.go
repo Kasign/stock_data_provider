@@ -209,3 +209,120 @@ func TestFinalizeRunRejectsIncompleteSummaryBeforeTransaction(t *testing.T) {
 		t.Fatalf("incomplete summary reached the database: %v", err)
 	}
 }
+
+
+func TestMariaDBFinalizeCancellationRunAtomicallyPersistsSummaryAndOutbox(t *testing.T) {
+	if os.Getenv("PLATFORM_STORAGE_INTEGRATION") != "1" {
+		t.Skip("set PLATFORM_STORAGE_INTEGRATION=1 to run Researchflow MariaDB integration tests")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+	defer cancel()
+	dsn := fmt.Sprintf("%s:%s@tcp(%s)/%s?parseTime=true",
+		os.Getenv("PLATFORM_MARIADB_USER"),
+		os.Getenv("PLATFORM_MARIADB_PASSWORD"),
+		os.Getenv("PLATFORM_MARIADB_ADDR"),
+		os.Getenv("PLATFORM_MARIADB_DATABASE"),
+	)
+	config, err := mysql.ParseDSN(dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	connector, err := mysql.NewConnector(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	db, err := platformstorage.OpenSQL(ctx, connector, platformstorage.DefaultSQLConfig())
+	if err != nil {
+		t.Fatalf("open MariaDB: %v", err)
+	}
+	defer db.Close()
+	if err := platformstorage.ApplyMigrations(ctx, db, MigrationNamespace, Migrations()); err != nil {
+		t.Fatalf("apply Researchflow migrations: %v", err)
+	}
+	repository, err := NewMySQLRunRepository(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	suffix := fmt.Sprintf("%d", time.Now().UnixNano())
+	now := time.Now().UTC()
+	runRef := "finalize-cancel-run-" + suffix
+	stageRef := "finalize-cancel-stage-" + suffix
+	fingerprint := "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+	templateFingerprint := "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+	record := application.CreateRunRecord{
+		Scope: application.IdempotencyScope{
+			CallerRef: "researchflow-finalize-cancel-test", Operation: "CreateRun", Key: "finalize-cancel-" + suffix,
+		},
+		Fingerprint: fingerprint,
+		Run: domain.Run{
+			Ref: runRef, SchemaVersion: "run-v1", Status: domain.RunCreated, Version: 1,
+			SystemAsOf: now.Add(-time.Minute), DeadlineAt: now.Add(5 * time.Minute),
+			TemplateRef: "finalize-cancel-template", TemplateVersion: "v1",
+			TemplateFingerprint: templateFingerprint, InputSnapshotRefs: []string{},
+			CorrelationID: "finalize-cancel-correlation-" + suffix,
+		},
+		Stages: []domain.Stage{{
+			Ref: stageRef, RunRef: runRef, Code: "context", Status: domain.StagePending,
+			Version: 1, Required: true, Dependencies: []string{}, RetryPolicyRef: "retry-v1",
+			DiagnosticRefs: []string{}, ReasonCodes: []string{},
+		}},
+		ResolvedTemplate: template.ResolvedTemplate{
+			Ref: "finalize-cancel-template", Version: "v1", Fingerprint: templateFingerprint,
+			Stages: []template.ResolvedStage{{Definition: template.StageDefinition{Code: "context"}}},
+		},
+		Parameters: json.RawMessage(`{}`),
+	}
+	if _, err := repository.CreateRunAtomic(ctx, record); err != nil {
+		t.Fatalf("CreateRunAtomic: %v", err)
+	}
+	finishedAt := formatResearchflowTimeValue(now.Add(time.Second))
+	if _, err := db.ExecContext(ctx, `UPDATE researchflow_runs
+		SET status = ?, version = version + 1, termination_reason = ?
+		WHERE run_ref = ?`, string(domain.RunCancelling), "user_cancelled", runRef); err != nil {
+		t.Fatalf("mark fixture Run cancelling: %v", err)
+	}
+	if _, err := db.ExecContext(ctx, `UPDATE researchflow_stages
+		SET status = ?, version = version + 1, reason_codes = ?, finished_at = ?
+		WHERE stage_ref = ?`, string(domain.StageCancelled), `["user_cancelled"]`, finishedAt, stageRef); err != nil {
+		t.Fatalf("cancel fixture Stage: %v", err)
+	}
+
+	input := application.CancellationFinalizationRecord{
+		RunRef: runRef, ExpectedVersion: 2,
+		ResultSummaryRef: "summary-cancel-" + suffix, SummarySchemaVersion: "summary-v1",
+		OutboxRef: "outbox-cancel-" + suffix, TerminalStatus: domain.RunCancelled,
+		TerminationReason: "user_cancelled",
+		Summary: domain.ResultSummary{
+			StageOutcomes: map[string]domain.StageStatus{"context": domain.StageCancelled},
+			RiskGateDecisions: map[string]string{}, ExcludedStages: []domain.ExcludedStage{},
+			MissingStageCodes: []string{"context"}, DegradedStageCodes: []string{},
+			BlockedStageCodes: []string{}, ReasonCodes: []string{"user_cancelled"},
+		},
+	}
+	updated, err := repository.FinalizeCancellationRun(ctx, input)
+	if err != nil || !updated {
+		t.Fatalf("FinalizeCancellationRun updated=%v err=%v", updated, err)
+	}
+
+	var runStatus, terminationReason, summaryRef string
+	var runVersion uint64
+	if err := db.QueryRowContext(ctx, `SELECT status, version, termination_reason, result_summary_ref
+		FROM researchflow_runs WHERE run_ref = ?`, runRef).Scan(&runStatus, &runVersion, &terminationReason, &summaryRef); err != nil {
+		t.Fatalf("read cancelled Run: %v", err)
+	}
+	if domain.RunStatus(runStatus) != domain.RunCancelled || runVersion != 3 ||
+		terminationReason != "user_cancelled" || summaryRef != input.ResultSummaryRef {
+		t.Fatalf("cancelled Run state=%s version=%d reason=%s summary=%s", runStatus, runVersion, terminationReason, summaryRef)
+	}
+	var summaryCount, outboxCount int
+	if err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM researchflow_result_summaries WHERE run_ref = ?`, runRef).Scan(&summaryCount); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM researchflow_outbox WHERE run_ref = ? AND event_type = ?`, runRef, runFinalizedEventType).Scan(&outboxCount); err != nil {
+		t.Fatal(err)
+	}
+	if summaryCount != 1 || outboxCount != 1 {
+		t.Fatalf("summary count=%d outbox count=%d, want one each", summaryCount, outboxCount)
+	}
+}
