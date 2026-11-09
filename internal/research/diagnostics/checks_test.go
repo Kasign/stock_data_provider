@@ -271,7 +271,7 @@ func TestEvidenceCheckMapsQualityStatesWithoutExposingEvidence(t *testing.T) {
 
 func TestEvidenceCheckUsesImmutableSnapshot(t *testing.T) {
 	value := validEvidenceSnapshot(t, researchevidence.QualityValid)
-	check, err := NewEvidenceCheck("research.evidence.snapshot", "Evidence 快照", true, value)
+	check, err := NewEvidenceCheck("research.evidence.snapshot", "Evidence 快照", true, value, value.SystemAsOf)
 	if err != nil {
 		t.Fatal(err)
 	}
