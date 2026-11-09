@@ -81,7 +81,6 @@ func TestNewServiceRejectsDuplicateIDsAcrossModuleGroups(t *testing.T) {
 	}
 }
 
-
 func TestNewServiceWithMigrationRegistersRequiredSchemaReadiness(t *testing.T) {
 	registry := servermigration.NewRegistry()
 	if err := registry.Register("sample", []platformstorage.Migration{{
