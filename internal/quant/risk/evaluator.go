@@ -79,6 +79,8 @@ func EvaluateRuleSet(
 			!validReasonStatus(reason.Status) || reason.SafeMessage == "" || reason.EvidenceRefs == nil {
 			return Decision{}, fmt.Errorf("%w: invalid result for rule %q", ErrRuleCoverage, rule.Code)
 		}
+		// 立即复制 evaluator 返回的引用切片，避免后续规则回调复用底层数组并改写既有结论。
+		reason.EvidenceRefs = append([]string{}, reason.EvidenceRefs...)
 		reasons = append(reasons, reason)
 	}
 
