@@ -117,12 +117,21 @@ func validAuditReasonCode(value string) bool {
 
 // String contains only the bounded fields allowed in an audit event.
 func (e SecurityAuditEvent) String() string {
+	if err := e.Validate(); err != nil {
+		return "security audit event (invalid)"
+	}
 	return fmt.Sprintf("security audit event (type=%s subject=%s result=%s request_id=%s source=%s reason=%s)",
 		e.EventType, e.Subject, e.Result, e.RequestID, e.Source, e.ReasonCode)
 }
 
 // LogValue exposes only the allowlisted event fields to structured logging.
 func (e SecurityAuditEvent) LogValue() slog.Value {
+	if err := e.Validate(); err != nil {
+		return slog.GroupValue(
+			slog.String("event_type", "invalid"),
+			slog.String("validation", "rejected"),
+		)
+	}
 	return slog.GroupValue(
 		slog.String("event_type", string(e.EventType)),
 		slog.String("subject", e.Subject),

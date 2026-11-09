@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"strings"
 	"testing"
 	"time"
 
@@ -75,5 +76,16 @@ func TestSecurityAuditEventStructuredLoggingContainsOnlyAllowlistedFields(t *tes
 	}
 	if got := event.String(); got == "" {
 		t.Fatal("String() must produce a diagnostic representation")
+	}
+	invalid := event
+	invalid.Subject = "sensitive@example.com"
+	invalid.RequestID = "request-id\nsecret"
+	if got := invalid.String(); got != "security audit event (invalid)" {
+		t.Fatalf("invalid event String() leaked fields: %s", got)
+	}
+	for _, attribute := range invalid.LogValue().Group() {
+		if strings.Contains(attribute.Value.String(), "sensitive") || strings.Contains(attribute.Value.String(), "secret") {
+			t.Fatalf("invalid event LogValue leaked data: %+v", attribute)
+		}
 	}
 }
