@@ -212,7 +212,11 @@ func Resolve(ctx context.Context, t WorkflowTemplate, parameters json.RawMessage
 	if err := Validate(t, gates); err != nil { return ResolvedTemplate{}, err }
 	if parameterSchemas == nil { return ResolvedTemplate{}, fmt.Errorf("%w: parameter schema validator is required", ErrInvalidTemplate) }
 	if evaluator == nil { return ResolvedTemplate{}, fmt.Errorf("%w: applicability evaluator is required", ErrInvalidTemplate) }
-	parameterSchema, err := parameterSchemas.Validate(ctx, t.ParameterSchemaRef, parameters)
+	// Validators and applicability evaluators are injected module boundaries.
+	// Give each one an owned copy so an implementation cannot mutate the
+	// caller's parameter bytes or influence a later Stage evaluation.
+	parameterSnapshot := append(json.RawMessage(nil), parameters...)
+	parameterSchema, err := parameterSchemas.Validate(ctx, t.ParameterSchemaRef, append(json.RawMessage(nil), parameterSnapshot...))
 	if err != nil { return ResolvedTemplate{}, fmt.Errorf("%w: validate parameters against %q: %w", ErrInvalidTemplate, t.ParameterSchemaRef, err) }
 	if parameterSchema.Ref != t.ParameterSchemaRef || strings.TrimSpace(parameterSchema.Version) == "" || len(parameterSchema.Fingerprint) != 64 {
 		return ResolvedTemplate{}, fmt.Errorf("%w: parameter schema validator returned an incomplete or mismatched immutable snapshot", ErrInvalidTemplate)
@@ -241,7 +245,7 @@ func Resolve(ctx context.Context, t WorkflowTemplate, parameters json.RawMessage
 		// caller-owned slice backing arrays from the mutable registry object.
 		stage = cloneStageDefinition(stage)
 		definitions[stage.Code] = stage
-		ok, reason, evalErr := evaluator.Evaluate(ctx, stage.Applicability, parameters)
+		ok, reason, evalErr := evaluator.Evaluate(ctx, stage.Applicability, append(json.RawMessage(nil), parameterSnapshot...))
 		if evalErr != nil { return ResolvedTemplate{}, fmt.Errorf("evaluate applicability for %s: %w", stage.Code, evalErr) }
 		if ok { included[stage.Code] = true; continue }
 		if strings.TrimSpace(reason) == "" { return ResolvedTemplate{}, fmt.Errorf("%w: non-applicable stage %s has no reason code", ErrInvalidTemplate, stage.Code) }
