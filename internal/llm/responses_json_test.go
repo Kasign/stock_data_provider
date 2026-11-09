@@ -364,7 +364,6 @@ func TestParseResponsesUsageDetailsAreRangeChecked(t *testing.T) {
 	}
 }
 
-
 func TestMapResponsesStreamRequestSetsStreamFlag(t *testing.T) {
 	request := validResponsesRequest()
 	now := request.SystemAsOf.Add(time.Second)
