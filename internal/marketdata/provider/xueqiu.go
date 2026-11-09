@@ -297,15 +297,18 @@ func (p *Xueqiu) FetchHotStocks(ctx context.Context, rankingType string, limit i
 		snapshot.ProviderTime = providerTime
 	} else {
 		snapshot.QualityReasons = appendTushareReason(snapshot.QualityReasons, "provider_snapshot_timestamp_missing_or_invalid")
+		addProviderParseIssue(ctx, -1, "provider_time", "data.timestamp", "missing_or_invalid_timestamp", "valid provider snapshot timestamp", providerJSONValueType(dataObject["timestamp"]), providerJSONPreview(dataObject["timestamp"]), "雪球榜单缺少有效的源端快照时间", validation.SeverityWarning)
 	}
 	if rankingType == "surge" {
 		snapshot.QualityReasons = appendTushareReason(snapshot.QualityReasons, "xueqiu_surge_uses_percentage_mover_proxy_not_eastmoney_hot_up_equivalent")
 	}
 	if requestLimit < limit {
 		snapshot.QualityReasons = appendTushareReason(snapshot.QualityReasons, "provider_request_limit_capped_at_50")
+		addProviderParseIssue(ctx, -1, "request_limit", "request.size", "provider_limit_applied", fmt.Sprintf("requested limit %d", limit), "integer", strconv.Itoa(requestLimit), "雪球榜单单次最多返回 50 条，实际请求已截断", validation.SeverityWarning)
 	}
 	if len(rows) > requestLimit {
 		snapshot.QualityReasons = appendTushareReason(snapshot.QualityReasons, "provider_returned_more_rows_than_requested")
+		addProviderParseIssue(ctx, -1, "row_count", "data.items", "provider_returned_excess_rows", fmt.Sprintf("at most %d rows", requestLimit), "integer", strconv.Itoa(len(rows)), "雪球榜单返回行数超过请求上限，多余行将被丢弃", validation.SeverityWarning)
 	}
 	seen := make(map[string]struct{}, requestLimit)
 	for index, row := range rows {
