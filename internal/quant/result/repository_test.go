@@ -65,10 +65,10 @@ func TestRecordValidatedSnapshotIsolatesMutableSlices(t *testing.T) {
 		t.Fatalf("snapshot reference changed after source mutation: %q", snapshot.Manifest.InputSnapshotRefs[0])
 	}
 
-	snapshot.Payload[0] = '['
+	snapshot.Payload[1] = 'X'
 	snapshot.Manifest.InputSnapshotRefs[0] = "snapshot:snapshot-mutated"
-	if record.Payload[0] != '[' {
-		t.Fatal("expected source payload to remain independently mutable")
+	if record.Payload[1] != '"' {
+		t.Fatalf("source payload changed after snapshot mutation: %s", record.Payload)
 	}
 	if record.Manifest.InputSnapshotRefs[0] != "snapshot:mutated" {
 		t.Fatalf("source reference changed after snapshot mutation: %q", record.Manifest.InputSnapshotRefs[0])
