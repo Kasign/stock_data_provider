@@ -114,4 +114,3 @@ func (f *DeadlineFinalizer) Finalize(ctx context.Context, runRef string) (Deadli
 	}
 	return DeadlineFinalizationResult{Run: run, Finalized: finalized}, nil
 }
-
