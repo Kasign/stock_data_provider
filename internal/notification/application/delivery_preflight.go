@@ -8,9 +8,9 @@ import (
 )
 
 var (
-	ErrDeliveryPreflightUnavailable = errors.New("notification: delivery preflight unavailable")
+	ErrDeliveryPreflightUnavailable   = errors.New("notification: delivery preflight unavailable")
 	ErrDeliveryPreflightNotApplicable = errors.New("notification: delivery preflight is not applicable")
-	ErrRecipientNotAuthorized = errors.New("notification: recipient is not authorized")
+	ErrRecipientNotAuthorized         = errors.New("notification: recipient is not authorized")
 )
 
 type DeliveryPreflightAction string
@@ -22,12 +22,12 @@ const (
 )
 
 type DeliveryPreflightResult struct {
-	Action                 DeliveryPreflightAction
-	ReasonCode             string
-	CurrentSubscription    domain.Subscription
-	Channel                ChannelAdapter
-	ChannelSnapshot        domain.ChannelConfigSnapshot
-	Recipient              domain.RecipientTarget
+	Action              DeliveryPreflightAction
+	ReasonCode          string
+	CurrentSubscription domain.Subscription
+	Channel             ChannelAdapter
+	ChannelSnapshot     domain.ChannelConfigSnapshot
+	Recipient           domain.RecipientTarget
 }
 
 type DeliveryPreflight struct {
@@ -46,8 +46,8 @@ func NewDeliveryPreflight(
 	}
 	return &DeliveryPreflight{
 		subscriptions: subscriptions,
-		channels: channels,
-		recipients: recipients,
+		channels:      channels,
+		recipients:    recipients,
 	}, nil
 }
 

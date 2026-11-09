@@ -10,8 +10,8 @@ import (
 
 type fixedRecipientResolver struct {
 	target domain.RecipientTarget
-	err error
-	calls int
+	err    error
+	calls  int
 }
 
 func (r *fixedRecipientResolver) Resolve(_ context.Context, _ domain.Subscription, _ domain.ChannelConfigSnapshot) (domain.RecipientTarget, error) {
@@ -47,9 +47,9 @@ func preflightFixture(t *testing.T) (*DeliveryPreflight, domain.DeliveryRecord, 
 	}
 	recipients := &fixedRecipientResolver{
 		target: domain.RecipientTarget{
-			RecipientRef: delivery.RecipientRef,
-			ChannelRef: delivery.ChannelRef,
-			ConfigVersion: delivery.ChannelConfigVersion,
+			RecipientRef:     delivery.RecipientRef,
+			ChannelRef:       delivery.ChannelRef,
+			ConfigVersion:    delivery.ChannelConfigVersion,
 			AdapterTargetRef: "opaque-target-1",
 		},
 	}

@@ -88,8 +88,8 @@ func TestCompleteAttemptFromChannelResultRejectsUnsupportedRetryAfter(t *testing
 	channel.Capabilities.SupportsRetryAfter = domain.CapabilityUnsupported
 	retryAfter := finishedAt.Add(time.Second)
 	result := domain.ChannelSendResult{
-		Outcome: domain.ChannelOutcomeRejected,
-		ErrorCode: "rate_limited",
+		Outcome:    domain.ChannelOutcomeRejected,
+		ErrorCode:  "rate_limited",
 		RetryAfter: &retryAfter,
 	}
 	if _, err := CompleteAttemptFromChannelResult(attempt, channel, result, finishedAt, ""); err == nil {
