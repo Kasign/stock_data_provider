@@ -546,7 +546,7 @@ func TestEntryValidateRejectsNonCanonicalMetadataWhitespace(t *testing.T) {
 
 func TestParseNumericDecimalStringLexicalContract(t *testing.T) {
 	precision := Precision{MaxIntegerDigits: 4, MaxFractionDigits: 4}
-	valid := []string{\`"0"\`, \`"-0"\`, \`"12"\`, \`"-12.3400"\`, \`"0.0001"\`}
+	valid := []string{`"0"`, `"-0"`, `"12"`, `"-12.3400"`, `"0.0001"`}
 	for _, raw := range valid {
 		t.Run("valid_"+strings.Trim(raw, "\\\""), func(t *testing.T) {
 			if _, err := parseNumeric(json.RawMessage(raw), ValueTypeDecimalString, precision); err != nil {
@@ -555,9 +555,9 @@ func TestParseNumericDecimalStringLexicalContract(t *testing.T) {
 		})
 	}
 	invalid := []string{
-		\`"1e2"\`, \`"1E-2"\`, \`"+1"\`, \`"01"\`, \`"-01.2"\`,
-		\`".5"\`, \`"1."\`, \`" 1"\`, \`"1 "\`, \`""\`, \`"NaN"\`,
-		\`"Infinity"\`, \`1.25\`, \`null\`,
+		`"1e2"`, `"1E-2"`, `"+1"`, `"01"`, `"-01.2"`,
+		`".5"`, `"1."`, `" 1"`, `"1 "`, `""`, `"NaN"`,
+		`"Infinity"`, `1.25`, `null`,
 	}
 	for _, raw := range invalid {
 		t.Run("invalid_"+strings.Trim(raw, "\\\""), func(t *testing.T) {
@@ -566,10 +566,10 @@ func TestParseNumericDecimalStringLexicalContract(t *testing.T) {
 			}
 		})
 	}
-	if _, err := parseNumeric(json.RawMessage(\`"12345.0"\`), ValueTypeDecimalString, precision); err == nil {
+	if _, err := parseNumeric(json.RawMessage(`"12345.0"`), ValueTypeDecimalString, precision); err == nil {
 		t.Fatal("decimal string exceeding integer precision unexpectedly succeeded")
 	}
-	if _, err := parseNumeric(json.RawMessage(\`"1.00001"\`), ValueTypeDecimalString, precision); err == nil {
+	if _, err := parseNumeric(json.RawMessage(`"1.00001"`), ValueTypeDecimalString, precision); err == nil {
 		t.Fatal("decimal string exceeding fractional precision unexpectedly succeeded")
 	}
 }
