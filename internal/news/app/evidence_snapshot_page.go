@@ -45,6 +45,9 @@ func (u *ListEvidenceSnapshotPage) Execute(
 		u.now == nil || ctx == nil {
 		return EvidenceSnapshotPage{}, ErrInvalidEvidenceQuery
 	}
+	if err := ctx.Err(); err != nil {
+		return EvidenceSnapshotPage{}, err
+	}
 	now := u.now().UTC()
 	if request.Validate(now) != nil {
 		return EvidenceSnapshotPage{}, ErrInvalidEvidenceQuery
@@ -67,6 +70,9 @@ func (u *ListEvidenceSnapshotPage) Execute(
 		if err != nil {
 			return EvidenceSnapshotPage{}, err
 		}
+		if err := ctx.Err(); err != nil {
+			return EvidenceSnapshotPage{}, err
+		}
 		if !loaded.MatchesRequest(request) || loaded.SortVersion != evidenceSortVersion {
 			return EvidenceSnapshotPage{}, ErrEvidenceSnapshotPageUnavailable
 		}
@@ -74,6 +80,9 @@ func (u *ListEvidenceSnapshotPage) Execute(
 		position = &decoded
 	}
 
+	if err := ctx.Err(); err != nil {
+		return EvidenceSnapshotPage{}, err
+	}
 	pageItems, hasMore, err := snapshot.PageAfter(position)
 	if err != nil {
 		return EvidenceSnapshotPage{}, err
@@ -84,6 +93,9 @@ func (u *ListEvidenceSnapshotPage) Execute(
 		SystemAsOf:  snapshot.SystemAsOf,
 	}
 	if hasMore {
+		if err := ctx.Err(); err != nil {
+			return EvidenceSnapshotPage{}, err
+		}
 		if len(pageItems) == 0 {
 			return EvidenceSnapshotPage{}, ErrInvalidEvidenceSnapshot
 		}

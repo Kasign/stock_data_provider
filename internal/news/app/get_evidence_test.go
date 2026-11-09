@@ -13,9 +13,11 @@ import (
 type getEvidencePITRepositoryStub struct {
 	record EvidencePITRecord
 	err error
+	afterRead func()
 }
 
 func (s getEvidencePITRepositoryStub) GetEvidenceVersionAt(context.Context, GetEvidenceRequest) (EvidencePITRecord, error) {
+	if s.afterRead != nil { s.afterRead() }
 	return s.record, s.err
 }
 
@@ -26,6 +28,7 @@ func (s getEvidencePITRepositoryStub) ListEvidenceVersionsAt(context.Context, Li
 type getEvidenceAuthorizationSnapshotStub struct {
 	binding domain.NewsAuthorizationBinding
 	err error
+	afterRead func()
 }
 
 func (s getEvidenceAuthorizationSnapshotStub) AppendAuthorizationSnapshot(context.Context, domain.NewsAuthorizationBinding, domain.Observation, domain.NewsItemVersion) error {
@@ -40,6 +43,7 @@ func (s getEvidenceAuthorizationSnapshotStub) GetLatestAuthorizationSnapshotForE
 	if s.err != nil {
 		return domain.NewsAuthorizationBinding{}, s.err
 	}
+	if s.afterRead != nil { s.afterRead() }
 	if s.binding.CallerRef != caller || s.binding.ResourceRef != resource ||
 		s.binding.PurposeCode != purpose || s.binding.RequestedContentLevel != level {
 		return domain.NewsAuthorizationBinding{}, ErrInvalidAuthorizationSnapshot
@@ -288,6 +292,36 @@ func TestGetEvidenceRejectsInvalidRetentionTimelineFromPITRepository(t *testing.
 			if authorizer.calls != 0 {
 				t.Fatalf("invalid retention timeline reached authorizer %d times", authorizer.calls)
 			}
+		})
+	}
+}
+
+
+func TestGetEvidenceStopsAfterContextCancellationAtDependencyBoundaries(t *testing.T) {
+	now := time.Date(2026, 11, 9, 12, 0, 0, 0, time.UTC)
+	request, pit, binding := validGetEvidenceFixture(now)
+	cases := []struct {
+		name string
+		cancelAt string
+	}{
+		{name: "PIT returned", cancelAt: "pit"},
+		{name: "authorization snapshot returned", cancelAt: "snapshot"},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			pitRepo := getEvidencePITRepositoryStub{record: pit}
+			snapshotRepo := getEvidenceAuthorizationSnapshotStub{binding: binding}
+			if test.cancelAt == "pit" { pitRepo.afterRead = cancel } else { snapshotRepo.afterRead = cancel }
+			authorizer := &getEvidenceAuthorizerStub{}
+			usecase, err := NewGetEvidence(pitRepo, snapshotRepo, authorizer)
+			if err != nil { t.Fatal(err) }
+			usecase.now = func() time.Time { return now }
+			if _, err := usecase.Execute(ctx, request); !errors.Is(err, context.Canceled) {
+				t.Fatalf("Execute() error = %v, want context.Canceled", err)
+			}
+			if authorizer.calls != 0 { t.Fatalf("canceled request reached authorizer: %d", authorizer.calls) }
 		})
 	}
 }
