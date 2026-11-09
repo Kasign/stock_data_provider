@@ -56,6 +56,22 @@ func TestValidateFundamentalsSnapshotUsesChinaMarketDateForAvailableAt(t *testin
 	}
 }
 
+func TestValidateFundamentalsSnapshotRejectsInvalidSnapshotQualityStatus(t *testing.T) {
+	snapshot := validFundamentalsFixture()
+	snapshot.QualityStatus = model.QualityStatus("fresh")
+	report := ValidateFundamentalsSnapshot(snapshot, "600036.SH", 2026, 2)
+	found := false
+	for _, issue := range report.Issues {
+		if issue.Field == "quality_status" && issue.Code == "invalid_enum" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected invalid snapshot quality enum issue, got %+v", report.Issues)
+	}
+}
+
 func TestValidateFundamentalsSnapshotReportsNilSnapshot(t *testing.T) {
 	report := ValidateFundamentalsSnapshot(nil, "600036.SH", 2026, 2)
 	if !report.HasErrors() || len(report.Issues) != 1 || report.Issues[0].Field != "snapshot" {
