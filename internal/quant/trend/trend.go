@@ -81,7 +81,7 @@ func (r Result) Validate() error {
 }
 
 func nonBlank(value string) bool {
-	return utf8.ValidString(value) && strings.TrimSpace(value) != ""
+	return utf8.ValidString(value) && strings.TrimSpace(value) != "" && strings.TrimSpace(value) == value
 }
 
 func canonicalUTCTimestamp(value string) bool {
