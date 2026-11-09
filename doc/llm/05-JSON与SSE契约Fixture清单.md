@@ -350,3 +350,11 @@ sequence_number 严格连续策略、Draft 2020-12 本地 Schema dialect、Reque
 - done 后再次收到同一分段 delta 必须拒绝；负 output_index/content_index 必须拒绝。
 - 对应测试：`TestParseResponsesSSEAggregatesMultipleTextPartsByIndex`、`TestParseResponsesSSERejectsTextDeltaAfterDone`。
 - 测试代码尚未执行，不构成通过证据。
+
+## 22. Function Call 参数终态一致性
+
+- 每个 call_id 的 arguments delta 独立累计；arguments.done 必须与此前累计值一致。
+- 收到 arguments.done 或对应 output_item.done 后，该 call_id 的参数流进入终态；后续 delta 必须拒绝。
+- 终态 Response 中的 ToolCall.arguments_json 必须与已累计参数一致。
+- 对应测试：`TestParseResponsesSSEFunctionCallAggregationAndConsistency`、`TestParseResponsesSSERejectsFunctionArgumentDeltaAfterDone`。
+- 测试代码尚未执行，不构成通过证据。
