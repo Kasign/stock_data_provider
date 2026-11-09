@@ -28,9 +28,11 @@ const maxSinaKlineBars = 1023
 
 // 新浪 Provider 同时实现实时行情和历史日 K。两个端点字段契约不同，必须分别归一化。
 type Sina struct {
-	client   *http.Client
-	quoteURL string
-	klineURL string
+	client         *http.Client
+	quoteHTTPDoer  HTTPDoer
+	klineHTTPDoer  HTTPDoer
+	quoteURL       string
+	klineURL       string
 }
 
 func NewSina(timeout time.Duration, quoteURL string) *Sina {
@@ -38,6 +40,12 @@ func NewSina(timeout time.Duration, quoteURL string) *Sina {
 }
 
 func NewSinaConfigured(timeout time.Duration, quoteURL, klineURL string) *Sina {
+	return NewSinaConfiguredWithHTTPDoers(timeout, quoteURL, klineURL, nil, nil)
+}
+
+// NewSinaConfiguredWithHTTPDoers 分别注入新浪实时报价和历史 K 线出口。
+// 两个 URL 独立配置，Root 必须按实际 Host 创建受限执行器；Module 不拥有、不关闭执行器。
+func NewSinaConfiguredWithHTTPDoers(timeout time.Duration, quoteURL, klineURL string, quoteDoer, klineDoer HTTPDoer) *Sina {
 	if timeout <= 0 {
 		timeout = 12 * time.Second
 	}
@@ -47,15 +55,21 @@ func NewSinaConfigured(timeout time.Duration, quoteURL, klineURL string) *Sina {
 	if strings.TrimSpace(klineURL) == "" {
 		klineURL = "https://money.finance.sina.com.cn/quotes_service/api/json_v2.php/CN_MarketData.getKLineData"
 	}
-	return &Sina{
-		client: &http.Client{
-			Timeout: timeout,
-			CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
-				return http.ErrUseLastResponse
-			},
+	client := &http.Client{
+		Timeout: timeout,
+		CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
+			return http.ErrUseLastResponse
 		},
-		quoteURL: strings.TrimSpace(quoteURL),
-		klineURL: strings.TrimSpace(klineURL),
+	}
+	if quoteDoer == nil {
+		quoteDoer = client
+	}
+	if klineDoer == nil {
+		klineDoer = client
+	}
+	return &Sina{
+		client: client, quoteHTTPDoer: quoteDoer, klineHTTPDoer: klineDoer,
+		quoteURL: strings.TrimSpace(quoteURL), klineURL: strings.TrimSpace(klineURL),
 	}
 }
 
@@ -106,7 +120,7 @@ func (p *Sina) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endDate
 	req.Header.Set("User-Agent", "Mozilla/5.0 (compatible; MarketDataProvider/1.0)")
 	req.Header.Set("Referer", "https://finance.sina.com.cn/")
 	req.Header.Set("Accept", "application/json,*/*")
-	resp, err := p.client.Do(req)
+	resp, err := p.klineHTTPDoer.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("Sina K-line request: %w", err)
 	}
@@ -333,7 +347,7 @@ func (p *Sina) FetchQuote(ctx context.Context, rawSymbol string) (*model.Quote, 
 	req.Header.Set("User-Agent", "Mozilla/5.0 (compatible; MarketDataProvider/1.0)")
 	req.Header.Set("Referer", "https://finance.sina.com.cn/")
 	req.Header.Set("Accept", "text/plain,*/*")
-	resp, err := p.client.Do(req)
+	resp, err := p.quoteHTTPDoer.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("Sina quote request: %w", err)
 	}
