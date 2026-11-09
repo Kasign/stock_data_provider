@@ -428,6 +428,9 @@ func TestFirstFactorQuantMetricSchemaValidatesGoldenAndRejectsInvalidStates(t *t
 		`{"metric_code":"momentum_20d","value":0.2,"unit":"ratio","period":"20d","system_as_of":"2026-11-09T00:00:00Z","quality_status":"valid","metric_status":"insufficient_data","calculation_version":"1.0.0","sample_count":21,"lower_bound":null,"upper_bound":null}`,
 		`{"metric_code":"momentum_20d","value":0.2,"unit":"ratio","period":"20d","system_as_of":"2026-11-09T00:00:00Z","quality_status":"valid","metric_status":"available","calculation_version":"1.0.0","sample_count":21,"lower_bound":0.1,"upper_bound":null}`,
 		`{"metric_code":"momentum_20d","value":0.2,"unit":"ratio","period":"20d","system_as_of":"2026-11-09T00:00:00+08:00","quality_status":"valid","metric_status":"available","calculation_version":"1.0.0","sample_count":21,"lower_bound":null,"upper_bound":null}`,
+		`{"metric_code":"momentum_20d","value":0.2,"unit":"ratio","period":"20d","system_as_of":"2026-11-09T00:00:00Z","quality_status":"valid","metric_status":"available","calculation_version":"1.0.0","sample_count":20,"lower_bound":null,"upper_bound":null}`,
+		`{"metric_code":"momentum_60d","value":0.6,"unit":"ratio","period":"60d","system_as_of":"2026-11-09T00:00:00Z","quality_status":"valid","metric_status":"available","calculation_version":"1.0.0","sample_count":60,"lower_bound":null,"upper_bound":null}`,
+		`{"metric_code":"volatility_20d","value":0.01,"unit":"ratio","period":"20d","system_as_of":"2026-11-09T00:00:00Z","quality_status":"valid","metric_status":"available","calculation_version":"1.0.0","sample_count":19,"lower_bound":null,"upper_bound":null}`,
 	}
 	for _, instance := range invalid {
 		if err := validateJSONSchemaInstance(schema, []byte(instance)); err == nil {
