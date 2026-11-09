@@ -282,7 +282,6 @@ func TestEvidenceCheckUsesImmutableSnapshot(t *testing.T) {
 	}
 }
 
-
 func TestEvidenceCheckRequiresComparableStrictPIT(t *testing.T) {
 	t.Run("unknown available_at is unavailable", func(t *testing.T) {
 		value := validEvidenceSnapshot(t, researchevidence.QualityValid)
