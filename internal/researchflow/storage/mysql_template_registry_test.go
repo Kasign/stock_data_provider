@@ -92,6 +92,9 @@ func TestMariaDBTemplateRegistryPublishesImmutableExactVersions(t *testing.T) {
 	if _, err := registry.Get(ctx, corrupt.Ref, corrupt.Version); !errors.Is(err, ErrWorkflowTemplateCorrupt) {
 		t.Fatalf("corrupt template error = %v, want ErrWorkflowTemplateCorrupt", err)
 	}
+	if err := registry.Publish(ctx, corrupt); !errors.Is(err, ErrWorkflowTemplateCorrupt) {
+		t.Fatalf("re-publishing corrupt immutable version error = %v, want ErrWorkflowTemplateCorrupt", err)
+	}
 }
 
 func registryTestTemplate(ref, version string) template.WorkflowTemplate {

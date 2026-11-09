@@ -127,13 +127,11 @@ func (r *MySQLTemplateRegistry) Publish(ctx context.Context, value template.Work
 			return fmt.Errorf("insert Researchflow workflow template %s@%s: %w", value.Ref, value.Version, err)
 		}
 		_ = tx.Rollback()
-		var existing string
-		readErr := r.db.QueryRowContext(ctx, `SELECT fingerprint FROM researchflow_workflow_templates
-			WHERE template_ref = ? AND version = ?`, value.Ref, value.Version).Scan(&existing)
+		existing, readErr := r.Get(ctx, value.Ref, value.Version)
 		if readErr != nil {
 			return fmt.Errorf("resolve duplicate Researchflow template publication: %w", readErr)
 		}
-		if existing == fingerprint {
+		if existing.Fingerprint == fingerprint {
 			return nil
 		}
 		return fmt.Errorf("%w: %s@%s", ErrWorkflowTemplateConflict, value.Ref, value.Version)
