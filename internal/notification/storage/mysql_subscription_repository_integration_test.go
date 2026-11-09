@@ -1,7 +1,9 @@
 package storage
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -20,6 +22,15 @@ type subscriptionIntegrationEventTypes struct{}
 
 func (subscriptionIntegrationEventTypes) HasEventType(eventType string) bool {
 	return eventType == "quant.risk_decision.changed"
+}
+
+type subscriptionIntegrationFilterValidator struct{}
+
+func (subscriptionIntegrationFilterValidator) ValidateFilter(eventType, schemaVersion string, filters json.RawMessage) error {
+	if eventType != "quant.risk_decision.changed" || schemaVersion != "1.0.0" || !json.Valid(filters) {
+		return errors.New("unsupported integration filter")
+	}
+	return nil
 }
 
 func TestNotificationMariaDBSubscriptionRepositoryIntegration(t *testing.T) {
@@ -46,7 +57,7 @@ func TestNotificationMariaDBSubscriptionRepositoryIntegration(t *testing.T) {
 	if err := platformstorage.ApplyMigrations(ctx, db, "notification", Migrations()); err != nil {
 		t.Fatalf("apply Notification migrations: %v", err)
 	}
-	repository, err := NewMySQLSubscriptionRepository(db, subscriptionIntegrationEventTypes{}, nil)
+	repository, err := NewMySQLSubscriptionRepository(db, subscriptionIntegrationEventTypes{}, subscriptionIntegrationFilterValidator{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -55,7 +66,7 @@ func TestNotificationMariaDBSubscriptionRepositoryIntegration(t *testing.T) {
 	initial := domain.Subscription{
 		SubscriptionID: fmt.Sprintf("subscription-%d", time.Now().UnixNano()),
 		OwnerRef: "owner-integration", Version: 1, Status: domain.SubscriptionActive,
-		EventType: "quant.risk_decision.changed", RecipientScope: domain.RecipientScopeOwner,
+		EventType: "quant.risk_decision.changed", FilterSchemaVersion: "1.0.0",\n\t\tFilters: json.RawMessage(`{"min_severity":"high"}`), RecipientScope: domain.RecipientScopeOwner,
 		ChannelRef: "channel-integration", TemplateID: "template-integration",
 		CreatedAt: now, UpdatedAt: now, EffectiveAt: now,
 	}
@@ -100,7 +111,7 @@ func TestNotificationMariaDBSubscriptionRepositoryIntegration(t *testing.T) {
 	if err != nil || !found || latest.Version != 2 || latest.Status != domain.SubscriptionPaused {
 		t.Fatalf("load latest subscription: found=%v subscription=%+v err=%v", found, latest, err)
 	}
-	if latest.CreatedAt != initial.CreatedAt || latest.OwnerRef != initial.OwnerRef {
+	if latest.CreatedAt != initial.CreatedAt || latest.OwnerRef != initial.OwnerRef || !bytes.Equal(latest.Filters, initial.Filters) {
 		t.Fatalf("immutable subscription identity changed: %+v", latest)
 	}
 	latest.Status = domain.SubscriptionDisabled
