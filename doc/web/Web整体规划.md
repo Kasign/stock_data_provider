@@ -1,6 +1,6 @@
 # WebUI 整体规划
 
-更新时间：2026-11-09（当前运行时代码验收基线：`b6da380eb29955c321b1d42b4e7dfb843f162fe9`；当前分支 HEAD：`76e91a1536279e3f2c5e3058f1dd3765e0287cb7`，其后提交为文档同步）
+更新时间：2026-11-09（最近运行时代码验收基线：`b6da380eb29955c321b1d42b4e7dfb843f162fe9`；此后仅有文档同步提交，未改变运行时代码）
 目标分支：`feat/webui-market-data-console`
 适用范围：仅规划和管理 WebUI（`web/**`）及其专属文档（`doc/web/**`）。除明确获批的文档路径修正外，不修改 Go、Provider、数据库、服务端 API、OpenAPI 实现和部署配置。
 
@@ -299,7 +299,7 @@ localStorage + storage event 方案能解决“另一个标签页完成写入后
 - W1 数据中心重复请求治理、W2 Run Flow 体验优化、W3 研究报告与研究记录工作区首批改造均已完成。
 - JSR-7 静态依赖图审计完成：51 个源文件、app.js 47 个直接静态依赖；未发现静态循环依赖或领域模块反向依赖 app.js。
 - UIR-2 CSS AST/CSSOM、主题/配色、响应式级联和跨 selector 复核完成；最终运行时代码基线为 `b6da380eb29955c321b1d42b4e7dfb843f162fe9`。
-- 该代码基线的 WebUI Checks #42207380891 与 Chromium Browser Smoke #42207380849 均通过。其后分支提交为文档同步，当前 HEAD 为 `76e91a1536279e3f2c5e3058f1dd3765e0287cb7`。
+- 该代码基线的 WebUI Checks #42207380891 与 Chromium Browser Smoke #42207380849 均通过；此后仅发生文档同步，运行时代码未改变。
 - 剩余 6 处 `!important` 用于全局隐藏和 reduced-motion 无障碍规则，属于必要优先级，不继续删除。
 
 ### 下一批：P2 人工视觉验收
