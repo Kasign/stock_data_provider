@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"time"
 
 	platformstorage "example.com/stock-analysis-flow/internal/platform/storage"
 )
@@ -68,20 +69,54 @@ func (r *Registry) Register(namespace string, migrations []platformstorage.Migra
 	return nil
 }
 
-// Run applies every registered namespace in lexical order and stops at the
-// first failure. Platform owns locking, checksums, history and SQL execution.
+// NamespaceResult records one namespace execution attempt. It deliberately
+// does not expose SQL or driver error text in structured diagnostics.
+type NamespaceResult struct {
+	Namespace  string        `json:"namespace"`
+	Status     string        `json:"status"`
+	Duration   time.Duration `json:"duration"`
+	ReasonCode string        `json:"reason_code,omitempty"`
+}
+
+// RunReport is the bounded, deterministic result of one Registry run.
+type RunReport struct {
+	StartedAt  time.Time         `json:"started_at"`
+	FinishedAt time.Time         `json:"finished_at"`
+	Duration   time.Duration     `json:"duration"`
+	Status     string            `json:"status"`
+	Namespaces []NamespaceResult `json:"namespaces"`
+}
+
+// Run preserves the original error-only API for existing callers.
 func (r *Registry) Run(ctx context.Context, db *sql.DB) error {
+	_, err := r.RunWithReport(ctx, db)
+	return err
+}
+
+// RunWithReport applies namespaces in lexical order and stops at the first
+// failure. Platform owns locking, checksums, history and SQL execution.
+func (r *Registry) RunWithReport(ctx context.Context, db *sql.DB) (RunReport, error) {
+	startedAt := time.Now()
+	report := RunReport{StartedAt: startedAt, Status: "failed", Namespaces: make([]NamespaceResult, 0)}
+	finish := func(err error) (RunReport, error) {
+		report.FinishedAt = time.Now()
+		report.Duration = report.FinishedAt.Sub(startedAt)
+		if err == nil {
+			report.Status = "succeeded"
+		}
+		return report, err
+	}
 	if r == nil {
-		return errors.New("migration registry is nil")
+		return finish(errors.New("migration registry is nil"))
 	}
 	if ctx == nil {
-		return errors.New("migration context is required")
+		return finish(errors.New("migration context is required"))
 	}
 	if db == nil {
-		return errors.New("migration database is required")
+		return finish(errors.New("migration database is required"))
 	}
 	if len(r.entries) == 0 {
-		return errors.New("no module migrations are registered")
+		return finish(errors.New("no module migrations are registered"))
 	}
 
 	namespaces := make([]string, 0, len(r.entries))
@@ -90,11 +125,23 @@ func (r *Registry) Run(ctx context.Context, db *sql.DB) error {
 	}
 	sort.Strings(namespaces)
 	for _, namespace := range namespaces {
-		if err := platformstorage.ApplyMigrations(ctx, db, namespace, r.entries[namespace]); err != nil {
-			return fmt.Errorf("apply %s migrations: %w", namespace, err)
+		itemStarted := time.Now()
+		err := platformstorage.ApplyMigrations(ctx, db, namespace, r.entries[namespace])
+		item := NamespaceResult{
+			Namespace: namespace,
+			Status: "succeeded",
+			Duration: time.Since(itemStarted),
 		}
+		if err != nil {
+			item.Status = "failed"
+			item.ReasonCode = "server.migration.namespace_failed"
+			item.Duration = time.Since(itemStarted)
+			report.Namespaces = append(report.Namespaces, item)
+			return finish(fmt.Errorf("apply %s migrations: %w", namespace, err))
+		}
+		report.Namespaces = append(report.Namespaces, item)
 	}
-	return nil
+	return finish(nil)
 }
 
 // Namespaces returns the registered namespace names in deterministic order.
