@@ -198,19 +198,20 @@ func validateSortedUniqueStrings(name string, values []string) error {
 }
 
 func validatePolicyVersions(values []PolicyVersion) error {
-	seen := make(map[string]struct{}, len(values))
-	previous := ""
+	seen := make(map[PolicyVersion]struct{}, len(values))
+	var previous PolicyVersion
 	for i, value := range values {
 		if err := requiredRef("policy_type", value.PolicyType); err != nil { return err }
 		if err := requiredRef("policy_ref", value.PolicyRef); err != nil { return err }
 		if err := requiredRef("policy_version", value.PolicyVersion); err != nil { return err }
-		key := value.PolicyType + " " + value.PolicyRef + " " + value.PolicyVersion
-		if _, exists := seen[key]; exists { return fmt.Errorf("policy_snapshot contains duplicate policy tuple") }
-		seen[key] = struct{}{}
-		if i > 0 && previous >= key {
+		if _, exists := seen[value]; exists { return fmt.Errorf("policy_snapshot contains duplicate policy tuple") }
+		seen[value] = struct{}{}
+		if i > 0 && (previous.PolicyType > value.PolicyType ||
+			(previous.PolicyType == value.PolicyType && previous.PolicyRef > value.PolicyRef) ||
+			(previous.PolicyType == value.PolicyType && previous.PolicyRef == value.PolicyRef && previous.PolicyVersion >= value.PolicyVersion)) {
 			return fmt.Errorf("policy_snapshot.policies must be sorted by policy_type, policy_ref, policy_version")
 		}
-		previous = key
+		previous = value
 	}
 	return nil
 }
