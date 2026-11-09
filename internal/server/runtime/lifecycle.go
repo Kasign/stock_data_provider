@@ -45,7 +45,7 @@ func (l *Lifecycle) Register(component Component) error {
 	return nil
 }
 
-// Start 按注册顺序启动；任一组件失败都会停止已尝试启动的组件。
+// Start 按注册顺序启动；启动失败或启动期间取消时都会停止已尝试启动的组件。
 func (l *Lifecycle) Start(ctx context.Context) error {
 	if ctx == nil {
 		return errors.New("lifecycle start context is required")
@@ -58,7 +58,12 @@ func (l *Lifecycle) Start(ctx context.Context) error {
 	l.startedOK = true
 	components := append([]Component(nil), l.components...)
 	l.mu.Unlock()
+
 	for _, component := range components {
+		if err := ctx.Err(); err != nil {
+			rollbackErr := l.Stop(context.WithoutCancel(ctx))
+			return errors.Join(fmt.Errorf("lifecycle startup canceled: %w", err), rollbackErr)
+		}
 		l.mu.Lock()
 		l.started = append(l.started, component)
 		l.mu.Unlock()
@@ -66,6 +71,10 @@ func (l *Lifecycle) Start(ctx context.Context) error {
 			rollbackErr := l.Stop(context.WithoutCancel(ctx))
 			return errors.Join(fmt.Errorf("start component %q: %w", component.Name(), err), rollbackErr)
 		}
+	}
+	if err := ctx.Err(); err != nil {
+		rollbackErr := l.Stop(context.WithoutCancel(ctx))
+		return errors.Join(fmt.Errorf("lifecycle startup canceled: %w", err), rollbackErr)
 	}
 	return nil
 }
