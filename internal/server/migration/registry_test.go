@@ -244,7 +244,6 @@ func TestRegistryConcurrentDuplicateRegistrationHasSingleWinner(t *testing.T) {
 	}
 }
 
-
 func TestRegistryFreezesRegistrationsWhenExecutionSnapshotStarts(t *testing.T) {
 	registry := NewRegistry()
 	migration := []platformstorage.Migration{{Version: 1, Description: "init", Statements: []string{"SELECT 1"}}}

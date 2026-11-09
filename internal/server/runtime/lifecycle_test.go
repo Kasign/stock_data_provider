@@ -262,7 +262,6 @@ func TestLifecycleConcurrentStopWaitsForStartupToFinish(t *testing.T) {
 	}
 }
 
-
 type contextAwareBlockingStartComponent struct {
 	name    string
 	entered chan struct{}

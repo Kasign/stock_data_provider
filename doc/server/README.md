@@ -769,14 +769,14 @@ Server 层完成不是“服务能够启动”这么简单。至少同时满足�
 | 任务 | 状态 | 说明 |
 |---|---|---|
 | SRV-001 | 完成 | 已记录旧入口、路由与认证现状、旧 Analysis Migration 四表、Worker/Storage 生命周期、部署边界及各模块接入就绪度；详细见 12.3 节 |
-| SRV-002 | 进行中 | Server 进程级配置已集中为 Process 快照；Storage/MarketData Adapter 已支持显式 Env 注入且 Bootstrap 统一传递；新增配置快照稳定性回归测试；完整模块 Registry 与统一装配未完成；详见 12.22、12.27、12.32 节 |
+| SRV-002 | 进行中 | Server 进程级配置已集中为 Process 快照；Storage/MarketData Adapter 已支持显式 Env 注入；Bootstrap 统一传递配置；部分初始化失败会汇总原始错误和逆序清理错误；完整模块 Registry 与统一装配仍待模块入口；详见 12.22、12.27、12.32、12.35、12.36 节 |
 | SRV-003 | 进行中 | DB、Redis、HTTP Client 已由 Resources 统一创建和关闭；新增固定 DestinationPolicy 的 BoundDoer 绑定入口，并覆盖 Bind/Close 并发边界；真实模块注入、Dependency allowlist/配额及流式生命周期验收仍待模块入口交付；详见 12.24、12.28 节 |
 | SRV-004 | 阻塞 | 已复核模块接入面；Researchflow/Quant/LLM/Notification 缺少完整生产装配入口，News/Research 也有关键查询/授权接入缺口；详见 12.6 节 |
 | SRV-005 | 进行中 | 已接入 Platform Bearer Owner 认证、入口 Request ID、Fault HTTP 映射工具、请求体与并发限制；补齐 GET/HEAD 探针的状态、响应头、身份策略及过载豁免测试；现有旧 Analysis Handler 保留原业务错误 DTO；Web Session/密码登录、CSRF、登录限流、模块 Service Scope 和可信代理边界仍待契约/模块入口，现有 WebUI 尚未携带 Analysis Owner 凭证，不能视为浏览器认证链路已完成；详见 12.31 节 |
-| SRV-006 | 进行中 | 旧 Analysis Worker 与 HTTP Server 均已纳入统一 Lifecycle；HTTP Listener 在 Start 阶段同步绑定，Readiness 在 HTTP Shutdown 前切换为 not-ready，Shutdown 超时后强制 Close；Bootstrap 显式保证消费者停止后再关闭共享资源；真实 SIGTERM 子进程测试已补充，模块 Worker 接入和生产容器退出验收仍待完成；详见 12.26 节 |
-| SRV-007 | 进行中 | 已建立 Server Migration Registry，并注册 News/Research/Notification；注册时按版本号稳定排序；增加 namespace 执行报告、稳定原因码和人工恢复标记；其他模块 Migration 和 MariaDB 集成验收待完成，详见 12.7、12.23、12.25 节 |
+| SRV-006 | 进行中 | 旧 Analysis Worker 与 HTTP Server 均已纳入统一 Lifecycle；启动取消回滚、并发 Stop、Start/Stop 竞态屏障和消费者先于共享资源关闭已实现；真实 SIGTERM 子进程测试及 Context 取消释放阻塞 Start 的回归测试已补充，但当前 HEAD 尚无测试运行证据；模块 Worker 接入、Race 和生产容器退出验收仍待完成；详见 12.17～12.19、12.26、12.34、12.38 节 |
+| SRV-007 | 进行中 | 已建立 Server Migration Registry，并注册 News/Research/Notification；namespace 与版本号稳定排序；增加执行报告、稳定原因码、人工恢复标记、Registry 并发保护及首次执行快照冻结；其他模块 Migration、MariaDB 故障/恢复集成验收和当前 SHA 测试仍待完成，详见 12.7、12.23、12.25、12.30、12.37 节 |
 | SRV-008 | 待契约 | Dispatcher 所有权未冻结 |
-| SRV-009 | 进行中 | 已实现 Platform Runner 聚合、严格 Readiness 判定、MariaDB/Redis 资源检查、Owner 保护的结构化 `/diagnostics` 入口；`/readyz` 依赖状态改为动态读取实际 Check Results；Service 装配期拒绝重复 Check ID 并保存不可变 Check 快照；真实模块 Check 注册、依赖故障注入及生产诊断验收仍待完成，详见 12.8、12.20、12.29、12.33 节 |
+| SRV-009 | 进行中 | 已实现 Platform Runner 聚合、严格 Readiness 判定、MariaDB/Redis 资源检查、Owner 保护的结构化 `/diagnostics` 入口；`/readyz` 动态读取实际 Check Results；Service 装配期拒绝重复 Check ID 并保存 Check 快照；真实模块 Check 注册、依赖故障注入、Platform Observation 元数据契约验收及当前 SHA 测试仍待完成，详见 12.8、12.20、12.29、12.33 节 |
 | SRV-010 | 阻塞 | 等待 Data 迁移门禁和公开接口 |
 | SRV-011 | 未开始 | 等待核心运行能力 |
 | SRV-012 | 未开始 | 等待新链路验收 |
@@ -1154,3 +1154,18 @@ Lifecycle.Stop 原实现通过 stopped 标记保证重复调用幂等，但并�
 - 验证 Lifecycle.Start 在取消后完成回滚，并调用该组件 Stop；避免仅凭并发 Stop 测试推断生产组件遵守 Context 约定。
 - 该测试明确 Lifecycle 的启动契约：组件 Start 必须响应传入 Context；Lifecycle 不会在 Start 仍运行时越过启动屏障并提前关闭共享资源。
 - 尚未运行当前 SHA 的 Go 测试和 Race；真实容器宽限期仍属于部署验收。
+
+
+### 12.39 Server 当前进度复核（2026-11-09）
+
+- SRV-002：Process 配置快照、显式配置源注入、共享资源创建/关闭及部分初始化失败清理错误汇总已实现；模块 Factory/Registry 装配仍受模块公开入口约束。
+- SRV-003：共享 DB/Redis/Platform HTTP Client 与 BoundDoer 绑定入口已实现；真实 LLM 流式消费者注入和依赖级目标策略仍待生产装配入口及联调。
+- SRV-004：阻塞，不能由 Server 创建占位 Factory；等待模块公开构造入口、Port、Handler、Worker、Check 和 Migration 贡献项。
+- SRV-005：基础 Owner 路由、Request ID、Fault 映射工具、请求体/并发限制和探针 GET/HEAD 语义已实现；Web Session/CSRF 与模块 Handler 的统一错误契约仍待批准契约及 Platform/模块交付。
+- SRV-006：Lifecycle 启动取消回滚、并发停止、启动/停止同步、HTTP 排空和资源关闭顺序已实现；真实 SIGTERM 子进程测试已编写，但当前 HEAD 无 Workflow/Combined Status，且尚无当前 SHA 测试结果；模块 Worker 和生产容器验收未完成。
+- SRV-007：News/Research/Notification Migration 已注册；Registry 排序、并发安全、首次执行冻结和 namespace 报告已实现；当前 SHA 测试、MariaDB 集成与其他模块 Migration 接入未完成。
+- SRV-008：待 Outbox/Inbox 与 Dispatcher 所有权契约，不擅自实现。
+- SRV-009：Storage Checks、结构化 Diagnostics、Readiness 和动态依赖状态已实现；模块真实 Check、故障注入及 Platform Observation 字段一致性契约验收未完成。
+- SRV-010：等待 Data 模块化单体迁移门禁。
+- SRV-011/012：尚未进入部署切换和旧链路退役阶段。
+- 本次进度复核没有将“代码存在”视为“验收通过”；当前 SHA 的 GitHub Workflow Runs 和 Combined Status 均为空。
