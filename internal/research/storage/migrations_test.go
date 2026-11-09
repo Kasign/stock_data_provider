@@ -66,8 +66,6 @@ func TestResearchMigrationsAreExplicitAndVersioned(t *testing.T) {
 	}
 }
 
-
-
 func TestResearchMigrationPreservesExistingPITAndOutboxValuesInOrder(t *testing.T) {
 	migrations := Migrations()
 	if len(migrations) != 5 {
