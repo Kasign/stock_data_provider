@@ -7,7 +7,7 @@
 - 跨模块准入：`doc/整体任务规划/01-项目总览/跨模块接入执行说明.md`、`doc/整体任务规划/01-项目总览/跨模块接入准入清单.md`
 - 本记录建立时的代码基线：`d8595f408337f62be3697aac661ba1570fdd3667`
 - 最近一次 M0 审计基线：`9687337743ff5ad8b5b81209831d43689693ae47`
-- 最近一次代码基线：`0179052d5506eef1b8be97459e31daee84372266`（Eastmoney origin 级受控 HTTP 执行器注入）
+- 最近一次代码基线：`93a88657b750ec46784e6d39d8143415b77aec3b`（Pytdx/BaoStock 受控 TCP DialContext 注入入口）
 - 当前实施状态：`M1_completed / M2_completed / M3_in_progress / M4_in_progress`；M3 的 Data 侧进程内路由准备已完成，Root Server 实际装配仍待 Server 组合根完成；M4 的 borrowed DB 与 go-redis Cache Adapter 已实现，Root 侧资源注入/配置一致性及 Provider 网络出口适配仍未完成。
 
 > 本文记录 Data 从独立 Go Module/服务迁入 Root Server 根 Go Module、同进程运行的实施计划和进度。若本文与上述架构决策文档冲突，以架构决策文档为准；公共平台及 DATA 契约以冻结契约文档为准。本文不重新定义契约。
@@ -993,5 +993,5 @@ internal/
 - BaoStock `Config` 增加可选 `DialContext`；配置后连接经 Root 注入函数，nil 时保留原标准 net.Dialer 与 KeepAlive 行为。
 - Bootstrap Dependencies 增加 `PytdxDialContext` / `BaoStockDialContext` 并透传；Module 不拥有、不关闭外部连接函数。
 - 当前 Platform 公开能力只有 HTTP `BoundDoer`，尚无可供 Root 使用的 TCP `BoundDialer`。本次只建立 Data 注入边界，不在 Data 分支复制 DNS/IP 校验逻辑，也不把普通 DialContext 伪称为受控连接。Root 安全接入必须等待 Platform 提供 TCP 目标绑定能力，按精确 Host/Port、DNS/IP 和连接生命周期策略装配。
-- 本轮新增 TCP 注入代码尚未运行测试；未宣称构建通过或真实 TCP 出站安全验收通过。
+- 新增测试源码覆盖 Pytdx 候选 Host:7709 和 BaoStock 配置 Host:Port 均调用 Root 注入函数，并验证连接 context deadline 和错误透传。测试尚未运行；未宣称构建通过或真实 TCP 出站安全验收通过。
 
