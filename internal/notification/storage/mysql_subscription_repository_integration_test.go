@@ -12,7 +12,6 @@ import (
 	"testing"
 	"time"
 
-	mysql "github.com/go-sql-driver/mysql"
 
 	"example.com/stock-analysis-flow/internal/notification/domain"
 	platformstorage "example.com/stock-analysis-flow/internal/platform/storage"
@@ -41,15 +40,7 @@ func TestNotificationMariaDBSubscriptionRepositoryIntegration(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
-	driverConfig, err := mysql.ParseDSN(dsn)
-	if err != nil {
-		t.Fatalf("parse MariaDB DSN: %v", err)
-	}
-	connector, err := mysql.NewConnector(driverConfig)
-	if err != nil {
-		t.Fatalf("create MariaDB connector: %v", err)
-	}
-	db, err := platformstorage.OpenSQL(ctx, connector, platformstorage.DefaultSQLConfig())
+	db, err := openNotificationIntegrationDB(ctx, dsn)
 	if err != nil {
 		t.Fatalf("open MariaDB through Platform Storage: %v", err)
 	}
