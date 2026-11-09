@@ -152,3 +152,14 @@ func encodePayload(value any) ([]byte, string, error) {
 	if err != nil { return nil, "", fmt.Errorf("encode research payload: %w", err) }
 	return payload, payloadDigest(payload), nil
 }
+
+func corruptStoredRecord(entity, detail string, cause error) error {
+	if cause == nil {
+		return fmt.Errorf("%w: stored %s: %s", ErrCorruptRecord, entity, detail)
+	}
+	return fmt.Errorf("%w: stored %s: %s: %v", ErrCorruptRecord, entity, detail, cause)
+}
+
+func corruptStoredIdentity(entity string) error {
+	return corruptStoredRecord(entity, "identity mismatch", nil)
+}

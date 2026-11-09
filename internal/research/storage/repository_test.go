@@ -57,3 +57,25 @@ func TestVerifyStoredPayloadRejectsDigestMismatch(t *testing.T) {
 		t.Fatalf("missing stored digest error = %v, want ErrCorruptRecord", err)
 	}
 }
+
+func TestCorruptStoredRecordClassification(t *testing.T) {
+	for _, entity := range []string{"Context", "Event", "Claim"} {
+		err := corruptStoredIdentity(entity)
+		if !errors.Is(err, ErrCorruptRecord) {
+			t.Fatalf("%s identity mismatch error = %v, want ErrCorruptRecord", entity, err)
+		}
+		if errors.Is(err, ErrConflict) {
+			t.Fatalf("%s identity mismatch must not be classified as ErrConflict", entity)
+		}
+	}
+	cause := errors.New("invalid stored JSON")
+	for _, entity := range []string{"Context", "Event", "Claim"} {
+		err := corruptStoredRecord(entity, "decode failed", cause)
+		if !errors.Is(err, ErrCorruptRecord) {
+			t.Fatalf("%s decode error = %v, want ErrCorruptRecord", entity, err)
+		}
+		if errors.Is(err, cause) {
+			t.Fatalf("stored %s decode error should not expose decoder cause through errors.Is", entity)
+		}
+	}
+}

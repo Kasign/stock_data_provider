@@ -43,8 +43,8 @@ func (r *EventRepository) GetVersion(ctx context.Context, id string, version int
 	var value researchevent.ResearchEvent
 	payload, err := r.base.getVersion(ctx, eventTable, "event_id", "event_version", id, int64(version))
 	if err != nil { return value, err }
-	if err := json.Unmarshal(payload, &value); err != nil { return value, fmt.Errorf("decode Event version: %w", err) }
-	if err := value.Validate(); err != nil { return value, fmt.Errorf("stored Event is invalid: %w", err) }
-	if value.EventID != id || value.EventVersion != version { return value, fmt.Errorf("%w: stored Event identity mismatch", ErrConflict) }
+	if err := json.Unmarshal(payload, &value); err != nil { return value, corruptStoredRecord("Event", "decode failed", err) }
+	if err := value.Validate(); err != nil { return value, corruptStoredRecord("Event", "validation failed", err) }
+	if value.EventID != id || value.EventVersion != version { return value, corruptStoredIdentity("Event") }
 	return value, nil
 }
