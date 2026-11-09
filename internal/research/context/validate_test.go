@@ -67,13 +67,11 @@ func TestContextValidateRejectsInvalidStructure(t *testing.T) {
 		}, "cannot have valid"},
 		{"conflict count marked valid", func(c *Context) {
 			c.QualitySummary.Status = QualityValid
-			c.QualitySummary.MissingOptionalCount = 0
 			c.QualitySummary.ConflictCount = 1
 			c.QualitySummary.ReasonCodes = []string{"evidence_conflict"}
 		}, "cannot have valid"},
 		{"stale count marked valid", func(c *Context) {
 			c.QualitySummary.Status = QualityValid
-			c.QualitySummary.MissingOptionalCount = 0
 			c.QualitySummary.StaleCount = 1
 			c.QualitySummary.ReasonCodes = []string{"stale_section"}
 		}, "cannot have valid"},
