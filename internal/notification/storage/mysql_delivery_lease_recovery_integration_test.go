@@ -54,7 +54,7 @@ func TestNotificationMariaDBExpiredDeliveryLeaseRecoveryIntegration(t *testing.T
 		RecipientRef: plan.RecipientRef, PayloadFingerprint: plan.PayloadFingerprint,
 		PlanFingerprint: plan.PlanFingerprint, DeliveryIdempotencyKey: plan.DeliveryIdempotencyKey,
 		Status: domain.DeliveryQueued, Version: 1, AttemptCount: 0, MaxAttempts: 3,
-		DeadlineAt: now.Add(10 * time.Minute), CreatedAt: now, UpdatedAt: now,
+		DeadlineAt: now.Add(10 * time.Minute), CreatedAt: now.Add(-3 * time.Second), UpdatedAt: now.Add(-3 * time.Second),
 	}
 	repository, err := NewMySQLDeliveryRepository(db)
 	if err != nil {
