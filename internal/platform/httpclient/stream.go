@@ -317,6 +317,7 @@ func (c *Client) OpenStream(ctx context.Context, request *http.Request, policy D
 		return nil, c.faultFor(err, policy.Dependency)
 	}
 
+	startedAt := time.Now()
 	requestCtx, cancel := context.WithTimeout(ctx, c.config.StreamTimeout)
 	requestCtx = context.WithValue(requestCtx, policyContextKey{}, policy)
 	globalSemaphore := c.defaultStreamSemaphore
@@ -367,7 +368,7 @@ func (c *Client) OpenStream(ctx context.Context, request *http.Request, policy D
 			RequestID:  observability.FromContext(requestCtx),
 			Dependency: policy.Dependency,
 			StatusCode: response.StatusCode,
-			StartedAt:  time.Now(),
+			StartedAt:  startedAt,
 		},
 	}
 	body := &streamBody{

@@ -200,7 +200,7 @@ Read 错误必须通过稳定 Fault Code 区分；Fault 的 SafeMessage 为固�
 - Request ID；
 - 逻辑 Dependency；
 - HTTP Status Code（已获得响应头时）；
-- 开始时间、持续时间；
+- 开始时间、持续时间；StartedAt 从 OpenStream 调用开始计时，Duration 覆盖并发排队、DNS/Dial、TLS、响应头等待和 Body 生命周期；
 - 实际交付字节数；
 - 终止原因：EOF、caller_close、context_cancel、deadline、idle_timeout、body_limit、read_error。
 
@@ -224,6 +224,7 @@ Read 错误必须通过稳定 Fault Code 区分；Fault 的 SafeMessage 为固�
 | 12 | 并发退出 | 并发 Close/Cancel/Read Error 后额度只释放一次，无 goroutine/连接泄漏 |
 | 13 | 附加资源边界 | 响应头上限、解压后 Body 上限、BoundDoer 固定策略和无自动重试均有回归测试 |
 | 14 | 建连超时分类 | Dial timeout 与 TLS handshake timeout 不误归类为响应头超时 |
+| 15 | 诊断耗时 | StreamStats.Duration 覆盖 OpenStream 到流终止的完整耗时 |
 
 测试必须同时覆盖 HTTP/1.1 和 HTTP/2 可适用的生命周期行为；使用本地 httptest、可控 Resolver/Dial 和短超时，不依赖公网。至少执行 gofmt、平台包单测、Race、Vet。
 

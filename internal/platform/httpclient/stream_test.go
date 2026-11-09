@@ -553,3 +553,19 @@ func TestOpenStreamTLSHandshakeTimeoutIsClassified(t *testing.T) {
 		t.Fatalf("expected TLS handshake timeout Fault, got %v", err)
 	}
 }
+
+
+func TestOpenStreamStatsDurationIncludesResponseHeaderWait(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		time.Sleep(80 * time.Millisecond)
+		_, _ = w.Write([]byte("ok"))
+	}))
+	defer server.Close()
+
+	client := newLocalStreamClient(t, server, 1024, time.Second, 1)
+	response := openLocalStream(t, client, server, context.Background(), "/duration", localPolicy(server))
+	defer response.Body.Close()
+	if duration := response.Stats().Duration; duration < 60*time.Millisecond {
+		t.Fatalf("stream duration omitted request/response-header wait: %s", duration)
+	}
+}
