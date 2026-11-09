@@ -392,3 +392,13 @@ Application 的 `RunFinalizationCoordinator` 是三种终态聚合路径的路�
 - 不允许从 `cancelling + user_cancelled` 路由到普通或 Deadline Finalizer；不允许 deadline reason 路由到正常 Finalizer；不允许无 termination reason 的 cancelling 被当作取消完成。
 - 各 Finalizer 的 Storage Adapter 仍通过既有原子 FinalizeRun 事务写入 Run、ResultSummary、Outbox；Coordinator 不新增事务。
 - Server 组合根负责注入 Coordinator，并由 Deadline Scanner、Stage 完成检查、取消收敛流程调用；不得在 Researchflow 模块中新增 Server DI 或 HTTP 接口。
+
+## 10. GetRun Application 查询契约（2026-11-09）
+
+- `RunReader.GetRun(ctx, runRef)` 是 Application 查询 Port；Server Composition Root 将 MySQL Repository 注入 `GetRunService`，HTTP Handler 只消费 `CreateRunResult` 中的公开领域投影，不直接调用 Storage。
+- RunRef 必须非空、无首尾空白且不超过 255 字符；Storage 返回的 Run.Ref 必须与请求完全一致。
+- Stage 集合必须非空；每个 Stage 必须属于请求 Run，具有非空 ref/code 和正 version；Stage ref 与 stage code 在同一 Run 内分别唯一。
+- 终态 Run 必须同时具有 ResultSummaryRef 与 ResultSummary；非终态 Run 不允许提前挂载摘要。Storage 必须按 ResultSummaryRef 与 RunRef 双键条件读取摘要，不能仅凭摘要 Ref 读取其他 Run 的资源。
+- ResultSummary payload 必须包含 StageOutcomes、RiskGateDecisions、ExcludedStages、Missing/Degraded/Blocked Stage Codes、ReasonCodes；Coverage 范围为 [0,1]，QualityStatus 和 ActionabilityStatus 必填。
+- GetRun 只做读取和一致性门禁，不负责授权判定；调用入口必须先由 Server 认证/授权层确认调用者有权读取该 Run。当前 Application Facade 不接受请求体 caller_ref，也不自行推断资源所有权。
+- 当前新增 Fake Reader/解码测试只证明 Application 与 payload 结构校验；MariaDB 回读、终态摘要关联和跨模块 DTO/Schema/Golden 仍待验收。
