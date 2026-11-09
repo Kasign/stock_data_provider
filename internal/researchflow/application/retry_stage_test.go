@@ -13,8 +13,8 @@ import (
 
 type retrySnapshotReaderStub struct {
 	snapshot StageExecutionSnapshot
-	err error
-	calls int
+	err      error
+	calls    int
 }
 
 func (s *retrySnapshotReaderStub) LoadStageExecutionSnapshot(context.Context, string, string) (StageExecutionSnapshot, error) {
@@ -23,8 +23,8 @@ func (s *retrySnapshotReaderStub) LoadStageExecutionSnapshot(context.Context, st
 }
 
 type retryDatabaseClockStub struct {
-	now time.Time
-	err error
+	now   time.Time
+	err   error
 	calls int
 }
 
@@ -34,10 +34,10 @@ func (s *retryDatabaseClockStub) NowUTC(context.Context) (time.Time, error) {
 }
 
 type retryStageExecutorStub struct {
-	result WorkerExecution
-	err error
+	result                       WorkerExecution
+	err                          error
 	runRef, stageRef, attemptRef string
-	calls int
+	calls                        int
 }
 
 func (s *retryStageExecutorStub) Execute(_ context.Context, runRef, stageRef, attemptRef string) (WorkerExecution, error) {
@@ -88,9 +88,9 @@ func TestRetryStageDispatchesEligibleRetryWithStableAttemptReference(t *testing.
 func TestRetryStageRejectsIneligibleSnapshotsBeforeDispatch(t *testing.T) {
 	now := time.Date(2026, 11, 9, 10, 0, 0, 0, time.UTC)
 	tests := []struct {
-		name string
+		name   string
 		change func(*StageExecutionSnapshot)
-		want error
+		want   error
 	}{
 		{name: "run cancelling", change: func(s *StageExecutionSnapshot) { s.Run.Status = domain.RunCancelling }, want: ErrRetryStageUnavailable},
 		{name: "deadline termination", change: func(s *StageExecutionSnapshot) { s.Run.TerminationReason = "deadline_exceeded" }, want: ErrRetryStageUnavailable},
