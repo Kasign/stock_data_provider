@@ -146,7 +146,7 @@ func Validate(t WorkflowTemplate, gates HardRiskGateRegistry) error {
 func validateRetry(p RetryPolicy) error {
 	if p.MaxAttempts < 1 || p.AttemptTimeoutMS <= 0 || p.Backoff.Algorithm != "exponential_full_jitter_v1" ||
 		p.Backoff.BaseDelayMS <= 0 || p.Backoff.MaxDelayMS < p.Backoff.BaseDelayMS ||
-		p.Backoff.MaxDelayMS > maxRetryDelayMS {
+		p.Backoff.MaxDelayMS > maxRetryDelayMS || p.AttemptTimeoutMS > maxRetryDelayMS {
 		return errors.New("retry policy must declare bounded attempts, positive timeout and exponential_full_jitter_v1 backoff")
 	}
 	seen := map[string]struct{}{}
