@@ -78,17 +78,17 @@ const sourceCollectionResultSeal = "news.collect_source.result.v1"
 // collectionSeal 仅由 CollectSource 设置，阻止跨包调用方手工构造可持久化结果。
 type CollectSourceResult struct {
 	collectionSeal          string
-	SourceID                  string
-	EndpointID                string
-	SourcePolicyVersionID     string
-	EndpointPolicyVersionID   string
-	PolicyEvaluatedAt         time.Time
-	FeedFormat                parser.FeedFormat
-	FeedTitle                 string
-	ObservedAt                time.Time
-	FetchedAt                 time.Time
-	NormalizedAt              time.Time
-	Entries                   []CollectedSourceEntry
+	SourceID                string
+	EndpointID              string
+	SourcePolicyVersionID   string
+	EndpointPolicyVersionID string
+	PolicyEvaluatedAt       time.Time
+	FeedFormat              parser.FeedFormat
+	FeedTitle               string
+	ObservedAt              time.Time
+	FetchedAt               time.Time
+	NormalizedAt            time.Time
+	Entries                 []CollectedSourceEntry
 }
 
 // SourceCollectionError 是可安全暴露的新闻业务错误，不包含 URL、响应体或底层错误文本。

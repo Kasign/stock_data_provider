@@ -28,7 +28,7 @@ func sourcePersistenceRegistration() SourceEndpointRegistration {
 
 func sealedCollectedSourceResult() CollectSourceResult {
 	return CollectSourceResult{
-		collectionSeal: sourceCollectionResultSeal,
+		collectionSeal:        sourceCollectionResultSeal,
 		SourceID:              "source-feed",
 		EndpointID:            "endpoint-feed",
 		SourcePolicyVersionID: "source-policy-v3",
