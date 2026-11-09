@@ -1180,3 +1180,10 @@ Lifecycle.Stop 原实现通过 stopped 标记保证重复调用幂等，但并�
 - 新增策略错配、非标准端口、响应头隔离、Body 所有权转移、响应与错误并存、非流式委托及未配置调用测试。
 - 该适配器只完成 Server→Platform→LLM 的传输接口桥接；ProviderConfig/Secret/CapabilityState 的可信来源、生产 BoundDoer 实例注入、LLM Application 装配和真实 Gateway E2E 仍待完整组合根接入。
 - 当前提交尚未执行 gofmt、Server 包测试或 Race；不得据此标记联调通过。
+
+
+### 12.41 SRV-003 LLM 传输适配首轮 CI 格式门禁修正（2026-11-09）
+
+- Go Workflow Run `42616624073` 对应 SHA `e7542450a947084db88b9cbc4920cd9558f91531`。根模块在 gofmt 门禁发现 `internal/server/llmtransport/transport_test.go` 两处格式差异，以及 Lifecycle 测试文件一处多余空行；根模块依赖下载、单测、Race、Vet 均未执行。
+- `go-core` 的 gofmt、单测、Race、Vet 全部通过；该结果不覆盖根模块。
+- 本次统一修正上述格式问题；推送后以新 SHA 重新执行完整 Server 分支 Workflow。不得将格式修正前的失败 Run 解释为代码编译或测试失败。

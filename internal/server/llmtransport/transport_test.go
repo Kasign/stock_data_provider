@@ -47,7 +47,9 @@ func TestValidateProviderPolicyRequiresExactHTTPSDestination(t *testing.T) {
 		mutate func(*platformhttpclient.DestinationPolicy)
 	}{
 		{"host mismatch", func(p *platformhttpclient.DestinationPolicy) { p.AllowedHosts = []string{"other.example.com"} }},
-		{"multiple hosts", func(p *platformhttpclient.DestinationPolicy) { p.AllowedHosts = append(p.AllowedHosts, "other.example.com") }},
+		{"multiple hosts", func(p *platformhttpclient.DestinationPolicy) {
+			p.AllowedHosts = append(p.AllowedHosts, "other.example.com")
+		}},
 		{"port mismatch", func(p *platformhttpclient.DestinationPolicy) { p.AllowedPorts = []uint16{8443} }},
 		{"redirects enabled", func(p *platformhttpclient.DestinationPolicy) { p.AllowRedirects = true }},
 		{"transport retries enabled", func(p *platformhttpclient.DestinationPolicy) { p.Idempotent = true }},
@@ -113,7 +115,7 @@ func TestTransportOpenStreamPreservesResponseAndError(t *testing.T) {
 	openErr := errors.New("stream open failed")
 	transport := &Transport{bound: &fakeBoundDoer{
 		streamResponse: &platformhttpclient.StreamResponse{StatusCode: http.StatusBadGateway, Body: body},
-		streamErr: openErr,
+		streamErr:      openErr,
 	}}
 	got, err := transport.OpenStream(context.Background(), httptestRequest(t))
 	if !errors.Is(err, openErr) {

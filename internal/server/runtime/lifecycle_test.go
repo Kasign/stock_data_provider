@@ -193,7 +193,6 @@ func TestLifecycleConcurrentStopWaitsForFirstStop(t *testing.T) {
 	}
 }
 
-
 type blockingStartComponent struct {
 	name    string
 	entered chan struct{}
