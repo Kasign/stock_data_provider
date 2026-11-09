@@ -34,7 +34,7 @@ func NewContextCheck(id, name string, required bool, value researchcontext.Conte
 				return failedObservation("research.context.invalid", "Research Context 结构校验失败",
 					map[string]string{"context_version": strconv.FormatInt(snapshot.ContextVersion, 10)}), nil
 			}
-			if !snapshot.SystemAsOf.Equal(runAsOf) {
+			if err := snapshot.ValidateSystemAsOf(runAsOf); err != nil {
 				return failedObservation("research.context.run_cutoff_mismatch", "Research Context system_as_of 与 Run 截止时间不一致",
 					map[string]string{"context_version": strconv.FormatInt(snapshot.ContextVersion, 10)}), nil
 			}
@@ -175,8 +175,7 @@ func NewEvidenceCheck(id, name string, required bool, value researchevidence.Evi
 				"quality_status": string(snapshot.QualityStatus),
 				"content_level":  string(snapshot.ContentLevel),
 			}
-			if snapshot.SystemAsOf.After(runAsOf) ||
-				snapshot.AvailableAt != nil && snapshot.AvailableAt.After(snapshot.SystemAsOf) {
+			if snapshot.SystemAsOf.After(runAsOf) {
 				return failedObservation("research.evidence.pit_invalid", "Research Evidence 不满足严格 PIT 约束", attributes), nil
 			}
 			if snapshot.AvailableAt == nil {
