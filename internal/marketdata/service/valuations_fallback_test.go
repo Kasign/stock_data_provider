@@ -283,3 +283,26 @@ func TestValuationsAcceptsNullableOptionalMetricsWhenSourceEvidenceIsValid(t *te
 		t.Fatalf("expected valid snapshot with nullable optional metrics, got %+v", got)
 	}
 }
+
+
+func TestValuationsAcceptsTimestampedSnapshotWithoutReportDateAsDegraded(t *testing.T) {
+	snapshot := validValuationsForFallbackTest("hithink")
+	now := time.Now().UTC()
+	snapshot.ProviderTimestamp = &now
+	snapshot.ProviderReportDate = ""
+	snapshot.QualityStatus = model.QualityDegraded
+	snapshot.QualityReasons = []string{"provider_valuation_report_date_not_exposed"}
+	snapshot.Items[0].QualityStatus = model.QualityDegraded
+	snapshot.Items[0].QualityReasons = []string{"provider_valuation_report_date_not_exposed"}
+
+	got, hit, err := valuationFallbackService(&valuationFallbackTestProvider{
+		name: "hithink", snapshot: snapshot,
+	}).Valuations(context.Background(), []string{"600519.SH"})
+	if err != nil || hit {
+		t.Fatalf("Valuations returned hit=%v err=%v", hit, err)
+	}
+	if got == nil || got.QualityStatus != model.QualityDegraded || got.ProviderReportDate != "" ||
+		got.ProviderTimestamp == nil {
+		t.Fatalf("expected timestamped snapshot without report date to remain degraded and usable, got %+v", got)
+	}
+}

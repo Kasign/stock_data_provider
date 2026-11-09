@@ -1404,6 +1404,10 @@ func (p *Hithink) FetchValuations(ctx context.Context, rawSymbols []string) (*mo
 		snapshot.QualityStatus = model.QualityDegraded
 		snapshot.QualityReasons = append(snapshot.QualityReasons, "provider_valuation_timestamp_missing_or_invalid")
 	}
+	// 同花顺估值响应未提供独立报告日期字段。ProviderTimestamp 仅表示
+	// 五项估值中最新有效时间，不能据此伪造 ProviderReportDate。
+	snapshot.QualityStatus = model.QualityDegraded
+	snapshot.QualityReasons = appendUniqueHithinkReason(snapshot.QualityReasons, "provider_valuation_report_date_not_exposed")
 	requested := make(map[string]struct{}, len(symbols))
 	for _, symbol := range symbols {
 		requested[symbol] = struct{}{}
