@@ -93,18 +93,18 @@ func validGetEvidenceFixture(now time.Time) (GetEvidenceRequest, EvidencePITReco
 	}
 	binding := domain.NewsAuthorizationBinding{
 		CallerRef: request.CallerRef, ResourceRef: resourceRef,
-		PurposeCode:           string(request.PurposeCode),
+		PurposeCode: string(request.PurposeCode),
 		RequestedContentLevel: domain.AuthorizationContentSummary,
-		ProviderRef:           domain.NullableOpaqueRef{Present: true},
-		EndpointRef:           domain.NullableOpaqueRef{Present: true},
-		SourceRef:             observation.SourceID,
+		ProviderRef: domain.NullableOpaqueRef{Present: true},
+		EndpointRef: domain.NullableOpaqueRef{Present: true},
+		SourceRef: observation.SourceID,
 		AuthorizationRef: domain.NewsAuthorizationRef{
 			AuthorizationRef: "authorization-evidence-1", PolicyOwner: "news",
 			PolicyVersion: "snapshot-evidence-v1", Decision: domain.AuthorizationDecisionAllowed,
 			PurposeCode: string(request.PurposeCode), ContentLevel: domain.AuthorizationContentSummary,
 			SubjectRef: request.CallerRef, ResourceRef: resourceRef,
-			DecidedAt:  now.Add(-3 * time.Hour).UTC().Format(time.RFC3339Nano),
-			ExpiresAt:  domain.NullableDateTime{Present: true},
+			DecidedAt: now.Add(-3 * time.Hour).UTC().Format(time.RFC3339Nano),
+			ExpiresAt: domain.NullableDateTime{Present: true},
 			Conditions: []string{}, DecisionFingerprint: strings.Repeat("a", 64),
 		},
 		PolicySnapshot: domain.AuthorizationPolicySnapshot{
@@ -157,7 +157,7 @@ func TestGetEvidenceSuppressesCandidateMetadataAfterRetentionDeadline(t *testing
 	pit.Observation.RetentionUntil = expired
 	pit.Observation.Candidate = domain.Candidate{
 		PublishedAtRaw: "raw-source-time",
-		FetchedAt:      func() *time.Time { value := now.Add(-2 * time.Hour); return &value }(),
+		FetchedAt: func() *time.Time { value := now.Add(-2 * time.Hour); return &value }(),
 	}
 	authorizer := &getEvidenceAuthorizerStub{}
 	usecase, err := NewGetEvidence(
@@ -241,12 +241,13 @@ func TestGetEvidenceRejectsSnapshotBoundToDifferentSource(t *testing.T) {
 	}
 }
 
+
 func TestGetEvidenceRejectsInvalidRetentionTimelineFromPITRepository(t *testing.T) {
 	now := time.Date(2026, 11, 9, 12, 0, 0, 0, time.UTC)
 	request, base, binding := validGetEvidenceFixture(now)
 	observedAt := base.Observation.ObservedAt
 	cases := []struct {
-		name   string
+		name string
 		mutate func(*domain.Observation)
 	}{
 		{

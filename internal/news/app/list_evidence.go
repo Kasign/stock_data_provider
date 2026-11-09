@@ -82,7 +82,7 @@ func (u *ListEvidence) Execute(ctx context.Context, request ListEvidenceRequest)
 		record, err := u.records.Execute(ctx, GetEvidenceRequest{
 			CallerRef: request.CallerRef, PurposeCode: request.PurposeCode,
 			RequestedContentLevel: request.RequestedContentLevel,
-			SystemAsOf:            referencePage.SystemAsOf, NewsID: item.NewsID, VersionID: item.VersionID,
+			SystemAsOf: referencePage.SystemAsOf, NewsID: item.NewsID, VersionID: item.VersionID,
 		})
 		if err != nil {
 			return ResearchEvidencePage{}, err

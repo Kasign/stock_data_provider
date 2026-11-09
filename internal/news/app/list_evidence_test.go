@@ -129,7 +129,6 @@ func TestListEvidenceRejectsReferenceAndRecordMismatch(t *testing.T) {
 	}
 }
 
-
 func TestListEvidenceRejectsMalformedPageMetadataBeforeResolvingRecords(t *testing.T) {
 	now := time.Date(2026, 11, 9, 12, 0, 0, 0, time.UTC)
 	request := validListEvidenceRequest(now)
