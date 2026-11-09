@@ -32,3 +32,6 @@ internal/quant/
 首期只按实际任务创建 `domain`、`indicator`、`factor` 等必要包，不为目录齐全创建空包。旧代码迁移结论见 [01-量化引擎总体设计](01-量化引擎总体设计.md) 第 6 节；输入输出契约和 Golden 设计见 [03-首批输入输出契约与验收补充](03-首批输入输出契约与验收补充.md)。
 
 详细任务见 [02-任务拆分与验收](02-任务拆分与验收.md)。
+
+
+最近一次 Quant 代码验证（2026-11-09）：`e8df200a6843df87a43f2dc4930037e7b12d61b1` 的 Push Workflow `42575135544` 中 `Test go-core` 已通过 gofmt、Go tests、Race Detector 和 go vet。根模块 `Test .` 仍被 Research 文件格式/字节问题阻断，不能标记全仓 CI 通过。
