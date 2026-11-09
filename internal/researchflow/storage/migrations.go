@@ -59,6 +59,7 @@ func Migrations() []platformstorage.Migration {
 					finished_at CHAR(30) CHARACTER SET ascii COLLATE ascii_bin NULL,
 					PRIMARY KEY (stage_ref),
 					UNIQUE KEY uq_researchflow_stage_run_code (run_ref, stage_code),
+					UNIQUE KEY uq_researchflow_stage_ref_run (stage_ref, run_ref),
 					KEY idx_researchflow_stages_run_status (run_ref, status),
 					CONSTRAINT fk_researchflow_stages_run FOREIGN KEY (run_ref)
 						REFERENCES researchflow_runs (run_ref)
@@ -78,12 +79,13 @@ func Migrations() []platformstorage.Migration {
 					output_ref VARCHAR(255) NULL,
 					PRIMARY KEY (attempt_ref),
 					UNIQUE KEY uq_researchflow_attempt_stage_no (stage_ref, attempt_no),
+					UNIQUE KEY uq_researchflow_attempt_stage_fencing (stage_ref, fencing_token),
 					KEY idx_researchflow_attempts_run_status (run_ref, status),
 					KEY idx_researchflow_attempts_lease (status, lease_expires_at),
 					CONSTRAINT fk_researchflow_attempts_run FOREIGN KEY (run_ref)
 						REFERENCES researchflow_runs (run_ref),
-					CONSTRAINT fk_researchflow_attempts_stage FOREIGN KEY (stage_ref)
-						REFERENCES researchflow_stages (stage_ref)
+					CONSTRAINT fk_researchflow_attempts_stage FOREIGN KEY (stage_ref, run_ref)
+						REFERENCES researchflow_stages (stage_ref, run_ref)
 				) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin`,
 				`CREATE TABLE researchflow_run_idempotency (
 					caller_ref VARCHAR(255) NOT NULL,
