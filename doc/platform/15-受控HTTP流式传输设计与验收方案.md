@@ -38,9 +38,9 @@
 ### 2.3 本次实现范围
 
 - Transport 已显式配置 `MaxResponseHeaderBytes`；默认值和硬上限已进入配置校验，仍需 CI 验证边界行为。
-- 本次新增独立流式累计字节数上限，仍需 CI 验证实际边界行为。
-- 本次新增流式并发额度、空闲读取超时和流生命周期统计，仍需 Race 验证。
-- 流式入口已增加响应头超时、连接失败和 DNS 失败的独立 Fault 分类，仍需 CI 验证不同 Transport 错误类型的映射。
+- 独立流式累计字节数上限已通过边界测试（含解压后字节计数）。
+- 流式并发额度、空闲读取超时和流生命周期统计已通过单测及 Race。
+- 流式入口的响应头超时、连接超时、TLS 握手超时和 DNS 失败 Fault 分类已通过专项测试。
 
 ## 3. 公共 API 方向
 
@@ -226,7 +226,7 @@ Read 错误必须通过稳定 Fault Code 区分；Fault 的 SafeMessage 为固�
 | 14 | 建连超时分类 | Dial timeout 与 TLS handshake timeout 不误归类为响应头超时 |
 | 15 | 诊断耗时 | StreamStats.Duration 覆盖 OpenStream 到流终止的完整耗时 |
 
-测试必须同时覆盖 HTTP/1.1 和 HTTP/2 可适用的生命周期行为；使用本地 httptest、可控 Resolver/Dial 和短超时，不依赖公网。至少执行 gofmt、平台包单测、Race、Vet。
+测试覆盖 HTTP/1.1 与 HTTP/2 的增量读取及取消；使用本地 httptest、可控 Resolver/Dial 和短超时，不依赖公网。提交 `742d6cf` 的 Platform CI 已完成 gofmt、契约 Schema/Golden、平台包单测、Race、Vet 和 Storage 集成 Race，全部通过。
 
 ## 9. 实施顺序与准入门禁
 
@@ -246,3 +246,13 @@ A1 的 gofmt、Platform 单测、Race、Vet、Schema/Golden 和 Storage integrat
 - 领域重试、业务终态、模型错误语义；
 - 通用流媒体框架、WebSocket、HTTP Upgrade；
 - 为流式读取另建一套 DNS、Transport 或 SSRF 实现。
+
+
+## 11. Platform A1 验收记录
+
+- 验收提交：`742d6cf9f7f2fa8eef20f3e94082086e934da7d5`
+- GitHub Actions：`https://github.com/Kasign/stock_data_provider/actions/runs/42555342449`
+- Platform packages：gofmt、契约 Schema/Golden、`go test ./internal/platform/...`、`go test -race ./internal/platform/...`、`go vet ./internal/platform/...` 全部通过。
+- Storage integration：MariaDB 11.4 / Redis 7.4 真实服务容器测试及 Race 全部通过。
+- 流式专项覆盖：HTTP/1.1 与 HTTP/2 增量读取/取消、慢消费者、主动关闭、并发额度释放、上游截断、Body/响应头上限、解压后字节限制、空闲超时、重定向、BoundDoer 固定策略、无自动重试、Fault 脱敏、连接/TLS/响应头超时分类。
+- 当前准入：Platform A1 通过；LLM A2 真实调用联调尚未完成；生产 A3 DNS/egress、Secret 和运行时验收尚未完成。不得将 A1 通过表述为整个 PLAT-CTR 跨模块交付完成。
