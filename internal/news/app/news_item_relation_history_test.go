@@ -127,7 +127,6 @@ func TestListNewsItemRelationHistoryRejectsInvalidRequestBeforeStorage(t *testin
 	}
 }
 
-
 func TestListNewsItemRelationHistoryPreservesAppendOnlyStatuses(t *testing.T) {
 	now := time.Date(2026, 11, 9, 10, 0, 0, 0, time.UTC)
 	observedAt := now.Add(-time.Minute)
