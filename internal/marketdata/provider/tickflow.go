@@ -41,12 +41,14 @@ var tickflowCoreIndexDefinitions = []tickflowIndexDefinition{
 }
 
 type TickFlow struct {
-	client       *http.Client
-	apiURL       string
-	freeAPIURL   string
-	apiKey       string
-	rateMu       sync.Mutex
-	lastFreeCall time.Time
+	client                 *http.Client
+	authenticatedHTTPDoer  HTTPDoer
+	publicHTTPDoer         HTTPDoer
+	apiURL                 string
+	freeAPIURL             string
+	apiKey                 string
+	rateMu                 sync.Mutex
+	lastFreeCall           time.Time
 }
 
 type tickflowQuotePayload struct {
@@ -64,6 +66,12 @@ type tickflowQuotePayload struct {
 }
 
 func NewTickFlowConfigured(timeout time.Duration, apiURL, freeAPIURL, apiKey string) *TickFlow {
+	return NewTickFlowConfiguredWithHTTPDoers(timeout, apiURL, freeAPIURL, apiKey, nil, nil)
+}
+
+// NewTickFlowConfiguredWithHTTPDoers 创建支持分别注入认证与公开出口的 TickFlow Provider。
+// 两个执行器由调用方创建并拥有；Provider 不关闭共享执行器。nil 时回退到兼容 HTTP Client。
+func NewTickFlowConfiguredWithHTTPDoers(timeout time.Duration, apiURL, freeAPIURL, apiKey string, authenticatedDoer, publicDoer HTTPDoer) *TickFlow {
 	if timeout <= 0 {
 		timeout = 20 * time.Second
 	}
@@ -73,11 +81,20 @@ func NewTickFlowConfigured(timeout time.Duration, apiURL, freeAPIURL, apiKey str
 	if strings.TrimSpace(freeAPIURL) == "" {
 		freeAPIURL = "https://free-api.tickflow.org"
 	}
+	client := &http.Client{Timeout: timeout}
+	if authenticatedDoer == nil {
+		authenticatedDoer = client
+	}
+	if publicDoer == nil {
+		publicDoer = client
+	}
 	return &TickFlow{
-		client:     &http.Client{Timeout: timeout},
-		apiURL:     strings.TrimRight(strings.TrimSpace(apiURL), "/"),
-		freeAPIURL: strings.TrimRight(strings.TrimSpace(freeAPIURL), "/"),
-		apiKey:     strings.TrimSpace(apiKey),
+		client:                client,
+		authenticatedHTTPDoer: authenticatedDoer,
+		publicHTTPDoer:        publicDoer,
+		apiURL:                strings.TrimRight(strings.TrimSpace(apiURL), "/"),
+		freeAPIURL:            strings.TrimRight(strings.TrimSpace(freeAPIURL), "/"),
+		apiKey:                strings.TrimSpace(apiKey),
 	}
 }
 
@@ -1394,7 +1411,14 @@ func (p *TickFlow) getJSON(ctx context.Context, baseURL, path string, query url.
 	if authenticated && p.apiKey != "" {
 		req.Header.Set("x-api-key", p.apiKey)
 	}
-	resp, err := p.client.Do(req)
+	doer := p.publicHTTPDoer
+	if authenticated {
+		doer = p.authenticatedHTTPDoer
+	}
+	if doer == nil {
+		return nil, errors.New("TickFlow HTTP executor is not configured")
+	}
+	resp, err := doer.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -1427,7 +1451,14 @@ func (p *TickFlow) postJSON(ctx context.Context, baseURL, path string, payload a
 	if authenticated && p.apiKey != "" {
 		req.Header.Set("x-api-key", p.apiKey)
 	}
-	resp, err := p.client.Do(req)
+	doer := p.publicHTTPDoer
+	if authenticated {
+		doer = p.authenticatedHTTPDoer
+	}
+	if doer == nil {
+		return nil, errors.New("TickFlow HTTP executor is not configured")
+	}
+	resp, err := doer.Do(req)
 	if err != nil {
 		return nil, err
 	}

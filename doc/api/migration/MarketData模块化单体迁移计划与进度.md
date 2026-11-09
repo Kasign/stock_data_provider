@@ -890,6 +890,16 @@ internal/
 - 本批提交后不在当前分支执行构建/测试；Hithink 受控出口仅完成注入接口和单测源码，待 integration 验收。下一步为 M4-HTTP-03 TickFlow：分别处理认证 API URL 与免费 API URL 的不同目的地址策略，不能共用一个无区分 BoundDoer。
 
 
+### 2026-11-09：M4-HTTP-03 TickFlow 双出口受控 HTTP 执行器注入
+
+- 代码基线：`27e2b94bfa59a92d840e95836d4dbfe1fda8defb`。TickFlow 认证 API（`apiURL`）承载 Quote、指数、市场/行业数据及带 Key 的日 K 请求；免费 API（`freeAPIURL`）仅用于未配置 API Key 时的免费日 K 请求。两类目标 Host 与凭据策略不同，不能共享同一个 BoundDoer。
+- Provider 新增 `NewTickFlowConfiguredWithHTTPDoers`，分别接收认证出口和公开出口；旧 `NewTickFlowConfigured` 保留，并在两个依赖未注入时回退到原超时配置的标准 `http.Client`。
+- `getJSON` / `postJSON` 按请求的 authenticated 标记选择执行器。认证请求继续只在认证路径附加 `x-api-key`；公开请求不附加该 Header。请求方法、URL、Query/Body、Accept/Content-Type、状态码错误处理和成功响应 `maxProviderPayloadBytes` 上限保持不变。
+- Bootstrap Dependencies 新增 `TickFlowAuthenticatedHTTPDoer` 与 `TickFlowPublicHTTPDoer` 两个可选依赖并传入 Provider。执行器由 Root 创建和关闭，Data Module 不拥有、不关闭；本批不修改 Root Server 组合根。
+- 新增回归测试源码覆盖认证 GET、公开 GET、认证 POST 的执行器路由、目标 URL、Key Header 隔离、请求方法/Content-Type 和 502 错误路径。测试尚未运行，不代表代码编译或安全策略验收通过。
+- Root 后续必须按实际配置分别创建两个 BoundDoer：认证出口绑定 `TickFlowAPIURL` 的精确 HTTPS Host/Port，公开出口绑定 `TickFlowFreeAPIURL` 的精确 HTTPS Host/Port；两者均拒绝重定向并执行 DNS/IP 与响应体上限策略。不能将认证 Key 注入公开出口。
+- 本分支下一项按带凭据风险顺序处理 Xueqiu Cookie 出口；随后处理无凭据 HTTP Provider。BaoStock/Pytdx 仍单列 TCP 出站策略。
+
 ### 2026-11-09：M4-HTTP-02 提交后基线
 
 - 当前代码 HEAD：`c7f55374356028b905813f6051f1b03e3c836b91`。

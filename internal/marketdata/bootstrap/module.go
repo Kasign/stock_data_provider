@@ -27,8 +27,10 @@ type Dependencies struct {
 	Store           *repository.Store // 调用方创建并持有；Module 不负责关闭。
 	Cache           cache.Cache       // 调用方创建并持有；Module 不负责关闭。
 	Logger          *slog.Logger      // 模块日志依赖；nil 时使用 slog.Default。
-	TushareHTTPDoer provider.HTTPDoer // Root 注入的受控 Tushare HTTP 执行器；Module 不拥有、不关闭。
-	HithinkHTTPDoer provider.HTTPDoer // Root 注入的受控同花顺 HTTP 执行器；Module 不拥有、不关闭。
+	TushareHTTPDoer          provider.HTTPDoer // Root 注入的受控 Tushare HTTP 执行器；Module 不拥有、不关闭。
+	HithinkHTTPDoer          provider.HTTPDoer // Root 注入的受控同花顺 HTTP 执行器；Module 不拥有、不关闭。
+	TickFlowAuthenticatedHTTPDoer provider.HTTPDoer // Root 注入的 TickFlow 认证 API 出口；Module 不拥有、不关闭。
+	TickFlowPublicHTTPDoer        provider.HTTPDoer // Root 注入的 TickFlow 免费 API 出口；Module 不拥有、不关闭。
 }
 
 // Diagnostics 暴露模块就绪状态和 Provider 诊断，不暴露具体 DataService。
@@ -96,7 +98,7 @@ func New(cfg config.Config, deps Dependencies) (*Module, error) {
 		retentionStore: deps.Store,
 		retention:      cfg.QuoteRetention,
 	}
-	if err := module.build(cfg, deps.TushareHTTPDoer, deps.HithinkHTTPDoer); err != nil {
+	if err := module.build(cfg, deps.TushareHTTPDoer, deps.HithinkHTTPDoer, deps.TickFlowAuthenticatedHTTPDoer, deps.TickFlowPublicHTTPDoer); err != nil {
 		_ = module.Close(context.Background())
 		return nil, err
 	}
@@ -156,7 +158,7 @@ func (m *Module) ProviderSummary() ProviderSummary {
 	}
 }
 
-func (m *Module) build(cfg config.Config, tushareHTTPDoer, hithinkHTTPDoer provider.HTTPDoer) error {
+func (m *Module) build(cfg config.Config, tushareHTTPDoer, hithinkHTTPDoer, tickflowAuthenticatedHTTPDoer, tickflowPublicHTTPDoer provider.HTTPDoer) error {
 	store := m.store
 	c := m.cache
 	logger := m.logger
@@ -178,7 +180,7 @@ func (m *Module) build(cfg config.Config, tushareHTTPDoer, hithinkHTTPDoer provi
 		"yahoo":     provider.NewYahooFinance(cfg.ProviderTimeout, cfg.YahooChartURL),
 		"netease":   provider.NewNeteaseConfigured(cfg.ProviderTimeout, cfg.NeteaseQuoteURL, cfg.NeteaseHistoryURL),
 		"tushare":   provider.NewTushareConfiguredWithHTTPDoer(cfg.ProviderTimeout, cfg.TushareAPIURL, cfg.TushareToken, tushareHTTPDoer),
-		"tickflow":  provider.NewTickFlowConfigured(cfg.ProviderTimeout, cfg.TickFlowAPIURL, cfg.TickFlowFreeAPIURL, cfg.TickFlowAPIKey),
+		"tickflow":  provider.NewTickFlowConfiguredWithHTTPDoers(cfg.ProviderTimeout, cfg.TickFlowAPIURL, cfg.TickFlowFreeAPIURL, cfg.TickFlowAPIKey, tickflowAuthenticatedHTTPDoer, tickflowPublicHTTPDoer),
 		"pytdx":     provider.NewPytdx(cfg.ProviderTimeout, cfg.PytdxHosts...),
 		"xueqiu":    provider.NewXueqiuConfigured(cfg.ProviderTimeout, cfg.XueqiuBaseURL, cfg.XueqiuCookie),
 	}
