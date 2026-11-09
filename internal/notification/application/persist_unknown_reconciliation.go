@@ -10,11 +10,11 @@ import (
 
 var ErrUnknownReconciliationPersistence = errors.New("notification: unknown reconciliation persistence failed")
 
-// PersistUnknownReconciliation converts an already assessed lookup result into
+// persistUnknownReconciliation converts an internally assessed lookup result into
 // a domain transition and persists it through the lease-independent CAS port.
 // Retryable non-acceptance requires a separately computed, evidence-bound retry
 // decision; this method never starts a channel send.
-func PersistUnknownReconciliation(
+func persistUnknownReconciliation(
 	ctx context.Context,
 	repository UnknownDeliveryReconciliationRepository,
 	delivery domain.DeliveryRecord,
@@ -134,7 +134,7 @@ func ReconcileUnknownDelivery(
 		}
 		decision = &computed
 	}
-	if err := PersistUnknownReconciliation(ctx, repository, delivery, assessment, now, decision); err != nil {
+	if err := persistUnknownReconciliation(ctx, repository, delivery, assessment, now, decision); err != nil {
 		return assessment, decision, err
 	}
 	return assessment, decision, nil
