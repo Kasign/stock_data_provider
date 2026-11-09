@@ -234,3 +234,60 @@ func TestGetEvidenceRejectsSnapshotBoundToDifferentSource(t *testing.T) {
 		t.Fatalf("mismatched authorization binding was not rejected: result=%+v err=%v calls=%d", result, err, authorizer.calls)
 	}
 }
+
+
+func TestGetEvidenceRejectsInvalidRetentionTimelineFromPITRepository(t *testing.T) {
+	now := time.Date(2026, 11, 9, 12, 0, 0, 0, time.UTC)
+	request, base, binding := validGetEvidenceFixture(now)
+	observedAt := base.Observation.ObservedAt
+	cases := []struct {
+		name string
+		mutate func(*domain.Observation)
+	}{
+		{
+			name: "retention deadline not after observation",
+			mutate: func(observation *domain.Observation) {
+				observation.RetentionUntil = observedAt
+			},
+		},
+		{
+			name: "purge timestamp before retention deadline",
+			mutate: func(observation *domain.Observation) {
+				observation.RetentionUntil = observedAt.Add(time.Hour)
+				purgedAt := observedAt.Add(30 * time.Minute)
+				observation.PayloadPurgedAt = &purgedAt
+				observation.Candidate = domain.Candidate{}
+			},
+		},
+		{
+			name: "purged payload without known retention deadline",
+			mutate: func(observation *domain.Observation) {
+				purgedAt := observedAt.Add(time.Hour)
+				observation.PayloadPurgedAt = &purgedAt
+				observation.Candidate = domain.Candidate{}
+			},
+		},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			pit := base
+			test.mutate(&pit.Observation)
+			authorizer := &getEvidenceAuthorizerStub{}
+			usecase, err := NewGetEvidence(
+				getEvidencePITRepositoryStub{record: pit},
+				getEvidenceAuthorizationSnapshotStub{binding: binding},
+				authorizer,
+			)
+			if err != nil {
+				t.Fatal(err)
+			}
+			usecase.now = func() time.Time { return now }
+			if _, err := usecase.Execute(context.Background(), request); !errors.Is(err, ErrInvalidEvidenceQuery) {
+				t.Fatalf("Execute() error = %v, want invalid PIT record", err)
+			}
+			if authorizer.calls != 0 {
+				t.Fatalf("invalid retention timeline reached authorizer %d times", authorizer.calls)
+			}
+		})
+	}
+}

@@ -104,11 +104,13 @@ func validEvidencePITRecord(pit EvidencePITRecord, request GetEvidenceRequest) b
 		observation.ObservedAt.After(request.SystemAsOf) || version.ObservedAt.After(request.SystemAsOf) {
 		return false
 	}
-	if !observation.RetentionUntil.IsZero() && !validEvidenceUTC(observation.RetentionUntil) {
+	if !observation.RetentionUntil.IsZero() &&
+		(!validEvidenceUTC(observation.RetentionUntil) || !observation.RetentionUntil.After(observation.ObservedAt)) {
 		return false
 	}
 	if observation.PayloadPurgedAt != nil {
 		if observation.PayloadPurgedAt.IsZero() || !validEvidenceUTC(*observation.PayloadPurgedAt) ||
+			observation.RetentionUntil.IsZero() || observation.PayloadPurgedAt.Before(observation.RetentionUntil) ||
 			!reflect.DeepEqual(observation.Candidate, domain.Candidate{}) {
 			return false
 		}
