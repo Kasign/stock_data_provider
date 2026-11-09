@@ -182,6 +182,13 @@ func TestContextJSONSchemaValidatesGoldenAndRejectsInvalidPayloads(t *testing.T)
 		{"context version below minimum", func(value map[string]any) {
 			value["context_version"] = 0
 		}},
+		{"context version exceeds Go int64", func(value map[string]any) {
+			value["context_version"] = json.Number("9223372036854775808")
+		}},
+		{"quality count exceeds Go int64", func(value map[string]any) {
+			quality := value["quality_summary"].(map[string]any)
+			quality["conflict_count"] = json.Number("9223372036854775808")
+		}},
 		{"whitespace-only research question", func(value map[string]any) {
 			value["research_question"] = "   "
 		}},
