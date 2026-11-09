@@ -66,7 +66,7 @@ func (s *DeliveryCompletionService) Complete(
 		claim.Lease.FencingToken != attempt.FencingToken ||
 		!claim.Lease.ExpiresAt.Equal(attempt.LeaseExpiresAt) ||
 		attempt.DeliveryID != delivery.DeliveryID ||
-		attempt.AttemptNo != delivery.AttemptCount ||
+		int64(attempt.AttemptNo) != delivery.AttemptCount+1 ||
 		attempt.AttemptNo < 1 ||
 		attempt.FinishedAt != nil {
 		return ErrRetryDecisionConflict
