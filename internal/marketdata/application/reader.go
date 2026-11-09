@@ -96,8 +96,6 @@ func (r *Reader) GetDailyBars(ctx context.Context, query app.DailyBarsQuery) (ap
 		if bars[0].Symbol != "" {
 			result.Symbol = bars[0].Symbol
 		}
-		result.VolumeUnit = bars[0].VolumeUnit
-		result.AmountUnit = bars[0].AmountUnit
 	}
 	for _, bar := range bars {
 		result.Bars = append(result.Bars, mapDailyBar(bar))

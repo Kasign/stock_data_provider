@@ -122,7 +122,7 @@ func TestReaderGetDailyBarsSelectsCurrentAndPITUseCases(t *testing.T) {
 	if backend.currentCalls != 1 || backend.pitCalls != 0 {
 		t.Fatalf("current/PIT calls = %d/%d, want 1/0", backend.currentCalls, backend.pitCalls)
 	}
-	if live.QualityStatus != app.QualityValid || live.VolumeUnit != "shares" || live.AmountUnit != "CNY" {
+	if live.QualityStatus != app.QualityValid || live.Bars[0].VolumeUnit != "shares" || live.Bars[0].AmountUnit != "CNY" {
 		t.Fatalf("current snapshot metadata mismatch: %+v", live)
 	}
 	if len(live.Bars) != 1 || live.Bars[0].AdjustmentReferenceDate != "2026-11-06" ||

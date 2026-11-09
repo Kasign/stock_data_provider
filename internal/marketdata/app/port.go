@@ -29,7 +29,7 @@ const (
 )
 
 // QuoteSnapshot 是 Application DTO，不复用 Data HTTP JSON 响应结构。
-// 可空数值继续使用指针；Volume 使用 int64 保留股数精度。
+// 字段来源与 model.Quote 一一对应；可空数值继续使用指针，Volume 使用 int64 保留股数精度。
 type QuoteSnapshot struct {
 	Symbol               string
 	Name                 string
@@ -66,8 +66,8 @@ type QuoteSnapshot struct {
 	NormalizationVersion string
 }
 
-// DailyBar 是供下游分析使用的 Application DTO，保留来源和时点元数据。
-// 未知数值字段保持 nil，不使用零值代替未知。
+// DailyBar 是供下游分析使用的 Application DTO，字段来源与 model.DailyBar 一一对应。
+// 保留来源和时点元数据；未知数值字段保持 nil，不使用零值代替未知。
 type DailyBar struct {
 	Symbol                           string
 	TradeDate                        string
@@ -116,9 +116,9 @@ type DailyBar struct {
 // 该字段为 nil 时读取当前视图。
 type DailyBarsQuery struct {
 	Symbol                 string
-	StartDate              string
-	EndDate                string
-	Limit                  int
+	StartDate              string // 包含边界，格式为 YYYY-MM-DD；空值由 DataService 按现有规则处理。
+	EndDate                string // 包含边界，格式为 YYYY-MM-DD；PIT 查询不得晚于截止时点所在交易日。
+	Limit                  int    // 请求日线条数；非正数和上限由 DataService 现有配置规则处理。
 	AdjustmentBasis        AdjustmentBasis
 	SystemObservedAtCutoff *time.Time
 }
@@ -128,8 +128,6 @@ type DailyBarsQuery struct {
 type DailyBarsSnapshot struct {
 	Symbol                 string
 	AdjustmentBasis        AdjustmentBasis
-	VolumeUnit             string
-	AmountUnit             string
 	QualityStatus          QualityStatus
 	Warnings               []string
 	SystemObservedAtCutoff *time.Time

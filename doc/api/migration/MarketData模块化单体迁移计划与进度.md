@@ -647,3 +647,12 @@ internal/
 - 汇总质量沿用 HTTP Handler 的现有判定：任意质量降级 warning 或任意非 valid bar → degraded；空数据集 → unknown；仅信息性 `bars_truncated_to_limit` 不单独降级。
 - PIT 参数只使用 `SystemObservedAtCutoff`，原样传入 `DailyBarsAsOf`；不把 Analysis.AsOf、交易日期或 ProviderTime 混为一谈。
 - 新增 fake backend 单元测试覆盖 Quote nullable/int64/来源/质量/fallback、当前日线与 PIT 路由、修订时点透传、单位/因子元数据及深拷贝。
+
+
+### 2026-11-09：M2-2 DTO 字段来源校对与 CI SHA 顺序修正
+
+- Application DTO 字段来源：`QuoteSnapshot` 逐字段映射 `model.Quote`；`DailyBar` 逐字段映射 `model.DailyBar`。`NormalizationVer` 在 Application 层命名为 `NormalizationVersion`，`AdjustmentRefDate` 命名为 `AdjustmentReferenceDate`；其余来源/时间/单位/质量/复权/fallback 语义保持不变。
+- `DailyBarsQuery.Symbol/StartDate/EndDate/Limit/AdjustmentBasis` 是消费者输入；日期格式 YYYY-MM-DD、边界包含语义和 limit 归一化仍由现有 DataService 校验。只有 `SystemObservedAtCutoff` 非 nil 才调用 PIT Revision 查询。
+- 删除 `DailyBarsSnapshot` 重复的顶层 VolumeUnit/AmountUnit：单位已逐条保存在 `DailyBar`，不从首行推导整个数据集单位，避免混合/空数据时产生错误汇总。
+- `DailyBarsSnapshot.QualityStatus` 来源为 Data 现有 warning 判定与逐条 bar QualityStatus；`Warnings` 原样来自 DataService；`SystemObservedAtCutoff` 是请求 cutoff 的副本。
+- CI 顺序调整：当前分支 Push 先完成根依赖 tidy 与 Data gofmt，再触发 workflow_dispatch 对最终 SHA 执行 Data、News MariaDB 验收；避免并行 Job 检查尚未 tidy/format 的旧 SHA。PR 验收仍保留，Docker build 仍只允许 integration 目标。
