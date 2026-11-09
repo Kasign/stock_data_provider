@@ -247,15 +247,9 @@ func TestRefreshAdjustmentFactorsStopsOnPersistenceFailure(t *testing.T) {
 	valid := model.AdjustmentFactor{
 		Symbol: "688010.SH", TradeDate: "2026-11-06", Factor: 1.111,
 		Basis: model.AdjustmentFactorShared, Source: "refresh-factor-persist-failure",
-		SourceVersion: "fixture-v1", FetchedAt: now, QualityStatus: model.QualityValid,
+		SourceVersion: "fixture-v1", FetchedAt: now, QualityStatus: model.QualityStatus("unsupported_quality"),
 	}
-	// 先写入同一身份但不同 revision，确保后续刷新在 Repository 唯一身份/事务约束处失败。
-	existing := valid
-	existing.Factor = 1.222
-	existing.SourceVersion = "existing-v1"
-	if err := store.SaveAdjustmentFactors(ctx, []model.AdjustmentFactor{existing}); err != nil {
-		t.Fatalf("seed existing factor: %v", err)
-	}
+	// Service 的 Provider 合同校验通过，但 Repository 必须拒绝未知质量状态；该持久化错误不能触发 Provider fallback。
 	p := &adjustmentFactorFixtureProvider{name: valid.Source, values: []model.AdjustmentFactor{valid}}
 	svc := &DataService{providers: []provider.NamedProvider{p}, store: store}
 	got, err := svc.RefreshAdjustmentFactors(ctx, valid.Symbol, valid.TradeDate, valid.TradeDate)
@@ -267,5 +261,12 @@ func TestRefreshAdjustmentFactorsStopsOnPersistenceFailure(t *testing.T) {
 	}
 	if p.calls != 1 {
 		t.Fatalf("persistence failure must not trigger provider fallback/retry, calls=%d", p.calls)
+	}
+	persisted, queryErr := store.ListAdjustmentFactorsAsOf(ctx, valid.Symbol, valid.TradeDate, valid.TradeDate, time.Now().UTC())
+	if queryErr != nil {
+		t.Fatalf("query after rejected persistence: %v", queryErr)
+	}
+	if len(persisted) != 0 {
+		t.Fatalf("rejected refresh must not persist a partial revision: %+v", persisted)
 	}
 }
