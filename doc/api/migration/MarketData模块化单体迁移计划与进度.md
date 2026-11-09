@@ -6,8 +6,8 @@
 - 总体规划：`doc/整体任务规划/01-项目总览/整体任务规划总览.md`
 - 跨模块准入：`doc/整体任务规划/01-项目总览/跨模块接入执行说明.md`、`doc/整体任务规划/01-项目总览/跨模块接入准入清单.md`
 - 本记录建立时的代码基线：`d8595f408337f62be3697aac661ba1570fdd3667`
-- 最近一次 M0 审计基线：`f2b9e5fc637ea59bff87f5449823e98f746c8428`（文档目录整理后）
-- 当前实施状态：`M0_audit_in_progress`（文档结构已整理，开始逐项核对；尚未执行代码迁移）
+- 最近一次 M0 审计基线：`9687337743ff5ad8b5b81209831d43689693ae47`
+- 当前实施状态：`M1_in_progress`（M1-1 代码迁移盘点已完成；开始 Go Module 归并准备）
 
 > 本文记录 Data 从独立 Go Module/服务迁入 Root Server 根 Go Module、同进程运行的实施计划和进度。若本文与上述架构决策文档冲突，以架构决策文档为准；公共平台及 DATA 契约以冻结契约文档为准。本文不重新定义契约。
 
@@ -32,8 +32,8 @@
 
 ### 方案边界校准
 
-1. MDM-001/M0 只做迁移前盘点、契约差异修复和证据冻结；不做 Module 归并。
-2. MDM-002/M1 才处理根与 Data Module 的 Go 版本、依赖、go.mod/go.sum 和目录迁移。
+1. MDM-001/M0 负责迁移前盘点、契约差异修复和证据冻结；M0-A/M0-B 已关闭，不再扩大审计范围。
+2. MDM-002/M1 已启动，处理根与 Data Module 的 Go 版本、依赖、go.mod/go.sum 和目录迁移；不等待其他模块全仓门禁全部通过。
 3. CT-01～CT-06 是 M0 的验收切片，不是与 M0 并列的第二套主计划。
 4. Data 领域数据质量/Provider 阶段 A～I 与 MDM 结构迁移是两条独立轨道；不得用 DailyBar 真实数据验收代替 MDM，也不得用 Module CI 代替真实 Provider 验收。
 5. DATA-CTR、PLAT-CTR、GOV-CTR 的语义和冻结状态以项目契约登记簿及生产方文档为准；本迁移文档只记录迁移适配，不复制字段定义。
@@ -46,7 +46,7 @@
 4. M0-A～C 完成后，按用户既定流程将当前分支合入 integration 并在 integration 验收，关闭 M0。
 5. M0 关闭后才开始 M1；M1 只处理 Module 归并，不顺带重写 API、Provider 或质量规则。
 
-**停止条件：** M0-A/M0-B 完成一次最终差异审查后，不再为了追求“测试数量更多”继续扩张；除非出现新的 Handler 行为或真实故障证据，否则不重新打开已关闭项。
+**停止条件：** M0-A/M0-B 已关闭，不再为了追求“测试数量更多”继续扩张；除非出现新的 Handler 行为或真实故障证据，否则不重新打开已关闭项。M0-C 生产 DDL 是生产切换证据，不阻断代码迁移；M0-D 全仓门禁改为持续集成项，只在出现 Data 直接依赖的集成故障时阻断对应步骤。
 
 ## 1. 目标与边界
 
@@ -184,19 +184,60 @@ internal/
 
 **M0-B 判定：** 出站调用行为审计已完成；安全缺口已明确到 Provider、敏感凭据类型和 M4 目标，不再扩大 M0 审计范围。该状态只代表“审计交付完成”，不代表 DNS/IP SSRF 防护已落地。M4 未完成前，不得把 Provider 网络出口安全整改标记为完成。
 
-#### M0 退出门槛
+#### M0 退出门槛（已调整）
 
-- M0-A 的请求参数与响应模型契约差异归零；M0-B 的出站审计交付完成，M4 安全整改有明确 Owner/目标/验收。
-- M0-C 取得生产 DDL 并完成对照；若暂时无法提供，只能保持外部阻断，不得假称通过。
-- M0-D 在 integration 完成验收；Push workflow 的成功只能作为模块级辅助证据。
-- 所有迁移对象均有源路径、目标路径、Owner、测试和回滚策略。
-- 满足以上条件后，才允许开始 M1。M1 期间解决 Go 版本和依赖冲突，不在 M0 先改 go.mod/go.sum。
+- M0-A 请求参数契约核对已完成；M0-B Provider 出站审计已完成，后续 HTTP/TCP 安全整改进入对应迁移阶段。
+- M0-C 生产 DDL 是生产切换前置证据，不阻断源码迁移、Module 归并或本地/CI 集成验证；未取得 DDL 前不得宣称生产 Schema 验收通过。
+- M0-D 全仓集成门禁持续运行。其他模块的 gofmt/test 失败不阻断 Data 独立迁移；若暴露 Root Server 启动、依赖接口或 Data 路由的直接冲突，则只阻断受影响的集成步骤。
+- Data 迁移对象已有源路径、目标路径、Owner、测试和回滚映射。
+- **M1 已准入并启动**，不再以 M0-C/M0-D 全部关闭作为前置条件。M1 期间解决 Go 版本和依赖冲突，不在 M0 先改 go.mod/go.sum。
 
 **当前明确不做：** 不新增 API/DTO/数据库字段；不扩展 OpenAPI 测试到没有 Handler 依据的规则；不修改 Provider 业务算法；不接入 Platform HTTP Client；不搬迁目录；不修改 Root Server、WebUI 或其他模块。
 
+### 2026-11-09：M1-1 运行入口与资源所有权盘点（代码基线 `9687337743ff5ad8b5b81209831d43689693ae47`）
+
+本轮仅核对代码和部署事实；未修改运行时代码、数据库、配置或其他模块。
+
+| 迁移对象 | 当前实现证据 | M1/M2 后续处理 |
+|---|---|---|
+| Data 进程入口 | `services/market-data/cmd/market-data/main.go` 独立加载配置、构造 Provider/Service/HTTP Handler、启动 `:8091` HTTP Server | M1 先归并 Module 并保留旧命令可构建；后续抽取 Bootstrap，由 Root 统一调用 |
+| Root 进程入口 | `cmd/analysis-api/main.go` 是当前根 Module 入口，先加载 dotenv，再初始化 MariaDB/Redis、Market Data Remote Client、Analysis Runner/Task Queue 和 HTTP API | 由该入口逐步承担 Data 装配；本轮不另造第二个 Server 入口 |
+| 调用链 | Root 的 `internal/adapters/marketdata.Client` 通过 HTTP BaseURL + `X-API-Key` 调用独立 Data 服务；Compose 依赖 Data healthcheck | 后续增加 InProcess Adapter，完成等价性验证后切换默认调用；Remote Adapter 保留回滚 |
+| Data 配置 | `services/market-data/internal/config.Load` 读取 MARKET_DATA_* 环境变量及 `configs/providers.json`，包含 Provider URL/Token、Data API Key、DB DSN、Redis 地址、自动迁移和 Provider 优先级 | 配置解析归 Data；Root 聚合读取并注入 Secret。迁移期间保持现有环境变量兼容 |
+| Provider 装配 | Data 独立入口创建 11 类 Provider、按配置校验 capability，再注入 DataService；BaoStock Client 单独 Close | 抽取为 Data Bootstrap 构造函数；HTTP Provider 接入 Platform HTTP Client 属后续网络安全适配，不与 Module 搬迁混做 |
+| MariaDB | Data `repository.OpenMySQL` 内部 `sql.Open`、独立连接池、Ping、Close；`Store.Migrate` 管理 Data 表 | 需要增加借用 `*sql.DB` 的构造路径，Data 保留 Repository/Schema/Migration 所有权，Root 负责共享 Pool 生命周期 |
+| Redis | Data Cache 使用自定义 RESP Client，每次命令单独 Dial；支持 AUTH/SELECT/TTL；没有共享连接池和统一 Close | 保持 Cache 接口和 key/TTL 语义，增加基于 Root `*redis.Client` 的 Adapter；不再并行保留两套生产连接池 |
+| Worker | Retention Worker 在 Data main 内启动 goroutine，使用进程 Context 退出；当前无显式 Start/Stop/Wait 对象 | 提取可控生命周期组件，Root 统一 Start/Drain/Stop，增加启动失败和关闭测试 |
+| HTTP | Data Handler 自己注册健康检查和 35 Operation 路由，内部包含 API Key 认证、Request ID、访问日志和超时包装 | Data 保留 Handler Adapter；Root 挂载兼容路由并统一入口 Middleware，避免重复认证/Request ID |
+| 部署 | Compose 当前运行独立 `stock-analysis-data` 和 `stock-analysis-server` 两个容器；Data 独立 Dockerfile；Root 镜像仅构建 Analysis API | M1 不切部署；M5 合并为 Root Server 镜像并保留旧 Data profile 回滚 |
+| Go Module | Root Go 1.22；Data Go 1.23.0。Root mysql driver 1.9.3，Data 1.8.1；x/net、x/text 版本也有差异。Data imports 使用 `github.com/Kasign/stock_data_provider/services/market-data/internal/...`，Root 使用 `example.com/stock-analysis-flow/internal/...` | M1 需统一 Go 版本/依赖、重写 Data 内部 import 路径、合并 go.mod/go.sum；不能只删除嵌套 go.mod |
+
+#### 迁移顺序与边界确认
+
+1. **先完成 M1 Module 归并**：Data 源码迁入根 Module 的 `internal/marketdata/**`，保留现有 package 边界和 Data HTTP API；先解决 Go 版本、依赖版本、内部 import 路径和根 CI 构建。
+2. **再做 M2 Bootstrap/Application Port**：从 Data main 抽离配置、Provider 装配、Service、Handler、Worker 构造；提供显式构造与关闭接口。
+3. **M3 Root 装配**：Root 注入共享 DB/Redis、Platform HTTP Client、Secret 和请求上下文；Analysis 从 Remote Adapter 切换 InProcess Adapter。
+4. **M4 共享资源和网络安全适配**：DB borrowed/owned、Redis Adapter、Data Migration 显式执行、HTTP Provider 受控出口、TCP Provider 出站策略分开验收。
+5. **M5 部署切换**：最后才合并容器与 Nginx 路由；生产 DDL 对照和凭据轮换在生产切换前完成。
+
+#### 本轮发现的直接风险
+
+- 不能把 Root 的 `mysqlredis.Store.Open` 直接复用为 Data Store：当前 Root Open 会自行执行 Analysis Migration 并校验 Analysis Schema，且同时拥有 DB/Redis；Data Repository 当前没有注入已有 `*sql.DB` 的公开构造入口。必须拆分资源打开与模块 Migration 的职责。
+- Data Redis 当前每次操作新建 TCP 连接，Root 使用 go-redis 连接池；切换时必须以现有 Cache 接口测试锁定 GET/SET、AUTH、DB index、TTL 和错误语义。
+- Root 当前 HTTP Adapter 使用自建 `http.Client`；Platform HTTP Client 有固定 DestinationPolicy/BoundDoer 与有界响应读取能力。Provider 侧迁移必须逐 Provider 绑定 Host/Port 策略，不能简单替换 Doer 后丢失请求差异。
+- Data 的 Provider 配置文件默认相对路径为 `configs/providers.json`；迁入根 Module 后工作目录变化会导致配置文件找不到。必须明确 Root 的配置路径解析和容器挂载策略。
+- 当前两个 Go Module 的 module path 不同，且 Go/依赖版本不一致；先进行依赖图冲突处理，再批量改 import 和搬目录，不能在同一提交里顺带重构领域逻辑。
+
+#### M1-1 验收
+
+- [x] 两个进程入口、调用链、配置源、Provider 装配、DB/Redis 所有权、Worker、HTTP 路由和部署边界已逐项定位。
+- [x] 已识别 Module 归并必须处理的 module path、Go 版本和关键依赖冲突。
+- [x] 已识别 Data DB/Redis 注入、配置相对路径和 Platform HTTP Client 的实际适配点。
+- [ ] M1-2：依赖冲突收敛与目录归并实施（下一任务）。
+
 ### M1：Go Module 归并
 
-状态：`pending`
+状态：`in_progress`
 
 工作项：
 
