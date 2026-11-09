@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Kasign/stock_data_provider/internal/quant/domain"
+	"example.com/stock-analysis-flow/internal/quant/domain"
 )
 
 func validFactorContext() domain.CalculationContext {

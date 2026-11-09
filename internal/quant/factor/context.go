@@ -4,7 +4,7 @@ package factor
 import (
 	"time"
 
-	"github.com/Kasign/stock_data_provider/internal/quant/domain"
+	"example.com/stock-analysis-flow/internal/quant/domain"
 )
 
 // Momentum20WithContext 在执行 20 日动量前校验计算上下文和价格口径。
