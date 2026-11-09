@@ -90,6 +90,7 @@ func Migrations() []platformstorage.Migration {
 					),
 					UNIQUE KEY uk_notification_delivery_idempotency (channel_ref, recipient_ref, delivery_idempotency_key),
 					KEY idx_notification_deliveries_due (status, next_attempt_at, deadline_at, created_at),
+					KEY idx_notification_deliveries_lease (status, lease_expires_at),
 					KEY idx_notification_deliveries_subscription (subscription_id, created_at),
 					CONSTRAINT fk_notification_delivery_plan FOREIGN KEY (delivery_id) REFERENCES notification_delivery_plans (delivery_id)
 				) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
