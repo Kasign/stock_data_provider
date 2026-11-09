@@ -290,34 +290,83 @@ localStorage + storage event 方案能解决“另一个标签页完成写入后
 7. 中文提交，记录提交 SHA、测试命令、CI 链接、未完成项和原因。
 8. 报告当前阶段、已完成事项、阻塞项和下一任务。
 
-## 7. 当前下一步
+## 7. 当前下一步（2026-11-09，按模块化单体架构重排）
 
-**当前主线：UIR-2 CSS 级联治理已完成；转入 P2 人工视觉验收与真实部署验收准备。** 不再继续重复 CSS 清理，也不以 app.js 行数或 CSS 文件体积为理由启动结构迁移。
+### 7.1 当前执行基线
 
-### 已完成并关闭
+- WebUI 分支 HEAD：`4a629eb7ac45cbdceb087833bd763ebc6d6753c3`，提交为合并 `integration`。
+- 本次合并的 integration HEAD：`40402b01f4a1f8132aef05d9f1049da2ef42aa75`。
+- 当前 HEAD 的 WebUI Checks：失败（Run `42607301812`）；JavaScript 语法检查通过，单元测试失败，Nginx 镜像构建因前置测试失败而跳过。不得沿用旧 HEAD `b6da380eb29955c321b1d42b4e7dfb843f162fe9` 的通过结果作为当前 HEAD 通过证据。
+- 本次尚未取得当前 HEAD 的 Chromium Browser Smoke 成功证据；合并后的真实部署、中文视觉验收也未完成。
+- 当前代码仍在浏览器配置中保存 Data API Key，并在行情请求中发送 `X-API-Key`；这属于 MDM-006 迁移项，不能在服务端路由/认证切换前单独删除。
 
-- W1 数据中心重复请求治理、W2 Run Flow 体验优化、W3 研究报告与研究记录工作区首批改造均已完成。
-- JSR-7 静态依赖图审计完成：51 个源文件、app.js 47 个直接静态依赖；未发现静态循环依赖或领域模块反向依赖 app.js。
-- UIR-2 CSS AST/CSSOM、主题/配色、响应式级联和跨 selector 复核完成；最终运行时代码基线为 `b6da380eb29955c321b1d42b4e7dfb843f162fe9`。
-- 该代码基线的 WebUI Checks #42207380891 与 Chromium Browser Smoke #42207380849 均通过；此后仅发生文档同步，运行时代码未改变。
-- 剩余 6 处 `!important` 用于全局隐藏和 reduced-motion 无障碍规则，属于必要优先级，不继续删除。
+项目相关分支最新节点（用于判断依赖，不代表这些分支的功能均已验收）：
+- Server：`feat/research-analysis-flow-native-go`，`6abb254909431bc22b27a75d904d6e4449272f20`。
+- Data：`feat/full-go-data-providers-api-switch`，`a8248f6a124fcb1e00c9181cd45837dd494394a8`。
+- Platform：`feat/platform-foundation`，`302a2315883bf4de4362f3ee528b820eae0a6f4a`。
+- Researchflow：`feat/researchflow`，`9bd1eb4156df751815feae095b8aec3c4df8a2e5`。
+- Notification：`feat/notification`，`19e9f6623b6b800a65932f035e3cb85dc0c9a47a`。
 
-### 下一批：P2 人工视觉验收
+### 7.2 重新确定的执行原则
 
-1. 在 macOS 或具备 CJK 字体的真实浏览器环境，检查中文字体、字重、换行、截断和实际文字边界；Linux Runner 缺少中文字体，其截图不能作为中文排版验收证据。
-2. 使用 320、768、900、1280、1600px 视口，检查市场总览、个股行情、筛选、自选股、研究、分析任务、数据中心和设置中心的导航、表格、弹层、右侧结果区及横向溢出。
-3. 重点检查图表 SVG、交易日历、Run Flow、研究工作区、市场活动表格及设置弹层；发现问题时记录具体页面、视口、DOM/选择器和复现步骤，再做局部修复。
-4. 人工验收结果与自动化结果分开记录；未提供带 CJK 字体环境的截图/复现证据前，不标记中文视觉验收通过。
+1. WebUI 只负责页面、交互、API 消费和状态展示；不实现领域规则，不为缺失的服务端能力增加假接口。
+2. Root Server 是目标 HTTP 宿主；模块 Application Port 是内部调用边界，WebUI 只消费经过 Server 注册且批准开放的 HTTP API。
+3. `/market-api`、`/analysis-api` 可以作为迁移期兼容前缀保留；统一进程不意味着必须立即更改浏览器 URL。
+4. 不把 Data API Key、Platform Service Secret、Owner Token 或 Provider Token 放进浏览器。Web Session/Cookie、CSRF、登录与资源授权契约未完成前，不把 Owner Bearer 临时管理入口接到 WebUI。
+5. Researchflow 拥有 Run/Stage/Attempt 和任务生命周期；Server 负责 HTTP 注册。任务历史列表不再归为 Data API 缺口。
+6. 自动化测试、OpenAPI 声明、Handler 注册、真实 Provider 数据和生产部署验收分别记录，不能互相替代。
+7. 不继续为了文件行数或 CSS 数量进行结构拆分；只有存在可复现缺陷或明确独立职责收益时才改运行时代码。
 
-### 依赖项与暂停项
+### 7.3 P0：恢复当前分支可验证状态
 
-- 数据中心统一诊断真实联调继续等待数据侧 ProviderProbeItem/OpenAPI 一致性、真实 Provider 覆盖率及 MariaDB 历史持久化证据；WebUI 不模拟 Provider 结果。
-- 服务端任务历史分页、服务端筛选扫描、告警执行、通知渠道/投递、板块资金流和板块领涨股证券代码，均属于数据/API 侧缺口；未有真实契约前保持待接入，不增加前端假接口。
-- UIR-5 CSS 物理拆分暂不启动；共享 selector ownership、页面截图基线和迁移前后 CSSOM 对照门槛未满足前，不移动或批量合并规则。
-- app.js 状态所有权和请求生命周期保持现状；只在出现可复现缺陷或可独立验证的纯逻辑边界时再拆分。
-- 本分支继续只修改 `web/**` 与必要的 `doc/web/**`；不修改 Go、Provider、数据库、OpenAPI 服务端实现、部署配置及其他分支。
+| 编号 | 任务 | 状态 | 完成条件 |
+|---|---|---|---|
+| WEB-101 | 定位并修复 HEAD `4a629eb7` 的 WebUI Checks 单测失败 | 待处理 | 找到具体失败测试与根因；仅修复 WebUI 自身断言/实现，不回退 integration 的 Data 目录迁移；当前 HEAD 的 WebUI Checks 全部通过 |
+| WEB-102 | 对齐 WebUI API 清单与当前 Market Data Handler/OpenAPI | 待处理 | 以 `internal/marketdata/httpapi/server.go` 和 `internal/marketdata/httpapi/openapi.yaml` 为准，逐项标记已注册、仅声明、未实现；修正旧 `services/market-data/**` 路径 |
+| WEB-103 | 校正 WebUI 服务边界和认证迁移说明 | 待处理 | 明确 Root Server 目标、兼容路由前缀、当前浏览器 Key 过渡状态、目标 Web Session 依赖；不把 Owner Token 写入浏览器，不提前删除现有请求认证 |
+| WEB-104 | 校正任务历史 API 归属与页面事实 | 待处理 | 明确当前最近任务只是浏览器本地引用；任务列表/分页由 Researchflow Application Facade 提供、Server 注册；没有真实 Handler 前不增加调用 |
+| WEB-105 | 校正统一诊断专项文档 | 待处理 | 对照当前 Data OpenAPI：字段校验计数、问题明细、截断和 coverage_dimensions 已声明；真实 Provider 覆盖及 MariaDB 历史持久化仍单独等待证据；修复失效文档链接和越界修改范围描述 |
 
-**验收门禁：** 代码修改按完整功能批次提交；先做针对性单测与静态检查，若需要构建则按既定规则先合并到 `origin/integration` 并只在该分支构建，不修改 integration 代码。真实数据和人工视觉验收分别给出证据，不互相替代。
+执行顺序：WEB-101 先定位当前 CI 失败；WEB-102～105 可并行做只读映射，随后按一次文档批次提交。不得用反复全量验证替代实际问题修复。
+
+### 7.4 P1：等待后端契约的前端接入准备
+
+| 编号 | 能力 | 真实 Owner / 依赖 | WebUI 当前策略 |
+|---|---|---|---|
+| WEB-201 | Data Key 移除、统一 Root 路由和连接配置收敛 | Data MDM-006 + Server Web Session/认证 + Platform | 暂不删除 Key 逻辑；等 Root 路由、登录态、CSRF、代理信任边界和回滚路径明确后一次切换 |
+| WEB-202 | 服务端任务历史分页/筛选 | Researchflow Facade + Server HTTP 注册与认证 | 保留本地最近任务引用；不把本地 10 条记录伪装成服务端历史，不由 Data 新增任务 API |
+| WEB-203 | 数据中心诊断真实联调 | Data Provider/OpenAPI/持久化证据 + Server 路由 | 保留现有字段展示；只按真实响应修正兼容，不复制质量规则 |
+| WEB-204 | 服务端选股扫描、候选理由和历史 | Quant 能力 + Researchflow 扫描任务/结果查询 + Server | 当前页本地筛选继续明确标注分页范围；服务端扫描入口保持待接入 |
+| WEB-205 | 告警评估、订阅、通知渠道和投递 | 告警条件由对应业务模块负责；Notification 负责订阅/渠道/投递 | 仅保留本地草稿与偏好，不宣称后台执行或真实通知 |
+| WEB-206 | 板块资金流及板块证券映射 | Data | 继续显示缺失/待接入，不以成交额替代资金净流入，不从名称反推证券代码 |
+| WEB-207 | AI 问股与模型设置 | LLM + Researchflow 用例编排 + Server | 无公开 API 和权限契约前保持禁用，不直连模型网关 |
+
+上述任务只有在生产方提交稳定 Application/HTTP 契约、OpenAPI、真实响应样例及对应权限语义后，才进入 WebUI 实施；不要求等待所有模块整体完工，只等待各自实际调用点。
+
+### 7.5 P2：人工与真实环境验收
+
+1. 在 macOS 或具备 CJK 字体的浏览器检查中文字体、字重、换行、截断和文字边界。
+2. 使用 320、768、900、1280、1600px 视口检查市场总览、个股行情、自选股、筛选、研究、分析任务、数据中心和设置中心。
+3. 在真实部署环境检查 Nginx 路由、登录态、Cookie/CSRF、健康检查、请求取消和真实数据错误状态。
+4. 人工视觉、真实 Provider 数据、服务端持久化、自动化 CI 分开记录证据；未取得证据不标记通过。
+
+### 7.6 暂停或明确不做
+
+- 不启动 UIR-5 CSS 物理拆分；不按 app.js 行数启动大规模 JS 拆分。
+- 不在 WebUI 实现任务生命周期、选股扫描、告警计算、通知投递、Provider 质量规则或数据持久化。
+- 不提前删除浏览器 Data API Key；必须与 MDM-006、Root Server 认证切换一起实施，并处理旧 Key 清理/轮换。
+- 不把 Server 临时 Owner Bearer 当作浏览器登录凭据。
+- 不修改 Go、Provider、数据库、OpenAPI 服务端实现、Docker/Compose/Nginx 部署配置及其他分支。
+
+### 7.7 本分支下一批执行安排
+
+**第一批：WEB-101～105。** 先修复当前 SHA 的单测失败，再完成 API/认证/任务/诊断文档对齐；这批不扩展业务页面，不改服务端代码。
+
+**第二批：** 仅接入已由 Data、Researchflow、Notification、Server 提供并通过对应契约证据的 API；按功能闭环分批实现，不提前铺设未确认接口。
+
+**第三批：** 完成 CJK 人工视觉与真实部署验收；按真实部署切换结果关闭 Data Key 迁移和 Root 登录相关 WebUI 事项。
+
+**验收门禁：** 每批只运行与改动对应的单测/静态检查；需要构建时遵守既定 integration 构建流程。当前 SHA 的失败必须先定位根因，不能将历史 SHA 的成功记录替代当前证据。每批集中提交中文说明，并记录 SHA、CI Run、未完成依赖和回滚边界。
 
 ### 2026-11-04 P0-C 后续边界修复（当前开发批次）
 
