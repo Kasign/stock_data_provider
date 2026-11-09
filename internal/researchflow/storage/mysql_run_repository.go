@@ -81,6 +81,7 @@ func (r *MySQLRunRepository) CreateRunAtomic(
 	if !record.Run.DeadlineAt.After(dbNow) {
 		return application.CreateRunResult{}, fmt.Errorf("%w: deadline elapsed before persistence", domain.ErrInvalidCommand)
 	}
+	record.Stages = append([]domain.Stage(nil), record.Stages...)
 	record.Run.CreatedAt = dbNow
 	for index := range record.Stages {
 		record.Stages[index].CreatedAt = dbNow
@@ -321,9 +322,9 @@ func (r *MySQLRunRepository) validateRecord(record application.CreateRunRecord) 
 	if err := r.validateScope(record.Scope); err != nil {
 		return err
 	}
-	if strings.TrimSpace(record.Fingerprint) == "" || len(record.Fingerprint) != 64 ||
+	if !validSHA256Fingerprint(record.Fingerprint) ||
 		record.Run.Ref == "" || record.Run.SchemaVersion == "" || record.Run.TemplateRef == "" ||
-		record.Run.TemplateVersion == "" || record.Run.TemplateFingerprint == "" ||
+		record.Run.TemplateVersion == "" || !validSHA256Fingerprint(record.Run.TemplateFingerprint) ||
 		record.Run.CorrelationID == "" || record.Run.Version == 0 || record.Run.Status != domain.RunCreated {
 		return errors.New("Researchflow create-run record is incomplete")
 	}
@@ -468,4 +469,12 @@ func sortResearchflowStages(stages []domain.Stage, order map[string]int) {
 		}
 		return stages[i].Code < stages[j].Code
 	})
+}
+
+func validSHA256Fingerprint(value string) bool {
+	if len(value) != 64 || value != strings.ToLower(value) {
+		return false
+	}
+	_, err := hex.DecodeString(value)
+	return err == nil
 }
