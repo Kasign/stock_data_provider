@@ -45,7 +45,9 @@ func (s getEvidenceAuthorizationSnapshotStub) GetLatestAuthorizationSnapshotForE
 	if s.err != nil {
 		return domain.NewsAuthorizationBinding{}, s.err
 	}
-	if s.afterRead != nil { s.afterRead() }
+	if s.afterRead != nil {
+		s.afterRead()
+	}
 	if s.binding.CallerRef != caller || s.binding.ResourceRef != resource ||
 		s.binding.PurposeCode != purpose || s.binding.RequestedContentLevel != level {
 		return domain.NewsAuthorizationBinding{}, ErrInvalidAuthorizationSnapshot

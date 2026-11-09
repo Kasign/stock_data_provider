@@ -49,7 +49,7 @@ func TestCreateEvidenceSnapshotForQueryFreezesOnlyPITReferences(t *testing.T) {
 	request.Filters = &EvidenceQueryFilters{NewsIDs: []string{"news-1", "news-2"}}
 	request.SystemAsOf = now.Add(-time.Second)
 
-	query := &evidencePITRepositoryStub{records:    evidencePITRecords(request.SystemAsOf)}
+	query := &evidencePITRepositoryStub{records: evidencePITRecords(request.SystemAsOf)}
 	store := &evidenceSnapshotRepositoryStub{}
 	service, err := NewCreateEvidenceSnapshotForQuery(query, store, func() string { return "snapshot-1" })
 	if err != nil {
