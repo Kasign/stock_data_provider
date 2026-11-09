@@ -2,6 +2,7 @@ package resources
 
 import (
 	"testing"
+	"sync"
 
 	platformhttpclient "example.com/stock-analysis-flow/internal/platform/httpclient"
 
@@ -80,5 +81,35 @@ func TestResourcesBindHTTPDestinationRejectsInvalidPolicy(t *testing.T) {
 		AllowedHosts: []string{"api.example.com"},
 	}); err == nil {
 		t.Fatal("BindHTTPDestination() error = nil, want invalid policy error")
+	}
+}
+
+func TestResourcesClosePreventsBindingsAfterReturn(t *testing.T) {
+	client, err := platformhttpclient.New(platformhttpclient.Config{})
+	if err != nil {
+		t.Fatalf("create Platform HTTP Client: %v", err)
+	}
+	resources := &Resources{HTTPClient: client}
+	policy := platformhttpclient.DestinationPolicy{
+		Dependency: "test.concurrent",
+		AllowedHosts: []string{"api.example.com"},
+	}
+	start := make(chan struct{})
+	var workers sync.WaitGroup
+	for i := 0; i < 32; i++ {
+		workers.Add(1)
+		go func() {
+			defer workers.Done()
+			<-start
+			_, _ = resources.BindHTTPDestination(policy)
+		}()
+	}
+	close(start)
+	if err := resources.Close(); err != nil {
+		t.Fatalf("Close() error = %v", err)
+	}
+	workers.Wait()
+	if _, err := resources.BindHTTPDestination(policy); err == nil {
+		t.Fatal("BindHTTPDestination() succeeded after Close() returned")
 	}
 }
