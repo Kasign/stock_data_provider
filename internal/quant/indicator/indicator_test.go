@@ -283,6 +283,38 @@ func TestIndicatorsRejectWindowsAboveContractMaximum(t *testing.T) {
 	}
 }
 
+func TestIndicatorsAcceptContractMaximumWindow(t *testing.T) {
+	prices := make([]float64, 1999)
+	for i := range prices {
+		prices[i] = 1
+	}
+
+	if got, err := SMA(prices[:1000], SMAParams{Window: 1000}); err != nil || got.Status != StatusAvailable {
+		t.Fatalf("SMA window=1000: result=%+v err=%v", got, err)
+	}
+	if got, err := EMA(prices[:1000], EMAParams{Window: 1000, SeedMethod: "sma"}); err != nil || got.Status != StatusAvailable {
+		t.Fatalf("EMA window=1000: result=%+v err=%v", got, err)
+	}
+	if got, err := Return(prices[:1001], ReturnParams{Window: 1000, ReturnBasis: "simple"}); err != nil || got.Status != StatusAvailable {
+		t.Fatalf("Return window=1000: result=%+v err=%v", got, err)
+	}
+	if got, err := Volatility(prices[:1001], VolatilityParams{Window: 1000, ReturnBasis: "simple", AnnualizationFactor: 252}); err != nil || got.Status != StatusAvailable {
+		t.Fatalf("Volatility window=1000: result=%+v err=%v", got, err)
+	}
+	if got, err := RSI(prices[:1001], RSIParams{Window: 1000, SmoothingMethod: "wilder"}); err != nil || got.Status != StatusAvailable {
+		t.Fatalf("RSI window=1000: result=%+v err=%v", got, err)
+	}
+	if got, err := MACD(prices, MACDParams{FastWindow: 999, SlowWindow: 1000, SignalWindow: 1000}); err != nil || got.Status != StatusAvailable {
+		t.Fatalf("MACD maximum windows: result=%+v err=%v", got, err)
+	}
+	if got, err := ATR(prices[:1000], prices[:1000], prices[:1000], 1, ATRParams{Window: 1000, SmoothingMethod: "wilder"}); err != nil || got.Status != StatusAvailable {
+		t.Fatalf("ATR window=1000: result=%+v err=%v", got, err)
+	}
+	if got, err := Bollinger(prices[:1000], BollingerParams{Window: 1000, Multiplier: 2, StdDevMethod: "population"}); err != nil || got.Status != StatusAvailable {
+		t.Fatalf("Bollinger window=1000: result=%+v err=%v", got, err)
+	}
+}
+
 func TestInsufficientDataAndInvalidInputs(t *testing.T) {
 	got, err := SMA([]float64{1, 2}, SMAParams{Window: 3})
 	if err != nil {
