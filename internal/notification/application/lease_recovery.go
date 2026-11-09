@@ -118,7 +118,7 @@ func AssessExpiredDeliveryLease(
 			result.ReasonCode = "channel_rejection_permanent"
 		} else if delivery.AttemptCount >= delivery.MaxAttempts || !now.Before(delivery.DeadlineAt) {
 			result.Action = LeaseRecoveryFinalizeFailed
-			result.ReasonCode = "retry_budget_exhausted"
+			result.ReasonCode = recoveryLimitReason(delivery, now)
 		} else {
 			result.Action = LeaseRecoveryApplyRetryPolicy
 			result.ReasonCode = "retryable_rejection_recovery"
@@ -140,11 +140,21 @@ func recoveryBudgetAssessment(delivery domain.DeliveryRecord, now time.Time, rea
 	result := LeaseRecoveryAssessment{AttemptID: attemptID, EvidenceRef: evidenceRef, ReasonCode: reason}
 	if delivery.AttemptCount >= delivery.MaxAttempts || !now.Before(delivery.DeadlineAt) {
 		result.Action = LeaseRecoveryFinalizeFailed
-		result.ReasonCode = "retry_budget_exhausted"
+		result.ReasonCode = recoveryLimitReason(delivery, now)
 		return result
 	}
 	result.Action = LeaseRecoverySafeToRetry
 	return result
+}
+
+func recoveryLimitReason(delivery domain.DeliveryRecord, now time.Time) string {
+	if delivery.AttemptCount >= delivery.MaxAttempts {
+		return "retry_budget_exhausted"
+	}
+	if !now.Before(delivery.DeadlineAt) {
+		return "deadline_exceeded"
+	}
+	return "retry_budget_exhausted"
 }
 
 func dereferenceRecoveryEvidence(value *string) string {

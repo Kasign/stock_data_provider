@@ -137,7 +137,12 @@ func (p *DeliveryPreflight) Check(ctx context.Context, delivery domain.DeliveryR
 		result.ReasonCode = "recipient_resolution_failed"
 		return result, err
 	}
-	if err := target.Validate(snapshot); err != nil || target.RecipientRef != delivery.RecipientRef {
+	if err := target.Validate(snapshot); err != nil {
+		result.Action = DeliveryPreflightBlock
+		result.ReasonCode = "recipient_target_invalid"
+		return result, err
+	}
+	if target.RecipientRef != delivery.RecipientRef {
 		result.Action = DeliveryPreflightSkip
 		result.ReasonCode = "recipient_not_authorized"
 		return result, nil

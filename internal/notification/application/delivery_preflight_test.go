@@ -162,6 +162,19 @@ func TestDeliveryPreflightBlocksDisabledChannelAndSkipsUnauthorizedRecipient(t *
 	}
 }
 
+func TestDeliveryPreflightBlocksMalformedRecipientTarget(t *testing.T) {
+	preflight, delivery, _ := preflightFixture(t)
+	preflight.recipients = &fixedRecipientResolver{target: domain.RecipientTarget{
+		RecipientRef: delivery.RecipientRef, ChannelRef: "wrong-channel",
+		ConfigVersion: delivery.ChannelConfigVersion, AdapterTargetRef: "opaque-target",
+	}}
+	result, err := preflight.Check(context.Background(), delivery)
+	if !errors.Is(err, domain.ErrInvalidRecipientTarget) ||
+		result.Action != DeliveryPreflightBlock || result.ReasonCode != "recipient_target_invalid" {
+		t.Fatalf("malformed resolver data must block, not permanently skip: %+v err=%v", result, err)
+	}
+}
+
 func TestDeliveryPreflightRejectsNonSendingDelivery(t *testing.T) {
 	preflight, delivery, _ := preflightFixture(t)
 	delivery.Status = domain.DeliveryQueued

@@ -76,6 +76,26 @@ func TestAssessExpiredDeliveryLeaseWithoutAttemptIsSafeOnlyWithinBudget(t *testi
 	}
 }
 
+func TestAssessExpiredDeliveryLeaseDistinguishesDeadlineFromAttemptBudget(t *testing.T) {
+	delivery, lease, now := recoveryFixture(t)
+	delivery.MaxAttempts = delivery.AttemptCount + 1
+	delivery.DeadlineAt = now.Add(-time.Second)
+	got, err := AssessExpiredDeliveryLease(delivery, lease, nil, now)
+	if err != nil || got.Action != LeaseRecoveryFinalizeFailed || got.ReasonCode != "deadline_exceeded" {
+		t.Fatalf("deadline-only exhaustion must retain its own reason: %+v err=%v", got, err)
+	}
+
+	delivery, lease, now = recoveryFixture(t)
+	attempt := recoveryAttempt(t, delivery, lease, domain.DeliveryAttemptRejected, true)
+	delivery.AttemptCount = 1
+	delivery.MaxAttempts = 2
+	delivery.DeadlineAt = now.Add(-time.Second)
+	got, err = AssessExpiredDeliveryLease(delivery, lease, []domain.DeliveryAttempt{attempt}, now)
+	if err != nil || got.Action != LeaseRecoveryFinalizeFailed || got.ReasonCode != "deadline_exceeded" {
+		t.Fatalf("retryable rejection after deadline must report deadline_exceeded: %+v err=%v", got, err)
+	}
+}
+
 func TestAssessExpiredDeliveryLeaseClassifiesAttemptOutcomes(t *testing.T) {
 	cases := []struct {
 		name      string
