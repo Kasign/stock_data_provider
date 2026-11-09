@@ -429,7 +429,7 @@ func (r *MySQLRunRepository) loadRun(ctx context.Context, runRef string) (applic
 	if err := json.Unmarshal([]byte(resolvedSnapshot), &resolved); err != nil {
 		return application.CreateRunResult{}, fmt.Errorf("decode Researchflow resolved template snapshot: %w", err)
 	}
-	run.ExcludedStages = append([]domain.ExcludedStage(nil), resolved.Excluded...)
+	run.ExcludedStages = append([]domain.ExcludedStage{}, resolved.Excluded...)
 
 	run.ResultSummary, err = r.loadResultSummary(ctx, run.Ref, run.ResultSummaryRef, run.Status)
 	if err != nil {
