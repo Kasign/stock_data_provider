@@ -120,3 +120,31 @@ func TestPersistUnknownReconciliationPropagatesTransactionFailure(t *testing.T) 
 		t.Fatal("repository transaction failure must be propagated")
 	}
 }
+
+
+func TestReconcileUnknownDeliveryRunsEvidenceBoundRetryEndToEnd(t *testing.T) {
+	delivery, channel, attempts, evidence, now := unknownReconciliationFixture(t)
+	evidence.Outcome = UnknownLookupNotAccepted
+	evidence.ErrorCode = "provider_busy"
+	repository := &unknownReconciliationRepositoryFake{}
+	assessment, decision, err := ReconcileUnknownDelivery(
+		context.Background(), repository, standardRetryPolicy(),
+		delivery, channel, attempts, evidence, now, 0.5,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if assessment.Action != UnknownReconciliationApplyRetryPolicy ||
+		decision == nil || !decision.Retry ||
+		decision.EvidenceRef != evidence.EvidenceRef ||
+		!decision.EvidenceObservedAt.Equal(evidence.ObservedAt) ||
+		repository.calls != 1 || repository.next.Status != domain.DeliveryRetryWait ||
+		repository.event.EvidenceRef == nil || *repository.event.EvidenceRef != evidence.EvidenceRef {
+		t.Fatalf("unknown retry orchestration did not preserve evidence: assessment=%+v decision=%+v repository=%+v",
+			assessment, decision, repository)
+	}
+	if attempts[len(attempts)-1].Outcome == nil ||
+		*attempts[len(attempts)-1].Outcome != domain.DeliveryAttemptAmbiguous {
+		t.Fatal("reconciliation must not rewrite immutable Attempt history")
+	}
+}
