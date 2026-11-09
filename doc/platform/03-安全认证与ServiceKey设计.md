@@ -185,3 +185,77 @@ Authenticator 当前采用逐个摘要比较，确保认证结果不因首个匹
 不符合格式的名称在启动配置构造阶段直接拒绝。该字段不得承载用户输入、凭证明文或其他敏感信息。对应实现位于 `internal/platform/security/security.go`，边界测试覆盖合法名称、空名称、超长名称、大小写混合、空格、斜线、控制字符和非法前缀。
 
 验收提交：`348b8a692dade915c1d11f35663e57a9777a3422`；Platform Go checks Run [42578653237](https://github.com/Kasign/stock_data_provider/actions/runs/42578653237) 全部通过。
+
+
+## 11. Web Owner 登录与 Session 安全模型（2026-11-09 当前设计）
+
+本节补充首期 Bearer 认证之后的 Web 登录安全设计，不替换 anonymous/owner/service 身份模型。浏览器登录使用独立 Web Session；Owner Bearer 与 Service Bearer 继续用于可信运维/服务间调用，三者不得互换。本文记录 Platform 公共原语边界，不定义 Server 登录页面、HTTP 路由或业务恢复流程。
+
+### 11.1 身份与凭证隔离
+- 首期仍为单一 Owner，不建设注册、多用户、组织、租户或通用 IAM。
+- Owner Web 密码只在 Server 端验证；持久化 Argon2id 哈希及算法参数，不保存明文，不记录密码/哈希。
+- 浏览器只持有高熵随机 Web Session Cookie；Owner Bearer（`PLATFORM_ADMIN_TOKEN`）和 Service Bearer 永不下发浏览器。
+- Web Session 只证明当前 Owner 登录状态；具体路由仍执行显式授权策略。登录状态不能自动覆盖公开路由边界、服务身份或未来领域资源授权。
+- Web 登录、Owner Bearer、Service Bearer 使用不同凭证、不同验证路径和不同配置项。禁止复用 Web 密码作为 API Key，禁止把 Owner Bearer 写入 localStorage、Cookie 或前端构建产物。
+
+### 11.2 密码原语与账号生命周期
+Platform 提供成熟 Argon2id 实现的封装、参数校验、哈希和验证，不自研密码学算法。候选默认参数为 memory=64 MiB、iterations=3、parallelism=1、salt=16 bytes、output=32 bytes；实现前需在目标部署硬件上做耗时/内存基准，保持登录可用性并限制暴力破解成本。参数必须版本化并随哈希编码保存，未来升级参数时允许验证旧版本并在成功登录后重新哈希。
+- 密码验证限制输入长度和请求体大小，避免超大输入消耗资源；不以固定字符拼盘规则替代长度策略。
+- 初始密码由 Server 一次性初始化流程从部署 Secret 注入；初始化完成后不得每次启动重置密码，也不得把环境变量作为长期密码数据库。
+- Owner 凭据哈希及 credential_version 作为持久化事实保存于 MariaDB；Platform 定义最小存储契约/迁移边界，Server 负责初始化、修改、恢复入口和运维流程。
+- 密码修改必须递增 credential_version，使旧 Session 即使仍残留于 Redis 也不能继续通过认证。
+- 账号恢复必须是显式的本机/受控运维流程，不能提供匿名密码重置接口；恢复成功后递增 credential_version。
+
+### 11.3 Session Token、Store 与生命周期
+- 登录成功后生成至少 256 bit CSPRNG 随机 Token，使用 URL-safe Base64 无填充编码；浏览器只拿到原始 Token，服务端存储 Token 的 SHA-256 摘要，不存明文。
+- Platform 定义 SessionStore 接口及不可变 Session 记录；首期 Redis 实现复用现有 `internal/platform/storage.OpenRedis` 创建的 Redis Client，不重复创建连接池。
+- Session 记录至少包含 Token 摘要标识、Owner Subject、created_at、last_seen_at、idle_expires_at、absolute_expires_at、credential_version、CSRF Token 摘要和必要轮换元数据；禁止保存 Cookie 明文。
+- 空闲期限 12 小时，绝对期限 7 天。有效访问原子刷新 last_seen/idle TTL，但不能延长 absolute_expires_at；过期检查同时校验两种期限。
+- 登录建立新 Session，不把匿名/旧 Cookie 会话升级为认证会话；轮换创建新 Token 并使旧 Token 失效；退出撤销当前 Session；密码修改/恢复通过 credential_version 使所有旧 Session 失效。
+- Redis 仅保存可丢失的短期 Session。Redis 不可用、超时或原子操作失败时，受保护请求必须 fail closed；不得退回内存 Session、Bearer 或匿名模式。Redis 数据丢失意味着重新登录。
+- SessionStore 的创建、读取并刷新、轮换、撤销必须具备明确并发语义；读写/TTL 更新和轮换不能留下可重复使用的旧 Token。Redis Lua/事务实现需有并发与故障测试。
+- Server 负责将 Session 解析为可信 Principal，并在每次认证时核对 MariaDB 权威 credential_version；低并发个人系统优先保证撤销正确性，不以减少一次 DB 读取为由弱化版本校验。
+
+### 11.4 Cookie 与 CSRF
+Cookie 候选默认值：
+- `HttpOnly=true`；HTTPS 部署 `Secure=true`，生产环境不得因代理头缺失静默降级。
+- `SameSite=Lax`；不设置宽泛 Domain；Path 限定到 Web/API 实际公共前缀，若同源应用共用根路径则使用 `/` 并明确这是最小可行范围。
+- Cookie 生命周期不超过 Session 剩余有效期；滑动续期时同步更新 Max-Age/Expires。
+- Cookie 名称由 Server 配置；退出、撤销和过期响应以相同 Name/Path/Domain 属性清除。
+- 外部 HTTPS 识别只能信任明确配置的反向代理网络/头部；不能无条件相信任意客户端的 `X-Forwarded-Proto`。
+
+Platform 提供 CSRF Token 生成、摘要绑定和常量时间验证原语；Server 负责安全方法/状态变更方法划分、路由接入和 Origin/Host 校验。
+- 每个 Session 绑定独立高熵 CSRF Token；通过受保护的同源引导响应提供给前端，前端仅保存在运行时内存并通过专用 Header 回传，不放入 localStorage。
+- 所有 Cookie 认证的状态变更请求（包括密码修改、退出及其他写操作）校验 CSRF；登录入口也校验 Origin/Host，防止 Login CSRF。
+- 状态变更请求严格校验配置的公开 Origin；缺失/不匹配默认拒绝。Host 校验防止 Host Header 注入，不能把任意 Host 反射为允许来源。
+- GET/HEAD/OPTIONS 不得产生业务状态变更；SameSite 只是纵深防御，不能替代 CSRF Token 和 Origin 校验。
+
+### 11.5 登录限流与安全审计
+Platform 提供可注入 RateLimiter 接口和 Redis 原子计数实现；Server 选择登录策略并接入真实来源信息。
+- 至少按账号标识和来源 IP 两个维度共同限流；每个维度有时间窗口、失败计数和逐步退避。
+- 不对单一 Owner 账号实施永久/长时间硬锁定，避免攻击者通过故意输错密码造成拒绝服务。
+- 限流结果包含 retry_after 等稳定字段，不泄露账号是否存在。
+- 来源 IP 只接受直接连接地址或来自显式可信代理的转发值；禁止无条件信任 X-Forwarded-For。限流键对 IP/账号做摘要，避免 Redis Key 暴露原始标识。
+- Redis 限流原子操作失败时首期 fail closed，不允许无保护登录。
+- Platform 提供 SecurityAuditEvent 模型、字段脱敏和 AuditWriter 接口；Server 产生登录成功/失败、退出、Session 轮换/撤销、密码修改/恢复、限流触发和敏感管理操作事件。
+- 审计事件至少包含 event_type、subject、result、occurred_at、request_id、source 分类及安全 reason_code；不包含密码、哈希、Session/CSRF Token、Authorization Header 或敏感请求体。
+- 不建设全量业务审计平台。审计持久化后端由 Server 注入 Writer；关键安全事件写入失败必须有明确策略和诊断，不能静默丢弃。
+
+### 11.6 明确不做与边界
+首期不建设 OAuth/OIDC、注册、多用户/多租户、MFA 管理平台、通用 IAM、动态 Service Key、复杂角色引擎、独立审计查询产品或独立认证微服务。若未来增加第二个实际用户、外部身份提供商或多实例高可用需求，重新评审身份模型、Session 一致性与恢复流程。
+
+### 11.7 验收门禁
+Platform 本地验收：
+- 密码哈希/验证正确；错误参数、异常长度、格式篡改和未知算法版本安全失败；参数可升级且成功验证后可重新哈希。
+- Session Token 使用 CSPRNG；存储只出现摘要；过期、滑动空闲期限、绝对期限、轮换、撤销、并发刷新和 credential_version 失效有测试。
+- Redis 错误、超时、数据丢失和原子操作失败均 fail closed；不得出现内存降级。
+- CSRF Token 与 Session 绑定，错误/缺失/跨 Session Token 拒绝，比较使用常量时间路径。
+- 限流按账号/IP 双维度原子执行，窗口边界、并发竞争、退避和 Redis 故障有测试。
+- 审计模型拒绝/脱敏敏感字段，Writer 错误可观测。
+
+Server/部署集成验收：
+- 登录、初始化、修改密码、受控恢复、退出、Session 续期及权限矩阵端到端通过。
+- Web 不接触 Owner/Service Bearer；Cookie 属性、HTTPS 代理信任、Origin/Host、CSRF、登录限流和安全审计在真实入口验证。
+- 直接访问 Server 端口与经 Nginx 访问的认证结果一致；除明确白名单外，不存在绕过认证的路由。
+- Redis 不可用时已登录请求和登录请求均拒绝；MariaDB credential_version 不匹配时所有旧 Session 失效。
+- 验收分别记录 Platform L1、Server A2、部署 A3，不以包级测试替代端到端验收。
