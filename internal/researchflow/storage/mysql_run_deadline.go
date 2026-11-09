@@ -74,11 +74,11 @@ func (r *MySQLRunRepository) ExpireRunDeadline(
 	}
 
 	type stageRecord struct {
-		ref string
-		status domain.StageStatus
-		version uint64
+		ref       string
+		status    domain.StageStatus
+		version   uint64
 		attemptNo uint32
-		reasons []string
+		reasons   []string
 	}
 	stageRows, err := tx.QueryContext(ctx, `SELECT stage_ref, status, version, attempt_no, reason_codes
 		FROM researchflow_stages WHERE run_ref = ? ORDER BY stage_ref FOR UPDATE`, runRef)
@@ -116,10 +116,10 @@ func (r *MySQLRunRepository) ExpireRunDeadline(
 	}
 
 	type attemptRecord struct {
-		ref string
-		stageRef string
-		attemptNo uint32
-		status domain.AttemptStatus
+		ref          string
+		stageRef     string
+		attemptNo    uint32
+		status       domain.AttemptStatus
 		fencingToken uint64
 	}
 	attemptRows, err := tx.QueryContext(ctx, `SELECT attempt_ref, stage_ref, attempt_no, status, fencing_token
