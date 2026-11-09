@@ -82,6 +82,11 @@ func (r *RedisLoginRateLimiter) ipKeys(digest string) (string, string) {
 }
 
 var checkLoginRateLimitScript = redis.NewScript(`
+local account_counter_ttl = redis.call('PTTL', KEYS[1])
+local ip_counter_ttl = redis.call('PTTL', KEYS[3])
+if account_counter_ttl == -1 or ip_counter_ttl == -1 then
+  return redis.error_reply('login rate limit counter has no expiry')
+end
 local account_count = tonumber(redis.call('GET', KEYS[1]) or '0')
 local ip_count = tonumber(redis.call('GET', KEYS[3]) or '0')
 local account_ttl = redis.call('PTTL', KEYS[2])
@@ -92,6 +97,11 @@ return {account_count, ip_count, account_ttl, ip_ttl}
 `)
 
 var recordLoginFailureScript = redis.NewScript(`
+local account_counter_ttl = redis.call('PTTL', KEYS[1])
+local ip_counter_ttl = redis.call('PTTL', KEYS[3])
+if account_counter_ttl == -1 or ip_counter_ttl == -1 then
+  return redis.error_reply('login rate limit counter has no expiry')
+end
 local account_count = redis.call('INCR', KEYS[1])
 if account_count == 1 then redis.call('PEXPIRE', KEYS[1], ARGV[1]) end
 local ip_count = redis.call('INCR', KEYS[3])

@@ -99,6 +99,26 @@ func TestRedisLoginRateLimiterIntegration(t *testing.T) {
 	if err != nil || concurrent.AccountFailures != 8 || concurrent.IPFailures != 11 || concurrent.Allowed {
 		t.Fatalf("concurrent counters are not atomic: %+v, %v", concurrent, err)
 	}
+	// A persisted counter without a TTL would otherwise accumulate failures
+	// indefinitely and gradually impose repeated maximum backoff.
+	corruptAccountDigest := strings.Repeat("e", 64)
+	corruptIPDigest := strings.Repeat("f", 64)
+	corruptCounter, _ := limiter.accountKeys(corruptAccountDigest)
+	if err := client.Set(ctx, corruptCounter, "1", 0).Err(); err != nil {
+		t.Fatalf("seed counter without expiry: %v", err)
+	}
+	if _, err := limiter.Check(ctx, corruptAccountDigest, corruptIPDigest); err == nil {
+		t.Fatal("counter without expiry must fail closed")
+	} else {
+		var storeFault *fault.Fault
+		if !errors.As(err, &storeFault) || storeFault.Dependency != "redis" {
+			t.Fatalf("invalid counter state returned unexpected error: %v", err)
+		}
+	}
+	if _, err := limiter.RecordFailure(ctx, corruptAccountDigest, corruptIPDigest, policy); err == nil {
+		t.Fatal("recording against a counter without expiry must fail closed")
+	}
+	_ = client.Del(ctx, corruptCounter).Err()
 	windowAccountDigest := strings.Repeat("c", 64)
 	windowIPDigest := strings.Repeat("d", 64)
 	windowPolicy := LoginRateLimitPolicy{
