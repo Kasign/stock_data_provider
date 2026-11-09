@@ -15,10 +15,10 @@ type requestIDGolden struct {
 	MaxLength                           int      `json:"max_length"`
 	GeneratedRandomBytes                int      `json:"generated_random_bytes"`
 	TrustIncomingRequiresExplicitOption bool     `json:"trust_incoming_requires_explicit_option"`
-	ValidValues          []string `json:"valid_values"`
-	InvalidValues        []string `json:"invalid_values"`
-	DuplicateValues      []string `json:"duplicate_values"`
-	OutboundWithContext  struct {
+	ValidValues                         []string `json:"valid_values"`
+	InvalidValues                       []string `json:"invalid_values"`
+	DuplicateValues                     []string `json:"duplicate_values"`
+	OutboundWithContext                 struct {
 		ContextID      string `json:"context_id"`
 		ExistingHeader string `json:"existing_header"`
 		ExpectedHeader string `json:"expected_header"`
