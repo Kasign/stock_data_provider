@@ -63,13 +63,14 @@ func newWorkerFixture() (*workerStoreFake, StageExecutionResult) {
 			RetryPolicy: template.RetryPolicy{
 				Ref: "retry-v1", MaxAttempts: 3,
 				RetryableReasonCodes: []string{"provider_unavailable"},
-				Backoff: template.BackoffPolicy{Algorithm: "exponential_full_jitter_v1", BaseDelayMS: 1000, MaxDelayMS: 5000},
-				AttemptTimeoutMS: 60000,
+				Backoff:              template.BackoffPolicy{Algorithm: "exponential_full_jitter_v1", BaseDelayMS: 1000, MaxDelayMS: 5000},
+				AttemptTimeoutMS:     60000,
 			},
 		},
 	}
 	return store, StageExecutionResult{AttemptStatus: domain.AttemptSucceeded, StageStatus: domain.StageSucceeded, OutputRef: &output}
 }
+
 type workerClockFake struct{}
 
 func (workerClockFake) NowUTC(context.Context) (time.Time, error) { return time.Now().UTC(), nil }
@@ -131,15 +132,15 @@ func TestWorkerAppliesRetryPolicyInsteadOfProviderRetryAt(t *testing.T) {
 	store.snapshot.RetryPolicy = template.RetryPolicy{
 		Ref: "retry-v1", MaxAttempts: 3,
 		RetryableReasonCodes: []string{"provider_unavailable"},
-		Backoff: template.BackoffPolicy{Algorithm: "exponential_full_jitter_v1", BaseDelayMS: 1000, MaxDelayMS: 5000},
-		AttemptTimeoutMS: 60000,
+		Backoff:              template.BackoffPolicy{Algorithm: "exponential_full_jitter_v1", BaseDelayMS: 1000, MaxDelayMS: 5000},
+		AttemptTimeoutMS:     60000,
 	}
 	store.snapshot.Stage.AttemptNo = 1
 	store.attempt.Number = 1
 	result := StageExecutionResult{
 		AttemptStatus: domain.AttemptFailed,
-		StageStatus: domain.StageRetryWait,
-		ReasonCodes: []string{"provider_unavailable"},
+		StageStatus:   domain.StageRetryWait,
+		ReasonCodes:   []string{"provider_unavailable"},
 	}
 	got, err := newWorker(t, store, result).Execute(context.Background(), "run-1", "stage-1", "attempt-new")
 	if err != nil {
@@ -155,12 +156,12 @@ func TestWorkerDisablesRetryForNonAllowlistedReason(t *testing.T) {
 	store.snapshot.RetryPolicy = template.RetryPolicy{
 		Ref: "retry-v1", MaxAttempts: 3,
 		RetryableReasonCodes: []string{"provider_unavailable"},
-		Backoff: template.BackoffPolicy{Algorithm: "exponential_full_jitter_v1", BaseDelayMS: 1000, MaxDelayMS: 5000},
+		Backoff:              template.BackoffPolicy{Algorithm: "exponential_full_jitter_v1", BaseDelayMS: 1000, MaxDelayMS: 5000},
 	}
 	result := StageExecutionResult{
 		AttemptStatus: domain.AttemptFailed,
-		StageStatus: domain.StageRetryWait,
-		ReasonCodes: []string{"schema_invalid"},
+		StageStatus:   domain.StageRetryWait,
+		ReasonCodes:   []string{"schema_invalid"},
 	}
 	got, err := newWorker(t, store, result).Execute(context.Background(), "run-1", "stage-1", "attempt-new")
 	if err != nil {
@@ -170,7 +171,6 @@ func TestWorkerDisablesRetryForNonAllowlistedReason(t *testing.T) {
 		t.Fatalf("non-allowlisted result must become failed: %+v", store.commit)
 	}
 }
-
 
 func TestWorkerConvertsAttemptDeadlineIntoPolicyControlledTimeout(t *testing.T) {
 	store, _ := newWorkerFixture()
