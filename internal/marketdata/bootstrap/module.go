@@ -24,11 +24,11 @@ import (
 
 // Dependencies 是由调用方创建并拥有的基础设施依赖；Module 不负责关闭 Store/Cache。
 type Dependencies struct {
-	Store           *repository.Store // 调用方创建并持有；Module 不负责关闭。
-	Cache           cache.Cache       // 调用方创建并持有；Module 不负责关闭。
-	Logger          *slog.Logger      // 模块日志依赖；nil 时使用 slog.Default。
-	TushareHTTPDoer          provider.HTTPDoer // Root 注入的受控 Tushare HTTP 执行器；Module 不拥有、不关闭。
-	HithinkHTTPDoer          provider.HTTPDoer // Root 注入的受控同花顺 HTTP 执行器；Module 不拥有、不关闭。
+	Store                         *repository.Store // 调用方创建并持有；Module 不负责关闭。
+	Cache                         cache.Cache       // 调用方创建并持有；Module 不负责关闭。
+	Logger                        *slog.Logger      // 模块日志依赖；nil 时使用 slog.Default。
+	TushareHTTPDoer               provider.HTTPDoer // Root 注入的受控 Tushare HTTP 执行器；Module 不拥有、不关闭。
+	HithinkHTTPDoer               provider.HTTPDoer // Root 注入的受控同花顺 HTTP 执行器；Module 不拥有、不关闭。
 	TickFlowAuthenticatedHTTPDoer provider.HTTPDoer // Root 注入的 TickFlow 认证 API 出口；Module 不拥有、不关闭。
 	TickFlowPublicHTTPDoer        provider.HTTPDoer // Root 注入的 TickFlow 免费 API 出口；Module 不拥有、不关闭。
 }
