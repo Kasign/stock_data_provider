@@ -787,3 +787,69 @@ func TestOpenAPIParameterInventoryMatchesReviewedHandlerMatrix(t *testing.T) {
 		}
 	}
 }
+
+
+func TestOpenAPIParameterDefaultsMatchHandlerDefaults(t *testing.T) {
+	spec, err := os.ReadFile("../../openapi.yaml")
+	if err != nil {
+		t.Fatalf("read OpenAPI specification: %v", err)
+	}
+	var document map[string]any
+	if err := yaml.Unmarshal(spec, &document); err != nil {
+		t.Fatalf("OpenAPI must be valid YAML: %v", err)
+	}
+	paths := document["paths"].(map[string]any)
+	assertParameterSchema := func(path, name string, want map[string]any) {
+		t.Helper()
+		pathItem, ok := paths[path].(map[string]any)
+		if !ok {
+			t.Fatalf("OpenAPI path missing: %s", path)
+		}
+		operation, ok := pathItem["get"].(map[string]any)
+		if !ok {
+			t.Fatalf("OpenAPI GET operation missing: %s", path)
+		}
+		parameters, _ := operation["parameters"].([]any)
+		for _, raw := range parameters {
+			parameter, ok := raw.(map[string]any)
+			if !ok || parameter["name"] != name {
+				continue
+			}
+			schema, ok := parameter["schema"].(map[string]any)
+			if !ok {
+				t.Errorf("%s.%s schema missing", path, name)
+				return
+			}
+			for field, expected := range want {
+				if !reflect.DeepEqual(schema[field], expected) {
+					t.Errorf("%s.%s schema.%s=%#v, want %#v", path, name, field, schema[field], expected)
+				}
+			}
+			return
+		}
+		t.Errorf("%s parameter %q missing", path, name)
+	}
+
+	// 这些默认值与对应 Handler 中的初始化值保持一致。
+	assertParameterSchema("/api/v1/market/limit-pools", "limit", map[string]any{
+		"type": "integer", "minimum": 1, "maximum": 100, "default": 100,
+	})
+	assertParameterSchema("/api/v1/market/limit-pools", "type", map[string]any{
+		"type": "string", "enum": []any{"up", "down", "broken"}, "default": "up",
+	})
+	assertParameterSchema("/api/v1/market/stocks", "page", map[string]any{
+		"type": "integer", "minimum": 1, "maximum": 10000, "default": 1,
+	})
+	assertParameterSchema("/api/v1/market/stocks", "page_size", map[string]any{
+		"type": "integer", "minimum": 1, "maximum": 100, "default": 50,
+	})
+	assertParameterSchema("/api/v1/market/stocks", "include_ma", map[string]any{
+		"type": "boolean", "default": true,
+	})
+	assertParameterSchema("/api/v1/market/dragon-tiger", "page_size", map[string]any{
+		"type": "integer", "minimum": 1, "maximum": 500, "default": 100,
+	})
+	assertParameterSchema("/api/v1/market/sentiment/history", "limit", map[string]any{
+		"type": "integer", "minimum": 1, "maximum": 500, "default": 366,
+	})
+}
