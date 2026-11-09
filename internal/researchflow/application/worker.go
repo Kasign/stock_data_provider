@@ -13,27 +13,27 @@ import (
 
 var (
 	ErrWorkerLeaseLost = errors.New("Researchflow worker lease lost")
-	ErrWorkerDeadline = errors.New("Researchflow run deadline exceeded")
+	ErrWorkerDeadline  = errors.New("Researchflow run deadline exceeded")
 )
 
 type StageExecutionSnapshot struct {
-	Run       domain.Run
-	Stage     domain.Stage
-	Parameters []byte
+	Run               domain.Run
+	Stage             domain.Stage
+	Parameters        []byte
 	InputSnapshotRefs []string
-	RetryPolicy template.RetryPolicy
+	RetryPolicy       template.RetryPolicy
 }
 
 type WorkerResultCommit struct {
-	RunRef string
-	StageRef string
-	AttemptRef string
-	WorkerID string
-	FencingToken uint64
+	RunRef        string
+	StageRef      string
+	AttemptRef    string
+	WorkerID      string
+	FencingToken  uint64
 	AttemptStatus domain.AttemptStatus
-	Stage domain.Stage
-	FaultRef *string
-	OutputRef *string
+	Stage         domain.Stage
+	FaultRef      *string
+	OutputRef     *string
 }
 
 // WorkerStore is the Application boundary. Its persistence adapter must map
@@ -46,24 +46,24 @@ type WorkerStore interface {
 }
 
 type WorkerConfig struct {
-	WorkerID string
-	LeaseDuration time.Duration
+	WorkerID          string
+	LeaseDuration     time.Duration
 	HeartbeatInterval time.Duration
-	MaxAttempts int
-	MaxParallel int
+	MaxAttempts       int
+	MaxParallel       int
 }
 
 type WorkerExecution struct {
-	Attempt domain.Attempt
-	Replayed bool
+	Attempt   domain.Attempt
+	Replayed  bool
 	Committed bool
 }
 
 type Worker struct {
-	store WorkerStore
+	store    WorkerStore
 	executor StageExecutor
-	config WorkerConfig
-	now func() time.Time
+	config   WorkerConfig
+	now      func() time.Time
 }
 
 func NewWorker(store WorkerStore, executor StageExecutor, config WorkerConfig) (*Worker, error) {
@@ -114,9 +114,9 @@ func (w *Worker) Execute(ctx context.Context, runRef, stageRef, attemptRef strin
 
 	request := StageExecutionRequest{
 		Run: snapshot.Run, Stage: snapshot.Stage, Attempt: attempt,
-		Parameters: append([]byte(nil), snapshot.Parameters...),
+		Parameters:        append([]byte(nil), snapshot.Parameters...),
 		InputSnapshotRefs: append([]string(nil), snapshot.InputSnapshotRefs...),
-		SystemAsOf: snapshot.Run.SystemAsOf, DeadlineAt: snapshot.Run.DeadlineAt,
+		SystemAsOf:        snapshot.Run.SystemAsOf, DeadlineAt: snapshot.Run.DeadlineAt,
 		CorrelationID: snapshot.Run.CorrelationID,
 	}
 	result, executeErr := w.executor.ExecuteStage(execCtx, request)
@@ -189,13 +189,19 @@ func (w *Worker) heartbeat(ctx context.Context, cancel context.CancelFunc, snaps
 			return
 		case <-ctx.Done():
 			if errors.Is(ctx.Err(), context.DeadlineExceeded) {
-				select { case failures <- ErrWorkerDeadline: default: }
+				select {
+				case failures <- ErrWorkerDeadline:
+				default:
+				}
 			}
 			return
 		case <-ticker.C:
 			if _, err := w.store.RenewAttemptLease(ctx, snapshot.Run.Ref, snapshot.Stage.Ref,
 				attempt.Ref, w.config.WorkerID, attempt.FencingToken, w.config.LeaseDuration); err != nil {
-				select { case failures <- err: default: }
+				select {
+				case failures <- err:
+				default:
+				}
 				cancel()
 				return
 			}
@@ -204,7 +210,9 @@ func (w *Worker) heartbeat(ctx context.Context, cancel context.CancelFunc, snaps
 }
 
 func cloneTime(value *time.Time) *time.Time {
-	if value == nil { return nil }
+	if value == nil {
+		return nil
+	}
 	copy := *value
 	return &copy
 }

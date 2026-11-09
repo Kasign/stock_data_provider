@@ -197,7 +197,6 @@ func TestPersistSchedulePlanRejectsDuplicateAndInvalidTransitions(t *testing.T) 
 	}
 }
 
-
 func TestBuildSchedulePlanDispatchesDueRetryWaitWithoutPrematureStateChange(t *testing.T) {
 	run, now := schedulerFixture()
 	due := now
