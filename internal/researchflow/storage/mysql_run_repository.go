@@ -177,6 +177,129 @@ func (r *MySQLRunRepository) CreateRunAtomic(
 	}, nil
 }
 
+// GetRun loads a persisted run and its stages by immutable run reference.
+func (r *MySQLRunRepository) GetRun(ctx context.Context, runRef string) (application.CreateRunResult, error) {
+	if err := r.validateRunRef(runRef); err != nil {
+		return application.CreateRunResult{}, err
+	}
+	return r.loadRun(ctx, runRef)
+}
+
+// GetStage loads one stage by immutable stage reference.
+func (r *MySQLRunRepository) GetStage(ctx context.Context, stageRef string) (domain.Stage, error) {
+	if err := r.validateRunRef(stageRef); err != nil {
+		return domain.Stage{}, err
+	}
+	var stage domain.Stage
+	var status, dependencies, diagnostics, reasonCodes, created string
+	var retryAt, outputRef, qualitySummaryRef, qualityStatus, riskDecision, started, finished sql.NullString
+	err := r.db.QueryRowContext(ctx, `SELECT
+		stage_ref, run_ref, stage_code, status, version, required,
+		dependency_stage_refs, retry_policy_ref, attempt_no, retry_at,
+		output_ref, quality_summary_ref, diagnostic_refs, quality_status,
+		reason_codes, risk_decision, created_at, started_at, finished_at
+		FROM researchflow_stages WHERE stage_ref = ?`, stageRef,
+	).Scan(
+		&stage.Ref, &stage.RunRef, &stage.Code, &status, &stage.Version, &stage.Required,
+		&dependencies, &stage.RetryPolicyRef, &stage.AttemptNo, &retryAt,
+		&outputRef, &qualitySummaryRef, &diagnostics, &qualityStatus,
+		&reasonCodes, &riskDecision, &created, &started, &finished,
+	)
+	if err != nil {
+		return domain.Stage{}, fmt.Errorf("load Researchflow stage %q: %w", stageRef, err)
+	}
+	stage.Status = domain.StageStatus(status)
+	if err := json.Unmarshal([]byte(dependencies), &stage.Dependencies); err != nil {
+		return domain.Stage{}, fmt.Errorf("decode stage dependencies: %w", err)
+	}
+	if err := json.Unmarshal([]byte(diagnostics), &stage.DiagnosticRefs); err != nil {
+		return domain.Stage{}, fmt.Errorf("decode stage diagnostics: %w", err)
+	}
+	if err := json.Unmarshal([]byte(reasonCodes), &stage.ReasonCodes); err != nil {
+		return domain.Stage{}, fmt.Errorf("decode stage reason codes: %w", err)
+	}
+	if stage.Dependencies == nil {
+		stage.Dependencies = []string{}
+	}
+	if stage.DiagnosticRefs == nil {
+		stage.DiagnosticRefs = []string{}
+	}
+	if stage.ReasonCodes == nil {
+		stage.ReasonCodes = []string{}
+	}
+	var err error
+	if stage.RetryAt, err = parseNullableResearchflowTime(retryAt); err != nil {
+		return domain.Stage{}, err
+	}
+	if stage.CreatedAt, err = parseResearchflowTime(created); err != nil {
+		return domain.Stage{}, err
+	}
+	if stage.StartedAt, err = parseNullableResearchflowTime(started); err != nil {
+		return domain.Stage{}, err
+	}
+	if stage.FinishedAt, err = parseNullableResearchflowTime(finished); err != nil {
+		return domain.Stage{}, err
+	}
+	stage.OutputRef = stringPointer(outputRef)
+	stage.QualitySummaryRef = stringPointer(qualitySummaryRef)
+	if qualityStatus.Valid {
+		stage.QualityStatus = qualityStatus.String
+	}
+	if riskDecision.Valid {
+		stage.RiskDecision = riskDecision.String
+	}
+	return stage, nil
+}
+
+// GetAttempt loads one immutable attempt record by reference.
+func (r *MySQLRunRepository) GetAttempt(ctx context.Context, attemptRef string) (domain.Attempt, error) {
+	if err := r.validateRunRef(attemptRef); err != nil {
+		return domain.Attempt{}, err
+	}
+	var attempt domain.Attempt
+	var status string
+	var leaseOwner, leaseExpiresAt, finishedAt, faultRef, outputRef sql.NullString
+	var startedAt string
+	err := r.db.QueryRowContext(ctx, `SELECT
+		attempt_ref, stage_ref, attempt_no, status, lease_owner, lease_expires_at,
+		fencing_token, started_at, finished_at, fault_ref, output_ref
+		FROM researchflow_attempts WHERE attempt_ref = ?`, attemptRef,
+	).Scan(
+		&attempt.Ref, &attempt.StageRef, &attempt.Number, &status, &leaseOwner,
+		&leaseExpiresAt, &attempt.FencingToken, &startedAt, &finishedAt,
+		&faultRef, &outputRef,
+	)
+	if err != nil {
+		return domain.Attempt{}, fmt.Errorf("load Researchflow attempt %q: %w", attemptRef, err)
+	}
+	attempt.Status = domain.AttemptStatus(status)
+	if leaseOwner.Valid {
+		attempt.LeaseOwner = leaseOwner.String
+	}
+	if attempt.LeaseExpiresAt, err = parseNullableResearchflowTime(leaseExpiresAt); err != nil {
+		return domain.Attempt{}, err
+	}
+	if attempt.StartedAt, err = parseResearchflowTime(startedAt); err != nil {
+		return domain.Attempt{}, err
+	}
+	if attempt.FinishedAt, err = parseNullableResearchflowTime(finishedAt); err != nil {
+		return domain.Attempt{}, err
+	}
+	attempt.FaultRef = stringPointer(faultRef)
+	attempt.OutputRef = stringPointer(outputRef)
+	return attempt, nil
+}
+
+func (r *MySQLRunRepository) validateRunRef(ref string) error {
+	if r == nil || r.db == nil {
+		return errors.New("researchflow SQL database is not configured")
+	}
+	if strings.TrimSpace(ref) == "" || len(ref) > 255 {
+		return errors.New("Researchflow reference is invalid")
+	}
+	return nil
+}
+
 func (r *MySQLRunRepository) loadRun(ctx context.Context, runRef string) (application.CreateRunResult, error) {
 	var run domain.Run
 	var status string
