@@ -643,6 +643,7 @@ func TestOpenAPIDocumentsHandlerParameterBounds(t *testing.T) {
 	}{
 		{"/api/v1/market/indices/{symbol}/daily", "get", []string{"10 年 / 3660 个自然日"}},
 		{"/api/v1/market/trading-calendar", "get", []string{"3660 calendar days"}},
+		{"/api/v1/market/sentiment", "get", []string{"historical date is rejected by this endpoint", "Use GET /api/v1/market/sentiment/history to read persisted historical snapshots"}},
 		{"/api/v1/market/sentiment/history", "get", []string{"366 calendar days", "1..500", "default of 366"}},
 		{"/api/v1/stocks/{symbol}/fundamentals", "get", []string{"2007 through the current calendar year", "single non-future RFC3339 timestamp"}},
 		{"/api/v1/market/session", "get", []string{"single RFC3339 timestamp"}},

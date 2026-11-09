@@ -2304,7 +2304,8 @@ paths:
       description: >-
         Combines the market breadth snapshot with same-date limit-up, limit-down and broken-board pool counts.
         Missing or unverifiable pool counts remain null, never zero. A snapshot is persisted only when MariaDB storage
-        is configured. Live collection is limited to the current China market date; historical dates are read-only.
+        is configured. Live collection is limited to the current China market date; a historical date is rejected by this endpoint.
+        Use GET /api/v1/market/sentiment/history to read persisted historical snapshots.
       parameters:
         - {name: date, in: query, required: false, schema: {type: string, format: date}, description: Defaults to the current Asia/Shanghai date; only the current date can be collected}
       responses:
