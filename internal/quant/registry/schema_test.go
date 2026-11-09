@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
-	"testing"
+	"testing"\n\n\t"github.com/santhosh-tekuri/jsonschema/v5"
 )
 
 func readQuantSchema(t *testing.T, name string) []byte {
@@ -84,4 +84,82 @@ func mustJSON(t *testing.T, value any) string {
 		t.Fatalf("marshal fixture: %v", err)
 	}
 	return string(encoded)
+}
+
+
+func TestAllIndicatorAndFactorGoldenParametersMatchContractSchemas(t *testing.T) {
+	contracts := []struct {
+		name       string
+		directory  string
+		schemaFile string
+		codeField  string
+	}{
+		{
+			name:       "indicator",
+			directory:  filepath.Join("..", "..", "..", "doc", "quant", "golden", "indicator"),
+			schemaFile: "QNT-CTR-002-indicator-parameters-1.0.0.schema.json",
+			codeField:  "indicator_code",
+		},
+		{
+			name:       "factor",
+			directory:  filepath.Join("..", "..", "..", "doc", "quant", "golden", "factor"),
+			schemaFile: "QNT-CTR-003-factor-parameters-1.0.0.schema.json",
+			codeField:  "factor_code",
+		},
+	}
+
+	for _, contract := range contracts {
+		t.Run(contract.name, func(t *testing.T) {
+			schema := compileQuantSchemaFile(t, contract.schemaFile)
+			files, err := filepath.Glob(filepath.Join(contract.directory, "*.golden.json"))
+			if err != nil {
+				t.Fatalf("list Golden fixtures: %v", err)
+			}
+			if len(files) == 0 {
+				t.Fatal("no Golden fixtures found")
+			}
+
+			for _, path := range files {
+				t.Run(filepath.Base(path), func(t *testing.T) {
+					content, err := os.ReadFile(path)
+					if err != nil {
+						t.Fatalf("read Golden fixture: %v", err)
+					}
+					var fixture struct {
+						SchemaVersion string          `json:"schema_version"`
+						IndicatorCode string          `json:"indicator_code"`
+						FactorCode    string          `json:"factor_code"`
+						Parameters    json.RawMessage `json:"parameters"`
+					}
+					if err := json.Unmarshal(content, &fixture); err != nil {
+						t.Fatalf("decode Golden fixture: %v", err)
+					}
+					code := fixture.IndicatorCode
+					if contract.codeField == "factor_code" {
+						code = fixture.FactorCode
+					}
+					instance, err := json.Marshal(map[string]any{
+						"schema_version": fixture.SchemaVersion,
+						contract.codeField: code,
+						"parameters":       fixture.Parameters,
+					})
+					if err != nil {
+						t.Fatalf("encode parameter contract instance: %v", err)
+					}
+					if err := validateJSONSchemaInstance(schema, instance); err != nil {
+						t.Fatalf("Golden parameters violate %s: %v", contract.schemaFile, err)
+					}
+				})
+			}
+		})
+	}
+}
+
+func compileQuantSchemaFile(t *testing.T, name string) *jsonschema.Schema {
+	t.Helper()
+	compiled, err := compileJSONSchema(readQuantSchema(t, name))
+	if err != nil {
+		t.Fatalf("compile schema %s: %v", name, err)
+	}
+	return compiled
 }
