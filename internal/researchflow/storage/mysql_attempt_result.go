@@ -37,7 +37,9 @@ func (r *MySQLRunRepository) CommitAttemptResult(ctx context.Context, input Atte
 		strings.TrimSpace(input.AttemptRef) == "" || strings.TrimSpace(input.WorkerID) == "" ||
 		len(input.WorkerID) > 128 || input.FencingToken == 0 ||
 		input.Stage.Ref != input.StageRef || input.Stage.RunRef != input.RunRef ||
-		input.Stage.Status == "" || input.Stage.AttemptNo <= 0 ||
+		input.Stage.AttemptNo <= 0 ||
+		(input.Stage.Status != domain.StageRetryWait &&
+			!input.Stage.Status.Terminal()) ||
 		(input.AttemptStatus != domain.AttemptSucceeded &&
 			input.AttemptStatus != domain.AttemptDegraded &&
 			input.AttemptStatus != domain.AttemptFailed &&
