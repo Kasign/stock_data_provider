@@ -282,7 +282,7 @@ func isJSONObject(raw json.RawMessage) bool {
 }
 
 func validText(value string) bool {
-	return utf8.ValidString(value) && strings.TrimSpace(value) != ""
+	return utf8.ValidString(value) && strings.TrimSpace(value) != "" && strings.TrimSpace(value) == value
 }
 
 func hasBlankOrDuplicate(values []string) bool {

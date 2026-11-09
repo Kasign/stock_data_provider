@@ -514,3 +514,30 @@ func TestEntryValidateRejectsInvalidUTF8Metadata(t *testing.T) {
 		})
 	}
 }
+
+func TestEntryValidateRejectsNonCanonicalMetadataWhitespace(t *testing.T) {
+	tests := []struct {
+		name string
+		mutate func(*Entry)
+	}{
+		{"algorithm version leading whitespace", func(e *Entry) { e.AlgorithmVersion = " 1.0.0" }},
+		{"unit trailing whitespace", func(e *Entry) { e.Unit = "ratio " }},
+		{"rounding mode whitespace only", func(e *Entry) { e.Precision.RoundingMode = "   " }},
+		{"input field leading whitespace", func(e *Entry) { e.InputRequirements[0].Fields[0] = " close" }},
+		{"interval trailing whitespace", func(e *Entry) { e.InputRequirements[0].Interval = "1d " }},
+		{"adjustment whitespace only", func(e *Entry) { e.InputRequirements[0].Adjustment = " " }},
+		{"input quality trailing whitespace", func(e *Entry) { e.InputRequirements[0].Quality[0] = "valid " }},
+		{"missing handling leading whitespace", func(e *Entry) { e.QualityPolicy.MissingHandling = " reject" }},
+		{"quality state whitespace only", func(e *Entry) { e.QualityPolicy.QualityStates[0] = " " }},
+		{"unavailable condition trailing whitespace", func(e *Entry) { e.QualityPolicy.UnavailableConditions[0] = "missing_input " }},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			entry := validEntry("sample_metric", "1.0.0")
+			tc.mutate(&entry)
+			if err := entry.Validate(); !errors.Is(err, ErrInvalidEntry) {
+				t.Fatalf("Validate() error = %v, want ErrInvalidEntry", err)
+			}
+		})
+	}
+}
