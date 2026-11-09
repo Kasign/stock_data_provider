@@ -103,6 +103,15 @@ func TestCalculationContextValidateEnforcesSnapshotRefBounds(t *testing.T) {
 	}
 }
 
+func TestCalculationContextValidateRejectsInvalidUTF8SnapshotRef(t *testing.T) {
+	ctx := validCalculationContext()
+	ctx.InputSnapshotRefs = []string{string([]byte{0xff})}
+	now := time.Date(2026, 11, 6, 9, 0, 0, 0, time.UTC)
+	if err := ctx.Validate(now, false); !errors.Is(err, ErrInvalidSnapshotRef) {
+		t.Fatalf("expected invalid UTF-8 reference to be rejected, got %v", err)
+	}
+}
+
 func TestCalculationContextValidateRequiresComparablePriceBasis(t *testing.T) {
 	ctx := validCalculationContext()
 	now := time.Date(2026, 11, 6, 9, 0, 0, 0, time.UTC)
