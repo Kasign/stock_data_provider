@@ -320,18 +320,19 @@ func TestParseResponsesSSEEnforcesEventCountLimit(t *testing.T) {
 }
 
 
+
 func TestParseResponsesSSEClassifiesMultilineEventLimitAsResourceLimit(t *testing.T) {
 	request := validSSERequest()
 	clock := sseTestClock{now: request.SystemAsOf.Add(time.Second)}
 	var data strings.Builder
-	data.WriteString("event: response.future_event\\n")
-	data.WriteString("data: {\\"type\\":\\"response.future_event\\",\\"padding\\":[\\n")
+	data.WriteString("event: response.future_event\n")
+	data.WriteString("data: {\"type\":\"response.future_event\",\"padding\":[\n")
 	for i := 0; i < 40; i++ {
 		data.WriteString("data: ")
-		data.WriteString(strings.Repeat("\\"padding\\",", 3000))
-		data.WriteByte('\\n')
+		data.WriteString(strings.Repeat("\"padding\",", 3000))
+		data.WriteByte('\n')
 	}
-	data.WriteString("data: null]}\\n\\n")
+	data.WriteString("data: null]}\n\n")
 
 	got, err := ParseResponsesSSE([]byte(data.String()), request, clock, nil)
 	var adapterErr *AdapterError
@@ -344,7 +345,7 @@ func TestParseResponsesSSEClassifiesMultilineEventLimitAsResourceLimit(t *testin
 func TestParseResponsesSSERejectsTotalPayloadAboveLimit(t *testing.T) {
 	request := validSSERequest()
 	clock := sseTestClock{now: request.SystemAsOf.Add(time.Second)}
-	line := ":" + strings.Repeat("x", 60<<10) + "\\n"
+	line := ":" + strings.Repeat("x", 60<<10) + "\n"
 	data := []byte(strings.Repeat(line, MaxPayloadBytes/(60<<10)+2))
 
 	got, err := ParseResponsesSSE(data, request, clock, nil)
