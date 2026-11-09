@@ -57,7 +57,8 @@
     "system_as_of": {
       "type": "string",
       "format": "date-time",
-      "description": "RFC3339Nano UTC"
+      "description": "RFC3339Nano UTC",
+      "pattern": "Z$"
     },
     "section_refs": {
       "type": "array",
@@ -90,7 +91,8 @@
     "created_at": {
       "type": "string",
       "format": "date-time",
-      "description": "RFC3339Nano UTC"
+      "description": "RFC3339Nano UTC",
+      "pattern": "Z$"
     }
   },
   "$defs": {
@@ -167,12 +169,14 @@
         "assembled_at": {
           "type": "string",
           "format": "date-time",
-          "description": "RFC3339Nano UTC"
+          "description": "RFC3339Nano UTC",
+          "pattern": "Z$"
         },
         "system_as_of": {
           "type": "string",
           "format": "date-time",
-          "description": "RFC3339Nano UTC"
+          "description": "RFC3339Nano UTC",
+          "pattern": "Z$"
         }
       }
     },
