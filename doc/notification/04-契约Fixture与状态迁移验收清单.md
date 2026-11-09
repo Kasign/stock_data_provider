@@ -369,3 +369,21 @@ Run `42602399686` 对应 HEAD `8d08cf07a651efcd42a514f3dafd94d659f21f97`。`Test
 
 - Run `42609496390` 对应代码 HEAD `70189fc`：`Test go-core` 成功；根模块 `Test .` 仍在全仓 gofmt 门禁失败，日志未列出 `internal/notification/**` 差异，根模块单测/Race/vet 未执行。
 - MariaDB 集成 Job skipped；没有真实 `NOTIFICATION_MARIADB_TEST_DSN` 执行证据。ChannelConfig Repository 的摘要规范化单测已加入，但当前尚无 CI 实际运行通过证据。
+
+
+### DeliveryExecutionService 完整 Attempt Deadline 接入（2026-11-09）
+
+- 执行服务在创建 Attempt 前读取完整历史，要求历史数量与 `Delivery.AttemptCount` 一致、AttemptNo 连续、DeliveryID 一致、Attempt 校验通过、FencingToken 严格递增、前序 Attempt 已完成且时间不倒退；历史不完整或冲突时 fail closed，不触发渠道。
+- 使用 `RetryPolicy.AttemptDeadline` 计算渠道调用的绝对截止时间：`min(now + PerAttemptTimeout, firstAttemptAt + MaxElapsed, Delivery.DeadlineAt)`；将其通过 `context.WithDeadline` 传给单次 Channel Send。
+- 预算耗尽时不创建 Attempt、不调用渠道，保留 sending/租约事实交给租约恢复路径收敛，避免把未知外部副作用错误转成安全重试。
+- 新增执行服务测试，验证 MaxElapsed 比 PerAttemptTimeout 更早时，渠道 context deadline 精确受 MaxElapsed 限制。
+- 本次代码与测试已提交；尚未取得该提交对应 CI 的 Notification 根模块测试执行证据，也未执行真实 MariaDB L3。
+
+
+## 16. Attempt Deadline 执行边界
+
+- [x] 执行前核对 Attempt 历史完整性、序号连续性、fencing token 单调性和前序完成时间。
+- [x] 渠道调用 deadline 取 PerAttemptTimeout、MaxElapsed、Delivery Deadline 三者最早值。
+- [x] 预算已耗尽时不创建 Attempt、不触发渠道副作用，保留租约恢复路径。
+- [x] 增加 MaxElapsed 收紧渠道 context deadline 的执行服务测试。
+- [ ] 当前提交对应 CI 根模块 Notification 测试实际执行通过；真实 MariaDB L3 仍待 DSN。
