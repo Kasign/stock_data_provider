@@ -167,6 +167,28 @@ func TestComposeResultRejectsBrokenContextAndRiskReferenceClosure(t *testing.T) 
 	}
 }
 
+func TestComposeResultRejectsRiskPassUsingUnusableQuantResult(t *testing.T) {
+	input := validCompositionInput()
+	quant := validQuantResult()
+	quant.QualityStatus = "unknown"
+	input.QuantResults = []QuantResultEnvelope{quant}
+	registry := NewRegistry()
+	if err := registry.Register("indicator", "1.0.0", PayloadValidatorFunc(func(json.RawMessage) error { return nil })); err != nil {
+		t.Fatal(err)
+	}
+	risk := validRiskDecision()
+	risk.InputRefs = []string{"qres_1"}
+	input.RiskDecision = &risk
+	if _, err := ComposeResult(input, registry); !errors.Is(err, ErrInvalidResultComposition) {
+		t.Fatalf("RiskDecision pass must not consume unusable Quant result, got %v", err)
+	}
+	risk.Status = "unknown"
+	input.RiskDecision = &risk
+	if _, err := ComposeResult(input, registry); err != nil {
+		t.Fatalf("unknown RiskDecision should be preserved, got %v", err)
+	}
+}
+
 func TestComposeResultAcceptsRiskReferencesResolvedByContextAndQuant(t *testing.T) {
 	input := validCompositionInput()
 	input.QuantResults = []QuantResultEnvelope{validQuantResult()}

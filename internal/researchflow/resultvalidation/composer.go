@@ -124,10 +124,17 @@ func ComposeResult(input ResultCompositionInput, quantRegistry *Registry) (Compo
 			return ComposedResearchResult{}, fmt.Errorf("%w: RiskDecision: %v", ErrInvalidResultComposition, err)
 		}
 		quantRefs := make(map[string]struct{}, len(quantResults))
+		unusableQuantRefs := make(map[string]struct{})
 		for _, quantResult := range quantResults {
 			quantRefs[quantResult.Result.ResultID] = struct{}{}
+			for _, snapshotRef := range quantResult.Result.InputSnapshotRefs {
+				quantRefs[snapshotRef] = struct{}{}
+			}
+			if !quantResult.Usable {
+				unusableQuantRefs[quantResult.Result.ResultID] = struct{}{}
+			}
 		}
-		if err := validateRiskReferences(*input.RiskDecision, quantRefs, contextSourceRefs, evidenceIDs); err != nil {
+		if err := validateRiskReferences(*input.RiskDecision, quantRefs, unusableQuantRefs, contextSourceRefs, evidenceIDs); err != nil {
 			return ComposedResearchResult{}, err
 		}
 		copyValue, err := cloneJSON(*input.RiskDecision)
@@ -233,8 +240,11 @@ func validateContextReferences(value researchapp.ResearchContext, evidenceIDs ma
 	return sourceRefs, nil
 }
 
-func validateRiskReferences(value RiskDecision, quantRefs, sourceRefs, evidenceIDs map[string]struct{}) error {
+func validateRiskReferences(value RiskDecision, quantRefs, unusableQuantRefs, sourceRefs, evidenceIDs map[string]struct{}) error {
 	for _, ref := range value.InputRefs {
+		if _, unusable := unusableQuantRefs[ref]; unusable && value.Status == "pass" {
+			return fmt.Errorf("%w: RiskDecision pass references unusable Quant result %q", ErrInvalidResultComposition, ref)
+		}
 		if _, quantExists := quantRefs[ref]; quantExists {
 			continue
 		}
