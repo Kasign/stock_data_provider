@@ -106,7 +106,6 @@ func PersistUnknownReconciliation(
 	return nil
 }
 
-
 // ReconcileUnknownDelivery is the complete application entry point for an
 // authoritative lookup result. It assesses evidence, computes a bound retry
 // decision when allowed, and persists the resulting state through CAS.

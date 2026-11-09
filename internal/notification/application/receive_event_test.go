@@ -198,7 +198,6 @@ func TestEventReceiverValidatesBeforeRepository(t *testing.T) {
 	}
 }
 
-
 type fixedInboxResult struct {
 	record    domain.InboxRecord
 	duplicate bool
@@ -222,20 +221,20 @@ func TestEventReceiverRejectsInvalidRepositoryResult(t *testing.T) {
 		{
 			name: "different event identity",
 			record: domain.InboxRecord{
-				Event: domain.EventEnvelope{SourceModule: "quant", EventID: "other-event", IdempotencyKey: "publish-1", PayloadFingerprint: "fingerprint"},
+				Event:      domain.EventEnvelope{SourceModule: "quant", EventID: "other-event", IdempotencyKey: "publish-1", PayloadFingerprint: "fingerprint"},
 				ReceivedAt: now,
 			},
 		},
 		{
-			name: "missing receive time",
+			name:   "missing receive time",
 			record: domain.InboxRecord{Event: event},
 		},
 		{
-			name: "future receive time",
+			name:   "future receive time",
 			record: domain.InboxRecord{Event: event, ReceivedAt: now.Add(time.Second)},
 		},
 		{
-			name: "non UTC receive time",
+			name:   "non UTC receive time",
 			record: domain.InboxRecord{Event: event, ReceivedAt: now.In(time.FixedZone("UTC+8", 8*60*60))},
 		},
 	}

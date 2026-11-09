@@ -121,7 +121,6 @@ func TestPersistUnknownReconciliationPropagatesTransactionFailure(t *testing.T) 
 	}
 }
 
-
 func TestReconcileUnknownDeliveryRunsEvidenceBoundRetryEndToEnd(t *testing.T) {
 	delivery, channel, attempts, evidence, now := unknownReconciliationFixture(t)
 	evidence.Outcome = UnknownLookupNotAccepted
