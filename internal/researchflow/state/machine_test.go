@@ -341,3 +341,36 @@ func TestFinalizeDeadlineRequiresAllWorkStoppedAndUsesPropagation(t *testing.T) 
 		t.Fatal("deadline finalizer accepted a still-running Attempt")
 	}
 }
+
+
+func TestApplyDeadlinePreservesCompletedRunForNormalAggregation(t *testing.T) {
+	now := time.Date(2026, 11, 6, 10, 0, 0, 0, time.UTC)
+	run := domain.Run{Status: domain.RunRunning, DeadlineAt: now}
+	stages := []domain.Stage{
+		{Code: "market", Status: domain.StageSucceeded},
+		{Code: "research", Status: domain.StageSucceeded},
+	}
+	updatedRun, updatedStages, err := ApplyDeadline(run, stages, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updatedRun.Status != domain.RunRunning || updatedRun.TerminationReason != "" {
+		t.Fatalf("deadline changed an already-complete Run: %#v", updatedRun)
+	}
+	for i := range stages {
+		if updatedStages[i].Status != stages[i].Status {
+			t.Fatalf("deadline changed completed Stage %q from %s to %s", stages[i].Code, stages[i].Status, updatedStages[i].Status)
+		}
+	}
+	policies := map[string]template.PropagationPolicy{
+		"market": {OnFailed: domain.PropagateFail},
+		"research": {OnFailed: domain.PropagateFail},
+	}
+	finalized, err := AggregateRun(updatedRun, updatedStages, nil, policies, nil, false, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if finalized.Status != domain.RunSucceeded || finalized.ResultSummary == nil {
+		t.Fatalf("completed Run did not retain normal successful finalization: %#v", finalized)
+	}
+}
