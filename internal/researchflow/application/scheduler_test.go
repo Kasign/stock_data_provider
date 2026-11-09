@@ -126,3 +126,74 @@ func TestBuildSchedulePlanRejectsExpiredRunDeadline(t *testing.T) {
 		t.Fatal("expired Run deadline must be rejected")
 	}
 }
+
+
+type schedulePlanStoreFake struct {
+	applied    []domain.Stage
+	conflictAt int
+}
+
+func (s *schedulePlanStoreFake) CompareAndSwapStage(_ context.Context, expected uint64, next domain.Stage) (bool, error) {
+	if s.conflictAt > 0 && len(s.applied)+1 == s.conflictAt {
+		return false, nil
+	}
+	if next.Version != expected+1 {
+		return false, errors.New("invalid expected version")
+	}
+	s.applied = append(s.applied, next)
+	return true, nil
+}
+
+func TestBuildSchedulePlanBlocksWhenAnyDependencyFailedEvenIfAnotherIsRunning(t *testing.T) {
+	run, now := schedulerFixture()
+	stages := []domain.Stage{
+		{Ref: "stage-running", RunRef: run.Ref, Code: "running", Status: domain.StageRunning},
+		{Ref: "stage-failed", RunRef: run.Ref, Code: "failed", Status: domain.StageFailed},
+		{Ref: "stage-downstream", RunRef: run.Ref, Code: "downstream", Status: domain.StagePending,
+			Dependencies: []string{"stage-running", "stage-failed"}},
+	}
+	plan, err := BuildSchedulePlan(context.Background(), run, stages, nil, 2, now, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(plan.MarkBlocked) != 1 || plan.MarkBlocked[0].Ref != "stage-downstream" ||
+		len(plan.WaitingRefs) != 0 {
+		t.Fatalf("failed dependency must dominate non-terminal dependency: %#v", plan)
+	}
+}
+
+func TestPersistSchedulePlanUsesCASAndReportsPartialProgress(t *testing.T) {
+	store := &schedulePlanStoreFake{conflictAt: 2}
+	plan := SchedulePlan{
+		PromoteToReady: []domain.Stage{
+			{Ref: "stage-b", Version: 4, Status: domain.StageReady},
+			{Ref: "stage-a", Version: 3, Status: domain.StageReady},
+		},
+		MarkBlocked: []domain.Stage{{Ref: "stage-c", Version: 7, Status: domain.StageBlocked}},
+	}
+	result, err := PersistSchedulePlan(context.Background(), store, plan)
+	if !errors.Is(err, ErrSchedulePlanConflict) {
+		t.Fatalf("persist error=%v, want schedule conflict", err)
+	}
+	if result.Promoted != 1 || result.Blocked != 0 || len(store.applied) != 1 ||
+		store.applied[0].Ref != "stage-a" {
+		t.Fatalf("unexpected partial CAS result=%#v applied=%#v", result, store.applied)
+	}
+}
+
+func TestPersistSchedulePlanRejectsDuplicateAndInvalidTransitions(t *testing.T) {
+	store := &schedulePlanStoreFake{}
+	_, err := PersistSchedulePlan(context.Background(), store, SchedulePlan{
+		PromoteToReady: []domain.Stage{{Ref: "same", Version: 2, Status: domain.StageReady}},
+		MarkBlocked:    []domain.Stage{{Ref: "same", Version: 3, Status: domain.StageBlocked}},
+	})
+	if err == nil {
+		t.Fatal("duplicate Stage transitions must be rejected")
+	}
+	_, err = PersistSchedulePlan(context.Background(), store, SchedulePlan{
+		PromoteToReady: []domain.Stage{{Ref: "stage", Version: 1, Status: domain.StageRunning}},
+	})
+	if err == nil {
+		t.Fatal("unsupported transition target must be rejected")
+	}
+}

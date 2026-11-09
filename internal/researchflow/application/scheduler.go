@@ -83,15 +83,15 @@ func BuildSchedulePlan(
 				}
 				if !dependency.Status.Terminal() {
 					allDependenciesTerminal = false
-					break
+					continue
 				}
 				if dependency.Status != domain.StageSucceeded && dependency.Status != domain.StageDegraded {
 					dependencyBlocked = true
-					break
+					continue
 				}
 				if dependency.OutputRef == nil || strings.TrimSpace(*dependency.OutputRef) == "" {
 					dependencyBlocked = true
-					break
+					continue
 				}
 				if validator == nil {
 					return SchedulePlan{}, errors.New("Researchflow dependency output validator is required")
@@ -102,10 +102,9 @@ func BuildSchedulePlan(
 				}
 				if !valid {
 					dependencyBlocked = true
-					break
 				}
 			}
-			if !allDependenciesTerminal {
+			if !allDependenciesTerminal && !dependencyBlocked {
 				plan.WaitingRefs = append(plan.WaitingRefs, stage.Ref)
 				continue
 			}
@@ -159,4 +158,59 @@ func appendUniqueReason(reasons []string, reason string) []string {
 		}
 	}
 	return append(reasons, reason)
+}
+
+
+// SchedulePlanStore persists scheduler-owned Stage transitions using optimistic
+// version checks. Each Stage is an independent CAS; after a conflict the caller
+// must reload the Run snapshot and rebuild the whole plan before dispatching.
+type SchedulePlanStore interface {
+	CompareAndSwapStage(context.Context, uint64, domain.Stage) (bool, error)
+}
+
+var ErrSchedulePlanConflict = errors.New("Researchflow schedule plan snapshot is stale")
+
+type SchedulePlanPersistResult struct {
+	Promoted int
+	Blocked  int
+}
+
+// PersistSchedulePlan applies only Pending -> Ready and Pending -> Blocked
+// transitions. Dispatch is advisory: ClaimAttempt remains the authority that
+// atomically reserves an Attempt and enforces cross-worker concurrency.
+func PersistSchedulePlan(ctx context.Context, store SchedulePlanStore, plan SchedulePlan) (SchedulePlanPersistResult, error) {
+	if store == nil {
+		return SchedulePlanPersistResult{}, errors.New("Researchflow schedule plan store is required")
+	}
+	result := SchedulePlanPersistResult{}
+	transitions := make([]domain.Stage, 0, len(plan.PromoteToReady)+len(plan.MarkBlocked))
+	transitions = append(transitions, plan.PromoteToReady...)
+	transitions = append(transitions, plan.MarkBlocked...)
+	sort.Slice(transitions, func(i, j int) bool { return transitions[i].Ref < transitions[j].Ref })
+	seen := make(map[string]struct{}, len(transitions))
+	for _, stage := range transitions {
+		if strings.TrimSpace(stage.Ref) == "" || stage.Version == 0 {
+			return result, errors.New("Researchflow schedule plan contains an invalid Stage transition")
+		}
+		if _, exists := seen[stage.Ref]; exists {
+			return result, fmt.Errorf("Researchflow schedule plan contains duplicate Stage transition %q", stage.Ref)
+		}
+		seen[stage.Ref] = struct{}{}
+		if stage.Status != domain.StageReady && stage.Status != domain.StageBlocked {
+			return result, fmt.Errorf("Researchflow schedule plan contains unsupported transition target %q", stage.Status)
+		}
+		applied, err := store.CompareAndSwapStage(ctx, stage.Version-1, stage)
+		if err != nil {
+			return result, fmt.Errorf("persist Researchflow Stage %q schedule transition: %w", stage.Ref, err)
+		}
+		if !applied {
+			return result, fmt.Errorf("%w: stage=%s", ErrSchedulePlanConflict, stage.Ref)
+		}
+		if stage.Status == domain.StageReady {
+			result.Promoted++
+		} else {
+			result.Blocked++
+		}
+	}
+	return result, nil
 }
