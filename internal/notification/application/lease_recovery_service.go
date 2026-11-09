@@ -49,6 +49,18 @@ func (s *LeaseRecoveryService) RecoverExpiredOnce(
 	if len(claims) > limit {
 		return report, fmt.Errorf("%w: scanner exceeded requested limit", ErrLeaseRecoveryHistory)
 	}
+	// 先验证整个候选批次的唯一性，再执行任何状态迁移；重复 Delivery 候选不能依赖扫描顺序决定赢家。
+	seenDeliveries := make(map[string]struct{}, len(claims))
+	for _, claim := range claims {
+		deliveryID := claim.Delivery.DeliveryID
+		if deliveryID == "" {
+			return report, ErrLeaseRecoveryHistory
+		}
+		if _, exists := seenDeliveries[deliveryID]; exists {
+			return report, fmt.Errorf("%w: duplicate delivery candidate %s", ErrLeaseRecoveryHistory, deliveryID)
+		}
+		seenDeliveries[deliveryID] = struct{}{}
+	}
 	report.Scanned = len(claims)
 	var failures []error
 	for _, claim := range claims {
