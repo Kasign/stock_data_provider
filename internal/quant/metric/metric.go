@@ -5,11 +5,17 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"math/big"
+	"regexp"
+	"strconv"
 	"strings"
 	"time"
 )
 
-var ErrInvalidMetric = errors.New("invalid quant metric")
+var (
+	ErrInvalidMetric = errors.New("invalid quant metric")
+	decimalStringRE = regexp.MustCompile(`^[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?$`)
+)
 
 type QualityStatus string
 
@@ -23,11 +29,11 @@ const (
 type Status string
 
 const (
-	StatusAvailable         Status = "available"
-	StatusInsufficientData  Status = "insufficient_data"
+	StatusAvailable          Status = "available"
+	StatusInsufficientData   Status = "insufficient_data"
 	StatusInsufficientSample Status = "insufficient_sample"
-	StatusNotApplicable     Status = "not_applicable"
-	StatusUnknown           Status = "unknown"
+	StatusNotApplicable      Status = "not_applicable"
+	StatusUnknown            Status = "unknown"
 )
 
 // Metric 是跨 Indicator/Factor 使用的 QuantMetric 结构。
@@ -80,6 +86,19 @@ func (m Metric) Validate() error {
 	} else if m.MetricStatus != StatusAvailable || lowerNull ||
 		valueKind != lowerKind || valueKind != upperKind {
 		return ErrInvalidMetric
+	} else {
+		lower, err := decimalValue(m.LowerBound, lowerKind)
+		if err != nil {
+			return ErrInvalidMetric
+		}
+		value, err := decimalValue(m.Value, valueKind)
+		if err != nil {
+			return ErrInvalidMetric
+		}
+		upper, err := decimalValue(m.UpperBound, upperKind)
+		if err != nil || lower.Cmp(value) > 0 || value.Cmp(upper) > 0 {
+			return ErrInvalidMetric
+		}
 	}
 	if m.MetricStatus == StatusAvailable &&
 		(m.QualityStatus == QualityInvalid || m.QualityStatus == QualityUnknown) {
@@ -114,6 +133,32 @@ func scalarKind(raw json.RawMessage) (string, bool, bool) {
 	default:
 		return "", false, false
 	}
+}
+
+// decimalValue 比较数值边界时使用精确有理数，避免 float64 舍入改变边界关系。
+func decimalValue(raw json.RawMessage, kind string) (*big.Rat, error) {
+	if len(raw) == 0 || len(raw) > 256 {
+		return nil, ErrInvalidMetric
+	}
+	text := string(bytes.TrimSpace(raw))
+	if kind == "string" {
+		var value string
+		if err := json.Unmarshal(raw, &value); err != nil || !decimalStringRE.MatchString(value) {
+			return nil, ErrInvalidMetric
+		}
+		text = value
+	}
+	if index := strings.IndexAny(text, "eE"); index >= 0 {
+		exponent, err := strconv.Atoi(text[index+1:])
+		if err != nil || exponent < -10000 || exponent > 10000 {
+			return nil, ErrInvalidMetric
+		}
+	}
+	value, ok := new(big.Rat).SetString(text)
+	if !ok {
+		return nil, ErrInvalidMetric
+	}
+	return value, nil
 }
 
 func canonicalUTCTimestamp(value string) bool {
