@@ -68,7 +68,7 @@ func TransitionAttempt(attempt domain.Attempt,next domain.AttemptStatus,now time
 	attempt.Status=next;v:=now.UTC();attempt.FinishedAt=&v;return attempt,nil
 }
 
-func CancelRun(run domain.Run, stages []domain.Stage, now time.Time) (domain.Run, []domain.Stage, error) {
+func CancelRun(run domain.Run, stages []domain.Stage, policies map[string]template.PropagationPolicy, now time.Time) (domain.Run, []domain.Stage, error) {
 	if run.Status.Terminal() { return run, stages, ErrAlreadyTerminal }
 	updatedStages := append([]domain.Stage(nil), stages...)
 	if run.Status == domain.RunCreated || run.Status == domain.RunQueued {
@@ -87,7 +87,9 @@ func CancelRun(run domain.Run, stages []domain.Stage, now time.Time) (domain.Run
 				if err != nil { return run, stages, err }
 			}
 		}
-		updatedRun.ResultSummary = ptrSummary(buildTerminalSummary(updatedStages, run.ExcludedStages))
+		summary, summaryErr := buildTerminalSummary(updatedStages, run.ExcludedStages, policies)
+		if summaryErr != nil { return run, stages, summaryErr }
+		updatedRun.ResultSummary = ptrSummary(summary)
 		return updatedRun, updatedStages, nil
 	}
 	if run.Status == domain.RunRunning {
@@ -303,13 +305,14 @@ func AggregateRun(run domain.Run,stages []domain.Stage,attempts []domain.Attempt
 	return updated, nil
 }
 
-func FinalizeCancellation(run domain.Run, stages []domain.Stage, attempts []domain.Attempt, now time.Time) (domain.Run, error) {
+func FinalizeCancellation(run domain.Run, stages []domain.Stage, attempts []domain.Attempt, policies map[string]template.PropagationPolicy, now time.Time) (domain.Run, error) {
 	if run.Status != domain.RunCancelling || run.TerminationReason != "user_cancelled" {
 		return run, fmt.Errorf("%w: run is not a user cancellation", ErrInvalidTransition)
 	}
 	if err := validateTerminalStages(stages); err != nil { return run, fmt.Errorf("cannot finalize cancellation: %w", err) }
 	if err := validateAttemptsTerminal(attempts); err != nil { return run, fmt.Errorf("cannot finalize cancellation: %w", err) }
-	summary := buildTerminalSummary(stages, run.ExcludedStages)
+	summary, err := buildTerminalSummary(stages, run.ExcludedStages, policies)
+	if err != nil { return run, fmt.Errorf("cannot build cancellation summary: %w", err) }
 	updated, err := transitionRun(run, domain.RunCancelled, now)
 	if err != nil { return run, err }
 	updated.ResultSummary = &summary
@@ -341,7 +344,7 @@ func validateAttemptsTerminal(attempts []domain.Attempt) error {
 
 func ptrSummary(summary domain.ResultSummary) *domain.ResultSummary { return &summary }
 
-func buildTerminalSummary(stages []domain.Stage, excludedStages []domain.ExcludedStage) domain.ResultSummary {
+func buildTerminalSummary(stages []domain.Stage, excludedStages []domain.ExcludedStage, policies map[string]template.PropagationPolicy) (domain.ResultSummary, error) {
 	summary := domain.ResultSummary{
 		StageOutcomes: map[string]domain.StageStatus{}, RiskGateDecisions: map[string]string{},
 		ExcludedStages: cloneExcludedStages(excludedStages), MissingStageCodes: []string{},
@@ -358,7 +361,19 @@ func buildTerminalSummary(stages []domain.Stage, excludedStages []domain.Exclude
 			completed++
 			summary.DegradedStageCodes = append(summary.DegradedStageCodes, stage.Code)
 			summary.QualityStatus = "degraded"
-		case domain.StageSkipped, domain.StageFailed, domain.StageTimedOut, domain.StageCancelled:
+		case domain.StageSkipped:
+			summary.MissingStageCodes = append(summary.MissingStageCodes, stage.Code)
+			policy, ok := policies[stage.Code]
+			if !ok { return domain.ResultSummary{}, fmt.Errorf("missing propagation policy for skipped stage %s", stage.Code) }
+			switch policy.OnSkipped {
+			case domain.PropagateNoImpact:
+				if stage.Required { return domain.ResultSummary{}, fmt.Errorf("required stage %s cannot use skipped=no_impact", stage.Code) }
+				completed++
+			case domain.PropagatePartial, domain.PropagateFail:
+			default:
+				return domain.ResultSummary{}, fmt.Errorf("invalid on_skipped policy for stage %s: %q", stage.Code, policy.OnSkipped)
+			}
+		case domain.StageFailed, domain.StageTimedOut, domain.StageCancelled:
 			summary.MissingStageCodes = append(summary.MissingStageCodes, stage.Code)
 		case domain.StageBlocked:
 			summary.MissingStageCodes = append(summary.MissingStageCodes, stage.Code)
@@ -373,7 +388,7 @@ func buildTerminalSummary(stages []domain.Stage, excludedStages []domain.Exclude
 	sort.Strings(summary.BlockedStageCodes)
 	summary.ReasonCodes = uniqueSorted(summary.ReasonCodes)
 	if len(stages) > 0 { summary.Coverage = float64(completed) / float64(len(stages)) }
-	return summary
+	return summary, nil
 }
 
 func contains(values []string,value string)bool{for _,v:=range values{if v==value{return true}};return false}
