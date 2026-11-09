@@ -283,6 +283,8 @@ Worker 取得 Delivery 时必须原子完成 queued/retry_wait -> sending 和租
 
 当前 `application.RetryPolicy` 提供纯函数重试决策：策略参数必须显式提供，所有 duration 使用正整数毫秒；`ScheduleRetry` 接收完整 Attempt 历史与外部注入的 `[0,1)` 随机样本，校验 Delivery/Attempt 关联、连续序号和 Attempt ID/fencing token 唯一性，只处理最后一条明确 rejected 且 retryable 的 Attempt；按 `min(max_delay, base_delay*2^(attempt_no-1))` 计算 capped full-jitter 上限，所有小于数据库微秒精度的延迟提升到 1µs，取本地退避与 Retry-After 的较晚时间，并以 `min(deadline_at, first_attempt_at+max_elapsed)` 截止；达到 `max_attempts` 返回 `retry_budget_exhausted`，越过总时间边界返回 `deadline_exceeded`。`AttemptDeadline` 返回 `min(now+per_attempt_timeout, deadline_at, first_attempt_at+max_elapsed)`。
 
+`CompleteAttemptFromChannelResult` 校验精确 ChannelConfigSnapshot 与 ChannelSendResult，映射 accepted/rejected/ambiguous/not_sent；Attempt.retryable 只由 `ChannelSendResult.IsRetryable` 对该 Channel 的 retryable_error_codes 白名单计算；Retry-After 只有在 supports_retry_after=supported 且结果为 rejected 时才能进入 Attempt；not_sent 必须附 evidence_ref。`RetryPolicy` 还校验完整 Attempt 历史的 attempt_no 连续、Attempt ID 唯一、fencing token 严格递增、前一 Attempt 已完成且后续 Attempt 未早于前一完成时间。
+
 `RetryDecision` 绑定 delivery_id、delivery_version、attempt_id、fencing_token 和 evaluated_at，避免跨 Delivery/Attempt/版本复用决策。`ApplyRetryDecision` 校验当前 sending 租约、已完成的 retryable rejected Attempt 和决策绑定后，将结果转换为 retry_wait 或 failed，再调用 `DeliveryRepository.UpdateWithLease`；该 Port 的原子契约要求同一操作 CAS 快照、追加状态事件，并在状态离开 sending 时释放租约。Fake 测试覆盖 retry_wait 与失败收敛、事件追加、租约释放和旧 token/非法决策拒绝。此处仍未实现真实 MariaDB 事务、随机数生成、Worker 调度或渠道端到端验证。
 
 ## 7. RetryDelivery 与取消/退订竞态
