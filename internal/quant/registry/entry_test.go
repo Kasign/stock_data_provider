@@ -487,3 +487,30 @@ func TestRegistryConcurrentVersionActivationAndLookup(t *testing.T) {
 		t.Error(err)
 	}
 }
+
+func TestEntryValidateRejectsInvalidUTF8Metadata(t *testing.T) {
+	tests := []struct {
+		name   string
+		mutate func(*Entry)
+	}{
+		{"algorithm version", func(e *Entry) { e.AlgorithmVersion = string([]byte{0xff}) }},
+		{"unit", func(e *Entry) { e.Unit = string([]byte{0xff}) }},
+		{"rounding mode", func(e *Entry) { e.Precision.RoundingMode = string([]byte{0xff}) }},
+		{"input field", func(e *Entry) { e.InputRequirements[0].Fields[0] = string([]byte{0xff}) }},
+		{"interval", func(e *Entry) { e.InputRequirements[0].Interval = string([]byte{0xff}) }},
+		{"adjustment", func(e *Entry) { e.InputRequirements[0].Adjustment = string([]byte{0xff}) }},
+		{"input quality", func(e *Entry) { e.InputRequirements[0].Quality[0] = string([]byte{0xff}) }},
+		{"missing handling", func(e *Entry) { e.QualityPolicy.MissingHandling = string([]byte{0xff}) }},
+		{"quality state", func(e *Entry) { e.QualityPolicy.QualityStates[0] = string([]byte{0xff}) }},
+		{"unavailable condition", func(e *Entry) { e.QualityPolicy.UnavailableConditions[0] = string([]byte{0xff}) }},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			entry := validEntry("sample_metric", "1.0.0")
+			tc.mutate(&entry)
+			if err := entry.Validate(); !errors.Is(err, ErrInvalidEntry) {
+				t.Fatalf("Validate() error = %v, want ErrInvalidEntry", err)
+			}
+		})
+	}
+}
