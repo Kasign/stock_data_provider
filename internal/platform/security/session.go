@@ -86,7 +86,7 @@ func validSessionDigest(value string) bool {
 }
 
 func (r SessionRecord) validate() error {
-	if strings.TrimSpace(r.Subject) == "" || len(r.Subject) > maxSessionSubjectBytes ||
+	if r.Subject != "owner" || len(r.Subject) > maxSessionSubjectBytes ||
 		r.CredentialVersion == 0 || r.CreatedAt.IsZero() || r.LastSeenAt.IsZero() ||
 		r.IdleExpiresAt.IsZero() || r.AbsoluteExpiresAt.IsZero() {
 		return errors.New("session record fields are invalid")

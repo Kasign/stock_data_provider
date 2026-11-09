@@ -45,6 +45,11 @@ func TestSessionRecordValidation(t *testing.T) {
 	if err := record.validate(); err != nil {
 		t.Fatalf("valid record rejected: %v", err)
 	}
+	record.Subject = "service"
+	if err := record.validate(); err == nil {
+		t.Fatal("non-owner session subject must be rejected")
+	}
+	record.Subject = "owner"
 	record.AbsoluteExpiresAt = now.Add(DefaultSessionAbsoluteTTL + time.Second)
 	if err := record.validate(); err == nil {
 		t.Fatal("record exceeding absolute lifetime must be rejected")
