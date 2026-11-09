@@ -18,9 +18,10 @@ import (
 )
 
 type Store struct {
-	DB     *sql.DB
-	Redis  *redis.Client
-	Config Config
+	DB            *sql.DB
+	Redis         *redis.Client
+	Config        Config
+	ownsResources bool
 }
 
 func Open(ctx context.Context, cfg Config) (*Store, error) {
@@ -52,7 +53,7 @@ func Open(ctx context.Context, cfg Config) (*Store, error) {
 		rdb.Close()
 		return nil, fmt.Errorf("ping Redis: %w", err)
 	}
-	s := &Store{DB: db, Redis: rdb, Config: cfg}
+	s := &Store{DB: db, Redis: rdb, Config: cfg, ownsResources: true}
 	if err := s.initializeSchema(ctx); err != nil {
 		s.Close()
 		return nil, err
@@ -83,6 +84,9 @@ func (s *Store) initializeSchema(ctx context.Context) error {
 }
 
 func (s *Store) Close() error {
+	if s == nil || !s.ownsResources {
+		return nil
+	}
 	var errs []error
 	if s.DB != nil {
 		if e := s.DB.Close(); e != nil {
