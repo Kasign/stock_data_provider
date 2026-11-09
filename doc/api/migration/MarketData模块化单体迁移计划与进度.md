@@ -7,7 +7,7 @@
 - 跨模块准入：`doc/整体任务规划/01-项目总览/跨模块接入执行说明.md`、`doc/整体任务规划/01-项目总览/跨模块接入准入清单.md`
 - 本记录建立时的代码基线：`d8595f408337f62be3697aac661ba1570fdd3667`
 - 最近一次 M0 审计基线：`9687337743ff5ad8b5b81209831d43689693ae47`
-- 当前开发分支 HEAD（本轮最新代码提交）：`c7f55374356028b905813f6051f1b03e3c836b91`（Hithink 受控 HTTP 执行器注入）
+- 最近一次代码基线（本次进度更新前）：`6f095846dd7efe704e31f1198416583dd9ba3aa7`（NetEase 双 Host 受控 HTTP 执行器注入前的分支 HEAD）
 - 当前实施状态：`M1_completed / M2_completed / M3_in_progress / M4_in_progress`；M3 的 Data 侧进程内路由准备已完成，Root Server 实际装配仍待 Server 组合根完成；M4 的 borrowed DB 与 go-redis Cache Adapter 已实现，Root 侧资源注入/配置一致性及 Provider 网络出口适配仍未完成。
 
 > 本文记录 Data 从独立 Go Module/服务迁入 Root Server 根 Go Module、同进程运行的实施计划和进度。若本文与上述架构决策文档冲突，以架构决策文档为准；公共平台及 DATA 契约以冻结契约文档为准。本文不重新定义契约。
@@ -419,7 +419,7 @@ internal/
 | M1 Go Module 归并 | completed（代码归并） | Data 源码已位于根 Module 的 `internal/marketdata/**`；根 `go.mod` 为 Go 1.23.0；当前 Data 根模块 gofmt/test/race/vet 专项通过 |
 | M2 Application Port/Bootstrap | completed（Data 侧） | M2-1～M2-6 已完成：Application Port、Bootstrap、Worker 生命周期、HTTP 用例接口拆分、来源能力快照和 Migration Runner |
 | M3 Root Server 装配 | in_progress | Data 已提供 `InProcessHandler()`、Application Port 和 `MigrationRunner()`；Root Router、共享资源注入、Remote→InProcess 切换属于 Server 组合根任务，本分支不越界修改 |
-| M4 共享资源统一 | in_progress | Data Repository borrowed DB、`cache.NewGoRedis`、Tushare/Hithink Platform HTTPDoer 注入入口已实现；Root 侧实际资源/BoundDoer 注入、Redis 配置匹配、TickFlow/Xueqiu/Eastmoney 等 Provider 与 TCP 出站策略仍待完成 |
+| M4 共享资源统一 | in_progress | Data Repository borrowed DB、`cache.NewGoRedis` 已实现；Tushare、Hithink、TickFlow（认证/免费双出口）、Xueqiu、Yahoo、NetEase（报价/历史双出口）已提供 HTTPDoer 注入入口；Root 侧真实 BoundDoer 创建与注入、Redis 配置匹配、Tencent/Sina/Eastmoney/MiaoXiang 等 Provider 和 TCP 出站策略仍待完成 |
 | M5 部署/WebUI 切换 | pending | Root 同进程装配和共享资源验收后执行 |
 | M6 迁移验收 | pending | 结构迁移、API/PIT/质量、真实 Provider 和部署验收分开形成证据 |
 | 公共平台契约接入 | in_progress（按依赖） | 当前分支已有 Platform 基础代码；Data 仅适配已冻结能力，不复制 HTTP Client、Diagnostics Runner、Storage 等公共实现 |
@@ -887,7 +887,7 @@ internal/
 - M4-HTTP-02 代码切片：Hithink 新增 `NewHithinkConfiguredWithHTTPDoer`；保留原构造器兼容行为；Bootstrap Dependencies 增加可选 `HithinkHTTPDoer` 并透传。未注入时仍使用标准 `http.Client`。
 - 新增测试只验证注入执行器被调用、GET URL/Accept/X-api-key 保持既有语义、502 错误仍可见；不输出或记录真实 API Key，不增加 API/字段/数据语义。
 - Root 注入策略要求：按实际 `HithinkBaseURL` 解析并精确绑定单一 Host；默认 HTTPS/443，除明确的本地测试配置外禁止 HTTP；不允许重定向（携带 X-api-key）；GET 可按 Platform 幂等策略配置，但不能因重试导致超出 Provider 速率限制。Platform Client 响应上限必须覆盖现有 `maxProviderPayloadBytes`，超限判定由公共层完成。
-- 本批提交后不在当前分支执行构建/测试；Hithink 受控出口仅完成注入接口和单测源码，待 integration 验收。下一步为 M4-HTTP-03 TickFlow：分别处理认证 API URL 与免费 API URL 的不同目的地址策略，不能共用一个无区分 BoundDoer。
+- 本批提交后不在当前分支执行构建/测试；Hithink 受控出口仅完成注入接口和单测源码，待 integration 验收。TickFlow 双出口后续已完成 Provider/Bootstrap 注入，详见 M4-HTTP-03 记录。
 
 
 ### 2026-11-09：M4-HTTP-02 提交后基线
@@ -898,17 +898,6 @@ internal/
 - Hithink 的测试源码覆盖注入调用、GET 目标、认证 Header、Accept Header 和 502 错误路径；待 integration 执行测试后再更新验收状态。
 - M4-HTTP-03 TickFlow 双出口注入与 M4-HTTP-04 Xueqiu Cookie 出口均已完成 Provider/Bootstrap 注入；真实 BoundDoer 创建仍由 Root Server 后续集成。
 
-### 2026-11-09：M4-HTTP-04 Xueqiu Cookie 受控 HTTP 执行器注入
-
-- 代码基线：`9e69ebb62098e9aa3b86472f914081f7e5c41e87`。Xueqiu 当前只有单一配置 BaseURL（默认 `https://stock.xueqiu.com`），通过 Cookie Header 传递可选凭据；无第二个公开出口。
-- Provider 新增 `NewXueqiuConfiguredWithHTTPDoer`，旧 `NewXueqiuConfigured` 保留并委托新构造器；未注入时仍使用原超时配置的标准 `http.Client`。
-- `FetchHotStocks` 改为通过注入的最小 `HTTPDoer` 执行请求；Cookie、Referer、Origin、Accept、User-Agent、GET Query、响应体上限和错误语义保持原样。未新增 Cookie 解析、刷新、日志或存储行为。
-- Bootstrap Dependencies 新增可选 `XueqiuHTTPDoer` 并传入 Provider。Root 创建并拥有绑定到实际 `XueqiuBaseURL` 的 BoundDoer；Data Module 不拥有、不关闭。
-- 新增回归测试源码覆盖注入执行器、GET 目标、Cookie/Referer/Origin/Accept Header 与 502 错误路径；测试尚未运行，不代表编译或安全策略验收通过。
-- Root 注入策略必须绑定精确 HTTPS Host/443、拒绝重定向（Cookie 不得跨域转发）、执行 DNS/IP 检查，并将成功响应上限设置为不小于现有 `maxProviderPayloadBytes`。Cookie 仅由配置注入，禁止出现在日志、错误或诊断证据中。
-- Yahoo Finance 已接入无凭据受控 HTTP 执行器；NetEase 报价与历史 CSV 是不同 Host，按两个独立出口接入。后续继续处理 Tencent/Sina/Eastmoney 等 Provider。BaoStock/Pytdx 仍单列 TCP 出站策略。
-
-
 ### 2026-11-09：M4-HTTP-03 TickFlow 双出口受控 HTTP 执行器注入
 
 - 代码基线：`27e2b94bfa59a92d840e95836d4dbfe1fda8defb`。TickFlow 认证 API（`apiURL`）承载 Quote、指数、市场/行业数据及带 Key 的日 K 请求；免费 API（`freeAPIURL`）仅用于未配置 API Key 时的免费日 K 请求。两类目标 Host 与凭据策略不同，不能共享同一个 BoundDoer。
@@ -918,6 +907,16 @@ internal/
 - 新增回归测试源码覆盖认证 GET、公开 GET、认证 POST 的执行器路由、目标 URL、Key Header 隔离、请求方法/Content-Type 和 502 错误路径。测试尚未运行，不代表代码编译或安全策略验收通过。
 - Root 后续必须按实际配置分别创建两个 BoundDoer：认证出口绑定 `TickFlowAPIURL` 的精确 HTTPS Host/Port，公开出口绑定 `TickFlowFreeAPIURL` 的精确 HTTPS Host/Port；两者均拒绝重定向并执行 DNS/IP 与响应体上限策略。不能将认证 Key 注入公开出口。
 - Xueqiu Cookie 出口已在 M4-HTTP-04 单独接入；后续处理无凭据 HTTP Provider。BaoStock/Pytdx 仍单列 TCP 出站策略。
+
+### 2026-11-09：M4-HTTP-04 Xueqiu Cookie 受控 HTTP 执行器注入
+
+- 代码基线：`9e69ebb62098e9aa3b86472f914081f7e5c41e87`。Xueqiu 当前只有单一配置 BaseURL（默认 `https://stock.xueqiu.com`），通过 Cookie Header 传递可选凭据；无第二个公开出口。
+- Provider 新增 `NewXueqiuConfiguredWithHTTPDoer`，旧 `NewXueqiuConfigured` 保留并委托新构造器；未注入时仍使用原超时配置的标准 `http.Client`。
+- `FetchHotStocks` 改为通过注入的最小 `HTTPDoer` 执行请求；Cookie、Referer、Origin、Accept、User-Agent、GET Query、响应体上限和错误语义保持原样。未新增 Cookie 解析、刷新、日志或存储行为。
+- Bootstrap Dependencies 新增可选 `XueqiuHTTPDoer` 并传入 Provider。Root 创建并拥有绑定到实际 `XueqiuBaseURL` 的 BoundDoer；Data Module 不拥有、不关闭。
+- 新增回归测试源码覆盖注入执行器、GET 目标、Cookie/Referer/Origin/Accept Header 与 502 错误路径；测试尚未运行，不代表编译或安全策略验收通过。
+- Root 注入策略必须绑定精确 HTTPS Host/443、拒绝重定向（Cookie 不得跨域转发）、执行 DNS/IP 检查，并将成功响应上限设置为不小于现有 `maxProviderPayloadBytes`。Cookie 仅由配置注入，禁止出现在日志、错误或诊断证据中。
+- Yahoo Finance 已接入无凭据受控 HTTP 执行器；NetEase 报价与历史 CSV 是不同 Host，按两个独立出口接入。后续继续处理 Tencent/Sina/Eastmoney 等 Provider。BaoStock/Pytdx 仍单列 TCP 出站策略。
 
 
 ### 2026-11-09：M4-HTTP-05 Yahoo Finance 无凭据受控 HTTP 执行器注入
