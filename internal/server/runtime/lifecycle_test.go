@@ -99,7 +99,7 @@ func TestLifecycleRollsBackWhenContextCanceledDuringStartup(t *testing.T) {
 	lifecycle := NewLifecycle()
 	_ = lifecycle.Register(cancelOnStartComponent{
 		testComponent: testComponent{name: "worker", log: &events},
-		cancel: cancel,
+		cancel:        cancel,
 	})
 	_ = lifecycle.Register(testComponent{name: "transport", log: &events})
 	err := lifecycle.Start(ctx)
