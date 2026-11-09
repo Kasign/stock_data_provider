@@ -41,6 +41,7 @@ type Dependencies struct {
 	TencentSearchHTTPDoer         provider.HTTPDoer // Root 注入的腾讯 Smartbox 搜索出口；Module 不拥有、不关闭。
 	SinaQuoteHTTPDoer             provider.HTTPDoer // Root 注入的新浪实时报价出口；Module 不拥有、不关闭。
 	SinaKlineHTTPDoer             provider.HTTPDoer // Root 注入的新浪历史 K 线出口；Module 不拥有、不关闭。
+	EastmoneyHTTPDoers            map[string]provider.HTTPDoer // Root 按 scheme://host 注入东方财富受控出口；Module 不拥有、不关闭。
 }
 
 // Diagnostics 暴露模块就绪状态和 Provider 诊断，不暴露具体 DataService。
@@ -108,7 +109,7 @@ func New(cfg config.Config, deps Dependencies) (*Module, error) {
 		retentionStore: deps.Store,
 		retention:      cfg.QuoteRetention,
 	}
-	if err := module.build(cfg, deps.TushareHTTPDoer, deps.HithinkHTTPDoer, deps.TickFlowAuthenticatedHTTPDoer, deps.TickFlowPublicHTTPDoer, deps.XueqiuHTTPDoer, deps.YahooHTTPDoer, deps.NeteaseQuoteHTTPDoer, deps.NeteaseHistoryHTTPDoer, deps.TencentQuoteHTTPDoer, deps.TencentKlineHTTPDoer, deps.TencentNoneKlineHTTPDoer, deps.TencentSearchHTTPDoer, deps.SinaQuoteHTTPDoer, deps.SinaKlineHTTPDoer); err != nil {
+	if err := module.build(cfg, deps.TushareHTTPDoer, deps.HithinkHTTPDoer, deps.TickFlowAuthenticatedHTTPDoer, deps.TickFlowPublicHTTPDoer, deps.XueqiuHTTPDoer, deps.YahooHTTPDoer, deps.NeteaseQuoteHTTPDoer, deps.NeteaseHistoryHTTPDoer, deps.TencentQuoteHTTPDoer, deps.TencentKlineHTTPDoer, deps.TencentNoneKlineHTTPDoer, deps.TencentSearchHTTPDoer, deps.SinaQuoteHTTPDoer, deps.SinaKlineHTTPDoer, deps.EastmoneyHTTPDoers); err != nil {
 		_ = module.Close(context.Background())
 		return nil, err
 	}
@@ -168,7 +169,7 @@ func (m *Module) ProviderSummary() ProviderSummary {
 	}
 }
 
-func (m *Module) build(cfg config.Config, tushareHTTPDoer, hithinkHTTPDoer, tickflowAuthenticatedHTTPDoer, tickflowPublicHTTPDoer, xueqiuHTTPDoer, yahooHTTPDoer, neteaseQuoteHTTPDoer, neteaseHistoryHTTPDoer, tencentQuoteHTTPDoer, tencentKlineHTTPDoer, tencentNoneKlineHTTPDoer, tencentSearchHTTPDoer, sinaQuoteHTTPDoer, sinaKlineHTTPDoer provider.HTTPDoer) error {
+func (m *Module) build(cfg config.Config, tushareHTTPDoer, hithinkHTTPDoer, tickflowAuthenticatedHTTPDoer, tickflowPublicHTTPDoer, xueqiuHTTPDoer, yahooHTTPDoer, neteaseQuoteHTTPDoer, neteaseHistoryHTTPDoer, tencentQuoteHTTPDoer, tencentKlineHTTPDoer, tencentNoneKlineHTTPDoer, tencentSearchHTTPDoer, sinaQuoteHTTPDoer, sinaKlineHTTPDoer provider.HTTPDoer, eastmoneyHTTPDoers map[string]provider.HTTPDoer) error {
 	store := m.store
 	c := m.cache
 	logger := m.logger
@@ -182,7 +183,7 @@ func (m *Module) build(cfg config.Config, tushareHTTPDoer, hithinkHTTPDoer, tick
 	})
 	m.baostockClient = baostockClient
 	available := map[string]provider.NamedProvider{
-		"eastmoney": provider.NewEastmoneyConfiguredWithAnnouncements(cfg.ProviderTimeout, cfg.EastmoneyQuoteURL, cfg.EastmoneyKlineURL, cfg.EastmoneyStockBasicURL, cfg.EastmoneySectorRankingURL, cfg.EastmoneyIndexURL, cfg.EastmoneyMarketStocksURL, cfg.EastmoneyLimitPoolBaseURL, cfg.EastmoneyStockBoardsURL, cfg.EastmoneyDragonTigerURL, cfg.EastmoneyAnnouncementsURL, cfg.EastmoneyUT).WithHotRankingURLs(cfg.EastmoneyHotRankingsURL, cfg.EastmoneyHotSurgeURL).WithCapitalFlowURL(cfg.EastmoneyCapitalFlowURL),
+		"eastmoney": provider.NewEastmoneyConfiguredWithAnnouncements(cfg.ProviderTimeout, cfg.EastmoneyQuoteURL, cfg.EastmoneyKlineURL, cfg.EastmoneyStockBasicURL, cfg.EastmoneySectorRankingURL, cfg.EastmoneyIndexURL, cfg.EastmoneyMarketStocksURL, cfg.EastmoneyLimitPoolBaseURL, cfg.EastmoneyStockBoardsURL, cfg.EastmoneyDragonTigerURL, cfg.EastmoneyAnnouncementsURL, cfg.EastmoneyUT).WithHotRankingURLs(cfg.EastmoneyHotRankingsURL, cfg.EastmoneyHotSurgeURL).WithCapitalFlowURL(cfg.EastmoneyCapitalFlowURL).WithHTTPDoers(eastmoneyHTTPDoers),
 		"hithink":   provider.NewHithinkConfiguredWithHTTPDoer(cfg.ProviderTimeout, cfg.HithinkBaseURL, cfg.HithinkAPIKey, hithinkHTTPDoer),
 		"baostock":  provider.NewBaostock(baostockClient),
 		"tencent":   provider.NewTencentConfiguredWithHTTPDoers(cfg.ProviderTimeout, cfg.TencentQuoteURL, cfg.TencentKlineURL, cfg.TencentNoneKlineURL, cfg.TencentStockSearchURL, tencentQuoteHTTPDoer, tencentKlineHTTPDoer, tencentNoneKlineHTTPDoer, tencentSearchHTTPDoer),

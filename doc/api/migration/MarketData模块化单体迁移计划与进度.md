@@ -419,7 +419,7 @@ internal/
 | M1 Go Module 归并 | completed（代码归并） | Data 源码已位于根 Module 的 `internal/marketdata/**`；根 `go.mod` 为 Go 1.23.0；当前 Data 根模块 gofmt/test/race/vet 专项通过 |
 | M2 Application Port/Bootstrap | completed（Data 侧） | M2-1～M2-6 已完成：Application Port、Bootstrap、Worker 生命周期、HTTP 用例接口拆分、来源能力快照和 Migration Runner |
 | M3 Root Server 装配 | in_progress | Data 已提供 `InProcessHandler()`、Application Port 和 `MigrationRunner()`；Root Router、共享资源注入、Remote→InProcess 切换属于 Server 组合根任务，本分支不越界修改 |
-| M4 共享资源统一 | in_progress | Data Repository borrowed DB、`cache.NewGoRedis` 已实现；Tushare、Hithink、TickFlow（认证/免费双出口）、Xueqiu、Yahoo、NetEase（报价/历史双出口）、Tencent（四 endpoint）、Sina（报价/K 线双出口）已提供 HTTPDoer 注入入口；Root 侧真实 BoundDoer 创建与注入、Redis 配置匹配、Eastmoney/MiaoXiang 等 Provider 和 TCP 出站策略仍待完成 |
+| M4 共享资源统一 | in_progress | Data Repository borrowed DB、`cache.NewGoRedis` 已实现；Tushare、Hithink、TickFlow（认证/免费双出口）、Xueqiu、Yahoo、NetEase（报价/历史双出口）、Tencent（四 endpoint）、Sina（报价/K 线双出口）、Eastmoney（按 origin 统一映射多个 endpoint）已提供 HTTPDoer 注入入口；Root 侧真实 BoundDoer 创建与注入、Redis 配置匹配、MiaoXiang 等 Provider 和 TCP 出站策略仍待完成 |
 | M5 部署/WebUI 切换 | pending | Root 同进程装配和共享资源验收后执行 |
 | M6 迁移验收 | pending | 结构迁移、API/PIT/质量、真实 Provider 和部署验收分开形成证据 |
 | 公共平台契约接入 | in_progress（按依赖） | 当前分支已有 Platform 基础代码；Data 仅适配已冻结能力，不复制 HTTP Client、Diagnostics Runner、Storage 等公共实现 |
@@ -960,4 +960,16 @@ internal/
 - Bootstrap Dependencies 新增 `SinaQuoteHTTPDoer` / `SinaKlineHTTPDoer` 并传入 Provider。Root 后续按各自运行时 URL 创建精确 HTTPS Host/443 BoundDoer，拒绝重定向、执行 DNS/IP 校验并保留 1 MiB 响应体上限；Data Module 不拥有、不关闭执行器。
 - 新增测试源码覆盖两出口不交叉、GET URL、Referer/Accept Header、502 错误路径和旧构造器兼容；测试尚未运行。
 - 下一步处理 Eastmoney 多 endpoint 出口；按真实配置 URL 逐个分组，不扩大 Host 白名单，不改变 Provider 质量规则。
+
+
+
+### 2026-11-09：M4-HTTP-09 Eastmoney 按 origin 受控 HTTP 执行器注入
+
+- 代码基线：`ba6cdde5ceebfb56d03f35068fc6e709f8f8bcb6`。Eastmoney 当前配置 endpoint 覆盖 Quote、Kline、StockBasic、SectorRanking/StockList、Index、MarketBreadth、LimitPool、StockBoards、CapitalFlow、DragonTiger、Announcements、HotRanking、HotSurge。部分默认 endpoint 共用 Host，另有 `push2his`、`push2ex`、`datacenter`、`datacenter-web`、`np-anotice-stock`、`emappdata` 等独立 origin。
+- 不为每条 URL 增加重复字段，而按规范 `scheme://host` 作为受控执行器映射键：同 origin 共享一个 BoundDoer，不同 origin 必须独立绑定。新增 `EastmoneyHTTPOrigin` 供 Root 计算映射键，`WithHTTPDoers` 注入执行器映射。
+- `getJSON` 路径覆盖 Quote、Kline、Index、SectorRanking/StockList、MarketBreadth、LimitPool、StockBoards、CapitalFlow、DragonTiger、Announcements 等 JSON 请求；StockBasic 直接请求和 HotRanking/HotSurge POST 路径也统一经 origin 选择执行器。
+- 映射为 nil 时兼容旧标准 Client；映射非 nil 时 fail-closed，缺少请求 origin 对应执行器直接报错，不允许静默回退无约束 Client。原有重定向策略、超时、请求 Header、重试和响应体限制保持不变。
+- Bootstrap Dependencies 新增 `EastmoneyHTTPDoers map[string]provider.HTTPDoer`。Root 后续需从实际配置 URL（包括 LimitPoolBaseURL 和默认值）汇总 origin，逐个创建精确 HTTPS/443 BoundDoer，再按 `provider.EastmoneyHTTPOrigin` 的返回值填入 map。Module 不拥有、不关闭执行器。
+- 尚未在 Root 侧实现 origin 汇总与注入；新增代码/测试未运行，不能视为 SSRF 防护已生效或真实 Eastmoney 数据验收通过。
+- 下一步处理 MiaoXiang 等剩余 HTTP Provider，再单独梳理 BaoStock/Pytdx TCP 出站；最后进入 Root Server 实际装配。
 
