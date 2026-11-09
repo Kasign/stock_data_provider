@@ -563,3 +563,31 @@ func TestParseResponsesSSERejectsTextDeltaAfterDone(t *testing.T) {
 		t.Fatalf("text delta after done must be rejected: response=%+v err=%v", got, err)
 	}
 }
+
+
+// TestParseResponsesSSERejectsFunctionArgumentDeltaAfterDone 验证函数参数完成后不再接受增量。
+func TestParseResponsesSSERejectsFunctionArgumentDeltaAfterDone(t *testing.T) {
+	request := validSSERequest()
+	clock := sseTestClock{now: request.SystemAsOf.Add(time.Second)}
+	data := strings.Join([]string{
+		"event: response.output_item.added",
+		"data: {\"type\":\"response.output_item.added\",\"output_index\":0,\"item\":{\"id\":\"fc-after-done\",\"type\":\"function_call\",\"status\":\"in_progress\",\"call_id\":\"call-after-done\",\"name\":\"lookup_quote\",\"arguments\":\"\"}}",
+		"",
+		"event: response.function_call_arguments.done",
+		"data: {\"type\":\"response.function_call_arguments.done\",\"call_id\":\"call-after-done\",\"arguments\":\"{}\"}",
+		"",
+		"event: response.function_call_arguments.delta",
+		"data: {\"type\":\"response.function_call_arguments.delta\",\"call_id\":\"call-after-done\",\"delta\":\"late\"}",
+		"",
+		"event: response.completed",
+		"data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp-function-after-done\",\"object\":\"response\",\"status\":\"completed\",\"output\":[]}}",
+		"",
+	}, "\n")
+
+	got, err := ParseResponsesSSE([]byte(data), request, clock, nil)
+	var adapterErr *AdapterError
+	if !errors.As(err, &adapterErr) || adapterErr.Info.StableCode != "llm.sse.function_arguments_after_done" ||
+		got.Status != ResponseFailed {
+		t.Fatalf("function argument delta after done must be rejected: response=%+v err=%v", got, err)
+	}
+}
