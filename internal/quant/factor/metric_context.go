@@ -21,7 +21,7 @@ func NewQuantMetricWithContext(
 	if err := ctx.Validate(trustedNow, true); err != nil {
 		return QuantMetric{}, err
 	}
-	if quality == QualityDegraded && ctx.QualityPolicy == domain.QualityPolicyStrict {
+	if result.Status == StatusAvailable && quality == QualityDegraded && ctx.QualityPolicy == domain.QualityPolicyStrict {
 		return QuantMetric{}, ErrQualityPolicyRejected
 	}
 	return NewQuantMetric(result, ctx.SystemAsOf, quality, calculationVersion)

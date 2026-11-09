@@ -39,6 +39,24 @@ func TestNewQuantMetricWithContextAppliesQualityPolicy(t *testing.T) {
 	}
 }
 
+
+func TestNewQuantMetricWithContextPreservesDegradedInsufficientDataUnderStrictPolicy(t *testing.T) {
+	ctx := validFactorContext()
+	now := time.Date(2026, 11, 9, 7, 0, 0, 0, time.UTC)
+	result := Result{
+		Code: "momentum_20d", Unit: "ratio",
+		Status: StatusInsufficientData, SampleCount: 12,
+	}
+
+	metric, err := NewQuantMetricWithContext(ctx, now, result, QualityDegraded, "1.0.0")
+	if err != nil {
+		t.Fatalf("strict policy must preserve unavailable diagnostic result: %v", err)
+	}
+	if metric.Value != nil || metric.MetricStatus != StatusInsufficientData || metric.QualityStatus != QualityDegraded {
+		t.Fatalf("degraded insufficient-data result was not preserved: %+v", metric)
+	}
+}
+
 func TestNewQuantMetricWithContextKeepsInsufficientDataUnavailable(t *testing.T) {
 	ctx := validFactorContext()
 	now := time.Date(2026, 11, 9, 7, 0, 0, 0, time.UTC)
