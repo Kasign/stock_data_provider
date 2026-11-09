@@ -93,7 +93,7 @@ func TestIngestCandidateCreatesNewsItemAndObservation(t *testing.T) {
 	observation, err := usecase.executeWithPolicyTrace(context.Background(), "source-1", "run-1/provider-a/item-1", domain.Candidate{
 		ProviderItemID: "provider-result-1", SourceItemID: "item-1", Title: " headline ",
 	}, domain.SourceURLPolicy{}, ObservationPolicyTrace{
-		SourcePolicyVersionID: "source-policy-v1", PolicyEvaluatedAt: time.Date(2026, 11, 9, 0, 0, 0, 0, time.UTC),
+		SourcePolicyVersionID: "source-policy-v1", PolicyEvaluatedAt: time.Date(2026, 11, 9, 0, 0, 0, 0, time.UTC), Retention: time.Hour,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -229,6 +229,28 @@ func TestIngestCandidateRetriesIdempotently(t *testing.T) {
 	}
 }
 
+func TestIngestCandidateRejectsChangedRetentionForSameIdempotencyKey(t *testing.T) {
+	repository := &memoryIdentityRepository{}
+	usecase := newCandidateIngest(repository, func() string { return "observation-retention-idempotency" })
+	candidate := domain.Candidate{SourceItemID: "item-retention", Title: "headline"}
+	baseTime := time.Date(2026, 11, 9, 10, 0, 0, 0, time.UTC)
+	usecase.now = func() time.Time { return baseTime }
+	trace := ObservationPolicyTrace{SourcePolicyVersionID: "source-policy-v1", PolicyEvaluatedAt: baseTime, Retention: time.Hour}
+	if _, err := usecase.executeWithPolicyTrace(context.Background(), "source-1", "same-retention-key", candidate, domain.SourceURLPolicy{}, trace); err != nil {
+		t.Fatal(err)
+	}
+	usecase.now = func() time.Time { return baseTime.Add(time.Minute) }
+	trace.PolicyEvaluatedAt = baseTime.Add(time.Minute)
+	trace.Retention = 2 * time.Hour
+	_, err := usecase.executeWithPolicyTrace(context.Background(), "source-1", "same-retention-key", candidate, domain.SourceURLPolicy{}, trace)
+	if !errors.Is(err, ErrIdentityTransaction) || !errors.Is(err, ErrObservationIdempotencyConflict) {
+		t.Fatalf("changed retention must conflict on idempotency key reuse, got %v", err)
+	}
+	if len(repository.observations) != 1 || effectiveObservationRetention(repository.observations[0]) != time.Hour {
+		t.Fatalf("original retention was changed: %+v", repository.observations)
+	}
+}
+
 func TestIngestCandidateRejectsReplayAfterObservationPayloadPurge(t *testing.T) {
 	repository := &memoryIdentityRepository{}
 	usecase := newCandidateIngest(repository, func() string { return "observation-purged" })
@@ -272,6 +294,7 @@ func TestIngestCandidatePersistsSourcePolicyTrace(t *testing.T) {
 		SourcePolicyVersionID: "source-policy-v3",
 		EndpointID:            "endpoint-v1", EndpointPolicyVersionID: "endpoint-policy-v2",
 		PolicyEvaluatedAt: evaluatedAt,
+		Retention: time.Hour,
 	}
 	observation, err := usecase.executeWithPolicyTrace(
 		context.Background(), "source-1", "feed-run-1/item-1",
@@ -296,10 +319,12 @@ func TestIngestCandidatePolicyTraceIsPartOfIdempotencyPayload(t *testing.T) {
 	firstTrace := ObservationPolicyTrace{
 		SourcePolicyVersionID: "source-policy-v3",
 		PolicyEvaluatedAt:     time.Date(2026, 11, 5, 10, 0, 0, 0, time.UTC),
+		Retention:             time.Hour,
 	}
 	secondTrace := ObservationPolicyTrace{
 		SourcePolicyVersionID: "source-policy-v4",
 		PolicyEvaluatedAt:     time.Date(2026, 11, 5, 10, 1, 0, 0, time.UTC),
+		Retention:             time.Hour,
 	}
 	if _, err := usecase.executeWithPolicyTrace(context.Background(), "source-1", "feed-run-1/item-1", candidate, domain.SourceURLPolicy{}, firstTrace); err != nil {
 		t.Fatal(err)
@@ -314,7 +339,7 @@ func TestIngestCandidateRejectsProviderPolicyReferenceWithoutVersion(t *testing.
 	repository := &memoryIdentityRepository{}
 	usecase := newCandidateIngest(repository, func() string { return "observation-provider-policy-incomplete" })
 	_, err := usecase.executeWithPolicyTrace(context.Background(), "source-1", "provider-result-incomplete", domain.Candidate{ProviderCode: "brave", SourceItemID: "item-1"}, domain.SourceURLPolicy{}, ObservationPolicyTrace{
-		SourcePolicyVersionID: "source-policy-v1", PolicyEvaluatedAt: time.Now().UTC(),
+		SourcePolicyVersionID: "source-policy-v1", PolicyEvaluatedAt: time.Now().UTC(), Retention: time.Hour,
 	})
 	if !errors.Is(err, ErrProviderOutputPolicyRequired) || len(repository.observations) != 0 {
 		t.Fatalf("err=%v repository=%+v", err, repository)
@@ -328,7 +353,7 @@ func TestIngestCandidateRejectsSelfDeclaredProviderPolicyTrace(t *testing.T) {
 		ProviderCode: "tavily", SourceItemID: "item-1",
 	}, domain.SourceURLPolicy{}, ObservationPolicyTrace{
 		SourcePolicyVersionID: "source-policy-v1", ProviderOutputPolicyRef: "provider-policy-ref",
-		ProviderOutputPolicyVersionID: "provider-policy-v1", PolicyEvaluatedAt: time.Now().UTC(),
+		ProviderOutputPolicyVersionID: "provider-policy-v1", PolicyEvaluatedAt: time.Now().UTC(), Retention: time.Hour,
 	})
 	if !errors.Is(err, ErrProviderOutputPolicyRequired) || len(repository.observations) != 0 {
 		t.Fatalf("self-declared provider policy must fail closed: err=%v repository=%+v", err, repository)

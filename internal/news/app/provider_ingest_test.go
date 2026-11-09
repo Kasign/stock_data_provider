@@ -92,6 +92,26 @@ func TestIngestProviderCandidateEvaluatesTrustedPolicyBeforePersistence(t *testi
 	}
 }
 
+func TestIngestProviderCandidateRejectsZeroRetentionBeforePolicyLookup(t *testing.T) {
+	repository := &memoryIdentityRepository{}
+	ingest := newCandidateIngest(repository, func() string { return "must-not-persist-zero-retention" })
+	policies := providerIngestPolicyStub{binding: validProviderIngestPolicy()}
+	usecase, err := NewIngestProviderCandidate(ingest,
+		providerIngestCatalogStub{registration: validProviderIngestRegistration()}, policies)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = usecase.Execute(context.Background(), IngestProviderCandidateRequest{
+		SourceID: "source-1", EndpointID: "endpoint-1", IdempotencyKey: "zero-retention",
+		Candidate: domain.Candidate{ProviderCode: "brave", SourceItemID: "native-1"},
+		Purpose: domain.PurposeInternalPersonalResearch, ContentKind: domain.ContentSnippet,
+		StorageMode: domain.StorageTransient,
+	})
+	if !errors.Is(err, ErrInvalidRequest) || len(repository.observations) != 0 {
+		t.Fatalf("zero retention must be rejected before persistence: err=%v repository=%+v", err, repository)
+	}
+}
+
 func TestIngestProviderCandidateFailsClosedBeforePersistence(t *testing.T) {
 	tests := []struct {
 		name         string
