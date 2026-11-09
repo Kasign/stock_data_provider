@@ -34,21 +34,21 @@ func TestValidateEgressDependenciesRequiresEnabledProviderInjection(t *testing.T
 
 func TestValidateEgressDependenciesChecksEastmoneyOrigins(t *testing.T) {
 	cfg := config.Config{
-		ProviderPriority:  []string{"eastmoney"},
-		ProviderSettings:  map[string]config.ProviderSettings{"eastmoney": {Enabled: true}},
-		EastmoneyQuoteURL: "https://quote.example.test/api",
-		EastmoneyKlineURL: "https://quote.example.test/kline",
-		EastmoneyStockBasicURL: "https://quote.example.test/basic",
+		ProviderPriority:          []string{"eastmoney"},
+		ProviderSettings:          map[string]config.ProviderSettings{"eastmoney": {Enabled: true}},
+		EastmoneyQuoteURL:         "https://quote.example.test/api",
+		EastmoneyKlineURL:         "https://quote.example.test/kline",
+		EastmoneyStockBasicURL:    "https://quote.example.test/basic",
 		EastmoneySectorRankingURL: "https://quote.example.test/sector",
-		EastmoneyIndexURL: "https://quote.example.test/index",
-		EastmoneyMarketStocksURL: "https://quote.example.test/market",
+		EastmoneyIndexURL:         "https://quote.example.test/index",
+		EastmoneyMarketStocksURL:  "https://quote.example.test/market",
 		EastmoneyLimitPoolBaseURL: "https://quote.example.test",
-		EastmoneyStockBoardsURL: "https://quote.example.test/boards",
-		EastmoneyDragonTigerURL: "https://quote.example.test/dragon",
+		EastmoneyStockBoardsURL:   "https://quote.example.test/boards",
+		EastmoneyDragonTigerURL:   "https://quote.example.test/dragon",
 		EastmoneyAnnouncementsURL: "https://quote.example.test/announcements",
-		EastmoneyHotRankingsURL: "https://quote.example.test/hot",
-		EastmoneyHotSurgeURL: "https://quote.example.test/surge",
-		EastmoneyCapitalFlowURL: "https://quote.example.test/flow",
+		EastmoneyHotRankingsURL:   "https://quote.example.test/hot",
+		EastmoneyHotSurgeURL:      "https://quote.example.test/surge",
+		EastmoneyCapitalFlowURL:   "https://quote.example.test/flow",
 	}
 	if err := validateEgressDependencies(cfg, Dependencies{EastmoneyHTTPDoers: map[string]provider.HTTPDoer{}}); err == nil ||
 		!strings.Contains(err.Error(), "quote.example.test") {
