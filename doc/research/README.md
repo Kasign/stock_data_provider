@@ -175,3 +175,11 @@ R1/R2/R3/R5 当前实现 Context、Evidence、Event、Claim/Hypothesis 领域结
 - v1 当前只接受 `schema_version=1.0.0`，常量定义于 `context.SchemaVersion`。
 - Context 与 Section 的四个时间字段要求零时区偏移；JSON Schema 进一步要求 RFC3339 date-time 字符串以 `Z` 结尾。
 - 新增版本门禁、非 UTC 时间测试和 Schema 时间字段约束测试；均尚未执行。
+
+
+## Context v1 JSON Schema Validator
+
+- 复用根模块已有 `github.com/santhosh-tekuri/jsonschema/v6`，不新增依赖。
+- `TestContextJSONSchemaValidatesGoldenAndRejectsInvalidPayloads` 实际编译 Draft 2020-12 Schema，验证 Golden，并拒绝缺字段、null 数组、未知枚举、额外字段及非 UTC 时间。
+- `TestContextJSONSchemaRejectsNullNestedObject` 覆盖必需对象为 null 的情况。
+- 该 Validator 测试尚未执行；GitHub Actions 强制门禁和跨模块 Contract Test 仍待接入。
