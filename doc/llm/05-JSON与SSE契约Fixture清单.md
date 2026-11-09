@@ -333,3 +333,11 @@ sequence_number 严格连续策略、Draft 2020-12 本地 Schema dialect、Reque
 - `response.completed`、`response.incomplete` 或 `response.failed` 终态后若仍出现携带 data 的事件，必须拒绝整个流。
 - 当前覆盖 completed 后追加普通事件，预期错误为 `ErrorInvalidResponse / llm.sse.event_after_terminal`。
 - 测试代码尚未执行，不构成通过证据。
+
+
+## 20. SSE 终态文本一致性
+
+- 输入先发送一个或多个 `response.output_text.delta`（或 `response.output_text.done`），终态 `response.output` 必须还原出完全相同的文本。
+- 若终态文本与已累计文本不一致，返回 `ErrorInvalidResponse / llm.sse.terminal_output_text_mismatch`；不得以终态结果覆盖已交付给消费者的文本。
+- 对应测试：`TestParseResponsesSSERejectsTerminalOutputTextMismatch`。
+- 此规则属于本地 Parser 一致性测试，仍待执行。
