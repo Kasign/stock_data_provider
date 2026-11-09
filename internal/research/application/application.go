@@ -17,6 +17,7 @@ import (
 	researchevent "example.com/stock-analysis-flow/internal/research/event"
 	researchclaim "example.com/stock-analysis-flow/internal/research/claim"
 	"example.com/stock-analysis-flow/internal/platform/fault"
+	"example.com/stock-analysis-flow/internal/platform/observability"
 )
 
 const (
@@ -155,12 +156,14 @@ type CreateEventCommand struct {
 type EventRef struct { EventID string; EventVersion int }
 type EventRepository interface {
 	Append(context.Context, researchevent.ResearchEvent) error
+	AppendWithLifecycle(context.Context, researchevent.ResearchEvent, *string, string) error
 	GetVersion(context.Context, string, int) (researchevent.ResearchEvent, error)
 }
 type UpdateEventCommand struct {
 	EventID string
 	ExpectedVersion int
 	Revision CreateEventCommand
+	ReasonCode *string
 }
 type EventPort interface {
 	CreateEvent(context.Context, CreateEventCommand) (ResearchEvent, error)
@@ -500,7 +503,21 @@ func (s *Service) UpdateEvent(ctx context.Context, command UpdateEventCommand) (
 	if err := next.ValidateNextVersion(previous); err != nil {
 		return ResearchEvent{}, validationFault("invalid_research_event_transition", "Research Event revision is invalid", err)
 	}
-	if err := s.events.Append(ctx, next); err != nil {
+	if command.ReasonCode != nil && (strings.TrimSpace(*command.ReasonCode) == "" || *command.ReasonCode != strings.TrimSpace(*command.ReasonCode)) {
+		return ResearchEvent{}, validationFault("invalid_event_reason_code", "Research Event reason code must be null or a non-empty trimmed value", nil)
+	}
+	if next.Status != previous.Status {
+		correlationID := observability.FromContext(ctx)
+		if correlationID == "" {
+			correlationID, err = s.ids.NewID("cor_")
+			if err != nil {
+				return ResearchEvent{}, applicationFault(fault.ClassInternal, "research_correlation_id_generation_failed", "Research correlation identifier generation failed", err)
+			}
+		}
+		if err := s.events.AppendWithLifecycle(ctx, next, cloneString(command.ReasonCode), correlationID); err != nil {
+			return ResearchEvent{}, mapRepositoryError(err)
+		}
+	} else if err := s.events.Append(ctx, next); err != nil {
 		return ResearchEvent{}, mapRepositoryError(err)
 	}
 	return fromDomainEvent(next), nil

@@ -52,6 +52,17 @@ func formatPIT(value time.Time) string {
 func (r repositoryBase) appendVersion(ctx context.Context, aggregateType, aggregateID string,
 	version int64, table, idColumn, versionColumn string, payload []byte, createdAt time.Time,
 	insertSQL string, insertArgs []any, validateNext func(previous []byte) error) error {
+	return r.appendVersionWithHook(ctx, aggregateType, aggregateID, version, table, idColumn, versionColumn,
+		payload, createdAt, insertSQL, insertArgs, validateNext, nil)
+}
+
+// appendVersionWithHook runs an optional side effect before the aggregate
+// transaction commits. It is reserved for records that must be atomic with
+// the immutable aggregate version, such as the Research notification Outbox.
+func (r repositoryBase) appendVersionWithHook(ctx context.Context, aggregateType, aggregateID string,
+	version int64, table, idColumn, versionColumn string, payload []byte, createdAt time.Time,
+	insertSQL string, insertArgs []any, validateNext func(previous []byte) error,
+	afterAppend func(tx *sql.Tx, previous []byte) error) error {
 	if r.db == nil { return ErrInvalidRepository }
 	if ctx == nil { return errors.New("context is nil") }
 	if aggregateID == "" || utf8.RuneCountInString(aggregateID) > 255 || version < 1 || len(payload) == 0 {
@@ -97,6 +108,7 @@ func (r repositoryBase) appendVersion(ctx context.Context, aggregateType, aggreg
 	if version != latest+1 {
 		return fmt.Errorf("%w: %s %s expected version %d, got %d", ErrConflict, aggregateType, aggregateID, latest+1, version)
 	}
+	var previousPayload []byte
 	if latest > 0 {
 		var previousDigest string
 		var previous []byte
@@ -109,6 +121,7 @@ func (r repositoryBase) appendVersion(ctx context.Context, aggregateType, aggreg
 		}
 		if validateNext == nil { return errors.New("next-version validator is required") }
 		if err := validateNext(previous); err != nil { return fmt.Errorf("validate next research version: %w", err) }
+		previousPayload = append([]byte(nil), previous...)
 	}
 	if _, err := tx.ExecContext(ctx, insertSQL, insertArgs...); err != nil {
 		return fmt.Errorf("insert immutable research version: %w", err)
@@ -119,6 +132,9 @@ func (r repositoryBase) appendVersion(ctx context.Context, aggregateType, aggreg
 	affected, err := result.RowsAffected()
 	if err != nil { return fmt.Errorf("verify research aggregate head update: %w", err) }
 	if affected != 1 { return fmt.Errorf("%w: aggregate head changed during append", ErrConflict) }
+	if afterAppend != nil {
+		if err := afterAppend(tx, previousPayload); err != nil { return fmt.Errorf("append transaction side effect: %w", err) }
+	}
 	if err := tx.Commit(); err != nil { return fmt.Errorf("commit research append transaction: %w", err) }
 	return nil
 }

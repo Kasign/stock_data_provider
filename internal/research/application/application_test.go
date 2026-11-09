@@ -81,8 +81,11 @@ func TestNewServiceRequiresSourceOwnerAuthorizationAdapter(t *testing.T) {
 	if err==nil { t.Fatal("missing EvidenceAuthorizer must be rejected") }
 }
 
-type eventRepoFake struct { value researchevent.ResearchEvent; appended bool; appendErr error; getErr error }
+type eventRepoFake struct { value researchevent.ResearchEvent; appended bool; lifecycleAppended bool; correlationID string; reasonCode *string; appendErr error; getErr error }
 func (f *eventRepoFake) Append(_ context.Context, value researchevent.ResearchEvent) error { f.value=value; f.appended=true; return f.appendErr }
+func (f *eventRepoFake) AppendWithLifecycle(_ context.Context, value researchevent.ResearchEvent, reasonCode *string, correlationID string) error {
+	f.value=value; f.appended=true; f.lifecycleAppended=true; f.reasonCode=reasonCode; f.correlationID=correlationID; return f.appendErr
+}
 func (f *eventRepoFake) GetVersion(_ context.Context, id string, version int) (researchevent.ResearchEvent,error) {
 	if f.getErr != nil { return researchevent.ResearchEvent{}, f.getErr }
 	if f.value.EventID!=id || f.value.EventVersion!=version { return researchevent.ResearchEvent{}, errors.New("missing") }
@@ -142,6 +145,9 @@ func TestUpdateEventUsesExpectedVersionAndDomainLifecycleRules(t *testing.T) {
 	if err != nil { t.Fatal(err) }
 	if got.EventID != previous.EventID || got.EventVersion != 2 || got.Status != string(researchevent.StatusConsolidating) {
 		t.Fatalf("unexpected Event revision: %+v", got)
+	}
+	if !repo.lifecycleAppended || repo.correlationID == "" || repo.reasonCode != nil {
+		t.Fatalf("status change must use lifecycle Outbox append with a trusted correlation ID: %+v", repo)
 	}
 	if _, err := service.UpdateEvent(context.Background(), UpdateEventCommand{
 		EventID: previous.EventID, ExpectedVersion: 1, Revision: revision,
