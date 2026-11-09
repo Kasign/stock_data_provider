@@ -855,6 +855,42 @@ func TestOpenAPIParameterDefaultsMatchHandlerDefaults(t *testing.T) {
 	assertParameterSchema("/api/v1/market/sentiment/history", "limit", map[string]any{
 		"type": "integer", "minimum": 1, "maximum": 500, "default": 366,
 	})
+	assertParameterSchema("/api/v1/market/sectors", "type", map[string]any{
+		"type": "string", "enum": []any{"industry", "concept"}, "default": "industry",
+	})
+	assertParameterSchema("/api/v1/market/sectors", "limit", map[string]any{
+		"type": "integer", "minimum": 1, "maximum": 100, "default": 10,
+	})
+	assertParameterSchema("/api/v1/market/sectors", "direction", map[string]any{
+		"type": "string", "enum": []any{"up", "down"}, "default": "up",
+	})
+	assertParameterSchema("/api/v1/market/sectors", "sort_by", map[string]any{
+		"type": "string", "enum": []any{"change_percent", "amount", "change_5d"}, "default": "change_percent",
+	})
+	assertParameterSchema("/api/v1/market/hot-stocks", "type", map[string]any{
+		"type": "string", "enum": []any{"popular", "surge", "followers"}, "default": "popular",
+	})
+	assertParameterSchema("/api/v1/market/hot-stocks", "limit", map[string]any{
+		"type": "integer", "minimum": 1, "maximum": 100, "default": 10,
+	})
+	assertParameterSchema("/api/v1/stocks/search", "limit", map[string]any{
+		"type": "integer", "minimum": 1, "maximum": 50, "default": 10,
+	})
+	assertParameterSchema("/api/v1/stocks/{symbol}/announcements", "page", map[string]any{
+		"type": "integer", "minimum": 1, "maximum": 1000, "default": 1,
+	})
+	assertParameterSchema("/api/v1/stocks/{symbol}/announcements", "page_size", map[string]any{
+		"type": "integer", "minimum": 1, "maximum": 100, "default": 20,
+	})
+	assertParameterSchema("/api/v1/data-sources/probe/history", "limit", map[string]any{
+		"type": "integer", "minimum": 1, "maximum": 100, "default": 20,
+	})
+	assertParameterSchema("/api/v1/market/index-catalog", "tag", map[string]any{
+		"type": "string", "enum": []any{"cn_concept", "region", "tszs", "industry", "tushare"}, "default": "cn_concept",
+	})
+	assertParameterSchema("/api/v1/market/dragon-tiger", "page", map[string]any{
+		"type": "integer", "minimum": 1, "maximum": 1000, "default": 1,
+	})
 }
 
 func TestProviderProbeRequestSchemaMatchesHandlerValidation(t *testing.T) {
@@ -971,4 +1007,37 @@ func TestProviderProbeRequestSchemaMatchesHandlerValidation(t *testing.T) {
 	if bodySchema["$ref"] != "#/components/schemas/ProviderProbeRequest" {
 		t.Errorf("Probe requestBody schema ref=%v, want ProviderProbeRequest", bodySchema["$ref"])
 	}
+}
+
+
+func TestStockSearchQueryDocumentsTrimmedValueSemantics(t *testing.T) {
+	spec, err := os.ReadFile("../../openapi.yaml")
+	if err != nil {
+		t.Fatalf("read OpenAPI specification: %v", err)
+	}
+	var document map[string]any
+	if err := yaml.Unmarshal(spec, &document); err != nil {
+		t.Fatalf("OpenAPI must be valid YAML: %v", err)
+	}
+	paths := document["paths"].(map[string]any)
+	operation := paths["/api/v1/stocks/search"].(map[string]any)["get"].(map[string]any)
+	parameters := operation["parameters"].([]any)
+	for _, raw := range parameters {
+		parameter, ok := raw.(map[string]any)
+		if !ok || parameter["name"] != "q" {
+			continue
+		}
+		schema := parameter["schema"].(map[string]any)
+		if schema["type"] != "string" || schema["minLength"] != 1 || schema["maxLength"] != 64 {
+			t.Errorf("stocks/search q schema=%#v, want string length 1..64", schema)
+		}
+		description, _ := parameter["description"].(string)
+		for _, phrase := range []string{"去除首尾空白后不能为空", "64 个 Unicode 字符"} {
+			if !strings.Contains(description, phrase) {
+				t.Errorf("stocks/search q description missing %q", phrase)
+			}
+		}
+		return
+	}
+	t.Fatal("stocks/search q parameter missing")
 }

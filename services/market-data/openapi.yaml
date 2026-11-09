@@ -1512,7 +1512,7 @@ paths:
         limit 控制返回条数，最多 50。结果是证券目录匹配候选，不是实时行情，fetched_at 不代表 quote_time。
         未知或降级质量必须由调用方按 quality_status 与 quality_reasons 处理。
       parameters:
-        - {name: q, in: query, required: true, schema: {type: string, minLength: 1, maxLength: 64}, description: Chinese name, six-digit code or normalized symbol}
+        - {name: q, in: query, required: true, schema: {type: string, minLength: 1, maxLength: 64}, description: 去除首尾空白后不能为空，最多 64 个 Unicode 字符；支持中文名称、六位代码或标准证券代码}
         - {name: limit, in: query, required: false, schema: {type: integer, minimum: 1, maximum: 50, default: 10}}
       responses:
         '200':

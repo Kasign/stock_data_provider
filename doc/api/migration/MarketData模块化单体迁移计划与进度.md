@@ -2126,3 +2126,16 @@ CI：本轮 SHA 对应 Go test suite Run `42549171549`。截至本次文档提�
 - 当前 HEAD：`962ae41e8151a4c8ec070a725bcd3a96072be3f7`（本次之后为文档记录提交）。
 
 **结论：** 本轮 OpenAPI/Contract Test 修改尚无完整 Data CI 结论；CT-05 继续进行，M0 不准入 M1。
+
+
+### 2026-11-09：CT-05 分页默认值与搜索参数语义审计第三批
+
+代码基线：`48e4a30bf8957dd54fd2f31f6bec20f99c4ec8d9`。
+
+- 复核 sectorRankings、hotStocks、searchStocks、stockAnnouncements、dataSourceProbeHistory、indexCatalog、dragonTiger Handler 初始化值，与 OpenAPI 默认值逐项对照；本批未发现运行时默认值漂移。
+- 扩展现有 TestOpenAPIParameterDefaultsMatchHandlerDefaults，新增上述接口的默认值、整数范围与枚举断言，避免后续契约回退。
+- 发现股票搜索 q 在 Handler 中先执行 strings.TrimSpace，再检查非空和 64 个 Unicode 字符；原参数描述没有说明首尾空白处理。补充 OpenAPI 参数描述，并新增 TestStockSearchQueryDocumentsTrimmedValueSemantics 锁定语义。数据来源为现有 Handler，不新增参数或字段。
+- 本批仅修改 OpenAPI 描述与 Contract Test，不修改运行时逻辑、API 路由、DTO、Provider、数据库和 WebUI。
+- 本批测试尚未执行；按项目约定后续在 integration 进行构建和测试，不在当前分支宣称通过。
+
+**当前结论：** CT-05 已覆盖 35 Operation 参数名称/位置/required、已审计的 Handler 边界、Probe Schema、部分默认值及本批分页默认值。剩余工作继续覆盖未纳入断言的参数类型/格式/值域和多值输入语义；M0 继续 `in_progress`，M1 不准入。
