@@ -122,7 +122,7 @@ func AssessExpiredDeliveryLease(
 		} else {
 			result.Action = LeaseRecoveryApplyRetryPolicy
 			result.ReasonCode = "retryable_rejection_recovery"
-			result.RetryAfterAt = cloneDeliveryTime(current.RetryAfterAt)
+			result.RetryAfterAt = cloneRetryTime(current.RetryAfterAt)
 		}
 	case domain.DeliveryAttemptNotSent:
 		result.EvidenceRef = dereferenceRecoveryEvidence(current.EvidenceRef)

@@ -56,7 +56,7 @@ func ApplyRetryDecision(
 		}
 		change.To = domain.DeliveryRetryWait
 		change.ReasonCode = "retry_scheduled"
-		change.NextAttemptAt = cloneDeliveryTime(decision.NextAttemptAt)
+		change.NextAttemptAt = cloneRetryTime(decision.NextAttemptAt)
 	} else {
 		if decision.NextAttemptAt != nil ||
 			(decision.ReasonCode != RetryReasonBudgetExhausted &&
