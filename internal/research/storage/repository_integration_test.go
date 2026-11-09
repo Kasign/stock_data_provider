@@ -67,7 +67,7 @@ func TestResearchSQLRepositoriesAppendAndReadVersions(t *testing.T) {
 		_, _ = db.ExecContext(context.Background(), "DELETE FROM research_context_versions WHERE context_id IN (?, ?, ?)", contextID, orphanContextID, lockedContextID)
 		_, _ = db.ExecContext(context.Background(), "DELETE FROM research_event_versions WHERE event_id=?", eventID)
 		_, _ = db.ExecContext(context.Background(), "DELETE FROM research_claim_versions WHERE claim_id=?", claimID)
-		_, _ = db.ExecContext(context.Background(), "DELETE FROM research_aggregate_heads WHERE aggregate_id IN (?, ?, ?, ?, ?)", contextID, eventID, claimID, cancelledContextID, orphanContextID, lockedContextID)
+		_, _ = db.ExecContext(context.Background(), "DELETE FROM research_aggregate_heads WHERE aggregate_id IN (?, ?, ?, ?, ?, ?)", contextID, eventID, claimID, cancelledContextID, orphanContextID, lockedContextID)
 	})
 
 	contextRepo, err := NewContextRepository(db, clock)
@@ -238,24 +238,56 @@ func TestResearchSQLRepositoriesAppendAndReadVersions(t *testing.T) {
 	lockedContextV2.SectionRefs = append([]researchcontext.SectionRef(nil), lockedContextV1.SectionRefs...)
 	lockedContextV2.SectionRefs[0].SystemAsOf = lockedContextV2.SystemAsOf
 	lockedContextV2.SectionRefs[0].AssembledAt = lockedContextV2.SystemAsOf
-	lockWaitCtx, cancelLockWait := context.WithTimeout(ctx, 300*time.Millisecond)
-	defer cancelLockWait()
+	lockWaitCtx, cancelLockWait := context.WithCancel(ctx)
 	appendResult := make(chan error, 1)
+	started := make(chan struct{})
 	go func() {
+		close(started)
 		appendResult <- contextRepo.Append(lockWaitCtx, lockedContextV2)
 	}()
+	<-started
+	// Wait until the append SQL is visible in MariaDB's process list while the
+	// blocker still owns the row lock; this avoids mistaking pre-cancellation
+	// for cancellation during an actual database lock wait.
+	waitDeadline := time.Now().Add(5 * time.Second)
+	lockWaitObserved := false
+	for time.Now().Before(waitDeadline) {
+		var active int
+		if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM information_schema.PROCESSLIST WHERE INFO LIKE 'INSERT IGNORE INTO research_aggregate_heads%' OR INFO LIKE 'SELECT latest_version FROM research_aggregate_heads%'").Scan(&active); err != nil {
+			cancelLockWait()
+			_ = blocker.Rollback()
+			t.Fatalf("inspect MariaDB process list for blocked append: %v", err)
+		}
+		if active > 0 {
+			lockWaitObserved = true
+			break
+		}
+		select {
+		case appendErr := <-appendResult:
+			cancelLockWait()
+			_ = blocker.Rollback()
+			t.Fatalf("append returned before lock wait was observed: %v", appendErr)
+		case <-time.After(20 * time.Millisecond):
+		}
+	}
+	if !lockWaitObserved {
+		cancelLockWait()
+		_ = blocker.Rollback()
+		t.Fatal("MariaDB did not expose the append statement while the aggregate-head lock was held")
+	}
+	cancelLockWait()
 	var appendErr error
 	select {
 	case appendErr = <-appendResult:
 	case <-time.After(5 * time.Second):
 		_ = blocker.Rollback()
-		t.Fatal("append did not return after lock-wait context deadline")
+		t.Fatal("append did not return after lock-wait context cancellation")
 	}
 	if err := blocker.Rollback(); err != nil && !errors.Is(err, sql.ErrTxDone) {
 		t.Fatalf("release aggregate-head lock: %v", err)
 	}
-	if !errors.Is(appendErr, context.DeadlineExceeded) {
-		t.Fatalf("lock-wait append error = %v, want context.DeadlineExceeded", appendErr)
+	if !errors.Is(appendErr, context.Canceled) {
+		t.Fatalf("lock-wait append error = %v, want context.Canceled", appendErr)
 	}
 	var lockedLatest int64
 	if err := db.QueryRowContext(ctx, "SELECT latest_version FROM research_aggregate_heads WHERE aggregate_type='context' AND aggregate_id=?", lockedContextID).Scan(&lockedLatest); err != nil {
