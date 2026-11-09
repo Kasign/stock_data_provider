@@ -133,4 +133,45 @@ func TestMariaDBBeginRunCancellationLinearizesWorkerOperations(t *testing.T) {
 	if err != nil || loadedAttempt.Status != domain.AttemptRunning {
 		t.Fatalf("in-flight attempt was falsely stopped: attempt=%#v err=%v", loadedAttempt, err)
 	}
+
+	if _, err := repository.ConfirmAttemptCancellation(ctx, runRef, runningStageRef, attempt.Ref,
+		"worker-a", attempt.FencingToken+1, runningStage.Version); !errors.Is(err, ErrAttemptLeaseHeld) {
+		t.Fatalf("stale fencing token cancellation error=%v, want ErrAttemptLeaseHeld", err)
+	}
+	confirmed, err := repository.ConfirmAttemptCancellation(ctx, runRef, runningStageRef, attempt.Ref,
+		"worker-a", attempt.FencingToken, runningStage.Version)
+	if err != nil || !confirmed {
+		t.Fatalf("worker cancellation confirmation confirmed=%v err=%v", confirmed, err)
+	}
+	loadedAttempt, err = repository.GetAttempt(ctx, attempt.Ref)
+	if err != nil || loadedAttempt.Status != domain.AttemptCancelled || loadedAttempt.LeaseOwner != "" || loadedAttempt.LeaseExpiresAt != nil {
+		t.Fatalf("Attempt cancellation was not persisted: attempt=%#v err=%v", loadedAttempt, err)
+	}
+	runningStage, err = repository.GetStage(ctx, runningStageRef)
+	if err != nil || runningStage.Status != domain.StageCancelled || runningStage.FinishedAt == nil {
+		t.Fatalf("Stage cancellation was not persisted: stage=%#v err=%v", runningStage, err)
+	}
+	finalized, err := repository.FinalizeRun(ctx, RunFinalization{
+		RunRef: runRef, ExpectedVersion: 3,
+		ResultSummaryRef: "cancel-summary-" + suffix, SummarySchemaVersion: "summary-v1",
+		OutboxRef: "cancel-outbox-" + suffix, TerminalStatus: domain.RunCancelled,
+		TerminationReason: "user_cancelled",
+		Summary: domain.ResultSummary{
+			StageOutcomes: map[string]domain.StageStatus{
+				"running": domain.StageCancelled, "ready": domain.StageCancelled,
+			},
+			ExcludedStages: []domain.ExcludedStage{}, MissingStageCodes: []string{},
+			DegradedStageCodes: []string{}, BlockedStageCodes: []string{},
+			ReasonCodes: []string{"user_cancelled"}, Coverage: 0,
+			QualityStatus: "incomplete", RiskGateDecisions: map[string]string{},
+			ActionabilityStatus: "not_evaluated",
+		},
+	})
+	if err != nil || !finalized {
+		t.Fatalf("finalize cancelled Run finalized=%v err=%v", finalized, err)
+	}
+	run, err = repository.GetRun(ctx, runRef)
+	if err != nil || run.Run.Status != domain.RunCancelled || run.Run.Version != 4 {
+		t.Fatalf("cancelled Run final state mismatch: run=%#v err=%v", run.Run, err)
+	}
 }
