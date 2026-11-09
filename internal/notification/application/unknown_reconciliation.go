@@ -38,6 +38,9 @@ const (
 )
 
 type UnknownReconciliationAssessment struct {
+	DeliveryID         string
+	AttemptID          string
+	FencingToken       int64
 	Action             UnknownReconciliationAction
 	ReasonCode         string
 	EvidenceRef        string
@@ -95,6 +98,9 @@ func AssessUnknownDelivery(
 	}
 
 	result := UnknownReconciliationAssessment{
+		DeliveryID: delivery.DeliveryID,
+		AttemptID: matched.AttemptID,
+		FencingToken: matched.FencingToken,
 		Action: UnknownReconciliationRemainUnknown,
 		ReasonCode: "channel_lookup_indeterminate",
 		EvidenceRef: evidence.EvidenceRef,
