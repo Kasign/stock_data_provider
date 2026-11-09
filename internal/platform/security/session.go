@@ -192,7 +192,7 @@ func toRedisSessionRecord(record SessionRecord) redisSessionRecord {
 	return redisSessionRecord{
 		Subject: record.Subject, CredentialVersion: record.CredentialVersion,
 		CSRFTokenDigest: record.CSRFTokenDigest,
-		CreatedAtMS: record.CreatedAt.UnixMilli(), LastSeenAtMS: record.LastSeenAt.UnixMilli(),
+		CreatedAtMS:     record.CreatedAt.UnixMilli(), LastSeenAtMS: record.LastSeenAt.UnixMilli(),
 		IdleExpiresAtMS: record.IdleExpiresAt.UnixMilli(), AbsoluteExpiresAtMS: record.AbsoluteExpiresAt.UnixMilli(),
 	}
 }
@@ -200,8 +200,8 @@ func toRedisSessionRecord(record SessionRecord) redisSessionRecord {
 func fromRedisSessionRecord(record redisSessionRecord) SessionRecord {
 	return SessionRecord{
 		Subject: record.Subject, CreatedAt: time.UnixMilli(record.CreatedAtMS).UTC(),
-		LastSeenAt: time.UnixMilli(record.LastSeenAtMS).UTC(),
-		IdleExpiresAt: time.UnixMilli(record.IdleExpiresAtMS).UTC(),
+		LastSeenAt:        time.UnixMilli(record.LastSeenAtMS).UTC(),
+		IdleExpiresAt:     time.UnixMilli(record.IdleExpiresAtMS).UTC(),
 		AbsoluteExpiresAt: time.UnixMilli(record.AbsoluteExpiresAtMS).UTC(),
 		CredentialVersion: record.CredentialVersion, CSRFTokenDigest: record.CSRFTokenDigest,
 	}
