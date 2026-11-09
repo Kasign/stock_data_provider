@@ -166,4 +166,3 @@ func WriteSecurityAudit(ctx context.Context, writer SecurityAuditWriter, event S
 	}
 	return nil
 }
-
