@@ -49,7 +49,8 @@ func (r *MySQLRunRepository) CommitAttemptResult(ctx context.Context, input Atte
 			input.AttemptStatus != domain.AttemptFailed &&
 			input.AttemptStatus != domain.AttemptTimedOut &&
 			input.AttemptStatus != domain.AttemptCancelled) ||
-		!validAttemptStageOutcome(input.AttemptStatus, input.Stage.Status) {
+		!validAttemptStageOutcome(input.AttemptStatus, input.Stage.Status) ||
+		!sameOptionalString(input.OutputRef, input.Stage.OutputRef) {
 		return errors.New("Researchflow attempt result arguments are invalid")
 	}
 	if input.Stage.Version == 0 {
@@ -195,4 +196,12 @@ func validAttemptStageOutcome(attempt domain.AttemptStatus, stage domain.StageSt
 	default:
 		return false
 	}
+}
+
+// sameOptionalString ensures Attempt and Stage cannot persist different output identities.
+func sameOptionalString(left, right *string) bool {
+	if left == nil || right == nil {
+		return left == nil && right == nil
+	}
+	return *left == *right
 }
