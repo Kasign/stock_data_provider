@@ -82,7 +82,9 @@ func NewWorker(store WorkerStore, executor StageExecutor, clock DatabaseClock, c
 
 // CancelRun signals all locally active Attempts for a durably-cancelling Run.
 func (w *Worker) CancelRun(runRef string) int {
-	if w == nil || w.cancellations == nil || strings.TrimSpace(runRef) == "" { return 0 }
+	if w == nil || w.cancellations == nil || strings.TrimSpace(runRef) == "" {
+		return 0
+	}
 	return w.cancellations.cancelRun(runRef)
 }
 
@@ -172,8 +174,12 @@ func (w *Worker) Execute(ctx context.Context, runRef, stageRef, attemptRef strin
 	}
 	if errors.Is(context.Cause(execCtx), ErrWorkerCancelled) {
 		confirmed, confirmErr := w.store.ConfirmAttemptCancellation(ctx, runRef, stageRef, attempt.Ref, w.config.WorkerID, attempt.FencingToken, snapshot.Stage.Version)
-		if confirmErr != nil { return WorkerExecution{Attempt: attempt}, fmt.Errorf("confirm Researchflow Attempt cancellation: %w", confirmErr) }
-		if !confirmed { return WorkerExecution{Attempt: attempt}, ErrWorkerLeaseLost }
+		if confirmErr != nil {
+			return WorkerExecution{Attempt: attempt}, fmt.Errorf("confirm Researchflow Attempt cancellation: %w", confirmErr)
+		}
+		if !confirmed {
+			return WorkerExecution{Attempt: attempt}, ErrWorkerLeaseLost
+		}
 		return WorkerExecution{Attempt: attempt}, nil
 	}
 	attemptTimedOut := errors.Is(execCtx.Err(), context.DeadlineExceeded) && runCtx.Err() == nil
