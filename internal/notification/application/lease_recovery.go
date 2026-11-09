@@ -31,6 +31,8 @@ type LeaseRecoveryAssessment struct {
 	ReasonCode  string
 	AttemptID   string
 	EvidenceRef string
+	RetryAfterAt *time.Time
+	ProviderMessageRef string
 }
 
 // AssessExpiredDeliveryLease 根据完整 Attempt 历史判断过期租约能否安全收敛。
@@ -108,7 +110,7 @@ func AssessExpiredDeliveryLease(
 		result.Action = LeaseRecoveryFinalizeSent
 		result.ReasonCode = "attempt_accepted_before_worker_crash"
 		if current.ProviderMessageRef != nil {
-			result.EvidenceRef = *current.ProviderMessageRef
+			result.ProviderMessageRef = *current.ProviderMessageRef
 		}
 	case domain.DeliveryAttemptRejected:
 		if !current.Retryable {
@@ -120,6 +122,7 @@ func AssessExpiredDeliveryLease(
 		} else {
 			result.Action = LeaseRecoveryApplyRetryPolicy
 			result.ReasonCode = "retryable_rejection_recovery"
+			result.RetryAfterAt = cloneDeliveryTime(current.RetryAfterAt)
 		}
 	case domain.DeliveryAttemptNotSent:
 		result.EvidenceRef = dereferenceRecoveryEvidence(current.EvidenceRef)

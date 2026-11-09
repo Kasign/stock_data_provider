@@ -242,7 +242,7 @@ Attempt Repository 的模块级原子边界：
 - ListByDelivery：按 attempt_no 顺序返回深拷贝历史；未知 Delivery 返回 not found。
 - attempt_count 是已追加 Attempt 数量的计数投影；StartWithLease 与 Attempt 追加同事务更新，不改变 Delivery 状态版本，也不产生伪造的状态迁移事件。真实 Repository 必须保证 Attempt 行、计数投影和租约检查的事务原子性；建议数据库增加 `UNIQUE(delivery_id, fencing_token)`，并在事务中锁定 Delivery 行，防止同一 claim 并发创建第二个 Attempt。
 
-新增只读 `AssessExpiredDeliveryLease` 恢复评估：要求完整 Attempt 历史与已过期租约；当前 fencing token 无 Attempt 表示外部 Send 尚未开始，可在剩余预算内安全重试；运行中 Attempt 或 ambiguous 结果必须进入 unknown；accepted 可收敛 sent；明确 rejected 按持久化 retryable 标志交给 RetryPolicy 或结束 failed；not_sent 必须保留 evidence_ref。评估函数不执行状态写入，调用方仍须以当前 Delivery version + fencing token 做 CAS，并在同一事务中释放租约/追加状态事件。
+新增只读 `AssessExpiredDeliveryLease` 恢复评估：要求完整 Attempt 历史与已过期租约；当前 fencing token 无 Attempt 表示外部 Send 尚未开始，可在剩余预算内安全重试；运行中 Attempt 或 ambiguous 结果必须进入 unknown；accepted 可收敛 sent 并保留 provider_message_ref；明确 rejected 按持久化 retryable 标志交给 RetryPolicy 或结束 failed，同时保留 retry_after_at；not_sent 必须保留 evidence_ref。评估函数不执行状态写入，调用方仍须以当前 Delivery version + fencing token 做 CAS，并在同一事务中释放租约/追加状态事件。
 
 当前仅有模块内 Fake；其锁只能证明单进程测试语义，不证明数据库事务、跨进程租约 fencing 或真实进程崩溃恢复。只读评估不等于已实现恢复扫描器或 MariaDB 恢复事务。
 Fake/单测代码未获得 CI 通过证据前不得标记模块级验收通过；真实 MariaDB Adapter、Worker 崩溃恢复和真实渠道证据仍未实现。
@@ -255,6 +255,7 @@ DeliveryAttempt 是追加式执行历史，至少记录：
 - started_at、finished_at；
 - outcome：accepted/rejected/ambiguous/not_sent；
 - provider_message_ref（如有）、error_code、retryable、duration；
+- `retry_after_at`：仅当渠道已验证支持 Retry-After，且 Adapter 返回的 rejected 结果通过能力校验后持久化；用于 Worker 崩溃恢复，不能只保存在内存中；
 - 安全摘要和受控 evidence_ref。
 
 每次真实渠道调用创建一个新 Attempt。完成后的 Attempt 结果不可覆盖；修正通过新的对账记录/状态事件追加。

@@ -147,6 +147,7 @@ func cloneApplicationAttempt(attempt domain.DeliveryAttempt) domain.DeliveryAtte
 	attempt.ProviderMessageRef = cloneDeliveryString(attempt.ProviderMessageRef)
 	attempt.ErrorCode = cloneDeliveryString(attempt.ErrorCode)
 	attempt.EvidenceRef = cloneDeliveryString(attempt.EvidenceRef)
+	attempt.RetryAfterAt = cloneDeliveryTime(attempt.RetryAfterAt)
 	if attempt.DurationMS != nil {
 		value := *attempt.DurationMS
 		attempt.DurationMS = &value

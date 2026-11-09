@@ -32,6 +32,7 @@ type DeliveryAttempt struct {
 	ProviderMessageRef  *string                `json:"provider_message_ref"`
 	ErrorCode           *string                `json:"error_code"`
 	Retryable           bool                   `json:"retryable"`
+	RetryAfterAt        *time.Time             `json:"retry_after_at"`
 	DurationMS          *int64                 `json:"duration_ms"`
 	EvidenceRef         *string                `json:"evidence_ref"`
 }
@@ -57,13 +58,14 @@ func (a DeliveryAttempt) Validate() error {
 
 	if a.FinishedAt == nil || a.Outcome == nil || a.DurationMS == nil {
 		if a.FinishedAt != nil || a.Outcome != nil || a.DurationMS != nil ||
-			a.ProviderMessageRef != nil || a.ErrorCode != nil || a.EvidenceRef != nil || a.Retryable {
+			a.ProviderMessageRef != nil || a.ErrorCode != nil || a.EvidenceRef != nil || a.Retryable || a.RetryAfterAt != nil {
 			return fmt.Errorf("%w: incomplete attempt completion", ErrInvalidDeliveryAttempt)
 		}
 		return nil
 	}
 	if !isUTCTime(*a.FinishedAt) || a.FinishedAt.Before(a.StartedAt) ||
-		*a.DurationMS < 0 || *a.DurationMS != a.FinishedAt.Sub(a.StartedAt).Milliseconds() {
+		*a.DurationMS < 0 || *a.DurationMS != a.FinishedAt.Sub(a.StartedAt).Milliseconds() ||
+		(a.RetryAfterAt != nil && (!isUTCTime(*a.RetryAfterAt) || a.Outcome == nil || *a.Outcome != DeliveryAttemptRejected)) {
 		return fmt.Errorf("%w: invalid completion time or duration", ErrInvalidDeliveryAttempt)
 	}
 
@@ -96,6 +98,14 @@ func (a DeliveryAttempt) Complete(at time.Time, outcome DeliveryAttemptOutcome, 
 	if err := a.Validate(); err != nil {
 		return DeliveryAttempt{}, err
 	}
+	return a.CompleteWithRetryAfter(at, outcome, providerMessageRef, errorCode, retryable, evidenceRef, nil)
+}
+
+// CompleteWithRetryAfter 在 Attempt 中持久化渠道明确返回的 Retry-After，供 Worker 崩溃恢复后继续执行相同退避约束。
+func (a DeliveryAttempt) CompleteWithRetryAfter(at time.Time, outcome DeliveryAttemptOutcome, providerMessageRef, errorCode string, retryable bool, evidenceRef string, retryAfterAt *time.Time) (DeliveryAttempt, error) {
+	if err := a.Validate(); err != nil {
+		return DeliveryAttempt{}, err
+	}
 	if a.FinishedAt != nil || !isUTCTime(at) || at.Before(a.StartedAt) {
 		return DeliveryAttempt{}, ErrInvalidDeliveryAttempt
 	}
@@ -109,6 +119,7 @@ func (a DeliveryAttempt) Complete(at time.Time, outcome DeliveryAttemptOutcome, 
 	next.ErrorCode = stringPointer(errorCode)
 	next.Retryable = retryable
 	next.EvidenceRef = stringPointer(evidenceRef)
+	next.RetryAfterAt = cloneTime(retryAfterAt)
 	if err := next.Validate(); err != nil {
 		return DeliveryAttempt{}, err
 	}
@@ -128,6 +139,7 @@ func cloneDeliveryAttempt(a DeliveryAttempt) DeliveryAttempt {
 	a.ErrorCode = cloneString(a.ErrorCode)
 	a.DurationMS = cloneInt64(a.DurationMS)
 	a.EvidenceRef = cloneString(a.EvidenceRef)
+	a.RetryAfterAt = cloneTime(a.RetryAfterAt)
 	return a
 }
 

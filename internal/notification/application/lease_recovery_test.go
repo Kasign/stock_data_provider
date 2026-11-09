@@ -107,6 +107,21 @@ func TestAssessExpiredDeliveryLeaseClassifiesAttemptOutcomes(t *testing.T) {
 	}
 }
 
+func TestAssessExpiredDeliveryLeaseRetainsRetryAfter(t *testing.T) {
+	delivery, lease, now := recoveryFixture(t)
+	running := recoveryAttempt(t, delivery, lease, domain.DeliveryAttemptRejected, false)
+	finishedAt := running.StartedAt.Add(time.Second)
+	retryAfter := finishedAt.Add(45 * time.Second)
+	completed, err := running.CompleteWithRetryAfter(finishedAt, domain.DeliveryAttemptRejected, "", "provider_busy", true, "", &retryAfter)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := AssessExpiredDeliveryLease(delivery, lease, []domain.DeliveryAttempt{completed}, now)
+	if err != nil || got.Action != LeaseRecoveryApplyRetryPolicy || got.RetryAfterAt == nil || !got.RetryAfterAt.Equal(retryAfter) {
+		t.Fatalf("recovery must retain provider Retry-After for policy evaluation: %+v err=%v", got, err)
+	}
+}
+
 func TestAssessExpiredDeliveryLeaseRejectsIncompleteOrMismatchedHistory(t *testing.T) {
 	delivery, lease, now := recoveryFixture(t)
 	attempt := recoveryAttempt(t, delivery, lease, domain.DeliveryAttemptAccepted, true)
