@@ -1262,9 +1262,9 @@ Lifecycle.Stop 原实现通过 stopped 标记保证重复调用幂等，但并�
 
 ### 12.51 Server 关闭错误与 Schema 预检独立 CI 验收（2026-11-09）
 
-- Commit：713f3fb64b0c25bd7feec62151814798d1e12229。
-- Server 独立 Workflow Run 42621289374：success。覆盖 gofmt、Server 包级单测、Race、Vet；Bootstrap、Diagnostics、Migration、Runtime 均在该矩阵中。
-- 根模块 Workflow Run 42621289403：failure。根模块 gofmt 已通过；全仓测试仍被 LLM、News、Notification、Quant、Research、Researchflow 等模块已有编译/测试问题阻断。Server 独立矩阵通过，不代表全仓通过。
+- Commit：e142acce5264b105460138a66408f9ea10c994de。
+- Server 独立 Workflow Run 42621863429（SHA e142acce）：success。覆盖 gofmt、Server 包级单测、Race、Vet；Bootstrap、Diagnostics、Migration、Runtime 均在该矩阵中，新增 Schema Readiness 注册测试通过。
+- 根模块 Workflow Run 42621863653：failure。根模块 gofmt 已通过；全仓测试仍被 LLM、News、Notification、Quant、Research、Researchflow 等模块已有编译/测试问题阻断，且 server/llmtransport 仍受 LLM 包编译错误影响。Server 独立矩阵通过，不代表全仓通过。
 - SRV-006 本轮关闭错误传播已通过独立包级测试；生产环境的关闭失败故障注入和进程退出码验收仍待完成。
-- SRV-007 本轮 Schema 只读版本/状态预检已通过独立包级测试；未连接真实 MariaDB 验证故障矩阵，且未验证 checksum。Platform 需要后续提供公开只读历史/checksum 验证能力，Server 不实现其内部算法。
+- SRV-007 本轮 Schema 只读版本/状态预检及 Readiness 注册测试已通过独立包级测试；未连接真实 MariaDB 验证故障矩阵，且未验证 checksum。Platform 需要后续提供公开只读历史/checksum 验证能力，Server 不实现其内部算法。
 - 当前 Server 分支没有合并 integration，也没有修改其他模块目录。
