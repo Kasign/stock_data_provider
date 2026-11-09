@@ -1,12 +1,17 @@
 package bootstrap
 
 import (
+	"net/http"
 	"strings"
 	"testing"
 
 	"example.com/stock-analysis-flow/internal/marketdata/config"
 	"example.com/stock-analysis-flow/internal/marketdata/provider"
 )
+
+type egressHTTPDoerStub struct{}
+
+func (egressHTTPDoerStub) Do(*http.Request) (*http.Response, error) { return nil, nil }
 
 func TestValidateEgressDependenciesOnlyRequiresEnabledProviders(t *testing.T) {
 	cfg := config.Config{
@@ -119,7 +124,7 @@ func TestValidateEgressDependenciesChecksOnlyEnabledTencentEndpoints(t *testing.
 		!strings.Contains(err.Error(), "tencent quote HTTP") {
 		t.Fatalf("expected missing quote executor, got %v", err)
 	}
-	deps := Dependencies{TencentQuoteHTTPDoer: providerHTTPDoerStub{}}
+	deps := Dependencies{TencentQuoteHTTPDoer: egressHTTPDoerStub{}}
 	if err := validateEgressDependencies(cfg, deps); err != nil {
 		t.Fatalf("quote-only Tencent must not require kline/search executors: %v", err)
 	}
@@ -134,12 +139,12 @@ func TestValidateEgressDependenciesChecksOnlyEnabledSinaAndNeteaseEndpoints(t *t
 		{
 			name: "sina quote only",
 			cfg:  config.Config{ProviderPriority: []string{"sina"}, ProviderSettings: map[string]config.ProviderSettings{"sina": {Enabled: true, Quote: true}}},
-			deps: Dependencies{SinaQuoteHTTPDoer: providerHTTPDoerStub{}},
+			deps: Dependencies{SinaQuoteHTTPDoer: egressHTTPDoerStub{}},
 		},
 		{
 			name: "netease daily bars only",
 			cfg:  config.Config{ProviderPriority: []string{"netease"}, ProviderSettings: map[string]config.ProviderSettings{"netease": {Enabled: true, DailyBars: true}}},
-			deps: Dependencies{NeteaseHistoryHTTPDoer: providerHTTPDoerStub{}},
+			deps: Dependencies{NeteaseHistoryHTTPDoer: egressHTTPDoerStub{}},
 		},
 	}
 	for _, tt := range tests {
