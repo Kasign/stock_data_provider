@@ -19,7 +19,7 @@ on:
       - 'docker-compose.yml'
       - 'scripts/**'
   push:
-    branches: [main, feat/full-go-data-providers-api-switch, feat/research-news-ingestion, feat/notification, feat/quant]
+    branches: [main, feat/full-go-data-providers-api-switch, feat/research-news-ingestion, feat/notification, feat/quant, feat/research-analysis-flow-native-go]
     paths:
       - 'go.mod'
       - 'go.sum'
