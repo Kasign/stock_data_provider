@@ -29,6 +29,7 @@ import (
 	serverhealth "example.com/stock-analysis-flow/internal/server/health"
 	servermigration "example.com/stock-analysis-flow/internal/server/migration"
 	serverresources "example.com/stock-analysis-flow/internal/server/resources"
+	runtime "example.com/stock-analysis-flow/internal/server/runtime"
 	"example.com/stock-analysis-flow/internal/service"
 )
 
@@ -127,11 +128,18 @@ func Run(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("创建旧 Analysis 异步任务队列失败: %w", err)
 	}
-	defer tasks.Close()
-	if serverRole == serverconfig.RoleWorker || serverRole == serverconfig.RoleAll {
-		if err := tasks.Start(ctx); err != nil {
-			return fmt.Errorf("启动旧 Analysis Worker 失败: %w", err)
+
+	lifecycle := runtime.NewLifecycle()
+	if err := lifecycle.Register(legacyAnalysisWorker{name: "legacy-analysis-worker", queue: tasks, enabled: serverRole == serverconfig.RoleWorker || serverRole == serverconfig.RoleAll}); err != nil {
+		return fmt.Errorf("注册旧 Analysis Worker 生命周期失败: %w", err)
+	}
+	defer func() {
+		if err := lifecycle.Stop(context.Background()); err != nil {
+			slog.Warn("停止 Server 运行组件失败", "error", err.Error())
 		}
+	}()
+	if err := lifecycle.Start(ctx); err != nil {
+		return fmt.Errorf("启动 Server 运行组件失败: %w", err)
 	}
 
 	if serverRole == serverconfig.RoleWorker {
@@ -194,6 +202,23 @@ func Run(ctx context.Context) error {
 		}
 		return nil
 	}
+}
+
+
+type legacyAnalysisWorker struct {
+	name string
+	queue *taskqueue.Queue
+	enabled bool
+}
+
+func (w legacyAnalysisWorker) Name() string { return w.name }
+func (w legacyAnalysisWorker) Start(ctx context.Context) error {
+	if !w.enabled { return nil }
+	return w.queue.Start(ctx)
+}
+func (w legacyAnalysisWorker) Stop(context.Context) error {
+	w.queue.Close()
+	return nil
 }
 
 func boundedIntEnv(name string, fallback, minimum, maximum int) (int, error) {
