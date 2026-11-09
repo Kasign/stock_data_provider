@@ -14,7 +14,10 @@ import (
 	_ "github.com/go-sql-driver/mysql"
 )
 
-type Store struct{ db *sql.DB }
+type Store struct {
+	db     *sql.DB
+	ownsDB bool
+}
 
 func OpenMySQL(ctx context.Context, dsn string) (*Store, error) {
 	if dsn == "" {
@@ -33,10 +36,18 @@ func OpenMySQL(ctx context.Context, dsn string) (*Store, error) {
 		db.Close()
 		return nil, fmt.Errorf("ping MariaDB: %w", err)
 	}
+	return &Store{db: db, ownsDB: true}, nil
+}
+// NewWithBorrowedDB 创建复用调用方连接池的 Store；Store 不拥有该连接池。
+func NewWithBorrowedDB(db *sql.DB) (*Store, error) {
+	if db == nil {
+		return nil, errors.New("borrowed MariaDB DB is required")
+	}
 	return &Store{db: db}, nil
 }
+
 func (s *Store) Close() error {
-	if s == nil || s.db == nil {
+	if s == nil || s.db == nil || !s.ownsDB {
 		return nil
 	}
 	return s.db.Close()

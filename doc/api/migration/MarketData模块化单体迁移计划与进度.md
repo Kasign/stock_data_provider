@@ -277,6 +277,8 @@ internal/
 - [ ] Application DTO 保留 nullable、精度、单位、来源、时间、复权、质量和 PIT 信息。
 - [ ] 生命周期和初始化失败路径有自动化测试。
 
+> **执行依赖修正（2026-11-09）：** M3 的 Root Server 装配不能先通过独立 `OpenMySQL` 为 Data 创建第二套 Pool。先完成 M4 的 MariaDB borrowed Pool 最小切片（Data Repository 接收 Root 的 `*sql.DB`，关闭 Data Store 不关闭 Root Pool），再实施 M3 路由与 InProcess 切换；Redis 适配和完整生命周期收口仍留在 M4。此调整只前移 M3 的必要资源前置条件，不提前合并 Platform 代码。
+
 ### M3：Root Server 同进程装配
 
 状态：`pending`
@@ -789,3 +791,12 @@ internal/
 - Root Server 后续可在自己的 Migration Registry 中注册该 Runner，决定与 Analysis/其他模块的执行顺序；Data 仍拥有迁移内容，Platform 不接管业务表和 SQL。
 - 新增无存储配置时 MigrationRunner 返回 nil 的单测；Repository 的迁移幂等和 MariaDB/PIT 集成测试继续作为迁移行为证据。
 - 当前 SHA `33760950` 的 Data Module gofmt/test/race/vet、MariaDB/PIT、News MariaDB、Platform、Live Probe、Go/Python parity 均通过；Root 全仓 gofmt 仍被 Research 文件阻断，WebUI 门禁失败归 WebUI Owner。本次修改后的结果以新 SHA CI 为准。
+
+
+### 2026-11-09：M4-DB 前置切片——Data Repository 支持借用 Root Pool
+
+- M3 Root Server 装配需要把 Root Store 的 `*sql.DB` 注入 Data Repository；现有 `OpenMySQL` 总是创建独立 Pool，直接复用会造成重复连接池和重复关闭风险。
+- `repository.Store` 增加明确的 `ownsDB` 所有权标记；原 `OpenMySQL` 创建的 Pool 仍由 Store 拥有，`Close` 行为保持不变。
+- 新增 `NewWithBorrowedDB(*sql.DB)`，只包装调用方 Pool，不 Ping、不调整连接池参数、不关闭该 Pool；nil DB 返回明确错误。
+- 该构造器只解决 Data Repository 的 DB 句柄所有权，不改 SQL、Schema、Migration 内容和查询语义；Root Server 仍负责创建、配置、Ping 和关闭 Pool。
+- 下一步补充 borrowed/owned 关闭行为测试，再由 Root Server Bootstrap 注入 borrowed Store；Redis 暂不做接口替换，避免把两类资源迁移混成一批。
