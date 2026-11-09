@@ -74,7 +74,6 @@ func NewResponsesAdapter(provider ProviderConfig, apiKey config.Secret, doer HTT
 	}, nil
 }
 
-
 func NewResponsesAdapterWithStream(provider ProviderConfig, apiKey config.Secret, doer HTTPDoer, streamDoer HTTPStreamDoer, capabilities CapabilityState, clock Clock) (*ResponsesAdapter, error) {
 	if streamDoer == nil {
 		return nil, errors.New("Platform-bound HTTP stream doer is required")
