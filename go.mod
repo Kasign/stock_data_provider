@@ -1,6 +1,6 @@
 module example.com/stock-analysis-flow
 
-go 1.22
+go 1.23.0
 
 require (
 	github.com/gowebpki/jcs v1.0.2
