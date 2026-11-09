@@ -1,9 +1,12 @@
 package registry
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/santhosh-tekuri/jsonschema/v5"
 )
 
 func TestTrendResultSchemaValidatesGoldenAndRejectsInvalidDiscriminators(t *testing.T) {
@@ -42,4 +45,110 @@ func TestTrendResultSchemaValidatesGoldenAndRejectsInvalidDiscriminators(t *test
 			t.Errorf("invalid evidence metric unexpectedly passed: %s", metric)
 		}
 	}
+}
+
+
+func TestTrendAndRiskSchemasRejectSurroundingWhitespace(t *testing.T) {
+	trendSchema := compileQuantSchemaFile(t, "QNT-CTR-004-trend-result-1.0.0.schema.json")
+	trendInstance := map[string]any{
+		"trend_code": "price_trend",
+		"direction": "unknown",
+		"phase": "emerging",
+		"strength": 0.2,
+		"period": "20d",
+		"evidence_metrics": []any{map[string]any{
+			"metric_code": "momentum_20d",
+			"value": 0.2,
+			"unit": "ratio",
+			"period": "20d",
+			"system_as_of": "2026-11-09T01:00:00Z",
+			"quality_status": "valid",
+			"metric_status": "available",
+			"calculation_version": "1.0.0",
+			"sample_count": 21,
+			"lower_bound": nil,
+			"upper_bound": nil,
+		}},
+		"conflict_refs": []any{"conflict:1"},
+		"quality_status": "valid",
+		"system_as_of": "2026-11-09T01:00:00Z",
+		"algorithm_version": "1.0.0",
+	}
+	trendMutations := []struct {
+		name string
+		mutate func(map[string]any)
+	}{
+		{"trend_code leading whitespace", func(v map[string]any) { v["trend_code"] = " price_trend" }},
+		{"trend_code trailing whitespace", func(v map[string]any) { v["trend_code"] = "price_trend " }},
+		{"period leading whitespace", func(v map[string]any) { v["period"] = " 20d" }},
+		{"period trailing whitespace", func(v map[string]any) { v["period"] = "20d " }},
+		{"algorithm_version leading whitespace", func(v map[string]any) { v["algorithm_version"] = " 1.0.0" }},
+		{"conflict ref trailing whitespace", func(v map[string]any) { v["conflict_refs"] = []any{"conflict:1 "} }},
+		{"metric code leading whitespace", func(v map[string]any) { v["evidence_metrics"].([]any)[0].(map[string]any)["metric_code"] = " momentum_20d" }},
+		{"metric unit trailing whitespace", func(v map[string]any) { v["evidence_metrics"].([]any)[0].(map[string]any)["unit"] = "ratio " }},
+		{"metric period leading whitespace", func(v map[string]any) { v["evidence_metrics"].([]any)[0].(map[string]any)["period"] = " 20d" }},
+		{"metric calculation version trailing whitespace", func(v map[string]any) { v["evidence_metrics"].([]any)[0].(map[string]any)["calculation_version"] = "1.0.0 " }},
+	}
+	for _, tc := range trendMutations {
+		t.Run("trend/"+tc.name, func(t *testing.T) {
+			instance := cloneSchemaMap(trendInstance)
+			tc.mutate(instance)
+			if err := validateSchemaMap(trendSchema, instance); err == nil {
+				t.Fatal("TrendResult Schema unexpectedly accepted non-canonical text")
+			}
+		})
+	}
+
+	riskSchema := compileQuantSchemaFile(t, "QNT-CTR-004-risk-decision-1.0.0.schema.json")
+	riskInstance := map[string]any{
+		"decision_id": "decision-1",
+		"status": "unknown",
+		"rule_set_version": "1.0.0",
+		"evaluated_at": "2026-11-09T01:00:00Z",
+		"system_as_of": "2026-11-09T00:59:00Z",
+		"reasons": []any{map[string]any{
+			"code": "INPUT_UNKNOWN",
+			"severity": "block",
+			"status": "unknown",
+			"safe_message": "input unavailable",
+			"evidence_refs": []any{"evidence:1"},
+		}},
+		"input_refs": []any{"input:1"},
+	}
+	riskMutations := []struct {
+		name string
+		mutate func(map[string]any)
+	}{
+		{"decision_id leading whitespace", func(v map[string]any) { v["decision_id"] = " decision-1" }},
+		{"rule_set_version trailing whitespace", func(v map[string]any) { v["rule_set_version"] = "1.0.0 " }},
+		{"reason code leading whitespace", func(v map[string]any) { v["reasons"].([]any)[0].(map[string]any)["code"] = " INPUT_UNKNOWN" }},
+		{"safe message trailing whitespace", func(v map[string]any) { v["reasons"].([]any)[0].(map[string]any)["safe_message"] = "input unavailable " }},
+		{"evidence ref leading whitespace", func(v map[string]any) { v["reasons"].([]any)[0].(map[string]any)["evidence_refs"] = []any{" evidence:1"} }},
+		{"input ref trailing whitespace", func(v map[string]any) { v["input_refs"] = []any{"input:1 "} }},
+	}
+	for _, tc := range riskMutations {
+		t.Run("risk/"+tc.name, func(t *testing.T) {
+			instance := cloneSchemaMap(riskInstance)
+			tc.mutate(instance)
+			if err := validateSchemaMap(riskSchema, instance); err == nil {
+				t.Fatal("RiskDecision Schema unexpectedly accepted non-canonical text")
+			}
+		})
+	}
+}
+
+func cloneSchemaMap(source map[string]any) map[string]any {
+	encoded, err := json.Marshal(source)
+	if err != nil {
+		panic(err)
+	}
+	var clone map[string]any
+	if err := json.Unmarshal(encoded, &clone); err != nil {
+		panic(err)
+	}
+	return clone
+}
+
+func validateSchemaMap(schema *jsonschema.Schema, instance map[string]any) error {
+	return schema.Validate(instance)
 }

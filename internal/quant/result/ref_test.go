@@ -272,26 +272,48 @@ func TestBuildRefRejectsBlankOrNonCanonicalMetadata(t *testing.T) {
 	}
 }
 
-
+ 
 func TestQuantResultRefSchemaMatchesGoCanonicalTextAndIdentityRules(t *testing.T) {
 	schemaPath := filepath.Join("..", "..", "..", "doc", "quant", "schema", "QNT-CTR-004-quant-result-ref-1.0.0.schema.json")
 	schemaDocument, err := os.ReadFile(schemaPath)
-	if err != nil { t.Fatalf("read QuantResultRef schema: %v", err) }
+	if err != nil {
+		t.Fatalf("read QuantResultRef schema: %v", err)
+	}
 	compiler := jsonschema.NewCompiler()
 	compiler.Draft = jsonschema.Draft2020
 	compiler.AssertFormat = true
 	const schemaURL = "https://quant.invalid/quant-result-ref-canonical.schema.json"
-	if err := compiler.AddResource(schemaURL, bytes.NewReader(schemaDocument)); err != nil { t.Fatal(err) }
+	if err := compiler.AddResource(schemaURL, bytes.NewReader(schemaDocument)); err != nil {
+		t.Fatal(err)
+	}
 	schema, err := compiler.Compile(schemaURL)
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	ref, err := BuildRef(validRefInput(), testManifest(t))
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	encoded, err := json.Marshal(ref)
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	var base map[string]any
-	if err := json.Unmarshal(encoded, &base); err != nil { t.Fatal(err) }
-	clone := func() map[string]any { copy := make(map[string]any, len(base)); for key, value := range base { copy[key] = value }; copy["input_snapshot_refs"] = append([]any(nil), base["input_snapshot_refs"].([]any)...); return copy }
-	invalid := []struct { name string; mutate func(map[string]any) }{
+	if err := json.Unmarshal(encoded, &base); err != nil {
+		t.Fatal(err)
+	}
+	clone := func() map[string]any {
+		copy := make(map[string]any, len(base))
+		for key, value := range base {
+			copy[key] = value
+		}
+		copy["input_snapshot_refs"] = append([]any(nil), base["input_snapshot_refs"].([]any)...)
+		return copy
+	}
+	invalid := []struct {
+		name   string
+		mutate func(map[string]any)
+	}{
 		{"result_id is not a content address", func(v map[string]any) { v["result_id"] = "result-1" }},
 		{"security_id leading whitespace", func(v map[string]any) { v["security_id"] = " security-1" }},
 		{"security_id trailing whitespace", func(v map[string]any) { v["security_id"] = "security-1 " }},
@@ -307,8 +329,22 @@ func TestQuantResultRefSchemaMatchesGoCanonicalTextAndIdentityRules(t *testing.T
 		{"snapshot ref trailing whitespace", func(v map[string]any) { v["input_snapshot_refs"] = []any{"snapshot-1 "} }},
 		{"snapshot ref whitespace only", func(v map[string]any) { v["input_snapshot_refs"] = []any{"   "} }},
 	}
-	for _, tc := range invalid { t.Run(tc.name, func(t *testing.T) { instance := clone(); tc.mutate(instance); if err := schema.Validate(instance); err == nil { t.Fatal("Schema unexpectedly accepted non-canonical QuantResultRef") } }) }
-	if err := schema.Validate(base); err != nil { t.Fatalf("Schema rejected canonical BuildRef output: %v", err) }
-	market := clone(); market["scope"] = "market"; delete(market, "security_id")
-	if err := schema.Validate(market); err != nil { t.Fatalf("Schema rejected market Ref without security_id: %v", err) }
+	for _, tc := range invalid {
+		t.Run(tc.name, func(t *testing.T) {
+			instance := clone()
+			tc.mutate(instance)
+			if err := schema.Validate(instance); err == nil {
+				t.Fatal("Schema unexpectedly accepted non-canonical QuantResultRef")
+			}
+		})
+	}
+	if err := schema.Validate(base); err != nil {
+		t.Fatalf("Schema rejected canonical BuildRef output: %v", err)
+	}
+	market := clone()
+	market["scope"] = "market"
+	delete(market, "security_id")
+	if err := schema.Validate(market); err != nil {
+		t.Fatalf("Schema rejected market Ref without security_id: %v", err)
+	}
 }
