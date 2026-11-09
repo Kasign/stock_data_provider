@@ -29,7 +29,7 @@ func TestValidateEgressDependenciesOnlyRequiresEnabledProviders(t *testing.T) {
 func TestValidateEgressDependenciesRequiresEnabledProviderInjection(t *testing.T) {
 	cfg := config.Config{
 		ProviderPriority: []string{"tushare"},
-		ProviderSettings: map[string]config.ProviderSettings{"tushare": {Enabled: true}},
+		ProviderSettings: map[string]config.ProviderSettings{"tushare": {Enabled: true, DailyBars: true}},
 	}
 	err := validateEgressDependencies(cfg, Dependencies{})
 	if err == nil || !strings.Contains(err.Error(), "tushare HTTP") {
@@ -40,7 +40,7 @@ func TestValidateEgressDependenciesRequiresEnabledProviderInjection(t *testing.T
 func TestValidateEgressDependenciesChecksEastmoneyOrigins(t *testing.T) {
 	cfg := config.Config{
 		ProviderPriority:          []string{"eastmoney"},
-		ProviderSettings:          map[string]config.ProviderSettings{"eastmoney": {Enabled: true}},
+		ProviderSettings:          map[string]config.ProviderSettings{"eastmoney": {Enabled: true, Quote: true}},
 		EastmoneyQuoteURL:         "https://quote.example.test/api",
 		EastmoneyKlineURL:         "https://quote.example.test/kline",
 		EastmoneyStockBasicURL:    "https://quote.example.test/basic",
@@ -65,8 +65,8 @@ func TestValidateEgressDependenciesRequiresTCPDialers(t *testing.T) {
 	cfg := config.Config{
 		ProviderPriority: []string{"baostock", "pytdx"},
 		ProviderSettings: map[string]config.ProviderSettings{
-			"baostock": {Enabled: true},
-			"pytdx":    {Enabled: true},
+			"baostock": {Enabled: true, DailyBars: true},
+			"pytdx":    {Enabled: true, DailyBars: true},
 		},
 	}
 	if err := validateEgressDependencies(cfg, Dependencies{}); err == nil ||
@@ -78,7 +78,7 @@ func TestValidateEgressDependenciesRequiresTCPDialers(t *testing.T) {
 func TestValidateEgressDependenciesUsesEffectiveEastmoneyDefaults(t *testing.T) {
 	cfg := config.Config{
 		ProviderPriority: []string{"eastmoney"},
-		ProviderSettings: map[string]config.ProviderSettings{"eastmoney": {Enabled: true}},
+		ProviderSettings: map[string]config.ProviderSettings{"eastmoney": {Enabled: true, Quote: true}},
 	}
 	err := validateEgressDependencies(cfg, Dependencies{EastmoneyHTTPDoers: map[string]provider.HTTPDoer{}})
 	if err == nil || !strings.Contains(err.Error(), "eastmoney.com") {

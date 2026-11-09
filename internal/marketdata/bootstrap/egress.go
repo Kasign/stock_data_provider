@@ -2,6 +2,7 @@ package bootstrap
 
 import (
 	"fmt"
+	"strings"
 
 	"example.com/stock-analysis-flow/internal/marketdata/config"
 	"example.com/stock-analysis-flow/internal/marketdata/provider"
@@ -78,8 +79,17 @@ func validateEgressDependencies(cfg config.Config, deps Dependencies) error {
 				return missingEgress("tushare HTTP")
 			}
 		case "tickflow":
-			if deps.TickFlowAuthenticatedHTTPDoer == nil || deps.TickFlowPublicHTTPDoer == nil {
-				return missingEgress("tickflow authenticated/public HTTP endpoints")
+			// Quote、指数、广度和行业排名走授权 API；日 K 在配置 API Key 时也走授权 API，
+			// 未配置 Key 时才走 free API。只校验本次配置可能实际使用的出口。
+			tickflowAuthenticated := settings.Quote || settings.IndexQuotes ||
+				settings.MarketBreadth || settings.SectorRankings ||
+				(settings.DailyBars && strings.TrimSpace(cfg.TickFlowAPIKey) != "")
+			tickflowPublic := settings.DailyBars && strings.TrimSpace(cfg.TickFlowAPIKey) == ""
+			if tickflowAuthenticated && deps.TickFlowAuthenticatedHTTPDoer == nil {
+				return missingEgress("tickflow authenticated HTTP")
+			}
+			if tickflowPublic && deps.TickFlowPublicHTTPDoer == nil {
+				return missingEgress("tickflow public HTTP")
 			}
 		case "pytdx":
 			if deps.PytdxDialContext == nil {
