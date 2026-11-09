@@ -106,6 +106,8 @@ func CancelRun(run domain.Run, stages []domain.Stage, now time.Time) (domain.Run
 	return run, stages, nil
 }
 
+// ApplyDeadline moves unfinished work into cancellation at the Run deadline. If every Stage is already terminal,
+// it leaves the Run running so the caller can use AggregateRun rather than deadline finalization.
 func ApplyDeadline(run domain.Run, stages []domain.Stage, dbNow time.Time) (domain.Run, []domain.Stage, error) {
 	if run.Status.Terminal() || dbNow.UTC().Before(run.DeadlineAt.UTC()) {
 		return run, stages, nil
