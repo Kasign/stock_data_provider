@@ -663,7 +663,7 @@ func TestResearchSQLRepositoriesAppendAndReadVersions(t *testing.T) {
 	lockWaitObserved := false
 	for time.Now().Before(waitDeadline) {
 		var active int
-		if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM information_schema.PROCESSLIST WHERE INFO LIKE 'INSERT IGNORE INTO research_aggregate_heads%' OR INFO LIKE 'SELECT latest_version FROM research_aggregate_heads%'").Scan(&active); err != nil {
+		if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM information_schema.PROCESSLIST WHERE INFO LIKE 'INSERT INTO research_aggregate_heads%' OR INFO LIKE 'SELECT latest_version FROM research_aggregate_heads%'").Scan(&active); err != nil {
 			cancelLockWait()
 			_ = blocker.Rollback()
 			t.Fatalf("inspect MariaDB process list for blocked append: %v", err)
