@@ -584,14 +584,14 @@ func TestResearchSQLRepositoriesAppendAndReadVersions(t *testing.T) {
 	if err := contextRepo.Append(ctx, contextV2); !errors.Is(err, ErrCorruptRecord) {
 		t.Fatalf("tampered Context idempotent replay error = %v, want ErrCorruptRecord", err)
 	}
-	contextV3 := contextV2
-	contextV3.ContextVersion = 3
-	contextV3.SystemAsOf = contextV2.SystemAsOf.Add(time.Minute)
-	contextV3.CreatedAt = contextV2.CreatedAt.Add(time.Minute)
-	contextV3.SectionRefs = append([]researchcontext.SectionRef(nil), contextV2.SectionRefs...)
-	contextV3.SectionRefs[0].SystemAsOf = contextV3.SystemAsOf
-	contextV3.SectionRefs[0].AssembledAt = contextV3.SystemAsOf
-	if err := contextRepo.Append(ctx, contextV3); !errors.Is(err, ErrCorruptRecord) {
+	contextV3Tampered := contextV2
+	contextV3Tampered.ContextVersion = 3
+	contextV3Tampered.SystemAsOf = contextV2.SystemAsOf.Add(time.Minute)
+	contextV3Tampered.CreatedAt = contextV2.CreatedAt.Add(time.Minute)
+	contextV3Tampered.SectionRefs = append([]researchcontext.SectionRef(nil), contextV2.SectionRefs...)
+	contextV3Tampered.SectionRefs[0].SystemAsOf = contextV3Tampered.SystemAsOf
+	contextV3Tampered.SectionRefs[0].AssembledAt = contextV3Tampered.SystemAsOf
+	if err := contextRepo.Append(ctx, contextV3Tampered); !errors.Is(err, ErrCorruptRecord) {
 		t.Fatalf("append after tampered previous Context error = %v, want ErrCorruptRecord", err)
 	}
 }
