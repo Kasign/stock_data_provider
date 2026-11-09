@@ -144,4 +144,3 @@ func ComposeModelInput(
 		Tokenizer: TokenizerProvenance{ModelID: expectedModelID, Version: tokenizer.Version()},
 	}, nil
 }
-

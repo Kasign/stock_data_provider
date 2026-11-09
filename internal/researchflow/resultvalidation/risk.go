@@ -8,30 +8,30 @@ import (
 )
 
 var (
-	ErrInvalidRiskDecision = errors.New("invalid Quant RiskDecision")
+	ErrInvalidRiskDecision      = errors.New("invalid Quant RiskDecision")
 	ErrRiskPassContradictsBlock = errors.New("RiskDecision pass contradicts a blocking reason")
 )
 
 type RiskReason struct {
-	Code          string   `json:"code"`
-	Severity      string   `json:"severity"`
-	Status        string   `json:"status"`
-	SafeMessage   string   `json:"safe_message"`
-	RuleRef       string   `json:"rule_ref"`
-	EvidenceRefs  []string `json:"evidence_refs"`
-	ObservedValue *string  `json:"observed_value,omitempty"`
-	ExpectedRange *string  `json:"expected_range,omitempty"`
-	RemediationCode *string `json:"remediation_code,omitempty"`
+	Code            string   `json:"code"`
+	Severity        string   `json:"severity"`
+	Status          string   `json:"status"`
+	SafeMessage     string   `json:"safe_message"`
+	RuleRef         string   `json:"rule_ref"`
+	EvidenceRefs    []string `json:"evidence_refs"`
+	ObservedValue   *string  `json:"observed_value,omitempty"`
+	ExpectedRange   *string  `json:"expected_range,omitempty"`
+	RemediationCode *string  `json:"remediation_code,omitempty"`
 }
 
 type RiskDecision struct {
-	DecisionID    string       `json:"decision_id"`
-	Status        string       `json:"status"`
-	RuleSetVersion string      `json:"rule_set_version"`
-	EvaluatedAt   time.Time    `json:"evaluated_at"`
-	SystemAsOf    time.Time    `json:"system_as_of"`
-	Reasons       []RiskReason `json:"reasons"`
-	InputRefs     []string     `json:"input_refs"`
+	DecisionID     string       `json:"decision_id"`
+	Status         string       `json:"status"`
+	RuleSetVersion string       `json:"rule_set_version"`
+	EvaluatedAt    time.Time    `json:"evaluated_at"`
+	SystemAsOf     time.Time    `json:"system_as_of"`
+	Reasons        []RiskReason `json:"reasons"`
+	InputRefs      []string     `json:"input_refs"`
 }
 
 // ValidateRiskDecision prevents a model score or narrative from overriding a

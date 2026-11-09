@@ -14,7 +14,7 @@ func validQuantResult() QuantResultEnvelope {
 		Scope: "stock", SecurityID: "600000.SH", SystemAsOf: now,
 		TradeDate: "2026-11-09", Period: "daily", AlgorithmVersion: "ma-v1",
 		ParameterFingerprint: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-		InputSnapshotRefs: []string{"snapshot-1"}, QualityStatus: "valid",
+		InputSnapshotRefs:    []string{"snapshot-1"}, QualityStatus: "valid",
 		ResultStatus: "completed", AuthorizationRef: "auth-1", CreatedAt: now,
 		Payload: json.RawMessage(`{"metric_code":"ma_5","value":"10.25"}`),
 	}
@@ -101,9 +101,9 @@ func TestRegistryRejectsEnvelopeAndPayloadContractViolations(t *testing.T) {
 	}
 	base := validQuantResult()
 	tests := []struct {
-		name string
+		name   string
 		mutate func(*QuantResultEnvelope)
-		want error
+		want   error
 	}{
 		{"as-of mismatch", func(v *QuantResultEnvelope) { v.SystemAsOf = v.SystemAsOf.Add(time.Second) }, ErrInvalidQuantResult},
 		{"missing authorization", func(v *QuantResultEnvelope) { v.AuthorizationRef = "" }, ErrInvalidQuantResult},
