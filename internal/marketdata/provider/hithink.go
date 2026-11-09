@@ -2092,12 +2092,25 @@ func (p *Hithink) fetchFinancialStatementSection(ctx context.Context, symbol str
 		if err := json.Unmarshal(row["thscode"], &rowSymbol); err != nil || !strings.EqualFold(strings.TrimSpace(rowSymbol), symbol) {
 			continue
 		}
-		endValue, ok := hithinkParseFundamentalValue(row["period_end_ms"])
+		rawPeriodEnd, periodEndPresent := row["period_end_ms"]
+		endValue, ok := hithinkParseFundamentalValue(rawPeriodEnd)
 		if !ok {
+			code := "invalid_date"
+			actualType := providerJSONValueType(rawPeriodEnd)
+			if !periodEndPresent || actualType == "missing" || actualType == "null" {
+				code = "missing_value"
+			}
+			addProviderFieldParseIssue(ctx, symbol, "report_date", "period_end_ms", code,
+				"valid epoch-millisecond report period end", actualType, string(rawPeriodEnd), rowIndex)
 			continue
 		}
 		rowDate, validDate := hithinkDateFromMillis(endValue, loc)
-		if validDate && rowDate == targetReportDate {
+		if !validDate {
+			addProviderFieldParseIssue(ctx, symbol, "report_date", "period_end_ms", "invalid_date",
+				"valid epoch-millisecond report period end", actualTypeForHithinkRaw(rawPeriodEnd), string(rawPeriodEnd), rowIndex)
+			continue
+		}
+		if rowDate == targetReportDate {
 			if selected != nil {
 				return model.FundamentalSection{}, fmt.Errorf("同花顺 %s 返回重复报告期 %s 记录", category, targetReportDate)
 			}
@@ -2113,12 +2126,21 @@ func (p *Hithink) fetchFinancialStatementSection(ctx context.Context, symbol str
 		Metrics:       make([]model.FundamentalMetric, 0, len(hithinkStatementFields[category])),
 		QualityStatus: model.QualityValid,
 	}
-	reportDateMS, ok := hithinkParseFundamentalValue(selected["report_date_ms"])
-	if publicationDate, validDate := hithinkDateFromMillis(reportDateMS, loc); ok && validDate {
+	rawPublicationDate, publicationDatePresent := selected["report_date_ms"]
+	reportDateMS, publicationValueValid := hithinkParseFundamentalValue(rawPublicationDate)
+	publicationDate, publicationDateValid := hithinkDateFromMillis(reportDateMS, loc)
+	if publicationValueValid && publicationDateValid {
 		section.PublicationDate = publicationDate
 	} else {
 		section.QualityStatus = model.QualityDegraded
 		section.QualityReasons = append(section.QualityReasons, "publication_date_missing_or_invalid")
+		code := "invalid_date"
+		actualType := providerJSONValueType(rawPublicationDate)
+		if !publicationDatePresent || actualType == "missing" || actualType == "null" {
+			code = "missing_value"
+		}
+		addProviderFieldParseIssue(ctx, symbol, "publication_date", "report_date_ms", code,
+			"valid epoch-millisecond publication date", actualType, string(rawPublicationDate), selectedRowIndex)
 	}
 	missingMetrics := 0
 	for _, field := range hithinkStatementFields[category] {
@@ -2148,6 +2170,10 @@ func (p *Hithink) fetchFinancialStatementSection(ctx context.Context, symbol str
 		section.QualityReasons = append(section.QualityReasons, "no_numeric_statement_fields_available")
 	}
 	return section, nil
+}
+
+func actualTypeForHithinkRaw(raw json.RawMessage) string {
+	return providerJSONValueType(raw)
 }
 
 type hithinkDailyRowPosition struct {
