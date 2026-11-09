@@ -155,6 +155,82 @@ func (r *Registry) RunWithReport(ctx context.Context, db *sql.DB) (RunReport, er
 	return finish(nil)
 }
 
+
+ // ValidateApplied performs a read-only check that every registered migration
+ // version is present and marked applied. It never creates or changes history.
+ // Checksum verification remains owned by Platform's migration runner.
+ func (r *Registry) ValidateApplied(ctx context.Context, db *sql.DB) error {
+ 	if r == nil {
+ 		return errors.New("migration registry is nil")
+ 	}
+ 	if ctx == nil {
+ 		return errors.New("migration validation context is required")
+ 	}
+ 	if db == nil {
+ 		return errors.New("migration database is required")
+ 	}
+ 	entries := r.snapshot()
+ 	if len(entries) == 0 {
+ 		return errors.New("no module migrations are registered")
+ 	}
+ 	namespaces := make([]string, 0, len(entries))
+ 	for namespace := range entries {
+ 		namespaces = append(namespaces, namespace)
+ 	}
+ 	sort.Strings(namespaces)
+ 	for _, namespace := range namespaces {
+ 		rows, err := db.QueryContext(ctx, "SELECT version, status FROM platform_schema_migrations WHERE namespace = ?", namespace)
+ 		if err != nil {
+ 			return fmt.Errorf("read migration history for %s: %w", namespace, err)
+ 		}
+ 		applied := make(map[uint64]string, len(entries[namespace]))
+ 		for rows.Next() {
+ 			var version uint64
+ 			var status string
+ 			if err := rows.Scan(&version, &status); err != nil {
+ 				_ = rows.Close()
+ 				return fmt.Errorf("read migration history for %s: %w", namespace, err)
+ 			}
+ 			applied[version] = status
+ 		}
+ 		rowsErr := rows.Err()
+ 		closeErr := rows.Close()
+ 		if rowsErr != nil {
+ 			return fmt.Errorf("read migration history for %s: %w", namespace, rowsErr)
+ 		}
+ 		if closeErr != nil {
+ 			return fmt.Errorf("close migration history for %s: %w", namespace, closeErr)
+ 		}
+ 		if err := validateAppliedVersions(entries[namespace], applied); err != nil {
+ 			return fmt.Errorf("migration namespace %s is not ready: %w", namespace, err)
+ 		}
+ 	}
+ 	return nil
+ }
+
+ func validateAppliedVersions(expected []platformstorage.Migration, applied map[uint64]string) error {
+ 	if len(expected) == 0 {
+ 		return errors.New("no migration definitions are registered")
+ 	}
+ 	known := make(map[uint64]struct{}, len(expected))
+ 	for _, migration := range expected {
+ 		known[migration.Version] = struct{}{}
+ 		status, exists := applied[migration.Version]
+ 		if !exists {
+ 			return fmt.Errorf("required migration version %d is missing", migration.Version)
+ 		}
+ 		if status != "applied" {
+ 			return fmt.Errorf("migration version %d has status %q", migration.Version, status)
+ 		}
+ 	}
+ 	for version := range applied {
+ 		if _, exists := known[version]; !exists {
+ 			return fmt.Errorf("database contains unregistered migration version %d", version)
+ 		}
+ 	}
+ 	return nil
+ }
+
 // migrationFailureDetails converts internal migration failures to stable,
 // non-sensitive diagnostics and marks cases that require operator inspection.
 func migrationFailureDetails(err error) (reasonCode string, recoveryRequired bool) {

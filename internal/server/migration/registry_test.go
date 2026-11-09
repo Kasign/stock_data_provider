@@ -302,3 +302,27 @@ func TestRegistryConcurrentRegisterAndExecutionSnapshotHaveNoLostNamespace(t *te
 		t.Fatal("registration after execution snapshot must fail")
 	}
 }
+
+
+func TestValidateAppliedVersionsRequiresExactAppliedSet(t *testing.T) {
+	expected := []platformstorage.Migration{{Version: 1}, {Version: 2}}
+	if err := validateAppliedVersions(expected, map[uint64]string{1: "applied", 2: "applied"}); err != nil {
+		t.Fatalf("complete schema rejected: %v", err)
+	}
+	cases := []struct {
+		name string
+		applied map[uint64]string
+	}{
+		{name: "missing version", applied: map[uint64]string{1: "applied"}},
+		{name: "incomplete version", applied: map[uint64]string{1: "applied", 2: "running"}},
+		{name: "failed version", applied: map[uint64]string{1: "applied", 2: "failed"}},
+		{name: "unknown version", applied: map[uint64]string{1: "applied", 2: "applied", 3: "applied"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if err := validateAppliedVersions(expected, tc.applied); err == nil {
+				t.Fatal("expected schema validation error")
+			}
+		})
+	}
+}

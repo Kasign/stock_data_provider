@@ -9,12 +9,13 @@ import (
 	platformdiagnostics "example.com/stock-analysis-flow/internal/platform/diagnostics"
 	"example.com/stock-analysis-flow/internal/platform/fault"
 	"example.com/stock-analysis-flow/internal/server/resources"
+	servermigration "example.com/stock-analysis-flow/internal/server/migration"
 )
 
 // StorageChecks creates required read-only checks for shared Server resources.
 // It does not create schemas or perform migrations.
-func StorageChecks(shared *resources.Resources) []platformdiagnostics.Check {
-	return []platformdiagnostics.Check{
+func StorageChecks(shared *resources.Resources, registries ...*servermigration.Registry) []platformdiagnostics.Check {
+	checks := []platformdiagnostics.Check{
 		{
 			ID: "server.storage.mariadb", Name: "MariaDB connection", Required: true, Timeout: 3 * time.Second,
 			Run: func(ctx context.Context) (platformdiagnostics.Observation, error) {
@@ -64,4 +65,29 @@ func StorageChecks(shared *resources.Resources) []platformdiagnostics.Check {
 			},
 		},
 	}
+	if len(registries) > 0 && registries[0] != nil {
+		registry := registries[0]
+		checks = append(checks, platformdiagnostics.Check{
+			ID: "server.storage.schema", Name: "Database schema", Required: true, Timeout: 5 * time.Second,
+			Run: func(ctx context.Context) (platformdiagnostics.Observation, error) {
+				if shared == nil || shared.DB == nil {
+					return platformdiagnostics.Observation{}, fault.New(
+						fault.ClassUnavailable, "server.storage.schema_unavailable",
+						"database schema cannot be checked because MariaDB is unavailable", nil,
+					)
+				}
+				if err := registry.ValidateApplied(ctx, shared.DB); err != nil {
+					return platformdiagnostics.Observation{}, fault.New(
+						fault.ClassUnavailable, "server.storage.schema_not_ready",
+						"required database schema is not ready", err,
+					)
+				}
+				return platformdiagnostics.Observation{
+					Status: platformdiagnostics.StatusHealthy, SafeMessage: "required database schema is ready",
+					CheckedAt: time.Now().UTC(), Attributes: map[string]string{"dependency": "mariadb"},
+				}, nil
+			},
+		})
+	}
+	return checks
 }

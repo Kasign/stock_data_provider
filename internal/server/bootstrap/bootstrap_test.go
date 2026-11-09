@@ -42,6 +42,19 @@ func TestStopConsumersThenCloseResourcesPreservesOrder(t *testing.T) {
 	}
 }
 
+
+func TestJoinShutdownErrorPreservesRunAndCloseErrors(t *testing.T) {
+	runErr := errors.New("HTTP server failed")
+	shutdownErr := errors.New("resource close failed")
+	got := joinShutdownError(runErr, shutdownErr)
+	if !errors.Is(got, runErr) || !errors.Is(got, shutdownErr) {
+		t.Fatalf("joined error = %v, want run and shutdown errors", got)
+	}
+	if got := joinShutdownError(runErr, nil); !errors.Is(got, runErr) {
+		t.Fatalf("nil shutdown error changed run error: %v", got)
+	}
+}
+
 func TestStopConsumersThenCloseResourcesHandlesMissingLifecycle(t *testing.T) {
 	closed := false
 	err := stopConsumersThenCloseResources(context.Background(), nil, func() error {

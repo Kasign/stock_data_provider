@@ -34,7 +34,7 @@ import (
 
 // Run loads process configuration, assembles the currently supported runtime,
 // and serves until the parent context is canceled or the HTTP server exits.
-func Run(ctx context.Context) error {
+func Run(ctx context.Context) (runErr error) {
 	if ctx == nil {
 		return errors.New("bootstrap context is required")
 	}
@@ -97,24 +97,32 @@ func Run(ctx context.Context) error {
 			},
 			storageResources.Close,
 		); shutdownErr != nil {
-			slog.Warn("停止 Server 并关闭共享资源失败", "error", shutdownErr.Error())
+			slog.Error("停止 Server 并关闭共享资源失败", "error", shutdownErr.Error())
+			runErr = joinShutdownError(runErr, shutdownErr)
 		}
 	}()
 
+	migrationRegistry, err := newMigrationRegistry()
+	if err != nil {
+		return fmt.Errorf("注册模块 Migration 失败: %w", err)
+	}
+	migrationCtx, migrationCancel := context.WithTimeout(ctx, migrationCfg.Timeout)
 	if migrationCfg.Enabled {
-		migrationRegistry, err := newMigrationRegistry()
-		if err != nil {
-			return fmt.Errorf("注册模块 Migration 失败: %w", err)
-		}
-		migrationCtx, migrationCancel := context.WithTimeout(ctx, migrationCfg.Timeout)
 		migrationReport, migrationErr := migrationRegistry.RunWithReport(migrationCtx, storageResources.DB)
-		migrationCancel()
 		if migrationErr != nil {
+			migrationCancel()
 			slog.Error("模块 Migration 执行失败", "report", migrationReport, "error", migrationErr.Error())
 			return fmt.Errorf("执行模块 Migration 失败: %w", migrationErr)
 		}
 		slog.Info("模块 Migration 执行完成", "report", migrationReport)
+	} else {
+		if err := migrationRegistry.ValidateApplied(migrationCtx, storageResources.DB); err != nil {
+			migrationCancel()
+			return fmt.Errorf("数据库 Schema 尚未满足当前模块版本要求（MIGRATION_ENABLED=false）: %w", err)
+		}
+		slog.Info("模块 Schema 预检通过", "migration_enabled", false)
 	}
+	migrationCancel()
 
 	runner, err := service.NewRunnerWithMarketDataStores(marketDataCfg, store, store)
 	if err != nil {
@@ -137,7 +145,7 @@ func Run(ctx context.Context) error {
 		if err != nil {
 			return fmt.Errorf("创建旧 Analysis HTTP API 失败: %w", err)
 		}
-		diagnosticsService, err := serverdiagnostics.NewService(storageResources)
+		diagnosticsService, err := serverdiagnostics.NewServiceWithMigration(storageResources, migrationRegistry)
 		if err != nil {
 			return fmt.Errorf("创建 Server 诊断服务失败: %w", err)
 		}
@@ -188,6 +196,14 @@ func Run(ctx context.Context) error {
 	case <-httpComponent.Done():
 		return httpComponent.Result()
 	}
+}
+
+
+func joinShutdownError(runErr, shutdownErr error) error {
+	if shutdownErr == nil {
+		return runErr
+	}
+	return errors.Join(runErr, fmt.Errorf("Server shutdown: %w", shutdownErr))
 }
 
 // stopConsumersThenCloseResources enforces the ownership boundary: all

@@ -1247,3 +1247,14 @@ Lifecycle.Stop 原实现通过 stopped 标记保证重复调用幂等，但并�
 - Server gofmt、`cmd/analysis-api` 与 Bootstrap/Config/Diagnostics/Health/Migration/Resources/Runtime 包级单测、Race、Vet 全部通过。
 - 该结果证明当前 Server 基础包在独立矩阵内通过，不覆盖 `internal/server/llmtransport`（其依赖 LLM 编译失败）、全仓其他模块或真实 MariaDB/Redis/LLM Gateway 集成。
 - 根模块全仓 Run `42618100918` 仍失败于其他模块编译/测试；不得把 Server 独立 CI 成功描述为全仓通过。
+
+
+### 12.50 Bootstrap 关闭错误传播与 Schema 只读预检（2026-11-09）
+
+- 修复 Bootstrap 的关闭错误丢失：Run 使用具名返回值，停止 Lifecycle 或关闭共享资源失败时，将关闭错误与原运行错误通过 errors.Join 汇总返回；日志仍记录完整关闭错误。
+- Migration Registry 新增 ValidateApplied 只读预检：逐模块读取 platform_schema_migrations，要求当前注册的全部版本存在且状态为 applied，并拒绝数据库中存在当前代码未注册的版本。预检不创建表、不执行 DDL、不修改历史记录。
+- MIGRATION_ENABLED=true 时先执行 Platform Migration Runner；为 false 时必须通过只读 Schema 预检，否则 Bootstrap 失败，不进入运行态。
+- Readiness 增加必需的 server.storage.schema 检查，持续验证 Schema 版本集合及应用状态；DB 可连接但 Schema 未就绪时不报告 Ready。
+- 校验边界：Platform 当前没有公开只读 checksum/history validator。Server 不复制 Platform checksum 算法，因此此预检只校验版本集合和状态，不声称校验 checksum；checksum 不匹配仍需由 Platform Runner 在显式 Migration 执行时识别。后续应由 Platform 提供稳定只读验证 API/Fault Code。
+- 测试覆盖完整版本集、缺失版本、running/failed 状态和未知版本；关闭错误合并保留运行错误及资源关闭错误。
+- 本节功能进入独立 CI 后方可标记完成；MariaDB 故障注入和生产 Schema 恢复验收仍属于后续集成工作。

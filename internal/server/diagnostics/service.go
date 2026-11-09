@@ -7,6 +7,7 @@ import (
 
 	platformdiagnostics "example.com/stock-analysis-flow/internal/platform/diagnostics"
 	"example.com/stock-analysis-flow/internal/server/resources"
+	servermigration "example.com/stock-analysis-flow/internal/server/migration"
 )
 
 // Service owns the immutable check set used by Server diagnostics requests.
@@ -17,7 +18,12 @@ type Service struct {
 }
 
 func NewService(shared *resources.Resources, moduleChecks ...[]platformdiagnostics.Check) (*Service, error) {
-	checks := StorageChecks(shared)
+	return NewServiceWithMigration(shared, nil, moduleChecks...)
+}
+
+// NewServiceWithMigration includes the required read-only Schema readiness check.
+func NewServiceWithMigration(shared *resources.Resources, registry *servermigration.Registry, moduleChecks ...[]platformdiagnostics.Check) (*Service, error) {
+	checks := StorageChecks(shared, registry)
 	for _, group := range moduleChecks {
 		checks = append(checks, group...)
 	}
