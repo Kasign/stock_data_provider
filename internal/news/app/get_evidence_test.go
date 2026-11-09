@@ -11,13 +11,15 @@ import (
 )
 
 type getEvidencePITRepositoryStub struct {
-	record EvidencePITRecord
-	err error
+	record    EvidencePITRecord
+	err       error
 	afterRead func()
 }
 
 func (s getEvidencePITRepositoryStub) GetEvidenceVersionAt(context.Context, GetEvidenceRequest) (EvidencePITRecord, error) {
-	if s.afterRead != nil { s.afterRead() }
+	if s.afterRead != nil {
+		s.afterRead()
+	}
 	return s.record, s.err
 }
 
@@ -26,8 +28,8 @@ func (s getEvidencePITRepositoryStub) ListEvidenceVersionsAt(context.Context, Li
 }
 
 type getEvidenceAuthorizationSnapshotStub struct {
-	binding domain.NewsAuthorizationBinding
-	err error
+	binding   domain.NewsAuthorizationBinding
+	err       error
 	afterRead func()
 }
 
@@ -52,7 +54,7 @@ func (s getEvidenceAuthorizationSnapshotStub) GetLatestAuthorizationSnapshotForE
 }
 
 type getEvidenceAuthorizerStub struct {
-	err error
+	err   error
 	calls int
 }
 
@@ -296,12 +298,11 @@ func TestGetEvidenceRejectsInvalidRetentionTimelineFromPITRepository(t *testing.
 	}
 }
 
-
 func TestGetEvidenceStopsAfterContextCancellationAtDependencyBoundaries(t *testing.T) {
 	now := time.Date(2026, 11, 9, 12, 0, 0, 0, time.UTC)
 	request, pit, binding := validGetEvidenceFixture(now)
 	cases := []struct {
-		name string
+		name     string
 		cancelAt string
 	}{
 		{name: "PIT returned", cancelAt: "pit"},
@@ -313,15 +314,23 @@ func TestGetEvidenceStopsAfterContextCancellationAtDependencyBoundaries(t *testi
 			defer cancel()
 			pitRepo := getEvidencePITRepositoryStub{record: pit}
 			snapshotRepo := getEvidenceAuthorizationSnapshotStub{binding: binding}
-			if test.cancelAt == "pit" { pitRepo.afterRead = cancel } else { snapshotRepo.afterRead = cancel }
+			if test.cancelAt == "pit" {
+				pitRepo.afterRead = cancel
+			} else {
+				snapshotRepo.afterRead = cancel
+			}
 			authorizer := &getEvidenceAuthorizerStub{}
 			usecase, err := NewGetEvidence(pitRepo, snapshotRepo, authorizer)
-			if err != nil { t.Fatal(err) }
+			if err != nil {
+				t.Fatal(err)
+			}
 			usecase.now = func() time.Time { return now }
 			if _, err := usecase.Execute(ctx, request); !errors.Is(err, context.Canceled) {
 				t.Fatalf("Execute() error = %v, want context.Canceled", err)
 			}
-			if authorizer.calls != 0 { t.Fatalf("canceled request reached authorizer: %d", authorizer.calls) }
+			if authorizer.calls != 0 {
+				t.Fatalf("canceled request reached authorizer: %d", authorizer.calls)
+			}
 		})
 	}
 }

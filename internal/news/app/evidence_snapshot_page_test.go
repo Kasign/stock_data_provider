@@ -29,7 +29,9 @@ func (s *evidenceSnapshotPageRepositoryStub) GetEvidenceSnapshot(_ context.Conte
 	if s.getErr != nil {
 		return EvidenceSnapshot{}, s.getErr
 	}
-	if s.afterGet != nil { s.afterGet() }
+	if s.afterGet != nil {
+		s.afterGet()
+	}
 	if snapshotRef != s.snapshot.SnapshotRef || callerRef != s.snapshot.CallerRef {
 		return EvidenceSnapshot{}, ErrEvidenceSnapshotUnavailable
 	}
@@ -212,7 +214,6 @@ func TestListEvidenceSnapshotPageRejectsStoredSnapshotContextMismatch(t *testing
 	}
 }
 
-
 func TestListEvidenceSnapshotPageStopsAfterContextCancellationDuringSnapshotRead(t *testing.T) {
 	now := time.Date(2026, 11, 9, 10, 0, 0, 0, time.UTC)
 	request := validEvidenceListRequest(now)
@@ -226,18 +227,23 @@ func TestListEvidenceSnapshotPageStopsAfterContextCancellationDuringSnapshotRead
 	snapshot.PageSize = request.PageSize
 	snapshot.SystemAsOf = request.SystemAsOf
 	snapshot.FiltersFingerprint, _ = evidenceFiltersFingerprint(request)
-	store := &evidenceSnapshotPageRepositoryStub{snapshot:snapshot}
+	store := &evidenceSnapshotPageRepositoryStub{snapshot: snapshot}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	store.afterGet = cancel
 	query := &evidencePITRepositoryStub{}
 	factory, _ := NewCreateEvidenceSnapshotForQuery(query, store, func() string { return "unused" })
-	codec := newTestEvidenceCursorCodec(t, "active", map[string]string{"active":strings.Repeat("k",32)})
+	codec := newTestEvidenceCursorCodec(t, "active", map[string]string{"active": strings.Repeat("k", 32)})
 	service, _ := NewListEvidenceSnapshotPage(factory, codec)
 	service.now = func() time.Time { return now }
-	position := ResearchEvidenceRecord{NewsID:snapshot.Items[0].NewsID, VersionID:snapshot.Items[0].VersionID, SystemObservedAt:snapshot.Items[0].SystemObservedAt, SystemAsOf:snapshot.SystemAsOf}
+	position := ResearchEvidenceRecord{
+		NewsID: snapshot.Items[0].NewsID, VersionID: snapshot.Items[0].VersionID,
+		SystemObservedAt: snapshot.Items[0].SystemObservedAt, SystemAsOf: snapshot.SystemAsOf,
+	}
 	token, err := codec.EncodeNextCursor(request, snapshot.SnapshotRef, position, now)
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	request.Cursor = &token
 	if _, err := service.Execute(ctx, request); !errors.Is(err, context.Canceled) {
 		t.Fatalf("Execute() error = %v, want context.Canceled", err)
