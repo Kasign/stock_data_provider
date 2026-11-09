@@ -257,7 +257,7 @@ func TestAssembleResearchContextWithTokenizerRunsCompleteBudgetAndInputPipeline(
 		{SectionID: "required", Text: "required authorized text"},
 		{SectionID: "optional", Text: "optional authorized text"},
 	}, tokenizer, "model-a", BudgetReservationInput{
-		ModelContextTokens: 100, SystemPrompt: "system", ToolSchema: "tools",
+		ModelContextTokens: 85, SystemPrompt: "system", ToolSchema: "tools",
 		OutputReserve: 30, SafetyMargin: 10,
 	})
 	if err != nil {
