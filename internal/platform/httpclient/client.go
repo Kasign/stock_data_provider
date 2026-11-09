@@ -427,8 +427,12 @@ func (c *Client) faultFor(err error, dependency string) *fault.Fault {
 		return c.newFault(fault.ClassTimeout, "platform.httpclient.timeout", "HTTP request timed out", err, dependency, false)
 	case errors.Is(err, context.Canceled):
 		return c.newFault(fault.ClassUnavailable, "platform.httpclient.canceled", "HTTP request was canceled", err, dependency, false)
-	default:
-		return c.newFault(fault.ClassUnavailable, "platform.httpclient.request_failed", "HTTP dependency request failed", err, dependency, retryableTransportError(err))
+	}
+	var networkError net.Error
+	if errors.As(err, &networkError) && networkError.Timeout() {
+		return c.newFault(fault.ClassTimeout, "platform.httpclient.transport_timeout", "HTTP dependency transport timed out", err, dependency, true)
+	}
+	return c.newFault(fault.ClassUnavailable, "platform.httpclient.request_failed", "HTTP dependency request failed", err, dependency, retryableTransportError(err))
 	}
 }
 
