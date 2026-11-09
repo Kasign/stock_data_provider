@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"log/slog"
 
 	"github.com/go-sql-driver/mysql"
 
@@ -26,9 +27,23 @@ var (
 // OwnerCredential is the single-owner credential snapshot. PasswordHash is a
 // PHC-encoded Argon2id hash and must never be logged or exposed in API output.
 type OwnerCredential struct {
-	Subject           string
-	PasswordHash      string
-	CredentialVersion uint64
+	Subject           string `json:"-"`
+	PasswordHash      string `json:"-"`
+	CredentialVersion uint64 `json:"-"`
+}
+
+// String deliberately omits the password hash so ordinary formatted logging
+// cannot accidentally disclose the stored credential.
+func (c OwnerCredential) String() string {
+	return fmt.Sprintf("owner credential (subject=%s, credential_version=%d)", c.Subject, c.CredentialVersion)
+}
+
+// LogValue exposes only non-secret credential metadata to structured logging.
+func (c OwnerCredential) LogValue() slog.Value {
+	return slog.GroupValue(
+		slog.String("subject", c.Subject),
+		slog.Uint64("credential_version", c.CredentialVersion),
+	)
 }
 
 // CredentialStore persists the single Owner credential and its global
