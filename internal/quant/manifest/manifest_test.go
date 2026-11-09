@@ -5,7 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"reflect"
+	"reflect"\n\t"strings"
 	"testing"
 	"time"
 )
@@ -112,5 +112,55 @@ func TestVerifyRejectsManifestMutation(t *testing.T) {
 	got.InputSnapshotRefs[0] = "snapshot-b"
 	if err := got.Verify(); !errors.Is(err, ErrInvalidManifest) {
 		t.Fatalf("expected tampered manifest to fail verification, got %v", err)
+	}
+}
+
+func TestBuildWithPayloadBindsManifestToCanonicalPayload(t *testing.T) {
+	payload := json.RawMessage(`{"metric_code":"momentum_20d","value":0.125}`)
+	input := Input{
+		ResultType:        "factor",
+		SchemaVersion:     "1.0.0",
+		SystemAsOf:        time.Date(2026, 11, 6, 5, 2, 0, 0, time.UTC),
+		InputSnapshotRefs: []string{"snapshot-a"},
+	}
+
+	got, err := BuildWithPayload(input, payload)
+	if err != nil {
+		t.Fatalf("BuildWithPayload() error = %v", err)
+	}
+	if err := got.VerifyPayload(json.RawMessage(`{ "value": 0.125, "metric_code": "momentum_20d" }`)); err != nil {
+		t.Fatalf("VerifyPayload() rejected equivalent canonical payload: %v", err)
+	}
+	if err := got.VerifyPayload(json.RawMessage(`{"metric_code":"momentum_20d","value":0.126}`)); !errors.Is(err, ErrInvalidPayload) {
+		t.Fatalf("expected changed payload to be rejected, got %v", err)
+	}
+}
+
+func TestBuildWithPayloadRejectsCallerSuppliedFingerprintMismatch(t *testing.T) {
+	input := Input{
+		ResultType:        "factor",
+		SchemaVersion:     "1.0.0",
+		SystemAsOf:        time.Date(2026, 11, 6, 5, 2, 0, 0, time.UTC),
+		InputSnapshotRefs: []string{"snapshot-a"},
+		ResultFingerprint: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+	}
+	if _, err := BuildWithPayload(input, json.RawMessage(`{"value":1}`)); !errors.Is(err, ErrInvalidPayload) {
+		t.Fatalf("expected mismatched caller fingerprint to be rejected, got %v", err)
+	}
+}
+
+func TestVerifyPayloadRejectsInvalidManifestBeforePayload(t *testing.T) {
+	got, err := BuildWithPayload(Input{
+		ResultType:        "factor",
+		SchemaVersion:     "1.0.0",
+		SystemAsOf:        time.Date(2026, 11, 6, 5, 2, 0, 0, time.UTC),
+		InputSnapshotRefs: []string{"snapshot-a"},
+	}, json.RawMessage(`{"value":1}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got.ResultID = "quant_result:sha256:" + strings.Repeat("0", 64)
+	if err := got.VerifyPayload(json.RawMessage(`{"value":1}`)); !errors.Is(err, ErrInvalidManifest) {
+		t.Fatalf("expected invalid manifest to fail before payload verification, got %v", err)
 	}
 }
