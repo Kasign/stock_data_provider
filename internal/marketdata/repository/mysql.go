@@ -48,6 +48,9 @@ func NewWithBorrowedDB(db *sql.DB) (*Store, error) {
 	return &Store{db: db}, nil
 }
 
+// Configured reports whether this Store wraps a database connection pool.
+func (s *Store) Configured() bool { return s != nil && s.db != nil }
+
 func (s *Store) Close() error {
 	if s == nil || s.db == nil || !s.ownsDB {
 		return nil
