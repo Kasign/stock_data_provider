@@ -31,6 +31,7 @@ type Dependencies struct {
 	HithinkHTTPDoer               provider.HTTPDoer // Root 注入的受控同花顺 HTTP 执行器；Module 不拥有、不关闭。
 	TickFlowAuthenticatedHTTPDoer provider.HTTPDoer // Root 注入的 TickFlow 认证 API 出口；Module 不拥有、不关闭。
 	TickFlowPublicHTTPDoer        provider.HTTPDoer // Root 注入的 TickFlow 免费 API 出口；Module 不拥有、不关闭。
+	XueqiuHTTPDoer                provider.HTTPDoer // Root 注入的雪球受控 HTTP 执行器；Module 不拥有、不关闭。
 }
 
 // Diagnostics 暴露模块就绪状态和 Provider 诊断，不暴露具体 DataService。
@@ -98,7 +99,7 @@ func New(cfg config.Config, deps Dependencies) (*Module, error) {
 		retentionStore: deps.Store,
 		retention:      cfg.QuoteRetention,
 	}
-	if err := module.build(cfg, deps.TushareHTTPDoer, deps.HithinkHTTPDoer, deps.TickFlowAuthenticatedHTTPDoer, deps.TickFlowPublicHTTPDoer); err != nil {
+	if err := module.build(cfg, deps.TushareHTTPDoer, deps.HithinkHTTPDoer, deps.TickFlowAuthenticatedHTTPDoer, deps.TickFlowPublicHTTPDoer, deps.XueqiuHTTPDoer); err != nil {
 		_ = module.Close(context.Background())
 		return nil, err
 	}
@@ -158,7 +159,7 @@ func (m *Module) ProviderSummary() ProviderSummary {
 	}
 }
 
-func (m *Module) build(cfg config.Config, tushareHTTPDoer, hithinkHTTPDoer, tickflowAuthenticatedHTTPDoer, tickflowPublicHTTPDoer provider.HTTPDoer) error {
+func (m *Module) build(cfg config.Config, tushareHTTPDoer, hithinkHTTPDoer, tickflowAuthenticatedHTTPDoer, tickflowPublicHTTPDoer, xueqiuHTTPDoer provider.HTTPDoer) error {
 	store := m.store
 	c := m.cache
 	logger := m.logger
@@ -182,7 +183,7 @@ func (m *Module) build(cfg config.Config, tushareHTTPDoer, hithinkHTTPDoer, tick
 		"tushare":   provider.NewTushareConfiguredWithHTTPDoer(cfg.ProviderTimeout, cfg.TushareAPIURL, cfg.TushareToken, tushareHTTPDoer),
 		"tickflow":  provider.NewTickFlowConfiguredWithHTTPDoers(cfg.ProviderTimeout, cfg.TickFlowAPIURL, cfg.TickFlowFreeAPIURL, cfg.TickFlowAPIKey, tickflowAuthenticatedHTTPDoer, tickflowPublicHTTPDoer),
 		"pytdx":     provider.NewPytdx(cfg.ProviderTimeout, cfg.PytdxHosts...),
-		"xueqiu":    provider.NewXueqiuConfigured(cfg.ProviderTimeout, cfg.XueqiuBaseURL, cfg.XueqiuCookie),
+		"xueqiu":    provider.NewXueqiuConfiguredWithHTTPDoer(cfg.ProviderTimeout, cfg.XueqiuBaseURL, cfg.XueqiuCookie, xueqiuHTTPDoer),
 	}
 	allProviders := make([]provider.NamedProvider, 0, len(available))
 	quoteProviders := make([]provider.QuoteProvider, 0, len(available))

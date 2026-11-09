@@ -20,14 +20,21 @@ import (
 const xueqiuVersion = "xueqiu-hot-ranking-v1"
 
 type Xueqiu struct {
-	client  *http.Client
-	baseURL string
-	cookie  string
+	client   *http.Client
+	httpDoer HTTPDoer
+	baseURL  string
+	cookie   string
 }
 
 // NewXueqiuConfigured configures an optional domestic ranking fallback.
 // The cookie is kept only in memory and is never emitted to logs or errors.
 func NewXueqiuConfigured(timeout time.Duration, baseURL, cookie string) *Xueqiu {
+	return NewXueqiuConfiguredWithHTTPDoer(timeout, baseURL, cookie, nil)
+}
+
+// NewXueqiuConfiguredWithHTTPDoer 创建支持调用方注入受控 HTTP 执行器的雪球 Provider。
+// 注入执行器时，其超时、目的地址策略和生命周期由调用方负责。
+func NewXueqiuConfiguredWithHTTPDoer(timeout time.Duration, baseURL, cookie string, doer HTTPDoer) *Xueqiu {
 	if timeout <= 0 {
 		timeout = 10 * time.Second
 	}
@@ -35,7 +42,11 @@ func NewXueqiuConfigured(timeout time.Duration, baseURL, cookie string) *Xueqiu 
 	if baseURL == "" {
 		baseURL = "https://stock.xueqiu.com"
 	}
-	return &Xueqiu{client: &http.Client{Timeout: timeout}, baseURL: baseURL, cookie: strings.TrimSpace(cookie)}
+	client := &http.Client{Timeout: timeout}
+	if doer == nil {
+		doer = client
+	}
+	return &Xueqiu{client: client, httpDoer: doer, baseURL: baseURL, cookie: strings.TrimSpace(cookie)}
 }
 
 func (p *Xueqiu) Name() string { return "xueqiu" }
@@ -226,7 +237,7 @@ func (p *Xueqiu) FetchHotStocks(ctx context.Context, rankingType string, limit i
 	if p.cookie != "" {
 		req.Header.Set("Cookie", p.cookie)
 	}
-	resp, err := p.client.Do(req)
+	resp, err := p.httpDoer.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("雪球榜单请求失败: %w", err)
 	}

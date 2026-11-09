@@ -890,6 +890,14 @@ internal/
 - 本批提交后不在当前分支执行构建/测试；Hithink 受控出口仅完成注入接口和单测源码，待 integration 验收。下一步为 M4-HTTP-03 TickFlow：分别处理认证 API URL 与免费 API URL 的不同目的地址策略，不能共用一个无区分 BoundDoer。
 
 
+### 2026-11-09：M4-HTTP-02 提交后基线
+
+- 当前代码 HEAD：`c7f55374356028b905813f6051f1b03e3c836b91`。
+- 本轮新增提交 `c7f5537` 修改 Hithink Provider、Bootstrap Dependencies、Hithink HTTPDoer 回归测试；保留旧构造器和独立部署默认 HTTP Client。
+- 合并后的 `go.mod`、`go.sum` 已检查无冲突标记；根 Module 仍为 Go 1.23.0。未执行构建，因此仅记录静态检查结果，不宣称依赖图或构建验收通过。
+- Hithink 的测试源码覆盖注入调用、GET 目标、认证 Header、Accept Header 和 502 错误路径；待 integration 执行测试后再更新验收状态。
+- 后续 M4-HTTP-03 TickFlow 双出口注入已完成；Xueqiu Cookie 出口随后单独接入，不能与其他 Provider 共用无区分 BoundDoer。
+
 ### 2026-11-09：M4-HTTP-03 TickFlow 双出口受控 HTTP 执行器注入
 
 - 代码基线：`27e2b94bfa59a92d840e95836d4dbfe1fda8defb`。TickFlow 认证 API（`apiURL`）承载 Quote、指数、市场/行业数据及带 Key 的日 K 请求；免费 API（`freeAPIURL`）仅用于未配置 API Key 时的免费日 K 请求。两类目标 Host 与凭据策略不同，不能共享同一个 BoundDoer。
@@ -900,10 +908,14 @@ internal/
 - Root 后续必须按实际配置分别创建两个 BoundDoer：认证出口绑定 `TickFlowAPIURL` 的精确 HTTPS Host/Port，公开出口绑定 `TickFlowFreeAPIURL` 的精确 HTTPS Host/Port；两者均拒绝重定向并执行 DNS/IP 与响应体上限策略。不能将认证 Key 注入公开出口。
 - 本分支下一项按带凭据风险顺序处理 Xueqiu Cookie 出口；随后处理无凭据 HTTP Provider。BaoStock/Pytdx 仍单列 TCP 出站策略。
 
-### 2026-11-09：M4-HTTP-02 提交后基线
 
-- 当前代码 HEAD：`c7f55374356028b905813f6051f1b03e3c836b91`。
-- 本轮新增提交 `c7f5537` 修改 Hithink Provider、Bootstrap Dependencies、Hithink HTTPDoer 回归测试；保留旧构造器和独立部署默认 HTTP Client。
-- 合并后的 `go.mod`、`go.sum` 已检查无冲突标记；根 Module 仍为 Go 1.23.0。未执行构建，因此仅记录静态检查结果，不宣称依赖图或构建验收通过。
-- Hithink 的测试源码覆盖注入调用、GET 目标、认证 Header、Accept Header 和 502 错误路径；待 integration 执行测试后再更新验收状态。
-- 本分支下一任务：M4-HTTP-03 TickFlow 双目的地址注入。TickFlow 同时访问配置的认证 API URL 和免费 API URL，必须使用两个独立 BoundDoer/依赖字段；认证 URL 携带 X-API-Key，免费 URL 不携带凭据。两者分别限制精确 Host/Port、协议、重定向和响应体上限。
+
+### 2026-11-09：M4-HTTP-04 Xueqiu Cookie 受控 HTTP 执行器注入
+
+- 代码基线：`9e69ebb62098e9aa3b86472f914081f7e5c41e87`。Xueqiu 当前只有单一配置 BaseURL（默认 `https://stock.xueqiu.com`），通过 Cookie Header 传递可选凭据；无第二个公开出口。
+- Provider 新增 `NewXueqiuConfiguredWithHTTPDoer`，旧 `NewXueqiuConfigured` 保留并委托新构造器；未注入时仍使用原超时配置的标准 `http.Client`。
+- `FetchHotStocks` 改为通过注入的最小 `HTTPDoer` 执行请求；Cookie、Referer、Origin、Accept、User-Agent、GET Query、响应体上限和错误语义保持原样。未新增 Cookie 解析、刷新、日志或存储行为。
+- Bootstrap Dependencies 新增可选 `XueqiuHTTPDoer` 并传入 Provider。Root 创建并拥有绑定到实际 `XueqiuBaseURL` 的 BoundDoer；Data Module 不拥有、不关闭。
+- 新增回归测试源码覆盖注入执行器、GET 目标、Cookie/Referer/Origin/Accept Header 与 502 错误路径；测试尚未运行，不代表编译或安全策略验收通过。
+- Root 注入策略必须绑定精确 HTTPS Host/443、拒绝重定向（Cookie 不得跨域转发）、执行 DNS/IP 检查，并将成功响应上限设置为不小于现有 `maxProviderPayloadBytes`。Cookie 仅由配置注入，禁止出现在日志、错误或诊断证据中。
+- 下一步处理无凭据 HTTP Provider 的受控出口；按实际 endpoint 分组，但每个不同 Host 仍需独立目的地址策略。BaoStock/Pytdx 继续单独制定 TCP 出站策略。
