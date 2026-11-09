@@ -9,7 +9,7 @@ import (
 )
 
 func TestValidateDeliveryStateHistory(t *testing.T) {
-	delivery, _, _ := recoveryFixture(t)
+	delivery := validDeliveryForRepository()
 	at := delivery.CreatedAt.Add(time.Minute)
 	sending := domain.DeliveryStateEvent{
 		DeliveryID: delivery.DeliveryID, Version: 2,
@@ -50,7 +50,7 @@ func TestValidateDeliveryStateHistory(t *testing.T) {
 }
 
 func TestValidateDeliveryStateHistoryRejectsTimeRegression(t *testing.T) {
-	delivery, _, _ := recoveryFixture(t)
+	delivery := validDeliveryForRepository()
 	firstAt := delivery.CreatedAt.Add(time.Minute)
 	secondAt := firstAt.Add(-time.Second)
 	record := delivery
