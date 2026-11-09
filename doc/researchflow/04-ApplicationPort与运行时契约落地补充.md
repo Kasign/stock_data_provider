@@ -351,4 +351,4 @@ Fake Repository/Fake Clock/Fake Provider 只证明模块内逻辑；MariaDB/Redi
 
 - `DeadlineFinalizer` 读取 Run/Stage/Attempt 与 ResolvedTemplate 派生的传播策略/硬风险门禁快照，使用 DatabaseClock 调用 Domain `FinalizeDeadline`。
 - Finalizer 生成 ResultSummary/Outbox 引用，并通过 `DeadlineFinalizationStore` 传递预期 Run.version、终态、termination_reason 和摘要；Store Adapter 必须映射 Storage `FinalizeRun`，确保摘要、Outbox、Run 终态同事务。
-- Application 只依赖 Port，不直接依赖 SQL/Storage。当前 Fake Port 测试已补，未执行；真实快照装配、Storage Adapter、MariaDB 集成和 Server 周期调度仍未完成。
+- Application 只依赖 Port，不直接依赖 SQL/Storage。当前 Fake Port 测试已补，未执行；真实 Snapshot 装配 Adapter、MariaDB 集成和 Server 周期调度仍未完成；MySQL `FinalizeDeadlineRun` 到既有原子 `FinalizeRun` 的薄适配已落地。

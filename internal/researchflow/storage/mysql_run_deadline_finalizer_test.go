@@ -32,7 +32,7 @@ func TestFinalizeDeadlineRunDelegatesToAtomicFinalizer(t *testing.T) {
 		SummarySchemaVersion: "1.0.0", OutboxRef: "outbox-1",
 		TerminalStatus: domain.RunFailed, TerminationReason: "deadline_exceeded",
 		Summary: domain.ResultSummary{
-			StageOutcomes: map[string]domain.StageStatus{"required": domain.StageTimedOut},
+			StageOutcomes:     map[string]domain.StageStatus{"required": domain.StageTimedOut},
 			RiskGateDecisions: map[string]string{}, ExcludedStages: []domain.ExcludedStage{},
 			MissingStageCodes: []string{"required"}, DegradedStageCodes: []string{},
 			BlockedStageCodes: []string{}, ReasonCodes: []string{},
