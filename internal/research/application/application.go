@@ -296,10 +296,10 @@ func (s *Service) AddEvidence(ctx context.Context, command AddEvidenceCommand) (
 	if err != nil { return EvidenceRecord{}, validationFault("invalid_evidence", "Research Evidence is invalid", err) }
 	value.ContentFingerprint = fingerprint
 	if err := value.Validate(); err != nil { return EvidenceRecord{}, validationFault("invalid_evidence", "Research Evidence is invalid", err) }
-	if err := s.authorizer.AuthorizeEvidence(ctx, command.CallerRef, purpose, value); err != nil {
+	if err := s.authorizer.AuthorizeEvidence(ctx, command.CallerRef, purpose, cloneDomainEvidence(value)); err != nil {
 		return EvidenceRecord{}, applicationFault(fault.ClassForbidden, "evidence_authorization_rejected", "Evidence is not authorized for this Research operation", err)
 	}
-	if err := s.evidence.Append(ctx, value); err != nil { return EvidenceRecord{}, mapRepositoryError(err) }
+	if err := s.evidence.Append(ctx, cloneDomainEvidence(value)); err != nil { return EvidenceRecord{}, mapRepositoryError(err) }
 	return fromDomainEvidence(value), nil
 }
 
@@ -327,7 +327,7 @@ func (s *Service) GetEvidence(ctx context.Context, ref EvidenceRef) (EvidenceRec
 	if err := value.Validate(); err != nil { return EvidenceRecord{}, applicationFault(fault.ClassInternal, "stored_evidence_invalid", "Stored Research Evidence is invalid", err) }
 	purpose := researchevidence.PurposeCode(ref.PurposeCode)
 	if purpose == "" { purpose = researchevidence.PurposeResearchAnalysis }
-	if err := s.authorizer.AuthorizeEvidence(ctx, ref.CallerRef, purpose, value); err != nil {
+	if err := s.authorizer.AuthorizeEvidence(ctx, ref.CallerRef, purpose, cloneDomainEvidence(value)); err != nil {
 		return EvidenceRecord{}, applicationFault(fault.ClassForbidden, "evidence_authorization_rejected", "Evidence is not currently authorized for this Research operation", err)
 	}
 	return fromDomainEvidence(value), nil
@@ -363,10 +363,48 @@ func toDomainQuality(v ContextQualitySummary) researchcontext.QualitySummary {
 	return researchcontext.QualitySummary{Status:researchcontext.QualityStatus(v.Status),MissingRequiredCount:v.MissingRequiredCount,MissingOptionalCount:v.MissingOptionalCount,ConflictCount:v.ConflictCount,StaleCount:v.StaleCount,ReasonCodes:cloneStrings(v.ReasonCodes)}
 }
 func toDomainEvidence(v EvidenceDraft) researchevidence.Evidence {
-	return researchevidence.Evidence{EvidenceType:researchevidence.EvidenceType(v.EvidenceType),SourceOwner:researchevidence.SourceOwner(v.SourceOwner),SourceRef:v.SourceRef,SourceVersion:v.SourceVersion,SourceLocator:v.SourceLocator,DerivedFromRefs:cloneStrings(v.DerivedFromRefs),ClaimRef:v.ClaimRef,SubjectRefs:cloneStrings(v.SubjectRefs),PublishedAt:v.PublishedAt,AvailableAt:v.AvailableAt,SystemObservedAt:v.SystemObservedAt,ValidTimeStart:v.ValidTimeStart,ValidTimeEnd:v.ValidTimeEnd,SystemAsOf:v.SystemAsOf,Stance:researchevidence.Stance(v.Stance),Confidence:v.Confidence,ConfidenceMethod:v.ConfidenceMethod,ConfidenceMethodVersion:v.ConfidenceMethodVersion,QualityStatus:researchevidence.QualityStatus(v.QualityStatus),ContentLevel:researchevidence.ContentLevel(v.ContentLevel),AuthorizationRef:v.AuthorizationRef,Limitations:cloneStrings(v.Limitations)}
+	return researchevidence.Evidence{
+		EvidenceType: researchevidence.EvidenceType(v.EvidenceType), SourceOwner: researchevidence.SourceOwner(v.SourceOwner),
+		SourceRef: v.SourceRef, SourceVersion: cloneString(v.SourceVersion), SourceLocator: cloneString(v.SourceLocator),
+		DerivedFromRefs: cloneStrings(v.DerivedFromRefs), ClaimRef: cloneString(v.ClaimRef), SubjectRefs: cloneStrings(v.SubjectRefs),
+		PublishedAt: cloneTime(v.PublishedAt), AvailableAt: cloneTime(v.AvailableAt),
+		SystemObservedAt: v.SystemObservedAt, ValidTimeStart: cloneTime(v.ValidTimeStart), ValidTimeEnd: cloneTime(v.ValidTimeEnd),
+		SystemAsOf: v.SystemAsOf, Stance: researchevidence.Stance(v.Stance), Confidence: cloneFloat(v.Confidence),
+		ConfidenceMethod: cloneString(v.ConfidenceMethod), ConfidenceMethodVersion: cloneString(v.ConfidenceMethodVersion),
+		QualityStatus: researchevidence.QualityStatus(v.QualityStatus), ContentLevel: researchevidence.ContentLevel(v.ContentLevel),
+		AuthorizationRef: v.AuthorizationRef, Limitations: cloneStrings(v.Limitations),
+	}
 }
+
 func fromDomainEvidence(v researchevidence.Evidence) EvidenceRecord {
-	return EvidenceRecord{EvidenceDraft:EvidenceDraft{EvidenceType:string(v.EvidenceType),SourceOwner:string(v.SourceOwner),SourceRef:v.SourceRef,SourceVersion:v.SourceVersion,SourceLocator:v.SourceLocator,DerivedFromRefs:cloneStrings(v.DerivedFromRefs),ClaimRef:v.ClaimRef,SubjectRefs:cloneStrings(v.SubjectRefs),PublishedAt:v.PublishedAt,AvailableAt:v.AvailableAt,SystemObservedAt:v.SystemObservedAt,ValidTimeStart:v.ValidTimeStart,ValidTimeEnd:v.ValidTimeEnd,SystemAsOf:v.SystemAsOf,Stance:string(v.Stance),Confidence:v.Confidence,ConfidenceMethod:v.ConfidenceMethod,ConfidenceMethodVersion:v.ConfidenceMethodVersion,QualityStatus:string(v.QualityStatus),ContentLevel:string(v.ContentLevel),AuthorizationRef:v.AuthorizationRef,Limitations:cloneStrings(v.Limitations)},EvidenceID:v.EvidenceID,ContentFingerprint:v.ContentFingerprint}
+	return EvidenceRecord{EvidenceDraft: EvidenceDraft{
+		EvidenceType: string(v.EvidenceType), SourceOwner: string(v.SourceOwner), SourceRef: v.SourceRef,
+		SourceVersion: cloneString(v.SourceVersion), SourceLocator: cloneString(v.SourceLocator),
+		DerivedFromRefs: cloneStrings(v.DerivedFromRefs), ClaimRef: cloneString(v.ClaimRef),
+		SubjectRefs: cloneStrings(v.SubjectRefs), PublishedAt: cloneTime(v.PublishedAt), AvailableAt: cloneTime(v.AvailableAt),
+		SystemObservedAt: v.SystemObservedAt, ValidTimeStart: cloneTime(v.ValidTimeStart), ValidTimeEnd: cloneTime(v.ValidTimeEnd),
+		SystemAsOf: v.SystemAsOf, Stance: string(v.Stance), Confidence: cloneFloat(v.Confidence),
+		ConfidenceMethod: cloneString(v.ConfidenceMethod), ConfidenceMethodVersion: cloneString(v.ConfidenceMethodVersion),
+		QualityStatus: string(v.QualityStatus), ContentLevel: string(v.ContentLevel),
+		AuthorizationRef: v.AuthorizationRef, Limitations: cloneStrings(v.Limitations),
+	}, EvidenceID: v.EvidenceID, ContentFingerprint: v.ContentFingerprint}
+}
+
+func cloneDomainEvidence(v researchevidence.Evidence) researchevidence.Evidence {
+	v.SourceVersion = cloneString(v.SourceVersion)
+	v.SourceLocator = cloneString(v.SourceLocator)
+	v.DerivedFromRefs = cloneStrings(v.DerivedFromRefs)
+	v.ClaimRef = cloneString(v.ClaimRef)
+	v.SubjectRefs = cloneStrings(v.SubjectRefs)
+	v.PublishedAt = cloneTime(v.PublishedAt)
+	v.AvailableAt = cloneTime(v.AvailableAt)
+	v.ValidTimeStart = cloneTime(v.ValidTimeStart)
+	v.ValidTimeEnd = cloneTime(v.ValidTimeEnd)
+	v.Confidence = cloneFloat(v.Confidence)
+	v.ConfidenceMethod = cloneString(v.ConfidenceMethod)
+	v.ConfidenceMethodVersion = cloneString(v.ConfidenceMethodVersion)
+	v.Limitations = cloneStrings(v.Limitations)
+	return v
 }
 
 

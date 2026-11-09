@@ -232,3 +232,5 @@ R1/R2/R3/R5 当前实现 Context、Evidence、Event、Claim/Hypothesis 领域结
 - Research Diagnostics Application Port 已提供 Context/Event/Claim Check 构造；Evidence Check 仍因 Owner 当前授权/撤销验证边界而未开放。
 
 - Application 读取边界：Context、Event、Claim 在映射 DTO 或构造 Diagnostics Check 前，校验 Repository 返回的 ID/版本与请求完全一致；不匹配按存储完整性错误拒绝。
+
+- Evidence Application：DTO/Domain 双向转换及授权、Repository 调用边界均使用深拷贝，防止可变字段别名导致校验后内容被修改。

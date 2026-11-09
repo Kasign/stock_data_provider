@@ -258,3 +258,70 @@ func TestApplicationRejectsRepositoryIdentityMismatch(t *testing.T) {
 		t.Fatal("Claim repository identity mismatch must be rejected")
 	}
 }
+
+
+
+type mutatingEvidenceAuthorizer struct{}
+func (mutatingEvidenceAuthorizer) AuthorizeEvidence(_ context.Context, _ string, _ researchevidence.PurposeCode, value researchevidence.Evidence) error {
+	if value.SourceVersion != nil { *value.SourceVersion = "mutated" }
+	if value.SourceLocator != nil { *value.SourceLocator = "mutated" }
+	if value.ClaimRef != nil { *value.ClaimRef = "mutated" }
+	if value.Confidence != nil { *value.Confidence = 0.99 }
+	if value.ConfidenceMethod != nil { *value.ConfidenceMethod = "mutated" }
+	if value.ConfidenceMethodVersion != nil { *value.ConfidenceMethodVersion = "mutated" }
+	if value.PublishedAt != nil { *value.PublishedAt = value.PublishedAt.Add(time.Hour) }
+	if value.AvailableAt != nil { *value.AvailableAt = value.AvailableAt.Add(time.Hour) }
+	if value.ValidTimeStart != nil { *value.ValidTimeStart = value.ValidTimeStart.Add(time.Hour) }
+	if value.ValidTimeEnd != nil { *value.ValidTimeEnd = value.ValidTimeEnd.Add(time.Hour) }
+	if len(value.SubjectRefs) > 0 { value.SubjectRefs[0] = "mutated" }
+	if len(value.DerivedFromRefs) > 0 { value.DerivedFromRefs[0] = "mutated" }
+	if len(value.Limitations) > 0 { value.Limitations[0] = "mutated" }
+	return nil
+}
+
+func TestEvidenceApplicationDeepCopiesDTOAndAdapterBoundaries(t *testing.T) {
+	now := time.Date(2026, 11, 9, 4, 0, 0, 0, time.UTC)
+	sourceVersion, locator, claimRef := "v1", "paragraph:2", "claim:1"
+	confidence, method, methodVersion := 0.7, "manual", "1"
+	published, available, validStart, validEnd := now, now.Add(time.Minute), now.Add(-time.Hour), now.Add(time.Hour)
+	draft := EvidenceDraft{
+		EvidenceType: string(researchevidence.TypeFact), SourceOwner: string(researchevidence.SourceData),
+		SourceRef: "data:fact:deep-copy", SourceVersion: &sourceVersion, SourceLocator: &locator,
+		DerivedFromRefs: []string{"ev_parent"}, ClaimRef: &claimRef,
+		SubjectRefs: []string{"security:600000"}, PublishedAt: &published, AvailableAt: &available,
+		SystemObservedAt: now, ValidTimeStart: &validStart, ValidTimeEnd: &validEnd, SystemAsOf: now,
+		Stance: string(researchevidence.StanceNeutral), Confidence: &confidence,
+		ConfidenceMethod: &method, ConfidenceMethodVersion: &methodVersion,
+		QualityStatus: string(researchevidence.QualityValid), ContentLevel: string(researchevidence.ContentMetadata),
+		AuthorizationRef: "auth:deep-copy", Limitations: []string{"limited"},
+	}
+	repo := &evidenceRepoFake{}
+	service, err := NewService(&contextRepoFake{}, repo, mutatingEvidenceAuthorizer{}, nil, &fixedIDs{})
+	if err != nil { t.Fatal(err) }
+	got, err := service.AddEvidence(context.Background(), AddEvidenceCommand{CallerRef: "researchflow:worker", Draft: draft})
+	if err != nil { t.Fatal(err) }
+	if *repo.value.SourceVersion != "v1" || *repo.value.SourceLocator != "paragraph:2" || *repo.value.ClaimRef != "claim:1" ||
+		*repo.value.Confidence != 0.7 || *repo.value.ConfidenceMethod != "manual" || *repo.value.ConfidenceMethodVersion != "1" {
+		t.Fatal("authorization adapter mutation leaked into the persisted Evidence")
+	}
+	if !repo.value.PublishedAt.Equal(published) || !repo.value.AvailableAt.Equal(available) ||
+		!repo.value.ValidTimeStart.Equal(validStart) || !repo.value.ValidTimeEnd.Equal(validEnd) {
+		t.Fatal("authorization adapter timestamp mutation leaked into the persisted Evidence")
+	}
+	if repo.value.SubjectRefs[0] != "security:600000" || repo.value.DerivedFromRefs[0] != "ev_parent" || repo.value.Limitations[0] != "limited" {
+		t.Fatal("authorization adapter slice mutation leaked into the persisted Evidence")
+	}
+	// Mutating the caller's original pointers after the call must not mutate storage.
+	sourceVersion, locator, claimRef, confidence, method, methodVersion = "caller", "caller", "caller", 0.1, "caller", "caller"
+	published, available, validStart, validEnd = now.Add(2*time.Hour), now.Add(2*time.Hour), now.Add(2*time.Hour), now.Add(2*time.Hour)
+	if *repo.value.SourceVersion != "v1" || *repo.value.Confidence != 0.7 || !repo.value.PublishedAt.Equal(now) {
+		t.Fatal("caller-owned pointer mutation leaked into stored Evidence")
+	}
+	// Returned DTO pointers and slices must also be detached from repository state.
+	*got.SourceVersion = "response"
+	*got.Confidence = 0.2
+	got.SubjectRefs[0] = "response"
+	if *repo.value.SourceVersion != "v1" || *repo.value.Confidence != 0.7 || repo.value.SubjectRefs[0] != "security:600000" {
+		t.Fatal("returned DTO mutation leaked into repository state")
+	}
+}
