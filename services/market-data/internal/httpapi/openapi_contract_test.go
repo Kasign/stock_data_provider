@@ -1198,3 +1198,77 @@ func TestBatchQuotesParameterDocumentsHandlerConstraints(t *testing.T) {
 	}
 	t.Fatal("market/quotes symbols parameter missing")
 }
+
+func TestIndexProviderSourceValidationMatchesOpenAPIEnum(t *testing.T) {
+	for _, testCase := range []struct {
+		name    string
+		input   string
+		want    string
+		wantErr bool
+	}{
+		{name: "automatic selection", input: "", want: ""},
+		{name: "hithink", input: "hithink", want: "hithink"},
+		{name: "tushare", input: "tushare", want: "tushare"},
+		{name: "normalized value", input: " TUSHARE ", want: "tushare"},
+		{name: "unsupported source", input: "eastmoney", wantErr: true},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			got, message := validateIndexProviderSource(testCase.input)
+			if testCase.wantErr {
+				if message == "" {
+					t.Fatal("expected source validation error")
+				}
+				return
+			}
+			if message != "" {
+				t.Fatalf("unexpected source validation error: %s", message)
+			}
+			if got != testCase.want {
+				t.Fatalf("normalized source=%q, want %q", got, testCase.want)
+			}
+		})
+	}
+
+	spec, err := os.ReadFile("../../openapi.yaml")
+	if err != nil {
+		t.Fatalf("read OpenAPI specification: %v", err)
+	}
+	var document map[string]any
+	if err := yaml.Unmarshal(spec, &document); err != nil {
+		t.Fatalf("OpenAPI must be valid YAML: %v", err)
+	}
+	paths := document["paths"].(map[string]any)
+	for _, path := range []string{
+		"/api/v1/market/indices/{symbol}/constituents",
+		"/api/v1/market/indices/{symbol}/daily",
+	} {
+		operation, ok := paths[path].(map[string]any)["get"].(map[string]any)
+		if !ok {
+			t.Fatalf("OpenAPI GET operation missing: %s", path)
+		}
+		parameters, _ := operation["parameters"].([]any)
+		found := false
+		for _, raw := range parameters {
+			parameter, ok := raw.(map[string]any)
+			if !ok || parameter["name"] != "source" {
+				continue
+			}
+			found = true
+			if parameter["in"] != "query" {
+				t.Errorf("%s source location=%v, want query", path, parameter["in"])
+			}
+			schema, ok := parameter["schema"].(map[string]any)
+			if !ok {
+				t.Errorf("%s source schema missing", path)
+				break
+			}
+			want := []any{"hithink", "tushare"}
+			if !reflect.DeepEqual(schema["enum"], want) {
+				t.Errorf("%s source enum=%#v, want %#v", path, schema["enum"], want)
+			}
+		}
+		if !found {
+			t.Errorf("%s source query parameter missing", path)
+		}
+	}
+}

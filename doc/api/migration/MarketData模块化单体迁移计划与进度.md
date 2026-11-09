@@ -141,7 +141,7 @@ internal/
 | 编号 | 剩余项 | 完成条件 | 当前判定 |
 |---|---|---|---|
 | M0-A / CT-05 | 35 Operation 参数语义最终核对 | 一次性核对仍有实际约束的 enum、minimum/maximum、default、数组/重复值、日期范围；已有 Schema/Test 覆盖的直接引用，不再重复造测试；输出差异清单，差异归零或逐项登记例外 | `in_progress` |
-| M0-B | Provider 请求行为安全证据 | 对真实出站调用逐项确认 method、URL/Host、query/body、超时、响应大小、重定向和凭据转发；已有测试覆盖的引用测试名，缺少且影响迁移安全的才补测试；不把 TCP Provider 误纳入 HTTP Client | `in_progress` |
+| M0-B | Provider 请求行为安全证据 | 已完成 HTTP/TCP 出站调用矩阵；当前配置边界与重定向风险明确登记，归入 M4 Platform HTTP Client / TCP 出站策略整改 | `completed_with_M4_followups` |
 | M0-C | 生产数据库 DDL 对照 | 获取脱敏生产 Schema/DDL；逐表对照 Data Migration、索引、唯一键、字段类型/精度/NULL/默认值；CI 临时 MariaDB 不能替代生产证据 | `blocked_external_evidence` |
 | M0-D / CT-06 | 集成基线验收 | 将当前分支合入 `origin/integration` 后，在 integration SHA 执行根模块、Data、race、vet、MariaDB/PIT、Compose/Docker；只记录结果，不直接修改 integration 代码 | `pending_integration` |
 
@@ -152,6 +152,37 @@ internal/
 3. 已有参数清单、类型/格式矩阵、Probe Schema、默认值测试和边界描述测试不重复实现。
 4. 对每个剩余参数只记录：Handler 校验位置、OpenAPI 当前值、差异、是否需要修复、对应测试。没有差异即关闭，不再为了增加测试数量增加测试。
 5. 本轮最终输出一张差异表；完成后 CT-05 关闭。后续若 Handler 规则变化，由对应代码变更同步更新测试，不再持续做无边界的“全量审计”。
+
+
+#### M0-B Provider 出站请求审计结果（代码基线：`c1b6cbee`）
+
+审计范围：`services/market-data/internal/provider/**` 与 `internal/baostock/client.go`。本项只冻结现状和迁移要求，不在 M0 重写各 Provider 网络栈。
+
+| Provider | 传输/方法 | 超时与响应体 | 重定向 | 认证/敏感信息 | 结论 |
+|---|---|---|---|---|---|
+| Eastmoney | HTTP GET/POST；统一 `getJSON` 与专项请求 | Client Timeout；成功响应使用 `readBoundedBody(maxProviderPayloadBytes)`；错误体最多读取 4 KiB | 自定义策略：最多 3 跳，仅允许 HTTPS Eastmoney 域名 | 无 Provider API Key | 已有较强重定向边界；仍缺 DNS/IP/解析后地址约束 |
+| Hithink | HTTP GET | Client Timeout；成功响应 `readBoundedBody(maxProviderPayloadBytes)`；错误体 4 KiB | 默认 Go 自动跟随 | `X-api-key` Header | 需在 M4 接入受控 HTTP Client，禁止任意跨域/非 HTTPS 跳转 |
+| MiaoXiang | HTTP POST | Client Timeout；成功响应上限 2 MiB；错误体 4 KiB | 禁止跟随 | `apikey` Header；请求 endpoint 校验绝对 HTTP(S)、无 userinfo/query/fragment，但允许 HTTP | 响应受限；M4 收紧 HTTPS 和 Host/IP 策略 |
+| NetEase | HTTP GET | Client Timeout；成功响应走有界读取；错误体 4 KiB | 禁止跟随 | 无 API 凭据 | 响应与跳转边界已有保护；仍缺 DNS/IP 策略 |
+| Sina | HTTP GET | Client Timeout；成功响应上限 1 MiB；错误体 4 KiB | 禁止跟随 | 无 API 凭据 | 响应与跳转边界已有保护；仍缺 DNS/IP 策略 |
+| Tencent | HTTP GET | Client Timeout；成功响应 `readBoundedBody(maxProviderPayloadBytes)`；错误体 4 KiB | 禁止跟随 | 无 API 凭据 | 响应与跳转边界已有保护；仍缺 DNS/IP 策略 |
+| TickFlow | HTTP GET/POST | Client Timeout；成功响应 `readBoundedBody(maxProviderPayloadBytes)`；错误体 2 KiB | 默认 Go 自动跟随 | `x-api-key` Header | 需在 M4 接入受控 HTTP Client，重点阻止认证请求跨域重定向 |
+| Tushare | HTTP POST | Client Timeout；成功响应有界读取；错误体 4 KiB | 默认 Go 自动跟随 | token 放在 JSON 请求体 | 需在 M4 禁止非预期重定向；请求体携带凭据，重定向必须拒绝而非依赖 Header 自动剥离 |
+| Xueqiu | HTTP GET | Client Timeout；成功响应有界读取；错误体 4 KiB | 默认 Go 自动跟随 | `Cookie` Header | 需在 M4 接入受控 HTTP Client，禁止携带 Cookie 跨域跳转 |
+| Yahoo | HTTP GET | Client Timeout；成功响应有界读取；错误体 4 KiB | 禁止跟随 | 无 API 凭据 | 响应与跳转边界已有保护；仍缺 DNS/IP 策略 |
+| BaoStock | 原生 TCP | ConnectTimeout、连接读写超时及单连接门控；非 HTTP Body | 不适用 | 登录凭据通过 BaoStock TCP 协议发送 | 不接入 Platform HTTP Client；M4 单独明确 TCP Host/Port 出站白名单 |
+| Pytdx | 原生 TCP | Dial 最长 1.5 秒/次，最多轮询 6 个候选；Client 设置整体 timeout | 不适用 | 无 HTTP 凭据 | 不接入 Platform HTTP Client；M4 单独明确 TCP Host/Port 出站白名单 |
+
+**审计结论与边界：**
+
+1. Provider endpoint 来自启动配置/构造参数，不来自当前 Data HTTP API 的请求参数；本轮未发现调用方可通过业务 API 直接指定任意上游 URL 的入口。此结论不等于 endpoint 配置天然可信，配置写入权限仍属于部署/运维信任边界。
+2. HTTP Provider 均设置 Client Timeout；审计到的成功响应路径均使用有界读取，错误响应体按 2/4 KiB 等小上限读取。Eastmoney、Hithink、MiaoXiang、NetEase、Sina、Tencent、TickFlow、Tushare、Xueqiu、Yahoo 均已核对。
+3. Hithink、TickFlow、Tushare、Xueqiu 使用 Go 默认重定向策略；其中 Hithink/TickFlow/Xueqiu 使用 Header 凭据，Tushare 将 token 放在 POST JSON Body。迁移后必须由受控 HTTP Client 拒绝非预期重定向，不能只依赖 Go 默认敏感 Header 剥离。
+4. Eastmoney 已限制最多 3 跳且只允许 HTTPS Eastmoney 域名；MiaoXiang、NetEase、Sina、Tencent、Yahoo 禁止自动跟随重定向。
+5. 当前 Provider 自建 `http.Client`，未统一执行 Platform HTTP Client 的 DNS 解析后 IP 检查、私网/保留地址拒绝和 DNS rebinding 防护。该项属于已确认的 M4 网络出口整改，不伪装成已完成安全加固。
+6. BaoStock 与 Pytdx 是 TCP，不应为了复用 HTTP Client 而包装成 HTTP；M4 必须单列 TCP 目标地址白名单、连接超时和部署网络出口限制。
+
+**M0-B 判定：** 出站调用行为审计已完成；安全缺口已明确到 Provider、敏感凭据类型和 M4 目标，不再扩大 M0 审计范围。该状态只代表“审计交付完成”，不代表 DNS/IP SSRF 防护已落地。M4 未完成前，不得把 Provider 网络出口安全整改标记为完成。
 
 #### M0 退出门槛
 
@@ -2255,4 +2286,17 @@ CI：本轮 SHA 对应 Go test suite Run `42549171549`。截至本次文档提�
 - 当前代码 SHA `5a25e3321e6cbea9dcc94fd75ca3fddd8ad8dfc7`：Data Module gofmt/test/race/vet、MariaDB/PIT/Probe 集成、Compose 和 Docker 镜像构建均通过 Push workflow；Root gofmt 与 WebUI checks 失败属于其他范围。Push workflow 不替代 integration 验收。
 - 当前 M0 不通过，M1 不准入。生产 DDL 需用户提供脱敏快照；未取得前保持 external evidence blocker，不得伪造或以 CI 临时数据库代替。
 - 本次只修改文档，不改业务代码、OpenAPI、数据库、部署配置或其他模块。
+
+
+
+### 2026-11-09：CT-05 指数 Provider source 枚举最终补齐与 M0-B 出站审计
+
+代码基线：`c1b6cbeea7a4ec12528ff7d87f767d376bf7113c`。
+
+- 对照 35 Operation 固定参数全集、参数类型/格式矩阵、Handler 默认值/边界描述测试及 Probe Body Schema，剩余 query enum 差异仅发现指数成分和指数日线两个接口的 `source` 参数缺少专门枚举断言；OpenAPI 与 Handler 当前均只允许 `hithink|tushare`，无运行时契约差异。
+- 新增 `TestIndexProviderSourceValidationMatchesOpenAPIEnum`：同时验证 Handler 自动选择、hithink、tushare、大小写/空白规范化和非法来源拒绝，并核对两个 Operation 的 OpenAPI query enum。没有修改 OpenAPI 或运行时行为。
+- M0-B 已完成 HTTP/TCP Provider 出站调用矩阵。发现四个 HTTP Provider 使用默认重定向策略（Hithink、TickFlow、Tushare、Xueqiu）；认证分别涉及 API Key Header、Token JSON Body、Cookie Header。所有已审计 HTTP 成功响应路径有界读取并设置请求超时。
+- DNS/IP 解析后地址限制、私网/保留地址拒绝、DNS rebinding 防护尚未统一落地；登记为 M4 Platform HTTP Client 接入整改。BaoStock/Pytdx 是 TCP，单列 TCP egress policy，不纳入 HTTP Client。
+- 当前仅提交测试和审计文档；不修改 Provider、API、DTO、数据库、部署配置或其他模块。
+- 新 SHA 的 Data Module CI 待确认后，M0-A 才能关闭；M0-C 仍等待脱敏生产 DDL，M0-D 仍等待 integration 验收。
 
