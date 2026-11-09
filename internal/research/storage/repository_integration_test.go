@@ -61,12 +61,13 @@ func TestResearchSQLRepositoriesAppendAndReadVersions(t *testing.T) {
 	claimID := "claim-it-" + suffix
 	cancelledContextID := "ctx-cancel-it-" + suffix
 	orphanContextID := "ctx-orphan-it-" + suffix
+	lockedContextID := "ctx-lock-cancel-it-" + suffix
 
 	t.Cleanup(func() {
-		_, _ = db.ExecContext(context.Background(), "DELETE FROM research_context_versions WHERE context_id IN (?, ?)", contextID, orphanContextID)
+		_, _ = db.ExecContext(context.Background(), "DELETE FROM research_context_versions WHERE context_id IN (?, ?, ?)", contextID, orphanContextID, lockedContextID)
 		_, _ = db.ExecContext(context.Background(), "DELETE FROM research_event_versions WHERE event_id=?", eventID)
 		_, _ = db.ExecContext(context.Background(), "DELETE FROM research_claim_versions WHERE claim_id=?", claimID)
-		_, _ = db.ExecContext(context.Background(), "DELETE FROM research_aggregate_heads WHERE aggregate_id IN (?, ?, ?, ?, ?)", contextID, eventID, claimID, cancelledContextID, orphanContextID)
+		_, _ = db.ExecContext(context.Background(), "DELETE FROM research_aggregate_heads WHERE aggregate_id IN (?, ?, ?, ?, ?)", contextID, eventID, claimID, cancelledContextID, orphanContextID, lockedContextID)
 	})
 
 	contextRepo, err := NewContextRepository(db, clock)
@@ -212,6 +213,63 @@ func TestResearchSQLRepositoriesAppendAndReadVersions(t *testing.T) {
 	}
 	if cancelledHeadCount != 0 {
 		t.Fatalf("pre-canceled append left %d aggregate head rows, want 0", cancelledHeadCount)
+	}
+
+
+	// Cancellation while waiting for the aggregate-head row lock must abort
+	// the append transaction and leave the previous version/head unchanged.
+	lockedContextV1 := contextV1
+	lockedContextV1.ContextID = lockedContextID
+	if err := contextRepo.Append(ctx, lockedContextV1); err != nil {
+		t.Fatalf("append lock-cancel Context v1: %v", err)
+	}
+	blocker, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatalf("begin aggregate-head lock transaction: %v", err)
+	}
+	if _, err := blocker.ExecContext(ctx, "UPDATE research_aggregate_heads SET updated_at=updated_at WHERE aggregate_type='context' AND aggregate_id=?", lockedContextID); err != nil {
+		_ = blocker.Rollback()
+		t.Fatalf("lock aggregate head: %v", err)
+	}
+	lockedContextV2 := lockedContextV1
+	lockedContextV2.ContextVersion = 2
+	lockedContextV2.CreatedAt = cutoff.Add(time.Minute)
+	lockedContextV2.SystemAsOf = cutoff.Add(time.Minute)
+	lockedContextV2.SectionRefs = append([]researchcontext.SectionRef(nil), lockedContextV1.SectionRefs...)
+	lockedContextV2.SectionRefs[0].SystemAsOf = lockedContextV2.SystemAsOf
+	lockedContextV2.SectionRefs[0].AssembledAt = lockedContextV2.SystemAsOf
+	lockWaitCtx, cancelLockWait := context.WithTimeout(ctx, 300*time.Millisecond)
+	defer cancelLockWait()
+	appendResult := make(chan error, 1)
+	go func() {
+		appendResult <- contextRepo.Append(lockWaitCtx, lockedContextV2)
+	}()
+	var appendErr error
+	select {
+	case appendErr = <-appendResult:
+	case <-time.After(5 * time.Second):
+		_ = blocker.Rollback()
+		t.Fatal("append did not return after lock-wait context deadline")
+	}
+	if err := blocker.Rollback(); err != nil && !errors.Is(err, sql.ErrTxDone) {
+		t.Fatalf("release aggregate-head lock: %v", err)
+	}
+	if !errors.Is(appendErr, context.DeadlineExceeded) {
+		t.Fatalf("lock-wait append error = %v, want context.DeadlineExceeded", appendErr)
+	}
+	var lockedLatest int64
+	if err := db.QueryRowContext(ctx, "SELECT latest_version FROM research_aggregate_heads WHERE aggregate_type='context' AND aggregate_id=?", lockedContextID).Scan(&lockedLatest); err != nil {
+		t.Fatalf("read aggregate head after canceled lock wait: %v", err)
+	}
+	if lockedLatest != 1 {
+		t.Fatalf("aggregate head after canceled lock wait = %d, want 1", lockedLatest)
+	}
+	var lockedV2Count int
+	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM research_context_versions WHERE context_id=? AND context_version=2", lockedContextID).Scan(&lockedV2Count); err != nil {
+		t.Fatalf("read version after canceled lock wait: %v", err)
+	}
+	if lockedV2Count != 0 {
+		t.Fatalf("canceled lock-wait append left %d version-2 rows, want 0", lockedV2Count)
 	}
 
 	eventV1 := researchevent.ResearchEvent{
