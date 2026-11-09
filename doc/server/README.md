@@ -822,6 +822,6 @@ Lifecycle 原先只在组件 `Start` 返回错误时回滚，没有在组件启�
 - 代码提交：`fb68554c233b20ba803d053914a5d63e85747ce0`（Lifecycle 实现）。
 - 测试提交：`9e34d6e6e9e8014344d5c2882f763a1baf03a181`（新增回归测试）。
 - Go Workflow Run `42601133240` 对测试 SHA 的首次检查因 `lifecycle_test.go` 一处 gofmt 对齐失败，在测试阶段前终止；`go-core` 子模块测试、race、vet 均通过。
-- 已在 `9a782b9e7fb3074ebe66264e78dc0af07fc225b4` 修正格式。该 SHA 的 Go Workflow 状态仍待回查；在取得新 Run 结果前，不将 Server 根模块测试标记为通过。
+- 已在 `9a782b9e7fb3074ebe66264e78dc0af07fc225b4` 修正格式。对应 Go Workflow Run `42601314977` 已启动：根模块 gofmt、依赖下载通过，根模块 `go test ./...` 正在执行；race/vet 尚未开始。最终结论待 Run 完成后更新。
 - 本次只修改 Server 负责的 `internal/server/runtime/**` 和本文档；未修改 Platform 或其他模块。
 - 真实子进程 SIGTERM/容器停止验收仍未完成；组件级取消回滚不能替代进程信号验收。
