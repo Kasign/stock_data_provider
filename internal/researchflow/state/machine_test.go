@@ -185,6 +185,23 @@ func TestAggregateRejectsInvalidHardRiskDecision(t *testing.T) {
 	if err == nil { t.Fatal("empty hard risk decision was accepted") }
 }
 
+func TestTerminalFinalizersRejectUnknownAttemptStates(t *testing.T) {
+	now := time.Date(2026, 11, 6, 10, 0, 0, 0, time.UTC)
+	terminalStages := []domain.Stage{{Code:"done", Status:domain.StageSucceeded}}
+	policies := map[string]template.PropagationPolicy{"done": {OnFailed:domain.PropagateFail}}
+	unknownStatuses := []domain.AttemptStatus{"", "queued", "unknown"}
+	for _, status := range unknownStatuses {
+		t.Run("aggregate_"+string(status), func(t *testing.T) {
+			_, err := AggregateRun(domain.Run{Status:domain.RunRunning}, terminalStages, []domain.Attempt{{Ref:"attempt-1", Status:status}}, policies, nil, false, now)
+			if err == nil { t.Fatalf("aggregate accepted non-terminal Attempt status %q", status) }
+		})
+		t.Run("cancel_"+string(status), func(t *testing.T) {
+			_, err := FinalizeCancellation(domain.Run{Status:domain.RunCancelling, TerminationReason:"user_cancelled"}, terminalStages, []domain.Attempt{{Ref:"attempt-1", Status:status}}, now)
+			if err == nil { t.Fatalf("cancellation finalizer accepted non-terminal Attempt status %q", status) }
+		})
+	}
+}
+
 func TestFinalizeCancellationPersistsTerminalSummary(t *testing.T) {
 	now := time.Date(2026, 11, 6, 10, 0, 0, 0, time.UTC)
 	run := domain.Run{Status:domain.RunCancelling, TerminationReason:"user_cancelled"}

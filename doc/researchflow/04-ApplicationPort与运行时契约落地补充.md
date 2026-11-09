@@ -264,3 +264,12 @@ Fake Repository/Fake Clock/Fake Provider 只证明模块内逻辑；MariaDB/Redi
 - 表名为模块私有逻辑名，Migration namespace 固定为 `researchflow`；版本号严格递增，已发布 Migration 的 SQL/语句顺序不可原地修改。MariaDB DDL 可能隐式提交，失败后按 Platform Migration Runner 规则进入人工检查/前向修复，不假设事务回滚。
 - 本轮 Review 已确认目标 MariaDB 版本为 11.4、Migration Runner 为 `internal/platform/storage.ApplyMigrations`；并修正 CreateRun 幂等唯一键占位顺序与 Retry Promotion 错误分配 Attempt 的冲突。
 - 该设计当前状态为 `reviewed_design_pending_implementation`；尚未形成可执行 Migration 或 Repository 实现，真实 MariaDB 并发集成、死锁、唯一键竞争、CAS、事务回滚和崩溃恢复仍未执行，不得标记实现完成或 L3 通过。
+
+
+### Attempt 终态校验 fail-closed 补充（2026-11-09）
+
+- Run 聚合和用户取消终结此前只拒绝 `AttemptRunning`，空状态或未知状态会被误认为已停止。
+- 新增统一 `validateAttemptsTerminal`，要求传入的每个 Attempt 状态均属于明确的终态枚举；running、空值和未知值一律拒绝。
+- AggregateRun、FinalizeCancellation 共用校验；FinalizeDeadline 复用 AggregateRun，因此同样受保护。
+- 新增回归测试覆盖空状态、queued、unknown 三种非终态输入，分别验证聚合和取消终结拒绝。
+- 本修正仍需定向 Go Test/Race/Vet 执行证据；不将静态增加的测试描述为通过。

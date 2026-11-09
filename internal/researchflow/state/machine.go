@@ -227,7 +227,7 @@ func ClaimReadyStage(run domain.Run, stage domain.Stage, now time.Time, attemptR
 func AggregateRun(run domain.Run,stages []domain.Stage,attempts []domain.Attempt,policies map[string]template.PropagationPolicy,hardRiskStageCodes map[string]bool,requiresHardRiskGate bool,now time.Time)(domain.Run,error){
 	if len(stages)==0{return run,errors.New("cannot aggregate an empty run")}
 	for _,s:=range stages{if !s.Status.Terminal(){return run,errors.New("cannot aggregate while stages are non-terminal")}}
-	for _,a:=range attempts{if a.Status==domain.AttemptRunning{return run,errors.New("cannot aggregate while an attempt is running")}}
+	if err := validateAttemptsTerminal(attempts); err != nil { return run, fmt.Errorf("cannot aggregate run: %w", err) }
 	summary:=domain.ResultSummary{StageOutcomes:map[string]domain.StageStatus{},RiskGateDecisions:map[string]string{},ExcludedStages:cloneExcludedStages(run.ExcludedStages),MissingStageCodes:[]string{},DegradedStageCodes:[]string{},BlockedStageCodes:[]string{},ReasonCodes:[]string{},QualityStatus:"valid",ActionabilityStatus:"not_evaluated"}
 	fail,partial,completed:=false,false,0
 	gateCount,gatePassed,gateExecutionFailed:=0,true,false
@@ -303,14 +303,22 @@ func FinalizeCancellation(run domain.Run, stages []domain.Stage, attempts []doma
 	for _, stage := range stages {
 		if !stage.Status.Terminal() { return run, errors.New("cannot finalize while a stage is active") }
 	}
-	for _, attempt := range attempts {
-		if attempt.Status == domain.AttemptRunning { return run, errors.New("cannot finalize while an attempt is running") }
-	}
+	if err := validateAttemptsTerminal(attempts); err != nil { return run, fmt.Errorf("cannot finalize cancellation: %w", err) }
 	summary := buildTerminalSummary(stages, run.ExcludedStages)
 	updated, err := transitionRun(run, domain.RunCancelled, now)
 	if err != nil { return run, err }
 	updated.ResultSummary = &summary
 	return updated, nil
+}
+
+// validateAttemptsTerminal fails closed for running and unknown Attempt states.
+func validateAttemptsTerminal(attempts []domain.Attempt) error {
+	for _, attempt := range attempts {
+		if !attempt.Status.Terminal() {
+			return fmt.Errorf("attempt %q is not in a terminal state: %q", attempt.Ref, attempt.Status)
+		}
+	}
+	return nil
 }
 
 func ptrSummary(summary domain.ResultSummary) *domain.ResultSummary { return &summary }
