@@ -61,6 +61,18 @@ func openResearchIntegrationDB(t *testing.T) *sql.DB {
 	return db
 }
 
+
+func assertResearchPITColumn(t *testing.T, db *sql.DB, query string, args []any, want time.Time) {
+	t.Helper()
+	var got string
+	if err := db.QueryRowContext(context.Background(), query, args...).Scan(&got); err != nil {
+		t.Fatalf("read persisted PIT timestamp: %v", err)
+	}
+	if expected := formatPIT(want); got != expected {
+		t.Fatalf("persisted PIT timestamp = %q, want %q", got, expected)
+	}
+}
+
 func TestResearchEventLifecycleOutboxFailureRollsBackEventVersion(t *testing.T) {
 	db := openResearchIntegrationDB(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
@@ -268,6 +280,7 @@ func TestResearchSQLRepositoriesAppendAndReadVersions(t *testing.T) {
 	if err := contextRepo.Append(ctx, contextV1); err != nil {
 		t.Fatalf("append Context v1: %v", err)
 	}
+	assertResearchPITColumn(t, db, "SELECT system_as_of FROM research_context_versions WHERE context_id=? AND context_version=1", []any{contextID}, cutoff)
 	if err := contextRepo.Append(ctx, contextV1); err != nil {
 		t.Fatalf("replay Context v1: %v", err)
 	}
@@ -490,6 +503,7 @@ func TestResearchSQLRepositoriesAppendAndReadVersions(t *testing.T) {
 	if err := eventRepo.Append(ctx, eventV1); err != nil {
 		t.Fatalf("append Event v1: %v", err)
 	}
+	assertResearchPITColumn(t, db, "SELECT system_as_of FROM research_event_versions WHERE event_id=? AND event_version=1", []any{eventID}, cutoff)
 	if err := eventRepo.Append(ctx, eventV1); err != nil {
 		t.Fatalf("replay Event v1: %v", err)
 	}
@@ -519,6 +533,7 @@ func TestResearchSQLRepositoriesAppendAndReadVersions(t *testing.T) {
 	if err := claimRepo.Append(ctx, claimV1); err != nil {
 		t.Fatalf("append Claim v1: %v", err)
 	}
+	assertResearchPITColumn(t, db, "SELECT system_as_of FROM research_claim_versions WHERE claim_id=? AND claim_version=1", []any{claimID}, cutoff)
 	if err := claimRepo.Append(ctx, claimV1); err != nil {
 		t.Fatalf("replay Claim v1: %v", err)
 	}
@@ -541,11 +556,12 @@ func TestResearchSQLRepositoriesAppendAndReadVersions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	availableAt := cutoff.Add(-time.Second)
 	evidenceV1 := researchevidence.Evidence{
 		EvidenceID: evidenceID, EvidenceType: researchevidence.TypeFact,
 		SourceOwner: researchevidence.SourceData, SourceRef: "data:integration:fixture",
 		DerivedFromRefs: []string{}, SubjectRefs: []string{},
-		SystemObservedAt: cutoff, SystemAsOf: cutoff,
+		SystemObservedAt: cutoff, SystemAsOf: cutoff, AvailableAt: &availableAt,
 		Stance: researchevidence.StanceNeutral, QualityStatus: researchevidence.QualityValid,
 		ContentLevel: researchevidence.ContentMetadata, AuthorizationRef: "auth-integration-v1",
 		Limitations: []string{},
@@ -557,6 +573,9 @@ func TestResearchSQLRepositoriesAppendAndReadVersions(t *testing.T) {
 	if err := evidenceRepo.Append(ctx, evidenceV1); err != nil {
 		t.Fatalf("append Evidence: %v", err)
 	}
+	assertResearchPITColumn(t, db, "SELECT system_as_of FROM research_evidence_records WHERE evidence_id=?", []any{evidenceID}, cutoff)
+	assertResearchPITColumn(t, db, "SELECT system_observed_at FROM research_evidence_records WHERE evidence_id=?", []any{evidenceID}, cutoff)
+	assertResearchPITColumn(t, db, "SELECT available_at FROM research_evidence_records WHERE evidence_id=?", []any{evidenceID}, availableAt)
 	if err := evidenceRepo.Append(ctx, evidenceV1); err != nil {
 		t.Fatalf("replay Evidence: %v", err)
 	}
