@@ -1,6 +1,8 @@
 package migration
 
 import (
+	"context"
+	"database/sql"
 	"reflect"
 	"testing"
 
@@ -80,5 +82,20 @@ func TestRegisterOnNilRegistry(t *testing.T) {
 	var registry *Registry
 	if err := registry.Register("research", []platformstorage.Migration{{Version: 1, Description: "init", Statements: []string{"SELECT 1"}}}); err == nil {
 		t.Fatal("Register() error = nil, want nil registry error")
+	}
+}
+
+func TestRunValidatesInputsBeforeDatabaseAccess(t *testing.T) {
+	registry := NewRegistry()
+	emptyDB := &sql.DB{}
+
+	if err := registry.Run(nil, emptyDB); err == nil {
+		t.Fatal("Run() error = nil for nil context")
+	}
+	if err := registry.Run(context.Background(), nil); err == nil {
+		t.Fatal("Run() error = nil for nil database")
+	}
+	if err := registry.Run(context.Background(), emptyDB); err == nil {
+		t.Fatal("Run() error = nil for empty registry")
 	}
 }
