@@ -147,7 +147,7 @@ func TestResponsesAdapterMapsHTTPStatusAndRetryAfter(t *testing.T) {
 	doer := doerFunc(func(*http.Request) (*http.Response, error) {
 		return &http.Response{
 			StatusCode: http.StatusTooManyRequests,
-			Header: http.Header{"Retry-After": []string{"30"}},
+			Header:     http.Header{"Retry-After": []string{"30"}},
 			Body:       io.NopCloser(strings.NewReader(`{"error":{"type":"rate_limit_error"}}`)),
 		}, nil
 	})
@@ -465,7 +465,7 @@ func TestResponsesAdapterStreamClosesBodyReturnedWithError(t *testing.T) {
 	streamDoer := HTTPStreamDoerFunc(func(context.Context, *http.Request) (*HTTPStreamResponse, error) {
 		return &HTTPStreamResponse{
 			StatusCode: http.StatusOK,
-			Header:     http.Header{"Content-Type": []string{"text/event-stream"}},
+			Header: http.Header{"Content-Type": []string{"text/event-stream"}},
 			Body:       body,
 		}, errors.New("open stream failed")
 	})
