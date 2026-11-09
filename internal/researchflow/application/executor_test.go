@@ -22,7 +22,7 @@ func TestValidateStageExecutionResult(t *testing.T) {
 		{name: "timed out", result: StageExecutionResult{AttemptStatus: domain.AttemptTimedOut, StageStatus: domain.StageTimedOut}, valid: true},
 		{name: "cancelled", result: StageExecutionResult{AttemptStatus: domain.AttemptCancelled, StageStatus: domain.StageCancelled}, valid: true},
 		{name: "success without output", result: StageExecutionResult{AttemptStatus: domain.AttemptSucceeded, StageStatus: domain.StageSucceeded}, valid: false},
-		{name: "retry without provider time", result: StageExecutionResult{AttemptStatus: domain.AttemptFailed, StageStatus: domain.StageRetryWait}, valid: true},
+		{name: "retry without time", result: StageExecutionResult{AttemptStatus: domain.AttemptFailed, StageStatus: domain.StageRetryWait}, valid: false},
 		{name: "retry with output", result: StageExecutionResult{AttemptStatus: domain.AttemptFailed, StageStatus: domain.StageRetryWait, RetryAt: &retryAt, OutputRef: &output}, valid: false},
 		{name: "mismatched attempt", result: StageExecutionResult{AttemptStatus: domain.AttemptFailed, StageStatus: domain.StageSucceeded, OutputRef: &output}, valid: false},
 		{name: "unknown stage state", result: StageExecutionResult{AttemptStatus: domain.AttemptFailed, StageStatus: domain.StageReady}, valid: false},
