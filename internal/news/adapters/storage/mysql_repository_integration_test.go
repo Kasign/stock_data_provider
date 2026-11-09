@@ -178,6 +178,24 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 	if !errors.Is(evidenceTamperErr, app.ErrInvalidEvidenceSnapshot) {
 		t.Fatalf("tampered evidence snapshot error = %v, want invalid snapshot", evidenceTamperErr)
 	}
+	// The denormalized lookup columns are part of the immutable snapshot
+	// envelope and must agree with the hash-verified JSON payload.
+	if _, err := db.ExecContext(ctx,
+		"UPDATE news_evidence_snapshots SET page_size = page_size + 1 WHERE snapshot_ref = ?",
+		snapshot.SnapshotRef,
+	); err != nil {
+		t.Fatalf("tamper evidence snapshot metadata: %v", err)
+	}
+	_, evidenceMetadataTamperErr := repository.GetEvidenceSnapshot(ctx, snapshot.SnapshotRef, snapshot.CallerRef, snapshotCreatedAt.Add(time.Minute))
+	if _, err := db.ExecContext(ctx,
+		"UPDATE news_evidence_snapshots SET page_size = ? WHERE snapshot_ref = ?",
+		snapshot.PageSize, snapshot.SnapshotRef,
+	); err != nil {
+		t.Fatalf("restore evidence snapshot metadata: %v", err)
+	}
+	if !errors.Is(evidenceMetadataTamperErr, app.ErrInvalidEvidenceSnapshot) {
+		t.Fatalf("tampered evidence snapshot metadata error = %v, want invalid snapshot", evidenceMetadataTamperErr)
+	}
 	conflictingSnapshot := snapshot
 	conflictingSnapshot.PageSize++
 	if err := repository.CreateEvidenceSnapshot(ctx, conflictingSnapshot); !errors.Is(err, app.ErrEvidenceSnapshotConflict) {

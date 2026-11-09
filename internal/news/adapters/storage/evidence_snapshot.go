@@ -68,10 +68,16 @@ func (r *MySQLRepository) GetEvidenceSnapshot(
 	var payload []byte
 	var storedHash string
 	var itemCount uint32
-	err := r.db.QueryRowContext(ctx,
-		"SELECT payload_json, payload_hash, item_count FROM news_evidence_snapshots WHERE snapshot_ref = ? AND caller_ref = ?",
+	var storedFingerprint string
+	var storedPageSize uint16
+	var storedSystemAsOf, storedCreatedAt, storedExpiresAt time.Time
+	var storedSortVersion string
+	err := r.db.QueryRowContext(ctx, `SELECT payload_json, payload_hash, item_count,
+		filters_fingerprint, page_size, system_as_of, sort_version, created_at, expires_at
+		FROM news_evidence_snapshots WHERE snapshot_ref = ? AND caller_ref = ?`,
 		snapshotRef, callerRef,
-	).Scan(&payload, &storedHash, &itemCount)
+	).Scan(&payload, &storedHash, &itemCount, &storedFingerprint, &storedPageSize,
+		&storedSystemAsOf, &storedSortVersion, &storedCreatedAt, &storedExpiresAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return app.EvidenceSnapshot{}, app.ErrEvidenceSnapshotUnavailable
 	}
@@ -88,7 +94,13 @@ func (r *MySQLRepository) GetEvidenceSnapshot(
 		snapshot.ValidateAt(now) != nil ||
 		uint32(len(snapshot.Items)) != itemCount ||
 		snapshot.SnapshotRef != snapshotRef ||
-		snapshot.CallerRef != callerRef {
+		snapshot.CallerRef != callerRef ||
+		snapshot.FiltersFingerprint != storedFingerprint ||
+		snapshot.PageSize != int(storedPageSize) ||
+		!snapshot.SystemAsOf.Equal(storedSystemAsOf) ||
+		snapshot.SortVersion != storedSortVersion ||
+		!snapshot.CreatedAt.Equal(storedCreatedAt) ||
+		!snapshot.ExpiresAt.Equal(storedExpiresAt) {
 		return app.EvidenceSnapshot{}, app.ErrInvalidEvidenceSnapshot
 	}
 	if !now.Before(snapshot.ExpiresAt) {
