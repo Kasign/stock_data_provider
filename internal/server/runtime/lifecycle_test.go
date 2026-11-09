@@ -58,7 +58,7 @@ func TestLifecycleRollsBackFailedComponentAndPriorComponents(t *testing.T) {
 	if !errors.Is(err, startErr) {
 		t.Fatalf("Start() error = %v, want original error", err)
 	}
-	want := []string{"start:storage","start:worker","stop:worker","stop:storage"}
+	want := []string{"start:storage", "start:worker", "stop:worker", "stop:storage"}
 	if !reflect.DeepEqual(events, want) {
 		t.Fatalf("events = %v, want %v", events, want)
 	}
@@ -70,14 +70,16 @@ func TestLifecycleRollsBackFailedComponentAndPriorComponents(t *testing.T) {
 func TestLifecycleRejectsDuplicateAndLateRegistration(t *testing.T) {
 	var events []string
 	lifecycle := NewLifecycle()
-	component := testComponent{name:"worker",log:&events}
+	component := testComponent{name: "worker", log: &events}
 	if err := lifecycle.Register(component); err != nil {
 		t.Fatal(err)
 	}
 	if err := lifecycle.Register(component); err == nil {
 		t.Fatal("duplicate registration must fail")
 	}
-	if err := lifecycle.Start(context.Background()); err != nil { t.Fatal(err) }
+	if err := lifecycle.Start(context.Background()); err != nil {
+		t.Fatal(err)
+	}
 	if err := lifecycle.Register(testComponent{name: "late", log: &events}); err == nil {
 		t.Fatal("late registration must fail")
 	}
