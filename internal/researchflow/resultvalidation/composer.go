@@ -74,6 +74,10 @@ func ComposeResult(input ResultCompositionInput, quantRegistry *Registry) (Compo
 	if err != nil {
 		return ComposedResearchResult{}, err
 	}
+	contextSourceRefs, err := validateContextReferences(input.Context, evidenceIDs)
+	if err != nil {
+		return ComposedResearchResult{}, err
+	}
 	claimIDs, err := validateResearchClaims(input.Claims, evidenceIDs, input.SystemAsOf)
 	if err != nil {
 		return ComposedResearchResult{}, err
@@ -119,6 +123,13 @@ func ComposeResult(input ResultCompositionInput, quantRegistry *Registry) (Compo
 		if err := ValidateRiskDecision(*input.RiskDecision, input.SystemAsOf); err != nil {
 			return ComposedResearchResult{}, fmt.Errorf("%w: RiskDecision: %v", ErrInvalidResultComposition, err)
 		}
+		quantRefs := make(map[string]struct{}, len(quantResults))
+		for _, quantResult := range quantResults {
+			quantRefs[quantResult.Result.ResultID] = struct{}{}
+		}
+		if err := validateRiskReferences(*input.RiskDecision, quantRefs, contextSourceRefs, evidenceIDs); err != nil {
+			return ComposedResearchResult{}, err
+		}
 		copyValue, err := cloneJSON(*input.RiskDecision)
 		if err != nil {
 			return ComposedResearchResult{}, fmt.Errorf("%w: copy RiskDecision: %v", ErrInvalidResultComposition, err)
@@ -151,6 +162,93 @@ func ComposeResult(input ResultCompositionInput, quantRegistry *Registry) (Compo
 		Explanation: explanation, RiskDecision: riskDecision,
 		Limitations: limitations,
 	}, nil
+}
+
+
+func validateContextReferences(value researchapp.ResearchContext, evidenceIDs map[string]struct{}) (map[string]struct{}, error) {
+	included := make(map[string]struct{}, len(value.IncludedSections))
+	omitted := make(map[string]struct{}, len(value.OmittedSections))
+	sourceRefs := make(map[string]struct{})
+	sectionIDs := make(map[string]struct{}, len(value.SectionRefs))
+	for _, sectionID := range value.IncludedSections {
+		if strings.TrimSpace(sectionID) == "" || sectionID != strings.TrimSpace(sectionID) {
+			return nil, fmt.Errorf("%w: invalid included section id", ErrInvalidResultComposition)
+		}
+		if _, exists := included[sectionID]; exists {
+			return nil, fmt.Errorf("%w: duplicate included section %q", ErrInvalidResultComposition, sectionID)
+		}
+		included[sectionID] = struct{}{}
+	}
+	for _, section := range value.SectionRefs {
+		if _, exists := sectionIDs[section.SectionID]; exists {
+			return nil, fmt.Errorf("%w: duplicate Context section %q", ErrInvalidResultComposition, section.SectionID)
+		}
+		sectionIDs[section.SectionID] = struct{}{}
+		if section.Included {
+			if _, exists := included[section.SectionID]; !exists {
+				return nil, fmt.Errorf("%w: included section %q missing from included_sections", ErrInvalidResultComposition, section.SectionID)
+			}
+		} else if _, exists := included[section.SectionID]; exists {
+			return nil, fmt.Errorf("%w: excluded section %q listed as included", ErrInvalidResultComposition, section.SectionID)
+		}
+		for _, ref := range section.SourceRefs {
+			if _, exists := sourceRefs[ref]; exists {
+				// A source may legitimately support more than one section.
+				continue
+			}
+			sourceRefs[ref] = struct{}{}
+		}
+		for _, ref := range section.EvidenceRefs {
+			if _, exists := evidenceIDs[ref]; !exists {
+				return nil, fmt.Errorf("%w: Context section %q references missing Evidence %q", ErrInvalidResultComposition, section.SectionID, ref)
+			}
+		}
+	}
+	for sectionID := range included {
+		if _, exists := sectionIDs[sectionID]; !exists {
+			return nil, fmt.Errorf("%w: included section %q has no section reference", ErrInvalidResultComposition, sectionID)
+		}
+	}
+	for _, section := range value.OmittedSections {
+		if strings.TrimSpace(section.SectionID) == "" || !validSourceOwner(section.SourceOwner) ||
+			strings.TrimSpace(section.SafeMessage) == "" || section.SourceRefs == nil ||
+			hasDuplicateOrInvalidRefs(section.SourceRefs) {
+			return nil, fmt.Errorf("%w: invalid omitted section %q", ErrInvalidResultComposition, section.SectionID)
+		}
+		switch section.ReasonCode {
+		case "not_requested", "budget_exceeded", "unavailable", "unauthorized", "quality_rejected", "failed", "duplicate":
+		default:
+			return nil, fmt.Errorf("%w: unsupported omitted-section reason %q", ErrInvalidResultComposition, section.ReasonCode)
+		}
+		if _, exists := omitted[section.SectionID]; exists {
+			return nil, fmt.Errorf("%w: duplicate omitted section %q", ErrInvalidResultComposition, section.SectionID)
+		}
+		if _, exists := included[section.SectionID]; exists {
+			return nil, fmt.Errorf("%w: section %q is both included and omitted", ErrInvalidResultComposition, section.SectionID)
+		}
+		omitted[section.SectionID] = struct{}{}
+	}
+	return sourceRefs, nil
+}
+
+func validateRiskReferences(value RiskDecision, quantRefs, sourceRefs, evidenceIDs map[string]struct{}) error {
+	for _, ref := range value.InputRefs {
+		if _, quantExists := quantRefs[ref]; quantExists {
+			continue
+		}
+		if _, sourceExists := sourceRefs[ref]; sourceExists {
+			continue
+		}
+		return fmt.Errorf("%w: RiskDecision references unknown input %q", ErrInvalidResultComposition, ref)
+	}
+	for _, reason := range value.Reasons {
+		for _, ref := range reason.EvidenceRefs {
+			if _, exists := evidenceIDs[ref]; !exists {
+				return fmt.Errorf("%w: RiskDecision reason %q references missing Evidence %q", ErrInvalidResultComposition, reason.Code, ref)
+			}
+		}
+	}
+	return nil
 }
 
 func validateResearchContext(value researchapp.ResearchContext, expectedSystemAsOf time.Time) error {
