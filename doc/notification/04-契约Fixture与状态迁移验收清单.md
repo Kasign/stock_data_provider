@@ -496,3 +496,20 @@ Run `42602399686` 对应 HEAD `8d08cf07a651efcd42a514f3dafd94d659f21f97`。`Test
 - [x] 批次全量校验、编译后原子登记。
 - [x] 任一记录失败或已有版本冲突时不产生部分新增登记。
 - [x] 覆盖损坏记录、重复加载及冲突回归测试。
+
+
+### 渠道配置精确版本加载边界（2026-11-09）
+
+- 新增 `LoadChannelConfigSnapshot`，统一按 `channel_ref + config_version` 精确读取；缺失版本返回 `ErrChannelConfigNotFound`，仓储不可用、持久化记录损坏分别有独立错误分类。
+- 加载层检查领域约束、请求身份与 SHA-256 Digest 格式，并复制可变切片；Digest 内容完整性由 Repository（MySQL 实现已校验 JCS 摘要）负责。
+- `SecretRef` 的解析、密钥可用性检查及 Adapter 构造仍归 Server/Secret Provider；Notification 不解析密钥、不读取明文。SecretRef 无法解析时由 Server 映射为启动依赖故障，不伪装成配置记录损坏。
+- 新增精确版本、缺失、摘要格式错误、身份错配、仓储错误及取消上下文测试。
+
+
+## 24. 渠道配置加载错误分类验收
+
+- [x] 精确版本读取，不回退其他版本。
+- [x] 区分仓储不可用、版本缺失和持久化记录损坏。
+- [x] 验证领域约束、身份和 Digest 格式并复制切片。
+- [x] SecretRef 解析与凭据可用性检查由 Server/Secret Provider 负责。
+- [x] 覆盖错误分类和上下文取消测试。
