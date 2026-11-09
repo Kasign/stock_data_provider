@@ -453,7 +453,7 @@ func (c *Client) streamOpenFault(err error, ctx context.Context, policy Destinat
 	case errors.Is(err, errDNSResolution):
 		return newStreamFault(fault.ClassUnavailable, "platform.httpclient.stream_dns_failed", "HTTP stream destination DNS resolution failed", err, policy.Dependency, false)
 	}
-	retryable := retryableTransportError(err)
+	retryable := policy.Idempotent && retryableTransportError(err)
 	switch classifyStreamOpenError(err) {
 	case streamOpenErrorTLSHandshakeTimeout:
 		return newStreamFault(fault.ClassTimeout, "platform.httpclient.stream_tls_handshake_timeout", "HTTP stream TLS handshake timed out", err, policy.Dependency, retryable)

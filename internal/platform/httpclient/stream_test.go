@@ -343,14 +343,20 @@ func TestOpenStreamPreservesRequestIDAndSafeStats(t *testing.T) {
 	}
 }
 
-func TestStreamOpenFaultRetryabilityIsTechnicalCandidate(t *testing.T) {
+func TestStreamOpenFaultRetryabilityRespectsIdempotency(t *testing.T) {
 	err := &net.OpError{Op: "dial", Net: "tcp", Err: syscall.ECONNREFUSED}
-	for _, idempotent := range []bool{false, true} {
-		policy := DestinationPolicy{Dependency: "news.fetch", Idempotent: idempotent}
+	for _, test := range []struct {
+		idempotent bool
+		retryable  bool
+	}{
+		{idempotent: false, retryable: false},
+		{idempotent: true, retryable: true},
+	} {
+		policy := DestinationPolicy{Dependency: "news.fetch", Idempotent: test.idempotent}
 		got := (&Client{}).streamOpenFault(err, context.Background(), policy)
-		if got.Class != fault.ClassUnavailable || !got.Retryable {
-			t.Fatalf("streamOpenFault(idempotent=%v) = class %q retryable %v, want unavailable/true",
-				idempotent, got.Class, got.Retryable)
+		if got.Class != fault.ClassUnavailable || got.Retryable != test.retryable {
+			t.Fatalf("streamOpenFault(idempotent=%v) = class %q retryable %v, want unavailable/%v",
+				test.idempotent, got.Class, got.Retryable, test.retryable)
 		}
 		if err := got.Validate(); err != nil {
 			t.Fatalf("streamOpenFault returned invalid Fault: %v", err)
