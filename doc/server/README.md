@@ -1231,3 +1231,11 @@ Lifecycle.Stop 原实现通过 stopped 标记保证重复调用幂等，但并�
 - `internal/server/llmtransport` 未能编译/运行测试，直接原因是依赖的 `internal/llm` 编译失败：`internal/llm/responses_stream.go:11` 存在未使用的 `time` 导入。该问题归 LLM 模块 Owner，不在 Server 分支修改。
 - 同一根模块 Run 还发现其他模块问题：News `NewListEvidenceSnapshotPage` 测试参数与签名不一致、News Migration/授权测试失败；Notification 缺 `EqualChannelSnapshot`；Quant 有未使用导入、缺 `decimalPattern`、缺 `json` 导入及多项指标溢出测试失败；Research 有重复短变量声明和 Application/授权相关测试失败；Researchflow 有 Schema 编译类型错误及 Context Assembly/Public DTO 测试失败。Server 不越权修复这些文件。
 - 本轮已消除 Server 自身 Migration Registry 未定义标识符编译错误；Server 主要基础包测试通过。待 LLM Owner 修复编译问题后，再单独验收 `server/llmtransport`。
+
+
+### 12.48 Server 独立包级 CI 门禁（2026-11-09）
+
+- 根模块 `go test ./...` 会被其他模块的编译/测试失败阻断，导致 Server 包已通过的结果无法单独形成稳定门禁。新增 `.github/workflows/server-test.yml`，仅在 Server 分支且 Server/入口/Server 文档变化时运行。
+- 独立门禁覆盖 `cmd/analysis-api`、Server Bootstrap、Config、Diagnostics、Health、Migration、Resources、Runtime 的 gofmt、单测、Race、Vet；不运行其他业务模块的测试，也不修改其文件。
+- 暂不将 `internal/server/llmtransport` 纳入该测试矩阵：当前依赖的 `internal/llm` 包有未使用的 `time` 导入，导致该适配器包无法编译。待 LLM Owner 修复后再加入，不用跳过/忽略失败的方式伪造通过。
+- 根模块 Workflow 仍保留完整全仓门禁；独立 Server Workflow 只提供归属清晰的基础包验收，不替代跨模块联调。
