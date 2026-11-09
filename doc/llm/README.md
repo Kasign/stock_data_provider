@@ -7,7 +7,7 @@
 - 当前代码状态：Provider Port、DTO、Responses JSON Mapper/Parser、非流式 Adapter、SSE Reader/Stream Adapter、Schema 编译与 strict 子集门禁均已实现；当前没有已确认的 LLM 代码缺口需要通过猜测性功能补齐。
 - 当前验收状态：LLM 自身 gofmt 已通过最近一次相关 CI 的文件清单核对；LLM 包级 `go test`、`go test -race`、`go vet` 尚无成功执行证据；真实 Gateway E2E 尚未完成。
 - PR #45（修正 LLM SSE 终态文本一致性）已于 2026-11-09 合并到 `integration`，合并提交：`2eeea1c44a3268fc98bbd4c99dc1bf5e464f8814`。
-- 分支当前 HEAD：`20a2232579977fe5605f22f699b3a443afed953e`；该提交仅更新本目录验收文档，尚无对应 CI 运行记录。
+- PR 合并后，分支又追加了验收文档更新（包括 `20a2232579977fe5605f22f699b3a443afed953e`）；当前 HEAD 以 `feat/llm` 分支指针为准，最新文档提交尚无对应 CI 运行记录。
 - LLM 不创建 HTTP Client、不实现 SSRF/目标地址策略、不自行重试；网络传输和目的地址安全由 Platform 提供，组合根包装由 Server 负责。
 
 ## 职责边界
