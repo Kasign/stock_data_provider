@@ -105,3 +105,38 @@ func PersistUnknownReconciliation(
 	}
 	return nil
 }
+
+
+// ReconcileUnknownDelivery is the complete application entry point for an
+// authoritative lookup result. It assesses evidence, computes a bound retry
+// decision when allowed, and persists the resulting state through CAS.
+func ReconcileUnknownDelivery(
+	ctx context.Context,
+	repository UnknownDeliveryReconciliationRepository,
+	policy RetryPolicy,
+	delivery domain.DeliveryRecord,
+	channel domain.ChannelConfigSnapshot,
+	attempts []domain.DeliveryAttempt,
+	evidence UnknownDeliveryEvidence,
+	now time.Time,
+	randomUnit float64,
+) (UnknownReconciliationAssessment, *RetryDecision, error) {
+	assessment, err := AssessUnknownDelivery(delivery, channel, attempts, evidence, now)
+	if err != nil {
+		return UnknownReconciliationAssessment{}, nil, err
+	}
+	var decision *RetryDecision
+	if assessment.Action == UnknownReconciliationApplyRetryPolicy {
+		computed, err := policy.ScheduleRetryAfterUnknownLookup(
+			delivery, attempts, now, randomUnit, evidence.EvidenceRef, evidence.ObservedAt,
+		)
+		if err != nil {
+			return assessment, nil, err
+		}
+		decision = &computed
+	}
+	if err := PersistUnknownReconciliation(ctx, repository, delivery, assessment, now, decision); err != nil {
+		return assessment, decision, err
+	}
+	return assessment, decision, nil
+}
