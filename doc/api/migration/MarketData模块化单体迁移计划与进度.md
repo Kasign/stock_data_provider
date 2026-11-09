@@ -597,3 +597,13 @@ internal/
 - 失败二：HTTP API Contract Tests 仍按旧目录层级读取 `../../openapi.yaml`。源码迁入 `internal/marketdata/httpapi` 后相对路径已变化，OpenAPI 文件仍由原 Data 服务目录持有。本修复将测试读取路径更新为 `../../../services/market-data/openapi.yaml`，不复制、不新增 OpenAPI 文件，也不改变 API 契约。
 - 本批仅修复 Data 自有测试对迁移后目录和根模块 Driver 版本的兼容；不调整 Provider 领域逻辑、API DTO、OpenAPI 内容、数据库 Schema。
 - 待新 SHA 的 Data gofmt/test/race/vet 与 MariaDB/PIT CI 复验后再关闭 M1-2。
+
+
+### 2026-11-09：Data 测试路径二次修正与根模块依赖闭包定位
+
+- 新 SHA `0ddd9e3d739728ad700191a3f69aa7467850c300` 的 Data 根模块测试已验证配置 DSN 断言修复有效。
+- 仍有一项 OpenAPI Platform Fault Contract Test 使用旧相对路径（`internal/marketdata/httpapi/platform_contract_test.go`）；本批同步改为从新目录读取原 Data OpenAPI 文件。该项仍是测试路径修复，不改 OpenAPI 契约。
+- 根模块 News MariaDB 测试失败原因已定位：根 `go.mod` 是多个 Module 依赖的简单合并，直接依赖仍被错误标记为 indirect/未整理；`go mod tidy -diff` 在 CI 给出可复现的依赖差异。它不是 News Repository 或 MariaDB 运行时故障。
+- 本分支拥有根 Module 的依赖归并，因此在迁移工作流中加入根 `go mod tidy`，由 CI 按当前分支 push 自动整理 `go.mod/go.sum` 并提交；不修改 News 业务代码。整理范围由根 Module 全部源码/测试实际 import 决定，删除未使用依赖并补齐实际依赖校验和。
+- Data 根模块测试门禁已改为在当前分支 push 时执行，避免只在手动 workflow_dispatch 时执行而日常 push 被跳过。
+- 根模块全仓 gofmt 当前仍因 Research 两个文件失败，责任归 Research；本分支不修改这两个文件。

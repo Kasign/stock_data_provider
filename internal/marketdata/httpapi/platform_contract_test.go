@@ -125,7 +125,7 @@ func TestDomainTimeoutIsMarkedAsRetryCandidateWithSafeMessage(t *testing.T) {
 }
 
 func TestOpenAPIErrorSchemaDocumentsPlatformFaultProjection(t *testing.T) {
-	spec, err := os.ReadFile("../../openapi.yaml")
+	spec, err := os.ReadFile("../../../services/market-data/openapi.yaml")
 	if err != nil {
 		t.Fatal(err)
 	}

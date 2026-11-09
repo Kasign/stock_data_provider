@@ -62,6 +62,8 @@ jobs:
           fetch-depth: 0
       - name: Run one-time source migration
         run: bash scripts/migrate-market-data-module.sh
+      - name: Tidy root Go module dependencies
+        run: go mod tidy
       - name: Commit and push migration
         id: commit
         run: |
