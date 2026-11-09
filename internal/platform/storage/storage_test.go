@@ -684,7 +684,6 @@ func TestNormalizeSQLConfigAppliesCompleteDefaults(t *testing.T) {
 	}
 }
 
-
 func TestDependencyFaultRetryabilityIsConservative(t *testing.T) {
 	tests := []struct {
 		name      string

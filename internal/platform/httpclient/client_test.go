@@ -1138,7 +1138,6 @@ func TestBoundDoerDoesNotAllowRequestToReplaceDestination(t *testing.T) {
 	}
 }
 
-
 func TestFaultForRetryabilityMatchesTransportRetryPolicy(t *testing.T) {
 	client := &Client{}
 	tests := []struct {
