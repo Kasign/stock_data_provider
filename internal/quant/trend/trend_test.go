@@ -91,7 +91,7 @@ func TestResultValidateRejectsInvalidUTF8Text(t *testing.T) {
 		mutate func(*Result)
 	}{
 		{"trend code", func(r *Result) { r.TrendCode = string([]byte{0xff}) }},
-		{"trend code padded", func(r *Result) { r.TrendCode = " price_trend " }},
+		{"trend code padded", func(r *Result) { r.TrendCode = " price_trend "}},
 		{"period", func(r *Result) { r.Period = string([]byte{0xff}) }},
 		{"period padded", func(r *Result) { r.Period = " 20d " }},
 		{"algorithm version", func(r *Result) { r.AlgorithmVersion = string([]byte{0xff}) }},
