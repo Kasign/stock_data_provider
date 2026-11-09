@@ -31,6 +31,21 @@ func TestAggregateStatusRequiresExplicitHardGateEvidence(t *testing.T) {
 			{Severity: SeverityBlock, Status: ReasonTriggered},
 			{Severity: SeverityWarn, Status: ReasonNotTriggered},
 		}, DecisionReject},
+		{"unknown block outcome cannot pass", []Reason{
+			{Severity: SeverityBlock, Status: "unexpected"},
+		}, DecisionUnknown},
+		{"unknown severity cannot pass", []Reason{
+			{Severity: "critical", Status: ReasonNotTriggered},
+			{Severity: SeverityBlock, Status: ReasonNotTriggered},
+		}, DecisionUnknown},
+		{"malformed warning cannot pass", []Reason{
+			{Severity: SeverityBlock, Status: ReasonNotTriggered},
+			{Severity: SeverityWarn, Status: "unexpected"},
+		}, DecisionUnknown},
+		{"triggered block dominates malformed rule", []Reason{
+			{Severity: SeverityBlock, Status: ReasonTriggered},
+			{Severity: "critical", Status: "unexpected"},
+		}, DecisionReject},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
