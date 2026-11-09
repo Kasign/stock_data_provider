@@ -15,8 +15,8 @@ import (
 )
 
 type Store struct {
-	db	*sql.DB
-	ownsDB	bool
+	db     *sql.DB
+	ownsDB bool
 }
 
 func OpenMySQL(ctx context.Context, dsn string) (*Store, error) {
@@ -38,6 +38,7 @@ func OpenMySQL(ctx context.Context, dsn string) (*Store, error) {
 	}
 	return &Store{db: db, ownsDB: true}, nil
 }
+
 // NewWithBorrowedDB 创建复用调用方连接池的 Store；Store 不拥有该连接池。
 func NewWithBorrowedDB(db *sql.DB) (*Store, error) {
 	if db == nil {
