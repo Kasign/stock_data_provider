@@ -41,7 +41,7 @@
 
 使用 supported / unsupported / unknown 三态，默认 unknown。
 
-首批能力键：responses_json、responses_stream、structured_output_json_schema、function_tool_calls、reasoning_effort、sampling_parameters、usage_details。temperature/top_p 仅在 sampling_parameters=supported 时发送。
+首批能力键：responses_json、responses_stream、structured_output_json_schema、structured_output_advanced_constraints、function_tool_calls、reasoning_effort、sampling_parameters、usage_details。temperature/top_p 仅在 sampling_parameters=supported 时发送；发送上游 Schema/Function Tool 参数 Schema 使用高级约束时，还必须有当前版本的 structured_output_advanced_constraints=supported 证据。
 
 能力状态必须绑定 provider_id、model_id、protocol、Gateway 版本、verified_at、valid_until 和 evidence_ref；还需记录当前模型已验证的 max_output_tokens_limit。缺少证据引用、有效期或模型上限时不得用于放行请求。Gateway 升级或模型更换后，历史结果不能自动沿用为 supported。路由存在只证明协议路径可达，不证明上游模型完整支持该能力。
 
@@ -126,35 +126,6 @@ ToolDefinition 是 Researchflow Registry 筛选后的只读声明。LLM 只序�
 
 OutputItem 首批类型：message、function_call、refusal、unknown。ContentPart 首批支持 output_text/refusal；未知 item 保留类型和安全元数据，不丢弃，也不伪装成空文本。
 
-### 5.3 OutputItem / ContentPart / ModelToolCall
-
-| 对象 | 字段 | 类型 | 约束 |
-|---|---|---|---|
-| OutputItem | type | enum | message / function_call / refusal / unknown |
-| OutputItem | unknown_type | string? | type=unknown 时保留原始 wire type，长度受限 |
-| OutputItem | item_id | string? | 上游 item id，缺失允许 |
-| OutputItem | status | string? | 原样保留上游状态；不映射成成功/失败的唯一依据 |
-| OutputItem | content_parts | ContentPart[] | message 的有序内容片段 |
-| OutputItem | tool_call | ModelToolCall? | 仅 function_call 类型可设置 |
-| ContentPart | type | enum | output_text / refusal / unknown |
-| ContentPart | unknown_type | string? | type=unknown 时保留原始 wire type，长度受限 |
-| ContentPart | text | string? | output_text 文本 |
-| ContentPart | annotations | Annotation[]? | 当前首批 Parser 不回传；后续仅允许已识别且安全的引用元数据 |
-| ModelToolCall | call_id | string | 上游调用 ID；缺失时标记协议异常 |
-| ModelToolCall | output_item_id | string? | 关联的 OutputItem ID |
-| ModelToolCall | name | string | 工具名；不直接执行 |
-| ModelToolCall | arguments_json | string | 原始参数 JSON 文本，解析前保留原值 |
-| ModelToolCall | status | string? | 上游 function_call 状态 |
-
-未知 OutputItem/ContentPart 必须保留 type 与有界安全元数据；不能把未知内容丢弃后仍报告完整成功。ToolCall arguments_json 需在 Researchflow 的 Tool Registry/Schema 下重新验证。
-
-### 5.4 条件必需字段
-
-- status=completed：response_id 应存在；output_items 结构必须可解析。
-- status=incomplete：保留 incomplete_reason；若上游给出 incomplete_details.reason 则必须透传。
-- status=failed：error 必须存在，且只包含稳定错误码与安全摘要。
-- response_id、model_actual、gateway_request_id 在上游未提供时可空；不得从 request_id 伪造 response_id。
-
 ### 5.1 Usage
 
 | 字段 | 类型 | 语义 |
@@ -176,6 +147,35 @@ Usage 是计量信息，不是输出质量证明；缺失、0 和 unknown 必须
 - failed：收到 response.failed、协议错误或本地解析/校验错误。
 - 非流式响应缺少 status 或 output 结构异常时，不自动判为 completed。
 - Tool Call 输出不能等同于文本回答完成；必须作为 output item 独立返回。
+
+### 5.4 OutputItem / ContentPart / ModelToolCall
+
+| 对象 | 字段 | 类型 | 约束 |
+|---|---|---|---|
+| OutputItem | type | enum | message / function_call / refusal / unknown |
+| OutputItem | unknown_type | string? | type=unknown 时保留原始 wire type，长度受限 |
+| OutputItem | item_id | string? | 上游 item id，缺失允许 |
+| OutputItem | status | string? | 原样保留上游状态；不映射成成功/失败的唯一依据 |
+| OutputItem | content_parts | ContentPart[] | message 的有序内容片段 |
+| OutputItem | tool_call | ModelToolCall? | 仅 function_call 类型可设置 |
+| ContentPart | type | enum | output_text / refusal / unknown |
+| ContentPart | unknown_type | string? | type=unknown 时保留原始 wire type，长度受限 |
+| ContentPart | text | string? | output_text 文本 |
+| ContentPart | annotations | Annotation[]? | 当前首批 Parser 不回传；后续仅允许已识别且安全的引用元数据 |
+| ModelToolCall | call_id | string | 上游调用 ID；缺失时标记协议异常 |
+| ModelToolCall | output_item_id | string? | 关联的 OutputItem ID |
+| ModelToolCall | name | string | 工具名；不直接执行 |
+| ModelToolCall | arguments_json | string | 原始参数 JSON 文本，解析前保留原值 |
+| ModelToolCall | status | string? | 上游 function_call 状态 |
+
+未知 OutputItem/ContentPart 必须保留 type 与有界安全元数据；不能把未知内容丢弃后仍报告完整成功。ToolCall arguments_json 需在 Researchflow 的 Tool Registry/Schema 下重新验证。
+
+### 5.3 条件必需字段
+
+- status=completed：response_id 必须存在；output_items 必须是数组，允许为空数组。
+- status=incomplete：保留 incomplete_reason；若上游给出 incomplete_details.reason 则必须透传。
+- status=failed：error 必须存在，且只包含稳定错误码与安全摘要。
+- response_id、model_actual、gateway_request_id 在上游未提供时可空；但 completed 不允许缺 response_id，也不得从 request_id 伪造。
 
 ## 6. Stream Port 与事件
 
@@ -259,12 +259,12 @@ DTO、Port、Fixture 和 parser 单元测试不依赖 Researchflow/Platform 生�
 
 ### 10.3 尚待实现证据与 L3 验证
 
-- 为七项已接受决议补齐 JSON Schema、JSON/SSE Golden、未知事件/序号异常/断流和错误映射 Contract Test。
-- 选择并锁定 Draft 2020-12 validator 实现库与许可证审查；补齐格式校验、深度/大小限制和 golden fixtures。
-- 以真实 Gateway 验证 X-Request-ID、上游 Request-Id 的响应头映射；当前文档只确认两者是不同 ID。
-- 对当前本地 llama.cpp/Qwen 验证 Responses JSON/SSE、Tool Call、Structured Output、reasoning_effort 和断流行为；未验证能力继续为 unknown。
+- ModelRequest/ModelResponse、ProviderConfig、CapabilityState 的 Draft 2020-12 JSON Schema 已存在；JSON/SSE Golden Fixture、未知事件/序号异常/断流、错误映射和 Schema 门禁测试代码已进入 `internal/llm/**`。这些交付物已具备代码，不等于测试执行通过。
+- 本地 Validator 已锁定为 `github.com/santhosh-tekuri/jsonschema/v6`；实现启用 Draft 2020-12 与 format assertion，拒绝外部 Schema 资源，并执行 Schema 字节数/JSON 深度限制。包级测试仍需实际执行。
+- LLM 包级 `go test`、`go test -race`、`go vet` 尚无成功执行证据；此前 CI 被全仓其他模块 gofmt 阻断，不能将静态代码或 fixture 存在记为测试通过。
+- 以真实 Gateway 验证 X-Request-ID、上游 Request-Id 响应头映射；对本地 llama.cpp/Qwen 验证 Responses JSON/SSE、Tool Call、Structured Output、reasoning_effort 和断流行为。未验证能力继续为 unknown。
 
-**当前结论：七项协议语义已接受；Schema、Golden、Contract Test 未齐，LLM-CTR-001/002/003 仍为 pending_evidence，不代表实现完成或 L2 Module Ready。**
+**当前结论：协议语义、Schema、Golden/Fixture 和 Contract Test 代码已落地；包级自动化测试执行、真实 Gateway E2E 与能力证据仍待完成。LLM-CTR-001/002/003 的项目级状态继续以项目统一契约目录为准；本文件不据此宣称 L2 Module Ready。**
 
 
 
