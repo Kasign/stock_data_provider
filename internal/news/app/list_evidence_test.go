@@ -30,7 +30,9 @@ type evidenceRecordReaderStub struct {
 
 func (s *evidenceRecordReaderStub) Execute(_ context.Context, request GetEvidenceRequest) (ResearchEvidenceRecord, error) {
 	s.calls++
-	if s.afterRead != nil { s.afterRead() }
+	if s.afterRead != nil {
+		s.afterRead()
+	}
 	if request.VersionID == s.errForVersion {
 		return ResearchEvidenceRecord{}, s.err
 	}
@@ -129,7 +131,6 @@ func TestListEvidenceRejectsReferenceAndRecordMismatch(t *testing.T) {
 	}
 }
 
-
 func TestListEvidenceRejectsMalformedPageMetadataBeforeResolvingRecords(t *testing.T) {
 	now := time.Date(2026, 11, 9, 12, 0, 0, 0, time.UTC)
 	request := validListEvidenceRequest(now)
@@ -202,7 +203,10 @@ func TestListEvidenceStopsResolvingItemsWhenContextIsCanceled(t *testing.T) {
 		},
 		afterRead: cancel,
 	}
-	usecase, _ := NewListEvidence(evidenceSnapshotPageReaderStub{page:page}, reader)
+	usecase, err := NewListEvidence(evidenceSnapshotPageReaderStub{page: page}, reader)
+	if err != nil {
+		t.Fatal(err)
+	}
 	usecase.now = func() time.Time { return now }
 	if _, err := usecase.Execute(ctx, request); !errors.Is(err, context.Canceled) {
 		t.Fatalf("Execute() error = %v, want context.Canceled", err)
