@@ -157,6 +157,43 @@ func TestNotificationMariaDBUnknownReconciliationIntegration(t *testing.T) {
 		}
 	})
 
+	t.Run("StateEvent 必须与状态快照一致", func(t *testing.T) {
+		unknown := createMariaDBUnknownDelivery(t, ctx, db, repository, "event-mismatch")
+		next, event := unknownSentTransition(t, unknown, "provider-event-mismatch")
+
+		mismatched := event
+		reason := "different_reason"
+		mismatched.ReasonCode = &reason
+		if err := repository.ReconcileUnknown(ctx, unknown.Version, next, mismatched); !errors.Is(err, domain.ErrInvalidDeliveryChange) {
+			t.Fatalf("mismatched event reason must be rejected before transaction, got %v", err)
+		}
+
+		mismatched = event
+		invalidEvidence := "lookup with spaces"
+		mismatched.EvidenceRef = &invalidEvidence
+		if err := repository.ReconcileUnknown(ctx, unknown.Version, next, mismatched); !errors.Is(err, domain.ErrInvalidDeliveryChange) {
+			t.Fatalf("invalid evidence reference must be rejected, got %v", err)
+		}
+
+		mismatched = event
+		local := time.FixedZone("UTC+8", 8*60*60)
+		mismatched.ChangedAt = event.ChangedAt.In(local)
+		if err := repository.ReconcileUnknown(ctx, unknown.Version, next, mismatched); !errors.Is(err, domain.ErrInvalidDeliveryChange) {
+			t.Fatalf("non-UTC event timestamp must be rejected, got %v", err)
+		}
+
+		mismatched = event
+		actor := "unexpected-actor"
+		mismatched.ActorRef = &actor
+		if err := repository.ReconcileUnknown(ctx, unknown.Version, next, mismatched); !errors.Is(err, domain.ErrInvalidDeliveryChange) {
+			t.Fatalf("unknown reconciliation must not accept manual actor metadata, got %v", err)
+		}
+
+		if err := repository.ReconcileUnknown(ctx, unknown.Version, next, event); err != nil {
+			t.Fatalf("valid state event should reconcile: %v", err)
+		}
+	})
+
 	t.Run("永久拒绝收敛failed", func(t *testing.T) {
 		unknown := createMariaDBUnknownDelivery(t, ctx, db, repository, "rejected")
 		next, event, err := unknown.Transition(domain.DeliveryTransition{
