@@ -365,3 +365,27 @@ func TestAuthenticatorCredentialSnapshotIsImmutableToCallers(t *testing.T) {
 		t.Fatalf("returned principal mutated authenticator state: %+v", next)
 	}
 }
+
+func TestPrincipalContextReturnsIsolatedScopeSnapshots(t *testing.T) {
+	original := Principal{
+		Kind: IdentityService, Subject: "context-service",
+		Scopes: []string{ScopeDataRead},
+	}
+	ctx := withPrincipal(context.Background(), original)
+
+	// The context must not retain the caller's mutable scope slice.
+	original.Scopes[0] = ScopeResearchRun
+
+	request := httptest.NewRequest(http.MethodGet, "/protected", nil).WithContext(ctx)
+	first, ok := PrincipalFromContext(request)
+	if !ok || !contains(first.Scopes, ScopeDataRead) || contains(first.Scopes, ScopeResearchRun) {
+		t.Fatalf("context principal changed through caller-owned slice: %+v, ok=%v", first, ok)
+	}
+
+	// Mutating a returned principal must not alter the context snapshot.
+	first.Scopes[0] = ScopeResearchRun
+	second, ok := PrincipalFromContext(request)
+	if !ok || !contains(second.Scopes, ScopeDataRead) || contains(second.Scopes, ScopeResearchRun) {
+		t.Fatalf("context principal changed through returned slice: %+v, ok=%v", second, ok)
+	}
+}

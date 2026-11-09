@@ -294,12 +294,22 @@ func (p RoutePolicy) valid() bool {
 
 type principalContextKey struct{}
 
+// clonePrincipal prevents callers from mutating the scope snapshot held in a
+// request context through a shared slice backing array.
+func clonePrincipal(principal Principal) Principal {
+	principal.Scopes = append([]string(nil), principal.Scopes...)
+	return principal
+}
+
 func PrincipalFromContext(request *http.Request) (Principal, bool) {
 	if request == nil {
 		return Principal{}, false
 	}
 	principal, ok := request.Context().Value(principalContextKey{}).(Principal)
-	return principal, ok
+	if !ok {
+		return Principal{}, false
+	}
+	return clonePrincipal(principal), true
 }
 
 func Guard(authenticator *Authenticator, policy RoutePolicy, next http.Handler) http.Handler {
@@ -358,7 +368,7 @@ func contains(values []string, target string) bool {
 }
 
 func withPrincipal(ctx context.Context, principal Principal) context.Context {
-	return context.WithValue(ctx, principalContextKey{}, principal)
+	return context.WithValue(ctx, principalContextKey{}, clonePrincipal(principal))
 }
 
 func writeAuthError(w http.ResponseWriter, status int, code, message string) {
