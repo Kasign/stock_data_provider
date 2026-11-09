@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	platformfault "example.com/stock-analysis-flow/internal/platform/fault"
@@ -20,6 +21,7 @@ var namespacePattern = regexp.MustCompile(`^[a-z0-9._-]{1,64}$`)
 // Registry stores immutable snapshots of module migration definitions.
 // Each namespace is applied independently in deterministic lexical order.
 type Registry struct {
+	mu      sync.RWMutex
 	entries map[string][]platformstorage.Migration
 }
 
@@ -41,13 +43,6 @@ func (r *Registry) Register(namespace string, migrations []platformstorage.Migra
 	if len(migrations) == 0 {
 		return fmt.Errorf("migration namespace %q has no migrations", namespace)
 	}
-	if r.entries == nil {
-		r.entries = make(map[string][]platformstorage.Migration)
-	}
-	if _, exists := r.entries[namespace]; exists {
-		return fmt.Errorf("migration namespace %q is already registered", namespace)
-	}
-
 	snapshot := make([]platformstorage.Migration, len(migrations))
 	versions := make(map[uint64]struct{}, len(migrations))
 	for i, item := range migrations {
@@ -66,6 +61,15 @@ func (r *Registry) Register(namespace string, migrations []platformstorage.Migra
 	sort.Slice(snapshot, func(i, j int) bool {
 		return snapshot[i].Version < snapshot[j].Version
 	})
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.entries == nil {
+		r.entries = make(map[string][]platformstorage.Migration)
+	}
+	if _, exists := r.entries[namespace]; exists {
+		return fmt.Errorf("migration namespace %q is already registered", namespace)
+	}
 	r.entries[namespace] = snapshot
 	return nil
 }
@@ -117,18 +121,19 @@ func (r *Registry) RunWithReport(ctx context.Context, db *sql.DB) (RunReport, er
 	if db == nil {
 		return finish(errors.New("migration database is required"))
 	}
-	if len(r.entries) == 0 {
+	entries := r.snapshot()
+	if len(entries) == 0 {
 		return finish(errors.New("no module migrations are registered"))
 	}
 
-	namespaces := make([]string, 0, len(r.entries))
-	for namespace := range r.entries {
+	namespaces := make([]string, 0, len(entries))
+	for namespace := range entries {
 		namespaces = append(namespaces, namespace)
 	}
 	sort.Strings(namespaces)
 	for _, namespace := range namespaces {
 		itemStarted := time.Now()
-		err := platformstorage.ApplyMigrations(ctx, db, namespace, r.entries[namespace])
+		err := platformstorage.ApplyMigrations(ctx, db, namespace, entries[namespace])
 		item := NamespaceResult{
 			Namespace: namespace,
 			Status: "succeeded",
@@ -172,10 +177,26 @@ func (r *Registry) Namespaces() []string {
 	if r == nil {
 		return nil
 	}
-	namespaces := make([]string, 0, len(r.entries))
-	for namespace := range r.entries {
+	entries := r.snapshot()
+	namespaces := make([]string, 0, len(entries))
+	for namespace := range entries {
 		namespaces = append(namespaces, namespace)
 	}
 	sort.Strings(namespaces)
 	return namespaces
+}
+
+// snapshot copies the registry map while holding a read lock. Registered
+// migration slices are immutable after insertion and can safely be shared.
+func (r *Registry) snapshot() map[string][]platformstorage.Migration {
+	if r == nil {
+		return nil
+	}
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	entries := make(map[string][]platformstorage.Migration, len(r.entries))
+	for namespace, migrations := range r.entries {
+		entries[namespace] = migrations
+	}
+	return entries
 }
