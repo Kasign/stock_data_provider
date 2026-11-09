@@ -100,6 +100,21 @@ func TestRunValidatesInputsBeforeDatabaseAccess(t *testing.T) {
 	}
 }
 
+func TestRunWithReportCapturesPreconditionFailure(t *testing.T) {
+	registry := NewRegistry()
+	report, err := registry.RunWithReport(context.Background(), &sql.DB{})
+	if err == nil {
+		t.Fatal("RunWithReport() error = nil, want empty registry error")
+	}
+	if report.Status != "failed" || report.StartedAt.IsZero() || report.FinishedAt.IsZero() ||
+		report.FinishedAt.Before(report.StartedAt) || report.Duration < 0 {
+		t.Fatalf("invalid failure report: %+v", report)
+	}
+	if len(report.Namespaces) != 0 {
+		t.Fatalf("namespace results = %v, want none", report.Namespaces)
+	}
+}
+
 func TestRegisterSortsMigrationsByVersion(t *testing.T) {
 	registry := NewRegistry()
 	migrations := []platformstorage.Migration{
