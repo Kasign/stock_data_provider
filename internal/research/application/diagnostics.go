@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	platformdiagnostics "example.com/stock-analysis-flow/internal/platform/diagnostics"
+	"example.com/stock-analysis-flow/internal/platform/fault"
 	researchdiagnostics "example.com/stock-analysis-flow/internal/research/diagnostics"
 	researcherrors "example.com/stock-analysis-flow/internal/research"
 )
