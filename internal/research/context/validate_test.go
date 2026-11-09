@@ -1,11 +1,13 @@
 package context
 
 import (
-    "bytes"\n\t"encoding/json"\n\t"os"
-    "math"
-    "strings"
-    "testing"
-    "time"
+	"bytes"
+	"encoding/json"
+	"math"
+	"os"
+	"strings"
+	"testing"
+	"time"
 )
 
 func validContext() Context {
