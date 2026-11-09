@@ -715,6 +715,7 @@ flowchart TD
 - 兼容性用例更新：`28b6b83`。
 - MariaDB Context 语义修正：`aee6d19`。
 - 保留健康状态兼容值：`74d0b3b`；对应测试：`41f9007`。
+- 可选依赖降级状态仍会出现在 Readiness 摘要中（不阻断 Ready）：`2cc4546`。
 - 本批次尚未运行 gofmt、Server 测试或 race；需以最新 SHA 的 Workflow 结果验收。
 
 ## 13. 分支与协作规则
