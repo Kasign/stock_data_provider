@@ -64,7 +64,8 @@ func AssessExpiredDeliveryLease(
 	seenTokens := make(map[int64]struct{}, len(attempts))
 	for i := range attempts {
 		attempt := attempts[i]
-		if err := attempt.Validate(); err != nil || attempt.DeliveryID != delivery.DeliveryID {
+		if err := attempt.Validate(); err != nil || attempt.DeliveryID != delivery.DeliveryID ||
+			attempt.AttemptNo != i+1 {
 			return LeaseRecoveryAssessment{}, ErrLeaseRecoveryHistory
 		}
 		if _, exists := seenIDs[attempt.AttemptID]; exists {
@@ -81,6 +82,23 @@ func AssessExpiredDeliveryLease(
 		seenTokens[attempt.FencingToken] = struct{}{}
 		if attempt.FencingToken > lease.FencingToken {
 			return LeaseRecoveryAssessment{}, ErrLeaseRecoveryHistory
+		}
+		if i > 0 {
+			previous := attempts[i-1]
+			if attempt.FencingToken <= previous.FencingToken ||
+				previous.FinishedAt == nil || previous.Outcome == nil ||
+				attempt.StartedAt.Before(*previous.FinishedAt) {
+				return LeaseRecoveryAssessment{}, ErrLeaseRecoveryHistory
+			}
+			switch *previous.Outcome {
+			case domain.DeliveryAttemptRejected:
+				if !previous.Retryable {
+					return LeaseRecoveryAssessment{}, ErrLeaseRecoveryHistory
+				}
+			case domain.DeliveryAttemptNotSent:
+			default:
+				return LeaseRecoveryAssessment{}, ErrLeaseRecoveryHistory
+			}
 		}
 		if attempt.FencingToken == lease.FencingToken {
 			if current != nil || attempt.WorkerID != lease.WorkerID ||

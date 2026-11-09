@@ -170,3 +170,25 @@ func TestLeaseRecoveryServiceAppliesMaxElapsedToSafeRetry(t *testing.T) {
 		t.Fatalf("safe-to-retry recovery must still obey MaxElapsed: next=%+v", repository.next)
 	}
 }
+
+func TestLeaseRecoveryServiceRejectsHistoryAfterTerminalAttempt(t *testing.T) {
+	delivery, lease, now := recoveryFixture(t)
+	first := recoveryAttempt(t, delivery, lease, domain.DeliveryAttemptAccepted, true)
+	delivery.AttemptCount = 2
+	secondLease := DeliveryLease{WorkerID: "worker-2", FencingToken: 2, ExpiresAt: now.Add(time.Minute)}
+	secondStarted := first.StartedAt.Add(2 * time.Second)
+	second := domain.DeliveryAttempt{
+		AttemptID: "attempt-after-accepted", DeliveryID: delivery.DeliveryID, AttemptNo: 2,
+		WorkerID: secondLease.WorkerID, FencingToken: secondLease.FencingToken,
+		LeaseExpiresAt: secondLease.ExpiresAt, StartedAt: secondStarted,
+	}
+	service, claim, _, repository := recoveryServiceFixture(t, []domain.DeliveryAttempt{first, second})
+	claim.Delivery = delivery
+	claim.Lease = secondLease
+	service.Scanner.(*recoveryScannerFake).claims[0] = claim
+
+	report, err := service.RecoverExpiredOnce(context.Background(), secondLease.ExpiresAt.Add(time.Second), 5)
+	if !errors.Is(err, ErrLeaseRecoveryHistory) || report.Recovered != 0 || repository.calls != 0 {
+		t.Fatalf("terminal prior outcome must reject recovery history: report=%+v calls=%d err=%v", report, repository.calls, err)
+	}
+}
