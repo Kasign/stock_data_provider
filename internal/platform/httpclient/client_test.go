@@ -1166,3 +1166,17 @@ func TestFaultForRetryabilityMatchesTransportRetryPolicy(t *testing.T) {
 		})
 	}
 }
+
+
+func TestValidDependencyRequiresStableLowercaseIdentifier(t *testing.T) {
+	for _, value := range []string{"news.fetch", "provider_1", "market-data"} {
+		if !validDependency(value) {
+			t.Errorf("validDependency(%q) = false, want true", value)
+		}
+	}
+	for _, value := range []string{"News.fetch", "news fetch", "https://provider.example", "8.8.8.8"} {
+		if validDependency(value) {
+			t.Errorf("validDependency(%q) = true, want false", value)
+		}
+	}
+}
