@@ -13,6 +13,7 @@ import (
 	"net"
 	"sort"
 	"strings"
+	"syscall"
 	"time"
 	"unicode/utf8"
 
@@ -214,6 +215,11 @@ func dependencyFault(dependency, code, message string, cause error) *fault.Fault
 			retryable = networkError.Timeout() || networkError.Temporary()
 		}
 	}
+	retryable = retryable || errors.Is(cause, syscall.ECONNREFUSED) ||
+		errors.Is(cause, syscall.ECONNRESET) ||
+		errors.Is(cause, syscall.ECONNABORTED) ||
+		errors.Is(cause, syscall.EPIPE) ||
+		errors.Is(cause, syscall.ETIMEDOUT)
 	return &fault.Fault{
 		Class: class, Code: code, SafeMessage: message,
 		Dependency: dependency, Retryable: retryable, Cause: cause,
@@ -265,7 +271,7 @@ func ApplyMigrations(ctx context.Context, db *sql.DB, namespace string, migratio
 		return dependencyFault("sql", "platform.storage.migration_lock_failed", "could not confirm migration lock ownership", errors.New("migration lock result is NULL"))
 	}
 	if acquired.Int64 != 1 {
-		return dependencyFault("sql", "platform.storage.migration_lock_busy", "another migration is running", errMigrationLockUnavailable)
+		return &fault.Fault{Class: fault.ClassConflict, Code: "platform.storage.migration_lock_busy", SafeMessage: "another migration is running", Dependency: "sql", Cause: errMigrationLockUnavailable}
 	}
 
 	defer func() {

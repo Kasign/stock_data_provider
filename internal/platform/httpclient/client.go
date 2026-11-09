@@ -13,6 +13,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"example.com/stock-analysis-flow/internal/platform/fault"
@@ -475,7 +476,14 @@ func retryableTransportError(err error) bool {
 		return false
 	}
 	var networkError net.Error
-	return errors.As(err, &networkError) || errors.Is(err, io.EOF)
+	if errors.As(err, &networkError) && (networkError.Timeout() || networkError.Temporary()) {
+		return true
+	}
+	return errors.Is(err, syscall.ECONNREFUSED) ||
+		errors.Is(err, syscall.ECONNRESET) ||
+		errors.Is(err, syscall.ECONNABORTED) ||
+		errors.Is(err, syscall.EPIPE) ||
+		errors.Is(err, syscall.ETIMEDOUT)
 }
 
 func retryableStatus(status int) bool {

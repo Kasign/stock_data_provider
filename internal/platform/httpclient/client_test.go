@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"syscall"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -1150,8 +1151,9 @@ func TestFaultForRetryabilityMatchesTransportRetryPolicy(t *testing.T) {
 		{name: "caller deadline", err: context.DeadlineExceeded, class: fault.ClassTimeout},
 		{name: "caller cancellation", err: context.Canceled, class: fault.ClassUnavailable},
 		{name: "transport timeout", err: &net.OpError{Op: "dial", Net: "tcp", Err: &net.DNSError{Err: "i/o timeout", IsTimeout: true}}, class: fault.ClassTimeout, retryable: true},
-		{name: "temporary network transport", err: &net.OpError{Op: "dial", Net: "tcp", Err: errors.New("connection refused")}, class: fault.ClassUnavailable, retryable: true},
+		{name: "temporary network transport", err: &net.OpError{Op: "dial", Net: "tcp", Err: syscall.ECONNREFUSED}, class: fault.ClassUnavailable, retryable: true},
 		{name: "permanent generic error", err: errors.New("certificate verification failed"), class: fault.ClassUnavailable},
+		{name: "permanent network error", err: &net.OpError{Op: "dial", Net: "tcp", Err: errors.New("certificate verification failed")}, class: fault.ClassUnavailable},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {

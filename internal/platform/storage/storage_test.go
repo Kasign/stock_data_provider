@@ -10,6 +10,7 @@ import (
 	"net"
 	"sort"
 	"strings"
+	"syscall"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -564,7 +565,7 @@ func TestApplyMigrationsRejectsConcurrentMigrationLock(t *testing.T) {
 		Version: 1, Description: "create", Statements: []string{"CREATE TABLE sample (id INT)"},
 	}})
 	var platformFault *fault.Fault
-	if !errors.As(err, &platformFault) || platformFault.Code != "platform.storage.migration_lock_busy" {
+	if !errors.As(err, &platformFault) || platformFault.Code != "platform.storage.migration_lock_busy" || platformFault.Class != fault.ClassConflict || platformFault.Retryable {
 		t.Fatalf("expected migration lock conflict, got %v", err)
 	}
 	if state.historyCreated || len(state.statements) != 0 || state.lockReleased {
@@ -695,6 +696,8 @@ func TestDependencyFaultRetryabilityIsConservative(t *testing.T) {
 		{name: "context cancellation", cause: context.Canceled, class: fault.ClassUnavailable},
 		{name: "permanent database error", cause: errors.New("access denied"), class: fault.ClassUnavailable},
 		{name: "network timeout", cause: &net.DNSError{Err: "temporary resolver failure", IsTimeout: true}, class: fault.ClassTimeout, retryable: true},
+		{name: "connection refused", cause: &net.OpError{Op: "dial", Net: "tcp", Err: syscall.ECONNREFUSED}, class: fault.ClassUnavailable, retryable: true},
+		{name: "permanent network error", cause: &net.OpError{Op: "dial", Net: "tcp", Err: errors.New("certificate verification failed")}, class: fault.ClassUnavailable},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
