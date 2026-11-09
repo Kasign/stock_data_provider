@@ -814,6 +814,54 @@ func TestObservationRetentionPurgeIntegration(t *testing.T) {
 		t.Fatalf("idempotent replay after purge error=%v, want ErrObservationPayloadPurged", err)
 	}
 
+	// 用数据库触发器在载荷 UPDATE 阶段注入失败，验证清理事务不会留下半成品。
+	rollbackObservation := domain.Observation{
+		ID: fmt.Sprintf("news-retention-rollback-%d", time.Now().UnixNano()),
+		IdempotencyKey: fmt.Sprintf("news-retention-rollback-key-%d", time.Now().UnixNano()),
+		SourceID: "news-retention-integration",
+		Candidate: domain.Candidate{SourceItemID: "retention-rollback-item", Title: "must survive rollback"},
+		ObservedAt: now.Add(-2 * time.Hour), RetentionUntil: now.Add(-time.Hour),
+		IdentityStatus: domain.ObservationUnidentified,
+	}
+	if err := repository.WithinIdentityTransaction(ctx, func(tx app.IdentityTransaction) error {
+		_, err := tx.AppendObservation(ctx, rollbackObservation)
+		return err
+	}); err != nil {
+		t.Fatalf("insert rollback observation: %v", err)
+	}
+	defer func() {
+		_, _ = db.ExecContext(context.Background(), "DROP TRIGGER IF EXISTS news_retention_force_rollback")
+		_, _ = db.ExecContext(context.Background(), "DELETE FROM news_observations WHERE observation_id = ?", rollbackObservation.ID)
+	}()
+	triggerSQL := "CREATE TRIGGER news_retention_force_rollback " +
+		"BEFORE UPDATE ON news_observations FOR EACH ROW " +
+		"SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'forced observation purge rollback'"
+	if _, err := db.ExecContext(ctx, triggerSQL); err != nil {
+		t.Fatalf("create rollback injection trigger: %v", err)
+	}
+	if result, purgeErr := repository.PurgeExpiredObservationPayloads(ctx, now, 1); purgeErr == nil {
+		t.Fatalf("purge with injected update failure unexpectedly succeeded: result=%+v", result)
+	}
+	var rollbackCandidateJSON []byte
+	var rollbackPurgedAt sql.NullTime
+	if err := db.QueryRowContext(ctx, "SELECT candidate_json, payload_purged_at FROM news_observations WHERE observation_id = ?", rollbackObservation.ID).Scan(&rollbackCandidateJSON, &rollbackPurgedAt); err != nil {
+		t.Fatalf("read rollback observation after failed purge: %v", err)
+	}
+	var rollbackCandidate domain.Candidate
+	if err := json.Unmarshal(rollbackCandidateJSON, &rollbackCandidate); err != nil {
+		t.Fatalf("decode rollback candidate: %v", err)
+	}
+	if rollbackCandidate.Title != rollbackObservation.Candidate.Title || rollbackPurgedAt.Valid {
+		t.Fatalf("failed purge left partial mutation: candidate=%+v purged_at=%+v", rollbackCandidate, rollbackPurgedAt)
+	}
+	if _, err := db.ExecContext(ctx, "DROP TRIGGER news_retention_force_rollback"); err != nil {
+		t.Fatalf("drop rollback injection trigger: %v", err)
+	}
+	recovered, err := repository.PurgeExpiredObservationPayloads(ctx, now, 1)
+	if err != nil || recovered.Scanned != 1 || recovered.Purged != 1 {
+		t.Fatalf("purge retry after rollback result=%+v err=%v", recovered, err)
+	}
+
 	// 两个并发清理调用处理同一批到期记录时，不得重复清理或遗漏。
 	concurrent := make([]domain.Observation, 4)
 	for i := range concurrent {
