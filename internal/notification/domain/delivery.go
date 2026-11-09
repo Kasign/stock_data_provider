@@ -45,7 +45,7 @@ type DeliveryRecord struct {
 	Version                int64          `json:"version"`
 	AttemptCount           int            `json:"attempt_count"`
 	MaxAttempts            int            `json:"max_attempts"`
-	NextAttemptAt         *time.Time     `json:"next_attempt_at"`
+	NextAttemptAt          *time.Time     `json:"next_attempt_at"`
 	DeadlineAt             time.Time      `json:"deadline_at"`
 	ReasonCode             *string        `json:"reason_code"`
 	LastErrorCode          *string        `json:"last_error_code"`

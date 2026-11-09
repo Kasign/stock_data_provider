@@ -130,7 +130,7 @@ func TestBoundChannelAdapterPreservesExplicitOutcome(t *testing.T) {
 	registry := NewChannelRegistry()
 	adapter := &fakeChannelAdapter{
 		snapshot: channelRegistryTestSnapshot(),
-		result: domain.ChannelSendResult{Outcome: domain.ChannelOutcomeRejected, ErrorCode: "rate_limited"},
+		result:   domain.ChannelSendResult{Outcome: domain.ChannelOutcomeRejected, ErrorCode: "rate_limited"},
 	}
 	if err := registry.Register(adapter); err != nil {
 		t.Fatal(err)
