@@ -51,25 +51,25 @@ type ProviderSummary struct {
 
 // Module 封装 Data 应用、HTTP Handler、诊断能力及模块自有资源。
 type Module struct {
-	handler        http.Handler
+	handler          http.Handler
 	inProcessHandler http.Handler
-	application    app.MarketDataReader
-	diagnostics    Diagnostics
-	summary        ProviderSummary
-	store          *repository.Store
-	cache          cache.Cache
-	logger         *slog.Logger
-	baostockClient *baostock.Client
-	retentionStore quoteRetentionStore
-	retention      time.Duration
-	lifecycleMu    sync.Mutex
-	closeMu        sync.Mutex
-	started        bool
-	closing        bool
-	closed         bool
-	workerCancel   context.CancelFunc
-	workerDone     chan struct{}
-	closeErr       error
+	application      app.MarketDataReader
+	diagnostics      Diagnostics
+	summary          ProviderSummary
+	store            *repository.Store
+	cache            cache.Cache
+	logger           *slog.Logger
+	baostockClient   *baostock.Client
+	retentionStore   quoteRetentionStore
+	retention        time.Duration
+	lifecycleMu      sync.Mutex
+	closeMu          sync.Mutex
+	started          bool
+	closing          bool
+	closed           bool
+	workerCancel     context.CancelFunc
+	workerDone       chan struct{}
+	closeErr         error
 }
 
 // New 根据已加载配置和调用方提供的基础设施依赖创建 Market Data Module。
