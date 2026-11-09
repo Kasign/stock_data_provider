@@ -153,3 +153,34 @@ func TestCreateRunPersistsCanonicalParameterAndSnapshotCollections(t *testing.T)
 		t.Fatalf("parameters snapshot is not JCS canonical: %s",got)
 	}
 }
+
+
+type selectiveApplicabilityStub map[string]bool
+func (s selectiveApplicabilityStub) Evaluate(_ context.Context, rule template.ApplicabilityRule, _ json.RawMessage) (bool, string, error) {
+	if s[rule.RuleRef] { return true, "", nil }
+	return false, "not_applicable", nil
+}
+
+func TestCreateRunPersistsOptionalNonApplicableStageAsSkipped(t *testing.T) {
+	now := time.Date(2026, 11, 6, 1, 0, 0, 0, time.UTC)
+	tmpl := validTemplate()
+	tmpl.Stages[0].Applicability.RuleRef = "always"
+	tmpl.Stages[1].Applicability.RuleRef = "optional-research"
+	repo := &repositoryStub{}
+	reader := &templatesStub{value: tmpl}
+	service, err := NewCreateRunService(identityStub{caller:"caller_1"}, clockStub{now}, &idsStub{}, reader, schemasStub{}, selectiveApplicabilityStub{"always":true}, nil, repo)
+	if err != nil { t.Fatal(err) }
+	got, err := service.CreateRun(context.Background(), command(now))
+	if err != nil { t.Fatal(err) }
+	if len(got.Stages) != 2 { t.Fatalf("expected required and optional Stage rows, got %#v", got.Stages) }
+	var optional *domain.Stage
+	for i := range got.Stages { if got.Stages[i].Code == "research" { optional = &got.Stages[i]; break } }
+	if optional == nil { t.Fatal("optional non-applicable Stage row was not persisted") }
+	if optional.Status != domain.StageSkipped || optional.Version != 1 || optional.FinishedAt == nil || !optional.FinishedAt.Equal(now) {
+		t.Fatalf("optional Stage must be created terminal skipped at CreateRun time: %#v", optional)
+	}
+	if len(optional.ReasonCodes) != 1 || optional.ReasonCodes[0] != "not_applicable" || len(optional.Dependencies) != 0 || optional.AttemptNo != 0 {
+		t.Fatalf("unexpected optional skipped Stage details: %#v", optional)
+	}
+	if len(got.Run.ExcludedStages) != 0 { t.Fatalf("optional skipped Stage must not be written to excluded_stages: %#v", got.Run.ExcludedStages) }
+}
