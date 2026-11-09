@@ -73,6 +73,29 @@ func TestMemoryRepositorySaveHonorsCancellation(t *testing.T) {
 	}
 }
 
+
+func TestMemoryRepositorySaveHonorsCancellationWhileWaitingForLock(t *testing.T) {
+	repository := NewMemoryRepository()
+	record := validRecord(t, `{"metric_code":"momentum_20d","value":0.12}`)
+	ctx, cancel := context.WithCancel(context.Background())
+
+	repository.mu.Lock()
+	done := make(chan error, 1)
+	go func() {
+		done <- repository.Save(ctx, record)
+	}()
+
+	cancel()
+	repository.mu.Unlock()
+
+	if err := <-done; !errors.Is(err, context.Canceled) {
+		t.Fatalf("Save() error = %v, want context.Canceled", err)
+	}
+	if len(repository.records) != 0 {
+		t.Fatalf("cancelled Save() persisted %d records", len(repository.records))
+	}
+}
+
 func TestMemoryRepositoryConcurrentIdempotentSave(t *testing.T) {
 	repository := NewMemoryRepository()
 	record := validRecord(t, `{"metric_code":"momentum_20d","value":0.12}`)
