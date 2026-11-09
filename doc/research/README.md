@@ -2,7 +2,6 @@
 
 - 分支：`feat/research`
 - 代码复核基线：`51cde38549d8861a71cf5333ed35a56649bd872e`（2026-11-09，合并 Data 与 integration 更新）
-- 当前分支 HEAD：`05b340012435e6a4a649ce94e05ec009a396d743`（文档对齐提交）
 - 已聚合到 integration：`a5ac63c2caa71153332d1229475139fd8b637c53`（PR #53）
 - 代码范围：`internal/research/**`
 - 文档范围：`doc/research/**`
