@@ -81,6 +81,17 @@ func TestMariaDBTemplateRegistryPublishesImmutableExactVersions(t *testing.T) {
 	if _, err := registry.Get(ctx, value.Ref, "missing"); !errors.Is(err, ErrWorkflowTemplateNotFound) {
 		t.Fatalf("missing exact version error = %v, want ErrWorkflowTemplateNotFound", err)
 	}
+
+	corrupt := registryTestTemplate(value.Ref, "v2")
+	if err := registry.Publish(ctx, corrupt); err != nil {
+		t.Fatalf("publish corruption fixture: %v", err)
+	}
+	if _, err := db.ExecContext(ctx, "UPDATE researchflow_workflow_templates SET definition = JSON_SET(definition, '$.unexpected_field', 'unexpected') WHERE template_ref = ? AND version = ?", corrupt.Ref, corrupt.Version); err != nil {
+		t.Fatalf("corrupt template fixture: %v", err)
+	}
+	if _, err := registry.Get(ctx, corrupt.Ref, corrupt.Version); !errors.Is(err, ErrWorkflowTemplateCorrupt) {
+		t.Fatalf("corrupt template error = %v, want ErrWorkflowTemplateCorrupt", err)
+	}
 }
 
 func registryTestTemplate(ref, version string) template.WorkflowTemplate {

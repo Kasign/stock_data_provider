@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"sort"
 	"strings"
 
@@ -55,8 +56,14 @@ func (r *MySQLTemplateRegistry) Get(ctx context.Context, ref, version string) (t
 		return template.WorkflowTemplate{}, fmt.Errorf("read Researchflow workflow template %s@%s: %w", ref, version, err)
 	}
 	var result template.WorkflowTemplate
-	if err := json.Unmarshal([]byte(definition), &result); err != nil {
+	decoder := json.NewDecoder(strings.NewReader(definition))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&result); err != nil {
 		return template.WorkflowTemplate{}, fmt.Errorf("%w: decode %s@%s: %v", ErrWorkflowTemplateCorrupt, ref, version, err)
+	}
+	var trailing any
+	if err := decoder.Decode(&trailing); !errors.Is(err, io.EOF) {
+		return template.WorkflowTemplate{}, fmt.Errorf("%w: trailing content in %s@%s", ErrWorkflowTemplateCorrupt, ref, version)
 	}
 	if result.Ref != ref || result.Version != version {
 		return template.WorkflowTemplate{}, fmt.Errorf("%w: stored identity does not match %s@%s", ErrWorkflowTemplateCorrupt, ref, version)
@@ -65,7 +72,8 @@ func (r *MySQLTemplateRegistry) Get(ctx context.Context, ref, version string) (t
 	if err != nil {
 		return template.WorkflowTemplate{}, fmt.Errorf("%w: fingerprint %s@%s: %v", ErrWorkflowTemplateCorrupt, ref, version, err)
 	}
-	if !validSHA256Fingerprint(fingerprint) || actual != fingerprint {
+	if !validSHA256Fingerprint(fingerprint) || actual != fingerprint ||
+		(result.Fingerprint != "" && result.Fingerprint != fingerprint) {
 		return template.WorkflowTemplate{}, fmt.Errorf("%w: fingerprint mismatch for %s@%s", ErrWorkflowTemplateCorrupt, ref, version)
 	}
 	if err := template.Validate(result, r.gates); err != nil {
