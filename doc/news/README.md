@@ -954,3 +954,6 @@
 - [x] 所有状态均明确 `provider_persistence=blocked`；该 Check 不发 Provider 网络请求、不触发配额消耗、不授权候选持久化。
 - [x] 增加状态分类、绑定身份错配和敏感错误不外泄测试。
 - [ ] Server 组合根注册 resolver-aware Check；旧无 Resolver Check 仅作为 fail-closed fallback，不作为生产接入完成证据。
+
+
+- Review 新增 Source 候选低层 Ingest 入口门禁：当前 `IngestCandidate.Execute` 不验证 Source Policy Version，`ExecuteWithPolicyTrace` 不能信任调用方自报版本；生产编排完成前不得直接将其作为跨模块持久化入口，需先增加可信 SourceCatalog 绑定用例。
