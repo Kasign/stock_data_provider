@@ -16,3 +16,11 @@
 - 新增 TickFlow 组合测试源码覆盖 Quote-only、无 Key 日 K、带 Key 日 K，以及缺失对应执行器的失败场景。
 - Eastmoney 暂保留 Provider 实际配置的全部 origin 校验。原因是当前 endpoint 被跨能力复用（例如 Quote enrichment、MarketBreadth 的 LimitPool 与 StockList 分页）；尚未完成所有调用点到领域能力的可靠映射，不能仅按 endpoint 字段名称推断最小依赖集。
 - 本批未执行构建或测试，按约定留待 integration 统一验收；本次仅完成静态请求路径核对和回归测试源码，不代表真实 BoundDoer 安全策略已接通。
+
+
+### 2026-11-09：GoRedis typed nil 防御
+
+- 实现提交：`95654831e9ae7a71cad604cdbfe8bad64270e472`。
+- `NewGoRedis` 原先只检查 interface 是否为 nil；传入 `(*redis.Client)(nil)` 等 typed nil 指针时，interface 本身非 nil，会绕过构造校验并在首次调用时触发空指针风险。
+- 构造入口现在同时检查 nil interface 与 nil 底层指针/接口/映射等 nil-able 动态值；增加 typed nil 回归测试。未改变 Adapter 的资源所有权，仍由 Root 持有并关闭 Redis Client。
+- 本批未运行测试，待 integration 统一验收。
