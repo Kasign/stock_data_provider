@@ -30,11 +30,11 @@ func evidencePITRecords(asOf time.Time) []EvidencePITRecord {
 	return []EvidencePITRecord{
 		{
 			Observation: domain.Observation{ID: "observation-2", NewsID: "news-2", ObservedAt: newer},
-			Version: domain.NewsItemVersion{ID: "version-2", NewsID: "news-2", ObservationID: "observation-2", ObservedAt: newer},
+			Version:     domain.NewsItemVersion{ID: "version-2", NewsID: "news-2", ObservationID: "observation-2", ObservedAt: newer},
 		},
 		{
 			Observation: domain.Observation{ID: "observation-1", NewsID: "news-1", ObservedAt: older},
-			Version: domain.NewsItemVersion{ID: "version-1", NewsID: "news-1", ObservationID: "observation-1", ObservedAt: older},
+			Version:     domain.NewsItemVersion{ID: "version-1", NewsID: "news-1", ObservationID: "observation-1", ObservedAt: older},
 		},
 	}
 }
