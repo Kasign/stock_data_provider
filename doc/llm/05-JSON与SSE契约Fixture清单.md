@@ -303,6 +303,7 @@ sequence_number 严格连续策略、Draft 2020-12 本地 Schema dialect、Reque
 ## 16. SSE Callback 中断回归覆盖
 
 - 新增 `TestParseResponsesSSECallbackErrorReturnsPartialResponse`，使用 EOF 前已有文本增量的 Fixture，在消费者收到文本增量时返回 sentinel error。
-- 断言 Parser 原样返回 callback error、保留已接收的部分文本、状态保持 incomplete、不生成 ModelErrorInfo，也不误报 completed；同时检查中断响应的结束时间和耗时元数据。
+- 新增 `TestParseResponsesSSECallbackErrorAtTerminalDoesNotComplete`，在合法 completed terminal 回调时返回 sentinel error，验证消费者拒绝终态事件后不能向上层暴露 completed。
+- 两项测试均断言 Parser 原样返回 callback error、保留已接收的部分文本、状态保持 incomplete、不生成 ModelErrorInfo；普通事件中断另检查结束时间和耗时元数据。
 - 此测试只覆盖纯 Parser 的同步回调中断语义，不代表网络读取取消、Body 关闭或 Platform backpressure 已实现。
 - 测试代码已提交，尚未执行 gofmt/go test。
