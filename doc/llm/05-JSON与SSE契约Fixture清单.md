@@ -19,6 +19,7 @@
 | Fixture | 输入条件 | 预期检查 |
 |---|---|---|
 | request_minimal_text.json | model、instructions、input_text、max_output_tokens | Responses `instructions` / `input` / `max_output_tokens` 映射准确；不发送空 tools 或默认采样参数 |
+| request_full_options.expected.json | temperature/top_p/reasoning_effort + strict JSON Schema + function tool + tool_choice=auto | 一次固定完整 wire 请求，校验采样、reasoning、text.format、schema、tool parameters/strict 和工具选择映射 |
 | request_sampling_supported.json | temperature/top_p/reasoning_effort + 对应 capability=supported | 仅支持字段发送，值不被改写 |
 | request_sampling_unknown_rejected.json | 可选采样字段存在但 capability=unknown | 返回 unsupported_capability；不静默丢弃或透传 |
 | request_tool_auto_supported.json | tools 非空、tool_choice=auto、function_tool_calls=supported | tools/name/description/parameters/strict 映射准确 |
