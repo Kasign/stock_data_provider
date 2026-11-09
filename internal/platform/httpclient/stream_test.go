@@ -491,7 +491,6 @@ func TestOpenStreamFaultDoesNotExposeSensitiveQuery(t *testing.T) {
 	}
 }
 
-
 func TestOpenStreamConnectTimeoutIsClassified(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
 	defer server.Close()
@@ -527,7 +526,7 @@ func TestOpenStreamTLSHandshakeTimeoutIsClassified(t *testing.T) {
 
 	port := listener.Addr().(*net.TCPAddr).Port
 	client, err := New(Config{
-		Resolver: staticResolver{addresses: []netip.Addr{netip.MustParseAddr("8.8.8.8")}},
+		Resolver:            staticResolver{addresses: []netip.Addr{netip.MustParseAddr("8.8.8.8")}},
 		TLSHandshakeTimeout: 40 * time.Millisecond,
 		StreamTimeout:       time.Second,
 		StreamIdleTimeout:   time.Second,
