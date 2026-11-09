@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"regexp"
 	"strings"
 	"time"
 
@@ -17,7 +16,6 @@ var (
 	ErrInvalidLLMExplanation    = errors.New("invalid non-authoritative LLM explanation")
 )
 
-var contentFingerprintRE = regexp.MustCompile(`^[0-9a-f]{64}$`)
 
 const LLMExplanationAuthority = "non_authoritative"
 
@@ -160,7 +158,7 @@ func validateResearchContext(value researchapp.ResearchContext, expectedSystemAs
 		strings.TrimSpace(value.ResearchQuestion) == "" || strings.TrimSpace(value.BuilderVersion) == "" ||
 		!isUTC(value.SystemAsOf) || !value.SystemAsOf.Equal(expectedSystemAsOf) ||
 		value.SectionRefs == nil || value.IncludedSections == nil || value.OmittedSections == nil ||
-		value.QualitySummary.ReasonCodes == nil || !validQuality(value.QualitySummary.Status) ||
+		value.QualitySummary.ReasonCodes == nil || strings.TrimSpace(value.QualitySummary.Status) == "" ||
 		value.QualitySummary.MissingRequiredCount < 0 || value.QualitySummary.MissingOptionalCount < 0 ||
 		value.QualitySummary.ConflictCount < 0 || value.QualitySummary.StaleCount < 0 {
 		return fmt.Errorf("%w: Research Context is invalid or belongs to another system_as_of", ErrInvalidResultComposition)
@@ -170,8 +168,8 @@ func validateResearchContext(value researchapp.ResearchContext, expectedSystemAs
 	}
 	for _, section := range value.SectionRefs {
 		if strings.TrimSpace(section.SectionID) == "" || strings.TrimSpace(section.SectionVersion) == "" ||
-			!validSourceOwner(section.SourceOwner) || section.SourceRefs == nil || section.EvidenceRefs == nil ||
-			!validQuality(section.QualityStatus) || !isUTC(section.AssembledAt) ||
+			strings.TrimSpace(section.SourceOwner) == "" || section.SourceRefs == nil || section.EvidenceRefs == nil ||
+			strings.TrimSpace(section.QualityStatus) == "" || !isUTC(section.AssembledAt) ||
 			!isUTC(section.SystemAsOf) || !section.SystemAsOf.Equal(expectedSystemAsOf) {
 			return fmt.Errorf("%w: invalid Research Context section %q", ErrInvalidResultComposition, section.SectionID)
 		}
@@ -183,20 +181,14 @@ func validateResearchEvidence(values []researchapp.EvidenceRecord, expectedSyste
 	ids := make(map[string]struct{}, len(values))
 	for _, value := range values {
 		draft := value.EvidenceDraft
-		if strings.TrimSpace(value.EvidenceID) == "" || !contentFingerprintRE.MatchString(value.ContentFingerprint) ||
-			!validEvidenceType(draft.EvidenceType) || !validSourceOwner(draft.SourceOwner) ||
-			strings.TrimSpace(draft.SourceRef) == "" || draft.SourceRef != strings.TrimSpace(draft.SourceRef) || draft.DerivedFromRefs == nil ||
-			draft.SubjectRefs == nil || draft.Limitations == nil ||
+		if strings.TrimSpace(value.EvidenceID) == "" || strings.TrimSpace(value.ContentFingerprint) == "" ||
+			strings.TrimSpace(draft.SourceRef) == "" || draft.SourceRef != strings.TrimSpace(draft.SourceRef) ||
+			draft.DerivedFromRefs == nil || draft.SubjectRefs == nil || draft.Limitations == nil ||
 			!isUTC(draft.SystemObservedAt) || !isUTC(draft.SystemAsOf) ||
 			draft.SystemAsOf.After(expectedSystemAsOf) || draft.SystemObservedAt.After(draft.SystemAsOf) ||
-			!validQuality(draft.QualityStatus) || !validContentLevel(draft.ContentLevel) ||
-			!validStance(draft.Stance) || strings.TrimSpace(draft.AuthorizationRef) == "" ||
+			strings.TrimSpace(draft.AuthorizationRef) == "" ||
 			hasDuplicateOrInvalidRefs(draft.DerivedFromRefs) || hasDuplicateOrInvalidRefs(draft.SubjectRefs) ||
-			hasDuplicateOrInvalidRefs(draft.Limitations) || !validEvidenceTimes(draft) ||
-			(draft.Confidence != nil && (*draft.Confidence < 0 || *draft.Confidence > 1 ||
-				strings.TrimSpace(pointerValue(draft.ConfidenceMethod)) == "" ||
-				strings.TrimSpace(pointerValue(draft.ConfidenceMethodVersion)) == "")) ||
-			((draft.EvidenceType == "inference" || draft.EvidenceType == "hypothesis") && len(draft.DerivedFromRefs) == 0) ||
+			hasDuplicateOrInvalidRefs(draft.Limitations) ||
 			(draft.ClaimRef != nil && (strings.TrimSpace(*draft.ClaimRef) == "" || *draft.ClaimRef != strings.TrimSpace(*draft.ClaimRef))) {
 			return nil, fmt.Errorf("%w: invalid Research Evidence %q", ErrInvalidResultComposition, value.EvidenceID)
 		}
@@ -218,37 +210,19 @@ func validateResearchEvidence(values []researchapp.EvidenceRecord, expectedSyste
 	return ids, nil
 }
 
-func validEvidenceTimes(value researchapp.EvidenceDraft) bool {
-	if value.PublishedAt != nil && (!isUTC(*value.PublishedAt) || value.PublishedAt.After(value.SystemAsOf)) {
-		return false
-	}
-	if value.AvailableAt != nil && (!isUTC(*value.AvailableAt) || value.AvailableAt.After(value.SystemAsOf)) {
-		return false
-	}
-	if (value.ValidTimeStart == nil) != (value.ValidTimeEnd == nil) {
-		return false
-	}
-	if value.ValidTimeStart != nil && (!isUTC(*value.ValidTimeStart) || !isUTC(*value.ValidTimeEnd) ||
-		value.ValidTimeStart.After(*value.ValidTimeEnd)) {
-		return false
-	}
-	return true
-}
-
 func validateResearchClaims(values []researchapp.Claim, evidenceIDs map[string]struct{}, expectedSystemAsOf time.Time) (map[string]struct{}, error) {
 	seen := make(map[string]struct{}, len(values))
 	claimIDs := make(map[string]struct{}, len(values))
 	for _, value := range values {
 		if strings.TrimSpace(value.ClaimID) == "" || value.ClaimVersion <= 0 ||
-			strings.TrimSpace(value.Statement) == "" || !validClaimType(value.EpistemicType) ||
+			strings.TrimSpace(value.Statement) == "" ||
 			!isUTC(value.SystemAsOf) || !value.SystemAsOf.Equal(expectedSystemAsOf) ||
 			value.ScopeRefs == nil || value.SupportingEvidenceRefs == nil ||
 			value.ContradictingEvidenceRefs == nil || value.RequiredDataRefs == nil ||
 			value.Limitations == nil ||
 			hasDuplicateOrInvalidRefs(value.ScopeRefs) || hasDuplicateOrInvalidRefs(value.SupportingEvidenceRefs) ||
 			hasDuplicateOrInvalidRefs(value.ContradictingEvidenceRefs) || hasDuplicateOrInvalidRefs(value.RequiredDataRefs) ||
-			hasDuplicateOrInvalidRefs(value.InvalidationConditions) || hasDuplicateOrInvalidRefs(value.Limitations) ||
-			!validClaimStatus(value.Status) {
+			hasDuplicateOrInvalidRefs(value.Limitations) {
 			return nil, fmt.Errorf("%w: invalid Research Claim %q", ErrInvalidResultComposition, value.ClaimID)
 		}
 		key := fmt.Sprintf("%s/%d", value.ClaimID, value.ClaimVersion)
@@ -282,37 +256,6 @@ func validateResearchClaims(values []researchapp.Claim, evidenceIDs map[string]s
 	return claimIDs, nil
 }
 
-func evidenceGraphHasCycle(values []researchapp.EvidenceRecord) bool {
-	graph := make(map[string][]string, len(values))
-	for _, value := range values {
-		graph[value.EvidenceID] = value.DerivedFromRefs
-	}
-	state := make(map[string]uint8, len(graph))
-	var visit func(string) bool
-	visit = func(id string) bool {
-		switch state[id] {
-		case 1:
-			return true
-		case 2:
-			return false
-		}
-		state[id] = 1
-		for _, parent := range graph[id] {
-			if visit(parent) {
-				return true
-			}
-		}
-		state[id] = 2
-		return false
-	}
-	for id := range graph {
-		if visit(id) {
-			return true
-		}
-	}
-	return false
-}
-
 func validateLLMExplanation(value llmapp.ModelResponse, expectedSystemAsOf time.Time) (LLMExplanation, error) {
 	if value.Status != llmapp.ResponseCompleted || strings.TrimSpace(value.OutputText) == "" ||
 		strings.TrimSpace(value.ProviderID) == "" || strings.TrimSpace(value.ModelRequested) == "" ||
@@ -331,60 +274,6 @@ func validateLLMExplanation(value llmapp.ModelResponse, expectedSystemAsOf time.
 		ModelVersion: value.ModelVersion, ResponseID: value.ResponseID,
 		Authority: LLMExplanationAuthority,
 	}, nil
-}
-
-func validEvidenceType(value string) bool {
-	switch value {
-	case "fact", "reported_fact", "inference", "hypothesis", "unknown":
-		return true
-	default:
-		return false
-	}
-}
-
-func validSourceOwner(value string) bool {
-	switch value {
-	case "data", "news", "quant", "research":
-		return true
-	default:
-		return false
-	}
-}
-
-func validContentLevel(value string) bool {
-	switch value {
-	case "metadata", "summary", "snippet", "full":
-		return true
-	default:
-		return false
-	}
-}
-
-func validStance(value string) bool {
-	switch value {
-	case "supports", "contradicts", "neutral":
-		return true
-	default:
-		return false
-	}
-}
-
-func validClaimType(value string) bool {
-	switch value {
-	case "reported_fact", "inference", "hypothesis":
-		return true
-	default:
-		return false
-	}
-}
-
-func validClaimStatus(value string) bool {
-	switch value {
-	case "proposed", "testing", "supported", "contradicted", "invalidated", "unknown":
-		return true
-	default:
-		return false
-	}
 }
 
 func pointerValue(value *string) string {
