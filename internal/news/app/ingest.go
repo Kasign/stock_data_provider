@@ -14,6 +14,7 @@ var (
 	ErrIdentityTransaction            = errors.New("news: identity transaction failed")
 	ErrObservationIdempotencyConflict = errors.New("news: observation idempotency key reused with different payload")
 	ErrObservationPayloadPurged       = errors.New("news: observation payload has been purged")
+	ErrObservationRetentionResultInvalid = errors.New("news: invalid observation retention purge result")
 	ErrProviderOutputPolicyRequired   = errors.New("news: provider output policy evaluation required")
 )
 

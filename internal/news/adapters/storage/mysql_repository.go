@@ -637,17 +637,12 @@ func (r *MySQLRepository) ObservationRetentionBacklog(ctx context.Context, now t
 	return count, &value, nil
 }
 
-type ObservationPayloadPurgeResult struct {
-	Scanned int
-	Purged  int
-}
-
 // PurgeExpiredObservationPayloads 清除到期候选载荷并保留 Observation tombstone。
-func (r *MySQLRepository) PurgeExpiredObservationPayloads(ctx context.Context, now time.Time, limit int) (ObservationPayloadPurgeResult, error) {
+func (r *MySQLRepository) PurgeExpiredObservationPayloads(ctx context.Context, now time.Time, limit int) (app.ObservationPayloadPurgeResult, error) {
 	if r == nil || r.db == nil || ctx == nil || now.IsZero() || limit < 1 || limit > 1000 {
-		return ObservationPayloadPurgeResult{}, app.ErrInvalidRequest
+		return app.ObservationPayloadPurgeResult{}, app.ErrInvalidRequest
 	}
-	result := ObservationPayloadPurgeResult{}
+	result := app.ObservationPayloadPurgeResult{}
 	err := r.withTransaction(ctx, "news_observation_retention", func(tx *sql.Tx, _ func(string) error) error {
 		rows, err := tx.QueryContext(ctx, `SELECT observation_id FROM news_observations
 			WHERE retention_until IS NOT NULL AND retention_until <= ? AND payload_purged_at IS NULL
