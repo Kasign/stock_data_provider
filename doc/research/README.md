@@ -4,7 +4,7 @@
 - 代码：`internal/research/**`
 - 任务前缀：RSC
 - 当前阶段：R1 Context + R2 Evidence + R3 Event + R5 Claim/Hypothesis 领域基础；R7 Storage Port/Schema/Context-Event-Claim-Evidence SQL Adapter；R8 Diagnostics 领域快照 Adapter 第一批
-- 当前状态：Context/Evidence/Event/Claim Domain 首批结构与校验已实现；Context 版本链、Evidence JCS/授权过期边界、Event 生命周期及 Claim 文本校验新增测试已写入但尚未执行。RSC-008 已新增 Context/Event/Claim 快照诊断 Adapter，复用 Platform Check/Observation/Runner，不建设 Run/Stage/Attempt；Evidence 诊断仍需来源 Owner 当前授权复核能力。Researchflow 目前没有稳定的 Research Diagnostics Application Port；跨模块调用须等待 Research Application Port 与 Researchflow FLOW-009 Facade 对齐，不允许直接依赖 Research Domain/Repository。RSC-007 已新增四个领域 Repository Port 和 Research Migration v1/v2/v3（v2 保留 RFC3339Nano PIT 纳秒精度）；Context/Event/Claim SQL Repository Adapter 已实现事务追加与精确版本读取；Evidence SQL Repository Adapter 已按完整 payload 不可变策略实现 Append/Get。MariaDB 集成测试覆盖追加、重放、冲突、版本跳号、并发、回滚、取消和摘要篡改，但尚未执行；组合根 Migration 注册尚未验收。未完成仓库完整构建/CI、真实 Data/News、Owner 当前授权复核、Application、Outbox 和跨模块集成。
+- 当前状态：Context/Evidence/Event/Claim Domain 首批结构与校验已实现；Context 版本链、Evidence JCS/授权过期边界、Event 生命周期及 Claim 文本校验新增测试已写入但尚未执行。RSC-008 已新增 Context/Event/Claim 快照诊断 Adapter，复用 Platform Check/Observation/Runner，不建设 Run/Stage/Attempt；Evidence 诊断仍需来源 Owner 当前授权复核能力。Research 已提供 Context/Event/Claim Diagnostics Application Port，负责按精确版本读取并构造 Platform Check；Runner 调度仍由组合调用方负责。Researchflow 尚待完成 FLOW-009 Facade 接线，不允许直接依赖 Research Domain/Repository。RSC-007 已新增四个领域 Repository Port 和 Research Migration v1/v2/v3（v2 保留 RFC3339Nano PIT 纳秒精度）；Context/Event/Claim SQL Repository Adapter 已实现事务追加与精确版本读取；Evidence SQL Repository Adapter 已按完整 payload 不可变策略实现 Append/Get。MariaDB 集成测试覆盖追加、重放、冲突、版本跳号、并发、回滚、取消和摘要篡改，但尚未执行；组合根 Migration 注册尚未验收。未完成仓库完整构建/CI、真实 Data/News、Owner 当前授权复核、Application、Outbox 和跨模块集成。
 
 ## 模块职责
 
@@ -25,6 +25,8 @@ internal/research/
   application/
     application.go
     application_test.go
+    diagnostics.go
+    diagnostics_test.go
   context/
     model.go
     validate.go
@@ -226,3 +228,5 @@ R1/R2/R3/R5 当前实现 Context、Evidence、Event、Claim/Hypothesis 领域结
 - Check 的 Required 标记由调用方明确传入；诊断仍是本地结构/Context 质量快照检查，不代表跨模块数据完整性、Evidence 当前授权或整个研究流程质量结论。
 - Evidence Check 暂不提供：来源 Owner 实时授权与撤销检查必须由 Owner Adapter 执行，不能以本地快照诊断替代。
 - 新增精确版本读取和 Check 构造用例；Go 测试及跨模块接线尚未执行。
+
+- Research Diagnostics Application Port 已提供 Context/Event/Claim Check 构造；Evidence Check 仍因 Owner 当前授权/撤销验证边界而未开放。
