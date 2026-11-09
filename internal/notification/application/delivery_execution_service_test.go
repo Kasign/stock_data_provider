@@ -124,3 +124,48 @@ func TestDeliveryExecutionAttemptStartFailureNeverCallsChannel(t *testing.T) {
 		t.Fatalf("failed Attempt start must not mutate Delivery: delivery=%+v found=%v err=%v", delivery, found, getErr)
 	}
 }
+
+func TestDeliveryExecutionAmbiguousResultConvergesToUnknown(t *testing.T) {
+	service, repository, adapter, claim := executionFixture(t)
+	adapter.result = domain.ChannelSendResult{
+		Outcome: domain.ChannelOutcomeAmbiguous,
+		ErrorCode: "provider_timeout",
+	}
+	repository.now = claim.Lease.ExpiresAt.Add(-time.Second)
+
+	result, err := service.Execute(
+		context.Background(), claim, domain.EventEnvelope{}, "attempt-execution-3",
+		0.5, "evidence-execution-3",
+	)
+	if err != nil {
+		t.Fatalf("ambiguous channel result should be persisted before returning: %v", err)
+	}
+	if result.ChannelResult == nil || result.ChannelResult.Outcome != domain.ChannelOutcomeAmbiguous || adapter.calls != 1 {
+		t.Fatalf("unexpected ambiguous result: %+v calls=%d", result, adapter.calls)
+	}
+	delivery, found, getErr := repository.Get(context.Background(), claim.Delivery.DeliveryID)
+	if getErr != nil || !found || delivery.Status != domain.DeliveryUnknown {
+		t.Fatalf("ambiguous send must converge to unknown: delivery=%+v found=%v err=%v", delivery, found, getErr)
+	}
+}
+
+func TestDeliveryExecutionRenderFailureBlocksWithoutChannelCall(t *testing.T) {
+	service, repository, adapter, claim := executionFixture(t)
+	service.renderer = fixedExecutionRenderer{err: domain.ErrInvalidPayloadFingerprint}
+	repository.now = claim.Lease.ExpiresAt.Add(-time.Second)
+
+	_, err := service.Execute(
+		context.Background(), claim, domain.EventEnvelope{}, "attempt-execution-4",
+		0.5, "evidence-execution-4",
+	)
+	if err == nil {
+		t.Fatal("expected template render failure")
+	}
+	if adapter.calls != 0 {
+		t.Fatalf("render failure must not call channel, calls=%d", adapter.calls)
+	}
+	delivery, found, getErr := repository.Get(context.Background(), claim.Delivery.DeliveryID)
+	if getErr != nil || !found || delivery.Status != domain.DeliveryBlocked {
+		t.Fatalf("render failure must persist blocked state: delivery=%+v found=%v err=%v", delivery, found, getErr)
+	}
+}
