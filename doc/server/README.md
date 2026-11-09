@@ -668,6 +668,32 @@ flowchart TD
 - 关闭顺序测试：`d7a445abee6a2f005cf2990d40fc6b7fe565c469`。
 - 本批次尚未运行 gofmt、Server 包测试或 Go Workflow；真实容器退出仍需部署验收。
 
+### 12.27 SRV-002 显式配置源注入第一阶段（2026-11-09）
+
+#### 实施内容
+
+- Platform `config.Env` 已是统一、可注入的配置读取原语。本阶段不复制领域配置 Schema，也不让 Server 解析 DB/Redis/行情业务参数。
+- `mysqlredis.LoadConfig(env)` 新增显式配置源入口，DB/Redis 的字段、默认值和校验仍归存储 Adapter；旧 `LoadConfigFromEnv()` 保留并委托新入口，兼容现有调用方。
+- `marketdata.LoadConfig(env)` 新增显式配置源入口，行情 API 地址、密钥、历史窗口、并发、响应大小、指数列表、时区和复权配置仍归行情 Adapter；旧 `ConfigFromEnv()` 保留并委托新入口。
+- Bootstrap 现在创建一个 Platform `config.Env`，将同一个配置源分别传给 Process、Storage Adapter 和 MarketData Adapter。Bootstrap 不再调用 Adapter 的隐式环境变量读取入口。
+- 密钥仍通过 `Env.Secret` 读取；Adapter 在构造实际连接配置时显式提取值，错误信息不包含密钥。
+
+#### 测试与边界
+
+- 新增 Storage Adapter 显式配置源测试，覆盖 DB/Redis 配置读取和非法 DB_PORT。
+- 新增 MarketData Adapter 显式配置源测试，覆盖 URL、API Key、历史窗口、并发、指数去重、复权方式和非法历史窗口。
+- 旧环境变量入口保留，避免一次性破坏其他尚未迁移的调用方。
+- 本阶段没有把 DB/Redis 或行情配置字段搬进 Server Process；下一阶段再评估由 Server 提供显式 Adapter Config 值，而不是重复维护第二份配置 Schema。
+- 代码提交：`1cdf03b`（Storage Adapter）、`a1eef1a`（MarketData Adapter）、`054b563`（Bootstrap 注入）、`696bcc0`（Storage 测试）、`8297dde`（MarketData 测试）。
+
+### 12.28 SRV-003 Resources 并发绑定关闭边界（2026-11-09）
+
+- 新增并发测试：多个 goroutine 同时尝试 BindHTTPDestination，Resources.Close 返回后再次绑定必须失败。
+- 现有互斥锁保证 Bind 与 Close 的 closed 状态切换串行化；Close 返回后不存在新的成功绑定。Close 前已返回的 BoundDoer 属于已创建消费者，仍必须先停止消费者再关闭底层 Client。
+- 测试提交：`7adeba4`。
+- 尚未配置真实 Dependency 配额和域名 allowlist：需要各消费者模块交付实际上游目标、Dependency 标识和生产配置后再逐项装配，不在 Server 猜测。
+- 本批次尚未运行 gofmt、测试、race 或 Go Workflow；不得标记为通过。
+
 ## 13. 分支与协作规则
 
 - 本规划及 Server 代码实施位于 `feat/research-analysis-flow-native-go`。
