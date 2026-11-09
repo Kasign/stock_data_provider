@@ -9,7 +9,7 @@ import (
 )
 
 var (
-	ErrDeliveryExecutionUnavailable  = errors.New("notification: delivery execution unavailable")
+	ErrDeliveryExecutionUnavailable   = errors.New("notification: delivery execution unavailable")
 	ErrDeliveryExecutionEventMismatch = errors.New("notification: execution event does not match Delivery snapshot")
 )
 
