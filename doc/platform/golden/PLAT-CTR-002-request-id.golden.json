@@ -2,6 +2,7 @@
   "header": "X-Request-ID",
   "max_length": 128,
   "generated_random_bytes": 16,
+  "trust_incoming_requires_explicit_option": true,
   "valid_values": [
     "abc",
     "a-b_c.d:e",

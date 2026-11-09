@@ -14,6 +14,7 @@ type requestIDGolden struct {
 	Header               string   `json:"header"`
 	MaxLength            int      `json:"max_length"`
 	GeneratedRandomBytes int      `json:"generated_random_bytes"`
+	TrustIncomingRequiresExplicitOption bool `json:"trust_incoming_requires_explicit_option"`
 	ValidValues          []string `json:"valid_values"`
 	InvalidValues        []string `json:"invalid_values"`
 	DuplicateValues      []string `json:"duplicate_values"`
@@ -37,7 +38,7 @@ func TestRequestIDContractGoldenVectors(t *testing.T) {
 	if err := json.Unmarshal(data, &golden); err != nil {
 		t.Fatal(err)
 	}
-	if golden.Header != RequestIDHeader || golden.MaxLength != 128 || golden.GeneratedRandomBytes != 16 {
+	if golden.Header != RequestIDHeader || golden.MaxLength != 128 || golden.GeneratedRandomBytes != 16 || !golden.TrustIncomingRequiresExplicitOption {
 		t.Fatalf("unexpected Request ID contract metadata: %+v", golden)
 	}
 	for _, value := range golden.ValidValues {
@@ -80,6 +81,18 @@ func TestRequestIDContractGoldenVectors(t *testing.T) {
 	}
 	if response.Header().Get(RequestIDHeader) != contextID {
 		t.Fatal("response Header does not echo replacement Request ID")
+	}
+
+	// A valid incoming ID is accepted only under the explicit trusted-gateway option.
+	trustedHandler := MiddlewareWithOptions(http.HandlerFunc(func(_ http.ResponseWriter, request *http.Request) {
+		contextID = FromContext(request.Context())
+	}), MiddlewareOptions{TrustIncomingRequestID: true})
+	request = httptest.NewRequest(http.MethodGet, "/", nil)
+	request.Header.Set(RequestIDHeader, golden.ValidValues[2])
+	response = httptest.NewRecorder()
+	trustedHandler.ServeHTTP(response, request)
+	if contextID != golden.ValidValues[2] || response.Header().Get(RequestIDHeader) != contextID {
+		t.Fatal("trusted gateway Request ID did not pass through the explicit option")
 	}
 
 	outbound, err := http.NewRequest(http.MethodGet, "https://example.com", nil)

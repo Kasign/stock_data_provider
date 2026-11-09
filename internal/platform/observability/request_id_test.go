@@ -8,7 +8,7 @@ import (
 	"testing"
 )
 
-func TestMiddlewarePreservesValidRequestID(t *testing.T) {
+func TestMiddlewareRegeneratesValidUntrustedRequestIDByDefault(t *testing.T) {
 	const requestID = "request-123.test:abc"
 	var contextID string
 	handler := Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -21,11 +21,31 @@ func TestMiddlewarePreservesValidRequestID(t *testing.T) {
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, request)
 
+	if !ValidRequestID(contextID) || contextID == requestID {
+		t.Fatalf("untrusted incoming request ID was not replaced: %q", contextID)
+	}
+	if got := response.Header().Get(RequestIDHeader); got != contextID {
+		t.Fatalf("response request ID = %q, want generated context ID", got)
+	}
+}
+
+func TestMiddlewareAcceptsRequestIDOnlyWithExplicitTrustedGatewayOption(t *testing.T) {
+	const requestID = "request-123.test:abc"
+	var contextID string
+	handler := MiddlewareWithOptions(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		contextID = FromContext(r.Context())
+	}), MiddlewareOptions{TrustIncomingRequestID: true})
+
+	request := httptest.NewRequest(http.MethodGet, "/", nil)
+	request.Header.Set(RequestIDHeader, requestID)
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+
 	if contextID != requestID {
-		t.Fatalf("context request ID = %q", contextID)
+		t.Fatalf("trusted gateway request ID = %q, want %q", contextID, requestID)
 	}
 	if got := response.Header().Get(RequestIDHeader); got != requestID {
-		t.Fatalf("response request ID = %q", got)
+		t.Fatalf("response request ID = %q, want trusted request ID", got)
 	}
 }
 
