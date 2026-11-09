@@ -16,19 +16,18 @@ import (
 
 	"example.com/stock-analysis-flow/internal/adapters/marketdata"
 	"example.com/stock-analysis-flow/internal/adapters/storage/mysqlredis"
-	"example.com/stock-analysis-flow/internal/platform/config"
-	platformstorage "example.com/stock-analysis-flow/internal/platform/storage"
-	"example.com/stock-analysis-flow/internal/platform/httpapi"
-	"example.com/stock-analysis-flow/internal/platform/taskqueue"
 	newsstorage "example.com/stock-analysis-flow/internal/news/adapters/storage"
 	notificationstorage "example.com/stock-analysis-flow/internal/notification/storage"
+	"example.com/stock-analysis-flow/internal/platform/config"
+	"example.com/stock-analysis-flow/internal/platform/httpapi"
+	platformstorage "example.com/stock-analysis-flow/internal/platform/storage"
+	"example.com/stock-analysis-flow/internal/platform/taskqueue"
 	researchstorage "example.com/stock-analysis-flow/internal/research/storage"
 	serverconfig "example.com/stock-analysis-flow/internal/server/config"
-	serverresources "example.com/stock-analysis-flow/internal/server/resources"
 	servermigration "example.com/stock-analysis-flow/internal/server/migration"
+	serverresources "example.com/stock-analysis-flow/internal/server/resources"
 	"example.com/stock-analysis-flow/internal/service"
 )
-
 // Run loads process configuration, assembles the currently supported runtime,
 // and serves until the parent context is canceled or the HTTP server exits.
 func Run(ctx context.Context) error {
