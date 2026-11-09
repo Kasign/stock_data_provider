@@ -61,6 +61,18 @@ func MapResponsesRequestAt(request ModelRequest, now time.Time) ([]byte, error) 
 	if err := request.ValidateAt(now); err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrInvalidResponsesRequest, err)
 	}
+	if request.ResponseSchema != nil && request.ResponseSchema.Strict && !request.LocalValidationOnly {
+		if err := validateResponsesStrictSchemaSubset(request.ResponseSchema.SchemaJSON); err != nil {
+			return nil, fmt.Errorf("%w: response_schema: %v", ErrUnsupportedResponsesSchemaSubset, err)
+		}
+	}
+	for _, tool := range request.Tools {
+		if tool.Strict {
+			if err := validateResponsesStrictSchemaSubset(tool.ParametersJSON); err != nil {
+				return nil, fmt.Errorf("%w: tool %q parameters: %v", ErrUnsupportedResponsesSchemaSubset, tool.Name, err)
+			}
+		}
+	}
 
 	wire := responsesRequest{
 		Model: request.Model, Instructions: request.Instructions,

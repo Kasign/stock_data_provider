@@ -108,7 +108,11 @@ func (a *ResponsesAdapter) Generate(ctx context.Context, request ModelRequest) (
 
 	body, err := MapResponsesRequestAt(request, startedAt)
 	if err != nil {
-		return fail(adapterError(ErrorInvalidRequest, "llm.responses.request_mapping_failed", false, nil), err)
+		code := "llm.responses.request_mapping_failed"
+		if errors.Is(err, ErrUnsupportedResponsesSchemaSubset) {
+			code = "llm.responses.unsupported_schema_subset"
+		}
+		return fail(adapterError(ErrorInvalidRequest, code, false, nil), err)
 	}
 	if int64(len(body)) > a.provider.MaxRequestBytes {
 		return fail(adapterError(ErrorResourceLimit, "llm.responses.request_too_large", false, nil), ErrInvalidResponsesRequest)

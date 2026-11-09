@@ -24,11 +24,11 @@ func TestMapResponsesRequest(t *testing.T) {
 	request.Temperature, request.TopP, request.ReasoningEffort = &temperature, &topP, "high"
 	request.ResponseSchema = &JSONSchemaSpec{
 		Name: "summary", Strict: true,
-		SchemaJSON: json.RawMessage(`{"type":"object","required":["summary"],"properties":{"summary":{"type":"string"}}}`),
+		SchemaJSON: json.RawMessage(`{"type":"object","required":["summary"],"properties":{"summary":{"type":"string"}},"additionalProperties":false}`),
 	}
 	request.Tools = []ToolDefinition{{
 		Name: "lookup_quote", Description: "Look up a quote", Strict: true,
-		ParametersJSON: json.RawMessage(`{"type":"object","properties":{"symbol":{"type":"string"}}}`),
+		ParametersJSON: json.RawMessage(`{"type":"object","properties":{"symbol":{"type":"string"}},"required":["symbol"],"additionalProperties":false}`),
 	}}
 	request.ToolChoice = "auto"
 
