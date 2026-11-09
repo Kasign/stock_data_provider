@@ -70,7 +70,7 @@ func TestAddEvidenceGeneratesIdentityFingerprintAndRequiresCurrentAuthorization(
 	auth.err=errors.New("revoked")
 	if _,err:=service.GetEvidence(context.Background(),EvidenceRef{EvidenceID:got.EvidenceID,CallerRef:"researchflow:worker-1"}); err==nil { t.Fatal("revoked Evidence must not be returned") }
 	repo.appended=false
-	if _,err:=service.AddEvidence(context.Background(),AddEvidenceCommand{CallerRef:"researchflow:worker-1",Draft:draft}); err==nil { t.Fatal("revoked Evidence authorization must be rejected") }
+	if _,err:=service.AddEvidence(context.Background(),AddEvidenceCommand{CallerRef:"researchflow:worker-1",Draft:EvidenceDraft{EvidenceType:string(draft.EvidenceType),SourceOwner:string(draft.SourceOwner),SourceRef:draft.SourceRef,DerivedFromRefs:draft.DerivedFromRefs,SubjectRefs:draft.SubjectRefs,SystemObservedAt:draft.SystemObservedAt,SystemAsOf:draft.SystemAsOf,Stance:string(draft.Stance),QualityStatus:string(draft.QualityStatus),ContentLevel:string(draft.ContentLevel),AuthorizationRef:draft.AuthorizationRef,Limitations:draft.Limitations}}); err==nil { t.Fatal("revoked Evidence authorization must be rejected") }
 	if repo.appended { t.Fatal("unauthorized Evidence must not be persisted") }
 }
 func TestNewServiceRequiresSourceOwnerAuthorizationAdapter(t *testing.T) {
