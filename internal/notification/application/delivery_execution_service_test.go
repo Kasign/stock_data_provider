@@ -265,7 +265,7 @@ func TestDeliveryExecutionCancellationAfterSendLeavesAttemptForUnknownRecovery(t
 func TestDeliveryExecutionRetryableRejectionSchedulesRetry(t *testing.T) {
 	service, repository, adapter, claim, event := executionFixture(t)
 	adapter.result = domain.ChannelSendResult{
-		Outcome: domain.ChannelOutcomeRejected,
+		Outcome:   domain.ChannelOutcomeRejected,
 		ErrorCode: "rate_limited",
 	}
 
