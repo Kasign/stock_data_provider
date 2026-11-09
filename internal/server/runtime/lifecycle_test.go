@@ -5,6 +5,7 @@ import (
 	"errors"
 	"reflect"
 	"testing"
+	"time"
 )
 
 type testComponent struct {
@@ -140,5 +141,54 @@ func TestLifecycleCollectsStopErrors(t *testing.T) {
 	}
 	if err := lifecycle.Stop(context.Background()); !errors.Is(err, stopErr) {
 		t.Fatalf("Stop() error = %v", err)
+	}
+}
+
+type blockingStopComponent struct {
+	name    string
+	entered chan struct{}
+	release chan struct{}
+}
+
+func (c blockingStopComponent) Name() string { return c.name }
+func (c blockingStopComponent) Start(context.Context) error { return nil }
+func (c blockingStopComponent) Stop(ctx context.Context) error {
+	close(c.entered)
+	select {
+	case <-c.release:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+func TestLifecycleConcurrentStopWaitsForFirstStop(t *testing.T) {
+	lifecycle := NewLifecycle()
+	component := blockingStopComponent{
+		name: "blocking-worker", entered: make(chan struct{}), release: make(chan struct{}),
+	}
+	if err := lifecycle.Register(component); err != nil {
+		t.Fatal(err)
+	}
+	if err := lifecycle.Start(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+
+	firstDone := make(chan error, 1)
+	go func() { firstDone <- lifecycle.Stop(context.Background()) }()
+	<-component.entered
+
+	waitCtx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer cancel()
+	if err := lifecycle.Stop(waitCtx); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("concurrent Stop() error = %v, want context deadline", err)
+	}
+
+	close(component.release)
+	if err := <-firstDone; err != nil {
+		t.Fatalf("first Stop() error = %v", err)
+	}
+	if err := lifecycle.Stop(context.Background()); err != nil {
+		t.Fatalf("Stop() after completion = %v", err)
 	}
 }
