@@ -7,7 +7,7 @@
 - 跨模块准入：`doc/整体任务规划/01-项目总览/跨模块接入执行说明.md`、`doc/整体任务规划/01-项目总览/跨模块接入准入清单.md`
 - 本记录建立时的代码基线：`d8595f408337f62be3697aac661ba1570fdd3667`
 - 最近一次 M0 审计基线：`9687337743ff5ad8b5b81209831d43689693ae47`
-- 当前开发分支 HEAD（本轮最后代码提交）：`e25afee8d6e1c28b880d805d653edacd5073d9b8`（补齐共享 Redis Cache 错误语义测试）
+- 当前开发分支 HEAD（本轮最后代码提交）：`bbfd6dd90212fe6042093300016ab059b8a7561f`（接入 Tushare 受控 HTTP 执行器）
 - 当前实施状态：`M1_completed / M2_completed / M3_in_progress / M4_in_progress`；M3 的 Data 侧进程内路由准备已完成，Root Server 实际装配仍待 Server 组合根完成；M4 的 borrowed DB 与 go-redis Cache Adapter 已实现，Root 侧资源注入/配置一致性及 Provider 网络出口适配仍未完成。
 
 > 本文记录 Data 从独立 Go Module/服务迁入 Root Server 根 Go Module、同进程运行的实施计划和进度。若本文与上述架构决策文档冲突，以架构决策文档为准；公共平台及 DATA 契约以冻结契约文档为准。本文不重新定义契约。
@@ -419,7 +419,7 @@ internal/
 | M1 Go Module 归并 | completed（代码归并） | Data 源码已位于根 Module 的 `internal/marketdata/**`；根 `go.mod` 为 Go 1.23.0；当前 Data 根模块 gofmt/test/race/vet 专项通过 |
 | M2 Application Port/Bootstrap | completed（Data 侧） | M2-1～M2-6 已完成：Application Port、Bootstrap、Worker 生命周期、HTTP 用例接口拆分、来源能力快照和 Migration Runner |
 | M3 Root Server 装配 | in_progress | Data 已提供 `InProcessHandler()`、Application Port 和 `MigrationRunner()`；Root Router、共享资源注入、Remote→InProcess 切换属于 Server 组合根任务，本分支不越界修改 |
-| M4 共享资源统一 | in_progress | Data Repository borrowed DB 与 `cache.NewGoRedis` 已实现；Root 侧实际注入、Redis 配置匹配/独立 Client 所有权、Platform HTTP Client 和 TCP 出站策略仍待完成 |
+| M4 共享资源统一 | in_progress | Data Repository borrowed DB、`cache.NewGoRedis`、Tushare Platform HTTPDoer 注入入口已实现；Root 侧实际资源/BoundDoer 注入、Redis 配置匹配、其余 HTTP Provider 与 TCP 出站策略仍待完成 |
 | M5 部署/WebUI 切换 | pending | Root 同进程装配和共享资源验收后执行 |
 | M6 迁移验收 | pending | 结构迁移、API/PIT/质量、真实 Provider 和部署验收分开形成证据 |
 | 公共平台契约接入 | in_progress（按依赖） | 当前分支已有 Platform 基础代码；Data 仅适配已冻结能力，不复制 HTTP Client、Diagnostics Runner、Storage 等公共实现 |
@@ -864,4 +864,16 @@ internal/
 - 本次只增加回归覆盖，不新增接口、字段、缓存 key、TTL 规则或公共平台代码；既有 `redis.Nil` 仍是唯一映射为 cache miss 的错误。
 - 本次提交后尚未执行构建或测试。按当前约束，不在功能分支执行构建；如需构建，须先按既定流程在 integration 验收，且不得直接修改 integration。
 - 因此当前判定为：实现与测试代码已提交，新增断言待集成构建验证；不能标记 M4 Redis 完整验收通过。
-- 下一步：完成 Tushare 这一类携带 Token JSON Body 的 HTTP Provider 受控出口接入评估/实现，使用既有 `internal/platform/httpclient` 的 BoundDoer 与固定 DestinationPolicy；保持 Tushare 请求/响应字段和数据语义不变。之后再按 Provider 分组扩展，不一次性重写全部 HTTP Provider。
+- 下一步：Tushare 已增加可注入 `HTTPDoer` 的构造入口和 Bootstrap 依赖传递，等待 integration 验证；随后按 Provider 分组接入其余 HTTP Provider，不一次性重写全部 HTTP Provider。
+
+
+### 2026-11-09：M4-HTTP 第一切片——Tushare 受控 HTTP 执行器注入
+
+- 代码基线：`bbfd6dd90212fe6042093300016ab059b8a7561f`。
+- Provider 层新增最小 `provider.HTTPDoer` 接口及 `NewTushareConfiguredWithHTTPDoer`；原 `NewTushareConfigured` 保留并委托新构造器，独立兼容部署仍默认使用标准 `http.Client`。
+- Bootstrap `Dependencies` 新增可选 `TushareHTTPDoer`，仅用于将 Root 提供的受控执行器传给 Tushare；Module 不拥有、不关闭该执行器。未注入时行为与原来一致。
+- Tushare 的日 K 与其他能力请求共用同一 `p.client.Do`，本批将两条调用路径统一切换为注入接口；未修改 Token JSON Body、API 名称、字段、频率限制、解析、复权和错误语义。
+- 新增固定测试验证日 K 与能力接口都使用注入的 Doer，POST URL/Content-Type/API 名称/Token 传递保持不变；使用 502 响应验证原有上游错误路径仍可见。
+- Root 组合根接入时必须针对实际 `TushareAPIURL` 创建 BoundDoer：精确 Host、HTTPS、443 端口、禁止重定向、`Idempotent=false`（Token 位于 POST Body）；Platform Client 的响应体上限需覆盖 Data 既有 Provider payload 上限。Root 负责创建和关闭 Platform Client。
+- 本批尚未执行构建/测试；不宣称 Tushare 受控出口验收通过。必须在按约定集成后验证 Data gofmt/test/race/vet、Tushare 固定测试和 Platform HTTP Client 安全策略。
+- 下一步：按凭据和重定向风险优先级，接入 Hithink、TickFlow、Xueqiu 等带凭据的 HTTP Provider；每个 Provider 的 endpoint Host/Port、凭据类型、重定向和响应上限独立登记。随后处理无凭据 Provider；BaoStock/Pytdx 仍单独制定 TCP 出站策略。
