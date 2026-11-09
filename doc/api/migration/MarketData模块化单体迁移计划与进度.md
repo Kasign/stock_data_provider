@@ -656,3 +656,12 @@ internal/
 - 删除 `DailyBarsSnapshot` 重复的顶层 VolumeUnit/AmountUnit：单位已逐条保存在 `DailyBar`，不从首行推导整个数据集单位，避免混合/空数据时产生错误汇总。
 - `DailyBarsSnapshot.QualityStatus` 来源为 Data 现有 warning 判定与逐条 bar QualityStatus；`Warnings` 原样来自 DataService；`SystemObservedAtCutoff` 是请求 cutoff 的副本。
 - CI 顺序调整：当前分支 Push 先完成根依赖 tidy 与 Data gofmt，再触发 workflow_dispatch 对最终 SHA 执行 Data、News MariaDB 验收；避免并行 Job 检查尚未 tidy/format 的旧 SHA。PR 验收仍保留，Docker build 仍只允许 integration 目标。
+
+
+### 2026-11-09：M2-3 Data Bootstrap 组合根提取
+
+- 新增 `internal/marketdata/bootstrap`，将 Provider 实例化、能力接口注册、DataService 装配、Application Reader 装配和 HTTP Handler 装配从 `cmd/market-data/main.go` 移入 Module。
+- Module 对外提供 `Handler()`、`Application()`、`Diagnostics()` 和 `ProviderSummary()`；消费者无需接触 DataService、Provider 集合或 Repository。
+- `Dependencies` 显式注入 Store、Cache、Logger。Store/Cache 由调用方创建并拥有；Module 只关闭自身创建的 BaoStock Client，避免重复关闭共享基础设施。
+- 保留原 ProviderPriority、ProviderSettings 能力校验、股票搜索独立优先级、补充 Provider 和 35 个 HTTP Operation 的现有装配行为；不改变 Provider 算法、API DTO、路由或数据质量规则。
+- 当前独立命令仍负责 DB/Redis 打开、MariaDB Migration、HTTP Server 生命周期及 Quote Retention Worker；下一任务 M2-4 再把 Worker Start/Stop/Wait 纳入 Module 生命周期。
