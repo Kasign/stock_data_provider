@@ -62,10 +62,10 @@ func openResearchIntegrationDB(t *testing.T) *sql.DB {
 }
 
 
-func assertResearchPITColumn(t *testing.T, db *sql.DB, query string, args []any, want time.Time) {
+func assertResearchPITColumn(t *testing.T, ctx context.Context, db *sql.DB, query string, args []any, want time.Time) {
 	t.Helper()
 	var got string
-	if err := db.QueryRowContext(context.Background(), query, args...).Scan(&got); err != nil {
+	if err := db.QueryRowContext(ctx, query, args...).Scan(&got); err != nil {
 		t.Fatalf("read persisted PIT timestamp: %v", err)
 	}
 	if expected := formatPIT(want); got != expected {
@@ -280,7 +280,7 @@ func TestResearchSQLRepositoriesAppendAndReadVersions(t *testing.T) {
 	if err := contextRepo.Append(ctx, contextV1); err != nil {
 		t.Fatalf("append Context v1: %v", err)
 	}
-	assertResearchPITColumn(t, db, "SELECT system_as_of FROM research_context_versions WHERE context_id=? AND context_version=1", []any{contextID}, cutoff)
+	assertResearchPITColumn(t, ctx, db, "SELECT system_as_of FROM research_context_versions WHERE context_id=? AND context_version=1", []any{contextID}, cutoff)
 	if err := contextRepo.Append(ctx, contextV1); err != nil {
 		t.Fatalf("replay Context v1: %v", err)
 	}
