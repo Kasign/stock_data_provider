@@ -625,7 +625,6 @@ func TestParseResponsesSSERejectsFunctionArgumentsMismatchAfterEmptyDelta(t *tes
 	}
 }
 
-
 type chunkedSSEReader struct {
 	data     []byte
 	offset   int
