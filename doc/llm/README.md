@@ -4,7 +4,7 @@
 - 代码：`internal/llm/**`
 - 任务前缀：LLM
 - 状态：LLM-002 DTO/Provider Port、Responses JSON Mapper/Parser、非流式 HTTP Adapter、Clock/Deadline 注入、纯 SSE Parser、公共 DTO Draft 2020-12 Schema 已实现；整体仍待 LLM 包级构建验证
-- 最近代码提交：`1c27b394777e1c6d4d7fdd15a0bb093afa491975`
+- 最近代码提交：`c244c8d2fbd322b1caaabd72cda1becd2169d1e4`
 - LLM-001：静态协议盘点完成；在线真实端点验收未执行
 - LLM-002：DTO/Provider Port、Responses JSON 请求映射/响应解析、非流式 HTTP Adapter 及对应单测已实现，待 gofmt/go test；Platform Fault 映射、Draft 2020-12 Schema 编译及 DTO Schema Contract Test 均待构建验证；JSON/SSE Golden 已扩展覆盖拒绝、未知项、Usage 边界、终态和序号异常；新增完整 Request Mapper Golden，覆盖 sampling、reasoning、strict schema、function tool 与 tool_choice；新增 Adapter 能力门禁测试，验证可选能力证据缺失时不会派发请求；已补充 SSE callback error（普通事件中断、终态回调拒绝）、CRLF/multiline data、事件数量、单事件累计字节、总输入字节上限、终态后事件拒绝回归测试，以及 Structured Output 非法 JSON/空输出/incomplete 边界测试（待执行）；完整矩阵仍待执行；Platform 受控流读取尚未提供；local_validation_only、Usage 诊断码、Capability verification_method 与 capability_ttl_ms 已纳入 Mapper/DTO
 
@@ -43,3 +43,11 @@ internal/llm/
 
 - 本轮代码提交：`722901c`、`cbf314b`；当前仍无该最新 HEAD 的独立包级测试证据。
 - 最近一次已完成 CI（提交 `b0e64f5`）中，根模块因全仓 gofmt 检查失败而跳过 go test/race/vet；失败文件不属于 LLM。go-core 测试/race/vet 通过，但不覆盖根模块 LLM 包。Market-data 单测和 market-data Docker 镜像构建另有失败；News/Market-data MariaDB 集成通过。
+
+
+## LLM Go 格式检查与全仓验证状态（2026-11-09）
+
+- 已依据 PR #45 最新 CI 的 `gofmt -l ./cmd ./internal` 输出，将 `internal/llm/**` 中 10 个未格式化 Go 文件统一格式化，提交：`c244c8d2fbd322b1caaabd72cda1becd2169d1e4`。
+- 格式化后最新 CI 的根模块 gofmt 清单已不再包含任何 `internal/llm/**` 文件；但全仓检查仍被 News、Notification、Quant、Research、Researchflow 模块的未格式化文件阻断。
+- 因根模块 job 在 gofmt 步骤失败，依赖下载、`go test ./...`、race、vet 均未执行；当前没有 LLM 包级测试通过证据。
+- LLM 分支不修改上述模块；待模块负责人修复后再跑根模块完整验证。
