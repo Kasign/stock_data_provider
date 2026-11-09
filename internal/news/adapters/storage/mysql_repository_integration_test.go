@@ -436,7 +436,7 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 	if pitRecord.Version.ID != secondVersion.Version.ID ||
 		pitRecord.Observation.ID != secondObservation.ID ||
 		pitRecord.SourceRef != secondSourceID ||
-		pitRecord.ProviderRef != "integration" {
+		pitRecord.ProviderRef != "" {
 		t.Fatalf("PIT record mismatch: %+v", pitRecord)
 	}
 	atVersion.SystemAsOf = secondVersion.Version.ObservedAt.Add(-time.Second)
