@@ -569,6 +569,7 @@ func (p *Hithink) FetchHotStocks(ctx context.Context, rankingType string, limit 
 		if _, duplicate := seen[symbol]; duplicate {
 			snapshot.ExcludedRows++
 			snapshot.QualityReasons = appendUniqueHithinkReason(snapshot.QualityReasons, "duplicate_hot_ranking_symbol_dropped")
+			addHithinkFieldIssue(ctx, &index, "symbol", "thscode", "duplicate_identity", "unique ranking symbol", "string", hithinkFieldString(row, "thscode"), "同花顺榜单返回重复证券记录")
 			continue
 		}
 		seen[symbol] = struct{}{}
@@ -580,6 +581,7 @@ func (p *Hithink) FetchHotStocks(ctx context.Context, rankingType string, limit 
 		if name == "" {
 			itemReasons = append(itemReasons, "provider_stock_name_missing")
 			snapshot.QualityReasons = appendUniqueHithinkReason(snapshot.QualityReasons, "one_or_more_stock_names_missing")
+			addHithinkFieldIssue(ctx, &index, "name", "name", "missing_value", "non-empty stock name", "string", "", "同花顺榜单证券名称缺失")
 		}
 		rank := int(*rankValue)
 		var rankChange *int
