@@ -646,6 +646,7 @@ func TestOpenAPIDocumentsHandlerParameterBounds(t *testing.T) {
 		{"/api/v1/market/sentiment/history", "get", []string{"366 calendar days", "1..500", "default of 366"}},
 		{"/api/v1/stocks/{symbol}/fundamentals", "get", []string{"2007 through the current calendar year", "single non-future RFC3339 timestamp"}},
 		{"/api/v1/market/session", "get", []string{"single RFC3339 timestamp"}},
+		{"/api/v1/market/capital-flow", "get", []string{"inclusive and capped at 2000 calendar days", "end must not be later than the current Asia/Shanghai calendar date"}},
 		{"/api/v1/data-sources/probe", "post", []string{"8 KiB", "恰好包含一个 JSON 对象", "未知字段拒绝"}},
 	}
 	for _, check := range checks {

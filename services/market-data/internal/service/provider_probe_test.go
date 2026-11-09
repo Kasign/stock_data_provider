@@ -735,13 +735,18 @@ func TestProviderProbeDefaultDailyBarsExcludeCurrentIncompleteDay(t *testing.T) 
 	if err != nil {
 		t.Fatalf("default Probe failed: %v", err)
 	}
-	wantEnd := time.Now().In(marketLocation()).AddDate(0, 0, -1).Format("2006-01-02")
+	wantEndTime := time.Now().In(marketLocation()).AddDate(0, 0, -1)
+	wantEnd := wantEndTime.Format("2006-01-02")
+	wantSampleDate := wantEndTime
+	for wantSampleDate.Weekday() == time.Saturday || wantSampleDate.Weekday() == time.Sunday {
+		wantSampleDate = wantSampleDate.AddDate(0, 0, -1)
+	}
 	if p.startDate != "" || p.endDate != wantEnd || p.limit != 5 {
 		t.Fatalf("default Probe must request at most the previous complete day: start=%q end=%q limit=%d, want end=%q limit=5", p.startDate, p.endDate, p.limit, wantEnd)
 	}
 	item, found := findProbeItem(run.Items, p.Name(), "daily_bars")
-	if !found || item.SampleDate != wantEnd {
-		t.Fatalf("default Probe should retain the latest completed date as sample evidence: found=%v item=%+v want=%s", found, item, wantEnd)
+	if !found || item.SampleDate != wantSampleDate.Format("2006-01-02") {
+		t.Fatalf("default Probe should retain the latest available weekday as sample evidence: found=%v item=%+v want=%s", found, item, wantSampleDate.Format("2006-01-02"))
 	}
 }
 
