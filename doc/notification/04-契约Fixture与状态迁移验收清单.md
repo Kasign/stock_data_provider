@@ -443,3 +443,20 @@ Run `42602399686` 对应 HEAD `8d08cf07a651efcd42a514f3dafd94d659f21f97`。`Test
 - 装载前后检查 context；仓储缺失、取消、身份错配、Digest 错配均 fail closed。
 - 重复装载相同版本/相同定义幂等；同一版本不同定义仍由 Registry 不可变保护拒绝。
 - 新增空仓储、取消上下文、身份错配、重复装载及同版本冲突测试。
+
+
+### 持久化渠道快照与运行时 Adapter 绑定校验（2026-11-09）
+
+- 新增 `ChannelRegistry.RegisterSnapshot(expected, adapter)`，由 Server 在读取指定版本持久化快照并完成 Adapter 装配后调用。
+- 注册前同时校验持久化快照与 Adapter 自报快照合法，并逐字段比较；任何 SecretRef、能力、渠道类型、启用状态或版本不一致均拒绝注册。
+- 重试错误码集合按集合语义比较，顺序差异不构成配置冲突；注册表只保留经验证的不可变快照副本。
+- 原 `Register(adapter)` 保留兼容，内部复用同一注册路径；新增匹配、错配及集合顺序测试。
+- Adapter 构造和 Secret 解析仍由 Server 负责，Notification 不读取 Secret 明文，也不承担 composition root 职责。
+
+
+## 21. 持久化渠道快照绑定
+
+- [x] 运行时 Adapter 注册可显式绑定持久化配置快照。
+- [x] 校验 Adapter 自报配置与持久化快照逐字段一致。
+- [x] RetryableErrorCodes 按集合语义比较。
+- [x] 覆盖匹配、配置错配和集合顺序差异测试。
