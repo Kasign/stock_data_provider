@@ -8,11 +8,11 @@ import (
 )
 
 type observationRetentionRepositoryStub struct {
-	result ObservationPayloadPurgeResult
-	err error
-	now time.Time
-	limit int
-	calls int
+	result     ObservationPayloadPurgeResult
+	err        error
+	now        time.Time
+	limit      int
+	calls      int
 	afterPurge func()
 }
 
