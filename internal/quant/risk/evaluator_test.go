@@ -96,6 +96,7 @@ func TestEvaluateRuleSetHonorsCancellation(t *testing.T) {
 	if _, err := EvaluateRuleSet(ctx, set, decisionInput(set.Version, nil), nil); !errors.Is(err, context.Canceled) {
 		t.Fatalf("error = %v, want context.Canceled", err)
 	}
+}
 
 func TestEvaluateRuleSetOptionalEvaluatorErrorIsDiagnosticOnly(t *testing.T) {
 	set := validRuleSet()
@@ -139,5 +140,4 @@ func TestEvaluateRuleSetStopsWhenContextIsCancelledDuringEvaluation(t *testing.T
 	if _, err := EvaluateRuleSet(ctx, set, decisionInput(set.Version, nil), evaluators); !errors.Is(err, context.Canceled) {
 		t.Fatalf("error = %v, want context.Canceled", err)
 	}
-}
 }
