@@ -439,6 +439,24 @@ func (r *closeTrackingReader) Close() error {
 	return nil
 }
 
+func TestResponsesAdapterGenerateClosesBodyReturnedWithError(t *testing.T) {
+	provider, secret, capabilities, clock := adapterTestConfig()
+	request := validResponsesRequest()
+	request.ProviderID = provider.ProviderID
+	body := &closeTrackingReader{Reader: strings.NewReader("")}
+	adapter, err := NewResponsesAdapter(provider, secret, doerFunc(func(*http.Request) (*http.Response, error) {
+		return &http.Response{StatusCode: http.StatusBadGateway, Body: body}, errors.New("transport failed")
+	}), capabilities, clock)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = adapter.Generate(context.Background(), request)
+	if err == nil || !body.closed {
+		t.Fatalf("body returned with transport error must be closed: err=%v closed=%v", err, body.closed)
+	}
+}
+
 func TestResponsesAdapterStreamClosesBodyReturnedWithError(t *testing.T) {
 	provider, secret, capabilities, clock := streamAdapterTestConfig()
 	request := validResponsesRequest()

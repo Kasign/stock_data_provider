@@ -155,6 +155,10 @@ func (a *ResponsesAdapter) Generate(ctx context.Context, request ModelRequest) (
 
 	httpResponse, err := a.doer.Do(httpRequest)
 	if err != nil {
+		// 遵循 HTTP Doer 约定：若错误同时返回了响应体，仍由 Adapter 释放资源。
+		if httpResponse != nil && httpResponse.Body != nil {
+			_ = httpResponse.Body.Close()
+		}
 		return fail(classifyAdapterTransportError(err, callCtx), err)
 	}
 	if httpResponse == nil {
