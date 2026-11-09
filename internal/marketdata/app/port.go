@@ -31,38 +31,38 @@ const (
 // QuoteSnapshot is an application DTO, not the Data HTTP JSON response.
 // Nullable numeric values remain pointers; Volume remains int64 to preserve share precision.
 type QuoteSnapshot struct {
-	Symbol              string
-	Name                string
-	CurrentPrice        *float64
-	Change              *float64
-	ChangePercent       *float64
-	Open                *float64
-	High                *float64
-	Low                 *float64
-	PrevClose           *float64
-	Volume              *int64
-	Amount              *float64
-	VolumeRatio         *float64
-	TurnoverRate        *float64
-	QuoteTime           *time.Time
-	QuoteTimeSemantics  string
-	FetchedAt           time.Time
-	NormalizedAt        time.Time
-	Source              string
-	SourceVersion       string
-	RawVolume           *float64
-	RawVolumeUnit       string
-	RawAmount           *float64
-	RawAmountUnit       string
-	RawAmountField      string
-	VolumeUnit          string
-	AmountUnit          string
-	AdjustmentBasis     AdjustmentBasis
-	QualityStatus       QualityStatus
-	QualityReasons      []string
-	FallbackFrom        string
-	FallbackReason      string
-	RequestID           string
+	Symbol               string
+	Name                 string
+	CurrentPrice         *float64
+	Change               *float64
+	ChangePercent        *float64
+	Open                 *float64
+	High                 *float64
+	Low                  *float64
+	PrevClose            *float64
+	Volume               *int64
+	Amount               *float64
+	VolumeRatio          *float64
+	TurnoverRate         *float64
+	QuoteTime            *time.Time
+	QuoteTimeSemantics   string
+	FetchedAt            time.Time
+	NormalizedAt         time.Time
+	Source               string
+	SourceVersion        string
+	RawVolume            *float64
+	RawVolumeUnit        string
+	RawAmount            *float64
+	RawAmountUnit        string
+	RawAmountField       string
+	VolumeUnit           string
+	AmountUnit           string
+	AdjustmentBasis      AdjustmentBasis
+	QualityStatus        QualityStatus
+	QualityReasons       []string
+	FallbackFrom         string
+	FallbackReason       string
+	RequestID            string
 	NormalizationVersion string
 }
 
@@ -115,12 +115,12 @@ type DailyBar struct {
 // SystemObservedAtCutoff is the system-observation/revision cutoff, not a trade
 // date and not the ProviderTime of a quote/bar. Nil requests the current view.
 type DailyBarsQuery struct {
-	Symbol                  string
-	StartDate               string
-	EndDate                 string
-	Limit                   int
-	AdjustmentBasis         AdjustmentBasis
-	SystemObservedAtCutoff  *time.Time
+	Symbol                 string
+	StartDate              string
+	EndDate                string
+	Limit                  int
+	AdjustmentBasis        AdjustmentBasis
+	SystemObservedAtCutoff *time.Time
 }
 
 // DailyBarsSnapshot preserves per-bar metadata and Data's aggregate quality assessment.
