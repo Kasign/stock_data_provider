@@ -248,7 +248,5 @@ func TestListEvidenceSnapshotPageStopsAfterContextCancellationDuringSnapshotRead
 	if _, err := service.Execute(ctx, request); !errors.Is(err, context.Canceled) {
 		t.Fatalf("Execute() error = %v, want context.Canceled", err)
 	}
-	if query.calls != 0 {
-		t.Fatalf("canceled continuation reran PIT: %d", query.calls)
-	}
+	if query.calls != 0 { t.Fatalf("canceled continuation reran PIT: %d", query.calls) }
 }
