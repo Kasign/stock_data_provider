@@ -236,12 +236,16 @@ func TestDeliveryAttemptRepositoryRejectsStaleLeaseAndVersion(t *testing.T) {
 		t.Fatalf("attempt worker must match lease owner: %v", err)
 	}
 	attempt = attemptForClaim(claim, 1)
+	repository.now = claim.Lease.ExpiresAt
 	if err := repository.StartWithLease(context.Background(), claim.Delivery.Version, claim.Lease.FencingToken, attempt); !errors.Is(err, ErrDeliveryLeaseConflict) {
 		t.Fatalf("expired lease must reject late start even if StartedAt is earlier: %v", err)
 	}
+	repository.now = claim.Lease.ExpiresAt.Add(-time.Second)
+	attempt.StartedAt = repository.now.Add(time.Nanosecond)
 	if err := repository.StartWithLease(context.Background(), claim.Delivery.Version, claim.Lease.FencingToken, attempt); !errors.Is(err, domain.ErrInvalidDeliveryAttempt) {
 		t.Fatalf("future StartedAt must be rejected: %v", err)
 	}
+	attempt = attemptForClaim(claim, 1)
 	if err := repository.StartWithLease(context.Background(), claim.Delivery.Version, claim.Lease.FencingToken, attempt); err != nil {
 		t.Fatal(err)
 	}
