@@ -288,13 +288,16 @@ func (r *MySQLDeliveryAttemptRepository) CompleteWithLease(
 		return application.ErrDeliveryAttemptConflict
 	}
 
+	finishedAtForDB := normalizeAttemptDatabaseTime(*completed.FinishedAt)
+	startedAtForDB := normalizeAttemptDatabaseTime(completed.StartedAt)
+	durationForDB := finishedAtForDB.Sub(startedAtForDB).Milliseconds()
 	result, err := tx.ExecContext(ctx, `UPDATE notification_delivery_attempts SET
 		finished_at = ?, outcome = ?, provider_message_ref = ?, error_code = ?,
 		retryable = ?, retry_after_at = ?, duration_ms = ?, evidence_ref = ?
 		WHERE attempt_id = ? AND delivery_id = ? AND fencing_token = ? AND finished_at IS NULL`,
-		completed.FinishedAt.UTC(), string(*completed.Outcome), nullableText(completed.ProviderMessageRef),
-		nullableText(completed.ErrorCode), completed.Retryable, nullableTime(completed.RetryAfterAt),
-		*completed.DurationMS, nullableText(completed.EvidenceRef),
+		finishedAtForDB, string(*completed.Outcome), nullableText(completed.ProviderMessageRef),
+		nullableText(completed.ErrorCode), completed.Retryable, nullableAttemptDatabaseTime(completed.RetryAfterAt),
+		durationForDB, nullableText(completed.EvidenceRef),
 		completed.AttemptID, completed.DeliveryID, fencingToken,
 	)
 	if err != nil {
