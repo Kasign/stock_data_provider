@@ -251,3 +251,11 @@ Notification 是独立通知业务模块，负责事件接收、Subscription、T
 - 执行前读取完整 Attempt 历史，校验数量、连续序号、完成状态、FencingToken 递增、时间顺序，以及前序 Attempt 必须为可重试拒绝或 `not_sent`；拒绝接受终态后又出现新 Attempt 的历史。
 - 租约恢复评估采用相同历史约束；安全重试路径补充首次 Attempt 起算的 MaxElapsed 检查，避免恢复流程绕过执行预算。
 - 新增历史不可能性回归测试；既有 MaxElapsed 执行 deadline 与恢复测试对应当前代码。
+
+
+### 模板仓储装载一致性收口（2026-11-09）
+
+- `Registry.LoadFromRepository` 按 `template_id + version` 精确读取，不回退 latest；校验记录身份、定义 JCS Digest 与仓储 Digest 一致后才注册。
+- 装载前后检查 context；仓储缺失、取消、身份错配、Digest 错配均 fail closed。
+- 重复装载相同版本/相同定义幂等；同一版本不同定义仍由 Registry 不可变保护拒绝。
+- 新增空仓储、取消上下文、身份错配、重复装载及同版本冲突测试。

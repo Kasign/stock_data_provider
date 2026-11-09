@@ -435,3 +435,11 @@ Run `42602399686` 对应 HEAD `8d08cf07a651efcd42a514f3dafd94d659f21f97`。`Test
 - [x] 执行 deadline 合并 PerAttemptTimeout、MaxElapsed、Delivery Deadline。
 - [x] 恢复安全重试遵守首次 Attempt 起算的 MaxElapsed。
 - [x] 增加终态后续出现新 Attempt 的拒绝测试。
+
+
+### 模板仓储装载一致性收口（2026-11-09）
+
+- `Registry.LoadFromRepository` 按 `template_id + version` 精确读取，不回退 latest；校验记录身份、定义 JCS Digest 与仓储 Digest 一致后才注册。
+- 装载前后检查 context；仓储缺失、取消、身份错配、Digest 错配均 fail closed。
+- 重复装载相同版本/相同定义幂等；同一版本不同定义仍由 Registry 不可变保护拒绝。
+- 新增空仓储、取消上下文、身份错配、重复装载及同版本冲突测试。

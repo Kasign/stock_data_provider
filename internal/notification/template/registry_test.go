@@ -330,3 +330,62 @@ func TestRegistryLoadsExactImmutableVersionFromRepository(t *testing.T) {
 		t.Fatal("repository digest mismatch must be rejected")
 	}
 }
+
+func TestRegistryRepositoryLoadRejectsInvalidIdentityAndCancelledContext(t *testing.T) {
+	registry := testTemplateRegistry(t, Limits{
+		MaxTemplateBytes: 2048, MaxOutputBytes: 2048, MaxPayloadDepth: 8,
+	})
+	definition := baseDefinition(FormatText)
+	digest, err := DefinitionDigest(definition)
+	if err != nil {
+		t.Fatal(err)
+	}
+	repository := registryTemplateRepositoryStub{definition: definition, digest: digest, found: true}
+
+	if err := registry.LoadFromRepository(context.Background(), nil, definition.TemplateID, definition.Version); !errors.Is(err, ErrRepositoryUnavailable) {
+		t.Fatalf("nil repository must be rejected: %v", err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := registry.LoadFromRepository(ctx, repository, definition.TemplateID, definition.Version); !errors.Is(err, context.Canceled) {
+		t.Fatalf("cancelled load must return context error: %v", err)
+	}
+
+	wrongIdentity := definition
+	wrongIdentity.Version++
+	repository.definition = wrongIdentity
+	if err := registry.LoadFromRepository(context.Background(), repository, definition.TemplateID, definition.Version); !errors.Is(err, ErrRepositoryDigestMismatch) {
+		t.Fatalf("repository identity mismatch must fail closed: %v", err)
+	}
+	if _, found := registry.Digest(definition.TemplateID, definition.Version); found {
+		t.Fatal("invalid repository record must not be registered")
+	}
+}
+
+func TestRegistryRepositoryLoadIsIdempotentButImmutable(t *testing.T) {
+	registry := testTemplateRegistry(t, Limits{
+		MaxTemplateBytes: 2048, MaxOutputBytes: 2048, MaxPayloadDepth: 8,
+	})
+	definition := baseDefinition(FormatText)
+	digest, err := DefinitionDigest(definition)
+	if err != nil {
+		t.Fatal(err)
+	}
+	repository := registryTemplateRepositoryStub{definition: definition, digest: digest, found: true}
+	for i := 0; i < 2; i++ {
+		if err := registry.LoadFromRepository(context.Background(), repository, definition.TemplateID, definition.Version); err != nil {
+			t.Fatalf("repeat exact-version load must be idempotent: %v", err)
+		}
+	}
+	changed := definition
+	changed.BodyTemplate = "changed {{.message}}"
+	changedDigest, err := DefinitionDigest(changed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	repository.definition = changed
+	repository.digest = changedDigest
+	if err := registry.LoadFromRepository(context.Background(), repository, definition.TemplateID, definition.Version); !errors.Is(err, ErrTemplateImmutable) {
+		t.Fatalf("same key with changed definition must remain immutable: %v", err)
+	}
+}
