@@ -52,30 +52,32 @@ func TestTrendAndRiskSchemasRejectSurroundingWhitespace(t *testing.T) {
 	trendSchema := compileQuantSchemaFile(t, "QNT-CTR-004-trend-result-1.0.0.schema.json")
 	trendInstance := map[string]any{
 		"trend_code": "price_trend",
-		"direction": "unknown",
-		"phase": "emerging",
-		"strength": 0.2,
-		"period": "20d",
-		"evidence_metrics": []any{map[string]any{
-			"metric_code": "momentum_20d",
-			"value": 0.2,
-			"unit": "ratio",
-			"period": "20d",
-			"system_as_of": "2026-11-09T01:00:00Z",
-			"quality_status": "valid",
-			"metric_status": "available",
-			"calculation_version": "1.0.0",
-			"sample_count": 21,
-			"lower_bound": nil,
-			"upper_bound": nil,
-		}},
-		"conflict_refs": []any{"conflict:1"},
-		"quality_status": "valid",
-		"system_as_of": "2026-11-09T01:00:00Z",
+		"direction":  "unknown",
+		"phase":      "emerging",
+		"strength":   0.2,
+		"period":     "20d",
+		"evidence_metrics": []any{
+			map[string]any{
+				"metric_code":         "momentum_20d",
+				"value":               0.2,
+				"unit":                "ratio",
+				"period":              "20d",
+				"system_as_of":        "2026-11-09T01:00:00Z",
+				"quality_status":      "valid",
+				"metric_status":       "available",
+				"calculation_version": "1.0.0",
+				"sample_count":        21,
+				"lower_bound":         nil,
+				"upper_bound":         nil,
+			},
+		},
+		"conflict_refs":     []any{"conflict:1"},
+		"quality_status":    "valid",
+		"system_as_of":      "2026-11-09T01:00:00Z",
 		"algorithm_version": "1.0.0",
 	}
 	trendMutations := []struct {
-		name string
+		name   string
 		mutate func(map[string]any)
 	}{
 		{"trend_code leading whitespace", func(v map[string]any) { v["trend_code"] = " price_trend" }},
@@ -93,7 +95,7 @@ func TestTrendAndRiskSchemasRejectSurroundingWhitespace(t *testing.T) {
 		t.Run("trend/"+tc.name, func(t *testing.T) {
 			instance := cloneSchemaMap(trendInstance)
 			tc.mutate(instance)
-			if err := validateSchemaMap(trendSchema, instance); err == nil {
+			if err := trendSchema.Validate(instance); err == nil {
 				t.Fatal("TrendResult Schema unexpectedly accepted non-canonical text")
 			}
 		})
@@ -101,22 +103,24 @@ func TestTrendAndRiskSchemasRejectSurroundingWhitespace(t *testing.T) {
 
 	riskSchema := compileQuantSchemaFile(t, "QNT-CTR-004-risk-decision-1.0.0.schema.json")
 	riskInstance := map[string]any{
-		"decision_id": "decision-1",
-		"status": "unknown",
+		"decision_id":      "decision-1",
+		"status":           "unknown",
 		"rule_set_version": "1.0.0",
-		"evaluated_at": "2026-11-09T01:00:00Z",
-		"system_as_of": "2026-11-09T00:59:00Z",
-		"reasons": []any{map[string]any{
-			"code": "INPUT_UNKNOWN",
-			"severity": "block",
-			"status": "unknown",
-			"safe_message": "input unavailable",
-			"evidence_refs": []any{"evidence:1"},
-		}},
+		"evaluated_at":     "2026-11-09T01:00:00Z",
+		"system_as_of":     "2026-11-09T00:59:00Z",
+		"reasons": []any{
+			map[string]any{
+				"code":          "INPUT_UNKNOWN",
+				"severity":      "block",
+				"status":        "unknown",
+				"safe_message": "input unavailable",
+				"evidence_refs": []any{"evidence:1"},
+			},
+		},
 		"input_refs": []any{"input:1"},
 	}
 	riskMutations := []struct {
-		name string
+		name   string
 		mutate func(map[string]any)
 	}{
 		{"decision_id leading whitespace", func(v map[string]any) { v["decision_id"] = " decision-1" }},
@@ -130,7 +134,7 @@ func TestTrendAndRiskSchemasRejectSurroundingWhitespace(t *testing.T) {
 		t.Run("risk/"+tc.name, func(t *testing.T) {
 			instance := cloneSchemaMap(riskInstance)
 			tc.mutate(instance)
-			if err := validateSchemaMap(riskSchema, instance); err == nil {
+			if err := riskSchema.Validate(instance); err == nil {
 				t.Fatal("RiskDecision Schema unexpectedly accepted non-canonical text")
 			}
 		})
@@ -147,8 +151,4 @@ func cloneSchemaMap(source map[string]any) map[string]any {
 		panic(err)
 	}
 	return clone
-}
-
-func validateSchemaMap(schema *jsonschema.Schema, instance map[string]any) error {
-	return schema.Validate(instance)
 }
