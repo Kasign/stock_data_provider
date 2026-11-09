@@ -28,9 +28,9 @@ type SchedulePlan struct {
 }
 
 // BuildSchedulePlan computes a deterministic, bounded dispatch plan from a
-// persisted Run/Stage snapshot. It does not persist transitions or reserve slots;
-// ClaimAttempt remains the cross-process authority and must enforce concurrency
-// limits transactionally before creating an Attempt.
+// persisted Run/Stage snapshot. It plans state transitions separately from dispatch;
+// ClaimAttempt remains the cross-process authority and enforces concurrency limits
+// transactionally before creating an Attempt.
 func BuildSchedulePlan(
 	ctx context.Context,
 	run domain.Run,
@@ -124,7 +124,17 @@ func BuildSchedulePlan(
 				ready = append(ready, updated)
 			}
 		case domain.StageRetryWait:
-			plan.WaitingRefs = append(plan.WaitingRefs, stage.Ref)
+			if stage.RetryAt == nil {
+				return SchedulePlan{}, fmt.Errorf("Researchflow retry_wait Stage %q has no retry_at", stage.Ref)
+			}
+			if stage.RetryAt.After(now) {
+				plan.WaitingRefs = append(plan.WaitingRefs, stage.Ref)
+				continue
+			}
+			// Keep the persisted state as retry_wait. ClaimAttempt validates the
+			// retry history, DB deadline and retry_at under the Run row lock,
+			// then atomically creates the next Attempt and moves Stage to running.
+			ready = append(ready, stage)
 		}
 	}
 	less := func(a, b domain.Stage) bool {

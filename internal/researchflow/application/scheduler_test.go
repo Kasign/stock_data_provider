@@ -196,3 +196,38 @@ func TestPersistSchedulePlanRejectsDuplicateAndInvalidTransitions(t *testing.T) 
 		t.Fatal("unsupported transition target must be rejected")
 	}
 }
+
+
+func TestBuildSchedulePlanDispatchesDueRetryWaitWithoutPrematureStateChange(t *testing.T) {
+	run, now := schedulerFixture()
+	due := now
+	future := now.Add(time.Minute)
+	stages := []domain.Stage{
+		{Ref: "stage-retry-due", RunRef: run.Ref, Code: "retry_due", Status: domain.StageRetryWait, Version: 4, AttemptNo: 1, RetryAt: &due},
+		{Ref: "stage-retry-future", RunRef: run.Ref, Code: "retry_future", Status: domain.StageRetryWait, Version: 4, AttemptNo: 1, RetryAt: &future},
+	}
+	plan, err := BuildSchedulePlan(context.Background(), run, stages, nil, 1, now, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(plan.Dispatch) != 1 || plan.Dispatch[0].Ref != "stage-retry-due" ||
+		plan.Dispatch[0].Status != domain.StageRetryWait {
+		t.Fatalf("due retry was not dispatched in retry_wait state: %#v", plan.Dispatch)
+	}
+	if len(plan.WaitingRefs) != 1 || plan.WaitingRefs[0] != "stage-retry-future" {
+		t.Fatalf("future retry should remain waiting: %#v", plan.WaitingRefs)
+	}
+	if len(plan.PromoteToReady) != 0 || len(plan.MarkBlocked) != 0 {
+		t.Fatalf("retry scheduling must not perform an intermediate state transition: %#v", plan)
+	}
+}
+
+func TestBuildSchedulePlanRejectsRetryWaitWithoutRetryAt(t *testing.T) {
+	run, now := schedulerFixture()
+	stages := []domain.Stage{
+		{Ref: "stage-retry-invalid", RunRef: run.Ref, Code: "retry_invalid", Status: domain.StageRetryWait, Version: 2, AttemptNo: 1},
+	}
+	if _, err := BuildSchedulePlan(context.Background(), run, stages, nil, 1, now, nil); err == nil {
+		t.Fatal("retry_wait Stage without retry_at must fail closed")
+	}
+}
