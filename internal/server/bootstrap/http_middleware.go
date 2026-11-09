@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
-	"time"
 
 	"example.com/stock-analysis-flow/internal/platform/fault"
 	"example.com/stock-analysis-flow/internal/platform/observability"
@@ -131,7 +130,3 @@ func writePublicError(w http.ResponseWriter, status int, value publicError) {
 	}
 }
 
-func requestDeadlineContext(r *http.Request, timeout time.Duration) (*http.Request, context.CancelFunc) {
-	ctx, cancel := context.WithTimeout(r.Context(), timeout)
-	return r.WithContext(ctx), cancel
-}
