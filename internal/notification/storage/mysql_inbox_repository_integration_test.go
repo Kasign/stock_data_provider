@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -67,6 +69,43 @@ func TestNotificationMariaDBInboxRepositoryIntegration(t *testing.T) {
 	}
 	if fanoutCount != 1 {
 		t.Fatalf("replay must not duplicate fanout work, got %d", fanoutCount)
+	}
+
+	concurrentEvent := integrationInboxEvent(event.EventID + "-concurrent")
+	const workers = 16
+	var accepted atomic.Int64
+	var duplicates atomic.Int64
+	var wg sync.WaitGroup
+	errCh := make(chan error, workers)
+	for i := 0; i < workers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, duplicate, acceptErr := repository.Accept(ctx, concurrentEvent, receivedAt)
+			if acceptErr != nil {
+				errCh <- acceptErr
+				return
+			}
+			if duplicate {
+				duplicates.Add(1)
+			} else {
+				accepted.Add(1)
+			}
+		}()
+	}
+	wg.Wait()
+	close(errCh)
+	for acceptErr := range errCh {
+		t.Errorf("concurrent Inbox accept: %v", acceptErr)
+	}
+	if accepted.Load() != 1 || duplicates.Load() != workers-1 {
+		t.Fatalf("concurrent replay must have one winner: accepted=%d duplicates=%d", accepted.Load(), duplicates.Load())
+	}
+	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM "+table+" WHERE event_id = ?", concurrentEvent.EventID).Scan(&fanoutCount); err != nil {
+		t.Fatal(err)
+	}
+	if fanoutCount != 1 {
+		t.Fatalf("concurrent replay must create one fanout row, got %d", fanoutCount)
 	}
 
 	eventConflict := event
