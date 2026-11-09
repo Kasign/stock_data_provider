@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
-	"testing"\n\n\t"github.com/santhosh-tekuri/jsonschema/v5"
+	"testing"
+
+	"github.com/santhosh-tekuri/jsonschema/v5"
 )
 
 func readQuantSchema(t *testing.T, name string) []byte {
