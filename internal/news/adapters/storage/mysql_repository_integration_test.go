@@ -700,6 +700,7 @@ func TestObservationRetentionPurgeIntegration(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	db.SetMaxOpenConns(8)
 	defer db.Close()
 	if err := db.PingContext(ctx); err != nil {
 		t.Fatalf("MariaDB ping failed: %v", err)
@@ -712,55 +713,69 @@ func TestObservationRetentionPurgeIntegration(t *testing.T) {
 		t.Fatal(err)
 	}
 	now := time.Now().UTC()
-	observation := domain.Observation{
-		ID: fmt.Sprintf("news-retention-it-%d", time.Now().UnixNano()),
-		IdempotencyKey: fmt.Sprintf("news-retention-key-%d", time.Now().UnixNano()),
-		SourceID: "news-retention-integration",
-		Candidate: domain.Candidate{SourceItemID: "retention-source-item", Title: "must be purged"},
-		ObservedAt: now.Add(-2 * time.Hour), RetentionUntil: now.Add(-time.Hour),
-		IdentityStatus: domain.ObservationUnidentified,
+	observations := make([]domain.Observation, 3)
+	for i := range observations {
+		observations[i] = domain.Observation{
+			ID: fmt.Sprintf("news-retention-it-%d-%d", time.Now().UnixNano(), i),
+			IdempotencyKey: fmt.Sprintf("news-retention-key-%d-%d", time.Now().UnixNano(), i),
+			SourceID: "news-retention-integration",
+			Candidate: domain.Candidate{SourceItemID: fmt.Sprintf("retention-source-item-%d", i), Title: "must be purged"},
+			ObservedAt: now.Add(-2 * time.Hour), RetentionUntil: now.Add(-time.Hour),
+			IdentityStatus: domain.ObservationUnidentified,
+		}
 	}
 	defer func() {
-		_, _ = db.ExecContext(context.Background(), "DELETE FROM news_observations WHERE observation_id = ?", observation.ID)
+		for _, observation := range observations {
+			_, _ = db.ExecContext(context.Background(), "DELETE FROM news_observations WHERE observation_id = ?", observation.ID)
+		}
 	}()
-	if err := repository.WithinIdentityTransaction(ctx, func(tx app.IdentityTransaction) error {
-		_, err := tx.AppendObservation(ctx, observation)
-		return err
-	}); err != nil {
-		t.Fatalf("insert expiring observation: %v", err)
+	for _, observation := range observations {
+		if err := repository.WithinIdentityTransaction(ctx, func(tx app.IdentityTransaction) error {
+			_, err := tx.AppendObservation(ctx, observation)
+			return err
+		}); err != nil {
+			t.Fatalf("insert expiring observation %s: %v", observation.ID, err)
+		}
 	}
 
-	purged, err := repository.PurgeExpiredObservationPayloads(ctx, now, 10)
-	if err != nil || purged.Scanned != 1 || purged.Purged != 1 {
-		t.Fatalf("purge result=%+v err=%v", purged, err)
+	firstBatch, err := repository.PurgeExpiredObservationPayloads(ctx, now, 2)
+	if err != nil || firstBatch.Scanned != 2 || firstBatch.Purged != 2 {
+		t.Fatalf("first batch result=%+v err=%v", firstBatch, err)
 	}
-	var candidateJSON []byte
-	var purgedAt sql.NullTime
-	if err := db.QueryRowContext(ctx, "SELECT candidate_json, payload_purged_at FROM news_observations WHERE observation_id = ?", observation.ID).Scan(&candidateJSON, &purgedAt); err != nil {
-		t.Fatalf("read purged observation: %v", err)
+	secondBatch, err := repository.PurgeExpiredObservationPayloads(ctx, now, 2)
+	if err != nil || secondBatch.Scanned != 1 || secondBatch.Purged != 1 {
+		t.Fatalf("second batch result=%+v err=%v", secondBatch, err)
 	}
-	var candidate domain.Candidate
-	if err := json.Unmarshal(candidateJSON, &candidate); err != nil {
-		t.Fatalf("decode purged candidate: %v", err)
-	}
-	if candidate.Title != "" || !purgedAt.Valid {
-		t.Fatalf("candidate payload was not cleared: candidate=%+v purged_at=%+v", candidate, purgedAt)
-	}
-	if err := repository.WithinIdentityTransaction(ctx, func(tx app.IdentityTransaction) error {
-		_, err := tx.AppendObservation(ctx, observation)
-		return err
-	}); !errors.Is(err, app.ErrObservationPayloadPurged) {
-		t.Fatalf("idempotent replay after purge error=%v, want ErrObservationPayloadPurged", err)
-	}
-	repeated, err := repository.PurgeExpiredObservationPayloads(ctx, now.Add(time.Minute), 10)
+	repeated, err := repository.PurgeExpiredObservationPayloads(ctx, now.Add(time.Minute), 2)
 	if err != nil || repeated.Scanned != 0 || repeated.Purged != 0 {
 		t.Fatalf("repeat purge result=%+v err=%v", repeated, err)
 	}
-	var retainedRows int
-	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM news_observations WHERE observation_id = ?", observation.ID).Scan(&retainedRows); err != nil {
-		t.Fatal(err)
+
+	for _, observation := range observations {
+		var candidateJSON []byte
+		var purgedAt sql.NullTime
+		if err := db.QueryRowContext(ctx, "SELECT candidate_json, payload_purged_at FROM news_observations WHERE observation_id = ?", observation.ID).Scan(&candidateJSON, &purgedAt); err != nil {
+			t.Fatalf("read purged observation %s: %v", observation.ID, err)
+		}
+		var candidate domain.Candidate
+		if err := json.Unmarshal(candidateJSON, &candidate); err != nil {
+			t.Fatalf("decode purged candidate %s: %v", observation.ID, err)
+		}
+		if candidate.Title != "" || !purgedAt.Valid {
+			t.Fatalf("candidate payload was not cleared: candidate=%+v purged_at=%+v", candidate, purgedAt)
+		}
+		var retainedRows int
+		if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM news_observations WHERE observation_id = ?", observation.ID).Scan(&retainedRows); err != nil {
+			t.Fatal(err)
+		}
+		if retainedRows != 1 {
+			t.Fatalf("observation tombstone row count=%d, want 1", retainedRows)
+		}
 	}
-	if retainedRows != 1 {
-		t.Fatalf("observation tombstone row count=%d, want 1", retainedRows)
+	if err := repository.WithinIdentityTransaction(ctx, func(tx app.IdentityTransaction) error {
+		_, err := tx.AppendObservation(ctx, observations[0])
+		return err
+	}); !errors.Is(err, app.ErrObservationPayloadPurged) {
+		t.Fatalf("idempotent replay after purge error=%v, want ErrObservationPayloadPurged", err)
 	}
 }

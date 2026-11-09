@@ -43,14 +43,13 @@ type candidateIngest struct {
 	newID      func() string
 }
 
-// NewcandidateIngest 创建候选身份处理用例。
+// newCandidateIngest 创建仅供 News Application 包内使用的候选身份处理器。
 func newCandidateIngest(repository IdentityRepository, newID func() string) *candidateIngest {
 	return &candidateIngest{repository: repository, now: time.Now, newID: newID}
 }
 
-// Execute 在同一事务内解析身份、必要时创建主体、保存身份凭据并幂等追加 Observation。
-// IdempotencyKey 必须由上游按一次采集操作稳定生成；重试同一操作必须复用该值。
-// ObservationPolicyTrace 将在线采集时使用的授权策略版本传递给 Observation。
+// candidateIngest 是 News Application 包内的底层身份处理器，不作为跨模块入口。
+// 生产调用必须经 IngestCollectedSource 或 IngestProviderCandidate 完成可信授权与保留期评估。
 type ObservationPolicyTrace struct {
 	SourcePolicyVersionID         string
 	EndpointID                    string
@@ -61,9 +60,7 @@ type ObservationPolicyTrace struct {
 	Retention                     time.Duration
 }
 
-// Execute 仅用于不依赖搜索 Provider 输出的来源候选。
-// Provider 搜索结果必须经过可信组合根完成 Provider Output Policy 评估后，
-// 通过 ExecuteWithPolicyTrace 传入策略引用和版本；缺少追踪信息时拒绝持久化。
+// executeUnscoped 仅供包内底层测试使用；生产调用不得绕过受控 Ingest 用例。
 func (u *candidateIngest) executeUnscoped(ctx context.Context, sourceID, idempotencyKey string, candidate domain.Candidate, policy domain.SourceURLPolicy) (domain.Observation, error) {
 	if strings.TrimSpace(candidate.ProviderCode) != "" {
 		return domain.Observation{}, ErrProviderOutputPolicyRequired
@@ -71,8 +68,8 @@ func (u *candidateIngest) executeUnscoped(ctx context.Context, sourceID, idempot
 	return u.executeCore(ctx, sourceID, idempotencyKey, candidate, policy, ObservationPolicyTrace{})
 }
 
-// ExecuteWithPolicyTrace 仅记录 Source/Endpoint 评估结果。Provider Policy Resolver 尚未接入，
-// 因此当前拒绝所有 Provider 候选及 Provider Policy 自声明引用，防止调用方伪造授权追踪。
+// executeWithPolicyTrace 接收 Source/Endpoint 可信授权结果，并要求实际保留期限为正数。
+// Provider 候选必须经 IngestProviderCandidate 的独立策略 Resolver 评估。
 func (u *candidateIngest) executeWithPolicyTrace(ctx context.Context, sourceID, idempotencyKey string, candidate domain.Candidate, policy domain.SourceURLPolicy, trace ObservationPolicyTrace) (domain.Observation, error) {
 	trace.SourcePolicyVersionID = strings.TrimSpace(trace.SourcePolicyVersionID)
 	trace.EndpointID = strings.TrimSpace(trace.EndpointID)
