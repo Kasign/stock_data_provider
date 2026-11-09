@@ -1031,3 +1031,11 @@ internal/
 - 增加测试源码覆盖零能力 Provider 跳过和代表性能力识别。该修复仅消除无调用场景的误报，不改变各 Provider 内部 endpoint 的粒度；Quote-only 等部分能力配置仍可能要求该 Provider 当前全部注入端点，下一步需按真实能力调用路径进一步收敛。
 - Redis 审查结论：Module 只借用注入的 Cache/Store，Close 仅关闭 Data 自有 BaoStock Client；GoRedis Adapter 不关闭共享 redis.Client。旧 RESP Redis 仍用于兼容独立入口，不能在 Root 模块化部署中替代 Platform storage.OpenRedis()。
 - 本次未运行构建/测试，待 integration 统一验收。
+
+
+### 2026-11-09：M4 按业务能力收敛多出口 Provider 装配
+
+- 复核 Provider 请求路径后，先对 endpoint 与业务能力有明确一一对应关系的 Provider 收敛严格校验：Tencent Quote / DailyBars（复权与未复权两路）/ StockSearch 分别校验；Sina Quote / DailyBars 分别校验；NetEase Quote / DailyBars 分别校验。
+- 未启用的 endpoint 不再要求 Root 注入对应 BoundDoer；启用 DailyBars 时仍要求其实际可能使用的完整路径（Tencent 两类 K 线执行器都必须注入）。
+- 其他 Provider 暂时保留保守的 Provider 级校验，尤其 Eastmoney 的多个领域能力共享或交叉使用 endpoint；在逐个调用点确认映射前，不猜测能力与 Host 的对应关系。
+- 新增测试源码覆盖 Quote-only、DailyBars-only 的依赖边界；未运行构建/测试。
