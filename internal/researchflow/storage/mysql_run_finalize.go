@@ -249,3 +249,25 @@ func (r *MySQLRunRepository) FinalizeDeadlineRun(ctx context.Context, record app
 		TerminationReason: record.TerminationReason, Summary: record.Summary,
 	})
 }
+
+ 
+// LoadRunFinalizationSnapshot shares the immutable snapshot reconstruction used
+// by deadline finalization; normal finalization applies a stricter Run-state gate.
+func (r *MySQLRunRepository) LoadRunFinalizationSnapshot(ctx context.Context, runRef string) (application.DeadlineFinalizationSnapshot, error) {
+	return r.LoadDeadlineFinalizationSnapshot(ctx, runRef)
+}
+
+// FinalizeRunResult adapts the normal Application aggregation record to the
+// existing atomic Run + ResultSummary + Outbox transaction.
+func (r *MySQLRunRepository) FinalizeRunResult(ctx context.Context, record application.RunFinalizationRecord) (bool, error) {
+	if record.TerminationReason != "" ||
+		(record.TerminalStatus != domain.RunSucceeded && record.TerminalStatus != domain.RunPartial && record.TerminalStatus != domain.RunFailed) {
+		return false, errors.New("Researchflow normal finalization record has an invalid termination reason or terminal status")
+	}
+	return r.FinalizeRun(ctx, RunFinalization{
+		RunRef: record.RunRef, ExpectedVersion: record.ExpectedVersion,
+		ResultSummaryRef: record.ResultSummaryRef, SummarySchemaVersion: record.SummarySchemaVersion,
+		OutboxRef: record.OutboxRef, TerminalStatus: record.TerminalStatus,
+		TerminationReason: record.TerminationReason, Summary: record.Summary,
+	})
+}
