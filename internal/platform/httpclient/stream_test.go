@@ -77,6 +77,86 @@ func TestOpenStreamDeliversFirstChunkBeforeEOF(t *testing.T) {
 	close(allowFinish)
 }
 
+func TestOpenStreamHTTP2IncrementalReadAndCancel(t *testing.T) {
+	firstWritten := make(chan struct{})
+	protocol := make(chan int, 1)
+	server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		protocol <- r.ProtoMajor
+		_, _ = w.Write([]byte("h2-first"))
+		w.(http.Flusher).Flush()
+		close(firstWritten)
+		<-r.Context().Done()
+	}))
+	server.EnableHTTP2 = true
+	server.StartTLS()
+	defer server.Close()
+
+	client, err := New(Config{
+		Resolver:             staticResolver{addresses: []netip.Addr{netip.MustParseAddr("8.8.8.8")}},
+		StreamTimeout:        3 * time.Second,
+		StreamIdleTimeout:    time.Second,
+		MaxStreamBytes:       1024,
+		MaxConcurrentStreams: 1,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer client.CloseIdleConnections()
+	serverTransport := server.Client().Transport.(*http.Transport)
+	client.transport.TLSClientConfig = serverTransport.TLSClientConfig.Clone()
+	client.dial = func(ctx context.Context, network, _ string) (net.Conn, error) {
+		return (&net.Dialer{}).DialContext(ctx, network, server.Listener.Addr().String())
+	}
+
+	port := server.Listener.Addr().(*net.TCPAddr).Port
+	request, err := http.NewRequest(http.MethodGet, "https://localhost:"+strconv.Itoa(port)+"/h2", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	policy := DestinationPolicy{
+		Dependency: "llm.stream", AllowedHosts: []string{"localhost"},
+		AllowedPorts: []uint16{uint16(port)},
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	response, err := client.OpenStream(ctx, request, policy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	select {
+	case major := <-protocol:
+		if major != 2 {
+			t.Fatalf("expected HTTP/2 request, got HTTP/%d", major)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("server did not receive HTTP/2 request")
+	}
+	<-firstWritten
+	buffer := make([]byte, len("h2-first"))
+	n, err := response.Body.Read(buffer)
+	if err != nil || string(buffer[:n]) != "h2-first" {
+		t.Fatalf("expected HTTP/2 first chunk before cancellation, got %q, %v", buffer[:n], err)
+	}
+
+	readResult := make(chan error, 1)
+	go func() {
+		var next [8]byte
+		_, readErr := response.Body.Read(next[:])
+		readResult <- readErr
+	}()
+	cancel()
+	select {
+	case readErr := <-readResult:
+		var platformFault *fault.Fault
+		if !errors.As(readErr, &platformFault) || platformFault.Code != "platform.httpclient.stream_canceled" {
+			t.Fatalf("expected HTTP/2 canceled Fault, got %v", readErr)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("HTTP/2 blocked Read did not stop after cancellation")
+	}
+}
+
 func TestOpenStreamContextCancelInterruptsBlockedRead(t *testing.T) {
 	ready := make(chan struct{})
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
