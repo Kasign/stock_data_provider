@@ -15,6 +15,7 @@ import (
 	researchcontext "example.com/stock-analysis-flow/internal/research/context"
 	researchevidence "example.com/stock-analysis-flow/internal/research/evidence"
 	researchevent "example.com/stock-analysis-flow/internal/research/event"
+	researchclaim "example.com/stock-analysis-flow/internal/research/claim"
 	"example.com/stock-analysis-flow/internal/platform/fault"
 )
 
@@ -22,6 +23,7 @@ const (
 	ContextIDPrefix = "ctx_"
 	EvidenceIDPrefix = "ev_"
 	EventIDPrefix = "evt_"
+	ClaimIDPrefix = "clm_"
 )
 
 type Clock func() time.Time
@@ -159,6 +161,47 @@ type EventPort interface {
 	GetEvent(context.Context, EventRef) (ResearchEvent, error)
 }
 
+
+type Claim struct {
+	ClaimID string `json:"claim_id"`
+	ClaimVersion int `json:"claim_version"`
+	Statement string `json:"statement"`
+	EpistemicType string `json:"epistemic_type"`
+	ScopeRefs []string `json:"scope_refs"`
+	SystemAsOf time.Time `json:"system_as_of"`
+	SupportingEvidenceRefs []string `json:"supporting_evidence_refs"`
+	ContradictingEvidenceRefs []string `json:"contradicting_evidence_refs"`
+	RequiredDataRefs []string `json:"required_data_refs"`
+	ValidationMethod *string `json:"validation_method"`
+	ExpectedObservation *string `json:"expected_observation"`
+	InvalidationConditions []string `json:"invalidation_conditions"`
+	Status string `json:"status"`
+	Limitations []string `json:"limitations"`
+}
+type CreateClaimCommand struct {
+	Statement string
+	EpistemicType string
+	ScopeRefs []string
+	SystemAsOf time.Time
+	SupportingEvidenceRefs []string
+	ContradictingEvidenceRefs []string
+	RequiredDataRefs []string
+	ValidationMethod *string
+	ExpectedObservation *string
+	InvalidationConditions []string
+	Status string
+	Limitations []string
+}
+type ClaimRef struct { ClaimID string; ClaimVersion int }
+type ClaimRepository interface {
+	Append(context.Context, researchclaim.Claim) error
+	GetVersion(context.Context, string, int) (researchclaim.Claim, error)
+}
+type ClaimPort interface {
+	CreateClaim(context.Context, CreateClaimCommand) (Claim, error)
+	GetClaim(context.Context, ClaimRef) (Claim, error)
+}
+
 type CreateContextCommand struct {
 	ResearchQuestion string
 	Scope string
@@ -202,11 +245,13 @@ type Service struct {
 	evidence EvidenceRepository
 	authorizer EvidenceAuthorizer
 	events EventRepository
+	claims ClaimRepository
 	clock Clock
 	ids IDGenerator
 }
 var _ Port = (*Service)(nil)
 var _ EventPort = (*Service)(nil)
+var _ ClaimPort = (*Service)(nil)
 
 func NewService(contexts ContextRepository, evidence EvidenceRepository, authorizer EvidenceAuthorizer, clock Clock, ids IDGenerator) (*Service, error) {
 	if contexts == nil || evidence == nil || authorizer == nil {
@@ -391,6 +436,65 @@ func cloneTime(value *time.Time) *time.Time { if value==nil{return nil}; copy:=*
 func cloneFloat(value *float64) *float64 { if value==nil{return nil}; copy:=*value; return &copy }
 func cloneString(value *string) *string { if value==nil{return nil}; copy:=*value; return &copy }
 func cloneInt(value *int) *int { if value==nil{return nil}; copy:=*value; return &copy }
+
+
+func NewServiceWithClaims(contexts ContextRepository, evidence EvidenceRepository, claims ClaimRepository, authorizer EvidenceAuthorizer, clock Clock, ids IDGenerator) (*Service, error) {
+	if claims == nil {
+		return nil, fault.New(fault.ClassInternal, "research_claim_repository_not_configured", "Research Claim Repository is not configured", researcherrors.ErrInvalidRepository)
+	}
+	service, err := NewService(contexts, evidence, authorizer, clock, ids)
+	if err != nil { return nil, err }
+	service.claims = claims
+	return service, nil
+}
+
+func (s *Service) CreateClaim(ctx context.Context, command CreateClaimCommand) (Claim, error) {
+	if s == nil || s.claims == nil {
+		return Claim{}, applicationFault(fault.ClassInternal, "research_claim_repository_not_configured", "Research Claim Repository is not configured", researcherrors.ErrInvalidRepository)
+	}
+	if ctx == nil { return Claim{}, validationFault("request_context_required", "request context is required", nil) }
+	id, err := s.ids.NewID(ClaimIDPrefix)
+	if err != nil { return Claim{}, applicationFault(fault.ClassInternal, "research_id_generation_failed", "Research identifier generation failed", err) }
+	value := researchclaim.Claim{
+		ClaimID:id, ClaimVersion:1, Statement:command.Statement,
+		EpistemicType:researchclaim.EpistemicType(command.EpistemicType),
+		ScopeRefs:cloneStrings(command.ScopeRefs), SystemAsOf:command.SystemAsOf,
+		SupportingEvidenceRefs:cloneStrings(command.SupportingEvidenceRefs),
+		ContradictingEvidenceRefs:cloneStrings(command.ContradictingEvidenceRefs),
+		RequiredDataRefs:cloneStrings(command.RequiredDataRefs),
+		ValidationMethod:cloneString(command.ValidationMethod), ExpectedObservation:cloneString(command.ExpectedObservation),
+		InvalidationConditions:cloneStrings(command.InvalidationConditions),
+		Status:researchclaim.ClaimStatus(command.Status), Limitations:cloneStrings(command.Limitations),
+	}
+	if err := value.Validate(); err != nil { return Claim{}, validationFault("invalid_research_claim", "Research Claim is invalid", err) }
+	if err := s.claims.Append(ctx, value); err != nil { return Claim{}, mapRepositoryError(err) }
+	return fromDomainClaim(value), nil
+}
+
+func (s *Service) GetClaim(ctx context.Context, ref ClaimRef) (Claim, error) {
+	if s == nil || s.claims == nil {
+		return Claim{}, applicationFault(fault.ClassInternal, "research_claim_repository_not_configured", "Research Claim Repository is not configured", researcherrors.ErrInvalidRepository)
+	}
+	if ctx == nil || strings.TrimSpace(ref.ClaimID) == "" || ref.ClaimVersion < 1 {
+		return Claim{}, validationFault("invalid_claim_ref", "Claim reference is invalid", nil)
+	}
+	value, err := s.claims.GetVersion(ctx, ref.ClaimID, ref.ClaimVersion)
+	if err != nil { return Claim{}, mapRepositoryError(err) }
+	if err := value.Validate(); err != nil { return Claim{}, applicationFault(fault.ClassInternal, "stored_claim_invalid", "Stored Research Claim is invalid", err) }
+	return fromDomainClaim(value), nil
+}
+
+func fromDomainClaim(value researchclaim.Claim) Claim {
+	return Claim{
+		ClaimID:value.ClaimID,ClaimVersion:value.ClaimVersion,Statement:value.Statement,
+		EpistemicType:string(value.EpistemicType),ScopeRefs:cloneStrings(value.ScopeRefs),SystemAsOf:value.SystemAsOf,
+		SupportingEvidenceRefs:cloneStrings(value.SupportingEvidenceRefs),
+		ContradictingEvidenceRefs:cloneStrings(value.ContradictingEvidenceRefs),
+		RequiredDataRefs:cloneStrings(value.RequiredDataRefs),
+		ValidationMethod:cloneString(value.ValidationMethod),ExpectedObservation:cloneString(value.ExpectedObservation),
+		InvalidationConditions:cloneStrings(value.InvalidationConditions),Status:string(value.Status),Limitations:cloneStrings(value.Limitations),
+	}
+}
 
 func mapRepositoryError(err error) error {
 	switch {

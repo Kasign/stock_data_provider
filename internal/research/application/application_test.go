@@ -9,6 +9,7 @@ import (
 	researchcontext "example.com/stock-analysis-flow/internal/research/context"
 	researchevidence "example.com/stock-analysis-flow/internal/research/evidence"
 	researchevent "example.com/stock-analysis-flow/internal/research/event"
+	researchclaim "example.com/stock-analysis-flow/internal/research/claim"
 )
 
 type fixedIDs struct { next int }
@@ -115,3 +116,50 @@ func TestCreateEventRejectsInvalidEventBeforePersistence(t *testing.T) {
 	if err==nil { t.Fatal("invalid Event must be rejected") }
 	if repo.appended { t.Fatal("invalid Event must not be persisted") }
 }
+
+type claimRepoFake struct { value researchclaim.Claim; appended bool }
+func (f *claimRepoFake) Append(_ context.Context, value researchclaim.Claim) error { f.value=value; f.appended=true; return nil }
+func (f *claimRepoFake) GetVersion(_ context.Context, id string, version int) (researchclaim.Claim,error) {
+	if f.value.ClaimID!=id || f.value.ClaimVersion!=version { return researchclaim.Claim{}, errors.New("missing") }
+	return f.value,nil
+}
+
+func TestCreateAndGetHypothesisUseApplicationDTO(t *testing.T) {
+	now:=time.Date(2026,11,9,1,0,0,0,time.UTC)
+	repo:=&claimRepoFake{}
+	service,err:=NewServiceWithClaims(&contextRepoFake{},&evidenceRepoFake{},repo,&authorizerFake{},nil,&fixedIDs{})
+	if err!=nil { t.Fatal(err) }
+	method:="比较公告前后盈利预测变化"
+	observation:="公告后分析师预测上调"
+	command:=CreateClaimCommand{
+		Statement:"业绩指引上调将改善未来两个季度盈利预期",
+		EpistemicType:string(researchclaim.EpistemicHypothesis),
+		ScopeRefs:[]string{"security:600000"},SystemAsOf:now,
+		SupportingEvidenceRefs:[]string{"ev_support_1"},ContradictingEvidenceRefs:[]string{},
+		RequiredDataRefs:[]string{"data:forecast_revision"},ValidationMethod:&method,
+		ExpectedObservation:&observation,InvalidationConditions:[]string{"后续预测持续下调"},
+		Status:string(researchclaim.StatusProposed),Limitations:[]string{},
+	}
+	got,err:=service.CreateClaim(context.Background(),command)
+	if err!=nil { t.Fatal(err) }
+	if got.ClaimID!="clm_test-1" || got.ClaimVersion!=1 || !repo.appended { t.Fatalf("Claim was not created: %+v",got) }
+	read,err:=service.GetClaim(context.Background(),ClaimRef{ClaimID:got.ClaimID,ClaimVersion:1})
+	if err!=nil { t.Fatalf("GetClaim failed: %v",err) }
+	if read.Statement!=command.Statement || read.EpistemicType!=command.EpistemicType { t.Fatalf("unexpected Claim DTO: %+v",read) }
+}
+
+func TestCreateHypothesisRequiresValidationContract(t *testing.T) {
+	now:=time.Date(2026,11,9,1,0,0,0,time.UTC)
+	repo:=&claimRepoFake{}
+	service,err:=NewServiceWithClaims(&contextRepoFake{},&evidenceRepoFake{},repo,&authorizerFake{},nil,&fixedIDs{})
+	if err!=nil { t.Fatal(err) }
+	_,err=service.CreateClaim(context.Background(),CreateClaimCommand{
+		Statement:"待验证假设",EpistemicType:string(researchclaim.EpistemicHypothesis),
+		ScopeRefs:[]string{},SystemAsOf:now,SupportingEvidenceRefs:[]string{},
+		ContradictingEvidenceRefs:[]string{},RequiredDataRefs:[]string{},
+		InvalidationConditions:[]string{"条件失效"},Status:string(researchclaim.StatusProposed),Limitations:[]string{},
+	})
+	if err==nil { t.Fatal("Hypothesis without validation method/observation must be rejected") }
+	if repo.appended { t.Fatal("invalid Hypothesis must not be persisted") }
+}
+

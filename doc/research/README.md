@@ -204,3 +204,10 @@ R1/R2/R3/R5 当前实现 Context、Evidence、Event、Claim/Hypothesis 领域结
 - `EventPort` 提供 `CreateEvent` 与 `GetEvent`，对外只暴露 Application DTO。
 - 创建时由服务端生成 EventID，版本固定为 1；精确版本读取在返回前重新执行领域校验。
 - 生命周期版本追加和 Outbox 暂不接入，等待 changed_at / INT-CTR-001 与事务边界冻结。
+
+
+### Claim / Hypothesis Application
+
+- `ClaimPort` 提供 `CreateClaim` 与 `GetClaim`；Hypothesis 使用 `epistemic_type=hypothesis`，复用同一 Claim 聚合。
+- 创建时由 Research 服务端生成 ClaimID，版本固定为 1；领域校验强制 Hypothesis 验证方法、预期观察和失效条件。
+- 版本更新接口暂不暴露，等待终态修订和 supersedes_version 契约明确。
