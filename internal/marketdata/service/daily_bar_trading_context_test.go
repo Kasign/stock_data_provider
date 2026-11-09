@@ -2,6 +2,8 @@ package service
 
 import (
 	"errors"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -183,5 +185,63 @@ func TestAssessDailyBarTradingContextHistoricalCalendarInferenceStillDegrades(t 
 	if result.QualityStatus != model.QualityDegraded ||
 		!hasDailyBarContextReason(result.Reasons, "daily_bar_context_calendar_degraded") {
 		t.Fatalf("inferred historical calendar dates must remain degraded: %+v", result)
+	}
+}
+
+
+func TestDailyBarContextCacheDeduplicatesConcurrentSecurityStatusReads(t *testing.T) {
+	ctx := withDailyBarContextCache(context.Background(), 2)
+	var calls atomic.Int32
+	loader := func(context.Context) (*model.SecurityTradingStatusSnapshot, error) {
+		calls.Add(1)
+		time.Sleep(10 * time.Millisecond)
+		return dailyBarContextStatus("2026-10-20", "2026-10-01", true, model.SuspensionStatusNoEvent), nil
+	}
+	const workers = 8
+	var wg sync.WaitGroup
+	wg.Add(workers)
+	errs := make(chan error, workers)
+	for i := 0; i < workers; i++ {
+		go func() {
+			defer wg.Done()
+			status, err := loadDailyBarContextSecurityStatus(ctx, "600519.SH", "2026-10-20", loader)
+			if err == nil && (status == nil || status.TradeDate != "2026-10-20") {
+				err = errors.New("cached security status is invalid")
+			}
+			errs <- err
+		}()
+	}
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	if got := calls.Load(); got != 1 {
+		t.Fatalf("same symbol/date should be loaded once across concurrent jobs, got %d calls", got)
+	}
+}
+
+func TestDailyBarContextCacheStopsAtRunBudget(t *testing.T) {
+	ctx := withDailyBarContextCache(context.Background(), 1)
+	loader := func(_ context.Context) (*model.SecurityTradingStatusSnapshot, error) {
+		return dailyBarContextStatus("2026-10-20", "2026-10-01", true, model.SuspensionStatusNoEvent), nil
+	}
+	if _, err := loadDailyBarContextSecurityStatus(ctx, "600519.SH", "2026-10-20", loader); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := loadDailyBarContextSecurityStatus(ctx, "600519.SH", "2026-10-21", loader); !errors.Is(err, errDailyBarContextStatusBudgetExceeded) {
+		t.Fatalf("lookup beyond the per-run budget must be explicit, got %v", err)
+	}
+}
+
+func TestAssessDailyBarTradingContextMarksBudgetExhaustionNotComparable(t *testing.T) {
+	ctx := withDailyBarContextCache(context.Background(), 0)
+	_ = ctx
+	result := dailyBarTradingContextResult{QualityStatus: model.QualityDegraded}
+	result.Reasons = appendDailyBarContextReason(result.Reasons, "daily_bar_context_security_status_budget_exceeded:2026-10-21")
+	if result.QualityStatus != model.QualityDegraded || !hasDailyBarContextReason(result.Reasons, "daily_bar_context_security_status_budget_exceeded:2026-10-21") {
+		t.Fatalf("budget exhaustion must remain explicit and degraded: %+v", result)
 	}
 }
