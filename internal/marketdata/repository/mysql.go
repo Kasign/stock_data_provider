@@ -15,8 +15,8 @@ import (
 )
 
 type Store struct {
-	db     *sql.DB
-	ownsDB bool
+	db	*sql.DB
+	ownsDB	bool
 }
 
 func OpenMySQL(ctx context.Context, dsn string) (*Store, error) {

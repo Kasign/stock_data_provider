@@ -799,4 +799,4 @@ internal/
 - `repository.Store` 增加明确的 `ownsDB` 所有权标记；原 `OpenMySQL` 创建的 Pool 仍由 Store 拥有，`Close` 行为保持不变。
 - 新增 `NewWithBorrowedDB(*sql.DB)`，只包装调用方 Pool，不 Ping、不调整连接池参数、不关闭该 Pool；nil DB 返回明确错误。
 - 该构造器只解决 Data Repository 的 DB 句柄所有权，不改 SQL、Schema、Migration 内容和查询语义；Root Server 仍负责创建、配置、Ping 和关闭 Pool。
-- 下一步补充 borrowed/owned 关闭行为测试，再由 Root Server Bootstrap 注入 borrowed Store；Redis 暂不做接口替换，避免把两类资源迁移混成一批。
+- 已新增 borrowed/owned 关闭行为测试和 nil DB 入参测试；当前提交 SHA 的 Data gofmt、单测、race、vet 与 MariaDB/PIT 结果待 CI 确认。下一步由 Root Server Bootstrap 注入 borrowed Store；Redis 暂不做接口替换，避免把两类资源迁移混成一批。
