@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"testing"
 
-	researcherrors "example.com/stock-analysis-flow/internal/research"
 	"example.com/stock-analysis-flow/internal/platform/fault"
+	researcherrors "example.com/stock-analysis-flow/internal/research"
 )
 
 func TestMapRepositoryErrorPreservesStableClassification(t *testing.T) {

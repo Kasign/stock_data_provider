@@ -15,8 +15,8 @@ import (
 
 	platformstorage "example.com/stock-analysis-flow/internal/platform/storage"
 	researchclaim "example.com/stock-analysis-flow/internal/research/claim"
-	researchevidence "example.com/stock-analysis-flow/internal/research/evidence"
 	researchcontext "example.com/stock-analysis-flow/internal/research/context"
+	researchevidence "example.com/stock-analysis-flow/internal/research/evidence"
 	researchevent "example.com/stock-analysis-flow/internal/research/event"
 )
 
@@ -95,7 +95,6 @@ func TestResearchEventLifecycleOutboxFailureRollsBackEventVersion(t *testing.T) 
 	}
 	if latest != 1 { t.Fatalf("aggregate latest_version = %d after Outbox rollback, want 1", latest) }
 }
-
 
 func TestResearchOutboxClaimRetryAndConfirmation(t *testing.T) {
 	db := openResearchIntegrationDB(t)
@@ -322,7 +321,6 @@ func TestResearchSQLRepositoriesAppendAndReadVersions(t *testing.T) {
 	if cancelledHeadCount != 0 {
 		t.Fatalf("pre-canceled append left %d aggregate head rows, want 0", cancelledHeadCount)
 	}
-
 
 	// Cancellation while waiting for the aggregate-head row lock must abort
 	// the append transaction and leave the previous version/head unchanged.
