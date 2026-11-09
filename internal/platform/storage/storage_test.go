@@ -10,8 +10,8 @@ import (
 	"net"
 	"sort"
 	"strings"
-	"syscall"
 	"sync/atomic"
+	"syscall"
 	"testing"
 	"time"
 

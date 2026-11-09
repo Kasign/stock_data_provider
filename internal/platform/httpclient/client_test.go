@@ -12,9 +12,9 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
-	"syscall"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"testing"
 	"time"
 
