@@ -1,6 +1,7 @@
 package event
 
 import (
+	"math"
 	"strings"
 	"testing"
 	"time"
@@ -180,5 +181,75 @@ func TestResearchEventValidateNextVersionRejectsIntegerOverflow(t *testing.T) {
 	next.EventVersion = 1
 	if err := next.ValidateNextVersion(previous); err == nil || !strings.Contains(err.Error(), "integer limit") {
 		t.Fatalf("ValidateNextVersion() error = %v, want integer limit rejection", err)
+	}
+}
+
+
+func TestEventSourceTimeConfidenceBoundaries(t *testing.T) {
+	method := "source_rank"
+	methodVersion := "source_rank.v1"
+
+	for _, confidence := range []float64{0, 1} {
+		t.Run(fmt.Sprintf("valid boundary %v", confidence), func(t *testing.T) {
+			value := validEvent(t)
+			value.SourceTimes[0].Confidence = &confidence
+			value.SourceTimes[0].ConfidenceMethod = &method
+			value.SourceTimes[0].ConfidenceMethodVersion = &methodVersion
+			if err := value.Validate(); err != nil {
+				t.Fatalf("Validate() error = %v, want success", err)
+			}
+		})
+	}
+
+	for _, confidence := range []struct {
+		name  string
+		value float64
+	}{
+		{"below zero", -0.0001},
+		{"above one", 1.0001},
+		{"NaN", math.NaN()},
+		{"positive infinity", math.Inf(1)},
+		{"negative infinity", math.Inf(-1)},
+	} {
+		t.Run(confidence.name, func(t *testing.T) {
+			value := validEvent(t)
+			value.SourceTimes[0].Confidence = &confidence.value
+			value.SourceTimes[0].ConfidenceMethod = &method
+			value.SourceTimes[0].ConfidenceMethodVersion = &methodVersion
+			if err := value.Validate(); err == nil || !strings.Contains(err.Error(), "confidence must be within [0,1]") {
+				t.Fatalf("Validate() error = %v, want confidence range rejection", err)
+			}
+		})
+	}
+}
+
+func TestEventSourceTimeConfidenceRequiresMethodAndVersion(t *testing.T) {
+	confidence := 0.5
+	method := "source_rank"
+	methodVersion := "source_rank.v1"
+	tests := []struct {
+		name string
+		set func(*EventSourceTime)
+		want string
+	}{
+		{"missing method", func(value *EventSourceTime) { value.ConfidenceMethod = nil }, "confidence_method is required"},
+		{"blank method", func(value *EventSourceTime) { blank := " "; value.ConfidenceMethod = &blank }, "confidence_method is required"},
+		{"missing method version", func(value *EventSourceTime) { value.ConfidenceMethodVersion = nil }, "confidence_method_version is required"},
+		{"blank method version", func(value *EventSourceTime) { blank := " "; value.ConfidenceMethodVersion = &blank }, "confidence_method_version is required"},
+		{"method without confidence", func(value *EventSourceTime) { value.Confidence = nil }, "require a non-null confidence"},
+		{"method version without confidence", func(value *EventSourceTime) { value.Confidence = nil; value.ConfidenceMethod = nil }, "require a non-null confidence"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			value := validEvent(t)
+			sourceTime := &value.SourceTimes[0]
+			sourceTime.Confidence = &confidence
+			sourceTime.ConfidenceMethod = &method
+			sourceTime.ConfidenceMethodVersion = &methodVersion
+			tt.set(sourceTime)
+			if err := value.Validate(); err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("Validate() error = %v, want containing %q", err, tt.want)
+			}
+		})
 	}
 }
