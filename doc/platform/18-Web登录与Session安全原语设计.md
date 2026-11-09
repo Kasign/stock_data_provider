@@ -189,7 +189,7 @@ Platform 提供 SecurityAuditEvent Schema、字段约束/脱敏和注入式 Audi
 - `NewSessionToken/SessionTokenDigest`：CSPRNG 生成 256-bit token，URL-safe Base64 无填充；Redis 只接收 64 位小写 SHA-256 摘要。
 - `SessionStore` 与 `RedisSessionStore`：构造时注入既有 `*redis.Client`，不创建连接池；Redis Key 只包含摘要，不包含原始 Token。
 - Redis Lua 原子执行 LookupAndTouch 与 Rotate。Touch 校验 idle/absolute 双过期，滑动 idle 期限但不延长 absolute 期限；Rotate 并发竞争时只允许一个旧 Token 成功，旧 Key 同步删除；Revoke 删除当前摘要 Key。
-- Session 记录限制 Owner Subject、Credential Version、时间边界和可选 CSRF digest；Redis 依赖故障返回 Fault，不提供内存/Bearer 降级。
+- Session 记录严格限制为固定 `owner` Subject、Credential Version、时间边界和可选 CSRF digest；Redis 依赖故障返回 Fault，不提供内存/Bearer 降级。
 - Cookie helper 固定 HttpOnly、SameSite=Lax、无 Domain、受限 Path；Secure 由 Server 根据部署 HTTPS 显式设置；清除 Cookie 复用相同作用域。
 - Server 仍负责登录签发、Cookie 解析与续期响应、MariaDB credential_version 对照、路由权限、CSRF/Origin/Host 和可信代理策略。本分支不修改 Server/Web 契约。
 - 验收状态：Platform L1 已完成。最终代码 SHA：`e19acd9eb16f16f2c436e15320d1b675b1ce593a`；CI：[42609371935](https://github.com/Kasign/stock_data_provider/actions/runs/42609371935)，success。通过 gofmt、Schema/Golden、全量 Platform test/race/vet、MariaDB/Redis storage integration/race、CredentialStore MariaDB integration/race 和 Redis Session integration/race。
@@ -211,7 +211,7 @@ Platform 提供 SecurityAuditEvent Schema、字段约束/脱敏和注入式 Audi
 - `internal/platform/security/rate_limit.go` 提供 `LoginRateLimiter`、`LoginRateLimitPolicy`、`LoginRateLimitResult` 与 `RedisLoginRateLimiter`。调用方必须传入账号标识摘要和来源 IP 摘要；原始账号/IP 不进入 Redis Key。
 - `Check` 原子读取账号/IP 失败计数和 block TTL；`RecordFailure` 在同一 Lua 脚本内递增两个维度的固定窗口计数，并按阈值计算指数退避，block TTL 不会超过策略 MaxBackoff。
 - `ResetAccount` 只删除账号维度计数和 block key，来源 IP 维度不清理；固定窗口与临时 block 均有 TTL，不产生永久账号锁定。
-- Redis 故障和异常持久状态返回 Redis Dependency Fault，调用方必须 fail closed。Platform 不解析 X-Forwarded-For、不选择真实来源 IP、不定义登录 HTTP 响应；这些由 Server 负责。
+- Redis 故障和异常持久状态返回 Redis Dependency Fault，调用方必须 fail closed。Check/RecordFailure 会检查失败计数 Key 的 TTL；已存在但无 TTL 的计数视为异常持久状态并拒绝服务，不尝试静默修复。Platform 不解析 X-Forwarded-For、不选择真实来源 IP、不定义登录 HTTP 响应；这些由 Server 负责。
 - 真实 Redis integration/race 覆盖双维度阈值、指数退避、窗口过期、并发计数、账号清理/IP 保留和故障 fail closed。CI：[42610511560](https://github.com/Kasign/stock_data_provider/actions/runs/42610511560)，success。
 - Platform L1 已完成；Server A2 仍需配置账号/IP 策略、可信代理与来源识别、登录前 Check、认证失败 RecordFailure、成功登录 ResetAccount 和 retry_after 响应映射。
 
@@ -224,3 +224,11 @@ Platform 提供 SecurityAuditEvent Schema、字段约束/脱敏和注入式 Audi
 - Writer 未配置或写入失败会返回明确 Fault；写入失败映射 `Dependency=audit_writer`，不静默吞掉。Platform 不选择数据库、不新增审计表 Migration、不定义业务操作的 fail-closed 策略。
 - 单测覆盖字段校验、PII/危险字符拒绝、日志脱敏、Writer 成功/失败。CI：[42611069167](https://github.com/Kasign/stock_data_provider/actions/runs/42611069167)，success。
 - Platform L1 已完成；Server A2 负责将登录/退出/密码更新/Session 撤销/限流等业务事件接入 Writer，选择持久化后端、保留周期和查询权限，并确定关键操作审计写入失败时的业务策略。
+
+
+### 11.6 PLAT-016/018 安全 Review 补充（2026-11-09）
+
+- `SessionRecord.validate` 将 Subject 限制为固定 `owner`，避免当前单 Owner 模型下公共 Store 接受其他身份类型的 Session。
+- RateLimiter Lua 脚本检查账号/IP 失败计数 Key 的 TTL；无 TTL 的异常持久计数返回 Redis Fault，保持 fail closed。真实 Redis 集成测试覆盖该异常状态的 Check 与 RecordFailure 拒绝行为。
+- `.github/workflows/platform-test.yml` 的 Redis Race 命令已覆盖 SessionStore 与 LoginRateLimiter；此前仅覆盖 SessionStore 的测试选择遗漏已修复。
+- CI：限流 TTL 防护及双维度 Race [42612388681](https://github.com/Kasign/stock_data_provider/actions/runs/42612388681)，success；单 Owner Session 收紧 [42612564289](https://github.com/Kasign/stock_data_provider/actions/runs/42612564289)，success。
