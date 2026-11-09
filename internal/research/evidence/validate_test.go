@@ -19,30 +19,30 @@ func goldenEvidence(t *testing.T) Evidence {
 	sourceVersion := "v1"
 	sourceLocator := "news://news_001/version/v1"
 	return Evidence{
-		EvidenceID: "evidence:research:0001",
-		EvidenceType: TypeReportedFact,
-		SourceOwner: SourceNews,
-		SourceRef: "news_evidence_version:news_001:v1",
-		SourceVersion: &sourceVersion,
-		SourceLocator: &sourceLocator,
-		DerivedFromRefs: []string{},
-		ClaimRef: nil,
-		SubjectRefs: []string{"600000.SH"},
-		PublishedAt: &publishedAt,
-		AvailableAt: &availableAt,
-		SystemObservedAt: observedAt,
-		ValidTimeStart: nil,
-		ValidTimeEnd: nil,
-		SystemAsOf: systemAsOf,
-		Stance: StanceSupports,
-		Confidence: nil,
-		ConfidenceMethod: nil,
+		EvidenceID:              "evidence:research:0001",
+		EvidenceType:            TypeReportedFact,
+		SourceOwner:             SourceNews,
+		SourceRef:               "news_evidence_version:news_001:v1",
+		SourceVersion:           &sourceVersion,
+		SourceLocator:           &sourceLocator,
+		DerivedFromRefs:         []string{},
+		ClaimRef:                nil,
+		SubjectRefs:             []string{"600000.SH"},
+		PublishedAt:             &publishedAt,
+		AvailableAt:             &availableAt,
+		SystemObservedAt:        observedAt,
+		ValidTimeStart:          nil,
+		ValidTimeEnd:            nil,
+		SystemAsOf:              systemAsOf,
+		Stance:                  StanceSupports,
+		Confidence:              nil,
+		ConfidenceMethod:        nil,
 		ConfidenceMethodVersion: nil,
-		QualityStatus: QualityValid,
-		ContentLevel: ContentSnippet,
-		AuthorizationRef: "auth_news_001",
-		Limitations: []string{"source_attribution_required", "snippet_only"},
-		ContentFingerprint: goldenFingerprint,
+		QualityStatus:           QualityValid,
+		ContentLevel:            ContentSnippet,
+		AuthorizationRef:        "auth_news_001",
+		Limitations:             []string{"source_attribution_required", "snippet_only"},
+		ContentFingerprint:      goldenFingerprint,
 	}
 }
 
@@ -80,9 +80,9 @@ func TestEvidenceFingerprintMatchesRSCCTR001Golden(t *testing.T) {
 
 func TestEvidenceValidateRejectsInvalidContractValues(t *testing.T) {
 	tests := []struct {
-		name string
+		name   string
 		mutate func(*Evidence)
-		want string
+		want   string
 	}{
 		{"invalid evidence type", func(e *Evidence) { e.EvidenceType = "assertion" }, "evidence_type"},
 		{"invalid source owner", func(e *Evidence) { e.SourceOwner = "platform" }, "source_owner"},
@@ -96,8 +96,15 @@ func TestEvidenceValidateRejectsInvalidContractValues(t *testing.T) {
 		{"confidence without method", func(e *Evidence) { v := 0.8; e.Confidence = &v }, "confidence_method is required"},
 		{"confidence without method version", func(e *Evidence) { v := 0.8; m := "method"; e.Confidence = &v; e.ConfidenceMethod = &m }, "confidence_method_version is required"},
 		{"unpaired valid time", func(e *Evidence) { v := mustTime(t, "2026-11-01T00:00:00Z"); e.ValidTimeStart = &v }, "both be null or both be set"},
-		{"reversed valid time", func(e *Evidence) { start := mustTime(t, "2026-11-02T00:00:00Z"); end := mustTime(t, "2026-11-01T00:00:00Z"); e.ValidTimeStart = &start; e.ValidTimeEnd = &end }, "must not be after"},
-		{"non-UTC observed time", func(e *Evidence) { e.SystemObservedAt = time.Date(2026, 11, 5, 16, 1, 0, 0, time.FixedZone("CST", 8*60*60)) }, "must be UTC"},
+		{"reversed valid time", func(e *Evidence) {
+			start := mustTime(t, "2026-11-02T00:00:00Z")
+			end := mustTime(t, "2026-11-01T00:00:00Z")
+			e.ValidTimeStart = &start
+			e.ValidTimeEnd = &end
+		}, "must not be after"},
+		{"non-UTC observed time", func(e *Evidence) {
+			e.SystemObservedAt = time.Date(2026, 11, 5, 16, 1, 0, 0, time.FixedZone("CST", 8*60*60))
+		}, "must be UTC"},
 		{"system cutoff before observation", func(e *Evidence) { e.SystemAsOf = e.SystemObservedAt.Add(-time.Second); setFingerprint(t, e) }, "must not be earlier"},
 		{"uppercase fingerprint", func(e *Evidence) { e.ContentFingerprint = strings.ToUpper(e.ContentFingerprint) }, "lowercase SHA-256"},
 	}
@@ -197,11 +204,11 @@ func TestFingerprintExcludesIdentityAndAuthorizationButTracksSemantics(t *testin
 
 func TestCanonicalNumberUsesECMAScriptThresholds(t *testing.T) {
 	cases := map[float64]string{
-		0: "0",
-		1e-6: "0.000001",
-		1e-7: "1e-7",
-		1e6: "1000000",
-		1e21: "1e+21",
+		0:     "0",
+		1e-6:  "0.000001",
+		1e-7:  "1e-7",
+		1e6:   "1000000",
+		1e21:  "1e+21",
 		0.125: "0.125",
 	}
 	for input, expected := range cases {
@@ -253,12 +260,12 @@ func TestCanonicalObjectSupportsNestedJCSValues(t *testing.T) {
 	value := map[string]any{
 		"evaluated_policy_versions": []any{
 			map[string]any{
-				"policy_type": "research_evidence_access",
-				"policy_ref": "research-evidence-access",
+				"policy_type":    "research_evidence_access",
+				"policy_ref":     "research-evidence-access",
 				"policy_version": "1.0.0",
 			},
 		},
-		"allowed": true,
+		"allowed":    true,
 		"conditions": []string{},
 	}
 	canonical, err := canonicalObject(value)
@@ -298,7 +305,7 @@ func TestEvidenceValidateRejectsZeroOffsetNonUTCLocations(t *testing.T) {
 	fixedZero := time.FixedZone("non-UTC", 0)
 	nonUTC := time.Date(2026, 11, 5, 8, 0, 0, 0, fixedZero)
 	tests := []struct {
-		name string
+		name   string
 		mutate func(*Evidence)
 	}{
 		{"system_observed_at", func(e *Evidence) { e.SystemObservedAt = nonUTC }},

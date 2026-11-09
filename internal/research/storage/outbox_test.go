@@ -24,11 +24,17 @@ func TestBuildResearchLifecycleEnvelopeKeepsStablePublicationIdentity(t *testing
 	next.Status = researchevent.StatusConsolidating
 	next.SystemAsOf = now.Add(time.Second)
 	transition, err := researchevent.NewLifecycleTransition(previous, next, now.Add(2*time.Second))
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	first, payload, err := buildResearchLifecycleEnvelope(previous, next, *transition, nil, "req_123", now.Add(2*time.Second))
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	second, _, err := buildResearchLifecycleEnvelope(previous, next, *transition, nil, "req_123", now.Add(2*time.Second))
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	if first.IdempotencyKey != "research-event-state:research-event:evt_abc:2" {
 		t.Fatalf("unexpected idempotency key: %s", first.IdempotencyKey)
 	}
@@ -39,7 +45,9 @@ func TestBuildResearchLifecycleEnvelopeKeepsStablePublicationIdentity(t *testing
 		t.Fatal("same lifecycle payload must have the same fingerprint")
 	}
 	var got map[string]any
-	if err := json.Unmarshal(payload, &got); err != nil { t.Fatal(err) }
+	if err := json.Unmarshal(payload, &got); err != nil {
+		t.Fatal(err)
+	}
 	if got["source_event_ref"] != "research-event-version:evt_abc:2" ||
 		got["research_event_ref"] != "research-event:evt_abc" ||
 		got["previous_state"] != string(researchevent.StatusDetected) ||
@@ -70,7 +78,6 @@ func TestBuildResearchLifecycleEnvelopeRejectsMismatchedTransition(t *testing.T)
 	}
 }
 
-
 func TestBuildResearchLifecycleCreatedEnvelopeMatchesFirstVersionContract(t *testing.T) {
 	now := time.Date(2026, 11, 9, 4, 5, 6, 123456789, time.UTC)
 	value := researchevent.ResearchEvent{
@@ -82,7 +89,9 @@ func TestBuildResearchLifecycleCreatedEnvelopeMatchesFirstVersionContract(t *tes
 		Uncertainty: []string{}, SourceTimes: []researchevent.EventSourceTime{},
 	}
 	envelope, payload, err := buildResearchLifecycleCreatedEnvelope(value, nil, "corr_parent_123", now)
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	if envelope.IdempotencyKey != "research-event-state:research-event:evt_created:1" {
 		t.Fatalf("unexpected initial idempotency key: %s", envelope.IdempotencyKey)
 	}
@@ -90,7 +99,9 @@ func TestBuildResearchLifecycleCreatedEnvelopeMatchesFirstVersionContract(t *tes
 		t.Fatalf("unexpected initial event timestamps: %+v", envelope)
 	}
 	var got map[string]any
-	if err := json.Unmarshal(payload, &got); err != nil { t.Fatal(err) }
+	if err := json.Unmarshal(payload, &got); err != nil {
+		t.Fatal(err)
+	}
 	if previous, ok := got["previous_state"]; !ok || previous != nil {
 		t.Fatalf("initial previous_state must be explicit null, got %#v", got["previous_state"])
 	}
@@ -113,4 +124,3 @@ func TestBuildResearchLifecycleEnvelopeRejectsInvalidCorrelationID(t *testing.T)
 		t.Fatal("unsafe correlation ID must be rejected")
 	}
 }
-

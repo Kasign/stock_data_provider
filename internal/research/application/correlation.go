@@ -25,18 +25,28 @@ func correlationIDForPublication(ctx context.Context, ids IDGenerator) (string, 
 			return value, nil
 		}
 	}
-	if ids == nil { return "", fmt.Errorf("Research ID generator is not configured") }
+	if ids == nil {
+		return "", fmt.Errorf("Research ID generator is not configured")
+	}
 	value, err := ids.NewID("cor_")
-	if err != nil { return "", err }
-	if !validCorrelationID(value) { return "", fmt.Errorf("Research ID generator returned an invalid correlation ID") }
+	if err != nil {
+		return "", err
+	}
+	if !validCorrelationID(value) {
+		return "", fmt.Errorf("Research ID generator returned an invalid correlation ID")
+	}
 	return value, nil
 }
 
 func validCorrelationID(value string) bool {
-	if value == "" || len(value) > 128 { return false }
+	if value == "" || len(value) > 128 {
+		return false
+	}
 	for _, r := range value {
 		if !((r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') ||
-			(r >= '0' && r <= '9') || r == '-' || r == '_' || r == '.' || r == ':') { return false }
+			(r >= '0' && r <= '9') || r == '-' || r == '_' || r == '.' || r == ':') {
+			return false
+		}
 	}
 	return true
 }

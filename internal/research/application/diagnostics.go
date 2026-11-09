@@ -76,7 +76,6 @@ func (s *Service) BuildClaimCheck(ctx context.Context, ref ClaimRef, required bo
 	return researchdiagnostics.NewClaimCheck("research.claim.snapshot", "Research Claim 快照", required, value)
 }
 
-
 // BuildEvidenceCheck 先通过来源 Owner 当前授权复核通过后，再构造不含证据正文的诊断项。
 func (s *Service) BuildEvidenceCheck(ctx context.Context, ref EvidenceRef, required bool) (platformdiagnostics.Check, error) {
 	if s == nil || s.evidence == nil || s.authorizer == nil {

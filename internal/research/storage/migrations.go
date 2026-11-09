@@ -125,7 +125,7 @@ func Migrations() []platformstorage.Migration {
 			},
 		},
 		{
-			Version: 5,
+			Version:     5,
 			Description: "add reliable Research Outbox delivery leases and retry state",
 			Statements: []string{
 				"ALTER TABLE research_notification_outbox ADD COLUMN delivery_status VARCHAR(16) NOT NULL DEFAULT 'pending', ADD COLUMN available_at CHAR(30) CHARACTER SET ascii COLLATE ascii_bin NULL, ADD COLUMN lease_owner VARCHAR(128) NULL, ADD COLUMN lease_token CHAR(32) CHARACTER SET ascii COLLATE ascii_bin NULL, ADD COLUMN lease_until CHAR(30) CHARACTER SET ascii COLLATE ascii_bin NULL, ADD COLUMN attempt_count INT UNSIGNED NOT NULL DEFAULT 0, ADD COLUMN last_error_code VARCHAR(128) NULL, ADD COLUMN delivered_at CHAR(30) CHARACTER SET ascii COLLATE ascii_bin NULL, ADD COLUMN updated_at DATETIME(6) NULL",

@@ -20,19 +20,25 @@ func validContext() Context {
 			{SectionID: "stock_profile", SectionVersion: "v1", SourceOwner: SourceOwnerData, SourceRefs: []string{"data:snapshot:001"}, EvidenceRefs: []string{}, QualityStatus: QualityValid, Required: true, Included: true, AssembledAt: cutoff, SystemAsOf: cutoff},
 			{SectionID: "risk_review", SectionVersion: "v1", SourceOwner: SourceOwnerResearch, SourceRefs: []string{}, EvidenceRefs: []string{}, QualityStatus: QualityUnknown, Required: false, Included: false, AssembledAt: cutoff, SystemAsOf: cutoff},
 		},
-		QualitySummary: QualitySummary{Status: QualityDegraded, MissingOptionalCount: 1, ReasonCodes: []string{"optional_section_omitted"}},
+		QualitySummary:   QualitySummary{Status: QualityDegraded, MissingOptionalCount: 1, ReasonCodes: []string{"optional_section_omitted"}},
 		IncludedSections: []string{"stock_profile"},
-		OmittedSections: []OmittedSection{{SectionID: "risk_review", SourceOwner: SourceOwnerResearch, ReasonCode: OmissionNotRequested, Required: false, SourceRefs: []string{}, SafeMessage: "该研究请求未要求风险分区", Retryable: false}},
-		BuilderVersion: "research-context-v1", CreatedAt: cutoff,
+		OmittedSections:  []OmittedSection{{SectionID: "risk_review", SourceOwner: SourceOwnerResearch, ReasonCode: OmissionNotRequested, Required: false, SourceRefs: []string{}, SafeMessage: "该研究请求未要求风险分区", Retryable: false}},
+		BuilderVersion:   "research-context-v1", CreatedAt: cutoff,
 	}
 }
 
 func TestContextValidateAcceptsValidContext(t *testing.T) {
-	if err := validContext().Validate(); err != nil { t.Fatalf("Validate() error = %v", err) }
+	if err := validContext().Validate(); err != nil {
+		t.Fatalf("Validate() error = %v", err)
+	}
 }
 
 func TestContextValidateRejectsInvalidStructure(t *testing.T) {
-	tests := []struct { name string; mutate func(*Context); want string }{
+	tests := []struct {
+		name   string
+		mutate func(*Context)
+		want   string
+	}{
 		{"invalid schema version", func(c *Context) { c.SchemaVersion = "v1" }, "schema_version"},
 		{"schema version leading zero", func(c *Context) { c.SchemaVersion = "01.0.0" }, "schema_version"},
 		{"padded subject ref", func(c *Context) { c.SubjectRefs = []string{" 600000.SH"} }, "whitespace-padded"},
@@ -75,8 +81,12 @@ func TestContextValidateRejectsInvalidStructure(t *testing.T) {
 
 func TestContextValidateSystemAsOf(t *testing.T) {
 	value := validContext()
-	if err := value.ValidateSystemAsOf(value.SystemAsOf); err != nil { t.Fatalf("matching cutoff unexpectedly failed: %v", err) }
-	if err := value.ValidateSystemAsOf(value.SystemAsOf.Add(time.Second)); err == nil { t.Fatal("mismatched cutoff must fail") }
+	if err := value.ValidateSystemAsOf(value.SystemAsOf); err != nil {
+		t.Fatalf("matching cutoff unexpectedly failed: %v", err)
+	}
+	if err := value.ValidateSystemAsOf(value.SystemAsOf.Add(time.Second)); err == nil {
+		t.Fatal("mismatched cutoff must fail")
+	}
 	if err := value.ValidateSystemAsOf(value.SystemAsOf.In(time.FixedZone("non-UTC", 0))); err == nil {
 		t.Fatal("equivalent instant in a non-UTC location must fail")
 	}
@@ -85,15 +95,20 @@ func TestContextValidateSystemAsOf(t *testing.T) {
 func TestContextJSONRoundTripPreservesRequiredEmptyArrays(t *testing.T) {
 	want := validContext()
 	encoded, err := json.Marshal(want)
-	if err != nil { t.Fatalf("Marshal() error = %v", err) }
+	if err != nil {
+		t.Fatalf("Marshal() error = %v", err)
+	}
 	var got Context
-	if err := json.Unmarshal(encoded, &got); err != nil { t.Fatalf("Unmarshal() error = %v", err) }
-	if err := got.Validate(); err != nil { t.Fatalf("round-tripped Context is invalid: %v", err) }
+	if err := json.Unmarshal(encoded, &got); err != nil {
+		t.Fatalf("Unmarshal() error = %v", err)
+	}
+	if err := got.Validate(); err != nil {
+		t.Fatalf("round-tripped Context is invalid: %v", err)
+	}
 	if got.SectionRefs[1].SourceRefs == nil || got.SectionRefs[1].EvidenceRefs == nil || got.OmittedSections[0].SourceRefs == nil {
 		t.Fatal("required empty arrays must remain non-null after JSON round-trip")
 	}
 }
-
 
 func TestContextValidateNextVersion(t *testing.T) {
 	previous := validContext()
@@ -146,7 +161,6 @@ func TestContextValidateNextVersionRejectsInvalidProgression(t *testing.T) {
 	}
 }
 
-
 func TestContextValidateNextVersionRejectsIntegerOverflow(t *testing.T) {
 	previous := validContext()
 	previous.ContextVersion = math.MaxInt64
@@ -184,8 +198,12 @@ func TestContextValidateRejectsUnsupportedSchemaVersionAndNonUTCTimes(t *testing
 		{"non UTC context cutoff", func(c *Context) { c.SystemAsOf = c.SystemAsOf.In(time.FixedZone("UTC+8", 8*60*60)) }, "system_as_of"},
 		{"zero-offset non-UTC context cutoff", func(c *Context) { c.SystemAsOf = c.SystemAsOf.In(time.FixedZone("non-UTC", 0)) }, "system_as_of"},
 		{"non UTC created time", func(c *Context) { c.CreatedAt = c.CreatedAt.In(time.FixedZone("UTC+8", 8*60*60)) }, "created_at"},
-		{"non UTC section assembled time", func(c *Context) { c.SectionRefs[0].AssembledAt = c.SectionRefs[0].AssembledAt.In(time.FixedZone("UTC+8", 8*60*60)) }, "assembled_at"},
-		{"non UTC section cutoff", func(c *Context) { c.SectionRefs[0].SystemAsOf = c.SectionRefs[0].SystemAsOf.In(time.FixedZone("UTC+8", 8*60*60)) }, "system_as_of"},
+		{"non UTC section assembled time", func(c *Context) {
+			c.SectionRefs[0].AssembledAt = c.SectionRefs[0].AssembledAt.In(time.FixedZone("UTC+8", 8*60*60))
+		}, "assembled_at"},
+		{"non UTC section cutoff", func(c *Context) {
+			c.SectionRefs[0].SystemAsOf = c.SectionRefs[0].SystemAsOf.In(time.FixedZone("UTC+8", 8*60*60))
+		}, "system_as_of"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
