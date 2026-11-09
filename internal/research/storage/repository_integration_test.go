@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -47,6 +48,52 @@ func openResearchIntegrationDB(t *testing.T) *sql.DB {
 		}
 	}
 	return db
+}
+
+func TestResearchEventLifecycleOutboxFailureRollsBackEventVersion(t *testing.T) {
+	db := openResearchIntegrationDB(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	now := time.Date(2026, 11, 9, 2, 0, 0, 123456789, time.UTC)
+	eventID := fmt.Sprintf("event-outbox-rollback-%d", time.Now().UnixNano())
+	repo, err := NewEventRepository(db, func() time.Time { return now })
+	if err != nil { t.Fatal(err) }
+	t.Cleanup(func() {
+		_, _ = db.ExecContext(context.Background(), "DELETE FROM research_notification_outbox WHERE subject_ref=?", "research-event:"+eventID)
+		_, _ = db.ExecContext(context.Background(), "DELETE FROM research_event_versions WHERE event_id=?", eventID)
+		_, _ = db.ExecContext(context.Background(), "DELETE FROM research_aggregate_heads WHERE aggregate_type='event' AND aggregate_id=?", eventID)
+	})
+	previous := researchevent.ResearchEvent{
+		EventID: eventID, EventVersion: 1, EventType: "integration_fixture",
+		Title: "Outbox rollback fixture", Status: researchevent.StatusDetected,
+		SubjectRefs: []string{"security:600000"}, EvidenceRefs: []string{},
+		SystemObservedAt: now, SystemAsOf: now,
+		ImpactHypothesisRefs: []string{}, InvalidationConditions: []string{},
+		Uncertainty: []string{}, SourceTimes: []researchevent.EventSourceTime{},
+	}
+	if err := repo.Append(ctx, previous); err != nil { t.Fatalf("append Event v1: %v", err) }
+	next := previous
+	next.EventVersion = 2
+	next.Status = researchevent.StatusConsolidating
+	next.SystemAsOf = now.Add(time.Minute)
+	idempotencyKey := "research-event-state:research-event:" + eventID + ":2"
+	if _, err := db.ExecContext(ctx,
+		"INSERT INTO research_notification_outbox (event_id, event_type, schema_version, source_module, occurred_at, published_at, subject_ref, idempotency_key, correlation_id, payload_fingerprint, payload, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+		"nte_seed_"+eventID, researchLifecycleEventType, researchLifecycleSchemaVersion, "research",
+		formatPIT(now), formatPIT(now), "research-event:"+eventID, idempotencyKey, "req_seed",
+		strings.Repeat("a", 64), "{}", now); err != nil {
+		t.Fatalf("seed Outbox idempotency conflict: %v", err)
+	}
+	err = repo.AppendWithLifecycle(ctx, next, nil, "req_test")
+	if err == nil { t.Fatal("duplicate Outbox idempotency key must abort the Event append transaction") }
+	if _, err := repo.GetVersion(ctx, eventID, 2); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("Event v2 after Outbox rollback = %v, want ErrNotFound", err)
+	}
+	var latest int64
+	if err := db.QueryRowContext(ctx, "SELECT latest_version FROM research_aggregate_heads WHERE aggregate_type='event' AND aggregate_id=?", eventID).Scan(&latest); err != nil {
+		t.Fatalf("read aggregate head after rollback: %v", err)
+	}
+	if latest != 1 { t.Fatalf("aggregate latest_version = %d after Outbox rollback, want 1", latest) }
 }
 
 func TestResearchSQLRepositoriesAppendAndReadVersions(t *testing.T) {
