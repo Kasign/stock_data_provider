@@ -59,6 +59,12 @@ type DeliveryRepository interface {
 	UpdateWithLease(ctx context.Context, expectedVersion, fencingToken int64, next domain.DeliveryRecord, event domain.DeliveryStateEvent, now time.Time) error
 }
 
+// ExpiredDeliveryLeaseScanner 以有界批次返回数据库确认已过期的 sending 租约。
+// 返回项只是候选快照，恢复写入仍必须重新执行版本/token/数据库时钟 CAS。
+type ExpiredDeliveryLeaseScanner interface {
+	ListExpiredLeases(ctx context.Context, limit int) ([]DeliveryClaim, error)
+}
+
 // DeliveryLeaseRecoveryRepository 将已过期租约的恢复结果与状态事件原子持久化。
 // 评估逻辑必须先通过完整 Attempt 历史调用 AssessExpiredDeliveryLease；
 // 本接口只负责在数据库权威时钟确认租约过期后，以版本和 fencing token CAS 收敛状态。
