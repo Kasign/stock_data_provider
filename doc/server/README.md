@@ -54,6 +54,51 @@ Server 是应用组合根（Composition Root）和进程运行入口。它负责
 
 以上决议与项目总览 doc/整体任务规划/01-项目总览/整体任务规划总览.md 第 2.4～2.6 节一致。若项目级权威文档后续改变，以 feat/design_doc 的新决议为准，并在本文件同步，不自行创造第二套架构规则。
 
+### 1.5 Platform 与 Server 最终职责决议（依据 Stock-Platform (53)）
+
+本节将 Platform 公共能力交付与 Server 实际服务接入分开。项目级跨模块语义仍以总规划和契约登记簿为唯一权威；本节只冻结 Server 的消费和装配责任，不创建第二套 Platform 标准。
+
+#### 职责边界
+
+| 能力 | Platform 负责 | Server 负责 | 领域模块负责 |
+|---|---|---|---|
+| Config / Secret | 环境变量基础解析、Secret 脱敏类型及公共原语 | 每个服务的 Config Bootstrap、校验、Secret 装载和注入 | 定义本模块 Config Schema 和业务参数约束 |
+| HTTP Client | DestinationPolicy、DNS/IP/SSRF、受控 Dial、重定向、超时、响应大小、并发、缓冲与流式传输 | 创建共享 Client、按目标建立固定 BoundDoer、注入消费者、管理 Client 生命周期 | Provider/模型协议、来源授权、业务错误及领域重试策略 |
+| Fault / Request ID | 公共 Fault 类型、字段校验、Request ID 生成/传播原语 | HTTP 入口接入、可信上下文传递、Fault 到 HTTP 状态码和安全响应 DTO 的映射 | 领域错误分类、业务错误码和消费侧处理 |
+| Security | Owner/Service 身份认证、Principal、Scope、Authenticator、Router/RoutePolicy 等公共原语 | 显式注册路由、选择认证策略、注入可信 Principal/Scope、隔离外部与内部入口 | 资源级授权、AuthorizationRef 签发/复核及业务权限规则 |
+| Web Session | 仅提供经项目契约正式批准的通用 Session/密码/CSRF 等公共原语；当前已交付能力不包含完整 Web Session | 在公共原语和契约具备后装配登录/登出、Session 路由、Cookie 策略及用户权限接入 | 不负责 Web 登录；领域资源授权仍由领域模块复核 |
+| Storage | SQL/Redis 连接、连接池、Ping、关闭和通用 Migration Runner | 创建共享资源、配置连接池、注入 Repository、统一关闭 | Repository、SQL、事务边界、领域表结构和 Migration 内容 |
+| Migration | 通用 Runner、namespace/version 执行机制及底层锁 | 收集模块注册项、校验、排序、显式触发、汇总结果并阻止未完成迁移的实例 Ready | 创建和维护自己的 Migration 内容及版本 |
+| Diagnostics | Check/Observation/Report Schema、Runner、限额、取消和通用聚合原语 | 注册模块 Check、执行聚合、定义 Required/Optional、Readiness 门禁和受保护 HTTP 入口 | 实现真实领域/依赖 Check，定义 reason_code、safe_message、evidence_ref 和状态映射 |
+| HTTP / Runtime | 不提供根应用宿主和业务启动编排 | 唯一 HTTP Server、根路由、中间件组合、模块装配、Worker/HTTP 生命周期、优雅关闭 | 提供公开 Handler、Application Port、Worker 和模块关闭语义 |
+
+#### 不可越界事项
+
+- Platform 不负责 Root Bootstrap、根 HTTP 路由、模块 DI、模块 Migration 总注册、模块 Worker 编排或部署拓扑。
+- Server 不复制 Platform 的 HTTP Client、Fault、Security、Storage、Migration Runner 或 Diagnostics Runner。
+- Server 不实现模块领域规则，不直接访问其他模块 Repository、私有 Domain 或数据库表。
+- 领域模块不得自行创建绕过 Platform DestinationPolicy 的生产 HTTP Client；Provider endpoint 安全策略与领域来源授权是两个不同门禁，前者由 Platform 执行，后者由领域模块决定。
+- 旧 internal/platform/httpapi 和 internal/platform/taskqueue 是历史 Analysis 专用代码，不是新模块可复用的通用 Router/Worker。旧链路迁移由 Server 负责。
+- integration 只做代码聚合，不承担上述任何一方的日常开发任务。
+
+#### PLAT-CTR-005 流式 HTTP 的最终接入边界
+
+Platform 已在 internal/platform/httpclient 提供 Client.OpenStream / BoundDoer.OpenStream。Platform 流式 A1 包级验收通过，表示传输原语可供消费者使用，不表示 LLM A2 或生产部署 A3 已完成。
+
+- **Platform**：复用现有安全 Transport、DestinationPolicy、受控 DNS/Dial、重定向策略、Context 生命周期、响应头/Body 字节限制、空闲读取超时、流并发额度、Fault 分类和脱敏统计；不解析 SSE、JSON、Responses 事件或模型业务终态。
+- **Server**：在 Bootstrap 创建共享 Platform HTTP Client；按稳定 Dependency 和精确目标配置 DestinationPolicy；为固定上游创建 BoundDoer；将 BoundDoer 和必要的 Provider Config/Secret 注入 LLM 的公开构造入口；保证所有消费者先停止、再关闭共享 Client。不得把裸 Transport 或可任意改写目标策略的 Client 暴露给领域模块。
+- **LLM**：调用注入的 BoundDoer.OpenStream；负责 SSE/Responses 事件解析、增量输出、模型终态、工具调用、模型错误映射和业务重试策略；必须在 EOF、错误或提前退出时关闭 Body，并传播调用方 Context。
+- **消费者生命周期**：StreamResponse.Body 所有权在成功返回后转交调用方；调用方必须 Close，Close 幂等；Platform 在 EOF/Read Error/Context Cancel/Close 时执行底层清理并释放流并发额度。响应头交付后的读取终止错误不得被透明重放；HTTP 4xx/5xx 由 LLM 按模型协议解释，不是传输层 Fault。
+- **验收分层**：Platform A1 是公共包级证据；LLM 真实 Gateway/SSE/取消/终态联调是 A2；DNS/egress/Secret/运行时和长连接资源限制是 A3。Server 负责完成依赖注入和部署接线，不得把 A1 记作 A2/A3。
+
+#### Server 当前执行原则
+
+1. 优先消费 Platform 当前分支已存在且有测试的 API；只有发现公共原语缺陷才反馈 Platform 修复，不在 Server 创建替代实现。
+2. 所有 Config 在 Bootstrap 读取并校验，启动后作为不可变快照；模块只接收自己的配置和所需 Secret，不自行散落读取环境变量。
+3. 共享资源由 Server 创建并拥有；模块借用资源，不得提前关闭；关闭顺序必须保证消费者先于资源提供方停止。
+4. Server 只注册模块已经公开且可构造的 Port、Handler、Worker、Migration 和 Check；模块入口未就绪时保持阻塞，不写空 Registry 或虚构构造函数。
+5. 项目契约目录仍标记 pending_evidence 的项目，不因 Platform 包级实现或 Server 局部适配而自行标记 frozen；消费者证据由对应模块和组合集成验收补齐。
+
 ## 2. 代码目录与文档目录
 
 ### 2.1 目标代码目录
@@ -308,7 +353,7 @@ Server 不重写模块业务 Handler 的校验和领域错误，不在路由层�
 
 ### SRV-005：HTTP Transport
 
-- 状态：进行中（Health/Readiness 已接入统一宿主；旧 Analysis 路由开始纳入 Platform 显式认证 Router）
+- 状态：进行中（Health/Readiness 已接入统一宿主；旧 Analysis 路由已使用 Platform 显式认证 Router；Fault→HTTP 统一映射、请求限制和模块 Handler 接入仍待完成）
 - 前置：SRV-004；认证、Fault、Request ID 等公共契约可用
 - 工作内容：建立 Router、通用中间件、统一错误映射、路由注册和 OpenAPI 汇总机制。
 - 交付物：HTTP Server、路由清单、安全配置和 Transport 测试。
@@ -316,7 +361,7 @@ Server 不重写模块业务 Handler 的校验和领域错误，不在路由层�
 
 ### SRV-006：API/Worker 运行角色和生命周期
 
-- 状态：进行中（已实现 SERVER_ROLE=api|worker|all 及旧 Analysis Worker/API 条件启动；完整通用 Lifecycle Manager 与模块 Worker 接入仍待完成）
+- 状态：进行中（已实现 SERVER_ROLE=api|worker|all 和 runtime.Lifecycle；旧 Analysis Worker 已接入；HTTP Server 尚未纳入 Lifecycle，SIGTERM/优雅关闭集成测试及模块 Worker 装配仍待完成）
 - 前置：SRV-003、SRV-004
 - 工作内容：实现角色解析、组件选择、启动依赖排序、失败回滚、优雅关闭和超时。
 - 交付物：Runtime Role 与 Lifecycle Manager。
@@ -341,7 +386,7 @@ Server 不重写模块业务 Handler 的校验和领域错误，不在路由层�
 
 ### SRV-009：Health、Readiness、Diagnostics 聚合
 
-- 状态：未开始
+- 状态：进行中（Platform Runner、Server Aggregator/Readiness 门禁和 DB/Redis 基础检查已实现；真实模块 Check 注册、受保护诊断入口及故障场景验收仍待完成）
 - 前置：SRV-003、SRV-004；Platform Diagnostics 契约可用
 - 工作内容：聚合进程、公共资源和模块状态；区分 liveness/readiness/diagnostics。
 - 交付物：健康端点、聚合器和故障场景测试。
@@ -637,3 +682,54 @@ Server 层完成不是“服务能够启动”这么简单。至少同时满足�
 - 当前 Lifecycle 已在 Bootstrap 的旧 Analysis Worker 垂直切片中实际使用，不是孤立工具包。HTTP Server 仍由 Bootstrap 负责优雅关闭，后续可在模块公开组件接口稳定后统一纳入。
 - 新增顺序启动/逆序停止、失败回滚、重复注册/启动后注册拒绝、停止错误汇总测试。
 - 当前未把模块 Worker 注册到 Lifecycle：Researchflow、Quant、LLM、Notification 等模块仍缺完整生产 Worker 装配入口，继续遵守 SRV-004 门禁。
+
+### 12.13 Platform/Server 职责最终收敛与执行计划（2026-11-09）
+
+本节依据 Stock-Platform (53) 讨论，并交叉核对 Platform 的受控 HTTP 流式传输方案、公共平台剩余开发任务清单、PLAT-002 公共契约差异记录及当前 Server 代码。职责总原则见第 1.5 节。
+
+#### 12.13.1 当前代码证据与状态校正
+
+- Server 的 internal/server/resources.Resources 已持有共享 Platform HTTP Client、DB 和 Redis；当前 OpenLegacyAnalysisResources 已创建 HTTP Client，并在资源关闭时调用 CloseIdleConnections。这证明共享资源创建/关闭有基础实现，但尚未证明 BoundDoer 已按目标注入所有消费者。
+- Server 的 internal/server/diagnostics.Aggregator 已委托 Platform Runner 执行 Check，并要求至少一个 Required Check 且所有 Required Observation 为 healthy 才 Ready；Storage Check 已有基础实现。模块真实 Check 尚未全部注册，不能将聚合器存在等同于完整领域诊断接入。
+- Server 的 internal/server/runtime.Lifecycle 已统一组件注册、顺序启动、逆序停止和失败回滚；旧 Analysis Worker 已接入。HTTP Server 仍由 Bootstrap 单独启动/关闭，尚未形成完整统一生命周期。
+- Server Migration Registry 已注册 News、Research、Notification 三个模块的 Migration；Migration 内容仍归模块，Server 只汇总调用 Platform Runner。
+- Platform 流式 HTTP A1 已有 OpenStream、Body 生命周期、并发额度、超时/字节限制、Fault 和统计能力及包级测试证据。A2（LLM 真实消费者接入）和 A3（生产网络/Secret/资源限制验收）仍是独立门禁。
+- Platform 当前本地公共原语已达到其文档所述交付基线；PLAT-002 的项目级契约冻结和消费者证据仍不能由 Platform 单方面宣布完成。公共包 CI 成功不等于项目级契约 frozen。
+
+#### 12.13.2 Server 责任拆分为可执行工作包
+
+| 工作包 | Server 必须完成的内容 | 依赖/交付门禁 |
+|---|---|---|
+| S-01 Bootstrap 与 Config | 收敛唯一入口；集中加载/校验 Server Config；装载模块 Config/Secret；移除新增模块散落环境变量读取 | Platform Config/Secret 原语；启动失败测试 |
+| S-02 共享资源与 HTTP Client | 统一创建 DB/Redis/HTTP Client；按目标配置 DestinationPolicy；创建并注入固定 BoundDoer；模块停止后关闭共享资源 | Platform HTTP Client A1；消费者公开构造入口 |
+| S-03 模块 DI | 按依赖 DAG 装配模块 Application Port、Adapter、Handler、Worker、Migration、Check；只接入真实公开 API | 各模块公开生产构造入口；不得填充空 Registry |
+| S-04 HTTP Transport 与安全 | 显式路由、RoutePolicy、Principal/Scope Context、Request ID、Fault→HTTP 映射、请求体/超时/并发限制、可信代理边界 | Platform Security/Fault/Request ID；项目路由与身份契约 |
+| S-05 生命周期 | 将 HTTP Server、模块 Worker、旧兼容 Worker 纳入统一生命周期；Readiness 先降级，HTTP 停止接收新请求并完成在途请求，再停 Worker/Dispatcher，最后关闭 DB/Redis/HTTP Client | 模块 Worker 公开生命周期契约；启动回滚和 SIGTERM 集成测试 |
+| S-06 Migration 汇总 | 注册模块自有 Migration；唯一入口、显式启用、执行结果诊断；失败不得 Ready | Platform Migration Runner；各模块 Migration 交付 |
+| S-07 Diagnostics 聚合 | 注册真实模块 Check；Required/Optional 策略；受保护只读诊断摘要；保留结构化 reason_code/evidence_ref | 模块 Check 和 Platform Observation 契约；故障注入验收 |
+| S-08 Web/API 访问边界 | 保持业务 API 默认拒绝；Owner/Service/Web 用户身份隔离；不向浏览器下发 Owner Token；反向代理和容器网络不能绕过认证 | 当前 Platform Bearer 原语；Web Session/CSRF 项目契约与公共原语尚未交付前，不实现自制 Session 框架 |
+| S-09 部署和集成 | API/Worker 角色、内部网络、代理入口、Secret、探针、迁移执行策略、回滚和生产验收 | 核心模块 L2、组合集成 L3 和部署证据 |
+
+#### 12.13.3 当前优先级和推进顺序
+
+1. **先完成可独立推进的 Server 基础工作**：S-05 将 HTTP Server 纳入 Lifecycle，补优雅关闭和 SIGTERM 集成测试；S-04 完成 Fault→HTTP 映射、请求限制及路由安全测试；S-07 接入当前已具备公开 Check 的模块真实诊断。
+2. **并行推进模块生产装配**：按模块公开 Facade/Port/Handler/Worker/Migration/Check 的实际成熟度逐个接入，不以所有模块同时完成为前置；缺少公开构造入口的模块继续由对应模块分支补齐。
+3. **完成流式 HTTP 消费者接线**：Server 将共享 Client 按固定 DestinationPolicy Bind 后注入 LLM；LLM 自己完成 A2；Server/部署 Owner 配合完成 A3。不得由 Server 解析 SSE。
+4. **处理 Web 登录安全门禁**：当前只维持 Owner/Service Bearer 保护和受限网络入口。Web Session/密码认证/CSRF 先由项目级契约确认范围与所有权，再由 Platform 提供批准的公共原语，Server 装配会话与权限路由，Web 负责登录交互。未完成前不放开匿名业务 API、不把 Owner Token 写入浏览器。
+5. **最后完成部署切换与旧链路退役**：等待 Data 模块化迁移门禁和各模块生产入口具备后，执行端到端集成；不得提前删除旧 Analysis 兼容路径。
+
+#### 12.13.4 明确不由 Server 承担的工作
+
+- 不实现 Platform 缺失的通用 HTTP、Session、Fault、Diagnostics、Storage 或 Migration 原语；发现公共 API 缺陷时提交具体调用场景和阻塞证据，由 Platform 修复。
+- 不实现 LLM SSE/Responses Parser、模型事件状态机或模型业务重试。
+- 不实现 News 来源授权、Research 证据授权、Quant 算法、Researchflow DAG、Notification 投递策略或 Data Provider 规则。
+- 不为未提供公开生产装配入口的模块制造虚构统一构造函数、空 Worker 或假健康 Check。
+- 不在 Server 文档复制项目契约定义；跨模块语义变更回项目总规划/契约登记簿，本文件只维护 Server 消费方式和实施状态。
+
+#### 12.13.5 验收口径
+
+- Platform package/A1、领域模块自身 CI、消费者 A2、生产部署 A3 分开记录；skipped、blocked、not_run 不计为通过。
+- Server 任务完成必须有当前分支代码、对应测试或可复核的精确 SHA/CI 证据；文档方案本身不代表代码完成。
+- Required Check 任何非 healthy 状态均不得 Ready；Optional Check 异常保留诊断结果但按策略不阻断 Ready。
+- 所有共享资源在消费者停止后关闭；启动失败必须逆序回滚；关闭错误必须汇总且不能跳过其他组件。
+- 对外业务 API 必须有显式认证授权策略；网络隔离只是纵深防御，不替代应用认证。
