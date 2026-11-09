@@ -136,6 +136,48 @@ func TestMariaDBFinalizeRunAtomicallyPersistsSummaryAndOutbox(t *testing.T) {
 	if _, err := repository.FinalizeRun(ctx, input); !errors.Is(err, ErrRunAlreadyFinalized) {
 		t.Fatalf("duplicate FinalizeRun error=%v, want ErrRunAlreadyFinalized", err)
 	}
+
+	// Worker A claims the event. Once its lease expires, Worker B reclaims it
+	// with a higher generation; A must not acknowledge B's lease.
+	claimedA, err := repository.ClaimOutbox(ctx, "worker-a", runRef, 10, 30*time.Second)
+	if err != nil || len(claimedA) != 1 {
+		t.Fatalf("Worker A ClaimOutbox got %d messages, err=%v", len(claimedA), err)
+	}
+	if claimedA[0].AttemptCount != 1 || claimedA[0].LeaseGeneration != 1 {
+		t.Fatalf("Worker A claim metadata = attempt %d generation %d", claimedA[0].AttemptCount, claimedA[0].LeaseGeneration)
+	}
+	if _, err := db.ExecContext(ctx, `UPDATE researchflow_outbox SET lease_expires_at = ?
+		WHERE outbox_ref = ?`, formatResearchflowTimeValue(now.Add(-time.Second)), input.OutboxRef); err != nil {
+		t.Fatalf("expire Worker A lease: %v", err)
+	}
+	claimedB, err := repository.ClaimOutbox(ctx, "worker-b", runRef, 10, 30*time.Second)
+	if err != nil || len(claimedB) != 1 {
+		t.Fatalf("Worker B ClaimOutbox got %d messages, err=%v", len(claimedB), err)
+	}
+	if claimedB[0].LeaseGeneration != 2 || claimedB[0].AttemptCount != 2 {
+		t.Fatalf("Worker B claim metadata = attempt %d generation %d", claimedB[0].AttemptCount, claimedB[0].LeaseGeneration)
+	}
+	if acknowledged, err := repository.AcknowledgeOutbox(ctx, input.OutboxRef, "worker-a", claimedA[0].LeaseGeneration); err != nil || acknowledged {
+		t.Fatalf("stale Worker A acknowledgement = %v, err=%v; want false", acknowledged, err)
+	}
+	retryAt := time.Now().UTC().Add(2 * time.Second)
+	if retried, err := repository.RetryOutbox(ctx, input.OutboxRef, "worker-b", claimedB[0].LeaseGeneration, retryAt, "temporary_failure"); err != nil || !retried {
+		t.Fatalf("Worker B RetryOutbox = %v, err=%v", retried, err)
+	}
+	if claimed, err := repository.ClaimOutbox(ctx, "worker-c", runRef, 10, 30*time.Second); err != nil || len(claimed) != 0 {
+		t.Fatalf("message claimed before next_attempt_at: count=%d err=%v", len(claimed), err)
+	}
+	if _, err := db.ExecContext(ctx, `UPDATE researchflow_outbox SET next_attempt_at = ?
+		WHERE outbox_ref = ?`, formatResearchflowTimeValue(now.Add(-time.Second)), input.OutboxRef); err != nil {
+		t.Fatalf("make Outbox retry due: %v", err)
+	}
+	claimedC, err := repository.ClaimOutbox(ctx, "worker-c", runRef, 10, 30*time.Second)
+	if err != nil || len(claimedC) != 1 || claimedC[0].LeaseGeneration != 3 {
+		t.Fatalf("Worker C retry claim = %+v, err=%v", claimedC, err)
+	}
+	if acknowledged, err := repository.AcknowledgeOutbox(ctx, input.OutboxRef, "worker-c", claimedC[0].LeaseGeneration); err != nil || !acknowledged {
+		t.Fatalf("Worker C acknowledgement = %v, err=%v", acknowledged, err)
+	}
 }
 
 func TestFinalizeRunRejectsIncompleteSummaryBeforeTransaction(t *testing.T) {

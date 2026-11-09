@@ -132,5 +132,18 @@ func Migrations() []platformstorage.Migration {
 				) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin`,
 			},
 		},
+		{
+			Version:     2,
+			Description: "add fenced Researchflow Outbox delivery leases and retry scheduling",
+			Statements: []string{
+				`ALTER TABLE researchflow_outbox
+					ADD COLUMN lease_owner VARCHAR(128) NULL AFTER published_at,
+					ADD COLUMN lease_expires_at CHAR(30) CHARACTER SET ascii COLLATE ascii_bin NULL AFTER lease_owner,
+					ADD COLUMN lease_generation BIGINT UNSIGNED NOT NULL DEFAULT 0 AFTER lease_expires_at,
+					ADD COLUMN next_attempt_at CHAR(30) CHARACTER SET ascii COLLATE ascii_bin NULL AFTER lease_generation`,
+				`ALTER TABLE researchflow_outbox
+					ADD KEY idx_researchflow_outbox_claim (published_at, next_attempt_at, lease_expires_at, created_at)`,
+			},
+		},
 	}
 }
