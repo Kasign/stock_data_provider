@@ -142,3 +142,12 @@ func TestComposeResultRejectsRiskPassContradiction(t *testing.T) {
 		t.Fatalf("blocking risk must prevent composition as pass, got %v", err)
 	}
 }
+
+func TestComposeResultAllowsEvidenceKnowledgeCutoffEarlierThanRun(t *testing.T) {
+	input := validCompositionInput()
+	input.Evidence[0].EvidenceDraft.SystemAsOf = input.SystemAsOf.Add(-time.Hour)
+	input.Evidence[0].EvidenceDraft.SystemObservedAt = input.SystemAsOf.Add(-2 * time.Hour)
+	if _, err := ComposeResult(input, nil); err != nil {
+		t.Fatalf("older Evidence system_as_of should remain valid: %v", err)
+	}
+}
