@@ -165,3 +165,67 @@ func compileQuantSchemaFile(t *testing.T, name string) *jsonschema.Schema {
 	}
 	return compiled
 }
+
+
+func TestRegistryEntrySchemaEnforcesValueTypeConditionals(t *testing.T) {
+	schema := compileQuantSchemaFile(t, "QNT-CTR-001-registry-entry-1.0.0.schema.json")
+
+	decimalEntry := validEntry("decimal_metric", "1.0.0")
+	decimalEntry.ValueType = ValueTypeDecimalString
+	decimalEntry.Precision.Tolerance = json.RawMessage(`"0.000001"`)
+	decimalEntry.Range = NumericRange{
+		Minimum: json.RawMessage(`"-1"`),
+		Maximum: json.RawMessage(`"1"`),
+	}
+	encoded, err := json.Marshal(decimalEntry)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := validateJSONSchemaInstance(schema, encoded); err != nil {
+		t.Fatalf("valid decimal_string entry rejected: %v", err)
+	}
+	decimalEntry.Precision.Tolerance = json.RawMessage("0.000001")
+	encoded, err = json.Marshal(decimalEntry)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := validateJSONSchemaInstance(schema, encoded); err == nil {
+		t.Fatal("decimal_string entry with numeric tolerance unexpectedly passed")
+	}
+
+	integerEntry := validEntry("integer_metric", "1.0.0")
+	integerEntry.ValueType = ValueTypeInteger
+	integerEntry.Precision.MaxFractionDigits = 0
+	integerEntry.Precision.Tolerance = json.RawMessage("1")
+	integerEntry.Range = NumericRange{
+		Minimum: json.RawMessage("0"),
+		Maximum: json.RawMessage("100"),
+	}
+	encoded, err = json.Marshal(integerEntry)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := validateJSONSchemaInstance(schema, encoded); err != nil {
+		t.Fatalf("valid integer entry rejected: %v", err)
+	}
+	integerEntry.Precision.MaxFractionDigits = 1
+	encoded, err = json.Marshal(integerEntry)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := validateJSONSchemaInstance(schema, encoded); err == nil {
+		t.Fatal("integer entry with non-zero fractional scale unexpectedly passed")
+	}
+}
+
+func TestIndicatorParameterSchemaEnforcesOneOfCodeAndParameters(t *testing.T) {
+	schema := compileQuantSchemaFile(t, "QNT-CTR-002-indicator-parameters-1.0.0.schema.json")
+	valid := []byte(`{"schema_version":"1.0.0","indicator_code":"sma","parameters":{"window":5}}`)
+	if err := validateJSONSchemaInstance(schema, valid); err != nil {
+		t.Fatalf("valid SMA parameters rejected: %v", err)
+	}
+	mismatched := []byte(`{"schema_version":"1.0.0","indicator_code":"macd","parameters":{"window":5}}`)
+	if err := validateJSONSchemaInstance(schema, mismatched); err == nil {
+		t.Fatal("MACD code with SMA parameters unexpectedly passed oneOf")
+	}
+}
