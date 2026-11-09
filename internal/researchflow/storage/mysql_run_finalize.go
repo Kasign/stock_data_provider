@@ -95,17 +95,19 @@ func (r *MySQLRunRepository) FinalizeRun(ctx context.Context, input RunFinalizat
 	currentStatus := domain.RunStatus(runStatus)
 	switch currentStatus {
 	case domain.RunCreated, domain.RunQueued, domain.RunRunning:
-		if existingReason.Valid && existingReason.String == "deadline_exceeded" {
-			if input.TerminalStatus != domain.RunFailed && input.TerminalStatus != domain.RunPartial {
-				return false, errors.New("deadline-expired Researchflow Run cannot finalize as succeeded")
+		if existingReason.Valid {
+			if existingReason.String != "deadline_exceeded" || input.TerminationReason != "deadline_exceeded" ||
+				(input.TerminalStatus != domain.RunFailed && input.TerminalStatus != domain.RunPartial) {
+				return false, errors.New("terminated Researchflow Run cannot use the requested finalization path")
 			}
-		} else if currentStatus != domain.RunRunning ||
+		} else if currentStatus != domain.RunRunning || input.TerminationReason != "" ||
 			(input.TerminalStatus != domain.RunSucceeded && input.TerminalStatus != domain.RunPartial && input.TerminalStatus != domain.RunFailed) {
 			return false, errors.New("Researchflow Run cannot finalize from its current state")
 		}
 	case domain.RunCancelling:
-		if input.TerminalStatus != domain.RunCancelled && input.TerminalStatus != domain.RunPartial && input.TerminalStatus != domain.RunFailed {
-			return false, errors.New("cancelling Researchflow Run cannot finalize to the requested status")
+		if !existingReason.Valid || existingReason.String != "user_cancelled" ||
+			input.TerminationReason != "user_cancelled" || input.TerminalStatus != domain.RunCancelled {
+			return false, errors.New("cancelling Researchflow Run requires user-cancelled terminal finalization")
 		}
 	default:
 		return false, ErrClaimRunUnavailable
