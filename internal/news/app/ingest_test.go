@@ -294,7 +294,7 @@ func TestIngestCandidatePersistsSourcePolicyTrace(t *testing.T) {
 		SourcePolicyVersionID: "source-policy-v3",
 		EndpointID:            "endpoint-v1", EndpointPolicyVersionID: "endpoint-policy-v2",
 		PolicyEvaluatedAt: evaluatedAt,
-		Retention: time.Hour,
+		Retention:         time.Hour,
 	}
 	observation, err := usecase.executeWithPolicyTrace(
 		context.Background(), "source-1", "feed-run-1/item-1",

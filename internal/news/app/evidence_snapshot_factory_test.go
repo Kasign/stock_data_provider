@@ -10,7 +10,7 @@ import (
 )
 
 type evidencePITRepositoryStub struct {
-	records    []EvidencePITRecord
+	records []EvidencePITRecord
 	err        error
 	calls      int
 	afterQuery func()
@@ -129,6 +129,7 @@ func TestCreateEvidenceSnapshotForQueryDoesNotRequeryOnCursorRequest(t *testing.
 	}
 }
 
+
 func TestCreateEvidenceSnapshotForQueryHonorsContextCancellation(t *testing.T) {
 	now := time.Date(2026, 11, 9, 12, 0, 0, 0, time.UTC)
 	request := validEvidenceListRequest(now)
@@ -153,7 +154,7 @@ func TestCreateEvidenceSnapshotForQueryHonorsContextCancellation(t *testing.T) {
 	t.Run("canceled after PIT query", func(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		query := &evidencePITRepositoryStub{
-			records:    evidencePITRecords(request.SystemAsOf),
+			records: evidencePITRecords(request.SystemAsOf),
 			afterQuery: cancel,
 		}
 		store := &evidenceSnapshotRepositoryStub{}
