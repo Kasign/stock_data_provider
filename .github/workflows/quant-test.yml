@@ -51,6 +51,8 @@ jobs:
         run: go mod download
       - name: 运行 Quant 单元测试
         run: go test ./internal/quant/...
+      - name: 运行 Manifest 指纹随机 Fuzz
+        run: go test -run=^$ -fuzz=FuzzFingerprintPayloadNoPanic -fuzztime=30s ./internal/quant/manifest
       - name: 运行 Quant 竞态检测
         run: go test -race ./internal/quant/...
       - name: 运行 Quant 静态检查
