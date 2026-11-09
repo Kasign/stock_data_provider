@@ -23,6 +23,8 @@ const (
 	QualityPolicyAllowDegraded QualityPolicy = "allow_degraded"
 )
 
+const maxSnapshotRefBytes = 128
+
 var (
 	ErrMissingSystemAsOf      = errors.New("system_as_of is required")
 	ErrSystemAsOfNotUTC       = errors.New("system_as_of must use the UTC location")
@@ -76,7 +78,7 @@ func (c CalculationContext) Validate(now time.Time, requiresPrice bool) error {
 	}
 	seen := make(map[string]struct{}, len(c.InputSnapshotRefs))
 	for _, ref := range c.InputSnapshotRefs {
-		if strings.TrimSpace(ref) == "" {
+		if ref == "" || strings.TrimSpace(ref) != ref || len([]byte(ref)) > maxSnapshotRefBytes {
 			return ErrInvalidSnapshotRef
 		}
 		if _, exists := seen[ref]; exists {
