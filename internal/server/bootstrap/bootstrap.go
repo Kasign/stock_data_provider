@@ -17,10 +17,15 @@ import (
 	"example.com/stock-analysis-flow/internal/adapters/marketdata"
 	"example.com/stock-analysis-flow/internal/adapters/storage/mysqlredis"
 	"example.com/stock-analysis-flow/internal/platform/config"
+	platformstorage "example.com/stock-analysis-flow/internal/platform/storage"
 	"example.com/stock-analysis-flow/internal/platform/httpapi"
 	"example.com/stock-analysis-flow/internal/platform/taskqueue"
+	newsstorage "example.com/stock-analysis-flow/internal/news/adapters/storage"
+	notificationstorage "example.com/stock-analysis-flow/internal/notification/storage"
+	researchstorage "example.com/stock-analysis-flow/internal/research/storage"
 	serverconfig "example.com/stock-analysis-flow/internal/server/config"
 	serverresources "example.com/stock-analysis-flow/internal/server/resources"
+	servermigration "example.com/stock-analysis-flow/internal/server/migration"
 	"example.com/stock-analysis-flow/internal/service"
 )
 
@@ -45,6 +50,10 @@ func Run(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("Go 行情服务配置无效: %w", err)
 	}
+	migrationCfg, err := serverconfig.LoadMigration(config.NewEnv())
+	if err != nil {
+		return fmt.Errorf("Migration 配置无效: %w", err)
+	}
 
 	startupCtx, startupCancel := context.WithTimeout(ctx, 15*time.Second)
 	storageResources, store, err := serverresources.OpenLegacyAnalysisResources(startupCtx, storageCfg)
@@ -57,6 +66,20 @@ func Run(ctx context.Context) error {
 			slog.Warn("关闭数据库/缓存依赖失败", "service", "stock-analysis-api", "error", closeErr.Error())
 		}
 	}()
+
+	if migrationCfg.Enabled {
+		migrationRegistry, err := newMigrationRegistry()
+		if err != nil {
+			return fmt.Errorf("注册模块 Migration 失败: %w", err)
+		}
+		migrationCtx, migrationCancel := context.WithTimeout(ctx, migrationCfg.Timeout)
+		err = migrationRegistry.Run(migrationCtx, storageResources.DB)
+		migrationCancel()
+		if err != nil {
+			return fmt.Errorf("执行模块 Migration 失败: %w", err)
+		}
+		slog.Info("模块 Migration 执行完成", "namespaces", migrationRegistry.Namespaces())
+	}
 
 	runner, err := service.NewRunnerWithMarketDataStores(marketDataCfg, store, store)
 	if err != nil {
@@ -165,4 +188,25 @@ func logLevel(raw string) slog.Level {
 	default:
 		return slog.LevelInfo
 	}
+}
+
+
+// newMigrationRegistry assembles only module migrations already present in this
+// root Go module. Module SQL remains in each module's storage package.
+func newMigrationRegistry() (*servermigration.Registry, error) {
+	registry := servermigration.NewRegistry()
+	registrations := []struct {
+		namespace  string
+		migrations []platformstorage.Migration
+	}{
+		{namespace: "news", migrations: newsstorage.Migrations()},
+		{namespace: researchstorage.MigrationNamespace, migrations: researchstorage.Migrations()},
+		{namespace: "notification", migrations: notificationstorage.Migrations()},
+	}
+	for _, registration := range registrations {
+		if err := registry.Register(registration.namespace, registration.migrations); err != nil {
+			return nil, fmt.Errorf("注册 %s Migration: %w", registration.namespace, err)
+		}
+	}
+	return registry, nil
 }
