@@ -2,9 +2,9 @@ package storage
 
 import (
 	"bytes"
-	"encoding/json"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
