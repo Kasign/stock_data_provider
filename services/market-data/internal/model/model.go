@@ -107,7 +107,7 @@ type Bundle struct {
 	Quote                 *Quote            `json:"quote,omitempty"`
 	DailyBars             []DailyBar        `json:"daily_bars"`
 	Sources               map[string]string `json:"sources"`
-	Warnings              []string          `json:"warnings"`
+	Warnings              []string          `json:"warnings,omitempty"`
 	SnapshotID            string            `json:"snapshot_id"`
 	AnalysisReferenceTime time.Time         `json:"analysis_reference_time"`
 	FetchedAt             time.Time         `json:"fetched_at"`

@@ -132,7 +132,7 @@ internal/
 - [x] Root → Data 调用链、Remote Adapter、DTO 映射、认证方式、超时和 WebUI/Nginx 路由依赖已定位。
 - [x] MariaDB Pool、Redis Client、Migration、Probe 持久化、Retention Worker 的创建、所有权和关闭风险已记录。
 - [x] Compose、Dockerfile、CI workflow、部署脚本和历史 go-migration profile 已盘点。
-- [x] CT-01 路由/认证、CT-02 Error Response、CT-04 LimitPool 条件语义已有实现与自动化测试；不重复重做。CT-03 已有 Go Model/OpenAPI 全字段核对，本轮发现并修复 Bundle.warnings required/omitempty 漂移。
+- [x] CT-01 路由/认证、CT-02 Error Response、CT-03 Go Model/OpenAPI 全字段与序列化、CT-04 LimitPool 条件语义已有实现与自动化测试；不重复重做。
 - [x] 35 Operation 的参数名称/位置/required 清单和类型/格式矩阵已建立；Probe Body Schema 已有独立校验。
 - [x] 当前 SHA `5a25e332` 的 Data Module gofmt、go test、race、vet、MariaDB/PIT/Probe 集成及 Market Data Docker 构建通过（Push workflow 证据，非 integration 最终验收）。
 
@@ -140,7 +140,7 @@ internal/
 
 | 编号 | 剩余项 | 完成条件 | 当前判定 |
 |---|---|---|---|
-| M0-A / CT-03 + CT-05 | 35 Operation 参数与 Go Model/OpenAPI 序列化最终核对 | 已覆盖参数清单、类型/格式、枚举、数值边界/默认值、日期与重复值语义；本批修复 Bundle.warnings required/omitempty 漂移并增加空数组序列化断言，等待最新 Data CI 确认 | `pending_ci` |
+| M0-A / CT-05（CT-03 复核） | 35 Operation 参数语义最终核对 | 固定参数全集的 inventory、类型/格式、枚举、数值边界/默认值、日期与重复值语义已覆盖；CT-03 Go Model/OpenAPI 全字段、required/nullable、序列化测试复核无当前差异，等待最新 Data CI 确认 | `pending_ci` |
 | M0-B | Provider 请求行为安全证据 | 已完成 HTTP/TCP 出站调用矩阵；当前配置边界与重定向风险明确登记，归入 M4 Platform HTTP Client / TCP 出站策略整改 | `completed_with_M4_followups` |
 | M0-C | 生产数据库 DDL 对照 | 获取脱敏生产 Schema/DDL；逐表对照 Data Migration、索引、唯一键、字段类型/精度/NULL/默认值；CI 临时 MariaDB 不能替代生产证据 | `blocked_external_evidence` |
 | M0-D / CT-06 | 集成基线验收 | 将当前分支合入 `origin/integration` 后，在 integration SHA 执行根模块、Data、race、vet、MariaDB/PIT、Compose/Docker；只记录结果，不直接修改 integration 代码 | `pending_integration` |
@@ -435,7 +435,7 @@ internal/
 ### 7.3 当前 M0 证据与阻断
 
 - **CT-01/02/04：** 路由/认证、公共 Error Envelope、LimitPool 条件语义已有对应自动化契约测试；不重复建设。
-- **CT-03：** Go Model 与 OpenAPI 字段/required/nullable 对照已存在。本轮发现 `Bundle.warnings` 被 OpenAPI 声明为 required，但 Go JSON Tag 使用 `omitempty`，与服务构造的非 nil 空切片语义不一致；已移除 omitempty，并增加空数组 `[]` 序列化断言。
+- **CT-03：** Go Model 与 OpenAPI 字段/required/nullable 对照及 JSON 序列化测试已存在。复核历史项目总览中关于 `Bundle.warnings` 必填的记录后，确认当前 OpenAPI `Bundle.required` 不包含该字段，Go `omitempty` 与当前可选契约一致；历史记录已过时，不改运行时行为。
 - **CT-05：** 固定 35 Operation 参数全集；参数 inventory、类型/格式、默认值/固定边界、枚举、日期范围和重复值语义已纳入矩阵。本轮补齐 index source 和数值边界断言。最新 Data CI 结果仍以当前 SHA 对应 Run 为准。
 - **M0-B：** Provider 出站行为矩阵已完成。DNS/IP SSRF 防护和默认重定向策略统一收敛到 M4；BaoStock/Pytdx TCP egress 单独治理。
 - **M0-C：** 缺少脱敏生产 DDL；CI 临时 MariaDB 不替代生产 Schema 证据。用户提供 DDL 后做一次逐表对照。
@@ -455,10 +455,19 @@ internal/
 ### 2026-11-09：CT-03 Bundle.warnings 序列化契约修复与 M0 审计文档去重
 
 - 项目总览中的历史复核指出 `Bundle.warnings` 在 OpenAPI 中为 required，但 Go Model JSON Tag 使用 `omitempty`；当前 Contract Test 反而将其断言为 optional，属于真实的 Schema/序列化契约不一致。
-- DataService.Bundle 已通过 `append([]string{}, warnings...)` 保证返回非 nil 空切片；因此移除 Model Tag 的 `omitempty` 后，无警告响应输出 `"warnings":[]`，不改变业务语义。
-- 已更新 Go Model/OpenAPI required 对照测试，将 Bundle.warnings 纳入 required，并增加空切片必须序列化为 `[]` 的断言。
-- M0-A 扩展为 CT-03 + CT-05 的一次性最终契约核对；不新增阶段，不改变 35 Operation 范围。
+- DataService.Bundle 虽构造非 nil 空切片，但 Go `omitempty` 仍会省略长度为零的 slice；当前 OpenAPI 允许省略，因此没有契约缺陷。
+- 已回退不必要的 Model/测试改动，保留原有 required/optional 和序列化断言；不改变 API 响应行为。
+- M0-A 保持 CT-05 参数核对；CT-03 仅做历史差异复核，不新增阶段或测试范围。
 - 将原第 7 节历史 M0 第一轮至第二十九轮流水账收敛为迁移对象映射、Owner、验证/回滚、已冻结事实和剩余阻断；历史提交仍可从 Git 追溯，不再把历史轮次作为活动任务。
 - 本批仅修改 Data Model、Data HTTP Contract Test 和本迁移文档；未修改 OpenAPI、Handler、数据库、其他模块或 integration。
 - 新 SHA 的 Data gofmt/test/race/vet、MariaDB/PIT 和 Docker 状态待 CI 确认；在 CI 完成前 M0-A 保持 pending_ci。
+
+
+
+### 2026-11-09：Bundle.warnings 历史契约记录复核（纠正）
+
+- 项目总览中的历史复核曾将 `Bundle.warnings` 记为 OpenAPI required；重新读取当前 `services/market-data/openapi.yaml` 后确认 `Bundle.required` 不含该字段。
+- 当前 Go Model 使用 `omitempty`，Contract Test 将该字段断言为 optional，并验证零值序列化时省略；三者语义一致。
+- 结论：历史 required 记录已过时，不存在当前契约差异；不移除 `omitempty`，不改变 API 响应行为。
+- 已撤销上一提交中的临时 Model/测试改动；保留 M0 文档对该历史记录的纠正。
 
