@@ -301,3 +301,38 @@ func TestValidateEgressDependenciesRequiresBothTencentDailyBarExecutors(t *testi
 		t.Fatalf("both daily-bar executors supplied, got %v", err)
 	}
 }
+
+
+type egressHTTPDoerPointerStub struct{}
+func (*egressHTTPDoerPointerStub) Do(*http.Request) (*http.Response, error) { return nil, nil }
+
+func TestValidateEgressDependenciesRejectsTypedNilHTTPDoers(t *testing.T) {
+	var typedNil *egressHTTPDoerPointerStub
+	tests := []struct {
+		name string
+		cfg config.Config
+		deps Dependencies
+		want string
+	}{
+		{
+			name: "single provider executor",
+			cfg: config.Config{ProviderPriority: []string{"tushare"}, ProviderSettings: map[string]config.ProviderSettings{"tushare": {Enabled: true, DailyBars: true}}},
+			deps: Dependencies{TushareHTTPDoer: typedNil},
+			want: "tushare HTTP",
+		},
+		{
+			name: "eastmoney origin executor",
+			cfg: config.Config{ProviderPriority: []string{"eastmoney"}, ProviderSettings: map[string]config.ProviderSettings{"eastmoney": {Enabled: true, Quote: true}}, EastmoneyQuoteURL: "https://quote.example.test/api"},
+			deps: Dependencies{EastmoneyHTTPDoers: map[string]provider.HTTPDoer{"https://quote.example.test": typedNil}},
+			want: "quote.example.test",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateEgressDependencies(tt.cfg, tt.deps)
+			if err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("typed nil executor must be rejected as missing, got %v", err)
+			}
+		})
+	}
+}

@@ -2,6 +2,7 @@ package bootstrap
 
 import (
 	"fmt"
+	"reflect"
 	"strings"
 
 	"example.com/stock-analysis-flow/internal/marketdata/config"
@@ -37,7 +38,7 @@ func validateEgressDependencies(cfg config.Config, deps Dependencies) error {
 				return fmt.Errorf("controlled egress for eastmoney: %w", err)
 			}
 			for _, origin := range origins {
-				if deps.EastmoneyHTTPDoers[origin] == nil {
+				if isNilEgressDependency(deps.EastmoneyHTTPDoers[origin]) {
 					return fmt.Errorf("controlled egress dependency missing: eastmoney origin %q", origin)
 				}
 			}
@@ -45,43 +46,43 @@ func validateEgressDependencies(cfg config.Config, deps Dependencies) error {
 		}
 		switch name {
 		case "hithink":
-			if deps.HithinkHTTPDoer == nil {
+			if isNilEgressDependency(deps.HithinkHTTPDoer) {
 				return missingEgress("hithink HTTP")
 			}
 		case "baostock":
-			if deps.BaoStockDialContext == nil {
+			if isNilEgressDependency(deps.BaoStockDialContext) {
 				return missingEgress("baostock TCP")
 			}
 		case "tencent":
-			if settings.Quote && deps.TencentQuoteHTTPDoer == nil {
+			if settings.Quote && isNilEgressDependency(deps.TencentQuoteHTTPDoer) {
 				return missingEgress("tencent quote HTTP")
 			}
-			if settings.DailyBars && (deps.TencentKlineHTTPDoer == nil || deps.TencentNoneKlineHTTPDoer == nil) {
+			if settings.DailyBars && (isNilEgressDependency(deps.TencentKlineHTTPDoer) || isNilEgressDependency(deps.TencentNoneKlineHTTPDoer)) {
 				return missingEgress("tencent daily-bars HTTP endpoints")
 			}
-			if settings.StockSearch && deps.TencentSearchHTTPDoer == nil {
+			if settings.StockSearch && isNilEgressDependency(deps.TencentSearchHTTPDoer) {
 				return missingEgress("tencent stock-search HTTP")
 			}
 		case "sina":
-			if settings.Quote && deps.SinaQuoteHTTPDoer == nil {
+			if settings.Quote && isNilEgressDependency(deps.SinaQuoteHTTPDoer) {
 				return missingEgress("sina quote HTTP")
 			}
-			if settings.DailyBars && deps.SinaKlineHTTPDoer == nil {
+			if settings.DailyBars && isNilEgressDependency(deps.SinaKlineHTTPDoer) {
 				return missingEgress("sina daily-bars HTTP")
 			}
 		case "yahoo":
-			if deps.YahooHTTPDoer == nil {
+			if isNilEgressDependency(deps.YahooHTTPDoer) {
 				return missingEgress("yahoo HTTP")
 			}
 		case "netease":
-			if settings.Quote && deps.NeteaseQuoteHTTPDoer == nil {
+			if settings.Quote && isNilEgressDependency(deps.NeteaseQuoteHTTPDoer) {
 				return missingEgress("netease quote HTTP")
 			}
-			if settings.DailyBars && deps.NeteaseHistoryHTTPDoer == nil {
+			if settings.DailyBars && isNilEgressDependency(deps.NeteaseHistoryHTTPDoer) {
 				return missingEgress("netease history HTTP")
 			}
 		case "tushare":
-			if deps.TushareHTTPDoer == nil {
+			if isNilEgressDependency(deps.TushareHTTPDoer) {
 				return missingEgress("tushare HTTP")
 			}
 		case "tickflow":
@@ -91,25 +92,25 @@ func validateEgressDependencies(cfg config.Config, deps Dependencies) error {
 				settings.MarketBreadth || settings.SectorRankings ||
 				(settings.DailyBars && strings.TrimSpace(cfg.TickFlowAPIKey) != "")
 			tickflowPublic := settings.DailyBars && strings.TrimSpace(cfg.TickFlowAPIKey) == ""
-			if tickflowAuthenticated && deps.TickFlowAuthenticatedHTTPDoer == nil {
+			if tickflowAuthenticated && isNilEgressDependency(deps.TickFlowAuthenticatedHTTPDoer) {
 				return missingEgress("tickflow authenticated HTTP")
 			}
-			if tickflowPublic && deps.TickFlowPublicHTTPDoer == nil {
+			if tickflowPublic && isNilEgressDependency(deps.TickFlowPublicHTTPDoer) {
 				return missingEgress("tickflow public HTTP")
 			}
 		case "pytdx":
-			if deps.PytdxDialContext == nil {
+			if isNilEgressDependency(deps.PytdxDialContext) {
 				return missingEgress("pytdx TCP")
 			}
 		case "xueqiu":
-			if deps.XueqiuHTTPDoer == nil {
+			if isNilEgressDependency(deps.XueqiuHTTPDoer) {
 				return missingEgress("xueqiu HTTP")
 			}
 		default:
 			return fmt.Errorf("controlled egress validation does not recognize provider %q", name)
 		}
 	}
-	if cfg.MXEnabled && deps.MiaoXiangHTTPDoer == nil {
+	if cfg.MXEnabled && isNilEgressDependency(deps.MiaoXiangHTTPDoer) {
 		return missingEgress("miao-xiang HTTP")
 	}
 	return nil
@@ -129,4 +130,17 @@ func hasConfiguredProviderCapability(settings config.ProviderSettings) bool {
 
 func missingEgress(name string) error {
 	return fmt.Errorf("controlled egress dependency missing: %s", name)
+}
+
+
+// isNilEgressDependency 同时识别 nil interface 与承载 nil 指针/函数的 typed nil interface。
+func isNilEgressDependency(value any) bool {
+	if value == nil { return true }
+	reflected := reflect.ValueOf(value)
+	switch reflected.Kind() {
+	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:
+		return reflected.IsNil()
+	default:
+		return false
+	}
 }
