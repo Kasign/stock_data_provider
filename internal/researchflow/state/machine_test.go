@@ -602,6 +602,28 @@ func TestFinalizeDeadlineRequiresAllWorkStoppedAndUsesPropagation(t *testing.T) 
 	}
 }
 
+func TestFinalizeDeadlineAcceptsRunsExpiredBeforeExecutionStarts(t *testing.T) {
+	now := time.Date(2026, 11, 9, 12, 0, 0, 0, time.UTC)
+	policies := map[string]template.PropagationPolicy{
+		"required": {OnTimedOut: domain.PropagateFail},
+	}
+	stages := []domain.Stage{
+		{Code: "required", Required: true, Status: domain.StageTimedOut, ReasonCodes: []string{"run_deadline_exceeded"}},
+	}
+	for _, status := range []domain.RunStatus{domain.RunCreated, domain.RunQueued} {
+		t.Run(string(status), func(t *testing.T) {
+			run := domain.Run{Status: status, TerminationReason: "deadline_exceeded"}
+			got, err := FinalizeDeadline(run, stages, nil, policies, nil, false, now)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got.Status != domain.RunFailed || got.ResultSummary == nil {
+				t.Fatalf("unexpected pre-start deadline result: %+v", got)
+			}
+		})
+	}
+}
+
 func TestApplyDeadlinePreservesCompletedRunForNormalAggregation(t *testing.T) {
 	now := time.Date(2026, 11, 6, 10, 0, 0, 0, time.UTC)
 	run := domain.Run{Status: domain.RunRunning, DeadlineAt: now}

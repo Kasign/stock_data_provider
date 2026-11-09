@@ -74,7 +74,8 @@ func (f *DeadlineFinalizer) Finalize(ctx context.Context, runRef string) (Deadli
 		return DeadlineFinalizationResult{}, fmt.Errorf("load expired Researchflow Run snapshot: %w", err)
 	}
 	if snapshot.Run.Ref != runRef || snapshot.Run.Version == 0 ||
-		snapshot.Run.Status != domain.RunRunning || snapshot.Run.TerminationReason != "deadline_exceeded" {
+		(snapshot.Run.Status != domain.RunCreated && snapshot.Run.Status != domain.RunQueued && snapshot.Run.Status != domain.RunRunning) ||
+		snapshot.Run.TerminationReason != "deadline_exceeded" {
 		return DeadlineFinalizationResult{}, errors.New("Researchflow Run is not in the persisted deadline-finalization state")
 	}
 	now, err := f.clock.NowUTC(ctx)
