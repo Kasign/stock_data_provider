@@ -191,12 +191,14 @@ func validateContextReferences(value researchapp.ResearchContext, evidenceIDs ma
 		} else if _, exists := included[section.SectionID]; exists {
 			return nil, fmt.Errorf("%w: excluded section %q listed as included", ErrInvalidResultComposition, section.SectionID)
 		}
-		for _, ref := range section.SourceRefs {
-			if _, exists := sourceRefs[ref]; exists {
-				// A source may legitimately support more than one section.
-				continue
+		if section.Included {
+			for _, ref := range section.SourceRefs {
+				if _, exists := sourceRefs[ref]; exists {
+					// A source may legitimately support more than one section.
+					continue
+				}
+				sourceRefs[ref] = struct{}{}
 			}
-			sourceRefs[ref] = struct{}{}
 		}
 		for _, ref := range section.EvidenceRefs {
 			if _, exists := evidenceIDs[ref]; !exists {
