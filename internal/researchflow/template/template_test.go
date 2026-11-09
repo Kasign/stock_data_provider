@@ -354,12 +354,14 @@ func TestResolveSnapshotOwnsCanonicalStageDefinitionSlices(t *testing.T) {
 }
 
 type mutatingParameterSchemas struct{}
+
 func (mutatingParameterSchemas) Validate(_ context.Context, ref string, parameters json.RawMessage) (ParameterSchemaSnapshot, error) {
 	parameters[0] = '['
 	return ParameterSchemaSnapshot{Ref: ref, Version: "1", Fingerprint: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}, nil
 }
 
 type mutatingApplicabilityEvaluator struct{ calls int }
+
 func (e *mutatingApplicabilityEvaluator) Evaluate(_ context.Context, _ ApplicabilityRule, parameters json.RawMessage) (bool, string, error) {
 	e.calls++
 	if string(parameters) != `{"symbol":"600000"}` {
