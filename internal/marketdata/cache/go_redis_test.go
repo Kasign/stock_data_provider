@@ -11,6 +11,7 @@ import (
 
 type fakeGoRedisCommands struct {
 	getCommand  *redis.StringCmd
+	getKey      string
 	setCommand  *redis.StatusCmd
 	pingCommand *redis.StatusCmd
 	setKey      string
@@ -18,7 +19,8 @@ type fakeGoRedisCommands struct {
 	setTTL      time.Duration
 }
 
-func (f *fakeGoRedisCommands) Get(ctx context.Context, _ string) *redis.StringCmd {
+func (f *fakeGoRedisCommands) Get(ctx context.Context, key string) *redis.StringCmd {
+	f.getKey = key
 	if f.getCommand == nil {
 		f.getCommand = redis.NewStringCmd(ctx)
 	}
@@ -52,8 +54,8 @@ func TestGoRedisGetHitAndMiss(t *testing.T) {
 	}
 
 	got, found, err := adapter.Get(ctx, "quote:600000")
-	if err != nil || !found || string(got) != "cached" {
-		t.Fatalf("Get() = %q, %v, %v", got, found, err)
+	if err != nil || !found || string(got) != "cached" || client.getKey != "quote:600000" {
+		t.Fatalf("Get() = %q, %v, %v; key = %q", got, found, err, client.getKey)
 	}
 
 	miss := &fakeGoRedisCommands{getCommand: redis.NewStringCmd(ctx)}
@@ -63,8 +65,8 @@ func TestGoRedisGetHitAndMiss(t *testing.T) {
 		t.Fatalf("NewGoRedis() miss adapter error = %v", err)
 	}
 	got, found, err = adapter.Get(ctx, "quote:missing")
-	if err != nil || found || got != nil {
-		t.Fatalf("missing Get() = %q, %v, %v; want nil, false, nil", got, found, err)
+	if err != nil || found || got != nil || miss.getKey != "quote:missing" {
+		t.Fatalf("missing Get() = %q, %v, %v; key = %q; want nil, false, nil", got, found, err, miss.getKey)
 	}
 }
 
@@ -86,6 +88,31 @@ func TestGoRedisSetPreservesValueAndTTL(t *testing.T) {
 	}
 	if err := adapter.Set(ctx, "bars:600000", value, time.Microsecond); err == nil {
 		t.Fatal("Set() must reject TTL below 1ms")
+	}
+}
+
+func TestGoRedisGetAndSetPropagateErrors(t *testing.T) {
+	ctx := context.Background()
+	getErr := errors.New("redis GET failed")
+	getClient := &fakeGoRedisCommands{getCommand: redis.NewStringCmd(ctx)}
+	getClient.getCommand.SetErr(getErr)
+	getAdapter, err := NewGoRedis(getClient)
+	if err != nil {
+		t.Fatalf("NewGoRedis() GET adapter error = %v", err)
+	}
+	if value, found, err := getAdapter.Get(ctx, "quote:600000"); !errors.Is(err, getErr) || found || value != nil {
+		t.Fatalf("Get() = %q, %v, %v; want nil, false, original error", value, found, err)
+	}
+
+	setErr := errors.New("redis SET failed")
+	setClient := &fakeGoRedisCommands{setCommand: redis.NewStatusCmd(ctx)}
+	setClient.setCommand.SetErr(setErr)
+	setAdapter, err := NewGoRedis(setClient)
+	if err != nil {
+		t.Fatalf("NewGoRedis() SET adapter error = %v", err)
+	}
+	if err := setAdapter.Set(ctx, "bars:600000", []byte("payload"), time.Second); !errors.Is(err, setErr) {
+		t.Fatalf("Set() error = %v, want original error %v", err, setErr)
 	}
 }
 
