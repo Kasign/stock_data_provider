@@ -2,6 +2,7 @@ package diagnostics
 
 import (
 	"context"
+	"sync"
 	"testing"
 	"time"
 
@@ -172,5 +173,34 @@ func TestResearchCheckHonorsCanceledRunnerContext(t *testing.T) {
 	}
 	if got := report.Results[0].Observation.Status; got != platformdiagnostics.StatusUnavailable {
 		t.Fatalf("canceled check status = %q, want unavailable", got)
+	}
+}
+
+func TestResearchChecksAreSafeForConcurrentRunnerExecution(t *testing.T) {
+	contextCheck, err := NewContextCheck("research.context.concurrent", "Context 快照", true, validContextSnapshot())
+	if err != nil {
+		t.Fatalf("NewContextCheck() error = %v", err)
+	}
+	const workers = 24
+	var wait sync.WaitGroup
+	errors := make(chan string, workers)
+	for i := 0; i < workers; i++ {
+		wait.Add(1)
+		go func() {
+			defer wait.Done()
+			observation, err := contextCheck.Run(context.Background())
+			if err != nil {
+				errors <- err.Error()
+				return
+			}
+			if observation.Status != platformdiagnostics.StatusHealthy {
+				errors <- string(observation.Status)
+			}
+		}()
+	}
+	wait.Wait()
+	close(errors)
+	for err := range errors {
+		t.Errorf("concurrent Context check failed: %s", err)
 	}
 }
