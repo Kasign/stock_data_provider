@@ -50,6 +50,7 @@ func TestValidateProviderPolicyRequiresExactHTTPSDestination(t *testing.T) {
 		{"multiple hosts", func(p *platformhttpclient.DestinationPolicy) { p.AllowedHosts = append(p.AllowedHosts, "other.example.com") }},
 		{"port mismatch", func(p *platformhttpclient.DestinationPolicy) { p.AllowedPorts = []uint16{8443} }},
 		{"redirects enabled", func(p *platformhttpclient.DestinationPolicy) { p.AllowRedirects = true }},
+		{"transport retries enabled", func(p *platformhttpclient.DestinationPolicy) { p.Idempotent = true }},
 		{"http enabled", func(p *platformhttpclient.DestinationPolicy) { p.AllowHTTP = true }},
 		{"dependency missing", func(p *platformhttpclient.DestinationPolicy) { p.Dependency = "" }},
 	}

@@ -54,8 +54,8 @@ func validateProviderPolicy(provider llm.ProviderConfig, policy platformhttpclie
 	if strings.TrimSpace(policy.Dependency) == "" {
 		return errors.New("LLM Gateway dependency identifier is required")
 	}
-	if policy.AllowHTTP || policy.AllowRedirects || policy.MaxRedirects != 0 {
-		return errors.New("LLM Gateway policy must require HTTPS and reject redirects")
+	if policy.AllowHTTP || policy.AllowRedirects || policy.MaxRedirects != 0 || policy.Idempotent {
+		return errors.New("LLM Gateway policy must require HTTPS, reject redirects, and disable transport retries")
 	}
 	if len(policy.AllowedHosts) != 1 {
 		return errors.New("LLM Gateway policy must allow exactly the configured host")
