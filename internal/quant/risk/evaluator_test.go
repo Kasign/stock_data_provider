@@ -96,4 +96,48 @@ func TestEvaluateRuleSetHonorsCancellation(t *testing.T) {
 	if _, err := EvaluateRuleSet(ctx, set, decisionInput(set.Version, nil), nil); !errors.Is(err, context.Canceled) {
 		t.Fatalf("error = %v, want context.Canceled", err)
 	}
+
+func TestEvaluateRuleSetOptionalEvaluatorErrorIsDiagnosticOnly(t *testing.T) {
+	set := validRuleSet()
+	evaluators := map[string]RuleEvaluator{
+		"INPUT_QUALITY": func(context.Context) (Reason, error) {
+			return Reason{Code: "INPUT_QUALITY", Severity: SeverityBlock, Status: ReasonNotTriggered, SafeMessage: "输入质量合格", EvidenceRefs: []string{}}, nil
+		},
+		"TRADING_STATUS": func(context.Context) (Reason, error) {
+			return Reason{Code: "TRADING_STATUS", Severity: SeverityBlock, Status: ReasonNotTriggered, SafeMessage: "交易状态正常", EvidenceRefs: []string{}}, nil
+		},
+		"CONCENTRATION": func(context.Context) (Reason, error) {
+			return Reason{}, errors.New("optional evaluator unavailable")
+		},
+	}
+	decision, err := EvaluateRuleSet(context.Background(), set, decisionInput(set.Version, nil), evaluators)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if decision.Status != DecisionPass {
+		t.Fatalf("optional evaluator failure changed hard-gate status: %q", decision.Status)
+	}
+	if len(decision.Reasons) != 3 {
+		t.Fatalf("reasons = %d, want 3 including optional diagnostic", len(decision.Reasons))
+	}
+	optional := decision.Reasons[2]
+	if optional.Code != "CONCENTRATION" || optional.Severity != SeverityWarn ||
+		optional.Status != ReasonUnknown || optional.SafeMessage == "optional evaluator unavailable" {
+		t.Fatalf("optional failure diagnostic is invalid or leaked internal error: %+v", optional)
+	}
+}
+
+func TestEvaluateRuleSetStopsWhenContextIsCancelledDuringEvaluation(t *testing.T) {
+	set := validRuleSet()
+	ctx, cancel := context.WithCancel(context.Background())
+	evaluators := map[string]RuleEvaluator{
+		"INPUT_QUALITY": func(context.Context) (Reason, error) {
+			cancel()
+			return Reason{Code: "INPUT_QUALITY", Severity: SeverityBlock, Status: ReasonNotTriggered, SafeMessage: "输入质量合格", EvidenceRefs: []string{}}, nil
+		},
+	}
+	if _, err := EvaluateRuleSet(ctx, set, decisionInput(set.Version, nil), evaluators); !errors.Is(err, context.Canceled) {
+		t.Fatalf("error = %v, want context.Canceled", err)
+	}
+}
 }

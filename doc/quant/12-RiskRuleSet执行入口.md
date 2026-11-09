@@ -22,3 +22,8 @@
 ## 验收
 
 测试覆盖声明顺序、必需规则缺失、执行错误 fail-closed、未知 evaluator、返回身份不匹配和 context 取消。该实现提供通用执行骨架，不代表已有真实风险规则或生产规则集。
+
+## 补充验收
+
+- 可选规则 evaluator 执行失败时保留该规则的 unknown 诊断，但不得改变已明确通过的 block 硬门禁状态；内部错误文本不得进入 safe_message。
+- evaluator 执行期间 Context 被取消时立即返回取消错误，不构造部分 RiskDecision。
