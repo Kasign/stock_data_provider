@@ -163,7 +163,7 @@ func execute(parent context.Context, check Check) (result Result) {
 func normalizeFault(err error, contextErr error) *fault.Fault {
 	var f *fault.Fault
 	if errors.As(err, &f) && f != nil {
-		if !validFaultClass(f.Class) {
+		if !f.Class.Valid() {
 			return &fault.Fault{
 				Class: fault.ClassInternal, Code: "platform.diagnostics.invalid_fault",
 				SafeMessage: "check returned an invalid fault", Cause: err,
