@@ -32,3 +32,17 @@
 - 原 TCP 依赖测试同时配置 BaoStock 与 Pytdx，但断言在 BaoStock 首个失败后即结束，未真正覆盖 Pytdx 缺失 DialContext 的分支。
 - 改为两个独立子测试，分别验证 BaoStock 与 Pytdx 缺少 TCP 注入时均 fail-closed；两者均显式开启 DailyBars，避免零能力跳过。
 - 未执行测试，待 integration 统一验收。
+
+
+### 2026-11-09：Eastmoney 出站依赖按业务能力收敛
+
+- 实现提交：`34e747ed029b800c60207917f3985adbd5ed9a2a`；校验回归测试提交：`3faa442968fb92b9123970d37ddf454d31711a2f`。
+- 新增 `EastmoneyCapabilities` 与 `HTTPOriginsForCapabilities`，由 Provider 根据真实调用链计算当前启用能力所需 origin；bootstrap 不再无条件要求全部配置端点。
+- 已纳入跨能力附带请求：
+  - MarketBreadth：市场分布、证券列表分页、涨跌停池。
+  - HotRankings：人气榜/飙升榜及指数行情补全。
+  - SectorRankings：行业榜及五日榜使用的 K 线。
+  - ChipDistribution：用于筹码计算的日 K。
+- 其他能力按其直接请求端点校验：Quote、DailyBars、StockBasic、StockSearch、IndexQuotes、LimitPools、StockBoards、Announcements、DragonTiger、CapitalFlow。
+- 增加 Provider 级依赖映射测试，以及 bootstrap 层“仅 Quote 启用时只要求 Quote origin”的回归测试。
+- 仍需在 integration 统一执行测试；本分支未运行构建或测试。该改动只收敛装配时依赖清单，不改变 BoundDoer 的 DNS/IP/重定向安全策略。
