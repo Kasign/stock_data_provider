@@ -57,7 +57,6 @@ func (a *deadlineAwareExecutionAdapter) Send(ctx context.Context, _ domain.Chann
 	}, context.DeadlineExceeded
 }
 
-
 type deadlineRecordingExecutionAdapter struct {
 	snapshot domain.ChannelConfigSnapshot
 	deadline time.Time
