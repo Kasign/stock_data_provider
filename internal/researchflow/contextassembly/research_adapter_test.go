@@ -220,3 +220,52 @@ func TestToResearchCreateContextCommandRejectsInvalidQualitySummary(t *testing.T
 		}
 	}
 }
+
+func TestAssembleResearchContextWithTokenizerRunsCompleteBudgetAndInputPipeline(t *testing.T) {
+	now := time.Date(2026, 11, 9, 8, 0, 0, 0, time.UTC)
+	tokenizer := testTokenizer{
+		modelID: "model-a", version: "v2",
+		count: func(value string) (int, error) {
+			switch value {
+			case "system":
+				return 10, nil
+			case "tools":
+				return 5, nil
+			case "required authorized text":
+				return 20, nil
+			case "optional authorized text":
+				return 15, nil
+			default:
+				return 25, nil
+			}
+		},
+	}
+	candidates := []SectionCandidate{
+		{ID: "required", SourceOwner: "data", Required: true, SourceRefs: []string{"snapshot-1"}},
+		{ID: "optional", SourceOwner: "news", SourceRefs: []string{"news-1"}},
+	}
+	metadata := map[string]SectionMetadata{
+		"required": {Version: "1", QualityStatus: "valid", AssembledAt: now},
+		"optional": {Version: "1", QualityStatus: "valid", AssembledAt: now},
+	}
+	snapshot := ResearchContextSnapshot{
+		ResearchQuestion: "分析", Scope: "stock", SubjectRefs: []string{"600000.SH"},
+		SystemAsOf: now, BuilderVersion: "v1",
+		QualitySummary: researchapp.ContextQualitySummary{Status: "valid", ReasonCodes: []string{}},
+	}
+	result, err := AssembleResearchContextWithTokenizer(snapshot, candidates, metadata, []SectionContent{
+		{SectionID: "required", Text: "required authorized text"},
+		{SectionID: "optional", Text: "optional authorized text"},
+	}, tokenizer, "model-a", BudgetReservationInput{
+		ModelContextTokens: 100, SystemPrompt: "system", ToolSchema: "tools",
+		OutputReserve: 30, SafetyMargin: 10,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.AvailableTokens != 45 || result.Plan.UsedTokens != 20 ||
+		len(result.Command.IncludedSections) != 1 || result.Command.IncludedSections[0] != "required" ||
+		result.ModelInput.TokenCount != 25 || result.Tokenizer.Version != "v2" {
+		t.Fatalf("unexpected complete assembly: %+v", result)
+	}
+}

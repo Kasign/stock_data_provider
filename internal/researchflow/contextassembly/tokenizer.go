@@ -19,6 +19,17 @@ type Tokenizer interface {
 	CountTokens(text string) (int, error)
 }
 
+func validateTokenizer(tokenizer Tokenizer, expectedModelID string) (TokenizerProvenance, error) {
+	if tokenizer == nil || expectedModelID == "" || expectedModelID != strings.TrimSpace(expectedModelID) {
+		return TokenizerProvenance{}, ErrTokenizerUnavailable
+	}
+	modelID, version := tokenizer.ModelID(), tokenizer.Version()
+	if modelID != expectedModelID || version == "" || version != strings.TrimSpace(version) {
+		return TokenizerProvenance{}, fmt.Errorf("%w: tokenizer identity does not match target model", ErrTokenizerUnavailable)
+	}
+	return TokenizerProvenance{ModelID: modelID, Version: version}, nil
+}
+
 // SectionContent is authorized section text supplied by its resource Owner.
 // The estimator does not fetch, persist, log or return this content.
 type SectionContent struct {
@@ -41,13 +52,9 @@ func EstimateSectionTokens(
 	candidates []SectionCandidate,
 	contents []SectionContent,
 ) ([]SectionCandidate, TokenizerProvenance, error) {
-	if tokenizer == nil {
-		return nil, TokenizerProvenance{}, ErrTokenizerUnavailable
-	}
-	if expectedModelID == "" || expectedModelID != strings.TrimSpace(expectedModelID) ||
-		tokenizer.ModelID() != expectedModelID || tokenizer.Version() == "" ||
-		tokenizer.Version() != strings.TrimSpace(tokenizer.Version()) {
-		return nil, TokenizerProvenance{}, fmt.Errorf("%w: tokenizer identity does not match target model", ErrTokenizerUnavailable)
+	provenance, err := validateTokenizer(tokenizer, expectedModelID)
+	if err != nil {
+		return nil, TokenizerProvenance{}, err
 	}
 	if len(candidates) == 0 || len(contents) != len(candidates) {
 		return nil, TokenizerProvenance{}, fmt.Errorf("%w: section content does not match candidates", ErrInvalidTokenEstimate)
@@ -92,5 +99,5 @@ func EstimateSectionTokens(
 		estimated[i].EvidenceRefs = append([]string(nil), candidate.EvidenceRefs...)
 		estimated[i].ProtectedEvidenceRefs = append([]string(nil), candidate.ProtectedEvidenceRefs...)
 	}
-	return estimated, TokenizerProvenance{ModelID: expectedModelID, Version: tokenizer.Version()}, nil
+	return estimated, provenance, nil
 }

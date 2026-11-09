@@ -190,6 +190,8 @@ func hasDuplicates(values []string) bool {
 type ResearchContextAssembly struct {
 	Command         researchapp.CreateContextCommand
 	Plan            Plan
+	ModelInput      ComposedModelInput
+	Tokenizer       TokenizerProvenance
 	AvailableTokens int
 }
 
@@ -215,4 +217,67 @@ func AssembleResearchContext(
 		return ResearchContextAssembly{}, err
 	}
 	return ResearchContextAssembly{Command: command, Plan: plan, AvailableTokens: available}, nil
+}
+
+
+// AssembleResearchContextWithTokenizer executes the model-specific assembly
+// path: count authorized section text, measure fixed request reservations,
+// select sections, project the Research DTO, then count the exact final JSON
+// model input. The system prompt and tool schema are measured separately
+// because they are sent in distinct LLM request fields.
+func AssembleResearchContextWithTokenizer(
+	snapshot ResearchContextSnapshot,
+	candidates []SectionCandidate,
+	metadata map[string]SectionMetadata,
+	contents []SectionContent,
+	tokenizer Tokenizer,
+	expectedModelID string,
+	reservations BudgetReservationInput,
+) (ResearchContextAssembly, error) {
+	estimated, provenance, err := EstimateSectionTokens(tokenizer, expectedModelID, candidates, contents)
+	if err != nil {
+		return ResearchContextAssembly{}, err
+	}
+	budget, budgetProvenance, err := MeasureBudgetReservations(tokenizer, expectedModelID, reservations)
+	if err != nil {
+		return ResearchContextAssembly{}, err
+	}
+	if provenance != budgetProvenance {
+		return ResearchContextAssembly{}, ErrTokenizerUnavailable
+	}
+	available, err := AvailableBudget(budget)
+	if err != nil {
+		return ResearchContextAssembly{}, err
+	}
+	plan, err := BuildPlan(estimated, available)
+	if err != nil {
+		return ResearchContextAssembly{}, err
+	}
+	command, err := ToResearchCreateContextCommand(snapshot, estimated, metadata, plan)
+	if err != nil {
+		return ResearchContextAssembly{}, err
+	}
+	selectedContents := make([]SectionContent, 0, len(plan.IncludedSections))
+	contentByID := make(map[string]SectionContent, len(contents))
+	for _, content := range contents {
+		contentByID[content.SectionID] = content
+	}
+	for _, id := range plan.IncludedSections {
+		content, exists := contentByID[id]
+		if !exists {
+			return ResearchContextAssembly{}, fmt.Errorf("%w: missing authorized content for section %q", ErrInvalidModelInput, id)
+		}
+		selectedContents = append(selectedContents, content)
+	}
+	modelInput, err := ComposeModelInput(
+		snapshot, estimated, metadata, plan, selectedContents,
+		tokenizer, expectedModelID, available,
+	)
+	if err != nil {
+		return ResearchContextAssembly{}, err
+	}
+	return ResearchContextAssembly{
+		Command: command, Plan: plan, ModelInput: modelInput,
+		Tokenizer: provenance, AvailableTokens: available,
+	}, nil
 }
