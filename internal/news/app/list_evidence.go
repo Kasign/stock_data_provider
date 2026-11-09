@@ -18,9 +18,9 @@ type EvidenceRecordReader interface {
 // ListEvidence composes reference-only PIT pagination with per-item current authorization.
 // A single item failure aborts the whole page so callers never receive partial disclosure.
 type ListEvidence struct {
-	pages EvidenceSnapshotPageReader
+	pages   EvidenceSnapshotPageReader
 	records EvidenceRecordReader
-	now func() time.Time
+	now     func() time.Time
 }
 
 // NewListEvidence creates the authorized content page facade.
@@ -50,7 +50,8 @@ func (u *ListEvidence) Execute(ctx context.Context, request ListEvidenceRequest)
 	if !validEvidenceOpaqueRef(referencePage.SnapshotRef) ||
 		referencePage.SystemAsOf.IsZero() || !referencePage.SystemAsOf.Equal(request.SystemAsOf) ||
 		len(referencePage.Items) > request.PageSize ||
-		(referencePage.NextCursor != nil && !validEvidencePageCursor(*referencePage.NextCursor)) {
+		(referencePage.NextCursor != nil &&
+			(len(referencePage.Items) != request.PageSize || !validEvidencePageCursor(*referencePage.NextCursor))) {
 		return ResearchEvidencePage{}, ErrEvidenceSnapshotPageUnavailable
 	}
 	result := NewResearchEvidencePage(referencePage.SystemAsOf)
@@ -90,7 +91,6 @@ func (u *ListEvidence) Execute(ctx context.Context, request ListEvidenceRequest)
 	}
 	return result, nil
 }
-
 
 // validEvidencePageCursor mirrors the request boundary for cursors returned by
 // the internal page reader; malformed repository output must not escape the facade.
