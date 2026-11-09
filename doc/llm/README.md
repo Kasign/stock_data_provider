@@ -3,10 +3,10 @@
 - 分支：`feat/llm`
 - 代码：`internal/llm/**`
 - 任务前缀：LLM
-- 状态：LLM-002 DTO/Provider Port、Responses JSON Mapper/Parser、非流式 HTTP Adapter、Clock/Deadline 注入、纯 SSE Parser、公共 DTO Draft 2020-12 Schema 已实现；整体仍待 LLM 包级构建验证
-- 最近代码提交：`a0ed1cc192aab7fd9df3648c6d4966622d9ef34b`
+- 状态：LLM-002 DTO/Provider Port、Responses JSON Mapper/Parser、非流式 HTTP Adapter、Clock/Deadline 注入、SSE Reader Parser/Stream Adapter、公共 DTO Draft 2020-12 Schema 已实现；整体仍待 LLM 包级构建验证及真实 Gateway E2E
+- 最近代码提交：以 `feat/llm` 当前 HEAD 为准
 - LLM-001：静态协议盘点完成；在线真实端点验收未执行
-- LLM-002：DTO/Provider Port、Responses JSON 请求映射/响应解析、非流式 HTTP Adapter 及对应单测已实现，待 gofmt/go test；Platform Fault 映射、Draft 2020-12 Schema 编译及 DTO Schema Contract Test 均待构建验证；JSON/SSE Golden 已扩展覆盖拒绝、未知项、Usage 边界、终态和序号异常；新增完整 Request Mapper Golden，覆盖 sampling、reasoning、strict schema、function tool 与 tool_choice；新增 Adapter 能力门禁测试，验证可选能力证据缺失时不会派发请求；已补充 SSE callback error（普通事件中断、终态回调拒绝）、CRLF/multiline data、事件数量、单事件累计字节、总输入字节上限、终态后事件拒绝回归测试，以及 Structured Output 非法 JSON/空输出/incomplete 边界测试（待执行）；完整矩阵仍待执行；Platform 受控流读取尚未提供；local_validation_only、Usage 诊断码、Capability verification_method 与 capability_ttl_ms 已纳入 Mapper/DTO
+- LLM-002：DTO/Provider Port、Responses JSON 请求映射/响应解析、非流式 HTTP Adapter 及对应单测已实现，待 gofmt/go test；Platform Fault 映射、Draft 2020-12 Schema 编译及 DTO Schema Contract Test 均待构建验证；JSON/SSE Golden 已扩展覆盖拒绝、未知项、Usage 边界、终态和序号异常；新增完整 Request Mapper Golden，覆盖 sampling、reasoning、strict schema、function tool 与 tool_choice；新增 Adapter 能力门禁测试，验证可选能力证据缺失时不会派发请求；已补充 SSE callback error（普通事件中断、终态回调拒绝）、CRLF/multiline data、事件数量、单事件累计字节、总输入字节上限、终态后事件拒绝回归测试，以及 Structured Output 非法 JSON/空输出/incomplete 边界测试（待执行）；完整矩阵仍待执行；Platform A1 已提供 `BoundDoer.OpenStream`，LLM A2 接入代码已实现但待包级验证和真实 E2E；local_validation_only、Usage 诊断码、Capability verification_method 与 capability_ttl_ms 已纳入 Mapper/DTO
 
 只负责 Go 侧模型服务协议适配，复用现有独立模型服务；不重建推理 Gateway，不管理研究状态机、工具权限或业务结论。
 
@@ -77,3 +77,11 @@ internal/llm/
 
 - 高级约束能力门禁覆盖 strict / non-strict 的所有上游 Schema；只有 `local_validation_only` 的 Response Schema 跳过上游能力要求，Function Tool 参数仍然执行门禁。
 - 最新 CI：`42558442773` 的根模块 gofmt 清单不含 `internal/llm/**`，但其他模块格式问题仍使根模块测试提前跳过。
+
+
+## LLM-005 流式接入最新状态（2026-11-09）
+
+- Platform `feat/platform-foundation` 的 PLAT-CTR-005 A1 已通过专项 CI，提供 `BoundDoer.OpenStream`。
+- LLM 已实现 `MapResponsesStreamRequestAt`、`ParseResponsesSSEReader`、`HTTPStreamDoer` 和 `ResponsesAdapter.Stream`；Stream 使用同步 callback、受控 Body、固定 SSE Accept、流式请求标志和已有能力证据门禁。
+- 组合根需要将 Platform `*httpclient.StreamResponse` 包装为 LLM `HTTPStreamResponse`；当前 integration 基线尚未包含 Platform A1 新 API，不能直接宣称跨分支集成完成。
+- 最新代码有 fake transport 回归测试，但 LLM 包级测试尚未执行；待根模块其他模块 gofmt 问题修复后补齐 go test/race/vet，并进行本地 Gateway E2E。
