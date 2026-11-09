@@ -355,3 +355,24 @@ func TestParseResponsesSSERejectsTotalPayloadAboveLimit(t *testing.T) {
 		t.Fatalf("oversized total payload must be resource_limit: response=%+v err=%v", got, err)
 	}
 }
+
+
+func TestParseResponsesSSERejectsEventAfterTerminal(t *testing.T) {
+	request := validSSERequest()
+	clock := sseTestClock{now: request.SystemAsOf.Add(time.Second)}
+	data := strings.Join([]string{
+		"event: response.completed",
+		"data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp-terminal-extra\",\"object\":\"response\",\"status\":\"completed\",\"output\":[]}}",
+		"",
+		"event: response.future_event",
+		"data: {\"type\":\"response.future_event\"}",
+		"",
+	}, "\n")
+
+	got, err := ParseResponsesSSE([]byte(data), request, clock, nil)
+	var adapterErr *AdapterError
+	if !errors.As(err, &adapterErr) || adapterErr.Info.StableCode != "llm.sse.event_after_terminal" ||
+		adapterErr.Info.Kind != ErrorInvalidResponse || got.Status != ResponseFailed {
+		t.Fatalf("event after terminal must reject the stream: response=%+v err=%v", got, err)
+	}
+}
