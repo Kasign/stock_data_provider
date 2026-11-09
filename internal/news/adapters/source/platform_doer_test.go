@@ -90,3 +90,18 @@ func TestSourceTransportErrorPreservesPlatformRetryClassification(t *testing.T) 
 		}
 	}
 }
+
+func TestSourceTransportErrorRejectsInvalidPlatformFaultMetadata(t *testing.T) {
+	platformErr := &fault.Fault{
+		Class: fault.ClassValidation, Code: "invalid code",
+		SafeMessage: "invalid fault", Retryable: true,
+	}
+	mapped := sourceTransportErrorFromPlatform(platformErr)
+	var transportErr *sourceTransportError
+	if !errors.As(mapped, &transportErr) {
+		t.Fatalf("mapped error type = %T, want *sourceTransportError", mapped)
+	}
+	if transportErr.Retryable() {
+		t.Fatal("invalid Platform Fault must not propagate retryable=true")
+	}
+}

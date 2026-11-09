@@ -132,3 +132,18 @@ func TestProviderErrorMapsPlatformFaultWithoutExposingCause(t *testing.T) {
 		t.Fatalf("mapped error exposed unsafe details: %q", got)
 	}
 }
+
+func TestProviderErrorRejectsInvalidPlatformFaultMetadata(t *testing.T) {
+	platformErr := &fault.Fault{
+		Class: fault.ClassValidation, Code: "invalid code",
+		SafeMessage: "invalid fault", Retryable: true,
+	}
+	mapped := providerErrorFromPlatform(platformErr)
+	var providerErr *app.ProviderError
+	if !errors.As(mapped, &providerErr) {
+		t.Fatalf("mapped error type = %T, want *app.ProviderError", mapped)
+	}
+	if providerErr.Code != "provider_transport_failed" || providerErr.Retryable {
+		t.Fatalf("invalid Platform Fault was propagated: %#v", providerErr)
+	}
+}

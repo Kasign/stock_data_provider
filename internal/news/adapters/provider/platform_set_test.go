@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	"example.com/stock-analysis-flow/internal/news/app"
-
 	newsconfig "example.com/stock-analysis-flow/internal/news/config"
 	platformconfig "example.com/stock-analysis-flow/internal/platform/config"
 	"example.com/stock-analysis-flow/internal/platform/httpclient"
