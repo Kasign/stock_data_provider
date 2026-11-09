@@ -232,19 +232,18 @@ func TestValidateEgressDependenciesChecksTickFlowRequestModes(t *testing.T) {
 	}
 }
 
-
 func TestValidateEgressDependenciesRequiresOnlyEnabledEastmoneyCapabilityOrigins(t *testing.T) {
 	cfg := config.Config{
-		ProviderPriority: []string{"eastmoney"},
-		ProviderSettings: map[string]config.ProviderSettings{"eastmoney": {Enabled: true, Quote: true}},
-		EastmoneyQuoteURL: "https://quote.example.test/api",
-		EastmoneyKlineURL: "https://unused-kline.example.test/api",
-		EastmoneyStockBasicURL: "https://unused-basic.example.test/api",
+		ProviderPriority:          []string{"eastmoney"},
+		ProviderSettings:          map[string]config.ProviderSettings{"eastmoney": {Enabled: true, Quote: true}},
+		EastmoneyQuoteURL:         "https://quote.example.test/api",
+		EastmoneyKlineURL:         "https://unused-kline.example.test/api",
+		EastmoneyStockBasicURL:    "https://unused-basic.example.test/api",
 		EastmoneySectorRankingURL: "https://unused-sector.example.test/api",
-		EastmoneyIndexURL: "https://unused-index.example.test/api",
-		EastmoneyMarketStocksURL: "https://unused-market.example.test/api",
+		EastmoneyIndexURL:         "https://unused-index.example.test/api",
+		EastmoneyMarketStocksURL:  "https://unused-market.example.test/api",
 		EastmoneyLimitPoolBaseURL: "https://unused-limit.example.test",
-		EastmoneyStockBoardsURL: "https://unused-boards.example.test/api",
+		EastmoneyStockBoardsURL:   "https://unused-boards.example.test/api",
 	}
 	deps := Dependencies{EastmoneyHTTPDoers: map[string]provider.HTTPDoer{
 		"https://quote.example.test": egressHTTPDoerStub{},
@@ -254,27 +253,26 @@ func TestValidateEgressDependenciesRequiresOnlyEnabledEastmoneyCapabilityOrigins
 	}
 }
 
-
 func TestValidateEgressDependenciesCoversSingleExecutorProviders(t *testing.T) {
 	tests := []struct {
-		name string
-		cfg config.Config
-		deps Dependencies
+		name    string
+		cfg     config.Config
+		deps    Dependencies
 		wantErr string
 	}{
 		{
-			name: "hithink",
-			cfg: config.Config{ProviderPriority: []string{"hithink"}, ProviderSettings: map[string]config.ProviderSettings{"hithink": {Enabled: true, DailyBars: true}}},
+			name:    "hithink",
+			cfg:     config.Config{ProviderPriority: []string{"hithink"}, ProviderSettings: map[string]config.ProviderSettings{"hithink": {Enabled: true, DailyBars: true}}},
 			wantErr: "hithink HTTP",
 		},
 		{
-			name: "yahoo",
-			cfg: config.Config{ProviderPriority: []string{"yahoo"}, ProviderSettings: map[string]config.ProviderSettings{"yahoo": {Enabled: true, DailyBars: true}}},
+			name:    "yahoo",
+			cfg:     config.Config{ProviderPriority: []string{"yahoo"}, ProviderSettings: map[string]config.ProviderSettings{"yahoo": {Enabled: true, DailyBars: true}}},
 			wantErr: "yahoo HTTP",
 		},
 		{
-			name: "xueqiu",
-			cfg: config.Config{ProviderPriority: []string{"xueqiu"}, ProviderSettings: map[string]config.ProviderSettings{"xueqiu": {Enabled: true, Quote: true}}},
+			name:    "xueqiu",
+			cfg:     config.Config{ProviderPriority: []string{"xueqiu"}, ProviderSettings: map[string]config.ProviderSettings{"xueqiu": {Enabled: true, Quote: true}}},
 			wantErr: "xueqiu HTTP",
 		},
 	}
