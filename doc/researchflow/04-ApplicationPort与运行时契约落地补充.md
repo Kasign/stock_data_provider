@@ -39,7 +39,7 @@ Template fingerprint 必须覆盖会改变执行或结果语义的全部字段�
 状态枚举、传播矩阵、Hard Risk actionability、取消/重试/deadline/CAS/fencing 以 03 决议为准，不得另建状态语义。
 
 1. Run 终态只能在所有 Stage 终态且无 running Attempt 后提交；结果摘要与终态在同一事务/CAS 固化。
-2. blocked 是运行期依赖/前置条件失败，不创建 Attempt；skipped 只表示 CreateRun 前按版本化规则判定不适用/裁剪，并有 reason_code。
+2. blocked 是运行期依赖/前置条件失败，不创建 Attempt；skipped 只表示 CreateRun 前按版本化规则判定不适用/裁剪，并有 reason_code。required Stage 不适用时仅进入 resolved_template_snapshot.excluded_stages、不创建 Stage；optional Stage 不适用时创建初始终态为 skipped 的 Stage（Version=1、FinishedAt=CreateRun 数据库 UTC 时间、AttemptNo=0、无 Attempt），其 reason_code 保留在 Stage.reason_codes。skipped 不是运行期迁移；可执行 Stage 依赖不适用 Stage 时 CreateRun fail-closed。
 3. retry_wait 不参与 Run 归并；RetryStage 仅由 Scheduler 推进，不是人工重跑入口。
 4. max_attempts 包含首次执行；只对白名单 reason_code 重试；degraded、业务 reject/unknown、权限失败、Schema 错误不可自动重试。
 5. Run deadline 是所有 Stage/Attempt 的共同绝对截止；数据库 UTC 时钟与 Run.version CAS 是并发裁决依据。
