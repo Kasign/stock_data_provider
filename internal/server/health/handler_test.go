@@ -2,11 +2,13 @@ package health
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
+	platformdiagnostics "example.com/stock-analysis-flow/internal/platform/diagnostics"
 	serverdiagnostics "example.com/stock-analysis-flow/internal/server/diagnostics"
 )
 
@@ -160,5 +162,38 @@ func TestReadyzFailsImmediatelyWhenDraining(t *testing.T) {
 	}
 	if checker.calls != 0 {
 		t.Fatalf("readiness checker calls = %d, want 0", checker.calls)
+	}
+}
+
+func TestReadyzReportsRegisteredCheckStatuses(t *testing.T) {
+	checker := &fakeReadinessChecker{report: serverdiagnostics.Report{
+		Readiness: serverdiagnostics.Readiness{Ready: true, SafeMessage: "ready"},
+		Diagnostics: platformdiagnostics.Report{
+			Results: []platformdiagnostics.Result{
+				{CheckID: "server.storage.mariadb", Observation: platformdiagnostics.Observation{Status: platformdiagnostics.StatusHealthy}},
+				{CheckID: "server.storage.redis", Observation: platformdiagnostics.Observation{Status: platformdiagnostics.StatusHealthy}},
+				{CheckID: "module.news.ingestion", Observation: platformdiagnostics.Observation{Status: platformdiagnostics.StatusHealthy}},
+			},
+		},
+	}}
+	handler, err := NewHandler(checker)
+	if err != nil {
+		t.Fatalf("NewHandler() error = %v", err)
+	}
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/readyz", nil))
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", response.Code, http.StatusOK)
+	}
+	var body struct {
+		Dependencies map[string]string `json:"dependencies"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	for _, id := range []string{"server.storage.mariadb", "server.storage.redis", "module.news.ingestion"} {
+		if body.Dependencies[id] != "healthy" {
+			t.Fatalf("dependency %q status = %q, want healthy; all=%v", id, body.Dependencies[id], body.Dependencies)
+		}
 	}
 }
