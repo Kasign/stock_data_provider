@@ -11,7 +11,7 @@ import (
 type DeliveryConsistencySnapshot struct {
 	Delivery   domain.DeliveryRecord
 	Attempts   []domain.DeliveryAttempt
-	StateEvents []domain.DeliveryStateEvent
+	StateEvents  []domain.DeliveryStateEvent
 }
 
 // DeliveryConsistencySnapshotReader must read the Delivery and both complete histories
@@ -44,8 +44,8 @@ func (s *DeliveryConsistencyService) Assess(ctx context.Context, deliveryID stri
 	}
 	result := AssessDeliveryConsistency(DeliveryConsistencyInput{
 		Delivery: snapshot.Delivery,
-		Attempts: snapshot.Attempts,
-		AttemptsComparable:    true,
+		Attempts:               snapshot.Attempts,
+		AttemptsComparable:     true,
 		StateEvents:            snapshot.StateEvents,
 		StateEventsComparable: true,
 	})
