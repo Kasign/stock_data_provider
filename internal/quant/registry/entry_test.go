@@ -273,7 +273,27 @@ func TestRegistryValidateParametersUsesExplicitAlgorithmVersion(t *testing.T) {
 	if err := registry.Register(entry, true); err != nil {
 		t.Fatal(err)
 	}
+	nextVersion := validEntry("sma", "2.0.0")
+	nextVersion.ParametersSchema = json.RawMessage(`{
+		"$schema":"https://json-schema.org/draft/2020-12/schema",
+		"type":"object",
+		"additionalProperties":false,
+		"required":["window"],
+		"properties":{"window":{"type":"integer","minimum":2}}
+	}`)
+	if err := registry.Register(nextVersion, false); err != nil {
+		t.Fatal(err)
+	}
+	if err := registry.ActivateVersion("sma", "1.0.0", "2.0.0"); err != nil {
+		t.Fatal(err)
+	}
 
+	if err := registry.ValidateParameters("sma", "1.0.0", "1.0.0", json.RawMessage(`{"window":1}`)); err != nil {
+		t.Fatalf("historical algorithm version changed after activation: %v", err)
+	}
+	if err := registry.ValidateParameters("sma", "1.0.0", "2.0.0", json.RawMessage(`{"window":1}`)); !errors.Is(err, ErrInvalidParameters) {
+		t.Fatalf("new active version must apply its own schema, got %v", err)
+	}
 	if err := registry.ValidateParameters("sma", "1.0.0", "1.0.0", json.RawMessage(`{"window":5}`)); err != nil {
 		t.Fatalf("valid parameters rejected: %v", err)
 	}
