@@ -79,11 +79,11 @@ func New(cfg config.Config, deps Dependencies) (*Module, error) {
 		deps.Logger = slog.Default()
 	}
 	module := &Module{
-		store:  deps.Store,
-		cache:  deps.Cache,
-		logger: deps.Logger,
+		store:          deps.Store,
+		cache:          deps.Cache,
+		logger:         deps.Logger,
 		retentionStore: deps.Store,
-		retention: cfg.QuoteRetention,
+		retention:      cfg.QuoteRetention,
 	}
 	if err := module.build(cfg); err != nil {
 		_ = module.Close(context.Background())
