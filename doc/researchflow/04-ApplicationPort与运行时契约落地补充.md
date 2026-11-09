@@ -366,3 +366,12 @@ Fake Repository/Fake Clock/Fake Provider 只证明模块内逻辑；MariaDB/Redi
 - MySQL `LoadRunFinalizationSnapshot` 复用不可变 ResolvedTemplate Snapshot、Stage、Attempt 装配；`FinalizeRunResult` 将正常结果映射到现有原子 `FinalizeRun` 事务。
 - 正常路径只允许 succeeded/partial/failed，且不接受 termination_reason；deadline 与 user cancellation 仍走各自专用 finalizer，避免跨终止原因覆盖。
 - 当前未完成：Server 聚合触发/周期扫描与生命周期接入；MariaDB 正常聚合并发、CAS 冲突、Outbox 原子性集成验收。
+
+
+### 9.13 User Cancellation Application Finalizer
+
+- `CancellationFinalizer` 只接受持久化状态 `Run=cancelling` 且 `termination_reason=user_cancelled`；deadline 和正常完成路径均拒绝。
+- Application 使用 DatabaseClock 调用 Domain `FinalizeCancellation`；Stage 集合完整且唯一、Stage/Attempt 全部明确终态是终结前置条件。
+- `CancellationFinalizationStore` 负责提交 ExpectedVersion、`cancelled`、`user_cancelled`、ResultSummary 与 Outbox 引用。MySQL Adapter 映射到现有 `FinalizeRun`，不得复制原子事务。
+- FinalizeRun 对 cancelling + user_cancelled 仅接受 RunCancelled；ResultSummary、Outbox、Run 终态和 version 更新保持同一事务。
+- Server 必须在 BeginRunCancellation 成功后广播 Worker.CancelRun；仅当活动 Attempt 均完成协作确认或被过期 lease fencing 后，才调用 CancellationFinalizer。当前尚无 Server 调度/DI 和 MariaDB 端到端验收。
