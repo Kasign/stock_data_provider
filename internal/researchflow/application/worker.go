@@ -230,4 +230,3 @@ func cloneTime(value *time.Time) *time.Time {
 	copy := *value
 	return &copy
 }
-
