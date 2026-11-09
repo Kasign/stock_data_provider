@@ -46,21 +46,32 @@ func validateEgressDependencies(cfg config.Config, deps Dependencies) error {
 				return missingEgress("baostock TCP")
 			}
 		case "tencent":
-			if deps.TencentQuoteHTTPDoer == nil || deps.TencentKlineHTTPDoer == nil ||
-				deps.TencentNoneKlineHTTPDoer == nil || deps.TencentSearchHTTPDoer == nil {
-				return missingEgress("tencent HTTP endpoints")
+			if settings.Quote && deps.TencentQuoteHTTPDoer == nil {
+				return missingEgress("tencent quote HTTP")
+			}
+			if settings.DailyBars && (deps.TencentKlineHTTPDoer == nil || deps.TencentNoneKlineHTTPDoer == nil) {
+				return missingEgress("tencent daily-bars HTTP endpoints")
+			}
+			if settings.StockSearch && deps.TencentSearchHTTPDoer == nil {
+				return missingEgress("tencent stock-search HTTP")
 			}
 		case "sina":
-			if deps.SinaQuoteHTTPDoer == nil || deps.SinaKlineHTTPDoer == nil {
-				return missingEgress("sina HTTP endpoints")
+			if settings.Quote && deps.SinaQuoteHTTPDoer == nil {
+				return missingEgress("sina quote HTTP")
+			}
+			if settings.DailyBars && deps.SinaKlineHTTPDoer == nil {
+				return missingEgress("sina daily-bars HTTP")
 			}
 		case "yahoo":
 			if deps.YahooHTTPDoer == nil {
 				return missingEgress("yahoo HTTP")
 			}
 		case "netease":
-			if deps.NeteaseQuoteHTTPDoer == nil || deps.NeteaseHistoryHTTPDoer == nil {
-				return missingEgress("netease HTTP endpoints")
+			if settings.Quote && deps.NeteaseQuoteHTTPDoer == nil {
+				return missingEgress("netease quote HTTP")
+			}
+			if settings.DailyBars && deps.NeteaseHistoryHTTPDoer == nil {
+				return missingEgress("netease history HTTP")
 			}
 		case "tushare":
 			if deps.TushareHTTPDoer == nil {

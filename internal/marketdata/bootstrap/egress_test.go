@@ -107,3 +107,46 @@ func TestHasConfiguredProviderCapability(t *testing.T) {
 		t.Fatal("Announcements must be recognized as an enabled capability")
 	}
 }
+
+func TestValidateEgressDependenciesChecksOnlyEnabledTencentEndpoints(t *testing.T) {
+	cfg := config.Config{
+		ProviderPriority: []string{"tencent"},
+		ProviderSettings: map[string]config.ProviderSettings{
+			"tencent": {Enabled: true, Quote: true},
+		},
+	}
+	if err := validateEgressDependencies(cfg, Dependencies{}); err == nil ||
+		!strings.Contains(err.Error(), "tencent quote HTTP") {
+		t.Fatalf("expected missing quote executor, got %v", err)
+	}
+	deps := Dependencies{TencentQuoteHTTPDoer: providerHTTPDoerStub{}}
+	if err := validateEgressDependencies(cfg, deps); err != nil {
+		t.Fatalf("quote-only Tencent must not require kline/search executors: %v", err)
+	}
+}
+
+func TestValidateEgressDependenciesChecksOnlyEnabledSinaAndNeteaseEndpoints(t *testing.T) {
+	tests := []struct {
+		name string
+		cfg config.Config
+		deps Dependencies
+	}{
+		{
+			name: "sina quote only",
+			cfg: config.Config{ProviderPriority: []string{"sina"}, ProviderSettings: map[string]config.ProviderSettings{"sina": {Enabled: true, Quote: true}}},
+			deps: Dependencies{SinaQuoteHTTPDoer: providerHTTPDoerStub{}},
+		},
+		{
+			name: "netease daily bars only",
+			cfg: config.Config{ProviderPriority: []string{"netease"}, ProviderSettings: map[string]config.ProviderSettings{"netease": {Enabled: true, DailyBars: true}}},
+			deps: Dependencies{NeteaseHistoryHTTPDoer: providerHTTPDoerStub{}},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := validateEgressDependencies(tt.cfg, tt.deps); err != nil {
+				t.Fatalf("disabled endpoints must not require executors: %v", err)
+			}
+		})
+	}
+}
