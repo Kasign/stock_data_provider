@@ -77,6 +77,20 @@ func TestContextCheckMapsQualityStates(t *testing.T) {
 	}
 }
 
+func TestContextCheckRequiresExactRunCutoff(t *testing.T) {
+	value := validContextSnapshot()
+	runAsOf := value.SystemAsOf.Add(time.Nanosecond)
+	check, err := NewContextCheck("research.context.cutoff", "Context 截止校验", true, value, runAsOf)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result := runCheck(t, check)
+	if result.Observation.Status != platformdiagnostics.StatusFailed ||
+		result.Observation.ReasonCode != "research.context.run_cutoff_mismatch" {
+		t.Fatalf("observation = %+v, want Run cutoff mismatch", result.Observation)
+	}
+}
+
 func TestContextCheckDoesNotExposeValidationDetails(t *testing.T) {
 	value := validContextSnapshot()
 	value.ResearchQuestion = "secret user content"
@@ -128,6 +142,16 @@ func TestEventAndClaimChecksValidateSnapshots(t *testing.T) {
 	if got := runCheck(t, eventCheck).Observation.Status; got != platformdiagnostics.StatusHealthy {
 		t.Fatalf("valid Event status = %q, want healthy", got)
 	}
+	futureEvent := event
+	futureEvent.SystemAsOf = cutoff.Add(time.Nanosecond)
+	futureEventCheck, err := NewEventCheck("research.event.future", "未来 Event", true, futureEvent, cutoff)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result := runCheck(t, futureEventCheck); result.Observation.Status != platformdiagnostics.StatusFailed ||
+		result.Observation.ReasonCode != "research.event.pit_invalid" {
+		t.Fatalf("future Event observation = %+v, want PIT failure", result.Observation)
+	}
 	event.Title = ""
 	invalidEventCheck, err := NewEventCheck("research.event.invalid", "无效 Event", true, event, cutoff)
 	if err != nil {
@@ -151,6 +175,16 @@ func TestEventAndClaimChecksValidateSnapshots(t *testing.T) {
 	}
 	if got := runCheck(t, claimCheck).Observation.Status; got != platformdiagnostics.StatusHealthy {
 		t.Fatalf("valid Claim status = %q, want healthy", got)
+	}
+	futureClaim := claim
+	futureClaim.SystemAsOf = cutoff.Add(time.Nanosecond)
+	futureClaimCheck, err := NewClaimCheck("research.claim.future", "未来 Claim", true, futureClaim, cutoff)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result := runCheck(t, futureClaimCheck); result.Observation.Status != platformdiagnostics.StatusFailed ||
+		result.Observation.ReasonCode != "research.claim.pit_invalid" {
+		t.Fatalf("future Claim observation = %+v, want PIT failure", result.Observation)
 	}
 	claim.Statement = ""
 	invalidClaimCheck, err := NewClaimCheck("research.claim.invalid", "无效 Claim", true, claim, cutoff)
@@ -299,6 +333,16 @@ func TestEvidenceCheckRequiresComparableStrictPIT(t *testing.T) {
 		if result.Observation.Status != platformdiagnostics.StatusUnavailable ||
 			result.Observation.ReasonCode != "research.evidence.pit_unavailable" {
 			t.Fatalf("observation = %+v, want unavailable PIT", result.Observation)
+		}
+		futureRunAsOf := value.SystemAsOf.Add(-time.Nanosecond)
+		futureCheck, err := NewEvidenceCheck("research.evidence.pit.future", "未来 Evidence", true, value, futureRunAsOf)
+		if err != nil {
+			t.Fatal(err)
+		}
+		futureResult := runCheck(t, futureCheck)
+		if futureResult.Observation.Status != platformdiagnostics.StatusFailed ||
+			futureResult.Observation.ReasonCode != "research.evidence.pit_invalid" {
+			t.Fatalf("future Evidence with unknown available_at = %+v, want PIT failure", futureResult.Observation)
 		}
 	})
 

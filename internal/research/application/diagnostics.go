@@ -28,10 +28,10 @@ func (s *Service) BuildContextCheck(ctx context.Context, ref ContextRef, runAsOf
 	}
 	if ctx == nil || strings.TrimSpace(ref.ContextID) == "" || ref.ContextVersion < 1 {
 		return platformdiagnostics.Check{}, validationFault("invalid_context_ref", "Context reference is invalid", nil)
-	
-		if err := validateDiagnosticRunCutoff(runAsOf); err != nil {
-			return platformdiagnostics.Check{}, err
-		}}
+	}
+	if err := validateDiagnosticRunCutoff(runAsOf); err != nil {
+		return platformdiagnostics.Check{}, err
+	}
 	value, err := s.GetContext(ctx, ref)
 	if err != nil {
 		return platformdiagnostics.Check{}, err
@@ -46,10 +46,10 @@ func (s *Service) BuildEventCheck(ctx context.Context, ref EventRef, runAsOf tim
 	}
 	if ctx == nil || strings.TrimSpace(ref.EventID) == "" || ref.EventVersion < 1 {
 		return platformdiagnostics.Check{}, validationFault("invalid_event_ref", "Event reference is invalid", nil)
-	
-		if err := validateDiagnosticRunCutoff(runAsOf); err != nil {
-			return platformdiagnostics.Check{}, err
-		}}
+	}
+	if err := validateDiagnosticRunCutoff(runAsOf); err != nil {
+		return platformdiagnostics.Check{}, err
+	}
 	value, err := s.events.GetVersion(ctx, ref.EventID, ref.EventVersion)
 	if err != nil {
 		return platformdiagnostics.Check{}, mapRepositoryError(err)
@@ -70,10 +70,10 @@ func (s *Service) BuildClaimCheck(ctx context.Context, ref ClaimRef, runAsOf tim
 	}
 	if ctx == nil || strings.TrimSpace(ref.ClaimID) == "" || ref.ClaimVersion < 1 {
 		return platformdiagnostics.Check{}, validationFault("invalid_claim_ref", "Claim reference is invalid", nil)
-	
-		if err := validateDiagnosticRunCutoff(runAsOf); err != nil {
-			return platformdiagnostics.Check{}, err
-		}}
+	}
+	if err := validateDiagnosticRunCutoff(runAsOf); err != nil {
+		return platformdiagnostics.Check{}, err
+	}
 	value, err := s.claims.GetVersion(ctx, ref.ClaimID, ref.ClaimVersion)
 	if err != nil {
 		return platformdiagnostics.Check{}, mapRepositoryError(err)
@@ -94,10 +94,10 @@ func (s *Service) BuildEvidenceCheck(ctx context.Context, ref EvidenceRef, runAs
 	}
 	if ctx == nil || strings.TrimSpace(ref.EvidenceID) == "" || strings.TrimSpace(ref.CallerRef) == "" {
 		return platformdiagnostics.Check{}, validationFault("invalid_evidence_ref", "Evidence reference and trusted caller are required", nil)
-	
-		if err := validateDiagnosticRunCutoff(runAsOf); err != nil {
-			return platformdiagnostics.Check{}, err
-		}}
+	}
+	if err := validateDiagnosticRunCutoff(runAsOf); err != nil {
+		return platformdiagnostics.Check{}, err
+	}
 	
 	record, err := s.GetEvidence(ctx, ref)
 	if err != nil {

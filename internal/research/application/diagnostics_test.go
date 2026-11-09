@@ -99,6 +99,12 @@ func TestDiagnosticsApplicationRejectsInvalidReferences(t *testing.T) {
 	if _, err := service.BuildClaimCheck(context.Background(), ClaimRef{ClaimID: "clm_1", ClaimVersion: 0}, time.Now().UTC(), true); err == nil {
 		t.Fatal("non-positive Claim version must be rejected")
 	}
+	if _, err := service.BuildContextCheck(context.Background(), ContextRef{ContextID: "ctx_1", ContextVersion: 1}, time.Time{}, true); err == nil {
+		t.Fatal("missing Run system_as_of must be rejected before Repository access")
+	}
+	if _, err := service.BuildEventCheck(context.Background(), EventRef{EventID: "evt_1", EventVersion: 1}, time.FixedZone("UTC+0", 0), true); err == nil {
+		t.Fatal("non-UTC Run system_as_of Location must be rejected")
+	}
 	if _, err := service.BuildEvidenceCheck(context.Background(), EvidenceRef{
 		EvidenceID: "ev_1", CallerRef: "researchflow:worker-1",
 	}, time.Time{}, true); err == nil {
