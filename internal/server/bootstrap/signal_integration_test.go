@@ -103,8 +103,12 @@ func TestSIGTERMStopsHTTPBeforeWorker(t *testing.T) {
 	if err := cmd.Start(); err != nil {
 		t.Fatalf("start helper process: %v", err)
 	}
-	waitDone := make(chan error, 1)
-	go func() { waitDone <- cmd.Wait() }()
+	waitDone := make(chan struct{})
+	var waitErr error
+	go func() {
+		waitErr = cmd.Wait()
+		close(waitDone)
+	}()
 	t.Cleanup(func() {
 		select {
 		case <-waitDone:
@@ -120,8 +124,8 @@ func TestSIGTERMStopsHTTPBeforeWorker(t *testing.T) {
 			break
 		}
 		select {
-		case err := <-waitDone:
-			t.Fatalf("helper exited before ready: %v", err)
+		case <-waitDone:
+			t.Fatalf("helper exited before ready: %v", waitErr)
 		default:
 		}
 		if time.Now().After(deadline) {
@@ -133,9 +137,9 @@ func TestSIGTERMStopsHTTPBeforeWorker(t *testing.T) {
 		t.Fatalf("send SIGTERM: %v", err)
 	}
 	select {
-	case err := <-waitDone:
-		if err != nil {
-			t.Fatalf("helper process failed: %v", err)
+	case <-waitDone:
+		if waitErr != nil {
+			t.Fatalf("helper process failed: %v", waitErr)
 		}
 	case <-time.After(5 * time.Second):
 		t.Fatal("helper process did not exit after SIGTERM")
