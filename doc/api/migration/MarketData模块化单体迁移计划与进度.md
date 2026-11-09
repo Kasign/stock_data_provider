@@ -704,3 +704,14 @@ internal/
 - Root 全仓 `Test .` 仍在 gofmt 阶段失败，准确阻断文件为 Research 所属的 `internal/research/context/validate.go`（非法反斜杠）和 `internal/research/evidence/authorization.go`（NUL 字节）。本分支不越权修改 Research。
 - Docker 构建按用户约束跳过；没有合并或修改 integration。
 - M2-1 至 M2-4 已完成：消费者 Port、DataService 映射、Bootstrap 装配、Module 生命周期。M2-5 HTTP Adapter 接口解耦仍待完成；当前 HTTP Handler 仍通过旧构造器接收具体 DataService 与能力 Provider 集合。
+
+
+### 2026-11-09：M1-2 迁移后 Go/Python 质量契约 CI 路径修正
+
+- 当前 SHA：`42e2b9fbd0f87883b9705c5b3dea0f036322f112`；对应 PR Run `42571532273` 的 Go-Python parity Job 失败于仍使用旧目录 `services/market-data/internal/normalize`，并非质量契约测试断言失败。
+- 已确认迁移后的唯一代码位置为 `internal/marketdata/normalize`，且同 SHA 的 Data 根模块 gofmt/test/race/vet 全部通过。
+- 修正 `.github/workflows/data-quality-parity.yml`：push/PR paths、Go cache 依赖文件、Parity 测试命令、Data 测试命令和契约测试文件检查统一指向根模块路径。
+- Data 全量测试限定为 `go test ./internal/marketdata/...`，避免把其他模块纳入 Data 专项门禁；不修改 Python/Go 数据质量判定规则、容差、样本或生产代码。
+- 真实 Provider 数据验收仍需具备双方可审计导出及来源证据；本次 CI 路径修复不构成真实数据一致性验收。
+- WebUI 检查失败仍因 WebUI 测试引用旧 Data 文件路径，属于 WebUI Owner 范围，本分支不修改 WebUI 文件。
+- 下一步：完成 M2-5，让 HTTP Handler 依赖 Application Port；保持 HTTP DTO、路由、认证、错误语义与现有 35 个 Operation 不变。

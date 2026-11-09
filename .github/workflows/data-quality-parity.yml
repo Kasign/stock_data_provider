@@ -6,7 +6,7 @@ on:
     branches:
       - feat/full-go-data-providers-api-switch
     paths:
-      - 'services/market-data/internal/normalize/**'
+      - 'internal/marketdata/normalize/**'
       - 'python_bridge/capabilities/market_data.py'
       - 'scripts/compare_market_data_exports.py'
       - 'scripts/test_compare_market_data_exports.py'
@@ -15,7 +15,7 @@ on:
       - '.github/workflows/data-quality-parity.yml'
   pull_request:
     paths:
-      - 'services/market-data/internal/normalize/**'
+      - 'internal/marketdata/normalize/**'
       - 'python_bridge/capabilities/market_data.py'
       - 'scripts/compare_market_data_exports.py'
       - 'scripts/test_compare_market_data_exports.py'
@@ -43,7 +43,7 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: '1.23.x'
-          cache-dependency-path: services/market-data/go.sum
+          cache-dependency-path: go.sum
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -54,12 +54,10 @@ jobs:
         run: python -m unittest scripts/test_compare_market_data_exports.py -v
 
       - name: Run Python-to-Go parity contract tests
-        working-directory: services/market-data
-        run: go test ./internal/normalize -run TestLegacyPythonBridgeAndGoQualityContract -count=1 -v
+        run: go test ./internal/marketdata/normalize -run TestLegacyPythonBridgeAndGoQualityContract -count=1 -v
 
       - name: Run market-data Go tests
-        working-directory: services/market-data
-        run: go test ./...
+        run: go test ./internal/marketdata/...
 
       - name: Verify legacy Python quality markers and report
         shell: bash
@@ -69,5 +67,5 @@ jobs:
           grep -q 'adjustment_basis_unverified' python_bridge/capabilities/market_data.py
           grep -q '必须保留的 Go 数据质量与单位统一改进' doc/api/provider-migration/GO_PYTHON_DATA_QUALITY_PARITY_REPORT.md
           grep -q '不得为了追求与旧 Python 返回值表面一致' doc/api/provider-migration/GO_PYTHON_DATA_QUALITY_PARITY_REPORT.md
-          grep -q 'TestLegacyPythonBridgeAndGoQualityContract' services/market-data/internal/normalize/quality_parity_test.go
+          grep -q 'TestLegacyPythonBridgeAndGoQualityContract' internal/marketdata/normalize/quality_parity_test.go
           echo 'Legacy unknown-quality markers and parity report are present.'
