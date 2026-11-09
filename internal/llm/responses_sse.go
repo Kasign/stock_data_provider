@@ -103,7 +103,10 @@ func parseResponsesSSEReaderLimit(reader io.Reader, request ModelRequest, clock 
 		return fail(adapterError(ErrorInvalidRequest, "llm.sse.nil_reader", false, nil), ErrInvalidResponsesSSE)
 	}
 
-	if maxBytes <= 0 || maxBytes > MaxPayloadBytes {\n\t\tmaxBytes = MaxPayloadBytes\n\t}\n\tlimitedReader := &io.LimitedReader{R: reader, N: maxBytes + 1}
+	if maxBytes <= 0 || maxBytes > MaxPayloadBytes {
+		maxBytes = MaxPayloadBytes
+	}
+	limitedReader := &io.LimitedReader{R: reader, N: maxBytes + 1}
 	scanner := bufio.NewScanner(limitedReader)
 	scanner.Buffer(make([]byte, 4096), MaxSSELineBytes)
 	eventName := ""
