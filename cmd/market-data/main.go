@@ -58,8 +58,8 @@ func run(ctx context.Context, logger *slog.Logger) error {
 		c = redis
 	}
 	module, err := bootstrap.New(cfg, bootstrap.Dependencies{
-		Store: store,
-		Cache: c,
+		Store:  store,
+		Cache:  c,
 		Logger: logger,
 	})
 	if err != nil {

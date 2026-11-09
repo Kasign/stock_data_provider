@@ -36,8 +36,8 @@ type Diagnostics interface {
 
 // ProviderSummary 用于启动日志，记录实际启用的 Provider 与能力集合。
 type ProviderSummary struct {
-	All      []string
-	Quotes   []string
+	All       []string
+	Quotes    []string
 	DailyBars []string
 }
 
@@ -112,8 +112,8 @@ func (m *Module) ProviderSummary() ProviderSummary {
 		return ProviderSummary{}
 	}
 	return ProviderSummary{
-		All:      append([]string(nil), m.summary.All...),
-		Quotes:   append([]string(nil), m.summary.Quotes...),
+		All:       append([]string(nil), m.summary.All...),
+		Quotes:    append([]string(nil), m.summary.Quotes...),
 		DailyBars: append([]string(nil), m.summary.DailyBars...),
 	}
 }
@@ -392,8 +392,8 @@ func (m *Module) build(cfg config.Config) error {
 	m.application = reader
 	m.handler = handler.Handler()
 	m.summary = ProviderSummary{
-		All:      providerNames(allProviders),
-		Quotes:   providerNames(quoteProviders),
+		All:       providerNames(allProviders),
+		Quotes:    providerNames(quoteProviders),
 		DailyBars: providerNames(barProviders),
 	}
 	return nil
