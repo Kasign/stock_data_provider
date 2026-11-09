@@ -485,3 +485,37 @@ func TestRiskDecisionSchemaValidatesGoldenAndFailClosedStructure(t *testing.T) {
 		}
 	}
 }
+
+func TestRegistryEntrySchemaMatchesGoCanonicalTextValidation(t *testing.T) {
+	schema := compileQuantSchemaFile(t, "QNT-CTR-001-registry-entry-1.0.0.schema.json")
+	cases := []struct {
+		name string
+		mutate func(*Entry)
+	}{
+		{"unit leading whitespace", func(e *Entry) { e.Unit = " ratio" }},
+		{"unit trailing whitespace", func(e *Entry) { e.Unit = "ratio " }},
+		{"algorithm version whitespace only", func(e *Entry) { e.AlgorithmVersion = " " }},
+		{"rounding mode leading whitespace", func(e *Entry) { e.Precision.RoundingMode = " half_up" }},
+		{"input field trailing whitespace", func(e *Entry) { e.InputRequirements[0].Fields[0] = "close " }},
+		{"interval leading whitespace", func(e *Entry) { e.InputRequirements[0].Interval = " 1d" }},
+		{"adjustment trailing whitespace", func(e *Entry) { e.InputRequirements[0].Adjustment = "forward_adjusted " }},
+		{"quality state whitespace only", func(e *Entry) { e.InputRequirements[0].Quality[0] = " " }},
+		{"missing handling trailing whitespace", func(e *Entry) { e.QualityPolicy.MissingHandling = "reject " }},
+		{"quality policy state leading whitespace", func(e *Entry) { e.QualityPolicy.QualityStates[0] = " valid" }},
+		{"unavailable condition trailing whitespace", func(e *Entry) { e.QualityPolicy.UnavailableConditions[0] = "missing_input " }},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			entry := validEntry("sample_metric", "1.0.0")
+			tc.mutate(&entry)
+			if err := entry.Validate(); err == nil {
+				t.Fatal("Go Entry.Validate unexpectedly accepted non-canonical text")
+			}
+			encoded, err := json.Marshal(entry)
+			if err != nil { t.Fatal(err) }
+			if err := validateJSONSchemaInstance(schema, encoded); err == nil {
+				t.Fatalf("Registry Entry Schema unexpectedly accepted non-canonical text: %s", encoded)
+			}
+		})
+	}
+}
