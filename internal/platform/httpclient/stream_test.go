@@ -345,7 +345,7 @@ func TestOpenStreamPreservesRequestIDAndSafeStats(t *testing.T) {
 func TestStreamOpenErrorClassificationCompatibility(t *testing.T) {
 	cases := []struct {
 		name string
-		err error
+		err  error
 		want streamOpenErrorKind
 	}{
 		{name: "response headers too large", err: errors.New("net/http: response headers exceeded 1024 bytes"), want: streamOpenErrorHeadersTooLarge},
