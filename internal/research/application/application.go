@@ -466,6 +466,9 @@ func (s *Service) UpdateEvent(ctx context.Context, command UpdateEventCommand) (
 	}
 	previous, err := s.events.GetVersion(ctx, command.EventID, command.ExpectedVersion)
 	if err != nil {
+		if errors.Is(err, researcherrors.ErrNotFound) {
+			return ResearchEvent{}, applicationFault(fault.ClassConflict, "research_event_version_conflict", "Research Event expected version is no longer current", researcherrors.ErrConflict)
+		}
 		return ResearchEvent{}, mapRepositoryError(err)
 	}
 	if previous.EventID != command.EventID || previous.EventVersion != command.ExpectedVersion {

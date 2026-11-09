@@ -8,6 +8,7 @@ import (
 
 	researchcontext "example.com/stock-analysis-flow/internal/research/context"
 	researchevidence "example.com/stock-analysis-flow/internal/research/evidence"
+	researcherrors "example.com/stock-analysis-flow/internal/research"
 	researchevent "example.com/stock-analysis-flow/internal/research/event"
 	researchclaim "example.com/stock-analysis-flow/internal/research/claim"
 )
@@ -80,9 +81,10 @@ func TestNewServiceRequiresSourceOwnerAuthorizationAdapter(t *testing.T) {
 	if err==nil { t.Fatal("missing EvidenceAuthorizer must be rejected") }
 }
 
-type eventRepoFake struct { value researchevent.ResearchEvent; appended bool; appendErr error }
+type eventRepoFake struct { value researchevent.ResearchEvent; appended bool; appendErr error; getErr error }
 func (f *eventRepoFake) Append(_ context.Context, value researchevent.ResearchEvent) error { f.value=value; f.appended=true; return f.appendErr }
 func (f *eventRepoFake) GetVersion(_ context.Context, id string, version int) (researchevent.ResearchEvent,error) {
+	if f.getErr != nil { return researchevent.ResearchEvent{}, f.getErr }
 	if f.value.EventID!=id || f.value.EventVersion!=version { return researchevent.ResearchEvent{}, errors.New("missing") }
 	return f.value,nil
 }
@@ -159,6 +161,17 @@ func TestUpdateEventUsesExpectedVersionAndDomainLifecycleRules(t *testing.T) {
 	if repo.value.EventVersion != 2 {
 		t.Fatal("invalid lifecycle transition must not be persisted")
 	}
+}
+
+func TestUpdateEventMapsMissingExpectedVersionToConflict(t *testing.T) {
+	repo := &eventRepoFake{getErr: researcherrors.ErrNotFound}
+	service, err := NewServiceWithEvents(&contextRepoFake{}, &evidenceRepoFake{}, repo, &authorizerFake{}, nil, nil)
+	if err != nil { t.Fatal(err) }
+	_, err = service.UpdateEvent(context.Background(), UpdateEventCommand{EventID: "evt_missing", ExpectedVersion: 1})
+	if err == nil || !errors.Is(err, researcherrors.ErrConflict) {
+		t.Fatalf("missing expected version error = %v, want conflict fault", err)
+	}
+	if repo.appended { t.Fatal("missing expected version must not append a new Event") }
 }
 
 func TestCreateEventRejectsInvalidEventBeforePersistence(t *testing.T) {
