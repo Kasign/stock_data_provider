@@ -204,3 +204,41 @@ func TestBuildRefOutputMatchesQNTCTR004Schema(t *testing.T) {
 		t.Fatal("schema accepted an unknown QuantResultRef field")
 	}
 }
+
+
+func TestBuildRefRejectsInvalidUTF8Metadata(t *testing.T) {
+	tests := []struct {
+		name   string
+		mutate func(*RefInput)
+	}{
+		{"security_id", func(v *RefInput) { v.SecurityID = string([]byte{0xff}) }},
+		{"period", func(v *RefInput) { v.Period = string([]byte{0xff}) }},
+		{"algorithm_version", func(v *RefInput) { v.AlgorithmVersion = string([]byte{0xff}) }},
+		{"parameter_fingerprint", func(v *RefInput) { v.ParameterFingerprint = string([]byte{0xff}) }},
+		{"authorization_ref", func(v *RefInput) { v.AuthorizationRef = string([]byte{0xff}) }},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			input := validRefInput()
+			tc.mutate(&input)
+			if _, err := BuildRef(input, testManifest(t)); !errors.Is(err, ErrInvalidResultRef) {
+				t.Fatalf("BuildRef() error = %v, want ErrInvalidResultRef", err)
+			}
+		})
+	}
+}
+
+func TestBuildRefRejectsInvalidUTF8SnapshotReference(t *testing.T) {
+	source, err := manifest.Build(manifest.Input{
+		ResultType: "factor", SchemaVersion: "1.0.0",
+		SystemAsOf: time.Date(2026, 11, 9, 0, 0, 0, 0, time.UTC),
+		InputSnapshotRefs: []string{string([]byte{0xff})},
+		ResultFingerprint: testManifest(t).ResultFingerprint,
+	})
+	if err != nil {
+		t.Fatalf("Build() error = %v", err)
+	}
+	if _, err := BuildRef(validRefInput(), source); !errors.Is(err, ErrInvalidResultRef) {
+		t.Fatalf("BuildRef() error = %v, want ErrInvalidResultRef", err)
+	}
+}
