@@ -481,7 +481,7 @@ func (p *Hithink) FetchHotStocks(ctx context.Context, rankingType string, limit 
 		return nil, err
 	}
 	var data struct {
-		Timestamp *int64                       `json:"timestamp"`
+		Timestamp json.RawMessage              `json:"timestamp"`
 		Item      []map[string]json.RawMessage `json:"item"`
 	}
 	if err := json.Unmarshal(dataRaw, &data); err != nil {
@@ -1414,8 +1414,9 @@ func (p *Hithink) FetchValuations(ctx context.Context, rawSymbols []string) (*mo
 		Source:           p.Name(), SourceVersion: hithinkVersion + "-valuation-snapshot-v1",
 		FetchedAt: now, QualityStatus: model.QualityValid,
 	}
-	if data.Timestamp != nil && *data.Timestamp > 0 {
-		timestamp := time.UnixMilli(*data.Timestamp).UTC()
+	timestampValue, timestampValid := hithinkParseFundamentalValue(data.Timestamp)
+	if timestampValid && math.Trunc(timestampValue) == timestampValue && timestampValue > 0 && timestampValue < float64(1<<63) {
+		timestamp := time.UnixMilli(int64(timestampValue)).UTC()
 		if !timestamp.After(now.Add(time.Minute)) && !timestamp.Before(now.AddDate(-10, 0, 0)) {
 			snapshot.ProviderTimestamp = &timestamp
 		}
@@ -1423,6 +1424,13 @@ func (p *Hithink) FetchValuations(ctx context.Context, rawSymbols []string) (*mo
 	if snapshot.ProviderTimestamp == nil {
 		snapshot.QualityStatus = model.QualityDegraded
 		snapshot.QualityReasons = append(snapshot.QualityReasons, "provider_valuation_timestamp_missing_or_invalid")
+		code := "invalid_timestamp"
+		actualType := providerJSONValueType(data.Timestamp)
+		if actualType == "missing" || actualType == "null" {
+			code = "missing_value"
+		}
+		addProviderFieldParseIssue(ctx, "", "provider_timestamp", "timestamp", code,
+			"positive integer epoch-millisecond timestamp", actualType, string(data.Timestamp), -1)
 	}
 	// 同花顺估值响应未提供独立报告日期字段。ProviderTimestamp 仅表示
 	// 五项估值中最新有效时间，不能据此伪造 ProviderReportDate。

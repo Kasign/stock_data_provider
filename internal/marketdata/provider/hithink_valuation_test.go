@@ -142,3 +142,33 @@ func TestHithinkValuationsRejectsTimestampBeyondServiceFutureSkew(t *testing.T) 
 		t.Fatalf("invalid timestamp reason missing: %+v", snapshot.QualityReasons)
 	}
 }
+
+
+func TestHithinkValuationsReportsInvalidProviderTimestampWithoutDroppingRows(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = fmt.Fprint(w, `{"code":0,"data":{"timestamp":"not-a-timestamp","total":1,"item":[{"thscode":"600519.SH","ticker":"600519","name":"贵州茅台","pe_ttm":25.0,"pe_mrq":24.0,"pb_mrq":8.0,"ps_ttm":10.0,"pcf_ttm":20.0}]}}`)
+	}))
+	defer server.Close()
+
+	reporter := validation.NewReporter(validation.DefaultMaxIssues)
+	ctx := validation.WithReporter(context.Background(), reporter)
+	snapshot, err := NewHithinkConfigured(3*time.Second, server.URL, "unit-test-key").
+		FetchValuations(ctx, []string{"600519.SH"})
+	if err != nil {
+		t.Fatalf("invalid optional provider timestamp should not discard valid valuation rows: %v", err)
+	}
+	if snapshot.ProviderTimestamp != nil || len(snapshot.Items) != 1 || snapshot.QualityStatus != model.QualityDegraded {
+		t.Fatalf("invalid provider timestamp must remain explicit and degrade snapshot: %+v", snapshot)
+	}
+	found := false
+	for _, issue := range reporter.Snapshot().Issues {
+		if issue.Field == "provider_timestamp" && issue.ProviderField == "timestamp" &&
+			issue.Code == "invalid_timestamp" && issue.ActualType == "string" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("expected provider timestamp parse issue, got %+v", reporter.Snapshot().Issues)
+	}
+}
