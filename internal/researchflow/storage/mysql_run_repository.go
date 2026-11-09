@@ -431,6 +431,11 @@ func (r *MySQLRunRepository) loadRun(ctx context.Context, runRef string) (applic
 	}
 	run.ExcludedStages = append([]domain.ExcludedStage(nil), resolved.Excluded...)
 
+	run.ResultSummary, err = r.loadResultSummary(ctx, run.Ref, run.ResultSummaryRef, run.Status)
+	if err != nil {
+		return application.CreateRunResult{}, err
+	}
+
 	rows, err := r.db.QueryContext(ctx, `SELECT
 		stage_ref, run_ref, stage_code, status, version, required,
 		dependency_stage_refs, retry_policy_ref, attempt_no, retry_at,
@@ -506,6 +511,64 @@ func (r *MySQLRunRepository) loadRun(ctx context.Context, runRef string) (applic
 	}
 	sortResearchflowStages(stages, order)
 	return application.CreateRunResult{Run: run, Stages: stages}, nil
+}
+
+// loadResultSummary restores the immutable summary referenced by a terminal Run.
+func (r *MySQLRunRepository) loadResultSummary(
+	ctx context.Context,
+	runRef string,
+	summaryRef *string,
+	status domain.RunStatus,
+) (*domain.ResultSummary, error) {
+	if status.Terminal() && (summaryRef == nil || strings.TrimSpace(*summaryRef) == "") {
+		return nil, fmt.Errorf("terminal Researchflow Run %q has no ResultSummary reference", runRef)
+	}
+	if !status.Terminal() && summaryRef != nil {
+		return nil, fmt.Errorf("non-terminal Researchflow Run %q unexpectedly references a ResultSummary", runRef)
+	}
+	if summaryRef == nil {
+		return nil, nil
+	}
+	var schemaVersion, payload string
+	err := r.db.QueryRowContext(ctx, `SELECT schema_version, payload
+		FROM researchflow_result_summaries
+		WHERE result_summary_ref = ? AND run_ref = ?`, *summaryRef, runRef,
+	).Scan(&schemaVersion, &payload)
+	if err != nil {
+		return nil, fmt.Errorf("load Researchflow ResultSummary %q: %w", *summaryRef, err)
+	}
+	if strings.TrimSpace(schemaVersion) == "" {
+		return nil, fmt.Errorf("Researchflow ResultSummary %q has no schema version", *summaryRef)
+	}
+	summary, err := decodeResultSummary([]byte(payload))
+	if err != nil {
+		return nil, fmt.Errorf("decode Researchflow ResultSummary %q: %w", *summaryRef, err)
+	}
+	return &summary, nil
+}
+
+func decodeResultSummary(payload []byte) (domain.ResultSummary, error) {
+	var summary domain.ResultSummary
+	if len(bytes.TrimSpace(payload)) == 0 {
+		return summary, errors.New("ResultSummary payload is empty")
+	}
+	if err := json.Unmarshal(payload, &summary); err != nil {
+		return summary, fmt.Errorf("invalid ResultSummary JSON: %w", err)
+	}
+	if summary.StageOutcomes == nil || summary.RiskGateDecisions == nil ||
+		summary.MissingStageCodes == nil || summary.DegradedStageCodes == nil ||
+		summary.BlockedStageCodes == nil || summary.ReasonCodes == nil ||
+		summary.ExcludedStages == nil {
+		return summary, errors.New("ResultSummary payload is missing required collections")
+	}
+	if summary.Coverage < 0 || summary.Coverage > 1 {
+		return summary, errors.New("ResultSummary coverage is outside [0,1]")
+	}
+	if strings.TrimSpace(summary.QualityStatus) == "" ||
+		strings.TrimSpace(summary.ActionabilityStatus) == "" {
+		return summary, errors.New("ResultSummary quality or actionability status is missing")
+	}
+	return summary, nil
 }
 
 func (r *MySQLRunRepository) validateScope(scope application.IdempotencyScope) error {
