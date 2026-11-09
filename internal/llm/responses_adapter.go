@@ -42,8 +42,8 @@ func (e *AdapterError) Unwrap() error {
 	return e.cause
 }
 
-// ResponsesAdapter implements non-streaming Responses calls only. Streaming
-// must use a separately approved Platform streaming transport.
+// ResponsesAdapter implements non-streaming and SSE Responses calls through
+// separate, explicitly injected Platform-bound transport interfaces.
 type ResponsesAdapter struct {
 	provider     ProviderConfig
 	apiKey       config.Secret
