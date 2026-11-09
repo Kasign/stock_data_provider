@@ -128,3 +128,43 @@ func TestAssessUnknownDeliveryRejectsEvidenceOlderThanAttempt(t *testing.T) {
 		t.Fatalf("lookup evidence before ambiguous completion must be rejected, got %v", err)
 	}
 }
+
+func TestAssessUnknownDeliveryRejectsImpossibleEarlierAttemptHistory(t *testing.T) {
+	delivery, channel, attempts, evidence, now := unknownReconciliationFixture(t)
+	latest := attempts[0]
+	first := latest
+	first.AttemptID = latest.AttemptID + "-first"
+	first.AttemptNo = 1
+	first.FinishedAt = nil
+	first.Outcome = nil
+	first.ProviderMessageRef = nil
+	first.ErrorCode = nil
+	first.RetryAfterAt = nil
+	first.DurationMS = nil
+	first.EvidenceRef = nil
+	first.Retryable = false
+	firstFinishedAt := first.StartedAt.Add(time.Second)
+	firstCompleted, err := first.Complete(firstFinishedAt, domain.DeliveryAttemptAccepted, "provider-accepted", "", false, "")
+	if err != nil { t.Fatal(err) }
+	latest.AttemptNo = 2
+	latest.AttemptID = latest.AttemptID + "-second"
+	latest.FencingToken = first.FencingToken + 1
+	latest.StartedAt = firstFinishedAt.Add(time.Second)
+	latest.LeaseExpiresAt = latest.StartedAt.Add(time.Minute)
+	latest.FinishedAt = nil
+	latest.Outcome = nil
+	latest.ProviderMessageRef = nil
+	latest.ErrorCode = nil
+	latest.RetryAfterAt = nil
+	latest.DurationMS = nil
+	latest.EvidenceRef = nil
+	latest.Retryable = false
+	latest, err = latest.Complete(latest.StartedAt.Add(time.Second), domain.DeliveryAttemptAmbiguous, "", "timeout", false, "")
+	if err != nil { t.Fatal(err) }
+	delivery.AttemptCount = 2
+	evidence.AttemptID = latest.AttemptID
+	evidence.ObservedAt = latest.FinishedAt.Add(time.Second)
+	if _, err := AssessUnknownDelivery(delivery, channel, []domain.DeliveryAttempt{firstCompleted, latest}, evidence, evidence.ObservedAt); !errors.Is(err, ErrLeaseRecoveryHistory) {
+		t.Fatalf("an accepted earlier attempt must invalidate reconciliation history, got %v", err)
+	}
+}

@@ -77,30 +77,11 @@ func AssessUnknownDelivery(
 		return UnknownReconciliationAssessment{}, ErrUnknownReconciliationNotApplicable
 	}
 
-	var matched *domain.DeliveryAttempt
-	seenIDs := make(map[string]struct{}, len(attempts))
-	seenAttemptNos := make(map[int]struct{}, len(attempts))
-	for i := range attempts {
-		attempt := attempts[i]
-		if err := attempt.Validate(); err != nil || attempt.DeliveryID != delivery.DeliveryID {
-			return UnknownReconciliationAssessment{}, ErrLeaseRecoveryHistory
-		}
-		if _, exists := seenIDs[attempt.AttemptID]; exists {
-			return UnknownReconciliationAssessment{}, ErrLeaseRecoveryHistory
-		}
-		if attempt.AttemptNo > delivery.AttemptCount {
-			return UnknownReconciliationAssessment{}, ErrLeaseRecoveryHistory
-		}
-		if _, exists := seenAttemptNos[attempt.AttemptNo]; exists {
-			return UnknownReconciliationAssessment{}, ErrLeaseRecoveryHistory
-		}
-		seenIDs[attempt.AttemptID] = struct{}{}
-		seenAttemptNos[attempt.AttemptNo] = struct{}{}
-		if attempt.AttemptNo == delivery.AttemptCount {
-			matched = &attempts[i]
-		}
+	if len(attempts) == 0 || ValidateDeliveryAttemptHistory(delivery.DeliveryID, delivery.AttemptCount, attempts) != nil {
+		return UnknownReconciliationAssessment{}, ErrLeaseRecoveryHistory
 	}
-	if len(seenAttemptNos) != delivery.AttemptCount || matched == nil || matched.AttemptID != evidence.AttemptID ||
+	matched := &attempts[len(attempts)-1]
+	if matched.AttemptID != evidence.AttemptID ||
 		(matched.Outcome != nil && *matched.Outcome != domain.DeliveryAttemptAmbiguous) ||
 		!evidenceObservedAfterAttempt(evidence.ObservedAt, *matched) {
 		return UnknownReconciliationAssessment{}, ErrUnknownReconciliationNotApplicable
