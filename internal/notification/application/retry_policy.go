@@ -98,6 +98,9 @@ func (p RetryPolicy) ScheduleRetry(
 		seenFencingTokens[attempt.FencingToken] = struct{}{}
 		if i == 0 {
 			firstAttemptAt = attempt.StartedAt
+		} else if attempt.FencingToken <= latest.FencingToken || latest.FinishedAt == nil ||
+			attempt.StartedAt.Before(*latest.FinishedAt) {
+			return RetryDecision{}, ErrRetryNotApplicable
 		}
 		latest = attempt
 	}

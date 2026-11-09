@@ -166,6 +166,11 @@ func TestRetryPolicyRequiresExplicitRetryableRejectionAndCompleteHistory(t *test
 	if _, err := policy.ScheduleRetry(duplicateDelivery, duplicateAttempts, duplicateNow, 0.5); !errors.Is(err, ErrRetryNotApplicable) {
 		t.Fatalf("duplicate fencing token history must fail closed: %v", err)
 	}
+	descendingDelivery, descendingAttempts, descendingNow := retryPolicyFixture(t, 2, 3)
+	descendingAttempts[1].FencingToken = descendingAttempts[0].FencingToken - 1
+	if _, err := policy.ScheduleRetry(descendingDelivery, descendingAttempts, descendingNow, 0.5); !errors.Is(err, ErrRetryNotApplicable) {
+		t.Fatalf("non-monotonic fencing token history must fail closed: %v", err)
+	}
 }
 
 func TestRetryPolicyValidatesDurationsAndRandomSample(t *testing.T) {
