@@ -85,7 +85,6 @@ func TestModuleStartStopWaitAndCloseLifecycle(t *testing.T) {
 	}
 }
 
-
 func TestModuleCloseTimeoutKeepsModuleInClosingState(t *testing.T) {
 	started := make(chan struct{})
 	release := make(chan struct{})
