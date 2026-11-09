@@ -465,6 +465,83 @@ func TestOpenStreamBodyLimitCountsDecompressedBytes(t *testing.T) {
 	}
 }
 
+func TestOpenStreamDependencyWaitDoesNotBlockOtherDependencies(t *testing.T) {
+	started := make(chan string, 3)
+	releaseA := make(chan struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		started <- r.URL.Path
+		w.(http.Flusher).Flush()
+		if r.URL.Path == "/a1" {
+			<-releaseA
+		}
+		<-r.Context().Done()
+	}))
+	defer server.Close()
+
+	client, err := New(Config{
+		Resolver: staticResolver{addresses: []netip.Addr{netip.MustParseAddr("8.8.8.8")}},
+		StreamTimeout: 3 * time.Second, StreamIdleTimeout: time.Second,
+		MaxStreamBytes: 1024, MaxConcurrentStreams: 2,
+		StreamDependencyLimits: map[string]int{"dep.a": 1},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	client.dial = func(ctx context.Context, network, _ string) (net.Conn, error) {
+		return (&net.Dialer{}).DialContext(ctx, network, server.Listener.Addr().String())
+	}
+	defer client.CloseIdleConnections()
+
+	policyA := localPolicy(server)
+	policyA.Dependency = "dep.a"
+	first, err := client.OpenStream(context.Background(), localRequest(t, server, "/a1"), policyA)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer first.Body.Close()
+	select {
+	case path := <-started:
+		if path != "/a1" { t.Fatalf("expected /a1 to start, got %s", path) }
+	case <-time.After(time.Second):
+		t.Fatal("first dependency A request did not start")
+	}
+
+	secondRequest := localRequest(t, server, "/a2")
+	secondCtx, secondCancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer secondCancel()
+	secondResult := make(chan error, 1)
+	go func() {
+		response, openErr := client.OpenStream(secondCtx, secondRequest, policyA)
+		if openErr == nil { _ = response.Body.Close() }
+		secondResult <- openErr
+	}()
+	// 等待第二个 A 请求进入额度等待；它不应占用全局槽位。
+	time.Sleep(50 * time.Millisecond)
+
+	policyB := localPolicy(server)
+	policyB.Dependency = "dep.b"
+	third, err := client.OpenStream(context.Background(), localRequest(t, server, "/b1"), policyB)
+	if err != nil {
+		t.Fatalf("dependency A waiter occupied a global slot: %v", err)
+	}
+	_ = third.Body.Close()
+	select {
+	case path := <-started:
+		if path != "/b1" { t.Fatalf("expected dependency B to start, got %s", path) }
+	case <-time.After(time.Second):
+		t.Fatal("dependency B request did not reach server")
+	}
+
+	secondCancel()
+	select {
+	case err := <-secondResult:
+		if err == nil { t.Fatal("expected waiting dependency A request to be canceled") }
+	case <-time.After(time.Second):
+		t.Fatal("dependency A waiter did not stop after cancellation")
+	}
+	close(releaseA)
+}
+
 func TestOpenStreamContextCancelReleasesSlotWithoutCallerClose(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.(http.Flusher).Flush()

@@ -323,30 +323,35 @@ func (c *Client) OpenStream(ctx context.Context, request *http.Request, policy D
 	startedAt := time.Now()
 	requestCtx, cancel := context.WithTimeout(ctx, c.config.StreamTimeout)
 	requestCtx = context.WithValue(requestCtx, policyContextKey{}, policy)
-	globalSemaphore := c.defaultStreamSemaphore
-	select {
-	case globalSemaphore <- struct{}{}:
-	case <-requestCtx.Done():
-		err := requestCtx.Err()
-		cancel()
-		return nil, c.streamContextFault(err, policy.Dependency)
-	}
+	// 先申请 Dependency 额度，再申请全局额度。等待某个 Dependency
+	// 的请求不会占住全局槽位，避免阻塞其他可用 Dependency。
 	dependencySemaphore := c.streamDependencySemaphore(policy.Dependency)
 	if dependencySemaphore != nil {
 		select {
 		case dependencySemaphore <- struct{}{}:
 		case <-requestCtx.Done():
 			err := requestCtx.Err()
-			<-globalSemaphore
 			cancel()
 			return nil, c.streamContextFault(err, policy.Dependency)
 		}
 	}
-	release := func() {
+
+	globalSemaphore := c.defaultStreamSemaphore
+	select {
+	case globalSemaphore <- struct{}{}:
+	case <-requestCtx.Done():
+		err := requestCtx.Err()
 		if dependencySemaphore != nil {
 			<-dependencySemaphore
 		}
+		cancel()
+		return nil, c.streamContextFault(err, policy.Dependency)
+	}
+	release := func() {
 		<-globalSemaphore
+		if dependencySemaphore != nil {
+			<-dependencySemaphore
+		}
 	}
 
 	current := request.Clone(requestCtx)
