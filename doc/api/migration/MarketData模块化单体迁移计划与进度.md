@@ -2176,3 +2176,11 @@ CI：本轮 SHA 对应 Go test suite Run `42549171549`。截至本次文档提�
 - 已补充 symbols 参数描述，并新增 TestBatchQuotesParameterDocumentsHandlerConstraints 锁定这些 Handler 约束。
 - 不新增字段、不调整批量请求行为、不放宽重复项校验；本批仅修改 OpenAPI 描述和 Contract Test。
 - 当前 Data Module gofmt 已在 SHA `9493e991` 对应工作流中通过；该 SHA 的 Go Test、race、vet、MariaDB/PIT 和 Docker 构建尚未全部结束。本批新增修改后仍需以最新 SHA 的 CI 结果为准。
+
+
+### 2026-11-09：CT-05 参数矩阵测试失败修正
+
+- Run `42553339408` Data Module gofmt 已通过，Go Test 暴露两处新增契约测试问题：Probe Body Operation 被错误登记为 GET（实际路由为 POST）；指数成分查询断言使用英文短语，与 OpenAPI 中文描述不一致。
+- 已将矩阵路由修正为 POST，并将断言改为匹配现有中文契约描述。
+- 失败发生于 HTTP Contract Test；未发现 Handler 或 Provider 运行时回归。此前 Docker Market Data 镜像失败是 Dockerfile 中的 `go test ./...` 前置链失败，需在修正后重新确认。
+- 本次修正后的 SHA 尚无 CI 结果，不得标记 CT-05 通过。
