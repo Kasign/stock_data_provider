@@ -196,8 +196,8 @@ func TestReadyzReportsRegisteredCheckStatuses(t *testing.T) {
 		t.Fatalf("decode response: %v", err)
 	}
 	for _, id := range []string{"server.storage.mariadb", "server.storage.redis", "module.news.ingestion"} {
-		if body.Dependencies[id] != "healthy" {
-			t.Fatalf("dependency %q status = %q, want healthy; all=%v", id, body.Dependencies[id], body.Dependencies)
+		if body.Dependencies[id] != "ok" {
+			t.Fatalf("dependency %q status = %q, want ok; all=%v", id, body.Dependencies[id], body.Dependencies)
 		}
 	}
 }
