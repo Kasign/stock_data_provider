@@ -49,6 +49,10 @@ func TestValidateResponsesStrictSchemaSubsetRejectsUnsupportedFeatures(t *testin
 			schema: `{"type":"object","properties":{},"required":[],"additionalProperties":true}`,
 		},
 		{
+			name:   "non-null type union",
+			schema: `{"type":"object","properties":{"value":{"type":["string","number"]}},"required":["value"],"additionalProperties":false}`,
+		},
+		{
 			name:   "unsupported string format",
 			schema: `{"type":"object","properties":{"value":{"type":"string","format":"ulid"}},"required":["value"],"additionalProperties":false}`,
 		},

@@ -101,8 +101,8 @@ func validateResponsesSchemaNode(node map[string]any, parentObjectDepth int, roo
 			}
 			types[value] = struct{}{}
 		case []any:
-			if len(value) == 0 {
-				return errors.New("type arrays must contain at least two types")
+			if len(value) != 2 {
+				return errors.New("type arrays must be a two-type nullable union")
 			}
 			for _, item := range value {
 				typeName, ok := item.(string)
@@ -116,6 +116,9 @@ func validateResponsesSchemaNode(node map[string]any, parentObjectDepth int, roo
 					return fmt.Errorf("duplicate type %q", typeName)
 				}
 				types[typeName] = struct{}{}
+			}
+			if _, hasNull := types["null"]; !hasNull {
+				return errors.New("type arrays must include null")
 			}
 		default:
 			return errors.New("type must be a string or a string array")

@@ -325,7 +325,7 @@ ParseResponsesSSE 只接收完整的有界字节切片并同步调用 callback�
 
 - 根节点必须是 `type: object`，根节点不允许 `anyOf`。
 - 每个 object 必须声明 `properties`、完整的 `required`，并设置 `additionalProperties: false`；所有属性都必须 required。可选字段使用包含 `null` 的类型联合表达。
-- 支持 `string/number/integer/boolean/object/array/null`、`enum`、嵌套 `anyOf`、`const`、`$defs` 与本地 `$ref`。
+- 支持 `string/number/integer/boolean/object/array/null`、仅允许与 `null` 组成的二类型 nullable 联合、`enum`、嵌套 `anyOf`、`const`、`$defs` 与本地 `$ref`。
 - 支持的约束：字符串 `pattern` 与官方格式；数字 `multipleOf/maximum/exclusiveMaximum/minimum/exclusiveMinimum`；数组 `items/minItems/maxItems`。
 - 不支持 `allOf/not/dependentRequired/dependentSchemas/if/then/else` 等组合关键字，也不接受 allowlist 以外的关键字。
 - 限制：对象嵌套最多 10 层、对象属性总数最多 5000、属性名/定义名/enum/const 字符总量最多 120000、enum 值总数最多 1000；单个字符串 enum 超过 250 项时字符总量最多 15000。

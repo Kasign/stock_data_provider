@@ -56,7 +56,7 @@ internal/llm/
 ## Responses Strict Schema 子集门禁（2026-11-09）
 
 - 本地 Draft 2020-12 Schema 编译与 Responses strict 子集检查分离：本地验证仍使用完整 Draft 2020-12；只有即将发送到上游的 `strict: true` Response Schema / Function Tool 参数 Schema 才执行子集门禁。
-- 根 Schema 必须是 object；对象属性必须全部列入 required，并设置 `additionalProperties: false`；根层不允许 anyOf。
+- 根 Schema 必须是 object；对象属性必须全部列入 required，并设置 `additionalProperties: false`；根层不允许 anyOf；type 数组只接受一个基础类型与 null 组成的 nullable 联合。
 - 支持类型、枚举、anyOf、$defs、本地 $ref、const、items，以及官方列明的字符串/数字/数组约束；未知关键字、allOf/not/条件组合等不支持能力直接拒绝，不做静默改写。
 - 应用官方结构限制：对象最多 10 层、对象属性总数最多 5000、属性名/定义名/enum/const 字符总量最多 120000、enum 值最多 1000；超过 250 个字符串 enum 值时，该 enum 字符总量不超过 15000。
 - `local_validation_only=true` 不发送上游 Schema，因此跳过 Responses strict 子集门禁，但仍执行本地完整 Schema 编译与响应校验。
