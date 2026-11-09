@@ -131,6 +131,10 @@ func contains(value, fragment string) bool {
 func TestReadyzPreservesExistingResponseShapeWhenReady(t *testing.T) {
 	checker := &fakeReadinessChecker{report: serverdiagnostics.Report{
 		Readiness: serverdiagnostics.Readiness{Ready: true, SafeMessage: "ready"},
+		Diagnostics: platformdiagnostics.Report{Results: []platformdiagnostics.Result{
+			{CheckID: "server.storage.mariadb", Observation: platformdiagnostics.Observation{Status: platformdiagnostics.StatusHealthy}},
+			{CheckID: "server.storage.redis", Observation: platformdiagnostics.Observation{Status: platformdiagnostics.StatusHealthy}},
+		}},
 	}}
 	handler, err := NewHandler(checker)
 	if err != nil {
