@@ -127,4 +127,3 @@ func writePublicError(w http.ResponseWriter, status int, value publicError) {
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(publicErrorEnvelope{Error: value})
 }
-
