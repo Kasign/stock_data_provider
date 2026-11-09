@@ -244,7 +244,8 @@ if old_idle <= now or old_absolute <= now then
   return 0
 end
 if redis.call('EXISTS', KEYS[2]) == 1 then return -1 end
-if new.subject ~= old.subject or new.credential_version ~= old.credential_version or
+if new.subject ~= old.subject or new.created_at_ms ~= old.created_at_ms or
+   new.credential_version ~= old.credential_version or
    tonumber(new.absolute_expires_at_ms or '0') ~= old_absolute then return 0 end
 local ttl = tonumber(ARGV[2]) - now
 if ttl <= 0 then return 0 end
