@@ -41,7 +41,7 @@ func TestMapRepositoryErrorPreservesStableClassification(t *testing.T) {
 	}
 }
 
-func TestMapRepositoryErrorCancellationIsNotReportedAsDeadline(t *testing.T) {
+func TestMapRepositoryErrorCancellationUsesDistinctFaultCode(t *testing.T) {
 	got, ok := mapRepositoryError(context.Canceled).(*fault.Fault)
 	if !ok { t.Fatalf("expected *fault.Fault, got %T", mapRepositoryError(context.Canceled)) }
 	if got.Code != "research_request_canceled" || got.Class != fault.ClassTimeout {
