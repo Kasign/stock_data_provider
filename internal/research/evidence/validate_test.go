@@ -215,6 +215,40 @@ func TestCanonicalNumberUsesECMAScriptThresholds(t *testing.T) {
     }
 }
 
+func TestCanonicalNumberMatchesRFC8785SerializationVectors(t *testing.T) {
+	cases := []struct {
+		input float64
+		want  string
+	}{
+		{333333333.33333329, "333333333.3333333"},
+		{1e30, "1e+30"},
+		{4.50, "4.5"},
+		{2e-3, "0.002"},
+		{1e-27, "1e-27"},
+		{1e-6, "0.000001"},
+		{1e-7, "1e-7"},
+		{1e20, "100000000000000000000"},
+		{1e21, "1e+21"},
+	}
+	for _, tt := range cases {
+		if got := canonicalNumber(tt.input); got != tt.want {
+			t.Errorf("canonicalNumber(%.17g) = %q, want %q", tt.input, got, tt.want)
+		}
+	}
+}
+
+func TestCanonicalStringUsesJCSRequiredEscaping(t *testing.T) {
+	input := "quote:\" slash:/ line:\n tab:\t separators:\u2028\u2029"
+	got, err := canonicalString(input)
+	if err != nil {
+		t.Fatalf("canonicalString() error = %v", err)
+	}
+	want := "\"quote:\\\" slash:/ line:\\n tab:\\t separators:\u2028\u2029\""
+	if got != want {
+		t.Fatalf("canonical string = %q, want %q", got, want)
+	}
+}
+
 func TestCanonicalObjectSupportsNestedJCSValues(t *testing.T) {
 	value := map[string]any{
 		"evaluated_policy_versions": []any{
