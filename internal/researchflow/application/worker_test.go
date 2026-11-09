@@ -33,6 +33,7 @@ func (f *workerStoreFake) CommitWorkerResult(_ context.Context, c WorkerResultCo
 	f.commits++
 	return nil
 }
+
 type workerExecutorFake struct {
 	result StageExecutionResult
 	err    error
