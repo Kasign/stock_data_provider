@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"errors"
 	"sync"
 	"sync/atomic"
@@ -236,12 +237,25 @@ func TestDailyBarContextCacheStopsAtRunBudget(t *testing.T) {
 	}
 }
 
+
+
+
 func TestAssessDailyBarTradingContextMarksBudgetExhaustionNotComparable(t *testing.T) {
-	ctx := withDailyBarContextCache(context.Background(), 0)
-	_ = ctx
-	result := dailyBarTradingContextResult{QualityStatus: model.QualityDegraded}
-	result.Reasons = appendDailyBarContextReason(result.Reasons, "daily_bar_context_security_status_budget_exceeded:2026-10-21")
-	if result.QualityStatus != model.QualityDegraded || !hasDailyBarContextReason(result.Reasons, "daily_bar_context_security_status_budget_exceeded:2026-10-21") {
-		t.Fatalf("budget exhaustion must remain explicit and degraded: %+v", result)
+	calendar := &model.TradingCalendarSnapshot{
+		QualityStatus: model.QualityValid,
+		Items: []model.TradingCalendarDay{
+			{Date: "2026-10-20", IsTradingDay: true},
+			{Date: "2026-10-21", IsTradingDay: true},
+		},
+	}
+	statuses := map[string]*model.SecurityTradingStatusSnapshot{
+		"2026-10-20": dailyBarContextStatus("2026-10-20", "2026-10-01", true, model.SuspensionStatusNoEvent),
+	}
+	statusErrors := map[string]error{"2026-10-21": errDailyBarContextStatusBudgetExceeded}
+	result := assessDailyBarTradingContext(calendar, nil, statuses, statusErrors)
+	if result.QualityStatus != model.QualityDegraded ||
+		!hasDailyBarContextReason(result.Reasons, "daily_bar_context_security_status_budget_exceeded:2026-10-21") ||
+		hasDailyBarContextReason(result.Reasons, "daily_bar_context_security_status_unavailable:2026-10-21") {
+		t.Fatalf("budget exhaustion must remain explicit and not-comparable: %+v", result)
 	}
 }

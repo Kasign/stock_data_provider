@@ -44,6 +44,9 @@ func loadDailyBarContextSecurityStatus(
 	symbol, tradeDate string,
 	loader func(context.Context) (*model.SecurityTradingStatusSnapshot, error),
 ) (*model.SecurityTradingStatusSnapshot, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	cache, _ := ctx.Value(dailyBarContextCacheKey{}).(*dailyBarContextCache)
 	if cache == nil {
 		return loader(ctx)
