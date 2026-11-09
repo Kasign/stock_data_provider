@@ -116,7 +116,7 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 		t.Fatalf("tampered authorization snapshot error = %v, want invalid snapshot", authorizationTamperErr)
 	}
 
-	snapshotCreatedAt := time.Now().UTC().Truncate(time.Microsecond)
+	snapshotCreatedAt := time.Now().UTC()
 	snapshot := app.EvidenceSnapshot{
 		SnapshotRef:           fmt.Sprintf("news-snapshot-it-%d", time.Now().UnixNano()),
 		CallerRef:             "service:researchflow",

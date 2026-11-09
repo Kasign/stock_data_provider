@@ -97,10 +97,10 @@ func (r *MySQLRepository) GetEvidenceSnapshot(
 		snapshot.CallerRef != callerRef ||
 		snapshot.FiltersFingerprint != storedFingerprint ||
 		snapshot.PageSize != int(storedPageSize) ||
-		!snapshot.SystemAsOf.Equal(storedSystemAsOf) ||
+		!sameEvidenceSnapshotDBTime(snapshot.SystemAsOf, storedSystemAsOf) ||
 		snapshot.SortVersion != storedSortVersion ||
-		!snapshot.CreatedAt.Equal(storedCreatedAt) ||
-		!snapshot.ExpiresAt.Equal(storedExpiresAt) {
+		!sameEvidenceSnapshotDBTime(snapshot.CreatedAt, storedCreatedAt) ||
+		!sameEvidenceSnapshotDBTime(snapshot.ExpiresAt, storedExpiresAt) {
 		return app.EvidenceSnapshot{}, app.ErrInvalidEvidenceSnapshot
 	}
 	if !now.Before(snapshot.ExpiresAt) {
@@ -124,4 +124,10 @@ func (r *MySQLRepository) DeleteExpiredEvidenceSnapshots(
 		return 0, err
 	}
 	return result.RowsAffected()
+}
+
+// MariaDB DATETIME(6) stores microsecond precision; compare the payload and
+// indexed metadata at the precision the schema can actually preserve.
+func sameEvidenceSnapshotDBTime(payloadTime, storedTime time.Time) bool {
+	return payloadTime.UTC().Truncate(time.Microsecond).Equal(storedTime.UTC().Truncate(time.Microsecond))
 }
