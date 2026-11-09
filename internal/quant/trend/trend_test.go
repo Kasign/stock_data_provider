@@ -2,15 +2,20 @@ package trend
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
+	"reflect"
 	"testing"
 
 	"example.com/stock-analysis-flow/internal/quant/metric"
 )
 
 func validResult() Result {
+	strength := 0.35
 	return Result{
 		TrendCode: "price_trend", Direction: DirectionUnknown, Phase: PhaseEmerging,
-		Period: "20d", EvidenceMetrics: []metric.Metric{}, ConflictRefs: []string{},
+		Strength: &strength, Period: "20d",
+		EvidenceMetrics: []metric.Metric{}, ConflictRefs: []string{},
 		QualityStatus: QualityValid, SystemAsOf: "2026-11-09T01:00:00Z",
 		AlgorithmVersion: "1.0.0",
 	}
@@ -34,6 +39,28 @@ func TestResultValidateSeparatesDirectionAndPhase(t *testing.T) {
 	}
 }
 
+func TestResultMatchesGolden(t *testing.T) {
+	encoded, err := json.Marshal(validResult())
+	if err != nil {
+		t.Fatalf("marshal TrendResult: %v", err)
+	}
+	goldenPath := filepath.Join("..", "..", "..", "doc", "quant", "golden", "result", "trend-result-1.0.0.golden.json")
+	golden, err := os.ReadFile(goldenPath)
+	if err != nil {
+		t.Fatalf("read TrendResult Golden: %v", err)
+	}
+	var got, want Result
+	if err := json.Unmarshal(encoded, &got); err != nil {
+		t.Fatalf("decode generated TrendResult: %v", err)
+	}
+	if err := json.Unmarshal(golden, &want); err != nil {
+		t.Fatalf("decode TrendResult Golden: %v", err)
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("TrendResult Golden mismatch: got=%s want=%s", encoded, golden)
+	}
+}
+
 func TestResultValidateStrengthAndRequiredCollections(t *testing.T) {
 	for _, strength := range []float64{-0.01, 1.01} {
 		result := validResult()
@@ -43,6 +70,10 @@ func TestResultValidateStrengthAndRequiredCollections(t *testing.T) {
 		}
 	}
 	result := validResult()
+	result.Strength = nil
+	if err := result.Validate(); err != nil {
+		t.Fatalf("nullable strength rejected: %v", err)
+	}
 	result.EvidenceMetrics = nil
 	if err := result.Validate(); err == nil {
 		t.Fatal("missing evidence_metrics accepted")
