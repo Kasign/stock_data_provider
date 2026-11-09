@@ -494,7 +494,7 @@ func TestResponsesAdapterStreamCancellationPreservesPartialOutput(t *testing.T) 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	body := &cancelAfterChunkReader{
-		data: []byte("event: response.output_text.delta\ndata: {\\"type\\":\\"response.output_text.delta\\",\\"delta\\":\\"partial\\"}\n\n"),
+		data: []byte("event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"delta\":\"partial\"}\n\n"),
 		cancel: cancel,
 	}
 	streamDoer := HTTPStreamDoerFunc(func(context.Context, *http.Request) (*HTTPStreamResponse, error) {
