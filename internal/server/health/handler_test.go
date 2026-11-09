@@ -105,7 +105,7 @@ func TestReadyzPreservesExistingResponseShapeWhenReady(t *testing.T) {
 	if response.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d", response.Code, http.StatusOK)
 	}
-	if !contains(response.Body.String(), "`"status"`:`"ready"`") ||
+	if !contains(response.Body.String(), `"status":"ready"`) ||
 		!contains(response.Body.String(), "`"mariadb"`:`"ok"`") ||
 		!contains(response.Body.String(), "`"redis"`:`"ok"`") {
 		t.Fatalf("unexpected readiness response: %s", response.Body.String())
