@@ -207,5 +207,16 @@ func Migrations() []platformstorage.Migration {
 					AFTER endpoint_policy_version_id`,
 			},
 		},
+		{
+			Version:     6,
+			Description: "bind observation to endpoint and provider output policy references",
+			Statements: []string{
+				`ALTER TABLE news_observations
+					ADD COLUMN endpoint_id VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL DEFAULT ''
+					AFTER query_dimension,
+					ADD COLUMN provider_output_policy_ref VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL DEFAULT ''
+					AFTER endpoint_policy_version_id`,
+			},
+		},
 	}
 }

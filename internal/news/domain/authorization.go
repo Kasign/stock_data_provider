@@ -250,18 +250,21 @@ func ValidateNewsAuthorizationBindingForEvidence(
 		return ErrAuthorizationBindingInvalid
 	}
 	if binding.EndpointRef.Value == nil {
-		if observation.EndpointPolicyVersionID != "" {
+		if observation.EndpointID != "" || observation.EndpointPolicyVersionID != "" {
 			return ErrAuthorizationBindingInvalid
 		}
-	} else if observation.EndpointPolicyVersionID == "" ||
+	} else if *binding.EndpointRef.Value != observation.EndpointID ||
+		observation.EndpointPolicyVersionID == "" ||
 		endpointPolicyVersion != observation.EndpointPolicyVersionID {
 		return ErrAuthorizationBindingInvalid
 	}
 	if binding.ProviderRef.Value == nil {
-		if observation.ProviderOutputPolicyVersionID != "" {
+		if observation.ProviderOutputPolicyRef != "" || observation.ProviderOutputPolicyVersionID != "" {
 			return ErrAuthorizationBindingInvalid
 		}
-	} else if observation.ProviderCode == "" || observation.ProviderOutputPolicyVersionID == "" ||
+	} else if observation.ProviderCode == "" ||
+		*binding.ProviderRef.Value != observation.ProviderOutputPolicyRef ||
+		observation.ProviderOutputPolicyVersionID == "" ||
 		providerPolicyVersion != observation.ProviderOutputPolicyVersionID {
 		return ErrAuthorizationBindingInvalid
 	}

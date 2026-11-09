@@ -279,13 +279,14 @@ func (t *mysqlNewsTransaction) AppendObservation(ctx context.Context, observatio
 		newsID = observation.NewsID
 	}
 	_, insertErr := t.tx.ExecContext(ctx, `INSERT INTO news_observations
-		(observation_id, idempotency_key, source_id, provider_code, query_dimension,
-		 source_policy_version_id, endpoint_policy_version_id, provider_output_policy_version_id,
+		(observation_id, idempotency_key, source_id, provider_code, query_dimension, endpoint_id,
+		 source_policy_version_id, endpoint_policy_version_id, provider_output_policy_ref, provider_output_policy_version_id,
 		 policy_evaluated_at, candidate_json, observed_at, identity_status, news_id, reason_code)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		observation.ID, observation.IdempotencyKey, observation.SourceID, observation.ProviderCode,
-		observation.QueryDimension, observation.SourcePolicyVersionID, observation.EndpointPolicyVersionID,
-		observation.ProviderOutputPolicyVersionID, policyEvaluatedAt, candidateJSON, observation.ObservedAt.UTC(),
+		observation.QueryDimension, observation.EndpointID, observation.SourcePolicyVersionID,
+		observation.EndpointPolicyVersionID, observation.ProviderOutputPolicyRef, observation.ProviderOutputPolicyVersionID,
+		policyEvaluatedAt, candidateJSON, observation.ObservedAt.UTC(),
 		string(observation.IdentityStatus), newsID, observation.ReasonCode,
 	)
 	if insertErr == nil {
@@ -303,8 +304,8 @@ func (t *mysqlNewsTransaction) AppendObservation(ctx context.Context, observatio
 }
 
 const observationSelect = `SELECT observation_id, idempotency_key, source_id, provider_code,
-	query_dimension, source_policy_version_id, endpoint_policy_version_id,
-	provider_output_policy_version_id, policy_evaluated_at, candidate_json, observed_at, identity_status, news_id, reason_code
+	query_dimension, endpoint_id, source_policy_version_id, endpoint_policy_version_id,
+	provider_output_policy_ref, provider_output_policy_version_id, policy_evaluated_at, candidate_json, observed_at, identity_status, news_id, reason_code
 	FROM news_observations`
 
 type rowScanner interface {
@@ -319,8 +320,8 @@ func scanObservation(row rowScanner) (domain.Observation, error) {
 	var status string
 	err := row.Scan(
 		&result.ID, &result.IdempotencyKey, &result.SourceID, &result.ProviderCode,
-		&result.QueryDimension, &result.SourcePolicyVersionID, &result.EndpointPolicyVersionID,
-		&result.ProviderOutputPolicyVersionID, &policyAt, &candidateJSON, &result.ObservedAt, &status, &newsID, &result.ReasonCode,
+		&result.QueryDimension, &result.EndpointID, &result.SourcePolicyVersionID,
+		&result.EndpointPolicyVersionID, &result.ProviderOutputPolicyRef, &result.ProviderOutputPolicyVersionID, &policyAt, &candidateJSON, &result.ObservedAt, &status, &newsID, &result.ReasonCode,
 	)
 	if err != nil {
 		return domain.Observation{}, err

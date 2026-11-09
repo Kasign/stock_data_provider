@@ -236,8 +236,8 @@ func TestIngestCandidatePersistsSourcePolicyTrace(t *testing.T) {
 	evaluatedAt := time.Date(2026, 11, 5, 10, 0, 0, 0, time.FixedZone("UTC+8", 8*60*60))
 	trace := ObservationPolicyTrace{
 		SourcePolicyVersionID:   "source-policy-v3",
-		EndpointPolicyVersionID: "endpoint-policy-v2",
-		ProviderOutputPolicyVersionID: "provider-policy-v1",
+		EndpointID: "endpoint-v1", EndpointPolicyVersionID: "endpoint-policy-v2",
+		ProviderOutputPolicyRef: "provider-policy-ref", ProviderOutputPolicyVersionID: "provider-policy-v1",
 		PolicyEvaluatedAt:       evaluatedAt,
 	}
 	observation, err := usecase.ExecuteWithPolicyTrace(
@@ -249,7 +249,9 @@ func TestIngestCandidatePersistsSourcePolicyTrace(t *testing.T) {
 		t.Fatal(err)
 	}
 	if observation.SourcePolicyVersionID != trace.SourcePolicyVersionID ||
+		observation.EndpointID != trace.EndpointID ||
 		observation.EndpointPolicyVersionID != trace.EndpointPolicyVersionID ||
+		observation.ProviderOutputPolicyRef != trace.ProviderOutputPolicyRef ||
 		observation.ProviderOutputPolicyVersionID != trace.ProviderOutputPolicyVersionID ||
 		!observation.PolicyEvaluatedAt.Equal(evaluatedAt.UTC()) {
 		t.Fatalf("policy trace was not persisted: %+v", observation)

@@ -295,6 +295,8 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 	traceCandidate := domain.Candidate{SourceItemID: "provider-trace-item", ProviderCode: "tavily", Title: "trace test"}
 	trace := app.ObservationPolicyTrace{
 		SourcePolicyVersionID: "source-policy-v1",
+		EndpointID: "endpoint-v1", EndpointPolicyVersionID: "endpoint-policy-v1",
+		ProviderOutputPolicyRef: "provider-policy-ref",
 		ProviderOutputPolicyVersionID: "provider-policy-v1",
 		PolicyEvaluatedAt: time.Now().UTC(),
 	}

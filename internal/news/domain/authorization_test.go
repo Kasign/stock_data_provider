@@ -373,6 +373,8 @@ func TestValidateNewsAuthorizationBindingForEvidenceBindsExactVersionAndObservat
 		{"different observation owner", func(_ *NewsAuthorizationBinding, o *Observation, _ *NewsItemVersion) { o.NewsID = "news-other" }},
 		{"different observation reference", func(_ *NewsAuthorizationBinding, o *Observation, _ *NewsItemVersion) { o.ID = "observation-other" }},
 		{"different source", func(_ *NewsAuthorizationBinding, o *Observation, _ *NewsItemVersion) { o.SourceID = "source-other" }},
+		{"different endpoint reference", func(_ *NewsAuthorizationBinding, o *Observation, _ *NewsItemVersion) { o.EndpointID = "endpoint-other" }},
+		{"different provider reference", func(_ *NewsAuthorizationBinding, o *Observation, _ *NewsItemVersion) { o.ProviderOutputPolicyRef = "provider-other" }},
 		{"different source policy version", func(_ *NewsAuthorizationBinding, o *Observation, _ *NewsItemVersion) { o.SourcePolicyVersionID = "2.2.0" }},
 		{"different endpoint policy version", func(_ *NewsAuthorizationBinding, o *Observation, _ *NewsItemVersion) { o.EndpointPolicyVersionID = "1.1.0" }},
 		{"different provider policy version", func(_ *NewsAuthorizationBinding, o *Observation, _ *NewsItemVersion) { o.ProviderOutputPolicyVersionID = "3.1.0" }},

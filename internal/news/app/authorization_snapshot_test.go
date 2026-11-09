@@ -76,8 +76,8 @@ func loadAppAuthorizationBinding(t *testing.T) domain.NewsAuthorizationBinding {
 func appAuthorizationEvidence() (domain.Observation, domain.NewsItemVersion) {
 	observation := domain.Observation{
 		ID: "observation-001", NewsID: "news_001", SourceID: "sec-edgar",
-		ProviderCode: "tavily", SourcePolicyVersionID: "2.1.0",
-		EndpointPolicyVersionID: "1.0.0", ProviderOutputPolicyVersionID: "3.0.0",
+		ProviderCode: "tavily", EndpointID: "sec-edgar-filings", SourcePolicyVersionID: "2.1.0",
+		EndpointPolicyVersionID: "1.0.0", ProviderOutputPolicyRef: "tavily-output", ProviderOutputPolicyVersionID: "3.0.0",
 	}
 	version := domain.NewsItemVersion{
 		ID: "version-001", NewsID: "news_001", VersionNo: 1,
