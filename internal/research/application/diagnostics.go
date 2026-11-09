@@ -4,8 +4,6 @@ import (
 	"context"
 	"strings"
 
-	"example.com/stock-analysis-flow/internal/platform/fault"
-
 	platformdiagnostics "example.com/stock-analysis-flow/internal/platform/diagnostics"
 	researchdiagnostics "example.com/stock-analysis-flow/internal/research/diagnostics"
 	researcherrors "example.com/stock-analysis-flow/internal/research"
@@ -37,7 +35,7 @@ func (s *Service) BuildContextCheck(ctx context.Context, ref ContextRef, require
 // BuildEventCheck 从指定的不可变 Event 版本构造诊断项。
 func (s *Service) BuildEventCheck(ctx context.Context, ref EventRef, required bool) (platformdiagnostics.Check, error) {
 	if s == nil || s.events == nil {
-		return platformdiagnostics.Check{}, applicationFault("internal", "research_event_repository_not_configured", "Research Event Repository is not configured", researcherrors.ErrInvalidRepository)
+		return platformdiagnostics.Check{}, applicationFault(fault.ClassInternal, "research_event_repository_not_configured", "Research Event Repository is not configured", researcherrors.ErrInvalidRepository)
 	}
 	if ctx == nil || strings.TrimSpace(ref.EventID) == "" || ref.EventVersion < 1 {
 		return platformdiagnostics.Check{}, validationFault("invalid_event_ref", "Event reference is invalid", nil)
