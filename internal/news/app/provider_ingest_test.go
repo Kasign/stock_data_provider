@@ -121,7 +121,7 @@ func TestIngestProviderCandidateFailsClosedBeforePersistence(t *testing.T) {
 				return value
 			}(),
 			policy: validProviderIngestPolicy(),
-			want: ErrProviderOutputPolicyUnavailable,
+			want:   ErrProviderOutputPolicyUnavailable,
 		},
 	}
 	for _, test := range tests {
