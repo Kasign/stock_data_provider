@@ -10,7 +10,6 @@ import (
 	"net/http"
 	"time"
 
-	"example.com/stock-analysis-flow/internal/platform/config"
 )
 
 // HTTPStreamResponse 是 LLM 与 Platform 受控流式传输之间的窄响应契约。
