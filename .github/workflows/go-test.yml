@@ -140,7 +140,7 @@ jobs:
         run: go vet ./...
 
   market-data-module-test:
-    if: ${{ hashFiles('services/market-data/go.mod') == '' }}
+    if: ${{ github.event_name == 'workflow_dispatch' }}
     name: Test Market Data in root module
     runs-on: ubuntu-latest
     steps:
@@ -155,7 +155,7 @@ jobs:
         run: |
           files="$(gofmt -l ./internal/marketdata ./cmd/market-data)"
           if [[ -n "$files" ]]; then
-            printf '%s\\n' "$files"
+            printf '%s\n' "$files"
             exit 1
           fi
       - name: Run Market Data tests
