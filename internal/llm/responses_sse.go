@@ -606,6 +606,9 @@ func terminalResponseFromEvent(wire responsesSSEWireEvent, request ModelRequest,
 		parsed.Error = invalidResponsesError("llm.sse.invalid_terminal_response")
 		return parsed, invalidSSEError("llm.sse.invalid_terminal_response")
 	}
+	if partial.OutputText != "" && parsed.OutputText != partial.OutputText {
+		return partial, invalidSSEError("llm.sse.terminal_output_text_mismatch")
+	}
 	return parsed, nil
 }
 

@@ -376,3 +376,25 @@ func TestParseResponsesSSERejectsEventAfterTerminal(t *testing.T) {
 		t.Fatalf("event after terminal must reject the stream: response=%+v err=%v", got, err)
 	}
 }
+
+
+func TestParseResponsesSSERejectsTerminalOutputTextMismatch(t *testing.T) {
+	request := validSSERequest()
+	clock := sseTestClock{now: request.SystemAsOf.Add(time.Second)}
+	data := strings.Join([]string{
+		"event: response.output_text.delta",
+		"data: {\"type\":\"response.output_text.delta\",\"delta\":\"streamed text\"}",
+		"",
+		"event: response.completed",
+		"data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp-text-mismatch\",\"object\":\"response\",\"status\":\"completed\",\"output\":[{\"id\":\"msg-1\",\"type\":\"message\",\"content\":[{\"type\":\"output_text\",\"text\":\"terminal text\"}]}]}}",
+		"",
+	}, "\n")
+
+	got, err := ParseResponsesSSE([]byte(data), request, clock, nil)
+	var adapterErr *AdapterError
+	if !errors.As(err, &adapterErr) || adapterErr.Info.Kind != ErrorInvalidResponse ||
+		adapterErr.Info.StableCode != "llm.sse.terminal_output_text_mismatch" ||
+		got.Status != ResponseFailed {
+		t.Fatalf("terminal output differing from streamed text must be rejected: response=%+v err=%v", got, err)
+	}
+}
