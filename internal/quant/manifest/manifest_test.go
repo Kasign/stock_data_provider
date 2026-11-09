@@ -5,7 +5,8 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"reflect"\n\t"strings"
+	"reflect"
+	"strings"
 	"testing"
 	"time"
 )
