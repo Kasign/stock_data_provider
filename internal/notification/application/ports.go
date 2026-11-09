@@ -59,6 +59,13 @@ type DeliveryRepository interface {
 	UpdateWithLease(ctx context.Context, expectedVersion, fencingToken int64, next domain.DeliveryRecord, event domain.DeliveryStateEvent, now time.Time) error
 }
 
+// DeliveryLeaseRecoveryRepository 将已过期租约的恢复结果与状态事件原子持久化。
+// 评估逻辑必须先通过完整 Attempt 历史调用 AssessExpiredDeliveryLease；
+// 本接口只负责在数据库权威时钟确认租约过期后，以版本和 fencing token CAS 收敛状态。
+type DeliveryLeaseRecoveryRepository interface {
+	RecoverExpiredLease(ctx context.Context, expectedVersion, fencingToken int64, next domain.DeliveryRecord, event domain.DeliveryStateEvent, now time.Time) error
+}
+
 // DeliveryAttemptRepository 管理单次渠道调用的追加式历史。
 // StartWithLease 必须在原子写入时使用 Repository 权威时钟校验租约仍有效、StartedAt 不在未来；同一 fencing token 最多追加一个 Attempt。
 // attempt_count 是 Attempt 历史的计数投影，随 StartWithLease 原子更新，不改变 Delivery 状态版本。
