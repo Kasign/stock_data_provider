@@ -23,7 +23,7 @@ func (r fixedExecutionRenderer) Render(context.Context, domain.EventEnvelope, st
 }
 
 type cancelAfterSendAdapter struct {
-	snapshot    domain.ChannelConfigSnapshot
+	snapshot domain.ChannelConfigSnapshot
 	cancel   context.CancelFunc
 	calls    int
 }
@@ -39,7 +39,7 @@ func (a *cancelAfterSendAdapter) Send(context.Context, domain.ChannelSendRequest
 }
 
 type deadlineAwareExecutionAdapter struct {
-	snapshot domain.ChannelConfigSnapshot
+	snapshot    domain.ChannelConfigSnapshot
 	hasDeadline bool
 	calls       int
 }
