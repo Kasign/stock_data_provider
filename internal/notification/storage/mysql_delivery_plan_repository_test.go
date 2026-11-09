@@ -40,7 +40,7 @@ func TestValidateDeliveryPlanColumns(t *testing.T) {
 	// AuthorizationRefs 使用 omitempty，空切片在 plan_json 中会解码为 nil；
 	// MariaDB 独立 JSON 列仍可能保存为 []，两者语义相同，重放必须接受。
 	emptyRefsPlan := plan
-	emptyRefsPlan.AuthorizationRefs = []string{}
+	emptyRefsPlan.AuthorizationRefs = nil
 	emptyRefsColumns := columns
 	emptyRefsColumns.authorizationRefsJSON = []byte("[]")
 	if err := validateDeliveryPlanColumns(emptyRefsPlan, emptyRefsColumns); err != nil {
