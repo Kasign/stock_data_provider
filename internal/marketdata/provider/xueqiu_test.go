@@ -207,3 +207,57 @@ func TestXueqiuFixtureSymbolCodesAreUnique(t *testing.T) {
 		}
 	}
 }
+
+
+func TestXueqiuHotRankingReportsSnapshotAndLimitDegradation(t *testing.T) {
+	rows := xueqiuFixtureRows(3)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.URL.Query().Get("size"); got != "50" {
+			t.Errorf("request size=%q, want 50", got)
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"error_code": 0,
+			"data": map[string]any{"items": rows},
+		})
+	}))
+	defer server.Close()
+	reporter := validation.NewReporter(20)
+	ctx := validation.WithReporter(context.Background(), reporter)
+	provider := NewXueqiuConfigured(2*time.Second, server.URL, "")
+	snapshot, err := provider.FetchHotStocks(ctx, "popular", 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if snapshot.Total != 3 {
+		t.Fatalf("unexpected ranking total: %d", snapshot.Total)
+	}
+	found := map[string]bool{"provider_time": false, "request_limit": false}
+	for _, issue := range reporter.Snapshot().Issues {
+		if _, ok := found[issue.Field]; ok && issue.Severity == validation.SeverityWarning {
+			found[issue.Field] = true
+		}
+	}
+	for field, ok := range found {
+		if !ok {
+			t.Errorf("missing snapshot-level Reporter evidence for %s: %+v", field, reporter.Snapshot().Issues)
+		}
+	}
+}
+
+func TestXueqiuHotRankingReportsProviderExcessRows(t *testing.T) {
+	rows := xueqiuFixtureRows(3)
+	server := newXueqiuFixtureServer(t, "2", rows)
+	defer server.Close()
+	reporter := validation.NewReporter(10)
+	ctx := validation.WithReporter(context.Background(), reporter)
+	provider := NewXueqiuConfigured(2*time.Second, server.URL, "")
+	if _, err := provider.FetchHotStocks(ctx, "popular", 2); err != nil {
+		t.Fatal(err)
+	}
+	for _, issue := range reporter.Snapshot().Issues {
+		if issue.Field == "row_count" && issue.Code == "provider_returned_excess_rows" && issue.Severity == validation.SeverityWarning {
+			return
+		}
+	}
+	t.Fatalf("expected excess row diagnostic, got %+v", reporter.Snapshot().Issues)
+}
