@@ -37,6 +37,40 @@ func TestHealthzDoesNotDependOnStorageReadiness(t *testing.T) {
 	}
 }
 
+func TestDiagnosticsReturnsStructuredReportWhenChecksComplete(t *testing.T) {
+	checker := &fakeReadinessChecker{report: serverdiagnostics.Report{
+		Readiness: serverdiagnostics.Readiness{Ready: false, ReasonCode: "server.readiness.required_check_unhealthy", SafeMessage: "dependency unavailable"},
+	}}
+	handler, err := NewHandler(checker)
+	if err != nil {
+		t.Fatalf("NewHandler() error = %v", err)
+	}
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/diagnostics", nil))
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", response.Code, http.StatusOK)
+	}
+	if !contains(response.Body.String(), "readiness") || !contains(response.Body.String(), "dependency unavailable") {
+		t.Fatalf("structured diagnostics report missing: %s", response.Body.String())
+	}
+}
+
+func TestDiagnosticsHidesRunnerErrors(t *testing.T) {
+	checker := &fakeReadinessChecker{err: errors.New("sensitive database connection details")}
+	handler, err := NewHandler(checker)
+	if err != nil {
+		t.Fatalf("NewHandler() error = %v", err)
+	}
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/diagnostics", nil))
+	if response.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, want %d", response.Code, http.StatusServiceUnavailable)
+	}
+	if contains(response.Body.String(), "sensitive") {
+		t.Fatalf("diagnostics response leaked internal error: %s", response.Body.String())
+	}
+}
+
 func TestReadyzReturnsServiceUnavailableWhenNotReady(t *testing.T) {
 	checker := &fakeReadinessChecker{report: serverdiagnostics.Report{
 		Readiness: serverdiagnostics.Readiness{
