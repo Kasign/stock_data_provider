@@ -4,7 +4,7 @@
 - 代码：`internal/llm/**`
 - 任务前缀：LLM
 - 状态：LLM-002 DTO/Provider Port、Responses JSON Mapper/Parser、非流式 HTTP Adapter、Clock/Deadline 注入、纯 SSE Parser、公共 DTO Draft 2020-12 Schema 已实现；整体仍待 LLM 包级构建验证
-- 最近代码提交：`830f8d54f2965ac35fe21dda201c6de01230a6dd`
+- 最近代码提交：`1c27b394777e1c6d4d7fdd15a0bb093afa491975`
 - LLM-001：静态协议盘点完成；在线真实端点验收未执行
 - LLM-002：DTO/Provider Port、Responses JSON 请求映射/响应解析、非流式 HTTP Adapter 及对应单测已实现，待 gofmt/go test；Platform Fault 映射、Draft 2020-12 Schema 编译及 DTO Schema Contract Test 均待构建验证；JSON/SSE Golden 已扩展覆盖拒绝、未知项、Usage 边界、终态和序号异常；新增完整 Request Mapper Golden，覆盖 sampling、reasoning、strict schema、function tool 与 tool_choice；新增 Adapter 能力门禁测试，验证可选能力证据缺失时不会派发请求；已补充 SSE callback error（普通事件中断、终态回调拒绝）、CRLF/multiline data、事件数量、单事件累计字节、总输入字节上限、终态后事件拒绝回归测试，以及 Structured Output 非法 JSON/空输出/incomplete 边界测试（待执行）；完整矩阵仍待执行；Platform 受控流读取尚未提供；local_validation_only、Usage 诊断码、Capability verification_method 与 capability_ttl_ms 已纳入 Mapper/DTO
 
@@ -37,6 +37,7 @@ internal/llm/
 - SSE 文本累计由单一全局字符串改为按 `output_index + content_index` 分段聚合，最终按索引顺序生成 ModelResponse.output_text；避免多个输出项交错到达时互相误判或覆盖。
 - 每个文本分段独立校验 delta 与 done；done 后再收到同一分段 delta 返回 `llm.sse.output_text_after_done`；负索引返回 `llm.sse.invalid_output_text_index`。
 - 新增多输出项交错事件聚合、文本 done 后 delta 拒绝、函数参数 done 后 delta 拒绝测试。
+- 文本分段只在终态/错误收尾时统一排序聚合，避免每个事件都排序造成高事件数场景下的重复 CPU 开销。
 - Function Call 参数也按终态约束：收到 `response.function_call_arguments.done` 或对应 `response.output_item.done` 后，不再接受同一 call_id 的后续参数 delta；违规返回 `llm.sse.function_arguments_after_done`。
 - 新增 `TestParseResponsesSSERejectsFunctionArgumentDeltaAfterDone`，覆盖 arguments.done 后追加 delta 的协议异常。
 
