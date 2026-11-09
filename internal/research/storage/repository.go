@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+ researcherrors "example.com/stock-analysis-flow/internal/research"
 	"fmt"
 	"math"
 	"time"
@@ -15,10 +16,10 @@ import (
 )
 
 var (
-	ErrNotFound = errors.New("research record not found")
-	ErrConflict = errors.New("research version conflict")
-	ErrInvalidRepository = errors.New("research repository is not configured")
-	ErrCorruptRecord = errors.New("research stored record is corrupt")
+	ErrNotFound = researcherrors.ErrNotFound
+	ErrConflict = researcherrors.ErrConflict
+	ErrInvalidRepository = researcherrors.ErrInvalidRepository
+	ErrCorruptRecord = researcherrors.ErrCorruptRecord
 )
 
 const pitTimeLayout = "2006-01-02T15:04:05.000000000Z"

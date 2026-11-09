@@ -56,7 +56,7 @@ internal/research/
     repository_integration_test.go
 ```
 
-R1/R2/R3/R5 当前实现 Context、Evidence、Event、Claim/Hypothesis 领域结构及本地校验；R7 已完成 Repository Port、Migration Schema 及 Context/Event/Claim SQL Adapter 第一批实现：包括 Evidence 内容指纹/PIT、GOV-CTR-006 授权快照完整性、Event 追加版本和生命周期转换、Claim/Hypothesis 认识论字段与验证条件。没有 HTTP 接口、真实数据 Adapter、Migration 执行、Outbox 或 Run 编排接入；Context/Event/Claim SQL Repository Adapter 已按 Migration v1/v2/v3 实现，但尚无真实 MariaDB 集成验收。
+R1/R2/R3/R5 当前实现 Context、Evidence、Event、Claim/Hypothesis 领域结构及本地校验；R7 已完成 Repository Port、Migration Schema 及 Context/Event/Claim SQL Adapter 第一批实现：包括 Evidence 内容指纹/PIT、GOV-CTR-006 授权快照完整性、Event 追加版本和生命周期转换、Claim/Hypothesis 认识论字段与验证条件。Research Application 首批 Context/Evidence 用例已实现；没有 HTTP 接口、真实数据 Owner Adapter、Migration 执行、Outbox 或 Run 编排接入；Context/Event/Claim SQL Repository Adapter 已按 Migration v1/v2/v3 实现，但尚无真实 MariaDB 集成验收。
 
 旧 `go-core/internal/contextpack` 和 `internal/analysis` 是历史分析流程，不等同于新 Research Domain；仅作为迁移行为参考，不重复建设其已有的数据整理能力。
 
@@ -186,3 +186,11 @@ R1/R2/R3/R5 当前实现 Context、Evidence、Event、Claim/Hypothesis 领域结
 - `TestContextJSONSchemaValidatesGoldenAndRejectsInvalidPayloads` 实际编译 Draft 2020-12 Schema，验证 Golden，并拒绝缺字段、null 数组、未知枚举、额外字段及非 UTC 时间。
 - `TestContextJSONSchemaRejectsNullNestedObject` 覆盖必需对象为 null 的情况。
 - 该 Validator 测试尚未执行；GitHub Actions 强制门禁和跨模块 Contract Test 仍待接入。
+
+
+## Research Application 首批接口
+
+- `application.Port` 暴露 `CreateContext`、`AddEvidence`、`GetContext`、`GetEvidence`，调用方只依赖稳定命令/引用和公开 DTO。
+- Context/Evidence 标识由 Research 服务端生成；Evidence 内容指纹由服务端计算，调用方提供的 ID/指纹不会被信任。
+- `AddEvidence` 必须通过 `EvidenceAuthorizer`，由来源 Owner Adapter 执行当前授权/撤销检查；不能以历史 AuthorizationRef 快照校验替代。
+- `ListEvidence` 尚未实现：当前 Evidence Repository Port 只有 Get/Append，且项目契约对 Cursor 查询尚无冻结 Schema；不提供假分页接口。
