@@ -10,7 +10,7 @@
 - status：pass、reject、unknown。
 - Reason：code、severity、status、safe_message、evidence_refs。
 - severity：block、warn、info；Reason status：triggered、not_triggered、unknown。
-- 时间采用规范 UTC RFC3339Nano；引用按不透明非空字符串处理。
+- 时间采用规范 UTC RFC3339Nano；Schema 与 Go DTO 同步拒绝非 UTC、冗余小数零和超过纳秒精度的时间表示；引用按不透明非空字符串处理。
 - required 数组必须显式存在；契约未规定最少元素数，因此允许空数组。
 - Schema 禁止未声明字段，不接受未冻结的 override 扩展。
 

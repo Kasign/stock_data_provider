@@ -484,6 +484,8 @@ func TestRiskDecisionSchemaValidatesGoldenAndFailClosedStructure(t *testing.T) {
 	invalid := []string{
 		`{"decision_id":"d1","status":"allow","rule_set_version":"1.0.0","evaluated_at":"2026-11-09T01:00:00Z","system_as_of":"2026-11-09T00:59:00Z","reasons":[],"input_refs":[]}`,
 		`{"decision_id":"d1","status":"pass","rule_set_version":"1.0.0","evaluated_at":"2026-11-09T01:00:00+08:00","system_as_of":"2026-11-09T00:59:00Z","reasons":[],"input_refs":[]}`,
+		`{"decision_id":"d1","status":"pass","rule_set_version":"1.0.0","evaluated_at":"2026-11-09T01:00:00.000Z","system_as_of":"2026-11-09T00:59:00Z","reasons":[],"input_refs":[]}`,
+		`{"decision_id":"d1","status":"pass","rule_set_version":"1.0.0","evaluated_at":"2026-11-09T01:00:00.100Z","system_as_of":"2026-11-09T00:59:00Z","reasons":[],"input_refs":[]}`,
 		`{"decision_id":"d1","status":"pass","rule_set_version":"1.0.0","evaluated_at":"2026-11-09T01:00:00Z","system_as_of":"2026-11-09T00:59:00Z","reasons":[{"code":"R1","severity":"critical","status":"triggered","safe_message":"blocked","evidence_refs":[]}],"input_refs":[]}`,
 		`{"decision_id":"d1","status":"unknown","rule_set_version":"1.0.0","evaluated_at":"2026-11-09T01:00:00Z","system_as_of":"2026-11-09T00:59:00Z","reasons":[{"code":"R1","severity":"block","status":"unknown","safe_message":" ","evidence_refs":[]}],"input_refs":[]}`,
 		`{"decision_id":"d1","status":"reject","rule_set_version":"1.0.0","evaluated_at":"2026-11-09T01:00:00Z","system_as_of":"2026-11-09T00:59:00Z","reasons":[],"input_refs":[""]}`,
