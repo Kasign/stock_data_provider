@@ -34,6 +34,8 @@ func TestMigrationsAreExplicitAndVersioned(t *testing.T) {
 	for _, fragment := range []string{
 		"UNIQUE KEY uq_researchflow_stage_run_code (run_ref, stage_code)",
 		"UNIQUE KEY uq_researchflow_attempt_stage_no (stage_ref, attempt_no)",
+		"UNIQUE KEY uq_researchflow_attempt_stage_fencing (stage_ref, fencing_token)",
+		"FOREIGN KEY (stage_ref, run_ref)",
 		"PRIMARY KEY (caller_ref, operation, idempotency_key)",
 		"request_fingerprint CHAR(64)",
 		"UNIQUE KEY uq_researchflow_result_summary_run (run_ref)",
