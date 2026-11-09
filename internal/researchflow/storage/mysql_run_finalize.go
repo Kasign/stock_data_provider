@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"strings"
 
+	"example.com/stock-analysis-flow/internal/researchflow/application"
 	"example.com/stock-analysis-flow/internal/researchflow/domain"
 )
 
@@ -232,4 +233,20 @@ func (r *MySQLRunRepository) FinalizeRun(ctx context.Context, input RunFinalizat
 		return false, fmt.Errorf("commit Researchflow finalization: %w", err)
 	}
 	return true, nil
+}
+
+
+// FinalizeDeadlineRun adapts the Application deadline-finalization record to
+// the existing atomic Run + ResultSummary + Outbox transaction.
+func (r *MySQLRunRepository) FinalizeDeadlineRun(ctx context.Context, record application.DeadlineFinalizationRecord) (bool, error) {
+	if record.TerminationReason != "deadline_exceeded" ||
+		(record.TerminalStatus != domain.RunFailed && record.TerminalStatus != domain.RunPartial) {
+		return false, errors.New("Researchflow deadline finalization record has an invalid termination reason or terminal status")
+	}
+	return r.FinalizeRun(ctx, RunFinalization{
+		RunRef: record.RunRef, ExpectedVersion: record.ExpectedVersion,
+		ResultSummaryRef: record.ResultSummaryRef, SummarySchemaVersion: record.SummarySchemaVersion,
+		OutboxRef: record.OutboxRef, TerminalStatus: record.TerminalStatus,
+		TerminationReason: record.TerminationReason, Summary: record.Summary,
+	})
 }
