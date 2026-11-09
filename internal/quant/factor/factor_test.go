@@ -105,6 +105,51 @@ func TestAllFactorsReportInsufficientDataBeforeWarmup(t *testing.T) {
 	}
 }
 
+func TestFactorsRejectOverflowFromFinitePositivePrices(t *testing.T) {
+	tests := []struct {
+		name string
+		run  func() error
+	}{
+		{"momentum_20d", func() error {
+			closes := make([]float64, 21)
+			for i := range closes {
+				closes[i] = 1
+			}
+			closes[0] = math.SmallestNonzeroFloat64
+			closes[20] = math.MaxFloat64
+			_, err := Momentum20(closes)
+			return err
+		}},
+		{"momentum_60d", func() error {
+			closes := make([]float64, 61)
+			for i := range closes {
+				closes[i] = 1
+			}
+			closes[0] = math.SmallestNonzeroFloat64
+			closes[60] = math.MaxFloat64
+			_, err := Momentum60(closes)
+			return err
+		}},
+		{"volatility_20d", func() error {
+			closes := make([]float64, 21)
+			for i := range closes {
+				closes[i] = 1
+			}
+			closes[0] = math.SmallestNonzeroFloat64
+			closes[1] = math.MaxFloat64
+			_, err := Volatility20(closes)
+			return err
+		}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := tt.run(); !errors.Is(err, ErrInvalidInput) {
+				t.Fatalf("expected ErrInvalidInput for finite positive inputs, got %v", err)
+			}
+		})
+	}
+}
+
 func TestFactorRejectsInvalidPrices(t *testing.T) {
 	if _, err := Momentum20([]float64{1, 0}); !errors.Is(err, ErrInvalidInput) {
 		t.Fatalf("expected ErrInvalidInput, got %v", err)
