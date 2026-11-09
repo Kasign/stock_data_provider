@@ -59,8 +59,6 @@ func providerConfigCheck(code, name string, configured bool) platformdiag.Check 
 	}
 }
 
-
- 
 // ProviderOutputPolicyCheck is the fail-closed fallback used when no resolver is wired.
 // Prefer ProviderOutputPolicyResolverCheck when the composition root has a resolver.
 // Neither check authorizes persistence; a concrete request must still be evaluated.
@@ -73,13 +71,13 @@ func ProviderOutputPolicyCheck() platformdiag.Check {
 				return platformdiag.Observation{}, err
 			}
 			return platformdiag.Observation{
-				Status: platformdiag.StatusDegraded,
-				ReasonCode: "news.provider.output_policy_unavailable",
+				Status:      platformdiag.StatusDegraded,
+				ReasonCode:  "news.provider.output_policy_unavailable",
 				SafeMessage: "Trusted Provider output policy evaluation is not configured; Provider persistence remains blocked",
-				CheckedAt: time.Now().UTC(),
+				CheckedAt:   time.Now().UTC(),
 				Attributes: map[string]string{
-					"policy_catalog": "unavailable",
-					"policy_evaluator": "unavailable",
+					"policy_catalog":       "unavailable",
+					"policy_evaluator":     "unavailable",
 					"provider_persistence": "blocked",
 				},
 			}, nil
