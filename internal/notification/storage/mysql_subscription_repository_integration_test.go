@@ -12,7 +12,6 @@ import (
 	"testing"
 	"time"
 
-
 	"example.com/stock-analysis-flow/internal/notification/domain"
 	platformstorage "example.com/stock-analysis-flow/internal/platform/storage"
 )
