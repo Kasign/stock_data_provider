@@ -57,7 +57,8 @@ func (s *LeaseRecoveryService) RecoverExpiredOnce(
 			break
 		}
 		if err := s.recoverClaim(ctx, claim, now); err != nil {
-			if errors.Is(err, ErrDeliveryLeaseConflict) || errors.Is(err, ErrDeliveryVersionConflict) {
+			if errors.Is(err, ErrDeliveryLeaseConflict) || errors.Is(err, ErrDeliveryVersionConflict) ||
+				errors.Is(err, ErrLeaseRecoveryNotApplicable) {
 				report.Conflicted++
 				continue
 			}
