@@ -40,7 +40,7 @@ func TestCalculateRetryAtUsesAllowlistAndAttemptLimit(t *testing.T) {
 func TestCalculateRetryAtCapsExponentialBackoff(t *testing.T) {
 	now := time.Now().UTC()
 	policy := template.RetryPolicy{
-		MaxAttempts: 8,
+		MaxAttempts:          8,
 		RetryableReasonCodes: []string{"temporary"},
 		Backoff:              template.BackoffPolicy{Algorithm: "exponential_full_jitter_v1", BaseDelayMS: 1000, MaxDelayMS: 3000},
 	}

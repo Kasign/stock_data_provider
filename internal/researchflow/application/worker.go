@@ -141,7 +141,7 @@ func (w *Worker) Execute(ctx context.Context, runRef, stageRef, attemptRef strin
 		InputSnapshotRefs: append([]string(nil), snapshot.InputSnapshotRefs...),
 		SystemAsOf:        snapshot.Run.SystemAsOf, DeadlineAt: snapshot.Run.DeadlineAt,
 		AttemptDeadlineAt: attemptDeadline,
-		CorrelationID: snapshot.Run.CorrelationID,
+		CorrelationID:     snapshot.Run.CorrelationID,
 	}
 	result, executeErr := w.executor.ExecuteStage(execCtx, request)
 	close(stopHeartbeat)
@@ -161,8 +161,8 @@ func (w *Worker) Execute(ctx context.Context, runRef, stageRef, attemptRef strin
 	if attemptTimedOut {
 		result = StageExecutionResult{
 			AttemptStatus: domain.AttemptTimedOut,
-			StageStatus: domain.StageRetryWait,
-			ReasonCodes: []string{"attempt_timeout"},
+			StageStatus:   domain.StageRetryWait,
+			ReasonCodes:   []string{"attempt_timeout"},
 		}
 	} else if executeErr != nil {
 		return WorkerExecution{Attempt: attempt}, fmt.Errorf("execute Researchflow Stage: %w", executeErr)
