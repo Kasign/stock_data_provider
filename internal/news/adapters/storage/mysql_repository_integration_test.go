@@ -778,4 +778,59 @@ func TestObservationRetentionPurgeIntegration(t *testing.T) {
 	}); !errors.Is(err, app.ErrObservationPayloadPurged) {
 		t.Fatalf("idempotent replay after purge error=%v, want ErrObservationPayloadPurged", err)
 	}
+
+	// 两个并发清理调用处理同一批到期记录时，不得重复清理或遗漏。
+	concurrent := make([]domain.Observation, 4)
+	for i := range concurrent {
+		concurrent[i] = domain.Observation{
+			ID: fmt.Sprintf("news-retention-concurrent-%d-%d", time.Now().UnixNano(), i),
+			IdempotencyKey: fmt.Sprintf("news-retention-concurrent-key-%d-%d", time.Now().UnixNano(), i),
+			SourceID: "news-retention-integration",
+			Candidate: domain.Candidate{SourceItemID: fmt.Sprintf("retention-concurrent-item-%d", i), Title: "concurrent purge"},
+			ObservedAt: now.Add(-2 * time.Hour), RetentionUntil: now.Add(-time.Hour),
+			IdentityStatus: domain.ObservationUnidentified,
+		}
+	}
+	defer func() {
+		for _, observation := range concurrent {
+			_, _ = db.ExecContext(context.Background(), "DELETE FROM news_observations WHERE observation_id = ?", observation.ID)
+		}
+	}()
+	for _, observation := range concurrent {
+		if err := repository.WithinIdentityTransaction(ctx, func(tx app.IdentityTransaction) error {
+			_, err := tx.AppendObservation(ctx, observation)
+			return err
+		}); err != nil {
+			t.Fatalf("insert concurrent observation %s: %v", observation.ID, err)
+		}
+	}
+	type purgeOutcome struct {
+		result app.ObservationPayloadPurgeResult
+		err error
+	}
+	outcomes := make(chan purgeOutcome, 2)
+	var workers sync.WaitGroup
+	for i := 0; i < 2; i++ {
+		workers.Add(1)
+		go func() {
+			defer workers.Done()
+			result, purgeErr := repository.PurgeExpiredObservationPayloads(ctx, now, 2)
+			outcomes <- purgeOutcome{result: result, err: purgeErr}
+		}()
+	}
+	workers.Wait()
+	close(outcomes)
+	totalPurged := 0
+	for outcome := range outcomes {
+		if outcome.err != nil {
+			t.Fatalf("concurrent purge failed: %v", outcome.err)
+		}
+		if outcome.result.Purged > 2 || outcome.result.Purged != outcome.result.Scanned {
+			t.Fatalf("invalid concurrent purge result: %+v", outcome.result)
+		}
+		totalPurged += outcome.result.Purged
+	}
+	if totalPurged != len(concurrent) {
+		t.Fatalf("concurrent purged total=%d, want %d", totalPurged, len(concurrent))
+	}
 }
