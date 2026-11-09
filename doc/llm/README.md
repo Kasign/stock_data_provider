@@ -4,9 +4,9 @@
 - 代码：`internal/llm/**`
 - 任务前缀：LLM
 - 状态：LLM-002 DTO/Provider Port、Responses JSON Mapper/Parser、非流式 HTTP Adapter、Clock/Deadline 注入、纯 SSE Parser、公共 DTO Draft 2020-12 Schema 已实现；整体待构建验证
-- 最近代码提交：c105adf4bde7e455364ae683e30fd1e070fffef0
+- 最近代码提交：a6c136ae43a32f1fd2198808e58ecb9420370b86
 - LLM-001：静态协议盘点完成；在线真实端点验收未执行
-- LLM-002：DTO/Provider Port、Responses JSON 请求映射/响应解析、非流式 HTTP Adapter 及对应单测已实现，待 gofmt/go test；Platform Fault 映射、Draft 2020-12 Schema 编译及 DTO Schema Contract Test 均待构建验证；JSON/SSE Golden 已扩展覆盖拒绝、未知项、Usage 边界、终态和序号异常；新增完整 Request Mapper Golden，覆盖 sampling、reasoning、strict schema、function tool 与 tool_choice；已补充 SSE callback error（普通事件中断、终态回调拒绝）保留部分响应的回归断言（待执行）；完整矩阵与 Platform 受控流读取尚未完成；local_validation_only、Usage 诊断码、Capability verification_method 与 capability_ttl_ms 已纳入 Mapper/DTO
+- LLM-002：DTO/Provider Port、Responses JSON 请求映射/响应解析、非流式 HTTP Adapter 及对应单测已实现，待 gofmt/go test；Platform Fault 映射、Draft 2020-12 Schema 编译及 DTO Schema Contract Test 均待构建验证；JSON/SSE Golden 已扩展覆盖拒绝、未知项、Usage 边界、终态和序号异常；新增完整 Request Mapper Golden，覆盖 sampling、reasoning、strict schema、function tool 与 tool_choice；新增 Adapter 能力门禁测试，验证可选能力证据缺失时不会派发请求；已补充 SSE callback error（普通事件中断、终态回调拒绝）保留部分响应的回归断言（待执行）；完整矩阵与 Platform 受控流读取尚未完成；local_validation_only、Usage 诊断码、Capability verification_method 与 capability_ttl_ms 已纳入 Mapper/DTO
 
 只负责 Go 侧模型服务协议适配，复用现有独立模型服务；不重建推理 Gateway，不管理研究状态机、工具权限或业务结论。
 
