@@ -24,6 +24,7 @@ CreateRunCommand 必须显式包含 schema_version、idempotency_key、template_
 - authenticated_caller_ref 从可信认证 Context 获取，不作为请求体字段，不接受客户端自报主体。
 - idempotency_key 唯一作用域为 (authenticated_caller_ref, CreateRun)；相同键/相同指纹返回原 Run，不同指纹返回 idempotency_conflict。
 - 请求指纹覆盖调用主体、template_ref/version、system_as_of、deadline_at、规范化 input_snapshot_refs 和 parameters；不覆盖 request_id、originating_request_id、correlation_id 和接收时间。
+- `input_snapshot_refs` 是不透明 Ref 集合：必须为非 null 数组；Ref 必须非空、首尾无空白且不重复。规范化只做字典序排序，不静默 Trim 或改写 Ref；空数组仍由模板 `allow_empty_inputs` 决定是否允许。指纹计算本身也执行上述结构校验，避免幂等记录查询先于完整命令校验时接收非法 Ref。
 - system_as_of 必须为 RFC3339Nano UTC 且不晚于可信服务端当前时间；deadline_at 必须晚于数据库 UTC 当前时间。二者独立。
 - originating_request_id 从可信 Request Context 注入；纯内部触发显式 null。correlation_id 从可信父链路继承，否则由 Researchflow 生成高熵 ID；不得信任客户端自报 Header。
 - input_snapshot_refs 必须为非 null 数组；空数组仅允许模板注册时声明 allow_empty_inputs=true 的纯函数流程。
