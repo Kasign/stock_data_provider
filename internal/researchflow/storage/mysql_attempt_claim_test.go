@@ -135,4 +135,50 @@ func TestMariaDBClaimAttemptLeaseAndFencing(t *testing.T) {
 	if loadedFirst.Status != domain.AttemptTimedOut {
 		t.Fatalf("expired attempt status=%q, want timed_out", loadedFirst.Status)
 	}
+
+	stage, err := repository.GetStage(ctx, stageRef)
+	if err != nil {
+		t.Fatalf("load stage before result commit: %v", err)
+	}
+	finished := time.Now().UTC()
+	nextStage := stage
+	nextStage.Version++
+	nextStage.Status = domain.StageSucceeded
+	nextStage.OutputRef = stringRef("result-" + suffix)
+	nextStage.FinishedAt = &finished
+	staleCommit := AttemptResultCommit{
+		RunRef: runRef, StageRef: stageRef, AttemptRef: first.Ref,
+		WorkerID: "worker-a", FencingToken: first.FencingToken,
+		AttemptStatus: domain.AttemptSucceeded, Stage: nextStage,
+	}
+	if err := repository.CommitAttemptResult(ctx, staleCommit); !errors.Is(err, ErrAttemptLeaseHeld) {
+		t.Fatalf("stale worker result error=%v, want ErrAttemptLeaseHeld", err)
+	}
+
+	currentCommit := AttemptResultCommit{
+		RunRef: runRef, StageRef: stageRef, AttemptRef: second.Ref,
+		WorkerID: "worker-b", FencingToken: second.FencingToken,
+		AttemptStatus: domain.AttemptSucceeded, Stage: nextStage,
+	}
+	if err := repository.CommitAttemptResult(ctx, currentCommit); err != nil {
+		t.Fatalf("current worker result commit: %v", err)
+	}
+	loadedSecond, err := repository.GetAttempt(ctx, second.Ref)
+	if err != nil {
+		t.Fatalf("load committed attempt: %v", err)
+	}
+	if loadedSecond.Status != domain.AttemptSucceeded || loadedSecond.OutputRef == nil ||
+		*loadedSecond.OutputRef != "result-"+suffix {
+		t.Fatalf("committed attempt has unexpected result: %#v", loadedSecond)
+	}
+	loadedStage, err := repository.GetStage(ctx, stageRef)
+	if err != nil {
+		t.Fatalf("load committed stage: %v", err)
+	}
+	if loadedStage.Status != domain.StageSucceeded || loadedStage.Version != nextStage.Version {
+		t.Fatalf("committed stage has unexpected state: %#v", loadedStage)
+	}
 }
+
+func stringRef(value string) *string { return &value }
+
