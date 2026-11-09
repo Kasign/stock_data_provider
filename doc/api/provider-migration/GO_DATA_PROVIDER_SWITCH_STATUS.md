@@ -54,3 +54,11 @@
 - 当前合入本分支的 `internal/platform/httpclient` 只有 HTTP BoundDoer，未发现可供 Root 使用的受控 TCP BoundDialer。
 - BaoStock 与 Pytdx 在 nil DialContext 时仍保留独立兼容模式的标准 `net.Dialer` fallback；模块化 Root 必须由严格装配校验阻止此路径，不能将 fallback 视为安全出站。
 - 该缺口属于 Platform 基础能力，不在 Data 分支重复实现。需要 Platform 提供可复用的 TCP 受控拨号能力后，Root 才能完成注入；在此之前启用 BaoStock/Pytdx 的模块化 Root 配置应保持 fail-closed。
+
+
+### 2026-11-09：补齐严格出站校验回归覆盖
+
+- 测试提交：`c5a2beaa3d6f178ba2a0cc8939e9a277a3ed1d9d`。
+- 增加 Hithink、Yahoo、Xueqiu 单 HTTP 出口缺失时的 fail-closed 测试。
+- 增加 Tencent DailyBars 必须同时具备注入复权与未复权 K 线执行器的测试；只注入其中一个时必须失败，两个都注入时通过静态装配校验。
+- 现有测试仍未执行，统一留待 integration。
