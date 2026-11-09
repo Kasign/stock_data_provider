@@ -65,8 +65,8 @@ func TestMigrationsReturnIndependentStatementSlices(t *testing.T) {
 	if len(first) == 0 || len(first[0].Statements) == 0 || len(second[0].Statements) == 0 || len(first[2].Statements) == 0 || len(second[2].Statements) == 0 || len(first[3].Statements) == 0 || len(second[3].Statements) == 0 {
 		t.Fatal("migration statements are empty")
 	}
-	first[2].Statements[0] = "mutated"
-	if second[2].Statements[0] == "mutated" {
+	first[3].Statements[0] = "mutated"
+	if second[3].Statements[0] == "mutated" {
 		t.Fatal("migration statements are shared across calls")
 	}
 }
@@ -110,6 +110,17 @@ func TestMigrationsPreserveEvidencePITAndSnapshotAccessPaths(t *testing.T) {
 	} {
 		if !strings.Contains(snapshotSchema, fragment) {
 			t.Errorf("V3 schema is missing snapshot integrity/access fragment %q", fragment)
+		}
+	}
+
+	identityHistorySchema := strings.Join(migrations[3].Statements, "\n")
+	for _, fragment := range []string{
+		"KEY idx_news_identifier_history_at",
+		"FOREIGN KEY (source_id, identifier_type, identifier_hash)",
+		"FROM news_identifiers",
+	} {
+		if !strings.Contains(identityHistorySchema, fragment) {
+			t.Errorf("V4 schema is missing identity history fragment %q", fragment)
 		}
 	}
 }

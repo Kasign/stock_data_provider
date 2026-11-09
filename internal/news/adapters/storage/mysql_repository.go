@@ -238,11 +238,23 @@ func (t *mysqlNewsTransaction) SaveIdentityCredentials(ctx context.Context, cred
 		return app.ErrInvalidRequest
 	}
 	for _, credential := range credentials {
+		_, observedOffset := credential.ObservedAt.Zone()
+		if credential.ObservedAt.IsZero() || observedOffset != 0 {
+			return app.ErrIdentityHistoryInvalid
+		}
 		if _, err := t.tx.ExecContext(ctx, `INSERT INTO news_identifiers
-			(source_id, identifier_type, identifier_hash, identifier_value, identifier_status, news_id)
-			VALUES (?, ?, ?, ?, ?, ?)`,
+			(source_id, identifier_type, identifier_hash, identifier_value, identifier_status, news_id, created_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?)`,
 			credential.SourceID, string(credential.Type), credential.Hash,
-			credential.Value, string(credential.Status), credential.NewsID,
+			credential.Value, string(credential.Status), credential.NewsID, credential.ObservedAt.UTC(),
+		); err != nil {
+			return err
+		}
+		if _, err := t.tx.ExecContext(ctx, `INSERT INTO news_identifier_status_history
+			(source_id, identifier_type, identifier_hash, identifier_status, observed_at)
+			VALUES (?, ?, ?, ?, ?)`,
+			credential.SourceID, string(credential.Type), credential.Hash,
+			string(credential.Status), credential.ObservedAt.UTC(),
 		); err != nil {
 			return err
 		}
@@ -600,6 +612,7 @@ func nullableString(value string) any {
 var requiredNewsSchemaTables = []string{
 	"news_items",
 	"news_identifiers",
+	"news_identifier_status_history",
 	"news_observations",
 	"news_item_versions",
 	"news_relation_assertions",
