@@ -468,3 +468,45 @@ func TestParseResponsesSSERejectsResponseIDChange(t *testing.T) {
 		t.Fatalf("changing response ID must reject the stream: response=%+v err=%v", got, err)
 	}
 }
+
+
+// TestParseResponsesSSERejectsTerminalTextAfterEmptyTextEvent 验证空文本事件也必须参与终态文本一致性校验。
+func TestParseResponsesSSERejectsTerminalTextAfterEmptyTextEvent(t *testing.T) {
+	request := validSSERequest()
+	clock := sseTestClock{now: request.SystemAsOf.Add(time.Second)}
+	for _, event := range []struct {
+		name string
+		kind string
+		body string
+	}{
+		{
+			name: "empty delta",
+			kind: "response.output_text.delta",
+			body: `{"type":"response.output_text.delta","delta":""}`,
+		},
+		{
+			name: "empty done",
+			kind: "response.output_text.done",
+			body: `{"type":"response.output_text.done","text":""}`,
+		},
+	} {
+		t.Run(event.name, func(t *testing.T) {
+			data := strings.Join([]string{
+				"event: " + event.kind,
+				"data: " + event.body,
+				"",
+				"event: response.completed",
+				"data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp-empty-text\",\"object\":\"response\",\"status\":\"completed\",\"output\":[{\"id\":\"msg-1\",\"type\":\"message\",\"content\":[{\"type\":\"output_text\",\"text\":\"nonempty terminal text\"}]}]}}",
+				"",
+			}, "\n")
+
+			got, err := ParseResponsesSSE([]byte(data), request, clock, nil)
+			var adapterErr *AdapterError
+			if !errors.As(err, &adapterErr) || adapterErr.Info.Kind != ErrorInvalidResponse ||
+				adapterErr.Info.StableCode != "llm.sse.terminal_output_text_mismatch" ||
+				got.Status != ResponseFailed {
+				t.Fatalf("terminal text after an empty text event must be rejected: response=%+v err=%v", got, err)
+			}
+		})
+	}
+}
