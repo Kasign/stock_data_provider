@@ -47,7 +47,6 @@ func TestTrendResultSchemaValidatesGoldenAndRejectsInvalidDiscriminators(t *test
 	}
 }
 
-
 func TestTrendAndRiskSchemasRejectSurroundingWhitespace(t *testing.T) {
 	trendSchema := compileQuantSchemaFile(t, "QNT-CTR-004-trend-result-1.0.0.schema.json")
 	trendInstance := map[string]any{
@@ -86,10 +85,14 @@ func TestTrendAndRiskSchemasRejectSurroundingWhitespace(t *testing.T) {
 		{"period trailing whitespace", func(v map[string]any) { v["period"] = "20d " }},
 		{"algorithm_version leading whitespace", func(v map[string]any) { v["algorithm_version"] = " 1.0.0" }},
 		{"conflict ref trailing whitespace", func(v map[string]any) { v["conflict_refs"] = []any{"conflict:1 "} }},
-		{"metric code leading whitespace", func(v map[string]any) { v["evidence_metrics"].([]any)[0].(map[string]any)["metric_code"] = " momentum_20d" }},
+		{"metric code leading whitespace", func(v map[string]any) {
+			v["evidence_metrics"].([]any)[0].(map[string]any)["metric_code"] = " momentum_20d"
+		}},
 		{"metric unit trailing whitespace", func(v map[string]any) { v["evidence_metrics"].([]any)[0].(map[string]any)["unit"] = "ratio " }},
 		{"metric period leading whitespace", func(v map[string]any) { v["evidence_metrics"].([]any)[0].(map[string]any)["period"] = " 20d" }},
-		{"metric calculation version trailing whitespace", func(v map[string]any) { v["evidence_metrics"].([]any)[0].(map[string]any)["calculation_version"] = "1.0.0 " }},
+		{"metric calculation version trailing whitespace", func(v map[string]any) {
+			v["evidence_metrics"].([]any)[0].(map[string]any)["calculation_version"] = "1.0.0 "
+		}},
 	}
 	for _, tc := range trendMutations {
 		t.Run("trend/"+tc.name, func(t *testing.T) {
@@ -113,7 +116,7 @@ func TestTrendAndRiskSchemasRejectSurroundingWhitespace(t *testing.T) {
 				"code":          "INPUT_UNKNOWN",
 				"severity":      "block",
 				"status":        "unknown",
-				"safe_message": "input unavailable",
+				"safe_message":  "input unavailable",
 				"evidence_refs": []any{"evidence:1"},
 			},
 		},
@@ -126,8 +129,12 @@ func TestTrendAndRiskSchemasRejectSurroundingWhitespace(t *testing.T) {
 		{"decision_id leading whitespace", func(v map[string]any) { v["decision_id"] = " decision-1" }},
 		{"rule_set_version trailing whitespace", func(v map[string]any) { v["rule_set_version"] = "1.0.0 " }},
 		{"reason code leading whitespace", func(v map[string]any) { v["reasons"].([]any)[0].(map[string]any)["code"] = " INPUT_UNKNOWN" }},
-		{"safe message trailing whitespace", func(v map[string]any) { v["reasons"].([]any)[0].(map[string]any)["safe_message"] = "input unavailable " }},
-		{"evidence ref leading whitespace", func(v map[string]any) { v["reasons"].([]any)[0].(map[string]any)["evidence_refs"] = []any{" evidence:1"} }},
+		{"safe message trailing whitespace", func(v map[string]any) {
+			v["reasons"].([]any)[0].(map[string]any)["safe_message"] = "input unavailable "
+		}},
+		{"evidence ref leading whitespace", func(v map[string]any) {
+			v["reasons"].([]any)[0].(map[string]any)["evidence_refs"] = []any{" evidence:1"}
+		}},
 		{"input ref trailing whitespace", func(v map[string]any) { v["input_refs"] = []any{"input:1 "} }},
 	}
 	for _, tc := range riskMutations {
