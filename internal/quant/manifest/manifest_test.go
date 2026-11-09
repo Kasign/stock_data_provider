@@ -251,3 +251,38 @@ func TestFingerprintPayloadRejectsDuplicateObjectKeys(t *testing.T) {
 		})
 	}
 }
+
+
+// FuzzFingerprintPayloadNoPanic 验证任意字节输入都不会导致 payload 指纹计算 panic；
+// 被接受的输入必须产生稳定的小写 SHA-256 十六进制指纹。
+func FuzzFingerprintPayloadNoPanic(f *testing.F) {
+	seeds := [][]byte{
+		[]byte(`{"value":1}`),
+		[]byte(`{"nested":{"name":"量化"}}`),
+		[]byte(`{"value":1,"value":2}`),
+		[]byte(`[]`),
+		[]byte(`null`),
+		[]byte{},
+		{0xff, 0xfe, 0xfd},
+	}
+	for _, seed := range seeds {
+		f.Add(seed)
+	}
+
+	f.Fuzz(func(t *testing.T, payload []byte) {
+		first, err := FingerprintPayload(json.RawMessage(payload))
+		if err != nil {
+			return
+		}
+		if !fingerprintRE.MatchString(first) {
+			t.Fatalf("accepted payload produced invalid fingerprint %q", first)
+		}
+		second, err := FingerprintPayload(json.RawMessage(payload))
+		if err != nil {
+			t.Fatalf("same payload became invalid on second fingerprint: %v", err)
+		}
+		if first != second {
+			t.Fatalf("fingerprint is not deterministic: %q != %q", first, second)
+		}
+	})
+}
