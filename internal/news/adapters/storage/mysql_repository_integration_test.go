@@ -724,10 +724,14 @@ func TestObservationRetentionPurgeIntegration(t *testing.T) {
 			IdentityStatus: domain.ObservationUnidentified,
 		}
 	}
+	referenceNewsID := fmt.Sprintf("news-retention-reference-%d", time.Now().UnixNano())
+	referenceVersionID := fmt.Sprintf("news-retention-version-%d", time.Now().UnixNano())
 	defer func() {
+		_, _ = db.ExecContext(context.Background(), "DELETE FROM news_item_versions WHERE version_id = ?", referenceVersionID)
 		for _, observation := range observations {
 			_, _ = db.ExecContext(context.Background(), "DELETE FROM news_observations WHERE observation_id = ?", observation.ID)
 		}
+		_, _ = db.ExecContext(context.Background(), "DELETE FROM news_items WHERE news_id = ?", referenceNewsID)
 	}()
 	for _, observation := range observations {
 		if err := repository.WithinIdentityTransaction(ctx, func(tx app.IdentityTransaction) error {
@@ -736,6 +740,21 @@ func TestObservationRetentionPurgeIntegration(t *testing.T) {
 		}); err != nil {
 			t.Fatalf("insert expiring observation %s: %v", observation.ID, err)
 		}
+	}
+
+	// 让一条 Observation 被版本事实外键引用，确认载荷清理不会破坏历史引用。
+	if _, err := db.ExecContext(ctx, "INSERT INTO news_items (news_id, origin_source_id) VALUES (?, ?)", referenceNewsID, "news-retention-integration"); err != nil {
+		t.Fatalf("insert referenced news item: %v", err)
+	}
+	if _, err := db.ExecContext(ctx, "UPDATE news_observations SET news_id = ? WHERE observation_id = ?", referenceNewsID, observations[0].ID); err != nil {
+		t.Fatalf("bind referenced observation: %v", err)
+	}
+	if _, err := db.ExecContext(ctx, `INSERT INTO news_item_versions
+		(version_id, news_id, version_no, fingerprint, title, content_json, observed_at, observation_id)
+		VALUES (?, ?, 1, ?, ?, JSON_OBJECT(), ?, ?)`,
+		referenceVersionID, referenceNewsID, strings.Repeat("a", 64), "retention reference",
+		observations[0].ObservedAt, observations[0].ID); err != nil {
+		t.Fatalf("insert version referencing observation: %v", err)
 	}
 
 	firstBatch, err := repository.PurgeExpiredObservationPayloads(ctx, now, 2)
@@ -771,6 +790,13 @@ func TestObservationRetentionPurgeIntegration(t *testing.T) {
 		if retainedRows != 1 {
 			t.Fatalf("observation tombstone row count=%d, want 1", retainedRows)
 		}
+	}
+	var retainedVersionRows int
+	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM news_item_versions WHERE version_id = ? AND observation_id = ?", referenceVersionID, observations[0].ID).Scan(&retainedVersionRows); err != nil {
+		t.Fatal(err)
+	}
+	if retainedVersionRows != 1 {
+		t.Fatalf("version reference row count=%d, want 1", retainedVersionRows)
 	}
 	if err := repository.WithinIdentityTransaction(ctx, func(tx app.IdentityTransaction) error {
 		_, err := tx.AppendObservation(ctx, observations[0])
