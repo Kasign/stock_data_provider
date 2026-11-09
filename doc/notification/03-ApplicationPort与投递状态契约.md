@@ -368,6 +368,10 @@ Channel 配置是不可变版本快照，注册键为 `(channel_ref, config_vers
 
 能力未验证时必须为 unknown；unknown 与 unsupported 一样不能启用对应行为。只有 supports_idempotency=supported 才能向渠道发送稳定 delivery_idempotency_key；只有 supports_retry_after=supported 才能采信 Retry-After；只有 supports_delivery_lookup=supported 才能执行渠道查询对账。
 
+**ChannelConfigRepository：**
+
+Notification 持久化层提供按 `(channel_ref, config_version)` 精确读取的不可变快照 Repository；相同版本相同内容幂等，不同内容冲突。Repository 只保存 `secret_ref`，不保存 Secret 明文。Server 组合根读取快照后，按 `channel_kind` 选择已编译进程序的具体 Adapter，并通过 Platform Config.Secret 注入 Secret；禁止从快照动态加载代码或从 latest 回退。
+
 **ChannelAdapter / Resolver：**
 
 `ChannelResolver.Resolve(ctx, channel_ref, config_version)` 返回绑定该精确版本的 Adapter。Adapter 提供只读 ConfigSnapshot 和 Send。发送请求只包含 delivery_id、稳定 recipient_ref/adapter_target_ref、已渲染内容快照，以及在已验证幂等能力下才允许携带的 idempotency_key。

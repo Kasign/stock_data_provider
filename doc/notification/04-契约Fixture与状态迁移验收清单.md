@@ -348,3 +348,12 @@ Run `42602399686` 对应 HEAD `8d08cf07a651efcd42a514f3dafd94d659f21f97`。`Test
 - 新增 Fake Repository 测试，覆盖固定版本装载、缺失版本不回退、Digest 不一致拒绝。
 - Go workflow Run `42608383500`（HEAD `1460cd8`）：`Test go-core` 通过，但该 Job 不覆盖 Notification；根模块 `Test .` 仍在 gofmt 门禁失败，日志未列出 `internal/notification/**` 格式差异，因此根模块单测/Race/vet 未执行；MariaDB 集成 Job skipped，真实 DSN L3 未执行。
 - 当前结论：模板存储与装载代码已提交，Notification gofmt 门禁无本模块差异；不能据此宣称 Notification 包测试或 MariaDB 集成通过。
+
+
+## 15. Channel 配置快照持久化验收
+
+- [x] `ChannelConfigRepository` 按 channel_ref/config_version 读写不可变快照。
+- [x] MySQL Adapter 保存 SecretRef 而非 Secret 明文；读取时校验快照身份与 JCS Digest。
+- [x] RetryableErrorCodes 作为集合规范化排序，顺序变化不形成新配置版本内容。
+- [x] Migration v4 与 MariaDB 集成测试代码已建立。
+- [ ] 真实 MariaDB DSN L3 尚未执行；测试代码不代表通过。
