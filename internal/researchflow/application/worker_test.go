@@ -211,7 +211,6 @@ func TestWorkerConvertsAttemptDeadlineIntoPolicyControlledTimeout(t *testing.T) 
 	}
 }
 
-
 func TestWorkerCancellationStopsProviderAndConfirmsAttempt(t *testing.T) {
 	store, _ := newWorkerFixture()
 	store.cancelOK = true
