@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"reflect"
 	"strings"
 	"time"
 
@@ -62,18 +63,19 @@ type WorkerExecution struct {
 type Worker struct {
 	store    WorkerStore
 	executor StageExecutor
+	clock    DatabaseClock
 	config   WorkerConfig
 	now      func() time.Time
 }
 
-func NewWorker(store WorkerStore, executor StageExecutor, config WorkerConfig) (*Worker, error) {
-	if store == nil || executor == nil || strings.TrimSpace(config.WorkerID) == "" ||
+func NewWorker(store WorkerStore, executor StageExecutor, clock DatabaseClock, config WorkerConfig) (*Worker, error) {
+	if store == nil || executor == nil || clock == nil || strings.TrimSpace(config.WorkerID) == "" ||
 		len(config.WorkerID) > 128 || config.LeaseDuration <= 0 ||
 		config.HeartbeatInterval <= 0 || config.HeartbeatInterval >= config.LeaseDuration ||
 		config.MaxAttempts <= 0 || config.MaxParallel <= 0 {
 		return nil, errors.New("Researchflow worker dependencies or configuration are invalid")
 	}
-	return &Worker{store: store, executor: executor, config: config, now: time.Now}, nil
+	return &Worker{store: store, executor: executor, clock: clock, config: config, now: time.Now}, nil
 }
 
 // Execute claims and runs one Stage. The store remains the concurrency,
@@ -82,8 +84,16 @@ func (w *Worker) Execute(ctx context.Context, runRef, stageRef, attemptRef strin
 	if strings.TrimSpace(runRef) == "" || strings.TrimSpace(stageRef) == "" || strings.TrimSpace(attemptRef) == "" {
 		return WorkerExecution{}, errors.New("Researchflow worker references are required")
 	}
+	policySnapshot, err := w.store.LoadStageExecutionSnapshot(ctx, runRef, stageRef)
+	if err != nil {
+		return WorkerExecution{}, fmt.Errorf("load Researchflow retry policy snapshot: %w", err)
+	}
+	if policySnapshot.Run.Ref != runRef || policySnapshot.Stage.Ref != stageRef ||
+		policySnapshot.Stage.RunRef != runRef || policySnapshot.RetryPolicy.MaxAttempts <= 0 {
+		return WorkerExecution{}, errors.New("Researchflow retry policy snapshot is inconsistent")
+	}
 	attempt, replayed, err := w.store.ClaimAttempt(ctx, runRef, stageRef, attemptRef, w.config.WorkerID,
-		w.config.LeaseDuration, w.config.MaxAttempts, w.config.MaxParallel)
+		w.config.LeaseDuration, policySnapshot.RetryPolicy.MaxAttempts, w.config.MaxParallel)
 	if err != nil {
 		return WorkerExecution{}, fmt.Errorf("claim Researchflow Stage: %w", err)
 	}
@@ -98,7 +108,7 @@ func (w *Worker) Execute(ctx context.Context, runRef, stageRef, attemptRef strin
 	if snapshot.Run.Ref != runRef || snapshot.Stage.Ref != stageRef ||
 		snapshot.Stage.RunRef != runRef || snapshot.Stage.Status != domain.StageRunning ||
 		snapshot.Stage.AttemptNo != attempt.Number || snapshot.Run.Status != domain.RunRunning ||
-		snapshot.Run.DeadlineAt.IsZero() {
+		snapshot.Run.DeadlineAt.IsZero() || !reflect.DeepEqual(snapshot.RetryPolicy, policySnapshot.RetryPolicy) {
 		return WorkerExecution{Attempt: attempt}, errors.New("Researchflow execution snapshot is inconsistent with claimed Attempt")
 	}
 	if !w.now().Before(snapshot.Run.DeadlineAt) {
@@ -140,7 +150,11 @@ func (w *Worker) Execute(ctx context.Context, runRef, stageRef, attemptRef strin
 		return WorkerExecution{Attempt: attempt}, err
 	}
 	if result.StageStatus == domain.StageRetryWait {
-		retryAt, retryAllowed, retryErr := CalculateRetryAt(snapshot.RetryPolicy, attempt.Number, result.ReasonCodes, w.now().UTC(), CryptoRetryJitter{})
+		retryNow, retryErr := w.clock.NowUTC(ctx)
+		if retryErr != nil {
+			return WorkerExecution{Attempt: attempt}, fmt.Errorf("read database UTC time for retry policy: %w", retryErr)
+		}
+		retryAt, retryAllowed, retryErr := CalculateRetryAt(snapshot.RetryPolicy, attempt.Number, result.ReasonCodes, retryNow, CryptoRetryJitter{})
 		if retryErr != nil {
 			return WorkerExecution{Attempt: attempt}, retryErr
 		}

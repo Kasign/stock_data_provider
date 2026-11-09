@@ -48,9 +48,13 @@ func newWorkerFixture() (*workerStoreFake, StageExecutionResult) {
 	store := &workerStoreFake{attempt: attempt, snapshot: StageExecutionSnapshot{Run: run, Stage: stage, Parameters: []byte(`{"symbol":"AAA"}`)}}
 	return store, StageExecutionResult{AttemptStatus: domain.AttemptSucceeded, StageStatus: domain.StageSucceeded, OutputRef: &output}
 }
+type workerClockFake struct{}
+
+func (workerClockFake) NowUTC(context.Context) (time.Time, error) { return time.Now().UTC(), nil }
+
 func newWorker(t *testing.T, store *workerStoreFake, result StageExecutionResult) *Worker {
 	t.Helper()
-	w, err := NewWorker(store, workerExecutorFake{result: result}, WorkerConfig{WorkerID: "worker-1", LeaseDuration: time.Minute, HeartbeatInterval: time.Second, MaxAttempts: 3, MaxParallel: 2})
+	w, err := NewWorker(store, workerExecutorFake{result: result}, workerClockFake{}, WorkerConfig{WorkerID: "worker-1", LeaseDuration: time.Minute, HeartbeatInterval: time.Second, MaxAttempts: 3, MaxParallel: 2})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -90,7 +94,7 @@ func TestWorkerRejectsInvalidSnapshot(t *testing.T) {
 }
 func TestWorkerDoesNotCommitExecutorError(t *testing.T) {
 	store, _ := newWorkerFixture()
-	w, err := NewWorker(store, workerExecutorFake{err: errors.New("provider unavailable")}, WorkerConfig{WorkerID: "worker-1", LeaseDuration: time.Minute, HeartbeatInterval: time.Second, MaxAttempts: 3, MaxParallel: 2})
+	w, err := NewWorker(store, workerExecutorFake{err: errors.New("provider unavailable")}, workerClockFake{}, WorkerConfig{WorkerID: "worker-1", LeaseDuration: time.Minute, HeartbeatInterval: time.Second, MaxAttempts: 3, MaxParallel: 2})
 	if err != nil {
 		t.Fatal(err)
 	}
