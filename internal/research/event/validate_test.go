@@ -189,10 +189,16 @@ func TestEventSourceTimeConfidenceBoundaries(t *testing.T) {
 	method := "source_rank"
 	methodVersion := "source_rank.v1"
 
-	for _, confidence := range []float64{0, 1} {
-		t.Run(fmt.Sprintf("valid boundary %v", confidence), func(t *testing.T) {
+	for _, boundary := range []struct {
+		name  string
+		value float64
+	}{
+		{"zero", 0},
+		{"one", 1},
+	} {
+		t.Run("valid boundary "+boundary.name, func(t *testing.T) {
 			value := validEvent(t)
-			value.SourceTimes[0].Confidence = &confidence
+			value.SourceTimes[0].Confidence = &boundary.value
 			value.SourceTimes[0].ConfidenceMethod = &method
 			value.SourceTimes[0].ConfidenceMethodVersion = &methodVersion
 			if err := value.Validate(); err != nil {
