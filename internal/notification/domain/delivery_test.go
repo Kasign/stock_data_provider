@@ -50,8 +50,19 @@ func TestDeliveryTransitionRejectsUnsafeSkippedAndTerminalChanges(t *testing.T) 
 	}
 	if _, _, err := sending.Transition(DeliveryTransition{
 		To: DeliverySkipped, At: sending.UpdatedAt.Add(time.Second), ReasonCode: "subscription_revoked",
+		RequestNotSent: true,
 	}); !errors.Is(err, ErrInvalidDeliveryChange) {
-		t.Fatalf("sending->skipped without proof must fail, got %v", err)
+		t.Fatalf("sending->skipped without evidence must fail, got %v", err)
+	}
+	skipped, event, err := sending.Transition(DeliveryTransition{
+		To: DeliverySkipped, At: sending.UpdatedAt.Add(time.Second),
+		ReasonCode: "subscription_revoked", RequestNotSent: true, EvidenceRef: "preflight-proof-1",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if skipped.Status != DeliverySkipped || event.EvidenceRef == nil || *event.EvidenceRef != "preflight-proof-1" {
+		t.Fatalf("sending->skipped must retain proof evidence: %+v", event)
 	}
 	sent, _, err := sending.Transition(DeliveryTransition{
 		To: DeliverySent, At: sending.UpdatedAt.Add(time.Second), ProviderMessageRef: "provider-message-1",

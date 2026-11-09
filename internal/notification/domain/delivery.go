@@ -22,7 +22,6 @@ const (
 
 var (
 	ErrInvalidDelivery       = errors.New("notification: invalid delivery")
-	ErrInvalidDeliveryState  = errors.New("notification: invalid delivery state")
 	ErrInvalidDeliveryChange = errors.New("notification: invalid delivery transition")
 )
 
@@ -148,6 +147,12 @@ func (d DeliveryRecord) Transition(change DeliveryTransition) (DeliveryRecord, D
 		return DeliveryRecord{}, DeliveryStateEvent{}, ErrInvalidDeliveryChange
 	}
 	if d.Status == DeliveryRetryWait && change.To == DeliverySending && change.At.Before(*d.NextAttemptAt) {
+		return DeliveryRecord{}, DeliveryStateEvent{}, ErrInvalidDeliveryChange
+	}
+	if change.RequestNotSent && (change.To != DeliverySkipped || change.EvidenceRef == "") {
+		return DeliveryRecord{}, DeliveryStateEvent{}, ErrInvalidDeliveryChange
+	}
+	if d.Status == DeliverySending && change.To == DeliverySkipped && (!change.RequestNotSent || change.EvidenceRef == "") {
 		return DeliveryRecord{}, DeliveryStateEvent{}, ErrInvalidDeliveryChange
 	}
 	if !deliveryTransitionAllowed(d.Status, change.To, change) {
