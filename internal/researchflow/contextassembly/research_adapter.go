@@ -3,7 +3,7 @@ package contextassembly
 import (
 	"errors"
 	"fmt"
-	"reflect"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -62,6 +62,9 @@ func ToResearchCreateContextCommand(
 		return researchapp.CreateContextCommand{}, ErrInvalidResearchContextProjection
 	}
 
+	if len(metadata) != len(candidates) {
+		return researchapp.CreateContextCommand{}, fmt.Errorf("%w: section metadata does not match candidates", ErrInvalidResearchContextProjection)
+	}
 	candidateByID := make(map[string]SectionCandidate, len(candidates))
 	for _, candidate := range candidates {
 		if candidate.ID == "" || candidate.SourceOwner == "" {
@@ -93,7 +96,7 @@ func ToResearchCreateContextCommand(
 		}
 		if _, selected := included[value.SectionID]; selected ||
 			value.SourceOwner != candidate.SourceOwner || value.Required != candidate.Required ||
-			!reflect.DeepEqual(value.SourceRefs, candidate.SourceRefs) ||
+			!slices.Equal(value.SourceRefs, candidate.SourceRefs) ||
 			value.ReasonCode != OmissionBudgetExceeded || value.SafeMessage == "" {
 			return researchapp.CreateContextCommand{}, fmt.Errorf("%w: omitted section %q does not match candidate", ErrInvalidResearchContextProjection, value.SectionID)
 		}
