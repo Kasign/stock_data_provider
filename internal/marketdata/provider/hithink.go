@@ -760,7 +760,6 @@ func (p *Hithink) FetchLimitPool(ctx context.Context, poolType, tradeDate string
 			return nil, fmt.Errorf("同花顺 %s 池第 %d 行代码不匹配: symbol=%s ticker=%s", poolType, index, symbol, code)
 		}
 		if _, exists := seenPoolSymbols[symbol]; exists {
-			snapshot.ExcludedRows++
 			snapshot.QualityStatus = model.QualityDegraded
 			snapshot.QualityReasons = appendUniqueHithinkReason(snapshot.QualityReasons, "duplicate_limit_pool_symbol_dropped")
 			addHithinkFieldIssue(ctx, &index, "symbol", "thscode", "duplicate_identity", "unique limit-pool symbol", "string", rawSymbol, "同花顺涨跌停池返回重复证券记录")
