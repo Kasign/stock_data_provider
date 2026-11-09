@@ -405,7 +405,7 @@ func parseResponsesSSEReaderLimit(reader io.Reader, request ModelRequest, clock 
 			readErr = scanner.Err()
 		}
 	}
-	if parseErr == nil && readErr == nil && limitedReader.N == 0 {
+	if parseErr == nil && limitedReader.N == 0 {
 		parseErr = newSSEAdapterError(adapterError(ErrorResourceLimit, "llm.sse.total_too_large", false, nil))
 	}
 	if parseErr == nil && readErr == nil {
