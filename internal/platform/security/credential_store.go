@@ -14,8 +14,8 @@ import (
 
 const (
 	OwnerCredentialMigrationNamespace = "platform.security"
-	ownerCredentialTable             = "platform_owner_credentials"
-	ownerCredentialID                = 1
+	ownerCredentialTable              = "platform_owner_credentials"
+	ownerCredentialID                 = 1
 )
 
 var (
