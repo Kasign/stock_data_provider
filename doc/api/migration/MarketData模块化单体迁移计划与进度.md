@@ -995,3 +995,12 @@ internal/
 - 当前 Platform 公开能力只有 HTTP `BoundDoer`，尚无可供 Root 使用的 TCP `BoundDialer`。本次只建立 Data 注入边界，不在 Data 分支复制 DNS/IP 校验逻辑，也不把普通 DialContext 伪称为受控连接。Root 安全接入必须等待 Platform 提供 TCP 目标绑定能力，按精确 Host/Port、DNS/IP 和连接生命周期策略装配。
 - 新增测试源码覆盖 Pytdx 候选 Host:7709 和 BaoStock 配置 Host:Port 均调用 Root 注入函数，并验证连接 context deadline 和错误透传。测试尚未运行；未宣称构建通过或真实 TCP 出站安全验收通过。
 
+
+
+### 2026-11-09：M4 Data Module 装配依赖传递收敛
+
+- 代码基线：`3c83d81964205011768932d7991a778c21f7af22`。
+- `bootstrap.Module.build` 改为接收完整的 `Dependencies`，不再通过 19 个位置参数逐一传递 Provider HTTPDoer/TCP DialContext。
+- Provider 构造仍显式读取对应依赖字段；不改变依赖所有权、默认兼容行为、Provider 优先级或资源关闭语义。
+- 该调整减少新增 Provider 注入项时的签名同步风险，保持 Root 注入契约集中在 `Dependencies`。
+- 本次未运行构建/测试；不宣称编译通过。当前已知 Data gofmt 门禁仍有 6 个文件待修复，后续需在 integration 统一验收。
