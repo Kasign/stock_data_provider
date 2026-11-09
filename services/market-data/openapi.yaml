@@ -1203,7 +1203,7 @@ paths:
         - name: symbols
           in: query
           required: true
-          description: 逗号分隔的 A 股代码，支持规范化后的六位代码或带交易所后缀代码。
+          description: 逗号分隔的 A 股代码，最多 50 个且不允许重复；每个代码先去除首尾空白再规范化，支持六位代码或带交易所后缀代码。
           schema:
             type: string
             example: "600519.SH,000001.SZ"
@@ -1376,7 +1376,7 @@ paths:
         timeout_seconds 为单项 Provider 请求超时，范围 1 到 30 秒，默认 12 秒。
         daily_bar_adjustments 仅用于 daily_bars，支持 none、forward_adjusted、backward_adjusted；省略时仅探测 none，每种口径独立生成结果。
         daily_bar_start_date 与 daily_bar_end_date 必须同时提供，仅用于 daily_bars 的显式历史窗口；首尾包含，按 Asia/Shanghai 交易日解释，最多 31 个自然日，结束日期不能晚于今日。省略时保持原有近期 5 条探测行为。
-        探测与业务熔断统计隔离，并发上限为 4；敏感错误信息会脱敏。
+        探测与业务熔断统计隔离，并发上限为 4；敏感错误信息会脱敏。非空请求体最多 8 KiB，且必须恰好包含一个 JSON 对象；未知字段拒绝。
       requestBody:
         required: false
         content:
@@ -1512,7 +1512,7 @@ paths:
         limit 控制返回条数，最多 50。结果是证券目录匹配候选，不是实时行情，fetched_at 不代表 quote_time。
         未知或降级质量必须由调用方按 quality_status 与 quality_reasons 处理。
       parameters:
-        - {name: q, in: query, required: true, schema: {type: string, minLength: 1, maxLength: 64}, description: Chinese name, six-digit code or normalized symbol}
+        - {name: q, in: query, required: true, schema: {type: string, minLength: 1, maxLength: 64}, description: 去除首尾空白后不能为空，最多 64 个 Unicode 字符；支持中文名称、六位代码或标准证券代码}
         - {name: limit, in: query, required: false, schema: {type: integer, minimum: 1, maximum: 50, default: 10}}
       responses:
         '200':
@@ -1726,7 +1726,7 @@ paths:
         never falls back to a live request. Since publication_time is not available for every metric, sections with a
         missing publication date or a publication date on/after the as_of date in Asia/Shanghai are excluded
         conservatively. Historical revisions can only be reconstructed for snapshots recorded after PIT storage began.
-        Values preserve provider-native numeric scale and explicit units.
+        Values preserve provider-native numeric scale and explicit units. year must be 2007 through the current calendar year; quarter must be 1..4. as_of must be a single non-future RFC3339 timestamp.
       parameters:
         - {name: symbol, in: path, required: true, schema: {type: string}}
         - {name: year, in: query, required: true, schema: {type: integer, minimum: 2007}}
@@ -1889,7 +1889,8 @@ paths:
         Returns provider-reported valuation ratios. Individual metrics can be null or negative; null is missing data, not zero.
         provider_timestamp is the latest valid provider timestamp among the valuation metrics and does not imply that every
         metric was updated at that exact time. The endpoint validates symbols, canonicalizes six-digit A-share codes and
-        returns missing_symbols for requested symbols omitted by the provider.
+        returns missing_symbols for requested symbols omitted by the provider. The 100-token cap applies before deduplication;
+        normalized duplicate symbols are deduplicated, while empty tokens are rejected.
       parameters:
         - name: symbols
           in: query
@@ -2019,7 +2020,7 @@ paths:
   /api/v1/market/indices/{symbol}/constituents:
     get:
       summary: 获取指定指数的最近或指定日期之前的成分权重报告快照
-      description: 未提供 as_of 时保持原有当前/最近快照行为。提供 as_of 时只使用显式支持历史查询的 Provider；Tushare 返回不晚于请求日期的最新 index_weight 报告日。as_of_date 是请求日期，provider_report_date 是实际报告日。该接口不表示成分在报告日至下次报告日之间持续有效，也不是严格历史成员生效区间回放。
+      description: 未提供 as_of 时保持原有当前/最近快照行为。提供 as_of 时只使用显式支持历史查询的 Provider；as_of 仅支持自动选择来源或 source=tushare，指定 source=hithink 时会被拒绝，因为同花顺只支持当前成分。Tushare 返回不晚于请求日期的最新 index_weight 报告日。as_of_date 是请求日期，provider_report_date 是实际报告日。该接口不表示成分在报告日至下次报告日之间持续有效，也不是严格历史成员生效区间回放。
       parameters:
         - name: symbol
           in: path
@@ -2075,7 +2076,7 @@ paths:
   /api/v1/market/indices/{symbol}/daily:
     get:
       summary: 获取指定指数的历史日线
-      description: Tushare 日线成交量以手为单位，成交额按千元换算为人民币元。
+      description: Tushare 日线成交量以手为单位，成交额按千元换算为人民币元。start 与 end 均必填，日期范围首尾包含且不得超过 10 年 / 3660 个自然日。
       parameters:
         - {name: symbol, in: path, required: true, schema: {type: string, example: 000300.SH}}
         - {name: start, in: query, required: true, schema: {type: string, format: date}}
@@ -2143,7 +2144,7 @@ paths:
   /api/v1/market/trading-calendar:
     get:
       summary: Get the explicit A-share trading calendar for an inclusive date range
-      description: Returns one row for every calendar date, including weekends and holidays. The endpoint rejects missing date coverage and does not infer trading days from weekdays.
+      description: Returns one row for every calendar date, including weekends and holidays. The inclusive start/end range must not exceed 3660 calendar days. The endpoint rejects missing date coverage and does not infer trading days from weekdays.
       parameters:
         - {name: start, in: query, required: true, schema: {type: string, format: date}}
         - {name: end, in: query, required: true, schema: {type: string, format: date}}
@@ -2180,7 +2181,7 @@ paths:
   /api/v1/market/session:
     get:
       summary: Get the scheduled A-share market session for a timestamp
-      description: Uses the provider-backed trading calendar for the requested date and the standard Asia/Shanghai session schedule. It does not determine individual-stock suspension, security-specific price limits, or emergency exchange interruptions. When at is omitted, current server time is used.
+      description: Uses the provider-backed trading calendar for the requested date and the standard Asia/Shanghai session schedule. It does not determine individual-stock suspension, security-specific price limits, or emergency exchange interruptions. When at is omitted, current server time is used. When supplied, at must be a single RFC3339 timestamp.
       parameters:
         - {name: at, in: query, required: false, schema: {type: string, format: date-time}, description: Optional RFC3339 timestamp; response includes the Asia/Shanghai date and time}
       responses:
@@ -2263,7 +2264,7 @@ paths:
         Returns the provider-reported market-wide moneyflow_mkt_dc series. Values are CNY and rates are percentage
         points. This is not calculated by summing a partial set of individual stocks. The endpoint requires a Tushare
         token with the moneyflow_mkt_dc permission (documented minimum 120 points); source timestamps are not precise,
-        so the result remains degraded. The requested range is inclusive and capped at 2000 calendar days.
+        so the result remains degraded. The requested range is inclusive and capped at 2000 calendar days; end must not be later than the current Asia/Shanghai calendar date.
       parameters:
         - {name: start, in: query, required: true, schema: {type: string, format: date}}
         - {name: end, in: query, required: true, schema: {type: string, format: date}}
@@ -2304,7 +2305,8 @@ paths:
       description: >-
         Combines the market breadth snapshot with same-date limit-up, limit-down and broken-board pool counts.
         Missing or unverifiable pool counts remain null, never zero. A snapshot is persisted only when MariaDB storage
-        is configured. Live collection is limited to the current China market date; historical dates are read-only.
+        is configured. Live collection is limited to the current China market date; a historical date is rejected by this endpoint.
+        Use GET /api/v1/market/sentiment/history to read persisted historical snapshots.
       parameters:
         - {name: date, in: query, required: false, schema: {type: string, format: date}, description: Defaults to the current Asia/Shanghai date; only the current date can be collected}
       responses:
@@ -2334,6 +2336,7 @@ paths:
   /api/v1/market/sentiment/history:
     get:
       summary: Get persisted daily A-share market sentiment snapshots
+      description: start/end are required, inclusive and limited to 366 calendar days. limit is 1..500 with a default of 366.
       parameters:
         - {name: start, in: query, required: true, schema: {type: string, format: date}}
         - {name: end, in: query, required: true, schema: {type: string, format: date}}
@@ -2465,7 +2468,7 @@ paths:
       parameters:
         - {name: type, in: query, schema: {type: string, enum: [up, down, broken], default: up}}
         - {name: date, in: query, description: Query date in Shanghai time, defaults to today's calendar date, schema: {type: string, format: date}}
-        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 100, default: 30}}
+        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 100, default: 100}}
       responses:
         '200':
           description: Pool snapshot; has_data=false is unknown/unavailable rather than a verified zero count

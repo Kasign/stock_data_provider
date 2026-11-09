@@ -95,3 +95,95 @@ func TestClaimVersionMustBeAppendOnly(t *testing.T) {
 		t.Fatalf("changed ID should fail, got %v", err)
 	}
 }
+
+
+func TestClaimValidateNextVersionRejectsIntegerOverflow(t *testing.T) {
+	previous := validHypothesis(t)
+	previous.ClaimVersion = int(^uint(0) >> 1)
+	next := previous
+	next.ClaimVersion = 1
+	if err := next.ValidateNextVersion(previous); err == nil || !strings.Contains(err.Error(), "integer limit") {
+		t.Fatalf("ValidateNextVersion() error = %v, want integer limit rejection", err)
+	}
+}
+
+
+func TestClaimStatusTransitionRules(t *testing.T) {
+	allowed := []struct {
+		from ClaimStatus
+		to   ClaimStatus
+	}{
+		{StatusProposed, StatusTesting},
+		{StatusTesting, StatusSupported},
+		{StatusTesting, StatusContradicted},
+		{StatusTesting, StatusInvalidated},
+		{StatusTesting, StatusUnknown},
+	}
+	for _, pair := range allowed {
+		if !CanTransition(pair.from, pair.to) {
+			t.Errorf("CanTransition(%s, %s) = false, want true", pair.from, pair.to)
+		}
+	}
+
+	blocked := []struct {
+		from ClaimStatus
+		to   ClaimStatus
+	}{
+		{StatusProposed, StatusSupported},
+		{StatusTesting, StatusProposed},
+		{StatusSupported, StatusTesting},
+		{StatusContradicted, StatusTesting},
+		{StatusInvalidated, StatusTesting},
+		{StatusUnknown, StatusTesting},
+	}
+	for _, pair := range blocked {
+		if CanTransition(pair.from, pair.to) {
+			t.Errorf("CanTransition(%s, %s) = true, want false", pair.from, pair.to)
+		}
+	}
+}
+
+func TestClaimValidateNextVersionEnforcesStatusTransitions(t *testing.T) {
+	tests := []struct {
+		name      string
+		from      ClaimStatus
+		to        ClaimStatus
+		wantError bool
+	}{
+		{"same status revision", StatusTesting, StatusTesting, false},
+		{"proposed to testing", StatusProposed, StatusTesting, false},
+		{"testing to supported", StatusTesting, StatusSupported, false},
+		{"testing to unknown", StatusTesting, StatusUnknown, false},
+		{"proposed skips testing", StatusProposed, StatusSupported, true},
+		{"testing returns to proposed", StatusTesting, StatusProposed, true},
+		{"supported is terminal", StatusSupported, StatusTesting, true},
+		{"contradicted is terminal", StatusContradicted, StatusTesting, true},
+		{"invalidated is terminal", StatusInvalidated, StatusTesting, true},
+		{"unknown has no declared recovery", StatusUnknown, StatusTesting, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			previous := validHypothesis(t)
+			previous.Status = tt.from
+			next := previous
+			next.ClaimVersion++
+			next.SystemAsOf = previous.SystemAsOf.Add(time.Minute)
+			next.Status = tt.to
+			err := next.ValidateNextVersion(previous)
+			if tt.wantError && (err == nil || !strings.Contains(err.Error(), "status transition")) {
+				t.Fatalf("ValidateNextVersion() error = %v, want status transition rejection", err)
+			}
+			if !tt.wantError && err != nil {
+				t.Fatalf("ValidateNextVersion() error = %v, want success", err)
+			}
+		})
+	}
+}
+
+func TestClaimValidateRejectsZeroOffsetNonUTCLocation(t *testing.T) {
+	value := validHypothesis(t)
+	value.SystemAsOf = time.Date(2026, 11, 6, 5, 0, 0, 0, time.FixedZone("non-UTC", 0))
+	if err := value.Validate(); err == nil || !strings.Contains(err.Error(), "must be UTC") {
+		t.Fatalf("Validate() error = %v, want strict UTC Location rejection", err)
+	}
+}

@@ -6,6 +6,8 @@ import (
 	"strings"
 	"time"
 	"unicode"
+
+	"example.com/stock-analysis-flow/internal/news/domain"
 )
 
 type EvidencePurposeCode string
@@ -49,7 +51,10 @@ const (
 	evidenceCursorTTL   = 15 * time.Minute
 )
 
-var ErrInvalidEvidenceQuery = errors.New("news.evidence.invalid_query")
+var (
+	ErrInvalidEvidenceQuery = errors.New("news.evidence.invalid_query")
+	ErrEvidencePITNotFound  = errors.New("news.evidence.pit_not_found")
+)
 
 // EvidenceQueryFilters is a closed filter set. It deliberately has no SQL,
 // field-name, URL, or caller-supplied ordering fields.
@@ -133,6 +138,21 @@ func NewResearchEvidencePage(systemAsOf time.Time) ResearchEvidencePage {
 		Diagnostics: make([]string, 0),
 		SystemAsOf:  systemAsOf.UTC(),
 	}
+}
+
+// EvidencePITRecord is an internal repository result. It must pass authorization
+// before any title, summary, or content is disclosed to a cross-module caller.
+type EvidencePITRecord struct {
+	SourceRef   string
+	ProviderRef string
+	Observation domain.Observation
+	Version     domain.NewsItemVersion
+}
+
+// EvidencePITRepository is the storage port used only by the News query Facade.
+// Both the selected version and its owning Observation must be visible at T.
+type EvidencePITRepository interface {
+	GetEvidenceVersionAt(context.Context, GetEvidenceRequest) (EvidencePITRecord, error)
 }
 
 // ResearchEvidenceQuery is the only cross-module read port. It never searches

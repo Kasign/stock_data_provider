@@ -57,11 +57,11 @@ type ReturnParams struct {
 type VolatilityParams struct {
 	Window              int
 	ReturnBasis         string
-	AnnualizationFactor float64
+	AnnualizationFactor int
 }
 
 type RSIParams struct {
-	Window         int
+	Window          int
 	SmoothingMethod string
 }
 
@@ -83,7 +83,7 @@ type BollingerParams struct {
 }
 
 func SMA(closes []float64, p SMAParams) (Result, error) {
-	if p.Window < 1 {
+	if !validWindow(p.Window, 1) {
 		return Result{}, ErrInvalidParameter
 	}
 	if err := validatePrices(closes); err != nil {
@@ -94,15 +94,19 @@ func SMA(closes []float64, p SMAParams) (Result, error) {
 	}
 
 	window := closes[len(closes)-p.Window:]
+	value := mean(window)
+	if !finite(value) {
+		return Result{}, ErrInvalidInput
+	}
 	return Result{
-		Value:       mean(window),
+		Value:       value,
 		Status:      StatusAvailable,
 		SampleCount: len(window),
 	}, nil
 }
 
 func EMA(closes []float64, p EMAParams) (Result, error) {
-	if p.Window < 1 || p.SeedMethod != "sma" {
+	if !validWindow(p.Window, 1) || p.SeedMethod != "sma" {
 		return Result{}, ErrInvalidParameter
 	}
 	if err := validatePrices(closes); err != nil {
@@ -116,15 +120,19 @@ func EMA(closes []float64, p EMAParams) (Result, error) {
 	if len(values) == 0 {
 		return Result{Status: StatusInsufficientData, SampleCount: len(closes)}, nil
 	}
+	value := values[len(values)-1]
+	if !finite(value) {
+		return Result{}, ErrInvalidInput
+	}
 	return Result{
-		Value:       values[len(values)-1],
+		Value:       value,
 		Status:      StatusAvailable,
 		SampleCount: len(closes),
 	}, nil
 }
 
 func Return(closes []float64, p ReturnParams) (Result, error) {
-	if p.Window < 1 || (p.ReturnBasis != "simple" && p.ReturnBasis != "log") {
+	if !validWindow(p.Window, 1) || (p.ReturnBasis != "simple" && p.ReturnBasis != "log") {
 		return Result{}, ErrInvalidParameter
 	}
 	if err := validatePrices(closes); err != nil {
@@ -138,7 +146,7 @@ func Return(closes []float64, p ReturnParams) (Result, error) {
 	end := closes[len(closes)-1]
 	value := end/start - 1
 	if p.ReturnBasis == "log" {
-		value = math.Log(end / start)
+		value = math.Log(end) - math.Log(start)
 	}
 	if !finite(value) {
 		return Result{}, ErrInvalidInput
@@ -147,9 +155,8 @@ func Return(closes []float64, p ReturnParams) (Result, error) {
 }
 
 func Volatility(closes []float64, p VolatilityParams) (Result, error) {
-	if p.Window < 2 ||
+	if !validWindow(p.Window, 2) ||
 		(p.ReturnBasis != "simple" && p.ReturnBasis != "log") ||
-		!finite(p.AnnualizationFactor) ||
 		p.AnnualizationFactor <= 0 {
 		return Result{}, ErrInvalidParameter
 	}
@@ -166,20 +173,15 @@ func Volatility(closes []float64, p VolatilityParams) (Result, error) {
 	start := len(closes) - p.Window - 1
 	returns := make([]float64, p.Window)
 	for i := range returns {
-		ratio := closes[start+i+1] / closes[start+i]
+		previous, current := closes[start+i], closes[start+i+1]
 		if p.ReturnBasis == "simple" {
-			returns[i] = ratio - 1
+			returns[i] = current/previous - 1
 		} else {
-			returns[i] = math.Log(ratio)
+			returns[i] = math.Log(current) - math.Log(previous)
 		}
 	}
-	average := mean(returns)
-	var sum float64
-	for _, value := range returns {
-		delta := value - average
-		sum += delta * delta
-	}
-	value := math.Sqrt(sum/float64(len(returns)-1)) * math.Sqrt(p.AnnualizationFactor)
+	standardDeviation := sampleStdDev(returns, true)
+	value := standardDeviation * math.Sqrt(float64(p.AnnualizationFactor))
 	if !finite(value) {
 		return Result{}, ErrInvalidInput
 	}
@@ -187,7 +189,7 @@ func Volatility(closes []float64, p VolatilityParams) (Result, error) {
 }
 
 func RSI(closes []float64, p RSIParams) (Result, error) {
-	if p.Window < 1 || p.SmoothingMethod != "wilder" {
+	if !validWindow(p.Window, 1) || p.SmoothingMethod != "wilder" {
 		return Result{}, ErrInvalidParameter
 	}
 	if err := validatePrices(closes); err != nil {
@@ -200,17 +202,21 @@ func RSI(closes []float64, p RSIParams) (Result, error) {
 		}, nil
 	}
 
-	var gains, losses float64
+	gains := make([]float64, p.Window)
+	losses := make([]float64, p.Window)
 	for i := 1; i <= p.Window; i++ {
 		change := closes[i] - closes[i-1]
 		if change > 0 {
-			gains += change
+			gains[i-1] = change
 		} else {
-			losses -= change
+			losses[i-1] = -change
 		}
 	}
-	averageGain := gains / float64(p.Window)
-	averageLoss := losses / float64(p.Window)
+	averageGain := mean(gains)
+	averageLoss := mean(losses)
+	if !finite(averageGain) || !finite(averageLoss) {
+		return Result{}, ErrInvalidInput
+	}
 
 	for i := p.Window + 1; i < len(closes); i++ {
 		change := closes[i] - closes[i-1]
@@ -220,22 +226,29 @@ func RSI(closes []float64, p RSIParams) (Result, error) {
 		} else {
 			loss = -change
 		}
-		averageGain = (averageGain*float64(p.Window-1) + gain) / float64(p.Window)
-		averageLoss = (averageLoss*float64(p.Window-1) + loss) / float64(p.Window)
+		averageGain = wilderAverage(averageGain, gain, p.Window)
+		averageLoss = wilderAverage(averageLoss, loss, p.Window)
+		if !finite(averageGain) || !finite(averageLoss) {
+			return Result{}, ErrInvalidInput
+		}
 	}
 
+	value := rsiValue(averageGain, averageLoss)
+	if !finite(value) {
+		return Result{}, ErrInvalidInput
+	}
 	return Result{
-		Value:       rsiValue(averageGain, averageLoss),
+		Value:       value,
 		Status:      StatusAvailable,
 		SampleCount: len(closes) - 1,
 	}, nil
 }
 
 func MACD(closes []float64, p MACDParams) (MACDResult, error) {
-	if p.FastWindow < 1 ||
-		p.SlowWindow < 2 ||
+	if !validWindow(p.FastWindow, 1) ||
+		!validWindow(p.SlowWindow, 2) ||
 		p.FastWindow >= p.SlowWindow ||
-		p.SignalWindow < 1 {
+		!validWindow(p.SignalWindow, 1) {
 		return MACDResult{}, ErrInvalidParameter
 	}
 	if err := validatePrices(closes); err != nil {
@@ -267,10 +280,14 @@ func MACD(closes []float64, p MACDParams) (MACDResult, error) {
 
 	lastDIF := dif[len(dif)-1]
 	lastDEA := dea[len(dea)-1]
+	histogram := 2 * (lastDIF - lastDEA)
+	if !finite(lastDIF) || !finite(lastDEA) || !finite(histogram) {
+		return MACDResult{}, ErrInvalidInput
+	}
 	return MACDResult{
 		DIF:         lastDIF,
 		DEA:         lastDEA,
-		Histogram:   2 * (lastDIF - lastDEA),
+		Histogram:   histogram,
 		Status:      StatusAvailable,
 		SampleCount: len(closes),
 	}, nil
@@ -278,7 +295,7 @@ func MACD(closes []float64, p MACDParams) (MACDResult, error) {
 
 // ATR 的 previousClose 是输入窗口前一交易日的收盘价；window 个 TR 需要 window 根 OHLC bar。
 func ATR(highs, lows, closes []float64, previousClose float64, p ATRParams) (Result, error) {
-	if p.Window < 1 || p.SmoothingMethod != "wilder" {
+	if !validWindow(p.Window, 1) || p.SmoothingMethod != "wilder" {
 		return Result{}, ErrInvalidParameter
 	}
 	if len(highs) != len(lows) || len(lows) != len(closes) {
@@ -316,13 +333,16 @@ func ATR(highs, lows, closes []float64, previousClose float64, p ATRParams) (Res
 	}
 	average := mean(trueRanges[:p.Window])
 	for i := p.Window; i < len(trueRanges); i++ {
-		average = (average*float64(p.Window-1) + trueRanges[i]) / float64(p.Window)
+		average = wilderAverage(average, trueRanges[i], p.Window)
+	}
+	if !finite(average) {
+		return Result{}, ErrInvalidInput
 	}
 	return Result{Value: average, Status: StatusAvailable, SampleCount: len(trueRanges)}, nil
 }
 
 func Bollinger(closes []float64, p BollingerParams) (BandsResult, error) {
-	if p.Window < 2 || !finite(p.Multiplier) || p.Multiplier <= 0 || p.StdDevMethod != "population" {
+	if !validWindow(p.Window, 2) || !finite(p.Multiplier) || p.Multiplier <= 0 || p.StdDevMethod != "population" {
 		return BandsResult{}, ErrInvalidParameter
 	}
 	if err := validatePrices(closes); err != nil {
@@ -334,24 +354,23 @@ func Bollinger(closes []float64, p BollingerParams) (BandsResult, error) {
 
 	window := closes[len(closes)-p.Window:]
 	middle := mean(window)
-	var sum float64
-	for _, value := range window {
-		delta := value - middle
-		sum += delta * delta
-	}
-	standardDeviation := math.Sqrt(sum / float64(p.Window))
+	standardDeviation := sampleStdDev(window, false)
 	band := p.Multiplier * standardDeviation
+	upper, lower := middle+band, middle-band
+	if !finite(middle) || !finite(standardDeviation) || !finite(upper) || !finite(lower) {
+		return BandsResult{}, ErrInvalidInput
+	}
 	return BandsResult{
 		Middle:      middle,
-		Upper:       middle + band,
-		Lower:       middle - band,
+		Upper:       upper,
+		Lower:       lower,
 		Status:      StatusAvailable,
 		SampleCount: p.Window,
 	}, nil
 }
 
 func emaSeries(values []float64, window int) ([]float64, error) {
-	if window < 1 {
+	if !validWindow(window, 1) {
 		return nil, ErrInvalidParameter
 	}
 	if err := validateFinite(values); err != nil {
@@ -368,6 +387,40 @@ func emaSeries(values []float64, window int) ([]float64, error) {
 		out[i] = alpha*values[i] + (1-alpha)*out[i-1]
 	}
 	return out, nil
+}
+
+const maxIndicatorWindow = 1000
+
+func validWindow(window, minimum int) bool {
+	return window >= minimum && window <= maxIndicatorWindow
+}
+
+// sampleStdDev 先按最大绝对值缩放，再计算样本/总体标准差，避免平方和或均值中间溢出。
+func sampleStdDev(values []float64, sample bool) float64 {
+	var scale float64
+	for _, value := range values {
+		if absolute := math.Abs(value); absolute > scale {
+			scale = absolute
+		}
+	}
+	if scale == 0 {
+		return 0
+	}
+
+	var average float64
+	for _, value := range values {
+		average += (value / scale) / float64(len(values))
+	}
+	var sum float64
+	for _, value := range values {
+		delta := value/scale - average
+		sum += delta * delta
+	}
+	denominator := len(values)
+	if sample {
+		denominator--
+	}
+	return scale * math.Sqrt(sum/float64(denominator))
 }
 
 func validatePrices(values []float64) error {
@@ -393,11 +446,28 @@ func finite(value float64) bool {
 }
 
 func mean(values []float64) float64 {
-	var sum float64
+	var scale float64
 	for _, value := range values {
-		sum += value
+		if absolute := math.Abs(value); absolute > scale {
+			scale = absolute
+		}
 	}
-	return sum / float64(len(values))
+	if scale == 0 {
+		return 0
+	}
+
+	var average float64
+	for _, value := range values {
+		average += (value / scale) / float64(len(values))
+	}
+	// 理论均值绝对值不可能大于最大输入绝对值；钳制浮点累加产生的微小越界。
+	average = math.Max(-1, math.Min(1, average))
+	return scale * average
+}
+
+// wilderAverage 使用等价的增量形式，避免 (window-1)*previous 的中间乘法溢出。
+func wilderAverage(previous, current float64, window int) float64 {
+	return previous + (current-previous)/float64(window)
 }
 
 func rsiValue(gain, loss float64) float64 {

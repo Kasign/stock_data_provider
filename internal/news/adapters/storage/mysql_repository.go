@@ -31,6 +31,7 @@ type MySQLRepository struct {
 var _ app.IdentityRepository = (*MySQLRepository)(nil)
 var _ app.ResearchUpdateRepository = (*MySQLRepository)(nil)
 var _ app.NewsItemRelationRepository = (*MySQLRepository)(nil)
+var _ app.EvidencePITRepository = (*MySQLRepository)(nil)
 
 var _ app.IdentityTransaction = (*mysqlNewsTransaction)(nil)
 var _ app.ResearchUpdateTransaction = (*mysqlNewsTransaction)(nil)
@@ -605,6 +606,7 @@ var requiredNewsSchemaTables = []string{
 	"news_relation_evidence",
 	"news_item_relations",
 	"news_authorization_snapshots",
+	"news_evidence_snapshots",
 }
 
 // Ping verifies the borrowed SQL pool without taking ownership of it.

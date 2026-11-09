@@ -85,18 +85,7 @@ func Volatility20(closes []float64) (Result, error) {
 	for i := range returns {
 		returns[i] = closes[start+i+1]/closes[start+i] - 1
 	}
-	var average float64
-	for _, value := range returns {
-		average += value
-	}
-	average /= window
-
-	var sum float64
-	for _, value := range returns {
-		delta := value - average
-		sum += delta * delta
-	}
-	value := math.Sqrt(sum / float64(window-1))
+	value := sampleStdDev(returns)
 	if math.IsNaN(value) || math.IsInf(value, 0) {
 		return Result{}, ErrInvalidInput
 	}
@@ -107,6 +96,30 @@ func Volatility20(closes []float64) (Result, error) {
 		Status:      StatusAvailable,
 		SampleCount: window,
 	}, nil
+}
+
+// sampleStdDev 先按最大绝对值缩放，再计算样本标准差，避免中间求和或平方溢出。
+func sampleStdDev(values []float64) float64 {
+	var scale float64
+	for _, value := range values {
+		if absolute := math.Abs(value); absolute > scale {
+			scale = absolute
+		}
+	}
+	if scale == 0 {
+		return 0
+	}
+
+	var average float64
+	for _, value := range values {
+		average += (value / scale) / float64(len(values))
+	}
+	var sum float64
+	for _, value := range values {
+		delta := value/scale - average
+		sum += delta * delta
+	}
+	return scale * math.Sqrt(sum/float64(len(values)-1))
 }
 
 func validate(closes []float64) error {
