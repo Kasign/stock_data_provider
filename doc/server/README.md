@@ -769,14 +769,14 @@ Server 层完成不是“服务能够启动”这么简单。至少同时满足�
 | 任务 | 状态 | 说明 |
 |---|---|---|
 | SRV-001 | 完成 | 已记录旧入口、路由与认证现状、旧 Analysis Migration 四表、Worker/Storage 生命周期、部署边界及各模块接入就绪度；详细见 12.3 节 |
-| SRV-002 | 进行中 | Server 进程级配置已集中为 Process 快照；Storage/MarketData Adapter 已支持显式 Env 注入；Bootstrap 统一传递配置；部分初始化失败会汇总原始错误和逆序清理错误；完整模块 Registry 与统一装配仍待模块入口；详见 12.22、12.27、12.32、12.35、12.36 节 |
-| SRV-003 | 进行中 | DB、Redis、HTTP Client 已由 Resources 统一创建和关闭；新增固定 DestinationPolicy 的 BoundDoer 绑定入口；LLM JSON/SSE 共用的 Server Transport 与 Responses Adapter 构造入口已实现；Provider/Secret/CapabilityState 可信配置装配、News Provider/Source 真实注入及生产流式 E2E 仍待完成；详见 12.24、12.28、12.40～12.42 节 |
+| SRV-002 | 进行中 | Server 进程级配置已集中为 Process 快照；Storage/MarketData Adapter 已支持显式 Env 注入；Bootstrap 统一传递配置；部分初始化失败会汇总原始错误和逆序清理错误；SHA `46763c7` 的 `internal/server/bootstrap` 包测试通过；完整模块 Registry 与统一装配仍待模块入口；详见 12.22、12.27、12.32、12.35、12.36 节 |
+| SRV-003 | 进行中 | DB、Redis、HTTP Client 已由 Resources 统一创建和关闭；新增固定 DestinationPolicy 的 BoundDoer 绑定入口；LLM JSON/SSE 共用 Transport 与 Responses Adapter 构造入口已实现；但当前 `internal/llm` 因未使用的 `time` 导入无法编译，连带阻断 `internal/server/llmtransport` 测试；Provider/Secret/CapabilityState 可信配置装配、News Provider/Source 真实注入及生产流式 E2E 仍待完成；详见 12.24、12.28、12.40～12.42 节 |
 | SRV-004 | 阻塞 | 已复核模块接入面；Researchflow/Quant/LLM/Notification 缺少完整生产装配入口，News/Research 也有关键查询/授权接入缺口；详见 12.6 节 |
 | SRV-005 | 进行中 | 已接入 Platform Bearer Owner 认证、入口 Request ID、Fault HTTP 映射工具、请求体与并发限制；补齐 GET/HEAD 探针的状态、响应头、身份策略及过载豁免测试；现有旧 Analysis Handler 保留原业务错误 DTO；Web Session/密码登录、CSRF、登录限流、模块 Service Scope 和可信代理边界仍待契约/模块入口，现有 WebUI 尚未携带 Analysis Owner 凭证，不能视为浏览器认证链路已完成；详见 12.31 节 |
-| SRV-006 | 进行中 | 旧 Analysis Worker 与 HTTP Server 均已纳入统一 Lifecycle；启动取消回滚、并发 Stop、Start/Stop 竞态屏障和消费者先于共享资源关闭已实现；真实 SIGTERM 子进程测试及 Context 取消释放阻塞 Start 的回归测试已补充，但当前 HEAD 尚无测试运行证据；模块 Worker 接入、Race 和生产容器退出验收仍待完成；详见 12.17～12.19、12.26、12.34、12.38 节 |
-| SRV-007 | 进行中 | 已建立 Server Migration Registry，并注册 News/Research/Notification；namespace 与版本号稳定排序；增加执行报告、稳定原因码、人工恢复标记、Registry 并发保护及首次执行快照冻结；其他模块 Migration、MariaDB 故障/恢复集成验收和当前 SHA 测试仍待完成，详见 12.7、12.23、12.25、12.30、12.37 节 |
+| SRV-006 | 进行中 | 旧 Analysis Worker 与 HTTP Server 均已纳入统一 Lifecycle；启动取消回滚、并发 Stop、Start/Stop 竞态屏障和消费者先于共享资源关闭已实现；SHA `46763c7` 的 `internal/server/runtime` 包测试通过；模块 Worker 接入、独立 Race 和生产容器退出验收仍待完成；详见 12.17～12.19、12.26、12.34、12.38 节 |
+| SRV-007 | 进行中 | 已建立 Server Migration Registry，并注册 News/Research/Notification；namespace 与版本号稳定排序；增加执行报告、稳定原因码、人工恢复标记、Registry 并发保护及首次执行快照冻结；SHA `46763c7` 的 `internal/server/migration` 包测试通过；Platform 历史/checksum 不匹配缺稳定 Fault Code，其他模块 Migration 与 MariaDB 故障/恢复集成验收待完成；详见 12.7、12.23、12.25、12.30、12.37、12.45 节 |
 | SRV-008 | 待契约 | Dispatcher 所有权未冻结 |
-| SRV-009 | 进行中 | 已实现 Platform Runner 聚合、严格 Readiness 判定、MariaDB/Redis 资源检查、Owner 保护的结构化 `/diagnostics` 入口；`/readyz` 动态读取实际 Check Results；Service 装配期拒绝重复 Check ID 并保存 Check 快照；真实模块 Check 注册、依赖故障注入、Platform Observation 元数据契约验收及当前 SHA 测试仍待完成，详见 12.8、12.20、12.29、12.33 节 |
+| SRV-009 | 进行中 | 已实现 Platform Runner 聚合、严格 Readiness 判定、MariaDB/Redis 资源检查、Owner 保护的结构化 `/diagnostics` 入口；`/readyz` 动态读取实际 Check Results；Service 装配期拒绝重复 Check ID 并保存 Check 快照；SHA `46763c7` 的 `internal/server/diagnostics` 包测试通过；真实模块 Check 注册、依赖故障注入和 Platform Observation 元数据契约验收仍待完成，详见 12.8、12.20、12.29、12.33 节 |
 | SRV-010 | 阻塞 | 等待 Data 迁移门禁和公开接口 |
 | SRV-011 | 未开始 | 等待核心运行能力 |
 | SRV-012 | 未开始 | 等待新链路验收 |
@@ -1222,3 +1222,12 @@ Lifecycle.Stop 原实现通过 stopped 标记保证重复调用幂等，但并�
 
 - Run `42617966003` 对应 SHA `03af6a2` 在 gofmt 门禁发现 `registry_test.go` 新增标准库导入顺序不符合 gofmt；根模块测试未执行。
 - 已按门禁输出调整导入顺序；无业务代码变化，后续以新 SHA 重新触发 Workflow。
+
+
+### 12.47 Server 包级测试结果与模块阻塞清单（2026-11-09）
+
+- Workflow Run `42618100918` 对应 SHA `46763c75e616c358b431b736820fdf60e85ffa3b`：根模块 gofmt、依赖下载通过；根模块 `go test ./...` 失败，因此 Race/Vet 被跳过；`go-core` 的 gofmt、单测、Race、Vet 通过。
+- 当前 SHA 中 Server 包级测试通过：`internal/server/bootstrap`、`internal/server/diagnostics`、`internal/server/migration`、`internal/server/resources`、`internal/server/runtime`。
+- `internal/server/llmtransport` 未能编译/运行测试，直接原因是依赖的 `internal/llm` 编译失败：`internal/llm/responses_stream.go:11` 存在未使用的 `time` 导入。该问题归 LLM 模块 Owner，不在 Server 分支修改。
+- 同一根模块 Run 还发现其他模块问题：News `NewListEvidenceSnapshotPage` 测试参数与签名不一致、News Migration/授权测试失败；Notification 缺 `EqualChannelSnapshot`；Quant 有未使用导入、缺 `decimalPattern`、缺 `json` 导入及多项指标溢出测试失败；Research 有重复短变量声明和 Application/授权相关测试失败；Researchflow 有 Schema 编译类型错误及 Context Assembly/Public DTO 测试失败。Server 不越权修复这些文件。
+- 本轮已消除 Server 自身 Migration Registry 未定义标识符编译错误；Server 主要基础包测试通过。待 LLM Owner 修复编译问题后，再单独验收 `server/llmtransport`。
