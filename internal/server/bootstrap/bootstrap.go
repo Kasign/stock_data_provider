@@ -123,7 +123,9 @@ func Run(ctx context.Context) error {
 	}
 	defer tasks.Close()
 	if serverRole == serverconfig.RoleWorker || serverRole == serverconfig.RoleAll {
-		if err := tasks.Start(ctx); err != nil { return fmt.Errorf("启动旧 Analysis Worker 失败: %w", err) }
+		if err := tasks.Start(ctx); err != nil {
+			return fmt.Errorf("启动旧 Analysis Worker 失败: %w", err)
+		}
 	}
 
 	if serverRole == serverconfig.RoleWorker {
@@ -133,7 +135,9 @@ func Run(ctx context.Context) error {
 	}
 
 	api, err := httpapi.NewWithTasks(runner, store, analysisTimeout, tasks)
-	if err != nil { return fmt.Errorf("创建旧 Analysis HTTP API 失败: %w", err) }
+	if err != nil {
+		return fmt.Errorf("创建旧 Analysis HTTP API 失败: %w", err)
+	}
 	diagnosticsService, err := serverdiagnostics.NewService(storageResources)
 	if err != nil {
 		return fmt.Errorf("创建 Server 诊断服务失败: %w", err)
