@@ -101,7 +101,8 @@ func AssessUnknownDelivery(
 		}
 	}
 	if len(seenAttemptNos) != delivery.AttemptCount || matched == nil || matched.AttemptID != evidence.AttemptID ||
-		(matched.Outcome != nil && *matched.Outcome != domain.DeliveryAttemptAmbiguous) {
+		(matched.Outcome != nil && *matched.Outcome != domain.DeliveryAttemptAmbiguous) ||
+		!evidenceObservedAfterAttempt(evidence.ObservedAt, *matched) {
 		return UnknownReconciliationAssessment{}, ErrUnknownReconciliationNotApplicable
 	}
 
@@ -172,6 +173,18 @@ func validReconciliationCode(value string) bool {
 			r == '_' || r == '.' || r == '-') {
 			return false
 		}
+	}
+	return true
+}
+
+// evidenceObservedAfterAttempt prevents a lookup result captured before the
+// corresponding channel request (or its known completion) from resolving it.
+func evidenceObservedAfterAttempt(observedAt time.Time, attempt domain.DeliveryAttempt) bool {
+	if observedAt.Before(attempt.StartedAt) {
+		return false
+	}
+	if attempt.FinishedAt != nil && observedAt.Before(*attempt.FinishedAt) {
+		return false
 	}
 	return true
 }
