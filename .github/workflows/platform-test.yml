@@ -123,4 +123,4 @@ jobs:
         run: go test ./internal/platform/security -run "Test(RedisSessionStore|RedisLoginRateLimiter)Integration" -v
 
       - name: Run Redis session and rate limit integration race tests
-        run: go test -race ./internal/platform/security -run "TestRedisSessionStoreIntegration" -v
+        run: go test -race ./internal/platform/security -run "Test(RedisSessionStore|RedisLoginRateLimiter)Integration" -v
