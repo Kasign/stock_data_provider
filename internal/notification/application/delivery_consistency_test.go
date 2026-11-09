@@ -8,6 +8,13 @@ import (
 
 func TestAssessDeliveryConsistency(t *testing.T) {
 	delivery, lease, _ := recoveryFixture(t)
+	initial := validDeliveryForRepository()
+	sendingSnapshot, sendingEvent, err := initial.Transition(domain.DeliveryTransition{
+		To: domain.DeliverySending, At: initial.CreatedAt.Add(time.Second),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
 	running := recoveryAttempt(t, delivery, lease, domain.DeliveryAttemptAccepted, false)
 	completed := recoveryAttempt(t, delivery, lease, domain.DeliveryAttemptAccepted, true)
 
@@ -19,22 +26,22 @@ func TestAssessDeliveryConsistency(t *testing.T) {
 	}{
 		{
 			name: "all histories comparable and consistent",
-			input: DeliveryConsistencyInput{Delivery: delivery, AttemptsComparable: true, StateEventsComparable: true},
+			input: DeliveryConsistencyInput{Delivery: initial, AttemptsComparable: true, StateEventsComparable: true},
 			want: DeliveryConsistencyPass,
 		},
 		{
 			name: "attempt delivery intermediate",
 			input: DeliveryConsistencyInput{
-				Delivery: func() domain.DeliveryRecord { value := delivery; value.Status = domain.DeliverySending; value.AttemptCount = 1; return value }(),
+				Delivery: func() domain.DeliveryRecord { value := sendingSnapshot; value.AttemptCount = 1; return value }(),
 				Attempts: []domain.DeliveryAttempt{completed}, AttemptsComparable: true,
-				StateEventsComparable: true,
+				StateEvents: []domain.DeliveryStateEvent{sendingEvent}, StateEventsComparable: true,
 			},
 			want: DeliveryConsistencyDegrade, wantReason: "attempt_delivery_intermediate",
 		},
 		{
 			name: "attempt snapshot contradiction",
 			input: DeliveryConsistencyInput{
-				Delivery: func() domain.DeliveryRecord { value := delivery; value.Status = domain.DeliverySent; value.AttemptCount = 1; return value }(),
+				Delivery: func() domain.DeliveryRecord { value := sendingSnapshot; value.Status = domain.DeliverySent; value.AttemptCount = 1; return value }(),
 				Attempts: []domain.DeliveryAttempt{running}, AttemptsComparable: true,
 				StateEventsComparable: false,
 			},
@@ -43,14 +50,14 @@ func TestAssessDeliveryConsistency(t *testing.T) {
 		{
 			name: "state history invalid",
 			input: DeliveryConsistencyInput{
-				Delivery: delivery, AttemptsComparable: false, StateEvents: []domain.DeliveryStateEvent{{}},
+				Delivery: initial, AttemptsComparable: false, StateEvents: []domain.DeliveryStateEvent{{}},
 				StateEventsComparable: true,
 			},
 			want: DeliveryConsistencyFail, wantReason: "state_event_history_conflict",
 		},
 		{
 			name: "history read unavailable",
-			input: DeliveryConsistencyInput{Delivery: delivery},
+			input: DeliveryConsistencyInput{Delivery: initial},
 			want: DeliveryConsistencyNotComparable,
 		},
 		{
