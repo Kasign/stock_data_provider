@@ -25,6 +25,10 @@ func TestValidateCreateRunCommandBoundaries(t *testing.T) {
 	if err:=ValidateCreateRunCommand(cmd,now,true);err!=nil{t.Fatal(err)}
 	cmd=commandAt(now);cmd.Parameters=json.RawMessage(`[]`)
 	if err:=ValidateCreateRunCommand(cmd,now,false);err==nil{t.Fatal("non-object parameters accepted")}
+	cmd=commandAt(now);cmd.InputSnapshotRefs=[]string{" snapshot-a"}
+	if err:=ValidateCreateRunCommand(cmd,now,false);err==nil{t.Fatal("snapshot reference with surrounding whitespace accepted")}
+	cmd=commandAt(now);cmd.InputSnapshotRefs=[]string{"snapshot-a","snapshot-a"}
+	if err:=ValidateCreateRunCommand(cmd,now,false);err==nil{t.Fatal("duplicate snapshot references accepted")}
 }
 
 func TestRequestFingerprintCanonicalizesParametersAndExcludesTracing(t *testing.T) {
@@ -61,5 +65,37 @@ func TestRequestFingerprintRejectsDuplicateJSONKeys(t *testing.T) {
 	cmd.Parameters = json.RawMessage(`{"symbol":"600000","symbol":"000001"}`)
 	if _, err := RequestFingerprint("caller-a", cmd); err == nil {
 		t.Fatal("duplicate JSON keys must be rejected by JCS")
+	}
+}
+
+
+func TestRequestFingerprintCanonicalizesSnapshotSetAndRejectsInvalidRefs(t *testing.T) {
+	now := time.Date(2026, 11, 6, 10, 0, 0, 0, time.UTC)
+	a, b := commandAt(now), commandAt(now)
+	a.InputSnapshotRefs = []string{"snapshot-b", "snapshot-a"}
+	b.InputSnapshotRefs = []string{"snapshot-a", "snapshot-b"}
+	fa, err := RequestFingerprint("caller-a", a)
+	if err != nil { t.Fatal(err) }
+	fb, err := RequestFingerprint("caller-a", b)
+	if err != nil { t.Fatal(err) }
+	if fa != fb { t.Fatal("snapshot set order changed request fingerprint") }
+
+	invalid := []struct {
+		name string
+		refs []string
+	}{
+		{name:"nil", refs:nil},
+		{name:"empty reference", refs:[]string{""}},
+		{name:"surrounding whitespace", refs:[]string{" snapshot-a"}},
+		{name:"duplicate", refs:[]string{"snapshot-a","snapshot-a"}},
+	}
+	for _, tc := range invalid {
+		t.Run(tc.name, func(t *testing.T) {
+			cmd := commandAt(now)
+			cmd.InputSnapshotRefs = tc.refs
+			if _, err := RequestFingerprint("caller-a", cmd); err == nil {
+				t.Fatal("invalid input_snapshot_refs accepted for fingerprint")
+			}
+		})
 	}
 }

@@ -35,22 +35,8 @@ func ValidateCreateRunCommand(cmd CreateRunCommand, now time.Time, allowEmptyInp
 	if !cmd.DeadlineAt.After(now) {
 		return fmt.Errorf("%w: deadline_at must be later than database UTC now", ErrInvalidCommand)
 	}
-	if cmd.InputSnapshotRefs == nil {
-		return fmt.Errorf("%w: input_snapshot_refs must be present", ErrInvalidCommand)
-	}
-	if len(cmd.InputSnapshotRefs) == 0 && !allowEmptyInputs {
-		return fmt.Errorf("%w: template does not allow empty input snapshots", ErrInvalidCommand)
-	}
-	seen := make(map[string]struct{}, len(cmd.InputSnapshotRefs))
-	for _, ref := range cmd.InputSnapshotRefs {
-		ref = strings.TrimSpace(ref)
-		if ref == "" {
-			return fmt.Errorf("%w: input snapshot reference is empty", ErrInvalidCommand)
-		}
-		if _, ok := seen[ref]; ok {
-			return fmt.Errorf("%w: duplicate input snapshot reference %q", ErrInvalidCommand, ref)
-		}
-		seen[ref] = struct{}{}
+	if _, err := canonicalInputSnapshotRefs(cmd.InputSnapshotRefs, allowEmptyInputs); err != nil {
+		return err
 	}
 	parameters := bytes.TrimSpace(cmd.Parameters)
 	if len(parameters) == 0 || !json.Valid(parameters) || parameters[0] != '{' {
@@ -60,6 +46,32 @@ func ValidateCreateRunCommand(cmd CreateRunCommand, now time.Time, allowEmptyInp
 		return fmt.Errorf("%w: originating_request_id must be null or non-empty", ErrInvalidCommand)
 	}
 	return nil
+}
+
+// canonicalInputSnapshotRefs validates opaque references and returns a stable set order.
+func canonicalInputSnapshotRefs(refs []string, allowEmpty bool) ([]string, error) {
+	if refs == nil {
+		return nil, fmt.Errorf("%w: input_snapshot_refs must be present", ErrInvalidCommand)
+	}
+	if len(refs) == 0 && !allowEmpty {
+		return nil, fmt.Errorf("%w: template does not allow empty input snapshots", ErrInvalidCommand)
+	}
+	canonical := append([]string(nil), refs...)
+	seen := make(map[string]struct{}, len(canonical))
+	for _, ref := range canonical {
+		if strings.TrimSpace(ref) == "" {
+			return nil, fmt.Errorf("%w: input snapshot reference is empty", ErrInvalidCommand)
+		}
+		if strings.TrimSpace(ref) != ref {
+			return nil, fmt.Errorf("%w: input snapshot reference must not contain surrounding whitespace", ErrInvalidCommand)
+		}
+		if _, exists := seen[ref]; exists {
+			return nil, fmt.Errorf("%w: duplicate input snapshot reference %q", ErrInvalidCommand, ref)
+		}
+		seen[ref] = struct{}{}
+	}
+	sort.Strings(canonical)
+	return canonical, nil
 }
 
 func isUTC(value time.Time) bool {
@@ -73,8 +85,10 @@ func RequestFingerprint(callerRef string, cmd CreateRunCommand) (string, error) 
 	if strings.TrimSpace(callerRef) == "" {
 		return "", fmt.Errorf("%w: authenticated caller is required", ErrInvalidCommand)
 	}
-	refs := append([]string(nil), cmd.InputSnapshotRefs...)
-	sort.Strings(refs)
+	refs, err := canonicalInputSnapshotRefs(cmd.InputSnapshotRefs, true)
+	if err != nil {
+		return "", err
+	}
 	parameters := bytes.TrimSpace(cmd.Parameters)
 	if len(parameters) == 0 || !json.Valid(parameters) || parameters[0] != '{' {
 		return "", fmt.Errorf("%w: parameters must be a valid JSON object", ErrInvalidCommand)
