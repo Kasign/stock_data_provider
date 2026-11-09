@@ -146,9 +146,24 @@ func TestMariaDBFinalizeRunAtomicallyPersistsSummaryAndOutbox(t *testing.T) {
 	if claimedA[0].AttemptCount != 1 || claimedA[0].LeaseGeneration != 1 {
 		t.Fatalf("Worker A claim metadata = attempt %d generation %d", claimedA[0].AttemptCount, claimedA[0].LeaseGeneration)
 	}
+	renewedUntil, renewed, err := repository.RenewOutboxLease(ctx, input.OutboxRef, "worker-a", claimedA[0].LeaseGeneration, 60*time.Second)
+	if err != nil || !renewed || !renewedUntil.After(now.Add(30*time.Second)) {
+		t.Fatalf("Worker A RenewOutboxLease = (%s, %v), err=%v", renewedUntil, renewed, err)
+	}
+	var persistedLease string
+	if err := db.QueryRowContext(ctx, `SELECT lease_expires_at FROM researchflow_outbox WHERE outbox_ref = ?`, input.OutboxRef).Scan(&persistedLease); err != nil {
+		t.Fatalf("read renewed Outbox lease: %v", err)
+	}
+	persistedExpiry, err := parseResearchflowTime(persistedLease)
+	if err != nil || !persistedExpiry.Equal(renewedUntil) {
+		t.Fatalf("persisted Outbox lease expiry = %s, want %s (err=%v)", persistedExpiry, renewedUntil, err)
+	}
 	if _, err := db.ExecContext(ctx, `UPDATE researchflow_outbox SET lease_expires_at = ?
 		WHERE outbox_ref = ?`, formatResearchflowTimeValue(now.Add(-time.Second)), input.OutboxRef); err != nil {
 		t.Fatalf("expire Worker A lease: %v", err)
+	}
+	if _, renewed, err := repository.RenewOutboxLease(ctx, input.OutboxRef, "worker-a", claimedA[0].LeaseGeneration, time.Minute); err != nil || renewed {
+		t.Fatalf("expired Worker A lease renewal = %v, err=%v; want false", renewed, err)
 	}
 	claimedB, err := repository.ClaimOutbox(ctx, "worker-b", runRef, 10, 30*time.Second)
 	if err != nil || len(claimedB) != 1 {
