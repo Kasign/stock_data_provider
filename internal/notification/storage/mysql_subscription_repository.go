@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 
-
 	"example.com/stock-analysis-flow/internal/notification/application"
 	"example.com/stock-analysis-flow/internal/notification/domain"
 )
