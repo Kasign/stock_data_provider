@@ -1,6 +1,6 @@
 # 新闻模块专项文档
 
-> 状态：N1-A/N2 已完成；N3 离线能力与在线采集编排首批完成、生产触发/授权网络门禁待接入；N4 领域/Application 首批完成；N5 Config/HTTP/Fault 适配完成；N6 Repository 与 Migration V1-V3 已实现（V1-V3 MariaDB 11.4 News 集成 CI 已通过）；N7 News Checks 已实现；NEWS-CTR-001 DTO/Cursor/Snapshot Store（快照绑定 caller/purpose/content level）与 NEWS-CTR-002 授权快照存储已推进，Query Facade/PIT/当前授权复核仍未完成  
+> 状态（2026-11-09 Review）：N1-A/N2 已完成；N3 离线能力已完成首批、在线生产采集未闭环；N4 领域/Repository 首批已实现；N5 Config/BoundDoer/Fault 适配已实现、Server 装配待接入；N6 Migration V1-V7 已定义，V1/V2 有 MariaDB 集成通过记录，V3-V7 尚无本轮完整验收证据；N7 News Check 工厂已实现、Runner 注册待 Server；NEWS-CTR-001 PIT/Snapshot/Cursor 已实现，内容查询 Facade 未闭环；NEWS-CTR-002 授权快照已实现，JCS/当前策略复核/撤销/TOCTOU 仍未闭环  
 > 开发分支：`feat/research-news-ingestion`  
 > 基线分支：`feat/full-go-data-providers-api-switch`
 
@@ -202,3 +202,13 @@ News MariaDB 集成测试新增两类篡改场景：授权快照和分页 Eviden
 - [x] 返回内部 Observation/Version 与 source/provider 引用；不推导 available_at，也不直接向跨模块调用方披露内容。
 - [x] MariaDB 集成测试覆盖截止时间前不可见、截止时间后可见、显式指定未来版本仍拒绝。
 - [ ] List PIT、Relation/Identity 历史查询、Query Facade、授权当前复核和内容裁剪仍未完成；本任务不代表 NEWS-CTR-001 完整验收。
+
+
+## 2026-11-09 全任务 Review 与当前授权门禁进度
+
+- 当前分支代码已包含 News Migration V1-V7；README 与历史阶段记录中的 V1-V3 状态不再代表当前完整版本。V7 的 MariaDB 升级兼容仍待真实集成验证。
+- NEWS-CTR-001 的 PIT Repository、只存引用的 Snapshot Store、Cursor 和分页 Snapshot Page 已有实现；完整内容查询 Facade、授权后的内容裁剪、available_at 证据过滤仍未完成。
+- NEWS-CTR-002 已有 Binding 校验、授权快照追加存储和本地静态授权判定；当前策略版本复核、撤销、GOV-CTR-006 JCS 运行时验证及读取 TOCTOU 仍是独立门禁。
+- 新增 `EvaluateNewsEvidenceReadAuthorization` 预检用例：先调用 GOV-CTR-006 适配端口验证指纹，再读取可信当前策略集合，要求策略 tuple 与历史授权快照完全一致，并逐项验证当前状态、生效/过期时间及用途/内容级别是否仍允许。
+- 当前预检不会读取或返回新闻内容；它不能替代最终内容查询在同一授权一致性边界内重新校验并读取。公共 JCS Verifier 与真实策略 Resolver 尚未接入时，构造/执行均 fail-closed。
+- N3 生产采集、N5 Server 组合根、N7 Runner 注册和 N8 A2 仍由 Server/集成 Owner 协调；News 分支不修改 `cmd/**`、根 DI 或其他模块。
