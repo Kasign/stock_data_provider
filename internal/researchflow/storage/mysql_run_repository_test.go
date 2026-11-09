@@ -191,6 +191,43 @@ func TestMariaDBCreateRunAtomicConcurrentIdempotency(t *testing.T) {
 		t.Fatalf("replayed calls = %d, want exactly 1", replayed)
 	}
 
+	loadedRun, err := repository.GetRun(ctx, winningRunRef)
+	if err != nil {
+		t.Fatalf("GetRun: %v", err)
+	}
+	if loadedRun.Run.Ref != winningRunRef || len(loadedRun.Stages) != 1 {
+		t.Fatalf("GetRun returned unexpected run/stages: run=%q stages=%d", loadedRun.Run.Ref, len(loadedRun.Stages))
+	}
+	stageRef := loadedRun.Stages[0].Ref
+	loadedStage, err := repository.GetStage(ctx, stageRef)
+	if err != nil {
+		t.Fatalf("GetStage: %v", err)
+	}
+	if loadedStage.Ref != stageRef || loadedStage.RunRef != winningRunRef {
+		t.Fatalf("GetStage returned unexpected stage: %#v", loadedStage)
+	}
+
+	attemptRef := "attempt-" + suffix
+	startedAt := formatResearchflowTimeValue(now)
+	leaseExpiresAt := formatResearchflowTimeValue(now.Add(time.Minute))
+	if _, err := db.ExecContext(ctx, `INSERT INTO researchflow_attempts (
+		attempt_ref, run_ref, stage_ref, attempt_no, status, lease_owner,
+		lease_expires_at, fencing_token, started_at, finished_at, fault_ref, output_ref
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		attemptRef, winningRunRef, stageRef, 1, string(domain.AttemptRunning),
+		"researchflow-test-worker", leaseExpiresAt, 1, startedAt, nil, nil, nil,
+	); err != nil {
+		t.Fatalf("insert attempt fixture: %v", err)
+	}
+	loadedAttempt, err := repository.GetAttempt(ctx, attemptRef)
+	if err != nil {
+		t.Fatalf("GetAttempt: %v", err)
+	}
+	if loadedAttempt.Ref != attemptRef || loadedAttempt.StageRef != stageRef ||
+		loadedAttempt.FencingToken != 1 || loadedAttempt.LeaseOwner != "researchflow-test-worker" {
+		t.Fatalf("GetAttempt returned unexpected attempt: %#v", loadedAttempt)
+	}
+
 	conflict := makeRecord("run-"+suffix+"-conflict", "stage-"+suffix+"-conflict")
 	conflict.Fingerprint = "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
 	if _, err := repository.CreateRunAtomic(ctx, conflict); !errors.Is(err, domain.ErrIdempotencyConflict) {
