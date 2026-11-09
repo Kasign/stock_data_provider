@@ -54,18 +54,18 @@
     },
     "period": {
       "type": "string",
-      "minLength": 1
-      "pattern": ".*\\\\S.*"
+      "minLength": 1,
+      "pattern": ".*\\S.*"
     },
     "algorithm_version": {
       "type": "string",
-      "minLength": 1
-      "pattern": ".*\\\\S.*"
+      "minLength": 1,
+      "pattern": ".*\\S.*"
     },
     "parameter_fingerprint": {
       "type": "string",
-      "minLength": 1
-      "pattern": ".*\\\\S.*"
+      "minLength": 1,
+      "pattern": ".*\\S.*"
     },
     "input_snapshot_refs": {
       "type": "array",
@@ -97,8 +97,8 @@
     },
     "authorization_ref": {
       "type": "string",
-      "minLength": 1
-      "pattern": ".*\\\\S.*"
+      "minLength": 1,
+      "pattern": ".*\\S.*"
     },
     "created_at": {
       "type": "string",
