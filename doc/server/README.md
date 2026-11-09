@@ -48,7 +48,7 @@ Server 是应用组合根（Composition Root）和进程运行入口。它负责
 ```text
 cmd/
   server/
-    main.go                    # 新 Server 进程入口；只做进程启动委托
+    main.go                    # 规划候选入口；当前项目总览仍要求沿用 cmd/analysis-api，未决前不得创建第二入口
 
 internal/
   server/
@@ -89,7 +89,7 @@ doc/
 
 目录约束：
 
-- `cmd/server/main.go` 不承载依赖创建细节和业务逻辑，只解析进程入口所需的最小参数并调用 Server Bootstrap。
+- 当前运行入口实际为 `cmd/analysis-api/main.go`；项目总览 2.4/2.5 明确要求沿用该入口渐进迁移。`cmd/server/main.go` 仅是本专项旧规划中的候选路径，与项目总览不一致；在项目级决议同步前不得创建第二个进程入口，也不得擅自移动现有入口。
 - `internal/server/**` 只放进程级装配、Transport、生命周期和跨模块连接代码。
 - `internal/platform/**` 继续归 Platform 所有；Server 通过公开接口使用，不复制实现。
 - `internal/{data,news,quant,research,researchflow,llm,notification}/**` 继续归各业务模块所有。
@@ -256,7 +256,7 @@ Server 不重写模块业务 Handler 的校验和领域错误，不在路由层�
 
 ### SRV-001：旧系统和启动入口审计
 
-- 状态：未开始
+- 状态：进行中（已完成第一轮启动链路与核心资源审计，剩余路由/迁移/部署引用清点）
 - 工作内容：
   - 审计 `cmd/analysis-api/main.go`、`internal/service/wiring.go`、旧 HTTP API、Task Queue、Storage、Market Data Adapter、Python Adapter。
   - 绘制当前启动依赖和资源生命周期。
@@ -270,8 +270,8 @@ Server 不重写模块业务 Handler 的校验和领域错误，不在路由层�
 
 ### SRV-002：Root Bootstrap
 
-- 状态：未开始
-- 前置：SRV-001
+- 状态：阻塞（SRV-001 完成前不启动；入口路径还存在项目总览与本专项文档冲突）
+- 前置：SRV-001；先按项目总览确认复用 `cmd/analysis-api` 的渐进迁移方式，或由项目级文档正式决议调整入口路径
 - 工作内容：建立 `cmd/server/main.go` 和 `internal/server/bootstrap`；统一配置加载、构造应用、启动和错误返回。
 - 交付物：最小可运行的新 Server 入口。
 - 验收：配置错误可诊断；启动失败返回非零退出；入口不包含业务逻辑；有启动和失败路径测试。
@@ -384,6 +384,33 @@ flowchart TD
 
 ## 12. 当前代码基线与迁移映射
 
+### 12.1 第一轮代码审计结果（基于分支 HEAD `3cccc7d365d106f2dc75823a335316ba8b0bdad2`）
+
+本分支相对 `integration` 仅领先 3 个提交，差异文件只有本规划文档；当前没有 `cmd/server/**` 或 `internal/server/**` 实现。不得把目标目录树误认为现有能力。
+
+| 现有位置 | 已核实职责与事实 | Server 迁移边界/注意事项 |
+|---|---|---|
+| `cmd/analysis-api/main.go` | 当前唯一根模块 Go API 入口；加载 `.env`、日志、MariaDB/Redis 与 Market Data 配置；创建 Store、Analysis Runner、旧 Task Queue；启动 Worker 和 HTTP Server；处理 SIGTERM 与 HTTP Shutdown | 入口仍直接装配具体实现；逐步将装配委托给 Server Bootstrap。项目总览要求沿用该入口，不得未经决议新增并行入口 |
+| `internal/service/wiring.go` | 构造旧 Analysis Runner 的具体领域组件，连接 Market Data、Python API、策略/风险等组件 | 这是旧业务装配，不应整体搬入 Server；待各新模块公开 Application Port 接入后逐项替换 |
+| `internal/platform/httpapi/server.go` | 旧 Analysis 专用 HTTP Handler；包含 `/healthz`、`/readyz`、同步 Run、Run 查询/事件、异步 Task 创建/查询；自行实现 Request ID、日志、Recover、错误响应和部分输入校验 | 不能直接当作通用 Platform Router；先盘点路由与 DTO，再把入口中间件迁移到 Server，业务 Handler 归属需按模块拆分 |
+| `internal/platform/observability/request_id.go` | 已有 Request ID 校验/生成、Context 传递、响应头写回和出站传播能力 | 可复用，不在 Server 重复实现；后续统一中间件时应保留该能力并核对项目 Request ID 契约 |
+| `internal/platform/httpclient/**` | 已有受控 HTTP Client、DestinationPolicy、超时/响应大小/并发/重试及流式相关公共实现 | 由 Server 创建并按模块公开构造入口注入；不得为 Market Data、LLM 等复制 HTTP Client |
+| `internal/platform/taskqueue/queue.go` | 旧 MariaDB 分析任务队列；直接依赖 `internal/analysis/domain`，包含旧 Analysis Run 恢复、Worker 启停和任务持久化 | 不是通用 Platform Worker，也不是 Researchflow DAG/Outbox Relay；不能直接注册为新模块 Worker，旧链路退役前保留 |
+| `internal/adapters/storage/mysqlredis/config.go`、`store.go` | 直接读取 DB/Redis 环境变量；打开连接、Ping、可选执行旧 Analysis Migration、检查 4 张旧表、Health/SelfTest；Store 暴露 `*sql.DB` 与 Redis Client | 属于旧 Analysis Storage Adapter，不是已确认的公共 Platform Storage Container 或 Migration Runner；不得把旧表 Migration 当作新模块 Migration 汇总 |
+| `internal/adapters/marketdata/**` | 旧 Analysis 的 Go Market Data HTTP Adapter；配置含 API Key、超时、历史窗口、并发、响应大小、复权和时区 | Data 并入 Root Server 仍受 Data MDM 门禁约束；Server 只注入 Data 公开 Port，不接管 Provider 规则 |
+| `internal/adapters/pythonapi/**` | 旧 Python API Adapter，含 Bearer/Cookie、HTTP 请求和响应解码 | 作为迁移/退役对象审计，不得把它当新 Go 模块的长期默认依赖 |
+| `docker-compose.yml`、`Dockerfile` | 当前部署仍以 `stock-analysis-server` 容器构建 `./cmd/analysis-api`；Market Data 是独立容器，WebUI 单独容器；Server 通过 `MARKET_DATA_BASE_URL` 和 API Key 访问 Data | 部署尚非 Data 与 Root Server 同进程的最终形态；切换必须等待 Data 迁移门禁，不能在本任务提前改部署 |
+
+第一轮审计确认：当前 `internal/platform` 下已有 Request ID、HTTP Client 等可复用原语，但 `httpapi`、`taskqueue` 并非通用平台能力；当前也未发现可供 Server 直接使用的统一 Config Container、Storage Container 或 Migration Runner。后续如需使用这些能力，必须先核对 `feat/platform-foundation` 的最新公开接口；缺失的公共能力回 Platform 分支处理，Server 不复制实现。
+
+### 12.2 仍需完成的 SRV-001 审计项
+
+- 完整列出旧 HTTP API 的全部路由、请求/响应 DTO、认证现状、调用方和兼容期限。
+- 从旧 Store 的 Migration 实现中提取表清单、版本/执行策略和与模块 Migration 的关系；不得把旧 Analysis 四表与新模块表混为一谈。
+- 清点旧 Analysis Worker 的启动/恢复/关闭行为及部署副本约束，明确其与 Researchflow Worker 的差异。
+- 核对 Quant、Research、Researchflow、LLM、Notification 当前公开构造入口、Application Port、Handler、Worker、Migration 和 Diagnostics 实际可用性；模块 README 的“已实现”不自动等于 Server 可装配。
+- 清点 Nginx、Compose、环境变量和旧 Python 服务引用，形成保留/迁移/删除门禁。
+
 当前已核实的旧入口至少包含：
 
 - `cmd/analysis-api/main.go`：读取 dotenv/日志/存储/行情配置，创建 MariaDB/Redis Store、旧 Analysis Runner、Task Queue Worker、HTTP API，处理 HTTP 监听和 SIGTERM。
@@ -422,8 +449,8 @@ Server 层完成不是“服务能够启动”这么简单。至少同时满足�
 
 | 任务 | 状态 | 说明 |
 |---|---|---|
-| SRV-001 | 未开始 | 已识别旧入口，完整审计尚未完成 |
-| SRV-002 | 未开始 | 尚无统一 Root Bootstrap |
+| SRV-001 | 进行中 | 已审计启动入口、旧 Runner 装配、HTTP API、Request ID、HTTP Client、旧 Task Queue、Storage、Market Data/Python Adapter 和 Compose；剩余路由/迁移/模块装配/部署引用清点 |
+| SRV-002 | 阻塞 | 尚无统一 Root Bootstrap；入口路径需先与项目总览对齐，SRV-001 完成前不开始 |
 | SRV-003 | 未开始 | 尚未建立 Server 统一资源装配 |
 | SRV-004 | 未开始 | 等待各模块公开装配入口 |
 | SRV-005 | 未开始 | 旧 HTTP API 尚待迁移映射 |
