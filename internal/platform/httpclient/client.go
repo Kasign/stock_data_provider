@@ -479,7 +479,8 @@ func retryableTransportError(err error) bool {
 	if errors.As(err, &networkError) && (networkError.Timeout() || networkError.Temporary()) {
 		return true
 	}
-	return errors.Is(err, syscall.ECONNREFUSED) ||
+	return errors.Is(err, io.EOF) ||
+		errors.Is(err, syscall.ECONNREFUSED) ||
 		errors.Is(err, syscall.ECONNRESET) ||
 		errors.Is(err, syscall.ECONNABORTED) ||
 		errors.Is(err, syscall.EPIPE) ||
