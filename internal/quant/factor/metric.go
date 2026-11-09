@@ -34,7 +34,7 @@ type QuantMetric struct {
 	UpperBound        *float64      `json:"upper_bound"`
 }
 
-var semanticVersionPattern = regexp.MustCompile(`^[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.-]+)?$`)
+var semanticVersionPattern = regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?$`)
 
 // NewQuantMetric 将 Factor 纯计算结果转换为固定字段、固定类型的公开指标对象。
 // systemAsOf 必须由可信调用上下文提供；本函数不会推导当前时间或输入快照质量。
