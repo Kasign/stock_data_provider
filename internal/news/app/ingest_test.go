@@ -255,7 +255,7 @@ func TestIngestCandidatePersistsSourcePolicyTrace(t *testing.T) {
 	}
 	observation, err := usecase.ExecuteWithPolicyTrace(
 		context.Background(), "source-1", "feed-run-1/item-1",
-		domain.Candidate{SourceItemID: "item-1", Title: "headline"},
+		domain.Candidate{ProviderCode: "tavily", SourceItemID: "item-1", Title: "headline"},
 		domain.SourceURLPolicy{}, trace,
 	)
 	if err != nil {
@@ -274,9 +274,11 @@ func TestIngestCandidatePersistsSourcePolicyTrace(t *testing.T) {
 func TestIngestCandidatePolicyTraceIsPartOfIdempotencyPayload(t *testing.T) {
 	repository := &memoryIdentityRepository{}
 	usecase := NewIngestCandidate(repository, func() string { return "observation-policy-idempotency" })
-	candidate := domain.Candidate{SourceItemID: "item-1", Title: "headline"}
+	candidate := domain.Candidate{ProviderCode: "tavily", SourceItemID: "item-1", Title: "headline"}
 	firstTrace := ObservationPolicyTrace{
 		SourcePolicyVersionID: "source-policy-v3",
+		ProviderOutputPolicyRef: "provider-policy-ref-v1",
+		ProviderOutputPolicyVersionID: "provider-policy-v1",
 		PolicyEvaluatedAt:     time.Date(2026, 11, 5, 10, 0, 0, 0, time.UTC),
 	}
 	secondTrace := ObservationPolicyTrace{
