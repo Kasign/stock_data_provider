@@ -3,7 +3,7 @@
 - 所属仓库：Kasign/stock_data_provider
 - 所属分支：feat/platform-foundation
 - 适用范围：Platform 公共安全原语候选设计
-- 状态：安全模型与跨层职责已明确；PLAT-015/016/017/018 Platform L1 已实现并通过 CI；Server A2 业务接入及 PLAT-019 平台原语仍待完成
+- 状态：安全模型与跨层职责已明确；PLAT-015/016/017/018/019 Platform L1 均已实现并通过 CI；Server A2 业务接入与审计持久化后端仍待完成
 - 关联文档：《03-安全认证与ServiceKey设计》《08-公共平台契约规范》《01-开发路线图与任务清单》《16-公共平台剩余开发任务与跨模块接入责任清单》
 
 ## 1. 设计结论
@@ -157,9 +157,9 @@ Platform 提供 SecurityAuditEvent Schema、字段约束/脱敏和注入式 Audi
 - 现有 `internal/platform/security` 只有 Bearer Authenticator、Router Policy 和测试。
 - `internal/platform/storage.OpenRedis` 提供统一 Redis Client 生命周期；`security.RedisSessionStore` 与 `security.RedisLoginRateLimiter` 均注入并复用该 Client，不创建第二套连接池。
 - go.mod 已引入成熟依赖 `golang.org/x/crypto/argon2`；不自研密码学算法。
-- Argon2id Hash/Verify/NeedsRehash 与 MariaDB CredentialStore 已新增；Hasher 使用显式参数，不提供未经硬件基准确认的生产默认值。PLAT-016 已新增 Session Token 摘要、Redis SessionStore 原子 Touch/Rotate/Revoke 和 Cookie helper，Platform L1 CI 已通过。PLAT-017 已新增 CSRF Token 生成、摘要与常量时间校验原语并通过 CI；PLAT-018 已新增 Redis 双维度登录限流与退避原语并通过 CI；仅 Security Audit 原语仍未实现。
+- Argon2id Hash/Verify/NeedsRehash 与 MariaDB CredentialStore 已新增；Hasher 使用显式参数，不提供未经硬件基准确认的生产默认值。PLAT-016 已新增 Session Token 摘要、Redis SessionStore 原子 Touch/Rotate/Revoke 和 Cookie helper，Platform L1 CI 已通过。PLAT-017 已新增 CSRF Token 生成、摘要与常量时间校验原语并通过 CI；PLAT-018 已新增 Redis 双维度登录限流与退避原语并通过 CI；PLAT-019 Security Audit Event/Writer 契约也已实现并通过 CI。
 - 已新增 Platform 自有 `platform.security` Migration 与 `platform_owner_credentials` 单 Owner 表；Server 必须显式注册 Migration，SQLCredentialStore 不自动建表。Session Redis Key 使用配置前缀加 `session:` 与 64 位摘要，不保存原始 Token。
-- Argon2id 生产参数需目标硬件基准；Server 需显式注册 Platform 自有 Migration。PLAT-016 的 Redis 原子脚本、TTL、并发轮换及故障策略已有真实 Redis CI 证据；PLAT-018 双维度限流、窗口 TTL、退避和 fail-closed 已有真实 Redis CI 证据；PLAT-019 Audit Writer 仍需实现/评审。
+- Argon2id 生产参数需目标硬件基准；Server 需显式注册 Platform 自有 Migration。PLAT-016 的 Redis 原子脚本、TTL、并发轮换及故障策略已有真实 Redis CI 证据；PLAT-018 双维度限流、窗口 TTL、退避和 fail-closed 已有真实 Redis CI 证据；PLAT-019 Audit Event/Writer 契约已实现并通过 CI；具体审计持久化后端与失败策略由 Server 选择。
 - 本文是 Platform 技术设计与实现边界文档；Web 登录路由/权限/交互契约由 Server Owner 跟进，Platform 不代替 Server 修改其业务文档，也不改变项目级契约登记簿状态。
 
 ### 11.1 PLAT-015 实现状态补充（2026-11-09）
@@ -214,3 +214,13 @@ Platform 提供 SecurityAuditEvent Schema、字段约束/脱敏和注入式 Audi
 - Redis 故障和异常持久状态返回 Redis Dependency Fault，调用方必须 fail closed。Platform 不解析 X-Forwarded-For、不选择真实来源 IP、不定义登录 HTTP 响应；这些由 Server 负责。
 - 真实 Redis integration/race 覆盖双维度阈值、指数退避、窗口过期、并发计数、账号清理/IP 保留和故障 fail closed。CI：[42610511560](https://github.com/Kasign/stock_data_provider/actions/runs/42610511560)，success。
 - Platform L1 已完成；Server A2 仍需配置账号/IP 策略、可信代理与来源识别、登录前 Check、认证失败 RecordFailure、成功登录 ResetAccount 和 retry_after 响应映射。
+
+
+### 11.5 PLAT-019 实现状态补充（2026-11-09）
+
+- `internal/platform/security/audit.go` 提供 `SecurityAuditEvent`、事件类型/结果/来源枚举、`SecurityAuditWriter`、`SecurityAuditWriterFunc` 和 `WriteSecurityAudit`。
+- 事件字段限制为 EventType、Subject、Result、OccurredAt、RequestID、Source、ReasonCode；Subject 只允许 `owner/anonymous/system`，事件类型闭集，RequestID/ReasonCode 有长度和字符约束。没有任意 Metadata 或敏感请求字段。
+- `String/LogValue` 对无效事件只输出固定 invalid/rejected，不输出可能混入的 PII/凭证；有效事件只输出白名单字段。
+- Writer 未配置或写入失败会返回明确 Fault；写入失败映射 `Dependency=audit_writer`，不静默吞掉。Platform 不选择数据库、不新增审计表 Migration、不定义业务操作的 fail-closed 策略。
+- 单测覆盖字段校验、PII/危险字符拒绝、日志脱敏、Writer 成功/失败。CI：[42611069167](https://github.com/Kasign/stock_data_provider/actions/runs/42611069167)，success。
+- Platform L1 已完成；Server A2 负责将登录/退出/密码更新/Session 撤销/限流等业务事件接入 Writer，选择持久化后端、保留周期和查询权限，并确定关键操作审计写入失败时的业务策略。
