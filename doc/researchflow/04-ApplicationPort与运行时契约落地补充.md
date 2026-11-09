@@ -326,3 +326,10 @@ Fake Repository/Fake Clock/Fake Provider 只证明模块内逻辑；MariaDB/Redi
 - Run 保持 running 以便 Application 使用已有 Domain 聚合规则计算 failed/partial 与 ResultSummary；Storage 只写 termination_reason=`deadline_exceeded` 并递增 Run.version。随后必须用新 version 调用既有 FinalizeRun，ResultSummary/Outbox/Run 终态仍原子提交。
 - FinalizeRun 对 deadline_exceeded 增加终态限制，只允许 failed/partial，禁止 deadline 已过仍以 succeeded 终结。
 - 当前仅实现 Storage 原语和终结门禁；Deadline Scanner、Application 聚合/Finalize 编排、Server 周期任务和 MariaDB 集成验收尚未完成。
+
+
+### 9.7 Deadline Scanner Port
+
+- Application `DeadlineExpirationStore` 只暴露有界候选查询与按 Run.version 执行过期收敛；Storage 的候选查询使用 DB UTC 和稳定顺序，返回非锁定快照，Expire 方法重新锁 Run 并校验 deadline/version。
+- `DeadlineScanner` 按 BatchSize 顺序执行，记录扫描/成功/版本冲突数量；错误立即停止本批，避免吞掉存储故障。
+- Scanner 不直接生成 ResultSummary 或终结 Run。完成 Stage/Attempt fencing 后，Server/Application 聚合器必须读取新快照，按既有领域规则计算 failed/partial，再调用 FinalizeRun 写 ResultSummary + Outbox + Run 终态。
