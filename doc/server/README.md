@@ -370,7 +370,7 @@ Server 不重写模块业务 Handler 的校验和领域错误，不在路由层�
 
 ### SRV-007：Migration 注册与执行
 
-- 状态：进行中（Server Registry 已接入 News、Research、Notification 三个模块 Migration；执行由 `MIGRATION_ENABLED` 显式开启）
+- 状态：进行中（Server Registry 已接入 News、Research、Notification 三个模块 Migration；按 namespace 和版本号稳定排序，执行由 `MIGRATION_ENABLED` 显式开启）
 - 前置：SRV-003；其余模块提供可用 Migration 后再注册；核对 Platform `storage.ApplyMigrations` 实际签名和各模块 Migration 注册形态
 - 工作内容：在模块装配阶段收集各模块拥有的 Migration 描述，校验 namespace/version 唯一性及顺序，再按部署策略调用 Platform Runner，输出可追踪结果。MariaDB DDL 部分执行失败后的恢复按 Platform Runner 契约执行，不在 Server 自行重试失败 Migration。
 - 交付物：`internal/server/migration.Registry`、显式执行配置和模块注册测试；真实 MariaDB 集成验收待执行。
@@ -599,7 +599,7 @@ Server 层完成不是“服务能够启动”这么简单。至少同时满足�
 | SRV-004 | 阻塞 | 已复核模块接入面；Researchflow/Quant/LLM/Notification 缺少完整生产装配入口，News/Research 也有关键查询/授权接入缺口；详见 12.6 节 |
 | SRV-005 | 进行中 | 已接入 Platform Bearer Owner 认证、入口 Request ID、Fault HTTP 映射工具、请求体与并发限制；现有旧 Analysis Handler 保留原业务错误 DTO；Web Session/密码登录、CSRF、登录限流、模块 Service Scope 和可信代理边界仍待契约/模块入口，现有 WebUI 尚未携带 Analysis Owner 凭证，不能视为浏览器认证链路已完成 |
 | SRV-006 | 进行中 | 旧 Analysis Worker 与 HTTP Server 均已纳入统一 Lifecycle；HTTP Listener 在 Start 阶段同步绑定，Readiness 在 HTTP Shutdown 前切换为 not-ready，Shutdown 超时后强制 Close；真实 SIGTERM 子进程测试已补充，待当前 SHA 的 Workflow 证据；模块 Worker 接入和生产容器退出验收仍待完成 |
-| SRV-007 | 进行中 | 已建立 Server Migration Registry，并注册 News/Research/Notification；显式配置执行；其他模块 Migration 和 MariaDB 集成验收待完成，详见 12.7 节 |
+| SRV-007 | 进行中 | 已建立 Server Migration Registry，并注册 News/Research/Notification；注册时按版本号稳定排序；显式配置执行；其他模块 Migration 和 MariaDB 集成验收待完成，详见 12.7 节 |
 | SRV-008 | 待契约 | Dispatcher 所有权未冻结 |
 | SRV-009 | 进行中 | 已实现 Platform Runner 聚合、严格 Readiness 判定、MariaDB/Redis 资源检查和 Owner 保护的结构化 `/diagnostics` 只读入口；真实模块 Check 注册、依赖故障注入及生产诊断验收仍待完成，详见 12.8、12.20 节 |
 | SRV-010 | 阻塞 | 等待 Data 迁移门禁和公开接口 |
@@ -894,3 +894,12 @@ Lifecycle.Stop 原实现通过 stopped 标记保证重复调用幂等，但并�
 - 本批次尚未运行当前 SHA 的 Go Workflow，不提前标记测试通过。
 - 当前只聚合 Server 已注册的 Storage Checks；News、Research、Quant、Researchflow、LLM、Notification 的真实 Check 必须由各模块公开 Check 入口提供后再注册，不能在 Server 伪造健康状态。
 - `/diagnostics` 是 Owner 运维接口，不是面向 Web 用户的业务 API；Web Session/CSRF 门禁不因该入口存在而放宽。
+
+
+### 12.21 SRV-007 Migration 版本顺序确定性补强（2026-11-09）
+
+- Review 发现 Registry 只对 namespace 排序，单个模块内部的 Migration 切片仍完全依赖调用方传入顺序。不同装配入口若以不同顺序提供相同版本集合，执行顺序可能不一致。
+- Register 在校验 namespace/version 唯一性和定义完整性后，对不可变快照按 Version 升序排序；不修改模块原始切片，不改变 SQL 所有权，也不增加 Server 侧 Migration 执行语义。
+- 新增乱序输入（30、10、20）验证注册后顺序为（10、20、30）。
+- 实现提交：`c09ccfaacbe7ea2e660ae67e6aeffd7f5ce88dc3`；测试提交：`99e997a2f791c7b0801236003e023165a25cf46b`。
+- 本次未运行当前 SHA 的 Go Workflow；真实 MariaDB Migration 集成、其他模块 Migration 接入和启动失败门禁仍未完成。
