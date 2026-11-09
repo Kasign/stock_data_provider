@@ -300,7 +300,7 @@ Server 不重写模块业务 Handler 的校验和领域错误，不在路由层�
 
 ### SRV-004：模块注册与依赖注入
 
-- 状态：未开始
+- 状态：阻塞（已完成模块接入面初审；多数模块尚无完整生产装配入口，不能先写空 Registry 或虚构统一构造函数）
 - 前置：SRV-003；各模块提供可用公开装配入口
 - 工作内容：按明确的依赖 DAG 显式创建模块实例；注入强类型 Application Port；校验缺失、重复和循环依赖。不得通过扫描私有包、隐式全量注册或 Server 直接访问 Domain/Repository 来装配。
 - 交付物：模块 Registry、依赖装配图和模块接入清单。
@@ -468,6 +468,28 @@ flowchart TD
 - 保留 `Storage` 类型别名和旧构造函数作为迁移兼容入口；Bootstrap 已改为调用 `OpenLegacyAnalysisResources`。
 - 当前 HTTP Client 使用 Platform 默认 Config。模块后续通过自己的公开配置/目的地址策略绑定使用，不在 Server 预设 Provider Host allowlist。
 - 本次增加资源容器重复关闭测试。GitHub 文件写入已完成，但本轮尚未执行 Go 编译和测试；不能据此认定测试通过。
+### 12.6 模块装配就绪度复核（2026-11-09）
+
+本节用于确定 SRV-004 的真实前置条件，不代表替代各模块自己的任务验收。
+
+| 模块 | 当前已具备 | Server 接入缺口 | 判断 |
+|---|---|---|---|
+| News | Domain/Application Port、Provider/Source Adapter、Storage Migration、Diagnostics Check；不计划独立 HTTP API | Query Facade/PIT 与当前授权复核仍未完成；生产 BoundDoer 注入、Migration 注册由组合根接入 | 部分可用，暂不注册生产查询能力 |
+| Research | Context/Evidence/Event/Claim Application Port、SQL Repository Adapter、Migration、Context/Event/Claim Diagnostics Port | Owner 当前授权复核与真实来源 Adapter 未完成；Migration 和诊断 Runner 尚未由 Server 统一装配 | 基础 Port 可用，生产链路不完整 |
+| Researchflow | CreateRun Application、Domain、模板/DAG、Context Assembly、Tool Policy、Result Validation | 缺生产模块 Facade、Repository、Migration、Worker；Research/Quant 等生产 Adapter 未就绪 | 不可装配 |
+| Quant | CalculationContext、Indicator/Factor 函数和 Registry 基础能力 | 缺可供 Server 注入的 Application Facade、持久化/结果输出边界及完整模块生命周期 | 不可装配 |
+| LLM | Provider Port、Responses JSON/SSE Adapter、Schema 校验 | 当前公共 HTTP Client 的流式能力与 LLM 所需接口仍需核对/适配；缺模块级生产构造入口和生命周期 | 部分协议能力可用，不可独立注册 |
+| Notification | Application Ports、Migration、Subscription/Delivery/Attempt Storage Adapter | Inbox 持久化、Fanout/Dispatcher/Worker 尚未完成 | 不可装配 |
+| Data | 独立 Data 服务及迁移工作 | 模块化单体迁移门禁、公开 Application Port 和配置/生命周期契约未满足 | SRV-010 保持阻塞 |
+
+执行约束：
+
+1. SRV-004 不提前创建只有空注册表、没有实际调用方的抽象。
+2. 每个模块必须先提供可编译的公开构造入口，并明确共享资源参数、Application Port、Migration、Diagnostics、Worker 和 Close 所有权。
+3. 按真实模块依赖关系建立 DAG；不因代码目录存在就推断模块可装配。
+4. 先接入具备完整公开边界的模块；缺失项回对应模块分支补齐，Server 不越权修改模块代码。
+5. News 当前不注册独立 HTTP 路由；Researchflow 是业务流程编排者，Server 只负责依赖注入和生命周期。
+
 ## 13. 分支与协作规则
 
 - 本规划及 Server 代码实施位于 `feat/research-analysis-flow-native-go`。
