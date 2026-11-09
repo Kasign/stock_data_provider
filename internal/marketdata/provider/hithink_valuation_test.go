@@ -172,3 +172,38 @@ func TestHithinkValuationsReportsInvalidProviderTimestampWithoutDroppingRows(t *
 		t.Fatalf("expected provider timestamp parse issue, got %+v", reporter.Snapshot().Issues)
 	}
 }
+
+
+func TestHithinkValuationsReportsMissingNameAndRequestedSymbol(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = fmt.Fprintf(w, `{"code":0,"data":{"timestamp":%d,"total":1,"item":[{"thscode":"600519.SH","ticker":"600519","name":"","pe_ttm":25.0,"pe_mrq":24.0,"pb_mrq":8.0,"ps_ttm":10.0,"pcf_ttm":20.0}]}}`, time.Now().UTC().UnixMilli())
+	}))
+	defer server.Close()
+
+	reporter := validation.NewReporter(10)
+	ctx := validation.WithReporter(context.Background(), reporter)
+	snapshot, err := NewHithinkConfigured(3*time.Second, server.URL, "unit-test-key").
+		FetchValuations(ctx, []string{"600519.SH", "600036.SH"})
+	if err != nil {
+		t.Fatalf("FetchValuations: %v", err)
+	}
+	if len(snapshot.Items) != 1 || len(snapshot.MissingSymbols) != 1 || snapshot.MissingSymbols[0] != "600036.SH" {
+		t.Fatalf("unexpected valuation coverage: %+v", snapshot)
+	}
+	foundName, foundMissing := false, false
+	for _, issue := range reporter.Snapshot().Issues {
+		if issue.Field == "name" && issue.ProviderField == "name" && issue.Code == "missing_value" &&
+			issue.RowIndex != nil && *issue.RowIndex == 0 {
+			foundName = true
+		}
+		if issue.Field == "symbol" && issue.ProviderField == "thscode" && issue.Code == "missing_requested_row" &&
+			issue.Symbol == "" && issue.RowIndex == nil {
+			foundMissing = true
+		}
+	}
+	if !foundName || !foundMissing {
+		t.Fatalf("missing valuation coverage Reporter evidence: name=%v missing_symbol=%v issues=%+v",
+			foundName, foundMissing, reporter.Snapshot().Issues)
+	}
+}
