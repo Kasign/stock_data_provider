@@ -60,6 +60,8 @@ func (s *DeliveryCompletionService) Complete(
 		return err
 	}
 	if delivery.Status != domain.DeliverySending ||
+		channel.ChannelRef != delivery.ChannelRef ||
+		channel.ConfigVersion != delivery.ChannelConfigVersion ||
 		claim.Lease.WorkerID != attempt.WorkerID ||
 		claim.Lease.FencingToken != attempt.FencingToken ||
 		!claim.Lease.ExpiresAt.Equal(attempt.LeaseExpiresAt) ||

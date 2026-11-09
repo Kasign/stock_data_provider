@@ -134,3 +134,30 @@ func TestDeliveryCompletionRejectsMismatchedClaimAndMissingNotSentEvidence(t *te
 		t.Fatal("mismatched worker must be rejected")
 	}
 }
+
+func TestDeliveryCompletionRejectsWrongChannelVersion(t *testing.T) {
+	repository, claim, attempt, finishedAt := startCompletionAttempt(t, domain.ChannelOutcomeAccepted)
+	service, err := NewDeliveryCompletionService(repository, repository, RetryPolicy{
+		MaxAttempts: 3, MaxElapsed: time.Hour, PerAttemptTimeout: time.Minute,
+		BaseDelay: time.Second, MaxDelay: time.Minute,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	wrongChannel := completionChannel()
+	wrongChannel.ConfigVersion++
+	err = service.Complete(context.Background(), claim, attempt, wrongChannel,
+		domain.ChannelSendResult{Outcome: domain.ChannelOutcomeAccepted, ProviderMessageRef: "provider-message-1"},
+		finishedAt, 0.5, "")
+	if err == nil {
+		t.Fatal("completion with a different channel config version must be rejected")
+	}
+	got, found, getErr := repository.Get(context.Background(), claim.Delivery.DeliveryID)
+	if getErr != nil || !found || got.Status != domain.DeliverySending {
+		t.Fatalf("mismatched channel must not mutate delivery, got=%+v found=%v err=%v", got, found, getErr)
+	}
+	history, historyErr := repository.ListByDelivery(context.Background(), claim.Delivery.DeliveryID)
+	if historyErr != nil || len(history) != 1 || history[0].FinishedAt != nil {
+		t.Fatalf("mismatched channel must not complete attempt, history=%+v err=%v", history, historyErr)
+	}
+}
