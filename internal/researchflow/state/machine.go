@@ -195,6 +195,9 @@ func ClaimRetryStage(run domain.Run, stage domain.Stage, policy template.RetryPo
 	if err != nil {
 		return stage, domain.Attempt{}, err
 	}
+	// ready 只是同一 RetryStage 事务中的逻辑中间态，不会单独持久化。
+	// Stage.version 对应一次原子 Repository 更新，因此最终只递增一次。
+	claimed.Version = stage.Version + 1
 	return claimed, attempt, nil
 }
 

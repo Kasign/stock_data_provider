@@ -132,7 +132,7 @@ Fake Repository/Fake Clock/Fake Provider 只证明模块内逻辑；MariaDB/Redi
 
 - `TransitionRun` 对外拒绝直接进入任何终态；只有 AggregateRun、FinalizeCancellation 等完成 Stage/Attempt 校验并固化 ResultSummary 的收敛入口可调用包内迁移函数提交终态。
 - 2026-11-09 复核发现此前将 Scheduler Retry 与 Worker Claim 拆成两个可分别提交的事务，与 FLOW-CTR-001/002 最终决议冲突。最终契约明确：`retry_wait -> ready` 与下一 Attempt 创建必须同事务提交；Run.version CAS 必须同时协调 Retry、Cancel、Deadline 和 Worker Claim。
-- 因 Attempt 只有 running/终态，没有 queued 状态，Researchflow 领域决策函数现提供 `ClaimRetryStage`：在一次原子用例中校验 retry_at、Run 状态、deadline 和 max_attempts，逻辑推进 `retry_wait -> ready -> running` 并构造下一 running Attempt。Repository 必须在同一事务内分配 attempt_no/fencing token、CAS 更新 Stage、插入 Attempt；不得单独提交中间 ready 状态。
+- 因 Attempt 只有 running/终态，没有 queued 状态，Researchflow 领域决策函数现提供 `ClaimRetryStage`：在一次原子用例中校验 retry_at、Run 状态、deadline 和 max_attempts，逻辑推进 `retry_wait -> ready -> running` 并构造下一 running Attempt。Repository 必须在同一事务内分配 attempt_no/fencing token、CAS 更新 Stage、插入 Attempt；不得单独提交中间 ready 状态。中间 ready 仅是逻辑状态，不单独持久化；一次 RetryStage Repository 更新只递增一次 Stage.version。
 - 首次执行仍使用 `ClaimReadyStage`；其 Repository 写入同样必须与 Run.version CAS、Stage.version CAS 和 Attempt 唯一键在一个事务中完成。
 - 纯函数不提供数据库并发保证；任何 claim/retry 决策都不能替代持久化 CAS、锁顺序、lease 和 fencing。
 - 取消终态 ResultSummary 将 cancelled Stage 计入 MissingStageCodes；actionability 仍固定 not_evaluated。

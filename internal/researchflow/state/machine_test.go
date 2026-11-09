@@ -27,7 +27,7 @@ func TestRetryPreservesAttemptAndEnforcesBudget(t *testing.T){
 	claimed,next,err:=ClaimRetryStage(run,waiting,p,*waiting.RetryAt,"attempt-2",2)
 	if err!=nil{t.Fatal(err)}
 	if claimed.Status!=domain.StageRunning||claimed.AttemptNo!=2||claimed.RetryAt!=nil||next.Number!=2||next.Ref==finished.Ref{t.Fatal("retry promotion and next Attempt claim must complete as one operation")}
-	if claimed.Version!=waiting.Version+2{t.Fatalf("both retry_wait -> ready and ready -> running transitions must be reflected in the version: before=%d after=%d",waiting.Version,claimed.Version)}
+	if claimed.Version!=waiting.Version+1{t.Fatalf("atomic RetryStage must increment Stage.version exactly once: before=%d after=%d",waiting.Version,claimed.Version)}
 	if _,_,err:=ScheduleRetry(claimed,next,p,"provider_unavailable",domain.AttemptFailed,*waiting.RetryAt,run.DeadlineAt,0.5);!errors.Is(err,ErrRetryBudgetExhausted){t.Fatalf("expected exhausted budget, got %v",err)}
 }
 
