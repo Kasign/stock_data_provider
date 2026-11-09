@@ -90,6 +90,24 @@ type QuarterlyFinancialFieldIssue struct {
 	RowIndex    int
 }
 
+// QuarterlyFinancialStructureError preserves evidence when a required identity/PIT field
+// makes a financial row unsafe to use. The caller must reject the row.
+type QuarterlyFinancialStructureError struct {
+	SourceField string
+	Code        string
+	ActualType  string
+	Preview     string
+	RowIndex    int
+	Expected    string
+	Message     string
+}
+
+func (e *QuarterlyFinancialStructureError) Error() string {
+	if e == nil { return "BaoStock financial structure error" }
+	return e.Message
+}
+
+// QuarterlyFinancialRecord stores one BaoStock financial row without changing numeric scale.
 type QuarterlyFinancialRecord struct {
 	Code            string
 	PublicationDate string
@@ -243,12 +261,20 @@ func parseQuarterlyFinancialPage(body string, spec financialQuerySpec, userID, c
 		fieldPreviews[spec.fields[i]] = baoStockCellPreview(string(raw))
 		value, err := decodeCell(raw)
 		if err != nil {
-			// pubDate 缺失或类型异常只影响披露日期证据，不应丢弃其他财务指标；
-			// code/statDate 仍是定位目标证券和报告期所必需的结构字段。
+			// code/statDate 是证券身份和报告期定位字段；保留证据后仍必须拒绝整行。
+			if i == 0 || i == 2 {
+				return nil, &QuarterlyFinancialStructureError{
+					SourceField: spec.fields[i], Code: "invalid_field",
+					ActualType: baoStockCellType(raw), Preview: baoStockCellPreview(string(raw)),
+					RowIndex: 0, Expected: "string scalar",
+					Message: fmt.Sprintf("BaoStock %s required structure field %s is invalid: %v", spec.method, spec.fields[i], err),
+				}
+			}
+			// pubDate 缺失或类型异常只影响披露日期证据，不应丢弃其他财务指标。
 			if i != 1 {
 				return nil, fmt.Errorf("BaoStock %s column %s: %w", spec.method, spec.fields[i], err)
 			}
-			fieldIssues = append(fieldIssues, QuarterlyFinancialFieldIssue{
+			fieldIssues = append(fieldIssues,
 				SourceField: spec.fields[i], Code: "invalid_field",
 				ActualType: baoStockCellType(raw), Preview: baoStockCellPreview(string(raw)),
 				RowIndex: 0,
@@ -259,12 +285,20 @@ func parseQuarterlyFinancialPage(body string, spec financialQuerySpec, userID, c
 		values[spec.fields[i]] = value
 	}
 	if strings.TrimSpace(values["code"]) != code {
-		return nil, fmt.Errorf("BaoStock %s row security mismatch: requested %s, got %q", spec.method, code, values["code"])
+		return nil, &QuarterlyFinancialStructureError{
+			SourceField: "code", Code: "symbol_mismatch", ActualType: fieldTypes["code"],
+			Preview: fieldPreviews["code"], RowIndex: 0, Expected: code,
+			Message: fmt.Sprintf("BaoStock %s row security mismatch: requested %s, got %q", spec.method, code, values["code"]),
+		}
 	}
 	statDate := strings.TrimSpace(values["statDate"])
 	periodEnd := time.Date(year, time.Month(quarter*3+1), 0, 0, 0, 0, 0, time.UTC).Format("2006-01-02")
 	if statDate != periodEnd {
-		return nil, fmt.Errorf("BaoStock %s report date %q does not match requested period end %s", spec.method, statDate, periodEnd)
+		return nil, &QuarterlyFinancialStructureError{
+			SourceField: "statDate", Code: "report_period_mismatch", ActualType: fieldTypes["statDate"],
+			Preview: fieldPreviews["statDate"], RowIndex: 0, Expected: periodEnd,
+			Message: fmt.Sprintf("BaoStock %s report date %q does not match requested period end %s", spec.method, statDate, periodEnd),
+		}
 	}
 	publicationDate := strings.TrimSpace(values["pubDate"])
 	return &QuarterlyFinancialRecord{
