@@ -615,3 +615,15 @@ internal/
 - 本批将唯一 OpenAPI 文件迁至 `internal/marketdata/httpapi/openapi.yaml`，不复制第二份；`openapi_contract_test.go` 和 `platform_contract_test.go` 改为读取同目录文件。
 - 自动迁移脚本同步增加 OpenAPI 文件迁移步骤，确保迁移重放行为与当前仓库树一致。
 - 不修改 OpenAPI 内容、35 个 Operation、认证/参数/响应/错误 Schema；本次仅调整规范文件归属和测试读取路径。
+
+
+### 2026-11-09：M2-1 首批 Data Application Port 定义
+
+- M1-2 Data 专项 CI 验收：Run `42568445917`，当前 SHA `a587373105e3c4147e1cf45fe21b283c0e2e6e46`。Data gofmt/test/race/vet 全部通过；Data MariaDB Migration/PIT、日线 Fallback、PIT revision fallback、Probe HTTP E2E 全部通过；News MariaDB 集成通过。
+- Root 全仓 `Test .` 仍在 gofmt 阶段被 Research 的 `internal/research/context/validate.go` 非法反斜杠和 `internal/research/evidence/authorization.go` NUL 字节阻断；本分支不修改 Research 文件。Docker 构建按用户约束未在本分支执行。
+- M1-2 的 Data 专项迁移验收关闭；根模块全仓门禁仍为跨模块阻断，不将其误记为 Data 测试失败。
+- M2-1 新增 `internal/marketdata/app` 首批消费者 Port：QuoteReader、DailyBarsReader、MarketDataReader。实际调用场景是现有 Analysis Collector 获取个股 Quote、个股/指数日 K；不把 35 个 HTTP Operation 全部做成一个巨大接口。
+- 新增 Application DTO 与 HTTP JSON DTO 分离：QuoteSnapshot、DailyBar、DailyBarsQuery、DailyBarsSnapshot。保留 nullable 指针、Volume int64、单位、来源/版本、ProviderTime、FetchedAt/NormalizedAt/SystemObservedAt、复权、质量、fallback、RequestID 和 normalization version。
+- PIT 输入字段明确命名为 `SystemObservedAtCutoff`，语义是 Data 历史修订的系统观察时点，不是交易日期，也不默认等同于 Analysis.AsOf。Server Adapter 后续必须显式定义映射；本批不修改 Server/Analysis 远程 Adapter。
+- 不暴露 Provider、Repository、Cache、SQL、HTTP Handler；不新增外部 API、字段存储或诊断行为。
+- 下一步 M2-2：实现 DataService 到 Application Port 的 Facade/映射，并补齐 DTO 映射、nil/精度/来源/PIT 元数据测试；M2-3 再让 HTTP Handler 依赖独立 Application 接口。
