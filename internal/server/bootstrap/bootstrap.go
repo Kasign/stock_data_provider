@@ -20,7 +20,7 @@ import (
 	notificationstorage "example.com/stock-analysis-flow/internal/notification/storage"
 	"example.com/stock-analysis-flow/internal/platform/config"
 	"example.com/stock-analysis-flow/internal/platform/httpapi"
-	platformstorage platformsecurity "example.com/stock-analysis-flow/internal/platform/security"
+	platformsecurity "example.com/stock-analysis-flow/internal/platform/security"
 	platformstorage "example.com/stock-analysis-flow/internal/platform/storage"
 	"example.com/stock-analysis-flow/internal/platform/taskqueue"
 	researchstorage "example.com/stock-analysis-flow/internal/research/storage"
