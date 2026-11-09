@@ -297,3 +297,52 @@ func TestProviderOutputPolicyCheckHonorsCanceledContext(t *testing.T) {
 		t.Fatalf("status=%s, want unavailable", report.Results[0].Observation.Status)
 	}
 }
+
+
+type providerOutputPolicyResolverStub struct {
+	binding app.ProviderOutputPolicyBinding
+	err     error
+}
+
+func (s providerOutputPolicyResolverStub) ResolveProviderOutputPolicy(context.Context, string) (app.ProviderOutputPolicyBinding, error) {
+	return s.binding, s.err
+}
+
+func TestProviderOutputPolicyResolverCheckDistinguishesReadinessStates(t *testing.T) {
+	run := func(name string, resolver app.ProviderOutputPolicyResolver, wantStatus platformdiag.Status, wantReason, wantState string) {
+		t.Run(name, func(t *testing.T) {
+			report, err := (platformdiag.Runner{}).Run(context.Background(), []platformdiag.Check{
+				ProviderOutputPolicyResolverCheck(resolver, "brave"),
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			observation := report.Results[0].Observation
+			if observation.Status != wantStatus || observation.ReasonCode != wantReason {
+				t.Fatalf("observation=%+v", observation)
+			}
+			if observation.Attributes["policy_resolver"] != wantState ||
+				observation.Attributes["provider_persistence"] != "blocked" {
+				t.Fatalf("attributes=%v", observation.Attributes)
+			}
+			if observation.SafeMessage == "" || observation.CheckedAt.IsZero() {
+				t.Fatalf("incomplete observation=%+v", observation)
+			}
+		})
+	}
+
+	run("resolver not configured", nil, platformdiag.StatusDegraded,
+		"news.provider.output_policy_resolver_unavailable", "unavailable")
+	run("lookup failed", providerOutputPolicyResolverStub{err: errors.New("private catalog detail")},
+		platformdiag.StatusUnavailable, "news.provider.output_policy_lookup_failed", "lookup_failed")
+	run("binding available but request not evaluated", providerOutputPolicyResolverStub{
+		binding: app.ProviderOutputPolicyBinding{
+			ProviderCode: "brave", PolicyRef: "brave-output", PolicyVersion: "policy-v4",
+		},
+	}, platformdiag.StatusDegraded, "news.provider.output_policy_not_evaluated", "available")
+	run("binding identity mismatch", providerOutputPolicyResolverStub{
+		binding: app.ProviderOutputPolicyBinding{
+			ProviderCode: "tavily", PolicyRef: "tavily-output", PolicyVersion: "policy-v4",
+		},
+	}, platformdiag.StatusDegraded, "news.provider.output_policy_binding_invalid", "available")
+}

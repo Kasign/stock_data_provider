@@ -61,10 +61,9 @@ func providerConfigCheck(code, name string, configured bool) platformdiag.Check 
 
 
  
-// ProviderOutputPolicyCheck reports the current hard boundary: Provider
-// credentials/configuration may exist, but no trusted policy catalog/evaluator
-// is wired into News yet. It performs no upstream request and never authorizes
-// persistence by itself.
+// ProviderOutputPolicyCheck is the fail-closed fallback used when no resolver is wired.
+// Prefer ProviderOutputPolicyResolverCheck when the composition root has a resolver.
+// Neither check authorizes persistence; a concrete request must still be evaluated.
 func ProviderOutputPolicyCheck() platformdiag.Check {
 	return platformdiag.Check{
 		ID: "news.provider.output_policy", Name: "News provider output policy readiness",
