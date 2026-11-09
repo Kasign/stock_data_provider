@@ -114,3 +114,17 @@ func TestAssessUnknownDeliveryRequiresContiguousUniqueAttemptNumbers(t *testing.
 		t.Fatalf("attempt numbers outside the delivery history must be rejected, got %v", err)
 	}
 }
+
+func TestAssessUnknownDeliveryRejectsEvidenceOlderThanAttempt(t *testing.T) {
+	delivery, channel, attempts, evidence, now := unknownReconciliationFixture(t)
+	evidence.Outcome = UnknownLookupAccepted
+	evidence.ProviderMessageRef = "provider-message-1"
+	evidence.ObservedAt = attempts[0].StartedAt.Add(-time.Nanosecond)
+	if _, err := AssessUnknownDelivery(delivery, channel, attempts, evidence, now); !errors.Is(err, ErrUnknownReconciliationNotApplicable) {
+		t.Fatalf("lookup evidence before the channel attempt must be rejected, got %v", err)
+	}
+	evidence.ObservedAt = attempts[0].FinishedAt.Add(-time.Nanosecond)
+	if _, err := AssessUnknownDelivery(delivery, channel, attempts, evidence, now); !errors.Is(err, ErrUnknownReconciliationNotApplicable) {
+		t.Fatalf("lookup evidence before ambiguous completion must be rejected, got %v", err)
+	}
+}

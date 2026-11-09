@@ -64,7 +64,7 @@ func (p RetryPolicy) ScheduleRetry(
 	now time.Time,
 	randomUnit float64,
 ) (RetryDecision, error) {
-	return p.scheduleRetry(delivery, attempts, now, randomUnit, domain.DeliverySending, domain.DeliveryAttemptRejected, false)
+	return p.scheduleRetry(delivery, attempts, now, randomUnit, domain.DeliverySending, domain.DeliveryAttemptRejected, false, time.Time{})
 }
 
 // ScheduleRetryAfterUnknownLookup evaluates a latest ambiguous Attempt only
@@ -83,7 +83,7 @@ func (p RetryPolicy) ScheduleRetryAfterUnknownLookup(
 		!isRecoveryUTC(now) || observedAt.After(now) {
 		return RetryDecision{}, ErrRetryNotApplicable
 	}
-	decision, err := p.scheduleRetry(delivery, attempts, now, randomUnit, domain.DeliveryUnknown, domain.DeliveryAttemptAmbiguous, true)
+	decision, err := p.scheduleRetry(delivery, attempts, now, randomUnit, domain.DeliveryUnknown, domain.DeliveryAttemptAmbiguous, true, observedAt)
 	if err != nil {
 		return RetryDecision{}, err
 	}
@@ -100,6 +100,7 @@ func (p RetryPolicy) scheduleRetry(
 	requiredStatus domain.DeliveryStatus,
 	requiredOutcome domain.DeliveryAttemptOutcome,
 	evidenceConfirmed bool,
+	evidenceObservedAt time.Time,
 ) (RetryDecision, error) {
 	if err := p.Validate(); err != nil {
 		return RetryDecision{}, err
@@ -156,7 +157,8 @@ func (p RetryPolicy) scheduleRetry(
 	}
 	if latest.FinishedAt == nil || latest.Outcome == nil ||
 		*latest.Outcome != requiredOutcome ||
-		(!evidenceConfirmed && !latest.Retryable) || now.Before(*latest.FinishedAt) {
+		(!evidenceConfirmed && !latest.Retryable) || now.Before(*latest.FinishedAt) ||
+		(evidenceConfirmed && !evidenceObservedAfterAttempt(evidenceObservedAt, latest)) {
 		return RetryDecision{}, ErrRetryNotApplicable
 	}
 
