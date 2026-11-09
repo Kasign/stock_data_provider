@@ -9,11 +9,11 @@ import (
 
 func TestNormalizeSubscriptionDatabaseTimesUsesMariaDBPrecision(t *testing.T) {
 	created := time.Date(2026, 11, 9, 9, 30, 0, 123456789, time.FixedZone("UTC+8", 8*60*60))
-	value := domain.Subscription{CreatedAt: created, UpdatedAt: created.Add(time.Second), EffectiveAt: created.Add(2*time.Second)}
+	value := domain.Subscription{CreatedAt: created, UpdatedAt: created.Add(time.Second), EffectiveAt: created.Add(2 * time.Second)}
 	normalized := normalizeSubscriptionDatabaseTimes(value)
 	for name, timestamp := range map[string]time.Time{
-		"created_at": normalized.CreatedAt,
-		"updated_at": normalized.UpdatedAt,
+		"created_at":   normalized.CreatedAt,
+		"updated_at":   normalized.UpdatedAt,
 		"effective_at": normalized.EffectiveAt,
 	} {
 		if timestamp.Location() != time.UTC || timestamp.Nanosecond()%1000 != 0 {

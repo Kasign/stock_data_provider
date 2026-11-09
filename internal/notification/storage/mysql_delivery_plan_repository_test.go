@@ -18,8 +18,8 @@ func TestValidateDeliveryPlanColumns(t *testing.T) {
 		AuthorizationPolicyVersions: []domain.AuthorizationPolicyVersion{
 			{PolicyType: "source", PolicyRef: "source-1", PolicyVersion: "v1"},
 		},
-		AuthorizationRefs: []string{"authorization-1"},
-		PlanFingerprint: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+		AuthorizationRefs:      []string{"authorization-1"},
+		PlanFingerprint:        "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
 		DeliveryIdempotencyKey: "idempotency-1",
 	}
 	policies, _ := json.Marshal(plan.AuthorizationPolicyVersions)
