@@ -50,7 +50,7 @@ Evidence DTO 的规范字段如下。RSC-CTR-001 的 Schema `$id` 标识 1.0.0 �
 - fact 必须有可验证来源和时间证据；reported_fact 只表达来源声称，不暗示独立核验。
 - inference 必须保留直接上游 Evidence 引用；hypothesis 必须有验证方法、预期观察和失效条件。
 - unknown 表达证据不足；不得用空字符串、0、false 或默认 valid 代替。
-- Evidence 的 system_as_of 不得晚于所属 Run；Research Application 的 `EvidenceRef.RunSystemAsOf` 必须来自 Researchflow CreateRun，非零且 UTC，并传入 `ValidateForStrictPIT(RunSystemAsOf)`。该校验同时约束 Evidence.system_as_of 与 available_at 不得晚于消费 Run 的知识截止时间；不得使用 Evidence 自身 system_as_of 代替 Run cutoff。语义变化必须追加新 Evidence ID/版本，不得原地覆盖。
+- Evidence 的 system_as_of 不得晚于所属 Run；Research Diagnostics Application 的 `BuildEvidenceCheck(..., runAsOf, ...)` 必须接收 Researchflow CreateRun 的非零 UTC cutoff，并传入 `ValidateForStrictPIT(runAsOf)`。该校验同时约束 Evidence.system_as_of 与 available_at；不得使用 Evidence 自身 system_as_of 代替 Run cutoff。语义变化必须追加新 Evidence ID/版本，不得原地覆盖。
 - stance 是相对 Claim 的立场；无 claim_ref 时不得把无关证据误作支持。
 
 ## 4. AuthorizationRef 与派生来源链
@@ -82,6 +82,8 @@ AuthorizationRef 遵循 GOV-CTR-006，是审计快照引用，不是 bearer toke
 ## 6. Event 版本与通知映射
 
 ResearchEvent 是跨来源现实事件，不是 News Article 别名。创建、合并、拆分、主体修正或生命周期迁移均追加版本；source_times 保留来源级时间冲突。
+
+Research Event 与 Claim 作为 Run 诊断快照时，其 system_as_of 必须不晚于 Researchflow CreateRun 的 runAsOf；Context 的 system_as_of 则必须与 Run cutoff 完全一致。四类诊断统一通过 Application Build*Check 显式接收该参数，不扩展领域 DTO。
 
 当前 `internal/research/event/` 已实现 Event/SourceTime 领域校验、版本追加校验和 MVP 生命周期转换；`internal/research/storage/` 已实现 Event SQL Repository，版本追加与生命周期 Outbox 在同一事务提交，并支持 Outbox 领取、租约、重试、确认和拒绝。Research 仍不查询 News Evidence Repository，也不执行多来源事实归并。非 null 的 occurred_at/published_at/available_at 至少要求存在相同 time_type 的 SourceTime；这只是来源类型存在性检查，不等于已验证规范化规则版本。
 

@@ -246,10 +246,9 @@ type AddEvidenceCommand struct {
 	Draft EvidenceDraft
 }
 type EvidenceRef struct {
-	EvidenceID    string
-	CallerRef     string
-	PurposeCode   string
-	RunSystemAsOf time.Time // Researchflow CreateRun 提供的权威知识截止时间，用于严格 PIT 校验。
+	EvidenceID  string
+	CallerRef   string
+	PurposeCode string
 }
 
 type ContextRepository interface {
