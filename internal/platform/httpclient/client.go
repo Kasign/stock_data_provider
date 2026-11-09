@@ -433,7 +433,6 @@ func (c *Client) faultFor(err error, dependency string) *fault.Fault {
 		return c.newFault(fault.ClassTimeout, "platform.httpclient.transport_timeout", "HTTP dependency transport timed out", err, dependency, true)
 	}
 	return c.newFault(fault.ClassUnavailable, "platform.httpclient.request_failed", "HTTP dependency request failed", err, dependency, retryableTransportError(err))
-	}
 }
 
 func (c *Client) newFault(class fault.Class, code, message string, cause error, dependency string, retryable bool) *fault.Fault {
