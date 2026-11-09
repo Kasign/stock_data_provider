@@ -411,3 +411,13 @@ Application 的 `RunFinalizationCoordinator` 是三种终态聚合路径的路�
 - `Started=true` 只表示本次请求赢得持久化 `created/queued/running -> cancelling` 迁移；不表示在途 Worker 已停止。Worker 必须确认停止，或由 lease fencing 回收；CancellationFinalizer 再原子写入 ResultSummary、Outbox 和 Run 终态。
 - 已处于 `cancelling + user_cancelled` 时幂等返回；终态 Run 或 `deadline_exceeded` 终止权已生效时拒绝。CAS 未获胜后必须重读；只有持久化状态已是同一用户取消才按幂等重放，否则返回版本冲突。
 - Server HTTP/DI、真实 RunAccessAuthorizer Adapter 和跨进程 Worker 协作不属于本分支 Application Facade 的实现范围。
+
+## 12. RetryStage Application 派发契约（2026-11-09）
+
+- `RetryStageService.RetryStage(ctx, runRef, stageRef, attemptRef)` 仅供 Scheduler 内部派发；它不是用户手动重跑入口。Stage 进入 retry_wait 的唯一依据仍是 Worker 完成失败/超时 Attempt 时按不可变 Template RetryPolicy 计算出的 retry_at 和精确 reason-code allowlist。
+- 同一次 Scheduler 派发的重投递必须复用稳定 `attemptRef`；不得每次重试请求都生成新 Attempt Ref。Worker/Storage 的 ClaimAttempt 对同一 Worker 的有效 lease 和同一 Attempt 进行幂等回读。
+- Application 读取 Run/Stage/RetryPolicy 快照并预检：Run 必须为 running 且无 termination_reason；Stage 必须为 retry_wait、有 retry_at 且已有至少一次 Attempt；AttemptNo 必须小于 max_attempts；Stage.reason_codes 至少一个命中 RetryPolicy.RetryableReasonCodes；数据库 UTC 当前时间必须早于 Run.deadline_at 且不早于 Stage.retry_at。
+- Facade 预检只用于快速拒绝非法/未到期派发，不构成并发保证。预检后 Run 可能被取消、Deadline 到期或其他 Worker 抢先 Claim；Worker.Execute -> Storage ClaimAttempt 必须重新在数据库事务中校验 Run/Stage/Attempt 状态、retry_at、deadline、attempt budget、lease/fencing 和 max_parallel，并原子提交新 Attempt 与 Stage 状态。
+- RetryStage 不单独将 retry_wait 持久化为 ready。领域 `ClaimRetryStage` 中 ready 仅为逻辑中间态；持久化操作直接以一次 Stage version 增量完成 retry_wait -> running，并插入下一 running Attempt。
+- 不重新计算 retry backoff，不修改 system_as_of、deadline、template_ref/version/fingerprint、parameters 或 input_snapshot_refs；重试沿用原 Run 的不可变执行快照。
+- RetryStage 返回 WorkerExecution 表示 Worker 执行/Claim 结果，不代表 Run 终态。终态聚合继续由 Run Finalizer 处理。
