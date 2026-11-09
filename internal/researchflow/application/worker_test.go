@@ -228,3 +228,14 @@ func TestWorkerCancellationConfirmationFailureDoesNotCommit(t *testing.T) {
 	if err := <-done; err == nil { t.Fatal("expected cancellation fencing failure") }
 	if store.commits != 0 { t.Fatal("must not commit after cancellation") }
 }
+
+
+func TestWorkerCancellationRegistryRemembersSignalBeforeRegistration(t *testing.T) {
+	registry := newWorkerCancellationRegistry()
+	if count := registry.cancelRun("run-before-register"); count != 0 { t.Fatalf("unexpected active count: %d", count) }
+	ctx, cancel := context.WithCancelCause(context.Background())
+	defer cancel(nil)
+	unregister := registry.register("run-before-register", "attempt-1", cancel)
+	defer unregister()
+	if !errors.Is(context.Cause(ctx), ErrWorkerCancelled) { t.Fatal("late registration must inherit prior Run cancellation") }
+}
