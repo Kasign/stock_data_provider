@@ -161,7 +161,7 @@ func assertApplicationSchemaStruct(t *testing.T, name string, typ reflect.Type, 
 			continue
 		}
 		fields[jsonName] = struct{}{}
-		assertContextSchemaValueType(t, name+"."+jsonName, field.Type, schemaObject(t, properties[jsonName]))
+		assertContextSchemaValueType(t, name+"."+jsonName, field.Type, applicationSchemaObject(t, properties[jsonName]))
 		if _, exists := properties[jsonName]; !exists {
 			t.Errorf("%s schema is missing Application DTO field %q", name, jsonName)
 		}
