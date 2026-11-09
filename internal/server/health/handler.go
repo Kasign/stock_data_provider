@@ -49,9 +49,9 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		writeJSON(w, r, http.StatusOK, map[string]any{
-			"status": "ready",
+			"status":       "ready",
 			"dependencies": map[string]string{"mariadb": "ok", "redis": "ok"},
-			"time": time.Now().UTC(),
+			"time":         time.Now().UTC(),
 		})
 	default:
 		http.NotFound(w, r)
