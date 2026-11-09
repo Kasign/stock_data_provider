@@ -13,6 +13,7 @@ import (
 var (
 	ErrIdentityTransaction            = errors.New("news: identity transaction failed")
 	ErrObservationIdempotencyConflict = errors.New("news: observation idempotency key reused with different payload")
+	ErrObservationPayloadPurged       = errors.New("news: observation payload has been purged")
 	ErrProviderOutputPolicyRequired   = errors.New("news: provider output policy evaluation required")
 )
 
@@ -56,6 +57,7 @@ type ObservationPolicyTrace struct {
 	ProviderOutputPolicyRef       string
 	ProviderOutputPolicyVersionID string
 	PolicyEvaluatedAt             time.Time
+	Retention                     time.Duration
 }
 
 // Execute 仅用于不依赖搜索 Provider 输出的来源候选。
@@ -121,6 +123,9 @@ func (u *IngestCandidate) execute(ctx context.Context, sourceID, idempotencyKey 
 		PolicyEvaluatedAt:             trace.PolicyEvaluatedAt,
 		Candidate:                     candidate,
 		ObservedAt:                    observedAt,
+	}
+	if trace.Retention > 0 {
+		observation.RetentionUntil = observedAt.Add(trace.Retention).UTC()
 	}
 	if observation.ID == "" {
 		return domain.Observation{}, ErrInvalidRequest
