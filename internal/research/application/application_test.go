@@ -37,13 +37,13 @@ func TestCreateContextAssignsIdentityAndPersistsValidatedSnapshot(t *testing.T) 
 	service,err:=NewService(repo,&evidenceRepoFake{},&authorizerFake{},func()time.Time{return now},&fixedIDs{})
 	if err!=nil { t.Fatal(err) }
 	command:=CreateContextCommand{
-		ResearchQuestion:"盈利能力变化是否持续", Scope:researchcontext.ScopeStock, SubjectRefs:[]string{"security:600000"},
-		SystemAsOf:now, SectionRefs:[]researchcontext.SectionRef{{
-			SectionID:"financials",SectionVersion:"1",SourceOwner:researchcontext.SourceOwnerData,
-			SourceRefs:[]string{"data:snapshot:1"},EvidenceRefs:[]string{},QualityStatus:researchcontext.QualityValid,
+		ResearchQuestion:"盈利能力变化是否持续", Scope:string(researchcontext.ScopeStock), SubjectRefs:[]string{"security:600000"},
+		SystemAsOf:now, SectionRefs:[]ContextSectionRef{{
+			SectionID:"financials",SectionVersion:"1",SourceOwner:string(researchcontext.SourceOwnerData),
+			SourceRefs:[]string{"data:snapshot:1"},EvidenceRefs:[]string{},QualityStatus:string(researchcontext.QualityValid),
 			Required:true,Included:true,AssembledAt:now,SystemAsOf:now,
-		}}, QualitySummary:researchcontext.QualitySummary{Status:researchcontext.QualityValid,ReasonCodes:[]string{}},
-		IncludedSections:[]string{"financials"},OmittedSections:[]researchcontext.OmittedSection{},BuilderVersion:"1.0.0",
+		}}, QualitySummary:ContextQualitySummary{Status:string(researchcontext.QualityValid),ReasonCodes:[]string{}},
+		IncludedSections:[]string{"financials"},OmittedSections:[]ContextOmittedSection{},BuilderVersion:"1.0.0",
 	}
 	got,err:=service.CreateContext(context.Background(),command)
 	if err!=nil { t.Fatal(err) }
@@ -63,7 +63,7 @@ func TestAddEvidenceGeneratesIdentityFingerprintAndRequiresCurrentAuthorization(
 		Stance:researchevidence.StanceNeutral,QualityStatus:researchevidence.QualityValid,
 		ContentLevel:researchevidence.ContentMetadata,AuthorizationRef:"auth:1",Limitations:[]string{},
 	}
-	got,err:=service.AddEvidence(context.Background(),AddEvidenceCommand{CallerRef:"researchflow:worker-1",Draft:draft})
+	got,err:=service.AddEvidence(context.Background(),AddEvidenceCommand{CallerRef:"researchflow:worker-1",Draft:EvidenceDraft{EvidenceType:string(draft.EvidenceType),SourceOwner:string(draft.SourceOwner),SourceRef:draft.SourceRef,DerivedFromRefs:draft.DerivedFromRefs,SubjectRefs:draft.SubjectRefs,SystemObservedAt:draft.SystemObservedAt,SystemAsOf:draft.SystemAsOf,Stance:string(draft.Stance),QualityStatus:string(draft.QualityStatus),ContentLevel:string(draft.ContentLevel),AuthorizationRef:draft.AuthorizationRef,Limitations:draft.Limitations}})
 	if err!=nil { t.Fatal(err) }
 	if got.EvidenceID!="ev_test-1" || got.ContentFingerprint=="" || !repo.appended || auth.calls!=1 { t.Fatalf("Evidence application flow incomplete: %+v",got) }
 	if _,err:=service.GetEvidence(context.Background(),EvidenceRef{EvidenceID:got.EvidenceID,CallerRef:"researchflow:worker-1"}); err!=nil { t.Fatalf("authorized Evidence read failed: %v",err) }
