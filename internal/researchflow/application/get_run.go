@@ -37,13 +37,13 @@ func (s *GetRunService) GetRun(ctx context.Context, runRef string) (CreateRunRes
 	if err != nil {
 		return CreateRunResult{}, fmt.Errorf("read Researchflow Run %q: %w", runRef, err)
 	}
-	if result.Run.Ref != runRef || result.Run.Version == 0 || result.Run.Status == "" {
+	if result.Run.Ref != runRef || result.Run.Version == 0 || !validRunStatus(result.Run.Status) {
 		return CreateRunResult{}, errors.New("Researchflow Run reader returned an inconsistent aggregate identity")
 	}
 	seenRefs := make(map[string]struct{}, len(result.Stages))
 	seenCodes := make(map[string]struct{}, len(result.Stages))
 	for _, stage := range result.Stages {
-		if stage.Ref == "" || stage.RunRef != runRef || stage.Code == "" || stage.Version == 0 {
+		if stage.Ref == "" || stage.RunRef != runRef || stage.Code == "" || stage.Version == 0 || !validStageStatus(stage.Status) {
 			return CreateRunResult{}, errors.New("Researchflow Run reader returned an invalid Stage identity")
 		}
 		if _, exists := seenRefs[stage.Ref]; exists {
@@ -70,4 +70,25 @@ func (s *GetRunService) GetRun(ctx context.Context, runRef string) (CreateRunRes
 	}
 	result.Stages = append([]domain.Stage(nil), result.Stages...)
 	return result, nil
+}
+
+func validRunStatus(status domain.RunStatus) bool {
+	switch status {
+	case domain.RunCreated, domain.RunQueued, domain.RunRunning, domain.RunCancelling,
+		domain.RunSucceeded, domain.RunPartial, domain.RunFailed, domain.RunCancelled:
+		return true
+	default:
+		return false
+	}
+}
+
+func validStageStatus(status domain.StageStatus) bool {
+	switch status {
+	case domain.StagePending, domain.StageReady, domain.StageRunning, domain.StageRetryWait,
+		domain.StageSucceeded, domain.StageDegraded, domain.StageSkipped, domain.StageFailed,
+		domain.StageTimedOut, domain.StageCancelled, domain.StageBlocked:
+		return true
+	default:
+		return false
+	}
 }
