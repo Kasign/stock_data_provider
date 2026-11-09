@@ -85,7 +85,6 @@ func TestMySQLRunRepositoryValidatesResolvedSnapshotIdentity(t *testing.T) {
 	}
 }
 
-
 func TestMariaDBCreateRunAtomicConcurrentIdempotency(t *testing.T) {
 	if os.Getenv("PLATFORM_STORAGE_INTEGRATION") != "1" {
 		t.Skip("set PLATFORM_STORAGE_INTEGRATION=1 to run Researchflow MariaDB integration tests")
