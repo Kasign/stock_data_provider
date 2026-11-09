@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"strings"
+	"sort"
 
 	"example.com/stock-analysis-flow/internal/llm"
 )
@@ -73,8 +74,8 @@ func IntentsFromModelResponse(response llm.ModelResponse) ([]Intent, error) {
 // ToolDefinitionsFor 只向模型暴露当前 Scope 和预算允许的工具。
 // 返回值用于 ModelRequest.Tools；工具调用响应仍必须经过 Authorize。
 func (r *Registry) ToolDefinitionsFor(budget Budget) []llm.ToolDefinition {
-	if r == nil || budget.MaxCalls <= budget.CallsUsed || budget.MaxCalls <= 0 ||
-		budget.MaxTotalTimeout <= budget.TimeoutUsed || budget.MaxTotalTimeout <= 0 ||
+	if r == nil || budget.MaxCalls <= 0 || budget.CallsUsed < 0 || budget.MaxCalls <= budget.CallsUsed ||
+		budget.MaxTotalTimeout <= 0 || budget.TimeoutUsed < 0 || budget.MaxTotalTimeout <= budget.TimeoutUsed ||
 		budget.Now.IsZero() || !budget.RunDeadline.After(budget.Now) {
 		return nil
 	}

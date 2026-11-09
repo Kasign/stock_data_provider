@@ -51,7 +51,7 @@ func TestIntentsFromModelResponseRequiresCompletedResponseAndUniqueCallIDs(t *te
 
 func TestNewLLMRegistryUsesBoundedLocalSchemaValidation(t *testing.T) {
 	registry, err := NewLLMRegistry([]Definition{{
-		Name: "research.lookup",
+		Name:           "research.lookup",
 		ParametersJSON: []byte(`{"type":"object","required":["symbol"],"properties":{"symbol":{"type":"string"}},"additionalProperties":false}`),
 		Timeout:        time.Second, MaxCallsPerRun: 1,
 	}})
