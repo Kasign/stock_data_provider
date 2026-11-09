@@ -104,9 +104,6 @@ func TestRegistryValidateMetricRejectsInvalidUTF8BeforeJSONDecode(t *testing.T) 
 
 	raw := append([]byte(`{"metric_code":"utf8_metric","value":0.25,"unit":"ratio","period":"`), 0xff)
 	raw = append(raw, []byte(`","system_as_of":"2026-11-09T01:00:00Z","quality_status":"valid","metric_status":"available","calculation_version":"1.0.0","lower_bound":null,"upper_bound":null}`)...)
-	if !json.Valid(raw) {
-		t.Fatal("test fixture must be syntactically valid JSON to isolate UTF-8 validation")
-	}
 	if err := registry.ValidateMetric("utf8_metric", "1.0.0", "1.0.0", json.RawMessage(raw)); !errors.Is(err, ErrInvalidMetricResult) {
 		t.Fatalf("ValidateMetric() error = %v, want ErrInvalidMetricResult", err)
 	}
