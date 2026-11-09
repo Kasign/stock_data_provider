@@ -11,9 +11,9 @@ import (
 
 type channelConfigRepositoryStub struct {
 	snapshot domain.ChannelConfigSnapshot
-	digest string
-	found bool
-	err error
+	digest   string
+	found    bool
+	err      error
 }
 
 func (s channelConfigRepositoryStub) Create(context.Context, domain.ChannelConfigSnapshot) (string, bool, error) {
@@ -29,10 +29,10 @@ func validConfigRepositorySnapshot() domain.ChannelConfigSnapshot {
 		ChannelRef: "channel-1", ConfigVersion: 3, ChannelKind: "test", Enabled: true,
 		SecretRef: "secret://notification/channel-1/v3",
 		Capabilities: domain.ChannelCapabilities{
-			SupportsIdempotency: domain.CapabilityUnknown,
+			SupportsIdempotency:    domain.CapabilityUnknown,
 			SupportsDeliveryLookup: domain.CapabilityUnknown,
-			SupportsRetryAfter: domain.CapabilityUnsupported,
-			MaxPayloadBytes: 4096,
+			SupportsRetryAfter:     domain.CapabilityUnsupported,
+			MaxPayloadBytes:        4096,
 		},
 		RetryableErrorCodes: []string{"rate_limited"},
 	}
