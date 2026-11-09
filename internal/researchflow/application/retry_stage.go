@@ -11,9 +11,9 @@ import (
 )
 
 var (
-	ErrRetryStageUnavailable = errors.New("Researchflow Stage is not eligible for retry")
-	ErrRetryStageNotDue      = errors.New("Researchflow Stage retry time has not arrived")
-	ErrRetryStageNotRetryable = errors.New("Researchflow Stage failure reason is not retryable")
+	ErrRetryStageUnavailable     = errors.New("Researchflow Stage is not eligible for retry")
+	ErrRetryStageNotDue          = errors.New("Researchflow Stage retry time has not arrived")
+	ErrRetryStageNotRetryable    = errors.New("Researchflow Stage failure reason is not retryable")
 	ErrRetryStageBudgetExhausted = errors.New("Researchflow Stage retry budget is exhausted")
 )
 
