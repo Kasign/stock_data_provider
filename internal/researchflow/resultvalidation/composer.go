@@ -208,7 +208,7 @@ func validateResearchEvidence(values []researchapp.EvidenceRecord, expectedSyste
 }
 
 func validEvidenceTimes(value researchapp.EvidenceDraft) bool {
-	if value.PublishedAt != nil && !isUTC(*value.PublishedAt) {
+	if value.PublishedAt != nil && (!isUTC(*value.PublishedAt) || value.PublishedAt.After(value.SystemAsOf)) {
 		return false
 	}
 	if value.AvailableAt != nil && (!isUTC(*value.AvailableAt) || value.AvailableAt.After(value.SystemAsOf)) {
