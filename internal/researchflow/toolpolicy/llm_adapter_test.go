@@ -10,7 +10,7 @@ import (
 
 func TestIntentFromModelToolCallOnlyAdaptsCompletedStructuredIntent(t *testing.T) {
 	call := llm.ModelToolCall{
-		CallID: "call-1", Name:           "research.lookup",
+		CallID: "call-1", Name: "research.lookup",
 		ArgumentsJSON: `{"symbol":"600000.SH"}`, Status: "completed",
 	}
 	intent, err := IntentFromModelToolCall(call)

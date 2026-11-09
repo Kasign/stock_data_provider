@@ -8,10 +8,10 @@ import (
 func TestAvailableBudgetSubtractsAllReservations(t *testing.T) {
 	got, err := AvailableBudget(BudgetInput{
 		ModelContextTokens: 32768,
-		SystemTokens: 2048,
-		ToolSchemaTokens: 1024,
-		OutputReserve: 4096,
-		SafetyMargin: 512,
+		SystemTokens:       2048,
+		ToolSchemaTokens:   1024,
+		OutputReserve:      4096,
+		SafetyMargin:       512,
 	})
 	if err != nil {
 		t.Fatal(err)
