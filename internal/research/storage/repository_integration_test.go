@@ -210,7 +210,9 @@ func TestResearchOutboxConcurrentClaimsDoNotDuplicateLease(t *testing.T) {
 	now := time.Date(2026, 11, 9, 7, 0, 0, 123456789, time.UTC)
 	eventID := fmt.Sprintf("event-outbox-concurrent-%d", time.Now().UnixNano())
 	repo, err := NewEventRepository(db, func() time.Time { return now })
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	t.Cleanup(func() {
 		_, _ = db.ExecContext(context.Background(), "DELETE FROM research_notification_outbox WHERE subject_ref=?", "research-event:"+eventID)
 		_, _ = db.ExecContext(context.Background(), "DELETE FROM research_event_versions WHERE event_id=?", eventID)
@@ -225,9 +227,15 @@ func TestResearchOutboxConcurrentClaimsDoNotDuplicateLease(t *testing.T) {
 		ImpactHypothesisRefs: []string{}, InvalidationConditions: []string{},
 		Uncertainty: []string{}, SourceTimes: []researchevent.EventSourceTime{},
 	}
-	if err := repo.AppendWithLifecycle(ctx, value, nil, "corr_concurrent_claim"); err != nil { t.Fatalf("append Event and Outbox: %v", err) }
+	if err := repo.AppendWithLifecycle(ctx, value, nil, "corr_concurrent_claim"); err != nil {
+		t.Fatalf("append Event and Outbox: %v", err)
+	}
 
-	type claimResult struct { worker string; values []researchapp.NotificationEventEnvelope; err error }
+	type claimResult struct {
+		worker string
+		values []researchapp.NotificationEventEnvelope
+		err    error
+	}
 	start := make(chan struct{})
 	results := make(chan claimResult, 2)
 	var workers sync.WaitGroup
@@ -248,21 +256,30 @@ func TestResearchOutboxConcurrentClaimsDoNotDuplicateLease(t *testing.T) {
 	claimedCount := 0
 	owners := make(map[string]struct{})
 	for result := range results {
-		if result.err != nil { t.Fatalf("%s claim failed: %v", result.worker, result.err) }
+		if result.err != nil {
+			t.Fatalf("%s claim failed: %v", result.worker, result.err)
+		}
 		claimedCount += len(result.values)
 		for _, envelope := range result.values {
-			if envelope.EventID == "" || envelope.LeaseToken == "" { t.Fatalf("%s received incomplete lease: %+v", result.worker, envelope) }
+			if envelope.EventID == "" || envelope.LeaseToken == "" {
+				t.Fatalf("%s received incomplete lease: %+v", result.worker, envelope)
+			}
 			owners[result.worker] = struct{}{}
 		}
 	}
-	if claimedCount != 1 || len(owners) != 1 { t.Fatalf("concurrent claims acquired %d leases across %d workers, want exactly one lease", claimedCount, len(owners)) }
+	if claimedCount != 1 || len(owners) != 1 {
+		t.Fatalf("concurrent claims acquired %d leases across %d workers, want exactly one lease", claimedCount, len(owners))
+	}
 
 	var status, owner, token string
 	var attempts int
-	if err := db.QueryRowContext(ctx, "SELECT delivery_status, lease_owner, lease_token, attempt_count FROM research_notification_outbox WHERE subject_ref=?", "research-event:"+eventID).Scan(&status, &owner, &token, &attempts); err != nil { t.Fatalf("read concurrently claimed Outbox state: %v", err) }
-	if status != "leased" || owner == "" || token == "" || attempts != 1 { t.Fatalf("unexpected concurrent Outbox state: status=%s owner=%s token_set=%t attempts=%d", status, owner, token != "", attempts) }
+	if err := db.QueryRowContext(ctx, "SELECT delivery_status, lease_owner, lease_token, attempt_count FROM research_notification_outbox WHERE subject_ref=?", "research-event:"+eventID).Scan(&status, &owner, &token, &attempts); err != nil {
+		t.Fatalf("read concurrently claimed Outbox state: %v", err)
+	}
+	if status != "leased" || owner == "" || token == "" || attempts != 1 {
+		t.Fatalf("unexpected concurrent Outbox state: status=%s owner=%s token_set=%t attempts=%d", status, owner, token != "", attempts)
+	}
 }
-
 
 func TestResearchMigrationsUpgradeHistoricalRowsFromV1ToV5(t *testing.T) {
 	dsn := os.Getenv("RESEARCH_MIGRATION_TEST_MYSQL_DSN")
@@ -949,7 +966,6 @@ func TestResearchAppendRejectsAggregateHeadWithMissingLatestVersion(t *testing.T
 		t.Fatalf("append created %d Event versions despite missing previous version", versionCount)
 	}
 }
-
 
 func TestResearchOutboxRejectsExpiredLeaseEvenWithBackdatedActionTime(t *testing.T) {
 	db := openResearchIntegrationDB(t)
