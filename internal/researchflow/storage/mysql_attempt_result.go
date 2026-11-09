@@ -15,15 +15,15 @@ import (
 // Application/Domain transition. Storage enforces lease fencing and persists
 // the Attempt and Stage outcome atomically.
 type AttemptResultCommit struct {
-	RunRef       string
-	StageRef     string
-	AttemptRef   string
-	WorkerID     string
-	FencingToken uint64
+	RunRef        string
+	StageRef      string
+	AttemptRef    string
+	WorkerID      string
+	FencingToken  uint64
 	AttemptStatus domain.AttemptStatus
-	Stage        domain.Stage
-	FaultRef     *string
-	OutputRef    *string
+	Stage         domain.Stage
+	FaultRef      *string
+	OutputRef     *string
 }
 
 // CommitAttemptResult persists a worker result only while its lease is current.

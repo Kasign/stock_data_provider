@@ -65,16 +65,16 @@ func TestMariaDBBeginRunCancellationLinearizesWorkerOperations(t *testing.T) {
 	now := time.Now().UTC()
 	fingerprint := "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 	templateFingerprint := "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
-	runRef, runningStageRef, readyStageRef := "cancel-run-"+suffix, "cancel-running-"+suffix, "cancel-ready-"+suffix
+	runRef, runningStageRef, readyStageRef := "cancel-run-" + suffix, "cancel-running-" + suffix, "cancel-ready-" + suffix
 	record := application.CreateRunRecord{
-		Scope: application.IdempotencyScope{CallerRef: "researchflow-cancel-test", Operation: "CreateRun", Key: "cancel-"+suffix},
+		Scope:       application.IdempotencyScope{CallerRef: "researchflow-cancel-test", Operation: "CreateRun", Key: "cancel-" + suffix},
 		Fingerprint: fingerprint,
 		Run: domain.Run{
 			Ref: runRef, SchemaVersion: "v1", Status: domain.RunCreated, Version: 1,
-			SystemAsOf: now.Add(-time.Minute), DeadlineAt: now.Add(10*time.Minute),
+			SystemAsOf: now.Add(-time.Minute), DeadlineAt: now.Add(10 * time.Minute),
 			TemplateRef: "cancel-template", TemplateVersion: "v1",
-			TemplateFingerprint: templateFingerprint, InputSnapshotRefs: []string{"snapshot-"+suffix},
-			CorrelationID: "cancel-correlation-"+suffix,
+			TemplateFingerprint: templateFingerprint, InputSnapshotRefs: []string{"snapshot-" + suffix},
+			CorrelationID: "cancel-correlation-" + suffix,
 		},
 		Stages: []domain.Stage{
 			{Ref: runningStageRef, RunRef: runRef, Code: "running", Status: domain.StageReady, Version: 1, Required: true, Dependencies: []string{}, RetryPolicyRef: "retry-v1", DiagnosticRefs: []string{}, ReasonCodes: []string{}},

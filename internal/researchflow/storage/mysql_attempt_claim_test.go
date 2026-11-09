@@ -64,15 +64,15 @@ func TestMariaDBClaimAttemptLeaseAndFencing(t *testing.T) {
 	runRef, stageRef := "claim-run-"+suffix, "claim-stage-"+suffix
 	record := application.CreateRunRecord{
 		Scope: application.IdempotencyScope{
-			CallerRef: "researchflow-claim-test", Operation: "CreateRun", Key: "claim-"+suffix,
+			CallerRef: "researchflow-claim-test", Operation: "CreateRun", Key: "claim-" + suffix,
 		},
 		Fingerprint: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 		Run: domain.Run{
 			Ref: runRef, SchemaVersion: "v1", Status: domain.RunCreated, Version: 1,
 			SystemAsOf: now.Add(-time.Minute), DeadlineAt: now.Add(10 * time.Minute),
 			TemplateRef: "claim-template", TemplateVersion: "v1",
-			TemplateFingerprint: templateFingerprint, InputSnapshotRefs: []string{"snapshot-"+suffix},
-			CorrelationID: "claim-correlation-"+suffix,
+			TemplateFingerprint: templateFingerprint, InputSnapshotRefs: []string{"snapshot-" + suffix},
+			CorrelationID: "claim-correlation-" + suffix,
 		},
 		Stages: []domain.Stage{{
 			Ref: stageRef, RunRef: runRef, Code: "context", Status: domain.StageReady,
@@ -204,4 +204,3 @@ func TestMariaDBClaimAttemptLeaseAndFencing(t *testing.T) {
 }
 
 func stringRef(value string) *string { return &value }
-
