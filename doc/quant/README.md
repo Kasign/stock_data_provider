@@ -7,9 +7,9 @@
 
 ## 当前状态
 
-Quant 已具备首批 Indicator/Factor 纯计算、CalculationContext、基础 Registry、RiskDecision/RuleSet 执行框架、TrendResult DTO、Manifest/ResultRef 和 Repository Save Port 等模块内能力。最近一次 Quant 独立 CI 对应 SHA 为 `471dae4e8b55e999719a691c7761df3cee8f8e8c`，Workflow `42598371072`，结果成功，覆盖 gofmt、Quant 全包测试、Manifest 30 秒随机 Fuzz、Race 和 Vet。
+Quant 已具备首批 Indicator/Factor 纯计算、CalculationContext、基础 Registry、RiskDecision/RuleSet 执行框架、TrendResult DTO、Manifest/ResultRef 和 Repository Save Port 等模块内能力。当前 HEAD `cda200a1e4a3673bb4a34cd4b914d32f0a3be823` 的 Quant 独立 CI Workflow `42618742241` 已全部通过，覆盖 gofmt、`go test ./internal/quant/...`、Manifest 30 秒随机 Fuzz、Race 和 Vet。
 
-上述 CI 证明的是该 SHA 的 Quant 模块内代码验证。当前 HEAD 后续仅增加文档提交，没有代码变化；不能将 Workflow 记为当前 HEAD 直接触发的 CI。它也不代表真实行情、生产 Registry 元数据、运行时授权、完整结果 Envelope、Platform Storage 或 Server 集成验收完成。
+同一 SHA 的全仓 Go Workflow `42618742230` 已结束但失败：根模块 gofmt、`services/market-data` 测试及 Market Data Docker 镜像构建失败；`go-core`、News MariaDB 集成和 Market Data MariaDB migration/PIT 集成 Job 成功。上述全仓失败不属于 Quant 独立工作流失败；仍需对应模块修复。Quant 独立 CI 只证明模块内代码验证，不代表真实行情、生产 Registry 元数据、运行时授权、完整结果 Envelope、Platform Storage 或 Server 集成验收完成。
 
 当前主要外部阻塞：
 - Data：DailyBars v2 Decimal 输入、真实 PIT/复权/交易日历及质量证据。
