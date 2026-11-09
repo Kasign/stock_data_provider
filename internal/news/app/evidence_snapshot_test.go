@@ -242,8 +242,8 @@ func TestEvidenceSnapshotRetentionCleanerHonorsCancellation(t *testing.T) {
 		repository := &evidenceSnapshotRepositoryStub{}
 		cleaner, err := NewEvidenceSnapshotRetentionCleaner(repository)
 		if err != nil {
-		t.Fatal(err)
-	}
+			t.Fatal(err)
+		}
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
 		if _, err := cleaner.Execute(ctx, now, 10); !errors.Is(err, context.Canceled) {
@@ -259,8 +259,8 @@ func TestEvidenceSnapshotRetentionCleanerHonorsCancellation(t *testing.T) {
 		repository := &evidenceSnapshotRepositoryStub{deleted: 2, afterDelete: cancel}
 		cleaner, err := NewEvidenceSnapshotRetentionCleaner(repository)
 		if err != nil {
-		t.Fatal(err)
-	}
+			t.Fatal(err)
+		}
 		if _, err := cleaner.Execute(ctx, now, 10); !errors.Is(err, context.Canceled) {
 			t.Fatalf("Execute() error=%v", err)
 		}

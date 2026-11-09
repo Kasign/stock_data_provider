@@ -37,7 +37,6 @@ func TestNullableStringUsesSQLNullForEmptyReferences(t *testing.T) {
 	}
 }
 
-
 func TestEvidenceSnapshotPayloadSizeIsBounded(t *testing.T) {
 	if validEvidenceSnapshotPayloadSize(nil) {
 		t.Fatal("nil payload must be rejected")

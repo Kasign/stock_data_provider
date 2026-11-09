@@ -135,7 +135,6 @@ func sameEvidenceSnapshotDBTime(payloadTime, storedTime time.Time) bool {
 	return payloadTime.UTC().Truncate(time.Microsecond).Equal(storedTime.UTC().Truncate(time.Microsecond))
 }
 
-
 func validEvidenceSnapshotPayloadSize(payload []byte) bool {
 	return len(payload) > 0 && len(payload) <= maximumEvidenceSnapshotBytes
 }
