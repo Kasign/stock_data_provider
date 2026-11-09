@@ -210,7 +210,6 @@ func TestFinalizeRunRejectsIncompleteSummaryBeforeTransaction(t *testing.T) {
 	}
 }
 
-
 func TestMariaDBFinalizeCancellationRunAtomicallyPersistsSummaryAndOutbox(t *testing.T) {
 	if os.Getenv("PLATFORM_STORAGE_INTEGRATION") != "1" {
 		t.Skip("set PLATFORM_STORAGE_INTEGRATION=1 to run Researchflow MariaDB integration tests")
@@ -294,7 +293,7 @@ func TestMariaDBFinalizeCancellationRunAtomicallyPersistsSummaryAndOutbox(t *tes
 		OutboxRef: "outbox-cancel-" + suffix, TerminalStatus: domain.RunCancelled,
 		TerminationReason: "user_cancelled",
 		Summary: domain.ResultSummary{
-			StageOutcomes: map[string]domain.StageStatus{"context": domain.StageCancelled},
+			StageOutcomes:     map[string]domain.StageStatus{"context": domain.StageCancelled},
 			RiskGateDecisions: map[string]string{}, ExcludedStages: []domain.ExcludedStage{},
 			MissingStageCodes: []string{"context"}, DegradedStageCodes: []string{},
 			BlockedStageCodes: []string{}, ReasonCodes: []string{"user_cancelled"},
