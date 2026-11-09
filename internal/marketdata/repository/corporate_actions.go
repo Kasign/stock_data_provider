@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"sort"
 	"strings"
 	"time"
 
@@ -65,47 +66,80 @@ func (s *Store) SaveAdjustmentFactors(ctx context.Context, values []model.Adjust
 	if s == nil || s.db == nil {
 		return errors.New("MariaDB adjustment-factor storage disabled")
 	}
+	if len(values) == 0 {
+		return nil
+	}
+
+	type revision struct {
+		value model.AdjustmentFactor
+		hash  string
+	}
+	revisions := make([]revision, 0, len(values))
+	seen := make(map[string]struct{}, len(values))
 	for _, value := range values {
 		if err := validateAdjustmentFactorRecord(value); err != nil {
 			return fmt.Errorf("invalid adjustment factor observation for %s on %s: %w", value.Symbol, value.TradeDate, err)
 		}
+		value.Basis = model.NormalizeAdjustmentFactorBasis(value.Basis)
+		identity := value.Symbol + "|" + value.TradeDate + "|" + value.Source + "|" + string(value.Basis)
+		if _, exists := seen[identity]; exists {
+			return fmt.Errorf("duplicate adjustment-factor revision identity: %s", identity)
+		}
+		seen[identity] = struct{}{}
 		hash, err := adjustmentFactorHash(value)
 		if err != nil {
 			return err
 		}
-		stored := value
-		stored.Basis = model.NormalizeAdjustmentFactorBasis(stored.Basis)
-		stored.SystemObservedAt = nil
-		metadata, err := json.Marshal(stored)
-		if err != nil {
-			return err
+		revisions = append(revisions, revision{value: value, hash: hash})
+	}
+	// 所有批次按相同顺序加锁，降低并发刷新相同证券时的死锁概率。
+	sort.Slice(revisions, func(i, j int) bool {
+		left, right := revisions[i].value, revisions[j].value
+		leftKey := left.Symbol + "|" + left.TradeDate + "|" + left.Source + "|" + string(left.Basis)
+		rightKey := right.Symbol + "|" + right.TradeDate + "|" + right.Source + "|" + string(right.Basis)
+		return leftKey < rightKey
+	})
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin adjustment-factor batch revision: %w", err)
+	}
+	committed := false
+	defer func() {
+		if !committed {
+			_ = tx.Rollback()
 		}
-		tx, err := s.db.BeginTx(ctx, nil)
-		if err != nil {
-			return fmt.Errorf("begin adjustment-factor revision: %w", err)
-		}
+	}()
+
+	for _, item := range revisions {
+		value := item.value
 		var latest string
 		lookupErr := tx.QueryRowContext(ctx, `SELECT revision_hash FROM market_data_adjustment_factor_versions
 WHERE symbol=? AND trade_date=? AND source=? AND factor_basis=? ORDER BY recorded_at DESC,id DESC LIMIT 1 FOR UPDATE`,
-			value.Symbol, value.TradeDate, value.Source, string(model.NormalizeAdjustmentFactorBasis(value.Basis))).Scan(&latest)
+			value.Symbol, value.TradeDate, value.Source, string(value.Basis)).Scan(&latest)
 		if lookupErr != nil && !errors.Is(lookupErr, sql.ErrNoRows) {
-			tx.Rollback()
-			return lookupErr
+			return fmt.Errorf("lock latest adjustment-factor revision for %s on %s: %w", value.Symbol, value.TradeDate, lookupErr)
 		}
-		if lookupErr != nil || latest != hash {
-			_, err = tx.ExecContext(ctx, `INSERT INTO market_data_adjustment_factor_versions
+		if lookupErr != nil || latest != item.hash {
+			stored := value
+			stored.SystemObservedAt = nil
+			metadata, marshalErr := json.Marshal(stored)
+			if marshalErr != nil {
+				return marshalErr
+			}
+			_, insertErr := tx.ExecContext(ctx, `INSERT INTO market_data_adjustment_factor_versions
 (symbol,trade_date,source,factor_basis,revision_hash,recorded_at,fetched_at,available_at,quality_status,metadata)
-VALUES (?,?,?,?,?,?,?,?,?,?)`, value.Symbol, value.TradeDate, value.Source, string(model.NormalizeAdjustmentFactorBasis(value.Basis)), hash,
+VALUES (?,?,?,?,?,?,?,?,?,?)`, value.Symbol, value.TradeDate, value.Source, string(value.Basis), item.hash,
 				time.Now().UTC(), value.FetchedAt.UTC(), nullableTime(value.AvailableAt), string(value.QualityStatus), metadata)
-			if err != nil {
-				tx.Rollback()
-				return fmt.Errorf("insert adjustment-factor revision: %w", err)
+			if insertErr != nil {
+				return fmt.Errorf("insert adjustment-factor revision for %s on %s: %w", value.Symbol, value.TradeDate, insertErr)
 			}
 		}
-		if err := tx.Commit(); err != nil {
-			return fmt.Errorf("commit adjustment-factor revision: %w", err)
-		}
 	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit adjustment-factor batch revision: %w", err)
+	}
+	committed = true
 	return nil
 }
 
