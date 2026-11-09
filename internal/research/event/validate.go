@@ -64,7 +64,7 @@ func (e ResearchEvent) Validate() error {
 		}
 	}
 	if e.SupersedesEventVersion != nil && (*e.SupersedesEventVersion < 1 || *e.SupersedesEventVersion >= e.EventVersion) {
-		return fmt.Errorf("supersedes_event_version must be positive and less than event_version")
+		return fmt.Errorf("supersedes_event_version must not supersede the current or a future event_version")
 	}
 	if e.SourceTimes == nil {
 		return fmt.Errorf("source_times must be a non-null array")

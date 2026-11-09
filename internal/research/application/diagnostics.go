@@ -7,6 +7,7 @@ import (
 	platformdiagnostics "example.com/stock-analysis-flow/internal/platform/diagnostics"
 	"example.com/stock-analysis-flow/internal/platform/fault"
 	researcherrors "example.com/stock-analysis-flow/internal/research"
+	researchcontext "example.com/stock-analysis-flow/internal/research/context"
 	researchdiagnostics "example.com/stock-analysis-flow/internal/research/diagnostics"
 )
 
@@ -92,4 +93,23 @@ func (s *Service) BuildEvidenceCheck(ctx context.Context, ref EvidenceRef, requi
 	value.EvidenceID = record.EvidenceID
 	value.ContentFingerprint = record.ContentFingerprint
 	return researchdiagnostics.NewEvidenceCheck("research.evidence.snapshot", "Research Evidence 快照", required, value)
+}
+
+// toDomainContext 将 Application DTO 转换为独立的 Domain 快照，供领域诊断器校验。
+func toDomainContext(value ResearchContext) researchcontext.Context {
+	return researchcontext.Context{
+		SchemaVersion:    value.SchemaVersion,
+		ContextID:        value.ContextID,
+		ContextVersion:   value.ContextVersion,
+		ResearchQuestion: value.ResearchQuestion,
+		Scope:            researchcontext.Scope(value.Scope),
+		SubjectRefs:      cloneStrings(value.SubjectRefs),
+		SystemAsOf:       value.SystemAsOf,
+		SectionRefs:      toDomainSections(value.SectionRefs),
+		QualitySummary:   toDomainQuality(value.QualitySummary),
+		IncludedSections: cloneStrings(value.IncludedSections),
+		OmittedSections:  toDomainOmitted(value.OmittedSections),
+		BuilderVersion:   value.BuilderVersion,
+		CreatedAt:        value.CreatedAt,
+	}
 }

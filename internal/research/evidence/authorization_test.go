@@ -139,7 +139,7 @@ func TestValidateEvidenceAuthorizationBindingRejectsNonAllowedDecision(t *testin
 				ref.Conditions = []string{"attribution_required"}
 			}
 			ref.DecisionFingerprint, _ = ref.ComputeDecisionFingerprint(snapshot)
-			err := ValidateEvidenceAuthorizationBinding(Evidence{SourceOwner: SourceResearch, ContentLevel: ContentSummary}, ref, snapshot,
+			err := ValidateEvidenceAuthorizationBinding(Evidence{SourceOwner: SourceResearch, ContentLevel: ContentSummary, AuthorizationRef: ref.AuthorizationRef}, ref, snapshot,
 				"service:researchflow", "research_evidence:evidence_001", PurposeResearchAnalysis)
 			if err == nil || !strings.Contains(err.Error(), "not readable") {
 				t.Fatalf("expected non-readable decision to be rejected, got %v", err)
