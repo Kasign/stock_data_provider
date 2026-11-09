@@ -104,6 +104,8 @@ func TestOpenStreamHTTP2IncrementalReadAndCancel(t *testing.T) {
 	defer client.CloseIdleConnections()
 	serverTransport := server.Client().Transport.(*http.Transport)
 	client.transport.TLSClientConfig = serverTransport.TLSClientConfig.Clone()
+	// 仅 HTTP/2 本地测试夹具跳过证书主机名校验，不改变生产 Client 的 TLS 配置。
+	client.transport.TLSClientConfig.InsecureSkipVerify = true
 	client.dial = func(ctx context.Context, network, _ string) (net.Conn, error) {
 		return (&net.Dialer{}).DialContext(ctx, network, server.Listener.Addr().String())
 	}
