@@ -55,6 +55,9 @@ func (u *GetEvidence) Execute(ctx context.Context, request GetEvidenceRequest) (
 	if err != nil {
 		return ResearchEvidenceRecord{}, err
 	}
+	if err := ctx.Err(); err != nil {
+		return ResearchEvidenceRecord{}, err
+	}
 	if !validEvidencePITRecord(pit, request) {
 		return ResearchEvidenceRecord{}, ErrInvalidEvidenceQuery
 	}
@@ -74,6 +77,9 @@ func (u *GetEvidence) Execute(ctx context.Context, request GetEvidenceRequest) (
 	if err != nil {
 		return ResearchEvidenceRecord{}, err
 	}
+	if err := ctx.Err(); err != nil {
+		return ResearchEvidenceRecord{}, err
+	}
 	if binding.CallerRef != request.CallerRef ||
 		binding.ResourceRef != resourceRef ||
 		binding.PurposeCode != string(request.PurposeCode) ||
@@ -82,10 +88,16 @@ func (u *GetEvidence) Execute(ctx context.Context, request GetEvidenceRequest) (
 		domain.ValidateNewsAuthorizationBindingForEvidence(binding, pit.Observation, pit.Version) != nil {
 		return ResearchEvidenceRecord{}, ErrInvalidAuthorizationSnapshot
 	}
+	if err := ctx.Err(); err != nil {
+		return ResearchEvidenceRecord{}, err
+	}
 	if err := u.authorizer.Execute(
 		ctx, binding, pit.Observation, pit.Version, request.CallerRef,
 		string(request.PurposeCode), contentLevel,
 	); err != nil {
+		return ResearchEvidenceRecord{}, err
+	}
+	if err := ctx.Err(); err != nil {
 		return ResearchEvidenceRecord{}, err
 	}
 	return researchEvidenceRecordFromPIT(pit, binding, request), nil

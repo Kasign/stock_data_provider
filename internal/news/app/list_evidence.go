@@ -47,6 +47,9 @@ func (u *ListEvidence) Execute(ctx context.Context, request ListEvidenceRequest)
 	if err != nil {
 		return ResearchEvidencePage{}, err
 	}
+	if err := ctx.Err(); err != nil {
+		return ResearchEvidencePage{}, err
+	}
 	if !validEvidenceOpaqueRef(referencePage.SnapshotRef) ||
 		referencePage.SystemAsOf.IsZero() || !referencePage.SystemAsOf.Equal(request.SystemAsOf) ||
 		len(referencePage.Items) > request.PageSize ||
@@ -59,6 +62,9 @@ func (u *ListEvidence) Execute(ctx context.Context, request ListEvidenceRequest)
 	result.SnapshotRef = referencePage.SnapshotRef
 	result.NextCursor = referencePage.NextCursor
 	for index, item := range referencePage.Items {
+		if err := ctx.Err(); err != nil {
+			return ResearchEvidencePage{}, err
+		}
 		if !validEvidenceOpaqueRef(item.NewsID) || !validEvidenceOpaqueRef(item.VersionID) ||
 			!validEvidenceOpaqueRef(item.ObservationID) ||
 			item.SystemObservedAt.IsZero() || !validEvidenceUTC(item.SystemObservedAt) ||
@@ -79,6 +85,9 @@ func (u *ListEvidence) Execute(ctx context.Context, request ListEvidenceRequest)
 			SystemAsOf: referencePage.SystemAsOf, NewsID: item.NewsID, VersionID: item.VersionID,
 		})
 		if err != nil {
+			return ResearchEvidencePage{}, err
+		}
+		if err := ctx.Err(); err != nil {
 			return ResearchEvidencePage{}, err
 		}
 		if record.NewsID != item.NewsID || record.VersionID != item.VersionID ||

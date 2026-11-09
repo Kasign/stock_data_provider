@@ -10,9 +10,11 @@ import (
 type evidenceSnapshotPageReaderStub struct {
 	page EvidenceSnapshotPage
 	err error
+	afterRead func()
 }
 
 func (s evidenceSnapshotPageReaderStub) Execute(context.Context, ListEvidenceRequest) (EvidenceSnapshotPage, error) {
+	if s.afterRead != nil { s.afterRead() }
 	return s.page, s.err
 }
 
@@ -21,10 +23,12 @@ type evidenceRecordReaderStub struct {
 	errForVersion string
 	err error
 	calls int
+	afterRead func()
 }
 
 func (s *evidenceRecordReaderStub) Execute(_ context.Context, request GetEvidenceRequest) (ResearchEvidenceRecord, error) {
 	s.calls++
+	if s.afterRead != nil { s.afterRead() }
 	if request.VersionID == s.errForVersion {
 		return ResearchEvidenceRecord{}, s.err
 	}
@@ -177,4 +181,27 @@ func TestListEvidenceRejectsMalformedPageMetadataBeforeResolvingRecords(t *testi
 			}
 		})
 	}
+}
+
+
+func TestListEvidenceStopsResolvingItemsWhenContextIsCanceled(t *testing.T) {
+	now := time.Date(2026, 11, 9, 12, 0, 0, 0, time.UTC)
+	request := validListEvidenceRequest(now)
+	observedAt := request.SystemAsOf.Add(-time.Minute)
+	page := EvidenceSnapshotPage{Items: []EvidenceSnapshotItem{
+		{NewsID:"news-1", VersionID:"version-1", ObservationID:"observation-1", SystemObservedAt:observedAt},
+		{NewsID:"news-2", VersionID:"version-2", ObservationID:"observation-2", SystemObservedAt:observedAt},
+	}, SnapshotRef:"snapshot-1", SystemAsOf:request.SystemAsOf}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	reader := &evidenceRecordReaderStub{records: map[string]ResearchEvidenceRecord{
+		"version-1": {NewsID:"news-1", VersionID:"version-1", ObservationID:"observation-1", SystemObservedAt:observedAt, SystemAsOf:request.SystemAsOf},
+		"version-2": {NewsID:"news-2", VersionID:"version-2", ObservationID:"observation-2", SystemObservedAt:observedAt, SystemAsOf:request.SystemAsOf},
+	}, afterRead: cancel}
+	usecase, _ := NewListEvidence(evidenceSnapshotPageReaderStub{page:page}, reader)
+	usecase.now = func() time.Time { return now }
+	if _, err := usecase.Execute(ctx, request); !errors.Is(err, context.Canceled) {
+		t.Fatalf("Execute() error = %v, want context.Canceled", err)
+	}
+	if reader.calls != 1 { t.Fatalf("canceled page resolved %d records, want 1", reader.calls) }
 }
