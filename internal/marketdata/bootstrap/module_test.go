@@ -43,6 +43,9 @@ func TestNewExposesApplicationHTTPAndDiagnostics(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
+	if module.InProcessHandler() == nil {
+		t.Fatal("InProcessHandler() returned nil")
+	}
 	if module.Handler() == nil {
 		t.Fatal("Handler() returned nil")
 	}

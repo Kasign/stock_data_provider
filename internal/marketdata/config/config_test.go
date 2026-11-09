@@ -20,6 +20,23 @@ func setDefaultProviderConfig(t *testing.T) {
 	t.Setenv("MARKET_DATA_PROVIDERS_CONFIG", file)
 }
 
+func TestLoadForInProcessDoesNotRequireDataAPIKey(t *testing.T) {
+	setDefaultProviderConfig(t)
+	t.Setenv("MARKET_DATA_API_KEY", "")
+	t.Setenv("MARKET_DATA_ALLOW_NO_STORAGE", "true")
+
+	cfg, err := LoadForInProcess()
+	if err != nil {
+		t.Fatalf("LoadForInProcess() error = %v", err)
+	}
+	if cfg.APIKey != "" {
+		t.Fatalf("in-process config APIKey = %q, want empty", cfg.APIKey)
+	}
+	if _, err := Load(); err == nil {
+		t.Fatal("Load() must continue requiring MARKET_DATA_API_KEY for standalone HTTP deployment")
+	}
+}
+
 func TestLoadProviderConfigAndEnvironmentOverrides(t *testing.T) {
 	file := filepath.Join(t.TempDir(), "providers.json")
 	data := `{"provider_priority":["eastmoney","tencent"],"adjustment_basis":"backward_adjusted","providers":{"eastmoney":{"enabled":true,"quote":false,"daily_bars":true},"tencent":{"enabled":true,"quote":true,"daily_bars":false}}}`

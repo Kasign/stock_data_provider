@@ -146,44 +146,65 @@ func NewWithApplication(apiKey, defaultAdjustment string, apps ApplicationDepend
 	}
 }
 func (s *Server) Handler() http.Handler {
-	mux := http.NewServeMux()
-	mux.HandleFunc("GET /health/live", s.live)
-	mux.HandleFunc("GET /health/ready", s.ready)
-	mux.Handle("GET /api/v1/quotes/{symbol}", s.auth(http.HandlerFunc(s.quote)))
-	mux.Handle("GET /api/v1/market/quotes", s.auth(http.HandlerFunc(s.batchQuotes)))
-	mux.Handle("GET /api/v1/market/stocks", s.auth(http.HandlerFunc(s.marketStocks)))
-	mux.Handle("GET /api/v1/bars/{symbol}/daily", s.auth(http.HandlerFunc(s.bars)))
-	mux.Handle("GET /api/v1/bundles/{symbol}", s.auth(http.HandlerFunc(s.bundle)))
-	mux.Handle("GET /api/v1/data-sources", s.auth(http.HandlerFunc(s.dataSources)))
-	mux.Handle("GET /api/v1/data-sources/diagnostics", s.auth(http.HandlerFunc(s.dataSourceDiagnostics)))
-	mux.Handle("POST /api/v1/data-sources/probe", s.auth(http.HandlerFunc(s.dataSourceProbe)))
-	mux.Handle("GET /api/v1/data-sources/probe/history", s.auth(http.HandlerFunc(s.dataSourceProbeHistory)))
-	mux.Handle("GET /api/v1/market/sectors", s.auth(http.HandlerFunc(s.sectorRankings)))
-	mux.Handle("GET /api/v1/market/indices", s.auth(http.HandlerFunc(s.indexQuotes)))
-	mux.Handle("GET /api/v1/market/valuations", s.auth(http.HandlerFunc(s.valuations)))
-	mux.Handle("GET /api/v1/market/index-catalog", s.auth(http.HandlerFunc(s.indexCatalog)))
-	mux.Handle("GET /api/v1/market/indices/{symbol}/constituents", s.auth(http.HandlerFunc(s.indexConstituents)))
-	mux.Handle("GET /api/v1/market/indices/{symbol}/daily", s.auth(http.HandlerFunc(s.indexDailyBars)))
-	mux.Handle("GET /api/v1/market/capital-flow", s.auth(http.HandlerFunc(s.marketCapitalFlow)))
-	mux.Handle("GET /api/v1/market/breadth", s.auth(http.HandlerFunc(s.marketBreadth)))
-	mux.Handle("GET /api/v1/market/sentiment", s.auth(http.HandlerFunc(s.marketSentiment)))
-	mux.Handle("GET /api/v1/market/sentiment/history", s.auth(http.HandlerFunc(s.marketSentimentHistory)))
-	mux.Handle("GET /api/v1/market/hot-stocks", s.auth(http.HandlerFunc(s.hotStocks)))
-	mux.Handle("GET /api/v1/market/limit-pools", s.auth(http.HandlerFunc(s.limitPool)))
-	mux.Handle("GET /api/v1/market/dragon-tiger", s.auth(http.HandlerFunc(s.dragonTiger)))
-	mux.Handle("GET /api/v1/market/trading-calendar", s.auth(http.HandlerFunc(s.tradingCalendar)))
-	mux.Handle("GET /api/v1/market/session", s.auth(http.HandlerFunc(s.marketSession)))
-	mux.Handle("GET /api/v1/stocks/search", s.auth(http.HandlerFunc(s.searchStocks)))
-	mux.Handle("GET /api/v1/stocks/{symbol}/trading-status", s.auth(http.HandlerFunc(s.securityTradingStatus)))
-	mux.Handle("GET /api/v1/stocks/{symbol}/price-limit-rule", s.auth(http.HandlerFunc(s.priceLimitRule)))
-	mux.Handle("GET /api/v1/stocks/{symbol}/profile", s.auth(http.HandlerFunc(s.stockBasic)))
-	mux.Handle("GET /api/v1/stocks/{symbol}/boards", s.auth(http.HandlerFunc(s.stockBoards)))
-	mux.Handle("GET /api/v1/stocks/{symbol}/announcements", s.auth(http.HandlerFunc(s.stockAnnouncements)))
-	mux.Handle("GET /api/v1/stocks/{symbol}/fundamentals", s.auth(http.HandlerFunc(s.fundamentals)))
-	mux.Handle("GET /api/v1/stocks/{symbol}/chip-distribution", s.auth(http.HandlerFunc(s.chipDistribution)))
-	mux.Handle("GET /api/v1/stocks/{symbol}/capital-flow", s.auth(http.HandlerFunc(s.capitalFlow)))
-	return securityHeaders(s.requestID(s.accessLog(s.timeoutContext(s.requestTimeout, mux))))
+	routes := s.routes(true, true)
+	return securityHeaders(s.requestID(s.accessLog(s.timeoutContext(s.requestTimeout, routes))))
 }
+
+// InProcessHandler 返回不包含认证和传输中间件的业务路由。
+// 仅允许挂载在 Root Server 已完成认证、授权、Request ID、超时和安全策略的可信进程内路由下。
+func (s *Server) InProcessHandler() http.Handler {
+	return s.routes(false, false)
+}
+
+func (s *Server) routes(requireAPIKey, includeHealth bool) *http.ServeMux {
+	mux := http.NewServeMux()
+	if includeHealth {
+		mux.HandleFunc("GET /health/live", s.live)
+		mux.HandleFunc("GET /health/ready", s.ready)
+	}
+	register := func(pattern string, handler http.Handler) {
+		if requireAPIKey {
+			mux.Handle(pattern, s.auth(handler))
+			return
+		}
+		mux.Handle(pattern, handler)
+	}
+	register("GET /api/v1/quotes/{symbol}", http.HandlerFunc(s.quote))
+	register("GET /api/v1/market/quotes", http.HandlerFunc(s.batchQuotes))
+	register("GET /api/v1/market/stocks", http.HandlerFunc(s.marketStocks))
+	register("GET /api/v1/bars/{symbol}/daily", http.HandlerFunc(s.bars))
+	register("GET /api/v1/bundles/{symbol}", http.HandlerFunc(s.bundle))
+	register("GET /api/v1/data-sources", http.HandlerFunc(s.dataSources))
+	register("GET /api/v1/data-sources/diagnostics", http.HandlerFunc(s.dataSourceDiagnostics))
+	register("POST /api/v1/data-sources/probe", http.HandlerFunc(s.dataSourceProbe))
+	register("GET /api/v1/data-sources/probe/history", http.HandlerFunc(s.dataSourceProbeHistory))
+	register("GET /api/v1/market/sectors", http.HandlerFunc(s.sectorRankings))
+	register("GET /api/v1/market/indices", http.HandlerFunc(s.indexQuotes))
+	register("GET /api/v1/market/valuations", http.HandlerFunc(s.valuations))
+	register("GET /api/v1/market/index-catalog", http.HandlerFunc(s.indexCatalog))
+	register("GET /api/v1/market/indices/{symbol}/constituents", http.HandlerFunc(s.indexConstituents))
+	register("GET /api/v1/market/indices/{symbol}/daily", http.HandlerFunc(s.indexDailyBars))
+	register("GET /api/v1/market/capital-flow", http.HandlerFunc(s.marketCapitalFlow))
+	register("GET /api/v1/market/breadth", http.HandlerFunc(s.marketBreadth))
+	register("GET /api/v1/market/sentiment", http.HandlerFunc(s.marketSentiment))
+	register("GET /api/v1/market/sentiment/history", http.HandlerFunc(s.marketSentimentHistory))
+	register("GET /api/v1/market/hot-stocks", http.HandlerFunc(s.hotStocks))
+	register("GET /api/v1/market/limit-pools", http.HandlerFunc(s.limitPool))
+	register("GET /api/v1/market/dragon-tiger", http.HandlerFunc(s.dragonTiger))
+	register("GET /api/v1/market/trading-calendar", http.HandlerFunc(s.tradingCalendar))
+	register("GET /api/v1/market/session", http.HandlerFunc(s.marketSession))
+	register("GET /api/v1/stocks/search", http.HandlerFunc(s.searchStocks))
+	register("GET /api/v1/stocks/{symbol}/trading-status", http.HandlerFunc(s.securityTradingStatus))
+	register("GET /api/v1/stocks/{symbol}/price-limit-rule", http.HandlerFunc(s.priceLimitRule))
+	register("GET /api/v1/stocks/{symbol}/profile", http.HandlerFunc(s.stockBasic))
+	register("GET /api/v1/stocks/{symbol}/boards", http.HandlerFunc(s.stockBoards))
+	register("GET /api/v1/stocks/{symbol}/announcements", http.HandlerFunc(s.stockAnnouncements))
+	register("GET /api/v1/stocks/{symbol}/fundamentals", http.HandlerFunc(s.fundamentals))
+	register("GET /api/v1/stocks/{symbol}/chip-distribution", http.HandlerFunc(s.chipDistribution))
+	register("GET /api/v1/stocks/{symbol}/capital-flow", http.HandlerFunc(s.capitalFlow))
+	return mux
+}
+
 func (s *Server) live(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, map[string]any{"status": "ok", "service": "market-data", "time": time.Now().UTC()})
 }

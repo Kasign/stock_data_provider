@@ -281,7 +281,7 @@ internal/
 
 ### M3：Root Server 同进程装配
 
-状态：`pending`
+状态：`in_progress`
 
 工作项：
 
@@ -809,3 +809,13 @@ internal/
 - 新增连接池所有权测试通过：borrowed Store.Close 不关闭调用方 Pool；owned Store.Close 关闭自有 Pool；nil DB 构造返回错误。
 - Root 全仓 gofmt 仍仅被 Research 两个文件阻断；不在 Data 分支修复。
 - M4-DB 的接口和所有权测试通过；Root Server 尚未实际注入 borrowed Store，因此不标记 Root/Data 共享 Pool 集成验收完成。
+
+
+### 2026-11-09：M3-1 拆分 Data HTTP 业务路由与传输中间件
+
+- Data HTTP Adapter 保留原 `Handler()` 作为独立部署入口：33 条业务路由仍逐条执行 Data API Key 认证，健康路由仍公开，外层 Request ID、Access Log、Timeout Context 和 Security Header 行为不变。
+- 新增 `InProcessHandler()`，只注册业务路由，不包含 Data API Key、Data Request ID、Access Log、Timeout Context、Security Header，也不暴露 Data 独立健康路由；Root Server 必须在外层提供可信认证/授权、Request ID、超时和安全策略后才能挂载。
+- `bootstrap.Module` 同时暴露兼容 `Handler()` 与 `InProcessHandler()`，两者由同一 HTTP Server/同一组 Application Dependencies 构造，避免双实例业务状态。
+- 新增 `config.LoadForInProcess()`：只跳过 Data HTTP API Key 校验，其他 Provider Secret、配置范围、存储约束仍执行原有校验；独立部署的 `config.Load()` 继续强制要求 Data API Key。
+- 新增路由边界测试：进程内业务路由无需 Data API Key，Request ID 不被 Data 覆盖，Data health 路由不对 Root 暴露；新增配置测试证明独立部署仍要求 API Key。
+- 本批未修改 Root Server、认证中间件或 Platform 代码；尚未把 InProcessHandler 实际挂载到 Root Router，不计 Root 集成验收完成。

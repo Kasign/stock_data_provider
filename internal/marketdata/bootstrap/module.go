@@ -52,6 +52,7 @@ type ProviderSummary struct {
 // Module 封装 Data 应用、HTTP Handler、诊断能力及模块自有资源。
 type Module struct {
 	handler        http.Handler
+	inProcessHandler http.Handler
 	application    app.MarketDataReader
 	diagnostics    Diagnostics
 	summary        ProviderSummary
@@ -109,6 +110,14 @@ func (m *Module) Handler() http.Handler {
 }
 
 // Application 返回供模块内消费者调用的窄化 Application Port。
+// InProcessHandler 返回由 Root Server 负责外层认证和传输策略的业务路由。
+func (m *Module) InProcessHandler() http.Handler {
+	if m == nil {
+		return nil
+	}
+	return m.inProcessHandler
+}
+
 func (m *Module) Application() app.MarketDataReader {
 	if m == nil {
 		return nil
@@ -431,6 +440,7 @@ func (m *Module) build(cfg config.Config) error {
 	}
 	m.application = reader
 	m.handler = handler.Handler()
+	m.inProcessHandler = handler.InProcessHandler()
 	m.summary = ProviderSummary{
 		All:       providerNames(allProviders),
 		Quotes:    providerNames(quoteProviders),

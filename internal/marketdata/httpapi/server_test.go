@@ -160,6 +160,28 @@ func (httpMarketCapitalFlowFake) FetchMarketCapitalFlow(_ context.Context, start
 	}, nil
 }
 
+func TestInProcessHandlerDelegatesTransportSecurityToRootServer(t *testing.T) {
+	server := NewWithApplication("", "forward_adjusted", ApplicationDependencies{}, nil, 0, 0, nil)
+	handler := server.InProcessHandler()
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/data-sources", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("in-process route status = %d, want %d; body=%s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	if got := rec.Header().Get("X-Request-ID"); got != "" {
+		t.Fatalf("in-process handler must not replace Root Request ID, got %q", got)
+	}
+
+	healthReq := httptest.NewRequest(http.MethodGet, "/health/live", nil)
+	healthRec := httptest.NewRecorder()
+	handler.ServeHTTP(healthRec, healthReq)
+	if healthRec.Code != http.StatusNotFound {
+		t.Fatalf("in-process health route status = %d, want 404; Root Server owns health routes", healthRec.Code)
+	}
+}
+
 func TestBuildSourceStatusesUsesOnlyRegisteredProviderCapabilities(t *testing.T) {
 	p := httpFakeProvider{}
 	sources := BuildSourceStatuses(SourceCapabilities{

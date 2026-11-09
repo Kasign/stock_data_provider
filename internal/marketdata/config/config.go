@@ -135,7 +135,17 @@ func defaultProviderFile() providerFile {
 	}
 }
 
+// Load 加载独立 HTTP 部署配置，要求配置 Data API Key。
 func Load() (Config, error) {
+	return load(true)
+}
+
+// LoadForInProcess 加载同进程模块配置；外部入口认证由 Root Server 负责，因此不要求 Data API Key。
+func LoadForInProcess() (Config, error) {
+	return load(false)
+}
+
+func load(requireHTTPAPIKey bool) (Config, error) {
 	if err := validateEnvironment(); err != nil {
 		return Config{}, err
 	}
@@ -282,7 +292,7 @@ func Load() (Config, error) {
 	if dsnErr != nil {
 		return cfg, dsnErr
 	}
-	if !validSecret(cfg.APIKey) {
+	if requireHTTPAPIKey && !validSecret(cfg.APIKey) {
 		return cfg, errors.New("MARKET_DATA_API_KEY must be a non-placeholder secret with at least 32 characters")
 	}
 	for name, endpoint := range map[string]string{
