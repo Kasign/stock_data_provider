@@ -652,6 +652,22 @@ flowchart TD
 - Migration 恢复判定测试：`e0affc01bc1ebf943ca701b05ee12f2bc9285c66`；补齐测试 fmt 导入：`389694c0b8b49e37c4cfe6f23bbad179c773d11c`。
 - 本批次尚未运行 gofmt、Server 包测试或 Go Workflow；不标记为通过。
 
+### 12.26 SRV-006 共享资源关闭顺序显式化（2026-11-09）
+
+#### Review 发现与修正
+
+- 原 Bootstrap 通过两个分散的 defer 隐式依赖 LIFO 顺序保证 Lifecycle.Stop 先于 Resources.Close。虽然当前顺序正确，但后续调整 defer 位置容易无意破坏消费者与共享资源的所有权边界。
+- 现改为单一关闭路径：先调用 Lifecycle.Stop，再关闭 Resources；即使消费者停止返回错误，也继续关闭共享资源，并通过 `errors.Join` 同时保留两类关闭错误。
+- 共享资源打开后立即注册关闭路径；若 Migration、旧 Analysis 构造或模块装配在 Lifecycle 创建前失败，仍会执行资源关闭。
+- 关闭预算在进程配置阶段确定：API/All 角色使用 HTTP Shutdown Timeout，Worker-only 使用 10 秒默认值。
+- 新增测试验证消费者停止先于资源关闭、两类错误均保留，以及 Lifecycle 尚未创建时仍能关闭资源。
+
+#### 提交与验证
+
+- Bootstrap 实现：`3599b1b5a01fd1fa06dcaec53e0b073d888f0ada`。
+- 关闭顺序测试：`d7a445abee6a2f005cf2990d40fc6b7fe565c469`。
+- 本批次尚未运行 gofmt、Server 包测试或 Go Workflow；真实容器退出仍需部署验收。
+
 ## 13. 分支与协作规则
 
 - 本规划及 Server 代码实施位于 `feat/research-analysis-flow-native-go`。
