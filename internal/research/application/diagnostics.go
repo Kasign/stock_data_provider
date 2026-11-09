@@ -46,7 +46,7 @@ func (s *Service) BuildEventCheck(ctx context.Context, ref EventRef, required bo
 		return platformdiagnostics.Check{}, mapRepositoryError(err)
 	}
 	if err := value.Validate(); err != nil {
-		return platformdiagnostics.Check{}, applicationFault("internal", "stored_event_invalid", "Stored Research Event is invalid", err)
+		return platformdiagnostics.Check{}, applicationFault(fault.ClassInternal, "stored_event_invalid", "Stored Research Event is invalid", err)
 	}
 	return researchdiagnostics.NewEventCheck("research.event.snapshot", "Research Event 快照", required, value)
 }
@@ -54,7 +54,7 @@ func (s *Service) BuildEventCheck(ctx context.Context, ref EventRef, required bo
 // BuildClaimCheck 从指定的不可变 Claim 版本构造诊断项。
 func (s *Service) BuildClaimCheck(ctx context.Context, ref ClaimRef, required bool) (platformdiagnostics.Check, error) {
 	if s == nil || s.claims == nil {
-		return platformdiagnostics.Check{}, applicationFault("internal", "research_claim_repository_not_configured", "Research Claim Repository is not configured", researcherrors.ErrInvalidRepository)
+		return platformdiagnostics.Check{}, applicationFault(fault.ClassInternal, "research_claim_repository_not_configured", "Research Claim Repository is not configured", researcherrors.ErrInvalidRepository)
 	}
 	if ctx == nil || strings.TrimSpace(ref.ClaimID) == "" || ref.ClaimVersion < 1 {
 		return platformdiagnostics.Check{}, validationFault("invalid_claim_ref", "Claim reference is invalid", nil)
@@ -64,7 +64,7 @@ func (s *Service) BuildClaimCheck(ctx context.Context, ref ClaimRef, required bo
 		return platformdiagnostics.Check{}, mapRepositoryError(err)
 	}
 	if err := value.Validate(); err != nil {
-		return platformdiagnostics.Check{}, applicationFault("internal", "stored_claim_invalid", "Stored Research Claim is invalid", err)
+		return platformdiagnostics.Check{}, applicationFault(fault.ClassInternal, "stored_claim_invalid", "Stored Research Claim is invalid", err)
 	}
 	return researchdiagnostics.NewClaimCheck("research.claim.snapshot", "Research Claim 快照", required, value)
 }
