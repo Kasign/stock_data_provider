@@ -12,7 +12,6 @@ import (
 
 	mysql "github.com/go-sql-driver/mysql"
 
-	"example.com/stock-analysis-flow/internal/notification/application"
 	"example.com/stock-analysis-flow/internal/notification/domain"
 	platformstorage "example.com/stock-analysis-flow/internal/platform/storage"
 )
@@ -122,5 +121,4 @@ func TestNotificationMariaDBSubscriptionRepositoryIntegration(t *testing.T) {
 		t.Fatalf("owner mutation must conflict: %v", err)
 	}
 
-	_ = application.ErrDeliveryNotFound
 }
