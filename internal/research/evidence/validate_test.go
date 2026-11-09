@@ -293,3 +293,52 @@ func TestEvidenceValidateRejectsZeroOffsetNonUTCLocations(t *testing.T) {
 		})
 	}
 }
+
+func TestEvidenceJSONSerializationPreservesUTCNanosecondsAndExplicitNulls(t *testing.T) {
+	value := goldenEvidence(t)
+	value.SystemObservedAt = time.Date(2026, 11, 5, 8, 1, 2, 123456789, time.UTC)
+	value.SystemAsOf = time.Date(2026, 11, 6, 5, 0, 3, 987654321, time.UTC)
+	value.SubjectRefs = []string{}
+	value.Limitations = []string{}
+	value.SourceVersion = nil
+	value.SourceLocator = nil
+	value.ClaimRef = nil
+	value.PublishedAt = nil
+	value.AvailableAt = nil
+	value.ValidTimeStart = nil
+	value.ValidTimeEnd = nil
+	value.Confidence = nil
+	value.ConfidenceMethod = nil
+	value.ConfidenceMethodVersion = nil
+	setFingerprint(t, &value)
+
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		t.Fatalf("Marshal() error = %v", err)
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(encoded, &fields); err != nil {
+		t.Fatalf("Unmarshal raw fields: %v", err)
+	}
+	want := map[string]string{
+		"system_observed_at":        "\"2026-11-05T08:01:02.123456789Z\"",
+		"system_as_of":              "\"2026-11-06T05:00:03.987654321Z\"",
+		"subject_refs":              "[]",
+		"limitations":               "[]",
+		"source_version":            "null",
+		"source_locator":            "null",
+		"claim_ref":                 "null",
+		"published_at":              "null",
+		"available_at":              "null",
+		"valid_time_start":          "null",
+		"valid_time_end":            "null",
+		"confidence":                "null",
+		"confidence_method":         "null",
+		"confidence_method_version": "null",
+	}
+	for name, expected := range want {
+		if got := string(fields[name]); got != expected {
+			t.Errorf("%s = %s, want %s", name, got, expected)
+		}
+	}
+}
