@@ -4,7 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"compress/zlib"
-	"context"
+	"context"\n\t"errors"
 	"encoding/json"
 	"fmt"
 	"hash/crc32"
@@ -957,5 +957,49 @@ func TestParseKLinePageRetainsUnsupportedCellTypeIssue(t *testing.T) {
 	}
 	if page.rows[0].Close != "" {
 		t.Fatalf("invalid object cell must not be converted into a close price: %+v", page.rows[0])
+	}
+}
+
+
+func TestParseQuarterlyFinancialPageReportsRequiredStructureFieldEvidence(t *testing.T) {
+	spec := quarterlyFinancialSpecs["profitability"]
+	cases := []struct {
+		name, field, code, expected string
+		mutate func([]any)
+	}{
+		{name: "code non-scalar", field: "code", code: "invalid_field", expected: "string scalar", mutate: func(row []any) { row[0] = map[string]any{"unexpected": "object"} }},
+		{name: "statDate non-scalar", field: "statDate", code: "invalid_field", expected: "string scalar", mutate: func(row []any) { row[2] = []any{"2026-06-30"} }},
+		{name: "security mismatch", field: "code", code: "symbol_mismatch", expected: "sh.600519", mutate: func(row []any) { row[0] = "sz.000001" }},
+		{name: "report period mismatch", field: "statDate", code: "report_period_mismatch", expected: "2026-06-30", mutate: func(row []any) { row[2] = "2026-03-31" }},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			row := make([]any, len(spec.fields))
+			for index, field := range spec.fields {
+				switch field {
+				case "code": row[index] = "sh.600519"
+				case "pubDate": row[index] = "2026-08-29"
+				case "statDate": row[index] = "2026-06-30"
+				default: row[index] = "1.25"
+				}
+			}
+			tc.mutate(row)
+			raw, err := json.Marshal(map[string]any{"record": [][]any{row}})
+			if err != nil { t.Fatal(err) }
+			body := strings.Join([]string{
+				"0", "success", spec.method, "anonymous", "1", strconv.Itoa(quarterlyFinancialPageSize),
+				string(raw), "sh.600519", "2026", "2", strings.Join(spec.fields, ","),
+			}, messageSplit)
+			_, err = parseQuarterlyFinancialPage(body, spec, "anonymous", "sh.600519", 2026, 2)
+			var structureErr *QuarterlyFinancialStructureError
+			if !errors.As(err, &structureErr) {
+				t.Fatalf("expected typed structure error, got %v", err)
+			}
+			if structureErr.SourceField != tc.field || structureErr.Code != tc.code ||
+				structureErr.Expected != tc.expected || structureErr.ActualType == "" ||
+				structureErr.Preview == "" || structureErr.RowIndex != 0 {
+				t.Fatalf("unexpected structure evidence: %+v", structureErr)
+			}
+		})
 	}
 }
