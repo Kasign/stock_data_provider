@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"reflect"
+	"sync"
 	"testing"
 
 	platformfault "example.com/stock-analysis-flow/internal/platform/fault"
@@ -191,5 +192,54 @@ func TestRegisterSortsMigrationsByVersion(t *testing.T) {
 		if got[i].Version != want[i] {
 			t.Fatalf("migration version at index %d = %d, want %d", i, got[i].Version, want[i])
 		}
+	}
+}
+
+func TestRegistryConcurrentRegisterAndNamespaces(t *testing.T) {
+	registry := NewRegistry()
+	migration := []platformstorage.Migration{{Version: 1, Description: "init", Statements: []string{"SELECT 1"}}}
+	start := make(chan struct{})
+	var workers sync.WaitGroup
+	for i := 0; i < 32; i++ {
+		workers.Add(1)
+		go func(index int) {
+			defer workers.Done()
+			<-start
+			if err := registry.Register(fmt.Sprintf("module-%02d", index), migration); err != nil {
+				t.Errorf("Register() error = %v", err)
+			}
+			_ = registry.Namespaces()
+		}(i)
+	}
+	close(start)
+	workers.Wait()
+	if got := len(registry.Namespaces()); got != 32 {
+		t.Fatalf("registered namespace count = %d, want 32", got)
+	}
+}
+
+func TestRegistryConcurrentDuplicateRegistrationHasSingleWinner(t *testing.T) {
+	registry := NewRegistry()
+	migration := []platformstorage.Migration{{Version: 1, Description: "init", Statements: []string{"SELECT 1"}}}
+	start := make(chan struct{})
+	var workers sync.WaitGroup
+	var mu sync.Mutex
+	successes := 0
+	for i := 0; i < 16; i++ {
+		workers.Add(1)
+		go func() {
+			defer workers.Done()
+			<-start
+			if err := registry.Register("research", migration); err == nil {
+				mu.Lock()
+				successes++
+				mu.Unlock()
+			}
+		}()
+	}
+	close(start)
+	workers.Wait()
+	if successes != 1 {
+		t.Fatalf("successful registrations = %d, want exactly 1", successes)
 	}
 }
