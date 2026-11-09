@@ -14,6 +14,7 @@ import (
 	mysql "github.com/go-sql-driver/mysql"
 
 	platformstorage "example.com/stock-analysis-flow/internal/platform/storage"
+	researchapp "example.com/stock-analysis-flow/internal/research/application"
 	researchclaim "example.com/stock-analysis-flow/internal/research/claim"
 	researchcontext "example.com/stock-analysis-flow/internal/research/context"
 	researchevent "example.com/stock-analysis-flow/internal/research/event"
@@ -199,6 +200,67 @@ func TestResearchOutboxClaimRetryAndConfirmation(t *testing.T) {
 	if attempts != 2 || status != "published" {
 		t.Fatalf("Outbox attempts/status = %d/%s, want 2/published", attempts, status)
 	}
+}
+
+func TestResearchOutboxConcurrentClaimsDoNotDuplicateLease(t *testing.T) {
+	db := openResearchIntegrationDB(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+
+	now := time.Date(2026, 11, 9, 7, 0, 0, 123456789, time.UTC)
+	eventID := fmt.Sprintf("event-outbox-concurrent-%d", time.Now().UnixNano())
+	repo, err := NewEventRepository(db, func() time.Time { return now })
+	if err != nil { t.Fatal(err) }
+	t.Cleanup(func() {
+		_, _ = db.ExecContext(context.Background(), "DELETE FROM research_notification_outbox WHERE subject_ref=?", "research-event:"+eventID)
+		_, _ = db.ExecContext(context.Background(), "DELETE FROM research_event_versions WHERE event_id=?", eventID)
+		_, _ = db.ExecContext(context.Background(), "DELETE FROM research_aggregate_heads WHERE aggregate_type='event' AND aggregate_id=?", eventID)
+	})
+
+	value := researchevent.ResearchEvent{
+		EventID: eventID, EventVersion: 1, EventType: "integration_fixture",
+		Title: "Concurrent Outbox claim fixture", Status: researchevent.StatusDetected,
+		SubjectRefs: []string{}, EvidenceRefs: []string{},
+		SystemObservedAt: now, SystemAsOf: now,
+		ImpactHypothesisRefs: []string{}, InvalidationConditions: []string{},
+		Uncertainty: []string{}, SourceTimes: []researchevent.EventSourceTime{},
+	}
+	if err := repo.AppendWithLifecycle(ctx, value, nil, "corr_concurrent_claim"); err != nil { t.Fatalf("append Event and Outbox: %v", err) }
+
+	type claimResult struct { worker string; values []researchapp.NotificationEventEnvelope; err error }
+	start := make(chan struct{})
+	results := make(chan claimResult, 2)
+	var workers sync.WaitGroup
+	for _, worker := range []string{"worker_concurrent_a", "worker_concurrent_b"} {
+		worker := worker
+		workers.Add(1)
+		go func() {
+			defer workers.Done()
+			<-start
+			values, err := repo.base.ClaimOutbox(ctx, worker, 1, now.Add(time.Minute))
+			results <- claimResult{worker: worker, values: values, err: err}
+		}()
+	}
+	close(start)
+	workers.Wait()
+	close(results)
+
+	claimedCount := 0
+	owners := make(map[string]struct{})
+	for result := range results {
+		if result.err != nil { t.Fatalf("%s claim failed: %v", result.worker, result.err) }
+		claimedCount += len(result.values)
+		for _, envelope := range result.values {
+			if envelope.EventID == "" || envelope.LeaseToken == "" { t.Fatalf("%s received incomplete lease: %+v", result.worker, envelope) }
+			owners[result.worker] = struct{}{}
+		}
+	}
+	if claimedCount != 1 || len(owners) != 1 { t.Fatalf("concurrent claims acquired %d leases across %d workers, want exactly one lease", claimedCount, len(owners)) }
+
+	var status, owner, token string
+	var attempts int
+	if err := db.QueryRowContext(ctx, "SELECT delivery_status, lease_owner, lease_token, attempt_count FROM research_notification_outbox WHERE subject_ref=?", "research-event:"+eventID).Scan(&status, &owner, &token, &attempts); err != nil { t.Fatalf("read concurrently claimed Outbox state: %v", err) }
+	if status != "leased" || owner == "" || token == "" || attempts != 1 { t.Fatalf("unexpected concurrent Outbox state: status=%s owner=%s token_set=%t attempts=%d", status, owner, token != "", attempts) }
 }
 
 func TestResearchSQLRepositoriesAppendAndReadVersions(t *testing.T) {
