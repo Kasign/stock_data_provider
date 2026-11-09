@@ -73,8 +73,11 @@ type CollectedSourceEntry struct {
 	Content   domain.ContentLayers
 }
 
-// CollectSourceResult 是单个 Source Endpoint 的在线 Feed 采集结果。
+const sourceCollectionResultSeal = "news.collect_source.result.v1"
+
+// collectionSeal 仅由 CollectSource 设置，阻止跨包调用方手工构造可持久化结果。
 type CollectSourceResult struct {
+	collectionSeal string
 	SourceID                string
 	EndpointID              string
 	SourcePolicyVersionID   string
@@ -218,6 +221,7 @@ func (u *CollectSource) Execute(ctx context.Context, request CollectSourceReques
 	}
 
 	result := CollectSourceResult{
+		collectionSeal:         sourceCollectionResultSeal,
 		SourceID:                request.SourceID,
 		EndpointID:              request.EndpointID,
 		SourcePolicyVersionID:   registration.SourcePolicyVersionID,
