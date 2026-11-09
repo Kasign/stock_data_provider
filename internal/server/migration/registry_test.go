@@ -2,8 +2,8 @@ package migration
 
 import (
 	"context"
-	"errors"
 	"database/sql"
+	"errors"
 	"fmt"
 	"reflect"
 	"sync"

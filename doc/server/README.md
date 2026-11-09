@@ -1216,3 +1216,9 @@ Lifecycle.Stop 原实现通过 stopped 标记保证重复调用幂等，但并�
 - 删除 Server 对不存在 sentinel 的引用，不通过字符串解析或复制 Platform 私有错误常量伪造稳定分类。公开 Fault Code `platform.storage.migration_requires_recovery`、`migration_apply_failed`、`migration_record_failed`、`migration_lock_release_failed` 仍按原规则标记人工恢复。
 - 未知历史版本、缺失中间版本、checksum 不匹配暂时归入 `server.migration.namespace_failed` 且不设置 recovery_required；这是明确的 Platform 契约缺口，需 Platform 提供稳定 Fault Code 后再精确分类。更新回归测试和 12.25 节描述。
 - 同一 Run 中其余模块编译/测试失败属于 News、LLM、Notification、Quant、Research、Researchflow；Server 不越权修改。LLM 包未编译成功也连带阻断 `server/llmtransport` 测试执行。
+
+
+### 12.46 Migration 错误边界测试格式修正（2026-11-09）
+
+- Run `42617966003` 对应 SHA `03af6a2` 在 gofmt 门禁发现 `registry_test.go` 新增标准库导入顺序不符合 gofmt；根模块测试未执行。
+- 已按门禁输出调整导入顺序；无业务代码变化，后续以新 SHA 重新触发 Workflow。
