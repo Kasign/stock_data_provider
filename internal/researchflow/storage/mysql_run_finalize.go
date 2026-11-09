@@ -16,7 +16,7 @@ import (
 var ErrRunAlreadyFinalized = errors.New("Researchflow run is already finalized")
 
 const (
-	runFinalizedEventType = "researchflow.run.finalized"
+	runFinalizedEventType   = "researchflow.run.finalized"
 	runFinalizedEventSchema = "1.0.0"
 )
 
@@ -24,14 +24,14 @@ const (
 // terminal result. The Application layer must calculate and validate Summary
 // and TerminalStatus; this method enforces the cross-row invariants atomically.
 type RunFinalization struct {
-	RunRef            string
-	ExpectedVersion   uint64
-	ResultSummaryRef  string
+	RunRef               string
+	ExpectedVersion      uint64
+	ResultSummaryRef     string
 	SummarySchemaVersion string
-	OutboxRef         string
-	TerminalStatus    domain.RunStatus
-	TerminationReason string
-	Summary           domain.ResultSummary
+	OutboxRef            string
+	TerminalStatus       domain.RunStatus
+	TerminationReason    string
+	Summary              domain.ResultSummary
 }
 
 // FinalizeRun atomically fixes ResultSummary, terminal Run state and the
@@ -169,14 +169,14 @@ func (r *MySQLRunRepository) FinalizeRun(ctx context.Context, input RunFinalizat
 	}
 	finishedAt := formatResearchflowTimeValue(now)
 	eventPayload, err := json.Marshal(struct {
-		EventType string `json:"event_type"`
-		SchemaVersion string `json:"schema_version"`
-		RunRef string `json:"run_ref"`
-		RunStatus domain.RunStatus `json:"run_status"`
-		ResultSummaryRef string `json:"result_summary_ref"`
-		TerminationReason string `json:"termination_reason,omitempty"`
-		CorrelationID string `json:"correlation_id"`
-		FinishedAt string `json:"finished_at"`
+		EventType         string           `json:"event_type"`
+		SchemaVersion     string           `json:"schema_version"`
+		RunRef            string           `json:"run_ref"`
+		RunStatus         domain.RunStatus `json:"run_status"`
+		ResultSummaryRef  string           `json:"result_summary_ref"`
+		TerminationReason string           `json:"termination_reason,omitempty"`
+		CorrelationID     string           `json:"correlation_id"`
+		FinishedAt        string           `json:"finished_at"`
 	}{
 		EventType: runFinalizedEventType, SchemaVersion: runFinalizedEventSchema,
 		RunRef: input.RunRef, RunStatus: input.TerminalStatus,

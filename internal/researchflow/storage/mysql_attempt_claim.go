@@ -158,7 +158,7 @@ func (r *MySQLRunRepository) ClaimAttempt(
 		// timed-out Attempt. Missing retry_at/history is corrupt state, not due work.
 		if domain.RunStatus(runStatus) != domain.RunRunning || !retryAt.Valid ||
 			!hasAttempt || (domain.AttemptStatus(currentStatus) != domain.AttemptFailed &&
-				domain.AttemptStatus(currentStatus) != domain.AttemptTimedOut) {
+			domain.AttemptStatus(currentStatus) != domain.AttemptTimedOut) {
 			return domain.Attempt{}, false, ErrClaimStageUnavailable
 		}
 		retryTime, parseErr := parseNullableResearchflowTime(retryAt)

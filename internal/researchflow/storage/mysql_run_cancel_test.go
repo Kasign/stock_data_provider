@@ -65,7 +65,7 @@ func TestMariaDBBeginRunCancellationLinearizesWorkerOperations(t *testing.T) {
 	now := time.Now().UTC()
 	fingerprint := "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 	templateFingerprint := "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
-	runRef, runningStageRef, readyStageRef := "cancel-run-" + suffix, "cancel-running-" + suffix, "cancel-ready-" + suffix
+	runRef, runningStageRef, readyStageRef := "cancel-run-"+suffix, "cancel-running-"+suffix, "cancel-ready-"+suffix
 	record := application.CreateRunRecord{
 		Scope:       application.IdempotencyScope{CallerRef: "researchflow-cancel-test", Operation: "CreateRun", Key: "cancel-" + suffix},
 		Fingerprint: fingerprint,

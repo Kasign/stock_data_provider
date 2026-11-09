@@ -12,7 +12,7 @@ import (
 // OutboxMessage is the application-facing delivery contract. The payload and
 // idempotency key are immutable; lease metadata fences concurrent publishers.
 type OutboxMessage struct {
-	Ref               string
+	Ref                string
 	RunRef             string
 	EventType          string
 	SchemaVersion      string
