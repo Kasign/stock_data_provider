@@ -69,6 +69,9 @@ func (r *MySQLRunRepository) ExpireRunDeadline(
 	if persistedDeadline.After(now) {
 		return false, version, ErrRunDeadlineNotReached
 	}
+	if terminationReason.Valid && terminationReason.String == "deadline_exceeded" {
+		return false, version, nil
+	}
 	if terminationReason.Valid && terminationReason.String != "" && terminationReason.String != "deadline_exceeded" {
 		return false, version, errors.New("Researchflow Run has a conflicting termination reason")
 	}
