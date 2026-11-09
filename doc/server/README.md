@@ -308,7 +308,7 @@ Server 不重写模块业务 Handler 的校验和领域错误，不在路由层�
 
 ### SRV-005：HTTP Transport
 
-- 状态：未开始
+- 状态：进行中（Health/Readiness 已接入统一宿主；旧 Analysis 路由开始纳入 Platform 显式认证 Router）
 - 前置：SRV-004；认证、Fault、Request ID 等公共契约可用
 - 工作内容：建立 Router、通用中间件、统一错误映射、路由注册和 OpenAPI 汇总机制。
 - 交付物：HTTP Server、路由清单、安全配置和 Transport 测试。
@@ -552,7 +552,7 @@ Server 层完成不是“服务能够启动”这么简单。至少同时满足�
 | SRV-002 | 进行中 | 已创建 internal/server/bootstrap，入口已委托 Bootstrap；HTTP 配置和 Platform 资源创建已拆出；剩余模块 Registry 与统一装配 |
 | SRV-003 | 进行中 | DB、Redis、HTTP Client 已由 Resources 统一创建和关闭；后续接入模块资源注入与诊断贡献项 |
 | SRV-004 | 阻塞 | 已复核模块接入面；Researchflow/Quant/LLM/Notification 缺少完整生产装配入口，News/Research 也有关键查询/授权接入缺口；详见 12.6 节 |
-| SRV-005 | 进行中 | 已由 Server 统一宿主接管 `/healthz`、`/readyz`，旧 Analysis API 暂作根路由回退；业务路由和认证授权迁移仍待完成 |
+| SRV-005 | 进行中 | `/healthz` 匿名白名单；`/readyz`、旧 Analysis 业务路由和根信息路由由 Platform Security Router 显式 owner 认证；模块业务 Handler/Scope 映射、统一 Fault 映射和中间件仍待接入 |
 | SRV-006 | 未开始 | 运行角色和生命周期尚未建立 |
 | SRV-007 | 进行中 | 已建立 Server Migration Registry，并注册 News/Research/Notification；显式配置执行；其他模块 Migration 和 MariaDB 集成验收待完成，详见 12.7 节 |
 | SRV-008 | 待契约 | Dispatcher 所有权未冻结 |
@@ -562,3 +562,14 @@ Server 层完成不是“服务能够启动”这么简单。至少同时满足�
 | SRV-012 | 未开始 | 等待新链路验收 |
 
 > 状态说明以本文件编写时已检查的 Server 代码基线为起点。每次继续实施前，必须重新核对当前分支 HEAD 和对应模块契约，不得把历史状态当作实时状态。
+
+
+### 12.9 SRV-005 HTTP 路由认证第一阶段（2026-11-09）
+
+- 新增 Server Security 配置，启动时必须读取 `PLATFORM_ADMIN_TOKEN`；缺失或格式不符合 Platform 要求时拒绝启动，不以匿名/空凭证降级运行。
+- Bootstrap 复用 Platform `security.Authenticator` 与 `security.Router`，没有在 Server 复制 Token 摘要、常量时间比较或 Scope 校验实现。
+- 当前路由策略明确：`GET/HEAD /healthz` 仅匿名白名单；`GET/HEAD /readyz`、根服务信息、旧 Analysis Run/Task 读写路由均要求 owner Bearer Token。当前没有任何业务 service Scope 被虚构或开放。
+- 移除旧 API 的根路径 catch-all 作为 Root Server 路由注册方式，改为逐条显式注册受保护路径；未登记路径由 Router 返回 404。
+- 新增配置测试和 Router 访问矩阵测试，覆盖匿名 liveness、readiness 未认证、业务路由未认证/owner 认证、未注册路径。
+- 当前属于兼容期安全收口：旧 Analysis 仍是业务 Handler 的所有者；待各模块公开 Handler 和真实 Scope 契约具备后，按模块替换 owner-only 临时策略。Readiness 仅对 owner 开放，部署探针需使用受保护的内网代理/认证探针配置。
+- 本轮尚未执行 gofmt/go test/CI；不能标记编译或测试通过。

@@ -21,6 +21,7 @@ import (
 	"example.com/stock-analysis-flow/internal/platform/config"
 	"example.com/stock-analysis-flow/internal/platform/httpapi"
 	platformstorage "example.com/stock-analysis-flow/internal/platform/storage"
+	platformsecurity "example.com/stock-analysis-flow/internal/platform/security"
 	"example.com/stock-analysis-flow/internal/platform/taskqueue"
 	researchstorage "example.com/stock-analysis-flow/internal/research/storage"
 	serverconfig "example.com/stock-analysis-flow/internal/server/config"
@@ -55,6 +56,14 @@ func Run(ctx context.Context) error {
 	migrationCfg, err := serverconfig.LoadMigration(config.NewEnv())
 	if err != nil {
 		return fmt.Errorf("Migration 配置无效: %w", err)
+	}
+	securityCfg, err := serverconfig.LoadSecurity(config.NewEnv())
+	if err != nil {
+		return fmt.Errorf("安全认证配置无效: %w", err)
+	}
+	authenticator, err := platformsecurity.NewAuthenticator(securityCfg.OwnerToken, nil)
+	if err != nil {
+		return fmt.Errorf("创建 HTTP 认证器失败: %w", err)
 	}
 
 	startupCtx, startupCancel := context.WithTimeout(ctx, 15*time.Second)
@@ -125,14 +134,14 @@ func Run(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("创建 Health/Readiness Handler 失败: %w", err)
 	}
-	mux := http.NewServeMux()
-	mux.Handle("/healthz", healthHandler)
-	mux.Handle("/readyz", healthHandler)
-	mux.Handle("/", api.Handler())
+	handler, err := newHTTPHandler(authenticator, healthHandler, api.Handler())
+	if err != nil {
+		return fmt.Errorf("注册 HTTP 路由失败: %w", err)
+	}
 
 	server := &http.Server{
 		Addr:              httpConfig.Address,
-		Handler:           mux,
+		Handler:           handler,
 		ReadHeaderTimeout: httpConfig.ReadHeaderTimeout,
 		ReadTimeout:       httpConfig.ReadTimeout,
 		WriteTimeout:      httpConfig.WriteTimeout,
