@@ -63,7 +63,9 @@ jobs:
       - name: Run one-time source migration
         run: bash scripts/migrate-market-data-module.sh
       - name: Tidy root Go module dependencies
-        run: go mod tidy
+        run: |
+          go mod tidy
+          git add go.mod go.sum
       - name: Commit and push migration
         id: commit
         run: |
