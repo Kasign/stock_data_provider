@@ -48,7 +48,12 @@ func (r *MySQLDeliveryRepository) ReconcileUnknown(
 		return fmt.Errorf("notification storage: lock unknown delivery: %w", err)
 	}
 	if current.Status != domain.DeliveryUnknown || current.Version != expectedVersion ||
-		!sameDeliveryIdentity(current, next) || next.UpdatedAt.Before(current.UpdatedAt) {
+		!sameDeliveryIdentity(current, next) ||
+		current.AttemptCount != next.AttemptCount ||
+		current.MaxAttempts != next.MaxAttempts ||
+		!current.DeadlineAt.Equal(next.DeadlineAt) ||
+		!current.CreatedAt.Equal(next.CreatedAt) ||
+		next.UpdatedAt.Before(current.UpdatedAt) {
 		return application.ErrUnknownReconciliationConflict
 	}
 
