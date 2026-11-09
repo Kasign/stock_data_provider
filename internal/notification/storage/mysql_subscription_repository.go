@@ -206,4 +206,3 @@ func cloneStoredSubscription(value domain.Subscription) domain.Subscription {
 	value.Filters = append(json.RawMessage(nil), value.Filters...)
 	return value
 }
-
