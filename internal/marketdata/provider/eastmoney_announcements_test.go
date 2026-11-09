@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"example.com/stock-analysis-flow/internal/marketdata/model"
+	"example.com/stock-analysis-flow/internal/marketdata/validation"
 )
 
 func TestEastmoneyFetchStockAnnouncementsParsesDatesPaginationAndURL(t *testing.T) {
@@ -152,5 +153,30 @@ func TestEastmoneyAnnouncementsRejectsNonStockSecurities(t *testing.T) {
 	}
 	if called {
 		t.Fatal("non-stock announcement requests must be rejected before contacting Eastmoney")
+	}
+}
+
+
+func TestEastmoneyAnnouncementReportsUnparseableDisplayTime(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `{"success":1,"data":{"page_index":1,"page_size":1,"total_hits":1,"list":[
+			{"art_code":"AN202610231234567890","codes":[{"short_name":"招商银行","stock_code":"600036"}],"display_time":"not-a-timestamp","notice_date":"2026-10-23","title":"测试公告"}
+		]}}`)
+	}))
+	defer server.Close()
+	reporter := validation.NewReporter(8)
+	ctx := validation.WithReporter(context.Background(), reporter)
+	p := NewEastmoneyConfiguredWithAnnouncements(2*time.Second, "", "", "", "", "", "", "", "", "", server.URL, "")
+	got, err := p.FetchStockAnnouncements(ctx, "600036.SH", "2026-10-20", "2026-10-26", 1, 1)
+	if err != nil {
+		t.Fatalf("FetchStockAnnouncements: %v", err)
+	}
+	if len(got.Items) != 1 || got.Items[0].PublishedAt != nil || got.QualityStatus != model.QualityDegraded {
+		t.Fatalf("unparseable display time must be retained as degraded without invented timestamp: %+v", got)
+	}
+	issues := reporter.Snapshot().Issues
+	if len(issues) != 1 || issues[0].Field != "published_at" || issues[0].ProviderField != "display_time" ||
+		issues[0].Code != "missing_or_invalid_value" || issues[0].RowIndex == nil || *issues[0].RowIndex != 0 {
+		t.Fatalf("unexpected Reporter issue: %+v", issues)
 	}
 }
