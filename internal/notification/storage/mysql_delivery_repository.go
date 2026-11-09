@@ -236,7 +236,7 @@ func (r *MySQLDeliveryRepository) ClaimDue(
 	}
 	return application.DeliveryClaim{
 		Delivery: next,
-		Lease: application.DeliveryLease{WorkerID: workerID, FencingToken: currentToken, ExpiresAt: effectiveExpiry},
+		Lease:    application.DeliveryLease{WorkerID: workerID, FencingToken: currentToken, ExpiresAt: effectiveExpiry},
 	}, true, nil
 }
 
