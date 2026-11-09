@@ -126,3 +126,47 @@ func TestListNewsItemRelationHistoryRejectsInvalidRequestBeforeStorage(t *testin
 		t.Fatalf("Execute() error/calls = %v/%d", err, repository.calls)
 	}
 }
+
+
+func TestListNewsItemRelationHistoryPreservesAppendOnlyStatuses(t *testing.T) {
+	now := time.Date(2026, 11, 9, 10, 0, 0, 0, time.UTC)
+	observedAt := now.Add(-time.Minute)
+	proposed := validRelationHistoryItem("relation-proposed", observedAt)
+	proposed.Status = domain.NewsItemRelationProposed
+	confirmed := validRelationHistoryItem("relation-confirmed", observedAt.Add(time.Second))
+	retracted := validRelationHistoryItem("relation-retracted", observedAt.Add(2*time.Second))
+	retracted.Status = domain.NewsItemRelationRetracted
+	retracted.SupersedesRelationID = "relation-confirmed"
+
+	repository := &relationHistoryRepositoryStub{relations: []domain.NewsItemRelation{
+		proposed, confirmed, retracted,
+	}}
+	useCase, err := NewListNewsItemRelationHistory(repository)
+	if err != nil {
+		t.Fatal(err)
+	}
+	useCase.now = func() time.Time { return now }
+
+	result, err := useCase.Execute(context.Background(), NewsItemRelationHistoryRequest{
+		NewsID: "news-1", SystemAsOf: now,
+	})
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if len(result) != 3 {
+		t.Fatalf("history length = %d, want all three append-only assertions", len(result))
+	}
+	want := []domain.NewsItemRelationStatus{
+		domain.NewsItemRelationProposed,
+		domain.NewsItemRelationConfirmed,
+		domain.NewsItemRelationRetracted,
+	}
+	for i := range want {
+		if result[i].Status != want[i] {
+			t.Errorf("history[%d].Status = %q, want %q", i, result[i].Status, want[i])
+		}
+	}
+	if result[2].SupersedesRelationID != "relation-confirmed" {
+		t.Fatalf("retraction lost its supersedes link: %+v", result[2])
+	}
+}
