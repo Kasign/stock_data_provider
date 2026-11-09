@@ -191,7 +191,7 @@ func NewEvidenceCheck(id, name string, required bool, value researchevidence.Evi
 			}
 			switch snapshot.QualityStatus {
 			case researchevidence.QualityValid:
-				return healthyObservation("Research Evidence 校验通过且来源授权复核已通过", attributes), nil
+				return healthyObservation("Research Evidence 结构与严格 PIT 校验通过", attributes), nil
 			case researchevidence.QualityDegraded:
 				return platformdiagnostics.Observation{
 					Status:      platformdiagnostics.StatusDegraded,
