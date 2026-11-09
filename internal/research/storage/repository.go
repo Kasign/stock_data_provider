@@ -8,7 +8,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
- researcherrors "example.com/stock-analysis-flow/internal/research"
+	researcherrors "example.com/stock-analysis-flow/internal/research"
 	"fmt"
 	"math"
 	"time"
