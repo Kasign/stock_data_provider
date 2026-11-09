@@ -282,6 +282,14 @@ func parseQuarterlyFinancialPage(body string, spec financialQuerySpec, userID, c
 			values[spec.fields[i]] = ""
 			continue
 		}
+		if (i == 0 || i == 2) && strings.TrimSpace(value) == "" {
+			return nil, &QuarterlyFinancialStructureError{
+				SourceField: spec.fields[i], Code: "missing_value",
+				ActualType: fieldTypes[spec.fields[i]], Preview: fieldPreviews[spec.fields[i]],
+				RowIndex: 0, Expected: "non-empty string scalar",
+				Message: fmt.Sprintf("BaoStock %s required structure field %s is empty", spec.method, spec.fields[i]),
+			}
+		}
 		values[spec.fields[i]] = value
 	}
 	if strings.TrimSpace(values["code"]) != code {
