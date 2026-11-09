@@ -14,15 +14,15 @@ var (
 )
 
 type RiskReason struct {
-	Code            string   `json:"code"`
-	Severity        string   `json:"severity"`
-	Status          string   `json:"status"`
-	SafeMessage     string   `json:"safe_message"`
-	RuleRef         string   `json:"rule_ref"`
-	EvidenceRefs    []string `json:"evidence_refs"`
+	Code            string          `json:"code"`
+	Severity        string          `json:"severity"`
+	Status          string          `json:"status"`
+	SafeMessage     string          `json:"safe_message"`
+	RuleRef         string          `json:"rule_ref"`
+	EvidenceRefs    []string        `json:"evidence_refs"`
 	ObservedValue   json.RawMessage `json:"observed_value,omitempty"`
-	ExpectedRange   *string  `json:"expected_range,omitempty"`
-	RemediationCode *string  `json:"remediation_code,omitempty"`
+	ExpectedRange   *string         `json:"expected_range,omitempty"`
+	RemediationCode *string         `json:"remediation_code,omitempty"`
 }
 
 type RiskDecision struct {
@@ -70,7 +70,6 @@ func ValidateRiskDecision(decision RiskDecision, expectedSystemAsOf time.Time) e
 	}
 	return nil
 }
-
 
 func validObservedValue(value json.RawMessage) bool {
 	if len(value) == 0 {
