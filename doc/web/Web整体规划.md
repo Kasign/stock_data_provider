@@ -295,8 +295,8 @@ localStorage + storage event 方案能解决“另一个标签页完成写入后
 ### 7.1 当前执行基线
 
 - 本次合并后的运行时代码基线（WEB-101 测试路径修复前）：`4a629eb7ac45cbdceb087833bd763ebc6d6753c3`；该提交合并了 `integration`。后续文档/测试修复提交不改变 WebUI 运行时实现。
-- 当前 HEAD 的 WebUI Checks：失败（Run `42607301812`）；JavaScript 语法检查通过，单元测试失败，Nginx 镜像构建因前置测试失败而跳过。不得沿用旧 HEAD `b6da380eb29955c321b1d42b4e7dfb843f162fe9` 的通过结果作为当前 HEAD 通过证据。
-- 本次尚未取得当前 HEAD 的 Chromium Browser Smoke 成功证据；合并后的真实部署、中文视觉验收也未完成。
+- 合并运行时代码基线 `4a629eb7` 的 WebUI Checks 失败（Run `42607301812`）：JavaScript 语法检查通过，单元测试失败，Nginx 镜像构建因前置测试失败而跳过。该失败已定位为 3 处测试读取迁移前旧路径；测试引用已修复，但当前分支 HEAD 尚未取得重跑 CI 证据。不得沿用旧代码基线 `b6da380eb29955c321b1d42b4e7dfb843f162fe9` 的通过结果替代新基线验收。
+- 合并运行时代码基线 `4a629eb7` 尚未取得 Chromium Browser Smoke 成功证据；真实部署、中文视觉验收也未完成。
 - 当前代码仍在浏览器配置中保存 Data API Key，并在行情请求中发送 `X-API-Key`；这属于 MDM-006 迁移项，不能在服务端路由/认证切换前单独删除。
 
 依赖职责（不维护其他分支 HEAD 快照）：Server 负责 Root HTTP 注册、认证和应用装配；Data 负责 Market Data Application/HTTP Adapter 与迁移；Researchflow 负责 Run/Stage/Attempt 及任务历史 Facade；Platform 提供认证、Request ID、诊断等公共基建；Notification 负责订阅、渠道与投递。WebUI 仅按实际调用点跟踪这些模块提供的稳定契约。
