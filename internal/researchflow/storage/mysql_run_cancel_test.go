@@ -65,7 +65,7 @@ func TestMariaDBBeginRunCancellationLinearizesWorkerOperations(t *testing.T) {
 	now := time.Now().UTC()
 	fingerprint := "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 	templateFingerprint := "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
-	runRef, runningStageRef, readyStageRef := "cancel-run-"+suffix, "cancel-running-"+suffix, "cancel-ready-"+suffix
+	runRef, runningStageRef, fencedStageRef, readyStageRef := "cancel-run-"+suffix, "cancel-running-"+suffix, "cancel-fenced-"+suffix, "cancel-ready-"+suffix
 	record := application.CreateRunRecord{
 		Scope:       application.IdempotencyScope{CallerRef: "researchflow-cancel-test", Operation: "CreateRun", Key: "cancel-" + suffix},
 		Fingerprint: fingerprint,
@@ -78,12 +78,14 @@ func TestMariaDBBeginRunCancellationLinearizesWorkerOperations(t *testing.T) {
 		},
 		Stages: []domain.Stage{
 			{Ref: runningStageRef, RunRef: runRef, Code: "running", Status: domain.StageReady, Version: 1, Required: true, Dependencies: []string{}, RetryPolicyRef: "retry-v1", DiagnosticRefs: []string{}, ReasonCodes: []string{}},
+			{Ref: fencedStageRef, RunRef: runRef, Code: "fenced", Status: domain.StageReady, Version: 1, Required: true, Dependencies: []string{}, RetryPolicyRef: "retry-v1", DiagnosticRefs: []string{}, ReasonCodes: []string{}},
 			{Ref: readyStageRef, RunRef: runRef, Code: "ready", Status: domain.StageReady, Version: 1, Required: true, Dependencies: []string{}, RetryPolicyRef: "retry-v1", DiagnosticRefs: []string{}, ReasonCodes: []string{}},
 		},
 		ResolvedTemplate: template.ResolvedTemplate{
 			Ref: "cancel-template", Version: "v1", Fingerprint: templateFingerprint,
 			Stages: []template.ResolvedStage{
 				{Definition: template.StageDefinition{Code: "running"}},
+				{Definition: template.StageDefinition{Code: "fenced"}},
 				{Definition: template.StageDefinition{Code: "ready"}},
 			},
 		},
@@ -95,6 +97,10 @@ func TestMariaDBBeginRunCancellationLinearizesWorkerOperations(t *testing.T) {
 	attempt, replayed, err := repository.ClaimAttempt(ctx, runRef, runningStageRef, "cancel-attempt-"+suffix, "worker-a", time.Minute, 2)
 	if err != nil || replayed {
 		t.Fatalf("claim running stage replayed=%v err=%v", replayed, err)
+	}
+	fencedAttempt, replayed, err := repository.ClaimAttempt(ctx, runRef, fencedStageRef, "fenced-attempt-"+suffix, "worker-b", time.Minute, 2)
+	if err != nil || replayed {
+		t.Fatalf("claim fenced stage replayed=%v err=%v", replayed, err)
 	}
 	changed, err := repository.BeginRunCancellation(ctx, runRef, 2)
 	if err != nil || !changed {
@@ -151,6 +157,32 @@ func TestMariaDBBeginRunCancellationLinearizesWorkerOperations(t *testing.T) {
 	if err != nil || runningStage.Status != domain.StageCancelled || runningStage.FinishedAt == nil {
 		t.Fatalf("Stage cancellation was not persisted: stage=%#v err=%v", runningStage, err)
 	}
+
+	fencedStage, err := repository.GetStage(ctx, fencedStageRef)
+	if err != nil || fencedStage.Status != domain.StageRunning {
+		t.Fatalf("unconfirmed Stage was falsely stopped before lease expiry: stage=%#v err=%v", fencedStage, err)
+	}
+	if _, err := db.ExecContext(ctx, `UPDATE researchflow_attempts SET lease_expires_at = ?
+		WHERE attempt_ref = ?`, formatResearchflowTimeValue(now.Add(-time.Second)), fencedAttempt.Ref); err != nil {
+		t.Fatalf("expire unresponsive Worker B lease: %v", err)
+	}
+	if _, err := repository.ConfirmAttemptCancellation(ctx, runRef, fencedStageRef, fencedAttempt.Ref,
+		"worker-b", fencedAttempt.FencingToken, fencedStage.Version); !errors.Is(err, ErrAttemptLeaseHeld) {
+		t.Fatalf("expired Worker B confirmation error=%v, want ErrAttemptLeaseHeld", err)
+	}
+	fenced, err := repository.FenceExpiredCancellationAttempt(ctx, runRef, fencedStageRef, fencedAttempt.Ref, fencedStage.Version)
+	if err != nil || !fenced {
+		t.Fatalf("expired Attempt fencing fenced=%v err=%v", fenced, err)
+	}
+	fencedAttempt, err = repository.GetAttempt(ctx, fencedAttempt.Ref)
+	if err != nil || fencedAttempt.Status != domain.AttemptTimedOut || fencedAttempt.FencingToken != 2 ||
+		fencedAttempt.LeaseOwner != "" || fencedAttempt.LeaseExpiresAt != nil {
+		t.Fatalf("expired Attempt was not fenced: attempt=%#v err=%v", fencedAttempt, err)
+	}
+	fencedStage, err = repository.GetStage(ctx, fencedStageRef)
+	if err != nil || fencedStage.Status != domain.StageCancelled {
+		t.Fatalf("expired Attempt Stage was not cancelled: stage=%#v err=%v", fencedStage, err)
+	}
 	finalized, err := repository.FinalizeRun(ctx, RunFinalization{
 		RunRef: runRef, ExpectedVersion: 3,
 		ResultSummaryRef: "cancel-summary-" + suffix, SummarySchemaVersion: "summary-v1",
@@ -158,7 +190,7 @@ func TestMariaDBBeginRunCancellationLinearizesWorkerOperations(t *testing.T) {
 		TerminationReason: "user_cancelled",
 		Summary: domain.ResultSummary{
 			StageOutcomes:  map[string]domain.StageStatus{
-				"running": domain.StageCancelled, "ready": domain.StageCancelled,
+				"running": domain.StageCancelled, "fenced": domain.StageCancelled, "ready": domain.StageCancelled,
 			},
 			ExcludedStages: []domain.ExcludedStage{}, MissingStageCodes: []string{},
 			DegradedStageCodes: []string{}, BlockedStageCodes: []string{},
