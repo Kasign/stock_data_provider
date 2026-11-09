@@ -122,3 +122,55 @@ func TestListEvidenceRejectsReferenceAndRecordMismatch(t *testing.T) {
 		t.Fatalf("mismatched reference was not rejected: result=%+v err=%v", result, err)
 	}
 }
+
+
+func TestListEvidenceRejectsMalformedPageMetadataBeforeResolvingRecords(t *testing.T) {
+	now := time.Date(2026, 11, 9, 12, 0, 0, 0, time.UTC)
+	request := validListEvidenceRequest(now)
+	observedAt := request.SystemAsOf.Add(-time.Minute)
+	validItem := EvidenceSnapshotItem{
+		NewsID: "news-1", VersionID: "version-1", ObservationID: "observation-1",
+		SystemObservedAt: observedAt,
+	}
+	badCursor := "bad\ncursor"
+	cases := []struct {
+		name string
+		page EvidenceSnapshotPage
+	}{
+		{
+			name: "invalid next cursor",
+			page: EvidenceSnapshotPage{Items: []EvidenceSnapshotItem{validItem}, NextCursor: &badCursor, SnapshotRef: "snapshot-1", SystemAsOf: request.SystemAsOf},
+		},
+		{
+			name: "duplicate evidence reference",
+			page: EvidenceSnapshotPage{Items: []EvidenceSnapshotItem{validItem, validItem}, SnapshotRef: "snapshot-1", SystemAsOf: request.SystemAsOf},
+		},
+		{
+			name: "non canonical identifier",
+			page: EvidenceSnapshotPage{Items: []EvidenceSnapshotItem{{NewsID: " news-1 ", VersionID: "version-1", ObservationID: "observation-1", SystemObservedAt: observedAt}}, SnapshotRef: "snapshot-1", SystemAsOf: request.SystemAsOf},
+		},
+		{
+			name: "unstable item ordering",
+			page: EvidenceSnapshotPage{Items: []EvidenceSnapshotItem{
+				{NewsID: "news-2", VersionID: "version-2", ObservationID: "observation-2", SystemObservedAt: observedAt},
+				validItem,
+			}, SnapshotRef: "snapshot-1", SystemAsOf: request.SystemAsOf},
+		},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			recordReader := &evidenceRecordReaderStub{}
+			usecase, err := NewListEvidence(evidenceSnapshotPageReaderStub{page: test.page}, recordReader)
+			if err != nil {
+				t.Fatal(err)
+			}
+			usecase.now = func() time.Time { return now }
+			if _, err := usecase.Execute(context.Background(), request); !errors.Is(err, ErrEvidenceSnapshotPageUnavailable) {
+				t.Fatalf("Execute() error = %v, want snapshot page unavailable", err)
+			}
+			if recordReader.calls != 0 {
+				t.Fatalf("malformed page reached record reader %d times", recordReader.calls)
+			}
+		})
+	}
+}
