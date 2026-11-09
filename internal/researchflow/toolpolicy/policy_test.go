@@ -98,3 +98,14 @@ func TestAuthorizeClampsTimeoutToRunDeadlineAndRemainingBudget(t *testing.T) {
 		t.Fatalf("timeout was not clamped: %+v", call)
 	}
 }
+
+func TestAuthorizeEnforcesPerToolCallLimit(t *testing.T) {
+	now := time.Date(2026, 11, 9, 9, 0, 0, 0, time.UTC)
+	budget := validBudget(now)
+	budget.CallsUsed = 1
+	budget.CallsByName = map[string]int{"research.lookup": 2}
+	intent := Intent{CallID: "call-3", Name: "research.lookup", ArgumentsJSON: `{"symbol":"600000.SH"}`}
+	if _, err := testRegistry(t).Authorize(intent, budget); !errors.Is(err, ErrCallBudgetExceeded) {
+		t.Fatalf("per-tool call limit error = %v", err)
+	}
+}
