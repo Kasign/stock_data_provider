@@ -325,11 +325,11 @@ Server 不重写模块业务 Handler 的校验和领域错误，不在路由层�
 
 ### SRV-007：Migration 注册与执行
 
-- 状态：未开始（Platform Migration Runner 已有公开实现，Server 侧尚未装配）
-- 前置：SRV-003、SRV-004；核对 Platform `storage.ApplyMigrations` 实际签名和各模块 Migration 注册形态
+- 状态：进行中（Server Registry 已接入 News、Research、Notification 三个模块 Migration；执行由 `MIGRATION_ENABLED` 显式开启）
+- 前置：SRV-003；其余模块提供可用 Migration 后再注册；核对 Platform `storage.ApplyMigrations` 实际签名和各模块 Migration 注册形态
 - 工作内容：在模块装配阶段收集各模块拥有的 Migration 描述，校验 namespace/version 唯一性及顺序，再按部署策略调用 Platform Runner，输出可追踪结果。MariaDB DDL 部分执行失败后的恢复按 Platform Runner 契约执行，不在 Server 自行重试失败 Migration。
-- 交付物：Migration Registry、执行策略和集成测试。
-- 验收：Server 不拥有业务 DDL；重复注册和版本冲突可检测；失败阻止 Ready；并发启动不会造成无协调的重复执行。
+- 交付物：`internal/server/migration.Registry`、显式执行配置和模块注册测试；真实 MariaDB 集成验收待执行。
+- 验收：Server 不拥有业务 DDL；重复注册和版本冲突可检测；失败阻止启动进入 Ready；Platform Runner 使用 namespace 级 MariaDB advisory lock，防止并发副本无协调执行。
 
 ### SRV-008：Outbox 事件交付集成
 
@@ -490,6 +490,16 @@ flowchart TD
 4. 先接入具备完整公开边界的模块；缺失项回对应模块分支补齐，Server 不越权修改模块代码。
 5. News 当前不注册独立 HTTP 路由；Researchflow 是业务流程编排者，Server 只负责依赖注入和生命周期。
 
+### 12.7 SRV-007 Migration Registry 实施记录（2026-11-09）
+
+- 新增 `internal/server/migration.Registry`，接收模块提供的 `[]platform/storage.Migration`；注册时校验 namespace、非空迁移集、版本非零、描述/SQL 非空和同 namespace 内版本重复。
+- Registry 对 Migration 和 Statements 做深拷贝，避免调用方后续修改影响已注册清单；namespace 重复注册直接失败。
+- 执行时按 namespace 字典序调用 Platform `storage.ApplyMigrations`，任一 namespace 失败立即停止后续 namespace；checksum、历史账本、MariaDB advisory lock、DDL 失败恢复仍完全由 Platform Runner 负责。
+- Bootstrap 已从当前根 Go Module 可用的模块中注册 News（`internal/news/adapters/storage.Migrations`）、Research（`internal/research/storage.Migrations`）和 Notification（`internal/notification/storage.Migrations`）。没有为尚未具备 Storage Migration 的 Quant、Researchflow、LLM、Data 虚构注册项。
+- 新增 `MIGRATION_ENABLED`（默认 false）和 `MIGRATION_TIMEOUT`（默认 2m，最大 30m）。只有显式启用时才在模块运行组件构造前执行；执行失败立即中止 Bootstrap，不启动 Worker/HTTP。
+- 旧 Analysis 四表仍由兼容 Store 的既有迁移开关管理，本次不将其混入模块 namespace。
+- 本轮已增加 Registry 校验/不可变快照/重复 namespace/确定性排序测试、Bootstrap 三模块注册测试和配置测试。GitHub API 已写入代码；本轮尚未执行 gofmt/go test 或真实 MariaDB 集成，不能标记测试通过。
+
 ## 13. 分支与协作规则
 
 - 本规划及 Server 代码实施位于 `feat/research-analysis-flow-native-go`。
@@ -525,7 +535,7 @@ Server 层完成不是“服务能够启动”这么简单。至少同时满足�
 | SRV-004 | 阻塞 | 已复核模块接入面；Researchflow/Quant/LLM/Notification 缺少完整生产装配入口，News/Research 也有关键查询/授权接入缺口；详见 12.6 节 |
 | SRV-005 | 未开始 | 旧 HTTP API 尚待迁移映射 |
 | SRV-006 | 未开始 | 运行角色和生命周期尚未建立 |
-| SRV-007 | 未开始 | Platform Migration Runner 已有实现；待 Server 资源装配及模块 Migration 注册入口就绪 |
+| SRV-007 | 进行中 | 已建立 Server Migration Registry，并注册 News/Research/Notification；显式配置执行；其他模块 Migration 和 MariaDB 集成验收待完成，详见 12.7 节 |
 | SRV-008 | 待契约 | Dispatcher 所有权未冻结 |
 | SRV-009 | 未开始 | 尚未建立系统级诊断聚合 |
 | SRV-010 | 阻塞 | 等待 Data 迁移门禁和公开接口 |
