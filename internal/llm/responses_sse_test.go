@@ -624,3 +624,79 @@ func TestParseResponsesSSERejectsFunctionArgumentsMismatchAfterEmptyDelta(t *tes
 		})
 	}
 }
+
+
+type chunkedSSEReader struct {
+	data     []byte
+	offset   int
+	maxChunk int
+}
+
+func (r *chunkedSSEReader) Read(buffer []byte) (int, error) {
+	if r.offset >= len(r.data) {
+		return 0, io.EOF
+	}
+	size := len(buffer)
+	if r.maxChunk > 0 && size > r.maxChunk {
+		size = r.maxChunk
+	}
+	if remaining := len(r.data) - r.offset; size > remaining {
+		size = remaining
+	}
+	n := copy(buffer[:size], r.data[r.offset:r.offset+size])
+	r.offset += n
+	return n, nil
+}
+
+type errorAfterSSEDataReader struct {
+	data []byte
+	err  error
+	sent bool
+}
+
+func (r *errorAfterSSEDataReader) Read(buffer []byte) (int, error) {
+	if !r.sent {
+		r.sent = true
+		return copy(buffer, r.data), nil
+	}
+	return 0, r.err
+}
+
+func TestParseResponsesSSEReaderDeliversEventsBeforeEOF(t *testing.T) {
+	request := validSSERequest()
+	clock := sseTestClock{now: request.SystemAsOf.Add(time.Second)}
+	data := []byte(strings.Join([]string{
+		"event: response.output_text.delta",
+		"data: {\"type\":\"response.output_text.delta\",\"delta\":\"partial\"}",
+		"",
+		"event: response.completed",
+		"data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp-reader\",\"object\":\"response\",\"status\":\"completed\",\"output\":[{\"id\":\"msg-reader\",\"type\":\"message\",\"content\":[{\"type\":\"output_text\",\"text\":\"partial\"}]}]}}",
+		"",
+	}, "\n"))
+	reader := &chunkedSSEReader{data: data, maxChunk: 1}
+	deliveredBeforeEOF := false
+	got, err := ParseResponsesSSEReader(reader, request, clock, func(event ModelEvent) error {
+		if event.Type == "response.output_text.delta" {
+			deliveredBeforeEOF = reader.offset < len(reader.data)
+		}
+		return nil
+	})
+	if err != nil || got.Status != ResponseCompleted || !deliveredBeforeEOF {
+		t.Fatalf("reader parser must deliver events incrementally: response=%+v before_eof=%v err=%v", got, deliveredBeforeEOF, err)
+	}
+}
+
+func TestParseResponsesSSEReaderPreservesTransportReadError(t *testing.T) {
+	request := validSSERequest()
+	clock := sseTestClock{now: request.SystemAsOf.Add(time.Second)}
+	readErr := errors.New("transport read failed")
+	data := []byte(strings.Join([]string{
+		"event: response.output_text.delta",
+		"data: {\"type\":\"response.output_text.delta\",\"delta\":\"partial\"}",
+		"",
+	}, "\n"))
+	got, err := ParseResponsesSSEReader(&errorAfterSSEDataReader{data: data, err: readErr}, request, clock, nil)
+	if err != readErr || got.Status != ResponseIncomplete || got.OutputText != "partial" {
+		t.Fatalf("reader transport error must remain distinguishable and preserve partial output: response=%+v err=%v", got, err)
+	}
+}
