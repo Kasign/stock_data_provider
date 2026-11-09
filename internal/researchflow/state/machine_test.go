@@ -185,6 +185,24 @@ func TestAggregateRejectsInvalidHardRiskDecision(t *testing.T) {
 	if err == nil { t.Fatal("empty hard risk decision was accepted") }
 }
 
+func TestTerminalFinalizersRejectEmptyOrDuplicateStageSets(t *testing.T) {
+	now := time.Date(2026, 11, 6, 10, 0, 0, 0, time.UTC)
+	policies := map[string]template.PropagationPolicy{"done": {OnFailed:domain.PropagateFail}}
+	for _, tc := range []struct{name string; stages []domain.Stage}{
+		{name:"empty", stages:nil},
+		{name:"duplicate", stages:[]domain.Stage{{Code:"done",Status:domain.StageSucceeded},{Code:"done",Status:domain.StageSucceeded}}},
+	} {
+		t.Run("aggregate_"+tc.name,func(t *testing.T){
+			_,err:=AggregateRun(domain.Run{Status:domain.RunRunning},tc.stages,nil,policies,nil,false,now)
+			if err==nil { t.Fatalf("aggregate accepted %s stage set",tc.name) }
+		})
+		t.Run("cancel_"+tc.name,func(t *testing.T){
+			_,err:=FinalizeCancellation(domain.Run{Status:domain.RunCancelling,TerminationReason:"user_cancelled"},tc.stages,nil,now)
+			if err==nil { t.Fatalf("cancellation finalizer accepted %s stage set",tc.name) }
+		})
+	}
+}
+
 func TestTerminalFinalizersRejectUnknownAttemptStates(t *testing.T) {
 	now := time.Date(2026, 11, 6, 10, 0, 0, 0, time.UTC)
 	terminalStages := []domain.Stage{{Code:"done", Status:domain.StageSucceeded}}

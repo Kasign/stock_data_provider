@@ -225,8 +225,7 @@ func ClaimReadyStage(run domain.Run, stage domain.Stage, now time.Time, attemptR
 }
 
 func AggregateRun(run domain.Run,stages []domain.Stage,attempts []domain.Attempt,policies map[string]template.PropagationPolicy,hardRiskStageCodes map[string]bool,requiresHardRiskGate bool,now time.Time)(domain.Run,error){
-	if len(stages)==0{return run,errors.New("cannot aggregate an empty run")}
-	for _,s:=range stages{if !s.Status.Terminal(){return run,errors.New("cannot aggregate while stages are non-terminal")}}
+	if err := validateTerminalStages(stages); err != nil { return run, fmt.Errorf("cannot aggregate run: %w", err) }
 	if err := validateAttemptsTerminal(attempts); err != nil { return run, fmt.Errorf("cannot aggregate run: %w", err) }
 	summary:=domain.ResultSummary{StageOutcomes:map[string]domain.StageStatus{},RiskGateDecisions:map[string]string{},ExcludedStages:cloneExcludedStages(run.ExcludedStages),MissingStageCodes:[]string{},DegradedStageCodes:[]string{},BlockedStageCodes:[]string{},ReasonCodes:[]string{},QualityStatus:"valid",ActionabilityStatus:"not_evaluated"}
 	fail,partial,completed:=false,false,0
@@ -300,15 +299,26 @@ func FinalizeCancellation(run domain.Run, stages []domain.Stage, attempts []doma
 	if run.Status != domain.RunCancelling || run.TerminationReason != "user_cancelled" {
 		return run, fmt.Errorf("%w: run is not a user cancellation", ErrInvalidTransition)
 	}
-	for _, stage := range stages {
-		if !stage.Status.Terminal() { return run, errors.New("cannot finalize while a stage is active") }
-	}
+	if err := validateTerminalStages(stages); err != nil { return run, fmt.Errorf("cannot finalize cancellation: %w", err) }
 	if err := validateAttemptsTerminal(attempts); err != nil { return run, fmt.Errorf("cannot finalize cancellation: %w", err) }
 	summary := buildTerminalSummary(stages, run.ExcludedStages)
 	updated, err := transitionRun(run, domain.RunCancelled, now)
 	if err != nil { return run, err }
 	updated.ResultSummary = &summary
 	return updated, nil
+}
+
+// validateTerminalStages ensures a complete, uniquely identified terminal Stage set.
+func validateTerminalStages(stages []domain.Stage) error {
+	if len(stages) == 0 { return errors.New("run has no stages") }
+	seen := make(map[string]struct{}, len(stages))
+	for _, stage := range stages {
+		if strings.TrimSpace(stage.Code) == "" { return errors.New("stage code is required for terminal aggregation") }
+		if _, exists := seen[stage.Code]; exists { return fmt.Errorf("duplicate stage code %q in terminal aggregation", stage.Code) }
+		seen[stage.Code] = struct{}{}
+		if !stage.Status.Terminal() { return fmt.Errorf("stage %s is not in a terminal state: %q", stage.Code, stage.Status) }
+	}
+	return nil
 }
 
 // validateAttemptsTerminal fails closed for running and unknown Attempt states.
