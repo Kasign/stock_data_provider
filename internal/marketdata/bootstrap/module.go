@@ -20,27 +20,32 @@ import (
 	"example.com/stock-analysis-flow/internal/marketdata/provider"
 	"example.com/stock-analysis-flow/internal/marketdata/repository"
 	"example.com/stock-analysis-flow/internal/marketdata/service"
+	"example.com/stock-analysis-flow/internal/marketdata/transport"
 )
 
 // Dependencies 是由调用方创建并拥有的基础设施依赖；Module 不负责关闭 Store/Cache。
 type Dependencies struct {
-	Store                         *repository.Store // 调用方创建并持有；Module 不负责关闭。
-	Cache                         cache.Cache       // 调用方创建并持有；Module 不负责关闭。
-	Logger                        *slog.Logger      // 模块日志依赖；nil 时使用 slog.Default。
-	TushareHTTPDoer               provider.HTTPDoer // Root 注入的受控 Tushare HTTP 执行器；Module 不拥有、不关闭。
-	HithinkHTTPDoer               provider.HTTPDoer // Root 注入的受控同花顺 HTTP 执行器；Module 不拥有、不关闭。
-	TickFlowAuthenticatedHTTPDoer provider.HTTPDoer // Root 注入的 TickFlow 认证 API 出口；Module 不拥有、不关闭。
-	TickFlowPublicHTTPDoer        provider.HTTPDoer // Root 注入的 TickFlow 免费 API 出口；Module 不拥有、不关闭。
-	XueqiuHTTPDoer                provider.HTTPDoer // Root 注入的雪球受控 HTTP 执行器；Module 不拥有、不关闭。
-	YahooHTTPDoer                 provider.HTTPDoer // Root 注入的 Yahoo Finance 受控 HTTP 执行器；Module 不拥有、不关闭。
-	NeteaseQuoteHTTPDoer          provider.HTTPDoer // Root 注入的 NetEase 行情出口；Module 不拥有、不关闭。
-	NeteaseHistoryHTTPDoer        provider.HTTPDoer // Root 注入的 NetEase 历史 CSV 出口；Module 不拥有、不关闭。
-	TencentQuoteHTTPDoer          provider.HTTPDoer // Root 注入的腾讯报价出口；Module 不拥有、不关闭。
-	TencentKlineHTTPDoer          provider.HTTPDoer // Root 注入的腾讯复权 K 线出口；Module 不拥有、不关闭。
-	TencentNoneKlineHTTPDoer      provider.HTTPDoer // Root 注入的腾讯未复权 K 线出口；Module 不拥有、不关闭。
-	TencentSearchHTTPDoer         provider.HTTPDoer // Root 注入的腾讯 Smartbox 搜索出口；Module 不拥有、不关闭。
-	SinaQuoteHTTPDoer             provider.HTTPDoer // Root 注入的新浪实时报价出口；Module 不拥有、不关闭。
-	SinaKlineHTTPDoer             provider.HTTPDoer // Root 注入的新浪历史 K 线出口；Module 不拥有、不关闭。
+	Store                         *repository.Store            // 调用方创建并持有；Module 不负责关闭。
+	Cache                         cache.Cache                  // 调用方创建并持有；Module 不负责关闭。
+	Logger                        *slog.Logger                 // 模块日志依赖；nil 时使用 slog.Default。
+	TushareHTTPDoer               provider.HTTPDoer            // Root 注入的受控 Tushare HTTP 执行器；Module 不拥有、不关闭。
+	HithinkHTTPDoer               provider.HTTPDoer            // Root 注入的受控同花顺 HTTP 执行器；Module 不拥有、不关闭。
+	TickFlowAuthenticatedHTTPDoer provider.HTTPDoer            // Root 注入的 TickFlow 认证 API 出口；Module 不拥有、不关闭。
+	TickFlowPublicHTTPDoer        provider.HTTPDoer            // Root 注入的 TickFlow 免费 API 出口；Module 不拥有、不关闭。
+	XueqiuHTTPDoer                provider.HTTPDoer            // Root 注入的雪球受控 HTTP 执行器；Module 不拥有、不关闭。
+	YahooHTTPDoer                 provider.HTTPDoer            // Root 注入的 Yahoo Finance 受控 HTTP 执行器；Module 不拥有、不关闭。
+	NeteaseQuoteHTTPDoer          provider.HTTPDoer            // Root 注入的 NetEase 行情出口；Module 不拥有、不关闭。
+	NeteaseHistoryHTTPDoer        provider.HTTPDoer            // Root 注入的 NetEase 历史 CSV 出口；Module 不拥有、不关闭。
+	TencentQuoteHTTPDoer          provider.HTTPDoer            // Root 注入的腾讯报价出口；Module 不拥有、不关闭。
+	TencentKlineHTTPDoer          provider.HTTPDoer            // Root 注入的腾讯复权 K 线出口；Module 不拥有、不关闭。
+	TencentNoneKlineHTTPDoer      provider.HTTPDoer            // Root 注入的腾讯未复权 K 线出口；Module 不拥有、不关闭。
+	TencentSearchHTTPDoer         provider.HTTPDoer            // Root 注入的腾讯 Smartbox 搜索出口；Module 不拥有、不关闭。
+	SinaQuoteHTTPDoer             provider.HTTPDoer            // Root 注入的新浪实时报价出口；Module 不拥有、不关闭。
+	SinaKlineHTTPDoer             provider.HTTPDoer            // Root 注入的新浪历史 K 线出口；Module 不拥有、不关闭。
+	EastmoneyHTTPDoers            map[string]provider.HTTPDoer // Root 按 scheme://host 注入东方财富受控出口；Module 不拥有、不关闭。
+	MiaoXiangHTTPDoer             provider.HTTPDoer            // Root 注入 MiaoXiang 补充数据 API 受控出口；Module 不拥有、不关闭。
+	PytdxDialContext              transport.DialContextFunc    // Root 注入通达信 TCP 受控连接函数；Module 不拥有、不关闭。
+	BaoStockDialContext           transport.DialContextFunc    // Root 注入 BaoStock TCP 受控连接函数；Module 不拥有、不关闭。
 }
 
 // Diagnostics 暴露模块就绪状态和 Provider 诊断，不暴露具体 DataService。
@@ -108,7 +113,7 @@ func New(cfg config.Config, deps Dependencies) (*Module, error) {
 		retentionStore: deps.Store,
 		retention:      cfg.QuoteRetention,
 	}
-	if err := module.build(cfg, deps.TushareHTTPDoer, deps.HithinkHTTPDoer, deps.TickFlowAuthenticatedHTTPDoer, deps.TickFlowPublicHTTPDoer, deps.XueqiuHTTPDoer, deps.YahooHTTPDoer, deps.NeteaseQuoteHTTPDoer, deps.NeteaseHistoryHTTPDoer, deps.TencentQuoteHTTPDoer, deps.TencentKlineHTTPDoer, deps.TencentNoneKlineHTTPDoer, deps.TencentSearchHTTPDoer, deps.SinaQuoteHTTPDoer, deps.SinaKlineHTTPDoer); err != nil {
+	if err := module.build(cfg, deps.TushareHTTPDoer, deps.HithinkHTTPDoer, deps.TickFlowAuthenticatedHTTPDoer, deps.TickFlowPublicHTTPDoer, deps.XueqiuHTTPDoer, deps.YahooHTTPDoer, deps.NeteaseQuoteHTTPDoer, deps.NeteaseHistoryHTTPDoer, deps.TencentQuoteHTTPDoer, deps.TencentKlineHTTPDoer, deps.TencentNoneKlineHTTPDoer, deps.TencentSearchHTTPDoer, deps.SinaQuoteHTTPDoer, deps.SinaKlineHTTPDoer, deps.EastmoneyHTTPDoers, deps.MiaoXiangHTTPDoer, deps.PytdxDialContext, deps.BaoStockDialContext); err != nil {
 		_ = module.Close(context.Background())
 		return nil, err
 	}
@@ -168,7 +173,7 @@ func (m *Module) ProviderSummary() ProviderSummary {
 	}
 }
 
-func (m *Module) build(cfg config.Config, tushareHTTPDoer, hithinkHTTPDoer, tickflowAuthenticatedHTTPDoer, tickflowPublicHTTPDoer, xueqiuHTTPDoer, yahooHTTPDoer, neteaseQuoteHTTPDoer, neteaseHistoryHTTPDoer, tencentQuoteHTTPDoer, tencentKlineHTTPDoer, tencentNoneKlineHTTPDoer, tencentSearchHTTPDoer, sinaQuoteHTTPDoer, sinaKlineHTTPDoer provider.HTTPDoer) error {
+func (m *Module) build(cfg config.Config, tushareHTTPDoer, hithinkHTTPDoer, tickflowAuthenticatedHTTPDoer, tickflowPublicHTTPDoer, xueqiuHTTPDoer, yahooHTTPDoer, neteaseQuoteHTTPDoer, neteaseHistoryHTTPDoer, tencentQuoteHTTPDoer, tencentKlineHTTPDoer, tencentNoneKlineHTTPDoer, tencentSearchHTTPDoer, sinaQuoteHTTPDoer, sinaKlineHTTPDoer provider.HTTPDoer, eastmoneyHTTPDoers map[string]provider.HTTPDoer, miaoxiangHTTPDoer provider.HTTPDoer, pytdxDialContext, baostockDialContext transport.DialContextFunc) error {
 	store := m.store
 	c := m.cache
 	logger := m.logger
@@ -179,10 +184,11 @@ func (m *Module) build(cfg config.Config, tushareHTTPDoer, hithinkHTTPDoer, tick
 		Password:       cfg.BaostockPassword,
 		ConnectTimeout: cfg.BaostockConnectTimeout,
 		RequestTimeout: cfg.BaostockRequestTimeout,
+		DialContext:    baostockDialContext,
 	})
 	m.baostockClient = baostockClient
 	available := map[string]provider.NamedProvider{
-		"eastmoney": provider.NewEastmoneyConfiguredWithAnnouncements(cfg.ProviderTimeout, cfg.EastmoneyQuoteURL, cfg.EastmoneyKlineURL, cfg.EastmoneyStockBasicURL, cfg.EastmoneySectorRankingURL, cfg.EastmoneyIndexURL, cfg.EastmoneyMarketStocksURL, cfg.EastmoneyLimitPoolBaseURL, cfg.EastmoneyStockBoardsURL, cfg.EastmoneyDragonTigerURL, cfg.EastmoneyAnnouncementsURL, cfg.EastmoneyUT).WithHotRankingURLs(cfg.EastmoneyHotRankingsURL, cfg.EastmoneyHotSurgeURL).WithCapitalFlowURL(cfg.EastmoneyCapitalFlowURL),
+		"eastmoney": provider.NewEastmoneyConfiguredWithAnnouncements(cfg.ProviderTimeout, cfg.EastmoneyQuoteURL, cfg.EastmoneyKlineURL, cfg.EastmoneyStockBasicURL, cfg.EastmoneySectorRankingURL, cfg.EastmoneyIndexURL, cfg.EastmoneyMarketStocksURL, cfg.EastmoneyLimitPoolBaseURL, cfg.EastmoneyStockBoardsURL, cfg.EastmoneyDragonTigerURL, cfg.EastmoneyAnnouncementsURL, cfg.EastmoneyUT).WithHotRankingURLs(cfg.EastmoneyHotRankingsURL, cfg.EastmoneyHotSurgeURL).WithCapitalFlowURL(cfg.EastmoneyCapitalFlowURL).WithHTTPDoers(eastmoneyHTTPDoers),
 		"hithink":   provider.NewHithinkConfiguredWithHTTPDoer(cfg.ProviderTimeout, cfg.HithinkBaseURL, cfg.HithinkAPIKey, hithinkHTTPDoer),
 		"baostock":  provider.NewBaostock(baostockClient),
 		"tencent":   provider.NewTencentConfiguredWithHTTPDoers(cfg.ProviderTimeout, cfg.TencentQuoteURL, cfg.TencentKlineURL, cfg.TencentNoneKlineURL, cfg.TencentStockSearchURL, tencentQuoteHTTPDoer, tencentKlineHTTPDoer, tencentNoneKlineHTTPDoer, tencentSearchHTTPDoer),
@@ -191,7 +197,7 @@ func (m *Module) build(cfg config.Config, tushareHTTPDoer, hithinkHTTPDoer, tick
 		"netease":   provider.NewNeteaseConfiguredWithHTTPDoers(cfg.ProviderTimeout, cfg.NeteaseQuoteURL, cfg.NeteaseHistoryURL, neteaseQuoteHTTPDoer, neteaseHistoryHTTPDoer),
 		"tushare":   provider.NewTushareConfiguredWithHTTPDoer(cfg.ProviderTimeout, cfg.TushareAPIURL, cfg.TushareToken, tushareHTTPDoer),
 		"tickflow":  provider.NewTickFlowConfiguredWithHTTPDoers(cfg.ProviderTimeout, cfg.TickFlowAPIURL, cfg.TickFlowFreeAPIURL, cfg.TickFlowAPIKey, tickflowAuthenticatedHTTPDoer, tickflowPublicHTTPDoer),
-		"pytdx":     provider.NewPytdx(cfg.ProviderTimeout, cfg.PytdxHosts...),
+		"pytdx":     provider.NewPytdxWithDialContext(cfg.ProviderTimeout, pytdxDialContext, cfg.PytdxHosts...),
 		"xueqiu":    provider.NewXueqiuConfiguredWithHTTPDoer(cfg.ProviderTimeout, cfg.XueqiuBaseURL, cfg.XueqiuCookie, xueqiuHTTPDoer),
 	}
 	allProviders := make([]provider.NamedProvider, 0, len(available))
@@ -395,7 +401,7 @@ func (m *Module) build(cfg config.Config, tushareHTTPDoer, hithinkHTTPDoer, tick
 	ds := service.NewWithCapabilities(allProviders, quoteProviders, barProviders, c, store, cfg.QuoteCacheTTL, cfg.BarsCacheTTL, cfg.DefaultDailyBars, cfg.MaxDailyBars, service.ResilienceConfig{Retries: cfg.ProviderRetries, CircuitFailureThreshold: cfg.CircuitFailureThreshold, CircuitCooldown: cfg.CircuitCooldown}, logger)
 	supplementProviders := make([]provider.SupplementProvider, 0, 1)
 	if cfg.MXEnabled {
-		mx, mxErr := provider.NewMiaoXiang(cfg.MXAPIKey, cfg.MXAPIURL, cfg.MXAPITimeout)
+		mx, mxErr := provider.NewMiaoXiangWithHTTPDoer(cfg.MXAPIKey, cfg.MXAPIURL, cfg.MXAPITimeout, miaoxiangHTTPDoer)
 		if mxErr != nil {
 			return fmt.Errorf("configure MiaoXiang supplemental provider: %w", mxErr)
 		}

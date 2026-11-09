@@ -42,6 +42,7 @@ const defaultEastmoneyCapitalFlowURL = "https://push2.eastmoney.com/api/qt/stock
 
 type Eastmoney struct {
 	client           *http.Client
+	httpDoers        map[string]HTTPDoer
 	quoteURL         string
 	klineURL         string
 	stockBasicURL    string
@@ -158,6 +159,54 @@ func (p *Eastmoney) WithHotRankingURLs(popularURL, surgeURL string) *Eastmoney {
 		p.hotSurgeURL = value
 	}
 	return p
+}
+
+// WithHTTPDoers 注入按 origin（scheme://host）索引的受控 HTTP 执行器。
+// 一个 origin 可服务同 Host 下多个 Eastmoney endpoint；不同 origin 必须使用独立 BoundDoer。
+// map 非 nil 时采用 fail-closed：未提供某个请求 origin 的执行器将返回错误，不回退标准 Client。
+func (p *Eastmoney) WithHTTPDoers(doers map[string]HTTPDoer) *Eastmoney {
+	if p == nil {
+		return nil
+	}
+	if doers == nil {
+		p.httpDoers = nil
+		return p
+	}
+	p.httpDoers = make(map[string]HTTPDoer, len(doers))
+	for origin, doer := range doers {
+		normalized := strings.ToLower(strings.TrimRight(strings.TrimSpace(origin), "/"))
+		if normalized != "" && doer != nil {
+			p.httpDoers[normalized] = doer
+		}
+	}
+	return p
+}
+
+// EastmoneyHTTPOrigin 返回 Eastmoney endpoint 的规范 origin，供 Root 按 origin 创建 BoundDoer。
+func EastmoneyHTTPOrigin(rawURL string) (string, error) {
+	parsed, err := url.Parse(strings.TrimSpace(rawURL))
+	if err != nil {
+		return "", fmt.Errorf("parse Eastmoney endpoint URL: %w", err)
+	}
+	if parsed.Scheme == "" || parsed.Host == "" || parsed.User != nil {
+		return "", fmt.Errorf("invalid Eastmoney endpoint origin %q", rawURL)
+	}
+	return strings.ToLower(parsed.Scheme + "://" + parsed.Host), nil
+}
+
+func (p *Eastmoney) doerForURL(rawURL string) (HTTPDoer, error) {
+	if p.httpDoers == nil {
+		return p.client, nil
+	}
+	origin, err := EastmoneyHTTPOrigin(rawURL)
+	if err != nil {
+		return nil, err
+	}
+	doer := p.httpDoers[origin]
+	if doer == nil {
+		return nil, fmt.Errorf("Eastmoney controlled HTTP executor is not configured for origin %q", origin)
+	}
+	return doer, nil
 }
 
 func (p *Eastmoney) Name() string { return "eastmoney" }
@@ -315,7 +364,11 @@ func (p *Eastmoney) FetchStockBasic(ctx context.Context, rawSymbol string) (*mod
 		req.Header.Set("Referer", "https://emweb.securities.eastmoney.com/")
 		req.Header.Set("Origin", "https://emweb.securities.eastmoney.com")
 		req.Header.Set("Accept", "application/json, text/plain, */*")
-		resp, err := p.client.Do(req)
+		doer, doerErr := p.doerForURL(u.String())
+		if doerErr != nil {
+			return nil, doerErr
+		}
+		resp, err := doer.Do(req)
 		if err != nil {
 			return nil, fmt.Errorf("eastmoney stock-basic request: %w", err)
 		}
@@ -956,7 +1009,11 @@ func (p *Eastmoney) fetchHotRankingRows(ctx context.Context, endpoint string) ([
 			req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36")
 			req.Header.Set("Referer", "https://guba.eastmoney.com/rank/")
 			var resp *http.Response
-			resp, reqErr = p.client.Do(req)
+			var doer HTTPDoer
+			doer, reqErr = p.doerForURL(endpoint)
+			if reqErr == nil {
+				resp, reqErr = doer.Do(req)
+			}
 			if reqErr == nil {
 				if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 					_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4096))
@@ -1509,7 +1566,11 @@ func (p *Eastmoney) getJSON(ctx context.Context, base string, params url.Values,
 	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36")
 	req.Header.Set("Referer", "https://quote.eastmoney.com/")
 	req.Header.Set("Accept", "application/json, text/plain, */*")
-	resp, err := p.client.Do(req)
+	doer, err := p.doerForURL(u.String())
+	if err != nil {
+		return err
+	}
+	resp, err := doer.Do(req)
 	if err != nil {
 		return fmt.Errorf("eastmoney request: %w", err)
 	}

@@ -61,6 +61,18 @@ func openResearchIntegrationDB(t *testing.T) *sql.DB {
 	return db
 }
 
+
+func assertResearchPITColumn(t *testing.T, ctx context.Context, db *sql.DB, query string, args []any, want time.Time) {
+	t.Helper()
+	var got string
+	if err := db.QueryRowContext(ctx, query, args...).Scan(&got); err != nil {
+		t.Fatalf("read persisted PIT timestamp: %v", err)
+	}
+	if expected := formatPIT(want); got != expected {
+		t.Fatalf("persisted PIT timestamp = %q, want %q", got, expected)
+	}
+}
+
 func TestResearchEventLifecycleOutboxFailureRollsBackEventVersion(t *testing.T) {
 	db := openResearchIntegrationDB(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
@@ -268,6 +280,7 @@ func TestResearchSQLRepositoriesAppendAndReadVersions(t *testing.T) {
 	if err := contextRepo.Append(ctx, contextV1); err != nil {
 		t.Fatalf("append Context v1: %v", err)
 	}
+	assertResearchPITColumn(t, ctx, db, "SELECT system_as_of FROM research_context_versions WHERE context_id=? AND context_version=1", []any{contextID}, cutoff)
 	if err := contextRepo.Append(ctx, contextV1); err != nil {
 		t.Fatalf("replay Context v1: %v", err)
 	}
@@ -490,6 +503,7 @@ func TestResearchSQLRepositoriesAppendAndReadVersions(t *testing.T) {
 	if err := eventRepo.Append(ctx, eventV1); err != nil {
 		t.Fatalf("append Event v1: %v", err)
 	}
+	assertResearchPITColumn(t, ctx, db, "SELECT system_as_of FROM research_event_versions WHERE event_id=? AND event_version=1", []any{eventID}, cutoff)
 	if err := eventRepo.Append(ctx, eventV1); err != nil {
 		t.Fatalf("replay Event v1: %v", err)
 	}
@@ -519,6 +533,7 @@ func TestResearchSQLRepositoriesAppendAndReadVersions(t *testing.T) {
 	if err := claimRepo.Append(ctx, claimV1); err != nil {
 		t.Fatalf("append Claim v1: %v", err)
 	}
+	assertResearchPITColumn(t, ctx, db, "SELECT system_as_of FROM research_claim_versions WHERE claim_id=? AND claim_version=1", []any{claimID}, cutoff)
 	if err := claimRepo.Append(ctx, claimV1); err != nil {
 		t.Fatalf("replay Claim v1: %v", err)
 	}
@@ -541,11 +556,12 @@ func TestResearchSQLRepositoriesAppendAndReadVersions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	availableAt := cutoff.Add(-time.Second)
 	evidenceV1 := researchevidence.Evidence{
 		EvidenceID: evidenceID, EvidenceType: researchevidence.TypeFact,
 		SourceOwner: researchevidence.SourceData, SourceRef: "data:integration:fixture",
 		DerivedFromRefs: []string{}, SubjectRefs: []string{},
-		SystemObservedAt: cutoff, SystemAsOf: cutoff,
+		SystemObservedAt: cutoff, SystemAsOf: cutoff, AvailableAt: &availableAt,
 		Stance: researchevidence.StanceNeutral, QualityStatus: researchevidence.QualityValid,
 		ContentLevel: researchevidence.ContentMetadata, AuthorizationRef: "auth-integration-v1",
 		Limitations: []string{},
@@ -557,6 +573,9 @@ func TestResearchSQLRepositoriesAppendAndReadVersions(t *testing.T) {
 	if err := evidenceRepo.Append(ctx, evidenceV1); err != nil {
 		t.Fatalf("append Evidence: %v", err)
 	}
+	assertResearchPITColumn(t, ctx, db, "SELECT system_as_of FROM research_evidence_records WHERE evidence_id=?", []any{evidenceID}, cutoff)
+	assertResearchPITColumn(t, ctx, db, "SELECT system_observed_at FROM research_evidence_records WHERE evidence_id=?", []any{evidenceID}, cutoff)
+	assertResearchPITColumn(t, ctx, db, "SELECT available_at FROM research_evidence_records WHERE evidence_id=?", []any{evidenceID}, availableAt)
 	if err := evidenceRepo.Append(ctx, evidenceV1); err != nil {
 		t.Fatalf("replay Evidence: %v", err)
 	}
@@ -584,14 +603,42 @@ func TestResearchSQLRepositoriesAppendAndReadVersions(t *testing.T) {
 	if err := contextRepo.Append(ctx, contextV2); !errors.Is(err, ErrCorruptRecord) {
 		t.Fatalf("tampered Context idempotent replay error = %v, want ErrCorruptRecord", err)
 	}
-	contextV3 := contextV2
-	contextV3.ContextVersion = 3
-	contextV3.SystemAsOf = contextV2.SystemAsOf.Add(time.Minute)
-	contextV3.CreatedAt = contextV2.CreatedAt.Add(time.Minute)
-	contextV3.SectionRefs = append([]researchcontext.SectionRef(nil), contextV2.SectionRefs...)
-	contextV3.SectionRefs[0].SystemAsOf = contextV3.SystemAsOf
-	contextV3.SectionRefs[0].AssembledAt = contextV3.SystemAsOf
-	if err := contextRepo.Append(ctx, contextV3); !errors.Is(err, ErrCorruptRecord) {
+	contextV3Tampered := contextV2
+	contextV3Tampered.ContextVersion = 3
+	contextV3Tampered.SystemAsOf = contextV2.SystemAsOf.Add(time.Minute)
+	contextV3Tampered.CreatedAt = contextV2.CreatedAt.Add(time.Minute)
+	contextV3Tampered.SectionRefs = append([]researchcontext.SectionRef(nil), contextV2.SectionRefs...)
+	contextV3Tampered.SectionRefs[0].SystemAsOf = contextV3Tampered.SystemAsOf
+	contextV3Tampered.SectionRefs[0].AssembledAt = contextV3Tampered.SystemAsOf
+	if err := contextRepo.Append(ctx, contextV3Tampered); !errors.Is(err, ErrCorruptRecord) {
 		t.Fatalf("append after tampered previous Context error = %v, want ErrCorruptRecord", err)
+	}
+
+	// Event 历史版本损坏后，精确读取和后续版本追加都必须 fail-closed。
+	if _, err := db.ExecContext(ctx, "UPDATE research_event_versions SET payload=CONCAT(payload, ' ') WHERE event_id=? AND event_version=2", eventID); err != nil {
+		t.Fatalf("tamper stored Event payload: %v", err)
+	}
+	if _, err := eventRepo.GetVersion(ctx, eventID, 2); !errors.Is(err, ErrCorruptRecord) {
+		t.Fatalf("tampered Event read error = %v, want ErrCorruptRecord", err)
+	}
+	eventV3 := eventV2
+	eventV3.EventVersion = 3
+	eventV3.SystemAsOf = eventV2.SystemAsOf.Add(time.Minute)
+	if err := eventRepo.Append(ctx, eventV3); !errors.Is(err, ErrCorruptRecord) {
+		t.Fatalf("append after tampered previous Event error = %v, want ErrCorruptRecord", err)
+	}
+
+	// Claim 历史版本损坏后，同样不得读取或继续追加。
+	if _, err := db.ExecContext(ctx, "UPDATE research_claim_versions SET payload=CONCAT(payload, ' ') WHERE claim_id=? AND claim_version=2", claimID); err != nil {
+		t.Fatalf("tamper stored Claim payload: %v", err)
+	}
+	if _, err := claimRepo.GetVersion(ctx, claimID, 2); !errors.Is(err, ErrCorruptRecord) {
+		t.Fatalf("tampered Claim read error = %v, want ErrCorruptRecord", err)
+	}
+	claimV3 := claimV2
+	claimV3.ClaimVersion = 3
+	claimV3.SystemAsOf = claimV2.SystemAsOf.Add(time.Minute)
+	if err := claimRepo.Append(ctx, claimV3); !errors.Is(err, ErrCorruptRecord) {
+		t.Fatalf("append after tampered previous Claim error = %v, want ErrCorruptRecord", err)
 	}
 }

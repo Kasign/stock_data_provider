@@ -37,6 +37,7 @@ type MiaoXiang struct {
 	apiKey   string
 	endpoint string
 	client   *http.Client
+	httpDoer HTTPDoer
 	logger   *slog.Logger
 	now      func() time.Time
 	cacheMu  sync.Mutex
@@ -79,6 +80,12 @@ type mxTable struct {
 var mxNumberPattern = regexp.MustCompile(`[-+]?[0-9]+(?:\.[0-9]+)?`)
 
 func NewMiaoXiang(apiKey, endpoint string, timeout time.Duration) (*MiaoXiang, error) {
+	return NewMiaoXiangWithHTTPDoer(apiKey, endpoint, timeout, nil)
+}
+
+// NewMiaoXiangWithHTTPDoer 创建 MiaoXiang 补充数据 Provider，并允许 Root 注入受控 HTTP 执行器。
+// 注入执行器由 Root 拥有；Provider 仅借用，不负责关闭。
+func NewMiaoXiangWithHTTPDoer(apiKey, endpoint string, timeout time.Duration, doer HTTPDoer) (*MiaoXiang, error) {
 	apiKey = strings.TrimSpace(apiKey)
 	if !validMXAPIKey(apiKey) {
 		return nil, errors.New("MX API key is missing or looks like a placeholder")
@@ -93,9 +100,12 @@ func NewMiaoXiang(apiKey, endpoint string, timeout time.Duration) (*MiaoXiang, e
 	if timeout <= 0 {
 		timeout = 10 * time.Second
 	}
+	client := &http.Client{Timeout: timeout, CheckRedirect: func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse }}
+	if doer == nil {
+		doer = client
+	}
 	return &MiaoXiang{
-		apiKey: apiKey, endpoint: u.String(),
-		client: &http.Client{Timeout: timeout, CheckRedirect: func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse }},
+		apiKey: apiKey, endpoint: u.String(), client: client, httpDoer: doer,
 		logger: slog.Default(),
 		now:    func() time.Time { return time.Now().UTC() },
 		cache:  make(map[string]cacheEntry), cacheTTL: miaoXiangCacheTTL,
@@ -299,7 +309,7 @@ func (p *MiaoXiang) queryTables(ctx context.Context, key, query string) ([]mxTab
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("User-Agent", "stock-market-data/1.0")
 	started := time.Now()
-	resp, err := p.client.Do(req)
+	resp, err := p.httpDoer.Do(req)
 	miaoXiangRateMu.Lock()
 	miaoXiangLastRequest = p.now()
 	miaoXiangRateMu.Unlock()
