@@ -94,15 +94,9 @@ Research Event 与 Claim 作为 Run 诊断快照时，其 system_as_of 必须不
 
 2026-11-09 只读核对 Data 分支 `feat/full-go-data-providers-api-switch`，HEAD 为 `7b3aa2a099b29b841caf93b0890985ecbc002cf4`。Market Data 已迁入根 Go Module（`internal/marketdata` 存在，`services/market-data/go.mod` 已不存在）；代码树仍未发现 SecurityRef、IndustryRef、SecurityMaster、IndustryClassification 或独立 GetSecurity/ListIndustries 查询端口。当前 `SecurityTradingStatus` 是具体状态数据，不是稳定证券主数据身份；旧 `internal/analysis/app/ports.go` 泛化 UniverseResolver 也不能视为 Data 所有的稳定实体契约。故 RSC-004 暂不开发 Adapter，也不在 Research 中复制 Security/Industry 模型。待 Data 提供稳定引用、历史版本/知识时间语义和公开 Application Port 后再继续。
 
-### RSC-OPEN-006：ScenarioCondition 缺少可执行的值类型与组合 Schema
-
-Quant-Research DTO 第 9.3 节将 `expected_value` 定义为 typed scalar/object，但没有按 condition_type、metric_ref、unit 给出类型映射或 JSON Schema；ConditionGroup（all/any）也没有明确与 `conditions[]` 的联合序列化结构。没有这些定义就无法可靠校验比较值类型、单位和组合语义。
-
-因此 RSC-006 暂不创建 `any`、任意 map 或 JSON RawMessage 作为伪类型实现。待项目契约补齐类型 Registry/oneOf Schema、空值和比较规则后再开发。
-
 ## 6.2 RSC-006 Scenario 契约准入检查
 
-Quant-Research DTO 已明确 Scenario 主体字段及 QuantResultRef 元数据；Research 不直接调用 Quant，Quant Evaluation 必须由 Researchflow 获取并完成当前授权复核后传入。但 ScenarioCondition 的 `expected_value` 目前仅描述为 typed scalar/object，没有给出按 condition_type、metric_ref、unit 的具体类型映射或 JSON Schema；ConditionGroup（all/any）也未明确与 `conditions[]` 的联合序列化结构。当前不创建 `any`、任意 map 或 JSON RawMessage 作为伪类型实现。待项目契约补齐类型 Registry/oneOf Schema、空值和比较规则后再实现 RSC-006。
+当前仍受本文件 `RSC-OPEN-006` 阻断：Scenario 主体字段及 QuantResultRef 元数据已明确，但 `ScenarioCondition.expected_value` 尚无按 condition_type、metric_ref、unit 定义的类型映射或 JSON Schema，ConditionGroup（all/any）也尚无与 `conditions[]` 对应的机器可验证联合结构。Research 不直接调用 Quant；Quant Evaluation 由 Researchflow 获取并完成当前授权复核后传入。契约补齐前不使用 `any`、任意 map 或 JSON RawMessage 代替强类型定义。
 
 ## 6.3 Claim / Hypothesis 领域实现边界
 
@@ -162,11 +156,11 @@ Quant-Research DTO 第 3.4 节定义 claim_version，但没有 `supersedes_versi
 
 ### RSC-DEC-002：Lifecycle changed_at 的事务时间语义
 
-项目级决议已明确 changed_at 是 Event 状态迁移提交时间，必须随 Event 新版本和 Outbox 在同一领域事务内持久化；Outbox 重试复用持久化值。它不是 occurred_at 或 system_observed_at。当前 Research 已实现该事务和 Outbox 机制；剩余是 Server → Notification Relay 接线与真实 MariaDB 验收。
+项目级决议已明确 changed_at 是 Event 状态迁移提交时间，必须随 Event 新版本和 Outbox 在同一领域事务内持久化；Outbox 重试复用持久化值。它不是 occurred_at 或 system_observed_at。当前 Research 已实现该事务和 Outbox 机制，专用 MariaDB 验收已通过；剩余是 Server → Notification Relay 接线。
 
-### RSC-OPEN-002：ResearchEvent.changed_at 与 INT-CTR-001 DTO 映射缺口
+### RSC-OPEN-002：Server → Notification Relay 接线待完成
 
-INT-CTR-001 已 accepted lifecycle_changed Payload 映射：source_event_ref、research_event_ref、event_version、previous_state、current_state、reason_code、system_as_of、changed_at。changed_at 为状态迁移提交时间；不得使用 occurred_at、system_observed_at 或 Outbox 重试时间替代。当前待完成的是 Server → Notification PublishEvent Relay 接线，不再阻断 Research Event Domain/Outbox 实现。
+INT-CTR-001 已接受 `lifecycle_changed` Payload 映射：`source_event_ref`、`research_event_ref`、`event_version`、`previous_state`、`current_state`、`reason_code`、`system_as_of`、`changed_at`。`changed_at` 是状态迁移提交时间，不得用 `occurred_at` 或 `system_observed_at` 代替。Research Migration v4/v5 提供事务 Outbox 和领取/租约/重试/确认/拒绝；CreateEvent 首次创建与 UpdateEvent 状态迁移均在同一事务写入 Outbox；Schema/Golden 自动 Contract Test 与专用 MariaDB 验收已通过。当前未完成的是 Server 组合根消费 Research Outbox 并调用 Notification `PublishEvent` 的 Relay 接线；这不是 DTO 映射或 Research Outbox 本身的缺口。
 
 
 
