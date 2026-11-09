@@ -1,6 +1,7 @@
 package httpclient
 
 import (
+	"context"
 	"net/http"
 
 	"example.com/stock-analysis-flow/internal/platform/fault"
@@ -50,4 +51,27 @@ func (d *BoundDoer) Do(request *http.Request) (*http.Response, error) {
 		)
 	}
 	return d.client.Do(request.Context(), request, d.policy)
+}
+
+
+// OpenStream executes a streaming request with the immutable endpoint policy.
+// The caller owns the returned Body and must close it when consumption ends.
+func (d *BoundDoer) OpenStream(ctx context.Context, request *http.Request) (*StreamResponse, error) {
+	if d == nil || d.client == nil {
+		return nil, fault.New(
+			fault.ClassValidation,
+			"platform.httpclient.invalid_client",
+			"HTTP client is not configured",
+			nil,
+		)
+	}
+	if request == nil {
+		return nil, fault.New(
+			fault.ClassValidation,
+			"platform.httpclient.invalid_request",
+			"invalid HTTP request",
+			nil,
+		)
+	}
+	return d.client.OpenStream(ctx, request, d.policy)
 }

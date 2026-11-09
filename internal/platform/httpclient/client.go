@@ -22,13 +22,23 @@ import (
 const (
 	defaultTimeout               = 15 * time.Second
 	defaultDialTimeout           = 5 * time.Second
-	defaultResponseHeaderTimeout = 8 * time.Second
-	defaultMaxResponseBytes      = int64(2 << 20)
-	maxResponseBytesLimit        = int64(16 << 20)
-	defaultMaxConcurrent         = 4
-	maxConcurrentLimit           = 32
-	maxDependencyLimitEntries    = 64
-	maxRetryLimit                = 2
+	defaultResponseHeaderTimeout  = 8 * time.Second
+	defaultMaxResponseHeaderBytes = int64(1 << 20)
+	maxResponseHeaderBytesLimit   = int64(4 << 20)
+	defaultMaxResponseBytes       = int64(2 << 20)
+	maxResponseBytesLimit         = int64(16 << 20)
+	defaultMaxStreamBytes         = int64(16 << 20)
+	maxStreamBytesLimit           = int64(64 << 20)
+	defaultStreamTimeout          = 10 * time.Minute
+	maxStreamTimeout              = 30 * time.Minute
+	defaultStreamIdleTimeout      = 30 * time.Second
+	maxStreamIdleTimeout          = 5 * time.Minute
+	defaultMaxConcurrentStreams   = 2
+	maxConcurrentStreamsLimit     = 8
+	defaultMaxConcurrent          = 4
+	maxConcurrentLimit            = 32
+	maxDependencyLimitEntries     = 64
+	maxRetryLimit                 = 2
 )
 
 var (
@@ -46,12 +56,20 @@ type Config struct {
 	Timeout               time.Duration
 	DialTimeout           time.Duration
 	TLSHandshakeTimeout   time.Duration
-	ResponseHeaderTimeout time.Duration
-	MaxResponseBytes      int64
-	MaxRetries            int
-	MaxConcurrent         int
-	DependencyLimits      map[string]int
-	Resolver              Resolver
+	ResponseHeaderTimeout  time.Duration
+	MaxResponseHeaderBytes int64
+	MaxResponseBytes       int64
+	MaxRetries             int
+	MaxConcurrent          int
+	DependencyLimits       map[string]int
+
+	StreamTimeout          time.Duration
+	StreamIdleTimeout      time.Duration
+	MaxStreamBytes         int64
+	MaxConcurrentStreams   int
+	StreamDependencyLimits map[string]int
+
+	Resolver Resolver
 }
 
 // DestinationPolicy must be supplied for every request. Hosts are exact-match
@@ -72,8 +90,10 @@ type Client struct {
 	dial             func(context.Context, string, string) (net.Conn, error)
 	httpClient       *http.Client
 	transport        *http.Transport
-	defaultSemaphore chan struct{}
-	semaphores       map[string]chan struct{}
+	defaultSemaphore       chan struct{}
+	semaphores             map[string]chan struct{}
+	defaultStreamSemaphore chan struct{}
+	streamSemaphores       map[string]chan struct{}
 }
 
 type policyContextKey struct{}
@@ -91,11 +111,41 @@ func New(config Config) (*Client, error) {
 	if config.ResponseHeaderTimeout <= 0 {
 		config.ResponseHeaderTimeout = defaultResponseHeaderTimeout
 	}
+	if config.MaxResponseHeaderBytes <= 0 {
+		config.MaxResponseHeaderBytes = defaultMaxResponseHeaderBytes
+	}
+	if config.MaxResponseHeaderBytes > maxResponseHeaderBytesLimit {
+		return nil, errors.New("max response header bytes exceeds 4 MiB")
+	}
 	if config.MaxResponseBytes <= 0 {
 		config.MaxResponseBytes = defaultMaxResponseBytes
 	}
 	if config.MaxResponseBytes > maxResponseBytesLimit {
 		return nil, errors.New("max response bytes exceeds 16 MiB")
+	}
+	if config.MaxStreamBytes <= 0 {
+		config.MaxStreamBytes = defaultMaxStreamBytes
+	}
+	if config.MaxStreamBytes > maxStreamBytesLimit {
+		return nil, errors.New("max stream bytes exceeds 64 MiB")
+	}
+	if config.StreamTimeout <= 0 {
+		config.StreamTimeout = defaultStreamTimeout
+	}
+	if config.StreamTimeout > maxStreamTimeout {
+		return nil, errors.New("stream timeout exceeds 30 minutes")
+	}
+	if config.StreamIdleTimeout <= 0 {
+		config.StreamIdleTimeout = defaultStreamIdleTimeout
+	}
+	if config.StreamIdleTimeout > maxStreamIdleTimeout {
+		return nil, errors.New("stream idle timeout exceeds 5 minutes")
+	}
+	if config.MaxConcurrentStreams <= 0 {
+		config.MaxConcurrentStreams = defaultMaxConcurrentStreams
+	}
+	if config.MaxConcurrentStreams > maxConcurrentStreamsLimit {
+		return nil, fmt.Errorf("max concurrent streams cannot exceed %d", maxConcurrentStreamsLimit)
 	}
 	if config.MaxRetries < 0 || config.MaxRetries > maxRetryLimit {
 		return nil, errors.New("max retries must be between 0 and 2")
@@ -120,6 +170,18 @@ func New(config Config) (*Client, error) {
 	}
 	config.DependencyLimits = limits
 
+	if len(config.StreamDependencyLimits) > maxDependencyLimitEntries {
+		return nil, fmt.Errorf("stream dependency limits cannot exceed %d entries", maxDependencyLimitEntries)
+	}
+	streamLimits := make(map[string]int, len(config.StreamDependencyLimits))
+	for dependency, limit := range config.StreamDependencyLimits {
+		if !validDependency(dependency) || limit < 1 || limit > config.MaxConcurrentStreams {
+			return nil, errors.New("invalid stream dependency concurrency limit")
+		}
+		streamLimits[dependency] = limit
+	}
+	config.StreamDependencyLimits = streamLimits
+
 	resolver := config.Resolver
 	if resolver == nil {
 		resolver = net.DefaultResolver
@@ -130,12 +192,18 @@ func New(config Config) (*Client, error) {
 	for dependency, limit := range limits {
 		semaphores[dependency] = make(chan struct{}, limit)
 	}
+	streamSemaphores := make(map[string]chan struct{}, len(streamLimits))
+	for dependency, limit := range streamLimits {
+		streamSemaphores[dependency] = make(chan struct{}, limit)
+	}
 	client := &Client{
-		config:           config,
-		resolver:         resolver,
-		dial:             dialer.DialContext,
-		defaultSemaphore: make(chan struct{}, config.MaxConcurrent),
-		semaphores:       semaphores,
+		config:                 config,
+		resolver:               resolver,
+		dial:                   dialer.DialContext,
+		defaultSemaphore:       make(chan struct{}, config.MaxConcurrent),
+		semaphores:             semaphores,
+		defaultStreamSemaphore: make(chan struct{}, config.MaxConcurrentStreams),
+		streamSemaphores:       streamSemaphores,
 	}
 
 	transport := &http.Transport{
@@ -143,8 +211,9 @@ func New(config Config) (*Client, error) {
 		DialContext:           client.dialContext,
 		TLSClientConfig:       &tls.Config{MinVersion: tls.VersionTLS12},
 		TLSHandshakeTimeout:   config.TLSHandshakeTimeout,
-		ResponseHeaderTimeout: config.ResponseHeaderTimeout,
-		IdleConnTimeout:       90 * time.Second,
+		ResponseHeaderTimeout:  config.ResponseHeaderTimeout,
+		MaxResponseHeaderBytes: config.MaxResponseHeaderBytes,
+		IdleConnTimeout:        90 * time.Second,
 		MaxIdleConns:          64,
 		MaxIdleConnsPerHost:   4,
 		MaxConnsPerHost:       16,

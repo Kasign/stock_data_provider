@@ -53,6 +53,8 @@ type StreamResponse struct {
     Body       io.ReadCloser
 }
 
+func (r *StreamResponse) Stats() StreamStats
+
 func (c *Client) OpenStream(
     ctx context.Context,
     request *http.Request,
@@ -169,7 +171,7 @@ Read 错误必须通过稳定 Fault Code 区分；Fault 的 SafeMessage 为固�
 
 ## 7. 诊断信息
 
-每条流提供只读的终态统计快照（建议 `StreamResponse.Stats()`），至少包括：
+每条流通过 `StreamResponse.Stats() StreamStats` 提供只读统计快照，至少包括：
 
 - Request ID；
 - 逻辑 Dependency；
