@@ -23,11 +23,31 @@ type Resources struct {
 	HTTPClient *platformhttpclient.Client
 
 	closeOnce sync.Once
+	mu        sync.Mutex
+	closed    bool
 	closeErr  error
 }
 
 // Storage is kept as a compatibility alias for the transitional Analysis adapter.
 type Storage = Resources
+
+// BindHTTPDestination creates a BoundDoer from the shared Platform Client.
+// The caller supplies the exact upstream allowlist; the returned doer cannot
+// replace that policy per request. Binding is rejected once resources close.
+func (r *Resources) BindHTTPDestination(policy platformhttpclient.DestinationPolicy) (*platformhttpclient.BoundDoer, error) {
+	if r == nil {
+		return nil, errors.New("server resources are nil")
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.closed {
+		return nil, errors.New("server resources are closed")
+	}
+	if r.HTTPClient == nil {
+		return nil, errors.New("shared Platform HTTP Client is not configured")
+	}
+	return r.HTTPClient.Bind(policy)
+}
 
 // OpenLegacyAnalysisResources creates shared Platform resources and adapts the
 // SQL/Redis clients to the still-running legacy Analysis persistence interfaces.
@@ -83,6 +103,9 @@ func (r *Resources) Close() error {
 		return nil
 	}
 	r.closeOnce.Do(func() {
+		r.mu.Lock()
+		r.closed = true
+		r.mu.Unlock()
 		var errs []error
 		if r.HTTPClient != nil {
 			r.HTTPClient.CloseIdleConnections()
