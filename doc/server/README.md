@@ -724,12 +724,12 @@ Server 层完成不是“服务能够启动”这么简单。至少同时满足�
 | 任务 | 状态 | 说明 |
 |---|---|---|
 | SRV-001 | 完成 | 已记录旧入口、路由与认证现状、旧 Analysis Migration 四表、Worker/Storage 生命周期、部署边界及各模块接入就绪度；详细见 12.3 节 |
-| SRV-002 | 进行中 | 已创建 internal/server/bootstrap，入口已委托 Bootstrap；Server 进程级配置已集中为 Process 快照；存储/行情仍由兼容 Adapter 自行解析，模块 Registry 与统一装配未完成；详见 12.22 节 |
-| SRV-003 | 进行中 | DB、Redis、HTTP Client 已由 Resources 统一创建和关闭；新增固定 DestinationPolicy 的 BoundDoer 绑定入口；真实模块注入、Dependency allowlist/配额及消费者停止验收仍待模块入口交付；详见 12.24 节 |
+| SRV-002 | 进行中 | Server 进程级配置已集中为 Process 快照；Storage/MarketData Adapter 已支持显式 Env 注入且 Bootstrap 统一传递；完整模块 Registry 与统一装配未完成；详见 12.22、12.27 节 |
+| SRV-003 | 进行中 | DB、Redis、HTTP Client 已由 Resources 统一创建和关闭；新增固定 DestinationPolicy 的 BoundDoer 绑定入口，并覆盖 Bind/Close 并发边界；真实模块注入、Dependency allowlist/配额及流式生命周期验收仍待模块入口交付；详见 12.24、12.28 节 |
 | SRV-004 | 阻塞 | 已复核模块接入面；Researchflow/Quant/LLM/Notification 缺少完整生产装配入口，News/Research 也有关键查询/授权接入缺口；详见 12.6 节 |
 | SRV-005 | 进行中 | 已接入 Platform Bearer Owner 认证、入口 Request ID、Fault HTTP 映射工具、请求体与并发限制；现有旧 Analysis Handler 保留原业务错误 DTO；Web Session/密码登录、CSRF、登录限流、模块 Service Scope 和可信代理边界仍待契约/模块入口，现有 WebUI 尚未携带 Analysis Owner 凭证，不能视为浏览器认证链路已完成 |
-| SRV-006 | 进行中 | 旧 Analysis Worker 与 HTTP Server 均已纳入统一 Lifecycle；HTTP Listener 在 Start 阶段同步绑定，Readiness 在 HTTP Shutdown 前切换为 not-ready，Shutdown 超时后强制 Close；真实 SIGTERM 子进程测试已补充，待当前 SHA 的 Workflow 证据；模块 Worker 接入和生产容器退出验收仍待完成 |
-| SRV-007 | 进行中 | 已建立 Server Migration Registry，并注册 News/Research/Notification；注册时按版本号稳定排序；显式配置执行；其他模块 Migration 和 MariaDB 集成验收待完成，详见 12.7 节 |
+| SRV-006 | 进行中 | 旧 Analysis Worker 与 HTTP Server 均已纳入统一 Lifecycle；HTTP Listener 在 Start 阶段同步绑定，Readiness 在 HTTP Shutdown 前切换为 not-ready，Shutdown 超时后强制 Close；Bootstrap 显式保证消费者停止后再关闭共享资源；真实 SIGTERM 子进程测试已补充，模块 Worker 接入和生产容器退出验收仍待完成；详见 12.26 节 |
+| SRV-007 | 进行中 | 已建立 Server Migration Registry，并注册 News/Research/Notification；注册时按版本号稳定排序；增加 namespace 执行报告、稳定原因码和人工恢复标记；其他模块 Migration 和 MariaDB 集成验收待完成，详见 12.7、12.23、12.25 节 |
 | SRV-008 | 待契约 | Dispatcher 所有权未冻结 |
 | SRV-009 | 进行中 | 已实现 Platform Runner 聚合、严格 Readiness 判定、MariaDB/Redis 资源检查和 Owner 保护的结构化 `/diagnostics` 只读入口；真实模块 Check 注册、依赖故障注入及生产诊断验收仍待完成，详见 12.8、12.20 节 |
 | SRV-010 | 阻塞 | 等待 Data 迁移门禁和公开接口 |
