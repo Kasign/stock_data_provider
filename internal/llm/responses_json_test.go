@@ -363,3 +363,31 @@ func TestParseResponsesUsageDetailsAreRangeChecked(t *testing.T) {
 		})
 	}
 }
+
+
+func TestMapResponsesStreamRequestSetsStreamFlag(t *testing.T) {
+	request := validResponsesRequest()
+	now := request.SystemAsOf.Add(time.Second)
+	body, err := MapResponsesStreamRequestAt(request, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var wire map[string]any
+	if err := json.Unmarshal(body, &wire); err != nil {
+		t.Fatal(err)
+	}
+	if wire["stream"] != true {
+		t.Fatalf("stream request must set stream=true: %s", body)
+	}
+	regular, err := MapResponsesRequestAt(request, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var regularWire map[string]any
+	if err := json.Unmarshal(regular, &regularWire); err != nil {
+		t.Fatal(err)
+	}
+	if _, exists := regularWire["stream"]; exists {
+		t.Fatalf("non-stream request must omit stream flag: %s", regular)
+	}
+}
