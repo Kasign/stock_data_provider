@@ -22,22 +22,22 @@ type DeliveryConsistencyInput struct {
 	StateEventsComparable bool
 }
 
-// DeliveryConsistencyResult reports independent checks and the aggregate result.
 // DeliveryConsistencyEvidence is a deliberately allowlisted, non-sensitive summary.
 // It excludes delivery/recipient/channel IDs, evidence references, payloads, provider
 // messages, actor references, request IDs, and raw errors.
 type DeliveryConsistencyEvidence struct {
-	DeliveryStatus       domain.DeliveryStatus       `json:"delivery_status"`
-	DeliveryVersion      int64                       `json:"delivery_version"`
-	ExpectedAttemptCount int                         `json:"expected_attempt_count"`
-	ObservedAttemptCount int                         `json:"observed_attempt_count"`
-	StateEventCount      int                         `json:"state_event_count"`
-	LatestAttemptOutcome domain.DeliveryAttemptOutcome `json:"latest_attempt_outcome,omitempty"`
-	LatestAttemptFinished bool                       `json:"latest_attempt_finished"`
-	EvidenceRefCount     int                         `json:"evidence_ref_count"`
+	DeliveryStatus        domain.DeliveryStatus         `json:"delivery_status"`
+	DeliveryVersion       int64                         `json:"delivery_version"`
+	ExpectedAttemptCount  int                           `json:"expected_attempt_count"`
+	ObservedAttemptCount  int                           `json:"observed_attempt_count"`
+	StateEventCount       int                           `json:"state_event_count"`
+	LatestAttemptOutcome  domain.DeliveryAttemptOutcome `json:"latest_attempt_outcome,omitempty"`
+	LatestAttemptFinished bool                          `json:"latest_attempt_finished"`
+	EvidenceRefCount      int                           `json:"evidence_ref_count"`
 }
 
-// DeliveryConsistencyResult is a safe diagnostic DTO; do not add raw domain records.
+// DeliveryConsistencyResult reports independent checks and the aggregate result.
+// It is a safe diagnostic DTO; do not add raw domain records.
 type DeliveryConsistencyResult struct {
 	Status             DeliveryConsistencyStatus `json:"status"`
 	AttemptStatus      DeliveryConsistencyStatus `json:"attempt_status"`
