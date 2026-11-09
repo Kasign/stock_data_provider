@@ -340,3 +340,9 @@ Fake Repository/Fake Clock/Fake Provider 只证明模块内逻辑；MariaDB/Redi
 - `deadline_exceeded` 一旦写入 Run.termination_reason，即成为终止路径的线性化标记；BeginRunCancellation 不得覆盖为 user_cancelled。
 - `ExpireRunDeadline` 对相同 Run 重复调用必须不增加版本、不重复 fencing；候选查询排除已有 termination_reason 的记录，避免 Deadline Scanner 热循环。
 - Run=cancelling 与 deadline expiration 互斥；谁先在 Run 行锁下成功建立终止原因，另一条路径必须拒绝。
+
+### 9.9 Deadline Finalize 领域/持久化状态对齐（2026-11-09）
+
+- `ExpireRunDeadline` 的持久化线性化结果为 Run=`running`、termination_reason=`deadline_exceeded`；Stage/Attempt 已在同一事务内超时并 fencing。
+- `FinalizeDeadline` 只接受上述状态组合，调用 `AggregateRun` 计算 failed/partial 和 ResultSummary；拒绝旧的 `cancelling + run_deadline_exceeded` 组合及 `user_cancelled`。
+- 后续 Application Finalizer 必须使用 Expire 返回的新 Run.version 调用 Storage `FinalizeRun`，由后者原子写入 ResultSummary、Outbox 与 Run 终态。该编排和真实 MariaDB 集成仍待完成。

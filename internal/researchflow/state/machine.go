@@ -574,8 +574,11 @@ func uniqueSorted(values []string) []string {
 // FinalizeDeadline aggregates timed-out and completed stages after all in-flight attempts
 // have stopped or been fenced. The template propagation matrix determines partial vs failed.
 func FinalizeDeadline(run domain.Run, stages []domain.Stage, attempts []domain.Attempt, policies map[string]template.PropagationPolicy, hardRiskStageCodes map[string]bool, requiresHardRiskGate bool, now time.Time) (domain.Run, error) {
-	if run.Status != domain.RunCancelling || run.TerminationReason != "run_deadline_exceeded" {
-		return run, fmt.Errorf("%w: run is not cancelling due to deadline", ErrInvalidTransition)
+	// Storage deadline expiration keeps the Run running, fences all in-flight
+	// Attempts and marks unfinished Stages timed_out. This Application step
+	// derives failed/partial before Storage atomically commits summary and Outbox.
+	if run.Status != domain.RunRunning || run.TerminationReason != "deadline_exceeded" {
+		return run, fmt.Errorf("%w: run is not pending deadline finalization", ErrInvalidTransition)
 	}
 	return AggregateRun(run, stages, attempts, policies, hardRiskStageCodes, requiresHardRiskGate, now)
 }
