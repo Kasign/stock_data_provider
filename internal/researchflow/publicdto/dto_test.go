@@ -129,6 +129,12 @@ func TestDomainProjectionsValidateAgainstTheirPublicSchemas(t *testing.T) {
 	assertDTO("Run","run-1.0.0.schema.json",run)
 	assertDTO("ResultSummary","result-summary-1.0.0.schema.json",ResultSummaryFromDomain(domainRunSummaryForTest()))
 	assertDTO("Stage","stage-1.0.0.schema.json",stage)
+	skippedStage := StageFromDomain(domain.Stage{
+		Ref:"stage_optional",RunRef:"run_schema",Code:"optional_news",Status:domain.StageSkipped,Version:1,
+		Required:false,Dependencies:[]string{},RetryPolicyRef:"retry_optional_v1",ReasonCodes:[]string{"not_applicable"},
+		CreatedAt:now,FinishedAt:timePointer(now),
+	}, "1.0.0")
+	assertDTO("SkippedStage","stage-1.0.0.schema.json",skippedStage)
 	assertDTO("Attempt","attempt-1.0.0.schema.json",attempt)
 }
 
