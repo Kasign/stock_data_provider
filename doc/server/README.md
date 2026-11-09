@@ -597,7 +597,7 @@ Server 层完成不是“服务能够启动”这么简单。至少同时满足�
 | SRV-002 | 进行中 | 已创建 internal/server/bootstrap，入口已委托 Bootstrap；HTTP 配置和 Platform 资源创建已拆出；剩余模块 Registry 与统一装配 |
 | SRV-003 | 进行中 | DB、Redis、HTTP Client 已由 Resources 统一创建和关闭；后续接入模块资源注入与诊断贡献项 |
 | SRV-004 | 阻塞 | 已复核模块接入面；Researchflow/Quant/LLM/Notification 缺少完整生产装配入口，News/Research 也有关键查询/授权接入缺口；详见 12.6 节 |
-| SRV-005 | 进行中 | 已接入 Platform Bearer Owner 认证；Web Session/密码登录、CSRF、登录限流、模块 Service Scope、统一 Fault 映射和可信代理边界仍待契约与实现；现有 WebUI 尚未携带 Analysis Owner 凭证，不能视为浏览器认证链路已完成 |
+| SRV-005 | 进行中 | 已接入 Platform Bearer Owner 认证、入口 Request ID、Fault HTTP 映射工具、请求体与并发限制；现有旧 Analysis Handler 保留原业务错误 DTO；Web Session/密码登录、CSRF、登录限流、模块 Service Scope 和可信代理边界仍待契约/模块入口，现有 WebUI 尚未携带 Analysis Owner 凭证，不能视为浏览器认证链路已完成 |
 | SRV-006 | 进行中 | 旧 Analysis Worker 与 HTTP Server 均已纳入统一 Lifecycle；HTTP Listener 在 Start 阶段同步绑定，Readiness 在 HTTP Shutdown 前切换为 not-ready，Shutdown 超时后强制 Close；模块 Worker 接入和真实进程 SIGTERM 集成测试仍待完成 |
 | SRV-007 | 进行中 | 已建立 Server Migration Registry，并注册 News/Research/Notification；显式配置执行；其他模块 Migration 和 MariaDB 集成验收待完成，详见 12.7 节 |
 | SRV-008 | 待契约 | Dispatcher 所有权未冻结 |

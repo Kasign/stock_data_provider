@@ -31,14 +31,14 @@ func LoadRole(env platformconfig.Env) (Role, error) {
 
 // HTTP contains the HTTP listener, admission limits and graceful-shutdown settings.
 type HTTP struct {
-	Address                 string
-	ReadHeaderTimeout       time.Duration
-	ReadTimeout             time.Duration
-	WriteTimeout            time.Duration
-	IdleTimeout             time.Duration
-	ShutdownTimeout         time.Duration
-	MaxRequestBodyBytes     int64
-	MaxConcurrentRequests   int
+	Address               string
+	ReadHeaderTimeout     time.Duration
+	ReadTimeout           time.Duration
+	WriteTimeout          time.Duration
+	IdleTimeout           time.Duration
+	ShutdownTimeout       time.Duration
+	MaxRequestBodyBytes   int64
+	MaxConcurrentRequests int
 }
 
 // LoadHTTP reads and validates Server-owned HTTP settings. The legacy Analysis

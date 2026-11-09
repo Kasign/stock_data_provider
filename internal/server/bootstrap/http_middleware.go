@@ -15,10 +15,10 @@ type httpMiddlewareConfig struct {
 }
 
 type publicError struct {
-	Class      string `json:"class"`
-	Code       string `json:"code"`
-	Message    string `json:"message"`
-	Retryable  bool   `json:"retryable"`
+	Class     string `json:"class"`
+	Code      string `json:"code"`
+	Message   string `json:"message"`
+	Retryable bool   `json:"retryable"`
 }
 
 type publicErrorEnvelope struct {
@@ -125,8 +125,6 @@ func writePublicError(w http.ResponseWriter, status int, value publicError) {
 		w.Header().Set("Retry-After", "1")
 	}
 	w.WriteHeader(status)
-	if r, ok := w.(interface{ Write([]byte) (int, error) }); ok {
-		_ = json.NewEncoder(r).Encode(publicErrorEnvelope{Error: value})
-	}
+	_ = json.NewEncoder(w).Encode(publicErrorEnvelope{Error: value})
 }
 

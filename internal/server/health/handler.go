@@ -17,7 +17,7 @@ type readinessChecker interface {
 }
 
 type Handler struct {
-	checker readinessChecker
+	checker  readinessChecker
 	draining atomic.Bool
 }
 
