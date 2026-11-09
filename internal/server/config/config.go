@@ -11,12 +11,12 @@ import (
 
 // HTTP contains the HTTP listener and graceful-shutdown settings owned by Server.
 type HTTP struct {
-	Address            string
-	ReadHeaderTimeout  time.Duration
-	ReadTimeout        time.Duration
-	WriteTimeout       time.Duration
-	IdleTimeout        time.Duration
-	ShutdownTimeout    time.Duration
+	Address           string
+	ReadHeaderTimeout time.Duration
+	ReadTimeout       time.Duration
+	WriteTimeout      time.Duration
+	IdleTimeout       time.Duration
+	ShutdownTimeout   time.Duration
 }
 
 // LoadHTTP reads and validates Server-owned HTTP settings. The legacy Analysis
