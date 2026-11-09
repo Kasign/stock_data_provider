@@ -906,7 +906,7 @@ internal/
 - Bootstrap Dependencies 新增可选 `XueqiuHTTPDoer` 并传入 Provider。Root 创建并拥有绑定到实际 `XueqiuBaseURL` 的 BoundDoer；Data Module 不拥有、不关闭。
 - 新增回归测试源码覆盖注入执行器、GET 目标、Cookie/Referer/Origin/Accept Header 与 502 错误路径；测试尚未运行，不代表编译或安全策略验收通过。
 - Root 注入策略必须绑定精确 HTTPS Host/443、拒绝重定向（Cookie 不得跨域转发）、执行 DNS/IP 检查，并将成功响应上限设置为不小于现有 `maxProviderPayloadBytes`。Cookie 仅由配置注入，禁止出现在日志、错误或诊断证据中。
-- 下一步处理无凭据 HTTP Provider 的受控出口；按实际 endpoint 分组，但每个不同 Host 仍需独立目的地址策略。BaoStock/Pytdx 继续单独制定 TCP 出站策略。
+- Yahoo Finance 已接入无凭据受控 HTTP 执行器；NetEase 报价与历史 CSV 是不同 Host，按两个独立出口接入。后续继续处理 Tencent/Sina/Eastmoney 等 Provider。BaoStock/Pytdx 仍单列 TCP 出站策略。
 
 
 ### 2026-11-09：M4-HTTP-03 TickFlow 双出口受控 HTTP 执行器注入
@@ -928,4 +928,15 @@ internal/
 - Bootstrap Dependencies 新增可选 `YahooHTTPDoer` 并传入 Provider。Root 后续绑定实际 `YahooChartURL` 的精确 HTTPS Host/443，拒绝重定向并执行 DNS/IP 与响应体上限策略；Data Module 不拥有、不关闭执行器。
 - 新增回归测试源码覆盖 Quote/DailyBars 两条请求路径、GET 目标、Accept/Referer Header、502 错误路径和默认构造器兼容性；测试尚未运行。
 - 下一步继续处理其他无凭据 HTTP Provider，逐个核对多 Host endpoint 与既有重定向行为；不得用单个宽泛 BoundDoer 代替精确目的地址策略。
+
+
+
+### 2026-11-09：M4-HTTP-06 NetEase 双 Host 受控 HTTP 执行器注入
+
+- 代码基线：`bf9b923014faff609c482c2adbaae42991a616d7`。NetEase 报价 JSONP 与历史 CSV 使用不同默认 Host（`api.money.126.net` 与 `quotes.money.163.com`），必须由两个 BoundDoer 独立约束；不能复用一个宽泛 Host 策略。
+- Provider 新增 `NewNeteaseConfiguredWithHTTPDoers`，分别注入 Quote 与 History 执行器；旧构造器保留，未注入时两个路径继续回退到原有超时与禁止重定向的标准 Client。
+- Quote/History 两条 GET 路径分别使用对应执行器；URL Query、Referer、Accept、响应体大小上限、CSV/JSONP 解析和错误语义不变。无凭据，不增加认证字段。
+- Bootstrap Dependencies 新增 `NeteaseQuoteHTTPDoer` / `NeteaseHistoryHTTPDoer`；Root 按运行时配置分别绑定精确 HTTPS Host/443，拒绝重定向并执行 DNS/IP 校验和既有响应体上限；Module 不拥有、不关闭执行器。
+- 新增测试源码覆盖两个出口不交叉、请求 URL/Referer 和 502 错误路径；测试尚未运行。
+- 下一步继续处理 Tencent 多 endpoint Provider，按真实 URL Host 分组注入，不改变既有重定向禁止策略。
 

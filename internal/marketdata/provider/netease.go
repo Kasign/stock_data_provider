@@ -31,9 +31,11 @@ const neteaseFields = "TCLOSE;HIGH;LOW;TOPEN;LCLOSE;CHG;PCHG;TURNOVER;VOTURNOVER
 // is controlled by providers.json and MARKET_DATA_NETEASE_*_ENABLED settings.
 
 type Netease struct {
-	client     *http.Client
-	quoteURL   string
-	historyURL string
+	client          *http.Client
+	quoteHTTPDoer   HTTPDoer
+	historyHTTPDoer HTTPDoer
+	quoteURL        string
+	historyURL      string
 }
 
 func NewNetease(timeout time.Duration, historyURL string) *Netease {
@@ -41,6 +43,12 @@ func NewNetease(timeout time.Duration, historyURL string) *Netease {
 }
 
 func NewNeteaseConfigured(timeout time.Duration, quoteURL, historyURL string) *Netease {
+	return NewNeteaseConfiguredWithHTTPDoers(timeout, quoteURL, historyURL, nil, nil)
+}
+
+// NewNeteaseConfiguredWithHTTPDoers 分别注入报价与历史 CSV 出口；两者可能指向不同 Host。
+// 注入执行器由调用方负责超时、目的地址策略、重定向策略和生命周期。
+func NewNeteaseConfiguredWithHTTPDoers(timeout time.Duration, quoteURL, historyURL string, quoteDoer, historyDoer HTTPDoer) *Netease {
 	if timeout <= 0 {
 		timeout = 12 * time.Second
 	}
@@ -50,15 +58,24 @@ func NewNeteaseConfigured(timeout time.Duration, quoteURL, historyURL string) *N
 	if strings.TrimSpace(historyURL) == "" {
 		historyURL = "https://quotes.money.163.com/service/chddata.html"
 	}
-	return &Netease{
-		client: &http.Client{
-			Timeout: timeout,
-			CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
-				return http.ErrUseLastResponse
-			},
+	client := &http.Client{
+		Timeout: timeout,
+		CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
+			return http.ErrUseLastResponse
 		},
-		quoteURL:   strings.TrimRight(strings.TrimSpace(quoteURL), "/"),
-		historyURL: strings.TrimSpace(historyURL),
+	}
+	if quoteDoer == nil {
+		quoteDoer = client
+	}
+	if historyDoer == nil {
+		historyDoer = client
+	}
+	return &Netease{
+		client:          client,
+		quoteHTTPDoer:   quoteDoer,
+		historyHTTPDoer: historyDoer,
+		quoteURL:        strings.TrimRight(strings.TrimSpace(quoteURL), "/"),
+		historyURL:      strings.TrimSpace(historyURL),
 	}
 }
 
@@ -89,7 +106,7 @@ func (p *Netease) FetchQuote(ctx context.Context, rawSymbol string) (*model.Quot
 	req.Header.Set("Accept", "application/javascript,application/json,*/*")
 	req.Header.Set("Referer", "https://money.163.com/")
 
-	resp, err := p.client.Do(req)
+	resp, err := p.quoteHTTPDoer.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("Netease quote request: %w", err)
 	}
@@ -378,7 +395,7 @@ func (p *Netease) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endD
 	req.Header.Set("Accept", "text/csv,text/plain,application/octet-stream,*/*")
 	req.Header.Set("Referer", "https://money.163.com/")
 
-	resp, err := p.client.Do(req)
+	resp, err := p.historyHTTPDoer.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("Netease history request: %w", err)
 	}
