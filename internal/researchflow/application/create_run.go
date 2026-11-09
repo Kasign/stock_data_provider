@@ -164,11 +164,20 @@ func (s *CreateRunService) CreateRun(ctx context.Context, command domain.CreateR
 			if !ok { return CreateRunResult{}, fmt.Errorf("resolved dependency %q has no stage reference", code) }
 			dependencies = append(dependencies, ref)
 		}
+		initialStatus := resolvedStage.InitialStatus
+		if initialStatus == "" { initialStatus = domain.StagePending }
+		var finishedAt *time.Time
+		if initialStatus == domain.StageSkipped {
+			finished := now
+			finishedAt = &finished
+		}
+		reasonCodes := append([]string(nil), resolvedStage.ReasonCodes...)
+		if reasonCodes == nil { reasonCodes = []string{} }
 		stages = append(stages, domain.Stage{
 			Ref:stageRefs[definition.Code], RunRef:runRef, Code:definition.Code,
-			Status:domain.StagePending, Version:1, Required:definition.Required,
+			Status:initialStatus, Version:1, Required:definition.Required,
 			Dependencies:dependencies, RetryPolicyRef:definition.Retry.Ref,
-			AttemptNo:0, ReasonCodes:[]string{}, CreatedAt:now,
+			AttemptNo:0, ReasonCodes:reasonCodes, CreatedAt:now, FinishedAt:finishedAt,
 		})
 	}
 	run := domain.Run{
