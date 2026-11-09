@@ -411,3 +411,10 @@ Run `42602399686` 对应 HEAD `8d08cf07a651efcd42a514f3dafd94d659f21f97`。`Test
 - [x] 二次读取租约时重新检查数据库权威过期时间，排除初次扫描后已续期的租约。
 - [x] MariaDB 集成测试覆盖 active、expired、renewed 三种状态。
 - [ ] 真实 MariaDB DSN L3 执行仍待配置。
+
+
+### 本轮执行预算与租约扫描 CI 反馈
+
+- Go workflow Run `42611257814` 对应 HEAD `f4d100a`：`Test go-core` 成功，但不覆盖 Notification；根模块 `Test .` 在全仓 gofmt 门禁失败，差异来自 Market Data、News、Quant 等其他目录，日志未列出 `internal/notification/**` 差异。
+- 根模块单测、Race Detector、go vet 未执行；Notification 新增执行期限/恢复预算测试及 MariaDB 扫描集成用例尚无实际执行通过证据。
+- MariaDB 集成 Job skipped；真实 `NOTIFICATION_MARIADB_TEST_DSN` L3 未执行。
