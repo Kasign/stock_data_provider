@@ -33,6 +33,7 @@ type SourceCapabilities struct {
 	HotRankings           []provider.HotRankingProvider
 	Supplements           []provider.SupplementProvider
 }
+
 func sourceProviderNames[T interface{ Name() string }](providers []T) []string {
 	names := make([]string, 0, len(providers))
 	for _, p := range providers {
