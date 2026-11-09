@@ -65,11 +65,12 @@ func AssessDeliveryConsistency(input DeliveryConsistencyInput) DeliveryConsisten
 		if attempt.EvidenceRef != nil && *attempt.EvidenceRef != "" {
 			result.Evidence.EvidenceRefCount++
 		}
-		if attempt.FinishedAt != nil {
-			result.Evidence.LatestAttemptFinished = true
-		}
-		if attempt.Outcome != nil {
-			result.Evidence.LatestAttemptOutcome = *attempt.Outcome
+	}
+	if len(input.Attempts) > 0 {
+		latest := input.Attempts[len(input.Attempts)-1]
+		result.Evidence.LatestAttemptFinished = latest.FinishedAt != nil && latest.Outcome != nil
+		if latest.Outcome != nil {
+			result.Evidence.LatestAttemptOutcome = *latest.Outcome
 		}
 	}
 	for _, event := range input.StateEvents {
