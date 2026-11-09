@@ -19,7 +19,7 @@ on:
       - 'docker-compose.yml'
       - 'scripts/**'
   push:
-    branches: [main, feat/full-go-data-providers-api-switch, feat/research-news-ingestion, feat/notification, feat/quant]
+    branches: [main, feat/full-go-data-providers-api-switch, feat/research-news-ingestion, feat/research, feat/notification, feat/quant]
     paths:
       - 'go.mod'
       - 'go.sum'
@@ -146,6 +146,31 @@ jobs:
       - name: Run go vet
         working-directory: ${{ matrix.module }}
         run: go vet ./...
+
+  research-contract:
+    name: Test Research Context Schema and Application contract
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: true
+      - name: Check Research gofmt
+        run: |
+          files="$(find internal/research/context internal/research/application -name '*.go' -type f -print0 | xargs -0 gofmt -l)"
+          if [[ -n "$files" ]]; then
+            printf '%s\\n' "$files"
+            exit 1
+          fi
+      - name: Run Context Schema and Application contract tests
+        run: go test ./internal/research/context ./internal/research/application -count=1
+      - name: Run Research contract race tests
+        run: go test -race ./internal/research/context ./internal/research/application -count=1
+      - name: Run Research contract vet
+        run: go vet ./internal/research/context ./internal/research/application
 
   market-data-module-test:
     if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.event.pull_request.head.ref == 'feat/full-go-data-providers-api-switch') }}
