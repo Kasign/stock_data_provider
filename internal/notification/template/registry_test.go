@@ -389,3 +389,93 @@ func TestRegistryRepositoryLoadIsIdempotentButImmutable(t *testing.T) {
 		t.Fatalf("same key with changed definition must remain immutable: %v", err)
 	}
 }
+
+type registryTemplateRepositoryMap map[templateKey]registryTemplateRepositoryStub
+
+func (s registryTemplateRepositoryMap) Get(_ context.Context, templateID string, version int64) (Definition, string, bool, error) {
+	record, ok := s[templateKey{id: templateID, version: version}]
+	return record.definition, record.digest, record.found, record.err
+}
+
+func (s registryTemplateRepositoryMap) Create(context.Context, Definition) (string, bool, error) {
+	return "", false, nil
+}
+
+func TestRegistryBatchRepositoryLoadIsAtomic(t *testing.T) {
+	registry := testTemplateRegistry(t, Limits{
+		MaxTemplateBytes: 2048, MaxOutputBytes: 2048, MaxPayloadDepth: 8,
+	})
+	first := baseDefinition(FormatText)
+	second := baseDefinition(FormatText)
+	second.TemplateID = "template-2"
+	second.Version = 2
+	firstDigest, err := DefinitionDigest(first)
+	if err != nil {
+		t.Fatal(err)
+	}
+	secondDigest, err := DefinitionDigest(second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	repository := registryTemplateRepositoryMap{
+		{ id: first.TemplateID, version: first.Version }: {definition: first, digest: firstDigest, found: true},
+		{ id: second.TemplateID, version: second.Version }: {definition: second, digest: "corrupt", found: true},
+	}
+	versions := []VersionRef{
+		{TemplateID: first.TemplateID, Version: first.Version},
+		{TemplateID: second.TemplateID, Version: second.Version},
+	}
+	if err := registry.LoadVersionsFromRepository(context.Background(), repository, versions); !errors.Is(err, ErrRepositoryDigestMismatch) {
+		t.Fatalf("corrupt second record must fail batch: %v", err)
+	}
+	if _, found := registry.Digest(first.TemplateID, first.Version); found {
+		t.Fatal("failed batch must not leave its first template partially registered")
+	}
+
+	repository[templateKey{id: second.TemplateID, version: second.Version}] = registryTemplateRepositoryStub{
+		definition: second, digest: secondDigest, found: true,
+	}
+	if err := registry.LoadVersionsFromRepository(context.Background(), repository, versions); err != nil {
+		t.Fatalf("valid batch should load: %v", err)
+	}
+	if _, found := registry.Digest(first.TemplateID, first.Version); !found {
+		t.Fatal("first template was not loaded")
+	}
+	if _, found := registry.Digest(second.TemplateID, second.Version); !found {
+		t.Fatal("second template was not loaded")
+	}
+	if err := registry.LoadVersionsFromRepository(context.Background(), repository, versions); err != nil {
+		t.Fatalf("repeated identical batch should be idempotent: %v", err)
+	}
+}
+
+func TestRegistryBatchRepositoryLoadChecksConflictsBeforeMutation(t *testing.T) {
+	registry := testTemplateRegistry(t, Limits{
+		MaxTemplateBytes: 2048, MaxOutputBytes: 2048, MaxPayloadDepth: 8,
+	})
+	existing := baseDefinition(FormatText)
+	if _, err := registry.Register(existing); err != nil {
+		t.Fatal(err)
+	}
+	first := baseDefinition(FormatText)
+	first.TemplateID = "template-new"
+	first.Version = 1
+	conflict := existing
+	conflict.BodyTemplate = "different {{.message}}"
+	firstDigest, _ := DefinitionDigest(first)
+	conflictDigest, _ := DefinitionDigest(conflict)
+	repository := registryTemplateRepositoryMap{
+		{ id: first.TemplateID, version: first.Version }: {definition: first, digest: firstDigest, found: true},
+		{ id: conflict.TemplateID, version: conflict.Version }: {definition: conflict, digest: conflictDigest, found: true},
+	}
+	err := registry.LoadVersionsFromRepository(context.Background(), repository, []VersionRef{
+		{TemplateID: first.TemplateID, Version: first.Version},
+		{TemplateID: conflict.TemplateID, Version: conflict.Version},
+	})
+	if !errors.Is(err, ErrTemplateImmutable) {
+		t.Fatalf("existing immutable conflict must fail batch: %v", err)
+	}
+	if _, found := registry.Digest(first.TemplateID, first.Version); found {
+		t.Fatal("conflicting batch must not partially register new versions")
+	}
+}

@@ -58,3 +58,84 @@ func (r *Registry) LoadFromRepository(ctx context.Context, repository Repository
 	}
 	return nil
 }
+
+
+// VersionRef 标识需要在启动阶段精确装载的模板版本。
+type VersionRef struct {
+	TemplateID string
+	Version    int64
+}
+
+// LoadVersionsFromRepository 批量装载精确版本。所有记录校验和编译成功后才一次性写入 Registry，避免部分装载。
+func (r *Registry) LoadVersionsFromRepository(ctx context.Context, repository Repository, versions []VersionRef) error {
+	if r == nil {
+		return ErrInvalidTemplateLimits
+	}
+	if ctx == nil || repository == nil || len(versions) == 0 {
+		return ErrRepositoryUnavailable
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+
+	type preparedVersion struct {
+		key      templateKey
+		compiled *compiledTemplate
+		digest   string
+	}
+	prepared := make([]preparedVersion, 0, len(versions))
+	seen := make(map[templateKey]struct{}, len(versions))
+	for _, version := range versions {
+		if strings.TrimSpace(version.TemplateID) == "" || version.Version <= 0 {
+			return ErrRepositoryUnavailable
+		}
+		key := templateKey{id: version.TemplateID, version: version.Version}
+		if _, exists := seen[key]; exists {
+			return fmt.Errorf("%w: duplicate template version %s/%d", ErrRepositoryDigestMismatch, version.TemplateID, version.Version)
+		}
+		seen[key] = struct{}{}
+
+		definition, storedDigest, found, err := repository.Get(ctx, version.TemplateID, version.Version)
+		if err != nil {
+			return err
+		}
+		if !found {
+			return fmt.Errorf("%w: %s/%d", ErrUnknownTemplate, version.TemplateID, version.Version)
+		}
+		if definition.TemplateID != version.TemplateID || definition.Version != version.Version {
+			return ErrRepositoryDigestMismatch
+		}
+		digest, err := DefinitionDigest(definition)
+		if err != nil {
+			return err
+		}
+		if storedDigest == "" || digest != storedDigest {
+			return ErrRepositoryDigestMismatch
+		}
+		if err := ValidateDefinition(definition, r.limits); err != nil {
+			return err
+		}
+		compiled, err := compileDefinition(definition, digest)
+		if err != nil {
+			return err
+		}
+		prepared = append(prepared, preparedVersion{key: key, compiled: compiled, digest: digest})
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+	}
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, item := range prepared {
+		if existing, exists := r.templates[item.key]; exists && existing.digest != item.digest {
+			return ErrTemplateImmutable
+		}
+	}
+	for _, item := range prepared {
+		if _, exists := r.templates[item.key]; !exists {
+			r.templates[item.key] = item.compiled
+		}
+	}
+	return nil
+}
