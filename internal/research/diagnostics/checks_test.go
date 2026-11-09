@@ -3,6 +3,7 @@ package diagnostics
 import (
 	"context"
 	"sync"
+	"strings"
 	"testing"
 	"time"
 
@@ -298,6 +299,9 @@ func TestEvidenceCheckMapsQualityStatesWithoutExposingEvidence(t *testing.T) {
 			}
 			if result.Observation.SafeMessage == value.SourceRef || result.Observation.SafeMessage == value.AuthorizationRef {
 				t.Fatal("diagnostic message exposes source or authorization reference")
+			}
+			if strings.Contains(result.Observation.SafeMessage, "授权复核") {
+				t.Fatal("snapshot-only Evidence check must not claim an Owner authorization decision")
 			}
 		})
 	}
