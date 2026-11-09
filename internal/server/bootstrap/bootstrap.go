@@ -61,13 +61,16 @@ func Run(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("Server 运行角色配置无效: %w", err)
 	}
-	securityCfg, err := serverconfig.LoadSecurity(config.NewEnv())
-	if err != nil {
-		return fmt.Errorf("安全认证配置无效: %w", err)
-	}
-	authenticator, err := platformsecurity.NewAuthenticator(securityCfg.OwnerToken, nil)
-	if err != nil {
-		return fmt.Errorf("创建 HTTP 认证器失败: %w", err)
+	var authenticator *platformsecurity.Authenticator
+	if serverRole != serverconfig.RoleWorker {
+		securityCfg, err := serverconfig.LoadSecurity(config.NewEnv())
+		if err != nil {
+			return fmt.Errorf("安全认证配置无效: %w", err)
+		}
+		authenticator, err = platformsecurity.NewAuthenticator(securityCfg.OwnerToken, nil)
+		if err != nil {
+			return fmt.Errorf("创建 HTTP 认证器失败: %w", err)
+		}
 	}
 
 	startupCtx, startupCancel := context.WithTimeout(ctx, 15*time.Second)
@@ -112,9 +115,12 @@ func Run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	httpConfig, err := serverconfig.LoadHTTP(config.NewEnv(), analysisTimeout)
-	if err != nil {
-		return fmt.Errorf("HTTP 服务配置无效: %w", err)
+	var httpConfig serverconfig.HTTP
+	if serverRole != serverconfig.RoleWorker {
+		httpConfig, err = serverconfig.LoadHTTP(config.NewEnv(), analysisTimeout)
+		if err != nil {
+			return fmt.Errorf("HTTP 服务配置无效: %w", err)
+		}
 	}
 
 	tasks, err := taskqueue.New(store.DB, runner, workers, maxQueued, analysisTimeout, 250*time.Millisecond)
