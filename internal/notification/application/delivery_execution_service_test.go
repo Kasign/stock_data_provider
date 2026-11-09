@@ -38,6 +38,25 @@ func (a *cancelAfterSendAdapter) Send(context.Context, domain.ChannelSendRequest
 	return domain.ChannelSendResult{Outcome: domain.ChannelOutcomeAccepted, ProviderMessageRef: "provider-message-after-cancel"}, nil
 }
 
+type deadlineAwareExecutionAdapter struct {
+	snapshot domain.ChannelConfigSnapshot
+	hasDeadline bool
+	calls int
+}
+
+func (a *deadlineAwareExecutionAdapter) ConfigSnapshot() domain.ChannelConfigSnapshot {
+	return cloneChannelSnapshot(a.snapshot)
+}
+
+func (a *deadlineAwareExecutionAdapter) Send(ctx context.Context, _ domain.ChannelSendRequest) (domain.ChannelSendResult, error) {
+	a.calls++
+	_, a.hasDeadline = ctx.Deadline()
+	return domain.ChannelSendResult{
+		Outcome: domain.ChannelOutcomeAmbiguous,
+		ErrorCode: "provider_timeout",
+	}, context.DeadlineExceeded
+}
+
 type sequenceExecutionClock struct {
 	times []time.Time
 	index int
@@ -304,5 +323,35 @@ func TestDeliveryExecutionRejectsInvalidRetrySampleBeforeChannelCall(t *testing.
 				t.Fatalf("invalid retry sample must not mutate delivery: delivery=%+v found=%v err=%v", delivery, found, getErr)
 			}
 		})
+	}
+}
+
+func TestDeliveryExecutionBoundsChannelCallAndPersistsTimeoutWithParentContext(t *testing.T) {
+	service, repository, _, claim, event := executionFixture(t)
+	snapshot := channelRegistryTestSnapshot()
+	snapshot.ConfigVersion = claim.Delivery.ChannelConfigVersion
+	adapter := &deadlineAwareExecutionAdapter{snapshot: snapshot}
+	registry := NewChannelRegistry()
+	if err := registry.Register(adapter); err != nil {
+		t.Fatal(err)
+	}
+	service.preflight.channels = registry
+
+	result, err := service.Execute(
+		context.Background(), claim, event, "attempt-execution-timeout",
+		0.5, "evidence-execution-timeout",
+	)
+	if err != nil {
+		t.Fatalf("ambiguous timeout should be persisted using parent context: %v", err)
+	}
+	if !adapter.hasDeadline || adapter.calls != 1 {
+		t.Fatalf("channel call must have a bounded deadline and run once: deadline=%v calls=%d", adapter.hasDeadline, adapter.calls)
+	}
+	if result.ChannelResult == nil || result.ChannelResult.Outcome != domain.ChannelOutcomeAmbiguous {
+		t.Fatalf("timeout must remain ambiguous: %+v", result)
+	}
+	delivery, found, getErr := repository.Get(context.Background(), claim.Delivery.DeliveryID)
+	if getErr != nil || !found || delivery.Status != domain.DeliveryUnknown {
+		t.Fatalf("timeout result must converge to unknown: delivery=%+v found=%v err=%v", delivery, found, getErr)
 	}
 }
