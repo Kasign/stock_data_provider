@@ -118,7 +118,7 @@ func TestListEvidenceSnapshotPageRejectsCursorAndSnapshotFailures(t *testing.T) 
 	store := &evidenceSnapshotPageRepositoryStub{getErr: ErrEvidenceSnapshotUnavailable}
 	factory, _ := NewCreateEvidenceSnapshotForQuery(query, store, func() string { return "snapshot-1" })
 	codec := newTestEvidenceCursorCodec(t, "active", map[string]string{"active": strings.Repeat("k", 32)})
-	service, _ := NewListEvidenceSnapshotPage(factory, store, codec)
+	service, _ := NewListEvidenceSnapshotPage(factory, codec)
 	service.now = func() time.Time { return now }
 
 	bad := "not-a-signed-cursor"
