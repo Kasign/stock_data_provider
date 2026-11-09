@@ -68,7 +68,7 @@ func TransitionAttempt(attempt domain.Attempt,next domain.AttemptStatus,now time
 	attempt.Status=next;v:=now.UTC();attempt.FinishedAt=&v;return attempt,nil
 }
 
-func CancelRun(run domain.Run, stages []domain.Stage, policies map[string]template.PropagationPolicy, now time.Time) (domain.Run, []domain.Stage, error) {
+func CancelRun(run domain.Run, stages []domain.Stage, policies map[string]template.PropagationPolicy, hardRiskStageCodes map[string]bool, now time.Time) (domain.Run, []domain.Stage, error) {
 	if run.Status.Terminal() { return run, stages, ErrAlreadyTerminal }
 	updatedStages := append([]domain.Stage(nil), stages...)
 	if run.Status == domain.RunCreated || run.Status == domain.RunQueued {
@@ -87,7 +87,7 @@ func CancelRun(run domain.Run, stages []domain.Stage, policies map[string]templa
 				if err != nil { return run, stages, err }
 			}
 		}
-		summary, summaryErr := buildTerminalSummary(updatedStages, run.ExcludedStages, policies)
+		summary, summaryErr := buildTerminalSummary(updatedStages, run.ExcludedStages, policies, hardRiskStageCodes)
 		if summaryErr != nil { return run, stages, summaryErr }
 		updatedRun.ResultSummary = ptrSummary(summary)
 		return updatedRun, updatedStages, nil
@@ -305,13 +305,13 @@ func AggregateRun(run domain.Run,stages []domain.Stage,attempts []domain.Attempt
 	return updated, nil
 }
 
-func FinalizeCancellation(run domain.Run, stages []domain.Stage, attempts []domain.Attempt, policies map[string]template.PropagationPolicy, now time.Time) (domain.Run, error) {
+func FinalizeCancellation(run domain.Run, stages []domain.Stage, attempts []domain.Attempt, policies map[string]template.PropagationPolicy, hardRiskStageCodes map[string]bool, now time.Time) (domain.Run, error) {
 	if run.Status != domain.RunCancelling || run.TerminationReason != "user_cancelled" {
 		return run, fmt.Errorf("%w: run is not a user cancellation", ErrInvalidTransition)
 	}
 	if err := validateTerminalStages(stages); err != nil { return run, fmt.Errorf("cannot finalize cancellation: %w", err) }
 	if err := validateAttemptsTerminal(attempts); err != nil { return run, fmt.Errorf("cannot finalize cancellation: %w", err) }
-	summary, err := buildTerminalSummary(stages, run.ExcludedStages, policies)
+	summary, err := buildTerminalSummary(stages, run.ExcludedStages, policies, hardRiskStageCodes)
 	if err != nil { return run, fmt.Errorf("cannot build cancellation summary: %w", err) }
 	updated, err := transitionRun(run, domain.RunCancelled, now)
 	if err != nil { return run, err }
@@ -344,7 +344,7 @@ func validateAttemptsTerminal(attempts []domain.Attempt) error {
 
 func ptrSummary(summary domain.ResultSummary) *domain.ResultSummary { return &summary }
 
-func buildTerminalSummary(stages []domain.Stage, excludedStages []domain.ExcludedStage, policies map[string]template.PropagationPolicy) (domain.ResultSummary, error) {
+func buildTerminalSummary(stages []domain.Stage, excludedStages []domain.ExcludedStage, policies map[string]template.PropagationPolicy, hardRiskStageCodes map[string]bool) (domain.ResultSummary, error) {
 	summary := domain.ResultSummary{
 		StageOutcomes: map[string]domain.StageStatus{}, RiskGateDecisions: map[string]string{},
 		ExcludedStages: cloneExcludedStages(excludedStages), MissingStageCodes: []string{},
@@ -354,6 +354,18 @@ func buildTerminalSummary(stages []domain.Stage, excludedStages []domain.Exclude
 	completed := 0
 	for _, stage := range stages {
 		summary.StageOutcomes[stage.Code] = stage.Status
+		if hardRiskStageCodes[stage.Code] {
+			if stage.RiskDecision != "" {
+				switch stage.RiskDecision {
+				case "pass", "reject", "unknown":
+					summary.RiskGateDecisions[stage.Code] = stage.RiskDecision
+				default:
+					return domain.ResultSummary{}, fmt.Errorf("hard risk stage %s returned invalid risk decision %q", stage.Code, stage.RiskDecision)
+				}
+			} else if stage.Status == domain.StageSucceeded {
+				return domain.ResultSummary{}, fmt.Errorf("hard risk stage %s succeeded without a risk decision", stage.Code)
+			}
+		}
 		switch stage.Status {
 		case domain.StageSucceeded:
 			completed++

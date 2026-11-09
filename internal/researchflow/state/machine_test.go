@@ -46,7 +46,7 @@ func TestCancelAndDeadlineDoNotPretendInflightWorkStopped(t *testing.T){
 	now:=time.Date(2026,11,6,10,0,0,0,time.UTC)
 	run:=domain.Run{Status:domain.RunRunning,DeadlineAt:now.Add(time.Minute)}
 	stages:=[]domain.Stage{{Status:domain.StageRunning},{Status:domain.StageReady}}
-	cancelled,updated,err:=CancelRun(run,stages,nil,now)
+	cancelled,updated,err:=CancelRun(run,stages,nil,nil,now)
 	if err!=nil{t.Fatal(err)}
 	if cancelled.Status!=domain.RunCancelling||updated[0].Status!=domain.StageRunning||updated[1].Status!=domain.StageCancelled{t.Fatal("cancel must await inflight stop confirmation")}
 	deadlineRun:=domain.Run{Status:domain.RunRunning,DeadlineAt:now}
@@ -79,7 +79,7 @@ func TestQueuedRunCannotCancelAnInFlightStage(t *testing.T) {
 	now := time.Date(2026, 11, 6, 10, 0, 0, 0, time.UTC)
 	run := domain.Run{Status: domain.RunQueued}
 	stages := []domain.Stage{{Status: domain.StageRunning}}
-	if _, _, err := CancelRun(run, stages, nil, now); err == nil {
+	if _, _, err := CancelRun(run, stages, nil, nil, now); err == nil {
 		t.Fatal("queued run with a running stage must fail closed")
 	}
 }
@@ -158,7 +158,7 @@ func TestCancelRunDoesNotMutateInputWhenValidationFails(t *testing.T) {
 	now := time.Date(2026, 11, 6, 10, 0, 0, 0, time.UTC)
 	stages := []domain.Stage{{Status:domain.StageReady}, {Status:domain.StageRunning}}
 	original := append([]domain.Stage(nil), stages...)
-	if _, _, err := CancelRun(domain.Run{Status:domain.RunQueued}, stages, nil, now); err == nil {
+	if _, _, err := CancelRun(domain.Run{Status:domain.RunQueued}, stages, nil, nil, now); err == nil {
 		t.Fatal("expected queued run with running stage to be rejected")
 	}
 	for i := range stages { if stages[i].Status != original[i].Status { t.Fatalf("input stage %d mutated on error", i) } }
@@ -208,7 +208,7 @@ func TestTerminalFinalizersRejectEmptyOrDuplicateStageSets(t *testing.T) {
 			if err==nil { t.Fatalf("aggregate accepted %s stage set",tc.name) }
 		})
 		t.Run("cancel_"+tc.name,func(t *testing.T){
-			_,err:=FinalizeCancellation(domain.Run{Status:domain.RunCancelling,TerminationReason:"user_cancelled"},tc.stages,nil,nil,now)
+			_,err:=FinalizeCancellation(domain.Run{Status:domain.RunCancelling,TerminationReason:"user_cancelled"},tc.stages,nil,nil,nil,now)
 			if err==nil { t.Fatalf("cancellation finalizer accepted %s stage set",tc.name) }
 		})
 	}
@@ -225,7 +225,7 @@ func TestTerminalFinalizersRejectUnknownAttemptStates(t *testing.T) {
 			if err == nil { t.Fatalf("aggregate accepted non-terminal Attempt status %q", status) }
 		})
 		t.Run("cancel_"+string(status), func(t *testing.T) {
-			_, err := FinalizeCancellation(domain.Run{Status:domain.RunCancelling, TerminationReason:"user_cancelled"}, terminalStages, []domain.Attempt{{Ref:"attempt-1", Status:status}}, nil, now)
+			_, err := FinalizeCancellation(domain.Run{Status:domain.RunCancelling, TerminationReason:"user_cancelled"}, terminalStages, []domain.Attempt{{Ref:"attempt-1", Status:status}}, nil, nil, now)
 			if err == nil { t.Fatalf("cancellation finalizer accepted non-terminal Attempt status %q", status) }
 		})
 	}
@@ -238,7 +238,7 @@ func TestFinalizeCancellationPersistsTerminalSummary(t *testing.T) {
 		{Code:"done", Status:domain.StageSucceeded},
 		{Code:"pending", Status:domain.StageCancelled, ReasonCodes:[]string{"user_cancelled"}},
 	}
-	got, err := FinalizeCancellation(run, stages, nil, nil, now)
+	got, err := FinalizeCancellation(run, stages, nil, nil, nil, now)
 	if err != nil { t.Fatal(err) }
 	if got.Status != domain.RunCancelled || got.ResultSummary == nil { t.Fatal("cancelled terminal Run must have a fixed result summary") }
 	if got.ResultSummary.StageOutcomes["done"] != domain.StageSucceeded || got.ResultSummary.StageOutcomes["pending"] != domain.StageCancelled { t.Fatal("terminal summary omitted stage outcomes") }
@@ -250,7 +250,7 @@ func TestQueuedCancellationCreatesTerminalSummary(t *testing.T) {
 	now := time.Date(2026, 11, 6, 10, 0, 0, 0, time.UTC)
 	run := domain.Run{Status:domain.RunQueued}
 	stages := []domain.Stage{{Code:"market", Status:domain.StageReady}}
-	got, updated, err := CancelRun(run, stages, nil, now)
+	got, updated, err := CancelRun(run, stages, nil, nil, now)
 	if err != nil { t.Fatal(err) }
 	if got.Status != domain.RunCancelled || got.ResultSummary == nil { t.Fatal("queued cancellation must persist terminal summary") }
 	if got.ResultSummary.StageOutcomes["market"] != domain.StageCancelled || updated[0].Status != domain.StageCancelled { t.Fatal("cancelled stage missing from terminal summary") }
@@ -270,7 +270,7 @@ func TestCancellationNoImpactSkippedDoesNotReduceCoverage(t *testing.T) {
 		{Code: "optional", Required: false, Status: domain.StageSkipped, ReasonCodes: []string{"not_applicable"}},
 	}
 	run := domain.Run{Status: domain.RunCancelling, TerminationReason: "user_cancelled"}
-	finalized, err := FinalizeCancellation(run, stages, nil, policies, now)
+	finalized, err := FinalizeCancellation(run, stages, nil, policies, nil, now)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -282,7 +282,7 @@ func TestCancellationNoImpactSkippedDoesNotReduceCoverage(t *testing.T) {
 	}
 
 	queued := domain.Run{Status: domain.RunQueued}
-	cancelled, _, err := CancelRun(queued, stages, policies, now)
+	cancelled, _, err := CancelRun(queued, stages, policies, nil, now)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -295,9 +295,39 @@ func TestCancellationSummaryRequiresSkippedStagePolicy(t *testing.T) {
 	now := time.Date(2026, 11, 6, 10, 0, 0, 0, time.UTC)
 	run := domain.Run{Status: domain.RunCancelling, TerminationReason: "user_cancelled"}
 	stages := []domain.Stage{{Code: "optional", Required: false, Status: domain.StageSkipped}}
-	if _, err := FinalizeCancellation(run, stages, nil, nil, now); err == nil {
+	if _, err := FinalizeCancellation(run, stages, nil, nil, nil, now); err == nil {
 		t.Fatal("cancellation summary accepted skipped Stage without its immutable propagation policy")
 	}
+}
+
+
+func TestCancellationPreservesHardRiskDecisionsWithoutActionability(t *testing.T) {
+	now := time.Date(2026, 11, 6, 10, 0, 0, 0, time.UTC)
+	policies := map[string]template.PropagationPolicy{
+		"risk": {OnSkipped: domain.PropagateFail},
+		"pending": {OnSkipped: domain.PropagateFail},
+	}
+	stages := []domain.Stage{
+		{Code: "risk", Required: true, Status: domain.StageSucceeded, RiskDecision: "reject"},
+		{Code: "pending", Required: true, Status: domain.StageCancelled},
+	}
+	run := domain.Run{Status: domain.RunCancelling, TerminationReason: "user_cancelled"}
+	got, err := FinalizeCancellation(run, stages, nil, policies, map[string]bool{"risk": true}, now)
+	if err != nil { t.Fatal(err) }
+	if got.ResultSummary == nil || got.ResultSummary.RiskGateDecisions["risk"] != "reject" {
+		t.Fatalf("cancellation summary lost completed hard-risk decision: %#v", got.ResultSummary)
+	}
+	if got.ResultSummary.ActionabilityStatus != "not_evaluated" {
+		t.Fatalf("cancelled Run must remain not_evaluated, got %q", got.ResultSummary.ActionabilityStatus)
+	}
+}
+
+func TestCancellationRejectsInvalidHardRiskDecision(t *testing.T) {
+	now := time.Date(2026, 11, 6, 10, 0, 0, 0, time.UTC)
+	run := domain.Run{Status: domain.RunCancelling, TerminationReason: "user_cancelled"}
+	stages := []domain.Stage{{Code: "risk", Required: true, Status: domain.StageSucceeded, RiskDecision: "maybe"}}
+	_, err := FinalizeCancellation(run, stages, nil, nil, map[string]bool{"risk": true}, now)
+	if err == nil { t.Fatal("cancellation summary accepted an invalid hard-risk decision") }
 }
 
 func TestTransitionRunCannotBypassTerminalFinalization(t *testing.T) {
@@ -366,7 +396,7 @@ func TestRunAggregationAndCancellationPreserveExcludedStageEvidence(t *testing.T
 		t.Fatalf("Run aggregation lost applicability exclusions: %#v",aggregated.ResultSummary.ExcludedStages)
 	}
 	queued:=domain.Run{Status:domain.RunQueued,ExcludedStages:excluded}
-	cancelled,_,err:=CancelRun(queued,[]domain.Stage{{Code:"quote",Status:domain.StageReady}},nil,now)
+	cancelled,_,err:=CancelRun(queued,[]domain.Stage{{Code:"quote",Status:domain.StageReady}},nil,nil,now)
 	if err!=nil{t.Fatal(err)}
 	if cancelled.ResultSummary==nil||len(cancelled.ResultSummary.ExcludedStages)!=1{
 		t.Fatalf("cancellation summary lost applicability exclusions: %#v",cancelled.ResultSummary)
