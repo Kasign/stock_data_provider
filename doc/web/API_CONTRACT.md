@@ -1,6 +1,6 @@
 # WebUI 真实 API 与配置边界
 
-更新时间：2026-10-30  
+更新时间：2026-11-09  
 适用分支：`feat/webui-market-data-console`
 
 本文只描述当前 WebUI 实际调用与当前仓库可核对的接口注册状态。OpenAPI 声明不等于 Handler 已注册，更不等于 Provider 已配置或上游可用。
@@ -39,7 +39,7 @@
 
 - `GET /api/v1/market/capital-flow` 已在当前 `server.go` 注册，并由 `market_capital_flow.go` 实现；WebUI 通过 `getMarketCapitalFlow` 按 start/end 日期范围读取。接口返回 Tushare `moneyflow_mkt_dc` 原始市场级序列，金额为 CNY、比例为百分点；需要启用且具备权限的 Tushare Token，Provider 不可用时返回 503，不能据此认定当前部署已有可用数据。
 - 个股资金流 `GET /api/v1/stocks/{symbol}/capital-flow` 已注册 Handler，并有 `getCapitalFlow` 封装。不得用个股资金流冒充市场级资金流。
-- `GET /api/v1/market/stocks`、`GET /api/v1/market/sentiment`、`GET /api/v1/market/sentiment/history` 已注册 Handler，且现已提供 WebUI API 封装；市场股票分页尚未接入具体展示列表，情绪历史已提供手动日期范围查询入口。
+- `GET /api/v1/market/stocks`、`GET /api/v1/market/sentiment`、`GET /api/v1/market/sentiment/history` 已注册 Handler，且现已提供 WebUI API 封装；市场股票分页已接入“个股行情”页，由用户显式点击加载，支持每页 20/50/100 条、复权方式切换和分页，具体实现位于 `web/src/market-stocks.js`；情绪历史提供手动日期范围查询入口。市场股票接口的 Provider 可用性仍需真实部署验证。
 - `POST /api/v1/data-sources/probe` 是主动探测接口。数据中心的同花顺状态展示不得调用该接口；本页面仅读取 `GET /api/v1/data-sources` 与只读运行诊断快照。不得要求用户提供同花顺 API Key 来完成 UI 验收。
 
 ## 3. 分析任务服务边界
