@@ -285,7 +285,7 @@ Server 不重写模块业务 Handler 的校验和领域错误，不在路由层�
 
 ### SRV-002：Root Bootstrap
 
-- 状态：进行中（第一阶段已将运行装配迁入 internal/server/bootstrap；后续拆分配置、Platform 资源和模块注册）
+- 状态：进行中（运行装配、HTTP 配置和 Platform 共享资源已拆出；剩余重点是模块 Registry 与统一启动编排）
 - 前置：SRV-001；复用现有 `cmd/analysis-api/main.go`，不新增第二进程入口
 - 工作内容：将现有入口逐步收敛为参数/信号处理和 Bootstrap 委托；在 `internal/server/bootstrap` 实现统一配置装载、Platform 资源构造、模块装配、启动和错误返回。先抽离可验证的最小垂直切片，不一次性重写旧启动链路。
 - 交付物：由现有 `cmd/analysis-api` 启动的 Root Server Bootstrap；旧入口仍可在迁移阶段兼容运行。
@@ -458,6 +458,16 @@ flowchart TD
 - Bootstrap 使用父 Context 控制运行；收到取消后先 Shutdown HTTP Server，再按 defer 顺序关闭旧 Worker 和 Store。
 - 旧 `mysqlredis.Store` 仍负责旧 Analysis 四表 Migration/Schema 检查；连接创建和生命周期已改由 Server 通过 Platform Storage API 管理。本阶段没有把旧 DDL 错误地并入 Platform Migration Runner。
 - 这只是 Root Bootstrap 的迁移边界，不代表 Platform 资源容器、模块 Registry、统一 Router 或新模块已接入完成。
+
+### 12.5 SRV-003 Platform 资源容器实施记录（含 `8a4b69e`、`49aae20`、`3339999`）
+
+- 将资源所有权从单纯的 Storage 扩展为 `internal/server/resources.Resources`，统一持有 MariaDB、Redis 和 Platform HTTP Client。
+- DB 通过 Platform Storage 的 `OpenSQL` 创建，Redis 通过 `OpenRedis` 创建，HTTP Client 通过 `platform/httpclient.New` 创建；未复制连接池、网络安全或 HTTP 请求实现。
+- 初始化顺序为 DB、Redis、HTTP Client；失败时按已创建资源的逆序清理。旧 Analysis Store 仅借用 DB/Redis，不拥有共享连接。
+- 关闭顺序为 HTTP Client 空闲连接、Redis、DB；资源容器使用 `sync.Once` 保证重复关闭安全。模块消费者必须先停止，Server 再关闭共享资源。
+- 保留 `Storage` 类型别名和旧构造函数作为迁移兼容入口；Bootstrap 已改为调用 `OpenLegacyAnalysisResources`。
+- 当前 HTTP Client 使用 Platform 默认 Config。模块后续通过自己的公开配置/目的地址策略绑定使用，不在 Server 预设 Provider Host allowlist。
+- 本次增加资源容器重复关闭测试。GitHub 文件写入已完成，但本轮尚未执行 Go 编译和测试；不能据此认定测试通过。
 ## 13. 分支与协作规则
 
 - 本规划及 Server 代码实施位于 `feat/research-analysis-flow-native-go`。
@@ -488,8 +498,8 @@ Server 层完成不是“服务能够启动”这么简单。至少同时满足�
 | 任务 | 状态 | 说明 |
 |---|---|---|
 | SRV-001 | 完成 | 已记录旧入口、路由与认证现状、旧 Analysis Migration 四表、Worker/Storage 生命周期、部署边界及各模块接入就绪度；详细见 12.3 节 |
-| SRV-002 | 进行中 | 已创建 internal/server/bootstrap，入口已委托 Bootstrap；Server HTTP 配置已集中到 internal/server/config；已通过 Platform Storage API 创建并统一关闭 MariaDB/Redis；下一步建立模块 Registry 和 Migration 汇总入口 |
-| SRV-003 | 进行中 | MariaDB/Redis 已通过 Platform Storage API 创建、探活和统一关闭；仍需扩展为通用资源容器并接入 HTTP Client/模块共享资源 |
+| SRV-002 | 进行中 | 已创建 internal/server/bootstrap，入口已委托 Bootstrap；HTTP 配置和 Platform 资源创建已拆出；剩余模块 Registry 与统一装配 |
+| SRV-003 | 进行中 | DB、Redis、HTTP Client 已由 Resources 统一创建和关闭；后续接入模块资源注入与诊断贡献项 |
 | SRV-004 | 未开始 | 等待各模块公开装配入口 |
 | SRV-005 | 未开始 | 旧 HTTP API 尚待迁移映射 |
 | SRV-006 | 未开始 | 运行角色和生命周期尚未建立 |
