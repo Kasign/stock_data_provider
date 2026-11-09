@@ -325,3 +325,34 @@ func TestEvidenceApplicationDeepCopiesDTOAndAdapterBoundaries(t *testing.T) {
 		t.Fatal("returned DTO mutation leaked into repository state")
 	}
 }
+
+
+type mismatchedEvidenceRepo struct { evidenceRepoFake }
+func (f *mismatchedEvidenceRepo) Get(context.Context, string) (researchevidence.Evidence, error) {
+	value := f.value
+	value.EvidenceID = "ev_other"
+	return value, nil
+}
+
+func TestGetEvidenceRejectsRepositoryIdentityMismatch(t *testing.T) {
+	now := time.Date(2026, 11, 9, 6, 0, 0, 0, time.UTC)
+	value := researchevidence.Evidence{
+		EvidenceID: "ev_other", EvidenceType: researchevidence.TypeFact,
+		SourceOwner: researchevidence.SourceData, SourceRef: "data:fact:1",
+		DerivedFromRefs: []string{}, SubjectRefs: []string{"security:600000"},
+		SystemObservedAt: now, SystemAsOf: now, Stance: researchevidence.StanceNeutral,
+		QualityStatus: researchevidence.QualityValid, ContentLevel: researchevidence.ContentMetadata,
+		AuthorizationRef: "auth:1", Limitations: []string{},
+	}
+	fingerprint, err := value.ComputeContentFingerprint()
+	if err != nil { t.Fatal(err) }
+	value.ContentFingerprint = fingerprint
+	repo := &mismatchedEvidenceRepo{evidenceRepoFake: evidenceRepoFake{value: value}}
+	service, err := NewService(&contextRepoFake{}, repo, &authorizerFake{}, nil, nil)
+	if err != nil { t.Fatal(err) }
+	if _, err := service.GetEvidence(context.Background(), EvidenceRef{
+		EvidenceID: "ev_requested", CallerRef: "researchflow:worker",
+	}); err == nil {
+		t.Fatal("Evidence repository identity mismatch must be rejected")
+	}
+}

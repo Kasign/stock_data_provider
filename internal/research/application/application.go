@@ -324,6 +324,9 @@ func (s *Service) GetEvidence(ctx context.Context, ref EvidenceRef) (EvidenceRec
 	}
 	value, err := s.evidence.Get(ctx, ref.EvidenceID)
 	if err != nil { return EvidenceRecord{}, mapRepositoryError(err) }
+	if value.EvidenceID != ref.EvidenceID {
+		return EvidenceRecord{}, applicationFault(fault.ClassInternal, "stored_evidence_identity_mismatch", "Stored Research Evidence identity does not match the requested record", researcherrors.ErrCorruptRecord)
+	}
 	if err := value.Validate(); err != nil { return EvidenceRecord{}, applicationFault(fault.ClassInternal, "stored_evidence_invalid", "Stored Research Evidence is invalid", err) }
 	purpose := researchevidence.PurposeCode(ref.PurposeCode)
 	if purpose == "" { purpose = researchevidence.PurposeResearchAnalysis }
