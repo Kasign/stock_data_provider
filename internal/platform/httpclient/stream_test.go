@@ -355,6 +355,37 @@ func TestOpenStreamHeaderTimeoutIsClassified(t *testing.T) {
 	}
 }
 
+func TestOpenStreamCloseInterruptsBlockedRead(t *testing.T) {
+	ready := make(chan struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.(http.Flusher).Flush()
+		close(ready)
+		<-r.Context().Done()
+	}))
+	defer server.Close()
+	client := newLocalStreamClient(t, server, 1024, time.Second, 1)
+	response := openLocalStream(t, client, server, context.Background(), "/close-blocked-read", localPolicy(server))
+	<-ready
+
+	readResult := make(chan error, 1)
+	go func() {
+		var buffer [8]byte
+		_, err := response.Body.Read(buffer[:])
+		readResult <- err
+	}()
+	if err := response.Body.Close(); err != nil {
+		t.Fatalf("Close failed: %v", err)
+	}
+	select {
+	case err := <-readResult:
+		if err == nil {
+			t.Fatal("blocked Read unexpectedly succeeded after Close")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Close did not interrupt blocked Read")
+	}
+}
+
 func TestOpenStreamConcurrentCloseIsIdempotent(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.(http.Flusher).Flush(); <-r.Context().Done() }))
 	defer server.Close()
