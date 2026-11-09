@@ -417,6 +417,7 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 
 	// A later source revision must not rewrite the version visible at an earlier
 	// knowledge time; the latest version changes only after its observation.
+	time.Sleep(10 * time.Millisecond)
 	revisedCandidate := secondCandidate
 	revisedCandidate.Title = "Second news item revised"
 	revisedObservation, err := ingest.Execute(
@@ -439,7 +440,7 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 		t.Fatalf("append second news revision: %v", err)
 	}
 	listRequest.Filters.CanonicalSymbols = nil
-	listRequest.SystemAsOf = revisedVersion.Version.ObservedAt.Add(-time.Second)
+	listRequest.SystemAsOf = secondVersion.Version.ObservedAt
 	listed, err = repository.ListEvidenceVersionsAt(ctx, listRequest)
 	if err != nil {
 		t.Fatalf("list evidence before later revision: %v", err)
