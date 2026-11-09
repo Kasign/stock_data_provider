@@ -3,27 +3,13 @@ package storage
 import (
 	"context"
 	"database/sql"
+
+	"example.com/stock-analysis-flow/internal/researchflow/application"
 	"errors"
 	"fmt"
 	"strings"
 	"time"
 )
-
-// OutboxMessage is an immutable event payload plus the current delivery attempt
-// metadata. LeaseGeneration fences workers whose lease has been superseded.
-type OutboxMessage struct {
-	Ref               string
-	RunRef             string
-	EventType          string
-	SchemaVersion      string
-	IdempotencyKey     string
-	CorrelationID      string
-	PayloadFingerprint string
-	Payload            string
-	CreatedAt          time.Time
-	AttemptCount       uint32
-	LeaseGeneration    uint64
-}
 
 // ClaimOutbox atomically leases due unpublished messages to one worker.
 // MariaDB 10.6+ SKIP LOCKED allows independent workers to claim disjoint rows.
@@ -32,7 +18,7 @@ func (r *MySQLRunRepository) ClaimOutbox(
 	workerID, runRef string,
 	limit int,
 	leaseDuration time.Duration,
-) ([]OutboxMessage, error) {
+) ([]application.OutboxMessage, error) {
 	if r == nil || r.db == nil {
 		return nil, errors.New("researchflow SQL database is not configured")
 	}
@@ -69,9 +55,9 @@ func (r *MySQLRunRepository) ClaimOutbox(
 	if err != nil {
 		return nil, fmt.Errorf("lock due Researchflow Outbox messages: %w", err)
 	}
-	messages := make([]OutboxMessage, 0, limit)
+	messages := make([]application.OutboxMessage, 0, limit)
 	for rows.Next() {
-		var item OutboxMessage
+		var item application.OutboxMessage
 		var createdAt string
 		if err := rows.Scan(&item.Ref, &item.RunRef, &item.EventType,
 			&item.SchemaVersion, &item.IdempotencyKey, &item.CorrelationID,
