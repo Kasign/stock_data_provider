@@ -170,22 +170,28 @@ func ScheduleRetry(stage domain.Stage,attempt domain.Attempt,policy template.Ret
 	return updated,terminal,nil
 }
 
-// PromoteRetry is the scheduler transition only: retry_wait -> ready.
-// It does not claim work or create an Attempt; Worker claim is a separate transition.
-func PromoteRetry(run domain.Run, stage domain.Stage, now time.Time) (domain.Stage, error) {
+// ClaimRetryStage atomically models Scheduler retry promotion and Worker claim.
+// The persisted operation must commit retry_wait -> ready -> running together with
+// insertion of the next Attempt; an intermediate ready Stage must not be committed.
+func ClaimRetryStage(run domain.Run, stage domain.Stage, policy template.RetryPolicy, now time.Time, attemptRef string, fencingToken uint64) (domain.Stage, domain.Attempt, error) {
 	if run.Status != domain.RunRunning || run.TerminationReason != "" {
-		return stage, fmt.Errorf("%w: run does not permit retry", ErrInvalidTransition)
+		return stage, domain.Attempt{}, fmt.Errorf("%w: run does not permit retry", ErrInvalidTransition)
 	}
 	if !now.UTC().Before(run.DeadlineAt.UTC()) {
-		return stage, ErrDeadlineExceeded
+		return stage, domain.Attempt{}, ErrDeadlineExceeded
 	}
 	if stage.Status != domain.StageRetryWait || stage.RetryAt == nil || now.UTC().Before(*stage.RetryAt) {
-		return stage, fmt.Errorf("%w: stage is not ready for retry", ErrInvalidTransition)
+		return stage, domain.Attempt{}, fmt.Errorf("%w: stage is not ready for retry", ErrInvalidTransition)
 	}
-	updated, err := TransitionStage(stage, domain.StageReady, now)
-	if err != nil { return stage, err }
-	updated.RetryAt = nil
-	return updated, nil
+	if policy.MaxAttempts < 1 || stage.AttemptNo < 1 || stage.AttemptNo >= policy.MaxAttempts {
+		return stage, domain.Attempt{}, ErrRetryBudgetExhausted
+	}
+	ready, err := TransitionStage(stage, domain.StageReady, now)
+	if err != nil {
+		return stage, domain.Attempt{}, err
+	}
+	ready.RetryAt = nil
+	return ClaimReadyStage(run, ready, now, attemptRef, fencingToken)
 }
 
 // ClaimReadyStage models a Worker claim after scheduler promotion. The caller must
