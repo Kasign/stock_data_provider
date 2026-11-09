@@ -133,5 +133,28 @@ func Migrations() []platformstorage.Migration {
 				) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
 			},
 		},
+		{
+			Version:     2,
+			Description: "create notification event inbox with dual idempotency constraints",
+			Statements: []string{
+				`CREATE TABLE notification_inbox (
+					source_module VARCHAR(32) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+					event_id VARCHAR(256) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+					idempotency_key VARCHAR(256) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+					event_type VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+					schema_version VARCHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+					subject_ref VARCHAR(256) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+					occurred_at VARCHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+					published_at VARCHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+					correlation_id VARCHAR(256) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+					payload_fingerprint CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+					payload JSON NOT NULL,
+					received_at DATETIME(6) NOT NULL,
+					PRIMARY KEY (source_module, event_id),
+					UNIQUE KEY uk_notification_inbox_idempotency (source_module, idempotency_key),
+					KEY idx_notification_inbox_received_at (received_at)
+				) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+			},
+		},
 	}
 }
