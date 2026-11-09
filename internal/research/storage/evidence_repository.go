@@ -11,8 +11,6 @@ import (
 	researchevidence "example.com/stock-analysis-flow/internal/research/evidence"
 )
 
-const evidenceTable = "research_evidence_records"
-
 type EvidenceRepository struct { base repositoryBase }
 
 func NewEvidenceRepository(db *sql.DB, clock Clock) (*EvidenceRepository, error) {

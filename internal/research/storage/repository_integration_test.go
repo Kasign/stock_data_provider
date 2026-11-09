@@ -373,7 +373,7 @@ func TestResearchSQLRepositoriesAppendAndReadVersions(t *testing.T) {
 	evidenceV1 := researchevidence.Evidence{
 		EvidenceID: evidenceID, EvidenceType: researchevidence.TypeFact,
 		SourceOwner: researchevidence.SourceData, SourceRef: "data:integration:fixture",
-		DerivedFromRefs: []string{}, SubjectRefs: [],
+		DerivedFromRefs: []string{}, SubjectRefs: []string{},
 		SystemObservedAt: cutoff, SystemAsOf: cutoff,
 		Stance: researchevidence.StanceNeutral, QualityStatus: researchevidence.QualityValid,
 		ContentLevel: researchevidence.ContentMetadata, AuthorizationRef: "auth-integration-v1",
@@ -390,6 +390,12 @@ func TestResearchSQLRepositoriesAppendAndReadVersions(t *testing.T) {
 	evidenceRenewed.AuthorizationRef = "auth-integration-v2"
 	if err := evidenceRepo.Append(ctx, evidenceRenewed); !errors.Is(err, ErrConflict) {
 		t.Fatalf("Evidence authorization snapshot replacement error = %v, want ErrConflict", err)
+	}
+	if _, err := db.ExecContext(ctx, "UPDATE research_evidence_records SET payload=CONCAT(payload, ' ') WHERE evidence_id=?", evidenceID); err != nil {
+		t.Fatalf("tamper stored Evidence payload: %v", err)
+	}
+	if _, err := evidenceRepo.Get(ctx, evidenceID); !errors.Is(err, ErrCorruptRecord) {
+		t.Fatalf("tampered Evidence read error = %v, want ErrCorruptRecord", err)
 	}
 
 	if _, err := db.ExecContext(ctx, "UPDATE research_context_versions SET payload=CONCAT(payload, ' ') WHERE context_id=? AND context_version=2", contextID); err != nil {
