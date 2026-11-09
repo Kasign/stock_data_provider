@@ -195,3 +195,37 @@ func hasDuplicates(values []string) bool {
 	}
 	return false
 }
+
+
+// ResearchContextAssembly is the deterministic output prepared for the
+// Research Application Port. AvailableTokens is the post-reservation input
+// budget; it is not a provider-reported usage value.
+type ResearchContextAssembly struct {
+	Command         researchapp.CreateContextCommand
+	Plan            Plan
+	AvailableTokens int
+}
+
+// AssembleResearchContext composes budget reservation, deterministic section
+// selection and the Research Application DTO projection. Section token
+// estimates must already have been produced by the selected model tokenizer.
+func AssembleResearchContext(
+	snapshot ResearchContextSnapshot,
+	candidates []SectionCandidate,
+	metadata map[string]SectionMetadata,
+	budgetInput BudgetInput,
+) (ResearchContextAssembly, error) {
+	available, err := AvailableBudget(budgetInput)
+	if err != nil {
+		return ResearchContextAssembly{}, err
+	}
+	plan, err := BuildPlan(candidates, available)
+	if err != nil {
+		return ResearchContextAssembly{}, err
+	}
+	command, err := ToResearchCreateContextCommand(snapshot, candidates, metadata, plan)
+	if err != nil {
+		return ResearchContextAssembly{}, err
+	}
+	return ResearchContextAssembly{Command: command, Plan: plan, AvailableTokens: available}, nil
+}

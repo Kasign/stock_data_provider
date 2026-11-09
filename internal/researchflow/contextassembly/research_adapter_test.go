@@ -138,3 +138,52 @@ func TestToResearchCreateContextCommandRejectsForgedMandatoryOmissionAndTokenCou
 		t.Fatalf("inconsistent token accounting should be rejected, got %v", err)
 	}
 }
+
+func TestAssembleResearchContextReservesModelWindowBeforeSelectingSections(t *testing.T) {
+	now := time.Date(2026, 11, 9, 8, 0, 0, 0, time.UTC)
+	candidates := []SectionCandidate{
+		{ID: "required", SourceOwner: "data", Required: true, EstimatedTokens: 20, SourceRefs: []string{"snapshot-1"}},
+		{ID: "optional", SourceOwner: "research", EstimatedTokens: 15},
+	}
+	snapshot := ResearchContextSnapshot{
+		ResearchQuestion: "分析", Scope: "stock", SubjectRefs: []string{"600000.SH"},
+		SystemAsOf: now, BuilderVersion: "v1",
+		QualitySummary: researchapp.ContextQualitySummary{
+			Status: "degraded", MissingOptionalCount: 1, ReasonCodes: []string{"budget_exceeded"},
+		},
+	}
+	metadata := map[string]SectionMetadata{
+		"required": {Version: "1", QualityStatus: "valid", AssembledAt: now},
+		"optional": {Version: "1", QualityStatus: "valid", AssembledAt: now},
+	}
+	result, err := AssembleResearchContext(snapshot, candidates, metadata, BudgetInput{
+		ModelContextTokens: 100, SystemTokens: 20, ToolSchemaTokens: 10,
+		OutputReserve: 30, SafetyMargin: 10,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.AvailableTokens != 30 || result.Plan.UsedTokens != 20 ||
+		len(result.Command.IncludedSections) != 1 || result.Command.IncludedSections[0] != "required" ||
+		len(result.Command.OmittedSections) != 1 || result.Command.OmittedSections[0].SectionID != "optional" {
+		t.Fatalf("unexpected assembled result: %+v", result)
+	}
+}
+
+func TestAssembleResearchContextFailsClosedWhenMandatorySectionsExceedReservedBudget(t *testing.T) {
+	now := time.Date(2026, 11, 9, 8, 0, 0, 0, time.UTC)
+	candidates := []SectionCandidate{{ID: "required", SourceOwner: "data", Required: true, EstimatedTokens: 31, SourceRefs: []string{"snapshot-1"}}}
+	snapshot := ResearchContextSnapshot{
+		ResearchQuestion: "分析", Scope: "stock", SubjectRefs: []string{"600000.SH"},
+		SystemAsOf: now, BuilderVersion: "v1",
+		QualitySummary: researchapp.ContextQualitySummary{Status: "valid", ReasonCodes: []string{}},
+	}
+	metadata := map[string]SectionMetadata{"required": {Version: "1", QualityStatus: "valid", AssembledAt: now}}
+	_, err := AssembleResearchContext(snapshot, candidates, metadata, BudgetInput{
+		ModelContextTokens: 100, SystemTokens: 20, ToolSchemaTokens: 10,
+		OutputReserve: 30, SafetyMargin: 10,
+	})
+	if !errors.Is(err, ErrMandatoryBudgetExceeded) {
+		t.Fatalf("expected mandatory budget failure, got %v", err)
+	}
+}
