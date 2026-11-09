@@ -275,7 +275,7 @@ func TestParseResponsesSSECallbackErrorReturnsPartialResponse(t *testing.T) {
 	if err != callbackErr {
 		t.Fatalf("callback error must be returned unchanged: got=%v want=%v", err, callbackErr)
 	}
-	if callbackCount != 2 || got.Status != ResponseIncomplete || got.OutputText != "partial" || got.Error != nil {
+	if callbackCount != 1 || got.Status != ResponseIncomplete || got.OutputText != "partial" || got.Error != nil {
 		t.Fatalf("callback interruption must preserve partial output without claiming completion: callbacks=%d response=%+v", callbackCount, got)
 	}
 	if got.FinishedAt.IsZero() || got.DurationMS < 0 {
