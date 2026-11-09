@@ -407,6 +407,9 @@ func (c *Client) streamOpenFault(err error, ctx context.Context, policy Destinat
 	if ctxErr := ctx.Err(); ctxErr != nil {
 		return c.streamContextFault(ctxErr, policy.Dependency)
 	}
+	if strings.Contains(strings.ToLower(err.Error()), "response headers exceeded") {
+		return newStreamFault(fault.ClassValidation, "platform.httpclient.stream_headers_too_large", "HTTP stream response headers exceed configured limit", err, policy.Dependency, false)
+	}
 	switch {
 	case errors.Is(err, errPolicyRejected), errors.Is(err, errRedirectRejected):
 		return newStreamFault(fault.ClassValidation, "platform.httpclient.stream_destination_rejected", "HTTP stream destination is not allowed", err, policy.Dependency, false)

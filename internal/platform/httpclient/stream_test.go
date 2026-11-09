@@ -1,6 +1,8 @@
 package httpclient
 
 import (
+	"bytes"
+	"compress/gzip"
 	"context"
 	"errors"
 	"io"
@@ -335,4 +337,156 @@ func TestOpenStreamSlowConsumerDoesNotPrebuffer(t *testing.T) {
 	}
 	close(allowFinish)
 	_, _ = io.Copy(io.Discard, response.Body)
+}
+
+
+func TestOpenStreamRejectsOversizedResponseHeaders(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("X-Large", strings.Repeat("x", 4096))
+		_, _ = w.Write([]byte("ok"))
+	}))
+	defer server.Close()
+
+	client := newLocalStreamClient(t, server, 1024, time.Second, 2)
+	client.config.MaxResponseHeaderBytes = 1024
+	client.transport.MaxResponseHeaderBytes = 1024
+	_, err := client.OpenStream(context.Background(), localRequest(t, server, "/large-headers"), localPolicy(server))
+	var platformFault *fault.Fault
+	if !errors.As(err, &platformFault) || platformFault.Code != "platform.httpclient.stream_headers_too_large" {
+		t.Fatalf("expected response header size Fault, got %v", err)
+	}
+}
+
+func TestOpenStreamBodyLimitCountsDecompressedBytes(t *testing.T) {
+	var compressed bytes.Buffer
+	writer := gzip.NewWriter(&compressed)
+	if _, err := writer.Write([]byte("0123456789abcdef")); err != nil {
+		t.Fatal(err)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Encoding", "gzip")
+		_, _ = w.Write(compressed.Bytes())
+	}))
+	defer server.Close()
+
+	client := newLocalStreamClient(t, server, 8, time.Second, 2)
+	response := openLocalStream(t, client, server, context.Background(), "/gzip", localPolicy(server))
+	defer response.Body.Close()
+	body, err := io.ReadAll(response.Body)
+	var platformFault *fault.Fault
+	if len(body) != 8 || !errors.As(err, &platformFault) || platformFault.Code != "platform.httpclient.stream_body_too_large" {
+		t.Fatalf("expected decompressed byte limit, got %d bytes and %v", len(body), err)
+	}
+}
+
+func TestOpenStreamContextCancelReleasesSlotWithoutCallerClose(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.(http.Flusher).Flush()
+		<-r.Context().Done()
+	}))
+	defer server.Close()
+
+	client := newLocalStreamClient(t, server, 1024, time.Second, 1)
+	ctx, cancel := context.WithCancel(context.Background())
+	first := openLocalStream(t, client, server, ctx, "/first", localPolicy(server))
+	cancel()
+
+	secondCtx, secondCancel := context.WithTimeout(context.Background(), time.Second)
+	defer secondCancel()
+	second, err := client.OpenStream(secondCtx, localRequest(t, server, "/second"), localPolicy(server))
+	if err != nil {
+		t.Fatalf("Context cancellation did not release the stream slot: %v", err)
+	}
+	_ = second.Body.Close()
+	_ = first.Body.Close()
+}
+
+func TestBoundDoerOpenStreamUsesBoundPolicy(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("bound"))
+	}))
+	defer server.Close()
+
+	client := newLocalStreamClient(t, server, 1024, time.Second, 2)
+	bound, err := client.Bind(localPolicy(server))
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, err := bound.OpenStream(context.Background(), localRequest(t, server, "/bound"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	body, err := io.ReadAll(response.Body)
+	if err != nil || string(body) != "bound" {
+		t.Fatalf("unexpected bound stream response %q, %v", body, err)
+	}
+}
+
+func TestOpenStreamDoesNotRetryHTTPStatus(t *testing.T) {
+	var requests atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requests.Add(1)
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_, _ = w.Write([]byte("busy"))
+	}))
+	defer server.Close()
+
+	client := newLocalStreamClient(t, server, 1024, time.Second, 2)
+	policy := localPolicy(server)
+	policy.Idempotent = true
+	response := openLocalStream(t, client, server, context.Background(), "/no-retry", policy)
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusServiceUnavailable || requests.Load() != 1 {
+		t.Fatalf("stream mode retried unexpectedly: status=%d requests=%d", response.StatusCode, requests.Load())
+	}
+}
+
+func TestOpenStreamAllowsSameOriginRedirect(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/redirect" {
+			http.Redirect(w, r, "/final", http.StatusFound)
+			return
+		}
+		_, _ = w.Write([]byte("final"))
+	}))
+	defer server.Close()
+
+	client := newLocalStreamClient(t, server, 1024, time.Second, 2)
+	policy := localPolicy(server)
+	policy.AllowRedirects = true
+	policy.MaxRedirects = 1
+	response, err := client.OpenStream(context.Background(), localRequest(t, server, "/redirect"), policy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	body, err := io.ReadAll(response.Body)
+	if err != nil || string(body) != "final" {
+		t.Fatalf("same-origin redirect failed: %q, %v", body, err)
+	}
+}
+
+func TestOpenStreamFaultDoesNotExposeSensitiveQuery(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Length", "100")
+		_, _ = w.Write([]byte("short"))
+	}))
+	defer server.Close()
+
+	client := newLocalStreamClient(t, server, 1024, time.Second, 2)
+	response := openLocalStream(t, client, server, context.Background(), "/truncated?api_key=secret-value", localPolicy(server))
+	defer response.Body.Close()
+	_, err := io.ReadAll(response.Body)
+	var platformFault *fault.Fault
+	if !errors.As(err, &platformFault) {
+		t.Fatalf("expected stream Fault, got %v", err)
+	}
+	if strings.Contains(platformFault.Error(), "secret-value") || strings.Contains(platformFault.SafeMessage, "secret-value") {
+		t.Fatal("stream Fault exposed a sensitive URL query")
+	}
 }

@@ -80,6 +80,27 @@ func (d *BoundDoer) OpenStream(
 7. HTTP 4xx/5xx 是正常收到的 HTTP 响应，不由传输层自动转换成 Fault；协议/业务错误由消费者判断。
 8. 流式请求不执行自动重试。尤其在任何数据交付后，绝不能透明重试或拼接第二条响应。
 
+使用示例（由调用方处理业务数据；Platform 不解析流协议）：
+
+```go
+bound, err := client.Bind(policy)
+if err != nil {
+    return err
+}
+stream, err := bound.OpenStream(ctx, request)
+if err != nil {
+    return err
+}
+defer stream.Body.Close()
+
+// 状态码和 Header 在读取 Body 前已经可用。
+if _, err := io.Copy(destination, stream.Body); err != nil {
+    return err
+}
+stats := stream.Stats()
+_ = stats // 由调用方写入自身的结构化日志/诊断记录
+```
+
 ## 4. 生命周期与资源控制
 
 ### 4.1 生命周期
@@ -151,6 +172,7 @@ Read 错误必须通过稳定 Fault Code 区分；Fault 的 SafeMessage 为固�
 | 场景 | 建议 Code | Class | Retryable |
 |---|---|---|---|
 | 目标策略拒绝 | `platform.httpclient.stream_destination_rejected` | validation | false |
+| 响应头超过上限 | `platform.httpclient.stream_headers_too_large` | validation | false |
 | 建连失败 | `platform.httpclient.stream_connect_failed` | unavailable | 仅在策略明确幂等且尚未返回响应时可为 true |
 | 响应头超时 | `platform.httpclient.stream_header_timeout` | timeout | 按请求幂等性判断 |
 | 单次读取空闲超时 | `platform.httpclient.stream_idle_timeout` | timeout | false |
@@ -194,10 +216,11 @@ Read 错误必须通过稳定 Fault Code 区分；Fault 的 SafeMessage 为固�
 | 6 | 上游提前断开 | Content-Length/分块场景返回截断错误，不伪装 EOF |
 | 7 | Body 超限 | 超过配置上限即终止，超限探测字节不交付 |
 | 8 | 空闲读取超时 | 单次阻塞 Read 超时退出；慢消费者暂停读取不误触发 |
-| 9 | 重定向 SSRF | 默认拒绝、HTTPS 降级拒绝、策略逐跳检查，危险目标不发生 Dial |
+| 9 | 重定向 SSRF | 默认拒绝、同源跳转可用、跨源/HTTPS 降级拒绝，危险目标不发生 Dial |
 | 10 | 慢消费者背压 | 无后台无界队列；单流额外缓冲有固定上限 |
 | 11 | Fault/脱敏 | 错误码分类稳定，Cause 不进入公开统计/日志字段 |
 | 12 | 并发退出 | 并发 Close/Cancel/Read Error 后额度只释放一次，无 goroutine/连接泄漏 |
+| 13 | 附加资源边界 | 响应头上限、解压后 Body 上限、BoundDoer 固定策略和无自动重试均有回归测试 |
 
 测试必须同时覆盖 HTTP/1.1 和 HTTP/2 可适用的生命周期行为；使用本地 httptest、可控 Resolver/Dial 和短超时，不依赖公网。至少执行 gofmt、平台包单测、Race、Vet。
 
