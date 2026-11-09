@@ -12,12 +12,12 @@ import (
 	"strings"
 	"time"
 
+	"example.com/stock-analysis-flow/internal/platform/fault"
 	researcherrors "example.com/stock-analysis-flow/internal/research"
+	researchclaim "example.com/stock-analysis-flow/internal/research/claim"
 	researchcontext "example.com/stock-analysis-flow/internal/research/context"
 	researchevidence "example.com/stock-analysis-flow/internal/research/evidence"
 	researchevent "example.com/stock-analysis-flow/internal/research/event"
-	researchclaim "example.com/stock-analysis-flow/internal/research/claim"
-	"example.com/stock-analysis-flow/internal/platform/fault"
 )
 
 const (
@@ -106,7 +106,6 @@ type EvidenceRecord struct {
 	ContentFingerprint string `json:"content_fingerprint"`
 }
 
-
 type EventSourceTime struct {
 	EvidenceRef string `json:"evidence_ref"`
 	TimeType string `json:"time_type"`
@@ -170,7 +169,6 @@ type EventPort interface {
 	GetEvent(context.Context, EventRef) (ResearchEvent, error)
 	UpdateEvent(context.Context, UpdateEventCommand) (ResearchEvent, error)
 }
-
 
 type Claim struct {
 	ClaimID string `json:"claim_id"`
@@ -426,7 +424,6 @@ func cloneDomainEvidence(v researchevidence.Evidence) researchevidence.Evidence 
 	return v
 }
 
-
 func NewServiceWithEvents(contexts ContextRepository, evidence EvidenceRepository, events EventRepository, authorizer EvidenceAuthorizer, clock Clock, ids IDGenerator) (*Service, error) {
 	if events == nil {
 		return nil, fault.New(fault.ClassInternal, "research_event_repository_not_configured", "Research Event Repository is not configured", researcherrors.ErrInvalidRepository)
@@ -563,7 +560,6 @@ func cloneFloat(value *float64) *float64 { if value==nil{return nil}; copy:=*val
 func cloneString(value *string) *string { if value==nil{return nil}; copy:=*value; return &copy }
 func cloneInt(value *int) *int { if value==nil{return nil}; copy:=*value; return &copy }
 
-
 func NewServiceWithClaims(contexts ContextRepository, evidence EvidenceRepository, claims ClaimRepository, authorizer EvidenceAuthorizer, clock Clock, ids IDGenerator) (*Service, error) {
 	if claims == nil {
 		return nil, fault.New(fault.ClassInternal, "research_claim_repository_not_configured", "Research Claim Repository is not configured", researcherrors.ErrInvalidRepository)
@@ -693,7 +689,6 @@ func cloneStrings(values []string) []string {
 	if values == nil { return []string{} }
 	return append([]string(nil), values...)
 }
-
 
 // NotificationEventEnvelope is the immutable payload Research sends to the
 // Notification Application Port. Delivery metadata is deliberately excluded.

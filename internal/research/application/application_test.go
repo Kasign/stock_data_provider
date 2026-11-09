@@ -6,11 +6,11 @@ import (
 	"testing"
 	"time"
 
+	researcherrors "example.com/stock-analysis-flow/internal/research"
+	researchclaim "example.com/stock-analysis-flow/internal/research/claim"
 	researchcontext "example.com/stock-analysis-flow/internal/research/context"
 	researchevidence "example.com/stock-analysis-flow/internal/research/evidence"
-	researcherrors "example.com/stock-analysis-flow/internal/research"
 	researchevent "example.com/stock-analysis-flow/internal/research/event"
-	researchclaim "example.com/stock-analysis-flow/internal/research/claim"
 )
 
 type fixedIDs struct { next int }
@@ -249,7 +249,6 @@ func TestCreateHypothesisRequiresValidationContract(t *testing.T) {
 	if repo.appended { t.Fatal("invalid Hypothesis must not be persisted") }
 }
 
-
 func TestUpdateClaimEnforcesExpectedVersionAndDomainTransition(t *testing.T) {
 	now := time.Date(2026, 11, 9, 2, 0, 0, 0, time.UTC)
 	repo := &claimRepoFake{value: researchclaim.Claim{
@@ -289,7 +288,6 @@ func TestUpdateClaimEnforcesExpectedVersionAndDomainTransition(t *testing.T) {
 }
 
 func stringPointer(value string) *string { return &value }
-
 
 type mismatchedContextRepo struct { contextRepoFake }
 func (f *mismatchedContextRepo) GetVersion(context.Context, string, int64) (researchcontext.Context, error) { return f.value, nil }
@@ -341,8 +339,6 @@ func TestApplicationRejectsRepositoryIdentityMismatch(t *testing.T) {
 		t.Fatal("Claim repository identity mismatch must be rejected")
 	}
 }
-
-
 
 type mutatingEvidenceAuthorizer struct{}
 func (mutatingEvidenceAuthorizer) AuthorizeEvidence(_ context.Context, _ string, _ researchevidence.PurposeCode, value researchevidence.Evidence) error {
@@ -408,7 +404,6 @@ func TestEvidenceApplicationDeepCopiesDTOAndAdapterBoundaries(t *testing.T) {
 		t.Fatal("returned DTO mutation leaked into repository state")
 	}
 }
-
 
 type mismatchedEvidenceRepo struct { evidenceRepoFake }
 func (f *mismatchedEvidenceRepo) Get(context.Context, string) (researchevidence.Evidence, error) {
