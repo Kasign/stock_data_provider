@@ -50,7 +50,6 @@ type WorkerConfig struct {
 	WorkerID          string
 	LeaseDuration     time.Duration
 	HeartbeatInterval time.Duration
-	MaxAttempts       int
 	MaxParallel       int
 }
 
@@ -72,7 +71,7 @@ func NewWorker(store WorkerStore, executor StageExecutor, clock DatabaseClock, c
 	if store == nil || executor == nil || clock == nil || strings.TrimSpace(config.WorkerID) == "" ||
 		len(config.WorkerID) > 128 || config.LeaseDuration <= 0 ||
 		config.HeartbeatInterval <= 0 || config.HeartbeatInterval >= config.LeaseDuration ||
-		config.MaxAttempts <= 0 || config.MaxParallel <= 0 {
+		config.MaxParallel <= 0 {
 		return nil, errors.New("Researchflow worker dependencies or configuration are invalid")
 	}
 	return &Worker{store: store, executor: executor, clock: clock, config: config, now: time.Now}, nil

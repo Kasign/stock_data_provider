@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"example.com/stock-analysis-flow/internal/researchflow/domain"
+	"example.com/stock-analysis-flow/internal/researchflow/template"
 )
 
 type workerStoreFake struct {
@@ -46,7 +47,7 @@ func newWorkerFixture() (*workerStoreFake, StageExecutionResult) {
 	stage := domain.Stage{Ref: "stage-1", RunRef: "run-1", Status: domain.StageRunning, Version: 3, AttemptNo: 1}
 	attempt := domain.Attempt{Ref: "attempt-1", StageRef: stage.Ref, Number: 1, Status: domain.AttemptRunning, LeaseOwner: "worker-1", FencingToken: 7}
 	output := "snapshot://result"
-	store := &workerStoreFake{attempt: attempt, snapshot: StageExecutionSnapshot{Run: run, Stage: stage, Parameters: []byte(`{"symbol":"AAA"}`)}}
+	store := &workerStoreFake{attempt: attempt, snapshot: StageExecutionSnapshot{Run: run, Stage: stage, Parameters: []byte(`{"symbol":"AAA"}`), RetryPolicy: template.RetryPolicy{Ref: "retry-v1", MaxAttempts: 3, RetryableReasonCodes: []string{"provider_unavailable"}, Backoff: template.BackoffPolicy{Algorithm: "exponential_full_jitter_v1", BaseDelayMS: 1000, MaxDelayMS: 5000}}}}
 	return store, StageExecutionResult{AttemptStatus: domain.AttemptSucceeded, StageStatus: domain.StageSucceeded, OutputRef: &output}
 }
 type workerClockFake struct{}
@@ -55,7 +56,7 @@ func (workerClockFake) NowUTC(context.Context) (time.Time, error) { return time.
 
 func newWorker(t *testing.T, store *workerStoreFake, result StageExecutionResult) *Worker {
 	t.Helper()
-	w, err := NewWorker(store, workerExecutorFake{result: result}, workerClockFake{}, WorkerConfig{WorkerID: "worker-1", LeaseDuration: time.Minute, HeartbeatInterval: time.Second, MaxAttempts: 3, MaxParallel: 2})
+	w, err := NewWorker(store, workerExecutorFake{result: result}, workerClockFake{}, WorkerConfig{WorkerID: "worker-1", LeaseDuration: time.Minute, HeartbeatInterval: time.Second, MaxParallel: 2})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -102,5 +103,49 @@ func TestWorkerDoesNotCommitExecutorError(t *testing.T) {
 	_, err = w.Execute(context.Background(), "run-1", "stage-1", "attempt-new")
 	if err == nil || store.commits != 0 {
 		t.Fatal("executor error must not be committed as success")
+	}
+}
+
+func TestWorkerAppliesRetryPolicyInsteadOfProviderRetryAt(t *testing.T) {
+	store, _ := newWorkerFixture()
+	store.snapshot.RetryPolicy = template.RetryPolicy{
+		Ref: "retry-v1", MaxAttempts: 3,
+		RetryableReasonCodes: []string{"provider_unavailable"},
+		Backoff: template.BackoffPolicy{Algorithm: "exponential_full_jitter_v1", BaseDelayMS: 1000, MaxDelayMS: 5000},
+	}
+	store.snapshot.Stage.AttemptNo = 1
+	store.attempt.Number = 1
+	result := StageExecutionResult{
+		AttemptStatus: domain.AttemptFailed,
+		StageStatus: domain.StageRetryWait,
+		ReasonCodes: []string{"provider_unavailable"},
+	}
+	got, err := newWorker(t, store, result).Execute(context.Background(), "run-1", "stage-1", "attempt-new")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !got.Committed || store.commit.Stage.Status != domain.StageRetryWait || store.commit.Stage.RetryAt == nil {
+		t.Fatalf("expected policy-controlled retry_wait commit: %+v", store.commit)
+	}
+}
+
+func TestWorkerDisablesRetryForNonAllowlistedReason(t *testing.T) {
+	store, _ := newWorkerFixture()
+	store.snapshot.RetryPolicy = template.RetryPolicy{
+		Ref: "retry-v1", MaxAttempts: 3,
+		RetryableReasonCodes: []string{"provider_unavailable"},
+		Backoff: template.BackoffPolicy{Algorithm: "exponential_full_jitter_v1", BaseDelayMS: 1000, MaxDelayMS: 5000},
+	}
+	result := StageExecutionResult{
+		AttemptStatus: domain.AttemptFailed,
+		StageStatus: domain.StageRetryWait,
+		ReasonCodes: []string{"schema_invalid"},
+	}
+	got, err := newWorker(t, store, result).Execute(context.Background(), "run-1", "stage-1", "attempt-new")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !got.Committed || store.commit.Stage.Status != domain.StageFailed || store.commit.Stage.RetryAt != nil {
+		t.Fatalf("non-allowlisted result must become failed: %+v", store.commit)
 	}
 }
