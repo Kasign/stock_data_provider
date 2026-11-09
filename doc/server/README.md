@@ -825,3 +825,22 @@ Lifecycle 原先只在组件 `Start` 返回错误时回滚，没有在组件启�
 - 已在 `9a782b9e7fb3074ebe66264e78dc0af07fc225b4` 修正格式。对应 Go Workflow Run `42601314977` 已启动：根模块 gofmt、依赖下载通过，根模块 `go test ./...` 正在执行；race/vet 尚未开始。最终结论待 Run 完成后更新。
 - 本次只修改 Server 负责的 `internal/server/runtime/**` 和本文档；未修改 Platform 或其他模块。
 - 真实子进程 SIGTERM/容器停止验收仍未完成；组件级取消回滚不能替代进程信号验收。
+
+
+### 12.18 SRV-006 真实 SIGTERM 子进程验收补充（2026-11-09）
+
+#### 实施内容
+
+- 新增 `internal/server/bootstrap/signal_integration_test.go`，通过独立 Go 测试子进程注册真实 `signal.NotifyContext`，由父进程发送操作系统 `SIGTERM`。
+- 子进程启动真实 HTTP Listener 和 Lifecycle Worker 测试组件；收到 SIGTERM 后执行 Lifecycle.Stop。
+- 通过事件文件断言关闭顺序：HTTP Readiness 先标记 draining，之后才停止 Worker。
+- 测试对子进程启动等待、退出超时和异常退出均设置了有限等待；超时清理会终止子进程，避免测试挂起。
+- 既有 HTTP Server 单测继续负责验证在途请求排空与 Shutdown 超时强制 Close；本子进程测试验证操作系统信号到 Lifecycle 的真实传递，不替代容器编排环境验收。
+
+#### 当前验收状态
+
+- 测试文件提交：`785eaa36040e76d29fae60eb89c5a6235f522b02`。
+- 信号依赖修正：`cde9fe5e63134c33ecc5e0495673ef7d59eed201`。
+- 子进程等待/清理逻辑修正：`7a08da2ff38c874566ad3b05a3719fb3bd7759bc`。
+- 最新代码 SHA 的 Go Workflow Run `42601840871` 已排队，尚未获得测试结果；不得提前标记通过。
+- 本测试只覆盖 Linux CI 中的真实 SIGTERM + Server Lifecycle 顺序；生产容器停止宽限期、真实旧 Analysis Queue 在途任务和数据库连接关闭仍需部署级验收。
