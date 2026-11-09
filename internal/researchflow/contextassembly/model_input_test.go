@@ -43,10 +43,10 @@ func TestComposeModelInputSerializesOnlySelectedSectionsAndCountsExactPayload(t 
 	if err != nil {
 		t.Fatal(err)
 	}
-	if input.EstimatedTokens != 37 || input.Tokenizer.Version != "tokenizer-v1" {
+	if input.TokenCount != 37 || input.Tokenizer.Version != "tokenizer-v1" {
 		t.Fatalf("unexpected composed input metadata: %+v", input)
 	}
-	if !strings.Contains(input.Text, "ev-1") || strings.Contains(input.Text, "news-1") ||
+	if !strings.Contains(input.Text, "ev-1") || !strings.Contains(input.Text, "budget_exceeded") || strings.Contains(input.Text, "news-1") ||
 		strings.Contains(input.Text, "news secret content") {
 		t.Fatalf("model input leaked omitted section or lost provenance: %s", input.Text)
 	}

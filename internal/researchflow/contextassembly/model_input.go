@@ -23,8 +23,10 @@ type ModelInputSection struct {
 	SourceOwner   string   `json:"source_owner"`
 	SourceRefs    []string `json:"source_refs"`
 	EvidenceRefs  []string `json:"evidence_refs"`
+	ProtectedEvidenceRefs []string `json:"protected_evidence_refs"`
 	QualityStatus string   `json:"quality_status"`
 	Required      bool     `json:"required"`
+	AssembledAt   string   `json:"assembled_at"`
 	Text          string   `json:"text"`
 }
 
@@ -36,6 +38,8 @@ type ModelInputEnvelope struct {
 	SubjectRefs      []string            `json:"subject_refs"`
 	SystemAsOf       string              `json:"system_as_of"`
 	BuilderVersion   string              `json:"builder_version"`
+	QualitySummary   researchapp.ContextQualitySummary `json:"quality_summary"`
+	OmittedSections []researchapp.ContextOmittedSection `json:"omitted_sections"`
 	Sections         []ModelInputSection `json:"sections"`
 }
 
@@ -43,7 +47,7 @@ type ModelInputEnvelope struct {
 // count for that serialization. It contains authorized content only in memory.
 type ComposedModelInput struct {
 	Text            string
-	EstimatedTokens int
+	TokenCount       int
 	Tokenizer       TokenizerProvenance
 }
 
@@ -72,11 +76,11 @@ func ComposeModelInput(
 		return ComposedModelInput{}, ErrTokenizerUnavailable
 	}
 
+	command, _ := ToResearchCreateContextCommand(snapshot, candidates, metadata, plan)
 	candidateByID := make(map[string]SectionCandidate, len(candidates))
 	for _, candidate := range candidates {
 		candidateByID[candidate.ID] = candidate
 	}
-	metadataByID := metadata
 	contentByID := make(map[string]string, len(contents))
 	for _, content := range contents {
 		if content.SectionID == "" || content.SectionID != strings.TrimSpace(content.SectionID) ||
@@ -102,14 +106,15 @@ func ComposeModelInput(
 		if !exists {
 			return ComposedModelInput{}, fmt.Errorf("%w: missing authorized content for section %q", ErrInvalidModelInput, id)
 		}
-		section := metadataByID[id]
+		section := metadata[id]
 		sections = append(sections, ModelInputSection{
 			SectionID: id, SectionVersion: section.Version,
 			SourceOwner: candidate.SourceOwner,
 			SourceRefs: append([]string{}, candidate.SourceRefs...),
 			EvidenceRefs: append([]string{}, candidate.EvidenceRefs...),
+			ProtectedEvidenceRefs: append([]string{}, candidate.ProtectedEvidenceRefs...),
 			QualityStatus: section.QualityStatus, Required: candidate.Required,
-			Text: content,
+			AssembledAt: section.AssembledAt.Format("2006-01-02T15:04:05.999999999Z"), Text: content,
 		})
 	}
 	envelope := ModelInputEnvelope{
@@ -117,7 +122,8 @@ func ComposeModelInput(
 		ResearchQuestion: snapshot.ResearchQuestion, Scope: snapshot.Scope,
 		SubjectRefs: append([]string{}, snapshot.SubjectRefs...),
 		SystemAsOf: snapshot.SystemAsOf.Format("2006-01-02T15:04:05.999999999Z"),
-		BuilderVersion: snapshot.BuilderVersion, Sections: sections,
+		BuilderVersion: snapshot.BuilderVersion, QualitySummary: command.QualitySummary,
+		OmittedSections: command.OmittedSections, Sections: sections,
 	}
 	serialized, err := json.Marshal(envelope)
 	if err != nil {
@@ -134,11 +140,8 @@ func ComposeModelInput(
 		return ComposedModelInput{}, fmt.Errorf("%w: used %d tokens, available %d", ErrModelInputOverBudget, tokenCount, availableTokens)
 	}
 	return ComposedModelInput{
-		Text: string(serialized), EstimatedTokens: tokenCount,
+		Text: string(serialized), TokenCount: tokenCount,
 		Tokenizer: TokenizerProvenance{ModelID: expectedModelID, Version: tokenizer.Version()},
 	}, nil
 }
 
-// ModelRequestFromContextInput is intentionally not defined here. Server owns
-// mapping this payload into internal/llm.ModelRequest and invoking the LLM.
-var _ = researchapp.CreateContextCommand{}
