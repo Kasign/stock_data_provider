@@ -94,15 +94,19 @@ func (u *IngestCollectedSource) Execute(ctx context.Context, request IngestColle
 		trace.EndpointPolicyVersionID = result.EndpointPolicyVersionID
 	}
 
+	// 先完整预检批次，避免前几条已写入后才发现后续条目混入 Provider 候选。
+	for _, entry := range result.Entries {
+		if strings.TrimSpace(entry.Candidate.ProviderCode) != "" {
+			return nil, ErrProviderOutputPolicyRequired
+		}
+	}
+
 	observations := make([]domain.Observation, 0, len(result.Entries))
 	for _, entry := range result.Entries {
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
 		candidate := entry.Candidate
-		if strings.TrimSpace(candidate.ProviderCode) != "" {
-			return nil, ErrProviderOutputPolicyRequired
-		}
 		// Observation 当前只持久化元数据；不得将 Provider 摘要作为来源摘要保存。
 		candidate.ProviderSummary = ""
 		fingerprint := sha256.Sum256([]byte(
