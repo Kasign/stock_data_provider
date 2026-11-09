@@ -153,6 +153,7 @@ type EvidencePITRecord struct {
 // Both the selected version and its owning Observation must be visible at T.
 type EvidencePITRepository interface {
 	GetEvidenceVersionAt(context.Context, GetEvidenceRequest) (EvidencePITRecord, error)
+	ListEvidenceVersionsAt(context.Context, ListEvidenceRequest) ([]EvidencePITRecord, error)
 }
 
 // ResearchEvidenceQuery is the only cross-module read port. It never searches

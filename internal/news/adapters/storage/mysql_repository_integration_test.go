@@ -382,6 +382,39 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 		t.Fatalf("explicit future version error = %v, want PIT not found", err)
 	}
 
+	listRequest := app.ListEvidenceRequest{
+		CallerRef:             "service:research",
+		PurposeCode:           app.EvidencePurposeResearchAnalysis,
+		RequestedContentLevel: app.EvidenceContentSummary,
+		SystemAsOf:            secondVersion.Version.ObservedAt.Add(time.Second),
+		Filters: &app.EvidenceQueryFilters{
+			NewsIDs:    []string{secondObservation.NewsID},
+			SourceRefs: []string{secondSourceID},
+		},
+		PageSize: 20,
+	}
+	listed, err := repository.ListEvidenceVersionsAt(ctx, listRequest)
+	if err != nil {
+		t.Fatalf("list evidence at system_as_of: %v", err)
+	}
+	if len(listed) != 1 || listed[0].Version.ID != secondVersion.Version.ID ||
+		listed[0].Observation.ID != secondObservation.ID || listed[0].SourceRef != secondSourceID {
+		t.Fatalf("ListEvidence PIT returned unexpected records: %+v", listed)
+	}
+	listRequest.SystemAsOf = secondVersion.Version.ObservedAt.Add(-time.Second)
+	listed, err = repository.ListEvidenceVersionsAt(ctx, listRequest)
+	if err != nil {
+		t.Fatalf("list evidence before system_as_of: %v", err)
+	}
+	if len(listed) != 0 {
+		t.Fatalf("ListEvidence PIT exposed %d future records", len(listed))
+	}
+	listRequest.SystemAsOf = secondVersion.Version.ObservedAt.Add(time.Second)
+	listRequest.Filters.CanonicalSymbols = []string{"SSE:600000"}
+	if _, err := repository.ListEvidenceVersionsAt(ctx, listRequest); !errors.Is(err, app.ErrInvalidEvidenceQuery) {
+		t.Fatalf("unsupported temporal symbol filter error = %v, want invalid query", err)
+	}
+
 	relationService := app.NewApplyNewsItemRelation(repository, newID)
 	relation, err := relationService.Execute(ctx, app.NewsItemRelationRequest{
 		Relation: domain.NewsItemRelation{

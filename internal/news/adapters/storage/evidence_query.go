@@ -46,6 +46,90 @@ func (r *MySQLRepository) GetEvidenceVersionAt(
 	return record, nil
 }
 
+// ListEvidenceVersionsAt returns the latest version of each News Item visible
+// at system_as_of. Unsupported temporal filters fail closed. One extra row is
+// read so the caller can detect a result set larger than the snapshot limit.
+func (r *MySQLRepository) ListEvidenceVersionsAt(
+	ctx context.Context,
+	request app.ListEvidenceRequest,
+) ([]app.EvidencePITRecord, error) {
+	now := time.Now().UTC()
+	if r == nil || r.db == nil || ctx == nil ||
+		request.Validate(now) != nil || request.Cursor != nil {
+		return nil, app.ErrInvalidEvidenceQuery
+	}
+	filters := request.Filters
+	if len(filters.CanonicalSymbols) > 0 || len(filters.QualityStatuses) > 0 ||
+		request.BusinessTimeFrom != nil || request.BusinessTimeTo != nil {
+		return nil, app.ErrInvalidEvidenceQuery
+	}
+
+	query := evidencePITSelect + ` WHERE
+		v.observed_at <= ? AND o.observed_at <= ?
+		AND NOT EXISTS (
+			SELECT 1
+			FROM news_item_versions newer
+			INNER JOIN news_observations newer_observation
+				ON newer_observation.observation_id = newer.observation_id
+				AND newer_observation.news_id = newer.news_id
+			WHERE newer.news_id = v.news_id
+				AND newer.observed_at <= ?
+				AND newer_observation.observed_at <= ?
+				AND (
+					newer.observed_at > v.observed_at OR
+					(newer.observed_at = v.observed_at AND newer.version_no > v.version_no) OR
+					(newer.observed_at = v.observed_at AND newer.version_no = v.version_no AND newer.version_id > v.version_id)
+				)
+		)`
+	asOf := request.SystemAsOf.UTC()
+	args := []any{asOf, asOf, asOf, asOf}
+	if len(filters.NewsIDs) > 0 {
+		query += " AND v.news_id IN (" + evidencePlaceholders(len(filters.NewsIDs)) + ")"
+		for _, value := range filters.NewsIDs {
+			args = append(args, value)
+		}
+	}
+	if len(filters.SourceRefs) > 0 {
+		query += " AND o.source_id IN (" + evidencePlaceholders(len(filters.SourceRefs)) + ")"
+		for _, value := range filters.SourceRefs {
+			args = append(args, value)
+		}
+	}
+	if filters.PublishedAtFrom != nil {
+		query += " AND v.published_at >= ?"
+		args = append(args, filters.PublishedAtFrom.UTC())
+	}
+	if filters.PublishedAtTo != nil {
+		query += " AND v.published_at <= ?"
+		args = append(args, filters.PublishedAtTo.UTC())
+	}
+	query += " ORDER BY v.observed_at DESC, v.news_id ASC, v.version_id ASC LIMIT ?"
+	args = append(args, app.MaximumEvidenceSnapshotSize+1)
+
+	rows, err := r.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	records := make([]app.EvidencePITRecord, 0)
+	for rows.Next() {
+		record, err := scanEvidencePITRecord(rows)
+		if err != nil {
+			return nil, err
+		}
+		records = append(records, record)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return records, nil
+}
+
+func evidencePlaceholders(count int) string {
+	return strings.TrimRight(strings.Repeat("?,", count), ",")
+}
+
 const evidencePITSelect = `SELECT
 	o.observation_id, o.idempotency_key, o.source_id, o.provider_code,
 	o.query_dimension, o.source_policy_version_id, o.endpoint_policy_version_id,
