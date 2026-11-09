@@ -718,6 +718,27 @@ flowchart TD
 - 可选依赖降级状态仍会出现在 Readiness 摘要中（不阻断 Ready）：`2cc4546`。
 - 本批次尚未运行 gofmt、Server 测试或 race；需以最新 SHA 的 Workflow 结果验收。
 
+### 12.30 SRV-007 Migration Registry 并发安全（2026-11-09）
+
+#### Review 发现
+
+- Registry 的 `Register` 会写入 namespace map，而 `RunWithReport` 和 `Namespaces` 会并发读取该 map。
+- 当前 Bootstrap 在启动阶段顺序注册后再执行 Migration，正常路径没有并发写入；但 Registry 本身是可复用导出组件，缺少并发安全约束，未来装配或诊断调用并行时可能触发 map concurrent read/write 或数据竞争。
+
+#### 实施内容
+
+- 为 Registry 增加读写锁，注册时只在完成定义校验和深拷贝后持锁写入。
+- `RunWithReport` 和 `Namespaces` 通过受保护的快照读取 namespace 集合。
+- 已注册 Migration 定义在插入后不可变，快照仅复制 map，不重复复制 SQL 字符串切片。
+- 重复 namespace 的并发注册由锁内唯一性检查保证，仅允许一个注册成功。
+- Platform Migration Runner、锁、Checksum 和 SQL 执行逻辑没有重复实现或修改。
+
+#### 测试与提交
+
+- Registry 并发保护：`59d5209`。
+- 并发注册/读取及重复注册竞争测试：`8b5154e`。
+- 本批次尚未运行 gofmt、Server 测试或 race；需在后续统一联调/CI 中验收。
+
 ## 13. 分支与协作规则
 
 - 本规划及 Server 代码实施位于 `feat/research-analysis-flow-native-go`。
