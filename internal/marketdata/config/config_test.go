@@ -960,3 +960,34 @@ func TestLoadTickFlowSectorRankingsRequiresAPIKey(t *testing.T) {
 		t.Fatalf("TickFlow sector rankings without API key must fail configuration validation, got %v", err)
 	}
 }
+
+func TestLoadDisabledTickFlowDoesNotRequireAPIKeyForStaleCapabilities(t *testing.T) {
+	file := filepath.Join(t.TempDir(), "providers.json")
+	data := `{"provider_priority":["eastmoney","tickflow"],"adjustment_basis":"forward_adjusted","providers":{"eastmoney":{"enabled":true,"quote":true,"daily_bars":true},"tickflow":{"enabled":false,"quote":false,"daily_bars":false,"index_quotes":true,"market_breadth":true}}}`
+	if err := os.WriteFile(file, []byte(data), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("MARKET_DATA_PROVIDERS_CONFIG", file)
+	t.Setenv("MARKET_DATA_PROVIDER_PRIORITY", "")
+	t.Setenv("MARKET_DATA_API_KEY", "test-api-key-that-is-at-least-32-characters")
+	t.Setenv("MARKET_DATA_ALLOW_NO_STORAGE", "true")
+	t.Setenv("MARKET_DATA_TICKFLOW_API_KEY", "")
+	t.Setenv("TICKFLOW_API_KEY", "")
+	t.Setenv("MARKET_DATA_TICKFLOW_ENABLED", "")
+	t.Setenv("MARKET_DATA_TICKFLOW_QUOTE_ENABLED", "")
+	t.Setenv("MARKET_DATA_TICKFLOW_DAILY_BARS_ENABLED", "")
+	t.Setenv("MARKET_DATA_TICKFLOW_INDEX_QUOTES_ENABLED", "")
+	t.Setenv("MARKET_DATA_TICKFLOW_MARKET_BREADTH_ENABLED", "")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("disabled TickFlow with stale capability flags must not require credentials: %v", err)
+	}
+	if cfg.ProviderSettings["tickflow"].Enabled {
+		t.Fatal("TickFlow must remain disabled")
+	}
+	if !cfg.ProviderSettings["tickflow"].IndexQuotes || !cfg.ProviderSettings["tickflow"].MarketBreadth {
+		t.Fatalf("test must preserve stale capability flags to cover the regression: %+v", cfg.ProviderSettings["tickflow"])
+	}
+}
+

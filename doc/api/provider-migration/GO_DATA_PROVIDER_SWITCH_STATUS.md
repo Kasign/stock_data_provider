@@ -62,3 +62,10 @@
 - 增加 Hithink、Yahoo、Xueqiu 单 HTTP 出口缺失时的 fail-closed 测试。
 - 增加 Tencent DailyBars 必须同时具备注入复权与未复权 K 线执行器的测试；只注入其中一个时必须失败，两个都注入时通过静态装配校验。
 - 现有测试仍未执行，统一留待 integration。
+
+### 2026-11-09：禁用 TickFlow 的残留能力不再触发凭证校验
+
+- 配置审查发现 TickFlow API Key 校验只检查能力开关，没有同时检查 Provider 的 Enabled 状态；禁用 TickFlow 但保留历史能力配置时，仍会错误阻断启动。
+- 凭证校验现在与 Hithink/Tushare 一致，仅在 TickFlow 已启用且启用了认证 API 能力时要求 API Key；日 K 的公开 API 模式仍不要求 Key。
+- 增加回归测试，保留禁用状态下的历史 IndexQuotes/MarketBreadth 开关并清空 TickFlow Key，验证配置仍可加载。
+- 未执行构建或测试，按约定留待 integration 统一验收。
