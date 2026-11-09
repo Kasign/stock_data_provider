@@ -17,6 +17,8 @@ import (
 	"example.com/stock-analysis-flow/internal/marketdata/normalize"
 	"example.com/stock-analysis-flow/internal/marketdata/provider"
 	"example.com/stock-analysis-flow/internal/marketdata/repository"
+	platformdiagnostics "example.com/stock-analysis-flow/internal/platform/diagnostics"
+	"example.com/stock-analysis-flow/internal/platform/fault"
 )
 
 type chipDistributionSource interface {
@@ -2566,13 +2568,62 @@ func (s *DataService) BarProviders() []provider.DailyBarProvider {
 	return append([]provider.DailyBarProvider(nil), s.barProviders...)
 }
 func (s *DataService) Ready(ctx context.Context) error {
-	if err := s.cache.Ping(ctx); err != nil {
-		return fmt.Errorf("Redis readiness: %w", err)
+	if s == nil {
+		return fault.New(fault.ClassValidation, "market_data.readiness_service_missing", "Market Data service is not configured", nil)
 	}
-	if err := s.store.Ping(ctx); err != nil {
-		return fmt.Errorf("MariaDB readiness: %w", err)
+	if ctx == nil {
+		return fault.New(fault.ClassValidation, "market_data.readiness_context_missing", "readiness context is required", nil)
+	}
+	checks := []platformdiagnostics.Check{
+		{
+			ID: "market-data.redis", Name: "Redis", Required: true, Timeout: 3 * time.Second,
+			Run: func(checkCtx context.Context) (platformdiagnostics.Observation, error) {
+				if s.cache == nil {
+					return platformdiagnostics.Observation{}, fault.New(fault.ClassInternal, "market_data.redis_dependency_missing", "Redis dependency is not configured", nil)
+				}
+				if err := s.cache.Ping(checkCtx); err != nil {
+					return platformdiagnostics.Observation{}, readinessDependencyFault("redis", "market_data.redis_unavailable", "Redis is unavailable", err)
+				}
+				return platformdiagnostics.Observation{Status: platformdiagnostics.StatusHealthy, SafeMessage: "Redis is ready"}, nil
+			},
+		},
+		{
+			ID: "market-data.mariadb", Name: "MariaDB", Required: true, Timeout: 3 * time.Second,
+			Run: func(checkCtx context.Context) (platformdiagnostics.Observation, error) {
+				if err := s.store.Ping(checkCtx); err != nil {
+					return platformdiagnostics.Observation{}, readinessDependencyFault("sql", "market_data.mariadb_unavailable", "MariaDB is unavailable", err)
+				}
+				return platformdiagnostics.Observation{Status: platformdiagnostics.StatusHealthy, SafeMessage: "MariaDB is ready"}, nil
+			},
+		},
+	}
+	report, err := (platformdiagnostics.Runner{MaxConcurrent: 2, TotalTimeout: 5 * time.Second}).Run(ctx, checks)
+	if err != nil {
+		return err
+	}
+	for _, result := range report.Results {
+		if result.Observation.Status == platformdiagnostics.StatusHealthy {
+			continue
+		}
+		if result.Fault != nil {
+			return result.Fault
+		}
+		return fault.New(fault.ClassUnavailable, "market_data.readiness_not_healthy", "Market Data dependencies are not ready", nil)
 	}
 	return nil
+}
+
+func readinessDependencyFault(dependency, code, message string, cause error) *fault.Fault {
+	class := fault.ClassUnavailable
+	retryable := false
+	if errors.Is(cause, context.DeadlineExceeded) {
+		class = fault.ClassTimeout
+		retryable = true
+	}
+	result := fault.New(class, code, message, cause)
+	result.Dependency = dependency
+	result.Retryable = retryable
+	return result
 }
 
 func (s *DataService) Quote(ctx context.Context, rawSymbol string) (*model.Quote, bool, error) {
