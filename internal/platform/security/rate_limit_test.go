@@ -96,8 +96,26 @@ func TestRedisLoginRateLimiterIntegration(t *testing.T) {
 	}
 	wait.Wait()
 	concurrent, err := limiter.Check(ctx, accountDigest, ipDigest)
-	if err != nil || concurrent.AccountFailures != 8 || concurrent.IPFailures != 8 || concurrent.Allowed {
+	if err != nil || concurrent.AccountFailures != 8 || concurrent.IPFailures != 11 || concurrent.Allowed {
 		t.Fatalf("concurrent counters are not atomic: %+v, %v", concurrent, err)
+	}
+	windowAccountDigest := strings.Repeat("c", 64)
+	windowIPDigest := strings.Repeat("d", 64)
+	windowPolicy := LoginRateLimitPolicy{
+		AccountMaxFailures: 1, IPMaxFailures: 1, Window: 250 * time.Millisecond,
+		BaseBackoff: 100 * time.Millisecond, MaxBackoff: 100 * time.Millisecond,
+	}
+	if _, err := limiter.RecordFailure(ctx, windowAccountDigest, windowIPDigest, windowPolicy); err != nil {
+		t.Fatalf("record first window failure: %v", err)
+	}
+	windowBlocked, err := limiter.RecordFailure(ctx, windowAccountDigest, windowIPDigest, windowPolicy)
+	if err != nil || windowBlocked.Allowed {
+		t.Fatalf("second window failure should block: %+v, %v", windowBlocked, err)
+	}
+	time.Sleep(300 * time.Millisecond)
+	windowReset, err := limiter.Check(ctx, windowAccountDigest, windowIPDigest)
+	if err != nil || !windowReset.Allowed || windowReset.AccountFailures != 0 || windowReset.IPFailures != 0 {
+		t.Fatalf("fixed window did not expire: %+v, %v", windowReset, err)
 	}
 	if err := client.Close(); err != nil {
 		t.Fatalf("close Redis client: %v", err)
