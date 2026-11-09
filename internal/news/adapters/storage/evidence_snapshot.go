@@ -91,7 +91,7 @@ func (r *MySQLRepository) GetEvidenceSnapshot(
 	}
 	var snapshot app.EvidenceSnapshot
 	if err := json.Unmarshal(payload, &snapshot); err != nil ||
-		snapshot.ValidateAt(now) != nil ||
+		snapshot.Validate() != nil || snapshot.CreatedAt.After(now) || snapshot.SystemAsOf.After(now) ||
 		uint32(len(snapshot.Items)) != itemCount ||
 		snapshot.SnapshotRef != snapshotRef ||
 		snapshot.CallerRef != callerRef ||

@@ -975,3 +975,9 @@
 - 本语义修正尚未通过 MariaDB 11.4 实际运行验证；并发锁跳过、回滚和结果计数仍属于待执行集成验收。
 
 - 补充诊断边界：backlog 查询返回负数、正数却无最早到期时间、零数量却带最早时间时，诊断报告 unavailable，不再把不一致结果误报为 healthy/degraded。
+
+
+### Evidence Snapshot 过期错误语义修正（2026-11-09）
+
+- [x] `GetEvidenceSnapshot` 先校验 Snapshot 结构、未来创建/知识时点及数据库信封一致性，再单独判断 TTL；已过期但内容完整的快照统一返回 `ErrEvidenceSnapshotUnavailable`，不再误报为 `ErrInvalidEvidenceSnapshot`。
+- [x] 既有 MariaDB 集成断言已覆盖 `now == expires_at` 的过期边界；本次未执行该测试，等待 News MariaDB Integration CI 提供运行证据。
