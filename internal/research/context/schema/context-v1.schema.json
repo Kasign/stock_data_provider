@@ -1,0 +1,273 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "research-context-v1.schema.json",
+  "title": "ResearchContext v1",
+  "description": "Research 模块 Context v1.0.0 公开 DTO。字段语义依据项目级 Quant-Research 公开 DTO 契约。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "context_id",
+    "context_version",
+    "research_question",
+    "scope",
+    "subject_refs",
+    "system_as_of",
+    "section_refs",
+    "quality_summary",
+    "included_sections",
+    "omitted_sections",
+    "builder_version",
+    "created_at"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "1.0.0"
+    },
+    "context_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "context_version": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "research_question": {
+      "type": "string",
+      "minLength": 1
+    },
+    "scope": {
+      "type": "string",
+      "enum": [
+        "market",
+        "industry",
+        "stock",
+        "event"
+      ]
+    },
+    "subject_refs": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "uniqueItems": true
+    },
+    "system_as_of": {
+      "type": "string",
+      "format": "date-time",
+      "description": "RFC3339Nano UTC"
+    },
+    "section_refs": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/ContextSectionRef"
+      }
+    },
+    "quality_summary": {
+      "$ref": "#/$defs/QualitySummary"
+    },
+    "included_sections": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "uniqueItems": true
+    },
+    "omitted_sections": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/OmittedSection"
+      }
+    },
+    "builder_version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "RFC3339Nano UTC"
+    }
+  },
+  "$defs": {
+    "sourceOwner": {
+      "type": "string",
+      "enum": [
+        "data",
+        "quant",
+        "research",
+        "news"
+      ]
+    },
+    "qualityStatus": {
+      "type": "string",
+      "enum": [
+        "valid",
+        "degraded",
+        "invalid",
+        "unknown"
+      ]
+    },
+    "ContextSectionRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "section_id",
+        "section_version",
+        "source_owner",
+        "source_refs",
+        "evidence_refs",
+        "quality_status",
+        "required",
+        "included",
+        "assembled_at",
+        "system_as_of"
+      ],
+      "properties": {
+        "section_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "section_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source_owner": {
+          "$ref": "#/$defs/sourceOwner"
+        },
+        "source_refs": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        },
+        "evidence_refs": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        },
+        "quality_status": {
+          "$ref": "#/$defs/qualityStatus"
+        },
+        "required": {
+          "type": "boolean"
+        },
+        "included": {
+          "type": "boolean"
+        },
+        "assembled_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "RFC3339Nano UTC"
+        },
+        "system_as_of": {
+          "type": "string",
+          "format": "date-time",
+          "description": "RFC3339Nano UTC"
+        }
+      }
+    },
+    "OmittedSection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "section_id",
+        "source_owner",
+        "reason_code",
+        "required",
+        "source_refs",
+        "safe_message",
+        "retryable"
+      ],
+      "properties": {
+        "section_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source_owner": {
+          "$ref": "#/$defs/sourceOwner"
+        },
+        "reason_code": {
+          "type": "string",
+          "enum": [
+            "not_requested",
+            "budget_exceeded",
+            "unavailable",
+            "unauthorized",
+            "quality_rejected",
+            "failed",
+            "duplicate"
+          ]
+        },
+        "required": {
+          "type": "boolean"
+        },
+        "source_refs": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        },
+        "safe_message": {
+          "type": "string",
+          "minLength": 1
+        },
+        "retryable": {
+          "type": "boolean"
+        }
+      }
+    },
+    "QualitySummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "missing_required_count",
+        "missing_optional_count",
+        "conflict_count",
+        "stale_count",
+        "reason_codes"
+      ],
+      "properties": {
+        "status": {
+          "$ref": "#/$defs/qualityStatus"
+        },
+        "missing_required_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "missing_optional_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "conflict_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "stale_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "reason_codes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        }
+      }
+    }
+  }
+}
