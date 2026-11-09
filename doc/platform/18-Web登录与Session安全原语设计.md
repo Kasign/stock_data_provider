@@ -25,6 +25,8 @@
 
 Server 统一入口必须为每条路由声明允许的认证方式和 Scope。Web Session 成功认证后可以映射为可信 Owner Principal，但 Principal 需保留认证来源；不能把 Cookie Session 当作 Owner Bearer。直接访问 Server 端口和经 Nginx 访问必须执行同样的应用认证。
 
+补充实现边界：当前 `internal/platform/security.Authenticator/Router` 仅验证 Authorization Bearer，RoutePolicy 仅支持 anonymous、Owner Bearer 和 Service Scope；它不解析 Cookie，也不识别 `owner_session`。Server 不得把已验证 Session 注入伪造 Authorization Header 来复用该 Router。Server 应在组合根使用独立 Session Middleware/路由授权链，先校验 Cookie、Redis Session、MariaDB credential_version，再按 Server 自有路由矩阵授权 Session。若同一路由接受 Bearer 与 Session，必须分别验证来源并执行各自授权规则；不得因最终 Owner 主体相同而扩大权限。
+
 ## 3. 密码与 Owner Credential
 
 ### 3.1 算法和参数
