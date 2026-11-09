@@ -60,7 +60,7 @@ func ObservationRetentionCheck(probe ObservationRetentionProbe) platformdiag.Che
 				return platformdiag.Observation{
 					Status: platformdiag.StatusDegraded, ReasonCode: "news.observation.retention_backlog",
 					SafeMessage: "Expired observation payloads are awaiting purge",
-					CheckedAt:   checkedAt, Attributes: attributes,
+					CheckedAt: checkedAt, Attributes: attributes,
 				}, nil
 			}
 			return platformdiag.Observation{

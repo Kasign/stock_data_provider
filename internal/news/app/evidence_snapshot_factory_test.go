@@ -10,7 +10,7 @@ import (
 )
 
 type evidencePITRepositoryStub struct {
-	records []EvidencePITRecord
+	records    []EvidencePITRecord
 	err        error
 	calls      int
 	afterQuery func()
@@ -49,7 +49,7 @@ func TestCreateEvidenceSnapshotForQueryFreezesOnlyPITReferences(t *testing.T) {
 	request.Filters = &EvidenceQueryFilters{NewsIDs: []string{"news-1", "news-2"}}
 	request.SystemAsOf = now.Add(-time.Second)
 
-	query := &evidencePITRepositoryStub{records: evidencePITRecords(request.SystemAsOf)}
+	query := &evidencePITRepositoryStub{records:    evidencePITRecords(request.SystemAsOf)}
 	store := &evidenceSnapshotRepositoryStub{}
 	service, err := NewCreateEvidenceSnapshotForQuery(query, store, func() string { return "snapshot-1" })
 	if err != nil {
@@ -128,7 +128,6 @@ func TestCreateEvidenceSnapshotForQueryDoesNotRequeryOnCursorRequest(t *testing.
 		t.Fatalf("cursor request re-ran PIT or wrote snapshot: query=%d store=%d", query.calls, store.calls)
 	}
 }
-
 
 func TestCreateEvidenceSnapshotForQueryHonorsContextCancellation(t *testing.T) {
 	now := time.Date(2026, 11, 9, 12, 0, 0, 0, time.UTC)
