@@ -819,3 +819,12 @@ internal/
 - 新增 `config.LoadForInProcess()`：只跳过 Data HTTP API Key 校验，其他 Provider Secret、配置范围、存储约束仍执行原有校验；独立部署的 `config.Load()` 继续强制要求 Data API Key。
 - 新增路由边界测试：进程内业务路由无需 Data API Key，Request ID 不被 Data 覆盖，Data health 路由不对 Root 暴露；新增配置测试证明独立部署仍要求 API Key。
 - 本批未修改 Root Server、认证中间件或 Platform 代码；尚未把 InProcessHandler 实际挂载到 Root Router，不计 Root 集成验收完成。
+
+
+### 2026-11-09：M3-1 Data 进程内路由专项验收
+
+- 实际验证代码 SHA：`7d7c3ee0401195839254a96716ad4502d6097596`（自动 gofmt 仅调整 Module 字段对齐）。
+- Go suite Run `42578303159`：Data Module Job `129030926997` 的 Data gofmt、单测、race、vet 全部通过；MariaDB Migration/PIT Job `129030926876` 通过。
+- 单测验证 `InProcessHandler` 不要求 Data API Key、不覆盖 Root Request ID、不暴露 Data health 路由；`Handler` 独立部署认证测试仍保留。
+- Root `Test .` 在同一 Run 仍被 Research 的语法/NUL 问题阻断；Data 专项不受影响。
+- 当前只完成 Adapter/Config 边界准备，尚未修改 `cmd/analysis-api`，也未实际将 Data Module 装入 Root Server；M3 总体验收不能标记通过。
