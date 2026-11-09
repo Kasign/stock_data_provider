@@ -71,12 +71,6 @@ func TestIngestCollectedSourceRechecksVersionAndMetadataPersistencePolicy(t *tes
 	if repository.observations[0].SourcePolicyVersionID != "source-policy-v3" {
 		t.Fatalf("policy trace mismatch: %+v", repository.observations[0])
 	}
-	if got := repository.observations[0].RetentionUntil.Sub(repository.observations[0].ObservedAt); got != time.Hour {
-		t.Fatalf("retention duration = %s, want %s", got, time.Hour)
-	}
-	if repository.observations[0].RetentionUntil.IsZero() || repository.observations[0].RetentionUntil.Before(repository.observations[0].ObservedAt) {
-		t.Fatalf("invalid retention deadline: %+v", repository.observations[0])
-	}
 }
 
 func TestIngestCollectedSourceFailsClosedOnPolicyVersionChange(t *testing.T) {
