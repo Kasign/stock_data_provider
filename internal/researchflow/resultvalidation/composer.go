@@ -169,9 +169,16 @@ func validateResearchEvidence(values []researchapp.EvidenceRecord, expectedSyste
 			strings.TrimSpace(draft.SourceRef) == "" || draft.DerivedFromRefs == nil ||
 			draft.SubjectRefs == nil || draft.Limitations == nil ||
 			!isUTC(draft.SystemObservedAt) || !isUTC(draft.SystemAsOf) ||
-			!draft.SystemAsOf.Equal(expectedSystemAsOf) || draft.SystemObservedAt.After(draft.SystemAsOf) ||
+			draft.SystemAsOf.After(expectedSystemAsOf) || draft.SystemObservedAt.After(draft.SystemAsOf) ||
 			!validQuality(draft.QualityStatus) || !validContentLevel(draft.ContentLevel) ||
-			!validStance(draft.Stance) || strings.TrimSpace(draft.AuthorizationRef) == "" {
+			!validStance(draft.Stance) || strings.TrimSpace(draft.AuthorizationRef) == "" ||
+			hasDuplicateOrInvalidRefs(draft.DerivedFromRefs) || hasDuplicateOrInvalidRefs(draft.SubjectRefs) ||
+			hasDuplicateOrInvalidRefs(draft.Limitations) || !validEvidenceTimes(draft) ||
+			(draft.Confidence != nil && (*draft.Confidence < 0 || *draft.Confidence > 1 ||
+				strings.TrimSpace(pointerValue(draft.ConfidenceMethod)) == "" ||
+				strings.TrimSpace(pointerValue(draft.ConfidenceMethodVersion)) == "")) ||
+			(draft.Confidence == nil && (draft.ConfidenceMethod != nil || draft.ConfidenceMethodVersion != nil)) ||
+			((draft.EvidenceType == "inference" || draft.EvidenceType == "hypothesis") && len(draft.DerivedFromRefs) == 0) {
 			return nil, fmt.Errorf("%w: invalid Research Evidence %q", ErrInvalidResultComposition, value.EvidenceID)
 		}
 		if _, exists := ids[value.EvidenceID]; exists {
@@ -179,7 +186,31 @@ func validateResearchEvidence(values []researchapp.EvidenceRecord, expectedSyste
 		}
 		ids[value.EvidenceID] = struct{}{}
 	}
+	for _, value := range values {
+		for _, ref := range value.DerivedFromRefs {
+			if _, exists := ids[ref]; !exists {
+				return nil, fmt.Errorf("%w: Evidence %q references missing upstream Evidence %q", ErrInvalidResultComposition, value.EvidenceID, ref)
+			}
+		}
+	}
 	return ids, nil
+}
+
+func validEvidenceTimes(value researchapp.EvidenceDraft) bool {
+	if value.PublishedAt != nil && !isUTC(*value.PublishedAt) {
+		return false
+	}
+	if value.AvailableAt != nil && (!isUTC(*value.AvailableAt) || value.AvailableAt.After(value.SystemAsOf)) {
+		return false
+	}
+	if (value.ValidTimeStart == nil) != (value.ValidTimeEnd == nil) {
+		return false
+	}
+	if value.ValidTimeStart != nil && (!isUTC(*value.ValidTimeStart) || !isUTC(*value.ValidTimeEnd) ||
+		value.ValidTimeStart.After(*value.ValidTimeEnd)) {
+		return false
+	}
+	return true
 }
 
 func validateResearchClaims(values []researchapp.Claim, evidenceIDs map[string]struct{}, expectedSystemAsOf time.Time) error {
@@ -191,6 +222,9 @@ func validateResearchClaims(values []researchapp.Claim, evidenceIDs map[string]s
 			value.ScopeRefs == nil || value.SupportingEvidenceRefs == nil ||
 			value.ContradictingEvidenceRefs == nil || value.RequiredDataRefs == nil ||
 			value.InvalidationConditions == nil || value.Limitations == nil ||
+			hasDuplicateOrInvalidRefs(value.ScopeRefs) || hasDuplicateOrInvalidRefs(value.SupportingEvidenceRefs) ||
+			hasDuplicateOrInvalidRefs(value.ContradictingEvidenceRefs) || hasDuplicateOrInvalidRefs(value.RequiredDataRefs) ||
+			hasDuplicateOrInvalidRefs(value.InvalidationConditions) || hasDuplicateOrInvalidRefs(value.Limitations) ||
 			!validClaimStatus(value.Status) {
 			return fmt.Errorf("%w: invalid Research Claim %q", ErrInvalidResultComposition, value.ClaimID)
 		}
