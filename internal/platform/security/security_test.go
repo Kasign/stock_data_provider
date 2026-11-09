@@ -189,6 +189,38 @@ func TestNewAuthenticatorRejectsTooManyServiceCredentials(t *testing.T) {
 	}
 }
 
+func TestNewAuthenticatorValidatesServiceCredentialNames(t *testing.T) {
+	makeSecret := func(value string) config.Secret {
+		return config.NewEnvWithLookup(func(string) (string, bool) { return value, true }).Secret("TOKEN")
+	}
+	validNames := []string{"data-service", "news.v1", "svc_01", "1st-service"}
+	for _, name := range validNames {
+		t.Run("valid/"+name, func(t *testing.T) {
+			_, err := NewAuthenticator(makeSecret(ownerToken), []ServiceCredential{{
+				Name: name, Secret: makeSecret(dataToken), Scopes: []string{ScopeDataRead},
+			}})
+			if err != nil {
+				t.Fatalf("valid service name %q rejected: %v", name, err)
+			}
+		})
+	}
+
+	invalidNames := []string{
+		"", "Data-service", "bad name", "bad/name", "bad\nname",
+		".hidden", "-hidden", "_hidden", strings.Repeat("a", 65),
+	}
+	for index, name := range invalidNames {
+		t.Run("invalid/"+strconv.Itoa(index), func(t *testing.T) {
+			_, err := NewAuthenticator(makeSecret(ownerToken), []ServiceCredential{{
+				Name: name, Secret: makeSecret(dataToken), Scopes: []string{ScopeDataRead},
+			}})
+			if err == nil {
+				t.Fatalf("invalid service name %q was accepted", name)
+			}
+		})
+	}
+}
+
 func TestNewAuthenticatorRejectsWeakDuplicateAndUnknownScopes(t *testing.T) {
 	makeSecret := func(value string) config.Secret {
 		return config.NewEnvWithLookup(func(string) (string, bool) { return value, true }).Secret("TOKEN")
