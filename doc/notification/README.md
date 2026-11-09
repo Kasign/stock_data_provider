@@ -127,3 +127,11 @@ Notification 是独立通知业务模块，负责事件接收、Subscription、T
 - [x] 覆盖渠道已返回 accepted、但调用上下文随后取消：执行服务不得在取消上下文下伪造完成；保留未完成 Attempt 与 sending Delivery，交由租约恢复/Unknown 对账保守收敛。
 - [x] 覆盖显式可重试 rejected：必须通过 RetryPolicy 转为 retry_wait，保留单次 Attempt，不在当前执行调用内二次发送。
 - [ ] 本轮 Go workflow Run `42603330820`：go-core 通过但不覆盖 Notification；根模块 `Test .` 在 gofmt 阶段失败，日志无 Notification 文件差异，根模块测试未执行。新增测试尚无 CI 执行通过证据。
+
+
+
+### Delivery 执行输入校验增量（`16d98fa5ce2db66291eff2944c45737db7a2ec55`）
+
+- [x] 在任何 Preflight、Attempt 写入和渠道副作用之前校验 RetryPolicy 随机采样值必须为有限数且位于 [0,1)；非法值直接拒绝，避免渠道已发生副作用后才因退避输入无效而无法完成状态收敛。
+- [x] 增加负数、1、NaN、正无穷输入测试，断言不调用渠道且 Delivery/Attempt 不变。
+- [ ] 最新提交 Go workflow Run `42603698251` 已排队；测试尚无 CI 执行证据。
