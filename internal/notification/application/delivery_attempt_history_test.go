@@ -53,6 +53,10 @@ func TestValidateDeliveryAttemptHistoryForDeliveryRejectsOutsideLifecycle(t *tes
 	beforeCreation := attempt
 	beforeCreation.StartedAt = delivery.CreatedAt.Add(-time.Second)
 	beforeCreation.LeaseExpiresAt = delivery.CreatedAt.Add(time.Minute)
+	finishedBeforeCreation := beforeCreation.StartedAt.Add(time.Second)
+	beforeCreation.FinishedAt = &finishedBeforeCreation
+	durationBeforeCreation := int64(1000)
+	beforeCreation.DurationMS = &durationBeforeCreation
 	if err := ValidateDeliveryAttemptHistoryForDelivery(delivery, []domain.DeliveryAttempt{beforeCreation}); !errors.Is(err, ErrDeliveryAttemptHistory) {
 		t.Fatalf("attempt before Delivery creation must fail closed: %v", err)
 	}
@@ -60,6 +64,10 @@ func TestValidateDeliveryAttemptHistoryForDeliveryRejectsOutsideLifecycle(t *tes
 	afterDeadline := attempt
 	afterDeadline.StartedAt = delivery.DeadlineAt
 	afterDeadline.LeaseExpiresAt = delivery.DeadlineAt.Add(time.Minute)
+	finishedAfterDeadline := afterDeadline.StartedAt.Add(time.Second)
+	afterDeadline.FinishedAt = &finishedAfterDeadline
+	durationAfterDeadline := int64(1000)
+	afterDeadline.DurationMS = &durationAfterDeadline
 	if err := ValidateDeliveryAttemptHistoryForDelivery(delivery, []domain.DeliveryAttempt{afterDeadline}); !errors.Is(err, ErrDeliveryAttemptHistory) {
 		t.Fatalf("attempt at/after Delivery deadline must fail closed: %v", err)
 	}
