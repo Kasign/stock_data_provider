@@ -10,12 +10,28 @@ func TestMigrationsAreExplicitAndVersioned(t *testing.T) {
 		t.Fatalf("MigrationNamespace = %q, want researchflow", MigrationNamespace)
 	}
 	migrations := Migrations()
-	if len(migrations) != 1 || migrations[0].Version != 1 {
-		t.Fatalf("expected one initial migration at version 1, got %+v", migrations)
+	if len(migrations) != 2 || migrations[0].Version != 1 || migrations[1].Version != 2 {
+		t.Fatalf("expected ordered migrations v1 and v2, got %+v", migrations)
 	}
 	migration := migrations[0]
 	if migration.Description == "" || len(migration.Statements) != 6 {
-		t.Fatalf("migration metadata/statements are incomplete: %+v", migration)
+		t.Fatalf("initial migration metadata/statements are incomplete: %+v", migration)
+	}
+	outboxMigration := migrations[1]
+	if outboxMigration.Description == "" || len(outboxMigration.Statements) != 2 {
+		t.Fatalf("Outbox migration metadata/statements are incomplete: %+v", outboxMigration)
+	}
+	outboxDDL := strings.Join(outboxMigration.Statements, "\\n")
+	for _, fragment := range []string{
+		"lease_owner VARCHAR(128)",
+		"lease_expires_at CHAR(30)",
+		"lease_generation BIGINT UNSIGNED NOT NULL DEFAULT 0",
+		"next_attempt_at CHAR(30)",
+		"idx_researchflow_outbox_claim",
+	} {
+		if !strings.Contains(outboxDDL, fragment) {
+			t.Errorf("Outbox migration is missing %q", fragment)
+		}
 	}
 
 	joined := strings.Join(migration.Statements, "\n")
