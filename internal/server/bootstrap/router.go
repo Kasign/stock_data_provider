@@ -23,6 +23,8 @@ func newHTTPHandler(authenticator *platformsecurity.Authenticator, health, legac
 		{pattern: "HEAD /healthz", policy: platformsecurity.AnonymousAccess(), handler: health},
 		{pattern: "GET /readyz", policy: platformsecurity.OwnerAccess(), handler: health},
 		{pattern: "HEAD /readyz", policy: platformsecurity.OwnerAccess(), handler: health},
+		{pattern: "GET /diagnostics", policy: platformsecurity.OwnerAccess(), handler: health},
+		{pattern: "HEAD /diagnostics", policy: platformsecurity.OwnerAccess(), handler: health},
 		{pattern: "GET /{$}", policy: platformsecurity.OwnerAccess(), handler: legacy},
 		{pattern: "POST /api/v1/analysis/runs", policy: platformsecurity.OwnerAccess(), handler: legacy},
 		{pattern: "GET /api/v1/analysis/runs/{run_id}", policy: platformsecurity.OwnerAccess(), handler: legacy},
