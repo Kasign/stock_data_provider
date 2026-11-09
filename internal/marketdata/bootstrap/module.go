@@ -182,6 +182,7 @@ func (m *Module) ProviderSummary() ProviderSummary {
 }
 
 func (m *Module) build(cfg config.Config, deps Dependencies) error {
+
 	store := m.store
 	c := m.cache
 	logger := m.logger
@@ -196,7 +197,7 @@ func (m *Module) build(cfg config.Config, deps Dependencies) error {
 	})
 	m.baostockClient = baostockClient
 	available := map[string]provider.NamedProvider{
-		"eastmoney": provider.NewEastmoneyConfiguredWithAnnouncements(cfg.ProviderTimeout, cfg.EastmoneyQuoteURL, cfg.EastmoneyKlineURL, cfg.EastmoneyStockBasicURL, cfg.EastmoneySectorRankingURL, cfg.EastmoneyIndexURL, cfg.EastmoneyMarketStocksURL, cfg.EastmoneyLimitPoolBaseURL, cfg.EastmoneyStockBoardsURL, cfg.EastmoneyDragonTigerURL, cfg.EastmoneyAnnouncementsURL, cfg.EastmoneyUT).WithHotRankingURLs(cfg.EastmoneyHotRankingsURL, cfg.EastmoneyHotSurgeURL).WithCapitalFlowURL(cfg.EastmoneyCapitalFlowURL).WithHTTPDoers(deps.EastmoneyHTTPDoers),
+		"eastmoney": newEastmoneyProvider(cfg).WithHTTPDoers(deps.EastmoneyHTTPDoers),
 		"hithink":   provider.NewHithinkConfiguredWithHTTPDoer(cfg.ProviderTimeout, cfg.HithinkBaseURL, cfg.HithinkAPIKey, deps.HithinkHTTPDoer),
 		"baostock":  provider.NewBaostock(baostockClient),
 		"tencent":   provider.NewTencentConfiguredWithHTTPDoers(cfg.ProviderTimeout, cfg.TencentQuoteURL, cfg.TencentKlineURL, cfg.TencentNoneKlineURL, cfg.TencentStockSearchURL, deps.TencentQuoteHTTPDoer, deps.TencentKlineHTTPDoer, deps.TencentNoneKlineHTTPDoer, deps.TencentSearchHTTPDoer),

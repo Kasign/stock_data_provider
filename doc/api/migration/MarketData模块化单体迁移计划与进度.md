@@ -1013,3 +1013,13 @@ internal/
 - Eastmoney 按全部配置 endpoint 计算 scheme://host，逐个要求 origin 对应执行器，不能仅以 map 非 nil 作为通过条件。
 - 校验失败时构造直接返回可定位的缺失依赖错误，不会静默回退标准 HTTP Client/默认 TCP Dialer。严格模式只证明注入入口完整，不证明注入实现具备 SSRF/DNS/IP 防护；Root 仍须使用 Platform 受控执行器。
 - 新增测试源码覆盖禁用 Provider 豁免、启用 Provider 缺失依赖、Eastmoney origin 缺项及 TCP Dialer 缺失。按分支约定未运行构建/测试，待 integration 统一验收。
+
+### 2026-11-09：M4 严格出站校验与 Platform 复用核对
+
+- 对照 Platform 公共契约与当前实现，确认 Data 不应自建 HTTP/DNS/IP 校验、Redis 连接池、通用 Fault 或诊断执行框架。
+- HTTP：Data 保留 Provider 专用 HTTPDoer 注入端口；Root 复用 Platform httpclient.Client.Bind()/BoundDoer，按 endpoint 精确创建执行器。Data 继续负责协议解析、响应体上限、Provider 错误和质量语义。
+- Redis：cache.GoRedis 是共享客户端 Adapter；Root 应使用 Platform storage.OpenRedis() 创建并 Ping 共享 redis.Client，再通过 cache.NewGoRedis(client) 注入 Data。Data 不创建/关闭连接池。旧 cache.Redis RESP 实现仍被兼容独立 cmd/market-data 使用，不作为模块化单体生产接入方案；旧入口退役前不贸然删除。
+- MariaDB：Data Repository/Store 保留领域 SQL 与 Schema 所有权；Root 复用 Platform storage.OpenSQL()/PingSQL() 管理连接池，再将 sql.DB 注入 Data Store。Data 不复制连接池参数、Fault 或 Ping 逻辑。
+- Diagnostics：Data 保留 Provider Probe、Validation、Freshness、Coverage、Cross-Provider 和历史证据；仅在 Server 入口需要公共摘要时适配 Platform Observation，不重写 Data 诊断体系。
+- 本次修复严格出站校验的默认值偏差：旧实现检查 Config 原始 URL，空字段会被误判为非法；实际 Provider 构造器会填充默认 endpoint。现从同一 newEastmoneyProvider(cfg) 实例读取 HTTPOrigins()，覆盖实际生效的默认值和自定义值，避免重复维护默认 Host 清单。增加默认 Host 回归测试源码，未运行测试。
+- Root 侧实际创建/注入 BoundDoer、受控 TCP Dialer、OpenRedis/OpenSQL 及统一关闭仍由 Server 组合根负责，不在 Data 复制实现。
