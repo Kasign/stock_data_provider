@@ -626,3 +626,14 @@ Server 层完成不是“服务能够启动”这么简单。至少同时满足�
 - 不允许通过 Nginx 静态配置注入 PLATFORM_ADMIN_TOKEN，也不允许把 Owner Token 放进浏览器 localStorage 解决该问题。
 - 正确的后续方案是先由 Platform 提供服务端 Session/CSRF 等公共安全能力，再由 Server 装配登录、会话和用户权限路由，Web 通过同源 HttpOnly Cookie 调用 API。Web 分支负责登录页面与客户端会话状态，不负责保存服务端凭证。
 - 在 Web Session 契约和实现完成前，Analysis API 应继续保持 Owner Bearer 保护和受限网络入口；不能为了当前 UI 可用而回退成匿名业务 API。
+
+### 12.12 SRV-006 统一组件生命周期第一阶段（2026-11-09）
+
+- 新增 `internal/server/runtime.Lifecycle`，统一组件注册、按注册顺序启动、按逆序停止。
+- 生命周期注册阶段拒绝空组件、空名称、重复名称；启动后禁止继续注册。
+- 任一组件启动失败时，Lifecycle 将失败组件本身和此前已尝试启动的组件按逆序 Stop，避免组件 Start 部分成功后资源泄漏；返回值保留原始启动错误和回滚错误。
+- Stop 幂等，并通过 `errors.Join` 汇总所有组件停止错误，不因一个组件关闭失败而跳过其他组件。
+- 旧 Analysis Task Queue 通过 Server Adapter 接入 Lifecycle。api 角色不启动 Queue Worker，但仍在进程退出时关闭 Queue；worker/all 角色由 Lifecycle 启动 Worker。
+- 当前 Lifecycle 已在 Bootstrap 的旧 Analysis Worker 垂直切片中实际使用，不是孤立工具包。HTTP Server 仍由 Bootstrap 负责优雅关闭，后续可在模块公开组件接口稳定后统一纳入。
+- 新增顺序启动/逆序停止、失败回滚、重复注册/启动后注册拒绝、停止错误汇总测试。
+- 当前未把模块 Worker 注册到 Lifecycle：Researchflow、Quant、LLM、Notification 等模块仍缺完整生产 Worker 装配入口，继续遵守 SRV-004 门禁。
