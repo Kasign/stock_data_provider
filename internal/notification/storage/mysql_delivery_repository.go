@@ -37,7 +37,6 @@ const deliverySelect = `SELECT
 	DATE_FORMAT(updated_at, '%Y-%m-%d %H:%i:%s.%f')
 	FROM notification_deliveries`
 
-
 // normalizeDeliveryDatabaseTime 将领域时间统一到 MariaDB DATETIME(6) 精度。
 func normalizeDeliveryDatabaseTime(value time.Time) time.Time {
 	return value.UTC().Truncate(time.Microsecond)

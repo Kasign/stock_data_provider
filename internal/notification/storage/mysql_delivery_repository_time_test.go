@@ -11,16 +11,16 @@ func TestNormalizeDeliveryRecordTimesUsesMariaDBPrecision(t *testing.T) {
 	now := time.Date(2026, 11, 9, 9, 30, 0, 123456789, time.FixedZone("UTC+8", 8*60*60))
 	nextAttempt := now.Add(time.Second + 987*time.Nanosecond)
 	record := domain.DeliveryRecord{
-		DeadlineAt: now.Add(time.Hour),
-		CreatedAt: now,
-		UpdatedAt: now,
+		DeadlineAt:    now.Add(time.Hour),
+		CreatedAt:     now,
+		UpdatedAt:     now,
 		NextAttemptAt: &nextAttempt,
 	}
 	normalized := normalizeDeliveryRecordTimes(record)
 	for name, value := range map[string]time.Time{
-		"deadline_at": normalized.DeadlineAt,
-		"created_at": normalized.CreatedAt,
-		"updated_at": normalized.UpdatedAt,
+		"deadline_at":     normalized.DeadlineAt,
+		"created_at":      normalized.CreatedAt,
+		"updated_at":      normalized.UpdatedAt,
 		"next_attempt_at": *normalized.NextAttemptAt,
 	} {
 		if value.Location() != time.UTC || value.Nanosecond()%1000 != 0 {

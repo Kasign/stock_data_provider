@@ -33,7 +33,6 @@ func NewMySQLSubscriptionRepository(
 	return &MySQLSubscriptionRepository{db: db, eventTypes: eventTypes, filterValidator: filterValidator}, nil
 }
 
-
 func normalizeSubscriptionDatabaseTimes(value domain.Subscription) domain.Subscription {
 	value.CreatedAt = value.CreatedAt.UTC().Truncate(time.Microsecond)
 	value.UpdatedAt = value.UpdatedAt.UTC().Truncate(time.Microsecond)
