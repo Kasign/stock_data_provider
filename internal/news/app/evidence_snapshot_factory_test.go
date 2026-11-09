@@ -168,7 +168,7 @@ func TestCreateEvidenceSnapshotForQueryHonorsContextCancellation(t *testing.T) {
 		query := &evidencePITRepositoryStub{records: evidencePITRecords(request.SystemAsOf)}
 		store := &cancelAfterCreateSnapshotStore{
 			evidenceSnapshotRepositoryStub: &evidenceSnapshotRepositoryStub{},
-			cancel: cancel,
+			cancel:                         cancel,
 		}
 		service, err := NewCreateEvidenceSnapshotForQuery(query, store, func() string { return "snapshot-after-cancel" })
 		if err != nil {
@@ -186,7 +186,7 @@ func TestCreateEvidenceSnapshotForQueryHonorsContextCancellation(t *testing.T) {
 	t.Run("canceled after PIT query", func(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		query := &evidencePITRepositoryStub{
-			records: evidencePITRecords(request.SystemAsOf),
+			records:    evidencePITRecords(request.SystemAsOf),
 			afterQuery: cancel,
 		}
 		store := &evidenceSnapshotRepositoryStub{}
