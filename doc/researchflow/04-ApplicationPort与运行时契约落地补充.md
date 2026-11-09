@@ -352,3 +352,9 @@ Fake Repository/Fake Clock/Fake Provider 只证明模块内逻辑；MariaDB/Redi
 - `DeadlineFinalizer` 读取 Run/Stage/Attempt 与 ResolvedTemplate 派生的传播策略/硬风险门禁快照，使用 DatabaseClock 调用 Domain `FinalizeDeadline`。
 - Finalizer 生成 ResultSummary/Outbox 引用，并通过 `DeadlineFinalizationStore` 传递预期 Run.version、终态、termination_reason 和摘要；Store Adapter 必须映射 Storage `FinalizeRun`，确保摘要、Outbox、Run 终态同事务。
 - Application 只依赖 Port，不直接依赖 SQL/Storage。当前 Fake Port 测试已补，未执行；MySQLRunRepository 已实现 `LoadDeadlineFinalizationSnapshot`，从持久化 ResolvedTemplate Snapshot、Stage 和 Attempt 历史恢复聚合输入；并实现 `FinalizeDeadlineRun` 到既有原子 `FinalizeRun` 的薄适配。MariaDB 集成验收和 Server 周期调度仍未完成。
+
+### 9.11 Deadline Scanner 排除已完成 Stage 集合（2026-11-09）
+
+- Review 发现 Run 已有全部终态 Stage、但尚未完成 Run 聚合时，Deadline Expire 仍会写入 `deadline_exceeded`，使本可正常 succeeded 的 Run 被错误禁止成功终结。
+- Storage `ExpireRunDeadline` 现在在确认全部 Stage 终态且无运行中 Attempt 后返回未变更；候选 SQL 同步排除全部 Stage 已终态的 Run，避免扫描热循环。
+- 这些 Run 必须由正常聚合/Finalize 路径处理；Deadline Expire 只负责仍有未完成 Stage 的 Run。
