@@ -703,7 +703,7 @@ flowchart TD
 
 #### 实施内容
 
-- `/readyz` 成功响应现在从本次 Runner Report 的 Results 动态生成依赖状态，使用稳定 CheckID 作为键，Observation Status 作为值。
+- `/readyz` 成功响应现在从本次 Runner Report 的 Results 动态生成依赖状态，使用稳定 CheckID 作为键；healthy 继续映射为既有兼容值 `ok`，其他状态保留 `degraded/unavailable/skipped/failed`。
 - 现有 Storage Check 仍显示为 `server.storage.mariadb`、`server.storage.redis`；未来模块 Check 会自然进入结果，不要求 Server 为每个模块追加硬编码字段。
 - 不输出 Check Name、Fault Cause、Dependency 内部字段或未验证的自由文本。
 - MariaDB Ping 现在与 Redis Ping 一样，保留 Context Canceled/DeadlineExceeded 语义，由 Platform Runner 统一分类为取消/超时，而不是错误包装成普通依赖不可用。
@@ -714,6 +714,7 @@ flowchart TD
 - 动态依赖结果测试：`d01693a`。
 - 兼容性用例更新：`28b6b83`。
 - MariaDB Context 语义修正：`aee6d19`。
+- 保留健康状态兼容值：`74d0b3b`；对应测试：`41f9007`。
 - 本批次尚未运行 gofmt、Server 测试或 race；需以最新 SHA 的 Workflow 结果验收。
 
 ## 13. 分支与协作规则
