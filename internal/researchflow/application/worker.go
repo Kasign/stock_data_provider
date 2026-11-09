@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"sync"
 	"time"
 
 	"example.com/stock-analysis-flow/internal/researchflow/domain"
@@ -109,7 +108,7 @@ func (w *Worker) Execute(ctx context.Context, runRef, stageRef, attemptRef strin
 	stopHeartbeat := make(chan struct{})
 	heartbeatDone := make(chan struct{})
 	heartbeatErr := make(chan error, 1)
-	go w.heartbeat(execCtx, snapshot, attempt, stopHeartbeat, heartbeatDone, heartbeatErr)
+	go w.heartbeat(execCtx, cancel, snapshot, attempt, stopHeartbeat, heartbeatDone, heartbeatErr)
 
 	request := StageExecutionRequest{
 		Run: snapshot.Run, Stage: snapshot.Stage, Attempt: attempt,
@@ -122,8 +121,11 @@ func (w *Worker) Execute(ctx context.Context, runRef, stageRef, attemptRef strin
 	close(stopHeartbeat)
 	<-heartbeatDone
 	select {
-	case leaseErr := <-heartbeatErr:
-		return WorkerExecution{Attempt: attempt}, fmt.Errorf("%w: %v", ErrWorkerLeaseLost, leaseErr)
+	case heartbeatFailure := <-heartbeatErr:
+		if errors.Is(heartbeatFailure, ErrWorkerDeadline) {
+			return WorkerExecution{Attempt: attempt}, ErrWorkerDeadline
+		}
+		return WorkerExecution{Attempt: attempt}, fmt.Errorf("%w: %v", ErrWorkerLeaseLost, heartbeatFailure)
 	default:
 	}
 	if errors.Is(execCtx.Err(), context.DeadlineExceeded) || !w.now().Before(snapshot.Run.DeadlineAt) {
@@ -162,7 +164,7 @@ func (w *Worker) Execute(ctx context.Context, runRef, stageRef, attemptRef strin
 	return WorkerExecution{Attempt: attempt, Committed: true}, nil
 }
 
-func (w *Worker) heartbeat(ctx context.Context, snapshot StageExecutionSnapshot, attempt domain.Attempt,
+func (w *Worker) heartbeat(ctx context.Context, cancel context.CancelFunc, snapshot StageExecutionSnapshot, attempt domain.Attempt,
 	stop <-chan struct{}, done chan<- struct{}, failures chan<- error) {
 	defer close(done)
 	ticker := time.NewTicker(w.config.HeartbeatInterval)
@@ -180,6 +182,7 @@ func (w *Worker) heartbeat(ctx context.Context, snapshot StageExecutionSnapshot,
 			if _, err := w.store.RenewAttemptLease(ctx, snapshot.Run.Ref, snapshot.Stage.Ref,
 				attempt.Ref, w.config.WorkerID, attempt.FencingToken, w.config.LeaseDuration); err != nil {
 				select { case failures <- err: default: }
+				cancel()
 				return
 			}
 		}
@@ -192,4 +195,3 @@ func cloneTime(value *time.Time) *time.Time {
 	return &copy
 }
 
-var _ sync.Locker
