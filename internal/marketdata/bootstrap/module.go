@@ -28,6 +28,7 @@ type Dependencies struct {
 	Cache           cache.Cache       // 调用方创建并持有；Module 不负责关闭。
 	Logger          *slog.Logger      // 模块日志依赖；nil 时使用 slog.Default。
 	TushareHTTPDoer provider.HTTPDoer // Root 注入的受控 Tushare HTTP 执行器；Module 不拥有、不关闭。
+	HithinkHTTPDoer provider.HTTPDoer // Root 注入的受控同花顺 HTTP 执行器；Module 不拥有、不关闭。
 }
 
 // Diagnostics 暴露模块就绪状态和 Provider 诊断，不暴露具体 DataService。
@@ -95,7 +96,7 @@ func New(cfg config.Config, deps Dependencies) (*Module, error) {
 		retentionStore: deps.Store,
 		retention:      cfg.QuoteRetention,
 	}
-	if err := module.build(cfg, deps.TushareHTTPDoer); err != nil {
+	if err := module.build(cfg, deps.TushareHTTPDoer, deps.HithinkHTTPDoer); err != nil {
 		_ = module.Close(context.Background())
 		return nil, err
 	}
@@ -155,7 +156,7 @@ func (m *Module) ProviderSummary() ProviderSummary {
 	}
 }
 
-func (m *Module) build(cfg config.Config, tushareHTTPDoer provider.HTTPDoer) error {
+func (m *Module) build(cfg config.Config, tushareHTTPDoer, hithinkHTTPDoer provider.HTTPDoer) error {
 	store := m.store
 	c := m.cache
 	logger := m.logger
@@ -170,7 +171,7 @@ func (m *Module) build(cfg config.Config, tushareHTTPDoer provider.HTTPDoer) err
 	m.baostockClient = baostockClient
 	available := map[string]provider.NamedProvider{
 		"eastmoney": provider.NewEastmoneyConfiguredWithAnnouncements(cfg.ProviderTimeout, cfg.EastmoneyQuoteURL, cfg.EastmoneyKlineURL, cfg.EastmoneyStockBasicURL, cfg.EastmoneySectorRankingURL, cfg.EastmoneyIndexURL, cfg.EastmoneyMarketStocksURL, cfg.EastmoneyLimitPoolBaseURL, cfg.EastmoneyStockBoardsURL, cfg.EastmoneyDragonTigerURL, cfg.EastmoneyAnnouncementsURL, cfg.EastmoneyUT).WithHotRankingURLs(cfg.EastmoneyHotRankingsURL, cfg.EastmoneyHotSurgeURL).WithCapitalFlowURL(cfg.EastmoneyCapitalFlowURL),
-		"hithink":   provider.NewHithinkConfigured(cfg.ProviderTimeout, cfg.HithinkBaseURL, cfg.HithinkAPIKey),
+		"hithink":   provider.NewHithinkConfiguredWithHTTPDoer(cfg.ProviderTimeout, cfg.HithinkBaseURL, cfg.HithinkAPIKey, hithinkHTTPDoer),
 		"baostock":  provider.NewBaostock(baostockClient),
 		"tencent":   provider.NewTencentConfiguredWithSearchURL(cfg.ProviderTimeout, cfg.TencentQuoteURL, cfg.TencentKlineURL, cfg.TencentNoneKlineURL, cfg.TencentStockSearchURL),
 		"sina":      provider.NewSinaConfigured(cfg.ProviderTimeout, cfg.SinaQuoteURL, cfg.SinaKlineURL),

@@ -28,7 +28,7 @@ const (
 // Hithink 对接同花顺官方金融数据 REST API。接口需要 API Key，默认不开启。
 // 认证只通过 X-api-key Header 发送，不将 Key 放入 URL、日志或错误文本。
 type Hithink struct {
-	client  *http.Client
+	client  HTTPDoer
 	baseURL string
 	apiKey  string
 
@@ -37,14 +37,23 @@ type Hithink struct {
 }
 
 func NewHithinkConfigured(timeout time.Duration, baseURL, apiKey string) *Hithink {
+	return NewHithinkConfiguredWithHTTPDoer(timeout, baseURL, apiKey, nil)
+}
+
+// NewHithinkConfiguredWithHTTPDoer 创建支持调用方注入受控 HTTP 执行器的同花顺 Provider。
+// 注入执行器时，其超时、目的地址策略和生命周期由调用方负责。
+func NewHithinkConfiguredWithHTTPDoer(timeout time.Duration, baseURL, apiKey string, doer HTTPDoer) *Hithink {
 	if timeout <= 0 {
 		timeout = 15 * time.Second
 	}
 	if strings.TrimSpace(baseURL) == "" {
 		baseURL = "https://fuyao.aicubes.cn"
 	}
+	if doer == nil {
+		doer = &http.Client{Timeout: timeout}
+	}
 	return &Hithink{
-		client:  &http.Client{Timeout: timeout},
+		client:  doer,
 		baseURL: strings.TrimRight(strings.TrimSpace(baseURL), "/"),
 		apiKey:  strings.TrimSpace(apiKey),
 	}

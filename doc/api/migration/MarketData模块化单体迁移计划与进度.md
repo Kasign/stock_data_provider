@@ -7,7 +7,7 @@
 - 跨模块准入：`doc/整体任务规划/01-项目总览/跨模块接入执行说明.md`、`doc/整体任务规划/01-项目总览/跨模块接入准入清单.md`
 - 本记录建立时的代码基线：`d8595f408337f62be3697aac661ba1570fdd3667`
 - 最近一次 M0 审计基线：`9687337743ff5ad8b5b81209831d43689693ae47`
-- 当前开发分支 HEAD（本轮最后代码提交）：`bbfd6dd90212fe6042093300016ab059b8a7561f`（接入 Tushare 受控 HTTP 执行器）
+- 当前开发分支 HEAD（合并 integration 后、本轮最新代码提交）：`be892d89f4247670efd1c64774d4866e03ccc454`（合并 integration；本轮后续代码以新提交为准）
 - 当前实施状态：`M1_completed / M2_completed / M3_in_progress / M4_in_progress`；M3 的 Data 侧进程内路由准备已完成，Root Server 实际装配仍待 Server 组合根完成；M4 的 borrowed DB 与 go-redis Cache Adapter 已实现，Root 侧资源注入/配置一致性及 Provider 网络出口适配仍未完成。
 
 > 本文记录 Data 从独立 Go Module/服务迁入 Root Server 根 Go Module、同进程运行的实施计划和进度。若本文与上述架构决策文档冲突，以架构决策文档为准；公共平台及 DATA 契约以冻结契约文档为准。本文不重新定义契约。
@@ -877,3 +877,14 @@ internal/
 - Root 组合根接入时必须针对实际 `TushareAPIURL` 创建 BoundDoer：精确 Host、HTTPS、443 端口、禁止重定向、`Idempotent=false`（Token 位于 POST Body）；Platform Client 的响应体上限需覆盖 Data 既有 Provider payload 上限。Root 负责创建和关闭 Platform Client。
 - 本批尚未执行构建/测试；不宣称 Tushare 受控出口验收通过。必须在按约定集成后验证 Data gofmt/test/race/vet、Tushare 固定测试和 Platform HTTP Client 安全策略。
 - 下一步：按凭据和重定向风险优先级，接入 Hithink、TickFlow、Xueqiu 等带凭据的 HTTP Provider；每个 Provider 的 endpoint Host/Port、凭据类型、重定向和响应上限独立登记。随后处理无凭据 Provider；BaoStock/Pytdx 仍单独制定 TCP 出站策略。
+
+
+### 2026-11-09：integration 合并后基线复核与 M4-HTTP-02
+
+- 用户将 `integration` 合并到当前分支，最新合并提交为 `be892d89f4247670efd1c64774d4866e03ccc454`，父提交为此前 Data 提交 `222b2c93039ad5df8ea0ed78f945692b504fc673`。本次合并信息显示 `go.mod` 存在冲突；合并后文件已恢复为单一根 Module（Go 1.23.0），依赖声明无冲突标记，包含当前仓库所需的 go-redis、mysql、jsonschema 等依赖。尚未通过构建验证，不能仅凭文件内容认定 go.sum/依赖图完全正确。
+- 合并带入的最新 Platform HTTP Client 仍提供 `Client.Bind(DestinationPolicy)` / `BoundDoer`，可直接复用；没有创建 Data 自有 SSRF/HTTP 安全层的理由。
+- 当前 Provider 核对：Tushare 已具备 HTTPDoer 注入；Hithink、TickFlow、Xueqiu 仍直接持有 `*http.Client`。Hithink 使用单一 baseURL + GET + `X-api-key`，适合按 Provider 注入固定 Host/Port 的 BoundDoer；本阶段只接 Hithink，不混做 TickFlow 的双 endpoint 或 Xueqiu Cookie 请求。
+- M4-HTTP-02 代码切片：Hithink 新增 `NewHithinkConfiguredWithHTTPDoer`；保留原构造器兼容行为；Bootstrap Dependencies 增加可选 `HithinkHTTPDoer` 并透传。未注入时仍使用标准 `http.Client`。
+- 新增测试只验证注入执行器被调用、GET URL/Accept/X-api-key 保持既有语义、502 错误仍可见；不输出或记录真实 API Key，不增加 API/字段/数据语义。
+- Root 注入策略要求：按实际 `HithinkBaseURL` 解析并精确绑定单一 Host；默认 HTTPS/443，除明确的本地测试配置外禁止 HTTP；不允许重定向（携带 X-api-key）；GET 可按 Platform 幂等策略配置，但不能因重试导致超出 Provider 速率限制。Platform Client 响应上限必须覆盖现有 `maxProviderPayloadBytes`，超限判定由公共层完成。
+- 本批提交后不在当前分支执行构建/测试；Hithink 受控出口仅完成注入接口和单测源码，待 integration 验收。下一步为 M4-HTTP-03 TickFlow：分别处理认证 API URL 与免费 API URL 的不同目的地址策略，不能共用一个无区分 BoundDoer。
