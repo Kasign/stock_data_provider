@@ -1023,3 +1023,11 @@ internal/
 - Diagnostics：Data 保留 Provider Probe、Validation、Freshness、Coverage、Cross-Provider 和历史证据；仅在 Server 入口需要公共摘要时适配 Platform Observation，不重写 Data 诊断体系。
 - 本次修复严格出站校验的默认值偏差：旧实现检查 Config 原始 URL，空字段会被误判为非法；实际 Provider 构造器会填充默认 endpoint。现从同一 newEastmoneyProvider(cfg) 实例读取 HTTPOrigins()，覆盖实际生效的默认值和自定义值，避免重复维护默认 Host 清单。增加默认 Host 回归测试源码，未运行测试。
 - Root 侧实际创建/注入 BoundDoer、受控 TCP Dialer、OpenRedis/OpenSQL 及统一关闭仍由 Server 组合根负责，不在 Data 复制实现。
+
+### 2026-11-09：M4 严格出站校验与 Provider 能力开关对齐
+
+- 复核发现 Enabled=true 不代表 Provider 一定会发起网络请求；Provider 还需要至少一个业务能力开关为 true。旧严格校验只看 Enabled，会对“已启用 Provider 但所有能力均关闭”的配置提出无意义的出站依赖要求。
+- 严格校验现同时检查 Enabled 与全部领域能力开关；没有启用任何能力的 Provider 不要求 HTTPDoer/TCP DialContext。实际启用至少一项能力时，仍执行原有依赖完整性检查。
+- 增加测试源码覆盖零能力 Provider 跳过和代表性能力识别。该修复仅消除无调用场景的误报，不改变各 Provider 内部 endpoint 的粒度；Quote-only 等部分能力配置仍可能要求该 Provider 当前全部注入端点，下一步需按真实能力调用路径进一步收敛。
+- Redis 审查结论：Module 只借用注入的 Cache/Store，Close 仅关闭 Data 自有 BaoStock Client；GoRedis Adapter 不关闭共享 redis.Client。旧 RESP Redis 仍用于兼容独立入口，不能在 Root 模块化部署中替代 Platform storage.OpenRedis()。
+- 本次未运行构建/测试，待 integration 统一验收。

@@ -20,7 +20,8 @@ func newEastmoneyProvider(cfg config.Config) *provider.Eastmoney {
 // 具体 BoundDoer/BoundDialer 的目标地址、DNS/IP 和重定向策略由 Root 负责。
 func validateEgressDependencies(cfg config.Config, deps Dependencies) error {
 	for _, name := range cfg.ProviderPriority {
-		if !cfg.ProviderSettings[name].Enabled {
+		settings := cfg.ProviderSettings[name]
+		if !settings.Enabled || !hasConfiguredProviderCapability(settings) {
 			continue
 		}
 		if name == "eastmoney" {
@@ -85,6 +86,18 @@ func validateEgressDependencies(cfg config.Config, deps Dependencies) error {
 		return missingEgress("miao-xiang HTTP")
 	}
 	return nil
+}
+
+// hasConfiguredProviderCapability 避免仅启用 Provider 开关、但未启用任何业务能力时，
+// 对不会被调用的网络出口提出装配要求。
+func hasConfiguredProviderCapability(settings config.ProviderSettings) bool {
+	return settings.Quote || settings.DailyBars || settings.StockBasic || settings.StockSearch ||
+		settings.SectorRankings || settings.IndexQuotes || settings.MarketBreadth ||
+		settings.LimitPools || settings.StockBoards || settings.TradingCalendar ||
+		settings.SecurityTradingStatus || settings.Fundamentals || settings.Valuations ||
+		settings.IndexCatalog || settings.ChipDistribution || settings.CapitalFlow ||
+		settings.MarketCapitalFlow || settings.HotRankings || settings.DragonTiger ||
+		settings.Announcements
 }
 
 func missingEgress(name string) error {
