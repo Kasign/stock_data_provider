@@ -2184,3 +2184,6 @@ CI：本轮 SHA 对应 Go test suite Run `42549171549`。截至本次文档提�
 - 已将矩阵路由修正为 POST，并将断言改为匹配现有中文契约描述。
 - 失败发生于 HTTP Contract Test；未发现 Handler 或 Provider 运行时回归。此前 Docker Market Data 镜像失败是 Dockerfile 中的 `go test ./...` 前置链失败，需在修正后重新确认。
 - 本次修正后的 SHA 尚无 CI 结果，不得标记 CT-05 通过。
+
+
+- 后续 Run `42553644056` 的 Data Module gofmt 再次指出新增 Batch Quotes 测试前存在一处多余空行；已按 CI diff 删除。该轮 Go Test 未开始，尚未验证 Probe 方法和指数成分中文断言修复。

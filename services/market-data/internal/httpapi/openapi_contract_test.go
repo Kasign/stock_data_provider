@@ -1167,7 +1167,6 @@ func TestOpenAPIParameterTypesAndFormatsMatchReviewedHandlerMatrix(t *testing.T)
 	}
 }
 
-
 func TestBatchQuotesParameterDocumentsHandlerConstraints(t *testing.T) {
 	spec, err := os.ReadFile("../../openapi.yaml")
 	if err != nil {
