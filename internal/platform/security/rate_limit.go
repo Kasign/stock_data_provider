@@ -13,8 +13,8 @@ import (
 )
 
 const (
-	maxRateLimitWindow = 24 * time.Hour
-	maxRateLimitBackoff = 24 * time.Hour
+	maxRateLimitWindow   = 24 * time.Hour
+	maxRateLimitBackoff  = 24 * time.Hour
 	maxRateLimitFailures = 100000
 )
 
