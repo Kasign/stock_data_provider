@@ -417,7 +417,6 @@ func TestParseResponsesSSECallbackAdapterErrorRemainsConsumerError(t *testing.T)
 	}
 }
 
-
 // uncomparableSSETestError 用于验证消费者错误不依赖接口值可比较性。
 type uncomparableSSETestError struct {
 	values []string
