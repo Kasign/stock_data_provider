@@ -108,8 +108,6 @@ func TestDecisionMatchesGoldenJSON(t *testing.T) {
 		t.Fatalf("decode expected Golden: %v", err)
 	}
 	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("RiskDecision JSON mismatch:
- got: %s
-want: %s", encoded, raw)
+		t.Fatalf("RiskDecision JSON mismatch: got %s, want %s", encoded, raw)
 	}
 }
