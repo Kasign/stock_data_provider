@@ -32,6 +32,8 @@ type RetryDecision struct {
 	AttemptID       string
 	FencingToken    int64
 	EvaluatedAt     time.Time
+	EvidenceRef     string
+	EvidenceObservedAt time.Time
 	Retry           bool
 	ReasonCode      string
 	NextAttemptAt   *time.Time
@@ -81,7 +83,13 @@ func (p RetryPolicy) ScheduleRetryAfterUnknownLookup(
 		!isRecoveryUTC(now) || observedAt.After(now) {
 		return RetryDecision{}, ErrRetryNotApplicable
 	}
-	return p.scheduleRetry(delivery, attempts, now, randomUnit, domain.DeliveryUnknown, domain.DeliveryAttemptAmbiguous, true)
+	decision, err := p.scheduleRetry(delivery, attempts, now, randomUnit, domain.DeliveryUnknown, domain.DeliveryAttemptAmbiguous, true)
+	if err != nil {
+		return RetryDecision{}, err
+	}
+	decision.EvidenceRef = evidenceRef
+	decision.EvidenceObservedAt = observedAt
+	return decision, nil
 }
 
 func (p RetryPolicy) scheduleRetry(

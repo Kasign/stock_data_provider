@@ -86,7 +86,8 @@ func TestPersistUnknownReconciliationRetryRequiresBoundDecision(t *testing.T) {
 	decision := &RetryDecision{
 		DeliveryID: delivery.DeliveryID, DeliveryVersion: delivery.Version,
 		AttemptID: assessment.AttemptID, FencingToken: assessment.FencingToken,
-		EvaluatedAt: now, Retry: true, NextAttemptAt: &nextAt,
+		EvaluatedAt: now, EvidenceRef: evidence.EvidenceRef, EvidenceObservedAt: evidence.ObservedAt,
+		Retry: true, NextAttemptAt: &nextAt,
 	}
 	repository := &unknownReconciliationRepositoryFake{}
 	if err := PersistUnknownReconciliation(context.Background(), repository, delivery, assessment, now, decision); err != nil {
