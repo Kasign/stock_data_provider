@@ -3,7 +3,7 @@
 - 所属仓库：Kasign/stock_data_provider
 - 所属分支：feat/platform-foundation
 - 适用范围：Platform 公共安全原语候选设计
-- 状态：安全模型与跨层职责为候选设计；Argon2id 哈希原语已进入实现/CI 验收，CredentialStore 及 Web Session 相关契约仍待消费者确认
+- 状态：安全模型与跨层职责已明确；PLAT-015/016 Platform L1 已实现并通过 CI；Server A2 业务接入及 PLAT-017/018/019 平台原语仍待完成
 - 关联文档：《03-安全认证与ServiceKey设计》《08-公共平台契约规范》《01-开发路线图与任务清单》《16-公共平台剩余开发任务与跨模块接入责任清单》
 
 ## 1. 设计结论
@@ -154,11 +154,11 @@ Platform 提供 SecurityAuditEvent Schema、字段约束/脱敏和注入式 Audi
 
 初始设计审查代码基线为 `fd45b6c299dfb54d2530bd1436589fe4708d8e96`；当前实现状态以本节后续 PLAT-015 记录为准：
 - 现有 `internal/platform/security` 只有 Bearer Authenticator、Router Policy 和测试。
-- 现有 `internal/platform/storage.OpenRedis` 只提供 Redis Client 生命周期，没有 Session Store 或 RateLimiter。
+- `internal/platform/storage.OpenRedis` 提供统一 Redis Client 生命周期；`security.RedisSessionStore` 注入并复用该 Client，不创建第二套连接池。RateLimiter 尚未实现。
 - go.mod 已引入成熟依赖 `golang.org/x/crypto/argon2`；不自研密码学算法。
-- Argon2id Hash/Verify/NeedsRehash 与 MariaDB CredentialStore 已新增；Hasher 使用显式参数，不提供未经硬件基准确认的生产默认值。PLAT-016 已新增 Session Token 摘要、Redis SessionStore 原子 Touch/Rotate/Revoke 和 Cookie helper；真实 Redis 集成与 CI 验收中。CSRF、RateLimiter 和 Security Audit 原语仍未实现。
-- 已新增 Platform 自有 `platform.security` Migration 与 `platform_owner_credentials` 单 Owner 表；Server 必须显式注册 Migration，SQLCredentialStore 不自动建表。尚未新增 Redis Key。
-- Argon2id 生产参数需目标硬件基准；Server 需显式注册 Platform 自有 Migration。Redis 原子脚本、限流阈值和 Audit Writer 持久化后端仍需评审。
+- Argon2id Hash/Verify/NeedsRehash 与 MariaDB CredentialStore 已新增；Hasher 使用显式参数，不提供未经硬件基准确认的生产默认值。PLAT-016 已新增 Session Token 摘要、Redis SessionStore 原子 Touch/Rotate/Revoke 和 Cookie helper，Platform L1 CI 已通过。CSRF、RateLimiter 和 Security Audit 原语仍未实现。
+- 已新增 Platform 自有 `platform.security` Migration 与 `platform_owner_credentials` 单 Owner 表；Server 必须显式注册 Migration，SQLCredentialStore 不自动建表。Session Redis Key 使用配置前缀加 `session:` 与 64 位摘要，不保存原始 Token。
+- Argon2id 生产参数需目标硬件基准；Server 需显式注册 Platform 自有 Migration。PLAT-016 的 Redis 原子脚本、TTL、并发轮换及故障策略已有真实 Redis CI 证据；PLAT-018 限流策略和 PLAT-019 Audit Writer 后端仍需实现/评审。
 - 本文是 Platform 技术设计与实现边界文档；Web 登录路由/权限/交互契约由 Server Owner 跟进，Platform 不代替 Server 修改其业务文档，也不改变项目级契约登记簿状态。
 
 ### 11.1 PLAT-015 实现状态补充（2026-11-09）
@@ -191,4 +191,6 @@ Platform 提供 SecurityAuditEvent Schema、字段约束/脱敏和注入式 Audi
 - Session 记录限制 Owner Subject、Credential Version、时间边界和可选 CSRF digest；Redis 依赖故障返回 Fault，不提供内存/Bearer 降级。
 - Cookie helper 固定 HttpOnly、SameSite=Lax、无 Domain、受限 Path；Secure 由 Server 根据部署 HTTPS 显式设置；清除 Cookie 复用相同作用域。
 - Server 仍负责登录签发、Cookie 解析与续期响应、MariaDB credential_version 对照、路由权限、CSRF/Origin/Host 和可信代理策略。本分支不修改 Server/Web 契约。
-- 当前状态：代码和测试已提交，等待真实 Redis integration、race、gofmt、go test 和 vet 结果；未通过前不标记完成。
+- 验收状态：Platform L1 已完成。最终代码 SHA：`e19acd9eb16f16f2c436e15320d1b675b1ce593a`；CI：[42609371935](https://github.com/Kasign/stock_data_provider/actions/runs/42609371935)，success。通过 gofmt、Schema/Golden、全量 Platform test/race/vet、MariaDB/Redis storage integration/race、CredentialStore MariaDB integration/race 和 Redis Session integration/race。
+- Redis Session 测试覆盖创建/重复创建、绝对 TTL、Touch 后 TTL、idle/absolute 过期、并发 Rotate 单赢家、旧 Token 失效、Revoke 与 Redis 故障 fail closed。Rotate 保留原始 created_at、subject、credential_version 和 absolute_expires_at，避免轮换重置 Session 绝对生命周期。
+- Server A2 仍需完成登录/退出路由、Cookie 续期、MariaDB credential_version 权威校验、CSRF/Origin/Host、路由认证方式映射；这些不属于 Platform L1。
