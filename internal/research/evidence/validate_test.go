@@ -272,12 +272,12 @@ func TestEvidenceValidateRejectsZeroOffsetNonUTCLocations(t *testing.T) {
 		{"published_at", func(e *Evidence) { e.PublishedAt = &nonUTC }},
 		{"available_at", func(e *Evidence) { e.AvailableAt = &nonUTC }},
 		{"valid_time_start", func(e *Evidence) {
-			end := nonUTC.Add(time.Hour)
+			end := nonUTC.Add(time.Hour).UTC()
 			e.ValidTimeStart = &nonUTC
 			e.ValidTimeEnd = &end
 		}},
 		{"valid_time_end", func(e *Evidence) {
-			start := nonUTC.Add(-time.Hour)
+			start := nonUTC.Add(-time.Hour).UTC()
 			e.ValidTimeStart = &start
 			e.ValidTimeEnd = &nonUTC
 		}},
