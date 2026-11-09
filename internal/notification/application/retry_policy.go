@@ -62,6 +62,37 @@ func (p RetryPolicy) ScheduleRetry(
 	now time.Time,
 	randomUnit float64,
 ) (RetryDecision, error) {
+	return p.scheduleRetry(delivery, attempts, now, randomUnit, domain.DeliverySending, domain.DeliveryAttemptRejected, false)
+}
+
+// ScheduleRetryAfterUnknownLookup evaluates a latest ambiguous Attempt only
+// after the channel's authoritative lookup confirmed non-acceptance.
+// The external evidence is validated here and remains separate from the
+// immutable Attempt history; no Attempt outcome is rewritten.
+func (p RetryPolicy) ScheduleRetryAfterUnknownLookup(
+	delivery domain.DeliveryRecord,
+	attempts []domain.DeliveryAttempt,
+	now time.Time,
+	randomUnit float64,
+	evidenceRef string,
+	observedAt time.Time,
+) (RetryDecision, error) {
+	if !validReconciliationRef(evidenceRef) || !isRecoveryUTC(observedAt) ||
+		!isRecoveryUTC(now) || observedAt.After(now) {
+		return RetryDecision{}, ErrRetryNotApplicable
+	}
+	return p.scheduleRetry(delivery, attempts, now, randomUnit, domain.DeliveryUnknown, domain.DeliveryAttemptAmbiguous, true)
+}
+
+func (p RetryPolicy) scheduleRetry(
+	delivery domain.DeliveryRecord,
+	attempts []domain.DeliveryAttempt,
+	now time.Time,
+	randomUnit float64,
+	requiredStatus domain.DeliveryStatus,
+	requiredOutcome domain.DeliveryAttemptOutcome,
+	evidenceConfirmed bool,
+) (RetryDecision, error) {
 	if err := p.Validate(); err != nil {
 		return RetryDecision{}, err
 	}
@@ -72,7 +103,7 @@ func (p RetryPolicy) ScheduleRetry(
 		math.IsInf(randomUnit, 0) || randomUnit < 0 || randomUnit >= 1 {
 		return RetryDecision{}, ErrRetryNotApplicable
 	}
-	if delivery.Status != domain.DeliverySending || delivery.MaxAttempts != p.MaxAttempts ||
+	if delivery.Status != requiredStatus || delivery.MaxAttempts != p.MaxAttempts ||
 		len(attempts) != delivery.AttemptCount || len(attempts) == 0 {
 		return RetryDecision{}, ErrRetryNotApplicable
 	}
@@ -116,8 +147,8 @@ func (p RetryPolicy) ScheduleRetry(
 		latest = attempt
 	}
 	if latest.FinishedAt == nil || latest.Outcome == nil ||
-		*latest.Outcome != domain.DeliveryAttemptRejected ||
-		!latest.Retryable || now.Before(*latest.FinishedAt) {
+		*latest.Outcome != requiredOutcome ||
+		(!evidenceConfirmed && !latest.Retryable) || now.Before(*latest.FinishedAt) {
 		return RetryDecision{}, ErrRetryNotApplicable
 	}
 
