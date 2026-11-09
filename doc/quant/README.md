@@ -35,3 +35,6 @@ internal/quant/
 
 
 最近一次 Quant 代码验证（2026-11-09）：`e8df200a6843df87a43f2dc4930037e7b12d61b1` 的 Push Workflow `42575135544` 中 `Test go-core` 已通过 gofmt、Go tests、Race Detector 和 go vet。根模块 `Test .` 仍被 Research 文件格式/字节问题阻断，不能标记全仓 CI 通过。
+
+
+ATR 边界已补充独立 synthetic Golden：明确窗口 N 需要 N 根 OHLC bar，首个 TR 使用输入窗口前一交易日的 previous_close，并以不同 previous_close 的双结果断言证明其参与计算。该样本只锁定算法边界，不代表真实 Data PIT 输入验收。

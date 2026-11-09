@@ -1,0 +1,25 @@
+{
+  "fixture_type": "synthetic_fixture",
+  "schema_version": "1.0.0",
+  "indicator_code": "atr",
+  "algorithm_version": "1.0.0",
+  "parameters": {
+    "window": 2,
+    "smoothing_method": "wilder"
+  },
+  "input": {
+    "high": [12, 14],
+    "low": [9, 11],
+    "close": [11, 13],
+    "previous_close": 10
+  },
+  "expected": {
+    "value": 3,
+    "sample_count": 2
+  },
+  "boundary_assertion": {
+    "alternate_previous_close": 1,
+    "expected_value": 7
+  },
+  "tolerance": 1e-12
+}
