@@ -10,7 +10,7 @@ import (
 
 type finalizationRouterStoreFake struct {
 	snapshot DeadlineFinalizationSnapshot
-	err error
+	err      error
 }
 
 func (f finalizationRouterStoreFake) LoadRunFinalizationSnapshot(context.Context, string) (DeadlineFinalizationSnapshot, error) {
@@ -19,9 +19,10 @@ func (f finalizationRouterStoreFake) LoadRunFinalizationSnapshot(context.Context
 
 type normalFinalizerFake struct {
 	result RunFinalizationResult
-	calls int
-	err error
+	calls  int
+	err    error
 }
+
 func (f *normalFinalizerFake) Finalize(context.Context, string) (RunFinalizationResult, error) {
 	f.calls++
 	return f.result, f.err
@@ -29,9 +30,10 @@ func (f *normalFinalizerFake) Finalize(context.Context, string) (RunFinalization
 
 type expiredFinalizerFake struct {
 	result DeadlineFinalizationResult
-	calls int
-	err error
+	calls  int
+	err    error
 }
+
 func (f *expiredFinalizerFake) Finalize(context.Context, string) (DeadlineFinalizationResult, error) {
 	f.calls++
 	return f.result, f.err
@@ -39,9 +41,10 @@ func (f *expiredFinalizerFake) Finalize(context.Context, string) (DeadlineFinali
 
 type cancelledFinalizerFake struct {
 	result CancellationFinalizationResult
-	calls int
-	err error
+	calls  int
+	err    error
 }
+
 func (f *cancelledFinalizerFake) Finalize(context.Context, string) (CancellationFinalizationResult, error) {
 	f.calls++
 	return f.result, f.err
@@ -50,7 +53,7 @@ func (f *cancelledFinalizerFake) Finalize(context.Context, string) (Cancellation
 func TestRunFinalizationCoordinatorRoutesByPersistedState(t *testing.T) {
 	cases := []struct {
 		name string
-		run domain.Run
+		run  domain.Run
 		want RunFinalizationPath
 	}{
 		{name: "normal", run: domain.Run{Ref: "run-1", Version: 1, Status: domain.RunRunning}, want: RunFinalizationPathNormal},
@@ -64,16 +67,33 @@ func TestRunFinalizationCoordinatorRoutesByPersistedState(t *testing.T) {
 			normal := &normalFinalizerFake{result: RunFinalizationResult{Run: tc.run, Finalized: true}}
 			deadline := &expiredFinalizerFake{result: DeadlineFinalizationResult{Run: tc.run, Finalized: true}}
 			cancelled := &cancelledFinalizerFake{result: CancellationFinalizationResult{Run: tc.run, Finalized: true}}
-			coordinator, err := NewRunFinalizationCoordinator(finalizationRouterStoreFake{snapshot: DeadlineFinalizationSnapshot{Run: tc.run}}, normal, deadline, cancelled)
-			if err != nil { t.Fatal(err) }
+			coordinator, err := NewRunFinalizationCoordinator(
+				finalizationRouterStoreFake{snapshot: DeadlineFinalizationSnapshot{Run: tc.run}},
+				normal, deadline, cancelled,
+			)
+			if err != nil {
+				t.Fatal(err)
+			}
 			got, err := coordinator.Finalize(context.Background(), "run-1")
-			if err != nil { t.Fatal(err) }
-			if got.Path != tc.want || !got.Finalized { t.Fatalf("got path=%q finalized=%v, want %q", got.Path, got.Finalized, tc.want) }
-			wantCalls := map[RunFinalizationPath]int{RunFinalizationPathNormal: normal.calls, RunFinalizationPathDeadline: deadline.calls, RunFinalizationPathCancellation: cancelled.calls}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got.Path != tc.want || !got.Finalized {
+				t.Fatalf("got path=%q finalized=%v, want %q", got.Path, got.Finalized, tc.want)
+			}
+			wantCalls := map[RunFinalizationPath]int{
+				RunFinalizationPathNormal:       normal.calls,
+				RunFinalizationPathDeadline:     deadline.calls,
+				RunFinalizationPathCancellation: cancelled.calls,
+			}
 			for path, calls := range wantCalls {
 				expected := 0
-				if path == tc.want { expected = 1 }
-				if calls != expected { t.Fatalf("%s calls=%d, want %d", path, calls, expected) }
+				if path == tc.want {
+					expected = 1
+				}
+				if calls != expected {
+					t.Fatalf("%s calls=%d, want %d", path, calls, expected)
+				}
 			}
 		})
 	}
@@ -91,7 +111,9 @@ func TestRunFinalizationCoordinatorRejectsAmbiguousAndTerminalStates(t *testing.
 			finalizationRouterStoreFake{snapshot: DeadlineFinalizationSnapshot{Run: run}},
 			&normalFinalizerFake{}, &expiredFinalizerFake{}, &cancelledFinalizerFake{},
 		)
-		if err != nil { t.Fatal(err) }
+		if err != nil {
+			t.Fatal(err)
+		}
 		if _, err := coordinator.Finalize(context.Background(), "run-1"); err == nil {
 			t.Fatalf("expected state %q / reason %q to be rejected", run.Status, run.TerminationReason)
 		}
@@ -104,7 +126,9 @@ func TestRunFinalizationCoordinatorPropagatesSnapshotAndFinalizerErrors(t *testi
 		finalizationRouterStoreFake{err: storeErr},
 		&normalFinalizerFake{}, &expiredFinalizerFake{}, &cancelledFinalizerFake{},
 	)
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	if _, err := coordinator.Finalize(context.Background(), "run-1"); !errors.Is(err, storeErr) {
 		t.Fatalf("got error %v, want wrapped storage error", err)
 	}
@@ -112,10 +136,14 @@ func TestRunFinalizationCoordinatorPropagatesSnapshotAndFinalizerErrors(t *testi
 	finalizerErr := errors.New("finalizer unavailable")
 	normal := &normalFinalizerFake{err: finalizerErr}
 	coordinator, err = NewRunFinalizationCoordinator(
-		finalizationRouterStoreFake{snapshot: DeadlineFinalizationSnapshot{Run: domain.Run{Ref: "run-1", Version: 1, Status: domain.RunRunning}}},
+		finalizationRouterStoreFake{snapshot: DeadlineFinalizationSnapshot{
+			Run: domain.Run{Ref: "run-1", Version: 1, Status: domain.RunRunning},
+		}},
 		normal, &expiredFinalizerFake{}, &cancelledFinalizerFake{},
 	)
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	if _, err := coordinator.Finalize(context.Background(), "run-1"); !errors.Is(err, finalizerErr) {
 		t.Fatalf("got error %v, want wrapped finalizer error", err)
 	}
@@ -123,10 +151,14 @@ func TestRunFinalizationCoordinatorPropagatesSnapshotAndFinalizerErrors(t *testi
 
 func TestRunFinalizationCoordinatorRejectsInvalidSnapshotAndReference(t *testing.T) {
 	coordinator, err := NewRunFinalizationCoordinator(
-		finalizationRouterStoreFake{snapshot: DeadlineFinalizationSnapshot{Run: domain.Run{Ref: "different", Version: 1, Status: domain.RunRunning}}},
+		finalizationRouterStoreFake{snapshot: DeadlineFinalizationSnapshot{
+			Run: domain.Run{Ref: "different", Version: 1, Status: domain.RunRunning},
+		}},
 		&normalFinalizerFake{}, &expiredFinalizerFake{}, &cancelledFinalizerFake{},
 	)
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	if _, err := coordinator.Finalize(context.Background(), "run-1"); err == nil {
 		t.Fatal("expected mismatched Run reference to be rejected")
 	}
