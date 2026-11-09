@@ -400,6 +400,8 @@ Channel 配置是不可变版本快照，注册键为 `(channel_ref, config_vers
 | NTF-004 | 有界 Dispatcher、状态机、CAS、租约/fencing、单 Delivery 单活 Worker | 真实 Worker 并发和进程崩溃恢复 |
 | NTF-005 | retryable/permanent/ambiguous 分类、退避预算、Retry-After、unknown 不盲重试 | 真实渠道超时/回执丢失/幂等行为验证 |
 | NTF-006 | Repository Port、唯一约束、Outbox/Inbox Schema 设计 | MariaDB 事务、唯一冲突、锁竞争、Migration/恢复演练 |
+
+当前 `internal/notification/storage.Migrations()` v1 仅定义 Subscription、DeliveryPlan、Delivery、Attempt、DeliveryStateEvent 五类持久化表。Delivery/DeliveryPlan 唯一键和 Attempt 的 `(delivery_id, fencing_token)` 唯一约束已进入 DDL。Inbox/FanoutWorkItem 表暂缓，等待项目级 FanoutWorkItem claim/ack/retry 与 Subscription active 分页契约冻结；不得在模块层猜测队列字段。Migration 未接入 Server 根注册，未在 MariaDB 执行，DDL 静态测试不等于真实数据库验收。
 | NTF-007 | Delivery 查询、脱敏诊断、reason_code 和审计 | 根 HTTP/权限/监控接入 |
 
 
