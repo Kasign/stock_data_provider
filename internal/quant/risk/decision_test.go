@@ -59,6 +59,12 @@ func TestDecisionValidateRejectsInvalidFields(t *testing.T) {
 		"non UTC time":            func(d *Decision) { d.EvaluatedAt = "2026-11-09T09:00:00+08:00" },
 		"non canonical time":      func(d *Decision) { d.SystemAsOf = "2026-11-09T00:59:00.000Z" },
 		"invalid calendar date":   func(d *Decision) { d.EvaluatedAt = "2026-02-30T01:00:00Z" },
+		"invalid UTF-8 decision id": func(d *Decision) { d.DecisionID = string([]byte{0xff}) },
+		"invalid UTF-8 rule version": func(d *Decision) { d.RuleSetVersion = string([]byte{0xff}) },
+		"invalid UTF-8 input ref": func(d *Decision) { d.InputRefs = []string{string([]byte{0xff})} },
+		"invalid UTF-8 reason code": func(d *Decision) { d.Reasons[0].Code = string([]byte{0xff}) },
+		"invalid UTF-8 safe message": func(d *Decision) { d.Reasons[0].SafeMessage = string([]byte{0xff}) },
+		"invalid UTF-8 evidence ref": func(d *Decision) { d.Reasons[0].EvidenceRefs = []string{string([]byte{0xff})} },
 	}
 	for name, mutate := range cases {
 		t.Run(name, func(t *testing.T) {
