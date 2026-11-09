@@ -169,7 +169,6 @@ type ProviderProbeHistory struct {
 	Total int                `json:"total"`
 }
 
-
 // ProviderProbeOptions 描述一次 Provider 能力探测请求。
 // 字段来源均为调用方显式请求；空切片/空字符串按 DataService 现有默认规则解释。
 type ProviderProbeOptions struct {

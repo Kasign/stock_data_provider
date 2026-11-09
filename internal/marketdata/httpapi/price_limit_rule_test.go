@@ -10,7 +10,7 @@ import (
 )
 
 func TestPriceLimitRuleReturnsUnknownWithoutTrustedProviders(t *testing.T) {
-	server := &Server{svc: &service.DataService{}}
+	server := &Server{trading: &service.DataService{}}
 	request := httptest.NewRequest("GET", "/api/v1/stocks/600519.SH/price-limit-rule?date=2026-10-29", nil)
 	request.SetPathValue("symbol", "600519.SH")
 	response := httptest.NewRecorder()
@@ -30,7 +30,7 @@ func TestPriceLimitRuleReturnsUnknownWithoutTrustedProviders(t *testing.T) {
 }
 
 func TestPriceLimitRuleRejectsInvalidDate(t *testing.T) {
-	server := &Server{svc: &service.DataService{}}
+	server := &Server{trading: &service.DataService{}}
 	request := httptest.NewRequest("GET", "/api/v1/stocks/600519.SH/price-limit-rule?date=2026-02-30", nil)
 	request.SetPathValue("symbol", "600519.SH")
 	response := httptest.NewRecorder()

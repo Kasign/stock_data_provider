@@ -38,7 +38,7 @@ type Server struct {
 	quotes            QuoteApplication
 	marketOverview    MarketOverviewApplication
 	securities        SecurityApplication
-	fundamentals      FundamentalsApplication
+	fundamentalsApp   FundamentalsApplication
 	index             IndexApplication
 	trading           TradingApplication
 	diagnostics       DiagnosticsApplication
@@ -227,7 +227,7 @@ func NewWithApplication(apiKey, defaultAdjustment string, apps ApplicationDepend
 	sourceSnapshot := append([]model.SourceStatus(nil), sources...)
 	return &Server{
 		apiKey: apiKey, defaultAdjustment: defaultAdjustment, maxBars: maxBars,
-		requestTimeout: requestTimeout, quotes: apps.Quotes, marketOverview: apps.MarketOverview, securities: apps.Securities, fundamentals: apps.Fundamentals, index: apps.Index, trading: apps.Trading, diagnostics: apps.Diagnostics, sources: sourceSnapshot, logger: logger,
+		requestTimeout: requestTimeout, quotes: apps.Quotes, marketOverview: apps.MarketOverview, securities: apps.Securities, fundamentalsApp: apps.Fundamentals, index: apps.Index, trading: apps.Trading, diagnostics: apps.Diagnostics, sources: sourceSnapshot, logger: logger,
 	}
 }
 func (s *Server) Handler() http.Handler {

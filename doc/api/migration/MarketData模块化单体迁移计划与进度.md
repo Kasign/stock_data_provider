@@ -759,3 +759,11 @@ internal/
 - Provider Probe 请求 DTO 已归属 `model.ProviderProbeOptions`；HTTP Adapter 改为直接使用 model 类型并移除不必要的 service 包导入，`service.ProviderProbeOptions` 兼容别名保留。
 - 恢复 Provider Probe 领域模型的后续提交 `3b24b086` 已补回 Run/Item/CheckResult/FieldComparison 等原有模型定义；本次不重复修改该文件。
 - 新增缺失 DiagnosticsApplication 时的 HTTP 回归断言；不改接口字段语义、Provider 探测规则或持久化结构。
+
+
+### 2026-11-09：M2-5 分组接口命名与测试适配
+
+- 修复七组 Application 接口接入后的字段命名冲突：`Server.fundamentals` 与 `fundamentals()` Handler 同名，统一改为 `fundamentalsApp`，基本面与估值 Handler 使用同一注入接口。
+- 更新价格限制规则单测的 Server 装配字段，从旧 `svc` 改为 `trading`；测试仍验证缺少可信 Provider 证据时返回 unknown，不改变 fail-closed 规则。
+- 清理 Provider Probe 模型文件多余空行，修复 Data 专项 gofmt 门禁。
+- 上一轮 CI 已确认 Provider Probe 模型定义恢复后，MariaDB 编译缺失类型问题已定位到旧提交；全仓 gofmt 仍被 Research 两个文件阻断，归属不变。

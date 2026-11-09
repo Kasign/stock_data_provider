@@ -49,7 +49,7 @@ func (s *Server) valuations(w http.ResponseWriter, r *http.Request) {
 		seen[symbol] = struct{}{}
 		symbols = append(symbols, symbol)
 	}
-	snapshot, cacheHit, err := s.fundamentals.Valuations(r.Context(), symbols)
+	snapshot, cacheHit, err := s.fundamentalsApp.Valuations(r.Context(), symbols)
 	if err != nil {
 		writeDomainErr(w, err, requestID(r))
 		return
