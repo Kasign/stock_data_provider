@@ -3,10 +3,10 @@ package storage
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
-	"time"
 
 	"example.com/stock-analysis-flow/internal/researchflow/domain"
 )
@@ -48,11 +48,11 @@ func (r *MySQLRunRepository) CommitAttemptResult(ctx context.Context, input Atte
 	if input.Stage.Version == 0 {
 		return errors.New("Researchflow result stage version must be positive")
 	}
-	diagnostics, err := jsonMarshalStrings(input.Stage.DiagnosticRefs)
+	diagnostics, err := json.Marshal(nonNilStrings(input.Stage.DiagnosticRefs))
 	if err != nil {
 		return fmt.Errorf("encode Researchflow result diagnostics: %w", err)
 	}
-	reasons, err := jsonMarshalStrings(input.Stage.ReasonCodes)
+	reasons, err := json.Marshal(nonNilStrings(input.Stage.ReasonCodes))
 	if err != nil {
 		return fmt.Errorf("encode Researchflow result reason codes: %w", err)
 	}
