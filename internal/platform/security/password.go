@@ -143,13 +143,19 @@ func parseArgon2idHash(encoded string) (Argon2idParams, []byte, []byte, error) {
 		}
 		switch keyValue[0] {
 		case "m":
-			if params.Memory != 0 { return Argon2idParams{}, nil, nil, errInvalidPasswordHash }
+			if params.Memory != 0 {
+				return Argon2idParams{}, nil, nil, errInvalidPasswordHash
+			}
 			params.Memory = uint32(value)
 		case "t":
-			if params.Iterations != 0 { return Argon2idParams{}, nil, nil, errInvalidPasswordHash }
+			if params.Iterations != 0 {
+				return Argon2idParams{}, nil, nil, errInvalidPasswordHash
+			}
 			params.Iterations = uint32(value)
 		case "p":
-			if params.Parallelism != 0 || value > 255 { return Argon2idParams{}, nil, nil, errInvalidPasswordHash }
+			if params.Parallelism != 0 || value > 255 {
+				return Argon2idParams{}, nil, nil, errInvalidPasswordHash
+			}
 			params.Parallelism = uint8(value)
 		default:
 			return Argon2idParams{}, nil, nil, errInvalidPasswordHash
