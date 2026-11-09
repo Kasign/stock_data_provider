@@ -2057,3 +2057,18 @@ Go test suite Run `42207170280` 已全部结束：
 - [ ] 取得脱敏生产数据库 Schema 快照并完成生产 DDL 对照。
 
 **当前结论：** 已修复一处 OpenAPI 默认值漂移和两处包含端点日期范围 off-by-one；新增测试覆盖对应边界。CT-05 仍进行中，M0 仍为 `in_progress`，M1 不准入。
+
+
+### 2026-11-09：CT-05 Provider Probe 请求 Schema 审计
+
+代码基线：`2d050c32dfdd8f77f08d1e8fc7e717a32d727edc`。本轮只增加 HTTP Contract Test，没有修改 Probe Handler、Provider 行为或请求 DTO。
+
+- 新增 `TestProviderProbeRequestSchemaMatchesHandlerValidation`，核对 ProviderProbeRequest 是拒绝未知字段的闭合 JSON 对象。
+- 核对 scope 的 all/core 枚举与默认值；markets/symbols 的单元素上限；checks/capabilities 的唯一性和枚举；daily_bar_adjustments 的唯一性、三项上限和 AdjustmentBasis 引用；历史日线日期格式；timeout_seconds 的 1..30 范围和默认 12。
+- capabilities 枚举与 `model.ProviderProbeCapabilities()` 的实际能力清单按集合核对，避免仅因 YAML 枚举顺序变化产生无意义失败。
+- 核对 Probe requestBody 仍为 optional，且 application/json 引用 ProviderProbeRequest；空请求体继续触发默认全能力探测。
+- 同步把 Probe 的日期成对提供、31 个自然日上限和结束日期不得晚于今日纳入 Handler 描述测试。
+
+CI：本轮 SHA 对应 Go test suite Run `42549171549`。截至本次文档提交时，Data Module gofmt 已通过，`go test ./...` 仍在运行，race/vet 尚未开始；不得标记本轮测试通过。上一 SHA `3d561d2c` 的 Data Module gofmt、Go Test、race、vet、MariaDB/PIT、Compose/Docker 已全部通过。
+
+**当前结论：** Probe 请求 Schema 自动化核对已补充，等待当前 SHA CI。CT-05 仍进行中；M0 继续 `in_progress`，M1 不准入。
