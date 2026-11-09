@@ -17,6 +17,7 @@ type fakeBaoStockFinancialClient struct {
 	invalidField    string
 	missingField    string
 	fieldIssues     []baostock.QuarterlyFinancialFieldIssue
+	publicationType string
 }
 
 func (fakeBaoStockFinancialClient) QueryDailyKLines(context.Context, string, string, string, string) ([]baostock.DailyKLine, error) {
@@ -49,7 +50,16 @@ func (f fakeBaoStockFinancialClient) QueryQuarterlyFinancialData(_ context.Conte
 	if f.invalidField != "netProfit" && f.missingField != "netProfit" {
 		values["netProfit"] = "28522000000"
 	}
-	return &baostock.QuarterlyFinancialRecord{Code: code, PublicationDate: values["pubDate"], ReportDate: values["statDate"], Fields: values, FieldIssues: f.fieldIssues}, nil
+	fieldTypes := map[string]string{"pubDate": "string"}
+	fieldPreviews := map[string]string{"pubDate": values["pubDate"]}
+	if f.publicationType != "" {
+		fieldTypes["pubDate"] = f.publicationType
+		fieldPreviews["pubDate"] = f.publicationType
+	}
+	return &baostock.QuarterlyFinancialRecord{
+		Code: code, PublicationDate: values["pubDate"], ReportDate: values["statDate"],
+		Fields: values, FieldTypes: fieldTypes, FieldPreviews: fieldPreviews, FieldIssues: f.fieldIssues,
+	}, nil
 }
 
 func TestBaostockFundamentalsPreservesRatioAndDisclosureDate(t *testing.T) {
@@ -154,5 +164,27 @@ func TestBaostockFundamentalsReportsFieldLevelParseIssues(t *testing.T) {
 		if !found {
 			t.Fatalf("expected field-level issue %s/%s, got %+v", field, code, issues)
 		}
+	}
+}
+
+
+func TestBaostockFundamentalsReportsMissingPublicationDateField(t *testing.T) {
+	reporter := validation.NewReporter(validation.DefaultMaxIssues)
+	ctx := validation.WithReporter(context.Background(), reporter)
+	_, err := NewBaostock(fakeBaoStockFinancialClient{
+		publicationDate: " ", publicationType: "null",
+	}).FetchFundamentals(ctx, "600519.SH", 2026, 2)
+	if err != nil {
+		t.Fatalf("missing publication evidence should preserve partial fundamentals: %v", err)
+	}
+	found := false
+	for _, issue := range reporter.Snapshot().Issues {
+		if issue.Field == "publication_date" && issue.ProviderField == "pubDate" &&
+			issue.Code == "missing_value" && issue.ActualType == "null" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("expected publication-date null evidence, got %+v", reporter.Snapshot().Issues)
 	}
 }

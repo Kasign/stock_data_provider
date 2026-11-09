@@ -95,6 +95,8 @@ type QuarterlyFinancialRecord struct {
 	PublicationDate string
 	ReportDate      string
 	Fields          map[string]string
+	FieldTypes      map[string]string
+	FieldPreviews   map[string]string
 	FieldIssues     []QuarterlyFinancialFieldIssue
 }
 
@@ -233,11 +235,17 @@ func parseQuarterlyFinancialPage(body string, spec financialQuerySpec, userID, c
 		return nil, fmt.Errorf("BaoStock %s row has %d columns; expected %d", spec.method, len(rows[0]), len(spec.fields))
 	}
 	values := make(map[string]string, len(spec.fields))
+	fieldTypes := make(map[string]string, len(spec.fields))
+	fieldPreviews := make(map[string]string, len(spec.fields))
 	fieldIssues := make([]QuarterlyFinancialFieldIssue, 0)
 	for i, raw := range rows[0] {
+		fieldTypes[spec.fields[i]] = baoStockCellType(raw)
+		fieldPreviews[spec.fields[i]] = baoStockCellPreview(string(raw))
 		value, err := decodeCell(raw)
 		if err != nil {
-			if i < 3 {
+			// pubDate 缺失或类型异常只影响披露日期证据，不应丢弃其他财务指标；
+			// code/statDate 仍是定位目标证券和报告期所必需的结构字段。
+			if i != 1 {
 				return nil, fmt.Errorf("BaoStock %s column %s: %w", spec.method, spec.fields[i], err)
 			}
 			fieldIssues = append(fieldIssues, QuarterlyFinancialFieldIssue{
@@ -259,12 +267,10 @@ func parseQuarterlyFinancialPage(body string, spec financialQuerySpec, userID, c
 		return nil, fmt.Errorf("BaoStock %s report date %q does not match requested period end %s", spec.method, statDate, periodEnd)
 	}
 	publicationDate := strings.TrimSpace(values["pubDate"])
-	if publicationDate != "" {
-		if _, err := time.Parse("2006-01-02", publicationDate); err != nil {
-			return nil, fmt.Errorf("BaoStock %s invalid publication date %q", spec.method, publicationDate)
-		}
-	}
-	return &QuarterlyFinancialRecord{Code: code, PublicationDate: publicationDate, ReportDate: statDate, Fields: values, FieldIssues: fieldIssues}, nil
+	return &QuarterlyFinancialRecord{
+		Code: code, PublicationDate: publicationDate, ReportDate: statDate,
+		Fields: values, FieldTypes: fieldTypes, FieldPreviews: fieldPreviews, FieldIssues: fieldIssues,
+	}, nil
 }
 
 // Client serializes operations over one stateful TCP session so requests and
