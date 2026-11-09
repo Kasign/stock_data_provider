@@ -30,6 +30,11 @@ type sseOutputTextState struct {
 	done     bool
 }
 
+type sseFunctionArgumentsState struct {
+	arguments string
+	done      bool
+}
+
 type responsesSSEWireEvent struct {
 	Type           string          `json:"type"`
 	SequenceNumber *int64          `json:"sequence_number"`
@@ -106,7 +111,7 @@ func ParseResponsesSSE(data []byte, request ModelRequest, clock Clock, onEvent f
 	outputTextParts := make(map[sseOutputTextKey]sseOutputTextState)
 	var parseErr error
 	var terminalErr error
-	functionArguments := make(map[string]string)
+	functionArguments := make(map[string]sseFunctionArgumentsState)
 
 	resetEvent := func() {
 		eventName = ""
@@ -241,22 +246,32 @@ func ParseResponsesSSE(data []byte, request ModelRequest, clock Clock, onEvent f
 		}
 		if event.Item != nil {
 			if event.Type == "response.output_item.done" && event.Item.ToolCall != nil {
-				if accumulated, ok := functionArguments[event.Item.ToolCall.CallID]; ok &&
-					accumulated != event.Item.ToolCall.ArgumentsJSON {
+				state := functionArguments[event.Item.ToolCall.CallID]
+				if state.arguments != "" && state.arguments != event.Item.ToolCall.ArgumentsJSON {
 					parseErr = invalidSSEError("llm.sse.output_item_arguments_mismatch")
 					resetEvent()
 					return
 				}
+				state.arguments = event.Item.ToolCall.ArgumentsJSON
+				state.done = true
+				functionArguments[event.Item.ToolCall.CallID] = state
 			}
 			upsertSSEOutputItem(&result, *event.Item)
 		}
 		if event.Type == "response.function_call_arguments.delta" && event.CallID != "" {
-			functionArguments[event.CallID] += event.Delta
-			if len(functionArguments[event.CallID]) > MaxSSEEventBytes {
+			state := functionArguments[event.CallID]
+			if state.done {
+				parseErr = invalidSSEError("llm.sse.function_arguments_after_done")
+				resetEvent()
+				return
+			}
+			state.arguments += event.Delta
+			if len(state.arguments) > MaxSSEEventBytes {
 				parseErr = newSSEAdapterError(adapterError(ErrorResourceLimit, "llm.sse.function_arguments_too_large", false, nil))
 				resetEvent()
 				return
 			}
+			functionArguments[event.CallID] = state
 			for i := range result.ToolCalls {
 				if result.ToolCalls[i].CallID == event.CallID {
 					result.ToolCalls[i].ArgumentsJSON += event.Delta
@@ -269,12 +284,20 @@ func ParseResponsesSSE(data []byte, request ModelRequest, clock Clock, onEvent f
 			}
 		}
 		if event.Type == "response.function_call_arguments.done" && event.CallID != "" {
-			if previous, ok := functionArguments[event.CallID]; ok && previous != event.Arguments {
+			state := functionArguments[event.CallID]
+			if state.done {
+				parseErr = invalidSSEError("llm.sse.function_arguments_after_done")
+				resetEvent()
+				return
+			}
+			if state.arguments != "" && state.arguments != event.Arguments {
 				parseErr = invalidSSEError("llm.sse.function_arguments_mismatch")
 				resetEvent()
 				return
 			}
-			functionArguments[event.CallID] = event.Arguments
+			state.arguments = event.Arguments
+			state.done = true
+			functionArguments[event.CallID] = state
 			for i := range result.ToolCalls {
 				if result.ToolCalls[i].CallID == event.CallID {
 					result.ToolCalls[i].ArgumentsJSON = event.Arguments
@@ -289,7 +312,7 @@ func ParseResponsesSSE(data []byte, request ModelRequest, clock Clock, onEvent f
 		if isTerminal {
 			if event.Type == "response.completed" || event.Type == "response.incomplete" || event.Type == "response.failed" {
 				for _, call := range terminalToolCalls(wire.Response, request) {
-					if accumulated, ok := functionArguments[call.CallID]; ok && accumulated != call.ArgumentsJSON {
+					if accumulated, ok := functionArguments[call.CallID]; ok && accumulated.arguments != call.ArgumentsJSON {
 						parseErr = invalidSSEError("llm.sse.terminal_arguments_mismatch")
 						resetEvent()
 						return
