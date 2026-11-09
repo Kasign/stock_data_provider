@@ -28,7 +28,6 @@ func TestInclusiveCalendarDays(t *testing.T) {
 	}
 }
 
-
 func TestMarketSentimentHistoryRejects367InclusiveDays(t *testing.T) {
 	request := httptest.NewRequest(http.MethodGet, "/?start=2024-01-01&end=2025-01-02", nil)
 	response := httptest.NewRecorder()
