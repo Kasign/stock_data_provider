@@ -333,3 +333,10 @@ Fake Repository/Fake Clock/Fake Provider 只证明模块内逻辑；MariaDB/Redi
 - Application `DeadlineExpirationStore` 只暴露有界候选查询与按 Run.version 执行过期收敛；Storage 的候选查询使用 DB UTC 和稳定顺序，返回非锁定快照，Expire 方法重新锁 Run 并校验 deadline/version。
 - `DeadlineScanner` 按 BatchSize 顺序执行，记录扫描/成功/版本冲突数量；错误立即停止本批，避免吞掉存储故障。
 - Scanner 不直接生成 ResultSummary 或终结 Run。完成 Stage/Attempt fencing 后，Server/Application 聚合器必须读取新快照，按既有领域规则计算 failed/partial，再调用 FinalizeRun 写 ResultSummary + Outbox + Run 终态。
+
+
+### 9.8 Deadline 与用户取消互斥及幂等
+
+- `deadline_exceeded` 一旦写入 Run.termination_reason，即成为终止路径的线性化标记；BeginRunCancellation 不得覆盖为 user_cancelled。
+- `ExpireRunDeadline` 对相同 Run 重复调用必须不增加版本、不重复 fencing；候选查询排除已有 termination_reason 的记录，避免 Deadline Scanner 热循环。
+- Run=cancelling 与 deadline expiration 互斥；谁先在 Run 行锁下成功建立终止原因，另一条路径必须拒绝。

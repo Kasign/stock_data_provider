@@ -21,7 +21,8 @@ func (r *MySQLRunRepository) ListExpiredRunCandidates(ctx context.Context, limit
 		return nil, errors.New("Researchflow deadline candidate limit is invalid")
 	}
 	rows, err := r.db.QueryContext(ctx, `SELECT run_ref, version FROM researchflow_runs
-		WHERE status IN (?, ?, ?) AND deadline_at <= DATE_FORMAT(UTC_TIMESTAMP(6), '%Y-%m-%dT%H:%i:%s.%f000Z')
+		WHERE status IN (?, ?, ?) AND (termination_reason IS NULL OR termination_reason = '')
+		AND deadline_at <= DATE_FORMAT(UTC_TIMESTAMP(6), '%Y-%m-%dT%H:%i:%s.%f000Z')
 		ORDER BY deadline_at, run_ref LIMIT ?`,
 		string(domain.RunCreated), string(domain.RunQueued), string(domain.RunRunning), limit)
 	if err != nil {
