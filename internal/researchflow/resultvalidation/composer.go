@@ -157,6 +157,17 @@ func validateResearchContext(value researchapp.ResearchContext, expectedSystemAs
 		value.QualitySummary.ConflictCount < 0 || value.QualitySummary.StaleCount < 0 {
 		return fmt.Errorf("%w: Research Context is invalid or belongs to another system_as_of", ErrInvalidResultComposition)
 	}
+	if !isUTC(value.CreatedAt) {
+		return fmt.Errorf("%w: Research Context created_at must be UTC", ErrInvalidResultComposition)
+	}
+	for _, section := range value.SectionRefs {
+		if strings.TrimSpace(section.SectionID) == "" || strings.TrimSpace(section.SectionVersion) == "" ||
+			!validSourceOwner(section.SourceOwner) || section.SourceRefs == nil || section.EvidenceRefs == nil ||
+			!validQuality(section.QualityStatus) || !isUTC(section.AssembledAt) ||
+			!isUTC(section.SystemAsOf) || !section.SystemAsOf.Equal(expectedSystemAsOf) {
+			return fmt.Errorf("%w: invalid Research Context section %q", ErrInvalidResultComposition, section.SectionID)
+		}
+	}
 	return nil
 }
 
@@ -166,7 +177,7 @@ func validateResearchEvidence(values []researchapp.EvidenceRecord, expectedSyste
 		draft := value.EvidenceDraft
 		if strings.TrimSpace(value.EvidenceID) == "" || !contentFingerprintRE.MatchString(value.ContentFingerprint) ||
 			!validEvidenceType(draft.EvidenceType) || !validSourceOwner(draft.SourceOwner) ||
-			strings.TrimSpace(draft.SourceRef) == "" || draft.DerivedFromRefs == nil ||
+			strings.TrimSpace(draft.SourceRef) == "" || draft.SourceRef != strings.TrimSpace(draft.SourceRef) || draft.DerivedFromRefs == nil ||
 			draft.SubjectRefs == nil || draft.Limitations == nil ||
 			!isUTC(draft.SystemObservedAt) || !isUTC(draft.SystemAsOf) ||
 			draft.SystemAsOf.After(expectedSystemAsOf) || draft.SystemObservedAt.After(draft.SystemAsOf) ||
@@ -177,8 +188,8 @@ func validateResearchEvidence(values []researchapp.EvidenceRecord, expectedSyste
 			(draft.Confidence != nil && (*draft.Confidence < 0 || *draft.Confidence > 1 ||
 				strings.TrimSpace(pointerValue(draft.ConfidenceMethod)) == "" ||
 				strings.TrimSpace(pointerValue(draft.ConfidenceMethodVersion)) == "")) ||
-			(draft.Confidence == nil && (draft.ConfidenceMethod != nil || draft.ConfidenceMethodVersion != nil)) ||
-			((draft.EvidenceType == "inference" || draft.EvidenceType == "hypothesis") && len(draft.DerivedFromRefs) == 0) {
+			((draft.EvidenceType == "inference" || draft.EvidenceType == "hypothesis") && len(draft.DerivedFromRefs) == 0) ||
+			(draft.ClaimRef != nil && (strings.TrimSpace(*draft.ClaimRef) == "" || *draft.ClaimRef != strings.TrimSpace(*draft.ClaimRef))) {
 			return nil, fmt.Errorf("%w: invalid Research Evidence %q", ErrInvalidResultComposition, value.EvidenceID)
 		}
 		if _, exists := ids[value.EvidenceID]; exists {
@@ -221,7 +232,7 @@ func validateResearchClaims(values []researchapp.Claim, evidenceIDs map[string]s
 			!isUTC(value.SystemAsOf) || !value.SystemAsOf.Equal(expectedSystemAsOf) ||
 			value.ScopeRefs == nil || value.SupportingEvidenceRefs == nil ||
 			value.ContradictingEvidenceRefs == nil || value.RequiredDataRefs == nil ||
-			value.InvalidationConditions == nil || value.Limitations == nil ||
+			value.Limitations == nil ||
 			hasDuplicateOrInvalidRefs(value.ScopeRefs) || hasDuplicateOrInvalidRefs(value.SupportingEvidenceRefs) ||
 			hasDuplicateOrInvalidRefs(value.ContradictingEvidenceRefs) || hasDuplicateOrInvalidRefs(value.RequiredDataRefs) ||
 			hasDuplicateOrInvalidRefs(value.InvalidationConditions) || hasDuplicateOrInvalidRefs(value.Limitations) ||
@@ -249,7 +260,7 @@ func validateResearchClaims(values []researchapp.Claim, evidenceIDs map[string]s
 			}
 		}
 		if value.EpistemicType == "hypothesis" &&
-			(strings.TrimSpace(pointerValue(value.ValidationMethod)) == "" ||
+			(value.InvalidationConditions == nil || strings.TrimSpace(pointerValue(value.ValidationMethod)) == "" ||
 				strings.TrimSpace(pointerValue(value.ExpectedObservation)) == "" ||
 				len(value.InvalidationConditions) == 0) {
 			return fmt.Errorf("%w: Hypothesis %q lacks validation or invalidation fields", ErrInvalidResultComposition, key)
