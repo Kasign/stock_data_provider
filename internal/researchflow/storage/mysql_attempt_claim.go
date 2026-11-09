@@ -95,36 +95,55 @@ func (r *MySQLRunRepository) ClaimAttempt(
 		return domain.Attempt{}, false, fmt.Errorf("lock latest Researchflow attempt for stage %q: %w", stageRef, err)
 	}
 
-	if hasAttempt && domain.AttemptStatus(currentStatus) == domain.AttemptRunning {
-		expiresAt, parseErr := parseNullableResearchflowTime(currentLease)
-		if parseErr != nil {
-			return domain.Attempt{}, false, parseErr
+	stageState := domain.StageStatus(stageStatus)
+	if hasAttempt {
+		attemptState := domain.AttemptStatus(currentStatus)
+		if current.Number != stage.AttemptNo {
+			return domain.Attempt{}, false, errors.New("Researchflow stage attempt number does not match latest attempt")
 		}
-		if expiresAt != nil && expiresAt.After(now) {
-			if currentOwner.Valid && currentOwner.String == workerID {
-				attempt, loadErr := r.getAttemptTx(ctx, tx, current.Ref)
-				if loadErr != nil {
-					return domain.Attempt{}, false, loadErr
-				}
-				if err := tx.Commit(); err != nil {
-					return domain.Attempt{}, false, fmt.Errorf("commit idempotent Researchflow claim: %w", err)
-				}
-				return attempt, true, nil
+		if attemptState == domain.AttemptRunning {
+			if stageState != domain.StageRunning {
+				return domain.Attempt{}, false, ErrClaimStageUnavailable
 			}
-			return domain.Attempt{}, false, ErrAttemptLeaseHeld
+			expiresAt, parseErr := parseNullableResearchflowTime(currentLease)
+			if parseErr != nil {
+				return domain.Attempt{}, false, parseErr
+			}
+			if expiresAt != nil && expiresAt.After(now) {
+				if currentOwner.Valid && currentOwner.String == workerID {
+					attempt, loadErr := r.getAttemptTx(ctx, tx, current.Ref)
+					if loadErr != nil {
+						return domain.Attempt{}, false, loadErr
+					}
+					if err := tx.Commit(); err != nil {
+						return domain.Attempt{}, false, fmt.Errorf("commit idempotent Researchflow claim: %w", err)
+					}
+					return attempt, true, nil
+				}
+				return domain.Attempt{}, false, ErrAttemptLeaseHeld
+			}
+			result, updateErr := tx.ExecContext(ctx, `UPDATE researchflow_attempts SET status = ?, finished_at = ?
+				WHERE attempt_ref = ? AND status = ?`,
+				string(domain.AttemptTimedOut), formatResearchflowTimeValue(now),
+				current.Ref, string(domain.AttemptRunning))
+			if updateErr != nil {
+				return domain.Attempt{}, false, fmt.Errorf("expire previous Researchflow attempt %q: %w", current.Ref, updateErr)
+			}
+			if affected, affectedErr := result.RowsAffected(); affectedErr != nil || affected != 1 {
+				if affectedErr != nil {
+					return domain.Attempt{}, false, fmt.Errorf("verify expired Researchflow attempt update: %w", affectedErr)
+				}
+				return domain.Attempt{}, false, errors.New("Researchflow attempt changed while locked")
+			}
+		} else if stageState == domain.StageRunning {
+			return domain.Attempt{}, false, ErrClaimStageUnavailable
 		}
-		_, err = tx.ExecContext(ctx, `UPDATE researchflow_attempts SET status = ?, finished_at = ?
-			WHERE attempt_ref = ? AND status = ?`,
-			string(domain.AttemptTimedOut), formatResearchflowTimeValue(now),
-			current.Ref, string(domain.AttemptRunning))
-		if err != nil {
-			return domain.Attempt{}, false, fmt.Errorf("expire previous Researchflow attempt %q: %w", current.Ref, err)
-		}
+	} else if stageState == domain.StageRunning {
+		return domain.Attempt{}, false, ErrClaimStageUnavailable
 	}
 
-	if domain.StageStatus(stageStatus) != domain.StageReady &&
-		domain.StageStatus(stageStatus) != domain.StageRetryWait &&
-		!(domain.StageStatus(stageStatus) == domain.StageRunning && hasAttempt) {
+	if stageState != domain.StageReady && stageState != domain.StageRetryWait &&
+		stageState != domain.StageRunning {
 		return domain.Attempt{}, false, ErrClaimStageUnavailable
 	}
 	if domain.StageStatus(stageStatus) == domain.StageRetryWait {
@@ -184,12 +203,18 @@ func (r *MySQLRunRepository) ClaimAttempt(
 	}
 
 	if domain.RunStatus(runStatus) != domain.RunRunning {
-		_, err = tx.ExecContext(ctx, `UPDATE researchflow_runs SET
+		result, updateErr := tx.ExecContext(ctx, `UPDATE researchflow_runs SET
 			status = ?, version = version + 1, started_at = COALESCE(started_at, ?)
 			WHERE run_ref = ? AND version = ?`,
 			string(domain.RunRunning), formatResearchflowTimeValue(now), runRef, runVersion)
-		if err != nil {
-			return domain.Attempt{}, false, fmt.Errorf("mark Researchflow run running: %w", err)
+		if updateErr != nil {
+			return domain.Attempt{}, false, fmt.Errorf("mark Researchflow run running: %w", updateErr)
+		}
+		if affected, affectedErr := result.RowsAffected(); affectedErr != nil || affected != 1 {
+			if affectedErr != nil {
+				return domain.Attempt{}, false, fmt.Errorf("verify Researchflow run transition: %w", affectedErr)
+			}
+			return domain.Attempt{}, false, errors.New("Researchflow run changed while locked")
 		}
 	}
 
