@@ -6,12 +6,12 @@ import (
 	"regexp"
 	"time"
 
-	"github.com/Kasign/stock_data_provider/internal/quant/manifest"
+	"example.com/stock-analysis-flow/internal/quant/manifest"
 )
 
 var (
 	ErrInvalidResultRef = errors.New("invalid quant result reference")
-	refSchemaVersionRE = regexp.MustCompile(`^[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.-]+)?$`)
+	refSchemaVersionRE = regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?$`)
 	tradeDateRE = regexp.MustCompile(`^[0-9]{4}-[0-9]{2}-[0-9]{2}$`)
 )
 
@@ -99,9 +99,6 @@ func BuildRef(input RefInput, source manifest.Manifest) (Ref, error) {
 		if _, err := time.Parse("2006-01-02", input.TradeDate); err != nil {
 			return Ref{}, fmt.Errorf("%w: trade_date value", ErrInvalidResultRef)
 		}
-	}
-	if input.ResultStatus == StatusCompleted && (input.QualityStatus == QualityInvalid || input.QualityStatus == QualityUnknown) {
-		return Ref{}, fmt.Errorf("%w: completed result cannot have invalid or unknown quality", ErrInvalidResultRef)
 	}
 
 	return Ref{

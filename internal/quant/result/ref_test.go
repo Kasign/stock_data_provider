@@ -64,8 +64,9 @@ func TestBuildRefKeepsCompletedAndQualityIndependent(t *testing.T) {
 		t.Fatalf("result and quality states were conflated: %+v", got)
 	}
 	input.QualityStatus = QualityUnknown
-	if _, err := BuildRef(input, testManifest(t)); !errors.Is(err, ErrInvalidResultRef) {
-		t.Fatalf("completed + unknown quality should be rejected, got %v", err)
+	got, err = BuildRef(input, testManifest(t))
+	if err != nil || got.ResultStatus != StatusCompleted || got.QualityStatus != QualityUnknown {
+		t.Fatalf("result and quality states must remain independent, got=%+v err=%v", got, err)
 	}
 }
 
