@@ -694,6 +694,28 @@ flowchart TD
 - 尚未配置真实 Dependency 配额和域名 allowlist：需要各消费者模块交付实际上游目标、Dependency 标识和生产配置后再逐项装配，不在 Server 猜测。
 - 本批次尚未运行 gofmt、测试、race 或 Go Workflow；不得标记为通过。
 
+### 12.29 SRV-009 Readiness 依赖结果动态化（2026-11-09）
+
+#### Review 发现
+
+- `/readyz` 虽然由 Platform Runner 执行已注册的 Required Checks，但成功响应中的 `dependencies` 原先固定写死 `mariadb` 和 `redis`。
+- 当 Server 后续接入模块 Check 时，Readiness 判定会包含模块依赖，但探针响应无法展示这些真实检查项；这会造成诊断结果与探针摘要不一致。
+
+#### 实施内容
+
+- `/readyz` 成功响应现在从本次 Runner Report 的 Results 动态生成依赖状态，使用稳定 CheckID 作为键，Observation Status 作为值。
+- 现有 Storage Check 仍显示为 `server.storage.mariadb`、`server.storage.redis`；未来模块 Check 会自然进入结果，不要求 Server 为每个模块追加硬编码字段。
+- 不输出 Check Name、Fault Cause、Dependency 内部字段或未验证的自由文本。
+- MariaDB Ping 现在与 Redis Ping 一样，保留 Context Canceled/DeadlineExceeded 语义，由 Platform Runner 统一分类为取消/超时，而不是错误包装成普通依赖不可用。
+
+#### 测试与提交
+
+- Readiness 动态状态实现：`78b318a`。
+- 动态依赖结果测试：`d01693a`。
+- 兼容性用例更新：`28b6b83`。
+- MariaDB Context 语义修正：`aee6d19`。
+- 本批次尚未运行 gofmt、Server 测试或 race；需以最新 SHA 的 Workflow 结果验收。
+
 ## 13. 分支与协作规则
 
 - 本规划及 Server 代码实施位于 `feat/research-analysis-flow-native-go`。
@@ -731,7 +753,7 @@ Server 层完成不是“服务能够启动”这么简单。至少同时满足�
 | SRV-006 | 进行中 | 旧 Analysis Worker 与 HTTP Server 均已纳入统一 Lifecycle；HTTP Listener 在 Start 阶段同步绑定，Readiness 在 HTTP Shutdown 前切换为 not-ready，Shutdown 超时后强制 Close；Bootstrap 显式保证消费者停止后再关闭共享资源；真实 SIGTERM 子进程测试已补充，模块 Worker 接入和生产容器退出验收仍待完成；详见 12.26 节 |
 | SRV-007 | 进行中 | 已建立 Server Migration Registry，并注册 News/Research/Notification；注册时按版本号稳定排序；增加 namespace 执行报告、稳定原因码和人工恢复标记；其他模块 Migration 和 MariaDB 集成验收待完成，详见 12.7、12.23、12.25 节 |
 | SRV-008 | 待契约 | Dispatcher 所有权未冻结 |
-| SRV-009 | 进行中 | 已实现 Platform Runner 聚合、严格 Readiness 判定、MariaDB/Redis 资源检查和 Owner 保护的结构化 `/diagnostics` 只读入口；真实模块 Check 注册、依赖故障注入及生产诊断验收仍待完成，详见 12.8、12.20 节 |
+| SRV-009 | 进行中 | 已实现 Platform Runner 聚合、严格 Readiness 判定、MariaDB/Redis 资源检查、Owner 保护的结构化 `/diagnostics` 入口；`/readyz` 依赖状态改为动态读取实际 Check Results；真实模块 Check 注册、依赖故障注入及生产诊断验收仍待完成，详见 12.8、12.20、12.29 节 |
 | SRV-010 | 阻塞 | 等待 Data 迁移门禁和公开接口 |
 | SRV-011 | 未开始 | 等待核心运行能力 |
 | SRV-012 | 未开始 | 等待新链路验收 |
