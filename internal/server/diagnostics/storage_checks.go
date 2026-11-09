@@ -25,6 +25,9 @@ func StorageChecks(shared *resources.Resources) []platformdiagnostics.Check {
 					)
 				}
 				if err := shared.DB.PingContext(ctx); err != nil {
+					if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+						return platformdiagnostics.Observation{}, err
+					}
 					return platformdiagnostics.Observation{}, fault.New(
 						fault.ClassUnavailable, "server.storage.mariadb_ping_failed",
 						"MariaDB connection is unavailable", err,
