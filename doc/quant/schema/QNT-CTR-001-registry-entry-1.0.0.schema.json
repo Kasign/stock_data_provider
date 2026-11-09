@@ -70,7 +70,8 @@
                 "const": 0
               },
               "tolerance": {
-                "type": "integer"
+                "type": "integer",
+                "minimum": 0
               }
             }
           },
@@ -103,7 +104,8 @@
           "precision": {
             "properties": {
               "tolerance": {
-                "type": "number"
+                "type": "number",
+                "minimum": 0
               }
             }
           },
@@ -317,10 +319,9 @@
           "items": {
             "type": "string",
             "minLength": 1,
-            "pattern": "^\\\\S(?:[\\\\s\\\\S]*\\\\S)?$"
+            "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
           },
-          "uniqueItems": true,
-          "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+          "uniqueItems": true
         }
       }
     },

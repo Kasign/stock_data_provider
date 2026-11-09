@@ -535,3 +535,68 @@ func TestRegistryEntrySchemaAcceptsCanonicalTextAndRejectsWhitespace(t *testing.
 		t.Fatal("Registry entry with surrounding whitespace unexpectedly passed")
 	}
 }
+
+func TestRegistryEntrySchemaValidatesUnavailableConditionItems(t *testing.T) {
+	schema := compileQuantSchemaFile(t, "QNT-CTR-001-registry-entry-1.0.0.schema.json")
+	entry := validEntry("sample_metric", "1.0.0")
+	entry.QualityPolicy.UnavailableConditions = []string{" "}
+	encoded, err := json.Marshal(entry)
+	if err != nil { t.Fatal(err) }
+	if err := validateJSONSchemaInstance(schema, encoded); err == nil {
+		t.Fatal("blank unavailable condition unexpectedly passed Schema")
+	}
+	entry.QualityPolicy.UnavailableConditions = []string{"missing_input"}
+	encoded, err = json.Marshal(entry)
+	if err != nil { t.Fatal(err) }
+	if err := validateJSONSchemaInstance(schema, encoded); err != nil {
+		t.Fatalf("canonical unavailable condition rejected: %v", err)
+	}
+}
+
+func TestRegistryEntrySchemaAndGoNumericValidationResponsibilities(t *testing.T) {
+	schema := compileQuantSchemaFile(t, "QNT-CTR-001-registry-entry-1.0.0.schema.json")
+	cases := []struct {
+		name string
+		mutate func(*Entry)
+	}{
+		{
+			name: "range ordering is a Go cross-field semantic constraint",
+			mutate: func(e *Entry) {
+				e.Range.Minimum = json.RawMessage("2")
+				e.Range.Maximum = json.RawMessage("1")
+			},
+		},
+		{
+			name: "declared fractional precision is enforced by Go",
+			mutate: func(e *Entry) {
+				e.Precision.MaxFractionDigits = 2
+				e.Precision.Tolerance = json.RawMessage("0.001")
+			},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			entry := validEntry("sample_metric", "1.0.0")
+			tc.mutate(&entry)
+			encoded, err := json.Marshal(entry)
+			if err != nil { t.Fatal(err) }
+			if err := validateJSONSchemaInstance(schema, encoded); err != nil {
+				t.Fatalf("structurally valid entry rejected by Schema: %v", err)
+			}
+			if err := entry.Validate(); err == nil {
+				t.Fatal("Go semantic validation unexpectedly accepted invalid numeric metadata")
+			}
+		})
+	}
+}
+
+func TestRegistryEntrySchemaRejectsNegativeNumericTolerance(t *testing.T) {
+	schema := compileQuantSchemaFile(t, "QNT-CTR-001-registry-entry-1.0.0.schema.json")
+	entry := validEntry("sample_metric", "1.0.0")
+	entry.Precision.Tolerance = json.RawMessage("-0.000001")
+	encoded, err := json.Marshal(entry)
+	if err != nil { t.Fatal(err) }
+	if err := validateJSONSchemaInstance(schema, encoded); err == nil {
+		t.Fatal("negative numeric tolerance unexpectedly passed Schema")
+	}
+}
