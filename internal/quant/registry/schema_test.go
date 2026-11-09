@@ -58,6 +58,27 @@ func TestDraft202012SchemasCompileAndValidateInstances(t *testing.T) {
 	}
 }
 
+func TestIndicatorParameterSchemaEnforcesWindowAndAnnualizationBounds(t *testing.T) {
+	schema := compileQuantSchemaFile(t, "QNT-CTR-002-indicator-parameters-1.0.0.schema.json")
+	invalid := []string{
+		`{"schema_version":"1.0.0","indicator_code":"sma","parameters":{"window":1001}}`,
+		`{"schema_version":"1.0.0","indicator_code":"ema","parameters":{"window":1001,"seed_method":"sma"}}`,
+		`{"schema_version":"1.0.0","indicator_code":"return","parameters":{"window":1001,"return_basis":"simple"}}`,
+		`{"schema_version":"1.0.0","indicator_code":"volatility","parameters":{"window":1001,"return_basis":"simple","annualization_factor":252}}`,
+		`{"schema_version":"1.0.0","indicator_code":"volatility","parameters":{"window":20,"return_basis":"simple","annualization_factor":1.5}}`,
+		`{"schema_version":"1.0.0","indicator_code":"rsi","parameters":{"window":1001,"smoothing_method":"wilder"}}`,
+		`{"schema_version":"1.0.0","indicator_code":"macd","parameters":{"fast_window":1,"slow_window":1001,"signal_window":1}}`,
+		`{"schema_version":"1.0.0","indicator_code":"macd","parameters":{"fast_window":1,"slow_window":2,"signal_window":1001}}`,
+		`{"schema_version":"1.0.0","indicator_code":"atr","parameters":{"window":1001,"smoothing_method":"wilder"}}`,
+		`{"schema_version":"1.0.0","indicator_code":"bollinger","parameters":{"window":1001,"multiplier":2,"stddev_method":"population"}}`,
+	}
+	for _, instance := range invalid {
+		if err := validateJSONSchemaInstance(schema, []byte(instance)); err == nil {
+			t.Errorf("invalid indicator parameters unexpectedly passed: %s", instance)
+		}
+	}
+}
+
 func TestCompileJSONSchemaRejectsUnsupportedDraftAndExternalReferences(t *testing.T) {
 	cases := []string{
 		`{"$schema":"http://json-schema.org/draft-07/schema#","type":"object","additionalProperties":false}`,
