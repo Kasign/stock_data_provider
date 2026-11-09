@@ -14,7 +14,7 @@ func testManifest(t *testing.T) manifest.Manifest {
 	payload := []byte(`{"metric_code":"momentum_20d","value":0.2}`)
 	m, err := manifest.BuildWithPayload(manifest.Input{
 		ResultType: "factor", SchemaVersion: "1.0.0",
-		SystemAsOf: time.Date(2026, 11, 9, 0, 0, 0, 0, time.UTC),
+		SystemAsOf:        time.Date(2026, 11, 9, 0, 0, 0, 0, time.UTC),
 		InputSnapshotRefs: []string{"snapshot-b", "snapshot-a"},
 	}, payload)
 	if err != nil {
@@ -28,9 +28,9 @@ func validRefInput() RefInput {
 		SchemaVersion: "1.0.0", Scope: ScopeStock, SecurityID: "opaque-security-ref",
 		TradeDate: "2026-11-06", Period: "20d", AlgorithmVersion: "momentum.v1",
 		ParameterFingerprint: "sha256:parameter-fingerprint",
-		QualityStatus: QualityValid, ResultStatus: StatusCompleted,
+		QualityStatus:        QualityValid, ResultStatus: StatusCompleted,
 		AuthorizationRef: "opaque-authorization-ref",
-		CreatedAt: time.Date(2026, 11, 9, 8, 0, 0, 0, time.FixedZone("UTC+8", 8*60*60)),
+		CreatedAt:        time.Date(2026, 11, 9, 8, 0, 0, 0, time.FixedZone("UTC+8", 8*60*60)),
 	}
 }
 
@@ -72,7 +72,7 @@ func TestBuildRefKeepsCompletedAndQualityIndependent(t *testing.T) {
 
 func TestBuildRefRejectsInvalidMetadataAndManifest(t *testing.T) {
 	tests := []struct {
-		name string
+		name   string
 		mutate func(*RefInput)
 	}{
 		{"invalid DTO schema version", func(v *RefInput) { v.SchemaVersion = "v1" }},
