@@ -56,6 +56,7 @@ type ObservationPolicyTrace struct {
 	ProviderOutputPolicyRef       string
 	ProviderOutputPolicyVersionID string
 	PolicyEvaluatedAt             time.Time
+	Retention                     time.Duration
 }
 
 // Execute 仅用于不依赖搜索 Provider 输出的来源候选。
@@ -121,6 +122,9 @@ func (u *IngestCandidate) execute(ctx context.Context, sourceID, idempotencyKey 
 		PolicyEvaluatedAt:             trace.PolicyEvaluatedAt,
 		Candidate:                     candidate,
 		ObservedAt:                    observedAt,
+	}
+	if trace.Retention > 0 {
+		observation.RetentionUntil = observedAt.Add(trace.Retention).UTC()
 	}
 	if observation.ID == "" {
 		return domain.Observation{}, ErrInvalidRequest
