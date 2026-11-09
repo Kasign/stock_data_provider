@@ -49,16 +49,27 @@ func (u *ListEvidence) Execute(ctx context.Context, request ListEvidenceRequest)
 	}
 	if !validEvidenceOpaqueRef(referencePage.SnapshotRef) ||
 		referencePage.SystemAsOf.IsZero() || !referencePage.SystemAsOf.Equal(request.SystemAsOf) ||
-		len(referencePage.Items) > request.PageSize {
+		len(referencePage.Items) > request.PageSize ||
+		(referencePage.NextCursor != nil && !validEvidencePageCursor(*referencePage.NextCursor)) {
 		return ResearchEvidencePage{}, ErrEvidenceSnapshotPageUnavailable
 	}
 	result := NewResearchEvidencePage(referencePage.SystemAsOf)
+	seen := make(map[string]struct{}, len(referencePage.Items))
 	result.SnapshotRef = referencePage.SnapshotRef
 	result.NextCursor = referencePage.NextCursor
-	for _, item := range referencePage.Items {
-		if item.NewsID == "" || item.VersionID == "" || item.ObservationID == "" ||
+	for index, item := range referencePage.Items {
+		if !validEvidenceOpaqueRef(item.NewsID) || !validEvidenceOpaqueRef(item.VersionID) ||
+			!validEvidenceOpaqueRef(item.ObservationID) ||
 			item.SystemObservedAt.IsZero() || !validEvidenceUTC(item.SystemObservedAt) ||
 			item.SystemObservedAt.After(referencePage.SystemAsOf) {
+			return ResearchEvidencePage{}, ErrEvidenceSnapshotPageUnavailable
+		}
+		key := item.NewsID + "\x00" + item.VersionID + "\x00" + item.ObservationID
+		if _, exists := seen[key]; exists {
+			return ResearchEvidencePage{}, ErrEvidenceSnapshotPageUnavailable
+		}
+		seen[key] = struct{}{}
+		if index > 0 && compareEvidenceSnapshotItems(referencePage.Items[index-1], item) >= 0 {
 			return ResearchEvidencePage{}, ErrEvidenceSnapshotPageUnavailable
 		}
 		record, err := u.records.Execute(ctx, GetEvidenceRequest{
@@ -78,4 +89,11 @@ func (u *ListEvidence) Execute(ctx context.Context, request ListEvidenceRequest)
 		result.Items = append(result.Items, record)
 	}
 	return result, nil
+}
+
+
+// validEvidencePageCursor mirrors the request boundary for cursors returned by
+// the internal page reader; malformed repository output must not escape the facade.
+func validEvidencePageCursor(value string) bool {
+	return value != "" && len(value) <= 4096 && !hasEvidenceControl(value)
 }
