@@ -77,6 +77,9 @@ func TestContextValidateSystemAsOf(t *testing.T) {
     value := validContext()
     if err := value.ValidateSystemAsOf(value.SystemAsOf); err != nil { t.Fatalf("matching cutoff unexpectedly failed: %v", err) }
     if err := value.ValidateSystemAsOf(value.SystemAsOf.Add(time.Second)); err == nil { t.Fatal("mismatched cutoff must fail") }
+    if err := value.ValidateSystemAsOf(value.SystemAsOf.In(time.FixedZone("non-UTC", 0))); err == nil {
+        t.Fatal("equivalent instant in a non-UTC location must fail")
+    }
 }
 
 func TestContextJSONRoundTripPreservesRequiredEmptyArrays(t *testing.T) {
@@ -179,6 +182,7 @@ func TestContextValidateRejectsUnsupportedSchemaVersionAndNonUTCTimes(t *testing
 	}{
 		{"unsupported schema version", func(c *Context) { c.SchemaVersion = "1.0.1" }, "supported version"},
 		{"non UTC context cutoff", func(c *Context) { c.SystemAsOf = c.SystemAsOf.In(time.FixedZone("UTC+8", 8*60*60)) }, "system_as_of"},
+		{"zero-offset non-UTC context cutoff", func(c *Context) { c.SystemAsOf = c.SystemAsOf.In(time.FixedZone("non-UTC", 0)) }, "system_as_of"},
 		{"non UTC created time", func(c *Context) { c.CreatedAt = c.CreatedAt.In(time.FixedZone("UTC+8", 8*60*60)) }, "created_at"},
 		{"non UTC section assembled time", func(c *Context) { c.SectionRefs[0].AssembledAt = c.SectionRefs[0].AssembledAt.In(time.FixedZone("UTC+8", 8*60*60)) }, "assembled_at"},
 		{"non UTC section cutoff", func(c *Context) { c.SectionRefs[0].SystemAsOf = c.SectionRefs[0].SystemAsOf.In(time.FixedZone("UTC+8", 8*60*60)) }, "system_as_of"},

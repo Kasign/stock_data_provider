@@ -160,11 +160,11 @@ func (c Context) Validate() error {
 
 // ValidateSystemAsOf compares the Context cutoff with the caller's authoritative Run cutoff.
 func (c Context) ValidateSystemAsOf(expected time.Time) error {
-    if expected.IsZero() {
-        return fmt.Errorf("expected system_as_of is required")
+    if expected.IsZero() || !isUTC(expected) {
+        return fmt.Errorf("expected system_as_of is required and must use UTC")
     }
-    if c.SystemAsOf.IsZero() || !c.SystemAsOf.Equal(expected) {
-        return fmt.Errorf("context system_as_of does not match expected cutoff")
+    if c.SystemAsOf.IsZero() || !isUTC(c.SystemAsOf) || !c.SystemAsOf.Equal(expected) {
+        return fmt.Errorf("context system_as_of does not match expected UTC cutoff")
     }
     return nil
 }
@@ -274,6 +274,5 @@ func (next Context) ValidateNextVersion(previous Context) error {
 
 
 func isUTC(value time.Time) bool {
-	_, offset := value.Zone()
-	return offset == 0
+	return value.Location() == time.UTC
 }

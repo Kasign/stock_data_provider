@@ -49,6 +49,13 @@ func TestAuthorizationValidateRejectsPolicyAndDecisionInconsistency(t *testing.T
 		{"policy snapshot mismatch", func(a *AuthorizationRef, s *AuthorizationPolicySnapshot) { s.SnapshotRef = "another-snapshot" }, "policy_version"},
 		{"empty policy list", func(a *AuthorizationRef, s *AuthorizationPolicySnapshot) { s.Policies = []PolicyVersion{} }, "must not be empty"},
 		{"duplicate policy tuple", func(a *AuthorizationRef, s *AuthorizationPolicySnapshot) { s.Policies = append(s.Policies, s.Policies[0]) }, "duplicate policy tuple"},
+		{"unsorted policy tuple", func(a *AuthorizationRef, s *AuthorizationPolicySnapshot) {
+			s.Policies = []PolicyVersion{
+				{PolicyType: "z_policy", PolicyRef: "policy", PolicyVersion: "1"},
+				{PolicyType: "a_policy", PolicyRef: "policy", PolicyVersion: "1"},
+			}
+			a.DecisionFingerprint, _ = a.ComputeDecisionFingerprint(*s)
+		}, "must be sorted by policy_type"},
 		{"allowed with conditions", func(a *AuthorizationRef, s *AuthorizationPolicySnapshot) { a.Conditions = []string{"attribution_required"} }, "allowed decision"},
 		{"conditional without conditions", func(a *AuthorizationRef, s *AuthorizationPolicySnapshot) { a.Decision = AuthorizationConditional }, "requires conditions"},
 		{"unsorted conditions", func(a *AuthorizationRef, s *AuthorizationPolicySnapshot) { a.Conditions = []string{"z_condition", "a_condition"} }, "sorted in ascending"},
