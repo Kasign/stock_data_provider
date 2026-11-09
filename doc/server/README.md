@@ -62,8 +62,8 @@ Server 是应用组合根（Composition Root）和进程运行入口。它负责
 
 ```text
 cmd/
-  server/
-    main.go                    # 规划候选入口；当前项目总览仍要求沿用 cmd/analysis-api，未决前不得创建第二入口
+  analysis-api/
+    main.go                    # 唯一进程入口；逐步委托 internal/server/bootstrap
 
 internal/
   server/
@@ -134,15 +134,15 @@ doc/
 
 ### 3.2 启动顺序
 
-1. 加载并校验配置。
+1. 加载并校验进程配置及模块配置。
 2. 初始化进程日志和诊断上下文。
 3. 创建 Platform 公共资源。
-4. 执行启动所需 Migration（仅在明确启用且符合部署策略时）。
-5. 构造模块实例和 Application Port 连接。
-6. 注册 Health/Readiness。
+4. 构造模块的轻量装配描述/实例，注册公开 Application Port，并收集模块 Migration 注册项；此阶段不得启动对外流量或后台 Worker。
+5. 按显式 Migration 策略调用 Platform Migration Runner；未启用迁移时必须验证所需 Schema 已满足运行条件。
+6. 完成模块依赖注入及组件装配，注册 Health/Readiness。
 7. 按角色启动模块 Worker。
 8. 启动 HTTP Server（api/all 角色）。
-9. 标记 Readiness 为 ready。
+9. 全部必需组件就绪后标记 Readiness 为 ready。
 
 启动失败必须返回明确错误，并按已成功启动的逆序回滚；不能遗留 goroutine、连接池或 Worker。
 
@@ -285,12 +285,11 @@ Server 不重写模块业务 Handler 的校验和领域错误，不在路由层�
 
 ### SRV-002：Root Bootstrap
 
-- 状态：阻塞（SRV-001 完成前不启动；入口路径还存在项目总览与本专项文档冲突）
-- 前置：SRV-001；先按项目总览确认复用 `cmd/analysis-api` 的渐进迁移方式，或由项目级文档正式决议调整入口路径
-- 工作内容：建立 `cmd/server/main.go` 和 `internal/server/bootstrap`；统一配置加载、构造应用、启动和错误返回。
-- 交付物：最小可运行的新 Server 入口。
+- 状态：未开始（按 SRV-001 完成情况启动；入口决议已明确）
+- 前置：SRV-001；复用现有 `cmd/analysis-api/main.go`，不新增第二进程入口
+- 工作内容：将现有入口逐步收敛为参数/信号处理和 Bootstrap 委托；在 `internal/server/bootstrap` 实现统一配置装载、Platform 资源构造、模块装配、启动和错误返回。先抽离可验证的最小垂直切片，不一次性重写旧启动链路。
+- 交付物：由现有 `cmd/analysis-api` 启动的 Root Server Bootstrap；旧入口仍可在迁移阶段兼容运行。
 - 验收：配置错误可诊断；启动失败返回非零退出；入口不包含业务逻辑；有启动和失败路径测试。
-
 ### SRV-003：Platform 资源装配
 
 - 状态：未开始
