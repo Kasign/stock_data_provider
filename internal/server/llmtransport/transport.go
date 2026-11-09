@@ -115,7 +115,6 @@ func (t *Transport) OpenStream(ctx context.Context, request *http.Request) (*llm
 	}, err
 }
 
-
 // NewResponsesAdapter binds one destination once and injects the same
 // transport into both JSON and SSE paths. Provider credentials and capability
 // evidence remain explicit inputs owned by Server configuration/policy wiring.

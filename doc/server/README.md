@@ -770,7 +770,7 @@ Server 层完成不是“服务能够启动”这么简单。至少同时满足�
 |---|---|---|
 | SRV-001 | 完成 | 已记录旧入口、路由与认证现状、旧 Analysis Migration 四表、Worker/Storage 生命周期、部署边界及各模块接入就绪度；详细见 12.3 节 |
 | SRV-002 | 进行中 | Server 进程级配置已集中为 Process 快照；Storage/MarketData Adapter 已支持显式 Env 注入；Bootstrap 统一传递配置；部分初始化失败会汇总原始错误和逆序清理错误；完整模块 Registry 与统一装配仍待模块入口；详见 12.22、12.27、12.32、12.35、12.36 节 |
-| SRV-003 | 进行中 | DB、Redis、HTTP Client 已由 Resources 统一创建和关闭；新增固定 DestinationPolicy 的 BoundDoer 绑定入口，并覆盖 Bind/Close 并发边界；真实模块注入、Dependency allowlist/配额及流式生命周期验收仍待模块入口交付；详见 12.24、12.28 节 |
+| SRV-003 | 进行中 | DB、Redis、HTTP Client 已由 Resources 统一创建和关闭；新增固定 DestinationPolicy 的 BoundDoer 绑定入口；LLM JSON/SSE 共用的 Server Transport 与 Responses Adapter 构造入口已实现；Provider/Secret/CapabilityState 可信配置装配、News Provider/Source 真实注入及生产流式 E2E 仍待完成；详见 12.24、12.28、12.40～12.42 节 |
 | SRV-004 | 阻塞 | 已复核模块接入面；Researchflow/Quant/LLM/Notification 缺少完整生产装配入口，News/Research 也有关键查询/授权接入缺口；详见 12.6 节 |
 | SRV-005 | 进行中 | 已接入 Platform Bearer Owner 认证、入口 Request ID、Fault HTTP 映射工具、请求体与并发限制；补齐 GET/HEAD 探针的状态、响应头、身份策略及过载豁免测试；现有旧 Analysis Handler 保留原业务错误 DTO；Web Session/密码登录、CSRF、登录限流、模块 Service Scope 和可信代理边界仍待契约/模块入口，现有 WebUI 尚未携带 Analysis Owner 凭证，不能视为浏览器认证链路已完成；详见 12.31 节 |
 | SRV-006 | 进行中 | 旧 Analysis Worker 与 HTTP Server 均已纳入统一 Lifecycle；启动取消回滚、并发 Stop、Start/Stop 竞态屏障和消费者先于共享资源关闭已实现；真实 SIGTERM 子进程测试及 Context 取消释放阻塞 Start 的回归测试已补充，但当前 HEAD 尚无测试运行证据；模块 Worker 接入、Race 和生产容器退出验收仍待完成；详见 12.17～12.19、12.26、12.34、12.38 节 |
@@ -1159,7 +1159,7 @@ Lifecycle.Stop 原实现通过 stopped 标记保证重复调用幂等，但并�
 ### 12.39 Server 当前进度复核（2026-11-09）
 
 - SRV-002：Process 配置快照、显式配置源注入、共享资源创建/关闭及部分初始化失败清理错误汇总已实现；模块 Factory/Registry 装配仍受模块公开入口约束。
-- SRV-003：共享 DB/Redis/Platform HTTP Client 与 BoundDoer 绑定入口已实现；真实 LLM 流式消费者注入和依赖级目标策略仍待生产装配入口及联调。
+- SRV-003：共享 DB/Redis/Platform HTTP Client 与 BoundDoer 绑定入口已实现；新增 LLM JSON/SSE 共用 Transport 和 Responses Adapter 构造器；Provider/Secret/CapabilityState 的可信来源、News Provider/Source 装配和真实 Gateway E2E 仍未完成。
 - SRV-004：阻塞，不能由 Server 创建占位 Factory；等待模块公开构造入口、Port、Handler、Worker、Check 和 Migration 贡献项。
 - SRV-005：基础 Owner 路由、Request ID、Fault 映射工具、请求体/并发限制和探针 GET/HEAD 语义已实现；Web Session/CSRF 与模块 Handler 的统一错误契约仍待批准契约及 Platform/模块交付。
 - SRV-006：Lifecycle 启动取消回滚、并发停止、启动/停止同步、HTTP 排空和资源关闭顺序已实现；真实 SIGTERM 子进程测试已编写，但当前 HEAD 无 Workflow/Combined Status，且尚无当前 SHA 测试结果；模块 Worker 和生产容器验收未完成。
@@ -1195,3 +1195,10 @@ Lifecycle.Stop 原实现通过 stopped 标记保证重复调用幂等，但并�
 - 构造器先验证 Gateway Host/Port/HTTPS/重定向/重试策略，再从共享 Resources 创建单一 BoundDoer，并将同一 Transport 注入 LLM JSON 与 SSE 接口；不读取环境变量、不自行解析 Secret、不生成或放宽 CapabilityState。
 - 新增使用真实 Platform Client/Resources 的纯构造测试，不发起外网请求；同时覆盖 Provider/Policy 不匹配时在绑定前失败。
 - 生产 ProviderConfig、Secret 与 CapabilityState 的来源和更新策略仍需由 Server 配置/证据仓储契约提供；当前构造器只负责安全注入，不把测试证据当成生产能力证明。
+
+
+### 12.43 LLM 组合构造入口代码复核修正（2026-11-09）
+
+- 复核 `NewResponsesAdapter` 测试时发现测试缺少 Server Resources 包导入；已补齐，避免构造测试无法编译。
+- 同步清理新增声明之间的多余空行，并更新 SRV-003 总表与当前进度摘要，准确区分“传输适配已实现”和“生产配置/能力证据尚未接入”。
+- Run `42617165666` 对应前一 SHA `e7542450`，因 gofmt 门禁失败，根模块单测、Race、Vet 未执行；go-core 四项检查通过。当前 HEAD `ccab13f` 的 Workflow `42617165666` 后续状态以新 SHA 的 Run 为准。

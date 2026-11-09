@@ -12,6 +12,7 @@ import (
 	"example.com/stock-analysis-flow/internal/llm"
 	platformconfig "example.com/stock-analysis-flow/internal/platform/config"
 	platformhttpclient "example.com/stock-analysis-flow/internal/platform/httpclient"
+	serverresources "example.com/stock-analysis-flow/internal/server/resources"
 )
 
 type fakeBoundDoer struct {
@@ -156,7 +157,6 @@ func httptestRequest(t *testing.T) *http.Request {
 	}
 	return request
 }
-
 
 type fixedClock struct{ now time.Time }
 
