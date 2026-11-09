@@ -146,6 +146,11 @@ func ParseResponsesSSE(data []byte, request ModelRequest, clock Clock, onEvent f
 			}
 			sequenceMode = 2
 		} else {
+			if *wire.SequenceNumber < 0 {
+				parseErr = invalidSSEError("llm.sse.invalid_sequence")
+				resetEvent()
+				return
+			}
 			if sequenceMode == 2 {
 				parseErr = invalidSSEError("llm.sse.mixed_sequence_presence")
 				resetEvent()
@@ -175,6 +180,11 @@ func ParseResponsesSSE(data []byte, request ModelRequest, clock Clock, onEvent f
 			return
 		}
 		if event.ResponseID != "" {
+			if result.ResponseID != "" && result.ResponseID != event.ResponseID {
+				parseErr = invalidSSEError("llm.sse.response_id_mismatch")
+				resetEvent()
+				return
+			}
 			result.ResponseID = event.ResponseID
 		}
 		if event.Type == "response.output_text.delta" {

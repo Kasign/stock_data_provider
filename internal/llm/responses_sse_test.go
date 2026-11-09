@@ -423,3 +423,51 @@ func TestParseResponsesSSECallbackAdapterErrorRemainsConsumerError(t *testing.T)
 		t.Fatalf("consumer error must preserve an incomplete partial response: %+v", got)
 	}
 }
+
+
+// TestParseResponsesSSERejectsNegativeSequenceNumber verifies sequence
+// numbers are non-negative even when the first event carries the value.
+func TestParseResponsesSSERejectsNegativeSequenceNumber(t *testing.T) {
+	request := validSSERequest()
+	clock := sseTestClock{now: request.SystemAsOf.Add(time.Second)}
+	data := strings.Join([]string{
+		"event: response.output_text.delta",
+		"data: {\"type\":\"response.output_text.delta\",\"sequence_number\":-1,\"delta\":\"x\"}",
+		"",
+		"event: response.completed",
+		"data: {\"type\":\"response.completed\",\"sequence_number\":0,\"response\":{\"id\":\"resp-seq-negative\",\"object\":\"response\",\"status\":\"completed\",\"output\":[]}}",
+		"",
+	}, "\n")
+
+	got, err := ParseResponsesSSE([]byte(data), request, clock, nil)
+	var adapterErr *AdapterError
+	if !errors.As(err, &adapterErr) || adapterErr.Info.Kind != ErrorInvalidResponse ||
+		adapterErr.Info.StableCode != "llm.sse.invalid_sequence" || got.Status == ResponseCompleted {
+		t.Fatalf("negative sequence number must be rejected: response=%+v err=%v", got, err)
+	}
+}
+
+// TestParseResponsesSSERejectsResponseIDChange ensures all supplied event
+// response IDs belong to the same Responses invocation.
+func TestParseResponsesSSERejectsResponseIDChange(t *testing.T) {
+	request := validSSERequest()
+	clock := sseTestClock{now: request.SystemAsOf.Add(time.Second)}
+	data := strings.Join([]string{
+		"event: response.created",
+		"data: {\"type\":\"response.created\",\"response\":{\"id\":\"resp-first\",\"model\":\"qwen-local\"}}",
+		"",
+		"event: response.output_text.delta",
+		"data: {\"type\":\"response.output_text.delta\",\"response_id\":\"resp-second\",\"delta\":\"x\"}",
+		"",
+		"event: response.completed",
+		"data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp-first\",\"object\":\"response\",\"status\":\"completed\",\"output\":[]}}",
+		"",
+	}, "\n")
+
+	got, err := ParseResponsesSSE([]byte(data), request, clock, nil)
+	var adapterErr *AdapterError
+	if !errors.As(err, &adapterErr) || adapterErr.Info.Kind != ErrorInvalidResponse ||
+		adapterErr.Info.StableCode != "llm.sse.response_id_mismatch" || got.Status == ResponseCompleted {
+		t.Fatalf("changing response ID must reject the stream: response=%+v err=%v", got, err)
+	}
+}
