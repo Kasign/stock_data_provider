@@ -550,3 +550,31 @@ func TestResponsesAdapterStreamMapsPlatformReadFailureAndPreservesPartialOutput(
 		t.Fatalf("read failure must be normalized without losing partial output: response=%+v err=%v", got, err)
 	}
 }
+
+
+// TestResponsesAdapterStreamDoesNotDispatchWithCancelledContext 验证已取消的调用上下文不会进入传输层。
+func TestResponsesAdapterStreamDoesNotDispatchWithCancelledContext(t *testing.T) {
+	provider, secret, capabilities, clock := streamAdapterTestConfig()
+	request := validResponsesRequest()
+	request.ProviderID = provider.ProviderID
+	called := false
+	streamDoer := HTTPStreamDoerFunc(func(context.Context, *http.Request) (*HTTPStreamResponse, error) {
+		called = true
+		return nil, errors.New("cancelled request must not be dispatched")
+	})
+	adapter, err := NewResponsesAdapterWithStream(provider, secret,
+		doerFunc(func(*http.Request) (*http.Response, error) { return nil, errors.New("unused") }),
+		streamDoer, capabilities, clock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	_, err = adapter.Stream(ctx, request, nil)
+	var adapterErr *AdapterError
+	if !errors.As(err, &adapterErr) || adapterErr.Info.Kind != ErrorCancelled ||
+		adapterErr.Info.StableCode != "llm.http.cancelled" || called {
+		t.Fatalf("cancelled context must stop before transport dispatch: err=%v called=%v", err, called)
+	}
+}
