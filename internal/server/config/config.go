@@ -9,6 +9,25 @@ import (
 	platformconfig "example.com/stock-analysis-flow/internal/platform/config"
 )
 
+type Role string
+
+const (
+	RoleAPI Role = "api"
+	RoleWorker Role = "worker"
+	RoleAll Role = "all"
+)
+
+// LoadRole parses the process role. The default preserves the historical combined runtime.
+func LoadRole(env platformconfig.Env) (Role, error) {
+	raw := strings.ToLower(strings.TrimSpace(env.String("SERVER_ROLE", string(RoleAll))))
+	role := Role(raw)
+	switch role {
+	case RoleAPI, RoleWorker, RoleAll:
+		return role, nil
+	default:
+		return "", fmt.Errorf("SERVER_ROLE 必须是 api、worker 或 all")
+	}
+}
 // HTTP contains the HTTP listener and graceful-shutdown settings owned by Server.
 type HTTP struct {
 	Address           string

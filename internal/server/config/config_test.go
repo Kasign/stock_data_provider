@@ -48,3 +48,21 @@ func TestLoadHTTPRejectsInvalidTimeout(t *testing.T) {
 		t.Fatal("LoadHTTP() error = nil, want invalid timeout error")
 	}
 }
+
+func TestLoadRoleDefaultsToAll(t *testing.T) {
+	role, err := LoadRole(platformconfig.NewEnvWithLookup(func(string) (string, bool) { return "", false }))
+	if err != nil || role != RoleAll { t.Fatalf("LoadRole() = %q, %v; want all", role, err) }
+}
+
+func TestLoadRoleAcceptsExplicitRoles(t *testing.T) {
+	for _, want := range []Role{RoleAPI, RoleWorker, RoleAll} {
+		env := platformconfig.NewEnvWithLookup(func(key string) (string, bool) { if key == "SERVER_ROLE" { return string(want), true }; return "", false })
+		got, err := LoadRole(env)
+		if err != nil || got != want { t.Fatalf("LoadRole(%q) = %q, %v", want, got, err) }
+	}
+}
+
+func TestLoadRoleRejectsUnknownRole(t *testing.T) {
+	env := platformconfig.NewEnvWithLookup(func(key string) (string, bool) { if key == "SERVER_ROLE" { return "scheduler", true }; return "", false })
+	if _, err := LoadRole(env); err == nil { t.Fatal("LoadRole() error = nil, want invalid role") }
+}

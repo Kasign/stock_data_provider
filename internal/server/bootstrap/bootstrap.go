@@ -57,6 +57,10 @@ func Run(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("Migration 配置无效: %w", err)
 	}
+	serverRole, err := serverconfig.LoadRole(config.NewEnv())
+	if err != nil {
+		return fmt.Errorf("Server 运行角色配置无效: %w", err)
+	}
 	securityCfg, err := serverconfig.LoadSecurity(config.NewEnv())
 	if err != nil {
 		return fmt.Errorf("安全认证配置无效: %w", err)
@@ -117,15 +121,19 @@ func Run(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("创建旧 Analysis 异步任务队列失败: %w", err)
 	}
-	if err := tasks.Start(ctx); err != nil {
-		return fmt.Errorf("启动旧 Analysis Worker 失败: %w", err)
-	}
 	defer tasks.Close()
+	if serverRole == serverconfig.RoleWorker || serverRole == serverconfig.RoleAll {
+		if err := tasks.Start(ctx); err != nil { return fmt.Errorf("启动旧 Analysis Worker 失败: %w", err) }
+	}
+
+	if serverRole == serverconfig.RoleWorker {
+		slog.Info("股票分析 Worker 已启动", "service", "stock-analysis-worker", "role", serverRole)
+		<-ctx.Done()
+		return nil
+	}
 
 	api, err := httpapi.NewWithTasks(runner, store, analysisTimeout, tasks)
-	if err != nil {
-		return fmt.Errorf("创建旧 Analysis HTTP API 失败: %w", err)
-	}
+	if err != nil { return fmt.Errorf("创建旧 Analysis HTTP API 失败: %w", err) }
 	diagnosticsService, err := serverdiagnostics.NewService(storageResources)
 	if err != nil {
 		return fmt.Errorf("创建 Server 诊断服务失败: %w", err)

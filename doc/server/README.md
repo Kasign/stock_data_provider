@@ -316,7 +316,7 @@ Server 不重写模块业务 Handler 的校验和领域错误，不在路由层�
 
 ### SRV-006：API/Worker 运行角色和生命周期
 
-- 状态：未开始
+- 状态：进行中（已实现 SERVER_ROLE=api|worker|all 及旧 Analysis Worker/API 条件启动；完整通用 Lifecycle Manager 与模块 Worker 接入仍待完成）
 - 前置：SRV-003、SRV-004
 - 工作内容：实现角色解析、组件选择、启动依赖排序、失败回滚、优雅关闭和超时。
 - 交付物：Runtime Role 与 Lifecycle Manager。
@@ -553,7 +553,7 @@ Server 层完成不是“服务能够启动”这么简单。至少同时满足�
 | SRV-003 | 进行中 | DB、Redis、HTTP Client 已由 Resources 统一创建和关闭；后续接入模块资源注入与诊断贡献项 |
 | SRV-004 | 阻塞 | 已复核模块接入面；Researchflow/Quant/LLM/Notification 缺少完整生产装配入口，News/Research 也有关键查询/授权接入缺口；详见 12.6 节 |
 | SRV-005 | 进行中 | `/healthz` 匿名白名单；`/readyz`、旧 Analysis 业务路由和根信息路由由 Platform Security Router 显式 owner 认证；模块业务 Handler/Scope 映射、统一 Fault 映射和中间件仍待接入 |
-| SRV-006 | 未开始 | 运行角色和生命周期尚未建立 |
+| SRV-006 | 进行中 | SERVER_ROLE=api|worker|all 已控制旧 Analysis Worker 与 HTTP API 的启动集合；统一 Lifecycle Manager、模块 Worker 接入、失败回滚和完整 SIGTERM 矩阵仍待完成 |
 | SRV-007 | 进行中 | 已建立 Server Migration Registry，并注册 News/Research/Notification；显式配置执行；其他模块 Migration 和 MariaDB 集成验收待完成，详见 12.7 节 |
 | SRV-008 | 待契约 | Dispatcher 所有权未冻结 |
 | SRV-009 | 进行中 | 已实现 Platform Runner 聚合、严格 Readiness 判定及 MariaDB/Redis 资源检查；尚待 Transport 暴露和真实依赖集成验收，详见 12.8 节 |
@@ -574,3 +574,39 @@ Server 层完成不是“服务能够启动”这么简单。至少同时满足�
 - 当前属于兼容期安全收口：旧 Analysis 仍是业务 Handler 的所有者；待各模块公开 Handler 和真实 Scope 契约具备后，按模块替换 owner-only 临时策略。Readiness 仅对 owner 开放，部署探针需使用受保护的内网代理/认证探针配置。
 - `.env.example` 已补充 `PLATFORM_ADMIN_TOKEN` 必填项说明；部署时必须替换为密码学安全随机生成的 32～256 字节 URL-safe Token。
 - 本轮尚未执行 gofmt/go test/CI；不能标记编译或测试通过。
+
+### 12.10 安全边界与 Web 登录演进约束（2026-11-09）
+
+本项目按“默认不对公网开放业务 API、所有业务请求必须在服务端鉴权”的原则实施。个人部署不构成匿名开放的理由。
+
+#### 当前部署事实与风险
+
+- docker-compose.yml 将 Root Server 的宿主机端口绑定到 127.0.0.1:8092，不是公网地址；Web Nginx 容器通过 Docker 内部网络访问 Server。该绑定是当前部署的重要保护层，但不能代替应用层认证。
+- Server 容器仍加入共享的 1panel-network，同网络其他容器可能直接访问其容器端口；不能把宿主机仅 loopback 发布当成唯一安全边界。
+- Web Nginx 当前将 /analysis-api/ 直接代理到 Server，未提供用户登录、服务端会话或 CSRF 防护。
+- 当前 Server 使用 PLATFORM_ADMIN_TOKEN 作为 Owner Bearer 凭证；该机制适合可信运维/服务端调用，不应将长期 Owner Token 下发到浏览器。
+- Web 当前 web/src/api.js 的设置模型仍保留 apiKey 并存入 localStorage；该值主要用于 Data API。未来登录方案不得把 Owner Token 或 Web 管理密码复用到该字段。Web 分支的迁移由 Web Owner 负责，本 Server 分支不直接修改 Web 代码。
+
+#### 目标身份模型
+
+1. Web 用户身份：未来提供独立登录账号/密码。密码只在服务端验证，持久化只保存经审慎选择的密码哈希（优先 Argon2id；算法参数需经安全实现审查），不保存明文密码。
+2. Web 会话：登录成功后由 Server 建立服务端可撤销会话，浏览器只持有随机高熵 Session Cookie；Cookie 使用 HttpOnly、HTTPS 下 Secure、SameSite 和受限 Path，设置合理空闲/绝对过期时间。服务端保存会话摘要而非原始 Cookie；支持退出、轮换、撤销和会话过期。
+3. CSRF 与浏览器边界：所有 Cookie 认证的状态变更请求必须有 CSRF 防护；校验 Origin/Host，禁止宽泛 CORS；登录、失败认证和敏感操作必须限流并审计。不得仅依赖 SameSite 或 CORS 作为唯一 CSRF/访问控制。
+4. Owner 管理凭证：PLATFORM_ADMIN_TOKEN 仅供受信任运维/自动化客户端使用，不进入 Web 页面、不写 localStorage、不通过 URL/Query 传递。
+5. 模块间服务身份：Service Credential 只授予最小 Scope；禁止把 Owner Token 用作模块调用凭证。服务身份不能由请求体、Query 或普通 Header 自报。
+6. 权限边界：登录只证明身份，不自动等于 Owner。未来需要明确 Web 用户角色/权限及敏感操作授权；模块 AuthorizationRef 仍由对应模块 Owner 实时复核，不能由 Web 登录态覆盖。
+
+#### API 暴露策略
+
+- 生产部署优先让 Root Server 只在 loopback 或私有容器网络监听；宿主机不发布业务 API 公网端口。外部流量只经过受控反向代理入口。
+- Data、Root Server 不应因处于同一 Docker 网络而默认信任任意容器；所有跨服务调用使用独立 Service Credential + 最小 Scope，网络策略再做第二层隔离。
+- 公开路由必须逐条注册并绑定明确策略；未注册路由返回 404。除 Liveness 外，业务、Readiness、诊断详情均不得匿名。
+- Nginx 只承担 TLS/静态资源/反向代理/网络限制，不替代 Server 的认证授权。X-Forwarded-* 只有在可信代理链校验后才能用于安全决策。
+- CORS 不是鉴权。禁止 Access-Control-Allow-Origin: * 与凭证 Cookie 同时使用；浏览器业务请求保持同源代理优先。
+- 生产环境建议增加公网入口 IP/网段 allowlist、请求体上限、连接/请求速率限制、登录失败退避、审计日志和异常告警；不能只依赖隐藏 URL 或前端按钮。
+
+#### Platform 能力缺口与后续门禁
+
+当前 Platform Security 提供 Owner/Service Bearer 认证和路由策略，但没有 Web 密码验证、服务端 Session Store、Cookie 签发/轮换/撤销、CSRF Token、登录限流等公共实现。Server 不应在此分支复制通用安全框架。Web 登录进入实现前，需要在项目级契约中明确账号初始化/恢复方式、密码哈希算法与参数、Session 存储/撤销、CSRF、Cookie 属性、用户角色与审计事件，并由 Platform 提供可复用的公共安全原语；Server 负责装配，Web 负责登录交互。
+
+在上述能力具备前，当前 Owner Bearer 只作为临时的可信管理入口；不得为了让浏览器调用方便而把 Owner Token 写入 Web localStorage 或静态 Nginx 配置。现有 WebUI 与 Root Server 的 Owner 认证存在接入缺口，必须在 Web 登录契约落地前保持部署入口受限，不能宣称已具备完整用户访问体验。
