@@ -1173,6 +1173,7 @@ func (p *Hithink) FetchIndexCatalog(ctx context.Context, rawTag string) (*model.
 			snapshot.ExcludedRows++
 			snapshot.QualityStatus = model.QualityDegraded
 			snapshot.QualityReasons = appendUniqueHithinkReason(snapshot.QualityReasons, "duplicate_catalog_symbol_dropped")
+			addHithinkFieldIssue(ctx, &index, "symbol", "thscode", "duplicate_identity", "unique catalog symbol", "string", row.THSCode, "同花顺指数/板块目录返回重复代码")
 			continue
 		}
 		seen[symbol] = struct{}{}
@@ -1253,6 +1254,7 @@ func (p *Hithink) FetchIndexConstituents(ctx context.Context, rawIndexSymbol str
 			snapshot.ExcludedCount++
 			snapshot.QualityStatus = model.QualityDegraded
 			snapshot.QualityReasons = appendUniqueHithinkReason(snapshot.QualityReasons, "duplicate_constituent_symbol_dropped")
+			addHithinkFieldIssue(ctx, &index, "symbol", "thscode", "duplicate_identity", "unique constituent symbol", "string", row.THSCode, "同花顺指数成分股返回重复证券代码")
 			continue
 		}
 		seen[symbol] = struct{}{}
