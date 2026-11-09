@@ -699,3 +699,20 @@ func TestParseResponsesSSEReaderPreservesTransportReadError(t *testing.T) {
 		t.Fatalf("reader transport error must remain distinguishable and preserve partial output: response=%+v err=%v", got, err)
 	}
 }
+
+
+func TestParseResponsesSSEReaderHonorsProviderResponseLimit(t *testing.T) {
+	request := validSSERequest()
+	clock := sseTestClock{now: request.SystemAsOf.Add(time.Second)}
+	data := strings.Join([]string{
+		"event: response.output_text.delta",
+		"data: {\"type\":\"response.output_text.delta\",\"delta\":\"this payload exceeds the configured limit\"}",
+		"",
+	}, "\n")
+	got, err := parseResponsesSSEReaderLimit(strings.NewReader(data), request, clock, nil, 32)
+	var adapterErr *AdapterError
+	if !errors.As(err, &adapterErr) || adapterErr.Info.StableCode != "llm.sse.total_too_large" ||
+		got.Status != ResponseFailed {
+		t.Fatalf("configured byte limit must reject oversized stream: response=%+v err=%v", got, err)
+	}
+}
