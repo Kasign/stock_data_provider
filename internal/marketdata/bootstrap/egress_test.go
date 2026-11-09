@@ -128,17 +128,17 @@ func TestValidateEgressDependenciesChecksOnlyEnabledTencentEndpoints(t *testing.
 func TestValidateEgressDependenciesChecksOnlyEnabledSinaAndNeteaseEndpoints(t *testing.T) {
 	tests := []struct {
 		name string
-		cfg config.Config
+		cfg  config.Config
 		deps Dependencies
 	}{
 		{
 			name: "sina quote only",
-			cfg: config.Config{ProviderPriority: []string{"sina"}, ProviderSettings: map[string]config.ProviderSettings{"sina": {Enabled: true, Quote: true}}},
+			cfg:  config.Config{ProviderPriority: []string{"sina"}, ProviderSettings: map[string]config.ProviderSettings{"sina": {Enabled: true, Quote: true}}},
 			deps: Dependencies{SinaQuoteHTTPDoer: providerHTTPDoerStub{}},
 		},
 		{
 			name: "netease daily bars only",
-			cfg: config.Config{ProviderPriority: []string{"netease"}, ProviderSettings: map[string]config.ProviderSettings{"netease": {Enabled: true, DailyBars: true}}},
+			cfg:  config.Config{ProviderPriority: []string{"netease"}, ProviderSettings: map[string]config.ProviderSettings{"netease": {Enabled: true, DailyBars: true}}},
 			deps: Dependencies{NeteaseHistoryHTTPDoer: providerHTTPDoerStub{}},
 		},
 	}
