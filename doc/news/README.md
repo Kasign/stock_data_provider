@@ -981,3 +981,11 @@
 
 - [x] `GetEvidenceSnapshot` 先校验 Snapshot 结构、未来创建/知识时点及数据库信封一致性，再单独判断 TTL；已过期但内容完整的快照统一返回 `ErrEvidenceSnapshotUnavailable`，不再误报为 `ErrInvalidEvidenceSnapshot`。
 - [x] 既有 MariaDB 集成断言已覆盖 `now == expires_at` 的过期边界；本次未执行该测试，等待 News MariaDB Integration CI 提供运行证据。
+
+
+### Evidence Snapshot TTL 清理 Application 入口补齐（2026-11-09）
+
+- [x] 新增有界 EvidenceSnapshotRetentionCleaner，通过窄 Repository Port 执行到期 Snapshot 清理；限制批量 1～1000，统一 UTC 时间，拒绝负数或超过批量上限的 Repository 计数。
+- [x] 清理用例传播调用前/执行期间的 Context 取消，不创建 News 内部调度器；周期调度仍归 Server 组合根。
+- [ ] Server 尚未注册该 Cleaner 的周期任务；本分支仅提供 Application 入口。
+- [ ] 本次未执行 Go 编译或单元测试，等待 CI。
