@@ -182,6 +182,34 @@ func TestContextJSONSchemaValidatesGoldenAndRejectsInvalidPayloads(t *testing.T)
 		{"context version below minimum", func(value map[string]any) {
 			value["context_version"] = 0
 		}},
+		{"whitespace-only research question", func(value map[string]any) {
+			value["research_question"] = "   "
+		}},
+		{"padded context identifier", func(value map[string]any) {
+			value["context_id"] = " context-1 "
+		}},
+		{"whitespace-only subject reference", func(value map[string]any) {
+			value["subject_refs"] = []any{"   "}
+		}},
+		{"padded builder version", func(value map[string]any) {
+			value["builder_version"] = " builder "
+		}},
+		{"padded nested section identifier", func(value map[string]any) {
+			sections := value["section_refs"].([]any)
+			sections[0].(map[string]any)["section_id"] = " section "
+		}},
+		{"whitespace-only nested safe message", func(value map[string]any) {
+			omitted := value["omitted_sections"].([]any)
+			omitted[0].(map[string]any)["safe_message"] = "   "
+		}},
+		{"padded omitted section identifier", func(value map[string]any) {
+			omitted := value["omitted_sections"].([]any)
+			omitted[0].(map[string]any)["section_id"] = " section "
+		}},
+		{"padded omitted source reference", func(value map[string]any) {
+			omitted := value["omitted_sections"].([]any)
+			omitted[0].(map[string]any)["source_refs"] = []any{" source "}
+		}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
