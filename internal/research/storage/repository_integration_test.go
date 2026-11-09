@@ -12,10 +12,10 @@ import (
 
 	_ "github.com/go-sql-driver/mysql"
 
+	platformstorage "example.com/stock-analysis-flow/internal/platform/storage"
 	researchclaim "example.com/stock-analysis-flow/internal/research/claim"
 	researchcontext "example.com/stock-analysis-flow/internal/research/context"
 	researchevent "example.com/stock-analysis-flow/internal/research/event"
-	platformstorage "example.com/stock-analysis-flow/internal/platform/storage"
 )
 
 func openResearchIntegrationDB(t *testing.T) *sql.DB {
@@ -240,10 +240,23 @@ func TestResearchSQLRepositoriesAppendAndReadVersions(t *testing.T) {
 	lockedContextV2.SectionRefs[0].AssembledAt = lockedContextV2.SystemAsOf
 	lockWaitCtx, cancelLockWait := context.WithCancel(ctx)
 	appendResult := make(chan error, 1)
+	appendResultReceived := false
 	started := make(chan struct{})
 	go func() {
 		close(started)
 		appendResult <- contextRepo.Append(lockWaitCtx, lockedContextV2)
+	}()
+	// 无论断言在哪个分支失败，都先取消请求并释放阻塞事务，再回收工作协程。
+	defer func() {
+		cancelLockWait()
+		_ = blocker.Rollback()
+		if !appendResultReceived {
+			select {
+			case <-appendResult:
+			case <-time.After(5 * time.Second):
+				t.Errorf("append goroutine did not exit after lock-wait test cleanup")
+			}
+		}
 	}()
 	<-started
 	// Wait until the append SQL is visible in MariaDB's process list while the
@@ -264,6 +277,7 @@ func TestResearchSQLRepositoriesAppendAndReadVersions(t *testing.T) {
 		}
 		select {
 		case appendErr := <-appendResult:
+			appendResultReceived = true
 			cancelLockWait()
 			_ = blocker.Rollback()
 			t.Fatalf("append returned before lock wait was observed: %v", appendErr)
@@ -279,6 +293,7 @@ func TestResearchSQLRepositoriesAppendAndReadVersions(t *testing.T) {
 	var appendErr error
 	select {
 	case appendErr = <-appendResult:
+		appendResultReceived = true
 	case <-time.After(5 * time.Second):
 		_ = blocker.Rollback()
 		t.Fatal("append did not return after lock-wait context cancellation")
