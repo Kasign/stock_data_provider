@@ -1113,3 +1113,11 @@ Lifecycle.Stop 原实现通过 stopped 标记保证重复调用幂等，但并�
 - 当前批次尚未运行 Go 测试；待本轮功能组完成后统一验证。
 
 - 追加回归测试：模块传入 Check 切片在 Service 构造后被替换，不得改变 Server 保存的 Check ID 与 Required 属性。
+
+
+### 12.34 SRV-006 Lifecycle 启停并发竞态修复（2026-11-09）
+
+- Review 发现 Lifecycle.Start 与外部并发 Stop 缺少启动阶段同步：Stop 可能在某个组件的 Start 尚未返回时执行 Stop；也可能在 Stop 已复制 started 列表后，Start 才继续登记后续组件，造成组件未被停止。
+- Lifecycle 现在显式维护启动完成信号。外部 Stop 先阻止后续注册并等待启动阶段完整结束，再一次性快照已尝试启动的组件并逆序停止；启动失败/取消时，Start 先关闭启动完成信号，再执行回滚，避免自等待死锁。等待启动阶段不受 Stop 的关闭预算提前打断，避免 Bootstrap 因 Stop 超时而在组件仍处于 Start 时关闭共享资源；组件 Start 必须遵守进程 Context 取消约定。
+- 增加阻塞 Start 的并发回归测试，验证 Stop 不会与 Start 重叠、Stop 开始后不再启动后续组件，且最终停止所有已尝试启动组件。
+- 本批次尚未运行 Go 测试与 race；需在统一验证阶段执行。

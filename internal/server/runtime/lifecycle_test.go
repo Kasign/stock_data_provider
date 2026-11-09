@@ -192,3 +192,72 @@ func TestLifecycleConcurrentStopWaitsForFirstStop(t *testing.T) {
 		t.Fatalf("Stop() after completion = %v", err)
 	}
 }
+
+
+type blockingStartComponent struct {
+	name    string
+	entered chan struct{}
+	release chan struct{}
+	events  *[]string
+}
+
+func (c blockingStartComponent) Name() string { return c.name }
+func (c blockingStartComponent) Start(context.Context) error {
+	*c.events = append(*c.events, "start:entered")
+	close(c.entered)
+	<-c.release
+	*c.events = append(*c.events, "start:finished")
+	return nil
+}
+func (c blockingStartComponent) Stop(context.Context) error {
+	*c.events = append(*c.events, "stop")
+	return nil
+}
+
+func TestLifecycleConcurrentStopWaitsForStartupToFinish(t *testing.T) {
+	var events []string
+	component := blockingStartComponent{
+		name: "blocking-start", entered: make(chan struct{}), release: make(chan struct{}), events: &events,
+	}
+	lifecycle := NewLifecycle()
+	if err := lifecycle.Register(component); err != nil {
+		t.Fatal(err)
+	}
+	if err := lifecycle.Register(testComponent{name: "must-not-start", log: &events}); err != nil {
+		t.Fatal(err)
+	}
+
+	startDone := make(chan error, 1)
+	go func() { startDone <- lifecycle.Start(context.Background()) }()
+	<-component.entered
+
+	stopDone := make(chan error, 1)
+	go func() { stopDone <- lifecycle.Stop(context.Background()) }()
+
+	deadline := time.Now().Add(time.Second)
+	for {
+		lifecycle.mu.Lock()
+		stopping := lifecycle.stopped
+		lifecycle.mu.Unlock()
+		if stopping {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("Stop did not enter stopping state")
+		}
+		time.Sleep(time.Millisecond)
+	}
+
+	close(component.release)
+	if err := <-startDone; err == nil {
+		t.Fatal("Start() must report interruption when Stop begins during startup")
+	}
+	if err := <-stopDone; err != nil {
+		t.Fatalf("Stop() error = %v", err)
+	}
+
+	want := []string{"start:entered", "start:finished", "stop"}
+	if !reflect.DeepEqual(events, want) {
+		t.Fatalf("events = %v, want %v", events, want)
+	}
+}

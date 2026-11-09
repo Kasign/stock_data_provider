@@ -22,6 +22,7 @@ type Lifecycle struct {
 	started    []Component
 	startedOK  bool
 	stopped    bool
+	startDone  chan struct{}
 	stopDone   chan struct{}
 	stopErr    error
 }
@@ -47,7 +48,8 @@ func (l *Lifecycle) Register(component Component) error {
 	return nil
 }
 
-// Start 按注册顺序启动；启动失败或启动期间取消时都会停止已尝试启动的组件。
+// Start 按注册顺序启动。并发 Stop 会等待整个启动阶段结束，避免组件
+// 在 Start 尚未返回时被 Stop，或在 Stop 快照之后才加入 started 列表。
 func (l *Lifecycle) Start(ctx context.Context) error {
 	if ctx == nil {
 		return errors.New("lifecycle start context is required")
@@ -58,30 +60,46 @@ func (l *Lifecycle) Start(ctx context.Context) error {
 		return errors.New("lifecycle has already been started or stopped")
 	}
 	l.startedOK = true
+	l.startDone = make(chan struct{})
 	components := append([]Component(nil), l.components...)
 	l.mu.Unlock()
 
-	for _, component := range components {
-		if err := ctx.Err(); err != nil {
-			rollbackErr := l.Stop(context.WithoutCancel(ctx))
-			return errors.Join(fmt.Errorf("lifecycle startup canceled: %w", err), rollbackErr)
-		}
-		l.mu.Lock()
-		l.started = append(l.started, component)
-		l.mu.Unlock()
-		if err := component.Start(ctx); err != nil {
-			rollbackErr := l.Stop(context.WithoutCancel(ctx))
-			return errors.Join(fmt.Errorf("start component %q: %w", component.Name(), err), rollbackErr)
-		}
-	}
-	if err := ctx.Err(); err != nil {
+	startErr := l.startComponents(ctx, components)
+
+	l.mu.Lock()
+	close(l.startDone)
+	l.mu.Unlock()
+
+	if startErr != nil {
 		rollbackErr := l.Stop(context.WithoutCancel(ctx))
-		return errors.Join(fmt.Errorf("lifecycle startup canceled: %w", err), rollbackErr)
+		return errors.Join(startErr, rollbackErr)
 	}
 	return nil
 }
 
-// Stop 按启动逆序停止，重复调用安全；返回所有停止错误。
+func (l *Lifecycle) startComponents(ctx context.Context, components []Component) error {
+	for _, component := range components {
+		if err := ctx.Err(); err != nil {
+			return fmt.Errorf("lifecycle startup canceled: %w", err)
+		}
+		l.mu.Lock()
+		if l.stopped {
+			l.mu.Unlock()
+			return errors.New("lifecycle startup interrupted by stop")
+		}
+		l.started = append(l.started, component)
+		l.mu.Unlock()
+		if err := component.Start(ctx); err != nil {
+			return fmt.Errorf("start component %q: %w", component.Name(), err)
+		}
+	}
+	if err := ctx.Err(); err != nil {
+		return fmt.Errorf("lifecycle startup canceled: %w", err)
+	}
+	return nil
+}
+
+// Stop 等待正在进行的启动阶段结束，再按启动逆序停止；重复调用安全。
 func (l *Lifecycle) Stop(ctx context.Context) error {
 	if ctx == nil {
 		return errors.New("lifecycle stop context is required")
@@ -103,6 +121,16 @@ func (l *Lifecycle) Stop(ctx context.Context) error {
 	l.stopped = true
 	l.stopDone = make(chan struct{})
 	done := l.stopDone
+	startDone := l.startDone
+	l.mu.Unlock()
+
+	if startDone != nil {
+		// Start 使用进程 Context；必须等它退出后才能安全关闭共享资源。
+		// 否则 Bootstrap 可能在组件仍处于 Start 时继续关闭 DB/Redis。
+		<-startDone
+	}
+
+	l.mu.Lock()
 	started := append([]Component(nil), l.started...)
 	l.started = nil
 	l.mu.Unlock()
