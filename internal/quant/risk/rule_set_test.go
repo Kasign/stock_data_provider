@@ -118,3 +118,19 @@ func TestBuildDecisionForRuleSetAllowsMissingOptionalRule(t *testing.T) {
 		t.Fatalf("optional rules should not block: %+v", decision)
 	}
 }
+
+func TestRuleSetRejectsNonCanonicalIdentities(t *testing.T) {
+	tests := []RuleSet{
+		{Version: " risk-1", Rules: []RuleDefinition{{Code: "A", Severity: SeverityBlock}}},
+		{Version: "risk-1 ", Rules: []RuleDefinition{{Code: "A", Severity: SeverityBlock}}},
+		{Version: "risk-1", Rules: []RuleDefinition{{Code: " A", Severity: SeverityBlock}}},
+		{Version: "risk-1", Rules: []RuleDefinition{{Code: "A ", Severity: SeverityBlock}}},
+		{Version: "risk-1", Rules: []RuleDefinition{{Code: string([]byte{0xff}), Severity: SeverityBlock}}},
+		{Version: string([]byte{0xff}), Rules: []RuleDefinition{{Code: "A", Severity: SeverityBlock}}},
+	}
+	for i, set := range tests {
+		if err := set.Validate(); !errors.Is(err, ErrInvalidRuleSet) {
+			t.Errorf("case %d: Validate() error = %v, want ErrInvalidRuleSet", i, err)
+		}
+	}
+}

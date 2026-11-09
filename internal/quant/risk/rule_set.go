@@ -3,11 +3,8 @@ package risk
 import (
 	"errors"
 	"fmt"
-)
-
-var (
-	ErrInvalidRuleSet = errors.New("invalid risk rule set")
-	ErrRuleCoverage   = errors.New("risk rule coverage mismatch")
+	"strings"
+	"unicode/utf8"
 )
 
 // RuleDefinition 声明一个版本化规则集中的规则身份和严重级别。
@@ -25,13 +22,14 @@ type RuleSet struct {
 }
 
 // Validate 校验规则集自身的身份、规则唯一性和必需硬门禁约束。
+// 版本和规则编码必须是有效 UTF-8、非空且无首尾空白，避免同一逻辑身份出现多种文本表示。
 func (set RuleSet) Validate() error {
-	if !nonBlank(set.Version) || len(set.Rules) == 0 {
+	if !canonicalIdentity(set.Version) || len(set.Rules) == 0 {
 		return ErrInvalidRuleSet
 	}
 	seen := make(map[string]struct{}, len(set.Rules))
 	for _, rule := range set.Rules {
-		if !nonBlank(rule.Code) || !validSeverity(rule.Severity) {
+		if !canonicalIdentity(rule.Code) || !validSeverity(rule.Severity) {
 			return ErrInvalidRuleSet
 		}
 		if _, exists := seen[rule.Code]; exists {
@@ -43,6 +41,10 @@ func (set RuleSet) Validate() error {
 		}
 	}
 	return nil
+}
+
+func canonicalIdentity(value string) bool {
+	return value != "" && utf8.ValidString(value) && strings.TrimSpace(value) == value
 }
 
 // BuildDecisionForRuleSet 按固定规则清单构造 RiskDecision。
