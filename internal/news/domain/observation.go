@@ -27,6 +27,8 @@ type Observation struct {
 	PolicyEvaluatedAt             time.Time
 	Candidate                     Candidate
 	ObservedAt                    time.Time
+	RetentionUntil                time.Time
+	PayloadPurgedAt               *time.Time
 	IdentityStatus                ObservationStatus
 	NewsID                        string
 	ReasonCode                    string
