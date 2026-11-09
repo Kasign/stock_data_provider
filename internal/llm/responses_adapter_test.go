@@ -693,3 +693,42 @@ func TestResponsesAdapterGenerateDoesNotDispatchWithCancelledContext(t *testing.
 		t.Fatalf("cancelled context must stop before transport dispatch: err=%v called=%v", err, called)
 	}
 }
+
+
+type closeTrackingReadCloser struct {
+	io.Reader
+	closed bool
+}
+
+func (r *closeTrackingReadCloser) Close() error {
+	r.closed = true
+	return nil
+}
+
+func TestResponsesAdapterStreamEnforcesProviderResponseLimitAndClosesBody(t *testing.T) {
+	provider, secret, capabilities, clock := streamAdapterTestConfig()
+	provider.MaxResponseBytes = 64
+	request := validResponsesRequest()
+	request.ProviderID = provider.ProviderID
+	body := &closeTrackingReadCloser{Reader: strings.NewReader(strings.Repeat("x", 128))}
+	streamDoer := HTTPStreamDoerFunc(func(context.Context, *http.Request) (*HTTPStreamResponse, error) {
+		return &HTTPStreamResponse{
+			StatusCode: http.StatusOK,
+			Header: http.Header{"Content-Type": []string{"text/event-stream"}},
+			Body: body,
+		}, nil
+	})
+	adapter, err := NewResponsesAdapterWithStream(provider, secret,
+		doerFunc(func(*http.Request) (*http.Response, error) { return nil, errors.New("unused") }),
+		streamDoer, capabilities, clock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := adapter.Stream(context.Background(), request, nil)
+	var adapterErr *AdapterError
+	if !errors.As(err, &adapterErr) || adapterErr.Info.Kind != ErrorResourceLimit ||
+		adapterErr.Info.StableCode != "llm.sse.total_too_large" ||
+		got.Status != ResponseFailed || !body.closed {
+		t.Fatalf("provider response limit must fail and close body: response=%+v closed=%v err=%v", got, body.closed, err)
+	}
+}
