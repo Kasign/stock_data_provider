@@ -59,13 +59,13 @@ func TestDiagnosticsApplicationBuildsChecksFromExactVersions(t *testing.T) {
 		build func() (platformdiagnostics.Check, error)
 	}{
 		{"context", func() (platformdiagnostics.Check, error) {
-			return service.BuildContextCheck(context.Background(), ContextRef{ContextID: "ctx_diag", ContextVersion: 1}, true)
+			return service.BuildContextCheck(context.Background(), ContextRef{ContextID: "ctx_diag", ContextVersion: 1}, now, true)
 		}},
 		{"event", func() (platformdiagnostics.Check, error) {
-			return service.BuildEventCheck(context.Background(), EventRef{EventID: "evt_diag", EventVersion: 1}, true)
+			return service.BuildEventCheck(context.Background(), EventRef{EventID: "evt_diag", EventVersion: 1}, now, true)
 		}},
 		{"claim", func() (platformdiagnostics.Check, error) {
-			return service.BuildClaimCheck(context.Background(), ClaimRef{ClaimID: "clm_diag", ClaimVersion: 1}, true)
+			return service.BuildClaimCheck(context.Background(), ClaimRef{ClaimID: "clm_diag", ClaimVersion: 1}, now, true)
 		}},
 	}
 	for _, item := range checks {
@@ -93,15 +93,15 @@ func TestDiagnosticsApplicationRejectsInvalidReferences(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := service.BuildContextCheck(context.Background(), ContextRef{ContextID: " ", ContextVersion: 1}, true); err == nil {
+	if _, err := service.BuildContextCheck(context.Background(), ContextRef{ContextID: " ", ContextVersion: 1}, time.Time{}, true); err == nil {
 		t.Fatal("blank Context ID must be rejected")
 	}
-	if _, err := service.BuildClaimCheck(context.Background(), ClaimRef{ClaimID: "clm_1", ClaimVersion: 0}, true); err == nil {
+	if _, err := service.BuildClaimCheck(context.Background(), ClaimRef{ClaimID: "clm_1", ClaimVersion: 0}, time.Now().UTC(), true); err == nil {
 		t.Fatal("non-positive Claim version must be rejected")
 	}
 	if _, err := service.BuildEvidenceCheck(context.Background(), EvidenceRef{
 		EvidenceID: "ev_1", CallerRef: "researchflow:worker-1",
-	}, true); err == nil {
+	}, time.Time{}, true); err == nil {
 		t.Fatal("missing Run system_as_of must be rejected before Owner access")
 	}
 }
@@ -130,8 +130,8 @@ func TestBuildEvidenceCheckRechecksOwnerAuthorization(t *testing.T) {
 	}
 
 	check, err := service.BuildEvidenceCheck(context.Background(), EvidenceRef{
-		EvidenceID: value.EvidenceID, CallerRef: "researchflow:worker-1", RunSystemAsOf: now,
-	}, true)
+		EvidenceID: value.EvidenceID, CallerRef: "researchflow:worker-1",
+	}, now, true)
 	if err != nil {
 		t.Fatalf("BuildEvidenceCheck() error = %v", err)
 	}
@@ -151,8 +151,8 @@ func TestBuildEvidenceCheckRechecksOwnerAuthorization(t *testing.T) {
 
 	authorizer.err = NewAuthorizationError(AuthorizationDenied, errors.New("owner revoked access"))
 	_, err = service.BuildEvidenceCheck(context.Background(), EvidenceRef{
-		EvidenceID: value.EvidenceID, CallerRef: "researchflow:worker-1", RunSystemAsOf: now,
-	}, true)
+		EvidenceID: value.EvidenceID, CallerRef: "researchflow:worker-1",
+	}, now, true)
 	if err == nil {
 		t.Fatal("revoked Owner authorization must prevent diagnostic check construction")
 	}

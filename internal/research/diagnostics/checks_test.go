@@ -62,7 +62,7 @@ func TestContextCheckMapsQualityStates(t *testing.T) {
 			if test.status != researchcontext.QualityValid {
 				value.QualitySummary.ReasonCodes = []string{"fixture_reason"}
 			}
-			check, err := NewContextCheck("research.context.snapshot", "Context 快照", true, value)
+			check, err := NewContextCheck("research.context.snapshot", "Context 快照", true, value, value.SystemAsOf)
 			if err != nil {
 				t.Fatalf("NewContextCheck() error = %v", err)
 			}
@@ -81,7 +81,7 @@ func TestContextCheckDoesNotExposeValidationDetails(t *testing.T) {
 	value := validContextSnapshot()
 	value.ResearchQuestion = "secret user content"
 	value.Scope = researchcontext.Scope("invalid-secret-scope")
-	check, err := NewContextCheck("research.context.snapshot", "Context 快照", true, value)
+	check, err := NewContextCheck("research.context.snapshot", "Context 快照", true, value, value.SystemAsOf)
 	if err != nil {
 		t.Fatalf("NewContextCheck() error = %v", err)
 	}
@@ -99,7 +99,7 @@ func TestContextCheckDoesNotExposeValidationDetails(t *testing.T) {
 
 func TestContextCheckUsesImmutableSnapshot(t *testing.T) {
 	value := validContextSnapshot()
-	check, err := NewContextCheck("research.context.snapshot", "Context 快照", true, value)
+	check, err := NewContextCheck("research.context.snapshot", "Context 快照", true, value, value.SystemAsOf)
 	if err != nil {
 		t.Fatalf("NewContextCheck() error = %v", err)
 	}
@@ -121,7 +121,7 @@ func TestEventAndClaimChecksValidateSnapshots(t *testing.T) {
 		ImpactHypothesisRefs: []string{}, InvalidationConditions: []string{},
 		Uncertainty: []string{}, SourceTimes: []researchevent.EventSourceTime{},
 	}
-	eventCheck, err := NewEventCheck("research.event.snapshot", "Event 快照", true, event)
+	eventCheck, err := NewEventCheck("research.event.snapshot", "Event 快照", true, event, cutoff)
 	if err != nil {
 		t.Fatalf("NewEventCheck() error = %v", err)
 	}
@@ -129,7 +129,7 @@ func TestEventAndClaimChecksValidateSnapshots(t *testing.T) {
 		t.Fatalf("valid Event status = %q, want healthy", got)
 	}
 	event.Title = ""
-	invalidEventCheck, err := NewEventCheck("research.event.invalid", "无效 Event", true, event)
+	invalidEventCheck, err := NewEventCheck("research.event.invalid", "无效 Event", true, event, cutoff)
 	if err != nil {
 		t.Fatalf("NewEventCheck(invalid) error = %v", err)
 	}
@@ -145,7 +145,7 @@ func TestEventAndClaimChecksValidateSnapshots(t *testing.T) {
 		RequiredDataRefs: []string{}, Status: researchclaim.StatusProposed,
 		Limitations: []string{},
 	}
-	claimCheck, err := NewClaimCheck("research.claim.snapshot", "Claim 快照", true, claim)
+	claimCheck, err := NewClaimCheck("research.claim.snapshot", "Claim 快照", true, claim, cutoff)
 	if err != nil {
 		t.Fatalf("NewClaimCheck() error = %v", err)
 	}
@@ -153,7 +153,7 @@ func TestEventAndClaimChecksValidateSnapshots(t *testing.T) {
 		t.Fatalf("valid Claim status = %q, want healthy", got)
 	}
 	claim.Statement = ""
-	invalidClaimCheck, err := NewClaimCheck("research.claim.invalid", "无效 Claim", true, claim)
+	invalidClaimCheck, err := NewClaimCheck("research.claim.invalid", "无效 Claim", true, claim, cutoff)
 	if err != nil {
 		t.Fatalf("NewClaimCheck(invalid) error = %v", err)
 	}
@@ -163,7 +163,7 @@ func TestEventAndClaimChecksValidateSnapshots(t *testing.T) {
 }
 
 func TestResearchCheckHonorsCanceledRunnerContext(t *testing.T) {
-	check, err := NewContextCheck("research.context.cancel", "Context 快照", true, validContextSnapshot())
+	check, err := NewContextCheck("research.context.cancel", "Context 快照", true, validContextSnapshot(), validContextSnapshot().SystemAsOf)
 	if err != nil {
 		t.Fatalf("NewContextCheck() error = %v", err)
 	}
@@ -179,7 +179,7 @@ func TestResearchCheckHonorsCanceledRunnerContext(t *testing.T) {
 }
 
 func TestResearchChecksAreSafeForConcurrentRunnerExecution(t *testing.T) {
-	contextCheck, err := NewContextCheck("research.context.concurrent", "Context 快照", true, validContextSnapshot())
+	contextCheck, err := NewContextCheck("research.context.concurrent", "Context 快照", true, validContextSnapshot(), validContextSnapshot().SystemAsOf)
 	if err != nil {
 		t.Fatalf("NewContextCheck() error = %v", err)
 	}

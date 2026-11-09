@@ -4,6 +4,7 @@ package diagnostics
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strconv"
 	"time"
@@ -15,7 +16,10 @@ import (
 	researchevidence "example.com/stock-analysis-flow/internal/research/evidence"
 )
 
-func NewContextCheck(id, name string, required bool, value researchcontext.Context) (platformdiagnostics.Check, error) {
+func NewContextCheck(id, name string, required bool, value researchcontext.Context, runAsOf time.Time) (platformdiagnostics.Check, error) {
+	if err := validateRunSystemAsOf(runAsOf); err != nil {
+		return platformdiagnostics.Check{}, err
+	}
 	snapshot, err := cloneSnapshot(value)
 	if err != nil {
 		return platformdiagnostics.Check{}, fmt.Errorf("snapshot Research Context: %w", err)
@@ -28,6 +32,10 @@ func NewContextCheck(id, name string, required bool, value researchcontext.Conte
 			}
 			if err := snapshot.Validate(); err != nil {
 				return failedObservation("research.context.invalid", "Research Context 结构校验失败",
+					map[string]string{"context_version": strconv.FormatInt(snapshot.ContextVersion, 10)}), nil
+			}
+			if !snapshot.SystemAsOf.Equal(runAsOf) {
+				return failedObservation("research.context.run_cutoff_mismatch", "Research Context system_as_of 与 Run 截止时间不一致",
 					map[string]string{"context_version": strconv.FormatInt(snapshot.ContextVersion, 10)}), nil
 			}
 			attributes := map[string]string{
@@ -58,7 +66,10 @@ func NewContextCheck(id, name string, required bool, value researchcontext.Conte
 	}, nil
 }
 
-func NewEventCheck(id, name string, required bool, value researchevent.ResearchEvent) (platformdiagnostics.Check, error) {
+func NewEventCheck(id, name string, required bool, value researchevent.ResearchEvent, runAsOf time.Time) (platformdiagnostics.Check, error) {
+	if err := validateRunSystemAsOf(runAsOf); err != nil {
+		return platformdiagnostics.Check{}, err
+	}
 	snapshot, err := cloneSnapshot(value)
 	if err != nil {
 		return platformdiagnostics.Check{}, fmt.Errorf("snapshot Research Event: %w", err)
@@ -73,13 +84,20 @@ func NewEventCheck(id, name string, required bool, value researchevent.ResearchE
 				return failedObservation("research.event.invalid", "Research Event 结构校验失败",
 					map[string]string{"event_version": strconv.Itoa(snapshot.EventVersion)}), nil
 			}
+			if snapshot.SystemAsOf.After(runAsOf) {
+				return failedObservation("research.event.pit_invalid", "Research Event 晚于 Run 知识截止时间",
+					map[string]string{"event_version": strconv.Itoa(snapshot.EventVersion)}), nil
+			}
 			return healthyObservation("Research Event 校验通过",
 				map[string]string{"event_version": strconv.Itoa(snapshot.EventVersion)}), nil
 		},
 	}, nil
 }
 
-func NewClaimCheck(id, name string, required bool, value researchclaim.Claim) (platformdiagnostics.Check, error) {
+func NewClaimCheck(id, name string, required bool, value researchclaim.Claim, runAsOf time.Time) (platformdiagnostics.Check, error) {
+	if err := validateRunSystemAsOf(runAsOf); err != nil {
+		return platformdiagnostics.Check{}, err
+	}
 	snapshot, err := cloneSnapshot(value)
 	if err != nil {
 		return platformdiagnostics.Check{}, fmt.Errorf("snapshot Research Claim: %w", err)
@@ -92,6 +110,10 @@ func NewClaimCheck(id, name string, required bool, value researchclaim.Claim) (p
 			}
 			if err := snapshot.Validate(); err != nil {
 				return failedObservation("research.claim.invalid", "Research Claim 结构校验失败",
+					map[string]string{"claim_version": strconv.Itoa(snapshot.ClaimVersion)}), nil
+			}
+			if snapshot.SystemAsOf.After(runAsOf) {
+				return failedObservation("research.claim.pit_invalid", "Research Claim 晚于 Run 知识截止时间",
 					map[string]string{"claim_version": strconv.Itoa(snapshot.ClaimVersion)}), nil
 			}
 			return healthyObservation("Research Claim 校验通过",
@@ -131,6 +153,9 @@ func failedObservation(code, message string, attributes map[string]string) platf
 
 // NewEvidenceCheck 只输出质量和来源元数据，不暴露 Evidence 正文、引用列表或授权快照。
 func NewEvidenceCheck(id, name string, required bool, value researchevidence.Evidence, runAsOf time.Time) (platformdiagnostics.Check, error) {
+	if err := validateRunSystemAsOf(runAsOf); err != nil {
+		return platformdiagnostics.Check{}, err
+	}
 	snapshot, err := cloneSnapshot(value)
 	if err != nil {
 		return platformdiagnostics.Check{}, fmt.Errorf("snapshot Research Evidence: %w", err)
@@ -149,6 +174,10 @@ func NewEvidenceCheck(id, name string, required bool, value researchevidence.Evi
 				"source_owner":   string(snapshot.SourceOwner),
 				"quality_status": string(snapshot.QualityStatus),
 				"content_level":  string(snapshot.ContentLevel),
+			}
+			if snapshot.SystemAsOf.After(runAsOf) ||
+				snapshot.AvailableAt != nil && snapshot.AvailableAt.After(snapshot.SystemAsOf) {
+				return failedObservation("research.evidence.pit_invalid", "Research Evidence 不满足严格 PIT 约束", attributes), nil
 			}
 			if snapshot.AvailableAt == nil {
 				return platformdiagnostics.Observation{
@@ -183,4 +212,11 @@ func NewEvidenceCheck(id, name string, required bool, value researchevidence.Evi
 			}
 		},
 	}, nil
+}
+
+func validateRunSystemAsOf(value time.Time) error {
+	if value.IsZero() || value.Location() != time.UTC {
+		return errors.New("Run system_as_of is required and must use UTC")
+	}
+	return nil
 }
