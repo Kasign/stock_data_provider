@@ -61,7 +61,6 @@ func openResearchIntegrationDB(t *testing.T) *sql.DB {
 	return db
 }
 
-
 func assertResearchPITColumn(t *testing.T, ctx context.Context, db *sql.DB, query string, args []any, want time.Time) {
 	t.Helper()
 	var got string

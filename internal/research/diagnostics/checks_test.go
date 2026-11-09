@@ -281,3 +281,44 @@ func TestEvidenceCheckUsesImmutableSnapshot(t *testing.T) {
 		t.Fatalf("snapshot status = %q, want healthy", result.Observation.Status)
 	}
 }
+
+func TestEvidenceCheckRequiresComparableStrictPIT(t *testing.T) {
+	t.Run("unknown available_at is unavailable", func(t *testing.T) {
+		value := validEvidenceSnapshot(t, researchevidence.QualityValid)
+		value.AvailableAt = nil
+		fingerprint, err := value.ComputeContentFingerprint()
+		if err != nil {
+			t.Fatal(err)
+		}
+		value.ContentFingerprint = fingerprint
+		check, err := NewEvidenceCheck("research.evidence.pit", "Evidence PIT", true, value)
+		if err != nil {
+			t.Fatal(err)
+		}
+		result := runCheck(t, check)
+		if result.Observation.Status != platformdiagnostics.StatusUnavailable ||
+			result.Observation.ReasonCode != "research.evidence.pit_unavailable" {
+			t.Fatalf("observation = %+v, want unavailable PIT", result.Observation)
+		}
+	})
+
+	t.Run("available_at after system_as_of is failed", func(t *testing.T) {
+		value := validEvidenceSnapshot(t, researchevidence.QualityValid)
+		late := value.SystemAsOf.Add(time.Nanosecond)
+		value.AvailableAt = &late
+		fingerprint, err := value.ComputeContentFingerprint()
+		if err != nil {
+			t.Fatal(err)
+		}
+		value.ContentFingerprint = fingerprint
+		check, err := NewEvidenceCheck("research.evidence.pit", "Evidence PIT", true, value)
+		if err != nil {
+			t.Fatal(err)
+		}
+		result := runCheck(t, check)
+		if result.Observation.Status != platformdiagnostics.StatusFailed ||
+			result.Observation.ReasonCode != "research.evidence.pit_invalid" {
+			t.Fatalf("observation = %+v, want failed PIT", result.Observation)
+		}
+	})
+}

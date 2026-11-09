@@ -1,7 +1,8 @@
 # Research 模块
 
 - 分支：`feat/research`
-- 最近复核基线：`51cde38549d8861a71cf5333ed35a56649bd872e`（2026-11-09，合并 Data 与 integration 更新）
+- 代码复核基线：`51cde38549d8861a71cf5333ed35a56649bd872e`（2026-11-09，合并 Data 与 integration 更新）
+- 已聚合到 integration：`a5ac63c2caa71153332d1229475139fd8b637c53`（PR #53）
 - 代码范围：`internal/research/**`
 - 文档范围：`doc/research/**`
 - 任务与验收权威记录：[02-任务拆分与验收](./02-任务拆分与验收.md)
@@ -31,7 +32,7 @@ Research 不采集新闻、不拥有行情事实、不重算 Quant 指标，不�
 | RSC-005 Claim/Hypothesis | Domain、认识论校验、状态迁移、版本追加、Application、SQL Repository | Evidence/Scope 真实引用解析、supersedes_version 契约缺口、真实样本 |
 | RSC-006 Scenario | 仅有部分引用模型 | 等待 typed expected_value 与 ConditionGroup 机器契约 |
 | RSC-007 Storage/Outbox | Context/Event/Claim/Evidence Repository、Migration v1-v5、事务 Outbox、领取/租约/重试/确认/拒绝 | 专用 MariaDB 实测、组合根 Migration 注册、故障注入验收 |
-| RSC-008 Diagnostics | Context/Event/Claim/Evidence 快照 Check；Evidence Check 通过 Application GetEvidence 先执行 Owner 当前授权复核；复用 Platform Runner | 真实 Owner Adapter、完整 CI 执行、Researchflow FLOW-009 Facade 接线 |
+| RSC-008 Diagnostics | Context/Event/Claim/Evidence 快照 Check；Evidence Check 通过 Application GetEvidence 先执行 Owner 当前授权复核，并执行严格 PIT；复用 Platform Runner | 真实 Owner Adapter、完整 CI 执行、Researchflow FLOW-009 Facade 接线 |
 
 ## 诊断边界
 
@@ -43,8 +44,8 @@ Research 不采集新闻、不拥有行情事实、不重算 Quant 指标，不�
 
 ## 当前验收结论
 
-- 当前 HEAD 为上述复核基线；之后的本次文档修订会形成新的 Research 文档提交。
-- 最新已查到的 Research 分支 Go workflow 运行在旧提交上，未覆盖当前 HEAD；失败项包含跨模块 gofmt、News MariaDB 和 Market-data 镜像构建，不得误判为 Research 代码失败。
+- 本次代码复核以 `51cde385` 为基线；文档对齐提交为 `05b3400`，并已通过 PR #53 聚合到 integration。
+- 截至本次检查，未发现以 integration 合并提交 `a5ac63c` 为 head 的新 Workflow Run；旧 Research 分支 Workflow 不能作为当前合并提交的构建证据。此前失败项包含跨模块 gofmt、News MariaDB 和 Market-data 镜像构建，不得误判为 Research 代码失败。
 - Research 的新增领域、Application、Diagnostics 与 MariaDB 集成测试尚未在当前 HEAD 完整执行；没有真实 Data/News Owner Adapter 和真实来源证据，因此不标记真实数据验收通过。
 - 构建/集成验收按项目约束在 `origin/integration` 聚合后执行；不得直接修改 integration 分支。
 
