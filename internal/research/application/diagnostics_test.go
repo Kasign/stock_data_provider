@@ -7,6 +7,7 @@ import (
 	"time"
 
 	platformdiagnostics "example.com/stock-analysis-flow/internal/platform/diagnostics"
+	platformfault "example.com/stock-analysis-flow/internal/platform/fault"
 	researchclaim "example.com/stock-analysis-flow/internal/research/claim"
 	researchcontext "example.com/stock-analysis-flow/internal/research/context"
 	researchevent "example.com/stock-analysis-flow/internal/research/event"
@@ -143,11 +144,16 @@ func TestBuildEvidenceCheckRechecksOwnerAuthorization(t *testing.T) {
 		t.Fatalf("authorized Evidence status = %q, want healthy", observation.Status)
 	}
 
-	authorizer.err = errors.New("owner revoked access")
-	if _, err := service.BuildEvidenceCheck(context.Background(), EvidenceRef{
+	authorizer.err = NewAuthorizationError(AuthorizationDenied, errors.New("owner revoked access"))
+	_, err = service.BuildEvidenceCheck(context.Background(), EvidenceRef{
 		EvidenceID: value.EvidenceID, CallerRef: "researchflow:worker-1",
-	}, true); err == nil {
+	}, true)
+	if err == nil {
 		t.Fatal("revoked Owner authorization must prevent diagnostic check construction")
+	}
+	var authorizationFault *platformfault.Fault
+	if !errors.As(err, &authorizationFault) || authorizationFault.Class != platformfault.ClassForbidden {
+		t.Fatalf("revoked Owner authorization error = %v, want Forbidden Fault", err)
 	}
 	if authorizer.calls != 2 {
 		t.Fatalf("Owner authorization calls after revocation = %d, want 2", authorizer.calls)
