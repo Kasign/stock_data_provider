@@ -3,7 +3,7 @@
 - 维护分支：`feat/design_doc`
 - 设计基线：`7344170dc53124361c9cf49efb0d66821d3605c1`
 - 决策状态：`accepted`（采用同进程模块化单体方向）
-- 实施状态：`not_started`（截至 2026-11-06 Data 分支已合入架构决议，但代码仍位于独立 Module；M0 仅完成初步只读审计）
+- 实施状态：`M1_in_progress`（截至 2026-11-09：M1-2 已将 Data 源码归并到根 Go Module，提交 `0076f99b88e8`；根 Module CI 验收待完成。具体进度以 `doc/api/migration/MarketData模块化单体迁移计划与进度.md` 为准）
 - 范围：Root Server、Market Data、WebUI 部署接入、Platform 基础设施装配
 - 非目标：结构迁移阶段不改变行情业务语义，不删除既有 Data API DTO/Schema，不拆分 Provider 子模块；DATA-CTR-005～008 的正式契约实现集中放在结构迁移后的 MDM-008
 

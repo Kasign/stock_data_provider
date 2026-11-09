@@ -76,7 +76,7 @@ jobs:
           git push origin HEAD:refs/heads/feat/full-go-data-providers-api-switch
           echo "changed=true" >> "$GITHUB_OUTPUT"
       - name: Trigger validation for migrated commit
-        if: ${{ steps.commit.outputs.changed == 'true' }}
+        if: ${{ steps.commit.outputs.changed == 'true' || github.event.head_commit.message == '触发 Data 根模块迁移验收' }}
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh workflow run go-test.yml --ref feat/full-go-data-providers-api-switch
@@ -257,6 +257,7 @@ jobs:
         run: go test ./internal/news/adapters/storage -run TestNewsMariaDBRepositoryIntegration -count=1 -v
 
   container-build:
+    if: ${{ github.ref == 'refs/heads/integration' || (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'integration') }}
     name: Validate Compose and build Docker images
     runs-on: ubuntu-latest
     timeout-minutes: 30
