@@ -1203,7 +1203,7 @@ paths:
         - name: symbols
           in: query
           required: true
-          description: 逗号分隔的 A 股代码，支持规范化后的六位代码或带交易所后缀代码。
+          description: 逗号分隔的 A 股代码，最多 50 个且不允许重复；每个代码先去除首尾空白再规范化，支持六位代码或带交易所后缀代码。
           schema:
             type: string
             example: "600519.SH,000001.SZ"

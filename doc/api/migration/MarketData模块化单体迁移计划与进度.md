@@ -2165,3 +2165,14 @@ CI：本轮 SHA 对应 Go test suite Run `42549171549`。截至本次文档提�
 - 修正后 SHA 尚未通过新的 CI 复验；必须等待 Data Module gofmt、测试、race、vet、MariaDB/PIT 和 Docker 构建最终状态。
 
 **当前结论：** CT-05 继续进行，M0 仍为 `in_progress`，M1 不准入。
+
+
+### 2026-11-09：CT-05 批量行情证券列表约束补齐
+
+代码基线：`9493e9911a9376e92f50005ce8cb699f111629a9`。
+
+- 核对 batchQuotes Handler：symbols 为逗号分隔字符串，最多 50 个 token；每个 token 去除首尾空白后规范化证券代码；规范化后重复代码返回 HTTP 400。
+- 原 OpenAPI 只说明逗号分隔与代码格式，没有披露数量上限、重复拒绝和 token 空白处理。
+- 已补充 symbols 参数描述，并新增 TestBatchQuotesParameterDocumentsHandlerConstraints 锁定这些 Handler 约束。
+- 不新增字段、不调整批量请求行为、不放宽重复项校验；本批仅修改 OpenAPI 描述和 Contract Test。
+- 当前 Data Module gofmt 已在 SHA `9493e991` 对应工作流中通过；该 SHA 的 Go Test、race、vet、MariaDB/PIT 和 Docker 构建尚未全部结束。本批新增修改后仍需以最新 SHA 的 CI 结果为准。

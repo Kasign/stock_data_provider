@@ -1166,3 +1166,36 @@ func TestOpenAPIParameterTypesAndFormatsMatchReviewedHandlerMatrix(t *testing.T)
 		}
 	}
 }
+
+
+func TestBatchQuotesParameterDocumentsHandlerConstraints(t *testing.T) {
+	spec, err := os.ReadFile("../../openapi.yaml")
+	if err != nil {
+		t.Fatalf("read OpenAPI specification: %v", err)
+	}
+	var document map[string]any
+	if err := yaml.Unmarshal(spec, &document); err != nil {
+		t.Fatalf("OpenAPI must be valid YAML: %v", err)
+	}
+	paths := document["paths"].(map[string]any)
+	operation := paths["/api/v1/market/quotes"].(map[string]any)["get"].(map[string]any)
+	parameters := operation["parameters"].([]any)
+	for _, raw := range parameters {
+		parameter, ok := raw.(map[string]any)
+		if !ok || parameter["name"] != "symbols" {
+			continue
+		}
+		schema := parameter["schema"].(map[string]any)
+		if schema["type"] != "string" {
+			t.Errorf("market/quotes symbols type=%v, want string", schema["type"])
+		}
+		description, _ := parameter["description"].(string)
+		for _, phrase := range []string{"最多 50 个", "不允许重复", "去除首尾空白再规范化"} {
+			if !strings.Contains(description, phrase) {
+				t.Errorf("market/quotes symbols description missing %q", phrase)
+			}
+		}
+		return
+	}
+	t.Fatal("market/quotes symbols parameter missing")
+}
