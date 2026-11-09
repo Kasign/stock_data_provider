@@ -18,6 +18,7 @@ var (
 type AuthorizationSnapshotRepository interface {
 	AppendAuthorizationSnapshot(context.Context, domain.NewsAuthorizationBinding, domain.Observation, domain.NewsItemVersion) error
 	GetAuthorizationSnapshot(context.Context, string) (domain.NewsAuthorizationBinding, error)
+	GetLatestAuthorizationSnapshotForEvidence(context.Context, string, string, string, domain.AuthorizationContentLevel) (domain.NewsAuthorizationBinding, error)
 }
 
 type RecordAuthorizationSnapshot struct {

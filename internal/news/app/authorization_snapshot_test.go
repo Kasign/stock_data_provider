@@ -23,6 +23,10 @@ func (s *authorizationSnapshotRepositoryStub) GetAuthorizationSnapshot(context.C
 	return domain.NewsAuthorizationBinding{}, ErrAuthorizationSnapshotNotFound
 }
 
+func (s *authorizationSnapshotRepositoryStub) GetLatestAuthorizationSnapshotForEvidence(context.Context, string, string, string, domain.AuthorizationContentLevel) (domain.NewsAuthorizationBinding, error) {
+	return domain.NewsAuthorizationBinding{}, ErrAuthorizationSnapshotNotFound
+}
+
 func TestRecordAuthorizationSnapshotValidatesAndPersistsBinding(t *testing.T) {
 	binding := loadAppAuthorizationBinding(t)
 	repository := &authorizationSnapshotRepositoryStub{}
