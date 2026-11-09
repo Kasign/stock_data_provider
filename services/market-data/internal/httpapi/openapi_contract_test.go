@@ -622,3 +622,665 @@ func TestDataModelJSONSerializationMatchesOpenAPIRequiredAndNullableSemantics(t 
 		nil,
 		nil)
 }
+
+func TestOpenAPIDocumentsHandlerParameterBounds(t *testing.T) {
+	spec, err := os.ReadFile("../../openapi.yaml")
+	if err != nil {
+		t.Fatalf("read OpenAPI specification: %v", err)
+	}
+	var document map[string]any
+	if err := yaml.Unmarshal(spec, &document); err != nil {
+		t.Fatalf("OpenAPI must be valid YAML: %v", err)
+	}
+	paths, ok := document["paths"].(map[string]any)
+	if !ok {
+		t.Fatal("OpenAPI paths object missing")
+	}
+	checks := []struct {
+		path    string
+		method  string
+		phrases []string
+	}{
+		{"/api/v1/market/indices/{symbol}/daily", "get", []string{"10 年 / 3660 个自然日"}},
+		{"/api/v1/market/trading-calendar", "get", []string{"3660 calendar days"}},
+		{"/api/v1/market/sentiment", "get", []string{"historical date is rejected by this endpoint", "Use GET /api/v1/market/sentiment/history to read persisted historical snapshots"}},
+		{"/api/v1/market/valuations", "get", []string{"100-token cap applies before deduplication", "normalized duplicate symbols are deduplicated", "empty tokens are rejected"}},
+		{"/api/v1/market/indices/{symbol}/constituents", "get", []string{"as_of 仅支持自动选择来源或 source=tushare", "指定 source=hithink 时会被拒绝"}},
+		{"/api/v1/market/sentiment/history", "get", []string{"366 calendar days", "1..500", "default of 366"}},
+		{"/api/v1/stocks/{symbol}/fundamentals", "get", []string{"2007 through the current calendar year", "single non-future RFC3339 timestamp"}},
+		{"/api/v1/market/session", "get", []string{"single RFC3339 timestamp"}},
+		{"/api/v1/market/capital-flow", "get", []string{"inclusive and capped at 2000 calendar days", "end must not be later than the current Asia/Shanghai calendar date"}},
+		{"/api/v1/data-sources/probe", "post", []string{"8 KiB", "恰好包含一个 JSON 对象", "未知字段拒绝", "必须同时提供", "最多 31 个自然日", "结束日期不能晚于今日"}},
+	}
+	for _, check := range checks {
+		pathItem, ok := paths[check.path].(map[string]any)
+		if !ok {
+			t.Errorf("OpenAPI path missing: %s", check.path)
+			continue
+		}
+		operation, ok := pathItem[check.method].(map[string]any)
+		if !ok {
+			t.Errorf("OpenAPI operation missing: %s %s", check.method, check.path)
+			continue
+		}
+		description, ok := operation["description"].(string)
+		if !ok {
+			t.Errorf("%s %s must document handler parameter constraints", check.method, check.path)
+			continue
+		}
+		for _, phrase := range check.phrases {
+			if !strings.Contains(description, phrase) {
+				t.Errorf("%s %s description is missing handler constraint %q", check.method, check.path, phrase)
+			}
+		}
+	}
+}
+
+func TestOpenAPIParameterInventoryMatchesReviewedHandlerMatrix(t *testing.T) {
+	spec, err := os.ReadFile("../../openapi.yaml")
+	if err != nil {
+		t.Fatalf("read OpenAPI specification: %v", err)
+	}
+	var document map[string]any
+	if err := yaml.Unmarshal(spec, &document); err != nil {
+		t.Fatalf("OpenAPI must be valid YAML: %v", err)
+	}
+	paths, ok := document["paths"].(map[string]any)
+	if !ok {
+		t.Fatal("OpenAPI paths object missing")
+	}
+	expected := map[string][]string{
+		"GET /health/live":                                 {},
+		"GET /health/ready":                                {},
+		"GET /api/v1/market/quotes":                        {"symbols@query!required"},
+		"GET /api/v1/quotes/{symbol}":                      {"symbol@path!required"},
+		"GET /api/v1/bars/{symbol}/daily":                  {"symbol@path!required", "start@query!optional", "end@query!optional", "limit@query!optional", "adjustment@query!optional", "as_of@query!optional"},
+		"GET /api/v1/bundles/{symbol}":                     {"symbol@path!required", "lookback_days@query!optional", "adjustment@query!optional", "as_of@query!optional"},
+		"POST /api/v1/data-sources/probe":                  {},
+		"GET /api/v1/data-sources/probe/history":           {"limit@query!optional"},
+		"GET /api/v1/data-sources/diagnostics":             {},
+		"GET /api/v1/data-sources":                         {},
+		"GET /api/v1/stocks/search":                        {"q@query!required", "limit@query!optional"},
+		"GET /api/v1/stocks/{symbol}/announcements":        {"symbol@path!required", "start_date@query!optional", "end_date@query!optional", "page@query!optional", "page_size@query!optional"},
+		"GET /api/v1/stocks/{symbol}/profile":              {"symbol@path!required"},
+		"GET /api/v1/stocks/{symbol}/price-limit-rule":     {"symbol@path!required", "date@query!required"},
+		"GET /api/v1/stocks/{symbol}/trading-status":       {"symbol@path!required", "date@query!required", "as_of@query!optional"},
+		"GET /api/v1/stocks/{symbol}/fundamentals":         {"symbol@path!required", "year@query!required", "quarter@query!required", "as_of@query!optional"},
+		"GET /api/v1/stocks/{symbol}/chip-distribution":    {"symbol@path!required"},
+		"GET /api/v1/stocks/{symbol}/capital-flow":         {"symbol@path!required"},
+		"GET /api/v1/stocks/{symbol}/boards":               {"symbol@path!required"},
+		"GET /api/v1/market/valuations":                    {"symbols@query!required"},
+		"GET /api/v1/market/sectors":                       {"type@query!optional", "limit@query!optional", "direction@query!optional", "sort_by@query!optional"},
+		"GET /api/v1/market/index-catalog":                 {"tag@query!optional"},
+		"GET /api/v1/market/indices/{symbol}/constituents": {"symbol@path!required", "source@query!optional", "as_of@query!optional"},
+		"GET /api/v1/market/indices/{symbol}/daily":        {"symbol@path!required", "start@query!required", "end@query!required", "source@query!optional"},
+		"GET /api/v1/market/indices":                       {},
+		"GET /api/v1/market/trading-calendar":              {"start@query!required", "end@query!required"},
+		"GET /api/v1/market/session":                       {"at@query!optional"},
+		"GET /api/v1/market/stocks":                        {"page@query!optional", "page_size@query!optional", "include_ma@query!optional", "adjustment@query!optional"},
+		"GET /api/v1/market/capital-flow":                  {"start@query!required", "end@query!required"},
+		"GET /api/v1/market/sentiment":                     {"date@query!optional"},
+		"GET /api/v1/market/sentiment/history":             {"start@query!required", "end@query!required", "limit@query!optional"},
+		"GET /api/v1/market/breadth":                       {},
+		"GET /api/v1/market/hot-stocks":                    {"type@query!optional", "limit@query!optional"},
+		"GET /api/v1/market/dragon-tiger":                  {"date@query!optional", "page@query!optional", "page_size@query!optional"},
+		"GET /api/v1/market/limit-pools":                   {"type@query!optional", "date@query!optional", "limit@query!optional"},
+	}
+	if len(expected) != 35 {
+		t.Fatalf("reviewed parameter matrix has %d operations, want 35", len(expected))
+	}
+	for route, want := range expected {
+		parts := strings.SplitN(route, " ", 2)
+		if len(parts) != 2 {
+			t.Fatalf("invalid route key %q", route)
+		}
+		pathItem, ok := paths[parts[1]].(map[string]any)
+		if !ok {
+			t.Errorf("OpenAPI path missing: %s", parts[1])
+			continue
+		}
+		operation, ok := pathItem[strings.ToLower(parts[0])].(map[string]any)
+		if !ok {
+			t.Errorf("OpenAPI operation missing: %s", route)
+			continue
+		}
+		got := map[string]bool{}
+		if rawParameters, exists := operation["parameters"]; exists {
+			parameters, ok := rawParameters.([]any)
+			if !ok {
+				t.Errorf("%s parameters must be an array", route)
+				continue
+			}
+			for _, rawParameter := range parameters {
+				parameter, ok := rawParameter.(map[string]any)
+				if !ok {
+					t.Errorf("%s contains an invalid parameter entry", route)
+					continue
+				}
+				name, nameOK := parameter["name"].(string)
+				location, locationOK := parameter["in"].(string)
+				if !nameOK || !locationOK {
+					t.Errorf("%s parameter must declare name and in", route)
+					continue
+				}
+				required, _ := parameter["required"].(bool)
+				state := "optional"
+				if required {
+					state = "required"
+				}
+				got[name+"@"+location+"!"+state] = true
+			}
+		}
+		wantSet := map[string]bool{}
+		for _, item := range want {
+			wantSet[item] = true
+		}
+		if len(got) != len(wantSet) {
+			t.Errorf("%s parameter count=%d, want %d; got=%v", route, len(got), len(wantSet), got)
+			continue
+		}
+		for item := range wantSet {
+			if !got[item] {
+				t.Errorf("%s missing or misclassified parameter %q", route, item)
+			}
+		}
+		_, hasBody := operation["requestBody"]
+		wantBody := route == "POST /api/v1/data-sources/probe"
+		if hasBody != wantBody {
+			t.Errorf("%s requestBody presence=%v, want %v", route, hasBody, wantBody)
+		}
+	}
+}
+
+func TestOpenAPIParameterDefaultsMatchHandlerDefaults(t *testing.T) {
+	spec, err := os.ReadFile("../../openapi.yaml")
+	if err != nil {
+		t.Fatalf("read OpenAPI specification: %v", err)
+	}
+	var document map[string]any
+	if err := yaml.Unmarshal(spec, &document); err != nil {
+		t.Fatalf("OpenAPI must be valid YAML: %v", err)
+	}
+	paths := document["paths"].(map[string]any)
+	assertParameterSchema := func(path, name string, want map[string]any) {
+		t.Helper()
+		pathItem, ok := paths[path].(map[string]any)
+		if !ok {
+			t.Fatalf("OpenAPI path missing: %s", path)
+		}
+		operation, ok := pathItem["get"].(map[string]any)
+		if !ok {
+			t.Fatalf("OpenAPI GET operation missing: %s", path)
+		}
+		parameters, _ := operation["parameters"].([]any)
+		for _, raw := range parameters {
+			parameter, ok := raw.(map[string]any)
+			if !ok || parameter["name"] != name {
+				continue
+			}
+			schema, ok := parameter["schema"].(map[string]any)
+			if !ok {
+				t.Errorf("%s.%s schema missing", path, name)
+				return
+			}
+			for field, expected := range want {
+				if !reflect.DeepEqual(schema[field], expected) {
+					t.Errorf("%s.%s schema.%s=%#v, want %#v", path, name, field, schema[field], expected)
+				}
+			}
+			return
+		}
+		t.Errorf("%s parameter %q missing", path, name)
+	}
+
+	// 这些默认值与对应 Handler 中的初始化值保持一致。
+	assertParameterSchema("/api/v1/market/limit-pools", "limit", map[string]any{
+		"type": "integer", "minimum": 1, "maximum": 100, "default": 100,
+	})
+	assertParameterSchema("/api/v1/market/limit-pools", "type", map[string]any{
+		"type": "string", "enum": []any{"up", "down", "broken"}, "default": "up",
+	})
+	assertParameterSchema("/api/v1/market/stocks", "page", map[string]any{
+		"type": "integer", "minimum": 1, "maximum": 10000, "default": 1,
+	})
+	assertParameterSchema("/api/v1/market/stocks", "page_size", map[string]any{
+		"type": "integer", "minimum": 1, "maximum": 100, "default": 50,
+	})
+	assertParameterSchema("/api/v1/market/stocks", "include_ma", map[string]any{
+		"type": "boolean", "default": true,
+	})
+	assertParameterSchema("/api/v1/market/dragon-tiger", "page_size", map[string]any{
+		"type": "integer", "minimum": 1, "maximum": 500, "default": 100,
+	})
+	assertParameterSchema("/api/v1/market/sentiment/history", "limit", map[string]any{
+		"type": "integer", "minimum": 1, "maximum": 500, "default": 366,
+	})
+	assertParameterSchema("/api/v1/market/sectors", "type", map[string]any{
+		"type": "string", "enum": []any{"industry", "concept"}, "default": "industry",
+	})
+	assertParameterSchema("/api/v1/market/sectors", "limit", map[string]any{
+		"type": "integer", "minimum": 1, "maximum": 100, "default": 10,
+	})
+	assertParameterSchema("/api/v1/market/sectors", "direction", map[string]any{
+		"type": "string", "enum": []any{"up", "down"}, "default": "up",
+	})
+	assertParameterSchema("/api/v1/market/sectors", "sort_by", map[string]any{
+		"type": "string", "enum": []any{"change_percent", "amount", "change_5d"}, "default": "change_percent",
+	})
+	assertParameterSchema("/api/v1/market/hot-stocks", "type", map[string]any{
+		"type": "string", "enum": []any{"popular", "surge", "followers"}, "default": "popular",
+	})
+	assertParameterSchema("/api/v1/market/hot-stocks", "limit", map[string]any{
+		"type": "integer", "minimum": 1, "maximum": 100, "default": 10,
+	})
+	assertParameterSchema("/api/v1/stocks/search", "limit", map[string]any{
+		"type": "integer", "minimum": 1, "maximum": 50, "default": 10,
+	})
+	assertParameterSchema("/api/v1/stocks/{symbol}/announcements", "page", map[string]any{
+		"type": "integer", "minimum": 1, "maximum": 1000, "default": 1,
+	})
+	assertParameterSchema("/api/v1/stocks/{symbol}/announcements", "page_size", map[string]any{
+		"type": "integer", "minimum": 1, "maximum": 100, "default": 20,
+	})
+	assertParameterSchema("/api/v1/data-sources/probe/history", "limit", map[string]any{
+		"type": "integer", "minimum": 1, "maximum": 100, "default": 20,
+	})
+	assertParameterSchema("/api/v1/market/index-catalog", "tag", map[string]any{
+		"type": "string", "enum": []any{"cn_concept", "region", "tszs", "industry", "tushare"}, "default": "cn_concept",
+	})
+	assertParameterSchema("/api/v1/market/dragon-tiger", "page", map[string]any{
+		"type": "integer", "minimum": 1, "maximum": 1000, "default": 1,
+	})
+	assertParameterSchema("/api/v1/bars/{symbol}/daily", "limit", map[string]any{
+		"type": "integer", "minimum": 1, "maximum": 2000,
+	})
+	assertParameterSchema("/api/v1/bundles/{symbol}", "lookback_days", map[string]any{
+		"type": "integer", "minimum": 20, "maximum": 2000,
+	})
+	assertParameterSchema("/api/v1/stocks/{symbol}/fundamentals", "year", map[string]any{
+		"type": "integer", "minimum": 2007,
+	})
+	assertParameterSchema("/api/v1/stocks/{symbol}/fundamentals", "quarter", map[string]any{
+		"type": "integer", "minimum": 1, "maximum": 4,
+	})
+}
+
+func TestProviderProbeRequestSchemaMatchesHandlerValidation(t *testing.T) {
+	spec, err := os.ReadFile("../../openapi.yaml")
+	if err != nil {
+		t.Fatalf("read OpenAPI specification: %v", err)
+	}
+	var document map[string]any
+	if err := yaml.Unmarshal(spec, &document); err != nil {
+		t.Fatalf("OpenAPI must be valid YAML: %v", err)
+	}
+	schemas := document["components"].(map[string]any)["schemas"].(map[string]any)
+	requestSchema, ok := schemas["ProviderProbeRequest"].(map[string]any)
+	if !ok {
+		t.Fatal("ProviderProbeRequest schema missing")
+	}
+	if requestSchema["type"] != "object" || requestSchema["additionalProperties"] != false {
+		t.Fatalf("ProviderProbeRequest must be a closed JSON object, got %#v", requestSchema)
+	}
+	properties, ok := requestSchema["properties"].(map[string]any)
+	if !ok {
+		t.Fatal("ProviderProbeRequest properties missing")
+	}
+	assertProperty := func(name string, want map[string]any) {
+		t.Helper()
+		property, ok := properties[name].(map[string]any)
+		if !ok {
+			t.Errorf("ProviderProbeRequest.%s missing or invalid", name)
+			return
+		}
+		for field, expected := range want {
+			if !reflect.DeepEqual(property[field], expected) {
+				t.Errorf("ProviderProbeRequest.%s.%s=%#v, want %#v", name, field, property[field], expected)
+			}
+		}
+	}
+	assertArrayEnum := func(name string, want []string) {
+		t.Helper()
+		property, ok := properties[name].(map[string]any)
+		if !ok {
+			t.Errorf("ProviderProbeRequest.%s missing or invalid", name)
+			return
+		}
+		items, ok := property["items"].(map[string]any)
+		if !ok {
+			t.Errorf("ProviderProbeRequest.%s.items missing", name)
+			return
+		}
+		if items["type"] != "string" {
+			t.Errorf("ProviderProbeRequest.%s.items.type=%v, want string", name, items["type"])
+		}
+		got, ok := items["enum"].([]any)
+		if !ok || len(got) != len(want) {
+			t.Errorf("ProviderProbeRequest.%s.items.enum=%#v, want %v", name, items["enum"], want)
+			return
+		}
+		for _, expected := range want {
+			if !containsContractString(got, expected) {
+				t.Errorf("ProviderProbeRequest.%s.items.enum is missing %q", name, expected)
+			}
+		}
+	}
+
+	assertProperty("scope", map[string]any{
+		"type": "string", "enum": []any{"all", "core"}, "default": "all",
+	})
+	assertProperty("markets", map[string]any{"type": "array", "maxItems": 1})
+	assertArrayEnum("markets", []string{"SH_MAIN", "SZ_MAIN", "CHINEXT", "STAR", "BSE"})
+	assertProperty("symbols", map[string]any{"type": "array", "maxItems": 1})
+	symbolsProperty, ok := properties["symbols"].(map[string]any)
+	if !ok {
+		t.Fatal("ProviderProbeRequest.symbols missing or invalid")
+	}
+	symbolItems, ok := symbolsProperty["items"].(map[string]any)
+	if !ok {
+		t.Fatal("ProviderProbeRequest.symbols.items missing")
+	}
+	if symbolItems["type"] != "string" || symbolItems["pattern"] != `^\d{6}\.(SH|SZ|BJ)$` {
+		t.Errorf("ProviderProbeRequest.symbols.items must be a six-digit SH/SZ/BJ symbol string, got %#v", symbolItems)
+	}
+	assertProperty("checks", map[string]any{"type": "array", "uniqueItems": true})
+	assertArrayEnum("checks", []string{"connectivity", "contract", "quality", "freshness", "cross_provider", "storage"})
+	assertProperty("capabilities", map[string]any{"type": "array", "uniqueItems": true})
+	capabilityItems := properties["capabilities"].(map[string]any)["items"].(map[string]any)
+	capabilityEnums, ok := capabilityItems["enum"].([]any)
+	if !ok || len(capabilityEnums) != len(model.ProviderProbeCapabilities()) {
+		t.Fatalf("ProviderProbeRequest.capabilities enum=%#v, want model capability inventory", capabilityItems["enum"])
+	}
+	for _, capability := range model.ProviderProbeCapabilities() {
+		if !containsContractString(capabilityEnums, capability) {
+			t.Errorf("ProviderProbeRequest.capabilities enum is missing %q", capability)
+		}
+	}
+	assertProperty("daily_bar_adjustments", map[string]any{"type": "array", "uniqueItems": true, "maxItems": 3})
+	adjustments := properties["daily_bar_adjustments"].(map[string]any)["items"].(map[string]any)
+	if adjustments["$ref"] != "#/components/schemas/RequestAdjustmentBasis" {
+		t.Errorf("daily_bar_adjustments.items.$ref=%v, want RequestAdjustmentBasis", adjustments["$ref"])
+	}
+	assertProperty("daily_bar_start_date", map[string]any{"type": "string", "format": "date"})
+	assertProperty("daily_bar_end_date", map[string]any{"type": "string", "format": "date"})
+	assertProperty("timeout_seconds", map[string]any{
+		"type": "integer", "minimum": 1, "maximum": 30, "default": 12,
+	})
+
+	paths := document["paths"].(map[string]any)
+	probeOperation := paths["/api/v1/data-sources/probe"].(map[string]any)["post"].(map[string]any)
+	requestBody := probeOperation["requestBody"].(map[string]any)
+	if requestBody["required"] != false {
+		t.Error("Provider Probe request body must remain optional; an empty body runs the default all-capability probe")
+	}
+	bodyContent := requestBody["content"].(map[string]any)
+	jsonContent := bodyContent["application/json"].(map[string]any)
+	bodySchema := jsonContent["schema"].(map[string]any)
+	if bodySchema["$ref"] != "#/components/schemas/ProviderProbeRequest" {
+		t.Errorf("Probe requestBody schema ref=%v, want ProviderProbeRequest", bodySchema["$ref"])
+	}
+}
+
+func TestStockSearchQueryDocumentsTrimmedValueSemantics(t *testing.T) {
+	spec, err := os.ReadFile("../../openapi.yaml")
+	if err != nil {
+		t.Fatalf("read OpenAPI specification: %v", err)
+	}
+	var document map[string]any
+	if err := yaml.Unmarshal(spec, &document); err != nil {
+		t.Fatalf("OpenAPI must be valid YAML: %v", err)
+	}
+	paths := document["paths"].(map[string]any)
+	operation := paths["/api/v1/stocks/search"].(map[string]any)["get"].(map[string]any)
+	parameters := operation["parameters"].([]any)
+	for _, raw := range parameters {
+		parameter, ok := raw.(map[string]any)
+		if !ok || parameter["name"] != "q" {
+			continue
+		}
+		schema := parameter["schema"].(map[string]any)
+		if schema["type"] != "string" || schema["minLength"] != 1 || schema["maxLength"] != 64 {
+			t.Errorf("stocks/search q schema=%#v, want string length 1..64", schema)
+		}
+		description, _ := parameter["description"].(string)
+		for _, phrase := range []string{"去除首尾空白后不能为空", "64 个 Unicode 字符"} {
+			if !strings.Contains(description, phrase) {
+				t.Errorf("stocks/search q description missing %q", phrase)
+			}
+		}
+		return
+	}
+	t.Fatal("stocks/search q parameter missing")
+}
+
+func TestOpenAPIParameterTypesAndFormatsMatchReviewedHandlerMatrix(t *testing.T) {
+	spec, err := os.ReadFile("../../openapi.yaml")
+	if err != nil {
+		t.Fatalf("read OpenAPI specification: %v", err)
+	}
+	var document map[string]any
+	if err := yaml.Unmarshal(spec, &document); err != nil {
+		t.Fatalf("OpenAPI must be valid YAML: %v", err)
+	}
+	paths := document["paths"].(map[string]any)
+	expected := map[string]map[string]map[string]any{
+		"GET /health/live":                     {},
+		"GET /health/ready":                    {},
+		"POST /api/v1/data-sources/probe":      {},
+		"GET /api/v1/data-sources/diagnostics": {},
+		"GET /api/v1/data-sources":             {},
+		"GET /api/v1/market/indices":           {},
+		"GET /api/v1/market/breadth":           {},
+		"GET /api/v1/market/quotes":            {"symbols": {"type": "string"}},
+		"GET /api/v1/quotes/{symbol}":          {"symbol": {"type": "string"}},
+		"GET /api/v1/bars/{symbol}/daily": {
+			"symbol": {"type": "string"}, "start": {"type": "string", "format": "date"},
+			"end": {"type": "string", "format": "date"}, "limit": {"type": "integer"},
+			"adjustment": {"$ref": "#/components/schemas/RequestAdjustmentBasis"}, "as_of": {"type": "string", "format": "date-time"},
+		},
+		"GET /api/v1/bundles/{symbol}": {
+			"symbol": {"type": "string"}, "lookback_days": {"type": "integer"},
+			"adjustment": {"$ref": "#/components/schemas/RequestAdjustmentBasis"}, "as_of": {"type": "string", "format": "date-time"},
+		},
+		"GET /api/v1/data-sources/probe/history": {"limit": {"type": "integer"}},
+		"GET /api/v1/stocks/search":              {"q": {"type": "string"}, "limit": {"type": "integer"}},
+		"GET /api/v1/stocks/{symbol}/announcements": {
+			"symbol": {"type": "string"}, "start_date": {"type": "string", "format": "date"},
+			"end_date": {"type": "string", "format": "date"}, "page": {"type": "integer"}, "page_size": {"type": "integer"},
+		},
+		"GET /api/v1/stocks/{symbol}/profile":          {"symbol": {"type": "string"}},
+		"GET /api/v1/stocks/{symbol}/price-limit-rule": {"symbol": {"type": "string"}, "date": {"type": "string", "format": "date"}},
+		"GET /api/v1/stocks/{symbol}/trading-status": {
+			"symbol": {"type": "string"}, "date": {"type": "string", "format": "date"}, "as_of": {"type": "string", "format": "date-time"},
+		},
+		"GET /api/v1/stocks/{symbol}/fundamentals": {
+			"symbol": {"type": "string"}, "year": {"type": "integer"}, "quarter": {"type": "integer"}, "as_of": {"type": "string", "format": "date-time"},
+		},
+		"GET /api/v1/stocks/{symbol}/chip-distribution": {"symbol": {"type": "string"}},
+		"GET /api/v1/stocks/{symbol}/capital-flow":      {"symbol": {"type": "string"}},
+		"GET /api/v1/stocks/{symbol}/boards":            {"symbol": {"type": "string"}},
+		"GET /api/v1/market/valuations":                 {"symbols": {"type": "string"}},
+		"GET /api/v1/market/sectors": {
+			"type": {"type": "string"}, "limit": {"type": "integer"}, "direction": {"type": "string"}, "sort_by": {"type": "string"},
+		},
+		"GET /api/v1/market/index-catalog": {"tag": {"type": "string"}},
+		"GET /api/v1/market/indices/{symbol}/constituents": {
+			"symbol": {"type": "string"}, "source": {"type": "string"}, "as_of": {"type": "string", "format": "date"},
+		},
+		"GET /api/v1/market/indices/{symbol}/daily": {
+			"symbol": {"type": "string"}, "start": {"type": "string", "format": "date"},
+			"end": {"type": "string", "format": "date"}, "source": {"type": "string"},
+		},
+		"GET /api/v1/market/trading-calendar": {"start": {"type": "string", "format": "date"}, "end": {"type": "string", "format": "date"}},
+		"GET /api/v1/market/session":          {"at": {"type": "string", "format": "date-time"}},
+		"GET /api/v1/market/stocks": {
+			"page": {"type": "integer"}, "page_size": {"type": "integer"}, "include_ma": {"type": "boolean"},
+			"adjustment": {"$ref": "#/components/schemas/RequestAdjustmentBasis"},
+		},
+		"GET /api/v1/market/capital-flow": {"start": {"type": "string", "format": "date"}, "end": {"type": "string", "format": "date"}},
+		"GET /api/v1/market/sentiment":    {"date": {"type": "string", "format": "date"}},
+		"GET /api/v1/market/sentiment/history": {
+			"start": {"type": "string", "format": "date"}, "end": {"type": "string", "format": "date"}, "limit": {"type": "integer"},
+		},
+		"GET /api/v1/market/hot-stocks": {"type": {"type": "string"}, "limit": {"type": "integer"}},
+		"GET /api/v1/market/dragon-tiger": {
+			"date": {"type": "string", "format": "date"}, "page": {"type": "integer"}, "page_size": {"type": "integer"},
+		},
+		"GET /api/v1/market/limit-pools": {
+			"type": {"type": "string"}, "date": {"type": "string", "format": "date"}, "limit": {"type": "integer"},
+		},
+	}
+	if len(expected) != 35 {
+		t.Fatalf("reviewed parameter schema matrix has %d operations, want 35", len(expected))
+	}
+	for route, wantParameters := range expected {
+		parts := strings.SplitN(route, " ", 2)
+		if len(parts) != 2 {
+			t.Fatalf("invalid route key %q", route)
+		}
+		pathItem, ok := paths[parts[1]].(map[string]any)
+		if !ok {
+			t.Errorf("OpenAPI path missing: %s", parts[1])
+			continue
+		}
+		operation, ok := pathItem[strings.ToLower(parts[0])].(map[string]any)
+		if !ok {
+			t.Errorf("OpenAPI operation missing: %s", route)
+			continue
+		}
+		parameters, _ := operation["parameters"].([]any)
+		gotParameters := make(map[string]map[string]any, len(parameters))
+		for _, raw := range parameters {
+			parameter, ok := raw.(map[string]any)
+			if !ok {
+				continue
+			}
+			name, _ := parameter["name"].(string)
+			schema, _ := parameter["schema"].(map[string]any)
+			if name != "" && schema != nil {
+				gotParameters[name] = schema
+			}
+		}
+		for name, wantSchema := range wantParameters {
+			gotSchema, ok := gotParameters[name]
+			if !ok {
+				t.Errorf("%s parameter %q schema missing", route, name)
+				continue
+			}
+			for field, expectedValue := range wantSchema {
+				if !reflect.DeepEqual(gotSchema[field], expectedValue) {
+					t.Errorf("%s parameter %q schema.%s=%#v, want %#v", route, name, field, gotSchema[field], expectedValue)
+				}
+			}
+		}
+		if len(gotParameters) != len(wantParameters) {
+			t.Errorf("%s parameter schema count=%d, reviewed count=%d", route, len(gotParameters), len(wantParameters))
+		}
+	}
+}
+
+func TestBatchQuotesParameterDocumentsHandlerConstraints(t *testing.T) {
+	spec, err := os.ReadFile("../../openapi.yaml")
+	if err != nil {
+		t.Fatalf("read OpenAPI specification: %v", err)
+	}
+	var document map[string]any
+	if err := yaml.Unmarshal(spec, &document); err != nil {
+		t.Fatalf("OpenAPI must be valid YAML: %v", err)
+	}
+	paths := document["paths"].(map[string]any)
+	operation := paths["/api/v1/market/quotes"].(map[string]any)["get"].(map[string]any)
+	parameters := operation["parameters"].([]any)
+	for _, raw := range parameters {
+		parameter, ok := raw.(map[string]any)
+		if !ok || parameter["name"] != "symbols" {
+			continue
+		}
+		schema := parameter["schema"].(map[string]any)
+		if schema["type"] != "string" {
+			t.Errorf("market/quotes symbols type=%v, want string", schema["type"])
+		}
+		description, _ := parameter["description"].(string)
+		for _, phrase := range []string{"最多 50 个", "不允许重复", "去除首尾空白再规范化"} {
+			if !strings.Contains(description, phrase) {
+				t.Errorf("market/quotes symbols description missing %q", phrase)
+			}
+		}
+		return
+	}
+	t.Fatal("market/quotes symbols parameter missing")
+}
+
+func TestIndexProviderSourceValidationMatchesOpenAPIEnum(t *testing.T) {
+	for _, testCase := range []struct {
+		name    string
+		input   string
+		want    string
+		wantErr bool
+	}{
+		{name: "automatic selection", input: "", want: ""},
+		{name: "hithink", input: "hithink", want: "hithink"},
+		{name: "tushare", input: "tushare", want: "tushare"},
+		{name: "normalized value", input: " TUSHARE ", want: "tushare"},
+		{name: "unsupported source", input: "eastmoney", wantErr: true},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			got, message := validateIndexProviderSource(testCase.input)
+			if testCase.wantErr {
+				if message == "" {
+					t.Fatal("expected source validation error")
+				}
+				return
+			}
+			if message != "" {
+				t.Fatalf("unexpected source validation error: %s", message)
+			}
+			if got != testCase.want {
+				t.Fatalf("normalized source=%q, want %q", got, testCase.want)
+			}
+		})
+	}
+
+	spec, err := os.ReadFile("../../openapi.yaml")
+	if err != nil {
+		t.Fatalf("read OpenAPI specification: %v", err)
+	}
+	var document map[string]any
+	if err := yaml.Unmarshal(spec, &document); err != nil {
+		t.Fatalf("OpenAPI must be valid YAML: %v", err)
+	}
+	paths := document["paths"].(map[string]any)
+	for _, path := range []string{
+		"/api/v1/market/indices/{symbol}/constituents",
+		"/api/v1/market/indices/{symbol}/daily",
+	} {
+		operation, ok := paths[path].(map[string]any)["get"].(map[string]any)
+		if !ok {
+			t.Fatalf("OpenAPI GET operation missing: %s", path)
+		}
+		parameters, _ := operation["parameters"].([]any)
+		found := false
+		for _, raw := range parameters {
+			parameter, ok := raw.(map[string]any)
+			if !ok || parameter["name"] != "source" {
+				continue
+			}
+			found = true
+			if parameter["in"] != "query" {
+				t.Errorf("%s source location=%v, want query", path, parameter["in"])
+			}
+			schema, ok := parameter["schema"].(map[string]any)
+			if !ok {
+				t.Errorf("%s source schema missing", path)
+				break
+			}
+			want := []any{"hithink", "tushare"}
+			if !reflect.DeepEqual(schema["enum"], want) {
+				t.Errorf("%s source enum=%#v, want %#v", path, schema["enum"], want)
+			}
+		}
+		if !found {
+			t.Errorf("%s source query parameter missing", path)
+		}
+	}
+}

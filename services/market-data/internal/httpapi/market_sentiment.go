@@ -50,7 +50,7 @@ func (s *Server) marketSentimentHistory(w http.ResponseWriter, r *http.Request) 
 	}
 	startTime, startErr := time.Parse("2006-01-02", start)
 	endTime, endErr := time.Parse("2006-01-02", end)
-	if startErr != nil || endErr != nil || startTime.Format("2006-01-02") != start || endTime.Format("2006-01-02") != end || endTime.Before(startTime) || endTime.Sub(startTime) > 366*24*time.Hour {
+	if startErr != nil || endErr != nil || startTime.Format("2006-01-02") != start || endTime.Format("2006-01-02") != end || endTime.Before(startTime) || inclusiveCalendarDays(startTime, endTime) > 366 {
 		writeErr(w, http.StatusBadRequest, "VALIDATION_ERROR", "start/end must be valid dates with an inclusive range no longer than 366 days", requestID(r))
 		return
 	}
