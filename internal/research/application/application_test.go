@@ -419,11 +419,20 @@ func TestUpdateClaimEnforcesExpectedVersionAndDomainTransition(t *testing.T) {
 	}
 	terminal := revision
 	terminal.Status = string(researchclaim.StatusSupported)
-	if _, err := service.UpdateClaim(context.Background(), UpdateClaimCommand{ClaimID: "clm_existing", ExpectedVersion: 2, Revision: terminal}); err == nil {
+	terminalResult, err := service.UpdateClaim(context.Background(), UpdateClaimCommand{ClaimID: "clm_existing", ExpectedVersion: 2, Revision: terminal})
+	if err != nil {
+		t.Fatalf("testing Claim must be allowed to reach supported: %v", err)
+	}
+	if terminalResult.ClaimVersion != 3 || terminalResult.Status != string(researchclaim.StatusSupported) {
+		t.Fatalf("unexpected terminal Claim: %+v", terminalResult)
+	}
+	postTerminal := terminal
+	postTerminal.Status = string(researchclaim.StatusContradicted)
+	if _, err := service.UpdateClaim(context.Background(), UpdateClaimCommand{ClaimID: "clm_existing", ExpectedVersion: 3, Revision: postTerminal}); err == nil {
 		t.Fatal("terminal Claim must not transition to another status")
 	}
-	if repo.value.ClaimVersion != 2 {
-		t.Fatal("invalid terminal transition must not be persisted")
+	if repo.value.ClaimVersion != 3 || repo.value.Status != researchclaim.StatusSupported {
+		t.Fatal("invalid post-terminal transition must not be persisted")
 	}
 }
 
