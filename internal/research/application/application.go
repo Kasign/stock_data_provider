@@ -17,7 +17,6 @@ import (
 	researchevent "example.com/stock-analysis-flow/internal/research/event"
 	researchclaim "example.com/stock-analysis-flow/internal/research/claim"
 	"example.com/stock-analysis-flow/internal/platform/fault"
-	"example.com/stock-analysis-flow/internal/platform/observability"
 )
 
 const (
@@ -456,7 +455,9 @@ func (s *Service) CreateEvent(ctx context.Context, command CreateEventCommand) (
 		SourceTimes:toDomainEventTimes(command.SourceTimes),
 	}
 	if err := value.Validate(); err != nil { return ResearchEvent{}, validationFault("invalid_research_event", "Research Event is invalid", err) }
-	if err := s.events.Append(ctx, value); err != nil { return ResearchEvent{}, mapRepositoryError(err) }
+	correlationID, err := correlationIDForPublication(ctx, s.ids)
+	if err != nil { return ResearchEvent{}, applicationFault(fault.ClassInternal, "research_correlation_id_generation_failed", "Research correlation identifier generation failed", err) }
+	if err := s.events.AppendWithLifecycle(ctx, value, nil, correlationID); err != nil { return ResearchEvent{}, mapRepositoryError(err) }
 	return fromDomainEvent(value), nil
 }
 
@@ -507,12 +508,9 @@ func (s *Service) UpdateEvent(ctx context.Context, command UpdateEventCommand) (
 		return ResearchEvent{}, validationFault("invalid_event_reason_code", "Research Event reason code must be null or a non-empty trimmed value", nil)
 	}
 	if next.Status != previous.Status {
-		correlationID := observability.FromContext(ctx)
-		if correlationID == "" {
-			correlationID, err = s.ids.NewID("cor_")
-			if err != nil {
-				return ResearchEvent{}, applicationFault(fault.ClassInternal, "research_correlation_id_generation_failed", "Research correlation identifier generation failed", err)
-			}
+		correlationID, err := correlationIDForPublication(ctx, s.ids)
+		if err != nil {
+			return ResearchEvent{}, applicationFault(fault.ClassInternal, "research_correlation_id_generation_failed", "Research correlation identifier generation failed", err)
 		}
 		if err := s.events.AppendWithLifecycle(ctx, next, cloneString(command.ReasonCode), correlationID); err != nil {
 			return ResearchEvent{}, mapRepositoryError(err)

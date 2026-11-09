@@ -69,3 +69,48 @@ func TestBuildResearchLifecycleEnvelopeRejectsMismatchedTransition(t *testing.T)
 		t.Fatal("mismatched transition identity must be rejected")
 	}
 }
+
+
+func TestBuildResearchLifecycleCreatedEnvelopeMatchesFirstVersionContract(t *testing.T) {
+	now := time.Date(2026, 11, 9, 4, 5, 6, 123456789, time.UTC)
+	value := researchevent.ResearchEvent{
+		EventID: "evt_created", EventVersion: 1, EventType: "earnings_guidance",
+		Title: "业绩指引", Status: researchevent.StatusDetected,
+		SubjectRefs: []string{"security:600000"}, EvidenceRefs: []string{},
+		SystemObservedAt: now, SystemAsOf: now,
+		ImpactHypothesisRefs: []string{}, InvalidationConditions: []string{},
+		Uncertainty: []string{}, SourceTimes: []researchevent.EventSourceTime{},
+	}
+	envelope, payload, err := buildResearchLifecycleCreatedEnvelope(value, nil, "corr_parent_123", now)
+	if err != nil { t.Fatal(err) }
+	if envelope.IdempotencyKey != "research-event-state:research-event:evt_created:1" {
+		t.Fatalf("unexpected initial idempotency key: %s", envelope.IdempotencyKey)
+	}
+	if envelope.OccurredAt != now.Format(time.RFC3339Nano) || envelope.PublishedAt != now.Format(time.RFC3339Nano) {
+		t.Fatalf("unexpected initial event timestamps: %+v", envelope)
+	}
+	var got map[string]any
+	if err := json.Unmarshal(payload, &got); err != nil { t.Fatal(err) }
+	if previous, ok := got["previous_state"]; !ok || previous != nil {
+		t.Fatalf("initial previous_state must be explicit null, got %#v", got["previous_state"])
+	}
+	if got["event_version"] != float64(1) || got["current_state"] != string(researchevent.StatusDetected) {
+		t.Fatalf("unexpected initial lifecycle payload: %#v", got)
+	}
+}
+
+func TestBuildResearchLifecycleEnvelopeRejectsInvalidCorrelationID(t *testing.T) {
+	now := time.Date(2026, 11, 9, 4, 5, 6, 0, time.UTC)
+	value := researchevent.ResearchEvent{
+		EventID: "evt_corr", EventVersion: 1, EventType: "earnings_guidance",
+		Title: "业绩指引", Status: researchevent.StatusDetected,
+		SubjectRefs: []string{}, EvidenceRefs: []string{},
+		SystemObservedAt: now, SystemAsOf: now,
+		ImpactHypothesisRefs: []string{}, InvalidationConditions: []string{},
+		Uncertainty: []string{}, SourceTimes: []researchevent.EventSourceTime{},
+	}
+	if _, _, err := buildResearchLifecycleCreatedEnvelope(value, nil, "client supplied id", now); err == nil {
+		t.Fatal("unsafe correlation ID must be rejected")
+	}
+}
+

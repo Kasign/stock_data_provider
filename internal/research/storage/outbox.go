@@ -11,7 +11,6 @@ import (
 	"strings"
 	"time"
 
-	"example.com/stock-analysis-flow/internal/platform/observability"
 
 	"github.com/gowebpki/jcs"
 
@@ -27,7 +26,7 @@ type researchLifecyclePayload struct {
 	SourceEventRef string `json:"source_event_ref"`
 	ResearchEventRef string `json:"research_event_ref"`
 	EventVersion int `json:"event_version"`
-	PreviousState researchevent.EventStatus `json:"previous_state"`
+	PreviousState *researchevent.EventStatus `json:"previous_state"`
 	CurrentState researchevent.EventStatus `json:"current_state"`
 	ReasonCode *string `json:"reason_code"`
 	SystemAsOf string `json:"system_as_of"`
@@ -79,27 +78,38 @@ func buildResearchLifecycleEnvelope(previous, next researchevent.ResearchEvent,
 		transition.ToStatus != next.Status {
 		return researchLifecycleEnvelope{}, nil, fmt.Errorf("lifecycle transition identity does not match Event versions")
 	}
-	if !observability.ValidRequestID(correlationID) {
-		return researchLifecycleEnvelope{}, nil, fmt.Errorf("correlation_id must contain 1..128 characters")
-	}
-	if publishedAt.IsZero() || publishedAt.Location() != time.UTC {
-		return researchLifecycleEnvelope{}, nil, fmt.Errorf("published_at must be a non-zero UTC time")
-	}
+	return buildResearchLifecycleEnvelopeValue(&previous, next, reasonCode, correlationID, transition.ChangedAt, publishedAt)
+}
+
+func buildResearchLifecycleCreatedEnvelope(next researchevent.ResearchEvent, reasonCode *string,
+	correlationID string, changedAt time.Time) (researchLifecycleEnvelope, []byte, error) {
+	if err := next.Validate(); err != nil { return researchLifecycleEnvelope{}, nil, err }
+	if next.EventVersion != 1 { return researchLifecycleEnvelope{}, nil, fmt.Errorf("created lifecycle Event must be version 1") }
+	return buildResearchLifecycleEnvelopeValue(nil, next, reasonCode, correlationID, changedAt, changedAt)
+}
+
+func buildResearchLifecycleEnvelopeValue(previous *researchevent.ResearchEvent, next researchevent.ResearchEvent,
+	reasonCode *string, correlationID string, changedAt, publishedAt time.Time) (researchLifecycleEnvelope, []byte, error) {
+	if !validCorrelationID(correlationID) { return researchLifecycleEnvelope{}, nil, fmt.Errorf("correlation_id must contain 1..128 safe ASCII characters") }
+	if changedAt.IsZero() || changedAt.Location() != time.UTC { return researchLifecycleEnvelope{}, nil, fmt.Errorf("changed_at must be a non-zero UTC time") }
+	if publishedAt.IsZero() || publishedAt.Location() != time.UTC { return researchLifecycleEnvelope{}, nil, fmt.Errorf("published_at must be a non-zero UTC time") }
 	if reasonCode != nil && (*reasonCode == "" || *reasonCode != strings.TrimSpace(*reasonCode)) {
 		return researchLifecycleEnvelope{}, nil, fmt.Errorf("reason_code must be null or a trimmed non-empty value")
 	}
 	researchEventRef := "research-event:" + next.EventID
 	sourceEventRef := fmt.Sprintf("research-event-version:%s:%d", next.EventID, next.EventVersion)
+	var previousState *researchevent.EventStatus
+	if previous != nil { previousState = eventStatusPointer(previous.Status) }
 	payloadValue := researchLifecyclePayload{
 		SourceEventRef: sourceEventRef, ResearchEventRef: researchEventRef,
-		EventVersion: next.EventVersion, PreviousState: previous.Status,
-		CurrentState: next.Status, ReasonCode: reasonCode,
+		EventVersion: next.EventVersion, PreviousState: previousState, CurrentState: next.Status,
+		ReasonCode: reasonCode,
 		SystemAsOf: next.SystemAsOf.UTC().Format(time.RFC3339Nano),
-		ChangedAt: transition.ChangedAt.UTC().Format(time.RFC3339Nano),
+		ChangedAt: changedAt.UTC().Format(time.RFC3339Nano),
 	}
 	payload, err := json.Marshal(payloadValue)
 	if err != nil { return researchLifecycleEnvelope{}, nil, fmt.Errorf("encode lifecycle payload: %w", err) }
-	occurredAt := transition.ChangedAt.UTC().Format(time.RFC3339Nano)
+	occurredAt := changedAt.UTC().Format(time.RFC3339Nano)
 	fingerprintInput := researchLifecycleFingerprintInput{
 		SourceModule: "research", EventType: researchLifecycleEventType,
 		SchemaVersion: researchLifecycleSchemaVersion, SubjectRef: researchEventRef,
@@ -122,6 +132,30 @@ func buildResearchLifecycleEnvelope(previous, next researchevent.ResearchEvent,
 		Payload: payload,
 	}
 	return envelope, payload, nil
+}
+
+func insertResearchLifecycleCreatedOutbox(ctx context.Context, tx *sql.Tx, next researchevent.ResearchEvent,
+	reasonCode *string, correlationID string, publishedAt time.Time) error {
+	envelope, payload, err := buildResearchLifecycleCreatedEnvelope(next, reasonCode, correlationID, publishedAt)
+	if err != nil { return err }
+	_, err = tx.ExecContext(ctx,
+		"INSERT INTO research_notification_outbox (event_id, event_type, schema_version, source_module, occurred_at, published_at, subject_ref, idempotency_key, correlation_id, payload_fingerprint, payload, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+		envelope.EventID, envelope.EventType, envelope.SchemaVersion, envelope.SourceModule,
+		envelope.OccurredAt, envelope.PublishedAt, envelope.SubjectRef, envelope.IdempotencyKey,
+		envelope.CorrelationID, envelope.PayloadFingerprint, string(payload), publishedAt.UTC())
+	if err != nil { return fmt.Errorf("insert Research lifecycle-created Outbox record: %w", err) }
+	return nil
+}
+
+func eventStatusPointer(value researchevent.EventStatus) *researchevent.EventStatus { return &value }
+
+func validCorrelationID(value string) bool {
+	if value == "" || len(value) > 128 { return false }
+	for _, r := range value {
+		if !((r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') ||
+			(r >= '0' && r <= '9') || r == '-' || r == '_' || r == '.' || r == ':') { return false }
+	}
+	return true
 }
 
 func newOutboxEventID() (string, error) {

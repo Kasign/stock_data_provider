@@ -104,9 +104,12 @@ func TestCreateAndGetEventUseApplicationDTOAndServerIdentity(t *testing.T) {
 		InvalidationConditions:[]string{"后续公告撤回该指引"},Uncertainty:[]string{},
 		SourceTimes:[]EventSourceTime{{EvidenceRef:"ev_source_1",TimeType:string(researchevent.TimeSystemObservedAt),Value:now,AssertedBy:"news:observation"}},
 	}
-	got,err:=service.CreateEvent(context.Background(),command)
+	createCtx, err := WithCorrelationID(context.Background(), "corr_create_parent")
+	if err != nil { t.Fatal(err) }
+	got,err:=service.CreateEvent(createCtx,command)
 	if err!=nil { t.Fatal(err) }
-	if got.EventID!="evt_test-1" || got.EventVersion!=1 || !repo.appended { t.Fatalf("Event was not created with server identity: %+v",got) }
+	if got.EventID!="evt_test-1" || got.EventVersion!=1 || !repo.appended || !repo.lifecycleAppended { t.Fatalf("Event was not created with server identity and lifecycle Outbox: %+v",got) }
+	if repo.correlationID != "corr_create_parent" || repo.reasonCode != nil { t.Fatalf("initial lifecycle metadata mismatch: %+v", repo) }
 	read,err:=service.GetEvent(context.Background(),EventRef{EventID:got.EventID,EventVersion:1})
 	if err!=nil { t.Fatalf("GetEvent failed: %v",err) }
 	if read.EventID!=got.EventID || read.Status!=command.Status { t.Fatalf("unexpected Event DTO: %+v",read) }
