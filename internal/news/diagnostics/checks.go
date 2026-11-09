@@ -52,6 +52,12 @@ func ObservationRetentionCheck(probe ObservationRetentionProbe) platformdiag.Che
 					"News observation retention backlog query failed", err,
 				)
 			}
+			if count < 0 || (count == 0 && oldest != nil) || (count > 0 && oldest == nil) {
+				return platformdiag.Observation{}, fault.New(
+					fault.ClassInternal, "news.observation.retention_backlog_invalid",
+					"News observation retention backlog returned inconsistent counters", nil,
+				)
+			}
 			attributes := map[string]string{"overdue_count": fmt.Sprintf("%d", count)}
 			if oldest != nil {
 				attributes["oldest_overdue_at"] = oldest.UTC().Format(time.RFC3339Nano)
