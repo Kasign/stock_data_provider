@@ -78,10 +78,10 @@ func TestResearchEventLifecycleOutboxFailureRollsBackEventVersion(t *testing.T) 
 	next.SystemAsOf = now.Add(time.Minute)
 	idempotencyKey := "research-event-state:research-event:" + eventID + ":2"
 	if _, err := db.ExecContext(ctx,
-		"INSERT INTO research_notification_outbox (event_id, event_type, schema_version, source_module, occurred_at, published_at, subject_ref, idempotency_key, correlation_id, payload_fingerprint, payload, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+		"INSERT INTO research_notification_outbox (event_id, event_type, schema_version, source_module, occurred_at, published_at, subject_ref, idempotency_key, correlation_id, payload_fingerprint, payload, created_at, available_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
 		"nte_seed_"+eventID, researchLifecycleEventType, researchLifecycleSchemaVersion, "research",
-		formatPIT(now), formatPIT(now), "research-event:"+eventID, idempotencyKey, "req_seed",
-		strings.Repeat("a", 64), "{}", now); err != nil {
+		formatPIT(now), formatPIT(now), "research-event:"+eventID, idempotencyKey, "corr_seed",
+		strings.Repeat("a", 64), "{}", now, formatPIT(now), now); err != nil {
 		t.Fatalf("seed Outbox idempotency conflict: %v", err)
 	}
 	err = repo.AppendWithLifecycle(ctx, next, nil, "req_test")

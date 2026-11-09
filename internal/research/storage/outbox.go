@@ -63,10 +63,10 @@ func insertResearchLifecycleOutbox(ctx context.Context, tx *sql.Tx, previous, ne
 	envelope, payload, err := buildResearchLifecycleEnvelope(previous, next, transition, reasonCode, correlationID, publishedAt)
 	if err != nil { return err }
 	_, err = tx.ExecContext(ctx,
-		"INSERT INTO research_notification_outbox (event_id, event_type, schema_version, source_module, occurred_at, published_at, subject_ref, idempotency_key, correlation_id, payload_fingerprint, payload, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+		"INSERT INTO research_notification_outbox (event_id, event_type, schema_version, source_module, occurred_at, published_at, subject_ref, idempotency_key, correlation_id, payload_fingerprint, payload, created_at, available_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
 		envelope.EventID, envelope.EventType, envelope.SchemaVersion, envelope.SourceModule,
 		envelope.OccurredAt, envelope.PublishedAt, envelope.SubjectRef, envelope.IdempotencyKey,
-		envelope.CorrelationID, envelope.PayloadFingerprint, string(payload), publishedAt.UTC())
+		envelope.CorrelationID, envelope.PayloadFingerprint, string(payload), publishedAt.UTC(), formatPIT(publishedAt), publishedAt.UTC())
 	if err != nil { return fmt.Errorf("insert Research lifecycle Outbox record: %w", err) }
 	return nil
 }
@@ -141,10 +141,10 @@ func insertResearchLifecycleCreatedOutbox(ctx context.Context, tx *sql.Tx, next 
 	envelope, payload, err := buildResearchLifecycleCreatedEnvelope(next, reasonCode, correlationID, publishedAt)
 	if err != nil { return err }
 	_, err = tx.ExecContext(ctx,
-		"INSERT INTO research_notification_outbox (event_id, event_type, schema_version, source_module, occurred_at, published_at, subject_ref, idempotency_key, correlation_id, payload_fingerprint, payload, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+		"INSERT INTO research_notification_outbox (event_id, event_type, schema_version, source_module, occurred_at, published_at, subject_ref, idempotency_key, correlation_id, payload_fingerprint, payload, created_at, available_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
 		envelope.EventID, envelope.EventType, envelope.SchemaVersion, envelope.SourceModule,
 		envelope.OccurredAt, envelope.PublishedAt, envelope.SubjectRef, envelope.IdempotencyKey,
-		envelope.CorrelationID, envelope.PayloadFingerprint, string(payload), publishedAt.UTC())
+		envelope.CorrelationID, envelope.PayloadFingerprint, string(payload), publishedAt.UTC(), formatPIT(publishedAt), publishedAt.UTC())
 	if err != nil { return fmt.Errorf("insert Research lifecycle-created Outbox record: %w", err) }
 	return nil
 }
