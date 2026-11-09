@@ -358,3 +358,11 @@ Fake Repository/Fake Clock/Fake Provider 只证明模块内逻辑；MariaDB/Redi
 - Review 发现 Run 已有全部终态 Stage、但尚未完成 Run 聚合时，Deadline Expire 仍会写入 `deadline_exceeded`，使本可正常 succeeded 的 Run 被错误禁止成功终结。
 - Storage `ExpireRunDeadline` 现在在确认全部 Stage 终态且无运行中 Attempt 后返回未变更；候选 SQL 同步排除全部 Stage 已终态的 Run，避免扫描热循环。
 - 这些 Run 必须由正常聚合/Finalize 路径处理；Deadline Expire 只负责仍有未完成 Stage 的 Run。
+
+### 9.12 正常 Run 聚合与终态提交（2026-11-09）
+
+- 新增 Application `RunFinalizer`：仅接受 `running` 且无终止原因的 Run；复用统一快照装配，调用 Domain `AggregateRun`，要求所有 Stage/Attempt 已终态。
+- 聚合成功后生成 ResultSummary/Outbox 引用，通过 Storage Port 提交；仅当持久化 CAS 成功才向返回对象填充 ResultSummaryRef。
+- MySQL `LoadRunFinalizationSnapshot` 复用不可变 ResolvedTemplate Snapshot、Stage、Attempt 装配；`FinalizeRunResult` 将正常结果映射到现有原子 `FinalizeRun` 事务。
+- 正常路径只允许 succeeded/partial/failed，且不接受 termination_reason；deadline 与 user cancellation 仍走各自专用 finalizer，避免跨终止原因覆盖。
+- 当前未完成：Server 聚合触发/周期扫描与生命周期接入；MariaDB 正常聚合并发、CAS 冲突、Outbox 原子性集成验收。
