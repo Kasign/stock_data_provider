@@ -281,7 +281,9 @@ Worker 取得 Delivery 时必须原子完成 queued/retry_wait -> sending 和租
 - 不支持幂等且无法查询结果的渠道，unknown 进入人工/运维对账，不自动重发。
 - Outbox + Inbox 可保障本地事件接收可靠性；不能声称外部渠道 exactly-once。实际语义是受限 at-least-once 尝试 + 幂等/对账控制重复风险。
 
-当前 `application.RetryPolicy` 提供纯函数重试决策：策略参数必须显式提供，所有 duration 使用正整数毫秒；`ScheduleRetry` 接收完整 Attempt 历史与外部注入的 `[0,1)` 随机样本，校验 Delivery/Attempt 关联和连续序号，只处理最后一条明确 rejected 且 retryable 的 Attempt；按 `min(max_delay, base_delay*2^(attempt_no-1))` 计算 full-jitter 上限，取本地退避与 Retry-After 的较晚时间，并以 `min(deadline_at, first_attempt_at+max_elapsed)` 截止；达到 `max_attempts` 返回 `retry_budget_exhausted`，越过总时间边界返回 `deadline_exceeded`。`AttemptDeadline` 返回 `min(now+per_attempt_timeout, deadline_at, first_attempt_at+max_elapsed)`。该实现不负责随机数生成、状态写入、租约释放或 Worker 调度；调用方必须将 RetryDecision 与 Delivery 状态 CAS/事件追加放入同一 Repository 原子操作。
+当前 `application.RetryPolicy` 提供纯函数重试决策：策略参数必须显式提供，所有 duration 使用正整数毫秒；`ScheduleRetry` 接收完整 Attempt 历史与外部注入的 `[0,1)` 随机样本，校验 Delivery/Attempt 关联、连续序号和 Attempt ID/fencing token 唯一性，只处理最后一条明确 rejected 且 retryable 的 Attempt；按 `min(max_delay, base_delay*2^(attempt_no-1))` 计算 capped full-jitter 上限，所有小于数据库微秒精度的延迟提升到 1µs，取本地退避与 Retry-After 的较晚时间，并以 `min(deadline_at, first_attempt_at+max_elapsed)` 截止；达到 `max_attempts` 返回 `retry_budget_exhausted`，越过总时间边界返回 `deadline_exceeded`。`AttemptDeadline` 返回 `min(now+per_attempt_timeout, deadline_at, first_attempt_at+max_elapsed)`。
+
+`RetryDecision` 绑定 delivery_id、delivery_version、attempt_id、fencing_token 和 evaluated_at，避免跨 Delivery/Attempt/版本复用决策。`ApplyRetryDecision` 校验当前 sending 租约、已完成的 retryable rejected Attempt 和决策绑定后，将结果转换为 retry_wait 或 failed，再调用 `DeliveryRepository.UpdateWithLease`；该 Port 的原子契约要求同一操作 CAS 快照、追加状态事件，并在状态离开 sending 时释放租约。Fake 测试覆盖 retry_wait 与失败收敛、事件追加、租约释放和旧 token/非法决策拒绝。此处仍未实现真实 MariaDB 事务、随机数生成、Worker 调度或渠道端到端验证。
 
 ## 7. RetryDelivery 与取消/退订竞态
 
