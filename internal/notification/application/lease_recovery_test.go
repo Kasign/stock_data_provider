@@ -58,8 +58,17 @@ func TestAssessExpiredDeliveryLeaseWithoutAttemptIsSafeOnlyWithinBudget(t *testi
 		t.Fatalf("expected safe retry without an Attempt, got %+v err=%v", got, err)
 	}
 
-	delivery.AttemptCount = delivery.MaxAttempts
-	got, err = AssessExpiredDeliveryLease(delivery, lease, nil, now)
+	previousLease := DeliveryLease{WorkerID: "worker-1", FencingToken: 1, ExpiresAt: delivery.UpdatedAt.Add(30 * time.Second)}
+	previous := domain.DeliveryAttempt{AttemptID: "attempt-previous", DeliveryID: delivery.DeliveryID, AttemptNo: 1,
+		WorkerID: previousLease.WorkerID, FencingToken: previousLease.FencingToken,
+		LeaseExpiresAt: previousLease.ExpiresAt, StartedAt: delivery.UpdatedAt.Add(time.Second)}
+	previousFinished := previous.StartedAt.Add(time.Second)
+	previous, err = previous.Complete(previousFinished, domain.DeliveryAttemptNotSent, "", "connection_not_opened", false, "evidence-previous")
+	if err != nil { t.Fatal(err) }
+	delivery.AttemptCount = 1
+	delivery.MaxAttempts = 1
+	lease.FencingToken = 2
+	got, err = AssessExpiredDeliveryLease(delivery, lease, []domain.DeliveryAttempt{previous}, now)
 	if err != nil || got.Action != LeaseRecoveryFinalizeFailed || got.ReasonCode != "retry_budget_exhausted" {
 		t.Fatalf("expected exhausted budget to fail, got %+v err=%v", got, err)
 	}
