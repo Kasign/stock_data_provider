@@ -2,11 +2,76 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"sync"
 	"time"
 
 	"example.com/stock-analysis-flow/internal/marketdata/model"
 )
+
+
+const maxDailyBarSecurityStatusLookupsPerProbe = 10
+
+var errDailyBarContextStatusBudgetExceeded = errors.New("daily-bar context security-status lookup budget exceeded")
+
+type dailyBarContextCacheKey struct{}
+
+type dailyBarContextCacheEntry struct {
+	ready  chan struct{}
+	status *model.SecurityTradingStatusSnapshot
+	err    error
+}
+
+type dailyBarContextCache struct {
+	mu      sync.Mutex
+	entries map[string]*dailyBarContextCacheEntry
+	used    int
+	budget  int
+}
+
+func withDailyBarContextCache(ctx context.Context, budget int) context.Context {
+	if ctx == nil || budget <= 0 {
+		return ctx
+	}
+	return context.WithValue(ctx, dailyBarContextCacheKey{}, &dailyBarContextCache{
+		entries: make(map[string]*dailyBarContextCacheEntry), budget: budget,
+	})
+}
+
+func loadDailyBarContextSecurityStatus(
+	ctx context.Context,
+	symbol, tradeDate string,
+	loader func(context.Context) (*model.SecurityTradingStatusSnapshot, error),
+) (*model.SecurityTradingStatusSnapshot, error) {
+	cache, _ := ctx.Value(dailyBarContextCacheKey{}).(*dailyBarContextCache)
+	if cache == nil {
+		return loader(ctx)
+	}
+	key := symbol + "|" + tradeDate
+	cache.mu.Lock()
+	if entry, exists := cache.entries[key]; exists {
+		cache.mu.Unlock()
+		select {
+		case <-entry.ready:
+			return entry.status, entry.err
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	}
+	if cache.used >= cache.budget {
+		cache.mu.Unlock()
+		return nil, errDailyBarContextStatusBudgetExceeded
+	}
+	entry := &dailyBarContextCacheEntry{ready: make(chan struct{})}
+	cache.entries[key] = entry
+	cache.used++
+	cache.mu.Unlock()
+
+	entry.status, entry.err = loader(ctx)
+	close(entry.ready)
+	return entry.status, entry.err
+}
 
 type dailyBarTradingContextResult struct {
 	QualityStatus model.QualityStatus
@@ -31,7 +96,9 @@ func (s *DataService) assessDailyBarTradingContext(ctx context.Context, symbol s
 		if _, exists := barDates[day.Date]; exists {
 			continue
 		}
-		status, statusErr := s.SecurityTradingStatus(ctx, symbol, day.Date)
+		status, statusErr := loadDailyBarContextSecurityStatus(ctx, symbol, day.Date, func(loadCtx context.Context) (*model.SecurityTradingStatusSnapshot, error) {
+			return s.SecurityTradingStatus(loadCtx, symbol, day.Date)
+		})
 		if statusErr != nil {
 			statusErrors[day.Date] = statusErr
 			continue
@@ -121,7 +188,9 @@ func assessDailyBarTradingContext(calendar *model.TradingCalendarSnapshot, bars 
 		status := statuses[day.Date]
 		if status == nil {
 			result.QualityStatus = model.QualityDegraded
-			if statusErrors[day.Date] != nil {
+			if errors.Is(statusErrors[day.Date], errDailyBarContextStatusBudgetExceeded) {
+				result.Reasons = appendDailyBarContextReason(result.Reasons, "daily_bar_context_security_status_budget_exceeded:"+day.Date)
+			} else if statusErrors[day.Date] != nil {
 				result.Reasons = appendDailyBarContextReason(result.Reasons, "daily_bar_context_security_status_unavailable:"+day.Date)
 			} else {
 				result.Reasons = appendDailyBarContextReason(result.Reasons, "daily_bar_context_security_status_missing:"+day.Date)

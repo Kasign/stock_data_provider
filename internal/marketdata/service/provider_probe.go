@@ -277,6 +277,10 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 	if len(selected) == 0 {
 		return nil, errors.New("provider-probe capabilities must not be empty")
 	}
+	// 同一轮 Probe 的不同 Provider/复权任务共享证券状态证据，并限制唯一状态查询预算。
+	if selected["daily_bars"] {
+		ctx = withDailyBarContextCache(ctx, maxDailyBarSecurityStatusLookupsPerProbe)
+	}
 	if selected["daily_bars"] {
 		if len(options.DailyBarAdjustments) == 0 {
 			options.DailyBarAdjustments = []model.AdjustmentBasis{model.AdjustmentNone}
