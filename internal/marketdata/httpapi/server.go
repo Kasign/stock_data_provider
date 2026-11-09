@@ -432,7 +432,7 @@ func (s *Server) dataSources(w http.ResponseWriter, r *http.Request) {
 
 // dataSourceDiagnostics 返回真实业务请求形成的运行诊断，不执行额外探测请求。
 func (s *Server) dataSourceDiagnostics(w http.ResponseWriter, r *http.Request) {
-	if s.svc == nil {
+	if s.diagnostics == nil {
 		writeJSON(w, http.StatusOK, map[string]any{"items": []any{}, "scope": []string{"quote", "daily_bars"}})
 		return
 	}

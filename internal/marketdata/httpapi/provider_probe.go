@@ -9,7 +9,6 @@ import (
 	"strings"
 
 	"example.com/stock-analysis-flow/internal/marketdata/model"
-	"example.com/stock-analysis-flow/internal/marketdata/service"
 )
 
 type providerProbeRequest struct {
@@ -110,7 +109,7 @@ func (s *Server) dataSourceProbe(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	run, err := s.diagnostics.ProbeProviderCapabilitiesWithOptions(r.Context(), service.ProviderProbeOptions{
+	run, err := s.diagnostics.ProbeProviderCapabilitiesWithOptions(r.Context(), model.ProviderProbeOptions{
 		Scope: request.Scope, Capabilities: request.Capabilities, Checks: request.Checks, Markets: request.Markets, Symbols: request.Symbols, DailyBarAdjustments: request.DailyBarAdjustments, DailyBarStartDate: request.DailyBarStartDate, DailyBarEndDate: request.DailyBarEndDate, TimeoutSeconds: timeoutSeconds,
 	})
 	if err != nil {

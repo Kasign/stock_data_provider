@@ -182,6 +182,14 @@ func TestNewWithApplicationUsesInjectedUseCasesAndCopiesSourceSnapshot(t *testin
 	if strings.Contains(rec.Body.String(), "mutated-after-construction") {
 		t.Fatalf("server retained caller-owned source slice: %s", rec.Body.String())
 	}
+
+	diagnosticsReq := httptest.NewRequest(http.MethodGet, "/api/v1/data-sources/diagnostics", nil)
+	diagnosticsReq.Header.Set("X-API-Key", "secret")
+	diagnosticsRec := httptest.NewRecorder()
+	server.Handler().ServeHTTP(diagnosticsRec, diagnosticsReq)
+	if diagnosticsRec.Code != http.StatusOK || !strings.Contains(diagnosticsRec.Body.String(), `"items":[]`) {
+		t.Fatalf("missing diagnostics Application must return an empty diagnostic set: status=%d body=%s", diagnosticsRec.Code, diagnosticsRec.Body.String())
+	}
 }
 
 func TestMarketCapitalFlowRouteIsRegisteredAndReturnsHistory(t *testing.T) {

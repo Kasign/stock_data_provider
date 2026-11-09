@@ -751,3 +751,11 @@ internal/
 - 接口拆分时新增的 `ProviderProbeOptions` 与原有 `model/provider_probe.go` 同路径，初次提交误覆盖了原有 ProviderProbeRun、CheckResult、FieldComparison、Item 等诊断模型。
 - MariaDB/PIT CI 明确报出这些类型缺失；已从接口拆分前的提交 `d0487f98` 恢复原文件全部内容，并在原文件末尾追加 `ProviderProbeOptions`。
 - 这次修复不改动任何原有诊断字段、JSON 名称或持久化语义；后续模型新增先检查目标路径，禁止覆盖已有模型文件。
+
+
+### 2026-11-09：M2-5 用例分组接口编译缺陷修复
+
+- 最新分组接口提交 `5f2f6520` 后，CI 明确发现旧 `s.svc` 字段残留在诊断 Handler 的 nil 判断；改为检查独立注入的 `DiagnosticsApplication`，无诊断实现时保持原有空诊断响应。
+- Provider Probe 请求 DTO 已归属 `model.ProviderProbeOptions`；HTTP Adapter 改为直接使用 model 类型并移除不必要的 service 包导入，`service.ProviderProbeOptions` 兼容别名保留。
+- 恢复 Provider Probe 领域模型的后续提交 `3b24b086` 已补回 Run/Item/CheckResult/FieldComparison 等原有模型定义；本次不重复修改该文件。
+- 新增缺失 DiagnosticsApplication 时的 HTTP 回归断言；不改接口字段语义、Provider 探测规则或持久化结构。
