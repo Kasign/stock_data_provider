@@ -408,8 +408,19 @@ func TestOpenStreamHTTP2CloseInterruptsBlockedRead(t *testing.T) {
 	client.dial = func(ctx context.Context, network, _ string) (net.Conn, error) {
 		return (&net.Dialer{}).DialContext(ctx, network, server.Listener.Addr().String())
 	}
-	response := openLocalStream(t, client, server, context.Background(), "/h2-close-blocked-read", localPolicy(server))
-	<-ready
+	request, err := http.NewRequest(http.MethodGet, strings.Replace(server.URL, "http://", "https://", 1)+"/h2-close-blocked-read", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, err := client.OpenStream(context.Background(), request, localPolicy(server))
+	if err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-ready:
+	case <-time.After(2 * time.Second):
+		t.Fatal("HTTP/2 handler did not receive the request")
+	}
 	readResult := make(chan error, 1)
 	go func() {
 		var buffer [8]byte
