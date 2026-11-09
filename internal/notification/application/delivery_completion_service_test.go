@@ -12,10 +12,10 @@ func completionChannel() domain.ChannelConfigSnapshot {
 	return domain.ChannelConfigSnapshot{
 		ChannelRef: "channel-1", ConfigVersion: 1, ChannelKind: "test", Enabled: true,
 		Capabilities: domain.ChannelCapabilities{
-			SupportsIdempotency: domain.CapabilityUnsupported,
+			SupportsIdempotency:    domain.CapabilityUnsupported,
 			SupportsDeliveryLookup: domain.CapabilityUnknown,
-			SupportsRetryAfter: domain.CapabilitySupported,
-			MaxPayloadBytes: 4096,
+			SupportsRetryAfter:     domain.CapabilitySupported,
+			MaxPayloadBytes:        4096,
 		},
 		RetryableErrorCodes: []string{"rate_limited"},
 	}
@@ -61,10 +61,10 @@ func TestDeliveryCompletionAcceptedConvergesToSent(t *testing.T) {
 
 func TestDeliveryCompletionAmbiguousAndNotSentAreConservative(t *testing.T) {
 	for _, test := range []struct {
-		name string
-		result domain.ChannelSendResult
+		name     string
+		result   domain.ChannelSendResult
 		evidence string
-		want domain.DeliveryStatus
+		want     domain.DeliveryStatus
 	}{
 		{name: "ambiguous", result: domain.ChannelSendResult{Outcome: domain.ChannelOutcomeAmbiguous, ErrorCode: "provider_timeout"}, want: domain.DeliveryUnknown},
 		{name: "not_sent", result: domain.ChannelSendResult{Outcome: domain.ChannelOutcomeNotSent, ErrorCode: "request_not_sent"}, evidence: "proof-1", want: domain.DeliverySkipped},

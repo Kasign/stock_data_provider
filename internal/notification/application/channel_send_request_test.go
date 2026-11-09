@@ -12,19 +12,19 @@ func TestBuildChannelSendRequestBindsFrozenDeliverySnapshot(t *testing.T) {
 	channel := completionChannel()
 	channel.Capabilities.SupportsIdempotency = domain.CapabilitySupported
 	recipient := domain.RecipientTarget{
-		RecipientRef: delivery.RecipientRef,
-		ChannelRef: delivery.ChannelRef,
-		ConfigVersion: delivery.ChannelConfigVersion,
+		RecipientRef:     delivery.RecipientRef,
+		ChannelRef:       delivery.ChannelRef,
+		ConfigVersion:    delivery.ChannelConfigVersion,
 		AdapterTargetRef: "opaque-target-1",
 	}
 	content := domain.RenderedContent{
-		TemplateID: delivery.TemplateID,
-		TemplateVersion: delivery.TemplateVersion,
-		TemplateDigest: strings.Repeat("a", 64),
+		TemplateID:              delivery.TemplateID,
+		TemplateVersion:         delivery.TemplateVersion,
+		TemplateDigest:          strings.Repeat("a", 64),
 		EventPayloadFingerprint: delivery.PayloadFingerprint,
-		Format: domain.TemplateFormatText,
-		Subject: "subject",
-		Body: "body",
+		Format:                  domain.TemplateFormatText,
+		Subject:                 "subject",
+		Body:                    "body",
 	}
 	request, err := BuildChannelSendRequest(delivery, channel, recipient, content)
 	if err != nil {
@@ -41,28 +41,36 @@ func TestBuildChannelSendRequestRejectsCrossDeliverySnapshots(t *testing.T) {
 	delivery := validDeliveryForRepository()
 	channel := completionChannel()
 	recipient := domain.RecipientTarget{
-		RecipientRef: delivery.RecipientRef,
-		ChannelRef: delivery.ChannelRef,
-		ConfigVersion: delivery.ChannelConfigVersion,
+		RecipientRef:     delivery.RecipientRef,
+		ChannelRef:       delivery.ChannelRef,
+		ConfigVersion:    delivery.ChannelConfigVersion,
 		AdapterTargetRef: "opaque-target-1",
 	}
 	content := domain.RenderedContent{
-		TemplateID: delivery.TemplateID,
-		TemplateVersion: delivery.TemplateVersion,
-		TemplateDigest: strings.Repeat("a", 64),
+		TemplateID:              delivery.TemplateID,
+		TemplateVersion:         delivery.TemplateVersion,
+		TemplateDigest:          strings.Repeat("a", 64),
 		EventPayloadFingerprint: delivery.PayloadFingerprint,
-		Format: domain.TemplateFormatText,
-		Subject: "subject",
-		Body: "body",
+		Format:                  domain.TemplateFormatText,
+		Subject:                 "subject",
+		Body:                    "body",
 	}
 	tests := []struct {
-		name string
+		name   string
 		mutate func(*domain.DeliveryRecord, *domain.ChannelConfigSnapshot, *domain.RecipientTarget, *domain.RenderedContent)
 	}{
-		{name: "wrong channel version", mutate: func(_ *domain.DeliveryRecord, c *domain.ChannelConfigSnapshot, _ *domain.RecipientTarget, _ *domain.RenderedContent) { c.ConfigVersion++ }},
-		{name: "wrong recipient", mutate: func(_ *domain.DeliveryRecord, _ *domain.ChannelConfigSnapshot, r *domain.RecipientTarget, _ *domain.RenderedContent) { r.RecipientRef = "other-recipient" }},
-		{name: "wrong template version", mutate: func(_ *domain.DeliveryRecord, _ *domain.ChannelConfigSnapshot, _ *domain.RecipientTarget, c *domain.RenderedContent) { c.TemplateVersion++ }},
-		{name: "wrong payload fingerprint", mutate: func(_ *domain.DeliveryRecord, _ *domain.ChannelConfigSnapshot, _ *domain.RecipientTarget, c *domain.RenderedContent) { c.EventPayloadFingerprint = strings.Repeat("b", 64) }},
+		{name: "wrong channel version", mutate: func(_ *domain.DeliveryRecord, c *domain.ChannelConfigSnapshot, _ *domain.RecipientTarget, _ *domain.RenderedContent) {
+			c.ConfigVersion++
+		}},
+		{name: "wrong recipient", mutate: func(_ *domain.DeliveryRecord, _ *domain.ChannelConfigSnapshot, r *domain.RecipientTarget, _ *domain.RenderedContent) {
+			r.RecipientRef = "other-recipient"
+		}},
+		{name: "wrong template version", mutate: func(_ *domain.DeliveryRecord, _ *domain.ChannelConfigSnapshot, _ *domain.RecipientTarget, c *domain.RenderedContent) {
+			c.TemplateVersion++
+		}},
+		{name: "wrong payload fingerprint", mutate: func(_ *domain.DeliveryRecord, _ *domain.ChannelConfigSnapshot, _ *domain.RecipientTarget, c *domain.RenderedContent) {
+			c.EventPayloadFingerprint = strings.Repeat("b", 64)
+		}},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -80,19 +88,19 @@ func TestBuildChannelSendRequestDoesNotSendUnverifiedIdempotencyKey(t *testing.T
 	channel := completionChannel()
 	channel.Capabilities.SupportsIdempotency = domain.CapabilityUnknown
 	recipient := domain.RecipientTarget{
-		RecipientRef: delivery.RecipientRef,
-		ChannelRef: delivery.ChannelRef,
-		ConfigVersion: delivery.ChannelConfigVersion,
+		RecipientRef:     delivery.RecipientRef,
+		ChannelRef:       delivery.ChannelRef,
+		ConfigVersion:    delivery.ChannelConfigVersion,
 		AdapterTargetRef: "opaque-target-1",
 	}
 	content := domain.RenderedContent{
-		TemplateID: delivery.TemplateID,
-		TemplateVersion: delivery.TemplateVersion,
-		TemplateDigest: strings.Repeat("a", 64),
+		TemplateID:              delivery.TemplateID,
+		TemplateVersion:         delivery.TemplateVersion,
+		TemplateDigest:          strings.Repeat("a", 64),
 		EventPayloadFingerprint: delivery.PayloadFingerprint,
-		Format: domain.TemplateFormatText,
-		Subject: "subject",
-		Body: "body",
+		Format:                  domain.TemplateFormatText,
+		Subject:                 "subject",
+		Body:                    "body",
 	}
 	request, err := BuildChannelSendRequest(delivery, channel, recipient, content)
 	if err != nil {

@@ -9,8 +9,8 @@ import (
 )
 
 var (
-	ErrEventValidatorUnavailable  = errors.New("notification: event validator unavailable")
-	ErrInboxRepositoryUnavailable = errors.New("notification: inbox repository unavailable")
+	ErrEventValidatorUnavailable    = errors.New("notification: event validator unavailable")
+	ErrInboxRepositoryUnavailable   = errors.New("notification: inbox repository unavailable")
 	ErrClockUnavailable             = errors.New("notification: clock unavailable")
 	ErrInboxRepositoryResultInvalid = errors.New("notification: inbox repository returned an invalid record")
 )

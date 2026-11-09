@@ -256,9 +256,9 @@ func TestRetryPolicyRejectsUnverifiedUnknownRetryEvidence(t *testing.T) {
 	policy := standardRetryPolicy()
 
 	for _, tc := range []struct {
-		name string
+		name        string
 		evidenceRef string
-		observedAt time.Time
+		observedAt  time.Time
 	}{
 		{"missing evidence", "", now},
 		{"future evidence", "lookup-evidence-1", now.Add(time.Second)},

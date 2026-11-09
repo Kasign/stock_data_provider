@@ -27,19 +27,19 @@ type RetryPolicy struct {
 }
 
 type RetryDecision struct {
-	DeliveryID      string
-	DeliveryVersion int64
-	AttemptID       string
-	FencingToken    int64
-	EvaluatedAt     time.Time
-	EvidenceRef     string
+	DeliveryID         string
+	DeliveryVersion    int64
+	AttemptID          string
+	FencingToken       int64
+	EvaluatedAt        time.Time
+	EvidenceRef        string
 	EvidenceObservedAt time.Time
-	Retry           bool
-	ReasonCode      string
-	NextAttemptAt   *time.Time
-	DelayCap        time.Duration
-	ChosenDelay     time.Duration
-	RetryAfterUsed  bool
+	Retry              bool
+	ReasonCode         string
+	NextAttemptAt      *time.Time
+	DelayCap           time.Duration
+	ChosenDelay        time.Duration
+	RetryAfterUsed     bool
 }
 
 // Validate requires explicit, positive millisecond policy values.
