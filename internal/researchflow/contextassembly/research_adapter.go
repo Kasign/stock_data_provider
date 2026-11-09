@@ -16,14 +16,14 @@ var ErrInvalidResearchContextProjection = errors.New("invalid Research Context p
 // SectionMetadata carries Research-owned semantic metadata that the planner
 // must not invent or infer from token-budget decisions.
 type SectionMetadata struct {
-	Version      string
+	Version       string
 	QualityStatus string
-	AssembledAt  time.Time
+	AssembledAt   time.Time
 }
 
 // ResearchContextSnapshot contains the semantic fields assessed by Research.
-// Quality status, conflict/stale counts and reason codes are passed through;
-// Researchflow only reconciles omission counts with its own selection plan.
+// Quality status, missing/conflict/stale counts and reason codes are passed
+// through unchanged. Budget omissions are a separate Researchflow decision.
 type ResearchContextSnapshot struct {
 	ResearchQuestion string
 	Scope            string
@@ -54,7 +54,8 @@ func ToResearchCreateContextCommand(
 		plan.IncludedSections == nil || plan.OmittedSections == nil || len(candidates) == 0 {
 		return researchapp.CreateContextCommand{}, ErrInvalidResearchContextProjection
 	}
-	if snapshot.QualitySummary.MissingRequiredCount < 0 ||
+	if !validQualityStatus(snapshot.QualitySummary.Status) ||
+		snapshot.QualitySummary.MissingRequiredCount < 0 ||
 		snapshot.QualitySummary.MissingOptionalCount < 0 ||
 		snapshot.QualitySummary.ConflictCount < 0 || snapshot.QualitySummary.StaleCount < 0 ||
 		!sort.StringsAreSorted(snapshot.QualitySummary.ReasonCodes) ||
@@ -121,7 +122,6 @@ func ToResearchCreateContextCommand(
 	}
 
 	sectionRefs := make([]researchapp.ContextSectionRef, 0, len(candidates))
-	missingRequired, missingOptional := 0, 0
 	for _, candidate := range candidates {
 		section, exists := metadata[candidate.ID]
 		if !exists || section.Version == "" || section.Version != strings.TrimSpace(section.Version) ||
@@ -138,18 +138,6 @@ func ToResearchCreateContextCommand(
 			QualityStatus: section.QualityStatus, Required: candidate.Required,
 			Included: selected, AssembledAt: section.AssembledAt, SystemAsOf: snapshot.SystemAsOf,
 		})
-		if !selected {
-			if candidate.Required {
-				missingRequired++
-			} else {
-				missingOptional++
-			}
-		}
-	}
-	if snapshot.QualitySummary.MissingRequiredCount != missingRequired ||
-		snapshot.QualitySummary.MissingOptionalCount != missingOptional ||
-		(missingRequired > 0 && snapshot.QualitySummary.Status == "valid") {
-		return researchapp.CreateContextCommand{}, fmt.Errorf("%w: quality summary omission counts do not match plan", ErrInvalidResearchContextProjection)
 	}
 
 	includedIDs := append([]string{}, plan.IncludedSections...)
@@ -195,7 +183,6 @@ func hasDuplicates(values []string) bool {
 	}
 	return false
 }
-
 
 // ResearchContextAssembly is the deterministic output prepared for the
 // Research Application Port. AvailableTokens is the post-reservation input

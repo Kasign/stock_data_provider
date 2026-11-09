@@ -22,7 +22,7 @@ func TestToResearchCreateContextCommandMapsPlanWithoutInventingQuality(t *testin
 		ResearchQuestion: "分析目标证券", Scope: "stock", SubjectRefs: []string{"600000.SH"},
 		SystemAsOf: now, BuilderVersion: "context-builder-v1",
 		QualitySummary: researchapp.ContextQualitySummary{
-			Status: "degraded", MissingRequiredCount: 0, MissingOptionalCount: 1,
+			Status: "degraded", MissingRequiredCount: 0, MissingOptionalCount: 0,
 			ConflictCount: 2, StaleCount: 1, ReasonCodes: []string{"budget_exceeded", "stale_source"},
 		},
 	}
@@ -64,30 +64,6 @@ func TestToResearchCreateContextCommandRejectsInconsistentPlan(t *testing.T) {
 	plan.IncludedSections = append(plan.IncludedSections, "unknown")
 	if _, err := ToResearchCreateContextCommand(snapshot, candidates, metadata, plan); !errors.Is(err, ErrInvalidResearchContextProjection) {
 		t.Fatalf("expected invalid projection, got %v", err)
-	}
-}
-
-func TestToResearchCreateContextCommandRequiresQualityCountsToMatchPlan(t *testing.T) {
-	now := time.Date(2026, 11, 9, 8, 0, 0, 0, time.UTC)
-	candidates := []SectionCandidate{
-		{ID: "required", SourceOwner: "data", Required: true, EstimatedTokens: 2, SourceRefs: []string{"snapshot-1"}},
-		{ID: "optional", SourceOwner: "research", EstimatedTokens: 2},
-	}
-	plan, err := BuildPlan(candidates, 2)
-	if err != nil {
-		t.Fatal(err)
-	}
-	snapshot := ResearchContextSnapshot{
-		ResearchQuestion: "分析", Scope: "stock", SubjectRefs: []string{"600000.SH"},
-		SystemAsOf: now, BuilderVersion: "v1",
-		QualitySummary: researchapp.ContextQualitySummary{Status: "valid", ReasonCodes: []string{}},
-	}
-	metadata := map[string]SectionMetadata{
-		"required": {Version: "1", QualityStatus: "valid", AssembledAt: now},
-		"optional": {Version: "1", QualityStatus: "valid", AssembledAt: now},
-	}
-	if _, err := ToResearchCreateContextCommand(snapshot, candidates, metadata, plan); !errors.Is(err, ErrInvalidResearchContextProjection) {
-		t.Fatalf("expected quality count mismatch, got %v", err)
 	}
 }
 
@@ -149,7 +125,7 @@ func TestAssembleResearchContextReservesModelWindowBeforeSelectingSections(t *te
 		ResearchQuestion: "分析", Scope: "stock", SubjectRefs: []string{"600000.SH"},
 		SystemAsOf: now, BuilderVersion: "v1",
 		QualitySummary: researchapp.ContextQualitySummary{
-			Status: "degraded", MissingOptionalCount: 1, ReasonCodes: []string{"budget_exceeded"},
+			Status: "degraded", MissingOptionalCount: 0, ReasonCodes: []string{"budget_exceeded"},
 		},
 	}
 	metadata := map[string]SectionMetadata{
@@ -185,5 +161,62 @@ func TestAssembleResearchContextFailsClosedWhenMandatorySectionsExceedReservedBu
 	})
 	if !errors.Is(err, ErrMandatoryBudgetExceeded) {
 		t.Fatalf("expected mandatory budget failure, got %v", err)
+	}
+}
+
+func TestToResearchCreateContextCommandKeepsQualityCountsIndependentFromBudgetOmissions(t *testing.T) {
+	now := time.Date(2026, 11, 9, 8, 0, 0, 0, time.UTC)
+	candidates := []SectionCandidate{
+		{ID: "required", SourceOwner: "data", Required: true, EstimatedTokens: 2, SourceRefs: []string{"snapshot-1"}},
+		{ID: "optional", SourceOwner: "research", EstimatedTokens: 2},
+	}
+	plan, err := BuildPlan(candidates, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	snapshot := ResearchContextSnapshot{
+		ResearchQuestion: "分析", Scope: "stock", SubjectRefs: []string{"600000.SH"},
+		SystemAsOf: now, BuilderVersion: "v1",
+		QualitySummary: researchapp.ContextQualitySummary{
+			Status: "degraded", MissingOptionalCount: 3, ConflictCount: 1,
+			ReasonCodes: []string{"source_missing"},
+		},
+	}
+	metadata := map[string]SectionMetadata{
+		"required": {Version: "1", QualityStatus: "valid", AssembledAt: now},
+		"optional": {Version: "1", QualityStatus: "valid", AssembledAt: now},
+	}
+	command, err := ToResearchCreateContextCommand(snapshot, candidates, metadata, plan)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(command.OmittedSections) != 1 || command.OmittedSections[0].SectionID != "optional" {
+		t.Fatalf("expected one budget omission, got %+v", command.OmittedSections)
+	}
+	if command.QualitySummary.MissingOptionalCount != 3 || command.QualitySummary.ConflictCount != 1 {
+		t.Fatalf("Research quality facts were coupled to budget omissions: %+v", command.QualitySummary)
+	}
+}
+
+func TestToResearchCreateContextCommandRejectsInvalidQualitySummary(t *testing.T) {
+	now := time.Date(2026, 11, 9, 8, 0, 0, 0, time.UTC)
+	candidates := []SectionCandidate{{ID: "market", SourceOwner: "data", EstimatedTokens: 1, SourceRefs: []string{"snapshot-1"}}}
+	plan, err := BuildPlan(candidates, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	metadata := map[string]SectionMetadata{"market": {Version: "1", QualityStatus: "valid", AssembledAt: now}}
+	for _, quality := range []researchapp.ContextQualitySummary{
+		{Status: "pass", ReasonCodes: []string{}},
+		{Status: "valid", MissingRequiredCount: -1, ReasonCodes: []string{}},
+		{Status: "valid", ConflictCount: -1, ReasonCodes: []string{}},
+	} {
+		snapshot := ResearchContextSnapshot{
+			ResearchQuestion: "分析", Scope: "stock", SubjectRefs: []string{"600000.SH"},
+			SystemAsOf: now, BuilderVersion: "v1", QualitySummary: quality,
+		}
+		if _, err := ToResearchCreateContextCommand(snapshot, candidates, metadata, plan); !errors.Is(err, ErrInvalidResearchContextProjection) {
+			t.Fatalf("quality %+v should be rejected, got %v", quality, err)
+		}
 	}
 }
