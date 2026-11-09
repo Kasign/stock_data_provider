@@ -325,3 +325,11 @@ sequence_number 严格连续策略、Draft 2020-12 本地 Schema dialect、Reque
 - 整个 SSE 输入超过 8 MiB 时，在扫描前返回 `resource_limit`，稳定码为 `llm.sse.total_too_large`。
 - 对应测试：`TestParseResponsesSSEClassifiesMultilineEventLimitAsResourceLimit`、`TestParseResponsesSSERejectsTotalPayloadAboveLimit`。
 - 测试代码尚未执行；此处只定义验收预期，不构成通过证据。
+
+
+## 19. SSE 终态后事件拒绝（2026-11-09）
+
+- 对应测试：`TestParseResponsesSSERejectsEventAfterTerminal`。
+- `response.completed`、`response.incomplete` 或 `response.failed` 终态后若仍出现携带 data 的事件，必须拒绝整个流。
+- 当前覆盖 completed 后追加普通事件，预期错误为 `ErrorInvalidResponse / llm.sse.event_after_terminal`。
+- 测试代码尚未执行，不构成通过证据。
