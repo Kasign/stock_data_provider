@@ -135,6 +135,36 @@ func TestBollingerAvoidsIntermediateOverflowForFinitePrices(t *testing.T) {
 	}
 }
 
+func TestRSISeedAvoidsIntermediateOverflowForFiniteChanges(t *testing.T) {
+	max := math.MaxFloat64
+	got, err := RSI([]float64{1, max, 1, max, 1}, RSIParams{Window: 3, SmoothingMethod: "wilder"})
+	if err != nil {
+		t.Fatalf("RSI() rejected representable Wilder averages: %v", err)
+	}
+	want := 100 - 100/(1+4.0/5.0)
+	if !finite(got.Value) || math.Abs(got.Value-want) > 1e-12 {
+		t.Fatalf("RSI() = %.17g, want %.17g", got.Value, want)
+	}
+}
+
+func TestATRSmoothingAvoidsIntermediateOverflow(t *testing.T) {
+	max := math.MaxFloat64
+	got, err := ATR(
+		[]float64{max, max, max, 1},
+		[]float64{1, 1, 1, 1},
+		[]float64{1, 1, 1, 1},
+		1,
+		ATRParams{Window: 3, SmoothingMethod: "wilder"},
+	)
+	if err != nil {
+		t.Fatalf("ATR() rejected representable Wilder average: %v", err)
+	}
+	want := (2.0 / 3.0) * max
+	if !finite(got.Value) || math.Abs(got.Value-want)/want > 1e-12 {
+		t.Fatalf("ATR() = %.17g, want approximately %.17g", got.Value, want)
+	}
+}
+
 func TestRSIWilderSeedAndSmoothing(t *testing.T) {
 	got, err := RSI([]float64{1, 2, 3, 2, 1}, RSIParams{Window: 2, SmoothingMethod: "wilder"})
 	if err != nil {

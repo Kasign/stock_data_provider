@@ -202,17 +202,18 @@ func RSI(closes []float64, p RSIParams) (Result, error) {
 		}, nil
 	}
 
-	var gains, losses float64
+	gains := make([]float64, p.Window)
+	losses := make([]float64, p.Window)
 	for i := 1; i <= p.Window; i++ {
 		change := closes[i] - closes[i-1]
 		if change > 0 {
-			gains += change
+			gains[i-1] = change
 		} else {
-			losses -= change
+			losses[i-1] = -change
 		}
 	}
-	averageGain := gains / float64(p.Window)
-	averageLoss := losses / float64(p.Window)
+	averageGain := mean(gains)
+	averageLoss := mean(losses)
 	if !finite(averageGain) || !finite(averageLoss) {
 		return Result{}, ErrInvalidInput
 	}
@@ -225,8 +226,8 @@ func RSI(closes []float64, p RSIParams) (Result, error) {
 		} else {
 			loss = -change
 		}
-		averageGain = (averageGain*float64(p.Window-1) + gain) / float64(p.Window)
-		averageLoss = (averageLoss*float64(p.Window-1) + loss) / float64(p.Window)
+		averageGain = wilderAverage(averageGain, gain, p.Window)
+		averageLoss = wilderAverage(averageLoss, loss, p.Window)
 		if !finite(averageGain) || !finite(averageLoss) {
 			return Result{}, ErrInvalidInput
 		}
@@ -332,7 +333,7 @@ func ATR(highs, lows, closes []float64, previousClose float64, p ATRParams) (Res
 	}
 	average := mean(trueRanges[:p.Window])
 	for i := p.Window; i < len(trueRanges); i++ {
-		average = (average*float64(p.Window-1) + trueRanges[i]) / float64(p.Window)
+		average = wilderAverage(average, trueRanges[i], p.Window)
 	}
 	if !finite(average) {
 		return Result{}, ErrInvalidInput
@@ -462,6 +463,11 @@ func mean(values []float64) float64 {
 	// 理论均值绝对值不可能大于最大输入绝对值；钳制浮点累加产生的微小越界。
 	average = math.Max(-1, math.Min(1, average))
 	return scale * average
+}
+
+// wilderAverage 使用等价的增量形式，避免 (window-1)*previous 的中间乘法溢出。
+func wilderAverage(previous, current float64, window int) float64 {
+	return previous + (current-previous)/float64(window)
 }
 
 func rsiValue(gain, loss float64) float64 {
