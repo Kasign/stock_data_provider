@@ -63,7 +63,12 @@ type ApplicabilityEvaluator interface {
 	Evaluate(context.Context, ApplicabilityRule, json.RawMessage) (bool, string, error)
 }
 type HardRiskGateRegistry interface { Contains(stageCode string) bool }
-type ResolvedStage struct { Definition StageDefinition; Dependencies []string }
+type ResolvedStage struct {
+	Definition StageDefinition
+	Dependencies []string
+	InitialStatus domain.StageStatus
+	ReasonCodes []string
+}
 type ParameterSchemaSnapshot struct {
 	Ref string
 	Version string
@@ -215,22 +220,29 @@ func Resolve(ctx context.Context, t WorkflowTemplate, parameters json.RawMessage
 	}
 	included := map[string]bool{}
 	definitions := map[string]StageDefinition{}
+	optionalSkipped := make(map[string]ResolvedStage)
 	for _, stage := range t.Stages {
 		definitions[stage.Code] = stage
 		ok, reason, evalErr := evaluator.Evaluate(ctx, stage.Applicability, parameters)
 		if evalErr != nil { return ResolvedTemplate{}, fmt.Errorf("evaluate applicability for %s: %w", stage.Code, evalErr) }
 		if ok { included[stage.Code] = true; continue }
-		if reason == "" { return ResolvedTemplate{}, fmt.Errorf("%w: excluded stage %s has no reason code", ErrInvalidTemplate, stage.Code) }
-		resolved.Excluded = append(resolved.Excluded, domain.ExcludedStage{StageCode:stage.Code, RuleVersion:stage.Applicability.RuleVersion, ReasonCode:reason})
+		if strings.TrimSpace(reason) == "" { return ResolvedTemplate{}, fmt.Errorf("%w: non-applicable stage %s has no reason code", ErrInvalidTemplate, stage.Code) }
+		if stage.Required {
+			resolved.Excluded = append(resolved.Excluded, domain.ExcludedStage{StageCode:stage.Code, RuleVersion:stage.Applicability.RuleVersion, ReasonCode:reason})
+			continue
+		}
+		// Optional non-applicable stages are materialized as terminal skipped rows.
+		// They are not executable DAG nodes and therefore carry no runtime dependencies.
+		optionalSkipped[stage.Code] = ResolvedStage{Definition:stage, InitialStatus:domain.StageSkipped, ReasonCodes:[]string{reason}}
 	}
-	if len(included) == 0 { return ResolvedTemplate{}, fmt.Errorf("%w: resolved DAG must not be empty", ErrInvalidTemplate) }
+	if len(included) == 0 { return ResolvedTemplate{}, fmt.Errorf("%w: resolved DAG must contain at least one applicable stage", ErrInvalidTemplate) }
 	gateCount := 0
 	active := make([]StageDefinition, 0, len(included))
 	for code := range included {
 		stage := definitions[code]
 		if stage.GateType == "hard_risk" { gateCount++ }
 		for _, dep := range stage.Dependencies {
-			if !included[dep] { return ResolvedTemplate{}, fmt.Errorf("%w: applicable stage %s depends on excluded stage %s", ErrInvalidTemplate, code, dep) }
+			if !included[dep] { return ResolvedTemplate{}, fmt.Errorf("%w: applicable stage %s depends on non-applicable stage %s", ErrInvalidTemplate, code, dep) }
 		}
 		active = append(active, stage)
 	}
@@ -242,8 +254,14 @@ func Resolve(ctx context.Context, t WorkflowTemplate, parameters json.RawMessage
 		dependencies := append([]string(nil), stage.Dependencies...)
 		sort.Strings(dependencies)
 		stage.Dependencies = append([]string(nil), dependencies...)
-		resolved.Stages = append(resolved.Stages, ResolvedStage{Definition:stage, Dependencies:dependencies})
+		resolved.Stages = append(resolved.Stages, ResolvedStage{Definition:stage, Dependencies:dependencies, InitialStatus:domain.StagePending})
 	}
+	// Append optional skipped rows in stable code order. They are terminal at creation
+	// and are deliberately excluded from the executable DAG's dependency ordering.
+	skippedCodes := make([]string, 0, len(optionalSkipped))
+	for code := range optionalSkipped { skippedCodes = append(skippedCodes, code) }
+	sort.Strings(skippedCodes)
+	for _, code := range skippedCodes { resolved.Stages = append(resolved.Stages, optionalSkipped[code]) }
 	sort.Slice(resolved.Excluded, func(i,j int) bool { return resolved.Excluded[i].StageCode < resolved.Excluded[j].StageCode })
 	return resolved, nil
 }
