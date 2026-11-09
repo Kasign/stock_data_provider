@@ -167,7 +167,8 @@ func TestRetryPolicyRequiresExplicitRetryableRejectionAndCompleteHistory(t *test
 		t.Fatalf("duplicate fencing token history must fail closed: %v", err)
 	}
 	descendingDelivery, descendingAttempts, descendingNow := retryPolicyFixture(t, 2, 3)
-	descendingAttempts[1].FencingToken = descendingAttempts[0].FencingToken - 1
+	descendingAttempts[0].FencingToken = 2
+	descendingAttempts[1].FencingToken = 1
 	if _, err := policy.ScheduleRetry(descendingDelivery, descendingAttempts, descendingNow, 0.5); !errors.Is(err, ErrRetryNotApplicable) {
 		t.Fatalf("non-monotonic fencing token history must fail closed: %v", err)
 	}
