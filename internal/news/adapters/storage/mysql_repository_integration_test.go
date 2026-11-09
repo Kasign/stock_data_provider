@@ -686,7 +686,6 @@ func integrationAuthorizationEvidence() (domain.Observation, domain.NewsItemVers
 	return observation, version
 }
 
-
 // TestObservationRetentionPurgeIntegration covers MariaDB V8 retention writes,
 // idempotent purge, and the no-resurrection rule for an expired payload.
 func TestObservationRetentionPurgeIntegration(t *testing.T) {
@@ -716,11 +715,11 @@ func TestObservationRetentionPurgeIntegration(t *testing.T) {
 	observations := make([]domain.Observation, 3)
 	for i := range observations {
 		observations[i] = domain.Observation{
-			ID: fmt.Sprintf("news-retention-it-%d-%d", time.Now().UnixNano(), i),
+			ID:             fmt.Sprintf("news-retention-it-%d-%d", time.Now().UnixNano(), i),
 			IdempotencyKey: fmt.Sprintf("news-retention-key-%d-%d", time.Now().UnixNano(), i),
-			SourceID: "news-retention-integration",
-			Candidate: domain.Candidate{SourceItemID: fmt.Sprintf("retention-source-item-%d", i), Title: "must be purged"},
-			ObservedAt: now.Add(-2 * time.Hour), RetentionUntil: now.Add(-time.Hour),
+			SourceID:       "news-retention-integration",
+			Candidate:      domain.Candidate{SourceItemID: fmt.Sprintf("retention-source-item-%d", i), Title: "must be purged"},
+			ObservedAt:     now.Add(-2 * time.Hour), RetentionUntil: now.Add(-time.Hour),
 			IdentityStatus: domain.ObservationUnidentified,
 		}
 	}
@@ -870,11 +869,11 @@ func TestObservationRetentionPurgeIntegration(t *testing.T) {
 	concurrent := make([]domain.Observation, 4)
 	for i := range concurrent {
 		concurrent[i] = domain.Observation{
-			ID: fmt.Sprintf("news-retention-concurrent-%d-%d", time.Now().UnixNano(), i),
+			ID:             fmt.Sprintf("news-retention-concurrent-%d-%d", time.Now().UnixNano(), i),
 			IdempotencyKey: fmt.Sprintf("news-retention-concurrent-key-%d-%d", time.Now().UnixNano(), i),
-			SourceID: "news-retention-integration",
-			Candidate: domain.Candidate{SourceItemID: fmt.Sprintf("retention-concurrent-item-%d", i), Title: "concurrent purge"},
-			ObservedAt: now.Add(-2 * time.Hour), RetentionUntil: now.Add(-time.Hour),
+			SourceID:       "news-retention-integration",
+			Candidate:      domain.Candidate{SourceItemID: fmt.Sprintf("retention-concurrent-item-%d", i), Title: "concurrent purge"},
+			ObservedAt:     now.Add(-2 * time.Hour), RetentionUntil: now.Add(-time.Hour),
 			IdentityStatus: domain.ObservationUnidentified,
 		}
 	}
@@ -893,7 +892,7 @@ func TestObservationRetentionPurgeIntegration(t *testing.T) {
 	}
 	type purgeOutcome struct {
 		result app.ObservationPayloadPurgeResult
-		err error
+		err    error
 	}
 	outcomes := make(chan purgeOutcome, 2)
 	var workers sync.WaitGroup
