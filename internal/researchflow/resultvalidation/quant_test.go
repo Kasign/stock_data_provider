@@ -13,7 +13,7 @@ func validQuantResult() QuantResultEnvelope {
 		SchemaVersion: "1.0.0", ResultID: "qres_1", ResultType: "indicator",
 		Scope: "stock", SecurityID: "600000.SH", SystemAsOf: now,
 		TradeDate: "2026-11-09", Period: "daily", AlgorithmVersion: "ma-v1",
-		ParameterFingerprint: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+		ParameterFingerprint: "sha256:parameter-fingerprint",
 		InputSnapshotRefs:    []string{"snapshot-1"}, QualityStatus: "valid",
 		ResultStatus: "completed", AuthorizationRef: "auth-1", CreatedAt: now,
 		Payload: json.RawMessage(`{"metric_code":"ma_5","value":"10.25"}`),
@@ -110,7 +110,7 @@ func TestRegistryRejectsEnvelopeAndPayloadContractViolations(t *testing.T) {
 		{"missing input refs", func(v *QuantResultEnvelope) { v.InputSnapshotRefs = nil }, ErrInvalidQuantResult},
 		{"unsorted input refs", func(v *QuantResultEnvelope) { v.InputSnapshotRefs = []string{"snapshot-2", "snapshot-1"} }, ErrInvalidQuantResult},
 		{"invalid schema version", func(v *QuantResultEnvelope) { v.SchemaVersion = "latest" }, ErrUnsupportedSchema},
-		{"invalid fingerprint", func(v *QuantResultEnvelope) { v.ParameterFingerprint = "not-a-hash" }, ErrInvalidQuantResult},
+		{"padded fingerprint", func(v *QuantResultEnvelope) { v.ParameterFingerprint = " padded " }, ErrInvalidQuantResult},
 		{"stock without security", func(v *QuantResultEnvelope) { v.SecurityID = "" }, ErrInvalidQuantResult},
 		{"invalid payload", func(v *QuantResultEnvelope) { v.Payload = json.RawMessage(`null`) }, ErrInvalidQuantPayload},
 	}

@@ -172,13 +172,8 @@ func validateEnvelope(result QuantResultEnvelope, policy ValidationPolicy) error
 	if !validQuality(result.QualityStatus) || !validResultStatus(result.ResultStatus) {
 		return fmt.Errorf("%w: invalid result or quality status", ErrInvalidQuantResult)
 	}
-	if len(result.ParameterFingerprint) != 64 {
-		return fmt.Errorf("%w: parameter_fingerprint must be SHA-256 hex", ErrInvalidQuantResult)
-	}
-	for _, char := range result.ParameterFingerprint {
-		if !((char >= '0' && char <= '9') || (char >= 'a' && char <= 'f') || (char >= 'A' && char <= 'F')) {
-			return fmt.Errorf("%w: parameter_fingerprint must be SHA-256 hex", ErrInvalidQuantResult)
-		}
+	if result.ParameterFingerprint != strings.TrimSpace(result.ParameterFingerprint) {
+		return fmt.Errorf("%w: parameter_fingerprint is not canonical", ErrInvalidQuantResult)
 	}
 	if result.InputSnapshotRefs == nil || (!policy.AllowEmptyInputs && len(result.InputSnapshotRefs) == 0) ||
 		hasDuplicateOrInvalidRefs(result.InputSnapshotRefs) || !sort.StringsAreSorted(result.InputSnapshotRefs) {
