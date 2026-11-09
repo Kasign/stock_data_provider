@@ -28,6 +28,18 @@ func TestContextJSONSchemaMatchesDTOFields(t *testing.T) {
 	assertSchemaStructFields(t, "OmittedSection", reflect.TypeOf(OmittedSection{}), schemaObject(t, definitions["OmittedSection"]))
 	assertSchemaStructFields(t, "QualitySummary", reflect.TypeOf(QualitySummary{}), schemaObject(t, definitions["QualitySummary"]))
 
+	timeFields := []map[string]any{
+		schemaObject(t, properties["system_as_of"]),
+		schemaObject(t, properties["created_at"]),
+		schemaObject(t, schemaObject(t, definitions["ContextSectionRef"])["properties"].(map[string]any)["assembled_at"]),
+		schemaObject(t, schemaObject(t, definitions["ContextSectionRef"])["properties"].(map[string]any)["system_as_of"]),
+	}
+	for _, field := range timeFields {
+		if field["format"] != "date-time" || field["pattern"] != "Z$" {
+			t.Errorf("Context time field must require RFC3339 date-time ending in UTC Z: %v", field)
+		}
+	}
+
 	version := schemaObject(t, properties["schema_version"])
 	if version["const"] != "1.0.0" {
 		t.Fatalf("schema_version const = %v, want 1.0.0", version["const"])
