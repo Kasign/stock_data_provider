@@ -398,3 +398,28 @@ func TestParseResponsesSSERejectsTerminalOutputTextMismatch(t *testing.T) {
 		t.Fatalf("terminal output differing from streamed text must be rejected: response=%+v err=%v", got, err)
 	}
 }
+
+
+// TestParseResponsesSSECallbackAdapterErrorRemainsConsumerError ensures a
+// consumer-owned AdapterError is not reclassified as a parser failure.
+func TestParseResponsesSSECallbackAdapterErrorRemainsConsumerError(t *testing.T) {
+	request := validSSERequest()
+	clock := sseTestClock{now: request.SystemAsOf.Add(time.Second)}
+	callbackErr := &AdapterError{
+		Info:  adapterError(ErrorCancelled, "consumer.cancelled", false, nil),
+		cause: errors.New("consumer cancellation"),
+	}
+
+	got, err := ParseResponsesSSE(readLLMFixture(t, "sse/stream_eof_without_terminal.sse"), request, clock, func(event ModelEvent) error {
+		if event.Type == "response.output_text.delta" {
+			return callbackErr
+		}
+		return nil
+	})
+	if err != callbackErr {
+		t.Fatalf("callback AdapterError must be returned unchanged: got=%v want=%v", err, callbackErr)
+	}
+	if got.Status != ResponseIncomplete || got.Error != nil || got.OutputText != "partial" {
+		t.Fatalf("consumer error must preserve an incomplete partial response: %+v", got)
+	}
+}

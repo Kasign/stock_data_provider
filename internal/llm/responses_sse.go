@@ -333,15 +333,16 @@ func ParseResponsesSSE(data []byte, request ModelRequest, clock Clock, onEvent f
 		result.SequenceNumberStatus = SequenceNumberUnavailable
 	}
 	if parseErr != nil {
+		// Callback errors take precedence over AdapterError classification: the
+		// consumer owns the error and the partial response must remain incomplete.
+		if terminalErr == parseErr {
+			finish()
+			return result, parseErr
+		}
 		var adapterErr *AdapterError
 		if errors.As(parseErr, &adapterErr) {
 			result.Status = ResponseFailed
 			result.Error = adapterErr.Info
-			finish()
-			return result, parseErr
-		}
-		// Callback errors are returned unchanged with the partial response.
-		if terminalErr == parseErr {
 			finish()
 			return result, parseErr
 		}
