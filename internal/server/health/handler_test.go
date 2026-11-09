@@ -91,3 +91,23 @@ func contains(value, fragment string) bool {
 	}
 	return false
 }
+
+func TestReadyzPreservesExistingResponseShapeWhenReady(t *testing.T) {
+	checker := &fakeReadinessChecker{report: serverdiagnostics.Report{
+		Readiness: serverdiagnostics.Readiness{Ready: true, SafeMessage: "ready"},
+	}}
+	handler, err := NewHandler(checker)
+	if err != nil {
+		t.Fatalf("NewHandler() error = %v", err)
+	}
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/readyz", nil))
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", response.Code, http.StatusOK)
+	}
+	if !contains(response.Body.String(), "`"status"`:`"ready"`") ||
+		!contains(response.Body.String(), "`"mariadb"`:`"ok"`") ||
+		!contains(response.Body.String(), "`"redis"`:`"ok"`") {
+		t.Fatalf("unexpected readiness response: %s", response.Body.String())
+	}
+}
