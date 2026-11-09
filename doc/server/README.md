@@ -515,6 +515,7 @@ flowchart TD
 - 当前 Health/Readiness 不输出底层错误、连接串或诊断详情；`/readyz` 对外只返回通用依赖不可用错误。详细诊断报告尚未公开暴露，后续需结合认证/运维访问策略再决定接口。
 - GitHub API 已写入实现和测试；尚未执行 gofmt/go test，也没有真实 MariaDB/Redis 连通性集成结果。不能标记为编译或测试通过。
 - Go workflow 原 push 分支白名单不包含 Server，本轮已将当前 Server 分支加入白名单，并将该分支的 gofmt 检查范围限定为 `cmd/analysis-api` 与 `internal/server`，避免替其他模块修复其格式问题；其他模块仍由各自分支负责。另修复了 Workflow shell 中错误的反斜杠续行写法。
+- CI 运行 `42591218043`（提交 `0a0e1cc`）：Server 相关包 `internal/server/{bootstrap,config,diagnostics,health,migration,resources}` 在根模块测试输出中均为 `ok`，Server 范围 gofmt 通过；`go-core` 的 gofmt、test、race、vet 全部通过。根模块整体 `go test ./...` 仍失败，失败集中在 LLM、News、Notification、Quant、Research、Researchflow 等其他模块（包括编译错误和既有断言失败），不属于本分支 Server 目录，本轮未越界修改。根模块 race/vet 因 test 失败未执行。
 - 相关代码提交：`f9c879c`（Aggregator）、`e787b3c`（聚合测试）、`4c65a1e`（共享存储检查）、`1d83680`（Service 组合入口）、`aad2ed1`（Service 测试）、`50286bc`/`984c25e`（Health Handler）、`ad21cd4`（统一宿主接入）、`3f0a876`（Handler 测试）。
 
 
