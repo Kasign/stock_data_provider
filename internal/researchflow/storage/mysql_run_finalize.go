@@ -27,6 +27,7 @@ type RunFinalization struct {
 	RunRef            string
 	ExpectedVersion   uint64
 	ResultSummaryRef  string
+	SummarySchemaVersion string
 	OutboxRef         string
 	TerminalStatus    domain.RunStatus
 	TerminationReason string
@@ -42,6 +43,7 @@ func (r *MySQLRunRepository) FinalizeRun(ctx context.Context, input RunFinalizat
 	}
 	if strings.TrimSpace(input.RunRef) == "" || len(input.RunRef) > 255 ||
 		strings.TrimSpace(input.ResultSummaryRef) == "" || len(input.ResultSummaryRef) > 255 ||
+		strings.TrimSpace(input.SummarySchemaVersion) == "" || len(input.SummarySchemaVersion) > 32 ||
 		strings.TrimSpace(input.OutboxRef) == "" || len(input.OutboxRef) > 255 ||
 		input.ExpectedVersion == ^uint64(0) {
 		return false, errors.New("Researchflow finalization identity or version is invalid")
@@ -66,13 +68,12 @@ func (r *MySQLRunRepository) FinalizeRun(ctx context.Context, input RunFinalizat
 	var runStatus string
 	var runVersion uint64
 	var correlationID string
-	var schemaVersion string
 	var existingSummaryRef sql.NullString
 	var existingReason sql.NullString
-	if err := tx.QueryRowContext(ctx, `SELECT status, version, correlation_id, schema_version,
+	if err := tx.QueryRowContext(ctx, `SELECT status, version, correlation_id,
 		result_summary_ref, termination_reason
 		FROM researchflow_runs WHERE run_ref = ? FOR UPDATE`, input.RunRef,
-	).Scan(&runStatus, &runVersion, &correlationID, &schemaVersion, &existingSummaryRef, &existingReason); err != nil {
+	).Scan(&runStatus, &runVersion, &correlationID, &existingSummaryRef, &existingReason); err != nil {
 		return false, fmt.Errorf("lock Researchflow finalization Run: %w", err)
 	}
 	if domain.RunStatus(runStatus).Terminal() {
@@ -83,6 +84,9 @@ func (r *MySQLRunRepository) FinalizeRun(ctx context.Context, input RunFinalizat
 	}
 	if existingReason.Valid && existingReason.String != input.TerminationReason {
 		return false, errors.New("Researchflow finalization termination reason does not match the persisted Run")
+	}
+	if existingReason.Valid && existingReason.String == "user_cancelled" && input.TerminalStatus != domain.RunCancelled {
+		return false, errors.New("user-cancelled Researchflow Run must finalize as cancelled")
 	}
 	if runVersion != input.ExpectedVersion {
 		return false, nil
@@ -188,7 +192,7 @@ func (r *MySQLRunRepository) FinalizeRun(ctx context.Context, input RunFinalizat
 	if _, err := tx.ExecContext(ctx, `INSERT INTO researchflow_result_summaries
 		(result_summary_ref, run_ref, schema_version, payload, created_at)
 		VALUES (?, ?, ?, ?, ?)`,
-		input.ResultSummaryRef, input.RunRef, schemaVersion, string(summaryPayload), finishedAt); err != nil {
+		input.ResultSummaryRef, input.RunRef, input.SummarySchemaVersion, string(summaryPayload), finishedAt); err != nil {
 		return false, fmt.Errorf("insert Researchflow ResultSummary: %w", err)
 	}
 	if _, err := tx.ExecContext(ctx, `INSERT INTO researchflow_outbox
