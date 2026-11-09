@@ -36,3 +36,22 @@ func TestNullableStringUsesSQLNullForEmptyReferences(t *testing.T) {
 		t.Fatalf("nullableString() = %#v", got)
 	}
 }
+
+
+func TestEvidenceSnapshotPayloadSizeIsBounded(t *testing.T) {
+	if validEvidenceSnapshotPayloadSize(nil) {
+		t.Fatal("nil payload must be rejected")
+	}
+	if validEvidenceSnapshotPayloadSize([]byte{}) {
+		t.Fatal("empty payload must be rejected")
+	}
+	if !validEvidenceSnapshotPayloadSize([]byte("snapshot")) {
+		t.Fatal("non-empty payload within limit must be accepted")
+	}
+	if !validEvidenceSnapshotPayloadSize(make([]byte, maximumEvidenceSnapshotBytes)) {
+		t.Fatal("payload at maximum size must be accepted")
+	}
+	if validEvidenceSnapshotPayloadSize(make([]byte, maximumEvidenceSnapshotBytes+1)) {
+		t.Fatal("payload exceeding maximum size must be rejected")
+	}
+}
