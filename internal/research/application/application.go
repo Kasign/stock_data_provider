@@ -454,19 +454,6 @@ func NewServiceWithClaims(contexts ContextRepository, evidence EvidenceRepositor
 	return service, nil
 }
 
-func fromDomainClaim(value researchclaim.Claim) Claim {
-	return Claim{
-		ClaimID: value.ClaimID, ClaimVersion: value.ClaimVersion, Statement: value.Statement,
-		EpistemicType: string(value.EpistemicType), ScopeRefs: cloneStrings(value.ScopeRefs),
-		SystemAsOf: value.SystemAsOf, SupportingEvidenceRefs: cloneStrings(value.SupportingEvidenceRefs),
-		ContradictingEvidenceRefs: cloneStrings(value.ContradictingEvidenceRefs),
-		RequiredDataRefs: cloneStrings(value.RequiredDataRefs), ValidationMethod: cloneString(value.ValidationMethod),
-		ExpectedObservation: cloneString(value.ExpectedObservation),
-		InvalidationConditions: cloneStrings(value.InvalidationConditions), Status: string(value.Status),
-		Limitations: cloneStrings(value.Limitations),
-	}
-}
-
 func (s *Service) CreateClaim(ctx context.Context, command CreateClaimCommand) (Claim, error) {
 	if s == nil || s.claims == nil {
 		return Claim{}, applicationFault(fault.ClassInternal, "research_claim_repository_not_configured", "Research Claim Repository is not configured", researcherrors.ErrInvalidRepository)
