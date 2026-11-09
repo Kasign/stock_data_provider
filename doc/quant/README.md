@@ -7,9 +7,9 @@
 
 ## 当前状态
 
-Quant 已具备首批 Indicator/Factor 纯计算、CalculationContext、基础 Registry、RiskDecision/RuleSet 执行框架、TrendResult DTO、Manifest/ResultRef 和 Repository Save Port 等模块内能力。当前 HEAD `cda200a1e4a3673bb4a34cd4b914d32f0a3be823` 的 Quant 独立 CI Workflow `42618742241` 已全部通过，覆盖 gofmt、`go test ./internal/quant/...`、Manifest 30 秒随机 Fuzz、Race 和 Vet。
+Quant 已具备首批 Indicator/Factor 纯计算、CalculationContext、基础 Registry、RiskDecision/RuleSet 执行框架、TrendResult DTO、Manifest/ResultRef 和 Repository Save Port 等模块内能力。最近代码验收 SHA `cda200a1e4a3673bb4a34cd4b914d32f0a3be823` 的 Quant 独立 CI Workflow `42618742241` 已全部通过，覆盖 gofmt、`go test ./internal/quant/...`、Manifest 30 秒随机 Fuzz、Race 和 Vet。
 
-同一 SHA 的全仓 Go Workflow `42618742230` 已结束但失败：根模块 gofmt、`services/market-data` 测试及 Market Data Docker 镜像构建失败；`go-core`、News MariaDB 集成和 Market Data MariaDB migration/PIT 集成 Job 成功。上述全仓失败不属于 Quant 独立工作流失败；仍需对应模块修复。Quant 独立 CI 只证明模块内代码验证，不代表真实行情、生产 Registry 元数据、运行时授权、完整结果 Envelope、Platform Storage 或 Server 集成验收完成。
+同一代码 SHA 的全仓 Go Workflow `42618742230` 已结束但失败：根模块 gofmt、`services/market-data` 测试及 Market Data Docker 镜像构建失败；`go-core`、News MariaDB 集成和 Market Data MariaDB migration/PIT 集成 Job 成功。当前分支 HEAD 在该代码验收 SHA 之后只有文档提交、没有 Quant 代码变化。上述全仓失败不属于 Quant 独立工作流失败；仍需对应模块修复。Quant 独立 CI 只证明模块内代码验证，不代表真实行情、生产 Registry 元数据、运行时授权、完整结果 Envelope、Platform Storage 或 Server 集成验收完成。
 
 当前主要外部阻塞：
 - Data：DailyBars v2 Decimal 输入、真实 PIT/复权/交易日历及质量证据。
