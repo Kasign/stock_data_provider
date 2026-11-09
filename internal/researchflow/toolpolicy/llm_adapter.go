@@ -70,7 +70,6 @@ func IntentsFromModelResponse(response llm.ModelResponse) ([]Intent, error) {
 	return intents, nil
 }
 
-
 // ToolDefinitionsFor 只向模型暴露当前 Scope 和预算允许的工具。
 // 返回值用于 ModelRequest.Tools；工具调用响应仍必须经过 Authorize。
 func (r *Registry) ToolDefinitionsFor(budget Budget) []llm.ToolDefinition {
@@ -106,7 +105,7 @@ func (r *Registry) ToolDefinitionsFor(budget Budget) []llm.ToolDefinition {
 		result = append(result, llm.ToolDefinition{
 			Name: definition.Name, Description: definition.Description,
 			ParametersJSON: append(json.RawMessage(nil), definition.ParametersJSON...),
-			Strict: definition.Strict,
+			Strict:         definition.Strict,
 		})
 	}
 	return result

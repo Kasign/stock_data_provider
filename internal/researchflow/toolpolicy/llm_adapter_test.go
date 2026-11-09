@@ -10,7 +10,7 @@ import (
 
 func TestIntentFromModelToolCallOnlyAdaptsCompletedStructuredIntent(t *testing.T) {
 	call := llm.ModelToolCall{
-		CallID: "call-1", Name: "research.lookup",
+		CallID: "call-1", Name:           "research.lookup",
 		ArgumentsJSON: `{"symbol":"600000.SH"}`, Status: "completed",
 	}
 	intent, err := IntentFromModelToolCall(call)
@@ -53,7 +53,7 @@ func TestNewLLMRegistryUsesBoundedLocalSchemaValidation(t *testing.T) {
 	registry, err := NewLLMRegistry([]Definition{{
 		Name: "research.lookup",
 		ParametersJSON: []byte(`{"type":"object","required":["symbol"],"properties":{"symbol":{"type":"string"}},"additionalProperties":false}`),
-		Timeout: time.Second, MaxCallsPerRun: 1,
+		Timeout:        time.Second, MaxCallsPerRun: 1,
 	}})
 	if err != nil {
 		t.Fatal(err)

@@ -156,7 +156,7 @@ func (r *Registry) Authorize(intent Intent, budget Budget) (AuthorizedCall, erro
 	}
 	return AuthorizedCall{
 		CallID: intent.CallID, Name: definition.Name,
-		ArgumentsJSON: append(json.RawMessage(nil), intent.ArgumentsJSON...),
+		ArgumentsJSON:  append(json.RawMessage(nil), intent.ArgumentsJSON...),
 		IdempotencyKey: budget.IdempotencyKey, Timeout: timeout, Deadline: deadline,
 	}, nil
 }
