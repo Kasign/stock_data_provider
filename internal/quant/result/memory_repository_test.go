@@ -5,9 +5,11 @@ import (
 	"errors"
 	"sync"
 	"testing"
+
+	"example.com/stock-analysis-flow/internal/quant/manifest"
 )
 
-func TestMemoryRepositorySaveIsIdempotentAndDetectsConflict(t *testing.T) {
+func TestMemoryRepositorySaveIsIdempotentAndRejectsTamperedIdentity(t *testing.T) {
 	repository := NewMemoryRepository()
 	first := validRecord(t, `{"metric_code":"momentum_20d","value":0.12}`)
 	if err := repository.Save(context.Background(), first); err != nil {
@@ -17,11 +19,10 @@ func TestMemoryRepositorySaveIsIdempotentAndDetectsConflict(t *testing.T) {
 		t.Fatalf("idempotent Save() error = %v", err)
 	}
 
-	conflict := validRecord(t, `{"metric_code":"momentum_20d","value":0.13}`)
-	// 用第一条记录的 result_id 模拟唯一键冲突，但保留第二份有效内容寻址载荷。
-	conflict.Manifest.ResultID = first.Manifest.ResultID
-	if err := repository.Save(context.Background(), conflict); !errors.Is(err, ErrResultConflict) {
-		t.Fatalf("conflicting Save() error = %v, want ErrResultConflict", err)
+	tampered := first
+	tampered.Payload = json.RawMessage(`{"metric_code":"momentum_20d","value":0.13}`)
+	if err := repository.Save(context.Background(), tampered); !errors.Is(err, manifest.ErrInvalidPayload) {
+		t.Fatalf("tampered Save() error = %v, want manifest.ErrInvalidPayload", err)
 	}
 	if len(repository.records) != 1 {
 		t.Fatalf("stored record count = %d, want 1", len(repository.records))

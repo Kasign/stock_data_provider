@@ -7,7 +7,7 @@
 - 使用互斥锁将 result_id 唯一性检查与写入作为单一原子操作。
 - 保存前调用 `Record.ValidatedSnapshot`，隔离调用方后续修改。
 - 相同 result_id 且 Manifest/payload 指纹相同，幂等成功。
-- 相同 result_id 但内容指纹不同，返回 `ErrResultConflict`。
+- 相同 result_id 且内容指纹相同，幂等成功；若传入内容与 Manifest 指纹不匹配，在唯一性检查前拒绝。`ErrResultConflict` 保留给存储层检测到有效身份冲突/哈希碰撞的防御性路径。
 - 遵守 context 取消，不在取消后继续写入。
 - 不提供读取方法，避免绕过尚未完成的读取授权复核。
 
