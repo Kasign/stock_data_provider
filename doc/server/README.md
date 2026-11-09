@@ -564,6 +564,23 @@ flowchart TD
 - 相关代码提交：`f9c879c`（Aggregator）、`e787b3c`（聚合测试）、`4c65a1e`（共享存储检查）、`1d83680`（Service 组合入口）、`aad2ed1`（Service 测试）、`50286bc`/`984c25e`（Health Handler）、`ad21cd4`（统一宿主接入）、`3f0a876`（Handler 测试）。
 
 
+### 12.22 SRV-002 Server 进程配置快照第一阶段（2026-11-09）
+
+#### 实施内容
+
+- 新增 `internal/server/config.Process` 与 `LoadProcess`，在 Bootstrap 启动早期一次性解析 Server 进程级配置：日志级别、旧 Analysis 超时/Worker/队列限制、运行角色、Migration、安全认证和 HTTP 配置。
+- Bootstrap 只消费该配置快照，不再分别调用多个 Server 配置加载器，也不再直接读取 `LOG_LEVEL`、`ANALYSIS_TIMEOUT`、`ANALYSIS_WORKERS`、`ANALYSIS_MAX_QUEUED`。
+- 将旧 Analysis 参数范围校验统一放入 Server Config：超时大于 0 且不超过 30 分钟；Worker 为 1～32；队列容量不小于 Worker 数且不超过 10000。
+- Worker-only 角色不加载 HTTP 和 Owner HTTP 认证配置，避免后台进程被不需要的 HTTP Secret 阻塞。
+- 存储和行情配置仍由现有兼容 Adapter 的 `LoadConfigFromEnv` / `ConfigFromEnv` 负责。它们属于现有 Adapter 配置所有权，本阶段不在 Server 复制其 Schema；后续模块公开配置契约就绪后，再统一改为显式 Config 注入。
+- 新增默认配置、Worker 角色跳过 HTTP/安全配置、非法日志级别/超时/Worker/队列/Migration 配置等测试。
+
+#### 当前边界
+
+- 本阶段完成的是 Server 进程级配置快照，不代表所有领域模块配置已完成统一装载。
+- .env 文件仍由 Bootstrap 在配置解析前加载；敏感值仍通过 Platform Env Secret 类型进入 Security 配置。
+- 本批次尚未运行当前 SHA 的 gofmt、Server 包测试或 Go Workflow；不得标记编译/测试通过。
+
 ## 13. 分支与协作规则
 
 - 本规划及 Server 代码实施位于 `feat/research-analysis-flow-native-go`。
@@ -594,8 +611,8 @@ Server 层完成不是“服务能够启动”这么简单。至少同时满足�
 | 任务 | 状态 | 说明 |
 |---|---|---|
 | SRV-001 | 完成 | 已记录旧入口、路由与认证现状、旧 Analysis Migration 四表、Worker/Storage 生命周期、部署边界及各模块接入就绪度；详细见 12.3 节 |
-| SRV-002 | 进行中 | 已创建 internal/server/bootstrap，入口已委托 Bootstrap；HTTP 配置和 Platform 资源创建已拆出；剩余模块 Registry 与统一装配 |
-| SRV-003 | 进行中 | DB、Redis、HTTP Client 已由 Resources 统一创建和关闭；后续接入模块资源注入与诊断贡献项 |
+| SRV-002 | 进行中 | 已创建 internal/server/bootstrap，入口已委托 Bootstrap；Server 进程级配置已集中为 Process 快照；存储/行情仍由兼容 Adapter 自行解析，模块 Registry 与统一装配未完成；详见 12.22 节 |
+| SRV-003 | 进行中 | DB、Redis、HTTP Client 已由 Resources 统一创建和关闭；尚未按真实模块上游配置创建 BoundDoer 并注入消费者，待公开构造入口交付 |
 | SRV-004 | 阻塞 | 已复核模块接入面；Researchflow/Quant/LLM/Notification 缺少完整生产装配入口，News/Research 也有关键查询/授权接入缺口；详见 12.6 节 |
 | SRV-005 | 进行中 | 已接入 Platform Bearer Owner 认证、入口 Request ID、Fault HTTP 映射工具、请求体与并发限制；现有旧 Analysis Handler 保留原业务错误 DTO；Web Session/密码登录、CSRF、登录限流、模块 Service Scope 和可信代理边界仍待契约/模块入口，现有 WebUI 尚未携带 Analysis Owner 凭证，不能视为浏览器认证链路已完成 |
 | SRV-006 | 进行中 | 旧 Analysis Worker 与 HTTP Server 均已纳入统一 Lifecycle；HTTP Listener 在 Start 阶段同步绑定，Readiness 在 HTTP Shutdown 前切换为 not-ready，Shutdown 超时后强制 Close；真实 SIGTERM 子进程测试已补充，待当前 SHA 的 Workflow 证据；模块 Worker 接入和生产容器退出验收仍待完成 |
