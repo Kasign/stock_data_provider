@@ -61,6 +61,9 @@ func (r *Registry) Register(namespace string, migrations []platformstorage.Migra
 			Statements: append([]string(nil), item.Statements...),
 		}
 	}
+	sort.Slice(snapshot, func(i, j int) bool {
+		return snapshot[i].Version < snapshot[j].Version
+	})
 	r.entries[namespace] = snapshot
 	return nil
 }
