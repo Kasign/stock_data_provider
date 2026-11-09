@@ -187,3 +187,30 @@ func TestDeliveryValidationRejectsInconsistentNullableFields(t *testing.T) {
 		t.Fatal("non-UTC timestamps must be rejected")
 	}
 }
+
+
+func TestValidateDeliveryStateEventRejectsControlCharactersInManualRetryReason(t *testing.T) {
+	record := validDeliveryRecord()
+	sending, _, err := record.Transition(DeliveryTransition{
+		To: DeliverySending, At: record.UpdatedAt.Add(time.Second),
+	})
+	if err != nil { t.Fatal(err) }
+	failed, _, err := sending.Transition(DeliveryTransition{
+		To: DeliveryFailed, At: sending.UpdatedAt.Add(time.Second), ReasonCode: "manual_review",
+	})
+	if err != nil { t.Fatal(err) }
+	_, event, err := failed.Transition(DeliveryTransition{
+		To: DeliveryQueued, At: failed.UpdatedAt.Add(time.Second),
+		AuthorizedManualRetry: true, ActorRef: "owner-1", RequestID: "request-1",
+		ManualRetryReason: "配置修复后重试",
+	})
+	if err != nil { t.Fatal(err) }
+	for _, reason := range []string{"包含\n换行", "包含\r回车", "包含\x00空字符"} {
+		corrupted := event
+		value := reason
+		corrupted.ActorReason = &value
+		if err := ValidateDeliveryStateEvent(DeliveryFailed, corrupted); !errors.Is(err, ErrInvalidDeliveryChange) {
+			t.Errorf("reason %q must be rejected, got %v", reason, err)
+		}
+	}
+}
