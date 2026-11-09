@@ -353,12 +353,7 @@ func Bollinger(closes []float64, p BollingerParams) (BandsResult, error) {
 
 	window := closes[len(closes)-p.Window:]
 	middle := mean(window)
-	var sum float64
-	for _, value := range window {
-		delta := value - middle
-		sum += delta * delta
-	}
-	standardDeviation := math.Sqrt(sum / float64(p.Window))
+	standardDeviation := sampleStdDev(window, false)
 	band := p.Multiplier * standardDeviation
 	upper, lower := middle+band, middle-band
 	if !finite(middle) || !finite(standardDeviation) || !finite(upper) || !finite(lower) {
@@ -450,11 +445,23 @@ func finite(value float64) bool {
 }
 
 func mean(values []float64) float64 {
-	var sum float64
+	var scale float64
 	for _, value := range values {
-		sum += value
+		if absolute := math.Abs(value); absolute > scale {
+			scale = absolute
+		}
 	}
-	return sum / float64(len(values))
+	if scale == 0 {
+		return 0
+	}
+
+	var average float64
+	for _, value := range values {
+		average += (value / scale) / float64(len(values))
+	}
+	// 理论均值绝对值不可能大于最大输入绝对值；钳制浮点累加产生的微小越界。
+	average = math.Max(-1, math.Min(1, average))
+	return scale * average
 }
 
 func rsiValue(gain, loss float64) float64 {

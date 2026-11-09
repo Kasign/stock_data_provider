@@ -86,6 +86,55 @@ func TestVolatilityAvoidsIntermediateOverflowForFiniteReturns(t *testing.T) {
 	}
 }
 
+func TestMeanAvoidsIntermediateOverflowForFinitePrices(t *testing.T) {
+	closes := []float64{1e308, 1e308}
+
+	sma, err := SMA(closes, SMAParams{Window: 2})
+	if err != nil {
+		t.Fatalf("SMA() rejected a representable mean: %v", err)
+	}
+	if sma.Status != StatusAvailable || sma.Value != 1e308 {
+		t.Fatalf("SMA() = %+v, want available value 1e308", sma)
+	}
+
+	ema, err := EMA(closes, EMAParams{Window: 2, SeedMethod: "sma"})
+	if err != nil {
+		t.Fatalf("EMA() rejected a representable seed mean: %v", err)
+	}
+	if ema.Status != StatusAvailable || ema.Value != 1e308 {
+		t.Fatalf("EMA() = %+v, want available value 1e308", ema)
+	}
+}
+
+func TestBollingerAvoidsIntermediateOverflowForFinitePrices(t *testing.T) {
+	closes := []float64{1e308, 5e307, 5e307}
+	got, err := Bollinger(closes, BollingerParams{Window: 3, Multiplier: 2, StdDevMethod: "population"})
+	if err != nil {
+		t.Fatalf("Bollinger() rejected representable statistics: %v", err)
+	}
+
+	wantMiddle := (2.0 / 3.0) * 1e308
+	wantStdDev := math.Sqrt(1.0/18.0) * 1e308
+	wantUpper := wantMiddle + 2*wantStdDev
+	wantLower := wantMiddle - 2*wantStdDev
+	for _, pair := range []struct {
+		name string
+		got  float64
+		want float64
+	}{
+		{"middle", got.Middle, wantMiddle},
+		{"upper", got.Upper, wantUpper},
+		{"lower", got.Lower, wantLower},
+	} {
+		if !finite(pair.got) || math.Abs(pair.got-pair.want)/pair.want > 1e-12 {
+			t.Fatalf("Bollinger() %s = %.17g, want approximately %.17g", pair.name, pair.got, pair.want)
+		}
+	}
+	if got.Status != StatusAvailable || got.SampleCount != 3 {
+		t.Fatalf("unexpected Bollinger metadata: %+v", got)
+	}
+}
+
 func TestRSIWilderSeedAndSmoothing(t *testing.T) {
 	got, err := RSI([]float64{1, 2, 3, 2, 1}, RSIParams{Window: 2, SmoothingMethod: "wilder"})
 	if err != nil {
