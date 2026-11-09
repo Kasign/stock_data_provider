@@ -589,7 +589,7 @@ flowchart TD
 
 - 在 Server Migration Registry 增加 `RunWithReport`，保留原 `Run` error-only 接口作为兼容封装，现有调用方不需要一次性迁移。
 - 报告记录整体开始/结束时间、耗时、总状态，以及按 namespace 字典序执行的逐项结果和耗时。
-- namespace 执行失败时记录 `failed` 和稳定 `reason_code=server.migration.namespace_failed`，保留已完成 namespace 的结果，并在首个失败处停止后续 namespace。
+- namespace 执行失败时记录 `failed` 和稳定 `reason_code`，优先保留经 Platform Fault.Validate 确认的 Platform Fault Code，否则回退 `server.migration.namespace_failed`；保留已完成 namespace 的结果，并在首个失败处停止后续 namespace。
 - 报告不输出 SQL、数据库驱动错误详情或连接凭据；原始错误仅作为内部启动错误链和受控服务端日志，不进入公开 HTTP 响应。
 - Bootstrap 在 Migration 成功和失败时均结构化记录报告；失败仍阻止启动流程继续，不会将未完成 Migration 的服务标记为 Ready。
 - 新增空 Registry 前置失败报告测试，覆盖状态、时间边界和空结果。
@@ -601,6 +601,31 @@ flowchart TD
 - 本批次尚未运行 gofmt、Server 包测试或 Go Workflow；MariaDB 成功/失败集成验收未完成。
 - 代码提交：`698eef3e5b57ff2476219dd191e1e9d939c60aae`（执行报告）、`584bc2889d92241cd8567a15097b3eea9370c0d6`（Bootstrap 结构化日志）。
 - 测试提交：`a31e9e5f858fd864f501fd27da8eb19902e1425a`。
+
+### 12.24 SRV-003 共享 HTTP Client BoundDoer 装配入口第一阶段（2026-11-09）
+
+#### 实施内容
+
+- `Resources` 新增 `BindHTTPDestination`，使用启动时创建的共享 Platform HTTP Client，按调用方提供的固定 `DestinationPolicy` 创建 `BoundDoer`。
+- Server 不在通用资源层硬编码任意上游域名、端口或重定向策略；各模块/部署配置必须提供精确 allowlist 后，才能绑定自己的 Dependency。
+- 绑定策略由 Platform `Client.Bind` 复制并固定，后续请求不能替换目标策略。
+- Resources 增加关闭状态保护：Close 开始后不再允许创建新的 BoundDoer，避免关闭阶段仍有消费者获得新依赖；既有消费者仍必须先由 Lifecycle 停止，再关闭 Resources。
+- 新增共享 Client 绑定成功、缺少 Client、非法策略和关闭后拒绝绑定测试。
+
+#### 当前边界
+
+- 这是 Server 的共享资源绑定入口，不代表 LLM 等消费者已经完成生产注入；模块公开构造入口和实际上游配置仍未交付时，不创建虚假 DestinationPolicy。
+- HTTP Client 当前仍使用 Platform 默认资源限制；各真实 Dependency 的并发配额、域名、端口和流式配额需依据模块生产配置逐项注入。
+- Platform Client 目前公开 `CloseIdleConnections`，Resources 继续按现有生命周期关闭空闲连接；完整消费者停止和流式 Body 关闭仍由模块 Lifecycle/A2 验收。
+- 代码提交：`cf917b675dbef448ad300822563b52927d612d0b`。
+- 测试提交：`9996e740d187578af0d2d92afef1bc8cb1c91614`。
+- 本批次尚未运行 gofmt、Server 包测试或 Go Workflow。
+
+#### Migration 报告补充
+
+- Server 从 Platform Fault 中提取通过 `Validate()` 的稳定 `Code` 作为 namespace 失败 `reason_code`；非 Platform Fault 或元数据非法时回退为 Server 通用原因码。
+- 不读取或序列化 Platform Fault 的 Cause/Dependency，不在结构化报告暴露底层 SQL 语句和驱动错误。
+- 修正提交：`a1d637cea8c1038ab9e0da5952a8acfbc91f71ea`。
 
 ## 13. 分支与协作规则
 
@@ -633,7 +658,7 @@ Server 层完成不是“服务能够启动”这么简单。至少同时满足�
 |---|---|---|
 | SRV-001 | 完成 | 已记录旧入口、路由与认证现状、旧 Analysis Migration 四表、Worker/Storage 生命周期、部署边界及各模块接入就绪度；详细见 12.3 节 |
 | SRV-002 | 进行中 | 已创建 internal/server/bootstrap，入口已委托 Bootstrap；Server 进程级配置已集中为 Process 快照；存储/行情仍由兼容 Adapter 自行解析，模块 Registry 与统一装配未完成；详见 12.22 节 |
-| SRV-003 | 进行中 | DB、Redis、HTTP Client 已由 Resources 统一创建和关闭；尚未按真实模块上游配置创建 BoundDoer 并注入消费者，待公开构造入口交付 |
+| SRV-003 | 进行中 | DB、Redis、HTTP Client 已由 Resources 统一创建和关闭；新增固定 DestinationPolicy 的 BoundDoer 绑定入口；真实模块注入、Dependency allowlist/配额及消费者停止验收仍待模块入口交付；详见 12.24 节 |
 | SRV-004 | 阻塞 | 已复核模块接入面；Researchflow/Quant/LLM/Notification 缺少完整生产装配入口，News/Research 也有关键查询/授权接入缺口；详见 12.6 节 |
 | SRV-005 | 进行中 | 已接入 Platform Bearer Owner 认证、入口 Request ID、Fault HTTP 映射工具、请求体与并发限制；现有旧 Analysis Handler 保留原业务错误 DTO；Web Session/密码登录、CSRF、登录限流、模块 Service Scope 和可信代理边界仍待契约/模块入口，现有 WebUI 尚未携带 Analysis Owner 凭证，不能视为浏览器认证链路已完成 |
 | SRV-006 | 进行中 | 旧 Analysis Worker 与 HTTP Server 均已纳入统一 Lifecycle；HTTP Listener 在 Start 阶段同步绑定，Readiness 在 HTTP Shutdown 前切换为 not-ready，Shutdown 超时后强制 Close；真实 SIGTERM 子进程测试已补充，待当前 SHA 的 Workflow 证据；模块 Worker 接入和生产容器退出验收仍待完成 |
