@@ -60,6 +60,10 @@ func Run(ctx context.Context) error {
 	}
 	migrationCfg := processConfig.Migration
 	serverRole := processConfig.Role
+	shutdownTimeout := 10 * time.Second
+	if serverRole != serverconfig.RoleWorker {
+		shutdownTimeout = processConfig.HTTP.ShutdownTimeout
+	}
 	analysisTimeout := processConfig.AnalysisTimeout
 	workers := processConfig.AnalysisWorkers
 	maxQueued := processConfig.AnalysisMaxQueued
@@ -78,9 +82,21 @@ func Run(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("连接 MariaDB/Redis 失败（检查 DB_HOST/DB_PASSWORD/REDIS_ADDR 和 DB_AUTO_MIGRATE）: %w", err)
 	}
+	var lifecycle *runtime.Lifecycle
 	defer func() {
-		if closeErr := storageResources.Close(); closeErr != nil {
-			slog.Warn("关闭数据库/缓存依赖失败", "service", "stock-analysis-api", "error", closeErr.Error())
+		stopCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
+		defer cancel()
+		if shutdownErr := stopConsumersThenCloseResources(
+			stopCtx,
+			func(ctx context.Context) error {
+				if lifecycle == nil {
+					return nil
+				}
+				return lifecycle.Stop(ctx)
+			},
+			storageResources.Close,
+		); shutdownErr != nil {
+			slog.Warn("停止 Server 并关闭共享资源失败", "error", shutdownErr.Error())
 		}
 	}()
 
@@ -110,7 +126,7 @@ func Run(ctx context.Context) error {
 		return fmt.Errorf("创建旧 Analysis 异步任务队列失败: %w", err)
 	}
 
-	lifecycle := runtime.NewLifecycle()
+	lifecycle = runtime.NewLifecycle()
 	if err := lifecycle.Register(legacyAnalysisWorker{name: "legacy-analysis-worker", queue: tasks, enabled: serverRole == serverconfig.RoleWorker || serverRole == serverconfig.RoleAll}); err != nil {
 		return fmt.Errorf("注册旧 Analysis Worker 生命周期失败: %w", err)
 	}
@@ -156,18 +172,6 @@ func Run(ctx context.Context) error {
 		}
 	}
 
-	shutdownTimeout := 10 * time.Second
-	if httpComponent != nil {
-		shutdownTimeout = httpConfig.ShutdownTimeout
-	}
-	defer func() {
-		stopCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
-		defer cancel()
-		if err := lifecycle.Stop(stopCtx); err != nil {
-			slog.Warn("停止 Server 运行组件失败", "error", err.Error())
-		}
-	}()
-
 	if err := lifecycle.Start(ctx); err != nil {
 		return fmt.Errorf("启动 Server 运行组件失败: %w", err)
 	}
@@ -183,6 +187,24 @@ func Run(ctx context.Context) error {
 	case <-httpComponent.Done():
 		return httpComponent.Result()
 	}
+}
+
+// stopConsumersThenCloseResources enforces the ownership boundary: all
+// lifecycle-managed consumers stop before shared DB/Redis/HTTP resources close.
+// Resource closure still runs when consumer shutdown reports an error.
+func stopConsumersThenCloseResources(
+	ctx context.Context,
+	stopConsumers func(context.Context) error,
+	closeResources func() error,
+) error {
+	var stopErr, closeErr error
+	if stopConsumers != nil {
+		stopErr = stopConsumers(ctx)
+	}
+	if closeResources != nil {
+		closeErr = closeResources()
+	}
+	return errors.Join(stopErr, closeErr)
 }
 
 type legacyAnalysisWorker struct {
