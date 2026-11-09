@@ -744,3 +744,10 @@ internal/
 - 新增编译期断言，确认当前 DataService 实现七组接口；`ProviderProbeOptions` 定义移至 `model`，`service.ProviderProbeOptions` 保留类型别名，HTTP Adapter 不再为探测请求类型导入 service。
 - `NewWithApplication` 改为接收 `ApplicationDependencies`，按用例域注入，避免再次引入单一巨型接口；旧构造器继续兼容现有 Bootstrap，来源能力快照仍由原构造逻辑提供。
 - 现阶段尚未完成 M2-5 第二阶段：Bootstrap 仍调用兼容构造器，下一步将 Provider 能力来源状态构建迁入 Bootstrap，并让生产装配直接调用 `NewWithApplication`。
+
+
+### 2026-11-09：恢复 Provider Probe 原有模型定义
+
+- 接口拆分时新增的 `ProviderProbeOptions` 与原有 `model/provider_probe.go` 同路径，初次提交误覆盖了原有 ProviderProbeRun、CheckResult、FieldComparison、Item 等诊断模型。
+- MariaDB/PIT CI 明确报出这些类型缺失；已从接口拆分前的提交 `d0487f98` 恢复原文件全部内容，并在原文件末尾追加 `ProviderProbeOptions`。
+- 这次修复不改动任何原有诊断字段、JSON 名称或持久化语义；后续模型新增先检查目标路径，禁止覆盖已有模型文件。
