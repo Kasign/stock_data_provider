@@ -16,9 +16,9 @@ import (
 var _ StorageProbe = (*storage.MySQLRepository)(nil)
 
 type observationRetentionProbeStub struct {
-	count int
+	count  int
 	oldest *time.Time
-	err error
+	err    error
 }
 
 func (s observationRetentionProbeStub) ObservationRetentionBacklog(context.Context, time.Time) (int, *time.Time, error) {
@@ -58,7 +58,9 @@ func TestObservationRetentionCheckReportsBacklogAndHealthyState(t *testing.T) {
 		t.Fatalf("retention backlog observation=%+v", observation)
 	}
 	report, err = (platformdiag.Runner{}).Run(context.Background(), []platformdiag.Check{ObservationRetentionCheck(observationRetentionProbeStub{})})
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	if report.Results[0].Observation.Status != platformdiag.StatusHealthy || report.Results[0].Observation.Attributes["overdue_count"] != "0" {
 		t.Fatalf("empty retention backlog observation=%+v", report.Results[0].Observation)
 	}
