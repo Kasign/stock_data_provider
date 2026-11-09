@@ -166,7 +166,6 @@ func TestValidateResponsesStrictSchemaSubsetEnforcesDocumentedLimits(t *testing.
 	})
 }
 
-
 // TestValidateCapabilitiesRequiresAdvancedSchemaConstraintEvidence 验证高级 Schema 约束必须有模型级证据。
 func TestValidateCapabilitiesRequiresAdvancedSchemaConstraintEvidence(t *testing.T) {
 	provider, _, capabilities, clock := adapterTestConfig()

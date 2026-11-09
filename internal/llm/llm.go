@@ -20,14 +20,14 @@ type Capability string
 type CapabilityStatus string
 
 const (
-	CapabilityResponsesJSON      Capability = "responses_json"
-	CapabilityResponsesStream    Capability = "responses_stream"
-	CapabilityStructuredOutput                   Capability = "structured_output_json_schema"
+	CapabilityResponsesJSON                       Capability = "responses_json"
+	CapabilityResponsesStream                     Capability = "responses_stream"
+	CapabilityStructuredOutput                    Capability = "structured_output_json_schema"
 	CapabilityStructuredOutputAdvancedConstraints Capability = "structured_output_advanced_constraints"
-	CapabilityFunctionToolCalls                  Capability = "function_tool_calls"
-	CapabilityReasoningEffort    Capability = "reasoning_effort"
-	CapabilitySamplingParameters Capability = "sampling_parameters"
-	CapabilityUsageDetails       Capability = "usage_details"
+	CapabilityFunctionToolCalls                   Capability = "function_tool_calls"
+	CapabilityReasoningEffort                     Capability = "reasoning_effort"
+	CapabilitySamplingParameters                  Capability = "sampling_parameters"
+	CapabilityUsageDetails                        Capability = "usage_details"
 
 	CapabilitySupported   CapabilityStatus = "supported"
 	CapabilityUnsupported CapabilityStatus = "unsupported"

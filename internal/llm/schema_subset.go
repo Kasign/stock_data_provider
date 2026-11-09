@@ -328,7 +328,6 @@ func (budget *responsesSchemaSubsetBudget) addString(value string) {
 	budget.stringChars += utf8.RuneCountInString(value)
 }
 
-
 // responsesStrictSchemaUsesAdvancedConstraints reports whether a strict schema
 // relies on keywords that need separate model-specific evidence.
 func responsesStrictSchemaUsesAdvancedConstraints(raw []byte) bool {
