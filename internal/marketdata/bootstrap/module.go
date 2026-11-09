@@ -125,7 +125,7 @@ func (m *Module) Diagnostics() Diagnostics {
 }
 
 // MigrationRunner 返回 Data 自有迁移执行器；未配置持久化时返回 nil。
- // 迁移由组合根显式执行，Module 构造和 Store 打开均不隐式修改 Schema。
+// 迁移由组合根显式执行，Module 构造和 Store 打开均不隐式修改 Schema。
 func (m *Module) MigrationRunner() MigrationRunner {
 	if m == nil || m.store == nil {
 		return nil
