@@ -28,7 +28,7 @@ func ValidateDeliveryStateHistory(delivery domain.DeliveryRecord, events []domai
 	}
 
 	previousStatus := domain.DeliveryQueued
-	previousAt := delivery.CreatedAt
+	previousAt := delivery.UpdatedAt
 	for index, event := range events {
 		expectedVersion := int64(index) + 2
 		if event.DeliveryID != delivery.DeliveryID ||
@@ -47,7 +47,7 @@ func ValidateDeliveryStateHistory(delivery domain.DeliveryRecord, events []domai
 		previousAt = event.ChangedAt
 	}
 	if len(events) == 0 {
-		if delivery.Version != 1 || delivery.Status != domain.DeliveryQueued || !delivery.UpdatedAt.Equal(delivery.CreatedAt) {
+		if delivery.Version != 1 || delivery.Status != domain.DeliveryQueued {
 			return "", ErrDeliveryStateHistory
 		}
 		return DeliveryStateHistoryConsistent, nil
