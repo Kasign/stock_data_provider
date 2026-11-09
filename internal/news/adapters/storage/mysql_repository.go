@@ -31,6 +31,7 @@ type MySQLRepository struct {
 var _ app.IdentityRepository = (*MySQLRepository)(nil)
 var _ app.ResearchUpdateRepository = (*MySQLRepository)(nil)
 var _ app.NewsItemRelationRepository = (*MySQLRepository)(nil)
+var _ app.EvidencePITRepository = (*MySQLRepository)(nil)
 
 var _ app.IdentityTransaction = (*mysqlNewsTransaction)(nil)
 var _ app.ResearchUpdateTransaction = (*mysqlNewsTransaction)(nil)

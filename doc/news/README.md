@@ -42,7 +42,7 @@
 - [x] N5 A1：Platform Config/Secret、Provider/Source BoundDoer 策略适配、Fault 安全映射与 Request ID 传播代码已实现；真实公网/DNS 出口及 Server 生产注入仍待集成验收
 - [x] N6 A1：News MySQLRepository、Migration V1-V3、不可变授权快照和只读分页 Snapshot Store 已实现；V1/V2 MariaDB 11.4 集成已通过，V3 等待最新 CI；Server 共享 DB 注入和总 Migration 注册不在 News 分支修改范围
 - [x] N7 A1：Provider Config、Parser Self、Source Endpoint Readiness、Storage 和单条 BusinessQuality Checks 已实现；Platform Runner 注册仍由 Server 组合根完成
-- [x] NEWS-CTR-001 首批：Request/Response DTO、JSON Schema/Golden、HMAC Cursor Codec、只存引用的 15 分钟 Snapshot Store 已实现；Query Facade、严格 PIT Repository、available_at 证据过滤和内容裁剪未完成
+- [x] NEWS-CTR-001 首批：Request/Response DTO、JSON Schema/Golden、HMAC Cursor Codec、只存引用的 15 分钟 Snapshot Store 已实现；Query Facade、List PIT/关系历史查询、available_at 证据过滤和内容裁剪未完成；GetEvidence 单版本 PIT Repository 首批已实现
 - [x] NEWS-CTR-002 首批：AuthorizationBinding 校验和不可变快照 MariaDB 存储已实现；JCS Runtime Verifier、当前策略版本复核、撤销/过期竞态和内容读取 TOCTOU 保护未完成
 - [ ] N8 / PLAT-013：完成 A2 契约测试、Server 装配、Migration 注册、News/Research Facade 接入验收；A3 故障演练对应 PLAT-014
 - [x] N1-A 用户评审确认；N2 已完成并进入 N3
@@ -192,3 +192,13 @@ News MariaDB 集成测试新增两类篡改场景：授权快照和分页 Eviden
 - [x] 新增单测覆盖 caller、purpose、content level、filters、page size、system_as_of 任一不一致时拒绝匹配。
 - [ ] Query Facade 尚未接入 Snapshot Store；严格 PIT Repository 查询、当前授权复核、撤销竞态和内容读取 TOCTOU 仍未完成。
 - 本次仅增强快照上下文绑定，不代表 NEWS-CTR-001 完整查询能力或真实数据验收通过。
+
+
+### NEWS-CTR-001 单版本 GetEvidence PIT Repository 首批（2026-11-09）
+
+- [x] 新增内部 EvidencePITRepository Port，供 News Application GetEvidence Facade 调用；不作为 Research 跨模块接口。
+- [x] MariaDB 查询同时约束版本与所属 Observation 的 observed_at <= system_as_of，并以 news_id + observation_id 关联，避免未来 Observation 反向暴露版本。
+- [x] 未指定 version_id 时按可见版本 observed_at DESC、version_no DESC、version_id DESC 选择；指定 version_id 时仍执行相同知识时间过滤。
+- [x] 返回内部 Observation/Version 与 source/provider 引用；不推导 available_at，也不直接向跨模块调用方披露内容。
+- [x] MariaDB 集成测试覆盖截止时间前不可见、截止时间后可见、显式指定未来版本仍拒绝。
+- [ ] List PIT、Relation/Identity 历史查询、Query Facade、授权当前复核和内容裁剪仍未完成；本任务不代表 NEWS-CTR-001 完整验收。

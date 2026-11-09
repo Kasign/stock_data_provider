@@ -354,6 +354,34 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 		t.Fatalf("create second news version: %v", err)
 	}
 
+	// Both the version and its owning Observation must be visible at system_as_of.
+	beforeVersion := app.GetEvidenceRequest{
+		NewsID: secondObservation.NewsID,
+		SystemAsOf: secondVersion.Version.ObservedAt.Add(-time.Second),
+	}
+	if _, err := repository.GetEvidenceVersionAt(ctx, beforeVersion); !errors.Is(err, app.ErrEvidencePITNotFound) {
+		t.Fatalf("version before system_as_of error = %v, want PIT not found", err)
+	}
+	atVersion := app.GetEvidenceRequest{
+		NewsID: secondObservation.NewsID,
+		VersionID: secondVersion.Version.ID,
+		SystemAsOf: secondVersion.Version.ObservedAt.Add(time.Second),
+	}
+	pitRecord, err := repository.GetEvidenceVersionAt(ctx, atVersion)
+	if err != nil {
+		t.Fatalf("get evidence at system_as_of: %v", err)
+	}
+	if pitRecord.Version.ID != secondVersion.Version.ID ||
+		pitRecord.Observation.ID != secondObservation.ID ||
+		pitRecord.SourceRef != secondSourceID ||
+		pitRecord.ProviderRef != "integration" {
+		t.Fatalf("PIT record mismatch: %+v", pitRecord)
+	}
+	atVersion.SystemAsOf = secondVersion.Version.ObservedAt.Add(-time.Second)
+	if _, err := repository.GetEvidenceVersionAt(ctx, atVersion); !errors.Is(err, app.ErrEvidencePITNotFound) {
+		t.Fatalf("explicit future version error = %v, want PIT not found", err)
+	}
+
 	relationService := app.NewApplyNewsItemRelation(repository, newID)
 	relation, err := relationService.Execute(ctx, app.NewsItemRelationRequest{
 		Relation: domain.NewsItemRelation{
