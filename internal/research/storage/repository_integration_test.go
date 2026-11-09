@@ -503,7 +503,7 @@ func TestResearchSQLRepositoriesAppendAndReadVersions(t *testing.T) {
 	if err := eventRepo.Append(ctx, eventV1); err != nil {
 		t.Fatalf("append Event v1: %v", err)
 	}
-	assertResearchPITColumn(t, db, "SELECT system_as_of FROM research_event_versions WHERE event_id=? AND event_version=1", []any{eventID}, cutoff)
+	assertResearchPITColumn(t, ctx, db, "SELECT system_as_of FROM research_event_versions WHERE event_id=? AND event_version=1", []any{eventID}, cutoff)
 	if err := eventRepo.Append(ctx, eventV1); err != nil {
 		t.Fatalf("replay Event v1: %v", err)
 	}
@@ -533,7 +533,7 @@ func TestResearchSQLRepositoriesAppendAndReadVersions(t *testing.T) {
 	if err := claimRepo.Append(ctx, claimV1); err != nil {
 		t.Fatalf("append Claim v1: %v", err)
 	}
-	assertResearchPITColumn(t, db, "SELECT system_as_of FROM research_claim_versions WHERE claim_id=? AND claim_version=1", []any{claimID}, cutoff)
+	assertResearchPITColumn(t, ctx, db, "SELECT system_as_of FROM research_claim_versions WHERE claim_id=? AND claim_version=1", []any{claimID}, cutoff)
 	if err := claimRepo.Append(ctx, claimV1); err != nil {
 		t.Fatalf("replay Claim v1: %v", err)
 	}
@@ -573,9 +573,9 @@ func TestResearchSQLRepositoriesAppendAndReadVersions(t *testing.T) {
 	if err := evidenceRepo.Append(ctx, evidenceV1); err != nil {
 		t.Fatalf("append Evidence: %v", err)
 	}
-	assertResearchPITColumn(t, db, "SELECT system_as_of FROM research_evidence_records WHERE evidence_id=?", []any{evidenceID}, cutoff)
-	assertResearchPITColumn(t, db, "SELECT system_observed_at FROM research_evidence_records WHERE evidence_id=?", []any{evidenceID}, cutoff)
-	assertResearchPITColumn(t, db, "SELECT available_at FROM research_evidence_records WHERE evidence_id=?", []any{evidenceID}, availableAt)
+	assertResearchPITColumn(t, ctx, db, "SELECT system_as_of FROM research_evidence_records WHERE evidence_id=?", []any{evidenceID}, cutoff)
+	assertResearchPITColumn(t, ctx, db, "SELECT system_observed_at FROM research_evidence_records WHERE evidence_id=?", []any{evidenceID}, cutoff)
+	assertResearchPITColumn(t, ctx, db, "SELECT available_at FROM research_evidence_records WHERE evidence_id=?", []any{evidenceID}, availableAt)
 	if err := evidenceRepo.Append(ctx, evidenceV1); err != nil {
 		t.Fatalf("replay Evidence: %v", err)
 	}
