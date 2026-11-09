@@ -38,6 +38,13 @@ type workerExecutorFake struct {
 	err    error
 }
 
+type timeoutWorkerExecutor struct{}
+
+func (timeoutWorkerExecutor) ExecuteStage(ctx context.Context, _ StageExecutionRequest) (StageExecutionResult, error) {
+	<-ctx.Done()
+	return StageExecutionResult{}, ctx.Err()
+}
+
 func (f workerExecutorFake) ExecuteStage(context.Context, StageExecutionRequest) (StageExecutionResult, error) {
 	return f.result, f.err
 }
@@ -149,5 +156,26 @@ func TestWorkerDisablesRetryForNonAllowlistedReason(t *testing.T) {
 	}
 	if !got.Committed || store.commit.Stage.Status != domain.StageFailed || store.commit.Stage.RetryAt != nil {
 		t.Fatalf("non-allowlisted result must become failed: %+v", store.commit)
+	}
+}
+
+
+func TestWorkerConvertsAttemptDeadlineIntoPolicyControlledTimeout(t *testing.T) {
+	store, _ := newWorkerFixture()
+	store.snapshot.RetryPolicy.AttemptTimeoutMS = 1
+	store.snapshot.RetryPolicy.RetryableReasonCodes = []string{"attempt_timeout"}
+	worker, err := NewWorker(store, timeoutWorkerExecutor{}, workerClockFake{}, WorkerConfig{
+		WorkerID: "worker-1", LeaseDuration: time.Minute, HeartbeatInterval: time.Second, MaxParallel: 2,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := worker.Execute(context.Background(), "run-1", "stage-1", "attempt-new")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !got.Committed || store.commit.AttemptStatus != domain.AttemptTimedOut ||
+		store.commit.Stage.Status != domain.StageRetryWait || store.commit.Stage.RetryAt == nil {
+		t.Fatalf("attempt timeout should follow the retry policy: %+v", store.commit)
 	}
 }
