@@ -11,7 +11,7 @@ func TestMigrationsDefineNewsOwnedPersistenceSchema(t *testing.T) {
 		t.Fatalf("Migrations() count = %d, want 5", len(migrations))
 	}
 	for index, migration := range migrations {
-		if migration.Version != index+1 || strings.TrimSpace(migration.Description) == "" || len(migration.Statements) == 0 {
+		if migration.Version != uint64(index+1) || strings.TrimSpace(migration.Description) == "" || len(migration.Statements) == 0 {
 			t.Fatalf("invalid migration metadata at index %d: %#v", index, migration)
 		}
 	}
