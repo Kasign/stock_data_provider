@@ -107,6 +107,60 @@ func TestCreateAndGetEventUseApplicationDTOAndServerIdentity(t *testing.T) {
 	if read.EventID!=got.EventID || read.Status!=command.Status { t.Fatalf("unexpected Event DTO: %+v",read) }
 }
 
+func TestUpdateEventUsesExpectedVersionAndDomainLifecycleRules(t *testing.T) {
+	now := time.Date(2026, 11, 9, 1, 0, 0, 0, time.UTC)
+	previous := researchevent.ResearchEvent{
+		EventID: "evt_existing", EventVersion: 1, EventType: "earnings_guidance",
+		Title: "公司调整年度业绩指引", Status: researchevent.StatusDetected,
+		SubjectRefs: []string{"security:600000"}, EvidenceRefs: []string{"ev_source_1"},
+		SystemObservedAt: now, SystemAsOf: now,
+		ImpactHypothesisRefs: []string{}, InvalidationConditions: []string{"公告撤回"},
+		Uncertainty: []string{}, SourceTimes: []researchevent.EventSourceTime{{
+			EvidenceRef: "ev_source_1", TimeType: researchevent.TimeSystemObservedAt,
+			Value: now, AssertedBy: "news:observation",
+		}},
+	}
+	repo := &eventRepoFake{value: previous}
+	service, err := NewServiceWithEvents(&contextRepoFake{}, &evidenceRepoFake{}, repo, &authorizerFake{}, nil, nil)
+	if err != nil { t.Fatal(err) }
+	revision := CreateEventCommand{
+		EventType: previous.EventType, Title: "业绩指引进入汇总阶段",
+		Status: string(researchevent.StatusConsolidating),
+		SubjectRefs: []string{"security:600000"}, EvidenceRefs: []string{"ev_source_1"},
+		SystemObservedAt: now, SystemAsOf: now.Add(time.Minute),
+		ImpactHypothesisRefs: []string{}, InvalidationConditions: []string{"公告撤回"},
+		Uncertainty: []string{}, SourceTimes: []EventSourceTime{{
+			EvidenceRef: "ev_source_1", TimeType: string(researchevent.TimeSystemObservedAt),
+			Value: now, AssertedBy: "news:observation",
+		}},
+	}
+	got, err := service.UpdateEvent(context.Background(), UpdateEventCommand{
+		EventID: previous.EventID, ExpectedVersion: 1, Revision: revision,
+	})
+	if err != nil { t.Fatal(err) }
+	if got.EventID != previous.EventID || got.EventVersion != 2 || got.Status != string(researchevent.StatusConsolidating) {
+		t.Fatalf("unexpected Event revision: %+v", got)
+	}
+	if _, err := service.UpdateEvent(context.Background(), UpdateEventCommand{
+		EventID: previous.EventID, ExpectedVersion: 1, Revision: revision,
+	}); err == nil {
+		t.Fatal("stale expected version must not be accepted")
+	}
+	if repo.value.EventVersion != 2 {
+		t.Fatal("stale Event revision must not overwrite the latest version")
+	}
+	invalid := revision
+	invalid.Status = string(researchevent.StatusDetected)
+	if _, err := service.UpdateEvent(context.Background(), UpdateEventCommand{
+		EventID: previous.EventID, ExpectedVersion: 2, Revision: invalid,
+	}); err == nil {
+		t.Fatal("backward lifecycle transition must be rejected")
+	}
+	if repo.value.EventVersion != 2 {
+		t.Fatal("invalid lifecycle transition must not be persisted")
+	}
+}
+
 func TestCreateEventRejectsInvalidEventBeforePersistence(t *testing.T) {
 	now:=time.Date(2026,11,9,1,0,0,0,time.UTC)
 	repo:=&eventRepoFake{}

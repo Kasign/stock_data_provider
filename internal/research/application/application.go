@@ -156,9 +156,15 @@ type EventRepository interface {
 	Append(context.Context, researchevent.ResearchEvent) error
 	GetVersion(context.Context, string, int) (researchevent.ResearchEvent, error)
 }
+type UpdateEventCommand struct {
+	EventID string
+	ExpectedVersion int
+	Revision CreateEventCommand
+}
 type EventPort interface {
 	CreateEvent(context.Context, CreateEventCommand) (ResearchEvent, error)
 	GetEvent(context.Context, EventRef) (ResearchEvent, error)
+	UpdateEvent(context.Context, UpdateEventCommand) (ResearchEvent, error)
 }
 
 
@@ -447,6 +453,52 @@ func (s *Service) CreateEvent(ctx context.Context, command CreateEventCommand) (
 	if err := value.Validate(); err != nil { return ResearchEvent{}, validationFault("invalid_research_event", "Research Event is invalid", err) }
 	if err := s.events.Append(ctx, value); err != nil { return ResearchEvent{}, mapRepositoryError(err) }
 	return fromDomainEvent(value), nil
+}
+
+func (s *Service) UpdateEvent(ctx context.Context, command UpdateEventCommand) (ResearchEvent, error) {
+	if s == nil || s.events == nil {
+		return ResearchEvent{}, applicationFault(fault.ClassInternal, "research_event_repository_not_configured", "Research Event Repository is not configured", researcherrors.ErrInvalidRepository)
+	}
+	if ctx == nil || strings.TrimSpace(command.EventID) == "" || command.ExpectedVersion < 1 {
+		return ResearchEvent{}, validationFault("invalid_event_update_command", "Event update command is invalid", nil)
+	}
+	previous, err := s.events.GetVersion(ctx, command.EventID, command.ExpectedVersion)
+	if err != nil {
+		return ResearchEvent{}, mapRepositoryError(err)
+	}
+	if previous.EventID != command.EventID || previous.EventVersion != command.ExpectedVersion {
+		return ResearchEvent{}, applicationFault(fault.ClassInternal, "stored_event_identity_mismatch", "Stored Research Event identity does not match the requested version", researcherrors.ErrCorruptRecord)
+	}
+	if err := previous.Validate(); err != nil {
+		return ResearchEvent{}, applicationFault(fault.ClassInternal, "stored_event_invalid", "Stored Research Event is invalid", err)
+	}
+	if previous.EventVersion == int(^uint(0)>>1) {
+		return ResearchEvent{}, validationFault("event_version_limit_reached", "Research Event version limit has been reached", nil)
+	}
+	next := researchevent.ResearchEvent{
+		EventID: previous.EventID, EventVersion: previous.EventVersion + 1,
+		EventType: command.Revision.EventType, Title: command.Revision.Title,
+		Status: researchevent.EventStatus(command.Revision.Status),
+		SubjectRefs: cloneStrings(command.Revision.SubjectRefs),
+		EvidenceRefs: cloneStrings(command.Revision.EvidenceRefs),
+		OccurredAt: cloneTime(command.Revision.OccurredAt),
+		PublishedAt: cloneTime(command.Revision.PublishedAt),
+		AvailableAt: cloneTime(command.Revision.AvailableAt),
+		SystemObservedAt: command.Revision.SystemObservedAt,
+		SystemAsOf: command.Revision.SystemAsOf,
+		ImpactHypothesisRefs: cloneStrings(command.Revision.ImpactHypothesisRefs),
+		InvalidationConditions: cloneStrings(command.Revision.InvalidationConditions),
+		Uncertainty: cloneStrings(command.Revision.Uncertainty),
+		SupersedesEventVersion: cloneInt(command.Revision.SupersedesEventVersion),
+		SourceTimes: toDomainEventTimes(command.Revision.SourceTimes),
+	}
+	if err := next.ValidateNextVersion(previous); err != nil {
+		return ResearchEvent{}, validationFault("invalid_research_event_transition", "Research Event revision is invalid", err)
+	}
+	if err := s.events.Append(ctx, next); err != nil {
+		return ResearchEvent{}, mapRepositoryError(err)
+	}
+	return fromDomainEvent(next), nil
 }
 
 func (s *Service) GetEvent(ctx context.Context, ref EventRef) (ResearchEvent, error) {
