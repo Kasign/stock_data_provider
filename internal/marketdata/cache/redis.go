@@ -21,6 +21,7 @@ type Redis struct {
 func NewRedis(addr, username, password string, db int, timeout time.Duration) *Redis {
 	return &Redis{Addr: addr, Username: username, Password: password, DB: db, Timeout: timeout}
 }
+func (r *Redis) Enabled() bool { return r != nil && strings.TrimSpace(r.Addr) != "" }
 func (r *Redis) Get(ctx context.Context, key string) ([]byte, bool, error) {
 	v, err := r.command(ctx, []string{"GET", key})
 	if err != nil {

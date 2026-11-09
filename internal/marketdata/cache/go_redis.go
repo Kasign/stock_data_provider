@@ -29,6 +29,8 @@ func NewGoRedis(client redisCommander) (*GoRedis, error) {
 	return &GoRedis{client: client}, nil
 }
 
+func (r *GoRedis) Enabled() bool { return r != nil && r.client != nil }
+
 func (r *GoRedis) Get(ctx context.Context, key string) ([]byte, bool, error) {
 	if r == nil || r.client == nil {
 		return nil, false, errors.New("go-redis client is not configured")
