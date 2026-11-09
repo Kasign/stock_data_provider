@@ -29,6 +29,23 @@ func NewBaostock(client baostockDailyClient) *Baostock {
 	return &Baostock{client: client}
 }
 
+func baoStockDailyBarStandardField(providerField string) string {
+	switch providerField {
+	case "date":
+		return "trade_date"
+	case "code":
+		return "symbol"
+	case "open", "high", "low", "close", "preclose", "volume", "amount", "adjustflag", "turn", "tradestatus", "pctChg", "isST":
+		return map[string]string{
+			"preclose": "prev_close", "adjustflag": "adjustment_basis",
+			"turn": "turnover_rate", "tradestatus": "trade_status",
+			"pctChg": "change_percent", "isST": "is_st",
+		}[providerField]
+	default:
+		return "provider." + providerField
+	}
+}
+
 func (p *Baostock) Name() string { return "baostock" }
 
 func (p *Baostock) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endDate string, limit int, adjustment model.AdjustmentBasis) ([]model.DailyBar, error) {
@@ -69,6 +86,14 @@ func (p *Baostock) FetchDailyBars(ctx context.Context, rawSymbol, startDate, end
 	out := make([]model.DailyBar, 0, len(rows))
 	seenDates := make(map[string]struct{}, len(rows))
 	for index, row := range rows {
+		if len(row.FieldIssues) > 0 {
+			for _, issue := range row.FieldIssues {
+				addProviderParseIssue(ctx, index, baoStockDailyBarStandardField(issue.SourceField), issue.SourceField,
+					issue.Code, "supported scalar cell", issue.ActualType, issue.Preview,
+					"BaoStock daily-bar field has an unsupported raw cell type")
+			}
+			return nil, fmt.Errorf("BaoStock row %d contains %d unsupported daily-bar field cell(s)", index, len(row.FieldIssues))
+		}
 		tradeDate := strings.TrimSpace(row.Date)
 		if _, err := time.Parse("2006-01-02", tradeDate); err != nil {
 			addProviderParseIssue(ctx, index, "trade_date", "date", "invalid_date", "YYYY-MM-DD", "string", tradeDate, "BaoStock daily-bar date is invalid")
