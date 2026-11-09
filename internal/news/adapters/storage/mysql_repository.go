@@ -281,12 +281,12 @@ func (t *mysqlNewsTransaction) AppendObservation(ctx context.Context, observatio
 	_, insertErr := t.tx.ExecContext(ctx, `INSERT INTO news_observations
 		(observation_id, idempotency_key, source_id, provider_code, query_dimension, endpoint_id,
 		 source_policy_version_id, endpoint_policy_version_id, provider_output_policy_ref, provider_output_policy_version_id,
-		 policy_evaluated_at, candidate_json, observed_at, retention_until, payload_purged_at, identity_status, news_id, reason_code)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		 policy_evaluated_at, candidate_json, observed_at, identity_status, news_id, reason_code)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		observation.ID, observation.IdempotencyKey, observation.SourceID, observation.ProviderCode,
 		observation.QueryDimension, observation.EndpointID, observation.SourcePolicyVersionID,
 		observation.EndpointPolicyVersionID, observation.ProviderOutputPolicyRef, observation.ProviderOutputPolicyVersionID,
-		policyEvaluatedAt, candidateJSON, observation.ObservedAt.UTC(), nullableTime(observation.RetentionUntil), nullableTimePointer(observation.PayloadPurgedAt),
+		policyEvaluatedAt, candidateJSON, observation.ObservedAt.UTC(),
 		string(observation.IdentityStatus), newsID, observation.ReasonCode,
 	)
 	if insertErr == nil {
@@ -305,7 +305,7 @@ func (t *mysqlNewsTransaction) AppendObservation(ctx context.Context, observatio
 
 const observationSelect = `SELECT observation_id, idempotency_key, source_id, provider_code,
 	query_dimension, endpoint_id, source_policy_version_id, endpoint_policy_version_id,
-	provider_output_policy_ref, provider_output_policy_version_id, policy_evaluated_at, candidate_json, observed_at, retention_until, payload_purged_at, identity_status, news_id, reason_code
+	provider_output_policy_ref, provider_output_policy_version_id, policy_evaluated_at, candidate_json, observed_at, identity_status, news_id, reason_code
 	FROM news_observations`
 
 type rowScanner interface {
@@ -315,14 +315,13 @@ type rowScanner interface {
 func scanObservation(row rowScanner) (domain.Observation, error) {
 	var result domain.Observation
 	var policyAt sql.NullTime
-	var retentionUntil, payloadPurgedAt sql.NullTime
 	var newsID sql.NullString
 	var candidateJSON []byte
 	var status string
 	err := row.Scan(
 		&result.ID, &result.IdempotencyKey, &result.SourceID, &result.ProviderCode,
 		&result.QueryDimension, &result.EndpointID, &result.SourcePolicyVersionID,
-		&result.EndpointPolicyVersionID, &result.ProviderOutputPolicyRef, &result.ProviderOutputPolicyVersionID, &policyAt, &candidateJSON, &result.ObservedAt, &retentionUntil, &payloadPurgedAt, &status, &newsID, &result.ReasonCode,
+		&result.EndpointPolicyVersionID, &result.ProviderOutputPolicyRef, &result.ProviderOutputPolicyVersionID, &policyAt, &candidateJSON, &result.ObservedAt, &status, &newsID, &result.ReasonCode,
 	)
 	if err != nil {
 		return domain.Observation{}, err
@@ -332,13 +331,6 @@ func scanObservation(row rowScanner) (domain.Observation, error) {
 	}
 	if policyAt.Valid {
 		result.PolicyEvaluatedAt = policyAt.Time.UTC()
-	}
-	if retentionUntil.Valid {
-		result.RetentionUntil = retentionUntil.Time.UTC()
-	}
-	if payloadPurgedAt.Valid {
-		value := payloadPurgedAt.Time.UTC()
-		result.PayloadPurgedAt = &value
 	}
 	if newsID.Valid {
 		result.NewsID = newsID.String
@@ -609,20 +601,6 @@ func (t *mysqlNewsTransaction) AppendNewsItemRelation(ctx context.Context, relat
 		nullableString(relation.ToVersionID), relation.AssertedAt.UTC(), relation.ObservedAt.UTC(),
 	)
 	return err
-}
-
-func nullableTime(value time.Time) any {
-	if value.IsZero() {
-		return nil
-	}
-	return value.UTC()
-}
-
-func nullableTimePointer(value *time.Time) any {
-	if value == nil || value.IsZero() {
-		return nil
-	}
-	return value.UTC()
 }
 
 func nullableString(value string) any {
