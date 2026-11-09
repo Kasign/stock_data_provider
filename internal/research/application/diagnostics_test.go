@@ -107,7 +107,7 @@ func TestBuildEvidenceCheckRechecksOwnerAuthorization(t *testing.T) {
 		EvidenceID: "ev_diag_authorized", EvidenceType: researchevidence.TypeFact,
 		SourceOwner: researchevidence.SourceData, SourceRef: "data:fixture:1",
 		DerivedFromRefs: []string{}, SubjectRefs: []string{"security:600000"},
-		SystemObservedAt: now, SystemAsOf: now,
+		AvailableAt: &now, SystemObservedAt: now, SystemAsOf: now,
 		Stance: researchevidence.StanceNeutral, QualityStatus: researchevidence.QualityValid,
 		ContentLevel: researchevidence.ContentMetadata, AuthorizationRef: "auth:current",
 		Limitations: []string{},

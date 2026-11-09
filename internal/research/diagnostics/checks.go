@@ -149,6 +149,17 @@ func NewEvidenceCheck(id, name string, required bool, value researchevidence.Evi
 				"quality_status": string(snapshot.QualityStatus),
 				"content_level":  string(snapshot.ContentLevel),
 			}
+			if snapshot.AvailableAt == nil {
+				return platformdiagnostics.Observation{
+					Status:      platformdiagnostics.StatusUnavailable,
+					ReasonCode:  "research.evidence.pit_unavailable",
+					SafeMessage: "Research Evidence 缺少可验证的 available_at，无法进行严格 PIT 比较",
+					Attributes:  attributes,
+				}, nil
+			}
+			if err := snapshot.ValidateForStrictPIT(snapshot.SystemAsOf); err != nil {
+				return failedObservation("research.evidence.pit_invalid", "Research Evidence 不满足严格 PIT 约束", attributes), nil
+			}
 			switch snapshot.QualityStatus {
 			case researchevidence.QualityValid:
 				return healthyObservation("Research Evidence 校验通过且来源授权复核已通过", attributes), nil
