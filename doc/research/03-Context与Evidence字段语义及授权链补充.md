@@ -84,6 +84,7 @@ AuthorizationRef 遵循 GOV-CTR-006，是审计快照引用，不是 bearer toke
 ResearchEvent 是跨来源现实事件，不是 News Article 别名。创建、合并、拆分、主体修正或生命周期迁移均追加版本；source_times 保留来源级时间冲突。
 
 Research Event 与 Claim 作为 Run 诊断快照时，其 system_as_of 必须不晚于 Researchflow CreateRun 的 runAsOf；Context 的 system_as_of 则必须与 Run cutoff 完全一致。四类诊断统一通过 Application Build*Check 显式接收该参数，不扩展领域 DTO。
+- Event 若提供 available_at，必须满足 available_at <= system_as_of；Research Event 的 Domain 校验与 Evidence 严格 PIT 规则保持一致。由于 Event.system_as_of 还必须 <= Run cutoff，该约束可传递保证 available_at 不晚于 Run cutoff。
 
 当前 `internal/research/event/` 已实现 Event/SourceTime 领域校验、版本追加校验和 MVP 生命周期转换；`internal/research/storage/` 已实现 Event SQL Repository，版本追加与生命周期 Outbox 在同一事务提交，并支持 Outbox 领取、租约、重试、确认和拒绝。Research 仍不查询 News Evidence Repository，也不执行多来源事实归并。非 null 的 occurred_at/published_at/available_at 至少要求存在相同 time_type 的 SourceTime；这只是来源类型存在性检查，不等于已验证规范化规则版本。
 
