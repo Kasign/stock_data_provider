@@ -425,6 +425,7 @@ func TestFirstFactorQuantMetricSchemaValidatesGoldenAndRejectsInvalidStates(t *t
 		`{"metric_code":"momentum_20d","value":null,"unit":"ratio","period":"20d","system_as_of":"2026-11-09T00:00:00Z","quality_status":"valid","metric_status":"available","calculation_version":"1.0.0","sample_count":21,"lower_bound":null,"upper_bound":null}`,
 		`{"metric_code":"momentum_20d","value":0.2,"unit":"ratio","period":"60d","system_as_of":"2026-11-09T00:00:00Z","quality_status":"valid","metric_status":"available","calculation_version":"1.0.0","sample_count":21,"lower_bound":null,"upper_bound":null}`,
 		`{"metric_code":"momentum_20d","value":0.2,"unit":"ratio","period":"20d","system_as_of":"2026-11-09T00:00:00Z","quality_status":"unknown","metric_status":"available","calculation_version":"1.0.0","sample_count":21,"lower_bound":null,"upper_bound":null}`,
+		`{"metric_code":"momentum_20d","value":0.2,"unit":"ratio","period":"20d","system_as_of":"2026-11-09T00:00:00Z","quality_status":"degraded","metric_status":"available","calculation_version":"1.0.0","sample_count":21,"lower_bound":null,"upper_bound":null}`,
 		`{"metric_code":"momentum_20d","value":0.2,"unit":"ratio","period":"20d","system_as_of":"2026-11-09T00:00:00Z","quality_status":"valid","metric_status":"insufficient_data","calculation_version":"1.0.0","sample_count":21,"lower_bound":null,"upper_bound":null}`,
 		`{"metric_code":"momentum_20d","value":0.2,"unit":"ratio","period":"20d","system_as_of":"2026-11-09T00:00:00Z","quality_status":"valid","metric_status":"available","calculation_version":"1.0.0","sample_count":21,"lower_bound":0.1,"upper_bound":null}`,
 		`{"metric_code":"momentum_20d","value":0.2,"unit":"ratio","period":"20d","system_as_of":"2026-11-09T00:00:00+08:00","quality_status":"valid","metric_status":"available","calculation_version":"1.0.0","sample_count":21,"lower_bound":null,"upper_bound":null}`,
@@ -436,5 +437,14 @@ func TestFirstFactorQuantMetricSchemaValidatesGoldenAndRejectsInvalidStates(t *t
 		if err := validateJSONSchemaInstance(schema, []byte(instance)); err == nil {
 			t.Errorf("invalid QuantMetric unexpectedly passed: %s", instance)
 		}
+	}
+}
+
+
+func TestFirstFactorQuantMetricSchemaAllowsDegradedAvailabilityForRegistryPolicyGate(t *testing.T) {
+	schema := compileQuantSchemaFile(t, "QNT-CTR-004-factor-quant-metric-1.0.0.schema.json")
+	instance := []byte(`{"metric_code":"momentum_20d","value":0.2,"unit":"ratio","period":"20d","system_as_of":"2026-11-09T00:00:00Z","quality_status":"degraded","metric_status":"available","calculation_version":"1.0.0","sample_count":21,"lower_bound":null,"upper_bound":null}`)
+	if err := validateJSONSchemaInstance(schema, instance); err != nil {
+		t.Fatalf("structurally valid degraded metric rejected before Registry quality_policy gate: %v", err)
 	}
 }

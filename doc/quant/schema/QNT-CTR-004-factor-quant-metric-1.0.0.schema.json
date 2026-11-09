@@ -113,6 +113,12 @@
           },
           "sample_count": {
             "minimum": 21
+          },
+          "quality_status": {
+            "enum": [
+              "valid",
+              "degraded"
+            ]
           }
         }
       }
