@@ -11,6 +11,7 @@ import (
 	researchclaim "example.com/stock-analysis-flow/internal/research/claim"
 	researchcontext "example.com/stock-analysis-flow/internal/research/context"
 	researchevent "example.com/stock-analysis-flow/internal/research/event"
+	researchevidence "example.com/stock-analysis-flow/internal/research/evidence"
 )
 
 func NewContextCheck(id, name string, required bool, value researchcontext.Context) (platformdiagnostics.Check, error) {
@@ -125,4 +126,50 @@ func failedObservation(code, message string, attributes map[string]string) platf
 		SafeMessage: message,
 		Attributes: attributes,
 	}
+}
+
+
+// NewEvidenceCheck 只输出质量和来源元数据，不暴露 Evidence 正文、引用列表或授权快照。
+func NewEvidenceCheck(id, name string, required bool, value researchevidence.Evidence) (platformdiagnostics.Check, error) {
+	snapshot, err := cloneSnapshot(value)
+	if err != nil {
+		return platformdiagnostics.Check{}, fmt.Errorf("snapshot Research Evidence: %w", err)
+	}
+	return platformdiagnostics.Check{
+		ID: id, Name: name, Required: required,
+		Run: func(ctx context.Context) (platformdiagnostics.Observation, error) {
+			if err := ctx.Err(); err != nil {
+				return platformdiagnostics.Observation{}, err
+			}
+			if err := snapshot.Validate(); err != nil {
+				return failedObservation("research.evidence.invalid", "Research Evidence 结构校验失败",
+					map[string]string{"quality_status": string(snapshot.QualityStatus)}), nil
+			}
+			attributes := map[string]string{
+				"source_owner": string(snapshot.SourceOwner),
+				"quality_status": string(snapshot.QualityStatus),
+				"content_level": string(snapshot.ContentLevel),
+			}
+			switch snapshot.QualityStatus {
+			case researchevidence.QualityValid:
+				return healthyObservation("Research Evidence 校验通过且来源授权复核已通过", attributes), nil
+			case researchevidence.QualityDegraded:
+				return platformdiagnostics.Observation{
+					Status: platformdiagnostics.StatusDegraded,
+					ReasonCode: "research.evidence.degraded",
+					SafeMessage: "Research Evidence 存在已记录的质量降级",
+					Attributes: attributes,
+				}, nil
+			case researchevidence.QualityUnknown:
+				return platformdiagnostics.Observation{
+					Status: platformdiagnostics.StatusUnavailable,
+					ReasonCode: "research.evidence.quality_unknown",
+					SafeMessage: "Research Evidence 质量状态不可比较",
+					Attributes: attributes,
+				}, nil
+			default:
+				return failedObservation("research.evidence.quality_invalid", "Research Evidence 质量状态无效", attributes), nil
+			}
+		},
+	}, nil
 }
