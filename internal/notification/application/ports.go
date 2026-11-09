@@ -60,12 +60,12 @@ type DeliveryRepository interface {
 }
 
 // DeliveryAttemptRepository 管理单次渠道调用的追加式历史。
-// StartWithLease 必须以调用方注入的 UTC now 校验租约仍有效、StartedAt 不在未来，并原子分配连续 attempt_no、追加运行中 Attempt。
+// StartWithLease 必须在原子写入时使用 Repository 权威时钟校验租约仍有效、StartedAt 不在未来，并分配连续 attempt_no、追加运行中 Attempt。
 // attempt_count 是 Attempt 历史的计数投影，随 StartWithLease 原子更新，不改变 Delivery 状态版本。
-// CompleteWithLease 只允许当前有效租约将运行中 Attempt 完成一次；完成记录不可再次覆盖。
+// CompleteWithLease 必须在原子写入时使用 Repository 权威时钟校验租约，并只允许当前有效租约将运行中 Attempt 完成一次；完成记录不可再次覆盖。
 type DeliveryAttemptRepository interface {
-	StartWithLease(ctx context.Context, expectedDeliveryVersion, fencingToken int64, attempt domain.DeliveryAttempt, now time.Time) error
-	CompleteWithLease(ctx context.Context, expectedDeliveryVersion, fencingToken int64, completed domain.DeliveryAttempt, now time.Time) error
+	StartWithLease(ctx context.Context, expectedDeliveryVersion, fencingToken int64, attempt domain.DeliveryAttempt) error
+	CompleteWithLease(ctx context.Context, expectedDeliveryVersion, fencingToken int64, completed domain.DeliveryAttempt) error
 	ListByDelivery(ctx context.Context, deliveryID string) (attempts []domain.DeliveryAttempt, err error)
 }
 

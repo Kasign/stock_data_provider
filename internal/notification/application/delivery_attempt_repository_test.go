@@ -10,11 +10,11 @@ import (
 	"example.com/stock-analysis-flow/internal/notification/domain"
 )
 
-func (m *memoryDeliveries) StartWithLease(ctx context.Context, expectedDeliveryVersion, fencingToken int64, attempt domain.DeliveryAttempt, now time.Time) error {
+func (m *memoryDeliveries) StartWithLease(ctx context.Context, expectedDeliveryVersion, fencingToken int64, attempt domain.DeliveryAttempt) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	if err := attempt.Validate(); err != nil || attempt.FinishedAt != nil || !isUTCApplicationTime(now) || attempt.StartedAt.After(now) {
+	if err := attempt.Validate(); err != nil || attempt.FinishedAt != nil {
 		return domain.ErrInvalidDeliveryAttempt
 	}
 	m.mu.Lock()
@@ -23,6 +23,10 @@ func (m *memoryDeliveries) StartWithLease(ctx context.Context, expectedDeliveryV
 	current, found := m.records[attempt.DeliveryID]
 	if !found {
 		return ErrDeliveryNotFound
+	}
+	now := m.now
+	if !isUTCApplicationTime(now) || attempt.StartedAt.After(now) {
+		return domain.ErrInvalidDeliveryAttempt
 	}
 	lease, leased := m.leases[attempt.DeliveryID]
 	if !leased || lease.FencingToken != fencingToken || attempt.FencingToken != fencingToken || lease.WorkerID != attempt.WorkerID ||
@@ -59,12 +63,11 @@ func (m *memoryDeliveries) StartWithLease(ctx context.Context, expectedDeliveryV
 	return nil
 }
 
-func (m *memoryDeliveries) CompleteWithLease(ctx context.Context, expectedDeliveryVersion, fencingToken int64, completed domain.DeliveryAttempt, now time.Time) error {
+func (m *memoryDeliveries) CompleteWithLease(ctx context.Context, expectedDeliveryVersion, fencingToken int64, completed domain.DeliveryAttempt) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	if err := completed.Validate(); err != nil || completed.FinishedAt == nil ||
-		!isUTCApplicationTime(now) || completed.FinishedAt.After(now) {
+	if err := completed.Validate(); err != nil || completed.FinishedAt == nil {
 		return domain.ErrInvalidDeliveryAttempt
 	}
 	m.mu.Lock()
@@ -73,6 +76,10 @@ func (m *memoryDeliveries) CompleteWithLease(ctx context.Context, expectedDelive
 	current, found := m.records[completed.DeliveryID]
 	if !found {
 		return ErrDeliveryNotFound
+	}
+	now := m.now
+	if !isUTCApplicationTime(now) || completed.FinishedAt.After(now) {
+		return domain.ErrInvalidDeliveryAttempt
 	}
 	lease, leased := m.leases[completed.DeliveryID]
 	if !leased || lease.FencingToken != fencingToken || lease.WorkerID != completed.WorkerID ||
@@ -151,6 +158,7 @@ func claimDeliveryForAttempt(t *testing.T, repository *memoryDeliveries) Deliver
 	if err != nil || !ok {
 		t.Fatalf("claim delivery: claimed=%v err=%v", ok, err)
 	}
+	repository.now = claim.Lease.ExpiresAt.Add(-time.Second)
 	return claim
 }
 
@@ -169,7 +177,7 @@ func TestDeliveryAttemptRepositoryStartAndCompleteWithActiveLease(t *testing.T) 
 	ctx := context.Background()
 	attempt := attemptForClaim(claim, 1)
 
-	if err := repository.StartWithLease(ctx, claim.Delivery.Version, claim.Lease.FencingToken, attempt, attempt.StartedAt); err != nil {
+	if err := repository.StartWithLease(ctx, claim.Delivery.Version, claim.Lease.FencingToken, attempt); err != nil {
 		t.Fatalf("start attempt: %v", err)
 	}
 	current, found, err := repository.Get(ctx, claim.Delivery.DeliveryID)
@@ -186,14 +194,15 @@ func TestDeliveryAttemptRepositoryStartAndCompleteWithActiveLease(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := repository.CompleteWithLease(ctx, claim.Delivery.Version, claim.Lease.FencingToken, completed, finishedAt.Add(time.Millisecond)); err != nil {
+	repository.now = finishedAt.Add(time.Millisecond)
+	if err := repository.CompleteWithLease(ctx, claim.Delivery.Version, claim.Lease.FencingToken, completed); err != nil {
 		t.Fatalf("complete attempt: %v", err)
 	}
 	listed, err = repository.ListByDelivery(ctx, claim.Delivery.DeliveryID)
 	if err != nil || len(listed) != 1 || listed[0].Outcome == nil || *listed[0].Outcome != domain.DeliveryAttemptAccepted {
 		t.Fatalf("completed attempt not visible: attempts=%+v err=%v", listed, err)
 	}
-	if err := repository.CompleteWithLease(ctx, claim.Delivery.Version, claim.Lease.FencingToken, completed, finishedAt.Add(time.Second)); !errors.Is(err, ErrDeliveryAttemptConflict) {
+	if err := repository.CompleteWithLease(ctx, claim.Delivery.Version, claim.Lease.FencingToken, completed); !errors.Is(err, ErrDeliveryAttemptConflict) {
 		t.Fatalf("completed attempt must not be overwritten: %v", err)
 	}
 }
@@ -203,31 +212,32 @@ func TestDeliveryAttemptRepositoryRejectsStaleLeaseAndVersion(t *testing.T) {
 	claim := claimDeliveryForAttempt(t, repository)
 	attempt := attemptForClaim(claim, 1)
 
-	if err := repository.StartWithLease(context.Background(), claim.Delivery.Version, claim.Lease.FencingToken+1, attempt, attempt.StartedAt); !errors.Is(err, ErrDeliveryLeaseConflict) {
+	if err := repository.StartWithLease(context.Background(), claim.Delivery.Version, claim.Lease.FencingToken+1, attempt); !errors.Is(err, ErrDeliveryLeaseConflict) {
 		t.Fatalf("stale fencing token must fail: %v", err)
 	}
-	if err := repository.StartWithLease(context.Background(), claim.Delivery.Version-1, claim.Lease.FencingToken, attempt, attempt.StartedAt); !errors.Is(err, ErrDeliveryVersionConflict) {
+	if err := repository.StartWithLease(context.Background(), claim.Delivery.Version-1, claim.Lease.FencingToken, attempt); !errors.Is(err, ErrDeliveryVersionConflict) {
 		t.Fatalf("stale delivery version must fail: %v", err)
 	}
 	attempt.WorkerID = "other-worker"
-	if err := repository.StartWithLease(context.Background(), claim.Delivery.Version, claim.Lease.FencingToken, attempt, attempt.StartedAt); !errors.Is(err, ErrDeliveryLeaseConflict) {
+	if err := repository.StartWithLease(context.Background(), claim.Delivery.Version, claim.Lease.FencingToken, attempt); !errors.Is(err, ErrDeliveryLeaseConflict) {
 		t.Fatalf("attempt worker must match lease owner: %v", err)
 	}
 	attempt = attemptForClaim(claim, 1)
-	if err := repository.StartWithLease(context.Background(), claim.Delivery.Version, claim.Lease.FencingToken, attempt, claim.Lease.ExpiresAt); !errors.Is(err, ErrDeliveryLeaseConflict) {
+	if err := repository.StartWithLease(context.Background(), claim.Delivery.Version, claim.Lease.FencingToken, attempt); !errors.Is(err, ErrDeliveryLeaseConflict) {
 		t.Fatalf("expired lease must reject late start even if StartedAt is earlier: %v", err)
 	}
-	if err := repository.StartWithLease(context.Background(), claim.Delivery.Version, claim.Lease.FencingToken, attempt, attempt.StartedAt.Add(-time.Nanosecond)); !errors.Is(err, domain.ErrInvalidDeliveryAttempt) {
+	if err := repository.StartWithLease(context.Background(), claim.Delivery.Version, claim.Lease.FencingToken, attempt); !errors.Is(err, domain.ErrInvalidDeliveryAttempt) {
 		t.Fatalf("future StartedAt must be rejected: %v", err)
 	}
-	if err := repository.StartWithLease(context.Background(), claim.Delivery.Version, claim.Lease.FencingToken, attempt, attempt.StartedAt); err != nil {
+	if err := repository.StartWithLease(context.Background(), claim.Delivery.Version, claim.Lease.FencingToken, attempt); err != nil {
 		t.Fatal(err)
 	}
 	completed, err := attempt.Complete(claim.Lease.ExpiresAt, domain.DeliveryAttemptAccepted, "", "", false, "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := repository.CompleteWithLease(context.Background(), claim.Delivery.Version, claim.Lease.FencingToken, completed, claim.Lease.ExpiresAt); !errors.Is(err, ErrDeliveryLeaseConflict) {
+	repository.now = claim.Lease.ExpiresAt
+	if err := repository.CompleteWithLease(context.Background(), claim.Delivery.Version, claim.Lease.FencingToken, completed); !errors.Is(err, ErrDeliveryLeaseConflict) {
 		t.Fatalf("expired lease must reject late completion: %v", err)
 	}
 }
@@ -237,7 +247,7 @@ func TestDeliveryAttemptRepositoryAppendIsUniqueAndFailureAtomic(t *testing.T) {
 	claim := claimDeliveryForAttempt(t, repository)
 	attempt := attemptForClaim(claim, 1)
 	repository.failAttemptNext = true
-	if err := repository.StartWithLease(context.Background(), claim.Delivery.Version, claim.Lease.FencingToken, attempt, attempt.StartedAt); !errors.Is(err, errInjectedRepositoryFailure) {
+	if err := repository.StartWithLease(context.Background(), claim.Delivery.Version, claim.Lease.FencingToken, attempt); !errors.Is(err, errInjectedRepositoryFailure) {
 		t.Fatalf("expected injected start failure, got %v", err)
 	}
 	current, _, _ := repository.Get(context.Background(), claim.Delivery.DeliveryID)
@@ -245,15 +255,15 @@ func TestDeliveryAttemptRepositoryAppendIsUniqueAndFailureAtomic(t *testing.T) {
 	if err != nil || current.AttemptCount != 0 || len(listed) != 0 {
 		t.Fatalf("failed append must not partially update count/history: count=%d attempts=%d err=%v", current.AttemptCount, len(listed), err)
 	}
-	if err := repository.StartWithLease(context.Background(), claim.Delivery.Version, claim.Lease.FencingToken, attempt, attempt.StartedAt); err != nil {
+	if err := repository.StartWithLease(context.Background(), claim.Delivery.Version, claim.Lease.FencingToken, attempt); err != nil {
 		t.Fatal(err)
 	}
 	duplicate := attempt
 	duplicate.AttemptID = "attempt-2"
-	if err := repository.StartWithLease(context.Background(), claim.Delivery.Version, claim.Lease.FencingToken, duplicate, duplicate.StartedAt); !errors.Is(err, ErrDeliveryAttemptConflict) {
+	if err := repository.StartWithLease(context.Background(), claim.Delivery.Version, claim.Lease.FencingToken, duplicate); !errors.Is(err, ErrDeliveryAttemptConflict) {
 		t.Fatalf("attempt number must be sequential and unique: %v", err)
 	}
-	if err := repository.StartWithLease(context.Background(), claim.Delivery.Version, claim.Lease.FencingToken, attempt, attempt.StartedAt); !errors.Is(err, ErrDeliveryAttemptAlreadyExists) {
+	if err := repository.StartWithLease(context.Background(), claim.Delivery.Version, claim.Lease.FencingToken, attempt); !errors.Is(err, ErrDeliveryAttemptAlreadyExists) {
 		t.Fatalf("attempt ID must be unique: %v", err)
 	}
 }

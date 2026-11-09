@@ -16,6 +16,7 @@ import (
 
 type memoryDeliveries struct {
 	mu       sync.Mutex
+	now      time.Time
 	records  map[string]domain.DeliveryRecord
 	leases   map[string]DeliveryLease
 	tokens   map[string]int64

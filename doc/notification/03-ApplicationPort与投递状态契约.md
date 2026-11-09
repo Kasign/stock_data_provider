@@ -237,7 +237,7 @@ DeliveryStateEvent 的 version/from/to/changed_at 来自每次状态迁移；evi
 本切片已补充 DeliveryAttemptRepository Port/Fake：StartWithLease 原子追加运行中 Attempt 并更新 attempt_count 计数投影；CompleteWithLease 仅允许当前有效租约完成一次；ListByDelivery 返回按序深拷贝。具体原子边界如下：
 
 Attempt Repository 的模块级原子边界：
-- StartWithLease：使用调用方注入的 UTC now，校验租约在 now 时刻仍有效、StartedAt 不晚于 now 且不早于本次 sending 领取时间；同时校验当前 Delivery 为 sending、expected version 与 fencing token 匹配、Worker 与租约一致、Attempt 尚未完成、attempt_no 等于当前 Attempt 数量 + 1；在同一 Repository 原子操作中追加运行中 Attempt 并更新 attempt_count 投影。不能仅凭调用方传入的 StartedAt 早于 ExpiresAt 推断租约当前仍有效。
+- StartWithLease：使用 Repository 内部权威时钟（MariaDB Adapter 在事务 SQL 中使用 UTC_TIMESTAMP(6)，Fake 使用可控时钟），校验租约在 now 时刻仍有效、StartedAt 不晚于 now 且不早于本次 sending 领取时间；同时校验当前 Delivery 为 sending、expected version 与 fencing token 匹配、Worker 与租约一致、Attempt 尚未完成、attempt_no 等于当前 Attempt 数量 + 1；在同一 Repository 原子操作中追加运行中 Attempt 并更新 attempt_count 投影。不能仅凭调用方传入的 StartedAt 早于 ExpiresAt 推断租约当前仍有效。
 - CompleteWithLease：只允许当前有效租约、当前 Delivery 版本和同一 Attempt 身份将运行中记录完成一次；完成时间不得越过租约截止；旧 Worker 的迟到完成必须拒绝。
 - ListByDelivery：按 attempt_no 顺序返回深拷贝历史；未知 Delivery 返回 not found。
 - attempt_count 是已追加 Attempt 数量的计数投影；StartWithLease 与 Attempt 追加同事务更新，不改变 Delivery 状态版本，也不产生伪造的状态迁移事件。真实 Repository 必须保证 Attempt 行、计数投影和租约检查的事务原子性。
