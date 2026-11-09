@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"strconv"
 	"strings"
 	"testing"
@@ -410,6 +411,37 @@ func TestParseResponsesSSECallbackAdapterErrorRemainsConsumerError(t *testing.T)
 	})
 	if err != callbackErr {
 		t.Fatalf("callback AdapterError must be returned unchanged: got=%v want=%v", err, callbackErr)
+	}
+	if got.Status != ResponseIncomplete || got.Error != nil || got.OutputText != "partial" {
+		t.Fatalf("consumer error must preserve an incomplete partial response: %+v", got)
+	}
+}
+
+
+// uncomparableSSETestError 用于验证消费者错误不依赖接口值可比较性。
+type uncomparableSSETestError struct {
+	values []string
+}
+
+func (e uncomparableSSETestError) Error() string {
+	return strings.Join(e.values, ",")
+}
+
+// TestParseResponsesSSECallbackUncomparableErrorDoesNotPanic 验证不可比较的消费者错误不会触发接口比较 panic。
+func TestParseResponsesSSECallbackUncomparableErrorDoesNotPanic(t *testing.T) {
+	request := validSSERequest()
+	clock := sseTestClock{now: request.SystemAsOf.Add(time.Second)}
+	callbackErr := uncomparableSSETestError{values: []string{"consumer", "failed"}}
+
+	got, err := ParseResponsesSSE(readLLMFixture(t, "sse/stream_eof_without_terminal.sse"), request, clock, func(event ModelEvent) error {
+		if event.Type == "response.output_text.delta" {
+			return callbackErr
+		}
+		return nil
+	})
+	returnedErr, ok := err.(uncomparableSSETestError)
+	if !ok || strings.Join(returnedErr.values, ",") != strings.Join(callbackErr.values, ",") {
+		t.Fatalf("callback error must be returned unchanged: got=%T %v", err, err)
 	}
 	if got.Status != ResponseIncomplete || got.Error != nil || got.OutputText != "partial" {
 		t.Fatalf("consumer error must preserve an incomplete partial response: %+v", got)
