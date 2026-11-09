@@ -3,8 +3,8 @@ package toolpolicy
 import (
 	"encoding/json"
 	"errors"
-	"strings"
 	"sort"
+	"strings"
 
 	"example.com/stock-analysis-flow/internal/llm"
 )

@@ -11,10 +11,10 @@ var ErrInvalidBudget = errors.New("invalid model context budget")
 // target model's context window before section planning starts.
 type BudgetInput struct {
 	ModelContextTokens int
-	SystemTokens      int
-	ToolSchemaTokens  int
-	OutputReserve     int
-	SafetyMargin      int
+	SystemTokens       int
+	ToolSchemaTokens   int
+	OutputReserve      int
+	SafetyMargin       int
 }
 
 // AvailableBudget returns the remaining input-token budget for context
