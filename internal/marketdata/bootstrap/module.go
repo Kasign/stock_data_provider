@@ -39,6 +39,8 @@ type Dependencies struct {
 	TencentKlineHTTPDoer          provider.HTTPDoer // Root 注入的腾讯复权 K 线出口；Module 不拥有、不关闭。
 	TencentNoneKlineHTTPDoer      provider.HTTPDoer // Root 注入的腾讯未复权 K 线出口；Module 不拥有、不关闭。
 	TencentSearchHTTPDoer         provider.HTTPDoer // Root 注入的腾讯 Smartbox 搜索出口；Module 不拥有、不关闭。
+	SinaQuoteHTTPDoer             provider.HTTPDoer // Root 注入的新浪实时报价出口；Module 不拥有、不关闭。
+	SinaKlineHTTPDoer             provider.HTTPDoer // Root 注入的新浪历史 K 线出口；Module 不拥有、不关闭。
 }
 
 // Diagnostics 暴露模块就绪状态和 Provider 诊断，不暴露具体 DataService。
@@ -106,7 +108,7 @@ func New(cfg config.Config, deps Dependencies) (*Module, error) {
 		retentionStore: deps.Store,
 		retention:      cfg.QuoteRetention,
 	}
-	if err := module.build(cfg, deps.TushareHTTPDoer, deps.HithinkHTTPDoer, deps.TickFlowAuthenticatedHTTPDoer, deps.TickFlowPublicHTTPDoer, deps.XueqiuHTTPDoer, deps.YahooHTTPDoer, deps.NeteaseQuoteHTTPDoer, deps.NeteaseHistoryHTTPDoer, deps.TencentQuoteHTTPDoer, deps.TencentKlineHTTPDoer, deps.TencentNoneKlineHTTPDoer, deps.TencentSearchHTTPDoer); err != nil {
+	if err := module.build(cfg, deps.TushareHTTPDoer, deps.HithinkHTTPDoer, deps.TickFlowAuthenticatedHTTPDoer, deps.TickFlowPublicHTTPDoer, deps.XueqiuHTTPDoer, deps.YahooHTTPDoer, deps.NeteaseQuoteHTTPDoer, deps.NeteaseHistoryHTTPDoer, deps.TencentQuoteHTTPDoer, deps.TencentKlineHTTPDoer, deps.TencentNoneKlineHTTPDoer, deps.TencentSearchHTTPDoer, deps.SinaQuoteHTTPDoer, deps.SinaKlineHTTPDoer); err != nil {
 		_ = module.Close(context.Background())
 		return nil, err
 	}
@@ -166,7 +168,7 @@ func (m *Module) ProviderSummary() ProviderSummary {
 	}
 }
 
-func (m *Module) build(cfg config.Config, tushareHTTPDoer, hithinkHTTPDoer, tickflowAuthenticatedHTTPDoer, tickflowPublicHTTPDoer, xueqiuHTTPDoer, yahooHTTPDoer, neteaseQuoteHTTPDoer, neteaseHistoryHTTPDoer, tencentQuoteHTTPDoer, tencentKlineHTTPDoer, tencentNoneKlineHTTPDoer, tencentSearchHTTPDoer provider.HTTPDoer) error {
+func (m *Module) build(cfg config.Config, tushareHTTPDoer, hithinkHTTPDoer, tickflowAuthenticatedHTTPDoer, tickflowPublicHTTPDoer, xueqiuHTTPDoer, yahooHTTPDoer, neteaseQuoteHTTPDoer, neteaseHistoryHTTPDoer, tencentQuoteHTTPDoer, tencentKlineHTTPDoer, tencentNoneKlineHTTPDoer, tencentSearchHTTPDoer, sinaQuoteHTTPDoer, sinaKlineHTTPDoer provider.HTTPDoer) error {
 	store := m.store
 	c := m.cache
 	logger := m.logger
@@ -184,7 +186,7 @@ func (m *Module) build(cfg config.Config, tushareHTTPDoer, hithinkHTTPDoer, tick
 		"hithink":   provider.NewHithinkConfiguredWithHTTPDoer(cfg.ProviderTimeout, cfg.HithinkBaseURL, cfg.HithinkAPIKey, hithinkHTTPDoer),
 		"baostock":  provider.NewBaostock(baostockClient),
 		"tencent":   provider.NewTencentConfiguredWithHTTPDoers(cfg.ProviderTimeout, cfg.TencentQuoteURL, cfg.TencentKlineURL, cfg.TencentNoneKlineURL, cfg.TencentStockSearchURL, tencentQuoteHTTPDoer, tencentKlineHTTPDoer, tencentNoneKlineHTTPDoer, tencentSearchHTTPDoer),
-		"sina":      provider.NewSinaConfigured(cfg.ProviderTimeout, cfg.SinaQuoteURL, cfg.SinaKlineURL),
+		"sina":      provider.NewSinaConfiguredWithHTTPDoers(cfg.ProviderTimeout, cfg.SinaQuoteURL, cfg.SinaKlineURL, sinaQuoteHTTPDoer, sinaKlineHTTPDoer),
 		"yahoo":     provider.NewYahooFinanceWithHTTPDoer(cfg.ProviderTimeout, cfg.YahooChartURL, yahooHTTPDoer),
 		"netease":   provider.NewNeteaseConfiguredWithHTTPDoers(cfg.ProviderTimeout, cfg.NeteaseQuoteURL, cfg.NeteaseHistoryURL, neteaseQuoteHTTPDoer, neteaseHistoryHTTPDoer),
 		"tushare":   provider.NewTushareConfiguredWithHTTPDoer(cfg.ProviderTimeout, cfg.TushareAPIURL, cfg.TushareToken, tushareHTTPDoer),
