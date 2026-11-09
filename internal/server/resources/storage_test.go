@@ -1,6 +1,8 @@
 package resources
 
 import (
+	"errors"
+	"reflect"
 	"sync"
 	"testing"
 
@@ -113,7 +115,6 @@ func TestResourcesClosePreventsBindingsAfterReturn(t *testing.T) {
 		t.Fatal("BindHTTPDestination() succeeded after Close() returned")
 	}
 }
-
 
 func TestClosePartialResourcesPreservesCauseCleanupErrorsAndOrder(t *testing.T) {
 	cause := errors.New("resource initialization failed")

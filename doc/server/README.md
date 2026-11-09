@@ -1130,3 +1130,10 @@ Lifecycle.Stop 原实现通过 stopped 标记保证重复调用幂等，但并�
 - HTTP Client 初始化失败时按 Redis、DB 顺序清理；旧 Storage Adapter 初始化失败时先释放 HTTP Client 空闲连接，再按 Redis、DB 顺序清理。
 - 增加错误保留、逆序执行和首个清理失败后继续清理的测试。
 - 本批次尚未运行 Go 测试；当前只覆盖清理聚合 helper，真实 MariaDB/Redis 故障注入仍属于集成环境验收。
+
+
+### 12.36 SRV-002 资源清理测试导入修正（2026-11-09）
+
+- Review 发现上一批新增的资源清理测试引用 errors 与 reflect，但测试文件未导入对应标准库，修正测试导入。
+- 同步清理新增代码周围多余空行，保持 gofmt 风格。
+- 本修正尚未执行 Go 测试；后续统一验证当前最新 SHA。

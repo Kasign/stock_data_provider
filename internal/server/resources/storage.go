@@ -131,7 +131,6 @@ func (r *Resources) Close() error {
 	return r.closeErr
 }
 
-
 // closePartialResources releases successfully opened dependencies in reverse
 // creation order and preserves both the initialization failure and cleanup
 // failures for startup diagnostics.
