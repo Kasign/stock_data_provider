@@ -73,10 +73,11 @@ func (r *Registry) Register(namespace string, migrations []platformstorage.Migra
 // NamespaceResult records one namespace execution attempt. It deliberately
 // does not expose SQL or driver error text in structured diagnostics.
 type NamespaceResult struct {
-	Namespace  string        `json:"namespace"`
-	Status     string        `json:"status"`
-	Duration   time.Duration `json:"duration"`
-	ReasonCode string        `json:"reason_code,omitempty"`
+	Namespace        string        `json:"namespace"`
+	Status           string        `json:"status"`
+	Duration         time.Duration `json:"duration"`
+	ReasonCode       string        `json:"reason_code,omitempty"`
+	RecoveryRequired bool          `json:"recovery_required"`
 }
 
 // RunReport is the bounded, deterministic result of one Registry run.
@@ -135,11 +136,7 @@ func (r *Registry) RunWithReport(ctx context.Context, db *sql.DB) (RunReport, er
 		}
 		if err != nil {
 			item.Status = "failed"
-			item.ReasonCode = "server.migration.namespace_failed"
-			var platformErr *platformfault.Fault
-			if errors.As(err, &platformErr) && platformErr.Validate() == nil {
-				item.ReasonCode = platformErr.Code
-			}
+			item.ReasonCode, item.RecoveryRequired = migrationFailureDetails(err)
 			item.Duration = time.Since(itemStarted)
 			report.Namespaces = append(report.Namespaces, item)
 			return finish(fmt.Errorf("apply %s migrations: %w", namespace, err))
@@ -147,6 +144,27 @@ func (r *Registry) RunWithReport(ctx context.Context, db *sql.DB) (RunReport, er
 		report.Namespaces = append(report.Namespaces, item)
 	}
 	return finish(nil)
+}
+
+// migrationFailureDetails converts internal migration failures to stable,
+// non-sensitive diagnostics and marks cases that require operator inspection.
+func migrationFailureDetails(err error) (reasonCode string, recoveryRequired bool) {
+	if errors.Is(err, errMigrationHistoryMismatch) {
+		return "server.migration.history_mismatch", true
+	}
+	var platformErr *platformfault.Fault
+	if !errors.As(err, &platformErr) || platformErr.Validate() != nil {
+		return "server.migration.namespace_failed", false
+	}
+	switch platformErr.Code {
+	case "platform.storage.migration_requires_recovery",
+		"platform.storage.migration_apply_failed",
+		"platform.storage.migration_record_failed",
+		"platform.storage.migration_lock_release_failed":
+		return platformErr.Code, true
+	default:
+		return platformErr.Code, false
+	}
 }
 
 // Namespaces returns the registered namespace names in deterministic order.
