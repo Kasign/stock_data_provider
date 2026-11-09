@@ -27,8 +27,8 @@ func validWorkflowTemplateForQuery() template.WorkflowTemplate {
 	retry := template.RetryPolicy{
 		Ref: "retry-v1", MaxAttempts: 2,
 		RetryableReasonCodes: []string{"provider_unavailable"},
-		Backoff:          template.BackoffPolicy{Algorithm: "exponential_full_jitter_v1", BaseDelayMS: 100, MaxDelayMS: 1000},
-		AttemptTimeoutMS: 5000,
+		Backoff:              template.BackoffPolicy{Algorithm: "exponential_full_jitter_v1", BaseDelayMS: 100, MaxDelayMS: 1000},
+		AttemptTimeoutMS:     5000,
 	}
 	propagation := template.PropagationPolicy{
 		OnDegraded: domain.PropagateAccept, OnSkipped: domain.PropagatePartial,
@@ -40,7 +40,7 @@ func validWorkflowTemplateForQuery() template.WorkflowTemplate {
 		Stages: []template.StageDefinition{{
 			Code: "market", Required: true,
 			Applicability: template.ApplicabilityRule{RuleRef: "always", RuleVersion: "1"},
-			Retry: retry, Propagation: propagation,
+			Retry:         retry, Propagation: propagation,
 		}},
 	}
 }

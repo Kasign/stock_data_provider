@@ -93,8 +93,8 @@ func registryTestTemplate(ref, version string) template.WorkflowTemplate {
 			Retry: template.RetryPolicy{
 				Ref: "retry-v1", MaxAttempts: 2,
 				RetryableReasonCodes: []string{"provider_unavailable"},
-				Backoff: template.BackoffPolicy{Algorithm: "exponential_full_jitter_v1", BaseDelayMS: 100, MaxDelayMS: 1000},
-				AttemptTimeoutMS: 5000,
+				Backoff:              template.BackoffPolicy{Algorithm: "exponential_full_jitter_v1", BaseDelayMS: 100, MaxDelayMS: 1000},
+				AttemptTimeoutMS:     5000,
 			},
 			Propagation: template.PropagationPolicy{
 				OnDegraded: domain.PropagateAccept, OnSkipped: domain.PropagatePartial,
