@@ -1981,3 +1981,36 @@ Root Test Job 的失败发生在 gofmt 门禁，报告：
 - 已在 `c5e67526324e556f85faa2a8e3922484ee14bc41` 将断言改为匹配中文契约，并将 Probe 描述修正为“非空请求体最多 8 KiB，且必须恰好包含一个 JSON 对象；未知字段拒绝”。
 - 新 SHA 对应 Go test suite Run `42207170280`：Data Module Test Job 在本次记录时仍为 in_progress；MariaDB migration/PIT Job success；Root Test Job 因 Research 模块非法字符失败；Compose/Docker Job 仍在运行。最终状态以该 Run 完成后的 Job 结果为准。
 - 因而 CT-05 参数清单与说明修正已提交，但自动化验证仍未通过最终门禁；不将本批标记为完成或 M0 通过。
+
+
+### 2026-11-09：CT-05 参数默认值语义审计第一批
+
+代码基线：`3963c05484eae908be2b6726ff0c56760d54f982`。本轮仅修改 Data OpenAPI 契约与对应 Contract Test，未修改 Handler 运行时行为、未新增接口或字段。
+
+#### 1. 上一轮 CI 最终结果
+
+Go test suite Run `42207170280` 已全部结束：
+
+- `Test services/market-data`：success；gofmt、`go test ./...`、`go test -race ./...`、`go vet ./...` 全部通过。
+- Market Data MariaDB migration / PIT persistence：success；迁移、PIT 持久化、日线 fallback、PIT revision fallback、Probe HTTP/MariaDB 端到端均通过。
+- Compose 校验与 Go 镜像构建：success。
+- Root `Test .`：failure，失败在 Research 文件的 gofmt 阶段，后续测试步骤被跳过；不属于 Data Module 失败，本分支不越界修改。
+
+#### 2. 参数默认值差异与修正
+
+- 对照 `internal/httpapi/server.go` 的 `limitPool` Handler，默认 limit 为 100，范围 1..100。
+- 原 OpenAPI 将 `/api/v1/market/limit-pools` 的 limit 默认值错误声明为 30。
+- 已修正 OpenAPI 默认值为 100，保持 Handler 行为不变。
+- 新增 `TestOpenAPIParameterDefaultsMatchHandlerDefaults`，自动核对 limit-pools、market-stocks、dragon-tiger、sentiment-history 的关键默认值、类型、范围及 limit-pools 类型枚举；避免后续只检查参数名称而漏掉默认值漂移。
+
+#### 3. 当前状态与剩余项
+
+- [x] 上一轮 CT-05 35 Operation 参数清单及边界说明测试通过 Data Module CI。
+- [x] 修正 limit-pools 的 OpenAPI 默认值与 Handler 不一致。
+- [x] 增加关键参数默认值/类型/范围/枚举的 Contract Test。
+- [ ] 本轮提交 `3963c054` 的 Data Module CI 尚待运行并确认。
+- [ ] 继续核对其余 Operation 的参数类型、格式、边界、默认值和枚举；当前新增测试只覆盖首批关键分页/限制参数，不代表 35 Operation 全量语义审计完成。
+- [ ] 对批量 symbols、日期范围、分页上限、Probe 请求体字段和数组约束补齐有 Handler 依据的结构化负例测试。
+- [ ] 取得脱敏生产数据库 Schema 快照，完成 M0 生产 DDL 对照。
+
+**当前结论：** Data Module 前一 SHA 的测试门禁已通过；本轮发现并修正一处 OpenAPI 默认值错误。CT-05 仍处于进行中，M0 仍为 `in_progress`，M1 不准入。
