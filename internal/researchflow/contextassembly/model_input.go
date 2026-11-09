@@ -67,7 +67,8 @@ func ComposeModelInput(
 	if availableTokens <= 0 {
 		return ComposedModelInput{}, fmt.Errorf("%w: available token budget must be positive", ErrInvalidModelInput)
 	}
-	if _, err := ToResearchCreateContextCommand(snapshot, candidates, metadata, plan); err != nil {
+	command, err := ToResearchCreateContextCommand(snapshot, candidates, metadata, plan)
+	if err != nil {
 		return ComposedModelInput{}, fmt.Errorf("%w: invalid context plan: %v", ErrInvalidModelInput, err)
 	}
 	if tokenizer == nil || expectedModelID == "" || expectedModelID != strings.TrimSpace(expectedModelID) ||
@@ -76,7 +77,6 @@ func ComposeModelInput(
 		return ComposedModelInput{}, ErrTokenizerUnavailable
 	}
 
-	command, _ := ToResearchCreateContextCommand(snapshot, candidates, metadata, plan)
 	candidateByID := make(map[string]SectionCandidate, len(candidates))
 	for _, candidate := range candidates {
 		candidateByID[candidate.ID] = candidate
