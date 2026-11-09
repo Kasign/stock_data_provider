@@ -130,7 +130,6 @@ func mustJSON(t *testing.T, value any) string {
 	return string(encoded)
 }
 
-
 func TestAllIndicatorAndFactorGoldenParametersMatchContractSchemas(t *testing.T) {
 	contracts := []struct {
 		name       string
@@ -183,7 +182,7 @@ func TestAllIndicatorAndFactorGoldenParametersMatchContractSchemas(t *testing.T)
 						code = fixture.FactorCode
 					}
 					instance, err := json.Marshal(map[string]any{
-						"schema_version": fixture.SchemaVersion,
+						"schema_version":   fixture.SchemaVersion,
 						contract.codeField: code,
 						"parameters":       fixture.Parameters,
 					})
@@ -207,7 +206,6 @@ func compileQuantSchemaFile(t *testing.T, name string) *jsonschema.Schema {
 	}
 	return compiled
 }
-
 
 func TestRegistryEntrySchemaEnforcesValueTypeConditionals(t *testing.T) {
 	schema := compileQuantSchemaFile(t, "QNT-CTR-001-registry-entry-1.0.0.schema.json")
@@ -271,10 +269,6 @@ func TestIndicatorParameterSchemaEnforcesOneOfCodeAndParameters(t *testing.T) {
 		t.Fatal("MACD code with SMA parameters unexpectedly passed oneOf")
 	}
 }
-
-
-
-
 
 func TestCompileJSONSchemaRejectsInvalidUTF8(t *testing.T) {
 	document := append([]byte(`{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","additionalProperties":false,"description":"`), 0xff)
@@ -371,8 +365,6 @@ func TestIndicatorAndFactorSchemasEnforceNumericAndEmptyParameterBoundaries(t *t
 	}
 }
 
-
-
 func TestCompileJSONSchemaRejectsDuplicateObjectKeys(t *testing.T) {
 	document := []byte(`{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","type":"array","additionalProperties":false}`)
 	if _, err := compileJSONSchema(document); err == nil {
@@ -406,7 +398,6 @@ func TestValidateJSONSchemaInstanceRejectsDuplicateObjectKeys(t *testing.T) {
 		})
 	}
 }
-
 
 func TestFirstFactorQuantMetricSchemaValidatesGoldenAndRejectsInvalidStates(t *testing.T) {
 	schema := compileQuantSchemaFile(t, "QNT-CTR-004-factor-quant-metric-1.0.0.schema.json")
@@ -445,7 +436,6 @@ func TestFirstFactorQuantMetricSchemaValidatesGoldenAndRejectsInvalidStates(t *t
 	}
 }
 
-
 func TestFirstFactorQuantMetricSchemaAllowsDegradedAvailabilityForRegistryPolicyGate(t *testing.T) {
 	schema := compileQuantSchemaFile(t, "QNT-CTR-004-factor-quant-metric-1.0.0.schema.json")
 	instance := []byte(`{"metric_code":"momentum_20d","value":0.2,"unit":"ratio","period":"20d","system_as_of":"2026-11-09T00:00:00Z","quality_status":"degraded","metric_status":"available","calculation_version":"1.0.0","sample_count":21,"lower_bound":null,"upper_bound":null}`)
@@ -453,7 +443,6 @@ func TestFirstFactorQuantMetricSchemaAllowsDegradedAvailabilityForRegistryPolicy
 		t.Fatalf("structurally valid degraded metric rejected before Registry quality_policy gate: %v", err)
 	}
 }
-
 
 func TestQuantResultRefSchemaEnforcesConditionalAndReferenceConstraints(t *testing.T) {
 	schema := compileQuantSchemaFile(t, "QNT-CTR-004-quant-result-ref-1.0.0.schema.json")
@@ -469,7 +458,6 @@ func TestQuantResultRefSchemaEnforcesConditionalAndReferenceConstraints(t *testi
 		}
 	}
 }
-
 
 func TestRiskDecisionSchemaValidatesGoldenAndFailClosedStructure(t *testing.T) {
 	schema := compileQuantSchemaFile(t, "QNT-CTR-004-risk-decision-1.0.0.schema.json")

@@ -21,17 +21,17 @@ const (
 // QuantMetric 是首批 Factor 的强类型 QNT-CTR-004 子对象。
 // 是否允许 degraded 结果作为可用事实，仍由上层 Registry quality_policy 决定。
 type QuantMetric struct {
-	MetricCode        string        `json:"metric_code"`
-	Value             *float64      `json:"value"`
-	Unit              string        `json:"unit"`
-	Period            string        `json:"period"`
-	SystemAsOf        string        `json:"system_as_of"`
-	QualityStatus     QualityStatus `json:"quality_status"`
-	MetricStatus      Status        `json:"metric_status"`
-	CalculationVersion string       `json:"calculation_version"`
-	SampleCount       int           `json:"sample_count"`
-	LowerBound        *float64      `json:"lower_bound"`
-	UpperBound        *float64      `json:"upper_bound"`
+	MetricCode         string        `json:"metric_code"`
+	Value              *float64      `json:"value"`
+	Unit               string        `json:"unit"`
+	Period             string        `json:"period"`
+	SystemAsOf         string        `json:"system_as_of"`
+	QualityStatus      QualityStatus `json:"quality_status"`
+	MetricStatus       Status        `json:"metric_status"`
+	CalculationVersion string        `json:"calculation_version"`
+	SampleCount        int           `json:"sample_count"`
+	LowerBound         *float64      `json:"lower_bound"`
+	UpperBound         *float64      `json:"upper_bound"`
 }
 
 var semanticVersionPattern = regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?$`)

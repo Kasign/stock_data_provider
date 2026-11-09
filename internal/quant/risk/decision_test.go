@@ -45,20 +45,20 @@ func TestDecisionValidateDoesNotInferRuleOutcome(t *testing.T) {
 
 func TestDecisionValidateRejectsInvalidFields(t *testing.T) {
 	cases := map[string]func(*Decision){
-		"missing decision id":       func(d *Decision) { d.DecisionID = "" },
-		"missing rule version":      func(d *Decision) { d.RuleSetVersion = "" },
-		"nil reasons":               func(d *Decision) { d.Reasons = nil },
-		"nil input refs":            func(d *Decision) { d.InputRefs = nil },
-		"empty input ref":           func(d *Decision) { d.InputRefs = []string{""} },
-		"nil evidence refs":         func(d *Decision) { d.Reasons[0].EvidenceRefs = nil },
-		"empty evidence ref":        func(d *Decision) { d.Reasons[0].EvidenceRefs = []string{" "} },
-		"empty safe message":        func(d *Decision) { d.Reasons[0].SafeMessage = " " },
-		"unknown decision status":   func(d *Decision) { d.Status = "sideways" },
-		"unknown severity":          func(d *Decision) { d.Reasons[0].Severity = "critical" },
-		"unknown reason status":     func(d *Decision) { d.Reasons[0].Status = "passed" },
-		"non UTC time":              func(d *Decision) { d.EvaluatedAt = "2026-11-09T09:00:00+08:00" },
-		"non canonical time":        func(d *Decision) { d.SystemAsOf = "2026-11-09T00:59:00.000Z" },
-		"invalid calendar date":     func(d *Decision) { d.EvaluatedAt = "2026-02-30T01:00:00Z" },
+		"missing decision id":     func(d *Decision) { d.DecisionID = "" },
+		"missing rule version":    func(d *Decision) { d.RuleSetVersion = "" },
+		"nil reasons":             func(d *Decision) { d.Reasons = nil },
+		"nil input refs":          func(d *Decision) { d.InputRefs = nil },
+		"empty input ref":         func(d *Decision) { d.InputRefs = []string{""} },
+		"nil evidence refs":       func(d *Decision) { d.Reasons[0].EvidenceRefs = nil },
+		"empty evidence ref":      func(d *Decision) { d.Reasons[0].EvidenceRefs = []string{" "} },
+		"empty safe message":      func(d *Decision) { d.Reasons[0].SafeMessage = " " },
+		"unknown decision status": func(d *Decision) { d.Status = "sideways" },
+		"unknown severity":        func(d *Decision) { d.Reasons[0].Severity = "critical" },
+		"unknown reason status":   func(d *Decision) { d.Reasons[0].Status = "passed" },
+		"non UTC time":            func(d *Decision) { d.EvaluatedAt = "2026-11-09T09:00:00+08:00" },
+		"non canonical time":      func(d *Decision) { d.SystemAsOf = "2026-11-09T00:59:00.000Z" },
+		"invalid calendar date":   func(d *Decision) { d.EvaluatedAt = "2026-02-30T01:00:00Z" },
 	}
 	for name, mutate := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -79,7 +79,6 @@ func TestDecisionValidateAllowsPresentEmptyArrays(t *testing.T) {
 		t.Fatalf("empty but present arrays rejected: %v", err)
 	}
 }
-
 
 func TestDecisionMatchesGoldenJSON(t *testing.T) {
 	path := filepath.Join("..", "..", "..", "doc", "quant", "golden", "result", "risk-decision-1.0.0.golden.json")

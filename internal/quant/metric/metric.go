@@ -14,7 +14,7 @@ import (
 
 var (
 	ErrInvalidMetric = errors.New("invalid quant metric")
-	decimalStringRE = regexp.MustCompile(`^[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?$`)
+	decimalStringRE  = regexp.MustCompile(`^[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?$`)
 )
 
 type QualityStatus string

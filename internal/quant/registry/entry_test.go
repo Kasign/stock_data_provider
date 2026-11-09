@@ -259,7 +259,6 @@ func TestRegistryFreezeAndStableSnapshot(t *testing.T) {
 	}
 }
 
-
 func TestRegistryValidateParametersUsesExplicitAlgorithmVersion(t *testing.T) {
 	registry := New()
 	entry := validEntry("sma", "1.0.0")
@@ -307,7 +306,6 @@ func TestRegistryValidateParametersUsesExplicitAlgorithmVersion(t *testing.T) {
 		t.Fatalf("expected malformed JSON rejection, got %v", err)
 	}
 }
-
 
 func TestRegistryDeepCopiesEntryOnRegisterAndLookup(t *testing.T) {
 	registry := New()

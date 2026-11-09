@@ -18,7 +18,7 @@ type indicatorGolden struct {
 		Window              int     `json:"window"`
 		SeedMethod          string  `json:"seed_method"`
 		ReturnBasis         string  `json:"return_basis"`
-		AnnualizationFactor int `json:"annualization_factor"`
+		AnnualizationFactor int     `json:"annualization_factor"`
 		SmoothingMethod     string  `json:"smoothing_method"`
 		FastWindow          int     `json:"fast_window"`
 		SlowWindow          int     `json:"slow_window"`
@@ -35,12 +35,12 @@ type indicatorGolden struct {
 	Expected struct {
 		Value       float64 `json:"value"`
 		SampleCount int     `json:"sample_count"`
-		DIF       float64 `json:"dif"`
-		DEA       float64 `json:"dea"`
-		Histogram float64 `json:"histogram"`
-		Middle    float64 `json:"middle"`
-		Upper     float64 `json:"upper"`
-		Lower     float64 `json:"lower"`
+		DIF         float64 `json:"dif"`
+		DEA         float64 `json:"dea"`
+		Histogram   float64 `json:"histogram"`
+		Middle      float64 `json:"middle"`
+		Upper       float64 `json:"upper"`
+		Lower       float64 `json:"lower"`
 	} `json:"expected"`
 	Tolerance float64 `json:"tolerance"`
 }

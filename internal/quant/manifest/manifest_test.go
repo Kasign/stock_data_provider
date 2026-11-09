@@ -189,7 +189,6 @@ func TestVerifyRejectsNonCanonicalUTCSystemAsOf(t *testing.T) {
 	}
 }
 
-
 func TestFingerprintPayloadRejectsInvalidUTF8(t *testing.T) {
 	payload := append([]byte(`{"value":"`), 0xff)
 	payload = append(payload, []byte(`"}`)...)
@@ -197,7 +196,6 @@ func TestFingerprintPayloadRejectsInvalidUTF8(t *testing.T) {
 		t.Fatalf("FingerprintPayload error = %v, want ErrInvalidPayload", err)
 	}
 }
-
 
 func TestFingerprintPayloadRejectsDuplicateObjectKeys(t *testing.T) {
 	cases := []struct {

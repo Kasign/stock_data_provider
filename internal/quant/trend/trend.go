@@ -42,16 +42,16 @@ const (
 
 // Result 是 QNT-CTR-004 TrendResult 的强类型 DTO。
 type Result struct {
-	TrendCode       string             `json:"trend_code"`
-	Direction       Direction          `json:"direction"`
-	Phase           Phase              `json:"phase"`
-	Strength        *float64           `json:"strength"`
-	Period          string             `json:"period"`
-	EvidenceMetrics []metric.Metric    `json:"evidence_metrics"`
-	ConflictRefs    []string           `json:"conflict_refs"`
-	QualityStatus   QualityStatus      `json:"quality_status"`
-	SystemAsOf      string             `json:"system_as_of"`
-	AlgorithmVersion string            `json:"algorithm_version"`
+	TrendCode        string          `json:"trend_code"`
+	Direction        Direction       `json:"direction"`
+	Phase            Phase           `json:"phase"`
+	Strength         *float64        `json:"strength"`
+	Period           string          `json:"period"`
+	EvidenceMetrics  []metric.Metric `json:"evidence_metrics"`
+	ConflictRefs     []string        `json:"conflict_refs"`
+	QualityStatus    QualityStatus   `json:"quality_status"`
+	SystemAsOf       string          `json:"system_as_of"`
+	AlgorithmVersion string          `json:"algorithm_version"`
 }
 
 // Validate 只校验 DTO 结构；趋势推断、强度归一化和质量策略由上层用例负责。

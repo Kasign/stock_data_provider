@@ -290,10 +290,10 @@ func TestATRRejectsInvalidOHLCBoundaries(t *testing.T) {
 	validClose := []float64{10, 11}
 	params := ATRParams{Window: 2, SmoothingMethod: "wilder"}
 	cases := []struct {
-		name string
-		high []float64
-		low []float64
-		close []float64
+		name     string
+		high     []float64
+		low      []float64
+		close    []float64
 		previous float64
 	}{
 		{"length mismatch", []float64{11}, validLow, validClose, 10},
@@ -366,12 +366,27 @@ func TestIndicatorsRejectWindowsAboveContractMaximum(t *testing.T) {
 		{"sma", func() error { _, err := SMA(nil, SMAParams{Window: 1001}); return err }},
 		{"ema", func() error { _, err := EMA(nil, EMAParams{Window: 1001, SeedMethod: "sma"}); return err }},
 		{"return", func() error { _, err := Return(nil, ReturnParams{Window: 1001, ReturnBasis: "simple"}); return err }},
-		{"volatility", func() error { _, err := Volatility(nil, VolatilityParams{Window: 1001, ReturnBasis: "simple", AnnualizationFactor: 252}); return err }},
+		{"volatility", func() error {
+			_, err := Volatility(nil, VolatilityParams{Window: 1001, ReturnBasis: "simple", AnnualizationFactor: 252})
+			return err
+		}},
 		{"rsi", func() error { _, err := RSI(nil, RSIParams{Window: 1001, SmoothingMethod: "wilder"}); return err }},
-		{"macd slow", func() error { _, err := MACD(nil, MACDParams{FastWindow: 1, SlowWindow: 1001, SignalWindow: 1}); return err }},
-		{"macd signal", func() error { _, err := MACD(nil, MACDParams{FastWindow: 1, SlowWindow: 2, SignalWindow: 1001}); return err }},
-		{"atr", func() error { _, err := ATR(nil, nil, nil, 1, ATRParams{Window: 1001, SmoothingMethod: "wilder"}); return err }},
-		{"bollinger", func() error { _, err := Bollinger(nil, BollingerParams{Window: 1001, Multiplier: 2, StdDevMethod: "population"}); return err }},
+		{"macd slow", func() error {
+			_, err := MACD(nil, MACDParams{FastWindow: 1, SlowWindow: 1001, SignalWindow: 1})
+			return err
+		}},
+		{"macd signal", func() error {
+			_, err := MACD(nil, MACDParams{FastWindow: 1, SlowWindow: 2, SignalWindow: 1001})
+			return err
+		}},
+		{"atr", func() error {
+			_, err := ATR(nil, nil, nil, 1, ATRParams{Window: 1001, SmoothingMethod: "wilder"})
+			return err
+		}},
+		{"bollinger", func() error {
+			_, err := Bollinger(nil, BollingerParams{Window: 1001, Multiplier: 2, StdDevMethod: "population"})
+			return err
+		}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

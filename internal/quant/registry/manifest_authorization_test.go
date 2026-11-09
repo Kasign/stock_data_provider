@@ -13,10 +13,10 @@ import (
 )
 
 type resultManifestGolden struct {
-	Manifest          json.RawMessage `json:"manifest"`
-	FingerprintInput  json.RawMessage `json:"fingerprint_input"`
-	CanonicalJSON     string          `json:"canonical_json"`
-	ExpectedSHA256     string          `json:"expected_sha256"`
+	Manifest         json.RawMessage `json:"manifest"`
+	FingerprintInput json.RawMessage `json:"fingerprint_input"`
+	CanonicalJSON    string          `json:"canonical_json"`
+	ExpectedSHA256   string          `json:"expected_sha256"`
 }
 
 type authorizationGolden struct {
@@ -119,14 +119,14 @@ func TestQuantResultManifestAndAuthorizationGolden(t *testing.T) {
 	}
 
 	var auth struct {
-		DecisionFingerprint string  `json:"decision_fingerprint"`
-		PolicyOwner         string  `json:"policy_owner"`
-		Decision            string  `json:"decision"`
-		PurposeCode         string  `json:"purpose_code"`
-		ContentLevel        string  `json:"content_level"`
-		SubjectRef          string  `json:"subject_ref"`
-		ResourceRef         string  `json:"resource_ref"`
-		PolicyVersion       string  `json:"policy_version"`
+		DecisionFingerprint string            `json:"decision_fingerprint"`
+		PolicyOwner         string            `json:"policy_owner"`
+		Decision            string            `json:"decision"`
+		PurposeCode         string            `json:"purpose_code"`
+		ContentLevel        string            `json:"content_level"`
+		SubjectRef          string            `json:"subject_ref"`
+		ResourceRef         string            `json:"resource_ref"`
+		PolicyVersion       string            `json:"policy_version"`
 		DecidedAt           string            `json:"decided_at"`
 		ExpiresAt           *string           `json:"expires_at"`
 		Conditions          []json.RawMessage `json:"conditions"`
@@ -170,4 +170,3 @@ func TestQuantResultManifestSchemaRejectsEmptySnapshotAndInvalidIdentity(t *test
 		}
 	}
 }
-

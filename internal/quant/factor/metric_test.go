@@ -18,32 +18,32 @@ func TestNewQuantMetricMatchesFactorResultGolden(t *testing.T) {
 		golden string
 	}{
 		{
-			name: "momentum available",
+			name:   "momentum available",
 			result: Result{Code: "momentum_20d", Value: 0.2, Unit: "ratio", Status: StatusAvailable, SampleCount: 21},
 			golden: "momentum_20d-available.golden.json",
 		},
 		{
-			name: "momentum insufficient",
+			name:   "momentum insufficient",
 			result: Result{Code: "momentum_20d", Unit: "ratio", Status: StatusInsufficientData, SampleCount: 20},
 			golden: "momentum_20d-insufficient.golden.json",
 		},
 		{
-			name: "momentum 60d available",
+			name:   "momentum 60d available",
 			result: Result{Code: "momentum_60d", Value: 0.6, Unit: "ratio", Status: StatusAvailable, SampleCount: 61},
 			golden: "momentum_60d-available.golden.json",
 		},
 		{
-			name: "momentum 60d insufficient",
+			name:   "momentum 60d insufficient",
 			result: Result{Code: "momentum_60d", Unit: "ratio", Status: StatusInsufficientData, SampleCount: 60},
 			golden: "momentum_60d-insufficient.golden.json",
 		},
 		{
-			name: "volatility available",
+			name:   "volatility available",
 			result: Result{Code: "volatility_20d", Value: 0.012, Unit: "ratio", Status: StatusAvailable, SampleCount: 20},
 			golden: "volatility_20d-available.golden.json",
 		},
 		{
-			name: "volatility insufficient",
+			name:   "volatility insufficient",
 			result: Result{Code: "volatility_20d", Unit: "ratio", Status: StatusInsufficientData, SampleCount: 19},
 			golden: "volatility_20d-insufficient.golden.json",
 		},
@@ -99,9 +99,9 @@ func TestNewQuantMetricRejectsInvalidMetadataAndNonFiniteValues(t *testing.T) {
 	now := time.Date(2026, 11, 9, 0, 0, 0, 0, time.UTC)
 	valid := Result{Code: "momentum_20d", Value: 0.2, Unit: "ratio", Status: StatusAvailable, SampleCount: 21}
 	cases := []struct {
-		name   string
-		result Result
-		asOf   time.Time
+		name    string
+		result  Result
+		asOf    time.Time
 		quality QualityStatus
 		version string
 	}{
