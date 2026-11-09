@@ -1,0 +1,56 @@
+name: Quant module validation
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'internal/quant/**'
+      - 'doc/quant/**'
+      - '.github/workflows/quant-test.yml'
+      - 'go.mod'
+      - 'go.sum'
+  push:
+    branches: [feat/quant]
+    paths:
+      - 'internal/quant/**'
+      - 'doc/quant/**'
+      - '.github/workflows/quant-test.yml'
+      - 'go.mod'
+      - 'go.sum'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: quant-test-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quant:
+    name: Test Quant packages
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+      - name: 安装 Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache-dependency-path: go.sum
+      - name: 检查 Quant 代码格式
+        shell: bash
+        run: |
+          files="$(find internal/quant -name '*.go' -type f -print0 | xargs -0 gofmt -l)"
+          if [[ -n "$files" ]]; then
+            echo "::error::Quant Go 文件未通过 gofmt"
+            printf '%s\\n' "$files"
+            exit 1
+          fi
+      - name: 下载依赖
+        run: go mod download
+      - name: 运行 Quant 单元测试
+        run: go test ./internal/quant/...
+      - name: 运行 Quant 竞态检测
+        run: go test -race ./internal/quant/...
+      - name: 运行 Quant 静态检查
+        run: go vet ./internal/quant/...
