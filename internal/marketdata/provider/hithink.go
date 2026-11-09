@@ -176,6 +176,17 @@ func addHithinkFieldIssue(ctx context.Context, rowIndex *int, field, providerFie
 	validation.AddContextReport(ctx, report)
 }
 
+func addHithinkSymbolFieldIssue(ctx context.Context, symbol string, field, providerField, code, expected, actualType, preview, message string) {
+	report := validation.NewReport(validation.DefaultMaxIssues)
+	report.Add(validation.FieldIssue{
+		Stage: validation.StageValidate, Symbol: symbol, Field: field, ProviderField: providerField,
+		Code: code, Expected: expected, ActualType: actualType,
+		ActualPreview: providerFieldIssuePreview(preview), Severity: validation.SeverityWarning,
+		Message: message,
+	})
+	validation.AddContextReport(ctx, report)
+}
+
 type hithinkIndexDefinition struct {
 	Symbol string
 	Code   string
@@ -1581,7 +1592,7 @@ func (p *Hithink) FetchValuations(ctx context.Context, rawSymbols []string) (*mo
 			snapshot.MissingSymbols = append(snapshot.MissingSymbols, symbol)
 			snapshot.QualityStatus = model.QualityDegraded
 			snapshot.QualityReasons = appendUniqueHithinkReason(snapshot.QualityReasons, "one_or_more_requested_symbols_missing_from_provider_response")
-			addHithinkFieldIssue(ctx, nil, "symbol", "thscode", "missing_requested_row", "provider response row for requested symbol "+symbol, "missing", "", "同花顺估值响应缺少已请求证券")
+			addHithinkSymbolFieldIssue(ctx, symbol, "symbol", "thscode", "missing_requested_row", "provider response row for requested symbol", "missing", "", "同花顺估值响应缺少已请求证券")
 			continue
 		}
 		snapshot.Items = append(snapshot.Items, item)

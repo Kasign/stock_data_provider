@@ -198,7 +198,7 @@ func TestHithinkValuationsReportsMissingNameAndRequestedSymbol(t *testing.T) {
 			foundName = true
 		}
 		if issue.Field == "symbol" && issue.ProviderField == "thscode" && issue.Code == "missing_requested_row" &&
-			issue.Symbol == "" && issue.RowIndex == nil {
+			issue.Symbol == "600036.SH" && issue.RowIndex == nil {
 			foundMissing = true
 		}
 	}
