@@ -155,11 +155,21 @@ Platform 提供 SecurityAuditEvent Schema、字段约束/脱敏和注入式 Audi
 截至 Platform HEAD `fd45b6c299dfb54d2530bd1436589fe4708d8e96`：
 - 现有 `internal/platform/security` 只有 Bearer Authenticator、Router Policy 和测试。
 - 现有 `internal/platform/storage.OpenRedis` 只提供 Redis Client 生命周期，没有 Session Store 或 RateLimiter。
-- 当前 go.mod 已有 `github.com/redis/go-redis/v9`，但没有 Argon2id 直接依赖；实现时需评估并引入成熟的 `golang.org/x/crypto/argon2` 依赖。
+- go.mod 已引入成熟依赖 `golang.org/x/crypto/argon2`；不自研密码学算法。
 - Argon2id Hash/Verify/NeedsRehash 与 MariaDB CredentialStore 已新增；Hasher 使用显式参数，不提供未经硬件基准确认的生产默认值。Session、Cookie、CSRF、RateLimiter 和 Security Audit 原语仍未实现。
 - 已新增 Platform 自有 `platform.security` Migration 与 `platform_owner_credentials` 单 Owner 表；Server 必须显式注册 Migration，SQLCredentialStore 不自动建表。尚未新增 Redis Key。
-- Argon2id 参数需目标硬件基准；CredentialStore 表结构/迁移注册方式、Redis 原子脚本、限流阈值和 Audit Writer 持久化后端需评审。
+- Argon2id 生产参数需目标硬件基准；Server 需显式注册 Platform 自有 Migration。Redis 原子脚本、限流阈值和 Audit Writer 持久化后端仍需评审。
 - 本文是 Platform 技术设计与实现边界文档；Web 登录路由/权限/交互契约由 Server Owner 跟进，Platform 不代替 Server 修改其业务文档，也不改变项目级契约登记簿状态。
+
+### 11.1 PLAT-015 实现状态补充（2026-11-09）
+
+- `internal/platform/security/password.go` 提供显式参数 Argon2id Hash/Verify/NeedsRehash，PHC 格式和攻击输入硬上限。
+- `internal/platform/security/credential_store.go` 提供单 Owner CredentialStore；MariaDB 表由 Platform Migration 管理，Server 必须显式注册，不在 Store 构造时自动执行。
+- 首次初始化固定 credential_version=1；密码更新以单条条件 UPDATE 实现 hash 与 version 原子 CAS；并发旧版本更新最多一个成功。
+- OwnerCredential 的 JSON 序列化和结构化日志均排除 PasswordHash；String 输出仅包含非敏感元数据。
+- 真实 MariaDB 集成与 race tests 已纳入 Platform workflow；测试使用唯一临时表和 namespace，避免修改正式 Owner Credential。
+- Platform L1 CI 已覆盖 Argon2id、CredentialStore、Migration、race 和 vet。Argon2id 的生产 cost 参数不在代码中默认化，待目标硬件基准后由 Server 显式配置。
+
 
 ## 12. 安全设计原则
 
