@@ -578,7 +578,6 @@ func TestResponsesAdapterStreamDoesNotDispatchWithCancelledContext(t *testing.T)
 	}
 }
 
-
 // TestResponsesAdapterGenerateDoesNotDispatchWithCancelledContext 验证已取消的调用上下文不会进入传输层。
 func TestResponsesAdapterGenerateDoesNotDispatchWithCancelledContext(t *testing.T) {
 	provider, secret, capabilities, clock := adapterTestConfig()
