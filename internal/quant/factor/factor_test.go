@@ -67,6 +67,26 @@ func TestVolatility20UsesSampleStdAndIsNotAnnualized(t *testing.T) {
 	assertNear(t, got.Value, 0)
 }
 
+func TestVolatility20AvoidsIntermediateOverflowForFiniteReturns(t *testing.T) {
+	closes := make([]float64, 21)
+	for i := range closes {
+		if i%2 == 0 {
+			closes[i] = 1e-308
+		} else {
+			closes[i] = 1
+		}
+	}
+
+	got, err := Volatility20(closes)
+	if err != nil {
+		t.Fatalf("Volatility20() rejected finite returns: %v", err)
+	}
+	want := math.Sqrt(5.0/19.0) * 1e308
+	if math.IsNaN(got.Value) || math.IsInf(got.Value, 0) || math.Abs(got.Value-want)/want > 1e-12 {
+		t.Fatalf("Volatility20() = %.17g, want approximately %.17g", got.Value, want)
+	}
+}
+
 func TestAllFactorsReportInsufficientDataBeforeWarmup(t *testing.T) {
 	positiveCloses := func(n int) []float64 {
 		closes := make([]float64, n)
