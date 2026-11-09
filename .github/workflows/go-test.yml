@@ -148,7 +148,7 @@ jobs:
         run: go vet ./...
 
   research-contract:
-    name: Test Research Context Schema and Application contract
+    name: Test all Research packages
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
@@ -160,17 +160,55 @@ jobs:
           cache: true
       - name: Check Research gofmt
         run: |
-          files="$(find internal/research/context internal/research/application -name '*.go' -type f -print0 | xargs -0 gofmt -l)"
+          files="$(find internal/research -name '*.go' -type f -print0 | xargs -0 gofmt -l)"
           if [[ -n "$files" ]]; then
             printf '%s\n' "$files"
             exit 1
           fi
-      - name: Run Context Schema and Application contract tests
-        run: go test ./internal/research/context ./internal/research/application -count=1
-      - name: Run Research contract race tests
-        run: go test -race ./internal/research/context ./internal/research/application -count=1
-      - name: Run Research contract vet
-        run: go vet ./internal/research/context ./internal/research/application
+      - name: Download root module dependencies
+        run: go mod download
+      - name: Run all Research package tests
+        run: go test ./internal/research/... -count=1
+      - name: Run all Research race tests
+        run: go test -race ./internal/research/... -count=1
+      - name: Run all Research vet
+        run: go vet ./internal/research/...
+
+  research-storage-mariadb:
+    name: Research Storage and Migration MariaDB integration
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      mariadb:
+        image: mariadb:11.4
+        env:
+          MARIADB_ROOT_PASSWORD: research-ci
+          MARIADB_DATABASE: research_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: true
+      - name: Create isolated historical migration database
+        run: |
+          container_id="$(docker ps --filter 'ancestor=mariadb:11.4' --format '{{.ID}}' | head -n 1)"
+          test -n "$container_id"
+          docker exec "$container_id" mariadb -uroot -presearch-ci -e 'CREATE DATABASE research_migration_test'
+      - name: Run Research Storage MariaDB integration
+        env:
+          RESEARCH_TEST_MYSQL_DSN: "root:research-ci@tcp(127.0.0.1:3306)/research_test?parseTime=true&loc=UTC"
+          RESEARCH_MIGRATION_TEST_MYSQL_DSN: "root:research-ci@tcp(127.0.0.1:3306)/research_migration_test?parseTime=true&loc=UTC"
+        run: go test ./internal/research/storage -count=1 -v
 
   market-data-module-test:
     if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.event.pull_request.head.ref == 'feat/full-go-data-providers-api-switch') }}
