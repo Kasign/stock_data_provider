@@ -8,6 +8,12 @@ import (
 	"example.com/stock-analysis-flow/internal/notification/domain"
 )
 
+type nilChannelResolver struct{}
+
+func (nilChannelResolver) Resolve(context.Context, string, int64) (ChannelAdapter, error) {
+	return nil, nil
+}
+
 type fixedRecipientResolver struct {
 	target domain.RecipientTarget
 	err    error
@@ -115,6 +121,13 @@ func TestDeliveryPreflightBlocksMissingChannelAndResolverDependency(t *testing.T
 	if !errors.Is(err, ErrChannelVersionNotFound) ||
 		result.Action != DeliveryPreflightBlock || result.ReasonCode != "channel_unavailable" {
 		t.Fatalf("missing exact channel version must block: %+v err=%v", result, err)
+	}
+
+	preflight, delivery, _ = preflightFixture(t)
+	preflight.channels = nilChannelResolver{}
+	result, err = preflight.Check(context.Background(), delivery)
+	if !errors.Is(err, ErrChannelAdapterUnavailable) || result.Action != DeliveryPreflightBlock {
+		t.Fatalf("nil adapter must fail closed: %+v err=%v", result, err)
 	}
 
 	preflight, delivery, _ = preflightFixture(t)

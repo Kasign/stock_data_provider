@@ -105,6 +105,11 @@ func (p *DeliveryPreflight) Check(ctx context.Context, delivery domain.DeliveryR
 		result.ReasonCode = "channel_unavailable"
 		return result, err
 	}
+	if adapter == nil {
+		result.Action = DeliveryPreflightBlock
+		result.ReasonCode = "channel_unavailable"
+		return result, ErrChannelAdapterUnavailable
+	}
 	snapshot := adapter.ConfigSnapshot()
 	if err := snapshot.Validate(); err != nil ||
 		snapshot.ChannelRef != delivery.ChannelRef ||
