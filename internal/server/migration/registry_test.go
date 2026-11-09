@@ -120,39 +120,39 @@ func TestRunWithReportCapturesPreconditionFailure(t *testing.T) {
 
 func TestMigrationFailureDetails(t *testing.T) {
 	tests := []struct {
-		name             string
-		err              error
-		wantCode         string
-		wantRecovery     bool
+		name         string
+		err          error
+		wantCode     string
+		wantRecovery bool
 	}{
 		{
-			name: "incomplete migration requires recovery",
-			err: platformfault.New(platformfault.ClassConflict, "platform.storage.migration_requires_recovery", "manual recovery required", nil),
-			wantCode: "platform.storage.migration_requires_recovery",
+			name:         "incomplete migration requires recovery",
+			err:          platformfault.New(platformfault.ClassConflict, "platform.storage.migration_requires_recovery", "manual recovery required", nil),
+			wantCode:     "platform.storage.migration_requires_recovery",
 			wantRecovery: true,
 		},
 		{
-			name: "statement failure requires recovery",
-			err: platformfault.New(platformfault.ClassInternal, "platform.storage.migration_apply_failed", "migration failed", nil),
-			wantCode: "platform.storage.migration_apply_failed",
+			name:         "statement failure requires recovery",
+			err:          platformfault.New(platformfault.ClassInternal, "platform.storage.migration_apply_failed", "migration failed", nil),
+			wantCode:     "platform.storage.migration_apply_failed",
 			wantRecovery: true,
 		},
 		{
-			name: "history update failure requires inspection",
-			err: platformfault.New(platformfault.ClassInternal, "platform.storage.migration_record_failed", "history update failed", nil),
-			wantCode: "platform.storage.migration_record_failed",
+			name:         "history update failure requires inspection",
+			err:          platformfault.New(platformfault.ClassInternal, "platform.storage.migration_record_failed", "history update failed", nil),
+			wantCode:     "platform.storage.migration_record_failed",
 			wantRecovery: true,
 		},
 		{
-			name: "connection failure does not imply partial DDL",
-			err: platformfault.New(platformfault.ClassUnavailable, "platform.storage.migration_connection_failed", "connection failed", nil),
-			wantCode: "platform.storage.migration_connection_failed",
+			name:         "connection failure does not imply partial DDL",
+			err:          platformfault.New(platformfault.ClassUnavailable, "platform.storage.migration_connection_failed", "connection failed", nil),
+			wantCode:     "platform.storage.migration_connection_failed",
 			wantRecovery: false,
 		},
 		{
-			name: "invalid fault metadata is hidden",
-			err: &platformfault.Fault{Class: platformfault.ClassInternal, Code: "INVALID CODE", SafeMessage: "invalid"},
-			wantCode: "server.migration.namespace_failed",
+			name:         "invalid fault metadata is hidden",
+			err:          &platformfault.Fault{Class: platformfault.ClassInternal, Code: "INVALID CODE", SafeMessage: "invalid"},
+			wantCode:     "server.migration.namespace_failed",
 			wantRecovery: false,
 		},
 	}

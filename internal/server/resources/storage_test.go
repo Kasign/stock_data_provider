@@ -1,8 +1,8 @@
 package resources
 
 import (
-	"testing"
 	"sync"
+	"testing"
 
 	platformhttpclient "example.com/stock-analysis-flow/internal/platform/httpclient"
 
@@ -39,7 +39,7 @@ func TestResourcesBindHTTPDestinationUsesSharedClient(t *testing.T) {
 	}
 	resources := &Resources{HTTPClient: client}
 	bound, err := resources.BindHTTPDestination(platformhttpclient.DestinationPolicy{
-		Dependency: "test.upstream",
+		Dependency:   "test.upstream",
 		AllowedHosts: []string{"api.example.com"},
 	})
 	if err != nil {
@@ -77,7 +77,7 @@ func TestResourcesBindHTTPDestinationRejectsInvalidPolicy(t *testing.T) {
 	resources := &Resources{HTTPClient: client}
 	t.Cleanup(func() { _ = resources.Close() })
 	if _, err := resources.BindHTTPDestination(platformhttpclient.DestinationPolicy{
-		Dependency: "invalid dependency",
+		Dependency:   "invalid dependency",
 		AllowedHosts: []string{"api.example.com"},
 	}); err == nil {
 		t.Fatal("BindHTTPDestination() error = nil, want invalid policy error")
@@ -91,7 +91,7 @@ func TestResourcesClosePreventsBindingsAfterReturn(t *testing.T) {
 	}
 	resources := &Resources{HTTPClient: client}
 	policy := platformhttpclient.DestinationPolicy{
-		Dependency: "test.concurrent",
+		Dependency:   "test.concurrent",
 		AllowedHosts: []string{"api.example.com"},
 	}
 	start := make(chan struct{})

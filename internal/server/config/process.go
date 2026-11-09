@@ -11,14 +11,14 @@ import (
 // Process 是 Bootstrap 使用的不可变进程配置快照。
 // 领域模块配置仍由模块自己的配置入口解析，避免 Server 接管领域参数所有权。
 type Process struct {
-	LogLevel        string
+	LogLevel          string
 	AnalysisTimeout   time.Duration
 	AnalysisWorkers   int
 	AnalysisMaxQueued int
-	Role            Role
-	Migration       Migration
-	Security        Security
-	HTTP            HTTP
+	Role              Role
+	Migration         Migration
+	Security          Security
+	HTTP              HTTP
 }
 
 // LoadProcess 在启动阶段一次性解析 Server 进程级配置。

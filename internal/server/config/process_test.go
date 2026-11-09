@@ -8,7 +8,12 @@ import (
 )
 
 func TestLoadProcessDefaults(t *testing.T) {
-	env := platformconfig.NewEnvWithLookup(func(key string) (string, bool) { if key == "PLATFORM_ADMIN_TOKEN" { return "0123456789abcdef0123456789abcdef", true }; return "", false })
+	env := platformconfig.NewEnvWithLookup(func(key string) (string, bool) {
+		if key == "PLATFORM_ADMIN_TOKEN" {
+			return "0123456789abcdef0123456789abcdef", true
+		}
+		return "", false
+	})
 	cfg, err := LoadProcess(env)
 	if err != nil {
 		t.Fatalf("LoadProcess() error = %v", err)
@@ -68,10 +73,10 @@ func TestLoadProcessRejectsInvalidProcessSettings(t *testing.T) {
 
 func TestLoadProcessReturnsStableSnapshot(t *testing.T) {
 	values := map[string]string{
-		"LOG_LEVEL": "debug",
-		"ANALYSIS_WORKERS": "4",
+		"LOG_LEVEL":           "debug",
+		"ANALYSIS_WORKERS":    "4",
 		"ANALYSIS_MAX_QUEUED": "200",
-		"SERVER_ROLE": "worker",
+		"SERVER_ROLE":         "worker",
 	}
 	env := platformconfig.NewEnvWithLookup(func(key string) (string, bool) {
 		value, ok := values[key]

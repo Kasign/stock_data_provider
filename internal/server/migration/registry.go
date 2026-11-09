@@ -136,8 +136,8 @@ func (r *Registry) RunWithReport(ctx context.Context, db *sql.DB) (RunReport, er
 		err := platformstorage.ApplyMigrations(ctx, db, namespace, entries[namespace])
 		item := NamespaceResult{
 			Namespace: namespace,
-			Status: "succeeded",
-			Duration: time.Since(itemStarted),
+			Status:    "succeeded",
+			Duration:  time.Since(itemStarted),
 		}
 		if err != nil {
 			item.Status = "failed"

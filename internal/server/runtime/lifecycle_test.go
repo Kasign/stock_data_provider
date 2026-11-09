@@ -150,7 +150,7 @@ type blockingStopComponent struct {
 	release chan struct{}
 }
 
-func (c blockingStopComponent) Name() string { return c.name }
+func (c blockingStopComponent) Name() string                { return c.name }
 func (c blockingStopComponent) Start(context.Context) error { return nil }
 func (c blockingStopComponent) Stop(ctx context.Context) error {
 	close(c.entered)

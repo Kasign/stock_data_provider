@@ -206,7 +206,6 @@ func TestReadyzReportsRegisteredCheckStatuses(t *testing.T) {
 	}
 }
 
-
 func TestHealthHandlerHeadRequestsKeepStatusHeadersAndExecuteReadiness(t *testing.T) {
 	checker := &fakeReadinessChecker{report: serverdiagnostics.Report{
 		Readiness: serverdiagnostics.Readiness{Ready: true, SafeMessage: "ready"},
