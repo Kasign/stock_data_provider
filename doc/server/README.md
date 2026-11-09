@@ -789,4 +789,16 @@ Server 层完成不是“服务能够启动”这么简单。至少同时满足�
 - 当前路由清单已显式使用 Platform Router：匿名仅 GET/HEAD `/healthz`，Readiness 和全部业务路由要求 Owner Bearer；未注册路由 404。尚无生产模块 Service Scope 路由，因此不添加虚构 Service Principal。
 - Platform `MiddlewareWithOptions` 当前只负责 Request ID 原语；Server 负责入口装配。Server 直连端口仍可访问，因此不启用 TrustIncomingRequestID。
 - Web Session/CSRF/登录限流、安全审计需待项目契约评审和 Platform PLAT-015～019 公共原语交付；本批次不修改 Platform 或项目契约分支。
-- 本批次新增测试尚未在当前执行环境运行；由当前分支 Go Workflow 对精确提交 SHA 验证 gofmt、单测、race 和 vet。
+- Web Session 候选参数仅作后续评审输入：Argon2id memory=64 MiB、iterations=3、parallelism=1、salt=16 bytes、output=32 bytes，必须在目标硬件基准后定稿；MariaDB 保存 Owner 哈希和 credential_version，Redis 保存 Session Token 摘要；Session 空闲 12 小时、绝对 7 天；Cookie 为 HttpOnly/Secure/SameSite=Lax；CSRF Token 按 Session 绑定并校验配置的 Origin/Host；登录按账号/IP 双维度限流；Redis 故障 fail closed。以上尚非冻结契约，CredentialStore Schema、Redis 原子语义、限流阈值、Audit Writer 持久化策略仍需项目级评审。
+- Platform 分支的 PLAT-015～019 目前只是候选任务编号，项目级登记簿尚未建立对应冻结项；不得把 Platform 设计文档中的编号视为已批准接口。
+
+
+### 12.16 SRV-005 / SRV-006 当前 SHA 验收记录（2026-11-09）
+
+- 当前验证 SHA：`faf4f5e4c361a51fadb662aed806ff60f700ada8`。
+- GitHub Actions Go test suite Run `42599945597`：根模块 `gofmt` 检查通过；根模块 `go test ./...` 未通过，失败位于 Server 变更范围之外：
+  - `internal/researchflow/contextassembly`：`TestAssembleResearchContextWithTokenizerRunsCompleteBudgetAndInputPipeline` 的现有预算装配断言失败。
+  - `internal/researchflow/publicdto`：`TestDomainProjectionsValidateAgainstTheirPublicSchemas` 中 `blocked_stage_codes` 为 null，但 Schema 要求 array。
+- 同一 Run 中 `internal/server/bootstrap`、`config`、`diagnostics`、`health`、`migration`、`resources`、`runtime` 包测试均通过；`go-core` 的 gofmt、单测、race、vet 均通过。
+- 根模块聚合测试失败导致根模块 race/vet 阶段被 Workflow 跳过；不得将本 SHA 记为完整 Go Workflow 通过。两个失败均不在本批次修改文件中，本分支未代改 Researchflow。
+- 后续由 Researchflow Owner 修复对应测试后，重新运行当前 Server SHA 的完整 Go Workflow；Server 当前包级测试证据可保留，但不能替代根模块全量门禁。
