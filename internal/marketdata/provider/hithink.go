@@ -1352,6 +1352,9 @@ func (p *Hithink) FetchIndexDailyBars(ctx context.Context, rawIndexSymbol, start
 		snapshot.QualityStatus = model.QualityDegraded
 		snapshot.QualityReasons = append(snapshot.QualityReasons, "provider_index_history_timestamp_missing_or_invalid")
 	}
+	if snapshot.ProviderTime == nil {
+		addHithinkFieldIssue(ctx, nil, "provider_time", "timestamp", "missing_or_invalid_value", "valid provider snapshot timestamp", "number", "", "同花顺指数历史 K 线快照时间缺失或非法")
+	}
 	seen := make(map[string]struct{}, len(data.Item))
 	for index, row := range data.Item {
 		if row.DateMS == nil || row.OpenPrice == nil || row.HighPrice == nil || row.LowPrice == nil || row.ClosePrice == nil {
@@ -1383,6 +1386,7 @@ func (p *Hithink) FetchIndexDailyBars(ctx context.Context, rawIndexSymbol, start
 		} else {
 			bar.QualityStatus = model.QualityDegraded
 			bar.QualityReasons = append(bar.QualityReasons, "provider_volume_missing_or_invalid")
+			addHithinkFieldIssue(ctx, &index, "volume", "volume", "missing_or_invalid_value", "finite non-negative integer volume", "number", fmt.Sprint(row.Volume), "同花顺指数历史 K 线成交量缺失或非法")
 		}
 		if row.Turnover != nil && hithinkNonNegativeFinite(*row.Turnover) {
 			amount := *row.Turnover
@@ -1393,7 +1397,8 @@ func (p *Hithink) FetchIndexDailyBars(ctx context.Context, rawIndexSymbol, start
 		} else {
 			bar.QualityStatus = model.QualityDegraded
 			bar.QualityReasons = append(bar.QualityReasons, "provider_turnover_missing_or_invalid")
-		}
+			addHithinkFieldIssue(ctx, &index, "amount", "turnover", "missing_or_invalid_value", "finite non-negative turnover", "number", fmt.Sprint(row.Turnover), "同花顺指数历史 K 线成交额缺失或非法")
+	}
 		if snapshot.ProviderTime == nil {
 			bar.QualityStatus = model.QualityDegraded
 			bar.QualityReasons = append(bar.QualityReasons, "provider_index_history_timestamp_missing_or_invalid")
