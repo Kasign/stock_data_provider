@@ -64,13 +64,13 @@ func TestNotificationMariaDBExpiredDeliveryLeaseRecoveryIntegration(t *testing.T
 		t.Fatalf("create delivery: %v", err)
 	}
 
-	claimAt := now.Add(time.Second)
-	leaseExpiry := claimAt.Add(time.Second)
+	claimAt := now.Add(-2 * time.Second)
+	leaseExpiry := now.Add(-time.Second)
 	claim, claimed, err := repository.ClaimDue(ctx, "recovery-worker", claimAt, leaseExpiry)
 	if err != nil || !claimed {
 		t.Fatalf("claim delivery: claimed=%v err=%v", claimed, err)
 	}
-	recoveryAt := leaseExpiry.Add(time.Second)
+	recoveryAt := now.Add(time.Second)
 	nextAttemptAt := recoveryAt.Add(time.Second)
 	next, event, err := claim.Delivery.Transition(domain.DeliveryTransition{
 		To: domain.DeliveryRetryWait, At: recoveryAt,
