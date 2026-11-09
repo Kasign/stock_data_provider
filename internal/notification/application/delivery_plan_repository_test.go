@@ -73,13 +73,13 @@ func validPlanForRepository() domain.DeliveryPlan {
 		SubscriptionID: "sub-1", SubscriptionVersion: 2,
 		ChannelRef: "channel-1", ChannelConfigVersion: 3,
 		TemplateID: "template-1", TemplateVersion: 4,
-		RecipientRef:                "recipient-1",
-		PayloadFingerprint:          strings.Repeat("a", 64),
+		RecipientRef:       "recipient-1",
+		PayloadFingerprint: strings.Repeat("a", 64),
 		AuthorizationPolicyVersions: []domain.AuthorizationPolicyVersion{
 			{PolicyType: "provider_output", PolicyRef: "provider-1", PolicyVersion: "v1"},
 			{PolicyType: "source", PolicyRef: "source-1", PolicyVersion: "v2"},
 		},
-		DeliveryID:                  "delivery-1", DeliveryIdempotencyKey: "delivery-key-1",
+		DeliveryID: "delivery-1", DeliveryIdempotencyKey: "delivery-key-1",
 	}
 }
 

@@ -91,7 +91,7 @@ func TestDeliveryPlanRepositoryFailureDoesNotPartiallyCreate(t *testing.T) {
 		AuthorizationPolicyVersions: []domain.AuthorizationPolicyVersion{
 			{PolicyType: "source", PolicyRef: "source-1", PolicyVersion: "v1"},
 		},
-		DeliveryID:                  "delivery-failure", DeliveryIdempotencyKey: "delivery-key-failure",
+		DeliveryID: "delivery-failure", DeliveryIdempotencyKey: "delivery-key-failure",
 	}
 	plan.PlanFingerprint, err = plan.CalculateFingerprint()
 	if err != nil {

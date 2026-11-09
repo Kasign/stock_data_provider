@@ -12,10 +12,10 @@ func validChannelSnapshot() ChannelConfigSnapshot {
 		ChannelRef: "channel-ref-1", ConfigVersion: 3, ChannelKind: "provider-a",
 		Enabled: true, SecretRef: "secret://notification/email/v3",
 		Capabilities: ChannelCapabilities{
-			SupportsIdempotency: CapabilityUnknown,
+			SupportsIdempotency:    CapabilityUnknown,
 			SupportsDeliveryLookup: CapabilityUnsupported,
-			SupportsRetryAfter: CapabilitySupported,
-			MaxPayloadBytes: 64 * 1024,
+			SupportsRetryAfter:     CapabilitySupported,
+			MaxPayloadBytes:        64 * 1024,
 		},
 		RetryableErrorCodes: []string{"rate_limited", "temporary_unavailable"},
 	}

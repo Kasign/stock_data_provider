@@ -30,10 +30,10 @@ func channelRegistryTestSnapshot() domain.ChannelConfigSnapshot {
 		ChannelRef: "channel-1", ConfigVersion: 2, ChannelKind: "test",
 		Enabled: true, SecretRef: "secret://channel-1/v2",
 		Capabilities: domain.ChannelCapabilities{
-			SupportsIdempotency: domain.CapabilitySupported,
+			SupportsIdempotency:    domain.CapabilitySupported,
 			SupportsDeliveryLookup: domain.CapabilityUnknown,
-			SupportsRetryAfter: domain.CapabilityUnsupported,
-			MaxPayloadBytes: 4096,
+			SupportsRetryAfter:     domain.CapabilityUnsupported,
+			MaxPayloadBytes:        4096,
 		},
 		RetryableErrorCodes: []string{"rate_limited"},
 	}
@@ -85,7 +85,7 @@ func TestBoundChannelAdapterValidatesRequestBeforeCallingAdapter(t *testing.T) {
 	registry := NewChannelRegistry()
 	adapter := &fakeChannelAdapter{
 		snapshot: channelRegistryTestSnapshot(),
-		result: domain.ChannelSendResult{Outcome: domain.ChannelOutcomeAccepted},
+		result:   domain.ChannelSendResult{Outcome: domain.ChannelOutcomeAccepted},
 	}
 	if err := registry.Register(adapter); err != nil {
 		t.Fatal(err)
@@ -107,7 +107,7 @@ func TestBoundChannelAdapterFailsClosedOnUnclassifiedAdapterResult(t *testing.T)
 	registry := NewChannelRegistry()
 	adapter := &fakeChannelAdapter{
 		snapshot: channelRegistryTestSnapshot(),
-		err: errors.New("transport failed after request write"),
+		err:      errors.New("transport failed after request write"),
 	}
 	if err := registry.Register(adapter); err != nil {
 		t.Fatal(err)
