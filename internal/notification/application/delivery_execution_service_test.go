@@ -18,6 +18,20 @@ func (r fixedExecutionRenderer) Render(context.Context, domain.EventEnvelope, st
 	return r.content, r.err
 }
 
+type sequenceExecutionClock struct {
+	times []time.Time
+	index int
+}
+
+func (c *sequenceExecutionClock) Now() time.Time {
+	if c.index >= len(c.times) {
+		return c.times[len(c.times)-1]
+	}
+	value := c.times[c.index]
+	c.index++
+	return value
+}
+
 func executionFixture(t *testing.T) (*DeliveryExecutionService, *memoryDeliveries, *fakeChannelAdapter, DeliveryClaim) {
 	t.Helper()
 	repository := newMemoryDeliveries()
@@ -58,23 +72,24 @@ func executionFixture(t *testing.T) (*DeliveryExecutionService, *memoryDeliverie
 	if err != nil {
 		t.Fatal(err)
 	}
-	service, err := NewDeliveryExecutionService(preflight, preflightCompletion, renderer, repository, completion)
+	clock := &sequenceExecutionClock{times: []time.Time{
+		claim.Delivery.UpdatedAt.Add(time.Second),
+		claim.Delivery.UpdatedAt.Add(2 * time.Second),
+	}}
+	service, err := NewDeliveryExecutionService(preflight, preflightCompletion, renderer, repository, completion, clock)
 	if err != nil {
 		t.Fatal(err)
 	}
-	service.preflight.subscriptions = preflight.subscriptions
 	return service, repository, adapter, claim
 }
 
 func TestDeliveryExecutionCallsChannelOnlyAfterAttemptStarts(t *testing.T) {
 	service, repository, adapter, claim := executionFixture(t)
-	startedAt := claim.Delivery.UpdatedAt.Add(time.Second)
-	finishedAt := startedAt.Add(time.Second)
-	repository.now = finishedAt.Add(time.Second)
+	repository.now = claim.Lease.ExpiresAt.Add(-time.Second)
 
 	result, err := service.Execute(
 		context.Background(), claim, domain.EventEnvelope{}, "attempt-execution-1",
-		startedAt, finishedAt, 0.5, "evidence-execution-1",
+		0.5, "evidence-execution-1",
 	)
 	if err != nil {
 		t.Fatalf("execute delivery: %v", err)
@@ -92,13 +107,11 @@ func TestDeliveryExecutionCallsChannelOnlyAfterAttemptStarts(t *testing.T) {
 func TestDeliveryExecutionAttemptStartFailureNeverCallsChannel(t *testing.T) {
 	service, repository, adapter, claim := executionFixture(t)
 	repository.failAttemptNext = true
-	startedAt := claim.Delivery.UpdatedAt.Add(time.Second)
-	finishedAt := startedAt.Add(time.Second)
-	repository.now = finishedAt.Add(time.Second)
+	repository.now = claim.Lease.ExpiresAt.Add(-time.Second)
 
 	_, err := service.Execute(
 		context.Background(), claim, domain.EventEnvelope{}, "attempt-execution-2",
-		startedAt, finishedAt, 0.5, "evidence-execution-2",
+		0.5, "evidence-execution-2",
 	)
 	if err == nil {
 		t.Fatal("expected Attempt persistence failure")
