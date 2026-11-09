@@ -95,6 +95,7 @@ func TestRuleSetRejectsDuplicateAndNonBlockRequiredRules(t *testing.T) {
 		{Version: "1.0.0", Rules: []RuleDefinition{{Code: "A", Severity: SeverityBlock}, {Code: "A", Severity: SeverityBlock}}},
 		{Version: "1.0.0", Rules: []RuleDefinition{{Code: "A", Severity: SeverityWarn, Required: true}}},
 		{Version: "1.0.0", Rules: []RuleDefinition{{Code: "A", Severity: SeverityBlock, Required: false}, {Code: "B", Severity: SeverityBlock, Required: true}}},
+		{Version: "1.0.0", Rules: []RuleDefinition{{Code: "A", Severity: SeverityBlock, Required: false}, {Code: "B", Severity: SeverityBlock, Required: true}}},
 		{Version: "1.0.0", Rules: []RuleDefinition{{Code: "A", Severity: "critical"}}},
 		{Version: "1.0.0"},
 	}
