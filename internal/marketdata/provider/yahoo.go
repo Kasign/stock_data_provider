@@ -27,21 +27,33 @@ const yahooFinanceQuoteVersion = "yahoo-finance-chart-quote-v1"
 // 该 endpoint 并非有 SLA 的官方开发者 API；配置默认关闭，成交额缺失必须降级。
 type YahooFinance struct {
 	client   *http.Client
+	httpDoer HTTPDoer
 	chartURL string
 }
 
 func NewYahooFinance(timeout time.Duration, chartURL string) *YahooFinance {
+	return NewYahooFinanceWithHTTPDoer(timeout, chartURL, nil)
+}
+
+// NewYahooFinanceWithHTTPDoer 创建支持调用方注入受控 HTTP 执行器的 Yahoo Finance Provider。
+// 注入执行器时，其超时、目的地址策略、重定向策略和生命周期由调用方负责。
+func NewYahooFinanceWithHTTPDoer(timeout time.Duration, chartURL string, doer HTTPDoer) *YahooFinance {
 	if timeout <= 0 {
 		timeout = 12 * time.Second
 	}
 	if strings.TrimSpace(chartURL) == "" {
 		chartURL = "https://query1.finance.yahoo.com/v8/finance/chart"
 	}
+	client := &http.Client{
+		Timeout:       timeout,
+		CheckRedirect: func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse },
+	}
+	if doer == nil {
+		doer = client
+	}
 	return &YahooFinance{
-		client: &http.Client{
-			Timeout:       timeout,
-			CheckRedirect: func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse },
-		},
+		client:   client,
+		httpDoer: doer,
 		chartURL: strings.TrimRight(strings.TrimSpace(chartURL), "/"),
 	}
 }
@@ -80,7 +92,7 @@ func (p *YahooFinance) FetchQuote(ctx context.Context, rawSymbol string) (*model
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Referer", "https://finance.yahoo.com/")
 
-	resp, err := p.client.Do(req)
+	resp, err := p.httpDoer.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("Yahoo Finance quote request: %w", err)
 	}
@@ -279,7 +291,7 @@ func (p *YahooFinance) FetchDailyBars(ctx context.Context, rawSymbol, startDate,
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Referer", "https://finance.yahoo.com/")
 
-	resp, err := p.client.Do(req)
+	resp, err := p.httpDoer.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("Yahoo Finance chart request: %w", err)
 	}

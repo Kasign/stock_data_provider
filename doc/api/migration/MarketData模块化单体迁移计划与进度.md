@@ -896,19 +896,7 @@ internal/
 - 本轮新增提交 `c7f5537` 修改 Hithink Provider、Bootstrap Dependencies、Hithink HTTPDoer 回归测试；保留旧构造器和独立部署默认 HTTP Client。
 - 合并后的 `go.mod`、`go.sum` 已检查无冲突标记；根 Module 仍为 Go 1.23.0。未执行构建，因此仅记录静态检查结果，不宣称依赖图或构建验收通过。
 - Hithink 的测试源码覆盖注入调用、GET 目标、认证 Header、Accept Header 和 502 错误路径；待 integration 执行测试后再更新验收状态。
-- 后续 M4-HTTP-03 TickFlow 双出口注入已完成；Xueqiu Cookie 出口随后单独接入，不能与其他 Provider 共用无区分 BoundDoer。
-
-### 2026-11-09：M4-HTTP-03 TickFlow 双出口受控 HTTP 执行器注入
-
-- 代码基线：`27e2b94bfa59a92d840e95836d4dbfe1fda8defb`。TickFlow 认证 API（`apiURL`）承载 Quote、指数、市场/行业数据及带 Key 的日 K 请求；免费 API（`freeAPIURL`）仅用于未配置 API Key 时的免费日 K 请求。两类目标 Host 与凭据策略不同，不能共享同一个 BoundDoer。
-- Provider 新增 `NewTickFlowConfiguredWithHTTPDoers`，分别接收认证出口和公开出口；旧 `NewTickFlowConfigured` 保留，并在两个依赖未注入时回退到原超时配置的标准 `http.Client`。
-- `getJSON` / `postJSON` 按请求的 authenticated 标记选择执行器。认证请求继续只在认证路径附加 `x-api-key`；公开请求不附加该 Header。请求方法、URL、Query/Body、Accept/Content-Type、状态码错误处理和成功响应 `maxProviderPayloadBytes` 上限保持不变。
-- Bootstrap Dependencies 新增 `TickFlowAuthenticatedHTTPDoer` 与 `TickFlowPublicHTTPDoer` 两个可选依赖并传入 Provider。执行器由 Root 创建和关闭，Data Module 不拥有、不关闭；本批不修改 Root Server 组合根。
-- 新增回归测试源码覆盖认证 GET、公开 GET、认证 POST 的执行器路由、目标 URL、Key Header 隔离、请求方法/Content-Type 和 502 错误路径。测试尚未运行，不代表代码编译或安全策略验收通过。
-- Root 后续必须按实际配置分别创建两个 BoundDoer：认证出口绑定 `TickFlowAPIURL` 的精确 HTTPS Host/Port，公开出口绑定 `TickFlowFreeAPIURL` 的精确 HTTPS Host/Port；两者均拒绝重定向并执行 DNS/IP 与响应体上限策略。不能将认证 Key 注入公开出口。
-- 本分支下一项按带凭据风险顺序处理 Xueqiu Cookie 出口；随后处理无凭据 HTTP Provider。BaoStock/Pytdx 仍单列 TCP 出站策略。
-
-
+- M4-HTTP-03 TickFlow 双出口注入与 M4-HTTP-04 Xueqiu Cookie 出口均已完成 Provider/Bootstrap 注入；真实 BoundDoer 创建仍由 Root Server 后续集成。
 
 ### 2026-11-09：M4-HTTP-04 Xueqiu Cookie 受控 HTTP 执行器注入
 
@@ -919,3 +907,25 @@ internal/
 - 新增回归测试源码覆盖注入执行器、GET 目标、Cookie/Referer/Origin/Accept Header 与 502 错误路径；测试尚未运行，不代表编译或安全策略验收通过。
 - Root 注入策略必须绑定精确 HTTPS Host/443、拒绝重定向（Cookie 不得跨域转发）、执行 DNS/IP 检查，并将成功响应上限设置为不小于现有 `maxProviderPayloadBytes`。Cookie 仅由配置注入，禁止出现在日志、错误或诊断证据中。
 - 下一步处理无凭据 HTTP Provider 的受控出口；按实际 endpoint 分组，但每个不同 Host 仍需独立目的地址策略。BaoStock/Pytdx 继续单独制定 TCP 出站策略。
+
+
+### 2026-11-09：M4-HTTP-03 TickFlow 双出口受控 HTTP 执行器注入
+
+- 代码基线：`27e2b94bfa59a92d840e95836d4dbfe1fda8defb`。TickFlow 认证 API（`apiURL`）承载 Quote、指数、市场/行业数据及带 Key 的日 K 请求；免费 API（`freeAPIURL`）仅用于未配置 API Key 时的免费日 K 请求。两类目标 Host 与凭据策略不同，不能共享同一个 BoundDoer。
+- Provider 新增 `NewTickFlowConfiguredWithHTTPDoers`，分别接收认证出口和公开出口；旧 `NewTickFlowConfigured` 保留，并在两个依赖未注入时回退到原超时配置的标准 `http.Client`。
+- `getJSON` / `postJSON` 按请求的 authenticated 标记选择执行器。认证请求继续只在认证路径附加 `x-api-key`；公开请求不附加该 Header。请求方法、URL、Query/Body、Accept/Content-Type、状态码错误处理和成功响应 `maxProviderPayloadBytes` 上限保持不变。
+- Bootstrap Dependencies 新增 `TickFlowAuthenticatedHTTPDoer` 与 `TickFlowPublicHTTPDoer` 两个可选依赖并传入 Provider。执行器由 Root 创建和关闭，Data Module 不拥有、不关闭；本批不修改 Root Server 组合根。
+- 新增回归测试源码覆盖认证 GET、公开 GET、认证 POST 的执行器路由、目标 URL、Key Header 隔离、请求方法/Content-Type 和 502 错误路径。测试尚未运行，不代表代码编译或安全策略验收通过。
+- Root 后续必须按实际配置分别创建两个 BoundDoer：认证出口绑定 `TickFlowAPIURL` 的精确 HTTPS Host/Port，公开出口绑定 `TickFlowFreeAPIURL` 的精确 HTTPS Host/Port；两者均拒绝重定向并执行 DNS/IP 与响应体上限策略。不能将认证 Key 注入公开出口。
+- Xueqiu Cookie 出口已在 M4-HTTP-04 单独接入；后续处理无凭据 HTTP Provider。BaoStock/Pytdx 仍单列 TCP 出站策略。
+
+
+### 2026-11-09：M4-HTTP-05 Yahoo Finance 无凭据受控 HTTP 执行器注入
+
+- 代码基线：`4779951d402d79e5eb7f0d5a44efb68754902384`。Yahoo Finance 使用配置的 Chart URL；Quote 与 DailyBars 两条调用路径共用该 endpoint，无 Provider 凭据，当前默认客户端明确禁止自动重定向。
+- Provider 新增 `NewYahooFinanceWithHTTPDoer`，旧 `NewYahooFinance` 保留并委托新构造器；未注入时仍使用原超时和禁止重定向的标准 `http.Client`。
+- Quote 与 DailyBars 请求统一通过注入的 `HTTPDoer`；GET 参数、请求 Header、响应体上限、错误状态处理和数据解析保持不变。
+- Bootstrap Dependencies 新增可选 `YahooHTTPDoer` 并传入 Provider。Root 后续绑定实际 `YahooChartURL` 的精确 HTTPS Host/443，拒绝重定向并执行 DNS/IP 与响应体上限策略；Data Module 不拥有、不关闭执行器。
+- 新增回归测试源码覆盖 Quote/DailyBars 两条请求路径、GET 目标、Accept/Referer Header、502 错误路径和默认构造器兼容性；测试尚未运行。
+- 下一步继续处理其他无凭据 HTTP Provider，逐个核对多 Host endpoint 与既有重定向行为；不得用单个宽泛 BoundDoer 代替精确目的地址策略。
+
