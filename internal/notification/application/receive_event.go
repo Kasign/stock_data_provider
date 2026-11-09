@@ -76,6 +76,8 @@ func (r *EventReceiver) Receive(ctx context.Context, raw []byte) (ReceiveEventRe
 	if receivedAt.IsZero() || receivedAt.Location() != time.UTC {
 		return result, errors.New("notification: receiver clock must return UTC time")
 	}
+	// MariaDB DATETIME(6) 只能保存微秒；在应用边界统一精度，保证首次接收与重放结果一致。
+	receivedAt = receivedAt.Truncate(time.Microsecond)
 	record, duplicate, err := r.inbox.Accept(ctx, event, receivedAt)
 	if err != nil {
 		return result, err

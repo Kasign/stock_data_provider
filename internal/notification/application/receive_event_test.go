@@ -116,6 +116,34 @@ func TestEventReceiverAcceptsAndDeduplicates(t *testing.T) {
 	}
 }
 
+func TestEventReceiverNormalizesAcceptedAtToDatabasePrecision(t *testing.T) {
+	now := time.Date(2026, 11, 6, 9, 0, 0, 123456789, time.UTC)
+	event := domain.EventEnvelope{
+		SourceModule: "quant", EventID: "event-precision",
+		IdempotencyKey: "publish-precision", PayloadFingerprint: "fingerprint",
+	}
+	repo := newMemoryInbox()
+	receiver, err := NewEventReceiver(staticValidator{event: event}, repo, fixedClock{now: now})
+	if err != nil {
+		t.Fatal(err)
+	}
+	first, err := receiver.Receive(context.Background(), []byte("{}"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	expected := now.Truncate(time.Microsecond)
+	if !first.AcceptedAt.Equal(expected) || first.AcceptedAt.Nanosecond()%1000 != 0 {
+		t.Fatalf("accepted time must use DATETIME(6) precision: got=%s want=%s", first.AcceptedAt, expected)
+	}
+	second, err := receiver.Receive(context.Background(), []byte("{}"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !second.Duplicate || !second.AcceptedAt.Equal(first.AcceptedAt) {
+		t.Fatalf("replay must return the exact original accepted time: first=%s second=%s duplicate=%v", first.AcceptedAt, second.AcceptedAt, second.Duplicate)
+	}
+}
+
 func TestEventReceiverRejectsBothUniqueKeyConflicts(t *testing.T) {
 	now := time.Date(2026, 11, 6, 9, 0, 0, 0, time.UTC)
 	base := domain.EventEnvelope{

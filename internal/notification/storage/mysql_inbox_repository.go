@@ -46,6 +46,8 @@ func (r *MySQLInboxRepository) Accept(
 	if receivedAt.IsZero() || receivedAt.Location() != time.UTC {
 		return domain.InboxRecord{}, false, errors.New("notification storage: inbox receive time must be UTC")
 	}
+	// 与 notification_inbox.received_at 的 DATETIME(6) 精度保持一致。
+	receivedAt = receivedAt.Truncate(time.Microsecond)
 	if err := event.VerifyPayloadFingerprint(); err != nil {
 		return domain.InboxRecord{}, false, err
 	}
