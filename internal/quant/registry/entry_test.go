@@ -1,9 +1,9 @@
 package registry
 
 import (
-	"encoding/json"
+	"encoding/json"\n\t"fmt"
 	"errors"
-	"testing"
+	"testing"\n\t"sync"
 )
 
 func validEntry(code, algorithmVersion string) Entry {
@@ -401,5 +401,87 @@ func TestRegistryValidateMetricAppliesRegisteredSemantics(t *testing.T) {
 	}
 	if err := registry.ValidateMetric("unknown", "1.0.0", "1.0.0", valid); !errors.Is(err, ErrUnknownEntry) {
 		t.Fatalf("unknown metric code should fail lookup, got %v", err)
+	}
+}
+
+
+func TestRegistryFreezePreventsAlgorithmActivation(t *testing.T) {
+	registry := New()
+	oldVersion := validEntry("momentum_20d", "1.0.0")
+	newVersion := validEntry("momentum_20d", "2.0.0")
+	if err := registry.Register(oldVersion, true); err != nil {
+		t.Fatal(err)
+	}
+	if err := registry.Register(newVersion, false); err != nil {
+		t.Fatal(err)
+	}
+	if err := registry.Freeze(); err != nil {
+		t.Fatalf("Freeze() error = %v", err)
+	}
+	if err := registry.ActivateVersion("momentum_20d", "1.0.0", "2.0.0"); !errors.Is(err, ErrRegistryFrozen) {
+		t.Fatalf("activation after Freeze must fail with ErrRegistryFrozen, got %v", err)
+	}
+	active, err := registry.LookupActive("momentum_20d", "1.0.0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if active.AlgorithmVersion != "1.0.0" {
+		t.Fatalf("frozen active version changed to %q", active.AlgorithmVersion)
+	}
+	// Freeze is idempotent and must not reopen a frozen Registry.
+	if err := registry.Freeze(); err != nil {
+		t.Fatalf("second Freeze() error = %v", err)
+	}
+	if err := registry.ActivateVersion("momentum_20d", "1.0.0", "2.0.0"); !errors.Is(err, ErrRegistryFrozen) {
+		t.Fatalf("activation after repeated Freeze must remain blocked, got %v", err)
+	}
+}
+
+func TestRegistryConcurrentVersionActivationAndLookup(t *testing.T) {
+	registry := New()
+	for _, entry := range []Entry{
+		validEntry("momentum_20d", "1.0.0"),
+		validEntry("momentum_20d", "2.0.0"),
+	} {
+		if err := registry.Register(entry, entry.AlgorithmVersion == "1.0.0"); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	const iterations = 100
+	errs := make(chan error, iterations*2)
+	var workers sync.WaitGroup
+	workers.Add(2)
+	go func() {
+		defer workers.Done()
+		for i := 0; i < iterations; i++ {
+			version := "1.0.0"
+			if i%2 == 1 {
+				version = "2.0.0"
+			}
+			if err := registry.ActivateVersion("momentum_20d", "1.0.0", version); err != nil {
+				errs <- err
+				return
+			}
+		}
+	}()
+	go func() {
+		defer workers.Done()
+		for i := 0; i < iterations; i++ {
+			entry, err := registry.LookupActive("momentum_20d", "1.0.0")
+			if err != nil {
+				errs <- err
+				return
+			}
+			if entry.AlgorithmVersion != "1.0.0" && entry.AlgorithmVersion != "2.0.0" {
+				errs <- fmt.Errorf("lookup returned unregistered algorithm version %q", entry.AlgorithmVersion)
+				return
+			}
+		}
+	}()
+	workers.Wait()
+	close(errs)
+	for err := range errs {
+		t.Error(err)
 	}
 }
