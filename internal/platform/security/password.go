@@ -122,7 +122,7 @@ func parseArgon2idHash(encoded string) (Argon2idParams, []byte, []byte, error) {
 		return Argon2idParams{}, nil, nil, errInvalidPasswordHash
 	}
 	parts := strings.Split(encoded, "$")
-	if len(parts) != 6 || parts[0] != "" || parts[1] != "argon2id" {
+	if len(parts) != 6 || parts[0] != "" || parts[1] != "argon2id" || !strings.HasPrefix(parts[2], "v=") {
 		return Argon2idParams{}, nil, nil, errInvalidPasswordHash
 	}
 	versionPart := strings.TrimPrefix(parts[2], "v=")
