@@ -546,3 +546,22 @@ internal/
 - 当前没有该 SHA 的可读取 CI 结果；不将依赖预收敛记为构建通过。源码归并后必须在根 Module 执行 gofmt、go test、race、vet、MariaDB/PIT、Provider 相关测试和镜像构建。
 - 下一步：按包依赖图将 `services/market-data/internal/**` 迁入 `internal/marketdata/**`，重写内部 import 路径，迁移 Data 命令入口并同步根 CI/Docker 构建；同批删除嵌套 go.mod/go.sum，保留 Data HTTP 行为和独立回滚入口。
 
+
+
+### 2026-11-09：当前分支 CI 归属拆分（PR #1，head `cf1d611602c1c1790a6549a1b3caba3a6e258f34`）
+
+本次 CI 运行：Go test suite `42560316082`、Platform Go checks `42560316079`、Live provider probe `42560316101`、Go-Python parity `42560316088`、WebUI checks `42560316156`。PR merge commit 为 `50e3ac0e3f0e2bc3b72bf9a49520ceb61e1ad612`，以下结果按工作流实际运行结果记录，不将 PR merge commit 误认为 Data 分支 HEAD。
+
+| 检查 | 结果 | Owner / 处理 |
+|---|---|---|
+| `Test services/market-data`：gofmt、go test、race、vet | 通过 | Data；当前无需修复 |
+| Market Data MariaDB migration/PIT、DataService fallback、Probe HTTP 集成 | 通过 | Data；当前无新增失败项 |
+| Go Market Data Docker image | 通过 | Data 镜像构建通过 |
+| Root `Test .` gofmt | 失败：`internal/research/context/validate.go` 非法反斜杠语法；`internal/research/evidence/authorization.go:207` 含 NUL 字符 | Research；不在 Data 分支修改 |
+| News MariaDB 集成 | 失败：Go 提示根模块需要 `go mod tidy` | News/根模块依赖闭包待定位；不修改 News 源码。若确认是本分支根依赖文件引入的缺项，再在本分支修复 `go.mod/go.sum` |
+| WebUI checks | 失败 | WebUI；不在 Data 分支修改 |
+| Platform Go checks | 通过 | Platform；无当前阻断 |
+| Live provider probe、Go-Python parity | 通过 | 仅代表对应 workflow 的探测/对账通过，不等于全部 Provider 与真实数据口径均验收通过 |
+| Analysis API Docker image | 运行中（记录时） | 继续等待结果；若失败按文件归属拆分 |
+
+**本轮结论：** 当前 CI 已明确的失败项没有落在 Data 生产源码、Data 测试或 Data MariaDB/PIT 测试中，因此本分支不为通过全仓门禁而修改其他模块。M1-2 继续推进 Data Module 归并；全仓 gofmt、News 依赖闭包和 WebUI 失败分别交由对应 Owner 处理，只有确认涉及本分支拥有的根构建文件时才在此修复。
