@@ -112,3 +112,9 @@ jobs:
 
       - name: Run storage integration race tests
         run: go test -race ./internal/platform/storage -run 'Test(MariaDB|Redis)StorageIntegration' -v
+
+      - name: Run MariaDB credential store integration tests
+        run: go test ./internal/platform/security -run '^TestMariaDBCredentialStoreIntegration -v
+
+      - name: Run MariaDB credential store race tests
+        run: go test -race ./internal/platform/security -run '^TestMariaDBCredentialStoreIntegration -v

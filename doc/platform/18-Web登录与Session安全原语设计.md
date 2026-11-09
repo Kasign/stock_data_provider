@@ -156,8 +156,8 @@ Platform 提供 SecurityAuditEvent Schema、字段约束/脱敏和注入式 Audi
 - 现有 `internal/platform/security` 只有 Bearer Authenticator、Router Policy 和测试。
 - 现有 `internal/platform/storage.OpenRedis` 只提供 Redis Client 生命周期，没有 Session Store 或 RateLimiter。
 - 当前 go.mod 已有 `github.com/redis/go-redis/v9`，但没有 Argon2id 直接依赖；实现时需评估并引入成熟的 `golang.org/x/crypto/argon2` 依赖。
-- Argon2id Hash/Verify/NeedsRehash 原语已新增，使用显式参数，不提供未经硬件基准确认的生产默认值；其余 CredentialStore、Session、Cookie、CSRF、RateLimiter 和 Security Audit 原语仍未实现。
-- 尚未新增平台 Credential Migration、CredentialStore 表或 Redis Key。
+- Argon2id Hash/Verify/NeedsRehash 与 MariaDB CredentialStore 已新增；Hasher 使用显式参数，不提供未经硬件基准确认的生产默认值。Session、Cookie、CSRF、RateLimiter 和 Security Audit 原语仍未实现。
+- 已新增 Platform 自有 `platform.security` Migration 与 `platform_owner_credentials` 单 Owner 表；Server 必须显式注册 Migration，SQLCredentialStore 不自动建表。尚未新增 Redis Key。
 - Argon2id 参数需目标硬件基准；CredentialStore 表结构/迁移注册方式、Redis 原子脚本、限流阈值和 Audit Writer 持久化后端需评审。
 - 本文是 Platform 技术设计与实现边界文档；Web 登录路由/权限/交互契约由 Server Owner 跟进，Platform 不代替 Server 修改其业务文档，也不改变项目级契约登记簿状态。
 

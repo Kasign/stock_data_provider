@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strconv"
 	"sync"
 	"testing"
 	"time"
@@ -42,10 +43,14 @@ func TestMariaDBCredentialStoreIntegration(t *testing.T) {
 	}
 	defer db.Close()
 
-	if err := storage.ApplyMigrations(ctx, db, OwnerCredentialMigrationNamespace, OwnerCredentialMigrations()); err != nil {
+		suffix := strconv.FormatInt(time.Now().UnixNano(), 10)
+	tableName := "platform_owner_credentials_it_" + suffix
+	namespace := "platform.security.it." + suffix
+	if err := storage.ApplyMigrations(ctx, db, namespace, ownerCredentialMigrations(tableName)); err != nil {
 		t.Fatalf("apply owner credential migration: %v", err)
 	}
-	store, err := NewSQLCredentialStore(db)
+	defer db.ExecContext(context.Background(), "DROP TABLE IF EXISTS "+tableName)
+	store, err := newSQLCredentialStore(db, tableName)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -59,7 +64,7 @@ func TestMariaDBCredentialStoreIntegration(t *testing.T) {
 		t.Fatal(err)
 	}
 	if credential.Subject != "owner" || credential.CredentialVersion != 1 || credential.PasswordHash != initialHash {
-		t.Fatalf("unexpected initialized credential: %+v", credential)
+		t.Fatalf("unexpected initialized credential metadata: subject=%q version=%d", credential.Subject, credential.CredentialVersion)
 	}
 	if _, err := store.InitializeOwnerCredential(ctx, initialHash); err == nil {
 		t.Fatal("second initialization must conflict")
@@ -75,7 +80,7 @@ func TestMariaDBCredentialStoreIntegration(t *testing.T) {
 		t.Fatal(err)
 	}
 	if loaded.CredentialVersion != 1 || loaded.PasswordHash != initialHash {
-		t.Fatalf("loaded credential mismatch: %+v", loaded)
+		t.Fatalf("loaded credential metadata mismatch: subject=%q version=%d", loaded.Subject, loaded.CredentialVersion)
 	}
 	if ok, err := hasher.Verify(loaded.PasswordHash, []byte("initial integration password")); err != nil || !ok {
 		t.Fatalf("stored password hash did not verify: ok=%v err=%v", ok, err)
@@ -90,7 +95,7 @@ func TestMariaDBCredentialStoreIntegration(t *testing.T) {
 		t.Fatal(err)
 	}
 	if updated.CredentialVersion != 2 || updated.PasswordHash != updatedHash {
-		t.Fatalf("updated credential mismatch: %+v", updated)
+		t.Fatalf("updated credential metadata mismatch: subject=%q version=%d", updated.Subject, updated.CredentialVersion)
 	}
 	if _, err := store.UpdateOwnerPassword(ctx, 1, initialHash); err == nil {
 		t.Fatal("stale credential version must conflict")
