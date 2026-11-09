@@ -74,6 +74,8 @@ func (p RetryPolicy) ScheduleRetry(
 
 	var firstAttemptAt time.Time
 	var latest domain.DeliveryAttempt
+	seenAttemptIDs := make(map[string]struct{}, len(attempts))
+	seenFencingTokens := make(map[int64]struct{}, len(attempts))
 	for i := range attempts {
 		attempt := attempts[i]
 		if err := attempt.Validate(); err != nil ||
@@ -81,6 +83,14 @@ func (p RetryPolicy) ScheduleRetry(
 			attempt.AttemptNo != i+1 {
 			return RetryDecision{}, ErrRetryNotApplicable
 		}
+		if _, exists := seenAttemptIDs[attempt.AttemptID]; exists {
+			return RetryDecision{}, ErrRetryNotApplicable
+		}
+		if _, exists := seenFencingTokens[attempt.FencingToken]; exists {
+			return RetryDecision{}, ErrRetryNotApplicable
+		}
+		seenAttemptIDs[attempt.AttemptID] = struct{}{}
+		seenFencingTokens[attempt.FencingToken] = struct{}{}
 		if i == 0 {
 			firstAttemptAt = attempt.StartedAt
 		}
@@ -105,9 +115,14 @@ func (p RetryPolicy) ScheduleRetry(
 	}
 
 	decision.DelayCap = exponentialDelayCap(p.BaseDelay, p.MaxDelay, latest.AttemptNo)
-	decision.ChosenDelay = time.Duration(float64(decision.DelayCap) * randomUnit)
+	scaledDelay := uint64(float64(uint64(decision.DelayCap)) * randomUnit)
+	if scaledDelay > uint64(decision.DelayCap) {
+		scaledDelay = uint64(decision.DelayCap)
+	}
+	decision.ChosenDelay = time.Duration(scaledDelay)
 	if decision.ChosenDelay <= 0 {
-		decision.ChosenDelay = time.Nanosecond
+		// Delivery timestamps are persisted at microsecond precision; avoid a zero-delay hot loop.
+		decision.ChosenDelay = time.Microsecond
 	}
 	next := now.Add(decision.ChosenDelay)
 	if latest.RetryAfterAt != nil {

@@ -228,11 +228,12 @@ DeliveryStateEvent 的 version/from/to/changed_at 来自每次状态迁移；evi
 | started_at | 注入 Clock，在真实渠道调用开始边界记录 | UTC；不能用 Claim 时间代替渠道调用开始时间 |
 | finished_at / outcome | ChannelAdapter 的受控 Send 结果与注入 Clock | accepted/rejected/ambiguous/not_sent；完成后不可通过 Complete 再次修改 |
 | provider_message_ref / error_code | ChannelAdapter 归一化结果 | 仅保存不透明回执引用和稳定错误码，不保存原始异常/响应正文 |
-| retryable | Channel 错误分类的技术建议 | 不直接授权重试；还须经过 Channel retryable 白名单、RetryPolicy、预算和 deadline 判断 |
+| retryable | Channel 错误分类的技术建议 | 不直接授权重试；必须由 `ChannelSendResult.IsRetryable` 基于精确 Channel 快照白名单得出，再经过 RetryPolicy、预算和 deadline 判断 |
+| retry_after_at | ChannelAdapter 验证后的 Retry-After 绝对时间 | 仅 rejected 可携带；只有 supports_retry_after=supported 时采信；持久化供 Worker 崩溃恢复使用 |
 | duration_ms | finished_at - started_at | 由领域方法计算，毫秒整数；运行中为 null |
 | evidence_ref | 能证明 not_sent 或支持后续对账的受控证据系统 | 不透明引用；not_sent 必须提供证明，不能仅凭普通错误字符串推断未发送 |
 
-`DeliveryAttempt.Complete` 返回新快照，不修改原对象。accepted 不允许携带 error_code/retryable；rejected 和 ambiguous 必须携带稳定 error_code；not_sent 必须同时携带 error_code 与 evidence_ref，且不能携带 provider_message_ref。ambiguous 即使 retryable=true 也不构成自动重试授权，最终决策属于 NTF-005。
+`DeliveryAttempt.Complete` 返回新快照，不修改原对象。accepted 不允许携带 error_code/retryable；rejected 和 ambiguous 必须携带稳定 error_code；not_sent 必须同时携带 error_code 与 evidence_ref，且不能携带 provider_message_ref。ambiguous 即使 retryable=true 也不构成自动重试授权。`CompleteWithRetryAfter` 仅为 rejected 保存 UTC `retry_after_at`；实际重试决策由 NTF-005 完成。
 
 本切片已补充 DeliveryAttemptRepository Port/Fake：StartWithLease 原子追加运行中 Attempt 并更新 attempt_count 计数投影；CompleteWithLease 仅允许当前有效租约完成一次；ListByDelivery 返回按序深拷贝。具体原子边界如下：
 
@@ -270,7 +271,8 @@ Worker 取得 Delivery 时必须原子完成 queued/retry_wait -> sending 和租
 
 ## 6. 重试与外部 exactly-once 边界
 
-- 只对渠道明确拒绝且标记 retryable 的结果自动重试。
+- 只对渠道明确拒绝且标记 retryable 的结果自动重试。`retryable` 必须来自 `ChannelSendResult.IsRetryable` 对当前精确 ChannelConfigSnapshot 的 retryable_error_codes 白名单判断，不得直接采信 Provider 原始布尔字段。
+
 - 永久错误不重试；存在有效 Retry-After 时，next_attempt_at = max(本地 full-jitter 退避时间, Retry-After 指定时间)，不得缩短本地退避，也不得达到或越过 Delivery deadline；若计算结果不早于 deadline_at，则结束为 failed（reason_code=deadline_exceeded），不再安排重试。
 - 使用 capped exponential full jitter；策略固定 max_attempts、max_elapsed_ms、per_attempt_timeout_ms、base_delay_ms、max_delay_ms 和总 deadline。所有 duration 为正整数 milliseconds；max_elapsed_ms/per_attempt_timeout_ms/base_delay_ms>0，max_delay_ms>=base_delay_ms。MVP 算法固定 exponential_full_jitter_v1：第 n 次 Attempt 失败后的上限 delay=min(max_delay_ms, base_delay_ms*2^(n-1))，实际等待从 [0,delay] 均匀抽取。单次调用截止=min(now+per_attempt_timeout_ms, deadline_at, first_attempt_at+max_elapsed_ms)。
 - attempt_count 只统计实际发起的渠道调用，不统计 Schema/权限/配置预检查。
@@ -278,6 +280,8 @@ Worker 取得 Delivery 时必须原子完成 queued/retry_wait -> sending 和租
 - 超时、连接中断或进程崩溃发生在请求可能已到达渠道之后时，标记 unknown；只有渠道查询/回执/幂等重放能证明安全时才可自动收敛。
 - 不支持幂等且无法查询结果的渠道，unknown 进入人工/运维对账，不自动重发。
 - Outbox + Inbox 可保障本地事件接收可靠性；不能声称外部渠道 exactly-once。实际语义是受限 at-least-once 尝试 + 幂等/对账控制重复风险。
+
+当前 `application.RetryPolicy` 提供纯函数重试决策：策略参数必须显式提供，所有 duration 使用正整数毫秒；`ScheduleRetry` 接收完整 Attempt 历史与外部注入的 `[0,1)` 随机样本，校验 Delivery/Attempt 关联和连续序号，只处理最后一条明确 rejected 且 retryable 的 Attempt；按 `min(max_delay, base_delay*2^(attempt_no-1))` 计算 full-jitter 上限，取本地退避与 Retry-After 的较晚时间，并以 `min(deadline_at, first_attempt_at+max_elapsed)` 截止；达到 `max_attempts` 返回 `retry_budget_exhausted`，越过总时间边界返回 `deadline_exceeded`。`AttemptDeadline` 返回 `min(now+per_attempt_timeout, deadline_at, first_attempt_at+max_elapsed)`。该实现不负责随机数生成、状态写入、租约释放或 Worker 调度；调用方必须将 RetryDecision 与 Delivery 状态 CAS/事件追加放入同一 Repository 原子操作。
 
 ## 7. RetryDelivery 与取消/退订竞态
 

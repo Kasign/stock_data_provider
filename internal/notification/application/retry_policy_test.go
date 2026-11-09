@@ -59,6 +59,10 @@ func TestRetryPolicyUsesCappedExponentialFullJitter(t *testing.T) {
 		!got.NextAttemptAt.Equal(now.Add(500*time.Millisecond)) {
 		t.Fatalf("unexpected first retry schedule: %+v", got)
 	}
+	zeroSample, err := policy.ScheduleRetry(delivery, attempts, now, 0)
+	if err != nil || zeroSample.ChosenDelay != time.Microsecond {
+		t.Fatalf("zero jitter must use the persisted timestamp precision floor: %+v err=%v", zeroSample, err)
+	}
 
 	delivery, attempts, now = retryPolicyFixture(t, 2, 3)
 	got, err = policy.ScheduleRetry(delivery, attempts, now, 0.5)
@@ -145,6 +149,11 @@ func TestRetryPolicyRequiresExplicitRetryableRejectionAndCompleteHistory(t *test
 	}
 	if _, err := policy.ScheduleRetry(delivery, nil, now, 0.5); !errors.Is(err, ErrRetryNotApplicable) {
 		t.Fatalf("incomplete Attempt history must fail closed: %v", err)
+	}
+	duplicateDelivery, duplicateAttempts, duplicateNow := retryPolicyFixture(t, 2, 3)
+	duplicateAttempts[1].FencingToken = duplicateAttempts[0].FencingToken
+	if _, err := policy.ScheduleRetry(duplicateDelivery, duplicateAttempts, duplicateNow, 0.5); !errors.Is(err, ErrRetryNotApplicable) {
+		t.Fatalf("duplicate fencing token history must fail closed: %v", err)
 	}
 }
 
