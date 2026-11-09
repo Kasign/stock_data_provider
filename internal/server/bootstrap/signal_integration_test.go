@@ -23,7 +23,7 @@ type signalTestWorker struct {
 	eventFile string
 }
 
-func (w signalTestWorker) Name() string { return "test-worker" }
+func (w signalTestWorker) Name() string                { return "test-worker" }
 func (w signalTestWorker) Start(context.Context) error { return nil }
 func (w signalTestWorker) Stop(context.Context) error {
 	return appendSignalEvent(w.eventFile, "worker-stopped")
