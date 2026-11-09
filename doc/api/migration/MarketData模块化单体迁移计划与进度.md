@@ -694,3 +694,13 @@ internal/
 
 
 - 生命周期补充边界：Close 等待超时后 Module 保持 `closing` 状态，禁止重新 Start；调用方可释放阻塞任务后重试 Close。新增忽略 Context 的阻塞 Store 测试验证该行为，避免关闭超时后后台任务被意外重启。
+
+
+### 2026-11-09：M2-4 Data 专项 CI 验收
+
+- 验收 Run：`42571224072`，提交 SHA：`042c40c8ff408d2bdc6a07d5a10c06851ef28586`。
+- Data gofmt、go test（含 Application/Bootstrap 生命周期测试）、race、vet 全部通过。
+- Data MariaDB Migration/PIT、News MariaDB 集成、go-core 全部通过。
+- Root 全仓 `Test .` 仍在 gofmt 阶段失败，准确阻断文件为 Research 所属的 `internal/research/context/validate.go`（非法反斜杠）和 `internal/research/evidence/authorization.go`（NUL 字节）。本分支不越权修改 Research。
+- Docker 构建按用户约束跳过；没有合并或修改 integration。
+- M2-1 至 M2-4 已完成：消费者 Port、DataService 映射、Bootstrap 装配、Module 生命周期。M2-5 HTTP Adapter 接口解耦仍待完成；当前 HTTP Handler 仍通过旧构造器接收具体 DataService 与能力 Provider 集合。
