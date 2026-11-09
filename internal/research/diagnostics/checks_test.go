@@ -302,7 +302,6 @@ func TestEvidenceCheckRequiresComparableStrictPIT(t *testing.T) {
 		}
 	})
 
-
 	t.Run("evidence system_as_of after Run cutoff is failed", func(t *testing.T) {
 		value := validEvidenceSnapshot(t, researchevidence.QualityValid)
 		runAsOf := value.SystemAsOf.Add(-time.Nanosecond)
@@ -326,7 +325,7 @@ func TestEvidenceCheckRequiresComparableStrictPIT(t *testing.T) {
 			t.Fatal(err)
 		}
 		value.ContentFingerprint = fingerprint
-		check, err := NewEvidenceCheck("research.evidence.pit", "Evidence PIT", true, value)
+		check, err := NewEvidenceCheck("research.evidence.pit", "Evidence PIT", true, value, value.SystemAsOf)
 		if err != nil {
 			t.Fatal(err)
 		}
