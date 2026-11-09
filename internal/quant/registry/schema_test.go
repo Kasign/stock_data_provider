@@ -524,13 +524,17 @@ func TestRegistryEntrySchemaAcceptsCanonicalTextAndRejectsWhitespace(t *testing.
 	schema := compileQuantSchemaFile(t, "QNT-CTR-001-registry-entry-1.0.0.schema.json")
 	entry := validEntry("sample_metric", "1.0.0")
 	encoded, err := json.Marshal(entry)
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	if err := validateJSONSchemaInstance(schema, encoded); err != nil {
 		t.Fatalf("canonical Registry entry rejected: %v", err)
 	}
 	entry.Unit = " ratio "
 	encoded, err = json.Marshal(entry)
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	if err := validateJSONSchemaInstance(schema, encoded); err == nil {
 		t.Fatal("Registry entry with surrounding whitespace unexpectedly passed")
 	}
@@ -541,13 +545,17 @@ func TestRegistryEntrySchemaValidatesUnavailableConditionItems(t *testing.T) {
 	entry := validEntry("sample_metric", "1.0.0")
 	entry.QualityPolicy.UnavailableConditions = []string{" "}
 	encoded, err := json.Marshal(entry)
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	if err := validateJSONSchemaInstance(schema, encoded); err == nil {
 		t.Fatal("blank unavailable condition unexpectedly passed Schema")
 	}
 	entry.QualityPolicy.UnavailableConditions = []string{"missing_input"}
 	encoded, err = json.Marshal(entry)
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	if err := validateJSONSchemaInstance(schema, encoded); err != nil {
 		t.Fatalf("canonical unavailable condition rejected: %v", err)
 	}
@@ -556,7 +564,7 @@ func TestRegistryEntrySchemaValidatesUnavailableConditionItems(t *testing.T) {
 func TestRegistryEntrySchemaAndGoNumericValidationResponsibilities(t *testing.T) {
 	schema := compileQuantSchemaFile(t, "QNT-CTR-001-registry-entry-1.0.0.schema.json")
 	cases := []struct {
-		name string
+		name   string
 		mutate func(*Entry)
 	}{
 		{
@@ -579,7 +587,9 @@ func TestRegistryEntrySchemaAndGoNumericValidationResponsibilities(t *testing.T)
 			entry := validEntry("sample_metric", "1.0.0")
 			tc.mutate(&entry)
 			encoded, err := json.Marshal(entry)
-			if err != nil { t.Fatal(err) }
+			if err != nil {
+				t.Fatal(err)
+			}
 			if err := validateJSONSchemaInstance(schema, encoded); err != nil {
 				t.Fatalf("structurally valid entry rejected by Schema: %v", err)
 			}
@@ -595,7 +605,9 @@ func TestRegistryEntrySchemaRejectsNegativeNumericTolerance(t *testing.T) {
 	entry := validEntry("sample_metric", "1.0.0")
 	entry.Precision.Tolerance = json.RawMessage("-0.000001")
 	encoded, err := json.Marshal(entry)
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	if err := validateJSONSchemaInstance(schema, encoded); err == nil {
 		t.Fatal("negative numeric tolerance unexpectedly passed Schema")
 	}
