@@ -46,6 +46,12 @@ func TestDecisionValidateDoesNotInferRuleOutcome(t *testing.T) {
 func TestDecisionValidateRejectsInvalidFields(t *testing.T) {
 	cases := map[string]func(*Decision){
 		"missing decision id":        func(d *Decision) { d.DecisionID = "" },
+		"decision id padded":         func(d *Decision) { d.DecisionID = " risk-decision-001 " },
+		"rule version padded":        func(d *Decision) { d.RuleSetVersion = " 1.0.0 " },
+		"input ref padded":           func(d *Decision) { d.InputRefs = []string{" quant_result:001 "} },
+		"reason code padded":         func(d *Decision) { d.Reasons[0].Code = " INPUT_QUALITY_UNKNOWN " },
+		"safe message padded":        func(d *Decision) { d.Reasons[0].SafeMessage = " 输入质量无法确认 " },
+		"evidence ref padded":        func(d *Decision) { d.Reasons[0].EvidenceRefs = []string{" evidence:quality:001 "} },
 		"missing rule version":       func(d *Decision) { d.RuleSetVersion = "" },
 		"nil reasons":                func(d *Decision) { d.Reasons = nil },
 		"nil input refs":             func(d *Decision) { d.InputRefs = nil },
