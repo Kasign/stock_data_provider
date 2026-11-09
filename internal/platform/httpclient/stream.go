@@ -152,7 +152,13 @@ func (b *streamBody) Read(buffer []byte) (int, error) {
 		return 0, terminalErr
 	}
 	if err := b.ctx.Err(); err != nil {
-		return 0, b.contextFault(err)
+		f := b.contextFault(err)
+		reason := "context_cancel"
+		if errors.Is(err, context.DeadlineExceeded) {
+			reason = "deadline"
+		}
+		b.state.finish(reason, f)
+		return 0, b.state.readTerminalError()
 	}
 
 	if b.bytesRead >= b.maxBytes {
@@ -313,15 +319,31 @@ func (c *Client) OpenStream(ctx context.Context, request *http.Request, policy D
 
 	requestCtx, cancel := context.WithTimeout(ctx, c.config.StreamTimeout)
 	requestCtx = context.WithValue(requestCtx, policyContextKey{}, policy)
-	semaphore := c.streamSemaphore(policy.Dependency)
+	globalSemaphore := c.defaultStreamSemaphore
 	select {
-	case semaphore <- struct{}{}:
+	case globalSemaphore <- struct{}{}:
 	case <-requestCtx.Done():
 		err := requestCtx.Err()
 		cancel()
 		return nil, c.streamContextFault(err, policy.Dependency)
 	}
-	release := func() { <-semaphore }
+	dependencySemaphore := c.streamDependencySemaphore(policy.Dependency)
+	if dependencySemaphore != nil {
+		select {
+		case dependencySemaphore <- struct{}{}:
+		case <-requestCtx.Done():
+			err := requestCtx.Err()
+			<-globalSemaphore
+			cancel()
+			return nil, c.streamContextFault(err, policy.Dependency)
+		}
+	}
+	release := func() {
+		if dependencySemaphore != nil {
+			<-dependencySemaphore
+		}
+		<-globalSemaphore
+	}
 
 	current := request.Clone(requestCtx)
 	observability.PropagateRequestID(requestCtx, current)
@@ -370,11 +392,8 @@ func (c *Client) OpenStream(ctx context.Context, request *http.Request, policy D
 	}, nil
 }
 
-func (c *Client) streamSemaphore(dependency string) chan struct{} {
-	if semaphore, ok := c.streamSemaphores[dependency]; ok {
-		return semaphore
-	}
-	return c.defaultStreamSemaphore
+func (c *Client) streamDependencySemaphore(dependency string) chan struct{} {
+	return c.streamSemaphores[dependency]
 }
 
 func (c *Client) streamContextFault(err error, dependency string) *fault.Fault {

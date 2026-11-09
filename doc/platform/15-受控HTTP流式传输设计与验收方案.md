@@ -3,7 +3,7 @@
 - 所属模块：Platform
 - 实现分支：`feat/platform-foundation`
 - 代码范围：`internal/platform/httpclient/**`
-- 文档状态：设计审查稿，尚未实现
+- 文档状态：实现验证中；代码已提交，尚未通过 CI
 - 消费方：LLM 首个消费者；其他领域按实际需求接入
 - 契约归属：现有 PLAT-CTR-005（HTTP Client）扩展，不另行创建第二套 HTTP Client
 
@@ -35,11 +35,11 @@
 
 因此流式入口必须独立管理 Context cancel、响应体、并发额度和终止状态，不能复用 `Do()` 的 defer 生命周期。
 
-### 2.3 当前缺口
+### 2.3 本次实现范围
 
 - Transport 未显式配置 `MaxResponseHeaderBytes`，不能把标准库默认值当成项目安全上限。
-- 当前只有缓冲响应体上限 `MaxResponseBytes`，没有独立流式累计字节数上限。
-- 当前没有流式并发额度、空闲读取超时和流生命周期统计。
+- 本次新增独立流式累计字节数上限，仍需 CI 验证实际边界行为。
+- 本次新增流式并发额度、空闲读取超时和流生命周期统计，仍需 Race 验证。
 - 当前 `faultFor` 对响应头等待超时等部分网络超时可能归为普通请求失败；流式入口必须明确分类。
 
 ## 3. 公共 API 方向
@@ -67,7 +67,7 @@ func (d *BoundDoer) OpenStream(
 ) (*StreamResponse, error)
 ```
 
-以上为接口方向，最终签名以实现审查为准。
+接口已按上述方向提交实现；最终稳定契约以通过 A1 验收的代码为准。
 
 契约要求：
 
