@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"time"
 
 	"example.com/stock-analysis-flow/internal/marketdata/app"
 	"example.com/stock-analysis-flow/internal/marketdata/application"
@@ -23,9 +24,9 @@ import (
 
 // Dependencies 是由调用方创建并拥有的基础设施依赖；Module 不负责关闭 Store/Cache。
 type Dependencies struct {
-	Store  *repository.Store
-	Cache  cache.Cache
-	Logger *slog.Logger
+	Store  *repository.Store // 调用方创建并持有；Module 不负责关闭。
+	Cache  cache.Cache       // 调用方创建并持有；Module 不负责关闭。
+	Logger *slog.Logger      // 模块日志依赖；nil 时使用 slog.Default。
 }
 
 // Diagnostics 暴露模块就绪状态和 Provider 诊断，不暴露具体 DataService。
@@ -36,9 +37,9 @@ type Diagnostics interface {
 
 // ProviderSummary 用于启动日志，记录实际启用的 Provider 与能力集合。
 type ProviderSummary struct {
-	All       []string
-	Quotes    []string
-	DailyBars []string
+	All       []string // 实际装配的全部 Provider 名称，顺序遵循配置优先级。
+	Quotes    []string // 实际具备 Quote 能力的 Provider 名称。
+	DailyBars []string // 实际具备 DailyBars 能力的 Provider 名称。
 }
 
 // Module 封装 Data 应用、HTTP Handler、诊断能力及模块自有资源。

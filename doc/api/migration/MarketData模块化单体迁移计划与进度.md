@@ -683,3 +683,11 @@ internal/
 - Store/Cache 仍由调用方持有。Close 超时会返回错误并保留可重试状态，不会提前关闭共享 Store。
 - 独立命令不再直接启动 Worker；在 HTTP Server 启动前调用 Module.Start，退出时使用独立 35 秒 Close Context，确保 Worker 先退出再由命令入口关闭 Store。
 - 新增生命周期测试覆盖重复 Start/Stop/Close、Wait 超时、Stop 后重启、Close 后拒绝 Start。
+
+
+### 2026-11-09：M2-4 生命周期实现细节校对
+
+- `Module.Start` 将 Retention Worker 绑定到调用方 Context；`Wait` 只等待当前 Worker，不触发取消；`Stop` 取消并等待，允许 Stop 后再次 Start。
+- `Close(ctx)` 使用独立关闭锁与生命周期锁，阻止关闭过程中重新 Start；若等待 Worker 超时，保留可重试状态，不关闭 BaoStock Client，也不释放调用方 Store/Cache。
+- 命令入口在退出时为 Close 创建 35 秒独立 Context，避免复用已经取消的进程 Context。
+- `ProviderSummary` 字段来源为已通过 ProviderSettings/ProviderPriority 校验并实际注册的 Provider `Name()`；Quotes/DailyBars 分别来自对应能力集合。
