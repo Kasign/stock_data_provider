@@ -218,5 +218,15 @@ func Migrations() []platformstorage.Migration {
 					AFTER endpoint_policy_version_id`,
 			},
 		},
+		{
+			Version:     7,
+			Description: "enforce single successor for append-only relation assertions",
+			Statements: []string{
+				`ALTER TABLE news_relation_assertions
+					ADD UNIQUE KEY uk_news_relation_assertions_supersedes (supersedes_relation_id)`,
+				`ALTER TABLE news_item_relations
+					ADD UNIQUE KEY uk_news_item_relations_supersedes (supersedes_relation_id)`,
+			},
+		},
 	}
 }
