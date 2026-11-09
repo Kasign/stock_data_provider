@@ -700,7 +700,6 @@ func TestParseResponsesSSEReaderPreservesTransportReadError(t *testing.T) {
 	}
 }
 
-
 func TestParseResponsesSSEReaderHonorsProviderResponseLimit(t *testing.T) {
 	request := validSSERequest()
 	clock := sseTestClock{now: request.SystemAsOf.Add(time.Second)}

@@ -465,8 +465,8 @@ func TestResponsesAdapterStreamClosesBodyReturnedWithError(t *testing.T) {
 	streamDoer := HTTPStreamDoerFunc(func(context.Context, *http.Request) (*HTTPStreamResponse, error) {
 		return &HTTPStreamResponse{
 			StatusCode: http.StatusOK,
-			Header: http.Header{"Content-Type": []string{"text/event-stream"}},
-			Body: body,
+			Header:     http.Header{"Content-Type": []string{"text/event-stream"}},
+			Body:       body,
 		}, errors.New("open stream failed")
 	})
 	adapter, err := NewResponsesAdapterWithStream(provider, secret,
@@ -512,7 +512,7 @@ func TestResponsesAdapterStreamCancellationPreservesPartialOutput(t *testing.T) 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	body := &cancelAfterChunkReader{
-		data: []byte("event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"delta\":\"partial\"}\n\n"),
+		data:   []byte("event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"delta\":\"partial\"}\n\n"),
 		cancel: cancel,
 	}
 	streamDoer := HTTPStreamDoerFunc(func(context.Context, *http.Request) (*HTTPStreamResponse, error) {
@@ -711,7 +711,6 @@ func TestResponsesAdapterGenerateDoesNotDispatchWithCancelledContext(t *testing.
 		t.Fatalf("cancelled context must stop before transport dispatch: err=%v called=%v", err, called)
 	}
 }
-
 
 type closeTrackingReadCloser struct {
 	io.Reader
