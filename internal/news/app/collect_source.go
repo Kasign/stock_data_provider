@@ -77,7 +77,7 @@ const sourceCollectionResultSeal = "news.collect_source.result.v1"
 
 // collectionSeal 仅由 CollectSource 设置，阻止跨包调用方手工构造可持久化结果。
 type CollectSourceResult struct {
-	collectionSeal           string
+	collectionSeal          string
 	SourceID                  string
 	EndpointID                string
 	SourcePolicyVersionID     string
