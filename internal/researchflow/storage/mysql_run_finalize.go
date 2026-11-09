@@ -188,6 +188,8 @@ func (r *MySQLRunRepository) FinalizeRun(ctx context.Context, input RunFinalizat
 	}
 	fingerprint := sha256.Sum256(eventPayload)
 	fingerprintHex := hex.EncodeToString(fingerprint[:])
+	idempotencyFingerprint := sha256.Sum256([]byte(input.RunRef + ":" + runFinalizedEventType))
+	idempotencyKey := "researchflow:" + hex.EncodeToString(idempotencyFingerprint[:])
 
 	if _, err := tx.ExecContext(ctx, `INSERT INTO researchflow_result_summaries
 		(result_summary_ref, run_ref, schema_version, payload, created_at)
@@ -200,7 +202,7 @@ func (r *MySQLRunRepository) FinalizeRun(ctx context.Context, input RunFinalizat
 		payload_fingerprint, payload, created_at, published_at, attempt_count, last_error_code)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 0, NULL)`,
 		input.OutboxRef, input.RunRef, runFinalizedEventType, runFinalizedEventSchema,
-		input.RunRef+":"+runFinalizedEventType, correlationID, fingerprintHex,
+		idempotencyKey, correlationID, fingerprintHex,
 		string(eventPayload), finishedAt); err != nil {
 		return false, fmt.Errorf("insert Researchflow finalized Outbox event: %w", err)
 	}
