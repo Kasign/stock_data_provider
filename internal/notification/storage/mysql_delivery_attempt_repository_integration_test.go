@@ -61,7 +61,7 @@ func TestNotificationMariaDBDeliveryAttemptRepositoryIntegration(t *testing.T) {
 		RecipientRef: plan.RecipientRef, PayloadFingerprint: plan.PayloadFingerprint,
 		PlanFingerprint: plan.PlanFingerprint, DeliveryIdempotencyKey: plan.DeliveryIdempotencyKey,
 		Status: domain.DeliveryQueued, Version: 1, AttemptCount: 0, MaxAttempts: 3,
-		DeadlineAt: now.Add(20 * time.Minute), CreatedAt: now.Add(-time.Second), UpdatedAt: now.Add(-time.Second),
+		DeadlineAt: now.Add(20 * time.Minute), CreatedAt: now.Add(-2 * time.Minute), UpdatedAt: now.Add(-2 * time.Minute),
 	}
 	deliveryRepository, err := NewMySQLDeliveryRepository(db)
 	if err != nil {
@@ -70,7 +70,7 @@ func TestNotificationMariaDBDeliveryAttemptRepositoryIntegration(t *testing.T) {
 	if err := deliveryRepository.Create(ctx, delivery); err != nil {
 		t.Fatalf("create delivery: %v", err)
 	}
-	claim, claimed, err := deliveryRepository.ClaimDue(ctx, "attempt-integration-worker", now, now.Add(10*time.Minute))
+	claim, claimed, err := deliveryRepository.ClaimDue(ctx, "attempt-integration-worker", now.Add(-time.Minute), now.Add(10*time.Minute))
 	if err != nil || !claimed {
 		t.Fatalf("claim delivery: claimed=%v err=%v", claimed, err)
 	}
