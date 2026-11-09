@@ -418,7 +418,7 @@ func TestRegistryBatchRepositoryLoadIsAtomic(t *testing.T) {
 		t.Fatal(err)
 	}
 	repository := registryTemplateRepositoryMap{
-		{id: first.TemplateID, version: first.Version}: {definition: first, digest: firstDigest, found: true},
+		{id: first.TemplateID, version: first.Version}:   {definition: first, digest: firstDigest, found: true},
 		{id: second.TemplateID, version: second.Version}: {definition: second, digest: "corrupt", found: true},
 	}
 	versions := []VersionRef{
