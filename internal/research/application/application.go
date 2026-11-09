@@ -505,7 +505,7 @@ func (s *Service) UpdateEvent(ctx context.Context, command UpdateEventCommand) (
 	if err := next.ValidateNextVersion(previous); err != nil {
 		return ResearchEvent{}, validationFault("invalid_research_event_transition", "Research Event revision is invalid", err)
 	}
-	if command.ReasonCode != nil && (strings.TrimSpace(*command.ReasonCode) == "" || *command.ReasonCode != strings.TrimSpace(*command.ReasonCode)) {
+	if command.ReasonCode != nil && !validCorrelationID(*command.ReasonCode) {
 		return ResearchEvent{}, validationFault("invalid_event_reason_code", "Research Event reason code must be null or a non-empty trimmed value", nil)
 	}
 	if next.Status != previous.Status {

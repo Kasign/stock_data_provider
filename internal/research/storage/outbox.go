@@ -95,7 +95,7 @@ func buildResearchLifecycleEnvelopeValue(previous *researchevent.ResearchEvent, 
 	if !validCorrelationID(correlationID) { return researchLifecycleEnvelope{}, nil, fmt.Errorf("correlation_id must contain 1..128 safe ASCII characters") }
 	if changedAt.IsZero() || changedAt.Location() != time.UTC { return researchLifecycleEnvelope{}, nil, fmt.Errorf("changed_at must be a non-zero UTC time") }
 	if publishedAt.IsZero() || publishedAt.Location() != time.UTC { return researchLifecycleEnvelope{}, nil, fmt.Errorf("published_at must be a non-zero UTC time") }
-	if reasonCode != nil && (*reasonCode == "" || *reasonCode != strings.TrimSpace(*reasonCode)) {
+	if reasonCode != nil && !validCorrelationID(*reasonCode) {
 		return researchLifecycleEnvelope{}, nil, fmt.Errorf("reason_code must be null or a trimmed non-empty value")
 	}
 	researchEventRef := "research-event:" + next.EventID

@@ -142,6 +142,13 @@ func TestUpdateEventUsesExpectedVersionAndDomainLifecycleRules(t *testing.T) {
 			Value: now, AssertedBy: "news:observation",
 		}},
 	}
+	badReason := "reason is not a machine code"
+	if _, err := service.UpdateEvent(context.Background(), UpdateEventCommand{
+		EventID: previous.EventID, ExpectedVersion: 1, Revision: revision, ReasonCode: &badReason,
+	}); err == nil {
+		t.Fatal("reason_code containing spaces must be rejected")
+	}
+	if repo.appended { t.Fatal("invalid reason_code must not append an Event") }
 	got, err := service.UpdateEvent(context.Background(), UpdateEventCommand{
 		EventID: previous.EventID, ExpectedVersion: 1, Revision: revision,
 	})

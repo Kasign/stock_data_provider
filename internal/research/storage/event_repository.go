@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"strings"
 
 	researchevent "example.com/stock-analysis-flow/internal/research/event"
 )
