@@ -12,6 +12,7 @@ import (
 
 	"example.com/stock-analysis-flow/internal/marketdata/model"
 	"example.com/stock-analysis-flow/internal/marketdata/normalize"
+	"example.com/stock-analysis-flow/internal/marketdata/validation"
 )
 
 const defaultEastmoneyAnnouncementURL = "https://np-anotice-stock.eastmoney.com/api/security/ann"
@@ -262,6 +263,9 @@ func (p *Eastmoney) FetchStockAnnouncements(ctx context.Context, rawSymbol, star
 			snapshot.QualityStatus = model.QualityDegraded
 			snapshot.QualityReasons = appendUniqueEastmoneyReason(snapshot.QualityReasons, "provider_display_time_missing_or_unparseable")
 		}
+		if publishedAt == nil {
+			addEastmoneyAnnouncementIssue(ctx, index, "published_at", "display_time", "missing_or_invalid_value", "precise provider publication timestamp", "string", displayTime, "东方财富公告展示时间缺失或无法解析；不使用公告日期伪造发布时间")
+		}
 		item := model.StockAnnouncement{
 			ArticleID: articleID, Symbol: symbol, StockName: stockName, Title: title,
 			TitleChinese: strings.TrimSpace(row.TitleChinese), TitleEnglish: strings.TrimSpace(row.TitleEnglish),
@@ -284,4 +288,17 @@ func emptyEastmoneyAnnouncementSnapshot(symbol, startDate, endDate string, page,
 		QualityStatus:  model.QualityUnknown,
 		QualityReasons: []string{"provider_returned_empty_announcement_list_not_confirmed_as_no_announcements"},
 	}
+}
+
+
+func addEastmoneyAnnouncementIssue(ctx context.Context, rowIndex int, field, providerField, code, expected, actualType, preview, message string) {
+	report := validation.NewReport(8)
+	issue := validation.FieldIssue{
+		Stage: validation.StageValidate, Field: field, ProviderField: providerField,
+		Code: code, Expected: expected, ActualType: actualType,
+		ActualPreview: quoteIssuePreview(preview), Severity: validation.SeverityWarning,
+		Message: message, RowIndex: &rowIndex,
+	}
+	report.Add(issue)
+	validation.AddContextReport(ctx, report)
 }
