@@ -38,7 +38,7 @@ test("板块资金净流入仍明确标记为未接入，不以成交额代替",
 });
 
 test("近五日涨幅字段与服务端 Go JSON 契约一致", async () => {
-  const model = await readFile(new URL("../../services/market-data/internal/model/model.go", import.meta.url), "utf8");
+  const model = await readFile(new URL("../../internal/marketdata/model/model.go", import.meta.url), "utf8");
   assert.match(model, /ChangePercent5D\s+\*float64\s+`json:"change_percent_5d,omitempty"`/);
 });
 
