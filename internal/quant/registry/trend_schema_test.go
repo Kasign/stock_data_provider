@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/santhosh-tekuri/jsonschema/v5"
 )
 
 func TestTrendResultSchemaValidatesGoldenAndRejectsInvalidDiscriminators(t *testing.T) {
