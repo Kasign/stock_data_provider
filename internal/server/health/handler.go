@@ -72,9 +72,13 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			})
 			return
 		}
+		dependencies := make(map[string]string, len(report.Diagnostics.Results))
+		for _, result := range report.Diagnostics.Results {
+			dependencies[result.CheckID] = string(result.Observation.Status)
+		}
 		writeJSON(w, r, http.StatusOK, map[string]any{
 			"status":       "ready",
-			"dependencies": map[string]string{"mariadb": "ok", "redis": "ok"},
+			"dependencies": dependencies,
 			"time":         time.Now().UTC(),
 		})
 	default:
