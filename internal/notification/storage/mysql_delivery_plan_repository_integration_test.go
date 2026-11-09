@@ -89,13 +89,13 @@ func integrationDeliveryPlan() domain.DeliveryPlan {
 		SubscriptionID: "subscription-" + suffix, SubscriptionVersion: 1,
 		ChannelRef: "channel-" + suffix, ChannelConfigVersion: 1,
 		TemplateID: "template-" + suffix, TemplateVersion: 1,
-		RecipientRef: "recipient-" + suffix,
+		RecipientRef:       "recipient-" + suffix,
 		PayloadFingerprint: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 		AuthorizationPolicyVersions: []domain.AuthorizationPolicyVersion{
 			{PolicyType: "provider_output", PolicyRef: "provider-it", PolicyVersion: "v1"},
 		},
 		AuthorizationRefs:      []string{"authorization-" + suffix},
-		DeliveryID:              "delivery-" + suffix,
+		DeliveryID:             "delivery-" + suffix,
 		DeliveryIdempotencyKey: "idempotency-" + suffix,
 	}
 	return plan
