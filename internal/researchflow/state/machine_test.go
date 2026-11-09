@@ -31,6 +31,17 @@ func TestRetryPreservesAttemptAndEnforcesBudget(t *testing.T){
 	if _,_,err:=ScheduleRetry(claimed,next,p,"provider_unavailable",domain.AttemptFailed,*waiting.RetryAt,run.DeadlineAt,0.5);!errors.Is(err,ErrRetryBudgetExhausted){t.Fatalf("expected exhausted budget, got %v",err)}
 }
 
+
+func TestScheduleRetryRejectsDurationOverflowPolicy(t *testing.T) {
+	now := time.Date(2026, 11, 6, 10, 0, 0, 0, time.UTC)
+	stage := domain.Stage{Ref: "stage-1", Status: domain.StageRunning, AttemptNo: 1}
+	attempt := domain.Attempt{Ref: "attempt-1", StageRef: stage.Ref, Number: 1, Status: domain.AttemptRunning}
+	policy := template.RetryPolicy{MaxAttempts: 2, RetryableReasonCodes: []string{"provider_unavailable"}, Backoff: template.BackoffPolicy{Algorithm: "exponential_full_jitter_v1", BaseDelayMS: 1, MaxDelayMS: int64(^uint64(0)>>1) / int64(time.Millisecond) + 1}}
+	if _, _, err := ScheduleRetry(stage, attempt, policy, "provider_unavailable", domain.AttemptFailed, now, now.Add(time.Hour), 0.5); err == nil {
+		t.Fatal("retry policy exceeding time.Duration range was accepted")
+	}
+}
+
 func TestCancelAndDeadlineDoNotPretendInflightWorkStopped(t *testing.T){
 	now:=time.Date(2026,11,6,10,0,0,0,time.UTC)
 	run:=domain.Run{Status:domain.RunRunning,DeadlineAt:now.Add(time.Minute)}

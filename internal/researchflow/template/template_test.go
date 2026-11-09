@@ -46,6 +46,15 @@ func TestValidateRejectsUnknownGateType(t *testing.T) {
 	}
 }
 
+
+func TestValidateRejectsRetryDelayExceedingTimeDurationRange(t *testing.T) {
+	tmpl := testTemplate()
+	tmpl.Stages[0].Retry.Backoff.MaxDelayMS = maxRetryDelayMS + 1
+	if err := Validate(tmpl, nil); err == nil {
+		t.Fatal("retry delay exceeding time.Duration range was accepted")
+	}
+}
+
 func TestResolveOrdersDAGAndRejectsExcludedDependency(t *testing.T){
 	tmpl:=testTemplate()
 	resolved,err:=Resolve(context.Background(),tmpl,json.RawMessage(`{}`),testParameterSchemas{},testEvaluator{"always":true},nil)

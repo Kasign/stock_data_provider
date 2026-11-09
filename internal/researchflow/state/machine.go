@@ -152,6 +152,10 @@ func ApplyDeadline(run domain.Run, stages []domain.Stage, dbNow time.Time) (doma
 // The caller persists both changes atomically and supplies jitter from an injected random source.
 func ScheduleRetry(stage domain.Stage,attempt domain.Attempt,policy template.RetryPolicy,reasonCode string,attemptResult domain.AttemptStatus,now,runDeadline time.Time,jitter float64)(domain.Stage,domain.Attempt,error){
 	if attempt.Status!=domain.AttemptRunning || stage.Status!=domain.StageRunning || attempt.StageRef!=stage.Ref || attempt.Number!=stage.AttemptNo{return stage,attempt,ErrInvalidTransition}
+	maxDurationMS := int64(^uint64(0)>>1) / int64(time.Millisecond)
+	if policy.Backoff.Algorithm != "exponential_full_jitter_v1" || policy.Backoff.BaseDelayMS <= 0 || policy.Backoff.MaxDelayMS < policy.Backoff.BaseDelayMS || policy.Backoff.MaxDelayMS > maxDurationMS {
+		return stage, attempt, errors.New("retry backoff policy is invalid or exceeds time.Duration range")
+	}
 	if now.UTC().Compare(runDeadline.UTC())>=0{return stage,attempt,ErrDeadlineExceeded}
 	if attempt.Number>=policy.MaxAttempts{return stage,attempt,ErrRetryBudgetExhausted}
 	if !contains(policy.RetryableReasonCodes,reasonCode){return stage,attempt,fmt.Errorf("%w: %s",ErrNotRetryable,reasonCode)}
@@ -161,7 +165,11 @@ func ScheduleRetry(stage domain.Stage,attempt domain.Attempt,policy template.Ret
 	capMS:=float64(policy.Backoff.BaseDelayMS)
 	for i:=1;i<attempt.Number&&capMS<float64(policy.Backoff.MaxDelayMS);i++{capMS*=2}
 	if capMS>float64(policy.Backoff.MaxDelayMS){capMS=float64(policy.Backoff.MaxDelayMS)}
-	retryAt:=now.UTC().Add(time.Duration(jitter*capMS*float64(time.Millisecond)))
+	delayNanos := jitter * capMS * float64(time.Millisecond)
+	if delayNanos >= float64(int64(^uint64(0)>>1)) {
+		return stage, attempt, errors.New("retry delay exceeds time.Duration range")
+	}
+	retryAt:=now.UTC().Add(time.Duration(delayNanos))
 	if !retryAt.Before(runDeadline.UTC()){return stage,attempt,ErrDeadlineExceeded}
 	updated,err:=TransitionStage(stage,domain.StageRetryWait,now);if err!=nil{return stage,attempt,err}
 	updated.RetryAt=&retryAt
