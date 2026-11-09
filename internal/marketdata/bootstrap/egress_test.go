@@ -231,3 +231,25 @@ func TestValidateEgressDependenciesChecksTickFlowRequestModes(t *testing.T) {
 		})
 	}
 }
+
+
+func TestValidateEgressDependenciesRequiresOnlyEnabledEastmoneyCapabilityOrigins(t *testing.T) {
+	cfg := config.Config{
+		ProviderPriority: []string{"eastmoney"},
+		ProviderSettings: map[string]config.ProviderSettings{"eastmoney": {Enabled: true, Quote: true}},
+		EastmoneyQuoteURL: "https://quote.example.test/api",
+		EastmoneyKlineURL: "https://unused-kline.example.test/api",
+		EastmoneyStockBasicURL: "https://unused-basic.example.test/api",
+		EastmoneySectorRankingURL: "https://unused-sector.example.test/api",
+		EastmoneyIndexURL: "https://unused-index.example.test/api",
+		EastmoneyMarketStocksURL: "https://unused-market.example.test/api",
+		EastmoneyLimitPoolBaseURL: "https://unused-limit.example.test",
+		EastmoneyStockBoardsURL: "https://unused-boards.example.test/api",
+	}
+	deps := Dependencies{EastmoneyHTTPDoers: map[string]provider.HTTPDoer{
+		"https://quote.example.test": egressHTTPDoerStub{},
+	}}
+	if err := validateEgressDependencies(cfg, deps); err != nil {
+		t.Fatalf("quote-only Eastmoney configuration must not require unused origins: %v", err)
+	}
+}
