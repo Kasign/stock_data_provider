@@ -1531,6 +1531,7 @@ func (p *Hithink) FetchValuations(ctx context.Context, rawSymbols []string) (*mo
 		itemReasons := make([]string, 0, 2)
 		if name == "" {
 			itemReasons = append(itemReasons, "provider_stock_name_missing")
+			addHithinkFieldIssue(ctx, &rowIndex, "name", "name", "missing_value", "non-empty stock name", "string", "", "同花顺估值证券名称缺失")
 		}
 		var pet, pem, pbm, pst, pcft *float64
 		metricIssue := false
@@ -1580,6 +1581,7 @@ func (p *Hithink) FetchValuations(ctx context.Context, rawSymbols []string) (*mo
 			snapshot.MissingSymbols = append(snapshot.MissingSymbols, symbol)
 			snapshot.QualityStatus = model.QualityDegraded
 			snapshot.QualityReasons = appendUniqueHithinkReason(snapshot.QualityReasons, "one_or_more_requested_symbols_missing_from_provider_response")
+			addHithinkFieldIssue(ctx, nil, "symbol", "thscode", "missing_requested_row", "provider response row for requested symbol "+symbol, "missing", "", "同花顺估值响应缺少已请求证券")
 			continue
 		}
 		snapshot.Items = append(snapshot.Items, item)
@@ -1592,6 +1594,7 @@ func (p *Hithink) FetchValuations(ctx context.Context, rawSymbols []string) (*mo
 	if data.Total == nil {
 		snapshot.QualityStatus = model.QualityDegraded
 		snapshot.QualityReasons = appendUniqueHithinkReason(snapshot.QualityReasons, "provider_total_missing")
+		addHithinkFieldIssue(ctx, nil, "total", "total", "missing_value", "provider returned item count", "missing", "", "同花顺估值响应缺少 total 计数字段")
 	}
 	return snapshot, nil
 }
