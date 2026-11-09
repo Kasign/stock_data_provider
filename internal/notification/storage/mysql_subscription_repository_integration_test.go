@@ -55,7 +55,7 @@ func TestNotificationMariaDBSubscriptionRepositoryIntegration(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Microsecond)
 	initial := domain.Subscription{
 		SubscriptionID: fmt.Sprintf("subscription-%d", time.Now().UnixNano()),
-		OwnerRef: "owner-integration", Version: 1, Status: domain.SubscriptionActive,
+		OwnerRef:       "owner-integration", Version: 1, Status: domain.SubscriptionActive,
 		EventType: "quant.risk_decision.changed", FilterSchemaVersion: "1.0.0",
 		Filters: json.RawMessage(`{"min_severity":"high"}`), RecipientScope: domain.RecipientScopeOwner,
 		ChannelRef: "channel-integration", TemplateID: "template-integration",
