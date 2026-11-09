@@ -3,6 +3,7 @@ package cache
 import (
 	"context"
 	"errors"
+	"reflect"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -22,7 +23,7 @@ type GoRedis struct {
 
 // NewGoRedis 创建共享 go-redis Cache Adapter；Client 由 Root Server 创建并负责关闭。
 func NewGoRedis(client redisCommander) (*GoRedis, error) {
-	if client == nil {
+	if isNilRedisCommander(client) {
 		return nil, errors.New("go-redis client is required")
 	}
 	return &GoRedis{client: client}, nil
@@ -57,4 +58,17 @@ func (r *GoRedis) Ping(ctx context.Context) error {
 		return errors.New("go-redis client is not configured")
 	}
 	return r.client.Ping(ctx).Err()
+}
+
+func isNilRedisCommander(client redisCommander) bool {
+	if client == nil {
+		return true
+	}
+	value := reflect.ValueOf(client)
+	switch value.Kind() {
+	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Ptr, reflect.Slice:
+		return value.IsNil()
+	default:
+		return false
+	}
 }
