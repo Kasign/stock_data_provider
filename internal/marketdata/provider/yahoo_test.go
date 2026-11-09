@@ -440,3 +440,31 @@ func TestYahooDailyBarInvalidFieldReportsRowAndProviderPath(t *testing.T) {
 		t.Fatalf("unexpected Yahoo field issue: %+v", issue)
 	}
 }
+
+
+func TestYahooFinanceQuoteReportsUnavailableAmountAndMissingName(t *testing.T) {
+	payload := `{"chart":{"result":[{"meta":{"symbol":"600036.SS","regularMarketPrice":42.35,"regularMarketChange":0.53,"regularMarketChangePercent":1.267,"regularMarketTime":1792746000,"regularMarketDayHigh":42.38,"regularMarketDayLow":41.57,"regularMarketOpen":41.70,"chartPreviousClose":41.82,"regularMarketVolume":56829700},"timestamp":[1792746000],"indicators":{"quote":[{"open":[41.70],"high":[42.38],"low":[41.57],"close":[42.35],"volume":[56829700]}]}}],"error":null}}`
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte(payload)) }))
+	defer server.Close()
+	reporter := validation.NewReporter(10)
+	ctx := validation.WithReporter(context.Background(), reporter)
+	p := NewYahooFinance(2*time.Second, server.URL)
+	q, err := p.FetchQuote(ctx, "600036.SH")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if q.Amount != nil || q.AmountUnit != "unknown" || q.QualityStatus != model.QualityDegraded {
+		t.Fatalf("Yahoo amount must remain unknown and degraded: %+v", q)
+	}
+	found := map[string]bool{"amount": false, "name": false}
+	for _, issue := range reporter.Snapshot().Issues {
+		if _, ok := found[issue.Field]; ok && issue.Severity == validation.SeverityWarning {
+			found[issue.Field] = true
+		}
+	}
+	for field, ok := range found {
+		if !ok {
+			t.Errorf("missing Yahoo Quote limitation evidence for %s: %+v", field, reporter.Snapshot().Issues)
+		}
+	}
+}
