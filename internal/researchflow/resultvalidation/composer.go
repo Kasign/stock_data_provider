@@ -234,6 +234,9 @@ func validateContextReferences(value researchapp.ResearchContext, evidenceIDs ma
 			return nil, fmt.Errorf("%w: section %q is both included and omitted", ErrInvalidResultComposition, section.SectionID)
 		}
 		omitted[section.SectionID] = struct{}{}
+		if section.Required && value.QualitySummary.Status == "valid" {
+			return nil, fmt.Errorf("%w: required section %q omitted from a valid Context", ErrInvalidResultComposition, section.SectionID)
+		}
 	}
 	return sourceRefs, nil
 }
