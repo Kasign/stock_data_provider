@@ -233,6 +233,7 @@ func TestIndicatorParameterSchemaEnforcesOneOfCodeAndParameters(t *testing.T) {
 
 
 
+
 func TestCompileJSONSchemaRejectsInvalidUTF8(t *testing.T) {
 	document := append([]byte(`{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","additionalProperties":false,"description":"`), 0xff)
 	document = append(document, []byte(`"}`)...)
