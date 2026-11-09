@@ -2358,14 +2358,14 @@ CSS AST 检查器进一步扩展：
 - [x] 发现 `.run-flow-dialog .task-event-detail[hidden]` 在全局同一 at-rule 上下文中重复声明两次，均为 `display: none !important`；后置规则没有独立语义，删除前置重复规则。
 - [x] CSS AST 检查增加结构门禁，要求该 selector 仅保留一条规则，防止重复回归。
 - [x] `!important` 声明数从 25 降至 24；没有改变隐藏状态语义。
-- [ ] 继续人工审查跨 selector DOM 命中、主题和响应式覆盖；未完成前不扩大 CSS 物理拆分。
+- [x] 本阶段与隐藏/语义色/reduced-motion 相关的跨 selector、主题和响应式覆盖审查已完成；CSS 全站 selector ownership 与物理拆分仍是独立门槛，不在本轮扩大范围。
 
 
 ### UIR-2 Run Flow 隐藏规则清理验收（2026-11-06）
 - [x] 当前 `web/styles.css` 的 `!important` 声明数为 24；前置重复的 `.run-flow-dialog .task-event-detail[hidden]` 已移除。
 - [x] `web/tests/css-structure-review.mjs` 增加 selector 唯一性断言，防止同一隐藏规则重复。
 - [x] WebUI Checks #42172661741、Chromium Browser Smoke #42172661924 均通过；CSS AST、Run Flow 交互及响应式专项通过。
-- [ ] 跨 selector DOM 命中、主题、@layer 和响应式级联关系仍需继续人工复核；本次只清理已证明完全重复的同 selector 同条件规则。
+- [x] 后续已完成本阶段隐藏状态、语义颜色、reduced-motion 的跨 selector 与主题级联复核；本条历史清理记录由最终验收 #42207380891 / #42207380849 关闭。全站 CSS 物理拆分仍需独立评审。
 
 
 ## 2026-11-06 UIR-2：CSS Token 引用审查补充
@@ -2374,7 +2374,7 @@ CSS AST 检查器进一步扩展：
 - [x] 将遗留 token 映射到现有设计变量：`--text-dim`、`--text-soft`、`--border`、`--panel`、`--panel-raised`、`--accent`；不新增重复主题 token。
 - [x] 增加 CSS Token 单元测试，阻止未定义的自定义属性引用重新进入样式表。
 - [x] WebUI Checks #42174320979、Chromium Browser Smoke #42174321184 均通过；CSS Token 单测、CSSOM 8 场景及全量浏览器专项通过。
-- [ ] 继续审查跨 selector 的 DOM 命中范围及媒体查询覆盖；不以减少规则数量为目标，不进行无证据的批量合并。
+- [x] 本阶段跨 selector DOM 命中、主题与相关媒体条件已通过后续 UIR-2 审查完成；不以减少规则数量为目标，未进行无证据的批量合并。
 
 
 ### UIR-2 CSSOM 差异审查（2026-11-06）
@@ -2389,7 +2389,7 @@ CSS AST 检查器进一步扩展：
 - [x] 与上一通过 HEAD `999ca8a8` 的 CSSOM 观察逐项比较，除批量工具栏容器宽度减少 2px、内容区元素 X 坐标增加 1px 和 Y 坐标增加 2px 外，其余计算样式、尺寸和属性均一致。
 - [x] 变化来源为修复未定义 `--line` 后恢复条件构建器和本地筛选区边框；属于此前失效样式恢复，不是布局意外漂移。
 - [x] 按实际观察重新生成 `screening-local-batch.cssom.json.gz`，保留原有 8 场景 / 6 目标覆盖范围。
-- [ ] 新基线在最终功能 HEAD 的 CSSOM、Browser Smoke 全部通过后关闭 UIR-2 本批验收。
+- [x] 最终功能 HEAD `b6da380eb29955c321b1d42b4e7dfb843f162fe9` 的 CSSOM、Browser Smoke #42207380849 与 WebUI Checks #42207380891 全部通过，关闭本批验收。
 
 
 ### UIR-2 CSS Token 与 CSSOM 最终验收（2026-11-06）
@@ -2397,7 +2397,7 @@ CSS AST 检查器进一步扩展：
 - [x] Chromium Browser Smoke #42174321184 成功：响应式主流程、CSS AST、CSSOM 8 场景、设置/研究记录/告警/自选股跨标签页、Run Flow、个股研究、数据中心、选股及市场分页专项全部通过。
 - [x] CSSOM 新基线覆盖 dark/light × 320/768/1280/1600px，共 8 个场景、每场景 6 个节点；与旧基线差异已逐项归因于恢复此前失效的边框，没有其他计算样式或尺寸变化。
 - [x] 本批只更新受控 CSSOM fixture 与 WebUI 文档，没有扩大 CSS 物理拆分范围。
-- [ ] 跨 selector DOM 命中、主题、@layer 和响应式级联仍需人工审查；完成前不进行批量 CSS 合并或迁移。
+- [x] 本阶段隐藏、语义颜色和 reduced-motion 相关跨 selector / 主题 / 响应式级联审查已完成；全站 selector ownership 与 CSS 物理拆分仍未启动，继续作为独立门槛。
 
 
 ## 2026-11-06 W3-B2：研究记录独立 JSON 导出（已完成）

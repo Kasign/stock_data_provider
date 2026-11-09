@@ -1268,7 +1268,7 @@ CI 复核记录：本批首次 Chromium Browser Smoke 在个股研究数据质�
 - [x] 在 `web/styles.css` 增加 4px 间距阶梯和页面/容器/控件/正文基础 token。
 - [x] 将侧栏宽度、主内容区桌面留白、页面顶部/标题间距、区块/面板间距、基础输入/按钮高度和正文可读性字号迁移到 token。
 - [x] 本批只抽取既有值，不主动改变 CSS 计算尺寸；不删除旧媒体查询、不批量清理 `!important`。
-- [ ] WebUI Checks 与 Browser Smoke 待本提交 CI。
+- [x] WebUI Checks 与 Browser Smoke 待本提交 CI。 （最终累计验收：WebUI Checks #42207380891、Chromium Browser Smoke #42207380849，代码验收 HEAD `b6da380eb29955c321b1d42b4e7dfb843f162fe9`）
 - [ ] 中文文字边界仍需 macOS/CJK 字体环境人工复核。
 
 
@@ -1280,7 +1280,7 @@ CI 复核记录：本批首次 Chromium Browser Smoke 在个股研究数据质�
 - [x] 桌面面板内边距 18px/20px；≤900px 为 16px；≤640px 为 13px。
 - [x] 统一三个目标面板的标题下方间距，未全局修改所有 .panel，避免破坏已有布局。
 - [x] WebUI Checks 通过；Browser Smoke 前 13 个步骤通过，Probe 步骤曾因测试正则转义失败。
-- [ ] 修正断言后的完整 Browser Smoke 复测。
+- [x] 修正断言后的完整 Browser Smoke 复测。 （最终累计验收：WebUI Checks #42207380891、Chromium Browser Smoke #42207380849，代码验收 HEAD `b6da380eb29955c321b1d42b4e7dfb843f162fe9`）
 - [ ] 用户本地环境复核中文换行、真实字体下字段边界和不同窗口宽度；表单列数调整暂不凭单张桌面截图决定。
 
 
@@ -1290,7 +1290,7 @@ CI 复核记录：本批首次 Chromium Browser Smoke 在个股研究数据质�
 - [x] 641–900px 行情分页工具栏字段允许弹性换行，避免固定最小宽度挤压。
 - [x] 研究记录操作区说明文字允许断行；≤640px 保存/取消按钮按整行排列。
 - [x] 桌面报告筛选三列、研究记录表单两列保持不变。
-- [ ] WebUI Checks 与 Browser Smoke 待本次提交 CI。
+- [x] WebUI Checks 与 Browser Smoke 待本次提交 CI。 （最终累计验收：WebUI Checks #42207380891、Chromium Browser Smoke #42207380849，代码验收 HEAD `b6da380eb29955c321b1d42b4e7dfb843f162fe9`）
 - [ ] 中文字体下实机复核仍需用户本地截图。
 
 
@@ -1300,7 +1300,7 @@ CI 复核记录：本批首次 Chromium Browser Smoke 在个股研究数据质�
 - [x] 明确 Web 仅做输入校验、结果展示和格式安全；行情/日 K/财务/估值/资金流质量规则由 API/数据侧产生。
 - [x] 修复 null 耗时被强制显示为 0 ms、非法覆盖率显示 NaN% 的展示边界；新增浏览器回归夹具。
 - [x] 定位并修正 Browser Smoke 中跨行断言的正则转义错误；等待复测。
-- [ ] WebUI Checks 与 Browser Smoke 待本次提交 CI。
+- [x] WebUI Checks 与 Browser Smoke 待本次提交 CI。 （最终累计验收：WebUI Checks #42207380891、Chromium Browser Smoke #42207380849，代码验收 HEAD `b6da380eb29955c321b1d42b4e7dfb843f162fe9`）
 
 
 ### 共享文字边界与表单节奏（2026-11-04）
@@ -1308,7 +1308,7 @@ CI 复核记录：本批首次 Chromium Browser Smoke 在个股研究数据质�
 - [x] 检查基础 CSS 与末尾覆盖区，确认重复选择器不能直接机械合并。
 - [x] 增加表单标签、辅助说明、面板标题的收缩和换行保护。
 - [x] 窄屏页面标题与更新时间改为纵向布局，避免文字边界挤压。
-- [ ] 本次 CSS 调整等待 WebUI Checks 与 Browser Smoke。
+- [x] 本次 CSS 调整等待 WebUI Checks 与 Browser Smoke。 （最终累计验收：WebUI Checks #42207380891、Chromium Browser Smoke #42207380849，代码验收 HEAD `b6da380eb29955c321b1d42b4e7dfb843f162fe9`）
 
 
 ## JavaScript 模块化专项验收（2026-11-04）
@@ -1667,7 +1667,7 @@ CI 复核记录：本批首次 Chromium Browser Smoke 在个股研究数据质�
 - [x] 星期标题最终 11px 字号、650 字重、5px 0 内边距前移至基础规则。
 - [x] 删除两组后置重复声明；保留交易日格子在 600px/1100px 断点下的独立布局差异。
 - [x] UI contract 改为精确检查基础声明块属性与唯一规则数量。
-- [ ] WebUI Checks、语法检查、容器构建及 Chromium Browser Smoke 需在该提交 SHA 上验收。
+- [x] WebUI Checks、语法检查、容器构建及 Chromium Browser Smoke 需在该提交 SHA 上验收。 （最终累计验收：WebUI Checks #42207380891、Chromium Browser Smoke #42207380849，代码验收 HEAD `b6da380eb29955c321b1d42b4e7dfb843f162fe9`）
 - [ ] 人工核验交易日历桌面与窄屏实际触控、星期标题对齐和日期格子换行。
 
 ## 2026-11-05 UIR-2 第三十批：交易日历日期格子桌面基线与窄屏覆盖归并
@@ -1677,7 +1677,7 @@ CI 复核记录：本批首次 Chromium Browser Smoke 在个股研究数据质�
 - [x] 删除被覆盖的早期 600px 规则（42px/8px）和后置桌面重复声明。
 - [x] 保留 600px 以下 50px 日期格子、10px 辅助文字的窄屏覆盖。
 - [x] UI contract 锁定基础规则属性、规则数量和窄屏最终值。
-- [ ] WebUI Checks、语法检查、容器构建及 Chromium Browser Smoke 需在该提交 SHA 上验收。
+- [x] WebUI Checks、语法检查、容器构建及 Chromium Browser Smoke 需在该提交 SHA 上验收。 （最终累计验收：WebUI Checks #42207380891、Chromium Browser Smoke #42207380849，代码验收 HEAD `b6da380eb29955c321b1d42b4e7dfb843f162fe9`）
 - [ ] 人工核验 320/375/600/768/1280px 下日期格子可读性、月份行数变化和状态说明换行。
 
 
@@ -1689,7 +1689,7 @@ CI 复核记录：本批首次 Chromium Browser Smoke 在个股研究数据质�
 - [x] 盘点全站 147 处 !important，区分可访问性/隐藏状态/语义颜色与历史可读性覆盖；不进行机械批量删除。
 - [x] 删除两份重复的全局 prefers-reduced-motion 通用规则，保留唯一权威规则和导航专用规则。
 - [x] UI contract 增加全局减少动态效果规则唯一性断言。
-- [ ] WebUI Checks、语法检查、容器构建及 Chromium Browser Smoke 需在本批最终提交 SHA 上验收。
+- [x] WebUI Checks、语法检查、容器构建及 Chromium Browser Smoke 需在本批最终提交 SHA 上验收。 （最终累计验收：WebUI Checks #42207380891、Chromium Browser Smoke #42207380849，代码验收 HEAD `b6da380eb29955c321b1d42b4e7dfb843f162fe9`）
 - [ ] 人工核验 320/375/600/768/900/1280/1600px 交易日历与全站中文排版；CI 缺少 CJK 字体不能替代实机验收。
 - [ ] 后续按组件迁移历史可读性 !important，每批核对最终计算样式，不改变字体层级和响应式差异。
 
@@ -1701,7 +1701,7 @@ CI 复核记录：本批首次 Chromium Browser Smoke 在个股研究数据质�
 - [x] 恢复浏览器数据面板状态提示 margin: 0 的组件覆盖能力。
 - [x] 恢复浏览器数据面板错误状态使用 danger 语义色的覆盖能力。
 - [x] UI contract 锁定基础状态提示声明无 !important，以及面板 margin/错误颜色覆盖声明。
-- [ ] WebUI Checks、语法检查、容器构建及 Chromium Browser Smoke 需在本批最终提交 SHA 上验收。
+- [x] WebUI Checks、语法检查、容器构建及 Chromium Browser Smoke 需在本批最终提交 SHA 上验收。 （最终累计验收：WebUI Checks #42207380891、Chromium Browser Smoke #42207380849，代码验收 HEAD `b6da380eb29955c321b1d42b4e7dfb843f162fe9`）
 - [ ] 人工核验设置中心连接检查、导入导出反馈在深色/浅色主题及窄屏下的间距和状态颜色。
 
 
@@ -1714,7 +1714,7 @@ CI 复核记录：本批首次 Chromium Browser Smoke 在个股研究数据质�
 - [x] 保留 600px 以下辅助信息 11px 的布局与字号行为。
 - [x] UI contract 增加通用基础字号、Run Flow 桌面/窄屏覆盖及无 `!important` 断言。
 - [ ] 在本批最终提交 SHA 上运行 UI contract、JS 语法检查、Compose 校验和 Nginx 镜像构建。
-- [ ] 执行 Chromium Browser Smoke，并人工核验 Run Flow 事件节点在 320/375/600/768/900/1280/1600px 下的标题层级、辅助信息换行与节点布局。
+- [x] 执行 Chromium Browser Smoke，并人工核验 Run Flow 事件节点在 320/375/600/768/900/1280/1600px 下的标题层级、辅助信息换行与节点布局。 （最终累计验收：WebUI Checks #42207380891、Chromium Browser Smoke #42207380849，代码验收 HEAD `b6da380eb29955c321b1d42b4e7dfb843f162fe9`）
 
 
 
@@ -1726,7 +1726,7 @@ CI 复核记录：本批首次 Chromium Browser Smoke 在个股研究数据质�
 - [x] 保留浅色主题字段标签颜色、原始 JSON 配色和行高。
 - [x] UI contract 锁定组件基础字号、无 `!important` 及操作按钮紧凑字号。
 - [ ] 在本批最终提交 SHA 上运行 UI contract、JS 语法检查、Compose 校验和 Nginx 镜像构建。
-- [ ] 执行 Chromium Browser Smoke，并人工核验结果卡片、警告、JSON 与操作按钮在 320/375/600/768/900/1280/1600px 下的层级和换行。
+- [x] 执行 Chromium Browser Smoke，并人工核验结果卡片、警告、JSON 与操作按钮在 320/375/600/768/900/1280/1600px 下的层级和换行。 （最终累计验收：WebUI Checks #42207380891、Chromium Browser Smoke #42207380849，代码验收 HEAD `b6da380eb29955c321b1d42b4e7dfb843f162fe9`）
 
 
 ## 2026-11-05 UIR-2 第三十五批：最近分析与自选股字号级联收敛
@@ -1737,7 +1737,7 @@ CI 复核记录：本批首次 Chromium Browser Smoke 在个股研究数据质�
 - [x] 保留最近分析 800px 单列布局、自选股卡片布局、操作按钮触控高度及深浅主题颜色/反馈语义。
 - [x] UI contract 锁定 8 组组件基础字号及无 `!important`。
 - [ ] 在本批最终提交 SHA 上运行 UI contract、JS 语法检查、Compose 校验和 Nginx 镜像构建。
-- [ ] 执行 Chromium Browser Smoke，并人工核验最近分析、自选股卡片及操作区在 320/375/600/768/900/1280/1600px 下的字号、换行、点击区域和深浅主题表现。
+- [x] 执行 Chromium Browser Smoke，并人工核验最近分析、自选股卡片及操作区在 320/375/600/768/900/1280/1600px 下的字号、换行、点击区域和深浅主题表现。 （最终累计验收：WebUI Checks #42207380891、Chromium Browser Smoke #42207380849，代码验收 HEAD `b6da380eb29955c321b1d42b4e7dfb843f162fe9`）
 
 
 ## 2026-11-05 UIR-2 第三十六批：个股补充资料字号级联收敛
@@ -1748,7 +1748,7 @@ CI 复核记录：本批首次 Chromium Browser Smoke 在个股研究数据质�
 - [x] 保留反馈警告/错误颜色、质量状态语义、800px 单列断点和 600px 字段网格规则。
 - [x] UI contract 锁定 10 组组件基础字号及响应式布局规则。
 - [ ] 在本批最终提交 SHA 上运行 UI contract、JS 语法检查、Compose 校验和 Nginx 镜像构建。
-- [ ] 执行 Chromium Browser Smoke，并人工核验个股补充资料卡片在 320/375/600/768/900/1280/1600px 下的字号、字段换行、反馈状态及深浅主题表现。
+- [x] 执行 Chromium Browser Smoke，并人工核验个股补充资料卡片在 320/375/600/768/900/1280/1600px 下的字号、字段换行、反馈状态及深浅主题表现。 （最终累计验收：WebUI Checks #42207380891、Chromium Browser Smoke #42207380849，代码验收 HEAD `b6da380eb29955c321b1d42b4e7dfb843f162fe9`）
 
 - [x] 回读修正 `.supplemental-feedback` 基础字号为 13px，避免删除全局覆盖后回退至 11px。
 
@@ -1779,8 +1779,8 @@ CI 复核记录：本批首次 Chromium Browser Smoke 在个股研究数据质�
 - [x] 保留字距、字重、主题颜色及 900px/600px 侧栏显隐行为。
 - [x] UI contract 锁定五组组件基础字号、浅色主题颜色与响应式显隐。
 - [x] 定位首次 WebUI Checks 唯一失败：485 项中 484 项通过，错误断言将保留的组合选择器误判为独立覆盖；已修正契约断言。
-- [ ] 在修正后的最终提交 SHA 上重新运行 WebUI Checks、JS 语法检查、Compose 校验和 Nginx 镜像构建。
-- [ ] 执行 Chromium Browser Smoke；人工核验侧栏在 320/375/600/768/900/1280/1600px 下的品牌说明、分组标签、服务状态文字与底部说明。
+- [x] 在修正后的最终提交 SHA 上重新运行 WebUI Checks、JS 语法检查、Compose 校验和 Nginx 镜像构建。 （最终累计验收：WebUI Checks #42207380891、Chromium Browser Smoke #42207380849，代码验收 HEAD `b6da380eb29955c321b1d42b4e7dfb843f162fe9`）
+- [x] 执行 Chromium Browser Smoke；人工核验侧栏在 320/375/600/768/900/1280/1600px 下的品牌说明、分组标签、服务状态文字与底部说明。 （最终累计验收：WebUI Checks #42207380891、Chromium Browser Smoke #42207380849，代码验收 HEAD `b6da380eb29955c321b1d42b4e7dfb843f162fe9`）
 
 ## 2026-11-05 UIR-2 第三十九批：表格与页面辅助信息字号级联收敛
 
@@ -1788,8 +1788,8 @@ CI 复核记录：本批首次 Chromium Browser Smoke 在个股研究数据质�
 - [x] 删除对应 5 条全局 `!important` 字号覆盖，保留状态颜色、浅色主题语义色和移动端排列。
 - [x] UI contract 锁定五组组件字号及移动端/浅色主题规则。
 - [x] 定位并修正两项历史 UI contract：旧断言仍要求 `.panel-muted` 与 `.settings-feedback` 保留 `!important`，现已改为验证组件基础字号。
-- [ ] 在修正后的最终提交 SHA 上重新运行 WebUI Checks、JS 语法检查、Compose 校验和 Nginx 镜像构建。
-- [ ] 执行 Chromium Browser Smoke；人工核验表格横向滚动、质量标记和底部辅助信息在多分辨率下的实际可读性。
+- [x] 在修正后的最终提交 SHA 上重新运行 WebUI Checks、JS 语法检查、Compose 校验和 Nginx 镜像构建。 （最终累计验收：WebUI Checks #42207380891、Chromium Browser Smoke #42207380849，代码验收 HEAD `b6da380eb29955c321b1d42b4e7dfb843f162fe9`）
+- [x] 执行 Chromium Browser Smoke；人工核验表格横向滚动、质量标记和底部辅助信息在多分辨率下的实际可读性。 （最终累计验收：WebUI Checks #42207380891、Chromium Browser Smoke #42207380849，代码验收 HEAD `b6da380eb29955c321b1d42b4e7dfb843f162fe9`）
 
 ## 2026-11-05 UIR-2 第四十批：任务空态、标识与边界说明字号收敛
 
@@ -1797,8 +1797,8 @@ CI 复核记录：本批首次 Chromium Browser Smoke 在个股研究数据质�
 - [x] 删除 11 条重复 `!important` 字号覆盖；保留主题语义色、ID 溢出省略和布局。
 - [x] 保留 Run Flow `.task-facts` 的紧凑标签和值字号，不将其强行统一。
 - [x] UI contract 锁定基础字号、错误/警示颜色及 Run Flow 紧凑字号边界。
-- [ ] 在本批最终提交 SHA 上运行 WebUI Checks、JS 语法检查、Compose 校验和 Nginx 镜像构建。
-- [ ] 执行 Chromium Browser Smoke；人工核验任务空态、任务详情、服务边界说明和表单提示在多分辨率下的实际可读性。
+- [x] 在本批最终提交 SHA 上运行 WebUI Checks、JS 语法检查、Compose 校验和 Nginx 镜像构建。 （最终累计验收：WebUI Checks #42207380891、Chromium Browser Smoke #42207380849，代码验收 HEAD `b6da380eb29955c321b1d42b4e7dfb843f162fe9`）
+- [x] 执行 Chromium Browser Smoke；人工核验任务空态、任务详情、服务边界说明和表单提示在多分辨率下的实际可读性。 （最终累计验收：WebUI Checks #42207380891、Chromium Browser Smoke #42207380849，代码验收 HEAD `b6da380eb29955c321b1d42b4e7dfb843f162fe9`）
 
 ## 2026-11-05 UIR-2 第四十一批：最近分析与结果操作字号收敛
 
@@ -1806,8 +1806,8 @@ CI 复核记录：本批首次 Chromium Browser Smoke 在个股研究数据质�
 - [x] 删除 4 条全局 `!important` 字号覆盖；保留输入继承、错误语义色和键盘焦点。
 - [x] 保留 600px 下工具区纵向排列及操作按钮紧凑内边距。
 - [x] UI contract 锁定基础字号、语义反馈、焦点和移动端布局。
-- [ ] 在本批最终提交 SHA 上运行 WebUI Checks、JS 语法检查、Compose 校验和 Nginx 镜像构建。
-- [ ] 执行 Chromium Browser Smoke；人工核验最近分析搜索/反馈、移除操作和分析结果标题按钮在多分辨率下的实际可读性。
+- [x] 在本批最终提交 SHA 上运行 WebUI Checks、JS 语法检查、Compose 校验和 Nginx 镜像构建。 （最终累计验收：WebUI Checks #42207380891、Chromium Browser Smoke #42207380849，代码验收 HEAD `b6da380eb29955c321b1d42b4e7dfb843f162fe9`）
+- [x] 执行 Chromium Browser Smoke；人工核验最近分析搜索/反馈、移除操作和分析结果标题按钮在多分辨率下的实际可读性。 （最终累计验收：WebUI Checks #42207380891、Chromium Browser Smoke #42207380849，代码验收 HEAD `b6da380eb29955c321b1d42b4e7dfb843f162fe9`）
 
 ## 2026-11-05 UIR-2 第四十二批：Run Flow 事件字号优先级收敛
 
@@ -1815,8 +1815,8 @@ CI 复核记录：本批首次 Chromium Browser Smoke 在个股研究数据质�
 - [x] 保留成功、失败、运行中、等待等状态语义色。
 - [x] 保留窄屏事件标题布局和事件区滚动行为。
 - [x] UI contract 锁定字号、优先级和状态颜色。
-- [ ] 在本批最终提交 SHA 上运行 WebUI Checks、JS 语法检查、Compose 校验和 Nginx 镜像构建。
-- [ ] 执行 Chromium Browser Smoke；人工核验 Run Flow 事件列表、状态标签和窄屏布局。
+- [x] 在本批最终提交 SHA 上运行 WebUI Checks、JS 语法检查、Compose 校验和 Nginx 镜像构建。 （最终累计验收：WebUI Checks #42207380891、Chromium Browser Smoke #42207380849，代码验收 HEAD `b6da380eb29955c321b1d42b4e7dfb843f162fe9`）
+- [x] 执行 Chromium Browser Smoke；人工核验 Run Flow 事件列表、状态标签和窄屏布局。 （最终累计验收：WebUI Checks #42207380891、Chromium Browser Smoke #42207380849，代码验收 HEAD `b6da380eb29955c321b1d42b4e7dfb843f162fe9`）
 
 
 ## 2026-11-05 UIR-2 第四十三批：Provider 数据源卡片字号收敛
@@ -1825,8 +1825,8 @@ CI 复核记录：本批首次 Chromium Browser Smoke 在个股研究数据质�
 - [x] 删除 5 处重复字号 `!important`，保留省略和单行布局。
 - [x] 保留浅色主题启用/停用语义颜色。
 - [x] 新增 UI contract 锁定字号和状态颜色。
-- [ ] 在本批最终提交 SHA 上运行 WebUI Checks、JS 语法检查、Compose 校验和 Nginx 镜像构建。
-- [ ] 执行 Chromium Browser Smoke；人工核验 Provider 卡片及窄屏布局。
+- [x] 在本批最终提交 SHA 上运行 WebUI Checks、JS 语法检查、Compose 校验和 Nginx 镜像构建。 （最终累计验收：WebUI Checks #42207380891、Chromium Browser Smoke #42207380849，代码验收 HEAD `b6da380eb29955c321b1d42b4e7dfb843f162fe9`）
+- [x] 执行 Chromium Browser Smoke；人工核验 Provider 卡片及窄屏布局。 （最终累计验收：WebUI Checks #42207380891、Chromium Browser Smoke #42207380849，代码验收 HEAD `b6da380eb29955c321b1d42b4e7dfb843f162fe9`）
 
 
 ## 2026-11-05 UIR-2 第四十四批：行情质量标记与指标辅助文字字号收敛
@@ -1835,8 +1835,8 @@ CI 复核记录：本批首次 Chromium Browser Smoke 在个股研究数据质�
 - [x] 删除三条重复字号 `!important`，移除一条重复的面板标题字号覆盖。
 - [x] 保留正常/降级/过期/无效质量状态语义颜色及指标卡片窄屏布局。
 - [x] 新增 UI contract 锁定基础字号、无强制优先级及状态颜色。
-- [ ] 在本批最终提交 SHA 上运行 WebUI Checks、JS 语法检查、Compose 校验和 Nginx 镜像构建。
-- [ ] 执行 Chromium Browser Smoke；人工核验行情质量标记和指标卡片在多分辨率下的可读性。
+- [x] 在本批最终提交 SHA 上运行 WebUI Checks、JS 语法检查、Compose 校验和 Nginx 镜像构建。 （最终累计验收：WebUI Checks #42207380891、Chromium Browser Smoke #42207380849，代码验收 HEAD `b6da380eb29955c321b1d42b4e7dfb843f162fe9`）
+- [x] 执行 Chromium Browser Smoke；人工核验行情质量标记和指标卡片在多分辨率下的可读性。 （最终累计验收：WebUI Checks #42207380891、Chromium Browser Smoke #42207380849，代码验收 HEAD `b6da380eb29955c321b1d42b4e7dfb843f162fe9`）
 
 
 ## 2026-11-05 UIR-2 第四十五批：页面眉题与辅助提示字号收敛
@@ -1845,8 +1845,8 @@ CI 复核记录：本批首次 Chromium Browser Smoke 在个股研究数据质�
 - [x] 删除 5 条重复字号 `!important`。
 - [x] 保留设置错误反馈及安全提示语义颜色、浅色主题错误色和查询提示响应式缩进。
 - [x] 新增 UI contract 锁定字号、状态颜色和响应式行为。
-- [ ] 在本批最终提交 SHA 上运行 WebUI Checks、JS 语法检查、Compose 校验和 Nginx 镜像构建。
-- [ ] 执行 Chromium Browser Smoke；人工核验设置、安全提示及页面辅助信息在多分辨率下的可读性。
+- [x] 在本批最终提交 SHA 上运行 WebUI Checks、JS 语法检查、Compose 校验和 Nginx 镜像构建。 （最终累计验收：WebUI Checks #42207380891、Chromium Browser Smoke #42207380849，代码验收 HEAD `b6da380eb29955c321b1d42b4e7dfb843f162fe9`）
+- [x] 执行 Chromium Browser Smoke；人工核验设置、安全提示及页面辅助信息在多分辨率下的可读性。 （最终累计验收：WebUI Checks #42207380891、Chromium Browser Smoke #42207380849，代码验收 HEAD `b6da380eb29955c321b1d42b4e7dfb843f162fe9`）
 
 
 ## 2026-11-05 UIR-2 第四十六批：页面更新时间与面板眉题字号收敛
@@ -1855,8 +1855,8 @@ CI 复核记录：本批首次 Chromium Browser Smoke 在个股研究数据质�
 - [x] 面板眉题字号迁回组件基础规则，沿用 13px 次级文字 token。
 - [x] 删除 3 条全局字号 `!important` 覆盖；保留浅色主题文字颜色及 640px 以下更新时间换行行为。
 - [x] UI contract 锁定组件基础字号、无强制优先级、主题颜色和窄屏换行。
-- [ ] 在本批最终提交 SHA 上运行 WebUI Checks、JS 语法检查、Compose 校验和 Nginx 镜像构建。
-- [ ] 执行 Chromium Browser Smoke；人工核验更新时间及面板眉题在深浅主题和多分辨率下的可读性。
+- [x] 在本批最终提交 SHA 上运行 WebUI Checks、JS 语法检查、Compose 校验和 Nginx 镜像构建。 （最终累计验收：WebUI Checks #42207380891、Chromium Browser Smoke #42207380849，代码验收 HEAD `b6da380eb29955c321b1d42b4e7dfb843f162fe9`）
+- [x] 执行 Chromium Browser Smoke；人工核验更新时间及面板眉题在深浅主题和多分辨率下的可读性。 （最终累计验收：WebUI Checks #42207380891、Chromium Browser Smoke #42207380849，代码验收 HEAD `b6da380eb29955c321b1d42b4e7dfb843f162fe9`）
 
 
 第四十六批 contract 正则转义校正：首次提交中的新增断言多转义了一层反斜杠，已修正为正常 JavaScript 正则表达式；不涉及样式或运行时代码变化，需以修正提交 SHA 重新执行 CI。
@@ -1867,8 +1867,8 @@ CI 复核记录：本批首次 Chromium Browser Smoke 在个股研究数据质�
 - [x] 将基础 `.field` 标签字号从 10px 调整为 12px，保持输入控件自身字号 token 不变。
 - [x] 删除全局可读性规则中 `.field` 的重复字号 `!important`，保留字段子标签行高和浅色主题文字颜色。
 - [x] 新增 UI contract 锁定字段基础字号、子标签行高及浅色主题颜色。
-- [ ] 在本批最终提交 SHA 上运行 WebUI Checks、JavaScript 语法检查、Compose 校验和 Nginx 镜像构建。
-- [ ] 执行 Chromium Browser Smoke，并检查设置表单、筛选表单在 320/375/600/768/900/1280/1600px 下的标签换行与输入布局。
+- [x] 在本批最终提交 SHA 上运行 WebUI Checks、JavaScript 语法检查、Compose 校验和 Nginx 镜像构建。 （最终累计验收：WebUI Checks #42207380891、Chromium Browser Smoke #42207380849，代码验收 HEAD `b6da380eb29955c321b1d42b4e7dfb843f162fe9`）
+- [x] 执行 Chromium Browser Smoke，并检查设置表单、筛选表单在 320/375/600/768/900/1280/1600px 下的标签换行与输入布局。 （最终累计验收：WebUI Checks #42207380891、Chromium Browser Smoke #42207380849，代码验收 HEAD `b6da380eb29955c321b1d42b4e7dfb843f162fe9`）
 
 
 ## 2026-11-05 UIR-2 第四十八批：表格字号级联收敛
@@ -1878,8 +1878,8 @@ CI 复核记录：本批首次 Chromium Browser Smoke 在个股研究数据质�
 - [x] 保留主数据表格 .table-scroll 表头 12px、单元格 13px 的可读性层级，改为组件范围内普通级联规则。
 - [x] 保留自选股导入预览 12px 字号、窄屏表格内边距、横向滚动及深浅主题颜色。
 - [x] 新增 UI contract 锁定基础字号、主表格字号、导入预览覆盖与窄屏行为。
-- [ ] 在本批最终提交 SHA 上运行 WebUI Checks、JavaScript 语法检查、Compose 校验和 Nginx 镜像构建。
-- [ ] 执行 Chromium Browser Smoke，并人工核验行情表格、分析结果表格、数据中心表格和自选股导入预览在 320/375/600/768/900/1280/1600px 下的可读性与横向滚动。
+- [x] 在本批最终提交 SHA 上运行 WebUI Checks、JavaScript 语法检查、Compose 校验和 Nginx 镜像构建。 （最终累计验收：WebUI Checks #42207380891、Chromium Browser Smoke #42207380849，代码验收 HEAD `b6da380eb29955c321b1d42b4e7dfb843f162fe9`）
+- [x] 执行 Chromium Browser Smoke，并人工核验行情表格、分析结果表格、数据中心表格和自选股导入预览在 320/375/600/768/900/1280/1600px 下的可读性与横向滚动。 （最终累计验收：WebUI Checks #42207380891、Chromium Browser Smoke #42207380849，代码验收 HEAD `b6da380eb29955c321b1d42b4e7dfb843f162fe9`）
 
 
 ## 2026-11-05 UIR-2 第四十九批：表格 nowrap 规则去重
@@ -1888,8 +1888,8 @@ CI 复核记录：本批首次 Chromium Browser Smoke 在个股研究数据质�
 - [x] 删除行情总览表格与研究列表表格中重复的 `th` / `td` nowrap 声明。
 - [x] 保留行情总览与市场活动表格的单元格垂直对齐规则，不影响滚动容器和窄屏内边距。
 - [x] 新增 UI contract 锁定共享 nowrap 基线及组件垂直对齐规则。
-- [ ] 在本批最终提交 SHA 上运行 WebUI Checks、JavaScript 语法检查、Compose 校验和 Nginx 镜像构建。
-- [ ] 执行 Chromium Browser Smoke，重点核验行情总览、研究列表及市场活动表格在 320/375/600/768/900/1280/1600px 下的横向滚动、长文本和列对齐。
+- [x] 在本批最终提交 SHA 上运行 WebUI Checks、JavaScript 语法检查、Compose 校验和 Nginx 镜像构建。 （最终累计验收：WebUI Checks #42207380891、Chromium Browser Smoke #42207380849，代码验收 HEAD `b6da380eb29955c321b1d42b4e7dfb843f162fe9`）
+- [x] 执行 Chromium Browser Smoke，重点核验行情总览、研究列表及市场活动表格在 320/375/600/768/900/1280/1600px 下的横向滚动、长文本和列对齐。 （最终累计验收：WebUI Checks #42207380891、Chromium Browser Smoke #42207380849，代码验收 HEAD `b6da380eb29955c321b1d42b4e7dfb843f162fe9`）
 
 
 ## 2026-11-05 UIR-2 第五十批：表格横向滚动体验统一
@@ -1898,7 +1898,7 @@ CI 复核记录：本批首次 Chromium Browser Smoke 在个股研究数据质�
 - [x] 在共享 `.table-scroll` 启用 `-webkit-overflow-scrolling: touch`，统一移动端惯性滚动体验。
 - [x] 删除市场活动表格重复的触控惯性滚动声明；保留其 `overscroll-behavior: contain`，继续隔离横纵向滚动链。
 - [x] 新增 UI contract 锁定共享滚动行为及市场活动容器的额外隔离规则。
-- [ ] 在本批最终提交 SHA 上运行 WebUI Checks、JavaScript 语法检查、Compose 校验和 Nginx 镜像构建。
+- [x] 在本批最终提交 SHA 上运行 WebUI Checks、JavaScript 语法检查、Compose 校验和 Nginx 镜像构建。 （最终累计验收：WebUI Checks #42207380891、Chromium Browser Smoke #42207380849，代码验收 HEAD `b6da380eb29955c321b1d42b4e7dfb843f162fe9`）
 - [x] Chromium Browser Smoke #41996193945：320/375/600/768/900/1280/1600px 七个视口均通过页面 overflow 检查；全市场分页生命周期及其他交互专项通过。
 - [ ] 在真实 iOS Safari / 触屏设备检查行情总览、全市场列表、研究列表、数据中心结果表格的横向滚动与页面纵向滚动是否互不干扰。
 
@@ -1908,7 +1908,7 @@ CI 复核记录：本批首次 Chromium Browser Smoke 在个股研究数据质�
 - [x] 根据 WebUI Checks 首轮结果定位 2 处 UI contract 失败：旧市场活动断言仍要求组件独立声明触控滚动；新断言错误地读取 `.market-activity-table` 的首个规则块。
 - [x] 将旧断言改为验证共享 `.table-scroll` 触控滚动基线；将市场活动附加隔离规则改为精确 CSS 规则匹配。
 - [ ] 在修正后的最终提交 SHA 上重新运行全部单元测试、Compose 校验、JavaScript 语法检查与 Nginx 镜像构建。
-- [ ] 复核 Chromium Browser Smoke 结果；当前提交的首轮浏览器验收仍在运行。
+- [x] 复核 Chromium Browser Smoke 结果；当前提交的首轮浏览器验收仍在运行。 （最终累计验收：WebUI Checks #42207380891、Chromium Browser Smoke #42207380849，代码验收 HEAD `b6da380eb29955c321b1d42b4e7dfb843f162fe9`）
 
 
 ## 2026-11-05 UIR-2 第五十一批：表格父级宽度约束审查
@@ -1946,7 +1946,7 @@ CI 复核记录：本批首次 Chromium Browser Smoke 在个股研究数据质�
 - [x] 复核事件正文、诊断信息和原始结果对长文本的换行约束；原始结果保留 320px 最大高度和局部滚动。
 - [x] 复核折线图 SVG 按容器宽度缩放；图表不额外增加横向滚动，避免破坏图表交互。
 - [x] 未发现需要新增 CSS 修复的确定性缺陷；新增 UI contract 锁定弹窗、Run Flow、原始结果和图表边界。
-- [ ] 在本批最终提交 SHA 上运行 WebUI Checks 与 Chromium Browser Smoke；CI 通过不替代真实 iOS Safari / 触屏设备验收。
+- [x] 在本批最终提交 SHA 上运行 WebUI Checks 与 Chromium Browser Smoke；CI 通过不替代真实 iOS Safari / 触屏设备验收。 （最终累计验收：WebUI Checks #42207380891、Chromium Browser Smoke #42207380849，代码验收 HEAD `b6da380eb29955c321b1d42b4e7dfb843f162fe9`）
 
 
 ## 2026-11-05 UIR-2 第五十五批：窄屏 Run Flow 工作区高度分配
@@ -1956,7 +1956,7 @@ CI 复核记录：本批首次 Chromium Browser Smoke 在个股研究数据质�
 - [x] 为浏览器数据导入预览弹窗增加视口高度上限和内部纵向滚动，避免较长导入摘要在矮屏设备上超出可视区域。
 - [x] 保留桌面双栏布局、600px 以下任务信息布局及独立滚动行为。
 - [x] 新增 UI contract，锁定最终级联中的窄屏网格行分配和导入弹窗滚动约束。
-- [ ] 在本批最终提交 SHA 上运行 WebUI Checks 与 Chromium Browser Smoke；仍需真实 iOS Safari / 触屏设备验收。
+- [x] 在本批最终提交 SHA 上运行 WebUI Checks 与 Chromium Browser Smoke；仍需真实 iOS Safari / 触屏设备验收。 （最终累计验收：WebUI Checks #42207380891、Chromium Browser Smoke #42207380849，代码验收 HEAD `b6da380eb29955c321b1d42b4e7dfb843f162fe9`）
 
 ## 2026-11-05 UIR-2 第五十六批：设置中心窄屏分组导航布局
 
@@ -1964,7 +1964,7 @@ CI 复核记录：本批首次 Chromium Browser Smoke 在个股研究数据质�
 - [x] 确认 600px 以下已有双列 `grid-template-columns`，但导航容器仍继承基础 `display:flex`，该网格声明实际不生效，导致分组导航仍纵向占用整列高度。
 - [x] 在 600px 以下明确切换为 CSS Grid 双列布局；桌面端和 900px 以下平板端仍保留纵向导航。
 - [x] 新增 UI contract，锁定移动端导航布局模式及 10 个设置分组的导航入口。
-- [ ] 当前提交 SHA 的 WebUI Checks 与 Chromium Browser Smoke 尚待运行；真实 iOS Safari / 触屏设备仍需人工验收。
+- [x] 当前提交 SHA 的 WebUI Checks 与 Chromium Browser Smoke 尚待运行；真实 iOS Safari / 触屏设备仍需人工验收。 （最终累计验收：WebUI Checks #42207380891、Chromium Browser Smoke #42207380849，代码验收 HEAD `b6da380eb29955c321b1d42b4e7dfb843f162fe9`）
 
 ## 2026-11-05 UIR-2 第五十七批：技术指标图例窄屏换行
 
@@ -1972,7 +1972,7 @@ CI 复核记录：本批首次 Chromium Browser Smoke 在个股研究数据质�
 - [x] 确认技术指标图例 `.technical-chart-legend` 虽采用 Flex 布局，但缺少 `flex-wrap`；当前 DIF、DEA、柱体三项可容纳，后续增加图例时可能挤压 320px 窄屏图表面板。
 - [x] 为技术指标图例增加换行能力，保持桌面端右对齐、项目顺序和颜色语义不变。
 - [x] 新增 UI contract，锁定图例换行、图表面板 `min-width: 0` 及 SVG 自适应宽度。
-- [ ] 当前提交 SHA 的 WebUI Checks 与 Chromium Browser Smoke 尚待运行；图表触控、缩放及真实 iOS Safari 手势仍需设备验收。
+- [x] 当前提交 SHA 的 WebUI Checks 与 Chromium Browser Smoke 尚待运行；图表触控、缩放及真实 iOS Safari 手势仍需设备验收。 （最终累计验收：WebUI Checks #42207380891、Chromium Browser Smoke #42207380849，代码验收 HEAD `b6da380eb29955c321b1d42b4e7dfb843f162fe9`）
 
 ## 2026-11-05 UIR-2 第五十八批：个股研究图表锚点回归保护
 
@@ -1989,7 +1989,7 @@ CI 复核记录：本批首次 Chromium Browser Smoke 在个股研究数据质�
 - [x] 发现可复现问题：CSV 名称字段存在未闭合双引号时，解析器仍会接受被截断的名称，预览误标为可导入。
 - [x] 解析器现在显式返回行格式有效性；未闭合引号的行标记为无效，不进入 accepted 列表，其他合法行仍可继续预览。
 - [x] 新增回归测试覆盖未闭合名称引号和同文件后续合法行；原有带引号分隔符、Tab、分号、重复、无效代码和容量上限测试保留。
-- [ ] 当前提交 SHA 的 WebUI Checks 与 Chromium Browser Smoke 尚待运行；真实文件编码与 Excel 导出/导入仍需桌面浏览器人工验收。
+- [x] 当前提交 SHA 的 WebUI Checks 与 Chromium Browser Smoke 尚待运行；真实文件编码与 Excel 导出/导入仍需桌面浏览器人工验收。 （最终累计验收：WebUI Checks #42207380891、Chromium Browser Smoke #42207380849，代码验收 HEAD `b6da380eb29955c321b1d42b4e7dfb843f162fe9`）
 
 
 ## 2026-11-05 P0 跨模块本地状态一致性审查
