@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"example.com/stock-analysis-flow/internal/marketdata/model"
+	platformstorage "example.com/stock-analysis-flow/internal/platform/storage"
 	_ "github.com/go-sql-driver/mysql"
 )
 
@@ -221,10 +222,11 @@ func (s *Store) Migrate(ctx context.Context) error {
  KEY idx_market_corporate_action_observed (recorded_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
 	}
-	for _, stmt := range stmts {
-		if _, err := s.db.ExecContext(ctx, stmt); err != nil {
-			return fmt.Errorf("market-data schema migration: %w", err)
-		}
+	// Data Schema 由公共 Platform Migration Runner 执行；版本 1 发布后保持不可变，后续变更追加新版本。
+	if err := platformstorage.ApplyMigrations(ctx, s.db, "market_data", []platformstorage.Migration{{
+		Version: 1, Description: "market data base schema", Statements: stmts,
+	}}); err != nil {
+		return fmt.Errorf("market-data schema migration: %w", err)
 	}
 	// 旧版修订表曾对内容哈希建立全历史唯一约束，会错误阻止 A→B→A 的回归修订。
 	if err := s.ensureNonUniqueHistoryIndex(ctx, "market_data_daily_bar_versions",
