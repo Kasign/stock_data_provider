@@ -74,7 +74,7 @@ func (r *MySQLDeliveryRepository) ListExpiredLeases(ctx context.Context, limit i
 		}
 		claims = append(claims, application.DeliveryClaim{
 			Delivery: delivery,
-			Lease: application.DeliveryLease{WorkerID: workerID.String, FencingToken: fencingToken, ExpiresAt: expiry},
+			Lease:    application.DeliveryLease{WorkerID: workerID.String, FencingToken: fencingToken, ExpiresAt: expiry},
 		})
 	}
 	return claims, nil
