@@ -973,3 +973,5 @@
 - `Purged` 表示本批实际更新并清除候选载荷的记录数。全局剩余到期量和最早到期时间必须通过只读 `ObservationRetentionBacklog` 查询，不能用 `Scanned - Purged` 推算。
 - 对当前 MySQL Repository，已锁定记录在同一事务内必须全部更新；若 `RowsAffected` 与领取数量不一致，整批返回错误并回滚，不把异常部分更新报告为成功结果。
 - 本语义修正尚未通过 MariaDB 11.4 实际运行验证；并发锁跳过、回滚和结果计数仍属于待执行集成验收。
+
+- 补充诊断边界：backlog 查询返回负数、正数却无最早到期时间、零数量却带最早时间时，诊断报告 unavailable，不再把不一致结果误报为 healthy/degraded。

@@ -66,6 +66,33 @@ func TestObservationRetentionCheckReportsBacklogAndHealthyState(t *testing.T) {
 	}
 }
 
+func TestObservationRetentionCheckRejectsInconsistentBacklogResult(t *testing.T) {
+	oldest := time.Date(2026, 11, 8, 8, 0, 0, 0, time.UTC)
+	cases := []struct {
+		name string
+		probe observationRetentionProbeStub
+	}{
+		{name: "negative count", probe: observationRetentionProbeStub{count: -1}},
+		{name: "positive count without oldest timestamp", probe: observationRetentionProbeStub{count: 1}},
+		{name: "zero count with oldest timestamp", probe: observationRetentionProbeStub{oldest: &oldest}},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			report, err := (platformdiag.Runner{}).Run(context.Background(), []platformdiag.Check{
+				ObservationRetentionCheck(testCase.probe),
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			observation := report.Results[0].Observation
+			if observation.Status != platformdiag.StatusUnavailable ||
+				observation.ReasonCode != "news.observation.retention_backlog_invalid" {
+				t.Fatalf("observation=%+v, want unavailable inconsistent-backlog result", observation)
+			}
+		})
+	}
+}
+
 func TestProviderConfigChecksSkipUnconfiguredWithoutSecrets(t *testing.T) {
 	report, err := (platformdiag.Runner{}).Run(context.Background(), ProviderConfigChecks(newsconfig.Config{}))
 	if err != nil {
