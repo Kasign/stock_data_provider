@@ -64,8 +64,8 @@ func ValidateStageExecutionResult(result StageExecutionResult) error {
 		}
 	case domain.StageRetryWait:
 		if (result.AttemptStatus != domain.AttemptFailed && result.AttemptStatus != domain.AttemptTimedOut) ||
-			result.RetryAt == nil || result.OutputRef != nil {
-			return fmt.Errorf("%w: retry_wait requires a failed/timed_out Attempt, retry_at and no output_ref", ErrInvalidStageExecutionResult)
+			result.RetryAt != nil || result.OutputRef != nil {
+			return fmt.Errorf("%w: retry_wait requires a failed/timed_out Attempt, no provider retry_at and no output_ref", ErrInvalidStageExecutionResult)
 		}
 	case domain.StageFailed:
 		if (result.AttemptStatus != domain.AttemptFailed && result.AttemptStatus != domain.AttemptTimedOut) ||
