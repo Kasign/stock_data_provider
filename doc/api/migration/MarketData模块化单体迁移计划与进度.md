@@ -7,7 +7,7 @@
 - 跨模块准入：`doc/整体任务规划/01-项目总览/跨模块接入执行说明.md`、`doc/整体任务规划/01-项目总览/跨模块接入准入清单.md`
 - 本记录建立时的代码基线：`d8595f408337f62be3697aac661ba1570fdd3667`
 - 最近一次 M0 审计基线：`9687337743ff5ad8b5b81209831d43689693ae47`
-- 最近一次代码基线：`93a88657b750ec46784e6d39d8143415b77aec3b`（Pytdx/BaoStock 受控 TCP DialContext 注入入口）
+- 最近一次代码基线：`e6ffc4458dd5cafed2930feab4531d5c553db910`（补齐 Pytdx/BaoStock TCP 注入测试源码）
 - 当前实施状态：`M1_completed / M2_completed / M3_in_progress / M4_in_progress`；M3 的 Data 侧进程内路由准备已完成，Root Server 实际装配仍待 Server 组合根完成；M4 的 borrowed DB 与 go-redis Cache Adapter 已实现，Root 侧资源注入/配置一致性及 Provider 网络出口适配仍未完成。
 
 > 本文记录 Data 从独立 Go Module/服务迁入 Root Server 根 Go Module、同进程运行的实施计划和进度。若本文与上述架构决策文档冲突，以架构决策文档为准；公共平台及 DATA 契约以冻结契约文档为准。本文不重新定义契约。
@@ -977,7 +977,7 @@ internal/
 
 ### 2026-11-09：M4-HTTP-10 MiaoXiang 补充数据 API 受控 HTTP 执行器注入
 
-- 代码基线：`a59c767f62b31a94a6dad3cc6cf8b5a1763147fd`。MiaoXiang 仅有一个可配置 API endpoint（默认 `mkapi2.dfcfs.com/finskillshub/api/claw/query`），请求为携带 `apikey` Header 的 JSON POST。
+- 代码基线：`a59c767f62b31a94a6dad3cc6cf8b5a1763147fd`；实现提交：`205e8fbad27a82708dcb9b95264a55f7ed084ee3`。MiaoXiang 仅有一个可配置 API endpoint（默认 `mkapi2.dfcfs.com/finskillshub/api/claw/query`），请求为携带 `apikey` Header 的 JSON POST。
 - 新增 `NewMiaoXiangWithHTTPDoer`；旧 `NewMiaoXiang` 保留并委托新构造器。注入执行器只负责传输，不改变 API Key 校验、全局串行准入、300ms 频率控制、缓存、10 秒默认超时、禁止重定向、2 MiB 响应体上限和解析逻辑。
 - Bootstrap Dependencies 增加 `MiaoXiangHTTPDoer`，仅在 `MXEnabled` 时传给 Provider。Root 应按运行时 `MXAPIURL` 精确创建 HTTPS/443 BoundDoer，执行 DNS/IP 校验、拒绝重定向并保留 2 MiB 响应体上限；Module 不拥有、不关闭执行器。
 - 新增测试源码覆盖注入执行器、POST URL、apikey/Content-Type Header、502 错误路径和旧构造器兼容；测试尚未运行。
@@ -987,7 +987,7 @@ internal/
 
 ### 2026-11-09：M4-TCP-01 Pytdx 与 BaoStock 受控 TCP DialContext 注入入口
 
-- 代码基线：`1340835a023989596454ee066eb3955bbdecc569`。Pytdx 在 Provider 内部通过 `net.Dialer.DialContext` 连接候选 TDX Host:7709；BaoStock TCP Client 在 `ensureLoggedInLocked` 中连接配置 Host:Port。两者均绕过 HTTP BoundDoer，不能用 HTTP 执行器代替。
+- 代码基线：`1340835a023989596454ee066eb3955bbdecc569`；注入实现提交：`93a88657b750ec46784e6d39d8143415b77aec3b`；测试提交：`e6ffc4458dd5cafed2930feab4531d5c553db910`。Pytdx 在 Provider 内部通过 `net.Dialer.DialContext` 连接候选 TDX Host:7709；BaoStock TCP Client 在 `ensureLoggedInLocked` 中连接配置 Host:Port。两者均绕过 HTTP BoundDoer，不能用 HTTP 执行器代替。
 - 新增共享窄类型 `internal/marketdata/transport.DialContextFunc`，签名与 Go 标准 `net.Dialer.DialContext` 一致。
 - Pytdx 新增 `NewPytdxWithDialContext`；原 `NewPytdx` 保留并委托。每次候选地址连接均经过注入函数，仍由 Provider 设置每次连接的超时 context、候选轮转和最多 6 次尝试。
 - BaoStock `Config` 增加可选 `DialContext`；配置后连接经 Root 注入函数，nil 时保留原标准 net.Dialer 与 KeepAlive 行为。

@@ -16,8 +16,8 @@ import (
 	"github.com/injoyai/tdx/protocol"
 
 	"example.com/stock-analysis-flow/internal/marketdata/model"
-	"example.com/stock-analysis-flow/internal/marketdata/transport"
 	"example.com/stock-analysis-flow/internal/marketdata/normalize"
+	"example.com/stock-analysis-flow/internal/marketdata/transport"
 	"example.com/stock-analysis-flow/internal/marketdata/validation"
 )
 

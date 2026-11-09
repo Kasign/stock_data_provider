@@ -10,10 +10,10 @@ import (
 	"math"
 	"net"
 	"strconv"
-
-	"example.com/stock-analysis-flow/internal/marketdata/transport"
 	"strings"
 	"time"
+
+	"example.com/stock-analysis-flow/internal/marketdata/transport"
 )
 
 const (
