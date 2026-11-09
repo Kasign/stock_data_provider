@@ -311,8 +311,8 @@ Server 不重写模块业务 Handler 的校验和领域错误，不在路由层�
 
 ### SRV-007：Migration 注册与执行
 
-- 状态：待契约
-- 前置：SRV-003、SRV-004；Platform Migration Runner 契约明确
+- 状态：未开始（Platform Migration Runner 已有公开实现，Server 侧尚未装配）
+- 前置：SRV-003、SRV-004；核对 Platform `storage.ApplyMigrations` 实际签名和各模块 Migration 注册形态
 - 工作内容：收集模块 Migration 注册项，校验唯一性和顺序，调用 Platform Runner，输出可追踪结果。
 - 交付物：Migration Registry、执行策略和集成测试。
 - 验收：Server 不拥有业务 DDL；重复注册和版本冲突可检测；失败阻止 Ready；并发启动不会造成无协调的重复执行。
@@ -401,7 +401,7 @@ flowchart TD
 | `internal/adapters/pythonapi/**` | 旧 Python API Adapter，含 Bearer/Cookie、HTTP 请求和响应解码 | 作为迁移/退役对象审计，不得把它当新 Go 模块的长期默认依赖 |
 | `docker-compose.yml`、`Dockerfile` | 当前部署仍以 `stock-analysis-server` 容器构建 `./cmd/analysis-api`；Market Data 是独立容器，WebUI 单独容器；Server 通过 `MARKET_DATA_BASE_URL` 和 API Key 访问 Data | 部署尚非 Data 与 Root Server 同进程的最终形态；切换必须等待 Data 迁移门禁，不能在本任务提前改部署 |
 
-第一轮审计确认：当前 `internal/platform` 下已有 Request ID、HTTP Client 等可复用原语，但 `httpapi`、`taskqueue` 并非通用平台能力；当前也未发现可供 Server 直接使用的统一 Config Container、Storage Container 或 Migration Runner。后续如需使用这些能力，必须先核对 `feat/platform-foundation` 的最新公开接口；缺失的公共能力回 Platform 分支处理，Server 不复制实现。
+第一轮审计确认：`internal/platform` 已有可复用的 Request ID、受控 HTTP Client、类型化 Config/Secret 原语、Diagnostics Check/Runner、SQL/Redis 生命周期和 Migration Runner。Platform 文档明确 PLAT-005 的服务 Config Bootstrap 接入、PLAT-006 的服务入口/Worker/日志接入、PLAT-007 的领域 Adapter/受保护诊断路由、PLAT-009 的生产拓扑/共享资源生命周期仍待 Server 或领域消费者完成；旧 `mysqlredis.Store` 尚未切换到 Platform Storage。`internal/platform/httpapi` 和 `internal/platform/taskqueue` 则是旧 Analysis 专用实现，不能误当通用 Router/Worker。Server 应直接使用 Platform 已有原语；仅当确认公开接口缺失时才回 Platform 补齐，禁止复制实现。
 
 ### 12.2 仍需完成的 SRV-001 审计项
 
@@ -455,7 +455,7 @@ Server 层完成不是“服务能够启动”这么简单。至少同时满足�
 | SRV-004 | 未开始 | 等待各模块公开装配入口 |
 | SRV-005 | 未开始 | 旧 HTTP API 尚待迁移映射 |
 | SRV-006 | 未开始 | 运行角色和生命周期尚未建立 |
-| SRV-007 | 待契约 | 依赖 Platform Migration Runner 契约 |
+| SRV-007 | 未开始 | Platform Migration Runner 已有实现；待 Server 资源装配及模块 Migration 注册入口就绪 |
 | SRV-008 | 待契约 | Dispatcher 所有权未冻结 |
 | SRV-009 | 未开始 | 尚未建立系统级诊断聚合 |
 | SRV-010 | 阻塞 | 等待 Data 迁移门禁和公开接口 |
