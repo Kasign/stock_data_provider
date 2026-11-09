@@ -854,7 +854,6 @@ func TestOpenAPIParameterDefaultsMatchHandlerDefaults(t *testing.T) {
 	})
 }
 
-
 func TestProviderProbeRequestSchemaMatchesHandlerValidation(t *testing.T) {
 	spec, err := os.ReadFile("../../openapi.yaml")
 	if err != nil {
