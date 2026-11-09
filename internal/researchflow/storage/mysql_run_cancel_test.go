@@ -189,7 +189,7 @@ func TestMariaDBBeginRunCancellationLinearizesWorkerOperations(t *testing.T) {
 		OutboxRef: "cancel-outbox-" + suffix, TerminalStatus: domain.RunCancelled,
 		TerminationReason: "user_cancelled",
 		Summary: domain.ResultSummary{
-			StageOutcomes:  map[string]domain.StageStatus{
+			StageOutcomes: map[string]domain.StageStatus{
 				"running": domain.StageCancelled, "fenced": domain.StageCancelled, "ready": domain.StageCancelled,
 			},
 			ExcludedStages: []domain.ExcludedStage{}, MissingStageCodes: []string{},
