@@ -57,6 +57,23 @@ func (a *deadlineAwareExecutionAdapter) Send(ctx context.Context, _ domain.Chann
 	}, context.DeadlineExceeded
 }
 
+
+type deadlineRecordingExecutionAdapter struct {
+	snapshot domain.ChannelConfigSnapshot
+	deadline time.Time
+	calls    int
+}
+
+func (a *deadlineRecordingExecutionAdapter) ConfigSnapshot() domain.ChannelConfigSnapshot {
+	return cloneChannelSnapshot(a.snapshot)
+}
+
+func (a *deadlineRecordingExecutionAdapter) Send(ctx context.Context, _ domain.ChannelSendRequest) (domain.ChannelSendResult, error) {
+	a.calls++
+	a.deadline, _ = ctx.Deadline()
+	return domain.ChannelSendResult{Outcome: domain.ChannelOutcomeAmbiguous, ErrorCode: "deadline_probe"}, nil
+}
+
 type sequenceExecutionClock struct {
 	times []time.Time
 	index int
@@ -353,5 +370,36 @@ func TestDeliveryExecutionBoundsChannelCallAndPersistsTimeoutWithParentContext(t
 	delivery, found, getErr := repository.Get(context.Background(), claim.Delivery.DeliveryID)
 	if getErr != nil || !found || delivery.Status != domain.DeliveryUnknown {
 		t.Fatalf("timeout result must converge to unknown: delivery=%+v found=%v err=%v", delivery, found, getErr)
+	}
+}
+
+func TestDeliveryExecutionCapsAttemptDeadlineByMaxElapsed(t *testing.T) {
+	service, _, _, claim, event := executionFixture(t)
+	service.completion.retry.PerAttemptTimeout = time.Minute
+	service.completion.retry.MaxElapsed = time.Second
+
+	snapshot := channelRegistryTestSnapshot()
+	snapshot.ConfigVersion = claim.Delivery.ChannelConfigVersion
+	adapter := &deadlineRecordingExecutionAdapter{snapshot: snapshot}
+	registry := NewChannelRegistry()
+	if err := registry.Register(adapter); err != nil {
+		t.Fatal(err)
+	}
+	service.preflight.channels = registry
+
+	startedAt := claim.Delivery.UpdatedAt.Add(time.Second)
+	result, err := service.Execute(
+		context.Background(), claim, event, "attempt-execution-max-elapsed",
+		0.5, "evidence-execution-max-elapsed",
+	)
+	if err != nil {
+		t.Fatalf("execute within max elapsed budget: %v", err)
+	}
+	expected := startedAt.Add(time.Second)
+	if adapter.calls != 1 || !adapter.deadline.Equal(expected) {
+		t.Fatalf("attempt deadline must be capped by first-attempt MaxElapsed: calls=%d deadline=%s expected=%s", adapter.calls, adapter.deadline, expected)
+	}
+	if result.ChannelResult == nil || result.ChannelResult.Outcome != domain.ChannelOutcomeAmbiguous {
+		t.Fatalf("unexpected bounded execution result: %+v", result)
 	}
 }
