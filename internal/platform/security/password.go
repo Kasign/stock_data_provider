@@ -132,11 +132,16 @@ func parseArgon2idHash(encoded string) (Argon2idParams, []byte, []byte, error) {
 	}
 
 	var params Argon2idParams
+	seenParams := make(map[string]struct{}, 3)
 	for _, item := range strings.Split(parts[3], ",") {
 		keyValue := strings.SplitN(item, "=", 2)
 		if len(keyValue) != 2 {
 			return Argon2idParams{}, nil, nil, errInvalidPasswordHash
 		}
+		if _, exists := seenParams[keyValue[0]]; exists {
+			return Argon2idParams{}, nil, nil, errInvalidPasswordHash
+		}
+		seenParams[keyValue[0]] = struct{}{}
 		value, parseErr := strconv.ParseUint(keyValue[1], 10, 32)
 		if parseErr != nil {
 			return Argon2idParams{}, nil, nil, errInvalidPasswordHash
@@ -169,7 +174,10 @@ func parseArgon2idHash(encoded string) (Argon2idParams, []byte, []byte, error) {
 	}
 	salt, saltErr := base64.RawStdEncoding.DecodeString(parts[4])
 	key, keyErr := base64.RawStdEncoding.DecodeString(parts[5])
-	if saltErr != nil || keyErr != nil || len(salt) < minArgonSaltBytes || len(salt) > maxArgonSaltBytes ||
+	if saltErr != nil || keyErr != nil ||
+		base64.RawStdEncoding.EncodeToString(salt) != parts[4] ||
+		base64.RawStdEncoding.EncodeToString(key) != parts[5] ||
+		len(salt) < minArgonSaltBytes || len(salt) > maxArgonSaltBytes ||
 		len(key) < minArgonKeyBytes || len(key) > maxArgonKeyBytes {
 		return Argon2idParams{}, nil, nil, errInvalidPasswordHash
 	}

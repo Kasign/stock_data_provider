@@ -83,6 +83,8 @@ func TestArgon2idRejectsMalformedAndExpensiveEncodedHashes(t *testing.T) {
 		"$argon2id$v=18$m=8192,t=1,p=1$YWJjZGVmZ2hpamtsbW5vcA$YWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXowMTIzNDU2",
 		"$argon2id$19$m=8192,t=1,p=1$YWJjZGVmZ2hpamtsbW5vcA$YWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXowMTIzNDU2",
 		"$argon2id$v=19$m=8192,m=8192,t=1,p=1$YWJjZGVmZ2hpamtsbW5vcA$YWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXowMTIzNDU2",
+		"$argon2id$v=19$m=0,m=8192,t=1,p=1$YWJjZGVmZ2hpamtsbW5vcA$YWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXowMTIzNDU2",
+		"$argon2id$v=19$m=8192,t=1,p=1$YWJjZGVmZ2hpamtsbW5vcA\n$YWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXowMTIzNDU2",
 		"$argon2id$v=19$m=4294967295,t=1,p=1$YWJjZGVmZ2hpamtsbW5vcA$YWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXowMTIzNDU2",
 		strings.Repeat("x", maxEncodedHashBytes+1),
 	} {
