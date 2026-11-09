@@ -826,10 +826,7 @@ func (randomIDGenerator) NewID(prefix string) (string, error) {
 	return prefix + hex.EncodeToString(raw[:]), nil
 }
 func cloneStrings(values []string) []string {
-	if values == nil {
-		return []string{}
-	}
-	return append([]string(nil), values...)
+	return append([]string{}, values...)
 }
 
 // NotificationEventEnvelope is the immutable payload Research sends to the
