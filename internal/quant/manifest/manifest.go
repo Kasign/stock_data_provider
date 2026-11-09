@@ -148,8 +148,9 @@ func (m Manifest) Verify() error {
 	if !strings.HasSuffix(m.SystemAsOf, "Z") {
 		return invalid("system_as_of must be UTC")
 	}
-	if _, err := time.Parse(time.RFC3339Nano, m.SystemAsOf); err != nil {
-		return invalid("system_as_of")
+	parsedAsOf, err := time.Parse(time.RFC3339Nano, m.SystemAsOf)
+	if err != nil || parsedAsOf.UTC().Format(time.RFC3339Nano) != m.SystemAsOf {
+		return invalid("system_as_of must use canonical UTC RFC3339Nano")
 	}
 	if len(m.InputSnapshotRefs) == 0 {
 		return invalid("input_snapshot_refs must not be empty")
