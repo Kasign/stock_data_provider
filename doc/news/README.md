@@ -965,3 +965,6 @@
 - [x] 增加“写入成功后立即取消”的 Application 回归测试，确认请求返回 context.Canceled，同时明确不可变 Snapshot 可能已经落库。
 - [x] 已落库但未返回给调用方的 Snapshot 不执行补偿删除；它不含新闻正文或摘要，依靠既有 TTL 与过期清理回收，避免取消路径误删可能已被并发重试使用的快照。
 - [ ] 仍需在 MariaDB 环境覆盖真实数据库写入与客户端取消的竞态；Application 测试仅验证调用边界，不代表数据库事务回滚。
+
+
+- [x] Snapshot 首次创建边界补充：生成的 SnapshotRef 非法或 PIT 返回重复证据引用时，在写入存储前拒绝；对应 Application 回归测试已加入。
