@@ -74,6 +74,9 @@ func assertSchemaStructFields(t *testing.T, name string, typ reflect.Type, schem
 		if !ok {
 			t.Fatalf("%s schema required contains non-string value %T", name, value)
 		}
+		if _, exists := required[field]; exists {
+			t.Errorf("%s schema required contains duplicate field %q", name, field)
+		}
 		required[field] = struct{}{}
 	}
 	for i := 0; i < typ.NumField(); i++ {
@@ -164,6 +167,20 @@ func TestContextJSONSchemaValidatesGoldenAndRejectsInvalidPayloads(t *testing.T)
 		}},
 		{"non UTC timestamp", func(value map[string]any) {
 			value["system_as_of"] = "2026-11-06T16:00:00+08:00"
+		}},
+		{"non UTC nested timestamp", func(value map[string]any) {
+			sections := value["section_refs"].([]any)
+			sections[0].(map[string]any)["assembled_at"] = "2026-11-06T16:00:00+08:00"
+		}},
+		{"invalid date-time format", func(value map[string]any) {
+			value["created_at"] = "not-a-date"
+		}},
+		{"unknown nested section field", func(value map[string]any) {
+			sections := value["section_refs"].([]any)
+			sections[0].(map[string]any)["unexpected"] = true
+		}},
+		{"context version below minimum", func(value map[string]any) {
+			value["context_version"] = 0
 		}},
 	}
 	for _, tt := range tests {
