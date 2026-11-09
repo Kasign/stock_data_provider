@@ -282,3 +282,22 @@ func TestParseResponsesSSECallbackErrorReturnsPartialResponse(t *testing.T) {
 		t.Fatalf("interrupted response timing metadata missing: %+v", got)
 	}
 }
+
+func TestParseResponsesSSECallbackErrorAtTerminalDoesNotComplete(t *testing.T) {
+	request := validSSERequest()
+	clock := sseTestClock{now: request.SystemAsOf.Add(time.Second)}
+	callbackErr := errors.New("consumer rejected terminal event")
+
+	got, err := ParseResponsesSSE(readLLMFixture(t, "sse/stream_completed_text.sse"), request, clock, func(event ModelEvent) error {
+		if event.Type == "response.completed" {
+			return callbackErr
+		}
+		return nil
+	})
+	if err != callbackErr {
+		t.Fatalf("terminal callback error must be returned unchanged: got=%v want=%v", err, callbackErr)
+	}
+	if got.Status != ResponseIncomplete || got.OutputText != "Fixture stream" || got.Error != nil {
+		t.Fatalf("callback rejection of terminal event must not expose a completed response: %+v", got)
+	}
+}
