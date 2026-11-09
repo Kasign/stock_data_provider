@@ -47,8 +47,9 @@ func (u *ListEvidence) Execute(ctx context.Context, request ListEvidenceRequest)
 	if err != nil {
 		return ResearchEvidencePage{}, err
 	}
-	if referencePage.SnapshotRef == "" || referencePage.SystemAsOf.IsZero() ||
-		!referencePage.SystemAsOf.Equal(request.SystemAsOf) {
+	if !validEvidenceOpaqueRef(referencePage.SnapshotRef) ||
+		referencePage.SystemAsOf.IsZero() || !referencePage.SystemAsOf.Equal(request.SystemAsOf) ||
+		len(referencePage.Items) > request.PageSize {
 		return ResearchEvidencePage{}, ErrEvidenceSnapshotPageUnavailable
 	}
 	result := NewResearchEvidencePage(referencePage.SystemAsOf)
