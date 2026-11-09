@@ -30,9 +30,9 @@ type CancelledRunFinalizer interface {
 type RunFinalizationPath string
 
 const (
-	RunFinalizationPathNormal        RunFinalizationPath = "normal"
-	RunFinalizationPathDeadline      RunFinalizationPath = "deadline"
-	RunFinalizationPathCancellation  RunFinalizationPath = "cancellation"
+	RunFinalizationPathNormal	RunFinalizationPath = "normal"
+	RunFinalizationPathDeadline	RunFinalizationPath = "deadline"
+	RunFinalizationPathCancellation	RunFinalizationPath = "cancellation"
 )
 
 type CoordinatedRunFinalizationResult struct {
