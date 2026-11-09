@@ -50,6 +50,7 @@ type ResponsesAdapter struct {
 	doer         HTTPDoer
 	capabilities CapabilityState
 	clock        Clock
+	streamDoer   HTTPStreamDoer
 }
 
 func NewResponsesAdapter(provider ProviderConfig, apiKey config.Secret, doer HTTPDoer, capabilities CapabilityState, clock Clock) (*ResponsesAdapter, error) {
@@ -71,6 +72,19 @@ func NewResponsesAdapter(provider ProviderConfig, apiKey config.Secret, doer HTT
 	return &ResponsesAdapter{
 		provider: provider, apiKey: apiKey, doer: doer, capabilities: capabilities, clock: clock,
 	}, nil
+}
+
+
+func NewResponsesAdapterWithStream(provider ProviderConfig, apiKey config.Secret, doer HTTPDoer, streamDoer HTTPStreamDoer, capabilities CapabilityState, clock Clock) (*ResponsesAdapter, error) {
+	if streamDoer == nil {
+		return nil, errors.New("Platform-bound HTTP stream doer is required")
+	}
+	adapter, err := NewResponsesAdapter(provider, apiKey, doer, capabilities, clock)
+	if err != nil {
+		return nil, err
+	}
+	adapter.streamDoer = streamDoer
+	return adapter, nil
 }
 
 // Generate performs one non-streaming Responses request. It never retries.
