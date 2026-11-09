@@ -28,4 +28,18 @@ func TestTrendResultSchemaValidatesGoldenAndRejectsInvalidDiscriminators(t *test
 			t.Errorf("invalid TrendResult unexpectedly passed: %s", instance)
 		}
 	}
+
+	invalidMetrics := []string{
+		`{"metric_code":"sample","value":null,"unit":"ratio","period":"20d","system_as_of":"2026-11-09T01:00:00Z","quality_status":"valid","metric_status":"available","calculation_version":"1.0.0","lower_bound":null,"upper_bound":null}`,
+		`{"metric_code":"sample","value":0.2,"unit":"ratio","period":"20d","system_as_of":"2026-11-09T01:00:00Z","quality_status":"valid","metric_status":"insufficient_sample","calculation_version":"1.0.0","lower_bound":null,"upper_bound":null}`,
+		`{"metric_code":"sample","value":0.2,"unit":"ratio","period":"20d","system_as_of":"2026-11-09T01:00:00Z","quality_status":"unknown","metric_status":"available","calculation_version":"1.0.0","lower_bound":null,"upper_bound":null}`,
+		`{"metric_code":"sample","value":0.2,"unit":"ratio","period":"20d","system_as_of":"2026-11-09T01:00:00Z","quality_status":"valid","metric_status":"available","calculation_version":"1.0.0","lower_bound":0.1,"upper_bound":null}`,
+		`{"metric_code":"sample","value":"0.2","unit":"ratio","period":"20d","system_as_of":"2026-11-09T01:00:00Z","quality_status":"valid","metric_status":"available","calculation_version":"1.0.0","lower_bound":0.1,"upper_bound":0.3}`,
+	}
+	for _, metric := range invalidMetrics {
+		instance := `{"trend_code":"price_trend","direction":"unknown","phase":"emerging","strength":0.2,"period":"20d","evidence_metrics":[` + metric + `],"conflict_refs":[],"quality_status":"valid","system_as_of":"2026-11-09T01:00:00Z","algorithm_version":"1.0.0"}`
+		if err := validateJSONSchemaInstance(schema, []byte(instance)); err == nil {
+			t.Errorf("invalid evidence metric unexpectedly passed: %s", metric)
+		}
+	}
 }
