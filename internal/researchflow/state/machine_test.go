@@ -24,13 +24,11 @@ func TestRetryPreservesAttemptAndEnforcesBudget(t *testing.T){
 	if err!=nil{t.Fatal(err)}
 	if waiting.Status!=domain.StageRetryWait||finished.Status!=domain.AttemptFailed||waiting.RetryAt==nil{t.Fatal("retry transition did not preserve failed attempt")}
 	run:=domain.Run{Status:domain.RunRunning,DeadlineAt:now.Add(time.Minute)}
-	ready,err:=PromoteRetry(run,waiting,*waiting.RetryAt)
+	claimed,next,err:=ClaimRetryStage(run,waiting,p,*waiting.RetryAt,"attempt-2",2)
 	if err!=nil{t.Fatal(err)}
-	if ready.Status!=domain.StageReady||ready.AttemptNo!=1||ready.RetryAt!=nil{t.Fatal("scheduler promotion must only move retry_wait to ready")}
-	claimed,next,err:=ClaimReadyStage(run,ready,*waiting.RetryAt,"attempt-2",2)
-	if err!=nil{t.Fatal(err)}
-	if claimed.Status!=domain.StageRunning||claimed.AttemptNo!=2||next.Number!=2||next.Ref==finished.Ref{t.Fatal("worker claim did not create the next attempt")}
-	if _,_,err:=ScheduleRetry(ready,next,p,"provider_unavailable",domain.AttemptFailed,*waiting.RetryAt,run.DeadlineAt,0.5);!errors.Is(err,ErrRetryBudgetExhausted){t.Fatalf("expected exhausted budget, got %v",err)}
+	if claimed.Status!=domain.StageRunning||claimed.AttemptNo!=2||claimed.RetryAt!=nil||next.Number!=2||next.Ref==finished.Ref{t.Fatal("retry promotion and next Attempt claim must complete as one operation")}
+	if claimed.Version!=waiting.Version+2{t.Fatalf("both retry_wait -> ready and ready -> running transitions must be reflected in the version: before=%d after=%d",waiting.Version,claimed.Version)}
+	if _,_,err:=ScheduleRetry(claimed,next,p,"provider_unavailable",domain.AttemptFailed,*waiting.RetryAt,run.DeadlineAt,0.5);!errors.Is(err,ErrRetryBudgetExhausted){t.Fatalf("expected exhausted budget, got %v",err)}
 }
 
 func TestCancelAndDeadlineDoNotPretendInflightWorkStopped(t *testing.T){
@@ -372,5 +370,24 @@ func TestApplyDeadlinePreservesCompletedRunForNormalAggregation(t *testing.T) {
 	}
 	if finalized.Status != domain.RunSucceeded || finalized.ResultSummary == nil {
 		t.Fatalf("completed Run did not retain normal successful finalization: %#v", finalized)
+	}
+}
+
+
+func TestClaimRetryStageRejectsEarlyOrExhaustedRetry(t *testing.T) {
+	now := time.Date(2026, 11, 6, 10, 0, 0, 0, time.UTC)
+	policy := template.RetryPolicy{MaxAttempts: 2}
+	retryAt := now.Add(time.Second)
+	stage := domain.Stage{Ref: "stage-1", Status: domain.StageRetryWait, Version: 3, AttemptNo: 1, RetryAt: &retryAt}
+	run := domain.Run{Status: domain.RunRunning, DeadlineAt: now.Add(time.Minute)}
+	if _, _, err := ClaimRetryStage(run, stage, policy, now, "attempt-2", 2); !errors.Is(err, ErrInvalidTransition) {
+		t.Fatalf("retry must not be claimed before retry_at: %v", err)
+	}
+	if _, _, err := ClaimRetryStage(run, stage, policy, now.Add(time.Second), "attempt-2", 2); err != nil {
+		t.Fatalf("eligible retry should be claimable: %v", err)
+	}
+	stage.AttemptNo = 2
+	if _, _, err := ClaimRetryStage(run, stage, policy, now.Add(time.Second), "attempt-3", 3); !errors.Is(err, ErrRetryBudgetExhausted) {
+		t.Fatalf("expected exhausted retry budget, got %v", err)
 	}
 }
