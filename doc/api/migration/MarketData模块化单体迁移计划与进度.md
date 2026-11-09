@@ -2103,3 +2103,15 @@ CI：本轮 SHA 对应 Go test suite Run `42549171549`。截至本次文档提�
 - 本批测试尚未执行；按约定等待 integration 集成验收，不在 Data 分支标记构建通过。
 
 **当前结论：** CT-05 仍进行中，M0 仍为 `in_progress`，M1 不准入。下一步继续审计 35 个 Operation 的剩余参数类型、格式、范围、默认值与枚举，并完成生产 DDL 快照对照。
+
+
+### 2026-11-09：CT-05 估值与指数成分参数语义补充
+
+代码基线：`dcf22ab2bd6ad42f17d3965c5ddc083f04fa7feb`。
+
+- 估值接口 `GET /api/v1/market/valuations`：Handler 按逗号拆分后先限制 100 个原始 token，再规范化并去重；空 token 拒绝。原 OpenAPI 只写 1–100 个证券，未明确“先限原始数量、再去重”的顺序。现已补充说明及 Contract Test。
+- 指数成分接口 `GET /api/v1/market/indices/{symbol}/constituents`：Handler 在 `as_of` 存在时拒绝显式 `source=hithink`，自动选择或 `source=tushare` 才可继续。原描述未明确此限制。现已补充说明及 Contract Test。
+- 本批提交：`7915b6257336338ef8b8695a48ed4c8a2f6f53ed`。仅修改 OpenAPI 描述与 Contract Test；无 Handler、DTO、路由、Provider、数据库或 WebUI 变化。
+- 本批测试尚未执行；后续在 integration 集成验收中确认。
+
+**当前结论：** CT-05 的 35 Operation 参数清单已覆盖，但剩余参数语义仍需逐项审计；M0 继续 `in_progress`，M1 不准入。
