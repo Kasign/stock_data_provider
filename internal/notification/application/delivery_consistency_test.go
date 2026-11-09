@@ -78,9 +78,14 @@ func TestAssessDeliveryConsistency(t *testing.T) {
 			if tc.wantReason != "" {
 				found := false
 				for _, reason := range got.ReasonCodes {
-					if reason == tc.wantReason { found = true; break }
+					if reason == tc.wantReason {
+						found = true
+						break
+					}
 				}
-				if !found { t.Fatalf("missing reason %q in %v", tc.wantReason, got.ReasonCodes) }
+				if !found {
+					t.Fatalf("missing reason %q in %v", tc.wantReason, got.ReasonCodes)
+				}
 			}
 		})
 	}
