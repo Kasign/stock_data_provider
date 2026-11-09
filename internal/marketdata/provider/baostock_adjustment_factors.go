@@ -60,13 +60,20 @@ func (p *Baostock) FetchAdjustmentFactors(ctx context.Context, rawSymbol, startD
 	previousDate := ""
 	for index, row := range rows {
 		if strings.ToLower(strings.TrimSpace(row.Code)) != code {
+			addProviderFieldParseIssue(ctx, symbol, "symbol", "code", "symbol_mismatch", code, "string", row.Code, index)
 			return nil, fmt.Errorf("BaoStock adjustment-factor row %d symbol mismatch: requested %s, got %q", index, code, row.Code)
 		}
 		date, dateErr := parseBaoStockFactorDate(row.OperateDate)
 		if dateErr != nil || date < start || date > end {
+			code := "invalid_date"
+			if dateErr == nil {
+				code = "date_out_of_range"
+			}
+			addProviderFieldParseIssue(ctx, symbol, "trade_date", "operateDate", code, start+".."+end, "string", row.OperateDate, index)
 			return nil, fmt.Errorf("BaoStock adjustment-factor row %d has invalid/out-of-range operate date %q", index, row.OperateDate)
 		}
 		if date <= previousDate {
+			addProviderFieldParseIssue(ctx, symbol, "trade_date", "operateDate", "duplicate_or_unsorted_date", "strictly increasing trade dates", "string", row.OperateDate, index)
 			return nil, fmt.Errorf("BaoStock adjustment-factor rows are duplicate or unsorted at %s", date)
 		}
 		previousDate = date
@@ -82,6 +89,11 @@ func (p *Baostock) FetchAdjustmentFactors(ctx context.Context, rawSymbol, startD
 			{basis: model.AdjustmentFactorBackward, factor: row.BackwardFactor},
 		} {
 			if item.factor <= 0 || math.IsNaN(item.factor) || math.IsInf(item.factor, 0) {
+				field, providerField := "forward_factor", "forwardFactor"
+				if item.basis == model.AdjustmentFactorBackward {
+					field, providerField = "backward_factor", "backwardFactor"
+				}
+				addProviderFieldParseIssue(ctx, symbol, field, providerField, "invalid_factor", "finite positive number", "number", fmt.Sprint(item.factor), index)
 				return nil, fmt.Errorf("BaoStock %s factor is invalid for %s: %v", item.basis, date, item.factor)
 			}
 			out = append(out, model.AdjustmentFactor{

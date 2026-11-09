@@ -5,6 +5,8 @@ import (
 	"errors"
 	"testing"
 
+	"example.com/stock-analysis-flow/internal/marketdata/validation"
+
 	"example.com/stock-analysis-flow/internal/marketdata/baostock"
 	"example.com/stock-analysis-flow/internal/marketdata/model"
 )
@@ -106,5 +108,39 @@ func TestParseBaoStockFactorDateRejectsNonCanonicalDate(t *testing.T) {
 	}
 	if _, err := parseBaoStockFactorDate("2025-07-11"); err != nil {
 		t.Fatalf("valid date rejected: %v", err)
+	}
+}
+
+
+func TestBaoStockAdjustmentFactorRejectsReportFieldEvidence(t *testing.T) {
+	tests := []struct {
+		name string
+		row baostock.AdjustmentFactor
+		field, providerField, code string
+	}{
+		{name: "symbol mismatch", row: baostock.AdjustmentFactor{Code: "sz.002982", OperateDate: "2025-07-11", ForwardFactor: 1, BackwardFactor: 1}, field: "symbol", providerField: "code", code: "symbol_mismatch"},
+		{name: "invalid date", row: baostock.AdjustmentFactor{Code: "sh.600036", OperateDate: "2025-02-30", ForwardFactor: 1, BackwardFactor: 1}, field: "trade_date", providerField: "operateDate", code: "invalid_date"},
+		{name: "invalid factor", row: baostock.AdjustmentFactor{Code: "sh.600036", OperateDate: "2025-07-11", ForwardFactor: 0, BackwardFactor: 1}, field: "forward_factor", providerField: "forwardFactor", code: "invalid_factor"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			reporter := validation.NewReporter(validation.DefaultMaxIssues)
+			ctx := validation.WithReporter(context.Background(), reporter)
+			client := &fakeBaoStockFactorClient{rows: []baostock.AdjustmentFactor{tt.row}}
+			_, err := NewBaostock(client).FetchAdjustmentFactors(ctx, "600036.SH", "2025-01-01", "2025-12-31")
+			if err == nil {
+				t.Fatal("invalid source row must be rejected")
+			}
+			issues := reporter.Snapshot().Issues
+			if len(issues) != 1 {
+				t.Fatalf("expected one field issue, got %+v", issues)
+			}
+			issue := issues[0]
+			if issue.Stage != validation.StageParse || issue.Symbol != "600036.SH" ||
+				issue.RowIndex == nil || *issue.RowIndex != 0 ||
+				issue.Field != tt.field || issue.ProviderField != tt.providerField || issue.Code != tt.code {
+				t.Fatalf("unexpected adjustment-factor field evidence: %+v", issue)
+			}
+		})
 	}
 }
