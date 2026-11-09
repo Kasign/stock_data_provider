@@ -44,7 +44,7 @@ func (f *workerStoreFake) CommitWorkerResult(_ context.Context, c WorkerResultCo
 
 type workerFaultNormalizerFake struct {
 	fault ExecutionFault
-	err error
+	err   error
 }
 
 func (f workerFaultNormalizerFake) NormalizeExecutionError(context.Context, error) (ExecutionFault, error) {
@@ -286,7 +286,6 @@ func TestWorkerCancellationRegistryRemembersSignalBeforeRegistration(t *testing.
 	}
 }
 
-
 func TestWorkerNormalizesProviderErrorAndAppliesRetryAllowlist(t *testing.T) {
 	store, _ := newWorkerFixture()
 	worker, err := NewWorkerWithFaultNormalizer(store,
@@ -294,9 +293,13 @@ func TestWorkerNormalizesProviderErrorAndAppliesRetryAllowlist(t *testing.T) {
 		WorkerConfig{WorkerID: "worker-1", LeaseDuration: time.Minute, HeartbeatInterval: time.Second, MaxParallel: 2},
 		workerFaultNormalizerFake{fault: ExecutionFault{FaultRef: "fault://provider-1", ReasonCode: "provider_unavailable"}},
 	)
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	got, err := worker.Execute(context.Background(), "run-1", "stage-1", "attempt-new")
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	if !got.Committed || store.commit.AttemptStatus != domain.AttemptFailed ||
 		store.commit.Stage.Status != domain.StageRetryWait || store.commit.FaultRef == nil ||
 		*store.commit.FaultRef != "fault://provider-1" || store.commit.Stage.RetryAt == nil {
@@ -311,9 +314,13 @@ func TestWorkerFailsClosedForUnmappedOrIncompleteExecutionFault(t *testing.T) {
 		WorkerConfig{WorkerID: "worker-1", LeaseDuration: time.Minute, HeartbeatInterval: time.Second, MaxParallel: 2},
 		workerFaultNormalizerFake{fault: ExecutionFault{FaultRef: "fault://provider-2"}},
 	)
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	if _, err := worker.Execute(context.Background(), "run-1", "stage-1", "attempt-new"); err == nil {
 		t.Fatal("incomplete fault evidence must fail closed")
 	}
-	if store.commits != 0 { t.Fatal("incomplete fault evidence must not commit") }
+	if store.commits != 0 {
+		t.Fatal("incomplete fault evidence must not commit")
+	}
 }
