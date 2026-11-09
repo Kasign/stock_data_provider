@@ -197,9 +197,15 @@ type ClaimRepository interface {
 	Append(context.Context, researchclaim.Claim) error
 	GetVersion(context.Context, string, int) (researchclaim.Claim, error)
 }
+type UpdateClaimCommand struct {
+	ClaimID string
+	ExpectedVersion int
+	Revision CreateClaimCommand
+}
 type ClaimPort interface {
 	CreateClaim(context.Context, CreateClaimCommand) (Claim, error)
 	GetClaim(context.Context, ClaimRef) (Claim, error)
+	UpdateClaim(context.Context, UpdateClaimCommand) (Claim, error)
 }
 
 type CreateContextCommand struct {
@@ -516,6 +522,52 @@ func (s *Service) CreateClaim(ctx context.Context, command CreateClaimCommand) (
 	if err := value.Validate(); err != nil { return Claim{}, validationFault("invalid_research_claim", "Research Claim is invalid", err) }
 	if err := s.claims.Append(ctx, value); err != nil { return Claim{}, mapRepositoryError(err) }
 	return fromDomainClaim(value), nil
+}
+
+// UpdateClaim 基于调用方指定的前版追加同一 Claim 的新版本。
+func (s *Service) UpdateClaim(ctx context.Context, command UpdateClaimCommand) (Claim, error) {
+	if s == nil || s.claims == nil {
+		return Claim{}, applicationFault(fault.ClassInternal, "research_claim_repository_not_configured", "Research Claim Repository is not configured", researcherrors.ErrInvalidRepository)
+	}
+	if ctx == nil || strings.TrimSpace(command.ClaimID) == "" || command.ExpectedVersion < 1 {
+		return Claim{}, validationFault("invalid_claim_update_ref", "Claim ID and expected version are required", nil)
+	}
+
+	previous, err := s.claims.GetVersion(ctx, command.ClaimID, command.ExpectedVersion)
+	if err != nil {
+		return Claim{}, mapRepositoryError(err)
+	}
+	if previous.ClaimID != command.ClaimID || previous.ClaimVersion != command.ExpectedVersion {
+		return Claim{}, applicationFault(fault.ClassInternal, "stored_claim_identity_mismatch", "Stored Research Claim identity does not match the requested version", researcherrors.ErrCorruptRecord)
+	}
+	if previous.ClaimVersion == int(^uint(0)>>1) {
+		return Claim{}, applicationFault(fault.ClassConflict, "research_claim_version_exhausted", "Research Claim version cannot be incremented", researcherrors.ErrConflict)
+	}
+
+	revision := command.Revision
+	next := researchclaim.Claim{
+		ClaimID: previous.ClaimID,
+		ClaimVersion: previous.ClaimVersion + 1,
+		Statement: revision.Statement,
+		EpistemicType: researchclaim.EpistemicType(revision.EpistemicType),
+		ScopeRefs: cloneStrings(revision.ScopeRefs),
+		SystemAsOf: revision.SystemAsOf,
+		SupportingEvidenceRefs: cloneStrings(revision.SupportingEvidenceRefs),
+		ContradictingEvidenceRefs: cloneStrings(revision.ContradictingEvidenceRefs),
+		RequiredDataRefs: cloneStrings(revision.RequiredDataRefs),
+		ValidationMethod: cloneString(revision.ValidationMethod),
+		ExpectedObservation: cloneString(revision.ExpectedObservation),
+		InvalidationConditions: cloneStrings(revision.InvalidationConditions),
+		Status: researchclaim.ClaimStatus(revision.Status),
+		Limitations: cloneStrings(revision.Limitations),
+	}
+	if err := next.ValidateNextVersion(previous); err != nil {
+		return Claim{}, validationFault("invalid_research_claim_revision", "Research Claim revision is invalid", err)
+	}
+	if err := s.claims.Append(ctx, next); err != nil {
+		return Claim{}, mapRepositoryError(err)
+	}
+	return fromDomainClaim(next), nil
 }
 
 func (s *Service) GetClaim(ctx context.Context, ref ClaimRef) (Claim, error) {
