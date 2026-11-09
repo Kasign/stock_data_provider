@@ -142,6 +142,10 @@ func TestListEvidenceRejectsMalformedPageMetadataBeforeResolvingRecords(t *testi
 			page: EvidenceSnapshotPage{Items: []EvidenceSnapshotItem{validItem}, NextCursor: &badCursor, SnapshotRef: "snapshot-1", SystemAsOf: request.SystemAsOf},
 		},
 		{
+			name: "short page with next cursor",
+			page: EvidenceSnapshotPage{Items: []EvidenceSnapshotItem{validItem}, NextCursor: func() *string { value := "signed-cursor"; return &value }(), SnapshotRef: "snapshot-1", SystemAsOf: request.SystemAsOf},
+		},
+		{
 			name: "duplicate evidence reference",
 			page: EvidenceSnapshotPage{Items: []EvidenceSnapshotItem{validItem, validItem}, SnapshotRef: "snapshot-1", SystemAsOf: request.SystemAsOf},
 		},
