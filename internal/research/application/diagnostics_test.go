@@ -2,9 +2,9 @@ package application
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
-	"errors"
 
 	platformdiagnostics "example.com/stock-analysis-flow/internal/platform/diagnostics"
 	researchclaim "example.com/stock-analysis-flow/internal/research/claim"
