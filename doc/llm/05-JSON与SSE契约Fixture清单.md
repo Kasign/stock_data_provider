@@ -274,7 +274,7 @@ sequence_number 严格连续策略、Draft 2020-12 本地 Schema dialect、Reque
 - `internal/llm/testdata/sse/stream_incomplete.sse` + `.expected.json`
 - 错误/边界原始样例：sequence_gap、EOF_without_terminal、unknown_event、terminal_then_extra_event、error_event。
 
-`responses_golden_test.go` 将原始 wire 与 expected DTO 比较；错误/边界 fixture 断言错误类型和安全行为。此集合只是第一批，Usage missing/partial/derived/overflow、mixed/duplicate/decreasing sequence、callback error、CRLF/multiline data、资源限制等仍需补充独立 fixture。
+`responses_golden_test.go` 将原始 wire 与 expected DTO 比较；错误/边界 fixture 断言错误类型和安全行为。此集合只是第一批，Usage missing/partial/derived/overflow、mixed/duplicate/decreasing sequence、callback error、CRLF/multiline data、资源限制等仍需补充独立 fixture。部分边界目前由内联单测覆盖，尚未全部拆成独立 Fixture。
 
 
 ## 14. LLM 公共 DTO Draft 2020-12 Schema
@@ -308,3 +308,11 @@ sequence_number 严格连续策略、Draft 2020-12 本地 Schema dialect、Reque
 - 两项测试均断言 Parser 原样返回 callback error、保留已接收的部分文本、状态保持 incomplete、不生成 ModelErrorInfo；普通事件中断另检查结束时间和耗时元数据。
 - 此测试只覆盖纯 Parser 的同步回调中断语义，不代表网络读取取消、Body 关闭或 Platform backpressure 已实现。
 - 测试代码已提交，尚未执行 gofmt/go test。
+
+
+## 17. 新增内联边界测试（2026-11-09）
+
+- Structured Output：非法 JSON 与空输出均拒绝并返回 schema_validation_failed；incomplete 响应不生成 structured_json，保留 incomplete_reason。
+- SSE：新增 CRLF + 注释行 + 多条 data 拼接解析测试；新增超过 MaxSSEEvents 的 resource_limit 测试。
+- 上述测试是纯解析器/DTO 层验证，不代表网络读取取消、HTTP Body Close、背压或 Platform 流式传输验收完成。
+- 新增测试代码尚未执行 gofmt/go test，不能标记通过。
