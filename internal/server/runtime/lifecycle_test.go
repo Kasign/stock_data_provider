@@ -8,11 +8,12 @@ import (
 )
 
 type testComponent struct {
-	name string
-	log *[]string
+	name     string
+	log      *[]string
 	startErr error
-	stopErr error
+	stopErr  error
 }
+
 func (c testComponent) Name() string { return c.name }
 func (c testComponent) Start(context.Context) error {
 	*c.log = append(*c.log, "start:"+c.name)
@@ -27,13 +28,17 @@ func TestLifecycleStartsInOrderAndStopsInReverse(t *testing.T) {
 	var events []string
 	lifecycle := NewLifecycle()
 	for _, name := range []string{"storage", "worker", "transport"} {
-		if err := lifecycle.Register(testComponent{name:name, log:&events}); err != nil { t.Fatal(err) }
+		if err := lifecycle.Register(testComponent{name: name, log: &events}); err != nil {
+			t.Fatal(err)
+		}
 	}
 	if err := lifecycle.Start(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	if err := lifecycle.Stop(context.Background()); err != nil { t.Fatal(err) }
-	want := []string{"start:storage","start:worker","start:transport","stop:transport","stop:worker","stop:storage"}
+	if err := lifecycle.Stop(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"start:storage", "start:worker", "start:transport", "stop:transport", "stop:worker", "stop:storage"}
 	if !reflect.DeepEqual(events, want) {
 		t.Fatalf("events = %v, want %v", events, want)
 	}
@@ -54,7 +59,9 @@ func TestLifecycleRollsBackFailedComponentAndPriorComponents(t *testing.T) {
 		t.Fatalf("Start() error = %v, want original error", err)
 	}
 	want := []string{"start:storage","start:worker","stop:worker","stop:storage"}
-	if !reflect.DeepEqual(events,want) { t.Fatalf("events = %v, want %v",events,want) }
+	if !reflect.DeepEqual(events, want) {
+		t.Fatalf("events = %v, want %v", events, want)
+	}
 	if err := lifecycle.Stop(context.Background()); err != nil {
 		t.Fatalf("Stop after rollback = %v", err)
 	}
