@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"example.com/stock-analysis-flow/internal/researchflow/domain"
+	"example.com/stock-analysis-flow/internal/researchflow/template"
 )
 
 var (
@@ -20,6 +21,7 @@ type StageExecutionSnapshot struct {
 	Stage     domain.Stage
 	Parameters []byte
 	InputSnapshotRefs []string
+	RetryPolicy template.RetryPolicy
 }
 
 type WorkerResultCommit struct {
@@ -136,6 +138,18 @@ func (w *Worker) Execute(ctx context.Context, runRef, stageRef, attemptRef strin
 	}
 	if err := ValidateStageExecutionResult(result); err != nil {
 		return WorkerExecution{Attempt: attempt}, err
+	}
+	if result.StageStatus == domain.StageRetryWait {
+		retryAt, retryAllowed, retryErr := CalculateRetryAt(snapshot.RetryPolicy, attempt.Number, result.ReasonCodes, w.now().UTC(), CryptoRetryJitter{})
+		if retryErr != nil {
+			return WorkerExecution{Attempt: attempt}, retryErr
+		}
+		if retryAllowed {
+			result.RetryAt = &retryAt
+		} else {
+			result.StageStatus = domain.StageFailed
+			result.RetryAt = nil
+		}
 	}
 
 	stage := snapshot.Stage
