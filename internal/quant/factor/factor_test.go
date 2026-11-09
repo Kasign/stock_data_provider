@@ -68,20 +68,27 @@ func TestVolatility20UsesSampleStdAndIsNotAnnualized(t *testing.T) {
 }
 
 func TestAllFactorsReportInsufficientDataBeforeWarmup(t *testing.T) {
+	positiveCloses := func(n int) []float64 {
+		closes := make([]float64, n)
+		for i := range closes {
+			closes[i] = 100 + float64(i)
+		}
+		return closes
+	}
 	tests := []struct {
 		name string
 		run  func() (Status, error)
 	}{
 		{"momentum_20d", func() (Status, error) {
-			got, err := Momentum20(make([]float64, 20))
+			got, err := Momentum20(positiveCloses(20))
 			return got.Status, err
 		}},
 		{"momentum_60d", func() (Status, error) {
-			got, err := Momentum60(make([]float64, 60))
+			got, err := Momentum60(positiveCloses(60))
 			return got.Status, err
 		}},
 		{"volatility_20d", func() (Status, error) {
-			got, err := Volatility20(make([]float64, 20))
+			got, err := Volatility20(positiveCloses(20))
 			return got.Status, err
 		}},
 	}
