@@ -95,3 +95,22 @@ func TestAssessUnknownDeliveryRejectsMismatchedAttemptAndFutureEvidence(t *testi
 		t.Fatalf("future evidence must be rejected, got %v", err)
 	}
 }
+
+func TestAssessUnknownDeliveryRequiresContiguousUniqueAttemptNumbers(t *testing.T) {
+	delivery, channel, attempts, evidence, now := unknownReconciliationFixture(t)
+	delivery.AttemptCount = 2
+
+	first := attempts[0]
+	first.AttemptNo = 2
+	second := first
+	second.AttemptID = first.AttemptID + "-duplicate-number"
+	evidence.AttemptID = second.AttemptID
+	if _, err := AssessUnknownDelivery(delivery, channel, []domain.DeliveryAttempt{first, second}, evidence, now); !errors.Is(err, ErrLeaseRecoveryHistory) {
+		t.Fatalf("duplicate attempt numbers must be rejected, got %v", err)
+	}
+
+	second.AttemptNo = 3
+	if _, err := AssessUnknownDelivery(delivery, channel, []domain.DeliveryAttempt{first, second}, evidence, now); !errors.Is(err, ErrLeaseRecoveryHistory) {
+		t.Fatalf("attempt numbers outside the delivery history must be rejected, got %v", err)
+	}
+}
