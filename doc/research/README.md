@@ -210,7 +210,7 @@ R1/R2/R3/R5 当前实现 Context、Evidence、Event、Claim/Hypothesis 领域结
 
 - `ClaimPort` 提供 `CreateClaim` 与 `GetClaim`；Hypothesis 使用 `epistemic_type=hypothesis`，复用同一 Claim 聚合。
 - 创建时由 Research 服务端生成 ClaimID，版本固定为 1；领域校验强制 Hypothesis 验证方法、预期观察和失效条件。
-- 版本更新接口暂不暴露，等待终态修订和 supersedes_version 契约明确。
+- `UpdateClaim` 仅支持基于 `ExpectedVersion` 的追加修订，并执行 Domain 状态迁移门禁；终态后修订仍关闭，`supersedes_version` 字段缺口继续保留，不允许借此表达跨 Claim 替代关系。
 
 
 ### Research Claim Application 状态迁移用例（2026-11-09）
