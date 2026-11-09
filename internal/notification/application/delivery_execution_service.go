@@ -8,7 +8,10 @@ import (
 	"example.com/stock-analysis-flow/internal/notification/domain"
 )
 
-var (\n\tErrDeliveryExecutionUnavailable = errors.New("notification: delivery execution unavailable")\n\tErrDeliveryExecutionEventMismatch = errors.New("notification: execution event does not match Delivery snapshot")\n)
+var (
+	ErrDeliveryExecutionUnavailable  = errors.New("notification: delivery execution unavailable")
+	ErrDeliveryExecutionEventMismatch = errors.New("notification: execution event does not match Delivery snapshot")
+)
 
 // DeliveryExecutionResult 汇总一次 Worker 对单条 Delivery 的执行结果。
 // 最终状态以 Delivery 与 Attempt Repository 中的持久化事实为准。
@@ -77,6 +80,12 @@ func (s *DeliveryExecutionService) Execute(
 	}
 	if err := ctx.Err(); err != nil {
 		return output, err
+	}
+	if event.EventID != claim.Delivery.EventID ||
+		event.SourceModule != claim.Delivery.SourceModule ||
+		event.PayloadFingerprint != claim.Delivery.PayloadFingerprint ||
+		event.VerifyPayloadFingerprint() != nil {
+		return output, ErrDeliveryExecutionEventMismatch
 	}
 
 	preflight, preflightErr := s.preflight.Check(ctx, claim.Delivery)

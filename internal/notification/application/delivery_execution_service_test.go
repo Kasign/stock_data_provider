@@ -2,6 +2,7 @@ package application
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 	"testing"
 	"time"
@@ -32,10 +33,34 @@ func (c *sequenceExecutionClock) Now() time.Time {
 	return value
 }
 
-func executionFixture(t *testing.T) (*DeliveryExecutionService, *memoryDeliveries, *fakeChannelAdapter, DeliveryClaim) {
+func executionFixture(t *testing.T) (*DeliveryExecutionService, *memoryDeliveries, *fakeChannelAdapter, DeliveryClaim, domain.EventEnvelope) {
 	t.Helper()
 	repository := newMemoryDeliveries()
-	claim := claimDeliveryForAttempt(t, repository)
+	delivery := validDeliveryForRepository()
+	event := domain.EventEnvelope{
+		EventID: delivery.EventID, EventType: "researchflow.run.terminal",
+		SchemaVersion: "1.0.0", SourceModule: delivery.SourceModule,
+		OccurredAt: "2026-11-09T02:00:00Z", PublishedAt: "2026-11-09T02:00:01Z",
+		SubjectRef: "run:execution-1", IdempotencyKey: "event-key-1", CorrelationID: "correlation-1",
+		Payload: json.RawMessage([]byte("{\"status\":\"succeeded\"}")),
+	}
+	fingerprint, err := event.CalculatePayloadFingerprint()
+	if err != nil {
+		t.Fatal(err)
+	}
+	event.PayloadFingerprint = fingerprint
+	delivery.PayloadFingerprint = fingerprint
+	if err := repository.Create(context.Background(), delivery); err != nil {
+		t.Fatal(err)
+	}
+	claimTime := delivery.CreatedAt.Add(time.Second)
+	claim, claimed, err := repository.ClaimDue(
+		context.Background(), "worker-attempt", claimTime, claimTime.Add(time.Minute),
+	)
+	if err != nil || !claimed {
+		t.Fatalf("claim delivery: claimed=%v err=%v", claimed, err)
+	}
+	repository.now = claim.Lease.ExpiresAt.Add(-time.Second)
 
 	preflight, _, _ := preflightFixture(t)
 	snapshot := channelRegistryTestSnapshot()
@@ -85,7 +110,6 @@ func executionFixture(t *testing.T) (*DeliveryExecutionService, *memoryDeliverie
 
 func TestDeliveryExecutionCallsChannelOnlyAfterAttemptStarts(t *testing.T) {
 	service, repository, adapter, claim, event := executionFixture(t)
-	repository.now = claim.Lease.ExpiresAt.Add(-time.Second)
 
 	result, err := service.Execute(
 		context.Background(), claim, event, "attempt-execution-1",
@@ -105,9 +129,8 @@ func TestDeliveryExecutionCallsChannelOnlyAfterAttemptStarts(t *testing.T) {
 }
 
 func TestDeliveryExecutionAttemptStartFailureNeverCallsChannel(t *testing.T) {
-	service, repository, adapter, claim := executionFixture(t)
+	service, repository, adapter, claim, event := executionFixture(t)
 	repository.failAttemptNext = true
-	repository.now = claim.Lease.ExpiresAt.Add(-time.Second)
 
 	_, err := service.Execute(
 		context.Background(), claim, event, "attempt-execution-2",
@@ -126,12 +149,11 @@ func TestDeliveryExecutionAttemptStartFailureNeverCallsChannel(t *testing.T) {
 }
 
 func TestDeliveryExecutionAmbiguousResultConvergesToUnknown(t *testing.T) {
-	service, repository, adapter, claim := executionFixture(t)
+	service, repository, adapter, claim, event := executionFixture(t)
 	adapter.result = domain.ChannelSendResult{
 		Outcome:   domain.ChannelOutcomeAmbiguous,
 		ErrorCode: "provider_timeout",
 	}
-	repository.now = claim.Lease.ExpiresAt.Add(-time.Second)
 
 	result, err := service.Execute(
 		context.Background(), claim, event, "attempt-execution-3",
@@ -150,9 +172,8 @@ func TestDeliveryExecutionAmbiguousResultConvergesToUnknown(t *testing.T) {
 }
 
 func TestDeliveryExecutionRenderFailureBlocksWithoutChannelCall(t *testing.T) {
-	service, repository, adapter, claim := executionFixture(t)
+	service, repository, adapter, claim, event := executionFixture(t)
 	service.renderer = fixedExecutionRenderer{err: domain.ErrInvalidPayloadFingerprint}
-	repository.now = claim.Lease.ExpiresAt.Add(-time.Second)
 
 	_, err := service.Execute(
 		context.Background(), claim, event, "attempt-execution-4",
@@ -173,7 +194,6 @@ func TestDeliveryExecutionRenderFailureBlocksWithoutChannelCall(t *testing.T) {
 func TestDeliveryExecutionRejectsEventFromAnotherDelivery(t *testing.T) {
 	service, repository, adapter, claim, event := executionFixture(t)
 	event.EventID = "another-event"
-	repository.now = claim.Lease.ExpiresAt.Add(-time.Second)
 
 	_, err := service.Execute(
 		context.Background(), claim, event, "attempt-execution-5",
