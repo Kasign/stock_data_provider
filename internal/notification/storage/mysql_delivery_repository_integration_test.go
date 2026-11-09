@@ -76,6 +76,16 @@ func TestNotificationMariaDBDeliveryRepositoryIntegration(t *testing.T) {
 		t.Fatalf("load created delivery: found=%v delivery=%+v err=%v", found, loaded, err)
 	}
 
+	snapshotReader, err := NewMySQLDeliveryConsistencySnapshotReader(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	initialSnapshot, snapshotFound, err := snapshotReader.ReadDeliveryConsistencySnapshot(ctx, delivery.DeliveryID)
+	if err != nil || !snapshotFound || initialSnapshot.Delivery.Version != 1 ||
+		len(initialSnapshot.Attempts) != 0 || len(initialSnapshot.StateEvents) != 0 {
+		t.Fatalf("read initial consistency snapshot: snapshot=%+v found=%v err=%v", initialSnapshot, snapshotFound, err)
+	}
+
 	const workers = 16
 	var claimed atomic.Int64
 	var winner application.DeliveryClaim
@@ -104,6 +114,12 @@ func TestNotificationMariaDBDeliveryRepositoryIntegration(t *testing.T) {
 	}
 	if winner.Delivery.Status != domain.DeliverySending || winner.Delivery.Version != 2 || winner.Lease.FencingToken != 1 {
 		t.Fatalf("unexpected winning claim: %+v", winner)
+	}
+
+	claimedSnapshot, snapshotFound, err := snapshotReader.ReadDeliveryConsistencySnapshot(ctx, delivery.DeliveryID)
+	if err != nil || !snapshotFound || claimedSnapshot.Delivery.Status != domain.DeliverySending ||
+		claimedSnapshot.Delivery.Version != 2 || len(claimedSnapshot.StateEvents) != 1 {
+		t.Fatalf("read claimed consistency snapshot: snapshot=%+v found=%v err=%v", claimedSnapshot, snapshotFound, err)
 	}
 
 	scanner := application.ExpiredDeliveryLeaseScanner(repository)
