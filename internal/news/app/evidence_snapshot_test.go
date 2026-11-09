@@ -32,6 +32,8 @@ func validEvidenceSnapshot(now time.Time) EvidenceSnapshot {
 	return EvidenceSnapshot{
 		SnapshotRef: "snapshot-1",
 		CallerRef: "research",
+		PurposeCode: EvidencePurposeResearchAnalysis,
+		RequestedContentLevel: EvidenceContentSummary,
 		FiltersFingerprint: strings.Repeat("a", 64),
 		PageSize: 20,
 		SystemAsOf: asOf,
@@ -53,6 +55,50 @@ func TestEvidenceSnapshotValidateAcceptsStableReferenceOnlySnapshot(t *testing.T
 	}
 }
 
+func TestEvidenceSnapshotMatchesExactQueryContext(t *testing.T) {
+	now := time.Date(2026, 11, 9, 10, 0, 0, 0, time.UTC)
+	snapshot := validEvidenceSnapshot(now)
+	request := ListEvidenceRequest{
+		CallerRef:             snapshot.CallerRef,
+		PurposeCode:           snapshot.PurposeCode,
+		RequestedContentLevel: snapshot.RequestedContentLevel,
+		SystemAsOf:            snapshot.SystemAsOf,
+		Filters:               &EvidenceQueryFilters{},
+		PageSize:              snapshot.PageSize,
+	}
+	fingerprint, err := evidenceFiltersFingerprint(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	snapshot.FiltersFingerprint = fingerprint
+	if !snapshot.MatchesRequest(request) {
+		t.Fatal("exact query context did not match snapshot")
+	}
+
+	cases := []struct {
+		name   string
+		mutate func(*ListEvidenceRequest)
+	}{
+		{"caller", func(r *ListEvidenceRequest) { r.CallerRef = "service:other" }},
+		{"purpose", func(r *ListEvidenceRequest) { r.PurposeCode = EvidencePurposeRiskReview }},
+		{"content level", func(r *ListEvidenceRequest) { r.RequestedContentLevel = EvidenceContentMetadata }},
+		{"filters", func(r *ListEvidenceRequest) { r.Filters.NewsIDs = []string{"news-other"} }},
+		{"page size", func(r *ListEvidenceRequest) { r.PageSize++ }},
+		{"system as of", func(r *ListEvidenceRequest) { r.SystemAsOf = r.SystemAsOf.Add(-time.Second) }},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			candidate := request
+			candidate.Filters = &EvidenceQueryFilters{}
+			candidate.Filters.NewsIDs = append([]string(nil), request.Filters.NewsIDs...)
+			testCase.mutate(&candidate)
+			if snapshot.MatchesRequest(candidate) {
+				t.Fatal("mismatched query context unexpectedly matched snapshot")
+			}
+		})
+	}
+}
+
 func TestEvidenceSnapshotValidateRejectsInvalidTTLFingerprintAndPITKey(t *testing.T) {
 	now := time.Now().UTC()
 	cases := []struct {
@@ -61,6 +107,8 @@ func TestEvidenceSnapshotValidateRejectsInvalidTTLFingerprintAndPITKey(t *testin
 	}{
 		{"wrong ttl", func(s *EvidenceSnapshot) { s.ExpiresAt = s.ExpiresAt.Add(time.Second) }},
 		{"system as of after snapshot creation", func(s *EvidenceSnapshot) { s.SystemAsOf = s.CreatedAt.Add(time.Second) }},
+		{"missing purpose", func(s *EvidenceSnapshot) { s.PurposeCode = "" }},
+		{"invalid content level", func(s *EvidenceSnapshot) { s.RequestedContentLevel = "unrestricted" }},
 		{"uppercase fingerprint", func(s *EvidenceSnapshot) { s.FiltersFingerprint = strings.Repeat("A", 64) }},
 		{"invalid fingerprint", func(s *EvidenceSnapshot) { s.FiltersFingerprint = "not-a-hash" }},
 		{"future observation", func(s *EvidenceSnapshot) { s.Items[0].SystemObservedAt = s.SystemAsOf.Add(time.Second) }},

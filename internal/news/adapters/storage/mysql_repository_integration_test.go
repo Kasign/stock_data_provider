@@ -120,6 +120,8 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 	snapshot := app.EvidenceSnapshot{
 		SnapshotRef: fmt.Sprintf("news-snapshot-it-%d", time.Now().UnixNano()),
 		CallerRef: "service:researchflow",
+		PurposeCode: app.EvidencePurposeResearchAnalysis,
+		RequestedContentLevel: app.EvidenceContentSummary,
 		FiltersFingerprint: strings.Repeat("a", 64),
 		PageSize: 20,
 		SystemAsOf: snapshotCreatedAt.Add(-time.Minute),

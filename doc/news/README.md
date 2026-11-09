@@ -1,6 +1,6 @@
 # 新闻模块专项文档
 
-> 状态：N1-A/N2 已完成；N3 离线能力与在线采集编排首批完成、生产触发/授权网络门禁待接入；N4 领域/Application 首批完成；N5 Config/HTTP/Fault 适配完成；N6 Repository 与 Migration V1-V3 已实现（V1/V2 MariaDB 集成通过，V3 等待当前 CI）；N7 News Checks 已实现；NEWS-CTR-001 DTO/Cursor/Snapshot Store 与 NEWS-CTR-002 授权快照存储已推进，Query Facade/PIT/当前授权复核仍未完成  
+> 状态：N1-A/N2 已完成；N3 离线能力与在线采集编排首批完成、生产触发/授权网络门禁待接入；N4 领域/Application 首批完成；N5 Config/HTTP/Fault 适配完成；N6 Repository 与 Migration V1-V3 已实现（V1/V2 MariaDB 集成通过，V3 等待当前 CI）；N7 News Checks 已实现；NEWS-CTR-001 DTO/Cursor/Snapshot Store（快照绑定 caller/purpose/content level）与 NEWS-CTR-002 授权快照存储已推进，Query Facade/PIT/当前授权复核仍未完成  
 > 开发分支：`feat/research-news-ingestion`  
 > 基线分支：`feat/full-go-data-providers-api-switch`
 
@@ -183,3 +183,12 @@ News MariaDB 集成测试新增两类篡改场景：授权快照和分页 Eviden
 
 - MariaDB 11.4 News 集成 Job `42207154603` 已成功，授权快照和 Evidence Snapshot 的 payload_hash 篡改读取保护通过。
 - 同一 Workflow 根模块 gofmt Job 失败原因为 internal/research 下两个文件存在非法字符，不属于 News 修改范围；根模块整体 CI 仍不能标记全绿。
+
+
+## 2026-11-09 NEWS-CTR-001 快照查询上下文绑定
+
+- [x] EvidenceSnapshot 持久化 caller_ref、purpose_code、requested_content_level、filters fingerprint、page_size、system_as_of 与排序版本。
+- [x] Snapshot 校验拒绝缺失/非法用途和内容级别；MatchesRequest 精确比较查询安全上下文及分页条件，防止跨用途、跨内容级别复用同一分页快照。
+- [x] 新增单测覆盖 caller、purpose、content level、filters、page size、system_as_of 任一不一致时拒绝匹配。
+- [ ] Query Facade 尚未接入 Snapshot Store；严格 PIT Repository 查询、当前授权复核、撤销竞态和内容读取 TOCTOU 仍未完成。
+- 本次仅增强快照上下文绑定，不代表 NEWS-CTR-001 完整查询能力或真实数据验收通过。

@@ -31,8 +31,10 @@ type EvidenceSnapshotItem struct {
 // It never copies titles, excerpts, summaries, or article bodies.
 type EvidenceSnapshot struct {
 	SnapshotRef       string                 `json:"snapshot_ref"`
-	CallerRef         string                 `json:"caller_ref"`
-	FiltersFingerprint string                `json:"filters_fingerprint"`
+	CallerRef             string                 `json:"caller_ref"`
+	PurposeCode           EvidencePurposeCode     `json:"purpose_code"`
+	RequestedContentLevel EvidenceContentLevel    `json:"requested_content_level"`
+	FiltersFingerprint    string                `json:"filters_fingerprint"`
 	PageSize          int                    `json:"page_size"`
 	SystemAsOf        time.Time              `json:"system_as_of"`
 	SortVersion       string                 `json:"sort_version"`
@@ -44,6 +46,8 @@ type EvidenceSnapshot struct {
 func (s EvidenceSnapshot) Validate() error {
 	if !validEvidenceOpaqueRef(s.SnapshotRef) ||
 		!validEvidenceCaller(s.CallerRef) ||
+		!validEvidencePurpose(s.PurposeCode) ||
+		!validEvidenceContentLevel(s.RequestedContentLevel) ||
 		len(s.FiltersFingerprint) != sha256.Size*2 || s.FiltersFingerprint != strings.ToLower(s.FiltersFingerprint) ||
 		s.PageSize < 1 || s.PageSize > 100 ||
 		s.SortVersion != evidenceSortVersion ||
@@ -76,6 +80,28 @@ func (s EvidenceSnapshot) Validate() error {
 		}
 	}
 	return nil
+}
+
+// MatchesRequest ensures a stored snapshot is reused only for the exact query
+// security scope and pagination contract that created it. The caller must
+// validate the request before using this comparison.
+func (s EvidenceSnapshot) MatchesRequest(request ListEvidenceRequest) bool {
+	if s.Validate() != nil || request.Filters == nil ||
+		!validEvidenceCaller(request.CallerRef) ||
+		!validEvidencePurpose(request.PurposeCode) ||
+		!validEvidenceContentLevel(request.RequestedContentLevel) ||
+		request.PageSize < 1 || request.PageSize > 100 ||
+		request.SystemAsOf.IsZero() || !validEvidenceUTC(request.SystemAsOf) {
+		return false
+	}
+	fingerprint, err := evidenceFiltersFingerprint(request)
+	return err == nil &&
+		s.CallerRef == request.CallerRef &&
+		s.PurposeCode == request.PurposeCode &&
+		s.RequestedContentLevel == request.RequestedContentLevel &&
+		s.FiltersFingerprint == fingerprint &&
+		s.PageSize == request.PageSize &&
+		s.SystemAsOf.Equal(request.SystemAsOf)
 }
 
 func (s EvidenceSnapshot) ValidateAt(now time.Time) error {
