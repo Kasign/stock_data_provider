@@ -20,9 +20,9 @@ type EvidenceSnapshotPage struct {
 // ListEvidenceSnapshotPage composes PIT snapshot creation and cursor
 // continuation without returning article content or re-running PIT on later pages.
 type ListEvidenceSnapshotPage struct {
-	factory    *CreateEvidenceSnapshotForQuery
-	codec      *EvidenceCursorCodec
-	now        func() time.Time
+	factory *CreateEvidenceSnapshotForQuery
+	codec   *EvidenceCursorCodec
+	now     func() time.Time
 }
 
 func NewListEvidenceSnapshotPage(
