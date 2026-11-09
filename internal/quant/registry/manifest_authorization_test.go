@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/gowebpki/jcs"
 )
@@ -67,6 +68,17 @@ func TestQuantResultManifestAndAuthorizationGolden(t *testing.T) {
 	if err := validateJSONSchemaInstance(authorizationSchema, authorization.AuthorizationRef); err != nil {
 		t.Fatalf("validate Quant AuthorizationRef: %v", err)
 	}
+	policySnapshotSchema, err := compileJSONSchema(readPlanningFixture(t, filepath.Join("schema", "GOV-CTR-006-policy-snapshot-1.0.0.schema.json")))
+	if err != nil {
+		t.Fatalf("compile GOV-CTR-006 policy snapshot schema: %v", err)
+	}
+	policySnapshotJSON, err := json.Marshal(authorization.PolicySnapshot)
+	if err != nil {
+		t.Fatalf("encode Quant policy snapshot: %v", err)
+	}
+	if err := validateJSONSchemaInstance(policySnapshotSchema, policySnapshotJSON); err != nil {
+		t.Fatalf("validate Quant policy snapshot: %v", err)
+	}
 
 	manifestCanonical, err := jcs.Transform(manifestGolden.FingerprintInput)
 	if err != nil {
@@ -115,7 +127,9 @@ func TestQuantResultManifestAndAuthorizationGolden(t *testing.T) {
 		SubjectRef          string  `json:"subject_ref"`
 		ResourceRef         string  `json:"resource_ref"`
 		PolicyVersion       string  `json:"policy_version"`
-		ExpiresAt           *string `json:"expires_at"`
+		DecidedAt           string            `json:"decided_at"`
+		ExpiresAt           *string           `json:"expires_at"`
+		Conditions          []json.RawMessage `json:"conditions"`
 	}
 	if err := json.Unmarshal(authorization.AuthorizationRef, &auth); err != nil {
 		t.Fatalf("decode authorization binding: %v", err)
@@ -124,8 +138,13 @@ func TestQuantResultManifestAndAuthorizationGolden(t *testing.T) {
 		auth.PolicyOwner != "quant" || auth.Decision != "allowed" ||
 		auth.PurposeCode != "quant_analysis" || auth.ContentLevel != "full" ||
 		auth.SubjectRef != "service:researchflow" || auth.ResourceRef != manifest.ResultID ||
-		auth.PolicyVersion != authorization.PolicySnapshot.SnapshotRef || auth.ExpiresAt != nil {
+		auth.PolicyVersion != authorization.PolicySnapshot.SnapshotRef || auth.ExpiresAt != nil ||
+		len(auth.Conditions) != 0 {
 		t.Fatalf("Quant AuthorizationRef binding mismatch: %+v", auth)
+	}
+	decidedAt, err := time.Parse(time.RFC3339Nano, auth.DecidedAt)
+	if err != nil || decidedAt.UTC().Format(time.RFC3339Nano) != auth.DecidedAt {
+		t.Fatalf("Quant AuthorizationRef decided_at must be canonical UTC RFC3339Nano: %q", auth.DecidedAt)
 	}
 	if len(authorization.PolicySnapshot.Policies) != 1 {
 		t.Fatalf("policy snapshot entries = %d, want 1", len(authorization.PolicySnapshot.Policies))
