@@ -120,3 +120,10 @@ Notification 是独立通知业务模块，负责事件接收、Subscription、T
 - 根模块 `Test .`：失败于 gofmt，差异仅来自 Quant 与 Market Data 目录；Notification 文件未出现在本轮差异列表。
 - 根模块测试、Race Detector、go vet 未执行；本轮执行服务测试仍未取得 CI 执行通过证据。
 - MariaDB 集成 Job 未执行，真实 DSN 验收仍缺。
+
+
+### Delivery 执行服务边界测试补充（HEAD `da05abab86fd2b00f2357720daa74cf3c8122719`）
+
+- [x] 覆盖渠道已返回 accepted、但调用上下文随后取消：执行服务不得在取消上下文下伪造完成；保留未完成 Attempt 与 sending Delivery，交由租约恢复/Unknown 对账保守收敛。
+- [x] 覆盖显式可重试 rejected：必须通过 RetryPolicy 转为 retry_wait，保留单次 Attempt，不在当前执行调用内二次发送。
+- [ ] 本轮 Go workflow Run `42603330820`：go-core 通过但不覆盖 Notification；根模块 `Test .` 在 gofmt 阶段失败，日志无 Notification 文件差异，根模块测试未执行。新增测试尚无 CI 执行通过证据。

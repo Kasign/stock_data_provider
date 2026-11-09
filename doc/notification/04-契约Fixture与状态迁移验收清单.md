@@ -278,3 +278,10 @@ Run `42601621426` 对应 HEAD `8d08cf07a651efcd42a514f3dafd94d659f21f97`。`Test
 ### 最新 CI 证据
 
 Run `42602399686` 对应 HEAD `8d08cf07a651efcd42a514f3dafd94d659f21f97`。`Test go-core` 通过但不覆盖 Notification；根模块 `Test .` 在 gofmt 阶段被 Quant/Market Data 格式差异阻断，Notification 文件未出现在差异列表，根模块测试未执行。执行服务测试仍未获得 CI 通过证据；MariaDB L3 未执行。
+
+
+### Delivery 执行服务补充验收
+
+- [x] 渠道返回 accepted 后调用上下文取消：Delivery 保持 sending，Attempt 保持未完成，确保后续恢复按不确定外部副作用处理，不盲目重发。
+- [x] 显式可重试 rejected：Delivery 进入 retry_wait 并记录 NextAttemptAt；本次 Execute 不执行第二次渠道调用。
+- [ ] Run `42603330820` 的 go-core 通过不覆盖 Notification；根模块 gofmt 阶段失败且日志无 Notification 文件差异，根模块测试未执行。以上新增测试待 CI 执行。
