@@ -3,6 +3,7 @@ package application
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -17,6 +18,22 @@ type fixedExecutionRenderer struct {
 
 func (r fixedExecutionRenderer) Render(context.Context, domain.EventEnvelope, string, int64) (domain.RenderedContent, error) {
 	return r.content, r.err
+}
+
+type cancelAfterSendAdapter struct {
+	snapshot domain.ChannelConfigSnapshot
+	cancel   context.CancelFunc
+	calls    int
+}
+
+func (a *cancelAfterSendAdapter) ConfigSnapshot() domain.ChannelConfigSnapshot {
+	return cloneChannelSnapshot(a.snapshot)
+}
+
+func (a *cancelAfterSendAdapter) Send(context.Context, domain.ChannelSendRequest) (domain.ChannelSendResult, error) {
+	a.calls++
+	a.cancel()
+	return domain.ChannelSendResult{Outcome: domain.ChannelOutcomeAccepted, ProviderMessageRef: "provider-message-after-cancel"}, nil
 }
 
 type sequenceExecutionClock struct {
@@ -208,5 +225,37 @@ func TestDeliveryExecutionRejectsEventFromAnotherDelivery(t *testing.T) {
 	delivery, found, getErr := repository.Get(context.Background(), claim.Delivery.DeliveryID)
 	if getErr != nil || !found || delivery.Status != domain.DeliverySending || delivery.AttemptCount != 0 {
 		t.Fatalf("mismatched event must not mutate Delivery: delivery=%+v found=%v err=%v", delivery, found, getErr)
+	}
+}
+
+func TestDeliveryExecutionCancellationAfterSendLeavesAttemptForUnknownRecovery(t *testing.T) {
+	service, repository, _, claim, event := executionFixture(t)
+	snapshot := channelRegistryTestSnapshot()
+	snapshot.ConfigVersion = claim.Delivery.ChannelConfigVersion
+	ctx, cancel := context.WithCancel(context.Background())
+	adapter := &cancelAfterSendAdapter{snapshot: snapshot, cancel: cancel}
+	registry := NewChannelRegistry()
+	if err := registry.Register(adapter); err != nil {
+		t.Fatal(err)
+	}
+	service.preflight.channels = registry
+
+	_, err := service.Execute(
+		ctx, claim, event, "attempt-execution-cancelled",
+		0.5, "evidence-execution-cancelled",
+	)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("completion must report cancellation after channel side effect, got %v", err)
+	}
+	if adapter.calls != 1 {
+		t.Fatalf("channel must be called exactly once, calls=%d", adapter.calls)
+	}
+	delivery, found, getErr := repository.Get(context.Background(), claim.Delivery.DeliveryID)
+	if getErr != nil || !found || delivery.Status != domain.DeliverySending || delivery.AttemptCount != 1 {
+		t.Fatalf("cancelled completion must preserve sending state for lease recovery: delivery=%+v found=%v err=%v", delivery, found, getErr)
+	}
+	attempts, listErr := repository.ListByDelivery(context.Background(), claim.Delivery.DeliveryID)
+	if listErr != nil || len(attempts) != 1 || attempts[0].FinishedAt != nil {
+		t.Fatalf("attempt must remain unfinished for conservative recovery: attempts=%+v err=%v", attempts, listErr)
 	}
 }
