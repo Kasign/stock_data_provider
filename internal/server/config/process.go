@@ -12,8 +12,8 @@ import (
 // 领域模块配置仍由模块自己的配置入口解析，避免 Server 接管领域参数所有权。
 type Process struct {
 	LogLevel        string
-	AnalysisTimeout time.Duration
-	AnalysisWorkers int
+	AnalysisTimeout   time.Duration
+	AnalysisWorkers   int
 	AnalysisMaxQueued int
 	Role            Role
 	Migration       Migration
@@ -39,8 +39,8 @@ func LoadProcess(env platformconfig.Env) (Process, error) {
 	if cfg.AnalysisTimeout, err = env.Duration("ANALYSIS_TIMEOUT", 5*time.Minute); err != nil {
 		return Process{}, err
 	}
-	if cfg.AnalysisTimeout <= 0 || cfg.AnalysisTimeout > 30*time.Minute {
-		return Process{}, fmt.Errorf("ANALYSIS_TIMEOUT 必须大于 0 且不超过 30m")
+	if cfg.AnalysisTimeout <= 0 {
+		return Process{}, fmt.Errorf("ANALYSIS_TIMEOUT 必须大于 0")
 	}
 	if cfg.AnalysisWorkers, err = env.Int("ANALYSIS_WORKERS", 2); err != nil {
 		return Process{}, err
