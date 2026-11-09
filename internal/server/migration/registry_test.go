@@ -303,14 +303,13 @@ func TestRegistryConcurrentRegisterAndExecutionSnapshotHaveNoLostNamespace(t *te
 	}
 }
 
-
 func TestValidateAppliedVersionsRequiresExactAppliedSet(t *testing.T) {
 	expected := []platformstorage.Migration{{Version: 1}, {Version: 2}}
 	if err := validateAppliedVersions(expected, map[uint64]string{1: "applied", 2: "applied"}); err != nil {
 		t.Fatalf("complete schema rejected: %v", err)
 	}
 	cases := []struct {
-		name string
+		name    string
 		applied map[uint64]string
 	}{
 		{name: "missing version", applied: map[uint64]string{1: "applied"}},

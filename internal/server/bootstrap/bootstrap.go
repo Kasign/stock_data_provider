@@ -198,7 +198,6 @@ func Run(ctx context.Context) (runErr error) {
 	}
 }
 
-
 func joinShutdownError(runErr, shutdownErr error) error {
 	if shutdownErr == nil {
 		return runErr

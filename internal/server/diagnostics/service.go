@@ -6,8 +6,8 @@ import (
 	"fmt"
 
 	platformdiagnostics "example.com/stock-analysis-flow/internal/platform/diagnostics"
-	"example.com/stock-analysis-flow/internal/server/resources"
 	servermigration "example.com/stock-analysis-flow/internal/server/migration"
+	"example.com/stock-analysis-flow/internal/server/resources"
 )
 
 // Service owns the immutable check set used by Server diagnostics requests.

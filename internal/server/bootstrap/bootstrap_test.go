@@ -42,7 +42,6 @@ func TestStopConsumersThenCloseResourcesPreservesOrder(t *testing.T) {
 	}
 }
 
-
 func TestJoinShutdownErrorPreservesRunAndCloseErrors(t *testing.T) {
 	runErr := errors.New("HTTP server failed")
 	shutdownErr := errors.New("resource close failed")
