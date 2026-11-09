@@ -28,12 +28,12 @@ type IngestCollectedSourceRequest struct {
 // IngestCollectedSource 在持久化前重新读取 SourceCatalog，并独立评估元数据持久化权限。
 // 采集时与当前策略版本不一致时拒绝，避免旧采集结果借用新版本授权。
 type IngestCollectedSource struct {
-	ingest  *IngestCandidate
+	ingest  *candidateIngest
 	sources SourceCatalog
 	now     func() time.Time
 }
 
-func NewIngestCollectedSource(ingest *IngestCandidate, sources SourceCatalog) (*IngestCollectedSource, error) {
+func NewIngestCollectedSource(ingest *candidateIngest, sources SourceCatalog) (*IngestCollectedSource, error) {
 	if ingest == nil || sources == nil {
 		return nil, ErrSourcePersistencePolicyUnavailable
 	}
@@ -115,7 +115,7 @@ func (u *IngestCollectedSource) Execute(ctx context.Context, request IngestColle
 				candidate.Title + "\x00" + candidate.PublishedAtRaw,
 		))
 		idempotencyKey := prefix + "/" + hex.EncodeToString(fingerprint[:])
-		observation, ingestErr := u.ingest.ExecuteWithPolicyTrace(
+		observation, ingestErr := u.ingest.executeWithPolicyTrace(
 			ctx, sourceID, idempotencyKey, candidate, registration.URLPolicy, trace,
 		)
 		if ingestErr != nil {
