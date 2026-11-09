@@ -535,3 +535,14 @@ internal/
 - 当前 Data 分支不修复其他模块文件。待相关模块合并格式修复后，在最新 integration HEAD 重跑根模块门禁；无需重新审计 Data 参数或 Provider 矩阵。
 - M0-C 仍等待脱敏生产 DDL；M0-A/M0-B 已关闭。
 
+
+
+### 2026-11-09：M1-2 Go 工具链与依赖预收敛（进行中）
+
+- 当前分支代码基线：`c875d5ffa00acb384f4f2b0b738b77fd10be82e6`。
+- 提交 `559d1eaffa7c26da74bd34600182147e593fa803`：根 `go.mod` 升级至 Go 1.23.0，根 Docker Builder 升级至 `golang:1.23-alpine`。仓库 Go CI 已使用 Go 1.23.x，因此统一本地模块声明与生产构建工具链。
+- 提交 `c875d5ffa00acb384f4f2b0b738b77fd10be82e6`：将 Data Module 依赖要求和 `go.sum` 校验和合并到根 Module；冲突版本暂选根侧较新版本：MySQL Driver 1.9.3、`x/net` 0.35.0、`x/text` 0.28.0；新增 Data 所需 `github.com/injoyai/tdx` 及其依赖。
+- 依赖合并是源码搬迁的准备提交，**不代表 Data 已进入根 Module**；嵌套 `services/market-data/go.mod` 和源码目录尚未删除/迁移。
+- 当前没有该 SHA 的可读取 CI 结果；不将依赖预收敛记为构建通过。源码归并后必须在根 Module 执行 gofmt、go test、race、vet、MariaDB/PIT、Provider 相关测试和镜像构建。
+- 下一步：按包依赖图将 `services/market-data/internal/**` 迁入 `internal/marketdata/**`，重写内部 import 路径，迁移 Data 命令入口并同步根 CI/Docker 构建；同批删除嵌套 go.mod/go.sum，保留 Data HTTP 行为和独立回滚入口。
+
