@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"example.com/stock-analysis-flow/internal/llm"
+	platformconfig "example.com/stock-analysis-flow/internal/platform/config"
 	platformhttpclient "example.com/stock-analysis-flow/internal/platform/httpclient"
 	serverresources "example.com/stock-analysis-flow/internal/server/resources"
 )
@@ -112,4 +113,27 @@ func (t *Transport) OpenStream(ctx context.Context, request *http.Request) (*llm
 		Header:     response.Header.Clone(),
 		Body:       response.Body,
 	}, err
+}
+
+
+// NewResponsesAdapter binds one destination once and injects the same
+// transport into both JSON and SSE paths. Provider credentials and capability
+// evidence remain explicit inputs owned by Server configuration/policy wiring.
+func NewResponsesAdapter(
+	resources *serverresources.Resources,
+	provider llm.ProviderConfig,
+	apiKey platformconfig.Secret,
+	capabilities llm.CapabilityState,
+	clock llm.Clock,
+	policy platformhttpclient.DestinationPolicy,
+) (*llm.ResponsesAdapter, error) {
+	transport, err := New(resources, provider, policy)
+	if err != nil {
+		return nil, err
+	}
+	adapter, err := llm.NewResponsesAdapterWithStream(provider, apiKey, transport, transport, capabilities, clock)
+	if err != nil {
+		return nil, fmt.Errorf("construct LLM Responses adapter: %w", err)
+	}
+	return adapter, nil
 }

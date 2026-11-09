@@ -1187,3 +1187,11 @@ Lifecycle.Stop 原实现通过 stopped 标记保证重复调用幂等，但并�
 - Go Workflow Run `42616624073` 对应 SHA `e7542450a947084db88b9cbc4920cd9558f91531`。根模块在 gofmt 门禁发现 `internal/server/llmtransport/transport_test.go` 两处格式差异，以及 Lifecycle 测试文件一处多余空行；根模块依赖下载、单测、Race、Vet 均未执行。
 - `go-core` 的 gofmt、单测、Race、Vet 全部通过；该结果不覆盖根模块。
 - 本次统一修正上述格式问题；推送后以新 SHA 重新执行完整 Server 分支 Workflow。不得将格式修正前的失败 Run 解释为代码编译或测试失败。
+
+
+### 12.42 SRV-003 LLM Responses Adapter 生产构造入口（2026-11-09）
+
+- 在 LLM 传输桥接上增加 Server-owned `NewResponsesAdapter`：显式接收 ProviderConfig、Platform Secret、版本化 CapabilityState、Clock 和 DestinationPolicy。
+- 构造器先验证 Gateway Host/Port/HTTPS/重定向/重试策略，再从共享 Resources 创建单一 BoundDoer，并将同一 Transport 注入 LLM JSON 与 SSE 接口；不读取环境变量、不自行解析 Secret、不生成或放宽 CapabilityState。
+- 新增使用真实 Platform Client/Resources 的纯构造测试，不发起外网请求；同时覆盖 Provider/Policy 不匹配时在绑定前失败。
+- 生产 ProviderConfig、Secret 与 CapabilityState 的来源和更新策略仍需由 Server 配置/证据仓储契约提供；当前构造器只负责安全注入，不把测试证据当成生产能力证明。

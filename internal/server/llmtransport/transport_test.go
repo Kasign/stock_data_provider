@@ -7,8 +7,10 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	"example.com/stock-analysis-flow/internal/llm"
+	platformconfig "example.com/stock-analysis-flow/internal/platform/config"
 	platformhttpclient "example.com/stock-analysis-flow/internal/platform/httpclient"
 )
 
@@ -153,4 +155,78 @@ func httptestRequest(t *testing.T) *http.Request {
 		t.Fatal(err)
 	}
 	return request
+}
+
+
+type fixedClock struct{ now time.Time }
+
+func (c fixedClock) Now() time.Time { return c.now }
+
+func TestNewResponsesAdapterUsesSharedBoundTransport(t *testing.T) {
+	now := time.Date(2026, 11, 9, 12, 0, 0, 0, time.UTC)
+	provider := llm.ProviderConfig{
+		ProviderID: "gateway", Protocol: llm.ProtocolOpenAIResponses,
+		BaseURL: "https://ai.example.com/v1", DefaultModel: "model",
+		APIKeySecretRef: "LLM_API_KEY", RequestTimeoutMS: 30_000,
+		CapabilityTTLMS: 60_000, AllowedModels: []string{"model"},
+		MaxRequestBytes: 1024, MaxResponseBytes: 1024, StreamEnabled: true,
+	}
+	verifiedAt := now.Add(-30 * time.Second)
+	validUntil := now.Add(30 * time.Second)
+	capabilities := llm.CapabilityState{
+		ProviderID: "gateway", ModelID: "model", Protocol: llm.ProtocolOpenAIResponses,
+		GatewayVersion: "gateway-v1", VerifiedAt: &verifiedAt, ValidUntil: &validUntil,
+		VerificationMethod: "integration-test", EvidenceRef: "capability-evidence",
+		MaxOutputTokensLimit: 4096,
+		Values: map[llm.Capability]llm.CapabilityStatus{
+			llm.CapabilityResponsesJSON: llm.CapabilitySupported,
+			llm.CapabilityResponsesStream: llm.CapabilitySupported,
+		},
+	}
+	env := platformconfig.NewEnvWithLookup(func(key string) (string, bool) {
+		if key == "LLM_API_KEY" {
+			return "test-secret", true
+		}
+		return "", false
+	})
+	client, err := platformhttpclient.New(platformhttpclient.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	resources := &serverresources.Resources{HTTPClient: client}
+	defer resources.Close()
+
+	adapter, err := NewResponsesAdapter(
+		resources, provider, env.Secret("LLM_API_KEY"), capabilities, fixedClock{now: now},
+		platformhttpclient.DestinationPolicy{
+			Dependency: "llm.gateway", AllowedHosts: []string{"ai.example.com"},
+			AllowedPorts: []uint16{443},
+		},
+	)
+	if err != nil {
+		t.Fatalf("NewResponsesAdapter() error = %v", err)
+	}
+	if adapter == nil {
+		t.Fatal("NewResponsesAdapter() returned nil adapter")
+	}
+}
+
+func TestNewResponsesAdapterRejectsProviderPolicyMismatch(t *testing.T) {
+	provider := llm.ProviderConfig{
+		ProviderID: "gateway", Protocol: llm.ProtocolOpenAIResponses,
+		BaseURL: "https://ai.example.com/v1", DefaultModel: "model",
+		APIKeySecretRef: "LLM_API_KEY", RequestTimeoutMS: 1000,
+		CapabilityTTLMS: 1000, AllowedModels: []string{"model"},
+		MaxRequestBytes: 1024, MaxResponseBytes: 1024,
+	}
+	_, err := NewResponsesAdapter(
+		nil, provider, platformconfig.Secret{}, llm.CapabilityState{}, fixedClock{},
+		platformhttpclient.DestinationPolicy{
+			Dependency: "llm.gateway", AllowedHosts: []string{"wrong.example.com"},
+			AllowedPorts: []uint16{443},
+		},
+	)
+	if err == nil {
+		t.Fatal("provider/policy mismatch must fail before binding resources")
+	}
 }
