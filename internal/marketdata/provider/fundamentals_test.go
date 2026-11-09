@@ -16,6 +16,7 @@ type fakeBaoStockFinancialClient struct {
 	publicationDate string
 	invalidField    string
 	missingField    string
+	fieldIssues     []baostock.QuarterlyFinancialFieldIssue
 }
 
 func (fakeBaoStockFinancialClient) QueryDailyKLines(context.Context, string, string, string, string) ([]baostock.DailyKLine, error) {
@@ -48,7 +49,7 @@ func (f fakeBaoStockFinancialClient) QueryQuarterlyFinancialData(_ context.Conte
 	if f.invalidField != "netProfit" && f.missingField != "netProfit" {
 		values["netProfit"] = "28522000000"
 	}
-	return &baostock.QuarterlyFinancialRecord{Code: code, PublicationDate: values["pubDate"], ReportDate: values["statDate"], Fields: values}, nil
+	return &baostock.QuarterlyFinancialRecord{Code: code, PublicationDate: values["pubDate"], ReportDate: values["statDate"], Fields: values, FieldIssues: f.fieldIssues}, nil
 }
 
 func TestBaostockFundamentalsPreservesRatioAndDisclosureDate(t *testing.T) {
@@ -131,6 +132,7 @@ func TestBaostockFundamentalsReportsFieldLevelParseIssues(t *testing.T) {
 	got, err := NewBaostock(fakeBaoStockFinancialClient{
 		invalidField: "roeAvg",
 		missingField: "netProfit",
+		fieldIssues: []baostock.QuarterlyFinancialFieldIssue{{SourceField: "gpMargin", Code: "invalid_field", ActualType: "object", Preview: "object", RowIndex: 0}},
 	}).FetchFundamentals(ctx, "600519.SH", 2026, 2)
 	if err != nil {
 		t.Fatalf("partial fundamentals should be retained: %v", err)
@@ -139,7 +141,7 @@ func TestBaostockFundamentalsReportsFieldLevelParseIssues(t *testing.T) {
 		t.Fatalf("invalid/missing fields must degrade the snapshot: %+v", got)
 	}
 	issues := reporter.Snapshot().Issues
-	want := map[string]string{"roe_avg": "invalid_number", "net_profit": "missing_value"}
+	want := map[string]string{"roe_avg": "invalid_number", "net_profit": "missing_value", "gross_profit_margin": "invalid_field"}
 	for field, code := range want {
 		found := false
 		for _, issue := range issues {
