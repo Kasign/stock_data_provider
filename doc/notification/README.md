@@ -31,7 +31,7 @@ Notification 是独立通知业务模块，负责事件接收、Subscription、T
 | Inbox/Subscription/DeliveryPlan | 部分实现 | 双唯一 Inbox Port/Fake、Subscription append-only Repository Port/Fake（版本追加、CAS 并发）与 DeliveryPlan 唯一性 Port/Fake、完整授权策略 tuple 指纹冲突测试已实现；真实持久化和 fan-out 事务仍待实现 |
 | Template/Renderer | 部分实现 | 固定版本 Registry、JSON Pointer 标量 allowlist、text/HTML 渲染、HTML 自动转义、CRLF Subject 拒绝和显式资源限制已实现；生产模板内容/持久化尚未实现 |
 | Channel/Dispatcher/Retry | 部分实现 | Channel Domain、精确版本内存 Registry、Adapter/RecipientResolver Port 与 Fake Adapter 测试已建立；Delivery 状态领域模型/迁移测试及 Repository Port/Fake、Claim/CAS 并发测试已编写；DeliveryAttempt 领域模型与 Attempt Repository Port/Fake 也已建立，测试尚未获得本轮 CI 通过证据；真实 Repository Adapter、Dispatcher/Worker、租约恢复和 Retry 尚未实现 |
-| Repository/Migration | 未开始 | Platform Storage 已有连接/事务/Migration Runner 原语；Notification 专属 Repository、表模型和迁移尚无 |
+| Repository/Migration | 进行中 | 已建立首批 DDL、DeliveryPlan MySQL Adapter 和可选 MariaDB 集成测试；Delivery/Attempt/Subscription/Inbox Adapter、根 Migration 注册和真实 MariaDB 执行证据仍缺 |
 | 三生产方事件接入 | 未验收 | 仅按各生产方契约和真实测试证据逐项开放 |
 | 真实渠道与 L3 集成 | 未开始/不可比较 | 无真实凭据、回执、MariaDB/Worker 集成证据时不得标记通过 |
 
