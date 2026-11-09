@@ -113,3 +113,47 @@ func TestResourcesClosePreventsBindingsAfterReturn(t *testing.T) {
 		t.Fatal("BindHTTPDestination() succeeded after Close() returned")
 	}
 }
+
+
+func TestClosePartialResourcesPreservesCauseCleanupErrorsAndOrder(t *testing.T) {
+	cause := errors.New("resource initialization failed")
+	redisErr := errors.New("redis close failed")
+	dbErr := errors.New("database close failed")
+	var events []string
+
+	err := closePartialResources(cause,
+		func() error {
+			events = append(events, "redis")
+			return redisErr
+		},
+		func() error {
+			events = append(events, "database")
+			return dbErr
+		},
+	)
+	if !errors.Is(err, cause) || !errors.Is(err, redisErr) || !errors.Is(err, dbErr) {
+		t.Fatalf("closePartialResources() error = %v, want initialization and cleanup errors", err)
+	}
+	want := []string{"redis", "database"}
+	if !reflect.DeepEqual(events, want) {
+		t.Fatalf("cleanup order = %v, want %v", events, want)
+	}
+}
+
+func TestClosePartialResourcesContinuesAfterCleanupError(t *testing.T) {
+	firstErr := errors.New("first close failed")
+	secondCalled := false
+	err := closePartialResources(errors.New("initialization failed"),
+		func() error { return firstErr },
+		func() error {
+			secondCalled = true
+			return nil
+		},
+	)
+	if !errors.Is(err, firstErr) {
+		t.Fatalf("closePartialResources() error = %v, want first cleanup error", err)
+	}
+	if !secondCalled {
+		t.Fatal("cleanup stopped after first close error")
+	}
+}

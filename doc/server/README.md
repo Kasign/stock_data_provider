@@ -1121,3 +1121,12 @@ Lifecycle.Stop 原实现通过 stopped 标记保证重复调用幂等，但并�
 - Lifecycle 现在显式维护启动完成信号。外部 Stop 先阻止后续注册并等待启动阶段完整结束，再一次性快照已尝试启动的组件并逆序停止；启动失败/取消时，Start 先关闭启动完成信号，再执行回滚，避免自等待死锁。等待启动阶段不受 Stop 的关闭预算提前打断，避免 Bootstrap 因 Stop 超时而在组件仍处于 Start 时关闭共享资源；组件 Start 必须遵守进程 Context 取消约定。
 - 增加阻塞 Start 的并发回归测试，验证 Stop 不会与 Start 重叠、Stop 开始后不再启动后续组件，且最终停止所有已尝试启动组件。
 - 本批次尚未运行 Go 测试与 race；需在统一验证阶段执行。
+
+
+### 12.35 SRV-002 共享资源部分初始化失败清理错误汇总（2026-11-09）
+
+- Review 发现 OpenLegacyAnalysisResources 在 Redis、Platform HTTP Client 或旧 Storage Adapter 初始化失败时，会按逆序关闭已创建资源，但忽略 DB/Redis Close 错误，导致启动错误缺少清理失败证据。
+- 新增 closePartialResources，保留原始初始化错误，并使用 errors.Join 汇总每个逆序清理错误；即使某个 Close 失败，也继续清理其余资源。
+- HTTP Client 初始化失败时按 Redis、DB 顺序清理；旧 Storage Adapter 初始化失败时先释放 HTTP Client 空闲连接，再按 Redis、DB 顺序清理。
+- 增加错误保留、逆序执行和首个清理失败后继续清理的测试。
+- 本批次尚未运行 Go 测试；当前只覆盖清理聚合 helper，真实 MariaDB/Redis 故障注入仍属于集成环境验收。
