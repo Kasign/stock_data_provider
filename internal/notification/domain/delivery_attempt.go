@@ -20,21 +20,21 @@ var ErrInvalidDeliveryAttempt = errors.New("notification: invalid delivery attem
 // DeliveryAttempt 是一次真实渠道调用的追加式执行记录。
 // 完成后的记录不可修改；结果纠正必须通过独立对账事实追加。
 type DeliveryAttempt struct {
-	AttemptID           string                 `json:"attempt_id"`
-	DeliveryID          string                 `json:"delivery_id"`
-	AttemptNo           int                    `json:"attempt_no"`
-	WorkerID            string                 `json:"worker_id"`
-	FencingToken        int64                  `json:"fencing_token"`
-	LeaseExpiresAt      time.Time              `json:"lease_expires_at"`
-	StartedAt           time.Time              `json:"started_at"`
-	FinishedAt          *time.Time             `json:"finished_at"`
-	Outcome             *DeliveryAttemptOutcome `json:"outcome"`
-	ProviderMessageRef  *string                `json:"provider_message_ref"`
-	ErrorCode           *string                `json:"error_code"`
-	Retryable           bool                   `json:"retryable"`
-	RetryAfterAt        *time.Time             `json:"retry_after_at"`
-	DurationMS          *int64                 `json:"duration_ms"`
-	EvidenceRef         *string                `json:"evidence_ref"`
+	AttemptID          string                  `json:"attempt_id"`
+	DeliveryID         string                  `json:"delivery_id"`
+	AttemptNo          int                     `json:"attempt_no"`
+	WorkerID           string                  `json:"worker_id"`
+	FencingToken       int64                   `json:"fencing_token"`
+	LeaseExpiresAt     time.Time               `json:"lease_expires_at"`
+	StartedAt          time.Time               `json:"started_at"`
+	FinishedAt         *time.Time              `json:"finished_at"`
+	Outcome            *DeliveryAttemptOutcome `json:"outcome"`
+	ProviderMessageRef *string                 `json:"provider_message_ref"`
+	ErrorCode          *string                 `json:"error_code"`
+	Retryable          bool                    `json:"retryable"`
+	RetryAfterAt       *time.Time              `json:"retry_after_at"`
+	DurationMS         *int64                  `json:"duration_ms"`
+	EvidenceRef        *string                 `json:"evidence_ref"`
 }
 
 // Validate 校验运行中或已完成 Attempt 的字段一致性。

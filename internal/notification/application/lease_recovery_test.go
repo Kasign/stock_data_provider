@@ -64,7 +64,9 @@ func TestAssessExpiredDeliveryLeaseWithoutAttemptIsSafeOnlyWithinBudget(t *testi
 		LeaseExpiresAt: previousLease.ExpiresAt, StartedAt: delivery.UpdatedAt.Add(time.Second)}
 	previousFinished := previous.StartedAt.Add(time.Second)
 	previous, err = previous.Complete(previousFinished, domain.DeliveryAttemptNotSent, "", "connection_not_opened", false, "evidence-previous")
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	delivery.AttemptCount = 1
 	delivery.MaxAttempts = 1
 	lease.FencingToken = 2
@@ -76,11 +78,11 @@ func TestAssessExpiredDeliveryLeaseWithoutAttemptIsSafeOnlyWithinBudget(t *testi
 
 func TestAssessExpiredDeliveryLeaseClassifiesAttemptOutcomes(t *testing.T) {
 	cases := []struct {
-		name string
-		outcome domain.DeliveryAttemptOutcome
-		finished bool
+		name      string
+		outcome   domain.DeliveryAttemptOutcome
+		finished  bool
 		retryable bool
-		want LeaseRecoveryAction
+		want      LeaseRecoveryAction
 	}{
 		{name: "running attempt is unknown", finished: false, want: LeaseRecoveryMarkUnknown},
 		{name: "accepted is finalized as sent", outcome: domain.DeliveryAttemptAccepted, finished: true, want: LeaseRecoveryFinalizeSent},

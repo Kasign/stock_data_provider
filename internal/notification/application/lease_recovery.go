@@ -12,8 +12,8 @@ import (
 type LeaseRecoveryAction string
 
 const (
-	LeaseRecoverySafeToRetry       LeaseRecoveryAction = "safe_to_retry"
-	LeaseRecoveryFinalizeSent      LeaseRecoveryAction = "finalize_sent"
+	LeaseRecoverySafeToRetry      LeaseRecoveryAction = "safe_to_retry"
+	LeaseRecoveryFinalizeSent     LeaseRecoveryAction = "finalize_sent"
 	LeaseRecoveryApplyRetryPolicy LeaseRecoveryAction = "apply_retry_policy"
 	LeaseRecoveryFinalizeFailed   LeaseRecoveryAction = "finalize_failed"
 	LeaseRecoveryMarkUnknown      LeaseRecoveryAction = "mark_unknown"
@@ -27,11 +27,11 @@ var (
 // LeaseRecoveryAssessment 是只读恢复判断，不直接修改 Delivery 或触发渠道调用。
 // 调用方必须在后续写入时再次使用 Delivery 版本与 fencing token 做 CAS。
 type LeaseRecoveryAssessment struct {
-	Action      LeaseRecoveryAction
-	ReasonCode  string
-	AttemptID   string
-	EvidenceRef string
-	RetryAfterAt *time.Time
+	Action             LeaseRecoveryAction
+	ReasonCode         string
+	AttemptID          string
+	EvidenceRef        string
+	RetryAfterAt       *time.Time
 	ProviderMessageRef string
 }
 
