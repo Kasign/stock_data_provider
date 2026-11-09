@@ -44,13 +44,19 @@ func (m *memoryDeliveries) StartWithLease(ctx context.Context, expectedDeliveryV
 	if _, exists := m.attempts[attempt.AttemptID]; exists {
 		return ErrDeliveryAttemptAlreadyExists
 	}
-	if attempt.AttemptNo != current.AttemptCount+1 {
-		return ErrDeliveryAttemptConflict
-	}
 	for _, existing := range m.attempts {
-		if existing.DeliveryID == attempt.DeliveryID && existing.AttemptNo == attempt.AttemptNo {
+		if existing.DeliveryID != attempt.DeliveryID {
+			continue
+		}
+		if existing.FencingToken == fencingToken {
+			return ErrDeliveryAttemptConflict
+		}
+		if existing.AttemptNo == attempt.AttemptNo {
 			return ErrDeliveryAttemptAlreadyExists
 		}
+	}
+	if attempt.AttemptNo != current.AttemptCount+1 {
+		return ErrDeliveryAttemptConflict
 	}
 	if m.failAttemptNext {
 		m.failAttemptNext = false
@@ -188,6 +194,10 @@ func TestDeliveryAttemptRepositoryStartAndCompleteWithActiveLease(t *testing.T) 
 	if err != nil || len(listed) != 1 || listed[0].FinishedAt != nil {
 		t.Fatalf("expected one running attempt, attempts=%+v err=%v", listed, err)
 	}
+	secondAttempt := attemptForClaim(claim, 2)
+	if err := repository.StartWithLease(ctx, claim.Delivery.Version, claim.Lease.FencingToken, secondAttempt); !errors.Is(err, ErrDeliveryAttemptConflict) {
+		t.Fatalf("one lease must not start a second attempt while the first is running: %v", err)
+	}
 
 	finishedAt := attempt.StartedAt.Add(1500 * time.Millisecond)
 	completed, err := attempt.Complete(finishedAt, domain.DeliveryAttemptAccepted, "provider-ref-1", "", false, "")
@@ -204,6 +214,9 @@ func TestDeliveryAttemptRepositoryStartAndCompleteWithActiveLease(t *testing.T) 
 	}
 	if err := repository.CompleteWithLease(ctx, claim.Delivery.Version, claim.Lease.FencingToken, completed); !errors.Is(err, ErrDeliveryAttemptConflict) {
 		t.Fatalf("completed attempt must not be overwritten: %v", err)
+	}
+	if err := repository.StartWithLease(ctx, claim.Delivery.Version, claim.Lease.FencingToken, secondAttempt); !errors.Is(err, ErrDeliveryAttemptConflict) {
+		t.Fatalf("one lease must not start another attempt after completion either: %v", err)
 	}
 }
 

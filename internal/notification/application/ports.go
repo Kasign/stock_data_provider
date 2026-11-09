@@ -60,7 +60,7 @@ type DeliveryRepository interface {
 }
 
 // DeliveryAttemptRepository 管理单次渠道调用的追加式历史。
-// StartWithLease 必须在原子写入时使用 Repository 权威时钟校验租约仍有效、StartedAt 不在未来，并分配连续 attempt_no、追加运行中 Attempt。
+// StartWithLease 必须在原子写入时使用 Repository 权威时钟校验租约仍有效、StartedAt 不在未来；同一 fencing token 最多追加一个 Attempt。
 // attempt_count 是 Attempt 历史的计数投影，随 StartWithLease 原子更新，不改变 Delivery 状态版本。
 // CompleteWithLease 必须在原子写入时使用 Repository 权威时钟校验租约，并只允许当前有效租约将运行中 Attempt 完成一次；完成记录不可再次覆盖。
 type DeliveryAttemptRepository interface {

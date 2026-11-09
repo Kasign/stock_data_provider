@@ -187,6 +187,7 @@ Fake Adapter 只能验证分类和状态机，不证明真实渠道行为。Reci
 | NTF002-ATT-03 | 当前有效租约完成 Attempt | 仅允许运行中记录完成一次；完成后不可覆盖 |
 | NTF002-ATT-04 | Attempt 完成时租约已过期 | 拒绝旧 Worker 迟到完成，交由恢复流程判定 unknown/安全重排 |
 | NTF002-ATT-05 | Attempt 追加/完成持久化失败 | 不产生部分 Attempt 或计数投影更新 |
+| NTF002-ATT-06 | 同一 fencing token 重复启动第二个 Attempt（前一条运行中或已完成） | 拒绝第二次启动；重试必须经过状态迁移并重新领取新 token |
 | NTF003-RETRY-01 | 明确 retryable rejection + 有效 Retry-After | next_attempt_at 取本地退避与 Retry-After 的较晚值；不超过总 deadline |
 | NTF003-RETRY-02 | permanent rejection / retry budget exhausted | 结束为 failed；不超过 max_attempts |
 | NTF003-RETRY-03 | timeout-after-write / 请求可能已到渠道 | 进入 unknown；不自动重发 |

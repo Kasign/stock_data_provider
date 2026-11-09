@@ -237,10 +237,10 @@ DeliveryStateEvent 的 version/from/to/changed_at 来自每次状态迁移；evi
 本切片已补充 DeliveryAttemptRepository Port/Fake：StartWithLease 原子追加运行中 Attempt 并更新 attempt_count 计数投影；CompleteWithLease 仅允许当前有效租约完成一次；ListByDelivery 返回按序深拷贝。具体原子边界如下：
 
 Attempt Repository 的模块级原子边界：
-- StartWithLease：使用 Repository 内部权威时钟（MariaDB Adapter 在事务 SQL 中使用 UTC_TIMESTAMP(6)，Fake 使用可控时钟），校验租约在 now 时刻仍有效、StartedAt 不晚于 now 且不早于本次 sending 领取时间；同时校验当前 Delivery 为 sending、expected version 与 fencing token 匹配、Worker 与租约一致、Attempt 尚未完成、attempt_no 等于当前 Attempt 数量 + 1；在同一 Repository 原子操作中追加运行中 Attempt 并更新 attempt_count 投影。不能仅凭调用方传入的 StartedAt 早于 ExpiresAt 推断租约当前仍有效。
+- StartWithLease：使用 Repository 内部权威时钟（MariaDB Adapter 在事务 SQL 中使用 UTC_TIMESTAMP(6)，Fake 使用可控时钟），校验租约在 now 时刻仍有效、StartedAt 不晚于 now 且不早于本次 sending 领取时间；同时校验当前 Delivery 为 sending、expected version 与 fencing token 匹配、Worker 与租约一致、attempt_no 等于当前 Attempt 数量 + 1，并确保同一 fencing token 最多只能创建一个 Attempt（无论前一 Attempt 是否已完成）；在同一 Repository 原子操作中追加运行中 Attempt 并更新 attempt_count 投影。重试必须先完成 sending -> retry_wait 等状态迁移并释放旧租约，再重新 ClaimDue 获得新 fencing token，不能在同一 claim 下启动第二次渠道调用。不能仅凭调用方传入的 StartedAt 早于 ExpiresAt 推断租约当前仍有效。
 - CompleteWithLease：只允许当前有效租约、当前 Delivery 版本和同一 Attempt 身份将运行中记录完成一次；完成时间不得越过租约截止；旧 Worker 的迟到完成必须拒绝。
 - ListByDelivery：按 attempt_no 顺序返回深拷贝历史；未知 Delivery 返回 not found。
-- attempt_count 是已追加 Attempt 数量的计数投影；StartWithLease 与 Attempt 追加同事务更新，不改变 Delivery 状态版本，也不产生伪造的状态迁移事件。真实 Repository 必须保证 Attempt 行、计数投影和租约检查的事务原子性。
+- attempt_count 是已追加 Attempt 数量的计数投影；StartWithLease 与 Attempt 追加同事务更新，不改变 Delivery 状态版本，也不产生伪造的状态迁移事件。真实 Repository 必须保证 Attempt 行、计数投影和租约检查的事务原子性；建议数据库增加 `UNIQUE(delivery_id, fencing_token)`，并在事务中锁定 Delivery 行，防止同一 claim 并发创建第二个 Attempt。
 
 当前仅有模块内 Fake；其锁只能证明单进程测试语义，不证明数据库事务、跨进程租约 fencing 或崩溃恢复。
 Fake/单测代码未获得 CI 通过证据前不得标记模块级验收通过；真实 MariaDB Adapter、Worker 崩溃恢复和真实渠道证据仍未实现。
