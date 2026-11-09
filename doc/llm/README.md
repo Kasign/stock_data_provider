@@ -4,7 +4,7 @@
 - 代码：`internal/llm/**`
 - 任务前缀：LLM
 - 状态：LLM-002 DTO/Provider Port、Responses JSON Mapper/Parser、非流式 HTTP Adapter、Clock/Deadline 注入、纯 SSE Parser、公共 DTO Draft 2020-12 Schema 已实现；整体仍待 LLM 包级构建验证
-- 最近代码提交：`3e624986fe05faebaa1596b74f82dde65bc7adfa`
+- 最近代码提交：`c9d9e74bae491c313d430a81c24ab8f47efd1118`
 - LLM-001：静态协议盘点完成；在线真实端点验收未执行
 - LLM-002：DTO/Provider Port、Responses JSON 请求映射/响应解析、非流式 HTTP Adapter 及对应单测已实现，待 gofmt/go test；Platform Fault 映射、Draft 2020-12 Schema 编译及 DTO Schema Contract Test 均待构建验证；JSON/SSE Golden 已扩展覆盖拒绝、未知项、Usage 边界、终态和序号异常；新增完整 Request Mapper Golden，覆盖 sampling、reasoning、strict schema、function tool 与 tool_choice；新增 Adapter 能力门禁测试，验证可选能力证据缺失时不会派发请求；已补充 SSE callback error（普通事件中断、终态回调拒绝）、CRLF/multiline data、事件数量、单事件累计字节、总输入字节上限、终态后事件拒绝回归测试，以及 Structured Output 非法 JSON/空输出/incomplete 边界测试（待执行）；完整矩阵仍待执行；Platform 受控流读取尚未提供；local_validation_only、Usage 诊断码、Capability verification_method 与 capability_ttl_ms 已纳入 Mapper/DTO
 
@@ -70,3 +70,5 @@ internal/llm/
 - 高级 Structured Output 约束已拆为独立模型能力 `structured_output_advanced_constraints`；pattern/format/数字边界/数组长度约束默认 fail-closed，需对应模型的有效 capability evidence。
 
 - Usage 明细增加 cached_tokens / reasoning_tokens 的负值与越界诊断，保留上游原值和来源，不伪造修正值。
+
+- 最新 CI 的根模块 gofmt 清单已不再包含任何 `internal/llm/**` 文件；但根模块仍被 News、Notification、Quant、Research、Researchflow 文件阻断，根模块 go test/race/vet 未执行。

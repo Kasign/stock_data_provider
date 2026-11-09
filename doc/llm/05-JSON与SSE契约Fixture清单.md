@@ -367,3 +367,10 @@ sequence_number 严格连续策略、Draft 2020-12 本地 Schema dialect、Reque
 - 上游 strict Response Schema 与 strict Function Tool 参数 Schema 都必须执行门禁；local_validation_only 仅跳过上游子集检查。
 - 限制覆盖：对象深度、属性总数、字符串元数据总长度、enum 数量与大 enum 字符数。
 - 对应测试：`TestValidateResponsesStrictSchemaSubsetAcceptsSupportedSchema`、`TestValidateResponsesStrictSchemaSubsetRejectsUnsupportedFeatures`、`TestMapResponsesRequestRejectsUnsupportedStrictSchemaButAllowsLocalValidation`、`TestMapResponsesRequestRejectsUnsupportedStrictToolSchema`。
+
+## 24. Usage 明细范围诊断
+
+- 缓存 Token 不能为负，且不能超过 input_tokens。
+- 推理 Token 不能为负，且不能超过 output_tokens。
+- 越界时保留上游原始值并追加 Usage.Diagnostics，不把异常明细当作可信正常值。
+- 对应测试：`TestParseResponsesUsageDetailsAreRangeChecked`。
