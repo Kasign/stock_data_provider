@@ -96,7 +96,7 @@
 - LLM → Quant、Research、Researchflow Domain。
 - Notification → Researchflow 或具体业务 Domain。
 - 任一模块访问其他模块的私有 Domain、Repository、SQL、Migration 实现或 Adapter。
-- 根 Go Module import Data 独立 Module 的 internal 包。
+- Data 迁移完成前，根 Go Module 不得跨 Module import Data 的 internal 包；迁移完成后 Data 与 Server 位于同一 Go Module，也仍须遵守领域私有包不可被其他模块直接依赖的业务边界。
 - 通过 Platform 建设共享万能 Domain、Repository、Task Framework 或动态工作流框架。
 
 ### 3.3 业务调用与 Go import 必须区分
