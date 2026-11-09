@@ -45,7 +45,7 @@ func (r *EventRepository) Append(ctx context.Context, value researchevent.Resear
 func (r *EventRepository) AppendWithLifecycle(ctx context.Context, value researchevent.ResearchEvent, reasonCode *string, correlationID string) error {
 	if r == nil { return ErrInvalidRepository }
 	if err := value.Validate(); err != nil { return fmt.Errorf("validate Event: %w", err) }
-	if strings.TrimSpace(correlationID) == "" || correlationID != strings.TrimSpace(correlationID) {
+	if !observability.ValidRequestID(correlationID) {
 		return fmt.Errorf("trusted correlation ID is required")
 	}
 	if reasonCode != nil && (strings.TrimSpace(*reasonCode) == "" || *reasonCode != strings.TrimSpace(*reasonCode)) {

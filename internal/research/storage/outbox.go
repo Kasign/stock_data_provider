@@ -8,7 +8,10 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
+
+	"example.com/stock-analysis-flow/internal/platform/observability"
 
 	"github.com/gowebpki/jcs"
 
@@ -76,13 +79,13 @@ func buildResearchLifecycleEnvelope(previous, next researchevent.ResearchEvent,
 		transition.ToStatus != next.Status {
 		return researchLifecycleEnvelope{}, nil, fmt.Errorf("lifecycle transition identity does not match Event versions")
 	}
-	if correlationID == "" || len(correlationID) > 128 {
+	if !observability.ValidRequestID(correlationID) {
 		return researchLifecycleEnvelope{}, nil, fmt.Errorf("correlation_id must contain 1..128 characters")
 	}
 	if publishedAt.IsZero() || publishedAt.Location() != time.UTC {
 		return researchLifecycleEnvelope{}, nil, fmt.Errorf("published_at must be a non-zero UTC time")
 	}
-	if reasonCode != nil && (*reasonCode == "" || *reasonCode != trimASCII(*reasonCode)) {
+	if reasonCode != nil && (*reasonCode == "" || *reasonCode != strings.TrimSpace(*reasonCode)) {
 		return researchLifecycleEnvelope{}, nil, fmt.Errorf("reason_code must be null or a trimmed non-empty value")
 	}
 	researchEventRef := "research-event:" + next.EventID
@@ -127,9 +130,3 @@ func newOutboxEventID() (string, error) {
 	return "nte_" + hex.EncodeToString(value[:]), nil
 }
 
-func trimASCII(value string) string {
-	start, end := 0, len(value)
-	for start < end && (value[start] == ' ' || value[start] == '\t' || value[start] == '\n' || value[start] == '\r') { start++ }
-	for end > start && (value[end-1] == ' ' || value[end-1] == '\t' || value[end-1] == '\n' || value[end-1] == '\r') { end-- }
-	return value[start:end]
-}
