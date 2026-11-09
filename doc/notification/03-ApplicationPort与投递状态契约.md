@@ -195,7 +195,7 @@ recipient_scope 不是地址，也不是 recipient_ref。建议 MVP 仅允许：
 
 DeliveryStateEvent 的 version/from/to/changed_at 来自每次状态迁移；evidence_ref 仅来自对账证据；actor_ref/request_id/actor_reason 仅来自经授权的人工命令审计上下文。领域方法返回新快照和事件，不修改原对象；Repository 必须在同一事务中 CAS 更新快照并追加事件。
 
-当前只完成领域模型与纯函数迁移测试；DeliveryAttempt、Repository CAS、租约/fencing 和 Dispatcher 仍属于 NTF-004 后续切片，不能据此宣称 Worker 或投递已实现。
+当前 DeliveryRecord 已具备领域模型与纯函数迁移测试；DeliveryRepository Port/Fake 已覆盖 Claim/CAS 的模块内并发语义。DeliveryAttempt 领域快照与 Complete 纯函数已实现，字段语义和校验规则见第 4.3 节。Attempt Repository、租约超时恢复和 Dispatcher/Worker 尚未实现，不能据此宣称 Worker 或真实投递已实现。
 
 
 ### 4.2 DeliveryRepository Port 与 Fake 的第一阶段实现
@@ -214,6 +214,27 @@ DeliveryStateEvent 的 version/from/to/changed_at 来自每次状态迁移；evi
 | ErrDeliveryVersionConflict / ErrDeliveryLeaseConflict | Repository CAS 判定 | 分别表示快照版本竞争和租约/token 失效；调用方不得将冲突当作可覆盖更新 |
 
 当前 Fake 只证明模块内并发/CAS 语义，不代表 MariaDB 锁、事务、跨进程 fencing 或崩溃恢复已验收。ClaimDue 将租约截止限制为 min(调用方请求截止, Delivery.deadline_at)，不回收过期 sending；后续 Dispatcher Recovery 必须先判断请求是否发出，能证明未发出才可安全重排，结果不明必须进入 unknown。
+
+
+### 4.3 DeliveryAttempt 追加式领域模型
+
+当前 `internal/notification/domain/delivery_attempt.go` 实现 DeliveryAttempt 快照、结构校验和纯函数完成操作；它不负责分配 attempt_no、不执行渠道调用，也不持久化记录。
+
+| 字段 | 来源 | 语义与约束 |
+|---|---|---|
+| attempt_id / delivery_id | Notification ID 生成器 / 当前 Delivery | 不透明稳定引用；一条 Attempt 只归属一条 Delivery |
+| attempt_no | DeliveryAttempt Repository 按 Delivery 原子分配 | 从 1 开始；每次真实渠道调用递增；发送前检查失败不创建 Attempt |
+| worker_id / fencing_token / lease_expires_at | DeliveryRepository 成功 Claim 返回的 Worker 与租约 | 必须关联当前 Claim；token 由 Repository 单调分配，不能由 Worker 自行生成 |
+| started_at | 注入 Clock，在真实渠道调用开始边界记录 | UTC；不能用 Claim 时间代替渠道调用开始时间 |
+| finished_at / outcome | ChannelAdapter 的受控 Send 结果与注入 Clock | accepted/rejected/ambiguous/not_sent；完成后不可通过 Complete 再次修改 |
+| provider_message_ref / error_code | ChannelAdapter 归一化结果 | 仅保存不透明回执引用和稳定错误码，不保存原始异常/响应正文 |
+| retryable | Channel 错误分类的技术建议 | 不直接授权重试；还须经过 Channel retryable 白名单、RetryPolicy、预算和 deadline 判断 |
+| duration_ms | finished_at - started_at | 由领域方法计算，毫秒整数；运行中为 null |
+| evidence_ref | 能证明 not_sent 或支持后续对账的受控证据系统 | 不透明引用；not_sent 必须提供证明，不能仅凭普通错误字符串推断未发送 |
+
+`DeliveryAttempt.Complete` 返回新快照，不修改原对象。accepted 不允许携带 error_code/retryable；rejected 和 ambiguous 必须携带稳定 error_code；not_sent 必须同时携带 error_code 与 evidence_ref，且不能携带 provider_message_ref。ambiguous 即使 retryable=true 也不构成自动重试授权，最终决策属于 NTF-005。
+
+本切片只完成领域模型与纯函数测试代码；Attempt 的 attempt_no 原子分配、追加式 Repository、与 Delivery 状态事件/租约的事务绑定、Worker 崩溃恢复和真实渠道证据仍未实现。Fake/单测代码未获得 CI 通过证据前不得标记模块级验收通过。
 
 ## 5. Attempt、租约与并发恢复
 
