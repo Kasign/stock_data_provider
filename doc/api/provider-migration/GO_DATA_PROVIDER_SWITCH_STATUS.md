@@ -46,3 +46,11 @@
 - 其他能力按其直接请求端点校验：Quote、DailyBars、StockBasic、StockSearch、IndexQuotes、LimitPools、StockBoards、Announcements、DragonTiger、CapitalFlow。
 - 增加 Provider 级依赖映射测试，以及 bootstrap 层“仅 Quote 启用时只要求 Quote origin”的回归测试。
 - 仍需在 integration 统一执行测试；本分支未运行构建或测试。该改动只收敛装配时依赖清单，不改变 BoundDoer 的 DNS/IP/重定向安全策略。
+
+
+### 后续阻塞项：TCP 受控拨号能力
+
+- 当前 Data Provider 已通过 `Dependencies.BaoStockDialContext` 与 `Dependencies.PytdxDialContext` 接收 Root 注入的 TCP 拨号函数；严格装配校验会在启用对应 Provider 能力但未注入时拒绝启动。
+- 当前合入本分支的 `internal/platform/httpclient` 只有 HTTP BoundDoer，未发现可供 Root 使用的受控 TCP BoundDialer。
+- BaoStock 与 Pytdx 在 nil DialContext 时仍保留独立兼容模式的标准 `net.Dialer` fallback；模块化 Root 必须由严格装配校验阻止此路径，不能将 fallback 视为安全出站。
+- 该缺口属于 Platform 基础能力，不在 Data 分支重复实现。需要 Platform 提供可复用的 TCP 受控拨号能力后，Root 才能完成注入；在此之前启用 BaoStock/Pytdx 的模块化 Root 配置应保持 fail-closed。
