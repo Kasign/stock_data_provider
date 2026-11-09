@@ -144,7 +144,10 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get evidence snapshot: %v", err)
 	}
-	if len(loadedSnapshot.Items) != 1 || loadedSnapshot.Items[0].VersionID != snapshot.Items[0].VersionID {
+	if len(loadedSnapshot.Items) != 1 ||
+		loadedSnapshot.Items[0].VersionID != snapshot.Items[0].VersionID ||
+		loadedSnapshot.PurposeCode != snapshot.PurposeCode ||
+		loadedSnapshot.RequestedContentLevel != snapshot.RequestedContentLevel {
 		t.Fatalf("evidence snapshot payload changed: %+v", loadedSnapshot)
 	}
 
