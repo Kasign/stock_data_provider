@@ -1,8 +1,8 @@
 package result
 
 import (
-	"encoding/json"
 	"context"
+	"encoding/json"
 	"errors"
 	"sync"
 	"testing"

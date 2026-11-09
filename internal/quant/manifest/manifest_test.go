@@ -99,6 +99,37 @@ func TestBuildSortsSnapshotRefsAndRejectsInvalidInputs(t *testing.T) {
 	}
 }
 
+
+func TestBuildRejectsInvalidUTF8SnapshotReference(t *testing.T) {
+	input := Input{
+		ResultType:        "factor",
+		SchemaVersion:     "1.0.0",
+		SystemAsOf:        time.Date(2026, 11, 6, 5, 2, 0, 0, time.UTC),
+		InputSnapshotRefs: []string{string([]byte{0xff})},
+		ResultFingerprint: strings.Repeat("b", 64),
+	}
+	if _, err := Build(input); !errors.Is(err, ErrInvalidManifest) {
+		t.Fatalf("Build() error = %v, want ErrInvalidManifest", err)
+	}
+}
+
+func TestVerifyRejectsInvalidUTF8SnapshotReference(t *testing.T) {
+	got, err := Build(Input{
+		ResultType:        "factor",
+		SchemaVersion:     "1.0.0",
+		SystemAsOf:        time.Date(2026, 11, 6, 5, 2, 0, 0, time.UTC),
+		InputSnapshotRefs: []string{"snapshot-a"},
+		ResultFingerprint: strings.Repeat("b", 64),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got.InputSnapshotRefs[0] = string([]byte{0xff})
+	if err := got.Verify(); !errors.Is(err, ErrInvalidManifest) {
+		t.Fatalf("Verify() error = %v, want ErrInvalidManifest", err)
+	}
+}
+
 func TestVerifyRejectsManifestMutation(t *testing.T) {
 	got, err := Build(Input{
 		ResultType:        "stock",

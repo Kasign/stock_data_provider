@@ -5,7 +5,7 @@
 新增 `result.Record` 与 `result.Repository` 写入端口：
 
 - Record 由已构造的 Manifest 和原始 payload 组成，不把未冻结的 QuantResult Envelope 假设写入存储模型。
-- `Record.Validate` 调用 Manifest.VerifyPayload，确保内容寻址身份、Manifest 指纹和实际 payload 指纹一致。
+- `Record.Validate` 调用 Manifest.VerifyPayload，确保内容寻址身份、Manifest 指纹和实际 payload 指纹一致；Manifest 的快照引用在构造和复核时均拒绝非法 UTF-8，避免 JSON 序列化替换字节后改变引用内容。
 - Repository 当前只定义 Save 写入端口，不暴露 Get/Query；在 QuantResultRef/Envelope 关系及读取时授权复核流程冻结前，不提供可绕过授权的结果读取接口。
 - Save 语义固定：相同 result_id、相同内容为幂等成功；相同 result_id、不同内容返回 ErrResultConflict。
 - Repository 实现必须通过数据库唯一约束/原子写入保证并发下的幂等与冲突判定，不能采用先查后写的非原子流程。
