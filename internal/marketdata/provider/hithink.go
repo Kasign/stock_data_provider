@@ -1458,6 +1458,7 @@ func (p *Hithink) FetchValuations(ctx context.Context, rawSymbols []string) (*mo
 			itemReasons = append(itemReasons, "provider_stock_name_missing")
 		}
 		var pet, pem, pbm, pst, pcft *float64
+		metricIssue := false
 		metricFields := []struct {
 			key string
 			value **float64
@@ -1471,6 +1472,7 @@ func (p *Hithink) FetchValuations(ctx context.Context, rawSymbols []string) (*mo
 		for _, field := range metricFields {
 			*field.value = hithinkFieldNumber(row, field.key)
 			if *field.value == nil {
+				metricIssue = true
 				reason := "valuation_metric_missing:" + field.key
 				if hithinkValuationMetricInputInvalid(row[field.key]) {
 					reason = "valuation_metric_invalid:" + field.key
@@ -1478,10 +1480,7 @@ func (p *Hithink) FetchValuations(ctx context.Context, rawSymbols []string) (*mo
 				itemReasons = append(itemReasons, reason)
 			}
 		}
-		if len(itemReasons) > 0 {
-			itemReasons = append(itemReasons, "one_or_more_valuation_metrics_missing_or_invalid")
-		}
-		if pet == nil || pem == nil || pbm == nil || pst == nil || pcft == nil {
+		if metricIssue {
 			itemReasons = append(itemReasons, "one_or_more_valuation_metrics_missing_or_invalid")
 		}
 		itemQuality := model.QualityValid
