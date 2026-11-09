@@ -259,3 +259,26 @@ func TestDeliveryExecutionCancellationAfterSendLeavesAttemptForUnknownRecovery(t
 		t.Fatalf("attempt must remain unfinished for conservative recovery: attempts=%+v err=%v", attempts, listErr)
 	}
 }
+
+func TestDeliveryExecutionRetryableRejectionSchedulesRetry(t *testing.T) {
+	service, repository, adapter, claim, event := executionFixture(t)
+	adapter.result = domain.ChannelSendResult{
+		Outcome: domain.ChannelOutcomeRejected,
+		ErrorCode: "rate_limited",
+	}
+
+	result, err := service.Execute(
+		context.Background(), claim, event, "attempt-execution-retry",
+		0.5, "evidence-execution-retry",
+	)
+	if err != nil {
+		t.Fatalf("execute retryable rejection: %v", err)
+	}
+	if result.ChannelResult == nil || result.ChannelResult.Outcome != domain.ChannelOutcomeRejected || adapter.calls != 1 {
+		t.Fatalf("unexpected rejection result: %+v calls=%d", result, adapter.calls)
+	}
+	delivery, found, getErr := repository.Get(context.Background(), claim.Delivery.DeliveryID)
+	if getErr != nil || !found || delivery.Status != domain.DeliveryRetryWait || delivery.NextAttemptAt == nil || delivery.AttemptCount != 1 {
+		t.Fatalf("retryable rejection must schedule retry without sending twice: delivery=%+v found=%v err=%v", delivery, found, getErr)
+	}
+}
