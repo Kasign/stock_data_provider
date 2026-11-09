@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	platformfault "example.com/stock-analysis-flow/internal/platform/fault"
 	platformstorage "example.com/stock-analysis-flow/internal/platform/storage"
 )
 
@@ -135,6 +136,10 @@ func (r *Registry) RunWithReport(ctx context.Context, db *sql.DB) (RunReport, er
 		if err != nil {
 			item.Status = "failed"
 			item.ReasonCode = "server.migration.namespace_failed"
+			var platformErr *platformfault.Fault
+			if errors.As(err, &platformErr) && platformErr.Validate() == nil {
+				item.ReasonCode = platformErr.Code
+			}
 			item.Duration = time.Since(itemStarted)
 			report.Namespaces = append(report.Namespaces, item)
 			return finish(fmt.Errorf("apply %s migrations: %w", namespace, err))
