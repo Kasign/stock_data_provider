@@ -183,7 +183,6 @@ func TestSourceEndpointCheckReportsApprovedRegistration(t *testing.T) {
 	}
 }
 
-
 func TestSourceEndpointCheckFailsClosedForUnsafeRegistrations(t *testing.T) {
 	valid := app.SourceEndpointRegistration{
 		SourceID: "source-1", EndpointID: "endpoint-1", Enabled: true,
@@ -266,7 +265,6 @@ func TestSourceEndpointCheckFailsClosedForUnsafeRegistrations(t *testing.T) {
 	}
 }
 
-
 func TestProviderOutputPolicyCheckReportsFailClosedBoundary(t *testing.T) {
 	report, err := (platformdiag.Runner{}).Run(context.Background(), []platformdiag.Check{
 		ProviderOutputPolicyCheck(),
@@ -297,7 +295,6 @@ func TestProviderOutputPolicyCheckHonorsCanceledContext(t *testing.T) {
 		t.Fatalf("status=%s, want unavailable", report.Results[0].Observation.Status)
 	}
 }
-
 
 type providerOutputPolicyResolverStub struct {
 	binding app.ProviderOutputPolicyBinding
