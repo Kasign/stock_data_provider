@@ -3,6 +3,7 @@ package migration
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"reflect"
 	"testing"
 
