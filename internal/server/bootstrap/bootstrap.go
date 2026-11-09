@@ -25,6 +25,8 @@ import (
 	researchstorage "example.com/stock-analysis-flow/internal/research/storage"
 	serverconfig "example.com/stock-analysis-flow/internal/server/config"
 	servermigration "example.com/stock-analysis-flow/internal/server/migration"
+	serverdiagnostics "example.com/stock-analysis-flow/internal/server/diagnostics"
+	serverhealth "example.com/stock-analysis-flow/internal/server/health"
 	serverresources "example.com/stock-analysis-flow/internal/server/resources"
 	"example.com/stock-analysis-flow/internal/service"
 )
@@ -115,9 +117,22 @@ func Run(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("创建旧 Analysis HTTP API 失败: %w", err)
 	}
+	diagnosticsService, err := serverdiagnostics.NewService(storageResources)
+	if err != nil {
+		return fmt.Errorf("创建 Server 诊断服务失败: %w", err)
+	}
+	healthHandler, err := serverhealth.NewHandler(diagnosticsService)
+	if err != nil {
+		return fmt.Errorf("创建 Health/Readiness Handler 失败: %w", err)
+	}
+	mux := http.NewServeMux()
+	mux.Handle("/healthz", healthHandler)
+	mux.Handle("/readyz", healthHandler)
+	mux.Handle("/", api.Handler())
+
 	server := &http.Server{
 		Addr:              httpConfig.Address,
-		Handler:           api.Handler(),
+		Handler:           mux,
 		ReadHeaderTimeout: httpConfig.ReadHeaderTimeout,
 		ReadTimeout:       httpConfig.ReadTimeout,
 		WriteTimeout:      httpConfig.WriteTimeout,
