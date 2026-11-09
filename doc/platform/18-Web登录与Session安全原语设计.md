@@ -3,7 +3,7 @@
 - 所属仓库：Kasign/stock_data_provider
 - 所属分支：feat/platform-foundation
 - 适用范围：Platform 公共安全原语候选设计
-- 状态：方案已形成，待 Server 与项目级契约 Owner 评审；未冻结、未实现
+- 状态：安全模型与跨层职责为候选设计；Argon2id 哈希原语已进入实现/CI 验收，CredentialStore 及 Web Session 相关契约仍待消费者确认
 - 关联文档：《03-安全认证与ServiceKey设计》《08-公共平台契约规范》《01-开发路线图与任务清单》《16-公共平台剩余开发任务与跨模块接入责任清单》
 
 ## 1. 设计结论
@@ -156,10 +156,10 @@ Platform 提供 SecurityAuditEvent Schema、字段约束/脱敏和注入式 Audi
 - 现有 `internal/platform/security` 只有 Bearer Authenticator、Router Policy 和测试。
 - 现有 `internal/platform/storage.OpenRedis` 只提供 Redis Client 生命周期，没有 Session Store 或 RateLimiter。
 - 当前 go.mod 已有 `github.com/redis/go-redis/v9`，但没有 Argon2id 直接依赖；实现时需评估并引入成熟的 `golang.org/x/crypto/argon2` 依赖。
-- 尚未新增密码哈希、CredentialStore、Session、Cookie、CSRF、RateLimiter 或 Security Audit 代码。
-- 尚未新增平台 Credential Migration 或 Redis Key。
+- Argon2id Hash/Verify/NeedsRehash 原语已新增，使用显式参数，不提供未经硬件基准确认的生产默认值；其余 CredentialStore、Session、Cookie、CSRF、RateLimiter 和 Security Audit 原语仍未实现。
+- 尚未新增平台 Credential Migration、CredentialStore 表或 Redis Key。
 - Argon2id 参数需目标硬件基准；CredentialStore 表结构/迁移注册方式、Redis 原子脚本、限流阈值和 Audit Writer 持久化后端需评审。
-- 本文是 Platform 设计稿，不修改 Server 业务文档，也不改变项目级契约登记簿状态。
+- 本文是 Platform 技术设计与实现边界文档；Web 登录路由/权限/交互契约由 Server Owner 跟进，Platform 不代替 Server 修改其业务文档，也不改变项目级契约登记簿状态。
 
 ## 12. 安全设计原则
 
