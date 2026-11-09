@@ -719,10 +719,19 @@ internal/
 
 ### 2026-11-09：M2-5 HTTP Adapter 用例接口解耦（第一阶段）
 
-- `httpapi.Server` 不再持有 `*service.DataService`，改为依赖本地 `marketDataApplication` 接口；接口只包含当前 HTTP Handler 实际调用的 16 个既有用例：Quote、DailyBars/PIT、Bundle、市场概览/资金流/板块/龙虎榜、股票资料/搜索/公告、Provider Diagnostics 和 Ready。
+- `httpapi.Server` 不再持有 `*service.DataService`，改为依赖本地 `marketDataApplication` 接口；接口只包含当前 HTTP Handler 实际调用的 17 个既有用例：Quote、DailyBars/PIT、Bundle、市场概览/资金流/板块/龙虎榜、股票资料/搜索/公告、Provider Diagnostics 和 Ready。
 - 接口以 `service.DataService` 编译期断言验证实现完整性；未新增业务方法、外部 API、DTO 字段或 Provider 调度规则。
 - HTTP Adapter 不再在请求处理时读取 `SupplementProviders()`；补充 Provider 的来源能力状态在 Server 构造时一次性快照到 `SourceStatus`，保持原响应内容与排序。
 - Provider 实例化、能力注册、PriceLimitEvent Provider 注入仍由现有 Bootstrap/兼容构造器完成；HTTP Handler 不拥有 Provider/Repository/Cache。
 - 保留现有 `New`、`NewWithCapabilities`、`NewWithConfig`、`NewWithCapabilityInterfaces` 构造入口，避免本阶段改变 35 个 Operation 的装配和测试方式。该阶段只收紧 Handler 的运行时依赖边界，不宣称已经完成 Server 根组合和所有 Provider 元数据构建迁移。
 - 验收标准：Data HTTP API Contract、OpenAPI、认证/Request ID/错误响应、全部 HTTP Handler 测试不变；Data gofmt/test/race/vet 通过。
 - 下一步：M2-5 第二阶段评估 Bootstrap 直接构造来源状态并调用接口构造器，逐步移除 HTTP Adapter 构造器中的 DataService/Provider 具体依赖；不得为此扩大公共 `app.MarketDataReader`（Analysis 只需要 Quote/DailyBars）。
+
+
+### 2026-11-09：M2-5 Application 注入构造入口与来源快照测试
+
+- 新增 `httpapi.NewWithApplication`，允许 Bootstrap 注入满足现有 HTTP 用例接口的实现，并传入已计算的 `SourceStatus` 快照；不要求调用方提供 Provider 集合。
+- 原有构造器保留为兼容入口，继续负责从当前 DataService/Provider 配置生成来源能力状态，再委托新构造器；现有调用点行为不变。
+- `NewWithApplication` 对来源状态切片执行防御性复制，并沿用原有 maxBars/requestTimeout/logger 默认值。
+- 新增测试使用仅实现接口形状的 Stub 构造 Server，验证无需具体 DataService/Provider 即可装配 HTTP Adapter，且构造后的来源快照不受调用方切片修改影响。
+- 当前 Bootstrap 仍使用兼容构造器；将其切换到新构造入口并迁移来源状态生成逻辑作为 M2-5 第二阶段，不在本批混入。

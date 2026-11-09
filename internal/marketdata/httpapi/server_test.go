@@ -160,6 +160,34 @@ func (httpMarketCapitalFlowFake) FetchMarketCapitalFlow(_ context.Context, start
 	}, nil
 }
 
+type stubMarketDataApplication struct {
+	marketDataApplication
+}
+
+func TestNewWithApplicationUsesInjectedUseCasesAndCopiesSourceSnapshot(t *testing.T) {
+	sources := []model.SourceStatus{{Name: "eastmoney", Enabled: true, QuoteCapable: true}}
+	server := NewWithApplication(
+		"secret", "forward_adjusted", &stubMarketDataApplication{},
+		sources, 2000, time.Second, slog.New(slog.NewTextHandler(io.Discard, nil)),
+	)
+	sources[0].Name = "mutated-after-construction"
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/data-sources", nil)
+	req.Header.Set("X-API-Key", "secret")
+	rec := httptest.NewRecorder()
+	server.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), `"name":"eastmoney"`) {
+		t.Fatalf("source snapshot changed after construction: %s", rec.Body.String())
+	}
+	if strings.Contains(rec.Body.String(), "mutated-after-construction") {
+		t.Fatalf("server retained caller-owned source slice: %s", rec.Body.String())
+	}
+}
+
 func TestMarketCapitalFlowRouteIsRegisteredAndReturnsHistory(t *testing.T) {
 	p := httpMarketCapitalFlowFake{}
 	svc := service.New([]provider.Provider{p}, cache.NewDisabled(), nil, time.Second, time.Minute, 120, slog.New(slog.NewTextHandler(io.Discard, nil)))

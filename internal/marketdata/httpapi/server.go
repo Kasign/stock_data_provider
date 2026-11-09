@@ -219,10 +219,26 @@ func NewWithCapabilityInterfaces(apiKey, defaultAdjustment string, svc *service.
 			})
 		}
 	}
+	return NewWithApplication(apiKey, defaultAdjustment, svc, sources, maxBars, requestTimeout, logger)
+}
+
+// NewWithApplication 使用显式 Application 用例实现和来源能力快照构造 HTTP Adapter。
+// sources 由 Bootstrap 根据已启用的 Provider 能力生成；Server 不再查询 Provider 集合。
+func NewWithApplication(apiKey, defaultAdjustment string, app marketDataApplication, sources []model.SourceStatus, maxBars int, requestTimeout time.Duration, logger *slog.Logger) *Server {
+	if logger == nil {
+		logger = slog.Default()
+	}
+	if maxBars <= 0 || maxBars > 2000 {
+		maxBars = 2000
+	}
 	if requestTimeout <= 0 {
 		requestTimeout = 110 * time.Second
 	}
-	return &Server{apiKey: apiKey, defaultAdjustment: defaultAdjustment, maxBars: maxBars, requestTimeout: requestTimeout, app: svc, sources: sources, logger: logger}
+	sourceSnapshot := append([]model.SourceStatus(nil), sources...)
+	return &Server{
+		apiKey: apiKey, defaultAdjustment: defaultAdjustment, maxBars: maxBars,
+		requestTimeout: requestTimeout, app: app, sources: sourceSnapshot, logger: logger,
+	}
 }
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
