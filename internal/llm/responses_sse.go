@@ -122,6 +122,7 @@ func parseResponsesSSEReaderLimit(reader io.Reader, request ModelRequest, clock 
 	var parseErr error
 	var readErr error
 	var terminalErr error
+	callbackError := false
 	functionArguments := make(map[string]sseFunctionArgumentsState)
 
 	resetEvent := func() {
@@ -352,6 +353,7 @@ func parseResponsesSSEReaderLimit(reader io.Reader, request ModelRequest, clock 
 				result.Error = nil
 				terminal = false
 				terminalErr = err
+				callbackError = true
 				parseErr = err
 			}
 		}
@@ -426,7 +428,7 @@ func parseResponsesSSEReaderLimit(reader io.Reader, request ModelRequest, clock 
 	}
 	if parseErr != nil {
 		// 消费者回调错误优先于 AdapterError 分类；部分响应必须保持 incomplete。
-		if terminalErr == parseErr {
+		if callbackError {
 			finish()
 			return result, parseErr
 		}
