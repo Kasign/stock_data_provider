@@ -402,3 +402,12 @@ Application 的 `RunFinalizationCoordinator` 是三种终态聚合路径的路�
 - ResultSummary payload 必须包含 StageOutcomes、RiskGateDecisions、ExcludedStages、Missing/Degraded/Blocked Stage Codes、ReasonCodes；Coverage 范围为 [0,1]，QualityStatus 和 ActionabilityStatus 必填。
 - GetRun 只做读取和一致性门禁，不负责授权判定；调用入口必须先由 Server 认证/授权层确认调用者有权读取该 Run。当前 Application Facade 不接受请求体 caller_ref，也不自行推断资源所有权。
 - 当前新增 Fake Reader/解码测试只证明 Application 与 payload 结构校验；MariaDB 回读、终态摘要关联和跨模块 DTO/Schema/Golden 仍待验收。
+
+## 11. CancelRun Application 命令契约（2026-11-09）
+
+- `CancelRunService.CancelRun(ctx, runRef)` 只接受可信 `RequestIdentity.AuthenticatedCallerRef`；必须先经 `RunAccessAuthorizer.AuthorizeRunCancellation(ctx, callerRef, runRef)` 校验持久化 Run 所有权/取消权限，再读取 Run 和调用取消 Storage。
+- Researchflow Run 当前不在 Run 聚合内持久化 caller owner；因此 Application 不得自行假定 caller_ref 与 RunRef 的关系，也不得仅凭已认证身份允许取消。Server 必须注入真实授权 Adapter；未配置 Authorizer 时构造失败。
+- 取消使用 Run 当前 Version 调用 `BeginRunCancellation`，由 Storage 在 Run 行锁内与 Claim/Commit 线性化。Application 不直接更新状态、不广播假取消成功、不绕过事务。
+- `Started=true` 只表示本次请求赢得持久化 `created/queued/running -> cancelling` 迁移；不表示在途 Worker 已停止。Worker 必须确认停止，或由 lease fencing 回收；CancellationFinalizer 再原子写入 ResultSummary、Outbox 和 Run 终态。
+- 已处于 `cancelling + user_cancelled` 时幂等返回；终态 Run 或 `deadline_exceeded` 终止权已生效时拒绝。CAS 未获胜后必须重读；只有持久化状态已是同一用户取消才按幂等重放，否则返回版本冲突。
+- Server HTTP/DI、真实 RunAccessAuthorizer Adapter 和跨进程 Worker 协作不属于本分支 Application Facade 的实现范围。
