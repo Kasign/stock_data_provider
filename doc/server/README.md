@@ -627,6 +627,31 @@ flowchart TD
 - 不读取或序列化 Platform Fault 的 Cause/Dependency，不在结构化报告暴露底层 SQL 语句和驱动错误。
 - 修正提交：`a1d637cea8c1038ab9e0da5952a8acfbc91f71ea`。
 
+### 12.25 SRV-004 模块 DI 所有权与 Migration 恢复诊断补强（2026-11-09）
+
+#### SRV-004 责任划分
+
+- **Server Owner 对 SRV-004 最终负责**：维护唯一组合根，按依赖 DAG 创建模块实例，注入共享资源和 Application Port，注册 Handler、Worker、Migration、Diagnostics，并统一管理启动/停止。
+- **模块 Owner 负责提供可装配入口**：公开稳定的生产构造函数/Module Factory、模块配置结构、Application Port、真实 Handler/Worker/Check/Migration 贡献项，以及资源所有权说明。模块不能自行创建 Server 共享 DB/Redis/HTTP Client，也不能自行启动脱离 Server Lifecycle 管理的后台 Worker。
+- **Platform Owner 负责公共原语**：提供 Config/Secret、Storage、HTTP Client、Fault、Diagnostics、Migration Runner 等技术能力；不承担模块业务构造，也不承担 Server 组合根。
+- Server 不创建占位 Factory、空 Worker 或假 Check。模块构造入口缺失时，Server 只推进已具备入口的模块，不将 SRV-004 整体标记完成。
+- 当前 Server Migration Registry 已实际注册 News、Research、Notification；这只是 Migration 接入证据，不等于这些模块的 Handler/Worker/Diagnostics DI 全部完成。其余模块按各自公开生产入口交付情况接入。
+
+#### Migration 恢复诊断补强
+
+- namespace 失败结果新增 `recovery_required`。
+- Platform 返回 `platform.storage.migration_requires_recovery`、`migration_apply_failed`、`migration_record_failed`、`migration_lock_release_failed` 时标记需要人工检查/恢复。
+- 已应用历史与当前 Migration 定义不一致（未知版本、缺失中间版本或 checksum 不匹配）时，映射为 `server.migration.history_mismatch` 并标记需要恢复。
+- 普通连接失败保留 Platform 稳定故障码，但不错误标记为部分 DDL 已执行。
+- 无效 Fault 元数据不会进入诊断报告，统一降级为 `server.migration.namespace_failed`。
+- 新增上述原因码及恢复标记单元测试；未模拟真实 MariaDB DDL 中断，真实恢复流程仍需集成环境验收。
+
+#### 提交与验证
+
+- Migration 恢复判定实现：`73fee1d5b08dbb0994ddaa08f3ef415d928c48f3`。
+- Migration 恢复判定测试：`e0affc01bc1ebf943ca701b05ee12f2bc9285c66`。
+- 本批次尚未运行 gofmt、Server 包测试或 Go Workflow；不标记为通过。
+
 ## 13. 分支与协作规则
 
 - 本规划及 Server 代码实施位于 `feat/research-analysis-flow-native-go`。
