@@ -2263,7 +2263,7 @@ paths:
         Returns the provider-reported market-wide moneyflow_mkt_dc series. Values are CNY and rates are percentage
         points. This is not calculated by summing a partial set of individual stocks. The endpoint requires a Tushare
         token with the moneyflow_mkt_dc permission (documented minimum 120 points); source timestamps are not precise,
-        so the result remains degraded. The requested range is inclusive and capped at 2000 calendar days.
+        so the result remains degraded. The requested range is inclusive and capped at 2000 calendar days; end must not be later than the current Asia/Shanghai calendar date.
       parameters:
         - {name: start, in: query, required: true, schema: {type: string, format: date}}
         - {name: end, in: query, required: true, schema: {type: string, format: date}}
