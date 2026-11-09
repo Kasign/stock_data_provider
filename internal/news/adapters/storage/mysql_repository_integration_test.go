@@ -299,16 +299,16 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 		ProviderOutputPolicyVersionID: "provider-policy-v1",
 		PolicyEvaluatedAt: time.Now().UTC(),
 	}
-	traced, err := ingest.ExecuteWithPolicyTrace(ctx, traceSourceID, "provider-trace-key", traceCandidate, domain.SourceURLPolicy{}, trace)
-	if err != nil {
-		t.Fatalf("ingest provider policy trace: %v", err)
+	if _, err := ingest.ExecuteWithPolicyTrace(ctx, traceSourceID, "provider-trace-key", traceCandidate, domain.SourceURLPolicy{}, trace); !errors.Is(err, app.ErrProviderOutputPolicyRequired) {
+		t.Fatalf("self-declared provider policy error = %v, want fail-closed rejection", err)
 	}
-	replayedTrace, err := ingest.ExecuteWithPolicyTrace(ctx, traceSourceID, "provider-trace-key", traceCandidate, domain.SourceURLPolicy{}, trace)
-	if err != nil {
-		t.Fatalf("replay provider policy trace: %v", err)
+	if err := db.QueryRowContext(ctx,
+		"SELECT COUNT(*) FROM news_items WHERE origin_source_id = ?", traceSourceID,
+	).Scan(&itemCount); err != nil {
+		t.Fatal(err)
 	}
-	if replayedTrace.ID != traced.ID || replayedTrace.ProviderOutputPolicyVersionID != "provider-policy-v1" {
-		t.Fatalf("provider output policy version was not persisted and replayed: %+v", replayedTrace)
+	if itemCount != 0 {
+		t.Fatalf("provider policy rejection created %d News items, want 0", itemCount)
 	}
 
 	replayed, err := ingest.Execute(ctx, sourceID, "news-it-key-0", candidate, domain.SourceURLPolicy{})
