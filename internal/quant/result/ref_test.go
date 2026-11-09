@@ -149,7 +149,6 @@ func TestBuildRefMatchesQNTCTR004Golden(t *testing.T) {
 	}
 }
 
-
 func TestBuildRefOutputMatchesQNTCTR004Schema(t *testing.T) {
 	schemaPath := filepath.Join("..", "..", "..", "doc", "quant", "schema", "QNT-CTR-004-quant-result-ref-1.0.0.schema.json")
 	schemaDocument, err := os.ReadFile(schemaPath)
@@ -200,7 +199,7 @@ func TestBuildRefOutputMatchesQNTCTR004Schema(t *testing.T) {
 		invalid[key] = value
 	}
 	invalid["unexpected"] = true
-	
+
 	if err := schema.Validate(invalid); err == nil {
 		t.Fatal("schema accepted an unknown QuantResultRef field")
 	}
@@ -228,7 +227,6 @@ func TestBuildRefOutputMatchesQNTCTR004Schema(t *testing.T) {
 
 }
 
-
 func TestBuildRefRejectsInvalidUTF8Metadata(t *testing.T) {
 	tests := []struct {
 		name   string
@@ -254,7 +252,7 @@ func TestBuildRefRejectsInvalidUTF8Metadata(t *testing.T) {
 func TestBuildRefRejectsInvalidUTF8SnapshotReference(t *testing.T) {
 	source, err := manifest.Build(manifest.Input{
 		ResultType: "factor", SchemaVersion: "1.0.0",
-		SystemAsOf: time.Date(2026, 11, 9, 0, 0, 0, 0, time.UTC),
+		SystemAsOf:        time.Date(2026, 11, 9, 0, 0, 0, 0, time.UTC),
 		InputSnapshotRefs: []string{string([]byte{0xff})},
 		ResultFingerprint: testManifest(t).ResultFingerprint,
 	})
@@ -268,7 +266,7 @@ func TestBuildRefRejectsInvalidUTF8SnapshotReference(t *testing.T) {
 
 func TestBuildRefRejectsBlankOrNonCanonicalMetadata(t *testing.T) {
 	tests := []struct {
-		name string
+		name   string
 		mutate func(*RefInput)
 	}{
 		{"security_id whitespace", func(v *RefInput) { v.SecurityID = "   " }},

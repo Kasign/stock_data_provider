@@ -14,7 +14,7 @@ func validRecord(t *testing.T, payload string) Record {
 	raw := json.RawMessage(payload)
 	m, err := manifest.BuildWithPayload(manifest.Input{
 		ResultType: "factor", SchemaVersion: "1.0.0",
-		SystemAsOf: time.Date(2026, 11, 9, 0, 0, 0, 0, time.UTC),
+		SystemAsOf:        time.Date(2026, 11, 9, 0, 0, 0, 0, time.UTC),
 		InputSnapshotRefs: []string{"snapshot:001"},
 	}, raw)
 	if err != nil {
@@ -45,7 +45,6 @@ func TestRecordValidateRejectsInvalidManifest(t *testing.T) {
 		t.Fatalf("Validate() error = %v, want ErrInvalidManifest", err)
 	}
 }
-
 
 func TestRecordValidatedSnapshotIsolatesMutableSlices(t *testing.T) {
 	record := validRecord(t, `{"metric_code":"momentum_20d","value":0.12}`)
