@@ -263,3 +263,12 @@ A1 通过只表示 Platform 流式技术原语可供领域模块接入，不代�
 - Storage integration：MariaDB 11.4 / Redis 7.4 真实服务容器测试及 Race 全部通过。
 - 流式专项覆盖：HTTP/1.1 与 HTTP/2 增量读取/取消、慢消费者、主动关闭、并发额度释放、上游截断、Body/响应头上限、解压后字节限制、空闲超时、重定向、BoundDoer 固定策略、应用层不重试约束、Fault 脱敏、连接/TLS/响应头超时分类、HTTP/2 主动 Close、调用方处理时间与错误分类兼容层。
 - 当前准入：Platform A1 通过；LLM A2 真实调用联调尚未完成；生产 A3 DNS/egress、Secret 和运行时验收尚未完成。不得将 A1 通过表述为整个 PLAT-CTR 跨模块交付完成。
+
+
+## 12. 2026-11-09 流式重试语义回归验收
+
+- 回归提交：`2f5a5abcfb526c63be428feca81ae3236ebc24cd`（`修正流式请求重试候选条件`）。
+- GitHub Actions：`https://github.com/Kasign/stock_data_provider/actions/runs/42574590069`，Platform packages 与 Storage integration 均为 success。
+- 修正内容：响应头交付前的流式请求错误，只有在策略显式幂等且请求体为空、为 `http.NoBody` 或提供 `GetBody` 时才标记 Retryable；不可重放请求体不再产生可重试提示。
+- 回归测试覆盖非幂等、无请求体、不可重放请求体、可重放请求体和 `http.NoBody`；同时通过 gofmt、契约 Schema/Golden、Platform 单测、Race、Vet，以及 MariaDB/Redis Storage integration 与 Race。
+- 本记录只证明 Platform A1 包级回归通过；LLM A2 真实 Gateway 联调和生产 A3 DNS/egress/Secret 验收仍未完成。
