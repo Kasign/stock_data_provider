@@ -66,6 +66,9 @@ func (tx memoryIdentityTransaction) AppendObservation(_ context.Context, observa
 		if existing.IdempotencyKey != observation.IdempotencyKey {
 			continue
 		}
+		if existing.PayloadPurgedAt != nil {
+			return domain.Observation{}, ErrObservationPayloadPurged
+		}
 		if !SameObservationPayload(existing, observation) {
 			return domain.Observation{}, ErrObservationIdempotencyConflict
 		}
@@ -223,6 +226,25 @@ func TestIngestCandidateRetriesIdempotently(t *testing.T) {
 	}
 	if first.ID != second.ID || len(repository.observations) != 1 || len(repository.items) != 1 {
 		t.Fatalf("first=%+v second=%+v repository=%+v", first, second, repository)
+	}
+}
+
+func TestIngestCandidateRejectsReplayAfterObservationPayloadPurge(t *testing.T) {
+	repository := &memoryIdentityRepository{}
+	usecase := NewIngestCandidate(repository, func() string { return "observation-purged" })
+	candidate := domain.Candidate{SourceItemID: "source-item-1", Title: "private candidate"}
+	if _, err := usecase.Execute(context.Background(), "source-1", "purged-key", candidate, domain.SourceURLPolicy{}); err != nil {
+		t.Fatal(err)
+	}
+	purgedAt := time.Date(2026, 11, 9, 10, 0, 0, 0, time.UTC)
+	repository.observations[0].Candidate = domain.Candidate{}
+	repository.observations[0].PayloadPurgedAt = &purgedAt
+	_, err := usecase.Execute(context.Background(), "source-1", "purged-key", candidate, domain.SourceURLPolicy{})
+	if !errors.Is(err, ErrIdentityTransaction) || !errors.Is(err, ErrObservationPayloadPurged) {
+		t.Fatalf("replay after payload purge must be rejected, got %v", err)
+	}
+	if len(repository.observations) != 1 || repository.observations[0].Candidate.Title != "" || repository.observations[0].PayloadPurgedAt == nil {
+		t.Fatalf("purged payload was restored: %+v", repository.observations)
 	}
 }
 

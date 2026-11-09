@@ -65,6 +65,9 @@ func TestIngestCollectedSourceRechecksVersionAndMetadataPersistencePolicy(t *tes
 	if len(observations) != 1 || len(repository.observations) != 1 {
 		t.Fatalf("observations=%+v repository=%+v", observations, repository)
 	}
+	if repository.observations[0].RetentionUntil.IsZero() || repository.observations[0].RetentionUntil.Sub(repository.observations[0].ObservedAt) != time.Hour {
+		t.Fatalf("actual requested retention was not persisted: %+v", repository.observations[0])
+	}
 	if repository.observations[0].Candidate.ProviderSummary != "" {
 		t.Fatalf("provider summary leaked into persistent metadata: %+v", repository.observations[0].Candidate)
 	}
