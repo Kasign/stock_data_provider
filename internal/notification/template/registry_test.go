@@ -288,3 +288,46 @@ func TestRegistryRejectsNilAndCancelledRenderContext(t *testing.T) {
 		t.Fatalf("cancelled context must be returned unchanged, got %v", err)
 	}
 }
+
+type registryTemplateRepositoryStub struct {
+	definition Definition
+	digest     string
+	found      bool
+	err        error
+}
+
+func (s registryTemplateRepositoryStub) Create(context.Context, Definition) (string, bool, error) {
+	return "", false, nil
+}
+
+func (s registryTemplateRepositoryStub) Get(context.Context, string, int64) (Definition, string, bool, error) {
+	return s.definition, s.digest, s.found, s.err
+}
+
+func TestRegistryLoadsExactImmutableVersionFromRepository(t *testing.T) {
+	registry := testTemplateRegistry(t, Limits{
+		MaxTemplateBytes: 2048, MaxOutputBytes: 2048, MaxPayloadDepth: 8,
+	})
+	definition := baseDefinition(FormatText)
+	digest, err := DefinitionDigest(definition)
+	if err != nil {
+		t.Fatal(err)
+	}
+	repository := registryTemplateRepositoryStub{definition: definition, digest: digest, found: true}
+	if err := registry.LoadFromRepository(context.Background(), repository, definition.TemplateID, definition.Version); err != nil {
+		t.Fatal(err)
+	}
+	if actual, found := registry.Digest(definition.TemplateID, definition.Version); !found || actual != digest {
+		t.Fatalf("loaded registry digest mismatch: digest=%q found=%v", actual, found)
+	}
+	repository.found = false
+	if err := registry.LoadFromRepository(context.Background(), repository, definition.TemplateID, 2); !errors.Is(err, ErrUnknownTemplate) {
+		t.Fatalf("missing exact version must not fall back: %v", err)
+	}
+	repository.found = true
+	repository.digest = "different-digest"
+	if err := registry.LoadFromRepository(context.Background(), repository, definition.TemplateID, definition.Version); err == nil {
+		t.Fatal("repository digest mismatch must be rejected")
+	}
+}
+
