@@ -56,7 +56,18 @@ func newWorkerFixture() (*workerStoreFake, StageExecutionResult) {
 	stage := domain.Stage{Ref: "stage-1", RunRef: "run-1", Status: domain.StageRunning, Version: 3, AttemptNo: 1}
 	attempt := domain.Attempt{Ref: "attempt-1", StageRef: stage.Ref, Number: 1, Status: domain.AttemptRunning, LeaseOwner: "worker-1", FencingToken: 7, StartedAt: time.Now().UTC()}
 	output := "snapshot://result"
-	store := &workerStoreFake{attempt: attempt, snapshot: StageExecutionSnapshot{Run: run, Stage: stage, Parameters: []byte(`{"symbol":"AAA"}`), RetryPolicy: template.RetryPolicy{Ref: "retry-v1", MaxAttempts: 3, RetryableReasonCodes: []string{"provider_unavailable"}, Backoff: template.BackoffPolicy{Algorithm: "exponential_full_jitter_v1", BaseDelayMS: 1000, MaxDelayMS: 5000}, AttemptTimeoutMS: 60000}}}}
+	store := &workerStoreFake{
+		attempt: attempt,
+		snapshot: StageExecutionSnapshot{
+			Run: run, Stage: stage, Parameters: []byte(`{"symbol":"AAA"}`),
+			RetryPolicy: template.RetryPolicy{
+				Ref: "retry-v1", MaxAttempts: 3,
+				RetryableReasonCodes: []string{"provider_unavailable"},
+				Backoff: template.BackoffPolicy{Algorithm: "exponential_full_jitter_v1", BaseDelayMS: 1000, MaxDelayMS: 5000},
+				AttemptTimeoutMS: 60000,
+			},
+		},
+	}
 	return store, StageExecutionResult{AttemptStatus: domain.AttemptSucceeded, StageStatus: domain.StageSucceeded, OutputRef: &output}
 }
 type workerClockFake struct{}
