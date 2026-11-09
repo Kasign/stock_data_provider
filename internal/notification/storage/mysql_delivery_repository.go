@@ -37,6 +37,23 @@ const deliverySelect = `SELECT
 	DATE_FORMAT(updated_at, '%Y-%m-%d %H:%i:%s.%f')
 	FROM notification_deliveries`
 
+
+// normalizeDeliveryDatabaseTime 将领域时间统一到 MariaDB DATETIME(6) 精度。
+func normalizeDeliveryDatabaseTime(value time.Time) time.Time {
+	return value.UTC().Truncate(time.Microsecond)
+}
+
+func normalizeDeliveryRecordTimes(record domain.DeliveryRecord) domain.DeliveryRecord {
+	record.DeadlineAt = normalizeDeliveryDatabaseTime(record.DeadlineAt)
+	record.CreatedAt = normalizeDeliveryDatabaseTime(record.CreatedAt)
+	record.UpdatedAt = normalizeDeliveryDatabaseTime(record.UpdatedAt)
+	if record.NextAttemptAt != nil {
+		value := normalizeDeliveryDatabaseTime(*record.NextAttemptAt)
+		record.NextAttemptAt = &value
+	}
+	return record
+}
+
 type deliveryScanner interface {
 	Scan(dest ...any) error
 }
@@ -117,6 +134,7 @@ func (r *MySQLDeliveryRepository) Create(ctx context.Context, delivery domain.De
 	if r == nil || r.db == nil || ctx == nil {
 		return errors.New("notification storage: repository is not configured")
 	}
+	delivery = normalizeDeliveryRecordTimes(delivery)
 	if err := delivery.Validate(); err != nil {
 		return err
 	}
@@ -198,7 +216,12 @@ func (r *MySQLDeliveryRepository) ClaimDue(
 	now, leaseExpiresAt time.Time,
 ) (application.DeliveryClaim, bool, error) {
 	if r == nil || r.db == nil || ctx == nil || !validDeliveryWorkerID(workerID) ||
-		!isUTCTime(now) || !isUTCTime(leaseExpiresAt) || !leaseExpiresAt.After(now) {
+		!isUTCTime(now) || !isUTCTime(leaseExpiresAt) {
+		return application.DeliveryClaim{}, false, domain.ErrInvalidDeliveryChange
+	}
+	now = normalizeDeliveryDatabaseTime(now)
+	leaseExpiresAt = normalizeDeliveryDatabaseTime(leaseExpiresAt)
+	if !leaseExpiresAt.After(now) {
 		return application.DeliveryClaim{}, false, domain.ErrInvalidDeliveryChange
 	}
 	tx, err := r.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
@@ -277,7 +300,13 @@ func (r *MySQLDeliveryRepository) UpdateWithLease(
 	now time.Time,
 ) error {
 	if r == nil || r.db == nil || ctx == nil || !isUTCTime(now) ||
-		expectedVersion < 1 || fencingToken < 1 || next.UpdatedAt.After(now) {
+		expectedVersion < 1 || fencingToken < 1 {
+		return application.ErrDeliveryLeaseConflict
+	}
+	now = normalizeDeliveryDatabaseTime(now)
+	next = normalizeDeliveryRecordTimes(next)
+	event.ChangedAt = normalizeDeliveryDatabaseTime(event.ChangedAt)
+	if next.UpdatedAt.After(now) {
 		return application.ErrDeliveryLeaseConflict
 	}
 	if err := next.Validate(); err != nil {
