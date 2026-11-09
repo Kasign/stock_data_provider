@@ -8,7 +8,7 @@ import (
 )
 
 func TestLoadProcessDefaults(t *testing.T) {
-	env := platformconfig.NewEnvWithLookup(func(string) (string, bool) { return "", false })
+	env := platformconfig.NewEnvWithLookup(func(key string) (string, bool) { if key == "PLATFORM_ADMIN_TOKEN" { return "0123456789abcdef0123456789abcdef", true }; return "", false })
 	cfg, err := LoadProcess(env)
 	if err != nil {
 		t.Fatalf("LoadProcess() error = %v", err)
