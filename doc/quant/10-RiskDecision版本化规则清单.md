@@ -8,7 +8,7 @@
 
 `RuleSet` 包含明确版本和有序规则定义。每条规则声明唯一 code、severity 和 required：
 
-- required 规则必须是 block。
+- required 规则必须是 block；反向约束同样成立：所有 `block` 级硬门禁必须声明为 required，禁止 `block + optional`。否则缺少 evaluator 时会被静默跳过，存在漏执行后仍得到 pass 的风险。
 - 同一规则集内 code 唯一。
 - 规则集版本非空，且至少包含一条规则。
 - 规则清单顺序作为 RiskDecision Reasons 的稳定排序依据。
@@ -21,7 +21,7 @@
 1. 校验规则集，并要求 DecisionInput.RuleSetVersion 与规则集版本完全一致。
 2. 拒绝规则集外的评估结果、重复结果和 severity 不匹配。
 3. 对缺失的 required 规则自动生成 block + unknown，不允许缺失规则被忽略后得到 pass。
-4. 缺失的 optional 规则不生成结果；其是否应为 required 由规则集版本定义。
+4. 仅 `warn/info + optional` 允许缺失时跳过；`block` 规则必须 required，不能通过配置为 optional 绕过硬门禁。
 5. 按规则清单顺序排列结果，再由 NewDecision 聚合状态并执行 DTO Validate。
 
 ## 边界
