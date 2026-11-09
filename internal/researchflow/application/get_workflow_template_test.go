@@ -3,6 +3,7 @@ package application
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"example.com/stock-analysis-flow/internal/researchflow/domain"
@@ -72,7 +73,7 @@ func TestGetWorkflowTemplateRejectsInvalidIdentityBeforeRegistry(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, pair := range [][2]string{{"", "1"}, {"stock_research", ""}, {" stock_research", "1"}, {"stock_research", "1 "}} {
+	for _, pair := range [][2]string{{"", "1"}, {"stock_research", ""}, {" stock_research", "1"}, {"stock_research", "1 "}, {"stock_research", strings.Repeat("v", 65)}} {
 		if _, err := service.GetWorkflowTemplate(context.Background(), pair[0], pair[1]); err == nil {
 			t.Fatalf("invalid identity accepted: %#v", pair)
 		}
