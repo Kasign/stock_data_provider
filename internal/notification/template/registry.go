@@ -144,6 +144,9 @@ func (r *Registry) Render(ctx context.Context, event domain.EventEnvelope, templ
 	if r == nil {
 		return result, ErrInvalidTemplateLimits
 	}
+	if ctx == nil {
+		return result, errors.New("notification: template render context is required")
+	}
 	if err := ctx.Err(); err != nil {
 		return result, err
 	}
