@@ -259,3 +259,26 @@ func containsString(values []string, target string) bool {
 	return false
 }
 
+func TestParseResponsesSSECallbackErrorReturnsPartialResponse(t *testing.T) {
+	request := validSSERequest()
+	clock := sseTestClock{now: request.SystemAsOf.Add(time.Second)}
+	callbackErr := errors.New("consumer stopped")
+	var callbackCount int
+
+	got, err := ParseResponsesSSE(readLLMFixture(t, "sse/stream_eof_without_terminal.sse"), request, clock, func(event ModelEvent) error {
+		callbackCount++
+		if event.Type == "response.output_text.delta" {
+			return callbackErr
+		}
+		return nil
+	})
+	if err != callbackErr {
+		t.Fatalf("callback error must be returned unchanged: got=%v want=%v", err, callbackErr)
+	}
+	if callbackCount != 2 || got.Status != ResponseIncomplete || got.OutputText != "partial" || got.Error != nil {
+		t.Fatalf("callback interruption must preserve partial output without claiming completion: callbacks=%d response=%+v", callbackCount, got)
+	}
+	if got.FinishedAt.IsZero() || got.DurationMS < 0 {
+		t.Fatalf("interrupted response timing metadata missing: %+v", got)
+	}
+}
