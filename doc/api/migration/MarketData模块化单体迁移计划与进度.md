@@ -7,7 +7,7 @@
 - 跨模块准入：`doc/整体任务规划/01-项目总览/跨模块接入执行说明.md`、`doc/整体任务规划/01-项目总览/跨模块接入准入清单.md`
 - 本记录建立时的代码基线：`d8595f408337f62be3697aac661ba1570fdd3667`
 - 最近一次 M0 审计基线：`9687337743ff5ad8b5b81209831d43689693ae47`
-- 当前实施状态：`M1_in_progress`（M1-1 代码迁移盘点已完成；开始 Go Module 归并准备）
+- 当前实施状态：`M1_in_progress`（M1-1 已完成；M1-2 源码归并提交 `0076f99b88e8`，等待根 Module CI 验收）
 
 > 本文记录 Data 从独立 Go Module/服务迁入 Root Server 根 Go Module、同进程运行的实施计划和进度。若本文与上述架构决策文档冲突，以架构决策文档为准；公共平台及 DATA 契约以冻结契约文档为准。本文不重新定义契约。
 
@@ -413,7 +413,7 @@ internal/
 | 阶段 | 状态 | 说明 |
 |---|---|---|
 | M0 迁移前审计 | in_progress | 审计范围已冻结；仅剩 CT-05 一次性参数差异核对、Provider 请求安全证据、生产 DDL 外部证据和 integration 验收 |
-| M1 Go Module 归并 | blocked_by_M0 | M0 未关闭；不得提前改 go.mod/go.sum 或搬迁目录 |
+| M1 Go Module 归并 | in_progress | M1-2 已完成源码/命令/配置目录归并与嵌套 Module 删除；等待 Data 根 Module CI、MariaDB/PIT 与迁移后 Docker 验收 |
 | M2 Application Port/Bootstrap | pending | M1 完成后执行 |
 | M3 Root Server 装配 | pending | M2 完成后执行 |
 | M4 共享资源统一 | pending | 按 M3/M4 资源所有权方案执行，复用 Platform 公共能力 |
@@ -578,3 +578,13 @@ internal/
 - CI 增加独立 Market Data 测试门禁，MariaDB/PIT 测试与 Data 镜像构建改用根 Module 路径。
 - 本批只做 Module/路径归并，不抽取 Bootstrap、不切换 Root InProcess Adapter，也不改变 Provider/领域逻辑。
 - 待 CI 验证：Data gofmt、单测、race、vet、MariaDB/PIT、Docker；全仓失败按文件归属单独处理。
+
+
+
+### 2026-11-09：M1-2 源码归并提交与回滚构建路径修正
+
+- 自动迁移提交：`0076f99b88e8c2ae59749c1c5c341373f75e9231`。Data 源码、测试与 testdata 已迁入 `internal/marketdata/**`，独立命令迁入 `cmd/market-data/**`，Provider 配置迁入 `configs/marketdata/**`；嵌套 `services/market-data/go.mod` 与 `go.sum` 已删除。
+- 根 Module 路径仍为 `example.com/stock-analysis-flow`，Go 版本保持 1.23.0；本批没有改写 Provider 领域逻辑、HTTP DTO、数据库 Schema 或历史数据。
+- 迁移后 CI Run `42566947023` 已启动：Data 根 Module gofmt/test/race/vet、go-core、根模块、MariaDB/PIT、News MariaDB 和容器构建分别执行中；结果未完成前不标记验收通过。
+- 复核发现旧 `docker/docker-compose.go-migration.yml` 仍使用独立 Module 的 Docker build context，且 `services/market-data/.env.example` 显式指定旧 Provider 配置路径。已同步修正这两个回滚入口，并将同样的修正规则纳入迁移脚本。
+- 当前 M1-2 状态：源码迁移已提交，CI 验收待完成；后续进入 M2 Application Port/Bootstrap 提取。

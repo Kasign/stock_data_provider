@@ -31,8 +31,8 @@ services:
   stock-analysis-data:
     profiles: ["go-migration"]
     build:
-      context: ../services/market-data
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: services/market-data/Dockerfile
     restart: unless-stopped
     env_file:
       - ../services/market-data/.env

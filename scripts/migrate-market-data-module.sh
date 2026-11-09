@@ -64,6 +64,22 @@ if compose.exists():
                         "context: .\n      dockerfile: services/market-data/Dockerfile")
     compose.write_text(text, encoding="utf-8")
 
+# 旧 go-migration Profile 仍作为显式回滚路径，必须同步切换到根目录构建上下文。
+legacy_compose = Path("docker/docker-compose.go-migration.yml")
+if legacy_compose.exists():
+    text = legacy_compose.read_text(encoding="utf-8")
+    text = text.replace("context: ../services/market-data\n      dockerfile: Dockerfile",
+                        "context: ..\n      dockerfile: services/market-data/Dockerfile")
+    legacy_compose.write_text(text, encoding="utf-8")
+
+# 独立 Data 环境示例中的 Provider 配置路径与新目录保持一致。
+env_example = Path("services/market-data/.env.example")
+if env_example.exists():
+    text = env_example.read_text(encoding="utf-8")
+    text = text.replace("MARKET_DATA_PROVIDERS_CONFIG=configs/providers.json",
+                        "MARKET_DATA_PROVIDERS_CONFIG=configs/marketdata/providers.json")
+    env_example.write_text(text, encoding="utf-8")
+
 # 迁移进度文档记录实际动作；不覆盖历史盘点。
 progress = Path("doc/api/migration/MarketData模块化单体迁移计划与进度.md")
 if progress.exists():
