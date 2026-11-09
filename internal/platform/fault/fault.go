@@ -74,7 +74,6 @@ func New(class Class, code, safeMessage string, cause error) *Fault {
 	}
 }
 
-
 // Validate checks the stable public metadata invariants of a Fault. Cause is
 // intentionally excluded because it is an internal error chain.
 func (f *Fault) Validate() error {
