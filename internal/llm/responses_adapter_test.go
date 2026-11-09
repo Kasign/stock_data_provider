@@ -398,7 +398,6 @@ func TestResponsesAdapterBlocksOptionalFeaturesWithoutCapabilityEvidence(t *test
 	}
 }
 
-
 // TestResponsesAdapterRejectsUnsupportedStrictSchemaBeforeDispatch 验证不支持的 strict Schema 在网络派发前被拒绝。
 func TestResponsesAdapterRejectsUnsupportedStrictSchemaBeforeDispatch(t *testing.T) {
 	provider, secret, capabilities, clock := adapterTestConfig()

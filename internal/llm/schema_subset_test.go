@@ -102,7 +102,6 @@ func TestMapResponsesRequestRejectsUnsupportedStrictToolSchema(t *testing.T) {
 	}
 }
 
-
 // TestValidateResponsesStrictSchemaSubsetEnforcesDocumentedLimits 验证上游 strict Schema 的结构预算。
 func TestValidateResponsesStrictSchemaSubsetEnforcesDocumentedLimits(t *testing.T) {
 	t.Run("object nesting", func(t *testing.T) {
@@ -146,9 +145,9 @@ func TestValidateResponsesStrictSchemaSubsetEnforcesDocumentedLimits(t *testing.
 			values[i] = fmt.Sprintf("value_%04d", i)
 		}
 		raw, _ := json.Marshal(map[string]any{
-			"type": "object",
+			"type":       "object",
 			"properties": map[string]any{"state": map[string]any{"type": "string", "enum": values}},
-			"required": []string{"state"}, "additionalProperties": false,
+			"required":   []string{"state"}, "additionalProperties": false,
 		})
 		if err := validateResponsesStrictSchemaSubset(raw); !errors.Is(err, ErrUnsupportedResponsesSchemaSubset) {
 			t.Fatalf("more than 1000 enum values must be rejected: %v", err)
