@@ -32,6 +32,14 @@ func NewMySQLSubscriptionRepository(
 	return &MySQLSubscriptionRepository{db: db, eventTypes: eventTypes, filterValidator: filterValidator}, nil
 }
 
+
+func normalizeSubscriptionDatabaseTimes(value domain.Subscription) domain.Subscription {
+	value.CreatedAt = value.CreatedAt.UTC().Truncate(time.Microsecond)
+	value.UpdatedAt = value.UpdatedAt.UTC().Truncate(time.Microsecond)
+	value.EffectiveAt = value.EffectiveAt.UTC().Truncate(time.Microsecond)
+	return value
+}
+
 const subscriptionSelect = `SELECT
 	subscription_id, owner_ref, version, status, event_type,
 	filter_schema_version, filters, recipient_scope, recipient_ref,
@@ -92,6 +100,7 @@ func (r *MySQLSubscriptionRepository) Create(ctx context.Context, subscription d
 	if r == nil || r.db == nil || ctx == nil {
 		return errors.New("notification storage: repository is not configured")
 	}
+	subscription = normalizeSubscriptionDatabaseTimes(subscription)
 	if subscription.Version != 1 {
 		return domain.ErrSubscriptionVersionConflict
 	}
@@ -147,6 +156,7 @@ func (r *MySQLSubscriptionRepository) AppendVersion(
 	if expectedVersion < 1 {
 		return domain.ErrSubscriptionVersionConflict
 	}
+	next = normalizeSubscriptionDatabaseTimes(next)
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("notification storage: begin subscription version: %w", err)
