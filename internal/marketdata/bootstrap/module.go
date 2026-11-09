@@ -105,10 +105,10 @@ func New(cfg config.Config, deps Dependencies) (*Module, error) {
 	if strings.TrimSpace(cfg.MySQLDSN) != "" && deps.Store == nil {
 		return nil, errors.New("MariaDB is configured but Store was not injected")
 	}
-	if strings.TrimSpace(cfg.RedisAddr) != "" && deps.Cache == nil {
+	if strings.TrimSpace(cfg.RedisAddr) != "" && isNilEgressDependency(deps.Cache) {
 		return nil, errors.New("Redis is configured but Cache was not injected")
 	}
-	if deps.Cache == nil {
+	if isNilEgressDependency(deps.Cache) {
 		deps.Cache = cache.NewDisabled()
 	}
 	if deps.Logger == nil {
