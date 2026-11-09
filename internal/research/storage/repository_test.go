@@ -42,3 +42,40 @@ func TestNewRepositoryBaseRequiresDatabase(t *testing.T) {
 		t.Fatalf("newRepositoryBase(nil) error = %v, want ErrInvalidRepository", err)
 	}
 }
+
+
+func TestVerifyStoredPayloadRejectsDigestMismatch(t *testing.T) {
+	payload := []byte(`{"context_id":"ctx-1","context_version":1}`)
+	validDigest := payloadDigest(payload)
+	if err := verifyStoredPayload(payload, validDigest); err != nil {
+		t.Fatalf("valid stored payload rejected: %v", err)
+	}
+	if err := verifyStoredPayload([]byte(`{"context_id":"ctx-1","context_version":2}`), validDigest); !errors.Is(err, ErrCorruptRecord) {
+		t.Fatalf("tampered stored payload error = %v, want ErrCorruptRecord", err)
+	}
+	if err := verifyStoredPayload(payload, ""); !errors.Is(err, ErrCorruptRecord) {
+		t.Fatalf("missing stored digest error = %v, want ErrCorruptRecord", err)
+	}
+}
+
+func TestCorruptStoredRecordClassification(t *testing.T) {
+	for _, entity := range []string{"Context", "Event", "Claim"} {
+		err := corruptStoredIdentity(entity)
+		if !errors.Is(err, ErrCorruptRecord) {
+			t.Fatalf("%s identity mismatch error = %v, want ErrCorruptRecord", entity, err)
+		}
+		if errors.Is(err, ErrConflict) {
+			t.Fatalf("%s identity mismatch must not be classified as ErrConflict", entity)
+		}
+	}
+	cause := errors.New("invalid stored JSON")
+	for _, entity := range []string{"Context", "Event", "Claim"} {
+		err := corruptStoredRecord(entity, "decode failed", cause)
+		if !errors.Is(err, ErrCorruptRecord) {
+			t.Fatalf("%s decode error = %v, want ErrCorruptRecord", entity, err)
+		}
+		if errors.Is(err, cause) {
+			t.Fatalf("stored %s decode error should not expose decoder cause through errors.Is", entity)
+		}
+	}
+}

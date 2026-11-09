@@ -43,8 +43,8 @@ func (r *ContextRepository) GetVersion(ctx context.Context, id string, version i
 	var value researchcontext.Context
 	payload, err := r.base.getVersion(ctx, contextTable, "context_id", "context_version", id, version)
 	if err != nil { return value, err }
-	if err := json.Unmarshal(payload, &value); err != nil { return value, fmt.Errorf("decode Context version: %w", err) }
-	if err := value.Validate(); err != nil { return value, fmt.Errorf("stored Context is invalid: %w", err) }
-	if value.ContextID != id || value.ContextVersion != version { return value, fmt.Errorf("%w: stored Context identity mismatch", ErrConflict) }
+	if err := json.Unmarshal(payload, &value); err != nil { return value, corruptStoredRecord("Context", "decode failed", err) }
+	if err := value.Validate(); err != nil { return value, corruptStoredRecord("Context", "validation failed", err) }
+	if value.ContextID != id || value.ContextVersion != version { return value, corruptStoredIdentity("Context") }
 	return value, nil
 }

@@ -138,6 +138,14 @@ func TestValidateEvidenceAuthorizationBindingAtEnforcesExpiryBoundary(t *testing
 	e := Evidence{SourceOwner: SourceResearch, ContentLevel: ContentSummary, AuthorizationRef: ref.AuthorizationRef}
 
 	if err := ValidateEvidenceAuthorizationBindingAt(e, ref, snapshot,
+		"service:researchflow", "research_evidence:evidence_001", PurposeResearchAnalysis, ref.DecidedAt.Add(-time.Nanosecond)); err == nil || !strings.Contains(err.Error(), "not yet effective") {
+		t.Fatalf("authorization before decision time must be rejected, got %v", err)
+	}
+	if err := ValidateEvidenceAuthorizationBindingAt(e, ref, snapshot,
+		"service:researchflow", "research_evidence:evidence_001", PurposeResearchAnalysis, ref.DecidedAt); err != nil {
+		t.Fatalf("authorization at decision time should be effective: %v", err)
+	}
+	if err := ValidateEvidenceAuthorizationBindingAt(e, ref, snapshot,
 		"service:researchflow", "research_evidence:evidence_001", PurposeResearchAnalysis, now); err != nil {
 		t.Fatalf("unexpired authorization rejected: %v", err)
 	}

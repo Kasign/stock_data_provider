@@ -43,8 +43,8 @@ func (r *ClaimRepository) GetVersion(ctx context.Context, id string, version int
 	var value researchclaim.Claim
 	payload, err := r.base.getVersion(ctx, claimTable, "claim_id", "claim_version", id, int64(version))
 	if err != nil { return value, err }
-	if err := json.Unmarshal(payload, &value); err != nil { return value, fmt.Errorf("decode Claim version: %w", err) }
-	if err := value.Validate(); err != nil { return value, fmt.Errorf("stored Claim is invalid: %w", err) }
-	if value.ClaimID != id || value.ClaimVersion != version { return value, fmt.Errorf("%w: stored Claim identity mismatch", ErrConflict) }
+	if err := json.Unmarshal(payload, &value); err != nil { return value, corruptStoredRecord("Claim", "decode failed", err) }
+	if err := value.Validate(); err != nil { return value, corruptStoredRecord("Claim", "validation failed", err) }
+	if value.ClaimID != id || value.ClaimVersion != version { return value, corruptStoredIdentity("Claim") }
 	return value, nil
 }

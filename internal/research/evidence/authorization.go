@@ -136,6 +136,9 @@ func ValidateEvidenceAuthorizationBindingAt(
 	if err := validateRequiredUTC("authorization_check_time", now); err != nil {
 		return err
 	}
+	if now.Before(a.DecidedAt) {
+		return fmt.Errorf("authorization_ref is not yet effective")
+	}
 	if a.ExpiresAt != nil && !now.Before(*a.ExpiresAt) {
 		return fmt.Errorf("authorization_ref is expired")
 	}

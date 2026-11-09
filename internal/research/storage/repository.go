@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+ researcherrors "example.com/stock-analysis-flow/internal/research"
 	"fmt"
 	"math"
 	"time"
@@ -15,9 +16,10 @@ import (
 )
 
 var (
-	ErrNotFound = errors.New("research record not found")
-	ErrConflict = errors.New("research version conflict")
-	ErrInvalidRepository = errors.New("research repository is not configured")
+	ErrNotFound = researcherrors.ErrNotFound
+	ErrConflict = researcherrors.ErrConflict
+	ErrInvalidRepository = researcherrors.ErrInvalidRepository
+	ErrCorruptRecord = researcherrors.ErrCorruptRecord
 )
 
 const pitTimeLayout = "2006-01-02T15:04:05.000000000Z"
@@ -50,6 +52,17 @@ func formatPIT(value time.Time) string {
 func (r repositoryBase) appendVersion(ctx context.Context, aggregateType, aggregateID string,
 	version int64, table, idColumn, versionColumn string, payload []byte, createdAt time.Time,
 	insertSQL string, insertArgs []any, validateNext func(previous []byte) error) error {
+	return r.appendVersionWithHook(ctx, aggregateType, aggregateID, version, table, idColumn, versionColumn,
+		payload, createdAt, insertSQL, insertArgs, validateNext, nil)
+}
+
+// appendVersionWithHook runs an optional side effect before the aggregate
+// transaction commits. It is reserved for records that must be atomic with
+// the immutable aggregate version, such as the Research notification Outbox.
+func (r repositoryBase) appendVersionWithHook(ctx context.Context, aggregateType, aggregateID string,
+	version int64, table, idColumn, versionColumn string, payload []byte, createdAt time.Time,
+	insertSQL string, insertArgs []any, validateNext func(previous []byte) error,
+	afterAppend func(tx *sql.Tx, previous []byte) error) error {
 	if r.db == nil { return ErrInvalidRepository }
 	if ctx == nil { return errors.New("context is nil") }
 	if aggregateID == "" || utf8.RuneCountInString(aggregateID) > 255 || version < 1 || len(payload) == 0 {
@@ -78,7 +91,14 @@ func (r repositoryBase) appendVersion(ctx context.Context, aggregateType, aggreg
 		var existingPayload []byte
 		query := fmt.Sprintf("SELECT payload_sha256, payload FROM %s WHERE %s=? AND %s=?", table, idColumn, versionColumn)
 		err := tx.QueryRowContext(ctx, query, aggregateID, version).Scan(&existingDigest, &existingPayload)
-		if err == nil && existingDigest == digest && bytes.Equal(existingPayload, payload) { return tx.Commit() }
+		if err == nil {
+			if err := verifyStoredPayload(existingPayload, existingDigest); err != nil {
+				return err
+			}
+			if existingDigest == digest && bytes.Equal(existingPayload, payload) {
+				return tx.Commit()
+			}
+		}
 		if err != nil && !errors.Is(err, sql.ErrNoRows) { return fmt.Errorf("read existing research version: %w", err) }
 		return fmt.Errorf("%w: %s %s version %d already has different content", ErrConflict, aggregateType, aggregateID, version)
 	}
@@ -88,14 +108,20 @@ func (r repositoryBase) appendVersion(ctx context.Context, aggregateType, aggreg
 	if version != latest+1 {
 		return fmt.Errorf("%w: %s %s expected version %d, got %d", ErrConflict, aggregateType, aggregateID, latest+1, version)
 	}
+	var previousPayload []byte
 	if latest > 0 {
+		var previousDigest string
 		var previous []byte
-		query := fmt.Sprintf("SELECT payload FROM %s WHERE %s=? AND %s=?", table, idColumn, versionColumn)
-		if err := tx.QueryRowContext(ctx, query, aggregateID, latest).Scan(&previous); err != nil {
+		query := fmt.Sprintf("SELECT payload_sha256, payload FROM %s WHERE %s=? AND %s=?", table, idColumn, versionColumn)
+		if err := tx.QueryRowContext(ctx, query, aggregateID, latest).Scan(&previousDigest, &previous); err != nil {
 			return fmt.Errorf("read previous research version: %w", err)
+		}
+		if err := verifyStoredPayload(previous, previousDigest); err != nil {
+			return err
 		}
 		if validateNext == nil { return errors.New("next-version validator is required") }
 		if err := validateNext(previous); err != nil { return fmt.Errorf("validate next research version: %w", err) }
+		previousPayload = append([]byte(nil), previous...)
 	}
 	if _, err := tx.ExecContext(ctx, insertSQL, insertArgs...); err != nil {
 		return fmt.Errorf("insert immutable research version: %w", err)
@@ -106,6 +132,9 @@ func (r repositoryBase) appendVersion(ctx context.Context, aggregateType, aggreg
 	affected, err := result.RowsAffected()
 	if err != nil { return fmt.Errorf("verify research aggregate head update: %w", err) }
 	if affected != 1 { return fmt.Errorf("%w: aggregate head changed during append", ErrConflict) }
+	if afterAppend != nil {
+		if err := afterAppend(tx, previousPayload); err != nil { return fmt.Errorf("append transaction side effect: %w", err) }
+	}
 	if err := tx.Commit(); err != nil { return fmt.Errorf("commit research append transaction: %w", err) }
 	return nil
 }
@@ -114,17 +143,39 @@ func (r repositoryBase) getVersion(ctx context.Context, table, idColumn, version
 	if r.db == nil { return nil, ErrInvalidRepository }
 	if ctx == nil { return nil, errors.New("context is nil") }
 	if aggregateID == "" || version < 1 { return nil, fmt.Errorf("aggregate identity and positive version are required") }
-	query := fmt.Sprintf("SELECT payload FROM %s WHERE %s=? AND %s=?", table, idColumn, versionColumn)
+	query := fmt.Sprintf("SELECT payload_sha256, payload FROM %s WHERE %s=? AND %s=?", table, idColumn, versionColumn)
+	var storedDigest string
 	var payload []byte
-	if err := r.db.QueryRowContext(ctx, query, aggregateID, version).Scan(&payload); err != nil {
+	if err := r.db.QueryRowContext(ctx, query, aggregateID, version).Scan(&storedDigest, &payload); err != nil {
 		if errors.Is(err, sql.ErrNoRows) { return nil, ErrNotFound }
 		return nil, fmt.Errorf("read research version: %w", err)
 	}
+	if err := verifyStoredPayload(payload, storedDigest); err != nil {
+		return nil, err
+	}
 	return payload, nil
+}
+
+func verifyStoredPayload(payload []byte, storedDigest string) error {
+	if storedDigest != payloadDigest(payload) {
+		return fmt.Errorf("%w: payload SHA-256 does not match stored content", ErrCorruptRecord)
+	}
+	return nil
 }
 
 func encodePayload(value any) ([]byte, string, error) {
 	payload, err := json.Marshal(value)
 	if err != nil { return nil, "", fmt.Errorf("encode research payload: %w", err) }
 	return payload, payloadDigest(payload), nil
+}
+
+func corruptStoredRecord(entity, detail string, cause error) error {
+	if cause == nil {
+		return fmt.Errorf("%w: stored %s: %s", ErrCorruptRecord, entity, detail)
+	}
+	return fmt.Errorf("%w: stored %s: %s: %v", ErrCorruptRecord, entity, detail, cause)
+}
+
+func corruptStoredIdentity(entity string) error {
+	return corruptStoredRecord(entity, "identity mismatch", nil)
 }

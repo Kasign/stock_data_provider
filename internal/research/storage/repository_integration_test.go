@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -14,6 +15,7 @@ import (
 
 	platformstorage "example.com/stock-analysis-flow/internal/platform/storage"
 	researchclaim "example.com/stock-analysis-flow/internal/research/claim"
+	researchevidence "example.com/stock-analysis-flow/internal/research/evidence"
 	researchcontext "example.com/stock-analysis-flow/internal/research/context"
 	researchevent "example.com/stock-analysis-flow/internal/research/event"
 )
@@ -48,6 +50,52 @@ func openResearchIntegrationDB(t *testing.T) *sql.DB {
 	return db
 }
 
+func TestResearchEventLifecycleOutboxFailureRollsBackEventVersion(t *testing.T) {
+	db := openResearchIntegrationDB(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	now := time.Date(2026, 11, 9, 2, 0, 0, 123456789, time.UTC)
+	eventID := fmt.Sprintf("event-outbox-rollback-%d", time.Now().UnixNano())
+	repo, err := NewEventRepository(db, func() time.Time { return now })
+	if err != nil { t.Fatal(err) }
+	t.Cleanup(func() {
+		_, _ = db.ExecContext(context.Background(), "DELETE FROM research_notification_outbox WHERE subject_ref=?", "research-event:"+eventID)
+		_, _ = db.ExecContext(context.Background(), "DELETE FROM research_event_versions WHERE event_id=?", eventID)
+		_, _ = db.ExecContext(context.Background(), "DELETE FROM research_aggregate_heads WHERE aggregate_type='event' AND aggregate_id=?", eventID)
+	})
+	previous := researchevent.ResearchEvent{
+		EventID: eventID, EventVersion: 1, EventType: "integration_fixture",
+		Title: "Outbox rollback fixture", Status: researchevent.StatusDetected,
+		SubjectRefs: []string{"security:600000"}, EvidenceRefs: []string{},
+		SystemObservedAt: now, SystemAsOf: now,
+		ImpactHypothesisRefs: []string{}, InvalidationConditions: []string{},
+		Uncertainty: []string{}, SourceTimes: []researchevent.EventSourceTime{},
+	}
+	if err := repo.Append(ctx, previous); err != nil { t.Fatalf("append Event v1: %v", err) }
+	next := previous
+	next.EventVersion = 2
+	next.Status = researchevent.StatusConsolidating
+	next.SystemAsOf = now.Add(time.Minute)
+	idempotencyKey := "research-event-state:research-event:" + eventID + ":2"
+	if _, err := db.ExecContext(ctx,
+		"INSERT INTO research_notification_outbox (event_id, event_type, schema_version, source_module, occurred_at, published_at, subject_ref, idempotency_key, correlation_id, payload_fingerprint, payload, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+		"nte_seed_"+eventID, researchLifecycleEventType, researchLifecycleSchemaVersion, "research",
+		formatPIT(now), formatPIT(now), "research-event:"+eventID, idempotencyKey, "req_seed",
+		strings.Repeat("a", 64), "{}", now); err != nil {
+		t.Fatalf("seed Outbox idempotency conflict: %v", err)
+	}
+	err = repo.AppendWithLifecycle(ctx, next, nil, "req_test")
+	if err == nil { t.Fatal("duplicate Outbox idempotency key must abort the Event append transaction") }
+	if _, err := repo.GetVersion(ctx, eventID, 2); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("Event v2 after Outbox rollback = %v, want ErrNotFound", err)
+	}
+	var latest int64
+	if err := db.QueryRowContext(ctx, "SELECT latest_version FROM research_aggregate_heads WHERE aggregate_type='event' AND aggregate_id=?", eventID).Scan(&latest); err != nil {
+		t.Fatalf("read aggregate head after rollback: %v", err)
+	}
+	if latest != 1 { t.Fatalf("aggregate latest_version = %d after Outbox rollback, want 1", latest) }
+}
+
 func TestResearchSQLRepositoriesAppendAndReadVersions(t *testing.T) {
 	db := openResearchIntegrationDB(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -59,6 +107,7 @@ func TestResearchSQLRepositoriesAppendAndReadVersions(t *testing.T) {
 	contextID := "ctx-it-" + suffix
 	eventID := "event-it-" + suffix
 	claimID := "claim-it-" + suffix
+	evidenceID := "evidence-it-" + suffix
 	cancelledContextID := "ctx-cancel-it-" + suffix
 	orphanContextID := "ctx-orphan-it-" + suffix
 	lockedContextID := "ctx-lock-cancel-it-" + suffix
@@ -67,6 +116,7 @@ func TestResearchSQLRepositoriesAppendAndReadVersions(t *testing.T) {
 		_, _ = db.ExecContext(context.Background(), "DELETE FROM research_context_versions WHERE context_id IN (?, ?, ?)", contextID, orphanContextID, lockedContextID)
 		_, _ = db.ExecContext(context.Background(), "DELETE FROM research_event_versions WHERE event_id=?", eventID)
 		_, _ = db.ExecContext(context.Background(), "DELETE FROM research_claim_versions WHERE claim_id=?", claimID)
+		_, _ = db.ExecContext(context.Background(), "DELETE FROM research_evidence_records WHERE evidence_id=?", evidenceID)
 		_, _ = db.ExecContext(context.Background(), "DELETE FROM research_aggregate_heads WHERE aggregate_id IN (?, ?, ?, ?, ?, ?)", contextID, eventID, claimID, cancelledContextID, orphanContextID, lockedContextID)
 	})
 
@@ -363,5 +413,55 @@ func TestResearchSQLRepositoriesAppendAndReadVersions(t *testing.T) {
 	if err := claimRepo.Append(ctx, claimV2); err != nil { t.Fatalf("append Claim v2: %v", err) }
 	if got, err := claimRepo.GetVersion(ctx, claimID, 2); err != nil || got.ClaimVersion != 2 {
 		t.Fatalf("get Claim v2 = version %d, error %v", got.ClaimVersion, err)
+	}
+
+	evidenceRepo, err := NewEvidenceRepository(db, clock)
+	if err != nil { t.Fatal(err) }
+	evidenceV1 := researchevidence.Evidence{
+		EvidenceID: evidenceID, EvidenceType: researchevidence.TypeFact,
+		SourceOwner: researchevidence.SourceData, SourceRef: "data:integration:fixture",
+		DerivedFromRefs: []string{}, SubjectRefs: []string{},
+		SystemObservedAt: cutoff, SystemAsOf: cutoff,
+		Stance: researchevidence.StanceNeutral, QualityStatus: researchevidence.QualityValid,
+		ContentLevel: researchevidence.ContentMetadata, AuthorizationRef: "auth-integration-v1",
+		Limitations: []string{},
+	}
+	evidenceV1.ContentFingerprint, err = evidenceV1.ComputeContentFingerprint()
+	if err != nil { t.Fatalf("compute Evidence fingerprint: %v", err) }
+	if err := evidenceRepo.Append(ctx, evidenceV1); err != nil { t.Fatalf("append Evidence: %v", err) }
+	if err := evidenceRepo.Append(ctx, evidenceV1); err != nil { t.Fatalf("replay Evidence: %v", err) }
+	if got, err := evidenceRepo.Get(ctx, evidenceID); err != nil || got.AuthorizationRef != evidenceV1.AuthorizationRef {
+		t.Fatalf("get Evidence authorization_ref = %q, error %v", got.AuthorizationRef, err)
+	}
+	evidenceRenewed := evidenceV1
+	evidenceRenewed.AuthorizationRef = "auth-integration-v2"
+	if err := evidenceRepo.Append(ctx, evidenceRenewed); !errors.Is(err, ErrConflict) {
+		t.Fatalf("Evidence authorization snapshot replacement error = %v, want ErrConflict", err)
+	}
+	if _, err := db.ExecContext(ctx, "UPDATE research_evidence_records SET payload=CONCAT(payload, ' ') WHERE evidence_id=?", evidenceID); err != nil {
+		t.Fatalf("tamper stored Evidence payload: %v", err)
+	}
+	if _, err := evidenceRepo.Get(ctx, evidenceID); !errors.Is(err, ErrCorruptRecord) {
+		t.Fatalf("tampered Evidence read error = %v, want ErrCorruptRecord", err)
+	}
+
+	if _, err := db.ExecContext(ctx, "UPDATE research_context_versions SET payload=CONCAT(payload, ' ') WHERE context_id=? AND context_version=2", contextID); err != nil {
+		t.Fatalf("tamper stored Context payload: %v", err)
+	}
+	if _, err := contextRepo.GetVersion(ctx, contextID, 2); !errors.Is(err, ErrCorruptRecord) {
+		t.Fatalf("tampered Context read error = %v, want ErrCorruptRecord", err)
+	}
+	if err := contextRepo.Append(ctx, contextV2); !errors.Is(err, ErrCorruptRecord) {
+		t.Fatalf("tampered Context idempotent replay error = %v, want ErrCorruptRecord", err)
+	}
+	contextV3 := contextV2
+	contextV3.ContextVersion = 3
+	contextV3.SystemAsOf = contextV2.SystemAsOf.Add(time.Minute)
+	contextV3.CreatedAt = contextV2.CreatedAt.Add(time.Minute)
+	contextV3.SectionRefs = append([]researchcontext.SectionRef(nil), contextV2.SectionRefs...)
+	contextV3.SectionRefs[0].SystemAsOf = contextV3.SystemAsOf
+	contextV3.SectionRefs[0].AssembledAt = contextV3.SystemAsOf
+	if err := contextRepo.Append(ctx, contextV3); !errors.Is(err, ErrCorruptRecord) {
+		t.Fatalf("append after tampered previous Context error = %v, want ErrCorruptRecord", err)
 	}
 }
