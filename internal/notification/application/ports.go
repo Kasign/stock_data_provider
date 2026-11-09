@@ -79,6 +79,7 @@ type DeliveryLeaseRecoveryRepository interface {
 type DeliveryAttemptRepository interface {
 	StartWithLease(ctx context.Context, expectedDeliveryVersion, fencingToken int64, attempt domain.DeliveryAttempt) error
 	CompleteWithLease(ctx context.Context, expectedDeliveryVersion, fencingToken int64, completed domain.DeliveryAttempt) error
+	// ListByDelivery 返回完整历史，并按 AttemptNo 升序排列；缺失或重复序号由调用方 fail closed。
 	ListByDelivery(ctx context.Context, deliveryID string) (attempts []domain.DeliveryAttempt, err error)
 }
 
