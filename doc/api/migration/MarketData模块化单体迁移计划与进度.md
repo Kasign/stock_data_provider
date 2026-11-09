@@ -2090,3 +2090,16 @@ CI：本轮 SHA 对应 Go test suite Run `42549171549`。截至本次文档提�
 - Probe Schema 断言补齐提交：`fb2a25e2622af1ff459c0113a058228a6ee90ac6`。在保留现有单份契约测试的基础上，恢复 symbols.items 的字符串类型与六位 SH/SZ/BJ 证券代码 pattern 校验，并统一检查枚举数组 items.type。该提交只修改测试，不改变 Handler、DTO、OpenAPI 或数据库。
 - 当前 HEAD 的这项测试尚未执行；不将其标记为通过。待进入 integration 集成验收后再确认。
 
+
+
+### 2026-11-09：CT-05 市场情绪历史查询描述与 Handler 对齐
+
+代码基线：`e33a137e8462bf3ad173a6c2a9ff5909869c98ac`。
+
+- 复核 `marketSentiment` Handler：该接口仅允许采集当前 Asia/Shanghai 自然日；传入历史日期会返回 HTTP 400，并提示使用历史接口。历史读取由 `marketSentimentHistory` 提供，要求 start/end，最多 366 个包含首尾的自然日，默认 limit=366。
+- 原 OpenAPI 描述“历史日期只读”容易被理解为当前接口支持历史日期查询，与 Handler 实际行为不一致。
+- 已修正 OpenAPI：明确当前接口拒绝历史日期，并指向 `GET /api/v1/market/sentiment/history`；新增契约文档断言防止描述回退。
+- 本批提交：`4441a8c95821e98736ce01dd49f9fe6b62ca69ea`。仅修改 OpenAPI 描述与 Contract Test，不修改 Handler、API 路由、请求/响应字段、数据库或 Provider。
+- 本批测试尚未执行；按约定等待 integration 集成验收，不在 Data 分支标记构建通过。
+
+**当前结论：** CT-05 仍进行中，M0 仍为 `in_progress`，M1 不准入。下一步继续审计 35 个 Operation 的剩余参数类型、格式、范围、默认值与枚举，并完成生产 DDL 快照对照。
