@@ -379,6 +379,7 @@ func TestRegistryValidateMetricAppliesRegisteredSemantics(t *testing.T) {
 	registry := New()
 	entry := validEntry("sample_metric", "1.0.0")
 	entry.Precision.MaxFractionDigits = 4
+	entry.Precision.Tolerance = json.RawMessage("0.0001")
 	entry.Range = NumericRange{Minimum: json.RawMessage("-0.5"), Maximum: json.RawMessage("0.5")}
 	entry.QualityPolicy.QualityStates = []string{"valid", "degraded"}
 	if err := registry.Register(entry, true); err != nil {
