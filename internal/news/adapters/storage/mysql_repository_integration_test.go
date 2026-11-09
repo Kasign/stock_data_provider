@@ -656,7 +656,7 @@ func integrationAuthorizationEvidence() (domain.Observation, domain.NewsItemVers
 	observation := domain.Observation{
 		ID: "news-it-auth-observation", NewsID: "news_001", SourceID: "sec-edgar",
 		ProviderCode: "tavily", SourcePolicyVersionID: "2.1.0",
-		EndpointPolicyVersionID: "1.0.0",
+		EndpointPolicyVersionID: "1.0.0", ProviderOutputPolicyVersionID: "3.0.0",
 	}
 	version := domain.NewsItemVersion{
 		ID: "news-it-auth-version", NewsID: "news_001", VersionNo: 1,
