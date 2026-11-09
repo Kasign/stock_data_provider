@@ -4,7 +4,7 @@
 - 所属分支：feat/platform-foundation
 - 当前基线：以分支最新 HEAD 为准
 - 当前目标：个人使用、单一所有者、少量服务与低并发
-- 当前阶段：PLAT-001～019 的 Platform 本地原语、包级契约测试和专项 CI 已完成；PLAT-015～019 Web Owner 登录安全原语已实现并通过 Platform L1 验收。当前代码验收基线为 `61c0f15d3958b1d2b6190c1fa4d0fbd96403de81`，GitHub Actions [42612962271](https://github.com/Kasign/stock_data_provider/actions/runs/42612962271) success；分支最新 HEAD 可能包含后续纯文档提交，应以 GitHub 分支为准。PLAT-002 仍待项目级契约 Owner 与消费者评审冻结；Server A2 业务接入、生产 A3 验收、Argon2id 目标硬件参数基准及领域 Adapter 均不属于 Platform L1 完成范围。PLAT-008 流式能力仅代表 A1 通过，LLM A2 与生产 A3 仍待完成。
+- 当前阶段：已实现的 Platform 公共原语及其专项 CI 达到当前 L1 基线；PLAT-015～019 Web Owner 登录安全原语已实现并通过 Platform L1 验收。PLAT-004、PLAT-011 为条件/按需暂缓；PLAT-010 是领域队列边界治理而非通用队列交付；PLAT-012～014 的服务接入、生产运行和跨模块演练仍待完成。当前代码验收基线为 `61c0f15d3958b1d2b6190c1fa4d0fbd96403de81`，GitHub Actions [42612962271](https://github.com/Kasign/stock_data_provider/actions/runs/42612962271) success；分支最新 HEAD 可能包含后续纯文档提交，应以 GitHub 分支为准。PLAT-002 仍待项目级契约 Owner 与消费者评审冻结；Server A2 业务接入、生产 A3 验收、Argon2id 目标硬件参数基准及领域 Adapter 均不属于 Platform L1 完成范围。PLAT-008 流式能力仅代表 A1 通过，LLM A2 与生产 A3 仍待完成。
 
 本目录是公共平台的唯一专项文档入口。平台的目标不是建设通用 SaaS 底座，而是为个人使用的股票研究系统提供足够可靠、性能可控、故障可定位的公共能力。
 
@@ -13,7 +13,7 @@
 | 文档 | 权威范围 |
 |---|---|
 | 00-平台架构与边界.md | 目标规模、架构原则、首期范围和明确不做的能力 |
-| 01-开发路线图与任务清单.md | 任务优先级、依赖、交付物、状态与验收 |
+| 01-开发路线图与任务清单.md | Platform 本地任务状态唯一权威清单；区分原语 L1、消费者 A2、部署 A3 |
 | 02-代码结构与模块详细设计.md | 包边界、依赖方向、现有实现复用策略 |
 | 03-安全认证与ServiceKey设计.md | 单所有者环境下的身份边界、部署 Secret 和轮换 |
 | 04-配置日志诊断与可观测性设计.md | 配置、日志、Request ID、诊断和最小运行观测 |
@@ -29,7 +29,7 @@
 | 13-跨分支合并准备审查.md | 当前分支图、提交差异、冲突路径、合并顺序与验收责任 |
 | 14-GOV-004跨模块统一契约基线与整体Review.md | 项目级契约交叉索引、模块依赖/DTO/状态机基线、未决决策及 L1/L2/L3 冻结门禁；不替代各专项 Schema |
 | 15-受控HTTP流式传输设计与验收方案.md | PLAT-CTR-005 流式扩展的现状审查、API、生命周期、安全、错误和验收设计 |
-| 16-公共平台剩余开发任务与跨模块接入责任清单.md | Platform 本地任务收口状态、消费者接入责任与跨模块剩余事项 |
+| 16-公共平台剩余开发任务与跨模块接入责任清单.md | 消费者/Server/部署剩余事项、责任归属和接入顺序；状态须与 01 对齐 |
 | 17-PLAT-002公共契约差异与待决事项.md | Platform 候选契约差异、待决事项、责任归属和本地 API Review |
 | 18-Web登录与Session安全原语设计.md | 单一 Owner Web Session、密码、Redis Store、Cookie、CSRF、登录限流和安全审计原语及 Server 接入边界 |
 
@@ -43,4 +43,13 @@
 6. 优先使用 Go 标准库、现有 MariaDB/Redis 和成熟依赖；不引入没有明确收益的新基础设施。
 7. 默认单实例、单所有者、少量内部服务。若未来出现多用户、多实例或更高并发，必须基于实际需求单独评审扩展。
 8. 只在 feat/platform-foundation 实现公共平台；服务启动、全局路由、DI 和 Migration 总入口由明确指定的 Server/组合根集成分支负责。当前尚未识别出独立 Server 分支，不得默认由 Data 分支代管。
-9. 不为了统一而搬迁领域代码；Data/News/Research 保留领域模型、Repository 和数据质量规则。
+9. 不为了统一而搬迁领域代码；Data/News/Research 保留领域模型、Repository 和数据质量规则。Data 迁入 Root Server 同 Go Module 是目标架构，不代表代码迁移已经完成；当前迁移状态由 Data/Server Owner 根据实际分支和集成证据维护。
+
+
+## 当前状态阅读规则（2026-11-09）
+
+- 本 README 只提供导航和摘要；任务状态以《01-开发路线图与任务清单》第 3 节任务总表及其最新校准记录为准。
+- 《16-公共平台剩余开发任务与跨模块接入责任清单》负责分工和依赖，不得另行定义与 01 冲突的 Platform 本地状态。
+- 《17-PLAT-002公共契约差异与待决事项》中的第 9 节是历史准入记录，第 10 节是后续状态校准；项目级冻结仍以项目契约登记簿为准。
+- Data 迁入 Root Server 同 Go Module 是目标架构；除非有对应迁移提交和集成证据，不得将目标写成已完成事实。
+- L1（Platform 原语）、A2（Server/消费者接入）、A3（生产部署验收）分别记录，任何一层通过都不自动代表其他层完成。
