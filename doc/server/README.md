@@ -776,7 +776,7 @@ Server 层完成不是“服务能够启动”这么简单。至少同时满足�
 | SRV-006 | 进行中 | 旧 Analysis Worker 与 HTTP Server 均已纳入统一 Lifecycle；HTTP Listener 在 Start 阶段同步绑定，Readiness 在 HTTP Shutdown 前切换为 not-ready，Shutdown 超时后强制 Close；Bootstrap 显式保证消费者停止后再关闭共享资源；真实 SIGTERM 子进程测试已补充，模块 Worker 接入和生产容器退出验收仍待完成；详见 12.26 节 |
 | SRV-007 | 进行中 | 已建立 Server Migration Registry，并注册 News/Research/Notification；注册时按版本号稳定排序；增加 namespace 执行报告、稳定原因码和人工恢复标记；其他模块 Migration 和 MariaDB 集成验收待完成，详见 12.7、12.23、12.25 节 |
 | SRV-008 | 待契约 | Dispatcher 所有权未冻结 |
-| SRV-009 | 进行中 | 已实现 Platform Runner 聚合、严格 Readiness 判定、MariaDB/Redis 资源检查、Owner 保护的结构化 `/diagnostics` 入口；`/readyz` 依赖状态改为动态读取实际 Check Results；真实模块 Check 注册、依赖故障注入及生产诊断验收仍待完成，详见 12.8、12.20、12.29 节 |
+| SRV-009 | 进行中 | 已实现 Platform Runner 聚合、严格 Readiness 判定、MariaDB/Redis 资源检查、Owner 保护的结构化 `/diagnostics` 入口；`/readyz` 依赖状态改为动态读取实际 Check Results；Service 装配期拒绝重复 Check ID 并保存不可变 Check 快照；真实模块 Check 注册、依赖故障注入及生产诊断验收仍待完成，详见 12.8、12.20、12.29、12.33 节 |
 | SRV-010 | 阻塞 | 等待 Data 迁移门禁和公开接口 |
 | SRV-011 | 未开始 | 等待核心运行能力 |
 | SRV-012 | 未开始 | 等待新链路验收 |
@@ -1111,3 +1111,5 @@ Lifecycle.Stop 原实现通过 stopped 标记保证重复调用幂等，但并�
 - Required Check 存在性规则保持不变；Check 本身的完整结构校验、执行、超时、状态归一化仍由 Platform Runner 负责，不复制 Platform 校验器。
 - 新增 Storage Check ID 冲突和跨模块组冲突测试。
 - 当前批次尚未运行 Go 测试；待本轮功能组完成后统一验证。
+
+- 追加回归测试：模块传入 Check 切片在 Service 构造后被替换，不得改变 Server 保存的 Check ID 与 Required 属性。

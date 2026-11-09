@@ -50,6 +50,23 @@ func TestNewServiceRejectsDuplicateModuleCheckIDsAtConstruction(t *testing.T) {
 	}
 }
 
+func TestNewServiceKeepsImmutableCheckSnapshot(t *testing.T) {
+	moduleChecks := []platformdiagnostics.Check{
+		check("module.snapshot.original", true, platformdiagnostics.StatusHealthy),
+	}
+	service, err := NewService(nil, moduleChecks)
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+	moduleChecks[0] = check("module.snapshot.mutated", false, platformdiagnostics.StatusDegraded)
+	if got := service.checks[2].ID; got != "module.snapshot.original" {
+		t.Fatalf("service check ID changed after source mutation: %q", got)
+	}
+	if !service.checks[2].Required {
+		t.Fatal("service check Required flag changed after source mutation")
+	}
+}
+
 func TestNewServiceRejectsDuplicateIDsAcrossModuleGroups(t *testing.T) {
 	first := check("module.shared.check", true, platformdiagnostics.StatusHealthy)
 	second := check("module.shared.check", false, platformdiagnostics.StatusHealthy)

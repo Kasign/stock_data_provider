@@ -52,7 +52,7 @@ func TestResourcesBindHTTPDestinationUsesSharedClient(t *testing.T) {
 		t.Fatalf("Close() error = %v", err)
 	}
 	if _, err := resources.BindHTTPDestination(platformhttpclient.DestinationPolicy{
-		Dependency: "test.upstream",
+		Dependency:   "test.upstream",
 		AllowedHosts: []string{"api.example.com"},
 	}); err == nil {
 		t.Fatal("BindHTTPDestination() after Close() error = nil")
@@ -62,7 +62,7 @@ func TestResourcesBindHTTPDestinationUsesSharedClient(t *testing.T) {
 func TestResourcesBindHTTPDestinationRejectsMissingClient(t *testing.T) {
 	resources := &Resources{}
 	if _, err := resources.BindHTTPDestination(platformhttpclient.DestinationPolicy{
-		Dependency: "test.upstream",
+		Dependency:   "test.upstream",
 		AllowedHosts: []string{"api.example.com"},
 	}); err == nil {
 		t.Fatal("BindHTTPDestination() error = nil, want missing client error")
