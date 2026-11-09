@@ -645,7 +645,7 @@ func TestResponsesAdapterStreamMapsPlatformReadFailureAndPreservesPartialOutput(
 		"",
 	}, "\n"))
 	streamDoer := HTTPStreamDoerFunc(func(context.Context, *http.Request) (*HTTPStreamResponse, error) {
-		return &HTTPStreamResponse{StatusCode: http.StatusOK, Header:     http.Header{"Content-Type": []string{"text/event-stream"}}, Body: io.NopCloser(&errorAfterSSEDataReader{data: partial, err: readErr})}, nil
+		return &HTTPStreamResponse{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": []string{"text/event-stream"}}, Body: io.NopCloser(&errorAfterSSEDataReader{data: partial, err: readErr})}, nil
 	})
 	adapter, err := NewResponsesAdapterWithStream(provider, secret,
 		doerFunc(func(*http.Request) (*http.Response, error) { return nil, errors.New("unused") }),
