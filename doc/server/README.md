@@ -649,7 +649,7 @@ flowchart TD
 #### 提交与验证
 
 - Migration 恢复判定实现：`73fee1d5b08dbb0994ddaa08f3ef415d928c48f3`。
-- Migration 恢复判定测试：`e0affc01bc1ebf943ca701b05ee12f2bc9285c66`。
+- Migration 恢复判定测试：`e0affc01bc1ebf943ca701b05ee12f2bc9285c66`；补齐测试 fmt 导入：`389694c0b8b49e37c4cfe6f23bbad179c773d11c`。
 - 本批次尚未运行 gofmt、Server 包测试或 Go Workflow；不标记为通过。
 
 ## 13. 分支与协作规则
