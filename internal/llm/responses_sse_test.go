@@ -510,3 +510,56 @@ func TestParseResponsesSSERejectsTerminalTextAfterEmptyTextEvent(t *testing.T) {
 		})
 	}
 }
+
+
+// TestParseResponsesSSEAggregatesMultipleTextPartsByIndex 验证多个输出项的文本按索引聚合且分别校验 done。
+func TestParseResponsesSSEAggregatesMultipleTextPartsByIndex(t *testing.T) {
+	request := validSSERequest()
+	clock := sseTestClock{now: request.SystemAsOf.Add(time.Second)}
+	data := strings.Join([]string{
+		"event: response.output_text.delta",
+		"data: {\"type\":\"response.output_text.delta\",\"output_index\":1,\"content_index\":0,\"delta\":\"second\"}",
+		"",
+		"event: response.output_text.delta",
+		"data: {\"type\":\"response.output_text.delta\",\"output_index\":0,\"content_index\":0,\"delta\":\"first\"}",
+		"",
+		"event: response.output_text.done",
+		"data: {\"type\":\"response.output_text.done\",\"output_index\":0,\"content_index\":0,\"text\":\"first\"}",
+		"",
+		"event: response.output_text.done",
+		"data: {\"type\":\"response.output_text.done\",\"output_index\":1,\"content_index\":0,\"text\":\"second\"}",
+		"",
+		"event: response.completed",
+		"data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp-multi-text\",\"object\":\"response\",\"status\":\"completed\",\"output\":[{\"id\":\"msg-1\",\"type\":\"message\",\"content\":[{\"type\":\"output_text\",\"text\":\"first\"}]},{\"id\":\"msg-2\",\"type\":\"message\",\"content\":[{\"type\":\"output_text\",\"text\":\"second\"}]}]}}",
+		"",
+	}, "\n")
+
+	got, err := ParseResponsesSSE([]byte(data), request, clock, nil)
+	if err != nil || got.Status != ResponseCompleted || got.OutputText != "firstsecond" {
+		t.Fatalf("multiple text parts must aggregate in output/content index order: response=%+v err=%v", got, err)
+	}
+}
+
+// TestParseResponsesSSERejectsTextDeltaAfterDone 验证同一文本分段完成后不再接受增量。
+func TestParseResponsesSSERejectsTextDeltaAfterDone(t *testing.T) {
+	request := validSSERequest()
+	clock := sseTestClock{now: request.SystemAsOf.Add(time.Second)}
+	data := strings.Join([]string{
+		"event: response.output_text.done",
+		"data: {\"type\":\"response.output_text.done\",\"output_index\":0,\"content_index\":0,\"text\":\"final\"}",
+		"",
+		"event: response.output_text.delta",
+		"data: {\"type\":\"response.output_text.delta\",\"output_index\":0,\"content_index\":0,\"delta\":\"late\"}",
+		"",
+		"event: response.completed",
+		"data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp-text-late\",\"object\":\"response\",\"status\":\"completed\",\"output\":[]}}",
+		"",
+	}, "\n")
+
+	got, err := ParseResponsesSSE([]byte(data), request, clock, nil)
+	var adapterErr *AdapterError
+	if !errors.As(err, &adapterErr) || adapterErr.Info.StableCode != "llm.sse.output_text_after_done" ||
+		got.Status != ResponseFailed {
+		t.Fatalf("text delta after done must be rejected: response=%+v err=%v", got, err)
+	}
+}
