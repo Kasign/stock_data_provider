@@ -61,7 +61,7 @@ R1/R2/R3/R5 当前实现 Context、Evidence、Event、Claim/Hypothesis 领域结
 
 ## 当前契约状态
 
-- Context：字段依据 `doc/整体任务规划/03-模块接口契约/Quant-Research公开DTO字段级契约.md` 第 3.1、9.1、9.2、9.8 节；已实现结构校验、ValidateNextVersion 版本链校验及 Context v1.0.0 内部 JSON Golden 字节级回归测试（待执行）。该 Golden 是内部回归基线，不代表正式 JSON Schema 或跨模块契约已冻结；SQL Repository 已支持事务追加和版本链校验，尚待真实 MariaDB 验收。
+- Context：字段依据 `doc/整体任务规划/03-模块接口契约/Quant-Research公开DTO字段级契约.md` 第 3.1、9.1、9.2、9.8 节；已实现结构校验、ValidateNextVersion 版本链校验、Context v1.0.0 JSON Golden 和 Draft 2020-12 Schema 候选；新增 DTO 字段一致性测试（待执行）。Schema 仍是 Research 分支候选，尚未接入完整 JSON Schema Validator CI/消费方 Contract Test，不代表跨模块契约已冻结；SQL Repository 已支持事务追加和版本链校验，尚待真实 MariaDB 验收。
 - Evidence：遵循项目级 `RSC-CTR-001` Evidence Schema/Golden；已实现 Go Domain、结构校验、JCS/SHA-256 内容指纹和严格 PIT 本地校验。当前补充 GOV-CTR-006 AuthorizationRef/PolicySnapshot 结构绑定、策略 tuple 校验、decision_fingerprint 复算及可信调用主体/资源/用途/内容级别绑定校验；这些本地校验不等于 Owner 当前授权复核或授权签发。真实来源接入仍未完成。该契约属于 Evidence，不属于 Context。
 - AuthorizationRef：只验证不可变快照结构和指纹，并绑定 Adapter 提供的可信调用上下文；不把引用当 bearer token，不以历史 allowed 代替读取时 Owner 当前策略复核。
 - News → Research 只读证据查询：目标契约尚未实现/冻结；不得据此宣称真实新闻接入通过。
@@ -160,3 +160,11 @@ R1/R2/R3/R5 当前实现 Context、Evidence、Event、Claim/Hypothesis 领域结
 - 测试：`TestContextGoldenJSONV1`，校验 Context v1.0.0 的确定性 JSON 序列化结果。
 - Golden 变更必须先 Review 字段契约和兼容性，不得仅为通过测试而直接刷新样例。
 - 正式 JSON Schema、Schema Validator CI 和跨模块 Contract Test 尚未完成；新增测试尚未执行。
+
+
+## RSC-001 Context v1 Schema 候选
+
+- Schema：`internal/research/context/schema/context-v1.schema.json`（JSON Schema Draft 2020-12）。
+- Golden：`internal/research/context/testdata/context_v1.golden.json`。
+- 一致性测试：`internal/research/context/schema_test.go`；覆盖 JSON 可解析、DTO JSON Tag 与 Schema properties/required 双向一致及 schema_version。
+- 完整 Schema Validator CI、跨模块 Contract Test 和跨字段约束仍未完成；当前新增测试尚未执行。
