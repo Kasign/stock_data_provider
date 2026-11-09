@@ -165,6 +165,9 @@ func (r *MySQLSubscriptionRepository) AppendVersion(
 	if previous.Version != expectedVersion {
 		return domain.ErrSubscriptionVersionConflict
 	}
+	if err := r.validate(previous); err != nil {
+		return fmt.Errorf("notification storage: previous subscription version is invalid: %w", err)
+	}
 	if err := domain.ValidateSubscriptionVersion(previous, next); err != nil {
 		return err
 	}
