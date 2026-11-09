@@ -234,13 +234,15 @@ func ValidateNewsAuthorizationBindingForEvidence(
 		return ErrAuthorizationBindingInvalid
 	}
 
-	var sourcePolicyVersion, endpointPolicyVersion string
+	var sourcePolicyVersion, endpointPolicyVersion, providerPolicyVersion string
 	for _, policy := range binding.PolicySnapshot.Policies {
 		switch policy.PolicyType {
 		case "source":
 			sourcePolicyVersion = policy.PolicyVersion
 		case "endpoint":
 			endpointPolicyVersion = policy.PolicyVersion
+		case "provider_output":
+			providerPolicyVersion = policy.PolicyVersion
 		}
 	}
 	if observation.SourcePolicyVersionID == "" ||
@@ -253,6 +255,14 @@ func ValidateNewsAuthorizationBindingForEvidence(
 		}
 	} else if observation.EndpointPolicyVersionID == "" ||
 		endpointPolicyVersion != observation.EndpointPolicyVersionID {
+		return ErrAuthorizationBindingInvalid
+	}
+	if binding.ProviderRef.Value == nil {
+		if observation.ProviderOutputPolicyVersionID != "" {
+			return ErrAuthorizationBindingInvalid
+		}
+	} else if observation.ProviderCode == "" || observation.ProviderOutputPolicyVersionID == "" ||
+		providerPolicyVersion != observation.ProviderOutputPolicyVersionID {
 		return ErrAuthorizationBindingInvalid
 	}
 	return nil

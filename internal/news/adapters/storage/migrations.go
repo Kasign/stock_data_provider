@@ -198,5 +198,14 @@ func Migrations() []platformstorage.Migration {
 					FROM news_identifiers`,
 			},
 		},
+		{
+			Version:     5,
+			Description: "record provider output policy version on news observations",
+			Statements: []string{
+				`ALTER TABLE news_observations
+					ADD COLUMN provider_output_policy_version_id VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL DEFAULT ''
+					AFTER endpoint_policy_version_id`,
+			},
+		},
 	}
 }

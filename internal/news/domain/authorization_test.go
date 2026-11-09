@@ -375,6 +375,7 @@ func TestValidateNewsAuthorizationBindingForEvidenceBindsExactVersionAndObservat
 		{"different source", func(_ *NewsAuthorizationBinding, o *Observation, _ *NewsItemVersion) { o.SourceID = "source-other" }},
 		{"different source policy version", func(_ *NewsAuthorizationBinding, o *Observation, _ *NewsItemVersion) { o.SourcePolicyVersionID = "2.2.0" }},
 		{"different endpoint policy version", func(_ *NewsAuthorizationBinding, o *Observation, _ *NewsItemVersion) { o.EndpointPolicyVersionID = "1.1.0" }},
+		{"different provider policy version", func(_ *NewsAuthorizationBinding, o *Observation, _ *NewsItemVersion) { o.ProviderOutputPolicyVersionID = "3.1.0" }},
 	}
 	for _, testCase := range cases {
 		t.Run(testCase.name, func(t *testing.T) {

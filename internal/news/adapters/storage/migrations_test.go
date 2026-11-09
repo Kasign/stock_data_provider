@@ -25,6 +25,7 @@ func TestMigrationsDefineNewsOwnedPersistenceSchema(t *testing.T) {
 	for _, table := range []string{
 		"news_items",
 		"news_identifiers",
+		"news_identifier_status_history",
 		"news_observations",
 		"news_item_versions",
 		"news_relation_assertions",

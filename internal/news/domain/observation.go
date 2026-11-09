@@ -21,6 +21,7 @@ type Observation struct {
 	QueryDimension          string
 	SourcePolicyVersionID   string
 	EndpointPolicyVersionID string
+	ProviderOutputPolicyVersionID string
 	PolicyEvaluatedAt       time.Time
 	Candidate               Candidate
 	ObservedAt              time.Time

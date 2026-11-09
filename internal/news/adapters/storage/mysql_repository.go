@@ -280,12 +280,12 @@ func (t *mysqlNewsTransaction) AppendObservation(ctx context.Context, observatio
 	}
 	_, insertErr := t.tx.ExecContext(ctx, `INSERT INTO news_observations
 		(observation_id, idempotency_key, source_id, provider_code, query_dimension,
-		 source_policy_version_id, endpoint_policy_version_id, policy_evaluated_at,
-		 candidate_json, observed_at, identity_status, news_id, reason_code)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		 source_policy_version_id, endpoint_policy_version_id, provider_output_policy_version_id,
+		 policy_evaluated_at, candidate_json, observed_at, identity_status, news_id, reason_code)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		observation.ID, observation.IdempotencyKey, observation.SourceID, observation.ProviderCode,
 		observation.QueryDimension, observation.SourcePolicyVersionID, observation.EndpointPolicyVersionID,
-		policyEvaluatedAt, candidateJSON, observation.ObservedAt.UTC(),
+		observation.ProviderOutputPolicyVersionID, policyEvaluatedAt, candidateJSON, observation.ObservedAt.UTC(),
 		string(observation.IdentityStatus), newsID, observation.ReasonCode,
 	)
 	if insertErr == nil {
@@ -304,7 +304,7 @@ func (t *mysqlNewsTransaction) AppendObservation(ctx context.Context, observatio
 
 const observationSelect = `SELECT observation_id, idempotency_key, source_id, provider_code,
 	query_dimension, source_policy_version_id, endpoint_policy_version_id,
-	policy_evaluated_at, candidate_json, observed_at, identity_status, news_id, reason_code
+	provider_output_policy_version_id, policy_evaluated_at, candidate_json, observed_at, identity_status, news_id, reason_code
 	FROM news_observations`
 
 type rowScanner interface {
@@ -320,7 +320,7 @@ func scanObservation(row rowScanner) (domain.Observation, error) {
 	err := row.Scan(
 		&result.ID, &result.IdempotencyKey, &result.SourceID, &result.ProviderCode,
 		&result.QueryDimension, &result.SourcePolicyVersionID, &result.EndpointPolicyVersionID,
-		&policyAt, &candidateJSON, &result.ObservedAt, &status, &newsID, &result.ReasonCode,
+		&result.ProviderOutputPolicyVersionID, &policyAt, &candidateJSON, &result.ObservedAt, &status, &newsID, &result.ReasonCode,
 	)
 	if err != nil {
 		return domain.Observation{}, err

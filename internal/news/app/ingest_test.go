@@ -237,6 +237,7 @@ func TestIngestCandidatePersistsSourcePolicyTrace(t *testing.T) {
 	trace := ObservationPolicyTrace{
 		SourcePolicyVersionID:   "source-policy-v3",
 		EndpointPolicyVersionID: "endpoint-policy-v2",
+		ProviderOutputPolicyVersionID: "provider-policy-v1",
 		PolicyEvaluatedAt:       evaluatedAt,
 	}
 	observation, err := usecase.ExecuteWithPolicyTrace(
@@ -249,6 +250,7 @@ func TestIngestCandidatePersistsSourcePolicyTrace(t *testing.T) {
 	}
 	if observation.SourcePolicyVersionID != trace.SourcePolicyVersionID ||
 		observation.EndpointPolicyVersionID != trace.EndpointPolicyVersionID ||
+		observation.ProviderOutputPolicyVersionID != trace.ProviderOutputPolicyVersionID ||
 		!observation.PolicyEvaluatedAt.Equal(evaluatedAt.UTC()) {
 		t.Fatalf("policy trace was not persisted: %+v", observation)
 	}
@@ -264,6 +266,7 @@ func TestIngestCandidatePolicyTraceIsPartOfIdempotencyPayload(t *testing.T) {
 	}
 	secondTrace := ObservationPolicyTrace{
 		SourcePolicyVersionID: "source-policy-v4",
+		ProviderOutputPolicyVersionID: "provider-policy-v2",
 		PolicyEvaluatedAt:     time.Date(2026, 11, 5, 10, 1, 0, 0, time.UTC),
 	}
 	if _, err := usecase.ExecuteWithPolicyTrace(context.Background(), "source-1", "feed-run-1/item-1", candidate, domain.SourceURLPolicy{}, firstTrace); err != nil {

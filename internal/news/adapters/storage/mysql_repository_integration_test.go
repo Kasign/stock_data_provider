@@ -291,6 +291,25 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 		t.Fatalf("unexpected identity PIT result: %+v", credentialsAt)
 	}
 
+	traceSourceID := sourceID + "-provider-trace"
+	traceCandidate := domain.Candidate{SourceItemID: "provider-trace-item", ProviderCode: "tavily", Title: "trace test"}
+	trace := app.ObservationPolicyTrace{
+		SourcePolicyVersionID: "source-policy-v1",
+		ProviderOutputPolicyVersionID: "provider-policy-v1",
+		PolicyEvaluatedAt: time.Now().UTC(),
+	}
+	traced, err := ingest.ExecuteWithPolicyTrace(ctx, traceSourceID, "provider-trace-key", traceCandidate, domain.SourceURLPolicy{}, trace)
+	if err != nil {
+		t.Fatalf("ingest provider policy trace: %v", err)
+	}
+	replayedTrace, err := ingest.ExecuteWithPolicyTrace(ctx, traceSourceID, "provider-trace-key", traceCandidate, domain.SourceURLPolicy{}, trace)
+	if err != nil {
+		t.Fatalf("replay provider policy trace: %v", err)
+	}
+	if replayedTrace.ID != traced.ID || replayedTrace.ProviderOutputPolicyVersionID != "provider-policy-v1" {
+		t.Fatalf("provider output policy version was not persisted and replayed: %+v", replayedTrace)
+	}
+
 	replayed, err := ingest.Execute(ctx, sourceID, "news-it-key-0", candidate, domain.SourceURLPolicy{})
 	if err != nil {
 		t.Fatalf("same-payload idempotency replay failed: %v", err)

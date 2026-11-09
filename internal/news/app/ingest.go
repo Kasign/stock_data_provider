@@ -51,6 +51,7 @@ func NewIngestCandidate(repository IdentityRepository, newID func() string) *Ing
 type ObservationPolicyTrace struct {
 	SourcePolicyVersionID   string
 	EndpointPolicyVersionID string
+	ProviderOutputPolicyVersionID string
 	PolicyEvaluatedAt       time.Time
 }
 
@@ -63,6 +64,7 @@ func (u *IngestCandidate) Execute(ctx context.Context, sourceID, idempotencyKey 
 func (u *IngestCandidate) ExecuteWithPolicyTrace(ctx context.Context, sourceID, idempotencyKey string, candidate domain.Candidate, policy domain.SourceURLPolicy, trace ObservationPolicyTrace) (domain.Observation, error) {
 	trace.SourcePolicyVersionID = strings.TrimSpace(trace.SourcePolicyVersionID)
 	trace.EndpointPolicyVersionID = strings.TrimSpace(trace.EndpointPolicyVersionID)
+	trace.ProviderOutputPolicyVersionID = strings.TrimSpace(trace.ProviderOutputPolicyVersionID)
 	if trace.SourcePolicyVersionID == "" || trace.PolicyEvaluatedAt.IsZero() {
 		return domain.Observation{}, ErrInvalidRequest
 	}
@@ -98,6 +100,7 @@ func (u *IngestCandidate) execute(ctx context.Context, sourceID, idempotencyKey 
 		QueryDimension:          candidate.QueryDimension,
 		SourcePolicyVersionID:   trace.SourcePolicyVersionID,
 		EndpointPolicyVersionID: trace.EndpointPolicyVersionID,
+		ProviderOutputPolicyVersionID: trace.ProviderOutputPolicyVersionID,
 		PolicyEvaluatedAt:       trace.PolicyEvaluatedAt,
 		Candidate:               candidate,
 		ObservedAt:              observedAt,
@@ -212,5 +215,6 @@ func SameObservationPayload(a, b domain.Observation) bool {
 		a.QueryDimension == b.QueryDimension &&
 		a.SourcePolicyVersionID == b.SourcePolicyVersionID &&
 		a.EndpointPolicyVersionID == b.EndpointPolicyVersionID &&
+		a.ProviderOutputPolicyVersionID == b.ProviderOutputPolicyVersionID &&
 		reflect.DeepEqual(aCandidate, bCandidate)
 }
