@@ -20,8 +20,8 @@ import (
 )
 
 const (
-	defaultTimeout               = 15 * time.Second
-	defaultDialTimeout           = 5 * time.Second
+	defaultTimeout                = 15 * time.Second
+	defaultDialTimeout            = 5 * time.Second
 	defaultResponseHeaderTimeout  = 8 * time.Second
 	defaultMaxResponseHeaderBytes = int64(1 << 20)
 	maxResponseHeaderBytesLimit   = int64(4 << 20)
@@ -53,9 +53,9 @@ type Resolver interface {
 }
 
 type Config struct {
-	Timeout               time.Duration
-	DialTimeout           time.Duration
-	TLSHandshakeTimeout   time.Duration
+	Timeout                time.Duration
+	DialTimeout            time.Duration
+	TLSHandshakeTimeout    time.Duration
 	ResponseHeaderTimeout  time.Duration
 	MaxResponseHeaderBytes int64
 	MaxResponseBytes       int64
@@ -85,11 +85,11 @@ type DestinationPolicy struct {
 }
 
 type Client struct {
-	config           Config
-	resolver         Resolver
-	dial             func(context.Context, string, string) (net.Conn, error)
-	httpClient       *http.Client
-	transport        *http.Transport
+	config                 Config
+	resolver               Resolver
+	dial                   func(context.Context, string, string) (net.Conn, error)
+	httpClient             *http.Client
+	transport              *http.Transport
 	defaultSemaphore       chan struct{}
 	semaphores             map[string]chan struct{}
 	defaultStreamSemaphore chan struct{}
@@ -207,17 +207,17 @@ func New(config Config) (*Client, error) {
 	}
 
 	transport := &http.Transport{
-		Proxy:                 nil, // 不读取 HTTP_PROXY/HTTPS_PROXY，避免不可信代理绕过目的地址校验。
-		DialContext:           client.dialContext,
-		TLSClientConfig:       &tls.Config{MinVersion: tls.VersionTLS12},
-		TLSHandshakeTimeout:   config.TLSHandshakeTimeout,
+		Proxy:                  nil, // 不读取 HTTP_PROXY/HTTPS_PROXY，避免不可信代理绕过目的地址校验。
+		DialContext:            client.dialContext,
+		TLSClientConfig:        &tls.Config{MinVersion: tls.VersionTLS12},
+		TLSHandshakeTimeout:    config.TLSHandshakeTimeout,
 		ResponseHeaderTimeout:  config.ResponseHeaderTimeout,
 		MaxResponseHeaderBytes: config.MaxResponseHeaderBytes,
 		IdleConnTimeout:        90 * time.Second,
-		MaxIdleConns:          64,
-		MaxIdleConnsPerHost:   4,
-		MaxConnsPerHost:       16,
-		ForceAttemptHTTP2:     true,
+		MaxIdleConns:           64,
+		MaxIdleConnsPerHost:    4,
+		MaxConnsPerHost:        16,
+		ForceAttemptHTTP2:      true,
 	}
 	client.transport = transport
 	client.httpClient = &http.Client{

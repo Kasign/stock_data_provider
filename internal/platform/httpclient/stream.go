@@ -16,7 +16,7 @@ import (
 )
 
 var (
-	errStreamIdleTimeout = errors.New("stream idle read timeout")
+	errStreamIdleTimeout  = errors.New("stream idle read timeout")
 	errStreamBodyTooLarge = errors.New("stream body exceeds configured limit")
 )
 
@@ -364,16 +364,16 @@ func (c *Client) OpenStream(ctx context.Context, request *http.Request, policy D
 	state := &streamState{
 		cancel: cancel, release: release, body: response.Body,
 		stats: StreamStats{
-			RequestID: observability.FromContext(requestCtx),
+			RequestID:  observability.FromContext(requestCtx),
 			Dependency: policy.Dependency,
 			StatusCode: response.StatusCode,
-			StartedAt: time.Now(),
+			StartedAt:  time.Now(),
 		},
 	}
 	body := &streamBody{
 		source: response.Body, state: state, ctx: requestCtx,
 		idleTimeout: c.config.StreamIdleTimeout,
-		maxBytes: c.config.MaxStreamBytes,
+		maxBytes:    c.config.MaxStreamBytes,
 	}
 	stop := context.AfterFunc(requestCtx, func() {
 		if errors.Is(requestCtx.Err(), context.DeadlineExceeded) {
@@ -386,9 +386,9 @@ func (c *Client) OpenStream(ctx context.Context, request *http.Request, policy D
 
 	return &StreamResponse{
 		StatusCode: response.StatusCode,
-		Header: response.Header.Clone(),
-		Body: body,
-		state: state,
+		Header:     response.Header.Clone(),
+		Body:       body,
+		state:      state,
 	}, nil
 }
 
