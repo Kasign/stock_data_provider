@@ -99,6 +99,11 @@ func TestDiagnosticsApplicationRejectsInvalidReferences(t *testing.T) {
 	if _, err := service.BuildClaimCheck(context.Background(), ClaimRef{ClaimID: "clm_1", ClaimVersion: 0}, true); err == nil {
 		t.Fatal("non-positive Claim version must be rejected")
 	}
+	if _, err := service.BuildEvidenceCheck(context.Background(), EvidenceRef{
+		EvidenceID: "ev_1", CallerRef: "researchflow:worker-1",
+	}, true); err == nil {
+		t.Fatal("missing Run system_as_of must be rejected before Owner access")
+	}
 }
 
 func TestBuildEvidenceCheckRechecksOwnerAuthorization(t *testing.T) {

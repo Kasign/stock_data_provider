@@ -83,7 +83,7 @@ func (s *Service) BuildEvidenceCheck(ctx context.Context, ref EvidenceRef, requi
 	if s == nil || s.evidence == nil || s.authorizer == nil {
 		return platformdiagnostics.Check{}, applicationFault(fault.ClassInternal, "research_evidence_dependencies_not_configured", "Research Evidence dependencies are not configured", researcherrors.ErrInvalidRepository)
 	}
-	if ctx == nil || strings.TrimSpace(ref.EvidenceID) == "" || strings.TrimSpace(ref.CallerRef) == "" || strings.TrimSpace(ref.PurposeCode) == "" {
+	if ctx == nil || strings.TrimSpace(ref.EvidenceID) == "" || strings.TrimSpace(ref.CallerRef) == "" {
 		return platformdiagnostics.Check{}, validationFault("invalid_evidence_ref", "Evidence reference and trusted caller are required", nil)
 	}
 	if ref.RunSystemAsOf.IsZero() || ref.RunSystemAsOf.Location() != time.UTC {
