@@ -73,7 +73,7 @@ func TestOutboxDispatcherPublishesAndSchedulesRetry(t *testing.T) {
 			{Ref: "event-ok", IdempotencyKey: "idem-ok", AttemptCount: 1, LeaseGeneration: 1},
 			{Ref: "event-fail", IdempotencyKey: "idem-fail", AttemptCount: 2, LeaseGeneration: 3},
 		},
-		retryAt:    map[string]time.Time{}, retryErrorCode: map[string]string{},
+		retryAt: map[string]time.Time{}, retryErrorCode: map[string]string{},
 		staleAck: map[string]bool{}, staleRetry: map[string]bool{},
 	}
 	publisher := &fakeOutboxPublisher{errors: map[string]error{
@@ -127,7 +127,7 @@ func TestOutboxDispatcherCountsStaleLeaseAndClaimFailure(t *testing.T) {
 		messages:   []OutboxMessage{{Ref: "stale", AttemptCount: 1, LeaseGeneration: 2}},
 		staleAck:   map[string]bool{"stale": true},
 		staleRetry: map[string]bool{},
-		retryAt: map[string]time.Time{}, retryErrorCode: map[string]string{},
+		retryAt:    map[string]time.Time{}, retryErrorCode: map[string]string{},
 	}
 	dispatcher, err := NewOutboxDispatcher(store, &fakeOutboxPublisher{errors: map[string]error{}},
 		OutboxDispatcherConfig{WorkerID: "worker-1", BatchSize: 1, MaxConcurrency: 1, LeaseDuration: time.Minute, PublishTimeout: time.Second})
