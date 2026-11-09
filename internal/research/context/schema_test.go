@@ -1,10 +1,10 @@
 package context
 
 import (
+	"bytes"
 	"encoding/json"
 	"os"
 	"reflect"
-	"strings"
 	"testing"
 
 	"github.com/santhosh-tekuri/jsonschema/v6"
@@ -116,8 +116,13 @@ func TestContextJSONSchemaValidatesGoldenAndRejectsInvalidPayloads(t *testing.T)
 	if err != nil {
 		t.Fatalf("read Context JSON Schema: %v", err)
 	}
+	schemaDocument, err := jsonschema.UnmarshalJSON(bytes.NewReader(schemaData))
+	if err != nil {
+		t.Fatalf("parse Context JSON Schema for validator: %v", err)
+	}
 	compiler := jsonschema.NewCompiler()
-	if err := compiler.AddResource("context-v1.schema.json", strings.NewReader(string(schemaData))); err != nil {
+	compiler.AssertFormat()
+	if err := compiler.AddResource("context-v1.schema.json", schemaDocument); err != nil {
 		t.Fatalf("add Context JSON Schema resource: %v", err)
 	}
 	schema, err := compiler.Compile("context-v1.schema.json")
@@ -133,7 +138,11 @@ func TestContextJSONSchemaValidatesGoldenAndRejectsInvalidPayloads(t *testing.T)
 	if err := json.Unmarshal(golden, &payload); err != nil {
 		t.Fatalf("decode Context v1 golden fixture: %v", err)
 	}
-	if err := schema.Validate(payload); err != nil {
+	instance, err := jsonschema.UnmarshalJSON(bytes.NewReader(golden))
+	if err != nil {
+		t.Fatalf("parse Context v1 golden for validator: %v", err)
+	}
+	if err := schema.Validate(instance); err != nil {
 		t.Fatalf("Context v1 golden fixture does not satisfy JSON Schema: %v", err)
 	}
 
@@ -168,7 +177,15 @@ func TestContextJSONSchemaValidatesGoldenAndRejectsInvalidPayloads(t *testing.T)
 				t.Fatalf("decode cloned fixture: %v", err)
 			}
 			tt.mutate(candidate)
-			if err := schema.Validate(candidate); err == nil {
+			candidateJSON, err := json.Marshal(candidate)
+			if err != nil {
+				t.Fatalf("encode invalid fixture: %v", err)
+			}
+			instance, err := jsonschema.UnmarshalJSON(bytes.NewReader(candidateJSON))
+			if err != nil {
+				t.Fatalf("parse invalid fixture for validator: %v", err)
+			}
+			if err := schema.Validate(instance); err == nil {
 				t.Fatal("invalid payload unexpectedly satisfied Context JSON Schema")
 			}
 		})
@@ -180,8 +197,13 @@ func TestContextJSONSchemaRejectsNullNestedObject(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read Context JSON Schema: %v", err)
 	}
+	schemaDocument, err := jsonschema.UnmarshalJSON(bytes.NewReader(schemaData))
+	if err != nil {
+		t.Fatalf("parse Context JSON Schema for validator: %v", err)
+	}
 	compiler := jsonschema.NewCompiler()
-	if err := compiler.AddResource("context-v1.schema.json", strings.NewReader(string(schemaData))); err != nil {
+	compiler.AssertFormat()
+	if err := compiler.AddResource("context-v1.schema.json", schemaDocument); err != nil {
 		t.Fatalf("add Context JSON Schema resource: %v", err)
 	}
 	schema, err := compiler.Compile("context-v1.schema.json")
@@ -197,7 +219,21 @@ func TestContextJSONSchemaRejectsNullNestedObject(t *testing.T) {
 		t.Fatalf("decode Context v1 golden fixture: %v", err)
 	}
 	payload["quality_summary"] = nil
-	if err := schema.Validate(payload); err == nil {
+	instance, err := jsonschema.UnmarshalJSON(bytes.NewReader(golden))
+	if err != nil {
+		t.Fatalf("parse Context v1 golden for validator: %v", err)
+	}
+	payloadMap := payload
+	payloadMap["quality_summary"] = nil
+	encoded, err := json.Marshal(payloadMap)
+	if err != nil {
+		t.Fatalf("encode null nested object fixture: %v", err)
+	}
+	instance, err = jsonschema.UnmarshalJSON(bytes.NewReader(encoded))
+	if err != nil {
+		t.Fatalf("parse null nested object fixture: %v", err)
+	}
+	if err := schema.Validate(instance); err == nil {
 		t.Fatal("null quality_summary unexpectedly satisfied Context JSON Schema")
 	}
 }
