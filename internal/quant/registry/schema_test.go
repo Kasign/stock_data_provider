@@ -40,6 +40,11 @@ func TestDraft202012SchemasCompileAndValidateInstances(t *testing.T) {
 			instance: `{"schema_version":"1.0.0","factor_code":"momentum_20d","parameters":{}}`,
 			invalid:  `{"schema_version":"1.0.0","factor_code":"momentum_20d","parameters":{"window":20}}`,
 		},
+		{
+			name:     "QNT-CTR-004-quant-result-ref-1.0.0.schema.json",
+			instance: `{"schema_version":"1.0.0","result_id":"result-1","result_type":"factor","scope":"stock","security_id":"security-1","system_as_of":"2026-11-09T00:00:00Z","period":"20d","algorithm_version":"momentum.v1","parameter_fingerprint":"sha256:abc","input_snapshot_refs":["snapshot-1"],"quality_status":"valid","result_status":"completed","authorization_ref":"authorization-1","created_at":"2026-11-09T00:01:00Z"}`,
+			invalid:  `{"schema_version":"1.0.0","result_id":"result-1","result_type":"factor","scope":"stock","system_as_of":"2026-11-09T00:00:00Z","period":"20d","algorithm_version":"momentum.v1","parameter_fingerprint":"sha256:abc","input_snapshot_refs":[],"quality_status":"valid","result_status":"completed","authorization_ref":"authorization-1","created_at":"2026-11-09T00:01:00Z"}`,
+		},
 	}
 
 	for _, tc := range cases {

@@ -2,6 +2,9 @@ package result
 
 import (
 	"errors"
+	"encoding/json"
+	"os"
+	"path/filepath"
 	"reflect"
 	"testing"
 	"time"
@@ -114,5 +117,32 @@ func TestBuildRefAllowsNonStockScopeWithoutSecurityID(t *testing.T) {
 	}
 	if got.SecurityID != "" || got.Scope != ScopeMarket {
 		t.Fatalf("unexpected market ref: %+v", got)
+	}
+}
+
+
+func TestBuildRefMatchesQNTCTR004Golden(t *testing.T) {
+	got, err := BuildRef(validRefInput(), testManifest(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	encoded, err := json.Marshal(got)
+	if err != nil {
+		t.Fatal(err)
+	}
+	goldenBytes, err := os.ReadFile(filepath.Join("..", "..", "..", "doc", "quant", "golden", "result", "quant-result-ref-1.0.0.golden.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var want Ref
+	if err := json.Unmarshal(goldenBytes, &want); err != nil {
+		t.Fatal(err)
+	}
+	var decoded Ref
+	if err := json.Unmarshal(encoded, &decoded); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(decoded, want) {
+		t.Fatalf("QuantResultRef Golden mismatch: got=%s want=%s", encoded, goldenBytes)
 	}
 }
