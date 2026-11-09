@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -16,6 +17,29 @@ var (
 	ErrInvalidQuantResult = errors.New("invalid Quant result envelope")
 	ErrInvalidQuantPayload = errors.New("invalid Quant result payload")
 	ErrPayloadValidatorUnavailable = errors.New("Quant payload validator is unavailable")
+)
+
+var schemaVersionRE = regexp.MustCompile(`^[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.-]+)?package resultvalidation
+
+import (
+	"encoding/json"
+	"errors"
+	"fmt"
+	"regexp"
+	"sort"
+	"strings"
+	"sync"
+	"time"
+)
+
+var (
+	ErrUnsupportedResultType = errors.New("unsupported Quant result type")
+	ErrUnsupportedSchema = errors.New("unsupported Quant result schema")
+	ErrInvalidQuantResult = errors.New("invalid Quant result envelope")
+	ErrInvalidQuantPayload = errors.New("invalid Quant result payload")
+	ErrPayloadValidatorUnavailable = errors.New("Quant payload validator is unavailable")
+)
+
 )
 
 var supportedResultTypes = map[string]struct{}{
@@ -80,7 +104,7 @@ func (r *Registry) Register(resultType, schemaVersion string, validator PayloadV
 	if _, ok := supportedResultTypes[resultType]; !ok {
 		return fmt.Errorf("%w: %q", ErrUnsupportedResultType, resultType)
 	}
-	if schemaVersion == "" || schemaVersion != strings.TrimSpace(schemaVersion) {
+	if !schemaVersionRE.MatchString(schemaVersion) || schemaVersion != strings.TrimSpace(schemaVersion) {
 		return fmt.Errorf("%w: empty or non-canonical schema version", ErrUnsupportedSchema)
 	}
 	key := schemaKey{resultType: resultType, version: schemaVersion}
@@ -120,21 +144,9 @@ func (r *Registry) Validate(result QuantResultEnvelope, policy ValidationPolicy)
 	}
 	r.mu.RLock()
 	validator, exists := r.validators[schemaKey{resultType: result.ResultType, version: result.SchemaVersion}]
-	hasType := false
-	if !exists {
-		for key := range r.validators {
-			if key.resultType == result.ResultType {
-				hasType = true
-				break
-			}
-		}
-	}
 	r.mu.RUnlock()
 	if !exists {
-		if hasType {
-			return QuantValidation{}, fmt.Errorf("%w: %s/%s", ErrUnsupportedSchema, result.ResultType, result.SchemaVersion)
-		}
-		return QuantValidation{}, fmt.Errorf("%w: %s", ErrUnsupportedResultType, result.ResultType)
+		return QuantValidation{}, fmt.Errorf("%w: %s/%s", ErrUnsupportedSchema, result.ResultType, result.SchemaVersion)
 	}
 
 	if err := validateEnvelope(result, policy); err != nil {
@@ -190,7 +202,7 @@ func validateEnvelope(result QuantResultEnvelope, policy ValidationPolicy) error
 		}
 	}
 	if result.InputSnapshotRefs == nil || (!policy.AllowEmptyInputs && len(result.InputSnapshotRefs) == 0) ||
-		hasDuplicateOrInvalidRefs(result.InputSnapshotRefs) {
+		hasDuplicateOrInvalidRefs(result.InputSnapshotRefs) || !sort.StringsAreSorted(result.InputSnapshotRefs) {
 		return fmt.Errorf("%w: input_snapshot_refs is missing, empty or invalid", ErrInvalidQuantResult)
 	}
 	if !isUTC(result.SystemAsOf) || !isUTC(result.CreatedAt) ||

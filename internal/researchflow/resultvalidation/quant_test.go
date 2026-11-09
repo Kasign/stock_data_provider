@@ -108,6 +108,8 @@ func TestRegistryRejectsEnvelopeAndPayloadContractViolations(t *testing.T) {
 		{"as-of mismatch", func(v *QuantResultEnvelope) { v.SystemAsOf = v.SystemAsOf.Add(time.Second) }, ErrInvalidQuantResult},
 		{"missing authorization", func(v *QuantResultEnvelope) { v.AuthorizationRef = "" }, ErrInvalidQuantResult},
 		{"missing input refs", func(v *QuantResultEnvelope) { v.InputSnapshotRefs = nil }, ErrInvalidQuantResult},
+		{"unsorted input refs", func(v *QuantResultEnvelope) { v.InputSnapshotRefs = []string{"snapshot-2", "snapshot-1"} }, ErrInvalidQuantResult},
+		{"invalid schema version", func(v *QuantResultEnvelope) { v.SchemaVersion = "latest" }, ErrUnsupportedSchema},
 		{"invalid fingerprint", func(v *QuantResultEnvelope) { v.ParameterFingerprint = "not-a-hash" }, ErrInvalidQuantResult},
 		{"stock without security", func(v *QuantResultEnvelope) { v.SecurityID = "" }, ErrInvalidQuantResult},
 		{"invalid payload", func(v *QuantResultEnvelope) { v.Payload = json.RawMessage(`null`) }, ErrInvalidQuantPayload},
