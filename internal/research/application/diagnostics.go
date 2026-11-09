@@ -6,8 +6,8 @@ import (
 
 	platformdiagnostics "example.com/stock-analysis-flow/internal/platform/diagnostics"
 	"example.com/stock-analysis-flow/internal/platform/fault"
-	researchdiagnostics "example.com/stock-analysis-flow/internal/research/diagnostics"
 	researcherrors "example.com/stock-analysis-flow/internal/research"
+	researchdiagnostics "example.com/stock-analysis-flow/internal/research/diagnostics"
 )
 
 type DiagnosticsPort interface {
@@ -77,7 +77,7 @@ func (s *Service) BuildClaimCheck(ctx context.Context, ref ClaimRef, required bo
 }
 
 
-// BuildEvidenceCheck 先通过来源 Owner 当前授权复核，再构造不含证据正文的诊断项。
+// BuildEvidenceCheck 先通过来源 Owner 当前授权复核通过后，再构造不含证据正文的诊断项。
 func (s *Service) BuildEvidenceCheck(ctx context.Context, ref EvidenceRef, required bool) (platformdiagnostics.Check, error) {
 	if s == nil || s.evidence == nil || s.authorizer == nil {
 		return platformdiagnostics.Check{}, applicationFault(fault.ClassInternal, "research_evidence_dependencies_not_configured", "Research Evidence dependencies are not configured", researcherrors.ErrInvalidRepository)
