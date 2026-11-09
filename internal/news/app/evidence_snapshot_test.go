@@ -108,6 +108,7 @@ func TestEvidenceSnapshotValidateRejectsInvalidTTLFingerprintAndPITKey(t *testin
 		{"wrong ttl", func(s *EvidenceSnapshot) { s.ExpiresAt = s.ExpiresAt.Add(time.Second) }},
 		{"system as of after snapshot creation", func(s *EvidenceSnapshot) { s.SystemAsOf = s.CreatedAt.Add(time.Second) }},
 		{"missing purpose", func(s *EvidenceSnapshot) { s.PurposeCode = "" }},
+		{"invalid purpose", func(s *EvidenceSnapshot) { s.PurposeCode = "unrestricted" }},
 		{"invalid content level", func(s *EvidenceSnapshot) { s.RequestedContentLevel = "unrestricted" }},
 		{"uppercase fingerprint", func(s *EvidenceSnapshot) { s.FiltersFingerprint = strings.Repeat("A", 64) }},
 		{"invalid fingerprint", func(s *EvidenceSnapshot) { s.FiltersFingerprint = "not-a-hash" }},

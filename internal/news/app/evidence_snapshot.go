@@ -30,17 +30,17 @@ type EvidenceSnapshotItem struct {
 // EvidenceSnapshot stores only immutable evidence references and sort keys.
 // It never copies titles, excerpts, summaries, or article bodies.
 type EvidenceSnapshot struct {
-	SnapshotRef       string                 `json:"snapshot_ref"`
-	CallerRef             string                 `json:"caller_ref"`
-	PurposeCode           EvidencePurposeCode     `json:"purpose_code"`
-	RequestedContentLevel EvidenceContentLevel    `json:"requested_content_level"`
-	FiltersFingerprint    string                `json:"filters_fingerprint"`
-	PageSize          int                    `json:"page_size"`
-	SystemAsOf        time.Time              `json:"system_as_of"`
-	SortVersion       string                 `json:"sort_version"`
-	CreatedAt         time.Time              `json:"created_at"`
-	ExpiresAt         time.Time              `json:"expires_at"`
-	Items             []EvidenceSnapshotItem `json:"items"`
+	SnapshotRef           string                 `json:"snapshot_ref"`
+	CallerRef              string                 `json:"caller_ref"`
+	PurposeCode            EvidencePurposeCode     `json:"purpose_code"`
+	RequestedContentLevel  EvidenceContentLevel    `json:"requested_content_level"`
+	FiltersFingerprint     string                 `json:"filters_fingerprint"`
+	PageSize               int                    `json:"page_size"`
+	SystemAsOf             time.Time              `json:"system_as_of"`
+	SortVersion            string                 `json:"sort_version"`
+	CreatedAt              time.Time              `json:"created_at"`
+	ExpiresAt              time.Time              `json:"expires_at"`
+	Items                  []EvidenceSnapshotItem `json:"items"`
 }
 
 func (s EvidenceSnapshot) Validate() error {

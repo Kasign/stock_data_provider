@@ -1,6 +1,6 @@
 # 新闻模块专项文档
 
-> 状态：N1-A/N2 已完成；N3 离线能力与在线采集编排首批完成、生产触发/授权网络门禁待接入；N4 领域/Application 首批完成；N5 Config/HTTP/Fault 适配完成；N6 Repository 与 Migration V1-V3 已实现（V1/V2 MariaDB 集成通过，V3 等待当前 CI）；N7 News Checks 已实现；NEWS-CTR-001 DTO/Cursor/Snapshot Store（快照绑定 caller/purpose/content level）与 NEWS-CTR-002 授权快照存储已推进，Query Facade/PIT/当前授权复核仍未完成  
+> 状态：N1-A/N2 已完成；N3 离线能力与在线采集编排首批完成、生产触发/授权网络门禁待接入；N4 领域/Application 首批完成；N5 Config/HTTP/Fault 适配完成；N6 Repository 与 Migration V1-V3 已实现（V1-V3 MariaDB 11.4 News 集成 CI 已通过）；N7 News Checks 已实现；NEWS-CTR-001 DTO/Cursor/Snapshot Store（快照绑定 caller/purpose/content level）与 NEWS-CTR-002 授权快照存储已推进，Query Facade/PIT/当前授权复核仍未完成  
 > 开发分支：`feat/research-news-ingestion`  
 > 基线分支：`feat/full-go-data-providers-api-switch`
 
