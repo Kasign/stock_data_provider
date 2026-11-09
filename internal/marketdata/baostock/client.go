@@ -12,6 +12,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"example.com/stock-analysis-flow/internal/marketdata/transport"
 )
 
 const (
@@ -34,6 +36,8 @@ type Config struct {
 	Password       string
 	ConnectTimeout time.Duration
 	RequestTimeout time.Duration
+	// DialContext 由 Root 注入的受控 TCP 出站函数；nil 时保留标准 net.Dialer 兼容行为。
+	DialContext transport.DialContextFunc
 }
 
 // DailyKLine contains the source fields needed by the daily-bar adapter.
@@ -706,8 +710,15 @@ func (c *Client) ensureLoggedInLocked(ctx context.Context) error {
 
 	dialCtx, cancel := context.WithTimeout(ctx, c.cfg.ConnectTimeout)
 	defer cancel()
-	conn, err := (&net.Dialer{Timeout: c.cfg.ConnectTimeout, KeepAlive: 30 * time.Second}).DialContext(
-		dialCtx, "tcp", net.JoinHostPort(c.cfg.Host, strconv.Itoa(c.cfg.Port)))
+	address := net.JoinHostPort(c.cfg.Host, strconv.Itoa(c.cfg.Port))
+	var conn net.Conn
+	var err error
+	if c.cfg.DialContext != nil {
+		conn, err = c.cfg.DialContext(dialCtx, "tcp", address)
+	} else {
+		conn, err = (&net.Dialer{Timeout: c.cfg.ConnectTimeout, KeepAlive: 30 * time.Second}).DialContext(
+			dialCtx, "tcp", address)
+	}
 	if err != nil {
 		return fmt.Errorf("connect to BaoStock %s:%d: %w", c.cfg.Host, c.cfg.Port, err)
 	}

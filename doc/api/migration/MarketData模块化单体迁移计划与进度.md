@@ -7,7 +7,7 @@
 - 跨模块准入：`doc/整体任务规划/01-项目总览/跨模块接入执行说明.md`、`doc/整体任务规划/01-项目总览/跨模块接入准入清单.md`
 - 本记录建立时的代码基线：`d8595f408337f62be3697aac661ba1570fdd3667`
 - 最近一次 M0 审计基线：`9687337743ff5ad8b5b81209831d43689693ae47`
-- 最近一次代码基线：`5258c26da1e427f60361ca600aa0f5683d0f2d12`（Tencent 四 endpoint 受控 HTTP 执行器注入）
+- 最近一次代码基线：`8340609eb93ff129378f07058bc3415d4ea74178`（整理 TCP 注入代码与迁移进度记录）
 - 当前实施状态：`M1_completed / M2_completed / M3_in_progress / M4_in_progress`；M3 的 Data 侧进程内路由准备已完成，Root Server 实际装配仍待 Server 组合根完成；M4 的 borrowed DB 与 go-redis Cache Adapter 已实现，Root 侧资源注入/配置一致性及 Provider 网络出口适配仍未完成。
 
 > 本文记录 Data 从独立 Go Module/服务迁入 Root Server 根 Go Module、同进程运行的实施计划和进度。若本文与上述架构决策文档冲突，以架构决策文档为准；公共平台及 DATA 契约以冻结契约文档为准。本文不重新定义契约。
@@ -419,7 +419,7 @@ internal/
 | M1 Go Module 归并 | completed（代码归并） | Data 源码已位于根 Module 的 `internal/marketdata/**`；根 `go.mod` 为 Go 1.23.0；当前 Data 根模块 gofmt/test/race/vet 专项通过 |
 | M2 Application Port/Bootstrap | completed（Data 侧） | M2-1～M2-6 已完成：Application Port、Bootstrap、Worker 生命周期、HTTP 用例接口拆分、来源能力快照和 Migration Runner |
 | M3 Root Server 装配 | in_progress | Data 已提供 `InProcessHandler()`、Application Port 和 `MigrationRunner()`；Root Router、共享资源注入、Remote→InProcess 切换属于 Server 组合根任务，本分支不越界修改 |
-| M4 共享资源统一 | in_progress | Data Repository borrowed DB、`cache.NewGoRedis` 已实现；Tushare、Hithink、TickFlow（认证/免费双出口）、Xueqiu、Yahoo、NetEase（报价/历史双出口）、Tencent（四 endpoint）、Sina（报价/K 线双出口）已提供 HTTPDoer 注入入口；Root 侧真实 BoundDoer 创建与注入、Redis 配置匹配、Eastmoney/MiaoXiang 等 Provider 和 TCP 出站策略仍待完成 |
+| M4 共享资源统一 | in_progress | Data Repository borrowed DB、`cache.NewGoRedis` 已实现；Tushare、Hithink、TickFlow（认证/免费双出口）、Xueqiu、Yahoo、NetEase（报价/历史双出口）、Tencent（四 endpoint）、Sina（报价/K 线双出口）、Eastmoney（按 origin 统一映射多个 endpoint）、MiaoXiang（单 API endpoint）已提供 HTTPDoer 注入入口；Root 侧真实 BoundDoer 创建与注入、Redis 配置匹配、Pytdx/BaoStock TCP 受控连接函数注入入口已提供；Platform 尚无可供 Root 使用的公开 BoundDialer，实际受控连接策略仍待完成 |
 | M5 部署/WebUI 切换 | pending | Root 同进程装配和共享资源验收后执行 |
 | M6 迁移验收 | pending | 结构迁移、API/PIT/质量、真实 Provider 和部署验收分开形成证据 |
 | 公共平台契约接入 | in_progress（按依赖） | 当前分支已有 Platform 基础代码；Data 仅适配已冻结能力，不复制 HTTP Client、Diagnostics Runner、Storage 等公共实现 |
@@ -960,4 +960,38 @@ internal/
 - Bootstrap Dependencies 新增 `SinaQuoteHTTPDoer` / `SinaKlineHTTPDoer` 并传入 Provider。Root 后续按各自运行时 URL 创建精确 HTTPS Host/443 BoundDoer，拒绝重定向、执行 DNS/IP 校验并保留 1 MiB 响应体上限；Data Module 不拥有、不关闭执行器。
 - 新增测试源码覆盖两出口不交叉、GET URL、Referer/Accept Header、502 错误路径和旧构造器兼容；测试尚未运行。
 - 下一步处理 Eastmoney 多 endpoint 出口；按真实配置 URL 逐个分组，不扩大 Host 白名单，不改变 Provider 质量规则。
+
+
+
+### 2026-11-09：M4-HTTP-09 Eastmoney 按 origin 受控 HTTP 执行器注入
+
+- 代码基线：`ba6cdde5ceebfb56d03f35068fc6e709f8f8bcb6`；本项实现提交：`0179052d5506eef1b8be97459e31daee84372266`。Eastmoney 当前配置 endpoint 覆盖 Quote、Kline、StockBasic、SectorRanking/StockList、Index、MarketBreadth、LimitPool、StockBoards、CapitalFlow、DragonTiger、Announcements、HotRanking、HotSurge。部分默认 endpoint 共用 Host，另有 `push2his`、`push2ex`、`datacenter`、`datacenter-web`、`np-anotice-stock`、`emappdata` 等独立 origin。
+- 不为每条 URL 增加重复字段，而按规范 `scheme://host` 作为受控执行器映射键：同 origin 共享一个 BoundDoer，不同 origin 必须独立绑定。新增 `EastmoneyHTTPOrigin` 供 Root 计算映射键，`WithHTTPDoers` 注入执行器映射。
+- `getJSON` 路径覆盖 Quote、Kline、Index、SectorRanking/StockList、MarketBreadth、LimitPool、StockBoards、CapitalFlow、DragonTiger、Announcements 等 JSON 请求；StockBasic 直接请求和 HotRanking/HotSurge POST 路径也统一经 origin 选择执行器。
+- 映射为 nil 时兼容旧标准 Client；映射非 nil 时 fail-closed，缺少请求 origin 对应执行器直接报错，不允许静默回退无约束 Client。原有重定向策略、超时、请求 Header、重试和响应体限制保持不变。
+- Bootstrap Dependencies 新增 `EastmoneyHTTPDoers map[string]provider.HTTPDoer`。Root 后续需从实际配置 URL（包括 LimitPoolBaseURL 和默认值）汇总 origin，逐个创建精确 HTTPS/443 BoundDoer，再按 `provider.EastmoneyHTTPOrigin` 的返回值填入 map。Module 不拥有、不关闭执行器。
+- 尚未在 Root 侧实现 origin 汇总与注入；新增代码/测试未运行，不能视为 SSRF 防护已生效或真实 Eastmoney 数据验收通过。
+- 下一步处理 MiaoXiang 等剩余 HTTP Provider，再单独梳理 BaoStock/Pytdx TCP 出站；最后进入 Root Server 实际装配。
+
+
+
+### 2026-11-09：M4-HTTP-10 MiaoXiang 补充数据 API 受控 HTTP 执行器注入
+
+- 代码基线：`a59c767f62b31a94a6dad3cc6cf8b5a1763147fd`；实现提交：`205e8fbad27a82708dcb9b95264a55f7ed084ee3`。MiaoXiang 仅有一个可配置 API endpoint（默认 `mkapi2.dfcfs.com/finskillshub/api/claw/query`），请求为携带 `apikey` Header 的 JSON POST。
+- 新增 `NewMiaoXiangWithHTTPDoer`；旧 `NewMiaoXiang` 保留并委托新构造器。注入执行器只负责传输，不改变 API Key 校验、全局串行准入、300ms 频率控制、缓存、10 秒默认超时、禁止重定向、2 MiB 响应体上限和解析逻辑。
+- Bootstrap Dependencies 增加 `MiaoXiangHTTPDoer`，仅在 `MXEnabled` 时传给 Provider。Root 应按运行时 `MXAPIURL` 精确创建 HTTPS/443 BoundDoer，执行 DNS/IP 校验、拒绝重定向并保留 2 MiB 响应体上限；Module 不拥有、不关闭执行器。
+- 新增测试源码覆盖注入执行器、POST URL、apikey/Content-Type Header、502 错误路径和旧构造器兼容；测试尚未运行。
+- 当前 Data 侧 Provider HTTP 执行器注入入口已覆盖已识别 Provider；下一阶段应盘点遗漏的非标准请求路径与 TCP Provider，再集中完成 Root 实际装配，而不是继续无差别增加接口。
+
+
+
+### 2026-11-09：M4-TCP-01 Pytdx 与 BaoStock 受控 TCP DialContext 注入入口
+
+- 代码基线：`1340835a023989596454ee066eb3955bbdecc569`；注入实现提交：`93a88657b750ec46784e6d39d8143415b77aec3b`；测试提交：`e6ffc4458dd5cafed2930feab4531d5c553db910`。Pytdx 在 Provider 内部通过 `net.Dialer.DialContext` 连接候选 TDX Host:7709；BaoStock TCP Client 在 `ensureLoggedInLocked` 中连接配置 Host:Port。两者均绕过 HTTP BoundDoer，不能用 HTTP 执行器代替。
+- 新增共享窄类型 `internal/marketdata/transport.DialContextFunc`，签名与 Go 标准 `net.Dialer.DialContext` 一致。
+- Pytdx 新增 `NewPytdxWithDialContext`；原 `NewPytdx` 保留并委托。每次候选地址连接均经过注入函数，仍由 Provider 设置每次连接的超时 context、候选轮转和最多 6 次尝试。
+- BaoStock `Config` 增加可选 `DialContext`；配置后连接经 Root 注入函数，nil 时保留原标准 net.Dialer 与 KeepAlive 行为。
+- Bootstrap Dependencies 增加 `PytdxDialContext` / `BaoStockDialContext` 并透传；Module 不拥有、不关闭外部连接函数。
+- 当前 Platform 公开能力只有 HTTP `BoundDoer`，尚无可供 Root 使用的 TCP `BoundDialer`。本次只建立 Data 注入边界，不在 Data 分支复制 DNS/IP 校验逻辑，也不把普通 DialContext 伪称为受控连接。Root 安全接入必须等待 Platform 提供 TCP 目标绑定能力，按精确 Host/Port、DNS/IP 和连接生命周期策略装配。
+- 新增测试源码覆盖 Pytdx 候选 Host:7709 和 BaoStock 配置 Host:Port 均调用 Root 注入函数，并验证连接 context deadline 和错误透传。测试尚未运行；未宣称构建通过或真实 TCP 出站安全验收通过。
 
