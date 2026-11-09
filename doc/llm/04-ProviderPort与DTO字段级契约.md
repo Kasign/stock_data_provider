@@ -342,3 +342,13 @@ Responses 文档指出，部分高级约束在 fine-tuned 模型上支持范围�
 - strict Response Schema 与 strict Function Tool 参数 Schema 使用同一门禁。
 - `local_validation_only=true` 不向上游发送 Response Schema，因此不要求该能力；Function Tool Schema 仍按上游 strict 能力检查。
 - 未验证或过期一律视为 unknown 并拒绝派发；不自动删除约束降级。
+
+### 12.4 Usage 明细一致性诊断
+
+Usage 上游值保留原值和来源，但缓存/推理明细需要做范围诊断：
+
+- `input_cached_tokens < 0` → `input_cached_tokens_negative`。
+- `input_cached_tokens > input_tokens`（且 input_tokens 非负）→ `input_cached_tokens_exceeds_input`。
+- `output_reasoning_tokens < 0` → `output_reasoning_tokens_negative`。
+- `output_reasoning_tokens > output_tokens`（且 output_tokens 非负）→ `output_reasoning_tokens_exceeds_output`。
+- 诊断不静默覆盖上游值；由调用方根据 Usage.Diagnostics 决定是否降低可信度。

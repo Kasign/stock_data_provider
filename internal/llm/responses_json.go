@@ -336,6 +336,20 @@ func normalizeResponsesUsage(wire *responsesUsage) *Usage {
 	if wire.OutputDetails != nil {
 		usage.OutputReasoningTokens = wire.OutputDetails.ReasoningTokens
 	}
+	if usage.InputCachedTokens != nil {
+		if *usage.InputCachedTokens < 0 {
+			usage.Diagnostics = append(usage.Diagnostics, "input_cached_tokens_negative")
+		} else if usage.InputTokens != nil && *usage.InputTokens >= 0 && *usage.InputCachedTokens > *usage.InputTokens {
+			usage.Diagnostics = append(usage.Diagnostics, "input_cached_tokens_exceeds_input")
+		}
+	}
+	if usage.OutputReasoningTokens != nil {
+		if *usage.OutputReasoningTokens < 0 {
+			usage.Diagnostics = append(usage.Diagnostics, "output_reasoning_tokens_negative")
+		} else if usage.OutputTokens != nil && *usage.OutputTokens >= 0 && *usage.OutputReasoningTokens > *usage.OutputTokens {
+			usage.Diagnostics = append(usage.Diagnostics, "output_reasoning_tokens_exceeds_output")
+		}
+	}
 	if usage.TotalTokens != nil && *usage.TotalTokens < 0 {
 		usage.Diagnostics = append(usage.Diagnostics, "total_tokens_negative")
 	}

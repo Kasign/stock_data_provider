@@ -316,3 +316,49 @@ func TestParseResponsesIncompleteStructuredOutputIsNotValidatedAsCompleted(t *te
 		t.Fatalf("incomplete output must remain incomplete and must not expose structured JSON: response=%+v err=%v", got, err)
 	}
 }
+
+
+// TestParseResponsesUsageDetailsAreRangeChecked 验证缓存与推理 Token 详情不超过对应总量且不为负数。
+func TestParseResponsesUsageDetailsAreRangeChecked(t *testing.T) {
+	request := validResponsesRequest()
+	cases := []struct {
+		name string
+		usage string
+		want string
+	}{
+		{
+			name: "cached tokens exceed input",
+			usage: `{"input_tokens":10,"output_tokens":5,"input_tokens_details":{"cached_tokens":11},"output_tokens_details":{"reasoning_tokens":1}}`,
+			want: "input_cached_tokens_exceeds_input",
+		},
+		{
+			name: "reasoning tokens exceed output",
+			usage: `{"input_tokens":10,"output_tokens":5,"input_tokens_details":{"cached_tokens":2},"output_tokens_details":{"reasoning_tokens":6}}`,
+			want: "output_reasoning_tokens_exceeds_output",
+		},
+		{
+			name: "negative details",
+			usage: `{"input_tokens":10,"output_tokens":5,"input_tokens_details":{"cached_tokens":-1},"output_tokens_details":{"reasoning_tokens":-1}}`,
+			want: "input_cached_tokens_negative",
+		},
+	}
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			body := []byte(`{"id":"resp-usage-detail","object":"response","model":"qwen-local","status":"completed","output":[],"usage":` + tt.usage + `}`)
+			got, err := ParseResponsesResponse(body, request)
+			if err != nil || got.Usage == nil {
+				t.Fatalf("usage details should be preserved with diagnostics: %+v err=%v", got, err)
+			}
+			found := false
+			for _, diagnostic := range got.Usage.Diagnostics {
+				if diagnostic == tt.want {
+					found = true
+					break
+				}
+			}
+			if !found {
+				t.Fatalf("expected diagnostic %q, got %v", tt.want, got.Usage.Diagnostics)
+			}
+		})
+	}
+}
