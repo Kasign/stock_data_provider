@@ -8,11 +8,14 @@ import (
 
 	"example.com/stock-analysis-flow/internal/marketdata/baostock"
 	"example.com/stock-analysis-flow/internal/marketdata/model"
+	"example.com/stock-analysis-flow/internal/marketdata/validation"
 )
 
 type fakeBaoStockFinancialClient struct {
 	noDataCategory  string
 	publicationDate string
+	invalidField    string
+	missingField    string
 }
 
 func (fakeBaoStockFinancialClient) QueryDailyKLines(context.Context, string, string, string, string) ([]baostock.DailyKLine, error) {
@@ -30,7 +33,12 @@ func (f fakeBaoStockFinancialClient) QueryQuarterlyFinancialData(_ context.Conte
 	for _, section := range quarterlyFundamentalMappings {
 		if section.Category == category {
 			for _, metric := range section.Fields {
-				values[metric.SourceField] = "1.25"
+				if metric.SourceField != f.missingField {
+					values[metric.SourceField] = "1.25"
+				}
+				if metric.SourceField == f.invalidField {
+					values[metric.SourceField] = "not-a-number"
+				}
 			}
 		}
 	}
@@ -108,5 +116,36 @@ func TestBaostockFundamentalsMissingCategoryIsUnknownNotZeroFilled(t *testing.T)
 	}
 	if got.QualityStatus != model.QualityDegraded {
 		t.Fatalf("partial snapshot should be degraded: %+v", got)
+	}
+}
+
+
+func TestBaostockFundamentalsReportsFieldLevelParseIssues(t *testing.T) {
+	reporter := validation.NewReporter(validation.DefaultMaxIssues)
+	ctx := validation.WithReporter(context.Background(), reporter)
+	got, err := NewBaostock(fakeBaoStockFinancialClient{
+		invalidField: "roeAvg",
+		missingField: "netProfit",
+	}).FetchFundamentals(ctx, "600519.SH", 2026, 2)
+	if err != nil {
+		t.Fatalf("partial fundamentals should be retained: %v", err)
+	}
+	if got.QualityStatus != model.QualityDegraded {
+		t.Fatalf("invalid/missing fields must degrade the snapshot: %+v", got)
+	}
+	issues := reporter.Snapshot().Issues
+	want := map[string]string{"roe_avg": "invalid_number", "net_profit": "missing_value"}
+	for field, code := range want {
+		found := false
+		for _, issue := range issues {
+			if issue.Field == field && issue.Code == code && issue.ProviderField != "" &&
+				issue.RowIndex != nil && *issue.RowIndex == 0 && issue.Symbol == "600519.SH" {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("expected field-level issue %s/%s, got %+v", field, code, issues)
+		}
 	}
 }

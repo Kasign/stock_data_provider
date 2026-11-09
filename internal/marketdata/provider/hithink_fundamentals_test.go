@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"example.com/stock-analysis-flow/internal/marketdata/model"
+	"example.com/stock-analysis-flow/internal/marketdata/validation"
 )
 
 func newHithinkFundamentalsTestServer(t *testing.T, abilitiesJSON string) (*httptest.Server, *atomic.Int32) {
@@ -184,5 +185,50 @@ func TestHithinkFundamentalsRejectsDuplicateStatementRowsForTargetReport(t *test
 	}
 	if !containsHithinkReason(got.QualityReasons, "income_statement_provider_unavailable") {
 		t.Fatalf("snapshot should preserve statement-unavailable reason, got %+v", got.QualityReasons)
+	}
+}
+
+
+func TestHithinkFundamentalsReportsFieldLevelParseIssues(t *testing.T) {
+	abilities := `[
+		{"ability":"profitability","indicators":[
+			{"index_id":"roe","value":"0.1"},
+			{"index_id":"net_profit_margin","value":null},
+			{"index_id":"gross_profit_margin","value":"not-a-number"},
+			{"index_id":"net_profit","value":{}},
+			{"value":"1.2"}
+		]}
+	]`
+	server, _ := newHithinkFundamentalsTestServer(t, abilities)
+	provider := NewHithinkConfigured(3*time.Second, server.URL, "unit-test-key")
+	reporter := validation.NewReporter(validation.DefaultMaxIssues)
+	ctx := validation.WithReporter(context.Background(), reporter)
+	got, err := provider.FetchFundamentals(ctx, "600519.SH", 2026, 2)
+	if err != nil {
+		t.Fatalf("partial fundamentals should be retained: %v", err)
+	}
+	if got.QualityStatus != model.QualityDegraded {
+		t.Fatalf("invalid/missing indicator values must degrade the snapshot: %+v", got)
+	}
+	issues := reporter.Snapshot().Issues
+	want := map[string]string{
+		"net_profit_margin": "missing_value",
+		"gross_profit_margin": "invalid_number",
+		"net_profit": "invalid_number",
+		"metric_key": "missing_field",
+	}
+	for field, code := range want {
+		found := false
+		for _, issue := range issues {
+			if issue.Field == field && issue.Code == code && issue.Stage == validation.StageParse &&
+				issue.ProviderField != "" && issue.RowIndex != nil && *issue.RowIndex >= 0 &&
+				issue.Symbol == "600519.SH" {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("expected field-level issue %s/%s, got %+v", field, code, issues)
+		}
 	}
 }

@@ -1833,7 +1833,7 @@ func (p *Hithink) FetchFundamentals(ctx context.Context, rawSymbol string, year,
 		Abilities []struct {
 			Ability    string `json:"ability"`
 			Indicators []struct {
-				IndexID string          `json:"index_id"`
+				IndexID json.RawMessage `json:"index_id"`
 				Value   json.RawMessage `json:"value"`
 			} `json:"indicators"`
 		} `json:"abilities"`
@@ -1879,12 +1879,18 @@ func (p *Hithink) FetchFundamentals(ctx context.Context, rawSymbol string, year,
 		}
 		invalidValueCount := 0
 		seenIndexIDs := make(map[string]struct{}, len(ability.Indicators))
-		for _, item := range ability.Indicators {
-			indexID := strings.TrimSpace(item.IndexID)
-			if indexID == "" {
+		for rowIndex, item := range ability.Indicators {
+			var indexID string
+			if err := json.Unmarshal(item.IndexID, &indexID); err != nil || strings.TrimSpace(indexID) == "" {
 				invalidValueCount++
+				code := "invalid_field"
+				if len(item.IndexID) == 0 || strings.TrimSpace(string(item.IndexID)) == "" || strings.TrimSpace(string(item.IndexID)) == "null" {
+					code = "missing_field"
+				}
+				addFundamentalParseIssue(ctx, symbol, "metric_key", "index_id", code, "non-empty string", fundamentalJSONValueType(item.IndexID), string(item.IndexID), rowIndex)
 				continue
 			}
+			indexID = strings.TrimSpace(indexID)
 			normalizedIndexID := strings.ToLower(indexID)
 			if _, duplicate := seenIndexIDs[normalizedIndexID]; duplicate {
 				return nil, fmt.Errorf("同花顺财务指标返回重复指标 ID %q（分区 %s）", indexID, category)
@@ -1893,6 +1899,12 @@ func (p *Hithink) FetchFundamentals(ctx context.Context, rawSymbol string, year,
 			value, ok := hithinkParseFundamentalValue(item.Value)
 			if !ok {
 				invalidValueCount++
+				code := "invalid_number"
+				actualType := fundamentalJSONValueType(item.Value)
+				if actualType == "missing" || actualType == "null" || (actualType == "string" && strings.TrimSpace(strings.Trim(string(item.Value), "\"")) == "") {
+					code = "missing_value"
+				}
+				addFundamentalParseIssue(ctx, symbol, indexID, "value", code, "finite number or numeric string", actualType, string(item.Value), rowIndex)
 				continue
 			}
 			section.Metrics = append(section.Metrics, model.FundamentalMetric{
@@ -2070,7 +2082,8 @@ func (p *Hithink) fetchFinancialStatementSection(ctx context.Context, symbol str
 		loc = time.FixedZone("CST", 8*60*60)
 	}
 	var selected map[string]json.RawMessage
-	for _, row := range data.Item {
+	selectedRowIndex := -1
+	for rowIndex, row := range data.Item {
 		var rowSymbol string
 		if err := json.Unmarshal(row["thscode"], &rowSymbol); err != nil || !strings.EqualFold(strings.TrimSpace(rowSymbol), symbol) {
 			continue
@@ -2085,6 +2098,7 @@ func (p *Hithink) fetchFinancialStatementSection(ctx context.Context, symbol str
 				return model.FundamentalSection{}, fmt.Errorf("同花顺 %s 返回重复报告期 %s 记录", category, targetReportDate)
 			}
 			selected = row
+			selectedRowIndex = rowIndex
 		}
 	}
 	if selected == nil {
@@ -2104,9 +2118,16 @@ func (p *Hithink) fetchFinancialStatementSection(ctx context.Context, symbol str
 	}
 	missingMetrics := 0
 	for _, field := range hithinkStatementFields[category] {
-		value, exists := hithinkParseFundamentalValue(selected[field.Key])
+		rawValue, present := selected[field.Key]
+		value, exists := hithinkParseFundamentalValue(rawValue)
 		if !exists {
 			missingMetrics++
+			code := "invalid_number"
+			actualType := fundamentalJSONValueType(rawValue)
+			if !present || actualType == "missing" || actualType == "null" || (actualType == "string" && strings.TrimSpace(strings.Trim(string(rawValue), "\"")) == "") {
+				code = "missing_value"
+			}
+			addFundamentalParseIssue(ctx, symbol, field.Key, field.Key, code, "finite number or numeric string", actualType, string(rawValue), selectedRowIndex)
 			continue
 		}
 		section.Metrics = append(section.Metrics, model.FundamentalMetric{
