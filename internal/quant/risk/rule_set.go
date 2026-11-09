@@ -20,6 +20,13 @@ type RuleSet struct {
 	Rules   []RuleDefinition
 }
 
+// cloneRuleSet 在执行入口创建规则定义快照，避免回调修改调用方持有的 Rules 切片后改变本次评估语义。
+func cloneRuleSet(source RuleSet) RuleSet {
+	cloned := source
+	cloned.Rules = append([]RuleDefinition(nil), source.Rules...)
+	return cloned
+}
+
 // Validate 校验规则集自身的身份、规则唯一性和必需硬门禁约束。
 // 版本和规则编码必须是有效 UTF-8、非空且无首尾空白，避免同一逻辑身份出现多种文本表示。
 func (set RuleSet) Validate() error {

@@ -14,6 +14,12 @@
 - 规则清单顺序作为 RiskDecision Reasons 的稳定排序依据。
 - Version 与 Code 必须是有效 UTF-8、非空且不含首尾空白；不擅自增加长度或字符集限制。
 
+## 执行快照与不可变性
+
+`EvaluateRuleSet` 在入口复制 RuleSet.Rules 和 evaluator 注册表；本次执行只使用入口快照。
+规则回调即使持有调用方原始 slice/map 的引用并修改它们，也不能改变当前执行中的规则身份、顺序或 evaluator 注册关系。
+调用方仍不得在函数入口复制期间并发写入传入的 slice/map；跨 goroutine 共享配置应由上层使用不可变对象或同步保护。
+
 ## 构造与完整性校验
 
 `BuildDecisionForRuleSet` 在构造决策前：

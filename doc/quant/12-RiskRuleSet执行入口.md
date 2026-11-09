@@ -7,7 +7,7 @@
 ## 接口
 
 - `RuleEvaluator` 接收调用上下文并返回单条 `Reason`。
-- `EvaluateRuleSet` 按 RuleSet 声明顺序执行，不依赖 map 遍历顺序。
+- `EvaluateRuleSet` 按 RuleSet 声明顺序执行，不依赖 map 遍历顺序；入口复制规则清单和 evaluator 注册表，避免 evaluator 回调修改调用方原始配置影响本次执行。
 - 规则执行器必须返回与 RuleDefinition 相同的 code/severity。
 - 未注册的 evaluator、未知规则、规则身份/严重级别不匹配均拒绝构造决策。
 - 所有 `block` 规则必须声明为 required；规则集校验拒绝 `block + optional`，避免缺少 evaluator 时静默跳过硬门禁。

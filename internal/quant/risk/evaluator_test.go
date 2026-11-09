@@ -31,6 +31,26 @@ func TestEvaluateRuleSetExecutesInDeclarationOrderAndBuildsDecision(t *testing.T
 	}
 }
 
+func TestEvaluateRuleSetUsesImmutableExecutionSnapshot(t *testing.T) {
+	set := validRuleSet()
+	evaluators := map[string]RuleEvaluator{}
+	evaluators["INPUT_QUALITY"] = func(context.Context) (Reason, error) {
+		set.Rules[1].Code = "MUTATED_RULE"
+		delete(evaluators, "TRADING_STATUS")
+		return Reason{Code: "INPUT_QUALITY", Severity: SeverityBlock, Status: ReasonNotTriggered, SafeMessage: "输入质量合格", EvidenceRefs: []string{}}, nil
+	}
+	evaluators["TRADING_STATUS"] = func(context.Context) (Reason, error) {
+		return Reason{Code: "TRADING_STATUS", Severity: SeverityBlock, Status: ReasonNotTriggered, SafeMessage: "交易状态正常", EvidenceRefs: []string{}}, nil
+	}
+	decision, err := EvaluateRuleSet(context.Background(), set, decisionInput("risk-2026.11.1", nil), evaluators)
+	if err != nil {
+		t.Fatalf("EvaluateRuleSet() error = %v", err)
+	}
+	if decision.Status != DecisionPass || len(decision.Reasons) != 2 || decision.Reasons[1].Code != "TRADING_STATUS" {
+		t.Fatalf("evaluation did not use its entry snapshot: %+v", decision)
+	}
+}
+
 func TestEvaluateRuleSetMissingRequiredEvaluatorFailsClosed(t *testing.T) {
 	set := validRuleSet()
 	evaluators := map[string]RuleEvaluator{

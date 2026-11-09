@@ -16,6 +16,8 @@ var (
 type RuleEvaluator func(context.Context) (Reason, error)
 
 // EvaluateRuleSet 按 RuleSet 声明顺序执行可用规则并构造决策。
+// 入口会复制规则清单和 evaluator 注册表，确保本次执行使用固定快照。
+// 调用方不得在函数入口复制期间并发修改传入的 slice/map。
 // 缺少必需规则或必需规则执行失败时，生成 block + unknown；不会生成 pass。
 // 可选规则缺失时跳过，执行失败时保留 unknown 诊断，但不改变硬门禁语义。
 // 规则实现必须返回与声明 code/severity 一致的结构化结论。
@@ -28,6 +30,8 @@ func EvaluateRuleSet(
 	if ctx == nil {
 		return Decision{}, fmt.Errorf("%w: nil context", ErrRuleEvaluation)
 	}
+	set = cloneRuleSet(set)
+	evaluators = cloneRuleEvaluators(evaluators)
 	if err := set.Validate(); err != nil {
 		return Decision{}, err
 	}
@@ -84,6 +88,17 @@ func EvaluateRuleSet(
 		return Decision{}, err
 	}
 	return decision, nil
+}
+
+func cloneRuleEvaluators(source map[string]RuleEvaluator) map[string]RuleEvaluator {
+	if source == nil {
+		return nil
+	}
+	cloned := make(map[string]RuleEvaluator, len(source))
+	for code, evaluator := range source {
+		cloned[code] = evaluator
+	}
+	return cloned
 }
 
 // invokeRuleEvaluator 将外部注入规则的 panic 转换为普通执行失败，避免中断整个风险评估。
