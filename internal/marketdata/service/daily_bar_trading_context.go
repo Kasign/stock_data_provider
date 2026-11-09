@@ -81,6 +81,11 @@ func assessDailyBarTradingContext(calendar *model.TradingCalendarSnapshot, bars 
 		} else {
 			result.QualityStatus = model.QualityDegraded
 			result.Reasons = appendDailyBarContextReason(result.Reasons, "daily_bar_context_calendar_degraded")
+			for _, reason := range calendar.QualityReasons {
+				if reason == "provider_trading_calendar_sources_disagree" {
+					result.Reasons = appendDailyBarContextReason(result.Reasons, "daily_bar_context_calendar_sources_disagree")
+				}
+			}
 			// 日历存在实质质量缺陷时，不能继续用其中的交易日标记确认证券漏数。
 			// 保留不可比较结论，避免把推断或不完整的日历证据升级为确定缺口。
 			return result
