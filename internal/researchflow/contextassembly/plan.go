@@ -135,7 +135,7 @@ func BuildPlan(candidates []SectionCandidate, budgetTokens int) (Plan, error) {
 		plan.OmittedSections = append(plan.OmittedSections, OmittedSection{
 			SectionID: candidate.ID, SourceOwner: candidate.SourceOwner,
 			ReasonCode: OmissionBudgetExceeded, Required: candidate.Required,
-			SourceRefs: append([]string{}, candidate.SourceRefs...),
+			SourceRefs:  append([]string{}, candidate.SourceRefs...),
 			SafeMessage: ContextBudgetMessage, Retryable: false,
 		})
 	}
