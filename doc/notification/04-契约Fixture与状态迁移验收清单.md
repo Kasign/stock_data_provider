@@ -256,7 +256,7 @@ Fake Adapter 只能验证分类和状态机，不证明真实渠道行为。Reci
 
 ## 11. DeliveryExecutionService 执行链路验收
 
-调用边界：上层 Server Worker 完成有界 Claim 后，提供 DeliveryClaim、已验证事件快照、唯一 Attempt ID、注入的 UTC Clock、RetryPolicy 随机采样值及诊断 evidence_ref；开始/完成时间在实际执行边界由服务内部采样。Notification 不扫描队列，也不创建 Worker 生命周期。
+调用边界：上层 Server Worker 完成有界 Claim 后，提供 DeliveryClaim、已验证事件快照、唯一 Attempt ID、注入的 UTC Clock、RetryPolicy 随机采样值及诊断 evidence_ref；开始/完成时间在实际执行边界由服务内部采样；调用前核对 EventID、SourceModule 与 Payload Fingerprint 必须匹配 Delivery 快照。Notification 不扫描队列，也不创建 Worker 生命周期。
 
 执行顺序与门禁：
 
@@ -272,4 +272,9 @@ Fake Adapter 只能验证分类和状态机，不证明真实渠道行为。Reci
 
 ### 执行服务验证证据更新
 
-Run `42601621426` 对应 HEAD `37b375a14163bf312871c76015167c6c65ef2d1f`。`Test go-core` 通过但不包含 Notification；根模块 `Test .` 在 gofmt 阶段被 Quant/Market Data 格式差异阻断，Notification 文件无 gofmt 差异，根模块测试未执行。因此本清单中的执行服务测试仅标记为已编写、待 CI 执行；MariaDB L3 仍未执行。
+Run `42601621426` 对应 HEAD `8d08cf07a651efcd42a514f3dafd94d659f21f97`。`Test go-core` 通过但不包含 Notification；根模块 `Test .` 在 gofmt 阶段被 Quant/Market Data 格式差异阻断，Notification 文件无 gofmt 差异，根模块测试未执行。因此本清单中的执行服务测试仅标记为已编写、待 CI 执行；MariaDB L3 仍未执行。
+
+
+### 最新 CI 证据
+
+Run `42602399686` 对应 HEAD `8d08cf07a651efcd42a514f3dafd94d659f21f97`。`Test go-core` 通过但不覆盖 Notification；根模块 `Test .` 在 gofmt 阶段被 Quant/Market Data 格式差异阻断，Notification 文件未出现在差异列表，根模块测试未执行。执行服务测试仍未获得 CI 通过证据；MariaDB L3 未执行。
