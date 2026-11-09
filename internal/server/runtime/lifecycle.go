@@ -85,7 +85,7 @@ func (l *Lifecycle) Stop(ctx context.Context) error {
 	l.started = nil
 	l.mu.Unlock()
 	var result error
-	for i := len(started)-1; i >= 0; i-- {
+	for i := len(started) - 1; i >= 0; i-- {
 		component := started[i]
 		if err := component.Stop(ctx); err != nil {
 			result = errors.Join(result, fmt.Errorf("stop component %q: %w", component.Name(), err))
