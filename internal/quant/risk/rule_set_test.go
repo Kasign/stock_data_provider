@@ -136,7 +136,6 @@ func TestRuleSetRejectsNonCanonicalIdentities(t *testing.T) {
 	}
 }
 
-
 func TestRuleSetRejectsOptionalBlockGate(t *testing.T) {
 	set := RuleSet{
 		Version: "risk-1",

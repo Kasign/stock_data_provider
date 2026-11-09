@@ -10,9 +10,8 @@
 - `EvaluateRuleSet` 按 RuleSet 声明顺序执行，不依赖 map 遍历顺序。
 - 规则执行器必须返回与 RuleDefinition 相同的 code/severity。
 - 未注册的 evaluator、未知规则、规则身份/严重级别不匹配均拒绝构造决策。
-- 所有 `block` 规则必须声明为 required；规则集校验拒绝 `block + optional`，避免缺少 evaluator 时静默跳过硬门禁。
 - 缺少必需规则或必需规则执行失败时，生成 block + unknown；硬门禁不能因此变成 pass。
-- `warn/info + optional` 规则未注册时跳过；执行失败时保留 unknown 原因，但不改变硬门禁通过条件。
+- 可选规则未注册时跳过；执行失败时保留 unknown 原因，但不改变硬门禁通过条件。
 - context 取消会中止评估，不生成部分决策。
 - 对外 safe_message 不包含底层 evaluator 的错误文本，避免泄漏内部实现信息。
 
