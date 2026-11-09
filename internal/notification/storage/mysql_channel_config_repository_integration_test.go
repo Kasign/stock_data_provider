@@ -36,10 +36,10 @@ func TestNotificationMariaDBChannelConfigRepositoryIntegration(t *testing.T) {
 		ChannelRef: fmt.Sprintf("channel-%d", time.Now().UnixNano()), ConfigVersion: 1,
 		ChannelKind: "provider-a", Enabled: true, SecretRef: "secret://notification/provider-a/v1",
 		Capabilities: domain.ChannelCapabilities{
-			SupportsIdempotency: domain.CapabilityUnknown,
+			SupportsIdempotency:    domain.CapabilityUnknown,
 			SupportsDeliveryLookup: domain.CapabilityUnsupported,
-			SupportsRetryAfter: domain.CapabilitySupported,
-			MaxPayloadBytes: 65536,
+			SupportsRetryAfter:     domain.CapabilitySupported,
+			MaxPayloadBytes:        65536,
 		},
 		RetryableErrorCodes: []string{"temporary_unavailable", "rate_limited"},
 	}
