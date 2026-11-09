@@ -2,7 +2,6 @@ package application
 
 import (
 	"context"
-	"strings"
 	"testing"
 	"time"
 
@@ -134,5 +133,4 @@ func TestDeliveryCompletionRejectsMismatchedClaimAndMissingNotSentEvidence(t *te
 		finishedAt, 0.5, ""); err == nil {
 		t.Fatal("mismatched worker must be rejected")
 	}
-	_ = strings.Repeat("x", 1)
 }
