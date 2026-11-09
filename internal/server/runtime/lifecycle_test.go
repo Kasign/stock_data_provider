@@ -90,7 +90,9 @@ func TestLifecycleCollectsStopErrors(t *testing.T) {
 	stopErr := errors.New("close failed")
 	lifecycle := NewLifecycle()
 	_ = lifecycle.Register(testComponent{name: "one", log: &events, stopErr: stopErr})
-	if err := lifecycle.Start(context.Background()); err != nil { t.Fatal(err) }
+	if err := lifecycle.Start(context.Background()); err != nil {
+		t.Fatal(err)
+	}
 	if err := lifecycle.Stop(context.Background()); !errors.Is(err, stopErr) {
 		t.Fatalf("Stop() error = %v", err)
 	}
