@@ -106,5 +106,11 @@ func (u *CreateEvidenceSnapshotForQuery) Execute(
 	if err := u.repository.CreateEvidenceSnapshot(ctx, snapshot); err != nil {
 		return EvidenceSnapshot{}, err
 	}
+	// A repository may finish a write just as its caller is canceled. Do not
+	// report a usable snapshot to a canceled request; the persisted immutable
+	// row is harmless and will be reclaimed by the normal expiry cleanup.
+	if err := ctx.Err(); err != nil {
+		return EvidenceSnapshot{}, err
+	}
 	return snapshot, nil
 }
