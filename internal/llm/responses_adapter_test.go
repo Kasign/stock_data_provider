@@ -2,6 +2,7 @@ package llm
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
@@ -322,5 +323,67 @@ func TestResponsesAdapterRejectsUnconfiguredSecretOrDoer(t *testing.T) {
 		return nil, nil
 	}), capabilities, nil); err == nil {
 		t.Fatal("missing Clock must be rejected")
+	}
+}
+
+func TestResponsesAdapterBlocksOptionalFeaturesWithoutCapabilityEvidence(t *testing.T) {
+	cases := []struct {
+		name string
+		configure func(*ModelRequest)
+	}{
+		{
+			name: "sampling parameters",
+			configure: func(request *ModelRequest) {
+				temperature := 0.2
+				request.Temperature = &temperature
+			},
+		},
+		{
+			name: "reasoning effort",
+			configure: func(request *ModelRequest) {
+				request.ReasoningEffort = "high"
+			},
+		},
+		{
+			name: "structured output",
+			configure: func(request *ModelRequest) {
+				request.ResponseSchema = &JSONSchemaSpec{
+					Name: "summary",
+					Strict: true,
+					SchemaJSON: json.RawMessage(`{"type":"object","properties":{"summary":{"type":"string"}}}`),
+				}
+			},
+		},
+		{
+			name: "function tool calls",
+			configure: func(request *ModelRequest) {
+				request.Tools = []ToolDefinition{{
+					Name: "lookup_quote",
+					ParametersJSON: json.RawMessage(`{"type":"object","properties":{"symbol":{"type":"string"}}}`),
+				}}
+				request.ToolChoice = "auto"
+			},
+		},
+	}
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			provider, secret, capabilities, clock := adapterTestConfig()
+			request := validResponsesRequest()
+			request.ProviderID = provider.ProviderID
+			tt.configure(&request)
+			dispatched := false
+			adapter, err := NewResponsesAdapter(provider, secret, doerFunc(func(*http.Request) (*http.Response, error) {
+				dispatched = true
+				return nil, errors.New("must not dispatch without capability evidence")
+			}), capabilities, clock)
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, err = adapter.Generate(context.Background(), request)
+			var adapterErr *AdapterError
+			if !errors.As(err, &adapterErr) || adapterErr.Info.Kind != ErrorUnsupportedCapability || dispatched {
+				t.Fatalf("feature without current capability evidence must be blocked: err=%v dispatched=%v", err, dispatched)
+			}
+		})
 	}
 }
