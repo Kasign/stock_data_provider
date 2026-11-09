@@ -10,6 +10,17 @@ import (
 
 var ErrInvalidModelToolCall = errors.New("invalid model tool call")
 
+type llmSchemaValidator struct{}
+
+func (llmSchemaValidator) Validate(schemaJSON, valueJSON []byte) error {
+	return llm.ValidateJSONAgainstSchema(schemaJSON, valueJSON)
+}
+
+// NewLLMRegistry 使用 LLM 模块已实现的本地 Draft 2020-12 校验器。
+func NewLLMRegistry(definitions []Definition) (*Registry, error) {
+	return NewRegistry(definitions, llmSchemaValidator{})
+}
+
 // IntentFromModelToolCall 将 LLM Provider 返回的工具调用转换为待授权意图。
 // 这里只做结构和状态检查，不代表工具已获准，也绝不执行工具。
 func IntentFromModelToolCall(call llm.ModelToolCall) (Intent, error) {
