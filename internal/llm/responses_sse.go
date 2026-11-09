@@ -32,6 +32,7 @@ type sseOutputTextState struct {
 
 type sseFunctionArgumentsState struct {
 	arguments string
+	sawDelta  bool
 	done      bool
 }
 
@@ -247,7 +248,7 @@ func ParseResponsesSSE(data []byte, request ModelRequest, clock Clock, onEvent f
 		if event.Item != nil {
 			if event.Type == "response.output_item.done" && event.Item.ToolCall != nil {
 				state := functionArguments[event.Item.ToolCall.CallID]
-				if state.arguments != "" && state.arguments != event.Item.ToolCall.ArgumentsJSON {
+				if state.sawDelta && state.arguments != event.Item.ToolCall.ArgumentsJSON {
 					parseErr = invalidSSEError("llm.sse.output_item_arguments_mismatch")
 					resetEvent()
 					return
@@ -266,6 +267,7 @@ func ParseResponsesSSE(data []byte, request ModelRequest, clock Clock, onEvent f
 				return
 			}
 			state.arguments += event.Delta
+			state.sawDelta = true
 			if len(state.arguments) > MaxSSEEventBytes {
 				parseErr = newSSEAdapterError(adapterError(ErrorResourceLimit, "llm.sse.function_arguments_too_large", false, nil))
 				resetEvent()
@@ -290,7 +292,7 @@ func ParseResponsesSSE(data []byte, request ModelRequest, clock Clock, onEvent f
 				resetEvent()
 				return
 			}
-			if state.arguments != "" && state.arguments != event.Arguments {
+			if state.sawDelta && state.arguments != event.Arguments {
 				parseErr = invalidSSEError("llm.sse.function_arguments_mismatch")
 				resetEvent()
 				return
