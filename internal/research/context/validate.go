@@ -8,8 +8,6 @@ import (
     "time"
 )
 
-var schemaVersionPattern = regexp.MustCompile(\`^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$\`)
-
 // Validate checks the ResearchContext DTO invariants. It does not fetch or
 // authorize referenced resources; those checks belong to source-owner adapters.
 func (c Context) Validate() error {
