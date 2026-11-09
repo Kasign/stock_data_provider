@@ -734,6 +734,7 @@ func (p *Hithink) FetchLimitPool(ctx context.Context, poolType, tradeDate string
 		return nil, fmt.Errorf("同花顺 %s 池 total=%d 但当前页没有返回数据", poolType, total)
 	}
 
+	seenPoolSymbols := make(map[string]struct{}, len(data.Item))
 	for index, row := range data.Item {
 		rawSymbol := hithinkFieldString(row, "thscode")
 		symbol, symbolErr := hithinkDomesticSymbol(rawSymbol)
@@ -747,6 +748,14 @@ func (p *Hithink) FetchLimitPool(ctx context.Context, poolType, tradeDate string
 		if code != strings.Split(symbol, ".")[0] {
 			return nil, fmt.Errorf("同花顺 %s 池第 %d 行代码不匹配: symbol=%s ticker=%s", poolType, index, symbol, code)
 		}
+		if _, exists := seenPoolSymbols[symbol]; exists {
+			snapshot.ExcludedRows++
+			snapshot.QualityStatus = model.QualityDegraded
+			snapshot.QualityReasons = appendUniqueHithinkReason(snapshot.QualityReasons, "duplicate_limit_pool_symbol_dropped")
+			addHithinkFieldIssue(ctx, &index, "symbol", "thscode", "duplicate_identity", "unique limit-pool symbol", "string", rawSymbol, "同花顺涨跌停池返回重复证券记录")
+			continue
+		}
+		seenPoolSymbols[symbol] = struct{}{}
 		name := hithinkFieldString(row, "name")
 		if name == "" {
 			return nil, fmt.Errorf("同花顺 %s 池第 %d 行缺少证券名称", poolType, index)
@@ -813,18 +822,24 @@ func (p *Hithink) FetchLimitPool(ctx context.Context, poolType, tradeDate string
 		}
 		if poolType == "up" && firstTouch == "" {
 			itemReasons = append(itemReasons, "provider_limit_up_time_missing")
+			addHithinkFieldIssue(ctx, &index, "first_touch_time", "limit_up_time", "missing_value", "provider limit-up time", "string", "", "同花顺涨停池首次触板时间缺失")
 		}
 		if poolType == "down" && (firstTouch == "" || lastTouch == "") {
 			itemReasons = append(itemReasons, "provider_limit_down_time_missing")
+			if firstTouch == "" { addHithinkFieldIssue(ctx, &index, "first_touch_time", "first_limit_time", "missing_value", "provider first limit time", "string", "", "同花顺跌停池首次触板时间缺失") }
+			if lastTouch == "" { addHithinkFieldIssue(ctx, &index, "last_touch_time", "last_limit_time", "missing_value", "provider last limit time", "string", "", "同花顺跌停池末次触板时间缺失") }
 		}
 		if poolType == "broken" && openTimes == nil {
 			itemReasons = append(itemReasons, "provider_open_times_missing_or_invalid")
+			addHithinkFieldIssue(ctx, &index, "open_times", "open_times", "missing_or_invalid_value", "non-negative integer", "number", fmt.Sprint(hithinkFieldNumber(row, "open_times")), "同花顺炸板池开板次数缺失或非法")
 		}
 		if poolType == "broken" && turnover == nil {
 			itemReasons = append(itemReasons, "provider_turnover_missing_or_invalid")
+			addHithinkFieldIssue(ctx, &index, "turnover", "turnover", "missing_or_invalid_value", "finite non-negative turnover", "number", fmt.Sprint(hithinkFieldNumber(row, "turnover")), "同花顺炸板池成交额缺失或非法")
 		}
 		if turnoverRatio == nil && (poolType == "down" || poolType == "broken") {
 			itemReasons = append(itemReasons, "provider_turnover_ratio_missing_or_invalid")
+			addHithinkFieldIssue(ctx, &index, "turnover_ratio", "turnover_ratio_pct", "missing_or_invalid_value", "finite non-negative turnover ratio", "number", fmt.Sprint(hithinkFieldNumber(row, "turnover_ratio_pct")), "同花顺涨跌停池换手率缺失或非法")
 		}
 
 		snapshot.Items = append(snapshot.Items, model.LimitPoolItem{
@@ -951,7 +966,9 @@ func (p *Hithink) FetchDragonTiger(ctx context.Context, tradeDate string, page, 
 	}
 	snapshot.HasMore = page < pages
 	snapshot.HasData = true
+	seenDragonTigerSymbols := make(map[string]struct{}, endIndex-startIndex)
 	for index, row := range data.StockItems[startIndex:endIndex] {
+		rowIndex := startIndex + index
 		rawSymbol := hithinkFieldString(row, "thscode")
 		symbol, symbolErr := hithinkDomesticSymbol(rawSymbol)
 		if symbolErr != nil {
@@ -964,11 +981,20 @@ func (p *Hithink) FetchDragonTiger(ctx context.Context, tradeDate string, page, 
 		if code != strings.Split(symbol, ".")[0] {
 			return nil, fmt.Errorf("同花顺龙虎榜第 %d 行代码不匹配", startIndex+index)
 		}
+		if _, exists := seenDragonTigerSymbols[symbol]; exists {
+			snapshot.QualityReasons = appendUniqueHithinkReason(snapshot.QualityReasons, "duplicate_dragon_tiger_symbol_dropped")
+			addHithinkFieldIssue(ctx, &rowIndex, "symbol", "thscode", "duplicate_identity", "unique dragon-tiger symbol per page", "string", rawSymbol, "同花顺龙虎榜当前页返回重复证券记录")
+			continue
+		}
+		seenDragonTigerSymbols[symbol] = struct{}{}
 		name := hithinkFieldString(row, "name")
 		if name == "" {
 			return nil, fmt.Errorf("同花顺龙虎榜第 %d 行缺少证券名称", startIndex+index)
 		}
 		change := hithinkFieldNumber(row, "change")
+		if change == nil {
+			addHithinkFieldIssue(ctx, &rowIndex, "change_percent", "change", "missing_or_invalid_value", "finite percentage value", "number", fmt.Sprint(row["change"]), "同花顺龙虎榜涨跌幅缺失或非法")
+		}
 		buy := hithinkFieldNumber(row, "buy_value")
 		sell := hithinkFieldNumber(row, "sell_value")
 		net := hithinkFieldNumber(row, "net_value")
