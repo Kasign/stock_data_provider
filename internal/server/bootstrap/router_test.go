@@ -41,6 +41,10 @@ func TestHTTPHandlerEnforcesExplicitRoutePolicies(t *testing.T) {
 	}{
 		{name: "匿名存活检查", method: http.MethodGet, path: "/healthz", want: http.StatusOK},
 		{name: "匿名 HEAD 存活检查", method: http.MethodHead, path: "/healthz", want: http.StatusOK},
+		{name: "匿名 HEAD Readiness", method: http.MethodHead, path: "/readyz", want: http.StatusUnauthorized},
+		{name: "匿名 HEAD Diagnostics", method: http.MethodHead, path: "/diagnostics", want: http.StatusUnauthorized},
+		{name: "Owner HEAD Readiness", method: http.MethodHead, path: "/readyz", authorization: "Bearer " + token, want: http.StatusOK},
+		{name: "Owner HEAD Diagnostics", method: http.MethodHead, path: "/diagnostics", authorization: "Bearer " + token, want: http.StatusOK},
 		{name: "Readiness 未认证", method: http.MethodGet, path: "/readyz", want: http.StatusUnauthorized},
 		{name: "业务路由未认证", method: http.MethodPost, path: "/api/v1/analysis/runs", want: http.StatusUnauthorized},
 		{name: "错误 Owner 凭证", method: http.MethodPost, path: "/api/v1/analysis/runs", authorization: "Bearer " + strings.Repeat("c", 43), want: http.StatusUnauthorized},

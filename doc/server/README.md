@@ -1078,3 +1078,18 @@ Lifecycle.Stop 原实现通过 stopped 标记保证重复调用幂等，但并�
 - 新增乱序输入（30、10、20）验证注册后顺序为（10、20、30）。
 - 实现提交：`c09ccfaacbe7ea2e660ae67e6aeffd7f5ce88dc3`；测试提交：`99e997a2f791c7b0801236003e023165a25cf46b`。
 - 本次未运行当前 SHA 的 Go Workflow；真实 MariaDB Migration 集成、其他模块 Migration 接入和启动失败门禁仍未完成。
+
+
+### 12.31 SRV-005 HTTP HEAD 探针与身份策略验收补强（2026-11-09）
+
+#### Review 发现与实施
+
+- Health Handler 已支持 GET/HEAD，Platform Router 也分别注册了 HEAD `/healthz`、`/readyz`、`/diagnostics`，但此前测试只覆盖了 HEAD liveness；Readiness/Diagnostics 的 HEAD 路由身份矩阵和响应语义缺少回归覆盖。
+- 增加 Handler 级 HEAD 测试，确认三个探针返回与 GET 一致的状态码和关键响应头，且不写响应体；HEAD Readiness/Diagnostics 仍执行诊断，以保持与对应 GET 的语义一致。
+- 增加 Router 级匿名/Owner HEAD 访问矩阵，确认 Readiness/Diagnostics 不因 HEAD 方法绕过 Owner 认证。
+- 增加并发过载时 HEAD `/healthz` 仍可通过的测试，保证 GET/HEAD liveness 具有一致的过载豁免。
+- 本批次只补齐既有路由契约的测试，没有新增匿名入口、Service 权限或业务 API。
+
+#### 验收状态
+
+- 测试和本文档合并为一个功能提交；未运行当前 SHA 的 gofmt、Server 包测试或 race，等待后续统一验证。

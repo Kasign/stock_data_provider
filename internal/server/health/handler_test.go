@@ -205,3 +205,32 @@ func TestReadyzReportsRegisteredCheckStatuses(t *testing.T) {
 		t.Fatalf("optional degraded check status = %q, want degraded; all=%v", body.Dependencies["module.notification.dispatch"], body.Dependencies)
 	}
 }
+
+
+func TestHealthHandlerHeadRequestsKeepStatusHeadersAndExecuteReadiness(t *testing.T) {
+	checker := &fakeReadinessChecker{report: serverdiagnostics.Report{
+		Readiness: serverdiagnostics.Readiness{Ready: true, SafeMessage: "ready"},
+	}}
+	handler, err := NewHandler(checker)
+	if err != nil {
+		t.Fatalf("NewHandler() error = %v", err)
+	}
+	for _, path := range []string{"/healthz", "/readyz", "/diagnostics"} {
+		t.Run(path, func(t *testing.T) {
+			response := httptest.NewRecorder()
+			handler.ServeHTTP(response, httptest.NewRequest(http.MethodHead, path, nil))
+			if response.Code != http.StatusOK {
+				t.Fatalf("status = %d, want %d", response.Code, http.StatusOK)
+			}
+			if response.Body.Len() != 0 {
+				t.Fatalf("HEAD response body must be empty, got %q", response.Body.String())
+			}
+			if response.Header().Get("Content-Type") != "application/json; charset=utf-8" || response.Header().Get("Cache-Control") != "no-store" {
+				t.Fatalf("missing GET-equivalent response headers: %v", response.Header())
+			}
+		})
+	}
+	if checker.calls != 2 {
+		t.Fatalf("readiness checker calls = %d, want 2 (readyz + diagnostics)", checker.calls)
+	}
+}
