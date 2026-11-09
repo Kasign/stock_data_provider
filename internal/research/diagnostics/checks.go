@@ -10,8 +10,8 @@ import (
 	platformdiagnostics "example.com/stock-analysis-flow/internal/platform/diagnostics"
 	researchclaim "example.com/stock-analysis-flow/internal/research/claim"
 	researchcontext "example.com/stock-analysis-flow/internal/research/context"
-	researchevent "example.com/stock-analysis-flow/internal/research/event"
 	researchevidence "example.com/stock-analysis-flow/internal/research/evidence"
+	researchevent "example.com/stock-analysis-flow/internal/research/event"
 )
 
 func NewContextCheck(id, name string, required bool, value researchcontext.Context) (platformdiagnostics.Check, error) {
@@ -127,7 +127,6 @@ func failedObservation(code, message string, attributes map[string]string) platf
 		Attributes: attributes,
 	}
 }
-
 
 // NewEvidenceCheck 只输出质量和来源元数据，不暴露 Evidence 正文、引用列表或授权快照。
 func NewEvidenceCheck(id, name string, required bool, value researchevidence.Evidence) (platformdiagnostics.Check, error) {
