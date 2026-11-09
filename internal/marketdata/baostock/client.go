@@ -74,11 +74,20 @@ type AdjustmentFactor struct {
 }
 
 // QuarterlyFinancialRecord stores one BaoStock financial row without changing numeric scale.
+type QuarterlyFinancialFieldIssue struct {
+	SourceField string
+	Code        string
+	ActualType  string
+	Preview     string
+	RowIndex    int
+}
+
 type QuarterlyFinancialRecord struct {
 	Code            string
 	PublicationDate string
 	ReportDate      string
 	Fields          map[string]string
+	FieldIssues     []QuarterlyFinancialFieldIssue
 }
 
 type financialQuerySpec struct {
@@ -216,10 +225,20 @@ func parseQuarterlyFinancialPage(body string, spec financialQuerySpec, userID, c
 		return nil, fmt.Errorf("BaoStock %s row has %d columns; expected %d", spec.method, len(rows[0]), len(spec.fields))
 	}
 	values := make(map[string]string, len(spec.fields))
+	fieldIssues := make([]QuarterlyFinancialFieldIssue, 0)
 	for i, raw := range rows[0] {
 		value, err := decodeCell(raw)
 		if err != nil {
-			return nil, fmt.Errorf("BaoStock %s column %s: %w", spec.method, spec.fields[i], err)
+			if i < 3 {
+				return nil, fmt.Errorf("BaoStock %s column %s: %w", spec.method, spec.fields[i], err)
+			}
+			fieldIssues = append(fieldIssues, QuarterlyFinancialFieldIssue{
+				SourceField: spec.fields[i], Code: "invalid_field",
+				ActualType: quarterlyFinancialCellType(raw), Preview: quarterlyFinancialCellPreview(string(raw)),
+				RowIndex: 0,
+			})
+			values[spec.fields[i]] = ""
+			continue
 		}
 		values[spec.fields[i]] = value
 	}
@@ -237,7 +256,7 @@ func parseQuarterlyFinancialPage(body string, spec financialQuerySpec, userID, c
 			return nil, fmt.Errorf("BaoStock %s invalid publication date %q", spec.method, publicationDate)
 		}
 	}
-	return &QuarterlyFinancialRecord{Code: code, PublicationDate: publicationDate, ReportDate: statDate, Fields: values}, nil
+	return &QuarterlyFinancialRecord{Code: code, PublicationDate: publicationDate, ReportDate: statDate, Fields: values, FieldIssues: fieldIssues}, nil
 }
 
 // Client serializes operations over one stateful TCP session so requests and
@@ -866,6 +885,39 @@ func parseKLinePage(body string) (queryPage, error) {
 		})
 	}
 	return page, nil
+}
+
+func quarterlyFinancialCellType(raw json.RawMessage) string {
+	value := strings.TrimSpace(string(raw))
+	switch {
+	case value == "":
+		return "missing"
+	case value == "null":
+		return "null"
+	case strings.HasPrefix(value, "{"):
+		return "object"
+	case strings.HasPrefix(value, "["):
+		return "array"
+	case value == "true" || value == "false":
+		return "boolean"
+	case strings.HasPrefix(value, "\""):
+		return "string"
+	default:
+		return "number_or_invalid"
+	}
+}
+
+func quarterlyFinancialCellPreview(value string) string {
+	value = strings.Map(func(r rune) rune {
+		if r < 0x20 || r == 0x7f {
+			return ' '
+		}
+		return r
+	}, value)
+	if len(value) > 160 {
+		return value[:160]
+	}
+	return value
 }
 
 func decodeCell(raw json.RawMessage) (string, error) {

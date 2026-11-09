@@ -155,7 +155,17 @@ func (p *Baostock) FetchFundamentals(ctx context.Context, rawSymbol string, year
 		} else if publicationDate > chinaToday {
 			return nil, fmt.Errorf("BaoStock %s publication date %s is after China market date %s", mapping.Category, publicationDate, chinaToday)
 		}
+		invalidProviderFields := make(map[string]baostock.QuarterlyFinancialFieldIssue, len(record.FieldIssues))
+		for _, issue := range record.FieldIssues {
+			invalidProviderFields[issue.SourceField] = issue
+		}
 		for _, metric := range mapping.Fields {
+			if issue, invalid := invalidProviderFields[metric.SourceField]; invalid {
+				degraded = true
+				section.QualityReasons = appendFundamentalReason(section.QualityReasons, "one_or_more_metrics_invalid")
+				addFundamentalParseIssue(ctx, symbol, metric.Key, metric.SourceField, issue.Code, "string or finite numeric cell", issue.ActualType, issue.Preview, issue.RowIndex)
+				continue
+			}
 			rawValue, present := record.Fields[metric.SourceField]
 			raw := strings.TrimSpace(rawValue)
 			if !present || raw == "" {
