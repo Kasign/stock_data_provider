@@ -132,9 +132,9 @@ func ToResearchCreateContextCommand(
 		_, selected := included[candidate.ID]
 		sectionRefs = append(sectionRefs, researchapp.ContextSectionRef{
 			SectionID: candidate.ID, SectionVersion: section.Version,
-			SourceOwner: candidate.SourceOwner,
-			SourceRefs: append([]string{}, candidate.SourceRefs...),
-			EvidenceRefs: append([]string{}, candidate.EvidenceRefs...),
+			SourceOwner:   candidate.SourceOwner,
+			SourceRefs:    append([]string{}, candidate.SourceRefs...),
+			EvidenceRefs:  append([]string{}, candidate.EvidenceRefs...),
 			QualityStatus: section.QualityStatus, Required: candidate.Required,
 			Included: selected, AssembledAt: section.AssembledAt, SystemAsOf: snapshot.SystemAsOf,
 		})
@@ -146,7 +146,7 @@ func ToResearchCreateContextCommand(
 		omittedSections = append(omittedSections, researchapp.ContextOmittedSection{
 			SectionID: value.SectionID, SourceOwner: value.SourceOwner,
 			ReasonCode: value.ReasonCode, Required: value.Required,
-			SourceRefs: append([]string{}, value.SourceRefs...),
+			SourceRefs:  append([]string{}, value.SourceRefs...),
 			SafeMessage: value.SafeMessage, Retryable: value.Retryable,
 		})
 	}
@@ -155,7 +155,7 @@ func ToResearchCreateContextCommand(
 	return researchapp.CreateContextCommand{
 		ResearchQuestion: snapshot.ResearchQuestion, Scope: snapshot.Scope,
 		SubjectRefs: append([]string{}, snapshot.SubjectRefs...),
-		SystemAsOf: snapshot.SystemAsOf, SectionRefs: sectionRefs,
+		SystemAsOf:  snapshot.SystemAsOf, SectionRefs: sectionRefs,
 		QualitySummary: quality, IncludedSections: includedIDs,
 		OmittedSections: omittedSections, BuilderVersion: snapshot.BuilderVersion,
 	}, nil
