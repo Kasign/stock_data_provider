@@ -273,6 +273,7 @@ func (p *Hithink) FetchIndexQuotes(ctx context.Context) (*model.IndexQuoteSnapsh
 	if quoteTime == nil {
 		snapshot.QualityStatus = model.QualityDegraded
 		snapshot.QualityReasons = append(snapshot.QualityReasons, "provider_snapshot_timestamp_missing_or_invalid")
+		addHithinkFieldIssue(ctx, nil, "provider_time", "timestamp", "missing_or_invalid_value", "valid provider snapshot timestamp in milliseconds", "missing_or_invalid", fmt.Sprint(data.Timestamp), "同花顺指数行情快照时间缺失或非法；不使用本地采集时间替代")
 	}
 	bySymbol := make(map[string]model.MarketIndexQuote, len(hithinkCoreIndexDefinitions))
 	seen := make(map[string]struct{}, len(hithinkCoreIndexDefinitions))
@@ -353,14 +354,19 @@ func (p *Hithink) FetchIndexQuotes(ctx context.Context) (*model.IndexQuoteSnapsh
 			QualityStatus: itemQuality, QualityReasons: reasons,
 		}
 	}
+	missingIndices := 0
 	for _, definition := range hithinkCoreIndexDefinitions {
 		item, ok := bySymbol[definition.Symbol]
 		if !ok {
 			snapshot.QualityStatus = model.QualityDegraded
 			snapshot.QualityReasons = appendUniqueHithinkReason(snapshot.QualityReasons, "one_or_more_allowlisted_indices_missing")
+			missingIndices++
 			continue
 		}
 		snapshot.Items = append(snapshot.Items, item)
+	}
+	if missingIndices > 0 {
+		addHithinkFieldIssue(ctx, nil, "index_coverage", "item.thscode", "allowlisted_index_unavailable", "all allowlisted core indices represented by usable rows", "incomplete", strconv.Itoa(missingIndices), "同花顺指数行情未能提供全部白名单核心指数的可用记录")
 	}
 	if len(snapshot.Items) == 0 {
 		return nil, errors.New("同花顺指数行情未返回可用的核心指数记录")

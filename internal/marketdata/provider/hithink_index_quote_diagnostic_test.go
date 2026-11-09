@@ -81,3 +81,34 @@ func TestHithinkFetchIndexQuotesReportsRowLevelIssues(t *testing.T) {
 		t.Fatalf("unexpected row evidence: %+v", rows)
 	}
 }
+
+func TestHithinkFetchIndexQuotesReportsTimestampAndCoverageGaps(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		definition := hithinkCoreIndexDefinitions[0]
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"code": 0,
+			"data": map[string]any{"item": []map[string]any{{
+				"thscode": definition.Symbol, "name": definition.Name,
+				"last_price": 101.0, "price_change": 1.0, "price_change_ratio_pct": 1.0,
+				"open_price": 99.0, "high_price": 102.0, "low_price": 98.0,
+				"prev_price": 100.0, "turnover": 100.0,
+			}}},
+		})
+	}))
+	defer server.Close()
+	reporter := validation.NewReporter(12)
+	ctx := validation.WithReporter(context.Background(), reporter)
+	p := NewHithinkConfigured(2*time.Second, server.URL, "unit-test-key")
+	got, err := p.FetchIndexQuotes(ctx)
+	if err != nil { t.Fatal(err) }
+	if got.QualityStatus != "degraded" { t.Fatalf("snapshot should be degraded, got %q", got.QualityStatus) }
+	foundTime, foundCoverage := false, false
+	for _, issue := range reporter.Snapshot().Issues {
+		if issue.Stage != validation.StageValidate || issue.Severity != validation.SeverityWarning || issue.RowIndex != nil { continue }
+		switch issue.Field {
+		case "provider_time": foundTime = issue.Code == "missing_or_invalid_value"
+		case "index_coverage": foundCoverage = issue.Code == "allowlisted_index_unavailable" && issue.ActualPreview != ""
+		}
+	}
+	if !foundTime || !foundCoverage { t.Fatalf("missing snapshot-level diagnostics: %+v", reporter.Snapshot().Issues) }
+}
