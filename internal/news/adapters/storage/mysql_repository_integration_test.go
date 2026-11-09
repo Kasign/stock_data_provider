@@ -219,7 +219,6 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 	const workers = 6
 
 	candidate := domain.Candidate{
-		ProviderCode:   "integration",
 		SourceItemID:   "native-item-001",
 		Title:          "News integration title",
 		PublisherName:  "Integration Publisher",
@@ -399,7 +398,7 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 
 	secondSourceID := sourceID + "-second"
 	secondCandidate := domain.Candidate{
-		ProviderCode: "integration", SourceItemID: "native-item-002",
+		SourceItemID: "native-item-002",
 		Title: "Second news item", PublisherName: "Second Publisher",
 	}
 	secondObservation, err := ingest.Execute(ctx, secondSourceID, "news-it-second-key", secondCandidate, domain.SourceURLPolicy{})
