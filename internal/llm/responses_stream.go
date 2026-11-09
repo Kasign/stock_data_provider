@@ -86,6 +86,9 @@ func (a *ResponsesAdapter) Stream(ctx context.Context, request ModelRequest, onE
 	}
 	callCtx, cancel := context.WithDeadline(ctx, deadline)
 	defer cancel()
+	if err := callCtx.Err(); err != nil {
+		return fail(classifyAdapterTransportError(err, callCtx), err)
+	}
 
 	endpoint, err := responsesEndpoint(a.provider.BaseURL)
 	if err != nil {
@@ -101,6 +104,10 @@ func (a *ResponsesAdapter) Stream(ctx context.Context, request ModelRequest, onE
 
 	stream, err := a.streamDoer.OpenStream(callCtx, httpRequest)
 	if err != nil {
+		// 遵循 HTTP Doer 约定：若错误同时返回了响应体，仍由 Adapter 释放资源。
+		if stream != nil && stream.Body != nil {
+			_ = stream.Body.Close()
+		}
 		info := ModelErrorFromPlatformFault(err)
 		if info == nil {
 			info = classifyAdapterTransportError(err, callCtx)
