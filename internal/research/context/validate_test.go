@@ -134,12 +134,12 @@ func TestContextValidateNextVersionRejectsInvalidProgression(t *testing.T) {
 		{"context id changed", func(c *Context) { c.ContextID = "ctx-002" }, "context_id"},
 		{"version skipped", func(c *Context) { c.ContextVersion = 3 }, "increment by exactly one"},
 		{"knowledge cutoff moved backwards", func(c *Context) {
-			c.SystemAsOf = c.SystemAsOf.Add(-time.Minute)
+			c.SystemAsOf = c.SystemAsOf.Add(-2 * time.Minute)
 			for i := range c.SectionRefs {
 				c.SectionRefs[i].SystemAsOf = c.SystemAsOf
 			}
 		}, "system_as_of cannot move backwards"},
-		{"created time moved backwards", func(c *Context) { c.CreatedAt = c.CreatedAt.Add(-time.Minute) }, "created_at cannot move backwards"},
+		{"created time moved backwards", func(c *Context) { c.CreatedAt = c.CreatedAt.Add(-2 * time.Minute) }, "created_at cannot move backwards"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

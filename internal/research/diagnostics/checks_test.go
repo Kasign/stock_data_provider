@@ -80,6 +80,7 @@ func TestContextCheckMapsQualityStates(t *testing.T) {
 func TestContextCheckDoesNotExposeValidationDetails(t *testing.T) {
 	value := validContextSnapshot()
 	value.ResearchQuestion = "secret user content"
+	value.Scope = researchcontext.Scope("invalid-secret-scope")
 	check, err := NewContextCheck("research.context.snapshot", "Context 快照", true, value)
 	if err != nil {
 		t.Fatalf("NewContextCheck() error = %v", err)
