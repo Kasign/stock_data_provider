@@ -10,6 +10,7 @@ import (
 )
 
 type egressTestDoer struct{}
+
 func (egressTestDoer) Do(*http.Request) (*http.Response, error) { return nil, nil }
 
 func TestValidateEgressDependenciesOnlyRequiresEnabledProviders(t *testing.T) {
@@ -17,7 +18,7 @@ func TestValidateEgressDependenciesOnlyRequiresEnabledProviders(t *testing.T) {
 		ProviderPriority: []string{"tushare", "pytdx"},
 		ProviderSettings: map[string]config.ProviderSettings{
 			"tushare": {Enabled: false},
-			"pytdx": {Enabled: false},
+			"pytdx":   {Enabled: false},
 		},
 	}
 	if err := validateEgressDependencies(cfg, Dependencies{}); err != nil {
@@ -38,8 +39,8 @@ func TestValidateEgressDependenciesRequiresEnabledProviderInjection(t *testing.T
 
 func TestValidateEgressDependenciesChecksEastmoneyOrigins(t *testing.T) {
 	cfg := config.Config{
-		ProviderPriority: []string{"eastmoney"},
-		ProviderSettings: map[string]config.ProviderSettings{"eastmoney": {Enabled: true}},
+		ProviderPriority:  []string{"eastmoney"},
+		ProviderSettings:  map[string]config.ProviderSettings{"eastmoney": {Enabled: true}},
 		EastmoneyQuoteURL: "https://quote.example.test/api",
 	}
 	if err := validateEgressDependencies(cfg, Dependencies{EastmoneyHTTPDoers: map[string]provider.HTTPDoer{}}); err == nil ||
@@ -53,7 +54,7 @@ func TestValidateEgressDependenciesRequiresTCPDialers(t *testing.T) {
 		ProviderPriority: []string{"baostock", "pytdx"},
 		ProviderSettings: map[string]config.ProviderSettings{
 			"baostock": {Enabled: true},
-			"pytdx": {Enabled: true},
+			"pytdx":    {Enabled: true},
 		},
 	}
 	if err := validateEgressDependencies(cfg, Dependencies{}); err == nil ||

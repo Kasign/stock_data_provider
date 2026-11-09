@@ -27,7 +27,7 @@ import (
 type Dependencies struct {
 	// RequireEgressDependencies 要求所有已启用 Provider 的出站执行器均由 Root 注入。
 	// 该开关只校验依赖完整性，不判断注入实现是否真正执行目的地址/DNS/IP 安全策略。
-	RequireEgressDependencies bool
+	RequireEgressDependencies     bool
 	Store                         *repository.Store            // 调用方创建并持有；Module 不负责关闭。
 	Cache                         cache.Cache                  // 调用方创建并持有；Module 不负责关闭。
 	Logger                        *slog.Logger                 // 模块日志依赖；nil 时使用 slog.Default。
