@@ -42,6 +42,9 @@ func (u *CreateEvidenceSnapshotForQuery) Execute(
 	if u == nil || u.query == nil || u.repository == nil || u.newID == nil || u.now == nil || ctx == nil {
 		return EvidenceSnapshot{}, ErrInvalidEvidenceQuery
 	}
+	if err := ctx.Err(); err != nil {
+		return EvidenceSnapshot{}, err
+	}
 	now := u.now().UTC()
 	if request.Cursor != nil || request.Validate(now) != nil {
 		return EvidenceSnapshot{}, ErrInvalidEvidenceQuery
@@ -49,6 +52,9 @@ func (u *CreateEvidenceSnapshotForQuery) Execute(
 
 	records, err := u.query.ListEvidenceVersionsAt(ctx, request)
 	if err != nil {
+		return EvidenceSnapshot{}, err
+	}
+	if err := ctx.Err(); err != nil {
 		return EvidenceSnapshot{}, err
 	}
 	if len(records) > MaximumEvidenceSnapshotSize {
