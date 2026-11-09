@@ -11,8 +11,9 @@ import (
 
 type evidencePITRepositoryStub struct {
 	records []EvidencePITRecord
-	err     error
-	calls   int
+	err        error
+	calls      int
+	afterQuery func()
 }
 
 func (s *evidencePITRepositoryStub) GetEvidenceVersionAt(context.Context, GetEvidenceRequest) (EvidencePITRecord, error) {
@@ -21,6 +22,9 @@ func (s *evidencePITRepositoryStub) GetEvidenceVersionAt(context.Context, GetEvi
 
 func (s *evidencePITRepositoryStub) ListEvidenceVersionsAt(context.Context, ListEvidenceRequest) ([]EvidencePITRecord, error) {
 	s.calls++
+	if s.afterQuery != nil {
+		s.afterQuery()
+	}
 	return s.records, s.err
 }
 
@@ -123,4 +127,44 @@ func TestCreateEvidenceSnapshotForQueryDoesNotRequeryOnCursorRequest(t *testing.
 	if query.calls != 0 || store.calls != 0 {
 		t.Fatalf("cursor request re-ran PIT or wrote snapshot: query=%d store=%d", query.calls, store.calls)
 	}
+}
+
+
+func TestCreateEvidenceSnapshotForQueryHonorsContextCancellation(t *testing.T) {
+	now := time.Date(2026, 11, 9, 12, 0, 0, 0, time.UTC)
+	request := validEvidenceListRequest(now)
+	request.Filters = &EvidenceQueryFilters{}
+	request.SystemAsOf = now.Add(-time.Minute)
+
+	t.Run("already canceled", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		query := &evidencePITRepositoryStub{}
+		store := &evidenceSnapshotRepositoryStub{}
+		service, _ := NewCreateEvidenceSnapshotForQuery(query, store, func() string { return "snapshot-1" })
+		service.now = func() time.Time { return now }
+		if _, err := service.Execute(ctx, request); !errors.Is(err, context.Canceled) {
+			t.Fatalf("Execute() error = %v, want context.Canceled", err)
+		}
+		if query.calls != 0 || store.calls != 0 {
+			t.Fatalf("canceled request reached dependencies: query=%d store=%d", query.calls, store.calls)
+		}
+	})
+
+	t.Run("canceled after PIT query", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		query := &evidencePITRepositoryStub{
+			records: evidencePITRecords(request.SystemAsOf),
+			afterQuery: cancel,
+		}
+		store := &evidenceSnapshotRepositoryStub{}
+		service, _ := NewCreateEvidenceSnapshotForQuery(query, store, func() string { return "snapshot-1" })
+		service.now = func() time.Time { return now }
+		if _, err := service.Execute(ctx, request); !errors.Is(err, context.Canceled) {
+			t.Fatalf("Execute() error = %v, want context.Canceled", err)
+		}
+		if query.calls != 1 || store.calls != 0 {
+			t.Fatalf("canceled query wrote snapshot: query=%d store=%d", query.calls, store.calls)
+		}
+	})
 }
