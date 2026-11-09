@@ -69,3 +69,10 @@
 - 凭证校验现在与 Hithink/Tushare 一致，仅在 TickFlow 已启用且启用了认证 API 能力时要求 API Key；日 K 的公开 API 模式仍不要求 Key。
 - 增加回归测试，保留禁用状态下的历史 IndexQuotes/MarketBreadth 开关并清空 TickFlow Key，验证配置仍可加载。
 - 未执行构建或测试，按约定留待 integration 统一验收。
+
+### 2026-11-09：严格出站装配拒绝 typed nil 执行器
+
+- 复核发现 HTTP Doer 以接口类型注入时，typed nil 指针转换成接口后不等于 nil，原严格出站校验可能误判为已注入。
+- 增加统一 nil-able 动态值检测，覆盖各 Provider HTTP Doer、Eastmoney origin map，以及 TCP DialContext；普通非 nil 实现保持兼容。
+- 增加 Tushare 与 Eastmoney 两类 typed nil 回归测试，验证其按缺失出站依赖处理。
+- 未执行构建或测试，留待 integration 统一验收。
