@@ -217,22 +217,27 @@ func (p *Netease) FetchQuote(ctx context.Context, rawSymbol string) (*model.Quot
 	if strings.TrimSpace(row.Symbol) == "" && strings.TrimSpace(row.Code) == "" {
 		q.QualityStatus = model.QualityDegraded
 		q.QualityReasons = append(q.QualityReasons, "provider_symbol_missing_assumed_from_request")
+		addProviderQuoteFieldIssue(ctx, "symbol", "symbol/code", "missing", "provider response symbol or code", "string", "", "NetEase quote omitted both response symbol and code; request symbol was assumed", validation.SeverityWarning)
 	}
 	if volume == nil {
 		q.QualityStatus = model.QualityDegraded
 		q.QualityReasons = append(q.QualityReasons, "volume_missing_or_invalid")
+		addProviderQuoteFieldIssue(ctx, "volume", "volume", "missing_or_invalid", "finite non-negative share count", providerJSONValueType(row.Volume), providerJSONPreview(row.Volume), "NetEase quote volume is missing or invalid and was omitted", validation.SeverityWarning)
 	}
 	if amount == nil {
 		q.QualityStatus = model.QualityDegraded
 		q.QualityReasons = append(q.QualityReasons, "amount_missing_or_invalid")
+		addProviderQuoteFieldIssue(ctx, "amount", "turnover", "missing_or_invalid", "finite non-negative CNY amount", providerJSONValueType(row.Turnover), providerJSONPreview(row.Turnover), "NetEase quote turnover is missing or invalid and was omitted", validation.SeverityWarning)
 	}
 	if quoteTime == nil {
 		q.QualityStatus = model.QualityDegraded
 		q.QualityReasons = append(q.QualityReasons, "provider_timestamp_missing")
+		addProviderQuoteFieldIssue(ctx, "quote_time", "time/update", "missing_or_invalid_timestamp", "valid provider snapshot timestamp", "string", quoteIssuePreview(firstNonEmptyString(row.Time, row.Update)), "NetEase quote timestamp is missing or invalid", validation.SeverityWarning)
 	}
 	if q.Name == "" {
 		q.QualityStatus = model.QualityDegraded
 		q.QualityReasons = append(q.QualityReasons, "provider_name_missing")
+		addProviderQuoteFieldIssue(ctx, "name", "name", "missing", "non-empty security name", "string", "", "NetEase quote security name is missing", validation.SeverityWarning)
 	}
 	report, err := normalize.ValidateQuoteWithReport(q)
 	validation.AddContextReport(ctx, report)
