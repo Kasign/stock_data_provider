@@ -400,8 +400,7 @@ func TestParseResponsesSSERejectsTerminalOutputTextMismatch(t *testing.T) {
 }
 
 
-// TestParseResponsesSSECallbackAdapterErrorRemainsConsumerError ensures a
-// consumer-owned AdapterError is not reclassified as a parser failure.
+// TestParseResponsesSSECallbackAdapterErrorRemainsConsumerError 验证消费者错误不会被重新归类为 Parser 错误。
 func TestParseResponsesSSECallbackAdapterErrorRemainsConsumerError(t *testing.T) {
 	request := validSSERequest()
 	clock := sseTestClock{now: request.SystemAsOf.Add(time.Second)}
@@ -425,8 +424,7 @@ func TestParseResponsesSSECallbackAdapterErrorRemainsConsumerError(t *testing.T)
 }
 
 
-// TestParseResponsesSSERejectsNegativeSequenceNumber verifies sequence
-// numbers are non-negative even when the first event carries the value.
+// TestParseResponsesSSERejectsNegativeSequenceNumber 验证首个事件的序号也必须是非负数。
 func TestParseResponsesSSERejectsNegativeSequenceNumber(t *testing.T) {
 	request := validSSERequest()
 	clock := sseTestClock{now: request.SystemAsOf.Add(time.Second)}
@@ -447,8 +445,7 @@ func TestParseResponsesSSERejectsNegativeSequenceNumber(t *testing.T) {
 	}
 }
 
-// TestParseResponsesSSERejectsResponseIDChange ensures all supplied event
-// response IDs belong to the same Responses invocation.
+// TestParseResponsesSSERejectsResponseIDChange 验证同一条流中的响应 ID 必须保持一致。
 func TestParseResponsesSSERejectsResponseIDChange(t *testing.T) {
 	request := validSSERequest()
 	clock := sseTestClock{now: request.SystemAsOf.Add(time.Second)}

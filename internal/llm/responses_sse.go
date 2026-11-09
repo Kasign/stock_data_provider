@@ -343,8 +343,7 @@ func ParseResponsesSSE(data []byte, request ModelRequest, clock Clock, onEvent f
 		result.SequenceNumberStatus = SequenceNumberUnavailable
 	}
 	if parseErr != nil {
-		// Callback errors take precedence over AdapterError classification: the
-		// consumer owns the error and the partial response must remain incomplete.
+		// 消费者回调错误优先于 AdapterError 分类；部分响应必须保持 incomplete。
 		if terminalErr == parseErr {
 			finish()
 			return result, parseErr
