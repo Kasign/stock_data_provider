@@ -165,3 +165,26 @@ func TestVerifyPayloadRejectsInvalidManifestBeforePayload(t *testing.T) {
 		t.Fatalf("expected invalid manifest to fail before payload verification, got %v", err)
 	}
 }
+
+func TestVerifyRejectsNonCanonicalUTCSystemAsOf(t *testing.T) {
+	got, err := Build(Input{
+		ResultType:        "factor",
+		SchemaVersion:     "1.0.0",
+		SystemAsOf:        time.Date(2026, 11, 6, 5, 2, 0, 120000000, time.UTC),
+		InputSnapshotRefs: []string{"snapshot-a"},
+		ResultFingerprint: strings.Repeat("b", 64),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got.SystemAsOf = "2026-11-06T05:02:00.120000000Z"
+	fingerprint, err := got.calculateFingerprint()
+	if err != nil {
+		t.Fatal(err)
+	}
+	got.ManifestFingerprint = fingerprint
+	got.ResultID = resultIDPrefix + fingerprint
+	if err := got.Verify(); !errors.Is(err, ErrInvalidManifest) {
+		t.Fatalf("expected non-canonical UTC timestamp to be rejected, got %v", err)
+	}
+}
