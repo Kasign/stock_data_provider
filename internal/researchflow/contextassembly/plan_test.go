@@ -81,3 +81,17 @@ func TestBuildPlanDoesNotMutateCandidateSlices(t *testing.T) {
 		t.Fatalf("input slices were mutated: %+v", input[0])
 	}
 }
+
+func TestBuildPlanRejectsNonCanonicalIdentityAndReferences(t *testing.T) {
+	tests := []SectionCandidate{
+		{ID: " section ", SourceOwner: "research", EstimatedTokens: 1},
+		{ID: "section", SourceOwner: " research", EstimatedTokens: 1},
+		{ID: "section", SourceOwner: "research", EstimatedTokens: 1, SourceRefs: []string{" source-1"}},
+		{ID: "section", SourceOwner: "research", EstimatedTokens: 1, EvidenceRefs: []string{"ev-1 "}},
+	}
+	for _, candidate := range tests {
+		if _, err := BuildPlan([]SectionCandidate{candidate}, 10); !errors.Is(err, ErrInvalidPlan) {
+			t.Fatalf("candidate %+v error = %v", candidate, err)
+		}
+	}
+}
