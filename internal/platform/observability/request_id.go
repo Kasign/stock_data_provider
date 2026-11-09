@@ -19,11 +19,14 @@ type requestIDKey struct{}
 
 var fallbackIDCounter atomic.Uint64
 
-// Middleware creates a fresh Request ID at the HTTP boundary by default.
-// Incoming client headers are not trusted unless the caller explicitly uses
-// MiddlewareWithOptions after establishing a trusted, non-bypassable gateway.
+// Middleware preserves the historical behavior for backwards compatibility:
+// it accepts one valid incoming Request ID. It must only be used behind a
+// trusted gateway that overwrites the header and cannot be bypassed.
+//
+// Deprecated: use MiddlewareWithOptions. Its zero-value options regenerate
+// incoming IDs and are safe for directly reachable HTTP boundaries.
 func Middleware(next http.Handler) http.Handler {
-	return MiddlewareWithOptions(next, MiddlewareOptions{})
+	return MiddlewareWithOptions(next, MiddlewareOptions{TrustIncomingRequestID: true})
 }
 
 // MiddlewareOptions controls which incoming correlation metadata may be trusted.

@@ -8,13 +8,13 @@ import (
 	"testing"
 )
 
-func TestMiddlewareRegeneratesValidUntrustedRequestIDByDefault(t *testing.T) {
+func TestMiddlewareWithOptionsRegeneratesValidUntrustedRequestIDByDefault(t *testing.T) {
 	const requestID = "request-123.test:abc"
 	var contextID string
-	handler := Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := MiddlewareWithOptions(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		contextID = FromContext(r.Context())
 		w.WriteHeader(http.StatusNoContent)
-	}))
+	}), MiddlewareOptions{})
 
 	request := httptest.NewRequest(http.MethodGet, "/", nil)
 	request.Header.Set(RequestIDHeader, requestID)
@@ -26,6 +26,21 @@ func TestMiddlewareRegeneratesValidUntrustedRequestIDByDefault(t *testing.T) {
 	}
 	if got := response.Header().Get(RequestIDHeader); got != contextID {
 		t.Fatalf("response request ID = %q, want generated context ID", got)
+	}
+}
+
+func TestMiddlewareLegacyCompatibilityPreservesValidRequestID(t *testing.T) {
+	const requestID = "request-legacy-123"
+	var contextID string
+	handler := Middleware(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		contextID = FromContext(r.Context())
+	}))
+	request := httptest.NewRequest(http.MethodGet, "/", nil)
+	request.Header.Set(RequestIDHeader, requestID)
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if contextID != requestID || response.Header().Get(RequestIDHeader) != requestID {
+		t.Fatalf("legacy middleware did not preserve valid trusted-gateway ID: context=%q response=%q", contextID, response.Header().Get(RequestIDHeader))
 	}
 }
 

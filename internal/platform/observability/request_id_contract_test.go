@@ -53,9 +53,9 @@ func TestRequestIDContractGoldenVectors(t *testing.T) {
 	}
 
 	var contextID string
-	handler := Middleware(http.HandlerFunc(func(_ http.ResponseWriter, request *http.Request) {
+	handler := MiddlewareWithOptions(http.HandlerFunc(func(_ http.ResponseWriter, request *http.Request) {
 		contextID = FromContext(request.Context())
-	}))
+	}), MiddlewareOptions{})
 	request := httptest.NewRequest(http.MethodGet, "/", nil)
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, request)
