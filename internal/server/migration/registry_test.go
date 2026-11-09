@@ -6,6 +6,7 @@ import (
 	"reflect"
 	"testing"
 
+	platformfault "example.com/stock-analysis-flow/internal/platform/fault"
 	platformstorage "example.com/stock-analysis-flow/internal/platform/storage"
 )
 
@@ -112,6 +113,61 @@ func TestRunWithReportCapturesPreconditionFailure(t *testing.T) {
 	}
 	if len(report.Namespaces) != 0 {
 		t.Fatalf("namespace results = %v, want none", report.Namespaces)
+	}
+}
+
+func TestMigrationFailureDetails(t *testing.T) {
+	tests := []struct {
+		name             string
+		err              error
+		wantCode         string
+		wantRecovery     bool
+	}{
+		{
+			name: "incomplete migration requires recovery",
+			err: platformfault.New(platformfault.ClassConflict, "platform.storage.migration_requires_recovery", "manual recovery required", nil),
+			wantCode: "platform.storage.migration_requires_recovery",
+			wantRecovery: true,
+		},
+		{
+			name: "statement failure requires recovery",
+			err: platformfault.New(platformfault.ClassInternal, "platform.storage.migration_apply_failed", "migration failed", nil),
+			wantCode: "platform.storage.migration_apply_failed",
+			wantRecovery: true,
+		},
+		{
+			name: "history update failure requires inspection",
+			err: platformfault.New(platformfault.ClassInternal, "platform.storage.migration_record_failed", "history update failed", nil),
+			wantCode: "platform.storage.migration_record_failed",
+			wantRecovery: true,
+		},
+		{
+			name: "connection failure does not imply partial DDL",
+			err: platformfault.New(platformfault.ClassUnavailable, "platform.storage.migration_connection_failed", "connection failed", nil),
+			wantCode: "platform.storage.migration_connection_failed",
+			wantRecovery: false,
+		},
+		{
+			name: "invalid fault metadata is hidden",
+			err: &platformfault.Fault{Class: platformfault.ClassInternal, Code: "INVALID CODE", SafeMessage: "invalid"},
+			wantCode: "server.migration.namespace_failed",
+			wantRecovery: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gotCode, gotRecovery := migrationFailureDetails(tt.err)
+			if gotCode != tt.wantCode || gotRecovery != tt.wantRecovery {
+				t.Fatalf("migrationFailureDetails() = (%q, %v), want (%q, %v)", gotCode, gotRecovery, tt.wantCode, tt.wantRecovery)
+			}
+		})
+	}
+}
+
+func TestMigrationHistoryMismatchRequiresRecovery(t *testing.T) {
+	gotCode, gotRecovery := migrationFailureDetails(fmt.Errorf("wrapped: %w", errMigrationHistoryMismatch))
+	if gotCode != "server.migration.history_mismatch" || !gotRecovery {
+		t.Fatalf("migrationFailureDetails() = (%q, %v), want history mismatch requiring recovery", gotCode, gotRecovery)
 	}
 }
 
