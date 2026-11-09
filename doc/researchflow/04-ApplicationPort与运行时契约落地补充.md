@@ -220,7 +220,7 @@ Fake Repository/Fake Clock/Fake Provider 只证明模块内逻辑；MariaDB/Redi
 
 ### 16.1 逻辑表与字段映射
 
-统一约束：表使用 InnoDB；所有绝对时间以 UTC 存储，精度至少微秒（DATETIME(6)）；引用字段使用不透明字符串，不从引用内容推导业务含义。JSON 文档由模块按对应 Schema 校验后写入，读取时仍校验版本与结构。实际字段长度、索引长度须在目标 MariaDB 版本验证后冻结。
+统一约束：目标数据库基线采用 Platform PLAT-009 已完成真实容器集成的 MariaDB 11.4；表使用 InnoDB；所有绝对时间以 UTC 存储，精度至少微秒（DATETIME(6)），并以 UTC_TIMESTAMP(6) 作为事务内裁决时钟；引用字段使用不透明字符串，不从引用内容推导业务含义。JSON 文档由模块按对应 Schema 校验后写入，读取时仍校验版本与结构。实际字段长度、索引长度须以 MariaDB 11.4 验证后冻结。Researchflow Migration 使用独立 namespace `researchflow`，版本号严格递增且已发布语句不可修改；通过 Platform `storage.ApplyMigrations` 显式执行，不在模块构造或 OpenSQL 时自动执行。
 
 | 逻辑表 | 主键/唯一约束 | 持久化内容 | 字段来源与语义 |
 |---|---|---|---|
@@ -236,10 +236,10 @@ Fake Repository/Fake Clock/Fake Provider 只证明模块内逻辑；MariaDB/Redi
 
 ### 16.2 必须原子提交的用例
 
-1. **CreateRun**：在同一事务中确认/占有幂等唯一键，使用数据库 UTC 时钟复核 deadline，插入 Run、完整 ResolvedTemplate Snapshot、全部 Stage 和幂等记录。并发相同键请求由唯一约束裁决；相同 fingerprint 返回已存在 Run，不同 fingerprint 返回幂等冲突。不得先写 Run 再补 Stage。
+1. **CreateRun**：先在事务外执行幂等快速读取；未命中后开启事务，使用数据库 UTC 时钟复核 deadline，插入 Run、完整 ResolvedTemplate Snapshot 和全部 Stage，最后插入幂等记录以竞争 `(caller_ref, operation, idempotency_key)` 唯一键。幂等记录依赖 Run 引用，因此不能在 Run 尚未插入时先占位。并发相同键请求由唯一约束裁决：唯一键冲突时回滚本事务，再在新事务读取胜出记录并比较 fingerprint；相同 fingerprint 返回原 Run，不同 fingerprint 返回幂等冲突。不得先提交 Run 再补 Stage/快照/幂等记录。
 2. **Worker Claim**：按 Run → Stage 的锁顺序读取并校验 Run=running、未取消、数据库时间早于 deadline、Stage=ready；同事务递增 Stage.version 与 fencing_token_high_water，分配 attempt_no，插入新 Attempt 并将 Stage 置 running。Run.version 必须参与同一命令门禁/CAS，防止与 Cancel/Deadline/Retry 竞争。
 3. **Attempt 输出提交/完成**：校验 Run 仍允许执行、Attempt 仍 running、提交 token 等于 Stage 当前 fencing 高水位且 lease 未失效；同事务保存 Output 引用并推进 Attempt/Stage。旧 token、已取消 Run、已终结 Attempt 的迟到结果必须拒绝，不能覆盖既有输出。
-4. **Retry Promotion**：按 Run → Stage 锁顺序确认 Run=running、未到 deadline、未取消、Stage=retry_wait、retry_at 已到且预算可用；同事务推进 Stage=ready 并分配下一 Attempt 的唯一序号/执行权。不得在 Run 已 cancelling/terminal 时创建新 Attempt。
+4. **Retry Promotion**：按 Run → Stage 锁顺序确认 Run=running、未到 deadline、未取消、Stage=retry_wait、retry_at 已到且重试预算仍可用；同事务只将 Stage 从 `retry_wait` 推进为 `ready` 并更新 Stage.version。不得在此步骤递增 attempt_no、分配 fencing token 或插入 Attempt；下一次真正执行权和 Attempt 序号只由 Worker Claim 在同一事务内分配。不得在 Run 已 cancelling/terminal 时推进 Retry。
 5. **Cancel/Deadline**：与 Worker Claim、Retry 使用同一 Run.version CAS 线性化；进入 cancelling 后禁止新 Claim/Retry。未启动 Stage 的收敛和在途 Attempt 停止确认/fencing 分开记录，不能仅因发出取消就假设 Worker 已停止。
 6. **Run Finalize**：按 Run → Stage（stage_ref 升序）→ Attempt（attempt_ref 升序）固定锁顺序，验证所有 Stage 终态且不存在 running Attempt；在同一事务写入不可变 ResultSummary、分配 result_summary_ref、CAS 更新 Run 终态/version，并写入 Outbox。任一环节失败必须整体回滚，禁止出现终态 Run 无摘要或摘要无终态 Run。
 
@@ -249,7 +249,7 @@ Fake Repository/Fake Clock/Fake Provider 只证明模块内逻辑；MariaDB/Redi
 
 - Run 更新使用 `WHERE run_ref=? AND version=? AND status IN (...)` 并在成功时 `version=version+1`；Stage 使用独立 version CAS。受 Run 状态约束的写命令必须先通过 Run CAS 门禁，不能只 CAS Stage。
 - 所有 deadline/lease/retry 到期判定使用数据库 UTC 时钟（`UTC_TIMESTAMP(6)` 或等价数据库时钟表达式），应用进程时间仅用于非裁决性展示；不得将 Go Clock 读数当成并发裁决依据。
-- Attempt 序号由 Stage 行锁内递增并受 `(stage_ref, attempt_no)` 唯一约束；fencing token 由 Stage 行内高水位递增并受唯一约束。禁止用进程内计数器、Redis INCR 或 MAX 查询替代同一数据库事务内的分配。
+- Attempt 序号只在 Worker Claim 成功时由 Stage 行锁内递增，并受 `(stage_ref, attempt_no)` 唯一约束；Retry Promotion 不分配序号。fencing token 同样只在 Worker Claim 时由 Stage 行内高水位递增并受唯一约束。禁止用进程内计数器、Redis INCR 或 MAX 查询替代同一数据库事务内的分配。
 - 锁顺序固定为 Run → Stage（按 stage_ref 升序）→ Attempt（按 attempt_ref 升序）；批量更新也遵守相同排序，降低死锁概率。遇到死锁可按明确次数重试整个幂等事务，但必须重新读取并重新验证状态，不能盲目重放 SQL。
 - CAS 未命中是并发冲突，不等于存储不可用；应用层重新读取后按当前状态返回 already_terminal、claim_lost、deadline_exceeded、retry_not_due 或 conflict 等稳定业务结果。数据库连接/超时故障映射 Platform Fault，不能伪装为 CAS 冲突。
 - 结果摘要和 Outbox 都是 append-only/不可变事实；Outbox 发布状态可变，但原始事件 payload、event_id、schema_version 不可变。Notification 发布成功与否不回滚已完成的 Run。
@@ -259,5 +259,6 @@ Fake Repository/Fake Clock/Fake Provider 只证明模块内逻辑；MariaDB/Redi
 - 本阶段不新增 SQL 实现、Migration 文件、Server DI、Worker 启动、HTTP 路由，也不修改 `internal/platform/**`。Platform Storage 的连接和 Migration Runner 已存在，Researchflow 只消费其公开能力。
 - 全局 Worker/队列容量原子预留属于 FLOW-004 Executor 资源预算实现；在资源策略和调度入口尚未落地前，不在本阶段臆造容量表。
 - Lease 心跳、过期接管、进程崩溃恢复及真实外部副作用对账属于 FLOW-004；本节只固定持久化字段和 fencing 提交门禁。
-- 表名为模块私有逻辑名，最终 Migration 可按项目命名规范调整，但不得改变唯一键、字段语义、事务边界和锁顺序。
-- 该设计当前状态为 `design_ready_pending_review`；未经过目标 MariaDB 版本 DDL 验证、并发集成测试和崩溃恢复测试，不得标记实现完成或 L3 通过。
+- 表名为模块私有逻辑名，Migration namespace 固定为 `researchflow`；版本号严格递增，已发布 Migration 的 SQL/语句顺序不可原地修改。MariaDB DDL 可能隐式提交，失败后按 Platform Migration Runner 规则进入人工检查/前向修复，不假设事务回滚。
+- 本轮 Review 已确认目标 MariaDB 版本为 11.4、Migration Runner 为 `internal/platform/storage.ApplyMigrations`；并修正 CreateRun 幂等唯一键占位顺序与 Retry Promotion 错误分配 Attempt 的冲突。
+- 该设计当前状态为 `reviewed_design_pending_implementation`；尚未形成可执行 Migration 或 Repository 实现，真实 MariaDB 并发集成、死锁、唯一键竞争、CAS、事务回滚和崩溃恢复仍未执行，不得标记实现完成或 L3 通过。
