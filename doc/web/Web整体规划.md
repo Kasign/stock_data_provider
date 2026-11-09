@@ -1867,7 +1867,7 @@ JSR-6L 补充：连接配置变更取消草稿检查后，旧代际 finally 按�
 - [x] 审查全局可读性覆盖区的 10 处 `!important`：对应选择器均为后置同级规则，或已有同级后置字号声明，不需要强制优先级。
 - [x] 移除上述 10 处无必要的 `!important`，保留既有字号值和规则顺序；未触碰隐藏状态、语义涨跌颜色、减少动态效果和局部组件状态规则。
 - [x] 当前样式表剩余 22 处 `!important`，后续继续按具体级联冲突逐项审查，不以归零为目标。
-- [ ] 当前提交 WebUI Checks 与 Chromium Browser Smoke 待运行。
+- [x] WebUI Checks #42207380891 与 Chromium Browser Smoke #42207380849 均通过（验收代码基线 `b6da380eb29955c321b1d42b4e7dfb843f162fe9`）；浏览器工作流执行 PostCSS CSS 结构审查、CSSOM 基线及完整 Browser Smoke。
 
 
 ## 2026-11-05 CSS 清理后的契约测试同步
@@ -1875,7 +1875,7 @@ JSR-6L 补充：连接配置变更取消草稿检查后，旧代际 finally 按�
 - [x] WebUI Checks 发现 2 条 UI 契约测试仍要求全局字号覆盖必须带 `!important`；这与本轮移除冗余优先级后的实际级联规则不一致。
 - [x] 更新契约断言：继续验证字号语义 token 与目标值，但不再把 `!important` 当作实现要求。
 - [x] 本次 Actions 的 511 项测试中 509 项通过、2 项为上述过时断言；修正测试后重新运行完整 CI。
-- [ ] 新提交 WebUI Checks 与 Chromium Browser Smoke 待运行。
+- [x] WebUI Checks #42207380891 与 Chromium Browser Smoke #42207380849 均通过（验收代码基线 `b6da380eb29955c321b1d42b4e7dfb843f162fe9`）；UI 契约单测、PostCSS CSS 结构审查与完整 Browser Smoke 均通过。
 
 
 ## 2026-11-05 CSS 拆分可行性与优先级复核
