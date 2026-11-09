@@ -367,6 +367,7 @@ func TestOpenAPIDataModelFieldsMatchKnownJSONContract(t *testing.T) {
 		{"DailyBar", "amount"},
 		{"DailyBar", "change_percent"},
 		{"DragonTigerSnapshot", "source_version"},
+		{"Bundle", "warnings"},
 		{"MarketBreadthSnapshot", "total_amount_cny"},
 		{"SourceStatus", "historical_index_constituents_capable"},
 	} {
@@ -375,7 +376,6 @@ func TestOpenAPIDataModelFieldsMatchKnownJSONContract(t *testing.T) {
 		}
 	}
 	for _, item := range []struct{ schema, field string }{
-		{"Bundle", "warnings"},
 		{"HotRankingItem", "source_version"},
 		{"HotRankingSnapshot", "source_version"},
 		{"MarketSentimentSnapshot", "source_version"},
@@ -597,10 +597,21 @@ func TestDataModelJSONSerializationMatchesOpenAPIRequiredAndNullableSemantics(t 
 		[]string{"symbol", "trade_date", "amount", "change_percent", "ma5"},
 		[]string{"is_partial", "adjustment_method"},
 		[]string{"amount", "change_percent", "ma5"})
-	assertFields("Bundle", model.Bundle{},
-		[]string{"symbol", "daily_bars", "sources", "snapshot_id"},
-		[]string{"warnings", "name", "quote"},
+	assertFields("Bundle", model.Bundle{Warnings: []string{}},
+		[]string{"symbol", "daily_bars", "sources", "warnings", "snapshot_id"},
+		[]string{"name", "quote"},
 		nil)
+	var bundleFields map[string]json.RawMessage
+	bundleJSON, err := json.Marshal(model.Bundle{Warnings: []string{}})
+	if err != nil {
+		t.Fatalf("Bundle JSON marshal: %v", err)
+	}
+	if err := json.Unmarshal(bundleJSON, &bundleFields); err != nil {
+		t.Fatalf("Bundle JSON decode: %v", err)
+	}
+	if string(bundleFields["warnings"]) != "[]" {
+		t.Errorf("Bundle.warnings=%s, want []", bundleFields["warnings"])
+	}
 	assertFields("HotRankingItem", model.HotRankingItem{},
 		[]string{"rank", "symbol", "code"},
 		[]string{"source_version", "name", "rank_trend"},
