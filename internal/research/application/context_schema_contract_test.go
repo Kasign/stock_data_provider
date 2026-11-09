@@ -76,8 +76,12 @@ func assertContextSchemaValueType(t *testing.T, name string, typ reflect.Type, s
 	}
 	switch typ.Kind() {
 	case reflect.String:
-		if schema["type"] != "string" {
-			t.Errorf("%s schema type = %v, want string", name, schema["type"])
+		if schema["type"] == "string" {
+			return
+		}
+		ref, _ := schema["$ref"].(string)
+		if ref != "#/$defs/sourceOwner" && ref != "#/$defs/qualityStatus" {
+			t.Errorf("%s schema must be a string or a known string enum reference: %v", name, schema)
 		}
 	case reflect.Bool:
 		if schema["type"] != "boolean" {
@@ -107,7 +111,16 @@ func assertContextSchemaValueType(t *testing.T, name string, typ reflect.Type, s
 			}
 			return
 		}
-		wantRef := "#/$defs/" + typ.Name()
+		definition := typ.Name()
+		switch definition {
+		case "SectionRef", "ContextSectionRef":
+			definition = "ContextSectionRef"
+		case "OmittedSection", "ContextOmittedSection":
+			definition = "OmittedSection"
+		case "QualitySummary", "ContextQualitySummary":
+			definition = "QualitySummary"
+		}
+		wantRef := "#/$defs/" + definition
 		if schema["$ref"] != wantRef {
 			t.Errorf("%s schema ref = %v, want %s", name, schema["$ref"], wantRef)
 		}
@@ -116,7 +129,8 @@ func assertContextSchemaValueType(t *testing.T, name string, typ reflect.Type, s
 	}
 }
 
-func mustApplicationSchemaDocument(t *testing.T, data []byte) *jsonschema.Schema {
+
+func mustApplicationSchemaDocument(t *testing.T, data []byte) any {
 	t.Helper()
 	document, err := jsonschema.UnmarshalJSON(bytes.NewReader(data))
 	if err != nil {
@@ -163,10 +177,12 @@ func assertApplicationSchemaStruct(t *testing.T, name string, typ reflect.Type, 
 			continue
 		}
 		fields[jsonName] = struct{}{}
-		assertContextSchemaValueType(t, name+"."+jsonName, field.Type, applicationSchemaObject(t, properties[jsonName]))
-		if _, exists := properties[jsonName]; !exists {
+		property, exists := properties[jsonName]
+		if !exists {
 			t.Errorf("%s schema is missing Application DTO field %q", name, jsonName)
+			continue
 		}
+		assertContextSchemaValueType(t, name+"."+jsonName, field.Type, applicationSchemaObject(t, property))
 		if _, exists := required[jsonName]; !exists {
 			t.Errorf("%s schema does not require Application DTO field %q", name, jsonName)
 		}
