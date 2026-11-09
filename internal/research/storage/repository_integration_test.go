@@ -15,8 +15,8 @@ import (
 
 	platformstorage "example.com/stock-analysis-flow/internal/platform/storage"
 	researchclaim "example.com/stock-analysis-flow/internal/research/claim"
-	researchevidence "example.com/stock-analysis-flow/internal/research/evidence"
 	researchcontext "example.com/stock-analysis-flow/internal/research/context"
+	researchevidence "example.com/stock-analysis-flow/internal/research/evidence"
 	researchevent "example.com/stock-analysis-flow/internal/research/event"
 )
 
@@ -78,10 +78,10 @@ func TestResearchEventLifecycleOutboxFailureRollsBackEventVersion(t *testing.T) 
 	next.SystemAsOf = now.Add(time.Minute)
 	idempotencyKey := "research-event-state:research-event:" + eventID + ":2"
 	if _, err := db.ExecContext(ctx,
-		"INSERT INTO research_notification_outbox (event_id, event_type, schema_version, source_module, occurred_at, published_at, subject_ref, idempotency_key, correlation_id, payload_fingerprint, payload, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+		"INSERT INTO research_notification_outbox (event_id, event_type, schema_version, source_module, occurred_at, published_at, subject_ref, idempotency_key, correlation_id, payload_fingerprint, payload, created_at, available_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
 		"nte_seed_"+eventID, researchLifecycleEventType, researchLifecycleSchemaVersion, "research",
-		formatPIT(now), formatPIT(now), "research-event:"+eventID, idempotencyKey, "req_seed",
-		strings.Repeat("a", 64), "{}", now); err != nil {
+		formatPIT(now), formatPIT(now), "research-event:"+eventID, idempotencyKey, "corr_seed",
+		strings.Repeat("a", 64), "{}", now, formatPIT(now), now); err != nil {
 		t.Fatalf("seed Outbox idempotency conflict: %v", err)
 	}
 	err = repo.AppendWithLifecycle(ctx, next, nil, "req_test")
@@ -94,6 +94,63 @@ func TestResearchEventLifecycleOutboxFailureRollsBackEventVersion(t *testing.T) 
 		t.Fatalf("read aggregate head after rollback: %v", err)
 	}
 	if latest != 1 { t.Fatalf("aggregate latest_version = %d after Outbox rollback, want 1", latest) }
+}
+
+func TestResearchOutboxClaimRetryAndConfirmation(t *testing.T) {
+	db := openResearchIntegrationDB(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	now := time.Date(2026, 11, 9, 3, 0, 0, 123456789, time.UTC)
+	eventID := fmt.Sprintf("event-outbox-delivery-%d", time.Now().UnixNano())
+	repo, err := NewEventRepository(db, func() time.Time { return now })
+	if err != nil { t.Fatal(err) }
+	t.Cleanup(func() {
+		_, _ = db.ExecContext(context.Background(), "DELETE FROM research_notification_outbox WHERE subject_ref=?", "research-event:"+eventID)
+		_, _ = db.ExecContext(context.Background(), "DELETE FROM research_event_versions WHERE event_id=?", eventID)
+		_, _ = db.ExecContext(context.Background(), "DELETE FROM research_aggregate_heads WHERE aggregate_type='event' AND aggregate_id=?", eventID)
+	})
+	value := researchevent.ResearchEvent{
+		EventID:eventID, EventVersion:1, EventType:"integration_fixture", Title:"Outbox delivery fixture",
+		Status:researchevent.StatusDetected, SubjectRefs:[]string{}, EvidenceRefs:[]string{},
+		SystemObservedAt:now, SystemAsOf:now, ImpactHypothesisRefs:[]string{},
+		InvalidationConditions:[]string{}, Uncertainty:[]string{}, SourceTimes:[]researchevent.EventSourceTime{},
+	}
+	if err := repo.AppendWithLifecycle(ctx, value, nil, "corr_integration"); err != nil { t.Fatalf("append Event and initial Outbox: %v", err) }
+	claimed, err := repo.base.ClaimOutbox(ctx, "worker_test", 10, now.Add(time.Minute))
+	if err != nil { t.Fatalf("claim Outbox: %v", err) }
+	if len(claimed) != 1 || claimed[0].IdempotencyKey != "research-event-state:research-event:"+eventID+":1" {
+		t.Fatalf("unexpected claimed Outbox messages: %+v", claimed)
+	}
+	if err := repo.base.ScheduleOutboxRetry(ctx, claimed[0].EventID, "worker_test", claimed[0].LeaseToken, now.Add(2*time.Minute), "notification_unavailable", now); err != nil {
+		t.Fatalf("schedule retry: %v", err)
+	}
+	tooEarly, err := repo.base.ClaimOutbox(ctx, "worker_test", 10, now.Add(3*time.Minute))
+	if err != nil { t.Fatalf("claim before retry time: %v", err) }
+	if len(tooEarly) != 0 { t.Fatalf("retry became available too early: %+v", tooEarly) }
+	now = now.Add(2*time.Minute)
+	reclaimed, err := repo.base.ClaimOutbox(ctx, "worker_test", 10, now.Add(time.Minute))
+	if err != nil { t.Fatalf("reclaim retry: %v", err) }
+	if len(reclaimed) != 1 || reclaimed[0].EventID != claimed[0].EventID || reclaimed[0].LeaseToken == claimed[0].LeaseToken {
+		t.Fatalf("retry must reuse the persisted Envelope identity: %+v", reclaimed)
+	}
+	if err := repo.base.MarkOutboxPublished(ctx, claimed[0].EventID, "worker_test", claimed[0].LeaseToken, now); !errors.Is(err, ErrConflict) {
+		t.Fatalf("stale lease token confirmation = %v, want ErrConflict", err)
+	}
+	if err := repo.base.MarkOutboxPublished(ctx, reclaimed[0].EventID, "worker_test", reclaimed[0].LeaseToken, now); err != nil {
+		t.Fatalf("confirm Outbox delivery: %v", err)
+	}
+	if err := repo.base.MarkOutboxPublished(ctx, reclaimed[0].EventID, "worker_test", reclaimed[0].LeaseToken, now); err != nil {
+		t.Fatalf("repeated confirmation must be idempotent: %v", err)
+	}
+	after, err := repo.base.ClaimOutbox(ctx, "worker_test", 10, now.Add(time.Minute))
+	if err != nil { t.Fatalf("claim after confirmation: %v", err) }
+	if len(after) != 0 { t.Fatalf("delivered Outbox message was claimed again: %+v", after) }
+	var attempts int
+	var status string
+	if err := db.QueryRowContext(ctx, "SELECT attempt_count, delivery_status FROM research_notification_outbox WHERE event_id=?", claimed[0].EventID).Scan(&attempts,&status); err != nil {
+		t.Fatalf("read Outbox delivery state: %v", err)
+	}
+	if attempts != 2 || status != "published" { t.Fatalf("Outbox attempts/status = %d/%s, want 2/published", attempts,status) }
 }
 
 func TestResearchSQLRepositoriesAppendAndReadVersions(t *testing.T) {
@@ -264,7 +321,6 @@ func TestResearchSQLRepositoriesAppendAndReadVersions(t *testing.T) {
 	if cancelledHeadCount != 0 {
 		t.Fatalf("pre-canceled append left %d aggregate head rows, want 0", cancelledHeadCount)
 	}
-
 
 	// Cancellation while waiting for the aggregate-head row lock must abort
 	// the append transaction and leave the previous version/head unchanged.

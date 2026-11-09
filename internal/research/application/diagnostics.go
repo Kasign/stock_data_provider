@@ -6,14 +6,15 @@ import (
 
 	platformdiagnostics "example.com/stock-analysis-flow/internal/platform/diagnostics"
 	"example.com/stock-analysis-flow/internal/platform/fault"
-	researchdiagnostics "example.com/stock-analysis-flow/internal/research/diagnostics"
 	researcherrors "example.com/stock-analysis-flow/internal/research"
+	researchdiagnostics "example.com/stock-analysis-flow/internal/research/diagnostics"
 )
 
 type DiagnosticsPort interface {
 	BuildContextCheck(context.Context, ContextRef, bool) (platformdiagnostics.Check, error)
 	BuildEventCheck(context.Context, EventRef, bool) (platformdiagnostics.Check, error)
 	BuildClaimCheck(context.Context, ClaimRef, bool) (platformdiagnostics.Check, error)
+	BuildEvidenceCheck(context.Context, EvidenceRef, bool) (platformdiagnostics.Check, error)
 }
 
 var _ DiagnosticsPort = (*Service)(nil)
@@ -73,4 +74,23 @@ func (s *Service) BuildClaimCheck(ctx context.Context, ref ClaimRef, required bo
 		return platformdiagnostics.Check{}, applicationFault(fault.ClassInternal, "stored_claim_invalid", "Stored Research Claim is invalid", err)
 	}
 	return researchdiagnostics.NewClaimCheck("research.claim.snapshot", "Research Claim 快照", required, value)
+}
+
+
+// BuildEvidenceCheck 先通过来源 Owner 当前授权复核通过后，再构造不含证据正文的诊断项。
+func (s *Service) BuildEvidenceCheck(ctx context.Context, ref EvidenceRef, required bool) (platformdiagnostics.Check, error) {
+	if s == nil || s.evidence == nil || s.authorizer == nil {
+		return platformdiagnostics.Check{}, applicationFault(fault.ClassInternal, "research_evidence_dependencies_not_configured", "Research Evidence dependencies are not configured", researcherrors.ErrInvalidRepository)
+	}
+	if ctx == nil || strings.TrimSpace(ref.EvidenceID) == "" || strings.TrimSpace(ref.CallerRef) == "" || strings.TrimSpace(ref.PurposeCode) == "" {
+		return platformdiagnostics.Check{}, validationFault("invalid_evidence_ref", "Evidence reference and trusted caller are required", nil)
+	}
+	record, err := s.GetEvidence(ctx, ref)
+	if err != nil {
+		return platformdiagnostics.Check{}, err
+	}
+	value := toDomainEvidence(record.EvidenceDraft)
+	value.EvidenceID = record.EvidenceID
+	value.ContentFingerprint = record.ContentFingerprint
+	return researchdiagnostics.NewEvidenceCheck("research.evidence.snapshot", "Research Evidence 快照", required, value)
 }

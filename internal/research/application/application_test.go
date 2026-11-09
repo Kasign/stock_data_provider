@@ -6,11 +6,11 @@ import (
 	"testing"
 	"time"
 
+	researcherrors "example.com/stock-analysis-flow/internal/research"
+	researchclaim "example.com/stock-analysis-flow/internal/research/claim"
 	researchcontext "example.com/stock-analysis-flow/internal/research/context"
 	researchevidence "example.com/stock-analysis-flow/internal/research/evidence"
-	researcherrors "example.com/stock-analysis-flow/internal/research"
 	researchevent "example.com/stock-analysis-flow/internal/research/event"
-	researchclaim "example.com/stock-analysis-flow/internal/research/claim"
 )
 
 type fixedIDs struct { next int }
@@ -104,9 +104,12 @@ func TestCreateAndGetEventUseApplicationDTOAndServerIdentity(t *testing.T) {
 		InvalidationConditions:[]string{"后续公告撤回该指引"},Uncertainty:[]string{},
 		SourceTimes:[]EventSourceTime{{EvidenceRef:"ev_source_1",TimeType:string(researchevent.TimeSystemObservedAt),Value:now,AssertedBy:"news:observation"}},
 	}
-	got,err:=service.CreateEvent(context.Background(),command)
+	createCtx, err := WithCorrelationID(context.Background(), "corr_create_parent")
+	if err != nil { t.Fatal(err) }
+	got,err:=service.CreateEvent(createCtx,command)
 	if err!=nil { t.Fatal(err) }
-	if got.EventID!="evt_test-1" || got.EventVersion!=1 || !repo.appended { t.Fatalf("Event was not created with server identity: %+v",got) }
+	if got.EventID!="evt_test-1" || got.EventVersion!=1 || !repo.appended || !repo.lifecycleAppended { t.Fatalf("Event was not created with server identity and lifecycle Outbox: %+v",got) }
+	if repo.correlationID != "corr_create_parent" || repo.reasonCode != nil { t.Fatalf("initial lifecycle metadata mismatch: %+v", repo) }
 	read,err:=service.GetEvent(context.Background(),EventRef{EventID:got.EventID,EventVersion:1})
 	if err!=nil { t.Fatalf("GetEvent failed: %v",err) }
 	if read.EventID!=got.EventID || read.Status!=command.Status { t.Fatalf("unexpected Event DTO: %+v",read) }
@@ -139,6 +142,13 @@ func TestUpdateEventUsesExpectedVersionAndDomainLifecycleRules(t *testing.T) {
 			Value: now, AssertedBy: "news:observation",
 		}},
 	}
+	badReason := "reason is not a machine code"
+	if _, err := service.UpdateEvent(context.Background(), UpdateEventCommand{
+		EventID: previous.EventID, ExpectedVersion: 1, Revision: revision, ReasonCode: &badReason,
+	}); err == nil {
+		t.Fatal("reason_code containing spaces must be rejected")
+	}
+	if repo.appended { t.Fatal("invalid reason_code must not append an Event") }
 	got, err := service.UpdateEvent(context.Background(), UpdateEventCommand{
 		EventID: previous.EventID, ExpectedVersion: 1, Revision: revision,
 	})
@@ -239,7 +249,6 @@ func TestCreateHypothesisRequiresValidationContract(t *testing.T) {
 	if repo.appended { t.Fatal("invalid Hypothesis must not be persisted") }
 }
 
-
 func TestUpdateClaimEnforcesExpectedVersionAndDomainTransition(t *testing.T) {
 	now := time.Date(2026, 11, 9, 2, 0, 0, 0, time.UTC)
 	repo := &claimRepoFake{value: researchclaim.Claim{
@@ -279,7 +288,6 @@ func TestUpdateClaimEnforcesExpectedVersionAndDomainTransition(t *testing.T) {
 }
 
 func stringPointer(value string) *string { return &value }
-
 
 type mismatchedContextRepo struct { contextRepoFake }
 func (f *mismatchedContextRepo) GetVersion(context.Context, string, int64) (researchcontext.Context, error) { return f.value, nil }
@@ -331,8 +339,6 @@ func TestApplicationRejectsRepositoryIdentityMismatch(t *testing.T) {
 		t.Fatal("Claim repository identity mismatch must be rejected")
 	}
 }
-
-
 
 type mutatingEvidenceAuthorizer struct{}
 func (mutatingEvidenceAuthorizer) AuthorizeEvidence(_ context.Context, _ string, _ researchevidence.PurposeCode, value researchevidence.Evidence) error {
@@ -398,7 +404,6 @@ func TestEvidenceApplicationDeepCopiesDTOAndAdapterBoundaries(t *testing.T) {
 		t.Fatal("returned DTO mutation leaked into repository state")
 	}
 }
-
 
 type mismatchedEvidenceRepo struct { evidenceRepoFake }
 func (f *mismatchedEvidenceRepo) Get(context.Context, string) (researchevidence.Evidence, error) {

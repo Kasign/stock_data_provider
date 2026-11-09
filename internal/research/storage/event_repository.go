@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"strings"
 
 	researchevent "example.com/stock-analysis-flow/internal/research/event"
 )
@@ -45,10 +44,10 @@ func (r *EventRepository) Append(ctx context.Context, value researchevent.Resear
 func (r *EventRepository) AppendWithLifecycle(ctx context.Context, value researchevent.ResearchEvent, reasonCode *string, correlationID string) error {
 	if r == nil { return ErrInvalidRepository }
 	if err := value.Validate(); err != nil { return fmt.Errorf("validate Event: %w", err) }
-	if !observability.ValidRequestID(correlationID) {
+	if !validCorrelationID(correlationID) {
 		return fmt.Errorf("trusted correlation ID is required")
 	}
-	if reasonCode != nil && (strings.TrimSpace(*reasonCode) == "" || *reasonCode != strings.TrimSpace(*reasonCode)) {
+	if reasonCode != nil && !validCorrelationID(*reasonCode) {
 		return fmt.Errorf("reason_code must be null or a non-empty trimmed value")
 	}
 	payload, digest, err := encodePayload(value)
@@ -61,11 +60,17 @@ func (r *EventRepository) AppendWithLifecycle(ctx context.Context, value researc
 		eventTable, "event_id", "event_version", payload, now, insert,
 		[]any{value.EventID, value.EventVersion, string(value.Status), formatPIT(value.SystemAsOf), digest, string(payload), now},
 		func(raw []byte) error {
-			if len(raw) == 0 { return fmt.Errorf("lifecycle Outbox requires an existing Event version") }
+			if len(raw) == 0 {
+				if value.EventVersion != 1 { return fmt.Errorf("first lifecycle Outbox Event must be version 1") }
+				return nil
+			}
 			if err := json.Unmarshal(raw, &previous); err != nil { return fmt.Errorf("decode previous Event: %w", err) }
 			return value.ValidateNextVersion(previous)
 		},
-		func(tx *sql.Tx, _ []byte) error {
+		func(tx *sql.Tx, previousPayload []byte) error {
+			if len(previousPayload) == 0 {
+				return insertResearchLifecycleCreatedOutbox(ctx, tx, value, reasonCode, correlationID, now)
+			}
 			transition, err := researchevent.NewLifecycleTransition(previous, value, now)
 			if err != nil { return err }
 			if transition == nil { return fmt.Errorf("lifecycle Outbox requires a status change") }

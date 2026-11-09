@@ -6,18 +6,18 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
 	"time"
 
+	"example.com/stock-analysis-flow/internal/platform/fault"
 	researcherrors "example.com/stock-analysis-flow/internal/research"
+	researchclaim "example.com/stock-analysis-flow/internal/research/claim"
 	researchcontext "example.com/stock-analysis-flow/internal/research/context"
 	researchevidence "example.com/stock-analysis-flow/internal/research/evidence"
 	researchevent "example.com/stock-analysis-flow/internal/research/event"
-	researchclaim "example.com/stock-analysis-flow/internal/research/claim"
-	"example.com/stock-analysis-flow/internal/platform/fault"
-	"example.com/stock-analysis-flow/internal/platform/observability"
 )
 
 const (
@@ -106,7 +106,6 @@ type EvidenceRecord struct {
 	ContentFingerprint string `json:"content_fingerprint"`
 }
 
-
 type EventSourceTime struct {
 	EvidenceRef string `json:"evidence_ref"`
 	TimeType string `json:"time_type"`
@@ -170,7 +169,6 @@ type EventPort interface {
 	GetEvent(context.Context, EventRef) (ResearchEvent, error)
 	UpdateEvent(context.Context, UpdateEventCommand) (ResearchEvent, error)
 }
-
 
 type Claim struct {
 	ClaimID string `json:"claim_id"`
@@ -426,7 +424,6 @@ func cloneDomainEvidence(v researchevidence.Evidence) researchevidence.Evidence 
 	return v
 }
 
-
 func NewServiceWithEvents(contexts ContextRepository, evidence EvidenceRepository, events EventRepository, authorizer EvidenceAuthorizer, clock Clock, ids IDGenerator) (*Service, error) {
 	if events == nil {
 		return nil, fault.New(fault.ClassInternal, "research_event_repository_not_configured", "Research Event Repository is not configured", researcherrors.ErrInvalidRepository)
@@ -456,7 +453,9 @@ func (s *Service) CreateEvent(ctx context.Context, command CreateEventCommand) (
 		SourceTimes:toDomainEventTimes(command.SourceTimes),
 	}
 	if err := value.Validate(); err != nil { return ResearchEvent{}, validationFault("invalid_research_event", "Research Event is invalid", err) }
-	if err := s.events.Append(ctx, value); err != nil { return ResearchEvent{}, mapRepositoryError(err) }
+	correlationID, err := correlationIDForPublication(ctx, s.ids)
+	if err != nil { return ResearchEvent{}, applicationFault(fault.ClassInternal, "research_correlation_id_generation_failed", "Research correlation identifier generation failed", err) }
+	if err := s.events.AppendWithLifecycle(ctx, value, nil, correlationID); err != nil { return ResearchEvent{}, mapRepositoryError(err) }
 	return fromDomainEvent(value), nil
 }
 
@@ -503,16 +502,13 @@ func (s *Service) UpdateEvent(ctx context.Context, command UpdateEventCommand) (
 	if err := next.ValidateNextVersion(previous); err != nil {
 		return ResearchEvent{}, validationFault("invalid_research_event_transition", "Research Event revision is invalid", err)
 	}
-	if command.ReasonCode != nil && (strings.TrimSpace(*command.ReasonCode) == "" || *command.ReasonCode != strings.TrimSpace(*command.ReasonCode)) {
+	if command.ReasonCode != nil && !validCorrelationID(*command.ReasonCode) {
 		return ResearchEvent{}, validationFault("invalid_event_reason_code", "Research Event reason code must be null or a non-empty trimmed value", nil)
 	}
 	if next.Status != previous.Status {
-		correlationID := observability.FromContext(ctx)
-		if correlationID == "" {
-			correlationID, err = s.ids.NewID("cor_")
-			if err != nil {
-				return ResearchEvent{}, applicationFault(fault.ClassInternal, "research_correlation_id_generation_failed", "Research correlation identifier generation failed", err)
-			}
+		correlationID, err := correlationIDForPublication(ctx, s.ids)
+		if err != nil {
+			return ResearchEvent{}, applicationFault(fault.ClassInternal, "research_correlation_id_generation_failed", "Research correlation identifier generation failed", err)
 		}
 		if err := s.events.AppendWithLifecycle(ctx, next, cloneString(command.ReasonCode), correlationID); err != nil {
 			return ResearchEvent{}, mapRepositoryError(err)
@@ -563,7 +559,6 @@ func cloneTime(value *time.Time) *time.Time { if value==nil{return nil}; copy:=*
 func cloneFloat(value *float64) *float64 { if value==nil{return nil}; copy:=*value; return &copy }
 func cloneString(value *string) *string { if value==nil{return nil}; copy:=*value; return &copy }
 func cloneInt(value *int) *int { if value==nil{return nil}; copy:=*value; return &copy }
-
 
 func NewServiceWithClaims(contexts ContextRepository, evidence EvidenceRepository, claims ClaimRepository, authorizer EvidenceAuthorizer, clock Clock, ids IDGenerator) (*Service, error) {
 	if claims == nil {
@@ -693,4 +688,102 @@ func (randomIDGenerator) NewID(prefix string) (string, error) {
 func cloneStrings(values []string) []string {
 	if values == nil { return []string{} }
 	return append([]string(nil), values...)
+}
+
+// NotificationEventEnvelope is the immutable payload Research sends to the
+// Notification Application Port. Delivery metadata is deliberately excluded.
+type NotificationEventEnvelope struct {
+	EventID string `json:"event_id"`
+	EventType string `json:"event_type"`
+	SchemaVersion string `json:"schema_version"`
+	SourceModule string `json:"source_module"`
+	OccurredAt string `json:"occurred_at"`
+	PublishedAt string `json:"published_at"`
+	SubjectRef string `json:"subject_ref"`
+	IdempotencyKey string `json:"idempotency_key"`
+	CorrelationID string `json:"correlation_id"`
+	PayloadFingerprint string `json:"payload_fingerprint"`
+	Payload json.RawMessage `json:"payload"`
+	LeaseToken string `json:"-"`
+}
+
+type OutboxDeliveryRepository interface {
+	ClaimOutbox(context.Context, string, int, time.Time) ([]NotificationEventEnvelope, error)
+	MarkOutboxPublished(context.Context, string, string, string, time.Time) error
+	ScheduleOutboxRetry(context.Context, string, string, string, time.Time, string, time.Time) error
+	RejectOutbox(context.Context, string, string, string, string, time.Time) error
+}
+
+type OutboxDeliveryPort interface {
+	Claim(context.Context, string, int, time.Duration) ([]NotificationEventEnvelope, error)
+	Confirm(context.Context, string, string, string) error
+	Retry(context.Context, string, string, string, time.Duration, string) error
+	Reject(context.Context, string, string, string, string) error
+}
+
+type OutboxService struct {
+	repository OutboxDeliveryRepository
+	clock Clock
+}
+
+var _ OutboxDeliveryPort = (*OutboxService)(nil)
+
+func NewOutboxService(repository OutboxDeliveryRepository, clock Clock) (*OutboxService, error) {
+	if repository == nil { return nil, applicationFault(fault.ClassInternal, "research_outbox_repository_not_configured", "Research Outbox Repository is not configured", researcherrors.ErrInvalidRepository) }
+	if clock == nil { clock = func() time.Time { return time.Now().UTC() } }
+	return &OutboxService{repository: repository, clock: clock}, nil
+}
+
+func (s *OutboxService) Claim(ctx context.Context, workerID string, limit int, leaseDuration time.Duration) ([]NotificationEventEnvelope, error) {
+	if s == nil || s.repository == nil { return nil, applicationFault(fault.ClassInternal, "research_outbox_repository_not_configured", "Research Outbox Repository is not configured", researcherrors.ErrInvalidRepository) }
+	if ctx == nil || !validCorrelationID(workerID) || limit < 1 || limit > 100 || leaseDuration < time.Second || leaseDuration > 5*time.Minute {
+		return nil, validationFault("invalid_research_outbox_claim", "Research Outbox claim parameters are invalid", nil)
+	}
+	now := s.clock().UTC()
+	if now.IsZero() { return nil, applicationFault(fault.ClassInternal, "research_clock_invalid", "Research application clock is invalid", nil) }
+	values, err := s.repository.ClaimOutbox(ctx, workerID, limit, now.Add(leaseDuration))
+	if err != nil { return nil, mapRepositoryError(err) }
+	return values, nil
+}
+
+func (s *OutboxService) Confirm(ctx context.Context, eventID, workerID, leaseToken string) error {
+	if s == nil || s.repository == nil { return applicationFault(fault.ClassInternal, "research_outbox_repository_not_configured", "Research Outbox Repository is not configured", researcherrors.ErrInvalidRepository) }
+	if ctx == nil || strings.TrimSpace(eventID) == "" || !validCorrelationID(workerID) || !validLeaseToken(leaseToken) {
+		return validationFault("invalid_research_outbox_confirmation", "Research Outbox confirmation is invalid", nil)
+	}
+	now := s.clock().UTC()
+	if now.IsZero() { return applicationFault(fault.ClassInternal, "research_clock_invalid", "Research application clock is invalid", nil) }
+	if err := s.repository.MarkOutboxPublished(ctx, eventID, workerID, leaseToken, now); err != nil { return mapRepositoryError(err) }
+	return nil
+}
+
+func (s *OutboxService) Retry(ctx context.Context, eventID, workerID, leaseToken string, delay time.Duration, reasonCode string) error {
+	if s == nil || s.repository == nil { return applicationFault(fault.ClassInternal, "research_outbox_repository_not_configured", "Research Outbox Repository is not configured", researcherrors.ErrInvalidRepository) }
+	if ctx == nil || strings.TrimSpace(eventID) == "" || !validCorrelationID(workerID) || !validLeaseToken(leaseToken) ||
+		delay <= 0 || delay > 24*time.Hour || !validCorrelationID(reasonCode) {
+		return validationFault("invalid_research_outbox_retry", "Research Outbox retry parameters are invalid", nil)
+	}
+	now := s.clock().UTC()
+	if now.IsZero() { return applicationFault(fault.ClassInternal, "research_clock_invalid", "Research application clock is invalid", nil) }
+	if err := s.repository.ScheduleOutboxRetry(ctx, eventID, workerID, leaseToken, now.Add(delay), reasonCode, now); err != nil { return mapRepositoryError(err) }
+	return nil
+}
+
+func (s *OutboxService) Reject(ctx context.Context, eventID, workerID, leaseToken, reasonCode string) error {
+	if s == nil || s.repository == nil { return applicationFault(fault.ClassInternal, "research_outbox_repository_not_configured", "Research Outbox Repository is not configured", researcherrors.ErrInvalidRepository) }
+	if ctx == nil || strings.TrimSpace(eventID) == "" || !validCorrelationID(workerID) || !validLeaseToken(leaseToken) || !validCorrelationID(reasonCode) {
+		return validationFault("invalid_research_outbox_rejection", "Research Outbox rejection is invalid", nil)
+	}
+	now := s.clock().UTC()
+	if now.IsZero() { return applicationFault(fault.ClassInternal, "research_clock_invalid", "Research application clock is invalid", nil) }
+	if err := s.repository.RejectOutbox(ctx, eventID, workerID, leaseToken, reasonCode, now); err != nil { return mapRepositoryError(err) }
+	return nil
+}
+
+func validLeaseToken(value string) bool {
+	if len(value) != 32 { return false }
+	for _, r := range value {
+		if !((r >= '0' && r <= '9') || (r >= 'a' && r <= 'f')) { return false }
+	}
+	return true
 }
