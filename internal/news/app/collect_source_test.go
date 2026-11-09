@@ -90,6 +90,10 @@ func TestCollectSourceFeedSuccessUsesRegisteredEndpointAndPolicy(t *testing.T) {
 		!result.PolicyEvaluatedAt.Equal(time.Date(2026, 11, 5, 10, 0, 0, 0, time.UTC)) {
 		t.Fatalf("policy trace=%+v", result)
 	}
+	trace := result.ObservationPolicyTrace()
+	if trace.EndpointID != "" || trace.EndpointPolicyVersionID != "" {
+		t.Fatalf("unversioned endpoint must not become an authorization policy reference: %+v", trace)
+	}
 	if result.FeedFormat != "rss" || result.FeedTitle != "媒体 Feed" || len(result.Entries) != 1 {
 		t.Fatalf("result=%+v", result)
 	}

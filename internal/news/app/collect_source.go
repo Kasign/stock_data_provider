@@ -287,9 +287,14 @@ func sourceTransportRetryable(err error) bool {
 }
 
 func (r CollectSourceResult) ObservationPolicyTrace() ObservationPolicyTrace {
-	return ObservationPolicyTrace{
-		SourcePolicyVersionID:   r.SourcePolicyVersionID,
-		EndpointPolicyVersionID: r.EndpointPolicyVersionID,
-		PolicyEvaluatedAt:       r.PolicyEvaluatedAt,
+	trace := ObservationPolicyTrace{
+		SourcePolicyVersionID: r.SourcePolicyVersionID,
+		PolicyEvaluatedAt:     r.PolicyEvaluatedAt,
 	}
+	// EndpointRef 代表经过单独评估的 Endpoint Policy，而不是仅仅存在一个采集入口。
+	if r.EndpointPolicyVersionID != "" {
+		trace.EndpointID = r.EndpointID
+		trace.EndpointPolicyVersionID = r.EndpointPolicyVersionID
+	}
+	return trace
 }
