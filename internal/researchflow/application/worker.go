@@ -15,6 +15,7 @@ import (
 var (
 	ErrWorkerLeaseLost = errors.New("Researchflow worker lease lost")
 	ErrWorkerDeadline  = errors.New("Researchflow run deadline exceeded")
+	ErrWorkerCancelled = errors.New("Researchflow run cancelled")
 )
 
 type StageExecutionSnapshot struct {
@@ -44,6 +45,7 @@ type WorkerStore interface {
 	LoadStageExecutionSnapshot(context.Context, string, string) (StageExecutionSnapshot, error)
 	RenewAttemptLease(context.Context, string, string, string, string, uint64, time.Duration) (time.Time, error)
 	CommitWorkerResult(context.Context, WorkerResultCommit) error
+	ConfirmAttemptCancellation(context.Context, string, string, string, string, uint64, uint64) (bool, error)
 }
 
 type WorkerConfig struct {
@@ -64,7 +66,8 @@ type Worker struct {
 	executor StageExecutor
 	clock    DatabaseClock
 	config   WorkerConfig
-	now      func() time.Time
+	now           func() time.Time
+	cancellations *workerCancellationRegistry
 }
 
 func NewWorker(store WorkerStore, executor StageExecutor, clock DatabaseClock, config WorkerConfig) (*Worker, error) {
@@ -74,7 +77,13 @@ func NewWorker(store WorkerStore, executor StageExecutor, clock DatabaseClock, c
 		config.MaxParallel <= 0 {
 		return nil, errors.New("Researchflow worker dependencies or configuration are invalid")
 	}
-	return &Worker{store: store, executor: executor, clock: clock, config: config, now: time.Now}, nil
+	return &Worker{store: store, executor: executor, clock: clock, config: config, now: time.Now, cancellations: newWorkerCancellationRegistry()}, nil
+}
+
+// CancelRun signals all locally active Attempts for a durably-cancelling Run.
+func (w *Worker) CancelRun(runRef string) int {
+	if w == nil || w.cancellations == nil || strings.TrimSpace(runRef) == "" { return 0 }
+	return w.cancellations.cancelRun(runRef)
 }
 
 // Execute claims and runs one Stage. The store remains the concurrency,
@@ -128,8 +137,12 @@ func (w *Worker) Execute(ctx context.Context, runRef, stageRef, attemptRef strin
 	if attemptDeadline.After(snapshot.Run.DeadlineAt) {
 		attemptDeadline = snapshot.Run.DeadlineAt
 	}
-	execCtx, cancelExecution := context.WithDeadline(runCtx, attemptDeadline)
-	defer cancelExecution()
+	baseExecCtx, cancelExecutionCause := context.WithCancelCause(runCtx)
+	defer cancelExecutionCause(nil)
+	execCtx, cancelAttemptDeadline := context.WithDeadline(baseExecCtx, attemptDeadline)
+	defer cancelAttemptDeadline()
+	unregisterCancellation := w.cancellations.register(runRef, attempt.Ref, cancelExecutionCause)
+	defer unregisterCancellation()
 	stopHeartbeat := make(chan struct{})
 	heartbeatDone := make(chan struct{})
 	heartbeatErr := make(chan error, 1)
@@ -156,6 +169,12 @@ func (w *Worker) Execute(ctx context.Context, runRef, stageRef, attemptRef strin
 	}
 	if errors.Is(runCtx.Err(), context.DeadlineExceeded) || !w.now().Before(snapshot.Run.DeadlineAt) {
 		return WorkerExecution{Attempt: attempt}, ErrWorkerDeadline
+	}
+	if errors.Is(context.Cause(execCtx), ErrWorkerCancelled) {
+		confirmed, confirmErr := w.store.ConfirmAttemptCancellation(ctx, runRef, stageRef, attempt.Ref, w.config.WorkerID, attempt.FencingToken, snapshot.Stage.Version)
+		if confirmErr != nil { return WorkerExecution{Attempt: attempt}, fmt.Errorf("confirm Researchflow Attempt cancellation: %w", confirmErr) }
+		if !confirmed { return WorkerExecution{Attempt: attempt}, ErrWorkerLeaseLost }
+		return WorkerExecution{Attempt: attempt}, nil
 	}
 	attemptTimedOut := errors.Is(execCtx.Err(), context.DeadlineExceeded) && runCtx.Err() == nil
 	if attemptTimedOut {

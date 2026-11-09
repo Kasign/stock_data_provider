@@ -3,6 +3,7 @@ package application
 import (
 	"context"
 	"errors"
+	"sync"
 	"testing"
 	"time"
 
@@ -17,6 +18,9 @@ type workerStoreFake struct {
 	renewErr    error
 	commit      WorkerResultCommit
 	commits     int
+	cancelled   int
+	cancelErr   error
+	cancelOK    bool
 }
 
 func (f *workerStoreFake) ClaimAttempt(context.Context, string, string, string, string, time.Duration, int, int) (domain.Attempt, bool, error) {
@@ -28,6 +32,7 @@ func (f *workerStoreFake) LoadStageExecutionSnapshot(context.Context, string, st
 func (f *workerStoreFake) RenewAttemptLease(context.Context, string, string, string, string, uint64, time.Duration) (time.Time, error) {
 	return time.Now().Add(time.Minute), f.renewErr
 }
+func (f *workerStoreFake) ConfirmAttemptCancellation(context.Context, string, string, string, string, uint64, uint64) (bool, error) { f.cancelled++; return f.cancelOK, f.cancelErr }
 func (f *workerStoreFake) CommitWorkerResult(_ context.Context, c WorkerResultCommit) error {
 	f.commit = c
 	f.commits++
@@ -38,6 +43,9 @@ type workerExecutorFake struct {
 	result StageExecutionResult
 	err    error
 }
+
+type blockingWorkerExecutor struct { started chan struct{}; once sync.Once }
+func (e *blockingWorkerExecutor) ExecuteStage(ctx context.Context, _ StageExecutionRequest) (StageExecutionResult, error) { e.once.Do(func(){close(e.started)}); <-ctx.Done(); return StageExecutionResult{}, ctx.Err() }
 
 type timeoutWorkerExecutor struct{}
 
@@ -190,4 +198,33 @@ func TestWorkerConvertsAttemptDeadlineIntoPolicyControlledTimeout(t *testing.T) 
 		store.commit.Stage.Status != domain.StageRetryWait || store.commit.Stage.RetryAt == nil {
 		t.Fatalf("attempt timeout should follow the retry policy: %+v", store.commit)
 	}
+}
+
+
+func TestWorkerCancellationStopsProviderAndConfirmsAttempt(t *testing.T) {
+	store, _ := newWorkerFixture()
+	store.cancelOK = true
+	executor := &blockingWorkerExecutor{started: make(chan struct{})}
+	worker, err := NewWorker(store, executor, workerClockFake{}, WorkerConfig{WorkerID:"worker-1", LeaseDuration:time.Minute, HeartbeatInterval:time.Second, MaxParallel:2})
+	if err != nil { t.Fatal(err) }
+	done := make(chan error, 1)
+	go func(){ _, err := worker.Execute(context.Background(), "run-1", "stage-1", "attempt-new"); done <- err }()
+	<-executor.started
+	if n := worker.CancelRun("run-1"); n != 1 { t.Fatalf("expected one active attempt cancelled, got %d", n) }
+	if err := <-done; err != nil { t.Fatal(err) }
+	if store.cancelled != 1 || store.commits != 0 { t.Fatalf("expected cancellation confirmation only: cancelled=%d commits=%d", store.cancelled, store.commits) }
+}
+
+func TestWorkerCancellationConfirmationFailureDoesNotCommit(t *testing.T) {
+	store, _ := newWorkerFixture()
+	store.cancelErr = errors.New("fencing conflict")
+	executor := &blockingWorkerExecutor{started: make(chan struct{})}
+	worker, err := NewWorker(store, executor, workerClockFake{}, WorkerConfig{WorkerID:"worker-1", LeaseDuration:time.Minute, HeartbeatInterval:time.Second, MaxParallel:2})
+	if err != nil { t.Fatal(err) }
+	done := make(chan error, 1)
+	go func(){ _, err := worker.Execute(context.Background(), "run-1", "stage-1", "attempt-new"); done <- err }()
+	<-executor.started
+	worker.CancelRun("run-1")
+	if err := <-done; err == nil { t.Fatal("expected cancellation fencing failure") }
+	if store.commits != 0 { t.Fatal("must not commit after cancellation") }
 }
