@@ -72,5 +72,4 @@ func TestValidateDeliveryAttemptHistoryForDeliveryRejectsOutsideLifecycle(t *tes
 		t.Fatalf("attempt at/after Delivery deadline must fail closed: %v", err)
 	}
 
-	}
 }
