@@ -152,7 +152,7 @@ Platform 提供 SecurityAuditEvent Schema、字段约束/脱敏和注入式 Audi
 
 ## 11. 当前状态与未决门禁
 
-截至 Platform HEAD `fd45b6c299dfb54d2530bd1436589fe4708d8e96`：
+初始设计审查代码基线为 `fd45b6c299dfb54d2530bd1436589fe4708d8e96`；当前实现状态以本节后续 PLAT-015 记录为准：
 - 现有 `internal/platform/security` 只有 Bearer Authenticator、Router Policy 和测试。
 - 现有 `internal/platform/storage.OpenRedis` 只提供 Redis Client 生命周期，没有 Session Store 或 RateLimiter。
 - go.mod 已引入成熟依赖 `golang.org/x/crypto/argon2`；不自研密码学算法。
