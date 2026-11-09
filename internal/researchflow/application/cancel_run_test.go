@@ -12,6 +12,7 @@ type cancelIdentityStub struct {
 	caller string
 	err    error
 }
+
 func (s cancelIdentityStub) AuthenticatedCallerRef(context.Context) (string, error) {
 	return s.caller, s.err
 }
@@ -23,6 +24,7 @@ type cancelAuthorizerStub struct {
 	err         error
 	calls       int
 }
+
 func (s *cancelAuthorizerStub) AuthorizeRunCancellation(_ context.Context, caller, run string) error {
 	s.calls++
 	s.caller, s.run = caller, run
@@ -34,6 +36,7 @@ type cancelReaderStub struct {
 	err     error
 	calls   int
 }
+
 func (s *cancelReaderStub) GetRun(context.Context, string) (CreateRunResult, error) {
 	s.calls++
 	if s.err != nil {
@@ -56,8 +59,11 @@ type cancelStoreStub struct {
 	version uint64
 	calls   int
 }
+
 func (s *cancelStoreStub) BeginRunCancellation(_ context.Context, ref string, version uint64) (bool, error) {
-	s.calls++; s.runRef, s.version = ref, version; return s.changed, s.err
+	s.calls++
+	s.runRef, s.version = ref, version
+	return s.changed, s.err
 }
 
 func cancellationReadResult(status domain.RunStatus, reason string, version uint64) CreateRunResult {
