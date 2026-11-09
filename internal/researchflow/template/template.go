@@ -102,6 +102,9 @@ func Validate(t WorkflowTemplate, gates HardRiskGateRegistry) error {
 	}
 	byCode := make(map[string]StageDefinition, len(t.Stages))
 	for _, stage := range t.Stages {
+		if stage.GateType != "" && stage.GateType != "hard_risk" {
+			return fmt.Errorf("%w: stage %s has unsupported gate type %q", ErrInvalidTemplate, stage.Code, stage.GateType)
+		}
 		if strings.TrimSpace(stage.Code) == "" || strings.TrimSpace(stage.Applicability.RuleRef) == "" ||
 			strings.TrimSpace(stage.Applicability.RuleVersion) == "" || strings.TrimSpace(stage.Retry.Ref) == "" {
 			return fmt.Errorf("%w: stage code, applicability rule and retry policy reference are required", ErrInvalidTemplate)

@@ -33,6 +33,19 @@ func TestValidateRejectsCyclesAndWildcardRetryCodes(t *testing.T){
 	if err:=Validate(tmpl,nil);err==nil{t.Fatal("wildcard retry code accepted")}
 }
 
+
+func TestValidateRejectsUnknownGateType(t *testing.T) {
+	for _, gateType := range []string{"hard-risk", "soft_risk", "unknown"} {
+		t.Run(gateType, func(t *testing.T) {
+			tmpl := testTemplate()
+			tmpl.Stages[0].GateType = gateType
+			if err := Validate(tmpl, nil); err == nil {
+				t.Fatalf("unsupported gate type %q was accepted", gateType)
+			}
+		})
+	}
+}
+
 func TestResolveOrdersDAGAndRejectsExcludedDependency(t *testing.T){
 	tmpl:=testTemplate()
 	resolved,err:=Resolve(context.Background(),tmpl,json.RawMessage(`{}`),testParameterSchemas{},testEvaluator{"always":true},nil)
