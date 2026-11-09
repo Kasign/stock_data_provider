@@ -118,7 +118,7 @@ func (e *sourceTransportError) Retryable() bool {
 
 func sourceTransportErrorFromPlatform(err error) error {
 	var platformFault *fault.Fault
-	if errors.As(err, &platformFault) && platformFault != nil {
+	if errors.As(err, &platformFault) && platformFault != nil && platformFault.Validate() == nil {
 		return &sourceTransportError{retryable: platformFault.Retryable}
 	}
 	return &sourceTransportError{}
