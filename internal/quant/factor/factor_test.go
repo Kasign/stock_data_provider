@@ -67,6 +67,37 @@ func TestVolatility20UsesSampleStdAndIsNotAnnualized(t *testing.T) {
 	assertNear(t, got.Value, 0)
 }
 
+func TestAllFactorsReportInsufficientDataBeforeWarmup(t *testing.T) {
+	tests := []struct {
+		name string
+		run  func() (Status, error)
+	}{
+		{"momentum_20d", func() (Status, error) {
+			got, err := Momentum20(make([]float64, 20))
+			return got.Status, err
+		}},
+		{"momentum_60d", func() (Status, error) {
+			got, err := Momentum60(make([]float64, 60))
+			return got.Status, err
+		}},
+		{"volatility_20d", func() (Status, error) {
+			got, err := Volatility20(make([]float64, 20))
+			return got.Status, err
+		}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			status, err := tt.run()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if status != StatusInsufficientData {
+				t.Fatalf("expected insufficient_data, got %s", status)
+			}
+		})
+	}
+}
+
 func TestFactorRejectsInvalidPrices(t *testing.T) {
 	if _, err := Momentum20([]float64{1, 0}); !errors.Is(err, ErrInvalidInput) {
 		t.Fatalf("expected ErrInvalidInput, got %v", err)
