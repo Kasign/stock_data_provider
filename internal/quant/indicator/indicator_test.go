@@ -121,6 +121,83 @@ func TestBollingerUsesPopulationDeviation(t *testing.T) {
 	closeTo(t, got.Lower, 2-2*math.Sqrt(2.0/3), 1e-12)
 }
 
+func TestAllIndicatorsReportInsufficientDataBeforeWarmup(t *testing.T) {
+	tests := []struct {
+		name string
+		run  func() (Status, int, error)
+	}{
+		{"sma", func() (Status, int, error) {
+			got, err := SMA([]float64{1, 2}, SMAParams{Window: 3})
+			return got.Status, got.SampleCount, err
+		}},
+		{"ema", func() (Status, int, error) {
+			got, err := EMA([]float64{1, 2}, EMAParams{Window: 3, SeedMethod: "sma"})
+			return got.Status, got.SampleCount, err
+		}},
+		{"return", func() (Status, int, error) {
+			got, err := Return([]float64{1, 2}, ReturnParams{Window: 2, ReturnBasis: "simple"})
+			return got.Status, got.SampleCount, err
+		}},
+		{"volatility", func() (Status, int, error) {
+			got, err := Volatility([]float64{1, 2}, VolatilityParams{Window: 2, ReturnBasis: "simple", AnnualizationFactor: 1})
+			return got.Status, got.SampleCount, err
+		}},
+		{"rsi", func() (Status, int, error) {
+			got, err := RSI([]float64{1, 2}, RSIParams{Window: 2, SmoothingMethod: "wilder"})
+			return got.Status, got.SampleCount, err
+		}},
+		{"macd", func() (Status, int, error) {
+			got, err := MACD([]float64{1, 2, 3}, MACDParams{FastWindow: 2, SlowWindow: 3, SignalWindow: 2})
+			return got.Status, got.SampleCount, err
+		}},
+		{"atr", func() (Status, int, error) {
+			got, err := ATR([]float64{2, 3}, []float64{1, 2}, []float64{1.5, 2.5}, 1, ATRParams{Window: 3, SmoothingMethod: "wilder"})
+			return got.Status, got.SampleCount, err
+		}},
+		{"bollinger", func() (Status, int, error) {
+			got, err := Bollinger([]float64{1}, BollingerParams{Window: 2, Multiplier: 2, StdDevMethod: "population"})
+			return got.Status, got.SampleCount, err
+		}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			status, _, err := tt.run()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if status != StatusInsufficientData {
+				t.Fatalf("expected insufficient_data, got %s", status)
+			}
+		})
+	}
+}
+
+func TestATRRejectsInvalidOHLCBoundaries(t *testing.T) {
+	validHigh := []float64{11, 12}
+	validLow := []float64{9, 10}
+	validClose := []float64{10, 11}
+	params := ATRParams{Window: 2, SmoothingMethod: "wilder"}
+	cases := []struct {
+		name string
+		high []float64
+		low []float64
+		close []float64
+		previous float64
+	}{
+		{"length mismatch", []float64{11}, validLow, validClose, 10},
+		{"close above high", []float64{11, 12}, validLow, []float64{10, 13}, 10},
+		{"close below low", validHigh, validLow, []float64{8, 11}, 10},
+		{"zero previous close", validHigh, validLow, validClose, 0},
+	}
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			if _, err := ATR(tt.high, tt.low, tt.close, tt.previous, params); !errors.Is(err, ErrInvalidInput) {
+				t.Fatalf("expected ErrInvalidInput, got %v", err)
+			}
+		})
+	}
+}
+
 func TestInsufficientDataAndInvalidInputs(t *testing.T) {
 	got, err := SMA([]float64{1, 2}, SMAParams{Window: 3})
 	if err != nil {
