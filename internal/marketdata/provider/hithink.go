@@ -162,13 +162,16 @@ func (p *Hithink) SearchStocks(ctx context.Context, queryText string, limit int)
 }
 
 func addHithinkStockSearchIssue(ctx context.Context, rowIndex int, field, providerField, code, expected, preview, message string) {
+	addHithinkFieldIssue(ctx, &rowIndex, field, providerField, code, expected, "string", preview, message)
+}
+
+func addHithinkFieldIssue(ctx context.Context, rowIndex *int, field, providerField, code, expected, actualType, preview, message string) {
 	report := validation.NewReport(validation.DefaultMaxIssues)
-	index := rowIndex
 	report.Add(validation.FieldIssue{
 		Stage: validation.StageValidate, Field: field, ProviderField: providerField,
-		Code: code, Expected: expected, ActualType: "string",
+		Code: code, Expected: expected, ActualType: actualType,
 		ActualPreview: providerFieldIssuePreview(preview), Severity: validation.SeverityWarning,
-		Message: message, RowIndex: &index,
+		Message: message, RowIndex: rowIndex,
 	})
 	validation.AddContextReport(ctx, report)
 }
@@ -262,7 +265,7 @@ func (p *Hithink) FetchIndexQuotes(ctx context.Context) (*model.IndexQuoteSnapsh
 	}
 	bySymbol := make(map[string]model.MarketIndexQuote, len(hithinkCoreIndexDefinitions))
 	seen := make(map[string]struct{}, len(hithinkCoreIndexDefinitions))
-	for _, item := range data.Item {
+	for rowIndex, item := range data.Item {
 		symbol := strings.ToUpper(strings.TrimSpace(item.THSCode))
 		definition, ok := allowed[symbol]
 		if !ok {
@@ -271,6 +274,7 @@ func (p *Hithink) FetchIndexQuotes(ctx context.Context) (*model.IndexQuoteSnapsh
 		if _, duplicate := seen[symbol]; duplicate {
 			snapshot.QualityStatus = model.QualityDegraded
 			snapshot.QualityReasons = appendUniqueHithinkReason(snapshot.QualityReasons, "duplicate_index_row_dropped")
+			addHithinkFieldIssue(ctx, &rowIndex, "symbol", "thscode", "duplicate_identity", "unique allowlisted index symbol", "string", item.THSCode, "同花顺指数行情返回重复指数记录")
 			continue
 		}
 		seen[symbol] = struct{}{}
@@ -281,6 +285,7 @@ func (p *Hithink) FetchIndexQuotes(ctx context.Context) (*model.IndexQuoteSnapsh
 			*item.LastPrice < *item.LowPrice || *item.LastPrice > *item.HighPrice {
 			snapshot.QualityStatus = model.QualityDegraded
 			snapshot.QualityReasons = appendUniqueHithinkReason(snapshot.QualityReasons, "one_or_more_index_rows_have_invalid_required_prices")
+			addHithinkFieldIssue(ctx, &rowIndex, "current_price", "last_price", "invalid_required_price", "finite positive price and internally consistent OHLC range", "number", fmt.Sprint(item.LastPrice), "同花顺指数行情必需价格缺失或价格区间无效")
 			continue
 		}
 		// 涨跌额与涨跌幅以最新价、昨收价计算为规范值；源端扩展字段仅用于交叉校验。
@@ -290,12 +295,14 @@ func (p *Hithink) FetchIndexQuotes(ctx context.Context) (*model.IndexQuoteSnapsh
 			(!hithinkFinite(*item.PriceChange) || math.Abs(*item.PriceChange-change) > hithinkChangeTolerance) {
 			snapshot.QualityStatus = model.QualityDegraded
 			snapshot.QualityReasons = appendUniqueHithinkReason(snapshot.QualityReasons, "provider_index_change_fields_inconsistent")
+			addHithinkFieldIssue(ctx, &rowIndex, "change", "price_change", "provider_value_inconsistent", "last_price - prev_price", "number", fmt.Sprint(item.PriceChange), "同花顺指数涨跌额与规范价格计算结果不一致")
 			continue
 		}
 		if item.ChangeRatio != nil &&
 			(!hithinkFinite(*item.ChangeRatio) || math.Abs(*item.ChangeRatio-changePercent) > hithinkChangePercentTolerancePP) {
 			snapshot.QualityStatus = model.QualityDegraded
 			snapshot.QualityReasons = appendUniqueHithinkReason(snapshot.QualityReasons, "provider_index_change_fields_inconsistent")
+			addHithinkFieldIssue(ctx, &rowIndex, "change_percent", "price_change_ratio_pct", "provider_value_inconsistent", "change / prev_price * 100", "number", fmt.Sprint(item.ChangeRatio), "同花顺指数涨跌幅与规范价格计算结果不一致")
 			continue
 		}
 		name := strings.TrimSpace(item.Name)
@@ -303,6 +310,7 @@ func (p *Hithink) FetchIndexQuotes(ctx context.Context) (*model.IndexQuoteSnapsh
 			name = definition.Name
 			snapshot.QualityStatus = model.QualityDegraded
 			snapshot.QualityReasons = appendUniqueHithinkReason(snapshot.QualityReasons, "provider_index_name_missing_used_allowlisted_name")
+			addHithinkFieldIssue(ctx, &rowIndex, "name", "name", "missing_value", "non-empty index name", "string", item.Name, "同花顺指数名称缺失，已使用白名单名称")
 		}
 		var amount *float64
 		amountUnit := "unknown"
@@ -318,6 +326,7 @@ func (p *Hithink) FetchIndexQuotes(ctx context.Context) (*model.IndexQuoteSnapsh
 			reasons = append(reasons, "provider_amount_missing_or_invalid")
 			snapshot.QualityStatus = model.QualityDegraded
 			snapshot.QualityReasons = appendUniqueHithinkReason(snapshot.QualityReasons, "provider_amount_missing_or_invalid")
+			addHithinkFieldIssue(ctx, &rowIndex, "amount", "turnover", "missing_or_invalid_value", "finite non-negative turnover", "number", fmt.Sprint(item.Turnover), "同花顺指数成交额缺失或非法")
 		}
 		itemQuality := model.QualityValid
 		if len(reasons) > 0 {
