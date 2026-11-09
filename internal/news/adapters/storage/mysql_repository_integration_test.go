@@ -536,6 +536,58 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 	if len(history) != 1 || history[0].ID != relation.ID {
 		t.Fatalf("target-side relation history = %#v, want relation %q", history, relation.ID)
 	}
+
+	proposal, err := relationService.Execute(ctx, app.NewsItemRelationRequest{
+		Relation: domain.NewsItemRelation{
+			FromNewsID: newsID, FromSourceID: sourceID,
+			ToNewsID: secondObservation.NewsID, ToSourceID: secondSourceID,
+			Kind: domain.NewsItemRelationRepostOf, Status: domain.NewsItemRelationProposed,
+			SupersedesRelationID: relation.ID,
+			EvidenceObservation:  observations[0].ID,
+			FromVersionID:        latest.ID, ToVersionID: revisedVersion.Version.ID,
+		},
+	})
+	if err != nil {
+		t.Fatalf("append proposed relation replacement: %v", err)
+	}
+	afterProposal := proposal.ObservedAt.Add(time.Microsecond)
+	history, err = repository.ListNewsItemRelationsAt(ctx, app.NewsItemRelationHistoryRequest{
+		NewsID: secondObservation.NewsID, SystemAsOf: afterProposal,
+	})
+	if err != nil {
+		t.Fatalf("read relation history after proposal: %v", err)
+	}
+	if len(history) != 2 || history[0].ID != relation.ID || history[1].ID != proposal.ID {
+		t.Fatalf("history after proposal = %#v, want original then proposal", history)
+	}
+	// 提议状态不改变当前关系图；原确认断言仍保留在历史中。
+
+	retraction, err := relationService.Execute(ctx, app.NewsItemRelationRequest{
+		Relation: domain.NewsItemRelation{
+			FromNewsID: newsID, FromSourceID: sourceID,
+			ToNewsID: secondObservation.NewsID, ToSourceID: secondSourceID,
+			Kind: domain.NewsItemRelationRepostOf, Status: domain.NewsItemRelationRetracted,
+			SupersedesRelationID: proposal.ID,
+			EvidenceObservation:  observations[0].ID,
+			FromVersionID:        latest.ID, ToVersionID: revisedVersion.Version.ID,
+		},
+	})
+	if err != nil {
+		t.Fatalf("append proposal retraction: %v", err)
+	}
+	afterRetraction := retraction.ObservedAt.Add(time.Microsecond)
+	history, err = repository.ListNewsItemRelationsAt(ctx, app.NewsItemRelationHistoryRequest{
+		NewsID: secondObservation.NewsID, SystemAsOf: afterRetraction,
+	})
+	if err != nil {
+		t.Fatalf("read relation history after retraction: %v", err)
+	}
+	if len(history) != 3 ||
+		history[0].ID != relation.ID ||
+		history[1].ID != proposal.ID ||
+		history[2].ID != retraction.ID {
+		t.Fatalf("history after retraction = %#v, want complete append-only chain", history)
+	}
 }
 
 func loadIntegrationAuthorizationBinding(t *testing.T) domain.NewsAuthorizationBinding {
