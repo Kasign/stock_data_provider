@@ -80,7 +80,8 @@ func (u *IngestCandidate) ExecuteWithPolicyTrace(ctx context.Context, sourceID, 
 	}
 	providerPolicyBound := trace.ProviderOutputPolicyRef != "" && trace.ProviderOutputPolicyVersionID != ""
 	providerPolicyPartial := (trace.ProviderOutputPolicyRef == "") != (trace.ProviderOutputPolicyVersionID == "")
-	if providerPolicyPartial || (strings.TrimSpace(candidate.ProviderCode) != "" && !providerPolicyBound) {
+	if providerPolicyPartial || (strings.TrimSpace(candidate.ProviderCode) != "" && !providerPolicyBound) ||
+		(strings.TrimSpace(candidate.ProviderCode) == "" && providerPolicyBound) {
 		return domain.Observation{}, ErrProviderOutputPolicyRequired
 	}
 	trace.PolicyEvaluatedAt = trace.PolicyEvaluatedAt.UTC()
