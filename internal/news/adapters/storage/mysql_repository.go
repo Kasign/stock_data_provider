@@ -618,6 +618,25 @@ func (t *mysqlNewsTransaction) AppendNewsItemRelation(ctx context.Context, relat
 	return err
 }
 
+// ObservationRetentionBacklog 返回当前已到期但尚未清除的 Observation 数量及最早到期时间。
+func (r *MySQLRepository) ObservationRetentionBacklog(ctx context.Context, now time.Time) (int, *time.Time, error) {
+	if r == nil || r.db == nil || ctx == nil || now.IsZero() {
+		return 0, nil, app.ErrInvalidRequest
+	}
+	var count int
+	var oldest sql.NullTime
+	if err := r.db.QueryRowContext(ctx, `SELECT COUNT(*), MIN(retention_until)
+		FROM news_observations
+		WHERE retention_until IS NOT NULL AND retention_until <= ? AND payload_purged_at IS NULL`, now.UTC()).Scan(&count, &oldest); err != nil {
+		return 0, nil, err
+	}
+	if !oldest.Valid {
+		return count, nil, nil
+	}
+	value := oldest.Time.UTC()
+	return count, &value, nil
+}
+
 type ObservationPayloadPurgeResult struct {
 	Scanned int
 	Purged  int
