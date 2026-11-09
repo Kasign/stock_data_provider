@@ -39,6 +39,11 @@ func (r *Registry) ValidateMetric(code, schemaVersion, algorithmVersion string, 
 	if err := result.Validate(); err != nil {
 		return fmt.Errorf("%w: %v", ErrInvalidMetricResult, err)
 	}
+	if !entry.SupportsInterval &&
+		(!bytes.Equal(bytes.TrimSpace(result.LowerBound), []byte("null")) ||
+			!bytes.Equal(bytes.TrimSpace(result.UpperBound), []byte("null"))) {
+		return ErrInvalidMetricResult
+	}
 	if result.MetricCode != entry.Code || result.Unit != entry.Unit ||
 		result.CalculationVersion != entry.AlgorithmVersion {
 		return ErrInvalidMetricResult

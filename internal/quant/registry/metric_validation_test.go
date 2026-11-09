@@ -57,3 +57,26 @@ func TestRegistryValidateMetricAcceptsUnavailableNullValue(t *testing.T) {
 		t.Fatalf("valid unavailable metric rejected: %v", err)
 	}
 }
+
+
+func TestRegistryValidateMetricHonorsSupportsInterval(t *testing.T) {
+	result := json.RawMessage(`{"metric_code":"bounded_metric","value":0.5,"unit":"ratio","period":"20d","system_as_of":"2026-11-09T01:00:00Z","quality_status":"valid","metric_status":"available","calculation_version":"1.0.0","lower_bound":0.4,"upper_bound":0.6}`)
+
+	withoutInterval := New()
+	entry := validEntry("bounded_metric", "1.0.0")
+	if err := withoutInterval.Register(entry, true); err != nil {
+		t.Fatal(err)
+	}
+	if err := withoutInterval.ValidateMetric("bounded_metric", "1.0.0", "1.0.0", result); !errors.Is(err, ErrInvalidMetricResult) {
+		t.Fatalf("interval bounds must be rejected when supports_interval is false, got %v", err)
+	}
+
+	withInterval := New()
+	entry.SupportsInterval = true
+	if err := withInterval.Register(entry, true); err != nil {
+		t.Fatal(err)
+	}
+	if err := withInterval.ValidateMetric("bounded_metric", "1.0.0", "1.0.0", result); err != nil {
+		t.Fatalf("interval bounds must be accepted when supports_interval is true, got %v", err)
+	}
+}
