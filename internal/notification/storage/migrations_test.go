@@ -24,6 +24,7 @@ func TestMigrationsDeclareImmutableVersionAndRequiredUniqueness(t *testing.T) {
 		"lease_worker_id",
 		"lease_expires_at",
 		"fencing_token BIGINT UNSIGNED NOT NULL DEFAULT 0",
+		"idx_notification_deliveries_lease",
 		"CREATE TABLE notification_delivery_attempts",
 		"uk_notification_attempt_number",
 		"uk_notification_attempt_fencing_token",
