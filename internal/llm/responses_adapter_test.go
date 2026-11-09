@@ -465,7 +465,7 @@ func TestResponsesAdapterStreamClosesBodyReturnedWithError(t *testing.T) {
 	streamDoer := HTTPStreamDoerFunc(func(context.Context, *http.Request) (*HTTPStreamResponse, error) {
 		return &HTTPStreamResponse{
 			StatusCode: http.StatusOK,
-			Header: http.Header{"Content-Type": []string{"text/event-stream"}},
+			Header:     http.Header{"Content-Type": []string{"text/event-stream"}},
 			Body:       body,
 		}, errors.New("open stream failed")
 	})
@@ -620,7 +620,7 @@ func TestResponsesAdapterStreamReturnsConsumerErrorUnchanged(t *testing.T) {
 	}, "\n")
 	callbackErr := &AdapterError{Info: adapterError(ErrorCancelled, "consumer.cancelled", false, nil)}
 	streamDoer := HTTPStreamDoerFunc(func(context.Context, *http.Request) (*HTTPStreamResponse, error) {
-		return &HTTPStreamResponse{StatusCode: http.StatusOK, Header:     http.Header{"Content-Type": []string{"text/event-stream"}}, Body: io.NopCloser(strings.NewReader(sse))}, nil
+		return &HTTPStreamResponse{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": []string{"text/event-stream"}}, Body: io.NopCloser(strings.NewReader(sse))}, nil
 	})
 	adapter, err := NewResponsesAdapterWithStream(provider, secret,
 		doerFunc(func(*http.Request) (*http.Response, error) { return nil, errors.New("unused") }),
