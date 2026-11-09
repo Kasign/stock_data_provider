@@ -957,3 +957,11 @@
 
 
 - Review 新增 Source 候选低层 Ingest 入口门禁：当前 `IngestCandidate.Execute` 不验证 Source Policy Version，`ExecuteWithPolicyTrace` 不能信任调用方自报版本；生产编排完成前不得直接将其作为跨模块持久化入口，需先增加可信 SourceCatalog 绑定用例。
+
+
+## 五十、Evidence Snapshot 写入完成与请求取消竞态（2026-11-09）
+
+- [x] Snapshot Repository 写入成功后再次检查 Context；若请求在数据库写入期间被取消，不向调用方返回可继续使用的 Snapshot。
+- [x] 增加“写入成功后立即取消”的 Application 回归测试，确认请求返回 context.Canceled，同时明确不可变 Snapshot 可能已经落库。
+- [x] 已落库但未返回给调用方的 Snapshot 不执行补偿删除；它不含新闻正文或摘要，依靠既有 TTL 与过期清理回收，避免取消路径误删可能已被并发重试使用的快照。
+- [ ] 仍需在 MariaDB 环境覆盖真实数据库写入与客户端取消的竞态；Application 测试仅验证调用边界，不代表数据库事务回滚。

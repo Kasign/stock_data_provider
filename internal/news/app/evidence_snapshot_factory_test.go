@@ -43,6 +43,18 @@ func evidencePITRecords(asOf time.Time) []EvidencePITRecord {
 	}
 }
 
+type cancelAfterCreateSnapshotStore struct {
+	*evidenceSnapshotRepositoryStub
+	cancel context.CancelFunc
+}
+
+func (s *cancelAfterCreateSnapshotStore) CreateEvidenceSnapshot(ctx context.Context, snapshot EvidenceSnapshot) error {
+	if err := s.evidenceSnapshotRepositoryStub.CreateEvidenceSnapshot(ctx, snapshot); err != nil {
+		return err
+	}
+	s.cancel()
+	return nil
+}
 func TestCreateEvidenceSnapshotForQueryFreezesOnlyPITReferences(t *testing.T) {
 	now := time.Now().UTC()
 	request := validEvidenceListRequest(now)
@@ -147,6 +159,27 @@ func TestCreateEvidenceSnapshotForQueryHonorsContextCancellation(t *testing.T) {
 		}
 		if query.calls != 0 || store.calls != 0 {
 			t.Fatalf("canceled request reached dependencies: query=%d store=%d", query.calls, store.calls)
+		}
+	})
+
+	t.Run("canceled after snapshot persistence", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		query := &evidencePITRepositoryStub{records: evidencePITRecords(request.SystemAsOf)}
+		store := &cancelAfterCreateSnapshotStore{
+			evidenceSnapshotRepositoryStub: &evidenceSnapshotRepositoryStub{},
+			cancel: cancel,
+		}
+		service, err := NewCreateEvidenceSnapshotForQuery(query, store, func() string { return "snapshot-after-cancel" })
+		if err != nil {
+			t.Fatal(err)
+		}
+		service.now = func() time.Time { return now }
+		if _, err := service.Execute(ctx, request); !errors.Is(err, context.Canceled) {
+			t.Fatalf("Execute() error = %v, want context.Canceled", err)
+		}
+		if query.calls != 1 || store.calls != 1 || store.created.SnapshotRef != "snapshot-after-cancel" {
+			t.Fatalf("expected completed immutable write before cancellation: query=%d writes=%d snapshot=%+v", query.calls, store.calls, store.created)
 		}
 	})
 
