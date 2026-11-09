@@ -7,8 +7,8 @@ import (
 
 func TestMigrationsDefineNewsOwnedPersistenceSchema(t *testing.T) {
 	migrations := Migrations()
-	if len(migrations) != 7 {
-		t.Fatalf("Migrations() count = %d, want 7", len(migrations))
+	if len(migrations) != 8 {
+		t.Fatalf("Migrations() count = %d, want 8", len(migrations))
 	}
 	for index, migration := range migrations {
 		if migration.Version != uint64(index+1) || strings.TrimSpace(migration.Description) == "" || len(migration.Statements) == 0 {
@@ -116,6 +116,20 @@ func TestMigrationsPreserveNewsPointInTimeAccessPaths(t *testing.T) {
 	for _, fragment := range []string{"ADD COLUMN endpoint_id", "ADD COLUMN provider_output_policy_ref"} {
 		if !strings.Contains(policyReferenceSchema, fragment) {
 			t.Errorf("V6 schema is missing policy reference trace %q", fragment)
+		}
+	}
+}
+
+func TestMigrationsAddObservationRetentionLifecycle(t *testing.T) {
+	migrations := Migrations()
+	retentionSchema := strings.Join(migrations[7].Statements, "\n")
+	for _, fragment := range []string{
+		"ADD COLUMN retention_until DATETIME(6) NULL",
+		"ADD COLUMN payload_purged_at DATETIME(6) NULL",
+		"ADD KEY idx_news_observations_retention (retention_until, observation_id)",
+	} {
+		if !strings.Contains(retentionSchema, fragment) {
+			t.Errorf("V8 schema is missing retention fragment %q", fragment)
 		}
 	}
 }

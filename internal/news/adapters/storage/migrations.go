@@ -228,5 +228,17 @@ func Migrations() []platformstorage.Migration {
 					ADD UNIQUE KEY uk_news_item_relations_supersedes (supersedes_relation_id)`,
 			},
 		},
+		{
+			Version:     8,
+			Description: "add observation payload retention lifecycle",
+			Statements: []string{
+				`ALTER TABLE news_observations
+					ADD COLUMN retention_until DATETIME(6) NULL
+					AFTER observed_at,
+					ADD COLUMN payload_purged_at DATETIME(6) NULL
+					AFTER retention_until,
+					ADD KEY idx_news_observations_retention (retention_until, observation_id)`,
+			},
+		},
 	}
 }
