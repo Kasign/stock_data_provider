@@ -598,7 +598,7 @@ Server 层完成不是“服务能够启动”这么简单。至少同时满足�
 | SRV-003 | 进行中 | DB、Redis、HTTP Client 已由 Resources 统一创建和关闭；后续接入模块资源注入与诊断贡献项 |
 | SRV-004 | 阻塞 | 已复核模块接入面；Researchflow/Quant/LLM/Notification 缺少完整生产装配入口，News/Research 也有关键查询/授权接入缺口；详见 12.6 节 |
 | SRV-005 | 进行中 | 已接入 Platform Bearer Owner 认证、入口 Request ID、Fault HTTP 映射工具、请求体与并发限制；现有旧 Analysis Handler 保留原业务错误 DTO；Web Session/密码登录、CSRF、登录限流、模块 Service Scope 和可信代理边界仍待契约/模块入口，现有 WebUI 尚未携带 Analysis Owner 凭证，不能视为浏览器认证链路已完成 |
-| SRV-006 | 进行中 | 旧 Analysis Worker 与 HTTP Server 均已纳入统一 Lifecycle；HTTP Listener 在 Start 阶段同步绑定，Readiness 在 HTTP Shutdown 前切换为 not-ready，Shutdown 超时后强制 Close；模块 Worker 接入和真实进程 SIGTERM 集成测试仍待完成 |
+| SRV-006 | 进行中 | 旧 Analysis Worker 与 HTTP Server 均已纳入统一 Lifecycle；HTTP Listener 在 Start 阶段同步绑定，Readiness 在 HTTP Shutdown 前切换为 not-ready，Shutdown 超时后强制 Close；真实 SIGTERM 子进程测试已补充，待当前 SHA 的 Workflow 证据；模块 Worker 接入和生产容器退出验收仍待完成 |
 | SRV-007 | 进行中 | 已建立 Server Migration Registry，并注册 News/Research/Notification；显式配置执行；其他模块 Migration 和 MariaDB 集成验收待完成，详见 12.7 节 |
 | SRV-008 | 待契约 | Dispatcher 所有权未冻结 |
 | SRV-009 | 进行中 | 已实现 Platform Runner 聚合、严格 Readiness 判定及 MariaDB/Redis 资源检查；尚待 Transport 暴露和真实依赖集成验收，详见 12.8 节 |
@@ -844,3 +844,25 @@ Lifecycle 原先只在组件 `Start` 返回错误时回滚，没有在组件启�
 - 子进程等待/清理逻辑修正：`7a08da2ff38c874566ad3b05a3719fb3bd7759bc`。
 - 最新代码 SHA 的 Go Workflow Run `42601840871` 已排队，尚未获得测试结果；不得提前标记通过。
 - 本测试只覆盖 Linux CI 中的真实 SIGTERM + Server Lifecycle 顺序；生产容器停止宽限期、真实旧 Analysis Queue 在途任务和数据库连接关闭仍需部署级验收。
+
+
+### 12.19 SRV-006 Lifecycle 并发停止语义补强（2026-11-09）
+
+#### Review 发现
+
+Lifecycle.Stop 原实现通过 stopped 标记保证重复调用幂等，但并发调用时，第二个调用会在第一个调用仍执行组件 Stop 的过程中直接返回 nil。调用方可能误以为所有组件已经停止，进而提前关闭 DB/Redis/HTTP Client 等共享资源，破坏消费者先停止、资源后关闭的约束。
+
+#### 实施内容
+
+- Lifecycle 首次 Stop 创建完成信号，并在逆序停止所有已启动组件后保存汇总错误、关闭完成信号。
+- 后续并发 Stop 不再提前返回成功，而是等待首次 Stop 完成；等待者自己的 Context 超时/取消时返回对应 Context 错误。
+- Stop 完成后的重复调用仍返回首次停止的汇总结果，保持幂等且不丢失关闭错误。
+- 新增阻塞组件回归测试：确认并发 Stop 在首次 Stop 未完成时不会返回成功，等待 Context 超时可独立退出；首次 Stop 完成后再次调用正常返回。
+
+#### 当前状态
+
+- Lifecycle 实现提交：`8e91fa10f5fe94fb9cec25c6f51dfdc262bc9e58`。
+- 并发停止回归测试提交：`1c8dfc2bbd581b377f95e2863c124f943aee9845`。
+- 本批次尚未运行当前 SHA 的 Go Workflow；不提前标记测试通过。
+- 本次只修改 Server Lifecycle、对应测试和 Server 主计划；没有修改 Platform 或其他模块。
+- 这项修复避免并发关闭调用提前释放共享资源，但不替代后续真实模块 Worker 装配和生产容器退出验收。
