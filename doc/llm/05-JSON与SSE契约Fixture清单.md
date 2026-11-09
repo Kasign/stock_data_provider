@@ -19,6 +19,7 @@
 | Fixture | 输入条件 | 预期检查 |
 |---|---|---|
 | request_minimal_text.json | model、instructions、input_text、max_output_tokens | Responses `instructions` / `input` / `max_output_tokens` 映射准确；不发送空 tools 或默认采样参数 |
+| request_full_options.expected.json | temperature/top_p/reasoning_effort + strict JSON Schema + function tool + tool_choice=auto | 一次固定完整 wire 请求，校验采样、reasoning、text.format、schema、tool parameters/strict 和工具选择映射 |
 | request_sampling_supported.json | temperature/top_p/reasoning_effort + 对应 capability=supported | 仅支持字段发送，值不被改写 |
 | request_sampling_unknown_rejected.json | 可选采样字段存在但 capability=unknown | 返回 unsupported_capability；不静默丢弃或透传 |
 | request_tool_auto_supported.json | tools 非空、tool_choice=auto、function_tool_calls=supported | tools/name/description/parameters/strict 映射准确 |
@@ -273,4 +274,110 @@ sequence_number 严格连续策略、Draft 2020-12 本地 Schema dialect、Reque
 - `internal/llm/testdata/sse/stream_incomplete.sse` + `.expected.json`
 - 错误/边界原始样例：sequence_gap、EOF_without_terminal、unknown_event、terminal_then_extra_event、error_event。
 
-`responses_golden_test.go` 将原始 wire 与 expected DTO 比较；错误/边界 fixture 断言错误类型和安全行为。此集合只是第一批，Usage missing/partial/derived/overflow、mixed/duplicate/decreasing sequence、callback error、CRLF/multiline data、资源限制等仍需补充独立 fixture。
+`responses_golden_test.go` 将原始 wire 与 expected DTO 比较；错误/边界 fixture 断言错误类型和安全行为。此集合只是第一批，Usage missing/partial/derived/overflow、mixed/duplicate/decreasing sequence、callback error、CRLF/multiline data、资源限制等仍需补充独立 fixture。部分边界目前由内联单测覆盖，尚未全部拆成独立 Fixture。
+
+
+## 14. LLM 公共 DTO Draft 2020-12 Schema
+
+已新增模块机器契约 Schema，版本 1.0.0：
+
+- `schema/provider-config-1.0.0.schema.json`
+- `schema/capability-state-1.0.0.schema.json`
+- `schema/model-request-1.0.0.schema.json`
+- `schema/model-response-1.0.0.schema.json`
+- `schema/model-event-1.0.0.schema.json`
+- `schema/model-error-info-1.0.0.schema.json`
+
+新增 `dto_schema_test.go`：验证 ProviderConfig、CapabilityState、ModelRequest、ModelResponse、ModelEvent、ModelErrorInfo 的实际 JSON 序列化结果；并使用现有 JSON/SSE Golden 解析结果执行 Schema 校验，覆盖必填字段与公开错误枚举拒绝。CapabilityState 的 verification_method 与 ProviderConfig.capability_ttl_ms 同时纳入机器契约。
+
+以上为 Schema 与 Contract Test 代码交付，尚未执行 gofmt/go test；不代表 LLM-CTR-001～003 已冻结。
+
+
+## 15. Golden 覆盖扩展（2026-11-06）
+
+新增 JSON 原始 Fixture：refusal、unknown output item、failed、Usage missing/partial/derived/overflow、missing status、completed missing response id；新增 request_minimal_text.expected.json 固定默认请求映射。
+
+新增 SSE 原始 Fixture：failed terminal、sequence duplicate/decreasing/mixed-missing/all-missing。`responses_golden_test.go` 增加对应 Contract Golden 断言，覆盖 refusal 文本保留、未知正文脱敏、合法 failed 状态、Usage null/derived/overflow、非法 envelope、序号异常和 all-missing 标记。
+
+以上 Fixture/测试代码尚未执行；其余完整 SSE 网络读取、Context cancel/backpressure 和本地 Gateway E2E 仍待 Platform streaming transport 与真实部署验收。
+
+## 16. SSE Callback 中断回归覆盖
+
+- 新增 `TestParseResponsesSSECallbackErrorReturnsPartialResponse`，使用 EOF 前已有文本增量的 Fixture，在消费者收到文本增量时返回 sentinel error。
+- 新增 `TestParseResponsesSSECallbackErrorAtTerminalDoesNotComplete`，在合法 completed terminal 回调时返回 sentinel error，验证消费者拒绝终态事件后不能向上层暴露 completed。
+- 两项测试均断言 Parser 原样返回 callback error、保留已接收的部分文本、状态保持 incomplete、不生成 ModelErrorInfo；普通事件中断另检查结束时间和耗时元数据。
+- 此测试只覆盖纯 Parser 的同步回调中断语义，不代表网络读取取消、Body 关闭或 Platform backpressure 已实现。
+- 测试代码已提交，尚未执行 gofmt/go test。
+
+
+## 17. 新增内联边界测试（2026-11-09）
+
+- Structured Output：非法 JSON 与空输出均拒绝并返回 schema_validation_failed；incomplete 响应不生成 structured_json，保留 incomplete_reason。
+- SSE：新增 CRLF + 注释行 + 多条 data 拼接解析测试；新增超过 MaxSSEEvents 的 resource_limit 测试。
+- 上述测试是纯解析器/DTO 层验证，不代表网络读取取消、HTTP Body Close、背压或 Platform 流式传输验收完成。
+- 新增测试代码尚未执行 gofmt/go test，不能标记通过。
+
+
+## 18. SSE 资源限制分类回归（2026-11-09）
+
+- 单事件大小按所有 data 字段值及字段间拼接换行累计，超过 1 MiB 返回 `resource_limit`。
+- 即使每一条 data 行均小于 64 KiB，多行拼接后超过单事件上限也必须返回 `resource_limit`。
+- 整个 SSE 输入超过 8 MiB 时，在扫描前返回 `resource_limit`，稳定码为 `llm.sse.total_too_large`。
+- 对应测试：`TestParseResponsesSSEClassifiesMultilineEventLimitAsResourceLimit`、`TestParseResponsesSSERejectsTotalPayloadAboveLimit`。
+- 测试代码尚未执行；此处只定义验收预期，不构成通过证据。
+
+
+## 19. SSE 终态后事件拒绝（2026-11-09）
+
+- 对应测试：`TestParseResponsesSSERejectsEventAfterTerminal`。
+- `response.completed`、`response.incomplete` 或 `response.failed` 终态后若仍出现携带 data 的事件，必须拒绝整个流。
+- 当前覆盖 completed 后追加普通事件，预期错误为 `ErrorInvalidResponse / llm.sse.event_after_terminal`。
+- 测试代码尚未执行，不构成通过证据。
+
+
+## 20. SSE 终态文本一致性
+
+- 输入先发送一个或多个 `response.output_text.delta`（或 `response.output_text.done`），终态 `response.output` 必须还原出完全相同的文本。
+- 若终态文本与已累计文本不一致，返回 `ErrorInvalidResponse / llm.sse.terminal_output_text_mismatch`；不得以终态结果覆盖已交付给消费者的文本。
+- 对应测试：`TestParseResponsesSSERejectsTerminalOutputTextMismatch`。
+- 此规则属于本地 Parser 一致性测试，仍待执行。
+
+
+## 21. 多文本分段 SSE 一致性回归
+
+- 文本事件按 `output_index + content_index` 分段累计，多个分段可交错到达；最终 ModelResponse.output_text 按索引顺序聚合。
+- 每个分段的 delta 与 done 独立比对，不能把一个分段的累计文本与另一个分段的 done 文本比较。
+- done 后再次收到同一分段 delta 必须拒绝；负 output_index/content_index 必须拒绝。
+- 对应测试：`TestParseResponsesSSEAggregatesMultipleTextPartsByIndex`、`TestParseResponsesSSERejectsTextDeltaAfterDone`。
+- 测试代码尚未执行，不构成通过证据。
+
+## 22. Function Call 参数终态一致性
+
+- 每个 call_id 的 arguments delta 独立累计；arguments.done 必须与此前累计值一致。
+- 收到 arguments.done 或对应 output_item.done 后，该 call_id 的参数流进入终态；后续 delta 必须拒绝。
+- 终态 Response 中的 ToolCall.arguments_json 必须与已累计参数一致。
+- 对应测试：`TestParseResponsesSSEFunctionCallAggregationAndConsistency`、`TestParseResponsesSSERejectsFunctionArgumentDeltaAfterDone`。
+- 测试代码尚未执行，不构成通过证据。
+
+
+## 23. Responses Strict Schema 子集回归
+
+- 接受标准：根 object、所有对象属性 required、additionalProperties=false；允许嵌套 anyOf、nullable 类型联合、$defs 与本地 $ref。
+- 拒绝标准：根 anyOf、allOf/其他未知关键字、缺失 required 属性、additionalProperties=true、未知 string format、远程 $ref。
+- 上游 strict Response Schema 与 strict Function Tool 参数 Schema 都必须执行门禁；local_validation_only 仅跳过上游子集检查。
+- 限制覆盖：对象深度、属性总数、字符串元数据总长度、enum 数量与大 enum 字符数。
+- 对应测试：`TestValidateResponsesStrictSchemaSubsetAcceptsSupportedSchema`、`TestValidateResponsesStrictSchemaSubsetRejectsUnsupportedFeatures`、`TestMapResponsesRequestRejectsUnsupportedStrictSchemaButAllowsLocalValidation`、`TestMapResponsesRequestRejectsUnsupportedStrictToolSchema`。
+
+## 24. Usage 明细范围诊断
+
+- 缓存 Token 不能为负，且不能超过 input_tokens。
+- 推理 Token 不能为负，且不能超过 output_tokens。
+- 越界时保留上游原始值并追加 Usage.Diagnostics，不把异常明细当作可信正常值。
+- 对应测试：`TestParseResponsesUsageDetailsAreRangeChecked`。
+
+## 25. 高级 Schema 约束能力证据
+
+- 发送上游的 Response Schema / Function Tool 参数，只要包含 `pattern`、`format`、数字边界、`multipleOf`、`minItems/maxItems`，必须要求 `structured_output_advanced_constraints=supported`。
+- 该能力绑定 Provider、Model、Protocol、Gateway 版本和有效期；unknown/unsupported 一律不派发。
+- strict 与 non-strict 都执行高级约束能力门禁；`local_validation_only` 只对 Response Schema 跳过上游能力要求。
+- 对应测试：`TestValidateCapabilitiesRequiresAdvancedSchemaConstraintEvidence`。

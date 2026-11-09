@@ -1,0 +1,21 @@
+{
+  "schema_version": "1.0.0",
+  "stage_ref": "stage_optional_news",
+  "run_ref": "run_01",
+  "stage_code": "optional_news",
+  "status": "skipped",
+  "version": 1,
+  "required": false,
+  "dependency_stage_refs": [],
+  "retry_policy_ref": "retry_optional_news_v1",
+  "retry_at": null,
+  "output_ref": null,
+  "reason_codes": [
+    "not_applicable"
+  ],
+  "created_at": "2026-11-09T02:00:00Z",
+  "started_at": null,
+  "finished_at": "2026-11-09T02:00:00Z",
+  "quality_summary_ref": null,
+  "diagnostic_refs": []
+}

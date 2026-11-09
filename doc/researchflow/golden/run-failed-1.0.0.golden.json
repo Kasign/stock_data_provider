@@ -16,23 +16,6 @@
   "started_at": "2026-11-06T01:00:01Z",
   "finished_at": "2026-11-06T01:10:00Z",
   "status": "failed",
-  "result_summary": {
-    "stage_outcomes": {
-      "quote_snapshot": "failed"
-    },
-    "excluded_stages": [],
-    "missing_stage_codes": [
-      "quote_snapshot"
-    ],
-    "degraded_stage_codes": [],
-    "blocked_stage_codes": [],
-    "reason_codes": [
-      "required_stage_failed"
-    ],
-    "coverage": 0,
-    "quality_status": "incomplete",
-    "risk_gate_decisions": {},
-    "actionability_status": "not_evaluated"
-  },
-  "termination_reason": "required_stage_failed"
+  "termination_reason": "required_stage_failed",
+  "result_summary_ref": "summary_failed_01"
 }

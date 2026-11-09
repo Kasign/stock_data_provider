@@ -1,0 +1,18 @@
+{
+  "stage_outcomes": {
+    "quote_snapshot": "failed"
+  },
+  "excluded_stages": [],
+  "missing_stage_codes": [
+    "quote_snapshot"
+  ],
+  "degraded_stage_codes": [],
+  "blocked_stage_codes": [],
+  "reason_codes": [
+    "required_stage_failed"
+  ],
+  "coverage": 0,
+  "quality_status": "incomplete",
+  "risk_gate_decisions": {},
+  "actionability_status": "blocked"
+}

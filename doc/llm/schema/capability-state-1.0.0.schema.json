@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://llm.invalid/contracts/llm-capabilitystate-1.0.0.schema.json",
+  "title": "LLM CapabilityState",
+  "$defs": {},
+  "type": "object",
+  "properties": {
+    "provider_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "model_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "protocol": {
+      "const": "openai_responses"
+    },
+    "gateway_version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "verification_method": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64
+    },
+    "verified_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "valid_until": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "evidence_ref": {
+      "type": "string",
+      "minLength": 1
+    },
+    "max_output_tokens_limit": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "values": {
+      "type": "object",
+      "propertyNames": {
+        "enum": [
+          "responses_json",
+          "responses_stream",
+          "structured_output_json_schema",
+          "function_tool_calls",
+          "reasoning_effort",
+          "sampling_parameters",
+          "usage_details"
+        ]
+      },
+      "additionalProperties": {
+        "enum": [
+          "supported",
+          "unsupported",
+          "unknown"
+        ]
+      }
+    }
+  },
+  "required": [
+    "provider_id",
+    "model_id",
+    "protocol",
+    "gateway_version",
+    "evidence_ref",
+    "max_output_tokens_limit",
+    "verified_at",
+    "valid_until",
+    "verification_method"
+  ],
+  "additionalProperties": false
+}

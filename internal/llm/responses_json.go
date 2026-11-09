@@ -16,16 +16,17 @@ var (
 )
 
 type responsesRequest struct {
-	Model           string          `json:"model"`
-	Instructions    string          `json:"instructions"`
-	Input           string          `json:"input"`
-	MaxOutputTokens int             `json:"max_output_tokens"`
-	Temperature     *float64        `json:"temperature,omitempty"`
-	TopP            *float64        `json:"top_p,omitempty"`
+	Model           string              `json:"model"`
+	Stream          bool                `json:"stream,omitempty"`
+	Instructions    string              `json:"instructions"`
+	Input           string              `json:"input"`
+	MaxOutputTokens int                 `json:"max_output_tokens"`
+	Temperature     *float64            `json:"temperature,omitempty"`
+	TopP            *float64            `json:"top_p,omitempty"`
 	Reasoning       *responsesReasoning `json:"reasoning,omitempty"`
-	Text            *responsesText `json:"text,omitempty"`
-	Tools           []responsesTool `json:"tools,omitempty"`
-	ToolChoice      string          `json:"tool_choice"`
+	Text            *responsesText      `json:"text,omitempty"`
+	Tools           []responsesTool     `json:"tools,omitempty"`
+	ToolChoice      string              `json:"tool_choice"`
 }
 
 type responsesReasoning struct {
@@ -58,12 +59,33 @@ func MapResponsesRequest(request ModelRequest) ([]byte, error) {
 }
 
 func MapResponsesRequestAt(request ModelRequest, now time.Time) ([]byte, error) {
+	return mapResponsesRequestAt(request, now, false)
+}
+
+// MapResponsesStreamRequestAt 将同一请求契约映射为 Responses SSE 请求。
+func MapResponsesStreamRequestAt(request ModelRequest, now time.Time) ([]byte, error) {
+	return mapResponsesRequestAt(request, now, true)
+}
+
+func mapResponsesRequestAt(request ModelRequest, now time.Time, stream bool) ([]byte, error) {
 	if err := request.ValidateAt(now); err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrInvalidResponsesRequest, err)
 	}
+	if request.ResponseSchema != nil && request.ResponseSchema.Strict && !request.LocalValidationOnly {
+		if err := validateResponsesStrictSchemaSubset(request.ResponseSchema.SchemaJSON); err != nil {
+			return nil, fmt.Errorf("%w: response_schema: %v", ErrUnsupportedResponsesSchemaSubset, err)
+		}
+	}
+	for _, tool := range request.Tools {
+		if tool.Strict {
+			if err := validateResponsesStrictSchemaSubset(tool.ParametersJSON); err != nil {
+				return nil, fmt.Errorf("%w: tool %q parameters: %v", ErrUnsupportedResponsesSchemaSubset, tool.Name, err)
+			}
+		}
+	}
 
 	wire := responsesRequest{
-		Model: request.Model, Instructions: request.Instructions,
+		Model: request.Model, Stream: stream, Instructions: request.Instructions,
 		Input: request.InputText, MaxOutputTokens: request.MaxOutputTokens,
 		Temperature: request.Temperature, TopP: request.TopP,
 		ToolChoice: request.ToolChoice,
@@ -100,16 +122,16 @@ func MapResponsesRequestAt(request ModelRequest, now time.Time) ([]byte, error) 
 }
 
 type responsesEnvelope struct {
-	ID               string          `json:"id"`
-	Object           string          `json:"object"`
-	Model            string          `json:"model"`
-	Status           string          `json:"status"`
-	Output           []json.RawMessage `json:"output"`
-	Usage            *responsesUsage `json:"usage"`
+	ID                string            `json:"id"`
+	Object            string            `json:"object"`
+	Model             string            `json:"model"`
+	Status            string            `json:"status"`
+	Output            []json.RawMessage `json:"output"`
+	Usage             *responsesUsage   `json:"usage"`
 	IncompleteDetails *struct {
 		Reason string `json:"reason"`
 	} `json:"incomplete_details"`
-	Error            *responsesError `json:"error"`
+	Error *responsesError `json:"error"`
 }
 
 type responsesError struct {
@@ -281,6 +303,7 @@ func parseResponsesContentPart(raw json.RawMessage) (ContentPart, error) {
 	var wire struct {
 		Type        string          `json:"type"`
 		Text        string          `json:"text"`
+		Refusal     string          `json:"refusal"`
 		Annotations json.RawMessage `json:"annotations"`
 	}
 	if len(raw) == 0 || len(raw) > MaxPayloadBytes || !json.Valid(raw) {
@@ -299,7 +322,10 @@ func parseResponsesContentPart(raw json.RawMessage) (ContentPart, error) {
 		part.Text = wire.Text
 	case "refusal":
 		part.Type = ContentPartRefusal
-		part.Text = wire.Text
+		part.Text = wire.Refusal
+		if part.Text == "" {
+			part.Text = wire.Text
+		}
 	default:
 		part.Type = ContentPartUnknown
 	}
@@ -319,6 +345,20 @@ func normalizeResponsesUsage(wire *responsesUsage) *Usage {
 	}
 	if wire.OutputDetails != nil {
 		usage.OutputReasoningTokens = wire.OutputDetails.ReasoningTokens
+	}
+	if usage.InputCachedTokens != nil {
+		if *usage.InputCachedTokens < 0 {
+			usage.Diagnostics = append(usage.Diagnostics, "input_cached_tokens_negative")
+		} else if usage.InputTokens != nil && *usage.InputTokens >= 0 && *usage.InputCachedTokens > *usage.InputTokens {
+			usage.Diagnostics = append(usage.Diagnostics, "input_cached_tokens_exceeds_input")
+		}
+	}
+	if usage.OutputReasoningTokens != nil {
+		if *usage.OutputReasoningTokens < 0 {
+			usage.Diagnostics = append(usage.Diagnostics, "output_reasoning_tokens_negative")
+		} else if usage.OutputTokens != nil && *usage.OutputTokens >= 0 && *usage.OutputReasoningTokens > *usage.OutputTokens {
+			usage.Diagnostics = append(usage.Diagnostics, "output_reasoning_tokens_exceeds_output")
+		}
 	}
 	if usage.TotalTokens != nil && *usage.TotalTokens < 0 {
 		usage.Diagnostics = append(usage.Diagnostics, "total_tokens_negative")

@@ -31,6 +31,7 @@ type MySQLRepository struct {
 var _ app.IdentityRepository = (*MySQLRepository)(nil)
 var _ app.ResearchUpdateRepository = (*MySQLRepository)(nil)
 var _ app.NewsItemRelationRepository = (*MySQLRepository)(nil)
+var _ app.EvidencePITRepository = (*MySQLRepository)(nil)
 
 var _ app.IdentityTransaction = (*mysqlNewsTransaction)(nil)
 var _ app.ResearchUpdateTransaction = (*mysqlNewsTransaction)(nil)
@@ -237,11 +238,23 @@ func (t *mysqlNewsTransaction) SaveIdentityCredentials(ctx context.Context, cred
 		return app.ErrInvalidRequest
 	}
 	for _, credential := range credentials {
+		_, observedOffset := credential.ObservedAt.Zone()
+		if credential.ObservedAt.IsZero() || observedOffset != 0 {
+			return app.ErrIdentityHistoryInvalid
+		}
 		if _, err := t.tx.ExecContext(ctx, `INSERT INTO news_identifiers
-			(source_id, identifier_type, identifier_hash, identifier_value, identifier_status, news_id)
-			VALUES (?, ?, ?, ?, ?, ?)`,
+			(source_id, identifier_type, identifier_hash, identifier_value, identifier_status, news_id, created_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?)`,
 			credential.SourceID, string(credential.Type), credential.Hash,
-			credential.Value, string(credential.Status), credential.NewsID,
+			credential.Value, string(credential.Status), credential.NewsID, credential.ObservedAt.UTC(),
+		); err != nil {
+			return err
+		}
+		if _, err := t.tx.ExecContext(ctx, `INSERT INTO news_identifier_status_history
+			(source_id, identifier_type, identifier_hash, identifier_status, observed_at)
+			VALUES (?, ?, ?, ?, ?)`,
+			credential.SourceID, string(credential.Type), credential.Hash,
+			string(credential.Status), credential.ObservedAt.UTC(),
 		); err != nil {
 			return err
 		}
@@ -266,12 +279,13 @@ func (t *mysqlNewsTransaction) AppendObservation(ctx context.Context, observatio
 		newsID = observation.NewsID
 	}
 	_, insertErr := t.tx.ExecContext(ctx, `INSERT INTO news_observations
-		(observation_id, idempotency_key, source_id, provider_code, query_dimension,
-		 source_policy_version_id, endpoint_policy_version_id, policy_evaluated_at,
-		 candidate_json, observed_at, identity_status, news_id, reason_code)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		(observation_id, idempotency_key, source_id, provider_code, query_dimension, endpoint_id,
+		 source_policy_version_id, endpoint_policy_version_id, provider_output_policy_ref, provider_output_policy_version_id,
+		 policy_evaluated_at, candidate_json, observed_at, identity_status, news_id, reason_code)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		observation.ID, observation.IdempotencyKey, observation.SourceID, observation.ProviderCode,
-		observation.QueryDimension, observation.SourcePolicyVersionID, observation.EndpointPolicyVersionID,
+		observation.QueryDimension, observation.EndpointID, observation.SourcePolicyVersionID,
+		observation.EndpointPolicyVersionID, observation.ProviderOutputPolicyRef, observation.ProviderOutputPolicyVersionID,
 		policyEvaluatedAt, candidateJSON, observation.ObservedAt.UTC(),
 		string(observation.IdentityStatus), newsID, observation.ReasonCode,
 	)
@@ -290,8 +304,8 @@ func (t *mysqlNewsTransaction) AppendObservation(ctx context.Context, observatio
 }
 
 const observationSelect = `SELECT observation_id, idempotency_key, source_id, provider_code,
-	query_dimension, source_policy_version_id, endpoint_policy_version_id,
-	policy_evaluated_at, candidate_json, observed_at, identity_status, news_id, reason_code
+	query_dimension, endpoint_id, source_policy_version_id, endpoint_policy_version_id,
+	provider_output_policy_ref, provider_output_policy_version_id, policy_evaluated_at, candidate_json, observed_at, identity_status, news_id, reason_code
 	FROM news_observations`
 
 type rowScanner interface {
@@ -306,8 +320,8 @@ func scanObservation(row rowScanner) (domain.Observation, error) {
 	var status string
 	err := row.Scan(
 		&result.ID, &result.IdempotencyKey, &result.SourceID, &result.ProviderCode,
-		&result.QueryDimension, &result.SourcePolicyVersionID, &result.EndpointPolicyVersionID,
-		&policyAt, &candidateJSON, &result.ObservedAt, &status, &newsID, &result.ReasonCode,
+		&result.QueryDimension, &result.EndpointID, &result.SourcePolicyVersionID,
+		&result.EndpointPolicyVersionID, &result.ProviderOutputPolicyRef, &result.ProviderOutputPolicyVersionID, &policyAt, &candidateJSON, &result.ObservedAt, &status, &newsID, &result.ReasonCode,
 	)
 	if err != nil {
 		return domain.Observation{}, err
@@ -599,12 +613,14 @@ func nullableString(value string) any {
 var requiredNewsSchemaTables = []string{
 	"news_items",
 	"news_identifiers",
+	"news_identifier_status_history",
 	"news_observations",
 	"news_item_versions",
 	"news_relation_assertions",
 	"news_relation_evidence",
 	"news_item_relations",
 	"news_authorization_snapshots",
+	"news_evidence_snapshots",
 }
 
 // Ping verifies the borrowed SQL pool without taking ownership of it.

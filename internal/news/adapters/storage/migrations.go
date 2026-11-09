@@ -153,5 +153,70 @@ func Migrations() []platformstorage.Migration {
 				) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
 			},
 		},
+		{
+			Version:     3,
+			Description: "persist immutable point-in-time evidence pagination snapshots",
+			Statements: []string{
+				`CREATE TABLE news_evidence_snapshots (
+					snapshot_ref VARCHAR(256) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
+					caller_ref VARCHAR(256) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
+					filters_fingerprint CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+					page_size SMALLINT UNSIGNED NOT NULL,
+					system_as_of DATETIME(6) NOT NULL,
+					sort_version VARCHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+					created_at DATETIME(6) NOT NULL,
+					expires_at DATETIME(6) NOT NULL,
+					item_count INT UNSIGNED NOT NULL,
+					payload_json JSON NOT NULL,
+					payload_hash CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+					PRIMARY KEY (snapshot_ref),
+					KEY idx_news_snapshot_caller_expiry (caller_ref, expires_at),
+					KEY idx_news_snapshot_expiry (expires_at)
+				) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+			},
+		},
+		{
+			Version:     4,
+			Description: "record point-in-time news identifier status history",
+			Statements: []string{
+				`CREATE TABLE news_identifier_status_history (
+					history_id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+					source_id VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+					identifier_type VARCHAR(32) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+					identifier_hash CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+					identifier_status VARCHAR(16) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+					observed_at DATETIME(6) NOT NULL,
+					PRIMARY KEY (history_id),
+					KEY idx_news_identifier_history_at (source_id, identifier_type, identifier_hash, observed_at, history_id),
+					CONSTRAINT fk_news_identifier_history_credential
+						FOREIGN KEY (source_id, identifier_type, identifier_hash)
+						REFERENCES news_identifiers (source_id, identifier_type, identifier_hash)
+				) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+				`INSERT INTO news_identifier_status_history
+					(source_id, identifier_type, identifier_hash, identifier_status, observed_at)
+					SELECT source_id, identifier_type, identifier_hash, identifier_status, created_at
+					FROM news_identifiers`,
+			},
+		},
+		{
+			Version:     5,
+			Description: "record provider output policy version on news observations",
+			Statements: []string{
+				`ALTER TABLE news_observations
+					ADD COLUMN provider_output_policy_version_id VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL DEFAULT ''
+					AFTER endpoint_policy_version_id`,
+			},
+		},
+		{
+			Version:     6,
+			Description: "bind observation to endpoint and provider output policy references",
+			Statements: []string{
+				`ALTER TABLE news_observations
+					ADD COLUMN endpoint_id VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL DEFAULT ''
+					AFTER query_dimension,
+					ADD COLUMN provider_output_policy_ref VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL DEFAULT ''
+					AFTER endpoint_policy_version_id`,
+			},
+		},
 	}
 }

@@ -261,8 +261,10 @@ h2 { margin: 0; color: #e5edf3; font-size: 14px; font-weight: 650; letter-spacin
 .metric-primary .metric-value { color: var(--accent); font-size: clamp(21px, 2.2vw, 28px); }
 .metric-source { font-size: clamp(13px, 1.2vw, 17px); letter-spacing: 0; }
 .metric-foot { overflow: hidden; margin-top: 6px; color: var(--text-dim); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
-.positive { color: var(--positive) !important; }
-.negative { color: var(--negative) !important; }
+.metric-primary .metric-foot.positive { color: var(--positive); }
+.metric-primary .metric-foot.negative { color: var(--negative); }
+.positive { color: var(--positive); }
+.negative { color: var(--negative); }
 .content-grid { display: grid; grid-template-columns: minmax(0, 1.56fr) minmax(285px, 1fr); gap: var(--layout-panel-gap); margin-top: var(--space-4); }
 .chart-panel, .source-panel, .bars-panel { padding: var(--layout-panel-padding-y) var(--layout-panel-padding-x) 14px; }
 .panel-heading {
@@ -877,6 +879,8 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outlin
 :root[data-theme="light"] .chart-foot, :root[data-theme="light"] .table-footer,
 :root[data-theme="light"] .page-footer, :root[data-theme="light"] .field-hint,
 :root[data-theme="light"] .dialog-intro, :root[data-theme="light"] .storage-boundary p { color: var(--text-dim); }
+:root[data-theme="light"] .metric-primary .metric-foot.positive { color: var(--positive); }
+:root[data-theme="light"] .metric-primary .metric-foot.negative { color: var(--negative); }
 :root[data-theme="light"] .metric-card, :root[data-theme="light"] .signal-result-card,
 :root[data-theme="light"] .task-result-metric, :root[data-theme="light"] .analysis-result-block,
 :root[data-theme="light"] .analysis-result-card, :root[data-theme="light"] .recent-analysis-item,
@@ -940,6 +944,8 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outlin
 :root[data-theme="light"] thead { background: #edf2f5; }
 :root[data-theme="light"] th { color: #596f80; border-color: var(--border-soft); }
 :root[data-theme="light"] td { color: #354c5c; border-color: var(--border-soft); }
+:root[data-theme="light"] td.positive { color: var(--positive); }
+:root[data-theme="light"] td.negative { color: var(--negative); }
 :root[data-theme="light"] tbody tr:hover { background: #f2f7f9; }
 :root[data-theme="light"] .raw-result pre { color: #334b5a; background: #f5f8fa; border-color: #d6e1e8; }
 :root[data-theme="light"] .empty-icon { color: var(--accent); background: #e7f6f1; border-color: #c9e8de; }
@@ -3027,6 +3033,8 @@ button:disabled, input:disabled, select:disabled, textarea:disabled { cursor: no
   font-size: 12px;
   line-height: 1.5;
 }
+.technical-metric-card > small.positive { color: var(--positive); }
+.technical-metric-card > small.negative { color: var(--negative); }
 .technical-metric-card > small.is-emphasis { color: var(--warning); }
 .technical-macd-values {
   display: grid;
