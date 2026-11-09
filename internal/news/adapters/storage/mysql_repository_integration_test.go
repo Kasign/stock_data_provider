@@ -455,6 +455,18 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 		},
 		PageSize: 20,
 	}
+	// 写入可追踪的历史策略引用，验证 PIT 查询完整回读 V6 字段。
+	policyEvaluatedAt := time.Now().UTC()
+	if _, err := db.ExecContext(ctx, `UPDATE news_observations
+		SET endpoint_id = ?, provider_output_policy_ref = ?,
+		    provider_output_policy_version_id = ?, policy_evaluated_at = ?
+		WHERE observation_id = ?`,
+		"endpoint-pit-v1", "provider-policy-pit", "provider-policy-v7",
+		policyEvaluatedAt, secondObservation.ID,
+	); err != nil {
+		t.Fatalf("set PIT policy trace fixture: %v", err)
+	}
+
 	listed, err := repository.ListEvidenceVersionsAt(ctx, listRequest)
 	if err != nil {
 		t.Fatalf("list evidence at system_as_of: %v", err)
@@ -462,6 +474,13 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 	if len(listed) != 1 || listed[0].Version.ID != secondVersion.Version.ID ||
 		listed[0].Observation.ID != secondObservation.ID || listed[0].SourceRef != secondSourceID {
 		t.Fatalf("ListEvidence PIT returned unexpected records: %+v", listed)
+	}
+	gotObservation := listed[0].Observation
+	if gotObservation.EndpointID != "endpoint-pit-v1" ||
+		gotObservation.ProviderOutputPolicyRef != "provider-policy-pit" ||
+		gotObservation.ProviderOutputPolicyVersionID != "provider-policy-v7" ||
+		!gotObservation.PolicyEvaluatedAt.Equal(policyEvaluatedAt) {
+		t.Fatalf("ListEvidence PIT lost policy trace: %+v", gotObservation)
 	}
 	listRequest.SystemAsOf = secondVersion.Version.ObservedAt.Add(-time.Second)
 	listed, err = repository.ListEvidenceVersionsAt(ctx, listRequest)

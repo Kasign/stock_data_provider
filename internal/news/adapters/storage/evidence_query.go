@@ -132,7 +132,8 @@ func evidencePlaceholders(count int) string {
 
 const evidencePITSelect = `SELECT
 	o.observation_id, o.idempotency_key, o.source_id, o.provider_code,
-	o.query_dimension, o.source_policy_version_id, o.endpoint_policy_version_id,
+	o.query_dimension, o.endpoint_id, o.source_policy_version_id, o.endpoint_policy_version_id,
+	o.provider_output_policy_ref, o.provider_output_policy_version_id,
 	o.policy_evaluated_at, o.candidate_json, o.observed_at, o.identity_status,
 	o.news_id, o.reason_code,
 	v.version_id, v.news_id, v.version_no, v.fingerprint, v.title,
@@ -153,8 +154,9 @@ func scanEvidencePITRecord(row rowScanner) (app.EvidencePITRecord, error) {
 
 	err := row.Scan(
 		&observation.ID, &observation.IdempotencyKey, &observation.SourceID,
-		&observation.ProviderCode, &observation.QueryDimension,
+		&observation.ProviderCode, &observation.QueryDimension, &observation.EndpointID,
 		&observation.SourcePolicyVersionID, &observation.EndpointPolicyVersionID,
+		&observation.ProviderOutputPolicyRef, &observation.ProviderOutputPolicyVersionID,
 		&policyAt, &candidateJSON, &observation.ObservedAt, &identityStatus,
 		&newsID, &observation.ReasonCode,
 		&version.ID, &version.NewsID, &version.VersionNo, &version.Fingerprint,
