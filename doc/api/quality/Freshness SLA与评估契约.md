@@ -214,3 +214,12 @@ Service 层新增 fake Provider 集成测试，验证 `applyFreshnessProbeResult
 以当前 HEAD `de028801` 为准：Freshness Evaluator、策略注册表、Probe `freshness` 检查映射及 Quote 证券级停复牌上下文解析均已有代码和回归测试。当前注册策略覆盖 Quote、Index、Market Breadth、Sector、Fund Flow；DailyBar、Fundamentals、Valuations 尚未发现独立 SLA 策略注册。
 
 因此本阶段不再建设 Evaluator 或 Probe 接口，只补充缺失数据域的策略和证据测试。DailyBar 应依据最近已完成交易日、交易日历和 Provider 发布时点判断；Fundamentals 应依据公告时间、available_at 与报告期语义；Valuations 应区分快照时间和报告日期。缺少可信源端时间或必要市场上下文时保持 `unknown`/`skipped`，不得使用 `fetched_at` 代替 `provider_time`，也不得复用 Quote 的秒级 SLA。
+
+
+## 2026-11-09 P0-65：非实时数据域 Freshness 策略边界核验
+
+- DailyBar、Fundamentals、Valuations 当前不映射到通用持续时间 SLA；Probe freshness 检查应保持 skipped / `freshness_policy_not_configured`，而不是复用 Quote 秒级策略。
+- DailyBar 的可判定依据是最近已完成交易日、交易日历覆盖和 Provider 发布时点；周末/节假日不能按墙钟小时差判 stale。
+- Fundamentals 的 `PublicationDate` 只有日期精度，`AvailableAt` 仅在源端确实提供精确可用时刻时使用；报告期末、抓取时间和系统观察时间不能替代披露时刻。
+- Valuations 的 `ProviderTimestamp` 是响应内五项指标的最新有效时间，不能证明每个指标的更新时间；同花顺当前没有独立 `ProviderReportDate`。在字段级时间证据和业务 SLA 未确定前保持 unknown/not-comparable。
+- 新增回归测试，防止 DailyBar/Fundamentals/Valuations 被误映射到通用持续时间策略。策略实现仍需真实数据域 SLA 和源端时间证据，不以任意阈值“补齐”。
