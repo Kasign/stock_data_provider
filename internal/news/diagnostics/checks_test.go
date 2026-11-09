@@ -15,6 +15,16 @@ import (
 
 var _ StorageProbe = (*storage.MySQLRepository)(nil)
 
+type observationRetentionProbeStub struct {
+	count int
+	oldest *time.Time
+	err error
+}
+
+func (s observationRetentionProbeStub) ObservationRetentionBacklog(context.Context, time.Time) (int, *time.Time, error) {
+	return s.count, s.oldest, s.err
+}
+
 type storageProbeStub struct {
 	pingErr   error
 	missing   []string
@@ -33,6 +43,23 @@ type sourceCatalogStub struct {
 
 func (s sourceCatalogStub) LookupEndpoint(context.Context, string, string) (app.SourceEndpointRegistration, error) {
 	return s.registration, s.err
+}
+
+func TestObservationRetentionCheckReportsBacklogAndHealthyState(t *testing.T) {
+	oldest := time.Date(2026, 11, 9, 8, 0, 0, 0, time.UTC)
+	check := ObservationRetentionCheck(observationRetentionProbeStub{count: 3, oldest: &oldest})
+	report, err := (platformdiag.Runner{}).Run(context.Background(), []platformdiag.Check{check})
+	if err != nil { t.Fatal(err) }
+	observation := report.Results[0].Observation
+	if observation.Status != platformdiag.StatusDegraded || observation.ReasonCode != "news.observation.retention_backlog" ||
+		observation.Attributes["overdue_count"] != "3" || observation.Attributes["oldest_overdue_at"] != oldest.Format(time.RFC3339Nano) {
+		t.Fatalf("retention backlog observation=%+v", observation)
+	}
+	report, err = (platformdiag.Runner{}).Run(context.Background(), []platformdiag.Check{ObservationRetentionCheck(observationRetentionProbeStub{})})
+	if err != nil { t.Fatal(err) }
+	if report.Results[0].Observation.Status != platformdiag.StatusHealthy || report.Results[0].Observation.Attributes["overdue_count"] != "0" {
+		t.Fatalf("empty retention backlog observation=%+v", report.Results[0].Observation)
+	}
 }
 
 func TestProviderConfigChecksSkipUnconfiguredWithoutSecrets(t *testing.T) {

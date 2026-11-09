@@ -24,6 +24,53 @@ type StorageProbe interface {
 	MissingSchemaTables(context.Context) ([]string, error)
 }
 
+// ObservationRetentionProbe 只读取到期 backlog，不执行清理或改变数据。
+type ObservationRetentionProbe interface {
+	ObservationRetentionBacklog(context.Context, time.Time) (int, *time.Time, error)
+}
+
+// ObservationRetentionCheck 报告已到期但尚未清除的候选载荷数量。
+func ObservationRetentionCheck(probe ObservationRetentionProbe) platformdiag.Check {
+	return platformdiag.Check{
+		ID: "news.observation.retention_backlog", Name: "News observation retention backlog",
+		Required: true, Timeout: 5 * time.Second,
+		Run: func(ctx context.Context) (platformdiag.Observation, error) {
+			if err := ctx.Err(); err != nil {
+				return platformdiag.Observation{}, err
+			}
+			if probe == nil {
+				return platformdiag.Observation{}, fault.New(
+					fault.ClassUnavailable, "news.observation.retention_probe_unavailable",
+					"News observation retention probe is unavailable", nil,
+				)
+			}
+			checkedAt := time.Now().UTC()
+			count, oldest, err := probe.ObservationRetentionBacklog(ctx, checkedAt)
+			if err != nil {
+				return platformdiag.Observation{}, fault.New(
+					fault.ClassUnavailable, "news.observation.retention_backlog_query_failed",
+					"News observation retention backlog query failed", err,
+				)
+			}
+			attributes := map[string]string{"overdue_count": fmt.Sprintf("%d", count)}
+			if oldest != nil {
+				attributes["oldest_overdue_at"] = oldest.UTC().Format(time.RFC3339Nano)
+			}
+			if count > 0 {
+				return platformdiag.Observation{
+					Status: platformdiag.StatusDegraded, ReasonCode: "news.observation.retention_backlog",
+					SafeMessage: "Expired observation payloads are awaiting purge",
+					CheckedAt: checkedAt, Attributes: attributes,
+				}, nil
+			}
+			return platformdiag.Observation{
+				Status: platformdiag.StatusHealthy, SafeMessage: "No expired observation payloads are awaiting purge",
+				CheckedAt: checkedAt, Attributes: attributes,
+			}, nil
+		},
+	}
+}
+
 // ProviderConfigChecks reports optional Provider configuration without exposing
 // endpoint values or credentials and without making billable upstream requests.
 func ProviderConfigChecks(config newsconfig.Config) []platformdiag.Check {
