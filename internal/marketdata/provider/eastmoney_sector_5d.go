@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"example.com/stock-analysis-flow/internal/marketdata/model"
+	"example.com/stock-analysis-flow/internal/marketdata/validation"
 )
 
 // fetchSectorRankings5D calculates five-trading-session return from each board's
@@ -173,9 +174,11 @@ func (p *Eastmoney) fetchSectorRankings5D(ctx context.Context, category, directi
 		items[i].Rank = i + 1
 	}
 	reasons := []string{"provider_snapshot_timestamp_not_exposed", "five_day_change_derived_from_six_daily_closes"}
+	addEastmoneySector5DWarning(ctx, "provider_time", "sector ranking endpoint", "not_exposed_by_provider_contract", "provider snapshot timestamp", "unavailable", "东方财富板块排名接口未暴露可验证的源端快照时间")
 	total := reportedTotal
 	if failed > 0 {
 		reasons = append(reasons, "provider_historical_board_coverage_incomplete")
+		addEastmoneySector5DCoverageWarning(ctx, failed)
 		total = rankableTotal
 	}
 	for i := range items {
@@ -264,4 +267,19 @@ func (p *Eastmoney) fetchSectorBoard5D(ctx context.Context, category string, can
 		QualityReasons: []string{"provider_snapshot_timestamp_not_exposed", "five_day_change_derived_from_six_daily_closes"},
 	}
 	return item, rows[len(rows)-1].date, nil
+}
+
+
+// addEastmoneySector5DWarning 记录板块 5 日排名的快照级质量限制。
+func addEastmoneySector5DWarning(ctx context.Context, field, providerField, code, expected, actualType, message string) {
+	report := validation.NewReport(8)
+	report.Add(validation.FieldIssue{Stage: validation.StageValidate, Field: field, ProviderField: providerField, Code: code, Expected: expected, ActualType: actualType, Severity: validation.SeverityWarning, Message: message})
+	validation.AddContextReport(ctx, report)
+}
+
+// addEastmoneySector5DCoverageWarning 将未能形成排名的候选板块数作为聚合证据。
+func addEastmoneySector5DCoverageWarning(ctx context.Context, failed int) {
+	report := validation.NewReport(8)
+	report.Add(validation.FieldIssue{Stage: validation.StageValidate, Field: "historical_coverage", ProviderField: "sector K-line endpoint", Code: "incomplete_historical_coverage", Expected: "complete six-close history for every candidate board", ActualType: "incomplete", Severity: validation.SeverityWarning, Message: "部分候选板块未能取得同一报告日期的完整六个日收盘价，未纳入五日排名", Count: failed})
+	validation.AddContextReport(ctx, report)
 }
