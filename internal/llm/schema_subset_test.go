@@ -165,3 +165,32 @@ func TestValidateResponsesStrictSchemaSubsetEnforcesDocumentedLimits(t *testing.
 		}
 	})
 }
+
+
+// TestValidateCapabilitiesRequiresAdvancedSchemaConstraintEvidence 验证高级 Schema 约束必须有模型级证据。
+func TestValidateCapabilitiesRequiresAdvancedSchemaConstraintEvidence(t *testing.T) {
+	provider, _, capabilities, clock := adapterTestConfig()
+	capabilities.Values[CapabilityStructuredOutput] = CapabilitySupported
+	request := validResponsesRequest()
+	request.ProviderID = provider.ProviderID
+	request.ResponseSchema = &JSONSchemaSpec{
+		Name: "summary", Strict: true,
+		SchemaJSON: json.RawMessage(`{"type":"object","properties":{"code":{"type":"string","pattern":"^[A-Z]+$"}},"required":["code"],"additionalProperties":false}`),
+	}
+	if err := request.ValidateCapabilitiesAt(capabilities, clock.Now()); err == nil ||
+		!strings.Contains(err.Error(), string(CapabilityStructuredOutputAdvancedConstraints)) {
+		t.Fatalf("advanced strict schema constraints must require model evidence: %v", err)
+	}
+
+	capabilities.Values[CapabilityStructuredOutputAdvancedConstraints] = CapabilitySupported
+	if err := request.ValidateCapabilitiesAt(capabilities, clock.Now()); err != nil {
+		t.Fatalf("verified advanced strict schema capability must be accepted: %v", err)
+	}
+
+	request.LocalValidationOnly = true
+	delete(capabilities.Values, CapabilityStructuredOutput)
+	delete(capabilities.Values, CapabilityStructuredOutputAdvancedConstraints)
+	if err := request.ValidateCapabilitiesAt(capabilities, clock.Now()); err != nil {
+		t.Fatalf("local_validation_only must not require upstream schema capabilities: %v", err)
+	}
+}

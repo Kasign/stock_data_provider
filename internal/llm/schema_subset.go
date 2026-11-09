@@ -327,3 +327,45 @@ func hasResponsesSchemaType(types map[string]struct{}, typeName string) bool {
 func (budget *responsesSchemaSubsetBudget) addString(value string) {
 	budget.stringChars += utf8.RuneCountInString(value)
 }
+
+
+// responsesStrictSchemaUsesAdvancedConstraints reports whether a strict schema
+// relies on keywords that need separate model-specific evidence.
+func responsesStrictSchemaUsesAdvancedConstraints(raw []byte) bool {
+	var root map[string]any
+	if json.Unmarshal(raw, &root) != nil {
+		return false
+	}
+	return schemaNodeUsesAdvancedResponsesConstraints(root)
+}
+
+func schemaNodeUsesAdvancedResponsesConstraints(node map[string]any) bool {
+	for _, key := range []string{
+		"pattern", "format", "multipleOf", "maximum", "exclusiveMaximum",
+		"minimum", "exclusiveMinimum", "minItems", "maxItems",
+	} {
+		if _, exists := node[key]; exists {
+			return true
+		}
+	}
+	for _, key := range []string{"properties", "$defs"} {
+		if values, ok := node[key].(map[string]any); ok {
+			for _, value := range values {
+				if child, ok := value.(map[string]any); ok && schemaNodeUsesAdvancedResponsesConstraints(child) {
+					return true
+				}
+			}
+		}
+	}
+	if items, ok := node["items"].(map[string]any); ok && schemaNodeUsesAdvancedResponsesConstraints(items) {
+		return true
+	}
+	if variants, ok := node["anyOf"].([]any); ok {
+		for _, value := range variants {
+			if child, ok := value.(map[string]any); ok && schemaNodeUsesAdvancedResponsesConstraints(child) {
+				return true
+			}
+		}
+	}
+	return false
+}

@@ -66,3 +66,5 @@ internal/llm/
 - 另补充结构预算边界测试及 Adapter 派发前拒绝测试；当前仍等待 CI 执行包级测试。
 
 - 新增 Strict Schema 子集限制边界和 Adapter 派发前拒绝测试；测试文件已按 CI gofmt diff 格式化，等待最新 CI 确认 LLM 文件从全仓 gofmt 清单中移除。
+
+- 高级 Structured Output 约束已拆为独立模型能力 `structured_output_advanced_constraints`；pattern/format/数字边界/数组长度约束默认 fail-closed，需对应模型的有效 capability evidence。

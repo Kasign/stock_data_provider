@@ -22,8 +22,9 @@ type CapabilityStatus string
 const (
 	CapabilityResponsesJSON      Capability = "responses_json"
 	CapabilityResponsesStream    Capability = "responses_stream"
-	CapabilityStructuredOutput   Capability = "structured_output_json_schema"
-	CapabilityFunctionToolCalls  Capability = "function_tool_calls"
+	CapabilityStructuredOutput                   Capability = "structured_output_json_schema"
+	CapabilityStructuredOutputAdvancedConstraints Capability = "structured_output_advanced_constraints"
+	CapabilityFunctionToolCalls                  Capability = "function_tool_calls"
 	CapabilityReasoningEffort    Capability = "reasoning_effort"
 	CapabilitySamplingParameters Capability = "sampling_parameters"
 	CapabilityUsageDetails       Capability = "usage_details"
@@ -323,6 +324,19 @@ func (r ModelRequest) ValidateCapabilitiesAt(s CapabilityState, now time.Time) e
 	}
 	if len(r.Tools) > 0 || r.ToolChoice == "auto" {
 		if err := require(CapabilityFunctionToolCalls); err != nil {
+			return err
+		}
+	}
+	needsAdvancedSchemaConstraints := r.ResponseSchema != nil && r.ResponseSchema.Strict &&
+		!r.LocalValidationOnly && responsesStrictSchemaUsesAdvancedConstraints(r.ResponseSchema.SchemaJSON)
+	for _, tool := range r.Tools {
+		if tool.Strict && responsesStrictSchemaUsesAdvancedConstraints(tool.ParametersJSON) {
+			needsAdvancedSchemaConstraints = true
+			break
+		}
+	}
+	if needsAdvancedSchemaConstraints {
+		if err := require(CapabilityStructuredOutputAdvancedConstraints); err != nil {
 			return err
 		}
 	}

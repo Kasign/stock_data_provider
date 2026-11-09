@@ -332,3 +332,13 @@ ParseResponsesSSE 只接收完整的有界字节切片并同步调用 callback�
 - 远程 `$ref` 禁止；本地 `$ref` 仍受 Draft 2020-12 编译器约束。
 - `local_validation_only=true` 不向上游发送 Schema，允许使用完整本地 Draft 2020-12；但不代表模型受约束生成。
 - 官方依据：https://developers.openai.com/api/docs/guides/structured-outputs
+
+### 12.3 Strict Schema 高级约束的模型级能力证据
+
+Responses 文档指出，部分高级约束在 fine-tuned 模型上支持范围更窄。LLM 不得仅凭模型支持基础 Structured Output 就推断所有约束均可用。
+
+- 新增 capability：`structured_output_advanced_constraints`。
+- `pattern`、`format`、数字边界/`multipleOf`、数组 `minItems/maxItems` 等高级约束，只有该 Provider/Model/Gateway 版本的 capability evidence 为 supported 且未过期时才允许发送。
+- strict Response Schema 与 strict Function Tool 参数 Schema 使用同一门禁。
+- `local_validation_only=true` 不向上游发送 Response Schema，因此不要求该能力；Function Tool Schema 仍按上游 strict 能力检查。
+- 未验证或过期一律视为 unknown 并拒绝派发；不自动删除约束降级。
