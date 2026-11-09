@@ -773,8 +773,8 @@ Server 层完成不是“服务能够启动”这么简单。至少同时满足�
 | SRV-003 | 进行中 | DB、Redis、HTTP Client 已由 Resources 统一创建和关闭；新增固定 DestinationPolicy 的 BoundDoer 绑定入口；LLM JSON/SSE 共用 Transport 与 Responses Adapter 构造入口已实现；但当前 `internal/llm` 因未使用的 `time` 导入无法编译，连带阻断 `internal/server/llmtransport` 测试；Provider/Secret/CapabilityState 可信配置装配、News Provider/Source 真实注入及生产流式 E2E 仍待完成；详见 12.24、12.28、12.40～12.42 节 |
 | SRV-004 | 阻塞 | 已复核模块接入面；Researchflow/Quant/LLM/Notification 缺少完整生产装配入口，News/Research 也有关键查询/授权接入缺口；详见 12.6 节 |
 | SRV-005 | 进行中 | 已接入 Platform Bearer Owner 认证、入口 Request ID、Fault HTTP 映射工具、请求体与并发限制；补齐 GET/HEAD 探针的状态、响应头、身份策略及过载豁免测试；现有旧 Analysis Handler 保留原业务错误 DTO；Web Session/密码登录、CSRF、登录限流、模块 Service Scope 和可信代理边界仍待契约/模块入口，现有 WebUI 尚未携带 Analysis Owner 凭证，不能视为浏览器认证链路已完成；详见 12.31 节 |
-| SRV-006 | 进行中 | 旧 Analysis Worker 与 HTTP Server 均已纳入统一 Lifecycle；启动取消回滚、并发 Stop、Start/Stop 竞态屏障和消费者先于共享资源关闭已实现；SHA `46763c7` 的 `internal/server/runtime` 包测试通过；模块 Worker 接入、独立 Race 和生产容器退出验收仍待完成；详见 12.17～12.19、12.26、12.34、12.38 节 |
-| SRV-007 | 进行中 | 已建立 Server Migration Registry，并注册 News/Research/Notification；namespace 与版本号稳定排序；增加执行报告、稳定原因码、人工恢复标记、Registry 并发保护及首次执行快照冻结；SHA `46763c7` 的 `internal/server/migration` 包测试通过；Platform 历史/checksum 不匹配缺稳定 Fault Code，其他模块 Migration 与 MariaDB 故障/恢复集成验收待完成；详见 12.7、12.23、12.25、12.30、12.37、12.45 节 |
+| SRV-006 | 进行中 | 旧 Analysis Worker 与 HTTP Server 均已纳入统一 Lifecycle；启动取消回滚、并发 Stop、Start/Stop 竞态屏障、HTTP 排空和消费者先于共享资源关闭已实现；Bootstrap 关闭错误现在会与运行错误汇总返回；最新 Server 独立 CI 的 Bootstrap/Runtime 单测、Race、Vet 通过；模块 Worker 接入、真实 SIGTERM/生产容器退出验收仍待完成；详见 12.17～12.19、12.26、12.34、12.38、12.50～12.51 节 |
+| SRV-007 | 进行中 | 已建立 Server Migration Registry，并注册 News/Research/Notification；namespace 与版本号稳定排序；增加执行报告、稳定原因码、人工恢复标记、Registry 并发保护及首次执行快照冻结；新增只读 Schema 版本/状态预检，并纳入 Bootstrap 启动门禁和 API Readiness；最新 Server 独立 CI 的 Migration/Diagnostics 单测、Race、Vet 通过；Platform checksum 只读验证 API/Fault Code、其他模块 Migration 与 MariaDB 故障/恢复集成验收待完成；详见 12.7、12.23、12.25、12.30、12.37、12.45、12.50～12.51 节 |
 | SRV-008 | 待契约 | Dispatcher 所有权未冻结 |
 | SRV-009 | 进行中 | 已实现 Platform Runner 聚合、严格 Readiness 判定、MariaDB/Redis 资源检查、Owner 保护的结构化 `/diagnostics` 入口；`/readyz` 动态读取实际 Check Results；Service 装配期拒绝重复 Check ID 并保存 Check 快照；SHA `46763c7` 的 `internal/server/diagnostics` 包测试通过；真实模块 Check 注册、依赖故障注入和 Platform Observation 元数据契约验收仍待完成，详见 12.8、12.20、12.29、12.33 节 |
 | SRV-010 | 阻塞 | 等待 Data 迁移门禁和公开接口 |
@@ -1258,3 +1258,13 @@ Lifecycle.Stop 原实现通过 stopped 标记保证重复调用幂等，但并�
 - 校验边界：Platform 当前没有公开只读 checksum/history validator。Server 不复制 Platform checksum 算法，因此此预检只校验版本集合和状态，不声称校验 checksum；checksum 不匹配仍需由 Platform Runner 在显式 Migration 执行时识别。后续应由 Platform 提供稳定只读验证 API/Fault Code。
 - 测试覆盖完整版本集、缺失版本、running/failed 状态和未知版本；关闭错误合并保留运行错误及资源关闭错误。
 - 本节功能进入独立 CI 后方可标记完成；MariaDB 故障注入和生产 Schema 恢复验收仍属于后续集成工作。
+
+
+### 12.51 Server 关闭错误与 Schema 预检独立 CI 验收（2026-11-09）
+
+- Commit：713f3fb64b0c25bd7feec62151814798d1e12229。
+- Server 独立 Workflow Run 42621289374：success。覆盖 gofmt、Server 包级单测、Race、Vet；Bootstrap、Diagnostics、Migration、Runtime 均在该矩阵中。
+- 根模块 Workflow Run 42621289403：failure。根模块 gofmt 已通过；全仓测试仍被 LLM、News、Notification、Quant、Research、Researchflow 等模块已有编译/测试问题阻断。Server 独立矩阵通过，不代表全仓通过。
+- SRV-006 本轮关闭错误传播已通过独立包级测试；生产环境的关闭失败故障注入和进程退出码验收仍待完成。
+- SRV-007 本轮 Schema 只读版本/状态预检已通过独立包级测试；未连接真实 MariaDB 验证故障矩阵，且未验证 checksum。Platform 需要后续提供公开只读历史/checksum 验证能力，Server 不实现其内部算法。
+- 当前 Server 分支没有合并 integration，也没有修改其他模块目录。
