@@ -489,7 +489,7 @@ func TestRiskDecisionSchemaValidatesGoldenAndFailClosedStructure(t *testing.T) {
 func TestRegistryEntrySchemaMatchesGoCanonicalTextValidation(t *testing.T) {
 	schema := compileQuantSchemaFile(t, "QNT-CTR-001-registry-entry-1.0.0.schema.json")
 	cases := []struct {
-		name string
+		name   string
 		mutate func(*Entry)
 	}{
 		{"unit leading whitespace", func(e *Entry) { e.Unit = " ratio" }},
@@ -512,7 +512,9 @@ func TestRegistryEntrySchemaMatchesGoCanonicalTextValidation(t *testing.T) {
 				t.Fatal("Go Entry.Validate unexpectedly accepted non-canonical text")
 			}
 			encoded, err := json.Marshal(entry)
-			if err != nil { t.Fatal(err) }
+			if err != nil {
+				t.Fatal(err)
+			}
 			if err := validateJSONSchemaInstance(schema, encoded); err == nil {
 				t.Fatalf("Registry Entry Schema unexpectedly accepted non-canonical text: %s", encoded)
 			}

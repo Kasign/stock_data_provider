@@ -72,7 +72,6 @@ func TestRegistryValidateMetricAcceptsUnavailableNullValue(t *testing.T) {
 	}
 }
 
-
 func TestRegistryValidateMetricHonorsSupportsInterval(t *testing.T) {
 	result := json.RawMessage(`{"metric_code":"bounded_metric","value":0.5,"unit":"ratio","period":"20d","system_as_of":"2026-11-09T01:00:00Z","quality_status":"valid","metric_status":"available","calculation_version":"1.0.0","lower_bound":0.4,"upper_bound":0.6}`)
 

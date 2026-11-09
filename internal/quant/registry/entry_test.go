@@ -1,10 +1,10 @@
 package registry
 
 import (
-	"strings"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"testing"
 )
@@ -407,7 +407,6 @@ func TestRegistryValidateMetricAppliesRegisteredSemantics(t *testing.T) {
 	}
 }
 
-
 func TestRegistryFreezePreventsAlgorithmActivation(t *testing.T) {
 	registry := New()
 	oldVersion := validEntry("momentum_20d", "1.0.0")
@@ -518,7 +517,7 @@ func TestEntryValidateRejectsInvalidUTF8Metadata(t *testing.T) {
 
 func TestEntryValidateRejectsNonCanonicalMetadataWhitespace(t *testing.T) {
 	tests := []struct {
-		name string
+		name   string
 		mutate func(*Entry)
 	}{
 		{"algorithm version leading whitespace", func(e *Entry) { e.AlgorithmVersion = " 1.0.0" }},
@@ -542,7 +541,6 @@ func TestEntryValidateRejectsNonCanonicalMetadataWhitespace(t *testing.T) {
 		})
 	}
 }
-
 
 func TestParseNumericDecimalStringLexicalContract(t *testing.T) {
 	precision := Precision{MaxIntegerDigits: 4, MaxFractionDigits: 4}
