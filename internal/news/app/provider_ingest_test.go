@@ -105,7 +105,7 @@ func TestIngestProviderCandidateRejectsNonPositiveRetentionBeforePolicyLookup(t 
 		_, err = usecase.Execute(context.Background(), IngestProviderCandidateRequest{
 			SourceID: "source-1", EndpointID: "endpoint-1", IdempotencyKey: "nonpositive-retention",
 			Candidate: domain.Candidate{ProviderCode: "brave", SourceItemID: "native-1"},
-			Purpose:   domain.PurposeInternalPersonalResearch, ContentKind: domain.ContentSnippet,
+			Purpose: domain.PurposeInternalPersonalResearch, ContentKind: domain.ContentSnippet,
 			StorageMode: domain.StorageTransient, Retention: retention,
 		})
 		if !errors.Is(err, ErrInvalidRequest) || len(repository.observations) != 0 {
