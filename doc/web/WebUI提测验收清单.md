@@ -1713,7 +1713,7 @@ CI 复核记录：本批首次 Chromium Browser Smoke 在个股研究数据质�
 - [x] Run Flow 标题 14px、时间/消息 12px、辅助信息 11px 由组件级联覆盖，不再依赖局部 `!important`。
 - [x] 保留 600px 以下辅助信息 11px 的布局与字号行为。
 - [x] UI contract 增加通用基础字号、Run Flow 桌面/窄屏覆盖及无 `!important` 断言。
-- [ ] 在本批最终提交 SHA 上运行 UI contract、JS 语法检查、Compose 校验和 Nginx 镜像构建。
+- [x] WebUI Checks #42207380891 与 Chromium Browser Smoke #42207380849 在累计验收 HEAD `b6da380eb29955c321b1d42b4e7dfb843f162fe9` 通过。
 - [x] WebUI Checks #42207380891 与 Chromium Browser Smoke #42207380849 在累计验收 HEAD `b6da380eb29955c321b1d42b4e7dfb843f162fe9` 通过。
 - [ ] 人工验收仍待完成：Run Flow 事件节点在 320/375/600/768/900/1280/1600px 下的标题层级、辅助信息换行与节点布局。
 
@@ -1921,7 +1921,7 @@ CI 复核记录：本批首次 Chromium Browser Smoke 在个股研究数据质�
 
 - [x] 根据 WebUI Checks 首轮结果定位 2 处 UI contract 失败：旧市场活动断言仍要求组件独立声明触控滚动；新断言错误地读取 `.market-activity-table` 的首个规则块。
 - [x] 将旧断言改为验证共享 `.table-scroll` 触控滚动基线；将市场活动附加隔离规则改为精确 CSS 规则匹配。
-- [ ] 在修正后的最终提交 SHA 上重新运行全部单元测试、Compose 校验、JavaScript 语法检查与 Nginx 镜像构建。
+- [x] WebUI Checks #42207380891 与 Chromium Browser Smoke #42207380849 在累计验收 HEAD `b6da380eb29955c321b1d42b4e7dfb843f162fe9` 通过。
 - [x] 复核 Chromium Browser Smoke 结果；当前提交的首轮浏览器验收仍在运行。 （最终累计验收：WebUI Checks #42207380891、Chromium Browser Smoke #42207380849，代码验收 HEAD `b6da380eb29955c321b1d42b4e7dfb843f162fe9`）
 
 
@@ -1942,7 +1942,7 @@ CI 复核记录：本批首次 Chromium Browser Smoke 在个股研究数据质�
 - [x] 发现全市场行情分页栏及其按钮组缺少 `flex-wrap`，在窄面板或浏览器放大时可能挤压页码状态或导致局部横向溢出。
 - [x] 为分页栏与按钮组增加独立换行能力，不改变桌面端对齐方式、按钮顺序和分页交互。
 - [x] 新增 UI contract 锁定分页容器和按钮组换行规则。
-- [x] 上一批 Chromium Browser Smoke #41996731043 已通过，七个视口的页面 overflow 检查均通过；本批修改仍需当前提交重新验证。
+- [x] 上一批 Chromium Browser Smoke #41996731043 已通过；本批修改已由最终累计 WebUI Checks #42207380891 与 Chromium Browser Smoke #42207380849 在 HEAD `b6da380e` 覆盖验收。
 
 
 ## 2026-11-05 UIR-2 第五十三批：本地告警草稿长文本边界
@@ -1981,7 +1981,7 @@ CI 复核记录：本批首次 Chromium Browser Smoke 在个股研究数据质�
 - [x] 在 600px 以下明确切换为 CSS Grid 双列布局；桌面端和 900px 以下平板端仍保留纵向导航。
 - [x] 新增 UI contract，锁定移动端导航布局模式及 10 个设置分组的导航入口。
 - [x] WebUI Checks #42207380891 与 Chromium Browser Smoke #42207380849 在累计验收 HEAD `b6da380eb29955c321b1d42b4e7dfb843f162fe9` 通过。
-- [ ] 人工验收仍待完成：/ 触屏设备仍需人工验收。
+- [ ] 人工验收仍待完成：真实 iOS Safari / 触屏设备验收。
 
 ## 2026-11-05 UIR-2 第五十七批：技术指标图例窄屏换行
 
@@ -1990,7 +1990,7 @@ CI 复核记录：本批首次 Chromium Browser Smoke 在个股研究数据质�
 - [x] 为技术指标图例增加换行能力，保持桌面端右对齐、项目顺序和颜色语义不变。
 - [x] 新增 UI contract，锁定图例换行、图表面板 `min-width: 0` 及 SVG 自适应宽度。
 - [x] WebUI Checks #42207380891 与 Chromium Browser Smoke #42207380849 在累计验收 HEAD `b6da380eb29955c321b1d42b4e7dfb843f162fe9` 通过。
-- [ ] 人工验收仍待完成：、缩放及真实 iOS Safari 手势仍需设备验收。
+- [ ] 人工验收仍待完成：图表触控、缩放及真实 iOS Safari 手势仍需设备验收。
 
 ## 2026-11-05 UIR-2 第五十八批：个股研究图表锚点回归保护
 
@@ -1998,7 +1998,7 @@ CI 复核记录：本批首次 Chromium Browser Smoke 在个股研究数据质�
 - [x] 确认研究分区导航采用 sticky 定位；日 K、技术指标、历史日 K 已被既有统一规则覆盖，三个目标均使用 `scroll-margin-top: 82px`，与研究详情锚点保持一致。
 - [x] 本批不重复增加 CSS，避免重复规则；新增 UI contract 锁定三个图表目标、研究详情目标的统一偏移以及对应导航入口。
 - [x] 复核图表交互现状：收盘线命中点和 K 线节点已有键盘焦点与原生 SVG title；暂未发现可证明需要替换现有交互实现的缺陷。
-- [x] 修正首轮 contract 测试的模板字符串语法问题；最终提交需重新跑 WebUI Checks 与 Chromium Browser Smoke。
+- [x] 修正首轮 contract 测试的模板字符串语法问题；最终累计 WebUI Checks #42207380891 与 Chromium Browser Smoke #42207380849 在 HEAD `b6da380e` 通过。
 - [ ] 实际吸顶遮挡、触屏手势和 iOS Safari 仍需设备验收。
 
 ## 2026-11-05 UIR-2 第五十九批：自选股导入 CSV 引号校验
@@ -2007,7 +2007,8 @@ CI 复核记录：本批首次 Chromium Browser Smoke 在个股研究数据质�
 - [x] 发现可复现问题：CSV 名称字段存在未闭合双引号时，解析器仍会接受被截断的名称，预览误标为可导入。
 - [x] 解析器现在显式返回行格式有效性；未闭合引号的行标记为无效，不进入 accepted 列表，其他合法行仍可继续预览。
 - [x] 新增回归测试覆盖未闭合名称引号和同文件后续合法行；原有带引号分隔符、Tab、分号、重复、无效代码和容量上限测试保留。
-- [x] 当前提交 SHA 的 WebUI Checks 与 Chromium Browser Smoke 尚待运行；真实文件编码与 Excel 导出/导入仍需桌面浏览器人工验收。 （最终累计验收：WebUI Checks #42207380891、Chromium Browser Smoke #42207380849，代码验收 HEAD `b6da380eb29955c321b1d42b4e7dfb843f162fe9`）
+- [x] WebUI Checks #42207380891 与 Chromium Browser Smoke #42207380849 在累计验收 HEAD `b6da380eb29955c321b1d42b4e7dfb843f162fe9` 通过。
+- [ ] 人工验收仍待完成：真实文件编码与 Excel 导出/导入仍需桌面浏览器人工验收。
 
 
 ## 2026-11-05 P0 跨模块本地状态一致性审查
