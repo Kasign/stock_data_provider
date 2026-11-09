@@ -69,6 +69,29 @@ func TestRequestFingerprintRejectsDuplicateJSONKeys(t *testing.T) {
 }
 
 
+func TestRequestFingerprintRejectsNonUTCTimestampsBeforeReplay(t *testing.T) {
+	now := time.Date(2026, 11, 6, 10, 0, 0, 0, time.UTC)
+	base := commandAt(now)
+	invalid := []struct {
+		name string
+		mutate func(*CreateRunCommand)
+	}{
+		{name:"zero system_as_of", mutate:func(cmd *CreateRunCommand) { cmd.SystemAsOf = time.Time{} }},
+		{name:"zero deadline_at", mutate:func(cmd *CreateRunCommand) { cmd.DeadlineAt = time.Time{} }},
+		{name:"offset system_as_of", mutate:func(cmd *CreateRunCommand) { cmd.SystemAsOf = cmd.SystemAsOf.In(time.FixedZone("UTC+8", 8*60*60)) }},
+		{name:"offset deadline_at", mutate:func(cmd *CreateRunCommand) { cmd.DeadlineAt = cmd.DeadlineAt.In(time.FixedZone("UTC+8", 8*60*60)) }},
+	}
+	for _, tc := range invalid {
+		t.Run(tc.name, func(t *testing.T) {
+			cmd := base
+			tc.mutate(&cmd)
+			if _, err := RequestFingerprint("caller-a", cmd); err == nil {
+				t.Fatal("invalid timestamp accepted for idempotency fingerprint")
+			}
+		})
+	}
+}
+
 func TestRequestFingerprintCanonicalizesSnapshotSetAndRejectsInvalidRefs(t *testing.T) {
 	now := time.Date(2026, 11, 6, 10, 0, 0, 0, time.UTC)
 	a, b := commandAt(now), commandAt(now)

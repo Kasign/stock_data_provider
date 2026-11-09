@@ -85,6 +85,9 @@ func RequestFingerprint(callerRef string, cmd CreateRunCommand) (string, error) 
 	if strings.TrimSpace(callerRef) == "" {
 		return "", fmt.Errorf("%w: authenticated caller is required", ErrInvalidCommand)
 	}
+	if cmd.SystemAsOf.IsZero() || cmd.DeadlineAt.IsZero() || !isUTC(cmd.SystemAsOf) || !isUTC(cmd.DeadlineAt) {
+		return "", fmt.Errorf("%w: system_as_of and deadline_at must be non-zero UTC timestamps", ErrInvalidCommand)
+	}
 	refs, err := canonicalInputSnapshotRefs(cmd.InputSnapshotRefs, true)
 	if err != nil {
 		return "", err
