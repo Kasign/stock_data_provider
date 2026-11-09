@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	_ "github.com/go-sql-driver/mysql"
+	mysql "github.com/go-sql-driver/mysql"
 
 	platformstorage "example.com/stock-analysis-flow/internal/platform/storage"
 	researchclaim "example.com/stock-analysis-flow/internal/research/claim"
@@ -25,6 +25,13 @@ func openResearchIntegrationDB(t *testing.T) *sql.DB {
 	dsn := os.Getenv("RESEARCH_TEST_MYSQL_DSN")
 	if dsn == "" {
 		t.Skip("RESEARCH_TEST_MYSQL_DSN is not set; skipping MariaDB integration test")
+	}
+	config, err := mysql.ParseDSN(dsn)
+	if err != nil {
+		t.Fatalf("parse RESEARCH_TEST_MYSQL_DSN: %v", err)
+	}
+	if !strings.HasSuffix(strings.ToLower(config.DBName), "_test") {
+		t.Fatalf("RESEARCH_TEST_MYSQL_DSN database %q is unsafe; dedicated database name must end with _test", config.DBName)
 	}
 	db, err := sql.Open("mysql", dsn)
 	if err != nil { t.Fatalf("open MariaDB: %v", err) }
