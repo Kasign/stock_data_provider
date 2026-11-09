@@ -76,3 +76,12 @@
 - 增加统一 nil-able 动态值检测，覆盖各 Provider HTTP Doer、Eastmoney origin map，以及 TCP DialContext；普通非 nil 实现保持兼容。
 - 增加 Tushare 与 Eastmoney 两类 typed nil 回归测试，验证其按缺失出站依赖处理。
 - 未执行构建或测试，留待 integration 统一验收。
+### 2026-11-09：Provider 能力配置与出站装配一致性复核
+
+- 对照 ProviderSettings、hasConfiguredProviderCapability 和 Module.build 的能力注册分支，确认当前 20 项配置能力均纳入“是否存在业务能力”判断，并在模块装配时执行对应接口断言；启用但未实现的能力会明确返回错误，不会静默注册。
+- 对照各 Provider 的出站装配，确认 Tencent 双 K 线出口、Sina/NetEase 分能力出口、TickFlow 认证/公开请求模式和 Eastmoney 能力级 origin 映射均有对应严格校验。
+- 发现并修复 TickFlow 禁用状态下残留认证能力仍要求 API Key 的配置问题。
+- 严格出站依赖检查现已识别 typed nil，避免接口非 nil 表象绕过装配门禁。
+- Dependencies.RequireEgressDependencies 是显式布尔门禁，默认值为 false，以兼容独立部署旧入口；模块化 Root 必须显式设置为 true。Data 分支不代替 Server 修改组合根，Root 实际调用点由 Server 分支验收。
+- BaoStock/Pytdx 的 TCP 受控拨号仍等待 Platform 提供 BoundDialer；当前 Data 保持严格模式 fail-closed，不在本分支实现第二套安全拨号器。
+- 本轮未执行构建、测试或真实 Provider 请求；新增测试源码留待 integration 统一 CI，真实出站验收仍需运行环境证据。
