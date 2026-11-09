@@ -177,6 +177,26 @@ recipient_scope 不是地址，也不是 recipient_ref。建议 MVP 仅允许：
 
 状态变更必须通过 Repository 条件更新/CAS 完成，写入状态版本、reason_code、changed_at 和必要的 evidence_ref。非法迁移返回稳定冲突错误，不静默覆盖。
 
+
+### 4.1 DeliveryRecord 与状态事件的 Go 领域实现
+
+当前 `internal/notification/domain/delivery.go` 实现 DeliveryRecord 的结构校验和纯状态迁移；它不执行数据库写入，也不代替 Repository CAS。
+
+| 字段组 | 来源 | 语义/约束 |
+|---|---|---|
+| Delivery 身份与订阅/渠道/模板/接收目标版本 | 已校验 DeliveryPlan 快照 | 创建后不可变；不从最新配置重新推导历史计划 |
+| payload_fingerprint / plan_fingerprint / delivery_idempotency_key | DeliveryPlan | 复用已验证指纹和稳定幂等键，不在状态迁移时重算 |
+| status / version | Notification 状态机 | version 从 1 开始，每次成功迁移递增；持久化时必须 CAS |
+| attempt_count / max_attempts | 真实渠道调用计数 / 显式 RetryPolicy | 仅真实渠道调用增加 attempt_count；max_attempts 必须显式配置 |
+| next_attempt_at / deadline_at | Retry 调度器 / Delivery 创建时显式截止时间 | 仅 retry_wait 有 next_attempt_at；必须为 UTC 且早于 deadline_at |
+| reason_code / last_error_code | Notification 领域决策 / Adapter 归一化错误 | 稳定机器码，不包含原始异常、响应正文或敏感目标 |
+| provider_message_ref | 渠道明确返回的回执引用 | 不透明引用；accepted/sent 语义不等于最终送达或阅读 |
+| created_at / updated_at | 注入的系统 Clock | RFC3339Nano UTC；状态变更时间不得倒退 |
+
+DeliveryStateEvent 的 version/from/to/changed_at 来自每次状态迁移；evidence_ref 仅来自对账证据；actor_ref/request_id/actor_reason 仅来自经授权的人工命令审计上下文。领域方法返回新快照和事件，不修改原对象；Repository 必须在同一事务中 CAS 更新快照并追加事件。
+
+当前只完成领域模型与纯函数迁移测试；DeliveryAttempt、Repository CAS、租约/fencing 和 Dispatcher 仍属于 NTF-004 后续切片，不能据此宣称 Worker 或投递已实现。
+
 ## 5. Attempt、租约与并发恢复
 
 DeliveryAttempt 是追加式执行历史，至少记录：

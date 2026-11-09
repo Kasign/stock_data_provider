@@ -3,7 +3,8 @@
 - 归属：NTF-001/002/003/004/005/006
 - 对应契约：NTF-CTR-001～003（历史别名 Platform CONTRACT-009/010）；状态以项目级契约目录为准
 - 状态：4 份 Draft 2020-12 Schema 与 6 个代表性 Golden 已校准；Go Draft 2020-12 Envelope/Payload Validator、Golden、非法 Payload、Inbox Fake 幂等/并发、Subscription 与 DeliveryPlan Repository Port/Fake 测试已写入；新增严格 JSON、资源上限边界、DeliveryPlan 写入前双重校验、Subscription Repository append-only/CAS 并发及 Inbox/Subscription/DeliveryPlan 失败注入恢复测试；NTF-002 增加 Template Registry/Renderer 测试及 Subject C0/DEL/C1 控制字符回归（根模块 Test job 被跨模块 Research 源码错误阻断）；NTF-003 增加 Channel Domain/Port/内存 Registry/Fake Adapter 测试；DeliveryPlan 授权策略 tuple 指纹与 GOV-CTR-006 对齐（同一 CI 阻断）；完整 CI Run 42201893234 已通过，覆盖 gofmt/go test/race/vet、go-core、market-data、MariaDB 集成和 Docker build；NTF-CTR-001～003 仍为 pending_evidence；不要求个人 Owner 签字
-- 日期：2026-11-06
+- 日期：2026-11-09
+- NTF-004 增量：已新增 DeliveryRecord/DeliveryStateEvent 领域实现与纯迁移测试；覆盖 queued→sending、sending→skipped 证明要求、unknown 对账证据、retry_wait 截止时间、failed 人工重试审计和 UTC/nullable 字段一致性。当前分支最新全仓 CI 仍在其他模块 gofmt 阶段失败，新增测试尚未获得通过证据。
 - 说明：以下均为合成数据与测试场景，不代表已有实现或真实渠道能力。
 
 ## 1. Fixture 原则
@@ -71,6 +72,8 @@
 | delivery_invalid_transition | 非法状态迁移 | CAS/领域错误；原状态不变 |
 
 ## 5. 幂等与并发 Fixture
+
+NTF-004 Delivery 领域迁移测试已覆盖：状态版本递增且原对象不变、sending 未证明未发送不得转 skipped、sent 终态不可回退、unknown 无 evidence_ref 不得收敛、retry_wait 时间必须早于 deadline、failed 人工重试必须携带授权结果和审计上下文、非 UTC 时间与不匹配的 next_attempt_at 必须拒绝。
 
 - `subscription_append_version_concurrent.test`：多个并发更新竞争同一 expected_version，只允许一个版本追加成功，其他返回 version conflict。
 - `subscription_append_only.test`：更新生成新版本，旧版本保持不变；读取副本的修改不得反向污染 Repository。

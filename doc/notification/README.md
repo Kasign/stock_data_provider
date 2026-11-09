@@ -3,9 +3,9 @@
 - 目标分支：`feat/notification`
 - 代码目录：`internal/notification/**`
 - 任务前缀：NTF
-- 当前阶段：NTF-001 Fake/Domain 测试已覆盖并发与失败恢复，真实 Repository Adapter 留待 NTF-006；NTF-002 Renderer 核心已实现；NTF-003 已建立 Channel Domain/Port/精确版本内存 Registry 与 Fake Adapter 测试，真实身份目录解析和具体渠道 Adapter 尚未实现。
+- 当前阶段：NTF-001 Fake/Domain 测试已覆盖并发与失败恢复，真实 Repository Adapter 留待 NTF-006；NTF-002 Renderer 核心已实现；NTF-003 已建立 Channel Domain/Port/精确版本内存 Registry 与 Fake Adapter 测试；NTF-004 已开始 Delivery 状态领域模型与迁移测试，Dispatcher/Worker/CAS Repository 尚未实现。
 - 当前代码事实：`internal/notification/domain`、`schema`、`application` 和 `template` 已建立；ChannelConfigSnapshot、ChannelAdapter/Resolver、RecipientResolver Port 与内存 ChannelRegistry 已建立；InboxRepository、SubscriptionRepository、DeliveryPlanRepository 已定义 Port。当前有 Inbox/Subscription/DeliveryPlan Fake Repository 测试覆盖并发、CAS、不可变版本和失败后无部分写入/重试；DeliveryPlan 授权策略版本按 GOV-CTR-006 完整 tuple 保存并参与指纹，没有真实持久化 Adapter。Event/Template 资源限制均显式配置，项目建议值尚未冻结，不在模块内设隐式默认值。Template Registry 仅提供内存不可变版本和 Renderer 核心，尚无生产模板内容或持久化 Adapter。旧 Python/Web 通知能力不属于 Go Notification Domain。
-- 契约证据：NTF-CTR-001～003 均为 `pending_evidence`。4 份 Schema、6 个 Golden 已校准；上一轮完整 CI Run 42201893234 已通过；当前 HEAD `84133201eb4d0314875a782f1213362e78dcbe13` 的根模块 Test job 仍被 integration 同步带入的 `internal/research/context/validate.go` 语法错误及 `internal/research/evidence/authorization.go` 非法 NUL 字符阻断；未修改其他模块，Notification 新增测试尚未获得本轮根模块 Test job 通过证据。NTF-CTR-001～003 仍因跨模块/真实 Adapter 证据不足保持 pending_evidence。
+- 契约证据：NTF-CTR-001～003 均为 `pending_evidence`。4 份 Schema、6 个 Golden 已校准；上一轮完整 CI Run 42201893234 已通过；当前分支 HEAD `eed8b817c7872cb1f07106fc901f15024e93e074` 对应 Run 42208589747 的根模块 Test job 在 gofmt 阶段被其他模块的 `internal/research/context/validate.go` 语法错误及 `internal/research/evidence/authorization.go` 非法 NUL 字符阻断；未修改其他模块，Delivery 状态迁移新增测试尚未获得通过证据。NTF-CTR-001～003 仍因跨模块/真实 Adapter 证据不足保持 pending_evidence。
 
 Notification 是独立通知业务模块，负责事件接收、Subscription、Template、Channel、Dispatcher、Delivery、Attempt、幂等、重试和投递诊断。不计算业务告警条件，不依赖 Researchflow 内部实现。
 
@@ -30,8 +30,8 @@ Notification 是独立通知业务模块，负责事件接收、Subscription、T
 | Go Notification Domain/Application | 部分实现 | EventEnvelope、JCS Fingerprint、Envelope/Payload Validator、EventReceiver、Subscription/DeliveryPlan 领域校验已实现；真实 Repository Adapter 尚未实现 |
 | Inbox/Subscription/DeliveryPlan | 部分实现 | 双唯一 Inbox Port/Fake、Subscription append-only Repository Port/Fake（版本追加、CAS 并发）与 DeliveryPlan 唯一性 Port/Fake、完整授权策略 tuple 指纹冲突测试已实现；真实持久化和 fan-out 事务仍待实现 |
 | Template/Renderer | 部分实现 | 固定版本 Registry、JSON Pointer 标量 allowlist、text/HTML 渲染、HTML 自动转义、CRLF Subject 拒绝和显式资源限制已实现；生产模板内容/持久化尚未实现 |
-| Channel/Dispatcher/Retry | 部分实现 | Channel Domain、精确版本内存 Registry、Adapter/RecipientResolver Port 与 Fake Adapter 测试已建立；无真实渠道 Adapter，Dispatcher/Retry 尚未开始 |
-| Repository/Migration | 未开始 | Platform Storage 已有通用基础能力；Notification 专属模型/迁移尚无 |
+| Channel/Dispatcher/Retry | 部分实现 | Channel Domain、精确版本内存 Registry、Adapter/RecipientResolver Port 与 Fake Adapter 测试已建立；Delivery 状态领域模型/迁移测试已编写但未通过本轮 CI；CAS Repository、Dispatcher/Worker、Attempt 和 Retry 尚未实现 |
+| Repository/Migration | 未开始 | Platform Storage 已有连接/事务/Migration Runner 原语；Notification 专属 Repository、表模型和迁移尚无 |
 | 三生产方事件接入 | 未验收 | 仅按各生产方契约和真实测试证据逐项开放 |
 | 真实渠道与 L3 集成 | 未开始/不可比较 | 无真实凭据、回执、MariaDB/Worker 集成证据时不得标记通过 |
 
