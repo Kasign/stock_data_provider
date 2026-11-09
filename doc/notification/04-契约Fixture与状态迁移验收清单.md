@@ -340,3 +340,11 @@ Run `42602399686` 对应 HEAD `8d08cf07a651efcd42a514f3dafd94d659f21f97`。`Test
 - [x] 增加 MariaDB 集成测试代码：重复创建、内容冲突、新版本、读取、Map 副本隔离。
 - [ ] Notification 包测试实际执行通过；当前 CI 根模块可能被其他模块 gofmt 阻断，需以本分支最新 Run 为准。
 - [ ] 真实 MariaDB L3：需配置 `NOTIFICATION_MARIADB_TEST_DSN` 并执行集成测试；测试代码存在不等于验收通过。
+
+
+### 模板 Repository 与 Registry 装载、最新 CI 证据
+
+- Registry 新增 `LoadFromRepository`：调用方必须显式指定 template_id/version；不回退 latest；先校验持久化 Digest 与定义重算结果一致，再注册到内存 Renderer，避免不一致内容先进入 Registry。
+- 新增 Fake Repository 测试，覆盖固定版本装载、缺失版本不回退、Digest 不一致拒绝。
+- Go workflow Run `42608383500`（HEAD `1460cd8`）：`Test go-core` 通过，但该 Job 不覆盖 Notification；根模块 `Test .` 仍在 gofmt 门禁失败，日志未列出 `internal/notification/**` 格式差异，因此根模块单测/Race/vet 未执行；MariaDB 集成 Job skipped，真实 DSN L3 未执行。
+- 当前结论：模板存储与装载代码已提交，Notification gofmt 门禁无本模块差异；不能据此宣称 Notification 包测试或 MariaDB 集成通过。
