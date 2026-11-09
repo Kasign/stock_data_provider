@@ -397,3 +397,34 @@ func TestResponsesAdapterBlocksOptionalFeaturesWithoutCapabilityEvidence(t *test
 		})
 	}
 }
+
+
+// TestResponsesAdapterRejectsUnsupportedStrictSchemaBeforeDispatch 验证不支持的 strict Schema 在网络派发前被拒绝。
+func TestResponsesAdapterRejectsUnsupportedStrictSchemaBeforeDispatch(t *testing.T) {
+	provider, secret, capabilities, clock := adapterTestConfig()
+	capabilities.Values[CapabilityStructuredOutput] = CapabilitySupported
+	request := validResponsesRequest()
+	request.ProviderID = provider.ProviderID
+	request.ResponseSchema = &JSONSchemaSpec{
+		Name: "summary", Strict: true,
+		SchemaJSON: json.RawMessage(`{"type":"object","properties":{},"required":[],"additionalProperties":false,"allOf":[]}`),
+	}
+	dispatched := false
+	adapter, err := NewResponsesAdapter(provider, secret, doerFunc(func(*http.Request) (*http.Response, error) {
+		dispatched = true
+		return nil, errors.New("must not dispatch")
+	}), capabilities, clock)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = adapter.Generate(context.Background(), request)
+	var adapterErr *AdapterError
+	if !errors.As(err, &adapterErr) || adapterErr.Info.Kind != ErrorInvalidRequest ||
+		adapterErr.Info.StableCode != "llm.responses.unsupported_schema_subset" {
+		t.Fatalf("unsupported strict schema must map to a stable invalid_request: %v", err)
+	}
+	if dispatched {
+		t.Fatal("unsupported strict schema must be rejected before HTTP dispatch")
+	}
+}

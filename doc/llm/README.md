@@ -4,7 +4,7 @@
 - 代码：`internal/llm/**`
 - 任务前缀：LLM
 - 状态：LLM-002 DTO/Provider Port、Responses JSON Mapper/Parser、非流式 HTTP Adapter、Clock/Deadline 注入、纯 SSE Parser、公共 DTO Draft 2020-12 Schema 已实现；整体仍待 LLM 包级构建验证
-- 最近代码提交：`fdd43b81ebc1fc6cf223e8892dd2d7fec2e88e43`
+- 最近代码提交：`3fd92d8429519cfd6c2f2248af599cd75c56057e`
 - LLM-001：静态协议盘点完成；在线真实端点验收未执行
 - LLM-002：DTO/Provider Port、Responses JSON 请求映射/响应解析、非流式 HTTP Adapter 及对应单测已实现，待 gofmt/go test；Platform Fault 映射、Draft 2020-12 Schema 编译及 DTO Schema Contract Test 均待构建验证；JSON/SSE Golden 已扩展覆盖拒绝、未知项、Usage 边界、终态和序号异常；新增完整 Request Mapper Golden，覆盖 sampling、reasoning、strict schema、function tool 与 tool_choice；新增 Adapter 能力门禁测试，验证可选能力证据缺失时不会派发请求；已补充 SSE callback error（普通事件中断、终态回调拒绝）、CRLF/multiline data、事件数量、单事件累计字节、总输入字节上限、终态后事件拒绝回归测试，以及 Structured Output 非法 JSON/空输出/incomplete 边界测试（待执行）；完整矩阵仍待执行；Platform 受控流读取尚未提供；local_validation_only、Usage 诊断码、Capability verification_method 与 capability_ttl_ms 已纳入 Mapper/DTO
 
@@ -62,3 +62,5 @@ internal/llm/
 - `local_validation_only=true` 不发送上游 Schema，因此跳过 Responses strict 子集门禁，但仍执行本地完整 Schema 编译与响应校验。
 - 来源：OpenAI Structured Outputs 文档 https://developers.openai.com/api/docs/guides/structured-outputs （Supported schemas / limitations）。
 - 当前仅有静态契约测试，尚未完成本地 Gateway 对该子集的 E2E 验证；细分模型能力继续以 capability evidence 为准。
+
+- 另补充结构预算边界测试及 Adapter 派发前拒绝测试；当前仍等待 CI 执行包级测试。
