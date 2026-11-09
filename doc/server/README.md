@@ -271,7 +271,7 @@ Server 不重写模块业务 Handler 的校验和领域错误，不在路由层�
 
 ### SRV-001：旧系统和启动入口审计
 
-- 状态：进行中（已完成第一轮启动链路与核心资源审计，剩余路由/迁移/部署引用清点）
+- 状态：完成（旧入口、路由、资源生命周期、旧 Migration、部署边界及模块接入就绪度已形成迁移归属记录）
 - 工作内容：
   - 审计 `cmd/analysis-api/main.go`、`internal/service/wiring.go`、旧 HTTP API、Task Queue、Storage、Market Data Adapter、Python Adapter。
   - 绘制当前启动依赖和资源生命周期。
@@ -285,11 +285,38 @@ Server 不重写模块业务 Handler 的校验和领域错误，不在路由层�
 
 ### SRV-002：Root Bootstrap
 
-- 状态：未开始（按 SRV-001 完成情况启动；入口决议已明确）
+- 状态：进行中（第一阶段已将运行装配迁入 internal/server/bootstrap；后续拆分配置、Platform 资源和模块注册）
 - 前置：SRV-001；复用现有 `cmd/analysis-api/main.go`，不新增第二进程入口
 - 工作内容：将现有入口逐步收敛为参数/信号处理和 Bootstrap 委托；在 `internal/server/bootstrap` 实现统一配置装载、Platform 资源构造、模块装配、启动和错误返回。先抽离可验证的最小垂直切片，不一次性重写旧启动链路。
 - 交付物：由现有 `cmd/analysis-api` 启动的 Root Server Bootstrap；旧入口仍可在迁移阶段兼容运行。
 - 验收：配置错误可诊断；启动失败返回非零退出；入口不包含业务逻辑；有启动和失败路径测试。
+### SRV-001 审计收敛记录（基于 HEAD `c33128a2c3e0305f00e2b94f3b340ae6e495b5db`）
+
+本轮已完成旧启动链路的职责归属审计。结论是：旧 Analysis 链路暂时保留，由 SRV-002 建立 Bootstrap 边界；后续按模块公开契约逐项替换，不把旧实现伪装成新模块。
+
+| 旧职责/位置 | 当前实际行为 | 归属与处置 |
+|---|---|---|
+| `cmd/analysis-api/main.go` | 加载 .env、读取 DB/Redis/Market Data 配置、创建 Store/Runner/Task Queue/HTTP API、监听 HTTP、处理 SIGTERM | 唯一入口保留；SRV-002 起只负责信号和 Bootstrap 委托 |
+| `internal/platform/httpapi/server.go` | 注册 `GET /healthz`、`GET /readyz`、`GET /`、`POST /api/v1/analysis/runs`、`GET /api/v1/analysis/runs/{run_id}[ /events ]`、`POST /api/v1/analysis/tasks`、`GET /api/v1/analysis/tasks/{task_id}[ /events ]`；Handler 链为 Request ID、请求日志、Recover | 属于旧 Analysis Transport；当前未看到认证中间件挂载。迁移时按模块归属拆 Handler，不能直接升级为通用 Router |
+| `internal/service/wiring.go` | 构造旧 Analysis Runner 及其策略、风险、行情采集、持久化依赖 | 旧 Analysis 领域装配；在新模块公开 Port 可用前保留，不能搬进 Server 作为长期领域实现 |
+| `internal/platform/taskqueue` | MariaDB 持久化旧 Analysis Task，负责领取、恢复、执行和停止 Worker；直接依赖旧 Analysis Domain | 旧 Analysis 兼容组件；不作为 Researchflow Worker、Platform 通用队列或 Outbox Relay |
+| `internal/adapters/storage/mysqlredis` | 创建 MariaDB/Redis 连接；可按 `DB_AUTO_MIGRATE` 执行旧 Analysis DDL；检查 `analysis_runs`、`analysis_stage_events`、`analysis_snapshots`、`analysis_tasks` 四张表 | 旧 Analysis Storage Adapter。迁移期间保留；不得把四张旧表混入模块 Migration Registry |
+| `internal/adapters/marketdata` | 旧 Analysis 通过受控 Go Market Data Client 访问独立 Data 服务 | Data 迁移门禁通过前保留 Remote Adapter；Server 不接管 Provider/Repository |
+| `internal/adapters/pythonapi` | 历史 Python 数据适配器仍在代码树中 | 作为待退役兼容代码，不进入新 Bootstrap 的默认依赖 |
+| `docker-compose.yml`、`Dockerfile` | 当前根服务仍构建 `cmd/analysis-api`；Market Data 独立部署 | SRV-011 再切换；本阶段不改部署拓扑 |
+
+模块接入就绪度按当前代码树作保守判断：
+
+- News：已有 Application Port、Source/Storage Adapter、模块 Migration 和 Diagnostics；尚不能仅凭这些认定完整 HTTP/Worker 生命周期已可由 Server 装配。
+- Research：已有 Application、公开 Port 相关实现、Storage Migration、Outbox 和诊断；Outbox Dispatcher 接入仍受 SRV-008 所有权契约约束。
+- Researchflow：已有 CreateRun Application 用例；当前不能认定持久化、Worker 和完整模块生命周期均已就绪。
+- Quant：当前树中尚未核实到可直接供 Server 使用的完整 Application Facade/Storage/Worker 接入面。
+- LLM：有协议/适配器实现；当前尚未核实到可直接装配的完整模块生命周期入口。
+- Notification：已有 Application Ports、Storage Migration、投递/重试用例；Dispatcher/Worker 的完整公开装配入口仍需后续核实。
+- Data：仍是独立服务迁移阶段；未通过模块化单体迁移门禁前不接入 Root Server。
+
+审计边界：以上结论只确认 Server 当前入口、旧链路和本轮可见模块接入面，不替代各模块自己的功能验收；模块未就绪项在 SRV-004/SRV-008/SRV-010 中按依赖条件推进。旧 API 当前未见认证中间件挂载，这是部署暴露面风险，必须在 SRV-005 接入统一认证策略前保持网络边界受控。
+
 ### SRV-003：Platform 资源装配
 
 - 状态：未开始
@@ -463,8 +490,8 @@ Server 层完成不是“服务能够启动”这么简单。至少同时满足�
 
 | 任务 | 状态 | 说明 |
 |---|---|---|
-| SRV-001 | 进行中 | 已审计启动入口、旧 Runner 装配、HTTP API、Request ID、HTTP Client、旧 Task Queue、Storage、Market Data/Python Adapter 和 Compose；剩余路由/迁移/模块装配/部署引用清点 |
-| SRV-002 | 未开始 | 入口决议已明确；等待 SRV-001 审计收敛后，将现有 cmd/analysis-api 委托给 Root Bootstrap |
+| SRV-001 | 完成 | 已记录旧入口、路由与认证现状、旧 Analysis Migration 四表、Worker/Storage 生命周期、部署边界及各模块接入就绪度；详细见 12.3 节 |
+| SRV-002 | 进行中 | 已创建 internal/server/bootstrap 并将旧运行装配从 main.go 移出；下一步继续将配置与 Platform 资源装配解耦 |
 | SRV-003 | 未开始 | 尚未建立 Server 统一资源装配 |
 | SRV-004 | 未开始 | 等待各模块公开装配入口 |
 | SRV-005 | 未开始 | 旧 HTTP API 尚待迁移映射 |
@@ -477,3 +504,12 @@ Server 层完成不是“服务能够启动”这么简单。至少同时满足�
 | SRV-012 | 未开始 | 等待新链路验收 |
 
 > 状态说明以本文件编写时已检查的 Server 代码基线为起点。每次继续实施前，必须重新核对当前分支 HEAD 和对应模块契约，不得把历史状态当作实时状态。
+
+
+### 12.3 SRV-002 第一阶段实施记录（HEAD 待本次提交生成）
+
+- 新增 `internal/server/bootstrap/bootstrap.go`，将 .env/配置读取、旧 Analysis Runner、旧 Task Queue、旧 HTTP API 和 HTTP Server 生命周期集中到 Bootstrap。
+- `cmd/analysis-api/main.go` 收敛为默认日志、SIGINT/SIGTERM 上下文和 Bootstrap 委托；未新增第二个进程入口。
+- Bootstrap 使用父 Context 控制运行；收到取消后先 Shutdown HTTP Server，再按 defer 顺序关闭旧 Worker 和 Store。
+- 旧 `mysqlredis.Store` 仍负责旧 Analysis 四表 Migration/Schema 检查；本阶段没有把旧 DDL 错误地并入 Platform Migration Runner。
+- 这只是 Root Bootstrap 的迁移边界，不代表 Platform 资源容器、模块 Registry、统一 Router 或新模块已接入完成。
