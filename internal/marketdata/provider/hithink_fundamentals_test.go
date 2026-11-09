@@ -232,3 +232,60 @@ func TestHithinkFundamentalsReportsFieldLevelParseIssues(t *testing.T) {
 		}
 	}
 }
+
+
+func TestHithinkFundamentalStatementReportsInvalidPeriodAndPublicationEvidence(t *testing.T) {
+	location, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil {
+		t.Fatal(err)
+	}
+	periodEnd := time.Date(2026, time.June, 30, 0, 0, 0, 0, location).UnixMilli()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/api/a-share/financials/indicators":
+			_, _ = fmt.Fprint(w, `{"code":0,"data":{"thscode":"600519.SH","report":"2026-2","abilities":[]}}`)
+		case "/api/a-share/financials/income-statements":
+			_ = json.NewEncoder(w).Encode(map[string]any{"code": 0, "data": map[string]any{"item": []map[string]any{
+				{"thscode": "600519.SH", "period_end_ms": "not-a-timestamp", "report_date_ms": nil, "operating_income": 100.0},
+				{"thscode": "600519.SH", "period_end_ms": periodEnd, "report_date_ms": nil, "operating_income": 200.0},
+			}}})
+		case "/api/a-share/financials/balance-sheets", "/api/a-share/financials/cash-flow-statements":
+			_, _ = fmt.Fprint(w, `{"code":0,"data":{"item":[]}}`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	reporter := validation.NewReporter(validation.DefaultMaxIssues)
+	ctx := validation.WithReporter(context.Background(), reporter)
+	got, err := NewHithinkConfigured(3*time.Second, server.URL, "unit-test-key").FetchFundamentals(ctx, "600519.SH", 2026, 2)
+	if err != nil {
+		t.Fatalf("invalid optional statement evidence should preserve partial snapshot: %v", err)
+	}
+	var income *model.FundamentalSection
+	for i := range got.Sections {
+		if got.Sections[i].Category == "income_statement" {
+			income = &got.Sections[i]
+			break
+		}
+	}
+	if income == nil || !income.HasData || income.QualityStatus != model.QualityDegraded {
+		t.Fatalf("statement should retain valid metric but degrade missing publication evidence: %+v", income)
+	}
+	foundPeriod, foundPublication := false, false
+	for _, issue := range reporter.Snapshot().Issues {
+		if issue.ProviderField == "period_end_ms" && issue.Field == "report_date" &&
+			issue.Code == "invalid_date" && issue.RowIndex != nil && *issue.RowIndex == 0 {
+			foundPeriod = true
+		}
+		if issue.ProviderField == "report_date_ms" && issue.Field == "publication_date" &&
+			issue.Code == "missing_value" && issue.RowIndex != nil && *issue.RowIndex == 1 {
+			foundPublication = true
+		}
+	}
+	if !foundPeriod || !foundPublication {
+		t.Fatalf("expected field-level period/publication issues, got %+v", reporter.Snapshot().Issues)
+	}
+}
