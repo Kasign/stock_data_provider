@@ -61,13 +61,13 @@ func TestSortResearchflowStagesUsesResolvedTemplateOrder(t *testing.T) {
 func TestMySQLRunRepositoryValidatesResolvedSnapshotIdentity(t *testing.T) {
 	repository := &MySQLRunRepository{db: &sql.DB{}}
 	record := application.CreateRunRecord{
-		Scope: application.IdempotencyScope{CallerRef: "caller-1", Operation: "CreateRun", Key: "key-1"},
+		Scope:       application.IdempotencyScope{CallerRef: "caller-1", Operation: "CreateRun", Key: "key-1"},
 		Fingerprint: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 		Run: domain.Run{
 			Ref: "run-1", SchemaVersion: "v1", Status: domain.RunCreated, Version: 1,
 			TemplateRef: "template-1", TemplateVersion: "v1",
 			TemplateFingerprint: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-			CorrelationID: "corr-1",
+			CorrelationID:       "corr-1",
 		},
 		Parameters: json.RawMessage(`{}`),
 		ResolvedTemplate: template.ResolvedTemplate{
