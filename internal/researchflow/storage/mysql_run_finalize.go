@@ -250,7 +250,7 @@ func (r *MySQLRunRepository) FinalizeDeadlineRun(ctx context.Context, record app
 	})
 }
 
- 
+
 // LoadRunFinalizationSnapshot shares the immutable snapshot reconstruction used
 // by deadline finalization; normal finalization applies a stricter Run-state gate.
 func (r *MySQLRunRepository) LoadRunFinalizationSnapshot(ctx context.Context, runRef string) (application.DeadlineFinalizationSnapshot, error) {
