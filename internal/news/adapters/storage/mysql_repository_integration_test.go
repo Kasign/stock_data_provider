@@ -791,6 +791,15 @@ func TestObservationRetentionPurgeIntegration(t *testing.T) {
 			t.Fatalf("observation tombstone row count=%d, want 1", retainedRows)
 		}
 	}
+	pitRecord, err := repository.GetEvidenceVersionAt(ctx, app.GetEvidenceRequest{
+		NewsID: referenceNewsID, VersionID: referenceVersionID, SystemAsOf: now.Add(time.Minute),
+	})
+	if err != nil {
+		t.Fatalf("PIT query after observation payload purge: %v", err)
+	}
+	if pitRecord.Observation.PayloadPurgedAt == nil || pitRecord.Observation.Candidate.Title != "" {
+		t.Fatalf("PIT query disclosed a purged candidate payload: %+v", pitRecord.Observation)
+	}
 	var retainedVersionRows int
 	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM news_item_versions WHERE version_id = ? AND observation_id = ?", referenceVersionID, observations[0].ID).Scan(&retainedVersionRows); err != nil {
 		t.Fatal(err)
