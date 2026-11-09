@@ -133,6 +133,9 @@ func TestMariaDBClaimAttemptLeaseAndFencing(t *testing.T) {
 	if _, err := db.ExecContext(ctx, `UPDATE researchflow_attempts SET lease_expires_at = ? WHERE attempt_ref = ?`, expired, first.Ref); err != nil {
 		t.Fatalf("expire first lease: %v", err)
 	}
+	if _, err := repository.RenewAttemptLease(ctx, runRef, stageRef, first.Ref, "worker-a", first.FencingToken, time.Minute); !errors.Is(err, ErrAttemptLeaseHeld) {
+		t.Fatalf("expired lease renewal error=%v, want ErrAttemptLeaseHeld", err)
+	}
 	second, replayed, err := repository.ClaimAttempt(ctx, runRef, stageRef, "claim-attempt-2-"+suffix, "worker-b", time.Minute, 3)
 	if err != nil || replayed {
 		t.Fatalf("reclaim replayed=%v err=%v", replayed, err)
