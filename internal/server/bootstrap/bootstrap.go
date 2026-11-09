@@ -43,18 +43,19 @@ func Run(ctx context.Context) error {
 		return fmt.Errorf("加载 .env 失败: %w", err)
 	}
 
-	processConfig, err := serverconfig.LoadProcess(config.NewEnv())
+	env := config.NewEnv()
+	processConfig, err := serverconfig.LoadProcess(env)
 	if err != nil {
 		return fmt.Errorf("Server 进程配置无效: %w", err)
 	}
 	slog.SetDefault(newJSONLogger(processConfig.LogLevel))
 
 	// 存储与行情配置仍由各自兼容 Adapter 负责解析；Server 不复制其领域配置 Schema。
-	storageCfg, err := mysqlredis.LoadConfigFromEnv()
+	storageCfg, err := mysqlredis.LoadConfig(env)
 	if err != nil {
 		return fmt.Errorf("存储配置无效: %w", err)
 	}
-	marketDataCfg, err := marketdata.ConfigFromEnv()
+	marketDataCfg, err := marketdata.LoadConfig(env)
 	if err != nil {
 		return fmt.Errorf("Go 行情服务配置无效: %w", err)
 	}
