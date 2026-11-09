@@ -720,6 +720,9 @@ func TestObservationRetentionPurgeIntegration(t *testing.T) {
 		ObservedAt: now.Add(-2 * time.Hour), RetentionUntil: now.Add(-time.Hour),
 		IdentityStatus: domain.ObservationUnidentified,
 	}
+	defer func() {
+		_, _ = db.ExecContext(context.Background(), "DELETE FROM news_observations WHERE observation_id = ?", observation.ID)
+	}()
 	if err := repository.WithinIdentityTransaction(ctx, func(tx app.IdentityTransaction) error {
 		_, err := tx.AppendObservation(ctx, observation)
 		return err

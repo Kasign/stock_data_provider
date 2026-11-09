@@ -11,11 +11,11 @@ import (
 )
 
 var (
-	ErrIdentityTransaction            = errors.New("news: identity transaction failed")
-	ErrObservationIdempotencyConflict = errors.New("news: observation idempotency key reused with different payload")
-	ErrObservationPayloadPurged       = errors.New("news: observation payload has been purged")
+	ErrIdentityTransaction               = errors.New("news: identity transaction failed")
+	ErrObservationIdempotencyConflict    = errors.New("news: observation idempotency key reused with different payload")
+	ErrObservationPayloadPurged          = errors.New("news: observation payload has been purged")
 	ErrObservationRetentionResultInvalid = errors.New("news: invalid observation retention purge result")
-	ErrProviderOutputPolicyRequired   = errors.New("news: provider output policy evaluation required")
+	ErrProviderOutputPolicyRequired      = errors.New("news: provider output policy evaluation required")
 )
 
 // IdentityRepository 要求在单一事务中读取身份、创建主体/凭据并追加 Observation。

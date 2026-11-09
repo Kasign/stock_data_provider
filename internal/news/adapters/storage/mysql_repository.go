@@ -688,7 +688,7 @@ func (r *MySQLRepository) PurgeExpiredObservationPayloads(ctx context.Context, n
 		return nil
 	})
 	if err != nil {
-		return ObservationPayloadPurgeResult{}, err
+		return app.ObservationPayloadPurgeResult{}, err
 	}
 	return result, nil
 }
