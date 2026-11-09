@@ -455,7 +455,7 @@ localStorage + storage event 方案能解决“另一个标签页完成写入后
 - [x] 修复公告卡片只显示质量等级、不展示记录级质量原因的问题。
 - [x] 有记录级质量原因时，在对应公告卡片内展示可折叠质量说明；没有原因时不增加空容器。
 - [x] 浏览器测试增加单条公告质量降级及原因可见断言。
-- [ ] WebUI Checks 与 Chromium Browser Smoke 待本批代码提交后验收。
+- [x] WebUI Checks #42207380891 与 Chromium Browser Smoke #42207380849 均通过（验收代码基线 `b6da380eb29955c321b1d42b4e7dfb843f162fe9`）；Browser Smoke 执行 `stock-research-data-browser.mjs`。
 
 验收边界：仅展示数据侧已返回的公告记录级质量原因，不修改公告数据、Provider 或 API 契约。
 
@@ -466,7 +466,7 @@ localStorage + storage event 方案能解决“另一个标签页完成写入后
 - [x] 财务指标分类卡片增加可用时间；快照元数据单独展示可选 `system_observed_at` 系统观测时间；缺失时显示“未提供”，不推算时间，也不与 `fetched_at` 混淆。
 - [x] 所属板块逐条展示质量等级、记录级质量原因、来源、来源版本与记录采集时间；模型未提供源端报告日期字段，不伪造源端日期。
 - [x] 浏览器测试覆盖财务可用时间和板块记录质量降级原因。
-- [ ] WebUI Checks 与 Chromium Browser Smoke 待本批代码提交后验收。
+- [x] WebUI Checks #42207380891 与 Chromium Browser Smoke #42207380849 均通过（验收代码基线 `b6da380eb29955c321b1d42b4e7dfb843f162fe9`）；Browser Smoke 执行 `stock-research-data-browser.mjs`。
 
 验收边界：仅展示数据侧已返回的 `available_at`、`quality_status`、`quality_reasons`，不补造时间或质量原因。
 
@@ -762,13 +762,13 @@ Web 数据中心已接入被动 Provider 运行诊断、主动 Probe、六个诊
 - 每个拆分批次 WebUI Checks、相关 Browser Smoke 通过后再进入下一批。
 
 
-### JSR-1 首批迁移：任务事件状态展示纯函数（待 CI）
+### JSR-1 首批迁移：任务事件状态展示纯函数（已验收）
 
 - [x] 将任务事件状态归一化、中文标签和展示色调从 `app.js` 抽离到无副作用模块 `task-event-format.js`。
 - [x] 保持原有状态映射、未知状态回退、CSS class 和调用参数不变。
 - [x] 增加 Node 单元测试覆盖成功、失败、部分完成、未知状态和空状态。
 - [x] 模块不读取 DOM、全局 state、localStorage 或网络，不引入新的模块依赖。
-- [ ] WebUI Checks 与 Browser Smoke 通过后标记验收完成。
+- [x] WebUI Checks #42207380891 与 Chromium Browser Smoke #42207380849 均通过（验收代码基线 `b6da380eb29955c321b1d42b4e7dfb843f162fe9`）；单元测试执行 `task-event-format.test.mjs`。
 
 迁移边界：本次仅抽离任务事件状态展示，不迁移任务请求、轮询、事件分页或 generation 状态；这些仍留在 app.js，后续 JSR-2 按请求生命周期整体规划迁移。
 
