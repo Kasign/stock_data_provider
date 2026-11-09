@@ -2014,3 +2014,46 @@ Go test suite Run `42207170280` 已全部结束：
 - [ ] 取得脱敏生产数据库 Schema 快照，完成 M0 生产 DDL 对照。
 
 **当前结论：** Data Module 前一 SHA 的测试门禁已通过；本轮发现并修正一处 OpenAPI 默认值错误。CT-05 仍处于进行中，M0 仍为 `in_progress`，M1 不准入。
+
+
+### 2026-11-09：CT-05 参数与日期范围语义审计第二批
+
+代码基线：`3d561d2ca924d2133427fb173e72a97c26ad4e05`。本轮仍限定在 Data Module 的 HTTP Handler、OpenAPI 与测试范围，没有新增接口/字段，也没有修改其他模块。
+
+#### 1. 参数契约差异与修正
+
+- 修正 `/api/v1/market/limit-pools` 的 OpenAPI `limit` 默认值：Handler 默认 100，原文档错误声明 30；当前契约为 1..100、默认 100。
+- 新增关键分页参数的 type/minimum/maximum/default 与枚举核对测试。
+- 市场资金流接口补充结束日期不得晚于当前 Asia/Shanghai 自然日的契约说明，并纳入参数边界文档测试。
+- 批量行情的最多 50 个不重复证券约束已在现有 OpenAPI 描述中明确；Probe 请求体字段/数组约束仍需继续做完整的结构化 Schema 对照。
+
+#### 2. 日期范围边界修正
+
+- 市场情绪历史原校验以日期差比较 366 天，实际会放过 367 个包含首尾的自然日。
+- 市场资金流原校验以日期差比较 2000 天，实际会放过 2001 个包含首尾的自然日。
+- 新增共享 `inclusiveCalendarDays` 计算，两个 Handler 改为按包含首尾的自然日数量校验。
+- 新增边界测试：366/367 天、2000/2001 天，以及两个 Handler 分别拒绝 367 天和 2001 天的 HTTP 负例。
+- 默认 Probe 日线样本测试原先假设“前一自然日一定是交易日”，周末时会错误期待周日样本。现改为按测试 Fake Provider 的工作日返回规则核对样本日期；不改变 Probe 运行时行为。
+
+#### 3. CI 状态与修复记录
+
+- Run `42548174669` 暴露周末日期测试假设问题；属于测试用例的日历假设缺陷，不是 Provider 运行逻辑回归。
+- Run `42548446678` 的 gofmt 已通过，Go Test 因资金流 OpenAPI 说明补充文本未实际写入而失败；已在 `3d561d2c` 补齐文档文本。
+- 当前 SHA `3d561d2c` 对应 Go test suite Run `42548643352`：
+  - Data Module 的 gofmt 与 `go test ./...` 已通过；
+  - race detector 尚在运行，go vet 尚未开始；
+  - Market Data MariaDB migration/PIT persistence success；
+  - News MariaDB integration success，go-core success；
+  - Root `Test .` 仍因其他模块的 gofmt 失败，不属于 Data 范围；
+  - Compose/Docker build 在本次记录时仍在运行。
+- 因此本轮 Data Module 全量门禁尚未最终完成，不将 CT-05 标记为通过。
+
+#### 4. 下一批
+
+- [ ] 确认 Run `42548643352` 的 Data race detector、go vet、Compose/Docker 最终结果。
+- [ ] 完成 35 Operation 剩余参数的 type/format/minimum/maximum/default/enum 全量语义核对。
+- [ ] 对 ProviderProbeRequest 的数组、枚举、日期成对约束和请求体大小补齐结构化契约测试。
+- [ ] 继续核对分页、批量数量、日期边界等 Handler 负例覆盖。
+- [ ] 取得脱敏生产数据库 Schema 快照并完成生产 DDL 对照。
+
+**当前结论：** 已修复一处 OpenAPI 默认值漂移和两处包含端点日期范围 off-by-one；新增测试覆盖对应边界。CT-05 仍进行中，M0 仍为 `in_progress`，M1 不准入。
