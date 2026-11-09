@@ -11,10 +11,10 @@ import (
 )
 
 type requestIDGolden struct {
-	Header               string   `json:"header"`
-	MaxLength            int      `json:"max_length"`
-	GeneratedRandomBytes int      `json:"generated_random_bytes"`
-	TrustIncomingRequiresExplicitOption bool `json:"trust_incoming_requires_explicit_option"`
+	Header                              string   `json:"header"`
+	MaxLength                           int      `json:"max_length"`
+	GeneratedRandomBytes                int      `json:"generated_random_bytes"`
+	TrustIncomingRequiresExplicitOption bool     `json:"trust_incoming_requires_explicit_option"`
 	ValidValues          []string `json:"valid_values"`
 	InvalidValues        []string `json:"invalid_values"`
 	DuplicateValues      []string `json:"duplicate_values"`
