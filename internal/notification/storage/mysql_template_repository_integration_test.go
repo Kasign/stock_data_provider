@@ -35,9 +35,9 @@ func TestNotificationMariaDBTemplateRepositoryIntegration(t *testing.T) {
 	definition := template.Definition{
 		TemplateID: fmt.Sprintf("template-%d", time.Now().UnixNano()), Version: 1,
 		EventType: "quant.risk_decision.changed", SchemaVersion: "1.0.0",
-		Format:            template.FormatText,
-		SubjectTemplate:   "Risk {{.status}}",
-		BodyTemplate:      "Decision: {{.message}}",
+		Format:           template.FormatText,
+		SubjectTemplate:  "Risk {{.status}}",
+		BodyTemplate:     "Decision: {{.message}}",
 		VariableBindings: map[string]string{"status": "/status", "message": "/message"},
 	}
 	digest, duplicate, err := repository.Create(ctx, definition)
