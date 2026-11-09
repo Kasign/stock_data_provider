@@ -1,7 +1,6 @@
 package risk
 
 import (
-	"errors"
 	"fmt"
 	"strings"
 	"unicode/utf8"

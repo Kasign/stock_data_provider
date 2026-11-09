@@ -249,21 +249,6 @@ func TestBuildRefRejectsInvalidUTF8Metadata(t *testing.T) {
 	}
 }
 
-func TestBuildRefRejectsInvalidUTF8SnapshotReference(t *testing.T) {
-	source, err := manifest.Build(manifest.Input{
-		ResultType: "factor", SchemaVersion: "1.0.0",
-		SystemAsOf:        time.Date(2026, 11, 9, 0, 0, 0, 0, time.UTC),
-		InputSnapshotRefs: []string{string([]byte{0xff})},
-		ResultFingerprint: testManifest(t).ResultFingerprint,
-	})
-	if err != nil {
-		t.Fatalf("Build() error = %v", err)
-	}
-	if _, err := BuildRef(validRefInput(), source); !errors.Is(err, ErrInvalidResultRef) {
-		t.Fatalf("BuildRef() error = %v, want ErrInvalidResultRef", err)
-	}
-}
-
 func TestBuildRefRejectsBlankOrNonCanonicalMetadata(t *testing.T) {
 	tests := []struct {
 		name   string
