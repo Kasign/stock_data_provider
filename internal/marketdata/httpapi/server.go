@@ -20,12 +20,38 @@ import (
 	"example.com/stock-analysis-flow/internal/marketdata/service"
 )
 
+// marketDataApplication 是 HTTP Adapter 实际调用的用例集合。
+//
+// 该接口只描述现有 HTTP 路由使用的能力，不暴露 DataService、Provider、Repository
+// 或缓存实现；DataService 当前作为默认实现，测试和后续组合根可注入其他实现。
+type marketDataApplication interface {
+	Ready(context.Context) error
+	Quote(context.Context, string) (*model.Quote, bool, error)
+	DailyBars(context.Context, string, string, string, int, model.AdjustmentBasis) ([]model.DailyBar, bool, []string, error)
+	DailyBarsAsOf(context.Context, string, string, string, int, model.AdjustmentBasis, time.Time) ([]model.DailyBar, []string, error)
+	Bundle(context.Context, string, int, time.Time, bool, model.AdjustmentBasis) (*model.Bundle, error)
+	ProviderDiagnostics() []map[string]any
+	IndexQuotes(context.Context) (*model.IndexQuoteSnapshot, bool, error)
+	MarketBreadth(context.Context) (*model.MarketBreadthSnapshot, bool, error)
+	LimitPool(context.Context, string, string, int) (*model.LimitPoolSnapshot, bool, error)
+	DragonTiger(context.Context, string, int, int) (*model.DragonTigerSnapshot, bool, error)
+	SectorRankingsByMetric(context.Context, string, string, string, int) (*model.SectorRankingSnapshot, bool, error)
+	StockBasic(context.Context, string) (*model.StockBasic, bool, error)
+	SearchStocks(context.Context, string, int) (*model.StockSearchSnapshot, error)
+	StockBoards(context.Context, string) (*model.StockBoardSnapshot, bool, error)
+	ChipDistribution(context.Context, string) (*model.ChipDistribution, bool, error)
+	CapitalFlow(context.Context, string) (*model.CapitalFlow, bool, error)
+	StockAnnouncements(context.Context, string, string, string, int, int) (*model.StockAnnouncementSnapshot, bool, error)
+}
+
+var _ marketDataApplication = (*service.DataService)(nil)
+
 type Server struct {
 	apiKey            string
 	defaultAdjustment string
 	maxBars           int
 	requestTimeout    time.Duration
-	svc               *service.DataService
+	app               marketDataApplication
 	sources           []model.SourceStatus
 	logger            *slog.Logger
 }
@@ -186,10 +212,17 @@ func NewWithCapabilityInterfaces(apiKey, defaultAdjustment string, svc *service.
 			SecurityTradingStatusCapable: securityTradingStatusEnabled[name], FundamentalsCapable: fundamentalsEnabled[name], ValuationCapable: valuationEnabled[name], IndexCatalogCapable: indexCatalogEnabled[name], HistoricalIndexConstituentsCapable: historicalIndexConstituentsEnabled[name], ChipCapable: chipEnabled[name], CapitalFlowCapable: capitalFlowEnabled[name], MarketCapitalFlowCapable: marketCapitalFlowEnabled[name], HotRankingCapable: hotRankingEnabled[name], DragonTigerCapable: dragonTigerEnabled[name], AnnouncementsCapable: announcementsEnabled[name],
 		})
 	}
+	if svc != nil {
+		for _, p := range svc.SupplementProviders() {
+			sources = append(sources, model.SourceStatus{
+				Name: p.Name(), Enabled: true, ChipCapable: true, CapitalFlowCapable: true,
+			})
+		}
+	}
 	if requestTimeout <= 0 {
 		requestTimeout = 110 * time.Second
 	}
-	return &Server{apiKey: apiKey, defaultAdjustment: defaultAdjustment, maxBars: maxBars, requestTimeout: requestTimeout, svc: svc, sources: sources, logger: logger}
+	return &Server{apiKey: apiKey, defaultAdjustment: defaultAdjustment, maxBars: maxBars, requestTimeout: requestTimeout, app: svc, sources: sources, logger: logger}
 }
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
@@ -236,14 +269,14 @@ func (s *Server) live(w http.ResponseWriter, r *http.Request) {
 func (s *Server) ready(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
 	defer cancel()
-	if err := s.svc.Ready(ctx); err != nil {
+	if err := s.app.Ready(ctx); err != nil {
 		writeErr(w, 503, "DEPENDENCY_UNAVAILABLE", "market-data dependencies are not ready", requestID(r))
 		return
 	}
 	writeJSON(w, 200, map[string]any{"status": "ready", "service": "market-data"})
 }
 func (s *Server) quote(w http.ResponseWriter, r *http.Request) {
-	q, cacheHit, err := s.svc.Quote(r.Context(), r.PathValue("symbol"))
+	q, cacheHit, err := s.app.Quote(r.Context(), r.PathValue("symbol"))
 	if err != nil {
 		writeDomainErr(w, err, requestID(r))
 		return
@@ -297,7 +330,7 @@ func (s *Server) bars(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if hasAsOf {
-		bars, warnings, err := s.svc.DailyBarsAsOf(r.Context(), symbol, start, end, limit, basis, asOf)
+		bars, warnings, err := s.app.DailyBarsAsOf(r.Context(), symbol, start, end, limit, basis, asOf)
 		switch {
 		case errors.Is(err, service.ErrDailyBarsAsOfUnavailable):
 			writeErr(w, http.StatusServiceUnavailable, "PIT_STORAGE_UNAVAILABLE", "daily-bar point-in-time storage is not enabled", requestID(r))
@@ -327,7 +360,7 @@ func (s *Server) bars(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	bars, hit, warnings, err := s.svc.DailyBars(r.Context(), symbol, start, end, limit, basis)
+	bars, hit, warnings, err := s.app.DailyBars(r.Context(), symbol, start, end, limit, basis)
 	if err != nil {
 		writeDomainErr(w, err, requestID(r))
 		return
@@ -378,7 +411,7 @@ func (s *Server) bundle(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, 400, "VALIDATION_ERROR", err.Error(), requestID(r))
 		return
 	}
-	b, err := s.svc.Bundle(r.Context(), r.PathValue("symbol"), lookback, asOf, provided, basis)
+	b, err := s.app.Bundle(r.Context(), r.PathValue("symbol"), lookback, asOf, provided, basis)
 	if err != nil {
 		writeDomainErr(w, err, requestID(r))
 		return
@@ -387,11 +420,6 @@ func (s *Server) bundle(w http.ResponseWriter, r *http.Request) {
 }
 func (s *Server) dataSources(w http.ResponseWriter, r *http.Request) {
 	sources := append([]model.SourceStatus(nil), s.sources...)
-	if s.svc != nil {
-		for _, p := range s.svc.SupplementProviders() {
-			sources = append(sources, model.SourceStatus{Name: p.Name(), Enabled: true, ChipCapable: true, CapitalFlowCapable: true})
-		}
-	}
 	sort.Slice(sources, func(i, j int) bool { return sources[i].Name < sources[j].Name })
 	writeJSON(w, 200, map[string]any{"sources": sources, "normalization_version": normalize.Version})
 }
@@ -403,14 +431,14 @@ func (s *Server) dataSourceDiagnostics(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"items":         s.svc.ProviderDiagnostics(),
+		"items":         s.app.ProviderDiagnostics(),
 		"scope":         []string{"quote", "daily_bars"},
 		"observed_from": "in_process_circuit_breaker",
 	})
 }
 
 func (s *Server) indexQuotes(w http.ResponseWriter, r *http.Request) {
-	snapshot, cacheHit, err := s.svc.IndexQuotes(r.Context())
+	snapshot, cacheHit, err := s.app.IndexQuotes(r.Context())
 	if err != nil {
 		writeDomainErr(w, err, requestID(r))
 		return
@@ -456,7 +484,7 @@ func (s *Server) sectorRankings(w http.ResponseWriter, r *http.Request) {
 		}
 		limit = parsed
 	}
-	snapshot, cacheHit, err := s.svc.SectorRankingsByMetric(r.Context(), category, sortBy, direction, limit)
+	snapshot, cacheHit, err := s.app.SectorRankingsByMetric(r.Context(), category, sortBy, direction, limit)
 	if err != nil {
 		writeDomainErr(w, err, requestID(r))
 		return
@@ -470,7 +498,7 @@ func (s *Server) sectorRankings(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) marketBreadth(w http.ResponseWriter, r *http.Request) {
-	snapshot, cacheHit, err := s.svc.MarketBreadth(r.Context())
+	snapshot, cacheHit, err := s.app.MarketBreadth(r.Context())
 	if err != nil {
 		writeDomainErr(w, err, requestID(r))
 		return
@@ -508,7 +536,7 @@ func (s *Server) limitPool(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "VALIDATION_ERROR", "type must be up, down or broken", requestID(r))
 		return
 	}
-	snapshot, cacheHit, err := s.svc.LimitPool(r.Context(), poolType, date, limit)
+	snapshot, cacheHit, err := s.app.LimitPool(r.Context(), poolType, date, limit)
 	if err != nil {
 		writeDomainErr(w, err, requestID(r))
 		return
@@ -547,7 +575,7 @@ func (s *Server) dragonTiger(w http.ResponseWriter, r *http.Request) {
 		}
 		pageSize = n
 	}
-	item, hit, err := s.svc.DragonTiger(r.Context(), date, page, pageSize)
+	item, hit, err := s.app.DragonTiger(r.Context(), date, page, pageSize)
 	if err != nil {
 		writeDomainErr(w, err, requestID(r))
 		return
@@ -575,7 +603,7 @@ func (s *Server) searchStocks(w http.ResponseWriter, r *http.Request) {
 		}
 		limit = parsed
 	}
-	snapshot, err := s.svc.SearchStocks(r.Context(), query, limit)
+	snapshot, err := s.app.SearchStocks(r.Context(), query, limit)
 	if err != nil {
 		writeDomainErr(w, err, requestID(r))
 		return
@@ -588,7 +616,7 @@ func (s *Server) searchStocks(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) stockBasic(w http.ResponseWriter, r *http.Request) {
-	item, hit, err := s.svc.StockBasic(r.Context(), r.PathValue("symbol"))
+	item, hit, err := s.app.StockBasic(r.Context(), r.PathValue("symbol"))
 	if err != nil {
 		writeDomainErr(w, err, requestID(r))
 		return
@@ -622,7 +650,7 @@ func (s *Server) stockAnnouncements(w http.ResponseWriter, r *http.Request) {
 		}
 		pageSize = n
 	}
-	snapshot, cacheHit, err := s.svc.StockAnnouncements(r.Context(), r.PathValue("symbol"), startDate, endDate, page, pageSize)
+	snapshot, cacheHit, err := s.app.StockAnnouncements(r.Context(), r.PathValue("symbol"), startDate, endDate, page, pageSize)
 	if err != nil {
 		writeDomainErr(w, err, requestID(r))
 		return
@@ -632,7 +660,7 @@ func (s *Server) stockAnnouncements(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) stockBoards(w http.ResponseWriter, r *http.Request) {
-	item, hit, err := s.svc.StockBoards(r.Context(), r.PathValue("symbol"))
+	item, hit, err := s.app.StockBoards(r.Context(), r.PathValue("symbol"))
 	if err != nil {
 		writeDomainErr(w, err, requestID(r))
 		return
@@ -642,7 +670,7 @@ func (s *Server) stockBoards(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) chipDistribution(w http.ResponseWriter, r *http.Request) {
-	item, hit, err := s.svc.ChipDistribution(r.Context(), r.PathValue("symbol"))
+	item, hit, err := s.app.ChipDistribution(r.Context(), r.PathValue("symbol"))
 	if err != nil {
 		writeDomainErr(w, err, requestID(r))
 		return
@@ -652,7 +680,7 @@ func (s *Server) chipDistribution(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) capitalFlow(w http.ResponseWriter, r *http.Request) {
-	item, hit, err := s.svc.CapitalFlow(r.Context(), r.PathValue("symbol"))
+	item, hit, err := s.app.CapitalFlow(r.Context(), r.PathValue("symbol"))
 	if err != nil {
 		writeDomainErr(w, err, requestID(r))
 		return
