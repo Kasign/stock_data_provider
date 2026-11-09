@@ -117,6 +117,9 @@ func (u *IngestCandidate) execute(ctx context.Context, sourceID, idempotencyKey 
 			observation.ReasonCode = "news.identity.credential_rejected"
 		} else {
 			credentials = built
+			for i := range credentials {
+				credentials[i].ObservedAt = observedAt
+			}
 		}
 	}
 

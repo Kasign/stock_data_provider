@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"strings"
+	"time"
 )
 
 type IdentifierType string
@@ -27,8 +28,9 @@ type IdentityCredential struct {
 	Type     IdentifierType
 	Value    string
 	Hash     string
-	Status   IdentifierStatus
-	NewsID   string
+	Status     IdentifierStatus
+	NewsID     string
+	ObservedAt time.Time
 }
 
 type IdentityResolutionStatus string

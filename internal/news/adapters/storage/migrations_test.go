@@ -7,8 +7,8 @@ import (
 
 func TestMigrationsDefineNewsOwnedPersistenceSchema(t *testing.T) {
 	migrations := Migrations()
-	if len(migrations) != 3 {
-		t.Fatalf("Migrations() count = %d, want 3", len(migrations))
+	if len(migrations) != 4 {
+		t.Fatalf("Migrations() count = %d, want 4", len(migrations))
 	}
 	if migrations[0].Version != 1 || migrations[1].Version != 2 || migrations[2].Version != 3 ||
 		strings.TrimSpace(migrations[0].Description) == "" ||
@@ -17,7 +17,11 @@ func TestMigrationsDefineNewsOwnedPersistenceSchema(t *testing.T) {
 		t.Fatalf("invalid migration metadata: %#v", migrations)
 	}
 
-	joined := strings.Join(append(append(append([]string{}, migrations[0].Statements...), migrations[1].Statements...), migrations[2].Statements...), "\n")
+	joinedStatements := append([]string{}, migrations[0].Statements...)
+	for _, migration := range migrations[1:] {
+		joinedStatements = append(joinedStatements, migration.Statements...)
+	}
+	joined := strings.Join(joinedStatements, "\n")
 	for _, table := range []string{
 		"news_items",
 		"news_identifiers",
@@ -44,6 +48,12 @@ func TestMigrationsDefineNewsOwnedPersistenceSchema(t *testing.T) {
 			t.Errorf("migration is missing constraint %q", constraint)
 		}
 	}
+	identityHistorySchema := strings.Join(migrations[3].Statements, "\n")
+	for _, fragment := range []string{"KEY idx_news_identifier_history_at", "SELECT source_id, identifier_type, identifier_hash, identifier_status, created_at FROM news_identifiers"} {
+		if !strings.Contains(identityHistorySchema, fragment) {
+			t.Errorf("V4 schema is missing identity history fragment %q", fragment)
+		}
+	}
 	if strings.Contains(joined, "news_schema_migrations") {
 		t.Fatal("News must use the Platform namespace migration ledger")
 	}
@@ -52,7 +62,7 @@ func TestMigrationsDefineNewsOwnedPersistenceSchema(t *testing.T) {
 func TestMigrationsReturnIndependentStatementSlices(t *testing.T) {
 	first := Migrations()
 	second := Migrations()
-	if len(first) == 0 || len(first[0].Statements) == 0 || len(second[0].Statements) == 0 || len(first[2].Statements) == 0 || len(second[2].Statements) == 0 {
+	if len(first) == 0 || len(first[0].Statements) == 0 || len(second[0].Statements) == 0 || len(first[2].Statements) == 0 || len(second[2].Statements) == 0 || len(first[3].Statements) == 0 || len(second[3].Statements) == 0 {
 		t.Fatal("migration statements are empty")
 	}
 	first[2].Statements[0] = "mutated"

@@ -267,6 +267,29 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 		t.Fatalf("concurrent first identity created %d News items, want 1", itemCount)
 	}
 
+	identityCandidates, err := domain.BuildIdentityCredentials(sourceID, "native-item-001", "", domain.SourceURLPolicy{})
+	if err != nil {
+		t.Fatalf("build identity history query: %v", err)
+	}
+	identityBefore := observations[0].ObservedAt.Add(-time.Hour)
+	credentialsBefore, err := repository.ListIdentityCredentialsAt(ctx, sourceID, identityCandidates, identityBefore)
+	if err != nil {
+		t.Fatalf("query identity before creation: %v", err)
+	}
+	if len(credentialsBefore) != 0 {
+		t.Fatalf("identity credential visible before creation: %+v", credentialsBefore)
+	}
+	identityAsOf := time.Now().UTC().Add(time.Second)
+	credentialsAt, err := repository.ListIdentityCredentialsAt(ctx, sourceID, identityCandidates, identityAsOf)
+	if err != nil {
+		t.Fatalf("query identity at system_as_of: %v", err)
+	}
+	if len(credentialsAt) != 1 || credentialsAt[0].NewsID != newsID ||
+		credentialsAt[0].Status != domain.IdentifierActive ||
+		credentialsAt[0].ObservedAt.After(identityAsOf) {
+		t.Fatalf("unexpected identity PIT result: %+v", credentialsAt)
+	}
+
 	replayed, err := ingest.Execute(ctx, sourceID, "news-it-key-0", candidate, domain.SourceURLPolicy{})
 	if err != nil {
 		t.Fatalf("same-payload idempotency replay failed: %v", err)
