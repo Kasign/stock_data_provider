@@ -61,6 +61,11 @@ type responsesSSEWireEvent struct {
 // transport can feed bounded events through the same normalization rules once
 // Platform exposes a controlled streaming transport.
 func ParseResponsesSSE(data []byte, request ModelRequest, clock Clock, onEvent func(ModelEvent) error) (ModelResponse, error) {
+	return ParseResponsesSSEReader(bytes.NewReader(data), request, clock, onEvent)
+}
+
+// ParseResponsesSSEReader 从有界 Reader 增量解析 SSE，并将读取错误原样交给传输适配层分类。
+func ParseResponsesSSEReader(reader io.Reader, request ModelRequest, clock Clock, onEvent func(ModelEvent) error) (ModelResponse, error) {
 	if clock == nil {
 		return ModelResponse{}, errors.New("LLM clock is required")
 	}
@@ -92,14 +97,12 @@ func ParseResponsesSSE(data []byte, request ModelRequest, clock Clock, onEvent f
 	if err := request.ValidateAt(startedAt); err != nil {
 		return fail(adapterError(ErrorInvalidRequest, "llm.sse.invalid_request", false, nil), err)
 	}
-	if len(data) == 0 {
-		return interrupted(streamInterruptedError(), io.EOF)
-	}
-	if len(data) > MaxPayloadBytes {
-		return fail(adapterError(ErrorResourceLimit, "llm.sse.total_too_large", false, nil), ErrInvalidResponsesSSE)
+	if reader == nil {
+		return fail(adapterError(ErrorInvalidRequest, "llm.sse.nil_reader", false, nil), ErrInvalidResponsesSSE)
 	}
 
-	scanner := bufio.NewScanner(bytes.NewReader(data))
+	limitedReader := &io.LimitedReader{R: reader, N: int64(MaxPayloadBytes) + 1}
+	scanner := bufio.NewScanner(limitedReader)
 	scanner.Buffer(make([]byte, 4096), MaxSSELineBytes)
 	eventName := ""
 	eventNameSet := false
@@ -112,6 +115,7 @@ func ParseResponsesSSE(data []byte, request ModelRequest, clock Clock, onEvent f
 	hasPreviousSequence := false
 	sawOutputTextEvent := false
 	var parseErr error
+	var readErr error
 	var terminalErr error
 	functionArguments := make(map[string]sseFunctionArgumentsState)
 
@@ -393,10 +397,13 @@ func ParseResponsesSSE(data []byte, request ModelRequest, clock Clock, onEvent f
 		if strings.Contains(strings.ToLower(scanner.Err().Error()), "token too long") {
 			parseErr = newSSEAdapterError(adapterError(ErrorResourceLimit, "llm.sse.line_too_large", false, nil))
 		} else {
-			parseErr = invalidSSEError("llm.sse.read_failed")
+			readErr = scanner.Err()
 		}
 	}
-	if parseErr == nil {
+	if parseErr == nil && readErr == nil && limitedReader.N == 0 {
+		parseErr = newSSEAdapterError(adapterError(ErrorResourceLimit, "llm.sse.total_too_large", false, nil))
+	}
+	if parseErr == nil && readErr == nil {
 		dispatch()
 		parseErr = terminalErr
 	}
@@ -405,6 +412,12 @@ func ParseResponsesSSE(data []byte, request ModelRequest, clock Clock, onEvent f
 		result.SequenceNumberStatus = SequenceNumberAvailable
 	case 2:
 		result.SequenceNumberStatus = SequenceNumberUnavailable
+	}
+	if readErr != nil {
+		result.Status = ResponseIncomplete
+		result.Error = nil
+		finish()
+		return result, readErr
 	}
 	if parseErr != nil {
 		// 消费者回调错误优先于 AdapterError 分类；部分响应必须保持 incomplete。
