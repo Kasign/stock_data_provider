@@ -320,9 +320,13 @@ func (r *repositoryBase) MarkOutboxPublished(ctx context.Context, eventID, worke
 		deliveredAt.IsZero() || deliveredAt.Location() != time.UTC {
 		return fmt.Errorf("invalid Research Outbox confirmation")
 	}
+	now := r.now().UTC()
+	if now.IsZero() {
+		return fmt.Errorf("repository clock returned zero time")
+	}
 	result, err := r.db.ExecContext(ctx,
 		"UPDATE research_notification_outbox SET delivery_status='published', delivered_at=?, lease_owner=NULL, lease_token=NULL, lease_until=NULL, updated_at=? WHERE event_id=? AND delivery_status='leased' AND lease_owner=? AND lease_token=? AND lease_until>?",
-		formatPIT(deliveredAt), deliveredAt, eventID, workerID, leaseToken, formatPIT(deliveredAt))
+		formatPIT(deliveredAt), deliveredAt, eventID, workerID, leaseToken, formatPIT(now))
 	if err != nil {
 		return fmt.Errorf("confirm Research Outbox delivery: %w", err)
 	}
@@ -356,9 +360,13 @@ func (r *repositoryBase) ScheduleOutboxRetry(ctx context.Context, eventID, worke
 		updatedAt.IsZero() || updatedAt.Location() != time.UTC || !retryAt.After(updatedAt) {
 		return fmt.Errorf("invalid Research Outbox retry parameters")
 	}
+	now := r.now().UTC()
+	if now.IsZero() {
+		return fmt.Errorf("repository clock returned zero time")
+	}
 	result, err := r.db.ExecContext(ctx,
 		"UPDATE research_notification_outbox SET delivery_status='retry_wait', available_at=?, lease_owner=NULL, lease_token=NULL, lease_until=NULL, last_error_code=?, updated_at=? WHERE event_id=? AND delivery_status='leased' AND lease_owner=? AND lease_token=? AND lease_until>?",
-		formatPIT(retryAt), reasonCode, updatedAt, eventID, workerID, leaseToken, formatPIT(updatedAt))
+		formatPIT(retryAt), reasonCode, updatedAt, eventID, workerID, leaseToken, formatPIT(now))
 	if err != nil {
 		return fmt.Errorf("schedule Research Outbox retry: %w", err)
 	}
@@ -406,9 +414,13 @@ func (r *repositoryBase) RejectOutbox(ctx context.Context, eventID, workerID, le
 		!validCorrelationID(reasonCode) || rejectedAt.IsZero() || rejectedAt.Location() != time.UTC {
 		return fmt.Errorf("invalid Research Outbox rejection parameters")
 	}
+	now := r.now().UTC()
+	if now.IsZero() {
+		return fmt.Errorf("repository clock returned zero time")
+	}
 	result, err := r.db.ExecContext(ctx,
 		"UPDATE research_notification_outbox SET delivery_status='rejected', last_error_code=?, lease_owner=NULL, lease_token=NULL, lease_until=NULL, updated_at=? WHERE event_id=? AND delivery_status='leased' AND lease_owner=? AND lease_token=? AND lease_until>?",
-		reasonCode, rejectedAt, eventID, workerID, leaseToken, formatPIT(rejectedAt))
+		reasonCode, rejectedAt, eventID, workerID, leaseToken, formatPIT(now))
 	if err != nil {
 		return fmt.Errorf("reject Research Outbox message: %w", err)
 	}

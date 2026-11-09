@@ -742,3 +742,64 @@ func TestResearchAppendRejectsAggregateHeadWithMissingLatestVersion(t *testing.T
 		t.Fatalf("append created %d Event versions despite missing previous version", versionCount)
 	}
 }
+
+
+func TestResearchOutboxRejectsExpiredLeaseEvenWithBackdatedActionTime(t *testing.T) {
+	db := openResearchIntegrationDB(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+
+	now := time.Date(2026, 11, 9, 6, 0, 0, 123456789, time.UTC)
+	eventID := fmt.Sprintf("event-outbox-expired-lease-%d", time.Now().UnixNano())
+	repo, err := NewEventRepository(db, func() time.Time { return now })
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		_, _ = db.ExecContext(context.Background(), "DELETE FROM research_notification_outbox WHERE subject_ref=?", "research-event:"+eventID)
+		_, _ = db.ExecContext(context.Background(), "DELETE FROM research_event_versions WHERE event_id=?", eventID)
+		_, _ = db.ExecContext(context.Background(), "DELETE FROM research_aggregate_heads WHERE aggregate_type='event' AND aggregate_id=?", eventID)
+	})
+
+	value := researchevent.ResearchEvent{
+		EventID: eventID, EventVersion: 1, EventType: "integration_fixture",
+		Title: "Expired lease fixture", Status: researchevent.StatusDetected,
+		SubjectRefs: []string{}, EvidenceRefs: []string{},
+		SystemObservedAt: now, SystemAsOf: now,
+		ImpactHypothesisRefs: []string{}, InvalidationConditions: []string{},
+		Uncertainty: []string{}, SourceTimes: []researchevent.EventSourceTime{},
+	}
+	if err := repo.AppendWithLifecycle(ctx, value, nil, "corr_expired_lease"); err != nil {
+		t.Fatalf("append Event and Outbox: %v", err)
+	}
+	claimed, err := repo.base.ClaimOutbox(ctx, "worker_expired", 10, now.Add(time.Minute))
+	if err != nil || len(claimed) != 1 {
+		t.Fatalf("claim Outbox = %d messages, error %v", len(claimed), err)
+	}
+
+	// Advance the trusted repository clock beyond the lease deadline, but
+	// deliberately supply action timestamps from before that deadline.
+	now = now.Add(2 * time.Minute)
+	backdated := now.Add(-time.Minute)
+	if err := repo.base.MarkOutboxPublished(ctx, claimed[0].EventID, "worker_expired", claimed[0].LeaseToken, backdated); !errors.Is(err, ErrConflict) {
+		t.Fatalf("confirm with expired lease and backdated timestamp = %v, want ErrConflict", err)
+	}
+	if err := repo.base.ScheduleOutboxRetry(ctx, claimed[0].EventID, "worker_expired", claimed[0].LeaseToken, now.Add(time.Minute), "temporary_failure", backdated); !errors.Is(err, ErrConflict) {
+		t.Fatalf("retry with expired lease and backdated timestamp = %v, want ErrConflict", err)
+	}
+	if err := repo.base.RejectOutbox(ctx, claimed[0].EventID, "worker_expired", claimed[0].LeaseToken, "permanent_failure", backdated); !errors.Is(err, ErrConflict) {
+		t.Fatalf("reject with expired lease and backdated timestamp = %v, want ErrConflict", err)
+	}
+
+	var status string
+	if err := db.QueryRowContext(ctx, "SELECT delivery_status FROM research_notification_outbox WHERE event_id=?", claimed[0].EventID).Scan(&status); err != nil {
+		t.Fatalf("read expired Outbox state: %v", err)
+	}
+	if status != "leased" {
+		t.Fatalf("expired action changed Outbox state to %q, want leased until reclaimed", status)
+	}
+	reclaimed, err := repo.base.ClaimOutbox(ctx, "worker_reclaimed", 10, now.Add(time.Minute))
+	if err != nil || len(reclaimed) != 1 || reclaimed[0].LeaseToken == claimed[0].LeaseToken {
+		t.Fatalf("reclaim expired Outbox lease = %+v, error %v", reclaimed, err)
+	}
+}
