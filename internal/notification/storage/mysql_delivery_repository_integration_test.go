@@ -2,7 +2,6 @@ package storage
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"fmt"
 	"os"
@@ -10,8 +9,6 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
-
-	_ "github.com/go-sql-driver/mysql"
 
 	"example.com/stock-analysis-flow/internal/notification/application"
 	"example.com/stock-analysis-flow/internal/notification/domain"
@@ -26,16 +23,11 @@ func TestNotificationMariaDBDeliveryRepositoryIntegration(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
-	db, err := sql.Open("mysql", dsn)
+	db, err := openNotificationIntegrationDB(ctx, dsn)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("open MariaDB through Platform Storage: %v", err)
 	}
-	db.SetMaxOpenConns(24)
-	db.SetMaxIdleConns(12)
 	defer db.Close()
-	if err := db.PingContext(ctx); err != nil {
-		t.Fatalf("MariaDB ping failed: %v", err)
-	}
 	if err := platformstorage.ApplyMigrations(ctx, db, "notification", Migrations()); err != nil {
 		t.Fatalf("apply Notification migrations: %v", err)
 	}
