@@ -108,7 +108,6 @@ func assertSchemaStructFields(t *testing.T, name string, typ reflect.Type, schem
 	}
 }
 
-
 func assertContextSchemaValueType(t *testing.T, name string, typ reflect.Type, schema map[string]any) {
 	t.Helper()
 	if typ.Kind() == reflect.Pointer {
