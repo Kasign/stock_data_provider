@@ -301,3 +301,37 @@ func TestParseResponsesSSECallbackErrorAtTerminalDoesNotComplete(t *testing.T) {
 		t.Fatalf("callback rejection of terminal event must not expose a completed response: %+v", got)
 	}
 }
+
+func TestMapResponsesRequestFullOptionsGoldenFixture(t *testing.T) {
+	now := time.Date(2026, 11, 9, 1, 0, 0, 0, time.UTC)
+	temperature, topP := 0.2, 0.8
+	request := ModelRequest{
+		ProviderID: "gateway-1", RequestID: "req-full", PurposeCode: "research.summary",
+		Model: "qwen-local", Instructions: "Be precise", InputText: "Summarize evidence",
+		MaxOutputTokens: 256, Temperature: &temperature, TopP: &topP, ReasoningEffort: "high",
+		ResponseSchema: &JSONSchemaSpec{
+			Name: "summary", Strict: true,
+			SchemaJSON: json.RawMessage(`{"type":"object","required":["summary"],"properties":{"summary":{"type":"string"}}}`),
+		},
+		Tools: []ToolDefinition{{
+			Name: "lookup_quote", Description: "Look up a quote", Strict: true,
+			ParametersJSON: json.RawMessage(`{"type":"object","properties":{"symbol":{"type":"string"}}}`),
+		}},
+		ToolChoice: "auto", DeadlineAt: now.Add(time.Minute),
+		CorrelationID: "run-full", SystemAsOf: now,
+	}
+	got, err := MapResponsesRequestAt(request, now)
+	if err != nil {
+		t.Fatalf("map full request: %v", err)
+	}
+	var gotValue, wantValue any
+	if err := json.Unmarshal(got, &gotValue); err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(readLLMFixture(t, "json/request_full_options.expected.json"), &wantValue); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(gotValue, wantValue) {
+		t.Fatalf("full request mapping differs from golden: got=%s want=%s", got, readLLMFixture(t, "json/request_full_options.expected.json"))
+	}
+}
