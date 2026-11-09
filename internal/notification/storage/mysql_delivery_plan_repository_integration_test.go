@@ -50,9 +50,11 @@ func TestNotificationMariaDBDeliveryPlanRepositoryIntegration(t *testing.T) {
 	if err != nil || duplicate || created.DeliveryID != plan.DeliveryID {
 		t.Fatalf("first create: duplicate=%v plan=%+v err=%v", duplicate, created, err)
 	}
+	created.AuthorizationRefs[0] = "caller-mutated-reference"
 	replayed, duplicate, err := repository.CreateOrGet(ctx, plan)
-	if err != nil || !duplicate || replayed.DeliveryID != plan.DeliveryID {
-		t.Fatalf("same plan replay: duplicate=%v plan=%+v err=%v", duplicate, replayed, err)
+	if err != nil || !duplicate || replayed.DeliveryID != plan.DeliveryID ||
+		replayed.AuthorizationRefs[0] != plan.AuthorizationRefs[0] {
+		t.Fatalf("same plan replay must return the persisted immutable snapshot: duplicate=%v plan=%+v err=%v", duplicate, replayed, err)
 	}
 
 	conflict := plan

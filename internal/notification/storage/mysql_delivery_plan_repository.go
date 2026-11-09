@@ -71,7 +71,7 @@ func (r *MySQLDeliveryPlanRepository) CreateOrGet(
 		plan.PlanFingerprint, plan.DeliveryIdempotencyKey, snapshot,
 	)
 	if err == nil {
-		return plan, false, nil
+		return cloneDeliveryPlan(plan), false, nil
 	}
 	if !isMySQLDuplicateKey(err) {
 		return domain.DeliveryPlan{}, false, fmt.Errorf("notification storage: insert delivery plan: %w", err)
@@ -127,4 +127,10 @@ func (r *MySQLDeliveryPlanRepository) getByIdentity(
 func isMySQLDuplicateKey(err error) bool {
 	var mysqlErr *mysql.MySQLError
 	return errors.As(err, &mysqlErr) && mysqlErr.Number == 1062
+}
+
+func cloneDeliveryPlan(plan domain.DeliveryPlan) domain.DeliveryPlan {
+	plan.AuthorizationPolicyVersions = append([]domain.AuthorizationPolicyVersion(nil), plan.AuthorizationPolicyVersions...)
+	plan.AuthorizationRefs = append([]string(nil), plan.AuthorizationRefs...)
+	return plan
 }
