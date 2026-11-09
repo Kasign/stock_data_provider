@@ -68,7 +68,8 @@ func (u *IngestCandidate) Execute(ctx context.Context, sourceID, idempotencyKey 
 	return u.execute(ctx, sourceID, idempotencyKey, candidate, policy, ObservationPolicyTrace{})
 }
 
-// ExecuteWithPolicyTrace 仅供可信组合根在完成 Source/Endpoint/Provider 策略评估后调用。
+// ExecuteWithPolicyTrace 仅记录 Source/Endpoint 评估结果。Provider Policy Resolver 尚未接入，
+// 因此当前拒绝所有 Provider 候选及 Provider Policy 自声明引用，防止调用方伪造授权追踪。
 func (u *IngestCandidate) ExecuteWithPolicyTrace(ctx context.Context, sourceID, idempotencyKey string, candidate domain.Candidate, policy domain.SourceURLPolicy, trace ObservationPolicyTrace) (domain.Observation, error) {
 	trace.SourcePolicyVersionID = strings.TrimSpace(trace.SourcePolicyVersionID)
 	trace.EndpointID = strings.TrimSpace(trace.EndpointID)
@@ -78,10 +79,8 @@ func (u *IngestCandidate) ExecuteWithPolicyTrace(ctx context.Context, sourceID, 
 	if trace.SourcePolicyVersionID == "" || trace.PolicyEvaluatedAt.IsZero() {
 		return domain.Observation{}, ErrInvalidRequest
 	}
-	providerPolicyBound := trace.ProviderOutputPolicyRef != "" && trace.ProviderOutputPolicyVersionID != ""
-	providerPolicyPartial := (trace.ProviderOutputPolicyRef == "") != (trace.ProviderOutputPolicyVersionID == "")
-	if providerPolicyPartial || (strings.TrimSpace(candidate.ProviderCode) != "" && !providerPolicyBound) ||
-		(strings.TrimSpace(candidate.ProviderCode) == "" && providerPolicyBound) {
+	if strings.TrimSpace(candidate.ProviderCode) != "" ||
+		trace.ProviderOutputPolicyRef != "" || trace.ProviderOutputPolicyVersionID != "" {
 		return domain.Observation{}, ErrProviderOutputPolicyRequired
 	}
 	trace.PolicyEvaluatedAt = trace.PolicyEvaluatedAt.UTC()

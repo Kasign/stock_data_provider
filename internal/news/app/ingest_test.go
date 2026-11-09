@@ -88,10 +88,9 @@ func TestIngestCandidateCreatesNewsItemAndObservation(t *testing.T) {
 	repository := &memoryIdentityRepository{}
 	usecase := NewIngestCandidate(repository, func() string { return "observation-1" })
 	observation, err := usecase.ExecuteWithPolicyTrace(context.Background(), "source-1", "run-1/provider-a/item-1", domain.Candidate{
-		ProviderCode: "provider-a", ProviderItemID: "provider-result-1", SourceItemID: "item-1", Title: " headline ",
+		ProviderItemID: "provider-result-1", SourceItemID: "item-1", Title: " headline ",
 	}, domain.SourceURLPolicy{}, ObservationPolicyTrace{
-		SourcePolicyVersionID: "source-policy-v1", ProviderOutputPolicyRef: "provider-policy-test",
-		ProviderOutputPolicyVersionID: "provider-policy-v1", PolicyEvaluatedAt: time.Date(2026, 11, 9, 0, 0, 0, 0, time.UTC),
+		SourcePolicyVersionID: "source-policy-v1", PolicyEvaluatedAt: time.Date(2026, 11, 9, 0, 0, 0, 0, time.UTC),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -212,8 +211,8 @@ func TestIngestCandidateRetriesIdempotently(t *testing.T) {
 		nextID++
 		return "observation-" + string(rune('0'+nextID))
 	})
-	candidate := domain.Candidate{ProviderCode: "provider-a", ProviderItemID: "provider-result-1", SourceItemID: "source-item-1", Title: "headline"}
-	trace := ObservationPolicyTrace{SourcePolicyVersionID: "source-policy-v1", ProviderOutputPolicyRef: "provider-policy-test", ProviderOutputPolicyVersionID: "provider-policy-v1", PolicyEvaluatedAt: time.Date(2026, 11, 9, 0, 0, 0, 0, time.UTC)}
+	candidate := domain.Candidate{ProviderItemID: "provider-result-1", SourceItemID: "source-item-1", Title: "headline"}
+	trace := ObservationPolicyTrace{SourcePolicyVersionID: "source-policy-v1", PolicyEvaluatedAt: time.Date(2026, 11, 9, 0, 0, 0, 0, time.UTC)}
 	first, err := usecase.ExecuteWithPolicyTrace(context.Background(), "source-1", "run-1/provider-a/item-1", candidate, domain.SourceURLPolicy{}, trace)
 	if err != nil {
 		t.Fatal(err)
@@ -250,12 +249,11 @@ func TestIngestCandidatePersistsSourcePolicyTrace(t *testing.T) {
 	trace := ObservationPolicyTrace{
 		SourcePolicyVersionID:   "source-policy-v3",
 		EndpointID: "endpoint-v1", EndpointPolicyVersionID: "endpoint-policy-v2",
-		ProviderOutputPolicyRef: "provider-policy-ref", ProviderOutputPolicyVersionID: "provider-policy-v1",
 		PolicyEvaluatedAt:       evaluatedAt,
 	}
 	observation, err := usecase.ExecuteWithPolicyTrace(
 		context.Background(), "source-1", "feed-run-1/item-1",
-		domain.Candidate{ProviderCode: "tavily", SourceItemID: "item-1", Title: "headline"},
+		domain.Candidate{SourceItemID: "item-1", Title: "headline"},
 		domain.SourceURLPolicy{}, trace,
 	)
 	if err != nil {
@@ -264,8 +262,6 @@ func TestIngestCandidatePersistsSourcePolicyTrace(t *testing.T) {
 	if observation.SourcePolicyVersionID != trace.SourcePolicyVersionID ||
 		observation.EndpointID != trace.EndpointID ||
 		observation.EndpointPolicyVersionID != trace.EndpointPolicyVersionID ||
-		observation.ProviderOutputPolicyRef != trace.ProviderOutputPolicyRef ||
-		observation.ProviderOutputPolicyVersionID != trace.ProviderOutputPolicyVersionID ||
 		!observation.PolicyEvaluatedAt.Equal(evaluatedAt.UTC()) {
 		t.Fatalf("policy trace was not persisted: %+v", observation)
 	}
@@ -274,17 +270,13 @@ func TestIngestCandidatePersistsSourcePolicyTrace(t *testing.T) {
 func TestIngestCandidatePolicyTraceIsPartOfIdempotencyPayload(t *testing.T) {
 	repository := &memoryIdentityRepository{}
 	usecase := NewIngestCandidate(repository, func() string { return "observation-policy-idempotency" })
-	candidate := domain.Candidate{ProviderCode: "tavily", SourceItemID: "item-1", Title: "headline"}
+	candidate := domain.Candidate{SourceItemID: "item-1", Title: "headline"}
 	firstTrace := ObservationPolicyTrace{
 		SourcePolicyVersionID: "source-policy-v3",
-		ProviderOutputPolicyRef: "provider-policy-ref-v1",
-		ProviderOutputPolicyVersionID: "provider-policy-v1",
 		PolicyEvaluatedAt:     time.Date(2026, 11, 5, 10, 0, 0, 0, time.UTC),
 	}
 	secondTrace := ObservationPolicyTrace{
 		SourcePolicyVersionID: "source-policy-v4",
-		ProviderOutputPolicyRef: "provider-policy-ref-v2",
-		ProviderOutputPolicyVersionID: "provider-policy-v2",
 		PolicyEvaluatedAt:     time.Date(2026, 11, 5, 10, 1, 0, 0, time.UTC),
 	}
 	if _, err := usecase.ExecuteWithPolicyTrace(context.Background(), "source-1", "feed-run-1/item-1", candidate, domain.SourceURLPolicy{}, firstTrace); err != nil {
@@ -300,10 +292,24 @@ func TestIngestCandidateRejectsProviderPolicyReferenceWithoutVersion(t *testing.
 	repository := &memoryIdentityRepository{}
 	usecase := NewIngestCandidate(repository, func() string { return "observation-provider-policy-incomplete" })
 	_, err := usecase.ExecuteWithPolicyTrace(context.Background(), "source-1", "provider-result-incomplete", domain.Candidate{ProviderCode: "brave", SourceItemID: "item-1"}, domain.SourceURLPolicy{}, ObservationPolicyTrace{
-		SourcePolicyVersionID: "source-policy-v1", ProviderOutputPolicyRef: "provider-policy-brave", PolicyEvaluatedAt: time.Now().UTC(),
+		SourcePolicyVersionID: "source-policy-v1", PolicyEvaluatedAt: time.Now().UTC(),
 	})
 	if !errors.Is(err, ErrProviderOutputPolicyRequired) || len(repository.observations) != 0 {
 		t.Fatalf("err=%v repository=%+v", err, repository)
+	}
+}
+
+func TestIngestCandidateRejectsSelfDeclaredProviderPolicyTrace(t *testing.T) {
+	repository := &memoryIdentityRepository{}
+	usecase := NewIngestCandidate(repository, func() string { return "observation-provider-policy-spoof" })
+	_, err := usecase.ExecuteWithPolicyTrace(context.Background(), "source-1", "provider-result-spoof", domain.Candidate{
+		ProviderCode: "tavily", SourceItemID: "item-1",
+	}, domain.SourceURLPolicy{}, ObservationPolicyTrace{
+		SourcePolicyVersionID: "source-policy-v1", ProviderOutputPolicyRef: "provider-policy-ref",
+		ProviderOutputPolicyVersionID: "provider-policy-v1", PolicyEvaluatedAt: time.Now().UTC(),
+	})
+	if !errors.Is(err, ErrProviderOutputPolicyRequired) || len(repository.observations) != 0 {
+		t.Fatalf("self-declared provider policy must fail closed: err=%v repository=%+v", err, repository)
 	}
 }
 
