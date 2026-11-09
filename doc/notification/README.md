@@ -60,3 +60,14 @@ Notification 是独立通知业务模块，负责事件接收、Subscription、T
 - `Test go-core`：通过（gofmt、单测、Race Detector、go vet）。
 - 根模块 `Test .`：仍在 gofmt 阶段失败；失败门禁来自仓库其他目录的格式差异，根模块测试未执行。本次不能据此声称 Notification 根模块测试通过。
 - MariaDB 集成 Job 未执行；真实 DSN 验收仍缺。
+
+
+### 本轮增量：持久化时间精度统一
+
+- Delivery Repository：Create、ClaimDue、UpdateWithLease 对输入时间统一转换为 UTC 微秒精度，匹配 MariaDB `DATETIME(6)`；避免首次返回值与重读值不一致，以及 lease/fencing 时间比较因纳秒截断产生偏差。
+- Subscription Repository：Create、AppendVersion 的 created_at、updated_at、effective_at 统一转换为 UTC 微秒精度，保证版本追加时 created_at 与数据库事实一致。
+- 新增 Delivery、Subscription 时间规范化单元测试，覆盖非 UTC 时区、纳秒截断和不修改调用方对象。
+- Inbox 时间精度修复已在前一提交完成。
+- Delivery 修复提交 `af05f6595b18717408e91a7650e3e89b3b6de236` 的 Run `42597457159`：go-core 全部通过；根模块在 gofmt 阶段失败，未执行根模块测试，不能认定为 Notification 根模块测试失败或通过。失败门禁来自 Quant 目录格式问题。
+- Subscription 修复提交 `28d0a2b1111a65bf6c8b52402557f4fedfa87ad4` 的 Run `42597527290`：go-core 已通过；根模块 gofmt 门禁失败，根模块测试未执行。MariaDB 集成 Job 未执行。
+- 当前真实 MariaDB 验收仍缺 `NOTIFICATION_MARIADB_TEST_DSN`。
