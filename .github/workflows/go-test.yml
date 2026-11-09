@@ -44,6 +44,32 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  migrate-market-data-module:
+    if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'feat/full-go-data-providers-api-switch' }}
+    name: Migrate Market Data into root Go module
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Check out Data migration branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          fetch-depth: 0
+      - name: Run one-time source migration
+        run: bash scripts/migrate-market-data-module.sh
+      - name: Commit and push migration
+        run: |
+          if git diff --cached --quiet; then
+            echo "No migration changes."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "refactor(api): 迁移 Market Data 到根 Go Module"
+          git push origin HEAD:refs/heads/feat/full-go-data-providers-api-switch
+
   test:
     name: Test ${{ matrix.module }}
     runs-on: ubuntu-latest
