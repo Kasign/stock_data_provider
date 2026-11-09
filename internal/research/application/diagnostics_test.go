@@ -99,6 +99,11 @@ func TestDiagnosticsApplicationRejectsInvalidReferences(t *testing.T) {
 	if _, err := service.BuildClaimCheck(context.Background(), ClaimRef{ClaimID: "clm_1", ClaimVersion: 0}, true); err == nil {
 		t.Fatal("non-positive Claim version must be rejected")
 	}
+	if _, err := service.BuildEvidenceCheck(context.Background(), EvidenceRef{
+		EvidenceID: "ev_1", CallerRef: "researchflow:worker-1",
+	}, true); err == nil {
+		t.Fatal("missing Run system_as_of must be rejected before Owner access")
+	}
 }
 
 func TestBuildEvidenceCheckRechecksOwnerAuthorization(t *testing.T) {
@@ -125,7 +130,7 @@ func TestBuildEvidenceCheckRechecksOwnerAuthorization(t *testing.T) {
 	}
 
 	check, err := service.BuildEvidenceCheck(context.Background(), EvidenceRef{
-		EvidenceID: value.EvidenceID, CallerRef: "researchflow:worker-1",
+		EvidenceID: value.EvidenceID, CallerRef: "researchflow:worker-1", RunSystemAsOf: now,
 	}, true)
 	if err != nil {
 		t.Fatalf("BuildEvidenceCheck() error = %v", err)
@@ -146,7 +151,7 @@ func TestBuildEvidenceCheckRechecksOwnerAuthorization(t *testing.T) {
 
 	authorizer.err = NewAuthorizationError(AuthorizationDenied, errors.New("owner revoked access"))
 	_, err = service.BuildEvidenceCheck(context.Background(), EvidenceRef{
-		EvidenceID: value.EvidenceID, CallerRef: "researchflow:worker-1",
+		EvidenceID: value.EvidenceID, CallerRef: "researchflow:worker-1", RunSystemAsOf: now,
 	}, true)
 	if err == nil {
 		t.Fatal("revoked Owner authorization must prevent diagnostic check construction")

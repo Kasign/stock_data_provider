@@ -246,7 +246,7 @@ func TestEvidenceCheckMapsQualityStatesWithoutExposingEvidence(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			value := validEvidenceSnapshot(t, test.quality)
-			check, err := NewEvidenceCheck("research.evidence.snapshot", "Evidence 快照", true, value)
+			check, err := NewEvidenceCheck("research.evidence.snapshot", "Evidence 快照", true, value, value.SystemAsOf)
 			if err != nil {
 				t.Fatalf("NewEvidenceCheck() error = %v", err)
 			}
@@ -271,7 +271,7 @@ func TestEvidenceCheckMapsQualityStatesWithoutExposingEvidence(t *testing.T) {
 
 func TestEvidenceCheckUsesImmutableSnapshot(t *testing.T) {
 	value := validEvidenceSnapshot(t, researchevidence.QualityValid)
-	check, err := NewEvidenceCheck("research.evidence.snapshot", "Evidence 快照", true, value)
+	check, err := NewEvidenceCheck("research.evidence.snapshot", "Evidence 快照", true, value, value.SystemAsOf)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -291,7 +291,7 @@ func TestEvidenceCheckRequiresComparableStrictPIT(t *testing.T) {
 			t.Fatal(err)
 		}
 		value.ContentFingerprint = fingerprint
-		check, err := NewEvidenceCheck("research.evidence.pit", "Evidence PIT", true, value)
+		check, err := NewEvidenceCheck("research.evidence.pit", "Evidence PIT", true, value, value.SystemAsOf)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -299,6 +299,20 @@ func TestEvidenceCheckRequiresComparableStrictPIT(t *testing.T) {
 		if result.Observation.Status != platformdiagnostics.StatusUnavailable ||
 			result.Observation.ReasonCode != "research.evidence.pit_unavailable" {
 			t.Fatalf("observation = %+v, want unavailable PIT", result.Observation)
+		}
+	})
+
+	t.Run("evidence system_as_of after Run cutoff is failed", func(t *testing.T) {
+		value := validEvidenceSnapshot(t, researchevidence.QualityValid)
+		runAsOf := value.SystemAsOf.Add(-time.Nanosecond)
+		check, err := NewEvidenceCheck("research.evidence.pit", "Evidence PIT", true, value, runAsOf)
+		if err != nil {
+			t.Fatal(err)
+		}
+		result := runCheck(t, check)
+		if result.Observation.Status != platformdiagnostics.StatusFailed ||
+			result.Observation.ReasonCode != "research.evidence.pit_invalid" {
+			t.Fatalf("observation = %+v, want failed Run cutoff", result.Observation)
 		}
 	})
 
@@ -311,7 +325,7 @@ func TestEvidenceCheckRequiresComparableStrictPIT(t *testing.T) {
 			t.Fatal(err)
 		}
 		value.ContentFingerprint = fingerprint
-		check, err := NewEvidenceCheck("research.evidence.pit", "Evidence PIT", true, value)
+		check, err := NewEvidenceCheck("research.evidence.pit", "Evidence PIT", true, value, value.SystemAsOf)
 		if err != nil {
 			t.Fatal(err)
 		}

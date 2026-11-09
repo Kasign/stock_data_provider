@@ -32,7 +32,7 @@ Research 不采集新闻、不拥有行情事实、不重算 Quant 指标，不�
 | RSC-005 Claim/Hypothesis | Domain、认识论校验、状态迁移、版本追加、Application、SQL Repository | Evidence/Scope 真实引用解析、supersedes_version 契约缺口、真实样本 |
 | RSC-006 Scenario | 仅有部分引用模型 | 等待 typed expected_value 与 ConditionGroup 机器契约 |
 | RSC-007 Storage/Outbox | Context/Event/Claim/Evidence Repository、Migration v1-v5、事务 Outbox、领取/租约/重试/确认/拒绝 | 专用 MariaDB 实测、组合根 Migration 注册、故障注入验收 |
-| RSC-008 Diagnostics | Context/Event/Claim/Evidence 快照 Check；Evidence Check 通过 Application GetEvidence 先执行 Owner 当前授权复核，并执行严格 PIT；复用 Platform Runner | 真实 Owner Adapter、完整 CI 执行、Researchflow FLOW-009 Facade 接线 |
+| RSC-008 Diagnostics | Context/Event/Claim/Evidence 快照 Check；Evidence Check 通过 Application GetEvidence 先执行 Owner 当前授权复核，并用 Researchflow RunSystemAsOf 执行严格 PIT；复用 Platform Runner | 真实 Owner Adapter、完整 CI 执行、Researchflow FLOW-009 Facade 接线 |
 
 ## 诊断边界
 

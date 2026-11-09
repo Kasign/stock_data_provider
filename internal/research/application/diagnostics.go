@@ -3,6 +3,7 @@ package application
 import (
 	"context"
 	"strings"
+	"time"
 
 	platformdiagnostics "example.com/stock-analysis-flow/internal/platform/diagnostics"
 	"example.com/stock-analysis-flow/internal/platform/fault"
@@ -82,8 +83,11 @@ func (s *Service) BuildEvidenceCheck(ctx context.Context, ref EvidenceRef, requi
 	if s == nil || s.evidence == nil || s.authorizer == nil {
 		return platformdiagnostics.Check{}, applicationFault(fault.ClassInternal, "research_evidence_dependencies_not_configured", "Research Evidence dependencies are not configured", researcherrors.ErrInvalidRepository)
 	}
-	if ctx == nil || strings.TrimSpace(ref.EvidenceID) == "" || strings.TrimSpace(ref.CallerRef) == "" || strings.TrimSpace(ref.PurposeCode) == "" {
+	if ctx == nil || strings.TrimSpace(ref.EvidenceID) == "" || strings.TrimSpace(ref.CallerRef) == "" {
 		return platformdiagnostics.Check{}, validationFault("invalid_evidence_ref", "Evidence reference and trusted caller are required", nil)
+	}
+	if ref.RunSystemAsOf.IsZero() || ref.RunSystemAsOf.Location() != time.UTC {
+		return platformdiagnostics.Check{}, validationFault("invalid_run_system_as_of", "Run system_as_of is required and must use UTC", nil)
 	}
 	record, err := s.GetEvidence(ctx, ref)
 	if err != nil {
@@ -92,7 +96,7 @@ func (s *Service) BuildEvidenceCheck(ctx context.Context, ref EvidenceRef, requi
 	value := toDomainEvidence(record.EvidenceDraft)
 	value.EvidenceID = record.EvidenceID
 	value.ContentFingerprint = record.ContentFingerprint
-	return researchdiagnostics.NewEvidenceCheck("research.evidence.snapshot", "Research Evidence 快照", required, value)
+	return researchdiagnostics.NewEvidenceCheck("research.evidence.snapshot", "Research Evidence 快照", required, value, ref.RunSystemAsOf)
 }
 
 // toDomainContext 将 Application DTO 转换为独立的 Domain 快照，供领域诊断器校验。
