@@ -200,6 +200,14 @@ func resolvedFingerprint(templateFingerprint string, schema ParameterSchemaSnaps
 	return hex.EncodeToString(sum[:]), nil
 }
 
+func cloneStageDefinition(stage StageDefinition) StageDefinition {
+	stage.Dependencies = append([]string(nil), stage.Dependencies...)
+	sort.Strings(stage.Dependencies)
+	stage.Retry.RetryableReasonCodes = append([]string(nil), stage.Retry.RetryableReasonCodes...)
+	sort.Strings(stage.Retry.RetryableReasonCodes)
+	return stage
+}
+
 func Resolve(ctx context.Context, t WorkflowTemplate, parameters json.RawMessage, parameterSchemas ParameterSchemaValidator, evaluator ApplicabilityEvaluator, gates HardRiskGateRegistry) (ResolvedTemplate, error) {
 	if err := Validate(t, gates); err != nil { return ResolvedTemplate{}, err }
 	if parameterSchemas == nil { return ResolvedTemplate{}, fmt.Errorf("%w: parameter schema validator is required", ErrInvalidTemplate) }
@@ -229,6 +237,9 @@ func Resolve(ctx context.Context, t WorkflowTemplate, parameters json.RawMessage
 	definitions := map[string]StageDefinition{}
 	optionalSkipped := make(map[string]ResolvedStage)
 	for _, stage := range t.Stages {
+		// ResolvedTemplate is a persisted execution snapshot. It must not retain
+		// caller-owned slice backing arrays from the mutable registry object.
+		stage = cloneStageDefinition(stage)
 		definitions[stage.Code] = stage
 		ok, reason, evalErr := evaluator.Evaluate(ctx, stage.Applicability, parameters)
 		if evalErr != nil { return ResolvedTemplate{}, fmt.Errorf("evaluate applicability for %s: %w", stage.Code, evalErr) }
