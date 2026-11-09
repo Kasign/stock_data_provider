@@ -76,6 +76,9 @@ func validObservedValue(value json.RawMessage) bool {
 	if len(value) == 0 {
 		return true
 	}
+	if !json.Valid(value) {
+		return false
+	}
 	decoder := json.NewDecoder(strings.NewReader(string(value)))
 	decoder.UseNumber()
 	var decoded any

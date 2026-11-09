@@ -60,7 +60,7 @@ func TestValidateRiskDecisionAcceptsOnlyScalarObservedValues(t *testing.T) {
 			t.Fatalf("scalar observed value %s should be accepted: %v", raw, err)
 		}
 	}
-	for _, raw := range []string{"true", `{"value":10}`, "[10]"} {
+	for _, raw := range []string{"true", `{"value":10}`, "[10]", "10 20"} {
 		value := base
 		value.Reasons = append([]RiskReason(nil), base.Reasons...)
 		value.Reasons[0].ObservedValue = []byte(raw)
