@@ -15,14 +15,14 @@ import (
 // Researchflow Worker. Provider implementations must treat its references,
 // timestamps and snapshots as authoritative and must not mutate them.
 type StageExecutionRequest struct {
-	Run               domain.Run
-	Stage             domain.Stage
-	Attempt           domain.Attempt
-	Parameters        json.RawMessage
-	InputSnapshotRefs []string
-	SystemAsOf        time.Time
-	DeadlineAt        time.Time
-	CorrelationID     string
+	Run                domain.Run
+	Stage              domain.Stage
+	Attempt            domain.Attempt
+	Parameters         json.RawMessage
+	InputSnapshotRefs  []string
+	SystemAsOf         time.Time
+	DeadlineAt         time.Time
+	CorrelationID      string
 }
 
 // StageExecutionResult is a provider outcome before it is committed by the
@@ -64,8 +64,8 @@ func ValidateStageExecutionResult(result StageExecutionResult) error {
 		}
 	case domain.StageRetryWait:
 		if (result.AttemptStatus != domain.AttemptFailed && result.AttemptStatus != domain.AttemptTimedOut) ||
-			result.RetryAt != nil || result.OutputRef != nil {
-			return fmt.Errorf("%w: retry_wait requires a failed/timed_out Attempt, no provider retry_at and no output_ref", ErrInvalidStageExecutionResult)
+			result.RetryAt == nil || result.OutputRef != nil {
+			return fmt.Errorf("%w: retry_wait requires a failed/timed_out Attempt, retry_at and no output_ref", ErrInvalidStageExecutionResult)
 		}
 	case domain.StageFailed:
 		if (result.AttemptStatus != domain.AttemptFailed && result.AttemptStatus != domain.AttemptTimedOut) ||
