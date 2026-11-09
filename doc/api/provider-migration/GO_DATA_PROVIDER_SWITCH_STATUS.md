@@ -85,3 +85,9 @@
 - Dependencies.RequireEgressDependencies 是显式布尔门禁，默认值为 false，以兼容独立部署旧入口；模块化 Root 必须显式设置为 true。Data 分支不代替 Server 修改组合根，Root 实际调用点由 Server 分支验收。
 - BaoStock/Pytdx 的 TCP 受控拨号仍等待 Platform 提供 BoundDialer；当前 Data 保持严格模式 fail-closed，不在本分支实现第二套安全拨号器。
 - 本轮未执行构建、测试或真实 Provider 请求；新增测试源码留待 integration 统一 CI，真实出站验收仍需运行环境证据。
+
+### 2026-11-09：Module Cache 注入拒绝 typed nil
+
+- 继续复核基础设施依赖时发现 Dependencies.Cache 是接口类型，typed nil 可绕过 Redis 必需依赖检查，也会阻止未配置 Redis 时回退到 Disabled Cache。
+- Module.New 现在使用统一 nil 检测：Redis 已配置时拒绝 typed nil Cache；Redis 未配置时将 typed nil Cache 视为未注入并使用 Disabled Cache。
+- 新增两种启动路径回归测试；未执行构建或测试，留待 integration 统一验收。
