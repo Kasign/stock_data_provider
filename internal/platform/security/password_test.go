@@ -46,9 +46,13 @@ func TestArgon2idNeedsRehash(t *testing.T) {
 		t.Fatal(err)
 	}
 	needs, err := newHasher.NeedsRehash(encoded)
-	if err != nil || !needs { t.Fatalf("needs rehash=%v err=%v", needs, err) }
+	if err != nil || !needs {
+		t.Fatalf("needs rehash=%v err=%v", needs, err)
+	}
 	needs, err = oldHasher.NeedsRehash(encoded)
-	if err != nil || needs { t.Fatalf("same parameters should not need rehash: %v %v", needs, err) }
+	if err != nil || needs {
+		t.Fatalf("same parameters should not need rehash: %v %v", needs, err)
+	}
 }
 
 func TestArgon2idRejectsInvalidInputsAndParameters(t *testing.T) {
@@ -77,6 +81,8 @@ func TestArgon2idRejectsMalformedAndExpensiveEncodedHashes(t *testing.T) {
 	for _, encoded := range []string{
 		"", "$argon2i$v=19$m=8192,t=1,p=1$YWJjZGVmZ2hpamtsbW5vcA$YWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXowMTIzNDU2",
 		"$argon2id$v=18$m=8192,t=1,p=1$YWJjZGVmZ2hpamtsbW5vcA$YWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXowMTIzNDU2",
+		"$argon2id$19$m=8192,t=1,p=1$YWJjZGVmZ2hpamtsbW5vcA$YWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXowMTIzNDU2",
+		"$argon2id$v=19$m=8192,m=8192,t=1,p=1$YWJjZGVmZ2hpamtsbW5vcA$YWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXowMTIzNDU2",
 		"$argon2id$v=19$m=4294967295,t=1,p=1$YWJjZGVmZ2hpamtsbW5vcA$YWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXowMTIzNDU2",
 		strings.Repeat("x", maxEncodedHashBytes+1),
 	} {
