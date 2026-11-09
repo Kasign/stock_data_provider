@@ -554,7 +554,6 @@ func TestOpenStreamTLSHandshakeTimeoutIsClassified(t *testing.T) {
 	}
 }
 
-
 func TestOpenStreamStatsDurationIncludesResponseHeaderWait(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		time.Sleep(80 * time.Millisecond)
