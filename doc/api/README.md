@@ -11,7 +11,7 @@
 | [contracts/](contracts/) | API 清单、OpenAPI、数据质量与状态契约 | 接口字段以权威 OpenAPI 和实现为准 |
 | [quality/](quality/) | 字段校验、诊断、Freshness、样例管理 | 规则与诊断专项，不重复建立通用框架 |
 | [acceptance/](acceptance/) | 阶段验收计划、黄金样例、对账记录 | 只记录有证据的验收状态 |
-| [migration/](migration/) | Market Data 并入 Root Server 的迁移计划与唯一进度 | M0 已进入收敛阶段；只剩参数差异最终核对、Provider 请求安全证据、生产 DDL 和 integration 验收；未关闭不得进入 M1 |
+| [migration/](migration/) | Market Data 并入 Root Server 的迁移计划与唯一进度 | M0 代码侧审计已关闭；仅剩脱敏生产 DDL 外部证据和 integration 验收；未关闭不得进入 M1 |
 | [provider-migration/](provider-migration/) | Provider 扩展、Go 迁移和 Python/Go 差分 | 历史专项状态不替代整体主计划 |
 
 ## 维护规则

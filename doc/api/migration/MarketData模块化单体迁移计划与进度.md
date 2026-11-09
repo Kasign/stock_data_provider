@@ -19,16 +19,14 @@
 
 ### 当前代码与 CI 基线
 
-- 当前分支 HEAD：`5a25e3321e6cbea9dcc94fd75ca3fddd8ad8dfc7`。
-- Data Module Job：Run `42553757978`，gofmt、go test、race、vet 全部 success。
-- MariaDB Migration/PIT/Probe HTTP 集成：同一 Run 的 Job success。
-- Compose 校验及 Market Data / Analysis API 镜像构建：success。
-- go-core：gofmt、test、race、vet success。
-- Root `Test .`：失败于 gofmt，测试/race/vet 被跳过；当前失败涉及其他模块文件，不在 Data 分支范围内。
-- WebUI checks：failure，不属于本分支 Data 修改范围。
-- Platform Go checks、Go-Python parity：success。
-- 上述是当前分支 Push workflow 证据。按分支约定，尚未完成 `origin/integration` 合并后的集成验收，不能把 Push CI 记为 M0-D 通过。
-- Live Provider workflow 外层 success 不代表所有 Provider 真实数据验收通过；按 Provider/能力/证券/日期/复权口径单独记录。
+- 当前分支 HEAD：`77ebff659b6bb8ba86a24f4924230c747aae0f1b`。
+- Go test suite Run `42556374146`：Data Module gofmt、go test、race、vet 全部 success；go-core 同样全部 success。
+- Market Data MariaDB Migration/PIT 集成 Job：success；News MariaDB 集成 Job：success。
+- Compose 校验、Market Data 镜像和 Analysis API 镜像构建：success。
+- Root `Test .`：失败于 gofmt，tests/race/vet 被跳过；失败不属于 Data 文件范围，本分支不越界修改。
+- WebUI checks Run `42556374143`：failure，不属于本分支 Data 修改范围。
+- Platform Go checks Run `42556374153`、Go-Python parity Run `42556374202`、Live Provider probe Run `42556374131`：workflow success。Live Provider 外层 success 不代表所有 Provider/能力/证券/日期/复权口径均完成真实数据验收。
+- Data 代码与契约测试在当前 SHA 已通过模块级 CI；Push workflow 仍不能替代 `origin/integration` 集成验收。
 
 ### 方案边界校准
 
@@ -140,10 +138,10 @@ internal/
 
 | 编号 | 剩余项 | 完成条件 | 当前判定 |
 |---|---|---|---|
-| M0-A / CT-05（CT-03 复核） | 35 Operation 参数语义最终核对 | 固定参数全集的 inventory、类型/格式、枚举、数值边界/默认值、日期与重复值语义已覆盖；CT-03 Go Model/OpenAPI 全字段、required/nullable、序列化测试复核无当前差异，等待最新 Data CI 确认 | `pending_ci` |
+| M0-A / CT-05（CT-03 复核） | 35 Operation 参数语义最终核对 | 固定参数全集的 inventory、类型/格式、枚举、数值边界/默认值、日期与重复值语义已覆盖；CT-03 Go Model/OpenAPI 全字段、required/nullable、序列化测试复核无当前差异；SHA `77ebff65` Data gofmt/test/race/vet 全通过 | `completed` |
 | M0-B | Provider 请求行为安全证据 | 已完成 HTTP/TCP 出站调用矩阵；当前配置边界与重定向风险明确登记，归入 M4 Platform HTTP Client / TCP 出站策略整改 | `completed_with_M4_followups` |
 | M0-C | 生产数据库 DDL 对照 | 获取脱敏生产 Schema/DDL；逐表对照 Data Migration、索引、唯一键、字段类型/精度/NULL/默认值；CI 临时 MariaDB 不能替代生产证据 | `blocked_external_evidence` |
-| M0-D / CT-06 | 集成基线验收 | 将当前分支合入 `origin/integration` 后，在 integration SHA 执行根模块、Data、race、vet、MariaDB/PIT、Compose/Docker；只记录结果，不直接修改 integration 代码 | `pending_integration` |
+| M0-D / CT-06 | 集成基线验收 | 当前 `integration` HEAD=`0ad30515`；本分支相对 integration 为 ahead 43 / behind 115、状态 diverged。先确认 PR/合并基线和冲突，不直接强行合并；验收时只记录结果，不修改 integration 代码 | `pending_integration` |
 
 #### CT-05 停止扩张规则
 
@@ -470,4 +468,15 @@ internal/
 - 当前 Go Model 使用 `omitempty`，Contract Test 将该字段断言为 optional，并验证零值序列化时省略；三者语义一致。
 - 结论：历史 required 记录已过时，不存在当前契约差异；不移除 `omitempty`，不改变 API 响应行为。
 - 已撤销上一提交中的临时 Model/测试改动；保留 M0 文档对该历史记录的纠正。
+
+
+
+### 2026-11-09：M0-A 关闭与 Integration 基线风险确认
+
+- 当前 SHA：`77ebff659b6bb8ba86a24f4924230c747aae0f1b`。
+- M0-A / CT-05：35 Operation 参数清单、类型/格式、枚举、数值边界/默认值、日期范围和重复值语义核对完成；CT-03 Go Model/OpenAPI 全字段和序列化测试复核无当前差异。Data Module gofmt/test/race/vet 全部通过（Run `42556374146`），M0-A 关闭。
+- Data MariaDB Migration/PIT、Compose、Market Data 与 Analysis API 镜像构建通过；Root gofmt 与 WebUI 检查仍有其他模块失败，未越界修改。
+- Integration 对比：`integration` HEAD `0ad30515dc40af5e4e48d6f624880aadcea0242d`；本分支 ahead 43、behind 115，状态 `diverged`，merge-base `41e4d1d442f22e9258c576b402a123b110b886bd`。
+- 不在当前分支直接制造 integration 合并提交。M0-D 等待集成窗口确认 PR 可合并性和冲突责任；不通过改写 integration 代码解决冲突。
+- 当前 M0 只剩 M0-C 生产 DDL 外部证据与 M0-D integration 验收；M1 仍不准入。
 
