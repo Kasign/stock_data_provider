@@ -36,16 +36,16 @@ type IdentityTransaction interface {
 	AppendObservation(context.Context, domain.Observation) (domain.Observation, error)
 }
 
-// IngestCandidate 负责将一个已发现候选写入身份处理流程；不负责真实抓取或跨来源去重。
-type IngestCandidate struct {
+// candidateIngest 负责将一个已发现候选写入身份处理流程；不负责真实抓取或跨来源去重。
+type candidateIngest struct {
 	repository IdentityRepository
 	now        func() time.Time
 	newID      func() string
 }
 
-// NewIngestCandidate 创建候选身份处理用例。
-func NewIngestCandidate(repository IdentityRepository, newID func() string) *IngestCandidate {
-	return &IngestCandidate{repository: repository, now: time.Now, newID: newID}
+// NewcandidateIngest 创建候选身份处理用例。
+func newCandidateIngest(repository IdentityRepository, newID func() string) *candidateIngest {
+	return &candidateIngest{repository: repository, now: time.Now, newID: newID}
 }
 
 // Execute 在同一事务内解析身份、必要时创建主体、保存身份凭据并幂等追加 Observation。
@@ -64,22 +64,22 @@ type ObservationPolicyTrace struct {
 // Execute 仅用于不依赖搜索 Provider 输出的来源候选。
 // Provider 搜索结果必须经过可信组合根完成 Provider Output Policy 评估后，
 // 通过 ExecuteWithPolicyTrace 传入策略引用和版本；缺少追踪信息时拒绝持久化。
-func (u *IngestCandidate) Execute(ctx context.Context, sourceID, idempotencyKey string, candidate domain.Candidate, policy domain.SourceURLPolicy) (domain.Observation, error) {
+func (u *candidateIngest) executeUnscoped(ctx context.Context, sourceID, idempotencyKey string, candidate domain.Candidate, policy domain.SourceURLPolicy) (domain.Observation, error) {
 	if strings.TrimSpace(candidate.ProviderCode) != "" {
 		return domain.Observation{}, ErrProviderOutputPolicyRequired
 	}
-	return u.execute(ctx, sourceID, idempotencyKey, candidate, policy, ObservationPolicyTrace{})
+	return u.executeCore(ctx, sourceID, idempotencyKey, candidate, policy, ObservationPolicyTrace{})
 }
 
 // ExecuteWithPolicyTrace 仅记录 Source/Endpoint 评估结果。Provider Policy Resolver 尚未接入，
 // 因此当前拒绝所有 Provider 候选及 Provider Policy 自声明引用，防止调用方伪造授权追踪。
-func (u *IngestCandidate) ExecuteWithPolicyTrace(ctx context.Context, sourceID, idempotencyKey string, candidate domain.Candidate, policy domain.SourceURLPolicy, trace ObservationPolicyTrace) (domain.Observation, error) {
+func (u *candidateIngest) executeWithPolicyTrace(ctx context.Context, sourceID, idempotencyKey string, candidate domain.Candidate, policy domain.SourceURLPolicy, trace ObservationPolicyTrace) (domain.Observation, error) {
 	trace.SourcePolicyVersionID = strings.TrimSpace(trace.SourcePolicyVersionID)
 	trace.EndpointID = strings.TrimSpace(trace.EndpointID)
 	trace.EndpointPolicyVersionID = strings.TrimSpace(trace.EndpointPolicyVersionID)
 	trace.ProviderOutputPolicyRef = strings.TrimSpace(trace.ProviderOutputPolicyRef)
 	trace.ProviderOutputPolicyVersionID = strings.TrimSpace(trace.ProviderOutputPolicyVersionID)
-	if trace.SourcePolicyVersionID == "" || trace.PolicyEvaluatedAt.IsZero() {
+	if trace.SourcePolicyVersionID == "" || trace.PolicyEvaluatedAt.IsZero() || trace.Retention <= 0 {
 		return domain.Observation{}, ErrInvalidRequest
 	}
 	if strings.TrimSpace(candidate.ProviderCode) != "" ||
@@ -87,10 +87,10 @@ func (u *IngestCandidate) ExecuteWithPolicyTrace(ctx context.Context, sourceID, 
 		return domain.Observation{}, ErrProviderOutputPolicyRequired
 	}
 	trace.PolicyEvaluatedAt = trace.PolicyEvaluatedAt.UTC()
-	return u.execute(ctx, sourceID, idempotencyKey, candidate, policy, trace)
+	return u.executeCore(ctx, sourceID, idempotencyKey, candidate, policy, trace)
 }
 
-func (u *IngestCandidate) execute(ctx context.Context, sourceID, idempotencyKey string, candidate domain.Candidate, policy domain.SourceURLPolicy, trace ObservationPolicyTrace) (domain.Observation, error) {
+func (u *candidateIngest) executeCore(ctx context.Context, sourceID, idempotencyKey string, candidate domain.Candidate, policy domain.SourceURLPolicy, trace ObservationPolicyTrace) (domain.Observation, error) {
 	if u == nil || u.repository == nil || u.newID == nil || ctx == nil {
 		return domain.Observation{}, ErrInvalidRequest
 	}
@@ -223,6 +223,14 @@ func credentialsNotYetStored(candidates, existing []domain.IdentityCredential) [
 	return result
 }
 
+// effectiveObservationRetention 以实际保留时长比较，避免重试时间变化导致相同授权期限冲突。
+func effectiveObservationRetention(observation domain.Observation) time.Duration {
+	if observation.RetentionUntil.IsZero() || observation.ObservedAt.IsZero() || observation.RetentionUntil.Before(observation.ObservedAt) {
+		return 0
+	}
+	return observation.RetentionUntil.Sub(observation.ObservedAt)
+}
+
 // SameObservationPayload 判断同一幂等键的候选载荷是否一致；不比较生成 ID、采集时间和解析结果。
 func SameObservationPayload(a, b domain.Observation) bool {
 	aCandidate, bCandidate := a.Candidate, b.Candidate
@@ -241,5 +249,6 @@ func SameObservationPayload(a, b domain.Observation) bool {
 		a.EndpointPolicyVersionID == b.EndpointPolicyVersionID &&
 		a.ProviderOutputPolicyRef == b.ProviderOutputPolicyRef &&
 		a.ProviderOutputPolicyVersionID == b.ProviderOutputPolicyVersionID &&
-		reflect.DeepEqual(aCandidate, bCandidate)
+		reflect.DeepEqual(aCandidate, bCandidate) &&
+		effectiveObservationRetention(a) == effectiveObservationRetention(b)
 }

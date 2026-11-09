@@ -59,7 +59,7 @@ func validProviderIngestPolicy() ProviderOutputPolicyBinding {
 
 func TestIngestProviderCandidateEvaluatesTrustedPolicyBeforePersistence(t *testing.T) {
 	repository := &memoryIdentityRepository{}
-	ingest := NewIngestCandidate(repository, func() string { return "observation-provider-allowed" })
+	ingest := newCandidateIngest(repository, func() string { return "observation-provider-allowed" })
 	usecase, err := NewIngestProviderCandidate(ingest, providerIngestCatalogStub{
 		registration: validProviderIngestRegistration(),
 	}, providerIngestPolicyStub{binding: validProviderIngestPolicy()})
@@ -77,6 +77,9 @@ func TestIngestProviderCandidateEvaluatesTrustedPolicyBeforePersistence(t *testi
 	})
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
+	}
+	if observation.RetentionUntil.IsZero() || observation.RetentionUntil.Sub(observation.ObservedAt) != 5*time.Minute {
+		t.Fatalf("authorized provider retention was not persisted: %+v", observation)
 	}
 	if observation.ProviderOutputPolicyRef != "brave-output" ||
 		observation.ProviderOutputPolicyVersionID != "policy-v4" ||
@@ -127,7 +130,7 @@ func TestIngestProviderCandidateFailsClosedBeforePersistence(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			repository := &memoryIdentityRepository{}
-			ingest := NewIngestCandidate(repository, func() string { return "must-not-persist" })
+			ingest := newCandidateIngest(repository, func() string { return "must-not-persist" })
 			usecase, err := NewIngestProviderCandidate(ingest,
 				providerIngestCatalogStub{registration: test.registration},
 				providerIngestPolicyStub{binding: test.policy, err: test.policyErr},
@@ -153,7 +156,7 @@ func TestIngestProviderCandidateFailsClosedBeforePersistence(t *testing.T) {
 
 func TestIngestProviderCandidateRejectsProviderIdentityMismatch(t *testing.T) {
 	repository := &memoryIdentityRepository{}
-	ingest := NewIngestCandidate(repository, func() string { return "must-not-persist" })
+	ingest := newCandidateIngest(repository, func() string { return "must-not-persist" })
 	binding := validProviderIngestPolicy()
 	binding.ProviderCode = "tavily"
 	usecase, err := NewIngestProviderCandidate(ingest,

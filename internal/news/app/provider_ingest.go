@@ -46,14 +46,14 @@ type IngestProviderCandidateRequest struct {
 // ProviderPolicyResolver 读取策略，并执行 Provider ∩ Source ∩ Endpoint 权限评估。
 // 任一策略缺失、版本缺失或权限不满足时 fail-closed，不触碰 Repository。
 type IngestProviderCandidate struct {
-	ingest   *IngestCandidate
+	ingest   *candidateIngest
 	sources  SourceCatalog
 	policies ProviderOutputPolicyResolver
 	now      func() time.Time
 }
 
 func NewIngestProviderCandidate(
-	ingest *IngestCandidate,
+	ingest *candidateIngest,
 	sources SourceCatalog,
 	policies ProviderOutputPolicyResolver,
 ) (*IngestProviderCandidate, error) {
@@ -73,7 +73,7 @@ func (u *IngestProviderCandidate) Execute(ctx context.Context, request IngestPro
 	request.Candidate.ProviderCode = strings.TrimSpace(request.Candidate.ProviderCode)
 	if request.SourceID == "" || request.EndpointID == "" || request.IdempotencyKey == "" ||
 		request.Candidate.ProviderCode == "" || request.Purpose == "" || request.ContentKind == "" ||
-		request.StorageMode == "" || request.Retention < 0 {
+		request.StorageMode == "" || request.Retention <= 0 {
 		return domain.Observation{}, ErrInvalidRequest
 	}
 
@@ -115,11 +115,12 @@ func (u *IngestProviderCandidate) Execute(ctx context.Context, request IngestPro
 		ProviderOutputPolicyRef:       strings.TrimSpace(providerBinding.PolicyRef),
 		ProviderOutputPolicyVersionID: strings.TrimSpace(providerBinding.PolicyVersion),
 		PolicyEvaluatedAt:             evaluatedAt,
+		Retention:                     request.Retention,
 	}
 	if registration.EndpointPolicy != nil {
 		trace.EndpointID = registration.EndpointID
 		trace.EndpointPolicyVersionID = registration.EndpointPolicyVersionID
 	}
-	return u.ingest.execute(ctx, request.SourceID, request.IdempotencyKey,
+	return u.ingest.executeCore(ctx, request.SourceID, request.IdempotencyKey,
 		request.Candidate, registration.URLPolicy, trace)
 }
