@@ -124,7 +124,33 @@ func (r *MySQLDeliveryRepository) Create(ctx context.Context, delivery domain.De
 		delivery.AttemptCount != 0 || delivery.NextAttemptAt != nil {
 		return domain.ErrInvalidDelivery
 	}
-	_, err := r.db.ExecContext(ctx, `INSERT INTO notification_deliveries (
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("notification storage: begin delivery create: %w", err)
+	}
+	defer tx.Rollback()
+
+	var matchingPlans int
+	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM notification_delivery_plans
+		WHERE delivery_id = ? AND source_module = ? AND event_id = ?
+		AND subscription_id = ? AND subscription_version = ?
+		AND channel_ref = ? AND channel_config_version = ?
+		AND template_id = ? AND template_version = ? AND recipient_ref = ?
+		AND payload_fingerprint = ? AND plan_fingerprint = ?
+		AND delivery_idempotency_key = ?`,
+		delivery.DeliveryID, delivery.SourceModule, delivery.EventID,
+		delivery.SubscriptionID, delivery.SubscriptionVersion,
+		delivery.ChannelRef, delivery.ChannelConfigVersion,
+		delivery.TemplateID, delivery.TemplateVersion, delivery.RecipientRef,
+		delivery.PayloadFingerprint, delivery.PlanFingerprint, delivery.DeliveryIdempotencyKey,
+	).Scan(&matchingPlans); err != nil {
+		return fmt.Errorf("notification storage: verify immutable delivery plan: %w", err)
+	}
+	if matchingPlans != 1 {
+		return errors.New("notification storage: delivery snapshot does not match its immutable plan")
+	}
+
+	_, err = tx.ExecContext(ctx, `INSERT INTO notification_deliveries (
 		delivery_id, source_module, event_id, subscription_id, subscription_version,
 		channel_ref, channel_config_version, template_id, template_version, recipient_ref,
 		payload_fingerprint, plan_fingerprint, delivery_idempotency_key, status, version,
@@ -145,6 +171,9 @@ func (r *MySQLDeliveryRepository) Create(ctx context.Context, delivery domain.De
 	}
 	if err != nil {
 		return fmt.Errorf("notification storage: create delivery: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("notification storage: commit delivery create: %w", err)
 	}
 	return nil
 }

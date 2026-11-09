@@ -71,6 +71,11 @@ func TestNotificationMariaDBDeliveryRepositoryIntegration(t *testing.T) {
 	if err := repository.Create(ctx, delivery); err != nil {
 		t.Fatalf("create delivery: %v", err)
 	}
+	mismatchedPlan := delivery
+	mismatchedPlan.RecipientRef = "recipient-mismatch"
+	if err := repository.Create(ctx, mismatchedPlan); err == nil {
+		t.Fatal("delivery snapshot must match its immutable persisted plan")
+	}
 	if err := repository.Create(ctx, delivery); !errors.Is(err, application.ErrDeliveryAlreadyExists) {
 		t.Fatalf("duplicate delivery must conflict, got %v", err)
 	}
@@ -115,6 +120,23 @@ func TestNotificationMariaDBDeliveryRepositoryIntegration(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatal(err)
+	}
+	// Force the append-only event insert to fail and prove the snapshot update rolls back.
+	if _, err := db.ExecContext(ctx, `INSERT INTO notification_delivery_state_events (
+		delivery_id, version, from_status, to_status, changed_at
+	) VALUES (?, ?, ?, ?, ?)`, delivery.DeliveryID, next.Version, string(domain.DeliverySending),
+		string(domain.DeliverySent), finishedAt); err != nil {
+		t.Fatalf("insert conflicting event fixture: %v", err)
+	}
+	if err := repository.UpdateWithLease(ctx, winner.Delivery.Version, winner.Lease.FencingToken, next, event, finishedAt); err == nil {
+		t.Fatal("duplicate state event must fail the transaction")
+	}
+	afterRollback, found, err := repository.Get(ctx, delivery.DeliveryID)
+	if err != nil || !found || afterRollback.Status != domain.DeliverySending || afterRollback.Version != winner.Delivery.Version {
+		t.Fatalf("failed event append must roll back delivery snapshot: found=%v delivery=%+v err=%v", found, afterRollback, err)
+	}
+	if _, err := db.ExecContext(ctx, "DELETE FROM notification_delivery_state_events WHERE delivery_id = ? AND version = ?", delivery.DeliveryID, next.Version); err != nil {
+		t.Fatalf("remove conflicting event fixture: %v", err)
 	}
 	if err := repository.UpdateWithLease(ctx, winner.Delivery.Version, winner.Lease.FencingToken, next, event, finishedAt); err != nil {
 		t.Fatalf("complete delivery with active lease: %v", err)
