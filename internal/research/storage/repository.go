@@ -79,7 +79,14 @@ func (r repositoryBase) appendVersion(ctx context.Context, aggregateType, aggreg
 		var existingPayload []byte
 		query := fmt.Sprintf("SELECT payload_sha256, payload FROM %s WHERE %s=? AND %s=?", table, idColumn, versionColumn)
 		err := tx.QueryRowContext(ctx, query, aggregateID, version).Scan(&existingDigest, &existingPayload)
-		if err == nil && existingDigest == digest && bytes.Equal(existingPayload, payload) { return tx.Commit() }
+		if err == nil {
+			if err := verifyStoredPayload(existingPayload, existingDigest); err != nil {
+				return err
+			}
+			if existingDigest == digest && bytes.Equal(existingPayload, payload) {
+				return tx.Commit()
+			}
+		}
 		if err != nil && !errors.Is(err, sql.ErrNoRows) { return fmt.Errorf("read existing research version: %w", err) }
 		return fmt.Errorf("%w: %s %s version %d already has different content", ErrConflict, aggregateType, aggregateID, version)
 	}
@@ -90,10 +97,14 @@ func (r repositoryBase) appendVersion(ctx context.Context, aggregateType, aggreg
 		return fmt.Errorf("%w: %s %s expected version %d, got %d", ErrConflict, aggregateType, aggregateID, latest+1, version)
 	}
 	if latest > 0 {
+		var previousDigest string
 		var previous []byte
-		query := fmt.Sprintf("SELECT payload FROM %s WHERE %s=? AND %s=?", table, idColumn, versionColumn)
-		if err := tx.QueryRowContext(ctx, query, aggregateID, latest).Scan(&previous); err != nil {
+		query := fmt.Sprintf("SELECT payload_sha256, payload FROM %s WHERE %s=? AND %s=?", table, idColumn, versionColumn)
+		if err := tx.QueryRowContext(ctx, query, aggregateID, latest).Scan(&previousDigest, &previous); err != nil {
 			return fmt.Errorf("read previous research version: %w", err)
+		}
+		if err := verifyStoredPayload(previous, previousDigest); err != nil {
+			return err
 		}
 		if validateNext == nil { return errors.New("next-version validator is required") }
 		if err := validateNext(previous); err != nil { return fmt.Errorf("validate next research version: %w", err) }
