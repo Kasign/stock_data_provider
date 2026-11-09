@@ -84,3 +84,24 @@ func TestResultValidateStrengthAndRequiredCollections(t *testing.T) {
 		t.Fatal("blank conflict ref accepted")
 	}
 }
+
+func TestResultValidateRejectsInvalidUTF8Text(t *testing.T) {
+	cases := []struct {
+		name   string
+		mutate func(*Result)
+	}{
+		{"trend code", func(r *Result) { r.TrendCode = string([]byte{0xff}) }},
+		{"period", func(r *Result) { r.Period = string([]byte{0xff}) }},
+		{"algorithm version", func(r *Result) { r.AlgorithmVersion = string([]byte{0xff}) }},
+		{"conflict ref", func(r *Result) { r.ConflictRefs = []string{string([]byte{0xff})} }},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			result := validResult()
+			tc.mutate(&result)
+			if err := result.Validate(); err == nil {
+				t.Fatal("invalid UTF-8 input accepted")
+			}
+		})
+	}
+}

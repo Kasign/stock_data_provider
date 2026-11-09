@@ -24,5 +24,6 @@
 - direction 与 phase 独立序列化；unknown 不得被转换为 sideways。
 - strength 拒绝 NaN、Inf 和 [0,1] 外数值。
 - 必需数组必须显式存在；允许空数组。
+- TrendResult 与通用 QuantMetric 的自由文本字段及 JSON 标量原文必须是有效 UTF-8，避免 Go JSON 解码/序列化替换非法字节。
 - 非法时间、空引用、非法质量状态拒绝。
 - Golden 固定 DTO 的 JSON 结构，不代表某个真实趋势算法已完成验收。
