@@ -69,3 +69,14 @@ func ClearSessionCookie(config SessionCookieConfig) (*http.Cookie, error) {
 		Expires: time.Unix(1, 0).UTC(), MaxAge: -1,
 	}, nil
 }
+
+func validCookieName(name string) bool {
+	for _, char := range []byte(name) {
+		if (char >= 'a' && char <= 'z') || (char >= 'A' && char <= 'Z') ||
+			(char >= '0' && char <= '9') || char == '-' || char == '_' {
+			continue
+		}
+		return false
+	}
+	return true
+}
