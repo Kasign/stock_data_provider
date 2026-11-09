@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"errors"
+	"reflect"
 	"strings"
 	"time"
 
@@ -53,6 +54,14 @@ func (u *GetEvidence) Execute(ctx context.Context, request GetEvidenceRequest) (
 	if err != nil {
 		return ResearchEvidenceRecord{}, err
 	}
+	if !validEvidencePITRecord(pit, request) {
+		return ResearchEvidenceRecord{}, ErrInvalidEvidenceQuery
+	}
+	// 到期或历史期限未知的候选载荷不得通过读取路径继续披露，即使清理任务尚未执行。
+	if pit.Observation.PayloadPurgedAt != nil || pit.Observation.RetentionUntil.IsZero() ||
+		!pit.Observation.RetentionUntil.After(u.now().UTC()) {
+		pit.Observation.Candidate = domain.Candidate{}
+	}
 	resourceRef, err := domain.NewsEvidenceResourceRef(pit.Version.NewsID, pit.Version.VersionNo)
 	if err != nil {
 		return ResearchEvidenceRecord{}, ErrInvalidAuthorizationSnapshot
@@ -79,6 +88,31 @@ func (u *GetEvidence) Execute(ctx context.Context, request GetEvidenceRequest) (
 		return ResearchEvidenceRecord{}, err
 	}
 	return researchEvidenceRecordFromPIT(pit, binding, request), nil
+}
+
+func validEvidencePITRecord(pit EvidencePITRecord, request GetEvidenceRequest) bool {
+	observation, version := pit.Observation, pit.Version
+	if observation.ID == "" || observation.NewsID != request.NewsID ||
+		version.ID == "" || version.NewsID != request.NewsID ||
+		(request.VersionID != "" && version.ID != request.VersionID) ||
+		version.VersionNo < 1 || version.ObservationID != observation.ID ||
+		pit.SourceRef == "" || pit.SourceRef != observation.SourceID ||
+		pit.ProviderRef != observation.ProviderCode ||
+		observation.ObservedAt.IsZero() || version.ObservedAt.IsZero() ||
+		!validEvidenceUTC(observation.ObservedAt) || !validEvidenceUTC(version.ObservedAt) ||
+		observation.ObservedAt.After(request.SystemAsOf) || version.ObservedAt.After(request.SystemAsOf) {
+		return false
+	}
+	if !observation.RetentionUntil.IsZero() && !validEvidenceUTC(observation.RetentionUntil) {
+		return false
+	}
+	if observation.PayloadPurgedAt != nil {
+		if observation.PayloadPurgedAt.IsZero() || !validEvidenceUTC(*observation.PayloadPurgedAt) ||
+			!reflect.DeepEqual(observation.Candidate, domain.Candidate{}) {
+			return false
+		}
+	}
+	return true
 }
 
 func researchEvidenceRecordFromPIT(
