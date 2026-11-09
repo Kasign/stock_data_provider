@@ -469,6 +469,8 @@ func buildPytdxQuote(ctx context.Context, symbol string, current, prevClose, ope
 		"provider_quote_timestamp_not_exposed",
 		"provider_name_not_exposed_by_quote_contract",
 	}
+	addPytdxValidationIssue(ctx, 0, "quote_time", "protocol.Quote", "not_exposed_by_provider_contract", "provider snapshot timestamp", "unavailable", "", "Go 通达信报价协议未暴露源端快照时间", validation.SeverityWarning)
+	addPytdxValidationIssue(ctx, 0, "name", "protocol.Quote", "not_exposed_by_provider_contract", "security name", "unavailable", "", "Go 通达信报价协议未暴露证券名称", validation.SeverityWarning)
 	if pytdxNonNegativeFinite(amountValue) && amountValue > 0 {
 		amount, rawAmount = &amountValue, &amountValue
 		amountUnit, rawAmountUnit, rawAmountField = "CNY", "CNY", "amount"
