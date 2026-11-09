@@ -27,15 +27,15 @@ func NewMySQLDeliveryAttemptRepository(db *sql.DB) (*MySQLDeliveryAttemptReposit
 }
 
 type lockedAttemptDelivery struct {
-	version       int64
-	status        domain.DeliveryStatus
-	attemptCount  int64
-	maxAttempts   int64
-	workerID      sql.NullString
-	leaseExpiry   []byte
-	fencingToken  int64
-	deadlineAt    []byte
-	updatedAt     []byte
+	version      int64
+	status       domain.DeliveryStatus
+	attemptCount int64
+	maxAttempts  int64
+	workerID     sql.NullString
+	leaseExpiry  []byte
+	fencingToken int64
+	deadlineAt   []byte
+	updatedAt    []byte
 }
 
 func lockAttemptDelivery(ctx context.Context, tx *sql.Tx, deliveryID string) (lockedAttemptDelivery, error) {
@@ -72,19 +72,19 @@ func validateAttemptLease(
 	workerID string,
 	fencingToken int64,
 	leaseExpiresAt time.Time,
-) error {
+) (time.Time, error) {
 	if !current.workerID.Valid || current.workerID.String != workerID ||
 		current.fencingToken != fencingToken || len(current.leaseExpiry) == 0 {
-		return application.ErrDeliveryLeaseConflict
+		return time.Time{}, application.ErrDeliveryLeaseConflict
 	}
 	expiry, err := parseDatabaseTime(current.leaseExpiry)
 	if err != nil {
-		return err
+		return time.Time{}, err
 	}
 	if !expiry.Equal(leaseExpiresAt) || !now.Before(expiry) {
-		return application.ErrDeliveryLeaseConflict
+		return time.Time{}, application.ErrDeliveryLeaseConflict
 	}
-	return nil
+	return expiry, nil
 }
 
 func (r *MySQLDeliveryAttemptRepository) StartWithLease(
@@ -116,7 +116,7 @@ func (r *MySQLDeliveryAttemptRepository) StartWithLease(
 	if err != nil {
 		return err
 	}
-	if err := validateAttemptLease(current, now, attempt.WorkerID, fencingToken, attempt.LeaseExpiresAt); err != nil {
+	if _, err := validateAttemptLease(current, now, attempt.WorkerID, fencingToken, attempt.LeaseExpiresAt); err != nil {
 		return err
 	}
 	if current.version != expectedDeliveryVersion {
@@ -139,6 +139,7 @@ func (r *MySQLDeliveryAttemptRepository) StartWithLease(
 		return domain.ErrInvalidDeliveryAttempt
 	}
 
+	// Delivery 行锁串行化同一 Delivery 的 Start；唯一索引仍是跨事务的最终防线。
 	var running int
 	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM notification_delivery_attempts
 		WHERE delivery_id = ? AND finished_at IS NULL`, attempt.DeliveryID).Scan(&running); err != nil {
@@ -227,7 +228,8 @@ func (r *MySQLDeliveryAttemptRepository) CompleteWithLease(
 	if err != nil {
 		return err
 	}
-	if err := validateAttemptLease(current, now, completed.WorkerID, fencingToken, completed.LeaseExpiresAt); err != nil {
+	expiry, err := validateAttemptLease(current, now, completed.WorkerID, fencingToken, completed.LeaseExpiresAt)
+	if err != nil {
 		return err
 	}
 	if current.version != expectedDeliveryVersion {
@@ -236,27 +238,21 @@ func (r *MySQLDeliveryAttemptRepository) CompleteWithLease(
 	if current.status != domain.DeliverySending {
 		return application.ErrDeliveryAttemptConflict
 	}
-	if completed.FinishedAt.After(now) {
+	if completed.FinishedAt.After(now) || !completed.FinishedAt.Before(expiry) {
 		return domain.ErrInvalidDeliveryAttempt
 	}
 
-	var existing domain.DeliveryAttempt
-	var outcome, providerRef, errorCode, evidenceRef sql.NullString
-	var finishedAt, retryAfterAt []byte
-	var duration sql.NullInt64
-	var retryable bool
+	var existingDeliveryID, existingWorkerID string
+	var existingAttemptNo int
+	var existingFencingToken int64
+	var existingLeaseExpiry, existingStartedAt, finishedAt []byte
 	err = tx.QueryRowContext(ctx, `SELECT delivery_id, attempt_no, worker_id, fencing_token,
 		DATE_FORMAT(lease_expires_at, '%Y-%m-%d %H:%i:%s.%f'),
 		DATE_FORMAT(started_at, '%Y-%m-%d %H:%i:%s.%f'),
-		DATE_FORMAT(finished_at, '%Y-%m-%d %H:%i:%s.%f'),
-		outcome, provider_message_ref, error_code, retryable,
-		DATE_FORMAT(retry_after_at, '%Y-%m-%d %H:%i:%s.%f'),
-		duration_ms, evidence_ref
+		DATE_FORMAT(finished_at, '%Y-%m-%d %H:%i:%s.%f')
 		FROM notification_delivery_attempts WHERE attempt_id = ? FOR UPDATE`, completed.AttemptID).Scan(
-		&existing.DeliveryID, &existing.AttemptNo, &existing.WorkerID, &existing.FencingToken,
-		&existing.LeaseExpiresAt, &existing.StartedAt, &finishedAt,
-		&outcome, &providerRef, &errorCode, &retryable, &retryAfterAt,
-		&duration, &evidenceRef,
+		&existingDeliveryID, &existingAttemptNo, &existingWorkerID, &existingFencingToken,
+		&existingLeaseExpiry, &existingStartedAt, &finishedAt,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return application.ErrDeliveryAttemptNotFound
@@ -264,20 +260,23 @@ func (r *MySQLDeliveryAttemptRepository) CompleteWithLease(
 	if err != nil {
 		return fmt.Errorf("notification storage: lock delivery attempt: %w", err)
 	}
-	if existing.LeaseExpiresAt, err = parseDatabaseTime(existing.LeaseExpiresAt); err != nil {
+	leaseExpiry, err := parseDatabaseTime(existingLeaseExpiry)
+	if err != nil {
 		return err
 	}
-	if existing.StartedAt, err = parseDatabaseTime(existing.StartedAt); err != nil {
+	startedAt, err := parseDatabaseTime(existingStartedAt)
+	if err != nil {
 		return err
 	}
-	if existing.DeliveryID != completed.DeliveryID || existing.AttemptNo != completed.AttemptNo ||
-		existing.WorkerID != completed.WorkerID || existing.FencingToken != fencingToken ||
-		!existing.LeaseExpiresAt.Equal(completed.LeaseExpiresAt) || !existing.StartedAt.Equal(completed.StartedAt) {
+	if existingDeliveryID != completed.DeliveryID || existingAttemptNo != completed.AttemptNo ||
+		existingWorkerID != completed.WorkerID || existingFencingToken != fencingToken ||
+		!leaseExpiry.Equal(completed.LeaseExpiresAt) || !startedAt.Equal(completed.StartedAt) {
 		return application.ErrDeliveryAttemptConflict
 	}
 	if len(finishedAt) != 0 {
 		return application.ErrDeliveryAttemptConflict
 	}
+
 	result, err := tx.ExecContext(ctx, `UPDATE notification_delivery_attempts SET
 		finished_at = ?, outcome = ?, provider_message_ref = ?, error_code = ?,
 		retryable = ?, retry_after_at = ?, duration_ms = ?, evidence_ref = ?
@@ -300,13 +299,6 @@ func (r *MySQLDeliveryAttemptRepository) CompleteWithLease(
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("notification storage: commit attempt completion: %w", err)
 	}
-	_ = outcome
-	_ = providerRef
-	_ = errorCode
-	_ = retryable
-	_ = retryAfterAt
-	_ = duration
-	_ = evidenceRef
 	return nil
 }
 
