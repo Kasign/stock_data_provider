@@ -316,12 +316,12 @@ localStorage + storage event 方案能解决“另一个标签页完成写入后
 | 编号 | 任务 | 状态 | 完成条件 |
 |---|---|---|---|
 | WEB-101 | 修复模块化单体迁移后的 WebUI 契约测试路径 | 待验收 | 已定位 3 项失败均由测试引用旧 `services/market-data/**` 路径导致；已更新 `market-sector-ranking.test.mjs`、`market-stocks-navigation.test.mjs`、`ui-contract.test.mjs` 至 `internal/marketdata/**`。待当前 HEAD 的 WebUI Checks 通过后关闭 |
-| WEB-102 | 对齐 WebUI API 清单与 Market Data 契约及挂载状态 | 待处理 | 分别核对 OpenAPI 声明、`internal/marketdata/httpapi/server.go` 中 Adapter 路由注册、Root Server 实际挂载、部署路由可达性和认证状态；不得将前两项推断为对外可用。修正旧 `services/market-data/**` 路径 |
-| WEB-103 | 校正 WebUI 服务边界和认证迁移说明 | 待处理 | 明确 Root Server 目标与兼容路由；记录当前 Analysis API 使用 Owner Bearer，而 `web/src/api.js` 不携带该凭证，浏览器请求预期 401，且 Web Session/Cookie、CSRF、登录限流和资源授权尚未闭环。保持 Owner Bearer 管理入口受限网络保护，不写入浏览器、不匿名降级 |
-| WEB-104 | 校正任务历史 API 归属与页面事实 | 待处理 | 明确当前最近任务只是浏览器本地引用；任务列表/分页由 Researchflow Application Facade 提供、Server 注册；没有真实 Handler 前不增加调用 |
-| WEB-105 | 校正统一诊断专项文档 | 待处理 | 对照当前 Data OpenAPI：字段校验计数、问题明细、截断和 coverage_dimensions 已声明；真实 Provider 覆盖及 MariaDB 历史持久化仍单独等待证据；修复失效文档链接和越界修改范围描述 |
+| WEB-102 | 对齐 WebUI API 清单与 Market Data 契约及挂载状态 | 阻塞/等待依赖 | 分别核对 OpenAPI 声明、`internal/marketdata/httpapi/server.go` 中 Adapter 路由注册、Root Server 实际挂载、部署路由可达性和认证状态；不得将前两项推断为对外可用。修正旧 `services/market-data/**` 路径 |
+| WEB-103 | 校正 WebUI 服务边界和认证迁移说明 | 已完成（文档对齐） | 明确 Root Server 目标与兼容路由；记录当前 Analysis API 使用 Owner Bearer，而 `web/src/api.js` 不携带该凭证，浏览器请求预期 401，且 Web Session/Cookie、CSRF、登录限流和资源授权尚未闭环。保持 Owner Bearer 管理入口受限网络保护，不写入浏览器、不匿名降级 |
+| WEB-104 | 校正任务历史 API 归属与页面事实 | 已完成（文档对齐） | 明确当前最近任务只是浏览器本地引用；任务列表/分页由 Researchflow Application Facade 提供、Server 注册；没有真实 Handler 前不增加调用 |
+| WEB-105 | 校正统一诊断专项文档 | 已完成（文档对齐） | 对照当前 Data OpenAPI：字段校验计数、问题明细、截断和 coverage_dimensions 已声明；真实 Provider 覆盖及 MariaDB 历史持久化仍单独等待证据；修复失效文档链接和越界修改范围描述 |
 
-WEB-101 根因证据：Run `42607301812` 的 3 项失败分别是 `market-sector-ranking.test.mjs` 读取旧 model 路径、`market-stocks-navigation.test.mjs` 读取旧 OpenAPI 路径、`ui-contract.test.mjs` 读取旧 HTTP Server/OpenAPI 路径，均为 `ENOENT`；335 项中 332 项通过。三处测试路径已更新，当前分支最新 HEAD 尚无对应 CI 通过证据。WEB-102～105 的文档映射已先行修正；后续按针对性检查推进，不以反复全量验证替代实际问题修复。
+WEB-101 根因证据：Run `42607301812` 的 3 项失败分别是 `market-sector-ranking.test.mjs` 读取旧 model 路径、`market-stocks-navigation.test.mjs` 读取旧 OpenAPI 路径、`ui-contract.test.mjs` 读取旧 HTTP Server/OpenAPI 路径，均为 `ENOENT`；335 项中 332 项通过。三处测试路径已更新，当前分支最新 HEAD 尚无对应 CI 通过证据。WEB-103～105 的服务边界、任务历史归属和诊断契约文档已完成对齐。WEB-102 已核实 OpenAPI 与 Data Adapter Handler 路由；Data 迁移文档明确 M3 Root Server 实际挂载尚未完成，Server SRV-010 仍未开始，因此该任务阻塞于 Server/Data 集成，不把 Adapter 注册误报为对外可用。后续按真实依赖推进，不以反复全量验证替代实际问题修复。
 
 ### 7.4 P1：等待后端契约的前端接入准备
 
