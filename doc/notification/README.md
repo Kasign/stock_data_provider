@@ -5,7 +5,7 @@
 - 任务前缀：NTF
 - 当前阶段：NTF-001 Fake/Domain 测试已覆盖并发与失败恢复，真实 Repository Adapter 留待 NTF-006；NTF-002 Renderer 核心已实现；NTF-003 已建立 Channel Domain/Port/精确版本内存 Registry 与 Fake Adapter 测试；NTF-004 已开始 Delivery 状态领域模型与迁移测试，Dispatcher/Worker/CAS Repository 尚未实现。
 - 当前代码事实：`internal/notification/domain`、`schema`、`application` 和 `template` 已建立；ChannelConfigSnapshot、ChannelAdapter/Resolver、RecipientResolver Port 与内存 ChannelRegistry 已建立；InboxRepository、SubscriptionRepository、DeliveryPlanRepository 已定义 Port。当前有 Inbox/Subscription/DeliveryPlan Fake Repository 测试覆盖并发、CAS、不可变版本和失败后无部分写入/重试；DeliveryPlan 授权策略版本按 GOV-CTR-006 完整 tuple 保存并参与指纹，没有真实持久化 Adapter。Event/Template 资源限制均显式配置，项目建议值尚未冻结，不在模块内设隐式默认值。Template Registry 仅提供内存不可变版本和 Renderer 核心，尚无生产模板内容或持久化 Adapter。旧 Python/Web 通知能力不属于 Go Notification Domain。
-- 契约证据：NTF-CTR-001～003 均为 `pending_evidence`。4 份 Schema、6 个 Golden 已校准；上一轮完整 CI Run 42201893234 已通过；当前分支 HEAD `eed8b817c7872cb1f07106fc901f15024e93e074` 对应 Run 42208589747 的根模块 Test job 在 gofmt 阶段被其他模块的 `internal/research/context/validate.go` 语法错误及 `internal/research/evidence/authorization.go` 非法 NUL 字符阻断；未修改其他模块，Delivery 状态迁移新增测试尚未获得通过证据。NTF-CTR-001～003 仍因跨模块/真实 Adapter 证据不足保持 pending_evidence。
+- 契约证据：NTF-CTR-001～003 均为 `pending_evidence`。4 份 Schema、6 个 Golden 已校准；上一轮完整 CI Run 42201893234 已通过；前一 HEAD `eed8b817c7872cb1f07106fc901f15024e93e074` 对应 Run 42208589747 的根模块 Test job 在 gofmt 阶段被其他模块的 `internal/research/context/validate.go` 语法错误及 `internal/research/evidence/authorization.go` 非法 NUL 字符阻断；未修改其他模块，Delivery 状态迁移新增测试尚未获得通过证据；最新提交 `4a8e35f733037c98121ce2014cdaf41027fb0e32` 尚无新的 CI 运行记录。NTF-CTR-001～003 仍因跨模块/真实 Adapter 证据不足保持 pending_evidence。
 
 Notification 是独立通知业务模块，负责事件接收、Subscription、Template、Channel、Dispatcher、Delivery、Attempt、幂等、重试和投递诊断。不计算业务告警条件，不依赖 Researchflow 内部实现。
 
@@ -19,7 +19,7 @@ Notification 是独立通知业务模块，负责事件接收、Subscription、T
 - [首批 JSON Schema](schema/)
 - [首批 Golden 样例](golden/)
 
-关键边界：recipient_scope 不等于真实发送目标；外部渠道不承诺 exactly-once；发送结果不确定时不得盲目重试。Platform 提供 Secret、HTTP、Storage 和 Worker 基础设施，领域状态与 Repository 归 Notification 所有。
+关键边界：recipient_scope 不等于真实发送目标；外部渠道不承诺 exactly-once；发送结果不确定时不得盲目重试。Platform 提供 Secret、HTTP Client、Storage 等公共技术原语；Notification 自己拥有领域状态、Repository 和有界 Dispatcher。当前 `internal/platform/taskqueue` 耦合旧 Analysis 领域，不作为 Notification Worker 复用；根 Worker/DI 装配由集成方负责。
 
 ## 当前开发状态
 
