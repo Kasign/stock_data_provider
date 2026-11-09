@@ -98,7 +98,7 @@ func (s *Service) BuildEvidenceCheck(ctx context.Context, ref EvidenceRef, runAs
 	if err := validateDiagnosticRunCutoff(runAsOf); err != nil {
 		return platformdiagnostics.Check{}, err
 	}
-	
+
 	record, err := s.GetEvidence(ctx, ref)
 	if err != nil {
 		return platformdiagnostics.Check{}, err
@@ -127,7 +127,6 @@ func toDomainContext(value ResearchContext) researchcontext.Context {
 		CreatedAt:        value.CreatedAt,
 	}
 }
-
 
 // validateDiagnosticRunCutoff validates the authoritative UTC cutoff supplied by Researchflow CreateRun.
 func validateDiagnosticRunCutoff(value time.Time) error {
