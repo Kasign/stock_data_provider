@@ -50,7 +50,10 @@ func NewIngestCandidate(repository IdentityRepository, newID func() string) *Ing
 // ObservationPolicyTrace 将在线采集时使用的授权策略版本传递给 Observation。
 type ObservationPolicyTrace struct {
 	SourcePolicyVersionID   string
+	EndpointID              string
 	EndpointPolicyVersionID string
+	ProviderOutputPolicyRef string
+	ProviderOutputPolicyVersionID string
 	PolicyEvaluatedAt       time.Time
 }
 
@@ -62,7 +65,10 @@ func (u *IngestCandidate) Execute(ctx context.Context, sourceID, idempotencyKey 
 // ExecuteWithPolicyTrace 用于 CollectSource 等已完成 Source/Endpoint 授权评估的候选。
 func (u *IngestCandidate) ExecuteWithPolicyTrace(ctx context.Context, sourceID, idempotencyKey string, candidate domain.Candidate, policy domain.SourceURLPolicy, trace ObservationPolicyTrace) (domain.Observation, error) {
 	trace.SourcePolicyVersionID = strings.TrimSpace(trace.SourcePolicyVersionID)
+	trace.EndpointID = strings.TrimSpace(trace.EndpointID)
 	trace.EndpointPolicyVersionID = strings.TrimSpace(trace.EndpointPolicyVersionID)
+	trace.ProviderOutputPolicyRef = strings.TrimSpace(trace.ProviderOutputPolicyRef)
+	trace.ProviderOutputPolicyVersionID = strings.TrimSpace(trace.ProviderOutputPolicyVersionID)
 	if trace.SourcePolicyVersionID == "" || trace.PolicyEvaluatedAt.IsZero() {
 		return domain.Observation{}, ErrInvalidRequest
 	}
@@ -96,8 +102,11 @@ func (u *IngestCandidate) execute(ctx context.Context, sourceID, idempotencyKey 
 		SourceID:                sourceID,
 		ProviderCode:            candidate.ProviderCode,
 		QueryDimension:          candidate.QueryDimension,
+		EndpointID:              trace.EndpointID,
 		SourcePolicyVersionID:   trace.SourcePolicyVersionID,
 		EndpointPolicyVersionID: trace.EndpointPolicyVersionID,
+		ProviderOutputPolicyRef: trace.ProviderOutputPolicyRef,
+		ProviderOutputPolicyVersionID: trace.ProviderOutputPolicyVersionID,
 		PolicyEvaluatedAt:       trace.PolicyEvaluatedAt,
 		Candidate:               candidate,
 		ObservedAt:              observedAt,
@@ -117,6 +126,9 @@ func (u *IngestCandidate) execute(ctx context.Context, sourceID, idempotencyKey 
 			observation.ReasonCode = "news.identity.credential_rejected"
 		} else {
 			credentials = built
+			for i := range credentials {
+				credentials[i].ObservedAt = observedAt
+			}
 		}
 	}
 
@@ -207,7 +219,10 @@ func SameObservationPayload(a, b domain.Observation) bool {
 		a.SourceID == b.SourceID &&
 		a.ProviderCode == b.ProviderCode &&
 		a.QueryDimension == b.QueryDimension &&
+		a.EndpointID == b.EndpointID &&
 		a.SourcePolicyVersionID == b.SourcePolicyVersionID &&
 		a.EndpointPolicyVersionID == b.EndpointPolicyVersionID &&
+		a.ProviderOutputPolicyRef == b.ProviderOutputPolicyRef &&
+		a.ProviderOutputPolicyVersionID == b.ProviderOutputPolicyVersionID &&
 		reflect.DeepEqual(aCandidate, bCandidate)
 }

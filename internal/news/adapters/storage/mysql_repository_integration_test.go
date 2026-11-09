@@ -65,10 +65,11 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 	}
 
 	binding := loadIntegrationAuthorizationBinding(t)
-	if err := repository.AppendAuthorizationSnapshot(ctx, binding); err != nil {
+	authorizationObservation, authorizationVersion := integrationAuthorizationEvidence()
+	if err := repository.AppendAuthorizationSnapshot(ctx, binding, authorizationObservation, authorizationVersion); err != nil {
 		t.Fatalf("append authorization snapshot: %v", err)
 	}
-	if err := repository.AppendAuthorizationSnapshot(ctx, binding); err != nil {
+	if err := repository.AppendAuthorizationSnapshot(ctx, binding, authorizationObservation, authorizationVersion); err != nil {
 		t.Fatalf("idempotent authorization snapshot append: %v", err)
 	}
 	loadedBinding, err := repository.GetAuthorizationSnapshot(ctx, binding.AuthorizationRef.AuthorizationRef)
@@ -81,7 +82,7 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 	}
 	conflictingBinding := binding
 	conflictingBinding.AuthorizationRef.DecisionFingerprint = strings.Repeat("f", 64)
-	if err := repository.AppendAuthorizationSnapshot(ctx, conflictingBinding); !errors.Is(err, app.ErrAuthorizationSnapshotConflict) {
+	if err := repository.AppendAuthorizationSnapshot(ctx, conflictingBinding, authorizationObservation, authorizationVersion); !errors.Is(err, app.ErrAuthorizationSnapshotConflict) {
 		t.Fatalf("conflicting authorization snapshot append error = %v", err)
 	}
 	if _, err := repository.GetAuthorizationSnapshot(ctx, "authorization-not-found"); !errors.Is(err, app.ErrAuthorizationSnapshotNotFound) {
@@ -116,7 +117,7 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 		t.Fatalf("tampered authorization snapshot error = %v, want invalid snapshot", authorizationTamperErr)
 	}
 
-	snapshotCreatedAt := time.Now().UTC().Truncate(time.Microsecond)
+	snapshotCreatedAt := time.Now().UTC()
 	snapshot := app.EvidenceSnapshot{
 		SnapshotRef:           fmt.Sprintf("news-snapshot-it-%d", time.Now().UnixNano()),
 		CallerRef:             "service:researchflow",
@@ -177,6 +178,24 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 	}
 	if !errors.Is(evidenceTamperErr, app.ErrInvalidEvidenceSnapshot) {
 		t.Fatalf("tampered evidence snapshot error = %v, want invalid snapshot", evidenceTamperErr)
+	}
+	// The denormalized lookup columns are part of the immutable snapshot
+	// envelope and must agree with the hash-verified JSON payload.
+	if _, err := db.ExecContext(ctx,
+		"UPDATE news_evidence_snapshots SET page_size = page_size + 1 WHERE snapshot_ref = ?",
+		snapshot.SnapshotRef,
+	); err != nil {
+		t.Fatalf("tamper evidence snapshot metadata: %v", err)
+	}
+	_, evidenceMetadataTamperErr := repository.GetEvidenceSnapshot(ctx, snapshot.SnapshotRef, snapshot.CallerRef, snapshotCreatedAt.Add(time.Minute))
+	if _, err := db.ExecContext(ctx,
+		"UPDATE news_evidence_snapshots SET page_size = ? WHERE snapshot_ref = ?",
+		snapshot.PageSize, snapshot.SnapshotRef,
+	); err != nil {
+		t.Fatalf("restore evidence snapshot metadata: %v", err)
+	}
+	if !errors.Is(evidenceMetadataTamperErr, app.ErrInvalidEvidenceSnapshot) {
+		t.Fatalf("tampered evidence snapshot metadata error = %v, want invalid snapshot", evidenceMetadataTamperErr)
 	}
 	conflictingSnapshot := snapshot
 	conflictingSnapshot.PageSize++
@@ -247,6 +266,50 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 	}
 	if itemCount != 1 {
 		t.Fatalf("concurrent first identity created %d News items, want 1", itemCount)
+	}
+
+	identityCandidates, err := domain.BuildIdentityCredentials(sourceID, "native-item-001", "", domain.SourceURLPolicy{})
+	if err != nil {
+		t.Fatalf("build identity history query: %v", err)
+	}
+	identityBefore := observations[0].ObservedAt.Add(-time.Hour)
+	credentialsBefore, err := repository.ListIdentityCredentialsAt(ctx, sourceID, identityCandidates, identityBefore)
+	if err != nil {
+		t.Fatalf("query identity before creation: %v", err)
+	}
+	if len(credentialsBefore) != 0 {
+		t.Fatalf("identity credential visible before creation: %+v", credentialsBefore)
+	}
+	identityAsOf := time.Now().UTC().Add(time.Second)
+	credentialsAt, err := repository.ListIdentityCredentialsAt(ctx, sourceID, identityCandidates, identityAsOf)
+	if err != nil {
+		t.Fatalf("query identity at system_as_of: %v", err)
+	}
+	if len(credentialsAt) != 1 || credentialsAt[0].NewsID != newsID ||
+		credentialsAt[0].Status != domain.IdentifierActive ||
+		credentialsAt[0].ObservedAt.After(identityAsOf) {
+		t.Fatalf("unexpected identity PIT result: %+v", credentialsAt)
+	}
+
+	traceSourceID := sourceID + "-provider-trace"
+	traceCandidate := domain.Candidate{SourceItemID: "provider-trace-item", ProviderCode: "tavily", Title: "trace test"}
+	trace := app.ObservationPolicyTrace{
+		SourcePolicyVersionID: "source-policy-v1",
+		EndpointID: "endpoint-v1", EndpointPolicyVersionID: "endpoint-policy-v1",
+		ProviderOutputPolicyRef: "provider-policy-ref",
+		ProviderOutputPolicyVersionID: "provider-policy-v1",
+		PolicyEvaluatedAt: time.Now().UTC(),
+	}
+	traced, err := ingest.ExecuteWithPolicyTrace(ctx, traceSourceID, "provider-trace-key", traceCandidate, domain.SourceURLPolicy{}, trace)
+	if err != nil {
+		t.Fatalf("ingest provider policy trace: %v", err)
+	}
+	replayedTrace, err := ingest.ExecuteWithPolicyTrace(ctx, traceSourceID, "provider-trace-key", traceCandidate, domain.SourceURLPolicy{}, trace)
+	if err != nil {
+		t.Fatalf("replay provider policy trace: %v", err)
+	}
+	if replayedTrace.ID != traced.ID || replayedTrace.ProviderOutputPolicyVersionID != "provider-policy-v1" {
+		t.Fatalf("provider output policy version was not persisted and replayed: %+v", replayedTrace)
 	}
 
 	replayed, err := ingest.Execute(ctx, sourceID, "news-it-key-0", candidate, domain.SourceURLPolicy{})
@@ -382,6 +445,81 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 		t.Fatalf("explicit future version error = %v, want PIT not found", err)
 	}
 
+	listRequest := app.ListEvidenceRequest{
+		CallerRef:             "service:research",
+		PurposeCode:           app.EvidencePurposeResearchAnalysis,
+		RequestedContentLevel: app.EvidenceContentSummary,
+		SystemAsOf:            time.Now().UTC(),
+		Filters: &app.EvidenceQueryFilters{
+			NewsIDs:    []string{secondObservation.NewsID},
+			SourceRefs: []string{secondSourceID},
+		},
+		PageSize: 20,
+	}
+	listed, err := repository.ListEvidenceVersionsAt(ctx, listRequest)
+	if err != nil {
+		t.Fatalf("list evidence at system_as_of: %v", err)
+	}
+	if len(listed) != 1 || listed[0].Version.ID != secondVersion.Version.ID ||
+		listed[0].Observation.ID != secondObservation.ID || listed[0].SourceRef != secondSourceID {
+		t.Fatalf("ListEvidence PIT returned unexpected records: %+v", listed)
+	}
+	listRequest.SystemAsOf = secondVersion.Version.ObservedAt.Add(-time.Second)
+	listed, err = repository.ListEvidenceVersionsAt(ctx, listRequest)
+	if err != nil {
+		t.Fatalf("list evidence before system_as_of: %v", err)
+	}
+	if len(listed) != 0 {
+		t.Fatalf("ListEvidence PIT exposed %d future records", len(listed))
+	}
+	listRequest.SystemAsOf = time.Now().UTC()
+	listRequest.Filters.CanonicalSymbols = []string{"SSE:600000"}
+	if _, err := repository.ListEvidenceVersionsAt(ctx, listRequest); !errors.Is(err, app.ErrInvalidEvidenceQuery) {
+		t.Fatalf("unsupported temporal symbol filter error = %v, want invalid query", err)
+	}
+
+	// A later source revision must not rewrite the version visible at an earlier
+	// knowledge time; the latest version changes only after its observation.
+	time.Sleep(10 * time.Millisecond)
+	revisedCandidate := secondCandidate
+	revisedCandidate.Title = "Second news item revised"
+	revisedObservation, err := ingest.Execute(
+		ctx, secondSourceID, "news-it-second-revision-key", revisedCandidate, domain.SourceURLPolicy{},
+	)
+	if err != nil {
+		t.Fatalf("ingest second news revision: %v", err)
+	}
+	if revisedObservation.NewsID != secondObservation.NewsID {
+		t.Fatalf("revision NewsID = %q, want %q", revisedObservation.NewsID, secondObservation.NewsID)
+	}
+	revisedVersion, err := updater.Execute(ctx, app.ResearchUpdateRequest{
+		NewsID: revisedObservation.NewsID, Candidate: revisedCandidate,
+		ObservationID: revisedObservation.ID,
+		Content: domain.ContentLayers{
+			SourceSummary: "revised source summary", SourceSummaryOrigin: domain.ContentOriginFeedSummary,
+		},
+	})
+	if err != nil {
+		t.Fatalf("append second news revision: %v", err)
+	}
+	listRequest.Filters.CanonicalSymbols = nil
+	listRequest.SystemAsOf = secondVersion.Version.ObservedAt
+	listed, err = repository.ListEvidenceVersionsAt(ctx, listRequest)
+	if err != nil {
+		t.Fatalf("list evidence before later revision: %v", err)
+	}
+	if len(listed) != 1 || listed[0].Version.ID != secondVersion.Version.ID {
+		t.Fatalf("historical PIT version = %+v, want original version %q", listed, secondVersion.Version.ID)
+	}
+	listRequest.SystemAsOf = time.Now().UTC()
+	listed, err = repository.ListEvidenceVersionsAt(ctx, listRequest)
+	if err != nil {
+		t.Fatalf("list evidence after later revision: %v", err)
+	}
+	if len(listed) != 1 || listed[0].Version.ID != revisedVersion.Version.ID {
+		t.Fatalf("latest PIT version = %+v, want revised version %q", listed, revisedVersion.Version.ID)
+	}
+
 	relationService := app.NewApplyNewsItemRelation(repository, newID)
 	relation, err := relationService.Execute(ctx, app.NewsItemRelationRequest{
 		Relation: domain.NewsItemRelation{
@@ -389,7 +527,7 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 			ToNewsID: secondObservation.NewsID, ToSourceID: secondSourceID,
 			Kind: domain.NewsItemRelationRepostOf, Status: domain.NewsItemRelationConfirmed,
 			EvidenceObservation: observations[0].ID,
-			FromVersionID:       latest.ID, ToVersionID: secondVersion.Version.ID,
+			FromVersionID:       latest.ID, ToVersionID: revisedVersion.Version.ID,
 		},
 	})
 	if err != nil {
@@ -412,6 +550,89 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
+	// Knowledge-time reads retain old assertions but hide assertions not yet observed.
+	beforeRelation := relation.ObservedAt.Add(-time.Microsecond)
+	history, err := repository.ListNewsItemRelationsAt(ctx, app.NewsItemRelationHistoryRequest{
+		NewsID: newsID, SystemAsOf: beforeRelation,
+	})
+	if err != nil {
+		t.Fatalf("read relation history before assertion: %v", err)
+	}
+	if len(history) != 0 {
+		t.Fatalf("relation history before assertion = %#v, want empty", history)
+	}
+	afterRelation := relation.ObservedAt.Add(time.Microsecond)
+	history, err = repository.ListNewsItemRelationsAt(ctx, app.NewsItemRelationHistoryRequest{
+		NewsID: newsID, SystemAsOf: afterRelation,
+	})
+	if err != nil {
+		t.Fatalf("read relation history from source item: %v", err)
+	}
+	if len(history) != 1 || history[0].ID != relation.ID {
+		t.Fatalf("source-side relation history = %#v, want relation %q", history, relation.ID)
+	}
+	history, err = repository.ListNewsItemRelationsAt(ctx, app.NewsItemRelationHistoryRequest{
+		NewsID: secondObservation.NewsID, SystemAsOf: afterRelation,
+	})
+	if err != nil {
+		t.Fatalf("read relation history from target item: %v", err)
+	}
+	if len(history) != 1 || history[0].ID != relation.ID {
+		t.Fatalf("target-side relation history = %#v, want relation %q", history, relation.ID)
+	}
+
+	proposal, err := relationService.Execute(ctx, app.NewsItemRelationRequest{
+		Relation: domain.NewsItemRelation{
+			FromNewsID: newsID, FromSourceID: sourceID,
+			ToNewsID: secondObservation.NewsID, ToSourceID: secondSourceID,
+			Kind: domain.NewsItemRelationRepostOf, Status: domain.NewsItemRelationProposed,
+			SupersedesRelationID: relation.ID,
+			EvidenceObservation:  observations[0].ID,
+			FromVersionID:        latest.ID, ToVersionID: revisedVersion.Version.ID,
+		},
+	})
+	if err != nil {
+		t.Fatalf("append proposed relation replacement: %v", err)
+	}
+	afterProposal := proposal.ObservedAt.Add(time.Microsecond)
+	history, err = repository.ListNewsItemRelationsAt(ctx, app.NewsItemRelationHistoryRequest{
+		NewsID: secondObservation.NewsID, SystemAsOf: afterProposal,
+	})
+	if err != nil {
+		t.Fatalf("read relation history after proposal: %v", err)
+	}
+	if len(history) != 2 || history[0].ID != relation.ID || history[1].ID != proposal.ID {
+		t.Fatalf("history after proposal = %#v, want original then proposal", history)
+	}
+	// 提议状态不改变当前关系图；原确认断言仍保留在历史中。
+
+	retraction, err := relationService.Execute(ctx, app.NewsItemRelationRequest{
+		Relation: domain.NewsItemRelation{
+			FromNewsID: newsID, FromSourceID: sourceID,
+			ToNewsID: secondObservation.NewsID, ToSourceID: secondSourceID,
+			Kind: domain.NewsItemRelationRepostOf, Status: domain.NewsItemRelationRetracted,
+			SupersedesRelationID: proposal.ID,
+			EvidenceObservation:  observations[0].ID,
+			FromVersionID:        latest.ID, ToVersionID: revisedVersion.Version.ID,
+		},
+	})
+	if err != nil {
+		t.Fatalf("append proposal retraction: %v", err)
+	}
+	afterRetraction := retraction.ObservedAt.Add(time.Microsecond)
+	history, err = repository.ListNewsItemRelationsAt(ctx, app.NewsItemRelationHistoryRequest{
+		NewsID: secondObservation.NewsID, SystemAsOf: afterRetraction,
+	})
+	if err != nil {
+		t.Fatalf("read relation history after retraction: %v", err)
+	}
+	if len(history) != 3 ||
+		history[0].ID != relation.ID ||
+		history[1].ID != proposal.ID ||
+		history[2].ID != retraction.ID {
+		t.Fatalf("history after retraction = %#v, want complete append-only chain", history)
+	}
 }
 
 func loadIntegrationAuthorizationBinding(t *testing.T) domain.NewsAuthorizationBinding {
@@ -431,4 +652,17 @@ func loadIntegrationAuthorizationBinding(t *testing.T) domain.NewsAuthorizationB
 		t.Fatalf("invalid NEWS-CTR-002 integration golden: %v", err)
 	}
 	return fixture.AuthorizationBinding
+}
+
+func integrationAuthorizationEvidence() (domain.Observation, domain.NewsItemVersion) {
+	observation := domain.Observation{
+		ID: "news-it-auth-observation", NewsID: "news_001", SourceID: "sec-edgar",
+		ProviderCode: "tavily", SourcePolicyVersionID: "2.1.0",
+		EndpointPolicyVersionID: "1.0.0", ProviderOutputPolicyVersionID: "3.0.0",
+	}
+	version := domain.NewsItemVersion{
+		ID: "news-it-auth-version", NewsID: "news_001", VersionNo: 1,
+		ObservationID: observation.ID,
+	}
+	return observation, version
 }
