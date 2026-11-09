@@ -176,6 +176,13 @@ func TestMariaDBClaimAttemptLeaseAndFencing(t *testing.T) {
 		AttemptStatus: domain.AttemptSucceeded, Stage: nextStage,
 		OutputRef: nextStage.OutputRef,
 	}
+	// Attempt and Stage must reference the same immutable output artifact.
+	mismatchedOutput := currentCommit
+	mismatchedOutput.OutputRef = stringRef("different-result-" + suffix)
+	if err := repository.CommitAttemptResult(ctx, mismatchedOutput); err == nil {
+		t.Fatal("result commit must reject different Attempt and Stage output refs")
+	}
+
 	if err := repository.CommitAttemptResult(ctx, currentCommit); err != nil {
 		t.Fatalf("current worker result commit: %v", err)
 	}
