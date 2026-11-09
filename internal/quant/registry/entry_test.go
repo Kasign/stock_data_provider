@@ -2,10 +2,10 @@ package registry
 
 import (
 	"encoding/json"
-\t"fmt"
 	"errors"
+	"fmt"
+	"sync"
 	"testing"
-\t"sync"
 )
 
 func validEntry(code, algorithmVersion string) Entry {
