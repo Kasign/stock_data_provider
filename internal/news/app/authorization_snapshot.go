@@ -16,7 +16,7 @@ var (
 // AuthorizationSnapshotRepository is an append-only store for immutable
 // NEWS-CTR-002 decisions. It is not a policy evaluator or current-access gate.
 type AuthorizationSnapshotRepository interface {
-	AppendAuthorizationSnapshot(context.Context, domain.NewsAuthorizationBinding) error
+	AppendAuthorizationSnapshot(context.Context, domain.NewsAuthorizationBinding, domain.Observation, domain.NewsItemVersion) error
 	GetAuthorizationSnapshot(context.Context, string) (domain.NewsAuthorizationBinding, error)
 }
 
@@ -34,10 +34,12 @@ func NewRecordAuthorizationSnapshot(repository AuthorizationSnapshotRepository) 
 func (s *RecordAuthorizationSnapshot) Execute(
 	ctx context.Context,
 	binding domain.NewsAuthorizationBinding,
+	observation domain.Observation,
+	version domain.NewsItemVersion,
 ) error {
 	if s == nil || s.repository == nil || ctx == nil ||
-		domain.ValidateNewsAuthorizationBinding(binding) != nil {
+		domain.ValidateNewsAuthorizationBindingForEvidence(binding, observation, version) != nil {
 		return ErrInvalidAuthorizationSnapshot
 	}
-	return s.repository.AppendAuthorizationSnapshot(ctx, binding)
+	return s.repository.AppendAuthorizationSnapshot(ctx, binding, observation, version)
 }

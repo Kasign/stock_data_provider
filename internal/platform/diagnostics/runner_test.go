@@ -205,3 +205,43 @@ func TestRunnerDoesNotRetainPanicPayload(t *testing.T) {
 		t.Fatalf("internal fault must not appear in report JSON: %s", encoded)
 	}
 }
+
+func TestRunnerRejectsRetryableValidationFault(t *testing.T) {
+	check := Check{ID: "retryable-validation", Run: func(context.Context) (Observation, error) {
+		return Observation{}, &fault.Fault{
+			Class: fault.ClassValidation, Code: "data.input.invalid",
+			SafeMessage: "invalid input", Retryable: true,
+		}
+	}}
+	report, err := (Runner{}).Run(context.Background(), []Check{check})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := report.Results[0].Fault
+	if got == nil || got.Class != fault.ClassInternal ||
+		got.Code != "platform.diagnostics.invalid_fault" {
+		t.Fatalf("retryable validation fault was not rejected: %+v", got)
+	}
+}
+
+func TestRunnerRejectsNonLogicalDependency(t *testing.T) {
+	for _, dependency := range []string{"https://db.example/path?token=secret", "127.0.0.1", "storage mariadb"} {
+		t.Run(dependency, func(t *testing.T) {
+			check := Check{ID: "unsafe-dependency", Run: func(context.Context) (Observation, error) {
+				return Observation{}, &fault.Fault{
+					Class: fault.ClassUnavailable, Code: "storage.unavailable",
+					SafeMessage: "storage unavailable", Dependency: dependency,
+				}
+			}}
+			report, err := (Runner{}).Run(context.Background(), []Check{check})
+			if err != nil {
+				t.Fatal(err)
+			}
+			got := report.Results[0].Fault
+			if got == nil || got.Code != "platform.diagnostics.invalid_fault" ||
+				got.SafeMessage != "check returned an invalid fault" {
+				t.Fatalf("non-logical dependency was not rejected: %+v", got)
+			}
+		})
+	}
+}

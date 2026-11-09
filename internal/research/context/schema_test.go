@@ -24,7 +24,7 @@ func TestContextJSONSchemaMatchesDTOFields(t *testing.T) {
 		t.Fatalf("unexpected JSON Schema dialect: %v", document["$schema"])
 	}
 	properties := schemaObject(t, document["properties"])
-	assertSchemaStructFields(t, "Context", reflect.TypeOf(Context{}), properties)
+	assertSchemaStructFields(t, "Context", reflect.TypeOf(Context{}), document)
 
 	definitions := schemaObject(t, document["$defs"])
 	assertSchemaStructFields(t, "ContextSectionRef", reflect.TypeOf(SectionRef{}), schemaObject(t, definitions["ContextSectionRef"]))
@@ -110,7 +110,6 @@ func requiredFieldNames(typ reflect.Type) map[string]struct{} {
 	}
 	return fields
 }
-
 
 func TestContextJSONSchemaValidatesGoldenAndRejectsInvalidPayloads(t *testing.T) {
 	schemaData, err := os.ReadFile("schema/context-v1.schema.json")

@@ -10,6 +10,7 @@ import (
 	researchclaim "example.com/stock-analysis-flow/internal/research/claim"
 	researchcontext "example.com/stock-analysis-flow/internal/research/context"
 	researchevent "example.com/stock-analysis-flow/internal/research/event"
+	researchevidence "example.com/stock-analysis-flow/internal/research/evidence"
 )
 
 func validContextSnapshot() researchcontext.Context {
@@ -24,7 +25,7 @@ func validContextSnapshot() researchcontext.Context {
 			QualityStatus: researchcontext.QualityValid, Required: true, Included: true,
 			AssembledAt: cutoff, SystemAsOf: cutoff,
 		}},
-		QualitySummary: researchcontext.QualitySummary{Status: researchcontext.QualityValid, ReasonCodes: []string{}},
+		QualitySummary:   researchcontext.QualitySummary{Status: researchcontext.QualityValid, ReasonCodes: []string{}},
 		IncludedSections: []string{"profile"}, OmittedSections: []researchcontext.OmittedSection{},
 		BuilderVersion: "diagnostics-test-v1", CreatedAt: cutoff,
 	}
@@ -44,10 +45,10 @@ func runCheck(t *testing.T, check platformdiagnostics.Check) platformdiagnostics
 
 func TestContextCheckMapsQualityStates(t *testing.T) {
 	tests := []struct {
-		name string
+		name   string
 		status researchcontext.QualityStatus
-		want platformdiagnostics.Status
-		code string
+		want   platformdiagnostics.Status
+		code   string
 	}{
 		{"valid", researchcontext.QualityValid, platformdiagnostics.StatusHealthy, ""},
 		{"degraded", researchcontext.QualityDegraded, platformdiagnostics.StatusDegraded, "research.context.degraded"},
@@ -79,6 +80,7 @@ func TestContextCheckMapsQualityStates(t *testing.T) {
 func TestContextCheckDoesNotExposeValidationDetails(t *testing.T) {
 	value := validContextSnapshot()
 	value.ResearchQuestion = "secret user content"
+	value.Scope = researchcontext.Scope("invalid-secret-scope")
 	check, err := NewContextCheck("research.context.snapshot", "Context 快照", true, value)
 	if err != nil {
 		t.Fatalf("NewContextCheck() error = %v", err)
@@ -138,7 +140,7 @@ func TestEventAndClaimChecksValidateSnapshots(t *testing.T) {
 	claim := researchclaim.Claim{
 		ClaimID: "claim-diagnostic", ClaimVersion: 1, Statement: "fixture claim",
 		EpistemicType: researchclaim.EpistemicReportedFact,
-		ScopeRefs: []string{}, SystemAsOf: cutoff,
+		ScopeRefs:     []string{}, SystemAsOf: cutoff,
 		SupportingEvidenceRefs: []string{}, ContradictingEvidenceRefs: []string{},
 		RequiredDataRefs: []string{}, Status: researchclaim.StatusProposed,
 		Limitations: []string{},
@@ -202,5 +204,80 @@ func TestResearchChecksAreSafeForConcurrentRunnerExecution(t *testing.T) {
 	close(errors)
 	for err := range errors {
 		t.Errorf("concurrent Context check failed: %s", err)
+	}
+}
+
+func validEvidenceSnapshot(t *testing.T, quality researchevidence.QualityStatus) researchevidence.Evidence {
+	t.Helper()
+	available := time.Date(2026, 11, 5, 8, 0, 0, 0, time.UTC)
+	published := available
+	version := "v1"
+	locator := "news://news_001/version/v1"
+	value := researchevidence.Evidence{
+		EvidenceID: "evidence-diagnostic", EvidenceType: researchevidence.TypeReportedFact,
+		SourceOwner: researchevidence.SourceNews, SourceRef: "news_evidence_version:news_001:v1",
+		SourceVersion: &version, SourceLocator: &locator, DerivedFromRefs: []string{},
+		SubjectRefs: []string{"600000.SH"}, PublishedAt: &published, AvailableAt: &available,
+		SystemObservedAt: available.Add(time.Minute), SystemAsOf: available.Add(time.Hour),
+		Stance: researchevidence.StanceSupports, QualityStatus: quality,
+		ContentLevel: researchevidence.ContentSnippet, AuthorizationRef: "auth_diagnostic",
+		Limitations: []string{"snippet_only"},
+	}
+	fingerprint, err := value.ComputeContentFingerprint()
+	if err != nil {
+		t.Fatalf("compute Evidence fingerprint: %v", err)
+	}
+	value.ContentFingerprint = fingerprint
+	return value
+}
+
+func TestEvidenceCheckMapsQualityStatesWithoutExposingEvidence(t *testing.T) {
+	tests := []struct {
+		name    string
+		quality researchevidence.QualityStatus
+		want    platformdiagnostics.Status
+		code    string
+	}{
+		{"valid", researchevidence.QualityValid, platformdiagnostics.StatusHealthy, ""},
+		{"degraded", researchevidence.QualityDegraded, platformdiagnostics.StatusDegraded, "research.evidence.degraded"},
+		{"unknown", researchevidence.QualityUnknown, platformdiagnostics.StatusUnavailable, "research.evidence.quality_unknown"},
+		{"invalid", researchevidence.QualityInvalid, platformdiagnostics.StatusFailed, "research.evidence.quality_invalid"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			value := validEvidenceSnapshot(t, test.quality)
+			check, err := NewEvidenceCheck("research.evidence.snapshot", "Evidence 快照", true, value)
+			if err != nil {
+				t.Fatalf("NewEvidenceCheck() error = %v", err)
+			}
+			result := runCheck(t, check)
+			if result.Observation.Status != test.want {
+				t.Fatalf("status = %q, want %q", result.Observation.Status, test.want)
+			}
+			if result.Observation.ReasonCode != test.code {
+				t.Fatalf("reason_code = %q, want %q", result.Observation.ReasonCode, test.code)
+			}
+			for _, forbidden := range []string{"evidence_id", "source_ref", "authorization_ref", "content_fingerprint", "subject_refs", "limitations"} {
+				if _, exists := result.Observation.Attributes[forbidden]; exists {
+					t.Errorf("diagnostic exposes sensitive attribute %q", forbidden)
+				}
+			}
+			if result.Observation.SafeMessage == value.SourceRef || result.Observation.SafeMessage == value.AuthorizationRef {
+				t.Fatal("diagnostic message exposes source or authorization reference")
+			}
+		})
+	}
+}
+
+func TestEvidenceCheckUsesImmutableSnapshot(t *testing.T) {
+	value := validEvidenceSnapshot(t, researchevidence.QualityValid)
+	check, err := NewEvidenceCheck("research.evidence.snapshot", "Evidence 快照", true, value)
+	if err != nil {
+		t.Fatal(err)
+	}
+	value.QualityStatus = researchevidence.QualityInvalid
+	result := runCheck(t, check)
+	if result.Observation.Status != platformdiagnostics.StatusHealthy {
+		t.Fatalf("snapshot status = %q, want healthy", result.Observation.Status)
 	}
 }

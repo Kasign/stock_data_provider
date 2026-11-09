@@ -2,6 +2,7 @@ package domain
 
 import (
 	"errors"
+	"strings"
 	"testing"
 	"time"
 )
@@ -74,6 +75,40 @@ func TestCalculationContextValidateRequiresUniqueSnapshotRefs(t *testing.T) {
 	ctx.InputSnapshotRefs = []string{"  "}
 	if err := ctx.Validate(now, false); !errors.Is(err, ErrInvalidSnapshotRef) {
 		t.Fatalf("expected ErrInvalidSnapshotRef, got %v", err)
+	}
+}
+
+func TestCalculationContextValidateEnforcesSnapshotRefBounds(t *testing.T) {
+	now := time.Date(2026, 11, 6, 9, 0, 0, 0, time.UTC)
+	ctx := validCalculationContext()
+
+	ctx.InputSnapshotRefs = []string{" snapshot-a"}
+	if err := ctx.Validate(now, false); !errors.Is(err, ErrInvalidSnapshotRef) {
+		t.Fatalf("expected leading whitespace to be rejected, got %v", err)
+	}
+
+	ctx.InputSnapshotRefs = []string{"snapshot-a "}
+	if err := ctx.Validate(now, false); !errors.Is(err, ErrInvalidSnapshotRef) {
+		t.Fatalf("expected trailing whitespace to be rejected, got %v", err)
+	}
+
+	ctx.InputSnapshotRefs = []string{strings.Repeat("a", 129)}
+	if err := ctx.Validate(now, false); !errors.Is(err, ErrInvalidSnapshotRef) {
+		t.Fatalf("expected reference longer than 128 bytes to be rejected, got %v", err)
+	}
+
+	ctx.InputSnapshotRefs = []string{strings.Repeat("a", 128)}
+	if err := ctx.Validate(now, false); err != nil {
+		t.Fatalf("expected 128-byte reference to be accepted, got %v", err)
+	}
+}
+
+func TestCalculationContextValidateRejectsInvalidUTF8SnapshotRef(t *testing.T) {
+	ctx := validCalculationContext()
+	ctx.InputSnapshotRefs = []string{string([]byte{0xff})}
+	now := time.Date(2026, 11, 6, 9, 0, 0, 0, time.UTC)
+	if err := ctx.Validate(now, false); !errors.Is(err, ErrInvalidSnapshotRef) {
+		t.Fatalf("expected invalid UTF-8 reference to be rejected, got %v", err)
 	}
 }
 
