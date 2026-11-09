@@ -26,7 +26,13 @@ func validateEgressDependencies(cfg config.Config, deps Dependencies) error {
 			continue
 		}
 		if name == "eastmoney" {
-			origins, err := newEastmoneyProvider(cfg).HTTPOrigins()
+			origins, err := newEastmoneyProvider(cfg).HTTPOriginsForCapabilities(provider.EastmoneyCapabilities{
+				Quote: settings.Quote, DailyBars: settings.DailyBars, StockBasic: settings.StockBasic,
+				StockSearch: settings.StockSearch, SectorRankings: settings.SectorRankings, IndexQuotes: settings.IndexQuotes,
+				MarketBreadth: settings.MarketBreadth, LimitPools: settings.LimitPools, StockBoards: settings.StockBoards,
+				Announcements: settings.Announcements, DragonTiger: settings.DragonTiger, ChipDistribution: settings.ChipDistribution,
+				CapitalFlow: settings.CapitalFlow, HotRankings: settings.HotRankings,
+			})
 			if err != nil {
 				return fmt.Errorf("controlled egress for eastmoney: %w", err)
 			}
