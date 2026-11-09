@@ -50,12 +50,12 @@ func NewIngestCandidate(repository IdentityRepository, newID func() string) *Ing
 // IdempotencyKey 必须由上游按一次采集操作稳定生成；重试同一操作必须复用该值。
 // ObservationPolicyTrace 将在线采集时使用的授权策略版本传递给 Observation。
 type ObservationPolicyTrace struct {
-	SourcePolicyVersionID          string
-	EndpointID                     string
-	EndpointPolicyVersionID        string
-	ProviderOutputPolicyRef        string
-	ProviderOutputPolicyVersionID  string
-	PolicyEvaluatedAt              time.Time
+	SourcePolicyVersionID         string
+	EndpointID                    string
+	EndpointPolicyVersionID       string
+	ProviderOutputPolicyRef       string
+	ProviderOutputPolicyVersionID string
+	PolicyEvaluatedAt             time.Time
 }
 
 // Execute 仅用于不依赖搜索 Provider 输出的来源候选。
@@ -108,19 +108,19 @@ func (u *IngestCandidate) execute(ctx context.Context, sourceID, idempotencyKey 
 		}
 	}
 	observation := domain.Observation{
-		ID:                      strings.TrimSpace(u.newID()),
-		IdempotencyKey:          idempotencyKey,
-		SourceID:                sourceID,
-		ProviderCode:            candidate.ProviderCode,
-		QueryDimension:          candidate.QueryDimension,
-		EndpointID:              trace.EndpointID,
-		SourcePolicyVersionID:   trace.SourcePolicyVersionID,
-		EndpointPolicyVersionID: trace.EndpointPolicyVersionID,
-		ProviderOutputPolicyRef: trace.ProviderOutputPolicyRef,
+		ID:                            strings.TrimSpace(u.newID()),
+		IdempotencyKey:                idempotencyKey,
+		SourceID:                      sourceID,
+		ProviderCode:                  candidate.ProviderCode,
+		QueryDimension:                candidate.QueryDimension,
+		EndpointID:                    trace.EndpointID,
+		SourcePolicyVersionID:         trace.SourcePolicyVersionID,
+		EndpointPolicyVersionID:       trace.EndpointPolicyVersionID,
+		ProviderOutputPolicyRef:       trace.ProviderOutputPolicyRef,
 		ProviderOutputPolicyVersionID: trace.ProviderOutputPolicyVersionID,
-		PolicyEvaluatedAt:       trace.PolicyEvaluatedAt,
-		Candidate:               candidate,
-		ObservedAt:              observedAt,
+		PolicyEvaluatedAt:             trace.PolicyEvaluatedAt,
+		Candidate:                     candidate,
+		ObservedAt:                    observedAt,
 	}
 	if observation.ID == "" {
 		return domain.Observation{}, ErrInvalidRequest
