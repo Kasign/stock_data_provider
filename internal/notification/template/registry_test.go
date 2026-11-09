@@ -330,4 +330,3 @@ func TestRegistryLoadsExactImmutableVersionFromRepository(t *testing.T) {
 		t.Fatal("repository digest mismatch must be rejected")
 	}
 }
-
