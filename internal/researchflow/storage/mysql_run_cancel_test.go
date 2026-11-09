@@ -111,6 +111,16 @@ func TestMariaDBBeginRunCancellationLinearizesWorkerOperations(t *testing.T) {
 	if err != nil || runningStage.Status != domain.StageRunning {
 		t.Fatalf("in-flight stage was falsely stopped: stage=%#v err=%v", runningStage, err)
 	}
+	lateStageResult := runningStage
+	lateStageResult.Version++
+	lateStageResult.Status = domain.StageSucceeded
+	if err := repository.CommitAttemptResult(ctx, AttemptResultCommit{
+		RunRef: runRef, StageRef: runningStageRef, AttemptRef: attempt.Ref,
+		WorkerID: "worker-a", FencingToken: attempt.FencingToken,
+		AttemptStatus: domain.AttemptSucceeded, Stage: lateStageResult,
+	}); !errors.Is(err, ErrClaimRunUnavailable) {
+		t.Fatalf("result commit after cancellation error=%v, want ErrClaimRunUnavailable", err)
+	}
 	readyStage, err := repository.GetStage(ctx, readyStageRef)
 	if err != nil || readyStage.Status != domain.StageCancelled || readyStage.FinishedAt == nil {
 		t.Fatalf("not-yet-started stage was not cancelled: stage=%#v err=%v", readyStage, err)
