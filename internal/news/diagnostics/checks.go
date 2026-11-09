@@ -59,6 +59,35 @@ func providerConfigCheck(code, name string, configured bool) platformdiag.Check 
 	}
 }
 
+
+ 
+// ProviderOutputPolicyCheck reports the current hard boundary: Provider
+// credentials/configuration may exist, but no trusted policy catalog/evaluator
+// is wired into News yet. It performs no upstream request and never authorizes
+// persistence by itself.
+func ProviderOutputPolicyCheck() platformdiag.Check {
+	return platformdiag.Check{
+		ID: "news.provider.output_policy", Name: "News provider output policy readiness",
+		Required: true, Timeout: time.Second,
+		Run: func(ctx context.Context) (platformdiag.Observation, error) {
+			if err := ctx.Err(); err != nil {
+				return platformdiag.Observation{}, err
+			}
+			return platformdiag.Observation{
+				Status: platformdiag.StatusDegraded,
+				ReasonCode: "news.provider.output_policy_unavailable",
+				SafeMessage: "Trusted Provider output policy evaluation is not configured; Provider persistence remains blocked",
+				CheckedAt: time.Now().UTC(),
+				Attributes: map[string]string{
+					"policy_catalog": "unavailable",
+					"policy_evaluator": "unavailable",
+					"provider_persistence": "blocked",
+				},
+			}, nil
+		},
+	}
+}
+
 // ParserChecks executes deterministic local RSS/Atom fixtures. It performs no
 // network access and never includes source payloads in diagnostic attributes.
 func ParserChecks() []platformdiag.Check {
