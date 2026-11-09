@@ -70,7 +70,9 @@ func ParseResponsesSSE(data []byte, request ModelRequest, clock Clock, onEvent f
 		ModelRequested: request.Model, Status: ResponseIncomplete,
 		OutputItems: []OutputItem{}, StartedAt: startedAt,
 	}
+	outputTextParts := make(map[sseOutputTextKey]sseOutputTextState)
 	finish := func() {
+		result.OutputText = aggregateSSEOutputText(outputTextParts)
 		result.FinishedAt = clock.Now().UTC()
 		result.DurationMS = result.FinishedAt.Sub(startedAt).Milliseconds()
 	}
@@ -108,7 +110,6 @@ func ParseResponsesSSE(data []byte, request ModelRequest, clock Clock, onEvent f
 	var previousSequence int64
 	hasPreviousSequence := false
 	sawOutputTextEvent := false
-	outputTextParts := make(map[sseOutputTextKey]sseOutputTextState)
 	var parseErr error
 	var terminalErr error
 	functionArguments := make(map[string]sseFunctionArgumentsState)
@@ -239,7 +240,6 @@ func ParseResponsesSSE(data []byte, request ModelRequest, clock Clock, onEvent f
 				state.done = true
 			}
 			outputTextParts[key] = state
-			result.OutputText = aggregateSSEOutputText(outputTextParts)
 		}
 		if event.Usage != nil {
 			result.Usage = event.Usage
@@ -325,6 +325,7 @@ func ParseResponsesSSE(data []byte, request ModelRequest, clock Clock, onEvent f
 				result.Status = ResponseFailed
 				result.Error = event.Error
 			} else {
+				result.OutputText = aggregateSSEOutputText(outputTextParts)
 				var terminalParseErr error
 				result, terminalParseErr = terminalResponseFromEvent(wire, request, startedAt, result, sawOutputTextEvent)
 				if terminalParseErr != nil {
