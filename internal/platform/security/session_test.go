@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"github.com/redis/go-redis/v9"
+
+	"example.com/stock-analysis-flow/internal/platform/fault"
 )
 
 func TestSessionTokenAndDigest(t *testing.T) {
@@ -78,6 +80,16 @@ func TestSessionCookieHelpers(t *testing.T) {
 	if _, err := ClearSessionCookie(config); err == nil {
 		t.Fatal("root cookie path must be rejected")
 	}
+	config.Path = "/market-api"
+	config.Name = "bad;name"
+	if _, err := ClearSessionCookie(config); err == nil {
+		t.Fatal("invalid cookie name must be rejected")
+	}
+	config.Name = "kasign_session"
+	config.Domain = "example.com"
+	if _, err := ClearSessionCookie(config); err == nil {
+		t.Fatal("cookie Domain must be rejected")
+	}
 }
 
 func TestRedisSessionStoreIntegration(t *testing.T) {
@@ -110,6 +122,10 @@ func TestRedisSessionStoreIntegration(t *testing.T) {
 	if err := store.Create(ctx, digest, record); err != nil {
 		t.Fatalf("create: %v", err)
 	}
+	createdTTL, err := client.PTTL(ctx, store.key(digest)).Result()
+	if err != nil || createdTTL <= 0 || createdTTL > DefaultSessionAbsoluteTTL {
+		t.Fatalf("created session TTL = %v, err=%v", createdTTL, err)
+	}
 	if err := store.Create(ctx, digest, record); !errors.Is(err, ErrSessionConflict) {
 		t.Fatalf("duplicate create = %v", err)
 	}
@@ -122,6 +138,11 @@ func TestRedisSessionStoreIntegration(t *testing.T) {
 		!touched.IdleExpiresAt.Equal(touchedAt.Add(DefaultSessionIdleTTL)) ||
 		!touched.AbsoluteExpiresAt.Equal(record.AbsoluteExpiresAt) {
 		t.Fatalf("touch expiry mismatch: %+v", touched)
+	}
+	touchedTTL, err := client.PTTL(ctx, store.key(digest)).Result()
+	wantTTL := record.AbsoluteExpiresAt.Sub(touchedAt)
+	if err != nil || touchedTTL <= 0 || absDuration(touchedTTL-wantTTL) > time.Second {
+		t.Fatalf("touched session TTL = %v, want about %v, err=%v", touchedTTL, wantTTL, err)
 	}
 	_, digestA, err := NewSessionToken()
 	if err != nil {
@@ -171,4 +192,45 @@ func TestRedisSessionStoreIntegration(t *testing.T) {
 	if _, err := store.LookupAndTouch(ctx, winner, touchedAt, DefaultSessionIdleTTL); !errors.Is(err, ErrSessionNotFound) {
 		t.Fatalf("revoked token still valid: %v", err)
 	}
+
+	_, idleExpiredDigest, err := NewSessionToken()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Create(ctx, idleExpiredDigest, record); err != nil {
+		t.Fatalf("create idle-expiry fixture: %v", err)
+	}
+	if _, err := store.LookupAndTouch(ctx, idleExpiredDigest, now.Add(13*time.Hour), DefaultSessionIdleTTL); !errors.Is(err, ErrSessionNotFound) {
+		t.Fatalf("idle-expired session lookup = %v, want not found", err)
+	}
+
+	_, absoluteExpiredDigest, err := NewSessionToken()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Create(ctx, absoluteExpiredDigest, record); err != nil {
+		t.Fatalf("create absolute-expiry fixture: %v", err)
+	}
+	if _, err := store.LookupAndTouch(ctx, absoluteExpiredDigest, now.Add(8*24*time.Hour), DefaultSessionIdleTTL); !errors.Is(err, ErrSessionNotFound) {
+		t.Fatalf("absolute-expired session lookup = %v, want not found", err)
+	}
+
+	if err := client.Close(); err != nil {
+		t.Fatalf("close Redis client: %v", err)
+	}
+	if _, err := store.LookupAndTouch(ctx, digest, touchedAt, DefaultSessionIdleTTL); err == nil {
+		t.Fatal("Redis outage must fail closed")
+	} else {
+		var storeFault *fault.Fault
+		if !errors.As(err, &storeFault) || storeFault.Dependency != "redis" {
+			t.Fatalf("Redis outage returned unexpected error: %v", err)
+		}
+	}
+}
+
+func absDuration(value time.Duration) time.Duration {
+	if value < 0 {
+		return -value
+	}
+	return value
 }
