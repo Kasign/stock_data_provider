@@ -15,12 +15,12 @@ func sourcePersistenceRegistration() SourceEndpointRegistration {
 		AccessMethod: domain.AccessRSS, URL: "https://feed.example/rss",
 		SourcePolicyVersionID: "source-policy-v3",
 		SourcePolicy: domain.SourcePolicy{
-			Status: domain.AuthorizationApproved,
+			Status:               domain.AuthorizationApproved,
 			AllowedAccessMethods: []domain.AccessMethod{domain.AccessRSS},
-			AllowedPurposes: []domain.Purpose{domain.PurposeInternalPersonalResearch},
-			AllowedContentKinds: []domain.ContentKind{domain.ContentSnippet, domain.ContentMetadata},
-			AllowedStorageModes: []domain.StorageMode{domain.StorageTransient, domain.StoragePersistentMetadata},
-			MaxRetention: 24 * time.Hour, EvidenceRef: "source-evidence",
+			AllowedPurposes:      []domain.Purpose{domain.PurposeInternalPersonalResearch},
+			AllowedContentKinds:  []domain.ContentKind{domain.ContentSnippet, domain.ContentMetadata},
+			AllowedStorageModes:  []domain.StorageMode{domain.StorageTransient, domain.StoragePersistentMetadata},
+			MaxRetention:         24 * time.Hour, EvidenceRef: "source-evidence",
 		},
 		URLPolicy: domain.SourceURLPolicy{AllowedSchemes: []string{"https"}, AllowedHosts: []string{"feed.example"}},
 	}
@@ -29,9 +29,10 @@ func sourcePersistenceRegistration() SourceEndpointRegistration {
 func sealedCollectedSourceResult() CollectSourceResult {
 	return CollectSourceResult{
 		collectionSeal: sourceCollectionResultSeal,
-		SourceID: "source-feed", EndpointID: "endpoint-feed",
+		SourceID:              "source-feed",
+		EndpointID:            "endpoint-feed",
 		SourcePolicyVersionID: "source-policy-v3",
-		PolicyEvaluatedAt: time.Date(2026, 11, 9, 9, 0, 0, 0, time.UTC),
+		PolicyEvaluatedAt:     time.Date(2026, 11, 9, 9, 0, 0, 0, time.UTC),
 	}
 }
 
@@ -48,7 +49,7 @@ func TestIngestCollectedSourceRechecksVersionAndMetadataPersistencePolicy(t *tes
 	result := sealedCollectedSourceResult()
 	result.Entries = []CollectedSourceEntry{{
 		Candidate: domain.Candidate{SourceItemID: "item-1", Title: "title", ProviderSummary: "must-not-persist"},
-		Content: domain.ContentLayers{ProviderSummary: "must-not-persist"},
+		Content:   domain.ContentLayers{ProviderSummary: "must-not-persist"},
 	}}
 	observations, err := usecase.Execute(context.Background(), IngestCollectedSourceRequest{
 		Collection: result, IdempotencyPrefix: "collection-1",
