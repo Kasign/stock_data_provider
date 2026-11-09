@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
+	"time"
 
 	platformdiagnostics "example.com/stock-analysis-flow/internal/platform/diagnostics"
 	researchclaim "example.com/stock-analysis-flow/internal/research/claim"
@@ -129,7 +130,7 @@ func failedObservation(code, message string, attributes map[string]string) platf
 }
 
 // NewEvidenceCheck 只输出质量和来源元数据，不暴露 Evidence 正文、引用列表或授权快照。
-func NewEvidenceCheck(id, name string, required bool, value researchevidence.Evidence) (platformdiagnostics.Check, error) {
+func NewEvidenceCheck(id, name string, required bool, value researchevidence.Evidence, runAsOf time.Time) (platformdiagnostics.Check, error) {
 	snapshot, err := cloneSnapshot(value)
 	if err != nil {
 		return platformdiagnostics.Check{}, fmt.Errorf("snapshot Research Evidence: %w", err)
@@ -157,7 +158,7 @@ func NewEvidenceCheck(id, name string, required bool, value researchevidence.Evi
 					Attributes:  attributes,
 				}, nil
 			}
-			if err := snapshot.ValidateForStrictPIT(snapshot.SystemAsOf); err != nil {
+			if err := snapshot.ValidateForStrictPIT(runAsOf); err != nil {
 				return failedObservation("research.evidence.pit_invalid", "Research Evidence 不满足严格 PIT 约束", attributes), nil
 			}
 			switch snapshot.QualityStatus {
