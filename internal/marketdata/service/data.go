@@ -2574,10 +2574,18 @@ func (s *DataService) Ready(ctx context.Context) error {
 	if ctx == nil {
 		return fault.New(fault.ClassValidation, "market_data.readiness_context_missing", "readiness context is required", nil)
 	}
+	cacheEnabled := true
+	if availability, ok := s.cache.(cache.Availability); ok {
+		cacheEnabled = availability.Enabled()
+	}
+	storeEnabled := s.store != nil
 	checks := []platformdiagnostics.Check{
 		{
-			ID: "market-data.redis", Name: "Redis", Required: true, Timeout: 3 * time.Second,
+			ID: "market-data.redis", Name: "Redis", Required: cacheEnabled, Timeout: 3 * time.Second,
 			Run: func(checkCtx context.Context) (platformdiagnostics.Observation, error) {
+				if !cacheEnabled {
+					return platformdiagnostics.Observation{Status: platformdiagnostics.StatusSkipped, ReasonCode: "market_data.redis_disabled", SafeMessage: "Redis cache is intentionally disabled"}, nil
+				}
 				if s.cache == nil {
 					return platformdiagnostics.Observation{}, fault.New(fault.ClassInternal, "market_data.redis_dependency_missing", "Redis dependency is not configured", nil)
 				}
@@ -2588,8 +2596,11 @@ func (s *DataService) Ready(ctx context.Context) error {
 			},
 		},
 		{
-			ID: "market-data.mariadb", Name: "MariaDB", Required: true, Timeout: 3 * time.Second,
+			ID: "market-data.mariadb", Name: "MariaDB", Required: storeEnabled, Timeout: 3 * time.Second,
 			Run: func(checkCtx context.Context) (platformdiagnostics.Observation, error) {
+				if !storeEnabled {
+					return platformdiagnostics.Observation{Status: platformdiagnostics.StatusSkipped, ReasonCode: "market_data.storage_not_configured", SafeMessage: "MariaDB storage is not configured"}, nil
+				}
 				if err := s.store.Ping(checkCtx); err != nil {
 					return platformdiagnostics.Observation{}, readinessDependencyFault("sql", "market_data.mariadb_unavailable", "MariaDB is unavailable", err)
 				}
@@ -2602,13 +2613,15 @@ func (s *DataService) Ready(ctx context.Context) error {
 		return err
 	}
 	for _, result := range report.Results {
-		if result.Observation.Status == platformdiagnostics.StatusHealthy {
+		switch result.Observation.Status {
+		case platformdiagnostics.StatusHealthy, platformdiagnostics.StatusSkipped:
 			continue
+		default:
+			if result.Fault != nil {
+				return result.Fault
+			}
+			return fault.New(fault.ClassUnavailable, "market_data.readiness_not_healthy", "Market Data dependencies are not ready", nil)
 		}
-		if result.Fault != nil {
-			return result.Fault
-		}
-		return fault.New(fault.ClassUnavailable, "market_data.readiness_not_healthy", "Market Data dependencies are not ready", nil)
 	}
 	return nil
 }
