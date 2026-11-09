@@ -14,7 +14,7 @@ type authorizationSnapshotRepositoryStub struct {
 	appended []domain.NewsAuthorizationBinding
 }
 
-func (s *authorizationSnapshotRepositoryStub) AppendAuthorizationSnapshot(_ context.Context, binding domain.NewsAuthorizationBinding) error {
+func (s *authorizationSnapshotRepositoryStub) AppendAuthorizationSnapshot(_ context.Context, binding domain.NewsAuthorizationBinding, _ domain.Observation, _ domain.NewsItemVersion) error {
 	s.appended = append(s.appended, binding)
 	return nil
 }
@@ -30,7 +30,8 @@ func TestRecordAuthorizationSnapshotValidatesAndPersistsBinding(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := service.Execute(context.Background(), binding); err != nil {
+	observation, version := appAuthorizationEvidence()
+	if err := service.Execute(context.Background(), binding, observation, version); err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
 	if len(repository.appended) != 1 ||
@@ -47,7 +48,8 @@ func TestRecordAuthorizationSnapshotRejectsInvalidBindingBeforePersistence(t *te
 	}
 	binding := loadAppAuthorizationBinding(t)
 	binding.AuthorizationRef.ResourceRef = "different-resource"
-	if err := service.Execute(context.Background(), binding); err != ErrInvalidAuthorizationSnapshot {
+	observation, version := appAuthorizationEvidence()
+	if err := service.Execute(context.Background(), binding, observation, version); err != ErrInvalidAuthorizationSnapshot {
 		t.Fatalf("Execute() error = %v, want ErrInvalidAuthorizationSnapshot", err)
 	}
 	if len(repository.appended) != 0 {
@@ -69,4 +71,17 @@ func loadAppAuthorizationBinding(t *testing.T) domain.NewsAuthorizationBinding {
 		t.Fatal(err)
 	}
 	return fixture.AuthorizationBinding
+}
+
+func appAuthorizationEvidence() (domain.Observation, domain.NewsItemVersion) {
+	observation := domain.Observation{
+		ID: "observation-001", NewsID: "news_001", SourceID: "sec-edgar",
+		ProviderCode: "tavily", SourcePolicyVersionID: "2.1.0",
+		EndpointPolicyVersionID: "1.0.0",
+	}
+	version := domain.NewsItemVersion{
+		ID: "version-001", NewsID: "news_001", VersionNo: 1,
+		ObservationID: observation.ID,
+	}
+	return observation, version
 }

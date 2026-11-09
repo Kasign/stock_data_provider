@@ -65,10 +65,11 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 	}
 
 	binding := loadIntegrationAuthorizationBinding(t)
-	if err := repository.AppendAuthorizationSnapshot(ctx, binding); err != nil {
+	authorizationObservation, authorizationVersion := integrationAuthorizationEvidence()
+	if err := repository.AppendAuthorizationSnapshot(ctx, binding, authorizationObservation, authorizationVersion); err != nil {
 		t.Fatalf("append authorization snapshot: %v", err)
 	}
-	if err := repository.AppendAuthorizationSnapshot(ctx, binding); err != nil {
+	if err := repository.AppendAuthorizationSnapshot(ctx, binding, authorizationObservation, authorizationVersion); err != nil {
 		t.Fatalf("idempotent authorization snapshot append: %v", err)
 	}
 	loadedBinding, err := repository.GetAuthorizationSnapshot(ctx, binding.AuthorizationRef.AuthorizationRef)
@@ -81,7 +82,7 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 	}
 	conflictingBinding := binding
 	conflictingBinding.AuthorizationRef.DecisionFingerprint = strings.Repeat("f", 64)
-	if err := repository.AppendAuthorizationSnapshot(ctx, conflictingBinding); !errors.Is(err, app.ErrAuthorizationSnapshotConflict) {
+	if err := repository.AppendAuthorizationSnapshot(ctx, conflictingBinding, authorizationObservation, authorizationVersion); !errors.Is(err, app.ErrAuthorizationSnapshotConflict) {
 		t.Fatalf("conflicting authorization snapshot append error = %v", err)
 	}
 	if _, err := repository.GetAuthorizationSnapshot(ctx, "authorization-not-found"); !errors.Is(err, app.ErrAuthorizationSnapshotNotFound) {
@@ -630,4 +631,17 @@ func loadIntegrationAuthorizationBinding(t *testing.T) domain.NewsAuthorizationB
 		t.Fatalf("invalid NEWS-CTR-002 integration golden: %v", err)
 	}
 	return fixture.AuthorizationBinding
+}
+
+func integrationAuthorizationEvidence() (domain.Observation, domain.NewsItemVersion) {
+	observation := domain.Observation{
+		ID: "news-it-auth-observation", NewsID: "news_001", SourceID: "sec-edgar",
+		ProviderCode: "tavily", SourcePolicyVersionID: "2.1.0",
+		EndpointPolicyVersionID: "1.0.0",
+	}
+	version := domain.NewsItemVersion{
+		ID: "news-it-auth-version", NewsID: "news_001", VersionNo: 1,
+		ObservationID: observation.ID,
+	}
+	return observation, version
 }

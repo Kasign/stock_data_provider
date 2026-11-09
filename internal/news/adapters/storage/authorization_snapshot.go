@@ -24,9 +24,11 @@ var _ app.AuthorizationSnapshotRepository = (*MySQLRepository)(nil)
 func (r *MySQLRepository) AppendAuthorizationSnapshot(
 	ctx context.Context,
 	binding domain.NewsAuthorizationBinding,
+	observation domain.Observation,
+	version domain.NewsItemVersion,
 ) error {
 	if r == nil || r.db == nil || ctx == nil ||
-		domain.ValidateNewsAuthorizationBinding(binding) != nil {
+		domain.ValidateNewsAuthorizationBindingForEvidence(binding, observation, version) != nil {
 		return app.ErrInvalidAuthorizationSnapshot
 	}
 	payload, err := json.Marshal(binding)

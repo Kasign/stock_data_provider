@@ -344,3 +344,47 @@ func TestValidateNewsAuthorizationBindingRejectsEmptyValidityWindow(t *testing.T
 		t.Fatal("expires_at equal to decided_at must not create an empty authorization validity window")
 	}
 }
+
+func TestValidateNewsAuthorizationBindingForEvidenceBindsExactVersionAndObservation(t *testing.T) {
+	binding := loadNewsAuthorizationGolden(t)
+	observation := Observation{
+		ID: "observation-001", NewsID: "news_001", SourceID: "sec-edgar",
+		ProviderCode: "tavily", SourcePolicyVersionID: "2.1.0",
+		EndpointPolicyVersionID: "1.0.0",
+	}
+	version := NewsItemVersion{
+		ID: "version-001", NewsID: "news_001", VersionNo: 1,
+		ObservationID: observation.ID,
+	}
+	resourceRef, err := NewsEvidenceResourceRef(version.NewsID, version.VersionNo)
+	if err != nil || resourceRef != binding.ResourceRef {
+		t.Fatalf("resource ref = %q, err=%v; golden=%q", resourceRef, err, binding.ResourceRef)
+	}
+	if err := ValidateNewsAuthorizationBindingForEvidence(binding, observation, version); err != nil {
+		t.Fatalf("valid evidence binding rejected: %v", err)
+	}
+
+	cases := []struct {
+		name string
+		mutate func(*NewsAuthorizationBinding, *Observation, *NewsItemVersion)
+	}{
+		{"different news item", func(_ *NewsAuthorizationBinding, _ *Observation, v *NewsItemVersion) { v.NewsID = "news-other" }},
+		{"different version number", func(_ *NewsAuthorizationBinding, _ *Observation, v *NewsItemVersion) { v.VersionNo = 2 }},
+		{"different observation owner", func(_ *NewsAuthorizationBinding, o *Observation, _ *NewsItemVersion) { o.NewsID = "news-other" }},
+		{"different observation reference", func(_ *NewsAuthorizationBinding, o *Observation, _ *NewsItemVersion) { o.ID = "observation-other" }},
+		{"different source", func(_ *NewsAuthorizationBinding, o *Observation, _ *NewsItemVersion) { o.SourceID = "source-other" }},
+		{"different source policy version", func(_ *NewsAuthorizationBinding, o *Observation, _ *NewsItemVersion) { o.SourcePolicyVersionID = "2.2.0" }},
+		{"different endpoint policy version", func(_ *NewsAuthorizationBinding, o *Observation, _ *NewsItemVersion) { o.EndpointPolicyVersionID = "1.1.0" }},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			candidateBinding := binding
+			candidateObservation := observation
+			candidateVersion := version
+			testCase.mutate(&candidateBinding, &candidateObservation, &candidateVersion)
+			if !errors.Is(ValidateNewsAuthorizationBindingForEvidence(candidateBinding, candidateObservation, candidateVersion), ErrAuthorizationBindingInvalid) {
+				t.Fatal("mismatched evidence resource was accepted")
+			}
+		})
+	}
+}

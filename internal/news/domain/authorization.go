@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 	"unicode"
@@ -202,6 +203,59 @@ func ValidateNewsAuthorizationBinding(binding NewsAuthorizationBinding) error {
 type AuthorizationUseDecision struct {
 	Allowed    bool
 	ReasonCode string
+}
+
+// NewsEvidenceResourceRef returns the stable resource reference defined by NEWS-CTR-002.
+func NewsEvidenceResourceRef(newsID string, versionNo int) (string, error) {
+	if !canonicalOpaqueRef(newsID) || versionNo < 1 {
+		return "", ErrAuthorizationBindingInvalid
+	}
+	return "news_evidence_version:" + newsID + ":v" + strconv.Itoa(versionNo), nil
+}
+
+// ValidateNewsAuthorizationBindingForEvidence binds the authorization decision
+// to the exact immutable News version and its owning Observation.
+func ValidateNewsAuthorizationBindingForEvidence(
+	binding NewsAuthorizationBinding,
+	observation Observation,
+	version NewsItemVersion,
+) error {
+	if ValidateNewsAuthorizationBinding(binding) != nil ||
+		!canonicalOpaqueRef(version.ID) || !canonicalOpaqueRef(version.NewsID) ||
+		version.VersionNo < 1 || !canonicalOpaqueRef(version.ObservationID) ||
+		!canonicalOpaqueRef(observation.ID) || !canonicalOpaqueRef(observation.NewsID) ||
+		!canonicalOpaqueRef(observation.SourceID) ||
+		version.NewsID != observation.NewsID || version.ObservationID != observation.ID ||
+		binding.SourceRef != observation.SourceID {
+		return ErrAuthorizationBindingInvalid
+	}
+	resourceRef, err := NewsEvidenceResourceRef(version.NewsID, version.VersionNo)
+	if err != nil || binding.ResourceRef != resourceRef {
+		return ErrAuthorizationBindingInvalid
+	}
+
+	var sourcePolicyVersion, endpointPolicyVersion string
+	for _, policy := range binding.PolicySnapshot.Policies {
+		switch policy.PolicyType {
+		case "source":
+			sourcePolicyVersion = policy.PolicyVersion
+		case "endpoint":
+			endpointPolicyVersion = policy.PolicyVersion
+		}
+	}
+	if observation.SourcePolicyVersionID == "" ||
+		sourcePolicyVersion != observation.SourcePolicyVersionID {
+		return ErrAuthorizationBindingInvalid
+	}
+	if binding.EndpointRef.Value == nil {
+		if observation.EndpointPolicyVersionID != "" {
+			return ErrAuthorizationBindingInvalid
+		}
+	} else if observation.EndpointPolicyVersionID == "" ||
+		endpointPolicyVersion != observation.EndpointPolicyVersionID {
+		return ErrAuthorizationBindingInvalid
+	}
+	return nil
 }
 
 func EvaluateNewsAuthorizationUse(binding NewsAuthorizationBinding, now time.Time) AuthorizationUseDecision {
