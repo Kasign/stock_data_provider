@@ -553,7 +553,7 @@ Server 层完成不是“服务能够启动”这么简单。至少同时满足�
 | SRV-003 | 进行中 | DB、Redis、HTTP Client 已由 Resources 统一创建和关闭；后续接入模块资源注入与诊断贡献项 |
 | SRV-004 | 阻塞 | 已复核模块接入面；Researchflow/Quant/LLM/Notification 缺少完整生产装配入口，News/Research 也有关键查询/授权接入缺口；详见 12.6 节 |
 | SRV-005 | 进行中 | 已接入 Platform Bearer Owner 认证；Web Session/密码登录、CSRF、登录限流、模块 Service Scope、统一 Fault 映射和可信代理边界仍待契约与实现；现有 WebUI 尚未携带 Analysis Owner 凭证，不能视为浏览器认证链路已完成 |
-| SRV-006 | 进行中 | SERVER_ROLE=api|worker|all 已控制旧 Analysis Worker 与 HTTP API 的启动集合；统一 Lifecycle Manager、模块 Worker 接入、失败回滚和完整 SIGTERM 矩阵仍待完成 |
+| SRV-006 | 进行中 | SERVER_ROLE=api|worker|all 已控制旧 Analysis Worker 与 HTTP API；统一 Lifecycle 已接入旧 Worker 并覆盖顺序启停、启动失败回滚、幂等停止；HTTP Server 纳入统一生命周期、模块 Worker 接入和完整 SIGTERM 集成测试仍待完成 |
 | SRV-007 | 进行中 | 已建立 Server Migration Registry，并注册 News/Research/Notification；显式配置执行；其他模块 Migration 和 MariaDB 集成验收待完成，详见 12.7 节 |
 | SRV-008 | 待契约 | Dispatcher 所有权未冻结 |
 | SRV-009 | 进行中 | 已实现 Platform Runner 聚合、严格 Readiness 判定及 MariaDB/Redis 资源检查；尚待 Transport 暴露和真实依赖集成验收，详见 12.8 节 |
@@ -616,7 +616,7 @@ Server 层完成不是“服务能够启动”这么简单。至少同时满足�
 - api 角色创建旧 Analysis Task Queue 但不调用 Start，因此不启动后台轮询 Worker；仍可持久化异步任务，由 worker 角色消费。
 - worker 角色启动旧 Analysis Worker，不构造、不监听业务 HTTP API；等待进程取消后关闭 Worker 与共享资源。
 - all 角色保持现有 API + Worker 组合运行。
-- 当前仍是旧 Analysis Queue 的角色隔离，不代表新模块 Worker Registry/Lifecycle Manager 已完成；启动失败逆序回滚、组件错误传播和完整 SIGTERM 测试仍待实现。
+- 旧 Analysis Queue 已通过 Server Lifecycle Adapter 管理；模块 Worker 尚未具备统一生产装配入口，因此不注册占位组件。HTTP Server 的优雅关闭仍由 Bootstrap 直接管理，完整 SIGTERM 集成测试仍待实现。
 - `.env.example` 已加入 SERVER_ROLE=all，并说明 api/worker 的部署切分方式。
 - CI 曾对 `ea6b3b3` 报 gofmt 失败；随后已修复格式并触发新 SHA 验证。以最新 Workflow 结果为准，不将旧失败误报为当前通过。
 
