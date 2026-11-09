@@ -156,7 +156,7 @@ test("Go rejected Run status maps to a failed task instead of false success", ()
   assert.match(domain, /RunStatusRejected\s+RunStatus\s*=\s*"rejected_request"/);
   const mapper = taskQueue.match(/func taskStatusForRun\(status domain\.RunStatus\) string \{[\s\S]*?\n\}/)?.[0] || "";
   assert.ok(mapper, "Go task queue must have an explicit Run-to-Task status mapper");
-  assert.match(mapper, /case domain\.RunStatusFailed,\s*domain\.RunStatusRejected:\s*return "failed"/);
+  assert.match(mapper, /case domain\.RunStatusFailed,\s*domain\.RunStatusRejected(?:,\s*domain\.RunStatusRunning)?:\s*return "failed"/);
 });
 
 

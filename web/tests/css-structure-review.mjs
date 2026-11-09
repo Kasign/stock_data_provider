@@ -210,21 +210,36 @@ function assertNormalDeclaration(selector, property, value) {
   [".market-index-card-footer .market-index-reasons", "color", "var(--warning)"],
   [".research-overview-metric strong.positive", "color", "var(--positive)"],
   [".research-overview-metric strong.negative", "color", "var(--negative)"],
-  [".market-index-changes .market-data-positive", "color", "var(--positive)"],
-  [".market-index-changes .market-data-negative", "color", "var(--negative)"],
-  [".market-index-changes .market-data-flat", "color", "var(--text-soft)"],
-  [".market-index-changes .market-data-unknown", "color", "var(--text-dim)"],
-  [".market-breadth-metric .market-data-positive", "color", "var(--positive)"],
-  ["#market-lists-panel .market-data-positive", "color", "var(--positive)"],
-  ["#market-activity-panel .market-data-positive", "color", "var(--positive)"]
+  [".metric-primary .metric-foot.positive", "color", "var(--positive)"],
+  [".metric-primary .metric-foot.negative", "color", "var(--negative)"],
+  [':root[data-theme="light"] .metric-primary .metric-foot.positive', "color", "var(--positive)"],
+  [':root[data-theme="light"] .metric-primary .metric-foot.negative', "color", "var(--negative)"],
+  [':root[data-theme="light"] td.positive', "color", "var(--positive)"],
+  [':root[data-theme="light"] td.negative', "color", "var(--negative)"],
+  [".technical-metric-card > small.positive", "color", "var(--positive)"],
+  [".technical-metric-card > small.negative", "color", "var(--negative)"],
+  [":root", "--positive", "#f17683"],
+  [":root", "--negative", "#55d6a6"],
+  [':root[data-theme="light"]', "--positive", "#d63d4e"],
+  [':root[data-theme="light"]', "--negative", "#07875c"],
+  [':root[data-market-color-scheme="reverse"]', "--positive", "#55d6a6"],
+  [':root[data-market-color-scheme="reverse"]', "--negative", "#f17683"],
+  [':root[data-theme="light"][data-market-color-scheme="reverse"]', "--positive", "#07875c"],
+  [':root[data-theme="light"][data-market-color-scheme="reverse"]', "--negative", "#d63d4e"],
+  ...["positive", "negative", "flat", "unknown"].flatMap((state) => {
+    const value = state === "positive" ? "var(--positive)"
+      : state === "negative" ? "var(--negative)"
+        : state === "flat" ? "var(--text-soft)" : "var(--text-dim)";
+    return [
+      [".market-index-changes .market-data-" + state, "color", value],
+      [".market-breadth-metric .market-data-" + state, "color", value],
+      ["#market-lists-panel .market-data-" + state, "color", value],
+      ["#market-activity-panel .market-data-" + state, "color", value]
+    ];
+  })
 ].forEach(([selector, property, value]) => assertNormalDeclaration(selector, property, value));
-for (const selector of [".positive", ".negative"]) {
-  const entries = selectorRules.get(selector) || [];
-  if (!entries.some((entry) => entry.declarations.some((item) =>
-    item.property === "color" && item.important
-  ))) {
-    throw new Error(`The shared ${selector} safety override must remain until all consumers are audited`);
-  }
+for (const [selector, value] of [[".positive", "var(--positive)"], [".negative", "var(--negative)"]]) {
+  assertNormalDeclaration(selector, "color", value);
 }
 const missing = sharedSelectors.filter((selector) => !selectorRules.has(selector));
 if (missing.length) throw new Error(`Missing shared shell selectors: ${missing.join(", ")}`);

@@ -12,10 +12,10 @@ import (
 
 func TestMapRepositoryErrorPreservesStableClassification(t *testing.T) {
 	cases := []struct {
-		name string
+		name  string
 		cause error
 		class fault.Class
-		code string
+		code  string
 	}{
 		{name: "not found", cause: fmt.Errorf("adapter: %w", researcherrors.ErrNotFound), class: fault.ClassNotFound, code: "research_record_not_found"},
 		{name: "conflict", cause: fmt.Errorf("adapter: %w", researcherrors.ErrConflict), class: fault.ClassConflict, code: "research_record_conflict"},
@@ -26,11 +26,15 @@ func TestMapRepositoryErrorPreservesStableClassification(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			got, ok := mapRepositoryError(tc.cause).(*fault.Fault)
-			if !ok { t.Fatalf("expected *fault.Fault, got %T", mapRepositoryError(tc.cause)) }
+			if !ok {
+				t.Fatalf("expected *fault.Fault, got %T", mapRepositoryError(tc.cause))
+			}
 			if got.Class != tc.class || got.Code != tc.code {
 				t.Fatalf("unexpected mapping: class=%q code=%q", got.Class, got.Code)
 			}
-			if got.Cause == nil { t.Fatal("original adapter error must remain available as internal Cause") }
+			if got.Cause == nil {
+				t.Fatal("original adapter error must remain available as internal Cause")
+			}
 			if got.Error() == "" || got.Error() == tc.cause.Error() {
 				t.Fatalf("public error text must use a safe summary, got %q", got.Error())
 			}
@@ -43,7 +47,9 @@ func TestMapRepositoryErrorPreservesStableClassification(t *testing.T) {
 
 func TestMapRepositoryErrorCancellationUsesDistinctFaultCode(t *testing.T) {
 	got, ok := mapRepositoryError(context.Canceled).(*fault.Fault)
-	if !ok { t.Fatalf("expected *fault.Fault, got %T", mapRepositoryError(context.Canceled)) }
+	if !ok {
+		t.Fatalf("expected *fault.Fault, got %T", mapRepositoryError(context.Canceled))
+	}
 	if got.Code != "research_request_canceled" || got.Class != fault.ClassTimeout {
 		t.Fatalf("cancellation mapping changed unexpectedly: class=%q code=%q", got.Class, got.Code)
 	}

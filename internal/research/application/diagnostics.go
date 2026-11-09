@@ -7,6 +7,7 @@ import (
 	platformdiagnostics "example.com/stock-analysis-flow/internal/platform/diagnostics"
 	"example.com/stock-analysis-flow/internal/platform/fault"
 	researcherrors "example.com/stock-analysis-flow/internal/research"
+	researchcontext "example.com/stock-analysis-flow/internal/research/context"
 	researchdiagnostics "example.com/stock-analysis-flow/internal/research/diagnostics"
 )
 
@@ -76,7 +77,6 @@ func (s *Service) BuildClaimCheck(ctx context.Context, ref ClaimRef, required bo
 	return researchdiagnostics.NewClaimCheck("research.claim.snapshot", "Research Claim 快照", required, value)
 }
 
-
 // BuildEvidenceCheck 先通过来源 Owner 当前授权复核通过后，再构造不含证据正文的诊断项。
 func (s *Service) BuildEvidenceCheck(ctx context.Context, ref EvidenceRef, required bool) (platformdiagnostics.Check, error) {
 	if s == nil || s.evidence == nil || s.authorizer == nil {
@@ -93,4 +93,23 @@ func (s *Service) BuildEvidenceCheck(ctx context.Context, ref EvidenceRef, requi
 	value.EvidenceID = record.EvidenceID
 	value.ContentFingerprint = record.ContentFingerprint
 	return researchdiagnostics.NewEvidenceCheck("research.evidence.snapshot", "Research Evidence 快照", required, value)
+}
+
+// toDomainContext 将 Application DTO 转换为独立的 Domain 快照，供领域诊断器校验。
+func toDomainContext(value ResearchContext) researchcontext.Context {
+	return researchcontext.Context{
+		SchemaVersion:    value.SchemaVersion,
+		ContextID:        value.ContextID,
+		ContextVersion:   value.ContextVersion,
+		ResearchQuestion: value.ResearchQuestion,
+		Scope:            researchcontext.Scope(value.Scope),
+		SubjectRefs:      cloneStrings(value.SubjectRefs),
+		SystemAsOf:       value.SystemAsOf,
+		SectionRefs:      toDomainSections(value.SectionRefs),
+		QualitySummary:   toDomainQuality(value.QualitySummary),
+		IncludedSections: cloneStrings(value.IncludedSections),
+		OmittedSections:  toDomainOmitted(value.OmittedSections),
+		BuilderVersion:   value.BuilderVersion,
+		CreatedAt:        value.CreatedAt,
+	}
 }

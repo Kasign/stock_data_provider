@@ -11,16 +11,26 @@ func TestCorrelationIDIsIndependentFromPlatformRequestID(t *testing.T) {
 	ctx := context.Background()
 	ctx = observability.WithRequestID(ctx, "request_123")
 	got, err := correlationIDForPublication(ctx, &fixedIDs{})
-	if err != nil { t.Fatal(err) }
-	if got != "cor_test-1" { t.Fatalf("Request ID must not be reused as Correlation ID; got %q", got) }
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "cor_test-1" {
+		t.Fatalf("Request ID must not be reused as Correlation ID; got %q", got)
+	}
 }
 
 func TestCorrelationIDInheritsTrustedParentContext(t *testing.T) {
 	ctx, err := WithCorrelationID(context.Background(), "corr_parent_123")
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	got, err := correlationIDForPublication(ctx, &fixedIDs{})
-	if err != nil { t.Fatal(err) }
-	if got != "corr_parent_123" { t.Fatalf("correlation ID = %q, want trusted parent ID", got) }
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "corr_parent_123" {
+		t.Fatalf("correlation ID = %q, want trusted parent ID", got)
+	}
 }
 
 func TestWithCorrelationIDRejectsInvalidValue(t *testing.T) {

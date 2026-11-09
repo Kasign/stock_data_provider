@@ -99,7 +99,7 @@ func AssessExpiredDeliveryLease(
 	if current == nil {
 		return recoveryBudgetAssessment(delivery, now, "lease_expired_before_attempt", "", ""), nil
 	}
-	result := LeaseRecoveryAssessment{AttemptID: current.AttemptID}
+	result := LeaseRecoveryAssessment{AttemptID: current.AttemptID, EvidenceRef: current.AttemptID}
 	if current.FinishedAt == nil || current.Outcome == nil {
 		result.Action = LeaseRecoveryMarkUnknown
 		result.ReasonCode = "lease_expired_during_attempt"

@@ -11,13 +11,13 @@ import (
 	"testing"
 	"time"
 
-	_ "github.com/go-sql-driver/mysql"
+	mysql "github.com/go-sql-driver/mysql"
 
 	platformstorage "example.com/stock-analysis-flow/internal/platform/storage"
 	researchclaim "example.com/stock-analysis-flow/internal/research/claim"
 	researchcontext "example.com/stock-analysis-flow/internal/research/context"
-	researchevidence "example.com/stock-analysis-flow/internal/research/evidence"
 	researchevent "example.com/stock-analysis-flow/internal/research/event"
+	researchevidence "example.com/stock-analysis-flow/internal/research/evidence"
 )
 
 func openResearchIntegrationDB(t *testing.T) *sql.DB {
@@ -26,12 +26,23 @@ func openResearchIntegrationDB(t *testing.T) *sql.DB {
 	if dsn == "" {
 		t.Skip("RESEARCH_TEST_MYSQL_DSN is not set; skipping MariaDB integration test")
 	}
+	config, err := mysql.ParseDSN(dsn)
+	if err != nil {
+		t.Fatalf("parse RESEARCH_TEST_MYSQL_DSN: %v", err)
+	}
+	if !strings.HasSuffix(strings.ToLower(config.DBName), "_test") {
+		t.Fatalf("RESEARCH_TEST_MYSQL_DSN database %q is unsafe; dedicated database name must end with _test", config.DBName)
+	}
 	db, err := sql.Open("mysql", dsn)
-	if err != nil { t.Fatalf("open MariaDB: %v", err) }
+	if err != nil {
+		t.Fatalf("open MariaDB: %v", err)
+	}
 	t.Cleanup(func() { _ = db.Close() })
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	if err := db.PingContext(ctx); err != nil { t.Fatalf("ping MariaDB: %v", err) }
+	if err := db.PingContext(ctx); err != nil {
+		t.Fatalf("ping MariaDB: %v", err)
+	}
 	if err := platformstorage.ApplyMigrations(ctx, db, MigrationNamespace, Migrations()); err != nil {
 		t.Fatalf("apply Research migrations: %v", err)
 	}
@@ -57,7 +68,9 @@ func TestResearchEventLifecycleOutboxFailureRollsBackEventVersion(t *testing.T) 
 	now := time.Date(2026, 11, 9, 2, 0, 0, 123456789, time.UTC)
 	eventID := fmt.Sprintf("event-outbox-rollback-%d", time.Now().UnixNano())
 	repo, err := NewEventRepository(db, func() time.Time { return now })
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	t.Cleanup(func() {
 		_, _ = db.ExecContext(context.Background(), "DELETE FROM research_notification_outbox WHERE subject_ref=?", "research-event:"+eventID)
 		_, _ = db.ExecContext(context.Background(), "DELETE FROM research_event_versions WHERE event_id=?", eventID)
@@ -71,7 +84,9 @@ func TestResearchEventLifecycleOutboxFailureRollsBackEventVersion(t *testing.T) 
 		ImpactHypothesisRefs: []string{}, InvalidationConditions: []string{},
 		Uncertainty: []string{}, SourceTimes: []researchevent.EventSourceTime{},
 	}
-	if err := repo.Append(ctx, previous); err != nil { t.Fatalf("append Event v1: %v", err) }
+	if err := repo.Append(ctx, previous); err != nil {
+		t.Fatalf("append Event v1: %v", err)
+	}
 	next := previous
 	next.EventVersion = 2
 	next.Status = researchevent.StatusConsolidating
@@ -85,7 +100,9 @@ func TestResearchEventLifecycleOutboxFailureRollsBackEventVersion(t *testing.T) 
 		t.Fatalf("seed Outbox idempotency conflict: %v", err)
 	}
 	err = repo.AppendWithLifecycle(ctx, next, nil, "req_test")
-	if err == nil { t.Fatal("duplicate Outbox idempotency key must abort the Event append transaction") }
+	if err == nil {
+		t.Fatal("duplicate Outbox idempotency key must abort the Event append transaction")
+	}
 	if _, err := repo.GetVersion(ctx, eventID, 2); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("Event v2 after Outbox rollback = %v, want ErrNotFound", err)
 	}
@@ -93,7 +110,9 @@ func TestResearchEventLifecycleOutboxFailureRollsBackEventVersion(t *testing.T) 
 	if err := db.QueryRowContext(ctx, "SELECT latest_version FROM research_aggregate_heads WHERE aggregate_type='event' AND aggregate_id=?", eventID).Scan(&latest); err != nil {
 		t.Fatalf("read aggregate head after rollback: %v", err)
 	}
-	if latest != 1 { t.Fatalf("aggregate latest_version = %d after Outbox rollback, want 1", latest) }
+	if latest != 1 {
+		t.Fatalf("aggregate latest_version = %d after Outbox rollback, want 1", latest)
+	}
 }
 
 func TestResearchOutboxClaimRetryAndConfirmation(t *testing.T) {
@@ -103,21 +122,27 @@ func TestResearchOutboxClaimRetryAndConfirmation(t *testing.T) {
 	now := time.Date(2026, 11, 9, 3, 0, 0, 123456789, time.UTC)
 	eventID := fmt.Sprintf("event-outbox-delivery-%d", time.Now().UnixNano())
 	repo, err := NewEventRepository(db, func() time.Time { return now })
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	t.Cleanup(func() {
 		_, _ = db.ExecContext(context.Background(), "DELETE FROM research_notification_outbox WHERE subject_ref=?", "research-event:"+eventID)
 		_, _ = db.ExecContext(context.Background(), "DELETE FROM research_event_versions WHERE event_id=?", eventID)
 		_, _ = db.ExecContext(context.Background(), "DELETE FROM research_aggregate_heads WHERE aggregate_type='event' AND aggregate_id=?", eventID)
 	})
 	value := researchevent.ResearchEvent{
-		EventID:eventID, EventVersion:1, EventType:"integration_fixture", Title:"Outbox delivery fixture",
-		Status:researchevent.StatusDetected, SubjectRefs:[]string{}, EvidenceRefs:[]string{},
-		SystemObservedAt:now, SystemAsOf:now, ImpactHypothesisRefs:[]string{},
-		InvalidationConditions:[]string{}, Uncertainty:[]string{}, SourceTimes:[]researchevent.EventSourceTime{},
+		EventID: eventID, EventVersion: 1, EventType: "integration_fixture", Title: "Outbox delivery fixture",
+		Status: researchevent.StatusDetected, SubjectRefs: []string{}, EvidenceRefs: []string{},
+		SystemObservedAt: now, SystemAsOf: now, ImpactHypothesisRefs: []string{},
+		InvalidationConditions: []string{}, Uncertainty: []string{}, SourceTimes: []researchevent.EventSourceTime{},
 	}
-	if err := repo.AppendWithLifecycle(ctx, value, nil, "corr_integration"); err != nil { t.Fatalf("append Event and initial Outbox: %v", err) }
+	if err := repo.AppendWithLifecycle(ctx, value, nil, "corr_integration"); err != nil {
+		t.Fatalf("append Event and initial Outbox: %v", err)
+	}
 	claimed, err := repo.base.ClaimOutbox(ctx, "worker_test", 10, now.Add(time.Minute))
-	if err != nil { t.Fatalf("claim Outbox: %v", err) }
+	if err != nil {
+		t.Fatalf("claim Outbox: %v", err)
+	}
 	if len(claimed) != 1 || claimed[0].IdempotencyKey != "research-event-state:research-event:"+eventID+":1" {
 		t.Fatalf("unexpected claimed Outbox messages: %+v", claimed)
 	}
@@ -125,11 +150,17 @@ func TestResearchOutboxClaimRetryAndConfirmation(t *testing.T) {
 		t.Fatalf("schedule retry: %v", err)
 	}
 	tooEarly, err := repo.base.ClaimOutbox(ctx, "worker_test", 10, now.Add(3*time.Minute))
-	if err != nil { t.Fatalf("claim before retry time: %v", err) }
-	if len(tooEarly) != 0 { t.Fatalf("retry became available too early: %+v", tooEarly) }
-	now = now.Add(2*time.Minute)
+	if err != nil {
+		t.Fatalf("claim before retry time: %v", err)
+	}
+	if len(tooEarly) != 0 {
+		t.Fatalf("retry became available too early: %+v", tooEarly)
+	}
+	now = now.Add(2 * time.Minute)
 	reclaimed, err := repo.base.ClaimOutbox(ctx, "worker_test", 10, now.Add(time.Minute))
-	if err != nil { t.Fatalf("reclaim retry: %v", err) }
+	if err != nil {
+		t.Fatalf("reclaim retry: %v", err)
+	}
 	if len(reclaimed) != 1 || reclaimed[0].EventID != claimed[0].EventID || reclaimed[0].LeaseToken == claimed[0].LeaseToken {
 		t.Fatalf("retry must reuse the persisted Envelope identity: %+v", reclaimed)
 	}
@@ -143,14 +174,20 @@ func TestResearchOutboxClaimRetryAndConfirmation(t *testing.T) {
 		t.Fatalf("repeated confirmation must be idempotent: %v", err)
 	}
 	after, err := repo.base.ClaimOutbox(ctx, "worker_test", 10, now.Add(time.Minute))
-	if err != nil { t.Fatalf("claim after confirmation: %v", err) }
-	if len(after) != 0 { t.Fatalf("delivered Outbox message was claimed again: %+v", after) }
+	if err != nil {
+		t.Fatalf("claim after confirmation: %v", err)
+	}
+	if len(after) != 0 {
+		t.Fatalf("delivered Outbox message was claimed again: %+v", after)
+	}
 	var attempts int
 	var status string
-	if err := db.QueryRowContext(ctx, "SELECT attempt_count, delivery_status FROM research_notification_outbox WHERE event_id=?", claimed[0].EventID).Scan(&attempts,&status); err != nil {
+	if err := db.QueryRowContext(ctx, "SELECT attempt_count, delivery_status FROM research_notification_outbox WHERE event_id=?", claimed[0].EventID).Scan(&attempts, &status); err != nil {
 		t.Fatalf("read Outbox delivery state: %v", err)
 	}
-	if attempts != 2 || status != "published" { t.Fatalf("Outbox attempts/status = %d/%s, want 2/published", attempts,status) }
+	if attempts != 2 || status != "published" {
+		t.Fatalf("Outbox attempts/status = %d/%s, want 2/published", attempts, status)
+	}
 }
 
 func TestResearchSQLRepositoriesAppendAndReadVersions(t *testing.T) {
@@ -178,11 +215,17 @@ func TestResearchSQLRepositoriesAppendAndReadVersions(t *testing.T) {
 	})
 
 	contextRepo, err := NewContextRepository(db, clock)
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	eventRepo, err := NewEventRepository(db, clock)
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	claimRepo, err := NewClaimRepository(db, clock)
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	cutoff := now
 	contextV1 := researchcontext.Context{
@@ -195,7 +238,7 @@ func TestResearchSQLRepositoriesAppendAndReadVersions(t *testing.T) {
 			QualityStatus: researchcontext.QualityValid, Required: true, Included: true,
 			AssembledAt: cutoff, SystemAsOf: cutoff,
 		}},
-		QualitySummary: researchcontext.QualitySummary{Status: researchcontext.QualityValid, ReasonCodes: []string{}},
+		QualitySummary:   researchcontext.QualitySummary{Status: researchcontext.QualityValid, ReasonCodes: []string{}},
 		IncludedSections: []string{"profile"}, OmittedSections: []researchcontext.OmittedSection{},
 		BuilderVersion: "integration-v1", CreatedAt: cutoff,
 	}
@@ -222,8 +265,12 @@ func TestResearchSQLRepositoriesAppendAndReadVersions(t *testing.T) {
 		t.Fatalf("failed append left %d aggregate head rows, want 0", orphanHeadCount)
 	}
 
-	if err := contextRepo.Append(ctx, contextV1); err != nil { t.Fatalf("append Context v1: %v", err) }
-	if err := contextRepo.Append(ctx, contextV1); err != nil { t.Fatalf("replay Context v1: %v", err) }
+	if err := contextRepo.Append(ctx, contextV1); err != nil {
+		t.Fatalf("append Context v1: %v", err)
+	}
+	if err := contextRepo.Append(ctx, contextV1); err != nil {
+		t.Fatalf("replay Context v1: %v", err)
+	}
 	conflictingContext := contextV1
 	conflictingContext.ResearchQuestion = "different payload"
 	if err := contextRepo.Append(ctx, conflictingContext); !errors.Is(err, ErrConflict) {
@@ -241,7 +288,9 @@ func TestResearchSQLRepositoriesAppendAndReadVersions(t *testing.T) {
 	contextV2.SectionRefs = append([]researchcontext.SectionRef(nil), contextV1.SectionRefs...)
 	contextV2.SectionRefs[0].SystemAsOf = contextV2.SystemAsOf
 	contextV2.SectionRefs[0].AssembledAt = contextV2.SystemAsOf
-	if err := contextRepo.Append(ctx, contextV2); err != nil { t.Fatalf("append Context v2: %v", err) }
+	if err := contextRepo.Append(ctx, contextV2); err != nil {
+		t.Fatalf("append Context v2: %v", err)
+	}
 	if got, err := contextRepo.GetVersion(ctx, contextID, 1); err != nil || got.ContextVersion != 1 {
 		t.Fatalf("get Context v1 = version %d, error %v", got.ContextVersion, err)
 	}
@@ -266,7 +315,9 @@ func TestResearchSQLRepositoriesAppendAndReadVersions(t *testing.T) {
 	concurrent.Wait()
 	close(replayErrors)
 	for err := range replayErrors {
-		if err != nil { t.Fatalf("concurrent identical Context append: %v", err) }
+		if err != nil {
+			t.Fatalf("concurrent identical Context append: %v", err)
+		}
 	}
 
 	// Conflicting payloads for one version must have exactly one winner.
@@ -294,9 +345,12 @@ func TestResearchSQLRepositoriesAppendAndReadVersions(t *testing.T) {
 	successes, conflicts := 0, 0
 	for err := range conflictErrors {
 		switch {
-		case err == nil: successes++
-		case errors.Is(err, ErrConflict): conflicts++
-		default: t.Fatalf("unexpected concurrent Context append error: %v", err)
+		case err == nil:
+			successes++
+		case errors.Is(err, ErrConflict):
+			conflicts++
+		default:
+			t.Fatalf("unexpected concurrent Context append error: %v", err)
 		}
 	}
 	if successes != 1 || conflicts != 1 {
@@ -433,8 +487,12 @@ func TestResearchSQLRepositoriesAppendAndReadVersions(t *testing.T) {
 		ImpactHypothesisRefs: []string{}, InvalidationConditions: []string{},
 		Uncertainty: []string{}, SourceTimes: []researchevent.EventSourceTime{},
 	}
-	if err := eventRepo.Append(ctx, eventV1); err != nil { t.Fatalf("append Event v1: %v", err) }
-	if err := eventRepo.Append(ctx, eventV1); err != nil { t.Fatalf("replay Event v1: %v", err) }
+	if err := eventRepo.Append(ctx, eventV1); err != nil {
+		t.Fatalf("append Event v1: %v", err)
+	}
+	if err := eventRepo.Append(ctx, eventV1); err != nil {
+		t.Fatalf("replay Event v1: %v", err)
+	}
 	eventGap := eventV1
 	eventGap.EventVersion = 3
 	if err := eventRepo.Append(ctx, eventGap); !errors.Is(err, ErrConflict) {
@@ -443,7 +501,9 @@ func TestResearchSQLRepositoriesAppendAndReadVersions(t *testing.T) {
 	eventV2 := eventV1
 	eventV2.EventVersion = 2
 	eventV2.SystemAsOf = cutoff.Add(time.Minute)
-	if err := eventRepo.Append(ctx, eventV2); err != nil { t.Fatalf("append Event v2: %v", err) }
+	if err := eventRepo.Append(ctx, eventV2); err != nil {
+		t.Fatalf("append Event v2: %v", err)
+	}
 	if got, err := eventRepo.GetVersion(ctx, eventID, 2); err != nil || got.EventVersion != 2 {
 		t.Fatalf("get Event v2 = version %d, error %v", got.EventVersion, err)
 	}
@@ -451,13 +511,17 @@ func TestResearchSQLRepositoriesAppendAndReadVersions(t *testing.T) {
 	claimV1 := researchclaim.Claim{
 		ClaimID: claimID, ClaimVersion: 1, Statement: "integration fixture",
 		EpistemicType: researchclaim.EpistemicReportedFact,
-		ScopeRefs: []string{}, SystemAsOf: cutoff,
+		ScopeRefs:     []string{}, SystemAsOf: cutoff,
 		SupportingEvidenceRefs: []string{}, ContradictingEvidenceRefs: []string{},
 		RequiredDataRefs: []string{}, Status: researchclaim.StatusProposed,
 		Limitations: []string{},
 	}
-	if err := claimRepo.Append(ctx, claimV1); err != nil { t.Fatalf("append Claim v1: %v", err) }
-	if err := claimRepo.Append(ctx, claimV1); err != nil { t.Fatalf("replay Claim v1: %v", err) }
+	if err := claimRepo.Append(ctx, claimV1); err != nil {
+		t.Fatalf("append Claim v1: %v", err)
+	}
+	if err := claimRepo.Append(ctx, claimV1); err != nil {
+		t.Fatalf("replay Claim v1: %v", err)
+	}
 	claimGap := claimV1
 	claimGap.ClaimVersion = 3
 	if err := claimRepo.Append(ctx, claimGap); !errors.Is(err, ErrConflict) {
@@ -466,13 +530,17 @@ func TestResearchSQLRepositoriesAppendAndReadVersions(t *testing.T) {
 	claimV2 := claimV1
 	claimV2.ClaimVersion = 2
 	claimV2.SystemAsOf = cutoff.Add(time.Minute)
-	if err := claimRepo.Append(ctx, claimV2); err != nil { t.Fatalf("append Claim v2: %v", err) }
+	if err := claimRepo.Append(ctx, claimV2); err != nil {
+		t.Fatalf("append Claim v2: %v", err)
+	}
 	if got, err := claimRepo.GetVersion(ctx, claimID, 2); err != nil || got.ClaimVersion != 2 {
 		t.Fatalf("get Claim v2 = version %d, error %v", got.ClaimVersion, err)
 	}
 
 	evidenceRepo, err := NewEvidenceRepository(db, clock)
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	evidenceV1 := researchevidence.Evidence{
 		EvidenceID: evidenceID, EvidenceType: researchevidence.TypeFact,
 		SourceOwner: researchevidence.SourceData, SourceRef: "data:integration:fixture",
@@ -483,9 +551,15 @@ func TestResearchSQLRepositoriesAppendAndReadVersions(t *testing.T) {
 		Limitations: []string{},
 	}
 	evidenceV1.ContentFingerprint, err = evidenceV1.ComputeContentFingerprint()
-	if err != nil { t.Fatalf("compute Evidence fingerprint: %v", err) }
-	if err := evidenceRepo.Append(ctx, evidenceV1); err != nil { t.Fatalf("append Evidence: %v", err) }
-	if err := evidenceRepo.Append(ctx, evidenceV1); err != nil { t.Fatalf("replay Evidence: %v", err) }
+	if err != nil {
+		t.Fatalf("compute Evidence fingerprint: %v", err)
+	}
+	if err := evidenceRepo.Append(ctx, evidenceV1); err != nil {
+		t.Fatalf("append Evidence: %v", err)
+	}
+	if err := evidenceRepo.Append(ctx, evidenceV1); err != nil {
+		t.Fatalf("replay Evidence: %v", err)
+	}
 	if got, err := evidenceRepo.Get(ctx, evidenceID); err != nil || got.AuthorizationRef != evidenceV1.AuthorizationRef {
 		t.Fatalf("get Evidence authorization_ref = %q, error %v", got.AuthorizationRef, err)
 	}
