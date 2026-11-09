@@ -317,11 +317,11 @@ func TestIndicatorsRejectNonFiniteCalculatedResults(t *testing.T) {
 		run  func() error
 	}{
 		{"simple return overflow", func() error {
-			_, err := Return([]float64{1, max}, ReturnParams{Window: 1, ReturnBasis: "simple"})
+			_, err := Return([]float64{math.SmallestNonzeroFloat64, max}, ReturnParams{Window: 1, ReturnBasis: "simple"})
 			return err
 		}},
 		{"volatility overflow", func() error {
-			_, err := Volatility([]float64{1, max, 1}, VolatilityParams{Window: 2, ReturnBasis: "simple", AnnualizationFactor: 1})
+			_, err := Volatility([]float64{math.SmallestNonzeroFloat64, max, math.SmallestNonzeroFloat64}, VolatilityParams{Window: 2, ReturnBasis: "simple", AnnualizationFactor: 1})
 			return err
 		}},
 		{"bollinger upper band overflow", func() error {

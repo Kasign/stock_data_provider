@@ -43,6 +43,7 @@ func TestRegistryValidateMetricSupportsDecimalStringAndInteger(t *testing.T) {
 	integerRegistry := New()
 	integer := validEntry("sample_count_metric", "1.0.0")
 	integer.ValueType = ValueTypeInteger
+	integer.Unit = "count"
 	integer.Precision.MaxIntegerDigits = 4
 	integer.Precision.MaxFractionDigits = 0
 	integer.Precision.Tolerance = json.RawMessage("0")
