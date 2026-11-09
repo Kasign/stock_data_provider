@@ -182,3 +182,85 @@ func TestSourceEndpointCheckReportsApprovedRegistration(t *testing.T) {
 		t.Fatalf("observation=%+v", observation)
 	}
 }
+
+
+func TestSourceEndpointCheckFailsClosedForUnsafeRegistrations(t *testing.T) {
+	valid := app.SourceEndpointRegistration{
+		SourceID: "source-1", EndpointID: "endpoint-1", Enabled: true,
+		URL: "https://feeds.example.com/rss", AccessMethod: domain.AccessRSS,
+		SourcePolicyVersionID: "source-policy-v1",
+		URLPolicy: domain.SourceURLPolicy{
+			AllowedSchemes: []string{"https"},
+			AllowedHosts:   []string{"feeds.example.com"},
+		},
+	}
+	tests := []struct {
+		name         string
+		registration app.SourceEndpointRegistration
+		wantStatus   platformdiag.Status
+		wantReason   string
+	}{
+		{
+			name: "registration identity mismatch",
+			registration: func() app.SourceEndpointRegistration {
+				value := valid
+				value.EndpointID = "other-endpoint"
+				return value
+			}(),
+			wantStatus: platformdiag.StatusUnavailable,
+		},
+		{
+			name: "disabled endpoint",
+			registration: func() app.SourceEndpointRegistration {
+				value := valid
+				value.Enabled = false
+				return value
+			}(),
+			wantStatus: platformdiag.StatusSkipped,
+			wantReason: "news.source.endpoint_disabled",
+		},
+		{
+			name: "unsupported access method",
+			registration: func() app.SourceEndpointRegistration {
+				value := valid
+				value.AccessMethod = domain.AccessOfficialAPI
+				return value
+			}(),
+			wantStatus: platformdiag.StatusSkipped,
+			wantReason: "news.source.access_method_unsupported",
+		},
+		{
+			name: "missing source policy version",
+			registration: func() app.SourceEndpointRegistration {
+				value := valid
+				value.SourcePolicyVersionID = ""
+				return value
+			}(),
+			wantStatus: platformdiag.StatusDegraded,
+			wantReason: "news.source.policy_version_invalid",
+		},
+		{
+			name: "URL outside allowlist",
+			registration: func() app.SourceEndpointRegistration {
+				value := valid
+				value.URL = "https://untrusted.example/rss"
+				return value
+			}(),
+			wantStatus: platformdiag.StatusFailed,
+			wantReason: "news.source.endpoint_url_rejected",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			check := SourceEndpointCheck(sourceCatalogStub{registration: test.registration}, "source-1", "endpoint-1", true)
+			report, err := (platformdiag.Runner{}).Run(context.Background(), []platformdiag.Check{check})
+			if err != nil {
+				t.Fatal(err)
+			}
+			observation := report.Results[0].Observation
+			if observation.Status != test.wantStatus || observation.ReasonCode != test.wantReason {
+				t.Fatalf("observation=%+v, want status=%s reason=%q", observation, test.wantStatus, test.wantReason)
+			}
+		})
+	}
+}
