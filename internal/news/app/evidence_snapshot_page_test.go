@@ -55,7 +55,7 @@ func TestListEvidenceSnapshotPageCreatesOnceAndContinuesWithoutPIT(t *testing.T)
 		newsID, versionID, observationID := "news-"+id, "version-"+id, "observation-"+id
 		records[i] = EvidencePITRecord{
 			Observation: domain.Observation{ID: observationID, NewsID: newsID, ObservedAt: observedAt},
-			Version: domain.NewsItemVersion{ID: versionID, NewsID: newsID, ObservationID: observationID, ObservedAt: observedAt},
+			Version:     domain.NewsItemVersion{ID: versionID, NewsID: newsID, ObservationID: observationID, ObservedAt: observedAt},
 		}
 	}
 	query := &evidencePITRepositoryStub{records: records}
@@ -133,7 +133,7 @@ func TestListEvidenceSnapshotPageRejectsCursorAndSnapshotFailures(t *testing.T) 
 	position := ResearchEvidenceRecord{
 		NewsID: "news-1", VersionID: "version-1",
 		SystemObservedAt: request.SystemAsOf.Add(-time.Second),
-		SystemAsOf: request.SystemAsOf,
+		SystemAsOf:       request.SystemAsOf,
 	}
 	token, err := codec.EncodeNextCursor(ListEvidenceRequest{
 		CallerRef: request.CallerRef, PurposeCode: request.PurposeCode,
