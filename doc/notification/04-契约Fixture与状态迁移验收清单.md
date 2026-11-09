@@ -293,3 +293,12 @@ Run `42602399686` 对应 HEAD `8d08cf07a651efcd42a514f3dafd94d659f21f97`。`Test
 - [x] 在任何 Preflight、Attempt 写入和渠道副作用之前校验 RetryPolicy 随机采样值必须为有限数且位于 [0,1)；非法值直接拒绝，避免渠道已发生副作用后才因退避输入无效而无法完成状态收敛。
 - [x] 增加负数、1、NaN、正无穷输入测试，断言不调用渠道且 Delivery/Attempt 不变。
 - [ ] 最新提交 Go workflow Run `42603698251` 已排队；测试尚无 CI 执行证据。
+
+
+
+### CI gofmt 反馈与修复记录
+
+- Run `42603698251` 对应提交 `16d98fa`：根模块 gofmt 门禁同时发现 Notification 执行测试一处字段对齐差异，以及 Quant 多处格式差异。
+- Notification 自身差异已在提交 `1dba2f9` 修复；Quant 差异属于其他模块，本分支不越界修改。
+- 提交 `1dba2f9a0cce73c3b581976e72be667828d9774c` 的 Go workflow Run `42603890369` 已排队；在其完成前，不宣称本轮 gofmt/测试通过。
+- go-core Job 通过不覆盖 Notification；根模块 gofmt 门禁失败时，根模块单测、Race Detector、go vet 均不会执行。
