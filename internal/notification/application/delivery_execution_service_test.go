@@ -43,7 +43,7 @@ func executionFixture(t *testing.T) (*DeliveryExecutionService, *memoryDeliverie
 	adapter := &fakeChannelAdapter{
 		snapshot: snapshot,
 		result: domain.ChannelSendResult{
-			Outcome: domain.ChannelOutcomeAccepted,
+			Outcome:            domain.ChannelOutcomeAccepted,
 			ProviderMessageRef: "provider-message-1",
 		},
 	}
@@ -54,12 +54,12 @@ func executionFixture(t *testing.T) (*DeliveryExecutionService, *memoryDeliverie
 	preflight.channels = registry
 
 	renderer := fixedExecutionRenderer{content: domain.RenderedContent{
-		TemplateID: claim.Delivery.TemplateID,
-		TemplateVersion: claim.Delivery.TemplateVersion,
-		TemplateDigest: strings.Repeat("c", 64),
+		TemplateID:              claim.Delivery.TemplateID,
+		TemplateVersion:         claim.Delivery.TemplateVersion,
+		TemplateDigest:          strings.Repeat("c", 64),
 		EventPayloadFingerprint: claim.Delivery.PayloadFingerprint,
-		Format: domain.TemplateFormatText,
-		Subject: "subject", Body: "body",
+		Format:                  domain.TemplateFormatText,
+		Subject:                 "subject", Body: "body",
 	}}
 	preflightCompletion, err := NewDeliveryPreflightCompletionService(repository)
 	if err != nil {
