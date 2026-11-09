@@ -130,7 +130,7 @@ func TestListEvidenceSnapshotPageRejectsAllCursorQueryContextMismatchesBeforeSto
 	last := ResearchEvidenceRecord{
 		NewsID: "news-1", VersionID: "version-1",
 		SystemObservedAt: request.SystemAsOf.Add(-time.Minute),
-		SystemAsOf: request.SystemAsOf,
+		SystemAsOf:       request.SystemAsOf,
 	}
 	token, err := codec.EncodeNextCursor(request, "snapshot-1", last, now)
 	if err != nil {
