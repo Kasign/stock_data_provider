@@ -7,21 +7,20 @@ import (
 
 func TestMigrationsDefineNewsOwnedPersistenceSchema(t *testing.T) {
 	migrations := Migrations()
-	if len(migrations) != 4 {
-		t.Fatalf("Migrations() count = %d, want 4", len(migrations))
+	if len(migrations) != 5 {
+		t.Fatalf("Migrations() count = %d, want 5", len(migrations))
 	}
-	if migrations[0].Version != 1 || migrations[1].Version != 2 || migrations[2].Version != 3 ||
-		strings.TrimSpace(migrations[0].Description) == "" ||
-		strings.TrimSpace(migrations[1].Description) == "" ||
-		strings.TrimSpace(migrations[2].Description) == "" {
-		t.Fatalf("invalid migration metadata: %#v", migrations)
+	for index, migration := range migrations {
+		if migration.Version != index+1 || strings.TrimSpace(migration.Description) == "" || len(migration.Statements) == 0 {
+			t.Fatalf("invalid migration metadata at index %d: %#v", index, migration)
+		}
 	}
 
-	joinedStatements := append([]string{}, migrations[0].Statements...)
-	for _, migration := range migrations[1:] {
-		joinedStatements = append(joinedStatements, migration.Statements...)
+	var statements []string
+	for _, migration := range migrations {
+		statements = append(statements, migration.Statements...)
 	}
-	joined := strings.Join(joinedStatements, "\n")
+	joined := strings.Join(statements, "\n")
 	for _, table := range []string{
 		"news_items",
 		"news_identifiers",
@@ -44,15 +43,10 @@ func TestMigrationsDefineNewsOwnedPersistenceSchema(t *testing.T) {
 		"PRIMARY KEY (source_id, identifier_type, identifier_hash)",
 		"fk_news_relation_evidence_version",
 		"fk_news_relation_evidence_observation",
+		"fk_news_identifier_history_credential",
 	} {
 		if !strings.Contains(joined, constraint) {
 			t.Errorf("migration is missing constraint %q", constraint)
-		}
-	}
-	identityHistorySchema := strings.Join(migrations[3].Statements, "\n")
-	for _, fragment := range []string{"KEY idx_news_identifier_history_at", "SELECT source_id, identifier_type, identifier_hash, identifier_status, created_at FROM news_identifiers"} {
-		if !strings.Contains(identityHistorySchema, fragment) {
-			t.Errorf("V4 schema is missing identity history fragment %q", fragment)
 		}
 	}
 	if strings.Contains(joined, "news_schema_migrations") {
@@ -63,20 +57,24 @@ func TestMigrationsDefineNewsOwnedPersistenceSchema(t *testing.T) {
 func TestMigrationsReturnIndependentStatementSlices(t *testing.T) {
 	first := Migrations()
 	second := Migrations()
-	if len(first) == 0 || len(first[0].Statements) == 0 || len(second[0].Statements) == 0 || len(first[2].Statements) == 0 || len(second[2].Statements) == 0 || len(first[3].Statements) == 0 || len(second[3].Statements) == 0 {
-		t.Fatal("migration statements are empty")
+	if len(first) != 5 || len(second) != 5 {
+		t.Fatalf("migration counts = %d/%d, want 5", len(first), len(second))
 	}
-	first[3].Statements[0] = "mutated"
-	if second[3].Statements[0] == "mutated" {
+	for index := range first {
+		if len(first[index].Statements) == 0 || len(second[index].Statements) == 0 {
+			t.Fatalf("migration %d statements are empty", index+1)
+		}
+	}
+	first[4].Statements[0] = "mutated"
+	if second[4].Statements[0] == "mutated" {
 		t.Fatal("migration statements are shared across calls")
 	}
 }
 
-
-func TestMigrationsPreserveEvidencePITAndSnapshotAccessPaths(t *testing.T) {
+func TestMigrationsPreserveNewsPointInTimeAccessPaths(t *testing.T) {
 	migrations := Migrations()
-	if len(migrations) != 3 {
-		t.Fatalf("Migrations() count = %d, want 3", len(migrations))
+	if len(migrations) != 5 {
+		t.Fatalf("Migrations() count = %d, want 5", len(migrations))
 	}
 
 	versionSchema := strings.Join(migrations[0].Statements, "\n")
@@ -118,10 +116,15 @@ func TestMigrationsPreserveEvidencePITAndSnapshotAccessPaths(t *testing.T) {
 	for _, fragment := range []string{
 		"KEY idx_news_identifier_history_at",
 		"FOREIGN KEY (source_id, identifier_type, identifier_hash)",
-		"FROM news_identifiers",
+		"SELECT source_id, identifier_type, identifier_hash, identifier_status, created_at FROM news_identifiers",
 	} {
 		if !strings.Contains(identityHistorySchema, fragment) {
 			t.Errorf("V4 schema is missing identity history fragment %q", fragment)
 		}
+	}
+
+	providerTraceSchema := strings.Join(migrations[4].Statements, "\n")
+	if !strings.Contains(providerTraceSchema, "ADD COLUMN provider_output_policy_version_id") {
+		t.Fatal("V5 schema is missing provider output policy version trace")
 	}
 }
