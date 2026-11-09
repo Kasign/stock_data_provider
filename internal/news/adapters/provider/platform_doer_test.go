@@ -92,6 +92,10 @@ func TestPlatformDoerRejectsRequestOutsideBoundOrigin(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewPlatformHTTPDoer() error = %v", err)
 	}
+	platformDoer, ok := doer.(*platformHTTPDoer)
+	if !ok || platformDoer.bound == nil {
+		t.Fatal("Provider adapter must hold a Platform BoundDoer")
+	}
 	request, err := http.NewRequest(http.MethodGet, "https://attacker.example/search", nil)
 	if err != nil {
 		t.Fatalf("http.NewRequest() error = %v", err)
