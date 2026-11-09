@@ -769,10 +769,10 @@ Server 层完成不是“服务能够启动”这么简单。至少同时满足�
 | 任务 | 状态 | 说明 |
 |---|---|---|
 | SRV-001 | 完成 | 已记录旧入口、路由与认证现状、旧 Analysis Migration 四表、Worker/Storage 生命周期、部署边界及各模块接入就绪度；详细见 12.3 节 |
-| SRV-002 | 进行中 | Server 进程级配置已集中为 Process 快照；Storage/MarketData Adapter 已支持显式 Env 注入且 Bootstrap 统一传递；完整模块 Registry 与统一装配未完成；详见 12.22、12.27 节 |
+| SRV-002 | 进行中 | Server 进程级配置已集中为 Process 快照；Storage/MarketData Adapter 已支持显式 Env 注入且 Bootstrap 统一传递；新增配置快照稳定性回归测试；完整模块 Registry 与统一装配未完成；详见 12.22、12.27、12.32 节 |
 | SRV-003 | 进行中 | DB、Redis、HTTP Client 已由 Resources 统一创建和关闭；新增固定 DestinationPolicy 的 BoundDoer 绑定入口，并覆盖 Bind/Close 并发边界；真实模块注入、Dependency allowlist/配额及流式生命周期验收仍待模块入口交付；详见 12.24、12.28 节 |
 | SRV-004 | 阻塞 | 已复核模块接入面；Researchflow/Quant/LLM/Notification 缺少完整生产装配入口，News/Research 也有关键查询/授权接入缺口；详见 12.6 节 |
-| SRV-005 | 进行中 | 已接入 Platform Bearer Owner 认证、入口 Request ID、Fault HTTP 映射工具、请求体与并发限制；现有旧 Analysis Handler 保留原业务错误 DTO；Web Session/密码登录、CSRF、登录限流、模块 Service Scope 和可信代理边界仍待契约/模块入口，现有 WebUI 尚未携带 Analysis Owner 凭证，不能视为浏览器认证链路已完成 |
+| SRV-005 | 进行中 | 已接入 Platform Bearer Owner 认证、入口 Request ID、Fault HTTP 映射工具、请求体与并发限制；补齐 GET/HEAD 探针的状态、响应头、身份策略及过载豁免测试；现有旧 Analysis Handler 保留原业务错误 DTO；Web Session/密码登录、CSRF、登录限流、模块 Service Scope 和可信代理边界仍待契约/模块入口，现有 WebUI 尚未携带 Analysis Owner 凭证，不能视为浏览器认证链路已完成；详见 12.31 节 |
 | SRV-006 | 进行中 | 旧 Analysis Worker 与 HTTP Server 均已纳入统一 Lifecycle；HTTP Listener 在 Start 阶段同步绑定，Readiness 在 HTTP Shutdown 前切换为 not-ready，Shutdown 超时后强制 Close；Bootstrap 显式保证消费者停止后再关闭共享资源；真实 SIGTERM 子进程测试已补充，模块 Worker 接入和生产容器退出验收仍待完成；详见 12.26 节 |
 | SRV-007 | 进行中 | 已建立 Server Migration Registry，并注册 News/Research/Notification；注册时按版本号稳定排序；增加 namespace 执行报告、稳定原因码和人工恢复标记；其他模块 Migration 和 MariaDB 集成验收待完成，详见 12.7、12.23、12.25 节 |
 | SRV-008 | 待契约 | Dispatcher 所有权未冻结 |
@@ -1093,3 +1093,12 @@ Lifecycle.Stop 原实现通过 stopped 标记保证重复调用幂等，但并�
 #### 验收状态
 
 - 测试和本文档合并为一个功能提交；未运行当前 SHA 的 gofmt、Server 包测试或 race，等待后续统一验证。
+
+
+### 12.32 SRV-002 Process 配置快照稳定性测试（2026-11-09）
+
+- 为 `LoadProcess` 增加显式配置源变更回归测试：配置加载完成后，底层 Env Lookup 值发生变化，已返回的 Process 字段保持原值。
+- 该测试固定 Process 是启动阶段解析结果快照的语义，不要求 Server 持有或重复读取环境变量；领域 Adapter 仍自行解析其配置结构。
+- 同批次整理 HEAD liveness 过载测试格式，避免新增测试绕过 gofmt 约束。
+- 相关代码提交：`83f5554`；HTTP HEAD 探针/路由测试提交：`7dd6a52`。
+- 当前尚未运行 gofmt、Server 包测试或 race；需待统一验证时以最新 HEAD 执行。
