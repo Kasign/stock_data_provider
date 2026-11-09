@@ -160,7 +160,6 @@ func appendUniqueReason(reasons []string, reason string) []string {
 	return append(reasons, reason)
 }
 
-
 // SchedulePlanStore persists scheduler-owned Stage transitions using optimistic
 // version checks. Each Stage is an independent CAS; after a conflict the caller
 // must reload the Run snapshot and rebuild the whole plan before dispatching.
