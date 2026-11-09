@@ -821,7 +821,7 @@ func TestResearchSQLRepositoriesAppendAndReadVersions(t *testing.T) {
 	}()
 	writers.Wait()
 	close(writeErrors)
-	successes, conflicts := 0, 0
+	successes, conflicts = 0, 0
 	for writeErr := range writeErrors {
 		switch {
 		case writeErr == nil:
