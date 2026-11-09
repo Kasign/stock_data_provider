@@ -27,13 +27,14 @@ func sourcePersistenceRegistration() SourceEndpointRegistration {
 }
 
 func sealedCollectedSourceResult() CollectSourceResult {
-	return CollectSourceResult{
-		collectionSeal:        sourceCollectionResultSeal,
+	result := CollectSourceResult{
 		SourceID:              "source-feed",
 		EndpointID:            "endpoint-feed",
 		SourcePolicyVersionID: "source-policy-v3",
 		PolicyEvaluatedAt:     time.Date(2026, 11, 9, 9, 0, 0, 0, time.UTC),
 	}
+	_ = sealCollectSourceResult(&result)
+	return result
 }
 
 func TestIngestCollectedSourceRechecksVersionAndMetadataPersistencePolicy(t *testing.T) {
@@ -51,6 +52,9 @@ func TestIngestCollectedSourceRechecksVersionAndMetadataPersistencePolicy(t *tes
 		Candidate: domain.Candidate{SourceItemID: "item-1", Title: "title", ProviderSummary: "must-not-persist"},
 		Content:   domain.ContentLayers{ProviderSummary: "must-not-persist"},
 	}}
+	if err := sealCollectSourceResult(&result); err != nil {
+		t.Fatal(err)
+	}
 	observations, err := usecase.Execute(context.Background(), IngestCollectedSourceRequest{
 		Collection: result, IdempotencyPrefix: "collection-1",
 		Purpose: domain.PurposeInternalPersonalResearch, Retention: time.Hour,
@@ -118,6 +122,24 @@ func TestIngestCollectedSourceRejectsUnsealedResult(t *testing.T) {
 	result.collectionSeal = ""
 	_, err = usecase.Execute(context.Background(), IngestCollectedSourceRequest{
 		Collection: result, IdempotencyPrefix: "collection-4",
+		Purpose: domain.PurposeInternalPersonalResearch, Retention: time.Hour,
+	})
+	if !errors.Is(err, ErrInvalidRequest) || len(repository.observations) != 0 {
+		t.Fatalf("err=%v repository=%+v", err, repository)
+	}
+}
+
+func TestIngestCollectedSourceRejectsTamperedCollectedResult(t *testing.T) {
+	repository := &memoryIdentityRepository{}
+	ingest := NewIngestCandidate(repository, func() string { return "must-not-persist" })
+	usecase, err := NewIngestCollectedSource(ingest, providerIngestCatalogStub{registration: sourcePersistenceRegistration()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	result := sealedCollectedSourceResult()
+	result.SourcePolicyVersionID = "source-policy-v4"
+	_, err = usecase.Execute(context.Background(), IngestCollectedSourceRequest{
+		Collection: result, IdempotencyPrefix: "collection-tampered",
 		Purpose: domain.PurposeInternalPersonalResearch, Retention: time.Hour,
 	})
 	if !errors.Is(err, ErrInvalidRequest) || len(repository.observations) != 0 {
