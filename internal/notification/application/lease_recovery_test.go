@@ -125,6 +125,9 @@ func TestAssessExpiredDeliveryLeaseClassifiesAttemptOutcomes(t *testing.T) {
 			if tc.outcome == domain.DeliveryAttemptNotSent && got.EvidenceRef != "evidence-not-sent-1" {
 				t.Fatalf("not_sent evidence must be retained, got %+v", got)
 			}
+			if tc.want == LeaseRecoveryMarkUnknown && got.EvidenceRef != attempt.AttemptID {
+				t.Fatalf("unknown recovery must retain the persisted Attempt as evidence, got %+v", got)
+			}
 		})
 	}
 }
