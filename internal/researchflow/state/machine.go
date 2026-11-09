@@ -191,7 +191,11 @@ func ClaimRetryStage(run domain.Run, stage domain.Stage, policy template.RetryPo
 		return stage, domain.Attempt{}, err
 	}
 	ready.RetryAt = nil
-	return ClaimReadyStage(run, ready, now, attemptRef, fencingToken)
+	claimed, attempt, err := ClaimReadyStage(run, ready, now, attemptRef, fencingToken)
+	if err != nil {
+		return stage, domain.Attempt{}, err
+	}
+	return claimed, attempt, nil
 }
 
 // ClaimReadyStage models a Worker claim after scheduler promotion. The caller must
