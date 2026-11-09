@@ -62,16 +62,19 @@ func TestValidateEgressDependenciesChecksEastmoneyOrigins(t *testing.T) {
 }
 
 func TestValidateEgressDependenciesRequiresTCPDialers(t *testing.T) {
-	cfg := config.Config{
-		ProviderPriority: []string{"baostock", "pytdx"},
-		ProviderSettings: map[string]config.ProviderSettings{
-			"baostock": {Enabled: true, DailyBars: true},
-			"pytdx":    {Enabled: true, DailyBars: true},
-		},
-	}
-	if err := validateEgressDependencies(cfg, Dependencies{}); err == nil ||
-		!strings.Contains(err.Error(), "baostock TCP") {
-		t.Fatalf("expected missing BaoStock dialer, got %v", err)
+	for _, name := range []string{"baostock", "pytdx"} {
+		t.Run(name, func(t *testing.T) {
+			cfg := config.Config{
+				ProviderPriority: []string{name},
+				ProviderSettings: map[string]config.ProviderSettings{
+					name: {Enabled: true, DailyBars: true},
+				},
+			}
+			err := validateEgressDependencies(cfg, Dependencies{})
+			if err == nil || !strings.Contains(err.Error(), name+" TCP") {
+				t.Fatalf("expected missing %s dialer, got %v", name, err)
+			}
+		})
 	}
 }
 
