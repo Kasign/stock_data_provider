@@ -464,7 +464,7 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 			ToNewsID: secondObservation.NewsID, ToSourceID: secondSourceID,
 			Kind: domain.NewsItemRelationRepostOf, Status: domain.NewsItemRelationConfirmed,
 			EvidenceObservation: observations[0].ID,
-			FromVersionID:       latest.ID, ToVersionID: secondVersion.Version.ID,
+			FromVersionID:       latest.ID, ToVersionID: revisedVersion.Version.ID,
 		},
 	})
 	if err != nil {
