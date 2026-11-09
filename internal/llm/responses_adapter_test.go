@@ -464,6 +464,62 @@ func TestResponsesAdapterStreamClosesBodyReturnedWithError(t *testing.T) {
 	}
 }
 
+// cancelAfterChunkReader 在交付首段 SSE 数据后取消上下文，模拟读取期间连接被取消。
+type cancelAfterChunkReader struct {
+	data    []byte
+	sent    bool
+	cancel  context.CancelFunc
+	closed  bool
+}
+
+func (r *cancelAfterChunkReader) Read(p []byte) (int, error) {
+	if !r.sent {
+		r.sent = true
+		n := copy(p, r.data)
+		r.cancel()
+		return n, nil
+	}
+	return 0, context.Canceled
+}
+
+func (r *cancelAfterChunkReader) Close() error {
+	r.closed = true
+	return nil
+}
+
+func TestResponsesAdapterStreamCancellationPreservesPartialOutput(t *testing.T) {
+	provider, secret, capabilities, clock := streamAdapterTestConfig()
+	request := validResponsesRequest()
+	request.ProviderID = provider.ProviderID
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	body := &cancelAfterChunkReader{
+		data: []byte("event: response.output_text.delta\ndata: {\\"type\\":\\"response.output_text.delta\\",\\"delta\\":\\"partial\\"}\n\n"),
+		cancel: cancel,
+	}
+	streamDoer := HTTPStreamDoerFunc(func(context.Context, *http.Request) (*HTTPStreamResponse, error) {
+		return &HTTPStreamResponse{
+			StatusCode: http.StatusOK,
+			Header: http.Header{"Content-Type": []string{"text/event-stream"}},
+			Body: body,
+		}, nil
+	})
+	adapter, err := NewResponsesAdapterWithStream(provider, secret,
+		doerFunc(func(*http.Request) (*http.Response, error) { return nil, errors.New("unused") }),
+		streamDoer, capabilities, clock)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := adapter.Stream(ctx, request, nil)
+	var adapterErr *AdapterError
+	if !errors.As(err, &adapterErr) || adapterErr.Info.Kind != ErrorCancelled ||
+		adapterErr.Info.StableCode != "llm.http.cancelled" ||
+		got.Status != ResponseIncomplete || got.OutputText != "partial" || !body.closed {
+		t.Fatalf("mid-stream cancellation must preserve partial output and close body: response=%+v err=%v closed=%v", got, err, body.closed)
+	}
+}
+
 func streamAdapterTestConfig() (ProviderConfig, config.Secret, CapabilityState, Clock) {
 	provider, secret, capabilities, clock := adapterTestConfig()
 	provider.StreamEnabled = true
