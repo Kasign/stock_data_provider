@@ -59,7 +59,7 @@ type AddEvidenceCommand struct {
 	// Draft 的 EvidenceID 与 ContentFingerprint 会被服务端忽略并重新生成。
 	Draft researchevidence.Evidence
 }
-type EvidenceRef struct { EvidenceID string }
+type EvidenceRef struct { EvidenceID string; CallerRef string; PurposeCode researchevidence.PurposeCode }
 
 type Port interface {
 	CreateContext(context.Context, CreateContextCommand) (researchcontext.Context, error)
@@ -96,8 +96,8 @@ func (s *Service) CreateContext(ctx context.Context, command CreateContextComman
 	value := researchcontext.Context{
 		SchemaVersion: researchcontext.SchemaVersion, ContextID: id, ContextVersion: 1,
 		ResearchQuestion: command.ResearchQuestion, Scope: command.Scope,
-		SubjectRefs: cloneStrings(command.SubjectRefs), SystemAsOf: command.SystemAsOf.UTC(),
-		SectionRefs: cloneSectionRefs(command.SectionRefs), QualitySummary: command.QualitySummary,
+		SubjectRefs: cloneStrings(command.SubjectRefs), SystemAsOf: command.SystemAsOf,
+		SectionRefs: cloneSectionRefs(command.SectionRefs), QualitySummary: cloneQualitySummary(command.QualitySummary),
 		IncludedSections: cloneStrings(command.IncludedSections), OmittedSections: cloneOmittedSections(command.OmittedSections),
 		BuilderVersion: command.BuilderVersion, CreatedAt: now,
 	}
@@ -145,12 +145,17 @@ func (s *Service) GetContext(ctx context.Context, ref ContextRef) (researchconte
 
 func (s *Service) GetEvidence(ctx context.Context, ref EvidenceRef) (researchevidence.Evidence, error) {
 	if s == nil { return researchevidence.Evidence{}, applicationFault(fault.ClassInternal, "research_application_not_configured", "Research Application is not configured", researcherrors.ErrInvalidRepository) }
-	if ctx == nil || strings.TrimSpace(ref.EvidenceID) == "" {
-		return researchevidence.Evidence{}, validationFault("invalid_evidence_ref", "Evidence reference is invalid", nil)
+	if ctx == nil || strings.TrimSpace(ref.EvidenceID) == "" || strings.TrimSpace(ref.CallerRef) == "" {
+		return researchevidence.Evidence{}, validationFault("invalid_evidence_ref", "Evidence reference and trusted caller are required", nil)
 	}
 	value, err := s.evidence.Get(ctx, ref.EvidenceID)
 	if err != nil { return researchevidence.Evidence{}, mapRepositoryError(err) }
 	if err := value.Validate(); err != nil { return researchevidence.Evidence{}, applicationFault(fault.ClassInternal, "stored_evidence_invalid", "Stored Research Evidence is invalid", err) }
+	purpose := ref.PurposeCode
+	if purpose == "" { purpose = researchevidence.PurposeResearchAnalysis }
+	if err := s.authorizer.AuthorizeEvidence(ctx, ref.CallerRef, purpose, value); err != nil {
+		return researchevidence.Evidence{}, applicationFault(fault.ClassForbidden, "evidence_authorization_rejected", "Evidence is not currently authorized for this Research operation", err)
+	}
 	return value, nil
 }
 
@@ -178,6 +183,10 @@ func (randomIDGenerator) NewID(prefix string) (string, error) {
 	var raw [16]byte
 	if _, err := rand.Read(raw[:]); err != nil { return "", fmt.Errorf("generate opaque Research ID: %w", err) }
 	return prefix + hex.EncodeToString(raw[:]), nil
+}
+func cloneQualitySummary(value researchcontext.QualitySummary) researchcontext.QualitySummary {
+	value.ReasonCodes = cloneStrings(value.ReasonCodes)
+	return value
 }
 func cloneStrings(values []string) []string {
 	if values == nil { return []string{} }

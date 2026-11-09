@@ -27,7 +27,7 @@ func (f *evidenceRepoFake) Get(_ context.Context, id string) (researchevidence.E
 type authorizerFake struct { err error; calls int }
 func (f *authorizerFake) AuthorizeEvidence(_ context.Context, caller string, purpose researchevidence.PurposeCode, value researchevidence.Evidence) error {
 	f.calls++
-	if caller=="" || purpose!=researchevidence.PurposeResearchAnalysis || value.EvidenceID=="" { return errors.New("invalid authorization input") }
+	if caller=="" || purpose=="" || value.EvidenceID=="" { return errors.New("invalid authorization input") }
 	return f.err
 }
 
@@ -66,7 +66,9 @@ func TestAddEvidenceGeneratesIdentityFingerprintAndRequiresCurrentAuthorization(
 	got,err:=service.AddEvidence(context.Background(),AddEvidenceCommand{CallerRef:"researchflow:worker-1",Draft:draft})
 	if err!=nil { t.Fatal(err) }
 	if got.EvidenceID!="ev_test-1" || got.ContentFingerprint=="" || !repo.appended || auth.calls!=1 { t.Fatalf("Evidence application flow incomplete: %+v",got) }
+	if _,err:=service.GetEvidence(context.Background(),EvidenceRef{EvidenceID:got.EvidenceID,CallerRef:"researchflow:worker-1"}); err!=nil { t.Fatalf("authorized Evidence read failed: %v",err) }
 	auth.err=errors.New("revoked")
+	if _,err:=service.GetEvidence(context.Background(),EvidenceRef{EvidenceID:got.EvidenceID,CallerRef:"researchflow:worker-1"}); err==nil { t.Fatal("revoked Evidence must not be returned") }
 	repo.appended=false
 	if _,err:=service.AddEvidence(context.Background(),AddEvidenceCommand{CallerRef:"researchflow:worker-1",Draft:draft}); err==nil { t.Fatal("revoked Evidence authorization must be rejected") }
 	if repo.appended { t.Fatal("unauthorized Evidence must not be persisted") }
