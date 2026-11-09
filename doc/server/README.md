@@ -361,7 +361,7 @@ Server 不重写模块业务 Handler 的校验和领域错误，不在路由层�
 
 ### SRV-006：API/Worker 运行角色和生命周期
 
-- 状态：进行中（已实现 SERVER_ROLE=api|worker|all 和 runtime.Lifecycle；旧 Analysis Worker 已接入；HTTP Server 尚未纳入 Lifecycle，SIGTERM/优雅关闭集成测试及模块 Worker 装配仍待完成）
+- 状态：进行中（已实现 SERVER_ROLE=api|worker|all；旧 Analysis Worker 与 HTTP Server 均已纳入 runtime.Lifecycle，具备启动失败回滚、Readiness 先降级、HTTP 在途请求排空和超时强制关闭；Lifecycle 已补充启动期间 Context 取消检测与逆序回滚。真实子进程 SIGTERM 验收、模块 Worker 装配仍待完成）
 - 前置：SRV-003、SRV-004
 - 工作内容：实现角色解析、组件选择、启动依赖排序、失败回滚、优雅关闭和超时。
 - 交付物：Runtime Role 与 Lifecycle Manager。
@@ -801,3 +801,26 @@ Server 层完成不是“服务能够启动”这么简单。至少同时满足�
 - `go-core` 的 gofmt、单测、race、vet 均通过。根模块聚合测试失败导致根模块 race/vet 阶段被 Workflow 跳过；不得将本 SHA 记为完整 Go Workflow 通过。
 - 本次 Server 提交只修改 Server 代码/测试和 Server 文档；未修改上述失败包，不代替 Quant、Research、Researchflow、News Owner 修复跨模块问题。
 - S1/S2 当前已有 Server 包级测试通过证据，但完整根模块 L1 门禁仍受其他模块阻断。待相关模块修复后，需对新的当前 Server HEAD 重跑 Go Workflow；不重复运行无变化的同一失败基线。
+
+
+### 12.17 SRV-006 Lifecycle 启动取消回滚补强（2026-11-09）
+
+#### Review 发现
+
+Lifecycle 原先只在组件 `Start` 返回错误时回滚，没有在组件启动前检查父 Context，也没有在所有组件启动完成后复查 Context。若进程在 Bootstrap 启动阶段收到 SIGTERM，后续组件仍可能继续启动；若某组件启动时取消 Context 并返回 nil，后续组件也会继续启动，直到 Bootstrap 主流程观察到取消。
+
+#### 实施内容
+
+- 每个组件启动前检查 Context；已取消时不再启动后续组件。
+- 任一组件启动期间父 Context 被取消，立即以不受父取消影响的清理 Context 逆序停止已尝试启动的组件。
+- 全部组件启动后再次检查 Context，覆盖最后一个组件启动期间发生取消的窗口。
+- 保留原始 `context.Canceled` / `context.DeadlineExceeded` 错误，并通过 `errors.Join` 汇总回滚错误。
+- 新增启动前已取消、组件启动过程中取消两组回归测试；既有启动顺序、启动失败回滚、停止错误汇总测试保持覆盖。
+
+#### 当前验收状态
+
+- 代码提交：`fb68554c233b20ba803d053914a5d63e85747ce0`（Lifecycle 实现）。
+- 测试提交：`9e34d6e6e9e8014344d5c2882f763a1baf03a181`（新增回归测试，当前分支 HEAD）。
+- 本记录提交时尚未取得上述新 SHA 的 GitHub Actions 结果；不得将测试标记为已通过。
+- 本次只修改 Server 负责的 `internal/server/runtime/**` 和本文档；未修改 Platform 或其他模块。
+- 真实子进程 SIGTERM/容器停止验收仍未完成；组件级取消回滚不能替代进程信号验收。
