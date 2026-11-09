@@ -157,7 +157,7 @@ func (w *Worker) Execute(ctx context.Context, runRef, stageRef, attemptRef strin
 	if errors.Is(runCtx.Err(), context.DeadlineExceeded) || !w.now().Before(snapshot.Run.DeadlineAt) {
 		return WorkerExecution{Attempt: attempt}, ErrWorkerDeadline
 	}
-	attemptTimedOut := errors.Is(execCtx.Err(), context.DeadlineExceeded) && !w.now().Before(attemptDeadline)
+	attemptTimedOut := errors.Is(execCtx.Err(), context.DeadlineExceeded) && runCtx.Err() == nil
 	if attemptTimedOut {
 		result = StageExecutionResult{
 			AttemptStatus: domain.AttemptTimedOut,
