@@ -218,3 +218,11 @@ R1/R2/R3/R5 当前实现 Context、Evidence、Event、Claim/Hypothesis 领域结
 - 新版本在写入前执行 Domain ValidateNextVersion，复用已冻结的 proposed→testing、testing→终态/unknown、同状态修订规则；终态和 unknown 不开放恢复路径。
 - Repository Append 继续负责事务内最新版本连续性与并发冲突检测；Application 的前读不替代 Repository 的原子约束。过期 ExpectedVersion 会因精确版本不存在或 Repository 冲突而失败。
 - 本批增加成功迁移与旧版本重放拒绝测试；Go 测试及 MariaDB 并发验收尚未执行。
+
+
+### Research Diagnostics Application Port（2026-11-09）
+- 新增 Application Diagnostics Port，提供 Context/Event/Claim 精确版本的 Check 构造方法；读取并校验对应 Repository 快照后，复用既有 Research Domain Diagnostics Adapter。
+- Application 只构造 Platform Check，不自行执行调度；并发上限、单项/总超时、取消及报告聚合继续由调用方交给 Platform Runner。
+- Check 的 Required 标记由调用方明确传入；诊断仍是本地结构/Context 质量快照检查，不代表跨模块数据完整性、Evidence 当前授权或整个研究流程质量结论。
+- Evidence Check 暂不提供：来源 Owner 实时授权与撤销检查必须由 Owner Adapter 执行，不能以本地快照诊断替代。
+- 新增精确版本读取和 Check 构造用例；Go 测试及跨模块接线尚未执行。
