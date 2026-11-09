@@ -1102,3 +1102,12 @@ Lifecycle.Stop 原实现通过 stopped 标记保证重复调用幂等，但并�
 - 同批次整理 HEAD liveness 过载测试格式，避免新增测试绕过 gofmt 约束。
 - 相关代码提交：`83f5554`；HTTP HEAD 探针/路由测试提交：`7dd6a52`。
 - 当前尚未运行 gofmt、Server 包测试或 race；需待统一验证时以最新 HEAD 执行。
+
+
+### 12.33 SRV-009 Diagnostics 装配期 Check ID 冲突检查（2026-11-09）
+
+- Review 发现 Service.NewService 原先只复制 Server 与模块 Check 列表，重复 Check ID 要等到首次 `/readyz` 或 `/diagnostics` 请求才由 Platform Runner 拒绝；这会导致配置错误延迟到服务运行期暴露。
+- 现在在 Service 构造阶段检查跨 Server Storage Checks、单个模块 Check 组及多个模块组之间的 Check ID 唯一性。冲突直接导致 Bootstrap 装配失败，不等待第一个探针请求。
+- Required Check 存在性规则保持不变；Check 本身的完整结构校验、执行、超时、状态归一化仍由 Platform Runner 负责，不复制 Platform 校验器。
+- 新增 Storage Check ID 冲突和跨模块组冲突测试。
+- 当前批次尚未运行 Go 测试；待本轮功能组完成后统一验证。

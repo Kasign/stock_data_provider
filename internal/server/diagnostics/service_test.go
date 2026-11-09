@@ -2,6 +2,7 @@ package diagnostics
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	platformdiagnostics "example.com/stock-analysis-flow/internal/platform/diagnostics"
@@ -41,13 +42,22 @@ func TestServiceRunUsesFreshRequiredResourceChecks(t *testing.T) {
 	}
 }
 
-func TestNewServiceRejectsDuplicateModuleCheckIDsAtRunTime(t *testing.T) {
+func TestNewServiceRejectsDuplicateModuleCheckIDsAtConstruction(t *testing.T) {
 	moduleCheck := check("server.storage.mariadb", false, platformdiagnostics.StatusHealthy)
-	service, err := NewService(nil, []platformdiagnostics.Check{moduleCheck})
-	if err != nil {
-		t.Fatalf("NewService() error = %v", err)
+	_, err := NewService(nil, []platformdiagnostics.Check{moduleCheck})
+	if err == nil || !strings.Contains(err.Error(), "duplicate diagnostics check ID") {
+		t.Fatalf("NewService() error = %v, want duplicate check ID error", err)
 	}
-	if _, err := service.Run(context.Background()); err == nil {
-		t.Fatal("expected duplicate check ID error")
+}
+
+func TestNewServiceRejectsDuplicateIDsAcrossModuleGroups(t *testing.T) {
+	first := check("module.shared.check", true, platformdiagnostics.StatusHealthy)
+	second := check("module.shared.check", false, platformdiagnostics.StatusHealthy)
+	_, err := NewService(nil,
+		[]platformdiagnostics.Check{first},
+		[]platformdiagnostics.Check{second},
+	)
+	if err == nil || !strings.Contains(err.Error(), "module.shared.check") {
+		t.Fatalf("NewService() error = %v, want duplicate module check ID", err)
 	}
 }

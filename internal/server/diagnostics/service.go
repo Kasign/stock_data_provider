@@ -3,6 +3,7 @@ package diagnostics
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	platformdiagnostics "example.com/stock-analysis-flow/internal/platform/diagnostics"
 	"example.com/stock-analysis-flow/internal/server/resources"
@@ -23,12 +24,16 @@ func NewService(shared *resources.Resources, moduleChecks ...[]platformdiagnosti
 	if len(checks) == 0 {
 		return nil, ErrNoRequiredChecks
 	}
+	seen := make(map[string]struct{}, len(checks))
 	required := false
 	for _, check := range checks {
 		if check.Required {
 			required = true
-			break
 		}
+		if _, exists := seen[check.ID]; exists {
+			return nil, fmt.Errorf("duplicate diagnostics check ID %q", check.ID)
+		}
+		seen[check.ID] = struct{}{}
 	}
 	if !required {
 		return nil, ErrNoRequiredChecks
