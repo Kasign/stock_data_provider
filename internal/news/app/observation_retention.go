@@ -34,8 +34,14 @@ func (u *ObservationRetentionCleaner) Execute(ctx context.Context, now time.Time
 	if u == nil || u.repository == nil || ctx == nil || now.IsZero() || limit < 1 || limit > 1000 {
 		return ObservationPayloadPurgeResult{}, ErrInvalidRequest
 	}
+	if err := ctx.Err(); err != nil {
+		return ObservationPayloadPurgeResult{}, err
+	}
 	result, err := u.repository.PurgeExpiredObservationPayloads(ctx, now.UTC(), limit)
 	if err != nil {
+		return ObservationPayloadPurgeResult{}, err
+	}
+	if err := ctx.Err(); err != nil {
 		return ObservationPayloadPurgeResult{}, err
 	}
 	if result.Scanned < 0 || result.Purged < 0 || result.Purged > result.Scanned || result.Scanned > limit {

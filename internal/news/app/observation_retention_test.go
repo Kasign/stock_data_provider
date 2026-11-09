@@ -12,10 +12,16 @@ type observationRetentionRepositoryStub struct {
 	err error
 	now time.Time
 	limit int
+	calls int
+	afterPurge func()
 }
 
 func (s *observationRetentionRepositoryStub) PurgeExpiredObservationPayloads(_ context.Context, now time.Time, limit int) (ObservationPayloadPurgeResult, error) {
 	s.now, s.limit = now, limit
+	s.calls++
+	if s.afterPurge != nil {
+		s.afterPurge()
+	}
 	return s.result, s.err
 }
 
@@ -54,4 +60,43 @@ func TestObservationRetentionCleanerRejectsInvalidRequestsAndResults(t *testing.
 	if _, err := cleaner.Execute(context.Background(), time.Now(), 10); !errors.Is(err, ErrObservationRetentionResultInvalid) {
 		t.Fatalf("invalid repository result error=%v", err)
 	}
+}
+
+func TestObservationRetentionCleanerHonorsContextCancellation(t *testing.T) {
+	now := time.Date(2026, 11, 9, 10, 0, 0, 0, time.UTC)
+
+	t.Run("already canceled does not call repository", func(t *testing.T) {
+		repository := &observationRetentionRepositoryStub{}
+		cleaner, err := NewObservationRetentionCleaner(repository)
+		if err != nil {
+			t.Fatal(err)
+		}
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		if _, err := cleaner.Execute(ctx, now, 10); !errors.Is(err, context.Canceled) {
+			t.Fatalf("Execute() error=%v, want context.Canceled", err)
+		}
+		if repository.calls != 0 {
+			t.Fatalf("repository calls=%d, want 0", repository.calls)
+		}
+	})
+
+	t.Run("canceled while repository is running returns cancellation", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		repository := &observationRetentionRepositoryStub{
+			result: ObservationPayloadPurgeResult{Scanned: 2, Purged: 2},
+			afterPurge: cancel,
+		}
+		cleaner, err := NewObservationRetentionCleaner(repository)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := cleaner.Execute(ctx, now, 10); !errors.Is(err, context.Canceled) {
+			t.Fatalf("Execute() error=%v, want context.Canceled", err)
+		}
+		if repository.calls != 1 {
+			t.Fatalf("repository calls=%d, want 1", repository.calls)
+		}
+	})
 }
