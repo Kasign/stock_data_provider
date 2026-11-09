@@ -97,7 +97,7 @@ func TestResultValidateRejectsInvalidUTF8Text(t *testing.T) {
 		{"algorithm version", func(r *Result) { r.AlgorithmVersion = string([]byte{0xff}) }},
 		{"algorithm version padded", func(r *Result) { r.AlgorithmVersion = " 1.0.0 " }},
 		{"conflict ref", func(r *Result) { r.ConflictRefs = []string{string([]byte{0xff})} }},
-		{"conflict ref padded", func(r *Result) { r.ConflictRefs = []string{" ref:trend " } }},
+		{"conflict ref padded", func(r *Result) { r.ConflictRefs = []string{" ref:trend "}}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
