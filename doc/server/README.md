@@ -386,7 +386,7 @@ Server 不重写模块业务 Handler 的校验和领域错误，不在路由层�
 
 ### SRV-009：Health、Readiness、Diagnostics 聚合
 
-- 状态：进行中（Platform Runner、Server Aggregator/Readiness 门禁和 DB/Redis 基础检查已实现；真实模块 Check 注册、受保护诊断入口及故障场景验收仍待完成）
+- 状态：进行中（Platform Runner、Server Aggregator/Readiness 门禁、DB/Redis 基础检查和 Owner 保护的结构化诊断入口已实现；真实模块 Check 注册及故障场景验收仍待完成）
 - 前置：SRV-003、SRV-004；Platform Diagnostics 契约可用
 - 工作内容：聚合进程、公共资源和模块状态；区分 liveness/readiness/diagnostics。
 - 交付物：健康端点、聚合器和故障场景测试。
@@ -601,7 +601,7 @@ Server 层完成不是“服务能够启动”这么简单。至少同时满足�
 | SRV-006 | 进行中 | 旧 Analysis Worker 与 HTTP Server 均已纳入统一 Lifecycle；HTTP Listener 在 Start 阶段同步绑定，Readiness 在 HTTP Shutdown 前切换为 not-ready，Shutdown 超时后强制 Close；真实 SIGTERM 子进程测试已补充，待当前 SHA 的 Workflow 证据；模块 Worker 接入和生产容器退出验收仍待完成 |
 | SRV-007 | 进行中 | 已建立 Server Migration Registry，并注册 News/Research/Notification；显式配置执行；其他模块 Migration 和 MariaDB 集成验收待完成，详见 12.7 节 |
 | SRV-008 | 待契约 | Dispatcher 所有权未冻结 |
-| SRV-009 | 进行中 | 已实现 Platform Runner 聚合、严格 Readiness 判定及 MariaDB/Redis 资源检查；尚待 Transport 暴露和真实依赖集成验收，详见 12.8 节 |
+| SRV-009 | 进行中 | 已实现 Platform Runner 聚合、严格 Readiness 判定、MariaDB/Redis 资源检查和 Owner 保护的结构化 `/diagnostics` 只读入口；真实模块 Check 注册、依赖故障注入及生产诊断验收仍待完成，详见 12.8、12.20 节 |
 | SRV-010 | 阻塞 | 等待 Data 迁移门禁和公开接口 |
 | SRV-011 | 未开始 | 等待核心运行能力 |
 | SRV-012 | 未开始 | 等待新链路验收 |
@@ -866,3 +866,31 @@ Lifecycle.Stop 原实现通过 stopped 标记保证重复调用幂等，但并�
 - 本批次尚未运行当前 SHA 的 Go Workflow；不提前标记测试通过。
 - 本次只修改 Server Lifecycle、对应测试和 Server 主计划；没有修改 Platform 或其他模块。
 - 这项修复避免并发关闭调用提前释放共享资源，但不替代后续真实模块 Worker 装配和生产容器退出验收。
+
+
+### 12.20 SRV-009 结构化 Diagnostics HTTP 入口第一阶段（2026-11-09）
+
+#### 实施内容
+
+- 在现有 Health Handler 增加 `GET /diagnostics` 与 `HEAD /diagnostics`，复用同一个 Server Diagnostics Service 和 Platform Runner，不重复创建 Check 或执行另一套诊断逻辑。
+- Diagnostics 路由通过 Platform Router 显式注册为 Owner-only；匿名请求返回 401，只有 Service Scope 的凭证返回 403，未注册路由仍为 404。
+- 诊断执行成功时返回完整结构化 Report，包括 Platform Observation 和 Server Readiness 判定。即使某项 Required Check 不健康，只要诊断执行成功仍返回 200，让运维端可以读取失败证据；Readiness 仍独立返回 503。
+- Runner 执行失败时返回通用 503 错误，不向 HTTP 响应泄露底层数据库、Redis 或内部依赖错误文本。
+- 保持 `/healthz` 匿名、`/readyz` Owner-only 的既有策略；没有开放任何 Service Scope 或匿名诊断入口。
+
+#### 本批次变更
+
+- `internal/server/health/handler.go`：增加结构化 Diagnostics 响应及错误脱敏。
+- `internal/server/bootstrap/router.go`：增加 GET/HEAD 路由和 Owner 策略。
+- `internal/server/health/handler_test.go`：覆盖报告返回、Runner 错误脱敏。
+- `internal/server/bootstrap/router_test.go`：覆盖匿名、Service Scope、Owner 访问矩阵。
+
+#### 当前状态
+
+- 实现提交：`a7ea18daf770dbba7609c8b67987f34b5ba700e3`。
+- 路由提交：`13473b9767479a8c0454fee5ebb9c9d3ed9d93dc`。
+- 路由身份测试提交：`3a466b6562eb22587dac81d76016ab728e10cd71`。
+- Handler 测试提交：`66593318d9da7d25392318891fd147aa5f428131`。
+- 本批次尚未运行当前 SHA 的 Go Workflow，不提前标记测试通过。
+- 当前只聚合 Server 已注册的 Storage Checks；News、Research、Quant、Researchflow、LLM、Notification 的真实 Check 必须由各模块公开 Check 入口提供后再注册，不能在 Server 伪造健康状态。
+- `/diagnostics` 是 Owner 运维接口，不是面向 Web 用户的业务 API；Web Session/CSRF 门禁不因该入口存在而放宽。
