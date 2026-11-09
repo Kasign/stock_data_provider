@@ -7,8 +7,8 @@
 - 跨模块准入：`doc/整体任务规划/01-项目总览/跨模块接入执行说明.md`、`doc/整体任务规划/01-项目总览/跨模块接入准入清单.md`
 - 本记录建立时的代码基线：`d8595f408337f62be3697aac661ba1570fdd3667`
 - 最近一次 M0 审计基线：`9687337743ff5ad8b5b81209831d43689693ae47`
-- 最近一次代码基线：`8340609eb93ff129378f07058bc3415d4ea74178`（整理 TCP 注入代码与迁移进度记录）
-- 当前实施状态：`M1_completed / M2_completed / M3_in_progress / M4_in_progress`；M3 的 Data 侧进程内路由准备已完成，Root Server 实际装配仍待 Server 组合根完成；M4 的 borrowed DB 与 go-redis Cache Adapter 已实现，Root 侧资源注入/配置一致性及 Provider 网络出口适配仍未完成。
+- 最近一次代码基线：`da62740bd05fd75a8d07290aac930a62ea27cda6`（Provider 能力/出站装配一致性复核前的当前分支基线；随后提交以 GitHub HEAD 为准）
+- 当前实施状态：`M1_completed / M2_completed / M3_in_progress / M4_in_progress`；M3 的 Data 侧进程内路由准备已完成，Root Server 实际装配仍待 Server 组合根完成；M4 的 Data 侧 borrowed DB、go-redis Adapter、Provider 受控出口注入端口和严格依赖校验已具备，Root 侧资源创建/注入、TCP BoundDialer、配置一致性与统一生命周期仍待完成。
 
 > 本文记录 Data 从独立 Go Module/服务迁入 Root Server 根 Go Module、同进程运行的实施计划和进度。若本文与上述架构决策文档冲突，以架构决策文档为准；公共平台及 DATA 契约以冻结契约文档为准。本文不重新定义契约。
 
@@ -305,28 +305,28 @@ internal/
 
 ### M4：共享资源与生命周期统一
 
-状态：`pending`
+状态：`in_progress`
 
 工作项：
 
-- [ ] MariaDB：Root Server 创建共享 Pool，Data Repository 明确接收 borrowed `*sql.DB`；Data 仍拥有 SQL 和 Repository。
-- [ ] Repository 支持 borrowed/owned 资源语义；只有独立兼容入口关闭自有 Pool。
-- [ ] Migration：Root Server 显式注册各模块 Runner，按 namespace 和依赖顺序执行；禁止 Store.Open 隐式迁移。
-- [ ] Redis：Data Cache 适配共享 go-redis Client；如 Redis DB/配置不同，由组合根创建独立 Client 并明确拥有者。
-- [ ] 保留 Data Cache key namespace、TTL、禁用缓存和降级语义。
-- [ ] Provider HTTP：使用冻结的 Platform 受控 HTTP Client；若契约接入尚未具备条件，不自行复制安全实现，记录阻断并等待准入。
-- [ ] Config：区分领域配置与远程 HTTP Adapter 认证配置；进程内模式不要求 Data API Key。
-- [ ] Worker：Data 拥有执行规则，Root Server 统一 Start/Stop 和 drain。
-- [ ] Logger/Diagnostics/Request Context 由组合根装配并按契约注入。
+- [x] Data Repository 支持 borrowed `*sql.DB`；[ ] Root Server 创建共享 Pool 并注入 Data。
+- [x] Repository 明确 borrowed/owned 语义，borrowed Pool 不由 Data 关闭；独立兼容入口保留自有 Pool 生命周期。
+- [x] Data 暴露显式 `MigrationRunner`，Module 构造不隐式执行 Schema Migration；[ ] Root Server 注册各模块 Runner 并统一调度。
+- [x] Data Cache 已适配共享 go-redis Client，`Module.Close` 不关闭注入 Cache；[ ] Root 创建、Ping 并注入共享 Redis Client，核对 Addr/Username/Password/DB 配置。
+- [x] 保留既有 Cache 接口、key namespace、TTL 和 Disabled Cache 入口；新增 typed nil 防御；[ ] integration 验证共享 Redis 下的完整行为。
+- [x] 已识别 Provider 的 HTTP 出口均有注入端口；严格校验按启用能力、实际 endpoint/origin 检查依赖完整性，并拒绝 typed nil；[ ] Root 按实际配置创建精确 Platform BoundDoer 并注入。
+- [ ] BaoStock/Pytdx TCP 受控出口：等待 Platform 提供 TCP BoundDialer；Root 注入前继续 fail-closed，禁止模块化生产路径使用标准 Dialer fallback。
+- [x] `LoadForInProcess` 不要求 Data API Key；[ ] Root 统一装载并校验服务 Config/Secret，区分独立 HTTP Adapter 凭据与进程内调用身份。
+- [x] Data Module 提供 Start/Stop/Wait/Close 生命周期入口；[ ] Root Server 统一调度 Worker、关闭顺序与 drain。
+- [ ] Logger/Diagnostics/Request Context 按冻结契约由组合根装配；Data 保留领域诊断语义。
 
 验收：
 
-- [ ] 每个 Pool/Client/Worker 只有一个明确 owner。
+- [ ] Root 与 Data 间每个 Pool/Client/Worker 只有一个明确 owner，且实际注入与关闭顺序有集成证据。
 - [ ] Migration 仅由组合根执行一次，失败阻止 readiness。
-- [ ] Data Repository 不会关闭 borrowed Pool。
-- [ ] Redis 共享或独立 Client 的配置语义可验证。
+- [x] Data Repository 不会关闭 borrowed Pool（代码与单测覆盖）；Root 生命周期仍待集成验收。
+- [ ] Redis 共享或独立 Client 的连接参数、Cache key、TTL、错误和禁用语义在 Root 集成环境验证。
 - [ ] Shutdown 顺序、超时和资源释放有集成测试。
-
 ### M5：部署与 WebUI 路由切换
 
 状态：`pending`
@@ -1039,3 +1039,11 @@ internal/
 - 未启用的 endpoint 不再要求 Root 注入对应 BoundDoer；启用 DailyBars 时仍要求其实际可能使用的完整路径（Tencent 两类 K 线执行器都必须注入）。
 - 其他 Provider 暂时保留保守的 Provider 级校验，尤其 Eastmoney 的多个领域能力共享或交叉使用 endpoint；在逐个调用点确认映射前，不猜测能力与 Host 的对应关系。
 - 新增测试源码覆盖 Quote-only、DailyBars-only 的依赖边界；未运行构建/测试。
+### 2026-11-09：M4 Data 侧依赖门禁与 typed nil 复核
+
+- 代码基线：`da62740bd05fd75a8d07290aac930a62ea27cda6`；本轮 Data 侧代码已增加 TickFlow 禁用能力的凭证校验修正、HTTP/TCP 出站依赖 typed nil 检测，以及 Module Cache typed nil 处理。
+- Provider 配置的 20 项能力均与 `hasConfiguredProviderCapability` 和 `Module.build` 的能力注册/接口断言对齐；启用但不支持的能力在 Module 装配时明确失败。
+- `RequireEgressDependencies` 默认 false 是独立兼容入口的兼容策略；Root Server 必须显式设置 true。当前 Data 分支不包含 Root 组合根调用点，不能将此项记为 Root 已接入。
+- Data 侧 HTTP 出口注入和严格依赖门禁已完成代码准备；Root 实际创建 Platform BoundDoer、配置 DestinationPolicy 并注入仍未完成。
+- TCP 受控拨号仍等待 Platform BoundDialer；BaoStock/Pytdx 的 Data 注入接口和 fail-closed 校验已准备，不在 Data 复制平台安全实现。
+- 本轮未执行构建或测试；新增测试源码和本轮静态审查结果待 integration CI 统一验收。
