@@ -1889,7 +1889,8 @@ paths:
         Returns provider-reported valuation ratios. Individual metrics can be null or negative; null is missing data, not zero.
         provider_timestamp is the latest valid provider timestamp among the valuation metrics and does not imply that every
         metric was updated at that exact time. The endpoint validates symbols, canonicalizes six-digit A-share codes and
-        returns missing_symbols for requested symbols omitted by the provider.
+        returns missing_symbols for requested symbols omitted by the provider. The 100-token cap applies before deduplication;
+        normalized duplicate symbols are deduplicated, while empty tokens are rejected.
       parameters:
         - name: symbols
           in: query
@@ -2019,7 +2020,7 @@ paths:
   /api/v1/market/indices/{symbol}/constituents:
     get:
       summary: 获取指定指数的最近或指定日期之前的成分权重报告快照
-      description: 未提供 as_of 时保持原有当前/最近快照行为。提供 as_of 时只使用显式支持历史查询的 Provider；Tushare 返回不晚于请求日期的最新 index_weight 报告日。as_of_date 是请求日期，provider_report_date 是实际报告日。该接口不表示成分在报告日至下次报告日之间持续有效，也不是严格历史成员生效区间回放。
+      description: 未提供 as_of 时保持原有当前/最近快照行为。提供 as_of 时只使用显式支持历史查询的 Provider；as_of 仅支持自动选择来源或 source=tushare，指定 source=hithink 时会被拒绝，因为同花顺只支持当前成分。Tushare 返回不晚于请求日期的最新 index_weight 报告日。as_of_date 是请求日期，provider_report_date 是实际报告日。该接口不表示成分在报告日至下次报告日之间持续有效，也不是严格历史成员生效区间回放。
       parameters:
         - name: symbol
           in: path
