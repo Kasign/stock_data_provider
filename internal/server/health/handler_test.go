@@ -177,6 +177,7 @@ func TestReadyzReportsRegisteredCheckStatuses(t *testing.T) {
 				{CheckID: "server.storage.mariadb", Observation: platformdiagnostics.Observation{Status: platformdiagnostics.StatusHealthy}},
 				{CheckID: "server.storage.redis", Observation: platformdiagnostics.Observation{Status: platformdiagnostics.StatusHealthy}},
 				{CheckID: "module.news.ingestion", Observation: platformdiagnostics.Observation{Status: platformdiagnostics.StatusHealthy}},
+				{CheckID: "module.notification.dispatch", Observation: platformdiagnostics.Observation{Status: platformdiagnostics.StatusDegraded}},
 			},
 		},
 	}}
@@ -199,5 +200,8 @@ func TestReadyzReportsRegisteredCheckStatuses(t *testing.T) {
 		if body.Dependencies[id] != "ok" {
 			t.Fatalf("dependency %q status = %q, want ok; all=%v", id, body.Dependencies[id], body.Dependencies)
 		}
+	}
+	if body.Dependencies["module.notification.dispatch"] != "degraded" {
+		t.Fatalf("optional degraded check status = %q, want degraded; all=%v", body.Dependencies["module.notification.dispatch"], body.Dependencies)
 	}
 }
