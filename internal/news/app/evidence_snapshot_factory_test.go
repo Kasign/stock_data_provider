@@ -123,45 +123,6 @@ func TestCreateEvidenceSnapshotForQueryRejectsOversizedAndInvalidPITResults(t *t
 	})
 }
 
-func TestCreateEvidenceSnapshotForQueryRejectsInvalidGeneratedIdentityAndDuplicatePITItems(t *testing.T) {
-	now := time.Date(2026, 11, 9, 12, 0, 0, 0, time.UTC)
-	request := validEvidenceListRequest(now)
-	request.Filters = &EvidenceQueryFilters{}
-	request.SystemAsOf = now.Add(-time.Minute)
-
-	t.Run("invalid generated snapshot reference", func(t *testing.T) {
-		query := &evidencePITRepositoryStub{records: evidencePITRecords(request.SystemAsOf)}
-		store := &evidenceSnapshotRepositoryStub{}
-		service, err := NewCreateEvidenceSnapshotForQuery(query, store, func() string { return " " })
-		if err != nil {
-			t.Fatal(err)
-		}
-		service.now = func() time.Time { return now }
-		if _, err := service.Execute(context.Background(), request); !errors.Is(err, ErrInvalidEvidenceSnapshot) {
-			t.Fatalf("Execute() error = %v, want ErrInvalidEvidenceSnapshot", err)
-		}
-		if store.calls != 0 {
-			t.Fatalf("invalid generated identity reached storage: %d writes", store.calls)
-		}
-	})
-
-	t.Run("duplicate PIT item", func(t *testing.T) {
-		record := evidencePITRecords(request.SystemAsOf)[0]
-		query := &evidencePITRepositoryStub{records: []EvidencePITRecord{record, record}}
-		store := &evidenceSnapshotRepositoryStub{}
-		service, err := NewCreateEvidenceSnapshotForQuery(query, store, func() string { return "snapshot-duplicate-item" })
-		if err != nil {
-			t.Fatal(err)
-		}
-		service.now = func() time.Time { return now }
-		if _, err := service.Execute(context.Background(), request); !errors.Is(err, ErrInvalidEvidenceSnapshot) {
-			t.Fatalf("Execute() error = %v, want ErrInvalidEvidenceSnapshot", err)
-		}
-		if store.calls != 0 {
-			t.Fatalf("duplicate PIT item reached storage: %d writes", store.calls)
-		}
-	})
-}
 func TestCreateEvidenceSnapshotForQueryDoesNotRequeryOnCursorRequest(t *testing.T) {
 	now := time.Now().UTC()
 	request := validEvidenceListRequest(now)

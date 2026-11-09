@@ -141,6 +141,26 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 	if err := repository.CreateEvidenceSnapshot(ctx, snapshot); err != nil {
 		t.Fatalf("idempotent evidence snapshot create: %v", err)
 	}
+
+	// Concurrent retries with the same immutable reference and payload must
+	// converge to the already persisted row instead of surfacing duplicate-key errors.
+	const snapshotRetryWorkers = 8
+	snapshotRetryErrors := make(chan error, snapshotRetryWorkers)
+	var snapshotRetryWait sync.WaitGroup
+	for index := 0; index < snapshotRetryWorkers; index++ {
+		snapshotRetryWait.Add(1)
+		go func() {
+			defer snapshotRetryWait.Done()
+			snapshotRetryErrors <- repository.CreateEvidenceSnapshot(ctx, snapshot)
+		}()
+	}
+	snapshotRetryWait.Wait()
+	close(snapshotRetryErrors)
+	for retryErr := range snapshotRetryErrors {
+		if retryErr != nil {
+			t.Fatalf("concurrent idempotent evidence snapshot create: %v", retryErr)
+		}
+	}
 	loadedSnapshot, err := repository.GetEvidenceSnapshot(ctx, snapshot.SnapshotRef, snapshot.CallerRef, snapshotCreatedAt.Add(time.Minute))
 	if err != nil {
 		t.Fatalf("get evidence snapshot: %v", err)
