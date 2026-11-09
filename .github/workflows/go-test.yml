@@ -68,8 +68,8 @@ jobs:
           git add go.mod go.sum
       - name: Format Data Application Port
         run: |
-          gofmt -w ./internal/marketdata/app ./internal/marketdata/application
-          git add internal/marketdata/app internal/marketdata/application
+          gofmt -w ./internal/marketdata/app ./internal/marketdata/application ./internal/marketdata/bootstrap ./cmd/market-data
+          git add internal/marketdata/app internal/marketdata/application internal/marketdata/bootstrap cmd/market-data
       - name: Commit and push migration
         id: commit
         run: |

@@ -72,7 +72,7 @@ func run(ctx context.Context, logger *slog.Logger) error {
 	}()
 	handler := module.Handler()
 	providerSummary := module.ProviderSummary()
-	server := &http.Server{Addr: cfg.HTTPAddr, Handler: handler.Handler(), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: cfg.RequestTimeout + 2*time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 1 << 20}
+	server := &http.Server{Addr: cfg.HTTPAddr, Handler: handler, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: cfg.RequestTimeout + 2*time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 1 << 20}
 	logger.Info("market-data service starting", "addr", cfg.HTTPAddr, "providers", strings.Join(providerSummary.All, ","), "quote_providers", strings.Join(providerSummary.Quotes, ","), "daily_bar_providers", strings.Join(providerSummary.DailyBars, ","), "mariadb_enabled", store != nil, "redis_enabled", cfg.RedisAddr != "", "adjustment", cfg.Adjustment, "mx_enabled", cfg.MXEnabled)
 	errCh := make(chan error, 1)
 	go func() { errCh <- server.ListenAndServe() }()

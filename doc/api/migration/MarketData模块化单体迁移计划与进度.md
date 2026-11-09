@@ -665,3 +665,11 @@ internal/
 - `Dependencies` 显式注入 Store、Cache、Logger。Store/Cache 由调用方创建并拥有；Module 只关闭自身创建的 BaoStock Client，避免重复关闭共享基础设施。
 - 保留原 ProviderPriority、ProviderSettings 能力校验、股票搜索独立优先级、补充 Provider 和 35 个 HTTP Operation 的现有装配行为；不改变 Provider 算法、API DTO、路由或数据质量规则。
 - 当前独立命令仍负责 DB/Redis 打开、MariaDB Migration、HTTP Server 生命周期及 Quote Retention Worker；下一任务 M2-4 再把 Worker Start/Stop/Wait 纳入 Module 生命周期。
+
+
+### 2026-11-09：M2-3 Bootstrap 装配边界测试
+
+- 新增 Bootstrap 单测覆盖 Handler/Application/Diagnostics 暴露、ProviderSummary、就绪检查、Summary 防御性拷贝、Close 幂等、缺失 MariaDB/Redis 注入和未知 Provider 配置拒绝。
+- 独立命令改为使用 `bootstrap.New`，HTTP Server 仍由命令入口创建；Bootstrap 仅返回 Handler，不自行监听端口。
+- 修正命令入口对 `http.Handler` 的调用方式；资源关闭顺序保持 Module 先关闭自有 BaoStock Client，再由命令入口关闭 Store。
+- CI 格式化步骤扩展至 bootstrap 与 cmd/market-data，确保新组合根与命令入口执行 gofmt。
