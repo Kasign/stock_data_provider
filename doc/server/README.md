@@ -1236,6 +1236,14 @@ Lifecycle.Stop 原实现通过 stopped 标记保证重复调用幂等，但并�
 ### 12.48 Server 独立包级 CI 门禁（2026-11-09）
 
 - 根模块 `go test ./...` 会被其他模块的编译/测试失败阻断，导致 Server 包已通过的结果无法单独形成稳定门禁。新增 `.github/workflows/server-test.yml`，仅在 Server 分支且 Server/入口/Server 文档变化时运行。
-- 独立门禁覆盖 `cmd/analysis-api`、Server Bootstrap、Config、Diagnostics、Health、Migration、Resources、Runtime 的 gofmt、单测、Race、Vet；不运行其他业务模块的测试，也不修改其文件。
+- 独立门禁覆盖 `cmd/analysis-api`、Server Bootstrap、Config、Diagnostics、Health、Migration、Resources、Runtime 的 gofmt、单测、Race、Vet；Run `42618730715` 对应 SHA `b692937` 已全部通过；不运行其他业务模块的测试，也不修改其文件。
 - 暂不将 `internal/server/llmtransport` 纳入该测试矩阵：当前依赖的 `internal/llm` 包有未使用的 `time` 导入，导致该适配器包无法编译。待 LLM Owner 修复后再加入，不用跳过/忽略失败的方式伪造通过。
 - 根模块 Workflow 仍保留完整全仓门禁；独立 Server Workflow 只提供归属清晰的基础包验收，不替代跨模块联调。
+
+
+### 12.49 Server 独立 CI 验收结果（2026-11-09）
+
+- Run `42618730715`，SHA `b692937ba53ee5a2cd60f6b95803b3c4f622e5fb`，结论 `success`。
+- Server gofmt、`cmd/analysis-api` 与 Bootstrap/Config/Diagnostics/Health/Migration/Resources/Runtime 包级单测、Race、Vet 全部通过。
+- 该结果证明当前 Server 基础包在独立矩阵内通过，不覆盖 `internal/server/llmtransport`（其依赖 LLM 编译失败）、全仓其他模块或真实 MariaDB/Redis/LLM Gateway 集成。
+- 根模块全仓 Run `42618100918` 仍失败于其他模块编译/测试；不得把 Server 独立 CI 成功描述为全仓通过。
