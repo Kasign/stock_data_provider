@@ -31,6 +31,7 @@ type OutboxStore interface {
 	RetryOutbox(context.Context, string, string, uint64, time.Time, string) (bool, error)
 }
 
+// OutboxPublisher may be called concurrently up to MaxConcurrency; implementations must be concurrency-safe.
 type OutboxPublisher interface {
 	Publish(context.Context, OutboxMessage) error
 }

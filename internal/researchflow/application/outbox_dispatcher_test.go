@@ -9,6 +9,7 @@ import (
 )
 
 type fakeOutboxStore struct {
+	mu             sync.Mutex
 	messages       []OutboxMessage
 	acknowledged   []string
 	retried        []string
@@ -20,10 +21,14 @@ type fakeOutboxStore struct {
 }
 
 func (s *fakeOutboxStore) ClaimOutbox(_ context.Context, _, _ string, _ int, _ time.Duration) ([]OutboxMessage, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	return append([]OutboxMessage(nil), s.messages...), s.claimErr
 }
 
 func (s *fakeOutboxStore) AcknowledgeOutbox(_ context.Context, ref, _ string, _ uint64) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if s.staleAck[ref] {
 		return false, nil
 	}
@@ -32,6 +37,8 @@ func (s *fakeOutboxStore) AcknowledgeOutbox(_ context.Context, ref, _ string, _ 
 }
 
 func (s *fakeOutboxStore) RetryOutbox(_ context.Context, ref, _ string, _ uint64, next time.Time, code string) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if s.staleRetry[ref] {
 		return false, nil
 	}
