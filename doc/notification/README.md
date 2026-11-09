@@ -172,3 +172,13 @@ Notification 是独立通知业务模块，负责事件接收、Subscription、T
 - 根模块 `Test .`：失败于 gofmt；本轮日志未列出任何 `internal/notification/**` 差异，Notification 本模块格式问题已清除。
 - 根模块 gofmt 失败仍由其他模块文件阻断；依赖下载、根模块单测、Race Detector、go vet 均未执行。Notification 新增执行服务测试仍没有 CI 实际运行证据。
 - MariaDB 集成 Job 未执行，真实 DSN L3 仍不可比较。
+
+
+### 模板版本持久化增量（2026-11-09）
+
+- 新增 `template.Repository`：提供不可变版本 `Create/Get`；相同 `template_id/version` 与相同 JCS Digest 幂等，内容不同返回 `ErrTemplateImmutable`。
+- Registry 暴露统一的 `ValidateDefinition` 与 `DefinitionDigest`，持久化 Adapter 与内存 Registry 共用同一校验和 RFC 8785 JCS + SHA-256 摘要算法，不另造摘要规则。
+- 新增 `MySQLTemplateRepository`，由 Server 注入共享 `*sql.DB` 和显式 Template Limits；读取时重新校验定义并重算 Digest，发现列内容与摘要不一致则 fail closed；返回的变量绑定 Map 为独立副本。
+- Notification Migration v3 新增 `notification_template_versions`，主键 `(template_id, version)`，保存事件绑定、格式、Subject/Body、JSON Pointer 绑定和 Digest；不包含预置业务文案。
+- 新增 MariaDB L3 集成测试代码，覆盖相同版本幂等、相同版本内容冲突、新版本追加、读取和副本隔离；未设置 `NOTIFICATION_MARIADB_TEST_DSN` 时会 Skip，不能视为已执行。
+- 当前限制：本轮没有真实 MariaDB DSN 和完整根模块 CI 结果；模板 Repository 已实现代码与测试，但 CI/数据库验收仍待执行。Server 根 Migration 注册由 Server 分支负责，本分支不越界修改。

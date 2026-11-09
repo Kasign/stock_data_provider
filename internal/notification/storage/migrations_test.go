@@ -7,7 +7,7 @@ import (
 
 func TestMigrationsDeclareImmutableVersionAndRequiredUniqueness(t *testing.T) {
 	migrations := Migrations()
-	if len(migrations) != 2 || migrations[0].Version != 1 || migrations[1].Version != 2 ||
+	if len(migrations) != 3 || migrations[0].Version != 1 || migrations[1].Version != 2 || migrations[2].Version != 3 ||
 		migrations[0].Description == "" || len(migrations[0].Statements) != 5 ||
 		migrations[1].Description == "" || len(migrations[1].Statements) != 1 {
 		t.Fatalf("unexpected notification migration set: %+v", migrations)
@@ -54,12 +54,24 @@ func TestMigrationsDeclareImmutableVersionAndRequiredUniqueness(t *testing.T) {
 	if strings.Contains(inboxDDL, "notification_fanout_work_items") {
 		t.Fatal("Inbox migration must not define an unfrozen FanoutWorkItem schema")
 	}
+	templateDDL := strings.Join(migrations[2].Statements, "\n")
+	for _, required := range []string{
+		"CREATE TABLE notification_template_versions",
+		"PRIMARY KEY (template_id, version)",
+		"variable_bindings JSON NOT NULL",
+		"digest CHAR(64)",
+		"MEDIUMTEXT",
+	} {
+		if !strings.Contains(templateDDL, required) {
+			t.Errorf("Template migration is missing required schema element %q", required)
+		}
+	}
 }
 
 func TestMigrationsReturnIndependentStatementSlices(t *testing.T) {
 	first := Migrations()
 	second := Migrations()
-	if len(first) != 2 || len(second) != 2 {
+	if len(first) != 3 || len(second) != 3 {
 		t.Fatal("migration set must be stable")
 	}
 	first[0].Statements[0] = "mutated"

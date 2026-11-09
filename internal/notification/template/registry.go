@@ -104,7 +104,7 @@ func (r *Registry) Register(definition Definition) (string, error) {
 	if err := validateDefinition(definition, r.limits); err != nil {
 		return "", err
 	}
-	digest, err := definitionDigest(definition)
+	digest, err := DefinitionDigest(definition)
 	if err != nil {
 		return "", err
 	}
@@ -345,7 +345,8 @@ func validateTemplateSource(source string, bindings map[string]string) (map[stri
 	return used, nil
 }
 
-func definitionDigest(definition Definition) (string, error) {
+// DefinitionDigest 使用 RFC 8785 JCS 对完整定义计算 SHA-256。
+func DefinitionDigest(definition Definition) (string, error) {
 	encoded, err := json.Marshal(definition)
 	if err != nil {
 		return "", fmt.Errorf("notification: encode template definition: %w", err)

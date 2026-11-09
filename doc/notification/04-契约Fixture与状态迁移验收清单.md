@@ -330,3 +330,13 @@ Run `42602399686` 对应 HEAD `8d08cf07a651efcd42a514f3dafd94d659f21f97`。`Test
 - 根模块 `Test .`：失败于 gofmt；本轮日志未列出任何 `internal/notification/**` 差异，Notification 本模块格式问题已清除。
 - 根模块 gofmt 失败仍由其他模块文件阻断；依赖下载、根模块单测、Race Detector、go vet 均未执行。Notification 新增执行服务测试仍没有 CI 实际运行证据。
 - MariaDB 集成 Job 未执行，真实 DSN L3 仍不可比较。
+
+
+## 14. 模板版本持久化验收
+
+- [x] Repository Port 固定 `Create/Get`，相同 ID/version + 相同 JCS Digest 幂等，不同内容拒绝覆盖。
+- [x] MySQL Adapter 复用 Renderer 的 Definition 校验与 JCS Digest；读取时重算 Digest，摘要/列不一致 fail closed。
+- [x] Migration v3 使用 `(template_id, version)` 主键保存不可变模板定义；不写入未经业务确认的生产模板内容。
+- [x] 增加 MariaDB 集成测试代码：重复创建、内容冲突、新版本、读取、Map 副本隔离。
+- [ ] Notification 包测试实际执行通过；当前 CI 根模块可能被其他模块 gofmt 阻断，需以本分支最新 Run 为准。
+- [ ] 真实 MariaDB L3：需配置 `NOTIFICATION_MARIADB_TEST_DSN` 并执行集成测试；测试代码存在不等于验收通过。
