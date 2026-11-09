@@ -39,8 +39,8 @@ func TestHithinkLimitPoolReportsDuplicateSymbol(t *testing.T) {
 	if err != nil {
 		t.Fatalf("FetchLimitPool: %v", err)
 	}
-	if len(got.Items) != 1 || got.ExcludedRows != 1 {
-		t.Fatalf("unexpected duplicate exclusion: items=%d excluded=%d", len(got.Items), got.ExcludedRows)
+	if len(got.Items) != 1 || !containsHithinkReason(got.QualityReasons, "duplicate_limit_pool_symbol_dropped") {
+		t.Fatalf("unexpected duplicate exclusion: items=%d reasons=%v", len(got.Items), got.QualityReasons)
 	}
 	issues := reporter.Snapshot().Issues
 	if len(issues) != 1 || issues[0].Code != "duplicate_identity" || issues[0].RowIndex == nil || *issues[0].RowIndex != 1 {
