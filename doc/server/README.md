@@ -4,7 +4,7 @@
 > 适用代码分支：`feat/research-analysis-flow-native-go`
 > 文档目录：`doc/server/`
 > 代码范围：Server 运行入口、应用装配、HTTP Transport、Worker 生命周期、Migration 汇总、事件连接和运行诊断。
-> 本文是 Server 分支的唯一任务主计划。模块内部实现仍以各模块自己的 `doc/<module>/` 为准；项目级架构和跨模块契约以 `feat/design_doc` 上的项目总览及契约目录为准。
+> 本文是 Server 分支的唯一任务主计划。模块内部实现仍以各模块自己的 `doc/<module>/` 为准；项目级架构和跨模块契约以 `feat/design_doc` 上的项目总览及契约目录为准；当前项目总览权威路径为 `doc/整体任务规划/01-项目总览/整体任务规划总览.md`，契约登记簿为 `doc/整体任务规划/02-契约治理/跨模块契约目录与冻结状态.md`。
 
 ## 1. 目标与边界
 
@@ -38,6 +38,21 @@ Server 是应用组合根（Composition Root）和进程运行入口。它负责
 3. 模块之间的调用必须遵循项目契约定义的 Application Port；Server 负责注入，不替代调用方执行业务逻辑。
 4. 模块间事件通过明确的 Outbox/Inbox 契约连接；不得直接访问对方数据库。
 5. Platform 只提供公共技术原语和资源能力，不承接业务语义。
+
+
+### 1.4 架构决议（与项目总览对齐，作为本分支执行基线）
+
+经复审，采用以下唯一方案，不再保留入口路径的并行候选：
+
+1. **唯一进程入口**：继续使用根 Go Module 的 cmd/analysis-api/main.go。它在迁移完成后仍是可执行入口，逐步缩减为启动参数/信号处理和对 internal/server/bootstrap 的委托；不新增 cmd/server/main.go，不同时维护两套启动链路。
+2. **唯一组合根**：新 Server 实现落在 internal/server/**。Bootstrap 负责配置、资源、模块装配和启动；Transport 负责统一 HTTP 接入；Runtime/Lifecycle 负责组件启停。目标目录仅是渐进落位，不代表当前代码已存在。
+3. **统一 API 宿主**：Root Server 是唯一对外 HTTP 宿主。模块拥有自己的 Application Port、传输 DTO 和 HTTP Handler/Adapter；Server 只显式注册经批准且已实现的 Handler，不代替模块实现业务接口，不自动公开所有内部 Port。
+4. **模块化单体优先**：同进程调用使用强类型 Application Port，不通过 localhost HTTP 或伪造 API Key；只有有明确隔离/扩缩容/安全需求并完成网络契约评审时才考虑拆进程。Data 迁移完成前，保留有明确边界的 Remote Adapter，不做静默 InProcess/Remote fallback。
+5. **公共能力归 Platform**：配置/Secret、Security、Request ID/Fault、受控 HTTP Client、Storage、Migration Runner、Diagnostics Runner 由 Platform 提供；Server 负责创建、装配、路由接入和生命周期，不复制实现。旧 internal/platform/httpapi 与 internal/platform/taskqueue 是历史 Analysis 专用代码，不视为通用 Router/Worker。
+6. **领域所有权不变**：Data、News、Quant、Research、Researchflow、LLM、Notification 拥有各自领域规则、Repository、Migration 内容、公开 Port 和模块 Worker；Server 不新增领域模型或业务状态机。Researchflow 是跨模块流程编排者，Server 不是工作流引擎。
+7. **共享根改动集中协调**：根入口、DI、路由注册、Worker 启动、根 Migration 汇总和部署配置属于受控集成面；模块分支不得各自修改。integration 只做代码聚合，不承接 SRV 开发任务。
+
+以上决议与项目总览 doc/整体任务规划/01-项目总览/整体任务规划总览.md 第 2.4～2.6 节一致。若项目级权威文档后续改变，以 feat/design_doc 的新决议为准，并在本文件同步，不自行创造第二套架构规则。
 
 ## 2. 代码目录与文档目录
 
@@ -89,7 +104,7 @@ doc/
 
 目录约束：
 
-- 当前运行入口实际为 `cmd/analysis-api/main.go`；项目总览 2.4/2.5 明确要求沿用该入口渐进迁移。`cmd/server/main.go` 仅是本专项旧规划中的候选路径，与项目总览不一致；在项目级决议同步前不得创建第二个进程入口，也不得擅自移动现有入口。
+- 当前及目标进程入口统一为 `cmd/analysis-api/main.go`；项目总览 2.4/2.5 已明确沿用该入口渐进迁移。不得创建 `cmd/server/main.go`，不得保留第二套配置、资源或生命周期入口，也不得擅自重命名现有命令。
 - `internal/server/**` 只放进程级装配、Transport、生命周期和跨模块连接代码。
 - `internal/platform/**` 继续归 Platform 所有；Server 通过公开接口使用，不复制实现。
 - `internal/{data,news,quant,research,researchflow,llm,notification}/**` 继续归各业务模块所有。
@@ -288,7 +303,7 @@ Server 不重写模块业务 Handler 的校验和领域错误，不在路由层�
 
 - 状态：未开始
 - 前置：SRV-003；各模块提供可用公开装配入口
-- 工作内容：按依赖关系创建模块实例；注入 Application Port；校验缺失、重复和循环注册。
+- 工作内容：按明确的依赖 DAG 显式创建模块实例；注入强类型 Application Port；校验缺失、重复和循环依赖。不得通过扫描私有包、隐式全量注册或 Server 直接访问 Domain/Repository 来装配。
 - 交付物：模块 Registry、依赖装配图和模块接入清单。
 - 验收：不 import 模块私有实现；无隐式全局单例；每个跨模块依赖都有契约依据；模块可独立构造和关闭。
 
@@ -313,7 +328,7 @@ Server 不重写模块业务 Handler 的校验和领域错误，不在路由层�
 
 - 状态：未开始（Platform Migration Runner 已有公开实现，Server 侧尚未装配）
 - 前置：SRV-003、SRV-004；核对 Platform `storage.ApplyMigrations` 实际签名和各模块 Migration 注册形态
-- 工作内容：收集模块 Migration 注册项，校验唯一性和顺序，调用 Platform Runner，输出可追踪结果。
+- 工作内容：在模块装配阶段收集各模块拥有的 Migration 描述，校验 namespace/version 唯一性及顺序，再按部署策略调用 Platform Runner，输出可追踪结果。MariaDB DDL 部分执行失败后的恢复按 Platform Runner 契约执行，不在 Server 自行重试失败 Migration。
 - 交付物：Migration Registry、执行策略和集成测试。
 - 验收：Server 不拥有业务 DDL；重复注册和版本冲突可检测；失败阻止 Ready；并发启动不会造成无协调的重复执行。
 
@@ -450,7 +465,7 @@ Server 层完成不是“服务能够启动”这么简单。至少同时满足�
 | 任务 | 状态 | 说明 |
 |---|---|---|
 | SRV-001 | 进行中 | 已审计启动入口、旧 Runner 装配、HTTP API、Request ID、HTTP Client、旧 Task Queue、Storage、Market Data/Python Adapter 和 Compose；剩余路由/迁移/模块装配/部署引用清点 |
-| SRV-002 | 阻塞 | 尚无统一 Root Bootstrap；入口路径需先与项目总览对齐，SRV-001 完成前不开始 |
+| SRV-002 | 未开始 | 入口决议已明确；等待 SRV-001 审计收敛后，将现有 cmd/analysis-api 委托给 Root Bootstrap |
 | SRV-003 | 未开始 | 尚未建立 Server 统一资源装配 |
 | SRV-004 | 未开始 | 等待各模块公开装配入口 |
 | SRV-005 | 未开始 | 旧 HTTP API 尚待迁移映射 |
