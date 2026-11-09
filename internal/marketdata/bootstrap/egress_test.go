@@ -1,17 +1,12 @@
 package bootstrap
 
 import (
-	"net/http"
 	"strings"
 	"testing"
 
 	"example.com/stock-analysis-flow/internal/marketdata/config"
 	"example.com/stock-analysis-flow/internal/marketdata/provider"
 )
-
-type egressTestDoer struct{}
-
-func (egressTestDoer) Do(*http.Request) (*http.Response, error) { return nil, nil }
 
 func TestValidateEgressDependenciesOnlyRequiresEnabledProviders(t *testing.T) {
 	cfg := config.Config{
@@ -42,6 +37,18 @@ func TestValidateEgressDependenciesChecksEastmoneyOrigins(t *testing.T) {
 		ProviderPriority:  []string{"eastmoney"},
 		ProviderSettings:  map[string]config.ProviderSettings{"eastmoney": {Enabled: true}},
 		EastmoneyQuoteURL: "https://quote.example.test/api",
+		EastmoneyKlineURL: "https://quote.example.test/kline",
+		EastmoneyStockBasicURL: "https://quote.example.test/basic",
+		EastmoneySectorRankingURL: "https://quote.example.test/sector",
+		EastmoneyIndexURL: "https://quote.example.test/index",
+		EastmoneyMarketStocksURL: "https://quote.example.test/market",
+		EastmoneyLimitPoolBaseURL: "https://quote.example.test",
+		EastmoneyStockBoardsURL: "https://quote.example.test/boards",
+		EastmoneyDragonTigerURL: "https://quote.example.test/dragon",
+		EastmoneyAnnouncementsURL: "https://quote.example.test/announcements",
+		EastmoneyHotRankingsURL: "https://quote.example.test/hot",
+		EastmoneyHotSurgeURL: "https://quote.example.test/surge",
+		EastmoneyCapitalFlowURL: "https://quote.example.test/flow",
 	}
 	if err := validateEgressDependencies(cfg, Dependencies{EastmoneyHTTPDoers: map[string]provider.HTTPDoer{}}); err == nil ||
 		!strings.Contains(err.Error(), "quote.example.test") {
