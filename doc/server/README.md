@@ -795,10 +795,9 @@ Server 层完成不是“服务能够启动”这么简单。至少同时满足�
 
 ### 12.16 SRV-005 / SRV-006 当前 SHA 验收记录（2026-11-09）
 
-- 当前验证 SHA：`faf4f5e4c361a51fadb662aed806ff60f700ada8`。
-- GitHub Actions Go test suite Run `42599945597`：根模块 `gofmt` 检查通过；根模块 `go test ./...` 未通过，失败位于 Server 变更范围之外：
-  - `internal/researchflow/contextassembly`：`TestAssembleResearchContextWithTokenizerRunsCompleteBudgetAndInputPipeline` 的现有预算装配断言失败。
-  - `internal/researchflow/publicdto`：`TestDomainProjectionsValidateAgainstTheirPublicSchemas` 中 `blocked_stage_codes` 为 null，但 Schema 要求 array。
-- 同一 Run 中 `internal/server/bootstrap`、`config`、`diagnostics`、`health`、`migration`、`resources`、`runtime` 包测试均通过；`go-core` 的 gofmt、单测、race、vet 均通过。
-- 根模块聚合测试失败导致根模块 race/vet 阶段被 Workflow 跳过；不得将本 SHA 记为完整 Go Workflow 通过。两个失败均不在本批次修改文件中，本分支未代改 Researchflow。
-- 后续由 Researchflow Owner 修复对应测试后，重新运行当前 Server SHA 的完整 Go Workflow；Server 当前包级测试证据可保留，但不能替代根模块全量门禁。
+- 当前代码验证 SHA：`47077a35aa624a5897743b2a636feda8959b8e67`。
+- GitHub Actions Go test suite Run `42600382891`：根模块 `gofmt` 检查通过；根模块 `go test ./...` 失败，失败分布在当前 Server 代码范围之外，包括 Quant、Research、Researchflow、News 等包的编译或测试错误。
+- 同一 Run 中 `internal/server/bootstrap`、`config`、`diagnostics`、`health`、`migration`、`resources`、`runtime` 包测试均通过；新增 Owner/Service 路由身份隔离测试包含在 `internal/server/bootstrap` 并通过。
+- `go-core` 的 gofmt、单测、race、vet 均通过。根模块聚合测试失败导致根模块 race/vet 阶段被 Workflow 跳过；不得将本 SHA 记为完整 Go Workflow 通过。
+- 本次 Server 提交只修改 Server 代码/测试和 Server 文档；未修改上述失败包，不代替 Quant、Research、Researchflow、News Owner 修复跨模块问题。
+- S1/S2 当前已有 Server 包级测试通过证据，但完整根模块 L1 门禁仍受其他模块阻断。待相关模块修复后，需对新的当前 Server HEAD 重跑 Go Workflow；不重复运行无变化的同一失败基线。
