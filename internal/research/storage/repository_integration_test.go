@@ -874,15 +874,27 @@ func TestResearchSQLRepositoriesAppendAndReadVersions(t *testing.T) {
 	if err := contextRepo.Append(ctx, contextV2); !errors.Is(err, ErrCorruptRecord) {
 		t.Fatalf("tampered Context idempotent replay error = %v, want ErrCorruptRecord", err)
 	}
-	contextV3Tampered := contextV2
-	contextV3Tampered.ContextVersion = 3
-	contextV3Tampered.SystemAsOf = contextV2.SystemAsOf.Add(time.Minute)
-	contextV3Tampered.CreatedAt = contextV2.CreatedAt.Add(time.Minute)
-	contextV3Tampered.SectionRefs = append([]researchcontext.SectionRef(nil), contextV2.SectionRefs...)
-	contextV3Tampered.SectionRefs[0].SystemAsOf = contextV3Tampered.SystemAsOf
-	contextV3Tampered.SectionRefs[0].AssembledAt = contextV3Tampered.SystemAsOf
-	if err := contextRepo.Append(ctx, contextV3Tampered); !errors.Is(err, ErrCorruptRecord) {
-		t.Fatalf("append after tampered previous Context error = %v, want ErrCorruptRecord", err)
+	latestContext, err := contextRepo.GetVersion(ctx, contextID, 4)
+	if err != nil {
+		t.Fatalf("read latest Context before corruption: %v", err)
+	}
+	contextV5 := latestContext
+	contextV5.ContextVersion = 5
+	contextV5.SystemAsOf = latestContext.SystemAsOf.Add(time.Minute)
+	contextV5.CreatedAt = latestContext.CreatedAt.Add(time.Minute)
+	contextV5.SectionRefs = append([]researchcontext.SectionRef(nil), latestContext.SectionRefs...)
+	for i := range contextV5.SectionRefs {
+		contextV5.SectionRefs[i].SystemAsOf = contextV5.SystemAsOf
+		contextV5.SectionRefs[i].AssembledAt = contextV5.SystemAsOf
+	}
+	if _, err := db.ExecContext(ctx, "UPDATE research_context_versions SET payload=CONCAT(payload, ' ') WHERE context_id=? AND context_version=4", contextID); err != nil {
+		t.Fatalf("tamper latest Context payload: %v", err)
+	}
+	if _, err := contextRepo.GetVersion(ctx, contextID, 4); !errors.Is(err, ErrCorruptRecord) {
+		t.Fatalf("tampered latest Context read error = %v, want ErrCorruptRecord", err)
+	}
+	if err := contextRepo.Append(ctx, contextV5); !errors.Is(err, ErrCorruptRecord) {
+		t.Fatalf("append after tampered latest Context error = %v, want ErrCorruptRecord", err)
 	}
 
 	// Event 历史版本损坏后，精确读取和后续版本追加都必须 fail-closed。
