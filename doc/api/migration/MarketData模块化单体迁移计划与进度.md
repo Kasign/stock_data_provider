@@ -7,7 +7,7 @@
 - 跨模块准入：`doc/整体任务规划/01-项目总览/跨模块接入执行说明.md`、`doc/整体任务规划/01-项目总览/跨模块接入准入清单.md`
 - 本记录建立时的代码基线：`d8595f408337f62be3697aac661ba1570fdd3667`
 - 最近一次 M0 审计基线：`9687337743ff5ad8b5b81209831d43689693ae47`
-- 最近一次代码基线：`6df7f7d6485e527aee74d64e712f016dc0666e78`（Sina 报价/K 线双出口受控 HTTP 执行器注入）
+- 最近一次代码基线：`0179052d5506eef1b8be97459e31daee84372266`（Eastmoney origin 级受控 HTTP 执行器注入）
 - 当前实施状态：`M1_completed / M2_completed / M3_in_progress / M4_in_progress`；M3 的 Data 侧进程内路由准备已完成，Root Server 实际装配仍待 Server 组合根完成；M4 的 borrowed DB 与 go-redis Cache Adapter 已实现，Root 侧资源注入/配置一致性及 Provider 网络出口适配仍未完成。
 
 > 本文记录 Data 从独立 Go Module/服务迁入 Root Server 根 Go Module、同进程运行的实施计划和进度。若本文与上述架构决策文档冲突，以架构决策文档为准；公共平台及 DATA 契约以冻结契约文档为准。本文不重新定义契约。
@@ -965,7 +965,7 @@ internal/
 
 ### 2026-11-09：M4-HTTP-09 Eastmoney 按 origin 受控 HTTP 执行器注入
 
-- 代码基线：`ba6cdde5ceebfb56d03f35068fc6e709f8f8bcb6`。Eastmoney 当前配置 endpoint 覆盖 Quote、Kline、StockBasic、SectorRanking/StockList、Index、MarketBreadth、LimitPool、StockBoards、CapitalFlow、DragonTiger、Announcements、HotRanking、HotSurge。部分默认 endpoint 共用 Host，另有 `push2his`、`push2ex`、`datacenter`、`datacenter-web`、`np-anotice-stock`、`emappdata` 等独立 origin。
+- 代码基线：`ba6cdde5ceebfb56d03f35068fc6e709f8f8bcb6`；本项实现提交：`0179052d5506eef1b8be97459e31daee84372266`。Eastmoney 当前配置 endpoint 覆盖 Quote、Kline、StockBasic、SectorRanking/StockList、Index、MarketBreadth、LimitPool、StockBoards、CapitalFlow、DragonTiger、Announcements、HotRanking、HotSurge。部分默认 endpoint 共用 Host，另有 `push2his`、`push2ex`、`datacenter`、`datacenter-web`、`np-anotice-stock`、`emappdata` 等独立 origin。
 - 不为每条 URL 增加重复字段，而按规范 `scheme://host` 作为受控执行器映射键：同 origin 共享一个 BoundDoer，不同 origin 必须独立绑定。新增 `EastmoneyHTTPOrigin` 供 Root 计算映射键，`WithHTTPDoers` 注入执行器映射。
 - `getJSON` 路径覆盖 Quote、Kline、Index、SectorRanking/StockList、MarketBreadth、LimitPool、StockBoards、CapitalFlow、DragonTiger、Announcements 等 JSON 请求；StockBasic 直接请求和 HotRanking/HotSurge POST 路径也统一经 origin 选择执行器。
 - 映射为 nil 时兼容旧标准 Client；映射非 nil 时 fail-closed，缺少请求 origin 对应执行器直接报错，不允许静默回退无约束 Client。原有重定向策略、超时、请求 Header、重试和响应体限制保持不变。

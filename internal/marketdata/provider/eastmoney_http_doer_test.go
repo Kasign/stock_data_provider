@@ -2,7 +2,6 @@ package provider
 
 import (
 	"context"
-	"errors"
 	"io"
 	"net/http"
 	"strings"
@@ -93,4 +92,3 @@ func TestEastmoneyWithHTTPDoersCopiesMap(t *testing.T) {
 	}
 }
 
-var _ = errors.New
