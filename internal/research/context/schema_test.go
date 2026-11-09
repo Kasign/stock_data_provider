@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/santhosh-tekuri/jsonschema/v6"
 )
@@ -88,6 +89,7 @@ func assertSchemaStructFields(t *testing.T, name string, typ reflect.Type, schem
 		if jsonName == "" || jsonName == "-" {
 			continue
 		}
+		assertContextSchemaValueType(t, name+"."+jsonName, field.Type, schemaObject(t, properties[jsonName]))
 		if _, exists := properties[jsonName]; !exists {
 			t.Errorf("%s schema is missing DTO field %q", name, jsonName)
 		}
@@ -103,6 +105,52 @@ func assertSchemaStructFields(t *testing.T, name string, typ reflect.Type, schem
 		if _, exists := requiredFieldNames(typ)[field]; !exists {
 			t.Errorf("%s schema defines field %q absent from DTO", name, field)
 		}
+	}
+}
+
+
+func assertContextSchemaValueType(t *testing.T, name string, typ reflect.Type, schema map[string]any) {
+	t.Helper()
+	if typ.Kind() == reflect.Pointer {
+		typ = typ.Elem()
+	}
+	switch typ.Kind() {
+	case reflect.String:
+		if schema["type"] != "string" {
+			t.Errorf("%s schema type = %v, want string", name, schema["type"])
+		}
+	case reflect.Bool:
+		if schema["type"] != "boolean" {
+			t.Errorf("%s schema type = %v, want boolean", name, schema["type"])
+		}
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64, reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		if schema["type"] != "integer" {
+			t.Errorf("%s schema type = %v, want integer", name, schema["type"])
+		}
+	case reflect.Slice, reflect.Array:
+		if schema["type"] != "array" {
+			t.Errorf("%s schema type = %v, want array", name, schema["type"])
+			return
+		}
+		items, ok := schema["items"].(map[string]any)
+		if !ok {
+			t.Errorf("%s schema items must be an object", name)
+			return
+		}
+		assertContextSchemaValueType(t, name+"[]", typ.Elem(), items)
+	case reflect.Struct:
+		if typ == reflect.TypeOf(time.Time{}) {
+			if schema["type"] != "string" || schema["format"] != "date-time" {
+				t.Errorf("%s schema must be a date-time string: %v", name, schema)
+			}
+			return
+		}
+		wantRef := "#/$defs/" + typ.Name()
+		if schema["$ref"] != wantRef {
+			t.Errorf("%s schema ref = %v, want %s", name, schema["$ref"], wantRef)
+		}
+	default:
+		t.Errorf("%s has unsupported DTO type %s; add an explicit Schema mapping", name, typ)
 	}
 }
 
