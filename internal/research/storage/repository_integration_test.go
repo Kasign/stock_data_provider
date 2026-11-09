@@ -594,4 +594,32 @@ func TestResearchSQLRepositoriesAppendAndReadVersions(t *testing.T) {
 	if err := contextRepo.Append(ctx, contextV3Tampered); !errors.Is(err, ErrCorruptRecord) {
 		t.Fatalf("append after tampered previous Context error = %v, want ErrCorruptRecord", err)
 	}
+
+	// Event 历史版本损坏后，精确读取和后续版本追加都必须 fail-closed。
+	if _, err := db.ExecContext(ctx, "UPDATE research_event_versions SET payload=CONCAT(payload, ' ') WHERE event_id=? AND event_version=2", eventID); err != nil {
+		t.Fatalf("tamper stored Event payload: %v", err)
+	}
+	if _, err := eventRepo.GetVersion(ctx, eventID, 2); !errors.Is(err, ErrCorruptRecord) {
+		t.Fatalf("tampered Event read error = %v, want ErrCorruptRecord", err)
+	}
+	eventV3 := eventV2
+	eventV3.EventVersion = 3
+	eventV3.SystemAsOf = eventV2.SystemAsOf.Add(time.Minute)
+	if err := eventRepo.Append(ctx, eventV3); !errors.Is(err, ErrCorruptRecord) {
+		t.Fatalf("append after tampered previous Event error = %v, want ErrCorruptRecord", err)
+	}
+
+	// Claim 历史版本损坏后，同样不得读取或继续追加。
+	if _, err := db.ExecContext(ctx, "UPDATE research_claim_versions SET payload=CONCAT(payload, ' ') WHERE claim_id=? AND claim_version=2", claimID); err != nil {
+		t.Fatalf("tamper stored Claim payload: %v", err)
+	}
+	if _, err := claimRepo.GetVersion(ctx, claimID, 2); !errors.Is(err, ErrCorruptRecord) {
+		t.Fatalf("tampered Claim read error = %v, want ErrCorruptRecord", err)
+	}
+	claimV3 := claimV2
+	claimV3.ClaimVersion = 3
+	claimV3.SystemAsOf = claimV2.SystemAsOf.Add(time.Minute)
+	if err := claimRepo.Append(ctx, claimV3); !errors.Is(err, ErrCorruptRecord) {
+		t.Fatalf("append after tampered previous Claim error = %v, want ErrCorruptRecord", err)
+	}
 }
