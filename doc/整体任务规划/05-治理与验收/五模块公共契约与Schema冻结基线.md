@@ -459,7 +459,7 @@ type ResearchEvidenceQuery interface {
 
 ### 13.5 Data OpenAPI ↔ Go JSON 修正执行清单
 
-已将已知字段差异整理为独立执行文档：[Data OpenAPI 与 Go 模型契约修正清单](./Data-OpenAPI与Go模型契约修正清单.md)。该清单只在 `feat/design_doc` 维护，实际 Data Schema/Model/测试修改归 Data 分支。
+已将已知字段差异整理为独立执行文档：[Data OpenAPI 与 Go 模型契约修正清单](../03-模块接口契约/Data-OpenAPI与Go模型契约修正清单.md)。该清单只在 `feat/design_doc` 维护，实际 Data Schema/Model/测试修改归 Data 分支。
 
 本轮把已知差异拆成四类：
 - Go JSON Tag 已有、OpenAPI 缺失：15 个字段，需按真实响应路径补齐。
@@ -481,7 +481,7 @@ type ResearchEvidenceQuery interface {
 
 ### 13.6 News → Research 只读证据查询 Facade 契约
 
-新增目标契约文档：[News → Research 只读证据查询契约](./News-Research只读证据查询契约.md)。
+新增目标契约文档：[News → Research 只读证据查询契约](../03-模块接口契约/News-Research只读证据查询契约.md)。
 
 本轮重新读取 `feat/research-news-ingestion` 的 Application / Domain 文件，并将分支与既有核查 SHA `ea697fe437d44afffbd60874ad144adc4313e469` 比较：当前分支 ahead 1 个提交，变化集中在新闻关系文档、领域类型与测试。当前 Application 仍只有 SearchCandidates、IngestCandidate、ApplyResearchUpdate 等能力，没有 Research 只读 Query Facade。
 
@@ -505,7 +505,7 @@ type ResearchEvidenceQuery interface {
 
 ### 13.7 Platform → 五模块公共依赖与集成验收
 
-新增清单：[Platform → 五模块公共依赖与集成验收清单](./Platform-五模块公共依赖与集成验收清单.md)。
+新增清单：[Platform → 五模块公共依赖与集成验收清单](../03-模块接口契约/Platform-五模块公共依赖与集成验收清单.md)。
 
 本轮重新比较 `feat/platform-foundation` 与已记录核查点 `a30ee12130d2a50bc3db672d9d12d1e14040e34f`：当前分支 ahead 2 个提交，变更涉及 dotenv、security 测试和配置/日志/诊断文档；未发现既有 Fault、Diagnostics、HTTP Client、Storage、Task Queue 职责边界发生改变。
 
@@ -522,7 +522,7 @@ type ResearchEvidenceQuery interface {
 
 ### 13.8 Data API Key 与 Platform Service Secret 边界
 
-新增设计文档：[Data 服务间认证映射与 Secret 注入设计](./Data服务间认证映射与Secret注入设计.md)。
+新增设计文档：[Data 服务间认证映射与 Secret 注入设计](../03-模块接口契约/Data服务间认证映射与Secret注入设计.md)。
 
 本轮重新读取 Data OpenAPI：
 - `ApiKey` 定义为 `X-API-Key`；
