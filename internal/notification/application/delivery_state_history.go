@@ -31,6 +31,20 @@ func ValidateDeliveryStateHistory(delivery domain.DeliveryRecord, events []domai
 	previousAt := delivery.CreatedAt
 	for index, event := range events {
 		expectedVersion := int64(index) + 2
+		change := domain.DeliveryTransition{
+			To: event.To, At: event.ChangedAt,
+			RequestNotSent: event.To == domain.DeliverySkipped && event.EvidenceRef != nil,
+			AuthorizedManualRetry: event.From == domain.DeliveryFailed && event.To == domain.DeliveryQueued,
+		}
+		if event.ActorRef != nil {
+			change.ActorRef = *event.ActorRef
+		}
+		if event.RequestID != nil {
+			change.RequestID = *event.RequestID
+		}
+		if event.ActorReason != nil {
+			change.ManualRetryReason = *event.ActorReason
+		}
 		if event.DeliveryID != delivery.DeliveryID ||
 			event.Version != expectedVersion ||
 			event.From != previousStatus ||
@@ -40,7 +54,14 @@ func ValidateDeliveryStateHistory(delivery domain.DeliveryRecord, events []domai
 			event.ChangedAt.IsZero() ||
 			event.ChangedAt.Location() != time.UTC ||
 			event.ChangedAt.Before(previousAt) ||
-			event.ChangedAt.Before(delivery.CreatedAt) {
+			event.ChangedAt.Before(delivery.CreatedAt) ||
+			!deliveryTransitionAllowed(event.From, event.To, change) ||
+			(deliveryRequiresReason(event.To) && (event.ReasonCode == nil || *event.ReasonCode == "")) ||
+			(event.From == domain.DeliveryUnknown && (event.EvidenceRef == nil || *event.EvidenceRef == "")) ||
+			(event.From == domain.DeliverySending && event.To == domain.DeliverySkipped && (event.EvidenceRef == nil || *event.EvidenceRef == "")) ||
+			(event.From == domain.DeliveryFailed && event.To == domain.DeliveryQueued &&
+				(event.ActorRef == nil || *event.ActorRef == "" || event.RequestID == nil || *event.RequestID == "" ||
+					event.ActorReason == nil || *event.ActorReason == "")) {
 			return "", ErrDeliveryStateHistory
 		}
 		previousStatus = event.To
