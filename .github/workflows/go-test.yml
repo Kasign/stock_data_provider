@@ -45,7 +45,7 @@ concurrency:
 
 jobs:
   migrate-market-data-module:
-    if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'feat/full-go-data-providers-api-switch' }}
+    if: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/feat/full-go-data-providers-api-switch') || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'feat/full-go-data-providers-api-switch') }}
     name: Migrate Market Data into root Go module
     runs-on: ubuntu-latest
     permissions:
@@ -54,8 +54,8 @@ jobs:
       - name: Check out Data migration branch
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.ref }}
-          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: feat/full-go-data-providers-api-switch
+          repository: ${{ github.repository }}
           fetch-depth: 0
       - name: Run one-time source migration
         run: bash scripts/migrate-market-data-module.sh
