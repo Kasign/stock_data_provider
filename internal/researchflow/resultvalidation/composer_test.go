@@ -1,8 +1,8 @@
 package resultvalidation
 
 import (
-	"errors"
 	"encoding/json"
+	"errors"
 	"testing"
 	"time"
 
@@ -23,7 +23,7 @@ func validCompositionInput() ResultCompositionInput {
 				SourceRefs: []string{"snapshot-1"}, EvidenceRefs: []string{"ev-1"},
 				QualityStatus: "valid", Required: true, Included: true, AssembledAt: now, SystemAsOf: now,
 			}},
-			QualitySummary: researchapp.ContextQualitySummary{Status: "valid", ReasonCodes: []string{}},
+			QualitySummary:   researchapp.ContextQualitySummary{Status: "valid", ReasonCodes: []string{}},
 			IncludedSections: []string{"market"}, OmittedSections: []researchapp.ContextOmittedSection{},
 			BuilderVersion: "builder-v1", CreatedAt: now,
 		},
@@ -36,7 +36,7 @@ func validCompositionInput() ResultCompositionInput {
 				Stance: "supports", QualityStatus: "valid", ContentLevel: "summary",
 				AuthorizationRef: "auth-ev-1", Limitations: []string{},
 			},
-			EvidenceID: "ev-1",
+			EvidenceID:         "ev-1",
 			ContentFingerprint: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 		}},
 		Claims: []researchapp.Claim{{
@@ -50,7 +50,7 @@ func validCompositionInput() ResultCompositionInput {
 			RequestID: "req-1", CorrelationID: "corr-1", SystemAsOf: now,
 			ProviderID: "provider-a", ResponseID: "resp-1",
 			Status: llmapp.ResponseCompleted, OutputItems: []llmapp.OutputItem{},
-			OutputText: "基于已提供证据，成交量变化需要结合价格结构观察。",
+			OutputText:     "基于已提供证据，成交量变化需要结合价格结构观察。",
 			ModelRequested: "model-a", ModelActual: "model-a", ModelVersion: "v1",
 			StartedAt: now, FinishedAt: now, DurationMS: 1,
 		},

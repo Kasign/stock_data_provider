@@ -14,7 +14,7 @@ import (
 
 var (
 	ErrInvalidResultComposition = errors.New("invalid Researchflow result composition")
-	ErrInvalidLLMExplanation = errors.New("invalid non-authoritative LLM explanation")
+	ErrInvalidLLMExplanation    = errors.New("invalid non-authoritative LLM explanation")
 )
 
 var contentFingerprintRE = regexp.MustCompile(`^[0-9a-f]{64}$`)
@@ -24,28 +24,28 @@ const LLMExplanationAuthority = "non_authoritative"
 // ResultCompositionInput keeps facts, evidence, risk and model explanation in
 // separate typed inputs. No LLM field can replace a Quant or Research field.
 type ResultCompositionInput struct {
-	RunID          string
-	SystemAsOf     time.Time
-	Context        researchapp.ResearchContext
-	QuantResults   []QuantResultEnvelope
-	Evidence       []researchapp.EvidenceRecord
-	Claims         []researchapp.Claim
-	LLMResponse    *llmapp.ModelResponse
-	RiskDecision   *RiskDecision
-	Limitations    []string
-	QuantPolicy    ValidationPolicy
+	RunID        string
+	SystemAsOf   time.Time
+	Context      researchapp.ResearchContext
+	QuantResults []QuantResultEnvelope
+	Evidence     []researchapp.EvidenceRecord
+	Claims       []researchapp.Claim
+	LLMResponse  *llmapp.ModelResponse
+	RiskDecision *RiskDecision
+	Limitations  []string
+	QuantPolicy  ValidationPolicy
 }
 
 // LLMExplanation is explicitly non-authoritative and never carries Quant
 // values, Research evidence state or RiskDecision fields.
 type LLMExplanation struct {
-	Text          string
-	ProviderID    string
+	Text           string
+	ProviderID     string
 	ModelRequested string
-	ModelActual   string
-	ModelVersion  string
-	ResponseID    string
-	Authority     string
+	ModelActual    string
+	ModelVersion   string
+	ResponseID     string
+	Authority      string
 }
 
 // ComposedResearchResult preserves source facts in independent fields. It
