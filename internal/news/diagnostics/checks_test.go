@@ -69,7 +69,7 @@ func TestObservationRetentionCheckReportsBacklogAndHealthyState(t *testing.T) {
 func TestObservationRetentionCheckRejectsInconsistentBacklogResult(t *testing.T) {
 	oldest := time.Date(2026, 11, 8, 8, 0, 0, 0, time.UTC)
 	cases := []struct {
-		name string
+		name  string
 		probe observationRetentionProbeStub
 	}{
 		{name: "negative count", probe: observationRetentionProbeStub{count: -1}},
