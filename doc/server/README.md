@@ -501,6 +501,20 @@ flowchart TD
 - 本轮已增加 Registry 校验/不可变快照/重复 namespace/确定性排序测试、Bootstrap 三模块注册测试和配置测试。GitHub API 已写入代码；本轮尚未执行 gofmt/go test 或真实 MariaDB 集成，不能标记测试通过。
 - 相关代码提交：`b345d6c`（Registry）、`d210ac8`/`f8774a7`（Registry 测试）、`9c6866e`/`00910e6`（执行配置与测试）、`1ee90ee`/`7a1270d`（Bootstrap 接入与测试）、`6e0cf82`（依赖导入格式整理）。
 
+
+### 12.8 SRV-009 系统诊断聚合实施记录（2026-11-09）
+
+- 新增 `internal/server/diagnostics.Aggregator`，复用 Platform `diagnostics.Runner` 执行检查，不复制并发限制、超时、panic 恢复、Fault 归一化或 Summary 聚合。
+- Server Readiness 与 Platform Diagnostics Summary 分开表达：至少注册一项 Required Check，且所有 Required Check 必须为 `healthy` 才返回 Ready；Required 的 `degraded/unavailable/failed/skipped` 均阻止 Ready。Optional 检查降级或失败保留在 Diagnostics Summary，但不阻塞 Readiness。
+- 空 Required 检查集直接返回 `ErrNoRequiredChecks`，避免 Platform 对空集合返回 `skipped` 后被误判为 Ready。
+- 新增共享资源检查 `StorageChecks`：MariaDB 使用 `PingContext`，Redis 使用带 Context 的 `Ping`；二者均为 Required、只读、带独立超时，不执行 Schema 修改或 Migration。
+- Research/News 已有 Diagnostics Adapter，但当前公开构造函数主要检查调用方传入的快照或模块配置，不等同于模块运行实例的动态健康状态。本轮不把静态快照检查冒充生产模块 Readiness，也不虚构 Quant/Researchflow/LLM/Notification 的运行检查。
+- 本轮增加 Readiness 规则测试：无 Required、Required 各状态、Optional 降级不阻塞、重复 Check ID。
+- 尚未接入 HTTP 路由：旧 Analysis Handler 仍在迁移，Health/Readiness 暴露应由 SRV-005 统一 Transport 和认证策略承接；本轮不新增独立 HTTP Server 或未经批准的匿名端点。
+- GitHub API 已写入实现和测试；尚未执行 gofmt/go test，也没有真实 MariaDB/Redis 连通性集成结果。不能标记为编译或测试通过。
+- 相关代码提交：`f9c879c`（Aggregator）、`e787b3c`（聚合测试）、`4c65a1e`（共享存储检查）。
+
+
 ## 13. 分支与协作规则
 
 - 本规划及 Server 代码实施位于 `feat/research-analysis-flow-native-go`。
@@ -538,7 +552,7 @@ Server 层完成不是“服务能够启动”这么简单。至少同时满足�
 | SRV-006 | 未开始 | 运行角色和生命周期尚未建立 |
 | SRV-007 | 进行中 | 已建立 Server Migration Registry，并注册 News/Research/Notification；显式配置执行；其他模块 Migration 和 MariaDB 集成验收待完成，详见 12.7 节 |
 | SRV-008 | 待契约 | Dispatcher 所有权未冻结 |
-| SRV-009 | 未开始 | 尚未建立系统级诊断聚合 |
+| SRV-009 | 进行中 | 已实现 Platform Runner 聚合、严格 Readiness 判定及 MariaDB/Redis 资源检查；尚待 Transport 暴露和真实依赖集成验收，详见 12.8 节 |
 | SRV-010 | 阻塞 | 等待 Data 迁移门禁和公开接口 |
 | SRV-011 | 未开始 | 等待核心运行能力 |
 | SRV-012 | 未开始 | 等待新链路验收 |
