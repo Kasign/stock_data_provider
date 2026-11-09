@@ -6,8 +6,8 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
-	"errors"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -15,8 +15,8 @@ import (
 
 	"github.com/gowebpki/jcs"
 
-	researchevent "example.com/stock-analysis-flow/internal/research/event"
 	researchapp "example.com/stock-analysis-flow/internal/research/application"
+	researchevent "example.com/stock-analysis-flow/internal/research/event"
 )
 
 const (
