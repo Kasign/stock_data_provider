@@ -275,3 +275,9 @@ Notification 是独立通知业务模块，负责事件接收、Subscription、T
 - `Test go-core` 成功；根模块 `Test .` 在全仓 gofmt 门禁失败，日志列出的差异来自 Market Data、News、Quant 等其他目录，未列出 `internal/notification/**`。
 - 因门禁失败，根模块测试、Race、vet 未执行；Notification 新增测试尚无 CI 实际执行通过证据。
 - MariaDB 集成 Job skipped，未获得真实 DSN L3 证据。
+
+
+### 租约恢复批次重复候选保护（2026-11-09）
+
+- 恢复批次在执行任何状态迁移前，先检查 DeliveryID 非空且候选唯一；发现重复候选时整批 fail closed，不依赖扫描顺序决定先后赢家。
+- 新增重复 Delivery 候选测试，确认 Repository 不会收到任何恢复写入。

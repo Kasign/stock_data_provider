@@ -192,3 +192,14 @@ func TestLeaseRecoveryServiceRejectsHistoryAfterTerminalAttempt(t *testing.T) {
 		t.Fatalf("terminal prior outcome must reject recovery history: report=%+v calls=%d err=%v", report, repository.calls, err)
 	}
 }
+
+func TestLeaseRecoveryServiceRejectsDuplicateDeliveryCandidatesBeforeMutation(t *testing.T) {
+	service, claim, now, repository := recoveryServiceFixture(t, nil)
+	scanner := service.Scanner.(*recoveryScannerFake)
+	scanner.claims = []DeliveryClaim{claim, claim}
+
+	report, err := service.RecoverExpiredOnce(context.Background(), now, 5)
+	if !errors.Is(err, ErrLeaseRecoveryHistory) || report.Recovered != 0 || repository.calls != 0 {
+		t.Fatalf("duplicate delivery candidates must reject the whole batch before mutation: report=%+v calls=%d err=%v", report, repository.calls, err)
+	}
+}
