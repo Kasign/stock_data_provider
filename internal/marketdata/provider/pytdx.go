@@ -16,6 +16,7 @@ import (
 	"github.com/injoyai/tdx/protocol"
 
 	"example.com/stock-analysis-flow/internal/marketdata/model"
+	"example.com/stock-analysis-flow/internal/marketdata/transport"
 	"example.com/stock-analysis-flow/internal/marketdata/normalize"
 	"example.com/stock-analysis-flow/internal/marketdata/validation"
 )
@@ -35,9 +36,16 @@ type Pytdx struct {
 	lastCall           time.Time
 	hosts              []string
 	hostIndex          int
+	dialContext        transport.DialContextFunc
 }
 
 func NewPytdx(timeout time.Duration, configuredHosts ...string) *Pytdx {
+	return NewPytdxWithDialContext(timeout, nil, configuredHosts...)
+}
+
+// NewPytdxWithDialContext 创建 Pytdx Provider，并允许 Root 注入受控 TCP 出站函数。
+// hosts 仍是 Provider 的候选服务器集合；实际连接目标还必须由注入函数二次约束。
+func NewPytdxWithDialContext(timeout time.Duration, dialContext transport.DialContextFunc, configuredHosts ...string) *Pytdx {
 	if timeout <= 0 {
 		timeout = 12 * time.Second
 	}
@@ -50,7 +58,7 @@ func NewPytdx(timeout time.Duration, configuredHosts ...string) *Pytdx {
 	if len(hosts) == 0 {
 		hosts = append(hosts, tdx.Hosts...)
 	}
-	return &Pytdx{timeout: timeout, hosts: hosts}
+	return &Pytdx{timeout: timeout, hosts: hosts, dialContext: dialContext}
 }
 
 func (p *Pytdx) Name() string { return "pytdx" }
@@ -105,8 +113,16 @@ func (p *Pytdx) dial(ctx context.Context) (*tdx.Client, error) {
 			if _, _, err := net.SplitHostPort(address); err != nil {
 				address = net.JoinHostPort(strings.Trim(address, "[]"), "7709")
 			}
-			dialer := net.Dialer{Timeout: dialTimeout}
-			conn, err := dialer.DialContext(dialCtx, "tcp", address)
+			attemptCtx, cancel := context.WithTimeout(dialCtx, dialTimeout)
+			var conn net.Conn
+			var err error
+			if p.dialContext != nil {
+				conn, err = p.dialContext(attemptCtx, "tcp", address)
+			} else {
+				dialer := net.Dialer{Timeout: dialTimeout}
+				conn, err = dialer.DialContext(attemptCtx, "tcp", address)
+			}
+			cancel()
 			if err == nil {
 				return conn, address, nil
 			}

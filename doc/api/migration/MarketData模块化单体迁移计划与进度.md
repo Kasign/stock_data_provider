@@ -419,7 +419,7 @@ internal/
 | M1 Go Module 归并 | completed（代码归并） | Data 源码已位于根 Module 的 `internal/marketdata/**`；根 `go.mod` 为 Go 1.23.0；当前 Data 根模块 gofmt/test/race/vet 专项通过 |
 | M2 Application Port/Bootstrap | completed（Data 侧） | M2-1～M2-6 已完成：Application Port、Bootstrap、Worker 生命周期、HTTP 用例接口拆分、来源能力快照和 Migration Runner |
 | M3 Root Server 装配 | in_progress | Data 已提供 `InProcessHandler()`、Application Port 和 `MigrationRunner()`；Root Router、共享资源注入、Remote→InProcess 切换属于 Server 组合根任务，本分支不越界修改 |
-| M4 共享资源统一 | in_progress | Data Repository borrowed DB、`cache.NewGoRedis` 已实现；Tushare、Hithink、TickFlow（认证/免费双出口）、Xueqiu、Yahoo、NetEase（报价/历史双出口）、Tencent（四 endpoint）、Sina（报价/K 线双出口）、Eastmoney（按 origin 统一映射多个 endpoint）、MiaoXiang（单 API endpoint）已提供 HTTPDoer 注入入口；Root 侧真实 BoundDoer 创建与注入、Redis 配置匹配、TCP 出站策略仍待完成 |
+| M4 共享资源统一 | in_progress | Data Repository borrowed DB、`cache.NewGoRedis` 已实现；Tushare、Hithink、TickFlow（认证/免费双出口）、Xueqiu、Yahoo、NetEase（报价/历史双出口）、Tencent（四 endpoint）、Sina（报价/K 线双出口）、Eastmoney（按 origin 统一映射多个 endpoint）、MiaoXiang（单 API endpoint）已提供 HTTPDoer 注入入口；Root 侧真实 BoundDoer 创建与注入、Redis 配置匹配、Pytdx/BaoStock TCP 受控连接函数注入入口已提供；Platform 尚无可供 Root 使用的公开 BoundDialer，实际受控连接策略仍待完成 |
 | M5 部署/WebUI 切换 | pending | Root 同进程装配和共享资源验收后执行 |
 | M6 迁移验收 | pending | 结构迁移、API/PIT/质量、真实 Provider 和部署验收分开形成证据 |
 | 公共平台契约接入 | in_progress（按依赖） | 当前分支已有 Platform 基础代码；Data 仅适配已冻结能力，不复制 HTTP Client、Diagnostics Runner、Storage 等公共实现 |
@@ -982,4 +982,16 @@ internal/
 - Bootstrap Dependencies 增加 `MiaoXiangHTTPDoer`，仅在 `MXEnabled` 时传给 Provider。Root 应按运行时 `MXAPIURL` 精确创建 HTTPS/443 BoundDoer，执行 DNS/IP 校验、拒绝重定向并保留 2 MiB 响应体上限；Module 不拥有、不关闭执行器。
 - 新增测试源码覆盖注入执行器、POST URL、apikey/Content-Type Header、502 错误路径和旧构造器兼容；测试尚未运行。
 - 当前 Data 侧 Provider HTTP 执行器注入入口已覆盖已识别 Provider；下一阶段应盘点遗漏的非标准请求路径与 TCP Provider，再集中完成 Root 实际装配，而不是继续无差别增加接口。
+
+
+
+### 2026-11-09：M4-TCP-01 Pytdx 与 BaoStock 受控 TCP DialContext 注入入口
+
+- 代码基线：`1340835a023989596454ee066eb3955bbdecc569`。Pytdx 在 Provider 内部通过 `net.Dialer.DialContext` 连接候选 TDX Host:7709；BaoStock TCP Client 在 `ensureLoggedInLocked` 中连接配置 Host:Port。两者均绕过 HTTP BoundDoer，不能用 HTTP 执行器代替。
+- 新增共享窄类型 `internal/marketdata/transport.DialContextFunc`，签名与 Go 标准 `net.Dialer.DialContext` 一致。
+- Pytdx 新增 `NewPytdxWithDialContext`；原 `NewPytdx` 保留并委托。每次候选地址连接均经过注入函数，仍由 Provider 设置每次连接的超时 context、候选轮转和最多 6 次尝试。
+- BaoStock `Config` 增加可选 `DialContext`；配置后连接经 Root 注入函数，nil 时保留原标准 net.Dialer 与 KeepAlive 行为。
+- Bootstrap Dependencies 增加 `PytdxDialContext` / `BaoStockDialContext` 并透传；Module 不拥有、不关闭外部连接函数。
+- 当前 Platform 公开能力只有 HTTP `BoundDoer`，尚无可供 Root 使用的 TCP `BoundDialer`。本次只建立 Data 注入边界，不在 Data 分支复制 DNS/IP 校验逻辑，也不把普通 DialContext 伪称为受控连接。Root 安全接入必须等待 Platform 提供 TCP 目标绑定能力，按精确 Host/Port、DNS/IP 和连接生命周期策略装配。
+- 本轮新增 TCP 注入代码尚未运行测试；未宣称构建通过或真实 TCP 出站安全验收通过。
 
