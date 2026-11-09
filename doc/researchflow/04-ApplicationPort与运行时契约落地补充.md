@@ -375,3 +375,20 @@ Fake Repository/Fake Clock/Fake Provider 只证明模块内逻辑；MariaDB/Redi
 - `CancellationFinalizationStore` 负责提交 ExpectedVersion、`cancelled`、`user_cancelled`、ResultSummary 与 Outbox 引用。MySQL Adapter 映射到现有 `FinalizeRun`，不得复制原子事务。
 - FinalizeRun 对 cancelling + user_cancelled 仅接受 RunCancelled；ResultSummary、Outbox、Run 终态和 version 更新保持同一事务。
 - Server 必须在 BeginRunCancellation 成功后广播 Worker.CancelRun；仅当活动 Attempt 均完成协作确认或被过期 lease fencing 后，才调用 CancellationFinalizer。当前尚无 Server 调度/DI 和 MariaDB 端到端验收。
+
+
+## 9.14 统一终态协调入口
+
+Application 的 `RunFinalizationCoordinator` 是三种终态聚合路径的路由入口，不替代各 Finalizer，也不持有 SQL/事务逻辑。
+
+| 持久化 Run 状态 | termination_reason | 路由 |
+|---|---|---|
+| running | 空 | 正常 Run Finalizer |
+| created / queued / running | deadline_exceeded | Deadline Finalizer |
+| cancelling | user_cancelled | Cancellation Finalizer |
+| 其他组合 | 任意 | fail-closed，返回状态错误 |
+
+- Coordinator 首先读取持久化 Run 快照，只用于选择路径；选中的 Finalizer 必须重新读取完整 Stage/Attempt 快照并执行自己的状态/原因校验。
+- 不允许从 `cancelling + user_cancelled` 路由到普通或 Deadline Finalizer；不允许 deadline reason 路由到正常 Finalizer；不允许无 termination reason 的 cancelling 被当作取消完成。
+- 各 Finalizer 的 Storage Adapter 仍通过既有原子 FinalizeRun 事务写入 Run、ResultSummary、Outbox；Coordinator 不新增事务。
+- Server 组合根负责注入 Coordinator，并由 Deadline Scanner、Stage 完成检查、取消收敛流程调用；不得在 Researchflow 模块中新增 Server DI 或 HTTP 接口。
