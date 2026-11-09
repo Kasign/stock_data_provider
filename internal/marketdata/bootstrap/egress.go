@@ -132,10 +132,11 @@ func missingEgress(name string) error {
 	return fmt.Errorf("controlled egress dependency missing: %s", name)
 }
 
-
 // isNilEgressDependency 同时识别 nil interface 与承载 nil 指针/函数的 typed nil interface。
 func isNilEgressDependency(value any) bool {
-	if value == nil { return true }
+	if value == nil {
+		return true
+	}
 	reflected := reflect.ValueOf(value)
 	switch reflected.Kind() {
 	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:
