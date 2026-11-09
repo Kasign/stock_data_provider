@@ -272,7 +272,6 @@ func TestBuildRefRejectsBlankOrNonCanonicalMetadata(t *testing.T) {
 	}
 }
 
-
 func TestQuantResultRefSchemaMatchesGoCanonicalTextAndIdentityRules(t *testing.T) {
 	schemaPath := filepath.Join("..", "..", "..", "doc", "quant", "schema", "QNT-CTR-004-quant-result-ref-1.0.0.schema.json")
 	schemaDocument, err := os.ReadFile(schemaPath)
