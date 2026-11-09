@@ -8,27 +8,54 @@ import (
 	"example.com/stock-analysis-flow/internal/researchflow/domain"
 )
 
-type cancelIdentityStub struct { caller string; err error }
-func (s cancelIdentityStub) AuthenticatedCallerRef(context.Context) (string, error) { return s.caller, s.err }
+type cancelIdentityStub struct {
+	caller string
+	err    error
+}
+func (s cancelIdentityStub) AuthenticatedCallerRef(context.Context) (string, error) {
+	return s.caller, s.err
+}
 func (cancelIdentityStub) OriginatingRequestID(context.Context) *string { return nil }
-func (cancelIdentityStub) CorrelationID(context.Context) string { return "" }
+func (cancelIdentityStub) CorrelationID(context.Context) string         { return "" }
 
-type cancelAuthorizerStub struct { caller, run string; err error; calls int }
+type cancelAuthorizerStub struct {
+	caller, run string
+	err         error
+	calls       int
+}
 func (s *cancelAuthorizerStub) AuthorizeRunCancellation(_ context.Context, caller, run string) error {
-	s.calls++; s.caller, s.run = caller, run; return s.err
+	s.calls++
+	s.caller, s.run = caller, run
+	return s.err
 }
 
-type cancelReaderStub struct { results []CreateRunResult; err error; calls int }
+type cancelReaderStub struct {
+	results []CreateRunResult
+	err     error
+	calls   int
+}
 func (s *cancelReaderStub) GetRun(context.Context, string) (CreateRunResult, error) {
 	s.calls++
-	if s.err != nil { return CreateRunResult{}, s.err }
-	if len(s.results) == 0 { return CreateRunResult{}, errors.New("no read result") }
+	if s.err != nil {
+		return CreateRunResult{}, s.err
+	}
+	if len(s.results) == 0 {
+		return CreateRunResult{}, errors.New("no read result")
+	}
 	result := s.results[0]
-	if len(s.results) > 1 { s.results = s.results[1:] }
+	if len(s.results) > 1 {
+		s.results = s.results[1:]
+	}
 	return result, nil
 }
 
-type cancelStoreStub struct { changed bool; err error; runRef string; version uint64; calls int }
+type cancelStoreStub struct {
+	changed bool
+	err     error
+	runRef  string
+	version uint64
+	calls   int
+}
 func (s *cancelStoreStub) BeginRunCancellation(_ context.Context, ref string, version uint64) (bool, error) {
 	s.calls++; s.runRef, s.version = ref, version; return s.changed, s.err
 }
@@ -42,7 +69,9 @@ func cancellationReadResult(status domain.RunStatus, reason string, version uint
 func newCancelService(t *testing.T, identity RequestIdentity, auth *cancelAuthorizerStub, reader *cancelReaderStub, store *cancelStoreStub) *CancelRunService {
 	t.Helper()
 	service, err := NewCancelRunService(identity, auth, reader, store)
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	return service
 }
 
@@ -55,7 +84,9 @@ func TestCancelRunPersistsIntentAndReturnsFreshSnapshot(t *testing.T) {
 	store := &cancelStoreStub{changed: true}
 	service := newCancelService(t, cancelIdentityStub{caller: "caller-1"}, auth, reader, store)
 	got, err := service.CancelRun(context.Background(), "run-1")
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	if !got.Started || got.Replayed || got.Run.Status != domain.RunCancelling || got.Run.Version != 5 {
 		t.Fatalf("unexpected cancellation result: %#v", got)
 	}
@@ -69,14 +100,20 @@ func TestCancelRunIsIdempotentWhenAlreadyCancelling(t *testing.T) {
 	store := &cancelStoreStub{}
 	service := newCancelService(t, cancelIdentityStub{caller: "caller-1"}, &cancelAuthorizerStub{}, reader, store)
 	got, err := service.CancelRun(context.Background(), "run-1")
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	if !got.Replayed || got.Started || store.calls != 0 {
 		t.Fatalf("existing cancellation must be replayed without a write: %#v", got)
 	}
 }
 
 func TestCancelRunRejectsUnauthenticatedOrUnauthorizedCaller(t *testing.T) {
-	for _, tc := range []struct{name string; identity RequestIdentity; authErr error}{
+	for _, tc := range []struct {
+		name     string
+		identity RequestIdentity
+		authErr  error
+	}{
 		{name: "missing caller", identity: cancelIdentityStub{}},
 		{name: "identity error", identity: cancelIdentityStub{err: errors.New("identity unavailable")}},
 		{name: "access denied", identity: cancelIdentityStub{caller: "caller-1"}, authErr: ErrRunAccessDenied},
@@ -86,7 +123,9 @@ func TestCancelRunRejectsUnauthenticatedOrUnauthorizedCaller(t *testing.T) {
 			reader, store := &cancelReaderStub{}, &cancelStoreStub{}
 			service := newCancelService(t, tc.identity, auth, reader, store)
 			_, err := service.CancelRun(context.Background(), "run-1")
-			if err == nil { t.Fatal("expected caller rejection") }
+			if err == nil {
+				t.Fatal("expected caller rejection")
+			}
 			if reader.calls != 0 || store.calls != 0 {
 				t.Fatal("unauthenticated/unauthorized request reached Run storage")
 			}
@@ -95,7 +134,11 @@ func TestCancelRunRejectsUnauthenticatedOrUnauthorizedCaller(t *testing.T) {
 }
 
 func TestCancelRunRejectsTerminalAndDeadlineRuns(t *testing.T) {
-	for _, tc := range []struct{name string; status domain.RunStatus; reason string}{
+	for _, tc := range []struct {
+		name   string
+		status domain.RunStatus
+		reason string
+	}{
 		{name: "terminal", status: domain.RunSucceeded},
 		{name: "deadline", status: domain.RunRunning, reason: "deadline_exceeded"},
 	} {
@@ -106,7 +149,9 @@ func TestCancelRunRejectsTerminalAndDeadlineRuns(t *testing.T) {
 			if _, err := service.CancelRun(context.Background(), "run-1"); !errors.Is(err, ErrRunCancellationDenied) {
 				t.Fatalf("CancelRun error=%v, want ErrRunCancellationDenied", err)
 			}
-			if store.calls != 0 { t.Fatal("ineligible Run reached cancellation Storage") }
+			if store.calls != 0 {
+				t.Fatal("ineligible Run reached cancellation Storage")
+			}
 		})
 	}
 }
@@ -132,5 +177,7 @@ func TestCancelRunRejectsInvalidReferenceBeforeIdentity(t *testing.T) {
 			t.Fatalf("CancelRun(%q) error=%v", ref, err)
 		}
 	}
-	if reader.calls != 0 || store.calls != 0 { t.Fatal("invalid Run ref reached storage") }
+	if reader.calls != 0 || store.calls != 0 {
+		t.Fatal("invalid Run ref reached storage")
+	}
 }

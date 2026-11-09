@@ -10,10 +10,10 @@ import (
 )
 
 var (
-	ErrRunAccessDenied       = errors.New("Researchflow Run access denied")
-	ErrRunVersionConflict    = errors.New("Researchflow Run changed during cancellation")
-	ErrRunCancellationDenied = errors.New("Researchflow Run cannot be cancelled")
-	ErrRunAlreadyTerminal = errors.New("Researchflow run is already terminal")
+	ErrRunAccessDenied            = errors.New("Researchflow Run access denied")
+	ErrRunVersionConflict         = errors.New("Researchflow Run changed during cancellation")
+	ErrRunCancellationDenied      = errors.New("Researchflow Run cannot be cancelled")
+	ErrRunAlreadyTerminal         = errors.New("Researchflow run is already terminal")
 	ErrRunCancellationUnavailable = errors.New("Researchflow run is unavailable for cancellation")
 )
 
@@ -38,10 +38,10 @@ type CancelRunResult struct {
 // CancelRunService persists cancellation intent. It does not claim that active
 // workers have stopped; worker confirmation/fencing and finalization follow.
 type CancelRunService struct {
-	identity    RequestIdentity
-	authorizer  RunAccessAuthorizer
-	reader      RunReader
-	cancellers  RunCancellationStore
+	identity   RequestIdentity
+	authorizer RunAccessAuthorizer
+	reader     RunReader
+	cancellers RunCancellationStore
 }
 
 func NewCancelRunService(
@@ -117,9 +117,9 @@ func (s *CancelRunService) CancelRun(ctx context.Context, runRef string) (Cancel
 
 func cancelResult(result CreateRunResult, started, replayed bool) CancelRunResult {
 	return CancelRunResult{
-		Run: result.Run,
-		Stages: append([]domain.Stage(nil), result.Stages...),
-		Started: started,
+		Run:      result.Run,
+		Stages:   append([]domain.Stage(nil), result.Stages...),
+		Started:  started,
 		Replayed: replayed,
 	}
 }
