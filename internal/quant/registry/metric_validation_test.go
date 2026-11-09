@@ -3,6 +3,7 @@ package registry
 import (
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 )
 
@@ -20,6 +21,19 @@ func TestRegistryValidateMetricSupportsDecimalStringAndInteger(t *testing.T) {
 	decimalResult := json.RawMessage(`{"metric_code":"decimal_metric","value":"0.12345678","unit":"ratio","period":"20d","system_as_of":"2026-11-09T01:00:00Z","quality_status":"valid","metric_status":"available","calculation_version":"1.0.0","lower_bound":null,"upper_bound":null}`)
 	if err := decimalRegistry.ValidateMetric("decimal_metric", "1.0.0", "1.0.0", decimalResult); err != nil {
 		t.Fatalf("valid decimal-string metric rejected: %v", err)
+	}
+
+	invalidDecimalValues := []string{
+		`"1e-2"`, `"01"`, `"+1"`, `".5"`, `"1."`,
+		`" 0.1"`, `"0.1 "`, `"NaN"`, `1.25`,
+	}
+	for _, value := range invalidDecimalValues {
+		t.Run("invalid_metric_value_"+strings.Trim(value, "\\\""), func(t *testing.T) {
+			candidate := strings.Replace(string(decimalResult), `"0.12345678"`, value, 1)
+			if err := decimalRegistry.ValidateMetric("decimal_metric", "1.0.0", "1.0.0", json.RawMessage(candidate)); !errors.Is(err, ErrInvalidMetricResult) {
+				t.Fatalf("invalid decimal-string value %s should be rejected, got %v", value, err)
+			}
+		})
 	}
 	decimalResult = json.RawMessage(`{"metric_code":"decimal_metric","value":0.12345678,"unit":"ratio","period":"20d","system_as_of":"2026-11-09T01:00:00Z","quality_status":"valid","metric_status":"available","calculation_version":"1.0.0","lower_bound":null,"upper_bound":null}`)
 	if err := decimalRegistry.ValidateMetric("decimal_metric", "1.0.0", "1.0.0", decimalResult); !errors.Is(err, ErrInvalidMetricResult) {
