@@ -1137,3 +1137,32 @@ func TestBoundDoerDoesNotAllowRequestToReplaceDestination(t *testing.T) {
 		t.Fatalf("expected bound destination rejection, got %v", err)
 	}
 }
+
+
+func TestFaultForRetryabilityMatchesTransportRetryPolicy(t *testing.T) {
+	client := &Client{}
+	tests := []struct {
+		name      string
+		err       error
+		class     fault.Class
+		retryable bool
+	}{
+		{name: "DNS failure", err: errDNSResolution, class: fault.ClassUnavailable},
+		{name: "caller deadline", err: context.DeadlineExceeded, class: fault.ClassTimeout},
+		{name: "caller cancellation", err: context.Canceled, class: fault.ClassUnavailable},
+		{name: "temporary network transport", err: &net.OpError{Op: "dial", Net: "tcp", Err: errors.New("connection refused")}, class: fault.ClassUnavailable, retryable: true},
+		{name: "permanent generic error", err: errors.New("certificate verification failed"), class: fault.ClassUnavailable},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got := client.faultFor(test.err, "test.upstream")
+			if got.Class != test.class || got.Retryable != test.retryable {
+				t.Fatalf("faultFor() = class %q retryable %v, want class %q retryable %v",
+					got.Class, got.Retryable, test.class, test.retryable)
+			}
+			if err := got.Validate(); err != nil {
+				t.Fatalf("faultFor() returned invalid fault: %v", err)
+			}
+		})
+	}
+}

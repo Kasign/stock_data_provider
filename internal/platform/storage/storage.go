@@ -10,6 +10,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"net"
 	"sort"
 	"strings"
 	"time"
@@ -201,15 +202,21 @@ func normalizePingTimeout(timeout time.Duration) (time.Duration, error) {
 
 func dependencyFault(dependency, code, message string, cause error) *fault.Fault {
 	class := fault.ClassUnavailable
+	retryable := false
 	if errors.Is(cause, context.DeadlineExceeded) {
 		class = fault.ClassTimeout
+	} else if !errors.Is(cause, context.Canceled) {
+		var networkError net.Error
+		if errors.As(cause, &networkError) {
+			if networkError.Timeout() {
+				class = fault.ClassTimeout
+			}
+			retryable = networkError.Timeout() || networkError.Temporary()
+		}
 	}
 	return &fault.Fault{
 		Class: class, Code: code, SafeMessage: message,
-		Dependency: dependency,
-		Retryable: !errors.Is(cause, context.Canceled) &&
-			(class == fault.ClassUnavailable || class == fault.ClassTimeout),
-		Cause: cause,
+		Dependency: dependency, Retryable: retryable, Cause: cause,
 	}
 }
 

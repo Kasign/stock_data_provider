@@ -420,15 +420,15 @@ func (c *Client) faultFor(err error, dependency string) *fault.Fault {
 	case errors.Is(err, errPolicyRejected), errors.Is(err, errRedirectRejected):
 		return c.newFault(fault.ClassValidation, "platform.httpclient.destination_rejected", "destination is not allowed", err, dependency, false)
 	case errors.Is(err, errDNSResolution):
-		return c.newFault(fault.ClassUnavailable, "platform.httpclient.dns_failed", "destination DNS resolution failed", err, dependency, true)
+		return c.newFault(fault.ClassUnavailable, "platform.httpclient.dns_failed", "destination DNS resolution failed", err, dependency, false)
 	case errors.Is(err, errResponseTooLarge):
 		return c.newFault(fault.ClassValidation, "platform.httpclient.response_too_large", "response body exceeds configured limit", err, dependency, false)
 	case errors.Is(err, context.DeadlineExceeded):
-		return c.newFault(fault.ClassTimeout, "platform.httpclient.timeout", "HTTP request timed out", err, dependency, true)
+		return c.newFault(fault.ClassTimeout, "platform.httpclient.timeout", "HTTP request timed out", err, dependency, false)
 	case errors.Is(err, context.Canceled):
 		return c.newFault(fault.ClassUnavailable, "platform.httpclient.canceled", "HTTP request was canceled", err, dependency, false)
 	default:
-		return c.newFault(fault.ClassUnavailable, "platform.httpclient.request_failed", "HTTP dependency request failed", err, dependency, true)
+		return c.newFault(fault.ClassUnavailable, "platform.httpclient.request_failed", "HTTP dependency request failed", err, dependency, retryableTransportError(err))
 	}
 }
 
