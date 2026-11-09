@@ -67,10 +67,10 @@ func TestNewExposesApplicationHTTPAndDiagnostics(t *testing.T) {
 	if module.ProviderSummary().All[0] != "eastmoney" {
 		t.Fatal("ProviderSummary() must return a defensive copy")
 	}
-	if err := module.Close(); err != nil {
+	if err := module.Close(context.Background()); err != nil {
 		t.Fatalf("first Close() error = %v", err)
 	}
-	if err := module.Close(); err != nil {
+	if err := module.Close(context.Background()); err != nil {
 		t.Fatalf("second Close() error = %v", err)
 	}
 }

@@ -673,3 +673,13 @@ internal/
 - 独立命令改为使用 `bootstrap.New`，HTTP Server 仍由命令入口创建；Bootstrap 仅返回 Handler，不自行监听端口。
 - 修正命令入口对 `http.Handler` 的调用方式；资源关闭顺序保持 Module 先关闭自有 BaoStock Client，再由命令入口关闭 Store。
 - CI 格式化步骤扩展至 bootstrap 与 cmd/market-data，确保新组合根与命令入口执行 gofmt。
+
+
+### 2026-11-09：M2-4 Module 生命周期与 Quote Retention Worker 收口
+
+- 将 Quote Retention Worker 从命令入口移入 Bootstrap Module；Worker 改为同步循环，由 Module goroutine 启动并持有 cancel/done。
+- 新增 `Start(ctx)`、`Wait(ctx)`、`Stop(ctx)`、`Close(ctx)`：Start/Stop/Close 幂等；Stop 取消并等待；Wait 只等待不取消；Close 等 Worker 退出后关闭 BaoStock 自有资源。
+- Worker 保留原规则：Retention 小于 24 小时或无 Store 时不启动；启动立即执行一次清理，之后每 24 小时执行；单次数据库操作 30 秒超时。
+- Store/Cache 仍由调用方持有。Close 超时会返回错误并保留可重试状态，不会提前关闭共享 Store。
+- 独立命令不再直接启动 Worker；在 HTTP Server 启动前调用 Module.Start，退出时使用独立 35 秒 Close Context，确保 Worker 先退出再由命令入口关闭 Store。
+- 新增生命周期测试覆盖重复 Start/Stop/Close、Wait 超时、Stop 后重启、Close 后拒绝 Start。

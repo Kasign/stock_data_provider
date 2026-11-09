@@ -44,7 +44,6 @@ func run(ctx context.Context, logger *slog.Logger) error {
 				return err
 			}
 		}
-		runQuoteRetentionWorker(ctx, store, cfg.QuoteRetention, logger)
 	}
 	var c cache.Cache = cache.NewDisabled()
 	if cfg.RedisAddr != "" {
@@ -66,10 +65,15 @@ func run(ctx context.Context, logger *slog.Logger) error {
 		return err
 	}
 	defer func() {
-		if err := module.Close(); err != nil {
+		closeCtx, cancel := context.WithTimeout(context.Background(), 35*time.Second)
+		defer cancel()
+		if err := module.Close(closeCtx); err != nil {
 			logger.Warn("关闭 Market Data Module 失败", "error", err)
 		}
 	}()
+	if err := module.Start(ctx); err != nil {
+		return err
+	}
 	handler := module.Handler()
 	providerSummary := module.ProviderSummary()
 	server := &http.Server{Addr: cfg.HTTPAddr, Handler: handler, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: cfg.RequestTimeout + 2*time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 1 << 20}
@@ -96,44 +100,6 @@ func run(ctx context.Context, logger *slog.Logger) error {
 		return e
 	}
 }
-func runQuoteRetentionWorker(ctx context.Context, store *repository.Store, retention time.Duration, logger *slog.Logger) {
-	if store == nil || retention < 24*time.Hour {
-		return
-	}
-	if logger == nil {
-		logger = slog.Default()
-	}
-	go func() {
-		purge := func() {
-			if err := ctx.Err(); err != nil {
-				return
-			}
-			jobCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
-			defer cancel()
-			cutoff := time.Now().UTC().Add(-retention)
-			deleted, err := store.PurgeQuotesBefore(jobCtx, cutoff)
-			if err != nil {
-				logger.Error("quote snapshot retention purge failed", "cutoff", cutoff.Format(time.RFC3339Nano), "error", err)
-				return
-			}
-			if deleted > 0 {
-				logger.Info("quote snapshot retention purge completed", "deleted_rows", deleted, "retention", retention.String())
-			}
-		}
-		purge()
-		ticker := time.NewTicker(24 * time.Hour)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-ticker.C:
-				purge()
-			}
-		}
-	}()
-}
-
 func logLevel(v string) slog.Level {
 	switch strings.ToLower(strings.TrimSpace(v)) {
 	case "debug":

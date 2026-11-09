@@ -51,7 +51,15 @@ type Module struct {
 	cache          cache.Cache
 	logger         *slog.Logger
 	baostockClient *baostock.Client
-	closeOnce      sync.Once
+	retentionStore quoteRetentionStore
+	retention      time.Duration
+	lifecycleMu    sync.Mutex
+	closeMu        sync.Mutex
+	started        bool
+	closing        bool
+	closed         bool
+	workerCancel   context.CancelFunc
+	workerDone     chan struct{}
 	closeErr       error
 }
 
@@ -74,9 +82,11 @@ func New(cfg config.Config, deps Dependencies) (*Module, error) {
 		store:  deps.Store,
 		cache:  deps.Cache,
 		logger: deps.Logger,
+		retentionStore: deps.Store,
+		retention: cfg.QuoteRetention,
 	}
 	if err := module.build(cfg); err != nil {
-		_ = module.Close()
+		_ = module.Close(context.Background())
 		return nil, err
 	}
 	return module, nil
@@ -119,17 +129,6 @@ func (m *Module) ProviderSummary() ProviderSummary {
 }
 
 // Close 只关闭 Module 自己创建的 BaoStock 客户端，不关闭调用方注入的 Store/Cache。
-func (m *Module) Close() error {
-	if m == nil {
-		return nil
-	}
-	m.closeOnce.Do(func() {
-		if m.baostockClient != nil {
-			m.closeErr = m.baostockClient.Close()
-		}
-	})
-	return m.closeErr
-}
 
 func (m *Module) build(cfg config.Config) error {
 	store := m.store
