@@ -199,3 +199,9 @@ Notification 是独立通知业务模块，负责事件接收、Subscription、T
 - 新增 Notification Migration v4：`notification_channel_config_versions`，主键 `(channel_ref, config_version)`，保存 JSON 快照和摘要。
 - 新增 MariaDB 集成测试代码，覆盖幂等、错误码顺序规范化、同版本变更拒绝、新版本追加和读取副本隔离；真实 DSN 尚未执行。
 - `ChannelRegistry` 仍只负责运行时 Adapter 注册与精确版本解析；持久化 Repository 与具体 Adapter/Platform Secret 装配分离，Server 负责读取快照并构造具体 Adapter。
+
+
+### Channel 配置持久化 CI 反馈
+
+- Go workflow Run `42609082056` 对应 ChannelConfig Repository 代码提交：`Test go-core` 通过，但不覆盖 Notification；根模块 `Test .` 仍因仓库其他模块 gofmt 差异失败，日志未列出 `internal/notification/**` 差异，因此根模块单测/Race/vet 未执行。
+- MariaDB 集成 Job skipped；当前没有 `NOTIFICATION_MARIADB_TEST_DSN` 的执行证据。ChannelConfig 的 Migration v4 和集成测试代码已提交，但 L3 未验收。

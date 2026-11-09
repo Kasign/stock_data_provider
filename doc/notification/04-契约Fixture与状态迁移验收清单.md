@@ -357,3 +357,9 @@ Run `42602399686` 对应 HEAD `8d08cf07a651efcd42a514f3dafd94d659f21f97`。`Test
 - [x] RetryableErrorCodes 作为集合规范化排序，顺序变化不形成新配置版本内容。
 - [x] Migration v4 与 MariaDB 集成测试代码已建立。
 - [ ] 真实 MariaDB DSN L3 尚未执行；测试代码不代表通过。
+
+
+### Channel 配置持久化 CI 反馈
+
+- Go workflow Run `42609082056` 对应 ChannelConfig Repository 代码提交：`Test go-core` 通过，但不覆盖 Notification；根模块 `Test .` 仍因仓库其他模块 gofmt 差异失败，日志未列出 `internal/notification/**` 差异，因此根模块单测/Race/vet 未执行。
+- MariaDB 集成 Job skipped；当前没有 `NOTIFICATION_MARIADB_TEST_DSN` 的执行证据。ChannelConfig 的 Migration v4 和集成测试代码已提交，但 L3 未验收。
