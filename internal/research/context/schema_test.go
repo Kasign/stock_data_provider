@@ -2,10 +2,13 @@ package context
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/santhosh-tekuri/jsonschema/v6"
 )
 
 func TestContextJSONSchemaMatchesDTOFields(t *testing.T) {
@@ -106,4 +109,98 @@ func requiredFieldNames(typ reflect.Type) map[string]struct{} {
 		}
 	}
 	return fields
+}
+
+
+func TestContextJSONSchemaValidatesGoldenAndRejectsInvalidPayloads(t *testing.T) {
+	schemaData, err := os.ReadFile("schema/context-v1.schema.json")
+	if err != nil {
+		t.Fatalf("read Context JSON Schema: %v", err)
+	}
+	compiler := jsonschema.NewCompiler()
+	if err := compiler.AddResource("context-v1.schema.json", strings.NewReader(string(schemaData))); err != nil {
+		t.Fatalf("add Context JSON Schema resource: %v", err)
+	}
+	schema, err := compiler.Compile("context-v1.schema.json")
+	if err != nil {
+		t.Fatalf("compile Context JSON Schema: %v", err)
+	}
+
+	golden, err := os.ReadFile("testdata/context_v1.golden.json")
+	if err != nil {
+		t.Fatalf("read Context v1 golden fixture: %v", err)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(golden, &payload); err != nil {
+		t.Fatalf("decode Context v1 golden fixture: %v", err)
+	}
+	if err := schema.Validate(payload); err != nil {
+		t.Fatalf("Context v1 golden fixture does not satisfy JSON Schema: %v", err)
+	}
+
+	tests := []struct {
+		name   string
+		mutate func(map[string]any)
+	}{
+		{"missing required field", func(value map[string]any) { delete(value, "context_id") }},
+		{"null required array", func(value map[string]any) { value["subject_refs"] = nil }},
+		{"unknown scope enum", func(value map[string]any) { value["scope"] = "portfolio" }},
+		{"unknown top-level field", func(value map[string]any) { value["unexpected"] = true }},
+		{"unknown section owner enum", func(value map[string]any) {
+			sections := value["section_refs"].([]any)
+			sections[0].(map[string]any)["source_owner"] = "unknown_owner"
+		}},
+		{"unknown omission reason enum", func(value map[string]any) {
+			omitted := value["omitted_sections"].([]any)
+			omitted[0].(map[string]any)["reason_code"] = "unknown_reason"
+		}},
+		{"non UTC timestamp", func(value map[string]any) {
+			value["system_as_of"] = "2026-11-06T16:00:00+08:00"
+		}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			encoded, err := json.Marshal(payload)
+			if err != nil {
+				t.Fatalf("clone fixture: %v", err)
+			}
+			var candidate map[string]any
+			if err := json.Unmarshal(encoded, &candidate); err != nil {
+				t.Fatalf("decode cloned fixture: %v", err)
+			}
+			tt.mutate(candidate)
+			if err := schema.Validate(candidate); err == nil {
+				t.Fatal("invalid payload unexpectedly satisfied Context JSON Schema")
+			}
+		})
+	}
+}
+
+func TestContextJSONSchemaRejectsNullNestedObject(t *testing.T) {
+	schemaData, err := os.ReadFile("schema/context-v1.schema.json")
+	if err != nil {
+		t.Fatalf("read Context JSON Schema: %v", err)
+	}
+	compiler := jsonschema.NewCompiler()
+	if err := compiler.AddResource("context-v1.schema.json", strings.NewReader(string(schemaData))); err != nil {
+		t.Fatalf("add Context JSON Schema resource: %v", err)
+	}
+	schema, err := compiler.Compile("context-v1.schema.json")
+	if err != nil {
+		t.Fatalf("compile Context JSON Schema: %v", err)
+	}
+	golden, err := os.ReadFile("testdata/context_v1.golden.json")
+	if err != nil {
+		t.Fatalf("read Context v1 golden fixture: %v", err)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(golden, &payload); err != nil {
+		t.Fatalf("decode Context v1 golden fixture: %v", err)
+	}
+	payload["quality_summary"] = nil
+	if err := schema.Validate(payload); err == nil {
+		t.Fatal("null quality_summary unexpectedly satisfied Context JSON Schema")
+	} else if !strings.Contains(fmt.Sprint(err), "quality_summary") {
+		t.Logf("Schema rejected null quality_summary: %v", err)
+	}
 }
