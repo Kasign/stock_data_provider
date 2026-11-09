@@ -59,7 +59,10 @@ func NewRegistry(definitions []Definition, validator SchemaValidator) (*Registry
 		if _, exists := registry.definitions[definition.Name]; exists {
 			return nil, fmt.Errorf("%w: duplicate tool %q", ErrInvalidPolicy, definition.Name)
 		}
-		scopes := append([]string(nil), definition.RequiredScopes...)
+		scopes := make([]string, 0, len(definition.RequiredScopes))
+		for _, scope := range definition.RequiredScopes {
+			scopes = append(scopes, strings.TrimSpace(scope))
+		}
 		sort.Strings(scopes)
 		for i, scope := range scopes {
 			if strings.TrimSpace(scope) == "" || (i > 0 && scopes[i-1] == scope) {

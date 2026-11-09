@@ -37,7 +37,8 @@ func IntentFromModelToolCall(call llm.ModelToolCall) (Intent, error) {
 	if call.Status != "" && call.Status != "completed" {
 		return Intent{}, ErrInvalidModelToolCall
 	}
-	if strings.TrimSpace(call.ArgumentsJSON) == "" || !json.Valid([]byte(call.ArgumentsJSON)) {
+	if strings.TrimSpace(call.ArgumentsJSON) == "" || len(call.ArgumentsJSON) > llm.MaxPayloadBytes ||
+		!json.Valid([]byte(call.ArgumentsJSON)) {
 		return Intent{}, ErrInvalidModelToolCall
 	}
 	return Intent{

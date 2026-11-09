@@ -1,8 +1,8 @@
 package toolpolicy
 
 import (
-	"errors"
 	"encoding/json"
+	"errors"
 	"testing"
 	"time"
 )
