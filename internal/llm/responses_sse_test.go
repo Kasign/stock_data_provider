@@ -581,7 +581,6 @@ func TestParseResponsesSSERejectsFunctionArgumentDeltaAfterDone(t *testing.T) {
 	}
 }
 
-
 // TestParseResponsesSSERejectsFunctionArgumentsMismatchAfterEmptyDelta 验证空参数增量也会参与终态一致性校验。
 func TestParseResponsesSSERejectsFunctionArgumentsMismatchAfterEmptyDelta(t *testing.T) {
 	request := validSSERequest()
