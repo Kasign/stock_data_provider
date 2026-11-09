@@ -419,7 +419,7 @@ internal/
 | M1 Go Module 归并 | completed（代码归并） | Data 源码已位于根 Module 的 `internal/marketdata/**`；根 `go.mod` 为 Go 1.23.0；当前 Data 根模块 gofmt/test/race/vet 专项通过 |
 | M2 Application Port/Bootstrap | completed（Data 侧） | M2-1～M2-6 已完成：Application Port、Bootstrap、Worker 生命周期、HTTP 用例接口拆分、来源能力快照和 Migration Runner |
 | M3 Root Server 装配 | in_progress | Data 已提供 `InProcessHandler()`、Application Port 和 `MigrationRunner()`；Root Router、共享资源注入、Remote→InProcess 切换属于 Server 组合根任务，本分支不越界修改 |
-| M4 共享资源统一 | in_progress | Data Repository borrowed DB、`cache.NewGoRedis` 已实现；Tushare、Hithink、TickFlow（认证/免费双出口）、Xueqiu、Yahoo、NetEase（报价/历史双出口）已提供 HTTPDoer 注入入口；Root 侧真实 BoundDoer 创建与注入、Redis 配置匹配、Tencent/Sina/Eastmoney/MiaoXiang 等 Provider 和 TCP 出站策略仍待完成 |
+| M4 共享资源统一 | in_progress | Data Repository borrowed DB、`cache.NewGoRedis` 已实现；Tushare、Hithink、TickFlow（认证/免费双出口）、Xueqiu、Yahoo、NetEase（报价/历史双出口）已提供 HTTPDoer 注入入口；Root 侧真实 BoundDoer 创建与注入、Redis 配置匹配、Sina/Eastmoney/MiaoXiang 等 Provider 和 TCP 出站策略仍待完成 |
 | M5 部署/WebUI 切换 | pending | Root 同进程装配和共享资源验收后执行 |
 | M6 迁移验收 | pending | 结构迁移、API/PIT/质量、真实 Provider 和部署验收分开形成证据 |
 | 公共平台契约接入 | in_progress（按依赖） | 当前分支已有 Platform 基础代码；Data 仅适配已冻结能力，不复制 HTTP Client、Diagnostics Runner、Storage 等公共实现 |
@@ -916,7 +916,7 @@ internal/
 - Bootstrap Dependencies 新增可选 `XueqiuHTTPDoer` 并传入 Provider。Root 创建并拥有绑定到实际 `XueqiuBaseURL` 的 BoundDoer；Data Module 不拥有、不关闭。
 - 新增回归测试源码覆盖注入执行器、GET 目标、Cookie/Referer/Origin/Accept Header 与 502 错误路径；测试尚未运行，不代表编译或安全策略验收通过。
 - Root 注入策略必须绑定精确 HTTPS Host/443、拒绝重定向（Cookie 不得跨域转发）、执行 DNS/IP 检查，并将成功响应上限设置为不小于现有 `maxProviderPayloadBytes`。Cookie 仅由配置注入，禁止出现在日志、错误或诊断证据中。
-- Yahoo Finance 已接入无凭据受控 HTTP 执行器；NetEase 报价与历史 CSV 是不同 Host，按两个独立出口接入。后续继续处理 Tencent/Sina/Eastmoney 等 Provider。BaoStock/Pytdx 仍单列 TCP 出站策略。
+- Yahoo Finance、NetEase 已接入无凭据受控 HTTP 执行器；Tencent 报价、复权 K 线、未复权 K 线、Smartbox 搜索按四个配置 endpoint 独立接入。后续继续处理 Sina/Eastmoney/MiaoXiang 等 Provider。BaoStock/Pytdx 仍单列 TCP 出站策略。
 
 
 ### 2026-11-09：M4-HTTP-05 Yahoo Finance 无凭据受控 HTTP 执行器注入
@@ -938,4 +938,15 @@ internal/
 - Bootstrap Dependencies 新增 `NeteaseQuoteHTTPDoer` / `NeteaseHistoryHTTPDoer`；Root 按运行时配置分别绑定精确 HTTPS Host/443，拒绝重定向并执行 DNS/IP 校验和既有响应体上限；Module 不拥有、不关闭执行器。
 - 新增测试源码覆盖两个出口不交叉、请求 URL/Referer 和 502 错误路径；测试尚未运行。
 - 下一步继续处理 Tencent 多 endpoint Provider，按真实 URL Host 分组注入，不改变既有重定向禁止策略。
+
+
+
+### 2026-11-09：M4-HTTP-07 Tencent 四 endpoint 受控 HTTP 执行器注入
+
+- 代码基线：`2d6d32b95a0d11e3df7428ac50ae3839ea0bf432`。Tencent 有四个实际请求 endpoint：报价 `TencentQuoteURL`、复权 K 线 `TencentKlineURL`、未复权 K 线 `TencentNoneKlineURL`、Smartbox 股票搜索 `TencentStockSearchURL`。前三个默认 Host 中报价为 `web.sqt.gtimg.cn`，两类 K 线为 `web.ifzq.gtimg.cn`；搜索为 `smartbox.gtimg.cn`。由于四个 URL 均可独立配置，按四个执行器注入，避免配置改 Host 后策略错配。
+- Provider 新增 `NewTencentConfiguredWithHTTPDoers`，四个 endpoint 各自注入；原 `NewTencentConfigured` / `NewTencentConfiguredWithSearchURL` 保留兼容，未注入时回退到同一标准 Client，保持原 12 秒超时与禁止重定向。
+- Quote、qfq/hfq K 线、raw K 线和 Smartbox Search 分别使用对应执行器。请求方法、参数、Header、响应体上限、解析、错误语义均不改变。
+- Bootstrap Dependencies 增加四个可选执行器字段，并将其传入 Tencent Provider。Root 必须根据各自运行时 URL 创建精确 HTTPS Host/443 BoundDoer，拒绝重定向、校验 DNS/IP 并沿用响应体上限；Data Module 不创建、不拥有、不关闭执行器。
+- 新增测试源码覆盖四条请求路径的执行器隔离、URL/GET/Referer/Header 与 502 错误路径，以及旧构造器默认 Client 兼容。测试尚未运行；不代表编译、Root 安全策略或真实 Tencent 数据验收通过。
+- 下一步继续处理 Sina Provider 的报价与 K 线出口；即使默认 Host 相同，也按独立配置 URL 绑定执行器，避免未来独立配置时出现策略错配。
 

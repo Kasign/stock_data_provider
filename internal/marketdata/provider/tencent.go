@@ -21,11 +21,15 @@ import (
 const tencentVersion = "tencent-finance-api-v1"
 
 type Tencent struct {
-	client       *http.Client
-	quoteURL     string
-	klineURL     string
-	noneKlineURL string
-	searchURL    string
+	client              *http.Client
+	quoteHTTPDoer       HTTPDoer
+	klineHTTPDoer       HTTPDoer
+	noneKlineHTTPDoer   HTTPDoer
+	searchHTTPDoer      HTTPDoer
+	quoteURL            string
+	klineURL            string
+	noneKlineURL        string
+	searchURL           string
 }
 
 func NewTencent(timeout time.Duration) *Tencent {
@@ -38,6 +42,12 @@ func NewTencentConfigured(timeout time.Duration, quoteURL, klineURL, noneKlineUR
 
 // NewTencentConfiguredWithSearchURL configures the Smartbox keyword-search endpoint independently.
 func NewTencentConfiguredWithSearchURL(timeout time.Duration, quoteURL, klineURL, noneKlineURL, stockSearchURL string) *Tencent {
+	return NewTencentConfiguredWithHTTPDoers(timeout, quoteURL, klineURL, noneKlineURL, stockSearchURL, nil, nil, nil, nil)
+}
+
+// NewTencentConfiguredWithHTTPDoers 分别注入报价、复权 K 线、未复权 K 线和 Smartbox 搜索出口。
+// 各 URL 独立可配置，Root 必须按实际 URL Host 创建受限执行器；Module 不拥有、不关闭执行器。
+func NewTencentConfiguredWithHTTPDoers(timeout time.Duration, quoteURL, klineURL, noneKlineURL, stockSearchURL string, quoteDoer, klineDoer, noneKlineDoer, searchDoer HTTPDoer) *Tencent {
 	if timeout <= 0 {
 		timeout = 12 * time.Second
 	}
@@ -53,7 +63,24 @@ func NewTencentConfiguredWithSearchURL(timeout time.Duration, quoteURL, klineURL
 	if stockSearchURL == "" {
 		stockSearchURL = defaultTencentStockSearchURL
 	}
-	return &Tencent{client: &http.Client{Timeout: timeout, CheckRedirect: func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse }}, quoteURL: quoteURL, klineURL: klineURL, noneKlineURL: noneKlineURL, searchURL: stockSearchURL}
+	client := &http.Client{Timeout: timeout, CheckRedirect: func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse }}
+	if quoteDoer == nil {
+		quoteDoer = client
+	}
+	if klineDoer == nil {
+		klineDoer = client
+	}
+	if noneKlineDoer == nil {
+		noneKlineDoer = client
+	}
+	if searchDoer == nil {
+		searchDoer = client
+	}
+	return &Tencent{
+		client: client, quoteHTTPDoer: quoteDoer, klineHTTPDoer: klineDoer,
+		noneKlineHTTPDoer: noneKlineDoer, searchHTTPDoer: searchDoer,
+		quoteURL: quoteURL, klineURL: klineURL, noneKlineURL: noneKlineURL, searchURL: stockSearchURL,
+	}
 }
 func (p *Tencent) Name() string { return "tencent" }
 
@@ -69,7 +96,7 @@ func (p *Tencent) FetchQuote(ctx context.Context, rawSymbol string) (*model.Quot
 	if err != nil {
 		return nil, err
 	}
-	body, err := p.getText(ctx, p.quoteURL+"="+url.QueryEscape(apiCode))
+	body, err := p.getTextWithDoer(ctx, p.quoteURL+"="+url.QueryEscape(apiCode), p.quoteHTTPDoer)
 	if err != nil {
 		return nil, err
 	}
@@ -263,7 +290,11 @@ func (p *Tencent) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endD
 	if adjustCode != "" {
 		param += "," + adjustCode
 	}
-	body, err := p.getJSONBytes(ctx, endpoint+"?param="+url.QueryEscape(param))
+	klineDoer := p.noneKlineHTTPDoer
+	if adjustment != model.AdjustmentNone {
+		klineDoer = p.klineHTTPDoer
+	}
+	body, err := p.getJSONBytesWithDoer(ctx, endpoint+"?param="+url.QueryEscape(param), klineDoer)
 	if err != nil {
 		return nil, err
 	}
@@ -490,7 +521,10 @@ func optionalUnit(value *float64, unit string) string {
 }
 
 func (p *Tencent) getText(ctx context.Context, u string) (string, error) {
-	b, err := p.getBytes(ctx, u)
+	return p.getTextWithDoer(ctx, u, nil)
+}
+func (p *Tencent) getTextWithDoer(ctx context.Context, u string, doer HTTPDoer) (string, error) {
+	b, err := p.getBytesWithDoer(ctx, u, doer)
 	if err != nil {
 		return "", err
 	}
@@ -499,14 +533,23 @@ func (p *Tencent) getText(ctx context.Context, u string) (string, error) {
 func (p *Tencent) getJSONBytes(ctx context.Context, u string) ([]byte, error) {
 	return p.getBytes(ctx, u)
 }
+func (p *Tencent) getJSONBytesWithDoer(ctx context.Context, u string, doer HTTPDoer) ([]byte, error) {
+	return p.getBytesWithDoer(ctx, u, doer)
+}
 func (p *Tencent) getBytes(ctx context.Context, u string) ([]byte, error) {
+	return p.getBytesWithDoer(ctx, u, nil)
+}
+func (p *Tencent) getBytesWithDoer(ctx context.Context, u string, doer HTTPDoer) ([]byte, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {
 		return nil, err
 	}
 	req.Header.Set("User-Agent", "Mozilla/5.0 (compatible; MarketDataService/1.0)")
 	req.Header.Set("Referer", "https://gu.qq.com/")
-	resp, err := p.client.Do(req)
+	if doer == nil {
+		doer = p.client
+	}
+	resp, err := doer.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("tencent request: %w", err)
 	}

@@ -61,7 +61,7 @@ func (p *Tencent) SearchStocks(ctx context.Context, rawQuery string, limit int) 
 	params.Set("q", searchTerm)
 	parsed.RawQuery = params.Encode()
 
-	body, err := p.getBytes(ctx, parsed.String())
+	body, err := p.getBytesWithDoer(ctx, parsed.String(), p.searchHTTPDoer)
 	if err != nil {
 		return nil, fmt.Errorf("Tencent stock-search request: %w", err)
 	}
