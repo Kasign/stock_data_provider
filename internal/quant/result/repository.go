@@ -27,6 +27,21 @@ func (record Record) Validate() error {
 	return nil
 }
 
+// ValidatedSnapshot 校验记录后返回与调用方内存隔离的深拷贝。
+// Repository 实现应在保存或异步处理前调用此方法，避免调用方随后修改切片底层数据。
+func (record Record) ValidatedSnapshot() (Record, error) {
+	if err := record.Validate(); err != nil {
+		return Record{}, err
+	}
+
+	snapshot := Record{
+		Manifest: record.Manifest,
+		Payload:  append(json.RawMessage(nil), record.Payload...),
+	}
+	snapshot.Manifest.InputSnapshotRefs = append([]string(nil), record.Manifest.InputSnapshotRefs...)
+	return snapshot, nil
+}
+
 // Repository 是 Quant 结果的写入端口，不暴露未完成授权复核的读取能力。
 // Save 必须满足：相同 result_id 且内容相同视为幂等成功；相同 result_id 但内容不同返回 ErrResultConflict。
 // 实现方必须以单一事务/原子操作保证唯一性检查与写入不可分割。

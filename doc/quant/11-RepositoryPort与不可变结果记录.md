@@ -20,3 +20,11 @@
 ## 验收
 
 Record 测试覆盖合法 Manifest/payload 绑定、payload 篡改和 Manifest 身份篡改。数据库并发幂等、冲突、事务和历史查询属于真实 Storage/L3 集成验收，不能由本阶段的纯单元测试替代。
+
+
+## 保存前内存隔离
+
+- 新增 `Record.ValidatedSnapshot`：先执行 `Record.Validate`，再深拷贝 Manifest 的快照引用切片和 payload 字节。
+- Repository 实现若要保留 Record、交给异步任务或在返回后继续处理，必须先取得并使用该快照；不得仅复制 Record struct，因为其切片字段仍共享底层数组。
+- 快照只隔离 Go 进程内的可变内存，不代表业务 payload Schema 已验证，也不提供跨进程/持久化层的不可变性；持久化仍须依靠内容寻址、事务和唯一约束。
+- 单元测试覆盖源记录修改不影响快照、快照修改不影响源记录，以及无效记录不能生成已校验快照。
