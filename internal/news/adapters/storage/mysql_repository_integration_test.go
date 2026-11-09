@@ -294,10 +294,10 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 	traceCandidate := domain.Candidate{SourceItemID: "provider-trace-item", ProviderCode: "tavily", Title: "trace test"}
 	trace := app.ObservationPolicyTrace{
 		SourcePolicyVersionID: "source-policy-v1",
-		EndpointID: "endpoint-v1", EndpointPolicyVersionID: "endpoint-policy-v1",
-		ProviderOutputPolicyRef: "provider-policy-ref",
+		EndpointID:            "endpoint-v1", EndpointPolicyVersionID: "endpoint-policy-v1",
+		ProviderOutputPolicyRef:       "provider-policy-ref",
 		ProviderOutputPolicyVersionID: "provider-policy-v1",
-		PolicyEvaluatedAt: time.Now().UTC(),
+		PolicyEvaluatedAt:             time.Now().UTC(),
 	}
 	if _, err := ingest.ExecuteWithPolicyTrace(ctx, traceSourceID, "provider-trace-key", traceCandidate, domain.SourceURLPolicy{}, trace); !errors.Is(err, app.ErrProviderOutputPolicyRequired) {
 		t.Fatalf("self-declared provider policy error = %v, want fail-closed rejection", err)
@@ -399,7 +399,7 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 	secondSourceID := sourceID + "-second"
 	secondCandidate := domain.Candidate{
 		SourceItemID: "native-item-002",
-		Title: "Second news item", PublisherName: "Second Publisher",
+		Title:        "Second news item", PublisherName: "Second Publisher",
 	}
 	secondObservation, err := ingest.Execute(ctx, secondSourceID, "news-it-second-key", secondCandidate, domain.SourceURLPolicy{})
 	if err != nil {
