@@ -157,6 +157,11 @@ func TestValidateEvidenceAuthorizationBindingAtEnforcesExpiryBoundary(t *testing
 		"service:researchflow", "research_evidence:evidence_001", PurposeResearchAnalysis, time.Time{}); err == nil || !strings.Contains(err.Error(), "authorization_check_time") {
 		t.Fatalf("zero check time must be rejected, got %v", err)
 	}
+	nonUTCNow := now.In(time.FixedZone("non-UTC", 0))
+	if err := ValidateEvidenceAuthorizationBindingAt(e, ref, snapshot,
+		"service:researchflow", "research_evidence:evidence_001", PurposeResearchAnalysis, nonUTCNow); err == nil || !strings.Contains(err.Error(), "authorization_check_time") {
+		t.Fatalf("zero-offset non-UTC check time must be rejected, got %v", err)
+	}
 }
 
 
@@ -167,5 +172,22 @@ func TestValidateEvidenceAuthorizationBindingAtAllowsNoFixedExpiry(t *testing.T)
 	if err := ValidateEvidenceAuthorizationBindingAt(e, ref, snapshot,
 		"service:researchflow", "research_evidence:evidence_001", PurposeResearchAnalysis, now); err != nil {
 		t.Fatalf("authorization with expires_at=null rejected: %v", err)
+	}
+}
+
+
+func TestAuthorizationValidateAcceptsPolicyTupleFieldsContainingSeparator(t *testing.T) {
+	ref, snapshot := researchAuthorizationGolden(t)
+	snapshot.Policies = []PolicyVersion{
+		{PolicyType: "a", PolicyRef: "b\x00c", PolicyVersion: "d"},
+		{PolicyType: "a\x00b", PolicyRef: "c", PolicyVersion: "d"},
+	}
+	var err error
+	ref.DecisionFingerprint, err = ref.ComputeDecisionFingerprint(snapshot)
+	if err != nil {
+		t.Fatalf("ComputeDecisionFingerprint() error = %v", err)
+	}
+	if err := ref.Validate(snapshot); err != nil {
+		t.Fatalf("distinct sorted policy tuples containing separator bytes were rejected: %v", err)
 	}
 }
