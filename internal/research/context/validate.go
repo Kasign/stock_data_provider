@@ -2,19 +2,17 @@ package context
 
 import (
     "fmt"
-    "regexp"
+    "math"
     "slices"
     "strings"
     "time"
 )
 
-var schemaVersionPattern = regexp.MustCompile(\`^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$\`)
-
 // Validate checks the ResearchContext DTO invariants. It does not fetch or
 // authorize referenced resources; those checks belong to source-owner adapters.
 func (c Context) Validate() error {
-    if !schemaVersionPattern.MatchString(c.SchemaVersion) {
-        return fmt.Errorf("schema_version must use MAJOR.MINOR.PATCH")
+    if c.SchemaVersion != SchemaVersion {
+        return fmt.Errorf("schema_version must equal the supported version %q", SchemaVersion)
     }
     if c.ContextID == "" || c.ContextID != strings.TrimSpace(c.ContextID) {
         return fmt.Errorf("context_id is required without surrounding whitespace")
@@ -34,11 +32,11 @@ func (c Context) Validate() error {
     if err := validateUniqueStrings("subject_refs", c.SubjectRefs); err != nil {
         return err
     }
-    if c.SystemAsOf.IsZero() {
-        return fmt.Errorf("system_as_of is required")
+    if c.SystemAsOf.IsZero() || !isUTC(c.SystemAsOf) {
+        return fmt.Errorf("system_as_of is required and must use UTC")
     }
-    if c.CreatedAt.IsZero() {
-        return fmt.Errorf("created_at is required")
+    if c.CreatedAt.IsZero() || !isUTC(c.CreatedAt) {
+        return fmt.Errorf("created_at is required and must use UTC")
     }
     if c.BuilderVersion == "" || c.BuilderVersion != strings.TrimSpace(c.BuilderVersion) {
         return fmt.Errorf("builder_version is required without surrounding whitespace")
@@ -83,10 +81,10 @@ func (c Context) Validate() error {
         if err := validateQualityStatus(section.QualityStatus); err != nil {
             return fmt.Errorf("section %q: %w", section.SectionID, err)
         }
-        if section.AssembledAt.IsZero() {
-            return fmt.Errorf("section %q assembled_at is required", section.SectionID)
+        if section.AssembledAt.IsZero() || !isUTC(section.AssembledAt) {
+            return fmt.Errorf("section %q assembled_at is required and must use UTC", section.SectionID)
         }
-        if section.SystemAsOf.IsZero() || !section.SystemAsOf.Equal(c.SystemAsOf) {
+        if section.SystemAsOf.IsZero() || !isUTC(section.SystemAsOf) || !section.SystemAsOf.Equal(c.SystemAsOf) {
             return fmt.Errorf("section %q system_as_of does not match Context", section.SectionID)
         }
         sections[section.SectionID] = section
@@ -162,11 +160,11 @@ func (c Context) Validate() error {
 
 // ValidateSystemAsOf compares the Context cutoff with the caller's authoritative Run cutoff.
 func (c Context) ValidateSystemAsOf(expected time.Time) error {
-    if expected.IsZero() {
-        return fmt.Errorf("expected system_as_of is required")
+    if expected.IsZero() || !isUTC(expected) {
+        return fmt.Errorf("expected system_as_of is required and must use UTC")
     }
-    if c.SystemAsOf.IsZero() || !c.SystemAsOf.Equal(expected) {
-        return fmt.Errorf("context system_as_of does not match expected cutoff")
+    if c.SystemAsOf.IsZero() || !isUTC(c.SystemAsOf) || !c.SystemAsOf.Equal(expected) {
+        return fmt.Errorf("context system_as_of does not match expected UTC cutoff")
     }
     return nil
 }
@@ -259,6 +257,9 @@ func (next Context) ValidateNextVersion(previous Context) error {
 	if next.ContextID != previous.ContextID {
 		return fmt.Errorf("context_id cannot change across versions")
 	}
+	if previous.ContextVersion == math.MaxInt64 {
+		return fmt.Errorf("context_version reached the supported integer limit")
+	}
 	if next.ContextVersion != previous.ContextVersion+1 {
 		return fmt.Errorf("context_version must increment by exactly one")
 	}
@@ -269,4 +270,9 @@ func (next Context) ValidateNextVersion(previous Context) error {
 		return fmt.Errorf("created_at cannot move backwards across Context versions")
 	}
 	return nil
+}
+
+
+func isUTC(value time.Time) bool {
+	return value.Location() == time.UTC
 }

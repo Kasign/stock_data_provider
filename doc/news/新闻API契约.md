@@ -204,3 +204,12 @@ News V2 Migration 新增 `news_authorization_snapshots`，Application 提供 app
 这里的 `payload_hash` 是数据库存储完整性校验，不等于 `decision_fingerprint` 的 GOV-CTR-006 JCS 验证。当前分支尚未接入公共 JCS Runtime Verifier，不能把结构校验或 SHA-256 原文哈希描述为 JCS 验收。
 
 该存储只证明 News 保存了某一历史授权决策快照，不证明当前策略仍允许访问。所有受限内容读取仍必须在实际读取边界重新核验当前 Source/Endpoint/Provider 策略、撤销、过期、用途与内容级别，并确保授权检查与内容读取不存在 TOCTOU 窗口。
+
+
+### 11.9 固定分页 Snapshot Store
+
+News Migration V3 新增 `news_evidence_snapshots`。Snapshot 只持久化 `news_id`、`version_id`、`observation_id` 和 `system_observed_at` 排序键，不复制新闻标题、摘要、正文或内容片段。快照固定绑定 caller、filters fingerprint、page size、system_as_of、排序版本及 15 分钟 TTL。
+
+Repository 创建时校验排序键唯一且符合 `system_observed_at DESC, news_id ASC, version_id ASC`，并限制单个快照最多 5000 条；Application 的 `PageAfter` 使用精确排序键续页，不使用 OFFSET；相同快照引用的相同 payload 可幂等重放，不同 payload 返回冲突。读取时校验 payload_hash、item_count、caller 绑定和 TTL；过期快照必须失败，不得重新生成。
+
+该 Store 目前尚未接入 Query Facade。调用方必须在创建快照前完成严格 PIT 的 `available_at <= system_as_of` 证据过滤和当前授权检查；Snapshot Store 本身不代表数据可见或内容已授权。

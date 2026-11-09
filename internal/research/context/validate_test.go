@@ -1,10 +1,13 @@
 package context
 
 import (
-    "encoding/json"
-    "strings"
-    "testing"
-    "time"
+	"bytes"
+	"encoding/json"
+	"math"
+	"os"
+	"strings"
+	"testing"
+	"time"
 )
 
 func validContext() Context {
@@ -74,6 +77,9 @@ func TestContextValidateSystemAsOf(t *testing.T) {
     value := validContext()
     if err := value.ValidateSystemAsOf(value.SystemAsOf); err != nil { t.Fatalf("matching cutoff unexpectedly failed: %v", err) }
     if err := value.ValidateSystemAsOf(value.SystemAsOf.Add(time.Second)); err == nil { t.Fatal("mismatched cutoff must fail") }
+    if err := value.ValidateSystemAsOf(value.SystemAsOf.In(time.FixedZone("non-UTC", 0))); err == nil {
+        t.Fatal("equivalent instant in a non-UTC location must fail")
+    }
 }
 
 func TestContextJSONRoundTripPreservesRequiredEmptyArrays(t *testing.T) {
@@ -135,6 +141,58 @@ func TestContextValidateNextVersionRejectsInvalidProgression(t *testing.T) {
 			err := next.ValidateNextVersion(previous)
 			if err == nil || !strings.Contains(err.Error(), tt.want) {
 				t.Fatalf("ValidateNextVersion() error = %v, want containing %q", err, tt.want)
+			}
+		})
+	}
+}
+
+
+func TestContextValidateNextVersionRejectsIntegerOverflow(t *testing.T) {
+	previous := validContext()
+	previous.ContextVersion = math.MaxInt64
+	next := previous
+	next.ContextVersion = 1
+	if err := next.ValidateNextVersion(previous); err == nil || !strings.Contains(err.Error(), "integer limit") {
+		t.Fatalf("ValidateNextVersion() error = %v, want integer limit rejection", err)
+	}
+}
+
+func TestContextGoldenJSONV1(t *testing.T) {
+	want := validContext()
+	encoded, err := json.MarshalIndent(want, "", "  ")
+	if err != nil {
+		t.Fatalf("MarshalIndent() error = %v", err)
+	}
+	encoded = append(encoded, '\n')
+
+	golden, err := os.ReadFile("testdata/context_v1.golden.json")
+	if err != nil {
+		t.Fatalf("read Context v1 golden fixture: %v", err)
+	}
+	if !bytes.Equal(encoded, golden) {
+		t.Fatalf("Context v1 JSON differs from golden fixture; update the fixture only after reviewing the public DTO contract")
+	}
+}
+
+func TestContextValidateRejectsUnsupportedSchemaVersionAndNonUTCTimes(t *testing.T) {
+	tests := []struct {
+		name   string
+		mutate func(*Context)
+		want   string
+	}{
+		{"unsupported schema version", func(c *Context) { c.SchemaVersion = "1.0.1" }, "supported version"},
+		{"non UTC context cutoff", func(c *Context) { c.SystemAsOf = c.SystemAsOf.In(time.FixedZone("UTC+8", 8*60*60)) }, "system_as_of"},
+		{"zero-offset non-UTC context cutoff", func(c *Context) { c.SystemAsOf = c.SystemAsOf.In(time.FixedZone("non-UTC", 0)) }, "system_as_of"},
+		{"non UTC created time", func(c *Context) { c.CreatedAt = c.CreatedAt.In(time.FixedZone("UTC+8", 8*60*60)) }, "created_at"},
+		{"non UTC section assembled time", func(c *Context) { c.SectionRefs[0].AssembledAt = c.SectionRefs[0].AssembledAt.In(time.FixedZone("UTC+8", 8*60*60)) }, "assembled_at"},
+		{"non UTC section cutoff", func(c *Context) { c.SectionRefs[0].SystemAsOf = c.SectionRefs[0].SystemAsOf.In(time.FixedZone("UTC+8", 8*60*60)) }, "system_as_of"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			value := validContext()
+			tt.mutate(&value)
+			if err := value.Validate(); err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("Validate() error = %v, want containing %q", err, tt.want)
 			}
 		})
 	}
