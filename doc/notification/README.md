@@ -306,3 +306,12 @@ Notification 是独立通知业务模块，负责事件接收、Subscription、T
 - Delivery 执行前与租约恢复评估均调用该校验；各自仍保留当前租约 Worker/Token/ExpiresAt 的专项校验。
 - 新增纯单元测试覆盖运行中末条记录、数量不符、终态后续 Attempt、重复 ID 与 fencing token 不递增。
 - 本次仅增加代码和测试，尚未取得该提交的 CI 执行证据；真实 MariaDB L3 不受此单测替代。
+
+
+### Delivery 与 Attempt 交叉一致性评估（2026-11-09）
+
+- 新增只读 `AssessDeliveryAttemptConsistency`，将 Delivery 当前状态与完整 Attempt 历史进行保守交叉校验。
+- `sent` 必须对应最后一次已完成的 accepted；`retry_wait` 必须对应最后一次可重试 rejected；`skipped` 有 Attempt 时必须对应 not_sent；`unknown` 允许 ambiguous 或仍运行中的 Attempt。
+- `sending` 允许无 Attempt（StartWithLease 前退出）、运行中 Attempt，以及 Attempt 已完成但 Delivery CAS 尚未完成的两阶段写入中间态；后者明确返回 intermediate，不误报损坏。
+- `queued` 保留人工重试和 not_sent 恢复语义；`blocked` 不凭 Attempt 快照单独推断矛盾。该评估不替代 StateEvent/Repository CAS 核验，也不执行修复写入。
+- 新增纯单元测试覆盖 sending/unknown 合法中间态与 sent/运行中 Attempt 的明确矛盾。CI 尚未验证。
