@@ -342,6 +342,93 @@ func TestOpenStreamPreservesRequestIDAndSafeStats(t *testing.T) {
 	}
 }
 
+func TestStreamOpenErrorClassificationCompatibility(t *testing.T) {
+	cases := []struct {
+		name string
+		err error
+		want streamOpenErrorKind
+	}{
+		{name: "response headers too large", err: errors.New("net/http: response headers exceeded 1024 bytes"), want: streamOpenErrorHeadersTooLarge},
+		{name: "TLS handshake timeout", err: errors.New("net/http: TLS handshake timeout"), want: streamOpenErrorTLSHandshakeTimeout},
+		{name: "response header timeout", err: errors.New("net/http: timeout awaiting response headers"), want: streamOpenErrorResponseHeaderTimeout},
+		{name: "unrelated error", err: errors.New("connection reset"), want: streamOpenErrorOther},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			if got := classifyStreamOpenError(test.err); got != test.want {
+				t.Fatalf("classification = %d, want %d", got, test.want)
+			}
+		})
+	}
+}
+
+func TestOpenStreamIdleTimeoutExcludesCallerProcessingTime(t *testing.T) {
+	firstWritten := make(chan struct{})
+	allowSecond := make(chan struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("first"))
+		w.(http.Flusher).Flush()
+		close(firstWritten)
+		<-allowSecond
+		_, _ = w.Write([]byte("second"))
+		w.(http.Flusher).Flush()
+	}))
+	defer server.Close()
+	client := newLocalStreamClient(t, server, 1024, 50*time.Millisecond, 1)
+	response := openLocalStream(t, client, server, context.Background(), "/caller-processing", localPolicy(server))
+	defer response.Body.Close()
+	<-firstWritten
+	buffer := make([]byte, 5)
+	if n, err := response.Body.Read(buffer); err != nil || string(buffer[:n]) != "first" {
+		t.Fatalf("first read = %q, %v", buffer[:n], err)
+	}
+	// 调用方处理数据的时间不属于一次阻塞 Read 的空闲时间。
+	time.Sleep(100 * time.Millisecond)
+	close(allowSecond)
+	buffer = make([]byte, 6)
+	if n, err := response.Body.Read(buffer); err != nil || string(buffer[:n]) != "second" {
+		t.Fatalf("second read after caller processing = %q, %v", buffer[:n], err)
+	}
+}
+
+func TestOpenStreamHTTP2CloseInterruptsBlockedRead(t *testing.T) {
+	ready := make(chan struct{})
+	server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.(http.Flusher).Flush()
+		close(ready)
+		<-r.Context().Done()
+	}))
+	server.EnableHTTP2 = true
+	server.StartTLS()
+	defer server.Close()
+	client := newLocalStreamClient(t, server, 1024, time.Second, 1)
+	serverTransport := server.Client().Transport.(*http.Transport)
+	client.transport.TLSClientConfig = serverTransport.TLSClientConfig.Clone()
+	client.transport.TLSClientConfig.ServerName = "127.0.0.1"
+	client.dial = func(ctx context.Context, network, _ string) (net.Conn, error) {
+		return (&net.Dialer{}).DialContext(ctx, network, server.Listener.Addr().String())
+	}
+	response := openLocalStream(t, client, server, context.Background(), "/h2-close-blocked-read", localPolicy(server))
+	<-ready
+	readResult := make(chan error, 1)
+	go func() {
+		var buffer [8]byte
+		_, err := response.Body.Read(buffer[:])
+		readResult <- err
+	}()
+	if err := response.Body.Close(); err != nil {
+		t.Fatalf("HTTP/2 Close failed: %v", err)
+	}
+	select {
+	case err := <-readResult:
+		if err == nil {
+			t.Fatal("HTTP/2 blocked Read unexpectedly succeeded after Close")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("HTTP/2 Close did not interrupt blocked Read")
+	}
+}
+
 func TestOpenStreamHeaderTimeoutIsClassified(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { <-r.Context().Done() }))
 	defer server.Close()

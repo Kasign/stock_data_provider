@@ -412,11 +412,39 @@ func (c *Client) streamContextFault(err error, dependency string) *fault.Fault {
 	return newStreamFault(fault.ClassUnavailable, "platform.httpclient.stream_canceled", "HTTP stream was canceled", err, dependency, false)
 }
 
+type streamOpenErrorKind uint8
+
+const (
+	streamOpenErrorOther streamOpenErrorKind = iota
+	streamOpenErrorHeadersTooLarge
+	streamOpenErrorTLSHandshakeTimeout
+	streamOpenErrorResponseHeaderTimeout
+)
+
+// classifyStreamOpenError 将 Go net/http Transport 未公开类型化的少数错误文本
+// 收敛在一个兼容层；其他错误优先通过 errors.As/Is 按类型判断。
+func classifyStreamOpenError(err error) streamOpenErrorKind {
+	if err == nil {
+		return streamOpenErrorOther
+	}
+	message := strings.ToLower(err.Error())
+	switch {
+	case strings.Contains(message, "response headers exceeded"):
+		return streamOpenErrorHeadersTooLarge
+	case strings.Contains(message, "tls handshake timeout"):
+		return streamOpenErrorTLSHandshakeTimeout
+	case strings.Contains(message, "timeout awaiting response headers"):
+		return streamOpenErrorResponseHeaderTimeout
+	default:
+		return streamOpenErrorOther
+	}
+}
+
 func (c *Client) streamOpenFault(err error, ctx context.Context, policy DestinationPolicy) *fault.Fault {
 	if ctxErr := ctx.Err(); ctxErr != nil {
 		return c.streamContextFault(ctxErr, policy.Dependency)
 	}
-	if strings.Contains(strings.ToLower(err.Error()), "response headers exceeded") {
+	if classifyStreamOpenError(err) == streamOpenErrorHeadersTooLarge {
 		return newStreamFault(fault.ClassValidation, "platform.httpclient.stream_headers_too_large", "HTTP stream response headers exceed configured limit", err, policy.Dependency, false)
 	}
 	switch {
@@ -426,11 +454,10 @@ func (c *Client) streamOpenFault(err error, ctx context.Context, policy Destinat
 		return newStreamFault(fault.ClassUnavailable, "platform.httpclient.stream_dns_failed", "HTTP stream destination DNS resolution failed", err, policy.Dependency, false)
 	}
 	retryable := policy.Idempotent && retryableTransportError(err)
-	errorText := strings.ToLower(err.Error())
-	if strings.Contains(errorText, "tls handshake timeout") {
+	switch classifyStreamOpenError(err) {
+	case streamOpenErrorTLSHandshakeTimeout:
 		return newStreamFault(fault.ClassTimeout, "platform.httpclient.stream_tls_handshake_timeout", "HTTP stream TLS handshake timed out", err, policy.Dependency, retryable)
-	}
-	if strings.Contains(errorText, "timeout awaiting response headers") {
+	case streamOpenErrorResponseHeaderTimeout:
 		return newStreamFault(fault.ClassTimeout, "platform.httpclient.stream_header_timeout", "HTTP stream response headers timed out", err, policy.Dependency, retryable)
 	}
 	var operationError *net.OpError
