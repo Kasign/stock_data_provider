@@ -518,8 +518,8 @@ func TestResponsesAdapterStreamCancellationPreservesPartialOutput(t *testing.T) 
 	streamDoer := HTTPStreamDoerFunc(func(context.Context, *http.Request) (*HTTPStreamResponse, error) {
 		return &HTTPStreamResponse{
 			StatusCode: http.StatusOK,
-			Header: http.Header{"Content-Type": []string{"text/event-stream"}},
-			Body: body,
+			Header:     http.Header{"Content-Type": []string{"text/event-stream"}},
+			Body:       body,
 		}, nil
 	})
 	adapter, err := NewResponsesAdapterWithStream(provider, secret,
@@ -620,7 +620,7 @@ func TestResponsesAdapterStreamReturnsConsumerErrorUnchanged(t *testing.T) {
 	}, "\n")
 	callbackErr := &AdapterError{Info: adapterError(ErrorCancelled, "consumer.cancelled", false, nil)}
 	streamDoer := HTTPStreamDoerFunc(func(context.Context, *http.Request) (*HTTPStreamResponse, error) {
-		return &HTTPStreamResponse{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": []string{"text/event-stream"}}, Body: io.NopCloser(strings.NewReader(sse))}, nil
+		return &HTTPStreamResponse{StatusCode: http.StatusOK, Header:     http.Header{"Content-Type": []string{"text/event-stream"}}, Body: io.NopCloser(strings.NewReader(sse))}, nil
 	})
 	adapter, err := NewResponsesAdapterWithStream(provider, secret,
 		doerFunc(func(*http.Request) (*http.Response, error) { return nil, errors.New("unused") }),
@@ -645,7 +645,7 @@ func TestResponsesAdapterStreamMapsPlatformReadFailureAndPreservesPartialOutput(
 		"",
 	}, "\n"))
 	streamDoer := HTTPStreamDoerFunc(func(context.Context, *http.Request) (*HTTPStreamResponse, error) {
-		return &HTTPStreamResponse{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": []string{"text/event-stream"}}, Body: io.NopCloser(&errorAfterSSEDataReader{data: partial, err: readErr})}, nil
+		return &HTTPStreamResponse{StatusCode: http.StatusOK, Header:     http.Header{"Content-Type": []string{"text/event-stream"}}, Body: io.NopCloser(&errorAfterSSEDataReader{data: partial, err: readErr})}, nil
 	})
 	adapter, err := NewResponsesAdapterWithStream(provider, secret,
 		doerFunc(func(*http.Request) (*http.Response, error) { return nil, errors.New("unused") }),
@@ -731,8 +731,8 @@ func TestResponsesAdapterStreamEnforcesProviderResponseLimitAndClosesBody(t *tes
 	streamDoer := HTTPStreamDoerFunc(func(context.Context, *http.Request) (*HTTPStreamResponse, error) {
 		return &HTTPStreamResponse{
 			StatusCode: http.StatusOK,
-			Header: http.Header{"Content-Type": []string{"text/event-stream"}},
-			Body: body,
+			Header:     http.Header{"Content-Type": []string{"text/event-stream"}},
+			Body:       body,
 		}, nil
 	})
 	adapter, err := NewResponsesAdapterWithStream(provider, secret,
