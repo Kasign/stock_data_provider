@@ -19,9 +19,9 @@ func (j fixedRetryJitter) Below(upper time.Duration) (time.Duration, error) {
 func TestCalculateRetryAtUsesAllowlistAndAttemptLimit(t *testing.T) {
 	now := time.Date(2026, 11, 9, 10, 0, 0, 0, time.UTC)
 	policy := template.RetryPolicy{
-		MaxAttempts: 3,
+		MaxAttempts:          3,
 		RetryableReasonCodes: []string{"provider_unavailable"},
-		Backoff: template.BackoffPolicy{Algorithm: "exponential_full_jitter_v1", BaseDelayMS: 1000, MaxDelayMS: 5000},
+		Backoff:              template.BackoffPolicy{Algorithm: "exponential_full_jitter_v1", BaseDelayMS: 1000, MaxDelayMS: 5000},
 	}
 	got, allowed, err := CalculateRetryAt(policy, 1, []string{"provider_unavailable"}, now, fixedRetryJitter(250*time.Millisecond))
 	if err != nil || !allowed || !got.Equal(now.Add(250*time.Millisecond)) {

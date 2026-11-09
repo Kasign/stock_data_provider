@@ -37,6 +37,7 @@ type workerExecutorFake struct {
 	result StageExecutionResult
 	err    error
 }
+
 func (f workerExecutorFake) ExecuteStage(context.Context, StageExecutionRequest) (StageExecutionResult, error) {
 	return f.result, f.err
 }
@@ -96,7 +97,7 @@ func TestWorkerRejectsInvalidSnapshot(t *testing.T) {
 }
 func TestWorkerDoesNotCommitExecutorError(t *testing.T) {
 	store, _ := newWorkerFixture()
-	w, err := NewWorker(store, workerExecutorFake{err: errors.New("provider unavailable")}, workerClockFake{}, WorkerConfig{WorkerID: "worker-1", LeaseDuration: time.Minute, HeartbeatInterval: time.Second, MaxAttempts: 3, MaxParallel: 2})
+	w, err := NewWorker(store, workerExecutorFake{err: errors.New("provider unavailable")}, workerClockFake{}, WorkerConfig{WorkerID: "worker-1", LeaseDuration: time.Minute, HeartbeatInterval: time.Second, MaxParallel: 2})
 	if err != nil {
 		t.Fatal(err)
 	}
