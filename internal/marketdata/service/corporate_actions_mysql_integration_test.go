@@ -198,10 +198,12 @@ func TestRefreshAdjustmentFactorsFallsBackFromEmptyAndInvalidProviderBatch(t *te
 		QualityReasons: []string{"available_at_not_provided"},
 	}
 	emptyProvider := &adjustmentFactorFixtureProvider{name: "refresh-factor-empty"}
-	invalidProvider := &adjustmentFactorFixtureProvider{name: "refresh-factor-invalid", values: []model.AdjustmentFactor{
-		{Symbol: "688009.SH", TradeDate: "2026-11-06", Factor: 0, Basis: model.AdjustmentFactorShared,
-			Source: "refresh-factor-invalid", SourceVersion: "fixture-v1", FetchedAt: now},
-	}}
+	duplicateA := valid
+	duplicateA.Source = "refresh-factor-duplicate"
+	duplicateA.Factor = 1.01
+	duplicateB := duplicateA
+	duplicateB.Factor = 1.02
+	invalidProvider := &adjustmentFactorFixtureProvider{name: duplicateA.Source, values: []model.AdjustmentFactor{duplicateA, duplicateB}}
 	validProvider := &adjustmentFactorFixtureProvider{name: valid.Source, values: []model.AdjustmentFactor{valid}}
 	svc := &DataService{
 		providers: []provider.NamedProvider{emptyProvider, invalidProvider, validProvider},
@@ -209,13 +211,13 @@ func TestRefreshAdjustmentFactorsFallsBackFromEmptyAndInvalidProviderBatch(t *te
 	}
 	got, err := svc.RefreshAdjustmentFactors(ctx, valid.Symbol, valid.TradeDate, valid.TradeDate)
 	if err != nil {
-		t.Fatalf("RefreshAdjustmentFactors should continue after empty/invalid batches: %v", err)
+		t.Fatalf("RefreshAdjustmentFactors should continue after empty/duplicate-identity batches: %v", err)
 	}
 	if len(got) != 1 || got[0].Source != valid.Source || got[0].Factor != valid.Factor {
 		t.Fatalf("unexpected fallback result: %+v", got)
 	}
 	if emptyProvider.calls != 1 || invalidProvider.calls != 1 || validProvider.calls != 1 {
-		t.Fatalf("unexpected provider call counts: empty=%d invalid=%d valid=%d",
+		t.Fatalf("unexpected provider call counts: empty=%d duplicate=%d valid=%d",
 			emptyProvider.calls, invalidProvider.calls, validProvider.calls)
 	}
 	persisted, err := store.ListAdjustmentFactorsAsOf(ctx, valid.Symbol, valid.TradeDate, valid.TradeDate, time.Now().UTC())
