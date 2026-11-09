@@ -71,10 +71,9 @@ func ComposeModelInput(
 	if err != nil {
 		return ComposedModelInput{}, fmt.Errorf("%w: invalid context plan: %v", ErrInvalidModelInput, err)
 	}
-	if tokenizer == nil || expectedModelID == "" || expectedModelID != strings.TrimSpace(expectedModelID) ||
-		tokenizer.ModelID() != expectedModelID || tokenizer.Version() == "" ||
-		tokenizer.Version() != strings.TrimSpace(tokenizer.Version()) {
-		return ComposedModelInput{}, ErrTokenizerUnavailable
+	provenance, err := validateTokenizer(tokenizer, expectedModelID)
+	if err != nil {
+		return ComposedModelInput{}, err
 	}
 
 	candidateByID := make(map[string]SectionCandidate, len(candidates))
@@ -141,6 +140,6 @@ func ComposeModelInput(
 	}
 	return ComposedModelInput{
 		Text: string(serialized), TokenCount: tokenCount,
-		Tokenizer: TokenizerProvenance{ModelID: expectedModelID, Version: tokenizer.Version()},
+		Tokenizer: provenance,
 	}, nil
 }

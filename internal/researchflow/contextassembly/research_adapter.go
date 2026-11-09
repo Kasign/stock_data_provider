@@ -275,6 +275,9 @@ func AssembleResearchContextWithTokenizer(
 	if err != nil {
 		return ResearchContextAssembly{}, err
 	}
+	if modelInput.Tokenizer != provenance {
+		return ResearchContextAssembly{}, ErrTokenizerUnavailable
+	}
 	return ResearchContextAssembly{
 		Command: command, Plan: plan, ModelInput: modelInput,
 		Tokenizer: provenance, AvailableTokens: available,
