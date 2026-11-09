@@ -56,55 +56,6 @@ HEALTHCHECK --interval=20s --timeout=5s --retries=3 --start-period=15s CMD wget 
 ENTRYPOINT ["/usr/local/bin/market-data"]
 """, encoding="utf-8")
 
-# 更新现有 Go CI：Data 独立测试不再依赖全仓测试；MariaDB 测试与 Docker 构建切换到根 Module。
-workflow = Path(".github/workflows/go-test.yml")
-if workflow.exists():
-    text = workflow.read_text(encoding="utf-8")
-    text = text.replace("          - services/market-data\n", "")
-    text = text.replace(
-        "          grep -Fxq 'module github.com/Kasign/stock_data_provider/services/market-data' services/market-data/go.mod",
-        "          test ! -f services/market-data/go.mod"
-    )
-    text = text.replace("cache-dependency-path: services/market-data/go.sum", "cache-dependency-path: go.sum")
-    text = text.replace("working-directory: services/market-data", "working-directory: .")
-    text = text.replace("./internal/repository -run", "./internal/marketdata/repository -run")
-    text = text.replace("./internal/service -run", "./internal/marketdata/service -run")
-    text = text.replace("./internal/httpapi -run", "./internal/marketdata/httpapi -run")
-    text = text.replace(
-        "docker build --tag stock-analysis-data:ci --file services/market-data/Dockerfile services/market-data",
-        "docker build --tag stock-analysis-data:ci --file services/market-data/Dockerfile ."
-    )
-    if "  market-data-module-test:" not in text:
-        anchor = "  market-data-mariadb-integration:\n"
-        job = """  market-data-module-test:
-    name: Test Market Data in root module
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: '1.23.x'
-          cache: true
-      - name: Check Market Data gofmt
-        run: |
-          files="$(gofmt -l ./internal/marketdata ./cmd/market-data)"
-          if [[ -n "$files" ]]; then
-            printf '%s\\n' "$files"
-            exit 1
-          fi
-      - name: Run Market Data tests
-        run: go test ./internal/marketdata/... ./cmd/market-data/...
-      - name: Run Market Data race detector
-        run: go test -race ./internal/marketdata/... ./cmd/market-data/...
-      - name: Run Market Data vet
-        run: go vet ./internal/marketdata/... ./cmd/market-data/...
-
-"""
-        text = text.replace(anchor, job + anchor)
-    workflow.write_text(text, encoding="utf-8")
-
 # Compose 保留双容器部署作为迁移期回滚方式，但 Data 镜像从根 Module 构建。
 compose = Path("docker-compose.yml")
 if compose.exists():

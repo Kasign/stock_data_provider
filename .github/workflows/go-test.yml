@@ -45,23 +45,28 @@ concurrency:
 
 jobs:
   migrate-market-data-module:
-    if: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/feat/full-go-data-providers-api-switch') || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'feat/full-go-data-providers-api-switch') }}
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/feat/full-go-data-providers-api-switch' }}
     name: Migrate Market Data into root Go module
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      actions: write
+    outputs:
+      migration_committed: ${{ steps.commit.outputs.changed }}
     steps:
       - name: Check out Data migration branch
         uses: actions/checkout@v4
         with:
-          ref: feat/full-go-data-providers-api-switch
+          ref: ${{ github.sha }}
           repository: ${{ github.repository }}
           fetch-depth: 0
       - name: Run one-time source migration
         run: bash scripts/migrate-market-data-module.sh
       - name: Commit and push migration
+        id: commit
         run: |
           if git diff --cached --quiet; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
             echo "No migration changes."
             exit 0
           fi
@@ -69,6 +74,12 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git commit -m "refactor(api): 迁移 Market Data 到根 Go Module"
           git push origin HEAD:refs/heads/feat/full-go-data-providers-api-switch
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+      - name: Trigger validation for migrated commit
+        if: ${{ steps.commit.outputs.changed == 'true' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run go-test.yml --ref feat/full-go-data-providers-api-switch
 
   test:
     name: Test ${{ matrix.module }}
@@ -79,7 +90,6 @@ jobs:
         module:
           - .
           - go-core
-          - services/market-data
     defaults:
       run:
         shell: bash
@@ -95,7 +105,11 @@ jobs:
             exit 1
           fi
           grep -Fxq 'module github.com/Kasign/stock_data_provider/go-core' go-core/go.mod
-          grep -Fxq 'module github.com/Kasign/stock_data_provider/services/market-data' services/market-data/go.mod
+          if [[ -f services/market-data/go.mod ]]; then
+            grep -Fxq 'module github.com/Kasign/stock_data_provider/services/market-data' services/market-data/go.mod
+          else
+            test ! -d services/market-data/internal
+          fi
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
@@ -125,6 +139,32 @@ jobs:
         working-directory: ${{ matrix.module }}
         run: go vet ./...
 
+  market-data-module-test:
+    if: ${{ hashFiles('services/market-data/go.mod') == '' }}
+    name: Test Market Data in root module
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: true
+      - name: Check Market Data gofmt
+        run: |
+          files="$(gofmt -l ./internal/marketdata ./cmd/market-data)"
+          if [[ -n "$files" ]]; then
+            printf '%s\\n' "$files"
+            exit 1
+          fi
+      - name: Run Market Data tests
+        run: go test ./internal/marketdata/... ./cmd/market-data/...
+      - name: Run Market Data race detector
+        run: go test -race ./internal/marketdata/... ./cmd/market-data/...
+      - name: Run Market Data vet
+        run: go vet ./internal/marketdata/... ./cmd/market-data/...
+
   market-data-mariadb-integration:
     name: Market-data MariaDB migration and PIT persistence
     runs-on: ubuntu-latest
@@ -149,27 +189,43 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: '1.23.x'
-          cache-dependency-path: services/market-data/go.sum
+          cache-dependency-path: go.sum
       - name: Run MariaDB migration and PIT persistence integration
-        working-directory: services/market-data
         env:
           MARKET_DATA_TEST_MYSQL_DSN: "root:market-data-ci@tcp(127.0.0.1:3306)/market_data_test?parseTime=true&loc=UTC"
-        run: go test ./internal/repository -run TestMariaDBRevisionPersistenceAndPointInTimeQueries -count=1 -v
+        run: |
+          if [[ -f services/market-data/go.mod ]]; then
+            (cd services/market-data && go test ./internal/repository -run TestMariaDBRevisionPersistenceAndPointInTimeQueries -count=1 -v)
+          else
+            go test ./internal/marketdata/repository -run TestMariaDBRevisionPersistenceAndPointInTimeQueries -count=1 -v
+          fi
       - name: Run DataService MariaDB daily-bar fallback integration
-        working-directory: services/market-data
         env:
           MARKET_DATA_TEST_MYSQL_DSN: "root:market-data-ci@tcp(127.0.0.1:3306)/market_data_test?parseTime=true&loc=UTC"
-        run: go test ./internal/service -run TestDailyBarsMariaDBFallbackPreservesNormalizationWarnings -count=1 -v
+        run: |
+          if [[ -f services/market-data/go.mod ]]; then
+            (cd services/market-data && go test ./internal/service -run TestDailyBarsMariaDBFallbackPreservesNormalizationWarnings -count=1 -v)
+          else
+            go test ./internal/marketdata/service -run TestDailyBarsMariaDBFallbackPreservesNormalizationWarnings -count=1 -v
+          fi
       - name: Run DataService PIT revision fallback integration
-        working-directory: services/market-data
         env:
           MARKET_DATA_TEST_MYSQL_DSN: "root:market-data-ci@tcp(127.0.0.1:3306)/market_data_test?parseTime=true&loc=UTC"
-        run: go test ./internal/service -run 'Test(AdjustmentFactors|CorporateActions)AsOfFallsBackToLatestProviderVisibleRevision' -count=1 -v
+        run: |
+          if [[ -f services/market-data/go.mod ]]; then
+            (cd services/market-data && go test ./internal/service -run 'Test(AdjustmentFactors|CorporateActions)AsOfFallsBackToLatestProviderVisibleRevision' -count=1 -v)
+          else
+            go test ./internal/marketdata/service -run 'Test(AdjustmentFactors|CorporateActions)AsOfFallsBackToLatestProviderVisibleRevision' -count=1 -v
+          fi
       - name: Run Probe HTTP and MariaDB end-to-end integration
-        working-directory: services/market-data
         env:
           MARKET_DATA_TEST_MYSQL_DSN: "root:market-data-ci@tcp(127.0.0.1:3306)/market_data_test?parseTime=true&loc=UTC"
-        run: go test ./internal/httpapi -run TestProviderProbeHTTPMariaDBEndToEnd -count=1 -v
+        run: |
+          if [[ -f services/market-data/go.mod ]]; then
+            (cd services/market-data && go test ./internal/httpapi -run TestProviderProbeHTTPMariaDBEndToEnd -count=1 -v)
+          else
+            go test ./internal/marketdata/httpapi -run TestProviderProbeHTTPMariaDBEndToEnd -count=1 -v
+          fi
 
   news-mariadb-integration:
     name: News MariaDB Repository and Migration integration
@@ -214,7 +270,12 @@ jobs:
       - name: Check deploy script syntax
         run: bash -n scripts/deploy-go.sh
       - name: Build Go market-data image
-        run: docker build --tag stock-analysis-data:ci --file services/market-data/Dockerfile services/market-data
+        run: |
+          if [[ -f services/market-data/go.mod ]]; then
+            docker build --tag stock-analysis-data:ci --file services/market-data/Dockerfile services/market-data
+          else
+            docker build --tag stock-analysis-data:ci --file services/market-data/Dockerfile .
+          fi
       - name: Build Go analysis API image
         if: ${{ !cancelled() }}
         run: docker build --tag stock-analysis-server:ci --file Dockerfile .
