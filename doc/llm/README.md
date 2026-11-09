@@ -72,3 +72,5 @@ internal/llm/
 - Usage 明细增加 cached_tokens / reasoning_tokens 的负值与越界诊断，保留上游原值和来源，不伪造修正值。
 
 - 最新 CI 的根模块 gofmt 清单已不再包含任何 `internal/llm/**` 文件；但根模块仍被 News、Notification、Quant、Research、Researchflow 文件阻断，根模块 go test/race/vet 未执行。
+
+- 最新 CI：`42558267262`。根模块 gofmt 清单已不再包含 `internal/llm/**`；当前仍由 News、Notification、Quant、Research、Researchflow 文件阻断，根模块依赖下载、go test、race、vet 均跳过。该 CI 只能证明 LLM 文件格式检查通过，不能证明 LLM 构建/测试通过。
