@@ -10,7 +10,7 @@ import (
 
 type runReaderStub struct {
 	result CreateRunResult
-	err error
+	err    error
 	called string
 }
 
@@ -32,7 +32,9 @@ func validReadResult() CreateRunResult {
 func TestGetRunReturnsValidatedAggregate(t *testing.T) {
 	reader := &runReaderStub{result: validReadResult()}
 	service, err := NewGetRunService(reader)
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	got, err := service.GetRun(context.Background(), "run-1")
 	if err != nil { t.Fatal(err) }
 	if got.Run.Ref != "run-1" || len(got.Stages) != 1 || reader.called != "run-1" {
@@ -48,25 +50,31 @@ func TestGetRunRejectsInvalidReferenceBeforeStorage(t *testing.T) {
 			t.Fatalf("GetRun(%q) error = %v, want ErrInvalidCommand", ref, err)
 		}
 	}
-	if reader.called != "" { t.Fatal("invalid Run reference reached Storage") }
+	if reader.called != "" {
+		t.Fatal("invalid Run reference reached Storage")
+	}
 }
 
 func TestGetRunRejectsCrossRunAndDuplicateStages(t *testing.T) {
-	cases := []struct{name string; stages []domain.Stage}{
-		{name: "cross run", stages: []domain.Stage{{Ref:"stage-1", RunRef:"other", Code:"context", Version:1}}},
+	cases := []struct {
+		name   string
+		stages []domain.Stage
+	}{
+		{name: "cross run", stages: []domain.Stage{{Ref: "stage-1", RunRef: "other", Code: "context", Version: 1}}},
 		{name: "duplicate ref", stages: []domain.Stage{
-			{Ref:"stage-1", RunRef:"run-1", Code:"context", Version:1},
-			{Ref:"stage-1", RunRef:"run-1", Code:"quant", Version:1},
+			{Ref: "stage-1", RunRef: "run-1", Code: "context", Version: 1},
+			{Ref: "stage-1", RunRef: "run-1", Code: "quant", Version: 1},
 		}},
 		{name: "duplicate code", stages: []domain.Stage{
 			{Ref:"stage-1", RunRef:"run-1", Code:"context", Version:1},
-			{Ref:"stage-2", RunRef:"run-1", Code:"context", Version:1},
+			{Ref: "stage-2", RunRef: "run-1", Code: "context", Version: 1},
 		}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			result := validReadResult(); result.Stages = tc.stages
-			service, _ := NewGetRunService(&runReaderStub{result:result})
+			result := validReadResult()
+			result.Stages = tc.stages
+			service, _ := NewGetRunService(&runReaderStub{result: result})
 			if _, err := service.GetRun(context.Background(), "run-1"); err == nil {
 				t.Fatal("expected inconsistent Stage set to be rejected")
 			}
@@ -85,7 +93,7 @@ func TestGetRunRequiresResultSummaryForTerminalRun(t *testing.T) {
 
 func TestGetRunPropagatesStorageError(t *testing.T) {
 	want := errors.New("storage unavailable")
-	service, _ := NewGetRunService(&runReaderStub{err:want})
+	service, _ := NewGetRunService(&runReaderStub{err: want})
 	if _, err := service.GetRun(context.Background(), "run-1"); !errors.Is(err, want) {
 		t.Fatalf("GetRun error = %v, want wrapped storage error", err)
 	}
