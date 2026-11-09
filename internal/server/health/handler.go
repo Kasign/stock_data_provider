@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"time"
 
 	serverdiagnostics "example.com/stock-analysis-flow/internal/server/diagnostics"
 )
@@ -28,27 +29,30 @@ func NewHandler(checker readinessChecker) (*Handler, error) {
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		w.Header().Set("Allow", "GET, HEAD")
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		writeJSON(w, r, http.StatusMethodNotAllowed, map[string]any{
+			"error": map[string]string{"code": "method_not_allowed", "message": "method not allowed"},
+		})
 		return
 	}
 
 	switch r.URL.Path {
 	case "/healthz":
-		writeJSON(w, r, http.StatusOK, map[string]string{"status": "ok"})
+		writeJSON(w, r, http.StatusOK, map[string]any{"status": "ok", "time": time.Now().UTC()})
 	case "/readyz":
 		report, err := h.checker.Run(r.Context())
-		if err != nil {
-			writeJSON(w, r, http.StatusServiceUnavailable, serverdiagnostics.Readiness{
-				Ready: false, ReasonCode: "server.readiness.diagnostics_failed",
-				SafeMessage: "Readiness diagnostics could not be completed",
+		if err != nil || !report.Readiness.Ready {
+			writeJSON(w, r, http.StatusServiceUnavailable, map[string]any{
+				"error": map[string]string{
+					"code": "dependencies_unready", "message": "one or more dependencies are unavailable",
+				},
 			})
 			return
 		}
-		status := http.StatusOK
-		if !report.Readiness.Ready {
-			status = http.StatusServiceUnavailable
-		}
-		writeJSON(w, r, status, report.Readiness)
+		writeJSON(w, r, http.StatusOK, map[string]any{
+			"status": "ready",
+			"dependencies": map[string]string{"mariadb": "ok", "redis": "ok"},
+			"time": time.Now().UTC(),
+		})
 	default:
 		http.NotFound(w, r)
 	}
@@ -56,6 +60,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 func writeJSON(w http.ResponseWriter, r *http.Request, status int, value any) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(status)
 	if r.Method == http.MethodHead {
