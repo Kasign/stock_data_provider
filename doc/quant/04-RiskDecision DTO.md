@@ -21,4 +21,4 @@ DTO Validate 只校验结构、枚举、必需字段和时间格式，不推导 
 
 ## 验收
 
-Go 强类型 DTO、单元测试、Draft 2020-12 Schema 编译测试和 Golden 校验已加入源码。尚未取得当前 SHA CI 证据；本阶段不代表 QNT-010 规则引擎、真实数据风险评估或运行时授权验收完成。
+Go 强类型 DTO、单元测试、Draft 2020-12 Schema 编译测试和 Golden 校验已加入源码，并由 Quant 独立 Workflow `42598371072` 在 SHA `471dae4e8b55e999719a691c7761df3cee8f8e8c` 上执行通过（覆盖 Quant 全包测试、gofmt、Manifest 30 秒随机 Fuzz、Race 和 Vet）。当前分支 HEAD `41fc0dc0dcffae90f3ba82a4179729d0d348ceb8` 后续只有文档提交，没有 Quant 代码变化；该证据不是对当前 HEAD 直接触发的 CI。本阶段不代表 QNT-010 具体领域规则、真实数据风险评估、可信授权或跨模块集成验收完成。
