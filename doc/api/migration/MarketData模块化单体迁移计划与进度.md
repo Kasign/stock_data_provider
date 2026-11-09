@@ -7,7 +7,8 @@
 - 跨模块准入：`doc/整体任务规划/01-项目总览/跨模块接入执行说明.md`、`doc/整体任务规划/01-项目总览/跨模块接入准入清单.md`
 - 本记录建立时的代码基线：`d8595f408337f62be3697aac661ba1570fdd3667`
 - 最近一次 M0 审计基线：`9687337743ff5ad8b5b81209831d43689693ae47`
-- 当前实施状态：`M1_in_progress`（M1-1 已完成；M1-2 源码归并提交 `0076f99b88e8`，等待根 Module CI 验收）
+- 当前开发分支 HEAD（2026-11-09 07:22:59 UTC）：`db69e4a17967e450a8b6cf1d7417df625c1bf0ea`（增加共享 go-redis Cache 适配器）
+- 当前实施状态：`M1_completed / M2_completed / M3_in_progress / M4_in_progress`；M3 的 Data 侧进程内路由准备已完成，Root Server 实际装配仍待 Server 组合根完成；M4 的 borrowed DB 与 go-redis Cache Adapter 已实现，Root 侧资源注入/配置一致性及 Provider 网络出口适配仍未完成。
 
 > 本文记录 Data 从独立 Go Module/服务迁入 Root Server 根 Go Module、同进程运行的实施计划和进度。若本文与上述架构决策文档冲突，以架构决策文档为准；公共平台及 DATA 契约以冻结契约文档为准。本文不重新定义契约。
 
@@ -414,14 +415,14 @@ internal/
 
 | 阶段 | 状态 | 说明 |
 |---|---|---|
-| M0 迁移前审计 | in_progress | 审计范围已冻结；仅剩 CT-05 一次性参数差异核对、Provider 请求安全证据、生产 DDL 外部证据和 integration 验收 |
-| M1 Go Module 归并 | in_progress | M1-2 已完成源码/命令/配置目录归并与嵌套 Module 删除；等待 Data 根 Module CI、MariaDB/PIT 与迁移后 Docker 验收 |
-| M2 Application Port/Bootstrap | pending | M1 完成后执行 |
-| M3 Root Server 装配 | pending | M2 完成后执行 |
-| M4 共享资源统一 | pending | 按 M3/M4 资源所有权方案执行，复用 Platform 公共能力 |
-| M5 部署/WebUI 切换 | pending | M4 验收后执行 |
-| M6 迁移验收 | pending | 结构迁移、真实数据和部署验收 |
-| 公共平台契约接入 | blocked_by_migration | 按冻结契约接入；不得复制 Platform 能力 |
+| M0 迁移前审计 | in_progress（收敛） | M0-A/M0-B 已完成；M0-C 等待脱敏生产 DDL；M0-D 的 Root 全仓门禁受其他模块 gofmt 阻断，不阻断 Data 独立开发 |
+| M1 Go Module 归并 | completed（代码归并） | Data 源码已位于根 Module 的 `internal/marketdata/**`；根 `go.mod` 为 Go 1.23.0；当前 Data 根模块 gofmt/test/race/vet 专项通过 |
+| M2 Application Port/Bootstrap | completed（Data 侧） | M2-1～M2-6 已完成：Application Port、Bootstrap、Worker 生命周期、HTTP 用例接口拆分、来源能力快照和 Migration Runner |
+| M3 Root Server 装配 | in_progress | Data 已提供 `InProcessHandler()`、Application Port 和 `MigrationRunner()`；Root Router、共享资源注入、Remote→InProcess 切换属于 Server 组合根任务，本分支不越界修改 |
+| M4 共享资源统一 | in_progress | Data Repository borrowed DB 与 `cache.NewGoRedis` 已实现；Root 侧实际注入、Redis 配置匹配/独立 Client 所有权、Platform HTTP Client 和 TCP 出站策略仍待完成 |
+| M5 部署/WebUI 切换 | pending | Root 同进程装配和共享资源验收后执行 |
+| M6 迁移验收 | pending | 结构迁移、API/PIT/质量、真实 Provider 和部署验收分开形成证据 |
+| 公共平台契约接入 | in_progress（按依赖） | 当前分支已有 Platform 基础代码；Data 仅适配已冻结能力，不复制 HTTP Client、Diagnostics Runner、Storage 等公共实现 |
 
 ### 变更记录模板
 
@@ -838,3 +839,19 @@ internal/
 - 原自定义 RESP Adapter 保留给独立兼容部署，Root 同进程装配不再使用每条命令单独 Dial 的实现。
 - 新增 fake go-redis 命令测试，覆盖命中/未命中、TTL、value 和 Ping 错误语义；不新增 Redis key、缓存字段或公共平台代码。
 - Root 与 Data Redis 配置是否完全一致、是否复用同一 Client，由后续 Root Bootstrap 按 Addr/Username/Password/DB 明确判定；不匹配时由组合根创建并关闭独立 Client。
+
+
+### 2026-11-09：当前 HEAD 与 M4 Redis 适配状态校准
+
+- 当前分支 HEAD：`db69e4a17967e450a8b6cf1d7417df625c1bf0ea`；最新提交新增 `internal/marketdata/cache.GoRedis`，将 Root 已持有的 go-redis Client 适配到 Data 既有 `cache.Cache`。
+- 适配边界：Data 不创建、Ping 或关闭 Redis Client；Root 负责 Client 生命周期。GET 的 `redis.Nil` 映射为 cache miss；其他错误透传；SET 保留既有 value/TTL 约束；不新增 Cache key、业务字段或 API。
+- 最新 PR Go suite Run `42579001733`（PR merge SHA `b9aa94f7358f8698b2f74c9c8f4c568bb08c0c85`）：Data 根模块 Job `129033111561` 的 gofmt、tests、race、vet 全部通过；MariaDB Migration/PIT Job `129033111558` 通过。说明 Data 专项编译/测试没有被本次 Redis Adapter 阻断。
+- 同一 Run 的 Root `Test .` Job `129033111530` 在全仓 gofmt 阶段失败，定位为 Research 文件 `internal/research/context/validate.go` 的非法反斜杠，以及 `internal/research/evidence/authorization.go` 的 NUL 字节；Root 测试/race/vet 因前置格式检查失败而 skipped。该失败不归属 Data，本分支不修改 Research。
+- 同一批次 Docker/Compose Job skipped；因此本 SHA 没有新的镜像构建证据。WebUI checks 失败属于 WebUI Owner；Platform Go checks 与 Go/Python parity 通过。Live Provider workflow 外层 success 不自动代表历史 Provider 专项已运行或真实数据验收通过。
+- M1/M2 的 Data 侧代码迁移与装配准备已具备；M3 尚未完成 Root Server 实际挂载，M4 尚未完成共享 Redis Client 实际注入及配置一致性验证。
+- 下一步边界：
+  1. 当前分支继续完成 Data 侧 M4：核对 `GoRedis` 与既有 Cache 行为的完整错误/TTL/禁用语义；只补真实缺陷，不增加第二套缓存抽象。
+  2. Root 侧共享 Redis Client 创建、Addr/Username/Password/DB 匹配、借用或独立 Client 生命周期，由 Server 组合根负责；本分支不修改 `cmd/analysis-api` 或 `internal/server/**`。
+  3. Provider HTTP 出站接入复用 `internal/platform/httpclient` 的 BoundDoer/DestinationPolicy；逐 Provider 明确 endpoint Host/Port、HTTP/HTTPS、重定向和请求体/响应限制。不得在 Data 重写 SSRF、DNS/IP 或连接池能力。
+  4. BaoStock/Pytdx TCP 出站策略单独处理，不包装成 HTTP，也不扩大 HTTP Client 职责。
+  5. M3/M4 代码集成验收仍按用户要求在 `origin/integration` 执行；本分支不执行构建、不修改 integration。
