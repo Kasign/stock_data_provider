@@ -3,6 +3,7 @@ package application
 import (
 	"context"
 	"errors"
+	"math"
 	"time"
 
 	"example.com/stock-analysis-flow/internal/notification/domain"
@@ -80,6 +81,9 @@ func (s *DeliveryExecutionService) Execute(
 	}
 	if err := ctx.Err(); err != nil {
 		return output, err
+	}
+	if math.IsNaN(randomUnit) || math.IsInf(randomUnit, 0) || randomUnit < 0 || randomUnit >= 1 {
+		return output, ErrRetryNotApplicable
 	}
 	if event.EventID != claim.Delivery.EventID ||
 		event.SourceModule != claim.Delivery.SourceModule ||
