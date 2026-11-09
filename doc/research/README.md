@@ -61,7 +61,7 @@ R1/R2/R3/R5 当前实现 Context、Evidence、Event、Claim/Hypothesis 领域结
 
 ## 当前契约状态
 
-- Context：字段依据 `doc/整体任务规划/03-模块接口契约/Quant-Research公开DTO字段级契约.md` 第 3.1、9.1、9.2、9.8 节；已实现结构校验和 ValidateNextVersion 版本链校验，但尚无专属冻结 Schema/Golden；SQL Repository 已支持事务追加和版本链校验，尚待真实 MariaDB 验收。本模块当前实现是领域校验模型，不代表跨模块契约已冻结。
+- Context：字段依据 `doc/整体任务规划/03-模块接口契约/Quant-Research公开DTO字段级契约.md` 第 3.1、9.1、9.2、9.8 节；已实现结构校验、ValidateNextVersion 版本链校验及 Context v1.0.0 内部 JSON Golden 字节级回归测试（待执行）。该 Golden 是内部回归基线，不代表正式 JSON Schema 或跨模块契约已冻结；SQL Repository 已支持事务追加和版本链校验，尚待真实 MariaDB 验收。
 - Evidence：遵循项目级 `RSC-CTR-001` Evidence Schema/Golden；已实现 Go Domain、结构校验、JCS/SHA-256 内容指纹和严格 PIT 本地校验。当前补充 GOV-CTR-006 AuthorizationRef/PolicySnapshot 结构绑定、策略 tuple 校验、decision_fingerprint 复算及可信调用主体/资源/用途/内容级别绑定校验；这些本地校验不等于 Owner 当前授权复核或授权签发。真实来源接入仍未完成。该契约属于 Evidence，不属于 Context。
 - AuthorizationRef：只验证不可变快照结构和指纹，并绑定 Adapter 提供的可信调用上下文；不把引用当 bearer token，不以历史 allowed 代替读取时 Owner 当前策略复核。
 - News → Research 只读证据查询：目标契约尚未实现/冻结；不得据此宣称真实新闻接入通过。
@@ -152,3 +152,11 @@ R1/R2/R3/R5 当前实现 Context、Evidence、Event、Claim/Hypothesis 领域结
 - 锁等待取消故障注入用例通过 `information_schema.PROCESSLIST` 观察独立连接正在执行的 Research aggregate-head SQL。测试账号必须具有查看其他连接进程信息的 `PROCESS` 权限；仅能查看自身连接的账号会导致测试无法确认真实锁等待，不能将其结果解释为取消路径通过。
 - 若环境不允许授予 `PROCESS`，应在独立的受控测试实例验证该用例，或调整测试观测机制；不得删除“确认 SQL 已进入锁等待后再取消”的断言来规避权限问题。
 - 当前未连接真实 MariaDB，以上是执行前置条件，不代表锁等待取消、事务回滚或 Migration 升级已验收。
+
+
+## RSC-001 Context v1 Golden
+
+- 内部回归样例：`internal/research/context/testdata/context_v1.golden.json`。
+- 测试：`TestContextGoldenJSONV1`，校验 Context v1.0.0 的确定性 JSON 序列化结果。
+- Golden 变更必须先 Review 字段契约和兼容性，不得仅为通过测试而直接刷新样例。
+- 正式 JSON Schema、Schema Validator CI 和跨模块 Contract Test 尚未完成；新增测试尚未执行。
