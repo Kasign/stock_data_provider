@@ -1169,3 +1169,14 @@ Lifecycle.Stop 原实现通过 stopped 标记保证重复调用幂等，但并�
 - SRV-010：等待 Data 模块化单体迁移门禁。
 - SRV-011/012：尚未进入部署切换和旧链路退役阶段。
 - 本次进度复核没有将“代码存在”视为“验收通过”；当前 SHA 的 GitHub Workflow Runs 和 Combined Status 均为空。
+
+
+### 12.40 SRV-003 LLM Platform 流式传输组合适配（2026-11-09）
+
+- 新增 `internal/server/llmtransport`，由 Server 组合根把共享 Resources 的固定 DestinationPolicy 绑定为一个 Transport。
+- Transport 同时实现 LLM 非流式 `HTTPDoer` 和流式 `HTTPStreamDoer`，两种请求共用同一不可变 BoundDoer，避免为同一 Gateway 分别创建策略不一致的 HTTP 入口。
+- 构造时校验 Provider BaseURL 与策略 Host/Port 精确一致；强制 HTTPS、禁止重定向；非标准端口必须显式 allowlist；不在 Server 硬编码 Gateway 域名或 Dependency 名称。
+- Platform StreamResponse 的状态码、响应头和 Body 所有权原样传给 LLM DTO；不缓冲流、不自行关闭 Body。LLM Adapter 在成功消费、失败或取消时负责 Close；即使 Platform 同时返回响应和错误，也保留响应 Body 供 LLM Adapter 清理。
+- 新增策略错配、非标准端口、响应头隔离、Body 所有权转移、响应与错误并存、非流式委托及未配置调用测试。
+- 该适配器只完成 Server→Platform→LLM 的传输接口桥接；ProviderConfig/Secret/CapabilityState 的可信来源、生产 BoundDoer 实例注入、LLM Application 装配和真实 Gateway E2E 仍待完整组合根接入。
+- 当前提交尚未执行 gofmt、Server 包测试或 Race；不得据此标记联调通过。
