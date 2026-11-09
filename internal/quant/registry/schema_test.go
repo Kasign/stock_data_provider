@@ -77,6 +77,23 @@ func TestIndicatorParameterSchemaEnforcesWindowAndAnnualizationBounds(t *testing
 			t.Errorf("invalid indicator parameters unexpectedly passed: %s", instance)
 		}
 	}
+
+	valid := []string{
+		`{"schema_version":"1.0.0","indicator_code":"sma","parameters":{"window":1000}}`,
+		`{"schema_version":"1.0.0","indicator_code":"ema","parameters":{"window":1000,"seed_method":"sma"}}`,
+		`{"schema_version":"1.0.0","indicator_code":"return","parameters":{"window":1000,"return_basis":"simple"}}`,
+		`{"schema_version":"1.0.0","indicator_code":"volatility","parameters":{"window":1000,"return_basis":"simple","annualization_factor":252}}`,
+		`{"schema_version":"1.0.0","indicator_code":"rsi","parameters":{"window":1000,"smoothing_method":"wilder"}}`,
+		`{"schema_version":"1.0.0","indicator_code":"macd","parameters":{"fast_window":999,"slow_window":1000,"signal_window":1000}}`,
+		`{"schema_version":"1.0.0","indicator_code":"atr","parameters":{"window":1000,"smoothing_method":"wilder"}}`,
+		`{"schema_version":"1.0.0","indicator_code":"bollinger","parameters":{"window":1000,"multiplier":2,"stddev_method":"population"}}`,
+	}
+	for _, instance := range valid {
+		if err := validateJSONSchemaInstance(schema, []byte(instance)); err != nil {
+			t.Errorf("valid maximum-boundary parameters rejected: %s: %v", instance, err)
+		}
+	}
+}
 }
 
 func TestCompileJSONSchemaRejectsUnsupportedDraftAndExternalReferences(t *testing.T) {
