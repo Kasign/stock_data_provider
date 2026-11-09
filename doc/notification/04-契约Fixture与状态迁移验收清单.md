@@ -252,3 +252,19 @@ Fake Adapter 只能验证分类和状态机，不证明真实渠道行为。Reci
 | NTF004-PREFLIGHT-05 | Subscription/Recipient 依赖故障 | block 并保留 error；不得伪装成 skip |
 | NTF004-PREFLIGHT-06 | 当前 Subscription 状态非法或版本落后于 Delivery | block；fail closed |
 | NTF004-PREFLIGHT-07 | Secret 缺失/撤销/轮换 | 真实 Adapter/Resolver L3 验收；当前 Fake Preflight 不证明真实 Secret 可读 |
+
+
+## 11. DeliveryExecutionService 执行链路验收
+
+调用边界：上层 Server Worker 完成有界 Claim 后，提供 DeliveryClaim、已验证事件快照、唯一 Attempt ID、UTC Clock 时间、RetryPolicy 随机采样值及诊断 evidence_ref。Notification 不扫描队列，也不创建 Worker 生命周期。
+
+执行顺序与门禁：
+
+1. Preflight 必须复核当前 Subscription 授权、Delivery 绑定的精确 ChannelConfigVersion 和 opaque RecipientTarget。skip/block 必须写状态事件并释放租约。
+2. 只允许使用 Delivery 固定的 TemplateID/Version 渲染；渲染失败不得调用渠道，必须 fail closed。
+3. BuildChannelSendRequest 必须校验模板版本、Payload Fingerprint、渠道版本、收件目标及 idempotency 能力。
+4. 必须先成功执行 Attempt.StartWithLease；失败时渠道调用次数必须为 0。
+5. 渠道结果必须经 DeliveryCompletionService 收敛；ambiguous 进入 unknown，不得直接重试；明确 rejected 仅按渠道错误白名单和 RetryPolicy 决策。
+6. Completion 持久化失败时保留 Attempt 历史供租约恢复评估，不得重新发起同一租约下的第二次渠道调用。
+
+已提交测试：accepted 完整执行后 Delivery=sent 且 AttemptCount=1；Attempt 启动失败后渠道调用次数=0、Delivery 保持 sending、AttemptCount 不变。当前测试提交尚待 CI，不标记通过。
