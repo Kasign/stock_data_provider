@@ -5,7 +5,7 @@
 - 核验基线 HEAD：`b6dfc85ba214fe16268c8cba780641a8bfe15086`
 - 对照分支：`origin/integration`
 - 对照结果：`identical`（ahead=0、behind=0）
-- 登记簿版本：`0.2.2-review`
+- 登记簿版本：`0.2.5-review`
 - 当前状态：`review_in_progress`
 - 冻结结论：尚未整体冻结；当前无足够证据宣布 PLAT-002 全部通过
 - 决策责任：项目负责人
