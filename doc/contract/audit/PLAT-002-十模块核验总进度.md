@@ -683,3 +683,13 @@
 - CTR-047 关闭前须裁决独立 CreateTaskRequest、TaskType 四值枚举/非法值处理时机、默认字段、historical_replay 条件约束、as_of_mode/run_id 服务端所有权、parameters 类型与校验时机，并同步 OpenAPI、Handler 和测试。CTR-005 的遗留枚举/required要求由 CTR-047 承接；CTR-003 的路径缺失由 CTR-046 承接，不重复计数。
 - 本批未修改业务代码、OpenAPI、DTO 或测试，未执行 CI；不把 RunResult 嵌套 Golden、DB migration、Worker 并发审计扩展到本轮。
 
+### WebUI — 维度 2：全市场分页 API Client CTR-004 证据链复核
+
+- 详细记录：`WebUI-维度2-完整性Review-第一轮.md` 第 27 节。固定代码审计基线仍为 `b6dfc85ba214fe16268c8cba780641a8bfe15086`。
+- **AUD-WEBUI-CTR-004 保留 P2**：`getMarketStocks` 已实现 page 1..10000、pageSize 1..100、includeMA 布尔序列化和 adjustment 白名单回退；Server/OpenAPI 已明确对应参数范围与默认值。
+- 原始“缺少前端直接断言”仍成立，但需收窄：`market-stocks-lifecycle-browser.mjs` 已覆盖页面交互的翻页、每页数量和复权口径；`api.test.mjs` 仅覆盖 getMarketStocks 超时/AbortSignal，缺 API Client 级查询参数默认值、边界归一化、include_ma 序列化断言。没有证据证明正常页面交互存在运行时错误。
+- 关闭建议：补 `getMarketStocks` 直接测试，覆盖默认值、正常参数、page/pageSize 越界、未知 adjustment、includeMA true/false，并断言 URL 与请求配置；明确 includeMA 只接受布尔值，或裁决字符串输入转换规则。
+- **冻结影响有限**：不单独阻断 Market Stocks 服务端 OpenAPI/DTO 语义冻结，但 WebUI 消费者参数适配的测试证据仍不完整；维度 2 整体不能据此宣称消费者 Contract Test 全部齐备。
+- 范围校正：AUD-WEBUI-CTR-001（行情 API Key 浏览器存储迁移）和 CTR-002（Analysis Owner-only 鉴权联调）属于 WebUI 维度 1，不在本轮维度 2 范围；不复核、不改状态，也不并入维度 2。上一轮将 CTR-001/002 列为本维度下一批任务是规划错误，已纠正。
+- 本批仅更新审计文档；未修改业务代码、OpenAPI、DTO、测试，未执行 CI；无新增编号。维度 2 第一轮完整性 Review 仍为 partial。
+
