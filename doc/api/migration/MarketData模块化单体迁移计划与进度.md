@@ -19,8 +19,8 @@
 | 阶段 | 当前结论 | 已完成范围 | 未关闭原因 |
 |---|---|---|---|
 | M0 | 审计主体已收敛，外部证据未齐 | M0-A 参数核对、M0-B Provider 出站行为审计完成 | M0-C 仍缺脱敏生产 DDL；M0-D 全仓门禁仍受其他模块影响 |
-| M1 | `implementation_completed_validation_pending` | Data 已归入根 Go Module；根依赖和目录迁移已实施 | 最新专项验证的 gofmt、单测、race 均通过；go vet 曾发现两处不可达代码，已在修复提交中清理，等待新 SHA CI 复验 |
-| M2 | `implementation_completed_validation_pending` | Bootstrap、Application Port、InProcess Handler、Diagnostics、Migration Runner、Module 生命周期入口均已实现 | 与 M1 共用 Data 专项门禁；需新 SHA go vet 通过后关闭代码验收 |
+| M1 | `completed` | Data 已归入根 Go Module；根依赖和目录迁移已实施 | Data 专项 gofmt、单测、race、vet 全部通过（Run `42808664417`，代码 SHA `960a51a1`） |
+| M2 | `completed` | Bootstrap、Application Port、InProcess Handler、Diagnostics、Migration Runner、Module 生命周期入口均已实现 | Data 专项 gofmt、单测、race、vet 全部通过（Run `42808664417`，代码 SHA `960a51a1`） |
 | M3 | `data_side_ready_root_pending` | Data 提供 Application、InProcessHandler、Diagnostics、MigrationRunner 和生命周期入口 | Root Server 尚未完成 Module 构造、路由挂载、Analysis InProcess 注入及 readiness 集成 |
 | M4 | `data_side_ready_root_pending_with_platform_blocker` | borrowed DB、go-redis Cache Adapter、HTTP/TCP 注入端口、严格出站依赖校验已具备 | Root 尚未创建并注入共享资源/BoundDoer；TCP BoundDialer 依赖 Platform；兼容 DDL 尚未纳入统一迁移锁 |
 | M5 | `pending` | 无可确认的部署切换完成证据 | Compose/Nginx/WebUI 凭据与容器切换尚未验收 |
@@ -33,10 +33,8 @@ Go Test Suite Run `42807835415`，测试代码 HEAD：`d7ba8b127a997432e547ce574
 - Data gofmt：success。
 - Data 单元测试：success。
 - Data race detector：success。
-- Data go vet：failure，定位为：
-  - `internal/marketdata/provider/fundamental_field_diagnostic.go:33`：unreachable code。
-  - `internal/marketdata/provider/quote_field_diagnostic.go:84`：unreachable code。
-- 上述两处均为截断预览函数在 `return truncateDiagnosticPreview(...)` 后残留的不可达 return，已在提交 `960a51a1ffeb1cc56671457bb18a7883cf5cbaea` 一并清理；新 SHA 的 Go Test Suite Run `42808625873` 已排队，尚无复验结论。
+- Data go vet：在原代码 SHA 上失败，原因是 `fundamental_field_diagnostic.go` 与 `quote_field_diagnostic.go` 各有一处不可达代码；已由提交 `960a51a1ffeb1cc56671457bb18a7883cf5cbaea` 清理。
+- 修复后 Go Test Suite Run `42808664417`（代码 SHA `960a51a1`）：Data gofmt、单元测试、race detector、go vet 全部 success；Market Data MariaDB Migration/PIT Job `129804349136` success。M1/M2 的 Data 专项代码验收关闭。
 - Market Data MariaDB Migration/PIT Job `129801600973`：success；包含 Migration/PIT、DataService 日 K 回退、PIT revision 回退、Probe HTTP/MariaDB 端到端。
 - Root `Test .` Job `129801600609`：failure 于全仓 gofmt，涉及 `internal/adapters/**`、`internal/notification/**`；不属于 Data 修改范围。
 - News MariaDB Job `129801599671`：failure，编译错误为 `internal/news/app/collect_source.go:224:28: undefined: sourceCollectionResultSeal`；属于 News 模块，不在本分支修复。
@@ -44,7 +42,7 @@ Go Test Suite Run `42807835415`，测试代码 HEAD：`d7ba8b127a997432e547ce574
 - 同一代码 SHA 的 Platform Go checks、Live Provider probe、Quant module validation：success；WebUI checks failure 属于独立模块，不在本分支处理。
 - Compose/Docker 构建 Job 在该次 Run 中 skipped，不能沿用历史成功结果代表当前 SHA 构建通过。
 
-**当前 CI 判定：Data 单测和 race 已通过；go vet 修复已提交但新 SHA 尚未复验。** MariaDB/PIT 集成成功不能替代 Root 装配、迁移锁和生产部署验收；Live Provider workflow 外层成功也不等于每个 Provider/能力/证券/日期/复权口径均完成真实数据验收。
+**当前 CI 判定：M1/M2 的 Data 专项门禁已通过（gofmt、单测、race、vet、MariaDB/PIT）。** Root 全仓 `Test .` 仍因其他模块 gofmt 失败；News MariaDB Job 仍因 News 编译错误失败；两者不改变 Data 专项门禁结论，也不在本分支修复。Compose/Docker 构建 Job 为 skipped，不能据此宣称部署镜像验收通过。MariaDB/PIT 集成成功不能替代 Root 装配、迁移锁和生产部署验收；Live Provider workflow 外层成功也不等于每个 Provider/能力/证券/日期/复权口径均完成真实数据验收。
 
 ### Root 当前代码核验（2026-11-10，分支 HEAD：`5695d5454343b1e95a036b4940ece323bb9aff37`）
 
