@@ -239,3 +239,15 @@ web/src/api.js 的统一request函数：
 - CTR-046/047：OpenAPI路由及Task请求Schema，按原关闭条件增量验收。
 
 本批仅做固定SHA静态核验与审计文档更新；未修改业务代码、OpenAPI、DTO、Golden、测试，未执行CI。
+
+
+### 8.7 Request ID 组合链路的增量风险（归既有 PLAT-CTR-002）
+
+本轮沿错误响应的Request ID通道继续核对Root组合顺序，发现上一轮“外层Root Middleware先重建ID，因此内层兼容Middleware不会再信任原始输入”的推断不成立：
+
+1. internal/server/bootstrap/http_middleware.go 通过 observability.MiddlewareWithOptions(next, zero-value options) 包裹Root Router；该中间件生成新ID、写响应Header并写入Context，但不修改传入Request的X-Request-ID Header。
+2. internal/platform/httpapi.Server.Handler() 返回的旧Analysis Handler仍包裹 observability.Middleware(next)，其兼容默认值 TrustIncomingRequestID=true。
+3. 该内层中间件仍可从原始Request Header读取调用方提交的合法ID，并再次覆盖Context与响应X-Request-ID。因此Root Analysis路由上的外层重新生成结果可能被内层覆盖；Health Handler没有这层旧包装。
+4. 这会削弱Analysis路径的Request ID防伪与日志关联完整性，不是认证绕过；本切片不判定更高严重级别，也不修改代码。
+
+该发现归入既有PLAT-CTR-002 / P002-D03，不新建CTR。关闭证据应由Server/Integration责任方提供：移除组合场景中的兼容型内层Middleware，或确保内层只使用外层已验证Context且不能重新信任原始Header；增加Root完整组合测试，传入caller-controlled ID后验证最终响应Header、Handler日志Context及后续传播均保持Root生成ID。需同步纠正Platform维度2 Request ID切片中“Root外层重建即可覆盖内层兼容Middleware”的既有结论。
