@@ -388,3 +388,14 @@
 - 新增 **AUD-WEBUI-CTR-028**（P2）：Tushare 目录标签与真实 Provider 能力不一致；新增 **AUD-WEBUI-CTR-029**（P2）：目录顺序没有稳定契约及回归测试；新增 **AUD-WEBUI-CTR-030**（P2）：WebUI 只有 API Client 函数，没有页面消费者及请求/DOM 测试。
 - provider_time 仅是 Hithink 响应级 timestamp，缺少独立目录发布日期/生效日；source_version 是适配器版本而非数据集修订号。provider_time 纳入 **AUD-WEBUI-CTR-010**（omitempty 指针被 OpenAPI 声明 nullable）。
 - 未发现默认运行中目录数据的运行时错误；默认目录能力未启用，当前结论是契约可调用性和端到端接入缺口。WebUI 维度 2 继续 partial。
+
+
+### WebUI — 维度 2：Index Constituents 指数成分与历史权重报告
+
+- 固定代码基线：`b6dfc85ba214fe16268c8cba780641a8bfe15086`；详细证据见审计明细第 35 节。
+- 已核对当前/历史两种 Provider Port、Hithink 当前成分实现、Tushare index_weight 历史报告实现、Service 历史能力筛选与校验、HTTP/OpenAPI、WebUI API Client 和请求测试。
+- 当前成分与历史报告分离；as_of 只调用 HistoricalIndexConstituentProvider，Hithink 当前成分不会被用于历史查询。Tushare 按月回溯，选取不晚于 as_of 的最新报告日，最多 120 个月；权重按百分点映射，缺失不补零，5000 行边界标 lower-bound。
+- 历史报告不等于成员生效区间回放。Tushare 未提供 effective_from/to、available_at、system_observed_at；Service 会将缺少 PIT 证据的历史快照降级，未发现将其误标为 valid 的路径。
+- 新增 **AUD-WEBUI-CTR-031**（P2）：历史报告缺少最大陈旧度策略和专门诊断；新增 **AUD-WEBUI-CTR-032**（P2）：历史成分名称使用当前 stock_basic 目录，缺少历史名称 PIT 证据；新增 **AUD-WEBUI-CTR-033**（P2）：WebUI 有 API Client 和请求测试，但没有页面消费与 DOM 测试。
+- IndexConstituent.weight_percent 与 IndexConstituentSnapshot.provider_time 的 omitempty 指针被 OpenAPI 声明 nullable，纳入 **AUD-WEBUI-CTR-010**。
+- 未发现已证实的报告日期越界或权重单位换算错误；时间陈旧度、历史名称和 UI 闭环仍待补强。WebUI 维度 2 继续 partial。
