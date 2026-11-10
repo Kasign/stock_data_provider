@@ -240,3 +240,10 @@
 - 原集成测试覆盖首次清理、目标行消失和重复清理，但没有覆盖多个 Worker 并发执行。
 - 新增 4 条到期 Snapshot、两个批次上限为 2 的并发清理 Worker；要求总删除数恰好为 4、每个 Worker 不超过上限、所有 Snapshot 行消失且重复清理为 0。
 - 该测试仍待 MariaDB 11.4 实际运行；当前不宣称并发清理已通过数据库验收。
+
+
+## 二十二、Evidence Snapshot 清理后读取边界（2026-11-10）
+
+- GetEvidenceSnapshot 通过 caller_ref 与 snapshot_ref 定位记录；记录已被清理时，sql.ErrNoRows 映射为 ErrEvidenceSnapshotUnavailable。
+- 新增集成断言：先完成到期删除并确认行数为零，再通过相同 SnapshotRef 读取，必须返回 ErrEvidenceSnapshotUnavailable。
+- 此用例验证删除后的确定性边界，不等同于并发 SELECT/DELETE 竞态或跨请求原子租约；后者仍需 MariaDB 实测。

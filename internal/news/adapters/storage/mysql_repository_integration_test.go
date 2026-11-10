@@ -348,6 +348,11 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 	if remainingSnapshotRows != 0 {
 		t.Fatalf("expired evidence snapshot rows remaining=%d, want 0", remainingSnapshotRows)
 	}
+	// 清理完成后，读取端必须将已删除的 Snapshot 视为不可用，
+	// 不得因为 payload 曾经存在而返回缓存或残留内容。
+	if _, err := repository.GetEvidenceSnapshot(ctx, snapshot.SnapshotRef, snapshot.CallerRef, snapshot.ExpiresAt); !errors.Is(err, app.ErrEvidenceSnapshotUnavailable) {
+		t.Fatalf("get deleted evidence snapshot error = %v, want unavailable", err)
+	}
 	repeatedDeleted, err := repository.DeleteExpiredEvidenceSnapshots(ctx, snapshot.ExpiresAt, 100)
 	if err != nil || repeatedDeleted != 0 {
 		t.Fatalf("repeat expired snapshot cleanup: deleted=%d err=%v, want 0 and nil", repeatedDeleted, err)
