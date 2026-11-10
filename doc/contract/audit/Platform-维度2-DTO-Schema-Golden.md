@@ -254,3 +254,56 @@ LLM消费者边界：`server/llmtransport.Transport.OpenStream`将Platform Strea
 ### 9.6 下一切片建议
 
 本轮HTTP Client切片完成后，不立即转Server维度2。回看项目Platform契约目录，PLAT-CTR-003（身份/授权）、PLAT-CTR-006（Storage/Migration生命周期）、PLAT-CTR-007（Typed Config/Secret）仍属于Platform公共契约，尚未在本审计文件中完成DTO/Schema/Golden适用性核验。下一切片先核PLAT-CTR-003：仅盘点Platform身份/授权相关公开结构、Header/Context边界、序列化适用性和直接消费者；不做Security算法/权限策略重审（维度4），不修改实现。确认该CTR在维度2是否存在适用机器契约后，再依次评估CTR-006/007；完成Platform维度2范围清单后才转Server维度2。
+
+## 10. PLAT-CTR-003 身份、授权与 Secret 边界（第五切片，2026-11-10）
+
+### 10.1 本轮范围与契约边界
+
+固定代码基线：`b6dfc85ba214fe16268c8cba780641a8bfe15086`。本轮对照项目契约目录 PLAT-CTR-003 原始定义，核对 Platform Bearer 身份原语、Principal/RoutePolicy、Secret 凭证边界和 Server 直接消费。PLAT-CTR-003 当前明确只包括 anonymous、owner Bearer、service Bearer；Owner Web Session 是后续独立扩展，不得静默并入该编号或据此宣布原契约已冻结。
+
+### 10.2 Platform Bearer 原语
+
+核验文件：
+- `internal/platform/security/security.go`：`IdentityKind`、`Principal`、`ServiceCredential`、`Authenticator`、`RoutePolicy`、`Guard`、`PrincipalFromContext`。
+- `internal/platform/security/security_test.go`、`rotation_test.go`：认证、策略、Scope、快照不可变性和轮换测试。
+- `internal/platform/config/env.go`（Secret API）及 `internal/platform/config/secret_contract_test.go`：Secret显式访问和脱敏。
+
+已证实：
+- 身份枚举为 anonymous/owner/service；Principal只包含Kind、Subject、Scopes，不含密码、Token或其他凭证明文。
+- Owner凭证只配置为 `PLATFORM_ADMIN_TOKEN`，映射Subject为owner，Scope仅为 `platform:admin`。
+- ServiceCredential由稳定Name、config.Secret和显式Scope组成；Name规范化后限制为1～64字节的小写ASCII标识，Authenticator内唯一。
+- Token长度限制32～256字节，只允许URL-safe字母数字、连字符和下划线；代码注释明确语法校验不证明熵，熵要求仍由部署生成流程保证。
+- Authenticator只保存SHA-256摘要；认证时扫描全部已配置摘要并使用ConstantTimeCompare；拒绝重复凭证、无效/重复/未知Scope及Service获得platform:admin。
+- 凭证和Scope在Authenticator构造时复制为快照；Principal写入Context及读取时复制Scope切片。
+- RoutePolicy字段私有，只通过AnonymousAccess/OwnerAccess/ServiceAccess/OwnerOrServiceAccess构造；Router拒绝无效策略、空Handler、根Catch-all及重复/非法路由；未注册路由保持404。
+- Guard只从Authorization Bearer认证结果构造Principal并写入Context，不读取客户端自报身份Header。匿名请求仅能访问显式Anonymous策略；Owner不会自动继承Service Scope，Service必须满足路由声明的全部Scope。
+- `config.Secret` 的String/GoString/格式化及JSON/Text输出脱敏已有契约测试；原始值只能显式调用Value获取。
+
+### 10.3 真实消费者与接入状态
+
+- Server `internal/server/config/security.go` 从配置加载Owner Secret。
+- Server `internal/server/bootstrap/bootstrap.go` 调用 `NewAuthenticator(processConfig.Security.OwnerToken, nil)`，即当前生产组合根只装配Owner Bearer，未装配ServiceCredential列表。
+- Server `internal/server/bootstrap/router.go` 将当前Health/Readiness/Diagnostics和旧Analysis路由显式注册为Anonymous或Owner策略；没有Service路由。
+- `router_test.go` 覆盖匿名白名单、Owner访问、Service不能访问Owner路由、未注册路由404；Platform安全测试覆盖Service Scope与身份隔离。
+- 固定基线Bootstrap未接入Cookie Session认证，也未把Session Principal注入Bearer Router；这符合文档要求的独立认证链原则，但表示Web Session A2尚未形成生产接入证据。
+- 本轮未取得全仓所有模块对Principal/Scope的完整import与调用点扫描结果，不能据局部Bootstrap证据声称所有领域消费者均已完成授权Context接入。领域资源授权和AuthorizationRef签发/读取复核属于维度4，不在本轮判定。
+
+### 10.4 序列化、Schema/Golden适用性
+
+- `Principal`、`ServiceCredential`、`RoutePolicy`、`Authenticator`均为进程内Go结构；没有JSON Tag/公开JSON序列化入口，RoutePolicy/Authenticator内部字段不可导出。PLAT-CTR-003本身不需要为这些结构创建JSON Schema或HTTP Golden；应以Go Contract Test、真实Router/Handler测试和消费者Context测试作为机器证据。
+- Owner/Service Bearer Token不应进入DTO、响应或Golden；Secret脱敏测试是适用证据。
+- Session扩展需单独看待：`SessionRecord`具有JSON字段并被RedisSessionStore序列化为内部Redis存储记录，字段包括subject、created_at、last_seen_at、idle_expires_at、absolute_expires_at、credential_version及可选csrf_token_digest；原始Session Token不在记录中，Redis Key使用Token摘要。该记录不是PLAT-CTR-003公开HTTP DTO，但属于持久化序列化格式；当前未发现独立schema_version或Golden兼容夹具，相关证据应归入Web Session扩展的既有P002-D12～D14/Server A2准入工作，不将其伪装为PLAT-CTR-003原契约缺陷。
+- OwnerCredential字段全部JSON隐藏，String/LogValue只暴露Subject和CredentialVersion；PasswordHash有独立序列化/日志脱敏测试。
+- SecurityAuditEvent有受限JSON字段和Validate/LogValue，但Writer由Server注入；本轮未发现它作为外部HTTP DTO的证据，不要求对外Schema/Golden。
+
+### 10.5 本切片结论与遗留证据
+
+**结论：PLAT-CTR-003 Platform Bearer A1原语基本符合既有契约；Server当前只接入Owner Bearer，Service身份的生产配置/消费者链路和完整跨模块Context消费尚未证明，整体保持partial / pending_evidence。**
+
+不新增CTR。既有缺口与关闭条件：
+- PLAT-CTR-003原登记的凭证轮换、脱敏和RoutePolicy本地测试已有实现/测试证据；轮换是通过部署Secret替换并重建Authenticator完成，旧Authenticator快照不会自行热更新。真实部署Secret分发/重启/旧值失效证据仍属L3。
+- Server当前Authenticator服务凭证参数为空，不能把Platform支持Service Scope等同于项目已部署服务间认证。需要Server A2按实际服务调用矩阵装配最小ServiceCredential，并由消费者测试证明Scope注入/拒绝路径；若当前没有服务间HTTP路由，需记录不适用范围，而不是虚构Service消费者。
+- Web Session不属于当前PLAT-CTR-003的已批准范围。Platform已存在Password/CredentialStore/SessionStore/Cookie/CSRF/RateLimiter/Audit原语，但Server Bootstrap未装配；须按既有P002-D12～D14和独立Web Session决议完成契约批准、Session Middleware/路由矩阵、CredentialVersion实时复核、审计Writer与真实Redis/MariaDB A2证据。不得将Bearer Router改造成伪Session Bearer。
+- Principal/Scope不是领域资源授权结论；Data/News/Research/Quant等资源Owner仍需在维度4核查AuthorizationRef签发和读取时复核。
+
+本轮没有修改业务实现、Schema、Golden或测试，没有执行CI。
