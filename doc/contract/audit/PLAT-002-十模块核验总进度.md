@@ -675,3 +675,11 @@
 - 关闭条件：补齐四种状态的空/非空分支处理、质量原因安全提示，以及 app.js DOM 回归，特别验证 unknown 空结果绝不显示成确定无匹配；可补 API Client 元数据保留测试，但不能替代 DOM 测试。
 - 本批未修改业务代码、OpenAPI 或测试，未执行 CI。WebUI 维度 2 第一轮完整性 Review 继续进行。
 
+### WebUI — 维度 2：Analysis Run CTR-046 / CTR-047 冻结影响 Review
+
+- 详细记录：`WebUI-维度2-完整性Review-第一轮.md` 第 26 节。固定代码基线仍为 `b6dfc85ba214fe16268c8cba780641a8bfe15086`。
+- **CTR-046 保留 P2**：Server 实际提供 Run GET 与 Run Events；Run GET 返回 RunResult，状态含 200/404/409/500；Run Events 返回 `{run_id, events}`，状态含 200/404/500。权威分析任务 OpenAPI 缺少两条路径及 RunResult/事件响应 Schema。已有 Run GET 404、500 脱敏测试；缺成功、409 和 Run Events Handler 专项测试。Task Events 测试不能替代 Run Events。该项阻断 Analysis Run 对外契约冻结。
+- **CTR-047 保留 P2**：CreateTask Handler 将 JSON 解码为领域 RunRequest，OpenAPI却只列部分字段并声称两者一致。Handler 会补 task_type、as_of、universe_id、portfolio_id、market_id、strategy_ids、配置版本默认值；historical_replay 必须显式 as_of；as_of_mode 根据是否显式提供 as_of 被服务端覆盖；Queue 生成并覆盖 run_id；parameters 是 map[string]string，Runner 可从 parameters.symbols 回退取标的。不能机械复制领域字段为 HTTP required。
+- CTR-047 关闭前须裁决独立 CreateTaskRequest、TaskType 四值枚举/非法值处理时机、默认字段、historical_replay 条件约束、as_of_mode/run_id 服务端所有权、parameters 类型与校验时机，并同步 OpenAPI、Handler 和测试。CTR-005 的遗留枚举/required要求由 CTR-047 承接；CTR-003 的路径缺失由 CTR-046 承接，不重复计数。
+- 本批未修改业务代码、OpenAPI、DTO 或测试，未执行 CI；不把 RunResult 嵌套 Golden、DB migration、Worker 并发审计扩展到本轮。
+
