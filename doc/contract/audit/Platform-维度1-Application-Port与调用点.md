@@ -583,3 +583,102 @@ Quant 的纯计算与结果契约边界基本符合其模块设计；Risk 执行
 LLM 的底层 JSON/SSE Adapter、Platform BoundDoer 接口、Secret 脱敏、Provider/Model allowlist、版本化能力证据和 Platform Fault 映射均有实现及单测证据；Server 侧 Transport Adapter 也已实现。固定基线没有 LLM Application/生产 Provider 配置装配、SecretRef 解析、CapabilityState 加载/刷新、Diagnostics 注入或生产调用方。RequestID DTO 到可信 Context 的入口映射待证。
 
 **LLM 维度 1 状态：partial；adapter/transport implementation evidenced / production composition wiring not evidenced。Platform 维度 1 总状态仍为 partial。**
+
+
+## 13. 第八批：Researchflow 模块消费者核验（初审）
+
+### 13.1 Application Port 与跨模块依赖方向
+
+固定基线证据：
+
+- `internal/researchflow/application/create_run.go`（blob `4c126384d95a1738c4f1603ca7325a9219380adf`）
+- `internal/researchflow/application/executor.go`（blob `1b8a6a3f6ac0df79a9ab72bca70b787788f05c9a`）
+- `internal/researchflow/application/worker.go`（blob `c08ee149de33742fea5ca1b30384308cc72cdd1b`）
+- `internal/researchflow/application/outbox_dispatcher.go`（blob `f8082139616d18cceccf082d2278e78152522f93`）
+- `internal/researchflow/contextassembly/research_adapter.go`（blob `a3e8e263efbb32787edc1bb2187b10a5df5be2c8`）
+- `internal/researchflow/toolpolicy/llm_adapter.go`（blob `d1513080bdf22ab6ef0926a9d2a09246fb7b7be8`）
+- `internal/researchflow/resultvalidation/composer.go`（blob `c4fbf942ad99ed98f5d0b8eb4ddb18bd930c83a8`）
+
+已确认：
+
+1. Researchflow Application 自有 `RequestIdentity`、`DatabaseClock`、`IDGenerator`、`TemplateRegistry`、`RunRepository`、`StageExecutor`、`WorkerStore`、`ExecutionFaultNormalizer`、`OutboxStore`、`OutboxPublisher` 等窄 Port；Application 不直接持有具体 SQL、HTTP、Broker 或 Provider Client。
+2. `StageExecutor` 是 Researchflow 模块所有的执行 Port，注释要求 Data/News/Quant/Research/LLM 适配器由 Server 组合根注入；Provider 只返回结果引用，不得直接写 Researchflow 持久化或决定 Run/Stage/Attempt 身份。
+3. `contextassembly` 只依赖 Research Application DTO，将完成的上下文选择计划映射为 `CreateContextCommand`；明确不创建 Context、不授权 Evidence、不读取 Section 正文。
+4. `toolpolicy` 依赖 LLM 的 Schema 校验器与 Model Tool Call/Response DTO；模型 Tool Call 只转换为待授权 Intent，必须逐个经过 Registry.Authorize，不代表工具获准或已执行。
+5. `resultvalidation` 使用 Research Application 的 Context/Evidence/Claim DTO、LLM ModelResponse DTO；Quant 结果采用 Researchflow 自己定义的 QuantResultEnvelope，不依赖 Quant 内部 Domain/Repository 类型。
+6. `ComposeResult` 要求调用方通过 Research/Quant 公共 Facade 取数并先完成当前 Owner 授权；LLM Explanation 明确标记 non_authoritative，事实、证据和 RiskDecision 分字段保留，不计算综合评分或可操作状态。
+7. RiskDecision 校验拒绝“block 已触发/未知却返回 pass”；Quant 结果校验要求精确 result_type/schema_version 注册，不允许未知版本回退。
+8. 当前可见跨模块直接依赖集中在 Research 与 LLM 的稳定 DTO/本地校验能力；未发现 Researchflow 直接依赖 Quant 内部实现或 Notification 内部实现。StageExecutor/OutboxPublisher 的具体适配器仍须由组合根提供。
+
+判断：Application Port 归属和主要跨模块 DTO 边界基本符合“Researchflow 负责编排、领域模块负责事实和能力”的方向；但接口定义和纯函数 Adapter 不等于真实 Facade/Stage 执行器已经接入。
+
+### 13.2 Worker、事务、Lease 与 Outbox 生命周期
+
+固定基线证据：
+
+- `internal/researchflow/application/worker.go`（同上）
+- `internal/researchflow/application/deadline_scanner.go`（blob `0e27493c1f6d86c07f92f9330a8ca2ebd92445a1`）
+- `internal/researchflow/application/outbox_dispatcher.go`（同上）
+- `internal/researchflow/storage/mysql_run_repository.go`（blob `5ef98c916502824eedc431c02469e1d08678a0b5`）
+- `internal/researchflow/storage/mysql_outbox.go`（blob `1f8fcc7f164a1b191366a8935d9b94b13005c919`）
+- `internal/researchflow/storage/migrations.go`（blob `f6cf573974cae7e2d426f934ef57d30ec62699ed`）
+
+已确认：
+
+1. Worker 在执行前读取不可变 RetryPolicy Snapshot；通过 Store ClaimAttempt 获取跨进程并发权威，再校验 Run/Stage/Attempt 快照一致性。
+2. Worker 使用 Run Deadline 与 Attempt Deadline 双重 Context；Heartbeat 续租，Lease/FencingToken 决定提交权；租约丢失、Run Deadline、取消分别处理；Provider RetryAt 不作为重试决策，重试由模板 RetryPolicy allowlist 控制。
+3. Worker 通过 `WorkerStore.CommitWorkerResult` 提交；Port 注释要求 Storage Adapter 将其映射为原子 `CommitAttemptResult` 事务。
+4. DeadlineScanner 只做有界候选扫描和版本栅栏过期；Run 汇总与最终化分开，避免扫描器自行越权完成最终事务。
+5. OutboxDispatcher 提供 at-least-once 发布；稳定 IdempotencyKey、LeaseGeneration、并发上限、PublishTimeout、RetryPolicy 和条件 Ack/Retry 已纳入接口；Publisher 必须幂等。
+6. MySQL Storage 实现 Run/Stage/Attempt/Idempotency/ResultSummary/Outbox 等表和事务；Migration 使用 Platform Storage Migration 类型。
+7. Outbox 消息持久化 CorrelationID，但未持久化 OriginatingRequestID；StageExecutionRequest 只携带 CorrelationID。
+
+### 13.3 Platform Diagnostics、Fault 与 Request ID
+
+固定基线证据：
+
+- `internal/researchflow/diagnostics/adapter.go`（blob `a21ba4591c1e99927b9dfb4febb761f901bf1939`）
+- `internal/researchflow/diagnostics/adapter_test.go`（blob `e18aa77e1ef3ab6ccf94f9a1f4116b7731ee8be9`）
+- `internal/researchflow/application/create_run.go`（同上）
+- `internal/researchflow/application/worker.go`（同上）
+- `internal/researchflow/storage/migrations.go`（同上）
+
+已确认：
+
+1. Researchflow Diagnostics Adapter 将 pass/degraded/fail/not_comparable 四态映射为 Platform Observation；not_comparable 映射 degraded，同时通过 assessment_status 属性保留原语义。
+2. Adapter 生成 Platform `diagnostics.Check`，检查 ID 稳定；对 Stage 身份、ReasonCode、CheckedAt、Duration、Attributes 数量进行校验。
+3. Application 的 `RequestIdentity` Port 分别读取 AuthenticatedCallerRef、OriginatingRequestID、CorrelationID；CreateRun 将 OriginatingRequestID 和 CorrelationID 写入 Run。
+4. Run Storage 保存 originating_request_id 与 correlation_id；但 Worker 的 StageExecutionRequest 仅携带 CorrelationID，OutboxMessage/Outbox 表也仅携带 CorrelationID。未见 Worker 从可信 Platform Request ID 重建 Context 或向下游执行器传播 originating request ID 的明确机制。
+5. Researchflow 没有直接依赖 Platform Fault 的实现；执行错误通过 `ExecutionFaultNormalizer` Port 转成 FaultRef/ReasonCode。若未注入 Normalizer，Worker fail-closed，不提交 Provider 错误结果。当前未找到将 Platform Fault 映射为 Researchflow FaultRef 的生产 Adapter。
+6. 本批未发现 Researchflow Diagnostics Check 被 Server Diagnostics Service 注册；模块 Check 工厂存在不代表 Server 会执行它。
+
+**AUD-PLAT-PORT-013：Researchflow originating Request ID 未证明贯穿 Worker 与 Outbox（P2 候选）**
+
+Run 创建时已从 RequestIdentity 读取并持久化 OriginatingRequestID；但 StageExecutionRequest 与 OutboxMessage 只传 CorrelationID，固定基线未证明异步执行器/事件消费者能恢复 originating request 关联。需由 Server/Researchflow 明确 Request ID 与 Correlation ID 各自用途、异步 Context 重建和事件字段映射，并补端到端测试。当前不认定 CorrelationID 缺失或已发生请求追踪故障。
+
+### 13.4 Server 生产组合根装配
+
+固定基线证据：
+
+- `internal/server/bootstrap/bootstrap.go`（blob `92df61265f173251ac7811f99a7ab9f41ac470ed`）
+- `internal/server/diagnostics/service.go`（blob `190068e7fc170d6f81d8a79868086fa2870a65e7`）
+- `internal/server/runtime/lifecycle.go`（blob `fcfe753c345af505a4f25e94050f19049d9ad75b`）
+
+已确认：
+
+1. Server Bootstrap 的 Migration Registry 当前只注册 News、Research、Notification；没有注册 `researchflowstorage.Migrations()`。
+2. Bootstrap 没有构造 Researchflow RunRepository、TemplateRegistry、RequestIdentity、StageExecutor、Worker、DeadlineScanner、OutboxDispatcher 或 Run Finalization Coordinator。
+3. Lifecycle 当前只注册旧 Analysis Worker；未注册 Researchflow Worker、Deadline Scanner、Outbox Dispatcher 或相关调度组件。
+4. Server Diagnostics 没有注入 Researchflow Stage/Dependency/Quality/LLM/Result Checks。
+5. 未找到由 Server 组合根把 Research Facade、LLM Adapter、Quant 结果读取/校验、Data/News 执行器和 Notification Outbox Publisher 装配为 StageExecutor 的生产调用点。
+6. Lifecycle 已支持按注册顺序启动、逆序停止和失败回滚；但尚无 Researchflow 组件注册，因此不能把通用生命周期能力视为模块运行时已接入。
+
+**AUD-PLAT-PORT-012：Researchflow Application、Storage 与异步运行组件尚未进入 Server 生产组合根（P1 候选）**
+
+模块内已有 Application Port、MySQL Storage、Migration、Worker/Deadline/Outbox 执行骨架及 Diagnostics Adapter；固定基线 Server 未注册 Migration、未构造 Application/Worker/Publisher/StageExecutor、未接入 Diagnostics。生产执行链缺少各领域 Facade/Stage Adapter、FaultNormalizer、Notification Outbox Publisher 和组件调度/停止顺序。此项属于生产集成缺口，不等于 Researchflow 模块内状态机/存储实现未完成。进入联调前需完成 Root Server 装配、真实 Adapter、Migration Registry、Lifecycle、Diagnostics 和组合根测试。
+
+### 13.5 本批结论
+
+Researchflow Application Port 和主要跨模块 DTO 边界已具备；Run/Stage/Attempt 的持久化、租约栅栏、Deadline、取消、重试策略、Outbox at-least-once 和四态 Diagnostics 均有模块内实现证据。当前固定基线 Server 没有将这些能力装配成可运行的生产流程，尤其缺少真实 StageExecutor/OutboxPublisher、Migration 注册、Worker 调度和 Diagnostics 注册。Originating Request ID 从 Run 到异步 Stage/Outbox 的传播待证。
+
+**Researchflow 维度 1 状态：partial；application/storage execution skeleton evidenced / production composition and cross-module execution wiring not evidenced。Platform 维度 1 总状态仍为 partial。**
