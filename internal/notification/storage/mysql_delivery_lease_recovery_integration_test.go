@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"testing"
 	"time"
@@ -181,7 +182,7 @@ func TestNotificationMariaDBExpiredDeliveryLeaseRecoveryIntegration(t *testing.T
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := attemptRepository.CompleteWithLease(ctx, claim.Delivery.Version, claim.Lease.FencingToken, completed); !errors.Is(err, application.ErrDeliveryAttemptConflict) {
+	if err := attemptRepository.CompleteWithLease(ctx, claim.Delivery.Version, claim.Lease.FencingToken, completed); !errors.Is(err, application.ErrDeliveryLeaseConflict) {
 		t.Fatalf("stale worker must not complete an Attempt after recovery won: %v", err)
 	}
 	persistedAttempts, err := attemptRepository.ListByDelivery(ctx, delivery.DeliveryID)
