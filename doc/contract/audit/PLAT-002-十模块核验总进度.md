@@ -221,3 +221,12 @@
 - 新增 **AUD-WEBUI-CTR-007**（P2）：Go Event 嵌入 StageEvent，但 OpenAPI event 仅是任意 object，缺少字段、状态枚举、时间格式和可选字段 Schema。
 - WebUI 已验证 Task ID、事件序号、分页游标和可选 run_id；服务端 next_after_sequence 计算、JSON Golden 与未知字段解码策略仍待核。
 - 维度 2 保持 partial。详细证据见审计明细第 19 节。
+
+
+### WebUI — 维度 2：TaskEvent 服务端分页核验
+
+- Handler 使用排他游标：返回本页最后一条 sequence；空页时保持请求游标。Queue 按事件数据库 ID 升序读取 ID 大于游标的记录。
+- 单测目前只覆盖单页增量读取，未覆盖空页、连续分页、limit 和非法游标边界。
+- 新增 **AUD-WEBUI-CTR-008**（P2，测试补证）：补齐分页边界测试，并用 Migration/DDL 证据确认事件 ID 的唯一、单调和不可变语义。
+- WebUI 读取 event.error_code，但当前 Go StageEvent 和 HTTP Handler 未提供该字段；暂不认定为运行时错误，待 DTO 收敛时裁决是否删除或正式支持。
+- 维度 2 仍为 partial。详见审计明细第 20 节。
