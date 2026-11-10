@@ -11,11 +11,11 @@ import (
 
 type memoryResearchRepository struct {
 	afterTransaction func()
-	observations map[string]domain.Observation
-	versions     map[string][]domain.NewsItemVersion
-	relations    map[string][]domain.RelationAssertion
-	evidence     map[string][][]domain.RelationEvidence
-	failAppend   bool
+	observations     map[string]domain.Observation
+	versions         map[string][]domain.NewsItemVersion
+	relations        map[string][]domain.RelationAssertion
+	evidence         map[string][][]domain.RelationEvidence
+	failAppend       bool
 }
 
 type memoryResearchTransaction struct {
