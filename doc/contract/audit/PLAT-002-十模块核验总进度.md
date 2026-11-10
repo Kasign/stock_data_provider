@@ -119,3 +119,15 @@
 - 新增 AUD-PLAT-PORT-006（P1 候选）：Notification Application/Fanout/Delivery Worker 未接入 Server 生产组合根。
 - 新增 AUD-PLAT-PORT-007（P2 候选）：Notification Request ID 与 Correlation ID 端到端映射待证。
 - Notification Fault 映射及 Application 全目录错误路径尚未完成扫描；本批结论为 module-level implementation evidenced / production wiring not evidenced。维度 1 保持 partial。
+
+
+### Platform — 维度 1：第六批（Quant 消费者初审）
+
+- 详细记录：[`Platform-维度1-Application-Port与调用点.md`](./Platform-维度1-Application-Port与调用点.md)
+- Quant 当前是纯计算/结果契约组件；目录包括 domain、factor、indicator、manifest、metric、registry、result、risk、trend，未见 Application/Adapter/Storage/Diagnostics。
+- Manifest/Result Save Port、MemoryRepository 和 Risk RuleSet fail-closed 执行骨架已有实现；MemoryRepository 明确不替代生产 Storage。
+- BuildRef 只构造引用，不签发/验证 AuthorizationRef；当前没有结果读取接口。
+- Server 未构造 Quant 服务、未注册 Quant Migration、未接入 Quant Diagnostics；Quant 任务规划明确生产 Storage、可信规则集发布和事实接入尚未完成。
+- 新增 AUD-PLAT-PORT-008（P1 候选，阶段性阻断）：Quant 生产 Application/Storage/Diagnostics 接入尚未形成；这是后续生产集成门禁，不直接定性为纯计算 Domain 缺陷。
+- 新增 AUD-PLAT-PORT-009（P1 候选，安全边界）：Quant AuthorizationRef 生产签发与验证责任待证；未发现读取接口，当前不认定存在授权绕过路径。
+- Quant 维度 1 状态 partial；domain/contract implementation evidenced / production application wiring not yet implemented by current stage。
