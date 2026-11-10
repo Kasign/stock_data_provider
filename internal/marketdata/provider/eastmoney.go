@@ -2409,6 +2409,7 @@ func (p *Eastmoney) FetchIndexQuotes(ctx context.Context) (*model.IndexQuoteSnap
 	if payload.Data.Total != nil && *payload.Data.Total > len(payload.Data.Diff) {
 		snapshot.QualityStatus = model.QualityDegraded
 		snapshot.QualityReasons = appendUniqueEastmoneyReason(snapshot.QualityReasons, "provider_total_exceeds_returned_rows")
+		addEastmoneyDragonTigerIssue(ctx, nil, "row_count", "data.total/diff", "provider_total_exceeds_returned_rows", "returned rows cover provider total", "incomplete", fmt.Sprintf("total=%d returned=%d", *payload.Data.Total, len(payload.Data.Diff)), "东方财富指数行情声明总数大于实际返回行数")
 	}
 	seen := make(map[string]bool, len(eastmoneyCoreIndexDefinitions))
 	for rowIndex, raw := range payload.Data.Diff {
@@ -2420,6 +2421,7 @@ func (p *Eastmoney) FetchIndexQuotes(ctx context.Context) (*model.IndexQuoteSnap
 		if seen[definition.Symbol] {
 			snapshot.QualityStatus = model.QualityDegraded
 			snapshot.QualityReasons = appendUniqueEastmoneyReason(snapshot.QualityReasons, "duplicate_index_row_dropped")
+			addEastmoneyDragonTigerIssue(ctx, &rowIndex, "symbol", "f13/f12", "duplicate_identity", "one row per allowlisted index", "duplicate", market+"."+code, "东方财富指数行情重复指数行被排除")
 			continue
 		}
 		name := parseEastmoneyBoardString(raw, "f14")
@@ -2427,12 +2429,14 @@ func (p *Eastmoney) FetchIndexQuotes(ctx context.Context) (*model.IndexQuoteSnap
 			name = definition.Name
 			snapshot.QualityStatus = model.QualityDegraded
 			snapshot.QualityReasons = appendUniqueEastmoneyReason(snapshot.QualityReasons, "provider_index_name_missing_used_allowlisted_name")
+			addEastmoneyDragonTigerIssue(ctx, &rowIndex, "name", "f14", "missing_value", "non-empty provider index name", "empty", "", "东方财富指数行情名称缺失，使用白名单名称回退")
 		}
 		price, changePercent := parseEastmoneyBoardNumber(raw, "f2"), parseEastmoneyBoardNumber(raw, "f3")
 		change := parseEastmoneyBoardNumber(raw, "f4")
 		if price == nil || *price <= 0 || changePercent == nil {
 			snapshot.QualityStatus = model.QualityDegraded
 			snapshot.QualityReasons = appendUniqueEastmoneyReason(snapshot.QualityReasons, "provider_index_required_price_field_missing_or_invalid")
+			addEastmoneyDragonTigerIssue(ctx, &rowIndex, "latest_price/change_percent", "f2/f3", "missing_or_invalid_value", "positive price and finite change percent", "invalid", fmt.Sprintf("price=%q change_percent=%q", parseEastmoneyBoardString(raw, "f2"), parseEastmoneyBoardString(raw, "f3")), "东方财富指数行情必需价格或涨跌幅字段缺失/非法")
 			continue
 		}
 		openPrice := parseEastmoneyBoardNumber(raw, "f17")
@@ -2449,6 +2453,7 @@ func (p *Eastmoney) FetchIndexQuotes(ctx context.Context) (*model.IndexQuoteSnap
 		if invalidOptionalPrice || (high != nil && low != nil && (*low > *high || *price < *low || *price > *high || (openPrice != nil && (*openPrice < *low || *openPrice > *high)))) {
 			snapshot.QualityStatus = model.QualityDegraded
 			snapshot.QualityReasons = appendUniqueEastmoneyReason(snapshot.QualityReasons, "provider_index_ohlc_invariant_failed")
+			addEastmoneyDragonTigerIssue(ctx, &rowIndex, "ohlc", "f15/f16/f17/f18/f2", "invariant_failed", "positive and internally consistent OHLC values", "inconsistent", fmt.Sprintf("open=%q high=%q low=%q prev_close=%q price=%q", parseEastmoneyBoardString(raw, "f17"), parseEastmoneyBoardString(raw, "f15"), parseEastmoneyBoardString(raw, "f16"), parseEastmoneyBoardString(raw, "f18"), parseEastmoneyBoardString(raw, "f2")), "东方财富指数行情 OHLC 区间约束校验失败")
 			continue
 		}
 		if prevClose != nil {
@@ -2457,6 +2462,7 @@ func (p *Eastmoney) FetchIndexQuotes(ctx context.Context) (*model.IndexQuoteSnap
 				math.Abs(*changePercent - priceChange / *prevClose * 100) > eastmoneyIndexChangePercentTolerancePP {
 				snapshot.QualityStatus = model.QualityDegraded
 				snapshot.QualityReasons = appendUniqueEastmoneyReason(snapshot.QualityReasons, "provider_index_change_fields_inconsistent")
+				addEastmoneyDragonTigerIssue(ctx, &rowIndex, "change/change_percent", "f4/f3/f2/f18", "inconsistent_value", "change fields agree with latest and previous close", "inconsistent", fmt.Sprintf("change=%q change_percent=%q price=%q prev_close=%q", parseEastmoneyBoardString(raw, "f4"), parseEastmoneyBoardString(raw, "f3"), parseEastmoneyBoardString(raw, "f2"), parseEastmoneyBoardString(raw, "f18")), "东方财富指数行情涨跌额/涨跌幅与价格关系不一致")
 				continue
 			}
 		}
@@ -2501,15 +2507,13 @@ func (p *Eastmoney) FetchIndexQuotes(ctx context.Context) (*model.IndexQuoteSnap
 		snapshot.Items = append(snapshot.Items, item)
 		seen[definition.Symbol] = true
 	}
-	if len(snapshot.Items) == 0 {
-		return nil, errors.New("Eastmoney index quote rows failed index-code and price validation")
-	}
-	if len(snapshot.Items) != len(eastmoneyCoreIndexDefinitions) {
+	if missing := len(eastmoneyCoreIndexDefinitions) - len(snapshot.Items); missing > 0 {
 		snapshot.QualityStatus = model.QualityDegraded
 		snapshot.QualityReasons = appendUniqueEastmoneyReason(snapshot.QualityReasons, "provider_core_index_rows_missing")
-	}
-	if missing := len(eastmoneyCoreIndexDefinitions) - len(snapshot.Items); missing > 0 {
 		addEastmoneyDragonTigerIssue(ctx, nil, "index_coverage", "Eastmoney core index allowlist", "allowlisted_index_unavailable", "all allowlisted core indices", "incomplete", strconv.Itoa(missing), "东方财富指数行情未形成全部白名单核心指数的可用记录")
+	}
+	if len(snapshot.Items) == 0 {
+		return nil, errors.New("Eastmoney index quote rows failed index-code and price validation")
 	}
 	bySymbol := make(map[string]model.MarketIndexQuote, len(snapshot.Items))
 	for _, item := range snapshot.Items {
