@@ -38,17 +38,26 @@ func (r *MySQLRepository) CreateEvidenceSnapshot(ctx context.Context, snapshot a
 	if insertErr == nil {
 		return nil
 	}
+	var existingPayload []byte
 	var existingHash, existingCallerRef, existingFingerprint, existingSortVersion string
 	var existingPageSize uint16
 	var existingItemCount uint32
 	var existingSystemAsOf, existingCreatedAt, existingExpiresAt time.Time
-	queryErr := r.db.QueryRowContext(ctx, `SELECT payload_hash, caller_ref, filters_fingerprint, page_size,
+	queryErr := r.db.QueryRowContext(ctx, `SELECT payload_json, payload_hash, caller_ref, filters_fingerprint, page_size,
 		system_as_of, sort_version, created_at, expires_at, item_count
 		FROM news_evidence_snapshots WHERE snapshot_ref = ?`,
 		snapshot.SnapshotRef,
-	).Scan(&existingHash, &existingCallerRef, &existingFingerprint, &existingPageSize,
+	).Scan(&existingPayload, &existingHash, &existingCallerRef, &existingFingerprint, &existingPageSize,
 		&existingSystemAsOf, &existingSortVersion, &existingCreatedAt, &existingExpiresAt, &existingItemCount)
 	if queryErr == nil {
+		if !validEvidenceSnapshotPayloadSize(existingPayload) {
+			return app.ErrInvalidEvidenceSnapshot
+		}
+		existingSum := sha256.Sum256(existingPayload)
+		existingActualHash := hex.EncodeToString(existingSum[:])
+		if subtle.ConstantTimeCompare([]byte(existingHash), []byte(existingActualHash)) != 1 {
+			return app.ErrInvalidEvidenceSnapshot
+		}
 		if subtle.ConstantTimeCompare([]byte(existingHash), []byte(payloadHash)) != 1 {
 			return app.ErrEvidenceSnapshotConflict
 		}
