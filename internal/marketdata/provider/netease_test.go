@@ -348,3 +348,34 @@ func TestNeteaseFetchQuoteReportsDegradedOptionalFields(t *testing.T) {
 		}
 	}
 }
+
+
+func TestNeteaseDailyBarsReportsOutOfRequestedDateRange(t *testing.T) {
+	payload := "日期,股票代码,名称,收盘价,最高价,最低价,开盘价,成交量,成交金额\n" +
+		"2026-10-22,'600036,招商银行,42.28,42.60,42.00,42.60,74818026,3157692775.06\n" +
+		"2026-10-21,'600036,招商银行,42.28,42.60,42.00,42.60,74818026,3157692775.06\n"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/csv; charset=utf-8")
+		_, _ = w.Write([]byte(payload))
+	}))
+	defer server.Close()
+
+	reporter := validation.NewReporter(20)
+	ctx := validation.WithReporter(context.Background(), reporter)
+	provider := NewNetease(2*time.Second, server.URL)
+	bars, err := provider.FetchDailyBars(ctx, "600036.SH", "2026-10-21", "2026-10-21", 8, model.AdjustmentNone)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(bars) != 1 || bars[0].TradeDate != "2026-10-21" {
+		t.Fatalf("out-of-range CSV row must be dropped while preserving the requested row: %+v", bars)
+	}
+	for _, issue := range reporter.Snapshot().Issues {
+		if issue.Field == "trade_date" && issue.ProviderField == "日期" &&
+			issue.Code == "date_out_of_requested_range" && issue.Stage == validation.StageParse &&
+			issue.RowIndex != nil && *issue.RowIndex == 0 {
+			return
+		}
+	}
+	t.Fatalf("expected out-of-range date diagnostic at CSV row 0, got %+v", reporter.Snapshot().Issues)
+}

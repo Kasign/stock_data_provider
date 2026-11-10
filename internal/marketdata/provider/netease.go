@@ -533,6 +533,8 @@ func (p *Netease) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endD
 		}
 		tradeDate := date.Format("2006-01-02")
 		if tradeDate < startISO || tradeDate > endISO {
+			addProviderParseIssue(ctx, rowIndex, "trade_date", "日期", "date_out_of_requested_range",
+				startISO+".."+endISO, "string", tradeDate, "Netease CSV trade date is outside the requested range")
 			rejectedRows++
 			rowIndex++
 			continue
