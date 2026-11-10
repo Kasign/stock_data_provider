@@ -460,3 +460,11 @@ Application 的 `RunFinalizationCoordinator` 是三种终态聚合路径的路�
 - 增加不同模板定义争用同一 Ref/Version 的并发 Publish，必须由数据库唯一键裁决，恰好一个成功、另一个返回 `ErrWorkflowTemplateConflict`；随后按精确版本读取并确认持久化指纹对应胜出候选。
 - 该测试用于验证数据库唯一约束与 Publish duplicate-key 回读路径的竞态语义，不以 Fake Repository 或单元测试替代 MariaDB。
 - 测试代码尚未执行；事务回滚注入、Run Finalize 与 Outbox 原子性/并发验收仍是独立缺口。
+
+
+## 17. FinalizeRun 事务回滚验收补充（2026-11-10）
+
+- MariaDB 集成测试在独立 Run 上创建临时 Outbox INSERT 失败触发器，确保 FinalizeRun 已尝试写入 ResultSummary 后，Outbox 写入失败。
+- 预期整个 InnoDB 事务回滚：Run 保持原 status/version 且无 result_summary_ref；ResultSummary 与 Outbox 行均不存在。
+- 触发器使用测试专属名称并在测试结束时清理；测试仅在 `PLATFORM_STORAGE_INTEGRATION=1` 时执行。
+- 当前只有测试代码，未宣称执行通过；并发 Finalize/CAS 竞争、Deadline 专项 MariaDB 验收仍未覆盖。
