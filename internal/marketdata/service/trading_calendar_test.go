@@ -181,3 +181,23 @@ func TestTradingCalendarMarksConflictingSourcesDegraded(t *testing.T) {
 	}
 	t.Fatalf("conflict reason is missing: %v", got.QualityReasons)
 }
+
+func TestTradingCalendarRejectsMismatchedProviderSourceAndContinues(t *testing.T) {
+	mismatchedSnapshot := validTestTradingCalendar()
+	mismatchedSnapshot.Source = "spoofed-source"
+	fallbackSnapshot := validTestTradingCalendar()
+	fallbackSnapshot.Source = "calendar-fallback"
+	preferred := &testTradingCalendarProvider{name: "calendar-preferred", snapshot: mismatchedSnapshot}
+	fallback := &testTradingCalendarProvider{name: "calendar-fallback", snapshot: fallbackSnapshot}
+	svc := NewWithCapabilities([]provider.NamedProvider{preferred, fallback}, nil, nil,
+		cache.NewDisabled(), nil, time.Second, time.Second, 120, 2000, ResilienceConfig{}, nil)
+	svc.SetTradingCalendarProviders([]provider.TradingCalendarProvider{preferred, fallback})
+
+	got, hit, err := svc.TradingCalendar(context.Background(), "2026-10-22", "2026-10-24")
+	if err != nil || hit || got == nil || got.Source != "calendar-fallback" {
+		t.Fatalf("mismatched trading-calendar source must be rejected: hit=%v got=%+v err=%v", hit, got, err)
+	}
+	if preferred.calls != 1 || fallback.calls != 1 {
+		t.Fatalf("expected both configured providers to be queried, calls=%d/%d", preferred.calls, fallback.calls)
+	}
+}
