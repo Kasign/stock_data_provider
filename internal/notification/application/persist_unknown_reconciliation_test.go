@@ -47,7 +47,7 @@ func TestPersistUnknownReconciliationAcceptedAndFailed(t *testing.T) {
 				t.Fatal(err)
 			}
 			repository := &unknownReconciliationRepositoryFake{}
-			if err := PersistUnknownReconciliation(context.Background(), repository, delivery, assessment, now, nil); err != nil {
+			if err := persistUnknownReconciliation(context.Background(), repository, delivery, assessment, now, nil); err != nil {
 				t.Fatal(err)
 			}
 			if repository.calls != 1 || repository.version != delivery.Version ||
@@ -66,7 +66,7 @@ func TestPersistUnknownReconciliationIndeterminateDoesNotWrite(t *testing.T) {
 		t.Fatal(err)
 	}
 	repository := &unknownReconciliationRepositoryFake{}
-	if err := PersistUnknownReconciliation(context.Background(), repository, delivery, assessment, now, nil); err != nil {
+	if err := persistUnknownReconciliation(context.Background(), repository, delivery, assessment, now, nil); err != nil {
 		t.Fatal(err)
 	}
 	if repository.calls != 0 {
@@ -90,7 +90,7 @@ func TestPersistUnknownReconciliationRetryRequiresBoundDecision(t *testing.T) {
 		Retry: true, NextAttemptAt: &nextAt,
 	}
 	repository := &unknownReconciliationRepositoryFake{}
-	if err := PersistUnknownReconciliation(context.Background(), repository, delivery, assessment, now, decision); err != nil {
+	if err := persistUnknownReconciliation(context.Background(), repository, delivery, assessment, now, decision); err != nil {
 		t.Fatal(err)
 	}
 	if repository.calls != 1 || repository.next.Status != domain.DeliveryRetryWait ||
@@ -99,7 +99,7 @@ func TestPersistUnknownReconciliationRetryRequiresBoundDecision(t *testing.T) {
 	}
 	decision.AttemptID = "different-attempt"
 	repository = &unknownReconciliationRepositoryFake{}
-	if err := PersistUnknownReconciliation(context.Background(), repository, delivery, assessment, now, decision); !errors.Is(err, ErrRetryDecisionConflict) {
+	if err := persistUnknownReconciliation(context.Background(), repository, delivery, assessment, now, decision); !errors.Is(err, ErrRetryDecisionConflict) {
 		t.Fatalf("mismatched retry decision must fail, got %v", err)
 	}
 	if repository.calls != 0 {
@@ -116,7 +116,7 @@ func TestPersistUnknownReconciliationPropagatesTransactionFailure(t *testing.T) 
 		t.Fatal(err)
 	}
 	repository := &unknownReconciliationRepositoryFake{err: errors.New("transaction failed")}
-	if err := PersistUnknownReconciliation(context.Background(), repository, delivery, assessment, now, nil); err == nil {
+	if err := persistUnknownReconciliation(context.Background(), repository, delivery, assessment, now, nil); err == nil {
 		t.Fatal("repository transaction failure must be propagated")
 	}
 }
@@ -126,9 +126,9 @@ func TestReconcileUnknownDeliveryRunsEvidenceBoundRetryEndToEnd(t *testing.T) {
 	evidence.Outcome = UnknownLookupNotAccepted
 	evidence.ErrorCode = "provider_busy"
 	repository := &unknownReconciliationRepositoryFake{}
-	assessment, decision, err := ReconcileUnknownDelivery(
+	assessment, decision, err := reconcileUnknownDelivery(
 		context.Background(), repository, standardRetryPolicy(),
-		delivery, channel, attempts, evidence, now, 0.5,
+		delivery, channel, attempts, verifiedUnknownDeliveryEvidence{evidence: evidence, deliveryVersion: delivery.Version, attemptID: attempts[len(attempts)-1].AttemptID, channel: channel}, now, 0.5,
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -155,9 +155,9 @@ func TestReconcileUnknownDeliveryPreservesUncertainCommitClassification(t *testi
 	evidence.ProviderMessageRef = "provider-message-1"
 	repository := &unknownReconciliationRepositoryFake{err: ErrPersistenceOutcomeUnknown}
 
-	assessment, decision, err := ReconcileUnknownDelivery(
+	assessment, decision, err := reconcileUnknownDelivery(
 		context.Background(), repository, standardRetryPolicy(),
-		delivery, channel, attempts, evidence, now, 0.5,
+		delivery, channel, attempts, verifiedUnknownDeliveryEvidence{evidence: evidence, deliveryVersion: delivery.Version, attemptID: attempts[len(attempts)-1].AttemptID, channel: channel}, now, 0.5,
 	)
 	if !errors.Is(err, ErrPersistenceOutcomeUnknown) {
 		t.Fatalf("uncertain commit classification must survive reconciliation orchestration, got %v", err)
