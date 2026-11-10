@@ -2350,6 +2350,33 @@ func TestStockBasicCacheWithOldNormalizationVersionIsBypassed(t *testing.T) {
 	}
 }
 
+func TestStockBasicRejectsMismatchedSourceAndFallsBack(t *testing.T) {
+	first := &stockBasicFakeProvider{name: "eastmoney", item: stockBasicIdentityFixtureForTest("600519.SH")}
+	first.item.Source = "tencent"
+	second := &stockBasicFakeProvider{name: "tushare", item: stockBasicIdentityFixtureForTest("600519.SH")}
+	second.item.Source = "tushare"
+	svc := NewWithCapabilities([]provider.NamedProvider{first, second}, nil, nil, cache.NewDisabled(), nil,
+		time.Second, time.Minute, 120, 2000, ResilienceConfig{}, nil)
+	svc.SetStockBasicProviders([]provider.StockBasicProvider{first, second})
+	got, hit, err := svc.StockBasic(context.Background(), "600519.SH")
+	if err != nil || hit || got == nil || got.Source != "tushare" {
+		t.Fatalf("mismatched source must be rejected and fallback selected: got=%+v hit=%v err=%v", got, hit, err)
+	}
+}
+
+func TestStockBasicMissingSourceIsExplicitlyDegraded(t *testing.T) {
+	p := &stockBasicFakeProvider{name: "eastmoney", item: stockBasicIdentityFixtureForTest("600519.SH")}
+	p.item.Source = ""
+	svc := NewWithCapabilities([]provider.NamedProvider{p}, nil, nil, cache.NewDisabled(), nil,
+		time.Second, time.Minute, 120, 2000, ResilienceConfig{}, nil)
+	svc.SetStockBasicProviders([]provider.StockBasicProvider{p})
+	got, hit, err := svc.StockBasic(context.Background(), "600519.SH")
+	if err != nil || hit || got == nil || got.Source != "eastmoney" || got.QualityStatus != model.QualityDegraded ||
+		!hasStockSearchReason(got.QualityReasons, "provider_source_missing_assumed_from_provider_name") {
+		t.Fatalf("missing source must be filled with explicit degraded provenance: got=%+v hit=%v err=%v", got, hit, err)
+	}
+}
+
 func TestValidateStockBasicRejectsOutDateBeforeIPODate(t *testing.T) {
 	item := &model.StockBasic{
 		Symbol: "600519.SH", Name: "贵州茅台", IPODate: "2020-01-02", OutDate: "2019-12-31",

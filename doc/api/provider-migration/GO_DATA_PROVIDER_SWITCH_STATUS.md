@@ -166,3 +166,13 @@
 - 缓存回源路径：Quote 缓存和 DailyBars 缓存均要求 Source 非空并通过质量/版本校验；MariaDB 历史日 K 回源后按 Source + SourceVersion + 复权元数据分组，缺少来源的历史行不会进入可复现序列。本修复针对实时 Provider 接收路径，不改变历史存量数据。
 - 尚需核对其他非 Quote/DailyBars 能力入口中“空值补齐”和“非空来源不匹配”的一致性；本次不扩大修改范围。
 - 本轮仅完成代码与回归测试编写；按开发分支约定，未运行 gofmt/build/test。
+
+### 2026-11-10：证券目录类 Provider 来源身份接收边界修复
+
+- 范围：StockBasic、StockSearch、StockBoards 三类接收入口。
+- 三类响应的非空 Source 必须与当前 Provider.Name() 一致；不匹配时拒绝当前响应并继续后备 Provider，不再将错误来源覆盖成当前 Provider 名称。
+- 空 Source 继续兼容，但补齐来源时显式降级并追加 `provider_source_missing_assumed_from_provider_name`。
+- StockBoards 同时检查快照级 Source 和每个成员项的 Source；任一非空来源不匹配即拒绝整份快照，任一来源缺失则对应成员和快照保留降级证据。
+- 新增 8 项回归测试覆盖 StockBasic、StockSearch、StockBoards 的来源不匹配回退和来源缺失降级。
+- 本批不涉及 ChipDistribution、CapitalFlow；这两类当前仍存在无条件覆盖 Source 的路径，留待下一批按同一接收边界规则处理。
+- 本批仅完成代码和测试编写，未运行 gofmt/build/test。

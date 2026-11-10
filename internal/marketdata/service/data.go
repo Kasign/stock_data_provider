@@ -1659,8 +1659,15 @@ func (s *DataService) StockBasic(ctx context.Context, rawSymbol string) (*model.
 			continue
 		}
 		item.Symbol = symbol
-		if item.Source == "" {
+		providerSource := strings.TrimSpace(item.Source)
+		if providerSource != "" && providerSource != p.Name() {
+			failures = append(failures, p.Name()+": stock-basic source does not match Provider.Name()")
+			continue
+		}
+		if providerSource == "" {
 			item.Source = p.Name()
+			item.QualityStatus = model.QualityDegraded
+			item.QualityReasons = appendReason(item.QualityReasons, "provider_source_missing_assumed_from_provider_name")
 		}
 		if item.FetchedAt.IsZero() {
 			item.FetchedAt = time.Now().UTC()
@@ -1767,8 +1774,15 @@ func (s *DataService) SearchStocks(ctx context.Context, rawQuery string, limit i
 			failures = append(failures, p.Name()+": empty stock-search response")
 			continue
 		}
-		if snapshot.Source == "" {
+		providerSource := strings.TrimSpace(snapshot.Source)
+		if providerSource != "" && providerSource != p.Name() {
+			failures = append(failures, p.Name()+": stock-search source does not match Provider.Name()")
+			continue
+		}
+		if providerSource == "" {
 			snapshot.Source = p.Name()
+			snapshot.QualityStatus = model.QualityDegraded
+			snapshot.QualityReasons = appendReason(snapshot.QualityReasons, "provider_source_missing_assumed_from_provider_name")
 		}
 		if snapshot.Query == "" {
 			snapshot.Query = query
@@ -2037,16 +2051,43 @@ func (s *DataService) StockBoards(ctx context.Context, rawSymbol string) (*model
 			continue
 		}
 		item.Symbol = symbol
-		if item.Source == "" {
+		providerSource := strings.TrimSpace(item.Source)
+		if providerSource != "" && providerSource != p.Name() {
+			failures = append(failures, p.Name()+": stock-boards source does not match Provider.Name()")
+			continue
+		}
+		missingSource := providerSource == ""
+		if missingSource {
 			item.Source = p.Name()
+			item.QualityStatus = model.QualityDegraded
+			item.QualityReasons = appendReason(item.QualityReasons, "provider_source_missing_assumed_from_provider_name")
 		}
 		if item.FetchedAt.IsZero() {
 			item.FetchedAt = time.Now().UTC()
 		}
 		for index := range item.Items {
-			if item.Items[index].Source == "" {
-				item.Items[index].Source = p.Name()
+			boardSource := strings.TrimSpace(item.Items[index].Source)
+			if boardSource != "" && boardSource != p.Name() {
+				missingSource = false
+				providerSource = "mismatch"
+				break
 			}
+			if boardSource == "" {
+				missingSource = true
+				item.Items[index].Source = p.Name()
+				item.Items[index].QualityStatus = model.QualityDegraded
+				item.Items[index].QualityReasons = appendReason(item.Items[index].QualityReasons, "provider_source_missing_assumed_from_provider_name")
+			}
+		}
+		if providerSource == "mismatch" {
+			failures = append(failures, p.Name()+": stock-board item source does not match Provider.Name()")
+			continue
+		}
+		if missingSource {
+			item.QualityStatus = model.QualityDegraded
+			item.QualityReasons = appendReason(item.QualityReasons, "provider_source_missing_assumed_from_provider_name")
+		}
+		for index := range item.Items {
 			if item.Items[index].FetchedAt.IsZero() {
 				item.Items[index].FetchedAt = item.FetchedAt
 			}
