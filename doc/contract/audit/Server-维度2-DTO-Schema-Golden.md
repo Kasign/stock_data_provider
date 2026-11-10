@@ -399,3 +399,73 @@ CTR-008的旧Task Events持久化/DDL/cursor证据不属于本轮决策清单，
 - 当前唯一阻断Schema最终形态的项目级决策是旧Analysis API的保留/迁移边界及请求行为；CTR-006可直接按当前真实序列化行为对齐Schema。
 - 本切片状态：complete_with_open_items。仅固定SHA文档/代码证据核对；未修改业务代码、OpenAPI、DTO、Schema、Golden、测试，未执行CI。
 - 下一步仍留在Server维度2，先处理项目负责人决策输入与责任方确认；未完成前不进入Server其他五个维度，不切换其他模块。
+
+
+
+## 11. Server 维度2第五切片：项目级决策输入收敛（2026-11-10）
+
+本切片将第10节待决项整理为可裁决提案。以下为审计建议，不是已批准的项目决议；在项目负责人确认前，相关CTR保持开放，不擅自修改业务实现或权威契约。
+
+### 11.1 CTR-046：旧Analysis API与Researchflow API边界
+
+**建议默认方案：兼容保留旧路径，Researchflow对外API独立版本化；禁止原路径静默切换底层语义。**
+
+- 保留现有`/api/v1/analysis/runs`、`/api/v1/analysis/tasks`及对应查询/Events路径作为旧Analysis兼容入口；当前消费者和OpenAPI按旧Analysis DTO定义。
+- Researchflow若需要对外暴露Run/Stage/Attempt，应使用独立、明确版本化的资源契约；具体路径在API设计决议中确定，不在本审计中臆造。
+- 不允许将旧RunRequest直接映射成Researchflow CreateRunCommand：旧请求缺少template_ref/version、system_as_of、deadline_at、input_snapshot_refs、idempotency_key等必填语义；as_of不能自动等同system_as_of。
+- 在存在显式、可审计的兼容映射（包括模板选择、时间语义、快照引用、身份与幂等键）前，旧路径不得静默改接Researchflow，也不得声称其已由Researchflow编排。
+- 后续迁移应先新增Researchflow API及消费者，再给旧路径增加弃用窗口、迁移指南和停止服务条件；不得原地破坏旧响应结构。
+
+**影响：** 短期保留两套API契约与适配成本；避免把旧Analysis输入语义错误转换成Researchflow命令，也避免现有客户端无提示破坏。长期目标仍须遵守项目级唯一流程编排者原则，不能无限期维持两个独立的跨模块编排实现。
+
+**需确认：** 项目负责人是否接受“旧路径兼容保留、Researchflow独立版本化、未来显式迁移”的默认方案；以及旧Analysis执行链当前是否仅作为迁移期兼容实现。
+
+### 11.2 CTR-047：旧Analysis请求行为
+
+依据固定基线当前Handler/Queue行为，建议明确如下：
+
+| 决策项 | 当前代码事实 | 建议目标契约 | 兼容影响 |
+|---|---|---|---|
+| 同步Run的run_id | Handler解码后直接交给Runner，Handler不重写；最终是否保留由Runner实现决定 | 不把客户端run_id承诺为权威资源ID；建议由执行端生成权威run_id。若现有Runner确实依赖调用方run_id，先记录为兼容行为，待迁移版本废弃 | 可能影响依赖客户端指定ID的内部调用，需消费者盘点 |
+| 异步Task的run_id | CreateTask路径将请求交给Queue；Queue生成并使用自己的RunID | 明确为服务端生成，忽略/拒绝客户端run_id（二选一，建议拒绝非空以避免误导） | 对传入run_id的旧调用方需迁移 |
+| task_type | 空值默认post_market_scan；非空未知值在HTTP decode层不被拒绝 | 空值继续默认；非空必须属于四个已定义值，否则400 | 收紧非法请求，合法请求不变 |
+| symbols | OpenAPI已有maxItems=100；本轮Handler没有对应数量校验 | 保留100项上限并在HTTP入口执行；Schema和运行时一致 | 超过100项的请求从下游失败/不确定变为明确400 |
+| as_of | 默认Asia/Shanghai当前时间；historical_replay必须显式提供 | 保持现有默认与条件必填语义，在Schema描述/条件规则中表达，不能机械标成全局required | 合法请求不变 |
+| as_of_mode | 客户端输入会被Handler按as_of是否显式提供重新派生 | 不作为客户端可控输入；从请求Schema移除或明确拒绝该字段，响应如需展示则单独定义 | 传入该字段的客户端可能需要调整 |
+
+**需确认：** 是否接受未知TaskType拒绝、symbols上限由Schema落实到Handler，以及异步run_id非空时拒绝。同步Run的最终run_id规则须先补Runner实现证据，不以Handler未重写推断执行端语义。
+
+### 11.3 CTR-007：旧Analysis Events生命周期
+
+**建议默认方案：保留现有旧Events端点为兼容契约，单独定义StageEvent；Researchflow事件流若建设则另立Schema。**
+
+- `GET /api/v1/analysis/runs/{run_id}/events`与`GET /api/v1/analysis/tasks/{task_id}/events`在无替代消费者迁移方案前继续保留。
+- Run Events中的旧Analysis StageEvent按第9节已核实字段定义独立Schema/Golden；Task Events的外层sequence/event与内部事件类型分别定义，不能用Researchflow Stage Schema替代。
+- 新Researchflow API如需事件流，必须单独定义事件类型、顺序/cursor、重放边界和版本；不得仅因两者都有stage字段就共享DTO。
+- 旧端点弃用必须以消费者迁移完成、兼容窗口和回滚策略为条件。
+
+**影响：** 保持旧客户端稳定，但短期会并存两套进度表达；避免事件字段、状态含义和cursor语义混淆。
+
+**需确认：** 是否接受旧Events兼容保留及独立Schema的方案；是否已有必须立即退役的消费者/安全原因。
+
+### 11.4 CTR-006：可直接执行的Schema修正
+
+该项不需要等待Run API迁移决策：
+
+- Task.started_at/finished_at继续按Go指针+omitempty行为序列化：nil时字段缺失，非nil时输出时间值。
+- OpenAPI将nullable语义移除，字段仍为可选；不得把字段设为required，也不得将nil编码为null。
+- Golden至少覆盖queued（started_at/finished_at均缺失）、running（started_at存在、finished_at缺失）、terminal（started_at和finished_at存在）；同时验证字段类型为date-time。
+- Schema校验应明确区分“可缺失”与“可为null”。
+
+**建议验收：** 三种Task状态的序列化Golden、OpenAPI Schema校验和Handler响应Contract Test全部通过后，才关闭CTR-006。
+
+### 11.5 项目负责人决策清单与状态
+
+| 决策ID | 建议默认方案 | 决策性质 | 当前状态 |
+|---|---|---|---|
+| D-SRV-API-01（CTR-046） | 旧Analysis路径兼容保留；Researchflow API独立版本化；禁止静默切换 | API边界/兼容策略 | pending_decision |
+| D-SRV-REQ-01（CTR-047） | 未知TaskType拒绝；symbols最多100由Handler执行；异步Task run_id服务端生成且拒绝非空客户端值；同步Run ID先补Runner证据 | 请求行为/运行时约束 | pending_decision |
+| D-SRV-EVT-01（CTR-007） | 旧Events兼容保留并独立定义StageEvent；Researchflow事件流独立版本化 | 事件生命周期/兼容策略 | pending_decision |
+| D-SRV-TIME-01（CTR-006） | 保持nil省略，修正Schema并补三态Golden | 与现有行为对齐，无新增领域决策 | ready_for_implementation |
+
+项目负责人确认前，不把建议写成accepted；责任方确认后，才进入相应Schema/Handler/Golden修复。CTR-046/047/007继续开放，CTR-006仍开放但具备直接实施条件。本切片没有新增CTR、关闭CTR或业务代码变更。
