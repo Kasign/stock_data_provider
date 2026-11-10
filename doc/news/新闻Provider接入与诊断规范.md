@@ -252,3 +252,102 @@ Brave/Bocha/Tavily 等具体 Provider 的策略值必须按实际账号套餐、
 ## 2026-11-06 接入状态更新
 
 Provider 适配器已落地 `provider.NewPlatformHTTPDoer`；Source 适配器已落地 `source.NewPlatformHTTPDoer`。二者均固定单个 endpoint 的 DestinationPolicy，拒绝重定向和平台自动重试；Platform Client 负责 DNS/IP、TLS、响应大小和 Deadline。Source endpoint 保留 query 参数，Provider endpoint 配置仍拒绝 query，避免将凭证放入 URL。生产组合根按每个 Provider/Source endpoint 独立注入。
+
+
+## 17. 多供应商统一协议层专项复核与实施方案（2026-11-10）
+
+本节是当前多供应商协议层的实施依据，结合当前分支代码复核结果修正早期“从零建设统一 Provider 协议”的表述。目标是演进现有协议，不重复建设平行模型。
+
+### 17.1 当前代码事实
+
+| 范围 | 现有实现 | 当前缺口 |
+|---|---|---|
+| 搜索 Provider 端口 | `app.Provider`：`Code + Search` | 没有显式描述能力/版本；接口仅覆盖搜索 |
+| Provider 集合 | `ProviderSet`、`StaticProviderSet` | 没有独立 Registry；没有重复 Code 的集中校验 |
+| 搜索请求 | `domain.SearchRequest`：Query、QueryDimension、Limit | 请求上下文较少；暂不应添加没有调用场景的通用参数 |
+| 搜索结果 | `domain.SearchResult`、`ProviderOutcome` | 已保留聚合状态和 Provider 级结果；不是空白，需要核对字段缺口后增量演进 |
+| 标准候选 | `domain.Candidate`、`NormalizeCandidate` | 已保留 Provider 身份、发布者身份、原始时间、观察时间及字段缺失信息 |
+| 错误 | `app.ProviderError` | 错误码仍由 Adapter 分散产生，稳定分类与映射规则需要收敛 |
+| 供应商适配 | Bocha、Tavily、Brave、SearXNG | 当前均实现 Search；没有证据表明它们支持统一 Fetch/Discover |
+| 配置装配 | News Config + `NewPlatformProviderSet` | 配置字段和装配代码按供应商显式维护；不是动态注册中心 |
+| 网络传输 | `app.HTTPDoer` + Platform BoundDoer 适配 | 生产逐 endpoint 绑定仍由 Server 组合根完成 |
+| Feed 来源采集 | `CollectSource`、`SourceCatalog`、`SourceTransport`、RSS/Atom Parser | 属于已登记发布来源采集，不是搜索 Provider 的另一种实现 |
+
+当前四个搜索 Provider 的实现位于 `internal/news/adapters/provider/providers.go`；搜索执行和结果聚合位于 `internal/news/app/search.go`；公共端口位于 `internal/news/app/ports.go`；标准候选及搜索结果模型位于 `internal/news/domain/types.go`。
+
+### 17.2 架构修订决定
+
+1. 不新建与现有 `app.Provider` 平行的万能 Provider 接口。
+2. 当前搜索能力继续使用独立的 Search Provider 端口；未来确实出现新闻正文 Fetch、第三方推送等不同能力时，再按真实用例增加能力专属端口。
+3. RSS/Atom 继续使用 Source Collection 端口。它代表经过登记、授权和 Endpoint 约束的发布来源，不并入搜索供应商 Registry。
+4. 搜索结果优先演进现有 `SearchResult`、`ProviderOutcome`、`Candidate`；不因泛型形式更漂亮而新增通用 `ProviderResult[T]`。
+5. Provider 输出策略、Source/Endpoint 授权交集、Observation 追踪和 Evidence/PIT 规则保持现有边界，不迁入 Adapter 或 Manager。
+6. Platform 继续提供 HTTP Client、Fault、Request ID 和 Diagnostics 原语；News 只映射新闻供应商业务语义，不重建通用设施。
+
+### 17.3 协议目标结构
+
+- Search Provider Contract：稳定的 Provider 身份、搜索请求、标准候选、单 Provider 执行结果和稳定错误分类。
+- Provider Catalog/Registry：启动时注册和校验身份唯一性；按需提供能力元数据。首期不做动态插件加载。
+- Search Orchestrator：执行现有多 Provider 搜索、保留逐 Provider Outcome 和聚合状态；调度策略与协议定义分离。
+- Source Collection Contract：继续负责 Source/Endpoint 登记、访问策略、RSS/Atom 采集和解析。
+- Normalization：沿用 Candidate 标准化逻辑，明确 Provider 原始字段到 Candidate 字段的映射和时间可信度。
+- Conformance Tests：所有 Search Provider 通过统一契约测试；Source Adapter 使用独立采集契约测试。
+
+### 17.4 明确暂不建设的能力
+
+首期不增加以下无当前用例的抽象或复杂度：
+
+- 将 Search、Fetch、Discover、UpdateCheck、HistoricalSearch 合并成一个万能能力接口。
+- 任意 `map[string]any` 请求参数或供应商自定义参数透传到领域层。
+- 动态插件发现、热加载和运行期供应商注册。
+- 自动评分、智能路由、主备切换、熔断和跨供应商自动合并。
+- 跨请求缓存、混合供应商缓存或新的原始响应存储。
+- 第二套通用 ProviderResult、通用 Fault 或通用 Diagnostics 模型。
+
+以上能力只有在明确业务调用方、数据证据和验收标准后才能单独立项。
+
+### 17.5 分阶段实施和验收
+
+**P0：现状盘点与方案复核（本轮）**
+- 核对所有搜索 Provider、配置、装配、调用和错误路径。
+- 单独核对 RSS/Atom Source Collection 边界。
+- 更新本规范、N1 Review 报告和任务验收清单。
+- 验收：代码路径和缺口均有当前分支证据；不修改业务行为。
+
+**P1：协议细化与冻结**
+- 明确 Provider 身份唯一性、请求字段语义、Outcome 状态迁移和错误码映射表。
+- 明确是否需要能力元数据；若当前只有 Search，则不引入无效能力抽象。
+- 明确分页、部分结果、时间字段、Provider provenance 的现有语义及兼容要求。
+- 验收：至少以两个不同响应特征的现有 Provider（例如 Bocha 与 Brave）逐字段走查协议；Search 与 RSS/Atom 两条路径边界明确。
+
+**P2：最小协议基础实现**
+- 只实现 P1 冻结且当前代码确实缺失的能力。
+- 增加 Registry 注册校验（特别是空 ID、重复 ID、nil Provider），或证明现有装配已能保证这些约束。
+- 统一错误码映射和 ProviderOutcome 构造，避免各 Adapter/调用处重复解释错误。
+- 不改变现有供应商查询参数和业务授权行为。
+
+**P3：单供应商试点**
+- 选择一个响应结构/时间字段有代表性的 Provider，建议先选 Bocha 或 Brave。
+- 通过新契约测试覆盖请求、响应解析、缺字段、空结果、错误、来源身份和时间语义。
+- 与迁移前固定样本结果逐项比较。
+
+**P4：其余搜索 Provider 迁移**
+- 按供应商逐个接入同一 Contract Test。
+- 清理重复错误映射和旧旁路。
+- 逐个确认结果与授权门禁没有退化。
+
+**P5：运行期调度优化（后置）**
+- 仅基于实际调用量、配额、失败率和质量对比证据决定是否增加主备、熔断或路由。
+- 所有切换保留原始 Provider Outcome；不把切换成功解释为数据完整或质量通过。
+
+### 17.6 不可退化的验收门禁
+
+- Provider Code 与 Publisher/Source 身份始终分离。
+- 空结果、跳过、失败、部分成功不得互相混淆。
+- PublishedAt、FetchedAt、NormalizedAt、ObservedAt 不得混用或推断。
+- Provider 输出许可与 Source/Endpoint 内容许可继续独立评估并取交集。
+- 未通过授权策略评估的 Provider Candidate 不得进入持久化。
+- 搜索 Provider 结果不得绕过 Observation/Identity/Evidence 既有业务入口。
+- Source/Endpoint 网络访问继续使用独立 BoundDoer 和可信 SourceCatalog。
+- CI 使用固定样本/fake，不依赖真实 Provider Key 或消耗真实配额。
+- 未执行的 Go 测试、MariaDB 集成或真实网络验收不得标记为通过。
