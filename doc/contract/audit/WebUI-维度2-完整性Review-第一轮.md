@@ -446,7 +446,40 @@ Go model.StockBasic 有 14 个 omitempty 字段，而 OpenAPI StockBasic 将它�
 - MarketSentimentSnapshot / MarketSentimentHistory：本批未发现新的 omitempty + OpenAPI nullable 冲突。provider_report_date、三个 lower-bound bool、pool_sources、pool_source_versions、source_version、quality_reasons 均为 omitempty，但 OpenAPI 未声明 nullable；三个计数指针字段不带 omitempty，且在 OpenAPI required + nullable，行为一致。MarketSentimentHistory 所有字段均非 omitempty，未发现 CTR-010 差异。
 - MarketCapitalFlowItem：14 个 omitempty 数值指针字段（close_sh、change_percent_sh、close_sz、change_percent_sz、net_amount_cny、net_amount_rate_percent，以及超大单/大单/中单/小单净流入金额和比例字段）均在 OpenAPI 声明 nullable，属于此前市场级资金流章节登记的 CTR-010。MarketCapitalFlowSnapshot.quality_reasons 虽 omitempty，但 OpenAPI 未声明 nullable，不计入。
 - CapitalFlow：main_net_inflow_yuan、inflow_5d_yuan、inflow_10d_yuan 三个 omitempty 指针字段均被 OpenAPI 声明 nullable，属于此前个股资金流章节登记的 CTR-010；provider_date、source_version、quality_reasons 虽 omitempty，但 OpenAPI 未声明 nullable。
-- 本批复核到 41 个既有 CTR-010 字段：Limit Pool 7、Dragon Tiger 18、Market Capital Flow 14、CapitalFlow 3；Market Sentiment 0。与此前数据集章节的登记重合，不新增差异编号，也不应将 41 再次累加到专门分批统计。seal_money/max_seal_money 等 omitempty 但 Schema 非 nullable 的字段排除。
+- 本批复核到 42 个既有 CTR-010 字段：Limit Pool 7、Dragon Tiger 18、Market Capital Flow 14、CapitalFlow 3；Market Sentiment 0。与此前数据集章节的登记重合，不新增差异编号，也不应将 41 再次累加到专门分批统计。seal_money/max_seal_money 等 omitempty 但 Schema 非 nullable 的字段排除。
 - 测试证据：`TestAllGoModelFieldsAndRequiredMatchOpenAPISchemas` 已将 DragonTigerItem/Snapshot、MarketSentimentSnapshot/History、LimitPoolItem/Snapshot、MarketCapitalFlowItem/Snapshot、CapitalFlow 纳入 51 个模型字段集合与 required 反射核对；该测试只对非 omitempty 指针检查 nullable，未检查 omitempty 字段的反向 nullable 冲突。
 - `TestDataModelJSONSerializationMatchesOpenAPIRequiredAndNullableSemantics` 仅对 MarketSentimentSnapshot 的三个非 omitempty 计数指针做 null 断言，对 LimitPoolItem 的 change_percent 做 null、seal_money/max_seal_money 做省略断言；没有覆盖本批 41 个差异字段的 nil 省略。Dragon Tiger、Market Capital Flow、CapitalFlow 没有对应 DTO 序列化样例。
 - 本批未执行固定基线 CI；结论为静态代码与测试资产核验，不代表 CI 已通过。无业务代码修改。CTR-010 仍需完成全 DTO 去重汇总及反向序列化断言缺口归档。
+
+
+> **计数更正（子批次 10）**：本节原记 41 个字段，分项实际为 Limit Pool 7 + Dragon Tiger 18 + Market Capital Flow 14 + CapitalFlow 3 = **42 个字段**。已按分项更正；这 42 个字段均为历史重复核验，不计入子批次 5–9 的 70 个专门分批字段累计。
+
+
+## 18. CTR-010 字段清单复核（子批次 11：Provider Probe DTO）
+
+固定代码基线：`origin/integration` `b6dfc85ba214fe16268c8cba780641a8bfe15086`。本批针对此前 Provider Probe History 审计未覆盖的嵌套响应 DTO，检查 Go JSON tag、OpenAPI nullable/required 与模型测试覆盖，不重复审查 CTR-048/049 的分页及错误映射。
+
+### 18.1 ProviderProbeFieldComparison
+
+- `left`、`right`、`difference`、`tolerance` 均为 `*float64 + omitempty`；OpenAPI 的 `ProviderProbeCheckResult.field_comparisons.items` 将四个字段声明为 `nullable: true`。
+- nil 时 Go JSON 会省略字段，而非输出 null，确认 4 个 CTR-010 字段。
+- `reason` 为 omitempty 字符串，但 Schema 未声明 nullable，不计入。
+
+### 18.2 ProviderProbeCheckResult
+
+- `provider_time`、`fetched_at` 均为 `*time.Time + omitempty`；OpenAPI 声明 nullable=true，确认 2 个 CTR-010 字段。
+- 其他 omitempty 字段（provider、capability、错误信息、日历/交易状态、年龄、市场阶段、Provider 标识、质量状态、日期集合、计数及 field_comparisons）未声明 nullable，不计入。
+
+### 18.3 ProviderProbeItem
+
+- `coverage_ratio` 为 `*float64 + omitempty`，OpenAPI nullable=true；`provider_time`、`fetched_at` 为 `*time.Time + omitempty`，OpenAPI 均 nullable=true。确认 3 个 CTR-010 字段。
+- `coverage_total`、`coverage_returned`、`coverage_validated`、`coverage_missing`、`coverage_excluded` 虽为 omitempty 指针，但 OpenAPI 未声明 nullable，不计入；其他 omitempty 字段亦未声明 nullable。
+
+### 18.4 测试覆盖与边界
+
+- `TestAllGoModelFieldsAndRequiredMatchOpenAPISchemas` 将 ProviderProbeCheckResult、ProviderProbeItem 纳入 51 个模型字段集合/required 检查，但仅检查非 omitempty 指针必须 nullable，不会发现本批 omitempty→nullable 冲突。
+- `ProviderProbeFieldComparison` 是 `ProviderProbeCheckResult.field_comparisons` 的嵌套元素，未单独加入 51 个模型注册表；反射测试只检查父字段名，不递归检查嵌套元素字段。
+- `TestDataModelJSONSerializationMatchesOpenAPIRequiredAndNullableSemantics` 没有 ProviderProbeItem、ProviderProbeCheckResult 或 ProviderProbeFieldComparison 的序列化样例；本批 9 个字段缺 nil 省略断言。
+- 本批确认 9 个此前未登记字段：ProviderProbeFieldComparison 4、ProviderProbeCheckResult 2、ProviderProbeItem 3。此前 Provider Probe History 的 CTR-048/049 章节没有登记这些字段，故本批是新增影响字段，不是重复核验；仍归既有 CTR-010，不新增编号。
+- 补充边界盘点：MarketStockOverviewItem 以 MarketStocksSnapshot.items 内联对象形式暴露，ma5/ma20 为非 omitempty 指针且 Schema nullable=true，quote 为 omitempty 可选引用且 Schema 非 nullable，未发现 CTR-010 冲突；该内联 DTO 未独立加入模型反射注册表。AdjustmentFactor、CorporateAction、StockUniverseSnapshot 未在当前 Market Data OpenAPI 中找到对应响应 Schema；ProviderProbeOptions 是无 JSON tag 的内部选项结构，不纳入当前 HTTP 响应 CTR-010 清单。PriceLimitEventEvidence 的 omitempty 字段此前第13节已核验，未发现 nullable 冲突。
+- 本批未执行固定基线 CI；结论来自固定 SHA 下 Go DTO、OpenAPI 和测试源码静态对照。无业务代码修改。
