@@ -820,3 +820,14 @@
 - 真实MariaDB/Redis集成测试受环境变量门控，本轮未运行；A2/L3资源与Migration运行证据留维度5。
 - 结论：PLAT-CTR-006维度2适用性已完成首轮核验，但整体契约保持partial / pending_evidence。仅审计文档更新，无业务代码/Schema/Golden/测试/CI变更。
 - 下一步唯一任务：**Platform维度2 — PLAT-CTR-007 Typed Config/Secret字段、脱敏、消费者映射及机器测试适用性核验**。固定基线不变；不重审本轮Migration算法和生命周期。
+
+
+## 14. Platform 维度2首轮收尾与Server维度2接续（2026-11-10）
+
+- 固定代码审计基线：`origin/integration @ b6dfc85ba214fe16268c8cba780641a8bfe15086`；维护分支：`feat/design_doc`。
+- 本轮完成Platform维度2最后一项 PLAT-CTR-007 Typed Config/Secret：Platform Env/Secret基础API及脱敏测试已核；Server Process、News、Market Data Adapter、Storage Adapter配置消费者已建立映射；旧Market Data/Python API环境读取入口登记待核。
+- 新差异PLAT2-D2-012～014均并入PLAT-CTR-007，不新增CTR；其中Secret类型保护丢失属于消费者安全封装风险，尚无实际日志泄漏证据；兼容环境读取入口的生产活跃状态需由Server/迁移维度核实。
+- Config/Secret为启动时进程内配置API，不适用公开HTTP JSON Schema/Golden；以Go Config Contract Test、Bootstrap注入、消费者配置输出脱敏和快照隔离测试作为替代机器证据。
+- PLAT-CTR-007保持pending_evidence。Platform维度2的PLAT-CTR-001～007均已完成首轮适用性切片，但多个契约仍有跨模块映射/测试/部署证据缺口；不得把“首轮覆盖完成”表述为“Platform契约冻结”。
+- 本轮未修改业务代码、Schema、Golden或测试，未执行CI；仅更新Platform维度2审计记录、差异唯一矩阵和本总进度。
+- **下一步唯一任务：Server — 维度2：DTO、Schema、Golden。** 审核Root Server公开HTTP请求/响应DTO、Handler、OpenAPI、Golden及真实WebUI/内部消费者映射。先完成Server维度2首轮切片，不重做Platform、不提前进入Server其他五个维度；Data继续使用固定基线，不检查Data新分支。
