@@ -10,7 +10,7 @@
 
 | 模块 | Port/调用点 | DTO/Schema/Golden | Fault/Diag/Request ID | 授权/Secret | Repo/Migration/Worker | 依赖边界 | 总状态 |
 |---|---|---|---|---|---|---|---|
-| Platform | partial（技术接口形态已核；消费者调用点待追踪） | partial | partial（Fault/Diagnostics/Request ID 基础实现与单测已核；消费者接入待核） | partial | partial | partial（发现 Task Queue 反向依赖旧 Analysis Domain，待裁决） | partial |
+| Platform | partial（接口形态、Server 部分消费者已核；Data 受控出站接线及全量消费者待核） | partial | partial（Fault/Diagnostics/Request ID 基础实现与单测已核；消费者接入待核） | partial | partial | partial（发现 Task Queue 反向依赖旧 Analysis Domain，待裁决） | partial |
 | Server | partial | not_started | partial | partial | partial | partial | partial |
 | Data | partial | partial | partial | partial | partial | partial | partial |
 | News | partial | partial | partial | partial | partial | partial | partial |
@@ -77,3 +77,13 @@
 - 结论：Platform 是技术原语层，不应定义统一领域 Application Port；HTTP Client、Diagnostics 等能力通过标准 Go interface、配置、构造函数和回调供调用方组合。
 - 发现 AUD-PLAT-PORT-001：`internal/platform/taskqueue` 直接依赖旧 `internal/analysis/domain`，违反 Platform 不依赖领域包的边界原则，登记为 P1 候选，等待旧 Analysis 迁移/Server 责任方裁决。
 - 消费者调用点、Server 装配入口、Data 独立 Module 接入方式和全量 Platform import 扫描尚未完成；维度 1 保持 partial。
+
+
+### Platform — 维度 1：第二批（Server 组合根与 Data Module）
+
+- 详细记录：[`Platform-维度1-Application-Port与调用点.md`](./Platform-维度1-Application-Port与调用点.md)
+- Server Bootstrap 已确认真实消费 Platform Config、Security、Storage、Diagnostics；Server Migration Registry 负责调度模块提供的 Migration，Diagnostics Service 组合模块 Check 并调用 Platform Runner。
+- 固定基线 Server Bootstrap 仍以旧 Analysis HTTP/Worker 为中心；Migration 当前注册 News、Research、Notification。其他领域模块尚不能据此认定已接入 Server。
+- Data 独立启动入口 `cmd/market-data/main.go` 仅注入 Store、Cache、Logger；Data Module 虽提供 HTTPDoer/Dialer 受控注入字段和完整性校验，但当前入口未注入这些依赖，也未启用 `RequireEgressDependencies`。
+- 新增 AUD-PLAT-PORT-002：Data 独立入口未证明接入 Platform 受控出站执行器，列为 P1 候选待核；需先核对是否存在其他生产装配入口及 Provider 默认网络实现。
+- Platform 维度 1 保持 partial；Request ID Middleware 和 Platform HTTP Client 的 Server 装配、其他模块消费者及全量 import 扫描仍待核。
