@@ -498,3 +498,10 @@ Application 的 `RunFinalizationCoordinator` 是三种终态聚合路径的路�
 - `ExpireRunDeadline` 持久化 `deadline_exceeded` 是 Deadline Finalizer 的终止权线性化点；普通 Finalizer 即使持有此前读取的 running/无 termination reason 快照，也不能覆盖该终止权。
 - 并发存储测试要求 Deadline Finalize 唯一成功，普通 Finalize 只能收到 `ErrRunAlreadyFinalized` 或 termination reason 不匹配拒绝；最终 Run 必须保持 deadline_exceeded，且仅有一条 ResultSummary 和 finalized Outbox。
 - 本测试直接覆盖数据库终结事务竞争；Run deadline 标记与 Stage/Attempt 收敛本身仍由 `ExpireRunDeadline` 的独立测试/验收负责。仅有测试代码，尚未执行真实 MariaDB。
+
+
+## 22. ExpireRunDeadline 数据库状态收敛验收补充（2026-11-10）
+
+- 对已过期的 Run，`ExpireRunDeadline` 在单个事务内持久化 `termination_reason=deadline_exceeded` 并递增 Run version；所有非终态 Stage 收敛为 timed_out、递增 Stage version、清除 retry_at 并追加 `run_deadline_exceeded`。
+- 重复调用在同一已标记 deadline 状态下返回 `updated=false` 和当前 version，不重复推进状态。
+- 新增 MariaDB 集成测试覆盖 Pending Stage 路径；running Attempt fencing、取消优先级、全部 Stage 已终态时交由正常 Finalize 的分支仍需专项覆盖。当前测试代码未执行。
