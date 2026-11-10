@@ -55,25 +55,39 @@ func TestMariaDBExpireRunDeadlineFencesRunningAttempt(t *testing.T){
  if err:=repo.CommitAttemptResult(ctx,AttemptResultCommit{RunRef:run,StageRef:stages[0],AttemptRef:attempt.Ref,WorkerID:"deadline-worker",FencingToken:attempt.FencingToken,AttemptStatus:domain.AttemptSucceeded,Stage:domain.Stage{Ref:stages[0],RunRef:run,Code:"active",Status:domain.StageSucceeded,Version:3,AttemptNo:attempt.Number,OutputRef:stringRef("late-result-"+suffix)},OutputRef:stringRef("late-result-"+suffix)});!errors.Is(err,ErrClaimRunUnavailable)&&!errors.Is(err,ErrAttemptLeaseHeld){t.Fatalf("stale result err=%v",err)}
 }
 
-func TestMariaDBDeadlineAndUserCancellationHaveSingleWinner(t *testing.T){
- if os.Getenv("PLATFORM_STORAGE_INTEGRATION")!="1"{t.Skip("set PLATFORM_STORAGE_INTEGRATION=1")}
- ctx,cancel,db,repo:=deadlineRaceDB(t);defer cancel();defer db.Close()
- suffix:=fmt.Sprint(time.Now().UnixNano());run,_:=deadlineRaceFixture(t,ctx,repo,suffix,"deadline-cancel","stage")
- if _,err:=db.ExecContext(ctx,"UPDATE researchflow_runs SET deadline_at=? WHERE run_ref=?",formatResearchflowTimeValue(time.Now().UTC().Add(-time.Minute)),run);err!=nil{t.Fatal(err)}
- start:=make(chan struct{});type outcome struct{changed bool;err error};results:=make(chan outcome,2);var wg sync.WaitGroup;wg.Add(2)
- go func(){defer wg.Done();<-start;v,e:=repo.ExpireRunDeadline(ctx,run,1);results<-outcome{v,e}}()
- go func(){defer wg.Done();<-start;v,e:=repo.BeginRunCancellation(ctx,run,1);results<-outcome{v,e}}()
- close(start);wg.Wait();close(results);wins,rejects:=0,0
- for r:=range results{if r.changed&&r.err==nil{wins++;continue};if r.changed||r.err==nil{t.Fatalf("unexpected race result: %#v",r)};if !errors.Is(r.err,ErrClaimRunUnavailable)&&!errors.Is(r.err,application.ErrRunCancellationUnavailable){t.Fatalf("unexpected rejection: %v",r.err)};rejects++}
- if wins!=1||rejects!=1{t.Fatalf("wins=%d rejects=%d",wins,rejects)}
- var status,reason string;var version uint64
- if err:=db.QueryRowContext(ctx,"SELECT status,version,termination_reason FROM researchflow_runs WHERE run_ref=?",run).Scan(&status,&version,&reason);err!=nil{t.Fatal(err)}
- if version!=2{t.Fatalf("Run version=%d want 2",version)}
- switch reason{case "deadline_exceeded":if domain.RunStatus(status)!=domain.RunCreated{t.Fatalf("deadline winner status=%s",status)}
- case "user_cancelled":if domain.RunStatus(status)!=domain.RunCancelling{t.Fatalf("cancellation winner status=%s",status)}
- default:t.Fatalf("unexpected termination reason %q",reason)}
-}
+func TestMariaDBExpiredDeadlineRejectsUserCancellation(t *testing.T) {
+	if os.Getenv("PLATFORM_STORAGE_INTEGRATION") != "1" {
+		t.Skip("set PLATFORM_STORAGE_INTEGRATION=1")
+	}
+	ctx, cancel, db, repo := deadlineRaceDB(t)
+	defer cancel()
+	defer db.Close()
 
+	suffix := fmt.Sprint(time.Now().UnixNano())
+	runRef, _ := deadlineRaceFixture(t, ctx, repo, suffix, "deadline-cancel", "stage")
+	if _, err := db.ExecContext(ctx, "UPDATE researchflow_runs SET deadline_at=? WHERE run_ref=?",
+		formatResearchflowTimeValue(time.Now().UTC().Add(-time.Minute)), runRef); err != nil {
+		t.Fatal(err)
+	}
+
+	changed, err := repo.BeginRunCancellation(ctx, runRef, 1)
+	if changed || !errors.Is(err, ErrClaimRunUnavailable) ||
+		!errors.Is(err, application.ErrRunCancellationUnavailable) {
+		t.Fatalf("expired-deadline cancellation changed=%v err=%v; want rejected cancellation", changed, err)
+	}
+	updated, version, err := repo.ExpireRunDeadline(ctx, runRef, 1)
+	if err != nil || !updated || version != 2 {
+		t.Fatalf("ExpireRunDeadline updated=%v version=%d err=%v; want true/2/nil", updated, version, err)
+	}
+	loaded, err := repo.GetRun(ctx, runRef)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loaded.Run.Status != domain.RunCreated || loaded.Run.TerminationReason != "deadline_exceeded" ||
+		loaded.Run.Version != 2 {
+		t.Fatalf("expired Run state=%#v; want created/deadline_exceeded/v2", loaded.Run)
+	}
+}
 
 func TestMariaDBExpiredDeadlineYieldsToCompletedStages(t *testing.T) {
 	if os.Getenv("PLATFORM_STORAGE_INTEGRATION") != "1" {
