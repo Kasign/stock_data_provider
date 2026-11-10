@@ -484,3 +484,10 @@ Application 的 `RunFinalizationCoordinator` 是三种终态聚合路径的路�
 - 断言一个 Worker 获得唯一事件，另一个返回空集合；获胜消息 attempt_count 与 lease_generation 首次均为 1。
 - 非租约持有者 Ack 必须失败，租约持有者按相同 generation Ack 成功，确保并发领取和确认均受 owner/generation 约束。
 - 测试依赖真实 MariaDB 的 InnoDB 行锁与 `SKIP LOCKED`，受 `PLATFORM_STORAGE_INTEGRATION=1` 门控，尚未执行。
+
+
+## 20. CreateRunAtomic 中途失败回滚验收补充（2026-11-10）
+
+- 通过测试专属 BEFORE INSERT Stage 触发器制造事务中途失败；失败点位于 Run INSERT 之后、Stage INSERT 期间。
+- 断言 `researchflow_runs`、`researchflow_stages`、`researchflow_run_idempotency` 均无该次创建记录，验证事务回滚完整覆盖 Run、Stage 和幂等索引记录。
+- 触发器在测试结束时清理；仅在 `PLATFORM_STORAGE_INTEGRATION=1` 时执行。当前仅补充验收代码，未宣称实测通过。
