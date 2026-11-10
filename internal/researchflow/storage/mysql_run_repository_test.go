@@ -360,3 +360,147 @@ func TestMariaDBCreateRunAtomicConcurrentIdempotency(t *testing.T) {
 		t.Fatalf("scheduler CAS altered fields owned by Claim/Worker: %#v", persistedStage)
 	}
 }
+
+
+func TestMariaDBWorkerStoreSnapshotClaimAndCommit(t *testing.T) {
+	if os.Getenv("PLATFORM_STORAGE_INTEGRATION") != "1" {
+		t.Skip("set PLATFORM_STORAGE_INTEGRATION=1 to run Researchflow MariaDB integration tests")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+	defer cancel()
+	dsn := fmt.Sprintf("%s:%s@tcp(%s)/%s?parseTime=true",
+		os.Getenv("PLATFORM_MARIADB_USER"),
+		os.Getenv("PLATFORM_MARIADB_PASSWORD"),
+		os.Getenv("PLATFORM_MARIADB_ADDR"),
+		os.Getenv("PLATFORM_MARIADB_DATABASE"),
+	)
+	config, err := mysql.ParseDSN(dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	connector, err := mysql.NewConnector(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	db, err := platformstorage.OpenSQL(ctx, connector, platformstorage.DefaultSQLConfig())
+	if err != nil {
+		t.Fatalf("open MariaDB: %v", err)
+	}
+	defer db.Close()
+	if err := platformstorage.ApplyMigrations(ctx, db, MigrationNamespace, Migrations()); err != nil {
+		t.Fatalf("apply Researchflow migrations: %v", err)
+	}
+	repository, err := NewMySQLRunRepository(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	suffix := fmt.Sprintf("%d", time.Now().UnixNano())
+	now := time.Now().UTC()
+	templateFingerprint := "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+	runRef, stageRef := "worker-run-"+suffix, "worker-stage-"+suffix
+	record := application.CreateRunRecord{
+		Scope: application.IdempotencyScope{
+			CallerRef: "researchflow-worker-integration-test", Operation: "CreateRun", Key: "worker-create-"+suffix,
+		},
+		Fingerprint: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+		Run: domain.Run{
+			Ref: runRef, SchemaVersion: "v1", Status: domain.RunCreated, Version: 1,
+			SystemAsOf: now.Add(-time.Minute), DeadlineAt: now.Add(10 * time.Minute),
+			TemplateRef: "worker-template", TemplateVersion: "v1",
+			TemplateFingerprint: templateFingerprint,
+			InputSnapshotRefs: []string{"input-snapshot-" + suffix},
+			CorrelationID: "worker-correlation-" + suffix,
+		},
+		Stages: []domain.Stage{{
+			Ref: stageRef, RunRef: runRef, Code: "quant", Status: domain.StagePending,
+			Version: 1, Required: true, Dependencies: []string{}, RetryPolicyRef: "retry-v1",
+			DiagnosticRefs: []string{}, ReasonCodes: []string{},
+		}},
+		ResolvedTemplate: template.ResolvedTemplate{
+			Ref: "worker-template", Version: "v1", Fingerprint: templateFingerprint,
+			Stages: []template.ResolvedStage{{
+				Definition: template.StageDefinition{
+					Code: "quant",
+					Retry: template.RetryPolicy{
+						Ref: "retry-v1", MaxAttempts: 3, AttemptTimeoutMS: 60000,
+						RetryableReasonCodes: []string{"provider_unavailable"},
+						Backoff: template.BackoffPolicy{
+							Algorithm: "exponential_full_jitter_v1", BaseDelayMS: 100, MaxDelayMS: 1000,
+						},
+					},
+				},
+			}},
+		},
+		Parameters: json.RawMessage(`{"symbol":"AAA"}`),
+	}
+	created, err := repository.CreateRunAtomic(ctx, record)
+	if err != nil {
+		t.Fatalf("CreateRunAtomic: %v", err)
+	}
+	queued := created.Run
+	queued.Version++
+	queued.Status = domain.RunQueued
+	if updated, err := repository.CompareAndSwapRun(ctx, created.Run.Version, queued); err != nil || !updated {
+		t.Fatalf("queue Run updated=%v err=%v", updated, err)
+	}
+	running := queued
+	running.Version++
+	running.Status = domain.RunRunning
+	if updated, err := repository.CompareAndSwapRun(ctx, queued.Version, running); err != nil || !updated {
+		t.Fatalf("start Run updated=%v err=%v", updated, err)
+	}
+	stage := created.Stages[0]
+	stage.Version++
+	stage.Status = domain.StageReady
+	if updated, err := repository.CompareAndSwapStage(ctx, created.Stages[0].Version, stage); err != nil || !updated {
+		t.Fatalf("ready Stage updated=%v err=%v", updated, err)
+	}
+
+	attemptRef := "worker-attempt-" + suffix
+	attempt, replayed, err := repository.ClaimAttempt(
+		ctx, runRef, stageRef, attemptRef, "worker-integration",
+		time.Minute, 3, 2,
+	)
+	if err != nil || replayed {
+		t.Fatalf("ClaimAttempt replayed=%v err=%v", replayed, err)
+	}
+	snapshot, err := repository.LoadStageExecutionSnapshot(ctx, runRef, stageRef)
+	if err != nil {
+		t.Fatalf("LoadStageExecutionSnapshot: %v", err)
+	}
+	if snapshot.Run.Ref != runRef || snapshot.Run.Status != domain.RunRunning ||
+		snapshot.Stage.Ref != stageRef || snapshot.Stage.Status != domain.StageRunning ||
+		snapshot.Stage.AttemptNo != attempt.Number ||
+		string(snapshot.Parameters) != `{"symbol":"AAA"}` ||
+		len(snapshot.InputSnapshotRefs) != 1 || snapshot.InputSnapshotRefs[0] != "input-snapshot-"+suffix ||
+		snapshot.RetryPolicy.Ref != "retry-v1" || snapshot.RetryPolicy.MaxAttempts != 3 ||
+		snapshot.RetryPolicy.AttemptTimeoutMS != 60000 {
+		t.Fatalf("unexpected Worker execution snapshot: %+v", snapshot)
+	}
+
+	outputRef := "worker-output-" + suffix
+	resultStage := snapshot.Stage
+	resultStage.Version++
+	resultStage.Status = domain.StageSucceeded
+	resultStage.OutputRef = &outputRef
+	resultStage.FinishedAt = nil // Storage assigns the authoritative database timestamp.
+	if err := repository.CommitWorkerResult(ctx, application.WorkerResultCommit{
+		RunRef: runRef, StageRef: stageRef, AttemptRef: attempt.Ref,
+		WorkerID: "worker-integration", FencingToken: attempt.FencingToken,
+		AttemptStatus: domain.AttemptSucceeded, Stage: resultStage,
+		OutputRef: &outputRef,
+	}); err != nil {
+		t.Fatalf("CommitWorkerResult: %v", err)
+	}
+	persistedAttempt, err := repository.GetAttempt(ctx, attempt.Ref)
+	if err != nil || persistedAttempt.Status != domain.AttemptSucceeded ||
+		persistedAttempt.LeaseOwner != "" || persistedAttempt.LeaseExpiresAt != nil {
+		t.Fatalf("persisted Attempt = %+v err=%v", persistedAttempt, err)
+	}
+	persistedStage, err := repository.GetStage(ctx, stageRef)
+	if err != nil || persistedStage.Status != domain.StageSucceeded ||
+		persistedStage.OutputRef == nil || *persistedStage.OutputRef != outputRef {
+		t.Fatalf("persisted Stage = %+v err=%v", persistedStage, err)
+	}
+}
