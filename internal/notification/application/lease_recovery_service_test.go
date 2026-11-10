@@ -44,12 +44,16 @@ type recoveryRepositoryFake struct {
 	calls           int
 	err             error
 	errSequence     []error
+	cancel          context.CancelFunc
 }
 
 func (f *recoveryRepositoryFake) RecoverExpiredLease(_ context.Context, version, token int64, next domain.DeliveryRecord, event domain.DeliveryStateEvent, now time.Time) error {
 	f.calls++
 	f.expectedVersion, f.fencingToken = version, token
 	f.next, f.event, f.now = next, event, now
+	if f.cancel != nil {
+		f.cancel()
+	}
 	if len(f.errSequence) > 0 {
 		err := f.errSequence[0]
 		f.errSequence = f.errSequence[1:]
@@ -243,5 +247,29 @@ func TestLeaseRecoveryServiceContinuesAfterPersistenceOutcomeUnknown(t *testing.
 	if report.Scanned != 2 || report.OutcomeUnknown != 1 || report.Recovered != 1 ||
 		report.Conflicted != 0 || report.Failed != 0 || repository.calls != 2 {
 		t.Fatalf("uncertain item must not prevent processing the remaining batch: report=%+v calls=%d", report, repository.calls)
+	}
+}
+
+
+func TestLeaseRecoveryServiceCountsUnprocessedClaimsOnCancellation(t *testing.T) {
+	service, firstClaim, now, repository := recoveryServiceFixture(t, nil)
+	secondClaim := firstClaim
+	secondClaim.Delivery.DeliveryID = "delivery-recovery-second"
+	thirdClaim := firstClaim
+	thirdClaim.Delivery.DeliveryID = "delivery-recovery-third"
+	service.Scanner.(*recoveryScannerFake).claims = []DeliveryClaim{firstClaim, secondClaim, thirdClaim}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	repository.cancel = cancel
+	report, err := service.RecoverExpiredOnce(ctx, now, 5)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("canceled batch must preserve context error, got %v", err)
+	}
+	if report.Scanned != 3 || report.Recovered != 1 || report.Unprocessed != 2 ||
+		report.Conflicted != 0 || report.OutcomeUnknown != 0 || report.Failed != 0 {
+		t.Fatalf("report must distinguish candidates from processed items: %+v", report)
+	}
+	if repository.calls != 1 {
+		t.Fatalf("canceled batch must stop after first completed item, calls=%d", repository.calls)
 	}
 }

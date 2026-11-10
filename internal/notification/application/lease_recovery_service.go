@@ -20,11 +20,13 @@ type LeaseRecoveryService struct {
 }
 
 type LeaseRecoveryReport struct {
-	Scanned       int
-	Recovered     int
-	Conflicted    int
+	// Scanned 是扫描器返回的候选总数，不代表全部候选都已处理。
+	Scanned        int
+	Recovered      int
+	Conflicted     int
 	OutcomeUnknown int
-	Failed        int
+	Failed         int
+	Unprocessed    int
 }
 
 // RecoverExpiredOnce runs one bounded recovery pass. The caller supplies the
@@ -64,8 +66,9 @@ func (s *LeaseRecoveryService) RecoverExpiredOnce(
 	}
 	report.Scanned = len(claims)
 	var failures []error
-	for _, claim := range claims {
+	for index, claim := range claims {
 		if err := ctx.Err(); err != nil {
+			report.Unprocessed += len(claims) - index
 			failures = append(failures, err)
 			break
 		}
