@@ -1,6 +1,6 @@
 # PLAT-002 十模块核验总进度
 
-**当前状态：** 基线阶段 A 已完成；十模块六维核验阶段 B 进行中；差异唯一登记阶段 D 进行中；第一轮完整性 Review 阶段 F 仅 WebUI 维度 2 局部进行中；项目尚未进入正确性 Review 或冻结评审。  
+**当前状态：** 基线阶段 A 已完成；十模块六维核验阶段 B 进行中；差异唯一登记阶段 D 进行中；第一轮完整性 Review 阶段 F：WebUI 维度 2 已完成（complete_with_open_items），其他模块/维度仍待覆盖；项目尚未进入正确性 Review 或冻结评审。  
 **代码基线：** `b6dfc85ba214fe16268c8cba780641a8bfe15086`（origin/integration）  
 **文档维护分支：** feat/design_doc
 
@@ -32,7 +32,7 @@
 | C | 跨模块调用图、授权链和依赖图 | not_started |
 | D | 差异、待裁决、补证唯一登记 | in_progress（已有大量 CTR 与审计切片；唯一任务矩阵已建立，其他模块差异仍待收敛） |
 | E | 责任模块修复/补证（本分支不改业务代码） | pending_audit |
-| F | 第一轮完整性 Review | in_progress（仅 WebUI 维度 2 局部完成子批次；不代表项目级第一轮完成） |
+| F | 第一轮完整性 Review | in_progress（WebUI 维度 2 已 complete_with_open_items；其他模块/维度尚未完成第一轮覆盖） |
 | G | 第二轮正确性 Review | not_started |
 | H | 第三轮冻结条件 Review | not_started |
 
@@ -754,3 +754,10 @@
 - WebUI维度2停止全量重复Review；后续只按责任模块新提交、正式裁决或测试证据增量验收。
 - 下一步回到阶段B十模块六维核验：先从当前总进度/唯一矩阵确认未完成模块与维度，再执行一个模块的一个未完成维度切片。固定代码基线不变，不检查Data新分支。
 - 本批仅修改审计文档，未修改业务代码、OpenAPI、DTO、Golden或测试，未执行CI。
+## 12. W2-E完成后的PLAT-002主线恢复点
+
+- WebUI维度2第一轮完整性Review已完成（complete_with_open_items），不再作为当前执行批次；其开放CTR保留在唯一矩阵，后续仅增量验收。
+- 阶段B仍未完成。十模块六维矩阵中，Platform的DTO/Schema/Golden仍为partial，Server该维度为not_started；本轮选择先推进Platform维度2，而不是继续扩展WebUI维度2。
+- 下一批唯一任务：**Platform — 维度2：DTO、Schema、Golden 契约一致性核验（固定SHA）**。从Platform自身公开结构、序列化、Schema/Golden和直接消费者映射开始，先盘点已存在的权威契约/测试资产，再选一个边界明确的DTO切片核验。重点判断Fault、Diagnostics、Request ID、HTTP Client配置/结果等Platform公共原语是否有唯一Schema与稳定序列化约束；不将领域模块DTO混入Platform范围，不重复维度1 Port/调用点审查，不修改Platform实现。
+- 本轮下一任务的完成产物应为：一个明确DTO切片的生产方字段/JSON tag、Schema、Golden/Contract Test、直接消费者证据及差异登记；如不存在适用的外部Schema，需说明内部Go API的契约测试方式，不为形式完整而新增OpenAPI。
+- 固定代码审计基线继续为 `b6dfc85ba214fe16268c8cba780641a8bfe15086`；只维护 `feat/design_doc` 审计文档，不查看Data新分支、不合并代码、不改业务实现、不执行CI，除非后续证据表明静态审查无法判定且需明确批准执行。
