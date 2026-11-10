@@ -2191,6 +2191,7 @@ func (p *Eastmoney) FetchSectorRankingsByMetric(ctx context.Context, rawCategory
 		QualityReasons: []string{"provider_snapshot_timestamp_not_exposed"},
 		Items:          make([]model.SectorRanking, 0, len(payload.Data.Diff)),
 	}
+	addEastmoneyDragonTigerIssue(ctx, nil, "provider_time", "sector ranking endpoint", "not_exposed_by_provider_contract", "verifiable provider snapshot timestamp", "unavailable", "", "东方财富行业/概念板块排名接口未暴露可验证的源端快照时间")
 	for _, raw := range payload.Data.Diff {
 		code := parseEastmoneyBoardString(raw, "f12")
 		name := parseEastmoneyBoardString(raw, "f14")

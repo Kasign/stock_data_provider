@@ -1158,8 +1158,10 @@ func TestEastmoneyFetchSectorRankingsMarksMissingTotalAndExcludedRows(t *testing
 	}))
 	defer server.Close()
 
+	reporter := validation.NewReporter(10)
+	ctx := validation.WithReporter(context.Background(), reporter)
 	provider := NewEastmoneyConfiguredWithMarketData(2*time.Second, "", "", "", server.URL, "")
-	got, err := provider.FetchSectorRankings(context.Background(), "industry", 10)
+	got, err := provider.FetchSectorRankings(ctx, "industry", 10)
 	if err != nil {
 		t.Fatalf("FetchSectorRankings: %v", err)
 	}
@@ -1172,6 +1174,17 @@ func TestEastmoneyFetchSectorRankingsMarksMissingTotalAndExcludedRows(t *testing
 		if !strings.Contains(strings.Join(got.QualityReasons, ","), reason) {
 			t.Errorf("missing source coverage reason %q: %v", reason, got.QualityReasons)
 		}
+	}
+	issues := reporter.Snapshot().Issues
+	foundTime := false
+	for _, issue := range issues {
+		if issue.Field == "provider_time" && issue.ProviderField == "sector ranking endpoint" &&
+			issue.Code == "not_exposed_by_provider_contract" && issue.RowIndex == nil {
+			foundTime = true
+		}
+	}
+	if !foundTime {
+		t.Fatalf("missing snapshot-level provider_time Reporter issue: %+v", issues)
 	}
 }
 
