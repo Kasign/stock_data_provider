@@ -187,7 +187,10 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 	latestDeny := binding
 	latestDeny.AuthorizationRef.AuthorizationRef = fmt.Sprintf("%s-latest-deny-%d", latestDeny.AuthorizationRef.AuthorizationRef, time.Now().UnixNano())
 	latestDeny.AuthorizationRef.Decision = domain.AuthorizationDecisionDenied
-	latestDeny.AuthorizationRef.DecidedAt = time.Now().UTC().Add(time.Second).Format(time.RFC3339Nano)
+	latestDenyDecidedAt := time.Now().UTC()
+	latestDenyExpiry := latestDenyDecidedAt.Add(time.Hour).Format(time.RFC3339Nano)
+	latestDeny.AuthorizationRef.DecidedAt = latestDenyDecidedAt.Format(time.RFC3339Nano)
+	latestDeny.AuthorizationRef.ExpiresAt = domain.NullableDateTime{Present: true, Value: &latestDenyExpiry}
 	latestDeny.AuthorizationRef.DecisionFingerprint = strings.Repeat("b", 64)
 	if err := repository.AppendAuthorizationSnapshot(ctx, latestDeny, authorizationObservation, authorizationVersion); err != nil {
 		t.Fatalf("append latest deny authorization snapshot: %v", err)
