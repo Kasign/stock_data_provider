@@ -977,3 +977,14 @@
 - 审计维护分支：feat/design_doc；固定代码审计基线：b6dfc85ba214fe16268c8cba780641a8bfe15086。
 - **下一步唯一任务：取得CTR-006责任模块分支及修复提交SHA，直接按差异矩阵第28.4节做增量验收。** 不再重审字段事实；如尚无责任分支/修复提交，则把该工单交由Server/旧Analysis契约责任方执行，不在审计分支代改。
 - CTR-006通过后，回到第27.3节，集中处理CTR-046/047/007的项目级决策，不另开重复审计切片；随后按B2、B4完成契约修复、跨模块验收和分批冻结。
+
+
+## 23. Data→Researchflow 跨模块输入边界审查（2026-11-10）
+
+- 固定代码审计基线保持 `origin/integration @ b6dfc85ba214fe16268c8cba780641a8bfe15086`；维护分支为 `feat/design_doc`。
+- 本轮完成 Data→Researchflow 输入边界初审，详细差异唯一登记见矩阵第27节。
+- 已确认：Researchflow 只持有不透明 `input_snapshot_refs` 并固定传播 Run 的 `system_as_of`；Data 拥有 Snapshot Manifest、来源版本和 AuthorizationRef。无需新增行情 DTO 或改变依赖方向。
+- 记录差异：真实 Stage Adapter 尚未验证 Manifest.system_as_of 与 Run.system_as_of 一致；Stage 级 Snapshot 最小权限范围未明确；可信 Principal/Scope、purpose_code、Manifest 与 AuthorizationRef 的实际映射缺少 Adapter 证据；当前未发现生产 Data Stage Adapter。
+- 状态：职责/依赖方向 `freeze-ready`；Run 上下文语义 `accepted`；Stage 级资源范围为条件性 `pending_decision`；真实 Data 消费交互 `pending_evidence`。
+- 沿用 DATA-CTR-005/008、FLOW-CTR-003/004，不新增 CTR；不修改 Data、Researchflow、Server 责任模块代码，不执行 CI。
+- 下一步唯一审查边界：**News→Researchflow**，只核对 News Evidence Query/Cursor/授权/PIT 引用如何进入 Run/Stage；不得重复 News→Research 已完成的首轮检查，除非发现 Researchflow 消费路径有独立差异。
