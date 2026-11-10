@@ -992,3 +992,36 @@ CTR-042 不是已证实的数值换算错误：当前代码没有把 Hithink 原
 ### 29.5 下一批
 
 下一批处理 WebUI 维度 2 的 DailyBar 查询窗口 CTR-009：只核对 lookback_days 缺省值的所有权、WebUI 显式传参、Server/OpenAPI 默认语义及现有测试；完成后把结论写入唯一矩阵。不得重新初审已完成的数据集。
+
+
+## 30. DailyBar Bundle lookback_days：CTR-009 合并冻结影响 Review
+
+本节只核对 `GET /api/v1/bundles/{symbol}` 的 lookback_days 默认值所有权、WebUI实际传参、服务端配置默认和现有测试，不重复日 K Provider/数据质量初审。
+
+### 30.1 默认值所有权与调用路径
+
+- WebUI 个股行情页的日 K 条数选择默认120；设置页允许60/120/250，并明确该设置影响下一次个股新查询的默认条数。
+- `app.js` 无自定义日期范围时调用 `getMarketBundle`，将当前limit夹在20..2000后作为 `lookbackDays` 显式传入。因此WebUI常规路径使用用户偏好，不依赖服务端缺省。
+- `api.js` 的 `getMarketBundle` 默认 `lookbackDays=120`，且始终把 lookback_days 序列化到URL。
+- HTTP Handler 在参数省略时将0传给Application；DataService.Bundle 对非正lookback使用 `s.defaultBars`。
+- 配置默认 `MARKET_DATA_DEFAULT_DAILY_BARS=120`，最大值配置 `MARKET_DATA_MAX_DAILY_BARS=1000`；二者均可部署配置。Handler校验显式值至少20且不超过Server maxBars。
+- OpenAPI只声明 minimum=20、maximum=2000，未描述省略参数时使用服务端配置。不可将固定120直接写成公共 default，因为实际默认值可配置，且部署默认max与Schema上限不同。
+
+### 30.2 测试证据
+
+- OpenAPI contract test断言lookback_days的type/minimum/maximum，但不校验省略行为说明或default。
+- Handler边界测试覆盖lookback_days=19返回400；本轮未发现省略参数使用配置默认值的专项HTTP测试。
+- API Client测试只通过超时用例调用getMarketBundle，没有断言默认120和显式lookback_days的URL参数。
+- 配置默认值由配置代码设置；本轮未发现针对Bundle“省略参数→配置默认值→实际读取窗口”的端到端测试证据。
+
+### 30.3 CTR-009 结论与关闭条件
+
+- **CTR-009 保留 P2。** 目前没有证据证明WebUI常规路径窗口错误；问题是公共契约未说明配置化默认行为，且Client/Handler缺少相应直接回归证据。
+- OpenAPI应描述：省略lookback_days时使用服务端配置 `MARKET_DATA_DEFAULT_DAILY_BARS`，默认部署值120；最大值由 `MARKET_DATA_MAX_DAILY_BARS` 控制。不要写死固定default=120。
+- 关闭条件：OpenAPI补充配置化默认与上下界语义；API Client测试覆盖默认120及显式值序列化；Handler/Service测试覆盖省略参数采用配置默认值、显式参数优先；配置范围测试确认默认值不超过最大值。
+- CTR-009不单独阻断整个WebUI维度2公共Schema冻结，但在上述契约说明和测试证据补齐前，不将Bundle查询窗口标记为完整。
+- 本轮仅审计文档更新；未修改业务代码、OpenAPI、DTO、测试或执行CI。固定代码基线未改变。
+
+### 30.4 下一批
+
+W2-C：对CTR-011～037已有审计证据进行一次集中归类和冻结影响判断。排除CTR-010聚合项以及已由其他批次承接的编号；不重新初审代码、不新增CTR。
