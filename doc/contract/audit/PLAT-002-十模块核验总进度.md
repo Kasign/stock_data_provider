@@ -254,7 +254,7 @@
 ### WebUI — 维度 2：证券资料、历史交易状态与涨跌幅规则
 
 - 已核对 Profile、Trading Status、Price Limit Rule 的路由、Handler、Go DTO、OpenAPI 和相关 WebUI API Client。
-- 新增 AUD-WEBUI-CTR-010（P2）：若干 Go `omitempty` 字段在 OpenAPI 直接声明 nullable=true，但实际 JSON 会省略字段；复核后不把仅在 $ref 旁声明 nullable 的 special_exception_evidence 计入已证实范围。
+- 新增 AUD-WEBUI-CTR-010（P2）：若干 Go `omitempty` 字段在 OpenAPI 直接声明 nullable=true，但实际 JSON 会省略字段；复核后不把仅在 $ref 旁声明 nullable 的 special_exception_evidence 计入已证实范围。第 25 节将 FundamentalsSnapshot.system_observed_at 纳入已证实范围。
 - 新增 AUD-WEBUI-CTR-011（P2）：PriceLimitRuleSnapshot 的 OpenAPI required 漏列八个 Go 非 omitempty 字段，且两个状态字段缺少 Go 已定义枚举；该 DTO 未进入 51 模型契约登记表，缺少完整 JSON Golden。
 - Review 已确认 stock-research.js 只实际调用 Profile；Trading Status / Price Limit Rule 请求函数未接入该页面，现有对应区域仅重置占位状态。不能视为端到端已完成。
 - 本批未证明运行时业务结果错误；WebUI 维度 2 继续 partial。详细证据见审计明细第 23 节。
@@ -269,3 +269,15 @@
 - 新增 **AUD-WEBUI-CTR-012**（P2）：Provider 已提供 `total_is_lower_bound`，但 WebUI 未消费该字段；源端 1000 条上限时，页面可能将下界呈现为确定总数。
 - Provider 1000 条上限、unknown 空列表、后备源回退及缓存策略均有对应代码/测试证据；本批未证明板块成员运行时数据错误。
 - WebUI 维度 2 继续 partial。详细证据见审计明细第 24 节。
+
+
+### WebUI — 维度 2：Fundamentals 财务指标与 PIT 消费
+
+- 固定代码基线：`b6dfc85ba214fe16268c8cba780641a8bfe15086`。
+- 已核对 Go DTO、BaoStock/HiThink Provider、DataService 校验/回退/缓存、MariaDB PIT 版本存储、HTTP Handler、OpenAPI、Provider/Service/HTTP/Repository 测试及 WebUI API Client/页面消费。
+- 时间语义区分明确：report_date=报告期末、publication_date=披露日期、available_at=精确可用时间、fetched_at=服务采集时间、system_observed_at=系统记录版本时间。未发现把报告期末或采集时间冒充披露时间。
+- 缺失指标不补零；缺失分区显式 unknown；PIT 只读本地版本，日期级披露证据采用保守过滤，精确 available_at 可支持同日时刻判断。
+- FundamentalMetric、FundamentalSection、FundamentalsSnapshot 字段及 required 与 OpenAPI 一致；将 FundamentalsSnapshot.system_observed_at 纳入 AUD-WEBUI-CTR-010（omitempty 指针被 OpenAPI 过度声明 nullable）。
+- 新增 **AUD-WEBUI-CTR-013**（P2，待产品范围确认）：服务端支持 as_of PIT 查询，但 WebUI API Client/页面未暴露该参数或历史时点查询动作。
+- 页面已消费分区质量、报告期、披露日期、available_at、指标、单位、质量原因及 system_observed_at；未发现缺失值补零。
+- 未发现已证实运行时财务数值错误；WebUI 维度 2 继续 partial。详细证据见审计明细第 25 节。
