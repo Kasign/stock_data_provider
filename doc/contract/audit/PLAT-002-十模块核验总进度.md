@@ -591,7 +591,7 @@
 - 详细记录：WebUI-维度2-完整性Review-第一轮.md 第 17 节。
 - 本批复核 Limit Pool、Dragon Tiger、Market Sentiment、Market Capital Flow 与个股 Capital Flow。确认既有 CTR-010 字段 42 个：Limit Pool 7、Dragon Tiger 18、Market Capital Flow 14、CapitalFlow 3；Market Sentiment 未发现新增 omitempty + nullable 冲突。
 - 42 个字段均已在此前数据集章节零散登记，本批属于重复核验，不新增 CTR 编号，也不重复计入专门分批清单。LimitPoolItem.seal_money/max_seal_money 等 omitempty 但 OpenAPI 非 nullable 的字段明确排除。
-- 51 模型字段/required 反射测试覆盖上述 DTO，但未验证 omitempty→非 nullable 的反向约束；JSON 序列化测试只覆盖 MarketSentimentSnapshot 的三个非 omitempty 计数指针及 LimitPoolItem.change_percent、seal_money/max_seal_money，没有覆盖 41 个差异字段的 nil 省略。Dragon Tiger、Market Capital Flow、CapitalFlow 缺 DTO 序列化样例。
+- 51 模型字段/required 反射测试覆盖上述 DTO，但未验证 omitempty→非 nullable 的反向约束；JSON 序列化测试只覆盖 MarketSentimentSnapshot 的三个非 omitempty 计数指针及 LimitPoolItem.change_percent、seal_money/max_seal_money，没有覆盖 42 个差异字段的 nil 省略。Dragon Tiger、Market Capital Flow、CapitalFlow 缺 DTO 序列化样例。
 - 本批未执行固定基线 CI，无业务代码修改。CTR-010 全量字段去重汇总仍未完成。
 
 
