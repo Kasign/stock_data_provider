@@ -1000,3 +1000,15 @@
 - 沿用 NEWS-CTR-001/002/003、FLOW-CTR-003/004、GOV-CTR-002/006，不新增 CTR；NEWS→Research 已登记问题不重复登记。
 - 本轮未修改业务代码、Schema、Golden、测试，未执行 CI。
 - **下一步唯一任务：转入 Quant→Researchflow 边界审查**，只核对 QuantResult/Manifest/AuthorizationRef 与 Run/Stage 输入引用、system_as_of、结果版本和重试固定关系；不得重复 Quant DTO/指标算法审查。
+
+
+## 25. Quant→Researchflow 结果消费边界审查（2026-11-10）
+
+- 固定代码审计基线保持 origin/integration @ b6dfc85ba214fe16268c8cba780641a8bfe15086；维护分支 feat/design_doc。
+- 本轮完成 Quant→Researchflow 结果消费边界初审，详细差异唯一登记见矩阵第29节。
+- 已确认：Quant 拥有不可变 Result Manifest、结果 payload 和 AuthorizationRef；Researchflow 拥有 Run/Stage/Attempt 执行关联和结果综合。Manifest 绑定 result_type/schema_version/system_as_of/input_snapshot_refs/result_fingerprint；AuthorizationRef.resource_ref 绑定 result_id，Quant 每次读取须重新授权。
+- 核心未决：QuantResultRef 与完整 Envelope 的关系及 GetResult 返回边界未明确，但 FLOW-006 已按完整 Envelope 消费；Quant 结果到 Researchflow Stage output_ref 的字段投影尚未定义。记录为 QNT-FLOW-A/E pending_decision。
+- 证据缺口：强类型 Payload Schema/Golden 未覆盖所有实际 discriminator；真实 Quant Facade 当前授权复核、Manifest/Run 输入对齐、Consumer Adapter、Server 装配和联合 Contract Test 未完成。记录为 QNT-FLOW-B/C/D/F pending_evidence。
+- 状态：职责/依赖方向 freeze-ready；Manifest/授权绑定原则 accepted；Ref/Envelope/Stage output_ref 投影 pending_decision；生产消费链路 pending_evidence。
+- 沿用 QNT-CTR-001～005、FLOW-CTR-003/004、GOV-CTR-002/006，不新增 CTR；不修改 Quant、Researchflow、Server 责任模块代码，不执行 CI。
+- 下一步唯一任务：转入 Research→Researchflow 边界审查，只核对 Research Context/Evidence/Claim 的公开读取与写入、来源授权复核、PIT、Stage 输出引用及重试幂等；不得重做 Data→Research 已审结的来源字段和 PIT 语义盘点。
