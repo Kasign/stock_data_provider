@@ -217,3 +217,27 @@ func TestRebuildAdjustedDailyBarsEmitsDeterministicFactorProvenance(t *testing.T
 		t.Fatal("shared forward bars must identify the same reference factor revision")
 	}
 }
+
+func TestAdjustmentFactorFingerprintSeparatesContentFromObservationMetadata(t *testing.T) {
+	instant := time.Date(2025, 7, 1, 8, 0, 0, 0, time.UTC)
+	observed := instant.Add(time.Hour)
+	factor := model.AdjustmentFactor{
+		Symbol: "600036.SH", TradeDate: "2025-07-01", Factor: 2,
+		Basis: model.AdjustmentFactorShared, Source: "tushare", SourceVersion: "v1",
+		FetchedAt: instant, ProviderTime: &instant, AvailableAt: &instant,
+		SystemObservedAt: &observed, QualityStatus: model.QualityValid,
+	}
+	first, err := adjustmentFactorFingerprint(factor)
+	if err != nil { t.Fatal(err) }
+	factor.FetchedAt = instant.Add(5 * time.Minute)
+	laterObserved := observed.Add(5 * time.Minute)
+	factor.SystemObservedAt = &laterObserved
+	second, err := adjustmentFactorFingerprint(factor)
+	if err != nil { t.Fatal(err) }
+	if first != second { t.Fatal("fetch and system observation metadata must not alter content revision fingerprint") }
+	laterAvailable := instant.Add(time.Minute)
+	factor.AvailableAt = &laterAvailable
+	third, err := adjustmentFactorFingerprint(factor)
+	if err != nil { t.Fatal(err) }
+	if first == third { t.Fatal("provider availability evidence must alter content revision fingerprint") }
+}
