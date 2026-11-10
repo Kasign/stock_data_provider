@@ -91,12 +91,9 @@ func (r *MySQLRunRepository) RenewAttemptLease(
 		return time.Time{}, ErrAttemptLeaseHeld
 	}
 
-	nextExpiry := now.Add(leaseDuration)
-	if nextExpiry.After(deadline) {
-		nextExpiry = deadline
-	}
-	if !nextExpiry.After(now) {
-		return time.Time{}, ErrClaimRunUnavailable
+	nextExpiry, err := calculateResearchflowLeaseExpiry(now, leaseDuration, deadline)
+	if err != nil {
+		return time.Time{}, err
 	}
 	result, err := tx.ExecContext(ctx, `UPDATE researchflow_attempts SET lease_expires_at = ?
 		WHERE attempt_ref = ? AND run_ref = ? AND stage_ref = ? AND attempt_no = ?

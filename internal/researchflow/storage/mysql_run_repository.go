@@ -764,6 +764,28 @@ func formatResearchflowTime(value time.Time) (string, error) {
 	return formatResearchflowTimeValue(value.UTC()), nil
 }
 
+// calculateResearchflowLeaseExpiry calculates a lease against the database clock
+// and caps it at the immutable Run deadline. Researchflow timestamps are stored
+// as fixed-width CHAR(30) values with nanosecond precision, not DATETIME(6).
+func calculateResearchflowLeaseExpiry(now time.Time, duration time.Duration, deadline time.Time) (time.Time, error) {
+	if duration <= 0 {
+		return time.Time{}, errors.New("Researchflow lease duration must be positive")
+	}
+	expiresAt := now.Add(duration)
+	if expiresAt.After(deadline) {
+		expiresAt = deadline
+	}
+	if !expiresAt.After(now) {
+		return time.Time{}, errors.New("Researchflow lease expiry must be after database time and within Run deadline")
+	}
+	// Keep the persisted representation fixed-width so lexical SQL comparisons
+	// preserve chronological ordering for every accepted timestamp.
+	if len(formatResearchflowTimeValue(expiresAt)) != len(researchflowTimestampLayout) {
+		return time.Time{}, errors.New("Researchflow lease expiry is outside the supported timestamp range")
+	}
+	return expiresAt, nil
+}
+
 func formatResearchflowTimeValue(value time.Time) string {
 	return value.UTC().Format(researchflowTimestampLayout)
 }

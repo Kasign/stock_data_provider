@@ -337,7 +337,10 @@ func (r *MySQLRunRepository) ClaimAttempt(
 	}
 	token := maxToken + 1
 	attemptNo := stage.AttemptNo + 1
-	expiresAt := now.Add(leaseDuration)
+	expiresAt, err := calculateResearchflowLeaseExpiry(now, leaseDuration, deadline)
+	if err != nil {
+		return domain.Attempt{}, false, err
+	}
 	_, err = tx.ExecContext(ctx, `INSERT INTO researchflow_attempts (
 		attempt_ref, run_ref, stage_ref, attempt_no, status, lease_owner,
 		lease_expires_at, fencing_token, started_at, finished_at, fault_ref, output_ref

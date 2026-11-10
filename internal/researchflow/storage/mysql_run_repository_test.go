@@ -37,6 +37,33 @@ func TestResearchflowTimestampUsesFixedUTCPrecision(t *testing.T) {
 	}
 }
 
+func TestCalculateResearchflowLeaseExpiryCapsAtRunDeadline(t *testing.T) {
+	now := time.Date(2026, 11, 10, 1, 2, 3, 123456789, time.UTC)
+	deadline := now.Add(1500 * time.Millisecond)
+	expiresAt, err := calculateResearchflowLeaseExpiry(now, time.Duration(1<<63-1), deadline)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !expiresAt.Equal(deadline) {
+		t.Fatalf("lease expiry = %s, want Run deadline %s", expiresAt, deadline)
+	}
+	if encoded := formatResearchflowTimeValue(expiresAt); len(encoded) != 30 || encoded != "2026-11-10T01:02:04.623456789Z" {
+		t.Fatalf("persisted expiry = %q, want fixed-width nanosecond timestamp", encoded)
+	}
+}
+
+func TestCalculateResearchflowLeaseExpiryRejectsInvalidBoundary(t *testing.T) {
+	now := time.Date(2026, 11, 10, 1, 2, 3, 123456789, time.UTC)
+	for _, duration := range []time.Duration{0, -time.Nanosecond} {
+		if _, err := calculateResearchflowLeaseExpiry(now, duration, now.Add(time.Minute)); err == nil {
+			t.Fatalf("duration %s was accepted", duration)
+		}
+	}
+	if _, err := calculateResearchflowLeaseExpiry(now, time.Second, now); err == nil {
+		t.Fatal("Run deadline equal to database time was accepted")
+	}
+}
+
 func TestResearchflowTimestampRejectsZeroValue(t *testing.T) {
 	if _, err := formatResearchflowTime(time.Time{}); err == nil {
 		t.Fatal("expected zero timestamp to be rejected")
