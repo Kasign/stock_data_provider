@@ -51,3 +51,44 @@ func TestWorkerResultCommitRejectsMismatchedOutputReference(t *testing.T) {
 		t.Fatal("expected mismatched output references to be rejected")
 	}
 }
+
+func TestResolveWorkerRetryPolicyUsesPersistedStageSnapshot(t *testing.T) {
+	resolved := template.ResolvedTemplate{Stages: []template.ResolvedStage{{
+		Definition: template.StageDefinition{
+			Code: "quant",
+			Retry: template.RetryPolicy{
+				Ref: "retry-v1", MaxAttempts: 3, AttemptTimeoutMS: 60000,
+				RetryableReasonCodes: []string{"provider_unavailable"},
+			},
+		},
+	}}}
+	stage := domain.Stage{Code: "quant", RetryPolicyRef: "retry-v1"}
+	got, err := resolveWorkerRetryPolicy(resolved, stage)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got.RetryableReasonCodes[0] = "mutated"
+	if resolved.Stages[0].Definition.Retry.RetryableReasonCodes[0] != "provider_unavailable" {
+		t.Fatal("retry policy result must not alias persisted resolved template")
+	}
+}
+
+func TestResolveWorkerRetryPolicyRejectsMismatchedOrDuplicateStage(t *testing.T) {
+	stage := domain.Stage{Code: "quant", RetryPolicyRef: "retry-v1"}
+	base := template.ResolvedStage{Definition: template.StageDefinition{
+		Code: "quant", Retry: template.RetryPolicy{Ref: "retry-v1", MaxAttempts: 2, AttemptTimeoutMS: 1000},
+	}}
+	for name, resolved := range map[string]template.ResolvedTemplate{
+		"missing": {},
+		"mismatched reference": {Stages: []template.ResolvedStage{{Definition: template.StageDefinition{
+			Code: "quant", Retry: template.RetryPolicy{Ref: "retry-v2", MaxAttempts: 2, AttemptTimeoutMS: 1000},
+		}}}},
+		"duplicate": {Stages: []template.ResolvedStage{base, base}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if _, err := resolveWorkerRetryPolicy(resolved, stage); err == nil {
+				t.Fatal("expected invalid persisted retry policy to be rejected")
+			}
+		})
+	}
+}

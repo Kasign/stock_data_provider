@@ -37,17 +37,20 @@ func (r *MySQLRunRepository) LoadStageExecutionSnapshot(
 	defer func() { _ = tx.Rollback() }()
 
 	var run domain.Run
-	var runStatus, systemAsOf, deadlineAt string
+	var runStatus, systemAsOf, deadlineAt, createdAt string
 	var inputRefsJSON, resolvedJSON, parametersJSON string
+	var startedAt, originatingRequestID, resultSummaryRef, terminationReason sql.NullString
 	err = tx.QueryRowContext(ctx, `SELECT
 		run_ref, schema_version, status, version, system_as_of, deadline_at,
 		template_ref, template_version, template_fingerprint, input_snapshot_refs,
-		resolved_template_snapshot, parameters_snapshot, correlation_id
+		resolved_template_snapshot, parameters_snapshot, correlation_id, created_at,
+		started_at, originating_request_id, result_summary_ref, termination_reason
 		FROM researchflow_runs WHERE run_ref = ?`, runRef,
 	).Scan(
 		&run.Ref, &run.SchemaVersion, &runStatus, &run.Version, &systemAsOf, &deadlineAt,
 		&run.TemplateRef, &run.TemplateVersion, &run.TemplateFingerprint,
-		&inputRefsJSON, &resolvedJSON, &parametersJSON, &run.CorrelationID,
+		&inputRefsJSON, &resolvedJSON, &parametersJSON, &run.CorrelationID, &createdAt,
+		&startedAt, &originatingRequestID, &resultSummaryRef, &terminationReason,
 	)
 	if err != nil {
 		return application.StageExecutionSnapshot{}, fmt.Errorf("load Researchflow execution Run: %w", err)
@@ -58,6 +61,17 @@ func (r *MySQLRunRepository) LoadStageExecutionSnapshot(
 	}
 	if run.DeadlineAt, err = parseResearchflowTime(deadlineAt); err != nil {
 		return application.StageExecutionSnapshot{}, fmt.Errorf("decode Researchflow deadline_at: %w", err)
+	}
+	if run.CreatedAt, err = parseResearchflowTime(createdAt); err != nil {
+		return application.StageExecutionSnapshot{}, fmt.Errorf("decode Researchflow created_at: %w", err)
+	}
+	if run.StartedAt, err = parseNullableResearchflowTime(startedAt); err != nil {
+		return application.StageExecutionSnapshot{}, fmt.Errorf("decode Researchflow started_at: %w", err)
+	}
+	run.OriginatingRequestID = stringPointer(originatingRequestID)
+	run.ResultSummaryRef = stringPointer(resultSummaryRef)
+	if terminationReason.Valid {
+		run.TerminationReason = terminationReason.String
 	}
 	if err := json.Unmarshal([]byte(inputRefsJSON), &run.InputSnapshotRefs); err != nil {
 		return application.StageExecutionSnapshot{}, fmt.Errorf("decode Researchflow input snapshot references: %w", err)
@@ -88,25 +102,11 @@ func (r *MySQLRunRepository) LoadStageExecutionSnapshot(
 		resolved.Fingerprint != run.TemplateFingerprint {
 		return application.StageExecutionSnapshot{}, errors.New("Researchflow resolved template identity differs from Run")
 	}
-	var retryPolicy *template.RetryPolicy
-	for i := range resolved.Stages {
-		candidate := &resolved.Stages[i]
-		if candidate.Definition.Code != stage.Code {
-			continue
-		}
-		if retryPolicy != nil {
-			return application.StageExecutionSnapshot{}, errors.New("Researchflow resolved template contains duplicate Stage codes")
-		}
-		if candidate.Definition.Retry.Ref != stage.RetryPolicyRef {
-			return application.StageExecutionSnapshot{}, errors.New("Researchflow Stage retry policy reference differs from resolved template")
-		}
-		policy := candidate.Definition.Retry
-		policy.RetryableReasonCodes = append([]string(nil), policy.RetryableReasonCodes...)
-		retryPolicy = &policy
+	retryPolicy, err := resolveWorkerRetryPolicy(resolved, stage)
+	if err != nil {
+		return application.StageExecutionSnapshot{}, err
 	}
-	if retryPolicy == nil || retryPolicy.MaxAttempts <= 0 || retryPolicy.AttemptTimeoutMS <= 0 {
-		return application.StageExecutionSnapshot{}, errors.New("Researchflow Stage retry policy is missing or invalid in resolved template")
-	}
+	run.ExcludedStages = append([]domain.ExcludedStage(nil), resolved.Excluded...)
 	if stage.RunRef != run.Ref || stage.Ref != stageRef {
 		return application.StageExecutionSnapshot{}, errors.New("Researchflow execution snapshot references are inconsistent")
 	}
@@ -116,7 +116,7 @@ func (r *MySQLRunRepository) LoadStageExecutionSnapshot(
 	return application.StageExecutionSnapshot{
 		Run: run, Stage: stage, Parameters: parameters,
 		InputSnapshotRefs: append([]string(nil), run.InputSnapshotRefs...),
-		RetryPolicy: *retryPolicy,
+		RetryPolicy: retryPolicy,
 	}, nil
 }
 
@@ -213,4 +213,27 @@ func cloneWorkerString(value *string) *string {
 	}
 	copy := *value
 	return &copy
+}
+
+func resolveWorkerRetryPolicy(resolved template.ResolvedTemplate, stage domain.Stage) (template.RetryPolicy, error) {
+	var found *template.RetryPolicy
+	for i := range resolved.Stages {
+		candidate := &resolved.Stages[i]
+		if candidate.Definition.Code != stage.Code {
+			continue
+		}
+		if found != nil {
+			return template.RetryPolicy{}, errors.New("Researchflow resolved template contains duplicate Stage codes")
+		}
+		if candidate.Definition.Retry.Ref != stage.RetryPolicyRef {
+			return template.RetryPolicy{}, errors.New("Researchflow Stage retry policy reference differs from resolved template")
+		}
+		policy := candidate.Definition.Retry
+		policy.RetryableReasonCodes = append([]string(nil), policy.RetryableReasonCodes...)
+		found = &policy
+	}
+	if found == nil || found.MaxAttempts <= 0 || found.AttemptTimeoutMS <= 0 {
+		return template.RetryPolicy{}, errors.New("Researchflow Stage retry policy is missing or invalid in resolved template")
+	}
+	return *found, nil
 }
