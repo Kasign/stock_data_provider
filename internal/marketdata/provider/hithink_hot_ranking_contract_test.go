@@ -7,6 +7,8 @@ import (
 	"net/http/httptest"
 	"testing"
 	"time"
+
+	"example.com/stock-analysis-flow/internal/marketdata/validation"
 )
 
 func TestHithinkHotRankingReportsDuplicateExclusionAndLowerBound(t *testing.T) {
