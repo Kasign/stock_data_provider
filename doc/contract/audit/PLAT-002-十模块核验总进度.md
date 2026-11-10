@@ -966,3 +966,14 @@
 - CTR-047整体保持开放；同步ID行为从未知事实变为ready_for_decision，不标记关闭。
 - 本轮只更新审计文档；无业务代码、OpenAPI、DTO、Schema、Golden、测试变更，未执行CI。
 - 下一步唯一任务：在不改变固定审计基线的前提下，确认CTR-006是否已有责任分支修复提交；若无，基于现有结论形成一次性修复/验收任务，等待明确指定责任分支后实施。不要继续拆Server维度2审查切片，不重新读取RunRequest/Task字段，不检查Data新分支。
+
+
+## 当前执行状态更新：CTR-006修复工单已收敛（2026-11-10）
+
+- 本轮按PLAT-002有限执行清单第27节推进CTR-006，没有重做Task DTO字段审计。
+- 固定基线唯一契约文件已定位为`doc/api/contracts/分析任务.openapi.yaml`；started_at/finished_at当前nullable与Go指针+omitempty的nil省略行为不一致。
+- 已在差异唯一矩阵第28节形成一次性修复/验收工单：只移除两个字段的nullable、保持可缺失、补queued/running/terminal Golden及Schema/Handler Contract Test；不修改Go DTO。
+- 本轮没有检查或修改其他责任分支，没有业务代码、OpenAPI、Golden、测试或CI变更。责任分支尚未指定，因此CTR-006仍为ready_for_implementation，未关闭、未冻结。
+- 审计维护分支：feat/design_doc；固定代码审计基线：b6dfc85ba214fe16268c8cba780641a8bfe15086。
+- **下一步唯一任务：取得CTR-006责任模块分支及修复提交SHA，直接按差异矩阵第28.4节做增量验收。** 不再重审字段事实；如尚无责任分支/修复提交，则把该工单交由Server/旧Analysis契约责任方执行，不在审计分支代改。
+- CTR-006通过后，回到第27.3节，集中处理CTR-046/047/007的项目级决策，不另开重复审计切片；随后按B2、B4完成契约修复、跨模块验收和分批冻结。
