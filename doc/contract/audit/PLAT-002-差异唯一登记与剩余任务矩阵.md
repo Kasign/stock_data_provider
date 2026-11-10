@@ -769,3 +769,41 @@ Golden应由真实DTO序列化生成或与真实序列化逐字节/结构比较�
 - 沿用 NEWS-CTR-001/002/003、FLOW-CTR-003/004、GOV-CTR-002/006；不新增 CTR。NEWS-RSC-A/B/C/D/H 已有问题不重复登记，只引用其既有结论。
 
 本批只更新 PLAT-002 审计记录；未修改业务代码、Schema、Golden、测试或执行 CI。后续统一处理 A/B/C/D 的生命周期与身份决策，不在本审计分支代替责任模块实现。只有相关决议或 Adapter 提交出现后才增量复核，不重做本批初审。
+
+
+## 29. Quant→Researchflow 结果消费边界首轮核验（2026-11-10）
+
+- 固定代码审计基线：origin/integration @ b6dfc85ba214fe16268c8cba780641a8bfe15086；维护分支：feat/design_doc。
+- 范围：QNT-CTR-001～005 与 FLOW-CTR-003/004 的组合边界；核对结果身份、Manifest、Envelope、PIT/输入引用、授权和 Researchflow 消费映射。
+- 不审查 Quant 算法公式、Registry 全量条目或 Risk 规则内容；不重复 Data→Quant 已登记问题。不修改 Quant、Researchflow、Server 业务代码，不新增 CTR。
+
+### 已确认的契约边界
+
+1. Quant 是结果语义和结果资源 Owner；Researchflow 是主要编排消费者。Researchflow 不重算指标、不解释/转换单位、不覆盖 RiskDecision，也不依赖 Quant 内部 Domain/Repository/SQL。
+2. Quant Result Manifest 是不可变内容寻址身份，绑定 result_type、schema_version、system_as_of、input_snapshot_refs 和 result_fingerprint；result_id 由 Manifest fingerprint 派生。AuthorizationRef.resource_ref 绑定 result_id，subject_ref 来自可信调用主体，policy_owner=quant。
+3. Quant 每次结果读取必须由 Quant Owner 按当前策略重新授权；历史 allowed AuthorizationRef 是审计快照，不是 bearer token，也不能覆盖当前 denied/expired/unknown。
+4. Researchflow 已接受以 result_type + schema_version 精确选择强类型 Payload Validator；未知 discriminator/schema 必须拒绝，不回退旧版本；Envelope 的 system_as_of、参数指纹、输入快照引用、AuthorizationRef 必须与 Run 上下文校验。
+5. Stage 执行 Envelope 的执行关联字段由 Orchestrator 注入，Quant 只拥有 typed domain payload、output_type/schema_version 和领域质量摘要；Quant 不得伪造 run_ref/stage_ref/attempt_ref 或 Stage 执行状态。
+6. Quant 结果引用与 Run 原始输入快照引用是不同身份空间：前者指向 Quant 计算结果资源，后者指向上游事实快照。不得把 Quant result_id 冒充 Data/News input_snapshot_refs。
+
+### 差异登记（审计工作项，非新增 CTR）
+
+| 编号 | 固定基线事实 | 状态 | 冻结影响 / 后续统一处理 |
+|---|---|---|---|
+| QNT-FLOW-A | Quant 文档明确 QuantResultRef 已有 DTO/Schema/Golden，但 Ref 与完整 QuantResult Envelope 的共同字段一致性、两者关系及 GetResult 返回边界仍待明确；Researchflow FLOW-006 却以完整 Quant Envelope 作为输入 | pending_decision | 明确唯一读取流程：Researchflow 持有 QuantResultRef，通过 Quant Application Facade 按 result_id 获取经当前授权复核的完整 Envelope；或明确 Ref 本身就是完整结果投影。必须说明字段权威、GetResult 返回类型和错误语义，不能由 Researchflow 自行拼装 Envelope |
+| QNT-FLOW-B | QNT-CTR-004 已有部分 Factor QuantMetric、TrendResult、RiskDecision 的 DTO/Schema/Golden，但各 result_type/schema_version 的强类型 Payload 子 Schema 不齐；FLOW-006 只提供 Validator Registry 接口，没有生产 Payload Schema 注册 | pending_evidence | Quant 按实际首批可消费结果提供精确 Payload Schema、Golden 和强类型序列化证据；Researchflow 注册对应 Validator 并做消费者负例。不得用任意 map、宽泛 Schema 或 Notification Risk Event Schema 替代 |
+| QNT-FLOW-C | QNT-CTR-005 的 Manifest/AuthorizationRef 结构与部分内容寻址测试已存在，但真实 Facade 读取、可信 Principal/Scope、当前授权复核、结果归属、撤销/竞态仍未完成 | pending_evidence | Quant Owner Facade 每次 GetResult 验证可信 Researchflow service principal、purpose/content scope、resource_ref=result_id 和当前策略；denied/unknown/expired/revoked 不返回 payload。补撤销与读取竞态、越权主体、结果归属和脱敏 Fault 测试 |
+| QNT-FLOW-D | Manifest 已绑定 system_as_of 与 input_snapshot_refs，FLOW-006 要求 Envelope.system_as_of 与 Run 一致并校验输入快照引用，但固定基线无真实 Adapter/联合测试证明 Manifest、Envelope、Run 三者逐项一致 | pending_evidence | Adapter 校验 Envelope.system_as_of == Run.system_as_of，Envelope.input_snapshot_refs 与 Quant Manifest 完全一致，参数指纹、算法/Schema 版本与 Manifest 一致；错配拒绝，不能只检查字段非空 |
+| QNT-FLOW-E | FLOW-CTR-004 要求 Orchestrator 注入执行关联字段；QuantResultRef 另含 result_id、algorithm_version、parameter_fingerprint、authorization_ref、input_snapshot_refs 等元数据，二者投影关系尚未形成共同 Schema/Golden | pending_decision | 明确 Quant Application Result Envelope 到 Researchflow Stage Provider Result Envelope 的投影：哪些字段留在 Quant 结果资源，哪些由 Orchestrator 注入，output_ref 指向哪个资源；避免双权威，也禁止 Provider 覆盖执行关联字段 |
+| QNT-FLOW-F | Quant 模块 CI 只证明模块内代码；Researchflow 文档明确生产 Facade 接入、结果持久化和跨模块调用链未完成，固定基线未见 Quant Consumer Adapter、Server 真实装配和双方 Contract Test | pending_evidence | A/E 决策后补真实 Adapter、Server DI 装配、ResultRef 保存/读取、未知版本拒绝、授权拒绝、PIT/输入错配及重试复用同一结果引用等 L2 测试；模块 CI/Fixture 不替代联合验收 |
+
+### 本批结论
+
+- 职责与依赖方向：freeze-ready。Quant 拥有结果和授权语义，Researchflow 拥有流程/Stage 执行语义；无需改变模块依赖或创建通用 Provider 抽象。
+- Manifest 内容寻址与授权资源绑定原则：accepted。Manifest 绑定结果类型、版本、system_as_of、输入快照和结果指纹；AuthorizationRef 绑定 result_id；读取时由 Quant Owner 复核当前授权。
+- Ref→Envelope→Stage output_ref 的读取/投影关系：pending_decision。Quant 文档明确 Ref 与 Envelope 关系/GetResult 边界未定，而 FLOW-006 已按完整 Envelope 消费。
+- 强类型 Payload Schema 与消费者 Validator：pending_evidence。部分 DTO 已有 Schema/Golden，不代表所有实际 result_type/schema_version 均可消费。
+- 真实授权读取、PIT/Manifest 对齐、Adapter/Server 装配及联合测试：pending_evidence。当前没有足够证据宣称 Quant→Researchflow 达到 L2 或 frozen。
+- 沿用 QNT-CTR-001～005、FLOW-CTR-003/004、GOV-CTR-002/006，不新增 CTR。Data→Quant 已登记问题不重复登记。
+
+本批只更新 PLAT-002 审计记录；未修改业务代码、Schema、Golden、测试或执行 CI。后续统一处理 A/E 的有限契约决策；B/C/D/F 等待责任模块实现证据后增量核验，不重复本轮算法或 DTO 审查。
