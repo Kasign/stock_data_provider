@@ -190,13 +190,41 @@ func (r *MySQLRunRepository) CompareAndSwapRun(
 	if expectedVersion == ^uint64(0) || next.Version != expectedVersion+1 || next.Status == "" {
 		return false, errors.New("Researchflow Run CAS version or status is invalid")
 	}
+	if next.ResultSummary != nil || next.ResultSummaryRef != nil || next.FinishedAt != nil {
+		return false, errors.New("Researchflow Run CAS cannot write terminal summary or finish time; use finalization")
+	}
+	var currentStatus string
+	var currentReason, currentSummaryRef sql.NullString
+	if err := r.db.QueryRowContext(ctx, `SELECT status, termination_reason, result_summary_ref
+		FROM researchflow_runs WHERE run_ref = ? AND version = ?`,
+		next.Ref, expectedVersion,
+	).Scan(&currentStatus, &currentReason, &currentSummaryRef); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return false, nil
+		}
+		return false, fmt.Errorf("load current Researchflow Run state for CAS: %w", err)
+	}
+	if currentSummaryRef.Valid {
+		return false, errors.New("Researchflow Run CAS cannot modify a Run with a ResultSummary; use finalization")
+	}
+	current := domain.Run{Status: domain.RunStatus(currentStatus)}
+	if _, err := state.TransitionRun(current, next.Status, time.Now().UTC()); err != nil {
+		return false, fmt.Errorf("reject invalid Researchflow Run CAS transition %s -> %s: %w",
+			currentStatus, next.Status, err)
+	}
+	currentReasonValue := ""
+	if currentReason.Valid {
+		currentReasonValue = currentReason.String
+	}
+	if next.TerminationReason != currentReasonValue {
+		return false, errors.New("Researchflow Run CAS cannot change termination_reason; use cancellation or deadline transition")
+	}
 	result, err := r.db.ExecContext(ctx, `UPDATE researchflow_runs SET
-		status = ?, version = ?, started_at = ?, finished_at = ?,
-		result_summary_ref = ?, termination_reason = ?
-		WHERE run_ref = ? AND version = ?`,
+		status = ?, version = ?, started_at = ?
+		WHERE run_ref = ? AND version = ? AND status = ?
+		AND COALESCE(termination_reason, '') = ? AND result_summary_ref IS NULL`,
 		string(next.Status), next.Version, nullableTime(next.StartedAt),
-		nullableTime(next.FinishedAt), nullableString(next.ResultSummaryRef),
-		nullableText(next.TerminationReason), next.Ref, expectedVersion,
+		next.Ref, expectedVersion, currentStatus, currentReasonValue,
 	)
 	if err != nil {
 		return false, fmt.Errorf("compare-and-swap Researchflow run %q: %w", next.Ref, err)

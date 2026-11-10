@@ -209,6 +209,29 @@ func TestMariaDBCreateRunAtomicConcurrentIdempotency(t *testing.T) {
 	if err != nil || updated {
 		t.Fatalf("stale CompareAndSwapRun updated=%v err=%v, want false without error", updated, err)
 	}
+	runningRun := nextRun
+	runningRun.Version++
+	runningRun.Status = domain.RunRunning
+	runningRun.StartedAt = &now
+	updated, err = repository.CompareAndSwapRun(ctx, nextRun.Version, runningRun)
+	if err != nil || !updated {
+		t.Fatalf("queued -> running Run CAS updated=%v err=%v", updated, err)
+	}
+	terminalRun := runningRun
+	terminalRun.Version++
+	terminalRun.Status = domain.RunSucceeded
+	finished := now
+	terminalRun.FinishedAt = &finished
+	if updated, err = repository.CompareAndSwapRun(ctx, runningRun.Version, terminalRun); err == nil || updated {
+		t.Fatalf("running -> succeeded Run CAS updated=%v err=%v; want finalizer-only rejection", updated, err)
+	}
+	terminationMutation := runningRun
+	terminationMutation.Version++
+	terminationMutation.Status = domain.RunCancelling
+	terminationMutation.TerminationReason = "user_cancelled"
+	if updated, err = repository.CompareAndSwapRun(ctx, runningRun.Version, terminationMutation); err == nil || updated {
+		t.Fatalf("Run CAS termination_reason mutation updated=%v err=%v; want rejection", updated, err)
+	}
 
 	stageRef := loadedRun.Stages[0].Ref
 	loadedStage, err := repository.GetStage(ctx, stageRef)
