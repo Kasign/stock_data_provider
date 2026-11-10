@@ -164,3 +164,26 @@
 - 未发现独立 Repository 历史排序/limit/重复 run_id 更新测试，也未发现 GET History Handler 对非法 limit、未配置存储和 SQL 读取失败的独立单元测试。
 
 本批没有新增差异编号。CTR-048/049 的证据与关闭条件已复核；维度 2 第一轮完整性 Review 仍需继续核对其余差异证据及跨维度交叉项，不宣布完成或冻结。
+## 10. Stock Search 差异证据复核（子批次 3）
+
+本批只复核 CTR-045，不扩展新的数据集或审计维度。代码基线仍为 origin/integration @ b6dfc85ba214fe16268c8cba780641a8bfe15086。
+
+### 10.1 CTR-045：搜索质量状态消费
+
+固定基线证据：
+- internal/marketdata/provider/tencent_search.go：Tencent Smartbox 无可核验匹配总数，非空结果固定标记 quality_status=degraded，原因 provider_search_total_not_reported；无匹配候选返回错误以触发后备 Provider。
+- internal/marketdata/service/data.go：SearchStocks 将 unknown 空结果和 unknown 匹配结果保留为候选状态并继续尝试后备源；全部 Provider 耗尽后，unknown 空结果仍以 quality_status=unknown 和 stock_search_fallback_exhausted_without_confirmed_match 返回，不把它转换为确定无匹配。
+- internal/marketdata/httpapi/openapi.yaml：Stock Search 描述明确要求调用方按 quality_status 和 quality_reasons 处理未知/降级质量。
+- web/src/app.js：loadStockSearch 对 items 为空直接显示“没有匹配的股票”；非空结果只把 stale 标志传给渲染函数，未消费 degraded、unknown 和 quality_reasons。
+- web/src/stock-search-view.js 与 web/tests/stock-search-view.test.mjs：覆盖候选规范化、文本安全渲染和 ARIA 键盘状态，但不覆盖 app.js 搜索流程的质量状态 DOM 行为。
+
+结论：CTR-045 证据成立，保留 P2。unknown 空结果不能显示为确定无匹配；degraded、stale、unknown 应有不同提示。需要增加 app.js 搜索流程的质量状态集成 DOM 回归测试，至少覆盖四种质量状态及 unknown 空结果。
+
+### 10.2 范围与重复项检查
+
+- StockSearchItem/StockSearchSnapshot 的 Go JSON tag 与 OpenAPI required/nullable 结构一致；OpenAPI 对 total 已说明它是 Provider 报告/保留的匹配候选数，不是全市场证券总数。
+- Tencent Smartbox 优先、Eastmoney 目录后备属于当前明确装配策略；不能为了让 total 看似完整而强制每次自动补全都扫描 Eastmoney 全市场目录。
+- 本批没有发现需要新增的 DTO、Provider Port 或排序差异编号；CTR-045 已覆盖当前确认的质量状态消费缺口。
+- 本批没有执行固定基线 CI，不将已有测试资产描述为本轮运行通过。
+
+本批无新增 CTR 编号、无业务代码修改。
