@@ -817,3 +817,68 @@ CTR-042 不是已证实的数值换算错误：当前代码没有把 Hithink 原
 - API Client 可增加响应元数据保留测试，但不能以 API Client 单测替代 app.js 集成 DOM 测试。
 - 本批不修改业务代码、OpenAPI 或测试，不执行 CI；不改变固定审计基线。WebUI 维度 2 第一轮完整性 Review 仍未完成。
 
+## 26. Analysis Run：CTR-046 / CTR-047 冻结影响 Review
+
+本批只复核既有 CTR-046、CTR-047 的冻结影响、责任边界与验收证据，不重新执行 Analysis Run 全链路初审，不新增 CTR 编号。固定代码审计基线仍为 `origin/integration @ b6dfc85ba214fe16268c8cba780641a8bfe15086`。
+
+### 26.1 CTR-046：Run 读取与 Run Events 公共接口
+
+**真实路由与消费者**
+- `internal/platform/httpapi/server.go` 注册 `GET /api/v1/analysis/runs/`，同一 Handler 按路径段区分 `GET /api/v1/analysis/runs/{run_id}` 与 `GET /api/v1/analysis/runs/{run_id}/events`。
+- WebUI `getAnalysisRun` 明确请求 Run GET；Run Events 路径也由 Server 对外提供，不能因当前 WebUI 主要通过 Task Events 展示阶段进度而从公共契约中省略。
+- Run GET 成功时返回完整 `domain.RunResult`；未完成返回 409 `run_not_finished`，不存在返回 404 `run_not_found`，存储读取错误返回 500 `read_result_failed`。
+- Run Events 成功返回对象 `{run_id, events}`；不存在返回 404 `run_not_found`，其他读取错误返回 500 `read_events_failed`。当前该端点没有分页参数或游标响应，不能将 Task Events 的 `after_sequence/limit/next_after_sequence` 语义套用到 Run Events。
+
+**权威契约缺失**
+- `doc/api/contracts/分析任务.openapi.yaml` 当前只定义异步 Task 创建、Task 状态、Task Events 三条路径，缺少 Run GET 和 Run Events 两条路径。
+- Schema 缺少 Run GET 的 `RunResult` 及其嵌套 `RunRequest`、`Failure`、`StageEvent`、质量/市场/组合/信号/计划等响应结构的正式定义；Run Events 的响应包装也没有定义。
+- Run GET 的状态响应语义至少应区分 200、404、409、500；Run Events 至少应定义 200、404、500。错误响应应沿用项目统一错误结构，而不是另造格式。
+- Run 状态域与 Task 状态域不同，不能把 Task 的 queued/running/succeeded/partial/failed 枚举直接复用为 RunStatus。RunStatus 当前包含 running、completed、blocked_data_quality、rejected_request、partial、failed；例如 blocked_data_quality 是 Run 结果状态，不等于 Task 执行未完成。
+
+**测试证据**
+- 已有 `TestReadResultMapsNotFound` 覆盖 Run GET 404；`TestReadResultDoesNotExposeStorageError` 覆盖 Run GET 500 脱敏。
+- 固定基线 `internal/platform/httpapi/server_test.go` 未发现 Run GET 成功响应、409 `run_not_finished` 的 Handler 测试，也未发现 Run Events 成功、404、500 的 Handler 专项测试。
+- Task Events 的测试不能替代 Run Events 测试，因为两者资源标识、响应包装和事件读取 Port 不同。
+
+**冻结判断**
+- CTR-046 保留 P2，属于正式公共接口描述缺失，不是路由不存在或 WebUI 请求路径错误。
+- 在 Run GET / Run Events 的路径、响应 Schema、状态码和错误语义进入权威 OpenAPI 前，消费者无法依赖正式契约生成客户端或验证响应；因此该项阻断 Analysis Run 对外契约冻结。
+- 关闭至少需要补齐两条 OpenAPI 路径、RunResult 与 Run Events 响应 Schema，并补充 Run GET 成功/409、Run Events 成功/404/500 的 Handler 测试。嵌套 DTO 应有字段级 JSON Golden 或等价序列化验证；本轮未执行该项。
+
+### 26.2 CTR-047：异步 CreateTask 请求与领域 RunRequest 的边界
+
+**真实 HTTP 行为**
+- `POST /api/v1/analysis/tasks` 的 Handler 直接将 JSON 解码到 `domain.RunRequest`，启用 `DisallowUnknownFields`，因此当前 HTTP 输入实际上受领域结构体字段集合影响；OpenAPI 却只列出部分字段，并错误描述“字段定义与 domain.RunRequest 一致”。
+- 领域 `RunRequest` 包含 `run_id`、`task_type`、`as_of`、`as_of_mode`、`universe_id`、`symbols`、`portfolio_id`、`strategy_ids`、`market_id`、四个配置版本字段及 `parameters map[string]string`。现有 OpenAPI 漏掉 `as_of_mode`、`parameters`，同时没有定义 TaskType 四值枚举和 required/default 语义。
+- Handler 默认值：空 `task_type` → `post_market_scan`；空 `as_of` → 当前上海时区时间；空 `universe_id` → `request-watchlist`；空 `portfolio_id` → `paper-unconfigured`；空 `market_id` → `CN-A`；空 `strategy_ids` → `trend-following`；四个配置版本分别补入固定默认版本。
+- `historical_replay` 必须由调用方显式提供 `as_of`，否则 Handler 直接返回 400 `as_of_required`。对于其他任务，Handler 根据调用方是否显式提供 `as_of` 覆盖 `as_of_mode`：显式时为 `explicit`，未显式时为 `realtime_snapshot`。因此客户端传入的 `as_of_mode` 不具有控制权。
+- Queue 在创建任务时生成新的 `run_id` 并覆盖请求中的 `req.RunID`，随后持久化；客户端传入的 `run_id` 不是创建任务时可控制的身份字段。
+- `parameters` 是 `map[string]string`，Runner 在 `symbols` 为空时会尝试从 `parameters["symbols"]` 解析标的。因此不能简单把 `symbols` 声明为所有场景必填，也不能将 parameters 声明成任意 JSON 对象。
+- Task Handler 的同步校验有限：它明确拒绝历史任务缺少 as_of；未知 TaskType、缺失 symbols 等领域执行校验可能在任务入队后由 Runner 执行并导致异步任务失败。契约不得误写成这些情况都在 POST 阶段同步返回 400。
+
+**契约裁决候选**
+1. 将 HTTP 输入独立定义为 `CreateTaskRequest`，不要继续声称它与领域 `RunRequest` 完全一致；领域对象是内部执行模型，不是 HTTP DTO 契约。
+2. TaskType 枚举列出四个正式值，并明确省略时的默认值。需由项目负责人裁决非法值应在创建时同步拒绝，还是允许入队后由 Runner 以失败 Task 结束；OpenAPI 与 Handler 必须采用同一行为。
+3. 明确 `as_of` 的默认行为和 `historical_replay` 必须显式提供 `as_of` 的条件约束；`as_of_mode` 是服务端推导值，不应被描述为客户端可控制字段。
+4. `run_id` 由服务端/Queue 生成并覆盖，不属于客户端可指定字段；建议从 CreateTaskRequest 中排除。若暂时保留兼容输入，也必须明确其被忽略并由服务端覆盖。
+5. 明确各服务端默认字段及其版本值；`symbols` 与 `parameters.symbols` 的互补关系、参数类型和执行期校验时机必须明确，不能机械复制领域结构体的非 omitempty 字段作为 required。
+6. 对未知字段、Content-Type、1 MiB 请求体上限、Idempotency-Key 长度与冲突、202 新建/200 幂等重放、429 队列满、503 Worker 未配置等现有行为，保留在 HTTP 请求/响应契约中。
+
+以上为待裁决候选，不代表项目已经批准新的请求 DTO 或改变当前行为。
+
+**测试证据**
+- 已有 `TestCreateTaskReturnsAcceptedAndIdempotencyKey` 覆盖省略 task_type 时的默认值与 202；`TestCreateTaskRejectsHistoricalRequestWithoutAsOf` 覆盖 historical_replay 条件约束；`TestIdempotencyConflictReturns409`、队列满 429、超大尾随请求体及错误 Content-Type 测试也已存在。
+- 尚未发现对 `as_of_mode` 被覆盖、客户端 `run_id` 被 Queue 覆盖、`parameters.symbols` 回退、TaskType 非法值处理时机，以及所有默认字段的完整 Handler 契约测试。
+- 现有测试不足以证明 HTTP CreateTaskRequest 与领域 RunRequest 的字段语义相同；它们反而证明存在 Handler 默认与覆盖规则。
+
+**冻结判断**
+- CTR-047 保留 P2，属于 HTTP 请求 DTO 边界及字段语义描述不准确。
+- 在 CreateTaskRequest 的字段集合、默认值、条件约束、服务端生成身份、parameters 语义和非法 TaskType 处理时机未裁决并同步到 OpenAPI/Handler 前，异步创建请求契约不能冻结。
+- CTR-005 的 TaskType enum/required 相关遗留要求继续由 CTR-047 承接；CTR-003 的 Run 路径缺失由 CTR-046 承接。历史编号保留可追溯，不重复计数。
+
+### 26.3 本批结论与范围控制
+
+- CTR-046、CTR-047 均保留 P2；两者都影响 Analysis Run/Task API 的权威契约冻结，但性质不同：CTR-046 是响应端点/Schema 缺失，CTR-047 是请求 DTO/字段语义边界不清。
+- CTR-046 的 404/500 既有测试描述已保持准确；缺口仅列出尚未覆盖的成功、409 和 Run Events 路径状态。
+- CTR-047 不把所有领域字段机械标为 required；先裁决 HTTP 输入模型和 Handler 实际校验时机。
+- 本批未修改业务代码、OpenAPI、DTO 或测试，未执行 CI；没有新增 CTR 编号，也没有把嵌套 RunResult Golden、DB migration 或 Worker 并发审计混入本轮。后几项仍按既定其他维度/专项任务处理。
