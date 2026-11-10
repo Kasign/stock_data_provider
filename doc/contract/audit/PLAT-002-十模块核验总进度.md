@@ -1047,3 +1047,15 @@
 - 状态：事件职责/依赖方向 freeze-ready；INT-CTR-001 语义 accepted；Research 生产端基本对齐但 Relay pending_evidence；Researchflow 实现偏差、Quant Outbox、Notification Fanout、Server Relay 均 pending_evidence。
 - 沿用 INT-CTR-001、NTF-CTR-001～003、QNT-CTR-005、RSC-CTR-003、FLOW-CTR-001/003、GOV-CTR-003/004，不新增 CTR；不修改业务代码，不执行 CI。
 - 下一步唯一任务：审查 WebUI→Server 对外 API 契约边界，核对页面消费的公开 HTTP DTO/Schema/错误与认证语义、Server Handler 映射和契约测试；不重做 WebUI 视觉/交互审查，也不把内部模块 DTO 当作 Web 公共协议。
+
+
+## 29. WebUI→Server 对外 HTTP API 契约边界审查（2026-11-10）
+
+- 固定审计基线：origin/integration @ b6dfc85ba214fe16268c8cba780641a8bfe15086；维护分支 feat/design_doc。详细差异见矩阵第33节。
+- 已确认：WebUI 同源 Nginx 分别代理 Market Data 8091 与 Analysis/Root Server 8092；Root Server 目前只装配 Legacy Analysis API/Worker 和 Platform Health/Router，未装配 Market Data Adapter 或 Researchflow Facade。Market Data 仍使用浏览器 localStorage API Key 作为迁移期兼容认证；Analysis 所有业务路由 Owner Bearer 保护，WebUI 不发送 Owner Token，故当前请求预期 401。
+- 安全基础正确：Root Router 明确区分 Anonymous/Owner/Service Scope；Root Middleware 重生成 Request ID、限制请求大小/并发；Fault 对外只暴露 class/code/safe message/retryable，Request ID 在响应头；WebUI 兼容解析结构化错误与 Request ID。
+- 关键待决：浏览器 Web Session/Cookie+CSRF+资源授权模型未定（WEB-SRV-B）；Analysis OpenAPI 未覆盖 WebUI/Root 已使用的 Run 查询路径且 DTO/认证/错误定义不完整（WEB-SRV-C）；Market Data/Root Error Request ID body/header 权威关系未统一（WEB-SRV-F）。
+- 证据缺口：Data API Key 从浏览器迁移到 Server 注入（WEB-SRV-A）；Researchflow/Data Facade 正式 HTTP 装配与 Legacy Analysis 退役策略（WEB-SRV-D）；OpenAPI 驱动的跨端 Contract Test 和 Session/代理端到端验收（WEB-SRV-E）。
+- 状态：职责边界 freeze-ready；当前路由/认证状态 accepted（仅迁移事实）；浏览器认证、Analysis OpenAPI、错误 Request ID 规范 pending_decision；目标装配/密钥迁移/联合测试 pending_evidence。
+- 沿用 MDM-006、PLAT Security/Fault/Observability、FLOW-CTR-001/003/004、GOV-CTR-001/002/003，不新增 CTR；不修改 WebUI/Server/Data 业务代码，不执行 CI。
+- 下一步唯一任务：核验 Server 组合根装配与 Platform 横向技术契约的实际使用，确认十模块 DI、资源生命周期、HTTP Client/Storage/Security/Diagnostics/Fault/Request ID 是否存在重复实现、越权承载领域语义或未接入；只登记证据和差异，不替模块修复。
