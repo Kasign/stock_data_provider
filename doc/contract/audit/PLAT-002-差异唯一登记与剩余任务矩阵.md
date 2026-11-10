@@ -440,3 +440,17 @@ W2-D 的“权威规则核对与裁决问题准备”完成；CTR-010 本身仍�
 - 本批只做固定SHA静态核验；无业务代码、OpenAPI、DTO、Golden、测试或CI改动。
 
 Server维度2当前仅完成首轮一个切片，状态为 `in_progress / partial`；不得将其视为整个Server维度2完成。下一切片应继续Server当前真实公开的模块HTTP Handler/Transport消费者映射，先盘点是否有Root已注册模块路由；若固定基线没有新增模块路由，则对Server公开错误DTO与Analysis API现有差异做增量补证，不重复本批Health/Analysis初审。
+
+
+## 22. Server 维度2第二切片收尾：错误 DTO 与消费者交叉核验
+
+- 固定代码基线仍为 b6dfc85ba214fe16268c8cba780641a8bfe15086；只读该SHA，不检查Data新分支。
+- Root Router没有新增模块Handler，仍为13条method-pattern；本轮不扩大路由范围。
+- Root错误生产路径已交叉核验：Bootstrap Middleware/Fault为class/code/message/retryable；Security Guard、Health Handler、旧Analysis Handler主要为code/message；Analysis Run执行失败另带partial_result；声明超限与Handler解码超限的错误码不同。
+- WebUI只消费message/code/status/requestId，不消费class/retryable；Request ID实际Body优先、Header其次，既有测试已验证Body优先。此前审计文档中“Header优先”的说法已在Server审计记录中纠正。
+- Analysis OpenAPI没有统一Error Schema/错误响应JSON Schema。CTR-046（Run路由OpenAPI缺失）、CTR-047（CreateTask请求Schema）均为既有项，本批不重复登记。
+- 错误Envelope统一建议：Root稳定错误响应逐步统一为嵌套Error DTO，保留code/message并明确class/retryable；实现前须由Server/项目责任方裁决覆盖端点、枚举、HTTP状态、retryable规则、超限错误码、Request ID权威通道及OpenAPI范围。审计分支不擅自改实现。
+- 唯一归属：Envelope归PLAT-CTR-001；Root路由/运维契约归SRV-CTR-001；Request ID归PLAT-CTR-002；CTR-046/047保持原编号。无新增CTR。
+- 本批状态：第二切片complete_with_open_items；Server维度2整体仍为in_progress / partial，不等于契约冻结。
+- 本批仅更新审计文档，无业务代码、OpenAPI、DTO、Golden、测试或CI变更。
+- 下一步：继续Server维度2，但只推进**Run/Task DTO字段与既有OpenAPI Schema的差异关闭证据**，以CTR-046/047、CTR-006/007的现有登记为唯一入口；不重新初审错误Envelope、Health/Readiness或WebUI基础错误解析。
