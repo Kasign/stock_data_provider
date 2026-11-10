@@ -384,7 +384,7 @@ func TestEastmoneyDailyBarsReportsResponseLevelIssues(t *testing.T) {
 		{name: "missing data object", body: `{"rc":0}`, wantCode: "empty_result", wantError: true, wantSeverity: validation.SeverityError},
 		{name: "symbol mismatch", body: `{"rc":0,"data":{"code":"000001","klines":[]}}`, wantCode: "symbol_mismatch", wantError: true, wantSeverity: validation.SeverityError},
 		{name: "missing echoed symbol", body: `{"rc":0,"data":{` + validRows + `}}`, wantCode: "missing_requested_identity", wantSeverity: validation.SeverityWarning},
-		{name: "empty klines", body: `{"rc":0,"data":{"code":"600519","klines":[]}}`, wantCode: "empty_result", wantSeverity: validation.SeverityWarning},
+		{name: "empty klines", body: `{"rc":0,"data":{"code":"600519","klines":[]}}`, wantCode: "empty_result", wantError: true, wantSeverity: validation.SeverityWarning},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
