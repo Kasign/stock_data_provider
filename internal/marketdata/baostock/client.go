@@ -272,10 +272,8 @@ func parseQuarterlyFinancialPage(body string, spec financialQuerySpec, userID, c
 					Message: fmt.Sprintf("BaoStock %s required structure field %s is invalid: %v", spec.method, spec.fields[i], err),
 				}
 			}
-			// pubDate 缺失或类型异常只影响披露日期证据，不应丢弃其他财务指标。
-			if i != 1 {
-				return nil, fmt.Errorf("BaoStock %s column %s: %w", spec.method, spec.fields[i], err)
-			}
+			// 只有 code/statDate 是定位证券和报告期的结构字段；披露日期与财务指标
+			// 类型异常均保留字段级证据，不应导致整条财务记录被丢弃。
 			fieldIssues = append(fieldIssues, QuarterlyFinancialFieldIssue{
 				SourceField: spec.fields[i], Code: "invalid_field",
 				ActualType: baoStockCellType(raw), Preview: baoStockCellPreview(string(raw)),
