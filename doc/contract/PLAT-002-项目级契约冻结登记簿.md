@@ -277,7 +277,7 @@ Platform 文档中的 P002-D01～D15 是 Platform 侧差异/待决事项索引�
 - 本轮未运行全仓测试；GitHub 文件读取不等于本地编译或 CI 验收。
 - 模块间独立确认尚未取得；不得标记为已确认消费者签字。
 
-## 9. 下一步执行顺序
+## 9. 初始审查计划（历史记录）
 
 1. 完成十个模块代码目录、Go Module、公开 Port、Handler、Schema/Golden 清单。
 2. 建立真实 import/调用依赖图，核对项目依赖 DAG 与实际方向。
@@ -303,7 +303,7 @@ Platform 文档中的 P002-D01～D15 是 Platform 侧差异/待决事项索引�
 
 ### 10.2 审计工作项统计（不作为正式 CTR 计数）
 
-截至差异矩阵第35节，有状态表格行共69行，其中56项带唯一显式审计编号（无重复），另有13行边界/契约聚合项。含 pending_decision 的行项目共22项：21项纯待决（NEWS-FLOW-D 随 A/B 合并裁决，不独立成项），1项同时包含待决与证据缺口；已决事项和条件性延期已移出待决队列。该统计不是 CTR 计数，也不与43个正式 CTR 相加。
+69行、56个唯一编号工作项是 B1～B8 裁决前的历史审计规模快照，不是当前待决数量。DEC-PLAT-002-018～026 已覆盖原22个含 pending_decision 的工作项；当前非条件性项目级待决队列为0。相关工作项转为 pending_evidence；DATA-FLOW-B、LLM-FLOW-B 保持 deferred。该统计不是 CTR 计数，也不与43个正式 CTR 相加。
 
 ### 10.3 L1 可维持冻结的范围
 
@@ -317,8 +317,8 @@ Platform 文档中的 P002-D01～D15 是 Platform 侧差异/待决事项索引�
 ### 10.4 当前不具备 L2 冻结资格的范围
 
 - 所有 43 个正式 CTR 仍需按自身门禁补机器契约、Golden、生产方与全部消费者 Contract Test、兼容/安全/状态机证据；适用项还需真实授权、幂等、PIT、并发和故障恢复测试。
-- 关键待决子范围包括 Data Snapshot/交易日历/stale/available_at 映射，News Evidence 来源/授权/质量与分页快照生命周期，Quant ResultRef/Envelope/Stage 投影，Research 引用/幂等/元数据访问，LLM Prompt 配置/ambiguous outcome，Web Session/Analysis OpenAPI/Request ID 规范。
-- 关键证据缺口包括 Data/News/Quant/Research/LLM 真实 Facade/Adapter，Researchflow Stage Provider，Outbox/Relay/Notification Fanout，Server 十模块 DI/Worker/Migration/Storage/Diagnostics/Secret 注入，以及 WebUI→Handler 跨端测试。
+- 原关键待决主题已由 DEC-PLAT-002-018～025 裁决：Data Snapshot/交易日历/stale 映射、News Evidence 来源/质量/关系、News→Researchflow 输入快照、Quant ResultRef/Stage 投影、Research 引用/幂等/Context 访问、LLM Prompt/模型配置/重试分类、WebUI 新 API/OpenAPI 边界。当前不再等待这些主题的项目级决策。
+- 当前主要证据缺口包括 Data/News/Quant/Research/LLM 真实 Facade/Adapter，Researchflow Stage Provider，Outbox/Relay/Notification Fanout，Server 十模块 DI/Worker/Migration/Storage/Diagnostics/Secret 注入，以及 WebUI→Handler 跨端测试。
 - P2 WebUI 字段和页面消费者差异按端点局部处理；不自动阻断无关契约。明确 deferred 的扩展能力按触发条件管理，不把延期项升级为全局冻结阻断。
 
 ### 10.5 PLAT-002 整体退出条件
@@ -326,17 +326,17 @@ Platform 文档中的 P002-D01～D15 是 Platform 侧差异/待决事项索引�
 PLAT-002 不因本次矩阵统计完成而结束。整体完成仍需：
 1. 十模块六维证据覆盖完成，并从生产方和全部直接消费者两端确认 Port、Schema、授权、Fault/Diagnostics、Repository/Migration/Worker、依赖方向。
 2. 完整 Go import/调用图、跨模块授权链和 Server 组合装配图完成，不再仅凭抽样确认。
-3. 非条件性 pending_decision 写入正式 `doc/contract/decisions/` 决议；责任模块完成对应修复和补证。
+3. 项目级非条件性 pending_decision 已由 DEC-PLAT-002-017～026 完成裁决；责任模块按决议完成对应实现和补证。
 4. 第二轮正确性 Review 和第三轮冻结门禁 Review 分别形成记录。
 5. 每个可冻结 CTR 满足第5节适用门禁后，逐项记录版本、生产方、消费者、Schema/Golden、双方测试、SHA/CI 证据并改为 frozen；不得批量改状态。
 6. L3 真实 Provider/模型/通知渠道/部署验收单独记录，不混入 L2，也不作为无关契约的阻断条件。
 
-本节不改变第3节任何 CTR 状态，不批准第35.4节待决事项，不宣称代码修复或 CI 通过。
+本节不改变第3节任何 CTR 状态，不代表责任模块代码修复或 CI 通过。
 
 
-## 11. 待决事项批次入口（2026-11-10）
+## 11. 项目级决策批次状态（2026-11-10）
 
-当前项目级待决提案统一以 doc/contract/decisions/项目级契约决策记录.md 中 DEC-B1～B8 为入口。既有决议覆盖项不重复裁决；条件性扩展保持 deferred；事实核验和实现缺口保持 pending_evidence。提案未批准前，第3节 CTR 状态不变。
+原 DEC-B1～B8 已完成项目负责人裁决，正式决议为 DEC-PLAT-002-018～025，汇总为 DEC-PLAT-002-026。当前非条件性项目级待决队列为0；责任模块实现/证据缺口按 pending_evidence 跟踪。DATA-FLOW-B、LLM-FLOW-B 仅在各自触发条件出现时重新进入决策。
 
 
 ## 12. DEC-B1～B8 项目级决议状态（2026-11-10）
