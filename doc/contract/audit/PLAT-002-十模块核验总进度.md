@@ -895,3 +895,20 @@
 - 本轮只更新三份审计文档；未修改业务代码、OpenAPI、DTO、Schema、Golden、测试，未执行CI。无新增CTR、无CTR关闭。
 - Server维度2仍为`in_progress / partial`，第四切片状态`complete_with_open_items`。
 - **下一步唯一任务：Server维度2决策输入收敛**——整理CTR-046/047/007所需的最小项目负责人决策项，按已有事实给出推荐默认方案与兼容影响；CTR-006按既有序列化事实准备直接Schema修正验收项。仍不进入Server其他五个维度、不审查Data新分支、不扩展到其他模块。
+
+
+
+## 20. Server维度2第五切片：项目级决策输入收敛（2026-11-10）
+
+- 固定代码审计基线仍为`origin/integration @ b6dfc85ba214fe16268c8cba780641a8bfe15086`；维护分支仍为`feat/design_doc`。
+- 本轮只读取固定基线权威契约、旧Analysis Handler/Task Handler/DTO/OpenAPI及Researchflow决议；没有检查Data新分支，也没有扩大模块审计范围。
+- 形成三项待负责人裁决提案：
+  - CTR-046 / D-SRV-API-01：旧Analysis Run/Task/Events路径兼容保留；Researchflow API独立版本化；旧路径不得静默切换语义。旧Analysis请求缺少Researchflow CreateRunCommand必填字段，不能直接映射。
+  - CTR-047 / D-SRV-REQ-01：建议未知非空TaskType拒绝、symbols的100项OpenAPI限制在Handler落实、异步Task run_id由服务端生成且拒绝非空客户端值；同步Run run_id先补Runner实现证据再裁决。
+  - CTR-007 / D-SRV-EVT-01：建议旧Analysis Events兼容保留并定义独立StageEvent；Researchflow事件流如建设则独立版本化。
+- CTR-006 / D-SRV-TIME-01具备直接实施条件：保持started_at/finished_at nil时省略，修正OpenAPI nullable语义，补queued/running/terminal Golden；本轮没有擅自修改Schema。
+- 关键边界：Researchflow CreateRunCommand中的system_as_of、deadline_at、template_ref/version、input_snapshot_refs、idempotency_key等语义不能从旧Analysis RunRequest猜测或自动映射；as_of不等于system_as_of。
+- 本轮决策仅为建议，未被项目负责人确认；CTR-046/047/007保持pending_decision，CTR-006为ready_for_implementation但仍未验收。无新增CTR、无CTR关闭。
+- 本轮只更新三份审计文档，无业务代码、OpenAPI、DTO、Schema、Golden、测试变更，未执行CI。
+- Server维度2整体仍为`in_progress / partial`。第五切片状态为`complete_with_open_items`。
+- **下一步唯一任务：按已形成的决策提案进行项目级裁决输入核对；在用户/项目负责人未确认前，不把建议当成accepted，也不擅自实施CTR-046/047/007。可独立推进的唯一实现项是CTR-006的Schema/Golden修正，但应先确认当前工作授权是否允许修改审计基线以外的业务契约文件；若只允许审计分支，则继续完善验收工单，不碰业务文件。** 仍不进入Server其他维度、不切换模块、不审查Data新分支。
