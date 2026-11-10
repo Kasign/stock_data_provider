@@ -584,3 +584,12 @@
 - SectorRanking 确认 latest_price、change、change_percent、change_percent_5d、amount、advancing_count、declining_count、leader_change_percent 共 8 个差异。合计 18 个字段，归入既有 CTR-010。
 - 反射测试覆盖本批 DTO 字段集合/required，但未检查 omitempty→nullable 反向冲突；现有 JSON 序列化测试只覆盖 Quote/DailyBar 核心非 omitempty 指针及 Bundle.quote 省略，没有覆盖本批 18 个差异字段。本批未执行固定基线 CI。
 - 截至子批次 9，CTR-010 专门分批清单累计核对 70 个字段；此前其他数据集章节零散登记的字段尚待统一去重汇总。无业务代码修改。
+
+
+### WebUI — 维度 2：CTR-010 字段清单复核（子批次 10）
+
+- 详细记录：WebUI-维度2-完整性Review-第一轮.md 第 17 节。
+- 本批复核 Limit Pool、Dragon Tiger、Market Sentiment、Market Capital Flow 与个股 Capital Flow。确认既有 CTR-010 字段 41 个：Limit Pool 7、Dragon Tiger 18、Market Capital Flow 14、CapitalFlow 3；Market Sentiment 未发现新增 omitempty + nullable 冲突。
+- 41 个字段均已在此前数据集章节零散登记，本批属于重复核验，不新增 CTR 编号，也不重复计入专门分批清单。LimitPoolItem.seal_money/max_seal_money 等 omitempty 但 OpenAPI 非 nullable 的字段明确排除。
+- 51 模型字段/required 反射测试覆盖上述 DTO，但未验证 omitempty→非 nullable 的反向约束；JSON 序列化测试只覆盖 MarketSentimentSnapshot 的三个非 omitempty 计数指针及 LimitPoolItem.change_percent、seal_money/max_seal_money，没有覆盖 41 个差异字段的 nil 省略。Dragon Tiger、Market Capital Flow、CapitalFlow 缺 DTO 序列化样例。
+- 本批未执行固定基线 CI，无业务代码修改。CTR-010 全量字段去重汇总仍未完成。
