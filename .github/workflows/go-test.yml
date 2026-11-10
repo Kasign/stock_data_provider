@@ -208,6 +208,27 @@ jobs:
       - name: Run Researchflow go vet
         run: go vet ./internal/researchflow/...
 
+  researchflow-workerstore-validation:
+    name: Researchflow WorkerStore unit, race and vet
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache-dependency-path: go.sum
+      - name: Download dependencies
+        run: go mod download
+      - name: Run WorkerStore storage tests
+        run: go test ./internal/researchflow/storage
+      - name: Run WorkerStore storage race detector
+        run: go test -race ./internal/researchflow/storage
+      - name: Run WorkerStore storage go vet
+        run: go vet ./internal/researchflow/storage
+
   researchflow-mariadb-integration:
     name: Researchflow MariaDB lifecycle integration
     runs-on: ubuntu-latest
