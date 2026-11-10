@@ -162,14 +162,15 @@ func TestUnknownDeliveryReconciliationServiceFailsClosedBeforeLookup(t *testing.
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			_, adapter, repository, now := unknownReconciliationServiceFixture(t, domain.ChannelLookupIndeterminate)
+			seedService, adapter, repository, now := unknownReconciliationServiceFixture(t, domain.ChannelLookupIndeterminate)
+			deliveryID := serviceDeliveryID(seedService)
 			service, err := NewUnknownDeliveryReconciliationService(
 				tc.reader, serviceRegistryForTest(t, adapter), repository, standardRetryPolicy(),
 			)
 			if err != nil {
 				t.Fatal(err)
 			}
-			_, _, err = service.Reconcile(context.Background(), serviceDeliveryID(service), now, 0.5)
+			_, _, err = service.Reconcile(context.Background(), deliveryID, now, 0.5)
 			if !errors.Is(err, tc.want) || adapter.lookupCalls != 0 || repository.calls != 0 {
 				t.Fatalf("must fail before provider lookup or write: calls=%d writes=%d err=%v", adapter.lookupCalls, repository.calls, err)
 			}
