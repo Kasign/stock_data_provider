@@ -239,3 +239,14 @@
 - 新增 IndexCatalog、HotRanking 两项来源不匹配回退测试；使用合法降级快照，断言首选来源被拒绝、后备 Provider 被调用且最终来源正确。
 - MarketCapitalFlow 已有严格来源匹配：非空错误来源及空来源均无法通过接收校验；缓存读取也执行领域 validator。本批不重复修改。
 - 本批未改变缓存键/TTL、质量候选策略、领域模型、Provider 接口及后备顺序。测试源码已提交，按开发分支约定未运行 gofmt/build/test，需由 integration 统一验收。
+
+### 2026-11-10：剩余来源身份入口清查收口
+
+- 本轮补查 TradingCalendar、SecurityTradingStatus、PriceLimitEventEvidence，以及 Supplement 承载的筹码/个股资金流接收路径。
+- TradingCalendar 原先只检查快照 Source 非空，未核对当前 Provider.Name()；现已增加来源身份拒绝，错误来源不参与跨源日历比较和候选选择，并新增后备 Provider 回归测试。
+- SecurityTradingStatus 在 validateSecurityTradingStatusSnapshot 中要求 Source 非空且等于当前 Provider.Name()；PriceLimitEventEvidence 在 validatePriceLimitEventEvidence 中执行相同严格校验。两者空来源和错误来源均拒绝，不需要重复改造。
+- Supplement 不是独立领域结果入口；其筹码和个股资金流通过 ChipDistribution / CapitalFlow 接收逻辑处理。两条路径均已有非空来源匹配、空来源显式降级补齐规则，不新增重复校验。
+- 前批已核验的 MarketCapitalFlow 继续保持严格来源匹配，空来源由来源身份检查及领域 validator 拒绝。
+- 至此，本阶段已逐项覆盖当前 DataService 实际接收的行情、目录、快照、财务、公告、估值、指数目录/成分/日线、市场资金流、交易日历、证券交易状态、特殊涨跌幅事件及补充数据入口。来源策略分为“严格匹配拒绝”或“有限兼容补齐并降级”，不再扩大清查范围。
+- 本阶段新增来源身份回归测试源码已提交；未运行 gofmt/build/test，测试结果待 integration 统一验收。来源身份阶段到此冻结，后续只允许修复 integration 暴露的具体问题，不再循环扩大审查清单。
+- 下一主线恢复真实 Provider 数据差分：固定证券与交易日采集原始响应，对照 Raw 字段、归一化字段及 Python/权威参考值；优先核验成交量/成交额单位、复权因子口径、Quote 时间偏差，以及请求区间、分页/截断完整性。此前列出的 Tencent 成交量推断、NetEase/BaoStock 成交量单位、Hithink 成交额单位、Tushare limit 截断诊断可见性、NetEase CSV 长区间覆盖、Eastmoney 空响应诊断和交易日历差分等证据项全部保留，不因本阶段完成而视为通过。
