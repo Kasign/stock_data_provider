@@ -80,20 +80,20 @@
 - `getMarketSentiment`、`getMarketSentimentHistory`
 - `getMarketBreadth`、`getMarketLimitPool`、`getMarketDragonTiger)
 
-这些入口应在后续逐项核对对应浏览器测试是否覆盖真实请求参数、错误/空响应和取消行为；不得仅因缺少单元测试就自动登记为契约缺陷。
+这些入口的直接 API Client 请求测试缺口已作为对应 CTR 或补证条件记录；没有新代码/测试证据时不再重复扫描。健康检查路由和访问策略属于维度 3 / Server 交叉核验，不扩展本维度 2。
 
 ## 5. 待核数据集与收口分类
 
-| 数据集/入口 | 已有审计状态 | 后续动作 |
+| 数据集/入口 | 当前审计状态 | 后续动作 |
 |---|---|---|
-| Hot Rankings | 本次盘点确认页面消费，未在第 1–36 节索引中确认独立字段语义切片 | 待核 DTO、OpenAPI、Provider/Service、页面字段 |
-| Market Sentiment History | 主快照已随 Market Breadth 核对；历史响应需确认独立 DTO/Schema/页面消费 | 待核历史记录字段、日期/窗口、空值语义 |
-| Limit Pool | 页面消费已确认；尚未从当前审计目录索引确认独立切片 | 待核池类型、日期、排序/截断、来源和页面消费 |
-| Dragon Tiger | 页面消费已确认；尚未从当前审计目录索引确认独立切片 | 待核分页、金额单位、日期/席位语义及页面消费 |
-| Stock Search | app.js 消费已确认；既有证券资料切片是否覆盖搜索 DTO 尚待定位 | 核对搜索候选 total、证券代码/交易所语义及 UI |
-| Analysis Run | Client 和路由存在；任务 DTO 已审，但 Run 结果结构不等同 Task | 核对 Run DTO、事件结构、Schema/Golden 与结果页消费 |
-| Provider Probe History | Client/页面/请求测试已接通；已有 Probe 切片覆盖情况待索引确认 | 核对历史记录 DTO、分页/截断和诊断字段 |
-| Market Session / Index Catalog / Index Constituents / Index Daily Bars | 数据集字段审计已完成 | 只在最终完整性 Review 中复核，不重复展开 |
+| Hot Rankings | 字段/Provider/页面消费切片已完成；CTR-037及CTR-010影响已登记 | 不重做初审；仅在责任方提交修复或新证据后增量验收 |
+| Market Sentiment History | 历史DTO、Repository、Handler、页面及CTR-038～040冻结影响Review已完成 | CTR-038/039待语义裁决；CTR-040待WebUI实现对齐；不重复初审 |
+| Limit Pool | DTO、Provider、Service、配置、Handler、OpenAPI、页面及CTR-042 Review已完成 | CTR-042单位证据/不可比较边界待裁决；不重复初审 |
+| Dragon Tiger | DTO、Provider、Service、分页、金额单位、页面及CTR-043/044 Review已完成 | CTR-043保留P1，等待Data责任方修复/明确延期；CTR-044能力边界待裁决 |
+| Stock Search | DTO、Provider、Service、质量状态及页面消费已审；CTR-045 Review已完成 | CTR-045等待WebUI质量状态消费和DOM回归；不重复初审 |
+| Analysis Run | Run GET/Events、RunResult、Task请求DTO及消费者证据已审；CTR-046/047 Review已完成 | 等待Server责任方补齐权威OpenAPI和对应测试；不重复初审 |
+| Provider Probe History | DTO、分页、Repository、Handler、WebUI和CTR-048/049 Review已完成 | 等待total语义裁决、存储错误映射和故障测试；不重复初审 |
+| Market Session / Index Catalog / Index Constituents / Index Daily Bars | 字段审计及对应CTR-023/028～036归类已完成 | 仅保留产品范围决议、能力/单位证据和对应关闭条件；不重复展开 |
 
 ### 分类约束
 
@@ -108,3 +108,20 @@
 WebUI API Client 的入口清单已完成第一轮盘点：44 个导出函数中 3 个为本地设置函数；其余 41 个远端入口有 40 个在主要页面模块找到精确引用，`getMarketSentiment` 是唯一已确认的孤儿 Client。当前剩余工作不是继续无边界扫描 Client，而是按第 5 节明确列出的数据集补齐 DTO/Schema/Golden 和消费证据，然后做维度 2 完整性 Review。
 
 当前不能据此宣布维度 2 完成：页面调用点存在不代表字段语义、OpenAPI required/nullable、错误映射和 Golden 测试已经全部核验。
+
+
+## 7. W2-E 第一轮完整性 Review 状态校正（2026-11-10）
+
+本次校正以固定代码审计基线 `b6dfc85ba214fe16268c8cba780641a8bfe15086` 和现有数据集审计章节为准。此前第5节将若干已经完成切片的数据集仍列为“待核”，属于索引过期；现已更新为“已审、仅待增量验收”，不得据此重新开展初审。
+
+- 数据集覆盖：第3节矩阵列出的 WebUI 维度2数据集均有独立审计切片；后续 API 盘点新增的 Hot Rankings、Market Sentiment History、Limit Pool、Dragon Tiger、Stock Search、Analysis Run、Provider Probe History 均已有专门章节或CTR冻结影响Review。
+- API消费映射：44个导出函数、41个远端入口、40个主要页面模块引用的盘点结果保持不变。唯一未发现主要页面消费者的是 `getMarketSentiment`，继续列为产品范围待确认，不自动新增CTR。
+- 服务端契约入口：Market Data 35个OpenAPI path（含2个健康路由）已与路由入口盘点；Analysis Run GET/Events缺失OpenAPI由CTR-046承接。健康检查/诊断访问策略归维度3，不混入本轮。
+- 编号去重：CTR-003→046、CTR-005→047；CTR-041 withdrawn；CTR-010为124字段聚合项；CTR-038与CTR-048分别保留；CTR-001/002归维度1。无新增CTR。
+- 冻结影响：CTR-043仍为P1；其余本维度活动差异按唯一矩阵保留各自P2/待裁决状态。第一轮完整性Review不等于修复、CI通过或契约冻结。
+
+### 7.1 第一轮结论
+
+**WebUI 维度2第一轮完整性Review完成（带开放差异与证据保留项）**。完成的含义仅为审查范围、数据集覆盖、API消费映射、编号去重、问题分类及遗留关闭条件已登记完整；不表示所有差异已关闭，也不表示该维度可整体冻结。
+
+CTR-010逐字段适用性/无值原因证据、CTR-043 P1处置、其余活动CTR的契约裁决/实现修复/测试补证仍在项目主线待办中。后续只做责任方新提交、正式决议和测试证据的增量验收，不重复完整性Review。
