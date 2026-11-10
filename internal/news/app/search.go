@@ -21,6 +21,7 @@ func NewSearchCandidates(providers ProviderSet) *SearchCandidates {
 
 func (s *SearchCandidates) Execute(ctx context.Context, request domain.SearchRequest) domain.SearchResult {
 	request.Query = strings.TrimSpace(request.Query)
+	request.QueryDimension = strings.TrimSpace(request.QueryDimension)
 	if request.Query == "" || request.Limit < 1 || request.Limit > 100 {
 		return domain.SearchResult{Status: domain.SearchFailed, FailureCode: "invalid_request"}
 	}

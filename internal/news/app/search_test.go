@@ -118,6 +118,9 @@ func TestSearchCandidatesNormalizesProviderCandidates(t *testing.T) {
 	if got.QueryDimension != "news" || got.ObservedAt.IsZero() || got.PublishedAt.Location() != time.UTC {
 		t.Fatalf("candidate context/time=%+v", got)
 	}
+	if len(result.Outcomes) != 1 || result.Outcomes[0].QueryDimension != "news" {
+		t.Fatalf("provider outcome query dimension was not normalized: %+v", result.Outcomes)
+	}
 }
 
 func TestSearchCandidatesReturnsEmptyWhenAllProvidersReturnEmpty(t *testing.T) {
