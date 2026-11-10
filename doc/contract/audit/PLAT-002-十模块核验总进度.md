@@ -602,3 +602,11 @@
 - ProviderProbeFieldComparison 是嵌套元素，未单独加入 51 模型反射注册表；父模型反射只核对字段名，不递归核验嵌套元素。三个 DTO 均缺 JSON nil 省略样例。
 - MarketStockOverviewItem 内联 Schema 字段与 Go 空值语义一致；AdjustmentFactor、CorporateAction、StockUniverseSnapshot 当前未找到对应 OpenAPI 响应 Schema；ProviderProbeOptions 是内部选项结构，不纳入当前 HTTP 响应字段清单。
 - 子批次10计数已更正：7 + 18 + 14 + 3 = 42，均为重复核验，不计入此前专门分批累计。子批次11本轮为新增字段登记。本批未执行固定基线 CI，无业务代码修改。
+
+
+### WebUI — 维度 2：CTR-010 字段清单复核（子批次 12）
+
+- 详细记录：WebUI-维度2-完整性Review-第一轮.md 第 19 节。
+- HotRankingItem 确认 latest_price、change、change_percent、rank_change、heat 五个 omitempty 指针字段与 OpenAPI nullable=true 冲突；HotRankingSnapshot.provider_time 再确认一个，共 6 个字段，归入既有 CTR-010。
+- 51 模型字段/required 反射测试已登记两个 DTO，但未检查 omitempty→nullable 反向冲突；JSON 序列化测试只覆盖 HotRankingItem 基础字段和其他可选字段省略，没有覆盖这六个字段的 nil 省略，也没有 HotRankingSnapshot 样例。
+- 本批只做 DTO/OpenAPI/测试资产静态核验，未执行固定基线 CI，无业务代码修改。
