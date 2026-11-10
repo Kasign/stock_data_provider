@@ -107,3 +107,15 @@
 - Server 已注册 Research Migration，但未构造 Research Application/Repository/Authorizer，也未注入 Research Diagnostics Checks。新增 AUD-PLAT-PORT-004（P1 候选）。
 - 新增 AUD-PLAT-PORT-005（P2 候选）：Research Correlation ID 与 Platform Request ID 端到端关联待证。
 - Research 消费者核验为 module-level implementation evidenced / production wiring not evidenced；Platform 维度 1 保持 partial。
+
+
+### Platform — 维度 1：第五批（Notification 消费者初审）
+
+- 详细记录：[`Platform-维度1-Application-Port与调用点.md`](./Platform-维度1-Application-Port与调用点.md)
+- Notification 自有 Application Port 覆盖 Subscription、Delivery Plan、Delivery、Attempt、租约恢复、Inbox、模板和渠道适配；Inbox 事务要求同时写入 Fanout 工作项。
+- DeliveryExecutionService 将扫描/Claim 留给上层 Worker；LeaseRecoveryService 仅提供调用方驱动的单次恢复入口。
+- Migration 已由 Server 注册；固定基线 Server Bootstrap 没有构造 Notification Application/Repository/FanoutWriter，也没有注册 Notification Worker；Server Diagnostics 未注入 Notification Checks。
+- Migration 持久化 Inbox `correlation_id` 和 Delivery State Event `request_id`，但端到端映射未证。
+- 新增 AUD-PLAT-PORT-006（P1 候选）：Notification Application/Fanout/Delivery Worker 未接入 Server 生产组合根。
+- 新增 AUD-PLAT-PORT-007（P2 候选）：Notification Request ID 与 Correlation ID 端到端映射待证。
+- Notification Fault 映射及 Application 全目录错误路径尚未完成扫描；本批结论为 module-level implementation evidenced / production wiring not evidenced。维度 1 保持 partial。
