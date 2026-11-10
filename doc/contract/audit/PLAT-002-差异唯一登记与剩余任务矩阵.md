@@ -324,3 +324,14 @@ W2-D 的“权威规则核对与裁决问题准备”完成；CTR-010 本身仍�
 ### 13.4 下一阶段执行边界
 
 从下一轮开始停止WebUI维度2全量完整性Review。回到阶段B十模块六维核验，按既定十模块清单与六个维度推进；先从唯一矩阵/总进度中确认当前未完成模块和维度，选择一个模块的一个未完成维度做证据核验。不得重新读取已完成WebUI维度2数据集，不检查Data新分支，不改变固定代码审计基线。
+
+## 14. Platform 维度2：Diagnostics Observation DTO 首批切片（2026-11-10）
+
+- 审计记录：`Platform-维度2-DTO-Schema-Golden.md`。
+- 固定基线：`b6dfc85ba214fe16268c8cba780641a8bfe15086`；只核 Platform `diagnostics.Observation` 一个 DTO 切片。
+- 已核 Go DTO/JSON Tag/Validator、PLAT-CTR-004 JSON Schema、healthy/unavailable Golden、Go 契约测试、News/Research 模块级生产方及 Server Diagnostics/Health Handler 消费路径。
+- 发现 PLAT2-D2-001～004：Go 字节长度与Schema字符长度不等价；空白字符串语义不等价；attributes总字节预算未在Schema表达；现有测试未证明Schema与Go对同一边界样例双重校验。以上均并入既有PLAT-CTR-004证据缺口，不新增CTR。
+- PLAT-CTR-004保持 `pending_evidence`，不可因Go Golden测试存在而标记frozen。Server完整Diagnostics Report Schema/HTTP Golden转由Server维度2核验，不在Platform切片越界补建。
+- 本切片状态 `partial`；Platform维度2仍为partial。本轮只完成Observation一个DTO，不代表Fault、Request ID、HTTP Client等其他公共结构完成核验。
+- 下一切片：Platform维度2核对Fault内部对象与领域/Transport映射边界；Server完整HTTP Error Envelope留在Server维度2。
+- 本轮仅新增/更新审计文档，未修改业务代码、Schema、Golden、测试，未执行CI；固定代码审计基线不变。
