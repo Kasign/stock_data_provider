@@ -730,3 +730,42 @@ Golden应由真实DTO序列化生成或与真实序列化逐字节/结构比较�
 - 沿用 DATA-CTR-005、DATA-CTR-008、FLOW-CTR-003、FLOW-CTR-004，不新增 CTR；本批不把 Researchflow 对 Data 的逻辑依赖误判为已经存在的直接 DTO 调用。
 
 本批只更新 PLAT-002 审计记录；未修改业务代码、Schema、Golden、测试或执行 CI。后续只在真实 Data Stage Adapter 或相关契约提交出现时增量核验，不重复本轮职责和上下文审查。
+
+
+## 28. News→Researchflow 跨模块消费边界首轮核验（2026-11-10）
+
+- 固定代码审计基线：`origin/integration @ b6dfc85ba214fe16268c8cba780641a8bfe15086`。
+- 审计维护分支：`feat/design_doc`。
+- 范围：NEWS-CTR-001/002/003 与 FLOW-CTR-003/004 的组合边界；只核对 News Evidence 查询结果、分页快照、PIT 和授权上下文如何成为 Run/Stage 固定输入。
+- 不重复 News→Research 已登记的 available_at、Evidence 来源字段、授权 DTO 映射、质量状态和 Research Adapter 问题；本批只记录它们对 Researchflow 输入生命周期的额外影响。
+- 不修改 News、Researchflow、Server 业务代码，不新增 CTR。
+
+### 已确认的边界
+
+1. News 的 `ListEvidence` 是同进程只读 Application Port；请求必须显式携带可信 `caller_ref`、`purpose_code`、`requested_content_level`、Run 的 `system_as_of`、受控 filters 和 page_size，不隐式触发搜索/抓取。
+2. News 首屏返回的 `snapshot_ref` 固定分页结果集；后续页使用同一 `snapshot_ref` 和不透明 `cursor`。Cursor 是续页令牌，不是独立业务资源引用，也不能代替 Evidence 版本引用。
+3. News 首期分页 Snapshot 和 Cursor TTL 均为 15 分钟；过期或快照不可用必须明确失败，禁止静默重建快照继续翻页。
+4. Researchflow 的 `CreateRunCommand.input_snapshot_refs` 在 Run 创建时固定，纳入请求指纹，并由 Stage/Attempt/重试原样继承；`system_as_of` 同样固定。当前契约没有授权 Stage 在执行或重试时刷新输入快照。
+5. News AuthorizationRef 的 `subject_ref` 必须等于可信 `caller_ref`，`resource_ref` 必须指向实际被授权的 News Evidence/版本资源；每次当前内容读取仍由 News Owner 复核授权，历史 allowed 不能直接作为后续访问许可。
+
+### 差异登记（审计工作项，非新增 CTR）
+
+| 编号 | 固定基线事实 | 状态 | 冻结影响 / 后续统一处理 |
+|---|---|---|---|
+| NEWS-FLOW-A | News 分页 `snapshot_ref` 是不可变结果集快照，但 Snapshot/Cursor TTL 只有 15 分钟；Researchflow Run/Stage/Attempt 可跨越该时长，且重试必须沿用原始输入。现有契约未定义将短期分页快照提升/固定为 Run 生命周期输入的机制 | `pending_decision` | 必须区分“查询分页快照”与“Run 输入快照”。推荐在 Run 创建前由受控准备步骤形成可持久引用的 Evidence 输入快照，或由 News 提供明确的 Run 级 Pin/Materialize 能力；其保留期至少覆盖 Run deadline、重试/恢复和规定的历史追溯期。不能把 15 分钟 Cursor/Snapshot 直接当作长期 Run 输入，也不能在重试时重新查询最新结果 |
+| NEWS-FLOW-B | Researchflow CreateRun 要求创建时提供固定 `input_snapshot_refs`；News `ListEvidence` 的首屏查询却是在调用时才生成 `snapshot_ref`。现有契约没有定义该快照在 CreateRun 前取得并纳入请求指纹，还是由 Stage 首次执行时取得并登记为派生输入；后者会使 Run 初始指纹未覆盖真实输入，且与“Run 输入固定”原则冲突 | `pending_decision` | 明确唯一生命周期：优先采用 CreateRun 前准备并校验输入引用，再创建 Run；若产品要求 Stage 内动态发现，则必须定义不可变的 Stage 输入派生记录、原子持久化、重试复用和审计语义，不得静默追加/替换 Run.input_snapshot_refs |
+| NEWS-FLOW-C | News 查询要求 `caller_ref/purpose_code/requested_content_level/filters/page_size`；Researchflow 具有可信 `authenticated_caller_ref`，但尚未明确该身份如何映射为 News caller_ref（原始用户主体还是受控服务主体/委托主体），也未明确 purpose/content level/filter 是否由版本化 Template/参数固定并纳入 Run 指纹 | `pending_decision` | 统一可信身份与委托规则：News AuthorizationRef.subject_ref 必须匹配实际传入 caller_ref；caller_ref 不得来自请求体自报。purpose_code、requested_content_level、filters 和分页策略必须由版本化 Template/参数或已固定输入快照承载，确保同一 Run 重试不改变用途、内容级别或查询范围 |
+| NEWS-FLOW-D | News 查询分页 Cursor 绑定 caller、purpose、content level、filters、page_size、system_as_of、snapshot_ref 和排序版本；Researchflow 只定义不透明 `input_snapshot_refs`，未明确 Cursor 的持有者、保存位置及跨 Attempt 续页规则 | `pending_decision`（随 A/B 决策处理） | Cursor 只能由 News Adapter/Owner 持有并原样用于同一查询快照续页；不得放入 `input_snapshot_refs` 冒充资源引用，不得跨 Run/过滤条件/调用主体复用。若 Run 输入准备已物化为完整 Evidence 引用集合，则 Cursor 不进入 Run/Stage 公共契约 |
+| NEWS-FLOW-E | Researchflow 运行时文档要求 Data/News 通过公开查询契约调用；模块 README 明确当前不包含 News 生产 Facade Adapter，News 专项文档也仍将内容查询 Facade 标为未闭环。固定基线未见 Researchflow News Consumer Adapter、真实 Server 装配及双方联合 Contract Test 证据 | `pending_evidence` | 在 A/B/C 生命周期和身份语义决议后，由责任模块实现 Adapter 和 Server 装配；验收必须覆盖固定 system_as_of、输入快照生命周期、分页完整性、授权拒绝/撤销、Attempt 重试复用和 Run 输入指纹，不以 Fake Provider 单测替代 L2 |
+| NEWS-FLOW-F | News 首批严格 PIT 会排除 `available_at` 为 null/unknown 的记录；News→Research 已登记该字段映射/来源证据缺口。Researchflow 若将查询结果作为 Run 输入，不能把非严格 PIT 返回的结果或分页 Snapshot 标记成严格 PIT 已验收输入 | `pending_evidence` | 沿用 NEWS-RSC-A 的处理结论；Researchflow Adapter 必须保留 News 的 PIT 可用性结果，不得自行推断 available_at，也不得将不满足严格 PIT 的 Evidence 纳入要求严格 PIT 的 Template |
+
+### 本批结论
+
+- **模块职责与依赖方向：`freeze-ready`**。News 拥有 Evidence 查询、分页快照、授权和 PIT；Researchflow 拥有 Run 输入固定、Stage/Attempt 生命周期和编排。无需新增 News HTTP API，也不应由 Researchflow 复制 News 查询/授权逻辑。
+- **PIT 时间传播原则：`accepted`**。News 查询必须原样接收 Run.system_as_of；Stage/Attempt/重试不得刷新时间边界。
+- **News 查询快照到 Run 输入的生命周期：`pending_decision`**。15 分钟分页 Snapshot 与 Run 长生命周期输入不是同一概念，且首屏快照生成时点与 CreateRun 固定输入之间存在流程缺口。
+- **可信主体、purpose/content level 与查询条件映射：`pending_decision`**。必须在 Run 创建/模板版本中固定，不能由 Stage 重试时临时变化。
+- **真实 News 消费交互：`pending_evidence`**。固定基线尚无生产 News Adapter/Server 装配/联合 Contract Test，不能宣称 NEWS→Researchflow L2 或 frozen。
+- 沿用 NEWS-CTR-001/002/003、FLOW-CTR-003/004、GOV-CTR-002/006；不新增 CTR。NEWS-RSC-A/B/C/D/H 已有问题不重复登记，只引用其既有结论。
+
+本批只更新 PLAT-002 审计记录；未修改业务代码、Schema、Golden、测试或执行 CI。后续统一处理 A/B/C/D 的生命周期与身份决策，不在本审计分支代替责任模块实现。只有相关决议或 Adapter 提交出现后才增量复核，不重做本批初审。
