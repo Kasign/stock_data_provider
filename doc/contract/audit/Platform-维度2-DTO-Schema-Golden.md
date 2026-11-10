@@ -190,3 +190,67 @@ Golden覆盖Header名、最大长度、生成随机字节数、默认不信任�
 ### 8.5 下一切片建议
 
 Platform维度2剩余最直接的公共结构是HTTP Client配置与结果/流式结果的契约边界。下一轮只核Platform HTTP Client对外配置、DestinationPolicy、缓冲/流式结果元数据与现有PLAT-CTR-005 Golden/Contract Test；不扩展到SSRF算法复审（归其他维度/专项安全审查），不审Server LLM Transport业务映射。
+## 9. HTTP Client 配置、DestinationPolicy 与缓冲/流式结果（第四切片，2026-11-10）
+
+### 9.1 公共API边界与机器契约适用性
+
+核验文件：
+- `internal/platform/httpclient/client.go`、`bound_doer.go`、`stream.go`、`address.go`
+- `internal/platform/httpclient/contract_test.go`、`client_test.go`、`bound_doer_test.go`、`stream_test.go`
+- `doc/platform/08-公共平台契约规范.md` 第8、23、25节
+- `doc/platform/15-受控HTTP流式传输设计与验收方案.md` 第3、6～9节及21项A1验收矩阵
+- 项目契约 `doc/整体任务规划/02-契约治理/跨模块契约目录与冻结状态.md` 中PLAT-CTR-005条目
+
+PLAT-CTR-005在本基线中定义的是进程内Go调用契约，不是跨网络JSON DTO：`Config`、`DestinationPolicy`、`BoundDoer`、`StreamResponse`、`StreamStats`均不通过JSON序列化作为平台传输协议。故不应为了形式完整而给这些Go结构创建JSON Schema或JSON Golden。可用版本化Go API定义、契约文档、可执行Go Contract Test及消费者适配测试作为机器/行为证据；但项目冻结登记簿应明确记录“JSON Schema/Golden不适用”的理由及替代验收证据，不能把仓库中不存在的PLAT-CTR-005 JSON Golden误报为测试失败。
+
+### 9.2 Config默认值、上限与资源隔离
+
+代码已实现并校验：
+- 缓冲请求：总Timeout默认15s、Dial 5s、TLS握手5s、响应头8s、MaxResponseBytes默认2MiB/硬上限16MiB、MaxRetries默认0/范围0～2、fallback MaxConcurrent默认4/硬上限32。
+- 响应头默认上限1MiB/硬上限4MiB；代码显式设置到共享Transport。
+- 流式：MaxStreamBytes默认16MiB/硬上限64MiB；StreamTimeout默认10min/上限30min；StreamIdleTimeout默认30s/上限5min；MaxConcurrentStreams默认2/上限8。
+- DependencyLimits与StreamDependencyLimits均最多64项；依赖标识校验；缓冲并发单项1～32，流并发单项1～MaxConcurrentStreams。两套流/缓冲并发池相互隔离；未知Dependency使用有界fallback池，避免按请求动态增长Map。
+- New复制两类并发配置Map；Bind复制AllowedHosts/AllowedPorts切片；Do/OpenStream入口再次复制策略切片，防止调用方后续修改改变本次策略。
+- Transport禁用环境代理、最低TLS 1.2，响应头上限显式生效。
+
+现有测试覆盖缓冲默认值中的主要项、MaxResponseBytes/Retry/缓冲并发边界、DependencyLimits Map复制；流式专项测试覆盖流并发/字节/超时上限、并发隔离、取消释放和完整生命周期。以下契约测试覆盖尚不完整：
+
+| 编号 | 证据缺口 | 说明/补证条件 |
+|---|---|---|
+| PLAT2-D2-007 | `TestNewAppliesPLATCTR005Defaults`未断言MaxResponseHeaderBytes及四项流式默认值；`TestNewEnforcesPLATCTR005UpperBounds`未覆盖MaxResponseHeaderBytes 4MiB硬上限；没有找到StreamDependencyLimits非法值/条目数/Map复制的专门配置测试 | 代码已有相应默认和校验逻辑，现阶段是契约回归覆盖缺口，不据此认定实现错误。补齐Config零值默认断言、MaxResponseHeaderBytes边界、StreamDependencyLimits空白/非法/越界/最多64项及调用方Map变更隔离测试。将测试断言与第15节配置语义逐字段对应 |
+
+### 9.3 DestinationPolicy 与BoundDoer
+
+- 每次Do/OpenStream都必须提供DestinationPolicy；Dependency为稳定逻辑标识；AllowedHosts精确匹配且拒绝wildcard；AllowedPorts拒绝0；Host/Port集合有界；HTTP需显式AllowHTTP；重定向需显式AllowRedirects且最多3跳。
+- BoundDoer在Bind时校验并复制策略切片；每个固定Provider endpoint单独绑定，不允许请求替换目的地址策略。
+- Redirect默认拒绝；显式启用仍限制同源、禁止HTTPS降级、逐跳复核目标、限制跳数和循环。此处只核对策略输入/消费边界，不重复审查SSRF/DNS/IP算法。
+- News Provider和Source Adapter通过BoundDoer绑定各自endpoint；Provider策略默认不允许HTTP重定向、不声明幂等。LLM Server Transport校验Provider BaseURL与单一精确Host/Port策略匹配，强制HTTPS、禁重定向、禁幂等重试；同一BoundDoer供JSON和SSE使用。
+- News Provider Fault Mapper调用Fault.Validate后只传Code/Retryable，不透传Cause；与前述LLM Fault Mapper的校验差异已由PLAT2-D2-005登记，不在本切片重复登记。
+
+### 9.4 缓冲与流式结果、资源所有权
+
+**缓冲Do：** 仅在响应体完整读取且未超过MaxResponseBytes后返回；底层Body已关闭，返回Body是内存缓冲副本；调用方仍需关闭返回Body。请求并发额度在完整读取后释放。重试仅在策略显式幂等、Body可重放且总Context仍有效时进行；429不重试。响应体读取失败/超限时不返回半成品响应。
+
+**流式OpenStream：** 响应头到达后立即返回StatusCode、独立Header快照、受控Body；不预读、不整体缓冲。Body所有权转移给调用方，EOF/读取错误/取消/deadline/主动Close均通过幂等终止状态清理底层Body、Context和并发额度。流式额度覆盖从排队到终止的整个生命周期，并与缓冲池隔离。单次阻塞Read空闲超时不包含两次Read之间的调用方处理时间；累计字节按解压后实际交付量计数。
+
+`StreamStats`只含RequestID、Dependency、StatusCode、StartedAt、Duration、BytesRead、TerminationReason；不含URL、Query、凭据、Header、Body和原始错误。测试覆盖EOF、caller_close、cancel、deadline、idle_timeout、body_limit、read_error/upstream truncation、字节计数、响应头等待计时、HTTP/1.1/HTTP2、背压、并发额度释放及安全统计。
+
+LLM消费者边界：`server/llmtransport.Transport.OpenStream`将Platform StreamResponse映射到LLM `HTTPStreamResponse`，复制Header并转移Body所有权；LLM Adapter在成功、HTTP状态错误、解析失败或取消路径均defer/显式Close Body。LLM窄接口没有暴露Platform `StreamStats`，因此LLM领域层不能直接将Platform传输终态/字节数/耗时写入自己的诊断。当前没有证据证明这违反已冻结LLM契约，但需由LLM/Server Owner确认A2诊断是否要求这些数据；若要求，应由Server Transport适配成LLM自有安全统计DTO，不让LLM直接依赖Platform内部统计类型。
+
+| 编号 | 发现 | 当前判断 | 补证/关闭条件 |
+|---|---|---|---|
+| PLAT2-D2-008 | LLM Transport映射时不暴露Platform StreamStats | 条件性消费者可观测性缺口，不判定为Platform API缺陷；LLM已有自己的ModelResponse Duration，但不等价于Platform流传输Duration/BytesRead/TerminationReason | LLM/Server Owner确认A2诊断需求；若不需要，记录不适用理由；若需要，补安全字段映射和消费者测试 |
+
+### 9.5 本切片结论
+
+**Platform HTTP Client A1：实现和局部测试证据基本齐备；配置边界契约测试仍有缺口；跨模块/生产验收未完成。**
+
+- 未发现本切片范围内已证实的HTTP Client配置或流式生命周期实现错误。
+- PLAT-CTR-005是内部Go API契约，JSON Schema/Golden不适用的判断有技术依据，但项目登记簿尚需明确记录替代机器证据及不适用理由。
+- PLAT2-D2-007并入既有PLAT-CTR-005配置/Contract Test补证，不新增CTR；PLAT2-D2-008并入LLM/Server A2消费者诊断确认，不新增CTR。
+- Platform A1测试矩阵在专项文档中列出21项；本切片未重新运行CI，不能将固定基线的历史CI结果冒充本轮执行结果。LLM A2真实Gateway联调、Server资源装配与生产A3网络/Secret/Runtime验收仍是独立门禁。
+- 本轮不修改业务代码、Schema、Golden、测试或CI。
+
+### 9.6 下一切片建议
+
+Platform维度2的主要独立公共DTO/调用API切片已核完。下一步不继续扩展Platform维度2；回到阶段B，转入Server维度2：HTTP公开错误Envelope与Diagnostics/Health响应DTO。Server切片应核路由实际输出、Fault到HTTP状态码/公开错误体映射、Request ID响应Header、Schema/Golden/消费者证据；不要重审Platform Fault内部字段、Observation DTO或HTTP Client底层实现。
