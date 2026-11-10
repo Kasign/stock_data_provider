@@ -208,3 +208,11 @@
 - 修复：幂等重放同时读取并核对 caller_ref、filters_fingerprint、page_size、system_as_of、sort_version、created_at、expires_at、item_count；payload hash 不同返回冲突，hash 相同但信封不一致返回无效快照。
 - 回归：MariaDB 集成用例篡改 caller_ref，断言重放返回 `ErrInvalidEvidenceSnapshot`；恢复字段后确认相同快照可再次幂等成功。
 - 当前限制：尚未取得本次提交的 CI 结果；News MariaDB 集成此前为 skipped，该新增断言仍需真实 MariaDB 11.4 执行。
+
+
+## 十九、Evidence Snapshot 写入端过期门禁修复（2026-11-10）
+
+- Review 发现 `EvidenceSnapshot.ValidateAt` 只检查 CreatedAt/SystemAsOf 不晚于当前时间，没有检查 ExpiresAt；已过期快照仍可通过 Save/Application 和 Repository 写入前校验。
+- 已将 `now >= ExpiresAt` 纳入无效快照条件，与 Get 的过期边界保持一致；达到过期时刻即拒绝保存/幂等重放。
+- 新增边界单测覆盖过期前最后一纳秒、ExpiresAt 相等和过期后一纳秒。
+- 当前未取得本次提交 CI 结果；MariaDB 11.4 集成仍需独立执行。
