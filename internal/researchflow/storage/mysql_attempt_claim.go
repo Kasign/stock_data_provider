@@ -218,8 +218,11 @@ func (r *MySQLRunRepository) ClaimAttempt(
 	}
 
 	var maxToken uint64
-	if err := tx.QueryRowContext(ctx, `SELECT COALESCE(MAX(fencing_token), 0)
-		FROM researchflow_attempts WHERE stage_ref = ?`, stageRef).Scan(&maxToken); err != nil {
+	err = tx.QueryRowContext(ctx, `SELECT fencing_token FROM researchflow_attempts
+		WHERE stage_ref = ? ORDER BY fencing_token DESC LIMIT 1`, stageRef).Scan(&maxToken)
+	if errors.Is(err, sql.ErrNoRows) {
+		maxToken = 0
+	} else if err != nil {
 		return domain.Attempt{}, false, fmt.Errorf("read Researchflow fencing token: %w", err)
 	}
 	if maxToken == ^uint64(0) || stage.Version == ^uint64(0) || runVersion == ^uint64(0) {
