@@ -162,3 +162,11 @@
 - CI Run `42743383781` 的根模块 gofmt 检查指出 News 四个测试文件存在格式差异；同时还列出 Market Data、Quant、Notification 的既有差异。
 - 已仅修正 News 四个文件，提交 `0076c667d080aaf1b3889f54799d203693129eb9`。其他模块格式问题留给其负责分支处理。
 - 该轮 CI 在 gofmt 步骤终止，不能据此判断 Go 测试结果。
+
+
+## 十三、Feed 采集 Context 取消传播（2026-11-10）
+
+- 提交：`a42c384137e2b22a68daaf126ff5cea22270128d`。
+- Review 发现 CollectSource 在 SourceCatalog、SourceTransport 返回后未检查 Context；如果依赖忽略取消并返回成功，流程仍会继续进行策略评估、读取响应和解析。
+- 已在入口和依赖返回边界增加取消检查；传输返回后若已取消则关闭响应 Body。读取响应体后也检查 Context。
+- 新增两项依赖返回取消测试。未改变 SourceCollectionError 的既有业务分类；Context 取消直接向上传播。

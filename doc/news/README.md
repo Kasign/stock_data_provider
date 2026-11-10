@@ -1049,3 +1049,10 @@
 - 根据 CI gofmt diff 单独修正 `authorization_read_test.go`、`get_evidence_test.go`、`provider_ingest_test.go`、`source_ingest_test.go`。
 - 未处理其他模块的 gofmt 差异，避免越界修改。
 - 对应提交：`0076c667d080aaf1b3889f54799d203693129eb9`。
+
+
+### 2026-11-10 Feed 采集取消传播补充
+
+- CollectSource 增加入口、SourceCatalog 返回后、SourceTransport 返回后及响应体读取后的 Context 检查。传输依赖返回响应但请求已取消时，主动关闭响应 Body 并终止采集。
+- 新增 SourceCatalog 和 SourceTransport 两个取消边界测试。
+- 对应提交：`a42c384137e2b22a68daaf126ff5cea22270128d`。
