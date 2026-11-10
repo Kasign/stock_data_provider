@@ -955,3 +955,14 @@
 ### 下一步唯一任务
 
 **按差异矩阵第27.3节，进入Server维度2关闭批次。先在固定基线中只补CTR-047同步Runner run_id缺失证据，同时确认责任分支当前是否已有CTR-006修复提交；若没有修复提交，不在审计分支代改，输出一次性可执行验收任务给Server责任分支。** 不重新审查DTO字段、不再写重复切片总结、不改变固定基线、不检查Data新分支。
+
+
+
+## 22. CTR-047 同步Run ID证据增量（2026-11-10）
+
+- 本轮按第21节有限批次计划，只补CTR-047同步Runner run_id这一项缺失证据，没有重做RunRequest字段审计。
+- 固定基线证据确认：Runner保留合法非空客户端run_id、空值时生成ID、非法值拒绝；Store.Begin对analysis_runs主键执行INSERT，Finish/GetResult按同一ID持久化和读取；重复ID不会覆盖已有Run。
+- 缺口仅保留为：重复ID的HTTP稳定409映射、Runner显式ID/非法ID/重复ID测试、真实MariaDB冲突集成证据。同步Run建议契约已可裁决为“客户端合法ID可保留、缺省服务端生成、重复ID拒绝”；异步Task仍由Queue生成权威run_id。
+- CTR-047整体保持开放；同步ID行为从未知事实变为ready_for_decision，不标记关闭。
+- 本轮只更新审计文档；无业务代码、OpenAPI、DTO、Schema、Golden、测试变更，未执行CI。
+- 下一步唯一任务：在不改变固定审计基线的前提下，确认CTR-006是否已有责任分支修复提交；若无，基于现有结论形成一次性修复/验收任务，等待明确指定责任分支后实施。不要继续拆Server维度2审查切片，不重新读取RunRequest/Task字段，不检查Data新分支。
