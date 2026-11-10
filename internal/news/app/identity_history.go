@@ -63,9 +63,7 @@ func (u *ResolveIdentityAt) Execute(ctx context.Context, request ResolveIdentity
 		if err := ctx.Err(); err != nil {
 			return domain.IdentityResolution{}, err
 		}
-		if credential.SourceID != request.SourceID || credential.NewsID == "" ||
-			credential.ObservedAt.IsZero() || !validEvidenceUTC(credential.ObservedAt) ||
-			credential.ObservedAt.After(request.SystemAsOf) {
+		if !validIdentityHistoryCredential(request.SourceID, request.Credentials, credential, request.SystemAsOf) {
 			return domain.IdentityResolution{}, ErrIdentityHistoryInvalid
 		}
 	}
@@ -74,4 +72,30 @@ func (u *ResolveIdentityAt) Execute(ctx context.Context, request ResolveIdentity
 		return domain.IdentityResolution{}, ErrInvalidRequest
 	}
 	return resolution, nil
+}
+
+func validIdentityHistoryCredential(
+	sourceID string,
+	candidates []domain.IdentityCredential,
+	credential domain.IdentityCredential,
+	systemAsOf time.Time,
+) bool {
+	if credential.SourceID != sourceID || credential.NewsID == "" ||
+		credential.ObservedAt.IsZero() || !validEvidenceUTC(credential.ObservedAt) ||
+		credential.ObservedAt.After(systemAsOf) {
+		return false
+	}
+	switch credential.Status {
+	case domain.IdentifierActive, domain.IdentifierHistorical, domain.IdentifierInvalid:
+	default:
+		return false
+	}
+	for _, candidate := range candidates {
+		if credential.Type == candidate.Type &&
+			credential.Value == candidate.Value &&
+			credential.Hash == candidate.Hash {
+			return true
+		}
+	}
+	return false
 }

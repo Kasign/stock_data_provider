@@ -104,3 +104,71 @@ func TestResolveIdentityAtPropagatesCancellationAfterRepositoryRead(t *testing.T
 		t.Fatalf("Execute() error = %v, want context.Canceled", err)
 	}
 }
+
+
+func TestResolveIdentityAtRejectsHistoryNotBoundToRequestedCredential(t *testing.T) {
+	now := time.Date(2026, 11, 9, 10, 0, 0, 0, time.UTC)
+	candidate, err := domain.BuildIdentityCredentials("source-1", "native-1", "", domain.SourceURLPolicy{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	base := domain.IdentityCredential{
+		SourceID: "source-1", Type: domain.IdentifierSourceNativeID, Value: "native-1",
+		Hash: candidate[0].Hash, Status: domain.IdentifierActive, NewsID: "news-1",
+		ObservedAt: now.Add(-time.Minute),
+	}
+	cases := []struct {
+		name   string
+		mutate func(*domain.IdentityCredential)
+	}{
+		{name: "wrong type", mutate: func(value *domain.IdentityCredential) { value.Type = domain.IdentifierNormalizedURL }},
+		{name: "wrong value", mutate: func(value *domain.IdentityCredential) { value.Value = "different-id" }},
+		{name: "wrong hash", mutate: func(value *domain.IdentityCredential) { value.Hash = "corrupted-hash" }},
+		{name: "unknown status", mutate: func(value *domain.IdentityCredential) { value.Status = domain.IdentifierStatus("unknown") }},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			credential := base
+			testCase.mutate(&credential)
+			repository := &identityHistoryRepositoryStub{credentials: []domain.IdentityCredential{credential}}
+			useCase, err := NewResolveIdentityAt(repository)
+			if err != nil {
+				t.Fatal(err)
+			}
+			useCase.now = func() time.Time { return now }
+			_, err = useCase.Execute(context.Background(), ResolveIdentityAtRequest{
+				SourceID: "source-1", Credentials: candidate, SystemAsOf: now,
+			})
+			if !errors.Is(err, ErrIdentityHistoryInvalid) {
+				t.Fatalf("Execute() error = %v, want ErrIdentityHistoryInvalid", err)
+			}
+		})
+	}
+}
+
+func TestResolveIdentityAtAcceptsInvalidStatusWithoutMatchingIt(t *testing.T) {
+	now := time.Date(2026, 11, 9, 10, 0, 0, 0, time.UTC)
+	candidate, err := domain.BuildIdentityCredentials("source-1", "native-1", "", domain.SourceURLPolicy{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	repository := &identityHistoryRepositoryStub{credentials: []domain.IdentityCredential{{
+		SourceID: "source-1", Type: domain.IdentifierSourceNativeID, Value: "native-1",
+		Hash: candidate[0].Hash, Status: domain.IdentifierInvalid, NewsID: "news-1",
+		ObservedAt: now.Add(-time.Minute),
+	}}}
+	useCase, err := NewResolveIdentityAt(repository)
+	if err != nil {
+		t.Fatal(err)
+	}
+	useCase.now = func() time.Time { return now }
+	resolution, err := useCase.Execute(context.Background(), ResolveIdentityAtRequest{
+		SourceID: "source-1", Credentials: candidate, SystemAsOf: now,
+	})
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if resolution.Status != domain.IdentityNew || resolution.NewsID != "" {
+		t.Fatalf("invalid historical credential was matched: %+v", resolution)
+	}
+}

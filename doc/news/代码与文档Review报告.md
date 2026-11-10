@@ -288,3 +288,12 @@
 - GetEvidence 对 Tombstone 执行时间线和空载荷校验；授权器仍可基于保留的 Observation 来源/策略字段与 News Item Version 做独立授权。DTO 只保留独立版本字段，Candidate 来源的 PublishedAtRaw/FetchedAt/NormalizedAt 不披露。
 - 新增 Application 测试验证授权器看到的是完整一致 Tombstone、候选元数据不泄露，而独立版本内容在授权后仍可读取。
 - 现有 MariaDB 集成已覆盖清理后 Tombstone 行保留、PIT 单条读取屏蔽和幂等重放拒绝；尚未覆盖 ListEvidenceVersionsAt 清理后读取。未执行 Go/MariaDB 测试，不标记运行验收通过。
+
+
+### 二十八、N8-05 Identity 历史凭据一致性
+
+- MariaDB Repository 通过 news_identifier_status_history 选取不晚于 system_as_of 的最新状态事件，并以 history_id 作为同一时间戳下的确定性次级排序；同时要求凭据 created_at <= system_as_of。查询不读取当前 identifier_status 来重建历史状态。
+- Application 边界此前未校验 Repository 返回凭据是否属于请求的精确身份候选，亦未校验状态枚举；现已增加 SourceID/Type/Value/Hash 精确绑定、状态枚举和时间边界校验。
+- 回归测试覆盖类型、原文、哈希和未知状态异常，以及合法 invalid 历史状态不参与匹配。
+- Observation Tombstone 保留 Observation 行和身份历史外键；身份状态历史与 Candidate 载荷清理相互独立。
+- 本轮未运行 Go 测试或 MariaDB 11.4；不标记运行验收通过。
