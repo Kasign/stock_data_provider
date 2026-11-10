@@ -21,7 +21,6 @@ import (
 	platformstorage "example.com/stock-analysis-flow/internal/platform/storage"
 )
 
-
 // repositoryIngestHarness 仅供 Storage 集成测试直接验证 Repository 的身份事务、
 // 幂等键和历史查询；它不替代生产 Application 的 Source/Provider 授权入口。
 type repositoryIngestHarness struct {

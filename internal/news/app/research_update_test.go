@@ -29,10 +29,10 @@ func (r *memoryResearchRepository) WithinResearchUpdateTransaction(ctx context.C
 	working := &memoryResearchRepository{
 		afterTransaction: r.afterTransaction,
 		observations:     map[string]domain.Observation{},
-		versions:     map[string][]domain.NewsItemVersion{},
-		relations:    map[string][]domain.RelationAssertion{},
-		evidence:     map[string][][]domain.RelationEvidence{},
-		failAppend:   r.failAppend,
+		versions:         map[string][]domain.NewsItemVersion{},
+		relations:        map[string][]domain.RelationAssertion{},
+		evidence:         map[string][][]domain.RelationEvidence{},
+		failAppend:       r.failAppend,
 	}
 	for key, value := range r.observations {
 		working.observations[key] = value
