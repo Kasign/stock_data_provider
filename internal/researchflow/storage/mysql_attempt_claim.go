@@ -192,6 +192,7 @@ func (r *MySQLRunRepository) ClaimAttempt(
 				SELECT 1 FROM researchflow_attempts a
 				WHERE a.stage_ref = s.stage_ref AND a.run_ref = s.run_ref
 					AND a.status = ? AND a.attempt_no = s.attempt_no
+					AND a.lease_expires_at IS NOT NULL
 			)`,
 		runRef, string(domain.StageRunning), stageRef, string(domain.AttemptRunning),
 	).Scan(&invalidRunningStages); err != nil {
