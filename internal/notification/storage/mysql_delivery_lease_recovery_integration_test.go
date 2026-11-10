@@ -99,6 +99,20 @@ func TestNotificationMariaDBExpiredDeliveryLeaseRecoveryIntegration(t *testing.T
 	if err := repository.RecoverExpiredLease(ctx, claim.Delivery.Version, claim.Lease.FencingToken, next, event, leaseExpiry.Add(-time.Microsecond)); !errors.Is(err, application.ErrDeliveryLeaseConflict) {
 		t.Fatalf("active lease must not be recovered, got %v", err)
 	}
+
+	// 恢复只能改变状态与租约，不得改写 Delivery 的创建时间、截止时间或重试预算。
+	for name, mutate := range map[string]func(*domain.DeliveryRecord){
+		"attempt_count": func(value *domain.DeliveryRecord) { value.AttemptCount++ },
+		"max_attempts":  func(value *domain.DeliveryRecord) { value.MaxAttempts++ },
+		"deadline_at":   func(value *domain.DeliveryRecord) { value.DeadlineAt = value.DeadlineAt.Add(time.Minute) },
+		"created_at":    func(value *domain.DeliveryRecord) { value.CreatedAt = value.CreatedAt.Add(-time.Second) },
+	} {
+		tampered := next
+		mutate(&tampered)
+		if err := repository.RecoverExpiredLease(ctx, claim.Delivery.Version, claim.Lease.FencingToken, tampered, event, recoveryAt); !errors.Is(err, application.ErrDeliveryVersionConflict) {
+			t.Fatalf("recovery must reject tampered %s, got %v", name, err)
+		}
+	}
 	// A conflicting append-only event must roll back the Delivery snapshot and lease release.
 	if _, err := db.ExecContext(ctx, `INSERT INTO notification_delivery_state_events (
 		delivery_id, version, from_status, to_status, changed_at
