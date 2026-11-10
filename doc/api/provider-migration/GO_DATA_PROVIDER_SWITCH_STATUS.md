@@ -194,3 +194,11 @@
 - Source 为空仍由原有领域校验拒绝，不擅自推断来源；快照成员与快照来源不一致仍由原有校验器拒绝。
 - 本批不改变质量状态、缓存策略、领域模型及 Provider 接口。
 - 未运行 gofmt/build/test。
+
+### 2026-11-10：补齐市场快照来源身份回归测试
+
+- 范围：IndexQuotes、MarketBreadth、SectorRankings 三个 DataService 接收入口。
+- 新增回归测试：首选 Provider 返回与自身名称不一致的非空快照来源时，必须拒绝该结果并继续调用后备 Provider；后备 Provider 的快照来源与其 Name 一致时，返回后备结果。
+- 测试使用最小合法降级快照，避免把字段质量规则或 Provider 时间戳要求混入来源身份测试的断言。
+- 本批只补齐来源不匹配回退测试；空来源仍由各自既有领域校验拒绝，成员来源一致性继续由快照 validator 检查。
+- 测试源码已提交，但按开发分支约定未运行 gofmt/build/test；测试结果待 integration 统一验收。
