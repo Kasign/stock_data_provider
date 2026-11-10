@@ -926,3 +926,38 @@ Golden应由真实DTO序列化生成或与真实序列化逐字节/结构比较�
 - 沿用 INT-CTR-001、NTF-CTR-001～003、QNT-CTR-005、RSC-CTR-003、FLOW-CTR-001/003、GOV-CTR-003/004，不新增 CTR。Research 已有 Outbox 证据不重复登记为新缺口；不审查通知渠道/Renderer 内部规则。
 
 本批只更新 PLAT-002 审计文档；未修改任何业务模块代码、Schema、Golden、测试或执行 CI。后续按责任模块修复/补证据后增量核验，不在 PLAT-002 分支代修。
+
+## 33. WebUI→Server 对外 HTTP API 契约边界首轮核验（2026-11-10）
+
+- 固定审计基线：origin/integration @ b6dfc85ba214fe16268c8cba780641a8bfe15086；维护分支：feat/design_doc。
+- 核验范围：WebUI `web/src/api.js` 与 `doc/web/API_CONTRACT.md` 实际请求；Root Server `internal/server/bootstrap` 路由、认证、中间件；Market Data Adapter 路由；`doc/api/contracts/分析任务.openapi.yaml`；Web Nginx 代理配置及现有前后端测试。仅审 HTTP 契约、公开 DTO/Schema、错误/认证和真实路由装配证据。
+
+### 已确认的边界与现状
+
+1. WebUI 通过同源 Nginx 前缀分别调用 `/market-api` 与 `/analysis-api`；Nginx 将两者转发到独立 Market Data（8091）和 Analysis/Root Server（8092）服务，且转发 X-Request-ID、代理超时。固定基线 Root Server 并未装配 Market Data HTTP Adapter；`internal/marketdata/httpapi.Server.InProcessHandler()` 只是可供可信 Root Server 挂载的无认证业务路由，不能视为已挂载。
+2. Market Data Adapter 当前 `Handler()` 自带 X-API-Key 认证；WebUI `loadSettings/saveSettings` 将 apiKey 保存到 localStorage，并由 `request()` 对行情请求添加 `X-API-Key`。这属于迁移期兼容模式，文档已明确不是目标安全模型；API_CONTRACT 也明确目标是 Root Server 注入 Data Adapter、浏览器不持有 Key。不能把当前浏览器存 Key 视为可冻结的目标认证契约。
+3. Analysis WebUI 使用 `POST /api/v1/analysis/tasks`、`GET /api/v1/analysis/tasks/{task_id}`、`GET /api/v1/analysis/tasks/{task_id}/events` 和 `GET /api/v1/analysis/runs/{run_id}`。Root Server Router 已注册这些路由（Run 查询及事件读取亦已注册），但全部使用 `OwnerAccess`；WebUI 请求不发送 Owner Bearer，只使用 same-origin credentials。因此当前浏览器 Analysis 请求按设计会得到 401，并非可用的浏览器登录会话接口。
+4. Root Server 安全边界当前明确：`/healthz` 匿名；`/readyz`、`/diagnostics` 和全部 Analysis 业务路由 Owner Bearer；Service Scope 不可访问 Owner 路由。Root 中间件重生成 Request ID，不信任调用方 X-Request-ID；公开 Fault Envelope 含 class/code/message/retryable，Request ID 通过响应头回传。WebUI 能从结构化错误和 X-Request-ID header 解析状态、code 和 requestId。
+5. 分析 OpenAPI `doc/api/contracts/分析任务.openapi.yaml` 版本 1.0.0 仅定义 Tasks 创建/查询/事件三类路径，缺少 WebUI 已使用且 Root 已注册的 `/api/v1/analysis/runs/{run_id}`；TaskEvent.event 仅为 opaque object；AnalysisRequest 字段未列 required/enum/严格格式边界；未定义 Bearer securityScheme、401/403 及统一 Error Envelope/Request ID header。OpenAPI 不能完整代表当前 HTTP 边界。
+6. WebUI `api.test.mjs` 通过 mock fetch 验证请求路径、Idempotency-Key、Market-only X-API-Key、错误码和 Request ID 解析；Root `router_test.go` 验证 Owner/Service/匿名路由权限；Root middleware 测试验证 Request ID 重生成、请求大小、过载和 Fault 安全输出。两侧各有单测，但固定基线未见 OpenAPI 驱动的跨端 Contract Test，也没有浏览器登录会话→Server 用户身份→资源授权的端到端证据。
+
+### 差异登记（审计工作项，非新增 CTR）
+
+| 编号 | 固定基线事实 | 状态 | 冻结影响 / 后续统一处理 |
+|---|---|---|---|
+| WEB-SRV-A | Market Data 仍为独立 8091 Adapter，WebUI 浏览器保存 apiKey 到 localStorage 并直接发送 X-API-Key；Root Server 未装配 Market Data Adapter。目标文档要求 Server 注入 Key/可信调用上下文，浏览器不得持有 Provider/API Key | pending_evidence | 沿用 MDM-006/PLAT Security 决议；Server/Platform/Data 完成 Data Adapter 迁移、服务端密钥注入、统一认证和部署路由后，WebUI 移除旧 localStorage Key 读写/请求头注入并轮换已暴露凭据。迁移完成前此接口仅为受限兼容路径，不得作为目标认证契约冻结 |
+| WEB-SRV-B | Analysis 路由全部 OwnerAccess，WebUI 不携带 Owner Bearer，当前浏览器请求预期 401；目标 Web Session/Cookie、CSRF、登录限流、可信代理和按资源授权尚未形成完整可消费契约 | pending_decision | 明确浏览器用户认证模型及生命周期：HttpOnly/Secure/SameSite Cookie、CSRF token/Origin 校验、登录/会话失效、用户/资源 Scope 映射、跨标签页与登出语义；Owner Bearer 仅保留管理/运维接口，绝不下发浏览器。决策后再补 Session Adapter 和端到端证据，不可匿名开放或把 Owner Token 放入 localStorage |
+| WEB-SRV-C | 分析 OpenAPI 缺少已实际注册/被 WebUI 使用的 Run 查询路径，TaskEvent.event 为 opaque object，AnalysisRequest 字段约束不完整，未声明 Security Scheme、401/403、Error Envelope 和 Request ID header | pending_decision | 统一 OpenAPI 作为 Analysis HTTP 权威契约：覆盖所有实际路由/方法/参数/状态码；明确请求字段 required、枚举、日期/时间、未知字段拒绝、nullable 与任务/阶段事件 DTO；定义认证安全方案、错误结构和 X-Request-ID。OpenAPI 与 Handler/前端不一致时先确认权威语义，不直接以内部 Domain DTO 替代公开 DTO |
+| WEB-SRV-D | Root Server 当前只装配 Legacy Analysis API/Worker 与 Platform Health/Router；Researchflow Application Facade/任务查询、模块 DTO 到 HTTP DTO 的正式 Adapter 尚未作为目标模块链路接入；Market Data 也未挂载 Root Server | pending_evidence | Server 作为唯一组合根，分别装配 Researchflow Facade/HTTP Handler 和 Data Facade/Adapter；Handler 只做校验、映射和 HTTP 语义，不拥有任务/行情领域规则。需要明确迁移期间旧 Analysis API 的兼容/退役策略，禁止将 Legacy Task DTO 直接冻结为最终 Researchflow 公共模型 |
+| WEB-SRV-E | WebUI 请求封装测试和 Root Router/Middleware 单测分离存在；没有同一 OpenAPI Schema 驱动的 WebUI→Handler 契约验证，也没有 Session/资源授权、代理部署前缀、Request ID 和错误 Envelope 的端到端验收 | pending_evidence | 增加以权威 OpenAPI/JSON Schema 为基准的 Handler Contract Test，并由 WebUI API 测试校验请求/响应边界；集成测试覆盖 Nginx 前缀剥离、Cookie/CSRF、401/403/404/409/413/429/503、错误码与 Request ID、任务幂等和事件游标。不要只靠两端各自 Mock 单测宣布联调通过 |
+| WEB-SRV-F | Market Data 与 Root Server 的错误 Envelope 细节不同：Market Data error 可在 body `error.request_id` 中携带 ID，Root Server publicError 不含该字段而依赖 `X-Request-ID` header；WebUI 当前兼容两者，但没有统一规范定义 header/body 的权威关系 | pending_decision | 以 Platform 公共错误契约为准，明确 Request ID 的权威传递位置（建议响应头为必需，body 可选兼容）；统一 class/code/message/retryable 的必需性、HTTP status 映射和 safe message 规则。兼容期 WebUI 可同时读取 header/body，不得把内部 dependency/cause 暴露给浏览器 |
+
+### 本批结论
+
+- **浏览器与 Server 的职责边界：freeze-ready。** WebUI 只消费公开 HTTP DTO；Server 负责认证、授权、路由、DTO 映射和错误投影；领域语义归 Data/Researchflow 等生产模块；Platform 提供认证、Fault、Request ID 等技术能力。
+- **当前路由与安全状态：accepted。** Market Data 仍独立部署并由 API Key 保护；Analysis 由 Root Server Owner Bearer 保护，WebUI 不携带 Owner Token，因此当前浏览器 Analysis 请求预期 401。这是已记录的迁移状态，不代表目标浏览器访问链路已完成。
+- **浏览器认证模型、完整 Analysis OpenAPI、错误 Request ID 规范：pending_decision。** 需要明确的公共 API 决议，不是单纯补测试。
+- **Data 迁移/密钥移除、模块 Facade 装配、跨端 Contract Test 与部署验收：pending_evidence。** OpenAPI 声明、Handler 注册、WebUI 封装、Root 装配、代理可达和真实认证成功必须分别验收。
+- 不新增 CTR；沿用 MDM-006、PLAT Security/Fault/Observability 契约、FLOW-CTR-001/003/004、GOV-CTR-001/002/003。此处不重复行情字段/Provider 语义或 WebUI 视觉审查。
+
+本批只更新 PLAT-002 审计记录；未修改 WebUI/Server/Data 业务代码、OpenAPI、测试或执行 CI。
