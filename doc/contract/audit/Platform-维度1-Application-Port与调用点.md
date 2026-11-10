@@ -34,7 +34,7 @@ adapters -> ports
 
 ### AUD-PLAT-PORT-001：Platform Task Queue 反向依赖旧 Analysis Domain
 
-<badge color="warning">待裁决 · P1 候选</badge>
+**待裁决 · P1 候选**
 
 证据：
 
