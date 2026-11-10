@@ -646,3 +646,12 @@
 - CTR-044：公共 API 接受任意有效历史日期，但 Hithink 仅支持最近一年。判定为 Provider 能力边界披露方式待裁决；不应将单一 Provider 的限制收窄为公共 API 全局限制。冻结前需明确 capability/诊断元数据或权威能力文档的表达方式。
 - 本批仅完成既有差异的冻结影响分类；未修改业务代码、未执行 CI、未新增差异编号。WebUI 维度 2 第一轮完整性 Review 继续进行。
 
+### WebUI — 维度 2：Market Sentiment History CTR-038～CTR-040 冻结影响 Review
+
+- 详细记录：`WebUI-维度2-完整性Review-第一轮.md` 第 23 节。
+- CTR-038：Service 在 Repository LIMIT 后设置 `total=len(items)`；OpenAPI 未定义 total 语义；WebUI 固定 limit=120 并显示 `items.length/total`。当日期范围超过 120 个已保存交易日时无法识别截断。注意公共范围最多 366 个自然日、每日最多一条；API 默认 limit=366、最大500，本身足以覆盖完整范围，实际风险来自 UI 显式 limit=120。归入 DATA-CTR-001/GOV-CTR-001，total 的“范围总数”或“返回数”语义待裁决；审计建议优先定义为 limit 前的范围内不同交易日记录总数。未修改代码。
+- CTR-039：Repository 每日选 `MAX(id)`，注释却称“最近一次采集”；id 是插入顺序，不能代表 fetched_at。归入 DATA-CTR-001/GOV-CTR-002，需裁决按 fetched_at DESC、id DESC 选择，还是按最后写入选择。审计建议采用 fetched_at DESC、id DESC；尚未形成正式决议。未修改代码。
+- CTR-040：OpenAPI 与 Handler 已明确闭区间 366 自然日限制，Handler 有 366/367 日边界测试；WebUI 调用日期校验时未传 maxCalendarDays，367 日请求会在服务端被拒。公共规则明确，属于 WebUI 实现未对齐。另发现 DataService 的日期差校验对 367 个包含首尾的自然日存在一日边界差异；当前 HTTP Handler 会先拦截，尚无绕过 Handler 的实际消费者证据，暂并入 CTR-040 的防御性核验，不新建编号。
+- 项目级映射仅引用既有 DATA-CTR-001、GOV-CTR-001、GOV-CTR-002，不新增正式契约编号。CTR-038/039 需要语义裁决；CTR-040 需要记录消费者未对齐/延期状态。
+- 本批未修改权威登记簿、业务代码、OpenAPI 或测试；未执行 CI。WebUI 维度 2 第一轮完整性 Review 继续进行。
+
