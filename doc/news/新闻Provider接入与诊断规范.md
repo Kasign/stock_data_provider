@@ -131,7 +131,6 @@ market-data Probe 的 connectivity、contract、quality、freshness、cross_prov
 
 当前没有发现逐来源 license/terms URL、robots 策略、允许抓取内容范围、全文保留期限、删除请求和政策复核时间等字段/执行机制。RSS/Atom/NewsNow 模板只能视为候选来源配置，不可自动视为允许全文抓取或长期保存。新模块应增加来源策略元数据和审核状态；在许可未确认前只保留必要元数据、短摘要和原始链接，并为删除/到期清理留接口。
 
-
 ## 10. 来源授权矩阵
 
 逐 Provider 和原始发布来源的条款核查见《新闻来源授权矩阵》。Provider 输出使用权与原始发布来源内容权利必须独立判断；未确认许可的来源默认 pending，不得自动抓取或持久化。
@@ -141,7 +140,6 @@ market-data Probe 的 connectivity、contract、quality、freshness、cross_prov
 本规范中第 4、4.1 节原先描述的 Probe、诊断报告、被动诊断历史和诊断查询均为未来能力设计，不属于新闻模块当前开发范围。当前新闻模块不实现诊断服务、诊断存储、主动 Probe 或诊断 API。
 
 新闻模块仍必须实现业务层错误与质量表达，包括来源授权不允许、候选字段缺失、发布时间未知、正文抓取/解析失败、身份冲突、重复/转载、证券未匹配等。它们是业务结果，不应伪装成通用诊断状态。未来由公共服务把新闻业务结果纳入统一诊断体系。
-
 
 ## 12. Provider provenance 与共享适配器历史方案（已废弃，2026-11-05）
 
@@ -159,7 +157,6 @@ market-data Probe 的 connectivity、contract、quality、freshness、cross_prov
 - Provider 单项错误/部分失败信息，但不落入通用诊断历史。
 
 Provider 输出策略必须在缓存和持久化之前执行。Brave 只允许必要的短暂运行期使用，不得长期缓存或写库；博查在存储权利书面确认前不持久化；Tavily 的 Provider 层许可仍需叠加发布者授权。共享层默认不缓存混合 Provider 结果。
-
 
 
 ## 13. 最终 Provider 实施决策（2026-11-05）
@@ -187,7 +184,6 @@ Provider 输出策略必须在缓存和持久化之前执行。Brave 只允许�
 - News 业务质量状态和 Platform Diagnostics 状态分开保留。News Check Adapter 只把领域结果作为受控摘要/Reason Code 映射给公共 Runner，不把新闻正文、Provider snippet、原始响应或 Secret 放入 Check Attributes。
 - 平台 failed 表示 Check 执行器/实现自身异常；新闻内容 invalid 应作为领域质量结果呈现，不得伪装为 Check 内部失败。
 
-
 ## 15. N2 首批 Provider Adapter 实施状态（2026-11-05）
 
 根模块 `internal/news/adapters/provider` 已建立 Bocha、Tavily、Brave News、SearXNG 的首版协议 Adapter，统一通过 Application 定义的窄 HTTPDoer 注入传输能力。
@@ -202,7 +198,6 @@ Provider 输出策略必须在缓存和持久化之前执行。Brave 只允许�
 
 fake Transport 测试已在根模块 GitHub Actions 中执行通过，覆盖各 Provider 的基本字段/鉴权语义、429 Retryable 候选、响应结构错误路径等。提交 7e55cf681f86c762aaa3d2e6a914495c162d2898 对应的根模块 gofmt、go test ./...、go test -race ./...、go vet ./... 和分析服务镜像构建通过；未执行真实 Provider 网络请求。
 
-
 ## 9. N3 Provider / Source / Endpoint 授权评估实现
 
 - 新闻 Domain 已提供纯函数策略评估，不依赖数据库、Redis、平台 Diagnostics 或真实 HTTP。
@@ -215,13 +210,11 @@ fake Transport 测试已在根模块 GitHub Actions 中执行通过，覆盖各 
 
 Brave/Bocha/Tavily 等具体 Provider 的策略值必须按实际账号套餐、书面协议和本项目核验记录配置，不能仅凭 Provider 名称默认批准。
 
-
 ### 9.1 内容类型与存储模式约束
 
 - persistent_metadata 仅允许 metadata/title；persistent_excerpt 仅允许 snippet/abstract；persistent_full_text 仅允许 full_text/attachment。
 - none/transient 不代表持久化授权；跨请求缓存另由 Provider 的 AllowCrossRequestCache 和 MaxCacheRetention 独立控制。
 - 即使 Provider 和 Source 分别允许某项内容及存储方式，内容类型与存储模式不匹配仍拒绝；不得通过将全文标记为 metadata 绕过全文留存限制。
-
 
 ## 2026-11-06 平台合并后 HTTP/Diagnostics 基线复核
 
@@ -229,7 +222,6 @@ Brave/Bocha/Tavily 等具体 Provider 的策略值必须按实际账号套餐、
 - `internal/platform/diagnostics.Runner` 已有平台 L1 原语和测试证据，但 Runner 不提供历史存储或 HTTP 路由；News 领域 Check 和 Server 路由接入仍待完成。
 - 当前 `provider/http.go` 通过注入的 HTTPDoer 读取响应体；生产响应大小上限依赖平台 BoundDoer，不能把 fake/raw HTTPDoer 作为生产实现。
 - 平台 L1 CI 通过不代表 News 实际注入、真实 Provider 请求、生产 DNS/出口或来源授权验收通过。
-
 
 ## 2026-11-06 项目级契约与 News Diagnostics 接入计划
 
@@ -243,16 +235,13 @@ Brave/Bocha/Tavily 等具体 Provider 的策略值必须按实际账号套餐、
 6. 不新增 News Diagnostics HTTP 路由、Runner、Registry 或通用历史库。统一诊断路由的认证和注册由 Server Owner 负责；News Ingestion Run/Stage 若有真实采集触发需求，其事实记录仍由 News 持有。
 7. PLAT-CTR-004 仍为 `pending_evidence`；News Check Adapter 的 Schema/Golden/Runner Contract Test 和状态映射证据通过后，才申请对应调用点 A2。
 
-
 ## 2026-11-06 当前 HTTP 适配 API 修正
 
 本规范历史段落中的 `BoundDoer` / `Client.Bind()` 描述已过时。当前 Platform HTTP Client API 为 `Client.Do(ctx, request, DestinationPolicy)`。News Provider 使用 `provider.NewPlatformHTTPDoer`，Source 使用 `source.NewPlatformHTTPDoer`；每个 endpoint 独立绑定精确 Host/Port 策略。响应体大小、总 Deadline、TLS、DNS/IP 校验和拨号仍完全由 Platform Client 执行。News 不创建裸 HTTP Client，不接管共享 Client 生命周期。
 
-
 ## 2026-11-06 接入状态更新
 
 Provider 适配器已落地 `provider.NewPlatformHTTPDoer`；Source 适配器已落地 `source.NewPlatformHTTPDoer`。二者均固定单个 endpoint 的 DestinationPolicy，拒绝重定向和平台自动重试；Platform Client 负责 DNS/IP、TLS、响应大小和 Deadline。Source endpoint 保留 query 参数，Provider endpoint 配置仍拒绝 query，避免将凭证放入 URL。生产组合根按每个 Provider/Source endpoint 独立注入。
-
 
 ## 17. 多供应商统一协议层专项复核与实施方案（2026-11-10）
 
@@ -352,7 +341,6 @@ Provider 适配器已落地 `provider.NewPlatformHTTPDoer`；Source 适配器已
 - CI 使用固定样本/fake，不依赖真实 Provider Key 或消耗真实配额。
 - 未执行的 Go 测试、MariaDB 集成或真实网络验收不得标记为通过。
 
-
 ### 17.7 Search Provider Contract v1（设计冻结）
 
 本版本是 News 进程内 Search Provider 契约，不是对外 HTTP API，也不承诺跨语言/插件 ABI。
@@ -450,3 +438,37 @@ Outcome 至少保留现有字段：ProviderCode、QueryDimension、Status、Cand
 - Context 取消传播。
 
 该测试集只验证进程内 Search Provider Contract；RSS/Atom 继续使用独立 Source Collection Contract Test。
+
+## 18. 多 Provider 协议验收与运行时边界（2026-11-10）
+
+### 18.1 已验收的协议边界
+
+- 搜索/聚合供应商统一实现 `app.Provider`：`Code()` 标识供应商，`Search(ctx, SearchRequest)` 接收标准查询并返回 `[]domain.Candidate`。
+- Application 统一通过 `ProviderSet` 获取供应商集合，由 `SearchCandidates` 负责身份预检、调用、错误归一化、候选标准化和 ProviderOutcome 汇总。
+- Candidate 保留 `ProviderCode` 与发布者身份分离；ProviderOutcome 保留 Provider 级状态、候选数量、耗时、查询维度、错误码和 Retryable。
+- 当前 Provider 集合由配置快照创建，固定顺序为 Bocha、Tavily、Brave News、SearXNG；每个生产 endpoint 单独绑定 Platform BoundDoer。没有动态插件注册、跨请求缓存、Provider 选择器或自动重试。
+- RSS/Atom 属于已登记 Source/Endpoint 采集链路，使用独立的 `SourceTransport` 和 Parser；不强行实现搜索 Provider 接口。两者共享候选领域模型，但请求语义和授权语义不同。
+
+### 18.2 调用路径审计结论
+
+本分支检查了 `cmd/analysis-api/main.go`、`internal/service/wiring.go`、`internal/platform/httpapi/server.go` 与 News Provider 组合代码：
+
+- 当前 Analysis API 的 Server/Runner 尚未装配 News ProviderSet 或 SearchCandidates；没有生产调用方通过该链路发起供应商请求。
+- 当前没有 News 独立外部 HTTP API；不在 Provider Adapter 或 News Application 中擅自增加对外路由。
+- 因此本阶段验收的是可编译、可测试的内部协议与 Adapter 边界，不是已上线的新闻搜索能力。
+- 后续由 Server 组合根在实际 Research/Researchflow 用例确定后注入 ProviderSet 和 SearchCandidates；模块之间只依赖 Application Facade，不直接依赖具体供应商 Adapter。
+
+### 18.3 当前执行语义与限制
+
+- `SearchCandidates` 按 ProviderSet 顺序串行调用。每个调用共享调用方 Context；调用方负责设置请求级 Deadline。
+- 聚合 `partial` 只表示多个 Provider 之间部分成功；单个 Provider 返回非 nil error 时，该 Provider 本次候选全部丢弃，CandidateCount 为 0。
+- 未配置供应商返回 skipped；认证、限流、超时、传输、请求、响应、业务拒绝和上游不可用使用稳定 News 错误分类。
+- Provider 错误的 Retryable 只是重试候选信息，Application 当前不自动重试。
+- 不因抽象层已统一就宣称供应商输出具有相同质量或权利；Provider 输出策略与 publisher/source 授权仍独立评估。
+
+### 18.4 验收证据
+
+- Provider 专项 Workflow：`News Provider contract tests`，Run `42755962624`，结果 success。
+- 覆盖 SearchCandidates、四家 Adapter、Race 和 Vet。
+- 真实供应商网络、实际账号配额、输出许可和生产 endpoint 的 BoundDoer 注入尚未验收。
+- 全量根模块 CI 仍受 Market Data、Notification、Quant 的 gofmt 差异阻断；全量 `go test ./internal/news/...` 另有非 Provider 业务测试问题，见 N1 Review 第 12.7 节。不得把专项通过扩大解释为全模块或全仓通过。
