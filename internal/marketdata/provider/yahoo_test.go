@@ -382,6 +382,37 @@ func TestYahooDailyBarReportsOutOfRangeDateAndKeepsInRangeRows(t *testing.T) {
 	}
 }
 
+func TestYahooDailyBarReportsHTTPAndProviderRejections(t *testing.T) {
+	cases := []struct {
+		name string
+		status int
+		body string
+		wantCode string
+	}{
+		{name: "http status", status: http.StatusBadGateway, body: "upstream unavailable", wantCode: "http_status_error"},
+		{name: "provider error", status: http.StatusOK, body: `{"chart":{"result":null,"error":{"code":"Not Found","description":"symbol unavailable"}}}`, wantCode: "provider_error"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(tc.status)
+				_, _ = fmt.Fprint(w, tc.body)
+			}))
+			defer server.Close()
+			reporter := validation.NewReporter(10)
+			ctx := validation.WithReporter(context.Background(), reporter)
+			provider := NewYahooFinance(2*time.Second, server.URL)
+			if _, err := provider.FetchDailyBars(ctx, "600036.SH", "2026-10-20", "2026-10-21", 8, model.AdjustmentNone); err == nil {
+				t.Fatal("expected Yahoo response to be rejected")
+			}
+			issues := reporter.Snapshot().Issues
+			if len(issues) != 1 || issues[0].Stage != validation.StageParse || issues[0].Code != tc.wantCode || issues[0].RowIndex != nil {
+				t.Fatalf("expected one snapshot-level %s issue, got %+v", tc.wantCode, issues)
+			}
+		})
+	}
+}
+
 func TestYahooDailyBarDecodeFailureAddsStructuredParseIssue(t *testing.T) {
 	payload := []byte(`{"chart":`)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
