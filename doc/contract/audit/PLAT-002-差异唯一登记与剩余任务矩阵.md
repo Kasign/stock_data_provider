@@ -346,3 +346,14 @@ W2-D 的“权威规则核对与裁决问题准备”完成；CTR-010 本身仍�
 - 本切片结论：Fault内部对象契约基本齐备；跨模块投影仍partial。P002-D02继续开放，PLAT-CTR-001保持pending_evidence。
 - 下一切片：Platform维度2核对Request ID公共原语与直接Transport消费者；Server完整HTTP Error Envelope留在Server维度2。
 - 本轮仅更新审计文档，未修改业务代码、Schema、Golden、测试，未执行CI。
+## 16. Platform 维度2：Request ID 原语与传播边界核验（2026-11-10）
+
+- 审计记录：`Platform-维度2-DTO-Schema-Golden.md` 第8节；固定代码基线 `b6dfc85ba214fe16268c8cba780641a8bfe15086`。
+- Request ID Header/格式/最大长度/生成/Context/出站传播规则由 `internal/platform/observability/request_id.go` 实现；Golden `PLAT-CTR-002-request-id.golden.json` 被 Contract Test读取，单测覆盖合法/非法/重复Header、默认不信任、显式可信入口、出站覆盖和无Context删除。
+- Root Server Bootstrap在路由外层使用 `MiddlewareWithOptions` 零值安全策略，直接可达时重建客户端ID；旧Analysis Handler内部仍调用Deprecated `Middleware`，但当前组合根外层已先生成可信ID。独立暴露旧Handler仍受可信Gateway前提约束。
+- 缓冲和流式Platform HTTP Client均从Context传播ID；Research Correlation ID使用独立Context Key，不从Request ID继承。GOV-CTR-003涉及originating_request_id/Worker/Event完整链路，不在本切片关闭。
+- PLAT2-D2-006：缺少真实Root Server入口到出站Platform HTTP Client的端到端组合测试，属集成证据缺口，不是已证实实现错误。由Server/Integration Owner补证。
+- P002-D03继续开放：Root Server当前入口接线符合安全默认，但Deprecated兼容入口的生产暴露路径和迁移/移除仍需部署证据。并入既有P002-D03，不新增CTR。
+- 本切片结论：Platform Request ID原语与局部传播测试基本齐备，组合链路partial；PLAT-CTR-002不能仅凭包级测试标记frozen，GOV-CTR-003保持独立pending_evidence。
+- 下一切片：Platform维度2核对HTTP Client配置、DestinationPolicy、缓冲/流式结果元数据及PLAT-CTR-005 Golden/Contract Test；不重审SSRF算法，不审Server LLM Transport业务映射。
+- 本轮仅更新审计文档，未修改业务代码、Schema、Golden、测试，未执行CI。
