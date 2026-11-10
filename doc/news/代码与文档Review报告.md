@@ -255,3 +255,11 @@
 - 已移除 Repository 成功后的二次 Context 检查，保留调用前取消门禁。成功结果现在优先于其后发生的 Context 取消；SQL/事务执行期间发生取消仍由 Repository 错误向上传递。
 - Commit/网络错误可能具有提交结果不确定性。当前实现保留原始错误，不把它错误映射为确定回滚；调用方应通过 Observation backlog 或 SnapshotRef/行状态查询核实。
 - 尚未覆盖 RowsAffected() 自身返回错误、Commit 连接中断和锁等待超时的可控驱动注入；也未运行 MariaDB 11.4。不得将该项标记为数据库运行验收通过。
+
+
+### 二十四、N8-01 Evidence List 游标同时间戳边界（2026-11-10）
+
+- 审查确认数据库查询排序与 Snapshot 比较器一致：`observed_at DESC, news_id ASC, version_id ASC`。
+- Cursor 绑定 SnapshotRef 与最后一条记录的时间戳、NewsID、VersionID；分页在不可变 Snapshot 中定位精确排序位置，不使用 offset，也不重新执行 PIT 查询。
+- 新增同一时间戳下多 News/Version 的跨页测试，覆盖次级排序键和连续分页无缺口/无重复。
+- 尚未执行测试；MariaDB DATETIME(6) 实际排序及跨数据库精度边界仍待集成环境验收。

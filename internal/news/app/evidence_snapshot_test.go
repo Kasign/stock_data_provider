@@ -191,6 +191,60 @@ func TestEvidenceSnapshotPageAfterUsesExactStableSortPosition(t *testing.T) {
 	}
 }
 
+func TestEvidenceSnapshotPageAfterPaginatesEqualTimestampTiesWithoutGaps(t *testing.T) {
+	now := time.Date(2026, 11, 10, 9, 0, 0, 0, time.UTC)
+	observedAt := now.Add(-time.Minute)
+	snapshot := validEvidenceSnapshot(now)
+	snapshot.PageSize = 2
+	snapshot.Items = []EvidenceSnapshotItem{
+		{NewsID: "news-a", VersionID: "version-a", ObservationID: "observation-a", SystemObservedAt: observedAt},
+		{NewsID: "news-a", VersionID: "version-b", ObservationID: "observation-b", SystemObservedAt: observedAt},
+		{NewsID: "news-b", VersionID: "version-a", ObservationID: "observation-c", SystemObservedAt: observedAt},
+		{NewsID: "news-c", VersionID: "version-a", ObservationID: "observation-d", SystemObservedAt: observedAt},
+		{NewsID: "news-c", VersionID: "version-b", ObservationID: "observation-e", SystemObservedAt: observedAt},
+	}
+	if err := snapshot.Validate(); err != nil {
+		t.Fatalf("equal-timestamp snapshot must be valid: %v", err)
+	}
+
+	var position *EvidenceCursorPosition
+	var got []string
+	for pageNumber := 0; pageNumber < 3; pageNumber++ {
+		page, hasMore, err := snapshot.PageAfter(position)
+		if err != nil {
+			t.Fatalf("page %d: %v", pageNumber+1, err)
+		}
+		for _, item := range page {
+			got = append(got, item.NewsID+"/"+item.VersionID)
+		}
+		if hasMore {
+			if len(page) != snapshot.PageSize {
+				t.Fatalf("page %d hasMore=true with short page: %d", pageNumber+1, len(page))
+			}
+			last := page[len(page)-1]
+			position = &EvidenceCursorPosition{
+				SnapshotRef: snapshot.SnapshotRef, LastSystemObservedAt: last.SystemObservedAt,
+				LastNewsID: last.NewsID, LastVersionID: last.VersionID,
+			}
+		} else {
+			position = nil
+			break
+		}
+	}
+	want := []string{
+		"news-a/version-a", "news-a/version-b", "news-b/version-a",
+		"news-c/version-a", "news-c/version-b",
+	}
+	if len(got) != len(want) {
+		t.Fatalf("paginated item count=%d, want %d: %v", len(got), len(want), got)
+	}
+	for index := range want {
+		if got[index] != want[index] {
+			t.Fatalf("paginated order[%d]=%q, want %q; all=%v", index, got[index], want[index], got)
+		}
+	}
+}
+
 func TestSaveEvidenceSnapshotValidatesBeforePersistence(t *testing.T) {
 	repository := &evidenceSnapshotRepositoryStub{}
 	service, err := NewSaveEvidenceSnapshot(repository)
