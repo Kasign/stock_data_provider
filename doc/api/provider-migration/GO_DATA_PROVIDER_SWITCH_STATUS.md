@@ -91,3 +91,15 @@
 - 继续复核基础设施依赖时发现 Dependencies.Cache 是接口类型，typed nil 可绕过 Redis 必需依赖检查，也会阻止未配置 Redis 时回退到 Disabled Cache。
 - Module.New 现在使用统一 nil 检测：Redis 已配置时拒绝 typed nil Cache；Redis 未配置时将 typed nil Cache 视为未注入并使用 Disabled Cache。
 - 新增两种启动路径回归测试；未执行构建或测试，留待 integration 统一验收。
+
+### 2026-11-10：Provider 公共协议与能力注册第一批 Review
+
+- 审查基线：`66e7a67f2283a13104db070b27e88b0caf40f2c2`。
+- 审查范围：`provider/provider.go`、核心领域模型、`bootstrap/module.go`、`service/data.go`、Provider 配置及 Probe 能力清单；本批不覆盖各数据商 Adapter 的字段映射验收。
+- 结论：按能力拆分的接口结构合理。Quote/DailyBars 分离，`NamedProvider` 作为最小发现接口，旧版组合 `Provider` 保留兼容；DataService 主要依赖能力接口，Bootstrap 对启用但未实现的能力 fail-fast。当前没有增加万能接口或重做领域模型的必要。
+- 待收口项一：`StockUniverseProvider` 没有独立配置开关，业务注册复用 `StockSearch` Provider 列表；主动 Probe 则从全部启用 Provider 中发现该接口，业务可用范围与 Probe 发现范围不完全一致。需确认完整证券目录是否继续作为 StockSearch 的子能力；若是，Probe 应与业务注册范围一致；若否，再拆独立配置能力。
+- 待收口项二：`PriceLimitEventProvider` 未纳入 `ProviderSettings`，但 Bootstrap 会从全部启用 Provider 自动发现并注册。需明确它是随 Provider 启用自动启用的基础证据能力，还是独立可配置能力；在语义明确前，不扩大自动注册范围。
+- 文档问题：`DragonTigerProvider` 声明前的注释误写为交易日历说明，应在协议文档整理批次修正。
+- 兼容性观察：`SupplementProvider` 与独立筹码、资金流接口存在方法重叠，当前作为旧补充源兼容入口保留；本批不删除，后续仅在确认无兼容调用后收敛。
+- 本批未修改业务代码，未运行 gofmt/build/test；静态 Review 结论不代表 Adapter 字段映射、单位/时间/分页语义或真实 Provider 请求已经验收。
+- 本批结论冻结。后续只处理上述明确边界，再进入核心 Quote/DailyBars Adapter 契约审查，不重新打开已通过的接口总体设计。
