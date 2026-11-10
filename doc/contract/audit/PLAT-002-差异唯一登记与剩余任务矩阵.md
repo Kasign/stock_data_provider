@@ -596,3 +596,52 @@ Server维度2当前仅完成首轮一个切片，状态为 `in_progress / partia
 - CTR-047同步Run推荐契约已收敛为：客户端合法run_id允许保留；省略时服务端生成；重复ID拒绝且应稳定映射409/run_id_conflict。异步Task Queue另按其服务端生成ID规则，不与同步入口混同。
 - 状态调整：同步Run ID的实现事实已补齐，决策输入可用（ready_for_decision）；重复冲突HTTP映射、Runner/Store/Handler测试及真实DB证据仍为pending_evidence。CTR-047整体仍开放。
 - 本轮没有新增CTR、修改业务代码或执行测试/CI。详细证据见`Server-维度2-DTO-Schema-Golden.md`第12节。
+
+
+## 28. CTR-006 一次性修复与验收工单（2026-11-10）
+
+本节将CTR-006从“修复准备”收敛为可直接执行的有限工单；不重新审计Task DTO，不改变固定代码审计基线。
+
+### 28.1 固定基线事实
+
+- 唯一契约文件：`doc/api/contracts/分析任务.openapi.yaml`。
+- `components.schemas.Task.properties.started_at`与`finished_at`均为`type: string`、`format: date-time`，当前额外声明`nullable: true`。
+- Go DTO既有行为为指针字段+ `omitempty`：nil时字段缺失，非nil时输出RFC3339时间值。
+- 本项只对齐Schema与既有序列化行为；不改Task DTO、不改变字段名、不改变Task状态枚举，也不扩大到RunResult或StageEvent。
+
+### 28.2 唯一修复要求
+
+1. 删除`started_at`和`finished_at`的`nullable: true`。
+2. 两字段继续保持非required属性；不得加入Task.required。
+3. 保留`type: string`和`format: date-time`。
+4. 不增加显式null输出；不改Go DTO序列化行为。
+5. 只修改上述契约文件及CTR-006所需Golden/测试，不顺手重排其他Schema。
+
+### 28.3 最小Golden矩阵
+
+Golden以Task对象为核心，固定必需字段使用稳定值；只验证本CTR相关时间字段的存在性和值：
+
+| 场景 | started_at | finished_at | 验收重点 |
+|---|---|---|---|
+| queued | 缺失 | 缺失 | 两字段均不出现，不能输出null |
+| running | 有效RFC3339时间 | 缺失 | started_at为字符串时间，finished_at不出现 |
+| terminal | 有效RFC3339时间 | 有效RFC3339时间 | 两字段均为字符串时间 |
+
+Golden应由真实DTO序列化生成或与真实序列化逐字节/结构比较，不得手工构造后仅自我校验。
+
+### 28.4 验收条件与关闭门槛
+
+- OpenAPI解析/规范校验通过。
+- Schema测试验证：started_at/finished_at允许缺失、拒绝null、非字符串和非法date-time。
+- DTO Golden覆盖queued/running/terminal三态。
+- Handler Contract Test至少验证queued响应和terminal响应与Schema一致；running状态如Handler可稳定构造，也纳入同一测试组。
+- 运行责任模块定向Go测试及相关CI，记录责任分支、修复提交SHA、测试命令和结果。
+- 以上证据齐全后才关闭CTR-006；仅修改Schema或Golden文件不构成关闭。
+
+### 28.5 执行边界与当前状态
+
+- 审计维护分支仍为`feat/design_doc`，只维护审计文档；本工单不授权在该分支修改业务契约文件。
+- 固定审计基线仍为`b6dfc85ba214fe16268c8cba780641a8bfe15086`。
+- 本轮确认了契约文件和精确修复要求，但没有检查/修改责任模块分支，也没有业务实现提交可供验收；责任分支尚未在本工单中指定。
+- CTR-006仍为`ready_for_implementation`，未关闭、未冻结。
+- 后续不得再次讨论字段语义；取得责任分支修复SHA后，直接按28.4验收。
