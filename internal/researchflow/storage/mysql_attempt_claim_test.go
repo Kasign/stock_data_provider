@@ -304,8 +304,8 @@ func TestMariaDBClaimAttemptLeaseAndFencing(t *testing.T) {
 	if _, err := db.ExecContext(ctx, `UPDATE researchflow_stages SET retry_at = NULL WHERE stage_ref = ?`, stageRef); err != nil {
 		t.Fatalf("clear retry_at: %v", err)
 	}
-	if _, _, err := repository.ClaimAttempt(ctx, runRef, stageRef, "invalid-retry-time-"+suffix, "worker-c", time.Minute, 3, 8); !errors.Is(err, ErrClaimStageUnavailable) {
-		t.Fatalf("retry without retry_at error=%v, want ErrClaimStageUnavailable", err)
+	if _, _, err := repository.ClaimAttempt(ctx, runRef, stageRef, "invalid-retry-time-"+suffix, "worker-c", time.Minute, 3, 8); !errors.Is(err, ErrAttemptHistoryInconsistent) {
+		t.Fatalf("retry without retry_at error=%v, want ErrAttemptHistoryInconsistent", err)
 	}
 
 	if _, err := db.ExecContext(ctx, `UPDATE researchflow_stages SET retry_at = ? WHERE stage_ref = ?`, retryAt, stageRef); err != nil {
