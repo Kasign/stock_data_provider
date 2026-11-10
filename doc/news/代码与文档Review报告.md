@@ -263,3 +263,12 @@
 - Cursor 绑定 SnapshotRef 与最后一条记录的时间戳、NewsID、VersionID；分页在不可变 Snapshot 中定位精确排序位置，不使用 offset，也不重新执行 PIT 查询。
 - 新增同一时间戳下多 News/Version 的跨页测试，覆盖次级排序键和连续分页无缺口/无重复。
 - 尚未执行测试；MariaDB DATETIME(6) 实际排序及跨数据库精度边界仍待集成环境验收。
+
+
+### 二十五、N8-02 Evidence 分页失败语义
+
+- 整页授权语义已由 `ListEvidence.Execute` 实现：所有引用逐条授权解析；任一条失败即返回零值页面，不返回部分结果。已有第二条授权失败测试覆盖该行为。
+- 修正了合法签名游标指向 Snapshot 中不存在的排序位置时的错误边界：由内部结构错误统一映射为 `ErrEvidenceSnapshotPageUnavailable`，避免将 Snapshot 内部校验错误泄露给跨模块调用方。
+- 新增合法签名但位置缺失的 continuation 测试，检查无部分页面、无 PIT 重跑。
+- 代码审查确认 Snapshot 读取错误原样传播，便于上层诊断；对外 Fault 映射仍由 Server/API 组合层负责。
+- 尚未运行 Go 测试或 MariaDB 11.4。
