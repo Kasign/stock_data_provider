@@ -216,3 +216,11 @@
 - 已将 `now >= ExpiresAt` 纳入无效快照条件，与 Get 的过期边界保持一致；达到过期时刻即拒绝保存/幂等重放。
 - 新增边界单测覆盖过期前最后一纳秒、ExpiresAt 相等和过期后一纳秒。
 - 当前未取得本次提交 CI 结果；MariaDB 11.4 集成仍需独立执行。
+
+
+### Snapshot 幂等重放载荷哈希复核补充（2026-11-10）
+
+- 二次复核发现只比较数据库 payload_hash 与本次待写 payload 的哈希，仍不能识别 payload_json 已被篡改但 payload_hash 未同步修改的记录。
+- 重放查询现读取既有 payload_json，先检查非空及 8 MiB 上限，再重新计算 SHA-256；存储哈希与实际载荷不一致时返回 ErrInvalidEvidenceSnapshot。
+- MariaDB 集成测试新增只篡改 payload_json、保留 payload_hash 的场景；恢复原始载荷后再次确认幂等创建成功。
+- 仍待真实 MariaDB 11.4 执行；未取得运行结果前不标记通过。
