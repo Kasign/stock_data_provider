@@ -87,3 +87,13 @@
 - Data 独立启动入口 `cmd/market-data/main.go` 仅注入 Store、Cache、Logger；Data Module 虽提供 HTTPDoer/Dialer 受控注入字段和完整性校验，但当前入口未注入这些依赖，也未启用 `RequireEgressDependencies`。
 - 新增 AUD-PLAT-PORT-002：Data 独立入口未证明接入 Platform 受控出站执行器，列为 P1 候选待核；需先核对是否存在其他生产装配入口及 Provider 默认网络实现。
 - Platform 维度 1 保持 partial；Request ID Middleware 和 Platform HTTP Client 的 Server 装配、其他模块消费者及全量 import 扫描仍待核。
+
+
+### Platform — 维度 1：第三批（News 消费者）
+
+- 详细记录：[`Platform-维度1-Application-Port与调用点.md`](./Platform-维度1-Application-Port与调用点.md)
+- News Application 定义窄 `HTTPDoer` Port；Provider Adapter 使用 Platform `httpclient.Client.Bind` 构造 Provider 专属 `BoundDoer`，并将有效 Platform Fault 映射为 News `ProviderError`，对应测试覆盖目标 Host 拒绝、Fault 校验和 Cause 脱敏。
+- News Diagnostics Check 使用 Platform Diagnostics/Fault，测试覆盖 skipped、degraded、unavailable 和脱敏。
+- 固定基线 Server Bootstrap 只注册 News Migration；未构造 News Provider Set/Application，也未向 Server Diagnostics 注入 News Checks。新增 AUD-PLAT-PORT-003（P1 候选）：News Platform Adapter/Diagnostics 尚无 Server 生产装配证据。
+- News Request ID 消费者仍待核。News 实现单测不能替代 Server 组合根接线证据。
+- Platform 维度 1 保持 partial。
