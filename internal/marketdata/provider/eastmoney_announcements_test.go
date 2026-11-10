@@ -183,12 +183,13 @@ func TestEastmoneyAnnouncementReportsUnparseableDisplayTime(t *testing.T) {
 func TestEastmoneyAnnouncementsReportsResponseAndRowRejections(t *testing.T) {
 	cases := []struct {
 		name, body, code string
+		pageSize         int
 		row              int
 	}{
-		{name: "provider rejected", body: `{"success":0,"code":500,"message":"failed"}`, code: "provider_error", row: -1},
-		{name: "page mismatch", body: `{"success":1,"data":{"page_index":2,"page_size":1,"total_hits":1,"list":[]}}`, code: "pagination_metadata_mismatch", row: -1},
-		{name: "negative total", body: `{"success":1,"data":{"page_index":1,"page_size":1,"total_hits":-1,"list":[]}}`, code: "invalid_pagination_total", row: -1},
-		{name: "row count mismatch", body: `{"success":1,"data":{"page_index":1,"page_size":2,"total_hits":2,"list":[]}}`, code: "pagination_row_count_mismatch", row: -1},
+		{name: "provider rejected", pageSize: 1, body: `{"success":0,"code":500,"message":"failed"}`, code: "provider_error", row: -1},
+		{name: "page mismatch", pageSize: 1, body: `{"success":1,"data":{"page_index":2,"page_size":1,"total_hits":1,"list":[]}}`, code: "pagination_metadata_mismatch", row: -1},
+		{name: "negative total", pageSize: 1, body: `{"success":1,"data":{"page_index":1,"page_size":1,"total_hits":-1,"list":[]}}`, code: "invalid_pagination_total", row: -1},
+		{name: "row count mismatch", pageSize: 2, body: `{"success":1,"data":{"page_index":1,"page_size":2,"total_hits":2,"list":[]}}`, code: "pagination_row_count_mismatch", row: -1},
 		{name: "missing article identity", body: `{"success":1,"data":{"page_index":1,"page_size":1,"total_hits":1,"list":[{"notice_date":"2026-10-23","title":"公告"}]}}`, code: "missing_required_value", row: 0},
 		{name: "invalid notice date", body: `{"success":1,"data":{"page_index":1,"page_size":1,"total_hits":1,"list":[{"art_code":"A1","notice_date":"bad","title":"公告"}]}}`, code: "invalid_date", row: 0},
 		{name: "duplicate article", body: `{"success":1,"data":{"page_index":1,"page_size":2,"total_hits":2,"list":[{"art_code":"A1","codes":[{"stock_code":"600036"}],"notice_date":"2026-10-23","title":"公告1"},{"art_code":"A1","codes":[{"stock_code":"600036"}],"notice_date":"2026-10-23","title":"公告2"}]}}`, code: "duplicate_article_id", row: 1},
@@ -201,7 +202,7 @@ func TestEastmoneyAnnouncementsReportsResponseAndRowRejections(t *testing.T) {
 			reporter := validation.NewReporter(16)
 			ctx := validation.WithReporter(context.Background(), reporter)
 			p := NewEastmoneyConfiguredWithAnnouncements(2*time.Second, "", "", "", "", "", "", "", "", "", server.URL, "")
-			_, err := p.FetchStockAnnouncements(ctx, "600036.SH", "2026-10-20", "2026-10-26", 1, tc.row+1)
+			_, err := p.FetchStockAnnouncements(ctx, "600036.SH", "2026-10-20", "2026-10-26", 1, tc.pageSize)
 			if err == nil {
 				t.Fatal("expected rejection")
 			}

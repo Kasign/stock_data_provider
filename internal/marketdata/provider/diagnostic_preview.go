@@ -1,11 +1,13 @@
 package provider
 
 import (
+	"strings"
 	"unicode/utf8"
 )
 
 // truncateDiagnosticPreview 按字节预算截断诊断预览，但不切断 UTF-8 多字节字符。
 func truncateDiagnosticPreview(value string, maxBytes int) string {
+	value = strings.ToValidUTF8(value, "�")
 	if maxBytes <= 0 {
 		return ""
 	}
