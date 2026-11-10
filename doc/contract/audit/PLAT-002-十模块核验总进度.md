@@ -10,7 +10,7 @@
 
 | 模块 | Port/调用点 | DTO/Schema/Golden | Fault/Diag/Request ID | 授权/Secret | Repo/Migration/Worker | 依赖边界 | 总状态 |
 |---|---|---|---|---|---|---|---|
-| Platform | partial | partial | partial（Fault/Diagnostics/Request ID 基础实现与单测已核；消费者接入待核） | partial | partial | partial | partial |
+| Platform | partial（技术接口形态已核；消费者调用点待追踪） | partial | partial（Fault/Diagnostics/Request ID 基础实现与单测已核；消费者接入待核） | partial | partial | partial（发现 Task Queue 反向依赖旧 Analysis Domain，待裁决） | partial |
 | Server | partial | not_started | partial | partial | partial | partial | partial |
 | Data | partial | partial | partial | partial | partial | partial | partial |
 | News | partial | partial | partial | partial | partial | partial | partial |
@@ -28,7 +28,7 @@
 | 阶段 | 内容 | 状态 |
 |---|---|---|
 | A | 固定 SHA、模块清单、文件规模与并行修改观察 | in_progress（本次已建立初始基线，待完成差异复核） |
-| B | 十模块六维接口级核验 | in_progress（当前仅完成 Platform 的 Fault/Diagnostics/Request ID 子项） |
+| B | 十模块六维接口级核验 | in_progress（Platform 维度 1 接口形态初审、维度 3 基础原语已核；消费者调用点及其余维度待核） |
 | C | 跨模块调用图、授权链和依赖图 | not_started |
 | D | 差异、待裁决、补证清单 | not_started |
 | E | 责任模块修复/补证（本分支不改业务代码） | pending_audit |
@@ -68,3 +68,12 @@
 - 结论：Platform 这三类基础原语的实现与单元测试整体符合已审查的公共契约；本结论不代表各领域模块和 Server 已正确接入。
 - 发现一项 P2 文档一致性问题：公共平台契约第 7.2 节对 Check 最小字段的描述，与第 21 节明确收敛后的实际 Go API 不一致，需由 Platform 文档责任方统一表述。
 - Request ID 的旧兼容 Middleware 仍会信任单值入站 Header；新接入必须使用零值安全的 MiddlewareWithOptions。真实 Server 调用点尚未核验，列入后续 Server 维度 3。
+
+
+### Platform — 维度 1：Application Port 与真实调用点（初审）
+
+- 详细记录：[`Platform-维度1-Application-Port与调用点.md`](./Platform-维度1-Application-Port与调用点.md)
+- 核验代码基线：`b6dfc85ba214fe16268c8cba780641a8bfe15086`
+- 结论：Platform 是技术原语层，不应定义统一领域 Application Port；HTTP Client、Diagnostics 等能力通过标准 Go interface、配置、构造函数和回调供调用方组合。
+- 发现 AUD-PLAT-PORT-001：`internal/platform/taskqueue` 直接依赖旧 `internal/analysis/domain`，违反 Platform 不依赖领域包的边界原则，登记为 P1 候选，等待旧 Analysis 迁移/Server 责任方裁决。
+- 消费者调用点、Server 装配入口、Data 独立 Module 接入方式和全量 Platform import 扫描尚未完成；维度 1 保持 partial。
