@@ -3,6 +3,7 @@ package application
 import (
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"example.com/stock-analysis-flow/internal/platform/diagnostics"
@@ -20,6 +21,16 @@ func (r LeaseRecoveryReport) ToDiagnosticsObservation(checkedAt time.Time, durat
 	if r.Scanned != r.Recovered+r.Conflicted+r.OutcomeUnknown+r.Failed+r.Unprocessed ||
 		r.OutcomeUnknown != len(r.OutcomeUnknownDeliveryIDs) {
 		return diagnostics.Observation{}, fmt.Errorf("notification: recovery report counts do not reconcile")
+	}
+	seenDeliveryIDs := make(map[string]struct{}, len(r.OutcomeUnknownDeliveryIDs))
+	for _, deliveryID := range r.OutcomeUnknownDeliveryIDs {
+		if strings.TrimSpace(deliveryID) == "" {
+			return diagnostics.Observation{}, fmt.Errorf("notification: recovery report contains an empty unknown delivery ID")
+		}
+		if _, exists := seenDeliveryIDs[deliveryID]; exists {
+			return diagnostics.Observation{}, fmt.Errorf("notification: recovery report contains a duplicate unknown delivery ID")
+		}
+		seenDeliveryIDs[deliveryID] = struct{}{}
 	}
 	if checkedAt.IsZero() || duration < 0 {
 		return diagnostics.Observation{}, fmt.Errorf("notification: invalid recovery diagnostic timing")
