@@ -481,3 +481,15 @@
 - 新增 **AUD-WEBUI-CTR-045（P2）**：WebUI 仅识别 stale，忽略 degraded/unknown 和 quality_reasons。尤其 unknown 空结果实际表示回退耗尽仍无法确认，却显示“没有匹配的股票”，容易被误解为证券不存在。需按四种质量状态展示并增加 app.js 搜索流程 DOM 回归。
 - API Client 已有中文 query 编码、API Key、AbortSignal 测试；Handler 覆盖成功、空 q 和超限 limit；view 组件覆盖候选安全渲染和 ARIA，但缺 loadStockSearch 质量状态集成 DOM 测试。
 - WebUI 维度 2 继续 partial。剩余待审数据集：Analysis Run、Provider Probe History。
+
+
+### WebUI — 维度 2：Analysis Run 分析结果与持久化读取
+
+- 详细记录：[`WebUI-维度2-Analysis-Run.md`](./WebUI-维度2-Analysis-Run.md)
+- 已核对 RunRequest/RunResult/RunStatus/StageEvent、Analysis Runner/RunStore Port、MariaDB/Redis 结果读取与写入、TaskQueue 创建/幂等/Worker/状态映射/事件游标、HTTP Handler、WebUI API Client/轮询/Run 结果视图及相关测试。
+- 已明确 Run 与 Task 是不同状态域：Run=blocked_data_quality 映射 Task=succeeded，表示任务执行已结束，不代表质量门禁通过；RunResult 从 MariaDB 读取，Redis 仅为缓存；Task Events 使用数据库自增 id 作为 sequence 游标。
+- 新增 **AUD-WEBUI-CTR-046（P2）**：WebUI 实际调用的 GET /api/v1/analysis/runs/{run_id} 及 Run Events 未进入正式 OpenAPI，且缺 RunResult/RunStatus/Failure/StageEvent 等响应 Schema；HTTP Server 缺少 GET Run 成功/404/409 与 Run Events 专项测试。
+- 新增 **AUD-WEBUI-CTR-047（P2）**：AnalysisRequest 声称与 domain.RunRequest 一致，但遗漏 as_of_mode、parameters；run_id 在异步队列由服务端生成覆盖，as_of_mode 由 Handler 根据 as_of 重设，需明确异步请求 DTO 与字段行为。
+- WebUI 已校验 task_id/run_id/事件游标/事件身份，Run 结果读取校验 run_id 和证券集合，并对可重试错误有限重试；API Client 测试验证 Run URL、分析端不附带 Market API Key 和结构化 409 错误。
+- 本轮未执行固定基线 CI；DB migration 索引/唯一约束、多实例 Worker claim、RunResult 嵌套 DTO Golden 仍未完成专项核验。
+- WebUI 维度 2 继续 partial。剩余待审数据集：Provider Probe History。
