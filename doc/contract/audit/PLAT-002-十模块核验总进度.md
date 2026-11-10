@@ -519,3 +519,5 @@
 - Analysis Task 请求契约补充核对：Handler/fillDefaults 会为 task_type、as_of、universe_id、portfolio_id、market_id、strategy_ids 和配置版本注入默认值；historical_replay 则要求显式 as_of；Runner 只接受四种 TaskType。故 CTR-005/047 的关闭条件应描述 HTTP 请求默认值、TaskType 四值枚举及历史回放条件约束，不应机械地把所有 RunRequest 非 omitempty 字段列为 HTTP required。
 
 - P1 门禁复核更正：CTR-041 经固定 SHA 源码、OpenAPI 和 JSON Golden 对照后撤销；LimitPoolItem.seal_money/max_seal_money 的 omitempty、非 required/非 nullable、JSON omitted 三方一致。当前维度 2 已确认仍需处理的 P1 为 CTR-043（Hithink 龙虎榜分页计数契约冲突）；本轮未执行 CI。
+
+- CTR-010 影响范围抽查（Limit Pool/Dragon Tiger）：两组 DTO 的已登记 omitempty 字段与 OpenAPI nullable=true 不一致属实；LimitPoolItem.seal_money/max_seal_money 则为 omitempty、OpenAPI 非 nullable/非 required、Golden omitted，明确排除在 CTR-010 外。CTR-010 全量字段复核仍待后续子批次。
