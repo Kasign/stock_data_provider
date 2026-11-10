@@ -88,58 +88,73 @@ func (p *Pytdx) dial(ctx context.Context) (*tdx.Client, error) {
 	if len(p.hosts) == 0 {
 		return nil, errors.New("Pytdx has no configured domestic quote servers")
 	}
-	dialTimeout := p.timeout
-	if dialTimeout > 1500*time.Millisecond {
-		dialTimeout = 1500 * time.Millisecond
-	}
-	// Each dial attempt checks only a small, rotating subset. A dead public server
-	// cannot stall a request while the library walks its entire built-in host list.
-	dial := func(dialCtx context.Context) (ios.ReadWriteCloser, string, error) {
-		p.rateMu.Lock()
-		start := p.hostIndex % len(p.hosts)
-		attempts := min(6, len(p.hosts))
-		p.hostIndex = (start + attempts) % len(p.hosts)
-		p.rateMu.Unlock()
-
-		var lastErr error
-		for i := 0; i < attempts; i++ {
-			if err := dialCtx.Err(); err != nil {
-				return nil, "", err
-			}
-			host := strings.TrimSpace(p.hosts[(start+i)%len(p.hosts)])
-			if host == "" {
-				continue
-			}
-			address := host
-			if _, _, err := net.SplitHostPort(address); err != nil {
-				address = net.JoinHostPort(strings.Trim(address, "[]"), "7709")
-			}
-			attemptCtx, cancel := context.WithTimeout(dialCtx, dialTimeout)
-			var conn net.Conn
-			var err error
-			if p.dialContext != nil {
-				conn, err = p.dialContext(attemptCtx, "tcp", address)
-			} else {
-				dialer := net.Dialer{Timeout: dialTimeout}
-				conn, err = dialer.DialContext(attemptCtx, "tcp", address)
-			}
-			cancel()
-			if err == nil {
-				return conn, address, nil
-			}
-			lastErr = err
-		}
-		if lastErr == nil {
-			lastErr = errors.New("no valid host in configured Pytdx server list")
-		}
-		return nil, "", fmt.Errorf("unable to connect to a configured TDX server: %w", lastErr)
-	}
-	client, err := tdx.DialWith(dial, tdx.WithRedial(), tdx.WithLevel(tdx.LevelError))
+	// tdx 客户端负责连接后的生命周期和重连；单次候选拨号保持有界。
+	client, err := tdx.DialWith(p.dialConfiguredHost, tdx.WithRedial(), tdx.WithLevel(tdx.LevelError))
 	if err != nil {
 		return nil, fmt.Errorf("Pytdx connect to domestic quote server: %w", err)
 	}
 	client.SetTimeout(p.timeout)
 	return client, nil
+}
+
+
+// dialConfiguredHost 执行一次有界的候选服务器拨号；重连策略由 tdx 客户端在上层管理。
+func (p *Pytdx) dialConfiguredHost(dialCtx context.Context) (ios.ReadWriteCloser, string, error) {
+	if dialCtx == nil {
+		dialCtx = context.Background()
+	}
+	if err := dialCtx.Err(); err != nil {
+		return nil, "", err
+	}
+	if len(p.hosts) == 0 {
+		return nil, "", errors.New("Pytdx has no configured domestic quote servers")
+	}
+	dialTimeout := p.timeout
+	if dialTimeout <= 0 {
+		dialTimeout = 12 * time.Second
+	}
+	if dialTimeout > 1500*time.Millisecond {
+		dialTimeout = 1500 * time.Millisecond
+	}
+
+	p.rateMu.Lock()
+	start := p.hostIndex % len(p.hosts)
+	attempts := min(6, len(p.hosts))
+	p.hostIndex = (start + attempts) % len(p.hosts)
+	p.rateMu.Unlock()
+
+	var lastErr error
+	for i := 0; i < attempts; i++ {
+		if err := dialCtx.Err(); err != nil {
+			return nil, "", err
+		}
+		host := strings.TrimSpace(p.hosts[(start+i)%len(p.hosts)])
+		if host == "" {
+			continue
+		}
+		address := host
+		if _, _, err := net.SplitHostPort(address); err != nil {
+			address = net.JoinHostPort(strings.Trim(address, "[]"), "7709")
+		}
+		attemptCtx, cancel := context.WithTimeout(dialCtx, dialTimeout)
+		var conn net.Conn
+		var err error
+		if p.dialContext != nil {
+			conn, err = p.dialContext(attemptCtx, "tcp", address)
+		} else {
+			dialer := net.Dialer{Timeout: dialTimeout}
+			conn, err = dialer.DialContext(attemptCtx, "tcp", address)
+		}
+		cancel()
+		if err == nil {
+			return conn, address, nil
+		}
+		lastErr = err
+	}
+	if lastErr == nil {
+		lastErr = errors.New("no valid host in configured Pytdx server list")
+	}
+	return nil, "", fmt.Errorf("unable to connect to a configured TDX server: %w", lastErr)
 }
 
 func (p *Pytdx) waitForRateLimit(ctx context.Context) error {
