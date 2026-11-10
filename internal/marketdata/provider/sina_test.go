@@ -300,6 +300,40 @@ func TestSinaMissingOrInvalidAmountDoesNotClaimRawFieldMetadata(t *testing.T) {
 	}
 }
 
+func TestSinaDailyBarsReportsSnapshotLevelFailures(t *testing.T) {
+	cases := []struct {
+		name, body string
+		status int
+		wantCode string
+	}{
+		{name: "http status", status: http.StatusBadGateway, body: "upstream unavailable", wantCode: "http_status_error"},
+		{name: "invalid json", status: http.StatusOK, body: "{not-json", wantCode: "decode_error"},
+		{name: "empty rows", status: http.StatusOK, body: "[]", wantCode: "empty_result"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(tc.status)
+				_, _ = fmt.Fprint(w, tc.body)
+			}))
+			defer server.Close()
+			reporter := validation.NewReporter(10)
+			ctx := validation.WithReporter(context.Background(), reporter)
+			_, err := NewSinaConfigured(0, "", server.URL).FetchDailyBars(ctx, "600036.SH", "2026-10-20", "2026-10-21", 8, model.AdjustmentNone)
+			if err == nil { t.Fatal("expected invalid provider response to be rejected") }
+			issues := reporter.Snapshot().Issues
+			found := false
+			for _, issue := range issues {
+				if issue.Stage == validation.StageParse && issue.Code == tc.wantCode && issue.RowIndex == nil {
+					found = true
+					break
+				}
+			}
+			if !found { t.Fatalf("missing snapshot-level %s issue: %+v", tc.wantCode, issues) }
+		})
+	}
+}
+
 func TestSinaFetchDailyBarsNormalizesUnadjustedRows(t *testing.T) {
 	payload := []byte(`[{"day":"2026-10-21","open":"10.0","high":"11.0","low":"9.0","close":"10.5","volume":"10000"},{"day":"2026-10-20","open":10,"high":11,"low":9,"close":10.2,"volume":5000}]`)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
