@@ -468,3 +468,11 @@ Application 的 `RunFinalizationCoordinator` 是三种终态聚合路径的路�
 - 预期整个 InnoDB 事务回滚：Run 保持原 status/version 且无 result_summary_ref；ResultSummary 与 Outbox 行均不存在。
 - 触发器使用测试专属名称并在测试结束时清理；测试仅在 `PLATFORM_STORAGE_INTEGRATION=1` 时执行。
 - 当前只有测试代码，未宣称执行通过；并发 Finalize/CAS 竞争、Deadline 专项 MariaDB 验收仍未覆盖。
+
+
+## 18. FinalizeRun 并发终态竞争验收补充（2026-11-10）
+
+- 两个并发 FinalizeRun 使用相同 RunRef 与 ExpectedVersion，分别提交不同的 SummaryRef/OutboxRef。
+- Run 行 `SELECT ... FOR UPDATE` 与终态检查是裁决点：胜者完成 Run + Summary + Outbox 事务；后到者必须观察到终态并返回 `ErrRunAlreadyFinalized`。
+- 测试断言只有一个成功、Run version 只增加一次，且 Summary/Outbox 均恰好一条。
+- 该测试受 `PLATFORM_STORAGE_INTEGRATION=1` 门控，尚未取得真实 MariaDB 执行证据。
