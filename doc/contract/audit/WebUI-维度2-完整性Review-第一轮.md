@@ -248,3 +248,52 @@ internal/marketdata/model/model.go 的 model.ChipDistribution 中，以下九个
 结论：CTR-010 在 ChipDistribution 上的九个字段全部确认，保留原编号，不新增差异。关闭条件需逐字段取消不符合 Go JSON 行为的 nullable 声明（或经明确契约决议改 Go 序列化行为），并增加 DTO nil/空值 Golden 与双向契约测试；不能仅修改 OpenAPI 而不验证消费者对省略字段的处理。
 
 本批仅完成 ChipDistribution 子集，不代表 CTR-010 全量字段清单完成。
+## 13. CTR-010 字段清单复核（子批次 6：Profile / Trading Status / Price Limit Rule）
+
+固定代码基线：origin/integration @ b6dfc85ba214fe16268c8cba780641a8bfe15086。本批仅核对证券资料、历史交易状态、涨跌幅规则三个响应 DTO。
+
+### 13.1 StockBasic（证券资料/Profile）
+
+Go model.StockBasic 有 14 个 omitempty 字段，而 OpenAPI StockBasic 将它们全部声明 nullable=true、均非 required：
+
+| JSON 字段 | Go 类型 | JSON tag | OpenAPI nullable |
+|---|---|---|---|
+| ipo_date / out_date | string | omitempty | true |
+| pe_dynamic / pb | *float64 | omitempty | true |
+| industry | string | omitempty | true |
+| market_cap_cny / float_market_cap_cny | *float64 | omitempty | true |
+| total_shares / float_shares | *float64 | omitempty | true |
+| board_code | string | omitempty | true |
+| roe_percent / net_profit_margin_percent | *float64 | omitempty | true |
+| net_profit_cny / gross_margin_percent | *float64 | omitempty | true |
+
+这些字段在 Go nil/空值时均被省略，而不是输出 JSON null。source_version、quality_reasons 虽带 omitempty，但 OpenAPI 未声明 nullable，不纳入 CTR-010。StockBasic 的 required 字段与 Go 非 omitempty 字段相符。
+
+### 13.2 SecurityTradingStatusSnapshot
+
+- system_observed_at：*time.Time + omitempty，OpenAPI nullable=true，存在省略/null 语义冲突，计入 CTR-010。
+- security_name、name_effective_from/to、listing_date、listing_trading_day_number、suspension_timing/type 均带 omitempty，但 OpenAPI 未声明 nullable，不计入 CTR-010。
+- required 集合与 Go 非 omitempty 字段相符；quality_reasons 虽 omitempty，但 Schema 未声明 nullable。
+
+### 13.3 PriceLimitRuleSnapshot 与 PriceLimitEventEvidence
+
+- PriceLimitRuleSnapshot 的 inline 200 response Schema 将 special_exception_evidence 和 limit_percent 声明 nullable=true；Go 两字段分别为指针且带 omitempty，nil 时省略，计入 CTR-010。
+- listing_trading_day_number、no_limit_reason、rule_effective_from/to 也带 omitempty，但 Schema 未声明 nullable，不计入 CTR-010。
+- PriceLimitEventEvidence 的 effective_to、quality_reasons、announcement_id 均 omitempty，Schema 未声明 nullable，不计入 CTR-010。
+- required 字段总体与 Go 非 omitempty 字段一致；此结论只针对字段 presence，不代表状态枚举和规则语义的其他审计项已关闭。
+
+### 13.4 测试与回归证据
+
+- openapi_contract_test.go 的 TestOpenAPIDataModelFieldsMatchKnownJSONContract 覆盖 StockBasic、SecurityTradingStatusSnapshot 的字段集合/required 对照；但没有对 omitempty 字段不应 nullable 的反向断言。
+- PriceLimitRuleSnapshot 是 Handler inline response Schema，没有对应的具名 Go DTO 注册项；当前测试未建立该 inline Schema 与 Go DTO 的逐字段映射。
+- TestDataModelJSONSerializationMatchesOpenAPIRequiredAndNullableSemantics 没有 StockBasic、SecurityTradingStatusSnapshot、PriceLimitRuleSnapshot 或 PriceLimitEventEvidence 的 nil/空值样例。
+- 本批未执行固定基线 CI；以上是源码与 Schema 静态对照，不表述为测试运行通过。
+
+### 13.5 CTR-010 本批确认数量
+
+- StockBasic：14 个字段。
+- SecurityTradingStatusSnapshot：1 个字段。
+- PriceLimitRuleSnapshot：2 个字段。
+- 合计确认 17 个字段，均保留原 CTR-010，不新增差异编号。
+
+本批仅完成上述三个 DTO；CTR-010 全量字段清单仍未完成。
