@@ -278,6 +278,26 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 	if !errors.Is(evidenceMetadataTamperErr, app.ErrInvalidEvidenceSnapshot) {
 		t.Fatalf("tampered evidence snapshot metadata error = %v, want invalid snapshot", evidenceMetadataTamperErr)
 	}
+	// Idempotent replay must reject a matching payload hash with a corrupted
+	// denormalized envelope instead of reporting a successful create.
+	if _, err := db.ExecContext(ctx,
+		"UPDATE news_evidence_snapshots SET caller_ref = ? WHERE snapshot_ref = ?",
+		"service:tampered", snapshot.SnapshotRef,
+	); err != nil {
+		t.Fatalf("tamper evidence snapshot caller envelope: %v", err)
+	}
+	if err := repository.CreateEvidenceSnapshot(ctx, snapshot); !errors.Is(err, app.ErrInvalidEvidenceSnapshot) {
+		t.Fatalf("idempotent create with tampered envelope error = %v, want invalid snapshot", err)
+	}
+	if _, err := db.ExecContext(ctx,
+		"UPDATE news_evidence_snapshots SET caller_ref = ? WHERE snapshot_ref = ?",
+		snapshot.CallerRef, snapshot.SnapshotRef,
+	); err != nil {
+		t.Fatalf("restore evidence snapshot caller envelope: %v", err)
+	}
+	if err := repository.CreateEvidenceSnapshot(ctx, snapshot); err != nil {
+		t.Fatalf("idempotent create after envelope restoration: %v", err)
+	}
 	conflictingSnapshot := snapshot
 	conflictingSnapshot.PageSize++
 	if err := repository.CreateEvidenceSnapshot(ctx, conflictingSnapshot); !errors.Is(err, app.ErrEvidenceSnapshotConflict) {
