@@ -308,3 +308,18 @@ func TestEastmoneyDragonTigerReportsUnavailableSnapshotTime(t *testing.T) {
 		t.Fatalf("unexpected snapshot-level Reporter issue: %+v", issues)
 	}
 }
+
+func TestEastmoneyDragonTigerReportsPaginationCountMismatch(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `{"result":{"pages":1,"count":101,"data":[{}]}}`)
+	}))
+	defer server.Close()
+	reporter := validation.NewReporter(8)
+	ctx := validation.WithReporter(context.Background(), reporter)
+	p := NewEastmoneyConfiguredWithDragonTiger(2*time.Second, "", "", "", "", "", "", "", "", server.URL, "")
+	if _, err := p.FetchDragonTiger(ctx, "2026-10-22", 1, 100); err == nil { t.Fatal("expected page count mismatch") }
+	issues := reporter.Snapshot().Issues
+	if len(issues) != 1 || issues[0].Field != "pages" || issues[0].Code != "count_inconsistent" || issues[0].RowIndex != nil {
+		t.Fatalf("unexpected pagination Reporter issue: %+v", issues)
+	}
+}
