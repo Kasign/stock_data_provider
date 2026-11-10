@@ -246,7 +246,7 @@ func TestListEvidenceSnapshotPageMapsValidCursorPositionMissingFromSnapshotToUna
 	missingPosition := ResearchEvidenceRecord{
 		NewsID: "news-not-in-snapshot", VersionID: "version-not-in-snapshot",
 		SystemObservedAt: request.SystemAsOf.Add(-time.Second),
-		SystemAsOf: request.SystemAsOf,
+		SystemAsOf:       request.SystemAsOf,
 	}
 	token, err := codec.EncodeNextCursor(request, snapshot.SnapshotRef, missingPosition, now)
 	if err != nil {
