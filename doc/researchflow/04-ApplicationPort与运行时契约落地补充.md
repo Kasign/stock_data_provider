@@ -491,3 +491,10 @@ Application 的 `RunFinalizationCoordinator` 是三种终态聚合路径的路�
 - 通过测试专属 BEFORE INSERT Stage 触发器制造事务中途失败；失败点位于 Run INSERT 之后、Stage INSERT 期间。
 - 断言 `researchflow_runs`、`researchflow_stages`、`researchflow_run_idempotency` 均无该次创建记录，验证事务回滚完整覆盖 Run、Stage 和幂等索引记录。
 - 触发器在测试结束时清理；仅在 `PLATFORM_STORAGE_INTEGRATION=1` 时执行。当前仅补充验收代码，未宣称实测通过。
+
+
+## 21. Deadline 与普通 Finalize 竞争验收补充（2026-11-10）
+
+- `ExpireRunDeadline` 持久化 `deadline_exceeded` 是 Deadline Finalizer 的终止权线性化点；普通 Finalizer 即使持有此前读取的 running/无 termination reason 快照，也不能覆盖该终止权。
+- 并发存储测试要求 Deadline Finalize 唯一成功，普通 Finalize 只能收到 `ErrRunAlreadyFinalized` 或 termination reason 不匹配拒绝；最终 Run 必须保持 deadline_exceeded，且仅有一条 ResultSummary 和 finalized Outbox。
+- 本测试直接覆盖数据库终结事务竞争；Run deadline 标记与 Stage/Attempt 收敛本身仍由 `ExpireRunDeadline` 的独立测试/验收负责。仅有测试代码，尚未执行真实 MariaDB。
