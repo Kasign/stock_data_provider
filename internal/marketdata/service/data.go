@@ -3176,6 +3176,41 @@ func (s *DataService) DailyBars(ctx context.Context, rawSymbol, start, end strin
 	return nil, false, nil, errors.New("all daily-bar providers failed: " + strings.Join(errs, " | "))
 }
 
+// mergeBundleQualityStatus 保留 Bundle 子数据中更严重、信息量更明确的质量状态。
+// invalid > stale > unknown > degraded > valid；空状态按 unknown 处理。
+func mergeBundleQualityStatus(current, next model.QualityStatus) model.QualityStatus {
+\trank := func(status model.QualityStatus) int {
+\t\tswitch status {
+\t\tcase model.QualityInvalid:
+\t\t\treturn 4
+\t\tcase model.QualityStale:
+\t\t\treturn 3
+\t\tcase model.QualityUnknown, "":
+\t\t\treturn 2
+\t\tcase model.QualityDegraded:
+\t\t\treturn 1
+\t\tcase model.QualityValid:
+\t\t\treturn 0
+\t\tdefault:
+\t\t\treturn 2
+\t\t}
+\t}
+\tif rank(next) > rank(current) {
+\t\tif next == "" { return model.QualityUnknown }
+\t\treturn next
+\t}
+\tif current == "" { return model.QualityUnknown }
+\treturn current
+}
+
+// mergeBundleChildQuality 将子数据状态映射到聚合状态，并保留可检索的子数据状态提示。
+func mergeBundleChildQuality(bundle *model.Bundle, component string, status model.QualityStatus) {
+\tif bundle == nil || status == model.QualityValid { return }
+\tif status == "" { status = model.QualityUnknown }
+\tbundle.QualityStatus = mergeBundleQualityStatus(bundle.QualityStatus, status)
+\tappendReasonOnce(&bundle.Warnings, component+"_quality_"+string(status))
+}
+
 func (s *DataService) Bundle(ctx context.Context, rawSymbol string, lookback int, asOf time.Time, asOfProvided bool, basis model.AdjustmentBasis) (*model.Bundle, error) {
 	symbol, err := normalize.NormalizeSymbol(rawSymbol)
 	if err != nil {
@@ -3235,10 +3270,10 @@ func (s *DataService) Bundle(ctx context.Context, rawSymbol string, lookback int
 	bundle := &model.Bundle{Symbol: symbol, DailyBars: bars, Sources: map[string]string{}, Warnings: append([]string{}, warnings...), QualityStatus: model.QualityValid}
 	if asOfProvided && basis != model.AdjustmentNone && time.Since(asOf) > 5*time.Minute {
 		bundle.Warnings = append(bundle.Warnings, "historical_adjusted_bars_may_use_current_corporate_action_factors; point_in_time_adjustment_not_verified")
-		bundle.QualityStatus = model.QualityDegraded
+		bundle.QualityStatus = mergeBundleQualityStatus(bundle.QualityStatus, model.QualityDegraded)
 	}
 	if normalize.HasQualityDegradingBarWarnings(warnings) {
-		bundle.QualityStatus = model.QualityDegraded
+		bundle.QualityStatus = mergeBundleQualityStatus(bundle.QualityStatus, model.QualityDegraded)
 	}
 	if len(bars) > 0 {
 		sourceSet := map[string]struct{}{}
@@ -3247,7 +3282,7 @@ func (s *DataService) Bundle(ctx context.Context, rawSymbol string, lookback int
 				sourceSet[b.Source] = struct{}{}
 			}
 			if b.QualityStatus != model.QualityValid {
-				bundle.QualityStatus = model.QualityDegraded
+				mergeBundleChildQuality(bundle, "daily_bars", b.QualityStatus)
 			}
 		}
 		sources := make([]string, 0, len(sourceSet))
@@ -3258,19 +3293,19 @@ func (s *DataService) Bundle(ctx context.Context, rawSymbol string, lookback int
 		bundle.Sources["daily_bars"] = strings.Join(sources, ",")
 		if len(sources) > 1 {
 			bundle.Warnings = append(bundle.Warnings, "daily_bars_mixed_sources; inspect per-bar source metadata before source-sensitive analysis")
-			bundle.QualityStatus = model.QualityDegraded
+			bundle.QualityStatus = mergeBundleQualityStatus(bundle.QualityStatus, model.QualityDegraded)
 		}
 	}
 	if quoteAllowed {
 		q, _, e := s.Quote(ctx, symbol)
 		if e != nil {
 			bundle.Warnings = append(bundle.Warnings, "realtime_quote_unavailable")
-			bundle.QualityStatus = model.QualityDegraded
+			bundle.QualityStatus = mergeBundleQualityStatus(bundle.QualityStatus, model.QualityDegraded)
 		} else if asOfProvided && (q.QuoteTime == nil || q.QuoteTime.After(asOf)) {
 			// A near-live as_of request may fetch a quote newer than the exact
 			// cutoff. Missing timestamps cannot prove point-in-time availability.
 			bundle.Warnings = append(bundle.Warnings, "realtime_quote_excluded_after_or_unknown_as_of_timestamp")
-			bundle.QualityStatus = model.QualityDegraded
+			bundle.QualityStatus = mergeBundleQualityStatus(bundle.QualityStatus, model.QualityDegraded)
 		} else {
 			bundle.Quote = q
 			bundle.Name = q.Name
@@ -3278,23 +3313,23 @@ func (s *DataService) Bundle(ctx context.Context, rawSymbol string, lookback int
 			if len(bars) > 0 && bars[len(bars)-1].AdjustmentBasis != q.AdjustmentBasis {
 				bundle.Warnings = append(bundle.Warnings, "quote_and_daily_bars_adjustment_basis_mismatch")
 				bundle.Warnings = append(bundle.Warnings, "do_not_compare_realtime_unadjusted_price_directly_with_adjusted_history")
-				bundle.QualityStatus = model.QualityDegraded
+				bundle.QualityStatus = mergeBundleQualityStatus(bundle.QualityStatus, model.QualityDegraded)
 			}
 			if q.QualityStatus != model.QualityValid {
-				bundle.QualityStatus = model.QualityDegraded
+				mergeBundleChildQuality(bundle, "realtime_quote", q.QualityStatus)
 			}
 		}
 	} else {
 		bundle.Warnings = append(bundle.Warnings, "realtime_quote_skipped_as_of_not_live; latest quote must not leak into historical analysis")
-		bundle.QualityStatus = model.QualityDegraded
+		bundle.QualityStatus = mergeBundleQualityStatus(bundle.QualityStatus, model.QualityDegraded)
 	}
 	if len(bars) == 0 {
-		bundle.QualityStatus = model.QualityDegraded
+		bundle.QualityStatus = mergeBundleQualityStatus(bundle.QualityStatus, model.QualityDegraded)
 		bundle.Warnings = append(bundle.Warnings, "daily_bars_missing")
 	} else {
 		latest := bars[len(bars)-1]
 		if latest.MA5 == nil || latest.MA20 == nil || latest.MA120 == nil || latest.MA250 == nil {
-			bundle.QualityStatus = model.QualityDegraded
+			bundle.QualityStatus = mergeBundleQualityStatus(bundle.QualityStatus, model.QualityDegraded)
 			bundle.Warnings = append(bundle.Warnings, "moving_average_history_insufficient")
 		}
 	}
@@ -3305,6 +3340,7 @@ func (s *DataService) Bundle(ctx context.Context, rawSymbol string, lookback int
 	} else {
 		bundle.AnalysisReferenceTime = bundle.FetchedAt
 	}
+	bundle.Warnings = dedupeStrings(bundle.Warnings)
 	return bundle, nil
 }
 

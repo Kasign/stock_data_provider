@@ -52,7 +52,24 @@ provider_fallback_used 只记录实际使用了非首选 Provider，不是质量
 - invalid 不缓存。
 - stale 历史兜底必须保留 stale 状态；不得作为实时 Quote 的正常缓存命中。
 
-## 6. 实施状态
+
+## 6. Bundle 聚合质量规则（任务 C）
+
+Bundle 聚合状态必须保留子数据的质量语义，不得把所有非 valid 状态统一压缩为 degraded。
+
+聚合优先级（从高到低）：
+
+1. invalid：防御性保留为 invalid；正常 Service 路径应在子数据校验阶段拒绝 invalid 数据。
+2. stale：只要参与 Bundle 的子数据明确为 stale，Bundle 不得标记为普通 degraded。
+3. unknown：子数据状态缺失或明确 unknown 时，Bundle 不得将其当作 valid。
+4. degraded：任一子数据为 degraded，或 Bundle 自身存在已定义的质量限制时，至少为 degraded。
+5. valid：只有参与聚合的子数据均 valid，且 Bundle 自身质量检查无降级原因时才为 valid。
+
+DailyBars 是 Bundle 的核心历史数据；返回的每根 K 线质量状态均参与聚合。Quote 仅在当前/近实时请求中参与聚合；历史 as_of 请求按时间边界规则排除实时 Quote。已有子数据 QualityReasons 继续保留在子对象中，Bundle Warnings 增加带组件名和状态的聚合提示（例如 daily_bars_quality_stale、realtime_quote_quality_unknown），不复制子对象的全部原因明细。
+
+本规则不改变当前缺失 DailyBars、Quote 不可用、历史调整前视风险等 Bundle 自身 Warning 的业务含义；也不新增独立 QualityReasons 字段。后续若消费者确实需要结构化聚合证据，再以实际消费接口为依据扩展。
+
+## 7. 实施状态
 
 - [x] Fundamentals：先保留 degraded 候选并继续寻找 valid；耗尽后优先返回 degraded，再考虑 unknown。
 - [x] Valuations：先保留首个 degraded 候选并继续寻找 valid；耗尽后优先返回 degraded，再考虑 unknown。
