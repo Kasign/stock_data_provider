@@ -1145,3 +1145,13 @@
 - Data 对外仍须满足已冻结的分页计数语义；如果运行实现不满足，应修复实现，而不是改变契约或要求 WebUI 了解 Provider 细节。
 - 同花顺 `provider_*_value` / `provider_amount_unit` 与 WebUI 金额展示不是 CTR-043 原始问题。本轮不据此要求 WebUI 增加消费逻辑或渲染测试，也不新增 CTR。若未来决定清理公共 DTO 中 Provider 原始字段，应单独评估公开 DTO 范围和兼容影响。
 - 此更正只更新项目级契约审计文档；未修改 Data/WebUI 代码，未执行测试或 CI。差异矩阵第38节为详细依据。
+
+
+## 38. DEC-PLAT-002-027：Data Provider 内部字段隔离决议与落实状态（2026-11-10）
+
+- 项目负责人明确的方向已登记为 DEC-PLAT-002-027：Data 对外提供规范化领域字段；Provider 原始金额、单位不确定值及 Provider 专属字段属于 Data 内部实现，不应暴露给 WebUI 或其他模块。
+- 龙虎榜公开金额统一为人民币元。Data 内部负责识别来源单位、换算和校验；无法可靠归一化时，公开 CNY 字段保持缺失，并由质量状态/原因表达，不输出未归一化原值。
+- 固定基线仍通过 JSON tag/OpenAPI 暴露 provider_buy_value、provider_sell_value、provider_deal_value、provider_net_value、provider_net_rate、provider_org_net_value、provider_hot_money_net_value、provider_amount_unit。因此这些字段当前不是纯内部字段，而是已经泄漏到公开 DTO/Schema 的字段；需要 Data 修订公开字段面，而不是要求 WebUI 消费它们。
+- WebUI 只需消费 *_cny 等标准化公开字段；不应知道 Provider 类型、内部字段名、金额单位识别和换算规则。真实 Provider 专项测试属于 Data 内部质量门禁；WebUI 渲染测试属于 WebUI 自身质量门禁，均不构成新增跨模块契约字段。
+- 状态：DEC-027 项目级语义已 accepted；Data DTO/OpenAPI/Golden 尚未落实新字段边界，保持 pending_evidence。未新增 CTR；不改变 CTR-043 原始问题定义。
+- 本轮只更新契约决议和审计文档，未修改 Data/WebUI 代码、OpenAPI、Golden 或测试，未执行 CI。详细依据见差异矩阵第39节。
