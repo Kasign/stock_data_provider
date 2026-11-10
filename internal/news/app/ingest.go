@@ -198,7 +198,7 @@ func (u *candidateIngest) executeCore(ctx context.Context, sourceID, idempotency
 		persisted, appendErr = tx.AppendObservation(ctx, observation)
 		return appendErr
 	})
-	// Repository 可能在事务提交后才观察到取消，或其實作未在回傳前傳播取消。
+	// Repository 可能在事务提交后才观察到取消，或其实现未在返回前传播取消。
 	// 此處只保證呼叫方不會收到成功結果；若提交已完成，不代表資料庫寫入已回滾。
 	if ctxErr := ctx.Err(); ctxErr != nil {
 		return domain.Observation{}, ctxErr

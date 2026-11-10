@@ -173,8 +173,8 @@ func TestIngestCollectedSourceStopsAfterCatalogContextCancellation(t *testing.T)
 }
 
 type failNthIdentityTransactionRepository struct {
-	inner IdentityRepository
-	calls int
+	inner  IdentityRepository
+	calls  int
 	failAt int
 }
 
@@ -189,7 +189,7 @@ func (r *failNthIdentityTransactionRepository) WithinIdentityTransaction(ctx con
 func TestIngestCollectedSourcePartialCommitCanBeSafelyRetried(t *testing.T) {
 	repository := &memoryIdentityRepository{}
 	failingRepository := &failNthIdentityTransactionRepository{
-		inner: repository,
+		inner:  repository,
 		failAt: 2,
 	}
 	ingest := NewIngestCandidate(failingRepository, func() string { return "observation-batch" })
