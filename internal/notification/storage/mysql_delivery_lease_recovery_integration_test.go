@@ -327,7 +327,13 @@ func TestNotificationMariaDBRecoveryRetryReclaimsWithNewFencingTokenIntegration(
 	if _, err := db.ExecContext(ctx, "UPDATE notification_deliveries SET next_attempt_at = ? WHERE delivery_id = ?", recoveryNow.Add(-time.Second), delivery.DeliveryID); err != nil {
 		t.Fatal(err)
 	}
-	newNow := time.Now().UTC().Truncate(time.Microsecond)
+	if err := db.QueryRowContext(ctx, "SELECT CAST(UTC_TIMESTAMP(6) AS CHAR)").Scan(&clock); err != nil {
+		t.Fatal(err)
+	}
+	newNow, err := parseDatabaseTime(clock)
+	if err != nil {
+		t.Fatal(err)
+	}
 	newClaim, claimed, err := deliveries.ClaimDue(ctx, "new-worker", newNow, newNow.Add(time.Minute))
 	if err != nil || !claimed {
 		t.Fatalf("reclaim after recovery: claimed=%v err=%v", claimed, err)
