@@ -61,6 +61,7 @@ func (r *MySQLRunRepository) ClaimAttempt(
 	}
 
 	var stage domain.Stage
+	var expiredAttemptReclaimed bool
 	var stageStatus string
 	var retryAt, startedAt sql.NullString
 	err = tx.QueryRowContext(ctx, `SELECT stage_ref, run_ref, status, version, attempt_no, retry_at, started_at
@@ -181,6 +182,7 @@ func (r *MySQLRunRepository) ClaimAttempt(
 				}
 				return domain.Attempt{}, false, errors.New("Researchflow attempt changed while locked")
 			}
+			expiredAttemptReclaimed = true
 		} else if stageState == domain.StageRunning {
 			return domain.Attempt{}, false, ErrClaimStageUnavailable
 		}
@@ -215,10 +217,39 @@ func (r *MySQLRunRepository) ClaimAttempt(
 			return domain.Attempt{}, false, ErrClaimStageUnavailable
 		}
 	}
+	// If the final allowed Attempt died with an expired lease, do not roll
+	// back its timeout transition and leave Stage.running without a live worker.
+	// Close the Stage atomically so Run finalization can observe a terminal result.
+	attemptBudgetExhausted := stage.AttemptNo >= maxAttempts ||
+		uint64(stage.AttemptNo) >= uint64(^uint32(0))
+	if expiredAttemptReclaimed && attemptBudgetExhausted {
+		if stage.Version == ^uint64(0) {
+			return domain.Attempt{}, false, errors.New("Researchflow Stage version exhausted while closing expired final Attempt")
+		}
+		finishedAt := formatResearchflowTimeValue(now)
+		result, updateErr := tx.ExecContext(ctx, `UPDATE researchflow_stages SET
+			status = ?, version = version + 1, retry_at = NULL, finished_at = ?
+			WHERE stage_ref = ? AND run_ref = ? AND version = ? AND status = ? AND attempt_no = ?`,
+			string(domain.StageTimedOut), finishedAt, stageRef, runRef, stage.Version,
+			string(domain.StageRunning), stage.AttemptNo)
+		if updateErr != nil {
+			return domain.Attempt{}, false, fmt.Errorf("close Researchflow Stage after final expired Attempt: %w", updateErr)
+		}
+		if affected, affectedErr := result.RowsAffected(); affectedErr != nil || affected != 1 {
+			if affectedErr != nil {
+				return domain.Attempt{}, false, fmt.Errorf("verify final expired Researchflow Stage update: %w", affectedErr)
+			}
+			return domain.Attempt{}, false, errors.New("Researchflow Stage changed while closing final expired Attempt")
+		}
+		if err := tx.Commit(); err != nil {
+			return domain.Attempt{}, false, fmt.Errorf("commit exhausted Researchflow attempt budget: %w", err)
+		}
+		return domain.Attempt{}, false, ErrAttemptLimitReached
+	}
 	// attempt_no is persisted as MariaDB INT UNSIGNED. Even if a caller
 	// configures a larger maxAttempts value, never calculate an unpersistable
 	// next number.
-	if stage.AttemptNo >= maxAttempts || uint64(stage.AttemptNo) >= uint64(^uint32(0)) {
+	if attemptBudgetExhausted {
 		return domain.Attempt{}, false, ErrAttemptLimitReached
 	}
 

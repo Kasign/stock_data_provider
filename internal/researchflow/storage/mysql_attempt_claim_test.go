@@ -63,6 +63,7 @@ func TestMariaDBClaimAttemptLeaseAndFencing(t *testing.T) {
 	now := time.Now().UTC()
 	templateFingerprint := "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
 	runRef, stageRef, secondStageRef := "claim-run-"+suffix, "claim-stage-"+suffix, "claim-stage-second-"+suffix
+	budgetStageRef := "claim-stage-budget-" + suffix
 	record := application.CreateRunRecord{
 		Scope: application.IdempotencyScope{
 			CallerRef: "researchflow-claim-test", Operation: "CreateRun", Key: "claim-" + suffix,
@@ -96,15 +97,49 @@ func TestMariaDBClaimAttemptLeaseAndFencing(t *testing.T) {
 				Version: 1, Required: true, Dependencies: []string{}, RetryPolicyRef: "retry-v1",
 				DiagnosticRefs: []string{}, ReasonCodes: []string{},
 			},
+			{
+				Ref: budgetStageRef, RunRef: runRef, Code: "budget", Status: domain.StageReady,
+				Version: 1, Required: true, Dependencies: []string{}, RetryPolicyRef: "retry-v1",
+				DiagnosticRefs: []string{}, ReasonCodes: []string{},
+			},
 		},
 		ResolvedTemplate: template.ResolvedTemplate{
 			Ref: "claim-template", Version: "v1", Fingerprint: templateFingerprint,
-			Stages: []template.ResolvedStage{{Definition: template.StageDefinition{Code: "context"}}, {Definition: template.StageDefinition{Code: "quant"}}, {Definition: template.StageDefinition{Code: "research"}}, {Definition: template.StageDefinition{Code: "report"}}},
+			Stages: []template.ResolvedStage{{Definition: template.StageDefinition{Code: "context"}}, {Definition: template.StageDefinition{Code: "quant"}}, {Definition: template.StageDefinition{Code: "research"}}, {Definition: template.StageDefinition{Code: "report"}}, {Definition: template.StageDefinition{Code: "budget"}}},
 		},
 		Parameters: json.RawMessage(`{}`),
 	}
 	if _, err := repository.CreateRunAtomic(ctx, record); err != nil {
 		t.Fatalf("create run fixture: %v", err)
+	}
+
+	// Exhausting the budget through an expired final lease must atomically
+	// close both Attempt and Stage instead of rolling back to a stuck running state.
+	budgetAttempt, replayed, err := repository.ClaimAttempt(ctx, runRef, budgetStageRef,
+		"claim-budget-attempt-"+suffix, "worker-budget", time.Minute, 1, 8)
+	if err != nil || replayed {
+		t.Fatalf("claim final-budget Attempt replayed=%v err=%v", replayed, err)
+	}
+	if _, err := db.ExecContext(ctx, `UPDATE researchflow_attempts SET lease_expires_at = ?
+		WHERE attempt_ref = ?`, formatResearchflowTimeValue(time.Now().UTC().Add(-time.Minute)), budgetAttempt.Ref); err != nil {
+		t.Fatalf("expire final-budget Attempt lease: %v", err)
+	}
+	if _, _, err := repository.ClaimAttempt(ctx, runRef, budgetStageRef,
+		"claim-budget-overrun-"+suffix, "worker-budget-reclaim", time.Minute, 1, 8);
+		!errors.Is(err, ErrAttemptLimitReached) {
+		t.Fatalf("claim after final Attempt lease expiry error=%v, want ErrAttemptLimitReached", err)
+	}
+	closedBudgetAttempt, err := repository.GetAttempt(ctx, budgetAttempt.Ref)
+	if err != nil || closedBudgetAttempt.Status != domain.AttemptTimedOut ||
+		closedBudgetAttempt.LeaseOwner != "" || closedBudgetAttempt.LeaseExpiresAt != nil ||
+		closedBudgetAttempt.FinishedAt == nil {
+		t.Fatalf("final-budget Attempt was not terminalized: attempt=%#v err=%v", closedBudgetAttempt, err)
+	}
+	closedBudgetStage, err := repository.GetStage(ctx, budgetStageRef)
+	if err != nil || closedBudgetStage.Status != domain.StageTimedOut ||
+		closedBudgetStage.FinishedAt == nil || closedBudgetStage.RetryAt != nil ||
+		closedBudgetStage.AttemptNo != 1 {
+		t.Fatalf("final-budget Stage was not closed consistently: stage=%#v err=%v", closedBudgetStage, err)
 	}
 
 	first, replayed, err := repository.ClaimAttempt(ctx, runRef, stageRef, "claim-attempt-1-"+suffix, "worker-a", time.Minute, 3, 8)
