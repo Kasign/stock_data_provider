@@ -668,3 +668,30 @@ Golden应由真实DTO序列化生成或与真实序列化逐字节/结构比较�
 - 已确认的业务职责、依赖方向、首批单证券日线范围、PIT 时间字段区分、授权 Owner 原则不再重复审查。
 - 本轮之后如无责任方新提交或决策，不重读上述相同文件；只核验新增证据和关闭条件。
 - 下一审查批次转入 News→Research 边界，沿用同一固定代码基线，范围仅限新闻 Evidence 查询/来源版本/PIT/授权与 Research 消费映射。
+
+
+## 26. News→Research 跨模块消费边界首轮核验（2026-11-10）
+
+- 固定代码基线：`origin/integration @ b6dfc85ba214fe16268c8cba780641a8bfe15086`。
+- 范围：News Evidence Query DTO/Facade、PIT Repository、Snapshot/Cursor、授权读取路径，以及 Research Evidence Domain/消费边界。
+- 已确认：News 拥有新闻来源、Observation、内容版本、授权和只读 Evidence Query；Research 拥有 Evidence 认识论语义；Server 负责同进程 Facade 装配。News 不新增独立 HTTP API，Research 不访问 News Repository/SQL/Domain。依赖方向正确，不需要改架构。
+
+| 编号（审计工作项，非新增CTR） | 固定基线事实 | 状态 | 冻结影响 / 后续统一处理 |
+|---|---|---|---|
+| NEWS-RSC-A | News DTO 声明 available_at，但 `researchEvidenceRecordFromPIT` 未赋值；字段始终为 null。MySQL PIT 查询也未选择来源可用时间字段。News 文档明确禁止推断 available_at；Research 严格 PIT 对 null 明确拒绝 | `pending_evidence` | News 当前可提供非严格PIT证据，但不能证明首批 Research Evidence 严格PIT可用。只有取得来源级可验证时间证据才能填充；否则保持 null 并排除严格PIT，不得用 published_at/fetched_at/system_observed_at 替代 |
+| NEWS-RSC-B | News DTO 的 `source_ref` 是 Source ID；另有 news_id/version_id/observation_id/provider_ref，但没有明确的 Research `source_ref/source_version/source_locator` 映射；News page 的 snapshot_ref 是分页结果集快照，不等同于单条新闻内容版本或来源版本 | `pending_decision` | 冻结前明确 Evidence 直接资源引用、来源版本和定位符：区分 News Item、News Version、Observation、Source、Provider 及分页 Snapshot；不能把内部 version_id 自动当作 Provider source_version，也不能把分页 snapshot_ref 当作单条资源版本 |
+| NEWS-RSC-C | News 授权读取返回 `authorization_ref` 字符串及 authorization_status；授权快照/PolicySnapshot保存在 News 内部 Binding，未见面向 Research 的完整 GOV-CTR-006 AuthorizationRef + PolicySnapshot 公开映射或读取 Port | `pending_decision + pending_evidence` | 明确 Research 如何取得并校验 Owner 签发的授权快照；引用必须绑定可信 caller、News 资源版本、purpose/content level。Research 不得自行签发或覆盖 News 授权结果 |
+| NEWS-RSC-D | News DTO 有 stale 状态；Research Evidence QualityStatus 仅 valid/degraded/invalid/unknown。当前映射函数将 BusinessQualityStatus 与 QualityStatus 固定写为 unknown，未见 stale/业务质量到 Research 质量的语义映射 | `pending_decision` | News 保留来源质量/新鲜度事实；Research 明确 stale 的 Evidence 使用策略及质量映射，不得无条件降为 degraded/unknown 或提升为 valid |
+| NEWS-RSC-E | NEWS-CTR-001 查询契约允许 canonical_symbols、quality_statuses、business_time_from/to；固定基线 MySQL `ListEvidenceVersionsAt` 对上述任一非空条件直接返回 ErrInvalidEvidenceQuery | `has_difference` | 对外部 Application Port 来说属于契约声明与真实 Repository 能力不一致。由 News 责任方统一明确首批支持范围；若暂不支持，收窄权威契约/Schema，不能静默保留为“支持”字段 |
+| NEWS-RSC-F | ResearchEvidenceRecord.RelationRefs 当前固定为空数组；查询 SQL 未读取新闻关联记录。契约/DTO 是否承诺返回关联引用需与首批范围核对 | `pending_decision` | 若首批不提供关系，明确空数组代表“本查询不返回关系”而非“确认无关系”；若承诺提供，则补关系版本/PIT映射和来源证据 |
+| NEWS-RSC-G | News Get/List Facade、Snapshot Page、授权复核代码已存在；但同一文档第11.5节仍记载 Facade、PIT Repository、授权当前复核和固定 Snapshot“尚未实现”，与固定基线实现冲突 | `has_difference` | 更新 News 专项文档的实现状态，以代码/测试证据为准；不得据旧文档把已实现能力重复列为未实现，也不得因此直接判定端到端验收完成 |
+| NEWS-RSC-H | News 侧有生产方 DTO/Schema/Golden/局部测试；Research Evidence Domain/Schema/Golden 已有，但固定基线未发现 Research News Adapter 或 Research Application 对 News Query Port 的接入；未见双方联合 Contract Test/Server 真实装配证据 | `pending_evidence` | 由 Research Adapter 与 Server 组合根责任方补消费者映射、授权/PIT字段校验和真实联合测试；PLAT-002 只验收证据，不代替实现 |
+
+### 本批补充判断
+
+1. News Query 的读取路径已具备单条 PIT 查询、不可变分页引用、HMAC Cursor、授权快照当前策略复核和内容级别裁剪等基础实现；这是 A1 代码证据，不等于跨模块 A2 接入或 A3 部署验收。
+2. `ListEvidenceVersionsAt` 先按系统观察时间选取版本，随后 Snapshot 保存引用；严格 PIT 的 available_at 约束尚未在该 Repository 查询中体现。即使后续逐条 Get 返回 null，Research 仍会拒绝严格 PIT，但这不能替代生产方在查询边界清晰表达严格PIT过滤策略。
+3. 授权当前策略复核由 News Owner 执行，Research 本地 Validator 不能替代；当前跨模块可见 DTO 是否足以让 Research 建立完整授权链，需先裁决，不将内部 Binding 结构直接暴露为公共 DTO。
+4. News→Research 首批只读 Evidence Query 是唯一审查范围；不扩展到新闻采集、Provider 搜索、独立 HTTP API、Research Event/Claim 生命周期。
+
+本批未修改 News/Research 业务代码、Schema、Golden 或测试，未执行 CI；只登记固定基线审查差异。后续统一由 News/Research/Server 责任方处理，本审计分支不越权修复。
