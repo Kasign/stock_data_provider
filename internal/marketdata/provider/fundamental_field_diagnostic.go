@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"strings"
 
 	"example.com/stock-analysis-flow/internal/marketdata/validation"
 )
