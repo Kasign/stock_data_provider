@@ -844,3 +844,46 @@ Server 已具备 Root Composition 的基础技术能力：共享 Platform Resour
 ### 15.5 本批审计范围与未覆盖项
 
 本批核验 API Client 核心请求封装、Nginx 部署代理、API Client 单测、Deployment Contract 测试、WebUI API 契约和项目级契约登记簿。未逐一复核所有页面模块的字段映射与每条 API 的 OpenAPI/Handler/JSON Golden；这属于维度 2（DTO/Schema/Golden）及跨端 API-01 接口矩阵的后续任务。不得将本批结论扩大为 WebUI 全部 API 契约已审计。
+
+
+## 16. 第十一批：WebUI 维度 2（Analysis API DTO/OpenAPI 映射初审）
+
+### 16.1 核验范围与证据
+
+固定代码基线：`b6dfc85ba214fe16268c8cba780641a8bfe15086`
+
+- `web/src/api.js`（blob `b8bcbee5908b43bfa1bc2ca744363190af38287f`）
+- `web/src/task-workflow.js`（blob `5bd115ed4600f180b6dfea0ab8343553c6ab63ff`）
+- `web/tests/api.test.mjs`（blob `a26eca75b24a744232d370fdbe2411806be45136`）
+- `doc/api/contracts/分析任务.openapi.yaml`（blob `aa8f153f25c46649dcdf187d5fef8f376113577b`）
+- `internal/server/bootstrap/router.go`（blob `2597c998236a8e981773635eced7915a28d6b2ed`）
+
+本批只审查 Analysis Run 查询路径在 WebUI、Root Server Router 与 OpenAPI 之间的映射，不代表已完成所有任务 DTO 或事件字段的逐字段核验。
+
+### 16.2 已确认映射
+
+1. WebUI `getAnalysisRun(settings, runId)` 调用 `GET /api/v1/analysis/runs/{run_id}`；路径参数使用 `encodeURIComponent`。
+2. Root Server Router 注册相同的 `GET /api/v1/analysis/runs/{run_id}`，并应用 OwnerAccess Policy。
+3. `web/tests/api.test.mjs` 覆盖 Run 查询路径、结构化错误 Code、HTTP Status、Request ID 提取，以及错误响应体长度限制。
+4. WebUI 事件页校验器要求响应包含 `task_id` 和 `events`，并验证 `next_after_sequence` 单调推进；事件序号与分页游标分开处理。此处只证明前端本地防御性校验，不替代服务端 DTO/Schema 证据。
+5. OpenAPI 当前定义任务创建、任务状态和阶段事件三类路径，没有定义 `GET /api/v1/analysis/runs/{run_id}`，也没有定义该接口的 Run 响应 Schema。Root Server Router 与 WebUI API Client 均已使用该路径，因此文档描述不完整。
+
+### 16.3 差异登记
+
+**AUD-WEBUI-CTR-003：Analysis Run 查询接口未纳入 OpenAPI（P2，契约文档缺口）**
+
+- 生产路由证据：`internal/server/bootstrap/router.go` 注册 `GET /api/v1/analysis/runs/{run_id}`。
+- 消费者证据：`web/src/api.js` 的 `getAnalysisRun` 调用该路径；`web/tests/api.test.mjs` 覆盖调用与错误映射。
+- 契约证据：`doc/api/contracts/分析任务.openapi.yaml` 仅包含 tasks 的 POST/GET/events 路径，没有 Run 查询路径及响应 Schema。
+- 影响：OpenAPI 无法完整生成或验证 WebUI 当前使用的 Analysis API 客户端契约；调用代码与运行时路由存在，但契约文档缺失。
+- 责任方：旧 Analysis API / Server 契约维护方。
+- 关闭条件：补充 Run 查询路径、响应 DTO 字段、状态码、错误响应与 Golden/契约测试；确认 WebUI 仅依赖已声明字段。
+- 定性边界：这是 P2 文档/Schema 完整性问题，不据此认定运行时路由缺失或服务不可用。
+
+### 16.4 本批未覆盖
+
+- 未逐字段核对 `AnalysisRequest`、`Task`、`TaskEvent` 与 Go DTO/JSON 序列化结构。
+- 未核对创建任务 payload 的所有页面构造点及历史兼容字段。
+- 未核对 Market Data API 所有前端函数与 Handler 请求/响应 DTO 的逐字段映射。
+- 未发现本批有可作为 Run 响应 Golden 的独立契约测试证据；需后续专门扫描。
+- WebUI 维度 2 保持 partial，不得将此单条 Run 路径核验扩展为整个 API 面已完成。
