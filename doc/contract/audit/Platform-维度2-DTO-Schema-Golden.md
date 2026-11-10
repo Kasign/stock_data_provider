@@ -253,4 +253,4 @@ LLM消费者边界：`server/llmtransport.Transport.OpenStream`将Platform Strea
 
 ### 9.6 下一切片建议
 
-Platform维度2的主要独立公共DTO/调用API切片已核完。下一步不继续扩展Platform维度2；回到阶段B，转入Server维度2：HTTP公开错误Envelope与Diagnostics/Health响应DTO。Server切片应核路由实际输出、Fault到HTTP状态码/公开错误体映射、Request ID响应Header、Schema/Golden/消费者证据；不要重审Platform Fault内部字段、Observation DTO或HTTP Client底层实现。
+本轮HTTP Client切片完成后，不立即转Server维度2。回看项目Platform契约目录，PLAT-CTR-003（身份/授权）、PLAT-CTR-006（Storage/Migration生命周期）、PLAT-CTR-007（Typed Config/Secret）仍属于Platform公共契约，尚未在本审计文件中完成DTO/Schema/Golden适用性核验。下一切片先核PLAT-CTR-003：仅盘点Platform身份/授权相关公开结构、Header/Context边界、序列化适用性和直接消费者；不做Security算法/权限策略重审（维度4），不修改实现。确认该CTR在维度2是否存在适用机器契约后，再依次评估CTR-006/007；完成Platform维度2范围清单后才转Server维度2。
