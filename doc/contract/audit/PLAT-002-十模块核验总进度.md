@@ -1023,3 +1023,14 @@
 - 状态：职责/依赖方向 freeze-ready；Context 映射与 Run 时间传播 accepted；元数据访问、写入幂等、固定引用加载策略 pending_decision；真实引用/授权/生产消费链路 pending_evidence。
 - 沿用 RSC-CTR-001/002、FLOW-CTR-003/004、GOV-CTR-003/005/006，不新增 CTR；不修改责任模块代码，不执行 CI。
 - 下一步：进入 Researchflow→LLM 边界审查，核对 ModelRequest/Response、Template 版本、Prompt/工具 Schema、调用身份/Scope、模型重试和结果引用；不重复已审的 Tool Policy 领域规则，只核对跨模块映射和生产 Adapter 证据。
+
+
+## 27. Researchflow→LLM 模型调用与工具往返边界审查（2026-11-10）
+
+- 固定审计基线：origin/integration @ b6dfc85ba214fe16268c8cba780641a8bfe15086；维护分支 feat/design_doc。详细差异唯一登记见矩阵第31节。
+- 已确认：Researchflow 编排模型调用和工具；LLM 只执行单次 Generate/Stream 协议适配，不授权、不执行工具、不决定业务重试。Run/Stage 上下文继承 system_as_of/deadline/input refs/template version/correlation_id；每个 Attempt 独立 request_id。ToolPolicy 已实现模型 ToolCall → Intent → Scope/Schema/预算授权的模块内路径。
+- 关键待决：StageExecutionRequest 到 LLM ModelRequest 的 provider/model/purpose/prompt 配置及 Prompt 版本审计映射未定义（LLM-FLOW-A）；LLM 只支持单轮文本，却提供 ToolCall 意图，工具执行后如何回传模型的 continuation 未定义（LLM-FLOW-B）；LLM ambiguous outcome 与 Researchflow Retry ReasonCode 的映射未定义（LLM-FLOW-C）。均为 pending_decision。
+- 证据缺口：Tool Executor 尚无生产绑定 Run/Stage/Attempt/fencing、持久化幂等和 ambiguous outcome 对账证据（LLM-FLOW-D）；真实 Gateway/Model 能力 E2E、LLM Stage Adapter、Server DI/Secret 注入、Platform Stream 包装和联合 Contract Test 未完成（LLM-FLOW-E/F pending_evidence）。
+- 状态：职责/依赖方向 freeze-ready；基础调用上下文语义 accepted；ModelRequest/Prompt 映射、Tool Call 往返、重试错误分类 pending_decision；生产工具执行与模型调用链 pending_evidence。
+- 沿用 LLM-CTR-001～003、FLOW-CTR-002/003/004、GOV-CTR-003/004/005，不新增 CTR；不修改责任模块代码，不执行 CI。
+- 下一步：进入业务事件生产方→Notification 边界审查，按 Data/News/Quant/Research/Researchflow 的实际事件生产责任核对事件 Envelope、schema_version、event_id、occurred_at、correlation_id、授权/敏感字段、Outbox/Inbox 幂等和 Delivery 反馈；不重复 Notification 内部 Channel/状态机规则。
