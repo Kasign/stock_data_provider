@@ -377,3 +377,14 @@
 - AUD-WEBUI-CTR-010 影响范围增加 MarketIndexQuote 的 latest_price、change、change_percent、open、high、low、prev_close、amount、quote_time：Go omitempty 字段 nil 时省略，OpenAPI 却声明 nullable=true。
 - WebUI 已接通并逐指数显示最新价、涨跌额、涨跌幅、质量和行情时间；API Client 缺少 getMarketIndices 直接请求测试，浏览器测试缺少 renderIndices DOM 回归。
 - 未发现已证实的指数涨跌公式错误；时间一致性、陈旧度和页面回归覆盖仍待补强。WebUI 维度 2 继续 partial。
+
+
+### WebUI — 维度 2：Index Catalog 指数目录
+
+- 固定代码基线：`b6dfc85ba214fe16268c8cba780641a8bfe15086`；详细证据见审计明细第 34 节。
+- 已核对 IndexCatalogItem/Snapshot DTO、IndexCatalogProvider Port、Hithink 目录实现、Service 规范化/去重/回退/缓存、配置装配、HTTP Handler、OpenAPI 和 WebUI API Client。
+- 服务端校验六位数字代码及允许后缀、非空名称、tag 一致性、唯一 symbol、来源计数和空目录质量；Provider 对重复代码去重并降级，触及 30000 项安全边界时标记 lower-bound。
+- 固定配置未启用任何 IndexCatalog Provider；Hithink/Tushare 均 disabled 且 index_catalog=false。当前只确认 Hithink 有目录实现，且仅支持 cn_concept/region/tszs/industry；Tushare 标签虽被 API/Client/OpenAPI 接受，但没有对应 FetchIndexCatalog 实现。
+- 新增 **AUD-WEBUI-CTR-028**（P2）：Tushare 目录标签与真实 Provider 能力不一致；新增 **AUD-WEBUI-CTR-029**（P2）：目录顺序没有稳定契约及回归测试；新增 **AUD-WEBUI-CTR-030**（P2）：WebUI 只有 API Client 函数，没有页面消费者及请求/DOM 测试。
+- provider_time 仅是 Hithink 响应级 timestamp，缺少独立目录发布日期/生效日；source_version 是适配器版本而非数据集修订号。provider_time 纳入 **AUD-WEBUI-CTR-010**（omitempty 指针被 OpenAPI 声明 nullable）。
+- 未发现默认运行中目录数据的运行时错误；默认目录能力未启用，当前结论是契约可调用性和端到端接入缺口。WebUI 维度 2 继续 partial。
