@@ -291,3 +291,14 @@
 - 将 StockAnnouncement.published_at 纳入 AUD-WEBUI-CTR-010：Go omitempty 指针 nil 时省略，OpenAPI 却声明 nullable=true。
 - 新增 **AUD-WEBUI-CTR-014**（P2）：WebUI 首次及后续公告分页请求均未复用首屏响应解析出的 start_date/end_date；跨中国自然日边界可能把不同查询窗口的页面合并，且没有跨页 article_id 去重/稳定集合保证。
 - WebUI 已接通公告 API，处理空状态、质量、来源时间、安全链接和刷新时旧分页响应失效；但跨页查询范围与集合一致性仍待修复。WebUI 维度 2 继续 partial。详细证据见审计明细第 26 节。
+
+
+### WebUI — 维度 2：Market Valuations 估值字段、时间与消费语义
+
+- 固定代码基线：`b6dfc85ba214fe16268c8cba780641a8bfe15086`。
+- 已核对同花顺 Provider、Valuations Service、字段校验、HTTP Handler、Go DTO、OpenAPI、模型反射测试及 WebUI API Client/个股页面/浏览器测试。
+- PE/PB/PS/PCF 倍数允许负数；数值 0、null、无效数值、未返回证券分别处理，不补零。核心五项指标缺失/非法会降级并写字段诊断；missing_symbols 与返回项互斥且覆盖请求。
+- provider_timestamp、provider_report_date、fetched_at 语义区分；同花顺未提供独立报告日期，因此即使有供应商时间戳，快照仍为 degraded。供应商时间不代表每个指标均在该时刻更新。
+- ValuationItem/ValuationSnapshot 字段和 required 集合与 OpenAPI 一致；新增 **AUD-WEBUI-CTR-015**（P2）：五个 omitempty 扩展指标被 OpenAPI 过度声明 nullable，归入 CTR-010 同类问题。
+- WebUI 已接通估值接口，显示五项核心倍数、缺失状态、质量原因及供应商/采集时间；未发现已证实的运行时估值数值错误。详细证据见审计明细第 27 节。
+- WebUI 维度 2 继续 partial。
