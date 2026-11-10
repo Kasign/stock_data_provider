@@ -19,6 +19,7 @@ import (
 
 	"example.com/stock-analysis-flow/internal/marketdata/model"
 	"example.com/stock-analysis-flow/internal/marketdata/normalize"
+	"example.com/stock-analysis-flow/internal/marketdata/validation"
 )
 
 const (
@@ -46,8 +47,9 @@ type MiaoXiang struct {
 }
 
 type mxFlowObservation struct {
-	date   string
-	amount *float64
+	date      string
+	amount    *float64
+	rowIndex  int
 }
 
 type cacheEntry struct {
@@ -133,6 +135,7 @@ func (p *MiaoXiang) FetchChipDistribution(ctx context.Context, rawSymbol string)
 		return nil, errors.New("MX API chip response table is empty")
 	}
 	row := rows[0]
+	addMiaoXiangWarning(ctx, -1, "publication_time", "自然语言补充接口", "not_exposed_by_provider_contract", "source publication/availability timestamp", "unavailable", "MiaoXiang natural-language response does not expose a verifiable source publication or availability timestamp")
 	avg, ok := parseNumber(row["平均成本"])
 	if !ok || avg <= 0 || !finiteNumber(avg) {
 		return nil, errors.New("MX API chip average cost is missing or invalid")
@@ -148,18 +151,22 @@ func (p *MiaoXiang) FetchChipDistribution(ctx context.Context, rawSymbol string)
 	out.Concentration90 = parseRatioPtr(row["90%筹码集中度"])
 	out.Concentration70 = parseRatioPtr(row["70%筹码集中度"])
 	if out.Date == "" {
+		addMiaoXiangWarning(ctx, 0, "provider_date", "headName", "missing_value", "valid provider observation date", "missing", "MiaoXiang chip-distribution row has no usable provider date")
 		out.QualityStatus = model.QualityDegraded
 		out.QualityReasons = append(out.QualityReasons, "provider_date_missing")
 	}
 	if out.ProfitRatio == nil {
+		addMiaoXiangWarning(ctx, 0, "profit_ratio", "获利比例", "missing_or_invalid_value", "ratio in [0,1]", "missing_or_invalid", "MiaoXiang chip-distribution profit ratio is missing or invalid")
 		out.QualityStatus = model.QualityDegraded
 		out.QualityReasons = append(out.QualityReasons, "profit_ratio_missing")
 	}
 	if out.Concentration90 == nil {
+		addMiaoXiangWarning(ctx, 0, "concentration_90", "90%筹码集中度", "missing_or_invalid_value", "ratio in [0,1]", "missing_or_invalid", "MiaoXiang 90-percent chip concentration is missing or invalid")
 		out.QualityStatus = model.QualityDegraded
 		out.QualityReasons = append(out.QualityReasons, "concentration_90_missing")
 	}
 	if out.Concentration70 == nil {
+		addMiaoXiangWarning(ctx, 0, "concentration_70", "70%筹码集中度", "missing_or_invalid_value", "ratio in [0,1]", "missing_or_invalid", "MiaoXiang 70-percent chip concentration is missing or invalid")
 		out.QualityStatus = model.QualityDegraded
 		out.QualityReasons = append(out.QualityReasons, "concentration_70_missing")
 	}
@@ -226,7 +233,7 @@ func (p *MiaoXiang) FetchCapitalFlow(ctx context.Context, rawSymbol string) (*mo
 				break
 			}
 		}
-		series = append(series, mxFlowObservation{date: date, amount: parseMoneyYuanPtr(row[label])})
+		series = append(series, mxFlowObservation{date: date, amount: parseMoneyYuanPtr(row[label]), rowIndex: index})
 	}
 	sort.SliceStable(series, func(i, j int) bool { return series[i].date > series[j].date })
 	if len(series) == 0 {
@@ -237,19 +244,39 @@ func (p *MiaoXiang) FetchCapitalFlow(ctx context.Context, rawSymbol string) (*mo
 		QualityStatus:  model.QualityDegraded,
 		QualityReasons: []string{"natural_language_supplemental_source", "publication_availability_timestamp_unavailable"},
 	}
+	addMiaoXiangWarning(ctx, -1, "publication_time", "自然语言补充接口", "not_exposed_by_provider_contract", "source publication/availability timestamp", "unavailable", "MiaoXiang natural-language response does not expose a verifiable source publication or availability timestamp")
 	flow.MainNetInflow = series[0].amount
 	if flow.MainNetInflow == nil {
+		addMiaoXiangWarning(ctx, series[0].rowIndex, "main_net_inflow", "主力净流入金额/headName", "missing_or_invalid_amount", "finite monetary amount with observation date", "missing_or_invalid", "latest MiaoXiang capital-flow observation has no usable monetary amount")
 		flow.QualityReasons = append(flow.QualityReasons, "latest_main_net_inflow_missing_or_not_monetary")
 	}
 	flow.Inflow5D = completeWindowSum(series, 5)
 	flow.Inflow10D = completeWindowSum(series, 10)
 	if flow.Inflow5D == nil {
+		addMiaoXiangWarning(ctx, -1, "inflow_5d", "主力净流入金额/headName", "incomplete_window", "5 complete dated monetary observations", "incomplete", "MiaoXiang five-day inflow aggregate is unavailable because fewer than five complete observations exist")
 		flow.QualityReasons = append(flow.QualityReasons, "inflow_5d_requires_5_complete_observations")
 	}
 	if flow.Inflow10D == nil {
+		addMiaoXiangWarning(ctx, -1, "inflow_10d", "主力净流入金额/headName", "incomplete_window", "10 complete dated monetary observations", "incomplete", "MiaoXiang ten-day inflow aggregate is unavailable because fewer than ten complete observations exist")
 		flow.QualityReasons = append(flow.QualityReasons, "inflow_10d_requires_10_complete_observations")
 	}
 	return flow, nil
+}
+
+
+// addMiaoXiangWarning 将自然语言补充接口已有的降级原因映射为可定位的字段证据。
+func addMiaoXiangWarning(ctx context.Context, rowIndex int, field, providerField, code, expected, actualType, message string) {
+	report := validation.NewReport(8)
+	issue := validation.FieldIssue{
+		Stage: validation.StageValidate, Field: field, ProviderField: providerField,
+		Code: code, Expected: expected, ActualType: actualType,
+		Severity: validation.SeverityWarning, Message: message,
+	}
+	if rowIndex >= 0 {
+		issue.RowIndex = &rowIndex
+	}
+	report.Add(issue)
+	validation.AddContextReport(ctx, report)
 }
 
 func completeWindowSum(series []mxFlowObservation, size int) *float64 {

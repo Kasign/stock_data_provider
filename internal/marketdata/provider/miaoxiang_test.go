@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"example.com/stock-analysis-flow/internal/marketdata/model"
+	"example.com/stock-analysis-flow/internal/marketdata/validation"
 )
 
 func resetMiaoXiangRateLimitForTest() {
@@ -204,4 +205,38 @@ func TestMiaoXiangCapitalFlowRejectsInvalidObservationDates(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestMiaoXiangChipDistributionReportsDegradedFields(t *testing.T) {
+	response := `{"status":0,"data":{"dataTableDTOList":[{"nameMap":{"0":"平均成本","1":"获利比例"},"table":{"headName":["2026-10-21"],"0":["12.50"],"1":["-"]}}]}}`
+	p, _, cleanup := newMiaoXiangTestServer(t, response, nil)
+	defer cleanup()
+	reporter := validation.NewReporter(10)
+	ctx := validation.WithReporter(context.Background(), reporter)
+	got, err := p.FetchChipDistribution(ctx, "600519")
+	if err != nil { t.Fatalf("FetchChipDistribution: %v", err) }
+	if got.QualityStatus != model.QualityDegraded { t.Fatalf("expected degraded snapshot: %+v", got) }
+	found := map[string]bool{"publication_time":false, "profit_ratio":false, "concentration_90":false, "concentration_70":false}
+	for _, issue := range reporter.Snapshot().Issues {
+		if issue.Stage != validation.StageValidate || issue.Severity != validation.SeverityWarning { continue }
+		if _, ok := found[issue.Field]; ok { found[issue.Field] = true }
+	}
+	for field, ok := range found { if !ok { t.Errorf("missing %s diagnostic: %+v", field, reporter.Snapshot().Issues) } }
+}
+
+func TestMiaoXiangCapitalFlowReportsDegradedFields(t *testing.T) {
+	response := `{"status":0,"data":{"dataTableDTOList":[{"nameMap":{"0":"主力净流入金额"},"table":{"headName":["2026-10-21","2026-10-20"],"0":["-","2亿"]}}]}}`
+	p, _, cleanup := newMiaoXiangTestServer(t, response, nil)
+	defer cleanup()
+	reporter := validation.NewReporter(10)
+	ctx := validation.WithReporter(context.Background(), reporter)
+	got, err := p.FetchCapitalFlow(ctx, "600519")
+	if err != nil { t.Fatalf("FetchCapitalFlow: %v", err) }
+	if got.QualityStatus != model.QualityDegraded { t.Fatalf("expected degraded flow: %+v", got) }
+	found := map[string]bool{"publication_time":false, "main_net_inflow":false, "inflow_5d":false, "inflow_10d":false}
+	for _, issue := range reporter.Snapshot().Issues {
+		if issue.Stage != validation.StageValidate || issue.Severity != validation.SeverityWarning { continue }
+		if _, ok := found[issue.Field]; ok { found[issue.Field] = true }
+	}
+	for field, ok := range found { if !ok { t.Errorf("missing %s diagnostic: %+v", field, reporter.Snapshot().Issues) } }
 }
