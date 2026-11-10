@@ -589,7 +589,16 @@
 ### WebUI — 维度 2：CTR-010 字段清单复核（子批次 10）
 
 - 详细记录：WebUI-维度2-完整性Review-第一轮.md 第 17 节。
-- 本批复核 Limit Pool、Dragon Tiger、Market Sentiment、Market Capital Flow 与个股 Capital Flow。确认既有 CTR-010 字段 41 个：Limit Pool 7、Dragon Tiger 18、Market Capital Flow 14、CapitalFlow 3；Market Sentiment 未发现新增 omitempty + nullable 冲突。
-- 41 个字段均已在此前数据集章节零散登记，本批属于重复核验，不新增 CTR 编号，也不重复计入专门分批清单。LimitPoolItem.seal_money/max_seal_money 等 omitempty 但 OpenAPI 非 nullable 的字段明确排除。
+- 本批复核 Limit Pool、Dragon Tiger、Market Sentiment、Market Capital Flow 与个股 Capital Flow。确认既有 CTR-010 字段 42 个：Limit Pool 7、Dragon Tiger 18、Market Capital Flow 14、CapitalFlow 3；Market Sentiment 未发现新增 omitempty + nullable 冲突。
+- 42 个字段均已在此前数据集章节零散登记，本批属于重复核验，不新增 CTR 编号，也不重复计入专门分批清单。LimitPoolItem.seal_money/max_seal_money 等 omitempty 但 OpenAPI 非 nullable 的字段明确排除。
 - 51 模型字段/required 反射测试覆盖上述 DTO，但未验证 omitempty→非 nullable 的反向约束；JSON 序列化测试只覆盖 MarketSentimentSnapshot 的三个非 omitempty 计数指针及 LimitPoolItem.change_percent、seal_money/max_seal_money，没有覆盖 41 个差异字段的 nil 省略。Dragon Tiger、Market Capital Flow、CapitalFlow 缺 DTO 序列化样例。
 - 本批未执行固定基线 CI，无业务代码修改。CTR-010 全量字段去重汇总仍未完成。
+
+
+### WebUI — 维度 2：CTR-010 字段清单复核（子批次 11）
+
+- 详细记录：WebUI-维度2-完整性Review-第一轮.md 第 18 节。
+- Provider Probe 新确认 9 个此前未登记字段：ProviderProbeFieldComparison 4、ProviderProbeCheckResult 2、ProviderProbeItem 3，均为 Go omitempty + OpenAPI nullable=true，归入既有 CTR-010，不新增编号。
+- ProviderProbeFieldComparison 是嵌套元素，未单独加入 51 模型反射注册表；父模型反射只核对字段名，不递归核验嵌套元素。三个 DTO 均缺 JSON nil 省略样例。
+- MarketStockOverviewItem 内联 Schema 字段与 Go 空值语义一致；AdjustmentFactor、CorporateAction、StockUniverseSnapshot 当前未找到对应 OpenAPI 响应 Schema；ProviderProbeOptions 是内部选项结构，不纳入当前 HTTP 响应字段清单。
+- 子批次10计数已更正：7 + 18 + 14 + 3 = 42，均为重复核验，不计入此前专门分批累计。子批次11本轮为新增字段登记。本批未执行固定基线 CI，无业务代码修改。
