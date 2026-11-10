@@ -1246,7 +1246,7 @@ Bundle 聚合 DTO 与 Go/OpenAPI 字段语义整体一致；WebUI 对顶层/嵌�
 
 **AUD-WEBUI-CTR-010：omitempty 响应字段在 OpenAPI 中被过度声明为 nullable（P2）**
 
-- 影响对象：StockBasic 多项可选字段、SecurityTradingStatusSnapshot.system_observed_at、PriceLimitRuleSnapshot.limit_percent、StockBoard.change_percent。StockBoard.change_percent 已在第 24 节补充核验；special_exception_evidence 因 OpenAPI 3.0.3 的 $ref/nullable 写法不满足同层 type 条件，仍列为待核，不计入已证实范围。
+- 影响对象：StockBasic 多项可选字段、SecurityTradingStatusSnapshot.system_observed_at、PriceLimitRuleSnapshot.limit_percent、StockBoard.change_percent、FundamentalsSnapshot.system_observed_at。StockBoard.change_percent 已在第 24 节补充核验，FundamentalsSnapshot.system_observed_at 已在第 25 节补充核验；special_exception_evidence 因 OpenAPI 3.0.3 的 $ref/nullable 写法不满足同层 type 条件，仍列为待核，不计入已证实范围。
 - 证据：上述 Go 字段均使用 omitempty；OpenAPI 对部分字段声明 nullable=true；Go encoding/json 的 nil/空值行为是省略字段。
 - 影响：客户端按 Schema 可能接受服务端永远不会发出的显式 null；缺失与 null 的语义被混淆，特别是生成式客户端和严格响应校验器。
 - 责任方：Market Data HTTP API 契约维护方。
@@ -1331,3 +1331,69 @@ Profile、Trading Status、Price Limit Rule 路由与基础 Handler 行为已核
 #### 24.6 本批结论
 
 StockBoards 的 Provider Port、Go DTO、Service 校验/回退/缓存、HTTP 路由、OpenAPI 和 WebUI 实际调用链均已核验。字段集合和 required 集合未发现错配；新增 AUD-WEBUI-CTR-012（P2，WebUI 未消费下界语义），并将 StockBoard.change_percent 纳入既有 AUD-WEBUI-CTR-010。未证明运行时板块成员值错误。WebUI 维度 2 继续保持 partial。
+
+
+### 25. WebUI 维度 2：Fundamentals 财务指标与 PIT 消费
+
+#### 25.1 核验范围与证据
+
+- 固定代码基线：`b6dfc85ba214fe16268c8cba780641a8bfe15086`。
+- Go DTO：`internal/marketdata/model/model.go`（blob `6f04516bd11452a01adcb5acceab571fb1c28ed5`）。
+- DataService 校验、Provider 回退、缓存和 PIT：`internal/marketdata/service/fundamentals.go`（blob `0112474efd5b65c5cf9812991c02aa0c9ae5d9df`）。
+- PIT 测试：`internal/marketdata/service/fundamentals_pit_test.go`（blob `47af2882a746b1327b35fae7b87b09f120cde30a`）；回退测试 `internal/marketdata/service/fundamentals_fallback_test.go`（blob `850a782871fbc9ee308ca37d5a37e18a9c3197b3`）。
+- BaoStock Provider：`internal/marketdata/provider/baostock_fundamentals.go`（blob `4ec129e8157157234dc8d199ec6bab344437ffba`）；测试 `internal/marketdata/provider/fundamentals_test.go`（blob `8c706f4cd1cbca7711931c12f0664221547cc2b2`）。
+- HiThink Provider：`internal/marketdata/provider/hithink.go`（blob `5a0e0c2f6a6a4d0e3f0c4baf1d7f9f5c2b4d3a1e`）；测试 `internal/marketdata/provider/hithink_fundamentals_test.go`（blob `8d4e33139b9d8bcedf30497bdcfc6c77fd41ce6e`）。
+- PIT 版本存储：`internal/marketdata/repository/mysql.go`（blob `3981fde146a6e56502348acb47d41ce87b082223`）；版本哈希测试 `internal/marketdata/repository/mysql_versions_test.go`（blob `464d278d131761119bf2ee9af3a6bfc405a5d8f5`）。
+- HTTP Handler：`internal/marketdata/httpapi/fundamentals.go`（blob `d6062a41b50b75b8921e1e977e90fda00d2ded2c`）；测试 `internal/marketdata/httpapi/fundamentals_test.go`（blob `8719e68f1697ed7ed05a93cf300723ceae7c1afb`）。
+- OpenAPI：`internal/marketdata/httpapi/openapi.yaml`（blob `cd8a6e3dfb8e3162ee789b11e883be9283c59f32`）；反射契约测试 `internal/marketdata/httpapi/openapi_contract_test.go`（blob `7f97f075a23bd698a7e3fc32e90509d1e999217b`）。
+- WebUI API Client：`web/src/api.js`（blob `b8bcbee5908b43bfa1bc2ca744363190af38287f`）；页面消费 `web/src/stock-research.js`（blob `49fe406d7dcf5e8fdec76f2f0bfcda6a18d4db85`）。
+
+#### 25.2 时间与数据语义
+
+1. `FundamentalsSnapshot.year/quarter` 标识请求的报告期；每个 `FundamentalSection.report_date` 是对应财务报告期末；`publication_date` 是披露日期；`available_at` 是精确到时分秒的可用时间证据；`fetched_at` 是本服务收到 Provider 响应的时间；PIT 查询返回的 `system_observed_at` 是本系统记录该版本的时间。这些字段不是同一时间概念。
+2. DataService 校验 section 的 report_date 必须等于所请求季度的期末，不能用 Provider 返回的其他期间填充目标季度；publication_date 必须是有效日期、不得早于报告期末或晚于中国市场当前日期。
+3. available_at 若存在，必须是非零、非未来时间，且其中国时区日期必须不早于报告期末，并与 publication_date 同日（publication_date 存在时）。当前核验的 BaoStock 与 HiThink Provider 实现没有填充 available_at；现阶段主要依赖日期级 publication_date 证据。
+4. BaoStock 使用 `statDate` 作为 report_date、`pubDate` 作为 publication_date。缺少/非法 pubDate 时保留有效指标但将 section 降级，并产生字段级诊断；指标缺失/非法时跳过该指标，不生成 0 值。
+5. HiThink 指标端点不提供可确认披露日期和单位，因此指标分区标记 degraded，并使用 `provider_defined` 单位；缺少标准能力分区时补充显式 unknown 空分区。其财务报表端点按 `period_end_ms` 精确选择目标报告期，使用 `report_date_ms` 作为披露日期证据；缺失/非法指标被跳过并降级。
+6. FundamentalMetric.value 是非指针数值且 required；这不意味着缺失值变为零。Provider 仅把有效数值追加到 metrics，缺失项不进入数组；真实数值 0 与缺失指标因此保持可区分。
+7. DataService 要求六个标准指标分区存在，允许最多额外三张财务报表分区；检查重复分区/指标键、指标元数据、数值有限性、报告期与披露日期一致性。完整有效快照为 12 小时缓存，degraded 为 1 小时，unknown/无数据为 5 分钟；多 Provider 场景不会让未标记回退耗尽的旧 unknown 缓存阻断后续来源尝试。
+
+#### 25.3 PIT 存储与查询
+
+1. HTTP Handler 要求 year、quarter；可选 as_of 必须恰好一个有效、非未来 RFC3339 时间戳。提供 as_of 时只调用 FundamentalsAsOf，不执行实时 Provider 回退；PIT 存储未启用返回 503，未找到可用历史版本返回 404。
+2. Service 将每个不同内容版本交给 Store 保存；MariaDB `market_data_fundamental_versions` 按 symbol、报告年/季度、source 保存 revision_hash、recorded_at、fetched_at、quality_status 和完整 metadata。revision hash 排除 fetched_at 与 system_observed_at，因此仅采集时间变化不会伪造内容修订；不同指标值会产生新版本。
+3. PIT 查询按 as_of 时刻取每个来源当时最新的版本，再对 section 做可用性过滤；若有精确 available_at，允许同日时刻级闭区间判断；否则必须 publication_date 严格早于 as_of 所在中国自然日。同日但无精确时刻、缺少披露日期的 section 会被排除并标 unknown，整体质量降级。
+4. PIT 测试覆盖未启用存储、披露日期早于/等于/缺失时的排除行为，以及精确 available_at 在 as_of 前后时刻的边界行为。MariaDB 版本哈希测试覆盖仅 fetched_at 变化不产生新版本、指标值变化产生新版本。
+5. 该实现没有把报告期末、Provider 抓取时间或系统观察时间当作披露时间；也没有在 PIT 缺少本地版本时静默回退实时数据。当前 Provider 未提供 available_at，因此同日精确时间可用性仍受数据源披露精度限制。
+
+#### 25.4 WebUI 消费链
+
+1. WebUI API Client 的 `getStockFundamentals` 请求 `/api/v1/stocks/{symbol}/fundamentals`，当前只传 year、quarter；未暴露可选 as_of 参数。
+2. 个股研究页面提供报告年/季度选择器和“读取财务指标”动作；报告期变更会取消旧请求、清空旧结果并要求重新加载。加载函数调用 getStockFundamentals，真实响应进入 renderFundamentals。
+3. 渲染层展示每个分区的质量状态、报告期、披露日期、available_at、指标名称/数值/单位及分区质量原因；顶部展示报告期、system_observed_at 和快照质量原因。
+4. 当 snapshot.has_data=false 或无 sections 时，页面明确说明“未确认有可用指标，不代表指标值为 0”；分区无指标时也展示未返回状态。没有发现前端把缺失指标补零的逻辑。
+5. 页面没有 as_of 输入/查询动作，API Client 也未暴露该参数，因此当前 WebUI 只消费最新 Provider 结果，不能从页面发起系统历史时点 PIT 查询。服务端 PIT 能力存在，但前端尚未接入。
+
+#### 25.5 DTO / OpenAPI / 测试
+
+1. FundamentalMetric、FundamentalSection、FundamentalsSnapshot 均纳入现有 Go Model 字段与 required 反射对照；Go 非 omitempty 字段与 OpenAPI required 集合一致。report_date、publication_date、available_at 是可省略属性，OpenAPI 未错误声明 nullable。
+2. FundamentalsSnapshot.system_observed_at 为 Go `*time.Time + omitempty`，nil 时 JSON 省略；OpenAPI 却直接声明 `type: string, format: date-time, nullable: true`。这属于 AUD-WEBUI-CTR-010 同类的省略/null 语义不一致。
+3. OpenAPI 对 report_date、publication_date、available_at 分别描述报告期末、披露日期、精确市场可用时间；接口 description 也说明 as_of 读取本地版本、不请求实时 Provider、同日无时刻证据时保守排除。参数、错误状态与 Handler 行为基本对齐。
+4. HTTP 专用测试覆盖必需报告期参数、非法季度、未来报告期、PIT 未启用、as_of 空值，以及正常响应中的 publication_date/source_field；未发现覆盖完整 FundamentalsSnapshot JSON 的专用 Golden。反射测试覆盖字段与 required，但当前没有反向约束 omitempty 字段不得 nullable 的通用检查。
+5. Provider 测试覆盖 BaoStock 报告期/披露日期、比例与人民币单位、未来日期、缺失分类、字段级缺失/非法诊断；HiThink 测试覆盖缺失分区、重复分区/指标、重复报告期行和字段级缺失/非法诊断。
+
+#### 25.6 差异登记
+
+**AUD-WEBUI-CTR-013：Fundamentals PIT 查询能力未接入 WebUI（P2，待产品范围确认）**
+
+- 证据：HTTP/OpenAPI 支持可选 as_of；WebUI `getStockFundamentals` 只构造 year、quarter 参数，个股研究页没有 as_of 控件或 PIT 查询动作。
+- 影响：页面无法复现历史系统观察时点的财务数据，当前页面展示的是最新可用 Provider 结果；研究/回测场景不能通过该页面避免使用事后更新的财务版本。
+- 责任方：WebUI 个股研究页面维护方；产品范围需确认是否要求页面提供 PIT 查询。
+- 关闭条件：若纳入页面范围，API Client 增加可选 as_of，页面提供明确时区的历史时点输入并展示系统观察时间/排除原因，补充日期边界与请求参数测试；若不纳入，需在 WebUI 功能范围文档明确 PIT 仅由服务端/其他调用方使用。
+
+#### 25.7 差异更新与本批结论
+
+- AUD-WEBUI-CTR-010 影响范围增加 `FundamentalsSnapshot.system_observed_at`：Go omitempty 指针 nil 时省略，OpenAPI 声明 nullable=true。
+- 新增 AUD-WEBUI-CTR-013（P2，待产品范围确认）：服务端 PIT 能力未接入当前 WebUI 个股财务查询链。
+- 本批未发现报告期/披露日期概念混淆、缺失值补零或 Provider 将请求报告期伪造成来源报告期的证据；PIT 日期级过滤是保守的。
+- Fundamentals DTO 字段与 required 集合未发现错配；未发现已证实的运行时财务数值错误。WebUI 维度 2 继续 partial。
