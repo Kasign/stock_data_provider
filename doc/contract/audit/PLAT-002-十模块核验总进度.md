@@ -1073,6 +1073,8 @@
 
 ## 31. PLAT-002 全量差异矩阵收敛与最终冻结评估（2026-11-10）
 
+> 历史快照：本节记录 B1～B8 获批前的待决统计；当前待决状态以第34节为准。
+
 - 评估基线：`origin/integration @ b6dfc85ba214fe16268c8cba780641a8bfe15086`；维护分支 `feat/design_doc`。
 - 核对权威登记簿 43 个正式 CTR：39 个 `pending_evidence`，4 个 `has_difference + pending_evidence`，0 个 L2 `frozen`。
 - 差异矩阵有状态工作项 56 条：22 个 `pending_decision`、1 个 `pending_decision + pending_evidence`、29 个 `pending_evidence`、2 个 `has_difference`、1 个 `accepted`、1 个 `deferred`。审计工作项不是 CTR，不与正式契约数相加。
@@ -1084,6 +1086,8 @@
 
 
 ## 32. PLAT-002 项目决策提案批次整理（2026-11-10）
+
+> 历史快照：本节的 proposal_pending 状态已由第33节正式裁决记录覆盖，不再作为当前待批准事项。
 
 - 已读取差异矩阵全部状态表格行：69 行，其中 56 个带唯一显式编号的审计工作项；其余为边界/契约聚合行。Data→Quant、Data→Research 同名各有两条不同差异，不合并。
 - 形成 8 个项目级决策提案 DEC-B1～B8，集中覆盖旧 Analysis 兼容/API、请求校验、Data Snapshot 映射、News Evidence 语义、News→Researchflow 输入快照、Quant ResultRef、Research Stage 读写幂等、LLM 请求/重试映射。
