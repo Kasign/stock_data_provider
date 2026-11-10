@@ -284,3 +284,27 @@ func TestEastmoneyDragonTigerReportsDegradedRowFieldsAndMissingPages(t *testing.
 		}
 	}
 }
+
+
+func TestEastmoneyDragonTigerReportsUnavailableSnapshotTime(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `{"result":{"pages":1,"count":1,"data":[{"SECURITY_CODE":"600519","SECUCODE":"600519.SH","SECURITY_NAME_ABBR":"贵州茅台","TRADE_DATE":"2026-10-22 00:00:00","BILLBOARD_NET_AMT":"100","BILLBOARD_BUY_AMT":"200","BILLBOARD_SELL_AMT":"100","BILLBOARD_DEAL_AMT":"300","EXPLAIN":"测试上榜原因","SECURITY_TYPE_CODE":"001001"}]}}`)
+	}))
+	defer server.Close()
+
+	reporter := validation.NewReporter(8)
+	ctx := validation.WithReporter(context.Background(), reporter)
+	p := NewEastmoneyConfiguredWithDragonTiger(2*time.Second, "", "", "", "", "", "", "", "", server.URL, "")
+	got, err := p.FetchDragonTiger(ctx, "2026-10-22", 1, 100)
+	if err != nil {
+		t.Fatalf("FetchDragonTiger: %v", err)
+	}
+	if got.QualityStatus != model.QualityDegraded || !strings.Contains(strings.Join(got.QualityReasons, ","), "provider_snapshot_timestamp_not_exposed") {
+		t.Fatalf("snapshot timestamp limitation must remain degraded: %+v", got)
+	}
+	issues := reporter.Snapshot().Issues
+	if len(issues) != 1 || issues[0].Field != "provider_time" || issues[0].ProviderField != "provider contract" ||
+		issues[0].Code != "not_exposed_by_provider_contract" || issues[0].RowIndex != nil {
+		t.Fatalf("unexpected snapshot-level Reporter issue: %+v", issues)
+	}
+}

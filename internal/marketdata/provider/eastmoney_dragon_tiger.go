@@ -97,6 +97,7 @@ func (p *Eastmoney) FetchDragonTiger(ctx context.Context, tradeDate string, page
 	}
 	pages := 0
 	reasons := []string{"provider_snapshot_timestamp_not_exposed"}
+	addEastmoneyDragonTigerIssue(ctx, nil, "provider_time", "provider contract", "not_exposed_by_provider_contract", "verifiable provider snapshot timestamp", "unavailable", "", "东方财富龙虎榜接口仅提供交易日，不提供可验证的源端快照时间")
 	if payload.Result.Pages != nil && *payload.Result.Pages >= 0 {
 		pages = *payload.Result.Pages
 	}
