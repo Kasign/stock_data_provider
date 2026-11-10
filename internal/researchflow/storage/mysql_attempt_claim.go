@@ -124,10 +124,15 @@ func (r *MySQLRunRepository) ClaimAttempt(
 				}
 				return domain.Attempt{}, false, ErrAttemptLeaseHeld
 			}
-			result, updateErr := tx.ExecContext(ctx, `UPDATE researchflow_attempts SET status = ?, finished_at = ?
-				WHERE attempt_ref = ? AND status = ?`,
+			if current.FencingToken == ^uint64(0) {
+				return domain.Attempt{}, false, errors.New("Researchflow fencing token exhausted while reclaiming expired attempt")
+			}
+			result, updateErr := tx.ExecContext(ctx, `UPDATE researchflow_attempts SET
+				status = ?, finished_at = ?, fencing_token = fencing_token + 1,
+				lease_owner = NULL, lease_expires_at = NULL
+				WHERE attempt_ref = ? AND status = ? AND fencing_token = ?`,
 				string(domain.AttemptTimedOut), formatResearchflowTimeValue(now),
-				current.Ref, string(domain.AttemptRunning))
+				current.Ref, string(domain.AttemptRunning), current.FencingToken)
 			if updateErr != nil {
 				return domain.Attempt{}, false, fmt.Errorf("expire previous Researchflow attempt %q: %w", current.Ref, updateErr)
 			}

@@ -151,15 +151,15 @@ func TestMariaDBClaimAttemptLeaseAndFencing(t *testing.T) {
 	if err != nil || replayed {
 		t.Fatalf("reclaim replayed=%v err=%v", replayed, err)
 	}
-	if second.Number != 2 || second.FencingToken != 2 || second.Ref == first.Ref {
+	if second.Number != 2 || second.FencingToken != 3 || second.Ref == first.Ref {
 		t.Fatalf("reclaim did not advance attempt/fencing token: first=%#v second=%#v", first, second)
 	}
 	loadedFirst, err := repository.GetAttempt(ctx, first.Ref)
 	if err != nil {
 		t.Fatalf("load expired attempt: %v", err)
 	}
-	if loadedFirst.Status != domain.AttemptTimedOut {
-		t.Fatalf("expired attempt status=%q, want timed_out", loadedFirst.Status)
+	if loadedFirst.Status != domain.AttemptTimedOut || loadedFirst.LeaseOwner != "" || loadedFirst.LeaseExpiresAt != nil || loadedFirst.FencingToken != 2 {
+		t.Fatalf("expired attempt was not fully fenced and released: %#v", loadedFirst)
 	}
 
 	stage, err := repository.GetStage(ctx, stageRef)
