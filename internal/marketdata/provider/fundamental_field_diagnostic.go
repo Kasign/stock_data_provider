@@ -50,8 +50,6 @@ func providerFieldIssuePreview(value string) string {
 		}
 		return r
 	}, value)
-	if len(value) > 160 {
-		return value[:160]
-	}
+	return truncateDiagnosticPreview(value, 160)
 	return value
 }

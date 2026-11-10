@@ -76,8 +76,6 @@ func quoteIssuePreview(s string) string {
 		}
 		return r
 	}, s)
-	if len(s) > 160 {
-		return s[:160]
-	}
+	return truncateDiagnosticPreview(s, 160)
 	return s
 }
