@@ -152,3 +152,38 @@ func TestRebuildAdjustedDailyBarsCurrentAllowsUnknownAvailabilityButKeepsDegrade
 		t.Fatal("current rebuild must require persisted SystemObservedAt")
 	}
 }
+
+func TestRebuildAdjustedDailyBarsRejectsConflictingFactorsWithSameObservationTime(t *testing.T) {
+	fetched := time.Date(2025, 7, 1, 0, 0, 0, 0, time.UTC)
+	observed := fetched.Add(time.Hour)
+	raw := []model.DailyBar{{
+		Symbol: "600036.SH", TradeDate: "2025-07-01", Open: 10, High: 10, Low: 10, Close: 10,
+		Source: "baostock", SourceVersion: "baostock-test-v1", AdjustmentBasis: model.AdjustmentNone,
+	}}
+	factor := model.AdjustmentFactor{
+		Symbol: "600036.SH", TradeDate: "2025-07-01", Factor: 2, Basis: model.AdjustmentFactorForward,
+		Source: "baostock", SourceVersion: "baostock-test-v1", FetchedAt: fetched,
+		AvailableAt: &fetched, SystemObservedAt: &observed, QualityStatus: model.QualityValid,
+	}
+	conflict := factor
+	conflict.Factor = 3
+	for _, values := range [][]model.AdjustmentFactor{{factor, conflict}, {conflict, factor}} {
+		if _, err := rebuildAdjustedDailyBarsPIT(raw, values, model.AdjustmentForward, "2025-07-01"); err == nil {
+			t.Fatal("conflicting factor revisions with the same observation timestamp must fail closed")
+		}
+	}
+}
+
+func TestSameAdjustmentFactorObservationIgnoresFetchAndZoneRepresentation(t *testing.T) {
+	instant := time.Date(2025, 7, 1, 8, 0, 0, 0, time.UTC)
+	otherZone := instant.In(time.FixedZone("UTC+8", 8*60*60))
+	left := model.AdjustmentFactor{Symbol: "600036.SH", TradeDate: "2025-07-01", Factor: 2, Source: "baostock",
+		SourceVersion: "v1", FetchedAt: instant, ProviderTime: &instant, AvailableAt: &instant,
+		SystemObservedAt: &instant, QualityStatus: model.QualityValid}
+	right := left
+	right.FetchedAt = instant.Add(time.Minute)
+	right.ProviderTime, right.AvailableAt, right.SystemObservedAt = &otherZone, &otherZone, &otherZone
+	if !sameAdjustmentFactorObservation(left, right) {
+		t.Fatal("same observation payload must compare equal despite fetch time and equivalent timestamp zone representation")
+	}
+}

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"reflect"
 	"sort"
 	"strings"
 	"time"
@@ -129,9 +130,17 @@ func rebuildAdjustedDailyBarsWithMode(raw []model.DailyBar, factors []model.Adju
 		if groups[key] == nil {
 			groups[key] = make(map[string]model.AdjustmentFactor)
 		}
-		if previous, exists := groups[key][factor.TradeDate]; !exists ||
-			factor.SystemObservedAt.After(*previous.SystemObservedAt) {
+		if previous, exists := groups[key][factor.TradeDate]; !exists {
 			groups[key][factor.TradeDate] = factor
+			continue
+		}
+		previousObserved := previous.SystemObservedAt
+		if factor.SystemObservedAt.After(*previousObserved) {
+			groups[key][factor.TradeDate] = factor
+			continue
+		}
+		if factor.SystemObservedAt.Equal(*previousObserved) && !sameAdjustmentFactorObservation(previous, factor) {
+			return nil, fmt.Errorf("ambiguous adjustment-factor revisions for %s on %s share system_observed_at", factor.Symbol, factor.TradeDate)
 		}
 	}
 
@@ -245,6 +254,28 @@ func rebuildAdjustedDailyBarsWithMode(raw []model.DailyBar, factors []model.Adju
 		}
 	}
 	return out, nil
+}
+
+func sameAdjustmentFactorObservation(left, right model.AdjustmentFactor) bool {
+	left.FetchedAt, right.FetchedAt = time.Time{}, time.Time{}
+	left.SystemObservedAt, right.SystemObservedAt = nil, nil
+	if left.ProviderTime != nil {
+		value := left.ProviderTime.UTC()
+		left.ProviderTime = &value
+	}
+	if right.ProviderTime != nil {
+		value := right.ProviderTime.UTC()
+		right.ProviderTime = &value
+	}
+	if left.AvailableAt != nil {
+		value := left.AvailableAt.UTC()
+		left.AvailableAt = &value
+	}
+	if right.AvailableAt != nil {
+		value := right.AvailableAt.UTC()
+		right.AvailableAt = &value
+	}
+	return reflect.DeepEqual(left, right)
 }
 
 func factorBasisForAdjustment(basis model.AdjustmentBasis) model.AdjustmentFactorBasis {
