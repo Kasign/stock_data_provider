@@ -1,6 +1,8 @@
 # 新闻模块开发任务与验收清单
 
-> 当前阶段（2026-11-10 Review）：NEWS-CTR-001 的 Get/List Facade、PIT Repository、Snapshot/Cursor 分页已有首批代码；但 available_at 严格 PIT 门禁未实现，授权快照信封校验和内容读取 TOCTOU 仍阻断生产披露。Observation V8/MariaDB 真实验收、Server 装配与生产采集闭环未完成。详见《代码与文档Review报告》。\n> 历史记录说明：本文按日期累积的早期实施段落保留为过程记录，其中“尚未实现”只描述当时状态；当前实现状态以本文件顶部、开发任务总览和最新 Review 报告为准。\n> 当前阶段（2026-11-09 Review）：N1-A/N2 已完成；N3 离线首批完成、生产采集未闭环；N4 领域/Repository 首批已实现；N5 Config/BoundDoer/Fault 适配已实现、Server 装配待接入；N6 Migration V1-V7 已定义，V1/V2 有 MariaDB 集成通过记录，V3-V7 尚待集成验收；N7 Check 工厂已实现、Runner 注册待接入；NEWS-CTR-001 PIT/Snapshot/Cursor 已实现，内容查询 Facade 未闭环；NEWS-CTR-002 授权快照已实现，当前策略复核/JCS/撤销/TOCTOU 未闭环
+> 当前阶段（2026-11-10 最新核验）：N6 V1-V8 Migration、Repository、Observation retention 与 V7→V8 既有数据升级已通过 MariaDB 11.4 专项 CI（Run `42765765269`，基线 SHA `09e76e35`）；News 全量 gofmt/单测/Race/Vet 与 Provider 契约测试通过（Run `42765765274`）。根模块 `Test go-core` 通过，但根模块 `Test .` 因 Market Data、Notification、Quant 文件 gofmt 差异失败。NEWS-CTR-001 严格 available_at PIT、授权读取 TOCTOU、Server 生产装配、Runner 注册和在线采集仍未闭环。
+> 当前代码任务：N8-04 补充 ListEvidence 对已清理 Observation Tombstone 的 MariaDB 读取断言，代码提交 `3f2b4aaf`；该 SHA 的 CI 尚待重新触发/取得结果，不提前标记通过。
+> 历史记录说明：本文按日期累积的早期实施段落保留为过程记录；历史状态不代表当前状态。当前状态以本段、开发任务总览和最新 Review 报告为准。
 > 状态：本分支只维护 News 领域实现和专项文档；公共平台原语来自已合并基线，根组合根由 Server/集成 Owner 负责
 
 ## 一、阶段总览
@@ -12,9 +14,9 @@
 | N3 | 来源授权、安全抓取、解析与标准化 | 离线能力首批完成；生产触发、CollectionRunID、授权持久化编排、逐 Endpoint 装配和真实网络验收未完成 | 离线业务能力可先行；真实网络依赖 PLAT-002/008 和 SSRF 门禁 |
 | N4 | 身份、去重、版本和证券关联 | Domain/Application、MariaDB Repository、身份/版本/关系历史首批已实现；生产采集编排和完整端到端运行未完成 | fake Repository/内存替身 |
 | N5 | 公共平台基础能力接入 | Config/Secret、独立 BoundDoer、Fault/Request ID 适配已实现；Server 生产装配和部署 DNS/出口验收待完成 | PLAT-002 契约门禁；A1 适配代码已推进，A2/A3 需证据 |
-| N6 | 新闻持久化与 Migration | Repository 与 Migration V1-V7 已实现；V1/V2 有 MariaDB 集成通过记录；V3-V7 当前无完整 MariaDB 验收证据，Server 共享 DB/Migration 注册待接入 | Server 共享 DB 注入与 Migration 总注册由集成分支负责 |
+| N6 | 新闻持久化与 Migration | V1-V8、Repository、Retention 清理和 V7→V8 既有数据升级已通过 MariaDB 11.4 专项 CI；生产共享 DB 注入、总 Migration 注册待接入 | Server 共享 DB 注入与 Migration 总注册由集成分支负责 |
 | N7 | 新闻领域诊断及可选执行记录 | Provider/Parser/Source/Storage Check 与单条 BusinessQualityCheck 已实现；Runner 注册、采集闭环诊断和批量质量/Freshness 扫描待接入 | PLAT-007；PLAT-010 不建设通用队列，News 异步化按真实触发需求 |
-| N8 | 跨模块集成与验收 | 待 A2 接入 | PLAT-013 领域接入；PLAT-014 故障演练 |
+| N8 | 跨模块集成与验收 | News 模块单测/Race/Vet 与 MariaDB 专项验收已有通过证据；A2 生产接入仍未完成 | PLAT-013 领域接入；PLAT-014 故障演练 |
 | H1 | 历史 Python 数据价值评估 | 可选，暂不实施 | 单独确认价值，不属于主路径 |
 
 ## 二、N1-A：新闻业务架构与公共平台边界

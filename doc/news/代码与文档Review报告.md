@@ -342,3 +342,12 @@
 - 已验证证据采用追加式修订，不允许后续采集静默覆盖；修订需保留旧证据与原因。
 - 当前 Bocha/Tavily/Brave News/SearXNG 候选字段及 RSS/Atom/HTML 解析字段均无符合条件的来源可用时间声明，因此本轮不新增数据库字段/证据表，不修改 Get/List SQL；继续保持 available_at=NULL。
 - NEWS-CTR-001 的严格 PIT 仍未完成：实现阶段必须先接入真实来源证据，再持久化 verified 证据，并在 Get/List 查询入口统一执行 `available_at <= system_as_of`；缺证据和晚于截止时间均排除。
+
+
+## 十、N8-04 ListEvidence Tombstone 集成覆盖补充（2026-11-10）
+
+- Review 发现 Observation Retention 集成测试此前只验证单条 GetEvidenceVersionAt 在清理后不返回 Candidate；ListEvidenceVersionsAt 的清理后载荷屏蔽缺少真实 MariaDB 断言。
+- 在 TestObservationRetentionPurgeIntegration 中增加列表 PIT 查询：要求保留合法 News Item Version 引用，同时返回空 Candidate 和非空 PayloadPurgedAt。
+- 查询时点使用清理后的当前 UTC 时间，遵守 system_as_of <= now 校验。
+- 代码提交：3f2b4aaf0fee03006e8e23db179fec44333872db。该 SHA 的 News 全量 CI 与 MariaDB 11.4 集成尚未取得结果；当前只记录代码与测试断言已添加，不标记通过。
+- 该测试只覆盖 Observation Tombstone 的列表读取语义，不解决授权预检与内容读取之间的 TOCTOU，也不改变 available_at 证据准入规则。
