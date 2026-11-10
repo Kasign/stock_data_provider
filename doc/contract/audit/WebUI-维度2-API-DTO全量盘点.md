@@ -8,7 +8,7 @@
 ## 1. 盘点结果
 
 - `web/src/api.js` 共导出 44 个函数，其中 3 个为本地设置读写（`loadSettings`、`saveSettings`、`clearSettings`），其余 41 个为远端请求/健康检查入口。
-- 41 个远端入口均在 WebUI 主要页面模块中找到直接引用；本轮没有发现“定义了 API Client 函数但在主要页面模块中完全无引用”的孤儿函数。
+- 41 个远端入口中，40 个在 WebUI 主要页面模块中找到精确标识符引用；`getMarketSentiment` 未发现页面模块消费者，是当前唯一已确认的孤儿 Client 函数。它是否为预留接口需确认产品范围，不自动登记为 P2。
 - Market Data HTTP Adapter 在 `internal/marketdata/httpapi/server.go` 注册业务路由；OpenAPI 位于 `internal/marketdata/httpapi/openapi.yaml`。Analysis Task API 的路由由 `internal/server/bootstrap/router.go` 注册，任务 OpenAPI 位于 `doc/api/contracts/分析任务.openapi.yaml`。
 - 已完成的数据集切片仍按既有第 1–36 节计算，不重复审计。盘点发现的未审或测试缺口进入后续清单，不把“有 Client 函数”误判为“页面完整消费”。
 
@@ -27,7 +27,7 @@
 | getMarketHotStocks | market-overview.js | 已消费；待对照第 1–36 节核对对应数据集覆盖 |
 | getMarketIndices | market-overview.js | 已消费；第 33 节已审 |
 | getMarketStocks | market-stocks.js | 已消费；已有全市场分页切片 |
-| getMarketSentiment / getMarketSentimentHistory | market-overview.js | 已消费；情绪主快照已在市场广度切片关联核对，历史 DTO 需确认是否独立覆盖 |
+| getMarketSentiment | 未发现消费者 | 孤儿 Client；需确认是否预留或应删除/接入，不自动登记 P2 |\n| getMarketSentimentHistory | market-overview.js | 已消费；历史 DTO 需确认是否独立覆盖 |
 | getMarketCapitalFlow | market-overview.js | 已消费；第 30 节已审 |
 | getMarketSession | existing-api-tools.js | 有工具模块消费者，但尚未证明进入主要页面交互；第 31 节已记录未展示缺口 |
 | getIndexCatalog / getIndexConstituents / getIndexDailyBars | existing-api-tools.js | 有工具模块消费者；第 34–36 节已审，页面闭环差异已登记 |
@@ -105,6 +105,6 @@
 
 ## 6. 本轮结论
 
-WebUI API Client 的入口清单已完成第一轮盘点：44 个导出函数中 3 个为本地设置函数，其余远端入口均在主要页面模块找到引用。当前剩余工作不是继续无边界扫描 Client，而是按第 5 节明确列出的数据集补齐 DTO/Schema/Golden 和消费证据，然后做维度 2 完整性 Review。
+WebUI API Client 的入口清单已完成第一轮盘点：44 个导出函数中 3 个为本地设置函数；其余 41 个远端入口有 40 个在主要页面模块找到精确引用，`getMarketSentiment` 是唯一已确认的孤儿 Client。当前剩余工作不是继续无边界扫描 Client，而是按第 5 节明确列出的数据集补齐 DTO/Schema/Golden 和消费证据，然后做维度 2 完整性 Review。
 
 当前不能据此宣布维度 2 完成：页面调用点存在不代表字段语义、OpenAPI required/nullable、错误映射和 Golden 测试已经全部核验。
