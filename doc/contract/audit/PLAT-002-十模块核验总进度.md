@@ -779,3 +779,13 @@
 - 本切片结论：Fault内部契约基本齐备，跨模块映射partial；Platform维度2仍partial。
 - 下一切片：Platform维度2核对Request ID公共原语与直接Transport消费者，不重审Fault/Observation，不扩大到Server完整HTTP Error Envelope。
 - 本轮仅修改审计文档，未修改业务代码、Schema、Golden、测试，未执行CI。
+## 15. Platform 维度2：Request ID 原语与传播边界第三切片（2026-11-10）
+
+- 审计记录：`Platform-维度2-DTO-Schema-Golden.md` 第8节；固定基线 `b6dfc85ba214fe16268c8cba780641a8bfe15086`。
+- Request ID格式、随机生成、默认不信任入口、显式可信Gateway选项、Context存取、出站Header覆盖/删除有实现、Golden和本地Contract Test；缓冲/流式HTTP Client均传播Context ID。
+- Root Server Bootstrap外层使用零值安全 `MiddlewareWithOptions`；内层旧Analysis Handler仍保留Deprecated兼容Middleware，但当前组合根外层先重建ID。独立暴露旧Handler的路径仍需满足可信Gateway约束。
+- Research Correlation ID使用独立Context Key，不继承Request ID；GOV-CTR-003的异步/事件ID完整链路本轮不审、不关闭。
+- PLAT2-D2-006：缺少Root Server入口到出站HTTP Client的端到端组合测试，属集成证据缺口。P002-D03继续开放，待Server/Integration补部署入口和兼容Handler迁移/隔离证据；不新增CTR。
+- 本切片结论：Platform Request ID原语和局部消费者测试基本齐备，组合链路partial；PLAT-CTR-002仍不能标记frozen，GOV-CTR-003保持独立pending_evidence。
+- 下一切片：Platform维度2核对HTTP Client配置、DestinationPolicy、缓冲/流式结果元数据及PLAT-CTR-005 Golden/Contract Test；不重审SSRF算法、不审Server LLM Transport业务映射。
+- 本轮仅更新审计文档，未修改业务代码、Schema、Golden、测试，未执行CI。
