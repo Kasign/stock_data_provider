@@ -265,3 +265,20 @@
 - 限制：上述为可访问的第三方历史行情展示页，不是 Tushare/Eastmoney/Hithink/Tencent/NetEase/BaoStock 的原始 HTTP 响应；Eastmoney K 线原始 API URL 在本轮查询环境不可直接读取，Tushare 还需要有效 Token/权限。因此本批没有声称完成任何 Provider 的 Raw→Normalized 差分，也没有据此修改单位换算代码。
 - 本轮确认的核验方法：必须逐个 Provider 留存请求参数、原始响应字段和值、Raw 字段及单位、归一化值及单位、与参考基准的差值和判定；来源展示页的舍入值只能作交叉参考，不能替代原始响应。未经直接证据确认的字段保持 not_comparable/degraded。
 - 下一步限定为同一证券、同一交易日、同一未复权口径，先采集可访问 Provider 的原始响应并核验成交量/成交额映射；需要凭证或受控出站环境的 Provider 只记录阻塞原因，不用第三方展示页伪造 Raw 数据。
+
+### 2026-11-10：固定样本 Provider 原始日 K 响应采集尝试
+
+- 样本保持不变：`600519.SH`、`2026-11-09`、日 K、未复权 `none`。本轮不更换证券、日期或复权口径。
+- 重新读取当前分支 Adapter，核对实际请求和字段映射：
+  - Eastmoney：默认日 K endpoint 为 `https://push2his.eastmoney.com/api/qt/stock/kline/get`；参数包括 `secid=1.600519`、`fields1=f1,f2,f3,f4,f5,f6`、`fields2=f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61`、`klt=101`、`fqt=0`、`beg=20261109`、`end=20261109`、`lmt` 和公开前端 `ut`。响应行字段顺序为日期、开盘、收盘、最高、最低、成交量、成交额等；Adapter 将第 6 列映射为 `f56`，第 7 列映射为 `f57`，成交量按手转股，成交额按 CNY 处理。
+  - Tencent：默认未复权 endpoint 为 `https://web.ifzq.gtimg.cn/appstock/app/kline/kline`；请求参数 `param=sh600519,day,2026-11-09,2026-11-09,10`。响应读取 `data.sh600519.day` 数组；Adapter 不把不存在验证依据的尾列当成交额，成交额保持不可用/降级。
+  - Sina：默认 endpoint 为 `https://money.finance.sina.com.cn/quotes_service/api/json_v2.php/CN_MarketData.getKLineData`；参数 `symbol=sh600519`、`scale=240`、`ma=no`、`datalen=10`。JSON 行包含日期、OHLC、成交量；接口没有成交额字段，Adapter 不推算金额。
+  - NetEase：默认 endpoint 为 `https://quotes.money.163.com/service/chddata.html`；参数 `code=0600519`、`start=20261109`、`end=20261109`、`fields` 包含 `TCLOSE/HIGH/LOW/TOPEN/VOTURNOVER/VATURNOVER`。CSV 原始列 `VOTURNOVER`、`VATURNOVER` 分别进入成交量、成交额解析；单位由当前 `neteaseValidateTradingUnits` 按成交额/成交量及 OHLC 关系判断，无法确认时降级。
+- 真实请求采集结果：本执行环境的容器 DNS 无法解析上述四个 Provider Host（curl 均以 `Could not resolve host` 退出）；随后通过网页访问通道打开相同接口，也均返回不可访问/内部错误，未取得 HTTP 状态码、响应头或响应体。因此 Eastmoney、Tencent、Sina、NetEase 本轮均为 `blocked`，不能记录原始响应值，不能判定其线上单位映射 `pass`。
+- 其他 Provider 阻塞：
+  - Hithink：当前 Adapter 明确要求 `MARKET_DATA_HITHINK_API_KEY`，本轮没有可用凭证，未发起请求。
+  - Tushare：请求体需要 Token，本轮没有可用凭证，未发起请求。
+  - BaoStock：Adapter 通过注入的 TCP 客户端查询，当前执行环境无可用 BaoStock 会话/受控 TCP 拨号，未取得响应。
+- 本轮没有把第三方历史行情展示页的数值冒充 Provider 原始响应；也没有将静态字段映射审查结果标为真实数据验收通过。此前外部展示页基准仍维持：OHLC 可作参考；成交量精确值及成交额精确值为 `not_comparable`。
+- 本轮未修改 Provider 代码，未运行构建、测试或 CI。当前环境没有成功取得真实 Provider 响应，故没有可供 Raw → Normalized 差分的新增数据证据。
+- 下一步仍在同一固定样本下推进真实响应采集：优先在可访问这些 Provider 的运行环境中，通过实际 Adapter 请求链路留存脱敏请求参数、HTTP 状态/响应头和原始响应体；若本地运行环境具备网络但受限于 DNS/代理，应先解决出站网络可达性，再执行同样本采集。取得响应后再逐项核对成交量、成交额字段与单位，不提前改换算逻辑。
