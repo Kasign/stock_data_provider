@@ -167,6 +167,7 @@ func (d DeliveryRecord) Transition(change DeliveryTransition) (DeliveryRecord, D
 		return DeliveryRecord{}, DeliveryStateEvent{}, ErrInvalidDeliveryChange
 	}
 	if manualRetry && (!change.AuthorizedManualRetry ||
+		d.AttemptCount >= d.MaxAttempts ||
 		!validOpaqueRef(change.ActorRef) || !validOpaqueRef(change.RequestID) ||
 		strings.TrimSpace(change.ManualRetryReason) == "" ||
 		len(change.ManualRetryReason) > 512 ||

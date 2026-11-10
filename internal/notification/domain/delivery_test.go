@@ -288,3 +288,21 @@ func TestDeliveryManualRetryEventPassesEventValidation(t *testing.T) {
 		t.Fatalf("manual retry event must pass its event validator: %v", err)
 	}
 }
+
+
+func TestDeliveryManualRetryRejectsExhaustedAttemptBudget(t *testing.T) {
+	record := validDeliveryRecord()
+	record.Status = DeliveryFailed
+	record.Version = 2
+	record.AttemptCount = record.MaxAttempts
+	record.ReasonCode = stringPointer("retry_budget_exhausted")
+	record.UpdatedAt = record.CreatedAt.Add(time.Minute)
+	_, _, err := record.Transition(DeliveryTransition{
+		To: DeliveryQueued, At: record.UpdatedAt.Add(time.Second),
+		AuthorizedManualRetry: true, ActorRef: "operator-1", RequestID: "request-1",
+		ManualRetryReason: "人工重试",
+	})
+	if !errors.Is(err, ErrInvalidDeliveryChange) {
+		t.Fatalf("manual retry must not create an unclaimable queued delivery after budget exhaustion, got %v", err)
+	}
+}
