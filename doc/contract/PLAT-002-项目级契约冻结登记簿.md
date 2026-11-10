@@ -303,7 +303,7 @@ Platform 文档中的 P002-D01～D15 是 Platform 侧差异/待决事项索引�
 
 ### 10.2 审计工作项统计（不作为正式 CTR 计数）
 
-截至差异矩阵第35节，有状态表格行共69行，其中56项带唯一显式审计编号（无重复），另有13行边界/契约聚合项。状态分布为：21条 `pending_decision`、1条 `pending_decision + pending_evidence`、1条随其他项合并裁决的条件决策、36条 `pending_evidence`、3条 `deferred`、2条 `has_difference`、2条 `accepted`、1条 `freeze-ready`；另有多状态维度行。该统计不是 CTR 计数，也不与43个正式 CTR 相加。
+截至差异矩阵第35节，有状态表格行共69行，其中56项带唯一显式审计编号（无重复），另有13行边界/契约聚合项。含 pending_decision 的行项目共22项：21项纯待决（NEWS-FLOW-D 随 A/B 合并裁决，不独立成项），1项同时包含待决与证据缺口；已决事项和条件性延期已移出待决队列。该统计不是 CTR 计数，也不与43个正式 CTR 相加。
 
 ### 10.3 L1 可维持冻结的范围
 
