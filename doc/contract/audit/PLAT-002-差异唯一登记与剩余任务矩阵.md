@@ -61,7 +61,7 @@ API Client 全量盘点也已完成：44 个导出函数，41 个远端入口，
 | 工作批次 | 涉及编号/范围 | 当前状态 | 完成条件 |
 |---|---|---|---|
 | W2-A Task/TaskEvent DTO 与分页 | CTR-006、007、008 | 本轮统一冻结影响 Review 已完成；差异仍开放 | CTR-006 nullable/omitempty 不一致；CTR-007 StageEvent Schema 未展开；CTR-008 cursor 基于事件表 id，但 DDL/数据库持久化约束证据不足。待契约/实现/测试责任方处理后增量验收，不再重复初审 |
-| W2-B DailyBar 查询窗口 | CTR-009 | 已有初审记录，尚未完成冻结影响收敛 | 明确 lookback_days 缺省值由谁拥有、WebUI 显式传参的边界及 OpenAPI 默认语义 |
+| W2-B DailyBar 查询窗口 | CTR-009 | 本轮冻结影响 Review 已完成；差异保留 P2 | WebUI 用户偏好显式传参；API Client 默认 120；服务端省略时使用环境可配置默认值（默认配置 120）；OpenAPI 未说明省略时配置化默认值。缺直接 Client URL/默认值回归测试 |
 | W2-C 其余已审数据集差异收敛 | CTR-011～037（不含已在其他批次处理的 CTR-010 聚合字段） | 已有独立切片，尚未完成统一去重/阻断判断 | 只基于现有证据形成一次矩阵；按契约错误、实现偏差、产品范围、测试补证分类，不重新初审代码 |
 | W2-D CTR-010 最终语义裁决准备 | CTR-010 | 124 个唯一字段、29 个 DTO、54 个响应 DTO 的静态统计已落档；目标语义未裁决 | 对照权威契约形成“缺失/null/零值”决策问题；不得直接要求 Data 改 DTO 或 OpenAPI，不在审计分支实施修复 |
 | W2-E 第一轮完整性 Review 收尾 | WebUI 维度 2 全部活动 CTR | partial | 汇总 W2-A～W2-D，确认数据集覆盖、API 消费映射、编号唯一、责任与关闭条件完整；不要求所有 P2 已修复才算第一轮 Review 完成 |
@@ -118,3 +118,28 @@ API Client 全量盘点也已完成：44 个导出函数，41 个远端入口，
 - `internal/platform/taskqueue/queue.go` 使用 `SELECT id,event_json ... WHERE run_id=? AND id>? ORDER BY id ASC LIMIT ?`，但本轮在固定基线仓库树中未找到 `analysis_stage_events` 的建表 DDL；不能把代码依赖的 id 属性当成已验证的数据库约束。
 - OpenAPI 对 after_sequence 的 minimum/default 和 limit 的 minimum/maximum/default 已有表达；缺失点不是参数完全未定义，而是 cursor 语义、事件载荷 Schema、持久化约束和真实 DB 回归证据。
 - 本批未执行 CI，也未修改业务代码、OpenAPI、DTO 或测试；只登记审计结论。
+
+
+## 10. W2-B DailyBar Bundle lookback_days 批次 Review 结果（2026-11-10）
+
+| 观察点 | 固定基线事实 | 判断 |
+|---|---|---|
+| WebUI 默认与偏好 | `web/index.html` 的个股行情日 K 选择默认 120；设置页允许 60/120/250，说明文字明确作为下一次新查询的默认条数。个股查询流程将当前 limit 夹在 20..2000 后作为 `lookbackDays` 显式传给 Bundle | WebUI 用户偏好是页面请求窗口的实际来源；请求不依赖服务端缺省值 |
+| API Client | `getMarketBundle` 默认 `lookbackDays=120`，并始终序列化 `lookback_days`；但 `web/tests/api.test.mjs` 只用该函数验证 timeout/AbortSignal，没有直接断言默认 120、显式值及 URL 编码 | 默认值存在，但缺直接请求契约测试 |
+| HTTP Handler | `server.bundle` 未收到参数时传 0 给 Application；收到参数时校验不低于 20 且不超过配置的 maxBars | Handler 不自行固定 120；省略值委托服务层 |
+| Service/配置 | `DataService.Bundle` 对 lookback<=0 使用 `s.defaultBars`；配置 `MARKET_DATA_DEFAULT_DAILY_BARS` 默认 120，`MARKET_DATA_MAX_DAILY_BARS` 默认 1000（允许范围由配置校验约束） | 服务端默认值是部署可配置值，不是稳定公共常量 |
+| OpenAPI | Bundle 的 lookback_days schema 有 minimum=20、maximum=2000，但没有 default，也没有说明省略时使用服务端配置 | 缺少省略行为描述；不应机械写死 default=120，因为部署可配置且当前默认 max 配置为1000 |
+| 测试 | OpenAPI contract test 只断言 type/minimum/maximum；Handler bounds test覆盖低于20；API Client无默认/显式参数URL断言；未见Bundle handler省略参数时使用配置默认值的专项HTTP测试 | 参数边界有部分测试；缺配置缺省链路和Client URL回归 |
+
+### CTR-009 结论
+
+- **保留 P2**：不是已证实的线上请求窗口错误，而是省略参数的公共契约描述不完整、客户端默认值缺直接测试。
+- WebUI 正常路径显式传入用户偏好，服务端环境默认值不会覆盖用户设置；API Client独立调用省略选项时默认发送120；非WebUI调用方省略HTTP参数时则使用部署配置值。
+- 不能把 OpenAPI 直接补成固定 `default: 120`。应描述“省略时使用服务端 `MARKET_DATA_DEFAULT_DAILY_BARS` 配置，默认部署值120”，并明确该默认可配置；同时记录服务端最大值受 `MARKET_DATA_MAX_DAILY_BARS` 配置控制。
+- 关闭条件：OpenAPI明确可配置默认语义和有效边界；API Client测试覆盖默认120及显式lookback值的URL参数；HTTP Handler/Service测试覆盖省略参数走配置默认值与显式值优先；配置默认/最大值的约束测试保持一致。
+- 该问题不单独阻断整个 WebUI 维度 2 的公共 Schema 冻结，但 Bundle 查询窗口语义在上述契约说明补齐前不标记为完整。
+- 本批没有修改业务代码、OpenAPI、DTO 或测试，没有执行 CI；固定基线不变。
+
+### 下一批
+
+进入 W2-C：仅基于现有审计切片，将 CTR-011～037（排除已单独处理的 CTR-010 聚合项及已由其他批次承接的编号）一次性归类为契约错误、实现偏差、产品范围待决、测试补证；不重新初审代码，不新增编号。
