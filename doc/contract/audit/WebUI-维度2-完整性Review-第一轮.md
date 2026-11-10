@@ -954,3 +954,41 @@ CTR-042 不是已证实的数值换算错误：当前代码没有把 Hithink 原
 - 下一批将 CTR-006/007/008 合并为一个 Task/TaskEvent 工作批次；一次核对 StartedAt/FinishedAt 空值语义、StageEvent Schema、事件分页和 ID 持久化语义，输出唯一关闭条件矩阵。
 - WebUI 维度 2 第一轮完整性 Review 仍为 partial；项目级阶段 F 也仍为 in_progress。没有宣称十模块核验或契约冻结完成。
 - 本轮仅更新审计文档，没有修改业务代码、OpenAPI、DTO、测试或执行 CI。
+
+
+## 29. Task / TaskEvent：CTR-006 / CTR-007 / CTR-008 合并冻结影响 Review
+
+本批一次性核对 Task DTO、StageEvent、HTTP Events Handler、Queue 查询、OpenAPI 与现有测试；不重复 Analysis Run/Task 初审，不扩展到其他维度。
+
+### 29.1 CTR-006：StartedAt / FinishedAt 空值语义
+
+- 固定基线 `internal/platform/taskqueue/queue.go` 的 `Task.StartedAt`、`FinishedAt` 均为 `*time.Time`，JSON tag 均带 `omitempty`。
+- Queue.Get 仅在数据库时间有效时设置指针；queued 任务的 StartedAt/FinishedAt 为 nil，running 任务通常只有 StartedAt，终态任务有 FinishedAt。
+- Go JSON 对 nil + omitempty 的实际行为是省略字段；OpenAPI Task Schema 将两字段声明为非 required 且 `nullable: true`，允许显式 null。两者表达集合不一致。
+- **CTR-006 保留 P2。** 需要由权威契约裁决缺失与 null 的公共语义，再统一 DTO、OpenAPI 和 Golden；不能直接假定 null 是目标语义。
+
+### 29.2 CTR-007：StageEvent 事件载荷 Schema
+
+- 固定基线 `internal/analysis/domain/types.go` 的 StageEvent 包含：`run_id`、`stage`、`status`、`at`、`duration_ms`、`message`、`attributes`。
+- 必需字段为 run_id、stage、status、at；status 值为 started、succeeded、failed、skipped；at 是 time.Time；duration_ms 为可选整数；message 为可选字符串；attributes 为可选 string-to-string map。
+- OpenAPI 的 TaskEvent.event 仅为 `type: object`，描述写“原始 domain.StageEvent 结构”，没有字段级 Schema、required、枚举或 date-time 约束。
+- **CTR-007 保留 P2。** 应在权威 OpenAPI 中显式定义 StageEvent Schema，并通过 JSON Golden 或等价契约测试验证 Go 序列化与 Schema 一致。
+
+### 29.3 CTR-008：事件分页与 cursor 持久化语义
+
+- Handler 默认 `after_sequence=0)、`limit=100`；after_sequence 必须是非负 int64，limit 必须是 1..500，否则返回 400。
+- Queue.Events 使用 `analysis_stage_events` 的 `id` 作为 sequence，按 `id > after` 过滤、`id ASC` 排序并 LIMIT；Handler 将最后一条返回事件的 sequence 作为 next_after_sequence，无事件时保留输入 cursor。
+- OpenAPI 已声明 after_sequence minimum=0/default=0、limit 1..500/default=100；因此不能再把问题描述为“分页参数完全没有约束”。
+- 本轮仓库树中未找到 `analysis_stage_events` 的建表 DDL，无法证明 id 的唯一性、自增/单调分配、索引和重启后不重用。当前 Handler 测试用 fake service 验证增量游标，不覆盖真实数据库分页。
+- **CTR-008 保留 P2。** 关闭需补充权威 migration/DDL 证据，明确 cursor 是 exclusive after 的事件序号，并补数据库集成测试验证多页、空页、边界 limit、重启后续读及并发追加。若 DDL 位于仓库外部迁移系统，责任方需提供可审计版本与部署约束证据。
+
+### 29.4 去重与冻结结论
+
+- CTR-006、007、008 是同一 Task/TaskEvent 数据集的三个不同差异：字段空值语义、事件载荷 Schema、分页游标持久化；不合并为一个 CTR，也不再拆成三个独立审查轮次。
+- 当前批次的冻结影响 Review 已完成，但三个差异均未关闭。Task/TaskEvent 公共契约不可标记为完全冻结；是否允许带延期决议冻结，由正式契约治理决策确定。
+- 关闭前不重复读取本批相同代码。后续仅在权威决议、实现提交、DDL/迁移证据或测试结果变化时做增量验收。
+- 本批未修改业务代码、OpenAPI、DTO 或测试，未执行 CI；固定代码基线不变。
+
+### 29.5 下一批
+
+下一批处理 WebUI 维度 2 的 DailyBar 查询窗口 CTR-009：只核对 lookback_days 缺省值的所有权、WebUI 显式传参、Server/OpenAPI 默认语义及现有测试；完成后把结论写入唯一矩阵。不得重新初审已完成的数据集。
