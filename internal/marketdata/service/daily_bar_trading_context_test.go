@@ -79,7 +79,7 @@ func TestAssessDailyBarTradingContextAcceptsNonTradingDayAndReturnedBar(t *testi
 }
 
 func TestAssessDailyBarTradingContextFlagsBarOnNonTradingDate(t *testing.T) {
-	calendar := &model.TradingCalendarSnapshot{Items: []model.TradingCalendarDay{
+	calendar := &model.TradingCalendarSnapshot{QualityStatus: model.QualityValid, Items: []model.TradingCalendarDay{
 		{Date: "2026-10-20", IsTradingDay: false},
 	}}
 	result := assessDailyBarTradingContext(calendar, []model.DailyBar{{TradeDate: "2026-10-20"}}, nil, nil)
@@ -90,7 +90,7 @@ func TestAssessDailyBarTradingContextFlagsBarOnNonTradingDate(t *testing.T) {
 }
 
 func TestAssessDailyBarTradingContextDoesNotExcludeMissingBarDuringIntradaySuspension(t *testing.T) {
-	calendar := &model.TradingCalendarSnapshot{Items: []model.TradingCalendarDay{
+	calendar := &model.TradingCalendarSnapshot{QualityStatus: model.QualityValid, Items: []model.TradingCalendarDay{
 		{Date: "2026-10-20", IsTradingDay: true},
 	}}
 	statuses := map[string]*model.SecurityTradingStatusSnapshot{
