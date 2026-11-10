@@ -444,3 +444,16 @@
 - 新增 **AUD-WEBUI-CTR-040（P2）**：WebUI 日期范围校验未传入服务端要求的 366 自然日上限，超限只能请求后收到 400。
 - API Client 未见直接请求测试；History Handler/Repository 缺少专用回归测试；页面有日期/取消/下界/时间证据单元测试，但缺真实历史表格 DOM 测试。
 - 本切片完成后，盘点中剩余待审数据集：Limit Pool、Dragon Tiger、Stock Search、Analysis Run、Provider Probe History。WebUI 维度 2 继续 partial。
+
+
+### WebUI — 维度 2：Limit Pool 涨停池、跌停池与炸板池
+
+- 详细记录：[`WebUI-维度2-Limit-Pool.md`](./WebUI-维度2-Limit-Pool.md)
+- 已核对 LimitPoolItem/LimitPoolSnapshot DTO、LimitPoolProvider Port、Eastmoney/Hithink Provider、默认配置与 Bootstrap、Service 校验/回退/缓存、Handler/OpenAPI、WebUI Client/页面和相关测试。
+- 默认仅启用 Eastmoney；Hithink 实现同一 Port 但默认 disabled。Eastmoney 会跨页读取至调用方 limit，Hithink 当前只读第一页。两家均将无数据响应保持 unknown，不作为已确认零事件；超出返回条数的源端 total 会使快照 degraded。
+- Eastmoney 不填充金额扩展字段；Hithink 的 seal_money/max_seal_money/turnover 单位未得到权威证明，标记 provider_defined 并降级。
+- 新增 **AUD-WEBUI-CTR-041（P1，待 CI 复核）**：LimitPoolItem 的 SealMoney/MaxSealMoney 是非 omitempty 指针，Go 会输出 null；OpenAPI 未将其列为 required/nullable；同一 JSON Golden 却断言两字段应省略，三方语义矛盾。需固定基线 CI 复核测试失败，并统一 DTO tag、Schema 和 Golden。
+- 新增 **AUD-WEBUI-CTR-042（P2）**：Hithink 金额字段缺少可验证单位，跨 Provider 无法安全比较/换算。
+- CTR-010 影响范围增加 LimitPoolItem 六个 omitempty 数值字段及 LimitPoolSnapshot.provider_report_date，共七个字段。
+- 页面显示主要榜单字段、总量/返回量/请求上限、来源时间和质量，不消费金额扩展字段；是否需要展示待产品确认。API Client 与 Limit Pool DOM 专项测试缺失，已有 Provider/Service 覆盖分页、部分覆盖、重复证券和 unknown 回退。
+- WebUI 维度 2 继续 partial。盘点剩余待审数据集：Dragon Tiger、Stock Search、Analysis Run、Provider Probe History。
