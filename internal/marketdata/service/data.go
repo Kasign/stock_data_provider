@@ -3179,36 +3179,36 @@ func (s *DataService) DailyBars(ctx context.Context, rawSymbol, start, end strin
 // mergeBundleQualityStatus 保留 Bundle 子数据中更严重、信息量更明确的质量状态。
 // invalid > stale > unknown > degraded > valid；空状态按 unknown 处理。
 func mergeBundleQualityStatus(current, next model.QualityStatus) model.QualityStatus {
-\trank := func(status model.QualityStatus) int {
-\t\tswitch status {
-\t\tcase model.QualityInvalid:
-\t\t\treturn 4
-\t\tcase model.QualityStale:
-\t\t\treturn 3
-\t\tcase model.QualityUnknown, "":
-\t\t\treturn 2
-\t\tcase model.QualityDegraded:
-\t\t\treturn 1
-\t\tcase model.QualityValid:
-\t\t\treturn 0
-\t\tdefault:
-\t\t\treturn 2
-\t\t}
-\t}
-\tif rank(next) > rank(current) {
-\t\tif next == "" { return model.QualityUnknown }
-\t\treturn next
-\t}
-\tif current == "" { return model.QualityUnknown }
-\treturn current
+	rank := func(status model.QualityStatus) int {
+		switch status {
+		case model.QualityInvalid:
+			return 4
+		case model.QualityStale:
+			return 3
+		case model.QualityUnknown, "":
+			return 2
+		case model.QualityDegraded:
+			return 1
+		case model.QualityValid:
+			return 0
+		default:
+			return 2
+		}
+	}
+	if rank(next) > rank(current) {
+		if next == "" { return model.QualityUnknown }
+		return next
+	}
+	if current == "" { return model.QualityUnknown }
+	return current
 }
 
 // mergeBundleChildQuality 将子数据状态映射到聚合状态，并保留可检索的子数据状态提示。
 func mergeBundleChildQuality(bundle *model.Bundle, component string, status model.QualityStatus) {
-\tif bundle == nil || status == model.QualityValid { return }
-\tif status == "" { status = model.QualityUnknown }
-\tbundle.QualityStatus = mergeBundleQualityStatus(bundle.QualityStatus, status)
-\tappendReasonOnce(&bundle.Warnings, component+"_quality_"+string(status))
+	if bundle == nil || status == model.QualityValid { return }
+	if status == "" { status = model.QualityUnknown }
+	bundle.QualityStatus = mergeBundleQualityStatus(bundle.QualityStatus, status)
+	appendReasonOnce(&bundle.Warnings, component+"_quality_"+string(status))
 }
 
 func (s *DataService) Bundle(ctx context.Context, rawSymbol string, lookback int, asOf time.Time, asOfProvided bool, basis model.AdjustmentBasis) (*model.Bundle, error) {

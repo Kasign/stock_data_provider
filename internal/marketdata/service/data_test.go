@@ -532,39 +532,39 @@ func TestQuoteFailoverRecordsActualSource(t *testing.T) {
 	}
 }
 func TestMergeBundleQualityStatusPreservesSeverity(t *testing.T) {
-\tcases := []struct { current, next, want model.QualityStatus }{
-\t\t{model.QualityValid, model.QualityDegraded, model.QualityDegraded},
-\t\t{model.QualityDegraded, model.QualityUnknown, model.QualityUnknown},
-\t\t{model.QualityUnknown, model.QualityStale, model.QualityStale},
-\t\t{model.QualityStale, model.QualityDegraded, model.QualityStale},
-\t\t{model.QualityStale, model.QualityInvalid, model.QualityInvalid},
-\t\t{model.QualityValid, "", model.QualityUnknown},
-\t}
-\tfor _, tc := range cases {
-\t\tif got := mergeBundleQualityStatus(tc.current, tc.next); got != tc.want {
-\t\t\tt.Errorf("mergeBundleQualityStatus(%q, %q) = %q, want %q", tc.current, tc.next, got, tc.want)
-\t\t}
-\t}
+	cases := []struct { current, next, want model.QualityStatus }{
+		{model.QualityValid, model.QualityDegraded, model.QualityDegraded},
+		{model.QualityDegraded, model.QualityUnknown, model.QualityUnknown},
+		{model.QualityUnknown, model.QualityStale, model.QualityStale},
+		{model.QualityStale, model.QualityDegraded, model.QualityStale},
+		{model.QualityStale, model.QualityInvalid, model.QualityInvalid},
+		{model.QualityValid, "", model.QualityUnknown},
+	}
+	for _, tc := range cases {
+		if got := mergeBundleQualityStatus(tc.current, tc.next); got != tc.want {
+			t.Errorf("mergeBundleQualityStatus(%q, %q) = %q, want %q", tc.current, tc.next, got, tc.want)
+		}
+	}
 }
 
 func TestBundlePreservesStaleRealtimeQuoteQuality(t *testing.T) {
-\tp := fakeProvider{name: "eastmoney", quote: validQuote("eastmoney")}
-\told := time.Now().Add(-25 * time.Hour).UTC()
-\tp.quote.QuoteTime = &old
-\tvol, amount := int64(1000), 10500.0
-\tp.bars = []model.DailyBar{{SourceVersion: "test-v1", Symbol: "600519.SH", TradeDate: time.Now().In(marketLocation()).AddDate(0, 0, -1).Format("2006-01-02"), Period: "1d", Open: 10, High: 11, Low: 9, Close: 10.5, Volume: &vol, Amount: &amount, AdjustmentBasis: model.AdjustmentNone, Source: "eastmoney", VolumeUnit: "shares", AmountUnit: "CNY", QualityStatus: model.QualityValid}}
-\ts := New([]provider.Provider{p}, cache.NewDisabled(), nil, time.Second, time.Second, 60, slog.New(slog.NewTextHandler(io.Discard, nil)))
-\tbundle, err := s.Bundle(context.Background(), "600519", 1, time.Time{}, false, model.AdjustmentNone)
-\tif err != nil { t.Fatal(err) }
-\tif bundle.Quote == nil || bundle.Quote.QualityStatus != model.QualityStale {
-\t\tt.Fatalf("expected stale quote in bundle, got %+v", bundle.Quote)
-\t}
-\tif bundle.QualityStatus != model.QualityStale {
-\t\tt.Fatalf("bundle must preserve stale child quality, got %q", bundle.QualityStatus)
-\t}
-\tif !containsTestWarning(bundle.Warnings, "realtime_quote_quality_stale") {
-\t\tt.Fatalf("bundle must expose the stale child component, warnings=%v", bundle.Warnings)
-\t}
+	p := fakeProvider{name: "eastmoney", quote: validQuote("eastmoney")}
+	old := time.Now().Add(-25 * time.Hour).UTC()
+	p.quote.QuoteTime = &old
+	vol, amount := int64(1000), 10500.0
+	p.bars = []model.DailyBar{{SourceVersion: "test-v1", Symbol: "600519.SH", TradeDate: time.Now().In(marketLocation()).AddDate(0, 0, -1).Format("2006-01-02"), Period: "1d", Open: 10, High: 11, Low: 9, Close: 10.5, Volume: &vol, Amount: &amount, AdjustmentBasis: model.AdjustmentNone, Source: "eastmoney", VolumeUnit: "shares", AmountUnit: "CNY", QualityStatus: model.QualityValid}}
+	s := New([]provider.Provider{p}, cache.NewDisabled(), nil, time.Second, time.Second, 60, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	bundle, err := s.Bundle(context.Background(), "600519", 1, time.Time{}, false, model.AdjustmentNone)
+	if err != nil { t.Fatal(err) }
+	if bundle.Quote == nil || bundle.Quote.QualityStatus != model.QualityStale {
+		t.Fatalf("expected stale quote in bundle, got %+v", bundle.Quote)
+	}
+	if bundle.QualityStatus != model.QualityStale {
+		t.Fatalf("bundle must preserve stale child quality, got %q", bundle.QualityStatus)
+	}
+	if !containsTestWarning(bundle.Warnings, "realtime_quote_quality_stale") {
+		t.Fatalf("bundle must expose the stale child component, warnings=%v", bundle.Warnings)
+	}
 }
 
 func TestHistoricalBundleDoesNotFetchRealtimeQuote(t *testing.T) {
