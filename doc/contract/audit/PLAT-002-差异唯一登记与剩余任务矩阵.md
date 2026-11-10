@@ -725,7 +725,7 @@ Golden应由真实DTO序列化生成或与真实序列化逐字节/结构比较�
 
 - **职责归属与依赖方向：`freeze-ready`**。Researchflow 不应依赖 Data 内部 Model/Repository，也不应复制 Data 行情 DTO。
 - **Run 级执行上下文语义：`accepted`**。唯一 `system_as_of`、不透明输入快照引用、重试不变更输入的原则已明确。
-- **Stage 级最小权限映射：`pending_decision`（条件项）**。只在明确 Data 消费 Stage 的资源授权范围前需要裁决。
+- **Stage 级最小权限映射：`deferred`（条件项）**。仅在首个真实 Data 消费 Stage 进入实现/接入前裁决；当前不阻断纯编排 Domain。
 - **真实 Data 消费交互：`pending_evidence`**。当前无生产 Data Stage Adapter，不能宣称 Data→Researchflow 已完成 L2 或 frozen。
 - 沿用 DATA-CTR-005、DATA-CTR-008、FLOW-CTR-003、FLOW-CTR-004，不新增 CTR；本批不把 Researchflow 对 Data 的逻辑依赖误判为已经存在的直接 DTO 调用。
 
@@ -1106,7 +1106,7 @@ PLAT-002 的项目级决策收敛已完成；**PLAT-002 项目整体不宣告完
 - 截至第35节（不含第36节提案映射表），有状态表格行：69 行。
 - 带唯一显式审计编号的工作项：56 项，编号无重复。
 - 其余 13 行为边界/契约聚合表格行，其中 Data→Quant、Data→Research 各有两个不同问题，不能因显示名称相同而合并。
-- 截至第35节，含 pending_decision 的行项目共22项：21项纯待决（NEWS-FLOW-D 随 A/B 合并裁决，不独立成项），1项同时包含待决与证据缺口。其余状态按表格各行保留，不将多维状态拆成多个独立问题。
+- 裁决前历史快照：截至第35节，含 pending_decision 的行项目共22项：21项纯待决（NEWS-FLOW-D 随 A/B 合并裁决，不独立成项），1项同时包含待决与证据缺口。该数字仅描述决策前状态，不代表当前队列。
 - 该统计包含历史切片表格和当前差异表格，不等于 69 个独立契约；正式 CTR 仍以登记簿第3节为准。
 
 ### 36.2 已有决议覆盖项：移出项目负责人待决队列
