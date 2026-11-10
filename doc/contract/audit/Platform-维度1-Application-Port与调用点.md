@@ -1137,3 +1137,61 @@ WebUI 当前创建请求的最小字段与调用路径明确；事件分页消�
 ### 21.6 本批结论
 
 日 K 请求参数、Handler 分支、Go DailyBar JSON、OpenAPI Schema 与 WebUI 图表消费逻辑整体对齐。服务端已有模型反射和 JSON 序列化契约测试，前端已有日 K 图表行为测试。当前未发现需要新增 AUD-WEBUI-CTR 差异项；WebUI 维度 2 保持 partial，下一批转向 Bundle 响应 DTO 与其前端消费链。
+
+
+## 22. 第十七批：WebUI 维度 2（Bundle 聚合响应 DTO 与快照元数据）
+
+### 22.1 固定基线与证据
+
+代码基线：`b6dfc85ba214fe16268c8cba780641a8bfe15086`
+
+- `internal/marketdata/model/model.go`（blob `6f04516bd11452a01adcb5acceab571fb1c28ed5`）
+- `internal/marketdata/httpapi/server.go`（blob `7b54b54b3c6182ecab830c2c43f91c548dc60dba`）
+- `internal/marketdata/httpapi/openapi.yaml`（blob `cd8a6e3dfb8e3162ee789b11e883be9283c59f32`）
+- `internal/marketdata/httpapi/openapi_contract_test.go`（blob `7f97f075a23bd698a7e3fc32e90509d1e999217b`）
+- `internal/marketdata/service/data.go`（blob `d2abb990d8d7ec2fcbf112a5f1beca49c8d40f7b`）
+- `web/src/api.js`（blob `b8bcbee5908b43bfa1bc2ca744363190af38287f`）
+- `web/src/app.js`（blob `324348f063d89c4a3861ef2dd38232a9253fe0cd`）
+
+### 22.2 Bundle 请求与服务端行为
+
+1. WebUI 无自定义日期范围时优先调用 `GET /api/v1/bundles/{symbol}`，传入 lookback_days 和 adjustment；当前调用点显式构造 lookbackDays，范围为 20 至 2000。
+2. Handler 对 lookback_days 执行整数和范围校验（20 至当前 Server 配置的 maxBars）；省略时传 0 给 Service，由 Service 使用 defaultBars。
+3. OpenAPI 将 lookback_days 声明为 integer、minimum 20、maximum 2000；未声明 default，也未描述省略时由服务端 defaultBars 配置决定。
+4. Service 当前默认构造配置下 defaultBars 为 120，但该值通过构造参数注入，不是 Bundle Handler 固定常量。WebUI 当前显式传入窗口，不依赖省略默认值。
+5. adjustment 缺省使用 Server 配置默认值，并按 RequestAdjustmentBasis 校验；OpenAPI 使用同一请求枚举。
+6. as_of 按带时区 RFC3339 时间解析。历史 cutoff 不会直接泄漏最新行情：仅在请求时间接近当前且 QuoteTime 可证明不晚于 cutoff 时保留 Quote；否则省略 Quote 并增加 warning/degraded 状态。
+7. PIT Bundle 会按上海时区 cutoff 处理当日未收盘 K 线；复权历史可能使用当前公司行为因子时，Service 明确增加 warning 并降级，避免把非 PIT 复权结果误认为完全历史可复现。
+8. Bundle 会额外请求 MA250 预热窗口，最终仍按 lookback 截断；Quote 与 DailyBars 复权口径不一致时增加警告并降级。来源混合、缺失日 K、均线历史不足等情况也会影响质量状态。
+
+### 22.3 Bundle DTO 与 OpenAPI
+
+1. Go Bundle 字段为 symbol、name、quote、daily_bars、sources、warnings、snapshot_id、analysis_reference_time、fetched_at、quality_status。
+2. name、quote、warnings 使用 omitempty；其余字段要求输出。OpenAPI required 集合与 Go JSON 序列化语义一致。
+3. quote 是可选对象，不是显式 nullable 字段；这与 Go `*Quote + omitempty` 的缺失语义一致。
+4. daily_bars 是 DailyBar 数组；sources 是 string-valued map；warnings 是字符串数组；snapshot_id、analysis_reference_time、fetched_at、quality_status 均有 Schema。
+5. Go 模型反射测试将 Bundle 纳入 51 个 Model 的字段集合和 required 对照；JSON 序列化测试明确检查 symbol/daily_bars/sources/snapshot_id 出现，name/quote/warnings 省略。反射测试同时检查剩余 required 字段，避免只依赖上述局部断言。
+
+### 22.4 WebUI 消费行为
+
+1. WebUI 对 Bundle 顶层 symbol 执行请求标的身份校验；若嵌套 Quote 存在，也独立校验 Quote.symbol。顶层不匹配时丢弃整个 Bundle，Quote 不匹配时仅剔除 Quote 并追加警告。
+2. 页面使用 daily_bars 渲染日 K；从首条 bar 读取单位，从记录中读取 adjustment_basis；Bundle 顶层 quality_status 和 warnings 决定质量提示。
+3. Quote 缺失时清空实时行情区域，并提示 Bundle 已返回多少根日 K 但没有实时行情，不把缺失 Quote 当作请求整体成功的完整行情。
+4. 页面展示 snapshot_id、analysis_reference_time 和 sources；sources 以键值形式呈现，超过展示上限时提示可复制完整元数据。
+5. Bundle 失败时，只有 HTTP 404 会触发旧服务兼容回退到 Quote + DailyBars；其他聚合错误不会重复调用所有 Provider，避免额外放大请求。
+6. Bundle 当前不向页面直接暴露 fetched_at 的独立展示字段；这不影响 DTO 契约，页面展示的 analysis_reference_time 与 snapshot_id 用于识别分析快照及其参考时点。
+
+### 22.5 差异判断
+
+**AUD-WEBUI-CTR-009：Bundle lookback_days 省略默认值未在 OpenAPI 说明（P2，契约文档补充）**
+
+- 证据：Handler 对省略 lookback_days 传 0，Service 再使用注入的 defaultBars；当前默认构造配置下为 120。OpenAPI 参数仅声明 integer/minimum/maximum，没有 default 或省略语义描述。
+- 影响：不传 lookback_days 的 API 调用方无法仅依据 OpenAPI 判断实际返回窗口；不同部署配置还可能使用不同 defaultBars。当前 WebUI 调用点显式传入 lookbackDays，不受影响。
+- 责任方：Market Data HTTP API 契约维护方。
+- 关闭条件：在 OpenAPI description 中明确“省略时使用服务端配置的默认窗口”，并说明默认值由部署配置决定；若项目决定固定为 120，则将默认值固定到构造配置并声明 default: 120，同时增加 Handler 默认行为契约测试。不要在配置仍可变时虚构一个固定 default。
+
+本批未发现 Bundle DTO 字段集合、required/omitempty、Quote 缺失语义或 WebUI 快照消费的已证实运行时错配。AUD-WEBUI-CTR-009 是调用方可见的默认行为文档缺口，不是当前 WebUI 调用错误。
+
+### 22.6 本批结论
+
+Bundle 聚合 DTO 与 Go/OpenAPI 字段语义整体一致；WebUI 对顶层/嵌套证券身份、Quote 缺失、质量降级、快照来源及旧服务 404 兼容回退均有明确处理。新增 AUD-WEBUI-CTR-009（P2），仅针对 lookback_days 省略默认值文档不完整。WebUI 维度 2 继续保持 partial。
