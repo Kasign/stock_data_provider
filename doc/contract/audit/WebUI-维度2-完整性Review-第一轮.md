@@ -446,9 +446,9 @@ Go model.StockBasic 有 14 个 omitempty 字段，而 OpenAPI StockBasic 将它�
 - MarketSentimentSnapshot / MarketSentimentHistory：本批未发现新的 omitempty + OpenAPI nullable 冲突。provider_report_date、三个 lower-bound bool、pool_sources、pool_source_versions、source_version、quality_reasons 均为 omitempty，但 OpenAPI 未声明 nullable；三个计数指针字段不带 omitempty，且在 OpenAPI required + nullable，行为一致。MarketSentimentHistory 所有字段均非 omitempty，未发现 CTR-010 差异。
 - MarketCapitalFlowItem：14 个 omitempty 数值指针字段（close_sh、change_percent_sh、close_sz、change_percent_sz、net_amount_cny、net_amount_rate_percent，以及超大单/大单/中单/小单净流入金额和比例字段）均在 OpenAPI 声明 nullable，属于此前市场级资金流章节登记的 CTR-010。MarketCapitalFlowSnapshot.quality_reasons 虽 omitempty，但 OpenAPI 未声明 nullable，不计入。
 - CapitalFlow：main_net_inflow_yuan、inflow_5d_yuan、inflow_10d_yuan 三个 omitempty 指针字段均被 OpenAPI 声明 nullable，属于此前个股资金流章节登记的 CTR-010；provider_date、source_version、quality_reasons 虽 omitempty，但 OpenAPI 未声明 nullable。
-- 本批复核到 42 个既有 CTR-010 字段：Limit Pool 7、Dragon Tiger 18、Market Capital Flow 14、CapitalFlow 3；Market Sentiment 0。与此前数据集章节的登记重合，不新增差异编号，也不应将 41 再次累加到专门分批统计。seal_money/max_seal_money 等 omitempty 但 Schema 非 nullable 的字段排除。
+- 本批复核到 42 个既有 CTR-010 字段：Limit Pool 7、Dragon Tiger 18、Market Capital Flow 14、CapitalFlow 3；Market Sentiment 0。与此前数据集章节的登记重合，不新增差异编号，也不应将 42 再次累加到专门分批统计。seal_money/max_seal_money 等 omitempty 但 Schema 非 nullable 的字段排除。
 - 测试证据：`TestAllGoModelFieldsAndRequiredMatchOpenAPISchemas` 已将 DragonTigerItem/Snapshot、MarketSentimentSnapshot/History、LimitPoolItem/Snapshot、MarketCapitalFlowItem/Snapshot、CapitalFlow 纳入 51 个模型字段集合与 required 反射核对；该测试只对非 omitempty 指针检查 nullable，未检查 omitempty 字段的反向 nullable 冲突。
-- `TestDataModelJSONSerializationMatchesOpenAPIRequiredAndNullableSemantics` 仅对 MarketSentimentSnapshot 的三个非 omitempty 计数指针做 null 断言，对 LimitPoolItem 的 change_percent 做 null、seal_money/max_seal_money 做省略断言；没有覆盖本批 41 个差异字段的 nil 省略。Dragon Tiger、Market Capital Flow、CapitalFlow 没有对应 DTO 序列化样例。
+- `TestDataModelJSONSerializationMatchesOpenAPIRequiredAndNullableSemantics` 仅对 MarketSentimentSnapshot 的三个非 omitempty 计数指针做 null 断言，对 LimitPoolItem 的 change_percent 做 null、seal_money/max_seal_money 做省略断言；没有覆盖本批 42 个差异字段的 nil 省略。Dragon Tiger、Market Capital Flow、CapitalFlow 没有对应 DTO 序列化样例。
 - 本批未执行固定基线 CI；结论为静态代码与测试资产核验，不代表 CI 已通过。无业务代码修改。CTR-010 仍需完成全 DTO 去重汇总及反向序列化断言缺口归档。
 
 
