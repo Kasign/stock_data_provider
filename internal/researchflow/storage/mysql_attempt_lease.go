@@ -56,8 +56,8 @@ func (r *MySQLRunRepository) RenewAttemptLease(
 		return time.Time{}, ErrClaimStageUnavailable
 	}
 
-	var attemptStatus, owner string
-	var leaseValue sql.NullString
+	var attemptStatus string
+	var owner, leaseValue sql.NullString
 	var token uint64
 	var attemptNo int
 	if err := tx.QueryRowContext(ctx, `SELECT status, lease_owner, lease_expires_at, fencing_token, attempt_no
@@ -68,7 +68,7 @@ func (r *MySQLRunRepository) RenewAttemptLease(
 		return time.Time{}, fmt.Errorf("lock Researchflow lease attempt %q: %w", attemptRef, err)
 	}
 	if domain.AttemptStatus(attemptStatus) != domain.AttemptRunning ||
-		owner != workerID || token != fencingToken || attemptNo != stageAttemptNo {
+		!owner.Valid || owner.String != workerID || token != fencingToken || attemptNo != stageAttemptNo {
 		return time.Time{}, ErrAttemptLeaseHeld
 	}
 

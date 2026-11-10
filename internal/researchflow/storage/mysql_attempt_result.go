@@ -99,8 +99,8 @@ func (r *MySQLRunRepository) CommitAttemptResult(ctx context.Context, input Atte
 		return ErrClaimStageUnavailable
 	}
 
-	var attemptStatus, owner string
-	var leaseValue sql.NullString
+	var attemptStatus string
+	var owner, leaseValue sql.NullString
 	var fencingToken uint64
 	var attemptNo int
 	if err := tx.QueryRowContext(ctx, `SELECT status, lease_owner, lease_expires_at, fencing_token, attempt_no
@@ -111,7 +111,7 @@ func (r *MySQLRunRepository) CommitAttemptResult(ctx context.Context, input Atte
 		return fmt.Errorf("lock Researchflow result attempt %q: %w", input.AttemptRef, err)
 	}
 	if domain.AttemptStatus(attemptStatus) != domain.AttemptRunning ||
-		owner != input.WorkerID || fencingToken != input.FencingToken ||
+		!owner.Valid || owner.String != input.WorkerID || fencingToken != input.FencingToken ||
 		attemptNo != stageAttemptNo {
 		return ErrAttemptLeaseHeld
 	}
