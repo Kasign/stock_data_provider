@@ -212,3 +212,12 @@
 - OpenAPI 声称 AnalysisRequest 与 Domain RunRequest 一致，但缺少 `as_of_mode`、`parameters`、TaskType 枚举和 required 约束。
 - 新增 **AUD-WEBUI-CTR-005**（P2）：先明确 HTTP Request DTO 与 Domain 类型的映射边界，再补齐 Schema 或修正其描述，并增加契约测试。当前 WebUI 最小请求不受该差异直接影响。
 - Task/TaskEvent 响应 DTO 逐字段核验及服务端 JSON 解码策略仍待检查；维度 2 保持 partial。详见审计明细第 18 节。
+
+
+### WebUI — 维度 2：Task / TaskEvent 响应 DTO 初审
+
+- Task 字段集合、required 集合与 Go Task 基本对齐；Task 状态枚举与 Worker 状态映射一致，并有状态映射单测。
+- 新增 **AUD-WEBUI-CTR-006**（P2）：StartedAt/FinishedAt 在 Go 中为 `omitempty` 指针，空值会省略；OpenAPI 却声明 `nullable: true`，需要统一缺失/null 语义。
+- 新增 **AUD-WEBUI-CTR-007**（P2）：Go Event 嵌入 StageEvent，但 OpenAPI event 仅是任意 object，缺少字段、状态枚举、时间格式和可选字段 Schema。
+- WebUI 已验证 Task ID、事件序号、分页游标和可选 run_id；服务端 next_after_sequence 计算、JSON Golden 与未知字段解码策略仍待核。
+- 维度 2 保持 partial。详细证据见审计明细第 19 节。
