@@ -845,3 +845,16 @@
 - Server维度2首轮仍为 `in_progress / partial`；本批只完成一个切片，不代表整个Server维度2完成或冻结。
 - 本轮仅修改审计文档，未修改业务代码、OpenAPI、DTO、Golden、测试，未执行CI。
 - **下一步唯一任务：Server维度2的增量路由/消费者盘点与错误DTO契约补证。** 先以固定SHA确认Root Server是否还注册模块Handler或其他HTTP Transport；若没有，停止扩大路由范围，转而将现有Root错误Envelope差异、WebUI消费和CTR-046/047的Schema关闭条件做交叉核对。不得重复本批Health/Analysis代码初审，不进入Server其他五个维度。
+
+
+## 16. Server 维度2第二切片：HTTP错误 DTO 与消费者契约交叉核验（2026-11-10）
+
+- 固定代码基线：b6dfc85ba214fe16268c8cba780641a8bfe15086；维护分支：feat/design_doc。
+- Root Router仍只有既有13条method-pattern，没有发现News/Research/Researchflow/Quant/LLM/Notification等模块Handler新增注册。
+- 错误生产方核验确认Middleware/Fault Envelope与Security/Health/旧Analysis Legacy Envelope并存；错误码在部分同状态场景也存在分叉；OpenAPI没有统一Error Schema。
+- WebUI消费error.message/code/status/requestId，不消费class/retryable；Request ID实际Body优先、Header其次，纠正了上一轮“Header优先”的文档表述。
+- 统一Envelope是建议而非已批准决议；必须先明确端点范围、class/retryable语义、状态码/code映射、超限错误码、Request ID权威通道和OpenAPI/Golden要求。
+- CTR-046/047没有重新登记；错误DTO归PLAT-CTR-001，Root路由/运维契约归SRV-CTR-001，Request ID信任与传播归PLAT-CTR-002。
+- Server维度2第二切片完成，状态complete_with_open_items；维度2整体仍partial，项目阶段B十模块六维核验继续进行。
+- 本批仅更新审计文档，无业务代码、OpenAPI、DTO、Golden、测试或CI变更。
+- 下一步唯一任务：**Server维度2 — Run/Task DTO字段与现有OpenAPI Schema差异的增量核验**。只以CTR-046/047、CTR-006/007已有登记及既有代码证据为入口，查明真实JSON字段、必填/可空/省略语义与Schema差异是否已被完整登记；不重做错误Envelope、Health/Readiness、WebUI错误解析，也不检查Data新分支。
