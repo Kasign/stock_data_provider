@@ -14,6 +14,7 @@ type relationHistoryRepositoryStub struct {
 	err       error
 	request   NewsItemRelationHistoryRequest
 	calls     int
+	afterRead func()
 }
 
 func (s *relationHistoryRepositoryStub) ListNewsItemRelationsAt(
@@ -21,6 +22,9 @@ func (s *relationHistoryRepositoryStub) ListNewsItemRelationsAt(
 ) ([]domain.NewsItemRelation, error) {
 	s.calls++
 	s.request = request
+	if s.afterRead != nil {
+		s.afterRead()
+	}
 	return s.relations, s.err
 }
 
@@ -167,5 +171,20 @@ func TestListNewsItemRelationHistoryPreservesAppendOnlyStatuses(t *testing.T) {
 	}
 	if result[2].SupersedesRelationID != "relation-confirmed" {
 		t.Fatalf("retraction lost its supersedes link: %+v", result[2])
+	}
+}
+
+func TestListNewsItemRelationHistoryPropagatesCancellationAfterRepositoryRead(t *testing.T) {
+	now := time.Now().UTC()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	repository := &relationHistoryRepositoryStub{afterRead: cancel}
+	useCase, _ := NewListNewsItemRelationHistory(repository)
+	useCase.now = func() time.Time { return now }
+	_, err := useCase.Execute(ctx, NewsItemRelationHistoryRequest{
+		NewsID: "news-1", SystemAsOf: now.Add(-time.Second),
+	})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("Execute() error = %v, want context.Canceled", err)
 	}
 }

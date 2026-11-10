@@ -41,6 +41,9 @@ func (u *ResolveIdentityAt) Execute(ctx context.Context, request ResolveIdentity
 	if u == nil || u.repository == nil || u.now == nil || ctx == nil {
 		return domain.IdentityResolution{}, ErrInvalidRequest
 	}
+	if err := ctx.Err(); err != nil {
+		return domain.IdentityResolution{}, err
+	}
 	request.SourceID = strings.TrimSpace(request.SourceID)
 	now := u.now().UTC()
 	if request.SourceID == "" || len(request.Credentials) == 0 || len(request.Credentials) > 10 ||
@@ -53,7 +56,13 @@ func (u *ResolveIdentityAt) Execute(ctx context.Context, request ResolveIdentity
 	if err != nil {
 		return domain.IdentityResolution{}, err
 	}
+	if err := ctx.Err(); err != nil {
+		return domain.IdentityResolution{}, err
+	}
 	for _, credential := range existing {
+		if err := ctx.Err(); err != nil {
+			return domain.IdentityResolution{}, err
+		}
 		if credential.SourceID != request.SourceID || credential.NewsID == "" ||
 			credential.ObservedAt.IsZero() || !validEvidenceUTC(credential.ObservedAt) ||
 			credential.ObservedAt.After(request.SystemAsOf) {

@@ -32,12 +32,21 @@ func (u *ListNewsItemRelationHistory) Execute(
 		request.Validate(u.now().UTC()) != nil {
 		return nil, ErrInvalidNewsItemRelationHistoryQuery
 	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	relations, err := u.repository.ListNewsItemRelationsAt(ctx, request)
 	if err != nil {
 		// Storage failures must remain visible; never convert them into empty history.
 		return nil, err
 	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	for i, relation := range relations {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		if (relation.FromNewsID != request.NewsID && relation.ToNewsID != request.NewsID) ||
 			relation.ObservedAt.IsZero() || relation.ObservedAt.After(request.SystemAsOf) ||
 			domain.ValidateNewsItemRelation(relation) != nil {

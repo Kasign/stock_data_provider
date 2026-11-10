@@ -14,6 +14,7 @@ type identityHistoryRepositoryStub struct {
 	err         error
 	calls       int
 	asOf        time.Time
+	afterRead   func()
 }
 
 func (s *identityHistoryRepositoryStub) ListIdentityCredentialsAt(
@@ -21,6 +22,9 @@ func (s *identityHistoryRepositoryStub) ListIdentityCredentialsAt(
 ) ([]domain.IdentityCredential, error) {
 	s.calls++
 	s.asOf = asOf
+	if s.afterRead != nil {
+		s.afterRead()
+	}
 	return s.credentials, s.err
 }
 
@@ -79,5 +83,24 @@ func TestResolveIdentityAtRejectsFutureAndInvalidHistory(t *testing.T) {
 	})
 	if !errors.Is(err, ErrIdentityHistoryInvalid) {
 		t.Fatalf("future identity history error = %v", err)
+	}
+}
+
+func TestResolveIdentityAtPropagatesCancellationAfterRepositoryRead(t *testing.T) {
+	now := time.Now().UTC()
+	candidate, err := domain.BuildIdentityCredentials("source-1", "native-1", "", domain.SourceURLPolicy{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	repository := &identityHistoryRepositoryStub{afterRead: cancel}
+	useCase, _ := NewResolveIdentityAt(repository)
+	useCase.now = func() time.Time { return now }
+	_, err = useCase.Execute(ctx, ResolveIdentityAtRequest{
+		SourceID: "source-1", Credentials: candidate, SystemAsOf: now.Add(-time.Second),
+	})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("Execute() error = %v, want context.Canceled", err)
 	}
 }
