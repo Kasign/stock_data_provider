@@ -1528,3 +1528,82 @@ StockBoards 的 Provider Port、Go DTO、Service 校验/回退/缓存、HTTP 路
 - WebUI 已接通估值接口，展示五项核心倍数、缺失状态、质量原因和供应商/采集时间；未发现页面将供应商时间解释成逐指标更新时间。
 - 新增 AUD-WEBUI-CTR-015（P2），为 CTR-010 的同类 Schema 精度问题；未发现已证实的估值运行时数值错误。
 - WebUI 维度 2 继续 partial。
+
+### 28. WebUI 维度 2：Chip Distribution 筹码分布字段、算法与消费语义
+
+#### 28.1 核验范围与证据
+
+- 固定代码基线：`b6dfc85ba214fe16268c8cba780641a8bfe15086`。
+- Go DTO：`internal/marketdata/model/model.go`（blob `6f04516bd11452a01adcb5acceab571fb1c28ed5`）。
+- Provider Port：`internal/marketdata/provider/provider.go`（blob `6635d2247379d1ffcb826f80e8e2176422b0cc0a`）。
+- Eastmoney 算法与数据获取：`internal/marketdata/provider/eastmoney.go`（blob `5f2a8c2d0fb883414f870f6e29af51943d12c204`）；对应测试文件 `eastmoney_test.go`（blob `2d9afd0cc44c0abfd54a2de1ed964a8d51addd47`，未包含筹码算法专用测试）。
+- MiaoXiang Provider：`internal/marketdata/provider/miaoxiang.go`（blob `5534cd8b3bf2075ece01468b7184e1c29795f5ac`）；解析/质量测试 `miaoxiang_test.go`（blob `dc2a5725e1fb52d8ddd34b340fe348107aefbedb`）。
+- Service 校验、Provider 回退与缓存：`internal/marketdata/service/data.go`（blob `d2abb990d8d7ec2fcbf112a5f1beca49c8d40f7b`）；回退测试 `chip_distribution_fallback_test.go`（blob `3965020143d2af00c3ff0fb84b20e5cad38d90e3`）。
+- HTTP Handler：`internal/marketdata/httpapi/server.go`（blob `7b54b54b3c6182ecab830c2c43f91c548dc60dba`）；OpenAPI `openapi.yaml`（blob `cd8a6e3dfb8e3162ee789b11e883be9283c59f32`）；模型契约测试 `openapi_contract_test.go`（blob `7f97f075a23bd698a7e3fc32e90509d1e999217b`）。
+- WebUI API Client：`web/src/api.js`（blob `b8bcbee5908b43bfa1bc2ca744363190af38287f`）；页面 `web/src/stock-research.js`（blob `49fe406d7dcf5e8fdec76f2f0bfcda6a18d4db85`）；浏览器测试 `web/tests/stock-research-data-browser.mjs`（blob `61b6e35376e6b7393f7c0a922506b795dbeedbe1`）。
+
+#### 28.2 多 Provider 协议与字段口径
+
+1. 已存在独立 `ChipDistributionProvider` Port，Provider 只需实现 `Name` 与 `FetchChipDistribution`，不要求同时实现资金流；DataService 统一聚合筹码 Provider 和补充 Provider，按 Provider 名称去重并执行回退。这一能力已有协议层，不需要再增加第二套筹码协议。
+2. DTO 统一字段：`average_cost`、70%/90% 成本区间上下界、`profit_ratio`、70%/90% 集中度、`date`、`provider_date`、`fetched_at`、来源版本及质量信息。
+3. 成本字段以人民币元/股表示；Service 要求平均成本和所有已提供区间边界为有限正数，并校验上下界不反向。区间边界允许单独缺失，当前没有要求 70% 区间必须被 90% 区间包含。
+4. 获利比例和集中度在统一 DTO 中使用 0..1 小数。MiaoXiang 解析器将带百分号值或大于 1 的数除以 100，并拒绝归一化后越界值；Eastmoney 计算器直接产生 0..1 比例。Service 对三项比例统一校验有限且处于 [0,1]。
+5. MiaoXiang 当前提供平均成本、获利比例、90%/70% 集中度；不提供 70%/90% 成本区间。缺失指标保持 nil，不补零，并产生字段诊断和质量原因。
+6. Eastmoney 使用日 K 与换手率自行计算筹码密度，返回平均成本、两组成本区间、获利比例及集中度；当前数据来自最近最多 120 根日 K。算法按筹码累计分布的 50% 分位点计算 `average_cost`，按 5%/95% 和 15%/85% 分位点计算 90%/70% 区间；集中度公式为 `(high-low)/(high+low)`。
+7. 两个 Provider 都不能提供可验证的源端发布时间/可用时间。Eastmoney 明确标记 `provider_chip_snapshot_timestamp_not_exposed`；MiaoXiang 记录 publication_time 不可用。Service 禁止此类快照被提升为 valid，当前两种来源均只能 degraded/unknown。
+
+#### 28.3 日期、供应商时间与采集时间
+
+1. Eastmoney 将最后一根有效日 K 的交易日期同时写入 `date` 和 `provider_date`；MiaoXiang 从表格 `headName` 解析日期，归一化后同样写入两个字段。
+2. `fetched_at` 在 Provider 生成时设置，但进入 Service 后会被覆盖为服务收到 Provider 响应的 UTC 时间；因此最终响应中的 fetched_at 是服务采集时间，不是 Provider 内部时间。
+3. `date` 与 `provider_date` 在当前两个 Provider 中取值相同，且均为归一化日期；OpenAPI 却将 provider_date 描述为“Original provider report date”，与实际归一化行为不符。
+4. 没有可验证的源端发布时间或可用时间，因此即使 date/provider_date 有值，也只能说明数据所关联的日期，不能证明数据在该日何时发布或何时可用。
+5. Service 校验 date/provider_date 为合法 YYYY-MM-DD 且不能晚于中国时区当天；fetched_at 不能为零或超前超过五分钟。
+
+#### 28.4 Eastmoney 计算数据的价格基准
+
+1. Eastmoney 请求日 K 时明确使用 `fqt=0`，即不复权价格；随后直接将最多 120 根原始 OHLC 与换手率输入筹码分布计算，没有在该计算路径中应用复权因子或公司行为重基准。
+2. 若这 120 根 K 线窗口内发生分红、送转、拆并股等除权除息事件，事件前后原始价格不再处于同一价格基准。直接累积两段原始价格密度可能把不同基准的成本分布叠加，影响平均成本和成本区间。
+3. 当前 Eastmoney Provider 的专用测试文件没有筹码算法测试或与 Python/AkShare 参考输出的 Golden 对照；MiaoXiang 有解析与比例归一化测试，Service 有回退、质量和未来采集时间测试。
+4. 当前质量原因只标记缺少筹码快照时间及使用最近 120 根日 K 计算，没有标记未复权价格基准/公司行为风险。
+
+#### 28.5 WebUI 实际消费
+
+1. Server 注册 `GET /api/v1/stocks/{symbol}/chip-distribution`；Handler 调用 Securities Application 的 ChipDistribution 并直接返回 `ChipDistribution` DTO。
+2. API Client `getChipDistribution` 与个股研究页面已接通；页面展示平均持仓成本、70%/90% 成本区间、获利比例、70%/90% 集中度、质量状态、质量原因、数据日期、供应商日期和采集时间。
+3. 页面按 0..1 比例乘 100 后显示百分数；成本字段显示元；缺失的可选字段显示“未提供”，不转为 0。
+4. 浏览器测试使用 0.56/0.2/0.1 样例，断言分别显示 56%/20%，并检查质量降级和数据日期元信息。该测试只验证页面渲染，不验证 Eastmoney 算法或跨 Provider 数值等价。
+5. 页面有 `data.has_data === false` 分支，但 `ChipDistribution` Go DTO 和 OpenAPI 均没有 `has_data` 字段，HTTP Handler 也直接返回该 DTO；因此真实服务响应不会通过该字段触发此分支。页面的“无可展示指标”分支仍可处理扩展字段缺失，但平均成本在 DTO 中是必需正数。
+
+#### 28.6 DTO / OpenAPI / 测试
+
+1. Go `ChipDistribution` 字段集合已登记在 51 模型反射契约测试中；OpenAPI properties 字段集合与 Go JSON 字段一致，required 集合为 symbol、average_cost、source、fetched_at、quality_status，与 Go 非 omitempty 字段一致。
+2. Go 中 `date`、四个成本区间指针、`profit_ratio`、两个 concentration 指针、`provider_date` 均使用 `omitempty`，nil 时 JSON 省略；OpenAPI 对应九个字段却声明 `nullable: true`。这属于 AUD-WEBUI-CTR-010 同类差异。
+3. `source_version` 是 omitempty 字段，但 OpenAPI 没有声明 nullable；`quality_reasons` 是 omitempty 切片，OpenAPI 也没有声明 nullable。
+4. 当前 51 模型反射测试检查字段集合、required 集合和非 omitempty pointer 必须 nullable，但没有反向检查 omitempty 字段不应声明 nullable；ChipDistribution 没有完整 JSON Golden 验证可选字段 nil 时的省略行为。
+5. Provider 测试覆盖 MiaoXiang 百分比解析、缺失指标诊断和日期；Service 测试覆盖 Provider 回退、unknown 候选选择、来源版本缺失、重复 Provider 名称、旧 unknown 缓存及未来 fetched_at。没有 Eastmoney 筹码算法、除权窗口或两 Provider 统一口径 Golden。
+
+#### 28.7 差异登记
+
+**AUD-WEBUI-CTR-016：筹码指标跨 Provider 语义与日期字段定义不充分（P2）**
+
+- 证据：Eastmoney 的 average_cost 来自筹码密度累计分布 50% 分位点；MiaoXiang 的 average_cost 直接解析源端“平均成本”列。Eastmoney 的集中度由成本区间公式计算，MiaoXiang 则直接解析源端集中度。两个 Provider 被映射到相同字段，但没有参考样例证明这些定义可直接比较。另，两个 Provider 均将归一化日期同时写入 date/provider_date，而 OpenAPI 将 provider_date 描述为原始报告日期。
+- 影响：回退切换 Provider 时，字段名称相同不代表数值定义和来源语义已证明等价；客户端也可能误把 provider_date 当作未经标准化的源端原始日期。
+- 责任方：Market Data Provider 与 HTTP API 契约维护方。
+- 关闭条件：为每个指标记录统一公式/源字段、单位、归一化规则和适用 Provider；用同标的同日期样本比较并明确容差或不可比状态；修正 provider_date 定义（或保留原始日期另设字段），补充 OpenAPI 描述和契约测试。
+
+**AUD-WEBUI-CTR-017：Eastmoney 筹码计算未统一复权价格基准（P2）**
+
+- 证据：Eastmoney 请求参数使用 `fqt=0`，计算直接使用最多 120 根未复权 OHLC；该路径未应用复权因子或公司行为重基准。现有 Eastmoney 测试文件没有筹码算法专用测试或参考 Golden。
+- 影响：若计算窗口内发生除权除息/送转等价格基准变化，历史筹码价格可能与最新价格不在同一基准，平均成本、成本区间和获利比例可能失真。当前 quality_reasons 没有提示该风险。
+- 责任方：Market Data Eastmoney Provider 维护方。
+- 关闭条件：确定筹码算法的复权口径；使用公司行为与复权因子将历史价格统一到同一基准，或采用经过验证的等效重基准算法；增加除权前后样本、无除权样本及 Python/AkShare 参考 Golden；若暂不能修复，必须明确限制适用窗口并将风险反映在质量原因中。
+
+#### 28.8 差异更新与本批结论
+
+- AUD-WEBUI-CTR-010 影响范围增加 ChipDistribution 的九个 omitempty 字段：date、四个成本区间边界、profit_ratio、concentration_90、concentration_70、provider_date。
+- 新增 AUD-WEBUI-CTR-016（P2）：两个 Provider 的 average_cost/集中度口径尚无等价性证据，provider_date 的 OpenAPI “原始日期”描述也不准确。
+- 新增 AUD-WEBUI-CTR-017（P2）：Eastmoney 使用未复权日 K 计算筹码分布，除权窗口存在价格基准混用风险，且缺少算法专用测试。
+- 已有统一 ChipDistributionProvider Port，不需要重复建设协议层；Service 已实现 Provider 去重、回退、质量降级和缓存。
+- WebUI 已接通并正确按 0..1 显示比例，缺失可选指标显示“未提供”；页面 has_data 分支不属于当前 DTO 契约。
+- 未发现已证实的线上数值错误，但跨 Provider 可比性与 Eastmoney 除权窗口准确性未得到充分证明。WebUI 维度 2 继续 partial。
