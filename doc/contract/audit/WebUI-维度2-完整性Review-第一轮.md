@@ -385,3 +385,54 @@ Go model.StockBasic 有 14 个 omitempty 字段，而 OpenAPI StockBasic 将它�
 - 合计确认 19 个字段，全部归入既有 CTR-010，不新增差异编号。
 
 截至子批次 8，CTR-010 专门分批清单累计核对 52 个字段（此前 33 个 + 本批 19 个）。该数字不含此前在其他数据集审计章节中零散登记的 CTR-010 字段；最终总数需在字段总表中去重汇总。本批仅覆盖上述五组 DTO，不代表 CTR-010 全量字段清单完成。
+
+## 16. CTR-010 字段清单复核（子批次 9：Quote / DailyBar / Bundle / StockBoard / SectorRanking）
+
+固定代码基线：origin/integration @ b6dfc85ba214fe16268c8cba780641a8bfe15086。本批核对核心行情、日线、数据包、个股板块和行业/概念排行 DTO，并对照 OpenAPI Schema 与现有模型测试。
+
+### 16.1 Quote
+
+- Quote.volume_ratio、turnover_rate、raw_volume、raw_amount 共 4 个字段使用 omitempty，OpenAPI 声明 nullable=true，确认 4 个 CTR-010 字段。
+- current_price、change、change_percent、open、high、low、prev_close、volume、amount、quote_time 均为非 omitempty 指针，Schema required + nullable，Go nil 时输出 null，语义一致。
+- name、quote_time_semantics、source_version、raw_volume_unit、raw_amount_unit、raw_amount_field、quality_reasons、fallback_from、fallback_reason、request_id 等 omitempty 字段未声明 nullable，不计入 CTR-010。
+
+### 16.2 DailyBar
+
+- adjustment_factor_system_observed_at、provider_timestamp、system_observed_at、raw_volume、raw_amount 共 5 个字段使用 omitempty，OpenAPI 声明 nullable=true，确认 5 个 CTR-010 字段。
+- ma5、ma20、ma120、ma250、volume、amount、change_percent 均为非 omitempty 指针，Schema required + nullable，语义一致。
+- is_partial、adjustment_method、adjustment_reference_date、adjustment_factor_source、adjustment_factor_source_version、source_version、raw_volume_unit、raw_amount_unit、raw_amount_field、quality_reasons、fallback_from、fallback_reason、request_id 等 omitempty 字段未声明 nullable，不计入。
+
+### 16.3 Bundle
+
+- Bundle.quote 为 *Quote + omitempty，OpenAPI 使用非 nullable 的可选 $ref；nil 时字段省略，与 Go 行为一致。
+- name、warnings 为 omitempty 且 Schema 非 nullable；无 CTR-010 差异。
+
+### 16.4 StockBoard
+
+- StockBoard.change_percent 为 *float64 + omitempty，OpenAPI nullable=true，确认 1 个 CTR-010 字段。
+- source_version、quality_reasons 为 omitempty，但 Schema 未声明 nullable；StockBoardSnapshot 的 source_version、quality_reasons 同样未声明 nullable。
+
+### 16.5 SectorRanking
+
+- SectorRanking.latest_price、change、change_percent、change_percent_5d、amount、advancing_count、declining_count、leader_change_percent 共 8 个 omitempty 指针字段，OpenAPI 均声明 nullable=true，确认 8 个 CTR-010 字段。
+- leading_stock、provider_report_date、source_version、quality_reasons 为 omitempty，但 Schema 未声明 nullable，不计入。
+- SectorRankingSnapshot 的 sort_by、provider_returned、excluded_rows、excluded_non_a_share_count、total_is_lower_bound、provider_report_date、source_version、quality_reasons 为 omitempty，Schema 均未声明 nullable；无 CTR-010 差异。
+
+### 16.6 测试与回归证据
+
+- TestAllGoModelFieldsAndRequiredMatchOpenAPISchemas 已将 Quote、DailyBar、Bundle、StockBoard、StockBoardSnapshot、SectorRanking、SectorRankingSnapshot 纳入 51 个模型的字段集合/required 反射核对。
+- 反射测试仍只检查非 omitempty 指针必须 nullable，没有检查 omitempty 字段不得 nullable，不能发现本批 18 个差异。
+- TestDataModelJSONSerializationMatchesOpenAPIRequiredAndNullableSemantics 已覆盖 Quote 的核心非 omitempty 指针 null 行为、DailyBar 的核心指针 null 行为及 Bundle.quote nil 时省略；但未覆盖本批 omitempty + nullable 的 18 个字段在 nil/空值时应省略的情况。
+- StockBoard、SectorRanking 及其 Snapshot 未加入该 JSON 序列化测试。
+- 本批未执行固定基线 CI；结论来自 Go DTO、OpenAPI Schema 与测试源码静态对照。
+
+### 16.7 CTR-010 本批确认数量
+
+- Quote：4 个字段。
+- DailyBar：5 个字段。
+- Bundle：0 个字段。
+- StockBoard：1 个字段。
+- SectorRanking：8 个字段。
+- 合计确认 18 个字段，全部归入既有 CTR-010，不新增差异编号。
+
+截至子批次 9，CTR-010 专门分批清单累计核对 70 个字段（此前 52 个 + 本批 18 个）。该数字不含此前其他数据集章节零散登记的 CTR-010 字段；最终总数仍需统一去重汇总。
