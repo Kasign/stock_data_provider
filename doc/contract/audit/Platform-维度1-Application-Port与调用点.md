@@ -1460,3 +1460,71 @@ StockBoards 的 Provider Port、Go DTO、Service 校验/回退/缓存、HTTP 路
 - 新增 AUD-WEBUI-CTR-014（P2）：公告分页未固定首屏解析后的日期范围和记录集合。
 - 公告日期、源端发布时间、采集时间语义清晰；空结果保持 unknown；Provider 与 Service 均校验分页计数和条目身份。未发现已证实的公告日期或文章身份运行时错配。
 - WebUI 已接通公告 API 并处理质量/空状态/过期响应，但跨页查询范围和集合一致性尚未保证。WebUI 维度 2 继续 partial。
+
+
+### 27. WebUI 维度 2：Market Valuations 估值字段、时间与消费语义
+
+#### 27.1 核验范围与证据
+
+- 固定代码基线：`b6dfc85ba214fe16268c8cba780641a8bfe15086`。
+- Go DTO：`internal/marketdata/model/model.go`（blob `6f04516bd11452a01adcb5acceab571fb1c28ed5`）。
+- Provider 实现：`internal/marketdata/provider/hithink.go`（blob 以固定基线 tree 为准）；Provider 测试 `internal/marketdata/provider/hithink_valuation_test.go`（blob `7ef7eecbb81d54f04872ac6d430823772ce4f743`）。
+- Service 校验、回退与缓存：`internal/marketdata/service/valuations.go`（blob `71ed95ace75728c81201647dcd8f1920ee6d13c1`）；回退/质量测试 `internal/marketdata/service/valuations_fallback_test.go`（blob `1fab561d9f8a4ac1a108540c1cfd7e58c183dbfc`）。
+- 字段诊断：`internal/marketdata/validation/valuations.go`（blob `a52a2e227c3d5e64a14067ca96cfc519b1572533`）。
+- HTTP Handler：`internal/marketdata/httpapi/valuations.go`（blob `efaa34be04b06b925ffdd6e4fd037eaf5ec22092`）；路由在 `internal/marketdata/httpapi/server.go` 注册。
+- OpenAPI：`internal/marketdata/httpapi/openapi.yaml`（blob `cd8a6e3dfb8e3162ee789b11e883be9283c59f32`）；模型字段/required 反射测试 `internal/marketdata/httpapi/openapi_contract_test.go`（blob `7f97f075a23bd698a7e3fc32e90509d1e999217b`）。
+- WebUI API Client：`web/src/api.js`（blob `b8bcbee5908b43bfa1bc2ca744363190af38287f`）；页面消费 `web/src/stock-research.js`（blob `49fe406d7dcf5e8fdec76f2f0bfcda6a18d4db85`）；浏览器测试 `web/tests/stock-research-data-browser.mjs`（blob `61b6e35376e6b7393f7c0a922506b795dbeedbe1`）。
+
+#### 27.2 指标口径、数值与缺失语义
+
+1. 当前固定基线下估值 Provider 实现为同花顺 `FetchValuations`，请求接口 `/api/a-share/valuations/snapshot`，批量上限 100 个规范 A 股代码。
+2. 当前五项核心指标映射为 `pe_ttm`、`pe_mrq`、`pb_mrq`、`ps_ttm`、`pcf_ttm`；`pe_static` 是 Provider-native 静态 PE（OpenAPI 说明其不等同于 PE MRQ），当前同花顺实现未填充该字段。扩展字段包括换手率/流通换手率（百分数值）、量比（非百分比比率）、股息率与 TTM 股息率（百分数值）。
+3. Go DTO 的六个核心倍数字段是非 omitempty 指针，JSON 字段始终存在，值可为 null；可选扩展指标使用 omitempty，nil 时 JSON 省略。
+4. PE/PB/PS/PCF 倍数允许负值，负 PE 可能反映亏损口径，不能按比例字段规则拒绝；换手率、量比、股息率等比例/比率字段在 Service 中要求非负。Provider 测试明确保留 PE=-12.5 和数值 0，区分 JSON null 与不可解析的字符串 `N/A`。
+5. 对核心五项指标，Provider 将缺失值与无效数字分别写入字段诊断，质量原因区分 `valuation_metric_missing:<field>` 和 `valuation_metric_invalid:<field>`，并将条目与快照质量降级；不会把 null、空值或非法字符串转换为 0。
+6. 请求证券没有出现在 Provider 响应时，写入 `missing_symbols` 并产生缺失证券诊断；返回行与 missing_symbols 必须互斥且完整覆盖请求集合。空响应返回 unknown，不把“没有返回记录”解释为估值为零。
+7. Service 检查证券规范性、请求顺序、返回/缺失覆盖、重复证券、代码与 symbol 一致、来源/版本一致、时间戳有效、数值有限，以及比例字段非负；负估值倍数不会触发负比例校验。
+8. 回退时跳过 unknown 快照，继续尝试后续 Provider；全部 Provider 耗尽时保留覆盖证券更多、可用指标更多的 unknown 快照，并附加回退耗尽原因。缓存 TTL 按 valid 5 分钟、degraded 1 分钟、unknown 10 秒区分；多 Provider 场景下非回退耗尽的 unknown 不直接缓存复用。
+
+#### 27.3 Provider 时间与质量边界
+
+1. `fetched_at` 是服务采集时间；`provider_timestamp` 来自同花顺响应顶层 `timestamp`（epoch 毫秒），不是服务采集时间；`provider_report_date` 是独立报告/数据日期。
+2. 当前同花顺估值响应未提供独立报告日期字段。Provider 明确不使用顶层 timestamp 伪造 `provider_report_date`，即使 timestamp 有效，快照仍因缺少报告日期证据而为 degraded。
+3. Provider timestamp 缺失、非整数、超前超过允许偏差或过旧时会置空并记录字段诊断；不会丢弃其余有效估值行。Service 再检查 provider_timestamp 不能为零或超过未来偏差、provider_report_date 必须为合法且非未来日期。
+4. 模型注释与 OpenAPI 均明确 provider_timestamp 是估值指标集合的最新有效供应商时间，不代表每个指标都在该时刻更新。页面将其显示为“供应商时间”，同时通过通用研究元信息显示采集时间；不得把它解释成每个倍数各自的更新时间。
+5. 当前 DTO 没有逐指标更新时间或逐指标报告期。若后续需要比较不同指标的实际新鲜度，现有单个 provider_timestamp 不足以支持该判断，需扩展有来源证据的字段，而不能由客户端推算。
+
+#### 27.4 WebUI 实际消费
+
+1. HTTP 路由注册 `GET /api/v1/market/valuations`；Handler 对原始逗号 token 数先执行 100 项上限，再校验空 token、规范化代码、限定 SH/SZ/BJ 六位 A 股代码并去重，最后调用 Fundamentals Application 的 Valuations。
+2. API Client `getMarketValuations` 发送逗号分隔 symbols，限制 1..100 个非空项；个股研究页面通过 `runSupplementRequest` 请求当前标的估值。
+3. 页面按规范化证券代码匹配返回项；若没有匹配项，会区分返回项证券不匹配、明确列入 missing_symbols、以及成功但无可展示项目，不会把缺失记录渲染为 0。
+4. 页面实际展示 PE TTM、PE MRQ、PB MRQ、PS TTM、PCF TTM 五项，null/undefined/空字符串显示“未提供”，数值包括负数按“倍”显示；条目质量优先于快照质量，条目质量原因优先于快照原因。
+5. 元信息展示来源、供应商时间和采集时间，并显示 missing_symbols；页面没有将 provider_timestamp 描述成每个指标独立更新时间。
+6. 页面当前不展示 PE Static、换手率、量比和股息率等扩展字段。当前同花顺 Provider 对 PE Static 和扩展指标也未映射/填充，因此这不是当前 Provider 已返回数据被页面丢弃的证据；若新增 Provider 开始提供这些字段，应重新核验产品是否需要展示。
+7. 浏览器测试覆盖负 PE（-1.2）、null 显示“未提供”、质量降级状态、供应商时间元信息；当前没有独立断言 provider_timestamp 与 fetched_at 同时展示且文案不混淆的测试。
+
+#### 27.5 DTO / OpenAPI / 测试
+
+1. `ValuationItem` Go JSON 字段集合与 OpenAPI properties 一致；Go 非 omitempty 字段及 OpenAPI required 集合一致。核心倍数字段为非 omitempty 指针，OpenAPI 声明 nullable=true，语义匹配。
+2. `ValuationSnapshot` Go 字段集合与 OpenAPI properties 一致；requested_symbols、total、items、source、fetched_at、quality_status required 集合一致；missing_symbols、provider_report_date、provider_timestamp、source_version、quality_reasons 为可选字段。
+3. `ValuationItem` 的 `turnover_rate_percent`、`float_turnover_rate_percent`、`volume_ratio`、`dividend_yield_percent`、`dividend_yield_ttm_percent` 均为 Go `omitempty` 指针，但 OpenAPI 声明 `nullable: true`。Go nil 时省略，Schema 却允许显式 null，属于 AUD-WEBUI-CTR-010 同类差异。
+4. 当前 51 模型反射测试覆盖 ValuationItem 与 ValuationSnapshot 的字段集合、required 集合及非 omitempty pointer 必须 nullable；没有反向检查 omitempty 字段不应被声明 nullable。Provider 测试覆盖负数、0、null、非法数值、时间戳缺失/超前、报告日期缺失、证券缺失与字段诊断；Service 测试覆盖回退、unknown、source_version 不一致、可空扩展指标和缺少报告日期时 degraded。
+5. 反射测试未发现 ValuationItem/ValuationSnapshot 字段或 required 漏项；尚无完整 ValuationItem JSON Golden 覆盖扩展字段 omitempty 的省略行为。
+
+#### 27.6 差异登记
+
+**AUD-WEBUI-CTR-015：估值可选扩展字段 OpenAPI 过度声明 nullable（P2）**
+
+- 证据：ValuationItem 的五个扩展指标字段为 Go `*float64 + omitempty`，nil 时省略；OpenAPI 对应 properties 却声明 `type: number, nullable: true`。
+- 影响：客户端 Schema 允许服务端实际不会输出的显式 null，混淆字段缺失与显式 null；与 AUD-WEBUI-CTR-010 的根因相同，但登记独立 DTO 范围便于责任方逐项关闭。
+- 责任方：Market Data HTTP API 契约维护方。
+- 关闭条件：明确 Go JSON 是否允许显式 null；若保持 omitempty，则 OpenAPI 移除 nullable；补充反向 Schema 检查及 JSON Golden，验证 nil 扩展指标确实省略。
+
+#### 27.7 本批结论
+
+- 估值倍数允许负数；数值零、null、无效数值和未返回证券有不同处理，不存在将缺失值补零的证据。
+- provider_timestamp、provider_report_date、fetched_at 的职责区分明确；当前同花顺缺少独立报告日期，因此快照不会被标记为 valid。
+- WebUI 已接通估值接口，展示五项核心倍数、缺失状态、质量原因和供应商/采集时间；未发现页面将供应商时间解释成逐指标更新时间。
+- 新增 AUD-WEBUI-CTR-015（P2），为 CTR-010 的同类 Schema 精度问题；未发现已证实的估值运行时数值错误。
+- WebUI 维度 2 继续 partial。
