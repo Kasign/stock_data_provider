@@ -327,7 +327,7 @@ Provider 适配器已落地 `provider.NewPlatformHTTPDoer`；Source 适配器已
 - 不改变现有供应商查询参数和业务授权行为。
 
 **P3：单供应商试点**
-- 选择一个响应结构/时间字段有代表性的 Provider，建议先选 Bocha 或 Brave。
+- 已选择 Bocha 作为代表 Provider；通过真实 Application SearchCandidates 调用路径验证 Adapter → Candidate → ProviderOutcome → SearchResult 的完整契约。
 - 通过新契约测试覆盖请求、响应解析、缺字段、空结果、错误、来源身份和时间语义。
 - 与迁移前固定样本结果逐项比较。
 

@@ -289,3 +289,33 @@ func TestSearchProvidersSatisfyCommonCandidateContract(t *testing.T) {
 		})
 	}
 }
+
+func TestBochaSearchThroughApplicationContract(t *testing.T) {
+	client := roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		return response(`{"code":200,"data":{"webPages":{"value":[{"id":"bocha-1","name":"标题","url":"https://publisher.example/a","siteName":"媒体","summary":"摘要"}]}}}`), nil
+	})
+	provider, err := NewBocha("https://api.example.test/search", "secret", client)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result := app.NewSearchCandidates(app.StaticProviderSet{Providers: []app.Provider{provider}}).
+		Execute(context.Background(), domain.SearchRequest{
+			Query: "市场消息", QueryDimension: " market ", Limit: 10,
+		})
+	if result.Status != domain.SearchSuccess {
+		t.Fatalf("search status=%s failure=%s", result.Status, result.FailureCode)
+	}
+	if len(result.Outcomes) != 1 || result.Outcomes[0].ProviderCode != BochaCode ||
+		result.Outcomes[0].Status != domain.ProviderSuccess || result.Outcomes[0].CandidateCount != 1 ||
+		result.Outcomes[0].QueryDimension != "market" {
+		t.Fatalf("provider outcome=%+v", result.Outcomes)
+	}
+	if len(result.Candidates) != 1 {
+		t.Fatalf("candidate count=%d", len(result.Candidates))
+	}
+	candidate := result.Candidates[0]
+	if candidate.ProviderCode != BochaCode || candidate.QueryDimension != "market" ||
+		candidate.Title != "标题" || candidate.ObservedAt.IsZero() {
+		t.Fatalf("normalized candidate=%+v", candidate)
+	}
+}
