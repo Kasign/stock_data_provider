@@ -1,10 +1,10 @@
 # PLAT-002 项目级契约冻结登记簿
 
 - 仓库：`Kasign/stock_data_provider`
-- 核验分支：`origin/feat/design_doc`
-- 核验基线 HEAD：`b6dfc85ba214fe16268c8cba780641a8bfe15086`
-- 对照分支：`origin/integration`
-- 对照结果：`identical`（ahead=0、behind=0）
+- 代码审计基线：`origin/integration` @ `b6dfc85ba214fe16268c8cba780641a8bfe15086`
+- 审计文档维护分支：`origin/feat/design_doc` @ `671b76db8879766f3b43990406eb0a1216a53424`
+- 文档分支相对代码基线：ahead=7、behind=0；compare 变更仅涉及文档文件
+- 本轮审计只对固定代码 SHA `b6dfc85ba214fe16268c8cba780641a8bfe15086` 作结论；不随分支 HEAD 自动漂移
 - 登记簿版本：`0.2.5-review`
 - 当前状态：`review_in_progress`
 - 冻结结论：尚未整体冻结；当前无足够证据宣布 PLAT-002 全部通过
@@ -17,12 +17,13 @@
 
 ### 1.1 集成基线
 
-GitHub 远端 ref 核验：
-- `feat/design_doc`：`b6dfc85ba214fe16268c8cba780641a8bfe15086`
-- `integration`：`b6dfc85ba214fe16268c8cba780641a8bfe15086`
-- GitHub compare：`identical`，0 个 ahead / 0 个 behind。
+GitHub 远端 ref 核验（2026-11-10）：
+- `origin/integration`：`b6dfc85ba214fe16268c8cba780641a8bfe15086`，作为本轮唯一代码审计基线。
+- `origin/feat/design_doc`：`671b76db8879766f3b43990406eb0a1216a53424`，作为本轮审计文档维护分支。
+- GitHub compare（base=integration, head=feat/design_doc）：ahead=7、behind=0。
+- compare 返回的 14 个变更文件均位于 `doc/`；未发现业务代码变更。
 
-因此，当前 `feat/design_doc` 的代码树与 `integration` 完全一致，可以确认本轮核验基线包含当前 integration 聚合结果。此结论只针对该精确 SHA，不代表所有模块开发分支最新 HEAD 均已合入。
+因此，本轮以 `b6dfc85ba214fe16268c8cba780641a8bfe15086` 的 integration 代码树作为固定审计对象，在 `feat/design_doc` 上维护审计文档。四个正在修改的模块不自动纳入本轮基线；其后续变更单独登记，只有确认触及契约边界时才扩展审计。此结论不代表所有模块开发分支最新 HEAD 均已合入。
 
 ### 1.2 已确认的代码结构事实
 

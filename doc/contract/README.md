@@ -1,8 +1,8 @@
 # 项目级契约治理入口
 
 - 仓库：`Kasign/stock_data_provider`
-- 当前审查分支：`feat/design_doc`
-- 当前审查基线：`b6dfc85ba214fe16268c8cba780641a8bfe15086`
+- 代码审计基线：`origin/integration` @ `b6dfc85ba214fe16268c8cba780641a8bfe15086`
+- 审计文档维护分支：`origin/feat/design_doc` @ `671b76db8879766f3b43990406eb0a1216a53424`
 - 当前阶段：PLAT-002 项目级契约核验中；尚未整体冻结
 
 ## 1. 权威性
@@ -51,6 +51,6 @@
 
 ## 5. 本轮范围
 
-以 `origin/feat/design_doc` 当前实际代码为唯一核验对象；当前已确认该分支与 `origin/integration` 指向同一 SHA。核验期间不修改业务代码、不修改其他分支、不将 integration 合并回任何分支。
+以固定的 `origin/integration` SHA `b6dfc85ba214fe16268c8cba780641a8bfe15086` 作为本轮代码核验对象；审计文档仅维护在 `feat/design_doc`。当前文档分支比 integration ahead 7 commits，compare 变更仅涉及文档文件。核验期间不修改业务代码、不修改其他分支、不合并其他分支，也不将 integration 合并回任何分支。
 
 本目录中的初始判断只表示已读取的证据，不表示十个模块已完成逐项核验，也不构成 PLAT-002 整体冻结。
