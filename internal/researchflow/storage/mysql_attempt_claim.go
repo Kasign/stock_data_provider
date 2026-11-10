@@ -12,11 +12,11 @@ import (
 )
 
 var (
-	ErrClaimRunUnavailable   = errors.New("Researchflow run is not claimable")
-	ErrClaimStageUnavailable = errors.New("Researchflow stage is not claimable")
-	ErrAttemptLeaseHeld      = errors.New("Researchflow attempt lease is held by another worker")
-	ErrAttemptLimitReached   = errors.New("Researchflow stage attempt limit reached")
-	ErrRunConcurrencyLimit   = errors.New("Researchflow run parallel stage limit reached")
+	ErrClaimRunUnavailable        = errors.New("Researchflow run is not claimable")
+	ErrClaimStageUnavailable      = errors.New("Researchflow stage is not claimable")
+	ErrAttemptLeaseHeld           = errors.New("Researchflow attempt lease is held by another worker")
+	ErrAttemptLimitReached        = errors.New("Researchflow stage attempt limit reached")
+	ErrRunConcurrencyLimit        = errors.New("Researchflow run parallel stage limit reached")
 	ErrAttemptHistoryInconsistent = errors.New("Researchflow attempt history is inconsistent")
 )
 
