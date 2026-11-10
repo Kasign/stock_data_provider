@@ -1195,3 +1195,71 @@ WebUI 当前创建请求的最小字段与调用路径明确；事件分页消�
 ### 22.6 本批结论
 
 Bundle 聚合 DTO 与 Go/OpenAPI 字段语义整体一致；WebUI 对顶层/嵌套证券身份、Quote 缺失、质量降级、快照来源及旧服务 404 兼容回退均有明确处理。新增 AUD-WEBUI-CTR-009（P2），仅针对 lookback_days 省略默认值文档不完整。WebUI 维度 2 继续保持 partial。
+
+
+## 23. 第十八批：WebUI 维度 2（证券资料、历史交易状态与涨跌幅规则 DTO）
+
+### 23.1 固定基线与证据
+
+代码基线：`b6dfc85ba214fe16268c8cba780641a8bfe15086`
+
+- `internal/marketdata/model/model.go`（blob `6f04516bd11452a01adcb5acceab571fb1c28ed5`）
+- `internal/marketdata/model/security_trading_status.go`（blob `41b8c25b5a6a228dbd05550b4a25beecc060c009`）
+- `internal/marketdata/model/trading_rules.go`（blob `eca0041346bb74eb7d2913868f30e459c0ef7adb`）
+- `internal/marketdata/httpapi/security_trading_status.go`（blob `841cb0d4ca4133facb034a75aea0f5ba7813a678`）
+- `internal/marketdata/httpapi/price_limit_rule.go`（blob `31414d48b4ef6c60a7058162964aa5454f439b9a`）
+- `internal/marketdata/httpapi/server.go`（blob `7b54b54b3c6182ecab830c2c43f91c548dc60dba`）
+- `internal/marketdata/httpapi/openapi.yaml`（blob `cd8a6e3dfb8e3162ee789b11e883be9283c59f32`）
+- `internal/marketdata/httpapi/openapi_contract_test.go`（blob `7f97f075a23bd698a7e3fc32e90509d1e999217b`）
+- `internal/marketdata/httpapi/security_trading_status_test.go`（blob `88d31cef968e114a52c8e463d0fa18db7b17297f`）
+- `internal/marketdata/httpapi/price_limit_rule_test.go`（blob `fbaa4062b407afe9e2079594833b6ca09b007759`）
+- `web/src/api.js`（blob `b8bcbee5908b43bfa1bc2ca744363190af38287f`）
+- `web/src/stock-research.js`（blob `49fe406d7dcf5e8fdec76f2f0bfcda6a18d4db85`）
+
+### 23.2 路由与调用边界
+
+1. Server 注册 `GET /api/v1/stocks/{symbol}/profile`、`/trading-status`、`/price-limit-rule`。
+2. Profile Handler 直接返回 `StockBasic`；Trading Status Handler 直接返回 `SecurityTradingStatusSnapshot`；Price Limit Handler 直接返回 `PriceLimitRuleSnapshot`。三者均未发现独立 HTTP DTO 转换层。
+3. WebUI API Client 导出 `getStockProfile`、`getStockTradingStatus`、`getStockPriceLimitRule`。已检查的 `stock-research.js` 实际使用 Profile API；状态/规则 UI 面板在标的切换时会清空，但本批未证明两个状态/规则请求函数已接入 UI 事件链，调用方接线列为待核，不据此声称已完成端到端联调。
+4. Profile API 的 WebUI 消费逻辑读取证券代码、名称、证券类型/标签、上市状态/标签、上市/退市日期、标准化版本、质量状态与原因、来源元数据。响应证券代码会与请求标的进行一致性校验。
+5. Trading Status Handler 要求唯一、非空 YYYY-MM-DD date，拒绝未来日期；可选 as_of 必须为单值、有效且非未来 RFC3339Nano。提供 as_of 时只读取本地 PIT 版本，不回退实时 Provider；缺少存储或版本分别返回 503/404。
+6. Price Limit Handler 同样要求唯一、非空且非未来日期；它先取历史交易状态，再取特殊无涨跌幅事件证据。任一证据不可用时仍返回 200，但将 status/quality 降为 unknown 并清除 limit_percent；不会把证据缺失当作正常限幅或 no_limit。
+
+### 23.3 StockBasic 与 SecurityTradingStatusSnapshot
+
+1. StockBasic 的 Go required 字段与 OpenAPI required 集合一致；`ipo_date`、`out_date`、`source_version`、`quality_reasons` 以及估值、市值、股本、行业、板块和盈利类可选字段均使用 `omitempty`。
+2. OpenAPI StockBasic 将多项可选字符串和数值属性声明为 `nullable: true`。Go 对应字段为 string 或 pointer，且均带 `omitempty`；nil/空字符串实际序列化为字段缺失，不会输出显式 JSON null。
+3. SecurityTradingStatusSnapshot 的 required 集合与 Go 非 omitempty 字段一致。唯一明确声明 nullable 的 `system_observed_at` 是 `*time.Time + omitempty`，nil 时序列化为字段缺失而非 null。
+4. SecurityTradingStatusSnapshot 的风险警示、退市和停复牌状态均有独立 unknown 值；unknown 不等于 normal。OpenAPI 已声明对应枚举，保留了这一安全语义。
+5. 当前 51 模型反射测试检查字段集合、required，以及非 omitempty pointer 必须 nullable；但没有反向检查 omitempty 字段不应被声明 nullable。其 JSON 序列化样例未覆盖 StockBasic 和 SecurityTradingStatusSnapshot。因此这些 nullable 过宽问题没有被现有测试捕获。
+
+### 23.4 PriceLimitRuleSnapshot 与 PriceLimitEventEvidence
+
+1. Go `PriceLimitRuleSnapshot` 非 omitempty 字段包括 symbol、market、board、trade_date、risk_warning_status、listing_status_known、special_exception_status、status、rule_version、rule_source、rule_source_url、quality_status、quality_reasons；这些字段均会出现在实际 JSON。
+2. OpenAPI Price Limit Rule 的内联响应 Schema required 目前只有 symbol、trade_date、status、quality_status、quality_reasons，漏列 market、board、risk_warning_status、listing_status_known、special_exception_status、rule_version、rule_source、rule_source_url 八个 Go 必输出字段。
+3. Go `RiskWarningStatus` 枚举为 unknown/normal/risk_warning；`PriceLimitException` 枚举为 unknown/none/relisting_first_day/delisting_first_day/exchange_specified。Price Limit Rule 内联 Schema 对 risk_warning_status 和 special_exception_status 只声明 string，未表达枚举；status 已声明 unknown/limited/no_limit。
+4. `special_exception_evidence` 和 `limit_percent` 是 Go omitempty 指针；OpenAPI 将二者声明 nullable=true。nil 时 Go 会省略字段，而非输出 null。
+5. PriceLimitEventEvidence 已进入 51 模型契约登记表，其 required 集合与 Go 非 omitempty 字段一致；status 枚举也已声明。其 omitempty 字段在 OpenAPI 中作为可选字段，没有额外 nullable 声明。
+6. PriceLimitRuleSnapshot 本身没有进入 51 模型契约登记表；其 OpenAPI 响应仍是路径内联对象，现有模型反射和 JSON 序列化测试都没有覆盖该 DTO。当前专用 HTTP 测试主要覆盖 unknown 规则和非法日期，未见完整响应 Golden。
+
+### 23.5 差异登记
+
+**AUD-WEBUI-CTR-010：omitempty 响应字段在 OpenAPI 中被过度声明为 nullable（P2）**
+
+- 影响对象：StockBasic 多项可选字段、SecurityTradingStatusSnapshot.system_observed_at、PriceLimitRuleSnapshot.special_exception_evidence/limit_percent。
+- 证据：上述 Go 字段均使用 omitempty；OpenAPI 对部分字段声明 nullable=true；Go encoding/json 的 nil/空值行为是省略字段。
+- 影响：客户端按 Schema 可能接受服务端永远不会发出的显式 null；缺失与 null 的语义被混淆，特别是生成式客户端和严格响应校验器。
+- 责任方：Market Data HTTP API 契约维护方。
+- 关闭条件：对响应 DTO 明确区分“可省略”和“可为 null”；对 omitempty 字段移除 nullable，只有 Go 实际输出 null 的非 omitempty 指针才保留 nullable；增加反向 Schema 检查，禁止 omitempty 字段无依据地 nullable。
+
+**AUD-WEBUI-CTR-011：PriceLimitRule 响应 Schema required 与枚举约束不完整（P2）**
+
+- 证据：Go PriceLimitRuleSnapshot 有八个非 omitempty 字段未进入 OpenAPI required；risk_warning_status、special_exception_status 也未声明 Go 已有枚举。
+- 影响：OpenAPI 客户端无法依赖这些字段必然存在，也无法在生成客户端/校验器中限制未知状态字符串；该接口的契约描述弱于实际 Go 输出与规则状态模型。
+- 测试缺口：PriceLimitRuleSnapshot 不在 51 模型反射登记表，且缺少完整响应 JSON Golden。
+- 责任方：Market Data HTTP API 契约维护方。
+- 关闭条件：将 PriceLimitRuleSnapshot 提升为可复用 Schema 或纳入等效的专用模型契约测试；required 与 Go 非 omitempty 字段一致；补齐 RiskWarningStatus、PriceLimitException 枚举；增加 JSON Golden/字段与 required 一致性测试。
+
+### 23.6 本批结论
+
+Profile、Trading Status、Price Limit Rule 路由与基础 Handler 行为已核对。新增 AUD-WEBUI-CTR-010、AUD-WEBUI-CTR-011，均为 P2 契约精度/测试覆盖问题；本批未证明运行时业务结果错误。Trading Status 与 Price Limit Rule 的 WebUI 请求函数到实际 UI 事件链仍待核。WebUI 维度 2 继续保持 partial。
