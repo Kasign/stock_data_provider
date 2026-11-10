@@ -50,7 +50,7 @@ provider_fallback_used 只记录实际使用了非首选 Provider，不是质量
 - degraded 应使用短于正常 TTL 的质量降级 TTL，避免降级结果长期阻止后续高质量刷新。
 - unknown 使用短 TTL，并且多 Provider 场景必须确认 fallback 已耗尽后才可作为缓存命中。
 - invalid 不缓存。
-- Quote：valid 使用配置 TTL；degraded 使用四分之一 TTL（最短 1 分钟）；stale/unknown/invalid 不命中缓存。
+- Quote：valid 使用配置 TTL；degraded 使用四分之一 TTL；若计算结果不大于零则回退到 1 分钟；stale/unknown/invalid 不命中缓存。
 - DailyBars：valid 使用配置 TTL；degraded 使用四分之一 TTL（最短 1 分钟）；stale/unknown/invalid 缓存条目拒绝命中。历史 MariaDB stale 兜底不写入 Provider 缓存。
 - Fundamentals：valid 12 小时、degraded 1 小时、unknown 5 分钟；多 Provider 下 unknown 仅在记录 fallback 耗尽后命中。
 - Valuations：valid 5 分钟、degraded 1 分钟、unknown 10 秒；多 Provider 下 unknown 仅在记录 fallback 耗尽后命中。

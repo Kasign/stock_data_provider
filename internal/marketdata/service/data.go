@@ -281,7 +281,7 @@ func degradedCacheTTL(ttl time.Duration) time.Duration {
 	return ttl / 4
 }
 
-// configuredDegradedCacheTTL 为配置型缓存保留最短一分钟的降级缓存窗口。
+// configuredDegradedCacheTTL 在四分之一 TTL 不可用时回退到一分钟。
 func configuredDegradedCacheTTL(ttl time.Duration) time.Duration {
 	shortTTL := degradedCacheTTL(ttl)
 	if shortTTL <= 0 {

@@ -190,7 +190,7 @@ func TestMarketBreadthMarksDegradedFallbackWhenPrimaryFails(t *testing.T) {
 func TestIndexQuotesBypassesDegradedCacheAfterShortTTL(t *testing.T) {
 	mem := newMemoryCache()
 	cached := indexQuoteSnapshotForFallback("eastmoney", model.QualityDegraded)
-	cached.FetchedAt = time.Now().Add(-5 * time.Second)
+	cached.FetchedAt = time.Now().Add(-8 * time.Second)
 	payload, err := json.Marshal(cached)
 	if err != nil { t.Fatal(err) }
 	mem.values["md:v1:index-quotes:core"] = payload
