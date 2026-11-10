@@ -352,3 +352,16 @@
 - 新增 **AUD-WEBUI-CTR-024**（P2）：集合竞价是粗粒度阶段，不足以作为订单行为判定；当前无下单功能，先明确契约边界，不提前扩展。
 - OpenAPI required 与 DTO 非 omitempty 字段对齐；API Client 默认路径和鉴权有测试，但显式 at 编码/AbortSignal 透传未单独覆盖。
 - 未发现已证实的阶段边界计算错误。详细证据见审计明细第 31 节；WebUI 维度 2 继续 partial。
+
+
+### WebUI — 维度 2：Market Breadth 市场涨跌家数与市场广度
+
+- 固定代码基线：`b6dfc85ba214fe16268c8cba780641a8bfe15086`；详细证据见审计明细第 32 节。
+- 已核对 MarketBreadthProvider Port、Eastmoney/TickFlow Provider、默认能力配置、DataService 分类/覆盖校验与回退、MarketSentiment 聚合、HTTP Handler、OpenAPI、模型反射契约测试及 WebUI API Client/市场概览页面。
+- 默认启用 Eastmoney 市场广度；TickFlow 实现同一 Port 但默认关闭。Eastmoney 将源端涨跌分布桶计数汇总为上涨/下跌/平盘，未提供逐证券停牌或未返回分类；总数与覆盖数相等只代表分布桶内部总和，不是独立证券主数据覆盖证明。
+- Service 强制四类计数合计等于 covered，并要求业务快照 covered==total；TickFlow 部分覆盖只可进入 Probe 的宽松校验，不能作为业务回退候选。
+- Eastmoney 缺少可验证盘中时间；成交额、涨跌停池分别请求，非原子快照。MarketSentiment 对辅助池报告日期为空时仍可能附加计数，且跨来源只保留来源标记，没有同一时刻/总体证明。
+- 新增 **AUD-WEBUI-CTR-025**（P2）：市场广度总体分母无法证明覆盖停牌及未返回证券，且 Provider 间总体口径未证明等价。
+- 新增 **AUD-WEBUI-CTR-026**（P2）：市场情绪辅助池缺少完整日期证据时仍可能附加计数。
+- AUD-WEBUI-CTR-010 影响范围增加 MarketBreadthSnapshot.oldest_quote_time/newest_quote_time：Go omitempty 指针 nil 时省略，OpenAPI 却声明 nullable=true。
+- WebUI 已消费并展示四类家数和覆盖元数据；API Client 无直接 getMarketBreadth 请求测试，浏览器测试未直接覆盖 renderBreadth。未发现已证实的涨跌分类算术错误；WebUI 维度 2 继续 partial。
