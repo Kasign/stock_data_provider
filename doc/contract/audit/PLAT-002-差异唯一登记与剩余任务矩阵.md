@@ -1168,3 +1168,12 @@ PLAT-002 的项目级决策收敛已完成；**PLAT-002 项目整体不宣告完
 | B8 | DEC-PLAT-002-025 | Run 固定 ResolvedTemplate/模型策略；Attempt 独立 request_id；错误分类控制重试，ambiguous outcome 不盲目重放 | LLM、Researchflow、Server |
 
 本轮只完成项目级决议登记，不修改责任模块代码，不运行 CI，不将任何 CTR 自动标记为 frozen。下一阶段按正式决议派发责任模块工作，并以新代码 SHA 做增量验收；不重新执行已经完成的全量初审。
+
+
+## 37. CTR-006 责任分支增量核验（2026-11-10）
+
+- 核验目标：只确认既有 CTR-006 工单是否已有责任分支修复证据；不重新审计 Task DTO，不改变固定代码基线。
+- Server 责任分支 `feat/research-analysis-flow-native-go` 当前 HEAD 为 `a7efeff9e8802e69cc58a0e7d17f3f37a8eee873`（提交说明为更新 readiness 验收文档）。与固定审计基线 `b6dfc85ba214fe16268c8cba780641a8bfe15086` 比较，Server 分支是该基线的祖先，基线领先 1677 个提交；不能把旧分支 HEAD 当作当前基线后的修复证据。
+- 固定基线中的权威 OpenAPI `doc/api/contracts/分析任务.openapi.yaml`（Blob `aa8f153f25c46649dcdf187d5fef8f376113577b`）仍为 `started_at`、`finished_at` 声明 `nullable: true`，与既有 Go 指针字段 `omitempty` 的“缺失而非显式 null”行为不一致；既有 queued/running/terminal Golden 和 Handler Contract Test 关闭条件尚未得到新提交证据。
+- 固定基线 `b6dfc85...` 的 GitHub Check Runs 为 0，Commit Status 为空；本次没有可引用的 CI 成功证据。未执行测试，也未修改责任模块代码。
+- 结论：CTR-006 仍为 `pending_evidence`（既有工单状态不变）；本轮没有可接受的修复 SHA，不得关闭或冻结。下一步只需等待 Server 责任分支产生针对 CTR-006 的修复提交，再按既定 28.4 验收条件增量核验；不重复字段语义讨论。
