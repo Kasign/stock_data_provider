@@ -85,6 +85,10 @@ func TestAuthorizationSnapshotEnvelopeMatchesEveryIndexedField(t *testing.T) {
 	if !valid() {
 		t.Fatal("valid authorization envelope did not match")
 	}
+	changedContentLevel := domain.AuthorizationContentMetadata
+	if ref.ContentLevel == changedContentLevel {
+		changedContentLevel = domain.AuthorizationContentSummary
+	}
 	tests := []struct {
 		name string
 		mutate func() bool
@@ -94,7 +98,7 @@ func TestAuthorizationSnapshotEnvelopeMatchesEveryIndexedField(t *testing.T) {
 		{name: "resource ref", mutate: func() bool { return matches(binding, ref.AuthorizationRef, ref.SubjectRef, ref.ResourceRef+"-tampered", string(ref.Decision), ref.PurposeCode, string(ref.ContentLevel), decidedAt, expiresAt, ref.DecisionFingerprint) }},
 		{name: "decision", mutate: func() bool { return matches(binding, ref.AuthorizationRef, ref.SubjectRef, ref.ResourceRef, string(domain.AuthorizationDecisionDenied), ref.PurposeCode, string(ref.ContentLevel), decidedAt, expiresAt, ref.DecisionFingerprint) }},
 		{name: "purpose", mutate: func() bool { return matches(binding, ref.AuthorizationRef, ref.SubjectRef, ref.ResourceRef, string(ref.Decision), ref.PurposeCode+"-tampered", string(ref.ContentLevel), decidedAt, expiresAt, ref.DecisionFingerprint) }},
-		{name: "content level", mutate: func() bool { return matches(binding, ref.AuthorizationRef, ref.SubjectRef, ref.ResourceRef, string(ref.Decision), ref.PurposeCode, string(domain.AuthorizationContentMetadata), decidedAt, expiresAt, ref.DecisionFingerprint) }},
+		{name: "content level", mutate: func() bool { return matches(binding, ref.AuthorizationRef, ref.SubjectRef, ref.ResourceRef, string(ref.Decision), ref.PurposeCode, string(changedContentLevel), decidedAt, expiresAt, ref.DecisionFingerprint) }},
 		{name: "decided at", mutate: func() bool { return matches(binding, ref.AuthorizationRef, ref.SubjectRef, ref.ResourceRef, string(ref.Decision), ref.PurposeCode, string(ref.ContentLevel), decidedAt.Add(time.Microsecond), expiresAt, ref.DecisionFingerprint) }},
 		{name: "expires at", mutate: func() bool { changed := expiresAt; if changed.Valid { changed.Time = changed.Time.Add(time.Microsecond) } else { changed = sql.NullTime{Time: decidedAt.Add(time.Hour), Valid: true} }; return matches(binding, ref.AuthorizationRef, ref.SubjectRef, ref.ResourceRef, string(ref.Decision), ref.PurposeCode, string(ref.ContentLevel), decidedAt, changed, ref.DecisionFingerprint) }},
 		{name: "fingerprint", mutate: func() bool { return matches(binding, ref.AuthorizationRef, ref.SubjectRef, ref.ResourceRef, string(ref.Decision), ref.PurposeCode, string(ref.ContentLevel), decidedAt, expiresAt, strings.Repeat("f", 64)) }},
@@ -109,7 +113,7 @@ func TestAuthorizationSnapshotEnvelopeMatchesEveryIndexedField(t *testing.T) {
 	// MariaDB stores DATETIME(6); sub-microsecond differences are intentionally
 	// normalized because they cannot be represented by the persisted envelope.
 	if !matches(binding, ref.AuthorizationRef, ref.SubjectRef, ref.ResourceRef, string(ref.Decision),
-		ref.PurposeCode, string(ref.ContentLevel), decidedAt.Add(500*time.Nanosecond), expiresAt, ref.DecisionFingerprint) {
+		ref.PurposeCode, string(ref.ContentLevel), decidedAt.Truncate(time.Microsecond).Add(100*time.Nanosecond), expiresAt, ref.DecisionFingerprint) {
 		t.Fatal("sub-microsecond timestamp difference should match DATETIME(6) precision")
 	}
 }
