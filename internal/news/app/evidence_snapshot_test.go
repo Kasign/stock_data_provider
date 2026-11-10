@@ -293,13 +293,13 @@ func TestSaveEvidenceSnapshotHonorsContextCancellation(t *testing.T) {
 		}
 	})
 	t.Run("canceled while repository is running", func(t *testing.T) {
-		repository := &evidenceSnapshotRepositoryStub{afterCreate: func() { cancel() }}
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		repository := &evidenceSnapshotRepositoryStub{afterCreate: cancel}
 		service, err := NewSaveEvidenceSnapshot(repository)
 		if err != nil {
 			t.Fatal(err)
 		}
-		ctx, cancel := context.WithCancel(context.Background())
-		defer cancel()
 		if err := service.Execute(ctx, snapshot); !errors.Is(err, context.Canceled) {
 			t.Fatalf("Execute() error=%v, want context.Canceled", err)
 		}
