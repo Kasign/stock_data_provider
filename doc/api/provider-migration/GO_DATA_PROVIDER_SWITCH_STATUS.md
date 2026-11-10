@@ -176,3 +176,13 @@
 - 新增 8 项回归测试覆盖 StockBasic、StockSearch、StockBoards 的来源不匹配回退和来源缺失降级。
 - 本批不涉及 ChipDistribution、CapitalFlow；这两类当前仍存在无条件覆盖 Source 的路径，留待下一批按同一接收边界规则处理。
 - 本批仅完成代码和测试编写，未运行 gofmt/build/test。
+
+### 2026-11-10：筹码分布与个股资金流来源身份接收边界修复
+
+- 范围：ChipDistribution、CapitalFlow 两类独立补充数据入口。
+- 非空 Source 必须与当前 Provider.Name() 一致；来源不匹配时拒绝当前响应并继续后备 Provider。
+- 空 Source 兼容补齐为当前 Provider 名称，同时将质量降级并追加 `provider_source_missing_assumed_from_provider_name`。
+- 保留原有 SourceVersion、Normalization/字段质量校验和 fetched_at 采集时间语义；不改变缓存键、TTL 或 Provider 协议。
+- 新增两组回归测试，分别覆盖两类能力的来源不匹配回退与来源缺失降级。
+- MarketCapitalFlow 已有严格来源匹配校验，本批未重复修改；该入口当前将空来源也作为不匹配拒绝。
+- 本批仅完成代码和测试编写，未运行 gofmt/build/test。

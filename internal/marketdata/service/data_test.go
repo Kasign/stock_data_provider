@@ -2531,13 +2531,19 @@ func TestStockBasicRetainsUnknownAfterFallbackExhaustion(t *testing.T) {
 }
 
 type supplementCountingFakeProvider struct {
+	name      string
 	chip      *model.ChipDistribution
 	flow      *model.CapitalFlow
 	chipCalls int
 	flowCalls int
 }
 
-func (p *supplementCountingFakeProvider) Name() string { return "miaoxiang" }
+func (p *supplementCountingFakeProvider) Name() string {
+	if strings.TrimSpace(p.name) != "" {
+		return p.name
+	}
+	return "miaoxiang"
+}
 
 func (p *supplementCountingFakeProvider) FetchChipDistribution(context.Context, string) (*model.ChipDistribution, error) {
 	p.chipCalls++
@@ -2547,6 +2553,50 @@ func (p *supplementCountingFakeProvider) FetchChipDistribution(context.Context, 
 func (p *supplementCountingFakeProvider) FetchCapitalFlow(context.Context, string) (*model.CapitalFlow, error) {
 	p.flowCalls++
 	return p.flow, nil
+}
+
+func TestSupplementRejectsMismatchedSourceAndFallsBack(t *testing.T) {
+	now := time.Now().UTC()
+	mainInflow := 120.0
+	first := &supplementCountingFakeProvider{name: "eastmoney",
+		chip: &model.ChipDistribution{Symbol: "600519.SH", AverageCost: 12.5, Source: "tencent", SourceVersion: "eastmoney-v1", FetchedAt: now, QualityStatus: model.QualityDegraded},
+		flow: &model.CapitalFlow{Symbol: "600519.SH", ProviderDate: time.Now().In(marketLocation()).Format("2006-01-02"), MainNetInflow: &mainInflow, Observations: 1, Source: "tencent", SourceVersion: "eastmoney-v1", FetchedAt: now, QualityStatus: model.QualityDegraded},
+	}
+	second := &supplementCountingFakeProvider{name: "tushare",
+		chip: &model.ChipDistribution{Symbol: "600519.SH", AverageCost: 12.6, Source: "tushare", SourceVersion: "tushare-v1", FetchedAt: now, QualityStatus: model.QualityDegraded},
+		flow: &model.CapitalFlow{Symbol: "600519.SH", ProviderDate: time.Now().In(marketLocation()).Format("2006-01-02"), MainNetInflow: &mainInflow, Observations: 1, Source: "tushare", SourceVersion: "tushare-v1", FetchedAt: now, QualityStatus: model.QualityDegraded},
+	}
+	svc := NewWithCapabilities([]provider.NamedProvider{first, second}, nil, nil, cache.NewDisabled(), nil, time.Second, time.Minute, 120, 2000, ResilienceConfig{}, nil)
+	svc.SetSupplementProviders([]provider.SupplementProvider{first, second})
+	chip, hit, err := svc.ChipDistribution(context.Background(), "600519.SH")
+	if err != nil || hit || chip == nil || chip.Source != "tushare" {
+		t.Fatalf("chip source mismatch must trigger fallback: got=%+v hit=%v err=%v", chip, hit, err)
+	}
+	flow, hit, err := svc.CapitalFlow(context.Background(), "600519.SH")
+	if err != nil || hit || flow == nil || flow.Source != "tushare" {
+		t.Fatalf("capital-flow source mismatch must trigger fallback: got=%+v hit=%v err=%v", flow, hit, err)
+	}
+}
+
+func TestSupplementMissingSourceIsExplicitlyDegraded(t *testing.T) {
+	now := time.Now().UTC()
+	mainInflow := 120.0
+	p := &supplementCountingFakeProvider{
+		chip: &model.ChipDistribution{Symbol: "600519.SH", AverageCost: 12.5, SourceVersion: "test-v1", FetchedAt: now, QualityStatus: model.QualityDegraded},
+		flow: &model.CapitalFlow{Symbol: "600519.SH", ProviderDate: time.Now().In(marketLocation()).Format("2006-01-02"), MainNetInflow: &mainInflow, Observations: 1, SourceVersion: "test-v1", FetchedAt: now, QualityStatus: model.QualityDegraded},
+	}
+	svc := NewWithCapabilities([]provider.NamedProvider{p}, nil, nil, cache.NewDisabled(), nil, time.Second, time.Minute, 120, 2000, ResilienceConfig{}, nil)
+	svc.SetSupplementProviders([]provider.SupplementProvider{p})
+	chip, hit, err := svc.ChipDistribution(context.Background(), "600519.SH")
+	if err != nil || hit || chip == nil || chip.Source != p.Name() || chip.QualityStatus != model.QualityDegraded ||
+		!hasStockSearchReason(chip.QualityReasons, "provider_source_missing_assumed_from_provider_name") {
+		t.Fatalf("chip missing source must be explicitly degraded: got=%+v hit=%v err=%v", chip, hit, err)
+	}
+	flow, hit, err := svc.CapitalFlow(context.Background(), "600519.SH")
+	if err != nil || hit || flow == nil || flow.Source != p.Name() || flow.QualityStatus != model.QualityDegraded ||
+		!hasStockSearchReason(flow.QualityReasons, "provider_source_missing_assumed_from_provider_name") {
+		t.Fatalf("capital-flow missing source must be explicitly degraded: got=%+v hit=%v err=%v", flow, hit, err)
+	}
 }
 
 func TestSupplementContractsRequireSourceVersion(t *testing.T) {

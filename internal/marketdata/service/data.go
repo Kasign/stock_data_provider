@@ -2405,7 +2405,16 @@ func (s *DataService) ChipDistribution(ctx context.Context, rawSymbol string) (*
 			continue
 		}
 		item.Symbol = symbol
-		item.Source = p.Name()
+		providerSource := strings.TrimSpace(item.Source)
+		if providerSource != "" && providerSource != p.Name() {
+			failures = append(failures, p.Name()+": chip-distribution source does not match Provider.Name()")
+			continue
+		}
+		if providerSource == "" {
+			item.Source = p.Name()
+			item.QualityStatus = model.QualityDegraded
+			item.QualityReasons = appendReason(item.QualityReasons, "provider_source_missing_assumed_from_provider_name")
+		}
 
 		// fetched_at 表示服务收到回包的时刻，不信任上游同名字段。
 		item.FetchedAt = time.Now().UTC()
@@ -2573,7 +2582,16 @@ func (s *DataService) CapitalFlow(ctx context.Context, rawSymbol string) (*model
 			continue
 		}
 		item.Symbol = symbol
-		item.Source = p.Name()
+		providerSource := strings.TrimSpace(item.Source)
+		if providerSource != "" && providerSource != p.Name() {
+			failures = append(failures, p.Name()+": capital-flow source does not match Provider.Name()")
+			continue
+		}
+		if providerSource == "" {
+			item.Source = p.Name()
+			item.QualityStatus = model.QualityDegraded
+			item.QualityReasons = appendReason(item.QualityReasons, "provider_source_missing_assumed_from_provider_name")
+		}
 
 		// fetched_at 表示服务收到回包的时刻，不信任上游同名字段。
 		item.FetchedAt = time.Now().UTC()
