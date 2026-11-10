@@ -157,3 +157,18 @@
 - 新增 AUD-PLAT-PORT-012（P1 候选）：Researchflow Application、Storage 与异步运行组件尚未进入 Server 生产组合根。
 - 新增 AUD-PLAT-PORT-013（P2 候选）：Researchflow originating Request ID 未证明贯穿 Worker 与 Outbox。
 - Researchflow 维度 1 状态 partial；application/storage execution skeleton evidenced / production composition and cross-module execution wiring not evidenced。
+
+
+### Platform — 维度 1：第九批（Server Root Composition 收尾核验）
+
+- 详细记录：[`Platform-维度1-Application-Port与调用点.md`](./Platform-维度1-Application-Port与调用点.md)
+- Server 当前仍是 transitional legacy Analysis runtime：Bootstrap 构造旧 Analysis Runner/TaskQueue，HTTP Router 仅暴露旧 Analysis API 与 Health/Readiness/Diagnostics。
+- Migration Registry 只注册 News、Research、Notification；单测固定断言这三个 namespace。
+- Lifecycle 只注册旧 Analysis Worker 和可选 HTTP Server；通用 Lifecycle 启停/回滚测试通过，但新模块组件尚未注册。
+- Resources 已持有共享 Platform SQL/Redis/HTTP Client，并提供 BindHTTPDestination；Bootstrap 尚未把共享 BoundDoer 注入新模块 Adapter。
+- HTTP Request ID Middleware 默认重生成不可信入站 ID，有对应测试；Diagnostics 仅执行共享 MariaDB/Redis/Schema Checks，Bootstrap 未传入模块 Checks。
+- Service Credential/Scope 仍明确暂缓；当前 Owner-only 旧 Analysis 路由符合现阶段配置注释，不单独记为安全缺陷。
+- Platform TaskQueue 仍直接依赖旧 Analysis Domain，与 AUD-PLAT-PORT-001 相互印证。
+- 新增 AUD-PLAT-PORT-014（P1 候选，项目级集成阻断）：Root Server 尚未完成从旧 Analysis 到模块化 Application Composition 的迁移；该项汇总关联各模块生产接线缺口，不替代模块责任项。
+- Server 维度 1 状态 partial；Root Server infrastructure evidenced / new-module production composition not evidenced。
+- Platform 维度 1 仍未全量完成；WebUI 和其他未完成消费者扫描及跨模块调用图仍待执行。
