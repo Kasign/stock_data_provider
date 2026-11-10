@@ -42,3 +42,31 @@ func TestValidateDeliveryAttemptHistoryRejectsImpossibleHistory(t *testing.T) {
 		})
 	}
 }
+
+func TestValidateDeliveryAttemptHistoryForDeliveryRejectsOutsideLifecycle(t *testing.T) {
+	delivery, lease, _ := recoveryFixture(t)
+	attempt := recoveryAttempt(t, delivery, lease, domain.DeliveryAttemptAccepted, true)
+	if err := ValidateDeliveryAttemptHistoryForDelivery(delivery, []domain.DeliveryAttempt{attempt}); err != nil {
+		t.Fatalf("valid attempt history rejected: %v", err)
+	}
+
+	beforeCreation := attempt
+	beforeCreation.StartedAt = delivery.CreatedAt.Add(-time.Second)
+	beforeCreation.LeaseExpiresAt = delivery.CreatedAt.Add(time.Minute)
+	if err := ValidateDeliveryAttemptHistoryForDelivery(delivery, []domain.DeliveryAttempt{beforeCreation}); !errors.Is(err, ErrDeliveryAttemptHistory) {
+		t.Fatalf("attempt before Delivery creation must fail closed: %v", err)
+	}
+
+	afterDeadline := attempt
+	afterDeadline.StartedAt = delivery.DeadlineAt
+	afterDeadline.LeaseExpiresAt = delivery.DeadlineAt.Add(time.Minute)
+	if err := ValidateDeliveryAttemptHistoryForDelivery(delivery, []domain.DeliveryAttempt{afterDeadline}); !errors.Is(err, ErrDeliveryAttemptHistory) {
+		t.Fatalf("attempt at/after Delivery deadline must fail closed: %v", err)
+	}
+
+	leaseBeyondDeadline := attempt
+	leaseBeyondDeadline.LeaseExpiresAt = delivery.DeadlineAt.Add(time.Second)
+	if err := ValidateDeliveryAttemptHistoryForDelivery(delivery, []domain.DeliveryAttempt{leaseBeyondDeadline}); !errors.Is(err, ErrDeliveryAttemptHistory) {
+		t.Fatalf("attempt lease beyond Delivery deadline must fail closed: %v", err)
+	}
+}

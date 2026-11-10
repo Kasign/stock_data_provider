@@ -77,7 +77,7 @@ func AssessUnknownDelivery(
 		return UnknownReconciliationAssessment{}, ErrUnknownReconciliationNotApplicable
 	}
 
-	if len(attempts) == 0 || ValidateDeliveryAttemptHistory(delivery.DeliveryID, delivery.AttemptCount, attempts) != nil {
+	if len(attempts) == 0 || ValidateDeliveryAttemptHistoryForDelivery(delivery, attempts) != nil {
 		return UnknownReconciliationAssessment{}, ErrLeaseRecoveryHistory
 	}
 	matched := &attempts[len(attempts)-1]
