@@ -3077,6 +3077,7 @@ func (s *DataService) DailyBars(ctx context.Context, rawSymbol, start, end strin
 			continue
 		}
 		if dailyBarsContainDegradedQuality(bars) {
+			s.breaker.Success(breakerKey)
 			warnings = append(warnings, "daily_bar_degraded_candidate_retained_while_searching_for_valid_provider")
 			if preferPartialBars(bars, bestDegraded) {
 				bestDegraded = append([]model.DailyBar(nil), bars...)

@@ -383,6 +383,22 @@ func TestDailyBarsAcceptsForwardReferenceAfterRequestedEnd(t *testing.T) {
 	}
 }
 
+func TestQuotePrefersLaterValidProviderOverDegradedPrimary(t *testing.T) {
+	degraded := validQuote("eastmoney")
+	degraded.Amount = nil
+	primary := fakeProvider{name: "eastmoney", quote: degraded}
+	secondary := fakeProvider{name: "tencent", quote: validQuote("tencent")}
+	svc := New([]provider.Provider{primary, secondary}, cache.NewDisabled(), nil, time.Second, time.Second, 120,
+		slog.New(slog.NewTextHandler(io.Discard, nil)))
+	got, hit, err := svc.Quote(context.Background(), "600519.SH")
+	if err != nil || hit {
+		t.Fatalf("Quote returned hit=%v err=%v", hit, err)
+	}
+	if got == nil || got.Source != "tencent" || got.QualityStatus != model.QualityValid || got.FallbackFrom != "eastmoney" {
+		t.Fatalf("later valid provider must win over degraded primary: %+v", got)
+	}
+}
+
 func TestQuoteFallbackDoesNotOverrideInvalidProviderQuality(t *testing.T) {
 	invalid := validQuote("tencent")
 	invalid.Symbol = ""
@@ -511,8 +527,8 @@ func TestQuoteFailoverRecordsActualSource(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if q.Source != "tencent" || q.FallbackFrom != "eastmoney" || q.QualityStatus != model.QualityDegraded {
-		t.Fatalf("fallback metadata missing: %+v", q)
+	if q.Source != "tencent" || q.FallbackFrom != "eastmoney" || q.QualityStatus != model.QualityValid || containsTestWarning(q.QualityReasons, "provider_fallback_used") {
+		t.Fatalf("valid fallback data must retain valid quality and provenance separately: %+v", q)
 	}
 }
 func TestHistoricalBundleDoesNotFetchRealtimeQuote(t *testing.T) {
