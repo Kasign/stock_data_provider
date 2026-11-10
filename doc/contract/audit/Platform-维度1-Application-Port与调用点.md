@@ -981,3 +981,58 @@ WebUI 当前只发送 `task_type` 和 `symbols`，因此上述差异不证明现
 ### 18.4 本批结论
 
 WebUI 当前创建请求的最小字段与调用路径明确；事件分页消费者有结构和身份防御。AnalysisRequest OpenAPI 与其声称对应的 Domain JSON 字段不完整，新增 AUD-WEBUI-CTR-005（P2）。尚未完成 Task/TaskEvent 响应 DTO 的逐字段核验，也未检查服务端 JSON 解码是否严格拒绝未知字段；维度 2 继续保持 partial。
+
+
+## 19. 第十四批：WebUI 维度 2（Task / TaskEvent 响应 DTO）
+
+### 19.1 固定基线与证据
+
+代码基线：`b6dfc85ba214fe16268c8cba780641a8bfe15086`
+
+- `internal/platform/taskqueue/queue.go`（blob `d438d934c6267ee1d7a14d482d37741cf3d1c795`）
+- `internal/platform/taskqueue/queue_test.go`（blob `6ff46bc8410cd72f1adb0077b21dc257f0a5583e`）
+- `internal/analysis/domain/types.go`（blob `f13ceaa6cf4474413072db898d4c2043347ac410`）
+- `doc/api/contracts/分析任务.openapi.yaml`（blob `aa8f153f25c46649dcdf187d5fef8f376113577b`）
+- `web/src/task-workflow.js`（blob `5bd115ed4600f180b6dfea0ab8343553c6ab63ff`）
+- `web/src/task-event-view.js`（blob `935050409e1d130cb9e901156c8075c1bdcb24d7`）
+
+### 19.2 Task 状态和字段映射
+
+1. Go `taskqueue.Task` JSON 字段：task_id、run_id、status、task_type、current_stage、completed_stages、created_at、started_at、finished_at、failure_code、error_message。
+2. OpenAPI Task Schema 声明相同字段；required 为 task_id、run_id、status、task_type、completed_stages、created_at。Go 的 current_stage/failure_code/error_message 使用 `omitempty`，与非 required 对齐。
+3. Go `StartedAt` / `FinishedAt` 是 `*time.Time` 且使用 `omitempty`；无值时序列化为字段缺失，而不是 JSON null。OpenAPI 对这两个字段设置 `nullable: true`，允许 null，和当前 Go 序列化器的输出形态不完全一致。
+4. `taskStatusForRun` 将 completed / blocked_data_quality 映射 succeeded，partial 映射 partial，failed / rejected_request / 非终态 running / 未知状态映射 failed。单测覆盖这些分支；OpenAPI Task status 枚举 queued/running/succeeded/partial/failed 与 Worker 生成值一致。
+5. `CreatedAt` 为非指针 time.Time 且 required；StartedAt/FinishedAt 为可选指针。时间值使用 Go time 标准 JSON 编码，OpenAPI 声明 date-time。
+
+**AUD-WEBUI-CTR-006：Task 时间字段 nullable 与 omitempty 输出语义不一致（P2）**
+
+- 证据：Go Task 的 StartedAt/FinishedAt 为指针并带 omitempty；OpenAPI 两字段声明 nullable=true。
+- 影响：Schema 允许 null，但当前 Go DTO 在无值时省略字段；客户端若区分“缺失”和“显式 null”，会得到不同语义。
+- 责任方：旧 Analysis API / Server 契约维护方。
+- 关闭条件：二选一统一：若 API 语义为缺失，移除 nullable；若语义为显式 null，调整 DTO 序列化并增加 JSON Golden/契约测试。前端应对缺失与 null 均保持兼容，直到契约冻结。
+
+### 19.3 TaskEvent 与分页游标
+
+1. Go Event 是 `{sequence:int64,event:domain.StageEvent}`；StageEvent 字段为 run_id、stage、status、at、duration_ms、message、attributes。
+2. StageStatus 当前枚举值为 started、succeeded、failed、skipped；可选字段 duration_ms/message/attributes 使用 omitempty。
+3. OpenAPI TaskEvent 仅声明 sequence 和一个无属性约束的 object event，并用文字称其为原始 domain.StageEvent；没有表达 StageEvent 字段、status 枚举、时间格式及可选字段语义。
+4. OpenAPI TaskEventsResponse 要求 task_id、events、next_after_sequence；WebUI 校验器检查 task_id 与当前任务一致，events 为数组，next_after_sequence 为安全整数且不回退；非空页必须推进游标，游标不能小于本页最大事件序号。
+5. WebUI 对每条事件校验 sequence 为正安全整数、event 为对象；可选 run_id 存在时必须与当前 Run 匹配。渲染器消费 stage/name、message、status、at、duration_ms、error_code，并对缺失状态/说明使用明确回退文案。
+6. 本轮已核对 Queue.Events 的 sequence 使用持久化事件行 ID、按升序读取并按 after 过滤；但尚未核对 HTTP Handler 计算 next_after_sequence 的完整实现及其边界测试，不能将前端游标校验视为服务端分页正确性的证明。
+7. OpenAPI 将 event 留作任意 object，且缺少 StageEvent Golden/字段反射校验的证据。本轮没有发现前端把可选 run_id 当作必填，也没有发现已证实的字段错配。
+
+**AUD-WEBUI-CTR-007：TaskEvent.event 缺少可验证的 StageEvent Schema（P2）**
+
+- 证据：Go Event 明确嵌入 domain.StageEvent；OpenAPI event 只有 type: object 和描述，没有 properties/required/enum/format。
+- 影响：OpenAPI 生成客户端只能把事件正文视为任意对象，无法验证 stage/status/at 等字段及其兼容性；WebUI 也无法通过 Schema 工具检查服务端变更。
+- 责任方：旧 Analysis API / Server 契约维护方。
+- 关闭条件：定义独立 HTTP StageEvent Schema（或明确引用等价组件），至少覆盖 run_id、stage、status、at、duration_ms、message、attributes 的 required/nullable/omitempty 和状态枚举；增加 Go JSON Golden 与 OpenAPI 一致性测试。
+- 注意：当前前端渲染器还读取 error_code，但 Go domain.StageEvent 没有该字段；本批未找到 HTTP 层额外 DTO 注入 error_code 的证据。需在 Handler/历史事件 JSON 核验中确认是否为历史兼容字段，不在本轮直接判定运行时缺陷。
+
+### 19.4 本批结论与边界
+
+- Task 字段集合和状态枚举总体对齐；taskStatusForRun 有覆盖终态和异常状态的单测。
+- Task 的可选时间字段存在 nullable/omitempty 语义差异，登记 AUD-WEBUI-CTR-006（P2）。
+- TaskEvent 的外层序号/事件结构明确，但 OpenAPI 没有描述 StageEvent 的实际字段和枚举，登记 AUD-WEBUI-CTR-007（P2）。
+- WebUI 事件分页客户端的游标防御已核；服务端 Handler 的 next_after_sequence 计算、Task/TaskEvent JSON Golden、未知字段解码策略仍待核。
+- WebUI 维度 2 继续保持 partial；本批不代表全部 Task API 及历史事件兼容性已审完。
