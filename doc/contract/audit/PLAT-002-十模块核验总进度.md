@@ -172,3 +172,16 @@
 - 新增 AUD-PLAT-PORT-014（P1 候选，项目级集成阻断）：Root Server 尚未完成从旧 Analysis 到模块化 Application Composition 的迁移；该项汇总关联各模块生产接线缺口，不替代模块责任项。
 - Server 维度 1 状态 partial；Root Server infrastructure evidenced / new-module production composition not evidenced。
 - Platform 维度 1 仍未全量完成；WebUI 和其他未完成消费者扫描及跨模块调用图仍待执行。
+
+
+### WebUI — 维度 1：对外契约消费核验
+
+- 详细记录：[`Platform-维度1-Application-Port与调用点.md`](./Platform-维度1-Application-Port与调用点.md)
+- 浏览器 API Client 使用同源 `/market-api` 与 `/analysis-api`；未发现直接访问 Provider/DB/Redis 的证据。
+- Nginx 当前分别代理至独立 Market Data:8091 与 Analysis Server:8092，仍是双后端兼容拓扑，不是目标 Root Server 单一模块化 API 装配。
+- Nginx 覆盖浏览器传入的 `X-Request-ID`，使用自身 Request ID；Web API Client 在失败时读取错误 envelope/header Request ID。
+- 行情 API Key 当前保存在浏览器 localStorage 并注入 `X-API-Key`；WebUI API_CONTRACT 已明确此为迁移期兼容状态，目标禁止浏览器持有。新增 AUD-WEBUI-CTR-001（P1 候选，迁移安全门禁）。
+- Analysis API Client 不发送 Owner Bearer/Session/CSRF；Server 当前旧 Analysis 路由 Owner-only。WebUI API_CONTRACT 明确浏览器请求预期 401。新增 AUD-WEBUI-CTR-002（P1，明确联调阻断）；禁止将 Owner Token 放进浏览器或匿名开放。
+- API 单测和 Deployment Contract 测试均不能替代真实 Server 鉴权与浏览器联调。
+- WebUI 维度 1 partial；same-origin API client and reverse-proxy implementation evidenced / target Root Server session-auth integration not evidenced。
+- 本批未完成逐页面 DTO/OpenAPI/Handler/Golden 映射，后续归维度 2 和 API-01 矩阵核验。
