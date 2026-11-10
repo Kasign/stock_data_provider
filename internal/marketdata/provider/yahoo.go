@@ -393,8 +393,8 @@ func (p *YahooFinance) FetchDailyBars(ctx context.Context, rawSymbol, startDate,
 		}
 		date := time.Unix(timestamp, 0).In(loc).Format("2006-01-02")
 		if date < startISO || date > endISO {
+			// 日期越界已有明确的行级诊断，不重复计入无法定位的通用解析拒绝数。
 			addProviderParseIssue(ctx, index, "trade_date", "timestamp", "date_out_of_requested_range", "date within "+startISO+".."+endISO, "timestamp", date, "Yahoo Finance 日 K 日期超出请求区间")
-			rejectedRows++
 			continue
 		}
 		openV, openOK := parseYahooFloatField(ctx, index, "open", "indicators.quote[0].open", rawYahooArrayValue(quote.Open, index), "finite positive price")
