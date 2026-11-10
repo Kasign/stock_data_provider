@@ -97,7 +97,6 @@ func (p *Pytdx) dial(ctx context.Context) (*tdx.Client, error) {
 	return client, nil
 }
 
-
 // dialConfiguredHost 执行一次有界的候选服务器拨号；重连策略由 tdx 客户端在上层管理。
 func (p *Pytdx) dialConfiguredHost(dialCtx context.Context) (ios.ReadWriteCloser, string, error) {
 	if dialCtx == nil {
