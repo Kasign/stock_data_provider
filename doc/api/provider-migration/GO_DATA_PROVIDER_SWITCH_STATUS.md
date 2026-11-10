@@ -186,3 +186,11 @@
 - 新增两组回归测试，分别覆盖两类能力的来源不匹配回退与来源缺失降级。
 - MarketCapitalFlow 已有严格来源匹配校验，本批未重复修改；该入口当前将空来源也作为不匹配拒绝。
 - 本批仅完成代码和测试编写，未运行 gofmt/build/test。
+
+### 2026-11-10：指数行情、市场广度、板块排行来源身份接收校验
+
+- 范围：IndexQuotes、MarketBreadth、SectorRankings 三个快照入口。
+- 在原有结构/字段校验前增加当前 Provider 身份核验：快照 Source 非空但不等于 Provider.Name() 时，记录契约失败并尝试后备 Provider。
+- Source 为空仍由原有领域校验拒绝，不擅自推断来源；快照成员与快照来源不一致仍由原有校验器拒绝。
+- 本批不改变质量状态、缓存策略、领域模型及 Provider 接口。
+- 未运行 gofmt/build/test。

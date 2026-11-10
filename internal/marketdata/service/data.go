@@ -345,6 +345,11 @@ func (s *DataService) IndexQuotes(ctx context.Context) (*model.IndexQuoteSnapsho
 			failures = append(failures, p.Name()+": "+fetchErr.Error())
 			continue
 		}
+		if snapshot != nil && strings.TrimSpace(snapshot.Source) != "" && snapshot.Source != p.Name() {
+			s.breaker.ContractFailure(breakerKey)
+			failures = append(failures, p.Name()+": index-quote source does not match Provider.Name()")
+			continue
+		}
 		if err := validateIndexQuoteSnapshot(snapshot); err != nil {
 			s.breaker.ContractFailure(breakerKey)
 			failures = append(failures, p.Name()+": "+err.Error())
@@ -609,6 +614,11 @@ func (s *DataService) MarketBreadth(ctx context.Context) (*model.MarketBreadthSn
 			}
 			recordProviderCallFailure(s.breaker, breakerKey, fetchErr)
 			failures = append(failures, p.Name()+": "+fetchErr.Error())
+			continue
+		}
+		if snapshot != nil && strings.TrimSpace(snapshot.Source) != "" && snapshot.Source != p.Name() {
+			s.breaker.ContractFailure(breakerKey)
+			failures = append(failures, p.Name()+": market-breadth source does not match Provider.Name()")
 			continue
 		}
 		if err := validateMarketBreadth(snapshot); err != nil {
@@ -1456,6 +1466,11 @@ func (s *DataService) SectorRankingsByMetric(ctx context.Context, rawCategory, r
 					snapshot.Items[index].QualityReasons = appendReason(snapshot.Items[index].QualityReasons, "provider_snapshot_timestamp_not_exposed")
 				}
 			}
+		}
+		if snapshot != nil && strings.TrimSpace(snapshot.Source) != "" && snapshot.Source != p.Name() {
+			s.breaker.ContractFailure(breakerKey)
+			failures = append(failures, p.Name()+": sector-ranking source does not match Provider.Name()")
+			continue
 		}
 		if err := validateSectorRankingSnapshot(category, limit, snapshot); err != nil {
 			s.breaker.ContractFailure(breakerKey)
