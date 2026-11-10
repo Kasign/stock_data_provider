@@ -78,8 +78,8 @@ func TestMariaDBBeginRunCancellationLinearizesWorkerOperations(t *testing.T) {
 		},
 		Stages: []domain.Stage{
 			{Ref: runningStageRef, RunRef: runRef, Code: "running", Status: domain.StagePending, Version: 1, Required: true, Dependencies: []string{}, RetryPolicyRef: "retry-v1", DiagnosticRefs: []string{}, ReasonCodes: []string{}},
-			{Ref: fencedStageRef, RunRef: runRef, Code: "fenced", Status: domain.StageReady, Version: 1, Required: true, Dependencies: []string{}, RetryPolicyRef: "retry-v1", DiagnosticRefs: []string{}, ReasonCodes: []string{}},
-			{Ref: readyStageRef, RunRef: runRef, Code: "ready", Status: domain.StageReady, Version: 1, Required: true, Dependencies: []string{}, RetryPolicyRef: "retry-v1", DiagnosticRefs: []string{}, ReasonCodes: []string{}},
+			{Ref: fencedStageRef, RunRef: runRef, Code: "fenced", Status: domain.StagePending, Version: 1, Required: true, Dependencies: []string{}, RetryPolicyRef: "retry-v1", DiagnosticRefs: []string{}, ReasonCodes: []string{}},
+			{Ref: readyStageRef, RunRef: runRef, Code: "ready", Status: domain.StagePending, Version: 1, Required: true, Dependencies: []string{}, RetryPolicyRef: "retry-v1", DiagnosticRefs: []string{}, ReasonCodes: []string{}},
 		},
 		ResolvedTemplate: template.ResolvedTemplate{
 			Ref: "cancel-template", Version: "v1", Fingerprint: templateFingerprint,

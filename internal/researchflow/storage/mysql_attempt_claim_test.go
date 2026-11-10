@@ -83,22 +83,22 @@ func TestMariaDBClaimAttemptLeaseAndFencing(t *testing.T) {
 				DiagnosticRefs: []string{}, ReasonCodes: []string{},
 			},
 			{
-				Ref: secondStageRef, RunRef: runRef, Code: "quant", Status: domain.StageReady,
+				Ref: secondStageRef, RunRef: runRef, Code: "quant", Status: domain.StagePending,
 				Version: 1, Required: true, Dependencies: []string{}, RetryPolicyRef: "retry-v1",
 				DiagnosticRefs: []string{}, ReasonCodes: []string{},
 			},
 			{
-				Ref: "claim-stage-third-" + suffix, RunRef: runRef, Code: "research", Status: domain.StageReady,
+				Ref: "claim-stage-third-" + suffix, RunRef: runRef, Code: "research", Status: domain.StagePending,
 				Version: 1, Required: true, Dependencies: []string{}, RetryPolicyRef: "retry-v1",
 				DiagnosticRefs: []string{}, ReasonCodes: []string{},
 			},
 			{
-				Ref: "claim-stage-fourth-" + suffix, RunRef: runRef, Code: "report", Status: domain.StageReady,
+				Ref: "claim-stage-fourth-" + suffix, RunRef: runRef, Code: "report", Status: domain.StagePending,
 				Version: 1, Required: true, Dependencies: []string{}, RetryPolicyRef: "retry-v1",
 				DiagnosticRefs: []string{}, ReasonCodes: []string{},
 			},
 			{
-				Ref: budgetStageRef, RunRef: runRef, Code: "budget", Status: domain.StageReady,
+				Ref: budgetStageRef, RunRef: runRef, Code: "budget", Status: domain.StagePending,
 				Version: 1, Required: true, Dependencies: []string{}, RetryPolicyRef: "retry-v1",
 				DiagnosticRefs: []string{}, ReasonCodes: []string{},
 			},
