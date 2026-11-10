@@ -509,3 +509,28 @@ Server维度2当前仅完成首轮一个切片，状态为 `in_progress / partia
 6. 分别执行旧Analysis与Researchflow定向测试，记录SHA/CI证据。
 
 本轮状态：complete_with_open_items；四项CTR均开放，无新增CTR、无CTR关闭。下一步仍为Server维度2，不进入其他维度。
+
+
+
+## 26. Server维度2第五切片：项目级决策输入收敛
+
+本节为项目负责人决策提案，非已批准决议。固定代码基线仍为`b6dfc85ba214fe16268c8cba780641a8bfe15086`。
+
+| 决策ID | CTR | 推荐默认方案 | 确认前状态 | 确认后的交付 |
+|---|---|---|---|---|
+| D-SRV-API-01 | CTR-046 | 旧Analysis Run/Task/Events路径兼容保留；Researchflow API独立版本化；旧路径不得静默切换底层语义 | pending_decision | 明确兼容窗口/迁移触发条件；Server按最终边界补OpenAPI、路由和组合测试 |
+| D-SRV-REQ-01 | CTR-047 | 未知非空TaskType拒绝；symbols最多100在Handler落实；异步Task run_id服务端生成并建议拒绝非空客户端值；同步Run ID先核Runner证据 | pending_decision | 请求Schema、Handler校验、错误码和Golden一致 |
+| D-SRV-EVT-01 | CTR-007 | 旧Analysis Events兼容保留并定义独立StageEvent；Researchflow事件流另立契约 | pending_decision | 补旧事件Schema/Golden/cursor测试；新事件流不复用旧DTO |
+| D-SRV-TIME-01 | CTR-006 | 保持Task时间字段nil时省略；OpenAPI移除nullable；补queued/running/terminal Golden | ready_for_implementation | Schema/Golden/Handler Contract Test通过后关闭CTR-006 |
+
+### 决策提案的依据与约束
+
+- 旧Analysis请求不能直接映射Researchflow CreateRunCommand：缺少template_ref/version、system_as_of、deadline_at、input_snapshot_refs、idempotency_key等必需语义；不得将as_of直接当作system_as_of。
+- Researchflow是项目级唯一跨业务流程编排者；旧Analysis兼容保留不等于批准其长期独立承担新的跨模块编排。未来迁移必须有显式输入映射、身份/幂等策略和消费者迁移计划。
+- 当前OpenAPI已声明symbols.maxItems=100，Handler尚无同等限制；建议兑现已发布Schema承诺。
+- 空task_type当前有默认值；非空未知值当前未在HTTP解码层拒绝。建议明确区分空值默认和未知值错误。
+- 同步Run Handler没有覆盖run_id，但Runner是否保留/重写需核实现有实现，不能只依据Handler下结论。
+- CTR-006的nil省略由Go DTO标签直接确定，可不等待API边界裁决，按实际行为修正Schema。
+- CTR-008不属于本轮；不重复核查DDL/cursor。
+
+本轮状态：决策输入已形成，尚待项目负责人接受/修改；CTR-046/047/007保持pending_decision，CTR-006为ready_for_implementation但尚未修复/验收。无新增CTR、无CTR关闭。
