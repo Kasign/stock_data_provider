@@ -142,22 +142,24 @@ func assessDailyBarTradingContext(calendar *model.TradingCalendarSnapshot, bars 
 		result.Reasons = append(result.Reasons, "daily_bar_context_calendar_unavailable")
 		return result
 	}
+	calendarCanConfirmMissingBar := calendar.QualityStatus == model.QualityValid
 	if calendar.QualityStatus != model.QualityValid {
 		if historicalCalendarTimestampOnlyDegradation(calendar) {
 			// 历史交易日历日期是稳定事实；缺少上游发布时间不应单独污染历史 K 线质量。
 			// 该元数据缺口仍显式保留，当前/未来日历则继续降级。
 			result.Reasons = appendDailyBarContextReason(result.Reasons, "daily_bar_context_calendar_snapshot_time_unverified")
+			calendarCanConfirmMissingBar = true
 		} else {
 			result.QualityStatus = model.QualityDegraded
 			result.Reasons = appendDailyBarContextReason(result.Reasons, "daily_bar_context_calendar_degraded")
 			for _, reason := range calendar.QualityReasons {
 				if reason == "provider_trading_calendar_sources_disagree" {
 					result.Reasons = appendDailyBarContextReason(result.Reasons, "daily_bar_context_calendar_sources_disagree")
+					return result
 				}
 			}
-			// 日历存在实质质量缺陷时，不能继续用其中的交易日标记确认证券漏数。
-			// 保留不可比较结论，避免把推断或不完整的日历证据升级为确定缺口。
-			return result
+			// 不完整日历不能确认漏数，但独立证券状态仍可提供上市和停牌证据。
+			// 具体漏数结论只允许由质量有效的交易日历支持。
 		}
 	}
 	for _, reason := range calendar.QualityReasons {
@@ -173,7 +175,7 @@ func assessDailyBarTradingContext(calendar *model.TradingCalendarSnapshot, bars 
 	}
 	for _, bar := range bars {
 		for _, day := range calendar.Items {
-			if day.Date == bar.TradeDate && !day.IsTradingDay {
+			if calendarCanConfirmMissingBar && day.Date == bar.TradeDate && !day.IsTradingDay {
 				result.QualityStatus = model.QualityDegraded
 				result.Reasons = appendDailyBarContextReason(result.Reasons, "daily_bar_returned_on_non_trading_date:"+bar.TradeDate)
 				break
@@ -229,13 +231,17 @@ func assessDailyBarTradingContext(calendar *model.TradingCalendarSnapshot, bars 
 		case model.SuspensionStatusSuspended:
 			result.Reasons = appendDailyBarContextReason(result.Reasons, "daily_bar_excluded_suspended:"+day.Date)
 		case model.SuspensionStatusIntraday:
-			// An intraday suspension does not explain a missing full-day bar:
-			// the security was not suspended for the entire trading session.
-			result.QualityStatus = model.QualityDegraded
-			result.Reasons = appendDailyBarContextReason(result.Reasons, "daily_bar_missing_during_intraday_suspension:"+day.Date)
+			// An intraday suspension does not explain a missing full-day bar.
+			// A degraded calendar cannot establish the missing-bar conclusion.
+			if calendarCanConfirmMissingBar {
+				result.QualityStatus = model.QualityDegraded
+				result.Reasons = appendDailyBarContextReason(result.Reasons, "daily_bar_missing_during_intraday_suspension:"+day.Date)
+			}
 		case model.SuspensionStatusNoEvent, model.SuspensionStatusResumed:
-			result.QualityStatus = model.QualityDegraded
-			result.Reasons = appendDailyBarContextReason(result.Reasons, "daily_bar_missing_on_confirmed_trading_day:"+day.Date)
+			if calendarCanConfirmMissingBar {
+				result.QualityStatus = model.QualityDegraded
+				result.Reasons = appendDailyBarContextReason(result.Reasons, "daily_bar_missing_on_confirmed_trading_day:"+day.Date)
+			}
 		default:
 			result.QualityStatus = model.QualityDegraded
 			result.Reasons = appendDailyBarContextReason(result.Reasons, fmt.Sprintf("daily_bar_context_suspension_status_unknown:%s", day.Date))
