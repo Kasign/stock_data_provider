@@ -83,7 +83,8 @@ type ListEvidenceRequest struct {
 }
 
 // GetEvidenceRequest identifies one News Item and an optional immutable
-// version. SystemAsOf is mandatory even when VersionID is supplied.
+// version. CallerRef must be injected from trusted in-process context. SystemAsOf
+// is mandatory even when VersionID is supplied.
 type GetEvidenceRequest struct {
 	CallerRef             string               `json:"caller_ref"`
 	PurposeCode           EvidencePurposeCode  `json:"purpose_code"`

@@ -42,8 +42,8 @@ func TestDraft202012SchemasCompileAndValidateInstances(t *testing.T) {
 		},
 		{
 			name:     "QNT-CTR-004-quant-result-ref-1.0.0.schema.json",
-			instance: `{"schema_version":"1.0.0","result_id":"result-1","result_type":"factor","scope":"stock","security_id":"security-1","system_as_of":"2026-11-09T00:00:00Z","period":"20d","algorithm_version":"momentum.v1","parameter_fingerprint":"sha256:abc","input_snapshot_refs":["snapshot-1"],"quality_status":"valid","result_status":"completed","authorization_ref":"authorization-1","created_at":"2026-11-09T00:01:00Z"}`,
-			invalid:  `{"schema_version":"1.0.0","result_id":"result-1","result_type":"factor","scope":"stock","system_as_of":"2026-11-09T00:00:00Z","period":"20d","algorithm_version":"momentum.v1","parameter_fingerprint":"sha256:abc","input_snapshot_refs":[],"quality_status":"valid","result_status":"completed","authorization_ref":"authorization-1","created_at":"2026-11-09T00:01:00Z"}`,
+			instance: `{"schema_version":"1.0.0","result_id":"quant_result:sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","result_type":"factor","scope":"stock","security_id":"security-1","system_as_of":"2026-11-09T00:00:00Z","period":"20d","algorithm_version":"momentum.v1","parameter_fingerprint":"sha256:abc","input_snapshot_refs":["snapshot-1"],"quality_status":"valid","result_status":"completed","authorization_ref":"authorization-1","created_at":"2026-11-09T00:01:00Z"}`,
+			invalid:  `{"schema_version":"1.0.0","result_id":"quant_result:sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","result_type":"factor","scope":"stock","system_as_of":"2026-11-09T00:00:00Z","period":"20d","algorithm_version":"momentum.v1","parameter_fingerprint":"sha256:abc","input_snapshot_refs":[],"quality_status":"valid","result_status":"completed","authorization_ref":"authorization-1","created_at":"2026-11-09T00:01:00Z"}`,
 		},
 	}
 
@@ -447,10 +447,10 @@ func TestFirstFactorQuantMetricSchemaAllowsDegradedAvailabilityForRegistryPolicy
 func TestQuantResultRefSchemaEnforcesConditionalAndReferenceConstraints(t *testing.T) {
 	schema := compileQuantSchemaFile(t, "QNT-CTR-004-quant-result-ref-1.0.0.schema.json")
 	invalid := []string{
-		`{"schema_version":"1.0.0","result_id":"result-1","result_type":"factor","scope":"stock","system_as_of":"2026-11-09T00:00:00Z","period":"20d","algorithm_version":"momentum.v1","parameter_fingerprint":"sha256:abc","input_snapshot_refs":["snapshot-1"],"quality_status":"valid","result_status":"completed","authorization_ref":"authorization-1","created_at":"2026-11-09T00:01:00Z"}`,
-		`{"schema_version":"1.0.0","result_id":"result-1","result_type":"factor","scope":"market","system_as_of":"2026-11-09T00:00:00Z","period":"20d","algorithm_version":"momentum.v1","parameter_fingerprint":"sha256:abc","input_snapshot_refs":["snapshot-1","snapshot-1"],"quality_status":"valid","result_status":"completed","authorization_ref":"authorization-1","created_at":"2026-11-09T00:01:00Z"}`,
-		`{"schema_version":"1.0.0","result_id":"result-1","result_type":"factor","scope":"market","system_as_of":"2026-11-09T00:00:00+08:00","period":"20d","algorithm_version":"momentum.v1","parameter_fingerprint":"sha256:abc","input_snapshot_refs":["snapshot-1"],"quality_status":"valid","result_status":"completed","authorization_ref":"authorization-1","created_at":"2026-11-09T00:01:00Z"}`,
-		`{"schema_version":"1.0.0","result_id":"result-1","result_type":"factor","scope":"market","trade_date":"2026-02-30","system_as_of":"2026-11-09T00:00:00Z","period":"20d","algorithm_version":"momentum.v1","parameter_fingerprint":"sha256:abc","input_snapshot_refs":["snapshot-1"],"quality_status":"valid","result_status":"completed","authorization_ref":"authorization-1","created_at":"2026-11-09T00:01:00Z"}`,
+		`{"schema_version":"1.0.0","result_id":"quant_result:sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","result_type":"factor","scope":"stock","system_as_of":"2026-11-09T00:00:00Z","period":"20d","algorithm_version":"momentum.v1","parameter_fingerprint":"sha256:abc","input_snapshot_refs":["snapshot-1"],"quality_status":"valid","result_status":"completed","authorization_ref":"authorization-1","created_at":"2026-11-09T00:01:00Z"}`,
+		`{"schema_version":"1.0.0","result_id":"quant_result:sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","result_type":"factor","scope":"market","system_as_of":"2026-11-09T00:00:00Z","period":"20d","algorithm_version":"momentum.v1","parameter_fingerprint":"sha256:abc","input_snapshot_refs":["snapshot-1","snapshot-1"],"quality_status":"valid","result_status":"completed","authorization_ref":"authorization-1","created_at":"2026-11-09T00:01:00Z"}`,
+		`{"schema_version":"1.0.0","result_id":"quant_result:sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","result_type":"factor","scope":"market","system_as_of":"2026-11-09T00:00:00+08:00","period":"20d","algorithm_version":"momentum.v1","parameter_fingerprint":"sha256:abc","input_snapshot_refs":["snapshot-1"],"quality_status":"valid","result_status":"completed","authorization_ref":"authorization-1","created_at":"2026-11-09T00:01:00Z"}`,
+		`{"schema_version":"1.0.0","result_id":"quant_result:sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","result_type":"factor","scope":"market","trade_date":"2026-02-30","system_as_of":"2026-11-09T00:00:00Z","period":"20d","algorithm_version":"momentum.v1","parameter_fingerprint":"sha256:abc","input_snapshot_refs":["snapshot-1"],"quality_status":"valid","result_status":"completed","authorization_ref":"authorization-1","created_at":"2026-11-09T00:01:00Z"}`,
 	}
 	for i, instance := range invalid {
 		if err := validateJSONSchemaInstance(schema, []byte(instance)); err == nil {
@@ -483,5 +483,134 @@ func TestRiskDecisionSchemaValidatesGoldenAndFailClosedStructure(t *testing.T) {
 		if err := validateJSONSchemaInstance(schema, []byte(instance)); err == nil {
 			t.Errorf("invalid RiskDecision unexpectedly passed: %s", instance)
 		}
+	}
+}
+
+func TestRegistryEntrySchemaMatchesGoCanonicalTextValidation(t *testing.T) {
+	schema := compileQuantSchemaFile(t, "QNT-CTR-001-registry-entry-1.0.0.schema.json")
+	cases := []struct {
+		name   string
+		mutate func(*Entry)
+	}{
+		{"unit leading whitespace", func(e *Entry) { e.Unit = " ratio" }},
+		{"unit trailing whitespace", func(e *Entry) { e.Unit = "ratio " }},
+		{"algorithm version whitespace only", func(e *Entry) { e.AlgorithmVersion = " " }},
+		{"rounding mode leading whitespace", func(e *Entry) { e.Precision.RoundingMode = " half_up" }},
+		{"input field trailing whitespace", func(e *Entry) { e.InputRequirements[0].Fields[0] = "close " }},
+		{"interval leading whitespace", func(e *Entry) { e.InputRequirements[0].Interval = " 1d" }},
+		{"adjustment trailing whitespace", func(e *Entry) { e.InputRequirements[0].Adjustment = "forward_adjusted " }},
+		{"quality state whitespace only", func(e *Entry) { e.InputRequirements[0].Quality[0] = " " }},
+		{"missing handling trailing whitespace", func(e *Entry) { e.QualityPolicy.MissingHandling = "reject " }},
+		{"quality policy state leading whitespace", func(e *Entry) { e.QualityPolicy.QualityStates[0] = " valid" }},
+		{"unavailable condition trailing whitespace", func(e *Entry) { e.QualityPolicy.UnavailableConditions[0] = "missing_input " }},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			entry := validEntry("sample_metric", "1.0.0")
+			tc.mutate(&entry)
+			if err := entry.Validate(); err == nil {
+				t.Fatal("Go Entry.Validate unexpectedly accepted non-canonical text")
+			}
+			encoded, err := json.Marshal(entry)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := validateJSONSchemaInstance(schema, encoded); err == nil {
+				t.Fatalf("Registry Entry Schema unexpectedly accepted non-canonical text: %s", encoded)
+			}
+		})
+	}
+}
+
+func TestRegistryEntrySchemaAcceptsCanonicalTextAndRejectsWhitespace(t *testing.T) {
+	schema := compileQuantSchemaFile(t, "QNT-CTR-001-registry-entry-1.0.0.schema.json")
+	entry := validEntry("sample_metric", "1.0.0")
+	encoded, err := json.Marshal(entry)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := validateJSONSchemaInstance(schema, encoded); err != nil {
+		t.Fatalf("canonical Registry entry rejected: %v", err)
+	}
+	entry.Unit = " ratio "
+	encoded, err = json.Marshal(entry)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := validateJSONSchemaInstance(schema, encoded); err == nil {
+		t.Fatal("Registry entry with surrounding whitespace unexpectedly passed")
+	}
+}
+
+func TestRegistryEntrySchemaValidatesUnavailableConditionItems(t *testing.T) {
+	schema := compileQuantSchemaFile(t, "QNT-CTR-001-registry-entry-1.0.0.schema.json")
+	entry := validEntry("sample_metric", "1.0.0")
+	entry.QualityPolicy.UnavailableConditions = []string{" "}
+	encoded, err := json.Marshal(entry)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := validateJSONSchemaInstance(schema, encoded); err == nil {
+		t.Fatal("blank unavailable condition unexpectedly passed Schema")
+	}
+	entry.QualityPolicy.UnavailableConditions = []string{"missing_input"}
+	encoded, err = json.Marshal(entry)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := validateJSONSchemaInstance(schema, encoded); err != nil {
+		t.Fatalf("canonical unavailable condition rejected: %v", err)
+	}
+}
+
+func TestRegistryEntrySchemaAndGoNumericValidationResponsibilities(t *testing.T) {
+	schema := compileQuantSchemaFile(t, "QNT-CTR-001-registry-entry-1.0.0.schema.json")
+	cases := []struct {
+		name   string
+		mutate func(*Entry)
+	}{
+		{
+			name: "range ordering is a Go cross-field semantic constraint",
+			mutate: func(e *Entry) {
+				e.Range.Minimum = json.RawMessage("2")
+				e.Range.Maximum = json.RawMessage("1")
+			},
+		},
+		{
+			name: "declared fractional precision is enforced by Go",
+			mutate: func(e *Entry) {
+				e.Precision.MaxFractionDigits = 2
+				e.Precision.Tolerance = json.RawMessage("0.001")
+			},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			entry := validEntry("sample_metric", "1.0.0")
+			tc.mutate(&entry)
+			encoded, err := json.Marshal(entry)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := validateJSONSchemaInstance(schema, encoded); err != nil {
+				t.Fatalf("structurally valid entry rejected by Schema: %v", err)
+			}
+			if err := entry.Validate(); err == nil {
+				t.Fatal("Go semantic validation unexpectedly accepted invalid numeric metadata")
+			}
+		})
+	}
+}
+
+func TestRegistryEntrySchemaRejectsNegativeNumericTolerance(t *testing.T) {
+	schema := compileQuantSchemaFile(t, "QNT-CTR-001-registry-entry-1.0.0.schema.json")
+	entry := validEntry("sample_metric", "1.0.0")
+	entry.Precision.Tolerance = json.RawMessage("-0.000001")
+	encoded, err := json.Marshal(entry)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := validateJSONSchemaInstance(schema, encoded); err == nil {
+		t.Fatal("negative numeric tolerance unexpectedly passed Schema")
 	}
 }

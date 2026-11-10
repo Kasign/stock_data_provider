@@ -94,6 +94,8 @@ func TestRuleSetRejectsDuplicateAndNonBlockRequiredRules(t *testing.T) {
 	tests := []RuleSet{
 		{Version: "1.0.0", Rules: []RuleDefinition{{Code: "A", Severity: SeverityBlock}, {Code: "A", Severity: SeverityBlock}}},
 		{Version: "1.0.0", Rules: []RuleDefinition{{Code: "A", Severity: SeverityWarn, Required: true}}},
+		{Version: "1.0.0", Rules: []RuleDefinition{{Code: "A", Severity: SeverityBlock, Required: false}, {Code: "B", Severity: SeverityBlock, Required: true}}},
+		{Version: "1.0.0", Rules: []RuleDefinition{{Code: "A", Severity: SeverityBlock, Required: false}, {Code: "B", Severity: SeverityBlock, Required: true}}},
 		{Version: "1.0.0", Rules: []RuleDefinition{{Code: "A", Severity: "critical"}}},
 		{Version: "1.0.0"},
 	}
@@ -132,5 +134,18 @@ func TestRuleSetRejectsNonCanonicalIdentities(t *testing.T) {
 		if err := set.Validate(); !errors.Is(err, ErrInvalidRuleSet) {
 			t.Errorf("case %d: Validate() error = %v, want ErrInvalidRuleSet", i, err)
 		}
+	}
+}
+
+func TestRuleSetRejectsOptionalBlockGate(t *testing.T) {
+	set := RuleSet{
+		Version: "risk-1",
+		Rules: []RuleDefinition{
+			{Code: "MANDATORY_GATE", Severity: SeverityBlock, Required: true},
+			{Code: "OPTIONAL_GATE", Severity: SeverityBlock, Required: false},
+		},
+	}
+	if err := set.Validate(); !errors.Is(err, ErrInvalidRuleSet) {
+		t.Fatalf("Validate() error = %v, want ErrInvalidRuleSet", err)
 	}
 }

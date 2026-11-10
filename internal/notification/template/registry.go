@@ -101,10 +101,10 @@ func (r *Registry) Register(definition Definition) (string, error) {
 	if r == nil {
 		return "", ErrInvalidTemplateLimits
 	}
-	if err := validateDefinition(definition, r.limits); err != nil {
+	if err := ValidateDefinition(definition, r.limits); err != nil {
 		return "", err
 	}
-	digest, err := definitionDigest(definition)
+	digest, err := DefinitionDigest(definition)
 	if err != nil {
 		return "", err
 	}
@@ -221,7 +221,7 @@ func (r *Registry) Render(ctx context.Context, event domain.EventEnvelope, templ
 	return result, nil
 }
 
-func validateDefinition(definition Definition, limits Limits) error {
+func ValidateDefinition(definition Definition, limits Limits) error {
 	if strings.TrimSpace(definition.TemplateID) == "" || definition.TemplateID != strings.TrimSpace(definition.TemplateID) ||
 		len(definition.TemplateID) > 128 || len(definition.EventType) > 128 ||
 		len(definition.SchemaVersion) > 64 || definition.Version <= 0 ||
@@ -345,7 +345,8 @@ func validateTemplateSource(source string, bindings map[string]string) (map[stri
 	return used, nil
 }
 
-func definitionDigest(definition Definition) (string, error) {
+// DefinitionDigest 使用 RFC 8785 JCS 对完整定义计算 SHA-256。
+func DefinitionDigest(definition Definition) (string, error) {
 	encoded, err := json.Marshal(definition)
 	if err != nil {
 		return "", fmt.Errorf("notification: encode template definition: %w", err)

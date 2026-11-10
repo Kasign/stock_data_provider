@@ -15,6 +15,7 @@ type evidenceSnapshotPageRepositoryStub struct {
 	creates  int
 	gets     int
 	getErr   error
+	afterGet func()
 }
 
 func (s *evidenceSnapshotPageRepositoryStub) CreateEvidenceSnapshot(_ context.Context, snapshot EvidenceSnapshot) error {
@@ -27,6 +28,9 @@ func (s *evidenceSnapshotPageRepositoryStub) GetEvidenceSnapshot(_ context.Conte
 	s.gets++
 	if s.getErr != nil {
 		return EvidenceSnapshot{}, s.getErr
+	}
+	if s.afterGet != nil {
+		s.afterGet()
 	}
 	if snapshotRef != s.snapshot.SnapshotRef || callerRef != s.snapshot.CallerRef {
 		return EvidenceSnapshot{}, ErrEvidenceSnapshotUnavailable
@@ -55,7 +59,7 @@ func TestListEvidenceSnapshotPageCreatesOnceAndContinuesWithoutPIT(t *testing.T)
 		newsID, versionID, observationID := "news-"+id, "version-"+id, "observation-"+id
 		records[i] = EvidencePITRecord{
 			Observation: domain.Observation{ID: observationID, NewsID: newsID, ObservedAt: observedAt},
-			Version: domain.NewsItemVersion{ID: versionID, NewsID: newsID, ObservationID: observationID, ObservedAt: observedAt},
+			Version:     domain.NewsItemVersion{ID: versionID, NewsID: newsID, ObservationID: observationID, ObservedAt: observedAt},
 		}
 	}
 	query := &evidencePITRepositoryStub{records: records}
@@ -118,7 +122,7 @@ func TestListEvidenceSnapshotPageRejectsCursorAndSnapshotFailures(t *testing.T) 
 	store := &evidenceSnapshotPageRepositoryStub{getErr: ErrEvidenceSnapshotUnavailable}
 	factory, _ := NewCreateEvidenceSnapshotForQuery(query, store, func() string { return "snapshot-1" })
 	codec := newTestEvidenceCursorCodec(t, "active", map[string]string{"active": strings.Repeat("k", 32)})
-	service, _ := NewListEvidenceSnapshotPage(factory, store, codec)
+	service, _ := NewListEvidenceSnapshotPage(factory, codec)
 	service.now = func() time.Time { return now }
 
 	bad := "not-a-signed-cursor"
@@ -133,7 +137,7 @@ func TestListEvidenceSnapshotPageRejectsCursorAndSnapshotFailures(t *testing.T) 
 	position := ResearchEvidenceRecord{
 		NewsID: "news-1", VersionID: "version-1",
 		SystemObservedAt: request.SystemAsOf.Add(-time.Second),
-		SystemAsOf: request.SystemAsOf,
+		SystemAsOf:       request.SystemAsOf,
 	}
 	token, err := codec.EncodeNextCursor(ListEvidenceRequest{
 		CallerRef: request.CallerRef, PurposeCode: request.PurposeCode,
@@ -149,5 +153,102 @@ func TestListEvidenceSnapshotPageRejectsCursorAndSnapshotFailures(t *testing.T) 
 	}
 	if query.calls != 0 || store.gets != 1 {
 		t.Fatalf("cursor continuation unexpectedly reran PIT: PIT=%d get=%d", query.calls, store.gets)
+	}
+}
+
+func TestListEvidenceSnapshotPageRejectsStoredSnapshotContextMismatch(t *testing.T) {
+	now := time.Date(2026, 11, 9, 10, 0, 0, 0, time.UTC)
+	request := validEvidenceListRequest(now)
+	request.Filters = &EvidenceQueryFilters{}
+	request.PageSize = 2
+	request.SystemAsOf = now.Add(-time.Minute)
+
+	snapshot := validEvidenceSnapshot(now)
+	snapshot.CallerRef = request.CallerRef
+	snapshot.PurposeCode = request.PurposeCode
+	snapshot.RequestedContentLevel = request.RequestedContentLevel
+	snapshot.PageSize = request.PageSize
+	snapshot.SystemAsOf = request.SystemAsOf
+	fingerprint, err := evidenceFiltersFingerprint(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	snapshot.FiltersFingerprint = fingerprint
+	if len(snapshot.Items) == 0 {
+		t.Fatal("test snapshot must contain a continuation position")
+	}
+
+	query := &evidencePITRepositoryStub{}
+	store := &evidenceSnapshotPageRepositoryStub{snapshot: snapshot}
+	factory, err := NewCreateEvidenceSnapshotForQuery(query, store, func() string { return "unused" })
+	if err != nil {
+		t.Fatal(err)
+	}
+	codec := newTestEvidenceCursorCodec(t, "active", map[string]string{"active": strings.Repeat("k", 32)})
+	service, err := NewListEvidenceSnapshotPage(factory, codec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	service.now = func() time.Time { return now }
+
+	position := ResearchEvidenceRecord{
+		NewsID: snapshot.Items[0].NewsID, VersionID: snapshot.Items[0].VersionID,
+		SystemObservedAt: snapshot.Items[0].SystemObservedAt, SystemAsOf: snapshot.SystemAsOf,
+	}
+	token, err := codec.EncodeNextCursor(request, snapshot.SnapshotRef, position, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.Cursor = &token
+
+	// The stored payload is structurally valid but belongs to another purpose.
+	store.snapshot.PurposeCode = EvidencePurposeRiskReview
+	if err := store.snapshot.Validate(); err != nil {
+		t.Fatalf("tampered purpose should remain structurally valid for this test: %v", err)
+	}
+	if _, err := service.Execute(context.Background(), request); !errors.Is(err, ErrEvidenceSnapshotPageUnavailable) {
+		t.Fatalf("Execute() error = %v, want snapshot page unavailable", err)
+	}
+	if query.calls != 0 || store.gets != 1 {
+		t.Fatalf("mismatched snapshot reached PIT or skipped storage: PIT=%d gets=%d", query.calls, store.gets)
+	}
+}
+
+func TestListEvidenceSnapshotPageStopsAfterContextCancellationDuringSnapshotRead(t *testing.T) {
+	now := time.Date(2026, 11, 9, 10, 0, 0, 0, time.UTC)
+	request := validEvidenceListRequest(now)
+	request.Filters = &EvidenceQueryFilters{}
+	request.PageSize = 2
+	request.SystemAsOf = now.Add(-time.Minute)
+	snapshot := validEvidenceSnapshot(now)
+	snapshot.CallerRef = request.CallerRef
+	snapshot.PurposeCode = request.PurposeCode
+	snapshot.RequestedContentLevel = request.RequestedContentLevel
+	snapshot.PageSize = request.PageSize
+	snapshot.SystemAsOf = request.SystemAsOf
+	snapshot.FiltersFingerprint, _ = evidenceFiltersFingerprint(request)
+	store := &evidenceSnapshotPageRepositoryStub{snapshot: snapshot}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	store.afterGet = cancel
+	query := &evidencePITRepositoryStub{}
+	factory, _ := NewCreateEvidenceSnapshotForQuery(query, store, func() string { return "unused" })
+	codec := newTestEvidenceCursorCodec(t, "active", map[string]string{"active": strings.Repeat("k", 32)})
+	service, _ := NewListEvidenceSnapshotPage(factory, codec)
+	service.now = func() time.Time { return now }
+	position := ResearchEvidenceRecord{
+		NewsID: snapshot.Items[0].NewsID, VersionID: snapshot.Items[0].VersionID,
+		SystemObservedAt: snapshot.Items[0].SystemObservedAt, SystemAsOf: snapshot.SystemAsOf,
+	}
+	token, err := codec.EncodeNextCursor(request, snapshot.SnapshotRef, position, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.Cursor = &token
+	if _, err := service.Execute(ctx, request); !errors.Is(err, context.Canceled) {
+		t.Fatalf("Execute() error = %v, want context.Canceled", err)
+	}
+	if query.calls != 0 {
+		t.Fatalf("canceled continuation reran PIT: %d", query.calls)
 	}
 }

@@ -9,9 +9,10 @@ import (
 )
 
 var (
-	ErrEventValidatorUnavailable  = errors.New("notification: event validator unavailable")
-	ErrInboxRepositoryUnavailable = errors.New("notification: inbox repository unavailable")
-	ErrClockUnavailable           = errors.New("notification: clock unavailable")
+	ErrEventValidatorUnavailable    = errors.New("notification: event validator unavailable")
+	ErrInboxRepositoryUnavailable   = errors.New("notification: inbox repository unavailable")
+	ErrClockUnavailable             = errors.New("notification: clock unavailable")
+	ErrInboxRepositoryResultInvalid = errors.New("notification: inbox repository returned an invalid record")
 )
 
 type EventValidator interface {
@@ -61,6 +62,12 @@ func (r *EventReceiver) Receive(ctx context.Context, raw []byte) (ReceiveEventRe
 	if r == nil || r.validator == nil || r.inbox == nil || r.clock == nil {
 		return result, errors.New("notification: event receiver is not initialized")
 	}
+	if ctx == nil {
+		return result, errors.New("notification: receive context is required")
+	}
+	if err := ctx.Err(); err != nil {
+		return result, err
+	}
 	event, err := r.validator.ValidateEvent(raw)
 	if err != nil {
 		return result, err
@@ -69,9 +76,14 @@ func (r *EventReceiver) Receive(ctx context.Context, raw []byte) (ReceiveEventRe
 	if receivedAt.IsZero() || receivedAt.Location() != time.UTC {
 		return result, errors.New("notification: receiver clock must return UTC time")
 	}
+	// MariaDB DATETIME(6) 只能保存微秒；在应用边界统一精度，保证首次接收与重放结果一致。
+	receivedAt = receivedAt.Truncate(time.Microsecond)
 	record, duplicate, err := r.inbox.Accept(ctx, event, receivedAt)
 	if err != nil {
 		return result, err
+	}
+	if domain.ValidateInboxReplay(record.Event, event) != nil || !isRecoveryUTC(record.ReceivedAt) || record.ReceivedAt.After(receivedAt) {
+		return result, ErrInboxRepositoryResultInvalid
 	}
 	return ReceiveEventResult{
 		EventID:    record.Event.EventID,

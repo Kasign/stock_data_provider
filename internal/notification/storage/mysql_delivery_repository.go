@@ -37,6 +37,22 @@ const deliverySelect = `SELECT
 	DATE_FORMAT(updated_at, '%Y-%m-%d %H:%i:%s.%f')
 	FROM notification_deliveries`
 
+// normalizeDeliveryDatabaseTime 将领域时间统一到 MariaDB DATETIME(6) 精度。
+func normalizeDeliveryDatabaseTime(value time.Time) time.Time {
+	return value.UTC().Truncate(time.Microsecond)
+}
+
+func normalizeDeliveryRecordTimes(record domain.DeliveryRecord) domain.DeliveryRecord {
+	record.DeadlineAt = normalizeDeliveryDatabaseTime(record.DeadlineAt)
+	record.CreatedAt = normalizeDeliveryDatabaseTime(record.CreatedAt)
+	record.UpdatedAt = normalizeDeliveryDatabaseTime(record.UpdatedAt)
+	if record.NextAttemptAt != nil {
+		value := normalizeDeliveryDatabaseTime(*record.NextAttemptAt)
+		record.NextAttemptAt = &value
+	}
+	return record
+}
+
 type deliveryScanner interface {
 	Scan(dest ...any) error
 }
@@ -117,6 +133,7 @@ func (r *MySQLDeliveryRepository) Create(ctx context.Context, delivery domain.De
 	if r == nil || r.db == nil || ctx == nil {
 		return errors.New("notification storage: repository is not configured")
 	}
+	delivery = normalizeDeliveryRecordTimes(delivery)
 	if err := delivery.Validate(); err != nil {
 		return err
 	}
@@ -198,7 +215,12 @@ func (r *MySQLDeliveryRepository) ClaimDue(
 	now, leaseExpiresAt time.Time,
 ) (application.DeliveryClaim, bool, error) {
 	if r == nil || r.db == nil || ctx == nil || !validDeliveryWorkerID(workerID) ||
-		!isUTCTime(now) || !isUTCTime(leaseExpiresAt) || !leaseExpiresAt.After(now) {
+		!isUTCTime(now) || !isUTCTime(leaseExpiresAt) {
+		return application.DeliveryClaim{}, false, domain.ErrInvalidDeliveryChange
+	}
+	now = normalizeDeliveryDatabaseTime(now)
+	leaseExpiresAt = normalizeDeliveryDatabaseTime(leaseExpiresAt)
+	if !leaseExpiresAt.After(now) {
 		return application.DeliveryClaim{}, false, domain.ErrInvalidDeliveryChange
 	}
 	tx, err := r.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
@@ -277,7 +299,13 @@ func (r *MySQLDeliveryRepository) UpdateWithLease(
 	now time.Time,
 ) error {
 	if r == nil || r.db == nil || ctx == nil || !isUTCTime(now) ||
-		expectedVersion < 1 || fencingToken < 1 || next.UpdatedAt.After(now) {
+		expectedVersion < 1 || fencingToken < 1 {
+		return application.ErrDeliveryLeaseConflict
+	}
+	now = normalizeDeliveryDatabaseTime(now)
+	next = normalizeDeliveryRecordTimes(next)
+	event.ChangedAt = normalizeDeliveryDatabaseTime(event.ChangedAt)
+	if next.UpdatedAt.After(now) {
 		return application.ErrDeliveryLeaseConflict
 	}
 	if err := next.Validate(); err != nil {
@@ -368,6 +396,48 @@ func (r *MySQLDeliveryRepository) UpdateWithLease(
 		return fmt.Errorf("notification storage: commit delivery update: %w", err)
 	}
 	return nil
+}
+
+
+func (r *MySQLDeliveryRepository) ListStateEvents(ctx context.Context, deliveryID string) ([]domain.DeliveryStateEvent, error) {
+	if r == nil || r.db == nil || ctx == nil || deliveryID == "" {
+		return nil, errors.New("notification storage: repository or delivery id is invalid")
+	}
+	rows, err := r.db.QueryContext(ctx, `SELECT delivery_id, version, from_status, to_status,
+		DATE_FORMAT(changed_at, '%Y-%m-%d %H:%i:%s.%f'),
+		reason_code, evidence_ref, actor_ref, request_id, actor_reason
+		FROM notification_delivery_state_events WHERE delivery_id = ? ORDER BY version ASC`, deliveryID)
+	if err != nil {
+		return nil, fmt.Errorf("notification storage: list delivery state events: %w", err)
+	}
+	defer rows.Close()
+
+	events := make([]domain.DeliveryStateEvent, 0)
+	for rows.Next() {
+		var event domain.DeliveryStateEvent
+		var fromStatus, toStatus string
+		var changedAt []byte
+		var reason, evidence, actor, request, actorReason sql.NullString
+		if err := rows.Scan(&event.DeliveryID, &event.Version, &fromStatus, &toStatus, &changedAt,
+			&reason, &evidence, &actor, &request, &actorReason); err != nil {
+			return nil, fmt.Errorf("notification storage: scan delivery state event: %w", err)
+		}
+		event.From = domain.DeliveryStatus(fromStatus)
+		event.To = domain.DeliveryStatus(toStatus)
+		if event.ChangedAt, err = parseDatabaseTime(changedAt); err != nil {
+			return nil, err
+		}
+		event.ReasonCode = nullableString(reason)
+		event.EvidenceRef = nullableString(evidence)
+		event.ActorRef = nullableString(actor)
+		event.RequestID = nullableString(request)
+		event.ActorReason = nullableString(actorReason)
+		events = append(events, event)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("notification storage: iterate delivery state events: %w", err)
+	}
+	return events, nil
 }
 
 func insertDeliveryStateEvent(ctx context.Context, tx *sql.Tx, event domain.DeliveryStateEvent) error {

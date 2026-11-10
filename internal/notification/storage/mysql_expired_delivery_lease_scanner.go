@@ -57,7 +57,8 @@ func (r *MySQLDeliveryRepository) ListExpiredLeases(ctx context.Context, limit i
 		var fencingToken int64
 		err = r.db.QueryRowContext(ctx, `SELECT lease_worker_id,
 			DATE_FORMAT(lease_expires_at, '%Y-%m-%d %H:%i:%s.%f'), fencing_token
-			FROM notification_deliveries WHERE delivery_id = ? AND status = ?`,
+			FROM notification_deliveries WHERE delivery_id = ? AND status = ?
+			AND lease_expires_at <= UTC_TIMESTAMP(6)`,
 			id, string(domain.DeliverySending)).Scan(&workerID, &expiresAt, &fencingToken)
 		if errors.Is(err, sql.ErrNoRows) {
 			continue

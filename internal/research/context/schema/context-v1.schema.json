@@ -27,15 +27,18 @@
     },
     "context_id": {
       "type": "string",
-      "minLength": 1
+      "minLength": 1,
+      "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
     },
     "context_version": {
       "type": "integer",
-      "minimum": 1
+      "minimum": 1,
+      "maximum": 9223372036854775807
     },
     "research_question": {
       "type": "string",
-      "minLength": 1
+      "minLength": 1,
+      "pattern": "[\\s\\S]*\\S[\\s\\S]*"
     },
     "scope": {
       "type": "string",
@@ -50,7 +53,8 @@
       "type": "array",
       "items": {
         "type": "string",
-        "minLength": 1
+        "minLength": 1,
+        "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
       },
       "uniqueItems": true
     },
@@ -74,7 +78,8 @@
       "type": "array",
       "items": {
         "type": "string",
-        "minLength": 1
+        "minLength": 1,
+        "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
       },
       "uniqueItems": true
     },
@@ -86,7 +91,8 @@
     },
     "builder_version": {
       "type": "string",
-      "minLength": 1
+      "minLength": 1,
+      "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
     },
     "created_at": {
       "type": "string",
@@ -132,11 +138,13 @@
       "properties": {
         "section_id": {
           "type": "string",
-          "minLength": 1
+          "minLength": 1,
+          "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
         },
         "section_version": {
           "type": "string",
-          "minLength": 1
+          "minLength": 1,
+          "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
         },
         "source_owner": {
           "$ref": "#/$defs/sourceOwner"
@@ -145,7 +153,8 @@
           "type": "array",
           "items": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
           },
           "uniqueItems": true
         },
@@ -153,7 +162,8 @@
           "type": "array",
           "items": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
           },
           "uniqueItems": true
         },
@@ -195,7 +205,8 @@
       "properties": {
         "section_id": {
           "type": "string",
-          "minLength": 1
+          "minLength": 1,
+          "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
         },
         "source_owner": {
           "$ref": "#/$defs/sourceOwner"
@@ -219,13 +230,15 @@
           "type": "array",
           "items": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
           },
           "uniqueItems": true
         },
         "safe_message": {
           "type": "string",
-          "minLength": 1
+          "minLength": 1,
+          "pattern": "[\\s\\S]*\\S[\\s\\S]*"
         },
         "retryable": {
           "type": "boolean"
@@ -249,25 +262,30 @@
         },
         "missing_required_count": {
           "type": "integer",
-          "minimum": 0
+          "minimum": 0,
+          "maximum": 9223372036854775807
         },
         "missing_optional_count": {
           "type": "integer",
-          "minimum": 0
+          "minimum": 0,
+          "maximum": 9223372036854775807
         },
         "conflict_count": {
           "type": "integer",
-          "minimum": 0
+          "minimum": 0,
+          "maximum": 9223372036854775807
         },
         "stale_count": {
           "type": "integer",
-          "minimum": 0
+          "minimum": 0,
+          "maximum": 9223372036854775807
         },
         "reason_codes": {
           "type": "array",
           "items": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
           },
           "uniqueItems": true
         }

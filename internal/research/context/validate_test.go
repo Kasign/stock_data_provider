@@ -61,6 +61,20 @@ func TestContextValidateRejectsInvalidStructure(t *testing.T) {
 			c.OmittedSections = append(c.OmittedSections, OmittedSection{SectionID: "stock_profile", SourceOwner: SourceOwnerData, ReasonCode: OmissionUnavailable, Required: true, SourceRefs: []string{"data:snapshot:001"}, SafeMessage: "不可用"})
 			c.QualitySummary = QualitySummary{Status: QualityValid, MissingRequiredCount: 1, MissingOptionalCount: 1, ReasonCodes: []string{}}
 		}, "cannot have valid"},
+		{"optional section omitted as valid", func(c *Context) {
+			c.QualitySummary.Status = QualityValid
+			c.QualitySummary.ReasonCodes = []string{}
+		}, "cannot have valid"},
+		{"conflict count marked valid", func(c *Context) {
+			c.QualitySummary.Status = QualityValid
+			c.QualitySummary.ConflictCount = 1
+			c.QualitySummary.ReasonCodes = []string{"evidence_conflict"}
+		}, "cannot have valid"},
+		{"stale count marked valid", func(c *Context) {
+			c.QualitySummary.Status = QualityValid
+			c.QualitySummary.StaleCount = 1
+			c.QualitySummary.ReasonCodes = []string{"stale_section"}
+		}, "cannot have valid"},
 		{"negative count", func(c *Context) { c.QualitySummary.ConflictCount = -1 }, "cannot be negative"},
 		{"unsorted reasons", func(c *Context) { c.QualitySummary.ReasonCodes = []string{"z_reason", "a_reason"} }, "must be sorted"},
 		{"omitted reason invalid", func(c *Context) { c.OmittedSections[0].ReasonCode = "unknown_reason" }, "reason_code is invalid"},

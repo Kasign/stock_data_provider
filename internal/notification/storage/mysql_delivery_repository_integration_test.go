@@ -76,6 +76,16 @@ func TestNotificationMariaDBDeliveryRepositoryIntegration(t *testing.T) {
 		t.Fatalf("load created delivery: found=%v delivery=%+v err=%v", found, loaded, err)
 	}
 
+	snapshotReader, err := NewMySQLDeliveryConsistencySnapshotReader(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	initialSnapshot, snapshotFound, err := snapshotReader.ReadDeliveryConsistencySnapshot(ctx, delivery.DeliveryID)
+	if err != nil || !snapshotFound || initialSnapshot.Delivery.Version != 1 ||
+		len(initialSnapshot.Attempts) != 0 || len(initialSnapshot.StateEvents) != 0 {
+		t.Fatalf("read initial consistency snapshot: snapshot=%+v found=%v err=%v", initialSnapshot, snapshotFound, err)
+	}
+
 	const workers = 16
 	var claimed atomic.Int64
 	var winner application.DeliveryClaim
@@ -104,6 +114,39 @@ func TestNotificationMariaDBDeliveryRepositoryIntegration(t *testing.T) {
 	}
 	if winner.Delivery.Status != domain.DeliverySending || winner.Delivery.Version != 2 || winner.Lease.FencingToken != 1 {
 		t.Fatalf("unexpected winning claim: %+v", winner)
+	}
+
+	claimedSnapshot, snapshotFound, err := snapshotReader.ReadDeliveryConsistencySnapshot(ctx, delivery.DeliveryID)
+	if err != nil || !snapshotFound || claimedSnapshot.Delivery.Status != domain.DeliverySending ||
+		claimedSnapshot.Delivery.Version != 2 || len(claimedSnapshot.StateEvents) != 1 {
+		t.Fatalf("read claimed consistency snapshot: snapshot=%+v found=%v err=%v", claimedSnapshot, snapshotFound, err)
+	}
+
+	consistencyService, err := application.NewDeliveryConsistencyService(snapshotReader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	consistency, consistencyFound, err := consistencyService.Assess(ctx, delivery.DeliveryID)
+	if err != nil || !consistencyFound || consistency.Status != application.DeliveryConsistencyPass {
+		t.Fatalf("assess claimed delivery snapshot: result=%+v found=%v err=%v", consistency, consistencyFound, err)
+	}
+
+	scanner := application.ExpiredDeliveryLeaseScanner(repository)
+	if expired, err := scanner.ListExpiredLeases(ctx, 10); err != nil || len(expired) != 0 {
+		t.Fatalf("active lease must not be returned by expired scanner: claims=%+v err=%v", expired, err)
+	}
+	if _, err := db.ExecContext(ctx, "UPDATE notification_deliveries SET lease_expires_at = ? WHERE delivery_id = ?", now.Add(-time.Second), delivery.DeliveryID); err != nil {
+		t.Fatalf("expire lease fixture: %v", err)
+	}
+	if expired, err := scanner.ListExpiredLeases(ctx, 10); err != nil || len(expired) != 1 ||
+		expired[0].Lease.FencingToken != winner.Lease.FencingToken {
+		t.Fatalf("expired lease must be returned with current fencing token: claims=%+v err=%v", expired, err)
+	}
+	if _, err := db.ExecContext(ctx, "UPDATE notification_deliveries SET lease_expires_at = ? WHERE delivery_id = ?", now.Add(2*time.Minute), delivery.DeliveryID); err != nil {
+		t.Fatalf("renew lease fixture: %v", err)
+	}
+	if expired, err := scanner.ListExpiredLeases(ctx, 10); err != nil || len(expired) != 0 {
+		t.Fatalf("renewed lease must not remain a recovery candidate: claims=%+v err=%v", expired, err)
 	}
 
 	finishedAt := now.Add(3 * time.Second)

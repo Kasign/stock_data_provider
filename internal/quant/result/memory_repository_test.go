@@ -2,6 +2,7 @@ package result
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"sync"
 	"testing"
@@ -26,6 +27,20 @@ func TestMemoryRepositorySaveIsIdempotentAndRejectsTamperedIdentity(t *testing.T
 	}
 	if len(repository.records) != 1 {
 		t.Fatalf("stored record count = %d, want 1", len(repository.records))
+	}
+}
+
+func TestMemoryRepositoryZeroValueIsUsable(t *testing.T) {
+	var repository MemoryRepository
+	record := validRecord(t, `{"metric_code":"momentum_20d","value":0.12}`)
+	if err := repository.Save(context.Background(), record); err != nil {
+		t.Fatalf("zero-value Save() error = %v", err)
+	}
+	if len(repository.records) != 1 {
+		t.Fatalf("stored record count = %d, want 1", len(repository.records))
+	}
+	if err := repository.Save(context.Background(), record); err != nil {
+		t.Fatalf("zero-value idempotent Save() error = %v", err)
 	}
 }
 
@@ -57,6 +72,28 @@ func TestMemoryRepositorySaveHonorsCancellation(t *testing.T) {
 	}
 }
 
+func TestMemoryRepositorySaveHonorsCancellationWhileWaitingForLock(t *testing.T) {
+	repository := NewMemoryRepository()
+	record := validRecord(t, `{"metric_code":"momentum_20d","value":0.12}`)
+	ctx, cancel := context.WithCancel(context.Background())
+
+	repository.mu.Lock()
+	done := make(chan error, 1)
+	go func() {
+		done <- repository.Save(ctx, record)
+	}()
+
+	cancel()
+	repository.mu.Unlock()
+
+	if err := <-done; !errors.Is(err, context.Canceled) {
+		t.Fatalf("Save() error = %v, want context.Canceled", err)
+	}
+	if len(repository.records) != 0 {
+		t.Fatalf("cancelled Save() persisted %d records", len(repository.records))
+	}
+}
+
 func TestMemoryRepositoryConcurrentIdempotentSave(t *testing.T) {
 	repository := NewMemoryRepository()
 	record := validRecord(t, `{"metric_code":"momentum_20d","value":0.12}`)
@@ -79,5 +116,23 @@ func TestMemoryRepositoryConcurrentIdempotentSave(t *testing.T) {
 	}
 	if len(repository.records) != 1 {
 		t.Fatalf("stored record count = %d, want 1", len(repository.records))
+	}
+}
+
+func TestMemoryRepositoryCanonicalPayloadIsIdempotent(t *testing.T) {
+	repository := NewMemoryRepository()
+	first := validRecord(t, `{"metric_code":"momentum_20d","value":0.12}`)
+	equivalent := validRecord(t, `{ "value": 0.12, "metric_code": "momentum_20d" }`)
+	if first.Manifest.ResultID != equivalent.Manifest.ResultID {
+		t.Fatal("canonical-equivalent payloads produced different result identities")
+	}
+	if err := repository.Save(context.Background(), first); err != nil {
+		t.Fatalf("first Save() error = %v", err)
+	}
+	if err := repository.Save(context.Background(), equivalent); err != nil {
+		t.Fatalf("Save() of canonical-equivalent payload error = %v", err)
+	}
+	if len(repository.records) != 1 {
+		t.Fatalf("stored record count = %d, want 1 for canonical-equivalent payloads", len(repository.records))
 	}
 }

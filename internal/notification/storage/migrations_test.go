@@ -7,8 +7,9 @@ import (
 
 func TestMigrationsDeclareImmutableVersionAndRequiredUniqueness(t *testing.T) {
 	migrations := Migrations()
-	if len(migrations) != 1 || migrations[0].Version != 1 ||
-		migrations[0].Description == "" || len(migrations[0].Statements) != 5 {
+	if len(migrations) != 4 || migrations[0].Version != 1 || migrations[1].Version != 2 || migrations[2].Version != 3 || migrations[3].Version != 4 ||
+		migrations[0].Description == "" || len(migrations[0].Statements) != 5 ||
+		migrations[1].Description == "" || len(migrations[1].Statements) != 1 {
 		t.Fatalf("unexpected notification migration set: %+v", migrations)
 	}
 
@@ -37,12 +38,43 @@ func TestMigrationsDeclareImmutableVersionAndRequiredUniqueness(t *testing.T) {
 			t.Errorf("migration is missing required schema element %q", required)
 		}
 	}
-	for _, forbidden := range []string{
-		"notification_inbox",
-		"notification_fanout_work_items",
+	inboxDDL := strings.Join(migrations[1].Statements, "\n")
+	for _, required := range []string{
+		"CREATE TABLE notification_inbox",
+		"PRIMARY KEY (source_module, event_id)",
+		"uk_notification_inbox_idempotency",
+		"payload_fingerprint",
+		"received_at DATETIME(6)",
+		"ENGINE=InnoDB",
 	} {
-		if strings.Contains(joined, forbidden) {
-			t.Errorf("migration must not invent unfrozen fan-out contract table %q", forbidden)
+		if !strings.Contains(inboxDDL, required) {
+			t.Errorf("Inbox migration is missing required schema element %q", required)
+		}
+	}
+	if strings.Contains(inboxDDL, "notification_fanout_work_items") {
+		t.Fatal("Inbox migration must not define an unfrozen FanoutWorkItem schema")
+	}
+	templateDDL := strings.Join(migrations[2].Statements, "\n")
+	for _, required := range []string{
+		"CREATE TABLE notification_template_versions",
+		"PRIMARY KEY (template_id, version)",
+		"variable_bindings JSON NOT NULL",
+		"digest CHAR(64)",
+		"MEDIUMTEXT",
+	} {
+		if !strings.Contains(templateDDL, required) {
+			t.Errorf("Template migration is missing required schema element %q", required)
+		}
+	}
+	channelDDL := strings.Join(migrations[3].Statements, "\n")
+	for _, required := range []string{
+		"CREATE TABLE notification_channel_config_versions",
+		"PRIMARY KEY (channel_ref, config_version)",
+		"snapshot_json JSON NOT NULL",
+		"digest CHAR(64)",
+	} {
+		if !strings.Contains(channelDDL, required) {
+			t.Errorf("Channel config migration is missing required schema element %q", required)
 		}
 	}
 }
@@ -50,7 +82,7 @@ func TestMigrationsDeclareImmutableVersionAndRequiredUniqueness(t *testing.T) {
 func TestMigrationsReturnIndependentStatementSlices(t *testing.T) {
 	first := Migrations()
 	second := Migrations()
-	if len(first) != 1 || len(second) != 1 {
+	if len(first) != 4 || len(second) != 4 {
 		t.Fatal("migration set must be stable")
 	}
 	first[0].Statements[0] = "mutated"

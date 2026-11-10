@@ -59,6 +59,13 @@ type DeliveryRepository interface {
 	UpdateWithLease(ctx context.Context, expectedVersion, fencingToken int64, next domain.DeliveryRecord, event domain.DeliveryStateEvent, now time.Time) error
 }
 
+
+// DeliveryStateEventReader reads the complete immutable state history in ascending version order.
+// The returned slice must not silently truncate; an incomplete result is rejected by the history validator.
+type DeliveryStateEventReader interface {
+	ListStateEvents(ctx context.Context, deliveryID string) ([]domain.DeliveryStateEvent, error)
+}
+
 // ExpiredDeliveryLeaseScanner 以有界批次返回数据库确认已过期的 sending 租约。
 // 返回项只是候选快照，恢复写入仍必须重新执行版本/token/数据库时钟 CAS。
 type ExpiredDeliveryLeaseScanner interface {
@@ -79,6 +86,7 @@ type DeliveryLeaseRecoveryRepository interface {
 type DeliveryAttemptRepository interface {
 	StartWithLease(ctx context.Context, expectedDeliveryVersion, fencingToken int64, attempt domain.DeliveryAttempt) error
 	CompleteWithLease(ctx context.Context, expectedDeliveryVersion, fencingToken int64, completed domain.DeliveryAttempt) error
+	// ListByDelivery 返回完整历史，并按 AttemptNo 升序排列；缺失或重复序号由调用方 fail closed。
 	ListByDelivery(ctx context.Context, deliveryID string) (attempts []domain.DeliveryAttempt, err error)
 }
 

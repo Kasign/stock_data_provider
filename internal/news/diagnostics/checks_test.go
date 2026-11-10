@@ -15,6 +15,16 @@ import (
 
 var _ StorageProbe = (*storage.MySQLRepository)(nil)
 
+type observationRetentionProbeStub struct {
+	count  int
+	oldest *time.Time
+	err    error
+}
+
+func (s observationRetentionProbeStub) ObservationRetentionBacklog(context.Context, time.Time) (int, *time.Time, error) {
+	return s.count, s.oldest, s.err
+}
+
 type storageProbeStub struct {
 	pingErr   error
 	missing   []string
@@ -33,6 +43,54 @@ type sourceCatalogStub struct {
 
 func (s sourceCatalogStub) LookupEndpoint(context.Context, string, string) (app.SourceEndpointRegistration, error) {
 	return s.registration, s.err
+}
+
+func TestObservationRetentionCheckReportsBacklogAndHealthyState(t *testing.T) {
+	oldest := time.Date(2026, 11, 9, 8, 0, 0, 0, time.UTC)
+	check := ObservationRetentionCheck(observationRetentionProbeStub{count: 3, oldest: &oldest})
+	report, err := (platformdiag.Runner{}).Run(context.Background(), []platformdiag.Check{check})
+	if err != nil {
+		t.Fatal(err)
+	}
+	observation := report.Results[0].Observation
+	if observation.Status != platformdiag.StatusDegraded || observation.ReasonCode != "news.observation.retention_backlog" ||
+		observation.Attributes["overdue_count"] != "3" || observation.Attributes["oldest_overdue_at"] != oldest.Format(time.RFC3339Nano) {
+		t.Fatalf("retention backlog observation=%+v", observation)
+	}
+	report, err = (platformdiag.Runner{}).Run(context.Background(), []platformdiag.Check{ObservationRetentionCheck(observationRetentionProbeStub{})})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report.Results[0].Observation.Status != platformdiag.StatusHealthy || report.Results[0].Observation.Attributes["overdue_count"] != "0" {
+		t.Fatalf("empty retention backlog observation=%+v", report.Results[0].Observation)
+	}
+}
+
+func TestObservationRetentionCheckRejectsInconsistentBacklogResult(t *testing.T) {
+	oldest := time.Date(2026, 11, 8, 8, 0, 0, 0, time.UTC)
+	cases := []struct {
+		name  string
+		probe observationRetentionProbeStub
+	}{
+		{name: "negative count", probe: observationRetentionProbeStub{count: -1}},
+		{name: "positive count without oldest timestamp", probe: observationRetentionProbeStub{count: 1}},
+		{name: "zero count with oldest timestamp", probe: observationRetentionProbeStub{oldest: &oldest}},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			report, err := (platformdiag.Runner{}).Run(context.Background(), []platformdiag.Check{
+				ObservationRetentionCheck(testCase.probe),
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			observation := report.Results[0].Observation
+			if observation.Status != platformdiag.StatusUnavailable ||
+				observation.ReasonCode != "news.observation.retention_backlog_invalid" {
+				t.Fatalf("observation=%+v, want unavailable inconsistent-backlog result", observation)
+			}
+		})
+	}
 }
 
 func TestProviderConfigChecksSkipUnconfiguredWithoutSecrets(t *testing.T) {
@@ -93,6 +151,17 @@ func TestSourceEndpointCheckDoesNotExposeCatalogErrors(t *testing.T) {
 }
 
 func TestStorageChecksReportHealthyAndIncompleteSchema(t *testing.T) {
+	healthyChecks := StorageChecks(storageProbeStub{})
+	healthyReport, err := (platformdiag.Runner{}).Run(context.Background(), healthyChecks)
+	if err != nil {
+		t.Fatal(err)
+	}
+	healthySchema := healthyReport.Results[1].Observation
+	if healthySchema.Status != platformdiag.StatusHealthy ||
+		healthySchema.Attributes["required_tables"] != "10" {
+		t.Fatalf("healthy schema=%+v, want all 10 News tables", healthySchema)
+	}
+
 	checks := StorageChecks(storageProbeStub{missing: []string{"news_item_versions", "news_observations"}})
 	report, err := (platformdiag.Runner{}).Run(context.Background(), checks)
 	if err != nil {
@@ -170,4 +239,165 @@ func TestSourceEndpointCheckReportsApprovedRegistration(t *testing.T) {
 		observation.Attributes["access_method"] != string(domain.AccessRSS) {
 		t.Fatalf("observation=%+v", observation)
 	}
+}
+
+func TestSourceEndpointCheckFailsClosedForUnsafeRegistrations(t *testing.T) {
+	valid := app.SourceEndpointRegistration{
+		SourceID: "source-1", EndpointID: "endpoint-1", Enabled: true,
+		URL: "https://feeds.example.com/rss", AccessMethod: domain.AccessRSS,
+		SourcePolicyVersionID: "source-policy-v1",
+		URLPolicy: domain.SourceURLPolicy{
+			AllowedSchemes: []string{"https"},
+			AllowedHosts:   []string{"feeds.example.com"},
+		},
+	}
+	tests := []struct {
+		name         string
+		registration app.SourceEndpointRegistration
+		wantStatus   platformdiag.Status
+		wantReason   string
+	}{
+		{
+			name: "registration identity mismatch",
+			registration: func() app.SourceEndpointRegistration {
+				value := valid
+				value.EndpointID = "other-endpoint"
+				return value
+			}(),
+			wantStatus: platformdiag.StatusUnavailable,
+			wantReason: "news.source.registration_mismatch",
+		},
+		{
+			name: "disabled endpoint",
+			registration: func() app.SourceEndpointRegistration {
+				value := valid
+				value.Enabled = false
+				return value
+			}(),
+			wantStatus: platformdiag.StatusSkipped,
+			wantReason: "news.source.endpoint_disabled",
+		},
+		{
+			name: "unsupported access method",
+			registration: func() app.SourceEndpointRegistration {
+				value := valid
+				value.AccessMethod = domain.AccessOfficialAPI
+				return value
+			}(),
+			wantStatus: platformdiag.StatusSkipped,
+			wantReason: "news.source.access_method_unsupported",
+		},
+		{
+			name: "missing source policy version",
+			registration: func() app.SourceEndpointRegistration {
+				value := valid
+				value.SourcePolicyVersionID = ""
+				return value
+			}(),
+			wantStatus: platformdiag.StatusDegraded,
+			wantReason: "news.source.policy_version_invalid",
+		},
+		{
+			name: "URL outside allowlist",
+			registration: func() app.SourceEndpointRegistration {
+				value := valid
+				value.URL = "https://untrusted.example/rss"
+				return value
+			}(),
+			wantStatus: platformdiag.StatusFailed,
+			wantReason: "news.source.endpoint_url_rejected",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			check := SourceEndpointCheck(sourceCatalogStub{registration: test.registration}, "source-1", "endpoint-1", true)
+			report, err := (platformdiag.Runner{}).Run(context.Background(), []platformdiag.Check{check})
+			if err != nil {
+				t.Fatal(err)
+			}
+			observation := report.Results[0].Observation
+			if observation.Status != test.wantStatus || observation.ReasonCode != test.wantReason {
+				t.Fatalf("observation=%+v, want status=%s reason=%q", observation, test.wantStatus, test.wantReason)
+			}
+		})
+	}
+}
+
+func TestProviderOutputPolicyCheckReportsFailClosedBoundary(t *testing.T) {
+	report, err := (platformdiag.Runner{}).Run(context.Background(), []platformdiag.Check{
+		ProviderOutputPolicyCheck(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	observation := report.Results[0].Observation
+	if observation.Status != platformdiag.StatusDegraded ||
+		observation.ReasonCode != "news.provider.output_policy_unavailable" ||
+		observation.Attributes["provider_persistence"] != "blocked" ||
+		observation.Attributes["policy_catalog"] != "unavailable" {
+		t.Fatalf("provider policy readiness=%+v", observation)
+	}
+	if observation.SafeMessage == "" || observation.CheckedAt.IsZero() {
+		t.Fatalf("incomplete diagnostic observation=%+v", observation)
+	}
+}
+
+func TestProviderOutputPolicyCheckHonorsCanceledContext(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	report, err := (platformdiag.Runner{}).Run(ctx, []platformdiag.Check{ProviderOutputPolicyCheck()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report.Results[0].Observation.Status != platformdiag.StatusUnavailable {
+		t.Fatalf("status=%s, want unavailable", report.Results[0].Observation.Status)
+	}
+}
+
+type providerOutputPolicyResolverStub struct {
+	binding app.ProviderOutputPolicyBinding
+	err     error
+}
+
+func (s providerOutputPolicyResolverStub) ResolveProviderOutputPolicy(context.Context, string) (app.ProviderOutputPolicyBinding, error) {
+	return s.binding, s.err
+}
+
+func TestProviderOutputPolicyResolverCheckDistinguishesReadinessStates(t *testing.T) {
+	run := func(name string, resolver app.ProviderOutputPolicyResolver, wantStatus platformdiag.Status, wantReason, wantState string) {
+		t.Run(name, func(t *testing.T) {
+			report, err := (platformdiag.Runner{}).Run(context.Background(), []platformdiag.Check{
+				ProviderOutputPolicyResolverCheck(resolver, "brave"),
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			observation := report.Results[0].Observation
+			if observation.Status != wantStatus || observation.ReasonCode != wantReason {
+				t.Fatalf("observation=%+v", observation)
+			}
+			if observation.Attributes["policy_resolver"] != wantState ||
+				observation.Attributes["provider_persistence"] != "blocked" {
+				t.Fatalf("attributes=%v", observation.Attributes)
+			}
+			if observation.SafeMessage == "" || observation.CheckedAt.IsZero() {
+				t.Fatalf("incomplete observation=%+v", observation)
+			}
+		})
+	}
+
+	run("resolver not configured", nil, platformdiag.StatusDegraded,
+		"news.provider.output_policy_resolver_unavailable", "unavailable")
+	run("lookup failed", providerOutputPolicyResolverStub{err: errors.New("private catalog detail")},
+		platformdiag.StatusUnavailable, "news.provider.output_policy_lookup_failed", "lookup_failed")
+	run("binding available but request not evaluated", providerOutputPolicyResolverStub{
+		binding: app.ProviderOutputPolicyBinding{
+			ProviderCode: "brave", PolicyRef: "brave-output", PolicyVersion: "policy-v4",
+		},
+	}, platformdiag.StatusDegraded, "news.provider.output_policy_not_evaluated", "available")
+	run("binding identity mismatch", providerOutputPolicyResolverStub{
+		binding: app.ProviderOutputPolicyBinding{
+			ProviderCode: "tavily", PolicyRef: "tavily-output", PolicyVersion: "policy-v4",
+		},
+	}, platformdiag.StatusDegraded, "news.provider.output_policy_binding_invalid", "available")
 }

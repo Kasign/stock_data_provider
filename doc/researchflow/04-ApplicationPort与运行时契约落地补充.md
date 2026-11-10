@@ -277,3 +277,178 @@ Fake Repository/Fake Clock/Fake Provider 只证明模块内逻辑；MariaDB/Redi
 
 
 - 终态收敛还要求 Stage 集合完整且唯一：空 Stage 集合、空 stage_code、重复 stage_code 或非终态 Stage 均 fail-closed；Attempt 集合中的每一项也必须处于明确终态，未知/空状态不能视为已停止。AggregateRun、FinalizeCancellation 共用这些校验，FinalizeDeadline 通过 AggregateRun 复用。
+
+
+## 9. Worker 与 StageExecutor 运行时契约（2026-11-09）
+
+### 9.1 执行边界
+
+- Application Worker 只依赖 `WorkerStore`、`DatabaseClock` 和 `StageExecutor` Port；不得直接 import Storage、SQL Model 或其他业务模块包。
+- Worker 执行顺序：读取不可变 Stage/RetryPolicy Snapshot → ClaimAttempt → 幂等 Claim replay 直接返回 → 重新读取 running Stage Snapshot → 校验 RetryPolicy 未漂移 → StageExecutor → 校验结果 → CommitWorkerResult。
+- WorkerStore Adapter 的 `CommitWorkerResult` 必须映射到 Storage `CommitAttemptResult`，不得绕过 Run/Stage/Attempt 锁顺序、lease expiry、owner、fencing token、Stage.version CAS。
+- Provider 不得自行写 Researchflow DB，不得生成/覆盖 Run/Stage/Attempt 身份，不得决定 retry_at。
+
+### 9.2 Lease、Deadline 与 Attempt Timeout
+
+- Lease heartbeat 在 Provider 执行期间持续续租；续租失败立即取消执行 Context，当前 Worker 不得再提交结果。
+- Run deadline 是绝对截止；Attempt deadline 为 `min(Run.deadline_at, Attempt.started_at + RetryPolicy.attempt_timeout_ms)`。StageExecutionRequest 同时携带两者。
+- Attempt 超时映射为 Attempt=timed_out、reason_code=`attempt_timeout`，再经模板 RetryPolicy 决定 retry_wait 或 Stage=timed_out；Run deadline 不得误记为 Attempt timeout。
+- RetryAt 使用 DatabaseClock UTC；算法为 `exponential_full_jitter_v1`，重试必须命中精确 reason-code allowlist，max_attempts 包含首次执行。
+- Provider 技术错误当前不自动映射为可重试结果；必须先由 Fault/ReasonCode 归一化层产出受控结果，未完成该层前 fail closed。
+
+### 9.3 Snapshot 与依赖约束
+
+- Claim 前读取的 RetryPolicy 用于传入 ClaimAttempt.max_attempts；Claim 后必须重新读取 Snapshot 并比较完整 RetryPolicy，策略缺失、错配或漂移拒绝执行。
+- 参数、输入快照引用在交给 Provider 前复制；system_as_of、template fingerprint、correlation_id 和 deadline 继承 Run，不允许 Provider 改写。
+- 当前尚未落地 Server Composition Root Adapter、Worker 生命周期启动、取消确认 Port、deadline 扫描器与 MariaDB Worker 集成测试；模块内 Fake Port 测试不等于部署验收。
+
+
+### 9.4 Worker 协作取消 Port（2026-11-09）
+
+- Worker.CancelRun(runRef) 只负责当前进程内活动 Attempt 的协作取消；不是取消持久化入口。调用方必须先执行 Storage BeginRunCancellation，再广播本地/跨进程取消信号。
+- Worker 为每个活动 Attempt 注册 context.CancelCauseFunc；Run 取消信号触发后 Provider Context 被取消。Provider 返回后 Worker 通过 ConfirmAttemptCancellation Port 原子确认 Attempt/Stage 取消，参数包含 Worker、fencing token 与 Claim 后的 Stage version。
+- 确认成功不再执行 CommitWorkerResult；确认失败、lease 失效或 fencing 冲突均 fail-closed。进程外 Worker 未收到广播或崩溃时，由 Storage FenceExpiredCancellationAttempt 回收。
+- 真实 Adapter 必须映射 MySQLRunRepository.ConfirmAttemptCancellation，并保持 Run → Stage → Attempt 锁顺序和数据库 UTC lease 检查。当前仅 Fake Port 测试，未完成跨进程通知与 MariaDB 集成验收。
+
+
+### 9.5 Provider Fault 归一化边界（2026-11-09）
+
+- Worker 可通过 ExecutionFaultNormalizer Port 将 Provider error 映射为 ExecutionFault{FaultRef, ReasonCode}；FaultRef 必须指向已持久化 Fault 事实，ReasonCode 必须是稳定、可审计的领域原因码。
+- Normalizer 不提供 retryable、RetryAt 或退避参数。Worker 只按 Run Snapshot 内不可变 RetryPolicy 的精确 ReasonCode allowlist、MaxAttempts 和指数 full jitter 计算是否重试。
+- 未注入 Normalizer 时 Provider error 仍 fail-closed，不会被自动猜测为 provider_unavailable；Normalizer 返回空 FaultRef/ReasonCode 或自身错误时不得提交。
+- 上下文取消和 deadline 不进入 Provider Fault 分类。真实 Platform Fault 创建/查询 Adapter 及 Server 注入仍待根组合层接入。
+
+
+### 9.6 Run Deadline 到期收敛
+
+- Deadline expiration 与用户取消是互斥路径：仅处理 Run=created/queued/running 且数据库 UTC 已达到 deadline_at 的 Run；Run=cancelling 不允许进入 deadline expiration，不得混用 `user_cancelled` 与 `deadline_exceeded`。
+- Storage `ExpireRunDeadline` 锁顺序 Run → Stage（stage_ref 排序）→ Attempt（stage_ref/attempt_no 排序）；所有非终态 Stage 转 timed_out，追加 `run_deadline_exceeded`；所有 running Attempt 立即转 timed_out、清除 lease、fencing_token+1。该操作不等待 lease expiry。
+- Run 保持 running 以便 Application `FinalizeDeadline` 使用 Domain 聚合规则计算 failed/partial 与 ResultSummary；Storage 只写 termination_reason=`deadline_exceeded` 并递增 Run.version。`FinalizeDeadline` 只接受 `running + deadline_exceeded`，随后使用新 version 调用既有 `FinalizeRun`，ResultSummary/Outbox/Run 终态仍原子提交。
+- FinalizeRun 对 deadline_exceeded 增加终态限制，只允许 failed/partial，禁止 deadline 已过仍以 succeeded 终结。
+- 当前仅实现 Storage 原语和终结门禁；Deadline Scanner、Application 聚合/Finalize 编排、Server 周期任务和 MariaDB 集成验收尚未完成。
+
+
+### 9.7 Deadline Scanner Port
+
+- Application `DeadlineExpirationStore` 只暴露有界候选查询与按 Run.version 执行过期收敛；Storage 的候选查询使用 DB UTC 和稳定顺序，返回非锁定快照，Expire 方法重新锁 Run 并校验 deadline/version。
+- `DeadlineScanner` 按 BatchSize 顺序执行，记录扫描/成功/版本冲突数量；错误立即停止本批，避免吞掉存储故障。
+- Scanner 不直接生成 ResultSummary 或终结 Run。完成 Stage/Attempt fencing 后，`DeadlineFinalizer` 读取完整执行快照，按既有领域规则计算 failed/partial，并调用 Finalization Store Port 写入 ResultSummary + Outbox + Run 终态。真实 Storage Snapshot/Finalize Adapter 和 Server 周期调度仍待完成。
+
+
+### 9.8 Deadline 与用户取消互斥及幂等
+
+- `deadline_exceeded` 一旦写入 Run.termination_reason，即成为终止路径的线性化标记；BeginRunCancellation 不得覆盖为 user_cancelled。
+- `ExpireRunDeadline` 对相同 Run 重复调用必须不增加版本、不重复 fencing；候选查询排除已有 termination_reason 的记录，避免 Deadline Scanner 热循环。
+- Run=cancelling 与 deadline expiration 互斥；谁先在 Run 行锁下成功建立终止原因，另一条路径必须拒绝。
+
+### 9.9 Deadline Finalize 领域/持久化状态对齐（2026-11-09）
+
+- `ExpireRunDeadline` 的持久化线性化结果为 Run=`running`、termination_reason=`deadline_exceeded`；Stage/Attempt 已在同一事务内超时并 fencing。
+- `FinalizeDeadline` 只接受上述状态组合，调用 `AggregateRun` 计算 failed/partial 和 ResultSummary；拒绝旧的 `cancelling + run_deadline_exceeded` 组合及 `user_cancelled`。
+- 后续 Application Finalizer 必须使用 Expire 返回的新 Run.version 调用 Storage `FinalizeRun`，由后者原子写入 ResultSummary、Outbox 与 Run 终态。该编排和真实 MariaDB 集成仍待完成。
+
+### 9.10 Deadline Application Finalizer 首轮实现（2026-11-09）
+
+- `DeadlineFinalizer` 读取 Run/Stage/Attempt 与 ResolvedTemplate 派生的传播策略/硬风险门禁快照，使用 DatabaseClock 调用 Domain `FinalizeDeadline`。
+- Finalizer 生成 ResultSummary/Outbox 引用，并通过 `DeadlineFinalizationStore` 传递预期 Run.version、终态、termination_reason 和摘要；Store Adapter 必须映射 Storage `FinalizeRun`，确保摘要、Outbox、Run 终态同事务。
+- Application 只依赖 Port，不直接依赖 SQL/Storage。当前 Fake Port 测试已补，未执行；MySQLRunRepository 已实现 `LoadDeadlineFinalizationSnapshot`，从持久化 ResolvedTemplate Snapshot、Stage 和 Attempt 历史恢复聚合输入；并实现 `FinalizeDeadlineRun` 到既有原子 `FinalizeRun` 的薄适配。MariaDB 集成验收和 Server 周期调度仍未完成。
+
+### 9.11 Deadline Scanner 排除已完成 Stage 集合（2026-11-09）
+
+- Review 发现 Run 已有全部终态 Stage、但尚未完成 Run 聚合时，Deadline Expire 仍会写入 `deadline_exceeded`，使本可正常 succeeded 的 Run 被错误禁止成功终结。
+- Storage `ExpireRunDeadline` 现在在确认全部 Stage 终态且无运行中 Attempt 后返回未变更；候选 SQL 同步排除全部 Stage 已终态的 Run，避免扫描热循环。
+- 这些 Run 必须由正常聚合/Finalize 路径处理；Deadline Expire 只负责仍有未完成 Stage 的 Run。
+
+### 9.12 正常 Run 聚合与终态提交（2026-11-09）
+
+- 新增 Application `RunFinalizer`：仅接受 `running` 且无终止原因的 Run；复用统一快照装配，调用 Domain `AggregateRun`，要求所有 Stage/Attempt 已终态。
+- 聚合成功后生成 ResultSummary/Outbox 引用，通过 Storage Port 提交；仅当持久化 CAS 成功才向返回对象填充 ResultSummaryRef。
+- MySQL `LoadRunFinalizationSnapshot` 复用不可变 ResolvedTemplate Snapshot、Stage、Attempt 装配；`FinalizeRunResult` 将正常结果映射到现有原子 `FinalizeRun` 事务。
+- 正常路径只允许 succeeded/partial/failed，且不接受 termination_reason；deadline 与 user cancellation 仍走各自专用 finalizer，避免跨终止原因覆盖。
+- 当前未完成：Server 聚合触发/周期扫描与生命周期接入；MariaDB 正常聚合并发、CAS 冲突、Outbox 原子性集成验收。
+
+
+### 9.13 User Cancellation Application Finalizer
+
+- `CancellationFinalizer` 只接受持久化状态 `Run=cancelling` 且 `termination_reason=user_cancelled`；deadline 和正常完成路径均拒绝。
+- Application 使用 DatabaseClock 调用 Domain `FinalizeCancellation`；Stage 集合完整且唯一、Stage/Attempt 全部明确终态是终结前置条件。
+- `CancellationFinalizationStore` 负责提交 ExpectedVersion、`cancelled`、`user_cancelled`、ResultSummary 与 Outbox 引用。MySQL Adapter 映射到现有 `FinalizeRun`，不得复制原子事务。
+- FinalizeRun 对 cancelling + user_cancelled 仅接受 RunCancelled；ResultSummary、Outbox、Run 终态和 version 更新保持同一事务。
+- Server 必须在 BeginRunCancellation 成功后广播 Worker.CancelRun；仅当活动 Attempt 均完成协作确认或被过期 lease fencing 后，才调用 CancellationFinalizer。当前尚无 Server 调度/DI 和 MariaDB 端到端验收。
+
+
+## 9.14 统一终态协调入口
+
+Application 的 `RunFinalizationCoordinator` 是三种终态聚合路径的路由入口，不替代各 Finalizer，也不持有 SQL/事务逻辑。
+
+| 持久化 Run 状态 | termination_reason | 路由 |
+|---|---|---|
+| running | 空 | 正常 Run Finalizer |
+| created / queued / running | deadline_exceeded | Deadline Finalizer |
+| cancelling | user_cancelled | Cancellation Finalizer |
+| 其他组合 | 任意 | fail-closed，返回状态错误 |
+
+- Coordinator 首先读取持久化 Run 快照，只用于选择路径；选中的 Finalizer 必须重新读取完整 Stage/Attempt 快照并执行自己的状态/原因校验。
+- 不允许从 `cancelling + user_cancelled` 路由到普通或 Deadline Finalizer；不允许 deadline reason 路由到正常 Finalizer；不允许无 termination reason 的 cancelling 被当作取消完成。
+- 各 Finalizer 的 Storage Adapter 仍通过既有原子 FinalizeRun 事务写入 Run、ResultSummary、Outbox；Coordinator 不新增事务。
+- Server 组合根负责注入 Coordinator，并由 Deadline Scanner、Stage 完成检查、取消收敛流程调用；不得在 Researchflow 模块中新增 Server DI 或 HTTP 接口。
+
+## 10. GetRun Application 查询契约（2026-11-09）
+
+- `RunReader.GetRun(ctx, runRef)` 是 Application 查询 Port；Server Composition Root 将 MySQL Repository 注入 `GetRunService`，HTTP Handler 只消费 `CreateRunResult` 中的公开领域投影，不直接调用 Storage。
+- RunRef 必须非空、无首尾空白且不超过 255 字符；Storage 返回的 Run.Ref 必须与请求完全一致。
+- Stage 集合必须非空；每个 Stage 必须属于请求 Run，具有非空 ref/code 和正 version；Stage ref 与 stage code 在同一 Run 内分别唯一。
+- 终态 Run 必须同时具有 ResultSummaryRef 与 ResultSummary；非终态 Run 不允许提前挂载摘要。Storage 必须按 ResultSummaryRef 与 RunRef 双键条件读取摘要，不能仅凭摘要 Ref 读取其他 Run 的资源。
+- ResultSummary payload 必须包含 StageOutcomes、RiskGateDecisions、ExcludedStages、Missing/Degraded/Blocked Stage Codes、ReasonCodes；Coverage 范围为 [0,1]，QualityStatus 和 ActionabilityStatus 必填。
+- GetRun 只做读取和一致性门禁，不负责授权判定；调用入口必须先由 Server 认证/授权层确认调用者有权读取该 Run。当前 Application Facade 不接受请求体 caller_ref，也不自行推断资源所有权。
+- 当前新增 Fake Reader/解码测试只证明 Application 与 payload 结构校验；MariaDB 回读、终态摘要关联和跨模块 DTO/Schema/Golden 仍待验收。
+
+## 11. CancelRun Application 命令契约（2026-11-09）
+
+- `CancelRunService.CancelRun(ctx, runRef)` 只接受可信 `RequestIdentity.AuthenticatedCallerRef`；必须先经 `RunAccessAuthorizer.AuthorizeRunCancellation(ctx, callerRef, runRef)` 校验持久化 Run 所有权/取消权限，再读取 Run 和调用取消 Storage。
+- Researchflow Run 当前不在 Run 聚合内持久化 caller owner；因此 Application 不得自行假定 caller_ref 与 RunRef 的关系，也不得仅凭已认证身份允许取消。Server 必须注入真实授权 Adapter；未配置 Authorizer 时构造失败。
+- 取消使用 Run 当前 Version 调用 `BeginRunCancellation`，由 Storage 在 Run 行锁内与 Claim/Commit 线性化。Application 不直接更新状态、不广播假取消成功、不绕过事务。
+- `Started=true` 只表示本次请求赢得持久化 `created/queued/running -> cancelling` 迁移；不表示在途 Worker 已停止。Worker 必须确认停止，或由 lease fencing 回收；CancellationFinalizer 再原子写入 ResultSummary、Outbox 和 Run 终态。
+- 已处于 `cancelling + user_cancelled` 时幂等返回；终态 Run 或 `deadline_exceeded` 终止权已生效时拒绝。CAS 未获胜后必须重读；只有持久化状态已是同一用户取消才按幂等重放，否则返回版本冲突。
+- Server HTTP/DI、真实 RunAccessAuthorizer Adapter 和跨进程 Worker 协作不属于本分支 Application Facade 的实现范围。
+
+## 12. RetryStage Application 派发契约（2026-11-09）
+
+- `RetryStageService.RetryStage(ctx, runRef, stageRef, attemptRef)` 仅供 Scheduler 内部派发；它不是用户手动重跑入口。Stage 进入 retry_wait 的唯一依据仍是 Worker 完成失败/超时 Attempt 时按不可变 Template RetryPolicy 计算出的 retry_at 和精确 reason-code allowlist。
+- 同一次 Scheduler 派发的重投递必须复用稳定 `attemptRef`；不得每次重试请求都生成新 Attempt Ref。Worker/Storage 的 ClaimAttempt 对同一 Worker 的有效 lease 和同一 Attempt 进行幂等回读。
+- Application 读取 Run/Stage/RetryPolicy 快照并预检：Run 必须为 running 且无 termination_reason；Stage 必须为 retry_wait、有 retry_at 且已有至少一次 Attempt；AttemptNo 必须小于 max_attempts；Stage.reason_codes 至少一个命中 RetryPolicy.RetryableReasonCodes；数据库 UTC 当前时间必须早于 Run.deadline_at 且不早于 Stage.retry_at。
+- Facade 预检只用于快速拒绝非法/未到期派发，不构成并发保证。预检后 Run 可能被取消、Deadline 到期或其他 Worker 抢先 Claim；Worker.Execute -> Storage ClaimAttempt 必须重新在数据库事务中校验 Run/Stage/Attempt 状态、retry_at、deadline、attempt budget、lease/fencing 和 max_parallel，并原子提交新 Attempt 与 Stage 状态。
+- RetryStage 不单独将 retry_wait 持久化为 ready。领域 `ClaimRetryStage` 中 ready 仅为逻辑中间态；持久化操作直接以一次 Stage version 增量完成 retry_wait -> running，并插入下一 running Attempt。
+- 不重新计算 retry backoff，不修改 system_as_of、deadline、template_ref/version/fingerprint、parameters 或 input_snapshot_refs；重试沿用原 Run 的不可变执行快照。
+- RetryStage 返回 WorkerExecution 表示 Worker 执行/Claim 结果，不代表 Run 终态。终态聚合继续由 Run Finalizer 处理。
+
+
+## 13. GetWorkflowTemplate Application 查询契约（2026-11-09）
+
+- GetWorkflowTemplateService.GetWorkflowTemplate(ctx, ref, version) 只允许精确 Ref + Version 查询；不允许 latest、默认版本、别名回退或缺省版本。
+- Application 复用 CreateRun 已使用的 TemplateRegistry.Get Port。Registry 错误原样保留错误链；返回 Ref/Version 与请求不完全一致时返回 ErrTemplateVersionMismatch。
+- Application 使用 template.Fingerprint 对返回 Template 的执行语义字段重新计算指纹。Registry 若提供非空 Fingerprint，必须与计算值相等；缺省时由 Application 返回计算值。该校验用于发现 Registry 内容漂移，不替代注册阶段的 Template Validate。
+- 返回 Template 的 Stages、Dependencies、RetryableReasonCodes 必须深拷贝，禁止将 Registry 内部可变切片直接暴露给调用方。
+- 查询 Facade 不负责授权。Server 必须在调用前完成认证和按 Template 资源策略授权；公开响应 DTO 不得直接暴露内部 Template 结构或内部错误。
+- Template Registry Adapter 的发布/写入路径必须执行 template.Validate（注入真实 HardRiskGateRegistry）、固化 Fingerprint，并拒绝同一 Ref/Version 的内容覆盖；该真实 Registry Adapter/持久化由模块集成阶段完成。
+
+
+## 14. MySQL Template Registry 持久化契约（2026-11-09）
+
+- v3 Migration 新增 `researchflow_workflow_templates`，主键 `(template_ref, version)`，保存 immutable definition、SHA-256 fingerprint 和数据库 UTC 创建时间。模块只声明 Migration；必须由 Server Composition Root 注册并执行。
+- `MySQLTemplateRegistry.Get` 只按 Ref + Version 精确读取，不支持 latest/别名；缺失版本返回 `ErrWorkflowTemplateNotFound`，严格 JSON 解码（拒绝未知字段/尾随内容）、identity、fingerprint 或模板语义校验失败返回 `ErrWorkflowTemplateCorrupt`。
+- `Publish` 是 insert-only 发布操作：必须先执行 `template.Validate` 并注入真实 HardRiskGateRegistry，再计算 fingerprint。相同 Ref/Version + 相同 fingerprint 幂等成功；同一身份不同 fingerprint 返回 `ErrWorkflowTemplateConflict`，禁止覆盖已发布版本。
+- Version 最大长度为 64，与 SQL 列一致；Ref 最大长度为 255。发布和读取均拒绝空白或首尾空格身份。
+- Template definition 的 Stage、Dependencies、RetryableReasonCodes 以稳定顺序持久化；读取返回独立切片。Fingerprint 不包含自身字段，防止递归哈希。
+- Application `TemplateRegistry` Port 由该 Adapter 实现；`GetWorkflowTemplate` 和 `CreateRun` 可共用同一 Adapter。模板发布权限、发布者审计、管理 API、Server DI 和根 Migration 注册由 Server 组合层负责，本模块不擅自开放外部发布接口。
+- MariaDB 集成测试覆盖精确版本、相同内容重放、同版本变更冲突、缺失版本和读取隔离；执行结果必须在启用 MariaDB 的 CI/环境中单独确认，静态 Migration 测试不能替代真实 DB 验收。
+
+
+## 15. Researchflow Diagnostics 到 Platform Diagnostics 投影契约（2026-11-09）
+
+- Researchflow 领域诊断只输出 `StageAssessment`，由 `internal/researchflow/diagnostics` 转成 Platform `diagnostics.Check`；统一由 Platform `diagnostics.Runner` 负责超时、panic 隔离、Observation 校验和聚合。Researchflow 不复制 Runner 或 Summary 聚合实现。
+- 领域四态映射固定为：`pass → healthy`、`degraded → degraded`、`fail → failed`、`not_comparable → degraded`。not_comparable 不能映射成 healthy 或 skipped；使用 Observation Attributes 中的 `assessment_status=not_comparable` 保留原语义，使 Required 检查仍按 degraded 参与聚合。
+- Kind 限定 `stage_execution/dependency/quality/llm/result`；Check ID 基于 Kind + StageRef 的 SHA-256 生成稳定标识。ReasonCode 必须是 Platform 稳定小写机器码；SafeMessage 仅允许安全摘要，禁止原始 Provider/LLM 错误、凭证和敏感输入。
+- EvidenceRef 是既有证据资源的引用，不由 Adapter 伪造或自动持久化。Fault 也不由投影层制造；失败事实及 FaultRef 应由对应领域/Platform Adapter 创建后传入。
+- Attributes 经过 Platform Observation.Validate 的数量、长度和控制字符门禁；投影层保留受控 `assessment_status/diagnostic_kind/stage_ref/stage_code` 字段并深拷贝 map，避免调用方修改共享对象。
+- 本契约只定义标准化投影，不替代各模块诊断规则。真实 Data/News/Research/Quant/LLM 检查、Evidence/Fault Adapter、Server DI 和生产诊断执行仍需集成验收。

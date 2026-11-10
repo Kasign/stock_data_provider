@@ -1,11 +1,11 @@
 # WebUI 统一诊断接入计划
 
 - 目标分支：`feat/webui-market-data-console`
-- 当前基线：`d1ad337d4ef8afd6b1242eaaea8869102bf81d65`
-- 更新日期：2026-11-03
+- 更新日期：2026-11-09
+- 当前总体任务状态以 [WebUI 整体规划](./Web整体规划.md) 为准；本文不维护独立分支 HEAD 基线。
 
-> 本文只保留诊断专项字段、展示和联调约束；当前是否推进以 [WebUI 整体规划](./整体规划.md) 为准。
-- 范围：仅修改当前 WebUI 分支的 `web/**` 与 `doc/**`；不创建新分支，不修改 main，不修改 Go Provider、服务端路由、数据库、OpenAPI 或部署配置。
+> 本文只保留诊断专项字段、展示和联调约束；当前是否推进以 [WebUI 整体规划](./Web整体规划.md) 为准。
+- 范围：仅修改当前 WebUI 分支的 `web/**` 与 `doc/web/**`；不创建新分支，不修改其他分支，不修改 Go Provider、服务端路由、数据库、OpenAPI 或部署配置。
 
 ## 1. 目标与边界
 
@@ -25,7 +25,7 @@
 
 ## 3. 数据契约说明
 
-当前数据侧 Go `ProviderProbeItem` 已包含：
+当前数据侧 Go `ProviderProbeItem` 与 Market Data OpenAPI 已声明以下字段：
 
 - `validation_total_count` / `validation_error_count` / `validation_warning_count` / `validation_info_count`
 - `validation_truncated` / `validation_issues`
@@ -33,7 +33,7 @@
 
 字段问题包括解析、标准化、校验阶段以及标准字段、Provider 原始字段、规则编码、期望、实际类型、脱敏实际值、严重级别和消息。市场宽度覆盖维度为 quote_response、price_classification、quote_timestamp、amount。
 
-当前 `services/market-data/openapi.yaml` 的 `ProviderProbeItem` Schema 尚未声明这些字段，属于数据侧文档缺口。本分支只记录，不修改服务端文件。若后续 Go JSON 响应与 OpenAPI 不一致，以数据侧补齐契约为准；WebUI 不猜测不存在的字段。
+当前契约文件为 `internal/marketdata/httpapi/openapi.yaml`，其中 `ProviderProbeItem` 已声明上述字段。本分支只消费契约，不修改服务端文件。OpenAPI 声明不代表 Root Server 已挂载该 Handler，也不代表真实 Provider 已产生完整诊断数据。
 
 ## 4. 展示约束
 

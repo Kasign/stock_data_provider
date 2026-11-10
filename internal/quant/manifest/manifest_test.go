@@ -99,6 +99,36 @@ func TestBuildSortsSnapshotRefsAndRejectsInvalidInputs(t *testing.T) {
 	}
 }
 
+func TestBuildRejectsInvalidUTF8SnapshotReference(t *testing.T) {
+	input := Input{
+		ResultType:        "factor",
+		SchemaVersion:     "1.0.0",
+		SystemAsOf:        time.Date(2026, 11, 6, 5, 2, 0, 0, time.UTC),
+		InputSnapshotRefs: []string{string([]byte{0xff})},
+		ResultFingerprint: strings.Repeat("b", 64),
+	}
+	if _, err := Build(input); !errors.Is(err, ErrInvalidManifest) {
+		t.Fatalf("Build() error = %v, want ErrInvalidManifest", err)
+	}
+}
+
+func TestVerifyRejectsInvalidUTF8SnapshotReference(t *testing.T) {
+	got, err := Build(Input{
+		ResultType:        "factor",
+		SchemaVersion:     "1.0.0",
+		SystemAsOf:        time.Date(2026, 11, 6, 5, 2, 0, 0, time.UTC),
+		InputSnapshotRefs: []string{"snapshot-a"},
+		ResultFingerprint: strings.Repeat("b", 64),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got.InputSnapshotRefs[0] = string([]byte{0xff})
+	if err := got.Verify(); !errors.Is(err, ErrInvalidManifest) {
+		t.Fatalf("Verify() error = %v, want ErrInvalidManifest", err)
+	}
+}
+
 func TestVerifyRejectsManifestMutation(t *testing.T) {
 	got, err := Build(Input{
 		ResultType:        "stock",
@@ -219,4 +249,38 @@ func TestFingerprintPayloadRejectsDuplicateObjectKeys(t *testing.T) {
 			}
 		})
 	}
+}
+
+// FuzzFingerprintPayloadNoPanic 验证任意字节输入都不会导致 payload 指纹计算 panic；
+// 被接受的输入必须产生稳定的小写 SHA-256 十六进制指纹。
+func FuzzFingerprintPayloadNoPanic(f *testing.F) {
+	seeds := [][]byte{
+		[]byte(`{"value":1}`),
+		[]byte(`{"nested":{"name":"量化"}}`),
+		[]byte(`{"value":1,"value":2}`),
+		[]byte(`[]`),
+		[]byte(`null`),
+		[]byte{},
+		{0xff, 0xfe, 0xfd},
+	}
+	for _, seed := range seeds {
+		f.Add(seed)
+	}
+
+	f.Fuzz(func(t *testing.T, payload []byte) {
+		first, err := FingerprintPayload(json.RawMessage(payload))
+		if err != nil {
+			return
+		}
+		if !fingerprintRE.MatchString(first) {
+			t.Fatalf("accepted payload produced invalid fingerprint %q", first)
+		}
+		second, err := FingerprintPayload(json.RawMessage(payload))
+		if err != nil {
+			t.Fatalf("same payload became invalid on second fingerprint: %v", err)
+		}
+		if first != second {
+			t.Fatalf("fingerprint is not deterministic: %q != %q", first, second)
+		}
+	})
 }

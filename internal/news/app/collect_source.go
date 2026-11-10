@@ -2,6 +2,8 @@ package app
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/json"
 	"errors"
 	"io"
 	"net"
@@ -73,8 +75,9 @@ type CollectedSourceEntry struct {
 	Content   domain.ContentLayers
 }
 
-// CollectSourceResult 是单个 Source Endpoint 的在线 Feed 采集结果。
+// collectionSeal 绑定完整采集结果，防止调用方修改已采集的策略版本或候选载荷。
 type CollectSourceResult struct {
+	collectionSeal          [sha256.Size]byte
 	SourceID                string
 	EndpointID              string
 	SourcePolicyVersionID   string
@@ -218,6 +221,7 @@ func (u *CollectSource) Execute(ctx context.Context, request CollectSourceReques
 	}
 
 	result := CollectSourceResult{
+		collectionSeal:          sourceCollectionResultSeal,
 		SourceID:                request.SourceID,
 		EndpointID:              request.EndpointID,
 		SourcePolicyVersionID:   registration.SourcePolicyVersionID,
@@ -254,7 +258,35 @@ func (u *CollectSource) Execute(ctx context.Context, request CollectSourceReques
 		result.Entries[index].Candidate.NormalizedAt = &normalized
 		result.Entries[index].Candidate.ObservedAt = normalizedAt
 	}
+	if err := sealCollectSourceResult(&result); err != nil {
+		return CollectSourceResult{}, &SourceCollectionError{Code: "source_result_seal_failed"}
+	}
 	return result, nil
+}
+
+// sealCollectSourceResult binds all exported result fields into an unexported digest.
+// The digest is intentionally package-private so external callers cannot mint a valid result.
+func sealCollectSourceResult(result *CollectSourceResult) error {
+	if result == nil {
+		return ErrSourceCollectionRequest
+	}
+	result.collectionSeal = [sha256.Size]byte{}
+	payload, err := json.Marshal(result)
+	if err != nil {
+		return err
+	}
+	result.collectionSeal = sha256.Sum256(payload)
+	return nil
+}
+
+func (r CollectSourceResult) hasValidCollectionSeal() bool {
+	expected := r.collectionSeal
+	if expected == [sha256.Size]byte{} {
+		return false
+	}
+	r.collectionSeal = [sha256.Size]byte{}
+	payload, err := json.Marshal(r)
+	return err == nil && sha256.Sum256(payload) == expected
 }
 
 // SourceCollectionErrorCode returns the stable business code without exposing wrapped transport errors.
@@ -287,9 +319,14 @@ func sourceTransportRetryable(err error) bool {
 }
 
 func (r CollectSourceResult) ObservationPolicyTrace() ObservationPolicyTrace {
-	return ObservationPolicyTrace{
-		SourcePolicyVersionID:   r.SourcePolicyVersionID,
-		EndpointPolicyVersionID: r.EndpointPolicyVersionID,
-		PolicyEvaluatedAt:       r.PolicyEvaluatedAt,
+	trace := ObservationPolicyTrace{
+		SourcePolicyVersionID: r.SourcePolicyVersionID,
+		PolicyEvaluatedAt:     r.PolicyEvaluatedAt,
 	}
+	// EndpointRef 代表经过单独评估的 Endpoint Policy，而不是仅仅存在一个采集入口。
+	if r.EndpointPolicyVersionID != "" {
+		trace.EndpointID = r.EndpointID
+		trace.EndpointPolicyVersionID = r.EndpointPolicyVersionID
+	}
+	return trace
 }

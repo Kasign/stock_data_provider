@@ -20,9 +20,9 @@ type EvidenceSnapshotPage struct {
 // ListEvidenceSnapshotPage composes PIT snapshot creation and cursor
 // continuation without returning article content or re-running PIT on later pages.
 type ListEvidenceSnapshotPage struct {
-	factory    *CreateEvidenceSnapshotForQuery
-	codec      *EvidenceCursorCodec
-	now        func() time.Time
+	factory *CreateEvidenceSnapshotForQuery
+	codec   *EvidenceCursorCodec
+	now     func() time.Time
 }
 
 func NewListEvidenceSnapshotPage(
@@ -44,6 +44,9 @@ func (u *ListEvidenceSnapshotPage) Execute(
 	if u == nil || u.factory == nil || u.factory.repository == nil || u.codec == nil ||
 		u.now == nil || ctx == nil {
 		return EvidenceSnapshotPage{}, ErrInvalidEvidenceQuery
+	}
+	if err := ctx.Err(); err != nil {
+		return EvidenceSnapshotPage{}, err
 	}
 	now := u.now().UTC()
 	if request.Validate(now) != nil {
@@ -67,6 +70,9 @@ func (u *ListEvidenceSnapshotPage) Execute(
 		if err != nil {
 			return EvidenceSnapshotPage{}, err
 		}
+		if err := ctx.Err(); err != nil {
+			return EvidenceSnapshotPage{}, err
+		}
 		if !loaded.MatchesRequest(request) || loaded.SortVersion != evidenceSortVersion {
 			return EvidenceSnapshotPage{}, ErrEvidenceSnapshotPageUnavailable
 		}
@@ -74,6 +80,9 @@ func (u *ListEvidenceSnapshotPage) Execute(
 		position = &decoded
 	}
 
+	if err := ctx.Err(); err != nil {
+		return EvidenceSnapshotPage{}, err
+	}
 	pageItems, hasMore, err := snapshot.PageAfter(position)
 	if err != nil {
 		return EvidenceSnapshotPage{}, err
@@ -84,6 +93,9 @@ func (u *ListEvidenceSnapshotPage) Execute(
 		SystemAsOf:  snapshot.SystemAsOf,
 	}
 	if hasMore {
+		if err := ctx.Err(); err != nil {
+			return EvidenceSnapshotPage{}, err
+		}
 		if len(pageItems) == 0 {
 			return EvidenceSnapshotPage{}, ErrInvalidEvidenceSnapshot
 		}

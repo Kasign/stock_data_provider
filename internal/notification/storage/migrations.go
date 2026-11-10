@@ -3,8 +3,8 @@ package storage
 import platformstorage "example.com/stock-analysis-flow/internal/platform/storage"
 
 // Migrations 返回 Notification 自有持久化结构。
-// Inbox/Fanout 表暂不在此版本创建：FanoutWorkItem 与分页订阅查询契约尚未冻结，
-// 不在存储层先行猜测队列状态、租约字段或游标语义。
+// Inbox 表只保存不可变事件与双唯一身份；Fanout 表结构尚未冻结，
+// 通过同一事务注入的 FanoutWriter 完成原子写入，不在此处猜测队列状态、租约字段或游标语义。
 func Migrations() []platformstorage.Migration {
 	return []platformstorage.Migration{
 		{
@@ -130,6 +130,64 @@ func Migrations() []platformstorage.Migration {
 					PRIMARY KEY (delivery_id, version),
 					KEY idx_notification_delivery_events_time (delivery_id, changed_at),
 					CONSTRAINT fk_notification_delivery_event FOREIGN KEY (delivery_id) REFERENCES notification_deliveries (delivery_id)
+				) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+			},
+		},
+		{
+			Version:     2,
+			Description: "create notification event inbox with dual idempotency constraints",
+			Statements: []string{
+				`CREATE TABLE notification_inbox (
+					source_module VARCHAR(32) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+					event_id VARCHAR(256) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+					idempotency_key VARCHAR(256) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+					event_type VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+					schema_version VARCHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+					subject_ref VARCHAR(256) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+					occurred_at VARCHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+					published_at VARCHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+					correlation_id VARCHAR(256) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+					payload_fingerprint CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+					payload JSON NOT NULL,
+					received_at DATETIME(6) NOT NULL,
+					PRIMARY KEY (source_module, event_id),
+					UNIQUE KEY uk_notification_inbox_idempotency (source_module, idempotency_key),
+					KEY idx_notification_inbox_received_at (received_at)
+				) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+			},
+		},
+		{
+			Version:     3,
+			Description: "create immutable notification template versions",
+			Statements: []string{
+				`CREATE TABLE notification_template_versions (
+					template_id VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+					version BIGINT UNSIGNED NOT NULL,
+					event_type VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+					schema_version VARCHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+					format VARCHAR(16) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+					subject_template MEDIUMTEXT NOT NULL,
+					body_template MEDIUMTEXT NOT NULL,
+					variable_bindings JSON NOT NULL,
+					digest CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+					created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+					PRIMARY KEY (template_id, version),
+					KEY idx_notification_template_event (event_type, schema_version, template_id, version)
+				) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+			},
+		},
+		{
+			Version:     4,
+			Description: "create immutable notification channel config versions",
+			Statements: []string{
+				`CREATE TABLE notification_channel_config_versions (
+					channel_ref VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+					config_version BIGINT UNSIGNED NOT NULL,
+					snapshot_json JSON NOT NULL,
+					digest CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+					created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+					PRIMARY KEY (channel_ref, config_version),
+					KEY idx_notification_channel_config_kind (channel_ref, config_version)
 				) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
 			},
 		},

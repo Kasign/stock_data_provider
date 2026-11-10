@@ -50,7 +50,7 @@ Evidence DTO 的规范字段如下。RSC-CTR-001 的 Schema `$id` 标识 1.0.0 �
 - fact 必须有可验证来源和时间证据；reported_fact 只表达来源声称，不暗示独立核验。
 - inference 必须保留直接上游 Evidence 引用；hypothesis 必须有验证方法、预期观察和失效条件。
 - unknown 表达证据不足；不得用空字符串、0、false 或默认 valid 代替。
-- Evidence 的 system_as_of 不得晚于所属 Run；语义变化必须追加新版本。
+- Evidence 的 system_as_of 不得晚于所属 Run；Research Diagnostics Application 的 `BuildEvidenceCheck(..., runAsOf, ...)` 必须接收 Researchflow CreateRun 的非零 UTC cutoff，并传入 `ValidateForStrictPIT(runAsOf)`。该校验同时约束 Evidence.system_as_of 与 available_at；不得使用 Evidence 自身 system_as_of 代替 Run cutoff。语义变化必须追加新 Evidence ID/版本，不得原地覆盖。
 - stance 是相对 Claim 的立场；无 claim_ref 时不得把无关证据误作支持。
 
 ## 4. AuthorizationRef 与派生来源链
@@ -83,27 +83,24 @@ AuthorizationRef 遵循 GOV-CTR-006，是审计快照引用，不是 bearer toke
 
 ResearchEvent 是跨来源现实事件，不是 News Article 别名。创建、合并、拆分、主体修正或生命周期迁移均追加版本；source_times 保留来源级时间冲突。
 
-当前 `internal/research/event/` 已实现 Event/SourceTime 领域结构、字段和时间校验、SourceTime 到 evidence_refs 的引用约束、版本追加校验及 MVP 生命周期转换。它不查询 Evidence Repository、不执行多来源事实归并、不持久化版本，也不发布 Outbox。非 null 的 occurred_at/published_at/available_at 至少要求存在相同 time_type 的 SourceTime；这只是来源类型存在性检查，不等于已验证规范化规则版本。
+Research Event 与 Claim 作为 Run 诊断快照时，其 system_as_of 必须不晚于 Researchflow CreateRun 的 runAsOf；Context 的 system_as_of 则必须与 Run cutoff 完全一致。四类诊断统一通过 Application Build*Check 显式接收该参数，不扩展领域 DTO。
+- Event 若提供 available_at，必须满足 available_at <= system_as_of；Research Event 的 Domain 校验与 Evidence 严格 PIT 规则保持一致。由于 Event.system_as_of 还必须 <= Run cutoff，该约束可传递保证 available_at 不晚于 Run cutoff。
+
+当前 `internal/research/event/` 已实现 Event/SourceTime 领域校验、版本追加校验和 MVP 生命周期转换；`internal/research/storage/` 已实现 Event SQL Repository，版本追加与生命周期 Outbox 在同一事务提交，并支持 Outbox 领取、租约、重试、确认和拒绝。Research 仍不查询 News Evidence Repository，也不执行多来源事实归并。非 null 的 occurred_at/published_at/available_at 至少要求存在相同 time_type 的 SourceTime；这只是来源类型存在性检查，不等于已验证规范化规则版本。
 
 生命周期：detected/consolidating/active/materializing/fading/invalidated/closed。只有状态真正迁移并持久化后才按 INT-CTR-001 发布 lifecycle_changed；Evidence 追加、来源补录或描述修订但状态未变，不发布。事件通过 Research 本地事务 Outbox 发布，不直接调用 Notification 内部接口。
 
 ## 6.1 RSC-004 Data 实体引用依赖复核
 
-2026-11-06 只读核对 Data 分支 `feat/full-go-data-providers-api-switch`，HEAD 为 `3a82139deb6e343fb651abb07512e909206f1b65`。代码树未发现 SecurityRef、IndustryRef、SecurityMaster、IndustryClassification 或独立 GetSecurity/ListIndustries 查询端口；旧 `internal/analysis/app/ports.go` 仅有泛化 UniverseResolver，不能视为 Data 所有的稳定实体契约。故 RSC-004 暂不开发 Adapter，也不在 Research 中复制 Security/Industry 模型。待 Data 提供稳定引用、历史版本/知识时间语义和公开 Application Port 后再继续。
-
-### RSC-OPEN-006：ScenarioCondition 缺少可执行的值类型与组合 Schema
-
-Quant-Research DTO 第 9.3 节将 `expected_value` 定义为 typed scalar/object，但没有按 condition_type、metric_ref、unit 给出类型映射或 JSON Schema；ConditionGroup（all/any）也没有明确与 `conditions[]` 的联合序列化结构。没有这些定义就无法可靠校验比较值类型、单位和组合语义。
-
-因此 RSC-006 暂不创建 `any`、任意 map 或 JSON RawMessage 作为伪类型实现。待项目契约补齐类型 Registry/oneOf Schema、空值和比较规则后再开发。
+2026-11-09 只读核对 Data 分支 `feat/full-go-data-providers-api-switch`，HEAD 为 `7b3aa2a099b29b841caf93b0890985ecbc002cf4`。Market Data 已迁入根 Go Module（`internal/marketdata` 存在，`services/market-data/go.mod` 已不存在）；代码树仍未发现 SecurityRef、IndustryRef、SecurityMaster、IndustryClassification 或独立 GetSecurity/ListIndustries 查询端口。当前 `SecurityTradingStatus` 是具体状态数据，不是稳定证券主数据身份；旧 `internal/analysis/app/ports.go` 泛化 UniverseResolver 也不能视为 Data 所有的稳定实体契约。故 RSC-004 暂不开发 Adapter，也不在 Research 中复制 Security/Industry 模型。待 Data 提供稳定引用、历史版本/知识时间语义和公开 Application Port 后再继续。
 
 ## 6.2 RSC-006 Scenario 契约准入检查
 
-Quant-Research DTO 已明确 Scenario 主体字段及 QuantResultRef 元数据；Research 不直接调用 Quant，Quant Evaluation 必须由 Researchflow 获取并完成当前授权复核后传入。但 ScenarioCondition 的 `expected_value` 目前仅描述为 typed scalar/object，没有给出按 condition_type、metric_ref、unit 的具体类型映射或 JSON Schema；ConditionGroup（all/any）也未明确与 `conditions[]` 的联合序列化结构。当前不创建 `any`、任意 map 或 JSON RawMessage 作为伪类型实现。待项目契约补齐类型 Registry/oneOf Schema、空值和比较规则后再实现 RSC-006。
+当前仍受本文件 `RSC-OPEN-006` 阻断：Scenario 主体字段及 QuantResultRef 元数据已明确，但 `ScenarioCondition.expected_value` 尚无按 condition_type、metric_ref、unit 定义的类型映射或 JSON Schema，ConditionGroup（all/any）也尚无与 `conditions[]` 对应的机器可验证联合结构。Research 不直接调用 Quant；Quant Evaluation 由 Researchflow 获取并完成当前授权复核后传入。契约补齐前不使用 `any`、任意 map 或 JSON RawMessage 代替强类型定义。
 
 ## 6.3 Claim / Hypothesis 领域实现边界
 
-当前 `internal/research/claim/` 以单一 Claim DTO 表达 reported_fact、inference 和 hypothesis 三类认识论状态。Hypothesis 必须提供 validation_method、expected_observation 和非空 invalidation_conditions；支持与反证引用不能重叠。当前只验证本地结构、UTC 知识截止时间和版本号连续性，不查询 Evidence/Scope 资源，不持久化版本，也不推断支持度或概率。状态值按项目契约枚举校验；状态迁移和跨版本替代关系尚未接入。
+当前 `internal/research/claim/` 以 Claim DTO 表达 reported_fact、inference 和 hypothesis 三类认识论状态；Hypothesis 必须提供 validation_method、expected_observation 和非空 invalidation_conditions，支持与反证引用不能重叠。Claim Validator 已实现本地结构、UTC 知识截止时间、版本连续性和状态迁移门禁；`internal/research/storage/` 已实现 Claim SQL Repository 的事务内版本追加与精确版本读取。当前仍不查询 Evidence/Scope 资源、不自动推断支持度或概率；`supersedes_version` 契约缺口仍未解决。
 
 ## 7. 验收门禁
 
@@ -122,12 +119,12 @@ Fixture/Fake Adapter 只能证明 Research 自身模型和消费边界；真实 
 ## 8. Persistence 边界
 
 - Context/Event/Claim 按 ID + 版本保存不可变快照，读取使用精确版本，不提供未经契约定义的列表/搜索接口。
-- Evidence 当前契约没有 Research-owned version 字段，Repository 以 evidence_id 作为不可变键；相同 ID 的不同 content_fingerprint 必须拒绝，禁止自动生成替代 ID。语义变化如何形成新版本仍待项目契约明确；content_fingerprint 不替代上游 source_version。
+- Evidence 当前契约没有 Research-owned version 字段，Repository 以 evidence_id 作为不可变键；相同 ID、相同完整 payload 才允许幂等重放，任何完整 payload 变化（包括 authorization_ref 变化）均冲突拒绝，不自动生成替代 ID。语义变化如何形成新 Evidence ID/版本仍待项目契约明确；content_fingerprint 不替代上游 source_version。
 - Research 拥有领域表、SQL、Repository Port 和 Migration 定义；连接池、Ping/Close、Migration 执行与历史校验复用 `internal/platform/storage`。
 - Research Migration namespace 为 `research`，由组合根显式注册和执行；Research 分支不修改服务启动入口或根 Migration 注册表。
 - system_as_of、system_observed_at、available_at 使用固定 30 字符 UTC RFC3339Nano（9 位小数）字符串并以 ascii_bin 排序，保证 PIT 纳秒精度；Migration v2 将 v1 DATETIME(6) 数据扩展为 6 位微秒 + 3 位零纳秒。created_at/updated_at 仍使用 DATETIME(6)，只作审计时间。payload_sha256 只用于完整 DTO 序列化内容的幂等校验。
-- changed_at 的事务 Outbox 记录暂不创建，等待 RSC-OPEN-002 的 DTO/Envelope 映射决议。
-- Evidence SQL Adapter 暂缓，等待 RSC-OPEN-007 明确授权快照续期历史的独立存储模型。
+- Event lifecycle_changed 的 changed_at 已按项目级 INT-CTR-001 映射决议，在 Event 新版本和 Outbox 同一事务中固化；Outbox 重试复用原值。Server → Notification PublishEvent Relay 接线仍待组合根集成。
+- Evidence SQL Adapter 的 Append/Get 已实现；RSC-OPEN-007 仅保留授权快照续期历史的独立留档语义待决，不再阻断 Evidence 基础不可变存储。
 
 ## 9. 跨模块边界决议与待决项
 
@@ -159,14 +156,14 @@ Quant-Research DTO 第 3.4 节定义 claim_version，但没有 `supersedes_versi
 
 ### RSC-DEC-002：Lifecycle changed_at 的事务时间语义
 
-项目级决议已明确 changed_at 是 Event 状态迁移提交时间，必须随 Event 新版本和 Outbox 在同一领域事务内持久化；Outbox 重试复用持久化值。它不是 occurred_at 或 system_observed_at。当前 Domain 仅构造 lifecycle transition 负载，事务和 Outbox 接入仍待实现。
+项目级决议已明确 changed_at 是 Event 状态迁移提交时间，必须随 Event 新版本和 Outbox 在同一领域事务内持久化；Outbox 重试复用持久化值。它不是 occurred_at 或 system_observed_at。当前 Research 已实现该事务和 Outbox 机制，专用 MariaDB 验收已通过；剩余是 Server → Notification Relay 接线。
 
-### RSC-OPEN-002：ResearchEvent.changed_at 与 INT-CTR-001 DTO 映射缺口
+### RSC-OPEN-002：Server → Notification Relay 接线待完成
 
-项目级 Quant-Research DTO 第 3.3 节没有 changed_at 字段，但 lifecycle_changed 事件要求该时间。语义已确定，字段/事件 Envelope 的具体映射仍待项目级契约统一；不得使用 occurred_at、system_observed_at 或 Outbox 重试时间替代。该缺口只阻断通知生产映射，不阻断 Event Domain 独立测试。
+INT-CTR-001 已接受 `lifecycle_changed` Payload 映射：`source_event_ref`、`research_event_ref`、`event_version`、`previous_state`、`current_state`、`reason_code`、`system_as_of`、`changed_at`。`changed_at` 是状态迁移提交时间，不得用 `occurred_at` 或 `system_observed_at` 代替。Research Migration v4/v5 提供事务 Outbox 和领取/租约/重试/确认/拒绝；CreateEvent 首次创建与 UpdateEvent 状态迁移均在同一事务写入 Outbox；Schema/Golden 自动 Contract Test 与专用 MariaDB 验收已通过。当前未完成的是 Server 组合根消费 Research Outbox 并调用 Notification `PublishEvent` 的 Relay 接线；这不是 DTO 映射或 Research Outbox 本身的缺口。
 
 
 
 ### RSC-OPEN-007：Evidence 授权快照续期与存储幂等边界
 
-Evidence.content_fingerprint 排除 authorization_ref，而存储层 payload_sha256 覆盖完整 DTO。相同 evidence_id、相同内容但不同 AuthorizationRef 会导致内容指纹相同、完整 payload 摘要不同。当前采用完整 DTO 不可变、冲突拒绝策略；不允许原地覆盖历史 AuthorizationRef，也不自动生成替代 evidence_id。若需要持久化授权续期历史，须由项目契约定义独立授权记录或关联结构。此问题不阻断 Context/Event/Claim Repository Adapter，但阻断 Evidence SQL Adapter 对“相同内容不同授权快照”的幂等语义定稿。
+Evidence.content_fingerprint 排除 authorization_ref，而存储层 payload_sha256 覆盖完整 DTO。相同 evidence_id、相同内容但不同 AuthorizationRef 会导致内容指纹相同、完整 payload 摘要不同。当前已采用完整 DTO 不可变、冲突拒绝策略；不允许原地覆盖历史 AuthorizationRef，也不自动生成替代 evidence_id。若要持久化授权续期历史，须由项目契约定义独立授权记录或关联结构。该待决项不阻断当前 Evidence Append/Get；它仅阻断“同一 Evidence ID 下授权续期可追溯”的额外能力。

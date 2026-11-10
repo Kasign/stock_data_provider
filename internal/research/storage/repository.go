@@ -86,8 +86,13 @@ func (r repositoryBase) appendVersionWithHook(ctx context.Context, aggregateType
 	}
 	defer tx.Rollback()
 
-	_, err = tx.ExecContext(ctx, "INSERT IGNORE INTO research_aggregate_heads "+
-		"(aggregate_type, aggregate_id, latest_version, created_at, updated_at) VALUES (?, ?, 0, ?, ?)",
+	// Use an upsert that takes the aggregate-head write lock immediately.
+	// INSERT IGNORE can acquire a shared duplicate-key lock that is later
+	// upgraded by SELECT FOR UPDATE; concurrent appenders may deadlock while
+	// upgrading those locks.
+	_, err = tx.ExecContext(ctx, "INSERT INTO research_aggregate_heads "+
+		"(aggregate_type, aggregate_id, latest_version, created_at, updated_at) VALUES (?, ?, 0, ?, ?) "+
+		"ON DUPLICATE KEY UPDATE aggregate_id=VALUES(aggregate_id)",
 		aggregateType, aggregateID, now, now)
 	if err != nil {
 		return fmt.Errorf("initialize research aggregate head: %w", err)
@@ -130,6 +135,9 @@ func (r repositoryBase) appendVersionWithHook(ctx context.Context, aggregateType
 		var previous []byte
 		query := fmt.Sprintf("SELECT payload_sha256, payload FROM %s WHERE %s=? AND %s=?", table, idColumn, versionColumn)
 		if err := tx.QueryRowContext(ctx, query, aggregateID, latest).Scan(&previousDigest, &previous); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return corruptStoredRecord(aggregateType, "aggregate head references a missing latest version", nil)
+			}
 			return fmt.Errorf("read previous research version: %w", err)
 		}
 		if err := verifyStoredPayload(previous, previousDigest); err != nil {

@@ -63,6 +63,9 @@ func (e ResearchEvent) Validate() error {
 			}
 		}
 	}
+	if e.AvailableAt != nil && e.AvailableAt.After(e.SystemAsOf) {
+		return fmt.Errorf("available_at must not be later than system_as_of")
+	}
 	if e.SupersedesEventVersion != nil && (*e.SupersedesEventVersion < 1 || *e.SupersedesEventVersion >= e.EventVersion) {
 		return fmt.Errorf("supersedes_event_version must not supersede the current or a future event_version")
 	}

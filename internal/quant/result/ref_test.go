@@ -149,7 +149,6 @@ func TestBuildRefMatchesQNTCTR004Golden(t *testing.T) {
 	}
 }
 
-
 func TestBuildRefOutputMatchesQNTCTR004Schema(t *testing.T) {
 	schemaPath := filepath.Join("..", "..", "..", "doc", "quant", "schema", "QNT-CTR-004-quant-result-ref-1.0.0.schema.json")
 	schemaDocument, err := os.ReadFile(schemaPath)
@@ -200,11 +199,33 @@ func TestBuildRefOutputMatchesQNTCTR004Schema(t *testing.T) {
 		invalid[key] = value
 	}
 	invalid["unexpected"] = true
+
 	if err := schema.Validate(invalid); err == nil {
 		t.Fatal("schema accepted an unknown QuantResultRef field")
 	}
-}
 
+	for _, field := range []string{"period", "algorithm_version", "parameter_fingerprint", "authorization_ref"} {
+		invalid = make(map[string]any)
+		for key, value := range instance.(map[string]any) {
+			invalid[key] = value
+		}
+		invalid[field] = "   "
+		if err := schema.Validate(invalid); err == nil {
+			t.Fatalf("schema accepted whitespace-only %s", field)
+		}
+	}
+
+	nonStock := make(map[string]any)
+	for key, value := range instance.(map[string]any) {
+		nonStock[key] = value
+	}
+	nonStock["scope"] = "market"
+	delete(nonStock, "security_id")
+	if err := schema.Validate(nonStock); err != nil {
+		t.Fatalf("schema rejected market ref without security_id: %v", err)
+	}
+
+}
 
 func TestBuildRefRejectsInvalidUTF8Metadata(t *testing.T) {
 	tests := []struct {
@@ -228,17 +249,105 @@ func TestBuildRefRejectsInvalidUTF8Metadata(t *testing.T) {
 	}
 }
 
-func TestBuildRefRejectsInvalidUTF8SnapshotReference(t *testing.T) {
-	source, err := manifest.Build(manifest.Input{
-		ResultType: "factor", SchemaVersion: "1.0.0",
-		SystemAsOf: time.Date(2026, 11, 9, 0, 0, 0, 0, time.UTC),
-		InputSnapshotRefs: []string{string([]byte{0xff})},
-		ResultFingerprint: testManifest(t).ResultFingerprint,
-	})
-	if err != nil {
-		t.Fatalf("Build() error = %v", err)
+func TestBuildRefRejectsBlankOrNonCanonicalMetadata(t *testing.T) {
+	tests := []struct {
+		name   string
+		mutate func(*RefInput)
+	}{
+		{"security_id whitespace", func(v *RefInput) { v.SecurityID = "   " }},
+		{"period whitespace", func(v *RefInput) { v.Period = "   " }},
+		{"period leading whitespace", func(v *RefInput) { v.Period = " 20d" }},
+		{"algorithm version whitespace", func(v *RefInput) { v.AlgorithmVersion = " " }},
+		{"parameter fingerprint trailing whitespace", func(v *RefInput) { v.ParameterFingerprint = "sha256:x " }},
+		{"authorization ref whitespace", func(v *RefInput) { v.AuthorizationRef = "\t" }},
 	}
-	if _, err := BuildRef(validRefInput(), source); !errors.Is(err, ErrInvalidResultRef) {
-		t.Fatalf("BuildRef() error = %v, want ErrInvalidResultRef", err)
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			input := validRefInput()
+			tc.mutate(&input)
+			if _, err := BuildRef(input, testManifest(t)); !errors.Is(err, ErrInvalidResultRef) {
+				t.Fatalf("BuildRef() error = %v, want ErrInvalidResultRef", err)
+			}
+		})
+	}
+}
+
+func TestQuantResultRefSchemaMatchesGoCanonicalTextAndIdentityRules(t *testing.T) {
+	schemaPath := filepath.Join("..", "..", "..", "doc", "quant", "schema", "QNT-CTR-004-quant-result-ref-1.0.0.schema.json")
+	schemaDocument, err := os.ReadFile(schemaPath)
+	if err != nil {
+		t.Fatalf("read QuantResultRef schema: %v", err)
+	}
+	compiler := jsonschema.NewCompiler()
+	compiler.Draft = jsonschema.Draft2020
+	compiler.AssertFormat = true
+	const schemaURL = "https://quant.invalid/quant-result-ref-canonical.schema.json"
+	if err := compiler.AddResource(schemaURL, bytes.NewReader(schemaDocument)); err != nil {
+		t.Fatal(err)
+	}
+	schema, err := compiler.Compile(schemaURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ref, err := BuildRef(validRefInput(), testManifest(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	encoded, err := json.Marshal(ref)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var base map[string]any
+	if err := json.Unmarshal(encoded, &base); err != nil {
+		t.Fatal(err)
+	}
+	clone := func() map[string]any {
+		copy := make(map[string]any, len(base))
+		for key, value := range base {
+			copy[key] = value
+		}
+		copy["input_snapshot_refs"] = append([]any(nil), base["input_snapshot_refs"].([]any)...)
+		return copy
+	}
+	invalid := []struct {
+		name   string
+		mutate func(map[string]any)
+	}{
+		{"result_id is not a content address", func(v map[string]any) { v["result_id"] = "result-1" }},
+		{"system_as_of has redundant fractional zeros", func(v map[string]any) { v["system_as_of"] = "2026-11-09T00:00:00.000Z" }},
+		{"created_at has redundant fractional zeros", func(v map[string]any) { v["created_at"] = "2026-11-09T00:00:00.000Z" }},
+		{"system_as_of uses a non-UTC offset", func(v map[string]any) { v["system_as_of"] = "2026-11-09T08:00:00+08:00" }},
+		{"created_at uses a non-UTC offset", func(v map[string]any) { v["created_at"] = "2026-11-09T08:00:00+08:00" }},
+		{"security_id leading whitespace", func(v map[string]any) { v["security_id"] = " security-1" }},
+		{"security_id trailing whitespace", func(v map[string]any) { v["security_id"] = "security-1 " }},
+		{"period leading whitespace", func(v map[string]any) { v["period"] = " 20d" }},
+		{"period trailing whitespace", func(v map[string]any) { v["period"] = "20d " }},
+		{"algorithm_version leading whitespace", func(v map[string]any) { v["algorithm_version"] = " momentum.v1" }},
+		{"algorithm_version trailing whitespace", func(v map[string]any) { v["algorithm_version"] = "momentum.v1 " }},
+		{"parameter_fingerprint leading whitespace", func(v map[string]any) { v["parameter_fingerprint"] = " sha256:x" }},
+		{"parameter_fingerprint trailing whitespace", func(v map[string]any) { v["parameter_fingerprint"] = "sha256:x " }},
+		{"authorization_ref leading whitespace", func(v map[string]any) { v["authorization_ref"] = " authorization-1" }},
+		{"authorization_ref trailing whitespace", func(v map[string]any) { v["authorization_ref"] = "authorization-1 " }},
+		{"snapshot ref leading whitespace", func(v map[string]any) { v["input_snapshot_refs"] = []any{" snapshot-1"} }},
+		{"snapshot ref trailing whitespace", func(v map[string]any) { v["input_snapshot_refs"] = []any{"snapshot-1 "} }},
+		{"snapshot ref whitespace only", func(v map[string]any) { v["input_snapshot_refs"] = []any{"   "} }},
+	}
+	for _, tc := range invalid {
+		t.Run(tc.name, func(t *testing.T) {
+			instance := clone()
+			tc.mutate(instance)
+			if err := schema.Validate(instance); err == nil {
+				t.Fatal("Schema unexpectedly accepted non-canonical QuantResultRef")
+			}
+		})
+	}
+	if err := schema.Validate(base); err != nil {
+		t.Fatalf("Schema rejected canonical BuildRef output: %v", err)
+	}
+	market := clone()
+	market["scope"] = "market"
+	delete(market, "security_id")
+	if err := schema.Validate(market); err != nil {
+		t.Fatalf("Schema rejected market Ref without security_id: %v", err)
 	}
 }

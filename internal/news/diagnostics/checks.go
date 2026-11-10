@@ -24,6 +24,59 @@ type StorageProbe interface {
 	MissingSchemaTables(context.Context) ([]string, error)
 }
 
+// ObservationRetentionProbe 只读取到期 backlog，不执行清理或改变数据。
+type ObservationRetentionProbe interface {
+	ObservationRetentionBacklog(context.Context, time.Time) (int, *time.Time, error)
+}
+
+// ObservationRetentionCheck 报告已到期但尚未清除的候选载荷数量。
+func ObservationRetentionCheck(probe ObservationRetentionProbe) platformdiag.Check {
+	return platformdiag.Check{
+		ID: "news.observation.retention_backlog", Name: "News observation retention backlog",
+		Required: true, Timeout: 5 * time.Second,
+		Run: func(ctx context.Context) (platformdiag.Observation, error) {
+			if err := ctx.Err(); err != nil {
+				return platformdiag.Observation{}, err
+			}
+			if probe == nil {
+				return platformdiag.Observation{}, fault.New(
+					fault.ClassUnavailable, "news.observation.retention_probe_unavailable",
+					"News observation retention probe is unavailable", nil,
+				)
+			}
+			checkedAt := time.Now().UTC()
+			count, oldest, err := probe.ObservationRetentionBacklog(ctx, checkedAt)
+			if err != nil {
+				return platformdiag.Observation{}, fault.New(
+					fault.ClassUnavailable, "news.observation.retention_backlog_query_failed",
+					"News observation retention backlog query failed", err,
+				)
+			}
+			if count < 0 || (count == 0 && oldest != nil) || (count > 0 && oldest == nil) {
+				return platformdiag.Observation{}, fault.New(
+					fault.ClassInternal, "news.observation.retention_backlog_invalid",
+					"News observation retention backlog returned inconsistent counters", nil,
+				)
+			}
+			attributes := map[string]string{"overdue_count": fmt.Sprintf("%d", count)}
+			if oldest != nil {
+				attributes["oldest_overdue_at"] = oldest.UTC().Format(time.RFC3339Nano)
+			}
+			if count > 0 {
+				return platformdiag.Observation{
+					Status: platformdiag.StatusDegraded, ReasonCode: "news.observation.retention_backlog",
+					SafeMessage: "Expired observation payloads are awaiting purge",
+					CheckedAt:   checkedAt, Attributes: attributes,
+				}, nil
+			}
+			return platformdiag.Observation{
+				Status: platformdiag.StatusHealthy, SafeMessage: "No expired observation payloads are awaiting purge",
+				CheckedAt: checkedAt, Attributes: attributes,
+			}, nil
+		},
+	}
+}
+
 // ProviderConfigChecks reports optional Provider configuration without exposing
 // endpoint values or credentials and without making billable upstream requests.
 func ProviderConfigChecks(config newsconfig.Config) []platformdiag.Check {
@@ -54,6 +107,32 @@ func providerConfigCheck(code, name string, configured bool) platformdiag.Check 
 			return platformdiag.Observation{
 				Status: platformdiag.StatusHealthy, SafeMessage: "Provider configuration is present",
 				CheckedAt: time.Now().UTC(), Attributes: map[string]string{"configured": "true"},
+			}, nil
+		},
+	}
+}
+
+// ProviderOutputPolicyCheck is the fail-closed fallback used when no resolver is wired.
+// Prefer ProviderOutputPolicyResolverCheck when the composition root has a resolver.
+// Neither check authorizes persistence; a concrete request must still be evaluated.
+func ProviderOutputPolicyCheck() platformdiag.Check {
+	return platformdiag.Check{
+		ID: "news.provider.output_policy", Name: "News provider output policy readiness",
+		Required: true, Timeout: time.Second,
+		Run: func(ctx context.Context) (platformdiag.Observation, error) {
+			if err := ctx.Err(); err != nil {
+				return platformdiag.Observation{}, err
+			}
+			return platformdiag.Observation{
+				Status:      platformdiag.StatusDegraded,
+				ReasonCode:  "news.provider.output_policy_unavailable",
+				SafeMessage: "Trusted Provider output policy evaluation is not configured; Provider persistence remains blocked",
+				CheckedAt:   time.Now().UTC(),
+				Attributes: map[string]string{
+					"policy_catalog":       "unavailable",
+					"policy_evaluator":     "unavailable",
+					"provider_persistence": "blocked",
+				},
 			}, nil
 		},
 	}
@@ -224,7 +303,7 @@ func StorageChecks(probe StorageProbe) []platformdiag.Check {
 				}
 				return platformdiag.Observation{
 					Status: platformdiag.StatusHealthy, SafeMessage: "News storage schema is ready",
-					CheckedAt: time.Now().UTC(), Attributes: map[string]string{"required_tables": "7"},
+					CheckedAt: time.Now().UTC(), Attributes: map[string]string{"required_tables": "10"},
 				}, nil
 			},
 		},

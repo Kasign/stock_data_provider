@@ -141,6 +141,26 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 	if err := repository.CreateEvidenceSnapshot(ctx, snapshot); err != nil {
 		t.Fatalf("idempotent evidence snapshot create: %v", err)
 	}
+
+	// Concurrent retries with the same immutable reference and payload must
+	// converge to the already persisted row instead of surfacing duplicate-key errors.
+	const snapshotRetryWorkers = 8
+	snapshotRetryErrors := make(chan error, snapshotRetryWorkers)
+	var snapshotRetryWait sync.WaitGroup
+	for index := 0; index < snapshotRetryWorkers; index++ {
+		snapshotRetryWait.Add(1)
+		go func() {
+			defer snapshotRetryWait.Done()
+			snapshotRetryErrors <- repository.CreateEvidenceSnapshot(ctx, snapshot)
+		}()
+	}
+	snapshotRetryWait.Wait()
+	close(snapshotRetryErrors)
+	for retryErr := range snapshotRetryErrors {
+		if retryErr != nil {
+			t.Fatalf("concurrent idempotent evidence snapshot create: %v", retryErr)
+		}
+	}
 	loadedSnapshot, err := repository.GetEvidenceSnapshot(ctx, snapshot.SnapshotRef, snapshot.CallerRef, snapshotCreatedAt.Add(time.Minute))
 	if err != nil {
 		t.Fatalf("get evidence snapshot: %v", err)
@@ -219,7 +239,6 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 	const workers = 6
 
 	candidate := domain.Candidate{
-		ProviderCode:   "integration",
 		SourceItemID:   "native-item-001",
 		Title:          "News integration title",
 		PublisherName:  "Integration Publisher",
@@ -295,21 +314,21 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 	traceCandidate := domain.Candidate{SourceItemID: "provider-trace-item", ProviderCode: "tavily", Title: "trace test"}
 	trace := app.ObservationPolicyTrace{
 		SourcePolicyVersionID: "source-policy-v1",
-		EndpointID: "endpoint-v1", EndpointPolicyVersionID: "endpoint-policy-v1",
-		ProviderOutputPolicyRef: "provider-policy-ref",
+		EndpointID:            "endpoint-v1", EndpointPolicyVersionID: "endpoint-policy-v1",
+		ProviderOutputPolicyRef:       "provider-policy-ref",
 		ProviderOutputPolicyVersionID: "provider-policy-v1",
-		PolicyEvaluatedAt: time.Now().UTC(),
+		PolicyEvaluatedAt:             time.Now().UTC(),
 	}
-	traced, err := ingest.ExecuteWithPolicyTrace(ctx, traceSourceID, "provider-trace-key", traceCandidate, domain.SourceURLPolicy{}, trace)
-	if err != nil {
-		t.Fatalf("ingest provider policy trace: %v", err)
+	if _, err := ingest.ExecuteWithPolicyTrace(ctx, traceSourceID, "provider-trace-key", traceCandidate, domain.SourceURLPolicy{}, trace); !errors.Is(err, app.ErrProviderOutputPolicyRequired) {
+		t.Fatalf("self-declared provider policy error = %v, want fail-closed rejection", err)
 	}
-	replayedTrace, err := ingest.ExecuteWithPolicyTrace(ctx, traceSourceID, "provider-trace-key", traceCandidate, domain.SourceURLPolicy{}, trace)
-	if err != nil {
-		t.Fatalf("replay provider policy trace: %v", err)
+	if err := db.QueryRowContext(ctx,
+		"SELECT COUNT(*) FROM news_items WHERE origin_source_id = ?", traceSourceID,
+	).Scan(&itemCount); err != nil {
+		t.Fatal(err)
 	}
-	if replayedTrace.ID != traced.ID || replayedTrace.ProviderOutputPolicyVersionID != "provider-policy-v1" {
-		t.Fatalf("provider output policy version was not persisted and replayed: %+v", replayedTrace)
+	if itemCount != 0 {
+		t.Fatalf("provider policy rejection created %d News items, want 0", itemCount)
 	}
 
 	replayed, err := ingest.Execute(ctx, sourceID, "news-it-key-0", candidate, domain.SourceURLPolicy{})
@@ -399,8 +418,8 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 
 	secondSourceID := sourceID + "-second"
 	secondCandidate := domain.Candidate{
-		ProviderCode: "integration", SourceItemID: "native-item-002",
-		Title: "Second news item", PublisherName: "Second Publisher",
+		SourceItemID: "native-item-002",
+		Title:        "Second news item", PublisherName: "Second Publisher",
 	}
 	secondObservation, err := ingest.Execute(ctx, secondSourceID, "news-it-second-key", secondCandidate, domain.SourceURLPolicy{})
 	if err != nil {
@@ -437,7 +456,7 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 	if pitRecord.Version.ID != secondVersion.Version.ID ||
 		pitRecord.Observation.ID != secondObservation.ID ||
 		pitRecord.SourceRef != secondSourceID ||
-		pitRecord.ProviderRef != "integration" {
+		pitRecord.ProviderRef != "" {
 		t.Fatalf("PIT record mismatch: %+v", pitRecord)
 	}
 	atVersion.SystemAsOf = secondVersion.Version.ObservedAt.Add(-time.Second)
@@ -456,6 +475,18 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 		},
 		PageSize: 20,
 	}
+	// 写入可追踪的历史策略引用，验证 PIT 查询完整回读 V6 字段。
+	policyEvaluatedAt := time.Now().UTC()
+	if _, err := db.ExecContext(ctx, `UPDATE news_observations
+		SET endpoint_id = ?, provider_output_policy_ref = ?,
+		    provider_output_policy_version_id = ?, policy_evaluated_at = ?
+		WHERE observation_id = ?`,
+		"endpoint-pit-v1", "provider-policy-pit", "provider-policy-v7",
+		policyEvaluatedAt, secondObservation.ID,
+	); err != nil {
+		t.Fatalf("set PIT policy trace fixture: %v", err)
+	}
+
 	listed, err := repository.ListEvidenceVersionsAt(ctx, listRequest)
 	if err != nil {
 		t.Fatalf("list evidence at system_as_of: %v", err)
@@ -463,6 +494,13 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 	if len(listed) != 1 || listed[0].Version.ID != secondVersion.Version.ID ||
 		listed[0].Observation.ID != secondObservation.ID || listed[0].SourceRef != secondSourceID {
 		t.Fatalf("ListEvidence PIT returned unexpected records: %+v", listed)
+	}
+	gotObservation := listed[0].Observation
+	if gotObservation.EndpointID != "endpoint-pit-v1" ||
+		gotObservation.ProviderOutputPolicyRef != "provider-policy-pit" ||
+		gotObservation.ProviderOutputPolicyVersionID != "provider-policy-v7" ||
+		!gotObservation.PolicyEvaluatedAt.Equal(policyEvaluatedAt) {
+		t.Fatalf("ListEvidence PIT lost policy trace: %+v", gotObservation)
 	}
 	listRequest.SystemAsOf = secondVersion.Version.ObservedAt.Add(-time.Second)
 	listed, err = repository.ListEvidenceVersionsAt(ctx, listRequest)
@@ -658,11 +696,243 @@ func integrationAuthorizationEvidence() (domain.Observation, domain.NewsItemVers
 	observation := domain.Observation{
 		ID: "news-it-auth-observation", NewsID: "news_001", SourceID: "sec-edgar",
 		ProviderCode: "tavily", SourcePolicyVersionID: "2.1.0",
-		EndpointPolicyVersionID: "1.0.0", ProviderOutputPolicyVersionID: "3.0.0",
+		EndpointID: "sec-edgar-filings", EndpointPolicyVersionID: "1.0.0",
+		ProviderOutputPolicyRef: "tavily-output", ProviderOutputPolicyVersionID: "3.0.0",
 	}
 	version := domain.NewsItemVersion{
 		ID: "news-it-auth-version", NewsID: "news_001", VersionNo: 1,
 		ObservationID: observation.ID,
 	}
 	return observation, version
+}
+
+// TestObservationRetentionPurgeIntegration covers MariaDB V8 retention writes,
+// idempotent purge, and the no-resurrection rule for an expired payload.
+func TestObservationRetentionPurgeIntegration(t *testing.T) {
+	dsn := os.Getenv("NEWS_MARIADB_TEST_DSN")
+	if dsn == "" {
+		t.Skip("set NEWS_MARIADB_TEST_DSN to run News MariaDB integration")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	db, err := sql.Open("mysql", dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	db.SetMaxOpenConns(8)
+	defer db.Close()
+	if err := db.PingContext(ctx); err != nil {
+		t.Fatalf("MariaDB ping failed: %v", err)
+	}
+	if err := platformstorage.ApplyMigrations(ctx, db, "news", Migrations()); err != nil {
+		t.Fatalf("apply News migrations: %v", err)
+	}
+	repository, err := NewMySQLRepository(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC()
+	observations := make([]domain.Observation, 3)
+	for i := range observations {
+		observations[i] = domain.Observation{
+			ID:             fmt.Sprintf("news-retention-it-%d-%d", time.Now().UnixNano(), i),
+			IdempotencyKey: fmt.Sprintf("news-retention-key-%d-%d", time.Now().UnixNano(), i),
+			SourceID:       "news-retention-integration",
+			Candidate:      domain.Candidate{SourceItemID: fmt.Sprintf("retention-source-item-%d", i), Title: "must be purged"},
+			ObservedAt:     now.Add(-2 * time.Hour), RetentionUntil: now.Add(-time.Hour),
+			IdentityStatus: domain.ObservationUnidentified,
+		}
+	}
+	referenceNewsID := fmt.Sprintf("news-retention-reference-%d", time.Now().UnixNano())
+	referenceVersionID := fmt.Sprintf("news-retention-version-%d", time.Now().UnixNano())
+	defer func() {
+		_, _ = db.ExecContext(context.Background(), "DELETE FROM news_item_versions WHERE version_id = ?", referenceVersionID)
+		for _, observation := range observations {
+			_, _ = db.ExecContext(context.Background(), "DELETE FROM news_observations WHERE observation_id = ?", observation.ID)
+		}
+		_, _ = db.ExecContext(context.Background(), "DELETE FROM news_items WHERE news_id = ?", referenceNewsID)
+	}()
+	for _, observation := range observations {
+		if err := repository.WithinIdentityTransaction(ctx, func(tx app.IdentityTransaction) error {
+			_, err := tx.AppendObservation(ctx, observation)
+			return err
+		}); err != nil {
+			t.Fatalf("insert expiring observation %s: %v", observation.ID, err)
+		}
+	}
+
+	// 让一条 Observation 被版本事实外键引用，确认载荷清理不会破坏历史引用。
+	if _, err := db.ExecContext(ctx, "INSERT INTO news_items (news_id, origin_source_id) VALUES (?, ?)", referenceNewsID, "news-retention-integration"); err != nil {
+		t.Fatalf("insert referenced news item: %v", err)
+	}
+	if _, err := db.ExecContext(ctx, "UPDATE news_observations SET news_id = ? WHERE observation_id = ?", referenceNewsID, observations[0].ID); err != nil {
+		t.Fatalf("bind referenced observation: %v", err)
+	}
+	if _, err := db.ExecContext(ctx, `INSERT INTO news_item_versions
+		(version_id, news_id, version_no, fingerprint, title, content_json, observed_at, observation_id)
+		VALUES (?, ?, 1, ?, ?, JSON_OBJECT(), ?, ?)`,
+		referenceVersionID, referenceNewsID, strings.Repeat("a", 64), "retention reference",
+		observations[0].ObservedAt, observations[0].ID); err != nil {
+		t.Fatalf("insert version referencing observation: %v", err)
+	}
+
+	firstBatch, err := repository.PurgeExpiredObservationPayloads(ctx, now, 2)
+	if err != nil || firstBatch.Scanned != 2 || firstBatch.Purged != 2 {
+		t.Fatalf("first batch result=%+v err=%v", firstBatch, err)
+	}
+	secondBatch, err := repository.PurgeExpiredObservationPayloads(ctx, now, 2)
+	if err != nil || secondBatch.Scanned != 1 || secondBatch.Purged != 1 {
+		t.Fatalf("second batch result=%+v err=%v", secondBatch, err)
+	}
+	repeated, err := repository.PurgeExpiredObservationPayloads(ctx, now.Add(time.Minute), 2)
+	if err != nil || repeated.Scanned != 0 || repeated.Purged != 0 {
+		t.Fatalf("repeat purge result=%+v err=%v", repeated, err)
+	}
+
+	for _, observation := range observations {
+		var candidateJSON []byte
+		var purgedAt sql.NullTime
+		if err := db.QueryRowContext(ctx, "SELECT candidate_json, payload_purged_at FROM news_observations WHERE observation_id = ?", observation.ID).Scan(&candidateJSON, &purgedAt); err != nil {
+			t.Fatalf("read purged observation %s: %v", observation.ID, err)
+		}
+		var candidate domain.Candidate
+		if err := json.Unmarshal(candidateJSON, &candidate); err != nil {
+			t.Fatalf("decode purged candidate %s: %v", observation.ID, err)
+		}
+		if candidate.Title != "" || !purgedAt.Valid {
+			t.Fatalf("candidate payload was not cleared: candidate=%+v purged_at=%+v", candidate, purgedAt)
+		}
+		var retainedRows int
+		if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM news_observations WHERE observation_id = ?", observation.ID).Scan(&retainedRows); err != nil {
+			t.Fatal(err)
+		}
+		if retainedRows != 1 {
+			t.Fatalf("observation tombstone row count=%d, want 1", retainedRows)
+		}
+	}
+	pitRecord, err := repository.GetEvidenceVersionAt(ctx, app.GetEvidenceRequest{
+		NewsID: referenceNewsID, VersionID: referenceVersionID, SystemAsOf: now.Add(time.Minute),
+	})
+	if err != nil {
+		t.Fatalf("PIT query after observation payload purge: %v", err)
+	}
+	if pitRecord.Observation.PayloadPurgedAt == nil || pitRecord.Observation.Candidate.Title != "" {
+		t.Fatalf("PIT query disclosed a purged candidate payload: %+v", pitRecord.Observation)
+	}
+	var retainedVersionRows int
+	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM news_item_versions WHERE version_id = ? AND observation_id = ?", referenceVersionID, observations[0].ID).Scan(&retainedVersionRows); err != nil {
+		t.Fatal(err)
+	}
+	if retainedVersionRows != 1 {
+		t.Fatalf("version reference row count=%d, want 1", retainedVersionRows)
+	}
+	if err := repository.WithinIdentityTransaction(ctx, func(tx app.IdentityTransaction) error {
+		_, err := tx.AppendObservation(ctx, observations[0])
+		return err
+	}); !errors.Is(err, app.ErrObservationPayloadPurged) {
+		t.Fatalf("idempotent replay after purge error=%v, want ErrObservationPayloadPurged", err)
+	}
+
+	// 用数据库触发器在载荷 UPDATE 阶段注入失败，验证清理事务不会留下半成品。
+	rollbackObservation := domain.Observation{
+		ID:             fmt.Sprintf("news-retention-rollback-%d", time.Now().UnixNano()),
+		IdempotencyKey: fmt.Sprintf("news-retention-rollback-key-%d", time.Now().UnixNano()),
+		SourceID:       "news-retention-integration",
+		Candidate:      domain.Candidate{SourceItemID: "retention-rollback-item", Title: "must survive rollback"},
+		ObservedAt:     now.Add(-2 * time.Hour), RetentionUntil: now.Add(-time.Hour),
+		IdentityStatus: domain.ObservationUnidentified,
+	}
+	if err := repository.WithinIdentityTransaction(ctx, func(tx app.IdentityTransaction) error {
+		_, err := tx.AppendObservation(ctx, rollbackObservation)
+		return err
+	}); err != nil {
+		t.Fatalf("insert rollback observation: %v", err)
+	}
+	defer func() {
+		_, _ = db.ExecContext(context.Background(), "DROP TRIGGER IF EXISTS news_retention_force_rollback")
+		_, _ = db.ExecContext(context.Background(), "DELETE FROM news_observations WHERE observation_id = ?", rollbackObservation.ID)
+	}()
+	triggerSQL := "CREATE TRIGGER news_retention_force_rollback " +
+		"BEFORE UPDATE ON news_observations FOR EACH ROW " +
+		"SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'forced observation purge rollback'"
+	if _, err := db.ExecContext(ctx, triggerSQL); err != nil {
+		t.Fatalf("create rollback injection trigger: %v", err)
+	}
+	if result, purgeErr := repository.PurgeExpiredObservationPayloads(ctx, now, 1); purgeErr == nil {
+		t.Fatalf("purge with injected update failure unexpectedly succeeded: result=%+v", result)
+	}
+	var rollbackCandidateJSON []byte
+	var rollbackPurgedAt sql.NullTime
+	if err := db.QueryRowContext(ctx, "SELECT candidate_json, payload_purged_at FROM news_observations WHERE observation_id = ?", rollbackObservation.ID).Scan(&rollbackCandidateJSON, &rollbackPurgedAt); err != nil {
+		t.Fatalf("read rollback observation after failed purge: %v", err)
+	}
+	var rollbackCandidate domain.Candidate
+	if err := json.Unmarshal(rollbackCandidateJSON, &rollbackCandidate); err != nil {
+		t.Fatalf("decode rollback candidate: %v", err)
+	}
+	if rollbackCandidate.Title != rollbackObservation.Candidate.Title || rollbackPurgedAt.Valid {
+		t.Fatalf("failed purge left partial mutation: candidate=%+v purged_at=%+v", rollbackCandidate, rollbackPurgedAt)
+	}
+	if _, err := db.ExecContext(ctx, "DROP TRIGGER news_retention_force_rollback"); err != nil {
+		t.Fatalf("drop rollback injection trigger: %v", err)
+	}
+	recovered, err := repository.PurgeExpiredObservationPayloads(ctx, now, 1)
+	if err != nil || recovered.Scanned != 1 || recovered.Purged != 1 {
+		t.Fatalf("purge retry after rollback result=%+v err=%v", recovered, err)
+	}
+
+	// 两个并发清理调用处理同一批到期记录时，不得重复清理或遗漏。
+	concurrent := make([]domain.Observation, 4)
+	for i := range concurrent {
+		concurrent[i] = domain.Observation{
+			ID:             fmt.Sprintf("news-retention-concurrent-%d-%d", time.Now().UnixNano(), i),
+			IdempotencyKey: fmt.Sprintf("news-retention-concurrent-key-%d-%d", time.Now().UnixNano(), i),
+			SourceID:       "news-retention-integration",
+			Candidate:      domain.Candidate{SourceItemID: fmt.Sprintf("retention-concurrent-item-%d", i), Title: "concurrent purge"},
+			ObservedAt:     now.Add(-2 * time.Hour), RetentionUntil: now.Add(-time.Hour),
+			IdentityStatus: domain.ObservationUnidentified,
+		}
+	}
+	defer func() {
+		for _, observation := range concurrent {
+			_, _ = db.ExecContext(context.Background(), "DELETE FROM news_observations WHERE observation_id = ?", observation.ID)
+		}
+	}()
+	for _, observation := range concurrent {
+		if err := repository.WithinIdentityTransaction(ctx, func(tx app.IdentityTransaction) error {
+			_, err := tx.AppendObservation(ctx, observation)
+			return err
+		}); err != nil {
+			t.Fatalf("insert concurrent observation %s: %v", observation.ID, err)
+		}
+	}
+	type purgeOutcome struct {
+		result app.ObservationPayloadPurgeResult
+		err    error
+	}
+	outcomes := make(chan purgeOutcome, 2)
+	var workers sync.WaitGroup
+	for i := 0; i < 2; i++ {
+		workers.Add(1)
+		go func() {
+			defer workers.Done()
+			result, purgeErr := repository.PurgeExpiredObservationPayloads(ctx, now, 2)
+			outcomes <- purgeOutcome{result: result, err: purgeErr}
+		}()
+	}
+	workers.Wait()
+	close(outcomes)
+	totalPurged := 0
+	for outcome := range outcomes {
+		if outcome.err != nil {
+			t.Fatalf("concurrent purge failed: %v", outcome.err)
+		}
+		if outcome.result.Purged > 2 || outcome.result.Purged != outcome.result.Scanned {
+			t.Fatalf("invalid concurrent purge result: %+v", outcome.result)
+		}
+		totalPurged += outcome.result.Purged
+	}
+	if totalPurged != len(concurrent) {
+		t.Fatalf("concurrent purged total=%d, want %d", totalPurged, len(concurrent))
+	}
 }

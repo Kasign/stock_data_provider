@@ -214,6 +214,44 @@ func (d DeliveryRecord) Transition(change DeliveryTransition) (DeliveryRecord, D
 	return next, event, nil
 }
 
+
+// ValidateDeliveryStateEvent validates an immutable state event using the same transition
+// rules as DeliveryRecord.Transition, without exposing the domain's internal rule helpers.
+func ValidateDeliveryStateEvent(previous DeliveryStatus, event DeliveryStateEvent) error {
+	change := DeliveryTransition{
+		To:                    event.To,
+		At:                    event.ChangedAt,
+		RequestNotSent:        event.From == DeliverySending && event.To == DeliverySkipped && event.EvidenceRef != nil && *event.EvidenceRef != "",
+		AuthorizedManualRetry: event.From == DeliveryFailed && event.To == DeliveryQueued,
+	}
+	if event.ActorRef != nil {
+		change.ActorRef = *event.ActorRef
+	}
+	if event.RequestID != nil {
+		change.RequestID = *event.RequestID
+	}
+	if event.ActorReason != nil {
+		change.ManualRetryReason = *event.ActorReason
+	}
+	if event.From != previous || event.From == event.To ||
+		!validDeliveryStatus(event.From) || !validDeliveryStatus(event.To) ||
+		!isUTCTime(event.ChangedAt) || !deliveryTransitionAllowed(event.From, event.To, change) ||
+		(event.ReasonCode != nil && !validDeliveryCode(*event.ReasonCode)) ||
+		(deliveryRequiresReason(event.To) && (event.ReasonCode == nil || *event.ReasonCode == "")) ||
+		(event.EvidenceRef != nil && !validOpaqueRef(*event.EvidenceRef)) ||
+		(event.From == DeliveryUnknown && (event.EvidenceRef == nil || *event.EvidenceRef == "")) ||
+		(event.From == DeliverySending && event.To == DeliverySkipped && (event.EvidenceRef == nil || *event.EvidenceRef == "")) ||
+		(event.From == DeliveryFailed && event.To == DeliveryQueued &&
+			(event.ActorRef == nil || !validOpaqueRef(*event.ActorRef) ||
+				event.RequestID == nil || !validOpaqueRef(*event.RequestID) ||
+				event.ActorReason == nil || strings.TrimSpace(*event.ActorReason) == "" ||
+				len(*event.ActorReason) > 512 ||
+				strings.ContainsAny(*event.ActorReason, "\r\n\x00"))) {
+		return ErrInvalidDeliveryChange
+	}
+	return nil
+}
+
 func deliveryTransitionAllowed(from, to DeliveryStatus, change DeliveryTransition) bool {
 	switch from {
 	case DeliveryQueued:
@@ -224,7 +262,7 @@ func deliveryTransitionAllowed(from, to DeliveryStatus, change DeliveryTransitio
 		if to == DeliverySkipped {
 			return change.RequestNotSent
 		}
-		return to == DeliverySent || to == DeliveryRetryWait ||
+		return to == DeliveryBlocked || to == DeliverySent || to == DeliveryRetryWait ||
 			to == DeliveryFailed || to == DeliveryUnknown
 	case DeliveryRetryWait:
 		return to == DeliverySending || to == DeliverySkipped ||

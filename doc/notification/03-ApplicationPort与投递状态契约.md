@@ -368,6 +368,10 @@ Channel 配置是不可变版本快照，注册键为 `(channel_ref, config_vers
 
 能力未验证时必须为 unknown；unknown 与 unsupported 一样不能启用对应行为。只有 supports_idempotency=supported 才能向渠道发送稳定 delivery_idempotency_key；只有 supports_retry_after=supported 才能采信 Retry-After；只有 supports_delivery_lookup=supported 才能执行渠道查询对账。
 
+**ChannelConfigRepository：**
+
+Notification 持久化层提供按 `(channel_ref, config_version)` 精确读取的不可变快照 Repository；相同版本相同内容幂等，不同内容冲突。Repository 只保存 `secret_ref`，不保存 Secret 明文。Server 组合根读取快照后，按 `channel_kind` 选择已编译进程序的具体 Adapter，并通过 Platform Config.Secret 注入 Secret；禁止从快照动态加载代码或从 latest 回退。
+
 **ChannelAdapter / Resolver：**
 
 `ChannelResolver.Resolve(ctx, channel_ref, config_version)` 返回绑定该精确版本的 Adapter。Adapter 提供只读 ConfigSnapshot 和 Send。发送请求只包含 delivery_id、稳定 recipient_ref/adapter_target_ref、已渲染内容快照，以及在已验证幂等能力下才允许携带的 idempotency_key。
@@ -481,3 +485,8 @@ Delivery plan fingerprint 使用 RFC 8785 JSON Canonicalization Scheme + SHA-256
 - 最终请求仍须通过 `ChannelSendRequest.Validate` 的能力和 payload 字节数校验。
 
 该构造器是 Worker/Dispatcher 调用 Adapter 前的统一边界，防止合法但属于另一 Delivery 的内容或接收目标被错误发送。
+
+
+## 8.6 Preflight 决策的状态收敛
+
+Preflight 在 Delivery 已领取为 sending、但尚未创建 Attempt/调用渠道前执行。ready 保持 sending 并继续执行；skip 收敛为 skipped；block 收敛为 blocked。skip/block 必须携带指向本次 Preflight 判定记录的 evidence_ref，状态事件与 Delivery CAS 更新原子写入，并由 Repository 同时释放租约。sending -> blocked 仅用于明确发生在外部渠道调用之前的 Preflight 阻断；不得用于渠道调用后的结果，后者由 DeliveryCompletionService 处理。

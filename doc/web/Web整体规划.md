@@ -1,6 +1,6 @@
 # WebUI 整体规划
 
-更新时间：2026-11-06（当前功能验收基线：`999ca8a8b0d88dd462b206a0b149d8a09ce14e4b`）
+更新时间：2026-11-09（最近运行时代码验收基线：`b6da380eb29955c321b1d42b4e7dfb843f162fe9`；此后仅有文档同步提交，未改变运行时代码）
 目标分支：`feat/webui-market-data-console`
 适用范围：仅规划和管理 WebUI（`web/**`）及其专属文档（`doc/web/**`）。除明确获批的文档路径修正外，不修改 Go、Provider、数据库、服务端 API、OpenAPI 实现和部署配置。
 
@@ -290,29 +290,78 @@ localStorage + storage event 方案能解决“另一个标签页完成写入后
 7. 中文提交，记录提交 SHA、测试命令、CI 链接、未完成项和原因。
 8. 报告当前阶段、已完成事项、阻塞项和下一任务。
 
-## 7. 当前下一步
+## 7. 当前下一步（2026-11-09，按模块化单体架构重排）
 
-**当前主线：W3 研究报告与研究记录工作区首批改造已完成；后续回到 UIR-2 CSS 级联审查。**
+### 7.1 当前执行基线
 
-已完成：
-- W1 数据中心自检重复请求修复、W2 Run Flow 体验优化。
-- W3-A 独立报告详情工作区：Markdown 结构化阅读、章节导航、长报告滚动、四档视口和 HTML 注入防护。
-- W3-B1 研究记录列表/编辑区分离、标签筛选、多标的摘要、三行正文预览、草稿保护及跨标签页冲突处理。
-- 当前功能验收 HEAD `999ca8a8b0d88dd462b206a0b149d8a09ce14e4b`：WebUI Checks #42172661741、Chromium Browser Smoke #42172661924 均通过。
+- 本次合并后的运行时代码基线（WEB-101 测试路径修复前）：`4a629eb7ac45cbdceb087833bd763ebc6d6753c3`；该提交合并了 `integration`。后续文档/测试修复提交不改变 WebUI 运行时实现。
+- 合并运行时代码基线 `4a629eb7` 的 WebUI Checks 失败（Run `42607301812`）：JavaScript 语法检查通过，单元测试失败，Nginx 镜像构建因前置测试失败而跳过。该失败已定位为 3 处测试读取迁移前旧路径；测试引用已修复，但当前分支 HEAD 尚未取得重跑 CI 证据。不得沿用旧代码基线 `b6da380eb29955c321b1d42b4e7dfb843f162fe9` 的通过结果替代新基线验收。
+- 合并运行时代码基线 `4a629eb7` 尚未取得 Chromium Browser Smoke 成功证据；真实部署、中文视觉验收也未完成。
+- 当前代码仍在浏览器配置中保存 Data API Key，并在行情请求中发送 `X-API-Key`；这属于 MDM-006 迁移项，不能在服务端路由/认证切换前单独删除。
 
-**下一批：**
-1. 完成 CSS AST 的 at-rule 条件、selector specificity、源码顺序和跨 selector DOM 命中关系人工复核；当前 `!important` 13 处；已清理重复组件隐藏规则和可由普通级联表达的龙虎榜理由换行，剩余声明继续按具体命中关系复核，不以归零为目标。
-2. 在人工级联审查通过后，选择低耦合组件继续 CSSOM computed-style 基线与迁移；不扩大物理拆分范围，不以移动 CSS 文件替代级联审查。
-3. 继续 P2 全站人工验收：macOS 中文字体、图表 SVG、交易日历、Run Flow、研究卡片、表格和弹层；真实部署验收独立记录。
-4. 数据中心统一诊断真实联调继续等待数据侧 ProviderProbeItem/OpenAPI、真实 Provider 覆盖率和 MariaDB 历史持久化证据，不在 Web 分支模拟。
+依赖职责（不维护其他分支 HEAD 快照）：Server 负责 Root HTTP 注册、认证和应用装配；Data 负责 Market Data Application/HTTP Adapter 与迁移；Researchflow 负责 Run/Stage/Attempt 及任务历史 Facade；Platform 提供认证、Request ID、诊断等公共基建；Notification 负责订阅、渠道与投递。WebUI 仅按实际调用点跟踪这些模块提供的稳定契约。
 
-**状态所有权门禁：**
-- app.js 继续持有跨页面 state、当前页行情快照校验、选中证券集合、批量操作、导出、请求生命周期和 storage 事件。
-- ViewModel 只做纯计算；DOM adapter 只构建/更新 DOM；业务模块负责自身数据规则和持久化。
-- 不新增 Controller 包装现有领域模块，不复制现有筛选、排序或质量判断算法。
-- UIR 样式 Review 继续独立进行，不与 JS 重构混合提交。
+### 7.2 重新确定的执行原则
 
-**验收门禁：** 每批新增模块单测与 UI contract；WebUI Checks 和 Chromium Browser Smoke 全部通过后才标记完成。Browser Smoke 的模拟 API 结果不代表真实 Provider 联调。
+1. WebUI 只负责页面、交互、API 消费和状态展示；不实现领域规则，不为缺失的服务端能力增加假接口。
+2. Root Server 是目标 HTTP 宿主；模块 Application Port 是内部调用边界，WebUI 只消费经过 Server 注册且批准开放的 HTTP API。
+3. `/market-api`、`/analysis-api` 可以作为迁移期兼容前缀保留；统一进程不意味着必须立即更改浏览器 URL。
+4. 不把 Data API Key、Platform Service Secret、Owner Token 或 Provider Token 放进浏览器。Web Session/Cookie、CSRF、登录与资源授权契约未完成前，不把 Owner Bearer 临时管理入口接到 WebUI。
+5. Researchflow 拥有 Run/Stage/Attempt 和任务生命周期；Server 负责 HTTP 注册。任务历史列表不再归为 Data API 缺口。
+6. 自动化测试、OpenAPI 声明、Handler 注册、真实 Provider 数据和生产部署验收分别记录，不能互相替代。
+7. 不继续为了文件行数或 CSS 数量进行结构拆分；只有存在可复现缺陷或明确独立职责收益时才改运行时代码。
+
+### 7.3 P0：恢复当前分支可验证状态
+
+| 编号 | 任务 | 状态 | 完成条件 |
+|---|---|---|---|
+| WEB-101 | 修复模块化单体迁移后的 WebUI 契约测试路径 | 待验收 | 已定位 3 项失败均由测试引用旧 `services/market-data/**` 路径导致；已更新 `market-sector-ranking.test.mjs`、`market-stocks-navigation.test.mjs`、`ui-contract.test.mjs` 至 `internal/marketdata/**`。待当前 HEAD 的 WebUI Checks 通过后关闭 |
+| WEB-102 | 对齐 WebUI API 清单与 Market Data 契约及挂载状态 | 阻塞/等待依赖 | 分别核对 OpenAPI 声明、`internal/marketdata/httpapi/server.go` 中 Adapter 路由注册、Root Server 实际挂载、部署路由可达性和认证状态；不得将前两项推断为对外可用。修正旧 `services/market-data/**` 路径 |
+| WEB-103 | 校正 WebUI 服务边界和认证迁移说明 | 已完成（文档对齐） | 明确 Root Server 目标与兼容路由；记录当前 Analysis API 使用 Owner Bearer，而 `web/src/api.js` 不携带该凭证，浏览器请求预期 401，且 Web Session/Cookie、CSRF、登录限流和资源授权尚未闭环。保持 Owner Bearer 管理入口受限网络保护，不写入浏览器、不匿名降级 |
+| WEB-104 | 校正任务历史 API 归属与页面事实 | 已完成（文档对齐） | 明确当前最近任务只是浏览器本地引用；任务列表/分页由 Researchflow Application Facade 提供、Server 注册；没有真实 Handler 前不增加调用 |
+| WEB-105 | 校正统一诊断专项文档 | 已完成（文档对齐） | 对照当前 Data OpenAPI：字段校验计数、问题明细、截断和 coverage_dimensions 已声明；真实 Provider 覆盖及 MariaDB 历史持久化仍单独等待证据；修复失效文档链接和越界修改范围描述 |
+
+WEB-101 根因证据：Run `42607301812` 的 3 项失败分别是 `market-sector-ranking.test.mjs` 读取旧 model 路径、`market-stocks-navigation.test.mjs` 读取旧 OpenAPI 路径、`ui-contract.test.mjs` 读取旧 HTTP Server/OpenAPI 路径，均为 `ENOENT`；335 项中 332 项通过。三处测试路径已更新，当前分支最新 HEAD 尚无对应 CI 通过证据。WEB-103～105 的服务边界、任务历史归属和诊断契约文档已完成对齐。WEB-102 已核实 OpenAPI 与 Data Adapter Handler 路由；Data 迁移文档明确 M3 Root Server 实际挂载尚未完成，Server SRV-010 仍未开始，因此该任务阻塞于 Server/Data 集成，不把 Adapter 注册误报为对外可用。后续按真实依赖推进，不以反复全量验证替代实际问题修复。
+
+### 7.4 P1：等待后端契约的前端接入准备
+
+| 编号 | 能力 | 真实 Owner / 依赖 | WebUI 当前策略 |
+|---|---|---|---|
+| WEB-201 | Data Key 移除、统一 Root 路由和连接配置收敛 | Data MDM-006 + Server Web Session/认证 + Platform | 迁移期保留现有浏览器 Key 配置及行情请求 `X-API-Key`，避免提前造成 401；Root Server 路由、Web Session/Cookie、CSRF、代理信任边界和回滚路径完成后一次切换，再清理 localStorage 旧 Key 字段并轮换已暴露凭据 |
+| WEB-202 | 服务端任务历史分页/筛选 | Researchflow Facade + Server HTTP 注册与认证 | 保留本地最近任务引用；不把本地 10 条记录伪装成服务端历史，不由 Data 新增任务 API |
+| WEB-203 | 数据中心诊断真实联调 | Data Provider/OpenAPI/持久化证据 + Server 路由 | 保留现有字段展示；只按真实响应修正兼容，不复制质量规则 |
+| WEB-204 | 服务端选股扫描、候选理由和历史 | Quant 能力 + Researchflow 扫描任务/结果查询 + Server | 当前页本地筛选继续明确标注分页范围；服务端扫描入口保持待接入 |
+| WEB-205 | 告警评估、订阅、通知渠道和投递 | 告警条件由对应业务模块负责；Notification 负责订阅/渠道/投递 | 仅保留本地草稿与偏好，不宣称后台执行或真实通知 |
+| WEB-206 | 板块资金流及板块证券映射 | Data | 继续显示缺失/待接入，不以成交额替代资金净流入，不从名称反推证券代码 |
+| WEB-207 | AI 问股与模型设置 | LLM + Researchflow 用例编排 + Server | 无公开 API 和权限契约前保持禁用，不直连模型网关 |
+
+上述任务只有在生产方提交稳定 Application/HTTP 契约、OpenAPI、真实响应样例及对应权限语义后，才进入 WebUI 实施；不要求等待所有模块整体完工，只等待各自实际调用点。
+
+### 7.5 P2：人工与真实环境验收
+
+1. 在 macOS 或具备 CJK 字体的浏览器检查中文字体、字重、换行、截断和文字边界。
+2. 使用 320、768、900、1280、1600px 视口检查市场总览、个股行情、自选股、筛选、研究、分析任务、数据中心和设置中心。
+3. 在真实部署环境检查 Nginx 路由、登录态、Cookie/CSRF、健康检查、请求取消和真实数据错误状态。
+4. 人工视觉、真实 Provider 数据、服务端持久化、自动化 CI 分开记录证据；未取得证据不标记通过。
+
+### 7.6 暂停或明确不做
+
+- 不启动 UIR-5 CSS 物理拆分；不按 app.js 行数启动大规模 JS 拆分。
+- 不在 WebUI 实现任务生命周期、选股扫描、告警计算、通知投递、Provider 质量规则或数据持久化。
+- 迁移期保留浏览器 Data API Key 仅作为兼容措施；MDM-006 与 Root Server/Web Session 认证切换完成后，必须移除浏览器 Key 读写和 `X-API-Key` 发送逻辑、清理 localStorage 旧字段，并轮换曾暴露的 Key。
+- 当前 Analysis API 的 Owner Bearer 与 WebUI 请求不兼容，预计返回 401；在 Web Session/Cookie + CSRF + 资源授权契约落地前，不把 Owner Bearer 当作浏览器登录凭据，也不降低业务 API 认证要求。
+- 不修改 Go、Provider、数据库、OpenAPI 服务端实现、Docker/Compose/Nginx 部署配置及其他分支。
+
+### 7.7 本分支下一批执行安排
+
+**第一批：WEB-101～105。** 先修复当前 SHA 的单测失败，再完成 API/认证/任务/诊断文档对齐；这批不扩展业务页面，不改服务端代码。
+
+**第二批：** 仅接入已由 Data、Researchflow、Notification、Server 提供并通过对应契约证据的 API；按功能闭环分批实现，不提前铺设未确认接口。
+
+**第三批：** 完成 CJK 人工视觉与真实部署验收；按真实部署切换结果关闭 Data Key 迁移和 Root 登录相关 WebUI 事项。
+
+**验收门禁：** 每批只运行与改动对应的单测/静态检查；需要构建时遵守既定 integration 构建流程。当前 SHA 的失败必须先定位根因，不能将历史 SHA 的成功记录替代当前证据。每批集中提交中文说明，并记录 SHA、CI Run、未完成依赖和回滚边界。
+
 ### 2026-11-04 P0-C 后续边界修复（当前开发批次）
 
 - [x] 全市场列表当前价、MA5、MA20 使用统一价格格式化函数，避免将格式化函数本身写入单元格；Chromium 研究入口用例增加 1,500 / 1,490 / 1,480 展示断言。

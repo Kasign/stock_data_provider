@@ -85,7 +85,7 @@ func TestCreateContextAssignsIdentityAndPersistsValidatedSnapshot(t *testing.T) 
 	}
 	got, err := service.CreateContext(context.Background(), command)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("CreateContext() error = %v, cause = %v", err, errors.Unwrap(err))
 	}
 	if got.ContextID != "ctx_test-1" || got.ContextVersion != 1 || !got.CreatedAt.Equal(now) {
 		t.Fatalf("unexpected generated Context metadata: %+v", got)
@@ -111,7 +111,7 @@ func TestAddEvidenceGeneratesIdentityFingerprintAndRequiresCurrentAuthorization(
 	}
 	got, err := service.AddEvidence(context.Background(), AddEvidenceCommand{CallerRef: "researchflow:worker-1", Draft: EvidenceDraft{EvidenceType: string(draft.EvidenceType), SourceOwner: string(draft.SourceOwner), SourceRef: draft.SourceRef, DerivedFromRefs: draft.DerivedFromRefs, SubjectRefs: draft.SubjectRefs, SystemObservedAt: draft.SystemObservedAt, SystemAsOf: draft.SystemAsOf, Stance: string(draft.Stance), QualityStatus: string(draft.QualityStatus), ContentLevel: string(draft.ContentLevel), AuthorizationRef: draft.AuthorizationRef, Limitations: draft.Limitations}})
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("AddEvidence() error = %v, cause = %v", err, errors.Unwrap(err))
 	}
 	if got.EvidenceID != "ev_test-1" || got.ContentFingerprint == "" || !repo.appended || auth.calls != 1 {
 		t.Fatalf("Evidence application flow incomplete: %+v", got)
@@ -191,7 +191,7 @@ func TestCreateAndGetEventUseApplicationDTOAndServerIdentity(t *testing.T) {
 	}
 	got, err := service.CreateEvent(createCtx, command)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("CreateEvent() error = %v, cause = %v", err, errors.Unwrap(err))
 	}
 	if got.EventID != "evt_test-1" || got.EventVersion != 1 || !repo.appended || !repo.lifecycleAppended {
 		t.Fatalf("Event was not created with server identity and lifecycle Outbox: %+v", got)
@@ -250,7 +250,7 @@ func TestUpdateEventUsesExpectedVersionAndDomainLifecycleRules(t *testing.T) {
 		EventID: previous.EventID, ExpectedVersion: 1, Revision: revision,
 	})
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("UpdateEvent() error = %v, cause = %v", err, errors.Unwrap(err))
 	}
 	if got.EventID != previous.EventID || got.EventVersion != 2 || got.Status != string(researchevent.StatusConsolidating) {
 		t.Fatalf("unexpected Event revision: %+v", got)
@@ -350,7 +350,7 @@ func TestCreateAndGetHypothesisUseApplicationDTO(t *testing.T) {
 	}
 	got, err := service.CreateClaim(context.Background(), command)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("CreateClaim() error = %v, cause = %v", err, errors.Unwrap(err))
 	}
 	if got.ClaimID != "clm_test-1" || got.ClaimVersion != 1 || !repo.appended {
 		t.Fatalf("Claim was not created: %+v", got)
@@ -409,7 +409,7 @@ func TestUpdateClaimEnforcesExpectedVersionAndDomainTransition(t *testing.T) {
 	}
 	got, err := service.UpdateClaim(context.Background(), UpdateClaimCommand{ClaimID: "clm_existing", ExpectedVersion: 1, Revision: revision})
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("UpdateClaim() error = %v, cause = %v", err, errors.Unwrap(err))
 	}
 	if got.ClaimID != "clm_existing" || got.ClaimVersion != 2 || got.Status != string(researchclaim.StatusTesting) {
 		t.Fatalf("unexpected Claim revision: %+v", got)
@@ -419,11 +419,20 @@ func TestUpdateClaimEnforcesExpectedVersionAndDomainTransition(t *testing.T) {
 	}
 	terminal := revision
 	terminal.Status = string(researchclaim.StatusSupported)
-	if _, err := service.UpdateClaim(context.Background(), UpdateClaimCommand{ClaimID: "clm_existing", ExpectedVersion: 2, Revision: terminal}); err == nil {
+	terminalResult, err := service.UpdateClaim(context.Background(), UpdateClaimCommand{ClaimID: "clm_existing", ExpectedVersion: 2, Revision: terminal})
+	if err != nil {
+		t.Fatalf("testing Claim must be allowed to reach supported: %v", err)
+	}
+	if terminalResult.ClaimVersion != 3 || terminalResult.Status != string(researchclaim.StatusSupported) {
+		t.Fatalf("unexpected terminal Claim: %+v", terminalResult)
+	}
+	postTerminal := terminal
+	postTerminal.Status = string(researchclaim.StatusContradicted)
+	if _, err := service.UpdateClaim(context.Background(), UpdateClaimCommand{ClaimID: "clm_existing", ExpectedVersion: 3, Revision: postTerminal}); err == nil {
 		t.Fatal("terminal Claim must not transition to another status")
 	}
-	if repo.value.ClaimVersion != 2 {
-		t.Fatal("invalid terminal transition must not be persisted")
+	if repo.value.ClaimVersion != 3 || repo.value.Status != researchclaim.StatusSupported {
+		t.Fatal("invalid post-terminal transition must not be persisted")
 	}
 }
 
@@ -625,5 +634,20 @@ func TestGetEvidenceRejectsRepositoryIdentityMismatch(t *testing.T) {
 		EvidenceID: "ev_requested", CallerRef: "researchflow:worker",
 	}); err == nil {
 		t.Fatal("Evidence repository identity mismatch must be rejected")
+	}
+}
+
+func TestCloneStringsAlwaysReturnsNonNilIndependentSlice(t *testing.T) {
+	for _, input := range [][]string{nil, {}} {
+		got := cloneStrings(input)
+		if got == nil {
+			t.Fatal("cloneStrings must normalize nil and empty input to a non-nil empty slice")
+		}
+	}
+	input := []string{"evidence:1"}
+	got := cloneStrings(input)
+	got[0] = "changed"
+	if input[0] != "evidence:1" {
+		t.Fatal("cloneStrings must return an independent copy")
 	}
 }
