@@ -611,3 +611,39 @@ CTR-010 在契约冻结前需要完成的是语义裁决，而不是立即修复
 - optional + non-nullable 仅为候选方案，不是已批准决议。
 - 本轮不修改 Data 代码、OpenAPI、契约测试或其他业务实现；不切换分支、不合并其他分支、不运行实现修复 CI。
 - WebUI 维度 2 第一轮完整性 Review 仍未完成。后续继续核对现有 CTR 差异的证据、责任、契约裁决状态和冻结影响，不增加新的数据集，也不把审计任务转成模块实现任务。
+
+## 22. Dragon Tiger：CTR-043 / CTR-044 冻结影响复核
+
+本批只复核既有 CTR-043、CTR-044 的契约含义、实现偏差和冻结影响；不修改 Data 实现，不新增差异编号。
+
+### 22.1 CTR-043：Provider 分页计数实现不符合既有契约
+
+固定基线证据（详见 `WebUI-维度2-Dragon-Tiger.md` 第 2、3、4、6 节）：
+- 公共 DTO 语义已经定义 `source_returned` 为“本页 Provider 原始记录数”，并要求 `source_returned = returned + excluded_non_a_share_count`。
+- Service 校验进一步将本页预期原始数定义为 `min(page_size, total-(page-1)*page_size)`。
+- Hithink Provider 却以整个 `stock_items` 数组长度填充 `SourceReturned`，再在 Provider 内存分页；重复 symbol 被静默跳过，但没有合法的重复记录计数语义。
+- 这不是公共契约缺失，而是 Hithink Adapter 对现有契约的实现不符合；当前已知影响是 Hithink 大于单页容量时无法通过 Service 校验，回退能力受损。
+
+冻结影响：
+- **不要求为了冻结而改变 `source_returned` 的既有公共语义。**
+- CTR-043 保留 P1，作为实现符合性缺陷；冻结评审必须明确记录其延期/修复决议、责任方和验收条件。若没有明确延期决议，不得将该 P1 从冻结门禁中静默移除。
+- 后续实现验收应覆盖第一页、中间页、末页、大于 page_size 和重复 symbol；重复项不能伪装成非 A 股排除数。
+
+### 22.2 CTR-044：Provider 历史日期能力的公开边界未定义
+
+固定基线证据（详见 `WebUI-维度2-Dragon-Tiger.md` 第 3、4、6 节）：
+- DataService、Handler 和公共 OpenAPI 接受任何格式有效且不晚于当前交易日的日期。
+- Hithink Provider 仅支持最近一年；超出范围时 Provider 报错。
+- 该限制是 Provider 能力差异，不应直接收窄整个龙虎榜公共 API 的日期范围；默认 Hithink disabled，启用为回退源时才可能影响较早日期。
+
+冻结影响：
+- CTR-044 保留 P2，属于 Provider 能力边界的契约披露/可观察性问题。
+- 冻结前需明确选择：公共契约是否通过 Provider capability/诊断元数据表达各 Provider 支持范围，还是由权威 Provider 能力文档统一定义并要求运行诊断可查询。
+- 不把 Hithink 的一年限制改成公共 API 全局限制；本轮不新增字段、不修改 Provider 或 API。
+- 在能力边界的权威定义确定前，CTR-044 仍是待裁决项。
+
+### 22.3 本批结论
+
+- CTR-043：公共语义明确、实现不符合；P1 保留，要求冻结评审显式处置，不在本轮修复。
+- CTR-044：Provider 能力范围未形成明确的权威披露方式；P2 待契约裁决，不在本轮实现。
+- 本批未执行 CI、未修改业务代码、未新增 CTR 编号。WebUI 维度 2 第一轮完整性 Review 继续进行。
