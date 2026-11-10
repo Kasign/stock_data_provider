@@ -269,7 +269,7 @@ func (r *MySQLRunRepository) CompareAndSwapStage(
 	}
 	if next.AttemptNo != 0 || next.RetryAt != nil || next.OutputRef != nil ||
 		next.QualitySummaryRef != nil || len(next.DiagnosticRefs) != 0 ||
-		next.QualityStatus != nil || next.RiskDecision != nil || next.StartedAt != nil {
+		strings.TrimSpace(next.QualityStatus) != "" || strings.TrimSpace(next.RiskDecision) != "" || next.StartedAt != nil {
 		return false, errors.New("Researchflow Stage CAS cannot modify attempt, retry, result, quality or start fields")
 	}
 	var currentReasons []string
@@ -682,8 +682,13 @@ func (r *MySQLRunRepository) validateRecord(record application.CreateRunRecord) 
 	if !validSHA256Fingerprint(record.Fingerprint) ||
 		record.Run.Ref == "" || record.Run.SchemaVersion == "" || record.Run.TemplateRef == "" ||
 		record.Run.TemplateVersion == "" || !validSHA256Fingerprint(record.Run.TemplateFingerprint) ||
-		record.Run.CorrelationID == "" || record.Run.Version == 0 || record.Run.Status != domain.RunCreated {
+		record.Run.CorrelationID == "" || record.Run.Version != 1 || record.Run.Status != domain.RunCreated {
 		return errors.New("Researchflow create-run record is incomplete")
+	}
+	if record.Run.StartedAt != nil || record.Run.FinishedAt != nil ||
+		record.Run.ResultSummary != nil || record.Run.ResultSummaryRef != nil ||
+		strings.TrimSpace(record.Run.TerminationReason) != "" {
+		return errors.New("Researchflow CreateRun cannot initialize lifecycle or terminal Run fields")
 	}
 	parameters := bytes.TrimSpace(record.Parameters)
 	if len(parameters) == 0 || !json.Valid(parameters) || parameters[0] != '{' ||
@@ -694,6 +699,15 @@ func (r *MySQLRunRepository) validateRecord(record application.CreateRunRecord) 
 	}
 	if len(record.Stages) == 0 {
 		return errors.New("Researchflow create-run requires at least one stage")
+	}
+	for _, stage := range record.Stages {
+		if stage.Version != 1 || stage.AttemptNo != 0 ||
+			(stage.Status != domain.StagePending && stage.Status != domain.StageSkipped) ||
+			stage.RetryAt != nil || stage.OutputRef != nil || stage.QualitySummaryRef != nil ||
+			len(stage.DiagnosticRefs) != 0 || strings.TrimSpace(stage.QualityStatus) != "" ||
+			strings.TrimSpace(stage.RiskDecision) != "" || stage.StartedAt != nil || stage.FinishedAt != nil {
+			return fmt.Errorf("Researchflow CreateRun Stage %q contains fields owned by later lifecycle transitions", stage.Ref)
+		}
 	}
 	return nil
 }

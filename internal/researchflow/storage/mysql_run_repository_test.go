@@ -74,10 +74,22 @@ func TestMySQLRunRepositoryValidatesResolvedSnapshotIdentity(t *testing.T) {
 			Ref: "template-1", Version: "v1",
 			Fingerprint: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
 		},
-		Stages: []domain.Stage{{Ref: "stage-1", RunRef: "run-1", Code: "context"}},
+		Stages: []domain.Stage{{Ref: "stage-1", RunRef: "run-1", Code: "context", Status: domain.StagePending, Version: 1}},
 	}
 	if err := repository.validateRecord(record); err != nil {
 		t.Fatalf("valid create-run record rejected: %v", err)
+	}
+	forgedRun := record
+	forgedStartedAt := time.Now().UTC()
+	forgedRun.Run.StartedAt = &forgedStartedAt
+	if err := repository.validateRecord(forgedRun); err == nil {
+		t.Fatal("CreateRun accepted caller-supplied Run StartedAt")
+	}
+	forgedStage := record
+	forgedStage.Stages = append([]domain.Stage(nil), record.Stages...)
+	forgedStage.Stages[0].AttemptNo = 1
+	if err := repository.validateRecord(forgedStage); err == nil {
+		t.Fatal("CreateRun accepted Stage AttemptNo owned by ClaimAttempt")
 	}
 	record.ResolvedTemplate.Version = "v2"
 	if err := repository.validateRecord(record); err == nil {
