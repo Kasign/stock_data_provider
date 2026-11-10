@@ -204,3 +204,11 @@
 - 页面正确区分当前页 coverage、目录 total 下界、null 缺失、质量状态和旧快照；未发现已证实字段语义错配。
 - 新增 **AUD-WEBUI-CTR-004**（P2，测试补证）：前端缺少对全市场分页 API 参数序列化/默认值/边界归一化的直接断言；当前不是已证实运行时错误。
 - WebUI 维度 2 仍为 partial；Analysis Run 与全市场分页两个切片已核，其他接口和 DTO 仍待核。详细证据见审计明细第 17 节。
+
+
+### WebUI — 维度 2：Analysis Task 创建请求 Schema 初审
+
+- WebUI 当前创建请求发送 `task_type + symbols`，可选传递 Idempotency-Key；阶段事件消费者验证 task_id、events、分页游标和可选 run_id 身份。
+- OpenAPI 声称 AnalysisRequest 与 Domain RunRequest 一致，但缺少 `as_of_mode`、`parameters`、TaskType 枚举和 required 约束。
+- 新增 **AUD-WEBUI-CTR-005**（P2）：先明确 HTTP Request DTO 与 Domain 类型的映射边界，再补齐 Schema 或修正其描述，并增加契约测试。当前 WebUI 最小请求不受该差异直接影响。
+- Task/TaskEvent 响应 DTO 逐字段核验及服务端 JSON 解码策略仍待检查；维度 2 保持 partial。详见审计明细第 18 节。
