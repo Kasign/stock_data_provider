@@ -1059,3 +1059,13 @@
 - 状态：职责边界 freeze-ready；当前路由/认证状态 accepted（仅迁移事实）；浏览器认证、Analysis OpenAPI、错误 Request ID 规范 pending_decision；目标装配/密钥迁移/联合测试 pending_evidence。
 - 沿用 MDM-006、PLAT Security/Fault/Observability、FLOW-CTR-001/003/004、GOV-CTR-001/002/003，不新增 CTR；不修改 WebUI/Server/Data 业务代码，不执行 CI。
 - 下一步唯一任务：核验 Server 组合根装配与 Platform 横向技术契约的实际使用，确认十模块 DI、资源生命周期、HTTP Client/Storage/Security/Diagnostics/Fault/Request ID 是否存在重复实现、越权承载领域语义或未接入；只登记证据和差异，不替模块修复。
+
+
+## 30. Server 组合根与 Platform 横向技术契约接入核验（2026-11-10）
+
+- 固定审计基线：origin/integration @ b6dfc85ba214fe16268c8cba780641a8bfe15086；维护分支 feat/design_doc。详细差异见矩阵第34节。
+- 已确认 Root 唯一入口 `cmd/analysis-api` 委托 `internal/server/bootstrap.Run`；Server Resources 通过 Platform Storage 创建共享 SQL/Redis、创建 Platform HTTP Client；Lifecycle 启动/逆序停止、失败回滚，Bootstrap 在消费者停止后关闭共享资源。Platform Security Router、Fault、Observability Request ID、Diagnostics Runner 和 Migration Runner 均有实际使用证据。
+- 但当前 Bootstrap 仍以 Legacy Analysis Runner/Queue/API 为主；Migration Registry 仅注册 News/Research/Notification；没有十模块完整 Facade/Adapter/Worker 装配。Market Data 仍独立运行，直接创建 SQL 连接池并使用自定义 Redis RESP 客户端。Root HTTP Client 只有创建和 BoundDoer 工厂，未发现业务上游绑定/模块注入生产链路；Diagnostics 只覆盖当前 DB/Redis/Schema。
+- 状态：Server/Platform/模块职责边界 freeze-ready；当前共享资源、生命周期和 Platform 基础原语接入 accepted；十模块组合装配、Data 资源统一、BoundDoer 生产注入、模块 Diagnostics/Config 接入均 pending_evidence。Web Session A2 已在 WEB-SRV-B 登记，不重复。
+- 差异登记 SRV-PLAT-A～E 为审计工作项，非新增 CTR；沿用 PLAT-CTR-005、PLAT-015～019 和现有模块契约。未修改业务代码，未执行 CI。
+- **PLAT-002 边界审查已覆盖本轮预定的模块间交互与 Server/Platform 装配方向。下一步不再扩展无边界的代码审查；应汇总全部差异矩阵，按 freeze-ready / blocked / pending-decision / pending-evidence / deferred 形成最终冻结评估，并明确哪些契约可先冻结、哪些只冻结职责/语义而保留实现证据门禁。**
