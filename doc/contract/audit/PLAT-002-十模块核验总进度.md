@@ -831,3 +831,17 @@
 - PLAT-CTR-007保持pending_evidence。Platform维度2的PLAT-CTR-001～007均已完成首轮适用性切片，但多个契约仍有跨模块映射/测试/部署证据缺口；不得把“首轮覆盖完成”表述为“Platform契约冻结”。
 - 本轮未修改业务代码、Schema、Golden或测试，未执行CI；仅更新Platform维度2审计记录、差异唯一矩阵和本总进度。
 - **下一步唯一任务：Server — 维度2：DTO、Schema、Golden。** 审核Root Server公开HTTP请求/响应DTO、Handler、OpenAPI、Golden及真实WebUI/内部消费者映射。先完成Server维度2首轮切片，不重做Platform、不提前进入Server其他五个维度；Data继续使用固定基线，不检查Data新分支。
+
+
+## 15. Server 维度2首轮切片（2026-11-10）
+
+- 固定代码审计基线：`origin/integration @ b6dfc85ba214fe16268c8cba780641a8bfe15086`；维护分支：`feat/design_doc`。
+- 本批范围：Root Server Health/Readiness/Diagnostics、Root实际路由、旧Analysis Run/Task HTTP Handler、Analysis OpenAPI、相关Go测试和WebUI基础API消费。
+- 已核对Root Router实际13条method-pattern；Health Handler真实响应包含healthz、readyz成功/失败、diagnostics成功/失败及HEAD行为。Platform Observation Schema不覆盖Server新增的Readiness/Report复合包装。
+- Analysis OpenAPI只覆盖Task创建/查询/Events，未覆盖同步Run创建/读取/Events和Root Health/Diagnostics。AnalysisRequest Schema未完整列出domain.RunRequest字段；StageEvent仍是泛化object；Task时间指针omitempty与nullable差异已由既有CTR-006承接。
+- Root错误响应存在Middleware publicError（class/code/message/retryable）与旧Analysis/Health Handler error（code/message）两种结构；错误信息已有部分脱敏测试，统一策略与全路由契约证据仍待完成，归PLAT-CTR-001。
+- WebUI `web/src/api.js`消费/healthz、/readyz及error.message/code，Request ID从X-Request-ID响应Header读取；未发现该文件消费/diagnostics。
+- 新增审计子观察SRV2-D2-001，归既有SRV-CTR-001（Root HTTP契约）；嵌入Observation仍归PLAT-CTR-004。CTR-006/007/046/047及PLAT-CTR-001均沿用既有编号，没有新增CTR。
+- Server维度2首轮仍为 `in_progress / partial`；本批只完成一个切片，不代表整个Server维度2完成或冻结。
+- 本轮仅修改审计文档，未修改业务代码、OpenAPI、DTO、Golden、测试，未执行CI。
+- **下一步唯一任务：Server维度2的增量路由/消费者盘点与错误DTO契约补证。** 先以固定SHA确认Root Server是否还注册模块Handler或其他HTTP Transport；若没有，停止扩大路由范围，转而将现有Root错误Envelope差异、WebUI消费和CTR-046/047的Schema关闭条件做交叉核对。不得重复本批Health/Analysis代码初审，不进入Server其他五个维度。
