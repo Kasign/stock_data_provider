@@ -219,3 +219,13 @@
 - 测试同时断言结果不是缓存命中，并检查两个 Provider 的调用次数，覆盖来源错误不会提前结束后备链。
 - 该测试验证来源身份与既有 unknown 语义共存，不把“空结果 unknown”误判为成功确认的零事件/零涨停池。
 - 测试源码已提交；按开发分支约定未运行 gofmt/build/test，需由 integration 统一执行。
+
+### 2026-11-10：财务、公告、估值 Provider 来源身份接收校验
+
+- 范围：Fundamentals、StockAnnouncements、Valuations 三个 DataService 入口。
+- 三个入口在领域 validator 前核对非空快照 Source 与当前 Provider.Name()；不匹配时拒绝当前 Provider 候选并继续后备 Provider。
+- 空 Source 不推断、不补齐，继续交由原领域 validator 拒绝；Valuations 的成员 Source/SourceVersion 与父快照一致性、公告成员来源/版本一致性仍由原 validator 负责。
+- Fundamentals 的服务接收时间戳仍在来源身份检查通过后写入，避免错误来源候选被改写后进入正常质量校验。
+- 新增三项回归测试，分别覆盖财务、公告、估值的错误来源回退；测试使用符合原领域约束的快照，并断言后备 Provider 被调用及最终来源正确。
+- 不改变 PIT、财务分区、公告分页、估值缺失证券计数、质量候选选择、缓存键与 TTL，也不新增 Provider 接口或领域字段。
+- 测试源码已提交；按开发分支约定未运行 gofmt/build/test，需由 integration 统一执行。
