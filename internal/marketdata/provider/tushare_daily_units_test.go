@@ -114,3 +114,62 @@ func TestTushareDailyBarsReportsFieldAndRowForParseFailure(t *testing.T) {
 	}
 	t.Fatalf("expected close field diagnostic with original row index, got %+v", report.Issues)
 }
+
+
+func TestTushareDailyBarsReportsDateAndNormalizationRejections(t *testing.T) {
+	tests := []struct {
+		name       string
+		items      string
+		wantCode   string
+		wantRow    int
+		start, end string
+	}{
+		{
+			name: "date outside requested range",
+			items: `[["600519.SH","20261027",10,11,9,10,1.0,100,100]]`,
+			wantCode: "date_out_of_requested_range", wantRow: 0,
+			start: "2026-10-28", end: "2026-10-28",
+		},
+		{
+			name: "duplicate trade date",
+			items: `[["600519.SH","20261028",10,11,9,10,1.0,100,100],["600519.SH","20261028",10,11,9,10,1.0,100,100]]`,
+			wantCode: "duplicate_trade_date", wantRow: 1,
+			start: "2026-10-28", end: "2026-10-28",
+		},
+		{
+			name: "fractional hand volume cannot normalize",
+			items: `[["600519.SH","20261028",10,11,9,10,1.0,0.1,100]]`,
+			wantCode: "normalization_error", wantRow: 0,
+			start: "2026-10-28", end: "2026-10-28",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				fmt.Fprintf(w, `{"code":0,"msg":"","data":{"fields":["ts_code","trade_date","open","high","low","close","pct_chg","vol","amount"],"items":%s}}`, tc.items)
+			}))
+			defer server.Close()
+
+			ctx := validation.WithReporter(context.Background(), validation.NewReporter(20))
+			client := NewTushareConfigured(0, server.URL, "test-token")
+			if _, err := client.FetchDailyBars(ctx, "600519.SH", tc.start, tc.end, 10, model.AdjustmentNone); err == nil {
+				t.Fatal("expected rejected Tushare daily response")
+			}
+			report := validation.ReporterFromContext(ctx).Snapshot()
+			for _, issue := range report.Issues {
+				if issue.Stage == validation.StageParse && issue.Field == "trade_date" && issue.Code == tc.wantCode &&
+					issue.RowIndex != nil && *issue.RowIndex == tc.wantRow {
+					return
+				}
+				if tc.wantCode == "normalization_error" && issue.Stage == validation.StageParse &&
+					issue.Field == "volume" && issue.Code == tc.wantCode &&
+					issue.RowIndex != nil && *issue.RowIndex == tc.wantRow {
+					return
+				}
+			}
+			t.Fatalf("expected %s at original row %d, got %+v", tc.wantCode, tc.wantRow, report.Issues)
+		})
+	}
+}
