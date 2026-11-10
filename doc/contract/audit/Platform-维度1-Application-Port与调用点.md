@@ -1246,7 +1246,7 @@ Bundle 聚合 DTO 与 Go/OpenAPI 字段语义整体一致；WebUI 对顶层/嵌�
 
 **AUD-WEBUI-CTR-010：omitempty 响应字段在 OpenAPI 中被过度声明为 nullable（P2）**
 
-- 影响对象：StockBasic 多项可选字段、SecurityTradingStatusSnapshot.system_observed_at、PriceLimitRuleSnapshot.limit_percent、StockBoard.change_percent、FundamentalsSnapshot.system_observed_at、MarketBreadthSnapshot.oldest_quote_time、MarketBreadthSnapshot.newest_quote_time。StockBoard.change_percent 已在第 24 节补充核验，FundamentalsSnapshot.system_observed_at 已在第 25 节补充核验，MarketBreadthSnapshot 两个时间边界字段已在第 32 节补充核验；special_exception_evidence 因 OpenAPI 3.0.3 的 $ref/nullable 写法不满足同层 type 条件，仍列为待核，不计入已证实范围。
+- 影响对象：StockBasic 多项可选字段、SecurityTradingStatusSnapshot.system_observed_at、PriceLimitRuleSnapshot.limit_percent、StockBoard.change_percent、FundamentalsSnapshot.system_observed_at、MarketBreadthSnapshot.oldest_quote_time、MarketBreadthSnapshot.newest_quote_time、MarketIndexQuote.latest_price、change、change_percent、open、high、low、prev_close、amount、quote_time。StockBoard.change_percent 已在第 24 节补充核验，FundamentalsSnapshot.system_observed_at 已在第 25 节补充核验，MarketBreadthSnapshot 两个时间边界字段已在第 32 节补充核验，MarketIndexQuote 八个数值字段和 quote_time 已在第 33 节补充核验；special_exception_evidence 因 OpenAPI 3.0.3 的 $ref/nullable 写法不满足同层 type 条件，仍列为待核，不计入已证实范围。
 - 证据：上述 Go 字段均使用 omitempty；OpenAPI 对部分字段声明 nullable=true；Go encoding/json 的 nil/空值行为是省略字段。
 - 影响：客户端按 Schema 可能接受服务端永远不会发出的显式 null；缺失与 null 的语义被混淆，特别是生成式客户端和严格响应校验器。
 - 责任方：Market Data HTTP API 契约维护方。
@@ -1927,3 +1927,68 @@ StockBoards 的 Provider Port、Go DTO、Service 校验/回退/缓存、HTTP 路
 - Eastmoney 报告日期可用但没有可验证盘中时间；成交额和涨跌停池是独立请求，不是原子同一时刻快照。TickFlow 提供逐证券时间范围，但不证明原子快照。
 - 新增 AUD-WEBUI-CTR-025、AUD-WEBUI-CTR-026（均 P2）；MarketBreadthSnapshot.oldest_quote_time/newest_quote_time 纳入既有 AUD-WEBUI-CTR-010。
 - WebUI 已接通并展示四类计数和覆盖元数据；API Client 与 DOM 渲染缺少该数据集的直接回归测试。未证明当前上涨/下跌/平盘算术实现错误；总体覆盖与跨来源快照一致性仍待收敛。WebUI 维度 2 继续 partial。
+
+
+### 33. WebUI 维度 2：Market Indices 核心指数行情与快照时间
+
+#### 33.1 核验范围与证据
+
+- 固定代码基线：`b6dfc85ba214fe16268c8cba780641a8bfe15086`。
+- DTO：`internal/marketdata/model/model.go`（blob `6f04516bd11452a01adcb5acceab571fb1c28ed5`），`MarketIndexQuote` / `IndexQuoteSnapshot`。
+- Port：`internal/marketdata/provider/provider.go`（blob `6635d2247379d1ffcb826f80e8e2176422b0cc0a`），`IndexQuoteProvider.FetchIndexQuotes`。
+- Provider：Eastmoney `internal/marketdata/provider/eastmoney.go`（blob `5f2a8c2d0fb883414f870f6e29af51943d12c204`）；同花顺 `internal/marketdata/provider/hithink.go`；TickFlow `internal/marketdata/provider/tickflow.go`（blob `fd32689a4981f6074902917dbfa28f0761922568`）。
+- Provider 测试：`internal/marketdata/provider/eastmoney_test.go`（blob `5f2a8c2d0fb883414f870f6e29af51943d12c204` 对应同基线文件路径，测试覆盖见 TestEastmoneyFetchIndexQuotes*）；`internal/marketdata/provider/hithink_index_test.go`、`hithink_index_quote_diagnostic_test.go`、`tickflow_index_test.go`、`tickflow_index_diagnostic_test.go`。
+- Service 校验、回退和缓存：`internal/marketdata/service/data.go`（blob `d2abb990d8d7ec2fcbf112a5f1beca49c8d40f7b`）；Service 测试 `internal/marketdata/service/data_test.go`。
+- 装配/配置：`internal/marketdata/bootstrap/module.go`（blob `859df0ca2fc26f02dab2399fe684617da9f2fc89`）、`internal/marketdata/config/config.go`（blob `5dab636e97e94b7f221f8bc8dda8dc08c03a83c4`）、`configs/marketdata/providers.json`。
+- HTTP：`internal/marketdata/httpapi/server.go`（blob `7b54b54b3c6182ecab830c2c43f91c548dc60dba`）；OpenAPI `internal/marketdata/httpapi/openapi.yaml`（blob `cd8a6e3dfb8e3162ee789b11e883be9283c59f32`）；契约测试 `internal/marketdata/httpapi/openapi_contract_test.go`（blob `7f97f075a23bd698a7e3fc32e90509d1e999217b`）。
+- WebUI：`web/src/api.js`（blob `b8bcbee5908b43bfa1bc2ca744363190af38287f`）、`web/src/market-overview.js`（blob `6509b2712412b3eb7108045af6ff5093f5893079`）、`web/tests/api.test.mjs`、`web/tests/market-overview.test.mjs`。
+
+#### 33.2 白名单、Provider 与覆盖
+
+1. 三个 Provider 实现同一个 `IndexQuoteProvider` Port，使用相同的七个核心指数白名单：000001.SH 上证指数、399001.SZ 深证成指、399006.SZ 创业板指、000300.SH 沪深300、000016.SH 上证50、000905.SH 中证500、000688.SH 科创50。Provider 使用固定白名单，不接收任意股票代码，也不发起无过滤的全市场请求。
+2. 固定配置 `configs/marketdata/providers.json` 中只有 Eastmoney 的 `index_quotes=true)，并且默认启用；同花顺整体 disabled 且 index_quotes=false；TickFlow 虽启用其他能力，但 index_quotes=false。因此默认实际只有 Eastmoney 提供核心指数行情，不应将三种实现描述为默认可用的三路回退。
+3. Bootstrap 按 `provider_priority` 装配已启用且声明 `IndexQuotes` 的 Provider；显式启用同花顺/TickFlow 对应能力后，DataService 才形成多 Provider 顺序回退。
+4. Provider 对未请求代码、重复代码、缺失核心指数、价格缺失/非法采取忽略、去重、降级或丢弃行策略；允许返回非空的部分指数集合，但会将缺失核心指数标记为 degraded。Service 校验重复 symbol、代码规范、来源/版本/采集时间一致性、价格正数和数值有限性，但不强制必须包含七个白名单中的全部项目。
+5. 部分指数缺失时，API 仍可能返回可用的其余项目，快照 quality 为 degraded，原因包含 provider_core_index_rows_missing / one_or_more_allowlisted_indices_missing 等。DTO 没有 expected_count、missing_symbols 或 coverage_ratio 字段，消费者只能通过质量原因理解缺口。
+
+#### 33.3 涨跌额、涨跌幅与单位
+
+1. 规范计算口径为 `change = latest_price - prev_close`，`change_percent = change / prev_close * 100`；`change_percent` 是百分数值/百分点（例如 1.0 表示上涨 1.0%），不是 0.01 的比例小数。OpenAPI 明确写 percentage points。
+2. 同花顺与 TickFlow 都从最新价和昨收价计算规范涨跌额/涨跌幅；源端扩展的涨跌额/涨跌幅仅作一致性校验，超出容差时丢弃该指数行并降级快照。相关 Provider 测试覆盖一致、缺少可选源端涨跌字段及矛盾源端值。
+3. Eastmoney 读取源端 f2 最新价、f3 涨跌幅、f4 涨跌额及 f18 昨收价；当昨收价存在时校验源端 change 与 change_percent 是否符合上述公式及容差，不一致时丢弃该行。当前未发现明确的公式或符号换算错误。
+4. 价格单位为指数点；amount 的单位是人民币元。amount 缺失或非法时保留 nil、amount_unit=unknown 并将条目/快照降级；不能把缺失成交额解释为 0。
+5. Service 必须要求 latest_price 与 change_percent 非空，但 change、prev_close、OHLC 和 amount 可选；允许缺失字段按 nil 处理。WebUI 展示最新价、涨跌额、涨跌幅和行情时间，不展示成交额、开高低/昨收。
+
+#### 33.4 时间与快照一致性
+
+1. 同花顺接口响应级 timestamp 被所有指数项目共享，提供同一响应快照时间；时间缺失/非法时快照降级，不使用本地 fetched_at 伪造行情时间。
+2. Eastmoney 对每个指数行读取 f86 源端时间；单次批量请求获取七个指数，但 DTO 保留逐项目 quote_time，不能将 fetched_at 当作行情时间。
+3. TickFlow 按 `tickflowMaxQuoteSymbolsPerRequest` 分批请求七个指数（现有测试确认发出两次请求），逐行读取 timestamp。批次之间没有共同响应级 timestamp，也没有 Service 对七个指数 quote_time 的最大跨度校验。
+4. Service 只验证 quote_time 非零、语义为 provider_snapshot_time、没有明显未来值；没有检查其最大历史年龄，也没有检查项目之间 oldest/newest 时间跨度。TickFlow 的时间解析辅助函数注释明确不猜测过期阈值，以免把休市/节假日/盘后最后有效快照误判为错误。
+5. 因此每个指数行情时间都有独立字段且 WebUI 逐卡显示，来源时间没有被采集时间替代；但整个 IndexQuoteSnapshot 不是被契约保证的原子同刻快照，亦没有统一 stale 判定。尤其 TickFlow 分批结果可能存在批次间时间差，而快照仍可能保持 valid。
+
+#### 33.5 HTTP、OpenAPI 与 WebUI
+
+1. HTTP 注册 `GET /api/v1/market/indices`，无查询参数；Handler 调用 MarketOverviewApplication.IndexQuotes，返回 IndexQuoteSnapshot。OpenAPI 路由、无参数矩阵、响应 Schema 均已登记。
+2. OpenAPI `MarketIndexQuote` 的 required 与 Go 非 omitempty 字段一致；模型反射测试覆盖字段集合和 required。Go 以下字段为 `*float64 + omitempty`：latest_price、change、change_percent、open、high、low、prev_close、amount；quote_time 为 `*time.Time + omitempty`。nil 时 JSON 省略，但 OpenAPI 对应字段声明 nullable=true，纳入 AUD-WEBUI-CTR-010。反射测试尚无反向禁止 omitempty 字段 nullable 的规则。
+3. API Client `getMarketIndices` 路径、API Key 注入和 AbortSignal 透传实现正确；固定基线 `web/tests/api.test.mjs` 没有直接调用/断言该方法。现有 API 测试中覆盖的是指数目录、成分、历史日线，不是核心指数实时行情。
+4. 市场概览页真实调用 `getMarketIndices`，逐指数显示名称/代码、最新价、涨跌额、涨跌幅、质量状态、quote_time 和来源；空列表显示明确空态，不补造指数。逐条 quote_time 可见，但没有整体最大时间差提示。
+5. `web/tests/market-overview.test.mjs` 当前只有 87 行，未发现 renderIndices 的 DOM 渲染回归测试；也没有直接验证缺指数、nil 字段、不同 quote_time、degraded 原因的页面呈现。
+
+#### 33.6 差异登记
+
+**AUD-WEBUI-CTR-027：核心指数快照缺少统一的时间跨度与陈旧度质量约束（P2）**
+
+- 证据：TickFlow 将七个指数分两批请求，逐项目记录 timestamp；同花顺使用响应级时间，Eastmoney 使用逐项目时间。Service 只拒绝零值/明显未来 quote_time，不校验最大历史年龄，也不校验同一 IndexQuoteSnapshot 内项目 quote_time 的最大跨度；TickFlow 时间解析函数明确不设置过期阈值。IndexQuoteSnapshot 没有整体 snapshot_time 或时间跨度字段。
+- 影响：消费者可以看到逐指数 quote_time，但无法仅凭快照 quality 判断某些指数是否明显滞后，亦无法将整个快照视为同一时刻。TickFlow 分批请求的项目时间差没有统一质量门槛；旧行情可能仍被标记为 valid。
+- 责任方：Market Data Provider / Service / Data Contract 维护方。
+- 关闭条件：明确市场交易时段、休市/节假日及盘后场景的 freshness SLA；定义跨指数最大时间跨度和整体快照时间语义；对 stale 与时间跨度超限降级或拒绝，并将证据暴露在 DTO/OpenAPI；增加跨批次时间差、盘中陈旧、盘后有效快照、休市和未来时间测试。不得简单以 fetched_at 替代 provider quote_time。
+
+#### 33.7 本批结论
+
+- 核心指数行情有独立 Port、三种 Provider 实现、DataService 校验/熔断/回退/15 秒缓存、HTTP Handler 和 OpenAPI；默认只有 Eastmoney 实际启用该能力。
+- 三个 Provider 使用相同七个核心指数白名单；涨跌额与涨跌幅规范公式一致，未发现已证实的计算或符号错误。
+- 同花顺响应级时间、Eastmoney/TickFlow 逐指数时间；TickFlow 两批请求，但 Service 没有跨项目时间跨度和陈旧度约束。新增 AUD-WEBUI-CTR-027（P2）。
+- MarketIndexQuote 的八个可选数值字段和 quote_time 纳入 AUD-WEBUI-CTR-010。
+- WebUI 已接通并逐指数显示行情时间、涨跌额和涨跌幅；API Client 缺少 getMarketIndices 直接测试，页面缺少 renderIndices DOM 回归测试。
+- WebUI 维度 2 继续 partial。
