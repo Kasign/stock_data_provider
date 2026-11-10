@@ -1012,3 +1012,14 @@
 - 状态：职责/依赖方向 freeze-ready；Manifest/授权绑定原则 accepted；Ref/Envelope/Stage output_ref 投影 pending_decision；生产消费链路 pending_evidence。
 - 沿用 QNT-CTR-001～005、FLOW-CTR-003/004、GOV-CTR-002/006，不新增 CTR；不修改 Quant、Researchflow、Server 责任模块代码，不执行 CI。
 - 下一步唯一任务：转入 Research→Researchflow 边界审查，只核对 Research Context/Evidence/Claim 的公开读取与写入、来源授权复核、PIT、Stage 输出引用及重试幂等；不得重做 Data→Research 已审结的来源字段和 PIT 语义盘点。
+
+
+## 26. Research→Researchflow 研究对象消费边界审查（2026-11-10）
+
+- 固定审计基线：origin/integration @ b6dfc85ba214fe16268c8cba780641a8bfe15086；维护分支 feat/design_doc。详细差异唯一登记见矩阵第30节。
+- 已确认：Research 拥有 Context/Evidence/Claim 语义与版本；Researchflow 负责 Run/Stage/Attempt、分区选择、预算裁剪和组合。FLOW-005 的 ToResearchCreateContextCommand 是纯 DTO 投影，不创建对象、不读取正文、不做授权；Context.system_as_of 必须等于 Run，Evidence.system_as_of 可早于 Run 但不得晚于 Run。
+- 关键待决：CreateContext/CreateClaim 等写操作由 Research 生成 ID 且没有调用幂等键；Attempt 超时/响应丢失后重试可能重复创建对象。Context Get 无 caller/purpose 授权边界；按显式 EvidenceRef/ClaimRef 加载的批量/失败策略也未定义。记录 RSC-FLOW-A/B/C/E pending_decision。
+- 证据缺口：Claim 的 supporting/contradicting EvidenceRefs、ScopeRefs 真实引用解析未完成；Claim Get 无来源 Owner 授权复核；生产 Research Facade Adapter、Server/Worker 装配和联合 Contract Test 未形成。记录 RSC-FLOW-D/F pending_evidence。
+- 状态：职责/依赖方向 freeze-ready；Context 映射与 Run 时间传播 accepted；元数据访问、写入幂等、固定引用加载策略 pending_decision；真实引用/授权/生产消费链路 pending_evidence。
+- 沿用 RSC-CTR-001/002、FLOW-CTR-003/004、GOV-CTR-003/005/006，不新增 CTR；不修改责任模块代码，不执行 CI。
+- 下一步：进入 Researchflow→LLM 边界审查，核对 ModelRequest/Response、Template 版本、Prompt/工具 Schema、调用身份/Scope、模型重试和结果引用；不重复已审的 Tool Policy 领域规则，只核对跨模块映射和生产 Adapter 证据。
