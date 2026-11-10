@@ -173,12 +173,22 @@ func TestMariaDBFinalizeRunAtomicallyPersistsSummaryAndOutbox(t *testing.T) {
 	if claimedB[0].LeaseGeneration != 2 || claimedB[0].AttemptCount != 2 {
 		t.Fatalf("Worker B claim metadata = attempt %d generation %d", claimedB[0].AttemptCount, claimedB[0].LeaseGeneration)
 	}
+	// Worker A must not mutate Worker B's reclaimed lease, even with its old owner/token pair.
 	if acknowledged, err := repository.AcknowledgeOutbox(ctx, input.OutboxRef, "worker-a", claimedA[0].LeaseGeneration); err != nil || acknowledged {
 		t.Fatalf("stale Worker A acknowledgement = %v, err=%v; want false", acknowledged, err)
+	}
+	if retried, err := repository.RetryOutbox(ctx, input.OutboxRef, "worker-a", claimedA[0].LeaseGeneration, time.Now().UTC().Add(time.Minute), "stale_failure"); err != nil || retried {
+		t.Fatalf("stale Worker A retry = %v, err=%v; want false", retried, err)
 	}
 	retryAt := time.Now().UTC().Add(2 * time.Second)
 	if retried, err := repository.RetryOutbox(ctx, input.OutboxRef, "worker-b", claimedB[0].LeaseGeneration, retryAt, "temporary_failure"); err != nil || !retried {
 		t.Fatalf("Worker B RetryOutbox = %v, err=%v", retried, err)
+	}
+	if acknowledged, err := repository.AcknowledgeOutbox(ctx, input.OutboxRef, "worker-b", claimedB[0].LeaseGeneration); err != nil || acknowledged {
+		t.Fatalf("Worker B acknowledgement after retry release = %v, err=%v; want false", acknowledged, err)
+	}
+	if renewed, ok, err := repository.RenewOutboxLease(ctx, input.OutboxRef, "worker-b", claimedB[0].LeaseGeneration, time.Minute); err != nil || ok || !renewed.IsZero() {
+		t.Fatalf("Worker B renewal after retry release = (%s, %v), err=%v; want zero/false", renewed, ok, err)
 	}
 	if claimed, err := repository.ClaimOutbox(ctx, "worker-c", runRef, 10, 30*time.Second); err != nil || len(claimed) != 0 {
 		t.Fatalf("message claimed before next_attempt_at: count=%d err=%v", len(claimed), err)
