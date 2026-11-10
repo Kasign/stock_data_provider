@@ -199,7 +199,7 @@ func TestRetryPolicyRejectsAttemptOutsideDeliveryLifecycle(t *testing.T) {
 	finished := beforeCreated.StartedAt.Add(time.Second)
 	beforeCreated.FinishedAt = &finished
 	beforeCreated.DurationMS = retryInt64Pointer(1000)
-	if err := policyValidateAttempt(beforeCreated); err != nil {
+	if err := beforeCreated.Validate(); err != nil {
 		t.Fatalf("invalid test fixture: %v", err)
 	}
 	attempts[0] = beforeCreated
@@ -215,7 +215,8 @@ func TestRetryPolicyRejectsAttemptOutsideDeliveryLifecycle(t *testing.T) {
 	atDeadline.DurationMS = int64Pointer(1000)
 	leaseExpiry := atDeadline.StartedAt.Add(time.Minute)
 	atDeadline.LeaseExpiresAt = leaseExpiry
-	if err := policyValidateAttempt(atDeadline); err != nil {
+	now = finished.Add(time.Second)
+	if err := atDeadline.Validate(); err != nil {
 		t.Fatalf("invalid test fixture: %v", err)
 	}
 	attempts[0] = atDeadline
