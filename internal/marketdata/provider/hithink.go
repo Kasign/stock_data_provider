@@ -1262,6 +1262,9 @@ func (p *Hithink) FetchIndexConstituents(ctx context.Context, rawIndexSymbol str
 		snapshot.QualityStatus = model.QualityDegraded
 		snapshot.QualityReasons = append(snapshot.QualityReasons, "provider_constituents_timestamp_missing_or_invalid")
 	}
+	if snapshot.ProviderTime == nil {
+		addHithinkFieldIssue(ctx, nil, "provider_time", "timestamp", "missing_or_invalid_value", "valid provider snapshot timestamp", "number", "", "同花顺指数成分股快照时间缺失或非法")
+	}
 	seen := make(map[string]struct{}, len(data.Item))
 	for index, row := range data.Item {
 		symbol, symbolErr := hithinkDomesticSymbol(row.THSCode)
