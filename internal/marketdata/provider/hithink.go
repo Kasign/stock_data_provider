@@ -560,6 +560,7 @@ func (p *Hithink) FetchHotStocks(ctx context.Context, rankingType string, limit 
 	}
 	if snapshot.ProviderTime == nil {
 		snapshot.QualityReasons = appendUniqueHithinkReason(snapshot.QualityReasons, "provider_ranking_timestamp_missing_or_invalid")
+		addHithinkFieldIssue(ctx, nil, "provider_time", "timestamp", "missing_or_invalid_value", "valid provider ranking snapshot timestamp", "missing_or_invalid", "", "同花顺人气榜/飙升榜源端快照时间缺失或非法")
 	}
 	if len(data.Item) == 0 {
 		snapshot.QualityStatus = model.QualityUnknown
@@ -574,6 +575,7 @@ func (p *Hithink) FetchHotStocks(ctx context.Context, rankingType string, limit 
 		}
 		symbol, symbolErr := hithinkDomesticSymbol(hithinkFieldString(row, "thscode"))
 		if symbolErr != nil {
+			addHithinkFieldIssue(ctx, &index, "symbol", "thscode", "invalid_identity", "valid A-share security code", "string", hithinkFieldString(row, "thscode"), "同花顺榜单证券代码无效")
 			return nil, fmt.Errorf("同花顺榜单第 %d 行证券代码无效: %w", index, symbolErr)
 		}
 		code := hithinkFieldString(row, "ticker")
@@ -581,10 +583,12 @@ func (p *Hithink) FetchHotStocks(ctx context.Context, rankingType string, limit 
 			code = strings.Split(symbol, ".")[0]
 		}
 		if code != strings.Split(symbol, ".")[0] {
+			addHithinkFieldIssue(ctx, &index, "symbol", "ticker/thscode", "identity_mismatch", "ticker matches thscode code", "string", code+"/"+hithinkFieldString(row, "thscode"), "同花顺榜单 ticker 与 thscode 不一致")
 			return nil, fmt.Errorf("同花顺榜单第 %d 行 ticker 与 thscode 不一致", index)
 		}
 		rankValue := hithinkFieldNumber(row, "rank")
 		if rankValue == nil || *rankValue < 1 || math.Trunc(*rankValue) != *rankValue || *rankValue > 1000000 {
+			addHithinkFieldIssue(ctx, &index, "rank", "rank", "missing_or_invalid_value", "positive bounded integer rank", "missing_or_invalid", hithinkFieldString(row, "rank"), "同花顺榜单排名缺失或非法")
 			return nil, fmt.Errorf("同花顺榜单第 %d 行排名无效", index)
 		}
 		if _, duplicate := seen[symbol]; duplicate {
