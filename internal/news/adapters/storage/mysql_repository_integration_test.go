@@ -298,6 +298,31 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 	if err := repository.CreateEvidenceSnapshot(ctx, snapshot); err != nil {
 		t.Fatalf("idempotent create after envelope restoration: %v", err)
 	}
+	var originalEvidencePayload []byte
+	if err := db.QueryRowContext(ctx,
+		"SELECT payload_json FROM news_evidence_snapshots WHERE snapshot_ref = ?",
+		snapshot.SnapshotRef,
+	).Scan(&originalEvidencePayload); err != nil {
+		t.Fatalf("read original evidence payload: %v", err)
+	}
+	if _, err := db.ExecContext(ctx,
+		"UPDATE news_evidence_snapshots SET payload_json = JSON_OBJECT('tampered', 'payload') WHERE snapshot_ref = ?",
+		snapshot.SnapshotRef,
+	); err != nil {
+		t.Fatalf("tamper evidence snapshot payload: %v", err)
+	}
+	if err := repository.CreateEvidenceSnapshot(ctx, snapshot); !errors.Is(err, app.ErrInvalidEvidenceSnapshot) {
+		t.Fatalf("idempotent create with tampered payload error = %v, want invalid snapshot", err)
+	}
+	if _, err := db.ExecContext(ctx,
+		"UPDATE news_evidence_snapshots SET payload_json = ? WHERE snapshot_ref = ?",
+		originalEvidencePayload, snapshot.SnapshotRef,
+	); err != nil {
+		t.Fatalf("restore evidence snapshot payload: %v", err)
+	}
+	if err := repository.CreateEvidenceSnapshot(ctx, snapshot); err != nil {
+		t.Fatalf("idempotent create after payload restoration: %v", err)
+	}
 	conflictingSnapshot := snapshot
 	conflictingSnapshot.PageSize++
 	if err := repository.CreateEvidenceSnapshot(ctx, conflictingSnapshot); !errors.Is(err, app.ErrEvidenceSnapshotConflict) {
