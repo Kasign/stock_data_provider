@@ -89,10 +89,6 @@ func TestAuthorizationSnapshotEnvelopeMatchesEveryIndexedField(t *testing.T) {
 	if ref.ContentLevel == changedContentLevel {
 		changedContentLevel = domain.AuthorizationContentSummary
 	}
-	changedContentLevel := domain.AuthorizationContentMetadata
-	if ref.ContentLevel == changedContentLevel {
-		changedContentLevel = domain.AuthorizationContentSummary
-	}
 	tests := []struct {
 		name   string
 		mutate func() bool
