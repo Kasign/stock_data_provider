@@ -38,9 +38,8 @@ func (r *MySQLDeliveryRepository) RecoverExpiredLease(
 	if err := next.Validate(); err != nil {
 		return err
 	}
-	if event.DeliveryID != next.DeliveryID || event.Version != next.Version ||
-		event.To != next.Status || !event.ChangedAt.Equal(next.UpdatedAt) {
-		return domain.ErrInvalidDeliveryChange
+	if err := validateDeliveryStateEventForSnapshot(next, event); err != nil {
+		return err
 	}
 
 	tx, err := r.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
