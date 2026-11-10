@@ -328,7 +328,7 @@ func (s *DataService) IndexQuotes(ctx context.Context) (*model.IndexQuoteSnapsho
 				degradedCandidate = snapshot
 				if providerIndex > 0 {
 					degradedCandidate.FallbackFrom = s.indexQuoteProviders[0].Name()
-					degradedCandidate.FallbackReason = strings.Join(failures, "; ")
+					degradedCandidate.FallbackReason = "preferred_provider_unavailable_or_unusable"
 				}
 			}
 			failures = append(failures, p.Name()+": valid contract but degraded quality")
@@ -336,7 +336,7 @@ func (s *DataService) IndexQuotes(ctx context.Context) (*model.IndexQuoteSnapsho
 		}
 		if providerIndex > 0 {
 			snapshot.FallbackFrom = s.indexQuoteProviders[0].Name()
-			snapshot.FallbackReason = strings.Join(failures, "; ")
+			snapshot.FallbackReason = "preferred_provider_unavailable_or_unusable"
 		}
 		payload, marshalErr := json.Marshal(snapshot)
 		if marshalErr == nil {
@@ -587,7 +587,7 @@ func (s *DataService) MarketBreadth(ctx context.Context) (*model.MarketBreadthSn
 				degradedCandidate = snapshot
 				if providerIndex > 0 {
 					degradedCandidate.FallbackFrom = s.marketBreadthProviders[0].Name()
-					degradedCandidate.FallbackReason = strings.Join(failures, "; ")
+					degradedCandidate.FallbackReason = "preferred_provider_unavailable_or_unusable"
 				}
 			}
 			failures = append(failures, p.Name()+": valid contract but degraded quality")
@@ -595,7 +595,7 @@ func (s *DataService) MarketBreadth(ctx context.Context) (*model.MarketBreadthSn
 		}
 		if providerIndex > 0 {
 			snapshot.FallbackFrom = s.marketBreadthProviders[0].Name()
-			snapshot.FallbackReason = strings.Join(failures, "; ")
+			snapshot.FallbackReason = "preferred_provider_unavailable_or_unusable"
 		}
 		if data, err := json.Marshal(snapshot); err == nil {
 			cacheTTL := ttl
