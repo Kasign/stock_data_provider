@@ -534,3 +534,14 @@ Application 的 `RunFinalizationCoordinator` 是三种终态聚合路径的路�
 - 旧 Worker 在消息被其他 Worker 重领后，不得 Ack 或 Retry 新租约。
 - Worker 完成 Retry 释放租约后，不得继续 Ack 或 Renew 原租约。
 - 新增 MariaDB 集成断言覆盖 Worker A -> Worker B reclaim -> Worker B Retry -> Worker C reclaim 的完整状态链。真实 MariaDB 尚未执行。
+
+
+## 运行时并发与 Outbox 投递语义 Review（2026-11-10）
+
+Storage 事务的统一锁顺序为 Run -> Stage（按 stage_ref）-> Attempt（按 stage_ref、attempt_no）。Claim、续租、结果提交、取消确认、过期 fencing、Deadline 收敛和 Finalize 均先锁 Run 行，因此同一 Run 的写入由 Run 行串行化；Outbox Worker 只锁 Outbox 行，不反向锁 Run，当前代码未见与 Finalize 形成反向锁环。
+
+事务中途 SQL 错误、状态行数校验失败或 Commit 前 context 取消时，defer Rollback 覆盖本事务已写入的多行状态。Commit 返回错误属于结果不确定场景，调用方应重新读取持久化状态后决定是否重试，不应直接生成新的业务身份。
+
+Outbox 使用发布前 Claim、提交租约、外部 Publish、成功后 Ack 的顺序，语义为至少一次。Publish 成功而 Ack 前进程崩溃会导致租约到期后重复投递；消费端必须按稳定 idempotency_key 去重。不得将本地租约/fencing 描述为端到端 exactly-once。
+
+以上为静态代码 Review 结论。真实 MariaDB 的死锁/锁等待压力、context cancel、事务中途失败和 Publish/Ack 崩溃窗口仍需集成验收。
