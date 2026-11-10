@@ -70,6 +70,20 @@ func TestEvidenceSnapshotValidateAcceptsStableReferenceOnlySnapshot(t *testing.T
 	}
 }
 
+func TestEvidenceSnapshotValidateAtRejectsExpiredSnapshot(t *testing.T) {
+	now := time.Date(2026, 11, 10, 10, 0, 0, 0, time.UTC)
+	snapshot := validEvidenceSnapshot(now.Add(-EvidenceSnapshotTTL))
+	if err := snapshot.ValidateAt(now.Add(-time.Nanosecond)); err != nil {
+		t.Fatalf("ValidateAt() immediately before expiry error = %v", err)
+	}
+	if err := snapshot.ValidateAt(now); !errors.Is(err, ErrInvalidEvidenceSnapshot) {
+		t.Fatalf("ValidateAt() at expiry error = %v, want ErrInvalidEvidenceSnapshot", err)
+	}
+	if err := snapshot.ValidateAt(now.Add(time.Nanosecond)); !errors.Is(err, ErrInvalidEvidenceSnapshot) {
+		t.Fatalf("ValidateAt() after expiry error = %v, want ErrInvalidEvidenceSnapshot", err)
+	}
+}
+
 func TestEvidenceSnapshotMatchesExactQueryContext(t *testing.T) {
 	now := time.Date(2026, 11, 9, 10, 0, 0, 0, time.UTC)
 	snapshot := validEvidenceSnapshot(now)
