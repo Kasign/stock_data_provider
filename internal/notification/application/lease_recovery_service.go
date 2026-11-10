@@ -26,7 +26,7 @@ type LeaseRecoveryReport struct {
 	Conflicted     int
 	OutcomeUnknown int
 	// OutcomeUnknownDeliveryIDs 是内部 Worker 对账所需的精确 Delivery 标识，不得写入公开诊断属性。
-	OutcomeUnknownDeliveryIDs []string
+	OutcomeUnknownDeliveryIDs []string `json:"-"`
 	Failed         int
 	Unprocessed    int
 }
