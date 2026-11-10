@@ -17,11 +17,15 @@ type evidenceSnapshotRepositoryStub struct {
 	deleteLimit int
 	deleteCalls int
 	afterDelete func()
+	afterCreate func()
 }
 
 func (s *evidenceSnapshotRepositoryStub) CreateEvidenceSnapshot(_ context.Context, snapshot EvidenceSnapshot) error {
 	s.calls++
 	s.created = snapshot
+	if s.afterCreate != nil {
+		s.afterCreate()
+	}
 	return nil
 }
 
@@ -266,6 +270,41 @@ func TestEvidenceSnapshotRetentionCleanerHonorsCancellation(t *testing.T) {
 		}
 		if repository.deleteCalls != 1 {
 			t.Fatalf("repository calls=%d, want 1", repository.deleteCalls)
+		}
+	})
+}
+
+func TestSaveEvidenceSnapshotHonorsContextCancellation(t *testing.T) {
+	now := time.Now().UTC()
+	snapshot := validEvidenceSnapshot(now)
+	t.Run("already canceled does not call repository", func(t *testing.T) {
+		repository := &evidenceSnapshotRepositoryStub{}
+		service, err := NewSaveEvidenceSnapshot(repository)
+		if err != nil {
+			t.Fatal(err)
+		}
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		if err := service.Execute(ctx, snapshot); !errors.Is(err, context.Canceled) {
+			t.Fatalf("Execute() error=%v, want context.Canceled", err)
+		}
+		if repository.calls != 0 {
+			t.Fatalf("repository calls=%d, want 0", repository.calls)
+		}
+	})
+	t.Run("canceled while repository is running", func(t *testing.T) {
+		repository := &evidenceSnapshotRepositoryStub{afterCreate: func() { cancel() }}
+		service, err := NewSaveEvidenceSnapshot(repository)
+		if err != nil {
+			t.Fatal(err)
+		}
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		if err := service.Execute(ctx, snapshot); !errors.Is(err, context.Canceled) {
+			t.Fatalf("Execute() error=%v, want context.Canceled", err)
+		}
+		if repository.calls != 1 {
+			t.Fatalf("repository calls=%d, want 1", repository.calls)
 		}
 	})
 }
