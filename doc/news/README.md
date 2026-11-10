@@ -1009,7 +1009,7 @@
 
 - [x] 授权快照读取端增加 64 KiB 上限及数据库信封字段与 JSON Binding 一致性校验。
 - [x] Provider Ingest 区分 SourceCatalog not-found 与依赖不可用，并保留底层错误原因。
-- [ ] 上述修复的 CI 与 MariaDB 11.4 集成运行结果待新提交 Workflow。
+- [ ] Run `42740420934` 中 News 未再触发 gofmt 错误，但根模块测试被其他模块格式差异阻断；News MariaDB 集成 Job skipped，仍需独立运行验收。
 - [ ] 当前剩余主要阻断：available_at 可信证据门禁、授权复核与内容读取 TOCTOU、Server 组合根注入及 MariaDB 真实验收。详见《代码与文档Review报告》。
 
 

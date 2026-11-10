@@ -96,8 +96,9 @@
 ## 六、修复后验证状态（2026-11-10）
 
 - 修复提交：`c567f991e28883d7c2551be7614590c32972d304`。
-- 新提交后的 CI 尚待运行；未在本地执行 Go 测试或 MariaDB 集成。
-- 上一 Run `42739748233` 已完成但失败：`Test go-core` 成功，根模块 `Test .` 因 Notification、Quant 等其他模块的 gofmt 差异失败；News MariaDB 集成 Job 为 skipped。
+- 修复代码提交 `abdb630f4fc409ced5d5341504ea7ef77e420c99` 对应 Run `42740420934` 已完成：`Test go-core` success；根模块 `Test .` failure，失败点为 Notification、Quant 等其他模块的 gofmt 差异，日志未列出 News 文件；News MariaDB 集成 Job 为 skipped。
+- 该 Run 最初还捕获到授权快照文件多余右花括号的语法错误，已在 `abdb630f` 修复；后续同一 Run 的 gofmt 检查没有再报告 News 文件，但由于其他模块格式差异，根模块测试未继续执行。
+- 最新文档提交 `e13d1543c7299cc887c30e4446811d4921743728` 尚未有独立 CI 结果；未在本地执行 Go 测试或 MariaDB 集成。
 - 本轮修复涉及的 MariaDB 断言尚无真实数据库运行证据。
 - 当前仍未解决：available_at 可信证据建模/严格 PIT 门禁；授权复核与精确内容读取 TOCTOU；最新授权选择与 payload 读取的事务一致性；真实 MariaDB 11.4 验收及 Server 组合根接线。
 
