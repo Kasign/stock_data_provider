@@ -112,7 +112,7 @@
 - 当前未发现带来源证明、来源字段路径/原始值、可信获取方式和可追溯出处的 `available_at` 证据字段或独立来源事件。
 - Feed 的 Atom `updated` 是内容更新声明，不等于首次公开可用时间；`published_at`、`fetched_at`、`normalized_at`、`observed_at` 均不得替代。
 
-结论：本分支当前没有足够证据安全实现 available_at 门禁。下一步需要先在 NEWS-CTR-001/数据模型中明确可接受的来源证据类型、原始证据保存、解析/可信等级和回溯规则，再新增持久化字段及 Get/List SQL 过滤；在此之前继续保持 available_at=null，并明确严格 PIT 尚未完成。
+结论：本分支当前没有足够证据安全实现 available_at 门禁。已在《新闻数据模型与质量契约》和《新闻API契约》中冻结首期准入规则：只接受经来源语义审核、Source/Endpoint 授权、字段 allowlist、精确时区解析并绑定具体内容版本的“发布来源明确声明首次公开可获取时间”证据；必须保留字段路径、原始值、证据 URL、策略版本、采集时间和解析器版本。普通 datePublished/published_date、RSS pubDate、Atom published/updated、dateModified、HTTP Date/Last-Modified、Provider 索引时间及系统采集时间均拒绝作为 available_at。首次成功抓取时间只证明当时已可获取，不证明首次公开时间，首期不回填。证据缺失、冲突或语义不明保持 NULL，严格 PIT 排除。当前接入来源仍无符合条件的字段，因此本次只冻结规则，不新增无真实来源支撑的字段/表，也不改 Get/List SQL；严格 PIT 仍未完成。
 
 
 ## 八、最新授权读取一致性边界修复（2026-11-10）
@@ -331,3 +331,14 @@
 - 对已处于 V8 的持久测试库不执行降级式 fixture，仍执行完整迁移集的版本/校验和一致性检查。
 - Run `42764067365` 的 News MariaDB Repository and Migration integration Job = success，真实 MariaDB 11.4 执行通过。
 - 同一提交的 News Provider/全量模块 Workflow Run `42764067354` = success；根模块 `Test .` 仍因其他模块 gofmt 差异失败。
+
+
+## 九、available_at 证据准入规则冻结（2026-11-10）
+
+- 首期只接受发布来源明确声明“首次公开可获取时间”的来源字段；普通发布时间、内容更新时间、HTTP 响应时间、搜索索引时间和系统采集时间均不具备该语义。
+- 准入前必须完成来源语义审核和 Source/Endpoint allowlist，并保留来源/Endpoint/策略版本、字段路径、原始值、时区、证据 URL、采集时间、解析器版本及受控证据摘要/引用；证据绑定到具体 News Item Version。
+- 日期粒度、时区缺失、语义不明、版本绑定不明、字段冲突、来源授权不足均不得生成 available_at；证据状态保持 unknown。
+- 首次成功抓取仅证明在抓取时刻已可获取，不证明首次公开时刻。首期不以首次抓取时间回填 available_at；如未来需要利用该事实，必须另行定义区间/上界语义，不能复用 available_at。
+- 已验证证据采用追加式修订，不允许后续采集静默覆盖；修订需保留旧证据与原因。
+- 当前 Bocha/Tavily/Brave News/SearXNG 候选字段及 RSS/Atom/HTML 解析字段均无符合条件的来源可用时间声明，因此本轮不新增数据库字段/证据表，不修改 Get/List SQL；继续保持 available_at=NULL。
+- NEWS-CTR-001 的严格 PIT 仍未完成：实现阶段必须先接入真实来源证据，再持久化 verified 证据，并在 Get/List 查询入口统一执行 `available_at <= system_as_of`；缺证据和晚于截止时间均排除。
