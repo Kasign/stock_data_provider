@@ -476,3 +476,11 @@ Application 的 `RunFinalizationCoordinator` 是三种终态聚合路径的路�
 - Run 行 `SELECT ... FOR UPDATE` 与终态检查是裁决点：胜者完成 Run + Summary + Outbox 事务；后到者必须观察到终态并返回 `ErrRunAlreadyFinalized`。
 - 测试断言只有一个成功、Run version 只增加一次，且 Summary/Outbox 均恰好一条。
 - 该测试受 `PLATFORM_STORAGE_INTEGRATION=1` 门控，尚未取得真实 MariaDB 执行证据。
+
+
+## 19. Outbox 双 Worker 并发 Claim 验收补充（2026-11-10）
+
+- 两个 Worker 同时 Claim 同一 Run 的唯一 finalized Outbox 事件，使用相同 RunRef 与 limit=1。
+- 断言一个 Worker 获得唯一事件，另一个返回空集合；获胜消息 attempt_count 与 lease_generation 首次均为 1。
+- 非租约持有者 Ack 必须失败，租约持有者按相同 generation Ack 成功，确保并发领取和确认均受 owner/generation 约束。
+- 测试依赖真实 MariaDB 的 InnoDB 行锁与 `SKIP LOCKED`，受 `PLATFORM_STORAGE_INTEGRATION=1` 门控，尚未执行。
