@@ -505,3 +505,10 @@ Application 的 `RunFinalizationCoordinator` 是三种终态聚合路径的路�
 - 对已过期的 Run，`ExpireRunDeadline` 在单个事务内持久化 `termination_reason=deadline_exceeded` 并递增 Run version；所有非终态 Stage 收敛为 timed_out、递增 Stage version、清除 retry_at 并追加 `run_deadline_exceeded`。
 - 重复调用在同一已标记 deadline 状态下返回 `updated=false` 和当前 version，不重复推进状态。
 - 新增 MariaDB 集成测试覆盖 Pending Stage 路径；running Attempt fencing、取消优先级、全部 Stage 已终态时交由正常 Finalize 的分支仍需专项覆盖。当前测试代码未执行。
+
+
+## 23. Deadline Attempt fencing 与用户取消优先级（2026-11-10）
+
+- Deadline 到期会立即将 running Attempt 置为 timed_out，递增 fencing token 并清空 lease owner/expiry；Stage 进入 timed_out。即使 Worker 仍持有旧 token，也不能再提交结果。
+- Deadline 与用户取消共用 Run 行锁作为终止权线性化点。Deadline 先提交 `deadline_exceeded` 时，BeginRunCancellation 必须拒绝；用户取消先提交 `user_cancelled`/cancelling 时，ExpireRunDeadline 必须拒绝。两者不得互相覆盖。
+- 新增 MariaDB 并发集成测试覆盖上述行为；尚未执行真实数据库验收。
