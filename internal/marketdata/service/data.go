@@ -321,8 +321,8 @@ func (s *DataService) IndexQuotes(ctx context.Context) (*model.IndexQuoteSnapsho
 			failures = append(failures, p.Name()+": "+err.Error())
 			continue
 		}
-		s.breaker.Success(breakerKey)
 		if snapshot.QualityStatus == model.QualityDegraded {
+			s.breaker.QualityDegraded(breakerKey)
 			// 降级快照保留为兜底候选，继续尝试后续 Provider，优先取得完整可信快照。
 			if degradedCandidate == nil {
 				degradedCandidate = snapshot
@@ -334,6 +334,7 @@ func (s *DataService) IndexQuotes(ctx context.Context) (*model.IndexQuoteSnapsho
 			failures = append(failures, p.Name()+": valid contract but degraded quality")
 			continue
 		}
+		s.breaker.Success(breakerKey)
 		if providerIndex > 0 {
 			snapshot.FallbackFrom = s.indexQuoteProviders[0].Name()
 			snapshot.FallbackReason = "preferred_provider_unavailable_or_unusable"
@@ -580,8 +581,8 @@ func (s *DataService) MarketBreadth(ctx context.Context) (*model.MarketBreadthSn
 			failures = append(failures, p.Name()+": "+err.Error())
 			continue
 		}
-		s.breaker.Success(breakerKey)
 		if snapshot.QualityStatus == model.QualityDegraded {
+			s.breaker.QualityDegraded(breakerKey)
 			// 市场广度的部分金额/时间覆盖必须保留降级，继续尝试后续完整来源。
 			if degradedCandidate == nil {
 				degradedCandidate = snapshot
@@ -593,6 +594,7 @@ func (s *DataService) MarketBreadth(ctx context.Context) (*model.MarketBreadthSn
 			failures = append(failures, p.Name()+": valid contract but degraded quality")
 			continue
 		}
+		s.breaker.Success(breakerKey)
 		if providerIndex > 0 {
 			snapshot.FallbackFrom = s.marketBreadthProviders[0].Name()
 			snapshot.FallbackReason = "preferred_provider_unavailable_or_unusable"
@@ -1387,7 +1389,7 @@ func (s *DataService) SectorRankingsByMetric(ctx context.Context, rawCategory, r
 				return nil, false, ctx.Err()
 			}
 			if calledProvider {
-				s.breaker.Failure(breakerKey)
+				recordProviderCallFailure(s.breaker, breakerKey, fetchErr)
 			} else {
 				s.breaker.Abandon(breakerKey)
 			}
@@ -2717,7 +2719,7 @@ func (s *DataService) Quote(ctx context.Context, rawSymbol string) (*model.Quote
 		if strings.TrimSpace(q.Symbol) != "" {
 			providerSymbol, symbolErr := normalize.NormalizeSymbol(q.Symbol)
 			if symbolErr != nil || providerSymbol != symbol {
-					s.breaker.ContractFailure(breakerKey)
+				s.breaker.ContractFailure(breakerKey)
 				errs = append(errs, p.Name()+": provider returned a different or invalid symbol")
 				continue
 			}
@@ -2951,7 +2953,7 @@ func (s *DataService) DailyBars(ctx context.Context, rawSymbol, start, end strin
 		}
 		receivedAt := time.Now().UTC()
 		if len(bars) == 0 {
-			s.breaker.Failure(breakerKey)
+			s.breaker.ContractFailure(breakerKey)
 			errs = append(errs, p.Name()+": empty daily-bar response without error")
 			continue
 		}
@@ -2986,7 +2988,7 @@ func (s *DataService) DailyBars(ctx context.Context, rawSymbol, start, end strin
 			}
 		}
 		if contractError != "" {
-			s.breaker.Failure(breakerKey)
+			s.breaker.ContractFailure(breakerKey)
 			errs = append(errs, p.Name()+": "+contractError)
 			continue // Never salvage only part of a provider response with a mixed contract.
 		}
