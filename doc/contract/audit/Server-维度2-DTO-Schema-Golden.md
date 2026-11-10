@@ -469,3 +469,50 @@ CTR-008的旧Task Events持久化/DDL/cursor证据不属于本轮决策清单，
 | D-SRV-TIME-01（CTR-006） | 保持nil省略，修正Schema并补三态Golden | 与现有行为对齐，无新增领域决策 | ready_for_implementation |
 
 项目负责人确认前，不把建议写成accepted；责任方确认后，才进入相应Schema/Handler/Golden修复。CTR-046/047/007继续开放，CTR-006仍开放但具备直接实施条件。本切片没有新增CTR、关闭CTR或业务代码变更。
+
+
+
+## 12. CTR-047 增量补证：同步 Runner 的 run_id 权威来源与持久化（2026-11-10）
+
+本节只补第11节明确缺失的同步 Runner 证据，不重复RunRequest字段盘点。
+
+### 12.1 固定基线代码事实
+
+- `internal/analysis/app/runner.go:39-48`：`Runner.Run`仅在`request.RunID`为空/空白时调用`newRunID()`；非空ID先经过`validateRunID`，允许1～64字符，仅ASCII字母、数字、连字符和下划线。非法ID返回`RunStatusRejected`及`invalid_run_id`。
+- `runner.go:52-58`：RunResult.RunID与规范化后的request.RunID相同；随后调用`Store.Begin(ctx, request, startedAt)`。因此非空合法客户端ID不会在Runner层被覆盖。
+- `runner.go:61-79`：最终持久化`Store.Finish`使用同一RunID；执行期间阶段事件、快照写入也使用该RunID。
+- `internal/adapters/storage/mysqlredis/store.go:184-196`：`analysis_runs.run_id`为VARCHAR(64) PRIMARY KEY；`analysis_stage_events`、`analysis_snapshots`以外键关联该RunID。主键保证同一ID不能创建第二条Run记录。
+- `store.go:199-208`：`Store.Begin`执行INSERT，不是UPSERT；重复RunID会由数据库唯一约束拒绝，不会覆盖既有Run。
+- `store.go:221-241`：`Store.Finish`按RunID更新结果；`store.go:293-322`：`GetResult`按RunID从Redis/MariaDB读取，并校验缓存结果RunID一致。
+- `internal/platform/httpapi/server.go:126-162`：同步HTTP Handler将请求交给Runner并直接返回RunResult；未在Handler生成或覆盖RunID。Begin失败进入通用Runner错误响应路径，当前未见将主键冲突映射为HTTP 409的专用分支。
+
+### 12.2 测试证据与缺口
+
+- `internal/analysis/app/runner_test.go:169-206`验证无RunID请求成功后结果与事件被持久化，但未断言生成的RunID格式或request/result/store三处ID一致。
+- 当前Runner测试未覆盖显式合法RunID被保留、非法RunID拒绝、重复RunID冲突。
+- `internal/platform/httpapi/server_test.go`有默认值、未知字段、请求体限制和Runner错误脱敏测试；未见同步Run显式RunID端到端断言或冲突状态码断言。
+- Store迁移定义给出主键约束，Store.Begin使用INSERT；但本轮未执行真实MariaDB集成测试，不能把DDL静态证据写成真实DB运行通过。
+
+### 12.3 CTR-047决策输入更新
+
+同步Run的ID行为已有明确实现事实，不再是未知：
+
+1. 客户端省略run_id：Runner生成服务端ID。
+2. 客户端提供合法run_id：Runner保留并将其作为Run主键、事件/快照关联键及查询键。
+3. 客户端提供非法run_id：返回Rejected结果，failure code为invalid_run_id。
+4. 客户端重复使用已存在run_id：MariaDB主键拒绝第二次Begin；不会覆盖旧Run。当前HTTP层未将该冲突稳定映射为409，属于错误契约/实现缺口。
+
+**建议目标契约：** 同步Run继续允许客户端提供合法run_id；省略时服务端生成。相同ID不得覆盖已有Run，冲突应稳定映射为409（建议专用`run_id_conflict`错误码）。这是对现有ID所有权行为的明确化，不需要将同步Run改成强制服务端生成。
+
+异步Task路径仍按Task Queue独立规则处理：Task Queue生成其RunID并将其作为Task/Run关联ID；不得因同步Runner接受客户端ID，就推断异步入口也接受该ID。
+
+### 12.4 最小关闭测试
+
+只需补以下增量用例，不重写整套Runner测试：
+
+- Runner：合法显式ID贯穿RunResult、Store.Begin、事件和Store.Finish；空ID生成ID；非法IDRejected。
+- Store/真实MariaDB：重复主键不覆盖原结果，第二次Begin失败；查询仍返回第一次Run。
+- HTTP Handler：重复ID冲突映射为稳定409和错误码；不泄漏SQL细节。
+- 异步Task：单独断言Queue生成的run_id与Task.run_id一致，客户端传入值不会改变Queue生成的权威ID（若既有测试已覆盖，仅补证引用，不重复添加）。
+
+本节结论：CTR-047中“同步Runner是否保留客户端run_id”已取得实现证据，可从pending_evidence移至ready_for_decision；目标建议为“合法客户端ID保留、缺省由服务端生成、重复ID拒绝且HTTP稳定409”。重复冲突HTTP映射及相应测试仍未完成。无业务代码或测试变更、未执行CI。
