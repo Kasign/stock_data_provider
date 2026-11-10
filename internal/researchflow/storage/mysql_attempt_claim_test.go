@@ -99,7 +99,7 @@ func TestMariaDBClaimAttemptLeaseAndFencing(t *testing.T) {
 		},
 		ResolvedTemplate: template.ResolvedTemplate{
 			Ref: "claim-template", Version: "v1", Fingerprint: templateFingerprint,
-			Stages: []template.ResolvedStage{{Definition: template.StageDefinition{Code: "context"}}, {Definition: template.StageDefinition{Code: "quant"}}},
+			Stages: []template.ResolvedStage{{Definition: template.StageDefinition{Code: "context"}}, {Definition: template.StageDefinition{Code: "quant"}}, {Definition: template.StageDefinition{Code: "research"}}, {Definition: template.StageDefinition{Code: "report"}}},
 		},
 		Parameters: json.RawMessage(`{}`),
 	}
