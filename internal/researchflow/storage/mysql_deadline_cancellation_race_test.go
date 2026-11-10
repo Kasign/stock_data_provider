@@ -237,3 +237,130 @@ func TestMariaDBDeadlineExpirationWinsAgainstStaleSchedulerStageCAS(t *testing.T
 			loadedStage.Status, loadedStage.Version, wantVersion, casResult.updated)
 	}
 }
+
+
+func TestMariaDBCancellationConfirmationAndLeaseFencingHaveSingleWinner(t *testing.T) {
+	if os.Getenv("PLATFORM_STORAGE_INTEGRATION") != "1" {
+		t.Skip("set PLATFORM_STORAGE_INTEGRATION=1")
+	}
+	ctx, cancel, db, repo := deadlineRaceDB(t)
+	defer cancel()
+	defer db.Close()
+
+	suffix := fmt.Sprint(time.Now().UnixNano())
+	runRef, stageRefs := deadlineRaceFixture(t, ctx, repo, suffix, "cancel-attempt-race", "running")
+	stageRef := stageRefs[0]
+	attempt, replayed, err := repo.ClaimAttempt(ctx, runRef, stageRef,
+		"cancel-attempt-"+suffix, "cancel-worker", time.Minute, 2, 8)
+	if err != nil || replayed {
+		t.Fatalf("ClaimAttempt replayed=%v err=%v", replayed, err)
+	}
+	runSnapshot, err := repo.GetRun(ctx, runRef)
+	if err != nil {
+		t.Fatal(err)
+	}
+	changed, err := repo.BeginRunCancellation(ctx, runRef, runSnapshot.Run.Version)
+	if err != nil || !changed {
+		t.Fatalf("BeginRunCancellation changed=%v err=%v", changed, err)
+	}
+	stage, err := repo.GetStage(ctx, stageRef)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// 将租约放在竞争启动点之后的短窗口：先取得 Run 锁的一方
+	// 根据同一数据库时间快照决定是协作确认还是过期回收。
+	expiresAt := time.Now().UTC().Add(500 * time.Millisecond)
+	if _, err := db.ExecContext(ctx, "UPDATE researchflow_attempts SET lease_expires_at = ? WHERE attempt_ref = ?",
+		formatResearchflowTimeValue(expiresAt), attempt.Ref); err != nil {
+		t.Fatal(err)
+	}
+
+	start := make(chan struct{})
+	type outcome struct {
+		confirmed bool
+		fenced    bool
+		err       error
+	}
+	results := make(chan outcome, 2)
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		<-start
+		confirmed, confirmErr := repo.ConfirmAttemptCancellation(ctx, runRef, stageRef,
+			attempt.Ref, "cancel-worker", attempt.FencingToken, stage.Version)
+		results <- outcome{confirmed: confirmed, err: confirmErr}
+	}()
+	go func() {
+		defer wg.Done()
+		<-start
+		fenced, fenceErr := repo.FenceExpiredCancellationAttempt(ctx, runRef, stageRef,
+			attempt.Ref, stage.Version)
+		results <- outcome{fenced: fenced, err: fenceErr}
+	}()
+	close(start)
+	wg.Wait()
+	close(results)
+
+	confirmedWins, fencedWins := 0, 0
+	for result := range results {
+		if result.confirmed && result.fenced {
+			t.Fatalf("one transaction reported two outcomes: %#v", result)
+		}
+		if result.confirmed {
+			if result.err != nil {
+				t.Fatalf("successful cancellation confirmation returned error: %v", result.err)
+			}
+			confirmedWins++
+			continue
+		}
+		if result.fenced {
+			if result.err != nil {
+				t.Fatalf("successful lease fencing returned error: %v", result.err)
+			}
+			fencedWins++
+			continue
+		}
+		if result.err == nil {
+			t.Fatalf("losing cancellation transaction returned neither success nor error: %#v", result)
+		}
+		if !errors.Is(result.err, ErrClaimStageUnavailable) && !errors.Is(result.err, ErrAttemptLeaseHeld) {
+			t.Fatalf("unexpected losing cancellation transaction error: %v", result.err)
+		}
+	}
+	if confirmedWins+fencedWins != 1 {
+		t.Fatalf("cancellation confirmation winners=%d lease fencing winners=%d; want exactly one",
+			confirmedWins, fencedWins)
+	}
+
+	loadedAttempt, err := repo.GetAttempt(ctx, attempt.Ref)
+	if err != nil {
+		t.Fatal(err)
+	}
+	loadedStage, err := repo.GetStage(ctx, stageRef)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loadedStage.Status != domain.StageCancelled || loadedStage.Version != stage.Version+1 ||
+		loadedStage.FinishedAt == nil {
+		t.Fatalf("cancelled Stage state=%#v; want cancelled/version+1/finished", loadedStage)
+	}
+	if loadedAttempt.LeaseOwner != "" || loadedAttempt.LeaseExpiresAt != nil || loadedAttempt.FinishedAt == nil {
+		t.Fatalf("Attempt lease was not released: %#v", loadedAttempt)
+	}
+	if confirmedWins == 1 && loadedAttempt.Status != domain.AttemptCancelled {
+		t.Fatalf("cooperative confirmation winner left Attempt status %s", loadedAttempt.Status)
+	}
+	if fencedWins == 1 && (loadedAttempt.Status != domain.AttemptTimedOut ||
+		loadedAttempt.FencingToken != attempt.FencingToken+1) {
+		t.Fatalf("lease fencing winner left Attempt state=%#v", loadedAttempt)
+	}
+	loadedRun, err := repo.GetRun(ctx, runRef)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loadedRun.Run.Status != domain.RunCancelling || loadedRun.Run.TerminationReason != "user_cancelled" {
+		t.Fatalf("Run cancellation state changed during Attempt race: %#v", loadedRun.Run)
+	}
+}
