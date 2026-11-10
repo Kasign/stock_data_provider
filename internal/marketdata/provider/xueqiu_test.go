@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"example.com/stock-analysis-flow/internal/marketdata/validation"
 )
@@ -260,4 +261,20 @@ func TestXueqiuHotRankingReportsProviderExcessRows(t *testing.T) {
 		}
 	}
 	t.Fatalf("expected excess row diagnostic, got %+v", reporter.Snapshot().Issues)
+}
+
+func TestXueqiuErrorMessageTruncationPreservesUTF8(t *testing.T) {
+	message := strings.Repeat("a", 199) + "中" + strings.Repeat("b", 10)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{"error_code": 1001, "error_description": message})
+	}))
+	defer server.Close()
+	provider := NewXueqiuConfigured(2*time.Second, server.URL, "")
+	_, err := provider.FetchHotStocks(context.Background(), "popular", 10)
+	if err == nil { t.Fatal("provider error response should be rejected") }
+	got := err.Error()
+	if !utf8.ValidString(got) { t.Fatalf("error message is invalid UTF-8: %q", got) }
+	if !strings.HasSuffix(got, strings.Repeat("a", 199)) {
+		t.Fatalf("error summary should stop before a split multibyte rune, got suffix %q", got[len(got)-minInt(len(got), 220):])
+	}
 }
