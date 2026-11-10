@@ -807,3 +807,41 @@ Golden应由真实DTO序列化生成或与真实序列化逐字节/结构比较�
 - 沿用 QNT-CTR-001～005、FLOW-CTR-003/004、GOV-CTR-002/006，不新增 CTR。Data→Quant 已登记问题不重复登记。
 
 本批只更新 PLAT-002 审计记录；未修改业务代码、Schema、Golden、测试或执行 CI。后续统一处理 A/E 的有限契约决策；B/C/D/F 等待责任模块实现证据后增量核验，不重复本轮算法或 DTO 审查。
+
+
+## 30. Research→Researchflow 研究对象消费边界首轮核验（2026-11-10）
+
+- 固定代码审计基线：origin/integration @ b6dfc85ba214fe16268c8cba780641a8bfe15086；维护分支：feat/design_doc。
+- 范围：RSC-CTR-001/002 与 FLOW-CTR-003/004 的组合边界；核对 Context 创建/读取、Evidence/Claim 精确引用、授权、Run 时间传播、Stage 输出和重试语义。
+- 不重复 Data→Research 已审查的 available_at 来源和 Snapshot→Evidence 映射；不审查 News Owner 内部查询实现，不修改 Research/Researchflow/Server 业务代码，不新增 CTR。
+
+### 已确认的契约边界
+
+1. Research 拥有 Context/Evidence/Claim/Event 等研究语义及版本；Researchflow 拥有 Run/Stage/Attempt、分区选择、预算裁剪和流程编排。Research 不依赖 Researchflow；跨模块只能通过 Research Application DTO/Port。
+2. Researchflow 的 FLOW-005 已提供纯映射函数 ToResearchCreateContextCommand：将 Researchflow 的候选分区、Plan、预算结果与 Research 提供的 section version/quality/assembled_at、Context QualitySummary 映射为 Research CreateContextCommand。该函数不创建 Context、不获取正文、不做授权；Server/Worker 负责调用 Research Port。
+3. Context.system_as_of 必须与 Run.system_as_of 完全一致；Context 的 section_refs 保留全部已评估分区，included/omitted 仅表达本次模型上下文选择。Research 负责分区语义/质量，Researchflow 负责选择和裁剪。
+4. Evidence.system_as_of 可早于 Run，但不得晚于 Run；严格 PIT 使用 Run cutoff 校验。Evidence 是 Research 内不可变资源，evidence_id 为精确身份；其 source_owner 为 data/news/quant/research 时，授权快照由对应 Owner 签发，读取受限内容必须由 Owner 当前复核。
+5. Research Application GetEvidence 接受 evidence_id、可信 caller_ref、purpose_code，并调用 EvidenceAuthorizer 后才返回 DTO；AuthorizationRef 本身不是 bearer token。Researchflow ComposeResult 已要求 Evidence 派生引用和 Claim 支持/反证引用在本次输入集合内闭环。
+6. Claim 由 Research 持有版本，ClaimRef 使用 claim_id + claim_version；Researchflow 不应自行拼接或推断 Claim 版本，也不直接依赖 Research Domain/Repository。
+7. Researchflow ComposeResult 只组合 ResearchContext/EvidenceRecord/Claim DTO，不重写研究事实；最终 Stage 结果仍须遵守 FLOW-CTR-004 的 Orchestrator Envelope、领域 typed payload、质量/诊断 sidecar 三层边界。
+
+### 差异登记（审计工作项，非新增 CTR）
+
+| 编号 | 固定基线事实 | 状态 | 冻结影响 / 后续统一处理 |
+|---|---|---|---|
+| RSC-FLOW-A | Researchflow 已有 ToResearchCreateContextCommand 映射，但 CreateContextCommand 不含 idempotency_key、Run/Stage/Attempt 关联或调用主体；Research Application 每次 CreateContext 都生成新 ContextID。FLOW-002/重试规则要求同一 Stage Attempt 重试不得重复产生不可对账的外部副作用 | pending_decision | 明确 Context 创建的重试语义：由 Researchflow/Server 在 Stage 输出提交前持久化首次成功 ContextRef 并在恢复时复用；或为 CreateContext 定义调用主体范围幂等键/请求指纹。必须覆盖调用超时但 Research 已提交的 ambiguous outcome，避免重试生成第二个 Context。不能仅靠 Worker 内存缓存 |
+| RSC-FLOW-B | Application Port 暴露 Create/Get Context、Add/Get Evidence；ClaimPort 单独暴露 Create/Get/Update Claim。GetEvidence 逐个按 evidence_id 读取，没有 List/批量读取 Port；GetClaim 使用精确 claim_id/version。Researchflow ComposeResult 需要已加载的 Context/Evidence/Claim DTO，但尚无完整生产 Facade/Adapter 负责按固定引用集合加载并保持稳定顺序、失败语义和部分结果策略 | pending_decision | 明确 Researchflow 输入采用显式 ContextRef、EvidenceRef[]、ClaimRef[]，由 Adapter 精确逐项读取；或定义有界批量读取 Port。需明确缺失/版本不存在、单项授权拒绝、部分读取失败时是整个 Stage fail-closed 还是按模板可选项降级；不得临时 List 全库或读取 latest |
+| RSC-FLOW-C | Context GetContext 只接收 context_id/context_version，不携带 caller_ref/purpose，也不执行 Owner Authorizer；Context DTO 含 research_question、subject_refs、section/source/evidence refs 和质量摘要。现有契约强调 Context 引用不等于授权，但没有明确 Context 元数据本身的访问级别和 Run/调用主体归属 | pending_decision | 决定 Context 是否为仅内部编排元数据（由 Server/Researchflow 信任边界保护，不另做领域授权），还是受限 Research 资源（需 Owner 当前授权/主体绑定）。明确之前不得将 ContextRef 当作正文或 Evidence 的授权凭证；若属于内部元数据，需明确其可见范围及日志/报告脱敏边界 |
+| RSC-FLOW-D | Claim Application Create/Get/Update 目前只做领域结构/版本校验和 Repository 读写；ClaimRef 不含 caller/purpose，Claim DTO 没有 AuthorizationRef，CreateClaim 不校验 supporting/contradicting EvidenceRefs 与 ScopeRefs 的真实存在/版本，Claim Get 也不执行关联 Evidence Owner 当前授权。现有 RSC-CTR-002/RSC-005 已登记 Evidence/Scope 真实引用解析未完成 | pending_evidence | Researchflow 不得把 Claim DTO 中的 refs 当作已授权内容或已解析事实。消费时必须按精确 Evidence 引用调用 GetEvidence 并由来源 Owner 复核，再由 Composer 校验支持/反证闭环；Claim 自身的读取范围和引用完整性证据由 Research Owner 补齐。沿用 RSC-CTR-002/RSC-005，不重复建立模块内缺口 |
+| RSC-FLOW-E | AddEvidence/CreateClaim/CreateContext 都由 Research 生成新 ID，命令没有幂等键；UpdateClaim 使用 ExpectedVersion 追加版本，但没有跨调用 idempotency/fingerprint 语义。Researchflow Stage 若执行这些写操作，Attempt 超时后无法仅凭原命令安全判定首次写入是否已提交 | pending_decision | 明确哪些 Research 写操作允许由 Stage 调用；对允许的写操作统一定义调用主体 + Stage/业务操作范围幂等键、规范化请求指纹、相同重放返回原 Ref、异指纹冲突，以及事务提交后响应丢失的对账方式。若某写操作不属于 Researchflow Stage，则明确排除，不泛化所有 Research 命令 |
+| RSC-FLOW-F | 固定基线只有 Context DTO 投影和纯组合函数；FLOW-005 明确生产 Owner Adapter、Research Facade、Context 持久化调用和真实 Tokenizer 尚未接入。FLOW-006 明确生产 Research Evidence/Claim Facade Adapter、当前授权复核和引用闭环尚未接入；未见 Research Consumer Adapter、Server 装配和双方联合 Contract Test | pending_evidence | 在 A/B/C 决策后实现真实 Research Facade Adapter 与 Server/Worker 装配。L2 至少覆盖 Context Create/Get 版本一致、Run.system_as_of 固定、Evidence Owner 授权拒绝/撤销、Claim 精确版本、引用闭环、部分失败策略、Stage 输出引用持久化和 Attempt 重试不重复写入。Fixture/纯函数测试不替代真实跨模块证据 |
+
+### 本批结论
+
+- **职责与依赖方向：freeze-ready**。Research 拥有研究对象语义，Researchflow 拥有编排/选择/预算语义；无需调整模块 DAG 或复制 Research Domain。
+- **Context 字段映射和 Run 时间传播：accepted**。已有纯 DTO 投影；Context.system_as_of 必须等于 Run，Evidence.system_as_of 允许早于 Run 但不得晚于 Run。投影函数不承担授权和持久化。
+- **Context 元数据访问边界、Context/Claim 写入幂等、按固定 Ref 集合加载策略：pending_decision**。这些直接影响 Stage 重试和结果可追溯性，需在正式消费契约冻结前明确。
+- **Claim 引用完整性、Owner 授权复核和真实生产消费链路：pending_evidence**。Researchflow 组合器的引用闭环校验不等于 Research Owner 已验证底层 Evidence/Scope 存在或仍可访问。
+- 沿用 RSC-CTR-001/002、FLOW-CTR-003/004、GOV-CTR-003/005/006，不新增 CTR。Data→Research 的 available_at、Snapshot 来源映射及 News→Research 的授权来源缺口不重复登记。
+
+本批只更新 PLAT-002 审计记录；未修改业务代码、Schema、Golden、测试或执行 CI。后续统一处理 A/B/C/E 的有限契约决策；D/F 等待 Research Owner 和 Server/Researchflow 生产接入证据后增量核验，不重做本轮已确认的职责、时间和 DTO 投影审查。
