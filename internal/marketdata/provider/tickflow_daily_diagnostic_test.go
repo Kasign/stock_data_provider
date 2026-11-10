@@ -99,3 +99,25 @@ func TestTickFlowDailyBarsReportsDateOutsideRequestedRange(t *testing.T) {
 		t.Fatalf("unexpected out-of-range diagnostic: %+v", issues)
 	}
 }
+
+func TestTickFlowDailyBarsReportsMissingOptionalAmountAndPreviousClose(t *testing.T) {
+	location, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil { t.Fatal(err) }
+	date := time.Now().In(location).AddDate(0, 0, -1)
+	timestamp := time.Date(date.Year(), date.Month(), date.Day(), 12, 0, 0, 0, location).UnixMilli()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(fmt.Sprintf(`{"code":0,"data":{"timestamp":[%d],"open":[100],"high":[102],"low":[99],"close":[101],"volume":[1000]}}`, timestamp)))
+	}))
+	defer server.Close()
+	reporter := validation.NewReporter(validation.DefaultMaxIssues)
+	ctx := validation.WithReporter(context.Background(), reporter)
+	provider := NewTickFlowConfigured(2*time.Second, server.URL, "", "test-key")
+	bars, err := provider.FetchDailyBars(ctx, "600519.SH", date.Format("2006-01-02"), date.Format("2006-01-02"), 10, model.AdjustmentNone)
+	if err != nil { t.Fatalf("FetchDailyBars: %v", err) }
+	if len(bars) != 1 || bars[0].QualityStatus != model.QualityDegraded { t.Fatalf("expected degraded bar: %+v", bars) }
+	fields := map[string]bool{}
+	for _, issue := range reporter.Snapshot().Issues { fields[issue.Field] = true }
+	for _, field := range []string{"amount", "prev_close"} {
+		if !fields[field] { t.Errorf("missing Reporter field %q: %+v", field, reporter.Snapshot().Issues) }
+	}
+}

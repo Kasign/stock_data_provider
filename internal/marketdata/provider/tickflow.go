@@ -1333,6 +1333,7 @@ func (p *TickFlow) FetchDailyBars(ctx context.Context, rawSymbol, startDate, end
 		} else {
 			quality = model.QualityDegraded
 			reasons = append(reasons, "amount_missing_from_provider", "amount_unit_unknown_because_amount_missing")
+			addProviderParseIssue(ctx, i, "amount", "amount", "missing_optional_value", "optional finite non-negative CNY amount when exposed", "missing", "", "TickFlow K-line amount is not exposed for this row")
 		}
 		var pct *float64
 		if len(data.PrevClose) > 0 {
@@ -1350,6 +1351,8 @@ func (p *TickFlow) FetchDailyBars(ctx context.Context, rawSymbol, startDate, end
 				quality = model.QualityDegraded
 				reasons = append(reasons, "provider_change_percent_missing_or_invalid")
 			}
+		} else {
+			addProviderParseIssue(ctx, i, "prev_close", "prev_close", "not_exposed_by_provider_contract", "provider previous close when exposed", "missing", "", "TickFlow K-line response does not expose previous close; change percent requires chronological-close derivation")
 		}
 		rawVolumeCopy := rawVolume
 		out = append(out, model.DailyBar{
