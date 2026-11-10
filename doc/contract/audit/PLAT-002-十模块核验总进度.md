@@ -1034,3 +1034,16 @@
 - 状态：职责/依赖方向 freeze-ready；基础调用上下文语义 accepted；ModelRequest/Prompt 映射、Tool Call 往返、重试错误分类 pending_decision；生产工具执行与模型调用链 pending_evidence。
 - 沿用 LLM-CTR-001～003、FLOW-CTR-002/003/004、GOV-CTR-003/004/005，不新增 CTR；不修改责任模块代码，不执行 CI。
 - 下一步：进入业务事件生产方→Notification 边界审查，按 Data/News/Quant/Research/Researchflow 的实际事件生产责任核对事件 Envelope、schema_version、event_id、occurred_at、correlation_id、授权/敏感字段、Outbox/Inbox 幂等和 Delivery 反馈；不重复 Notification 内部 Channel/状态机规则。
+
+
+## 28. 业务事件生产方→Notification 首批事件交互审查（2026-11-10）
+
+- 固定审计基线：origin/integration @ b6dfc85ba214fe16268c8cba780641a8bfe15086；维护分支 feat/design_doc。详细差异见矩阵第32节。
+- 已确认 INT-CTR-001 首批三类事件：Researchflow Run 终态、Quant 风险决策变化、Research Event 生命周期迁移；生产方本地事务 Outbox + Notification 双键 Inbox，at-least-once，业务事实生产方拥有事件语义，Notification 拥有接收和投递语义。
+- Research：Event 版本与 Outbox 同事务；已实现完整生命周期 Envelope、稳定 event_id/idempotency_key、业务 occurred_at/published_at、JCS fingerprint 和 Outbox 领取/租约/重试；Server Relay 尚未接线。
+- Researchflow：Run+ResultSummary+Outbox 原子提交已实现，但当前 event_type `researchflow.run.finalized`、Payload 字段/空值、Envelope 身份字段和原始 SHA-256 fingerprint 与已接受 INT-CTR-001 不一致；登记 BUS-EVT-A，禁止当前 Outbox 直接接入 Notification。
+- Quant：有 RiskDecision 构造和结果写入 Port，固定基线未见风险事实事务 Outbox/持久化链；登记 BUS-EVT-B。
+- Notification：EventReceiver 与 MySQL Inbox 双唯一键接收实现已建立，事务内 FanoutWriter 仍仅为扩展点，生产 Fanout/Worker 不完整；登记 BUS-EVT-D。Server Relay/DI/端到端集成缺证据，登记 BUS-EVT-C/E。
+- 状态：事件职责/依赖方向 freeze-ready；INT-CTR-001 语义 accepted；Research 生产端基本对齐但 Relay pending_evidence；Researchflow 实现偏差、Quant Outbox、Notification Fanout、Server Relay 均 pending_evidence。
+- 沿用 INT-CTR-001、NTF-CTR-001～003、QNT-CTR-005、RSC-CTR-003、FLOW-CTR-001/003、GOV-CTR-003/004，不新增 CTR；不修改业务代码，不执行 CI。
+- 下一步唯一任务：审查 WebUI→Server 对外 API 契约边界，核对页面消费的公开 HTTP DTO/Schema/错误与认证语义、Server Handler 映射和契约测试；不重做 WebUI 视觉/交互审查，也不把内部模块 DTO 当作 Web 公共协议。
