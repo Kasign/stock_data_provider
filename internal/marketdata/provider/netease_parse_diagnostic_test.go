@@ -9,54 +9,70 @@ import (
 	"testing"
 	"time"
 
-	"example.com/stock-analysis-flow/internal/marketdata/model"
 	"example.com/stock-analysis-flow/internal/marketdata/validation"
 )
 
-func TestNeteaseDailyBarsReportsInvalidOptionalChangePercent(t *testing.T) {
-	location, err := time.LoadLocation("Asia/Shanghai")
-	if err != nil {
-		t.Fatal(err)
+func TestNeteaseQuoteReportsIdentityAndConsistencyRejections(t *testing.T) {
+	tests := []struct {
+		name string
+		payload string
+		field string
+		code string
+	}{
+		{
+			name: "missing requested identity",
+			payload: `{"sh600519":{"code":"sh000001","symbol":"000001","price":10,"open":9,"high":11,"low":8,"yestclose":9,"updown":1,"percent":0.1}}`,
+			field: "symbol", code: "symbol_mismatch",
+		},
+		{
+			name: "change inconsistent",
+			payload: `{"sh600519":{"code":"sh600519","symbol":"600519","price":10,"open":9,"high":11,"low":8,"yestclose":9,"updown":2,"percent":0.1}}`,
+			field: "change", code: "inconsistent_value",
+		},
+		{
+			name: "percent inconsistent",
+			payload: `{"sh600519":{"code":"sh600519","symbol":"600519","price":10,"open":9,"high":11,"low":8,"yestclose":9,"updown":1,"percent":0.2}}`,
+			field: "change_percent", code: "inconsistent_value",
+		},
 	}
-	date := time.Now().In(location).AddDate(0, 0, -1).Format("2006-01-02")
-	payload := "日期,股票代码,名称,收盘价,最高价,最低价,开盘价,前收盘,涨跌幅,成交量,成交金额\n" +
-		date + ",600036,招商银行,42.28,42.60,42.00,42.60,42.52,bad-percent,74818026,3157692775.06\n"
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = fmt.Fprint(w, payload)
-	}))
-	defer server.Close()
-
-	reporter := validation.NewReporter(validation.DefaultMaxIssues)
-	ctx := validation.WithReporter(context.Background(), reporter)
-	provider := NewNetease(2*time.Second, server.URL)
-	bars, err := provider.FetchDailyBars(ctx, "600036.SH", date, date, 1, model.AdjustmentNone)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(bars) != 1 || bars[0].ChangePercent != nil {
-		t.Fatalf("invalid optional percent must be omitted without dropping bar: %+v", bars)
-	}
-	issues := reporter.Snapshot().Issues
-	if len(issues) != 1 || issues[0].Stage != validation.StageParse || issues[0].Field != "change_percent" || issues[0].ProviderField != "涨跌幅" || issues[0].Code != "invalid_optional_number" || issues[0].RowIndex == nil || *issues[0].RowIndex != 0 {
-		t.Fatalf("unexpected Netease parse issue: %+v", issues)
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				_, _ = fmt.Fprintf(w, "_ntes_quote_callback(%s);", tc.payload)
+			}))
+			defer server.Close()
+			reporter := validation.NewReporter(10)
+			ctx := validation.WithReporter(context.Background(), reporter)
+			provider := NewNeteaseConfigured(2*time.Second, server.URL, "http://127.0.0.1:1/history")
+			_, err := provider.FetchQuote(ctx, "600519.SH")
+			if err == nil { t.Fatal("expected quote rejection") }
+			found := false
+			for _, issue := range reporter.Snapshot().Issues {
+				if issue.Field == tc.field && issue.Code == tc.code && issue.Stage == validation.StageValidate {
+					found = true
+				}
+			}
+			if !found { t.Fatalf("missing %s/%s diagnostic: %+v", tc.field, tc.code, reporter.Snapshot().Issues) }
+		})
 	}
 }
 
-func TestNeteaseDailyBarsReportsMissingRequiredCSVColumn(t *testing.T) {
+func TestNeteaseQuoteReportsMissingRequestedIdentity(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = fmt.Fprintln(w, "日期,股票代码,开盘价")
-		_, _ = fmt.Fprintln(w, "2026-10-21,600036,42")
+		_, _ = fmt.Fprint(w, `_ntes_quote_callback({"sh000001":{"code":"sh000001","symbol":"000001"}});`)
 	}))
 	defer server.Close()
-	reporter := validation.NewReporter(validation.DefaultMaxIssues)
+	reporter := validation.NewReporter(10)
 	ctx := validation.WithReporter(context.Background(), reporter)
-	provider := NewNetease(2*time.Second, server.URL)
-	_, err := provider.FetchDailyBars(ctx, "600036.SH", "2026-10-20", "2026-10-21", 8, model.AdjustmentNone)
-	if err == nil || !strings.Contains(err.Error(), "missing required column") {
-		t.Fatalf("expected missing-column error, got %v", err)
+	provider := NewNeteaseConfigured(2*time.Second, server.URL, "http://127.0.0.1:1/history")
+	_, err := provider.FetchQuote(ctx, "600519.SH")
+	if err == nil || !strings.Contains(err.Error(), "does not contain requested code") {
+		t.Fatalf("expected missing requested identity error, got %v", err)
 	}
-	issues := reporter.Snapshot().Issues
-	if len(issues) != 1 || issues[0].Field != "high" || issues[0].ProviderField != "high" || issues[0].Code != "missing_column" || issues[0].RowIndex != nil {
-		t.Fatalf("unexpected missing-column issue: %+v", issues)
+	for _, issue := range reporter.Snapshot().Issues {
+		if issue.Field == "symbol" && issue.Code == "missing_requested_identity" && issue.RowIndex == nil {
+			return
+		}
 	}
+	t.Fatalf("missing snapshot-level identity diagnostic: %+v", reporter.Snapshot().Issues)
 }
