@@ -28,7 +28,7 @@ Researchflow 是研究应用编排层，通过 Data、News、Quant、Research、
 ## 当前明确缺口
 
 - Scheduler 目前是纯计划计算 + Stage CAS 原语，没有周期扫描、快照读取、CAS 冲突自动重载重算和实际派发的运行服务。
-- Worker 有单次 `Execute` 协调器，但当前 Storage 尚无完整 `WorkerStore` Adapter：缺少执行快照装配及 `CommitWorkerResult` 到 MySQL 结果事务的适配；因此尚不能仅凭当前 MySQL Repository 直接构造生产 Worker。
+- Worker 有单次 `Execute` 协调器；MySQLRunRepository 已实现 WorkerStore，执行快照读取与结果提交映射已落地。常驻消费循环、队列派发、Worker Pool/优雅停机和生产 Executor Adapter 仍未闭环。
 - `StageExecutor` 是注入端口，Data/News/Quant/Research/LLM 的生产 Adapter 尚未在本分支闭环。
 - 无独立 Worker Pool/队列消费循环；跨 Worker 的 Run 并发上限由 ClaimAttempt 数据库事务兜底。
 - Go 测试、Race、Vet、真实 MariaDB、进程崩溃恢复和跨模块端到端验收必须按实际 SHA 记录，不以测试文件存在代替通过证据。
