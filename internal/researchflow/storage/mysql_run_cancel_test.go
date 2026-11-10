@@ -106,6 +106,23 @@ func TestMariaDBBeginRunCancellationLinearizesWorkerOperations(t *testing.T) {
 	if err != nil || !changed {
 		t.Fatalf("begin cancellation changed=%v err=%v", changed, err)
 	}
+	// Cancelling status alone is insufficient authority: both worker stop paths
+	// must require the persisted user-cancelled reason as well.
+	if _, err := db.ExecContext(ctx, `UPDATE researchflow_runs SET termination_reason = ?
+		WHERE run_ref = ?`, "unexpected_reason", runRef); err != nil {
+		t.Fatalf("corrupt cancellation reason fixture: %v", err)
+	}
+	if confirmed, err := repository.ConfirmAttemptCancellation(ctx, runRef, runningStageRef, attempt.Ref,
+		"worker-a", attempt.FencingToken, 2); confirmed || !errors.Is(err, ErrClaimRunUnavailable) {
+		t.Fatalf("confirmation with mismatched termination reason confirmed=%v err=%v", confirmed, err)
+	}
+	if fenced, err := repository.FenceExpiredCancellationAttempt(ctx, runRef, fencedStageRef, fencedAttempt.Ref, 2); fenced || !errors.Is(err, ErrClaimRunUnavailable) {
+		t.Fatalf("fencing with mismatched termination reason fenced=%v err=%v", fenced, err)
+	}
+	if _, err := db.ExecContext(ctx, `UPDATE researchflow_runs SET termination_reason = ?
+		WHERE run_ref = ?`, "user_cancelled", runRef); err != nil {
+		t.Fatalf("restore cancellation reason fixture: %v", err)
+	}
 	changed, err = repository.BeginRunCancellation(ctx, runRef, 2)
 	if err != nil || changed {
 		t.Fatalf("idempotent cancellation changed=%v err=%v", changed, err)

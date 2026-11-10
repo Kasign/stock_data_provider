@@ -36,11 +36,13 @@ func (r *MySQLRunRepository) ConfirmAttemptCancellation(
 	defer func() { _ = tx.Rollback() }()
 
 	var runStatus string
-	if err := tx.QueryRowContext(ctx, `SELECT status FROM researchflow_runs
-		WHERE run_ref = ? FOR UPDATE`, runRef).Scan(&runStatus); err != nil {
+	var terminationReason sql.NullString
+	if err := tx.QueryRowContext(ctx, `SELECT status, termination_reason FROM researchflow_runs
+		WHERE run_ref = ? FOR UPDATE`, runRef).Scan(&runStatus, &terminationReason); err != nil {
 		return false, fmt.Errorf("lock Researchflow cancellation Run: %w", err)
 	}
-	if domain.RunStatus(runStatus) != domain.RunCancelling {
+	if domain.RunStatus(runStatus) != domain.RunCancelling ||
+		!terminationReason.Valid || terminationReason.String != "user_cancelled" {
 		return false, ErrClaimRunUnavailable
 	}
 
@@ -168,11 +170,13 @@ func (r *MySQLRunRepository) FenceExpiredCancellationAttempt(
 	defer func() { _ = tx.Rollback() }()
 
 	var runStatus string
-	if err := tx.QueryRowContext(ctx, `SELECT status FROM researchflow_runs
-		WHERE run_ref = ? FOR UPDATE`, runRef).Scan(&runStatus); err != nil {
+	var terminationReason sql.NullString
+	if err := tx.QueryRowContext(ctx, `SELECT status, termination_reason FROM researchflow_runs
+		WHERE run_ref = ? FOR UPDATE`, runRef).Scan(&runStatus, &terminationReason); err != nil {
 		return false, fmt.Errorf("lock Researchflow cancellation Run: %w", err)
 	}
-	if domain.RunStatus(runStatus) != domain.RunCancelling {
+	if domain.RunStatus(runStatus) != domain.RunCancelling ||
+		!terminationReason.Valid || terminationReason.String != "user_cancelled" {
 		return false, ErrClaimRunUnavailable
 	}
 	var stageStatus string
