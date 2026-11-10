@@ -416,7 +416,7 @@
 
 - 详细记录：[`WebUI-维度2-API-DTO全量盘点.md`](./WebUI-维度2-API-DTO全量盘点.md)
 - 代码基线：`b6dfc85ba214fe16268c8cba780641a8bfe15086`。
-- `web/src/api.js` 共 44 个导出函数（3 个本地设置函数、41 个远端请求/健康检查入口）；41 个远端入口均在 WebUI 主要页面模块中找到引用，暂未发现未被页面模块引用的 Client 孤儿函数。
+- `web/src/api.js` 共 44 个导出函数（3 个本地设置函数、41 个远端请求/健康检查入口）；41 个远端入口中，40 个在主要页面模块找到精确引用；`getMarketSentiment` 是唯一已确认的孤儿 Client，需确认是否为预留接口，不自动登记 P2。
 - Market Data HTTP Adapter 的 35 个 OpenAPI path 与 `server.go` 路由清单已对照；Analysis Task OpenAPI 覆盖任务三条路径，但未描述 Client 使用的 `GET /api/v1/analysis/runs/{run_id}`，登记为待补 Schema/契约证据，不在本轮直接定性运行时错误。
 - `web/tests/api.test.mjs` 已覆盖多类请求；Market Hot Stocks、Market Indices、Sentiment/History、Breadth、Limit Pool、Dragon Tiger、两类 Liveness 等函数未见该文件直接请求测试，需再核浏览器测试覆盖。
 - 待核数据集收敛为 Hot Rankings、Market Sentiment History、Limit Pool、Dragon Tiger、Stock Search、Analysis Run、Provider Probe History；既有第 1–36 节已审数据集不重复展开。
