@@ -97,3 +97,13 @@
 - 固定基线 Server Bootstrap 只注册 News Migration；未构造 News Provider Set/Application，也未向 Server Diagnostics 注入 News Checks。新增 AUD-PLAT-PORT-003（P1 候选）：News Platform Adapter/Diagnostics 尚无 Server 生产装配证据。
 - News Request ID 消费者仍待核。News 实现单测不能替代 Server 组合根接线证据。
 - Platform 维度 1 保持 partial。
+
+### Platform — 维度 1：第四批（Research 消费者）
+
+- 详细记录：[`Platform-维度1-Application-Port与调用点.md`](./Platform-维度1-Application-Port与调用点.md)
+- Research 自有 Application/Event/Claim Port，DTO 不暴露 Domain Entity；错误映射 Platform Fault。
+- Research Diagnostics 构造 Platform Check，由调用方 Runner 执行；测试覆盖快照版本、质量状态、Run cutoff 和敏感内容隔离。
+- Research 定义独立 Correlation ID，与 Platform Request ID 明确区分；Server 端可信上下文映射和异步端到端传播仍待核。
+- Server 已注册 Research Migration，但未构造 Research Application/Repository/Authorizer，也未注入 Research Diagnostics Checks。新增 AUD-PLAT-PORT-004（P1 候选）。
+- 新增 AUD-PLAT-PORT-005（P2 候选）：Research Correlation ID 与 Platform Request ID 端到端关联待证。
+- Research 消费者核验为 module-level implementation evidenced / production wiring not evidenced；Platform 维度 1 保持 partial。
