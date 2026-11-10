@@ -383,6 +383,5 @@ func TestCollectSourceStopsAfterContextCancellationAtDependencyBoundaries(t *tes
 				t.Fatalf("transport called after catalog cancellation: %d", transport.calls)
 			}
 		})
-		}
 	}
 }
