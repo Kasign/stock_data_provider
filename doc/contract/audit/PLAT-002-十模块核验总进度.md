@@ -1143,7 +1143,7 @@
 - 公共分页计数语义已经由 DTO、Service 校验和 OpenAPI 明确。生产方和消费方无需知晓 Provider 内部如何抓取、分页或去重。因此这是 Data Adapter 对既有公共契约的实现符合性问题，不是公共契约待定义问题。
 - **PLAT-002 状态修正：CTR-043 公共契约语义 `freeze-ready`，不再作为 L2 契约冻结阻断项。** Hithink Adapter 修复、真实 Provider 专项测试及 CI 属于 Data 模块内部工程质量和实现整改，另由 Data 模块跟踪，不属于 PLAT-002 契约冻结门禁。
 - Data 对外仍须满足已冻结的分页计数语义；如果运行实现不满足，应修复实现，而不是改变契约或要求 WebUI 了解 Provider 细节。
-- 同花顺 `provider_*_value` / `provider_amount_unit` 与 WebUI 金额展示不是 CTR-043 原始问题。本轮不据此要求 WebUI 增加消费逻辑或渲染测试，也不新增 CTR。若未来决定清理公共 DTO 中 Provider 原始字段，应单独评估公开 DTO 范围和兼容影响。
+- 同花顺 Provider 原始字段与 WebUI 金额展示不是 CTR-043 原始问题。Provider 原始字段的公开边界已由 DEC-PLAT-002-027 单独裁决，具体落实状态见总进度第38节及差异矩阵第39节；不要求 WebUI 增加 Provider 字段消费逻辑或渲染测试。
 - 此更正只更新项目级契约审计文档；未修改 Data/WebUI 代码，未执行测试或 CI。差异矩阵第38节为详细依据。
 
 
