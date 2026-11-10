@@ -359,6 +359,14 @@ func decodeTickFlowIndexQuoteRows(ctx context.Context, data []byte) ([]tickflowQ
 	return quotes, nil
 }
 
+func addTickflowIndexIssue(ctx context.Context, rowIndex *int, field, providerField, code, expected, actualType, preview, message string) {
+	report := validation.NewReport(validation.DefaultMaxIssues)
+	report.Add(validation.FieldIssue{Stage: validation.StageValidate, Field: field, ProviderField: providerField,
+		Code: code, Expected: expected, ActualType: actualType, ActualPreview: quoteIssuePreview(preview),
+		Severity: validation.SeverityWarning, Message: message, RowIndex: rowIndex})
+	validation.AddContextReport(ctx, report)
+}
+
 func (p *TickFlow) FetchIndexQuotes(ctx context.Context) (*model.IndexQuoteSnapshot, error) {
 	if p == nil || p.client == nil {
 		return nil, errors.New("TickFlow HTTP client is not configured")
@@ -408,33 +416,46 @@ func (p *TickFlow) FetchIndexQuotes(ctx context.Context) (*model.IndexQuoteSnaps
 		snapshot.QualityReasons = appendTickflowUniqueReason(snapshot.QualityReasons, reason)
 	}
 	quotesBySymbol := make(map[string]tickflowQuotePayload, len(quotes))
-	for _, quote := range quotes {
+	rowIndexes := make(map[string]int, len(quotes))
+	for rowIndex, quote := range quotes {
 		symbol := strings.ToUpper(strings.TrimSpace(quote.Symbol))
 		if _, expected := definitions[symbol]; !expected {
 			markSnapshotDegraded("provider_returned_unrequested_index_ignored")
+			addTickflowIndexIssue(ctx, &rowIndex, "symbol", "symbol", "unrequested_identity", "requested core index symbol", "string", symbol, "TickFlow 返回未请求的指数，已忽略")
 			continue
 		}
 		if _, duplicate := quotesBySymbol[symbol]; duplicate {
 			markSnapshotDegraded("duplicate_index_row_dropped")
+			addTickflowIndexIssue(ctx, &rowIndex, "symbol", "symbol", "duplicate_identity", "one row per requested index", "string", symbol, "TickFlow 返回重复指数记录，已忽略后续行")
 			continue
 		}
 		quotesBySymbol[symbol] = quote
+		rowIndexes[symbol] = rowIndex
 	}
 
 	for _, definition := range tickflowCoreIndexDefinitions {
 		quote, exists := quotesBySymbol[definition.Symbol]
 		if !exists {
 			markSnapshotDegraded("provider_core_index_rows_missing")
+			addTickflowIndexIssue(ctx, nil, "symbol", "symbol", "missing_requested_identity", "one returned row for each requested core index", "missing", definition.Symbol, "TickFlow 未返回请求的核心指数")
 			continue
 		}
-		if quote.LastPrice == nil || !tickflowPositiveFinite(*quote.LastPrice) || quote.PrevClose == nil || !tickflowPositiveFinite(*quote.PrevClose) {
+		rowIndex := rowIndexes[definition.Symbol]
+		if quote.LastPrice == nil || !tickflowPositiveFinite(*quote.LastPrice) {
 			markSnapshotDegraded("provider_index_required_price_field_missing_or_invalid")
+			addTickflowIndexIssue(ctx, &rowIndex, "last_price", "last_price", "missing_or_invalid_value", "positive finite latest price", "number", fmt.Sprint(quote.LastPrice), "TickFlow 核心指数最新价缺失或非法")
+			continue
+		}
+		if quote.PrevClose == nil || !tickflowPositiveFinite(*quote.PrevClose) {
+			markSnapshotDegraded("provider_index_required_price_field_missing_or_invalid")
+			addTickflowIndexIssue(ctx, &rowIndex, "prev_close", "prev_close", "missing_or_invalid_value", "positive finite previous close", "number", fmt.Sprint(quote.PrevClose), "TickFlow 核心指数昨收价缺失或非法")
 			continue
 		}
 		change := *quote.LastPrice - *quote.PrevClose
 		changePercent := change / *quote.PrevClose * 100
 		if math.IsNaN(change) || math.IsInf(change, 0) || math.IsNaN(changePercent) || math.IsInf(changePercent, 0) {
 			markSnapshotDegraded("provider_index_change_fields_inconsistent")
+			addTickflowIndexIssue(ctx, &rowIndex, "change", "last_price/prev_close", "invalid_derived_value", "finite derived change values", "number", fmt.Sprintf("change=%g change_percent=%g", change, changePercent), "TickFlow 指数推导涨跌值异常")
 			continue
 		}
 		// 扩展字段只用于交叉校验，不能覆盖由最新价和昨收价计算的规范值。
@@ -442,6 +463,7 @@ func (p *TickFlow) FetchIndexQuotes(ctx context.Context) (*model.IndexQuoteSnaps
 			value, parseErr := tickflowFloat(rawChange)
 			if parseErr != nil || math.IsNaN(value) || math.IsInf(value, 0) || math.Abs(value-change) > 0.05 {
 				markSnapshotDegraded("provider_index_change_fields_inconsistent")
+				addTickflowIndexIssue(ctx, &rowIndex, "change", "ext.change_amount", "inconsistent_value", "change_amount agrees with price-derived change", "number", string(rawChange), "TickFlow 扩展涨跌额与价格推导值不一致")
 				continue
 			}
 		}
@@ -449,6 +471,7 @@ func (p *TickFlow) FetchIndexQuotes(ctx context.Context) (*model.IndexQuoteSnaps
 			value, parseErr := tickflowFloat(rawChangePercent)
 			if parseErr != nil || math.IsNaN(value) || math.IsInf(value, 0) || math.Abs(value*100-changePercent) > 0.15 {
 				markSnapshotDegraded("provider_index_change_fields_inconsistent")
+				addTickflowIndexIssue(ctx, &rowIndex, "change_percent", "ext.change_pct", "inconsistent_value", "change_pct agrees with derived percentage / 100", "number", string(rawChangePercent), "TickFlow 扩展涨跌幅与价格推导值不一致")
 				continue
 			}
 		}
@@ -462,6 +485,7 @@ func (p *TickFlow) FetchIndexQuotes(ctx context.Context) (*model.IndexQuoteSnaps
 		}
 		if quoteTime == nil {
 			reasons = append(reasons, "provider_quote_timestamp_missing_or_invalid")
+			addTickflowIndexIssue(ctx, &rowIndex, "quote_time", "timestamp", "missing_or_invalid_value", "valid provider quote timestamp", "missing_or_invalid", fmt.Sprint(quote.Timestamp), "TickFlow 指数源端行情时间缺失或非法")
 		}
 		var amount *float64
 		amountUnit := "unknown"
@@ -469,13 +493,16 @@ func (p *TickFlow) FetchIndexQuotes(ctx context.Context) (*model.IndexQuoteSnaps
 			amount, amountUnit = quote.Amount, "CNY"
 		} else {
 			reasons = append(reasons, "provider_amount_missing_or_invalid")
+			addTickflowIndexIssue(ctx, &rowIndex, "amount", "amount", "missing_or_invalid_value", "finite non-negative CNY amount", "number", fmt.Sprint(quote.Amount), "TickFlow 指数成交额缺失或非法")
 		}
 		if quote.Open == nil || quote.High == nil || quote.Low == nil {
 			reasons = append(reasons, "provider_index_ohlc_missing")
+			addTickflowIndexIssue(ctx, &rowIndex, "ohlc", "open/high/low", "missing_value", "complete OHLC values", "missing", "", "TickFlow 指数 OHLC 字段不完整")
 		} else if !tickflowPositiveFinite(*quote.Open) || !tickflowPositiveFinite(*quote.High) ||
 			!tickflowPositiveFinite(*quote.Low) || *quote.Low > *quote.High ||
 			*quote.Open < *quote.Low || *quote.Open > *quote.High ||
 			*quote.LastPrice < *quote.Low || *quote.LastPrice > *quote.High {
+			addTickflowIndexIssue(ctx, &rowIndex, "ohlc", "open/high/low/last_price", "invariant_violation", "low <= open,last_price <= high and low <= high", "number", fmt.Sprintf("open=%v high=%v low=%v last=%v", quote.Open, quote.High, quote.Low, quote.LastPrice), "TickFlow 指数 OHLC 价格关系异常")
 			return nil, fmt.Errorf("TickFlow index %s has invalid OHLC values", definition.Symbol)
 		}
 
