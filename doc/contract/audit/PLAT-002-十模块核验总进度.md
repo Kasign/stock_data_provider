@@ -858,3 +858,10 @@
 - Server维度2第二切片完成，状态complete_with_open_items；维度2整体仍partial，项目阶段B十模块六维核验继续进行。
 - 本批仅更新审计文档，无业务代码、OpenAPI、DTO、Golden、测试或CI变更。
 - 下一步唯一任务：**Server维度2 — Run/Task DTO字段与现有OpenAPI Schema差异的增量核验**。只以CTR-046/047、CTR-006/007已有登记及既有代码证据为入口，查明真实JSON字段、必填/可空/省略语义与Schema差异是否已被完整登记；不重做错误Envelope、Health/Readiness、WebUI错误解析，也不检查Data新分支。
+
+
+## 17. Server 错误DTO切片发现的 Request ID 组合链路风险（2026-11-10）
+
+- 补充核对Root与旧Analysis Handler的嵌套Middleware：外层MiddlewareWithOptions只重建Context/响应Header，不清除原始请求Header；旧Analysis内层兼容Middleware仍信任X-Request-ID，可能再次覆盖Context和响应Header。
+- 该风险归既有PLAT-CTR-002 / P002-D03，不新增CTR；需要Server组合测试和内层兼容Middleware隔离证据。此前“Root外层重建即可保证内层不再信任调用方ID”的判断需纠正。
+- 本发现仅登记，不修改Platform/Server实现；不改变当前Server维度2错误Envelope切片的范围和结论。
