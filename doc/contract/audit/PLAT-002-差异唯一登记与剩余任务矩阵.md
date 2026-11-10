@@ -583,3 +583,16 @@ Server维度2当前仅完成首轮一个切片，状态为 `in_progress / partia
 - P0/P1未解决或未批准延期，不进入项目整体冻结；P2按受影响契约局部冻结或明确deferred，不无限阻塞其他无关契约。
 - 十模块六维覆盖、跨模块关系、责任模块修复和三轮Review仍是PLAT-002总门槛；但不要求所有P2同一时间修完才允许对已满足条件的契约分批冻结。
 - 本节不改变任何CTR状态，不宣称任何契约已修复或冻结。
+
+
+
+## 28. CTR-047 同步 Runner run_id 增量证据（2026-11-10）
+
+仅补此前明确缺失的Runner行为，不重复RunRequest字段盘点。
+
+- 固定基线`internal/analysis/app/runner.go`已证明：合法非空客户端run_id被保留；空ID由Runner生成；非法ID返回Rejected/invalid_run_id。
+- `internal/adapters/storage/mysqlredis/store.go`已证明：Begin使用INSERT，`analysis_runs.run_id`为主键；Finish/GetResult均按同一run_id写入/读取；重复ID不会覆盖已有Run，数据库会拒绝第二次INSERT。
+- 当前Runner/Handler测试未覆盖显式ID贯穿、重复ID冲突及冲突HTTP状态；未执行真实MariaDB集成测试。Handler尚未发现将主键冲突稳定映射为409的专用分支。
+- CTR-047同步Run推荐契约已收敛为：客户端合法run_id允许保留；省略时服务端生成；重复ID拒绝且应稳定映射409/run_id_conflict。异步Task Queue另按其服务端生成ID规则，不与同步入口混同。
+- 状态调整：同步Run ID的实现事实已补齐，决策输入可用（ready_for_decision）；重复冲突HTTP映射、Runner/Store/Handler测试及真实DB证据仍为pending_evidence。CTR-047整体仍开放。
+- 本轮没有新增CTR、修改业务代码或执行测试/CI。详细证据见`Server-维度2-DTO-Schema-Golden.md`第12节。
