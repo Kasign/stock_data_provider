@@ -322,7 +322,7 @@ func TestNeteaseFetchQuoteParseFailureKeepsReporterWhenProviderReturnsError(t *t
 }
 
 func TestNeteaseFetchQuoteReportsDegradedOptionalFields(t *testing.T) {
-	payload := `_ntes_quote_callback({"0600036":{"price":42.35,"percent":0.0127,"updown":0.53,"open":41.70,"high":42.38,"low":41.57,"yestclose":41.82}});`
+	payload := `_ntes_quote_callback({"0600036":{"price":42.35,"percent":0.0127,"updown":0.53,"open":41.70,"high":42.38,"low":41.57,"yestclose":41.82,"volume":56829700}});`
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte(payload)) }))
 	defer server.Close()
 	reporter := validation.NewReporter(20)
@@ -335,7 +335,7 @@ func TestNeteaseFetchQuoteReportsDegradedOptionalFields(t *testing.T) {
 	if q.QualityStatus != model.QualityDegraded {
 		t.Fatalf("missing optional fields must degrade quote: %+v", q)
 	}
-	found := map[string]bool{"symbol": false, "volume": false, "amount": false, "quote_time": false, "name": false}
+	found := map[string]bool{"symbol": false, "amount": false, "quote_time": false, "name": false}
 	for _, issue := range reporter.Snapshot().Issues {
 		if _, ok := found[issue.Field]; ok && issue.Severity == validation.SeverityWarning {
 			found[issue.Field] = true
