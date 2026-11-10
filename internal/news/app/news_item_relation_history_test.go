@@ -188,3 +188,41 @@ func TestListNewsItemRelationHistoryPropagatesCancellationAfterRepositoryRead(t 
 		t.Fatalf("Execute() error = %v, want context.Canceled", err)
 	}
 }
+
+
+func TestListNewsItemRelationHistoryKeepsSupersededAncestorForTargetSideQuery(t *testing.T) {
+	now := time.Date(2026, 11, 9, 10, 0, 0, 0, time.UTC)
+	parent := validRelationHistoryItem("relation-parent", now.Add(-2*time.Minute))
+	child := validRelationHistoryItem("relation-child", now.Add(-time.Minute))
+	child.ToNewsID = "news-3"
+	child.ToSourceID = "source-3"
+	child.SupersedesRelationID = parent.ID
+	repository := &relationHistoryRepositoryStub{relations: []domain.NewsItemRelation{parent, child}}
+	useCase, err := NewListNewsItemRelationHistory(repository)
+	if err != nil {
+		t.Fatal(err)
+	}
+	useCase.now = func() time.Time { return now }
+	result, err := useCase.Execute(context.Background(), NewsItemRelationHistoryRequest{NewsID: "news-3", SystemAsOf: now})
+	if err != nil {
+		t.Fatalf("target-side history with superseded ancestor: %v", err)
+	}
+	if len(result) != 2 || result[0].ID != parent.ID || result[1].ID != child.ID {
+		t.Fatalf("history lost superseded ancestor: %+v", result)
+	}
+}
+
+func TestListNewsItemRelationHistoryRejectsUnrelatedAncestorRows(t *testing.T) {
+	now := time.Date(2026, 11, 9, 10, 0, 0, 0, time.UTC)
+	direct := validRelationHistoryItem("relation-direct", now.Add(-time.Minute))
+	unrelated := validRelationHistoryItem("relation-unrelated", now.Add(-2*time.Minute))
+	unrelated.FromNewsID, unrelated.ToNewsID = "news-7", "news-8"
+	unrelated.FromSourceID, unrelated.ToSourceID = "source-7", "source-8"
+	repository := &relationHistoryRepositoryStub{relations: []domain.NewsItemRelation{unrelated, direct}}
+	useCase, _ := NewListNewsItemRelationHistory(repository)
+	useCase.now = func() time.Time { return now }
+	_, err := useCase.Execute(context.Background(), NewsItemRelationHistoryRequest{NewsID: "news-1", SystemAsOf: now})
+	if !errors.Is(err, ErrNewsItemRelationHistoryInvalid) {
+		t.Fatalf("Execute() error = %v, want invalid history", err)
+	}
+}

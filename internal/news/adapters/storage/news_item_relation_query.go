@@ -11,7 +11,7 @@ import (
 )
 
 // ListNewsItemRelationsAt returns the append-only relation assertion history
-// visible at the requested knowledge time. Superseded and retracted assertions
+// visible at the requested knowledge time. Superseded and retracted assertions, plus both directions of their supersedes chain,
 // are intentionally retained; callers must not mistake this for a current graph.
 func (r *MySQLRepository) ListNewsItemRelationsAt(
 	ctx context.Context,
@@ -22,14 +22,29 @@ func (r *MySQLRepository) ListNewsItemRelationsAt(
 		return nil, app.ErrInvalidNewsItemRelationHistoryQuery
 	}
 
-	rows, err := r.db.QueryContext(ctx, `SELECT
-		item_relation_id, from_news_id, from_source_id, to_news_id, to_source_id,
-		relation_kind, status, supersedes_relation_id, evidence_observation_id,
-		from_version_id, to_version_id, asserted_at, observed_at
+	rows, err := r.db.QueryContext(ctx, `WITH RECURSIVE relation_history AS (
+		SELECT item_relation_id, from_news_id, from_source_id, to_news_id, to_source_id,
+			relation_kind, status, supersedes_relation_id, evidence_observation_id,
+			from_version_id, to_version_id, asserted_at, observed_at
 		FROM news_item_relations
 		WHERE (from_news_id = ? OR to_news_id = ?) AND observed_at <= ?
-		ORDER BY observed_at ASC, item_relation_id ASC`,
-		request.NewsID, request.NewsID, request.SystemAsOf.UTC())
+		UNION DISTINCT
+		SELECT related.item_relation_id, related.from_news_id, related.from_source_id,
+			related.to_news_id, related.to_source_id, related.relation_kind, related.status,
+			related.supersedes_relation_id, related.evidence_observation_id,
+			related.from_version_id, related.to_version_id, related.asserted_at, related.observed_at
+		FROM news_item_relations related
+		INNER JOIN relation_history current
+			ON related.supersedes_relation_id = current.item_relation_id
+			OR current.supersedes_relation_id = related.item_relation_id
+		WHERE related.observed_at <= ?
+	)
+	SELECT item_relation_id, from_news_id, from_source_id, to_news_id, to_source_id,
+		relation_kind, status, supersedes_relation_id, evidence_observation_id,
+		from_version_id, to_version_id, asserted_at, observed_at
+	FROM relation_history
+	ORDER BY observed_at ASC, item_relation_id ASC`,
+		request.NewsID, request.NewsID, request.SystemAsOf.UTC(), request.SystemAsOf.UTC())
 	if err != nil {
 		return nil, err
 	}

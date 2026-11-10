@@ -842,6 +842,31 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 		t.Fatalf("target-side relation history = %#v, want relation %q", history, relation.ID)
 	}
 
+	// A replacement may change the target item. Both old and new target queries
+	// must retain the complete supersedes chain.
+	changedTarget := relation
+	changedTarget.ID = "news-it-relation-changed-target-" + fmt.Sprint(time.Now().UnixNano())
+	changedTarget.ToNewsID = "news-it-relation-new-target"
+	changedTarget.ToSourceID = "news-it-relation-new-source"
+	changedTarget.SupersedesRelationID = relation.ID
+	changedTarget.ObservedAt = time.Now().UTC()
+	if err := repository.WithinNewsItemRelationTransaction(ctx, func(tx app.NewsItemRelationTransaction) error {
+		return tx.AppendNewsItemRelation(ctx, changedTarget)
+	}); err != nil {
+		t.Fatalf("append changed-target relation replacement: %v", err)
+	}
+	for _, targetID := range []string{relation.ToNewsID, changedTarget.ToNewsID} {
+		chain, err := repository.ListNewsItemRelationsAt(ctx, app.NewsItemRelationHistoryRequest{
+			NewsID: targetID, SystemAsOf: time.Now().UTC().Add(time.Second),
+		})
+		if err != nil {
+			t.Fatalf("read target-side relation chain for %s: %v", targetID, err)
+		}
+		if len(chain) != 2 || chain[0].ID != relation.ID || chain[1].ID != changedTarget.ID {
+			t.Fatalf("target-side relation chain for %s = %#v, want original and replacement", targetID, chain)
+		}
+	}
+
 	proposal, err := relationService.Execute(ctx, app.NewsItemRelationRequest{
 		Relation: domain.NewsItemRelation{
 			FromNewsID: newsID, FromSourceID: sourceID,
