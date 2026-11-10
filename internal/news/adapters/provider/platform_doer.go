@@ -112,10 +112,6 @@ func (d *platformHTTPDoer) Do(request *http.Request) (*http.Response, error) {
 func providerErrorFromPlatform(err error) error {
 	var platformFault *fault.Fault
 	if errors.As(err, &platformFault) && platformFault != nil && platformFault.Validate() == nil {
-		code := strings.TrimSpace(platformFault.Code)
-		if code == "" {
-			code = "provider_transport_failed"
-		}
 		mappedCode := app.ProviderErrorTransportFailed
 		retryable := platformFault.Retryable
 		switch platformFault.Class {

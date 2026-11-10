@@ -76,11 +76,9 @@ func (s *SearchCandidates) Execute(ctx context.Context, request domain.SearchReq
 			outcome.ErrorCode = ProviderErrorUnknown
 			var providerErr *ProviderError
 			if errors.As(err, &providerErr) {
-				if strings.TrimSpace(providerErr.Code) != "" {
-					outcome.ErrorCode = providerErr.Code
-				}
-				outcome.Retryable = providerErr.Retryable
-				if providerErr.Skipped {
+				outcome.ErrorCode = normalizeProviderErrorCode(providerErr.Code)
+				outcome.Retryable = providerErrorRetryable(outcome.ErrorCode, providerErr.Retryable)
+				if providerErr.Skipped && outcome.ErrorCode == ProviderErrorNotConfigured {
 					outcome.Status = domain.ProviderSkipped
 				}
 			}
@@ -165,5 +163,36 @@ func summarizeSearchResult(result *domain.SearchResult) {
 	default:
 		result.Status = domain.SearchSuccess
 		result.FailureCode = ""
+	}
+}
+
+
+// normalizeProviderErrorCode prevents adapter-specific or arbitrary error strings from
+// becoming part of the stable SearchResult contract.
+func normalizeProviderErrorCode(code string) string {
+	switch strings.TrimSpace(code) {
+	case ProviderErrorUnauthorized,
+		ProviderErrorRateLimited,
+		ProviderErrorTimeout,
+		ProviderErrorTransportFailed,
+		ProviderErrorRequestInvalid,
+		ProviderErrorResponseInvalid,
+		ProviderErrorBusinessRejected,
+		ProviderErrorUpstreamUnavailable,
+		ProviderErrorNotConfigured:
+		return strings.TrimSpace(code)
+	default:
+		return ProviderErrorUnknown
+	}
+}
+
+func providerErrorRetryable(code string, retryable bool) bool {
+	switch code {
+	case ProviderErrorRateLimited, ProviderErrorTimeout, ProviderErrorUpstreamUnavailable:
+		return true
+	case ProviderErrorTransportFailed:
+		return retryable
+	default:
+		return false
 	}
 }

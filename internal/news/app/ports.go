@@ -22,7 +22,7 @@ const (
 	ProviderErrorRequestInvalid     = "provider_request_invalid"
 	ProviderErrorResponseInvalid    = "provider_response_invalid"
 	ProviderErrorBusinessRejected   = "provider_business_rejected"
-	ProviderErrorUpstreamUnavailable = "provider_upstream_unavailable"
+	ProviderErrorUpstreamUnavailable  = "provider_upstream_unavailable"
 	ProviderErrorUnknown            = "provider_unknown"
 	ProviderErrorNotConfigured      = "provider_not_configured"
 )

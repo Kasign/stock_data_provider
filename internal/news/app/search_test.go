@@ -102,7 +102,7 @@ func TestSearchCandidatesPreservesPartialProviderFailure(t *testing.T) {
 func TestSearchCandidatesNormalizesProviderCandidates(t *testing.T) {
 	publishedAt := time.Date(2026, 11, 4, 10, 0, 0, 0, time.FixedZone("CST", 8*60*60))
 	usecase := NewSearchCandidates(StaticProviderSet{Providers: []Provider{
-		fakeProvider{code: " provider-a ", items: []domain.Candidate{{
+		fakeProvider{code: "provider-a", items: []domain.Candidate{{
 			Title: "  标题  ", ProviderSummary: " 摘要  内容 ", RawURL: " https://publisher.example/a ",
 			PublisherName: " 媒体 ", PublishedAt: &publishedAt,
 		}}},
@@ -134,7 +134,7 @@ func TestSearchCandidatesReturnsEmptyWhenAllProvidersReturnEmpty(t *testing.T) {
 func TestSearchCandidatesReturnsPartialForSuccessAndSkipped(t *testing.T) {
 	usecase := NewSearchCandidates(StaticProviderSet{Providers: []Provider{
 		fakeProvider{code: "one", items: []domain.Candidate{{Title: "headline"}}},
-		fakeProvider{code: "two", err: &ProviderError{Code: "provider_not_configured", Skipped: true}},
+		fakeProvider{code: "two", err: &ProviderError{Code: ProviderErrorNotConfigured, Skipped: true}},
 	}})
 	result := usecase.Execute(context.Background(), domain.SearchRequest{Query: "market", Limit: 10})
 	if result.Status != domain.SearchPartial {
