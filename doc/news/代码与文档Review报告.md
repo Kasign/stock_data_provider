@@ -176,3 +176,10 @@
 
 - Run `42743661308` 在根模块 gofmt 前置步骤发现 `collect_source_test.go` 新增测试末尾多余右花括号，导致解析失败。
 - 已修正测试函数结构，提交 `ac8410ee00b0afb0a4cb6238dd8b03b420e75382`。此前该轮并未执行 Go 测试。
+
+
+## 十五、Provider Ingest 测试格式门禁修正（2026-11-10）
+
+- Run `42743865832` 的根模块 gofmt 检查仍失败；News 自身唯一列出的文件为 `internal/news/app/provider_ingest_test.go`，其两处复合字面量字段缩进与 gofmt 输出不一致。
+- 已仅修正该 News 文件，提交 `c4982d374813e70a30282e4e82027558a6d3384f`。其他模块格式差异未越界修改。
+- 根模块测试和 News MariaDB 集成仍未执行。

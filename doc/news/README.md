@@ -1062,3 +1062,10 @@
 
 - CI 在解析新增取消边界测试时发现多余右花括号，已修正。
 - 对应提交：`ac8410ee00b0afb0a4cb6238dd8b03b420e75382`。
+
+
+### 2026-11-10 Provider Ingest 测试格式修正
+
+- CI 再次发现 `internal/news/app/provider_ingest_test.go` 两处复合字面量字段缩进不符合 gofmt，已修正。
+- Market Data、Notification、Quant 的格式差异没有在 News 分支处理。
+- 对应提交：`c4982d374813e70a30282e4e82027558a6d3384f`。
