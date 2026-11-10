@@ -1524,6 +1524,10 @@ func (p *Hithink) FetchValuations(ctx context.Context, rawSymbols []string) (*mo
 		return nil, fmt.Errorf("解析同花顺批量估值失败: %w", err)
 	}
 	if data.Total != nil && (*data.Total < 0 || *data.Total != len(data.Item)) {
+		addHithinkFieldIssue(ctx, nil, "row_count", "total/item", "provider_count_mismatch",
+			"total equals non-negative item count", "number",
+			fmt.Sprintf("total=%d items=%d", *data.Total, len(data.Item)),
+			"同花顺估值响应 total 与 item 数量不一致")
 		return nil, fmt.Errorf("同花顺估值响应 total 与 item 数量不一致: total=%d items=%d", *data.Total, len(data.Item))
 	}
 	now := time.Now().UTC()
@@ -1564,12 +1568,18 @@ func (p *Hithink) FetchValuations(ctx context.Context, rawSymbols []string) (*mo
 		rawSymbol := hithinkFieldString(row, "thscode")
 		symbol, symbolErr := hithinkDomesticSymbol(rawSymbol)
 		if symbolErr != nil {
+			addHithinkFieldIssue(ctx, &rowIndex, "symbol", "thscode", "invalid_symbol",
+				"valid A-share symbol with exchange", "string", rawSymbol, "同花顺估值响应证券代码无效")
 			return nil, fmt.Errorf("同花顺估值第 %d 行证券代码无效: %w", rowIndex, symbolErr)
 		}
 		if _, ok := requested[symbol]; !ok {
+			addHithinkFieldIssue(ctx, &rowIndex, "symbol", "thscode", "unrequested_identity",
+				"one of requested symbols", "string", rawSymbol, "同花顺估值响应包含未请求证券")
 			return nil, fmt.Errorf("同花顺估值响应包含未请求代码 %s", symbol)
 		}
 		if _, duplicate := bySymbol[symbol]; duplicate {
+			addHithinkFieldIssue(ctx, &rowIndex, "symbol", "thscode", "duplicate_identity",
+				"unique requested symbol", "string", rawSymbol, "同花顺估值响应包含重复证券记录")
 			return nil, fmt.Errorf("同花顺估值响应包含重复代码 %s", symbol)
 		}
 		code := hithinkFieldString(row, "ticker")
@@ -1577,6 +1587,8 @@ func (p *Hithink) FetchValuations(ctx context.Context, rawSymbols []string) (*mo
 			code = strings.Split(symbol, ".")[0]
 		}
 		if code != strings.Split(symbol, ".")[0] {
+			addHithinkFieldIssue(ctx, &rowIndex, "code", "ticker", "symbol_code_mismatch",
+				strings.Split(symbol, ".")[0], "string", code, "同花顺估值 ticker 与 thscode 不一致")
 			return nil, fmt.Errorf("同花顺估值第 %d 行 ticker 与 thscode 不一致", rowIndex)
 		}
 		name := hithinkFieldString(row, "name")
