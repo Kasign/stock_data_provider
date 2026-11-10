@@ -65,11 +65,40 @@ func TestNotificationMariaDBExpiredDeliveryLeaseRecoveryIntegration(t *testing.T
 	}
 
 	claimAt := now.Add(-2 * time.Second)
-	leaseExpiry := now.Add(-time.Second)
+	leaseExpiry := now.Add(time.Minute)
 	claim, claimed, err := repository.ClaimDue(ctx, "recovery-worker", claimAt, leaseExpiry)
 	if err != nil || !claimed {
 		t.Fatalf("claim delivery: claimed=%v err=%v", claimed, err)
 	}
+	attemptRepository, err := NewMySQLDeliveryAttemptRepository(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var startedClock []byte
+	if err := db.QueryRowContext(ctx, `SELECT DATE_FORMAT(UTC_TIMESTAMP(6), '%Y-%m-%d %H:%i:%s.%f')`).Scan(&startedClock); err != nil {
+		t.Fatal(err)
+	}
+	startedAt, err := parseDatabaseTime(startedClock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	attempt := domain.DeliveryAttempt{
+		AttemptID: "attempt-" + fmt.Sprint(time.Now().UnixNano()), DeliveryID: delivery.DeliveryID,
+		AttemptNo: 1, WorkerID: claim.Lease.WorkerID, FencingToken: claim.Lease.FencingToken,
+		LeaseExpiresAt: claim.Lease.ExpiresAt, StartedAt: startedAt,
+	}
+	if err := attemptRepository.StartWithLease(ctx, claim.Delivery.Version, claim.Lease.FencingToken, attempt); err != nil {
+		t.Fatalf("start attempt before lease expiry: %v", err)
+	}
+	// 测试夹具同时推进 Delivery 与 Attempt 的租约截止时间，模拟 Worker 在发送期间失联。
+	expiredAt := now.Add(-time.Second)
+	if _, err := db.ExecContext(ctx, "UPDATE notification_deliveries SET lease_expires_at = ? WHERE delivery_id = ?", expiredAt, delivery.DeliveryID); err != nil {
+		t.Fatalf("expire delivery lease fixture: %v", err)
+	}
+	if _, err := db.ExecContext(ctx, "UPDATE notification_delivery_attempts SET lease_expires_at = ? WHERE delivery_id = ?", expiredAt, delivery.DeliveryID); err != nil {
+		t.Fatalf("expire attempt lease fixture: %v", err)
+	}
+
 	expiredClaims, err := repository.ListExpiredLeases(ctx, 10)
 	if err != nil {
 		t.Fatalf("scan expired leases: %v", err)
@@ -87,10 +116,9 @@ func TestNotificationMariaDBExpiredDeliveryLeaseRecoveryIntegration(t *testing.T
 		t.Fatalf("bounded scan must return the expired lease for %s", delivery.DeliveryID)
 	}
 	recoveryAt := now
-	nextAttemptAt := recoveryAt.Add(time.Second)
 	next, event, err := claim.Delivery.Transition(domain.DeliveryTransition{
-		To: domain.DeliveryRetryWait, At: recoveryAt,
-		NextAttemptAt: &nextAttemptAt, ReasonCode: "lease_expired_before_attempt",
+		To: domain.DeliveryUnknown, At: recoveryAt,
+		ReasonCode: "lease_expired_during_attempt", EvidenceRef: attempt.AttemptID,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -138,9 +166,29 @@ func TestNotificationMariaDBExpiredDeliveryLeaseRecoveryIntegration(t *testing.T
 		t.Fatalf("recover expired lease: %v", err)
 	}
 	recovered, found, err := repository.Get(ctx, delivery.DeliveryID)
-	if err != nil || !found || recovered.Status != domain.DeliveryRetryWait || recovered.Version != next.Version {
+	if err != nil || !found || recovered.Status != domain.DeliveryUnknown || recovered.Version != next.Version {
 		t.Fatalf("load recovered delivery: found=%v delivery=%+v err=%v", found, recovered, err)
 	}
+	var finishClock []byte
+	if err := db.QueryRowContext(ctx, `SELECT DATE_FORMAT(UTC_TIMESTAMP(6), '%Y-%m-%d %H:%i:%s.%f')`).Scan(&finishClock); err != nil {
+		t.Fatal(err)
+	}
+	finishedAt, err := parseDatabaseTime(finishClock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	completed, err := attempt.Complete(finishedAt, domain.DeliveryAttemptAccepted, "late-provider-acceptance", "", false, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := attemptRepository.CompleteWithLease(ctx, claim.Delivery.Version, claim.Lease.FencingToken, completed); !errors.Is(err, application.ErrDeliveryAttemptConflict) {
+		t.Fatalf("stale worker must not complete an Attempt after recovery won: %v", err)
+	}
+	persistedAttempts, err := attemptRepository.ListByDelivery(ctx, delivery.DeliveryID)
+	if err != nil || len(persistedAttempts) != 1 || persistedAttempts[0].FinishedAt != nil {
+		t.Fatalf("recovered running Attempt must remain immutable: attempts=%+v err=%v", persistedAttempts, err)
+	}
+
 	var leaseCount int
 	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM notification_deliveries WHERE delivery_id = ? AND lease_worker_id IS NULL AND lease_expires_at IS NULL", delivery.DeliveryID).Scan(&leaseCount); err != nil || leaseCount != 1 {
 		t.Fatalf("recovered lease must be released: count=%d err=%v", leaseCount, err)
