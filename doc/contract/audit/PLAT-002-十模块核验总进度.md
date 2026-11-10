@@ -1,6 +1,6 @@
 # PLAT-002 十模块核验总进度
 
-**当前状态：** 固定基线阶段 A 已完成；十模块六维核验阶段 B 为 partial（已完成若干跨模块边界切片，但十模块六维证据尚未齐备）；跨模块关系阶段 C 为 partial（主要边界已交叉核验，完整 import 图/授权链未完成）；差异登记阶段 D 已完成首轮集中收敛但仍有待决与补证；责任模块修复阶段 E pending；第一轮完整性 Review 阶段 F 部分完成；第二轮正确性 Review G、第三轮冻结门禁 Review H 尚未开始。L1 设计基线已冻结，L2 正式 CTR 当前 0/43 frozen。
+**当前状态：** 阶段 A 固定基线已完成；阶段 B（十模块六维核验）和阶段 C（完整 import/消费者/授权链）仍为 partial；阶段 D 项目级决策已收敛，B1～B8 已正式裁决，当前非条件性项目级 pending_decision 为 0；阶段 E（责任模块实现/补证）进入待执行状态；阶段 F 第一轮完整性 Review 为 partial；阶段 G 正确性 Review、阶段 H 冻结门禁 Review 尚未开始。L1 设计基线已冻结，L2 正式 CTR 当前 0/43 frozen。
 **代码基线：** `b6dfc85ba214fe16268c8cba780641a8bfe15086`（origin/integration）  
 **文档维护分支：** feat/design_doc
 
@@ -30,8 +30,8 @@
 | A | 固定 SHA、模块清单、文件规模与并行修改观察 | complete（基线固定；仅维护并行变更观察） |
 | B | 十模块六维接口级核验 | partial（跨模块边界已覆盖主要关系，但十模块六维证据尚未逐项齐备） |
 | C | 跨模块调用图、授权链和依赖图 | partial（主要边界已抽样交叉核验；全仓 import 图、全部消费者调用点和授权链尚未完成） |
-| D | 差异、待裁决、补证唯一登记 | first_pass_consolidated（43 个正式 CTR、56 条审计工作项已归并；决策与证据仍待责任方处理） |
-| E | 责任模块修复/补证（本分支不改业务代码） | pending_audit |
+| D | 差异、待裁决、补证唯一登记 | decision_complete（B1～B8 已裁决；差异和证据工作项唯一登记） |
+| E | 责任模块实现/补证（本分支不改业务代码） | ready_for_execution |
 | F | 第一轮完整性 Review | partial（WebUI 维度 2 与主要跨模块边界已完成首轮切片；十模块六维全覆盖尚未完成） |
 | G | 第二轮正确性 Review | not_started |
 | H | 第三轮冻结条件 Review | not_started |
@@ -1101,3 +1101,15 @@
 - B3～B8 按 Review 结论明确数据质量、News 关系状态、Run 输入物化范围、Quant Payload 所有权、Research Stage 幂等范围、LLM Run 配置固定和错误重试分类。
 - 只更新 PLAT-002 项目级文档；未修改业务模块代码、未运行 CI、未改变任何正式 CTR 的冻结状态。
 - 下一步主线：按决议责任边界执行模块实现/补证；优先处理 B1 新 API/WebUI 切换和旧路由退役方案、B2 Server 请求规则，然后按模块依赖推进 B3～B8。PLAT-002 只按新 SHA 增量验收，不重做全量初审。
+
+
+
+## 34. 项目级决策 Review 通过与阶段转换（2026-11-10）
+
+- 本轮复核对象：项目级决策记录、差异唯一登记矩阵、契约冻结登记簿、十模块总进度四份权威文档。
+- Review 结论：B1～B8 正式决议 018～025 与汇总决议 026 已存在；决策记录旧“待项目负责人裁决”标题、矩阵旧 pending_decision 汇总/退出条件、登记簿旧待决入口已发现并完成同步修正。
+- 当前项目级非条件性 pending_decision 为 0；原决策工作项转为 pending_evidence。DATA-FLOW-B、LLM-FLOW-B 保持条件性 deferred。正式 CTR 状态未因项目级决议批准而改变，当前仍为 0/43 L2 frozen。
+- 阶段转换：项目级决策阶段 D 完成，下一阶段转为 E——责任模块按正式决议实施和补证。PLAT-002 维护分支继续只做治理文档和新 SHA 增量验收，不修改责任模块代码。
+- 首批实施主线：B1 新 Researchflow API / WebUI 直接切换 / 旧 Analysis 专属路由退役；B2 Server 请求校验与同步 Run ID 幂等。后续按依赖推进 B3～B8。
+- 分支边界检查：当前可见分支包含 `feat/researchflow`、`feat/webui-market-data-console`、`feat/platform-foundation` 等，但没有独立 Server 分支。Server 代码实施前必须明确其责任分支；不得默认把 Server 代码写入 Platform 或 integration 分支，也不得擅自创建新分支。
+- 本轮未修改业务模块代码、未运行 CI、未改变任何正式 CTR 冻结状态。
