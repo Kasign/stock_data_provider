@@ -307,24 +307,27 @@ func emptyEastmoneyAnnouncementSnapshot(symbol, startDate, endDate string, page,
 
 
 func addEastmoneyAnnouncementResponseIssue(ctx context.Context, field, providerField, code, expected, actualType, message string) {
-	addEastmoneyAnnouncementIssueWithSeverity(ctx, -1, validation.SeverityError, field, providerField, code, expected, actualType, "", message)
+	addEastmoneyAnnouncementIssueWithSeverity(ctx, validation.StageParse, -1, validation.SeverityError, field, providerField, code, expected, actualType, "", message)
 }
 
 func addEastmoneyAnnouncementParseIssue(ctx context.Context, rowIndex int, field, providerField, code, expected, actualType, message string) {
-	addEastmoneyAnnouncementIssueWithSeverity(ctx, rowIndex, validation.SeverityError, field, providerField, code, expected, actualType, "", message)
+	addEastmoneyAnnouncementIssueWithSeverity(ctx, validation.StageParse, rowIndex, validation.SeverityError, field, providerField, code, expected, actualType, "", message)
 }
 
 func addEastmoneyAnnouncementIssue(ctx context.Context, rowIndex int, field, providerField, code, expected, actualType, preview, message string) {
-	addEastmoneyAnnouncementIssueWithSeverity(ctx, rowIndex, validation.SeverityWarning, field, providerField, code, expected, actualType, preview, message)
+	addEastmoneyAnnouncementIssueWithSeverity(ctx, validation.StageValidate, rowIndex, validation.SeverityWarning, field, providerField, code, expected, actualType, preview, message)
 }
 
-func addEastmoneyAnnouncementIssueWithSeverity(ctx context.Context, rowIndex int, severity validation.Severity, field, providerField, code, expected, actualType, preview, message string) {
+func addEastmoneyAnnouncementIssueWithSeverity(ctx context.Context, stage validation.Stage, rowIndex int, severity validation.Severity, field, providerField, code, expected, actualType, preview, message string) {
 	report := validation.NewReport(8)
 	issue := validation.FieldIssue{
-		Stage: validation.StageValidate, Field: field, ProviderField: providerField,
+		Stage: stage, Field: field, ProviderField: providerField,
 		Code: code, Expected: expected, ActualType: actualType,
 		ActualPreview: quoteIssuePreview(preview), Severity: severity,
-		Message: message, RowIndex: &rowIndex,
+		Message: message,
+	}
+	if rowIndex >= 0 {
+		issue.RowIndex = &rowIndex
 	}
 	report.Add(issue)
 	validation.AddContextReport(ctx, report)
