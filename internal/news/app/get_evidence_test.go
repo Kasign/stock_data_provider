@@ -343,7 +343,7 @@ func TestGetEvidenceStopsAfterContextCancellationAtDependencyBoundaries(t *testi
 		})
 	}
 }
- 
+
 func TestGetEvidenceSuppressesCandidateAtExactRetentionDeadline(t *testing.T) {
 	now := time.Date(2026, 11, 9, 12, 0, 0, 0, time.UTC)
 	request, pit, binding := validGetEvidenceFixture(now)

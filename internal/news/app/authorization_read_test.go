@@ -194,7 +194,7 @@ func TestEvaluateNewsEvidenceReadAuthorizationRejectsConditionalBeforeExternalCh
 
 func TestEvaluateNewsEvidenceReadAuthorizationStopsAfterContextCancellation(t *testing.T) {
 	cases := []struct {
-		name string
+		name     string
 		cancelAt string
 	}{
 		{name: "fingerprint verifier returned", cancelAt: "verifier"},

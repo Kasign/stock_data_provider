@@ -171,7 +171,7 @@ func TestIngestProviderCandidateFailsClosedBeforePersistence(t *testing.T) {
 			_, err = usecase.Execute(context.Background(), IngestProviderCandidateRequest{
 				SourceID: "source-1", EndpointID: "endpoint-1", IdempotencyKey: "run-1/item-1",
 				Candidate: domain.Candidate{ProviderCode: "brave", SourceItemID: "native-1"},
-				Purpose:   domain.PurposeInternalPersonalResearch, ContentKind: domain.ContentSnippet,
+		Purpose:   domain.PurposeInternalPersonalResearch, ContentKind: domain.ContentSnippet,
 				StorageMode: domain.StorageTransient, Retention: time.Minute,
 			})
 			if !errors.Is(err, test.want) {
@@ -268,7 +268,7 @@ func TestIngestProviderCandidateStopsAfterContextCancellationAtPolicyBoundaries(
 			_, err = usecase.Execute(ctx, IngestProviderCandidateRequest{
 				SourceID: "source-1", EndpointID: "endpoint-1", IdempotencyKey: "cancelled",
 				Candidate: domain.Candidate{ProviderCode: "brave", SourceItemID: "item"},
-				Purpose: domain.PurposeInternalPersonalResearch, ContentKind: domain.ContentSnippet,
+				Purpose:   domain.PurposeInternalPersonalResearch, ContentKind: domain.ContentSnippet,
 				StorageMode: domain.StorageTransient, Retention: time.Minute,
 			})
 			if !errors.Is(err, context.Canceled) {
