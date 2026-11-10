@@ -312,12 +312,12 @@ func (s *DataService) IndexQuotes(ctx context.Context) (*model.IndexQuoteSnapsho
 				s.breaker.Abandon(breakerKey)
 				return nil, false, ctx.Err()
 			}
-			s.breaker.Failure(breakerKey)
+			recordProviderCallFailure(s.breaker, breakerKey, fetchErr)
 			failures = append(failures, p.Name()+": "+fetchErr.Error())
 			continue
 		}
 		if err := validateIndexQuoteSnapshot(snapshot); err != nil {
-			s.breaker.Failure(breakerKey)
+			s.breaker.ContractFailure(breakerKey)
 			failures = append(failures, p.Name()+": "+err.Error())
 			continue
 		}
@@ -571,12 +571,12 @@ func (s *DataService) MarketBreadth(ctx context.Context) (*model.MarketBreadthSn
 				s.breaker.Abandon(breakerKey)
 				return nil, false, ctx.Err()
 			}
-			s.breaker.Failure(breakerKey)
+			recordProviderCallFailure(s.breaker, breakerKey, fetchErr)
 			failures = append(failures, p.Name()+": "+fetchErr.Error())
 			continue
 		}
 		if err := validateMarketBreadth(snapshot); err != nil {
-			s.breaker.Failure(breakerKey)
+			s.breaker.ContractFailure(breakerKey)
 			failures = append(failures, p.Name()+": "+err.Error())
 			continue
 		}
@@ -1396,10 +1396,12 @@ func (s *DataService) SectorRankingsByMetric(ctx context.Context, rawCategory, r
 		}
 		if snapshot != nil {
 			if snapshot.Direction != "" && snapshot.Direction != direction {
+				s.breaker.ContractFailure(breakerKey)
 				failures = append(failures, p.Name()+": provider returned a different sector ranking direction")
 				continue
 			}
 			if snapshot.SortBy != "" && snapshot.SortBy != sortBy {
+					s.breaker.ContractFailure(breakerKey)
 				failures = append(failures, p.Name()+": provider returned a different sector ranking sort_by")
 				continue
 			}
@@ -1419,7 +1421,7 @@ func (s *DataService) SectorRankingsByMetric(ctx context.Context, rawCategory, r
 			}
 		}
 		if err := validateSectorRankingSnapshot(category, limit, snapshot); err != nil {
-			s.breaker.Failure(breakerKey)
+			s.breaker.ContractFailure(breakerKey)
 			failures = append(failures, p.Name()+": "+err.Error())
 			continue
 		}
@@ -2691,7 +2693,7 @@ func (s *DataService) Quote(ctx context.Context, rawSymbol string) (*model.Quote
 			return nil, false, ctx.Err()
 		}
 		if e != nil {
-			s.breaker.Failure(breakerKey)
+			recordProviderCallFailure(s.breaker, breakerKey, e)
 			if errors.Is(e, context.DeadlineExceeded) {
 				timeoutFailures++
 			}
@@ -2700,12 +2702,12 @@ func (s *DataService) Quote(ctx context.Context, rawSymbol string) (*model.Quote
 			continue
 		}
 		if q == nil {
-			s.breaker.Failure(breakerKey)
+			s.breaker.ContractFailure(breakerKey)
 			errs = append(errs, p.Name()+": empty quote without error")
 			continue
 		}
 		if !hasIdentifiableSourceVersion(q.SourceVersion) {
-			s.breaker.Failure(breakerKey)
+			s.breaker.ContractFailure(breakerKey)
 			errs = append(errs, p.Name()+": quote source_version is missing")
 			continue
 		}
@@ -2715,7 +2717,7 @@ func (s *DataService) Quote(ctx context.Context, rawSymbol string) (*model.Quote
 		if strings.TrimSpace(q.Symbol) != "" {
 			providerSymbol, symbolErr := normalize.NormalizeSymbol(q.Symbol)
 			if symbolErr != nil || providerSymbol != symbol {
-				s.breaker.Failure(breakerKey)
+					s.breaker.ContractFailure(breakerKey)
 				errs = append(errs, p.Name()+": provider returned a different or invalid symbol")
 				continue
 			}
@@ -2731,7 +2733,7 @@ func (s *DataService) Quote(ctx context.Context, rawSymbol string) (*model.Quote
 			q.NormalizationVer = normalize.Version
 		}
 		if q.NormalizationVer != normalize.Version {
-			s.breaker.Failure(breakerKey)
+			s.breaker.ContractFailure(breakerKey)
 			errs = append(errs, p.Name()+": quote normalization_version is unsupported")
 			continue
 		}
@@ -2744,14 +2746,14 @@ func (s *DataService) Quote(ctx context.Context, rawSymbol string) (*model.Quote
 			appendReasonOnce(&q.QualityReasons, "amount_missing_from_provider")
 		}
 		if e = normalize.ValidateQuote(q); e != nil {
-			s.breaker.Failure(breakerKey)
+			s.breaker.ContractFailure(breakerKey)
 			errs = append(errs, p.Name()+" failed contract validation: "+e.Error())
 			continue
 		}
 		applyQuoteFreshness(q, time.Now())
 		q.NormalizedAt = time.Now().UTC()
 		if !quoteCacheEligible(q) {
-			s.breaker.Failure(breakerKey)
+			s.breaker.QualityDegraded(breakerKey)
 			errs = append(errs, p.Name()+": quote not suitable as a fresh live snapshot: "+strings.Join(q.QualityReasons, ","))
 			copy := *q
 			copy.QualityReasons = append([]string(nil), q.QualityReasons...)
@@ -2939,7 +2941,7 @@ func (s *DataService) DailyBars(ctx context.Context, rawSymbol, start, end strin
 			return nil, false, nil, ctx.Err()
 		}
 		if e != nil {
-			s.breaker.Failure(breakerKey)
+			recordProviderCallFailure(s.breaker, breakerKey, e)
 			if errors.Is(e, context.DeadlineExceeded) {
 				timeoutFailures++
 			}
@@ -3025,19 +3027,19 @@ func (s *DataService) DailyBars(ctx context.Context, rawSymbol, start, end strin
 		}
 		bars = accepted
 		if len(bars) == 0 {
-			s.breaker.Failure(breakerKey)
+			s.breaker.ContractFailure(breakerKey)
 			errs = append(errs, p.Name()+": no bars matched the requested symbol and adjustment basis")
 			continue
 		}
 		bars, warnings := normalize.ValidateAndSortBars(symbol, bars, start, end, limit)
 		if len(bars) == 0 {
-			s.breaker.Failure(breakerKey)
+			s.breaker.ContractFailure(breakerKey)
 			errs = append(errs, p.Name()+" response failed bar validation")
 			continue
 		}
 		adjustmentWarnings, adjustmentErr := applyDailyBarAdjustmentMetadataQuality(bars, basis)
 		if adjustmentErr != nil {
-			s.breaker.Failure(breakerKey)
+			s.breaker.ContractFailure(breakerKey)
 			errs = append(errs, p.Name()+": "+adjustmentErr.Error())
 			continue
 		}
@@ -3065,7 +3067,7 @@ func (s *DataService) DailyBars(ctx context.Context, rawSymbol, start, end strin
 		applyDailyBarCoverageWarnings(bars, coverageWarnings)
 		warnings = dedupeStrings(warnings)
 		if !coverageOK {
-			s.breaker.Failure(breakerKey)
+			s.breaker.QualityDegraded(breakerKey)
 			warning := fmt.Sprintf("%s returned partial daily-bar coverage: requested %d bars, validated %d; tried fallback providers before using this degraded series", p.Name(), limit, len(bars))
 			warnings = append(warnings, warning)
 			for j := range bars {
@@ -3082,7 +3084,7 @@ func (s *DataService) DailyBars(ctx context.Context, rawSymbol, start, end strin
 			continue
 		}
 		if dailyBarsContainDegradedQuality(bars) {
-			s.breaker.Success(breakerKey)
+			s.breaker.QualityDegraded(breakerKey)
 			warnings = append(warnings, "daily_bar_degraded_candidate_retained_while_searching_for_valid_provider")
 			if preferPartialBars(bars, bestDegraded) {
 				bestDegraded = append([]model.DailyBar(nil), bars...)
@@ -3627,6 +3629,19 @@ func applyQuoteFreshness(q *model.Quote, now time.Time) {
 // providerFailureURLQuery redacts query parameters from URLs embedded in HTTP client errors.
 // Provider URLs often include public tokens or request-specific fields; logs only need the endpoint and failure type.
 var providerFailureURLQuery = regexp.MustCompile(`(?i)(https?://[^\s"?]+)\?[^\s"']*`)
+
+// recordProviderCallFailure keeps known data/client errors out of the availability circuit.
+func recordProviderCallFailure(b *circuitBreaker, key string, err error) {
+	kind, _ := providerFailureSummary(err)
+	switch kind {
+	case "data_contract", "empty_or_unparseable_response":
+		b.ContractFailure(key)
+	case "canceled":
+		b.Abandon(key)
+	default:
+		b.Failure(key)
+	}
+}
 
 func providerFailureSummary(err error) (kind, message string) {
 	if err == nil {

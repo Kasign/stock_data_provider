@@ -63,3 +63,20 @@ provider_fallback_used 只记录实际使用了非首选 Provider，不是质量
 - [ ] 完成六类能力缓存准入与降级 TTL 交叉核对。
 
 本阶段不引入通用 fallback runtime、统一质量评分或跨 Provider 数据拼接。
+
+
+## 熔断器故障分类（任务 B）
+
+熔断器只保护 Provider + Capability 的可用性：
+
+| 结果 | 熔断器处理 | 诊断 |
+|---|---|---|
+| 网络连接失败、超时、连接中断 | Failure | 计入可用性失败连续次数 |
+| 响应违反字段、版本、证券、复权契约 | ContractFailure | 独立累计契约失败，不触发可用性熔断 |
+| 响应成功但 freshness、coverage 或字段质量降级 | QualityDegraded | 独立累计质量降级，不触发可用性熔断 |
+| 调用方取消 | Abandon | 释放半开探测，不记录 Provider 故障 |
+| 满足契约和质量门禁 | Success | 重置可用性失败连续次数 |
+
+ContractFailure 与 QualityDegraded 都表示 Provider 已完成响应，会释放半开探测并恢复可用性状态；独立计数保留历史问题，不与可用性失败混算。
+
+本次实施范围：IndexQuotes、MarketBreadth、SectorRankings、Quote、DailyBars。

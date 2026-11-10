@@ -45,6 +45,51 @@ func TestCircuitBreakerDiagnosticsTracksRealOutcomes(t *testing.T) {
 	}
 }
 
+
+func TestCircuitBreakerSeparatesContractAndQualityOutcomes(t *testing.T) {
+	now := time.Date(2026, 11, 10, 5, 0, 0, 0, time.UTC)
+	b := newCircuitBreaker(1, time.Minute)
+	b.now = func() time.Time { return now }
+	keys := map[string]string{"provider:quote": "quote"}
+
+	if !b.Allow("provider:quote") {
+		t.Fatal("initial request should be admitted")
+	}
+	b.ContractFailure("provider:quote")
+	got := b.Diagnostics(keys)[0]
+	if got.Status != "healthy" || got.ConsecutiveFails != 0 ||
+		got.TotalContractFailure != 1 || got.TotalFailure != 0 ||
+		got.LastContractFailureAt == nil {
+		t.Fatalf("contract failure must be diagnostic, not availability failure: %+v", got)
+	}
+
+	b.QualityDegraded("provider:quote")
+	got = b.Diagnostics(keys)[0]
+	if got.Status != "healthy" || got.ConsecutiveFails != 0 ||
+		got.TotalQualityDegraded != 1 || got.TotalFailure != 0 ||
+		got.LastQualityDegradedAt == nil {
+		t.Fatalf("quality degradation must be diagnostic, not availability failure: %+v", got)
+	}
+}
+
+func TestCircuitBreakerNonAvailabilityOutcomeReleasesHalfOpenProbe(t *testing.T) {
+	now := time.Date(2026, 11, 10, 5, 0, 0, 0, time.UTC)
+	b := newCircuitBreaker(1, time.Second)
+	b.now = func() time.Time { return now }
+	b.Failure("provider:quote")
+	now = now.Add(2 * time.Second)
+	if !b.Allow("provider:quote") {
+		t.Fatal("cooldown should allow half-open probe")
+	}
+	b.ContractFailure("provider:quote")
+	if b.states["provider:quote"].probeInFlight {
+		t.Fatal("contract response must release half-open probe")
+	}
+	if !b.Allow("provider:quote") {
+		t.Fatal("contract response proves availability and should close the circuit")
+	}
+}
+
 func TestCircuitBreakerDiagnosticsKeepsCapabilitiesIndependent(t *testing.T) {
 	b := newCircuitBreaker(1, time.Minute)
 	b.Failure("provider:quote")

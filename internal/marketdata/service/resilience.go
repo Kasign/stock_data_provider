@@ -40,9 +40,13 @@ type breakerState struct {
 	openUntil     time.Time
 	probeInFlight bool
 	lastSuccessAt time.Time
-	lastFailureAt time.Time
-	totalSuccess  uint64
-	totalFailure  uint64
+	lastFailureAt         time.Time
+	lastContractFailureAt time.Time
+	lastQualityDegradedAt time.Time
+	totalSuccess          uint64
+	totalFailure          uint64
+	totalContractFailure  uint64
+	totalQualityDegraded  uint64
 }
 
 // CircuitDiagnostic 是熔断器基于真实业务调用维护的只读运行状态。
@@ -53,8 +57,12 @@ type CircuitDiagnostic struct {
 	TotalSuccess     uint64     `json:"total_success"`
 	TotalFailure     uint64     `json:"total_failure"`
 	LastSuccessAt    *time.Time `json:"last_success_at"`
-	LastFailureAt    *time.Time `json:"last_failure_at"`
-	OpenUntil        *time.Time `json:"open_until"`
+	LastFailureAt         *time.Time `json:"last_failure_at"`
+	LastContractFailureAt *time.Time `json:"last_contract_failure_at,omitempty"`
+	LastQualityDegradedAt *time.Time `json:"last_quality_degraded_at,omitempty"`
+	TotalContractFailure  uint64     `json:"total_contract_failure"`
+	TotalQualityDegraded  uint64     `json:"total_quality_degraded"`
+	OpenUntil             *time.Time `json:"open_until"`
 }
 
 type circuitBreaker struct {
@@ -100,15 +108,38 @@ func (b *circuitBreaker) Allow(key string) bool {
 	return true
 }
 
-func (b *circuitBreaker) Success(key string) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
+func (b *circuitBreaker) observeResponse(key string) *breakerState {
 	state := b.state(key)
 	state.failures = 0
 	state.openUntil = time.Time{}
 	state.probeInFlight = false
 	state.lastSuccessAt = b.now().UTC()
 	state.totalSuccess++
+	return state
+}
+
+func (b *circuitBreaker) Success(key string) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.observeResponse(key)
+}
+
+// ContractFailure 记录已收到响应但违反数据契约的情况，不计入可用性熔断。
+func (b *circuitBreaker) ContractFailure(key string) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	state := b.observeResponse(key)
+	state.lastContractFailureAt = b.now().UTC()
+	state.totalContractFailure++
+}
+
+// QualityDegraded 记录响应可用但未通过质量/新鲜度门禁的情况。
+func (b *circuitBreaker) QualityDegraded(key string) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	state := b.observeResponse(key)
+	state.lastQualityDegradedAt = b.now().UTC()
+	state.totalQualityDegraded++
 }
 
 // Abandon releases a half-open probe when the caller cancels the request. Caller
@@ -228,6 +259,16 @@ func (b *circuitBreaker) Diagnostics(keys map[string]string) []CircuitDiagnostic
 			item.ConsecutiveFails = state.failures
 			item.TotalSuccess = state.totalSuccess
 			item.TotalFailure = state.totalFailure
+			item.TotalContractFailure = state.totalContractFailure
+			item.TotalQualityDegraded = state.totalQualityDegraded
+			if !state.lastContractFailureAt.IsZero() {
+				value := state.lastContractFailureAt
+				item.LastContractFailureAt = &value
+			}
+			if !state.lastQualityDegradedAt.IsZero() {
+				value := state.lastQualityDegradedAt
+				item.LastQualityDegradedAt = &value
+			}
 			if !state.lastSuccessAt.IsZero() {
 				value := state.lastSuccessAt
 				item.LastSuccessAt = &value
