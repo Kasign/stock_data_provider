@@ -3467,3 +3467,145 @@ func TestDailyBarsCacheRetainsStoredWarningsWhenHit(t *testing.T) {
 		t.Fatalf("cache hit must merge stored warnings and current normalization warnings: %v", warnings)
 	}
 }
+
+type snapshotSourceIdentityFakeProvider struct {
+	name string
+	indexSnapshot *model.IndexQuoteSnapshot
+	breadthSnapshot *model.MarketBreadthSnapshot
+	sectorSnapshot *model.SectorRankingSnapshot
+	indexCalls int
+	breadthCalls int
+	sectorCalls int
+}
+
+func (p *snapshotSourceIdentityFakeProvider) Name() string { return p.name }
+
+func (p *snapshotSourceIdentityFakeProvider) FetchIndexQuotes(context.Context) (*model.IndexQuoteSnapshot, error) {
+	p.indexCalls++
+	return p.indexSnapshot, nil
+}
+
+func (p *snapshotSourceIdentityFakeProvider) FetchMarketBreadth(context.Context) (*model.MarketBreadthSnapshot, error) {
+	p.breadthCalls++
+	return p.breadthSnapshot, nil
+}
+
+func (p *snapshotSourceIdentityFakeProvider) FetchSectorRankings(_ context.Context, _ string, _ int) (*model.SectorRankingSnapshot, error) {
+	p.sectorCalls++
+	return p.sectorSnapshot, nil
+}
+
+func (p *snapshotSourceIdentityFakeProvider) FetchSectorRankingsByMetric(_ context.Context, _, _, _ string, _ int) (*model.SectorRankingSnapshot, error) {
+	p.sectorCalls++
+	return p.sectorSnapshot, nil
+}
+
+func newSnapshotSourceIdentityService(primary, fallback *snapshotSourceIdentityFakeProvider) *DataService {
+	svc := NewWithCapabilities(
+		[]provider.NamedProvider{primary, fallback},
+		nil,
+		nil,
+		cache.NewDisabled(),
+		nil,
+		time.Second,
+		time.Second,
+		120,
+		2000,
+		ResilienceConfig{},
+		nil,
+	)
+	svc.SetIndexQuoteProviders([]provider.IndexQuoteProvider{primary, fallback})
+	svc.marketBreadthProviders = []provider.MarketBreadthProvider{primary, fallback}
+	svc.SetSectorRankingProviders([]provider.SectorRankingProvider{primary, fallback})
+	return svc
+}
+
+func indexQuoteSnapshotForSource(source string) *model.IndexQuoteSnapshot {
+	now := time.Now().UTC()
+	price, changePercent := 3200.0, 1.0
+	return &model.IndexQuoteSnapshot{
+		Source: source, SourceVersion: "test-v1", FetchedAt: now, QualityStatus: model.QualityDegraded,
+		Items: []model.MarketIndexQuote{{
+			Symbol: "000001.SH", Code: "000001", Name: "上证指数",
+			LatestPrice: &price, ChangePercent: &changePercent, AmountUnit: "unknown",
+			Source: source, SourceVersion: "test-v1", FetchedAt: now, QualityStatus: model.QualityDegraded,
+		}},
+	}
+}
+
+func marketBreadthSnapshotForSource(source string) *model.MarketBreadthSnapshot {
+	amount := 100.0
+	return &model.MarketBreadthSnapshot{
+		Market: "cn_a_share", TotalSecurities: 1, CoveredSecurities: 1,
+		AdvancingCount: 1, DecliningCount: 0, UnchangedCount: 0,
+		AmountCoverageCount: 1, TotalAmountCNY: &amount,
+		ProviderReportDate: time.Now().In(marketLocation()).Format("2006-01-02"),
+		Source: source, SourceVersion: "test-v1", FetchedAt: time.Now().UTC(),
+		QualityStatus: model.QualityDegraded,
+	}
+}
+
+func sectorRankingSnapshotForSource(source string) *model.SectorRankingSnapshot {
+	now := time.Now().UTC()
+	changePercent := 1.0
+	return &model.SectorRankingSnapshot{
+		Category: "industry", Direction: "up", SortBy: "change_percent", Total: 1,
+		Source: source, SourceVersion: "test-v1", FetchedAt: now, QualityStatus: model.QualityDegraded,
+		Items: []model.SectorRanking{{
+			Rank: 1, Code: "BK0001", Name: "测试行业", Category: "industry",
+			ChangePercent: &changePercent, AmountUnit: "unknown",
+			Source: source, SourceVersion: "test-v1", FetchedAt: now, QualityStatus: model.QualityDegraded,
+		}},
+	}
+}
+
+func TestIndexQuotesRejectsMismatchedProviderSourceAndFallsBack(t *testing.T) {
+	primary := &snapshotSourceIdentityFakeProvider{name: "primary", indexSnapshot: indexQuoteSnapshotForSource("spoofed")}
+	fallback := &snapshotSourceIdentityFakeProvider{name: "fallback", indexSnapshot: indexQuoteSnapshotForSource("fallback")}
+	svc := newSnapshotSourceIdentityService(primary, fallback)
+
+	got, _, err := svc.IndexQuotes(context.Background())
+	if err != nil {
+		t.Fatalf("expected fallback index snapshot, got error: %v", err)
+	}
+	if got == nil || got.Source != "fallback" {
+		t.Fatalf("expected fallback source, got %+v", got)
+	}
+	if primary.indexCalls != 1 || fallback.indexCalls != 1 {
+		t.Fatalf("mismatched source must be rejected and fallback called: primary=%d fallback=%d", primary.indexCalls, fallback.indexCalls)
+	}
+}
+
+func TestMarketBreadthRejectsMismatchedProviderSourceAndFallsBack(t *testing.T) {
+	primary := &snapshotSourceIdentityFakeProvider{name: "primary", breadthSnapshot: marketBreadthSnapshotForSource("spoofed")}
+	fallback := &snapshotSourceIdentityFakeProvider{name: "fallback", breadthSnapshot: marketBreadthSnapshotForSource("fallback")}
+	svc := newSnapshotSourceIdentityService(primary, fallback)
+
+	got, _, err := svc.MarketBreadth(context.Background())
+	if err != nil {
+		t.Fatalf("expected fallback market-breadth snapshot, got error: %v", err)
+	}
+	if got == nil || got.Source != "fallback" {
+		t.Fatalf("expected fallback source, got %+v", got)
+	}
+	if primary.breadthCalls != 1 || fallback.breadthCalls != 1 {
+		t.Fatalf("mismatched source must be rejected and fallback called: primary=%d fallback=%d", primary.breadthCalls, fallback.breadthCalls)
+	}
+}
+
+func TestSectorRankingsRejectsMismatchedProviderSourceAndFallsBack(t *testing.T) {
+	primary := &snapshotSourceIdentityFakeProvider{name: "primary", sectorSnapshot: sectorRankingSnapshotForSource("spoofed")}
+	fallback := &snapshotSourceIdentityFakeProvider{name: "fallback", sectorSnapshot: sectorRankingSnapshotForSource("fallback")}
+	svc := newSnapshotSourceIdentityService(primary, fallback)
+
+	got, _, err := svc.SectorRankingsByMetric(context.Background(), "industry", "change_percent", "up", 1)
+	if err != nil {
+		t.Fatalf("expected fallback sector-ranking snapshot, got error: %v", err)
+	}
+	if got == nil || got.Source != "fallback" {
+		t.Fatalf("expected fallback source, got %+v", got)
+	}
+	if primary.sectorCalls != 1 || fallback.sectorCalls != 1 {
+		t.Fatalf("mismatched source must be rejected and fallback called: primary=%d fallback=%d", primary.sectorCalls, fallback.sectorCalls)
+	}
+}
