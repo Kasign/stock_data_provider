@@ -1126,3 +1126,12 @@
 - 固定基线 OpenAPI 仍将 Task.started_at/finished_at 标记为 nullable，与 Go 指针字段 omitempty 的缺失语义不一致；CTR-006 既定 queued/running/terminal Golden、Schema 双向校验和 Handler Contract Test 尚无新 SHA 证据。
 - 固定基线 Check Runs 为 0、Commit Status 为空；本轮未执行测试/CI，未修改责任模块代码。
 - 结论：CTR-006 保持 pending_evidence，不关闭、不冻结。矩阵第37节记录了精确证据与下一步验收条件。后续仅在责任分支出现新修复 SHA 后增量验收，不再重复字段语义审查。
+
+
+## 36. CTR-043 Dragon Tiger P1 冲突定位结果（2026-11-10）
+
+- 本轮按 B0 有限执行批次增量核验既有 CTR-043，没有新增 CTR，也没有修改 Data/WebUI 责任模块。
+- 已定位冲突：同花顺 Provider 将单位未明确的金额保留在 `provider_*_value`，并标记 `provider_amount_unit="provider_defined"`，不填充 `*_cny`；WebUI 龙虎榜表格只展示 `net_buy_amount_cny` 与 `deal_amount_cny`。当同花顺作为回退源返回有效 degraded 数据时，页面可显示证券/涨跌幅/质量，但资金金额列无法展示。
+- 不应将同花顺原始金额擅自转换或冒充 CNY。当前 Data Go DTO 与 OpenAPI 对原始值/CNY 的字段区分一致；差异位于 Provider 回退输出与 WebUI 展示能力之间，并缺真实 Provider→HTTP→WebUI Fixture/Contract Test 闭环。
+- 关闭条件：Data 补真实同花顺 Provider 响应 Golden/Contract Test，保持单位边界；WebUI 明确原始金额展示或不可比较/未提供策略，并补真实响应 Fixture 渲染测试；两端定向测试与 CI 通过。详细文件证据和验收边界见差异矩阵第38节。
+- 状态：CTR-043 保持 P1 open / L2 blocked，不冻结。此次仅静态核验，未执行测试/CI；不将静态证据表述为测试通过。
