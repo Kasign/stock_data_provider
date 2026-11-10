@@ -90,3 +90,13 @@
 - 与 WebUI 维度 1、3、4、5、6 的交叉检查。
 
 因此 WebUI 维度 2 仍为 partial；本文件只完成第一轮完整性 Review 的一个子批次，不宣布维度 2 或 PLAT-002 完成。下一批继续在本维度内核对差异关闭条件和证据链，不增加数据集范围。
+
+
+### 3.5 CTR-005 的 required 语义进一步收敛
+
+再次对照 `internal/platform/httpapi/tasks.go:handleCreateTask`、`internal/platform/httpapi/server.go:fillDefaults`、`internal/analysis/app/runner.go` 和 AnalysisRequest Schema 后，不能简单把 RunRequest 所有非 omitempty 字段都列为 HTTP required：
+
+- HTTP Handler 会为缺省 task_type、as_of、universe_id、portfolio_id、market_id、strategy_ids 及配置版本填充服务端默认值。
+- historical_replay 是条件例外：必须由调用方显式提供 as_of；Handler 会在缺省时返回 400。
+- Runner 会校验 task_type 仅允许 post_market_scan、watchlist_scan、position_review、historical_replay 四个值。
+- 因此 CTR-005/047 的正确关闭要求是：将 HTTP CreateTaskRequest 与 domain.RunRequest 的字段映射和默认行为明确分开；OpenAPI 为 task_type 补四值枚举及默认值，为其他服务端默认字段描述默认行为，并表达 historical_replay 对显式 as_of 的条件约束。不能机械地将所有领域字段标成 required。
