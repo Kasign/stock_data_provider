@@ -399,3 +399,14 @@
 - 新增 **AUD-WEBUI-CTR-031**（P2）：历史报告缺少最大陈旧度策略和专门诊断；新增 **AUD-WEBUI-CTR-032**（P2）：历史成分名称使用当前 stock_basic 目录，缺少历史名称 PIT 证据；新增 **AUD-WEBUI-CTR-033**（P2）：WebUI 有 API Client 和请求测试，但没有页面消费与 DOM 测试。
 - IndexConstituent.weight_percent 与 IndexConstituentSnapshot.provider_time 的 omitempty 指针被 OpenAPI 声明 nullable，纳入 **AUD-WEBUI-CTR-010**。
 - 未发现已证实的报告日期越界或权重单位换算错误；时间陈旧度、历史名称和 UI 闭环仍待补强。WebUI 维度 2 继续 partial。
+
+
+### WebUI — 维度 2：Index Daily Bars 指数历史日线
+
+- 固定代码基线：`b6dfc85ba214fe16268c8cba780641a8bfe15086`；详细证据见审计明细第 36 节。
+- 已核对 IndexDailyBar/IndexDailyBarsSnapshot DTO、IndexCatalogProvider Port、Hithink/Tushare 实现、Service 来源选择/校验/回退/缓存、HTTP Handler、OpenAPI、Go 模型契约测试及 WebUI API Client/API 请求测试。
+- Hithink 和 Tushare 均校验请求日期范围、重复日期、OHLC；Service 校验日期范围、唯一性、升序、来源/版本、计数和单位组合。Tushare 成交量保留 hands，成交额由千元换算为 CNY；Hithink 成交量为 shares，turnover 单位未证实为 CNY，故标 provider_defined 并降级。
+- Tushare 不提供 Provider 快照时间戳，条目/快照保守降级；Hithink 使用响应级 timestamp。空结果为 unknown，不补零。
+- 新增 **AUD-WEBUI-CTR-034**（P2）：没有与交易日历核对预期交易日集合，不能证明请求区间无漏日；新增 **AUD-WEBUI-CTR-035**（P2）：OpenAPI 未完整枚举/说明跨 Provider 成交量和成交额单位；新增 **AUD-WEBUI-CTR-036**（P2）：WebUI 有 API Client 和请求测试，但没有页面消费者及 DOM 测试。
+- IndexDailyBar.change_percent/volume/amount/provider_time 与 IndexDailyBarsSnapshot.provider_time 纳入 **AUD-WEBUI-CTR-010**（omitempty 指针被 OpenAPI 声明 nullable）。
+- 未发现已证实的 OHLC 算术或 Tushare 单位换算错误；交易日完整性、Hithink amount 可比性和 UI 闭环仍待补强。WebUI 维度 2 继续 partial。
