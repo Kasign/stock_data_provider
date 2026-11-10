@@ -182,11 +182,23 @@ func (r *MySQLRunRepository) ClaimAttempt(
 
 	// Run is locked above, so every ClaimAttempt for this Run serializes before
 	// reading the active Stage count. This is the cross-worker concurrency gate.
-	var runningStages, activeLeases int
-	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM researchflow_stages
-		WHERE run_ref = ? AND status = ? AND stage_ref <> ?`,
-		runRef, string(domain.StageRunning), stageRef).Scan(&runningStages); err != nil {
-		return domain.Attempt{}, false, fmt.Errorf("count running Researchflow stages: %w", err)
+	var invalidRunningStages, activeLeases int
+	// An expired lease is a recoverable running Stage, not corruption and not
+	// an active concurrency slot. A running Stage without a matching running
+	// Attempt is inconsistent and must fail closed.
+	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM researchflow_stages s
+		WHERE s.run_ref = ? AND s.status = ? AND s.stage_ref <> ?
+			AND NOT EXISTS (
+				SELECT 1 FROM researchflow_attempts a
+				WHERE a.stage_ref = s.stage_ref AND a.run_ref = s.run_ref
+					AND a.status = ? AND a.attempt_no = s.attempt_no
+			)`,
+		runRef, string(domain.StageRunning), stageRef, string(domain.AttemptRunning),
+	).Scan(&invalidRunningStages); err != nil {
+		return domain.Attempt{}, false, fmt.Errorf("validate running Researchflow stages: %w", err)
+	}
+	if invalidRunningStages != 0 {
+		return domain.Attempt{}, false, errors.New("Researchflow running Stage has no matching running Attempt")
 	}
 	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM researchflow_stages s
 		WHERE s.run_ref = ? AND s.status = ? AND s.stage_ref <> ?
@@ -199,9 +211,6 @@ func (r *MySQLRunRepository) ClaimAttempt(
 		runRef, string(domain.StageRunning), stageRef, string(domain.AttemptRunning),
 		formatResearchflowTimeValue(now)).Scan(&activeLeases); err != nil {
 		return domain.Attempt{}, false, fmt.Errorf("count active Researchflow Attempt leases: %w", err)
-	}
-	if runningStages != activeLeases {
-		return domain.Attempt{}, false, errors.New("Researchflow running Stage and active Attempt lease counts are inconsistent")
 	}
 	if activeLeases >= maxParallel {
 		return domain.Attempt{}, false, ErrRunConcurrencyLimit
