@@ -107,7 +107,7 @@ func (r *MySQLDeliveryRepository) RecoverExpiredLease(
 		return err
 	}
 	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("notification storage: commit expired lease recovery: %w", err)
+		return fmt.Errorf("%w: notification storage: commit expired lease recovery: %w", application.ErrPersistenceOutcomeUnknown, err)
 	}
 	return nil
 }

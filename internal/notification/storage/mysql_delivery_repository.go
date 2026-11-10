@@ -190,7 +190,7 @@ func (r *MySQLDeliveryRepository) Create(ctx context.Context, delivery domain.De
 		return fmt.Errorf("notification storage: create delivery: %w", err)
 	}
 	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("notification storage: commit delivery create: %w", err)
+		return fmt.Errorf("%w: notification storage: commit delivery create: %w", application.ErrPersistenceOutcomeUnknown, err)
 	}
 	return nil
 }
@@ -393,7 +393,7 @@ func (r *MySQLDeliveryRepository) UpdateWithLease(
 		return err
 	}
 	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("notification storage: commit delivery update: %w", err)
+		return fmt.Errorf("%w: notification storage: commit delivery update: %w", application.ErrPersistenceOutcomeUnknown, err)
 	}
 	return nil
 }
