@@ -15,6 +15,7 @@ import (
 
 	"example.com/stock-analysis-flow/internal/marketdata/model"
 	"example.com/stock-analysis-flow/internal/marketdata/normalize"
+	"example.com/stock-analysis-flow/internal/marketdata/validation"
 )
 
 const xueqiuVersion = "xueqiu-hot-ranking-v1"
@@ -131,7 +132,7 @@ func xueqiuSymbol(row map[string]json.RawMessage) (string, error) {
 }
 
 func xueqiuReportSnapshotIssue(ctx context.Context, field, providerField, code, expected, actualType, preview, message string, severity validation.Severity) {
-	addProviderParseIssue(ctx, -1, field, providerField, code, expected, actualType, preview, message, severity)
+	addProviderQuoteFieldIssue(ctx, field, providerField, code, expected, actualType, preview, message, severity)
 }
 
 func xueqiuReportRowParseIssue(ctx context.Context, rowIndex int, field, providerField, code, expected string, raw json.RawMessage, message string) {

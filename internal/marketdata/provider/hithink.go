@@ -552,8 +552,9 @@ func (p *Hithink) FetchHotStocks(ctx context.Context, rankingType string, limit 
 		QualityStatus:  model.QualityDegraded,
 		QualityReasons: []string{"provider_hot_ranking_is_delayed_not_a_real_time_trading_signal", "provider_total_missing_using_returned_count"},
 	}
-	if data.Timestamp != nil && *data.Timestamp > 0 {
-		candidate := time.UnixMilli(*data.Timestamp).UTC()
+	timestampValue, timestampValid := hithinkParseFundamentalValue(data.Timestamp)
+	if timestampValid && math.Trunc(timestampValue) == timestampValue && timestampValue > 0 && timestampValue < float64(1<<63) {
+		candidate := time.UnixMilli(int64(timestampValue)).UTC()
 		if !candidate.After(now.Add(5*time.Minute)) && !candidate.Before(now.AddDate(-10, 0, 0)) {
 			snapshot.ProviderTime = &candidate
 		}
