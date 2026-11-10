@@ -1016,3 +1016,8 @@
 ### available_at 审计结论（2026-11-10）
 
 现有 Feed/Observation 时间字段不能证明新闻首次公开可用时间；Atom updated 也不是首次公开时间。当前保持 `available_at=null`，不从 published_at/fetched_at/normalized_at/observed_at 推断。严格 PIT 门禁需等待来源证据模型先行冻结。
+
+
+### 最新授权快照一致性修复（2026-11-10）
+
+最新授权排序选择与载荷读取现已合并为单条 SQL 语句，统一校验 payload/hash/数据库信封；并增加“旧 allow + 最新 deny”集成断言。该修改尚待 CI 与 MariaDB 11.4 实际运行。它不代表 Evidence 内容读取与当前授权策略复核的 TOCTOU 已解决。

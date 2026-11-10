@@ -113,3 +113,14 @@
 - Feed 的 Atom `updated` 是内容更新声明，不等于首次公开可用时间；`published_at`、`fetched_at`、`normalized_at`、`observed_at` 均不得替代。
 
 结论：本分支当前没有足够证据安全实现 available_at 门禁。下一步需要先在 NEWS-CTR-001/数据模型中明确可接受的来源证据类型、原始证据保存、解析/可信等级和回溯规则，再新增持久化字段及 Get/List SQL 过滤；在此之前继续保持 available_at=null，并明确严格 PIT 尚未完成。
+
+
+## 八、最新授权读取一致性边界修复（2026-11-10）
+
+- 提交：`1d2fbd2756d10afb2c8caf1758b154c573862016`，后续测试夹具唯一化提交：`35a64e43474673ad29690323a03b3c35677f215d`。
+- `GetLatestAuthorizationSnapshotForEvidence` 不再先查 authorization_ref、再发起第二条 SQL 读取 payload；现在一条 SELECT 同时完成最新记录排序选择、信封字段与 payload/hash 读取。
+- 同一条 SQL 语句在 MariaDB/InnoDB 下使用同一语句读取视图，避免并发追加导致“选择的授权行”和“随后读取的授权行”跨语句漂移。
+- 共享读取函数统一执行载荷上限、SHA-256、Binding 结构和数据库信封一致性校验。
+- MariaDB 集成测试增加“旧 allow + 新 deny，最新查询必须返回 deny”的断言；测试引用使用唯一后缀，避免持久测试库重复运行冲突。
+- 这只解决授权快照选择/载荷读取之间的跨语句不一致；不解决 Evidence 内容读取与当前授权策略复核的 TOCTOU。后者仍需授权策略 Owner/Server 定义内容查询的共同一致性边界。
+- 本提交尚未取得 CI/MariaDB 执行结果，不标记运行验收通过。
