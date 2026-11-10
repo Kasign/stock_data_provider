@@ -289,3 +289,46 @@ Platform 文档中的 P002-D01～D15 是 Platform 侧差异/待决事项索引�
 8. 最后执行登记簿、决策记录、版本记录和专项文档交叉引用复核。
 
 **当前结论：本轮建立的是绑定 `b6dfc85ba214fe16268c8cba780641a8bfe15086` 的审查起始基线，不是 PLAT-002 冻结完成声明。**
+
+
+## 10. PLAT-002 当前冻结评估（2026-11-10，状态覆盖说明）
+
+本节是当前冻结评估快照；正式契约编号及单项状态仍以第3节为唯一总索引，详细差异以 PLAT-002 差异矩阵第35节为执行索引。
+
+### 10.1 L1 与 L2 状态必须分层
+
+- **L1 Design Baseline 1.0.0：已冻结。** 不可变锚点为 `6d2966e35aab06ed30791701e4ca6fc036a07702`。冻结的是已明确的职责、依赖方向、公开边界、身份/时间/数值/授权/错误/状态/幂等/版本兼容原则及首批跨模块调用范围。
+- **L2 Contract Evidence：当前 0/43 项 frozen。** 第3节 43 个正式 CTR 中，39 项为 `pending_evidence`，4 项为 `has_difference + pending_evidence`。任何局部实现、Schema/Golden 文件存在或单模块测试通过，都不能替代登记簿第5节的全部适用门禁。
+- 因此项目状态准确表述为：**L1 设计基线冻结；L2 契约证据验收未完成；PLAT-002 整体尚未完成。**
+
+### 10.2 审计工作项统计（不作为正式 CTR 计数）
+
+差异矩阵当前有状态工作项 56 条：22 条 `pending_decision`、1 条 `pending_decision + pending_evidence`、29 条 `pending_evidence`、2 条 `has_difference`、1 条 `accepted`、1 条 `deferred`。工作项用于记录某个契约的子范围、消费者映射或实现证据，不创建新契约编号，也不能与 43 个正式 CTR 相加。
+
+### 10.3 L1 可维持冻结的范围
+
+- Platform 只拥有 Fault、Security、Request Context、Diagnostics、HTTP Client、Storage、Config 等横向技术原语。
+- Server 是唯一目标组合根/HTTP 宿主，负责 DI、路由安全、共享资源、Worker/Migration 生命周期和 HTTP DTO 映射。
+- Data、News、Quant、Research、Researchflow、LLM、Notification 各自拥有领域事实/结果/事件/授权语义及模块公开 Port。
+- Researchflow 负责跨模块编排，不拥有 Data/News/Quant/Research 的领域语义；LLM 负责模型协议适配，不执行工具；Notification 消费版本化事件，不反向依赖生产模块领域对象。
+- WebUI 只消费公开 HTTP 契约，不定义领域模型，也不持有 Provider/API Key 或 Owner Bearer。
+- 这些是 L1 职责/语义冻结，不代表对应 Facade/Adapter/Session/Worker 已完成 A2 接入。
+
+### 10.4 当前不具备 L2 冻结资格的范围
+
+- 所有 43 个正式 CTR 仍需按自身门禁补机器契约、Golden、生产方与全部消费者 Contract Test、兼容/安全/状态机证据；适用项还需真实授权、幂等、PIT、并发和故障恢复测试。
+- 关键待决子范围包括 Data Snapshot/交易日历/stale/available_at 映射，News Evidence 来源/授权/质量与分页快照生命周期，Quant ResultRef/Envelope/Stage 投影，Research 引用/幂等/元数据访问，LLM Prompt 配置/ambiguous outcome，Web Session/Analysis OpenAPI/Request ID 规范。
+- 关键证据缺口包括 Data/News/Quant/Research/LLM 真实 Facade/Adapter，Researchflow Stage Provider，Outbox/Relay/Notification Fanout，Server 十模块 DI/Worker/Migration/Storage/Diagnostics/Secret 注入，以及 WebUI→Handler 跨端测试。
+- P2 WebUI 字段和页面消费者差异按端点局部处理；不自动阻断无关契约。明确 deferred 的扩展能力按触发条件管理，不把延期项升级为全局冻结阻断。
+
+### 10.5 PLAT-002 整体退出条件
+
+PLAT-002 不因本次矩阵统计完成而结束。整体完成仍需：
+1. 十模块六维证据覆盖完成，并从生产方和全部直接消费者两端确认 Port、Schema、授权、Fault/Diagnostics、Repository/Migration/Worker、依赖方向。
+2. 完整 Go import/调用图、跨模块授权链和 Server 组合装配图完成，不再仅凭抽样确认。
+3. 非条件性 pending_decision 写入正式 `doc/contract/decisions/` 决议；责任模块完成对应修复和补证。
+4. 第二轮正确性 Review 和第三轮冻结门禁 Review 分别形成记录。
+5. 每个可冻结 CTR 满足第5节适用门禁后，逐项记录版本、生产方、消费者、Schema/Golden、双方测试、SHA/CI 证据并改为 frozen；不得批量改状态。
+6. L3 真实 Provider/模型/通知渠道/部署验收单独记录，不混入 L2，也不作为无关契约的阻断条件。
+
+本节不改变第3节任何 CTR 状态，不批准第35.4节待决事项，不宣称代码修复或 CI 通过。
