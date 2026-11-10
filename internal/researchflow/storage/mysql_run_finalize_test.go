@@ -110,6 +110,12 @@ func TestMariaDBFinalizeRunAtomicallyPersistsSummaryAndOutbox(t *testing.T) {
 			RiskGateDecisions: map[string]string{}, ActionabilityStatus: "not_evaluated",
 		},
 	}
+	staleSummary := input
+	staleSummary.Summary.StageOutcomes = map[string]domain.StageStatus{"context": domain.StageFailed}
+	if updated, err := repository.FinalizeRun(ctx, staleSummary); updated || err == nil {
+		t.Fatalf("FinalizeRun accepted stale Stage summary updated=%v err=%v", updated, err)
+	}
+
 	updated, err := repository.FinalizeRun(ctx, input)
 	if err != nil || !updated {
 		t.Fatalf("FinalizeRun updated=%v err=%v", updated, err)
