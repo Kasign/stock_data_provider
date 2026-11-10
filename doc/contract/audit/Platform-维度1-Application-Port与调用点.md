@@ -937,3 +937,47 @@ Server 已具备 Root Composition 的基础技术能力：共享 Platform Resour
 ### 17.5 本批结论
 
 全市场分页股票接口的请求参数、Go JSON DTO、OpenAPI Schema 和页面字段语义整体对齐；服务端 Go OpenAPI Contract Test 提供较强的模型字段/必填/null 约束。当前未发现字段语义错配。前端 API Client 请求参数断言不足，登记 AUD-WEBUI-CTR-004（P2）。WebUI 维度 2 仍为 partial。
+
+
+## 18. 第十三批：WebUI 维度 2（Analysis Task 创建请求与 DTO Schema）
+
+### 18.1 固定基线与证据
+
+代码基线：`b6dfc85ba214fe16268c8cba780641a8bfe15086`
+
+- `internal/analysis/domain/types.go`（blob `f13ceaa6cf4474413072db898d4c2043347ac410`）
+- `internal/analysis/app/runner.go`（blob `3866ebafdf0a76d9887966b339b350c47c15f82f`）
+- `doc/api/contracts/分析任务.openapi.yaml`（blob `aa8f153f25c46649dcdf187d5fef8f376113577b`）
+- `web/src/api.js`（blob `b8bcbee5908b43bfa1bc2ca744363190af38287f`）
+- `web/src/app.js`（blob `324348f063d89c4a3861ef2dd38232a9253fe0cd`）
+- `web/src/task-workflow.js`（blob `5bd115ed4600f180b6dfea0ab8343553c6ab63ff`）
+
+### 18.2 已确认的请求消费行为
+
+1. WebUI 当前创建任务只发送 `{task_type, symbols}`；`createAnalysisTask` 将 payload 原样 JSON 提交至 `POST /api/v1/analysis/tasks`，并可选传递 `Idempotency-Key`。
+2. WebUI 对创建响应只在 Task ID、Run ID、状态、标的集合等关键字段有效时更新对应状态；POST 响应不完整时保留请求上下文，后续通过 Task 状态接口补齐权威字段。
+3. WebUI 的阶段事件消费者要求 `task_id`、`events`、`next_after_sequence` 结构有效；序号游标必须前进，事件按 Task ID 隔离。若事件包含 `run_id`，再校验其与当前 Run 一致；Domain StageEvent 的 `run_id` 并非必填，因此前端不将字段缺失误判为跨 Run 事件。
+4. Domain `RunRequest` 的 JSON 字段包含 `task_type`、`as_of`、`as_of_mode`、`universe_id`、`symbols`、`portfolio_id`、`strategy_ids`、`market_id`、策略/风险/交易规则/数据策略版本以及 `parameters`；其中 `run_id` 为 omitempty。
+5. Domain `TaskType` 明确定义 post_market_scan、watchlist_scan、position_review、historical_replay 四种值。Runner 对标的数量/格式及任务类型执行校验。
+
+### 18.3 OpenAPI 差异
+
+OpenAPI 的 `AnalysisRequest` 描述声称字段定义与 `domain.RunRequest` 一致，但当前 Schema：
+- 漏掉 `as_of_mode`；
+- 漏掉 `parameters`；
+- `task_type` 未声明四种枚举值；
+- 没有声明请求字段的 required 集合，无法表达 Runner 所需的关键字段约束。
+
+WebUI 当前只发送 `task_type` 和 `symbols`，因此上述差异不证明现有 WebUI 创建请求会失败；但契约文档对完整 API 请求能力的描述不准确，且无法为未来显式时点/参数化请求生成可靠客户端。
+
+**AUD-WEBUI-CTR-005：AnalysisRequest OpenAPI Schema 与 Domain JSON 契约不完整（P2）**
+
+- 依据：OpenAPI 描述声称与 `domain.RunRequest` 一致，但字段集合缺少 `as_of_mode`、`parameters`，任务类型枚举和必填约束也未表达。
+- 影响：契约生成、请求校验和未来调用方无法依据 OpenAPI 完整构造合法请求；当前 WebUI 最小请求 `task_type + symbols` 不受本差异直接影响。
+- 责任方：旧 Analysis API / Server 契约维护方。
+- 关闭条件：明确 HTTP 请求 DTO 与 Domain RunRequest 的映射边界；若确实使用同一 JSON DTO，补齐字段/枚举/required/边界；若 HTTP DTO 有意收窄，则修改 OpenAPI 描述并定义独立 Request Schema，增加序列化/契约测试。
+- 不应简单把整个 Domain 类型无条件暴露为 HTTP DTO；应先明确 API 层允许调用方控制的字段，尤其是 as_of、配置版本与 parameters 的权限和默认值语义。
+
+### 18.4 本批结论
+
+WebUI 当前创建请求的最小字段与调用路径明确；事件分页消费者有结构和身份防御。AnalysisRequest OpenAPI 与其声称对应的 Domain JSON 字段不完整，新增 AUD-WEBUI-CTR-005（P2）。尚未完成 Task/TaskEvent 响应 DTO 的逐字段核验，也未检查服务端 JSON 解码是否严格拒绝未知字段；维度 2 继续保持 partial。
