@@ -199,3 +199,12 @@
 - 已补齐解析后、候选循环、归一化时钟回调后、结果封印前和最终返回前检查，并增加回归测试。
 - 该修复不改变持久化、授权或 Feed 解析语义。
 - 对应提交：`a7988ad1fb7aa9ef7635365e8215cee017c15b76`。
+
+
+## 十八、Evidence Snapshot 幂等重放信封一致性修复（2026-11-10）
+
+- 修复前：`CreateEvidenceSnapshot` 在 INSERT 失败后只读取既有行的 `payload_hash`；哈希相同即返回成功，没有验证数据库信封字段。
+- 风险：既有行的 caller、分页参数、PIT 时间或过期时间等索引字段被篡改时，创建重放可能错误报告成功，而后续 Get 会拒绝该行。
+- 修复：幂等重放同时读取并核对 caller_ref、filters_fingerprint、page_size、system_as_of、sort_version、created_at、expires_at、item_count；payload hash 不同返回冲突，hash 相同但信封不一致返回无效快照。
+- 回归：MariaDB 集成用例篡改 caller_ref，断言重放返回 `ErrInvalidEvidenceSnapshot`；恢复字段后确认相同快照可再次幂等成功。
+- 当前限制：尚未取得本次提交的 CI 结果；News MariaDB 集成此前为 skipped，该新增断言仍需真实 MariaDB 11.4 执行。
