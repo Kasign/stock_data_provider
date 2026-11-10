@@ -695,3 +695,38 @@ Golden应由真实DTO序列化生成或与真实序列化逐字节/结构比较�
 4. News→Research 首批只读 Evidence Query 是唯一审查范围；不扩展到新闻采集、Provider 搜索、独立 HTTP API、Research Event/Claim 生命周期。
 
 本批未修改 News/Research 业务代码、Schema、Golden 或测试，未执行 CI；只登记固定基线审查差异。后续统一由 News/Research/Server 责任方处理，本审计分支不越权修复。
+
+
+## 27. Data→Researchflow 跨模块输入边界首轮核验（2026-11-10）
+
+- 固定代码审计基线：`origin/integration @ b6dfc85ba214fe16268c8cba780641a8bfe15086`。
+- 审计维护分支：`feat/design_doc`。
+- 本批范围：DATA-CTR-005/008、FLOW-CTR-003/004 中 Data 快照进入 Run、Stage Provider 和下游执行上下文的边界。
+- 本批不创建新的 Data DTO，不修改 Data、Researchflow、Server 责任模块代码，不扩展 Data 首批 DailyBarsV2 范围。
+
+### 已确认的契约边界
+
+1. Data 是行情事实、不可变 Snapshot Manifest 和 Data AuthorizationRef 的 Owner；Researchflow 只负责 Run 输入快照组织、固定执行上下文和编排，不拥有行情语义。
+2. Researchflow 的 `CreateRunCommand.input_snapshot_refs` 是必填、非 null 的不透明 Ref 集合；Run 保存该集合，Stage/Attempt 继承同一组引用。重试不得刷新 `system_as_of`、替换快照或改变 Template 版本。
+3. Data Snapshot Manifest 已定义内容寻址，并绑定 caller、purpose_code、symbol、日期范围、adjustment_basis、system_as_of 和所选来源版本；Data AuthorizationRef 的 `resource_ref` 必须绑定该 `snapshot_ref`。
+4. Data 的 `purpose_code` 是数据访问业务目的（quant_analysis/research_analysis/risk_review），不是 Researchflow 模块身份。Researchflow 不应自行签发或改写 Data AuthorizationRef。
+5. 因此不存在独立的“Data→Researchflow 行情 DTO”需求。只有某个 Stage Provider 实际读取 DailyBars 时，才由该 Provider 的 Adapter 消费 DATA-CTR-005 v2；编排层只传播不透明快照引用和固定执行上下文。
+
+### 差异登记（审计工作项，非新增 CTR）
+
+| 编号 | 固定基线事实 | 状态 | 冻结影响 / 后续统一处理 |
+|---|---|---|---|
+| DATA-FLOW-A | FLOW-CTR-003 已规定 Run 的 `system_as_of`、`input_snapshot_refs`、Template 版本和 `correlation_id` 由 Stage/Attempt 继承；Data Manifest 也绑定自己的 `system_as_of`。但当前 Researchflow Data Stage Adapter 尚不存在，未见消费者验证 Manifest 的 `system_as_of` 与 Run 完全一致的映射/测试证据 | `pending_evidence` | 真实 Data 消费 Adapter 必须按不透明 snapshot_ref 解析/验证 Manifest，拒绝时间边界不匹配；不得只凭 Run 保存了 Ref 就宣称 PIT 输入已验收 |
+| DATA-FLOW-B | Run 级 `input_snapshot_refs` 会传递给所有 Stage/Attempt；已审文档未明确每个 `stage_code` 可读取哪些 Snapshot、是否需要 Stage 级引用子集，以及如何将 Template 资源策略绑定到具体 Snapshot | `pending_decision`（条件项） | 在出现真实 Data 消费 Stage 前，统一决定是否由 Template 声明 Stage 输入引用/资源范围，或由 Adapter 按注册策略过滤。目标是最小权限，不允许 Stage 因继承 Run 全量 Ref 而默认获得所有数据访问权；不阻断纯编排 Domain |
+| DATA-FLOW-C | Data Manifest 的 purpose_code、caller_ref 和 AuthorizationRef 均有生产方规则，但尚无真实 Researchflow Data Stage Adapter 证明可信 Principal/Scope、业务 purpose_code 与 Snapshot/AuthorizationRef 的一致映射 | `pending_evidence` | Adapter 必须使用可信调用主体，验证 purpose_code 与调用 Scope、Manifest 和授权引用一致；不得从请求体自报 caller_ref，也不得把 AuthorizationRef 当 bearer token |
+| DATA-FLOW-D | Researchflow 专项 README/任务拆分明确当前没有生产 Data Facade Adapter；DATA-CTR-005 v2 DTO/Provider 精度链路仍 pending_evidence；FLOW-CTR-003/004 的下游字段映射与 Provider Adapter Contract Test 也未完成 | `pending_evidence` | 仅在真实 Data 消费 Stage 启用前，补 v2 DTO/Schema/Golden、Stage 输入映射、输出 Envelope、授权/PIT 校验和双方 Contract Test；不要求先为编排层增加通用行情接口 |
+
+### 本批结论
+
+- **职责归属与依赖方向：`freeze-ready`**。Researchflow 不应依赖 Data 内部 Model/Repository，也不应复制 Data 行情 DTO。
+- **Run 级执行上下文语义：`accepted`**。唯一 `system_as_of`、不透明输入快照引用、重试不变更输入的原则已明确。
+- **Stage 级最小权限映射：`pending_decision`（条件项）**。只在明确 Data 消费 Stage 的资源授权范围前需要裁决。
+- **真实 Data 消费交互：`pending_evidence`**。当前无生产 Data Stage Adapter，不能宣称 Data→Researchflow 已完成 L2 或 frozen。
+- 沿用 DATA-CTR-005、DATA-CTR-008、FLOW-CTR-003、FLOW-CTR-004，不新增 CTR；本批不把 Researchflow 对 Data 的逻辑依赖误判为已经存在的直接 DTO 调用。
+
+本批只更新 PLAT-002 审计记录；未修改业务代码、Schema、Golden、测试或执行 CI。后续只在真实 Data Stage Adapter 或相关契约提交出现时增量核验，不重复本轮职责和上下文审查。
