@@ -1403,7 +1403,7 @@ func (s *DataService) SectorRankingsByMetric(ctx context.Context, rawCategory, r
 				continue
 			}
 			if snapshot.SortBy != "" && snapshot.SortBy != sortBy {
-					s.breaker.ContractFailure(breakerKey)
+				s.breaker.ContractFailure(breakerKey)
 				failures = append(failures, p.Name()+": provider returned a different sector ranking sort_by")
 				continue
 			}

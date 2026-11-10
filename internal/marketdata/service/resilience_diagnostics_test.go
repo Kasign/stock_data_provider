@@ -1,6 +1,7 @@
 package service
 
 import (
+	"errors"
 	"testing"
 	"time"
 )
@@ -106,5 +107,21 @@ func TestCircuitBreakerDiagnosticsKeepsCapabilitiesIndependent(t *testing.T) {
 	}
 	if states["quote"] != "open" || states["daily_bars"] != "not_observed" {
 		t.Fatalf("capability states = %#v", states)
+	}
+}
+
+
+func TestProviderCallFailureClassificationControlsAvailabilityCircuit(t *testing.T) {
+	b := newCircuitBreaker(1, time.Minute)
+	recordProviderCallFailure(b, "provider:quote", errors.New("quote source_version is missing"))
+	state := b.states["provider:quote"]
+	if state == nil || state.failures != 0 || state.totalFailure != 0 || state.totalContractFailure != 1 {
+		t.Fatalf("contract error must not trip availability circuit: %+v", state)
+	}
+
+	recordProviderCallFailure(b, "provider:quote", errors.New("dial tcp: connection refused"))
+	state = b.states["provider:quote"]
+	if state.failures != 1 || state.totalFailure != 1 || b.Allow("provider:quote") {
+		t.Fatalf("network failure must count toward availability circuit: %+v", state)
 	}
 }
