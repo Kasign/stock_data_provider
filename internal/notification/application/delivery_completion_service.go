@@ -93,11 +93,11 @@ func (s *DeliveryCompletionService) Complete(
 	if err != nil {
 		return err
 	}
-	if !found || current.DeliveryID != delivery.DeliveryID || current.Version != delivery.Version ||
+	if !found || current.Version != delivery.Version ||
 		current.Status != domain.DeliverySending ||
 		current.AttemptCount != int64(attempt.AttemptNo) ||
 		current.MaxAttempts != delivery.MaxAttempts ||
-		!current.CreatedAt.Equal(delivery.CreatedAt) ||
+		current.CreatedAt != delivery.CreatedAt ||
 		!current.DeadlineAt.Equal(delivery.DeadlineAt) {
 		return ErrRetryDecisionConflict
 	}

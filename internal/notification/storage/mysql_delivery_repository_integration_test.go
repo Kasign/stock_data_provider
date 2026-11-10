@@ -173,6 +173,22 @@ func TestNotificationMariaDBDeliveryRepositoryIntegration(t *testing.T) {
 	if _, err := db.ExecContext(ctx, "DELETE FROM notification_delivery_state_events WHERE delivery_id = ? AND version = ?", delivery.DeliveryID, next.Version); err != nil {
 		t.Fatalf("remove conflicting event fixture: %v", err)
 	}
+	for _, mutation := range []struct {
+		name string
+		edit func(*domain.DeliveryRecord)
+	}{
+		{name: "attempt_count", edit: func(value *domain.DeliveryRecord) { value.AttemptCount++ }},
+		{name: "max_attempts", edit: func(value *domain.DeliveryRecord) { value.MaxAttempts++ }},
+		{name: "deadline_at", edit: func(value *domain.DeliveryRecord) { value.DeadlineAt = value.DeadlineAt.Add(time.Second) }},
+	} {
+		t.Run("reject_mutated_"+mutation.name, func(t *testing.T) {
+			mutated := next
+			mutation.edit(&mutated)
+			if err := repository.UpdateWithLease(ctx, winner.Delivery.Version, winner.Lease.FencingToken, mutated, event, finishedAt); !errors.Is(err, domain.ErrInvalidDeliveryChange) {
+				t.Fatalf("mutated immutable execution field must be rejected, got %v", err)
+			}
+		})
+	}
 	if err := repository.UpdateWithLease(ctx, winner.Delivery.Version, winner.Lease.FencingToken, next, event, finishedAt); err != nil {
 		t.Fatalf("complete delivery with active lease: %v", err)
 	}

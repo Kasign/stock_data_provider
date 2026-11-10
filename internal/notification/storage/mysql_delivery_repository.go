@@ -350,6 +350,13 @@ func (r *MySQLDeliveryRepository) UpdateWithLease(
 	if current.Version != expectedVersion || next.Version != expectedVersion+1 {
 		return application.ErrDeliveryVersionConflict
 	}
+	// AttemptCount 只能由 StartWithLease 在追加 Attempt 的同一事务中推进；
+	// MaxAttempts 与 DeadlineAt 是创建时确定的执行边界，普通状态迁移不得修改。
+	if next.AttemptCount != current.AttemptCount ||
+		next.MaxAttempts != current.MaxAttempts ||
+		!next.DeadlineAt.Equal(current.DeadlineAt) {
+		return domain.ErrInvalidDeliveryChange
+	}
 	if event.From != current.Status {
 		return domain.ErrInvalidDeliveryChange
 	}
