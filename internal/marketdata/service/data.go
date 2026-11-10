@@ -890,6 +890,10 @@ func (s *DataService) LimitPool(ctx context.Context, rawType, rawDate string, li
 			failures = append(failures, p.Name()+": "+fetchErr.Error())
 			continue
 		}
+		if snapshot != nil && strings.TrimSpace(snapshot.Source) != "" && snapshot.Source != p.Name() {
+			failures = append(failures, p.Name()+": limit-pool source does not match Provider.Name()")
+			continue
+		}
 		if err := validateLimitPoolSnapshot(poolType, date, limit, snapshot); err != nil {
 			failures = append(failures, p.Name()+": "+err.Error())
 			continue
@@ -1154,6 +1158,10 @@ func (s *DataService) DragonTiger(ctx context.Context, rawDate string, page, pag
 		snapshot, fetchErr := p.FetchDragonTiger(ctx, date, page, pageSize)
 		if fetchErr != nil {
 			failures = append(failures, p.Name()+": "+fetchErr.Error())
+			continue
+		}
+		if snapshot != nil && strings.TrimSpace(snapshot.Source) != "" && snapshot.Source != p.Name() {
+			failures = append(failures, p.Name()+": dragon-tiger source does not match Provider.Name()")
 			continue
 		}
 		if err := validateDragonTigerSnapshot(date, page, pageSize, snapshot); err != nil {
