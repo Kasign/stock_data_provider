@@ -518,9 +518,9 @@ Server维度2当前仅完成首轮一个切片，状态为 `in_progress / partia
 
 | 决策ID | CTR | 推荐默认方案 | 确认前状态 | 确认后的交付 |
 |---|---|---|---|---|
-| D-SRV-API-01 | CTR-046 | 旧Analysis Run/Task/Events路径兼容保留；Researchflow API独立版本化；旧路径不得静默切换底层语义 | pending_decision | 明确兼容窗口/迁移触发条件；Server按最终边界补OpenAPI、路由和组合测试 |
-| D-SRV-REQ-01 | CTR-047 | 未知非空TaskType拒绝；symbols最多100在Handler落实；异步Task run_id服务端生成并建议拒绝非空客户端值；同步Run ID先核Runner证据 | pending_decision | 请求Schema、Handler校验、错误码和Golden一致 |
-| D-SRV-EVT-01 | CTR-007 | 旧Analysis Events兼容保留并定义独立StageEvent；Researchflow事件流另立契约 | pending_decision | 补旧事件Schema/Golden/cursor测试；新事件流不复用旧DTO |
+| D-SRV-API-01 | CTR-046 | 旧Analysis Run/Task/Events路径兼容保留；Researchflow API独立版本化；旧路径不得静默切换底层语义 | `pending_evidence` | 明确兼容窗口/迁移触发条件；Server按最终边界补OpenAPI、路由和组合测试 |
+| D-SRV-REQ-01 | CTR-047 | 未知非空TaskType拒绝；symbols最多100在Handler落实；异步Task run_id服务端生成并建议拒绝非空客户端值；同步Run ID先核Runner证据 | `pending_evidence` | 请求Schema、Handler校验、错误码和Golden一致 |
+| D-SRV-EVT-01 | CTR-007 | 旧Analysis Events兼容保留并定义独立StageEvent；Researchflow事件流另立契约 | `pending_evidence` | 补旧事件Schema/Golden/cursor测试；新事件流不复用旧DTO |
 | D-SRV-TIME-01 | CTR-006 | 保持Task时间字段nil时省略；OpenAPI移除nullable；补queued/running/terminal Golden | ready_for_implementation | Schema/Golden/Handler Contract Test通过后关闭CTR-006 |
 
 ### 决策提案的依据与约束
@@ -654,12 +654,12 @@ Golden应由真实DTO序列化生成或与真实序列化逐字节/结构比较�
 | 边界 | 唯一问题主题 | 当前状态 | 冻结影响 | 后续统一处理条件 |
 |---|---|---|---|---|
 | Data→Quant | Data Application DTO 与内部 Model 字段映射高度同构，公共契约独立性证据不足；内部采集字段不得未经领域语义审查直接外露 | `pending_evidence` | Data 公共 DTO 边界暂不能按当前实现直接冻结 | Data 责任方明确公开字段的业务含义/必要性，剔除纯内部实现字段或证明其公开用途，并提供 DTO/Schema/Golden 一致性证据 |
-| Data→Quant | DailyBars Snapshot 缺少 Quant 所需的不可变输入引用/Manifest 连接；交易日历版本及完整性证据未映射 | `pending_decision + pending_evidence` | 依赖快照、PIT、连续交易日窗口的 Quant 输入契约不能冻结 | 统一决策：Data 提供日历版本和完整性证据，区分非交易日、停牌、缺失/无效行情；Quant 负责连续性校验；补真实签发与消费证据 |
+| Data→Quant | DailyBars Snapshot 缺少 Quant 所需的不可变输入引用/Manifest 连接；交易日历版本及完整性证据未映射 | `pending_evidence` | 依赖快照、PIT、连续交易日窗口的 Quant 输入契约不能冻结 | 统一决策：Data 提供日历版本和完整性证据，区分非交易日、停牌、缺失/无效行情；Quant 负责连续性校验；补真实签发与消费证据 |
 | Data→Quant | Data v1 number/float64 与 Quant 精度要求不一致；v2 Decimal 精度、scale/舍入和版本识别未形成真实接入证据 | `pending_evidence` | 精确计算输入契约不能冻结 | 按既有 v2 Decimal 规则补字段级精度/舍入定义、原始精度保真、Golden 和真实 Adapter 证据；禁止 float64 转字符串伪造精度 |
-| Data→Quant | Data Quality 含 `stale`，Quant QualityPolicy 无对应明确映射 | `pending_decision` | stale 输入处理策略不能冻结 | Data 提供 stale 原因/时间证据；Quant 按指标输入策略拒绝或保留 degraded，不得提升为 valid |
+| Data→Quant | Data Quality 含 `stale`，Quant QualityPolicy 无对应明确映射 | `pending_evidence` | stale 输入处理策略不能冻结 | Data 提供 stale 原因/时间证据；Quant 按指标输入策略拒绝或保留 degraded，不得提升为 valid |
 | Data→Quant | 权威 OpenAPI 路径/版本与历史契约文档引用冲突 | `pending_evidence` | 相关契约引用无法作为唯一权威来源冻结 | 统一权威路径、版本和所有消费者引用；以固定基线文件为证，不扩大 API 版本设计 |
 | Data→Research | Data 日线事实本身的 `available_at` 是否公开、来源证据及缺失表达尚待核实 | `pending_evidence` | 严格 PIT 可用性不能从 trade_date/provider_time/fetched_at 推断 | 核对 DATA-CTR-005/007 完整定义；若确实缺失，由 Data 明确提供有证据的 available_at，无证据时 null |
-| Data→Research | Snapshot Manifest 的 snapshot_ref/manifest_fingerprint/sources 与 Evidence source_ref/source_version/source_locator/authorization_ref 映射未明确 | `pending_decision` | Evidence 来源定位及授权绑定不能冻结 | 明确 Evidence 直接引用不可变 Snapshot；Manifest 保留多 Provider 来源版本；source_locator 定位证券/日期/记录；Schema 版本与 Provider 数据版本分离；authorization_ref.resource_ref 绑定 Snapshot |
+| Data→Research | Snapshot Manifest 的 snapshot_ref/manifest_fingerprint/sources 与 Evidence source_ref/source_version/source_locator/authorization_ref 映射未明确 | `pending_evidence` | Evidence 来源定位及授权绑定不能冻结 | 明确 Evidence 直接引用不可变 Snapshot；Manifest 保留多 Provider 来源版本；source_locator 定位证券/日期/记录；Schema 版本与 Provider 数据版本分离；authorization_ref.resource_ref 绑定 Snapshot |
 | Data→Research | v2 DTO、Data Owner AuthorizationRef 签发/复核、Research Data Adapter 和联合 Contract Test 尚无完整真实接入证据 | `pending_evidence` | Data→Research 首批日线 Evidence 交互不能标记 frozen | 只补真实生产方签发、Research Adapter 映射、授权复核和双方联合 Contract Test；不重审已确认的 Research Domain/Storage/PIT 规则 |
 
 ### 本节执行边界
@@ -679,11 +679,11 @@ Golden应由真实DTO序列化生成或与真实序列化逐字节/结构比较�
 | 编号（审计工作项，非新增CTR） | 固定基线事实 | 状态 | 冻结影响 / 后续统一处理 |
 |---|---|---|---|
 | NEWS-RSC-A | News DTO 声明 available_at，但 `researchEvidenceRecordFromPIT` 未赋值；字段始终为 null。MySQL PIT 查询也未选择来源可用时间字段。News 文档明确禁止推断 available_at；Research 严格 PIT 对 null 明确拒绝 | `pending_evidence` | News 当前可提供非严格PIT证据，但不能证明首批 Research Evidence 严格PIT可用。只有取得来源级可验证时间证据才能填充；否则保持 null 并排除严格PIT，不得用 published_at/fetched_at/system_observed_at 替代 |
-| NEWS-RSC-B | News DTO 的 `source_ref` 是 Source ID；另有 news_id/version_id/observation_id/provider_ref，但没有明确的 Research `source_ref/source_version/source_locator` 映射；News page 的 snapshot_ref 是分页结果集快照，不等同于单条新闻内容版本或来源版本 | `pending_decision` | 冻结前明确 Evidence 直接资源引用、来源版本和定位符：区分 News Item、News Version、Observation、Source、Provider 及分页 Snapshot；不能把内部 version_id 自动当作 Provider source_version，也不能把分页 snapshot_ref 当作单条资源版本 |
+| NEWS-RSC-B | News DTO 的 `source_ref` 是 Source ID；另有 news_id/version_id/observation_id/provider_ref，但没有明确的 Research `source_ref/source_version/source_locator` 映射；News page 的 snapshot_ref 是分页结果集快照，不等同于单条新闻内容版本或来源版本 | `pending_evidence` | 冻结前明确 Evidence 直接资源引用、来源版本和定位符：区分 News Item、News Version、Observation、Source、Provider 及分页 Snapshot；不能把内部 version_id 自动当作 Provider source_version，也不能把分页 snapshot_ref 当作单条资源版本 |
 | NEWS-RSC-C | News 授权读取返回 `authorization_ref` 字符串及 authorization_status；授权快照/PolicySnapshot保存在 News 内部 Binding，未见面向 Research 的完整 GOV-CTR-006 AuthorizationRef + PolicySnapshot 公开映射或读取 Port | `pending_evidence` | 按 GOV-CTR-006 实现 News Owner 签发/公开传递 AuthorizationRef 与 PolicySnapshot；Research 按可信 caller/purpose 消费，News 每次读取复核当前授权；补双方 Contract Test 和撤销/过期证据 |
-| NEWS-RSC-D | News DTO 有 stale 状态；Research Evidence QualityStatus 仅 valid/degraded/invalid/unknown。当前映射函数将 BusinessQualityStatus 与 QualityStatus 固定写为 unknown，未见 stale/业务质量到 Research 质量的语义映射 | `pending_decision` | News 保留来源质量/新鲜度事实；Research 明确 stale 的 Evidence 使用策略及质量映射，不得无条件降为 degraded/unknown 或提升为 valid |
+| NEWS-RSC-D | News DTO 有 stale 状态；Research Evidence QualityStatus 仅 valid/degraded/invalid/unknown。当前映射函数将 BusinessQualityStatus 与 QualityStatus 固定写为 unknown，未见 stale/业务质量到 Research 质量的语义映射 | `pending_evidence` | News 保留来源质量/新鲜度事实；Research 明确 stale 的 Evidence 使用策略及质量映射，不得无条件降为 degraded/unknown 或提升为 valid |
 | NEWS-RSC-E | NEWS-CTR-001 查询契约允许 canonical_symbols、quality_statuses、business_time_from/to；固定基线 MySQL `ListEvidenceVersionsAt` 对上述任一非空条件直接返回 ErrInvalidEvidenceQuery | `has_difference` | 对外部 Application Port 来说属于契约声明与真实 Repository 能力不一致。由 News 责任方统一明确首批支持范围；若暂不支持，收窄权威契约/Schema，不能静默保留为“支持”字段 |
-| NEWS-RSC-F | ResearchEvidenceRecord.RelationRefs 当前固定为空数组；查询 SQL 未读取新闻关联记录。契约/DTO 是否承诺返回关联引用需与首批范围核对 | `pending_decision` | 若首批不提供关系，明确空数组代表“本查询不返回关系”而非“确认无关系”；若承诺提供，则补关系版本/PIT映射和来源证据 |
+| NEWS-RSC-F | ResearchEvidenceRecord.RelationRefs 当前固定为空数组；查询 SQL 未读取新闻关联记录。契约/DTO 是否承诺返回关联引用需与首批范围核对 | `pending_evidence` | 若首批不提供关系，明确空数组代表“本查询不返回关系”而非“确认无关系”；若承诺提供，则补关系版本/PIT映射和来源证据 |
 | NEWS-RSC-G | News Get/List Facade、Snapshot Page、授权复核代码已存在；但同一文档第11.5节仍记载 Facade、PIT Repository、授权当前复核和固定 Snapshot“尚未实现”，与固定基线实现冲突 | `has_difference` | 更新 News 专项文档的实现状态，以代码/测试证据为准；不得据旧文档把已实现能力重复列为未实现，也不得因此直接判定端到端验收完成 |
 | NEWS-RSC-H | News 侧有生产方 DTO/Schema/Golden/局部测试；Research Evidence Domain/Schema/Golden 已有，但固定基线未发现 Research News Adapter 或 Research Application 对 News Query Port 的接入；未见双方联合 Contract Test/Server 真实装配证据 | `pending_evidence` | 由 Research Adapter 与 Server 组合根责任方补消费者映射、授权/PIT字段校验和真实联合测试；PLAT-002 只验收证据，不代替实现 |
 
@@ -752,9 +752,9 @@ Golden应由真实DTO序列化生成或与真实序列化逐字节/结构比较�
 
 | 编号 | 固定基线事实 | 状态 | 冻结影响 / 后续统一处理 |
 |---|---|---|---|
-| NEWS-FLOW-A | News 分页 `snapshot_ref` 是不可变结果集快照，但 Snapshot/Cursor TTL 只有 15 分钟；Researchflow Run/Stage/Attempt 可跨越该时长，且重试必须沿用原始输入。现有契约未定义将短期分页快照提升/固定为 Run 生命周期输入的机制 | `pending_decision` | 必须区分“查询分页快照”与“Run 输入快照”。推荐在 Run 创建前由受控准备步骤形成可持久引用的 Evidence 输入快照，或由 News 提供明确的 Run 级 Pin/Materialize 能力；其保留期至少覆盖 Run deadline、重试/恢复和规定的历史追溯期。不能把 15 分钟 Cursor/Snapshot 直接当作长期 Run 输入，也不能在重试时重新查询最新结果 |
-| NEWS-FLOW-B | Researchflow CreateRun 要求创建时提供固定 `input_snapshot_refs`；News `ListEvidence` 的首屏查询却是在调用时才生成 `snapshot_ref`。现有契约没有定义该快照在 CreateRun 前取得并纳入请求指纹，还是由 Stage 首次执行时取得并登记为派生输入；后者会使 Run 初始指纹未覆盖真实输入，且与“Run 输入固定”原则冲突 | `pending_decision` | 明确唯一生命周期：优先采用 CreateRun 前准备并校验输入引用，再创建 Run；若产品要求 Stage 内动态发现，则必须定义不可变的 Stage 输入派生记录、原子持久化、重试复用和审计语义，不得静默追加/替换 Run.input_snapshot_refs |
-| NEWS-FLOW-C | News 查询要求 `caller_ref/purpose_code/requested_content_level/filters/page_size`；Researchflow 具有可信 `authenticated_caller_ref`，但尚未明确该身份如何映射为 News caller_ref（原始用户主体还是受控服务主体/委托主体），也未明确 purpose/content level/filter 是否由版本化 Template/参数固定并纳入 Run 指纹 | `pending_decision` | 统一可信身份与委托规则：News AuthorizationRef.subject_ref 必须匹配实际传入 caller_ref；caller_ref 不得来自请求体自报。purpose_code、requested_content_level、filters 和分页策略必须由版本化 Template/参数或已固定输入快照承载，确保同一 Run 重试不改变用途、内容级别或查询范围 |
+| NEWS-FLOW-A | News 分页 `snapshot_ref` 是不可变结果集快照，但 Snapshot/Cursor TTL 只有 15 分钟；Researchflow Run/Stage/Attempt 可跨越该时长，且重试必须沿用原始输入。现有契约未定义将短期分页快照提升/固定为 Run 生命周期输入的机制 | `pending_evidence` | 必须区分“查询分页快照”与“Run 输入快照”。推荐在 Run 创建前由受控准备步骤形成可持久引用的 Evidence 输入快照，或由 News 提供明确的 Run 级 Pin/Materialize 能力；其保留期至少覆盖 Run deadline、重试/恢复和规定的历史追溯期。不能把 15 分钟 Cursor/Snapshot 直接当作长期 Run 输入，也不能在重试时重新查询最新结果 |
+| NEWS-FLOW-B | Researchflow CreateRun 要求创建时提供固定 `input_snapshot_refs`；News `ListEvidence` 的首屏查询却是在调用时才生成 `snapshot_ref`。现有契约没有定义该快照在 CreateRun 前取得并纳入请求指纹，还是由 Stage 首次执行时取得并登记为派生输入；后者会使 Run 初始指纹未覆盖真实输入，且与“Run 输入固定”原则冲突 | `pending_evidence` | 明确唯一生命周期：优先采用 CreateRun 前准备并校验输入引用，再创建 Run；若产品要求 Stage 内动态发现，则必须定义不可变的 Stage 输入派生记录、原子持久化、重试复用和审计语义，不得静默追加/替换 Run.input_snapshot_refs |
+| NEWS-FLOW-C | News 查询要求 `caller_ref/purpose_code/requested_content_level/filters/page_size`；Researchflow 具有可信 `authenticated_caller_ref`，但尚未明确该身份如何映射为 News caller_ref（原始用户主体还是受控服务主体/委托主体），也未明确 purpose/content level/filter 是否由版本化 Template/参数固定并纳入 Run 指纹 | `pending_evidence` | 统一可信身份与委托规则：News AuthorizationRef.subject_ref 必须匹配实际传入 caller_ref；caller_ref 不得来自请求体自报。purpose_code、requested_content_level、filters 和分页策略必须由版本化 Template/参数或已固定输入快照承载，确保同一 Run 重试不改变用途、内容级别或查询范围 |
 | NEWS-FLOW-D | News 查询分页 Cursor 绑定 caller、purpose、content level、filters、page_size、system_as_of、snapshot_ref 和排序版本；Researchflow 只定义不透明 `input_snapshot_refs`，未明确 Cursor 的持有者、保存位置及跨 Attempt 续页规则 | `pending_decision`（随 A/B 决策处理） | Cursor 只能由 News Adapter/Owner 持有并原样用于同一查询快照续页；不得放入 `input_snapshot_refs` 冒充资源引用，不得跨 Run/过滤条件/调用主体复用。若 Run 输入准备已物化为完整 Evidence 引用集合，则 Cursor 不进入 Run/Stage 公共契约 |
 | NEWS-FLOW-E | Researchflow 运行时文档要求 Data/News 通过公开查询契约调用；模块 README 明确当前不包含 News 生产 Facade Adapter，News 专项文档也仍将内容查询 Facade 标为未闭环。固定基线未见 Researchflow News Consumer Adapter、真实 Server 装配及双方联合 Contract Test 证据 | `pending_evidence` | 在 A/B/C 生命周期和身份语义决议后，由责任模块实现 Adapter 和 Server 装配；验收必须覆盖固定 system_as_of、输入快照生命周期、分页完整性、授权拒绝/撤销、Attempt 重试复用和 Run 输入指纹，不以 Fake Provider 单测替代 L2 |
 | NEWS-FLOW-F | News 首批严格 PIT 会排除 `available_at` 为 null/unknown 的记录；News→Research 已登记该字段映射/来源证据缺口。Researchflow 若将查询结果作为 Run 输入，不能把非严格 PIT 返回的结果或分页 Snapshot 标记成严格 PIT 已验收输入 | `pending_evidence` | 沿用 NEWS-RSC-A 的处理结论；Researchflow Adapter 必须保留 News 的 PIT 可用性结果，不得自行推断 available_at，也不得将不满足严格 PIT 的 Evidence 纳入要求严格 PIT 的 Template |
@@ -790,11 +790,11 @@ Golden应由真实DTO序列化生成或与真实序列化逐字节/结构比较�
 
 | 编号 | 固定基线事实 | 状态 | 冻结影响 / 后续统一处理 |
 |---|---|---|---|
-| QNT-FLOW-A | Quant 文档明确 QuantResultRef 已有 DTO/Schema/Golden，但 Ref 与完整 QuantResult Envelope 的共同字段一致性、两者关系及 GetResult 返回边界仍待明确；Researchflow FLOW-006 却以完整 Quant Envelope 作为输入 | pending_decision | 明确唯一读取流程：Researchflow 持有 QuantResultRef，通过 Quant Application Facade 按 result_id 获取经当前授权复核的完整 Envelope；或明确 Ref 本身就是完整结果投影。必须说明字段权威、GetResult 返回类型和错误语义，不能由 Researchflow 自行拼装 Envelope |
+| QNT-FLOW-A | Quant 文档明确 QuantResultRef 已有 DTO/Schema/Golden，但 Ref 与完整 QuantResult Envelope 的共同字段一致性、两者关系及 GetResult 返回边界仍待明确；Researchflow FLOW-006 却以完整 Quant Envelope 作为输入 | `pending_evidence` | 明确唯一读取流程：Researchflow 持有 QuantResultRef，通过 Quant Application Facade 按 result_id 获取经当前授权复核的完整 Envelope；或明确 Ref 本身就是完整结果投影。必须说明字段权威、GetResult 返回类型和错误语义，不能由 Researchflow 自行拼装 Envelope |
 | QNT-FLOW-B | QNT-CTR-004 已有部分 Factor QuantMetric、TrendResult、RiskDecision 的 DTO/Schema/Golden，但各 result_type/schema_version 的强类型 Payload 子 Schema 不齐；FLOW-006 只提供 Validator Registry 接口，没有生产 Payload Schema 注册 | pending_evidence | Quant 按实际首批可消费结果提供精确 Payload Schema、Golden 和强类型序列化证据；Researchflow 注册对应 Validator 并做消费者负例。不得用任意 map、宽泛 Schema 或 Notification Risk Event Schema 替代 |
 | QNT-FLOW-C | QNT-CTR-005 的 Manifest/AuthorizationRef 结构与部分内容寻址测试已存在，但真实 Facade 读取、可信 Principal/Scope、当前授权复核、结果归属、撤销/竞态仍未完成 | pending_evidence | Quant Owner Facade 每次 GetResult 验证可信 Researchflow service principal、purpose/content scope、resource_ref=result_id 和当前策略；denied/unknown/expired/revoked 不返回 payload。补撤销与读取竞态、越权主体、结果归属和脱敏 Fault 测试 |
 | QNT-FLOW-D | Manifest 已绑定 system_as_of 与 input_snapshot_refs，FLOW-006 要求 Envelope.system_as_of 与 Run 一致并校验输入快照引用，但固定基线无真实 Adapter/联合测试证明 Manifest、Envelope、Run 三者逐项一致 | pending_evidence | Adapter 校验 Envelope.system_as_of == Run.system_as_of，Envelope.input_snapshot_refs 与 Quant Manifest 完全一致，参数指纹、算法/Schema 版本与 Manifest 一致；错配拒绝，不能只检查字段非空 |
-| QNT-FLOW-E | FLOW-CTR-004 要求 Orchestrator 注入执行关联字段；QuantResultRef 另含 result_id、algorithm_version、parameter_fingerprint、authorization_ref、input_snapshot_refs 等元数据，二者投影关系尚未形成共同 Schema/Golden | pending_decision | 明确 Quant Application Result Envelope 到 Researchflow Stage Provider Result Envelope 的投影：哪些字段留在 Quant 结果资源，哪些由 Orchestrator 注入，output_ref 指向哪个资源；避免双权威，也禁止 Provider 覆盖执行关联字段 |
+| QNT-FLOW-E | FLOW-CTR-004 要求 Orchestrator 注入执行关联字段；QuantResultRef 另含 result_id、algorithm_version、parameter_fingerprint、authorization_ref、input_snapshot_refs 等元数据，二者投影关系尚未形成共同 Schema/Golden | `pending_evidence` | 明确 Quant Application Result Envelope 到 Researchflow Stage Provider Result Envelope 的投影：哪些字段留在 Quant 结果资源，哪些由 Orchestrator 注入，output_ref 指向哪个资源；避免双权威，也禁止 Provider 覆盖执行关联字段 |
 | QNT-FLOW-F | Quant 模块 CI 只证明模块内代码；Researchflow 文档明确生产 Facade 接入、结果持久化和跨模块调用链未完成，固定基线未见 Quant Consumer Adapter、Server 真实装配和双方 Contract Test | pending_evidence | A/E 决策后补真实 Adapter、Server DI 装配、ResultRef 保存/读取、未知版本拒绝、授权拒绝、PIT/输入错配及重试复用同一结果引用等 L2 测试；模块 CI/Fixture 不替代联合验收 |
 
 ### 本批结论
@@ -829,11 +829,11 @@ Golden应由真实DTO序列化生成或与真实序列化逐字节/结构比较�
 
 | 编号 | 固定基线事实 | 状态 | 冻结影响 / 后续统一处理 |
 |---|---|---|---|
-| RSC-FLOW-A | Researchflow 已有 ToResearchCreateContextCommand 映射，但 CreateContextCommand 不含 idempotency_key、Run/Stage/Attempt 关联或调用主体；Research Application 每次 CreateContext 都生成新 ContextID。FLOW-002/重试规则要求同一 Stage Attempt 重试不得重复产生不可对账的外部副作用 | pending_decision | 明确 Context 创建的重试语义：由 Researchflow/Server 在 Stage 输出提交前持久化首次成功 ContextRef 并在恢复时复用；或为 CreateContext 定义调用主体范围幂等键/请求指纹。必须覆盖调用超时但 Research 已提交的 ambiguous outcome，避免重试生成第二个 Context。不能仅靠 Worker 内存缓存 |
-| RSC-FLOW-B | Application Port 暴露 Create/Get Context、Add/Get Evidence；ClaimPort 单独暴露 Create/Get/Update Claim。GetEvidence 逐个按 evidence_id 读取，没有 List/批量读取 Port；GetClaim 使用精确 claim_id/version。Researchflow ComposeResult 需要已加载的 Context/Evidence/Claim DTO，但尚无完整生产 Facade/Adapter 负责按固定引用集合加载并保持稳定顺序、失败语义和部分结果策略 | pending_decision | 明确 Researchflow 输入采用显式 ContextRef、EvidenceRef[]、ClaimRef[]，由 Adapter 精确逐项读取；或定义有界批量读取 Port。需明确缺失/版本不存在、单项授权拒绝、部分读取失败时是整个 Stage fail-closed 还是按模板可选项降级；不得临时 List 全库或读取 latest |
-| RSC-FLOW-C | Context GetContext 只接收 context_id/context_version，不携带 caller_ref/purpose，也不执行 Owner Authorizer；Context DTO 含 research_question、subject_refs、section/source/evidence refs 和质量摘要。现有契约强调 Context 引用不等于授权，但没有明确 Context 元数据本身的访问级别和 Run/调用主体归属 | pending_decision | 决定 Context 是否为仅内部编排元数据（由 Server/Researchflow 信任边界保护，不另做领域授权），还是受限 Research 资源（需 Owner 当前授权/主体绑定）。明确之前不得将 ContextRef 当作正文或 Evidence 的授权凭证；若属于内部元数据，需明确其可见范围及日志/报告脱敏边界 |
+| RSC-FLOW-A | Researchflow 已有 ToResearchCreateContextCommand 映射，但 CreateContextCommand 不含 idempotency_key、Run/Stage/Attempt 关联或调用主体；Research Application 每次 CreateContext 都生成新 ContextID。FLOW-002/重试规则要求同一 Stage Attempt 重试不得重复产生不可对账的外部副作用 | `pending_evidence` | 明确 Context 创建的重试语义：由 Researchflow/Server 在 Stage 输出提交前持久化首次成功 ContextRef 并在恢复时复用；或为 CreateContext 定义调用主体范围幂等键/请求指纹。必须覆盖调用超时但 Research 已提交的 ambiguous outcome，避免重试生成第二个 Context。不能仅靠 Worker 内存缓存 |
+| RSC-FLOW-B | Application Port 暴露 Create/Get Context、Add/Get Evidence；ClaimPort 单独暴露 Create/Get/Update Claim。GetEvidence 逐个按 evidence_id 读取，没有 List/批量读取 Port；GetClaim 使用精确 claim_id/version。Researchflow ComposeResult 需要已加载的 Context/Evidence/Claim DTO，但尚无完整生产 Facade/Adapter 负责按固定引用集合加载并保持稳定顺序、失败语义和部分结果策略 | `pending_evidence` | 明确 Researchflow 输入采用显式 ContextRef、EvidenceRef[]、ClaimRef[]，由 Adapter 精确逐项读取；或定义有界批量读取 Port。需明确缺失/版本不存在、单项授权拒绝、部分读取失败时是整个 Stage fail-closed 还是按模板可选项降级；不得临时 List 全库或读取 latest |
+| RSC-FLOW-C | Context GetContext 只接收 context_id/context_version，不携带 caller_ref/purpose，也不执行 Owner Authorizer；Context DTO 含 research_question、subject_refs、section/source/evidence refs 和质量摘要。现有契约强调 Context 引用不等于授权，但没有明确 Context 元数据本身的访问级别和 Run/调用主体归属 | `pending_evidence` | 决定 Context 是否为仅内部编排元数据（由 Server/Researchflow 信任边界保护，不另做领域授权），还是受限 Research 资源（需 Owner 当前授权/主体绑定）。明确之前不得将 ContextRef 当作正文或 Evidence 的授权凭证；若属于内部元数据，需明确其可见范围及日志/报告脱敏边界 |
 | RSC-FLOW-D | Claim Application Create/Get/Update 目前只做领域结构/版本校验和 Repository 读写；ClaimRef 不含 caller/purpose，Claim DTO 没有 AuthorizationRef，CreateClaim 不校验 supporting/contradicting EvidenceRefs 与 ScopeRefs 的真实存在/版本，Claim Get 也不执行关联 Evidence Owner 当前授权。现有 RSC-CTR-002/RSC-005 已登记 Evidence/Scope 真实引用解析未完成 | pending_evidence | Researchflow 不得把 Claim DTO 中的 refs 当作已授权内容或已解析事实。消费时必须按精确 Evidence 引用调用 GetEvidence 并由来源 Owner 复核，再由 Composer 校验支持/反证闭环；Claim 自身的读取范围和引用完整性证据由 Research Owner 补齐。沿用 RSC-CTR-002/RSC-005，不重复建立模块内缺口 |
-| RSC-FLOW-E | AddEvidence/CreateClaim/CreateContext 都由 Research 生成新 ID，命令没有幂等键；UpdateClaim 使用 ExpectedVersion 追加版本，但没有跨调用 idempotency/fingerprint 语义。Researchflow Stage 若执行这些写操作，Attempt 超时后无法仅凭原命令安全判定首次写入是否已提交 | pending_decision | 明确哪些 Research 写操作允许由 Stage 调用；对允许的写操作统一定义调用主体 + Stage/业务操作范围幂等键、规范化请求指纹、相同重放返回原 Ref、异指纹冲突，以及事务提交后响应丢失的对账方式。若某写操作不属于 Researchflow Stage，则明确排除，不泛化所有 Research 命令 |
+| RSC-FLOW-E | AddEvidence/CreateClaim/CreateContext 都由 Research 生成新 ID，命令没有幂等键；UpdateClaim 使用 ExpectedVersion 追加版本，但没有跨调用 idempotency/fingerprint 语义。Researchflow Stage 若执行这些写操作，Attempt 超时后无法仅凭原命令安全判定首次写入是否已提交 | `pending_evidence` | 明确哪些 Research 写操作允许由 Stage 调用；对允许的写操作统一定义调用主体 + Stage/业务操作范围幂等键、规范化请求指纹、相同重放返回原 Ref、异指纹冲突，以及事务提交后响应丢失的对账方式。若某写操作不属于 Researchflow Stage，则明确排除，不泛化所有 Research 命令 |
 | RSC-FLOW-F | 固定基线只有 Context DTO 投影和纯组合函数；FLOW-005 明确生产 Owner Adapter、Research Facade、Context 持久化调用和真实 Tokenizer 尚未接入。FLOW-006 明确生产 Research Evidence/Claim Facade Adapter、当前授权复核和引用闭环尚未接入；未见 Research Consumer Adapter、Server 装配和双方联合 Contract Test | pending_evidence | 在 A/B/C 决策后实现真实 Research Facade Adapter 与 Server/Worker 装配。L2 至少覆盖 Context Create/Get 版本一致、Run.system_as_of 固定、Evidence Owner 授权拒绝/撤销、Claim 精确版本、引用闭环、部分失败策略、Stage 输出引用持久化和 Attempt 重试不重复写入。Fixture/纯函数测试不替代真实跨模块证据 |
 
 ### 本批结论
@@ -866,9 +866,9 @@ Golden应由真实DTO序列化生成或与真实序列化逐字节/结构比较�
 
 | 编号 | 固定基线事实 | 状态 | 冻结影响 / 后续统一处理 |
 |---|---|---|---|
-| LLM-FLOW-A | LLM ModelRequest 要求 provider_id、model、purpose_code、instructions、input_text、request_id、correlation_id、system_as_of、deadline_at；Researchflow StageExecutionRequest 当前只传 Run/Stage/Attempt、parameters、input_snapshot_refs、system_as_of、deadline_at、attempt_deadline_at、correlation_id。尚未定义由哪个版本化 Template/Adapter 配置映射 provider/model/purpose/prompt instructions/input_text、如何生成每次执行 request_id，以及 prompt/template/schema 的审计身份如何绑定到 ModelRequest 与结果 | pending_decision | 明确唯一映射责任：Template/ResolvedTemplate 固定 prompt/template 资源版本及模型调用配置，Server 注入 LLM ProviderConfig/Secret，Researchflow Adapter 组装 ModelRequest 并生成本 Attempt 独立 request_id；定义 purpose_code 枚举、Prompt fingerprint/版本及其与 Template fingerprint 的关系。禁止由客户端传任意 provider endpoint 或以自由文本 purpose 代替稳定代码 |
+| LLM-FLOW-A | LLM ModelRequest 要求 provider_id、model、purpose_code、instructions、input_text、request_id、correlation_id、system_as_of、deadline_at；Researchflow StageExecutionRequest 当前只传 Run/Stage/Attempt、parameters、input_snapshot_refs、system_as_of、deadline_at、attempt_deadline_at、correlation_id。尚未定义由哪个版本化 Template/Adapter 配置映射 provider/model/purpose/prompt instructions/input_text、如何生成每次执行 request_id，以及 prompt/template/schema 的审计身份如何绑定到 ModelRequest 与结果 | `pending_evidence` | 明确唯一映射责任：Template/ResolvedTemplate 固定 prompt/template 资源版本及模型调用配置，Server 注入 LLM ProviderConfig/Secret，Researchflow Adapter 组装 ModelRequest 并生成本 Attempt 独立 request_id；定义 purpose_code 枚举、Prompt fingerprint/版本及其与 Template fingerprint 的关系。禁止由客户端传任意 provider endpoint 或以自由文本 purpose 代替稳定代码 |
 | LLM-FLOW-B | LLM 首批协议明确单轮 instructions + input_text，并将多轮/previous_response_id/任意 input item deferred；同时允许 ModelResponse 返回 function_call 意图。Researchflow ToolPolicy 能授权并生成 AuthorizedCall，但当前没有已定义的 ToolResult → 下一次 ModelRequest 输入映射/Responses continuation 形式 | deferred | 明确 MVP 工具调用语义：若支持完整工具循环，必须定义受限 ToolResult DTO、call_id 关联、工具结果 schema/大小限制、模型续轮请求及多轮状态/重试语义；若维持单轮契约，则明确 Tool Call 仅为 Stage 终端建议/待执行意图，不允许执行后再声称模型已消费工具结果。不得把工具结果拼入自由文本伪装为已支持的 continuation |
-| LLM-FLOW-C | LLM 明确不对可能已被上游接收但响应丢失的请求自动重试；Researchflow RetryPolicy 以 ReasonCode allowlist 控制 Stage 重试，但跨模块尚未明确哪些 LLM 错误码表示确定未派发、哪些表示执行结果 ambiguous，以及 ModelErrorInfo.retryable 如何映射到模板 ReasonCode | pending_decision | 建立 LLM ModelErrorKind/stable_code → Researchflow ReasonCode 显式映射。仅确定未派发或有上游幂等/查询证据的错误允许重试；ambiguous outcome、incomplete、schema_validation_failed、权限/参数错误不得自动重放。重试必须沿用同一 Run/Stage 输入和 Template，但新 Attempt/request_id；禁止将 retryable=true 单独作为自动重试依据 |
+| LLM-FLOW-C | LLM 明确不对可能已被上游接收但响应丢失的请求自动重试；Researchflow RetryPolicy 以 ReasonCode allowlist 控制 Stage 重试，但跨模块尚未明确哪些 LLM 错误码表示确定未派发、哪些表示执行结果 ambiguous，以及 ModelErrorInfo.retryable 如何映射到模板 ReasonCode | `pending_evidence` | 建立 LLM ModelErrorKind/stable_code → Researchflow ReasonCode 显式映射。仅确定未派发或有上游幂等/查询证据的错误允许重试；ambiguous outcome、incomplete、schema_validation_failed、权限/参数错误不得自动重放。重试必须沿用同一 Run/Stage 输入和 Template，但新 Attempt/request_id；禁止将 retryable=true 单独作为自动重试依据 |
 | LLM-FLOW-D | ToolPolicy AuthorizedCall 的幂等键和 deadline 已生成，但对象本身不包含 Run/Stage/Attempt/Worker/fencing 身份；Policy 注释要求实际执行器二次绑定身份并做幂等控制。固定基线没有 Tool Executor Port/持久化执行记录、工具结果回写和 ambiguous outcome 对账的生产证据 | pending_evidence | 真实 Executor 必须从可信 StageExecutionRequest 注入 Run/Stage/Attempt/fencing，派生稳定下游 idempotency_key 与 request fingerprint；持久化调用意图/执行结果或可查询对账记录；重试不得重复产生非幂等外部副作用。Scope/Schema 重新校验和 deadline 由 Researchflow 执行层落实 |
 | LLM-FLOW-E | LLM-CTR-001～003 仍为 pending_evidence；有 ModelRequest/Response、Schema 和 ToolPolicy 单测，但文档明确真实 Gateway Generate/SSE/模型能力 E2E 未完成；Capability 默认 unknown，需绑定 Provider/Model/Protocol/Gateway 版本和有效期 | pending_evidence | 为实际首批 Provider/Model/Gateway 版本提供真实 Generate/Stream、Tool Calling、Structured Output、Usage、取消/超限证据；unknown/过期能力必须拒绝对应请求。不能以路由可达、Mock 或单模块 Fixture 标记 supported |
 | LLM-FLOW-F | Researchflow FLOW-005 记录真实 LLM Adapter 未接入；Worker 只有通用 StageExecutor Port，LLM Adapter、Server DI/Secret 注入、Platform BoundDoer/OpenStream 包装、调用结果到 Stage typed output 的完整链路未形成固定基线证据 | pending_evidence | A/B/C 决策后补 Researchflow LLM Stage Provider Adapter、Server 组合根装配、Platform HTTP 流式接口包装、错误/取消映射和 Stage Output Registry 注册；联合测试覆盖上下文原样传播、工具拒绝/往返策略、重试、SSE terminal/断流和 fencing 迟到结果拒绝 |
@@ -947,7 +947,7 @@ Golden应由真实DTO序列化生成或与真实序列化逐字节/结构比较�
 |---|---|---|---|
 | WEB-SRV-A | Market Data 仍为独立 8091 Adapter，WebUI 浏览器保存 apiKey 到 localStorage 并直接发送 X-API-Key；Root Server 未装配 Market Data Adapter。目标文档要求 Server 注入 Key/可信调用上下文，浏览器不得持有 Provider/API Key | pending_evidence | 沿用 MDM-006/PLAT Security 决议；Server/Platform/Data 完成 Data Adapter 迁移、服务端密钥注入、统一认证和部署路由后，WebUI 移除旧 localStorage Key 读写/请求头注入并轮换已暴露凭据。迁移完成前此接口仅为受限兼容路径，不得作为目标认证契约冻结 |
 | WEB-SRV-B | Analysis 路由全部 OwnerAccess，WebUI 不携带 Owner Bearer，当前浏览器请求预期 401；Web Session/Cookie、CSRF、登录限流和身份分离语义已由 DEC-PLAT-002-017 决议；当前缺 Server/WebUI A2 接入证据 | pending_evidence | 按 DEC-PLAT-002-017 实现 Server A2 登录/退出、Session Middleware、Cookie/CSRF/Origin、Credential Version、路由认证矩阵与资源授权上下文；WebUI 实现 Cookie/CSRF 请求和登录退出交互，补浏览器 Session E2E。不得把 Owner Bearer 下发浏览器 |
-| WEB-SRV-C | 分析 OpenAPI 缺少已实际注册/被 WebUI 使用的 Run 查询路径，TaskEvent.event 为 opaque object，AnalysisRequest 字段约束不完整，未声明 Security Scheme、401/403、Error Envelope 和 Request ID header | pending_decision | 统一 OpenAPI 作为 Analysis HTTP 权威契约：覆盖所有实际路由/方法/参数/状态码；明确请求字段 required、枚举、日期/时间、未知字段拒绝、nullable 与任务/阶段事件 DTO；定义认证安全方案、错误结构和 X-Request-ID。OpenAPI 与 Handler/前端不一致时先确认权威语义，不直接以内部 Domain DTO 替代公开 DTO |
+| WEB-SRV-C | 分析 OpenAPI 缺少已实际注册/被 WebUI 使用的 Run 查询路径，TaskEvent.event 为 opaque object，AnalysisRequest 字段约束不完整，未声明 Security Scheme、401/403、Error Envelope 和 Request ID header | `pending_evidence` | 统一 OpenAPI 作为 Analysis HTTP 权威契约：覆盖所有实际路由/方法/参数/状态码；明确请求字段 required、枚举、日期/时间、未知字段拒绝、nullable 与任务/阶段事件 DTO；定义认证安全方案、错误结构和 X-Request-ID。OpenAPI 与 Handler/前端不一致时先确认权威语义，不直接以内部 Domain DTO 替代公开 DTO |
 | WEB-SRV-D | Root Server 当前只装配 Legacy Analysis API/Worker 与 Platform Health/Router；Researchflow Application Facade/任务查询、模块 DTO 到 HTTP DTO 的正式 Adapter 尚未作为目标模块链路接入；Market Data 也未挂载 Root Server | pending_evidence | Server 作为唯一组合根，分别装配 Researchflow Facade/HTTP Handler 和 Data Facade/Adapter；Handler 只做校验、映射和 HTTP 语义，不拥有任务/行情领域规则。需要明确迁移期间旧 Analysis API 的兼容/退役策略，禁止将 Legacy Task DTO 直接冻结为最终 Researchflow 公共模型 |
 | WEB-SRV-E | WebUI 请求封装测试和 Root Router/Middleware 单测分离存在；没有同一 OpenAPI Schema 驱动的 WebUI→Handler 契约验证，也没有 Session/资源授权、代理部署前缀、Request ID 和错误 Envelope 的端到端验收 | pending_evidence | 增加以权威 OpenAPI/JSON Schema 为基准的 Handler Contract Test，并由 WebUI API 测试校验请求/响应边界；集成测试覆盖 Nginx 前缀剥离、Cookie/CSRF、401/403/404/409/413/429/503、错误码与 Request ID、任务幂等和事件游标。不要只靠两端各自 Mock 单测宣布联调通过 |
 | WEB-SRV-F | Market Data 与 Root Server 的错误 Envelope 细节不同：Market Data error 可在 body `error.request_id` 中携带 ID，Root Server publicError 不含该字段而依赖 `X-Request-ID` header；WebUI 当前兼容两者。Platform 公共契约已规定最终 Request ID 通过响应头返回，Body 字段仅作为旧接口兼容，不再构成项目级语义待决 | pending_evidence | 按 doc/platform/08 第5节以响应 X-Request-ID 为权威，保留旧 Body request_id 的兼容读取；统一各 Transport 的 Fault→HTTP 映射和 Golden/Contract Test，不向浏览器暴露内部 dependency/cause |
@@ -1013,8 +1013,8 @@ Golden应由真实DTO序列化生成或与真实序列化逐字节/结构比较�
 - 维护分支：`feat/design_doc`。
 - 本轮核对权威登记簿、唯一差异矩阵、十模块总进度，以及已完成的跨模块边界审查（第25～34节）。
 - 正式 CTR 统计以 `doc/contract/PLAT-002-项目级契约冻结登记簿.md` 第3节为准；审计工作项统计以本矩阵现有表格为准。两者不可相加，也不得把审计工作项当作新 CTR。
-- 当前正式登记簿有 43 个 CTR：39 个为 `pending_evidence`，4 个为 `has_difference + pending_evidence`，没有任何 L2 `frozen` 项。
-- 截至第35节，矩阵有状态表格行共69行，其中56项带唯一显式审计编号（无重复），其余13行为边界/契约聚合行。含 pending_decision 的行项目共22项：21项纯待决（其中 NEWS-FLOW-D 随 A/B 合并裁决，不独立成项），1项同时包含待决与证据缺口；WEB-SRV-B、WEB-SRV-F、NEWS-RSC-C 和 Data→Research available_at 已移出待决队列。该统计不代表独立契约数。
+- 正式登记簿仍有 43 个 CTR；本轮复核时 0 项达到 L2 `frozen`。单项当前状态以登记簿第3节为准，不因项目级决议批准而自动变化。
+- 69 行、56 个唯一编号工作项是本轮决策前的历史审计规模快照，不是当前待决数量。DEC-PLAT-002-018～026 已覆盖原 22 个含 `pending_decision` 的工作项；当前非条件性项目级待决队列为 0。相关工作项已在本矩阵当前状态表中转为 `pending_evidence`；DATA-FLOW-B、LLM-FLOW-B 继续按条件触发规则保持 `deferred`。历史审查章节保留当时状态，不能当作当前状态读取。
 - W2-C 的 CTR-011～037 是聚合范围，CTR-010 是字段级聚合差异；历史别名 CTR-003/005 不重复计数；CTR-041 已 withdrawn。以上去重规则继续有效。
 
 ### 35.2 双层冻结结论（必须区分）
@@ -1043,26 +1043,14 @@ Golden应由真实DTO序列化生成或与真实序列化逐字节/结构比较�
 
 以上只冻结稳定职责/语义，不把未决字段映射、未启用能力、未完成 Adapter 或未验收部署纳入冻结范围。
 
-### 35.4 必须保持 pending_decision 的有限决策集合
+### 35.4 当前待决事项与条件性延期
 
-不得将以下问题降为普通测试补证，也不得由实现者自行猜测：
-
-| 边界/工作项 | 待决范围 | 决策责任 |
-|---|---|---|
-| Data→Quant（见第25节） | Snapshot 交易日历/完整性版本映射；stale 输入的 Quant 策略 | Data + Quant |
-| Data→Research（见第25节） | available_at 的来源证据；Snapshot Manifest 到 Research Evidence 来源定位/版本映射 | Data + Research |
-| Data→Researchflow（DATA-FLOW-B） | 真实 Data Stage 启用时，Stage 级引用子集/最小权限策略 | Data + Researchflow；触发前可保持条件项 |
-| News→Research（NEWS-RSC-B/C/D/F） | Evidence 来源资源/版本定位；授权快照公开映射；stale/质量映射；关系引用是否在首批范围 | News + Research |
-| News→Researchflow（NEWS-FLOW-A～D） | 分页 Snapshot 与 Run 输入快照生命周期；Run 前准备或 Stage 派生输入；可信 caller/purpose/content level 固定；Cursor 持有边界 | News + Researchflow |
-| Quant→Researchflow（QNT-FLOW-A/E） | QuantResultRef 与完整 Envelope/GetResult 的关系；Envelope 到 Stage output_ref 的投影 | Quant + Researchflow |
-| Research→Researchflow（RSC-FLOW-A/B/C/E） | CreateContext 幂等与 Ref 重用；引用解析策略；Context 元数据访问控制；写操作幂等范围 | Research + Researchflow |
-| Researchflow→LLM（LLM-FLOW-A/C） | Template/Prompt/Provider 配置到 ModelRequest 的映射和审计身份；ambiguous outcome 到 Retry ReasonCode 的映射 | LLM + Researchflow |
-| WebUI→Server（WEB-SRV-B/C/F） | 浏览器 Session/Cookie/CSRF/资源授权模型；Analysis OpenAPI 完整边界；Request ID Header/Body 权威关系 | Server + Platform + WebUI |
-
-条件性说明：
-- LLM-FLOW-B 当前标记为 `deferred`：首批单轮模型调用不因此阻断；若未来启用完整 Tool Call 往返，必须先补决策和版本化契约。
-- DATA-FLOW-B 只在真实 Data 消费 Stage 启用前决策；不阻断纯编排 Domain。
-- 不把上述决策扩展为新的 CTR；由对应既有契约与审计工作项承接。
+- **当前非条件性项目级 `pending_decision`：0 项。** 原待决事项已由 DEC-PLAT-002-017、018～025 及 GOV-CTR-006 覆盖；正式语义以决策记录为准。
+- **条件性延期：**
+  - `DATA-FLOW-B`：仅在首个真实 Data 消费 Stage 进入实现/接入前，决定 Stage 级引用子集和最小权限策略；不阻断纯编排 Domain。
+  - `LLM-FLOW-B`：仅在项目决定启用完整 Tool Call continuation 时，补充 ToolResult 回传、上下文和版本化契约；不阻断首期单轮文本调用。
+- 其余原 `pending_decision` 工作项已转为 `pending_evidence`：决策方向已定，剩余是责任模块实现、Schema/Golden、Adapter、授权复核和双方测试。不得再把这些事项要求项目负责人重复裁决。
+- 如果后续实现暴露出决议未覆盖的新业务取舍，必须先登记具体差异和影响，再单独提交裁决；不得仅因实现困难而重新打开已批准决议。
 
 ### 35.5 L2 pending_evidence 的主要阻断簇
 
@@ -1097,19 +1085,19 @@ Golden应由真实DTO序列化生成或与真实序列化逐字节/结构比较�
 | Server A2 装配 | `pending_evidence` | 十模块真实 Facade/Worker/Migration/资源/Session/Diagnostics 接线及 Root 集成测试 |
 | L3 部署/真实 Provider/模型/通知 | `deferred / not established`，不得混入 L2 | 按部署与真实依赖单独验收，不作为无关 L2 契约的前置条件 |
 
-PLAT-002 本轮“差异矩阵收敛与冻结评估”完成；**PLAT-002 项目整体不宣告完成**。剩余工作不再是重复审查，而是有限的项目决策、责任模块修复/补证和按项冻结。全量 import 图/完整消费者追踪、十模块六维覆盖及第二/第三轮 Review 尚未完成，不能将其标记为 complete。
+PLAT-002 的项目级决策收敛已完成；**PLAT-002 项目整体不宣告完成**。当前主线是责任模块实现/补证、按新 SHA 增量验收，以及后续第二/第三轮 Review。全量 import 图/完整消费者追踪、十模块六维覆盖及冻结门禁 Review 尚未完成，不能将其标记为 complete。
 
 ### 35.8 后续唯一执行主线
 
-1. 先由项目负责人集中裁决第35.4节的非条件性 `pending_decision`；每个决策写入 `doc/contract/decisions/` 并回填对应契约，不在审计矩阵里以描述代替批准。
-2. 各责任模块按第35.5节修复和补证，按真实依赖并行，不等待所有模块整体完成。
-3. 每获得一组责任模块新提交，PLAT-002 只增量核验相关工作项；满足 L2 门禁的 CTR 单项冻结，不满足的保持 pending。
-4. 在十模块六维证据和全仓依赖图完成后，执行第二轮正确性 Review；责任模块补证齐备后执行第三轮冻结门禁 Review。
-5. 每轮只关闭已变化的差异；没有新提交/决议/证据时，不重复读取相同代码或增加审计章节。
+1. 项目级非条件性决策队列已清零；DEC-PLAT-002-018～026 是当前执行依据，不再重复提交 B1～B8 裁决。
+2. 各责任模块按第35.5节和正式决议实施/补证，按真实依赖并行；先处理新 Researchflow API/WebUI 切换与 Server 请求规则，再推进 Data/News/Quant/Research/LLM 的对应 Adapter 和事件链路。
+3. 每获得一组责任模块新提交，PLAT-002 只按新 SHA 增量核验相关工作项；满足 L2 门禁的 CTR 单项冻结，不满足的保持 `pending_evidence`。
+4. 十模块六维证据和全仓依赖图补齐后，执行第二轮正确性 Review；责任模块补证齐备后执行第三轮冻结门禁 Review。
+5. `DATA-FLOW-B`、`LLM-FLOW-B` 仅在各自触发条件出现时重新进入决策；没有新提交/决议/证据时，不重复读取相同代码或增加审计章节。
 
 ## 36. 项目级待决事项分批提案与状态去重（2026-11-10）
 
-本节将现有 pending_decision 工作项按真实决策主题合并。以下均为提案，不是已批准决议；只有项目负责人明确确认后，才可写入正式决议。不得创建新的 CTR。
+本节保留项目决策批次的历史提案、映射与最终裁决记录。36.3～36.5 是裁决前快照；当前有效结果以 36.6 和正式决策记录 DEC-PLAT-002-018～026 为准，不得将历史提案重新作为待批准事项。不得创建新的 CTR。
 
 ### 36.1 统计口径纠正
 
@@ -1161,7 +1149,7 @@ PLAT-002 本轮“差异矩阵收敛与冻结评估”完成；**PLAT-002 项目
 - 将 Data→Research available_at 的事实核验转为 pending_evidence。
 - 将 DATA-FLOW-B、LLM-FLOW-B 作为条件性扩展转为 deferred。
 - NEWS-FLOW-D 仅随 NEWS-FLOW-A/B 一并裁决，不作为独立决策批次。
-- 本节提案未获项目负责人批准前，DEC-B1～B8 仍为 proposal；不改变任何正式 CTR 冻结状态。
+- 本条为裁决前的历史状态说明，已被第36.6节最终裁决覆盖；DEC-B1～B8 不再是待批准提案。
 
 
 ### 36.6 项目负责人最终裁决（2026-11-10）
