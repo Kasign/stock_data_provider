@@ -229,3 +229,28 @@ func TestValidateDeliveryStateEventRejectsActorMetadataOutsideManualRetry(t *tes
 		t.Fatalf("automatic transition must reject manual actor metadata, got %v", err)
 	}
 }
+
+func TestValidateDeliveryStateEventRequiresIdentityAndTransitionVersion(t *testing.T) {
+	record := validDeliveryRecord()
+	_, event, err := record.Transition(DeliveryTransition{
+		To: DeliverySending, At: record.UpdatedAt.Add(time.Second),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := ValidateDeliveryStateEvent(DeliveryQueued, event); err != nil {
+		t.Fatalf("valid state event rejected: %v", err)
+	}
+
+	invalidID := event
+	invalidID.DeliveryID = ""
+	if err := ValidateDeliveryStateEvent(DeliveryQueued, invalidID); !errors.Is(err, ErrInvalidDeliveryChange) {
+		t.Fatalf("state event without delivery identity must fail, got %v", err)
+	}
+
+	invalidVersion := event
+	invalidVersion.Version = 1
+	if err := ValidateDeliveryStateEvent(DeliveryQueued, invalidVersion); !errors.Is(err, ErrInvalidDeliveryChange) {
+		t.Fatalf("creation snapshot version must not be represented as a state event, got %v", err)
+	}
+}
