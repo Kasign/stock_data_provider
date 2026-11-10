@@ -81,5 +81,4 @@ func quoteIssuePreview(s string) string {
 		return r
 	}, s)
 	return truncateDiagnosticPreview(s, 160)
-	return s
 }
