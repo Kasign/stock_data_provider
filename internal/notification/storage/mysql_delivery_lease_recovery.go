@@ -59,7 +59,12 @@ func (r *MySQLDeliveryRepository) RecoverExpiredLease(
 	}
 	if current.Status != domain.DeliverySending || current.Version != expectedVersion ||
 		next.Version != expectedVersion+1 || event.From != domain.DeliverySending ||
-		!sameDeliveryIdentity(current, next) || next.UpdatedAt.Before(current.UpdatedAt) {
+		!sameDeliveryIdentity(current, next) ||
+		current.AttemptCount != next.AttemptCount ||
+		current.MaxAttempts != next.MaxAttempts ||
+		!current.DeadlineAt.Equal(next.DeadlineAt) ||
+		!current.CreatedAt.Equal(next.CreatedAt) ||
+		next.UpdatedAt.Before(current.UpdatedAt) {
 		return application.ErrDeliveryVersionConflict
 	}
 
