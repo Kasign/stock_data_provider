@@ -1004,3 +1004,105 @@ Golden应由真实DTO序列化生成或与真实序列化逐字节/结构比较�
 - **Web Session A2 接入**沿用 WEB-SRV-B，不重复登记。沿用既有 PLAT-CTR-005、PLAT-015～019、GOV-CTR-003/004/005 与各模块 Migration/Adapter 契约，不新增 CTR。
 
 本批只更新 PLAT-002 审计文档；未修改 Server/Platform/业务模块代码、未执行 CI。后续只在责任模块完成正式接入后核验 SRV-PLAT-A～E 的证据，不重复审查已通过的 Platform 包级原语和 Lifecycle 单测。
+
+## 35. PLAT-002 全量差异矩阵收敛与最终冻结评估（2026-11-10）
+
+### 35.1 评估基线与统计口径
+
+- 固定代码基线：`origin/integration @ b6dfc85ba214fe16268c8cba780641a8bfe15086`。
+- 维护分支：`feat/design_doc`。
+- 本轮核对权威登记簿、唯一差异矩阵、十模块总进度，以及已完成的跨模块边界审查（第25～34节）。
+- 正式 CTR 统计以 `doc/contract/PLAT-002-项目级契约冻结登记簿.md` 第3节为准；审计工作项统计以本矩阵现有表格为准。两者不可相加，也不得把审计工作项当作新 CTR。
+- 当前正式登记簿有 43 个 CTR：39 个为 `pending_evidence`，4 个为 `has_difference + pending_evidence`，没有任何 L2 `frozen` 项。
+- 本矩阵当前可识别 56 条有状态的审计工作项：22 条 `pending_decision`、1 条 `pending_decision + pending_evidence`、29 条 `pending_evidence`、2 条 `has_difference`、1 条 `accepted`、1 条 `deferred`。这些是子范围/调用边界问题，不代表 56 个独立契约。
+- W2-C 的 CTR-011～037 是聚合范围，CTR-010 是字段级聚合差异；历史别名 CTR-003/005 不重复计数；CTR-041 已 withdrawn。以上去重规则继续有效。
+
+### 35.2 双层冻结结论（必须区分）
+
+**L1 Design Baseline：已冻结。**
+- 项目级 L1 设计基线 1.0.0 已有明确决议，锚点为 `6d2966e35aab06ed30791701e4ca6fc036a07702`。
+- 冻结范围是已经明确的模块职责、依赖方向、公开边界、身份/时间/数值/授权/错误/状态/幂等/版本兼容原则和首批跨模块调用范围。
+- 该冻结不覆盖明确保留的条件性未决子范围，也不代表代码、Schema、Golden、消费者测试或真实环境已经验收。
+
+**L2 Contract Evidence：尚未有正式 CTR 冻结。**
+- 43 个正式 CTR 均未达到 L2 `frozen`。
+- Schema/Golden 文件存在、单模块测试通过、局部 Adapter 存在或文档写明 accepted，均不能代替生产方和全部直接消费者的契约证据。
+- 因此当前只能宣布“L1 设计基线冻结；L2 契约验收未完成”，不能宣布“PLAT-002 全部契约冻结完成”。
+
+### 35.3 可以维持 L1 冻结的稳定范围
+
+以下职责和语义边界已有审查证据，可继续作为 L1 冻结基线，不要求为补实现证据而重新设计：
+
+1. **模块职责与依赖方向**：Platform 只提供技术原语；Server 是唯一组合根；Data/News/Quant/Research/Researchflow/LLM/Notification 各自拥有领域事实与语义；WebUI 只消费公开 HTTP 契约。
+2. **数据与研究边界**：Data 拥有行情事实、Snapshot Manifest 和 Data AuthorizationRef；Research 拥有 Evidence/Context/Claim 等研究语义；Researchflow 负责跨模块编排，不访问其他模块 Repository/SQL。
+3. **计算与编排边界**：Quant 拥有指标、因子、风险决策及结果资源；Researchflow 负责 Stage 组合，不重算 Quant 指标、不覆盖 RiskDecision。
+4. **模型与工具边界**：LLM 负责模型协议适配；Researchflow 负责工具策略、授权和执行编排；LLM 不执行工具。
+5. **事件边界**：业务事实生产模块产生版本化事件并在本地事务写 Outbox；Notification 负责接收、Inbox 幂等和投递编排；Server 负责 Relay 装配，不推导业务事件语义。
+6. **HTTP 与基础设施边界**：WebUI 不持有 Provider/API Key；Server 负责入口认证、授权、DTO 映射和 HTTP 错误投影；Platform 提供 Fault、Security、Request ID、Diagnostics、HTTP Client、Storage 等横向原语。
+7. **生命周期边界**：Server 管理共享资源和组件生命周期；模块拥有自身 Repository、Migration 内容、Worker/Facade Port；Platform 提供通用连接与 Migration Runner。
+
+以上只冻结稳定职责/语义，不把未决字段映射、未启用能力、未完成 Adapter 或未验收部署纳入冻结范围。
+
+### 35.4 必须保持 pending_decision 的有限决策集合
+
+不得将以下问题降为普通测试补证，也不得由实现者自行猜测：
+
+| 边界/工作项 | 待决范围 | 决策责任 |
+|---|---|---|
+| Data→Quant（见第25节） | Snapshot 交易日历/完整性版本映射；stale 输入的 Quant 策略 | Data + Quant |
+| Data→Research（见第25节） | available_at 的来源证据；Snapshot Manifest 到 Research Evidence 来源定位/版本映射 | Data + Research |
+| Data→Researchflow（DATA-FLOW-B） | 真实 Data Stage 启用时，Stage 级引用子集/最小权限策略 | Data + Researchflow；触发前可保持条件项 |
+| News→Research（NEWS-RSC-B/C/D/F） | Evidence 来源资源/版本定位；授权快照公开映射；stale/质量映射；关系引用是否在首批范围 | News + Research |
+| News→Researchflow（NEWS-FLOW-A～D） | 分页 Snapshot 与 Run 输入快照生命周期；Run 前准备或 Stage 派生输入；可信 caller/purpose/content level 固定；Cursor 持有边界 | News + Researchflow |
+| Quant→Researchflow（QNT-FLOW-A/E） | QuantResultRef 与完整 Envelope/GetResult 的关系；Envelope 到 Stage output_ref 的投影 | Quant + Researchflow |
+| Research→Researchflow（RSC-FLOW-A/B/C/E） | CreateContext 幂等与 Ref 重用；引用解析策略；Context 元数据访问控制；写操作幂等范围 | Research + Researchflow |
+| Researchflow→LLM（LLM-FLOW-A/C） | Template/Prompt/Provider 配置到 ModelRequest 的映射和审计身份；ambiguous outcome 到 Retry ReasonCode 的映射 | LLM + Researchflow |
+| WebUI→Server（WEB-SRV-B/C/F） | 浏览器 Session/Cookie/CSRF/资源授权模型；Analysis OpenAPI 完整边界；Request ID Header/Body 权威关系 | Server + Platform + WebUI |
+
+条件性说明：
+- LLM-FLOW-B 当前标记为 `deferred`：首批单轮模型调用不因此阻断；若未来启用完整 Tool Call 往返，必须先补决策和版本化契约。
+- DATA-FLOW-B 只在真实 Data 消费 Stage 启用前决策；不阻断纯编排 Domain。
+- 不把上述决策扩展为新的 CTR；由对应既有契约与审计工作项承接。
+
+### 35.5 L2 pending_evidence 的主要阻断簇
+
+以下是当前最主要的实现/证据门禁，统一由责任模块处理，PLAT-002 只做增量验收：
+
+1. **WebUI 维度2 DTO/OpenAPI**：CTR-006/007/008/009/010 及 CTR-011～049 中既有 P2 差异，按对应端点和字段局部冻结；W2-C 已完成归类，不重做初审。P2 不自动阻断无关端点或其他模块。
+2. **Data 生产与消费证据**：v2 Decimal Schema/原始精度链路、Snapshot/Manifest/AuthorizationRef、交易日历与质量映射、Data→Quant/Research/Researchflow Adapter 和联合测试。
+3. **News 生产与消费证据**：available_at 来源证据、授权快照映射、查询 filters 实际支持范围、Snapshot/Cursor 生命周期、Research/Researchflow Consumer Adapter 和 PIT/授权联合测试。NEWS-RSC-E/G 的实现/文档冲突先由 News Owner 修正，不能将声明能力当成真实能力。
+4. **Quant→Researchflow**：强类型 Payload 子 Schema/Validator、Quant Application Facade、结果当前授权读取、Manifest/Run 上下文一致性、真实 Adapter 和联合测试。
+5. **Research→Researchflow**：真实 Facade Adapter、Claim 引用闭环、Owner 授权复核、Context/写操作幂等和跨模块测试。
+6. **Researchflow→LLM**：Tool Executor 持久化幂等/fencing、真实 Provider/Model/Gateway 能力、Stage Adapter、Server Secret/BoundDoer 注入、SSE/取消/错误映射联合测试。
+7. **事件生产与 Notification**：Researchflow Outbox 按既定 INT-CTR-001 对齐；Quant 风险事实 Outbox 缺失；Research Relay、Notification Fanout Writer/Worker、Server Relay 装配及崩溃/重复投递测试。
+8. **WebUI→Server 与 Server/Platform**：Data API Key 退出浏览器并迁移至 Server；目标模块 Facade/Worker/Migration/Diagnostics/Config 装配；Platform BoundDoer 生产注入；OpenAPI 驱动跨端测试和 Session E2E。
+9. **Platform 基础契约证据**：Fault/Request Context/Diagnostics/Storage/HTTP Client/Config/Security 的包级原语已部分实现，但公共 Schema、跨模块映射、真实消费者接入和必要 Golden/Contract Test 仍需按 PLAT-CTR-001～007 补齐。
+
+### 35.6 责任归属与不得越权的处理方式
+
+- PLAT-002：维护唯一登记、L1 冻结范围、决策追踪、证据索引和冻结评估；不代替责任模块修改 DTO/Schema/Golden/测试/业务实现。
+- Platform：维护 Fault、Security、Request Context、Diagnostics、HTTP Client、Storage、Config 等技术原语及自身机器契约。
+- Server：负责 Root Composition、DI、Session/路由安全、资源生命周期、Migration/Worker 注册、HTTP Adapter/错误映射和模块 Diagnostics 汇总。
+- Data/News/Quant/Research/Researchflow/LLM/Notification：分别负责本领域公开 DTO/Port、Schema/Golden、生产行为、Repository/Outbox/Worker 和领域授权；消费者模块负责自己的映射与消费测试。
+- WebUI：负责按权威 OpenAPI 消费请求/响应、错误和认证流程，不反向定义领域模型。
+- 责任模块修复后，PLAT-002 只按新提交 SHA、对应 Schema/Golden/Contract Test 和消费者映射增量核验；不重新跑已完成的初审。
+
+### 35.7 当前冻结评估与退出条件
+
+| 评估层级 | 当前结论 | 退出条件 |
+|---|---|---|
+| L1 设计基线 | `frozen`（锚点 6d2966e...） | 仅通过正式契约变更流程修改 |
+| 单项 L2 契约 | 当前 0/43 `frozen` | 逐项满足登记簿第5节适用门禁 |
+| 跨模块 L2 关系 | 部分边界职责/语义已 freeze-ready；调用 Adapter/授权/联合测试未齐 | 生产方与消费者双向证据、授权链、Schema/Golden/Contract Test |
+| Server A2 装配 | `pending_evidence` | 十模块真实 Facade/Worker/Migration/资源/Session/Diagnostics 接线及 Root 集成测试 |
+| L3 部署/真实 Provider/模型/通知 | `deferred / not established`，不得混入 L2 | 按部署与真实依赖单独验收，不作为无关 L2 契约的前置条件 |
+
+PLAT-002 本轮“差异矩阵收敛与冻结评估”完成；**PLAT-002 项目整体不宣告完成**。剩余工作不再是重复审查，而是有限的项目决策、责任模块修复/补证和按项冻结。全量 import 图/完整消费者追踪、十模块六维覆盖及第二/第三轮 Review 尚未完成，不能将其标记为 complete。
+
+### 35.8 后续唯一执行主线
+
+1. 先由项目负责人集中裁决第35.4节的非条件性 `pending_decision`；每个决策写入 `doc/contract/decisions/` 并回填对应契约，不在审计矩阵里以描述代替批准。
+2. 各责任模块按第35.5节修复和补证，按真实依赖并行，不等待所有模块整体完成。
+3. 每获得一组责任模块新提交，PLAT-002 只增量核验相关工作项；满足 L2 门禁的 CTR 单项冻结，不满足的保持 pending。
+4. 在十模块六维证据和全仓依赖图完成后，执行第二轮正确性 Review；责任模块补证齐备后执行第三轮冻结门禁 Review。
+5. 每轮只关闭已变化的差异；没有新提交/决议/证据时，不重复读取相同代码或增加审计章节。
