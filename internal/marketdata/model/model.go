@@ -268,6 +268,8 @@ type IndexQuoteSnapshot struct {
 	FetchedAt      time.Time          `json:"fetched_at"`
 	QualityStatus  QualityStatus      `json:"quality_status"`
 	QualityReasons []string           `json:"quality_reasons,omitempty"`
+	FallbackFrom   string             `json:"fallback_from,omitempty"`
+	FallbackReason string             `json:"fallback_reason,omitempty"`
 }
 
 type MarketBreadthSnapshot struct {
@@ -292,6 +294,8 @@ type MarketBreadthSnapshot struct {
 	FetchedAt                   time.Time     `json:"fetched_at"`
 	QualityStatus               QualityStatus `json:"quality_status"`
 	QualityReasons              []string      `json:"quality_reasons,omitempty"`
+	FallbackFrom                string        `json:"fallback_from,omitempty"`
+	FallbackReason              string        `json:"fallback_reason,omitempty"`
 }
 
 type LimitPoolItem struct {

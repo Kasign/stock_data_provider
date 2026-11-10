@@ -91,8 +91,10 @@ func TestIndexQuotesFallsBackFromDegradedToValidProvider(t *testing.T) {
 	if err != nil || hit {
 		t.Fatalf("IndexQuotes returned hit=%v err=%v", hit, err)
 	}
-	if got == nil || got.Source != "tickflow" || got.QualityStatus != model.QualityDegraded || !hasSnapshotQualityReason(got.QualityReasons, "provider_fallback_used") {
-		t.Fatalf("expected valid fallback index quote, got %+v", got)
+	if got == nil || got.Source != "tickflow" || got.QualityStatus != model.QualityValid ||
+		got.FallbackFrom != "eastmoney" || hasSnapshotQualityReason(got.QualityReasons, "provider_fallback_used") ||
+		got.Items[0].QualityStatus != model.QualityValid {
+		t.Fatalf("valid fallback index quote must retain valid quality and separate provenance: %+v", got)
 	}
 	if first.calls != 1 || second.calls != 1 {
 		t.Fatalf("expected both providers to be tried, calls=%d/%d", first.calls, second.calls)
@@ -125,8 +127,9 @@ func TestMarketBreadthFallsBackFromDegradedToValidProvider(t *testing.T) {
 	if err != nil || hit {
 		t.Fatalf("MarketBreadth returned hit=%v err=%v", hit, err)
 	}
-	if got == nil || got.Source != "tickflow" || got.QualityStatus != model.QualityDegraded || !hasSnapshotQualityReason(got.QualityReasons, "provider_fallback_used") {
-		t.Fatalf("expected valid fallback market breadth, got %+v", got)
+	if got == nil || got.Source != "tickflow" || got.QualityStatus != model.QualityValid ||
+		got.FallbackFrom != "eastmoney" || hasSnapshotQualityReason(got.QualityReasons, "provider_fallback_used") {
+		t.Fatalf("valid fallback market breadth must retain valid quality and separate provenance: %+v", got)
 	}
 	if first.calls != 1 || second.calls != 1 {
 		t.Fatalf("expected both providers to be tried, calls=%d/%d", first.calls, second.calls)
@@ -160,9 +163,9 @@ func TestIndexQuotesMarksDegradedFallbackWhenPrimaryFails(t *testing.T) {
 		t.Fatalf("IndexQuotes returned hit=%v err=%v", hit, err)
 	}
 	if got == nil || got.Source != "tickflow" || got.QualityStatus != model.QualityDegraded ||
-		!hasSnapshotQualityReason(got.QualityReasons, "provider_fallback_used") ||
-		!hasSnapshotQualityReason(got.Items[0].QualityReasons, "provider_fallback_used") {
-		t.Fatalf("degraded fallback must preserve fallback provenance: %+v", got)
+		got.FallbackFrom != "eastmoney" || got.FallbackReason == "" ||
+		hasSnapshotQualityReason(got.QualityReasons, "provider_fallback_used") {
+		t.Fatalf("degraded fallback must preserve source provenance without adding a quality defect: %+v", got)
 	}
 }
 
@@ -176,7 +179,8 @@ func TestMarketBreadthMarksDegradedFallbackWhenPrimaryFails(t *testing.T) {
 		t.Fatalf("MarketBreadth returned hit=%v err=%v", hit, err)
 	}
 	if got == nil || got.Source != "tickflow" || got.QualityStatus != model.QualityDegraded ||
-		!hasSnapshotQualityReason(got.QualityReasons, "provider_fallback_used") {
-		t.Fatalf("degraded fallback must preserve fallback provenance: %+v", got)
+		got.FallbackFrom != "eastmoney" || got.FallbackReason == "" ||
+		hasSnapshotQualityReason(got.QualityReasons, "provider_fallback_used") {
+		t.Fatalf("degraded fallback must preserve source provenance without adding a quality defect: %+v", got)
 	}
 }

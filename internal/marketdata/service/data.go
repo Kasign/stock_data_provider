@@ -327,27 +327,22 @@ func (s *DataService) IndexQuotes(ctx context.Context) (*model.IndexQuoteSnapsho
 			if degradedCandidate == nil {
 				degradedCandidate = snapshot
 				if providerIndex > 0 {
-					degradedCandidate.QualityReasons = appendReason(degradedCandidate.QualityReasons, "provider_fallback_used")
-					for index := range degradedCandidate.Items {
-						degradedCandidate.Items[index].QualityStatus = model.QualityDegraded
-						degradedCandidate.Items[index].QualityReasons = appendReason(degradedCandidate.Items[index].QualityReasons, "provider_fallback_used")
-					}
+					degradedCandidate.FallbackFrom = s.indexQuoteProviders[0].Name()
+					degradedCandidate.FallbackReason = strings.Join(failures, "; ")
 				}
 			}
 			failures = append(failures, p.Name()+": valid contract but degraded quality")
 			continue
 		}
 		if providerIndex > 0 {
-			snapshot.QualityStatus = model.QualityDegraded
-			snapshot.QualityReasons = appendReason(snapshot.QualityReasons, "provider_fallback_used")
-			for index := range snapshot.Items {
-				snapshot.Items[index].QualityStatus = model.QualityDegraded
-				snapshot.Items[index].QualityReasons = appendReason(snapshot.Items[index].QualityReasons, "provider_fallback_used")
-			}
+			snapshot.FallbackFrom = s.indexQuoteProviders[0].Name()
+			snapshot.FallbackReason = strings.Join(failures, "; ")
 		}
 		payload, marshalErr := json.Marshal(snapshot)
 		if marshalErr == nil {
-			if cacheErr := s.cache.Set(ctx, key, payload, ttl); cacheErr != nil {
+			cacheTTL := ttl
+			if snapshot.QualityStatus == model.QualityDegraded { cacheTTL = ttl / 4 }
+			if cacheErr := s.cache.Set(ctx, key, payload, cacheTTL); cacheErr != nil {
 				s.logger.Warn("index quote cache write failed", "error", cacheErr)
 			}
 		} else {
@@ -361,7 +356,7 @@ func (s *DataService) IndexQuotes(ctx context.Context) (*model.IndexQuoteSnapsho
 	if degradedCandidate != nil {
 		// 后续来源均未提供 valid 快照时，仍返回优先级最高的合法降级结果。
 		if payload, marshalErr := json.Marshal(degradedCandidate); marshalErr == nil {
-			if cacheErr := s.cache.Set(ctx, key, payload, ttl); cacheErr != nil {
+			if cacheErr := s.cache.Set(ctx, key, payload, ttl/4); cacheErr != nil {
 				s.logger.Warn("index quote degraded cache write failed", "error", cacheErr)
 			}
 		}
@@ -591,18 +586,21 @@ func (s *DataService) MarketBreadth(ctx context.Context) (*model.MarketBreadthSn
 			if degradedCandidate == nil {
 				degradedCandidate = snapshot
 				if providerIndex > 0 {
-					degradedCandidate.QualityReasons = appendReason(degradedCandidate.QualityReasons, "provider_fallback_used")
+					degradedCandidate.FallbackFrom = s.marketBreadthProviders[0].Name()
+					degradedCandidate.FallbackReason = strings.Join(failures, "; ")
 				}
 			}
 			failures = append(failures, p.Name()+": valid contract but degraded quality")
 			continue
 		}
 		if providerIndex > 0 {
-			snapshot.QualityStatus = model.QualityDegraded
-			snapshot.QualityReasons = appendReason(snapshot.QualityReasons, "provider_fallback_used")
+			snapshot.FallbackFrom = s.marketBreadthProviders[0].Name()
+			snapshot.FallbackReason = strings.Join(failures, "; ")
 		}
 		if data, err := json.Marshal(snapshot); err == nil {
-			if cacheErr := s.cache.Set(ctx, key, data, ttl); cacheErr != nil {
+			cacheTTL := ttl
+			if snapshot.QualityStatus == model.QualityDegraded { cacheTTL = ttl / 4 }
+			if cacheErr := s.cache.Set(ctx, key, data, cacheTTL); cacheErr != nil {
 				s.logger.Warn("market breadth cache write failed", "error", cacheErr)
 			}
 		}
@@ -614,7 +612,7 @@ func (s *DataService) MarketBreadth(ctx context.Context) (*model.MarketBreadthSn
 	if degradedCandidate != nil {
 		// 只有后续来源均未提供 valid 快照时，才返回优先级最高的合法降级结果。
 		if data, err := json.Marshal(degradedCandidate); err == nil {
-			if cacheErr := s.cache.Set(ctx, key, data, ttl); cacheErr != nil {
+			if cacheErr := s.cache.Set(ctx, key, data, ttl/4); cacheErr != nil {
 				s.logger.Warn("market breadth degraded cache write failed", "error", cacheErr)
 			}
 		}
