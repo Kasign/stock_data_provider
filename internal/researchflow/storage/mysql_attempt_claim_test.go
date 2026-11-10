@@ -78,7 +78,7 @@ func TestMariaDBClaimAttemptLeaseAndFencing(t *testing.T) {
 		},
 		Stages: []domain.Stage{
 			{
-				Ref: stageRef, RunRef: runRef, Code: "context", Status: domain.StageReady,
+				Ref: stageRef, RunRef: runRef, Code: "context", Status: domain.StagePending,
 				Version: 1, Required: true, Dependencies: []string{}, RetryPolicyRef: "retry-v1",
 				DiagnosticRefs: []string{}, ReasonCodes: []string{},
 			},
@@ -111,6 +111,14 @@ func TestMariaDBClaimAttemptLeaseAndFencing(t *testing.T) {
 	}
 	if _, err := repository.CreateRunAtomic(ctx, record); err != nil {
 		t.Fatalf("create run fixture: %v", err)
+	}
+	for _, stage := range record.Stages {
+		ready := stage
+		ready.Status = domain.StageReady
+		ready.Version++
+		if updated, err := repository.CompareAndSwapStage(ctx, stage.Version, ready); err != nil || !updated {
+			t.Fatalf("prepare Ready Stage %q updated=%v err=%v", stage.Ref, updated, err)
+		}
 	}
 
 	// Exhausting the budget through an expired final lease must atomically

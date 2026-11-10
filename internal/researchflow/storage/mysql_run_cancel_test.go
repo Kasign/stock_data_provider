@@ -77,7 +77,7 @@ func TestMariaDBBeginRunCancellationLinearizesWorkerOperations(t *testing.T) {
 			CorrelationID: "cancel-correlation-" + suffix,
 		},
 		Stages: []domain.Stage{
-			{Ref: runningStageRef, RunRef: runRef, Code: "running", Status: domain.StageReady, Version: 1, Required: true, Dependencies: []string{}, RetryPolicyRef: "retry-v1", DiagnosticRefs: []string{}, ReasonCodes: []string{}},
+			{Ref: runningStageRef, RunRef: runRef, Code: "running", Status: domain.StagePending, Version: 1, Required: true, Dependencies: []string{}, RetryPolicyRef: "retry-v1", DiagnosticRefs: []string{}, ReasonCodes: []string{}},
 			{Ref: fencedStageRef, RunRef: runRef, Code: "fenced", Status: domain.StageReady, Version: 1, Required: true, Dependencies: []string{}, RetryPolicyRef: "retry-v1", DiagnosticRefs: []string{}, ReasonCodes: []string{}},
 			{Ref: readyStageRef, RunRef: runRef, Code: "ready", Status: domain.StageReady, Version: 1, Required: true, Dependencies: []string{}, RetryPolicyRef: "retry-v1", DiagnosticRefs: []string{}, ReasonCodes: []string{}},
 		},
@@ -93,6 +93,14 @@ func TestMariaDBBeginRunCancellationLinearizesWorkerOperations(t *testing.T) {
 	}
 	if _, err := repository.CreateRunAtomic(ctx, record); err != nil {
 		t.Fatalf("create cancellation fixture: %v", err)
+	}
+	for _, stage := range record.Stages {
+		ready := stage
+		ready.Status = domain.StageReady
+		ready.Version++
+		if updated, err := repository.CompareAndSwapStage(ctx, stage.Version, ready); err != nil || !updated {
+			t.Fatalf("prepare Ready Stage %q updated=%v err=%v", stage.Ref, updated, err)
+		}
 	}
 	attempt, replayed, err := repository.ClaimAttempt(ctx, runRef, runningStageRef, "cancel-attempt-"+suffix, "worker-a", time.Minute, 2, 8)
 	if err != nil || replayed {

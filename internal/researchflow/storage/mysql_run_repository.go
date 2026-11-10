@@ -224,7 +224,7 @@ func (r *MySQLRunRepository) CompareAndSwapRun(
 	}
 	result, err := r.db.ExecContext(ctx, `UPDATE researchflow_runs SET
 		status = ?, version = ?,
-		started_at = CASE WHEN ? = ? THEN COALESCE(started_at, UTC_TIMESTAMP(6)) ELSE started_at END
+		started_at = CASE WHEN ? = ? THEN COALESCE(started_at, DATE_FORMAT(UTC_TIMESTAMP(6), '%Y-%m-%dT%H:%i:%s.%f000Z')) ELSE started_at END
 		WHERE run_ref = ? AND version = ? AND status = ?
 		AND COALESCE(termination_reason, '') = ? AND result_summary_ref IS NULL`,
 		string(next.Status), next.Version, string(next.Status), string(domain.RunRunning),
@@ -300,7 +300,7 @@ func (r *MySQLRunRepository) CompareAndSwapStage(
 	}
 	result, err := r.db.ExecContext(ctx, `UPDATE researchflow_stages SET
 		status = ?, version = ?, reason_codes = ?,
-		finished_at = CASE WHEN ? = ? THEN UTC_TIMESTAMP(6) ELSE finished_at END
+		finished_at = CASE WHEN ? = ? THEN DATE_FORMAT(UTC_TIMESTAMP(6), '%Y-%m-%dT%H:%i:%s.%f000Z') ELSE finished_at END
 		WHERE stage_ref = ? AND run_ref = ? AND version = ? AND status = ?`,
 		string(next.Status), next.Version, mustMarshalStrings(expectedReasons),
 		string(next.Status), string(domain.StageBlocked),
@@ -790,11 +790,15 @@ func formatResearchflowTimeValue(value time.Time) string {
 }
 
 func parseResearchflowTime(value string) (time.Time, error) {
-	parsed, err := time.Parse(researchflowTimestampLayout, value)
-	if err != nil {
-		return time.Time{}, fmt.Errorf("invalid Researchflow timestamp %q: %w", value, err)
+	// 兼容 MariaDB DATETIME 的空格分隔及微秒精度返回值；写入仍统一使用固定 UTC 格式。
+	layouts := []string{researchflowTimestampLayout, "2006-01-02 15:04:05.999999", "2006-01-02 15:04:05"}
+	for _, layout := range layouts {
+		parsed, err := time.Parse(layout, value)
+		if err == nil {
+			return parsed.UTC(), nil
+		}
 	}
-	return parsed.UTC(), nil
+	return time.Time{}, fmt.Errorf("invalid Researchflow timestamp %q", value)
 }
 
 func parseNullableResearchflowTime(value sql.NullString) (*time.Time, error) {

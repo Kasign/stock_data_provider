@@ -34,10 +34,19 @@ func deadlineRaceFixture(t *testing.T,ctx context.Context,repo *MySQLRunReposito
  t.Helper(); now:=time.Now().UTC()
  stages:=make([]domain.Stage,0,len(codes)); resolved:=make([]template.ResolvedStage,0,len(codes)); refs:=make([]string,0,len(codes))
  runRef:=prefix+"-"+suffix
- for _,code:=range codes { ref:=prefix+"-"+code+"-"+suffix; refs=append(refs,ref); stages=append(stages,domain.Stage{Ref:ref,RunRef:runRef,Code:code,Status:domain.StageReady,Version:1,Required:true,Dependencies:[]string{},RetryPolicyRef:"retry-v1",DiagnosticRefs:[]string{},ReasonCodes:[]string{}}); resolved=append(resolved,template.ResolvedStage{Definition:template.StageDefinition{Code:code}}) }
+ for _,code:=range codes { ref:=prefix+"-"+code+"-"+suffix; refs=append(refs,ref); stages=append(stages,domain.Stage{Ref:ref,RunRef:runRef,Code:code,Status:domain.StagePending,Version:1,Required:true,Dependencies:[]string{},RetryPolicyRef:"retry-v1",DiagnosticRefs:[]string{},ReasonCodes:[]string{}}); resolved=append(resolved,template.ResolvedStage{Definition:template.StageDefinition{Code:code}}) }
  fp:="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"; tfp:="bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
  rec:=application.CreateRunRecord{Scope:application.IdempotencyScope{CallerRef:prefix,Operation:"CreateRun",Key:suffix},Fingerprint:fp,Run:domain.Run{Ref:runRef,SchemaVersion:"v1",Status:domain.RunCreated,Version:1,SystemAsOf:now.Add(-time.Minute),DeadlineAt:now.Add(5*time.Minute),TemplateRef:prefix+"-template",TemplateVersion:"v1",TemplateFingerprint:tfp,InputSnapshotRefs:[]string{},CorrelationID:prefix+"-"+suffix},Stages:stages,ResolvedTemplate:template.ResolvedTemplate{Ref:prefix+"-template",Version:"v1",Fingerprint:tfp,Stages:resolved},Parameters:json.RawMessage("{}")}
  if _,err:=repo.CreateRunAtomic(ctx,rec);err!=nil{t.Fatal(err)}
+ for _, ref := range refs {
+  stage, err := repo.GetStage(ctx, ref)
+  if err != nil { t.Fatal(err) }
+  stage.Status = domain.StageReady
+  stage.Version++
+  if updated, err := repo.CompareAndSwapStage(ctx, stage.Version-1, stage); err != nil || !updated {
+   t.Fatalf("prepare Ready Stage %q updated=%v err=%v", ref, updated, err)
+  }
+ }
  return runRef,refs
 }
 
