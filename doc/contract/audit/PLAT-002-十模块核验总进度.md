@@ -1081,3 +1081,13 @@
 - 可维持 L1 冻结的边界：模块职责/依赖方向；Data/News/Quant/Research/Researchflow/LLM/Notification 的领域 Owner；Server 唯一组合根；Platform 横向技术原语；WebUI 仅消费公开 HTTP 契约；Outbox/Inbox 与工具执行的职责边界。条件性未决子范围不得由实现方猜测。
 - 不得宣告 PLAT-002 整体完成：十模块六维全覆盖、完整 import/消费者/授权链、责任模块修复补证、第二轮正确性 Review、第三轮冻结门禁 Review 尚未完成。
 - 后续唯一主线：集中裁决非条件性 pending_decision 并写入正式 decisions；责任模块修复/补证；PLAT-002 按新 SHA 增量核验；满足 L2 门禁的 CTR 单项冻结。不重复已完成初审，不新增重复 CTR。
+
+
+## 32. PLAT-002 项目决策提案批次整理（2026-11-10）
+
+- 已读取差异矩阵全部状态表格行：69 行，其中 56 个带唯一显式编号的审计工作项；其余为边界/契约聚合行。Data→Quant、Data→Research 同名各有两条不同差异，不合并。
+- 形成 8 个项目级决策提案 DEC-B1～B8，集中覆盖旧 Analysis 兼容/API、请求校验、Data Snapshot 映射、News Evidence 语义、News→Researchflow 输入快照、Quant ResultRef、Research Stage 读写幂等、LLM 请求/重试映射。
+- 已有 DEC-PLAT-002-017 覆盖 WEB-SRV-B；Platform 08 第5节已覆盖 WEB-SRV-F；GOV-CTR-006 已覆盖 NEWS-RSC-C 的公共授权语义。这三项转为实现证据，不重复裁决。
+- Data→Research available_at 属于字段/来源事实核验，转为 pending_evidence；DATA-FLOW-B 和 LLM-FLOW-B 为条件性扩展，转为 deferred。
+- DEC-B1～B8 均为 proposal_pending_project_owner，不是批准决议；正式 CTR 冻结状态未变。本轮仅维护 PLAT-002 文档，不修改业务模块代码，不执行 CI。
+- 下一步：项目负责人一次性对 DEC-B1～B8 逐项接受/修改/拒绝/延期；批准后责任模块按决议修复，PLAT-002 只做新 SHA 增量验收。
