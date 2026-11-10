@@ -192,16 +192,32 @@ func serviceRegistryForTest(t *testing.T, adapter *unknownReconciliationLookupAd
 }
 
 func TestUnknownDeliveryReconciliationServiceRejectsIncompleteHistory(t *testing.T) {
-	service, adapter, repository, now := unknownReconciliationServiceFixture(t, domain.ChannelLookupIndeterminate)
-	reader := service.reader.(consistencySnapshotReaderFake)
-	reader.snapshot.StateEvents = reader.snapshot.StateEvents[:1]
-	service.reader = reader
+	for _, tc := range []struct {
+		name                string
+		removeAttempts      bool
+		removeStateEvents   bool
+	}{
+		{name: "attempt history incomplete", removeAttempts: true},
+		{name: "state event history incomplete", removeStateEvents: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			service, adapter, repository, now := unknownReconciliationServiceFixture(t, domain.ChannelLookupIndeterminate)
+			reader := service.reader.(consistencySnapshotReaderFake)
+			if tc.removeAttempts {
+				reader.snapshot.Attempts = nil
+			}
+			if tc.removeStateEvents {
+				reader.snapshot.StateEvents = reader.snapshot.StateEvents[:1]
+			}
+			service.reader = reader
 
-	_, _, err := service.Reconcile(context.Background(), reader.snapshot.Delivery.DeliveryID, now, 0.5)
-	if !errors.Is(err, ErrUnknownDeliverySnapshotNotConsistent) ||
-		adapter.lookupCalls != 0 || repository.calls != 0 {
-		t.Fatalf("incomplete state history must fail closed: lookups=%d writes=%d err=%v",
-			adapter.lookupCalls, repository.calls, err)
+			_, _, err := service.Reconcile(context.Background(), reader.snapshot.Delivery.DeliveryID, now, 0.5)
+			if !errors.Is(err, ErrUnknownDeliverySnapshotNotConsistent) ||
+				adapter.lookupCalls != 0 || repository.calls != 0 {
+				t.Fatalf("incomplete history must fail closed: lookups=%d writes=%d err=%v",
+					adapter.lookupCalls, repository.calls, err)
+			}
+		})
 	}
 }
 
