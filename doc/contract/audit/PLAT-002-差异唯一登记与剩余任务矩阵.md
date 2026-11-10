@@ -1177,3 +1177,24 @@ PLAT-002 的项目级决策收敛已完成；**PLAT-002 项目整体不宣告完
 - 固定基线中的权威 OpenAPI `doc/api/contracts/分析任务.openapi.yaml`（Blob `aa8f153f25c46649dcdf187d5fef8f376113577b`）仍为 `started_at`、`finished_at` 声明 `nullable: true`，与既有 Go 指针字段 `omitempty` 的“缺失而非显式 null”行为不一致；既有 queued/running/terminal Golden 和 Handler Contract Test 关闭条件尚未得到新提交证据。
 - 固定基线 `b6dfc85...` 的 GitHub Check Runs 为 0，Commit Status 为空；本次没有可引用的 CI 成功证据。未执行测试，也未修改责任模块代码。
 - 结论：CTR-006 仍为 `pending_evidence`（既有工单状态不变）；本轮没有可接受的修复 SHA，不得关闭或冻结。下一步只需等待 Server 责任分支产生针对 CTR-006 的修复提交，再按既定 28.4 验收条件增量核验；不重复字段语义讨论。
+
+
+## 38. CTR-043 Dragon Tiger 生产方—消费方冲突增量核验（2026-11-10）
+
+- 核验范围：固定代码审计基线 `b6dfc85ba214fe16268c8cba780641a8bfe15086`，仅核 Data Dragon Tiger Provider/Service/HTTP OpenAPI 与 WebUI 页面消费映射；不改责任模块代码，不改变固定基线。
+- 生产方事实（Data）：
+  - `internal/marketdata/model/dragon_tiger.go` 定义两组不同语义字段：`NetBuyAmountCNY/BuyAmountCNY/SellAmountCNY/DealAmountCNY` 明确为人民币金额；`ProviderBuyValue/ProviderSellValue/ProviderDealValue/ProviderNetValue/ProviderNetRate/ProviderOrgNetValue/ProviderHotMoneyNetValue` 是原始 Provider 值，另有 `ProviderAmountUnit`。
+  - `internal/marketdata/provider/hithink.go` 的 `FetchDragonTiger` 明确保留同花顺金额到 `Provider*Value`，设置 `ProviderAmountUnit="provider_defined"`，不填充 `*_CNY`；质量原因包含 `provider_amount_units_not_explicitly_documented` 与 `hot_money_detail_not_represented_in_shared_stock_pagination`。
+  - `internal/marketdata/provider/eastmoney_dragon_tiger.go` 将东方财富已核实金额映射到 `*_CNY`，缺失金额保留 nil；空报表/只有非 A 股记录保持 unknown，不视为确认无上榜。
+  - `internal/marketdata/service/data.go` 的 DragonTiger 服务会在 Provider 结果有数据且非 unknown 时直接返回首个可用结果；因此当东方财富不可用/不可用质量而同花顺回退成功时，HTTP 响应可以是同花顺的 degraded 记录，而不是自动获得 CNY 金额。
+  - `internal/marketdata/httpapi/openapi.yaml` 已将 `provider_*_value` 描述为单位可能未文档化的原始值，并将 `*_cny` 描述为 CNY；这部分 OpenAPI 字段语义与 Go DTO 一致。
+- 消费方事实（WebUI）：
+  - `web/src/market-activity.js` 的 `renderDragon` 资金列只读取 `item.net_buy_amount_cny` 和 `item.deal_amount_cny`，没有展示 `provider_*_value` 或 `provider_amount_unit`。
+  - `web/src/api.js` 的 `getMarketDragonTiger` 直接消费同一接口；`doc/web/API_CONTRACT.md` 也只登记接口调用，没有定义同花顺原始金额字段的消费展示规则。
+  - 因此同花顺作为回退源返回有效 degraded 数据时，页面仍可展示证券、涨跌幅、原因和质量状态，但净买入/成交金额两列为空。当前前端不误把原始单位金额当 CNY，这是正确的安全行为；但 Provider 可回退能力与 UI 资金列消费能力不完整对齐。
+- 测试证据：
+  - Data 有东方财富 Provider 测试及基于 fake Provider 的 fallback 测试；后者覆盖未知质量/空报告回退，但不能证明真实同花顺金额字段经过 Data HTTP DTO 后能被消费者正确处理。
+  - 固定基线未发现专门的 `FetchDragonTiger` 同花顺 Provider 契约测试，也未发现 WebUI 对 `provider_*_value` 与 `provider_amount_unit` 的 Dragon Tiger 渲染测试。
+  - 本轮为静态证据核验，未执行测试或 CI；不声称测试通过。
+- 结论：CTR-043 的 P1 实现冲突得到具体定位，状态继续保持开放/阻断 L2 冻结。不得把 `provider_defined` 金额映射成 CNY，也不得仅因 OpenAPI/Go DTO 对齐就关闭。关闭条件：Data 继续保证原始金额与 CNY 字段分离并提供真实同花顺 Provider→HTTP 响应 Golden/Contract Test；WebUI 明确消费策略（展示带单位来源标识的 Provider 原始值，或在该 Provider 下明确显示不可比较/未提供），并补真实响应 fixture 的渲染回归测试；两端在同一 DTO/Schema 语义下通过定向测试及 CI。该条件是既有 CTR-043 的验收细化，不新增 CTR。
+- 责任边界：Data 负责 Provider 字段来源、单位声明和响应契约；WebUI 负责按字段单位/质量状态正确呈现。PLAT-002 本分支只登记证据与冻结影响，不代替责任模块修复。
