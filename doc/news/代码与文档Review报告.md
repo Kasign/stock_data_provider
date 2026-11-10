@@ -155,3 +155,10 @@
 - Provider Ingest 原先在 SourceCatalog 和 ProviderOutputPolicyResolver 成功返回后没有检查 Context；Source Ingest 在 SourceCatalog 成功返回后也未检查。依赖若忽略取消，可能继续执行策略评估并触发写入。
 - 已在每个依赖返回后检查 Context，并新增三条取消边界测试，断言取消后不写入 Observation/Identity。
 - 该修复只保证取消传播，不代表数据库事务可撤销已经提交的写入；多条 Observation 的批次原子性仍由独立持久化契约决定。
+
+
+## 十二、News 测试文件 gofmt 门禁修正（2026-11-10）
+
+- CI Run `42743383781` 的根模块 gofmt 检查指出 News 四个测试文件存在格式差异；同时还列出 Market Data、Quant、Notification 的既有差异。
+- 已仅修正 News 四个文件，提交 `0076c667d080aaf1b3889f54799d203693129eb9`。其他模块格式问题留给其负责分支处理。
+- 该轮 CI 在 gofmt 步骤终止，不能据此判断 Go 测试结果。

@@ -1042,3 +1042,10 @@
 - Provider Ingest 在 SourceCatalog、ProviderOutputPolicyResolver 返回后检查 Context；Source Ingest 在 SourceCatalog 返回后检查 Context。即使依赖忽略取消并返回成功，也不会继续进入授权策略评估或持久化。
 - 新增三个取消边界测试，并检查取消后没有 Observation/Identity 持久化。
 - 对应提交：`e898104b9b548057330978c3fbc287e6c9d79a57`。
+
+
+### 2026-11-10 News 测试格式门禁修正
+
+- 根据 CI gofmt diff 单独修正 `authorization_read_test.go`、`get_evidence_test.go`、`provider_ingest_test.go`、`source_ingest_test.go`。
+- 未处理其他模块的 gofmt 差异，避免越界修改。
+- 对应提交：`0076c667d080aaf1b3889f54799d203693129eb9`。
