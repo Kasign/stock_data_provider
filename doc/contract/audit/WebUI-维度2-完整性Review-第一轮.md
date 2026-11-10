@@ -54,9 +54,9 @@
 
 ## 4. P1 与测试门禁回看
 
-- CTR-041（Limit Pool）仍为 P1、待固定基线 CI 复核：DTO 指针 JSON、OpenAPI nullable/required、Golden 断言存在三方矛盾。本轮未执行 CI，不得降级或关闭。
-- CTR-043（Dragon Tiger）为 P1：Hithink source_returned 与 Service 当前页计数约束不一致，重复 symbol 计数也不闭合。源码已确认逻辑冲突，但本轮没有执行固定基线测试，不将源码审计描述成运行时测试失败。
-- 其余本轮新增 CTR-045 至 CTR-049 均登记 P2；P2 不代表可以在未决情况下冻结。
+- CTR-041 已撤销：固定基线 DTO tag 实际带 omitempty，OpenAPI 非 required/非 nullable，JSON Golden 要求 omitted，三方一致。原 P1 是审计误读，不应保留为门禁。
+- CTR-043（Dragon Tiger）仍为 P1：复核 Hithink `FetchDragonTiger` 确认 `SourceReturned=len(data.StockItems)`，但 items 在 Provider 内按页切片；Service 要求当前页原始数。重复 symbol 被跳过且未计入排除数，进一步违反计数恒等式。代码逻辑冲突已确认，但本轮未执行固定基线测试，不将源码审计描述成运行时测试失败。
+- CTR-045 至 CTR-049 均登记 P2；P2 不代表可以在未决情况下冻结。
 - 多个数据集的 API Client 或 DOM 测试缺失是独立补证项；只有当缺失测试掩盖字段语义/错误处理/用户误读时，才与对应行为差异一起登记，不把“没有测试”本身自动扩大为缺陷。
 
 ## 5. 跨数据集语义一致性观察
@@ -100,3 +100,23 @@
 - historical_replay 是条件例外：必须由调用方显式提供 as_of；Handler 会在缺省时返回 400。
 - Runner 会校验 task_type 仅允许 post_market_scan、watchlist_scan、position_review、historical_replay 四个值。
 - 因此 CTR-005/047 的正确关闭要求是：将 HTTP CreateTaskRequest 与 domain.RunRequest 的字段映射和默认行为明确分开；OpenAPI 为 task_type 补四值枚举及默认值，为其他服务端默认字段描述默认行为，并表达 historical_replay 对显式 as_of 的条件约束。不能机械地将所有领域字段标成 required。
+
+
+## 7. P1 门禁复核：CTR-041 撤销、CTR-043 保留
+
+### CTR-041 撤销依据
+
+固定 SHA `b6dfc85ba214fe16268c8cba780641a8bfe15086`：
+- `internal/marketdata/model/model.go`：`SealMoney` / `MaxSealMoney` 的 JSON tag 均带 `omitempty`。
+- `internal/marketdata/httpapi/openapi.yaml`：两个字段不在 LimitPoolItem required 中，属性没有 nullable=true。
+- `internal/marketdata/httpapi/openapi_contract_test.go`：JSON serialization test 将两字段列入 omitted。
+- 结论：三方一致，原 CTR-041 的事实前提错误，已从活动差异/P1 门禁中撤销。不是“测试未跑所以待确认”的状态。
+
+### CTR-043 保留依据
+
+固定 SHA：
+- `internal/marketdata/provider/hithink.go:FetchDragonTiger`：`total` 来自 stock_items 总数；`SourceReturned` 设置为 `len(data.StockItems)`；之后仅对 `stock_items[startIndex:endIndex]` 本地分页。
+- `internal/marketdata/service/data.go:validateDragonTigerSnapshot`：对非空总数要求 `SourceReturned == min(pageSize, total-(page-1)*pageSize)`，并要求 `SourceReturned == Returned + ExcludedNonAShareCount`。
+- Provider 在重复 symbol 时跳过该行并记录诊断，但没有增加 ExcludedNonAShareCount；该字段也不应被滥用于表示重复记录。
+- 固定基线 tree 未发现 Hithink 龙虎榜 Provider 专项测试文件。
+- 结论：CTR-043 是由 Provider 生产逻辑与 Service 公共计数契约直接证明的 P1 冲突；仍需责任模块修复并补 page 1/中间页/末页及重复记录测试。本轮未执行 Go CI。
