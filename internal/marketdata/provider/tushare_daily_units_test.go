@@ -115,7 +115,6 @@ func TestTushareDailyBarsReportsFieldAndRowForParseFailure(t *testing.T) {
 	t.Fatalf("expected close field diagnostic with original row index, got %+v", report.Issues)
 }
 
-
 func TestTushareDailyBarsReportsDateAndNormalizationRejections(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -125,20 +124,20 @@ func TestTushareDailyBarsReportsDateAndNormalizationRejections(t *testing.T) {
 		start, end string
 	}{
 		{
-			name: "date outside requested range",
-			items: `[["600519.SH","20261027",10,11,9,10,1.0,100,100]]`,
+			name:     "date outside requested range",
+			items:    `[["600519.SH","20261027",10,11,9,10,1.0,100,100]]`,
 			wantCode: "date_out_of_requested_range", wantRow: 0,
 			start: "2026-10-28", end: "2026-10-28",
 		},
 		{
-			name: "duplicate trade date",
-			items: `[["600519.SH","20261028",10,11,9,10,1.0,100,100],["600519.SH","20261028",10,11,9,10,1.0,100,100]]`,
+			name:     "duplicate trade date",
+			items:    `[["600519.SH","20261028",10,11,9,10,1.0,100,100],["600519.SH","20261028",10,11,9,10,1.0,100,100]]`,
 			wantCode: "duplicate_trade_date", wantRow: 1,
 			start: "2026-10-28", end: "2026-10-28",
 		},
 		{
-			name: "fractional hand volume cannot normalize",
-			items: `[["600519.SH","20261028",10,11,9,10,1.0,0.1,100]]`,
+			name:     "fractional hand volume cannot normalize",
+			items:    `[["600519.SH","20261028",10,11,9,10,1.0,0.1,100]]`,
 			wantCode: "normalization_error", wantRow: 0,
 			start: "2026-10-28", end: "2026-10-28",
 		},

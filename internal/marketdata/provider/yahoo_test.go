@@ -357,7 +357,7 @@ func TestYahooDailyBarReportsOutOfRangeDateAndKeepsInRangeRows(t *testing.T) {
 	inside := time.Date(2026, 10, 20, 0, 0, 0, 0, loc).Unix()
 	payload, err := json.Marshal(map[string]any{"chart": map[string]any{
 		"result": []any{map[string]any{
-			"meta": map[string]any{"symbol": "600036.SS"},
+			"meta":      map[string]any{"symbol": "600036.SS"},
 			"timestamp": []int64{outside, inside},
 			"indicators": map[string]any{"quote": []any{map[string]any{
 				"open": []float64{9, 10}, "high": []float64{10, 11},
@@ -366,15 +366,21 @@ func TestYahooDailyBarReportsOutOfRangeDateAndKeepsInRangeRows(t *testing.T) {
 		}},
 		"error": nil,
 	}})
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write(payload) }))
 	defer server.Close()
 	reporter := validation.NewReporter(10)
 	ctx := validation.WithReporter(context.Background(), reporter)
 	provider := NewYahooFinance(2*time.Second, server.URL)
 	bars, err := provider.FetchDailyBars(ctx, "600036.SH", "2026-10-20", "2026-10-21", 8, model.AdjustmentNone)
-	if err != nil { t.Fatal(err) }
-	if len(bars) != 1 || bars[0].TradeDate != "2026-10-20" { t.Fatalf("unexpected in-range bars: %+v", bars) }
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(bars) != 1 || bars[0].TradeDate != "2026-10-20" {
+		t.Fatalf("unexpected in-range bars: %+v", bars)
+	}
 	issues := reporter.Snapshot().Issues
 	if len(issues) != 1 || issues[0].Stage != validation.StageParse || issues[0].Field != "trade_date" ||
 		issues[0].Code != "date_out_of_requested_range" || issues[0].RowIndex == nil || *issues[0].RowIndex != 0 {
@@ -384,9 +390,9 @@ func TestYahooDailyBarReportsOutOfRangeDateAndKeepsInRangeRows(t *testing.T) {
 
 func TestYahooDailyBarReportsHTTPAndProviderRejections(t *testing.T) {
 	cases := []struct {
-		name string
-		status int
-		body string
+		name     string
+		status   int
+		body     string
 		wantCode string
 	}{
 		{name: "http status", status: http.StatusBadGateway, body: "upstream unavailable", wantCode: "http_status_error"},
@@ -502,7 +508,6 @@ func TestYahooDailyBarInvalidFieldReportsRowAndProviderPath(t *testing.T) {
 		t.Fatalf("unexpected Yahoo field issue: %+v", issue)
 	}
 }
-
 
 func TestYahooFinanceQuoteReportsUnavailableAmountAndMissingName(t *testing.T) {
 	payload := `{"chart":{"result":[{"meta":{"symbol":"600036.SS","regularMarketPrice":42.35,"regularMarketChange":0.53,"regularMarketChangePercent":1.267,"regularMarketTime":1792746000,"regularMarketDayHigh":42.38,"regularMarketDayLow":41.57,"regularMarketOpen":41.70,"chartPreviousClose":41.82,"regularMarketVolume":56829700},"timestamp":[1792746000],"indicators":{"quote":[{"open":[41.70],"high":[42.38],"low":[41.57],"close":[42.35],"volume":[56829700]}]}}],"error":null}}`

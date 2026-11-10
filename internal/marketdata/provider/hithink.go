@@ -723,7 +723,7 @@ func (p *Hithink) FetchLimitPool(ctx context.Context, poolType, tradeDate string
 	if data.Pagination.Size != nil && (*data.Pagination.Size < len(data.Item) || *data.Pagination.Size > 100) {
 		addHithinkFieldIssue(ctx, nil, "page_size", "pagination.size", "invalid_value", "returned size between item count and 100", "number", strconv.Itoa(*data.Pagination.Size), "同花顺涨跌停池返回分页 size 无效")
 		return nil, fmt.Errorf("同花顺 %s 池返回的分页 size 无效: %d", poolType, *data.Pagination.Size)
-}
+	}
 
 	now := time.Now().UTC()
 	// 仅从可信的供应商时间戳派生报告日期，不能用请求日期伪造来源报告日期。
@@ -863,8 +863,12 @@ func (p *Hithink) FetchLimitPool(ctx context.Context, poolType, tradeDate string
 		}
 		if poolType == "down" && (firstTouch == "" || lastTouch == "") {
 			itemReasons = append(itemReasons, "provider_limit_down_time_missing")
-			if firstTouch == "" { addHithinkFieldIssue(ctx, &index, "first_touch_time", "first_limit_time", "missing_value", "provider first limit time", "string", "", "同花顺跌停池首次触板时间缺失") }
-			if lastTouch == "" { addHithinkFieldIssue(ctx, &index, "last_touch_time", "last_limit_time", "missing_value", "provider last limit time", "string", "", "同花顺跌停池末次触板时间缺失") }
+			if firstTouch == "" {
+				addHithinkFieldIssue(ctx, &index, "first_touch_time", "first_limit_time", "missing_value", "provider first limit time", "string", "", "同花顺跌停池首次触板时间缺失")
+			}
+			if lastTouch == "" {
+				addHithinkFieldIssue(ctx, &index, "last_touch_time", "last_limit_time", "missing_value", "provider last limit time", "string", "", "同花顺跌停池末次触板时间缺失")
+			}
 		}
 		if poolType == "broken" && openTimes == nil {
 			itemReasons = append(itemReasons, "provider_open_times_missing_or_invalid")
@@ -1086,7 +1090,6 @@ func hithinkFieldString(row map[string]json.RawMessage, key string) string {
 	}
 	return ""
 }
-
 
 // hithinkValuationMetricInputInvalid 区分源端未提供值与提供了不可解析的值。
 // 空字段、JSON null 和空字符串表示缺失；其他无法解析的内容表示源端值无效。
@@ -1451,7 +1454,7 @@ func (p *Hithink) FetchIndexDailyBars(ctx context.Context, rawIndexSymbol, start
 			bar.QualityStatus = model.QualityDegraded
 			bar.QualityReasons = append(bar.QualityReasons, "provider_turnover_missing_or_invalid")
 			addHithinkFieldIssue(ctx, &index, "amount", "turnover", "missing_or_invalid_value", "finite non-negative turnover", "number", fmt.Sprint(row.Turnover), "同花顺指数历史 K 线成交额缺失或非法")
-	}
+		}
 		if snapshot.ProviderTime == nil {
 			bar.QualityStatus = model.QualityDegraded
 			bar.QualityReasons = append(bar.QualityReasons, "provider_index_history_timestamp_missing_or_invalid")
@@ -1601,7 +1604,7 @@ func (p *Hithink) FetchValuations(ctx context.Context, rawSymbols []string) (*mo
 		var pet, pem, pbm, pst, pcft *float64
 		metricIssue := false
 		metricFields := []struct {
-			key string
+			key   string
 			value **float64
 		}{
 			{key: "pe_ttm", value: &pet},

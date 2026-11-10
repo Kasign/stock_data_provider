@@ -107,7 +107,6 @@ func TestAdjustmentFactorHashIncludesBasis(t *testing.T) {
 	}
 }
 
-
 func TestValidateAdjustmentFactorRecordRequiresSourceAndValidTimeEvidence(t *testing.T) {
 	fetched := time.Date(2026, 11, 9, 1, 0, 0, 0, time.UTC)
 	available := fetched.Add(-time.Hour)
@@ -150,16 +149,26 @@ func TestAdjustmentFactorHashCanonicalizesTimestampLocation(t *testing.T) {
 		ProviderTime: &utc, AvailableAt: &utc, QualityStatus: model.QualityValid,
 	}
 	first, err := adjustmentFactorHash(base)
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	base.ProviderTime, base.AvailableAt = &local, &local
 	second, err := adjustmentFactorHash(base)
-	if err != nil { t.Fatal(err) }
-	if first != second { t.Fatal("equivalent instants in different time zones must have the same factor revision hash") }
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first != second {
+		t.Fatal("equivalent instants in different time zones must have the same factor revision hash")
+	}
 	later := instant.Add(time.Second)
 	base.AvailableAt = &later
 	third, err := adjustmentFactorHash(base)
-	if err != nil { t.Fatal(err) }
-	if first == third { t.Fatal("availability timestamp changes must create a different factor revision hash") }
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first == third {
+		t.Fatal("availability timestamp changes must create a different factor revision hash")
+	}
 }
 
 func TestCorporateActionHashCanonicalizesAvailabilityLocation(t *testing.T) {
@@ -171,11 +180,17 @@ func TestCorporateActionHashCanonicalizesAvailabilityLocation(t *testing.T) {
 		ExDate: "2026-11-09", Source: "tushare", AvailableAt: &utc,
 	}
 	first, err := corporateActionHash(base)
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	base.AvailableAt = &local
 	second, err := corporateActionHash(base)
-	if err != nil { t.Fatal(err) }
-	if first != second { t.Fatal("equivalent availability instants in different time zones must have the same corporate-action revision hash") }
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first != second {
+		t.Fatal("equivalent availability instants in different time zones must have the same corporate-action revision hash")
+	}
 }
 
 func TestAdjustmentFactorRevisionIdentityIncludesSourceVersion(t *testing.T) {
@@ -186,12 +201,20 @@ func TestAdjustmentFactorRevisionIdentityIncludesSourceVersion(t *testing.T) {
 	upgraded := base
 	upgraded.SourceVersion = "v2"
 	first, err := adjustmentFactorHash(base)
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	second, err := adjustmentFactorHash(upgraded)
-	if err != nil { t.Fatal(err) }
-	if first == second { t.Fatal("source-version changes must produce independent factor content identities") }
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first == second {
+		t.Fatal("source-version changes must produce independent factor content identities")
+	}
 	identity := func(value model.AdjustmentFactor) string {
 		return value.Symbol + "|" + value.TradeDate + "|" + value.Source + "|" + value.SourceVersion + "|" + string(value.Basis)
 	}
-	if identity(base) == identity(upgraded) { t.Fatal("different source versions must use distinct persistence identities") }
+	if identity(base) == identity(upgraded) {
+		t.Fatal("different source versions must use distinct persistence identities")
+	}
 }

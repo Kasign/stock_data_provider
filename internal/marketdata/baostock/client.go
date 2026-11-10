@@ -103,7 +103,9 @@ type QuarterlyFinancialStructureError struct {
 }
 
 func (e *QuarterlyFinancialStructureError) Error() string {
-	if e == nil { return "BaoStock financial structure error" }
+	if e == nil {
+		return "BaoStock financial structure error"
+	}
 	return e.Message
 }
 

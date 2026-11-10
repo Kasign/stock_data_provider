@@ -24,9 +24,9 @@ func TestHithinkLimitPoolReportsDuplicateSymbol(t *testing.T) {
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"code": 0,
 			"data": map[string]any{
-				"timestamp": now,
+				"timestamp":  now,
 				"pagination": map[string]any{"total": 2, "page": 1, "size": 2},
-				"item": []map[string]any{row, row},
+				"item":       []map[string]any{row, row},
 			},
 		})
 	}))
@@ -48,14 +48,13 @@ func TestHithinkLimitPoolReportsDuplicateSymbol(t *testing.T) {
 	}
 }
 
-
 func TestHithinkLimitPoolReportsMissingSnapshotTimestamp(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"code": 0,
 			"data": map[string]any{
 				"pagination": map[string]any{"total": 0, "page": 1, "size": 10},
-				"item": []any{},
+				"item":       []any{},
 			},
 		})
 	}))
@@ -109,9 +108,9 @@ func TestHithinkLimitPoolReportsPaginationMismatch(t *testing.T) {
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"code": 0,
 			"data": map[string]any{
-				"timestamp": time.Now().UTC().UnixMilli(),
+				"timestamp":  time.Now().UTC().UnixMilli(),
 				"pagination": map[string]any{"total": 0, "page": 1, "size": 10},
-				"item": []any{map[string]any{"thscode": "600519.SH"}},
+				"item":       []any{map[string]any{"thscode": "600519.SH"}},
 			},
 		})
 	}))
@@ -139,7 +138,9 @@ func TestHithinkDragonTigerReportsStockCountMismatch(t *testing.T) {
 	reporter := validation.NewReporter(10)
 	ctx := validation.WithReporter(context.Background(), reporter)
 	p := NewHithinkConfigured(2*time.Second, server.URL, "unit-test-key")
-	if _, err := p.FetchDragonTiger(ctx, tradeDate, 1, 20); err == nil { t.Fatal("expected stock_count mismatch error") }
+	if _, err := p.FetchDragonTiger(ctx, tradeDate, 1, 20); err == nil {
+		t.Fatal("expected stock_count mismatch error")
+	}
 	issues := reporter.Snapshot().Issues
 	if len(issues) != 1 || issues[0].Field != "row_count" || issues[0].Code != "count_inconsistent" || issues[0].RowIndex != nil {
 		t.Fatalf("unexpected stock-count Reporter issue: %+v", issues)

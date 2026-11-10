@@ -309,7 +309,6 @@ func TestValuationsAcceptsNullableOptionalMetricsWhenSourceEvidenceIsValid(t *te
 	}
 }
 
-
 func TestValuationsAcceptsTimestampedSnapshotWithoutReportDateAsDegraded(t *testing.T) {
 	snapshot := validValuationsForFallbackTest("hithink")
 	now := time.Now().UTC()

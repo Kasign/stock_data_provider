@@ -16,7 +16,7 @@ func addProviderFieldParseIssue(ctx context.Context, symbol, field, providerFiel
 		Stage: validation.StageParse, Field: field, ProviderField: providerField,
 		Code: code, Expected: expected, ActualType: actualType,
 		ActualPreview: providerFieldIssuePreview(preview), Severity: validation.SeverityWarning,
-		Message: "fundamentals provider field is missing or invalid",
+		Message:  "fundamentals provider field is missing or invalid",
 		RowIndex: &row, Symbol: symbol,
 	})
 	validation.AddContextReport(ctx, report)

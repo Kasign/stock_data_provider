@@ -248,7 +248,6 @@ func TestEastmoneyFetchDragonTigerRejectsExplicitFailureWithRows(t *testing.T) {
 	}
 }
 
-
 func TestEastmoneyDragonTigerReportsDegradedRowFieldsAndMissingPages(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprint(w, `{"result":{"count":1,"data":[{"SECURITY_CODE":"600519","SECUCODE":"600519.SH","SECURITY_NAME_ABBR":"贵州茅台","TRADE_DATE":"2026-10-23 00:00:00","CLOSE_PRICE":"1313.31","CHANGE_RATE":"1.25","SECURITY_TYPE_CODE":"001001"}]}}`)
@@ -285,7 +284,6 @@ func TestEastmoneyDragonTigerReportsDegradedRowFieldsAndMissingPages(t *testing.
 	}
 }
 
-
 func TestEastmoneyDragonTigerReportsUnavailableSnapshotTime(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprint(w, `{"result":{"pages":1,"count":1,"data":[{"SECURITY_CODE":"600519","SECUCODE":"600519.SH","SECURITY_NAME_ABBR":"贵州茅台","TRADE_DATE":"2026-10-22 00:00:00","BILLBOARD_NET_AMT":"100","BILLBOARD_BUY_AMT":"200","BILLBOARD_SELL_AMT":"100","BILLBOARD_DEAL_AMT":"300","EXPLAIN":"测试上榜原因","SECURITY_TYPE_CODE":"001001"}]}}`)
@@ -317,7 +315,9 @@ func TestEastmoneyDragonTigerReportsPaginationCountMismatch(t *testing.T) {
 	reporter := validation.NewReporter(8)
 	ctx := validation.WithReporter(context.Background(), reporter)
 	p := NewEastmoneyConfiguredWithDragonTiger(2*time.Second, "", "", "", "", "", "", "", "", server.URL, "")
-	if _, err := p.FetchDragonTiger(ctx, "2026-10-22", 1, 100); err == nil { t.Fatal("expected page count mismatch") }
+	if _, err := p.FetchDragonTiger(ctx, "2026-10-22", 1, 100); err == nil {
+		t.Fatal("expected page count mismatch")
+	}
 	issues := reporter.Snapshot().Issues
 	if len(issues) != 1 || issues[0].Field != "pages" || issues[0].Code != "count_inconsistent" || issues[0].RowIndex != nil {
 		t.Fatalf("unexpected pagination Reporter issue: %+v", issues)

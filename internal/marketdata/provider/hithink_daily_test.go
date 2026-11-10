@@ -93,7 +93,6 @@ func TestHithinkDailyPaginationDuplicateReportsPageOffsetAndRow(t *testing.T) {
 	}
 }
 
-
 func TestHithinkIndexDailyBarsReportsOptionalFieldIssues(t *testing.T) {
 	loc := time.FixedZone("CST", 8*60*60)
 	dateMS := time.Date(2026, time.November, 6, 0, 0, 0, 0, loc).UnixMilli()
@@ -146,8 +145,8 @@ func TestHithinkIndexDailyBarsReportsOptionalFieldIssues(t *testing.T) {
 
 func TestHithinkDailyResponseFailuresAreReportedAtSnapshotLevel(t *testing.T) {
 	cases := []struct {
-		name string
-		payload string
+		name     string
+		payload  string
 		wantCode string
 	}{
 		{name: "provider rejection", payload: `{"code":1001,"message":"quota exceeded"}`, wantCode: "provider_response_error"},

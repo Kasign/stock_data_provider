@@ -189,7 +189,6 @@ func TestAssessDailyBarTradingContextHistoricalCalendarInferenceStillDegrades(t 
 	}
 }
 
-
 func TestDailyBarContextCacheDeduplicatesConcurrentSecurityStatusReads(t *testing.T) {
 	ctx := withDailyBarContextCache(context.Background(), 2)
 	var calls atomic.Int32
@@ -236,9 +235,6 @@ func TestDailyBarContextCacheStopsAtRunBudget(t *testing.T) {
 		t.Fatalf("lookup beyond the per-run budget must be explicit, got %v", err)
 	}
 }
-
-
-
 
 func TestAssessDailyBarTradingContextMarksBudgetExhaustionNotComparable(t *testing.T) {
 	calendar := &model.TradingCalendarSnapshot{

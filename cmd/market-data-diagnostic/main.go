@@ -2,8 +2,8 @@ package main
 
 import (
 	"bytes"
-	"encoding/base64"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -30,17 +30,17 @@ const (
 )
 
 type capture struct {
-	Method          string            `json:"method"`
-	RequestURL      string            `json:"request_url"`
-	RequestHeaders  map[string]string `json:"request_headers,omitempty"`
-	StatusCode      int               `json:"status_code,omitempty"`
-	ResponseHeaders map[string]string `json:"response_headers,omitempty"`
-	BodyComplete    bool              `json:"body_complete"`
-	BodyBytes       int               `json:"body_bytes"`
+	Method           string            `json:"method"`
+	RequestURL       string            `json:"request_url"`
+	RequestHeaders   map[string]string `json:"request_headers,omitempty"`
+	StatusCode       int               `json:"status_code,omitempty"`
+	ResponseHeaders  map[string]string `json:"response_headers,omitempty"`
+	BodyComplete     bool              `json:"body_complete"`
+	BodyBytes        int               `json:"body_bytes"`
 	RawPayloadBase64 string            `json:"raw_payload_base64,omitempty"`
 	RawPayloadText   string            `json:"raw_payload_text,omitempty"`
-	Error           string            `json:"error,omitempty"`
-	DurationMS      int64             `json:"duration_ms"`
+	Error            string            `json:"error,omitempty"`
+	DurationMS       int64             `json:"duration_ms"`
 }
 
 type captureDoer struct {
@@ -122,16 +122,16 @@ func (d *captureDoer) sanitizeError(value string) string {
 }
 
 type report struct {
-	Provider  string             `json:"provider"`
-	Symbol    string             `json:"symbol"`
-	TradeDate string             `json:"trade_date"`
-	Period    string             `json:"period"`
-	Adjust    string             `json:"adjustment"`
-	StartedAt time.Time          `json:"started_at"`
-	FinishedAt time.Time         `json:"finished_at"`
-	Error     string             `json:"error,omitempty"`
-	Requests  []capture          `json:"requests"`
-	DailyBars []model.DailyBar   `json:"daily_bars,omitempty"`
+	Provider   string           `json:"provider"`
+	Symbol     string           `json:"symbol"`
+	TradeDate  string           `json:"trade_date"`
+	Period     string           `json:"period"`
+	Adjust     string           `json:"adjustment"`
+	StartedAt  time.Time        `json:"started_at"`
+	FinishedAt time.Time        `json:"finished_at"`
+	Error      string           `json:"error,omitempty"`
+	Requests   []capture        `json:"requests"`
+	DailyBars  []model.DailyBar `json:"daily_bars,omitempty"`
 }
 
 func main() {
@@ -280,4 +280,3 @@ func selectedHeaders(header http.Header, allowed []string) map[string]string {
 	}
 	return out
 }
-

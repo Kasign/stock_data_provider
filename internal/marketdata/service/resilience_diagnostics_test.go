@@ -46,7 +46,6 @@ func TestCircuitBreakerDiagnosticsTracksRealOutcomes(t *testing.T) {
 	}
 }
 
-
 func TestCircuitBreakerSeparatesContractAndQualityOutcomes(t *testing.T) {
 	now := time.Date(2026, 11, 10, 5, 0, 0, 0, time.UTC)
 	b := newCircuitBreaker(1, time.Minute)
@@ -110,7 +109,6 @@ func TestCircuitBreakerDiagnosticsKeepsCapabilitiesIndependent(t *testing.T) {
 	}
 }
 
-
 func TestProviderCallFailureClassificationControlsAvailabilityCircuit(t *testing.T) {
 	b := newCircuitBreaker(1, time.Minute)
 	recordProviderCallFailure(b, "provider:quote", errors.New("quote source_version is missing"))
@@ -125,7 +123,6 @@ func TestProviderCallFailureClassificationControlsAvailabilityCircuit(t *testing
 		t.Fatalf("network failure must count toward availability circuit: %+v", state)
 	}
 }
-
 
 func TestProviderHTTPClientErrorsDoNotTripAvailabilityCircuit(t *testing.T) {
 	b := newCircuitBreaker(1, time.Minute)

@@ -36,10 +36,10 @@ func (c ResilienceConfig) normalized() ResilienceConfig {
 }
 
 type breakerState struct {
-	failures      int
-	openUntil     time.Time
-	probeInFlight bool
-	lastSuccessAt time.Time
+	failures              int
+	openUntil             time.Time
+	probeInFlight         bool
+	lastSuccessAt         time.Time
 	lastFailureAt         time.Time
 	lastContractFailureAt time.Time
 	lastQualityDegradedAt time.Time
@@ -53,12 +53,12 @@ type breakerState struct {
 
 // CircuitDiagnostic 是熔断器基于真实业务调用维护的只读运行状态。
 type CircuitDiagnostic struct {
-	Capability       string     `json:"capability"`
-	Status           string     `json:"status"`
-	ConsecutiveFails int        `json:"consecutive_failures"`
-	TotalSuccess     uint64     `json:"total_success"`
-	TotalFailure     uint64     `json:"total_failure"`
-	LastSuccessAt    *time.Time `json:"last_success_at"`
+	Capability            string     `json:"capability"`
+	Status                string     `json:"status"`
+	ConsecutiveFails      int        `json:"consecutive_failures"`
+	TotalSuccess          uint64     `json:"total_success"`
+	TotalFailure          uint64     `json:"total_failure"`
+	LastSuccessAt         *time.Time `json:"last_success_at"`
 	LastFailureAt         *time.Time `json:"last_failure_at"`
 	LastContractFailureAt *time.Time `json:"last_contract_failure_at,omitempty"`
 	LastQualityDegradedAt *time.Time `json:"last_quality_degraded_at,omitempty"`

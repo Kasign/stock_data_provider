@@ -209,7 +209,6 @@ func addEastmoneyCapitalFlowParseIssue(ctx context.Context, rowIndex int, field,
 	validation.AddContextReport(ctx, report)
 }
 
-
 func addEastmoneyCapitalFlowWarning(ctx context.Context, rowIndex int, field, providerField, code, expected, actualType, message string) {
 	report := validation.NewReport(8)
 	issue := validation.FieldIssue{

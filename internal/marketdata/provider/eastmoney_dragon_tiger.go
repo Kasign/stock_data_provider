@@ -182,7 +182,9 @@ func (p *Eastmoney) FetchDragonTiger(ctx context.Context, tradeDate string, page
 		}
 		if code == "" || normalizedCode == "" || date != tradeDate || name == "" {
 			field, providerField, codeName, expected, preview := "identity", "SECURITY_CODE/SECUCODE/SECURITY_NAME_ABBR", "missing_or_invalid_value", "valid code, normalized symbol and non-empty name", code+"/"+securityCode+"/"+name
-			if name == "" { field, providerField, codeName, expected, preview = "name", "SECURITY_NAME_ABBR", "missing_value", "non-empty security name", "" }
+			if name == "" {
+				field, providerField, codeName, expected, preview = "name", "SECURITY_NAME_ABBR", "missing_value", "non-empty security name", ""
+			}
 			addEastmoneyDragonTigerIssue(ctx, &index, field, providerField, codeName, expected, "string", preview, "东方财富龙虎榜行身份或名称字段不符合契约")
 			return nil, fmt.Errorf("Eastmoney dragon-tiger row %d violates identity/date contract: code=%q normalized_code=%q name=%q trade_date=%q requested_date=%q security_type=%q", index, code, normalizedCode, name, date, tradeDate, securityType)
 		}
@@ -193,9 +195,15 @@ func (p *Eastmoney) FetchDragonTiger(ctx context.Context, tradeDate string, page
 		deal := parseEastmoneyBoardNumber(raw, "BILLBOARD_DEAL_AMT")
 		if netBuy == nil || buy == nil || sell == nil {
 			itemReasons = append(itemReasons, "provider_billboard_amount_fields_incomplete")
-			if netBuy == nil { addEastmoneyDragonTigerIssue(ctx, &index, "net_buy_amount", "BILLBOARD_NET_AMT", "missing_or_invalid_value", "finite net-buy amount", "missing_or_invalid", "", "龙虎榜净买入金额缺失或非法") }
-			if buy == nil { addEastmoneyDragonTigerIssue(ctx, &index, "buy_amount", "BILLBOARD_BUY_AMT", "missing_or_invalid_value", "finite non-negative buy amount", "missing_or_invalid", "", "龙虎榜买入金额缺失或非法") }
-			if sell == nil { addEastmoneyDragonTigerIssue(ctx, &index, "sell_amount", "BILLBOARD_SELL_AMT", "missing_or_invalid_value", "finite non-negative sell amount", "missing_or_invalid", "", "龙虎榜卖出金额缺失或非法") }
+			if netBuy == nil {
+				addEastmoneyDragonTigerIssue(ctx, &index, "net_buy_amount", "BILLBOARD_NET_AMT", "missing_or_invalid_value", "finite net-buy amount", "missing_or_invalid", "", "龙虎榜净买入金额缺失或非法")
+			}
+			if buy == nil {
+				addEastmoneyDragonTigerIssue(ctx, &index, "buy_amount", "BILLBOARD_BUY_AMT", "missing_or_invalid_value", "finite non-negative buy amount", "missing_or_invalid", "", "龙虎榜买入金额缺失或非法")
+			}
+			if sell == nil {
+				addEastmoneyDragonTigerIssue(ctx, &index, "sell_amount", "BILLBOARD_SELL_AMT", "missing_or_invalid_value", "finite non-negative sell amount", "missing_or_invalid", "", "龙虎榜卖出金额缺失或非法")
+			}
 		}
 		reason := strings.TrimSpace(parseEastmoneyBoardString(raw, "EXPLAIN"))
 		explanation := strings.TrimSpace(parseEastmoneyBoardString(raw, "EXPLANATION"))
@@ -293,7 +301,6 @@ func eastmoneyDragonTigerSymbol(raw map[string]json.RawMessage, rawCode string) 
 	}
 	return symbol, code, nil
 }
-
 
 func addEastmoneyDragonTigerIssue(ctx context.Context, rowIndex *int, field, providerField, code, expected, actualType, preview, message string) {
 	report := validation.NewReport(16)

@@ -21,15 +21,15 @@ import (
 const tencentVersion = "tencent-finance-api-v1"
 
 type Tencent struct {
-	client              *http.Client
-	quoteHTTPDoer       HTTPDoer
-	klineHTTPDoer       HTTPDoer
-	noneKlineHTTPDoer   HTTPDoer
-	searchHTTPDoer      HTTPDoer
-	quoteURL            string
-	klineURL            string
-	noneKlineURL        string
-	searchURL           string
+	client            *http.Client
+	quoteHTTPDoer     HTTPDoer
+	klineHTTPDoer     HTTPDoer
+	noneKlineHTTPDoer HTTPDoer
+	searchHTTPDoer    HTTPDoer
+	quoteURL          string
+	klineURL          string
+	noneKlineURL      string
+	searchURL         string
 }
 
 func NewTencent(timeout time.Duration) *Tencent {

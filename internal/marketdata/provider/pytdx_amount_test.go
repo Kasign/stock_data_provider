@@ -165,7 +165,6 @@ func TestBuildPytdxQuoteReportsInvalidOptionalAmountAndDegrades(t *testing.T) {
 	}
 }
 
-
 func TestBuildPytdxQuoteReportsProviderContractLimitations(t *testing.T) {
 	reporter := validation.NewReporter(20)
 	ctx := validation.WithReporter(context.Background(), reporter)

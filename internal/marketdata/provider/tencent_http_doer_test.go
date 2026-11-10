@@ -34,9 +34,9 @@ func (d *recordingTencentHTTPDoer) Do(request *http.Request) (*http.Response, er
 
 func TestTencentUsesDistinctHTTPDoersForConfiguredEndpoints(t *testing.T) {
 	const (
-		quoteURL = "https://web.sqt.gtimg.example/utf8/q"
-		qfqURL   = "https://web.ifzq.gtimg.example/appstock/app/fqkline/get"
-		rawURL   = "https://raw-kline.gtimg.example/appstock/app/kline/kline"
+		quoteURL  = "https://web.sqt.gtimg.example/utf8/q"
+		qfqURL    = "https://web.ifzq.gtimg.example/appstock/app/fqkline/get"
+		rawURL    = "https://raw-kline.gtimg.example/appstock/app/kline/kline"
 		searchURL = "https://smartbox.gtimg.example/s3/"
 	)
 	quoteDoer := &recordingTencentHTTPDoer{status: http.StatusBadGateway}

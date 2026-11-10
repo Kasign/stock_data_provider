@@ -28,11 +28,11 @@ const maxSinaKlineBars = 1023
 
 // 新浪 Provider 同时实现实时行情和历史日 K。两个端点字段契约不同，必须分别归一化。
 type Sina struct {
-	client         *http.Client
-	quoteHTTPDoer  HTTPDoer
-	klineHTTPDoer  HTTPDoer
-	quoteURL       string
-	klineURL       string
+	client        *http.Client
+	quoteHTTPDoer HTTPDoer
+	klineHTTPDoer HTTPDoer
+	quoteURL      string
+	klineURL      string
 }
 
 func NewSina(timeout time.Duration, quoteURL string) *Sina {

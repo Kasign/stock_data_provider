@@ -245,7 +245,6 @@ func containsReason(reasons []string, want string) bool {
 	return false
 }
 
-
 func TestBaostockDailyBarsReportsUnsupportedRawCellType(t *testing.T) {
 	client := &fakeBaostockClient{rows: []baostock.DailyKLine{{
 		Date: "2026-10-21", Code: "sh.600519",
@@ -270,7 +269,6 @@ func TestBaostockDailyBarsReportsUnsupportedRawCellType(t *testing.T) {
 		t.Fatalf("expected raw close cell type issue at row 0, got %+v", reporter.Snapshot().Issues)
 	}
 }
-
 
 func TestBaostockDailyBarsReportsOutOfRangeDate(t *testing.T) {
 	client := &fakeBaostockClient{rows: []baostock.DailyKLine{{

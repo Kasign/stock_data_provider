@@ -14,25 +14,25 @@ import (
 
 func TestNeteaseQuoteReportsIdentityAndConsistencyRejections(t *testing.T) {
 	tests := []struct {
-		name string
+		name    string
 		payload string
-		field string
-		code string
+		field   string
+		code    string
 	}{
 		{
-			name: "missing requested identity",
+			name:    "missing requested identity",
 			payload: `{"sh600519":{"code":"sh000001","symbol":"000001","price":10,"open":9,"high":11,"low":8,"yestclose":9,"updown":1,"percent":0.1}}`,
-			field: "symbol", code: "symbol_mismatch",
+			field:   "symbol", code: "symbol_mismatch",
 		},
 		{
-			name: "change inconsistent",
+			name:    "change inconsistent",
 			payload: `{"sh600519":{"code":"sh600519","symbol":"600519","price":10,"open":9,"high":11,"low":8,"yestclose":9,"updown":2,"percent":0.1}}`,
-			field: "change", code: "inconsistent_value",
+			field:   "change", code: "inconsistent_value",
 		},
 		{
-			name: "percent inconsistent",
+			name:    "percent inconsistent",
 			payload: `{"sh600519":{"code":"sh600519","symbol":"600519","price":10,"open":9,"high":11,"low":8,"yestclose":9,"updown":1,"percent":0.2}}`,
-			field: "change_percent", code: "inconsistent_value",
+			field:   "change_percent", code: "inconsistent_value",
 		},
 	}
 	for _, tc := range tests {
@@ -45,14 +45,18 @@ func TestNeteaseQuoteReportsIdentityAndConsistencyRejections(t *testing.T) {
 			ctx := validation.WithReporter(context.Background(), reporter)
 			provider := NewNeteaseConfigured(2*time.Second, server.URL, "http://127.0.0.1:1/history")
 			_, err := provider.FetchQuote(ctx, "600519.SH")
-			if err == nil { t.Fatal("expected quote rejection") }
+			if err == nil {
+				t.Fatal("expected quote rejection")
+			}
 			found := false
 			for _, issue := range reporter.Snapshot().Issues {
 				if issue.Field == tc.field && issue.Code == tc.code && issue.Stage == validation.StageValidate {
 					found = true
 				}
 			}
-			if !found { t.Fatalf("missing %s/%s diagnostic: %+v", tc.field, tc.code, reporter.Snapshot().Issues) }
+			if !found {
+				t.Fatalf("missing %s/%s diagnostic: %+v", tc.field, tc.code, reporter.Snapshot().Issues)
+			}
 		})
 	}
 }

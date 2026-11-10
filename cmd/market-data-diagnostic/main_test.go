@@ -21,8 +21,8 @@ func TestCaptureDoerPreservesResponseBody(t *testing.T) {
 	body := "provider-raw-payload"
 	response := &http.Response{
 		StatusCode: http.StatusOK,
-		Header: http.Header{"Content-Type": []string{"application/json"}},
-		Body: io.NopCloser(strings.NewReader(body)),
+		Header:     http.Header{"Content-Type": []string{"application/json"}},
+		Body:       io.NopCloser(strings.NewReader(body)),
 	}
 	doer := &captureDoer{next: fixedDoer{response: response}, limit: 1024}
 	request, _ := http.NewRequest(http.MethodGet, "https://example.com/data", nil)

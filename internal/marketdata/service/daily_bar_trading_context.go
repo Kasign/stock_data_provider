@@ -10,7 +10,6 @@ import (
 	"example.com/stock-analysis-flow/internal/marketdata/model"
 )
 
-
 const maxDailyBarSecurityStatusLookupsPerProbe = 10
 
 var errDailyBarContextStatusBudgetExceeded = errors.New("daily-bar context security-status lookup budget exceeded")

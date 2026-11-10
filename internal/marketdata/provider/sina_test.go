@@ -303,8 +303,8 @@ func TestSinaMissingOrInvalidAmountDoesNotClaimRawFieldMetadata(t *testing.T) {
 func TestSinaDailyBarsReportsSnapshotLevelFailures(t *testing.T) {
 	cases := []struct {
 		name, body string
-		status int
-		wantCode string
+		status     int
+		wantCode   string
 	}{
 		{name: "http status", status: http.StatusBadGateway, body: "upstream unavailable", wantCode: "http_status_error"},
 		{name: "invalid json", status: http.StatusOK, body: "{not-json", wantCode: "decode_error"},
@@ -320,7 +320,9 @@ func TestSinaDailyBarsReportsSnapshotLevelFailures(t *testing.T) {
 			reporter := validation.NewReporter(10)
 			ctx := validation.WithReporter(context.Background(), reporter)
 			_, err := NewSinaConfigured(0, "", server.URL).FetchDailyBars(ctx, "600036.SH", "2026-10-20", "2026-10-21", 8, model.AdjustmentNone)
-			if err == nil { t.Fatal("expected invalid provider response to be rejected") }
+			if err == nil {
+				t.Fatal("expected invalid provider response to be rejected")
+			}
 			issues := reporter.Snapshot().Issues
 			found := false
 			for _, issue := range issues {
@@ -329,7 +331,9 @@ func TestSinaDailyBarsReportsSnapshotLevelFailures(t *testing.T) {
 					break
 				}
 			}
-			if !found { t.Fatalf("missing snapshot-level %s issue: %+v", tc.wantCode, issues) }
+			if !found {
+				t.Fatalf("missing snapshot-level %s issue: %+v", tc.wantCode, issues)
+			}
 		})
 	}
 }

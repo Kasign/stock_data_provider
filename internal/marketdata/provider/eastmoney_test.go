@@ -345,9 +345,9 @@ func TestEastmoneyRejectsNonZeroProviderResultCode(t *testing.T) {
 
 func TestEastmoneyDailyBarsReportsRequestAndDecodeFailures(t *testing.T) {
 	cases := []struct {
-		name string
+		name   string
 		status int
-		body string
+		body   string
 	}{
 		{name: "http status", status: http.StatusBadGateway, body: "upstream unavailable"},
 		{name: "invalid json", status: http.StatusOK, body: `{"rc":0,"data":`},

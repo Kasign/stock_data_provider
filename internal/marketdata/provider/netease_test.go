@@ -321,7 +321,6 @@ func TestNeteaseFetchQuoteParseFailureKeepsReporterWhenProviderReturnsError(t *t
 	}
 }
 
-
 func TestNeteaseFetchQuoteReportsDegradedOptionalFields(t *testing.T) {
 	payload := `_ntes_quote_callback({"0600036":{"price":42.35,"percent":0.0127,"updown":0.53,"open":41.70,"high":42.38,"low":41.57,"yestclose":41.82}});`
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte(payload)) }))
@@ -348,7 +347,6 @@ func TestNeteaseFetchQuoteReportsDegradedOptionalFields(t *testing.T) {
 		}
 	}
 }
-
 
 func TestNeteaseDailyBarsReportsOutOfRequestedDateRange(t *testing.T) {
 	payload := "日期,股票代码,名称,收盘价,最高价,最低价,开盘价,成交量,成交金额\n" +

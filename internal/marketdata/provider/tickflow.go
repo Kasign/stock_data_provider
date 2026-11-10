@@ -41,14 +41,14 @@ var tickflowCoreIndexDefinitions = []tickflowIndexDefinition{
 }
 
 type TickFlow struct {
-	client                 *http.Client
-	authenticatedHTTPDoer  HTTPDoer
-	publicHTTPDoer         HTTPDoer
-	apiURL                 string
-	freeAPIURL             string
-	apiKey                 string
-	rateMu                 sync.Mutex
-	lastFreeCall           time.Time
+	client                *http.Client
+	authenticatedHTTPDoer HTTPDoer
+	publicHTTPDoer        HTTPDoer
+	apiURL                string
+	freeAPIURL            string
+	apiKey                string
+	rateMu                sync.Mutex
+	lastFreeCall          time.Time
 }
 
 type tickflowQuotePayload struct {

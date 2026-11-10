@@ -111,11 +111,10 @@ func TestParseBaoStockFactorDateRejectsNonCanonicalDate(t *testing.T) {
 	}
 }
 
-
 func TestBaoStockAdjustmentFactorRejectsReportFieldEvidence(t *testing.T) {
 	tests := []struct {
-		name string
-		row baostock.AdjustmentFactor
+		name                       string
+		row                        baostock.AdjustmentFactor
 		field, providerField, code string
 	}{
 		{name: "symbol mismatch", row: baostock.AdjustmentFactor{Code: "sz.002982", OperateDate: "2025-07-11", ForwardFactor: 1, BackwardFactor: 1}, field: "symbol", providerField: "code", code: "symbol_mismatch"},

@@ -13,6 +13,8 @@ func truncateDiagnosticPreview(value string, maxBytes int) string {
 		return value
 	}
 	end := maxBytes
-	for end > 0 && !utf8.RuneStart(value[end]) { end-- }
+	for end > 0 && !utf8.RuneStart(value[end]) {
+		end--
+	}
 	return value[:end]
 }

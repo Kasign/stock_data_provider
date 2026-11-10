@@ -598,7 +598,7 @@ func TestDailyBarsMissingProviderSourceIsFilledAsDegraded(t *testing.T) {
 }
 
 func TestMergeBundleQualityStatusPreservesSeverity(t *testing.T) {
-	cases := []struct { current, next, want model.QualityStatus }{
+	cases := []struct{ current, next, want model.QualityStatus }{
 		{model.QualityValid, model.QualityDegraded, model.QualityDegraded},
 		{model.QualityDegraded, model.QualityUnknown, model.QualityUnknown},
 		{model.QualityUnknown, model.QualityStale, model.QualityStale},
@@ -621,7 +621,9 @@ func TestBundlePreservesStaleRealtimeQuoteQuality(t *testing.T) {
 	p.bars = []model.DailyBar{{SourceVersion: "test-v1", Symbol: "600519.SH", TradeDate: time.Now().In(marketLocation()).AddDate(0, 0, -1).Format("2006-01-02"), Period: "1d", Open: 10, High: 11, Low: 9, Close: 10.5, Volume: &vol, Amount: &amount, AdjustmentBasis: model.AdjustmentNone, Source: "eastmoney", VolumeUnit: "shares", AmountUnit: "CNY", QualityStatus: model.QualityValid}}
 	s := New([]provider.Provider{p}, cache.NewDisabled(), nil, time.Second, time.Second, 60, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	bundle, err := s.Bundle(context.Background(), "600519", 1, time.Time{}, false, model.AdjustmentNone)
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	if bundle.Quote == nil || bundle.Quote.QualityStatus != model.QualityStale {
 		t.Fatalf("expected stale quote in bundle, got %+v", bundle.Quote)
 	}
@@ -859,7 +861,6 @@ func dailyBarForVersionContractTest(sourceVersion, tradeDate string) model.Daily
 	}
 }
 
-
 func TestQuoteBypassesDegradedCacheAfterShortTTL(t *testing.T) {
 	mem := newMemoryCache()
 	cached := validQuote("eastmoney")
@@ -869,7 +870,9 @@ func TestQuoteBypassesDegradedCacheAfterShortTTL(t *testing.T) {
 	cached.FetchedAt = time.Now().Add(-3 * time.Minute)
 	cached.NormalizedAt = time.Now().UTC()
 	payload, err := json.Marshal(cached)
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	mem.values["md:v4:quote:600519.SH"] = payload
 
 	current := fakeProvider{name: "tencent", quote: validQuote("tencent")}
@@ -893,7 +896,9 @@ func TestDailyBarsBypassesDegradedCacheAfterShortTTL(t *testing.T) {
 	cached.FetchedAt = time.Now().Add(-3 * time.Minute)
 	cached.NormalizedAt = time.Now().UTC()
 	payload, err := json.Marshal(map[string]any{"bars": []model.DailyBar{cached}, "warnings": []string{}})
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	key := fmt.Sprintf("md:v5:bars:600519.SH:%s:%s:%s:%d", tradeDate, tradeDate, model.AdjustmentNone, 1)
 	mem.values[key] = payload
 
@@ -923,7 +928,9 @@ func TestDailyBarsRejectsNonCacheableQualityStatuses(t *testing.T) {
 			cached.FetchedAt = time.Now().UTC()
 			cached.NormalizedAt = time.Now().UTC()
 			payload, err := json.Marshal(map[string]any{"bars": []model.DailyBar{cached}, "warnings": []string{}})
-			if err != nil { t.Fatal(err) }
+			if err != nil {
+				t.Fatal(err)
+			}
 			key := fmt.Sprintf("md:v5:bars:600519.SH:%s:%s:%s:%d", tradeDate, tradeDate, model.AdjustmentNone, 1)
 			mem.values[key] = payload
 
@@ -3469,13 +3476,13 @@ func TestDailyBarsCacheRetainsStoredWarningsWhenHit(t *testing.T) {
 }
 
 type snapshotSourceIdentityFakeProvider struct {
-	name string
-	indexSnapshot *model.IndexQuoteSnapshot
+	name            string
+	indexSnapshot   *model.IndexQuoteSnapshot
 	breadthSnapshot *model.MarketBreadthSnapshot
-	sectorSnapshot *model.SectorRankingSnapshot
-	indexCalls int
-	breadthCalls int
-	sectorCalls int
+	sectorSnapshot  *model.SectorRankingSnapshot
+	indexCalls      int
+	breadthCalls    int
+	sectorCalls     int
 }
 
 func (p *snapshotSourceIdentityFakeProvider) Name() string { return p.name }
@@ -3540,7 +3547,7 @@ func marketBreadthSnapshotForSource(source string) *model.MarketBreadthSnapshot 
 		AdvancingCount: 1, DecliningCount: 0, UnchangedCount: 0,
 		AmountCoverageCount: 1, TotalAmountCNY: &amount,
 		ProviderReportDate: time.Now().In(marketLocation()).Format("2006-01-02"),
-		Source: source, SourceVersion: "test-v1", FetchedAt: time.Now().UTC(),
+		Source:             source, SourceVersion: "test-v1", FetchedAt: time.Now().UTC(),
 		QualityStatus: model.QualityDegraded,
 	}
 }
@@ -3788,10 +3795,11 @@ func TestValuationsRejectsMismatchedProviderSourceAndFallsBack(t *testing.T) {
 }
 
 type indexCatalogSourceIdentityFake struct {
-	name string
+	name     string
 	snapshot *model.IndexCatalogSnapshot
-	calls int
+	calls    int
 }
+
 func (f *indexCatalogSourceIdentityFake) Name() string { return f.name }
 func (f *indexCatalogSourceIdentityFake) FetchIndexCatalog(context.Context, string) (*model.IndexCatalogSnapshot, error) {
 	f.calls++
@@ -3808,7 +3816,7 @@ func TestIndexCatalogRejectsMismatchedProviderSourceAndFallsBack(t *testing.T) {
 	now := time.Now().UTC()
 	makeSnapshot := func(source string) *model.IndexCatalogSnapshot {
 		return &model.IndexCatalogSnapshot{
-			Tag: "cn_concept",
+			Tag:   "cn_concept",
 			Items: []model.IndexCatalogItem{{Symbol: "000300.SH", Name: "沪深300", Tag: "cn_concept"}},
 			Total: 1, ProviderReturned: 1, Source: source, SourceVersion: "test-v1",
 			FetchedAt: now, QualityStatus: model.QualityDegraded,
@@ -3828,10 +3836,11 @@ func TestIndexCatalogRejectsMismatchedProviderSourceAndFallsBack(t *testing.T) {
 }
 
 type hotRankingSourceIdentityFake struct {
-	name string
+	name     string
 	snapshot *model.HotRankingSnapshot
-	calls int
+	calls    int
 }
+
 func (f *hotRankingSourceIdentityFake) Name() string { return f.name }
 func (f *hotRankingSourceIdentityFake) FetchHotStocks(context.Context, string, int) (*model.HotRankingSnapshot, error) {
 	f.calls++

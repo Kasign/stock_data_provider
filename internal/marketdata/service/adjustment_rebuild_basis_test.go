@@ -200,9 +200,13 @@ func TestRebuildAdjustedDailyBarsEmitsDeterministicFactorProvenance(t *testing.T
 		{Symbol: "600036.SH", TradeDate: "2025-07-02", Factor: 4, Source: "tushare", SourceVersion: "tushare-v1", FetchedAt: available, AvailableAt: &available, SystemObservedAt: &observed, QualityStatus: model.QualityValid},
 	}
 	first, err := rebuildAdjustedDailyBarsPIT(raw, factors, model.AdjustmentForward, "2025-07-02")
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	second, err := rebuildAdjustedDailyBarsPIT(raw, []model.AdjustmentFactor{factors[1], factors[0]}, model.AdjustmentForward, "2025-07-02")
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	for i := range first {
 		if first[i].AdjustmentFactorRevisionHash == "" || first[i].AdjustmentFactorSetHash == "" ||
 			first[i].AdjustmentFactorReferenceRevisionHash == "" || first[i].AdjustmentAlgorithmVersion != "cumulative_adj_factor_v1" {
@@ -228,16 +232,26 @@ func TestAdjustmentFactorFingerprintSeparatesContentFromObservationMetadata(t *t
 		SystemObservedAt: &observed, QualityStatus: model.QualityValid,
 	}
 	first, err := adjustmentFactorFingerprint(factor)
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	factor.FetchedAt = instant.Add(5 * time.Minute)
 	laterObserved := observed.Add(5 * time.Minute)
 	factor.SystemObservedAt = &laterObserved
 	second, err := adjustmentFactorFingerprint(factor)
-	if err != nil { t.Fatal(err) }
-	if first != second { t.Fatal("fetch and system observation metadata must not alter content revision fingerprint") }
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first != second {
+		t.Fatal("fetch and system observation metadata must not alter content revision fingerprint")
+	}
 	laterAvailable := instant.Add(time.Minute)
 	factor.AvailableAt = &laterAvailable
 	third, err := adjustmentFactorFingerprint(factor)
-	if err != nil { t.Fatal(err) }
-	if first == third { t.Fatal("provider availability evidence must alter content revision fingerprint") }
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first == third {
+		t.Fatal("provider availability evidence must alter content revision fingerprint")
+	}
 }

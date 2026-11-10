@@ -59,24 +59,24 @@ type Quote struct {
 }
 
 type DailyBar struct {
-	Symbol                           string          `json:"symbol"`
-	TradeDate                        string          `json:"trade_date"`
-	IsPartial                        bool            `json:"is_partial,omitempty"`
-	Period                           string          `json:"period"`
-	Open                             float64         `json:"open"`
-	High                             float64         `json:"high"`
-	Low                              float64         `json:"low"`
-	Close                            float64         `json:"close"`
-	MA5                              *float64        `json:"ma5"`
-	MA20                             *float64        `json:"ma20"`
-	MA120                            *float64        `json:"ma120"`
-	MA250                            *float64        `json:"ma250"`
-	Volume                           *int64          `json:"volume"`
-	Amount                           *float64        `json:"amount"`
-	ChangePercent                    *float64        `json:"change_percent"`
-	AdjustmentBasis                  AdjustmentBasis `json:"adjustment_basis"`
-	AdjustmentMethod                 string          `json:"adjustment_method,omitempty"`
-	AdjustmentRefDate                string          `json:"adjustment_reference_date,omitempty"`
+	Symbol                                string          `json:"symbol"`
+	TradeDate                             string          `json:"trade_date"`
+	IsPartial                             bool            `json:"is_partial,omitempty"`
+	Period                                string          `json:"period"`
+	Open                                  float64         `json:"open"`
+	High                                  float64         `json:"high"`
+	Low                                   float64         `json:"low"`
+	Close                                 float64         `json:"close"`
+	MA5                                   *float64        `json:"ma5"`
+	MA20                                  *float64        `json:"ma20"`
+	MA120                                 *float64        `json:"ma120"`
+	MA250                                 *float64        `json:"ma250"`
+	Volume                                *int64          `json:"volume"`
+	Amount                                *float64        `json:"amount"`
+	ChangePercent                         *float64        `json:"change_percent"`
+	AdjustmentBasis                       AdjustmentBasis `json:"adjustment_basis"`
+	AdjustmentMethod                      string          `json:"adjustment_method,omitempty"`
+	AdjustmentRefDate                     string          `json:"adjustment_reference_date,omitempty"`
 	AdjustmentFactorSource                string          `json:"adjustment_factor_source,omitempty"`
 	AdjustmentFactorSourceVersion         string          `json:"adjustment_factor_source_version,omitempty"`
 	AdjustmentFactorRevisionHash          string          `json:"adjustment_factor_revision_hash,omitempty"`
@@ -84,25 +84,25 @@ type DailyBar struct {
 	AdjustmentFactorReferenceRevisionHash string          `json:"adjustment_factor_reference_revision_hash,omitempty"`
 	AdjustmentAlgorithmVersion            string          `json:"adjustment_algorithm_version,omitempty"`
 	AdjustmentFactorSystemObservedAt      *time.Time      `json:"adjustment_factor_system_observed_at,omitempty"`
-	Source                           string          `json:"source"`
-	SourceVersion                    string          `json:"source_version,omitempty"`
-	ProviderTime                     *time.Time      `json:"provider_timestamp,omitempty"`
-	FetchedAt                        time.Time       `json:"fetched_at"`
-	NormalizedAt                     time.Time       `json:"normalized_at"`
-	SystemObservedAt                 *time.Time      `json:"system_observed_at,omitempty"`
-	RawVolume                        *float64        `json:"raw_volume,omitempty"`
-	RawVolumeUnit                    string          `json:"raw_volume_unit,omitempty"`
-	RawAmount                        *float64        `json:"raw_amount,omitempty"`
-	RawAmountUnit                    string          `json:"raw_amount_unit,omitempty"`
-	RawAmountField                   string          `json:"raw_amount_field,omitempty"`
-	VolumeUnit                       string          `json:"volume_unit"`
-	AmountUnit                       string          `json:"amount_unit"`
-	QualityStatus                    QualityStatus   `json:"quality_status"`
-	QualityReasons                   []string        `json:"quality_reasons,omitempty"`
-	FallbackFrom                     string          `json:"fallback_from,omitempty"`
-	FallbackReason                   string          `json:"fallback_reason,omitempty"`
-	RequestID                        string          `json:"request_id,omitempty"`
-	NormalizationVer                 string          `json:"normalization_version"`
+	Source                                string          `json:"source"`
+	SourceVersion                         string          `json:"source_version,omitempty"`
+	ProviderTime                          *time.Time      `json:"provider_timestamp,omitempty"`
+	FetchedAt                             time.Time       `json:"fetched_at"`
+	NormalizedAt                          time.Time       `json:"normalized_at"`
+	SystemObservedAt                      *time.Time      `json:"system_observed_at,omitempty"`
+	RawVolume                             *float64        `json:"raw_volume,omitempty"`
+	RawVolumeUnit                         string          `json:"raw_volume_unit,omitempty"`
+	RawAmount                             *float64        `json:"raw_amount,omitempty"`
+	RawAmountUnit                         string          `json:"raw_amount_unit,omitempty"`
+	RawAmountField                        string          `json:"raw_amount_field,omitempty"`
+	VolumeUnit                            string          `json:"volume_unit"`
+	AmountUnit                            string          `json:"amount_unit"`
+	QualityStatus                         QualityStatus   `json:"quality_status"`
+	QualityReasons                        []string        `json:"quality_reasons,omitempty"`
+	FallbackFrom                          string          `json:"fallback_from,omitempty"`
+	FallbackReason                        string          `json:"fallback_reason,omitempty"`
+	RequestID                             string          `json:"request_id,omitempty"`
+	NormalizationVer                      string          `json:"normalization_version"`
 }
 
 type Bundle struct {

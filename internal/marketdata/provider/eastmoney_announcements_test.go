@@ -156,7 +156,6 @@ func TestEastmoneyAnnouncementsRejectsNonStockSecurities(t *testing.T) {
 	}
 }
 
-
 func TestEastmoneyAnnouncementReportsUnparseableDisplayTime(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprint(w, `{"success":1,"data":{"page_index":1,"page_size":1,"total_hits":1,"list":[
@@ -181,29 +180,47 @@ func TestEastmoneyAnnouncementReportsUnparseableDisplayTime(t *testing.T) {
 	}
 }
 
-
 func TestEastmoneyAnnouncementsReportsResponseAndRowRejections(t *testing.T) {
-	cases := []struct{name, body, code string; row int}{
-		{name:"provider rejected",body:`{"success":0,"code":500,"message":"failed"}`,code:"provider_error",row:-1},
-		{name:"page mismatch",body:`{"success":1,"data":{"page_index":2,"page_size":1,"total_hits":1,"list":[]}}`,code:"pagination_metadata_mismatch",row:-1},
-		{name:"negative total",body:`{"success":1,"data":{"page_index":1,"page_size":1,"total_hits":-1,"list":[]}}`,code:"invalid_pagination_total",row:-1},
-		{name:"row count mismatch",body:`{"success":1,"data":{"page_index":1,"page_size":2,"total_hits":2,"list":[]}}`,code:"pagination_row_count_mismatch",row:-1},
-		{name:"missing article identity",body:`{"success":1,"data":{"page_index":1,"page_size":1,"total_hits":1,"list":[{"notice_date":"2026-10-23","title":"公告"}]}}`,code:"missing_required_value",row:0},
-		{name:"invalid notice date",body:`{"success":1,"data":{"page_index":1,"page_size":1,"total_hits":1,"list":[{"art_code":"A1","notice_date":"bad","title":"公告"}]}}`,code:"invalid_date",row:0},
-		{name:"duplicate article",body:`{"success":1,"data":{"page_index":1,"page_size":2,"total_hits":2,"list":[{"art_code":"A1","codes":[{"stock_code":"600036"}],"notice_date":"2026-10-23","title":"公告1"},{"art_code":"A1","codes":[{"stock_code":"600036"}],"notice_date":"2026-10-23","title":"公告2"}]}}`,code:"duplicate_article_id",row:1},
-		{name:"wrong stock",body:`{"success":1,"data":{"page_index":1,"page_size":1,"total_hits":1,"list":[{"art_code":"A1","codes":[{"stock_code":"000001"}],"notice_date":"2026-10-23","title":"公告"}]}}`,code:"symbol_mismatch",row:0},
+	cases := []struct {
+		name, body, code string
+		row              int
+	}{
+		{name: "provider rejected", body: `{"success":0,"code":500,"message":"failed"}`, code: "provider_error", row: -1},
+		{name: "page mismatch", body: `{"success":1,"data":{"page_index":2,"page_size":1,"total_hits":1,"list":[]}}`, code: "pagination_metadata_mismatch", row: -1},
+		{name: "negative total", body: `{"success":1,"data":{"page_index":1,"page_size":1,"total_hits":-1,"list":[]}}`, code: "invalid_pagination_total", row: -1},
+		{name: "row count mismatch", body: `{"success":1,"data":{"page_index":1,"page_size":2,"total_hits":2,"list":[]}}`, code: "pagination_row_count_mismatch", row: -1},
+		{name: "missing article identity", body: `{"success":1,"data":{"page_index":1,"page_size":1,"total_hits":1,"list":[{"notice_date":"2026-10-23","title":"公告"}]}}`, code: "missing_required_value", row: 0},
+		{name: "invalid notice date", body: `{"success":1,"data":{"page_index":1,"page_size":1,"total_hits":1,"list":[{"art_code":"A1","notice_date":"bad","title":"公告"}]}}`, code: "invalid_date", row: 0},
+		{name: "duplicate article", body: `{"success":1,"data":{"page_index":1,"page_size":2,"total_hits":2,"list":[{"art_code":"A1","codes":[{"stock_code":"600036"}],"notice_date":"2026-10-23","title":"公告1"},{"art_code":"A1","codes":[{"stock_code":"600036"}],"notice_date":"2026-10-23","title":"公告2"}]}}`, code: "duplicate_article_id", row: 1},
+		{name: "wrong stock", body: `{"success":1,"data":{"page_index":1,"page_size":1,"total_hits":1,"list":[{"art_code":"A1","codes":[{"stock_code":"000001"}],"notice_date":"2026-10-23","title":"公告"}]}}`, code: "symbol_mismatch", row: 0},
 	}
-	for _,tc:=range cases{t.Run(tc.name,func(t *testing.T){
-		server:=httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter,_ *http.Request){fmt.Fprint(w,tc.body)}));defer server.Close()
-		reporter:=validation.NewReporter(16);ctx:=validation.WithReporter(context.Background(),reporter)
-		p:=NewEastmoneyConfiguredWithAnnouncements(2*time.Second,"","","","","","","","","",server.URL,"")
-		_,err:=p.FetchStockAnnouncements(ctx,"600036.SH","2026-10-20","2026-10-26",1,tc.row+1)
-		if err==nil{t.Fatal("expected rejection")}
-		for _,issue:=range reporter.Snapshot().Issues{if issue.Code!=tc.code{continue}
-			if issue.Stage!=validation.StageParse||issue.Severity!=validation.SeverityError{t.Fatalf("unexpected issue classification: %+v",issue)}
-			if tc.row<0&&issue.RowIndex!=nil{t.Fatalf("response-level issue has row index: %+v",issue)}
-			if tc.row>=0&&(issue.RowIndex==nil||*issue.RowIndex!=tc.row){t.Fatalf("wrong row index: %+v",issue)}
-			return
-		};t.Fatalf("missing %s evidence: %+v",tc.code,reporter.Snapshot().Issues)
-	})}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { fmt.Fprint(w, tc.body) }))
+			defer server.Close()
+			reporter := validation.NewReporter(16)
+			ctx := validation.WithReporter(context.Background(), reporter)
+			p := NewEastmoneyConfiguredWithAnnouncements(2*time.Second, "", "", "", "", "", "", "", "", "", server.URL, "")
+			_, err := p.FetchStockAnnouncements(ctx, "600036.SH", "2026-10-20", "2026-10-26", 1, tc.row+1)
+			if err == nil {
+				t.Fatal("expected rejection")
+			}
+			for _, issue := range reporter.Snapshot().Issues {
+				if issue.Code != tc.code {
+					continue
+				}
+				if issue.Stage != validation.StageParse || issue.Severity != validation.SeverityError {
+					t.Fatalf("unexpected issue classification: %+v", issue)
+				}
+				if tc.row < 0 && issue.RowIndex != nil {
+					t.Fatalf("response-level issue has row index: %+v", issue)
+				}
+				if tc.row >= 0 && (issue.RowIndex == nil || *issue.RowIndex != tc.row) {
+					t.Fatalf("wrong row index: %+v", issue)
+				}
+				return
+			}
+			t.Fatalf("missing %s evidence: %+v", tc.code, reporter.Snapshot().Issues)
+		})
+	}
 }

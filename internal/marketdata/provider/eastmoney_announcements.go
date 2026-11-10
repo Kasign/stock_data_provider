@@ -305,7 +305,6 @@ func emptyEastmoneyAnnouncementSnapshot(symbol, startDate, endDate string, page,
 	}
 }
 
-
 func addEastmoneyAnnouncementResponseIssue(ctx context.Context, field, providerField, code, expected, actualType, message string) {
 	addEastmoneyAnnouncementIssueWithSeverity(ctx, validation.StageParse, -1, validation.SeverityError, field, providerField, code, expected, actualType, "", message)
 }

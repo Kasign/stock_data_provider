@@ -565,7 +565,6 @@ func TestTencentDailyBarsReportsInvalidTradeDate(t *testing.T) {
 	}
 }
 
-
 func TestTencentQuoteReportsDegradedOptionalFieldEvidence(t *testing.T) {
 	fields := make([]string, 60)
 	for i := range fields {
@@ -581,7 +580,7 @@ func TestTencentQuoteReportsDegradedOptionalFieldEvidence(t *testing.T) {
 	defer server.Close()
 	reporter := validation.NewReporter(20)
 	ctx := validation.WithReporter(context.Background(), reporter)
-	p := NewTencent(2*time.Second)
+	p := NewTencent(2 * time.Second)
 	p.quoteURL = server.URL + "/quote"
 	if _, err := p.FetchQuote(ctx, "600519.SH"); err == nil {
 		t.Fatal("unverifiable Tencent volume unit must reject the quote")
@@ -599,7 +598,6 @@ func TestTencentQuoteReportsDegradedOptionalFieldEvidence(t *testing.T) {
 		}
 	}
 }
-
 
 func TestTencentDailyBarsReportsOutOfRequestedDateRange(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {

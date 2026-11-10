@@ -47,9 +47,9 @@ type MiaoXiang struct {
 }
 
 type mxFlowObservation struct {
-	date      string
-	amount    *float64
-	rowIndex  int
+	date     string
+	amount   *float64
+	rowIndex int
 }
 
 type cacheEntry struct {
@@ -270,7 +270,6 @@ func (p *MiaoXiang) FetchCapitalFlow(ctx context.Context, rawSymbol string) (*mo
 	}
 	return flow, nil
 }
-
 
 // addMiaoXiangIssue 将妙想响应或字段问题转换为可定位的结构化证据。
 func addMiaoXiangIssue(ctx context.Context, rowIndex int, stage validation.Stage, field, providerField, code, expected, actualType, message string, severity validation.Severity) {

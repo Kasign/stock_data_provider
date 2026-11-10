@@ -209,7 +209,6 @@ func TestXueqiuFixtureSymbolCodesAreUnique(t *testing.T) {
 	}
 }
 
-
 func TestXueqiuHotRankingReportsSnapshotAndLimitDegradation(t *testing.T) {
 	rows := xueqiuFixtureRows(3)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -218,7 +217,7 @@ func TestXueqiuHotRankingReportsSnapshotAndLimitDegradation(t *testing.T) {
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"error_code": 0,
-			"data": map[string]any{"items": rows},
+			"data":       map[string]any{"items": rows},
 		})
 	}))
 	defer server.Close()
@@ -271,9 +270,13 @@ func TestXueqiuErrorMessageTruncationPreservesUTF8(t *testing.T) {
 	defer server.Close()
 	provider := NewXueqiuConfigured(2*time.Second, server.URL, "")
 	_, err := provider.FetchHotStocks(context.Background(), "popular", 10)
-	if err == nil { t.Fatal("provider error response should be rejected") }
+	if err == nil {
+		t.Fatal("provider error response should be rejected")
+	}
 	got := err.Error()
-	if !utf8.ValidString(got) { t.Fatalf("error message is invalid UTF-8: %q", got) }
+	if !utf8.ValidString(got) {
+		t.Fatalf("error message is invalid UTF-8: %q", got)
+	}
 	want := "雪球榜单接口错误 code=1001: " + strings.Repeat("a", 199)
 	if got != want {
 		t.Fatalf("error summary should stop before a split multibyte rune: got %q want %q", got, want)

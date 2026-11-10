@@ -184,19 +184,25 @@ func (p *Eastmoney) WithHTTPDoers(doers map[string]HTTPDoer) *Eastmoney {
 
 // EastmoneyCapabilities 描述本次装配启用的 Eastmoney 业务能力，用于计算最小出站依赖集。
 type EastmoneyCapabilities struct {
-	Quote, DailyBars, StockBasic, StockSearch bool
-	SectorRankings, IndexQuotes, MarketBreadth bool
+	Quote, DailyBars, StockBasic, StockSearch           bool
+	SectorRankings, IndexQuotes, MarketBreadth          bool
 	LimitPools, StockBoards, Announcements, DragonTiger bool
-	ChipDistribution, CapitalFlow, HotRankings bool
+	ChipDistribution, CapitalFlow, HotRankings          bool
 }
 
 // HTTPOriginsForCapabilities 只返回指定业务能力真实请求路径涉及的 endpoint origin。
 // MarketBreadth 会读取证券列表并查询涨跌停池；HotRankings 会调用指数行情补全报价；
 // SectorRankings 的五日榜会读取 K 线；ChipDistribution 通过日 K 计算。
 func (p *Eastmoney) HTTPOriginsForCapabilities(c EastmoneyCapabilities) ([]string, error) {
-	if p == nil { return nil, errors.New("Eastmoney provider is nil") }
+	if p == nil {
+		return nil, errors.New("Eastmoney provider is nil")
+	}
 	endpoints := make([]string, 0, 8)
-	add := func(enabled bool, values ...string) { if enabled { endpoints = append(endpoints, values...) } }
+	add := func(enabled bool, values ...string) {
+		if enabled {
+			endpoints = append(endpoints, values...)
+		}
+	}
 	add(c.Quote, p.quoteURL)
 	add(c.DailyBars || c.SectorRankings || c.ChipDistribution, p.klineURL)
 	add(c.StockBasic, p.stockBasicURL)
@@ -213,11 +219,15 @@ func (p *Eastmoney) HTTPOriginsForCapabilities(c EastmoneyCapabilities) ([]strin
 	origins := make(map[string]struct{}, len(endpoints))
 	for _, endpoint := range endpoints {
 		origin, err := EastmoneyHTTPOrigin(endpoint)
-		if err != nil { return nil, err }
+		if err != nil {
+			return nil, err
+		}
 		origins[origin] = struct{}{}
 	}
 	result := make([]string, 0, len(origins))
-	for origin := range origins { result = append(result, origin) }
+	for origin := range origins {
+		result = append(result, origin)
+	}
 	sort.Strings(result)
 	return result, nil
 }
@@ -248,6 +258,7 @@ func (p *Eastmoney) HTTPOrigins() ([]string, error) {
 	sort.Strings(result)
 	return result, nil
 }
+
 // EastmoneyHTTPOrigin 返回 Eastmoney endpoint 的规范 origin，供 Root 按 origin 创建 BoundDoer。
 func EastmoneyHTTPOrigin(rawURL string) (string, error) {
 	parsed, err := url.Parse(strings.TrimSpace(rawURL))

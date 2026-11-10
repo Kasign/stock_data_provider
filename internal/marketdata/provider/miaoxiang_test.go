@@ -214,14 +214,26 @@ func TestMiaoXiangChipDistributionReportsDegradedFields(t *testing.T) {
 	reporter := validation.NewReporter(10)
 	ctx := validation.WithReporter(context.Background(), reporter)
 	got, err := p.FetchChipDistribution(ctx, "600519")
-	if err != nil { t.Fatalf("FetchChipDistribution: %v", err) }
-	if got.QualityStatus != model.QualityDegraded { t.Fatalf("expected degraded snapshot: %+v", got) }
-	found := map[string]bool{"publication_time":false, "profit_ratio":false, "concentration_90":false, "concentration_70":false}
-	for _, issue := range reporter.Snapshot().Issues {
-		if issue.Stage != validation.StageValidate || issue.Severity != validation.SeverityWarning { continue }
-		if _, ok := found[issue.Field]; ok { found[issue.Field] = true }
+	if err != nil {
+		t.Fatalf("FetchChipDistribution: %v", err)
 	}
-	for field, ok := range found { if !ok { t.Errorf("missing %s diagnostic: %+v", field, reporter.Snapshot().Issues) } }
+	if got.QualityStatus != model.QualityDegraded {
+		t.Fatalf("expected degraded snapshot: %+v", got)
+	}
+	found := map[string]bool{"publication_time": false, "profit_ratio": false, "concentration_90": false, "concentration_70": false}
+	for _, issue := range reporter.Snapshot().Issues {
+		if issue.Stage != validation.StageValidate || issue.Severity != validation.SeverityWarning {
+			continue
+		}
+		if _, ok := found[issue.Field]; ok {
+			found[issue.Field] = true
+		}
+	}
+	for field, ok := range found {
+		if !ok {
+			t.Errorf("missing %s diagnostic: %+v", field, reporter.Snapshot().Issues)
+		}
+	}
 }
 
 func TestMiaoXiangCapitalFlowReportsDegradedFields(t *testing.T) {
@@ -231,20 +243,32 @@ func TestMiaoXiangCapitalFlowReportsDegradedFields(t *testing.T) {
 	reporter := validation.NewReporter(10)
 	ctx := validation.WithReporter(context.Background(), reporter)
 	got, err := p.FetchCapitalFlow(ctx, "600519")
-	if err != nil { t.Fatalf("FetchCapitalFlow: %v", err) }
-	if got.QualityStatus != model.QualityDegraded { t.Fatalf("expected degraded flow: %+v", got) }
-	found := map[string]bool{"publication_time":false, "main_net_inflow":false, "inflow_5d":false, "inflow_10d":false}
-	for _, issue := range reporter.Snapshot().Issues {
-		if issue.Stage != validation.StageValidate || issue.Severity != validation.SeverityWarning { continue }
-		if _, ok := found[issue.Field]; ok { found[issue.Field] = true }
+	if err != nil {
+		t.Fatalf("FetchCapitalFlow: %v", err)
 	}
-	for field, ok := range found { if !ok { t.Errorf("missing %s diagnostic: %+v", field, reporter.Snapshot().Issues) } }
+	if got.QualityStatus != model.QualityDegraded {
+		t.Fatalf("expected degraded flow: %+v", got)
+	}
+	found := map[string]bool{"publication_time": false, "main_net_inflow": false, "inflow_5d": false, "inflow_10d": false}
+	for _, issue := range reporter.Snapshot().Issues {
+		if issue.Stage != validation.StageValidate || issue.Severity != validation.SeverityWarning {
+			continue
+		}
+		if _, ok := found[issue.Field]; ok {
+			found[issue.Field] = true
+		}
+	}
+	for field, ok := range found {
+		if !ok {
+			t.Errorf("missing %s diagnostic: %+v", field, reporter.Snapshot().Issues)
+		}
+	}
 }
 
 func TestMiaoXiangQueryTablesReportsResponseFailures(t *testing.T) {
 	cases := []struct {
 		name, response, wantCode string
-		status int
+		status                   int
 	}{
 		{name: "HTTP status", response: "unavailable", status: http.StatusBadGateway, wantCode: "http_status_error"},
 		{name: "invalid JSON", response: "{", status: http.StatusOK, wantCode: "decode_error"},
@@ -263,10 +287,14 @@ func TestMiaoXiangQueryTablesReportsResponseFailures(t *testing.T) {
 			reporter := validation.NewReporter(10)
 			ctx := validation.WithReporter(context.Background(), reporter)
 			_, err := p.FetchChipDistribution(ctx, "600519")
-			if err == nil { t.Fatal("expected response failure") }
+			if err == nil {
+				t.Fatal("expected response failure")
+			}
 			for _, issue := range reporter.Snapshot().Issues {
 				if issue.Code == tc.wantCode {
-					if issue.RowIndex != nil { t.Fatalf("response-level issue must not invent row index: %+v", issue) }
+					if issue.RowIndex != nil {
+						t.Fatalf("response-level issue must not invent row index: %+v", issue)
+					}
 					return
 				}
 			}
@@ -275,13 +303,12 @@ func TestMiaoXiangQueryTablesReportsResponseFailures(t *testing.T) {
 	}
 }
 
-
 // TestMiaoXiangChipAndCapitalFlowRejectsReportParseEvidence 覆盖上层指标表与观测行拒绝证据。
 func TestMiaoXiangChipAndCapitalFlowRejectsReportParseEvidence(t *testing.T) {
 	cases := []struct {
 		name, response, wantCode string
-		fetchFlow bool
-		wantRow int
+		fetchFlow                bool
+		wantRow                  int
 	}{
 		{name: "chip metric table missing", response: `{"status":0,"data":{"dataTableDTOList":[{"nameMap":{"0":"获利比例"},"table":{"headName":["2026-10-21"],"0":["80%"]}}]}}`, wantCode: "missing_metric_table", wantRow: -1},
 		{name: "chip table empty", response: `{"status":0,"data":{"dataTableDTOList":[{"nameMap":{"0":"平均成本"},"table":{"headName":[],"0":[]}}]}}`, wantCode: "empty_result", wantRow: -1},
@@ -304,7 +331,9 @@ func TestMiaoXiangChipAndCapitalFlowRejectsReportParseEvidence(t *testing.T) {
 				_, _ = p.FetchChipDistribution(ctx, "600519")
 			}
 			for _, issue := range reporter.Snapshot().Issues {
-				if issue.Code != tc.wantCode { continue }
+				if issue.Code != tc.wantCode {
+					continue
+				}
 				if tc.wantRow < 0 && issue.RowIndex != nil {
 					t.Fatalf("response-level issue must not invent row index: %+v", issue)
 				}

@@ -134,7 +134,6 @@ func TestEastmoneyCapitalFlowReportsFieldAndRowParseIssue(t *testing.T) {
 	}
 }
 
-
 func TestEastmoneyCapitalFlowReportsDegradedSnapshotAndIncompleteWindows(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -162,7 +161,6 @@ func TestEastmoneyCapitalFlowReportsDegradedSnapshotAndIncompleteWindows(t *test
 	}
 }
 
-
 func TestEastmoneyCapitalFlowReportsResponseRejections(t *testing.T) {
 	cases := []struct {
 		name, body, wantCode string
@@ -184,9 +182,13 @@ func TestEastmoneyCapitalFlowReportsResponseRejections(t *testing.T) {
 			reporter := validation.NewReporter(10)
 			ctx := validation.WithReporter(context.Background(), reporter)
 			_, err := NewEastmoney(time.Second, "", "").WithCapitalFlowURL(server.URL).FetchCapitalFlow(ctx, "600519.SH")
-			if err == nil { t.Fatal("expected rejection") }
+			if err == nil {
+				t.Fatal("expected rejection")
+			}
 			for _, issue := range reporter.Snapshot().Issues {
-				if issue.Code != tc.wantCode { continue }
+				if issue.Code != tc.wantCode {
+					continue
+				}
 				if issue.Stage != validation.StageParse || issue.Severity != validation.SeverityError || issue.RowIndex != nil {
 					t.Fatalf("response-level issue must be Parse/Error without row index: %+v", issue)
 				}
@@ -206,9 +208,13 @@ func TestEastmoneyCapitalFlowReportsMalformedJSONRequestFailure(t *testing.T) {
 	reporter := validation.NewReporter(10)
 	ctx := validation.WithReporter(context.Background(), reporter)
 	_, err := NewEastmoney(time.Second, "", "").WithCapitalFlowURL(server.URL).FetchCapitalFlow(ctx, "600519.SH")
-	if err == nil { t.Fatal("invalid JSON must be rejected") }
+	if err == nil {
+		t.Fatal("invalid JSON must be rejected")
+	}
 	for _, issue := range reporter.Snapshot().Issues {
-		if issue.Code == "request_error" && issue.Stage == validation.StageParse && issue.RowIndex == nil { return }
+		if issue.Code == "request_error" && issue.Stage == validation.StageParse && issue.RowIndex == nil {
+			return
+		}
 	}
 	t.Fatalf("missing request-level Reporter evidence: %+v", reporter.Snapshot().Issues)
 }

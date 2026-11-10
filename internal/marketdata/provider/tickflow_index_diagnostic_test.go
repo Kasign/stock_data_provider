@@ -37,7 +37,9 @@ func TestTickFlowIndexQuotesReportsDuplicateUnrequestedAndMissingIndexes(t *test
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		rows := make([]map[string]any, 0, len(tickflowTestRequestedIndexDefinitions(r))+2)
 		for _, def := range tickflowTestRequestedIndexDefinitions(r) {
-			if def.Symbol == "399001.SZ" { continue }
+			if def.Symbol == "399001.SZ" {
+				continue
+			}
 			rows = append(rows, map[string]any{"symbol": def.Symbol, "last_price": 101.0, "prev_close": 100.0,
 				"open": 99.0, "high": 102.0, "low": 98.0, "amount": 123.0, "timestamp": time.Now().UTC().Add(-time.Minute).UnixMilli()})
 		}
@@ -54,12 +56,20 @@ func TestTickFlowIndexQuotesReportsDuplicateUnrequestedAndMissingIndexes(t *test
 	ctx := validation.WithReporter(context.Background(), reporter)
 	p := NewTickFlowConfigured(2*time.Second, server.URL, "", "test-key")
 	got, err := p.FetchIndexQuotes(ctx)
-	if err != nil { t.Fatal(err) }
-	if got.QualityStatus != model.QualityDegraded { t.Fatalf("expected degraded coverage: %+v", got) }
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.QualityStatus != model.QualityDegraded {
+		t.Fatalf("expected degraded coverage: %+v", got)
+	}
 	seen := map[string]bool{}
-	for _, issue := range reporter.Snapshot().Issues { seen[issue.Code+":"+issue.Field] = true }
+	for _, issue := range reporter.Snapshot().Issues {
+		seen[issue.Code+":"+issue.Field] = true
+	}
 	for _, key := range []string{"duplicate_identity:symbol", "unrequested_identity:symbol", "missing_requested_identity:symbol"} {
-		if !seen[key] { t.Errorf("missing Reporter issue %q; got %+v", key, reporter.Snapshot().Issues) }
+		if !seen[key] {
+			t.Errorf("missing Reporter issue %q; got %+v", key, reporter.Snapshot().Issues)
+		}
 	}
 }
 
@@ -68,7 +78,9 @@ func TestTickFlowIndexQuotesReportsOHLCInvariantViolation(t *testing.T) {
 		rows := make([]map[string]any, 0, len(tickflowTestRequestedIndexDefinitions(r)))
 		for _, def := range tickflowTestRequestedIndexDefinitions(r) {
 			low := 98.0
-			if def.Symbol == "000001.SH" { low = 103.0 }
+			if def.Symbol == "000001.SH" {
+				low = 103.0
+			}
 			rows = append(rows, map[string]any{"symbol": def.Symbol, "last_price": 101.0, "prev_close": 100.0,
 				"open": 99.0, "high": 102.0, "low": low, "amount": 123.0, "timestamp": time.Now().UTC().Add(-time.Minute).UnixMilli()})
 		}
@@ -78,7 +90,9 @@ func TestTickFlowIndexQuotesReportsOHLCInvariantViolation(t *testing.T) {
 	reporter := validation.NewReporter(32)
 	ctx := validation.WithReporter(context.Background(), reporter)
 	p := NewTickFlowConfigured(2*time.Second, server.URL, "", "test-key")
-	if _, err := p.FetchIndexQuotes(ctx); err == nil { t.Fatal("expected invalid OHLC error") }
+	if _, err := p.FetchIndexQuotes(ctx); err == nil {
+		t.Fatal("expected invalid OHLC error")
+	}
 	issues := reporter.Snapshot().Issues
 	if len(issues) != 1 || issues[0].Field != "ohlc" || issues[0].Code != "invariant_violation" || issues[0].RowIndex == nil || *issues[0].RowIndex != 0 {
 		t.Fatalf("unexpected OHLC Reporter issue: %+v", issues)

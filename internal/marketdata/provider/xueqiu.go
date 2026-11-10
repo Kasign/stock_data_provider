@@ -21,10 +21,10 @@ import (
 const xueqiuVersion = "xueqiu-hot-ranking-v1"
 
 type Xueqiu struct {
-	client  *http.Client
+	client   *http.Client
 	httpDoer HTTPDoer
-	baseURL string
-	cookie  string
+	baseURL  string
+	cookie   string
 }
 
 // NewXueqiuConfigured configures an optional domestic ranking fallback.

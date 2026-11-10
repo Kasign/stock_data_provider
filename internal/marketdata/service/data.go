@@ -276,6 +276,7 @@ func validateIndexQuoteSnapshot(snapshot *model.IndexQuoteSnapshot) error {
 	}
 	return nil
 }
+
 // degradedCacheTTL 返回基础 TTL 的四分之一，适用于具有固定 TTL 的快照能力。
 func degradedCacheTTL(ttl time.Duration) time.Duration {
 	return ttl / 4
@@ -376,7 +377,9 @@ func (s *DataService) IndexQuotes(ctx context.Context) (*model.IndexQuoteSnapsho
 		payload, marshalErr := json.Marshal(snapshot)
 		if marshalErr == nil {
 			cacheTTL := ttl
-			if snapshot.QualityStatus == model.QualityDegraded { cacheTTL = degradedCacheTTL(ttl) }
+			if snapshot.QualityStatus == model.QualityDegraded {
+				cacheTTL = degradedCacheTTL(ttl)
+			}
 			if cacheErr := s.cache.Set(ctx, key, payload, cacheTTL); cacheErr != nil {
 				s.logger.Warn("index quote cache write failed", "error", cacheErr)
 			}
@@ -646,7 +649,9 @@ func (s *DataService) MarketBreadth(ctx context.Context) (*model.MarketBreadthSn
 		}
 		if data, err := json.Marshal(snapshot); err == nil {
 			cacheTTL := ttl
-			if snapshot.QualityStatus == model.QualityDegraded { cacheTTL = degradedCacheTTL(ttl) }
+			if snapshot.QualityStatus == model.QualityDegraded {
+				cacheTTL = degradedCacheTTL(ttl)
+			}
 			if cacheErr := s.cache.Set(ctx, key, data, cacheTTL); cacheErr != nil {
 				s.logger.Warn("market breadth cache write failed", "error", cacheErr)
 			}
@@ -3343,17 +3348,25 @@ func mergeBundleQualityStatus(current, next model.QualityStatus) model.QualitySt
 		}
 	}
 	if rank(next) > rank(current) {
-		if next == "" { return model.QualityUnknown }
+		if next == "" {
+			return model.QualityUnknown
+		}
 		return next
 	}
-	if current == "" { return model.QualityUnknown }
+	if current == "" {
+		return model.QualityUnknown
+	}
 	return current
 }
 
 // mergeBundleChildQuality 将子数据状态映射到聚合状态，并保留可检索的子数据状态提示。
 func mergeBundleChildQuality(bundle *model.Bundle, component string, status model.QualityStatus) {
-	if bundle == nil || status == model.QualityValid { return }
-	if status == "" { status = model.QualityUnknown }
+	if bundle == nil || status == model.QualityValid {
+		return
+	}
+	if status == "" {
+		status = model.QualityUnknown
+	}
 	bundle.QualityStatus = mergeBundleQualityStatus(bundle.QualityStatus, status)
 	appendReasonOnce(&bundle.Warnings, component+"_quality_"+string(status))
 }
@@ -3837,14 +3850,20 @@ func recordProviderCallFailure(b *circuitBreaker, key string, err error) {
 }
 
 func providerHTTPStatusCode(err error) int {
-	if err == nil { return 0 }
+	if err == nil {
+		return 0
+	}
 	lower := strings.ToLower(err.Error())
 	marker := "http status"
 	index := strings.Index(lower, marker)
-	if index < 0 { return 0 }
+	if index < 0 {
+		return 0
+	}
 	rest := strings.TrimSpace(strings.TrimLeft(lower[index+len(marker):], " :=#"))
 	fields := strings.Fields(rest)
-	if len(fields) == 0 { return 0 }
+	if len(fields) == 0 {
+		return 0
+	}
 	status, _ := strconv.Atoi(strings.Trim(fields[0], ":,;"))
 	return status
 }

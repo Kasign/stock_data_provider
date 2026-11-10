@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"example.com/stock-analysis-flow/internal/marketdata/model"
-	"github.com/injoyai/tdx/protocol"
 	"example.com/stock-analysis-flow/internal/marketdata/validation"
+	"github.com/injoyai/tdx/protocol"
 )
 
 type fakePytdxDailyClient struct {
@@ -151,8 +151,8 @@ func TestPytdxDailyBarsGbbqConnectionFailureIsPreserved(t *testing.T) {
 
 func TestPytdxDailyBarsReportsRequestAndEmptyResponseIssues(t *testing.T) {
 	cases := []struct {
-		name string
-		client *fakePytdxDailyClient
+		name     string
+		client   *fakePytdxDailyClient
 		wantCode string
 	}{
 		{name: "page request failure", client: &fakePytdxDailyClient{klineErr: errors.New("network timeout")}, wantCode: "request_error"},
@@ -178,7 +178,7 @@ func TestPytdxDailyBarsReportsRequestAndEmptyResponseIssues(t *testing.T) {
 func TestPytdxDailyBarsReportsAdjustmentReferenceFailure(t *testing.T) {
 	client := &fakePytdxDailyClient{
 		klineResponse: &protocol.KlineResp{List: []*protocol.Kline{pytdxTestDailyKline("2026-10-21", 10000, 10200, 9800, 10100, 10000)}},
-		gbbqErr: errors.New("GBBQ unavailable"),
+		gbbqErr:       errors.New("GBBQ unavailable"),
 	}
 	p := NewPytdx(time.Second, "127.0.0.1")
 	p.dailyClientFactory = func(context.Context) (pytdxDailyClient, error) { return client, nil }
