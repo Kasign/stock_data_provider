@@ -198,6 +198,20 @@ func TestMariaDBClaimAttemptLeaseAndFencing(t *testing.T) {
 		AttemptStatus: domain.AttemptSucceeded, Stage: nextStage,
 		OutputRef: nextStage.OutputRef,
 	}
+	// Storage must enforce retry scheduling metadata independently of Application.
+	missingRetryAt := currentCommit
+	missingRetryAt.AttemptStatus = domain.AttemptFailed
+	missingRetryAt.Stage.Status = domain.StageRetryWait
+	missingRetryAt.Stage.RetryAt = nil
+	if err := repository.CommitAttemptResult(ctx, missingRetryAt); err == nil {
+		t.Fatal("retry_wait result without retry_at must be rejected")
+	}
+	staleRetryAt := currentCommit
+	staleRetryAt.Stage.RetryAt = &finished
+	if err := repository.CommitAttemptResult(ctx, staleRetryAt); err == nil {
+		t.Fatal("terminal Stage result with retry_at must be rejected")
+	}
+
 	// Attempt and Stage must reference the same immutable output artifact.
 	mismatchedOutput := currentCommit
 	mismatchedOutput.OutputRef = stringRef("different-result-" + suffix)

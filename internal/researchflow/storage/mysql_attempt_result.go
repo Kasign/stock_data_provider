@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"example.com/stock-analysis-flow/internal/researchflow/domain"
 )
@@ -50,6 +51,7 @@ func (r *MySQLRunRepository) CommitAttemptResult(ctx context.Context, input Atte
 			input.AttemptStatus != domain.AttemptTimedOut &&
 			input.AttemptStatus != domain.AttemptCancelled) ||
 		!validAttemptStageOutcome(input.AttemptStatus, input.Stage.Status) ||
+		!validStageRetryAt(input.Stage.Status, input.Stage.RetryAt) ||
 		!sameOptionalString(input.OutputRef, input.Stage.OutputRef) {
 		return errors.New("Researchflow attempt result arguments are invalid")
 	}
@@ -182,6 +184,14 @@ func (r *MySQLRunRepository) CommitAttemptResult(ctx context.Context, input Atte
 		return fmt.Errorf("commit Researchflow attempt result: %w", err)
 	}
 	return nil
+}
+
+// validStageRetryAt keeps retry scheduling metadata aligned with the Stage lifecycle.
+func validStageRetryAt(status domain.StageStatus, retryAt *time.Time) bool {
+	if status == domain.StageRetryWait {
+		return retryAt != nil && !retryAt.IsZero()
+	}
+	return retryAt == nil
 }
 
 func validAttemptStageOutcome(attempt domain.AttemptStatus, stage domain.StageStatus) bool {
