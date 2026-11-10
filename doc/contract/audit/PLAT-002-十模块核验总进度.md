@@ -195,3 +195,12 @@
 - 新增 **AUD-WEBUI-CTR-003**（P2，契约文档缺口）：补齐 Run 查询 DTO、状态码和 Golden/契约测试后关闭；不据此认定运行时路由缺失。
 - 本批只完成 Analysis Run 单路径映射；AnalysisRequest/Task/TaskEvent 逐字段核验及 Market Data 全量 DTO 映射待后续批次。WebUI 维度 2 保持 partial。
 - 详细证据见 `Platform-维度1-Application-Port与调用点.md` 第 16 节。
+
+
+### WebUI — 维度 2：全市场分页股票 DTO 映射初审
+
+- 已核对 WebUI API Client/页面、Market Data Handler、Go Model、OpenAPI Schema 与 Go OpenAPI Contract Test。
+- `page/page_size/include_ma/adjustment` 请求参数与 Handler/OpenAPI 默认值和边界一致；Go 测试反射校验 51 个 Model 的字段、required 和 pointer-nullable 语义。
+- 页面正确区分当前页 coverage、目录 total 下界、null 缺失、质量状态和旧快照；未发现已证实字段语义错配。
+- 新增 **AUD-WEBUI-CTR-004**（P2，测试补证）：前端缺少对全市场分页 API 参数序列化/默认值/边界归一化的直接断言；当前不是已证实运行时错误。
+- WebUI 维度 2 仍为 partial；Analysis Run 与全市场分页两个切片已核，其他接口和 DTO 仍待核。详细证据见审计明细第 17 节。
