@@ -314,3 +314,15 @@
 - 新增 **AUD-WEBUI-CTR-017**（P2）：Eastmoney 使用 fqt=0 未复权日 K 计算最近最多 120 根筹码分布，除权窗口可能混用价格基准；没有算法专用测试或参考 Golden。
 - WebUI 已接通并正确显示比例、成本、日期、质量状态；has_data 分支不属于当前 Go DTO/OpenAPI 契约。未证实线上数值错误，准确性风险待责任方处理。详细证据见审计明细第 28 节。
 - WebUI 维度 2 继续 partial。
+
+
+### WebUI — 维度 2：个股 Capital Flow 主力资金流字段、窗口与消费语义
+
+- 固定代码基线：`b6dfc85ba214fe16268c8cba780641a8bfe15086`。本节仅审查个股 `/api/v1/stocks/{symbol}/capital-flow`，市场级资金流历史是独立接口。
+- 已核对 CapitalFlow DTO、独立 Provider Port、Eastmoney/MiaoXiang Provider、Service 校验/回退/缓存、HTTP Handler、OpenAPI、模型反射测试和 WebUI 页面/浏览器测试。
+- 两个 Provider 均按日期降序取最新观测；金额统一人民币元，保留正负方向；缺失金额不补零，5/10 日合计要求对应观测金额完整。Service 统一验证来源版本、证券代码、日期、采集时间、观测数量和有限数值。
+- 新增 **AUD-WEBUI-CTR-018**（P2）：5/10 日汇总只按最近 N 条记录计算，未用交易日历证明窗口无漏日；诊断文案要求连续观测但实现未检查交易日完整性。
+- 新增 **AUD-WEBUI-CTR-019**（P2）：三个 omitempty 金额指针字段被 OpenAPI 过度声明 nullable。
+- WebUI 已接通并正确显示元单位、负数、缺失指标、观测数量及质量状态；has_data 分支不是 Go DTO/OpenAPI 字段。未发现已证实的金额符号或元单位换算错误。
+- 跨 Provider 资金分类口径没有同标的同日期对照证据；源端发布时间不可验证，因此快照保持 degraded/unknown。详细证据见审计明细第 29 节。
+- WebUI 维度 2 继续 partial。
