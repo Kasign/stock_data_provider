@@ -431,3 +431,16 @@
 - 新增 **AUD-WEBUI-CTR-037（P2）**：HotRankingItem.change_percent 的 OpenAPI 描述错误引用 LimitPoolSnapshot 的 has_data 约束，可能误导消费者。HotRankingItem 五个 omitempty 数值字段及 Snapshot.provider_time 的 nullable 不一致纳入 CTR-010。
 - WebUI 当前只开放 popular/surge；服务端/OpenAPI/雪球 Provider 另支持 followers，归为产品范围待决，不直接登记缺陷。
 - `getMarketHotStocks` 未见 API Client 专用请求测试，页面测试也未直接验证榜单真实响应 DOM；已有源码结构断言和 Provider/Service 测试。WebUI 维度 2 继续 partial。
+
+
+### WebUI — 维度 2：Market Sentiment History 市场情绪历史
+
+- 详细记录：[`WebUI-维度2-Market-Sentiment-History.md`](./WebUI-维度2-Market-Sentiment-History.md)
+- 已核对 MarketSentimentSnapshot/History DTO、DataService 采集与历史读取、MariaDB Repository/迁移、HTTP Handler/OpenAPI、51 模型反射契约测试、WebUI API Client/历史表格及相关测试。
+- 历史 API 只读已持久化记录；当前快照接口负责采集并追加保存。历史页不触发采集；`getMarketSentiment` Client 无页面消费者，每日采集责任需 Server/部署侧补证。
+- DTO/OpenAPI 字段集合和 required 已有反射检查；辅助池计数显式 null，缺失不补零；下界语义在 UI 显示为“≥N”。
+- 新增 **AUD-WEBUI-CTR-038（P2）**：history.total 实际是本次返回条数，不能表达范围总量或截断状态；WebUI 的 N/N 显示无法判断是否还有记录。
+- 新增 **AUD-WEBUI-CTR-039（P2）**：Repository 以 MAX(id) 选择每日最新记录，但注释语义是最近采集；并发乱序写入时 ID 顺序不保证 fetched_at 顺序。
+- 新增 **AUD-WEBUI-CTR-040（P2）**：WebUI 日期范围校验未传入服务端要求的 366 自然日上限，超限只能请求后收到 400。
+- API Client 未见直接请求测试；History Handler/Repository 缺少专用回归测试；页面有日期/取消/下界/时间证据单元测试，但缺真实历史表格 DOM 测试。
+- 本切片完成后，盘点中剩余待审数据集：Limit Pool、Dragon Tiger、Stock Search、Analysis Run、Provider Probe History。WebUI 维度 2 继续 partial。
