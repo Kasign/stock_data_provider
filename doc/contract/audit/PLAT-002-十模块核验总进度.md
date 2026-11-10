@@ -797,5 +797,5 @@
 - PLAT2-D2-007：MaxResponseHeaderBytes/流式默认值与StreamDependencyLimits配置边界测试不完整，归入PLAT-CTR-005，不新增CTR。
 - PLAT2-D2-008：LLM Transport未向LLM窄接口暴露StreamStats，需确认A2是否要求领域层采集Platform传输终态/字节数/耗时；条件性缺口，不预设新增Platform API。
 - PLAT-CTR-005是内部Go API契约，JSON Schema/Golden不适用；项目登记簿仍需明确不适用理由和Go Contract Test/消费者测试替代证据。PLAT-CTR-005仍pending_evidence，A2真实消费者联调和A3生产部署验收未完成。
-- Platform维度2主要独立切片已完成首轮核验；下一步转Server维度2，核验HTTP公开错误Envelope与Diagnostics/Health响应DTO，不重复审查Platform Fault、Observation和HTTP Client实现。
+- 本轮HTTP Client切片完成后不立即转Server维度2。项目Platform契约目录仍有PLAT-CTR-003（身份/授权）、PLAT-CTR-006（Storage/Migration）、PLAT-CTR-007（Typed Config/Secret）未完成维度2适用性核验。下一切片先核PLAT-CTR-003身份/授权结构、Header/Context、序列化适用性和直接消费者；权限算法/授权语义留在维度4。完成Platform维度2剩余契约范围核对后，再转Server维度2。
 - 本轮仅修改审计文档，未修改业务代码、Schema、Golden、测试，未执行CI。
