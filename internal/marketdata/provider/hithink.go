@@ -1520,7 +1520,7 @@ func (p *Hithink) FetchValuations(ctx context.Context, rawSymbols []string) (*mo
 		return nil, err
 	}
 	var data struct {
-		Timestamp *int64                       `json:"timestamp"`
+		Timestamp json.RawMessage              `json:"timestamp"`
 		Total     *int                         `json:"total"`
 		Item      []map[string]json.RawMessage `json:"item"`
 	}
@@ -1541,8 +1541,10 @@ func (p *Hithink) FetchValuations(ctx context.Context, rawSymbols []string) (*mo
 		Source:           p.Name(), SourceVersion: hithinkVersion + "-valuation-snapshot-v1",
 		FetchedAt: now, QualityStatus: model.QualityValid,
 	}
-	if data.Timestamp != nil && *data.Timestamp > 0 {
-		timestamp := time.UnixMilli(*data.Timestamp).UTC()
+	var providerTimestamp int64
+	if len(data.Timestamp) > 0 && string(data.Timestamp) != "null" &&
+		json.Unmarshal(data.Timestamp, &providerTimestamp) == nil && providerTimestamp > 0 {
+		timestamp := time.UnixMilli(providerTimestamp).UTC()
 		if !timestamp.After(now.Add(time.Minute)) && !timestamp.Before(now.AddDate(-10, 0, 0)) {
 			snapshot.ProviderTimestamp = &timestamp
 		}
@@ -1550,11 +1552,17 @@ func (p *Hithink) FetchValuations(ctx context.Context, rawSymbols []string) (*mo
 	if snapshot.ProviderTimestamp == nil {
 		snapshot.QualityStatus = model.QualityDegraded
 		snapshot.QualityReasons = append(snapshot.QualityReasons, "provider_valuation_timestamp_missing_or_invalid")
-		code, actualType, timestampPreview := "invalid_timestamp", "number", ""
-		if data.Timestamp == nil {
-			code, actualType = "missing_value", "missing"
+		code, actualType, timestampPreview := "invalid_timestamp", providerJSONValueType(data.Timestamp), strings.TrimSpace(string(data.Timestamp))
+		if len(data.Timestamp) == 0 || string(data.Timestamp) == "null" {
+			code = "missing_value"
+			if len(data.Timestamp) == 0 {
+				actualType = "missing"
+			}
 		} else {
-			timestampPreview = strconv.FormatInt(*data.Timestamp, 10)
+			var timestampString string
+			if json.Unmarshal(data.Timestamp, &timestampString) == nil {
+				timestampPreview = timestampString
+			}
 		}
 		addProviderFieldParseIssue(ctx, "", "provider_timestamp", "timestamp", code,
 			"positive integer epoch-millisecond timestamp", actualType, timestampPreview, -1)
