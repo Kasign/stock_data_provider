@@ -1988,9 +1988,13 @@ func (p *Hithink) FetchFundamentals(ctx context.Context, rawSymbol string, year,
 		return nil, fmt.Errorf("解析同花顺财务指标失败: %w", err)
 	}
 	if !strings.EqualFold(strings.TrimSpace(data.THSCode), symbol) {
+		addHithinkSymbolFieldIssue(ctx, symbol, "symbol", "thscode", "symbol_mismatch",
+			"requested symbol "+symbol, "string", data.THSCode, "同花顺财务响应证券代码与请求不匹配")
 		return nil, fmt.Errorf("同花顺财务响应证券代码不匹配: requested=%s returned=%q", symbol, data.THSCode)
 	}
 	if strings.TrimSpace(data.Report) != report {
+		addHithinkFieldIssue(ctx, nil, "report_period", "report", "report_period_mismatch",
+			report, "string", data.Report, "同花顺财务响应报告期与请求不匹配")
 		return nil, fmt.Errorf("同花顺财务响应报告期不匹配: requested=%s returned=%q", report, data.Report)
 	}
 
@@ -2008,12 +2012,16 @@ func (p *Hithink) FetchFundamentals(ctx context.Context, rawSymbol string, year,
 		standardCategorySet[category] = struct{}{}
 	}
 	seenCategories := make(map[string]struct{}, len(data.Abilities))
-	for _, ability := range data.Abilities {
+	for abilityIndex, ability := range data.Abilities {
 		category := hithinkFundamentalCategory(ability.Ability)
 		if _, allowed := standardCategorySet[category]; !allowed {
+			addHithinkFieldIssue(ctx, &abilityIndex, "category", "ability", "unknown_category",
+				"one of supported financial ability categories", "string", ability.Ability, "同花顺财务指标返回未知能力分区")
 			return nil, fmt.Errorf("同花顺财务指标返回未知能力分区 %q", ability.Ability)
 		}
 		if _, duplicate := seenCategories[category]; duplicate {
+			addHithinkFieldIssue(ctx, &abilityIndex, "category", "ability", "duplicate_category",
+				"unique financial ability category", "string", ability.Ability, "同花顺财务指标返回重复能力分区")
 			return nil, fmt.Errorf("同花顺财务指标返回重复能力分区 %q", category)
 		}
 		seenCategories[category] = struct{}{}
@@ -2039,6 +2047,8 @@ func (p *Hithink) FetchFundamentals(ctx context.Context, rawSymbol string, year,
 			indexID = strings.TrimSpace(indexID)
 			normalizedIndexID := strings.ToLower(indexID)
 			if _, duplicate := seenIndexIDs[normalizedIndexID]; duplicate {
+				addHithinkFieldIssue(ctx, &rowIndex, "metric_key", "index_id", "duplicate_metric_identity",
+					"unique index_id within ability category", "string", indexID, "同花顺财务指标分区返回重复指标 ID")
 				return nil, fmt.Errorf("同花顺财务指标返回重复指标 ID %q（分区 %s）", indexID, category)
 			}
 			seenIndexIDs[normalizedIndexID] = struct{}{}
