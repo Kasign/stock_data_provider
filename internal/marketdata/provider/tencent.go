@@ -361,6 +361,13 @@ func (p *Tencent) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endD
 			addProviderParseIssue(ctx, rowIndex, "trade_date", "kline_row[0]", "invalid_date", "YYYY-MM-DD", "string", vals[0], "Tencent K-line trade date is invalid")
 			continue
 		}
+		if (start != "" && vals[0] < start) || (end != "" && vals[0] > end) {
+			rejectedRows++
+			requestedRange := start + ".." + end
+			addProviderParseIssue(ctx, rowIndex, "trade_date", "kline_row[0]", "date_out_of_requested_range",
+				requestedRange, "string", vals[0], "Tencent K-line trade date is outside the requested range")
+			continue
+		}
 		open, e1 := strconv.ParseFloat(vals[1], 64)
 		closeV, e2 := strconv.ParseFloat(vals[2], 64)
 		high, e3 := strconv.ParseFloat(vals[3], 64)

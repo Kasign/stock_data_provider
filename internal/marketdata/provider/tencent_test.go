@@ -599,3 +599,30 @@ func TestTencentQuoteReportsDegradedOptionalFieldEvidence(t *testing.T) {
 		}
 	}
 }
+
+
+func TestTencentDailyBarsReportsOutOfRequestedDateRange(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		fmt.Fprint(w, `{"data":{"sh600519":{"qfqday":[
+			["2026-10-22","10.0","10.2","10.3","9.9","100"],
+			["2026-10-21","10.0","10.2","10.3","9.9","100"]
+		]}}}`)
+	}))
+	defer server.Close()
+	p := NewTencent(2 * time.Second)
+	p.klineURL, p.noneKlineURL = server.URL, server.URL
+	reporter := validation.NewReporter(20)
+	ctx := validation.WithReporter(context.Background(), reporter)
+	bars, err := p.FetchDailyBars(ctx, "600519.SH", "2026-10-21", "2026-10-21", 8, model.AdjustmentForward)
+	if err != nil || len(bars) != 1 || bars[0].TradeDate != "2026-10-21" {
+		t.Fatalf("out-of-range row should be rejected while preserving requested row: bars=%+v err=%v", bars, err)
+	}
+	for _, issue := range reporter.Snapshot().Issues {
+		if issue.Stage == validation.StageParse && issue.Field == "trade_date" &&
+			issue.ProviderField == "kline_row[0]" && issue.Code == "date_out_of_requested_range" &&
+			issue.RowIndex != nil && *issue.RowIndex == 0 {
+			return
+		}
+	}
+	t.Fatalf("expected out-of-range date diagnostic at original row 0, got %+v", reporter.Snapshot().Issues)
+}
