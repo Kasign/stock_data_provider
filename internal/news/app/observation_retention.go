@@ -2,12 +2,9 @@ package app
 
 import (
 	"context"
-	"errors"
 	"time"
 )
 
-// ErrObservationRetentionResultInvalid 表示 Repository 返回了不可能的批量清理计数。
-var ErrObservationRetentionResultInvalid = errors.New("news.observation.retention_result_invalid")
 
 // ObservationPayloadPurgeResult 描述单次批量载荷清理结果。
 // Scanned 是本批事务成功领取并锁定的到期记录数，不是全局 backlog 数。
