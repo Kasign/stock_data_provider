@@ -239,6 +239,7 @@ func (s *DataService) Valuations(ctx context.Context, rawSymbols []string) (*mod
 		return nil, false, errors.New("no enabled valuation provider")
 	}
 	var failures []string
+	var degradedSnapshot *model.ValuationSnapshot
 	var unknownSnapshot *model.ValuationSnapshot
 	for _, p := range s.valuationProviders {
 		if err := ctx.Err(); err != nil {
@@ -260,6 +261,14 @@ func (s *DataService) Valuations(ctx context.Context, rawSymbols []string) (*mod
 			failures = append(failures, p.Name()+": valuation snapshot quality is unknown")
 			continue
 		}
+		if snapshot.QualityStatus == model.QualityDegraded {
+			// 降级快照保留为首选兜底候选，继续尝试后续 Provider 寻找 valid。
+			if degradedSnapshot == nil {
+				degradedSnapshot = snapshot
+			}
+			failures = append(failures, p.Name()+": valuation snapshot quality is degraded")
+			continue
+		}
 		payload, marshalErr := json.Marshal(snapshot)
 		if marshalErr != nil {
 			s.logger.Warn("valuation cache encode failed", "symbols", strings.Join(symbols, ","), "error", marshalErr)
@@ -275,6 +284,14 @@ func (s *DataService) Valuations(ctx context.Context, rawSymbols []string) (*mod
 			}
 		}
 		return snapshot, false, nil
+	}
+	if degradedSnapshot != nil {
+		if payload, err := json.Marshal(degradedSnapshot); err == nil {
+			if cacheErr := s.cache.Set(ctx, cacheKey, payload, time.Minute); cacheErr != nil {
+				s.logger.Warn("valuation degraded cache write failed", "symbols", strings.Join(symbols, ","), "error", cacheErr)
+			}
+		}
+		return degradedSnapshot, false, nil
 	}
 	if unknownSnapshot != nil {
 		reason := "valuations_fallback_exhausted_without_usable_quality"

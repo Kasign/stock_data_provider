@@ -100,6 +100,31 @@ func unknownValuationsWithCoverageForTest(source string, returned, missing []str
 	}
 }
 
+func TestValuationsPrefersLaterValidProviderOverDegradedPrimary(t *testing.T) {
+	degraded := validValuationsForFallbackTest("eastmoney")
+	valid := validValuationsForFallbackTest("tushare")
+	now := time.Now().UTC()
+	valid.ProviderTimestamp = &now
+	valid.ProviderReportDate = now.In(marketLocation()).Format("2006-01-02")
+	valid.QualityStatus = model.QualityValid
+	valid.QualityReasons = nil
+	valid.Items[0].QualityStatus = model.QualityValid
+	valid.Items[0].QualityReasons = nil
+	first := &valuationFallbackTestProvider{name: "eastmoney", snapshot: degraded}
+	second := &valuationFallbackTestProvider{name: "tushare", snapshot: valid}
+
+	got, hit, err := valuationFallbackService(first, second).Valuations(context.Background(), []string{"600519.SH"})
+	if err != nil || hit {
+		t.Fatalf("Valuations returned hit=%v err=%v", hit, err)
+	}
+	if got == nil || got.Source != "tushare" || got.QualityStatus != model.QualityValid {
+		t.Fatalf("expected later valid provider over degraded primary, got %+v", got)
+	}
+	if first.calls != 1 || second.calls != 1 {
+		t.Fatalf("expected both providers to be tried, calls=%d/%d", first.calls, second.calls)
+	}
+}
+
 func TestValuationsKeepsBestCoverageUnknownSnapshotAfterFallbackExhaustion(t *testing.T) {
 	full := &valuationFallbackTestProvider{
 		name:     "eastmoney",
