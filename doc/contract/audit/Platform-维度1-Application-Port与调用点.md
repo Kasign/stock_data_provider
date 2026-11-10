@@ -153,3 +153,77 @@ Bootstrap 的 Migration Registry 当前只注册：
 - Request ID Middleware、Platform HTTP Client 的 Server 装配、各领域模块消费者仍未完成全量追踪。
 
 **维度状态仍为 partial。**
+
+
+## 8. 第三批：News 模块 Platform 消费者核验
+
+### 8.1 News Application Port 与 Provider 出站适配
+
+固定基线证据：
+
+- `internal/news/app/ports.go`（blob `da1d571deba9dc038db4270c72ec5c7a025ce369`）
+- `internal/news/adapters/provider/platform_doer.go`（blob `2f103b96ca184938dd9052b4b86c77812f0470c4`）
+- `internal/news/adapters/provider/platform_set.go`（blob `2c5e25c211a2f76f3aaa11ce4bc9e492545c7e27`）
+- `internal/news/adapters/provider/http.go`（blob `9bb7762f9f17d04ffc53a691bc955993a179e215`）
+- 对应测试：`platform_doer_test.go`（blob `2c5e493093ce5340d9057c9af9a70cda8c56d7d9`）、`platform_set_test.go`（blob `f9a3e255ef25559efeb141594dfb6110d0e04149`）
+
+已确认：
+
+1. News Application 定义窄 `HTTPDoer` Port；注释明确生产环境由组合根注入绑定 Platform DestinationPolicy 的 Doer。
+2. Adapter 的 `NewPlatformHTTPDoer` 使用 Platform `httpclient.Client.Bind` 创建 Provider 专属 `BoundDoer`，并为 endpoint 固定单 Host/Port、关闭 Redirect、限制 HTTP scheme 由配置决定。
+3. `NewPlatformProviderSet` 为 Bocha、Tavily、Brave、SearXNG 分别构造绑定的 Doer，Provider 不持有 Platform Client 生命周期。
+4. Provider Adapter 将 Platform Fault 映射为 News 自己的 `ProviderError`；仅透传经过 `Fault.Validate` 的 Code/Retryable，不透传 Cause，防止底层敏感错误越过领域边界。
+5. 测试覆盖 DestinationPolicy 精确约束、跨 Host 请求拒绝、非法 Fault 降级为通用错误、Cause 脱敏，以及 Provider Set 中每个 Provider 确实持有 Platform BoundDoer。
+
+判断：News 的 Platform HTTP Client / Fault 适配代码及单测质量符合“领域 Port 由 News 拥有、Platform 实现由组合根注入”的契约方向。
+
+### 8.2 News Diagnostics 对 Platform Runner/Fault 的使用
+
+固定基线证据：
+
+- `internal/news/diagnostics/checks.go`（blob `7c11feb178f9f6833d2cdb9af2dd3ba30eeec3e2`）
+- `internal/news/diagnostics/business_quality.go`（blob `fc5725e57abb3c260205f851ef50b03c7d91ce49`）
+- `internal/news/diagnostics/checks_test.go`（blob `fa827622e38f86cce75866e2b9b52977b85f7a4d`）
+
+已确认：
+
+- News Diagnostics 返回 Platform `diagnostics.Check`，使用 Platform Fault 作为探针执行失败的内部错误分类。
+- 测试直接调用 `platformdiagnostics.Runner{}` 执行 News Check，覆盖 Provider 未配置时 skipped、Parser 本地自检、Retention backlog degraded、无效 backlog unavailable 和错误脱敏。
+- News 自有业务质量仍作为 Attributes 独立输出，不把领域质量状态错误折叠为 Platform 健康状态。
+
+### 8.3 Server 生产装配缺口
+
+与 News Adapter/Diagnostics 的局部实现相对照，固定基线 `internal/server/bootstrap/bootstrap.go`：
+
+- 只 import `internal/news/adapters/storage` 的 Migration 包；未 import News Application、Provider Adapter 或 News Diagnostics。
+- `newMigrationRegistry()` 注册 News Storage Migration，但这不等于 News Application 已装配。
+- Server Diagnostics 通过 `NewServiceWithMigration(storageResources, migrationRegistry)` 创建，调用时没有传入 News Module Checks。
+- Bootstrap 未创建 Platform `httpclient.Client`，也未调用 `NewPlatformProviderSet`。
+- 当前 Server 路由只装配旧 Analysis API 和 Health/Readiness；没有 News Application Handler/内部服务构造点。
+
+因此，当前基线证明 News 的 Platform Adapter 和 Diagnostics Check 已实现并有单测，但未证明它们被 Server 生产组合根使用。不能将 Adapter 单测通过等同于线上接入完成。
+
+### 8.4 新增待核项
+
+**AUD-PLAT-PORT-003：News Platform Adapter / Diagnostics 未接入 Server 生产组合根（P1 候选）**
+
+证据范围仅限已检查的 News Provider Adapter、News Diagnostics 与 Server Bootstrap：
+
+- Provider Set 工厂和 BoundDoer 适配存在，但在已检查的 Server Bootstrap 中没有构造调用。
+- News Check 工厂存在，但 Server Diagnostics 构造时未注入模块 Check。
+- Server 仅注册 News Migration。
+
+处理建议：
+1. 由 Server/News 责任方确定 News 是通过 Server 内部 Application Port 注入，还是由内部任务/服务直接调用；不要求暴露独立外部 News API。
+2. 明确 Platform HTTP Client 生命周期归 Root Server，Provider-specific BoundDoer 由 News Adapter 构造。
+3. 将 News Diagnostics Checks 注入 Server Diagnostics 聚合，或明确由独立内部诊断路径承载。
+4. 补充至少一个组合根测试，证明真实构造/注入关系，不以 Adapter 单元测试替代集成证据。
+
+### 8.5 本批结论
+
+- News 的 HTTPDoer Port、Platform BoundDoer 适配、Platform Fault 映射和 Platform Diagnostics Check 均有实现及单测。
+- News 的 Application Port 归属正确，Platform 仅提供技术原语。
+- 固定基线 Server Bootstrap 尚无证据将 News Provider Set、News Application 和 News Diagnostics 接入生产运行时。
+- 本批未完成 News Request ID 消费者核验；不能推断 News 业务流程已传播 Request ID。
+
+**News 消费者核验：implementation partial / production wiring not evidenced。Platform 维度 1 总状态仍为 partial。**
