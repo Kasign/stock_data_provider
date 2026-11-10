@@ -106,7 +106,7 @@ func (s EvidenceSnapshot) MatchesRequest(request ListEvidenceRequest) bool {
 
 func (s EvidenceSnapshot) ValidateAt(now time.Time) error {
 	if s.Validate() != nil || now.IsZero() || !validEvidenceUTC(now) ||
-		s.CreatedAt.After(now) || s.SystemAsOf.After(now) {
+		s.CreatedAt.After(now) || s.SystemAsOf.After(now) || !now.Before(s.ExpiresAt) {
 		return ErrInvalidEvidenceSnapshot
 	}
 	return nil
