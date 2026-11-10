@@ -488,7 +488,7 @@
 - 详细记录：[`WebUI-维度2-Analysis-Run.md`](./WebUI-维度2-Analysis-Run.md)
 - 已核对 RunRequest/RunResult/RunStatus/StageEvent、Analysis Runner/RunStore Port、MariaDB/Redis 结果读取与写入、TaskQueue 创建/幂等/Worker/状态映射/事件游标、HTTP Handler、WebUI API Client/轮询/Run 结果视图及相关测试。
 - 已明确 Run 与 Task 是不同状态域：Run=blocked_data_quality 映射 Task=succeeded，表示任务执行已结束，不代表质量门禁通过；RunResult 从 MariaDB 读取，Redis 仅为缓存；Task Events 使用数据库自增 id 作为 sequence 游标。
-- 新增 **AUD-WEBUI-CTR-046（P2）**：WebUI 实际调用的 GET /api/v1/analysis/runs/{run_id} 及 Run Events 未进入正式 OpenAPI，且缺 RunResult/RunStatus/Failure/StageEvent 等响应 Schema；HTTP Server 缺少 GET Run 成功/404/409 与 Run Events 专项测试。
+- 新增 **AUD-WEBUI-CTR-046（P2）**：WebUI 实际调用的 GET /api/v1/analysis/runs/{run_id} 及 Run Events 未进入正式 OpenAPI，且缺 RunResult/RunStatus/Failure/StageEvent 等响应 Schema；HTTP Server 已有 GET Run 404 和 500 脱敏测试；缺 GET Run 成功、409 run_not_finished 与 Run Events 专项测试。
 - 新增 **AUD-WEBUI-CTR-047（P2）**：AnalysisRequest 声称与 domain.RunRequest 一致，但遗漏 as_of_mode、parameters；run_id 在异步队列由服务端生成覆盖，as_of_mode 由 Handler 根据 as_of 重设，需明确异步请求 DTO 与字段行为。
 - WebUI 已校验 task_id/run_id/事件游标/事件身份，Run 结果读取校验 run_id 和证券集合，并对可重试错误有限重试；API Client 测试验证 Run URL、分析端不附带 Market API Key 和结构化 409 错误。
 - 本轮未执行固定基线 CI；DB migration 索引/唯一约束、多实例 Worker claim、RunResult 嵌套 DTO Golden 仍未完成专项核验。
@@ -538,3 +538,10 @@
 - StockSearchItem/StockSearchSnapshot 的 Go JSON tag 与 OpenAPI required/nullable 一致；total 语义已明确为 Provider 匹配候选数，不是全市场证券总量。本批未发现新的 DTO/Provider 契约差异。
 - view 组件测试覆盖文本安全渲染和 ARIA，但缺 app.js 搜索流程质量状态 DOM 集成测试。本批未执行固定基线 CI。
 - 本批无新增 CTR 编号、无业务代码修改。维度 2 第一轮完整性 Review 继续 partial。
+### WebUI — 维度 2：第一轮完整性 Review（子批次 4）
+
+- 详细记录：WebUI-维度2-完整性Review-第一轮.md 第 11 节。
+- 本批复核 CTR-046、CTR-047。Run GET 与 Run Events 路由真实存在，但权威分析任务 OpenAPI 缺少两条路径及 RunResult/事件响应 Schema；CTR-046 保留 P2。
+- 更正 CTR-046 测试资产描述：server_test.go 已覆盖 GET Run 404 和 500 脱敏；仍缺成功响应、409 run_not_finished 与 Run Events Handler 专项测试。
+- CTR-047 经 RunRequest、TaskType 常量、CreateTask Handler 默认/时间模式处理及 Queue 生成覆盖 run_id 的代码核对，字段差异和异步请求 Schema 描述不准确成立，保留 P2。关闭时按 HTTP CreateTaskRequest 语义定义 required/default，不能机械复制领域结构体。
+- 本批没有新增 CTR 编号或业务代码修改；固定基线 CI、RunResult 全字段 Golden、migration/Worker 并发专项仍未执行。
