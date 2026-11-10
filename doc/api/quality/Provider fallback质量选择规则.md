@@ -58,6 +58,7 @@ provider_fallback_used 只记录实际使用了非首选 Provider，不是质量
 - MarketBreadth：valid 5 分钟、degraded 四分之一 TTL；读取端按对应质量 TTL 二次校验。
 - Quote、DailyBars、IndexQuotes、MarketBreadth 均在读取端检查 FetchedAt 年龄，不能只依赖缓存后端执行 TTL；DailyBars 还必须拒绝 stale/unknown/invalid 条目。
 - stale 历史兜底必须保留 stale 状态；不得作为实时 Quote 的正常缓存命中。
+- MariaDB stale 历史兜底不得覆盖已取得的覆盖达标 degraded Provider 序列；stale 仅在没有更高质量 Provider 候选时参与回退选择。
 
 
 ## 6. Bundle 聚合质量规则（任务 C）

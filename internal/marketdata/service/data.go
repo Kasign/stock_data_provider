@@ -3194,7 +3194,8 @@ func (s *DataService) DailyBars(ctx context.Context, rawSymbol, start, end strin
 					// Use the database snapshot only when its coherent series covers
 					// at least as recent a trade date and at least as much history as
 					// the best provider partial. Never merge their price series.
-					if len(bestPartial) == 0 || preferStoredSeries(cached, bestPartial) {
+					// MariaDB 数据始终作为 stale 历史兜底；已有覆盖达标的 degraded Provider 序列时，不允许 stale 结果越级。
+					if len(bestDegraded) == 0 && (len(bestPartial) == 0 || preferStoredSeries(cached, bestPartial)) {
 						fallbackWarnings := []string{"provider_unavailable_served_from_mariadb", "mariadb_bars_use_one_coherent_source_and_adjustment_reference"}
 						fallbackWarnings = append(fallbackWarnings, storedWarnings...)
 						return cached, false, dedupeStrings(fallbackWarnings), nil
