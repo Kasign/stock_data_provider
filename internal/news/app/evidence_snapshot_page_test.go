@@ -141,7 +141,7 @@ func TestListEvidenceSnapshotPageRejectsCursorAndSnapshotFailures(t *testing.T) 
 	}
 	token, err := codec.EncodeNextCursor(ListEvidenceRequest{
 		CallerRef: request.CallerRef, PurposeCode: request.PurposeCode,
-		RequestedContentLevel: request.RequestedContentLevel, SystemAsOf:       request.SystemAsOf,
+		RequestedContentLevel: request.RequestedContentLevel, SystemAsOf: request.SystemAsOf,
 		Filters: request.Filters, PageSize: request.PageSize,
 	}, "snapshot-1", position, now)
 	if err != nil {
