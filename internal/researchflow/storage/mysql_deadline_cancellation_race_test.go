@@ -73,3 +73,63 @@ func TestMariaDBDeadlineAndUserCancellationHaveSingleWinner(t *testing.T){
  case "user_cancelled":if domain.RunStatus(status)!=domain.RunCancelling{t.Fatalf("cancellation winner status=%s",status)}
  default:t.Fatalf("unexpected termination reason %q",reason)}
 }
+
+
+func TestMariaDBExpiredDeadlineYieldsToCompletedStages(t *testing.T) {
+	if os.Getenv("PLATFORM_STORAGE_INTEGRATION") != "1" {
+		t.Skip("set PLATFORM_STORAGE_INTEGRATION=1")
+	}
+	ctx, cancel, db, repo := deadlineRaceDB(t)
+	defer cancel()
+	defer db.Close()
+
+	suffix := fmt.Sprint(time.Now().UnixNano())
+	runRef, stages := deadlineRaceFixture(t, ctx, repo, suffix, "deadline-completed", "completed")
+	now := time.Now().UTC()
+	started := formatResearchflowTimeValue(now.Add(-2 * time.Minute))
+	finished := formatResearchflowTimeValue(now.Add(-time.Minute))
+	if _, err := db.ExecContext(ctx, `UPDATE researchflow_runs
+		SET status = ?, version = version + 1, started_at = ?, deadline_at = ?
+		WHERE run_ref = ?`, string(domain.RunRunning), started,
+		formatResearchflowTimeValue(now.Add(-time.Minute)), runRef); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.ExecContext(ctx, `UPDATE researchflow_stages
+		SET status = ?, version = version + 1, started_at = ?, finished_at = ?
+		WHERE stage_ref = ?`, string(domain.StageSucceeded), started, finished, stages[0]); err != nil {
+		t.Fatal(err)
+	}
+
+	updated, version, err := repo.ExpireRunDeadline(ctx, runRef, 2)
+	if err != nil || updated || version != 2 {
+		t.Fatalf("ExpireRunDeadline updated=%v version=%d err=%v; want false/2/nil", updated, version, err)
+	}
+	var reason sql.NullString
+	if err := db.QueryRowContext(ctx, "SELECT termination_reason FROM researchflow_runs WHERE run_ref = ?", runRef).Scan(&reason); err != nil {
+		t.Fatal(err)
+	}
+	if reason.Valid && reason.String != "" {
+		t.Fatalf("completed Run acquired termination reason %q", reason.String)
+	}
+
+	finalized, err := repo.FinalizeRun(ctx, RunFinalization{
+		RunRef: runRef, ExpectedVersion: 2,
+		ResultSummaryRef: "deadline-completed-summary-" + suffix,
+		SummarySchemaVersion: "summary-v1", OutboxRef: "deadline-completed-outbox-" + suffix,
+		TerminalStatus: domain.RunSucceeded,
+		Summary: domain.ResultSummary{
+			StageOutcomes: map[string]domain.StageStatus{"completed": domain.StageSucceeded},
+			ExcludedStages: []domain.ExcludedStage{}, MissingStageCodes: []string{},
+			DegradedStageCodes: []string{}, BlockedStageCodes: []string{}, ReasonCodes: []string{},
+			RiskGateDecisions: map[string]string{}, Coverage: 1, QualityStatus: "valid",
+			ActionabilityStatus: "not_evaluated",
+		},
+	})
+	if err != nil || !finalized {
+		t.Fatalf("normal FinalizeRun finalized=%v err=%v; completed work must retain normal aggregation", finalized, err)
+	}
+	loaded, err := repo.GetRun(ctx, runRef)
+	if err != nil || loaded.Run.Status != domain.RunSucceeded || loaded.Run.TerminationReason != "" {
+		t.Fatalf("completed Run final state=%#v err=%v", loaded.Run, err)
+	}
+}
