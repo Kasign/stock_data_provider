@@ -1186,5 +1186,15 @@ PLAT-002 的项目级决策收敛已完成；**PLAT-002 项目整体不宣告完
 - **已知实现偏差（仅作为模块内部符合性记录）：** 固定审计基线 `b6dfc85ba214fe16268c8cba780641a8bfe15086` 的 Hithink Dragon Tiger Provider 一次读取完整 `stock_items` 后本地分页，却将整份列表数量写入 `source_returned`；当总量大于 page_size 时，与 Service 对当前页原始记录数的校验冲突。重复 symbol 被静默去重但未计入排除数，也可能破坏上述计数恒等式。这是 Data 内部 Adapter 对已定义公共契约的实现不符合，不是公共契约语义缺失。
 - **契约冻结判断：** CTR-043 的公共契约语义明确，生产方与消费方无需理解 Hithink 的内部分页策略、原始字段或 Provider 测试结构。就 PLAT-002 的契约冻结目标而言，本项应标记为 `freeze-ready`（契约语义可冻结）；Hithink Adapter 的修复、Provider 专项测试和运行时验证属于 Data 模块内部实现质量工作，不作为本项契约冻结门禁。
 - **边界补充：** Data 对外仍须按公共契约返回正确的分页计数和守恒关系。若真实服务违反已冻结契约，应作为 Data 模块实现缺陷跟踪和修复；不得因此反复修改或扩大公共契约，也不得要求 WebUI 了解 Provider 的分页方式。
-- **金额字段问题明确移出本 CTR：** `provider_*_value`、`provider_amount_unit` 是当前 DTO/OpenAPI 暴露的字段事实，但它们不是原始 CTR-043 的问题。本轮不据此新增 CTR、不要求 WebUI 消费 Provider 内部原始金额，也不将真实同花顺金额测试或 WebUI 渲染回归测试列为 PLAT-002 冻结条件。若项目决定公共接口不应暴露 Provider 原始字段，应另按公共 DTO 范围评审，不得借 CTR-043 擅自改动。
+- **金额字段问题不属于原始 CTR-043，但已另行形成项目级契约决议：** DEC-PLAT-002-027 已明确 Provider 原始金额及 `provider_amount_unit` 不属于跨模块公开 DTO，Data 对外只提供规范化 CNY 金额字段。该公开字段边界需要在 Data OpenAPI/DTO 契约中落实，详见本矩阵第39节；不要求 WebUI 消费 Provider 原始金额，也不将 Provider 内部测试列为 PLAT-002 跨模块契约门禁。
 - **执行边界：** 本轮只修正 PLAT-002 审计文档和状态分类，不修改 Data/WebUI 责任模块代码，不执行测试或 CI。原实现偏差保留为 Data 模块内部待修事项，不阻断契约冻结。
+
+
+## 39. DEC-PLAT-002-027：Dragon Tiger 公开 DTO 的 Provider 字段边界落实
+
+- 项目级决议已明确：Provider 原始金额和 Provider 专属单位字段属于 Data 内部适配细节；跨模块公开 DTO 只输出规范化人民币金额。Data 负责 Provider 原始值识别、单位验证、换算与质量判断。
+- 固定基线 b6dfc85ba214fe16268c8cba780641a8bfe15086 的 internal/marketdata/model/dragon_tiger.go 通过 JSON tag 暴露 provider_buy_value、provider_sell_value、provider_deal_value、provider_net_value、provider_net_rate、provider_org_net_value、provider_hot_money_net_value、provider_amount_unit；internal/marketdata/httpapi/openapi.yaml 的 DragonTigerItem Schema 也公开声明这些字段。它们不是只存在于 Provider 内部的私有字段。
+- 当前公开契约边界与 DEC-PLAT-002-027 不一致。Data 应调整公开 DTO/OpenAPI/Schema/Golden：移除上述 Provider 原始字段；保留标准化 *_cny 字段和明确的缺失语义。无法可靠换算的金额不得填入 CNY 字段，应省略/为空并通过 quality_status/quality_reasons 表达 degraded 或 unknown。
+- WebUI 只消费公开 CNY 字段，不识别同花顺、不处理 provider_defined、不负责换算。Data 内部可继续保留任意 Provider 原始字段、模型或诊断信息，但不得通过跨模块公开 JSON DTO 泄漏。
+- 状态：项目级语义决议已 accepted；Data 公开 DTO/OpenAPI 落实证据尚缺，故该字段边界在 L2 仍为 pending_evidence。这是既有 DEC-027 的落实项，不新建 CTR，不与原始 CTR-043 的分页计数问题混为一项。
+- 本分支只登记契约边界与证据缺口，不修改 Data 代码、OpenAPI、Golden 或测试；后续由 Data 责任分支落实后，以新 SHA 增量核验。
