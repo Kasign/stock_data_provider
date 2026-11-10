@@ -10,7 +10,6 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -454,9 +453,6 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 	if err != nil || repeatedConcurrentCleanup != 0 {
 		t.Fatalf("repeat concurrent snapshot cleanup deleted=%d err=%v, want 0 and nil", repeatedConcurrentCleanup, err)
 	}
-	var idSequence atomic.Uint64
-	newID := func() string { return fmt.Sprintf("news-it-%d", idSequence.Add(1)) }
-	ingest := app.NewIngestCandidate(repository, newID)
 	sourceID := fmt.Sprintf("news-it-source-%d", time.Now().UnixNano())
 	const workers = 6
 
@@ -466,6 +462,10 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 		PublisherName:  "Integration Publisher",
 		PublishedAtRaw: "2026-11-06T01:02:03Z",
 	}
+	identityCandidates, err := domain.BuildIdentityCredentials(sourceID, candidate.SourceItemID, "", domain.SourceURLPolicy{})
+	if err != nil {
+		t.Fatalf("build integration identity: %v", err)
+	}
 	observations := make([]domain.Observation, workers)
 	errs := make(chan error, workers)
 	var wait sync.WaitGroup
@@ -474,9 +474,45 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 		wait.Add(1)
 		go func() {
 			defer wait.Done()
-			observation, err := ingest.Execute(
-				ctx, sourceID, fmt.Sprintf("news-it-key-%d", index), candidate, domain.SourceURLPolicy{},
-			)
+			observedAt := time.Now().UTC()
+			observation := domain.Observation{
+				ID:             fmt.Sprintf("news-it-observation-%d-%d", time.Now().UnixNano(), index),
+				IdempotencyKey: fmt.Sprintf("news-it-key-%d", index),
+				SourceID:       sourceID,
+				Candidate:      domain.NormalizeCandidate(candidate, observedAt, ""),
+				ObservedAt:     observedAt,
+			}
+			err := repository.WithinIdentityTransaction(ctx, func(tx app.IdentityTransaction) error {
+				existing, findErr := tx.FindIdentityCredentials(ctx, sourceID, identityCandidates)
+				if findErr != nil {
+					return findErr
+				}
+				resolution := domain.ResolveIdentity(sourceID, identityCandidates, existing)
+				switch resolution.Status {
+				case domain.IdentityNew:
+					newsID, createErr := tx.CreateNewsItem(ctx, sourceID)
+					if createErr != nil {
+						return createErr
+					}
+					observation.NewsID = newsID
+					observation.IdentityStatus = domain.ObservationNew
+					credentials := append([]domain.IdentityCredential(nil), identityCandidates...)
+					for credentialIndex := range credentials {
+						credentials[credentialIndex].NewsID = newsID
+						credentials[credentialIndex].ObservedAt = observedAt
+					}
+					if saveErr := tx.SaveIdentityCredentials(ctx, credentials); saveErr != nil {
+						return saveErr
+					}
+				case domain.IdentityMatched:
+					observation.NewsID = resolution.NewsID
+					observation.IdentityStatus = domain.ObservationMatched
+				default:
+					return fmt.Errorf("unexpected identity resolution: %+v", resolution)
+				}
+				_, appendErr := tx.AppendObservation(ctx, observation)
+				return appendErr
+			})
 			if err != nil {
 				errs <- err
 				return
@@ -487,12 +523,12 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 	wait.Wait()
 	close(errs)
 	for err := range errs {
-		t.Fatalf("concurrent identity ingestion failed: %v", err)
+		t.Fatalf("concurrent repository identity transaction failed: %v", err)
 	}
 
 	newsID := observations[0].NewsID
 	if newsID == "" {
-		t.Fatal("identity ingestion did not create a NewsID")
+		t.Fatal("identity repository transaction did not create a NewsID")
 	}
 	for index, observation := range observations {
 		if observation.NewsID != newsID {
@@ -506,7 +542,7 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 		t.Fatal(err)
 	}
 	if itemCount != 1 {
-		t.Fatalf("concurrent first identity created %d News items, want 1", itemCount)
+		t.Fatalf("concurrent repository transactions created %d News items, want 1", itemCount)
 	}
 
 	identityCandidates, err := domain.BuildIdentityCredentials(sourceID, "native-item-001", "", domain.SourceURLPolicy{})
