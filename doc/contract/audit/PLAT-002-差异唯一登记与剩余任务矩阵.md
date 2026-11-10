@@ -335,3 +335,14 @@ W2-D 的“权威规则核对与裁决问题准备”完成；CTR-010 本身仍�
 - 本切片状态 `partial`；Platform维度2仍为partial。本轮只完成Observation一个DTO，不代表Fault、Request ID、HTTP Client等其他公共结构完成核验。
 - 下一切片：Platform维度2核对Fault内部对象与领域/Transport映射边界；Server完整HTTP Error Envelope留在Server维度2。
 - 本轮仅新增/更新审计文档，未修改业务代码、Schema、Golden、测试，未执行CI；固定代码审计基线不变。
+## 15. Platform 维度2：Fault 内部对象与跨模块映射核验（2026-11-10）
+
+- 审计记录：`Platform-维度2-DTO-Schema-Golden.md` 第7节；固定代码基线 `b6dfc85ba214fe16268c8cba780641a8bfe15086`。
+- Fault所有字段均为 `json:"-"`，直接JSON序列化为 `{}`；这是内部对象边界的预期行为，不应为Fault本身创建公开Schema/Golden。
+- Class、Code、SafeMessage、Dependency、Retryable、Cause/Unwrap的实现和本地测试基本覆盖；Platform Diagnostics Runner会Validate并归一化非法Fault。
+- 已确认LLM `ModelErrorFromPlatformFault` 是跨模块直接消费者：映射Class/Code/SafeMessage/Retryable，排除Dependency/Cause；现有测试覆盖合法映射及敏感字段排除。
+- PLAT2-D2-005：LLM Mapper投影前不调用Fault.Validate，缺少非法Class/Code、控制字符SafeMessage、非法Retryable组合的映射测试。作为证据缺口并入既有P002-D02 / PLAT-CTR-001，不新增CTR；由LLM Owner补信任边界说明及测试，必要时对非法Fault安全降级。
+- Market Data与Platform HTTP当前使用独立HTTP Error DTO/映射路径，未发现直接消费Platform Fault的证据；不能用它们的错误Envelope测试替代Fault消费者测试。
+- 本切片结论：Fault内部对象契约基本齐备；跨模块投影仍partial。P002-D02继续开放，PLAT-CTR-001保持pending_evidence。
+- 下一切片：Platform维度2核对Request ID公共原语与直接Transport消费者；Server完整HTTP Error Envelope留在Server维度2。
+- 本轮仅更新审计文档，未修改业务代码、Schema、Golden、测试，未执行CI。
