@@ -470,3 +470,14 @@
 - CTR-010 影响范围增加 DragonTigerItem 16 个 omitempty 指针字段，以及 provider_amount_unit、provider_report_date 两个 omitempty 字符串；OpenAPI 均声明 nullable=true，与 Go nil 时省略不一致。现有 JSON 序列化 Golden 未覆盖 DragonTiger DTO。
 - WebUI 已展示分页计数、排除数、质量与来源时间，并只展示明确 CNY 金额字段；API Client 无直接请求测试，页面无龙虎榜分页/渲染 DOM 回归。当前也缺 Hithink 龙虎榜 Provider 专项测试。
 - WebUI 维度 2 继续 partial。剩余待审数据集：Stock Search、Analysis Run、Provider Probe History。
+
+
+### WebUI — 维度 2：Stock Search 证券搜索
+
+- 详细记录：[`WebUI-维度2-Stock-Search.md`](./WebUI-维度2-Stock-Search.md)
+- 已核对 StockSearchItem/Snapshot DTO、StockSearchProvider Port、Tencent Smartbox 与 Eastmoney Provider、独立 Provider 优先级、默认配置、Service 校验/回退、Handler/OpenAPI、WebUI API Client/自动补全和测试。
+- 默认 Tencent 与 Eastmoney 均启用，搜索专用顺序为 Tencent → Eastmoney → 配置优先级。Tencent 非空结果通常以 degraded 返回并直接使用；无匹配时才回退 Eastmoney。Eastmoney 全量 A 股目录缓存 6 小时，刷新失败可回退 stale 缓存。
+- Tencent 不提供可核验匹配总数，total 是本次解析匹配候选数，quality 固定 degraded；Eastmoney 从完整证券目录进行匹配，total 是本地目录中的匹配数量。DTO/OpenAPI required/nullable 一致。
+- 新增 **AUD-WEBUI-CTR-045（P2）**：WebUI 仅识别 stale，忽略 degraded/unknown 和 quality_reasons。尤其 unknown 空结果实际表示回退耗尽仍无法确认，却显示“没有匹配的股票”，容易被误解为证券不存在。需按四种质量状态展示并增加 app.js 搜索流程 DOM 回归。
+- API Client 已有中文 query 编码、API Key、AbortSignal 测试；Handler 覆盖成功、空 q 和超限 limit；view 组件覆盖候选安全渲染和 ARIA，但缺 loadStockSearch 质量状态集成 DOM 测试。
+- WebUI 维度 2 继续 partial。剩余待审数据集：Analysis Run、Provider Probe History。
