@@ -246,7 +246,9 @@ func ValidateDeliveryStateEvent(previous DeliveryStatus, event DeliveryStateEven
 				event.RequestID == nil || !validOpaqueRef(*event.RequestID) ||
 				event.ActorReason == nil || strings.TrimSpace(*event.ActorReason) == "" ||
 				len(*event.ActorReason) > 512 ||
-				strings.ContainsAny(*event.ActorReason, "\r\n\x00"))) {
+				strings.ContainsAny(*event.ActorReason, "\r\n\x00"))) ||
+		((event.From != DeliveryFailed || event.To != DeliveryQueued) &&
+			(event.ActorRef != nil || event.RequestID != nil || event.ActorReason != nil)) {
 		return ErrInvalidDeliveryChange
 	}
 	return nil
