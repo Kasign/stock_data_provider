@@ -682,3 +682,85 @@ Run 创建时已从 RequestIdentity 读取并持久化 OriginatingRequestID；�
 Researchflow Application Port 和主要跨模块 DTO 边界已具备；Run/Stage/Attempt 的持久化、租约栅栏、Deadline、取消、重试策略、Outbox at-least-once 和四态 Diagnostics 均有模块内实现证据。当前固定基线 Server 没有将这些能力装配成可运行的生产流程，尤其缺少真实 StageExecutor/OutboxPublisher、Migration 注册、Worker 调度和 Diagnostics 注册。Originating Request ID 从 Run 到异步 Stage/Outbox 的传播待证。
 
 **Researchflow 维度 1 状态：partial；application/storage execution skeleton evidenced / production composition and cross-module execution wiring not evidenced。Platform 维度 1 总状态仍为 partial。**
+
+
+## 14. 第九批：Server Root Composition 核验（维度 1 收尾批次）
+
+### 14.1 Root Server 当前装配清单
+
+固定基线证据：
+
+- `internal/server/bootstrap/bootstrap.go`（blob `92df61265f173251ac7811f99a7ab9f41ac470ed`）
+- `internal/server/bootstrap/router.go`（blob `2597c998236a8e981773635eced7915a28d6b2ed`）
+- `internal/server/config/process.go`（blob `13ff754095b763f4afbfa9dda1bbecb74a0b9a91`）
+- `internal/server/config/security.go`（blob `3119060466de2d99da96b2bdfc1374e68ad4e356`）
+- `internal/server/bootstrap/bootstrap_test.go`（blob `7cc244a2d6e62b5a177d08efd3484195598b5cf4`）
+
+已确认：
+
+1. `bootstrap.Run` 解析进程配置后，通过 `OpenLegacyAnalysisResources` 打开共享 MariaDB、Redis 和 Platform HTTP Client；再构造旧 MarketData Adapter、旧 Analysis Runner、Platform TaskQueue。
+2. Root Server 的 Migration Registry 明确只注册 `news`、`research`、`notification` 三个 namespace；对应单测固定断言这三个 namespace。未注册 Researchflow、Quant、LLM、Data 的模块 Migration。Data 当前另有独立 `cmd/market-data` 入口；Quant 当前阶段尚无生产 Storage Migration。
+3. Root Server 只构造旧 Analysis `service.Runner` 与 `platform/taskqueue.Queue`；Lifecycle 只注册 `legacy-analysis-worker` 和可选 HTTP Server，没有注册 Researchflow 或 Notification Worker/Dispatcher，也没有其他新模块后台组件。
+4. HTTP Router 只注册 `/healthz`、`/readyz`、`/diagnostics`、根页面以及旧 `/api/v1/analysis/**` 路由；没有 Data、Research、Researchflow、Quant、LLM、News 或 Notification 的模块 Application 路由。
+5. Server Process Config 仍以 `ANALYSIS_TIMEOUT`、`ANALYSIS_WORKERS`、`ANALYSIS_MAX_QUEUED` 为主要业务运行参数；注释明确领域模块配置由各模块自己的配置入口解析。
+6. Server `LoadSecurity` 只解析 Owner Token；代码注释明确模块 Service Scope 尚未接线前旧 Analysis 路由保持 Owner-only。Bootstrap 调用 `NewAuthenticator(ownerToken, nil)`，没有装载模块 Service Credentials。当前 Router 也没有模块 Service Route，因此这是明确的过渡状态，不据此单独判定越权缺陷。
+7. Bootstrap 对 HTTP Server 角色执行完整的共享资源创建、Migration 校验、旧 Analysis API/Worker 装配；Worker 角色不创建 HTTP Handler。当前没有基于模块能力的独立服务装配矩阵。
+
+### 14.2 Platform 公共能力的实际消费与生命周期
+
+固定基线证据：
+
+- `internal/server/resources/storage.go`（blob `beebb1858f93dcc03e6a71b9706f406c5fde0481`）
+- `internal/server/bootstrap/http_middleware.go`（blob `0ba274509dd14e3da3e1d936b19181fb44126851`）
+- `internal/server/bootstrap/http_middleware_test.go`（blob `5f999c41a4e7b6a574ee877abbabef307fdbafae`）
+- `internal/server/diagnostics/storage_checks.go`（blob `de8bc86f2a2d1921ddc01929cff85a90cc31a3bc`）
+- `internal/server/runtime/lifecycle.go`（blob `fcfe753c345af505a4f25e94050f19049d9ad75b`）
+- `internal/server/runtime/lifecycle_test.go`（blob `97e67e036a0339033436a41a290a241167bf587d`）
+
+已确认：
+
+1. Server Resources 拥有共享 Platform SQL、Redis、HTTP Client；`BindHTTPDestination` 可基于共享 Client 创建固定策略 BoundDoer，并在 Resources 关闭后拒绝新绑定。
+2. 但 Bootstrap 没有调用 `BindHTTPDestination`，也没有把 Resources 传给 News/LLM/Researchflow 或 Data 的生产 Adapter。共享 Client 的存在只证明基础资源已创建，不证明模块已消费。
+3. Server HTTP Middleware 使用 Platform `MiddlewareWithOptions` 零值策略，默认重生成客户端传入的 `X-Request-ID`；单测确认不会接受 caller-controlled ID。Platform Client 出站传播只会使用可信 Context 中的 ID。
+4. Diagnostics Service 支持接收模块 Check 分组，但 Bootstrap 调用 `NewServiceWithMigration(storageResources, migrationRegistry)` 时没有传入任何模块 Checks；Storage Checks 只检查 MariaDB、Redis 和 Migration Schema。
+5. Lifecycle 本身具备顺序启动、逆序停止、启动失败回滚、并发停止等待和错误聚合测试。Bootstrap 的 defer 明确先 Stop Lifecycle Consumers，再 Close HTTP/Redis/DB 等共享资源，顺序符合资源所有权原则。
+6. 当前生命周期机制本身已有证据，但因为新模块 Worker/Dispatcher 未注册，不能将通用 Lifecycle 测试视为新模块停止顺序已验收。
+
+### 14.3 旧 Analysis 与 Platform 边界
+
+固定基线证据：
+
+- `internal/platform/taskqueue/queue.go`（blob `d438d934c6267ee1d7a14d482d37741cf3d1c795`）
+- `internal/server/bootstrap/bootstrap.go`（同上）
+
+已确认：
+
+- Root Server 仍直接创建 `platform/taskqueue.Queue`，并以旧 Analysis `service.Runner` 作为执行器。
+- TaskQueue 的 Runner、Create 参数和 Event 字段直接引用旧 `internal/analysis/domain` 类型；因此 Server 目前的核心异步工作流仍被旧 Analysis Domain DTO 锁定。
+- 这与前文 **AUD-PLAT-PORT-001** 相互印证：问题不只是命名/目录遗留，而是 Platform TaskQueue 的公共 API 仍反向依赖领域类型。
+- 责任方需在旧 Analysis 迁移时决定：将该队列迁出 Platform 领域无关命名空间，或抽取真正通用的任务 DTO/事件协议；不能让新模块继续依赖该旧接口。
+
+### 14.4 Server 维度 1 汇总判断
+
+Server 已具备 Root Composition 的基础技术能力：共享 Platform Resources、受控 HTTP Destination 绑定入口、Request ID Middleware、显式 Router/Auth Policy、Migration Registry、统一 Diagnostics Runner、Lifecycle 与有序关闭。
+
+但固定基线的实际组合仍是 transitional legacy Analysis runtime：
+
+- 生产 Application 装配仍以旧 Analysis 为中心；
+- 新模块只在部分 Migration 层注册；
+- 新模块 HTTP/Application/Worker/Outbox/Diagnostics/受控 HTTP Adapter 没有形成生产装配；
+- Service Credential 配置与模块路由明确暂缓；
+- Shared Platform HTTP Client 已创建但尚无新模块生产消费者；
+- 旧 TaskQueue 仍处于 Platform 命名空间并依赖旧 Analysis Domain。
+
+**AUD-PLAT-PORT-014：Root Server 尚未完成从旧 Analysis 到模块化 Application Composition 的迁移（P1 候选，项目级集成阻断）**
+
+此项作为项目级组合根总缺口，汇总并关联 AUD-PLAT-PORT-001/003/004/006/008/010/012，不替代各模块具体责任项。证据为 Bootstrap 的实际构造调用、Migration Registry 单测、Router 路由清单、Diagnostics 构造调用及 Lifecycle 注册清单。进入模块化生产联调前，需明确 Server 作为唯一组合根的装配清单，按模块接入 Application/Adapter/Repository/Secret/Diagnostics/Migration/Worker/Outbox/Route，并以组合根测试证明资源所有权、启动依赖顺序、失败回滚和逆序停止。
+
+**Server 维度 1 状态：partial；Root Server infrastructure evidenced / new-module production composition not evidenced。**
+
+### 14.5 Platform 维度 1 阶段性结论（十模块尚未全部核验）
+
+本批完成 Server Root Composition 的实际调用点核验，并对前述模块生产接线缺口进行汇总。当前已核验 Platform、Data、News、Research、Notification、Quant、LLM、Researchflow 的部分维度 1 消费者和 Server 组合根；尚未完成 WebUI 与所有模块的全部维度 1 消费者扫描。不能宣称维度 1 全量完成，也不能以当前 Bootstrap 的缺失直接推断各模块内部接口未实现。
+
+下一步仍按既定十模块清单补齐未核消费者，并在全量完成后再进行跨模块调用图、授权链和依赖图核验。
