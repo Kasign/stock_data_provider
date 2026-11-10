@@ -416,3 +416,27 @@ W2-D 的“权威规则核对与裁决问题准备”完成；CTR-010 本身仍�
 ### 下一步唯一任务
 
 **Server — 维度2：DTO、Schema、Golden。** 从Root Server公开HTTP响应/请求DTO、真实Handler、OpenAPI、Golden和WebUI/内部消费者映射开始；不重复Platform维度2，不提前审查Server其余五个维度。
+
+
+## 21. Server 维度2首轮切片：Root Health/Diagnostics 与旧 Analysis HTTP（2026-11-10）
+
+审计详情：`Server-维度2-DTO-Schema-Golden.md`。固定代码基线仍为 `b6dfc85ba214fe16268c8cba780641a8bfe15086`。
+
+| 观察/差异 | 唯一归属 | 当前判断 | 关闭条件 |
+|---|---|---|---|
+| SRV2-D2-001：Root /diagnostics复合Report、/readyz成功/失败响应没有Server专属Schema/Golden；Platform Observation Schema不能约束Server新增Readiness/Report包装 | SRV-CTR-001（Root HTTP契约）；嵌入Observation继续归PLAT-CTR-004 | P2证据缺口，不是已证实运行时字段错误；不新增CTR | 明确运维端点是否作为稳定契约；若保留，补Server Schema与healthz/readyz/diagnostics成功失败Golden/Handler Contract Test；若不做，登记不适用理由及替代测试 |
+| Analysis Run OpenAPI覆盖不足 | CTR-046（GET Run/Events）+ SRV-CTR-001（Root API清单） | 既有差异；POST Run也尚未进入当前Analysis OpenAPI，随Root路由清单统一登记，不重复编号 | OpenAPI覆盖真实注册的Run路由、响应结构和错误状态；Go Handler与Schema/Gateway Contract Test一致 |
+| CreateTask的AnalysisRequest Schema与RunRequest字段/约束不完整 | CTR-047 | 既有差异，不新增CTR | 对齐完整请求字段、required/default/枚举和未知字段拒绝语义 |
+| StageEvent Schema仅为泛化object | CTR-007 | 既有差异，不新增CTR | 展开StageEvent字段、状态枚举、时间格式和可选字段语义 |
+| Task started_at/finished_at的omitempty与nullable差异 | CTR-006 | 既有差异，不新增CTR | 明确省略或null并对齐Go/OpenAPI/Golden |
+| Root错误Envelope存在publicError(class/code/message/retryable)与legacy error(code/message)两种形状 | PLAT-CTR-001（Server负责映射） | 安全消息已有收敛测试，但统一Envelope策略和全路由映射证据未完成；不新增CTR | 明确统一或按端点保留多种Envelope；同步状态码、OpenAPI、WebUI消费和Golden |
+
+### 本批证据与边界
+
+- Root Router实际注册Health/Readiness/Diagnostics、Root discovery、同步Run/Events、异步Task/Events共13条method-pattern；不把Market Data独立服务路由混入Server。
+- Health Handler有fake checker测试，覆盖错误脱敏、Ready/Draining、依赖状态、GET/HEAD；缺完整Server Report Schema/Golden。
+- 旧Analysis Handler有请求大小、Content-Type、未知字段、默认值、任务幂等、cursor和若干错误映射测试；测试以Fake依赖为主，未发现OpenAPI双向校验或稳定Golden。
+- WebUI `web/src/api.js`消费Root /healthz、/readyz和error.message/code；Request ID读取X-Request-ID Header；未发现该文件消费/diagnostics。
+- 本批只做固定SHA静态核验；无业务代码、OpenAPI、DTO、Golden、测试或CI改动。
+
+Server维度2当前仅完成首轮一个切片，状态为 `in_progress / partial`；不得将其视为整个Server维度2完成。下一切片应继续Server当前真实公开的模块HTTP Handler/Transport消费者映射，先盘点是否有Root已注册模块路由；若固定基线没有新增模块路由，则对Server公开错误DTO与Analysis API现有差异做增量补证，不重复本批Health/Analysis初审。
