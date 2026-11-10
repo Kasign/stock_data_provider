@@ -1912,16 +1912,19 @@ func (p *Hithink) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endD
 		}
 		all = append(all, segmentBars...)
 		if len(all) > hithinkMaxRowsPerCall {
+			hithinkDailyResponseIssue(ctx, "result_limit_exceeded", "daily_bar_result", fmt.Sprintf("at most %d rows", hithinkMaxRowsPerCall), "row_count", strconv.Itoa(len(all)), "同花顺日 K 结果超过单次调用安全行数上限")
 			return nil, fmt.Errorf("同花顺日 K 结果超过安全上限 %d 行", hithinkMaxRowsPerCall)
 		}
 		segmentStart = segmentEnd.AddDate(0, 0, 1)
 	}
 	if len(all) == 0 {
+		hithinkDailyResponseIssue(ctx, "empty_result", "daily_bar_result", "at least one daily K-line row", "empty", "0 rows", "同花顺未返回请求区间的日 K")
 		return nil, errors.New("同花顺未返回请求区间的日 K")
 	}
 	sort.Slice(all, func(i, j int) bool { return all[i].TradeDate < all[j].TradeDate })
 	for i := 1; i < len(all); i++ {
 		if all[i].TradeDate == all[i-1].TradeDate {
+			hithinkDailyResponseIssue(ctx, "duplicate_trade_date", "trade_date", "unique trade date across requested segments", "date", all[i].TradeDate, "同花顺日 K 分段结果包含重复交易日")
 			return nil, fmt.Errorf("同花顺返回重复交易日 %s", all[i].TradeDate)
 		}
 	}
@@ -2337,6 +2340,16 @@ type hithinkDailyRowPosition struct {
 	pageLastDate  string
 }
 
+func hithinkDailyResponseIssue(ctx context.Context, code, field, expected, actualType, actualPreview, message string) {
+	report := validation.NewReport(1)
+	report.Add(validation.FieldIssue{
+		Stage: validation.StageParse, Field: field, ProviderField: field,
+		Code: code, Expected: expected, ActualType: actualType, ActualPreview: actualPreview,
+		Severity: validation.SeverityError, Message: message,
+	})
+	validation.AddContextReport(ctx, report)
+}
+
 func (p *Hithink) fetchDailySegment(ctx context.Context, symbol string, start, end time.Time, adjust string, loc *time.Location) ([]model.DailyBar, error) {
 	startMS := time.Date(start.Year(), start.Month(), start.Day(), 0, 0, 0, 0, loc).UnixMilli()
 	endMS := time.Date(end.Year(), end.Month(), end.Day(), 23, 59, 59, int(time.Second-time.Nanosecond), loc).UnixMilli()
@@ -2356,10 +2369,12 @@ func (p *Hithink) fetchDailySegment(ctx context.Context, symbol string, start, e
 		query.Set("offset", strconv.Itoa(offset))
 		raw, err := p.get(ctx, "/api/a-share/prices/historical", query)
 		if err != nil {
+			hithinkDailyResponseIssue(ctx, "request_error", "daily_bar_page", "successful historical K-line page response", "request_error", "", "同花顺历史 K 线分页请求失败")
 			return nil, fmt.Errorf("同花顺历史 K 线区间 %s..%s 请求失败: %w", start.Format("2006-01-02"), end.Format("2006-01-02"), err)
 		}
 		dataRaw, err := hithinkResponseData(raw)
 		if err != nil {
+			hithinkDailyResponseIssue(ctx, "provider_response_error", "daily_bar_response", "successful response envelope containing data", "response_error", "", "同花顺历史 K 线响应信封无效或 Provider 拒绝请求")
 			return nil, err
 		}
 		var data struct {
@@ -2490,11 +2505,13 @@ func (p *Hithink) fetchDailySegment(ctx context.Context, symbol string, start, e
 				QualityStatus: quality, QualityReasons: reasons, NormalizationVer: normalize.Version,
 			})
 			if len(out) > hithinkMaxRowsPerCall {
+				hithinkDailyResponseIssue(ctx, "result_limit_exceeded", "daily_bar_page", fmt.Sprintf("at most %d rows", hithinkMaxRowsPerCall), "row_count", strconv.Itoa(len(out)), "同花顺日 K 分页结果超过安全行数上限")
 				return nil, fmt.Errorf("同花顺分页结果超过安全上限 %d 行", hithinkMaxRowsPerCall)
 			}
 		}
 		offset += len(data.Item)
 	}
+	hithinkDailyResponseIssue(ctx, "pagination_limit_exceeded", "daily_bar_page", "pagination terminates before page safety limit", "page_count", strconv.Itoa(hithinkMaxPagesPerRange), "同花顺日 K 分页达到安全上限，拒绝返回可能不完整的结果")
 	return nil, fmt.Errorf("同花顺在 %d 页内未结束分页，拒绝返回可能不完整的 K 线", hithinkMaxPagesPerRange)
 }
 

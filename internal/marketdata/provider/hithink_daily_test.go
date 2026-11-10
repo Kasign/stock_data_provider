@@ -143,3 +143,51 @@ func TestHithinkIndexDailyBarsReportsOptionalFieldIssues(t *testing.T) {
 		}
 	}
 }
+
+func TestHithinkDailyResponseFailuresAreReportedAtSnapshotLevel(t *testing.T) {
+	cases := []struct {
+		name string
+		payload string
+		wantCode string
+	}{
+		{name: "provider rejection", payload: `{"code":1001,"message":"quota exceeded"}`, wantCode: "provider_response_error"},
+		{name: "missing data", payload: `{"code":0}`, wantCode: "provider_response_error"},
+		{name: "empty result", payload: `{"code":0,"data":{"item":[]}}`, wantCode: "empty_result"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(tc.payload))
+			}))
+			defer server.Close()
+			reporter := validation.NewReporter(10)
+			ctx := validation.WithReporter(context.Background(), reporter)
+			p := NewHithinkConfigured(time.Second, server.URL, "test-key")
+			if _, err := p.FetchDailyBars(ctx, "600036.SH", "2026-10-20", "2026-10-21", 10, model.AdjustmentNone); err == nil {
+				t.Fatal("expected response to be rejected")
+			}
+			issues := reporter.Snapshot().Issues
+			if len(issues) != 1 || issues[0].Stage != validation.StageParse || issues[0].Code != tc.wantCode || issues[0].RowIndex != nil {
+				t.Fatalf("expected one snapshot-level %s issue, got %+v", tc.wantCode, issues)
+			}
+		})
+	}
+}
+
+func TestHithinkDailyRequestFailureIsReportedAtSnapshotLevel(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "upstream unavailable", http.StatusBadGateway)
+	}))
+	defer server.Close()
+	reporter := validation.NewReporter(10)
+	ctx := validation.WithReporter(context.Background(), reporter)
+	p := NewHithinkConfigured(time.Second, server.URL, "test-key")
+	if _, err := p.FetchDailyBars(ctx, "600036.SH", "2026-10-20", "2026-10-21", 10, model.AdjustmentNone); err == nil {
+		t.Fatal("expected HTTP failure")
+	}
+	issues := reporter.Snapshot().Issues
+	if len(issues) != 1 || issues[0].Code != "request_error" || issues[0].RowIndex != nil {
+		t.Fatalf("expected one snapshot-level request_error issue, got %+v", issues)
+	}
+}
