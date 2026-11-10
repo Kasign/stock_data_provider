@@ -90,3 +90,55 @@ Schema 的字段集合、状态枚举、required 集合、条件 reason_code、d
 ## 6. 下一步
 
 继续阶段B十模块六维核验，下一切片保持在 **Platform 维度2**：核对 Platform `Fault` 是否确实仅作为内部错误对象、各 HTTP/领域 Adapter 的映射边界是否有明确 DTO/测试证据。只核 Platform 自身生产方及直接消费者映射，不扩展到 Server 的完整 HTTP Error Envelope（留给 Server 维度2），不修改业务实现。完成后再按证据决定 Platform 维度2是否还有独立切片。
+
+## 7. Fault 内部错误对象与映射边界（第二切片，2026-11-10）
+
+### 7.1 内部对象契约
+
+核验文件：
+- `internal/platform/fault/fault.go`：`Class`、`Fault`、`Valid()`、`New()`、`Validate()`、`Error()`、`Unwrap()`。
+- `internal/platform/fault/fault_test.go`、`class_test.go`、`unwrap_test.go`。
+- `doc/platform/08-公共平台契约规范.md` 第4、24节。
+- `doc/platform/17-PLAT-002公共契约差异与待决事项.md` 第3、8节及P002-D02。
+
+`Fault` 字段全部标记 `json:"-"`，直接 `json.Marshal(Fault)` 的测试结果为 `{}`。这不是缺少对外 Schema，而是契约明确要求 Fault 只作为进程内错误对象；HTTP Transport 必须映射到独立公开 DTO。Fault 本身不应创建对外 JSON Schema/Golden，否则会错误地把内部结构固化为传输协议。
+
+| 字段/行为 | 实现与测试证据 | 核验结论 |
+|---|---|---|
+| Class | 固定8类；`Class.Valid()` 与测试枚举一致 | 通过 |
+| Code | 小写稳定标识，最多160字节；空值/非法标识拒绝 | 通过 |
+| SafeMessage | TrimSpace后非空，最多512字节，不含控制字符 | 通过；语义仍要求生产方脱敏 |
+| Dependency | 可选稳定逻辑标识，最多128字节；拒绝URL/IP/非法标识 | 通过 |
+| Retryable | 仅 unavailable/timeout 允许为true | 通过；只是候选提示，不是重试命令 |
+| Cause | error链由Unwrap保留；JSON隐藏 | 通过 |
+| New | 仅构造对象，不自动调用Validate | 需依赖各边界/消费者校验；不可把New等同有效对象 |
+
+### 7.2 生产方与消费者
+
+- Platform HTTP Client `client.go` / `stream.go` 构造 Fault，显式提供稳定 Code、SafeMessage、Dependency、Retryable 和内部 Cause。缓冲/流式故障分类由 Platform 自身测试覆盖。
+- Platform Diagnostics Runner 的 `normalizeFault` 对传入 Fault 调用 `Validate()`；无效 Class/Code/SafeMessage/Dependency/Retryable 会归一化为固定 `platform.diagnostics.invalid_fault`，不将不可信元数据写入 Observation。对应 Runner 测试覆盖未知 Class、控制字符、URL/IP Dependency、Retryable validation。
+- LLM `ModelErrorFromPlatformFault` 是本基线中已确认的直接领域消费者。它将 Class/Code 映射为 LLM ModelErrorKind，保留 Retryable 和 SafeMessage，明确不复制 Dependency/Cause。LLM 测试覆盖8类映射、缺省Code/Message、response_too_large、取消/deadline，以及 Dependency/Cause 不泄露。
+- Market Data HTTP 的 `writeErr` / `writeDomainErr` 走自己的公开 `errorBody` 映射，不直接序列化 Platform Fault；其 `platform_contract_test.go` 覆盖错误类别、默认不重试、Request ID、领域错误Cause脱敏和 OpenAPI Error Schema。该测试不能当成 Platform Fault 已被该HTTP Adapter直接消费的证据。
+- Platform HTTP API 的任务错误目前由独立 `writeError` 输出其HTTP DTO；未发现该层直接接收/映射 `*fault.Fault` 的证据。
+
+### 7.3 保留的映射边界证据缺口
+
+| 编号 | 发现 | 当前判断 | 关闭/补证条件 |
+|---|---|---|---|
+| PLAT2-D2-005 | LLM `ModelErrorFromPlatformFault` 使用 `errors.As` 取出 Fault 后，直接投影 Class/Code/SafeMessage/Retryable，没有调用 `Fault.Validate()`；现有测试覆盖合法映射和Dependency/Cause排除，但未覆盖非法Class/Code、控制字符SafeMessage、非法Retryable组合 | **证据缺口，尚不能据此认定生产数据可被外部攻击者控制。** Platform HTTP Client构造的Fault来自受控内部路径；但该函数是跨模块投影边界，需明确它只接受可信且已校验的Platform Fault，或在投影前校验并安全降级 | LLM Owner补充信任边界说明；增加无效元数据映射测试。若选择在Mapper校验，非法Fault必须映射为固定安全的internal/upstream错误，不能回传原始SafeMessage/Code。由LLM模块验收，Platform提供Validate语义支持 |
+
+此项并入既有项目差异 `P002-D02 / PLAT-CTR-001` 的消费者映射补证，不新增项目CTR。Platform Runner已执行Validate不代表所有其他消费者都自动经过Runner；LLM直接接收Fault的路径是独立边界。
+
+### 7.4 本切片结论
+
+**Fault内部对象契约本身：代码与单测证据基本齐备；跨模块投影完整性：partial。**
+
+- Fault 不应有公开 JSON Schema/Golden；`{}` 序列化测试与契约文档一致。
+- Fault 字段校验、内部Cause链、Retryable限制和Dependency逻辑标识边界有实现及测试证据。
+- Diagnostics Runner 对Fault做校验/归一化；LLM Mapper 是独立直接消费者，不能把Runner的校验覆盖推定到LLM路径。
+- P002-D02仍开放，直至Transport/Server与领域消费者的公开DTO映射证据齐备；本轮只核Platform Fault内部结构和已确认直接消费者，不核Server完整HTTP Error Envelope。
+- 不新增CTR，不修改Fault实现、LLM实现、Schema、Golden或测试，不执行CI。
+
+### 7.5 下一切片建议
+
+Platform维度2下一切片核对 Request ID：区分内部Request Context/ID生成与各Transport公开响应头/DTO；只核Platform公共原语及直接消费者证据。Server完整HTTP错误Envelope与路由响应契约仍留在Server维度2。
