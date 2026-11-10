@@ -88,13 +88,14 @@
 
 ## 6. 已登记差异
 
-### AUD-WEBUI-CTR-041（P1，待 CI 复核）：LimitPoolItem 的 Go JSON、OpenAPI 与 JSON Golden 断言互相矛盾
+### AUD-WEBUI-CTR-041（撤销）：LimitPoolItem 的 Go JSON、OpenAPI 与 JSON Golden 实际一致
 
-- Go DTO 中 `SealMoney`、`MaxSealMoney` 是 `*float64`，JSON tag 分别为 `seal_money`、`max_seal_money`，没有 `omitempty`。nil 时 Go encoding/json 会输出显式 null。
-- OpenAPI `LimitPoolItem.required` 未包含这两个字段，属性也没有声明 nullable；但全模型反射测试会将非 omitempty 指针字段视为 required 且 nullable。
-- 同一文件的 `TestDataModelJSONSerializationMatchesOpenAPIRequiredAndNullableSemantics` 却将这两个字段列为必须省略（omitted），与 DTO tag 冲突。
-- 因而静态代码证据显示：模型反射断言和 JSON 序列化断言至少存在一处必然失败/互相矛盾；需要在固定基线 CI 中确认实际失败结果。
-- 关闭条件：先确定字段真实语义。如果字段可选，Go tag 应改为 omitempty、OpenAPI 从 required 移除且 nullable=false，Golden 断言保持省略；如果必须显式 null，则保留非 omitempty，OpenAPI 加入 required+nullable，Golden 改为 null。三者必须统一并让测试通过。
+- 第一轮审计将 `SealMoney`、`MaxSealMoney` 误读为非 `omitempty` 指针，基于该错误前提登记了三方语义冲突。
+- 固定基线 `internal/marketdata/model/model.go` 实际定义为 `json:"seal_money,omitempty"` 和 `json:"max_seal_money,omitempty"`。
+- `internal/marketdata/httpapi/openapi.yaml` 的 `LimitPoolItem.required` 不包含这两个字段，属性也没有声明 nullable。
+- `TestDataModelJSONSerializationMatchesOpenAPIRequiredAndNullableSemantics` 明确将这两个字段列入 omitted。
+- 三方语义一致：字段可选，nil 时省略；本项不是已证实契约缺陷，撤销 CTR-041，不作为 P1 门禁，不需要等待 CI 才能确认这一静态事实。
+- 本轮没有运行固定基线 CI；这不影响 Go tag、Schema 和现有 Golden 对这两个字段的静态一致性结论。
 
 ### AUD-WEBUI-CTR-010 影响范围补充
 
