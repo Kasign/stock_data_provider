@@ -2627,9 +2627,9 @@ func (s *DataService) CapitalFlow(ctx context.Context, rawSymbol string) (*model
 			item.QualityStatus = model.QualityDegraded
 			item.QualityReasons = appendReason(item.QualityReasons, "provider_quality_status_missing")
 		}
+		item.QualityReasons = appendReason(item.QualityReasons, "publication_availability_timestamp_unverified")
 		if item.QualityStatus == model.QualityValid {
 			item.QualityStatus = model.QualityDegraded
-			item.QualityReasons = appendReason(item.QualityReasons, "publication_availability_timestamp_unverified")
 		}
 		if err := validateCapitalFlowSnapshot(symbol, item); err != nil {
 			failures = append(failures, p.Name()+": "+err.Error())
