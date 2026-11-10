@@ -33,6 +33,7 @@ func validRelationHistoryItem(id string, observedAt time.Time) domain.NewsItemRe
 		ID: id, FromNewsID: "news-1", FromSourceID: "source-1",
 		ToNewsID: "news-2", ToSourceID: "source-2",
 		Kind: domain.NewsItemRelationRepostOf, Status: domain.NewsItemRelationConfirmed,
+		FromVersionID: "version-from-" + id, ToVersionID: "version-to-" + id,
 		AssertedAt: observedAt, ObservedAt: observedAt,
 	}
 }

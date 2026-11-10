@@ -215,7 +215,7 @@ func TestIngestCandidateRetriesIdempotently(t *testing.T) {
 		return "observation-" + string(rune('0'+nextID))
 	})
 	candidate := domain.Candidate{ProviderItemID: "provider-result-1", SourceItemID: "source-item-1", Title: "headline"}
-	trace := ObservationPolicyTrace{SourcePolicyVersionID: "source-policy-v1", PolicyEvaluatedAt: time.Date(2026, 11, 9, 0, 0, 0, 0, time.UTC)}
+	trace := ObservationPolicyTrace{SourcePolicyVersionID: "source-policy-v1", PolicyEvaluatedAt: time.Date(2026, 11, 9, 0, 0, 0, 0, time.UTC), Retention: time.Hour}
 	first, err := usecase.executeWithPolicyTrace(context.Background(), "source-1", "run-1/provider-a/item-1", candidate, domain.SourceURLPolicy{}, trace)
 	if err != nil {
 		t.Fatal(err)
