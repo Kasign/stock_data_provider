@@ -256,4 +256,22 @@ func TestMariaDBCreateRunAtomicConcurrentIdempotency(t *testing.T) {
 	if _, err := repository.CreateRunAtomic(ctx, conflict); !errors.Is(err, domain.ErrIdempotencyConflict) {
 		t.Fatalf("different request fingerprint error = %v, want ErrIdempotencyConflict", err)
 	}
+
+	// A direct Storage CAS must not bypass the state machine by resurrecting a terminal Stage.
+	terminalStage := nextStage
+	terminalStage.Version++
+	terminalStage.Status = domain.StageSucceeded
+	finishedAt := now
+	terminalStage.FinishedAt = &finishedAt
+	updated, err = repository.CompareAndSwapStage(ctx, nextStage.Version, terminalStage)
+	if err != nil || !updated {
+		t.Fatalf("ready -> succeeded Stage CAS updated=%v err=%v", updated, err)
+	}
+	resurrectedStage := terminalStage
+	resurrectedStage.Version++
+	resurrectedStage.Status = domain.StageRunning
+	resurrectedStage.FinishedAt = nil
+	if updated, err = repository.CompareAndSwapStage(ctx, terminalStage.Version, resurrectedStage); err == nil || updated {
+		t.Fatalf("terminal -> running Stage CAS updated=%v err=%v; want rejected transition", updated, err)
+	}
 }

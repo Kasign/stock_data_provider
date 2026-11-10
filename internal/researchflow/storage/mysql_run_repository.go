@@ -17,6 +17,7 @@ import (
 	"example.com/stock-analysis-flow/internal/researchflow/application"
 	"example.com/stock-analysis-flow/internal/researchflow/domain"
 	"example.com/stock-analysis-flow/internal/researchflow/template"
+	"example.com/stock-analysis-flow/internal/researchflow/state"
 )
 
 const researchflowTimestampLayout = "2006-01-02T15:04:05.000000000Z"
@@ -221,18 +222,33 @@ func (r *MySQLRunRepository) CompareAndSwapStage(
 		next.Version != expectedVersion+1 || next.Status == "" || next.AttemptNo < 0 {
 		return false, errors.New("Researchflow Stage CAS version or state is invalid")
 	}
+	var currentStatus string
+	if err := r.db.QueryRowContext(ctx, `SELECT status FROM researchflow_stages
+		WHERE stage_ref = ? AND run_ref = ? AND version = ?`,
+		next.Ref, next.RunRef, expectedVersion,
+	).Scan(&currentStatus); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return false, nil
+		}
+		return false, fmt.Errorf("load current Researchflow Stage status for CAS: %w", err)
+	}
+	if _, err := state.TransitionStage(domain.Stage{Status: domain.StageStatus(currentStatus)},
+		next.Status, time.Now().UTC()); err != nil {
+		return false, fmt.Errorf("reject invalid Researchflow Stage CAS transition %s -> %s: %w",
+			currentStatus, next.Status, err)
+	}
 	result, err := r.db.ExecContext(ctx, `UPDATE researchflow_stages SET
 		status = ?, version = ?, attempt_no = ?, retry_at = ?,
 		output_ref = ?, quality_summary_ref = ?, diagnostic_refs = ?,
 		quality_status = ?, reason_codes = ?, risk_decision = ?,
 		started_at = ?, finished_at = ?
-		WHERE stage_ref = ? AND run_ref = ? AND version = ?`,
+		WHERE stage_ref = ? AND run_ref = ? AND version = ? AND status = ?`,
 		string(next.Status), next.Version, next.AttemptNo, nullableTime(next.RetryAt),
 		nullableString(next.OutputRef), nullableString(next.QualitySummaryRef),
 		mustMarshalStrings(next.DiagnosticRefs), nullableText(next.QualityStatus),
 		mustMarshalStrings(next.ReasonCodes), nullableText(next.RiskDecision),
 		nullableTime(next.StartedAt), nullableTime(next.FinishedAt),
-		next.Ref, next.RunRef, expectedVersion,
+		next.Ref, next.RunRef, expectedVersion, currentStatus,
 	)
 	if err != nil {
 		return false, fmt.Errorf("compare-and-swap Researchflow stage %q: %w", next.Ref, err)
