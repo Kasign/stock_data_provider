@@ -60,7 +60,7 @@ API Client 全量盘点也已完成：44 个导出函数，41 个远端入口，
 
 | 工作批次 | 涉及编号/范围 | 当前状态 | 完成条件 |
 |---|---|---|---|
-| W2-A Task/TaskEvent DTO 与分页 | CTR-006、007、008 | 已有初审记录，尚未完成统一关闭条件 Review | 一次性核对 StartedAt/FinishedAt 缺失/null、StageEvent Schema、分页边界与事件 ID 持久化语义；给出契约裁决项、实现项、测试项及冻结影响 |
+| W2-A Task/TaskEvent DTO 与分页 | CTR-006、007、008 | 本轮统一冻结影响 Review 已完成；差异仍开放 | CTR-006 nullable/omitempty 不一致；CTR-007 StageEvent Schema 未展开；CTR-008 cursor 基于事件表 id，但 DDL/数据库持久化约束证据不足。待契约/实现/测试责任方处理后增量验收，不再重复初审 |
 | W2-B DailyBar 查询窗口 | CTR-009 | 已有初审记录，尚未完成冻结影响收敛 | 明确 lookback_days 缺省值由谁拥有、WebUI 显式传参的边界及 OpenAPI 默认语义 |
 | W2-C 其余已审数据集差异收敛 | CTR-011～037（不含已在其他批次处理的 CTR-010 聚合字段） | 已有独立切片，尚未完成统一去重/阻断判断 | 只基于现有证据形成一次矩阵；按契约错误、实现偏差、产品范围、测试补证分类，不重新初审代码 |
 | W2-D CTR-010 最终语义裁决准备 | CTR-010 | 124 个唯一字段、29 个 DTO、54 个响应 DTO 的静态统计已落档；目标语义未裁决 | 对照权威契约形成“缺失/null/零值”决策问题；不得直接要求 Data 改 DTO 或 OpenAPI，不在审计分支实施修复 |
@@ -99,3 +99,22 @@ API Client 全量盘点也已完成：44 个导出函数，41 个远端入口，
 - 若没有新证据，不重复读取同一批代码；直接推进下一项尚未完成工作。
 - 不新增 CTR，除非证明现有编号无法表达且与所有已有问题不重复。
 - 固定审计基线不变；不检查 Data 新分支，不合并四个并行修改分支。
+
+
+## 9. W2-A Task/TaskEvent 批次 Review 结果（2026-11-10）
+
+本批一次性核对 CTR-006/007/008 的 Go DTO、HTTP Handler、OpenAPI、队列读取逻辑和现有 Handler 测试；不重复 Analysis Run/Task 的其他部分。
+
+| 编号 | 固定基线事实 | 性质与冻结影响 | 关闭条件 |
+|---|---|---|---|
+| CTR-006 | `taskqueue.Task.StartedAt`、`FinishedAt` 为 `*time.Time` 且带 `omitempty`；OpenAPI Task Schema 将二者声明为非 required 且 `nullable: true` | Go nil 实际省略字段，OpenAPI允许显式 null；序列化语义不一致。P2，Task 响应 Schema 字段语义未冻结 | 在权威契约明确“省略”或“null”之一；DTO tag、OpenAPI、JSON Golden 三方一致，并覆盖 queued/running/terminal 状态 |
+| CTR-007 | `domain.StageEvent` 字段为 run_id、stage、status、at、duration_ms、message、attributes；status 有 started/succeeded/failed/skipped 四值；时间为 time.Time；可选字段有 omitempty。OpenAPI TaskEvent.event 仅声明 `type: object` 并用描述指向领域结构体 | 事件载荷没有字段级 Schema、required、枚举和 date-time 约束。P2，Task Events 消费者契约不完整 | OpenAPI独立定义 StageEvent Schema，明确必需字段、状态枚举、date-time、可选属性 map 类型；Golden/Schema 测试与 Go JSON 一致 |
+| CTR-008 | Handler 默认 after_sequence=0、limit=100，拒绝负 cursor、limit 非整数或不在 1..500；Queue 查询 `analysis_stage_events` 中同 run_id 且 `id > after`，按 id ASC、LIMIT 返回；响应 next_after_sequence 为最后一条返回事件 sequence，无事件时保持传入 cursor | API 增量读取算法清楚；但事件序号实际取数据库 `id`，当前已核文件未包含该表 DDL/索引/自增约束，不能仅凭查询语句证明持久化单调性、唯一性及跨重启稳定性。现有 HTTP 测试只用 fake service 验证 after=4 返回 sequence=7，未覆盖真实 DB 分页、重复读取、空页 cursor 保持和边界 limit。P2，分页契约与持久化证据不完整 | 补充权威 migration/DDL 证据，确认 id 唯一且单调分配、不会重用；明确 cursor 是不透明事件序号、exclusive after；补数据库集成测试覆盖多页、空页、边界、重启后续读和并发追加；OpenAPI补充默认值及 next cursor 语义 |
+
+### 本批测试证据边界
+
+- `internal/platform/httpapi/tasks_test.go` 有 `TestGetTaskEventsSupportsIncrementalSequence`，仅证明 Handler 将 cursor 传给 Service，并按返回最后一条事件更新 next cursor；fake service 在内存中过滤，不验证数据库真实排序和持久化。
+- `internal/platform/taskqueue/queue_test.go` 当前可见测试覆盖 ID 生成格式、队列关闭、worker 生命周期等；未发现真实数据库事件分页测试。
+- `internal/platform/taskqueue/queue.go` 使用 `SELECT id,event_json ... WHERE run_id=? AND id>? ORDER BY id ASC LIMIT ?`，但本轮在固定基线仓库树中未找到 `analysis_stage_events` 的建表 DDL；不能把代码依赖的 id 属性当成已验证的数据库约束。
+- OpenAPI 对 after_sequence 的 minimum/default 和 limit 的 minimum/maximum/default 已有表达；缺失点不是参数完全未定义，而是 cursor 语义、事件载荷 Schema、持久化约束和真实 DB 回归证据。
+- 本批未执行 CI，也未修改业务代码、OpenAPI、DTO 或测试；只登记审计结论。
