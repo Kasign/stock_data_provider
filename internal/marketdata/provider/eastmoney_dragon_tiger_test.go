@@ -267,6 +267,12 @@ func TestEastmoneyDragonTigerReportsDegradedRowFieldsAndMissingPages(t *testing.
 	for _, issue := range reporter.Snapshot().Issues {
 		key := issue.Field + ":" + issue.ProviderField + ":" + issue.Code
 		seen[key] = true
+		if issue.Field == "provider_time" {
+			if issue.RowIndex != nil {
+				t.Errorf("snapshot-level provider_time issue must not have a row index: %+v", issue)
+			}
+			continue
+		}
 		if issue.Field != "pages" && (issue.RowIndex == nil || *issue.RowIndex != 0) {
 			t.Errorf("row-level issue must point to row 0: %+v", issue)
 		}
@@ -319,7 +325,16 @@ func TestEastmoneyDragonTigerReportsPaginationCountMismatch(t *testing.T) {
 		t.Fatal("expected page count mismatch")
 	}
 	issues := reporter.Snapshot().Issues
-	if len(issues) != 1 || issues[0].Field != "pages" || issues[0].Code != "count_inconsistent" || issues[0].RowIndex != nil {
-		t.Fatalf("unexpected pagination Reporter issue: %+v", issues)
+	if len(issues) != 2 {
+		t.Fatalf("expected snapshot timestamp limitation and pagination mismatch, got %+v", issues)
+	}
+	foundPagination := false
+	for _, issue := range issues {
+		if issue.Field == "pages" && issue.Code == "count_inconsistent" && issue.RowIndex == nil {
+			foundPagination = true
+		}
+	}
+	if !foundPagination {
+		t.Fatalf("missing snapshot-level pagination mismatch issue: %+v", issues)
 	}
 }

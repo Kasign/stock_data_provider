@@ -722,6 +722,14 @@ func parseEastmoneyQuoteNumber(ctx context.Context, data map[string]json.RawMess
 		if actualType == "string" {
 			if err := json.Unmarshal(raw, &value); err != nil {
 				actualType = "invalid"
+			} else {
+				preview = strings.Map(func(r rune) rune {
+					if r < 0x20 || r == 0x7f {
+						return ' '
+					}
+					return r
+				}, value)
+				preview = truncateDiagnosticPreview(preview, 160)
 			}
 		} else if actualType == "number" {
 			value = trimmed
