@@ -192,7 +192,6 @@ func TestProviderRejectsCredentialQueryParameters(t *testing.T) {
 	}
 }
 
-
 func TestProviderHTTPStatusMapsStableErrorCodes(t *testing.T) {
 	tests := []struct {
 		status    int
@@ -223,7 +222,6 @@ func TestProviderHTTPStatusMapsStableErrorCodes(t *testing.T) {
 		})
 	}
 }
-
 
 func TestSearchProvidersSatisfyCommonCandidateContract(t *testing.T) {
 	tests := []struct {

@@ -105,7 +105,6 @@ func TestResolveIdentityAtPropagatesCancellationAfterRepositoryRead(t *testing.T
 	}
 }
 
-
 func TestResolveIdentityAtRejectsHistoryNotBoundToRequestedCredential(t *testing.T) {
 	now := time.Date(2026, 11, 9, 10, 0, 0, 0, time.UTC)
 	candidate, err := domain.BuildIdentityCredentials("source-1", "native-1", "", domain.SourceURLPolicy{})

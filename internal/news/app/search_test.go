@@ -22,7 +22,7 @@ func (p fakeProvider) Search(context.Context, domain.SearchRequest) ([]domain.Ca
 }
 
 type callbackProvider struct {
-	code string
+	code   string
 	search func(context.Context, domain.SearchRequest) ([]domain.Candidate, error)
 }
 
@@ -158,7 +158,6 @@ func TestSearchCandidatesRejectsInvalidRequest(t *testing.T) {
 		t.Fatalf("result=%+v", result)
 	}
 }
-
 
 func TestSearchCandidatesRejectsInvalidProviderSetBeforeCallingAnyProvider(t *testing.T) {
 	tests := []struct {

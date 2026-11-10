@@ -153,7 +153,6 @@ func queryURL(endpoint, query string, limit int) (string, error) {
 	return u.String(), nil
 }
 
-
 // isProviderTimeout classifies transport and context deadline failures without treating
 // ordinary caller cancellation as a provider timeout.
 func isProviderTimeout(err error) bool {

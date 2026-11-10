@@ -166,7 +166,6 @@ func summarizeSearchResult(result *domain.SearchResult) {
 	}
 }
 
-
 // normalizeProviderErrorCode prevents adapter-specific or arbitrary error strings from
 // becoming part of the stable SearchResult contract.
 func normalizeProviderErrorCode(code string) string {

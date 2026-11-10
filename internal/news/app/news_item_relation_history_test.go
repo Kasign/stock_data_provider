@@ -189,7 +189,6 @@ func TestListNewsItemRelationHistoryPropagatesCancellationAfterRepositoryRead(t 
 	}
 }
 
-
 func TestListNewsItemRelationHistoryKeepsSupersededAncestorForTargetSideQuery(t *testing.T) {
 	now := time.Date(2026, 11, 9, 10, 0, 0, 0, time.UTC)
 	parent := validRelationHistoryItem("relation-parent", now.Add(-2*time.Minute))
@@ -226,7 +225,6 @@ func TestListNewsItemRelationHistoryRejectsUnrelatedAncestorRows(t *testing.T) {
 		t.Fatalf("Execute() error = %v, want invalid history", err)
 	}
 }
-
 
 func TestListNewsItemRelationHistoryReturnsEmptyForItemWithoutRelations(t *testing.T) {
 	now := time.Date(2026, 11, 9, 10, 0, 0, 0, time.UTC)
