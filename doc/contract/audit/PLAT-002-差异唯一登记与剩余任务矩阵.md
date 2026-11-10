@@ -394,3 +394,25 @@ W2-D 的“权威规则核对与裁决问题准备”完成；CTR-010 本身仍�
 - A2真实MariaDB/Redis集成测试受 `PLATFORM_STORAGE_INTEGRATION=1` 门控，本轮未执行；真实连接池、锁和关闭顺序证据留维度5/L3。
 - 本轮未改实现、Schema、Golden、测试，未执行CI。
 - 下一切片：Platform维度2核对PLAT-CTR-007 Typed Config/Secret的字段、序列化脱敏、消费者映射和机器测试适用性；不重审本轮Migration执行算法。
+
+
+## 20. Platform 维度2 — PLAT-CTR-007 Typed Config/Secret（2026-11-10）
+
+审计详情：`Platform-维度2-DTO-Schema-Golden.md` 第20节。固定代码基线不变。
+
+| 差异 | 唯一归属 | 当前判断 | 关闭条件 |
+|---|---|---|---|
+| PLAT2-D2-012 | PLAT-CTR-007 | Market Data/Storage Adapter把Platform Secret.Value()转成普通公开Config字符串；存在类型级脱敏保护丢失风险，未证实实际日志泄漏 | 责任模块明确明文使用边界；保留Secret或限制窄化访问；Config格式化/JSON/slog脱敏测试或等效访问约束证据 |
+| PLAT2-D2-013 | PLAT-CTR-007 | Python API与旧Market Data配置入口直接读取进程环境；调用方/活跃部署未确认，暂不判定为生产违规 | Server/迁移维度核实真实调用点、部署入口；活跃入口统一从Bootstrap注入Platform Env，非活跃入口标记兼容/退役 |
+| PLAT2-D2-014 | PLAT-CTR-007 | Secret脱敏、配置快照和消费者默认/边界测试缺少完整消费者级证据 | 活跃消费者补Config输出脱敏、快照隔离、默认值/边界测试；非活跃入口提供不适用证据 |
+
+本轮结论：
+- Platform Env/Secret基础API及本体脱敏测试存在；Server Process和News Config使用Platform Env，News/Server保留Secret包装。
+- Adapter Secret类型丢失和旧环境读取入口是消费者接入证据缺口；不新增CTR。
+- Config均为进程内启动配置，不适用公开HTTP Schema/Golden；以Go Config Contract Test、Bootstrap注入测试和消费者安全测试替代。
+- PLAT-CTR-007继续 `pending_evidence`；不代表Platform维度2整体冻结。
+- 本轮仅更新审计文档，无业务代码、Schema、Golden、测试或CI变更。
+
+### 下一步唯一任务
+
+**Server — 维度2：DTO、Schema、Golden。** 从Root Server公开HTTP响应/请求DTO、真实Handler、OpenAPI、Golden和WebUI/内部消费者映射开始；不重复Platform维度2，不提前审查Server其余五个维度。
