@@ -961,3 +961,46 @@ Golden应由真实DTO序列化生成或与真实序列化逐字节/结构比较�
 - 不新增 CTR；沿用 MDM-006、PLAT Security/Fault/Observability 契约、FLOW-CTR-001/003/004、GOV-CTR-001/002/003。此处不重复行情字段/Provider 语义或 WebUI 视觉审查。
 
 本批只更新 PLAT-002 审计记录；未修改 WebUI/Server/Data 业务代码、OpenAPI、测试或执行 CI。
+
+## 34. Server 组合根与 Platform 横向技术契约接入核验（2026-11-10）
+
+- 固定审计基线：origin/integration @ b6dfc85ba214fe16268c8cba780641a8bfe15086；维护分支：feat/design_doc。
+- 核验范围：`internal/server/bootstrap`、`resources`、`runtime`、`migration`、`diagnostics`、`health`、`cmd/analysis-api`，Platform Config/Storage/Security/HTTP Client/Fault/Observability/Diagnostics 公共原语，以及独立 `cmd/market-data` 资源入口。只核对组合根装配和技术契约复用，不审模块内部领域实现。
+
+### 已有实际接入与正确边界
+
+1. Root `cmd/analysis-api/main.go` 已唯一委托 `internal/server/bootstrap.Run`，未新增第二个 Root Server 入口。Bootstrap 集中读取进程配置，创建共享 SQL/Redis/Platform HTTP Client，执行 Migration 预检/迁移，构造 Legacy Analysis Worker/HTTP Handler，并将组件注册到 Runtime Lifecycle。
+2. Server Resources 使用 Platform `storage.OpenSQL/OpenRedis` 创建共享连接资源，按 HTTP Client→Redis→DB 顺序关闭；初始化失败按逆序清理。`stopConsumersThenCloseResources` 保证 Lifecycle 消费者停止后再关闭共享资源。
+3. Runtime Lifecycle 按注册顺序启动、逆序停止；启动失败自动回滚，Stop 等待 Start 完成并聚合停止错误。当前注册顺序是 Legacy Worker 后 HTTP Server，因此关闭时先 HTTP Server 再 Worker，最后 Bootstrap 关闭共享资源。对应单测覆盖顺序、失败回滚、并发 Stop/Start 和错误保留。
+4. Server 通过 Platform Security `Authenticator/Router/RoutePolicy` 注册显式路由策略；通过 Platform Observability Middleware 生成 Request ID；通过 Platform Fault 映射安全错误；通过 Platform Diagnostics Runner 执行并聚合 Server 自有 Storage/Schema Check。Server 自己实现 HTTP 入口、路由组合、公开错误 DTO 和业务依赖 Check，未复制 Platform 的通用 Runner/Auth/HTTP Client 核心。
+5. Server Migration Registry 只收集模块提供的 Migration 定义，按 namespace 排序后调用 Platform `ApplyMigrations`；SQL 内容仍归模块。`MIGRATION_ENABLED=false` 时执行只读已应用版本预检。此职责方向符合 Server/Platform/模块分层。
+6. Platform HTTP Client 具备受控 DestinationPolicy/BoundDoer/流式能力；Server Resources 提供固定策略绑定入口并在关闭后拒绝新绑定。此为可用装配能力，不等同于已存在 Provider/LLM 生产消费者。
+
+### 生产装配与复用缺口
+
+1. **Root 组合根尚处迁移态。** `bootstrap.Run` 当前实际创建 Legacy Analysis Runner/Queue/API；未见 Data、Quant、Research、Researchflow、LLM、Notification 的完整公开 Facade/Adapter/Worker 接入。`newMigrationRegistry` 的真实注册集合只有 `news`、`research`、`notification` 三个 namespace；测试明确断言该集合。当前不能把目录、模块 Port 或迁移规划视为 Server 已装配。
+2. **Data 仍是独立进程和独立资源所有者。** `cmd/market-data` 自行加载配置、`repository.OpenMySQL` 直接 `sql.Open` 并设置连接池；Redis 通过 `marketdata/cache.Redis` 自定义 RESP 客户端逐命令建连。Repository 的 Migration 调用虽复用 Platform `ApplyMigrations`，连接池创建/生命周期及 Redis 客户端未复用 Root Server 的 Platform Storage 资源。该状态与此前 WebUI→Server 记录的独立 Data 服务一致，是迁移未完成，不是 Server 再造一套 Platform。
+3. **Platform HTTP Client 尚缺生产消费者证据。** Root Resources 创建共享 Client，提供 `BindHTTPDestination`；本轮固定基线中 Bootstrap 未绑定具体上游，也未把 BoundDoer 注入 Data/News/LLM 等生产构造入口。Resources 单测只证明绑定能力，不证明模块 Provider/模型调用已走 Platform 受控链路。
+4. **Web Session 原语尚未由 Server 接入。** Server 当前只构造 Bearer `Authenticator` 并使用 Owner RoutePolicy；没有 Cookie Session/CSRF/登录/退出/限流/审计流程接线。Platform Session 等 L1 原语存在，但 Server A2 未完成。该差异已由 WEB-SRV-B 登记，本节不重复建立差异项。
+5. **配置装配仍带有 Legacy 耦合。** Bootstrap 通过旧 `mysqlredis` Adapter 解析共享 DB/Redis 配置，并加载旧 Market Data Config 后构造 Legacy Analysis Runner；配置仍以当前兼容链为主，尚未证明各目标模块 Config/Secret Schema 均通过公开装配入口集中注入。该问题随模块正式接入统一核验，不另行要求 Server 接管领域配置定义。
+6. **Diagnostics 仅覆盖当前已装配资源。** Root Storage/Schema Check 使用 Platform Diagnostics Runner；尚未注册各目标模块的真实 Check，Readiness 不能被解释为十模块全部依赖健康。必须在模块接入时由 Owner 提供真实 Check，再由 Server 声明 Required/Optional。
+
+### 差异登记（审计工作项，非新增 CTR）
+
+| 编号 | 固定基线事实 | 状态 | 冻结影响 / 后续统一处理 |
+|---|---|---|---|
+| SRV-PLAT-A | Root Bootstrap 仍以 Legacy Analysis 为主要服务；未见十模块公开 Facade/Adapter/Worker 的完整装配；Migration Registry 只注册 News/Research/Notification | pending_evidence | Server Owner 按模块公开构造入口逐项装配，不直接访问模块私有 Repository/Domain；Migration/Worker/Diagnostics 仅注册已交付能力。以模块装配清单、DI 图、启动/关闭证据和根集成测试证明，不创建空 Registry 或占位 Adapter。Data/Researchflow 等未就绪项保持明确阻断 |
+| SRV-PLAT-B | Market Data 独立入口自行创建 SQL 连接池和自定义 Redis RESP 客户端；未统一复用 Root Server Platform Storage 资源 | pending_evidence | 沿用 Data 迁移和 Server 唯一宿主决议；迁移到 Root 后由 Server 创建共享 Platform SQL/Redis 资源并注入 Data Store/Cache，模块 Store 不拥有借用资源。迁移前保留独立进程兼容边界，不在两个进程间伪造共享连接池 |
+| SRV-PLAT-C | Root 已创建 Platform HTTP Client 并提供 BoundDoer 绑定方法，但固定基线没有实际业务上游绑定和模块生产注入链路 | pending_evidence | Server 按每个真实上游配置精确 DestinationPolicy/Dependency，创建固定 BoundDoer 并注入模块公开构造入口；消费者停止后关闭 Client。补 SSRF/重定向/超时/响应限制/流关闭和真实 Provider E2E 证据；不得将 Client 可构造或单测通过标记为生产接入完成 |
+| SRV-PLAT-D | Root Diagnostics 已使用 Platform Runner，但只注册当前 MariaDB/Redis/Schema 检查；未接入各模块真实诊断 Check | pending_evidence | 模块 Owner 提供具有稳定 ID、Required/Optional、reason_code、safe_message、evidence_ref 的真实 Check；Server 负责注册与聚合，并明确 Readiness 门禁。不能将当前 Root Readiness 宣称为全模块健康 |
+| SRV-PLAT-E | Root 当前配置和构造仍依赖 Legacy Analysis/Data Adapter 配置入口；目标模块 Config/Secret 集中装配证据不足 | pending_evidence | Server 只集中加载进程级配置和模块公开配置结构，按模块注入最小必要 Secret；不复制领域配置 Schema，不允许业务模块任意散读环境变量。随 SRV-PLAT-A 的正式模块接入核验 |
+
+### 本批结论
+
+- **Server/Platform/领域模块职责边界：freeze-ready。** Server 是组合根和唯一目标 HTTP 宿主；Platform 提供横向技术原语；领域模块拥有业务语义、Repository、Migration 内容、公开 Port 和 Worker。无需重做公共 Platform 契约或引入新的万能模块接口。
+- **Server 生命周期和共享资源管理基础：accepted。** Root Resources、Lifecycle、Migration Registry、Platform Router/Fault/Observability/Diagnostics 的基础接入及单测存在；启动/关闭顺序与资源所有权方向正确。
+- **十模块生产组合装配：pending_evidence。** 当前实际仍是 Legacy Analysis 主链，Migration/Worker/Diagnostics/HTTP Facade 仅有部分模块接入，不能以设计文档或单模块测试替代根装配证据。
+- **Platform HTTP Client 的生产消费、Data 统一 Storage、模块 Diagnostics/Config 注入：pending_evidence。** 不需要新增 Platform 技术原语；按现有契约由 Server 和责任模块完成接线。
+- **Web Session A2 接入**沿用 WEB-SRV-B，不重复登记。沿用既有 PLAT-CTR-005、PLAT-015～019、GOV-CTR-003/004/005 与各模块 Migration/Adapter 契约，不新增 CTR。
+
+本批只更新 PLAT-002 审计文档；未修改 Server/Platform/业务模块代码、未执行 CI。后续只在责任模块完成正式接入后核验 SRV-PLAT-A～E 的证据，不重复审查已通过的 Platform 包级原语和 Lifecycle 单测。
