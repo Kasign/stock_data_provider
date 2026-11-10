@@ -786,7 +786,7 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 		PageSize: 20,
 	}
 	// 写入可追踪的历史策略引用，验证 PIT 查询完整回读 V6 字段。
-	policyEvaluatedAt := time.Now().UTC()
+	policyEvaluatedAt := time.Now().UTC().Truncate(time.Microsecond)
 	if _, err := db.ExecContext(ctx, `UPDATE news_observations
 		SET source_policy_version_id = ?, endpoint_id = ?,
 		    endpoint_policy_version_id = ?, provider_output_policy_ref = ?,
