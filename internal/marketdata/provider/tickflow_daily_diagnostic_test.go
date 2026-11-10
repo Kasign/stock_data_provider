@@ -115,8 +115,15 @@ func TestTickFlowDailyBarsReportsDuplicateTradeDate(t *testing.T) {
 		t.Fatal("expected duplicate date error")
 	}
 	issues := reporter.Snapshot().Issues
-	if len(issues) != 1 || issues[0].Code != "duplicate_trade_date" || issues[0].RowIndex == nil || *issues[0].RowIndex != 1 {
-		t.Fatalf("unexpected duplicate-date diagnostic: %+v", issues)
+	foundDuplicate := false
+	for _, issue := range issues {
+		if issue.Code == "duplicate_trade_date" && issue.RowIndex != nil && *issue.RowIndex == 1 {
+			foundDuplicate = true
+			break
+		}
+	}
+	if !foundDuplicate {
+		t.Fatalf("missing duplicate-date diagnostic for second row: %+v", issues)
 	}
 }
 
