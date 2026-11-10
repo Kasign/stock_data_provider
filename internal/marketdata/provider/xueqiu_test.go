@@ -279,3 +279,25 @@ func TestXueqiuErrorMessageTruncationPreservesUTF8(t *testing.T) {
 		t.Fatalf("error summary should stop before a split multibyte rune: got %q want %q", got, want)
 	}
 }
+
+func TestXueqiuHotRankingReportsResponseRejections(t *testing.T) {
+	cases := []struct { name, body, wantCode string; status int }{
+		{name:"HTTP status",body:"upstream unavailable",status:http.StatusBadGateway,wantCode:"http_status_error"},
+		{name:"invalid JSON",body:"{",status:http.StatusOK,wantCode:"decode_error"},
+		{name:"provider error",body:`{"error_code":1001,"error_description":"quota exceeded"}`,status:http.StatusOK,wantCode:"provider_error"},
+		{name:"invalid error code",body:`{"error_code":"bad","data":{"items":[]}}`,status:http.StatusOK,wantCode:"invalid_provider_error_code"},
+		{name:"missing data",body:`{"error_code":0}`,status:http.StatusOK,wantCode:"missing_data"},
+		{name:"invalid data shape",body:`{"error_code":0,"data":[]}`,status:http.StatusOK,wantCode:"decode_error"},
+		{name:"empty rows",body:`{"error_code":0,"data":{"items":[]}}`,status:http.StatusOK,wantCode:"empty_result"},
+	}
+	for _, tc := range cases { t.Run(tc.name,func(t *testing.T){
+		server:=httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter,r *http.Request){w.WriteHeader(tc.status);_,_=w.Write([]byte(tc.body))}))
+		defer server.Close()
+		reporter:=validation.NewReporter(10);ctx:=validation.WithReporter(context.Background(),reporter)
+		provider:=NewXueqiuConfigured(2*time.Second,server.URL,"")
+		_,err:=provider.FetchHotStocks(ctx,"popular",10)
+		if err==nil { t.Fatal("expected rejected or degraded response") }
+		for _,issue:=range reporter.Snapshot().Issues { if issue.Code==tc.wantCode { if issue.RowIndex!=-1 {t.Fatalf("response-level issue must not invent row index: %+v",issue)};return } }
+		t.Fatalf("missing Reporter code %q: %+v",tc.wantCode,reporter.Snapshot().Issues)
+	})}
+}
