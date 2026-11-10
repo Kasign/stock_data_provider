@@ -950,10 +950,12 @@ func (p *Hithink) FetchDragonTiger(ctx context.Context, tradeDate string, page, 
 	}
 	responseDate := strings.TrimSpace(data.TradeDate)
 	if responseDate == "" {
+		addHithinkFieldIssue(ctx, nil, "trade_date", "trade_date", "missing_value", "provider report trade date", "string", "", "同花顺龙虎榜响应缺少交易日")
 		return nil, errors.New("同花顺龙虎榜响应缺少 trade_date")
 	}
 	parsedResponseDate, err := time.Parse("2006-01-02", responseDate)
 	if err != nil || parsedResponseDate.Format("2006-01-02") != responseDate {
+		addHithinkFieldIssue(ctx, nil, "trade_date", "trade_date", "invalid_value", "valid YYYY-MM-DD provider trade date", "string", responseDate, "同花顺龙虎榜返回交易日非法")
 		return nil, fmt.Errorf("同花顺龙虎榜返回了无效交易日 %q", responseDate)
 	}
 	today := time.Now().In(loc).Format("2006-01-02")
@@ -961,11 +963,13 @@ func (p *Hithink) FetchDragonTiger(ctx context.Context, tradeDate string, page, 
 		return nil, fmt.Errorf("同花顺龙虎榜源端交易日 %s 晚于中国市场当前日期 %s", responseDate, today)
 	}
 	if rawDate != "" && rawDate != responseDate {
+		addHithinkFieldIssue(ctx, nil, "trade_date", "trade_date", "date_mismatch", "returned date equals requested date", "string", responseDate, "同花顺龙虎榜返回交易日与请求日期不一致")
 		return nil, fmt.Errorf("同花顺龙虎榜交易日不匹配: requested=%s returned=%s", rawDate, responseDate)
 	}
 	total := len(data.StockItems)
 	if data.StockCount != nil {
 		if *data.StockCount < 0 || *data.StockCount != len(data.StockItems) {
+			addHithinkFieldIssue(ctx, nil, "row_count", "stock_count/stock_items", "count_inconsistent", "stock_count equals stock_items length", "inconsistent", fmt.Sprintf("declared=%d items=%d", *data.StockCount, len(data.StockItems)), "同花顺龙虎榜声明股票数与返回股票行数不一致")
 			return nil, fmt.Errorf("同花顺龙虎榜 stock_count 与 stock_items 不一致: declared=%d items=%d", *data.StockCount, len(data.StockItems))
 		}
 		total = *data.StockCount
@@ -996,11 +1000,13 @@ func (p *Hithink) FetchDragonTiger(ctx context.Context, tradeDate string, page, 
 		return snapshot, nil
 	}
 	if pages == 0 || page > pages {
+		addHithinkFieldIssue(ctx, nil, "page", "page/page_size/stock_count", "page_out_of_range", "requested page within computed page count", "number", fmt.Sprintf("page=%d pages=%d", page, pages), "同花顺龙虎榜请求页超出总页数")
 		return nil, fmt.Errorf("同花顺龙虎榜请求页 %d 超出总页数 %d", page, pages)
 	}
 	startIndex := (page - 1) * pageSize
 	endIndex := min(startIndex+pageSize, total)
 	if startIndex >= len(data.StockItems) {
+		addHithinkFieldIssue(ctx, nil, "pagination", "stock_items", "page_rows_missing", "rows available for requested page", "missing", fmt.Sprintf("start=%d returned=%d", startIndex, len(data.StockItems)), "同花顺龙虎榜请求页没有对应返回行")
 		return nil, fmt.Errorf("同花顺龙虎榜请求页 %d 超出了当前返回数据", page)
 	}
 	snapshot.HasMore = page < pages
@@ -1011,6 +1017,7 @@ func (p *Hithink) FetchDragonTiger(ctx context.Context, tradeDate string, page, 
 		rawSymbol := hithinkFieldString(row, "thscode")
 		symbol, symbolErr := hithinkDomesticSymbol(rawSymbol)
 		if symbolErr != nil {
+			addHithinkFieldIssue(ctx, &rowIndex, "symbol", "thscode", "invalid_identity", "valid A-share security code", "string", rawSymbol, "同花顺龙虎榜证券代码无效")
 			return nil, fmt.Errorf("同花顺龙虎榜第 %d 行证券代码无效: %w", startIndex+index, symbolErr)
 		}
 		code := hithinkFieldString(row, "ticker")
@@ -1018,6 +1025,7 @@ func (p *Hithink) FetchDragonTiger(ctx context.Context, tradeDate string, page, 
 			code = strings.Split(symbol, ".")[0]
 		}
 		if code != strings.Split(symbol, ".")[0] {
+			addHithinkFieldIssue(ctx, &rowIndex, "symbol", "ticker/thscode", "identity_mismatch", "ticker matches thscode code", "string", code+"/"+rawSymbol, "同花顺龙虎榜 ticker 与 thscode 不一致")
 			return nil, fmt.Errorf("同花顺龙虎榜第 %d 行代码不匹配", startIndex+index)
 		}
 		if _, exists := seenDragonTigerSymbols[symbol]; exists {
@@ -1028,6 +1036,7 @@ func (p *Hithink) FetchDragonTiger(ctx context.Context, tradeDate string, page, 
 		seenDragonTigerSymbols[symbol] = struct{}{}
 		name := hithinkFieldString(row, "name")
 		if name == "" {
+			addHithinkFieldIssue(ctx, &rowIndex, "name", "name", "missing_value", "non-empty security name", "string", "", "同花顺龙虎榜证券名称缺失")
 			return nil, fmt.Errorf("同花顺龙虎榜第 %d 行缺少证券名称", startIndex+index)
 		}
 		change := hithinkFieldNumber(row, "change")
@@ -1043,6 +1052,7 @@ func (p *Hithink) FetchDragonTiger(ctx context.Context, tradeDate string, page, 
 		hotRank := hithinkFieldInteger(row, "hot_rank")
 		rangeDays := hithinkFieldInteger(row, "range_days")
 		if buy != nil && *buy < 0 || sell != nil && *sell < 0 {
+			addHithinkFieldIssue(ctx, &rowIndex, "buy_sell_amount", "buy_value/sell_value", "negative_amount", "non-negative buy and sell amounts", "number", fmt.Sprintf("buy=%v sell=%v", buy, sell), "同花顺龙虎榜买入或卖出金额为负")
 			return nil, fmt.Errorf("同花顺龙虎榜第 %d 行买入/卖出金额不能为负", startIndex+index)
 		}
 		var concepts []string

@@ -127,3 +127,21 @@ func TestHithinkLimitPoolReportsPaginationMismatch(t *testing.T) {
 		t.Fatalf("unexpected pagination Reporter issue: %+v", issues)
 	}
 }
+
+func TestHithinkDragonTigerReportsStockCountMismatch(t *testing.T) {
+	tradeDate := time.Now().In(time.FixedZone("CST", 8*3600)).Format("2006-01-02")
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{"code": 0, "data": map[string]any{
+			"trade_date": tradeDate, "stock_count": 2, "stock_items": []any{},
+		}})
+	}))
+	defer server.Close()
+	reporter := validation.NewReporter(10)
+	ctx := validation.WithReporter(context.Background(), reporter)
+	p := NewHithinkConfigured(2*time.Second, server.URL, "unit-test-key")
+	if _, err := p.FetchDragonTiger(ctx, tradeDate, 1, 20); err == nil { t.Fatal("expected stock_count mismatch error") }
+	issues := reporter.Snapshot().Issues
+	if len(issues) != 1 || issues[0].Field != "row_count" || issues[0].Code != "count_inconsistent" || issues[0].RowIndex != nil {
+		t.Fatalf("unexpected stock-count Reporter issue: %+v", issues)
+	}
+}
