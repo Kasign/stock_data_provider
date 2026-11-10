@@ -29,11 +29,12 @@ func (r *MySQLDeliveryRepository) ReconcileUnknown(
 	}
 	if next.Version != expectedVersion+1 ||
 		(next.Status != domain.DeliverySent && next.Status != domain.DeliveryFailed && next.Status != domain.DeliveryRetryWait) ||
-		event.DeliveryID != next.DeliveryID || event.Version != next.Version ||
-		event.From != domain.DeliveryUnknown || event.To != next.Status ||
-		event.EvidenceRef == nil || !validUnknownEvidenceRef(*event.EvidenceRef) ||
-		!event.ChangedAt.Equal(next.UpdatedAt) {
+		event.From != domain.DeliveryUnknown ||
+		event.EvidenceRef == nil || !validUnknownEvidenceRef(*event.EvidenceRef) {
 		return domain.ErrInvalidDeliveryChange
+	}
+	if err := validateDeliveryStateEventForSnapshot(next, event); err != nil {
+		return err
 	}
 
 	tx, err := r.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
