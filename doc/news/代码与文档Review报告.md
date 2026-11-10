@@ -147,3 +147,11 @@
 - Review 发现 `EvaluateNewsEvidenceReadAuthorization.Execute` 仅在调用外部依赖前检查 Context，未在 Verifier 和策略 Resolver 成功返回后检查。若依赖忽略取消并返回成功，内部 UseCase 会错误地产生授权成功结果（尽管 GetEvidence 外层仍有取消检查）。
 - 已在两个依赖返回后增加 `ctx.Err()` 检查，并新增 Verifier/Resolver 取消测试。
 - 该修复强化取消传播，不解决策略撤销与正文读取的 TOCTOU；两者仍须独立处理。
+
+
+## 十一、采集策略依赖 Context 取消边界（2026-11-10）
+
+- 提交：`e898104b9b548057330978c3fbc287e6c9d79a57`。
+- Provider Ingest 原先在 SourceCatalog 和 ProviderOutputPolicyResolver 成功返回后没有检查 Context；Source Ingest 在 SourceCatalog 成功返回后也未检查。依赖若忽略取消，可能继续执行策略评估并触发写入。
+- 已在每个依赖返回后检查 Context，并新增三条取消边界测试，断言取消后不写入 Observation/Identity。
+- 该修复只保证取消传播，不代表数据库事务可撤销已经提交的写入；多条 Observation 的批次原子性仍由独立持久化契约决定。

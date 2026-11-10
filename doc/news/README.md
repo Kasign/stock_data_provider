@@ -1035,3 +1035,10 @@
 - 修复授权指纹 Verifier 与当前策略 Resolver 返回后未立即检查 Context 的缺口。即使依赖忽略取消并返回成功，UseCase 也会终止，不再将结果作为有效授权复核。
 - 新增两个取消边界单测，验证 Verifier 取消后不调用策略 Resolver。
 - 对应提交：`9edb6f7321939784c3be865d56544109b954f680`。
+
+
+### 2026-11-10 采集策略依赖取消传播补充
+
+- Provider Ingest 在 SourceCatalog、ProviderOutputPolicyResolver 返回后检查 Context；Source Ingest 在 SourceCatalog 返回后检查 Context。即使依赖忽略取消并返回成功，也不会继续进入授权策略评估或持久化。
+- 新增三个取消边界测试，并检查取消后没有 Observation/Identity 持久化。
+- 对应提交：`e898104b9b548057330978c3fbc287e6c9d79a57`。
