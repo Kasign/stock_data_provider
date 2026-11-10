@@ -171,7 +171,7 @@ func TestIngestProviderCandidateFailsClosedBeforePersistence(t *testing.T) {
 			_, err = usecase.Execute(context.Background(), IngestProviderCandidateRequest{
 				SourceID: "source-1", EndpointID: "endpoint-1", IdempotencyKey: "run-1/item-1",
 				Candidate: domain.Candidate{ProviderCode: "brave", SourceItemID: "native-1"},
-		Purpose:   domain.PurposeInternalPersonalResearch, ContentKind: domain.ContentSnippet,
+				Purpose:   domain.PurposeInternalPersonalResearch, ContentKind: domain.ContentSnippet,
 				StorageMode: domain.StorageTransient, Retention: time.Minute,
 			})
 			if !errors.Is(err, test.want) {
@@ -199,7 +199,7 @@ func TestIngestProviderCandidateRejectsProviderIdentityMismatch(t *testing.T) {
 	_, err = usecase.Execute(context.Background(), IngestProviderCandidateRequest{
 		SourceID: "source-1", EndpointID: "endpoint-1", IdempotencyKey: "run-1/item-1",
 		Candidate: domain.Candidate{ProviderCode: "brave", SourceItemID: "native-1"},
-			Purpose:   domain.PurposeInternalPersonalResearch, ContentKind: domain.ContentSnippet,
+		Purpose:   domain.PurposeInternalPersonalResearch, ContentKind: domain.ContentSnippet,
 		StorageMode: domain.StorageTransient, Retention: time.Minute,
 	})
 	if !errors.Is(err, ErrProviderOutputPolicyUnavailable) || len(repository.observations) != 0 {
@@ -231,7 +231,7 @@ func TestIngestProviderCandidatePreservesSourceCatalogFailureClassification(t *t
 			_, err = usecase.Execute(context.Background(), IngestProviderCandidateRequest{
 				SourceID: "source-1", EndpointID: "endpoint-1", IdempotencyKey: "catalog-error",
 				Candidate: domain.Candidate{ProviderCode: "brave", SourceItemID: "native-1"},
-		Purpose:   domain.PurposeInternalPersonalResearch, ContentKind: domain.ContentSnippet,
+				Purpose:   domain.PurposeInternalPersonalResearch, ContentKind: domain.ContentSnippet,
 				StorageMode: domain.StorageTransient, Retention: time.Minute,
 			})
 			if !errors.Is(err, test.want) {
