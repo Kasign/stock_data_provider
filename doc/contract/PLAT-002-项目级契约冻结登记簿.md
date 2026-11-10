@@ -337,3 +337,12 @@ PLAT-002 不因本次矩阵统计完成而结束。整体完成仍需：
 ## 11. 待决事项批次入口（2026-11-10）
 
 当前项目级待决提案统一以 doc/contract/decisions/项目级契约决策记录.md 中 DEC-B1～B8 为入口。既有决议覆盖项不重复裁决；条件性扩展保持 deferred；事实核验和实现缺口保持 pending_evidence。提案未批准前，第3节 CTR 状态不变。
+
+
+## 12. DEC-B1～B8 项目级决议状态（2026-11-10）
+
+- 项目负责人已确认 B1～B8 的 Review 修订方向，正式决议编号为 DEC-PLAT-002-018～025，汇总决议为 DEC-PLAT-002-026。
+- B1 不保留旧 Analysis API 兼容期：当前无正在服役的旧服务，WebUI 直接切换 Researchflow 新 API；新 API 验收后删除旧路由及专属适配代码。该决议不自动授权删除仍被新模块使用的通用能力、历史数据或 Migration。
+- B2～B8 按正式决议执行，详细语义和验收要求以项目级决策记录为准。
+- 本次批准只确认项目级契约语义和实现方向，不代表责任模块实现完成，也不改变第3节正式 CTR 状态。CTR 仍须分别满足 Schema、Golden、生产方/消费者 Contract Test、CI 和适用安全/兼容门禁后才能冻结。
+- 后续责任模块：Server/WebUI/Researchflow（B1/B2）；Data/Quant/Research（B3）；News/Research（B4）；News/Researchflow/Server（B5）；Quant/Researchflow/Server（B6）；Research/Researchflow（B7）；LLM/Researchflow/Server（B8）。
