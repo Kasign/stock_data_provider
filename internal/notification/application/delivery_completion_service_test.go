@@ -197,3 +197,65 @@ func TestDeliveryCompletionDeliveryCASFailureIsRecoverableFromCompletedAttempt(t
 		t.Fatalf("recovery must finalize sent from immutable Attempt without resending: assessment=%+v err=%v", assessment, err)
 	}
 }
+
+
+func TestDeliveryCompletionPreservesAttemptCountAcrossTwoRetryCycles(t *testing.T) {
+	repository, firstClaim, firstAttempt, firstFinishedAt := startCompletionAttempt(t, domain.ChannelOutcomeRejected)
+	policy := RetryPolicy{
+		MaxAttempts: 3, MaxElapsed: time.Hour, PerAttemptTimeout: time.Minute,
+		BaseDelay: time.Second, MaxDelay: time.Minute,
+	}
+	service, err := NewDeliveryCompletionService(repository, repository, policy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rejected := domain.ChannelSendResult{Outcome: domain.ChannelOutcomeRejected, ErrorCode: "rate_limited"}
+	if err := service.Complete(context.Background(), firstClaim, firstAttempt, completionChannel(),
+		rejected, firstFinishedAt, 0.5, ""); err != nil {
+		t.Fatalf("complete first rejected attempt: %v", err)
+	}
+
+	afterFirst, found, err := repository.Get(context.Background(), firstClaim.Delivery.DeliveryID)
+	if err != nil || !found || afterFirst.Status != domain.DeliveryRetryWait ||
+		afterFirst.AttemptCount != 1 || afterFirst.NextAttemptAt == nil {
+		t.Fatalf("first retry projection is invalid: delivery=%+v found=%v err=%v", afterFirst, found, err)
+	}
+
+	secondClaimAt := *afterFirst.NextAttemptAt
+	repository.now = secondClaimAt
+	secondClaim, claimed, err := repository.ClaimDue(context.Background(), "worker-attempt-2",
+		secondClaimAt, secondClaimAt.Add(time.Minute))
+	if err != nil || !claimed {
+		t.Fatalf("claim second attempt: claimed=%v err=%v", claimed, err)
+	}
+	if secondClaim.Delivery.AttemptCount != 1 || secondClaim.Delivery.Version != afterFirst.Version ||
+		secondClaim.Lease.FencingToken <= firstClaim.Lease.FencingToken {
+		t.Fatalf("second claim must retain first attempt projection and advance fencing: %+v", secondClaim)
+	}
+
+	secondAttempt := attemptForClaim(secondClaim, 2)
+	repository.now = secondClaim.Lease.ExpiresAt.Add(-time.Second)
+	if err := repository.StartWithLease(context.Background(), secondClaim.Delivery.Version,
+		secondClaim.Lease.FencingToken, secondAttempt); err != nil {
+		t.Fatalf("start second attempt: %v", err)
+	}
+	secondFinishedAt := secondAttempt.StartedAt.Add(time.Second)
+	repository.now = secondFinishedAt.Add(time.Second)
+	if err := service.Complete(context.Background(), secondClaim, secondAttempt, completionChannel(),
+		domain.ChannelSendResult{Outcome: domain.ChannelOutcomeAccepted, ProviderMessageRef: "provider-message-second"},
+		secondFinishedAt, 0.5, ""); err != nil {
+		t.Fatalf("complete second accepted attempt: %v", err)
+	}
+
+	final, found, err := repository.Get(context.Background(), firstClaim.Delivery.DeliveryID)
+	if err != nil || !found || final.Status != domain.DeliverySent || final.AttemptCount != 2 {
+		t.Fatalf("second attempt must converge to sent without losing count: delivery=%+v found=%v err=%v", final, found, err)
+	}
+	history, err := repository.ListByDelivery(context.Background(), final.DeliveryID)
+	if err != nil || len(history) != 2 || history[0].AttemptNo != 1 ||
+		history[0].Outcome == nil || *history[0].Outcome != domain.DeliveryAttemptRejected ||
+		history[1].AttemptNo != 2 || history[1].Outcome == nil ||
+		*history[1].Outcome != domain.DeliveryAttemptAccepted {
+		t.Fatalf("two-attempt history must remain continuous and immutable: attempts=%+v err=%v", history, err)
+	}
+}
