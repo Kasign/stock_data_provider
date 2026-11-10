@@ -620,3 +620,11 @@
 - 子批次10的42项、子批次12的6项均为历史重复复核，不再重复累计；子批次11的9项中，5项已在51 DTO扫描集合，4项来自嵌套 inline ProviderProbeFieldComparison。
 - 中央 JSON 序列化 Golden 未对本节124个差异字段中的任何一个断言 nil/空值省略（0/124）；51 DTO 反射测试没有 omitempty→非 nullable 的反向约束，且三个 inline DTO 不在注册表中。
 - 本节为固定 SHA 静态清单，不代表 CI 通过或 CTR-010 已修复。下一步只进行 CTR-010 关闭方案 Review，不扩展新的 WebUI 数据集。
+
+
+### WebUI — 维度 2：CTR-010 关闭方案 Review
+
+- 详细记录：WebUI-维度2-完整性Review-第一轮.md 第 21 节。
+- 关闭目标已裁决为 optional + non-nullable：保留 Go DTO 的 omitempty 运行时行为，从 OpenAPI 的 124 个差异属性移除 nullable，不改变 required、字段类型或业务逻辑。
+- 修复范围包括 OpenAPI 124 字段、反射测试 omitempty→非 nullable 反向约束、3 个 inline DTO 的契约检查，以及中央 JSON 序列化测试对 124 字段省略行为和非 nil 指针零值输出的覆盖。
+- 本轮只完成方案 Review，未修改业务代码、未运行修复后 CI。CTR-010 仍未关闭；下一步由 Data/API 责任分支实施，审计分支待其完成后做固定 SHA 增量复核。WebUI 维度 2 第一轮完整性 Review 仍为进行中。
