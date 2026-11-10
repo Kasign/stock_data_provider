@@ -134,6 +134,11 @@ Template 与 Channel 配置版本始终属于唯一键和 Delivery 计划快照�
 
 Attempt 完成后不可覆盖；结果纠正通过新对账事实追加。DeliveryRecord 是当前投递状态快照，DeliveryAttempt 是不可变执行历史，两者不能合并成同一可覆盖记录。
 
+Attempt 生命周期边界：
+- `started_at` 必须不早于 Delivery.created_at，且严格早于 Delivery.deadline_at；截止时刻及之后不得启动新的渠道请求。
+- 渠道请求在截止时间前启动后，允许在 Delivery.deadline_at 之后返回；Attempt.finished_at 不因晚于 Delivery Deadline 而无效。
+- `lease_expires_at` 用于 Worker 租约 fencing，与发送截止独立，可以晚于 Delivery.deadline_at。实际渠道调用 deadline 仍由单次超时、首次 Attempt 起算的 MaxElapsed 和 Delivery Deadline 共同取最早值。
+
 
 ## 3. recipient_scope 与安全边界
 
