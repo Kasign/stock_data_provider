@@ -799,3 +799,14 @@
 - PLAT-CTR-005是内部Go API契约，JSON Schema/Golden不适用；项目登记簿仍需明确不适用理由和Go Contract Test/消费者测试替代证据。PLAT-CTR-005仍pending_evidence，A2真实消费者联调和A3生产部署验收未完成。
 - 本轮HTTP Client切片完成后不立即转Server维度2。项目Platform契约目录仍有PLAT-CTR-003（身份/授权）、PLAT-CTR-006（Storage/Migration）、PLAT-CTR-007（Typed Config/Secret）未完成维度2适用性核验。下一切片先核PLAT-CTR-003身份/授权结构、Header/Context、序列化适用性和直接消费者；权限算法/授权语义留在维度4。完成Platform维度2剩余契约范围核对后，再转Server维度2。
 - 本轮仅修改审计文档，未修改业务代码、Schema、Golden、测试，未执行CI。
+
+## 17. Platform 维度2：PLAT-CTR-003 身份、授权与 Secret 边界（2026-11-10）
+
+- 审计记录：`Platform-维度2-DTO-Schema-Golden.md` 第10节；固定基线 `b6dfc85ba214fe16268c8cba780641a8bfe15086`。
+- PLAT-CTR-003原始批准范围为anonymous、owner Bearer、service Bearer。Platform A1原语已实现：凭证摘要与常量时间比较、Token格式/长度、固定Scope白名单、Owner/Service隔离、Principal Context快照隔离、显式RoutePolicy和默认拒绝；Secret脱敏有测试。
+- Server Bootstrap仅以OwnerToken构造Authenticator，ServiceCredential列表为空；当前Router只有匿名/Owner路由，没有Service路由。Server Service身份生产接入未证明，不能仅凭Platform包级能力标记契约frozen。
+- Principal/RoutePolicy是进程内结构，不适用JSON Schema/Golden；以Go Contract Test、Router与Context消费者测试替代。Secret不进入Golden。
+- Owner Web Session虽有Platform原语，但Server A2未接入；不属于当前PLAT-CTR-003原始Bearer范围。SessionRecord是Redis内部JSON记录，schema_version/Golden证据缺口归既有P002-D12～D14/Session扩展验收，不新增CTR。
+- 未完成全仓Principal/Scope消费者扫描；领域资源授权和AuthorizationRef归维度4。
+- 结论：Platform Bearer A1基本符合，Server Service装配和部署Secret证据仍待补；PLAT-CTR-003保持pending_evidence。仅更新审计文档，无业务代码/Schema/Golden/测试/CI变更。
+- 下一步唯一任务：**Platform 维度2 — PLAT-CTR-006 Storage、Repository、Migration 契约的DTO/机器证据适用性核验**。不重审Storage连接算法与Migration执行正确性（维度5），固定代码基线不变。
