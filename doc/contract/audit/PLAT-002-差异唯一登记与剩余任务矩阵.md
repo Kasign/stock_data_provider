@@ -369,3 +369,16 @@ W2-D 的“权威规则核对与裁决问题准备”完成；CTR-010 本身仍�
 - 本切片结论：Platform HTTP Client A1实现及局部测试基本齐备；配置回归覆盖、LLM统计可见性决策、A2真实消费者联调和A3生产网络/Secret/Runtime证据仍待补。PLAT-CTR-005保持pending_evidence。
 - 本轮HTTP Client切片完成后，暂不转Server维度2。项目Platform契约目录中的PLAT-CTR-003（身份/授权）、PLAT-CTR-006（Storage/Migration）、PLAT-CTR-007（Typed Config/Secret）尚未完成维度2适用性核验。下一切片先核PLAT-CTR-003的身份/授权结构、Header/Context、序列化适用性和直接消费者；不重审权限算法/授权语义（维度4）。完成Platform维度2剩余契约适用性清点后，再转Server维度2。
 - 本轮仅更新审计文档，未修改业务代码、Schema、Golden、测试，未执行CI。
+
+## 18. Platform 维度2：PLAT-CTR-003 身份、授权与 Secret 边界（2026-11-10）
+
+- 审计记录：`Platform-维度2-DTO-Schema-Golden.md` 第10节；固定代码基线 `b6dfc85ba214fe16268c8cba780641a8bfe15086`。
+- 对照项目契约登记簿原始PLAT-CTR-003：其批准范围是anonymous、owner Bearer、service Bearer；不得将Owner Web Session静默并入该CTR。
+- Platform `security.go` 已实现IdentityKind/Principal、Owner与Service凭证摘要、32～256字节URL-safe Token约束、SHA-256摘要和常量时间比较、固定Scope白名单、拒绝重复/未知Scope和Service platform:admin、不可变Authenticator快照、Context Principal切片隔离、显式RoutePolicy和默认拒绝。Secret格式化/序列化脱敏有测试。
+- Server Bootstrap真实消费Platform Authenticator，但当前只调用 `NewAuthenticator(OwnerToken, nil)`，仅装配Owner Bearer；Router当前路由显式匿名/Owner策略，没有Service路由。不能将Platform包支持Service Scope视为Service生产链路已接入。
+- Principal/RoutePolicy等均为进程内Go结构，无公开JSON传输边界；不适用JSON Schema/Golden，以Go Contract Test、Router测试和消费者Context测试作为机器证据。Secret不得进入Golden/DTO。
+- Owner Web Session的Platform原语虽已存在，但Server Bootstrap没有Session接入。SessionRecord作为Redis内部JSON持久化记录无独立schema_version/Golden的证据，归入既有P002-D12～D14及Server A2扩展验收，不扩大PLAT-CTR-003原范围。
+- 本轮未完成全仓Principal/Scope消费者import扫描；领域资源授权、AuthorizationRef签发和读取时复核留在维度4。
+- 本切片结论：Platform Bearer A1实现基本符合；Server Service凭证装配、真实服务间消费者证据和L3 Secret部署证据未齐，PLAT-CTR-003继续pending_evidence。Web Session另按独立扩展准入验收，不新增CTR或把Session并入Bearer契约。
+- 本轮只更新审计文档，未修改业务代码、Schema、Golden、测试，未执行CI。
+- 下一切片：Platform维度2核对PLAT-CTR-006 Storage/Repository/Migration相关结构的序列化适用性、Migration机器契约及直接消费者；不重审连接/事务算法（维度5），不重复本轮Security审查。
