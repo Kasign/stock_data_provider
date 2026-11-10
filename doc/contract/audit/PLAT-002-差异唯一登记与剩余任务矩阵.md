@@ -1136,14 +1136,14 @@ PLAT-002 本轮“差异矩阵收敛与冻结评估”完成；**PLAT-002 项目
 
 | 批次 | 决策主题 | 对应现有工作项/契约 | 建议裁决方向 | 不包含的工作 |
 |---|---|---|---|---|
-| DEC-B1 | 旧 Analysis API 与 Researchflow API 的兼容边界 | D-SRV-API-01、D-SRV-EVT-01、WEB-SRV-C；CTR-046/007 | 旧 Analysis Run/Task/Events 作为兼容 API 保留，不静默改为 Researchflow 语义；Researchflow 使用独立版本化路径和 DTO。旧 StageEvent 独立定义；OpenAPI 是 HTTP 公共契约权威，覆盖实际保留路由、认证、错误和 Run/Task/Event Schema。旧 API 退役须有明确消费者迁移和兼容窗口 | 不要求 Researchflow 复用旧 DTO；不在本批决定具体 Handler 实现或测试通过 |
-| DEC-B2 | 旧 Analysis 请求校验与 ID 规则 | D-SRV-REQ-01；CTR-047 | 未知非空 TaskType 拒绝；symbols 上限 100 由 Handler 强制；异步 Task ID 由服务端生成并拒绝客户端指定值；同步 Run 保留合法显式 run_id，缺失时生成，重复时稳定返回 409/run_id_conflict | 不重开已核实的同步 Runner ID 事实；不改 Researchflow CreateRunCommand |
-| DEC-B3 | Data Snapshot 与 Quant/Research 的事实映射 | Data→Quant 两项；Data→Research Manifest 映射；DATA-CTR-005/007/008、QNT-CTR-001/002、RSC-CTR-001 | Data Snapshot 必须携带可追溯的交易日历/完整性版本证据；Data 负责事实和日历证据，Quant 负责按指标输入策略校验连续性。stale 不得映射为 valid；严格输入拒绝 stale，允许容忍的用例只能显式产出 degraded 并保留 stale 原因/时间。Research Evidence 直接引用不可变 Snapshot；source/version/locator 分别区分 Snapshot 资源、Provider 数据版本和证券/日期/记录定位；authorization_ref.resource_ref 绑定 Snapshot；Schema 版本与 Provider 数据版本分离 | available_at 的存在性/来源属于证据核验，不纳入裁决；不重做 Decimal v2 决策 |
-| DEC-B4 | News Evidence 来源、质量与关系返回语义 | NEWS-RSC-B/D/F；NEWS-CTR-001/002/003、RSC-CTR-001、GOV-CTR-006 | Evidence 必须区分 News Item/Version、Observation、Source、Provider 和分页 Snapshot；不得把内部 version_id 冒充 Provider source_version。News 保留来源质量/新鲜度事实，Research 的 stale 使用策略必须显式，不能静默提升为 valid。首批若不返回新闻关系，RelationRefs 为空只表示“本次查询未提供关系”，不得解释为“确认无关系”；首批关系能力明确列为未提供 | NEWS-RSC-C 授权快照映射属于既有 GOV-CTR-006 的实现补证，不重复裁决 |
-| DEC-B5 | News 输入如何进入 Researchflow Run | NEWS-FLOW-A/B/C/D；NEWS-CTR-001/002、FLOW-CTR-003/004、GOV-CTR-002/006 | 推荐 Run 创建前完成受控输入准备/物化；形成独立、可持久化、内容寻址的 Run 输入快照，生命周期覆盖 Run deadline、重试/恢复和审计保留。分页 Snapshot/Cursor 仅是查询过程资源，Cursor 由 News Adapter 持有，不进入 input_snapshot_refs。caller_ref 由 Server 从可信认证主体/委托上下文注入，禁止请求体自报；purpose/content level/filters/page_size 固定在版本化 Template 或 Run 参数指纹中 | 不把分页 Cursor 当 Run 输入；不在重试时重新查询最新 News |
-| DEC-B6 | Quant ResultRef 与 Researchflow Stage 输出投影 | QNT-FLOW-A/E；QNT-CTR-001～005、FLOW-CTR-004 | QuantResultRef 是不可变结果资源引用；Researchflow 通过 Quant Application Facade 获取经当前授权复核的完整 Result Envelope。Quant 拥有结果 Payload/Manifest；Orchestrator 只注入 Run/Stage/Attempt/diagnostic 关联字段，Stage output_ref 指向 Quant result resource，不复制或重写领域结果 | 不由 Researchflow 拼装 Quant Envelope；不扩大 Quant 通用 RPC/HTTP |
-| DEC-B7 | Research Stage 读写引用、幂等和 Context 访问策略 | RSC-FLOW-A/B/C/E；RSC-CTR-001/002、FLOW-CTR-002/003/004、GOV-CTR-003/005/006 | Stage 仅能按固定 Ref 精确读取指定版本；缺失/版本冲突/授权拒绝默认 fail-closed，部分降级必须由版本化 Template 显式声明。Context 元数据也属于受控 Research 资源，需可信 caller/purpose 和明确可见范围，不得把 ContextRef 当 Evidence 授权。允许 Stage 调用的 Research 写操作须定义稳定操作级幂等键、规范化请求指纹、相同重放返回原 Ref、异指纹冲突及提交后响应丢失对账；幂等键跨 Attempt 保持稳定 | 不要求无差别给所有 Research 命令增加幂等字段；仅覆盖明确允许由 Stage 调用的写操作 |
-| DEC-B8 | Researchflow→LLM 请求配置与重试分类 | LLM-FLOW-A/C；LLM-CTR-001/003、FLOW-CTR-002/003/004、GOV-CTR-003/004/005 | 版本化 ResolvedTemplate 固定 Prompt/template/schema 版本与 fingerprint、purpose_code 及模型调用策略；provider/model 从 Server 注入的受控配置/允许列表解析，禁止客户端传任意 endpoint。Researchflow Adapter 组装 ModelRequest，每个 Attempt 生成独立 request_id，Run 的 system_as_of/correlation_id/Template 固定。LLM stable error code 映射至 Researchflow Retry ReasonCode；仅确定未派发或有幂等/查询对账证据的错误允许重试，ambiguous outcome、incomplete、schema/权限/参数错误不得自动重放 | 不包含完整 Tool Call continuation（LLM-FLOW-B 已 deferred）；不把 retryable=true 单独视为重试授权 |
+| DEC-B1 | 旧 Analysis API 直接退役 | D-SRV-API-01、D-SRV-EVT-01、WEB-SRV-C；CTR-046/007 | 当前无正在服役的旧 Analysis 服务；WebUI 直接切换 Researchflow 新 API，不保留旧 API 兼容期。新 API 独立使用版本化 DTO/事件语义；OpenAPI 覆盖实际路由、认证、错误和 Run/Task/Event Schema。新 API 接入验收后删除旧路由、Handler 和专属适配代码 | 不自动删除仍被新模块使用的通用能力、历史数据或 Migration |
+| DEC-B2 | 请求校验与 Run/Task ID | D-SRV-REQ-01；CTR-047 | 未知 TaskType 拒绝；symbols 首期上限 100，由 Server Handler 集中强制并进入 OpenAPI/测试，后续调整须有负载/性能依据并同步更新契约。异步 Task ID 服务端生成；同步 Run 缺失 ID 时生成，显式 ID 相同指纹返回既有 Run，不同指纹返回 409/run_id_conflict | 不改变 Researchflow CreateRunCommand 的独立 ID 语义 |
+| DEC-B3 | Data Snapshot 事实映射 | Data→Quant 两项、Data→Research Manifest 映射；DATA-CTR-005/007/008、QNT-CTR-001/002、RSC-CTR-001 | Data 提供行情/交易日历/完整性证据，证据缺失显式 unknown；Quant 按具体指标策略校验连续性；stale 不得升级 valid，容忍时显式 degraded；Research 引用不可变 Snapshot 并保留来源/授权链 | 不改变既有 Decimal v2 决策；available_at 继续单独补证 |
+| DEC-B4 | News Evidence 来源/质量/关系语义 | NEWS-RSC-B/D/F；NEWS-CTR-001/002/003、RSC-CTR-001 | 区分 News Item/Version、Observation、Source、Provider、分页 Snapshot；质量和 stale 策略显式；RelationRefs 区分 not_provided 与 confirmed_none，不以空数组表达无关系结论 | 不重开 GOV-CTR-006 授权语义 |
+| DEC-B5 | News 输入进入 Researchflow Run | NEWS-FLOW-A/B/C/D；NEWS-CTR-001/002、FLOW-CTR-003/004、GOV-CTR-002/006 | Run 创建前两阶段准备输入：固定身份/查询条件查询 News，仅物化该 Run 实际需要的持久化不可变 Snapshot，再创建 Run 固定 refs；Cursor 仅由 News Adapter 持有，重试复用原 Snapshot | 不建设无必要的通用快照平台；无 News 输入不创建空 Snapshot |
+| DEC-B6 | Quant ResultRef 与 Stage 输出投影 | QNT-FLOW-A/E；QNT-CTR-001～005、FLOW-CTR-004 | Quant 拥有完整 Result Envelope/Payload/Manifest/Schema/授权；Researchflow 通过 Facade 获取必要元数据并复核授权，Stage.output_ref 仅保存资源引用和编排关联信息，不复制完整 Payload | 仅在下游用例确实需要时通过 Quant Facade 读取结果内容 |
+| DEC-B7 | Research Stage 引用读取、幂等和 Context 访问 | RSC-FLOW-A/B/C/E；RSC-CTR-001/002、FLOW-CTR-002/003/004、GOV-CTR-003/005/006 | 固定 Ref 精确读取、默认 fail-closed；Context 元数据受控；仅对明确允许 Stage 调用且产生业务副作用的写操作要求稳定幂等键、规范化指纹、重放对账，幂等键跨 Attempt 稳定 | 不给所有 Research 命令无差别增加幂等字段 |
+| DEC-B8 | Researchflow→LLM 配置固定与重试分类 | LLM-FLOW-A/C；LLM-CTR-001/003、FLOW-CTR-002/003/004、GOV-CTR-003/004/005 | Run 固定版本化 ResolvedTemplate、Prompt/Schema fingerprint 和模型策略；Provider/Model 由 Server 受控注入；Attempt 独立 request_id；stable error 显式映射 Retry ReasonCode；ambiguous outcome 不盲目重放 | 不包含已 deferred 的完整 Tool Call continuation；retryable=true 不单独授权重试 |
 
 ### 36.4 批次优先级与依赖
 
@@ -1162,3 +1162,21 @@ PLAT-002 本轮“差异矩阵收敛与冻结评估”完成；**PLAT-002 项目
 - 将 DATA-FLOW-B、LLM-FLOW-B 作为条件性扩展转为 deferred。
 - NEWS-FLOW-D 仅随 NEWS-FLOW-A/B 一并裁决，不作为独立决策批次。
 - 本节提案未获项目负责人批准前，DEC-B1～B8 仍为 proposal；不改变任何正式 CTR 冻结状态。
+
+
+### 36.6 项目负责人最终裁决（2026-11-10）
+
+项目负责人已确认 B1～B8 的 Review 修订方向，正式决议见项目级决策记录 DEC-PLAT-002-018～025；汇总状态见 DEC-PLAT-002-026。原 DEC-B1～B8 仅保留为审计映射，不再是待批准提案。
+
+| 提案映射 | 正式决议 | 最终裁决要点 | 后续责任边界 |
+|---|---|---|---|
+| B1 | DEC-PLAT-002-018 | 当前无服役旧 Analysis 服务；WebUI 直接切换新 Researchflow API；不保留兼容期；新 API 验收后删除旧路由和专属适配代码 | Server、WebUI、Researchflow |
+| B2 | DEC-PLAT-002-019 | 未知 TaskType 拒绝；symbols 首期上限100由 Handler 强制；异步 Task ID 服务端生成；同步 Run 同指纹幂等、异指纹409 | Server、WebUI |
+| B3 | DEC-PLAT-002-020 | Data 提供行情/日历/完整性事实；Quant 决定指标连续性策略；stale 不得升级 valid；Research 引用不可变 Snapshot | Data、Quant、Research |
+| B4 | DEC-PLAT-002-021 | News 来源/版本/Observation 分离；质量显式；关系未提供不等于无关系 | News、Research |
+| B5 | DEC-PLAT-002-022 | Run 创建前两阶段准备输入；只物化 Run 实际需要内容；Cursor 不进入 Run refs；重试复用快照 | News、Researchflow、Server |
+| B6 | DEC-PLAT-002-023 | Quant 拥有结果 Envelope；Researchflow 仅保存 ResultRef/关联信息，不复制完整 Payload | Quant、Researchflow、Server |
+| B7 | DEC-PLAT-002-024 | 固定 Ref 精确读取、默认 fail-closed；仅 Stage 可调用且有业务副作用的写操作要求幂等 | Research、Researchflow |
+| B8 | DEC-PLAT-002-025 | Run 固定 ResolvedTemplate/模型策略；Attempt 独立 request_id；错误分类控制重试，ambiguous outcome 不盲目重放 | LLM、Researchflow、Server |
+
+本轮只完成项目级决议登记，不修改责任模块代码，不运行 CI，不将任何 CTR 自动标记为 frozen。下一阶段按正式决议派发责任模块工作，并以新代码 SHA 做增量验收；不重新执行已经完成的全量初审。
