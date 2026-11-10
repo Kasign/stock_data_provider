@@ -478,3 +478,34 @@ Server维度2当前仅完成首轮一个切片，状态为 `in_progress / partia
 | CTR-008 | 本轮只确认固定基线未定位旧Analysis taskqueue表的独立DDL；不对数据库现状作不存在判断 | 不改变既有状态和关闭条件；由原责任方补迁移/DDL、唯一单调ID和真实DB分页证据 |
 
 补充：RunResult完整嵌套结构不在本批展开，归CTR-046关闭工作；Task.status的五个输出值与RunStatus六个领域状态不同，不能共用枚举。未新增CTR。
+
+
+
+## 25. Server维度2第四切片：Run/Task决策与关闭依赖归并
+
+固定代码基线：`b6dfc85ba214fe16268c8cba780641a8bfe15086`。本节只增量更新既有CTR-046/047/006/007，不新建编号。
+
+| CTR | 唯一责任边界 | 决策/事实状态 | 下一交付 |
+|---|---|---|---|
+| CTR-046 | Server负责Root HTTP路由、版本和适配；Researchflow负责自身Run/Stage/Attempt领域DTO、Schema/Golden | 项目架构已明确Server为唯一Composition Root、Researchflow为唯一跨模块流程编排者；但旧Analysis同步Run/Task/Events是否保留、是否迁移到Researchflow API尚未裁决 | 项目负责人确认API兼容/迁移边界；随后Server补最终路由/OpenAPI，Researchflow只补自身DTO契约，双方做真实组合测试 |
+| CTR-047 | 旧Analysis请求由旧Analysis/Server负责；Researchflow CreateRunCommand不与其混用 | Researchflow命令字段和可信Context语义已有accepted决议；旧Analysis RunRequest仍存在run_id、TaskType校验、symbols上限和同步/异步差异待明确项 | 裁决同步Run客户端run_id、Task入口生成/覆盖规则、未知TaskType是否拒绝、symbols上限是否强制；再对齐Handler、Schema、Contract Test |
+| CTR-006 | 旧Analysis Task DTO与对应OpenAPI | 当前Go行为已明确：started_at/finished_at nil时省略；nullable=true与真实输出不符 | 默认保持现有行为，Schema移除nullable并允许字段缺失；补queued/running/terminal Golden和Schema校验 |
+| CTR-007 | 旧Analysis Task Events生产方/HTTP适配方 | StageEvent是旧Analysis进度事件，不是Researchflow Stage DTO；字段事实见Server维度2第9节 | 先确定旧Events端点保留范围，再为保留端点定义独立StageEvent Schema/Golden；若替换，定义迁移和兼容策略 |
+
+### 本轮确认的权威边界
+
+- Researchflow状态机设计决议FLOW-CTR-001/002为accepted；正式公开DTO在`internal/researchflow/publicdto`，Schema在`doc/researchflow/schema/`，Golden在`doc/researchflow/golden/`，测试在`internal/researchflow/publicdto/dto_test.go`。
+- Researchflow现有Schema/Golden资产不代表已通过测试：既有决议记录指出定向Go Test/Race/Vet缺少执行证据。
+- 旧Analysis的`internal/analysis/domain.RunRequest/RunResult/StageEvent`和`internal/platform/taskqueue.Task/Event`属于另一套旧HTTP契约。不能将Researchflow的Run/Stage/Attempt Schema直接复用为旧Analysis的Run/Task/StageEvent Schema。
+- CTR-008仍独立负责旧Task Events的DDL、cursor持久化和真实数据库证据，本轮不重复核查。
+
+### 关闭依赖顺序
+
+1. CTR-046：项目负责人确认旧Analysis API保留/迁移边界。
+2. CTR-047：据此确定同步/异步请求行为和运行时校验规则。
+3. CTR-006：按当前nil省略行为修正Schema并补三态Golden，可与第2项并行。
+4. CTR-007：确认Events端点保留后定义旧StageEvent契约；不得套用Researchflow Stage。
+5. CTR-046：最后补最终Run响应Schema、Golden、Root路由和真实Handler/Adapter Contract Test。
+6. 分别执行旧Analysis与Researchflow定向测试，记录SHA/CI证据。
+
+本轮状态：complete_with_open_items；四项CTR均开放，无新增CTR、无CTR关闭。下一步仍为Server维度2，不进入其他维度。
