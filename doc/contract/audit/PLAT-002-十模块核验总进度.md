@@ -702,3 +702,13 @@
 - 已完成初审的数据集不再重新初审；CTR-004、CTR-038～040、CTR-042～049 的既有冻结影响/证据链 Review 不重复执行。
 - 下一批仅处理 WebUI 维度 2 的 Task/TaskEvent 一组：CTR-006/007/008，一次完成 DTO 空值、事件 Schema、分页与事件 ID 语义的关闭条件收敛。
 - 本次只更新审计索引和状态，没有修改业务代码、OpenAPI、DTO 或测试，没有执行 CI；固定代码基线不变。
+
+
+## 7. W2-A Task/TaskEvent 合并批次完成记录
+
+- CTR-006：StartedAt/FinishedAt Go nil+omitempty 与 OpenAPI nullable 语义不一致，P2 保留。
+- CTR-007：StageEvent 只有泛化 object 描述，缺少字段级 Schema，P2 保留。
+- CTR-008：Handler/Queue 的 exclusive after 分页逻辑与默认/边界已核；数据库事件表 DDL/持久化约束及真实 DB 分页测试证据不足，P2 保留。
+- 本批冻结影响 Review 已完成，问题尚未修复/裁决；不再重复初审，后续只做增量验收。
+- 详细关闭条件见 `PLAT-002-差异唯一登记与剩余任务矩阵.md` 第 9 节及 WebUI 维度 2 Review 第 29 节。
+- 下一批：DailyBar 查询窗口 CTR-009，随后继续维度 2 其余差异集中收敛。
