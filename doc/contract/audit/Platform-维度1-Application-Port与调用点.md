@@ -1782,3 +1782,78 @@ StockBoards 的 Provider Port、Go DTO、Service 校验/回退/缓存、HTTP 路
 - 新增 AUD-WEBUI-CTR-020：14 个 omitempty 数值字段被 OpenAPI 过度声明 nullable。
 - WebUI 已接通市场级 API，但页面只显示主力净额和指数，不消费四类资金分类字段；API Client 有请求测试，页面缺少该数据表格的直接渲染回归测试。
 - 未发现已证实的金额单位换算或正负号实现错误；来源分类关系、交易日完整覆盖和四类字段的产品消费范围仍需补证。WebUI 维度 2 继续 partial。
+
+
+### 31. WebUI 维度 2：Market Session 市场交易时段
+
+#### 31.1 核验范围与证据
+
+- 固定代码基线：`b6dfc85ba214fe16268c8cba780641a8bfe15086`。
+- DTO：`internal/marketdata/model/market_session.go`（blob `18f99c0476c953dcf0eeba3999f81af152b87241`）；交易日历 DTO：`internal/marketdata/model/trading_calendar.go`（blob `7f670406ff48b7e29bfb373e743c8561d2affb21`）。
+- Provider Port：`internal/marketdata/provider/provider.go`（blob `6635d2247379d1ffcb826f80e8e2176422b0cc0a`）；固定基线中唯一实现为 BaoStock：`internal/marketdata/provider/baostock_calendar.go`（blob `855b5d7980a2e699b421af835f2c0f3bd3138ef8`），测试 blob `b6fd0f8ed5a8c3792f68370c18df406fa6b46fde`。
+- Service：`internal/marketdata/service/market_session.go`（blob `c2045d3c5d8107d861de9352ad968646e72b3077`）、测试 blob `f6807387ec2af2bbf096142f572b2a3d9138dcc9`；交易日历 Service：`trading_calendar.go`（blob `7fac35c11e75ca1314d272a3c4d96306052631b4`）、测试 blob `30413febdd002519e803f60b61dce028e1d639f2`。
+- HTTP Handler：`internal/marketdata/httpapi/market_session.go`（blob `f39cc77edf323278a1116cc93bbad7bc88309bce`）、测试 blob `646730083a430813014f1d0d2232e89845d1de74`；路由注册 `internal/marketdata/httpapi/server.go`（blob `7b54b54b3c6182ecab830c2c43f91c548dc60dba`）。
+- OpenAPI：`internal/marketdata/httpapi/openapi.yaml`（blob `cd8a6e3dfb8e3162ee789b11e883be9283c59f32`）；模型契约测试 `openapi_contract_test.go`（blob `7f97f075a23bd698a7e3fc32e90509d1e999217b`）。
+- 配置/接线：`internal/marketdata/config/config.go`（blob `5dab636e97e94b7f221f8bc8dda8dc08c03a83c4`）；`internal/marketdata/bootstrap/module.go`（blob `859df0ca2fc26f02dab2399fe684617da9f2fc89`）。
+- WebUI API Client：`web/src/api.js`（blob `b8bcbee5908b43bfa1bc2ca744363190af38287f`）；API 测试 `web/tests/api.test.mjs`（blob `a26eca75b24a744232d370fdbe2411806be45136`）。市场活动页 `web/src/market-activity.js`（blob `43b8e76d0b9f1bc9b97b1a88326d271a6cb8e29c`）消费交易日历，但未消费 Market Session。
+
+#### 31.2 交易日历来源和质量
+
+1. `MarketSession` 不使用本机 weekday 推断交易日，而是调用 `DataService.TradingCalendar` 查询该时间点在 Asia/Shanghai 下对应日期的交易日状态。
+2. `TradingCalendarProvider` 是独立 Port。固定基线中只有 BaoStock 实现；默认配置启用 BaoStock 的 `TradingCalendar` 能力，其他默认 Provider 未实现/未启用该能力。因此当前市场时段判断依赖 BaoStock 日历，不具备已证实的第二日历源故障回退。
+3. BaoStock Provider 要求源端返回请求范围内每一个自然日，校验行数和逐日日期顺序；缺失某日、乱序或日期错位均报错，不会将缺失行默认为周末/节假日。
+4. TradingCalendar Service 再次验证市场、起止范围、完整自然日覆盖、逐日日期、交易日计数、来源版本、采集时间和质量状态；多个来源出现交易日状态冲突时将快照降级并写入 `provider_trading_calendar_sources_disagree`。
+5. BaoStock 不提供可验证的源端快照发布时间，Provider 使用本地 UTC 接收/采集时间并标记 degraded；MarketSession 继承日历的 source、source_version、fetched_at、quality_status 和 quality_reasons。不能将 `fetched_at` 理解为交易所发布时间。
+6. 默认配置中只有 BaoStock 日历源，故多源冲突比较逻辑虽存在，但默认运行配置下没有第二来源参与交叉核对。
+
+#### 31.3 时区、时间字段与阶段边界
+
+1. HTTP `GET /api/v1/market/session` 可选 `at` 参数必须是单个 RFC3339/RFC3339Nano 时间戳；重复、空白或非法值返回 400。省略时使用服务端当前时间。
+2. Service 将输入瞬间转换到 `Asia/Shanghai`，生成 `local_date` 和 `local_time`；响应 `at` 归一化为 UTC。OpenAPI 明确 `server_time` 是响应生成时的 UTC 服务端时间，与请求的 `at` 不同。
+3. 阶段按北京时间分钟数计算，边界采用左闭右开区间：
+   - 09:15 前：`pre_open`；
+   - 09:15–09:25：`opening_auction`；
+   - 09:25–09:30：`auction_pause`；
+   - 09:30–11:30：`continuous_morning`；
+   - 11:30–13:00：`lunch_break`；
+   - 13:00–14:57：`continuous_afternoon`；
+   - 14:57–15:00：`closing_auction`；
+   - 15:00 后：`closed`。
+4. 非交易日优先返回 `non_trading_day`，不受当日时钟时间影响。开盘/收盘集合竞价的 `is_trading_session=true`、`is_auction=true`；连续竞价为 session/continuous true；竞价暂停和午间休市均为 false。
+5. 现有 Service 单元测试覆盖 09:15、09:25、09:30、11:30、13:00、14:57、15:00 的边界，以及非交易日忽略时钟；HTTP 测试覆盖 +08:00 输入转换为 Asia/Shanghai 本地日期时间，并验证 `at`、`server_time` 等字段。
+6. 当前 `opening_auction` 将 09:15–09:25 合并为单一阶段，没有细分 09:15–09:20 可撤单与 09:20–09:25 不可撤单等竞价规则；也不表达逐笔撮合、交易所临时停市或盘后大宗交易。API 语义是市场计划时段，不应被下游用作订单可撤销/可成交的权威判定。
+7. 时间区间只按标准 A 股时段计算，不会判断个股上市日期、个股停牌、证券级交易状态或特殊无涨跌幅日；OpenAPI 描述和模型注释均明确排除证券级停牌和交易所临时中断。
+
+#### 31.4 WebUI 消费与契约
+
+1. `web/src/api.js` 已提供 `getMarketSession(settings, at, signal)`，请求时附加行情 API Key 和 AbortSignal；不传 `at` 时请求无 query 的当前时段接口。
+2. `web/tests/api.test.mjs` 将 `getMarketSession` 纳入 API Client 请求/鉴权测试，断言默认请求路径和 API Key。
+3. 固定基线中市场活动页实际调用 `getTradingCalendar` 并展示完整自然日历；没有发现页面调用 `getMarketSession` 或展示 phase/is_trading_session/is_continuous_trading/is_auction 的消费链。因此当前是 API Client 已接线、页面未消费，不能将其记为 WebUI 已展示市场时段。
+4. OpenAPI `MarketSessionSnapshot` required 集合与 Go 非 omitempty 字段对齐；`source_version`、`quality_reasons` 可省略，与 Go omitempty 一致。模型反射测试注册了 MarketSessionSnapshot，契约字段集合和 required 有自动核验。
+5. 当前 API 测试只验证默认请求路径和鉴权，未验证显式 RFC3339 `at` 的 URL 编码、AbortSignal 透传；服务端测试覆盖合法 +08:00 和非法时间戳，但缺少 UTC/非 +08:00 输入、跨日时区转换和未来/历史边界的集成测试。
+
+#### 31.5 差异登记
+
+**AUD-WEBUI-CTR-023：Market Session API 尚未接入 WebUI 页面消费（P2，产品范围待确认）**
+
+- 证据：`getMarketSession` 存在于 `web/src/api.js`，仅在 `web/tests/api.test.mjs` 中被调用；市场活动页消费的是 TradingCalendar，没有读取 MarketSession。
+- 影响：服务端已提供市场阶段、竞价/连续交易标志，但用户界面当前不能查看这些信息；API Client 测试通过不代表页面功能已交付。
+- 责任方：WebUI / 产品范围维护方。
+- 关闭条件：若市场概览/市场活动页面需要实时交易时段，增加页面调用、加载/错误/质量状态和阶段展示，并覆盖交易日、非交易日、竞价暂停、午休、收盘及 degraded 日历的浏览器测试；若暂不属于 WebUI 范围，则在页面/API 接入清单中明确标记为服务端预留能力，不列为已交付 UI 功能。
+
+**AUD-WEBUI-CTR-024：集合竞价阶段未表达可撤单规则，不能用于订单行为判定（P2，语义边界）**
+
+- 证据：服务端将整个 09:15–09:25 合并为 `opening_auction`，仅提供 `is_auction`，没有 09:20 边界或订单撤单能力字段。
+- 影响：下游若将 phase/auction 当作订单可撤销、可成交或撮合状态，会在集合竞价内部不同规则阶段产生误判。当前项目不提供下单功能，尚未发现实际错误消费者。
+- 责任方：Market Data / 产品契约维护方。
+- 关闭条件：在 API 文档明确该接口仅表示粗粒度市场计划时段，不可作为订单行为判据；只有未来确有订单规则消费需求时，再增加细粒度阶段/交易所规则来源和对应测试，不在当前无下单范围内提前扩展字段。
+
+#### 31.6 本批结论
+
+- 市场交易时段由完整交易日历 + Asia/Shanghai 固定时间表组合计算，不依赖本机时区或 weekday 推断；BaoStock 明确覆盖每个自然日并拒绝缺日。
+- 固定基线只有 BaoStock 提供交易日历能力，且源端快照时间不可验证，所以当前 MarketSession 质量保持 degraded；日历服务具备多源冲突检测机制，但默认只有一个来源。
+- 时段边界和主要布尔标志有单元测试，HTTP 测试覆盖 +08:00 输入；没有证据显示当前时间段计算边界实现错误。
+- MarketSession 不等于个股交易状态，不覆盖个股停牌、临时停市、特殊证券规则和集合竞价撤单细则。
+- 新增 AUD-WEBUI-CTR-023（P2）：WebUI API Client 已有函数，但页面没有消费市场时段。
+- 新增 AUD-WEBUI-CTR-024（P2）：集合竞价只提供粗粒度阶段，必须明确禁止用于订单行为判定。
+- WebUI 维度 2 继续 partial。
