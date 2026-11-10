@@ -336,3 +336,14 @@ func TestValidateEgressDependenciesRejectsTypedNilHTTPDoers(t *testing.T) {
 		})
 	}
 }
+
+func TestModuleNewEnforcesControlledEgressWhenRequired(t *testing.T) {
+	cfg := testConfig()
+	deps := testDependencies()
+	deps.RequireEgressDependencies = true
+
+	_, err := New(cfg, deps)
+	if err == nil || !strings.Contains(err.Error(), "controlled egress dependency missing") {
+		t.Fatalf("New() must reject missing controlled egress dependencies when required, got %v", err)
+	}
+}
