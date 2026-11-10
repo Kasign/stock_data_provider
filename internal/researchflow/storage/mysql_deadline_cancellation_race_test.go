@@ -47,7 +47,8 @@ func TestMariaDBExpireRunDeadlineFencesRunningAttempt(t *testing.T){
  suffix:=fmt.Sprint(time.Now().UnixNano());run,stages:=deadlineRaceFixture(t,ctx,repo,suffix,"deadline-fence","active","pending")
  attempt,replayed,err:=repo.ClaimAttempt(ctx,run,stages[0],"deadline-attempt-"+suffix,"deadline-worker",time.Minute,2,8);if err!=nil||replayed{t.Fatalf("ClaimAttempt replayed=%v err=%v",replayed,err)}
  if _,err=db.ExecContext(ctx,"UPDATE researchflow_runs SET deadline_at=? WHERE run_ref=?",formatResearchflowTimeValue(time.Now().UTC().Add(-time.Minute)),run);err!=nil{t.Fatal(err)}
- updated,version,err:=repo.ExpireRunDeadline(ctx,run,1);if err!=nil||!updated||version!=2{t.Fatalf("ExpireRunDeadline=%v/%d/%v",updated,version,err)}
+ runSnapshot,err:=repo.GetRun(ctx,run);if err!=nil{t.Fatal(err)};expectedRunVersion:=runSnapshot.Run.Version
+ updated,version,err:=repo.ExpireRunDeadline(ctx,run,expectedRunVersion);if err!=nil||!updated||version!=expectedRunVersion+1{t.Fatalf("ExpireRunDeadline=%v/%d/%v expected version %d",updated,version,err,expectedRunVersion+1)}
  got,err:=repo.GetAttempt(ctx,attempt.Ref);if err!=nil{t.Fatal(err)}
  if got.Status!=domain.AttemptTimedOut||got.FencingToken!=attempt.FencingToken+1||got.LeaseOwner!=""||got.LeaseExpiresAt!=nil{t.Fatalf("Attempt not fenced: %#v",got)}
  for i,ref:=range stages{stage,e:=repo.GetStage(ctx,ref);if e!=nil{t.Fatal(e)};want:=uint64(2);if i==0{want=3};if stage.Status!=domain.StageTimedOut||stage.Version!=want{t.Fatalf("Stage %s=%s/v%d want timed_out/v%d",ref,stage.Status,stage.Version,want)}}
