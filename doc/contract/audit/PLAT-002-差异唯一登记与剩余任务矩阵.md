@@ -845,3 +845,40 @@ Golden应由真实DTO序列化生成或与真实序列化逐字节/结构比较�
 - 沿用 RSC-CTR-001/002、FLOW-CTR-003/004、GOV-CTR-003/005/006，不新增 CTR。Data→Research 的 available_at、Snapshot 来源映射及 News→Research 的授权来源缺口不重复登记。
 
 本批只更新 PLAT-002 审计记录；未修改业务代码、Schema、Golden、测试或执行 CI。后续统一处理 A/B/C/E 的有限契约决策；D/F 等待 Research Owner 和 Server/Researchflow 生产接入证据后增量核验，不重做本轮已确认的职责、时间和 DTO 投影审查。
+
+
+## 31. Researchflow→LLM 模型调用与工具往返边界首轮核验（2026-11-10）
+
+- 固定审计基线：origin/integration @ b6dfc85ba214fe16268c8cba780641a8bfe15086；维护分支：feat/design_doc。
+- 范围：LLM-CTR-001～003 与 FLOW-002/004/005/008 的组合边界；核对 ModelRequest 映射、Run/Stage 上下文传播、Prompt/Template 版本、Tool Call 往返、重试与流式终止、错误投影和生产装配证据。
+- 不重复审查 LLM 内部 Responses JSON/SSE Parser、JSON Schema 编译器和 Tool Policy 领域规则；不修改 LLM/Researchflow/Server 业务代码，不新增 CTR。
+
+### 已确认的契约边界
+
+1. Researchflow 是模型调用编排方，LLM 是单次模型协议适配方。LLM Generate/Stream 不决定业务重试，不执行工具，不授权工具，不解释业务结论；工具白名单、Scope、参数 Schema、预算和执行归 Researchflow。
+2. Researchflow 每次 Stage/Attempt 调用必须继承 Run.system_as_of、deadline_at、input_snapshot_refs、template_ref/version/fingerprint 和 correlation_id；每次实际执行使用独立 request_id。LLM ModelRequest/Response 携带并原样回显 request_id、correlation_id、system_as_of；deadline 取 ModelRequest、Context 和 Provider timeout 的最早值。
+3. LLM ModelRequest 固定首批单轮 instructions + input_text；不接受任意 Responses input item、多轮、previous_response_id、conversation_id 或多模态。ToolDefinition 是 Registry 筛选后的只读声明，LLM 只解析 function_call 意图。
+4. Researchflow ToolPolicy 已有 Registry、Scope/Schema/预算校验、Intent 转换和 AuthorizedCall；模型可见工具列表不等于授权，响应必须再次 Authorize。AuthorizedCall 带调用 ID、参数快照、幂等键和受 Run Deadline/预算裁剪的执行时限；实际 Executor 仍须绑定 Run/Stage/Attempt 并二次校验幂等。
+5. LLM 错误只提供 retryable/Retry-After 技术提示，是否重试由 Researchflow 的不可变 Template RetryPolicy 白名单、max_attempts、deadline 和预算决定。请求可能已被上游接收但响应丢失时不得假定未执行；Stream 收到首个事件后禁止透明重试，未收到 terminal event 的 EOF 不能视为成功。
+6. ModelResponse 只有 completed/incomplete/failed 三态；只有 completed 响应可以转为工具意图。Stage 输出 Envelope 的执行关联字段由 Orchestrator 注入，Provider 不得覆盖 Run/Stage/Attempt 身份。
+
+### 差异登记（审计工作项，非新增 CTR）
+
+| 编号 | 固定基线事实 | 状态 | 冻结影响 / 后续统一处理 |
+|---|---|---|---|
+| LLM-FLOW-A | LLM ModelRequest 要求 provider_id、model、purpose_code、instructions、input_text、request_id、correlation_id、system_as_of、deadline_at；Researchflow StageExecutionRequest 当前只传 Run/Stage/Attempt、parameters、input_snapshot_refs、system_as_of、deadline_at、attempt_deadline_at、correlation_id。尚未定义由哪个版本化 Template/Adapter 配置映射 provider/model/purpose/prompt instructions/input_text、如何生成每次执行 request_id，以及 prompt/template/schema 的审计身份如何绑定到 ModelRequest 与结果 | pending_decision | 明确唯一映射责任：Template/ResolvedTemplate 固定 prompt/template 资源版本及模型调用配置，Server 注入 LLM ProviderConfig/Secret，Researchflow Adapter 组装 ModelRequest 并生成本 Attempt 独立 request_id；定义 purpose_code 枚举、Prompt fingerprint/版本及其与 Template fingerprint 的关系。禁止由客户端传任意 provider endpoint 或以自由文本 purpose 代替稳定代码 |
+| LLM-FLOW-B | LLM 首批协议明确单轮 instructions + input_text，并将多轮/previous_response_id/任意 input item deferred；同时允许 ModelResponse 返回 function_call 意图。Researchflow ToolPolicy 能授权并生成 AuthorizedCall，但当前没有已定义的 ToolResult → 下一次 ModelRequest 输入映射/Responses continuation 形式 | pending_decision | 明确 MVP 工具调用语义：若支持完整工具循环，必须定义受限 ToolResult DTO、call_id 关联、工具结果 schema/大小限制、模型续轮请求及多轮状态/重试语义；若维持单轮契约，则明确 Tool Call 仅为 Stage 终端建议/待执行意图，不允许执行后再声称模型已消费工具结果。不得把工具结果拼入自由文本伪装为已支持的 continuation |
+| LLM-FLOW-C | LLM 明确不对可能已被上游接收但响应丢失的请求自动重试；Researchflow RetryPolicy 以 ReasonCode allowlist 控制 Stage 重试，但跨模块尚未明确哪些 LLM 错误码表示确定未派发、哪些表示执行结果 ambiguous，以及 ModelErrorInfo.retryable 如何映射到模板 ReasonCode | pending_decision | 建立 LLM ModelErrorKind/stable_code → Researchflow ReasonCode 显式映射。仅确定未派发或有上游幂等/查询证据的错误允许重试；ambiguous outcome、incomplete、schema_validation_failed、权限/参数错误不得自动重放。重试必须沿用同一 Run/Stage 输入和 Template，但新 Attempt/request_id；禁止将 retryable=true 单独作为自动重试依据 |
+| LLM-FLOW-D | ToolPolicy AuthorizedCall 的幂等键和 deadline 已生成，但对象本身不包含 Run/Stage/Attempt/Worker/fencing 身份；Policy 注释要求实际执行器二次绑定身份并做幂等控制。固定基线没有 Tool Executor Port/持久化执行记录、工具结果回写和 ambiguous outcome 对账的生产证据 | pending_evidence | 真实 Executor 必须从可信 StageExecutionRequest 注入 Run/Stage/Attempt/fencing，派生稳定下游 idempotency_key 与 request fingerprint；持久化调用意图/执行结果或可查询对账记录；重试不得重复产生非幂等外部副作用。Scope/Schema 重新校验和 deadline 由 Researchflow 执行层落实 |
+| LLM-FLOW-E | LLM-CTR-001～003 仍为 pending_evidence；有 ModelRequest/Response、Schema 和 ToolPolicy 单测，但文档明确真实 Gateway Generate/SSE/模型能力 E2E 未完成；Capability 默认 unknown，需绑定 Provider/Model/Protocol/Gateway 版本和有效期 | pending_evidence | 为实际首批 Provider/Model/Gateway 版本提供真实 Generate/Stream、Tool Calling、Structured Output、Usage、取消/超限证据；unknown/过期能力必须拒绝对应请求。不能以路由可达、Mock 或单模块 Fixture 标记 supported |
+| LLM-FLOW-F | Researchflow FLOW-005 记录真实 LLM Adapter 未接入；Worker 只有通用 StageExecutor Port，LLM Adapter、Server DI/Secret 注入、Platform BoundDoer/OpenStream 包装、调用结果到 Stage typed output 的完整链路未形成固定基线证据 | pending_evidence | A/B/C 决策后补 Researchflow LLM Stage Provider Adapter、Server 组合根装配、Platform HTTP 流式接口包装、错误/取消映射和 Stage Output Registry 注册；联合测试覆盖上下文原样传播、工具拒绝/往返策略、重试、SSE terminal/断流和 fencing 迟到结果拒绝 |
+
+### 本批结论
+
+- **职责与依赖方向：freeze-ready**。Researchflow 编排模型调用和工具，LLM 只负责模型协议适配；不需要 LLM 反向依赖 Researchflow，也不需要把工具执行迁入 LLM。
+- **基础调用上下文语义：accepted**。system_as_of、deadline_at、correlation_id、request_id 的职责已明确；每次 Attempt 独立 request_id，Run 的知识截止/关联 ID 在重试中保持不变。
+- **ModelRequest 配置/Prompt 版本映射、Tool Call 是否支持完整往返、LLM ambiguous outcome 的重试分类：pending_decision**。这三项影响执行正确性，不能仅靠补测试解决。
+- **Tool Executor 生产幂等、真实模型能力、Adapter/Server 装配和联合 Contract Test：pending_evidence**。模块内 ToolPolicy 与 LLM Parser 已有实现不代表跨模块链路完成。
+- 沿用 LLM-CTR-001～003、FLOW-CTR-002/003/004、GOV-CTR-003/004/005，不新增 CTR。LLM 内部 Schema/Parser 审查和 Researchflow Tool Policy 规则不重复登记。
+
+本批只更新 PLAT-002 审计记录；未修改业务代码、Schema、Golden、测试或执行 CI。后续统一处理 A/B/C 的有限契约决策；D/E/F 等待责任模块生产接入和实测证据后增量核验，不重复本轮协议 Parser/工具权限设计审查。
