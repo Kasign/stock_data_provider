@@ -251,3 +251,88 @@ web/src/api.js 的统一request函数：
 4. 这会削弱Analysis路径的Request ID防伪与日志关联完整性，不是认证绕过；本切片不判定更高严重级别，也不修改代码。
 
 该发现归入既有PLAT-CTR-002 / P002-D03，不新建CTR。关闭证据应由Server/Integration责任方提供：移除组合场景中的兼容型内层Middleware，或确保内层只使用外层已验证Context且不能重新信任原始Header；增加Root完整组合测试，传入caller-controlled ID后验证最终响应Header、Handler日志Context及后续传播均保持Root生成ID。需同步纠正Platform维度2 Request ID切片中“Root外层重建即可覆盖内层兼容Middleware”的既有结论。
+
+
+## 9. Server 维度2第三切片：Run/Task DTO 字段语义与 OpenAPI 增量核验（2026-11-10）
+
+本切片只增量核对既有 CTR-046/047/006/007，不重新初审错误Envelope、Health/Readiness或WebUI错误解析。
+
+### 9.1 RunRequest真实字段、输入与默认值
+
+代码来源：internal/analysis/domain/types.go 的 RunRequest；Handler：internal/platform/httpapi/server.go 的 handleCreateRun、fillDefaults；异步入口：internal/platform/httpapi/tasks.go 的 handleCreateTask。
+
+| JSON字段 | Go类型/标签 | Handler实际行为 | OpenAPI现状 |
+|---|---|---|---|
+| run_id | string / omitempty | 解码允许；同步入口不在Handler重写；Queue.Create会生成新RunID并覆盖传入值 | 缺失 |
+| task_type | TaskType / 无omitempty | 空值默认post_market_scan；Handler不在解码阶段验证枚举 | string，无enum |
+| as_of | time.Time / 无omitempty | 零值补为Asia/Shanghai当前时间；historical_replay要求请求显式提供 | date-time，未声明required/default |
+| as_of_mode | AsOfMode / omitempty | 接受解码，但随后依据as_of是否显式提供强制设为explicit或realtime_snapshot | 缺失 |
+| universe_id | string / 无omitempty | 空白值默认request-watchlist | string |
+| symbols | []string / omitempty | 可省略；当前HTTP Handler不在解码层校验最多100项 | array，声明maxItems=100 |
+| portfolio_id | string / 无omitempty | 空白值默认paper-unconfigured | string |
+| strategy_ids | []string / 无omitempty | 空数组默认trend-following | array |
+| market_id | string / 无omitempty | 空白值默认CN-A | string |
+| strategy_config_version | string / 无omitempty | 空值默认trend-following-mvp-v1 | string |
+| risk_config_version | string / 无omitempty | 空值默认unverified-tradability-block-v1 | string |
+| trading_rules_version | string / 无omitempty | 空值默认not-configured-v1 | string |
+| data_policy_version | string / 无omitempty | 空值默认baseline-quality-v1 | string |
+| parameters | map[string]string / omitempty | 可省略；若提供则按string map解码 | 缺失 |
+
+结论：
+- OpenAPI AnalysisRequest并非完整DTO Schema，CTR-047既有缺口得到字段级确认；不得新增CTR。
+- required不能简单按Go非指针字段生成：TaskType、AsOf、UniverseID、PortfolioID、StrategyIDs、MarketID及版本字段会在Handler补默认值；但historical_replay对显式as_of有条件必填规则，应通过条件约束或描述表达。
+- TaskType应列出post_market_scan、watchlist_scan、position_review、historical_replay四个代码枚举值；当前HTTP解码层未验证未知TaskType，Schema enum只能描述目标契约，不能假称运行时已有同等校验。
+- as_of_mode属于服务端派生值：客户端即使传入也会被覆盖。权威请求Schema应明确其不接受输入或明确忽略规则，不应把它作为普通客户端可控字段。
+- run_id在异步CreateTask路径会被Queue生成值覆盖；同步Run路径是否允许客户端指定run_id需由Run契约责任方裁决。共享Schema不能隐藏两路径差异。
+- symbols.maxItems=100目前仅见于OpenAPI，本轮检查的Handler解码逻辑没有相应数量限制；在验证下游是否另有限制前，不应宣称该约束已由HTTP入口执行。
+- OpenAPI缺失parameters、run_id、as_of_mode均作为CTR-047字段级证据；Run路径覆盖由CTR-046承接。
+
+### 9.2 Task与TaskEvent真实序列化字段
+
+代码来源：internal/platform/taskqueue/queue.go 的 Task、Event；领域事件来源：internal/analysis/domain/types.go 的 StageEvent。
+
+Task字段：
+- 始终输出：task_id、run_id、status、task_type、completed_stages、created_at。
+- 空值省略：current_stage、failure_code、error_message。
+- started_at、finished_at为* time.Time且带omitempty：nil时省略；非nil时输出时间值。
+- OpenAPI Task required六字段与Go非omitempty字段基本一致；可选字段未列required也与omitempty字段基本一致。
+- 唯一已确认的不一致仍是started_at/finished_at的nullable=true：Go nil时省略，不会输出显式null。归CTR-006。
+
+Task.status：
+- Queue映射输出queued、running、succeeded、partial、failed。
+- domain.RunStatus与Task状态不是同一枚举；RunStatus包括running、completed、blocked_data_quality、rejected_request、partial、failed。blocked_data_quality映射为Task succeeded，rejected_request映射为Task failed。
+- OpenAPI Task.status当前枚举与Queue映射结果一致；不应把RunStatus枚举直接复用为Task.status枚举。
+
+TaskEvent / StageEvent：
+- Event外层始终输出sequence（int64）和event。
+- StageEvent始终输出run_id、stage、status、at；duration_ms、message、attributes为空时省略。
+- StageEvent.status枚举为started、succeeded、failed、skipped；at为time.Time，JSON时间格式为RFC3339/RFC3339Nano。
+- OpenAPI TaskEvent.event当前只声明type: object，没有字段、required、status enum或date-time约束。归CTR-007。
+- StageEvent的attributes是map[string]string；message是string；duration_ms是int64。Schema应明确这些类型及可选性，而不是只复制Go结构体描述。
+
+### 9.3 Run响应契约边界
+
+- POST Run成功和GET Run成功直接序列化domain.RunResult；GET Run Events返回{run_id, events}，events为StageEvent数组。
+- 当前分析任务OpenAPI没有POST Run、GET Run、GET Run Events路径，也没有RunResult响应Schema；CTR-046承接路由和响应契约覆盖缺口。
+- RunResult是较大的嵌套领域结果DTO，包含Request、Quality、MarketState、Factors、Signals、Tradability、Risk、Plans、Execution、Events、Failure、Warnings等结构；不能用一个泛化object或只定义RunID/Status冒充完整Schema。
+- 本切片不展开RunResult全部嵌套子结构；其完整Schema拆解留在CTR-046关闭工作中，避免本批变成无边界领域DTO全仓审查。
+
+### 9.4 Golden、Schema与测试证据边界
+
+- server_test.go证明同步Run默认值、未知字段拒绝、请求体限制和Content-Type行为；tasks_test.go证明Task入口默认值、历史回放as_of约束、幂等与事件cursor Handler映射。
+- 现有测试未形成RunRequest/Task/StageEvent完整稳定JSON Golden；也未发现Handler输入输出与OpenAPI Schema双向校验。
+- Task nil时间字段的omitempty行为可从Go标签直接确定，但当前未发现专门断言queued/running/terminal三类状态下started_at/finished_at省略/出现规则的Golden。
+- 本切片没有找到覆盖旧Analysis taskqueue所用analysis_tasks、analysis_stage_events表的独立迁移文件；本结论仅说明固定基线文件树中未定位到对应DDL，不推断生产数据库中不存在表。DDL来源和cursor持久化约束属于CTR-008/Researchflow存储证据，不在本切片扩大审计。
+- 不以Fake Handler测试替代数据库持久化证据；不把Researchflow自身的新表迁移误认作旧Analysis taskqueue表DDL。
+
+### 9.5 唯一CTR归属与本切片结论
+
+| 差异 | 唯一归属 | 本轮增量结论 |
+|---|---|---|
+| Run创建/读取/Events路由与RunResult响应未进入OpenAPI | CTR-046；Root路由目录仍由SRV-CTR-001承接 | 已确认缺口；RunResult完整Schema未展开 |
+| AnalysisRequest字段缺失、required/default/TaskType约束不足 | CTR-047 | 字段级差异已确认；还需权威契约决议和Schema/测试实现 |
+| Task.started_at/finished_at nullable与omitempty不一致 | CTR-006 | Go nil省略已确认；需选定省略或null并三方对齐 |
+| TaskEvent.event未展开StageEvent结构 | CTR-007 | 字段、状态枚举、时间、可选属性类型已核实；Schema/Golden仍缺 |
+| Task Events cursor持久化/DDL约束 | CTR-008 | 本切片不重做；仅记录旧Analysis DDL未定位，按原关闭条件补证 |
+
+本切片状态：complete_with_open_items。字段事实已核实并回写唯一登记；没有CTR关闭，因为尚无权威Schema/Golden、运行时校验或责任方裁决证据。Server维度2整体仍为in_progress / partial。
