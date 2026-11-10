@@ -768,3 +768,52 @@ CTR-042 不是已证实的数值换算错误：当前代码没有把 Hithink 原
 - 当前 WebUI 不消费这些扩展字段，Hithink 默认 disabled；无证据表明当前默认页面发生错误金额展示。
 - 需要裁决的是未知单位值的公共消费边界，而不是要求在缺少来源证据时补出单位。
 - 本批未修改业务代码、OpenAPI、DTO 或测试，未执行 CI；WebUI 维度 2 第一轮完整性 Review 继续进行。
+
+## 25. Stock Search：CTR-045 冻结影响 Review
+
+本批只复核既有 CTR-045 的公共契约边界、实现责任和冻结影响，不重新扫描 DTO，也不新增差异编号。固定代码审计基线仍为 `origin/integration @ b6dfc85ba214fe16268c8cba780641a8bfe15086`。
+
+### 25.1 Provider 与 Service 的质量语义
+
+- Tencent Smartbox 的搜索接口没有提供可核验的匹配总数。Provider 对非空候选返回 `quality_status=degraded`，原因 `provider_search_total_not_reported`；返回的 `total` 是本次 Provider 可报告/保留的匹配候选数，不代表全量目录命中总数。
+- Tencent 无匹配 A 股候选时返回错误，Service 因此继续尝试后备 Provider。
+- Service 对 `unknown` 空结果和 `unknown` 非空结果均继续尝试后备源；后备源耗尽后，分别以 `stock_search_fallback_exhausted_without_confirmed_match` 和 `stock_search_fallback_exhausted_with_unconfirmed_quality` 保留明确状态。
+- Service 对 `stale` 非空候选继续尝试后备源；全部后备源耗尽后才返回 stale 候选，并附加 `stock_search_fallback_exhausted_using_stale_directory`。
+- Service 对 `valid` 或 `degraded` 的非 stale 结果直接返回；因此 degraded 非空候选可以作为候选呈现，但不能被描述为完整目录覆盖。degraded 空结果也不能仅凭 `items=[]` 推导为确定不存在，必须结合状态和质量原因判断。
+- Stock Search Service 校验接受 `valid`、`degraded`、`stale`、`unknown` 四种状态；`invalid` 不在该用例的 Provider 快照允许集合内。
+
+### 25.2 HTTP/OpenAPI 契约边界
+
+- HTTP Handler 对成功结果直接序列化完整 `StockSearchSnapshot`，不会把 unknown 空结果改成 404 或转换成确定无匹配；搜索失败与搜索结果是不同响应路径。
+- OpenAPI 的 StockSearchSnapshot 将 `quality_status` 列为 required，`quality_reasons` 为可选数组；`total` 明确表示所选 Provider 报告/保留的匹配候选数，而不是全市场证券总数。
+- `GET /api/v1/stocks/search` 的描述要求调用方按 `quality_status` 和 `quality_reasons` 处理未知或降级质量。这证明公共契约已要求消费者处理质量状态，但尚未定义空结果在不同质量状态下的具体语义，也没有给出各状态对“可否宣告无匹配”的明确约束。
+- 因此，公共契约存在可进一步明确的消费语义，但目前没有证据表明 Provider/Service 将 unknown 空结果错误转换成确定无匹配；这个错误发生在 WebUI 展示层。
+
+### 25.3 WebUI 实际消费行为与测试覆盖
+
+- `web/src/app.js:loadStockSearch` 在读取响应后，先判断 `items` 是否为空；只要为空就显示“没有匹配的股票，请检查名称或代码”，没有检查 `quality_status` 或 `quality_reasons`。
+- 对非空候选，当前只把 `quality_status === stale` 传给结果渲染；`degraded`、`unknown` 和质量原因均未进入状态提示。unknown 非空候选因此也会显示普通的“找到 N 条匹配结果”。
+- `web/src/stock-search-view.js` 只负责候选安全渲染和 ARIA 选择状态，不负责质量判断；其单元测试覆盖规范化、文本安全渲染和键盘可访问性，不覆盖 `app.js` 的响应质量分支。
+- `web/tests/api.test.mjs` 已覆盖搜索请求的中文编码、API Key、AbortSignal 和响应读取，但未验证不同质量状态/原因在调用层被完整保留并正确消费。
+- Provider 测试验证 Tencent 非空结果为 degraded；Service 测试覆盖 unknown 空/非空结果的后备与耗尽语义；HTTP Handler 测试覆盖鉴权、成功响应和参数校验，但未专门验证 unknown/degraded 空结果的响应语义。当前没有覆盖搜索质量状态端到端展示的 DOM 回归测试。
+
+### 25.4 冻结前应明确的消费者规则
+
+建议将以下规则作为 CTR-045 的契约裁决候选；目前尚未批准，不视为已冻结规则：
+
+1. 只有 `quality_status=valid` 且 `items=[]` 时，WebUI 才能显示确定的“没有匹配的股票”。
+2. `unknown` 且 `items=[]` 必须显示“暂时无法确认是否存在匹配证券”，并展示或解释 `quality_reasons`；不得显示确定无匹配。
+3. `degraded` 且 `items=[]` 不得默认解释为确定无匹配；应根据质量原因说明覆盖/证据不足，无法证明完整性时提示“结果不完整，暂不能确认无匹配”。
+4. 非空候选仍可供用户选择，但必须区分 valid、degraded、stale、unknown：degraded 标示结果可能不完整；stale 标示缓存目录时效；unknown 标示目录质量未确认。unknown 非空候选不得使用“已确认匹配”一类措辞。
+5. 对有结果和无结果的所有质量状态，均应消费 `quality_reasons`，以便提示可解释且可诊断；未知原因码应安全显示通用质量提示，不得导致页面渲染失败。
+6. Provider 的 `total` 不得被 WebUI解释为全市场或完整匹配总量；当前 UI 仅展示候选条目数时，不应由条目数推导目录覆盖完整。
+
+### 25.5 冻结影响与结论
+
+- **CTR-045 保留 P2，证据成立。** 主要责任是 WebUI 对 Stock Search 质量状态消费不完整；公共契约的空结果/质量状态语义也需要进一步明确，但不需要新增独立 CTR。
+- 固定基线中 Service 已保留 unknown 状态与耗尽原因，HTTP Handler 也直接返回质量元数据；没有证据支持通过改变 Service 将 unknown 空结果转换为错误响应来解决 UI 误导。
+- 冻结前必须明确“确定无匹配”的判定条件，且 WebUI 必须遵守该条件。建议 valid + empty 才能作为确定无匹配；其他质量状态按质量原因呈现不确定性。
+- 关闭 CTR-045 的实现证据至少包括：`loadStockSearch` 对 valid/degraded/stale/unknown × 空/非空结果的分支处理；质量原因展示/安全降级；浏览器 DOM 回归覆盖 unknown 空结果不会显示为确定无匹配、degraded/stale/unknown 非空候选有不同提示、valid 空结果仍显示无匹配。
+- API Client 可增加响应元数据保留测试，但不能以 API Client 单测替代 app.js 集成 DOM 测试。
+- 本批不修改业务代码、OpenAPI 或测试，不执行 CI；不改变固定审计基线。WebUI 维度 2 第一轮完整性 Review 仍未完成。
+
