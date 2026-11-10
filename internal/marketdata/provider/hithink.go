@@ -2394,10 +2394,16 @@ func (p *Hithink) fetchDailySegment(ctx context.Context, symbol string, start, e
 			}
 			tradeDate := time.UnixMilli(dateMS).In(loc).Format("2006-01-02")
 			if tradeDate < start.Format("2006-01-02") || tradeDate > end.Format("2006-01-02") {
+				addProviderParseIssue(ctx, absoluteRowIndex, "trade_date", "date_ms", "date_out_of_requested_range",
+					start.Format("2006-01-02")+".."+end.Format("2006-01-02"), "timestamp", tradeDate,
+					"同花顺日 K 日期超出当前分页请求区间")
 				return nil, fmt.Errorf("同花顺日 K 日期 %s 超出请求区间", tradeDate)
 			}
 			if first, duplicate := seen[tradeDate]; duplicate {
 				// 保留重复项并拒绝整次结果；页级边界用于区分 offset 未生效与上游分页窗口重叠。
+				addProviderParseIssue(ctx, absoluteRowIndex, "trade_date", "date_ms", "duplicate_trade_date",
+					"unique trade date across all pages", "timestamp", tradeDate,
+					"同花顺分页响应包含重复交易日")
 				return nil, fmt.Errorf("同花顺分页返回重复交易日 %s (first_page=%d first_offset=%d first_row=%d first_page_item_count=%d first_page_first_date=%s first_page_last_date=%s duplicate_page=%d duplicate_offset=%d duplicate_row=%d duplicate_page_item_count=%d duplicate_page_first_date=%s duplicate_page_last_date=%s)",
 					tradeDate, first.page, first.offset, first.row, first.pageItemCount, first.pageFirstDate, first.pageLastDate,
 					page+1, offset, rowIndex, len(data.Item), pageFirstDate, pageLastDate)
@@ -2408,6 +2414,10 @@ func (p *Hithink) fetchDailySegment(ctx context.Context, symbol string, start, e
 			}
 			if !hithinkPositiveFinite(open) || !hithinkPositiveFinite(high) || !hithinkPositiveFinite(low) || !hithinkPositiveFinite(closePrice) ||
 				low > high || open < low || open > high || closePrice < low || closePrice > high {
+				addProviderParseIssue(ctx, absoluteRowIndex, "ohlc", "open_price/high_price/low_price/close_price", "invariant_violation",
+					"positive finite prices and low <= open/close <= high", "number",
+					fmt.Sprintf("open=%g high=%g low=%g close=%g", open, high, low, closePrice),
+					"同花顺日 K OHLC 价格关系不满足约束")
 				return nil, fmt.Errorf("同花顺日 K %s 的 OHLC 不满足数据约束", tradeDate)
 			}
 			var volume *int64

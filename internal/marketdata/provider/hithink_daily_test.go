@@ -71,12 +71,25 @@ func TestHithinkDailyPaginationDuplicateReportsPageOffsetAndRow(t *testing.T) {
 	defer server.Close()
 
 	provider := NewHithinkConfigured(time.Second, server.URL, "test-key")
-	_, err := provider.FetchDailyBars(context.Background(), "600036.SH", "2026-10-07", "2026-10-09", 10, model.AdjustmentNone)
+	reporter := validation.NewReporter(20)
+	ctx := validation.WithReporter(context.Background(), reporter)
+	_, err := provider.FetchDailyBars(ctx, "600036.SH", "2026-10-07", "2026-10-09", 10, model.AdjustmentNone)
 	if err == nil || !strings.Contains(err.Error(), "first_page=1 first_offset=0 first_row=1 first_page_item_count=2 first_page_first_date=2026-10-07 first_page_last_date=2026-10-08 duplicate_page=2 duplicate_offset=2 duplicate_row=0 duplicate_page_item_count=2 duplicate_page_first_date=2026-10-08 duplicate_page_last_date=2026-10-09") || !strings.Contains(err.Error(), "2026-10-08") {
 		t.Fatalf("expected page/offset/row duplicate diagnostic, got %v", err)
 	}
 	if len(offsets) != 2 || offsets[0] != "0" || offsets[1] != "2" {
 		t.Fatalf("unexpected pagination offsets: %v", offsets)
+	}
+	found := false
+	for _, issue := range reporter.Snapshot().Issues {
+		if issue.Stage == validation.StageParse && issue.Field == "trade_date" &&
+			issue.ProviderField == "date_ms" && issue.Code == "duplicate_trade_date" &&
+			issue.RowIndex != nil && *issue.RowIndex == 2 {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("expected structured duplicate trade-date issue at absolute row 2, got %+v", reporter.Snapshot().Issues)
 	}
 }
 
