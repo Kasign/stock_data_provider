@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"reflect"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -1232,6 +1233,30 @@ func TestObservationRetentionPurgeIntegration(t *testing.T) {
 	}
 	if pitRecord.Observation.PayloadPurgedAt == nil || pitRecord.Observation.Candidate.Title != "" {
 		t.Fatalf("PIT query disclosed a purged candidate payload: %+v", pitRecord.Observation)
+	}
+
+	// 列表 PIT 查询必须与单条查询保持相同的 Tombstone 载荷屏蔽语义。
+	listed, err := repository.ListEvidenceVersionsAt(ctx, app.ListEvidenceRequest{
+		CallerRef:             "service:research",
+		PurposeCode:           app.EvidencePurposeResearchAnalysis,
+		RequestedContentLevel: app.EvidenceContentSummary,
+		SystemAsOf:            time.Now().UTC(),
+		Filters: &app.EvidenceQueryFilters{
+			NewsIDs:    []string{referenceNewsID},
+			SourceRefs: []string{"news-retention-integration"},
+		},
+		PageSize: 20,
+	})
+	if err != nil {
+		t.Fatalf("ListEvidence PIT query after observation payload purge: %v", err)
+	}
+	if len(listed) != 1 || listed[0].Version.ID != referenceVersionID ||
+		listed[0].Observation.ID != observations[0].ID {
+		t.Fatalf("ListEvidence PIT returned unexpected tombstone records: %+v", listed)
+	}
+	if listed[0].Observation.PayloadPurgedAt == nil ||
+		!reflect.DeepEqual(listed[0].Observation.Candidate, domain.Candidate{}) {
+		t.Fatalf("ListEvidence PIT disclosed a purged candidate payload: %+v", listed[0].Observation)
 	}
 	var retainedVersionRows int
 	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM news_item_versions WHERE version_id = ? AND observation_id = ?", referenceVersionID, observations[0].ID).Scan(&retainedVersionRows); err != nil {
