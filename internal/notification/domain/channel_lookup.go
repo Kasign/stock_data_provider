@@ -7,24 +7,24 @@ import (
 
 var (
 	ErrInvalidChannelLookupRequest = errors.New("notification: invalid channel lookup request")
-	ErrInvalidChannelLookupResult = errors.New("notification: invalid channel lookup result")
+	ErrInvalidChannelLookupResult  = errors.New("notification: invalid channel lookup result")
 )
 
 type ChannelLookupOutcome string
 
 const (
-	ChannelLookupAccepted ChannelLookupOutcome = "accepted"
+	ChannelLookupAccepted     ChannelLookupOutcome = "accepted"
 	ChannelLookupNotAccepted ChannelLookupOutcome = "not_accepted"
 	ChannelLookupIndeterminate ChannelLookupOutcome = "indeterminate"
 )
 
 // ChannelDeliveryLookupRequest 只携带精确投递身份和不透明查询键。
 type ChannelDeliveryLookupRequest struct {
-	ChannelRef string
-	ConfigVersion int64
-	DeliveryID string
-	AttemptID string
-	IdempotencyKey string
+	ChannelRef         string
+	ConfigVersion      int64
+	DeliveryID         string
+	AttemptID          string
+	IdempotencyKey     string
 	ProviderMessageRef string
 }
 
@@ -34,10 +34,8 @@ func (r ChannelDeliveryLookupRequest) Validate(capabilities ChannelCapabilities)
 		!validOpaqueRef(r.DeliveryID) || !validOpaqueRef(r.AttemptID) {
 		return ErrInvalidChannelLookupRequest
 	}
-	if r.IdempotencyKey != "" && capabilities.SupportsIdempotency != CapabilitySupported {
-		return ErrInvalidChannelLookupRequest
-	}
-	if r.IdempotencyKey != "" && !validOpaqueRef(r.IdempotencyKey) {
+	if r.IdempotencyKey != "" &&
+		(capabilities.SupportsIdempotency != CapabilitySupported || !validOpaqueRef(r.IdempotencyKey)) {
 		return ErrInvalidChannelLookupRequest
 	}
 	if r.ProviderMessageRef != "" && !validOpaqueRef(r.ProviderMessageRef) {
@@ -49,15 +47,15 @@ func (r ChannelDeliveryLookupRequest) Validate(capabilities ChannelCapabilities)
 // ChannelDeliveryLookupResult 的身份字段必须与请求完全一致。
 // evidence_ref 仅用于审计定位，不单独构成权威性证明。
 type ChannelDeliveryLookupResult struct {
-	ChannelRef string
-	ConfigVersion int64
-	DeliveryID string
-	AttemptID string
-	Outcome ChannelLookupOutcome
-	EvidenceRef string
-	ObservedAt time.Time
+	ChannelRef         string
+	ConfigVersion      int64
+	DeliveryID         string
+	AttemptID          string
+	Outcome            ChannelLookupOutcome
+	EvidenceRef        string
+	ObservedAt         time.Time
 	ProviderMessageRef string
-	ErrorCode string
+	ErrorCode          string
 }
 
 func (r ChannelDeliveryLookupResult) Validate(request ChannelDeliveryLookupRequest) error {
