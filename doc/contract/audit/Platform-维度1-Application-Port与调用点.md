@@ -475,3 +475,111 @@ Notification 模块内 Application Port、Inbox 幂等、Fanout 事务注入、D
 Quant 的纯计算与结果契约边界基本符合其模块设计；Risk 执行骨架有 fail-closed 实现证据。Quant 当前不是已装配的生产 Application 模块，尚无 Platform Fault/Diagnostics Adapter、生产 Storage/Migration、Server 组合根或 Worker 接入证据。AuthorizationRef 只作为引用文本，不证明授权已签发/验证。
 
 **Quant 维度 1 状态：partial；domain/contract implementation evidenced / production application wiring not yet implemented by current stage. Platform 维度 1 总状态仍为 partial。**
+
+
+## 12. 第七批：LLM 模块消费者核验（初审）
+
+### 12.1 LLM Domain/Adapter 与 Platform HTTP Port
+
+固定基线证据：
+
+- `internal/llm/llm.go`（blob `cb7e0bb9a8b79a31d0d3a9bd213d03423354c87a`）
+- `internal/llm/responses_adapter.go`（blob `dc398278474dcdc63efd2c6e695c344bb176fc2e`）
+- `internal/llm/responses_stream.go`（blob `6923f9d0a00ed31f82def9c970ef493e3855e1ff`）
+- `internal/server/llmtransport/transport.go`（blob `c5e1cffcd2724f50e806f549e805e1188757ce9a`）
+- `internal/server/resources/storage.go`（blob `beebb1858f93dcc03e6a71b9706f406c5fde0481`）
+
+已确认：
+
+1. `internal/llm` 定义窄 `HTTPDoer` 和 `HTTPStreamDoer` Port；ResponsesAdapter 不创建 HTTP Client，不持有可变 DestinationPolicy。
+2. `internal/server/llmtransport.Transport` 将 Root Server 共享 Platform Client 绑定为一个不可变 BoundDoer，同时适配普通 HTTP 和 SSE Stream；不拥有/关闭共享 Client。
+3. `validateProviderPolicy` 要求 Gateway HTTPS、单一精确 Host、端口精确匹配、禁止 Redirect、禁止 HTTP、禁止传输层自动重试；非标准端口必须显式 allowlist。
+4. `server/resources.Resources.BindHTTPDestination` 从 Server 所有的共享 Platform Client 创建 BoundDoer；资源关闭后拒绝新绑定。
+5. `llmtransport.NewResponsesAdapter` 将同一个 Transport 注入 JSON 与 SSE 路径，避免两个出口策略分叉。
+6. LLM Adapter 通过传入的 `context.Context` 建立带 Deadline 的 HTTP Request；Platform HTTP Client 在出站前调用 `observability.PropagateRequestID`，因此只有调用上下文中存在可信 Platform Request ID 时才会覆盖/传播出站 `X-Request-ID`。
+
+判断：LLM 的底层出站 Port 与 Server 侧 Platform BoundDoer Adapter 已实现，符合 Platform Client 由 Root Server 共享持有、模块使用受限绑定的方向。
+
+### 12.2 Secret、Provider 配置与能力证据
+
+固定基线证据：
+
+- `internal/platform/config/env.go`（blob `c1d5b0dfc7e11c5e0a4a22d2a8c1e4dca7d0a7bb`）
+- `internal/llm/llm.go`（同上）
+- `internal/llm/responses_adapter_test.go`（blob `6994bbbeb758fdbdba7feaa43e850b0247be6ae1`）
+- `internal/server/llmtransport/transport_test.go`（blob `526822771f5e1b558c2ddbe13b91466d830f05fb`）
+
+已确认：
+
+1. `ProviderConfig` 只保存 `APIKeySecretRef`，不保存凭据明文；配置校验要求 SecretRef 非空。
+2. ResponsesAdapter 构造时必须显式传入 `platform/config.Secret`；未配置 Secret 或未注入 Platform-bound Doer 时拒绝创建。
+3. Platform Secret 的 String/GoString/Format/LogValue/JSON/Text 序列化均脱敏；只有显式 `Value()` 可取明文，Adapter 仅在构造出站 Authorization Header 时读取。
+4. ProviderConfig 限制 HTTPS Gateway URL、固定 `/v1` 路径、拒绝 URL UserInfo/Query/Fragment；Provider/Model 需匹配 allowlist。
+5. CapabilityState 把 Provider、Model、Protocol、Gateway Version、验证时间、有效期、验证方法、EvidenceRef 和能力状态绑定；未知、过期、未来验证或超过 Provider TTL 的证据不能作为 supported；流式开关要求当前 SSE 能力证据。
+6. 单测覆盖缺失 Secret/Doer、凭据 Header 注入、错误信息脱敏、能力过期、模型 allowlist、Gateway Policy Host/Port/Redirect/HTTP/Retry 约束。
+
+边界：本批看到的是 Secret 引用字段与 Secret 值的独立注入契约；未发现生产配置解析/SecretRef 解析器把具体 ProviderConfig.APIKeySecretRef 绑定到对应 `platform/config.Secret` 的调用点。必须由 Server 组合根负责该绑定，不能仅凭构造器接受一个 Secret 就认定引用解析和 Secret 归属已完成。
+
+### 12.3 Platform Fault 映射与错误脱敏
+
+固定基线证据：
+
+- `internal/llm/platform_fault.go`（blob `cde2dcdbafa54d2211999cc8b1e94ca82830a885`）
+- `internal/llm/llm_test.go`（blob `8c325127b47f4ab271588e35541184530c829d6f`）
+- `internal/llm/responses_adapter_test.go`（blob `6994bbbeb758fdbdba7feaa43e850b0247be6ae1`）
+
+已确认：
+
+- `ModelErrorFromPlatformFault` 将 Platform Fault Class/Code 映射为 LLM 自有 ModelErrorInfo；Dependency/Cause 不进入公开 DTO。
+- 映射覆盖 validation、unauthenticated、forbidden、unavailable、timeout、not_found、conflict、internal；支持 response_too_large、context canceled/deadline 的特殊分类。
+- 非 Platform Fault 不被误映射；缺失 Code/SafeMessage 使用稳定安全回退值。
+- AdapterError 对外只输出 ModelErrorInfo.SafeMessage，内部 Cause 保留 errors.Is/errors.As 链。
+- 单测验证不泄露 Dependency、Cause 和 Secret。
+
+判断：LLM Adapter 的 Platform Fault 消费及错误脱敏已有实现和单测证据；尚未核对所有下游模块如何把 ModelErrorInfo 再映射为各自 Application Fault/Retry Policy。
+
+### 12.4 Request ID 与 Correlation ID 边界
+
+固定基线证据：
+
+- `internal/llm/llm.go`：ModelRequest 包含 RequestID、CorrelationID、PurposeCode、TraceID。
+- `internal/llm/responses_adapter.go` / `responses_stream.go`：结果保留 RequestID、CorrelationID；出站 HTTP Request 使用调用方 Context。
+- `internal/platform/observability/request_id.go`：Platform 只从可信 Context PropagateRequestID；无 ID 时删除调用方预设 Header。
+- `internal/platform/httpclient/client.go`：实际出站时调用 `observability.PropagateRequestID`。
+
+判断：
+
+1. LLM DTO 中 RequestID 与 CorrelationID 是独立字段，语义上未混为一谈。
+2. HTTP 出站 Request ID 来源是 Context，而不是 ModelRequest.RequestID 字段；Adapter 没有把 DTO 的 RequestID 自动写入可信 Context，也没有把 CorrelationID 写成出站 Request ID。
+3. 若上游 Application/Worker 已正确构造可信 Context，Platform HTTP Client 可传播 Request ID；但固定基线尚无 LLM 生产调用方，未证明 DTO RequestID、Context Request ID、CorrelationID 在调用入口处一致/关联。
+4. Gateway Request ID 与 Upstream Request ID 分别保存，测试证明两者未混淆。
+
+**AUD-PLAT-PORT-011：LLM DTO RequestID 与可信 Context Request ID 的入口映射待证（P2 候选）**
+
+当前出站传播原语正确，但 LLM ModelRequest.RequestID 只是 DTO 字段；真正出站 Header 依赖 Context。待 Server/调用模块 Application 装配时，必须明确 RequestID 的可信来源、Context 注入点以及 CorrelationID 的独立传播/持久化语义，补端到端测试。当前没有生产调用方，暂不定性为已发生 Request ID 丢失。
+
+### 12.5 Diagnostics 与 Server 生产装配
+
+固定基线证据：
+
+- `internal/server/bootstrap/bootstrap.go`（blob `92df61265f173251ac7811f99a7ab9f41ac470ed`）
+- `internal/server/diagnostics/service.go`（blob `190068e7fc170d6f81d8a79868086fa2870a65e7`）
+- `internal/server/bootstrap/bootstrap_test.go`（blob `7cc244a2d6e62b5a177d08efd3484195598b5cf4`）
+
+已确认：
+
+1. LLM 目录没有 Application/Diagnostics/Storage/Worker 子包；现有实现是 LLM Domain/Responses Adapter 和 Server 侧 Transport Adapter。
+2. Server Bootstrap 未 import `internal/llm` 或 `internal/server/llmtransport`；没有构造 ProviderConfig、解析 SecretRef、装载 CapabilityState、创建 LLM Adapter 的生产调用点。
+3. Server 没有把 LLM Gateway 健康/能力证据 Check 注入 Diagnostics；当前 Diagnostics 只组合共享 Storage/Migration 检查。
+4. Server HTTP Router 当前只暴露旧 Analysis、Health/Readiness/Diagnostics 路由，没有 LLM 对外路由；本批没有发现 LLM 对外独立 API 的需求或契约，不能据此要求新增公开路由。
+5. LLM 当前是被调用的模型能力 Adapter；没有证据要求它自己拥有 Worker 或后台 Lifecycle。其关键生命周期应由未来 Application/调用方和 Root Server 管理共享 Platform Client。
+
+**AUD-PLAT-PORT-010：LLM Gateway Adapter 尚未进入生产组合根（P1 候选）**
+
+证据边界：LLM Responses Adapter、Server llmtransport、Platform Secret 和 BoundDoer 能力均已实现并有测试；但固定基线 Server Bootstrap 没有构造/调用 llmtransport，没有 Provider 配置与 SecretRef 解析装配，没有 CapabilityState 加载/刷新入口，也没有领域 Diagnostics Check 注入。此项属于生产接入缺口，不能把 Adapter 单测或 Transport 工厂测试当成真实 Gateway 端到端生产调用证据。责任方需明确 ProviderConfig/SecretRef/CapabilityState 的来源与刷新、调用方 Application Port、Gateway Check 的依赖/状态/证据语义，并补 Server 组合根测试和受控真实 Gateway 验收。
+
+### 12.6 本批结论
+
+LLM 的底层 JSON/SSE Adapter、Platform BoundDoer 接口、Secret 脱敏、Provider/Model allowlist、版本化能力证据和 Platform Fault 映射均有实现及单测证据；Server 侧 Transport Adapter 也已实现。固定基线没有 LLM Application/生产 Provider 配置装配、SecretRef 解析、CapabilityState 加载/刷新、Diagnostics 注入或生产调用方。RequestID DTO 到可信 Context 的入口映射待证。
+
+**LLM 维度 1 状态：partial；adapter/transport implementation evidenced / production composition wiring not evidenced。Platform 维度 1 总状态仍为 partial。**
