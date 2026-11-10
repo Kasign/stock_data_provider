@@ -281,7 +281,13 @@ func TestNotificationMariaDBRecoveryRetryReclaimsWithNewFencingTokenIntegration(
 	if err := attempts.StartWithLease(ctx, oldClaim.Delivery.Version, oldClaim.Lease.FencingToken, oldAttempt); err != nil {
 		t.Fatalf("start old attempt: %v", err)
 	}
-	finishedAt := time.Now().UTC().Add(100 * time.Millisecond).Truncate(time.Microsecond)
+	if err := db.QueryRowContext(ctx, "SELECT CAST(UTC_TIMESTAMP(6) AS CHAR)").Scan(&clock); err != nil {
+		t.Fatal(err)
+	}
+	finishedAt, err := parseDatabaseTime(clock)
+	if err != nil {
+		t.Fatal(err)
+	}
 	oldCompleted, err := oldAttempt.Complete(finishedAt, domain.DeliveryAttemptRejected, "", "temporary_provider_error", true, "")
 	if err != nil {
 		t.Fatal(err)
@@ -302,8 +308,12 @@ func TestNotificationMariaDBRecoveryRetryReclaimsWithNewFencingTokenIntegration(
 		time.Sleep(wait)
 	}
 	recoveryNow := time.Now().UTC().Truncate(time.Microsecond)
+	recoverySnapshot, found, err := deliveries.Get(ctx, delivery.DeliveryID)
+	if err != nil || !found || recoverySnapshot.AttemptCount != 1 {
+		t.Fatalf("load current Delivery projection before recovery: found=%v delivery=%+v err=%v", found, recoverySnapshot, err)
+	}
 	retryAt := recoveryNow.Add(time.Microsecond)
-	next, event, err := oldClaim.Delivery.Transition(domain.DeliveryTransition{
+	next, event, err := recoverySnapshot.Transition(domain.DeliveryTransition{
 		To: domain.DeliveryRetryWait, At: recoveryNow, NextAttemptAt: &retryAt,
 		ReasonCode: "retryable_rejection_recovered", ErrorCode: "temporary_provider_error",
 		EvidenceRef: oldAttempt.AttemptID,
