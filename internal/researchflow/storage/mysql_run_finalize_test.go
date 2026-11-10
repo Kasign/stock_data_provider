@@ -325,3 +325,132 @@ func TestMariaDBFinalizeCancellationRunAtomicallyPersistsSummaryAndOutbox(t *tes
 		t.Fatalf("summary count=%d outbox count=%d, want one each", summaryCount, outboxCount)
 	}
 }
+
+
+// TestMariaDBFinalizeRunRollsBackWhenOutboxInsertFails verifies that a
+// failure after the ResultSummary insert cannot leave a partial terminal Run.
+func TestMariaDBFinalizeRunRollsBackWhenOutboxInsertFails(t *testing.T) {
+	if os.Getenv("PLATFORM_STORAGE_INTEGRATION") != "1" {
+		t.Skip("set PLATFORM_STORAGE_INTEGRATION=1 to run Researchflow MariaDB integration tests")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+	defer cancel()
+	dsn := fmt.Sprintf("%s:%s@tcp(%s)/%s?parseTime=true",
+		os.Getenv("PLATFORM_MARIADB_USER"),
+		os.Getenv("PLATFORM_MARIADB_PASSWORD"),
+		os.Getenv("PLATFORM_MARIADB_ADDR"),
+		os.Getenv("PLATFORM_MARIADB_DATABASE"),
+	)
+	config, err := mysql.ParseDSN(dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	connector, err := mysql.NewConnector(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	db, err := platformstorage.OpenSQL(ctx, connector, platformstorage.DefaultSQLConfig())
+	if err != nil {
+		t.Fatalf("open MariaDB: %v", err)
+	}
+	defer db.Close()
+	if err := platformstorage.ApplyMigrations(ctx, db, MigrationNamespace, Migrations()); err != nil {
+		t.Fatalf("apply Researchflow migrations: %v", err)
+	}
+	repository, err := NewMySQLRunRepository(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	suffix := fmt.Sprintf("%d", time.Now().UnixNano())
+	runRef := "rollback-finalize-run-" + suffix
+	stageRef := "rollback-finalize-stage-" + suffix
+	now := time.Now().UTC()
+	fingerprint := "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	templateFingerprint := "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+	record := application.CreateRunRecord{
+		Scope: application.IdempotencyScope{
+			CallerRef: "researchflow-finalize-rollback-test", Operation: "CreateRun", Key: "rollback-" + suffix,
+		},
+		Fingerprint: fingerprint,
+		Run: domain.Run{
+			Ref: runRef, SchemaVersion: "run-v1", Status: domain.RunCreated, Version: 1,
+			SystemAsOf: now.Add(-time.Minute), DeadlineAt: now.Add(5 * time.Minute),
+			TemplateRef: "rollback-template", TemplateVersion: "v1",
+			TemplateFingerprint: templateFingerprint, InputSnapshotRefs: []string{},
+			CorrelationID: "rollback-correlation-" + suffix,
+		},
+		Stages: []domain.Stage{{
+			Ref: stageRef, RunRef: runRef, Code: "context", Status: domain.StagePending,
+			Version: 1, Required: true, Dependencies: []string{}, RetryPolicyRef: "retry-v1",
+			DiagnosticRefs: []string{}, ReasonCodes: []string{},
+		}},
+		ResolvedTemplate: template.ResolvedTemplate{
+			Ref: "rollback-template", Version: "v1", Fingerprint: templateFingerprint,
+			Stages: []template.ResolvedStage{{Definition: template.StageDefinition{Code: "context"}}},
+		},
+		Parameters: json.RawMessage(`{}`),
+	}
+	if _, err := repository.CreateRunAtomic(ctx, record); err != nil {
+		t.Fatalf("CreateRunAtomic: %v", err)
+	}
+	startedAt := formatResearchflowTimeValue(now)
+	finishedAt := formatResearchflowTimeValue(now.Add(time.Second))
+	if _, err := db.ExecContext(ctx, `UPDATE researchflow_runs
+		SET status = ?, version = version + 1, started_at = ? WHERE run_ref = ?`,
+		string(domain.RunRunning), startedAt, runRef); err != nil {
+		t.Fatalf("start fixture Run: %v", err)
+	}
+	if _, err := db.ExecContext(ctx, `UPDATE researchflow_stages
+		SET status = ?, version = version + 1, started_at = ?, finished_at = ?
+		WHERE stage_ref = ?`,
+		string(domain.StageSucceeded), startedAt, finishedAt, stageRef); err != nil {
+		t.Fatalf("finish fixture Stage: %v", err)
+	}
+
+	triggerName := "researchflow_fail_outbox_" + suffix
+	if _, err := db.ExecContext(ctx, `CREATE TRIGGER `+triggerName+` BEFORE INSERT ON researchflow_outbox
+		FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'forced Researchflow Outbox insert failure'`); err != nil {
+		t.Fatalf("create Outbox failure trigger: %v", err)
+	}
+	defer func() {
+		_, _ = db.ExecContext(context.Background(), "DROP TRIGGER IF EXISTS "+triggerName)
+	}()
+
+	input := RunFinalization{
+		RunRef: runRef, ExpectedVersion: 2,
+		ResultSummaryRef: "rollback-summary-" + suffix, SummarySchemaVersion: "summary-v1",
+		OutboxRef: "rollback-outbox-" + suffix, TerminalStatus: domain.RunSucceeded,
+		Summary: domain.ResultSummary{
+			StageOutcomes: map[string]domain.StageStatus{"context": domain.StageSucceeded},
+			ExcludedStages: []domain.ExcludedStage{}, MissingStageCodes: []string{},
+			DegradedStageCodes: []string{}, BlockedStageCodes: []string{},
+			ReasonCodes: []string{}, Coverage: 1, QualityStatus: "valid",
+			RiskGateDecisions: map[string]string{}, ActionabilityStatus: "not_evaluated",
+		},
+	}
+	if updated, err := repository.FinalizeRun(ctx, input); err == nil || updated {
+		t.Fatalf("FinalizeRun updated=%v err=%v, want failed transaction", updated, err)
+	}
+
+	var status string
+	var version uint64
+	var summaryRef sql.NullString
+	if err := db.QueryRowContext(ctx, `SELECT status, version, result_summary_ref
+		FROM researchflow_runs WHERE run_ref = ?`, runRef).Scan(&status, &version, &summaryRef); err != nil {
+		t.Fatalf("read Run after rollback: %v", err)
+	}
+	if domain.RunStatus(status) != domain.RunRunning || version != 2 || summaryRef.Valid {
+		t.Fatalf("Run changed despite Outbox failure: status=%s version=%d summary_ref=%v", status, version, summaryRef)
+	}
+	var summaryCount, outboxCount int
+	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM researchflow_result_summaries WHERE run_ref = ?", runRef).Scan(&summaryCount); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM researchflow_outbox WHERE run_ref = ?", runRef).Scan(&outboxCount); err != nil {
+		t.Fatal(err)
+	}
+	if summaryCount != 0 || outboxCount != 0 {
+		t.Fatalf("partial finalization persisted: summaries=%d outbox=%d, want 0/0", summaryCount, outboxCount)
+	}
+}
