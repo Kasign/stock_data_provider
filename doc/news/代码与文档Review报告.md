@@ -349,5 +349,5 @@
 - Review 发现 Observation Retention 集成测试此前只验证单条 GetEvidenceVersionAt 在清理后不返回 Candidate；ListEvidenceVersionsAt 的清理后载荷屏蔽缺少真实 MariaDB 断言。
 - 在 TestObservationRetentionPurgeIntegration 中增加列表 PIT 查询：要求保留合法 News Item Version 引用，同时返回空 Candidate 和非空 PayloadPurgedAt。
 - 查询时点使用清理后的当前 UTC 时间，遵守 system_as_of <= now 校验。
-- 代码提交：3f2b4aaf0fee03006e8e23db179fec44333872db。该 SHA 的 News 全量 CI 与 MariaDB 11.4 集成尚未取得结果；当前只记录代码与测试断言已添加，不标记通过。
+- 代码提交：0452bbbfc42b56661403bd49273c6e9d7046a6ea。News 全量 CI Run 42768996986 success；MariaDB 11.4.13 集成 Run 42768996723 success。新增 ListEvidence Tombstone 断言已在真实数据库执行通过。
 - 该测试只覆盖 Observation Tombstone 的列表读取语义，不解决授权预检与内容读取之间的 TOCTOU，也不改变 available_at 证据准入规则。

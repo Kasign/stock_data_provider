@@ -1,7 +1,7 @@
 # 新闻模块开发任务与验收清单
 
 > 当前阶段（2026-11-10 最新核验）：N6 V1-V8 Migration、Repository、Observation retention 与 V7→V8 既有数据升级已通过 MariaDB 11.4 专项 CI（Run `42765765269`，基线 SHA `09e76e35`）；News 全量 gofmt/单测/Race/Vet 与 Provider 契约测试通过（Run `42765765274`）。根模块 `Test go-core` 通过，但根模块 `Test .` 因 Market Data、Notification、Quant 文件 gofmt 差异失败。NEWS-CTR-001 严格 available_at PIT、授权读取 TOCTOU、Server 生产装配、Runner 注册和在线采集仍未闭环。
-> 当前代码任务：N8-04 补充 ListEvidence 对已清理 Observation Tombstone 的 MariaDB 读取断言，代码提交 `3f2b4aaf`；该 SHA 的 CI 尚待重新触发/取得结果，不提前标记通过。
+> 当前代码任务：N8-04 补充 ListEvidence 对已清理 Observation Tombstone 的 MariaDB 读取断言，代码提交 `0452bbbfc42b56661403bd49273c6e9d7046a6ea`；News 全量 CI Run `42768996986` success，MariaDB 11.4 Job Run `42768996723` success。
 > 历史记录说明：本文按日期累积的早期实施段落保留为过程记录；历史状态不代表当前状态。当前状态以本段、开发任务总览和最新 Review 报告为准。
 > 状态：本分支只维护 News 领域实现和专项文档；公共平台原语来自已合并基线，根组合根由 Server/集成 Owner 负责
 
