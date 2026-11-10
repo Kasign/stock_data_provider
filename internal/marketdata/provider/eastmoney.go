@@ -1475,18 +1475,26 @@ func (p *Eastmoney) FetchDailyBars(ctx context.Context, rawSymbol, startDate, en
 		return nil, err
 	}
 	if payload.RC != nil && *payload.RC != 0 {
+		addEastmoneyDailyBarParseIssue(ctx, -1, symbol, "", "provider_status", "rc", "provider_error", "rc=0", "number", strconv.Itoa(*payload.RC), validation.SeverityError, "Eastmoney daily-bars provider returned a non-zero result code")
 		return nil, fmt.Errorf("Eastmoney daily-bars provider error rc=%d", *payload.RC)
 	}
 	if payload.Data == nil {
+		addEastmoneyDailyBarParseIssue(ctx, -1, symbol, "", "daily_bars", "data", "empty_result", "non-null data object", "missing", "", validation.SeverityError, "Eastmoney daily-bars response has no data object")
 		return nil, errors.New("eastmoney returned empty daily bars")
 	}
 	reported := strings.TrimSpace(payload.Data.Code)
 	reportedSymbolMissing := reported == ""
-	if !reportedSymbolMissing {
+	if reportedSymbolMissing {
+		addEastmoneyDailyBarParseIssue(ctx, -1, symbol, "", "symbol", "code", "missing_requested_identity", "requested symbol echoed by provider", "missing", "", validation.SeverityWarning, "Eastmoney daily-bars response does not echo the requested security identity")
+	} else {
 		reportedSymbol, normalizeErr := normalize.NormalizeSymbol(reported)
 		if normalizeErr != nil || reportedSymbol != symbol {
+			addEastmoneyDailyBarParseIssue(ctx, -1, symbol, "", "symbol", "code", "symbol_mismatch", symbol, "string", reported, validation.SeverityError, "Eastmoney daily-bars response security identity does not match the request")
 			return nil, fmt.Errorf("Eastmoney daily-bars symbol mismatch: requested %s got %q", symbol, reported)
 		}
+	}
+	if len(payload.Data.KLines) == 0 {
+		addEastmoneyDailyBarParseIssue(ctx, -1, symbol, "", "daily_bars", "klines", "empty_result", "at least one daily-bar row", "array", "0 rows", validation.SeverityWarning, "Eastmoney daily-bars response contains no rows")
 	}
 	out := make([]model.DailyBar, 0, len(payload.Data.KLines))
 	rejectedRows := 0
