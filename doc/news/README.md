@@ -1021,3 +1021,10 @@
 ### 最新授权快照一致性修复（2026-11-10）
 
 最新授权排序选择与载荷读取现已合并为单条 SQL 语句，统一校验 payload/hash/数据库信封；并增加“旧 allow + 最新 deny”集成断言。该修改尚待 CI 与 MariaDB 11.4 实际运行。它不代表 Evidence 内容读取与当前授权策略复核的 TOCTOU 已解决。
+
+
+### 2026-11-10 Evidence 读取边界测试补充
+
+- GetEvidence 新增当前授权器返回后 Context 取消的回归用例，确保取消后不返回内容 DTO。
+- 新增 RetentionUntil 与当前时间相等的边界用例，明确到期边界为 `now >= retention_until`；到期只抑制 Candidate 采集元数据。
+- 对应提交：`cc423098087b39e45716430b84a232e343914045`；CI Run `42742190179` 待完成。

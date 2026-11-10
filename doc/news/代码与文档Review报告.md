@@ -131,3 +131,11 @@
 - 新增 `TestAuthorizationSnapshotEnvelopeMatchesEveryIndexedField`，逐项覆盖 authorization_ref、subject_ref、resource_ref、decision、purpose_code、content_level、decided_at、expires_at、decision_fingerprint 的不匹配拒绝行为。
 - 同时验证 DATETIME(6) 精度下亚微秒差异的归一语义。
 - Provider Catalog 错误分类测试与授权信封测试的 gofmt 对齐已修复；最新提交 `91291c0b00e1d925a596f61ff33ec1d98c76e63b` 的 CI 仍在运行。
+
+
+## 九、Evidence Application 边界测试补充（2026-11-10）
+
+- 提交：`cc423098087b39e45716430b84a232e343914045`。
+- `TestGetEvidenceStopsAfterContextCancellationAtDependencyBoundaries` 新增“当前授权复核返回后 Context 已取消”场景，要求 Execute 返回 context.Canceled，不能继续构造/返回 Evidence DTO。
+- 新增 `TestGetEvidenceSuppressesCandidateAtExactRetentionDeadline`，验证 `RetentionUntil == now` 时按 `now >= retention_until` 抑制 Candidate 采集元数据，同时保留独立授权的版本摘要读取行为。
+- 以上为 Application 单测覆盖；未实际运行测试前不标记通过，也不替代 MariaDB 集成验收。
