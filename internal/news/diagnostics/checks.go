@@ -309,3 +309,69 @@ func StorageChecks(probe StorageProbe) []platformdiag.Check {
 		},
 	}
 }
+
+// ProviderOutputPolicyResolverCheck reports whether the trusted policy binding can
+// be resolved for one Provider. It deliberately does not authorize a concrete
+// persistence request; IngestProviderCandidate must evaluate that request again.
+func ProviderOutputPolicyResolverCheck(resolver app.ProviderOutputPolicyResolver, providerCode string) platformdiag.Check {
+	providerCode = strings.TrimSpace(providerCode)
+	sum := sha256.Sum256([]byte(providerCode))
+	checkID := "news.provider.output_policy_resolver." + hex.EncodeToString(sum[:12])
+	return platformdiag.Check{
+		ID: checkID, Name: "News Provider output policy resolver readiness",
+		Required: true, Timeout: 3 * time.Second,
+		Run: func(ctx context.Context) (platformdiag.Observation, error) {
+			if err := ctx.Err(); err != nil {
+				return platformdiag.Observation{}, err
+			}
+			if resolver == nil || providerCode == "" {
+				return platformdiag.Observation{
+					Status: platformdiag.StatusDegraded,
+					ReasonCode: "news.provider.output_policy_resolver_unavailable",
+					SafeMessage: "Trusted Provider output policy resolver is unavailable; Provider persistence remains blocked",
+					CheckedAt: time.Now().UTC(),
+					Attributes: map[string]string{
+						"policy_resolver": "unavailable", "provider_persistence": "blocked",
+					},
+				}, nil
+			}
+			binding, err := resolver.ResolveProviderOutputPolicy(ctx, providerCode)
+			if ctxErr := ctx.Err(); ctxErr != nil {
+				return platformdiag.Observation{}, ctxErr
+			}
+			if err != nil {
+				return platformdiag.Observation{
+					Status: platformdiag.StatusUnavailable,
+					ReasonCode: "news.provider.output_policy_lookup_failed",
+					SafeMessage: "Trusted Provider output policy lookup failed; Provider persistence remains blocked",
+					CheckedAt: time.Now().UTC(),
+					Attributes: map[string]string{
+						"policy_resolver": "lookup_failed", "provider_persistence": "blocked",
+					},
+				}, nil
+			}
+			if binding.ProviderCode != providerCode ||
+				strings.TrimSpace(binding.PolicyRef) == "" ||
+				strings.TrimSpace(binding.PolicyVersion) == "" {
+				return platformdiag.Observation{
+					Status: platformdiag.StatusDegraded,
+					ReasonCode: "news.provider.output_policy_binding_invalid",
+					SafeMessage: "Trusted Provider output policy binding is incomplete or mismatched; Provider persistence remains blocked",
+					CheckedAt: time.Now().UTC(),
+					Attributes: map[string]string{
+						"policy_resolver": "available", "provider_persistence": "blocked",
+					},
+				}, nil
+			}
+			return platformdiag.Observation{
+				Status: platformdiag.StatusDegraded,
+				ReasonCode: "news.provider.output_policy_not_evaluated",
+				SafeMessage: "Provider output policy binding is available, but request-specific persistence authorization has not been evaluated",
+				CheckedAt: time.Now().UTC(),
+				Attributes: map[string]string{
+					"policy_resolver": "available", "provider_persistence": "blocked",
+				},
+			}, nil
+		},
+	}
+}
