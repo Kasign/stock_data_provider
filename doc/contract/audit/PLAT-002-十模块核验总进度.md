@@ -493,3 +493,14 @@
 - WebUI 已校验 task_id/run_id/事件游标/事件身份，Run 结果读取校验 run_id 和证券集合，并对可重试错误有限重试；API Client 测试验证 Run URL、分析端不附带 Market API Key 和结构化 409 错误。
 - 本轮未执行固定基线 CI；DB migration 索引/唯一约束、多实例 Worker claim、RunResult 嵌套 DTO Golden 仍未完成专项核验。
 - WebUI 维度 2 继续 partial。剩余待审数据集：Provider Probe History。
+
+
+### WebUI — 维度 2：Provider Probe History 主动探测历史
+
+- 详细记录：[`WebUI-维度2-Provider-Probe-History.md`](./WebUI-维度2-Provider-Probe-History.md)
+- 已核对 ProviderProbeRun/History DTO、DataService 探测汇总与脱敏、MariaDB 表/写入/最近批次读取、HTTP POST/GET、OpenAPI、WebUI API Client/数据中心页面、API/浏览器/MariaDB 集成测试资产。
+- 已确认历史 GET 只读 MariaDB 已持久化批次，不触发 Provider 探测；默认最近 20 批、最大 100 批；历史按 started_at DESC、id DESC 排序。API Key 认证、limit 校验、请求取消、历史读取失败提示和敏感错误脱敏均有实现。
+- 新增 **AUD-WEBUI-CTR-048（P2）**：Repository 仅查询 LIMIT N，Service 将 total 设置为 len(items)，并非数据库总记录数；OpenAPI 未定义 total 语义，UI“服务端记录 X 批”可能误导。需定义全量 total 或改为 returned_count/has_more。
+- 新增 **AUD-WEBUI-CTR-049（P2）**：MariaDB 写入失败由 Service 返回持久化错误，但 POST Handler 把所有 Service error 映射成 400 VALIDATION_ERROR；OpenAPI 却声明 500，且 Handler 丢弃带 persisted=false 的探测结果。需区分存储错误并补 Handler 故障测试。
+- MariaDB 集成测试覆盖真实写入、重启后历史读取和证据保留，但依赖 MARKET_DATA_TEST_MYSQL_DSN，本轮未执行；缺少独立 GET Handler 对 limit/503/SQL 失败的单元测试。
+- WebUI 维度 2 三个剩余数据集（Stock Search、Analysis Run、Provider Probe History）均已审完。下一步进入维度 2 完整性 Review，不再扩展数据集清单。
