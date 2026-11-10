@@ -38,16 +38,33 @@ func (r *MySQLRepository) CreateEvidenceSnapshot(ctx context.Context, snapshot a
 	if insertErr == nil {
 		return nil
 	}
-	var existingHash string
-	queryErr := r.db.QueryRowContext(ctx,
-		"SELECT payload_hash FROM news_evidence_snapshots WHERE snapshot_ref = ?",
+	var existingHash, existingCallerRef, existingFingerprint, existingSortVersion string
+	var existingPageSize uint16
+	var existingItemCount uint32
+	var existingSystemAsOf, existingCreatedAt, existingExpiresAt time.Time
+	queryErr := r.db.QueryRowContext(ctx, `SELECT payload_hash, caller_ref, filters_fingerprint, page_size,
+		system_as_of, sort_version, created_at, expires_at, item_count
+		FROM news_evidence_snapshots WHERE snapshot_ref = ?`,
 		snapshot.SnapshotRef,
-	).Scan(&existingHash)
+	).Scan(&existingHash, &existingCallerRef, &existingFingerprint, &existingPageSize,
+		&existingSystemAsOf, &existingSortVersion, &existingCreatedAt, &existingExpiresAt, &existingItemCount)
 	if queryErr == nil {
-		if subtle.ConstantTimeCompare([]byte(existingHash), []byte(payloadHash)) == 1 {
-			return nil
+		if subtle.ConstantTimeCompare([]byte(existingHash), []byte(payloadHash)) != 1 {
+			return app.ErrEvidenceSnapshotConflict
 		}
-		return app.ErrEvidenceSnapshotConflict
+		// A matching payload hash alone is insufficient for an idempotent replay:
+		// the denormalized lookup envelope must still describe that exact payload.
+		if existingCallerRef != snapshot.CallerRef ||
+			existingFingerprint != snapshot.FiltersFingerprint ||
+			existingPageSize != uint16(snapshot.PageSize) ||
+			existingSortVersion != snapshot.SortVersion ||
+			existingItemCount != uint32(len(snapshot.Items)) ||
+			!sameEvidenceSnapshotDBTime(existingSystemAsOf, snapshot.SystemAsOf) ||
+			!sameEvidenceSnapshotDBTime(existingCreatedAt, snapshot.CreatedAt) ||
+			!sameEvidenceSnapshotDBTime(existingExpiresAt, snapshot.ExpiresAt) {
+			return app.ErrInvalidEvidenceSnapshot
+		}
+		return nil
 	}
 	if errors.Is(queryErr, sql.ErrNoRows) {
 		return insertErr
