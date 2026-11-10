@@ -576,42 +576,38 @@ Hot Ranking 新确认 6 个 CTR-010 影响字段（5 + 1），属于此前 CTR-0
 CTR-010 的静态字段完整性清单已收敛为 **124 个唯一字段 / 29 个受影响 DTO / 54 个纳入范围的响应 DTO**。此前子批次累计数字不再用于推导总数。此结论只完成字段清单和测试资产盘点，不代表 CTR-010 已修复，也不代表 WebUI 维度 2 或 PLAT-002 已完成；下一步进入 CTR-010 关闭方案 Review，先确定 OpenAPI 还是 Go JSON 行为作为规范目标，再定义双向反射校验和最小化 Golden 补齐策略。
 
 
-## 21. CTR-010 关闭方案 Review
+## 21. CTR-010 契约差异处置边界 Review
 
-### 21.1 规范目标裁决
+### 21.1 已确认事实（不等同于契约裁决）
 
-本轮建议以固定基线的实际 Go JSON 序列化行为作为响应契约事实，不改变现有 DTO 的 `omitempty` 行为：
+- 固定基线 `b6dfc85ba214fe16268c8cba780641a8bfe15086` 下，CTR-010 静态清单为 124 个唯一字段、29 个受影响 DTO、54 个纳入范围的响应 DTO。
+- 这些字段的 Go JSON tag 带 `omitempty`，对应 OpenAPI 属性声明 `nullable: true`；现有 Go 序列化路径在 nil/空值时省略字段，而非输出 JSON null。
+- 当前中央反射测试没有覆盖 omitempty -> nullable 的反向约束；中央 JSON Golden 对这 124 个字段的 nil/空值省略行为覆盖为 0/124。
+- 上述内容证明实现描述与 OpenAPI 声明之间存在差异，但不能单凭现有实现行为推导产品期望的公共契约语义。
 
-- 124 个差异字段保持 optional（不加入 OpenAPI `required`）。
-- 对这 124 个字段移除 OpenAPI `nullable: true`。字段缺失仍合法；字段一旦出现，其值必须符合声明类型，不接受 JSON `null`。
-- 不为消除 Schema 差异而删除 Go `omitempty` 或改成输出 `null`。这会改变实际响应体，并扩大 WebUI/其他消费者的行为变更面。
-- 不改变字段类型、单位、默认值、required 集合或业务计算逻辑；本问题只修正可空性描述。
+### 21.2 候选方案（尚未形成最终裁决）
 
-理由：指针字段为 nil 时，`omitempty` 会省略整个属性；指针非 nil 时，即使指向数值零值也会输出该数值。字符串 `omitempty` 在空字符串时省略。当前 Go DTO 没有通过这些字段主动输出 JSON `null` 的路径，因此 OpenAPI 的 nullable 是过宽声明，而不是服务端真实输出能力。
+此前提出的候选方案是 optional + non-nullable：保留 Go DTO 的 `omitempty` 行为，将 124 个 OpenAPI 属性的 `nullable: true` 移除，并补齐反向反射约束及 JSON 序列化测试。
 
-### 21.2 最小修复范围
+该方案目前只能作为候选，不能记录为已裁决，原因是：
+- 需要确认公共 API 是否明确承诺允许消费者发送/接收 null，还是仅允许字段缺失；
+- 需要确认契约权威文档中对这些字段的定义是否已有更高优先级的语义约束；
+- 需要从消费者兼容性角度确认移除 nullable 是否属于对既有契约的收窄，而不是无影响的文档清理。
 
-修复应由 Data/API 代码责任分支实施，审计分支不修改业务代码：
+因此，本轮不修改 OpenAPI、不修改 Go DTO、不修改测试，也不要求 Data/API 责任分支实施该方案。
 
-1. 修改 `internal/marketdata/httpapi/openapi.yaml`：仅移除第 20.2 节列出的 124 个属性的 `nullable: true`，保留属性定义、类型、格式、描述及 required 集合。
-2. 修改 `internal/marketdata/httpapi/openapi_contract_test.go`：为具名 DTO 增加反向断言，任何带 `omitempty` 的字段都不得在对应 OpenAPI 属性上声明 nullable；现有“非 omitempty 指针必须 nullable”及 required/字段集合检查继续保留。
-3. 将三个未纳入 51 项具名注册表的 HTTP 响应 DTO 纳入同一契约检查路径：
-   - PriceLimitRuleSnapshot：Handler 内联响应 Schema；
-   - ProviderProbeFieldComparison：ProviderProbeCheckResult.field_comparisons 的内联 items Schema；
-   - MarketStockOverviewItem：市场股票概览内联响应 Schema。
-   不能把 inline DTO 的字段只登记在文档中而不接入自动检查。
-4. 扩展中央 JSON 序列化契约测试：按 DTO 零值样例验证 124 个字段在 nil/空值时均被省略；另保留非 nil 指针指向零值时仍输出字段的断言，防止错误地把“omitempty”解释成“零值不输出”。嵌套 ProviderProbeFieldComparison 需要单独序列化验证。
+### 21.3 冻结前处置要求
 
-### 21.3 测试与验收门槛
+CTR-010 在契约冻结前需要完成的是语义裁决，而不是立即修复代码：
+1. 对照项目权威契约，确认这 124 个字段的目标语义：字段缺失是否允许、JSON null 是否允许、非 nil 零值如何表达。
+2. 若权威契约已有明确规定，以权威规定为准；若没有，形成明确决议并记录兼容性影响。
+3. 将裁决写入唯一权威契约文档，并在审计台账记录对应 DTO/字段范围。
+4. 把实现与冻结契约之间的差异登记为实现对齐任务，明确责任模块和后续验收条件；除非该差异导致契约含义无法确定或存在冻结门禁风险，否则不在本轮直接改实现。
+5. 冻结评审时分别报告“契约语义已确定”和“当前实现是否符合”，不得用其中一个状态替代另一个状态。
 
-- 静态检查：124 个唯一字段逐项确认 Schema nullable 已移除，required 集合未变化。
-- 反射契约测试：具名与 inline DTO 均覆盖字段集合、required、omitempty/nullable 双向约束。
-- JSON 序列化测试：124/124 个字段 nil/空值省略；非 nil 指针零值输出；非 omitempty 指针 nil 仍输出 null。
-- 执行 `go test ./internal/marketdata/httpapi`，再执行 Data 模块相关 Go 测试及仓库规定 CI；记录固定提交 SHA、命令、结果。仅静态审查或文档更新不能关闭 CTR-010。
-- 修复后由独立 Review 对照 OpenAPI diff 和 DTO tag，确认只变更 nullable 声明及契约测试，不出现字段类型、required、业务行为的无关漂移。
+### 21.4 本轮结论与状态
 
-### 21.4 本轮裁决与状态
-
-- 关闭方案 Review 通过：规范目标为“optional + non-nullable”，保留 Go JSON 运行时行为，修正 OpenAPI 过宽声明。
-- CTR-010 **仍未关闭**：124 个字段尚未修正，双向反射约束和 124 字段序列化覆盖尚未补齐，也未运行修复后 CI。
-- 本轮只完成审计方案裁决，不修改业务代码、不切换分支、不合并其他分支。下一步应由 Data/API 责任分支按 21.2—21.3 实施和自测；审计主线随后做固定 SHA 增量复核。完成 CTR-010 后再回到 WebUI 维度 2 第一轮完整性 Review 的整体收敛，不扩展新的数据集。
+- CTR-010：**差异事实已确认；124 字段清单已完成静态去重；目标契约语义待最终裁决；实现修复未启动。**
+- optional + non-nullable 仅为候选方案，不是已批准决议。
+- 本轮不修改 Data 代码、OpenAPI、契约测试或其他业务实现；不切换分支、不合并其他分支、不运行实现修复 CI。
+- WebUI 维度 2 第一轮完整性 Review 仍未完成。后续继续核对现有 CTR 差异的证据、责任、契约裁决状态和冻结影响，不增加新的数据集，也不把审计任务转成模块实现任务。
