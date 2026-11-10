@@ -319,3 +319,71 @@ func TestBochaSearchThroughApplicationContract(t *testing.T) {
 		t.Fatalf("normalized candidate=%+v", candidate)
 	}
 }
+
+func TestSearchProvidersThroughApplicationContract(t *testing.T) {
+	tests := []struct {
+		name    string
+		new     func(app.HTTPDoer) (app.Provider, error)
+		payload string
+	}{
+		{
+			name: "bocha",
+			new: func(client app.HTTPDoer) (app.Provider, error) {
+				return NewBocha("https://api.example.test/search", "secret", client)
+			},
+			payload: `{"code":200,"data":{"webPages":{"value":[{"id":"b-1","name":"标题","url":"https://publisher.example/b","siteName":"媒体"}]}}}`,
+		},
+		{
+			name: "tavily",
+			new: func(client app.HTTPDoer) (app.Provider, error) {
+				return NewTavily("https://api.example.test/search", "secret", client)
+			},
+			payload: `{"results":[{"title":"标题","url":"https://publisher.example/t","content":"摘要"}]}`,
+		},
+		{
+			name: "brave",
+			new: func(client app.HTTPDoer) (app.Provider, error) {
+				return NewBrave("https://api.example.test/search", "secret", client)
+			},
+			payload: `{"results":[{"title":"标题","url":"https://publisher.example/br","description":"摘要"}]}`,
+		},
+		{
+			name: "searxng",
+			new: func(client app.HTTPDoer) (app.Provider, error) {
+				return NewSearXNG("https://searx.example/search", client)
+			},
+			payload: `{"results":[{"title":"标题","url":"https://publisher.example/s","content":"摘要"}]}`,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			client := roundTripFunc(func(req *http.Request) (*http.Response, error) {
+				return response(test.payload), nil
+			})
+			provider, err := test.new(client)
+			if err != nil {
+				t.Fatal(err)
+			}
+			result := app.NewSearchCandidates(app.StaticProviderSet{Providers: []app.Provider{provider}}).
+				Execute(context.Background(), domain.SearchRequest{
+					Query: "市场消息", QueryDimension: " market ", Limit: 10,
+				})
+			if result.Status != domain.SearchSuccess {
+				t.Fatalf("search status=%s failure=%s", result.Status, result.FailureCode)
+			}
+			if len(result.Outcomes) != 1 || result.Outcomes[0].ProviderCode != provider.Code() ||
+				result.Outcomes[0].Status != domain.ProviderSuccess || result.Outcomes[0].CandidateCount != 1 ||
+				result.Outcomes[0].QueryDimension != "market" {
+				t.Fatalf("provider outcome=%+v", result.Outcomes)
+			}
+			if len(result.Candidates) != 1 {
+				t.Fatalf("candidate count=%d", len(result.Candidates))
+			}
+			candidate := result.Candidates[0]
+			if candidate.ProviderCode != provider.Code() || candidate.QueryDimension != "market" ||
+				candidate.Title != "标题" || candidate.ObservedAt.IsZero() {
+				t.Fatalf("normalized candidate=%+v", candidate)
+			}
+		})
+	}
+}
