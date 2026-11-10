@@ -483,3 +483,25 @@ Go model.StockBasic 有 14 个 omitempty 字段，而 OpenAPI StockBasic 将它�
 - 本批确认 9 个此前未登记字段：ProviderProbeFieldComparison 4、ProviderProbeCheckResult 2、ProviderProbeItem 3。此前 Provider Probe History 的 CTR-048/049 章节没有登记这些字段，故本批是新增影响字段，不是重复核验；仍归既有 CTR-010，不新增编号。
 - 补充边界盘点：MarketStockOverviewItem 以 MarketStocksSnapshot.items 内联对象形式暴露，ma5/ma20 为非 omitempty 指针且 Schema nullable=true，quote 为 omitempty 可选引用且 Schema 非 nullable，未发现 CTR-010 冲突；该内联 DTO 未独立加入模型反射注册表。AdjustmentFactor、CorporateAction、StockUniverseSnapshot 未在当前 Market Data OpenAPI 中找到对应响应 Schema；ProviderProbeOptions 是无 JSON tag 的内部选项结构，不纳入当前 HTTP 响应 CTR-010 清单。PriceLimitEventEvidence 的 omitempty 字段此前第13节已核验，未发现 nullable 冲突。
 - 本批未执行固定基线 CI；结论来自固定 SHA 下 Go DTO、OpenAPI 和测试源码静态对照。无业务代码修改。
+
+
+## 19. CTR-010 字段清单复核（子批次 12：Hot Ranking）
+
+固定代码基线：`origin/integration` `b6dfc85ba214fe16268c8cba780641a8bfe15086`。本批仅核验 Hot Ranking DTO 中尚需纳入 CTR-010 汇总的空值字段，不重复复审 Provider、分页、默认启用项或页面消费逻辑。
+
+### 19.1 字段对照
+
+- `HotRankingItem.latest_price`、`change`、`change_percent`、`rank_change`、`heat`：均为指针类型且带 `omitempty`；OpenAPI `HotRankingItem` 对应属性均声明 `nullable: true`。nil 时 Go JSON 省略字段，确认 5 个 CTR-010 字段。
+- `HotRankingSnapshot.provider_time`：`*time.Time + omitempty`；OpenAPI 声明 `nullable: true`，确认 1 个 CTR-010 字段。
+- 本批合计 6 个字段。均归入既有 CTR-010，不新增差异编号。HotRankingItem.name/rank_trend 等其他可选字段的 OpenAPI 未声明 nullable，不计入。
+
+### 19.2 测试覆盖
+
+- `TestAllGoModelFieldsAndRequiredMatchOpenAPISchemas` 已登记 HotRankingItem/HotRankingSnapshot，能核对字段集合和 required，但没有 omitempty→nullable 的反向约束。
+- `TestDataModelJSONSerializationMatchesOpenAPIRequiredAndNullableSemantics` 已覆盖 HotRankingItem 的基础必填字段及 name/rank_trend/source_version 省略，但没有断言五个 nullable 冲突字段在 nil 时省略；也没有 HotRankingSnapshot 序列化样例，未覆盖 provider_time 的省略行为。
+- 测试中已有对 HotRankingItem.name、rank_trend 非 nullable 的局部断言，但不覆盖本批六个字段。
+- 本批未执行固定基线 CI；结论来自固定 SHA 的 DTO、OpenAPI 和测试源码静态对照。无业务代码修改。
+
+### 19.3 本批结论
+
+Hot Ranking 新确认 6 个 CTR-010 影响字段（5 + 1），属于此前 CTR-010 全量字段去重汇总中的待纳入项。后续统一总表时应按 `DTO.field` 去重；不得把历史数据集章节已列出的相同字段重复累计。
