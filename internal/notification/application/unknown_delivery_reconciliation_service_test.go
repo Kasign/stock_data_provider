@@ -41,6 +41,7 @@ type unknownReconciliationLookupAdapter struct {
 	outcome    domain.ChannelLookupOutcome
 	lookupErr  error
 	lookupCalls int
+	observedAt time.Time
 	cancel     context.CancelFunc
 }
 
@@ -58,7 +59,7 @@ func (a *unknownReconciliationLookupAdapter) LookupDelivery(
 		ChannelRef: request.ChannelRef, ConfigVersion: request.ConfigVersion,
 		DeliveryID: request.DeliveryID, AttemptID: request.AttemptID,
 		Outcome: a.outcome, EvidenceRef: "service-lookup-evidence",
-		ObservedAt: time.Date(2026, 11, 10, 9, 0, 0, 0, time.UTC),
+		ObservedAt: a.observedAt,
 	}
 	switch a.outcome {
 	case domain.ChannelLookupAccepted:
@@ -118,6 +119,7 @@ func unknownReconciliationServiceFixture(t *testing.T, outcome domain.ChannelLoo
 	adapter := &unknownReconciliationLookupAdapter{
 		fakeChannelAdapter: &fakeChannelAdapter{snapshot: channel},
 		outcome: outcome,
+		observedAt: unknownAt.Add(time.Second),
 	}
 	registry := NewChannelRegistry()
 	if err := registry.Register(adapter); err != nil {
@@ -167,12 +169,16 @@ func TestUnknownDeliveryReconciliationServiceFailsClosedBeforeLookup(t *testing.
 			if err != nil {
 				t.Fatal(err)
 			}
-			_, _, err = service.Reconcile(context.Background(), "delivery-service", now, 0.5)
+			_, _, err = service.Reconcile(context.Background(), serviceDeliveryID(service), now, 0.5)
 			if !errors.Is(err, tc.want) || adapter.lookupCalls != 0 || repository.calls != 0 {
 				t.Fatalf("must fail before provider lookup or write: calls=%d writes=%d err=%v", adapter.lookupCalls, repository.calls, err)
 			}
 		})
 	}
+}
+
+func serviceDeliveryID(service *UnknownDeliveryReconciliationService) string {
+	return service.reader.(consistencySnapshotReaderFake).snapshot.Delivery.DeliveryID
 }
 
 func serviceRegistryForTest(t *testing.T, adapter *unknownReconciliationLookupAdapter) *ChannelRegistry {
@@ -202,7 +208,7 @@ func TestUnknownDeliveryReconciliationServiceDoesNotWriteOnLookupError(t *testin
 	service, adapter, repository, now := unknownReconciliationServiceFixture(t, domain.ChannelLookupIndeterminate)
 	adapter.lookupErr = errors.New("provider lookup timeout")
 
-	_, _, err := service.Reconcile(context.Background(), "delivery-service", now, 0.5)
+	_, _, err := service.Reconcile(context.Background(), serviceDeliveryID(service), now, 0.5)
 	if err == nil || adapter.lookupCalls != 1 || repository.calls != 0 {
 		t.Fatalf("lookup failure must not reach persistence: lookups=%d writes=%d err=%v",
 			adapter.lookupCalls, repository.calls, err)
@@ -212,7 +218,7 @@ func TestUnknownDeliveryReconciliationServiceDoesNotWriteOnLookupError(t *testin
 func TestUnknownDeliveryReconciliationServiceKeepsIndeterminateUnknown(t *testing.T) {
 	service, adapter, repository, now := unknownReconciliationServiceFixture(t, domain.ChannelLookupIndeterminate)
 
-	assessment, decision, err := service.Reconcile(context.Background(), "delivery-service", now, 0.5)
+	assessment, decision, err := service.Reconcile(context.Background(), serviceDeliveryID(service), now, 0.5)
 	if err != nil || assessment.Action != UnknownReconciliationRemainUnknown ||
 		decision != nil || adapter.lookupCalls != 1 || repository.calls != 0 {
 		t.Fatalf("indeterminate must remain unknown without CAS: assessment=%+v decision=%+v lookups=%d writes=%d err=%v",
@@ -225,7 +231,7 @@ func TestUnknownDeliveryReconciliationServiceStopsAfterLookupCancellation(t *tes
 	ctx, cancel := context.WithCancel(context.Background())
 	adapter.cancel = cancel
 
-	_, _, err := service.Reconcile(ctx, "delivery-service", now, 0.5)
+	_, _, err := service.Reconcile(ctx, serviceDeliveryID(service), now, 0.5)
 	if !errors.Is(err, context.Canceled) || adapter.lookupCalls != 1 || repository.calls != 0 {
 		t.Fatalf("cancellation after lookup must prevent CAS: lookups=%d writes=%d err=%v",
 			adapter.lookupCalls, repository.calls, err)
@@ -236,7 +242,7 @@ func TestUnknownDeliveryReconciliationServiceDoesNotReplayEvidenceAfterCASConfli
 	service, adapter, repository, now := unknownReconciliationServiceFixture(t, domain.ChannelLookupAccepted)
 	repository.err = ErrUnknownReconciliationConflict
 
-	assessment, decision, err := service.Reconcile(context.Background(), "delivery-service", now, 0.5)
+	assessment, decision, err := service.Reconcile(context.Background(), serviceDeliveryID(service), now, 0.5)
 	if !errors.Is(err, ErrUnknownReconciliationConflict) ||
 		assessment.Action != UnknownReconciliationFinalizeSent || decision != nil ||
 		adapter.lookupCalls != 1 || repository.calls != 1 {
