@@ -83,7 +83,9 @@ func recoveryServiceFixture(t *testing.T, attempts []domain.DeliveryAttempt) (*L
 func TestLeaseRecoveryServiceRecoversWithoutStartingAttempt(t *testing.T) {
 	service, claim, now, repository := recoveryServiceFixture(t, nil)
 	report, err := service.RecoverExpiredOnce(context.Background(), now, 10)
-	if err != nil || report != (LeaseRecoveryReport{Scanned: 1, Recovered: 1}) {
+	if err != nil || report.Scanned != 1 || report.Recovered != 1 ||
+		report.Conflicted != 0 || report.OutcomeUnknown != 0 || report.Failed != 0 ||
+		report.Unprocessed != 0 || len(report.OutcomeUnknownDeliveryIDs) != 0 {
 		t.Fatalf("unexpected recovery report: %+v err=%v", report, err)
 	}
 	if repository.calls != 1 || repository.expectedVersion != claim.Delivery.Version ||
