@@ -647,3 +647,67 @@ CTR-010 在契约冻结前需要完成的是语义裁决，而不是立即修复
 - CTR-043：公共语义明确、实现不符合；P1 保留，要求冻结评审显式处置，不在本轮修复。
 - CTR-044：Provider 能力范围未形成明确的权威披露方式；P2 待契约裁决，不在本轮实现。
 - 本批未执行 CI、未修改业务代码、未新增 CTR 编号。WebUI 维度 2 第一轮完整性 Review 继续进行。
+
+## 23. Market Sentiment History：CTR-038～CTR-040 冻结影响 Review
+
+本批只复核既有 CTR-038、CTR-039、CTR-040。审计代码基线仍为 `b6dfc85ba214fe16268c8cba780641a8bfe15086`；不新增 CTR 编号、不重新扫描 DTO，也不修改 Data/WebUI 实现。
+
+### 23.1 CTR-038：total 的统计范围与截断语义未定义
+
+固定基线证据：
+- `internal/marketdata/service/market_sentiment.go` 的 `DataService.MarketSentimentHistory` 在 Repository 已按 limit 取数后设置 `Total: len(items)`。
+- `internal/marketdata/repository/market_sentiment.go` 对每个 trade_date 只选一条记录，再按 trade_date DESC 排序并应用 SQL LIMIT。
+- `MarketSentimentHistory.total` 在 OpenAPI 中仅声明 integer，没有描述它是“范围内总记录数”还是“本次返回条数”。
+- WebUI `market-overview.js` 固定传 `limit: 120`，状态文案使用 `items.length/total`。当范围内有超过 120 个交易日快照时，服务端只返回 120 条且 total 也等于 120，页面无法识别截断。
+- 需要限定影响边界：HTTP 日期范围最多 366 个自然日、每个交易日最多一条；API 默认 limit=366、最大 500，因此采用默认 limit 时最多 366 条，理论上足以覆盖完整范围。当前实际截断风险主要来自 WebUI 主动传入的 120，而不是所有 API 请求必然截断。
+
+冻结影响与裁决建议：
+- 这是公共响应字段 `total` 的语义缺失，不只是页面文案问题；归入既有 `DATA-CTR-001`（HTTP DTO/响应语义）及 `GOV-CTR-001`（JSON 字段语义）核验范围，不新增项目级契约编号。
+- 建议将 `total` 定义为指定闭区间内符合条件的不同 trade_date 快照总数（应用 limit 前统计）。这样 `items.length < total` 可直接表示当前响应未返回完整集合；在最大 366 天范围内，客户端可将 limit 提高至 366/500 获取完整结果，不必为本接口额外引入 cursor/page。
+- 另一可选方案是将 total 明确定义为 returned_count，但此时不能再把它用于表示全量或判断截断，WebUI 必须移除 N/N 完整性暗示，并另行定义是否需要 has_more。
+- 上述为审计建议，不是已批准决议。项目负责人/契约 Owner 需要确认 total 的目标含义后，才可写入权威登记簿和 Data HTTP 契约。
+- 状态：**契约语义待裁决**；冻结前必须明确。当前 total 实现与“范围总数”候选语义不符，但若最终裁决为 returned_count，则属于现有实现可保留、仅需补充明确定义的情况。
+
+### 23.2 CTR-039：每日“最新快照”的选择顺序不一致
+
+固定基线证据：
+- `SaveMarketSentiment` 每次采集均 INSERT，允许同一 market/trade_date 保存多次；同时保存 `fetched_at`。
+- `ListMarketSentiment` 使用 `MAX(id)` 为每个 trade_date 选择一条记录，按 trade_date DESC 输出。
+- Repository 注释将其描述为“每一天最近一次采集的快照”，但自增 id 表达插入顺序，不表达 fetched_at 时间先后。并发采集或写入延迟可能导致较早 fetched_at 的记录后插入并被选中。
+- `fetched_at` 是快照 DTO 的必填采集时间，表中也有对应列；现有查询没有使用该列进行选择。
+- OpenAPI 对每个日期只返回一条历史快照，但没有定义多条同日记录时哪一条胜出。
+
+冻结影响与裁决建议：
+- 该问题同时触及既有 `DATA-CTR-001` 的历史响应选择语义和 `GOV-CTR-002` 的时间字段语义，不新增正式契约编号。
+- 建议将“最近一次采集”定义为同一 market/trade_date 下 `fetched_at` 最大的记录；若 fetched_at 相同，以 id DESC 作为确定性 tie-breaker。这样与 DTO 中 fetched_at 的语义及 Repository 注释一致。
+- 若项目实际希望表达“最后成功写入”，则必须将该语义明确写入契约，并修正“最近一次采集”的注释/页面说明，避免将写入顺序误称为采集时间顺序。
+- 当前没有针对该 Repository 查询的乱序写入/并发选择测试；该测试是未来实现符合性验收证据，不是本轮必须执行的代码修复。
+- 状态：**最新记录选择语义待裁决**；在选择顺序未明确前，不应冻结该历史接口的同日记录选择规则。
+
+### 23.3 CTR-040：366 自然日限制已在公共 HTTP 契约明确，WebUI 未对齐
+
+固定基线证据：
+- OpenAPI 路径说明明确 start/end 闭区间最多 366 个自然日；Handler 使用 `inclusiveCalendarDays` 校验，并有 366 日通过、367 日返回 400 的边界测试。
+- WebUI 的 `validateMarketDateRange(start,end,maxCalendarDays)` 已支持最大自然日参数，但 `loadSentimentHistory` 调用时未传 maxCalendarDays，因此 367 日范围在浏览器端可通过校验，发出请求后才被服务端拒绝。
+- WebUI 实际请求固定 limit=120；该事实与 CTR-038 的截断风险相关，但不合并 CTR-038/CTR-040：前者是 total/截断语义，后者是输入边界的消费者校验不一致。
+- DataService 内部使用 `end.Sub(start) > 366*24h`，与 Handler 的闭区间自然日计数存在一日边界差异：例如 367 个包含首尾的自然日，其日期差正好为 366 天，Service 该判断不会拒绝。当前 HTTP Handler 会先拒绝该请求，因此已证实的外部 HTTP 路径仍执行 366 日限制；若未来有绕过该 Handler 的 InProcess/Application 调用，则需要统一校验。当前尚无证据证明存在该绕行消费者，故不另立缺陷编号。
+- WebUI 测试覆盖了通用日期校验器的显式 max 参数，也特意验证不传 max 时不施加 2000 日限制；没有针对情绪历史调用必须传 366 的测试。
+
+冻结影响与裁决建议：
+- 366 个自然日、闭区间的公共限制已有 OpenAPI、Handler 和边界测试三方证据，**公共规则本身不待裁决**；属于 `DATA-CTR-001` 输入约束的一部分。
+- CTR-040 应分类为 WebUI 消费者实现未对齐，不应反向修改公共 API 以放宽到任意日期范围。
+- 冻结前可将该差异登记为明确的实现对齐/延期事项；若按 DEC-PLAT-002-007 的完整门禁要求 WebUI 消费者必须确认符合约束，则未有明确延期决议前不能把该消费者契约标为 frozen。
+- 冻结后实现验收应包括 WebUI 366/367 日边界、Handler 同样边界，以及确认所有 InProcess/Application 调用路径不会绕过 366 日约束。
+- 状态：**公共规则明确、WebUI 实现不一致**；契约定义不需要扩展，消费者符合性仍未完成。
+
+### 23.4 本批总体结论与项目级映射
+
+| 审计项 | 问题性质 | 冻结前要求 | 实现处理 |
+|---|---|---|---|
+| CTR-038 | 响应 total 语义缺失；120 条 UI 请求存在截断不可见风险 | 必须裁决 total 是范围总数还是返回数，并写入权威契约 | 不在本轮修改 |
+| CTR-039 | 同日最新记录选择语义缺失，代码按插入 ID 选择但注释称最近采集 | 必须明确按 fetched_at 还是最后写入选择 | 不在本轮修改 |
+| CTR-040 | 公共 366 日规则明确，WebUI 未传入同一上限；Service 内部校验另有一日边界风险 | 不需改变公共规则；冻结状态需如实记录消费者未对齐/延期 | 不在本轮修改 |
+
+项目级映射只引用登记簿已有的 `DATA-CTR-001`、`GOV-CTR-001`、`GOV-CTR-002`，不新建正式契约编号。CTR-038/039 的语义裁决由项目负责人/相应契约 Owner 确认；CTR-040 是实现符合性问题，不应包装成新的契约设计。
+
+本批没有修改项目级权威登记簿，因为 CTR-038/039 的候选语义尚未获得裁决；也没有修改模块代码、OpenAPI、测试或分支实现。未执行 CI。WebUI 维度 2 第一轮完整性 Review 继续进行。
