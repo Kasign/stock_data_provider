@@ -301,3 +301,80 @@ Research 有意区分两个标识，这是合理的语义边界；但当前已�
 Research Application Port、Platform Fault 和 Diagnostics Adapter 的模块内实现方向正确；Research Migration 已由 Server 注册。固定基线仍缺 Application/Repository/Authorizer/Diagnostics 的 Server 生产装配证据。Request ID 与 Correlation ID 的跨模块传播尚待核验。
 
 **Research 消费者核验：module-level implementation evidenced / production wiring not evidenced。Platform 维度 1 总状态仍为 partial。**
+
+
+## 10. 第五批：Notification 模块消费者核验（初审）
+
+### 10.1 Application Port 与模块边界
+
+固定基线证据：
+
+- `internal/notification/application/ports.go`（blob `2cda82ab5da00aab4c8898f9ac0e384fb9c32c66`）
+- `internal/notification/application/channel_ports.go`（blob `111c614906e21b436d8e9d125bee186b453042f0`）
+- `internal/notification/application/receive_event.go`（blob `b6cd60c1c7437cf4e0073eefc68514ee244c0dc8`）
+- `internal/notification/application/delivery_execution_service.go`（blob `ef4d79b0213fc17e097c3ef8dcf0caf769751758`）
+- `internal/notification/application/lease_recovery_service.go`（blob `7dc75bebedcdd60d986ac4ee71e20e038a8d28f2`）
+
+已确认：
+
+1. Notification Application 自有 SubscriptionRepository、DeliveryPlanRepository、DeliveryRepository、DeliveryAttemptRepository、DeliveryLeaseRecoveryRepository、TemplateRenderer、ChannelAdapter、ChannelResolver、RecipientResolver、InboxRepository 等 Port。
+2. Port 使用 Notification Domain 类型；ChannelAdapter 注释要求具体 Adapter 在构造时绑定 Platform Secret 与策略约束 HTTP Doer，且不向 Application 暴露明文 Secret/任意 URL。
+3. `EventReceiver.Receive` 在持久化前验证完整 Event Envelope；InboxRepository 契约要求事件和 Fanout 工作项在同一事务写入。
+4. `DeliveryExecutionService` 只负责单条 Delivery 的 Preflight、渲染、Attempt 和渠道调用；注释明确队列扫描和 Claim 由上层 Worker 负责。
+5. `LeaseRecoveryService.RecoverExpiredOnce` 是有界、调用方驱动的单次恢复过程，本身不持有 Timer 或后台 Goroutine 生命周期。
+
+判断：Notification 已有较完整的模块内 Application Port 和投递执行领域服务；但接口定义和单测不构成生产 Worker 已运行的证据。
+
+### 10.2 Repository、Migration 与事务边界
+
+固定基线证据：
+
+- `internal/notification/storage/migrations.go`（blob `ac5a90d65c9ccf0920b5aee5cfb6234ffcaa56c3`）
+- `internal/notification/storage/mysql_inbox_repository.go`（blob `16ecbd5be10078cb871e337e90b40b3e75de12b9`）
+- `internal/notification/storage/mysql_expired_delivery_lease_scanner.go`（blob `62fd035f9e73b12a417f3ad8cefda77681cb69fa`）
+
+已确认：
+
+- Notification Storage 提供 Platform `storage.Migration`；Server Migration Registry 已注册 Notification Migration。
+- Inbox Repository 必须注入 `InboxFanoutWriter`；新事件写入 Inbox 和 Fanout 工作项复用同一 SQL 事务，避免接收成功但 Fanout 丢失。
+- Inbox 使用 `(source_module,event_id)` 主键和 `(source_module,idempotency_key)` 唯一约束；持久化 `correlation_id`。
+- Migration 中 Delivery State Event 表含可空 `request_id` 字段；Inbox 表持久化 `correlation_id`。这只能证明数据结构预留，不能证明请求上下文到事件/状态事件的端到端映射已接线。
+- 过期租约扫描采用有界批次，按到期时间排序，并在恢复写入前重新检查数据库时钟；恢复服务使用完整 Attempt 历史和 fencing token 进行收敛。
+
+### 10.3 Fault、Diagnostics 与 Request ID
+
+- 本批抽查的 Application Port/Service 以 Notification 自有错误值和领域错误作为内部错误表达；尚未发现其到 Platform `fault.Fault` 的统一映射证据。本结论仅限已检查文件，尚未完成 Application 全目录错误映射扫描。
+- 固定基线 `internal/notification` 顶层目录仅见 application、domain、schema、storage、template；未发现独立 diagnostics 包。Server Diagnostics 构造调用未传入 Notification Checks。
+- Storage Schema 同时存在 `request_id` 与 `correlation_id` 字段，但尚未核实二者写入调用点、可信来源和异步消费者传播。
+
+### 10.4 Server 生产装配与 Worker 生命周期
+
+固定基线证据：
+
+- `internal/server/bootstrap/bootstrap.go`（blob `92df61265f173251ac7811f99a7ab9f41ac470ed`）
+- `internal/server/diagnostics/service.go`（blob `190068e7fc170d6f81d8a79868086fa2870a65e7`）
+- `internal/server/runtime/lifecycle.go`（blob `fcfe753c345af505a4f25e94050f19049d9ad75b`）
+
+已确认：
+
+1. Bootstrap 只导入 Notification Storage Migration，并在 Migration Registry 注册 Notification；未导入 Notification Application 或 Storage Repository 构造。
+2. Bootstrap 只注册旧 Analysis Worker；没有 Notification Worker 的构造、Lifecycle.Register、Start 或 Stop 调用点。
+3. Server Diagnostics 使用 `NewServiceWithMigration(storageResources, migrationRegistry)`，没有传入 Notification Module Checks。
+4. Notification 的 DeliveryExecutionService 明确把扫描/Claim 留给上层 Worker；LeaseRecoveryService 只提供单次恢复入口。固定基线未找到负责驱动这些入口的 Server 运行组件。
+5. Inbox Repository 需要事务内 FanoutWriter，但本批 Server Bootstrap 没有注入该依赖的构造点。
+
+### 10.5 新增待核项
+
+**AUD-PLAT-PORT-006：Notification Application、Fanout 与 Delivery Worker 未接入 Server 生产组合根（P1 候选）**
+
+证据边界：已检查 Notification Application Port/执行服务、Inbox Repository、Server Bootstrap、Diagnostics Service 与 Lifecycle。模块内有接收、持久化、单条投递执行和租约恢复能力，但固定基线 Server 只注册 Migration；没有 Notification Application/Repository/FanoutWriter/Worker 构造和 Lifecycle 接线。需由 Notification/Server 责任方明确 Fanout 持久化实现归属、Delivery Worker 的调度与 Claim 入口、Lease Recovery 周期驱动、共享资源所有权及停止顺序，并补组合根测试。当前不能认定为已运行的生产投递链。
+
+**AUD-PLAT-PORT-007：Notification Request ID 与 Correlation ID 端到端映射待证（P2 候选）**
+
+Migration 中 Inbox 持久化 `correlation_id`，Delivery State Event 持久化 `request_id`；但本批未发现从可信 Platform Request ID 到事件上下文、Fanout 工作项、Delivery 状态事件及 Worker 的端到端映射证据。需在 Server/Outbox/Fanout 消费链核验时补证，暂不定性为运行时缺陷。
+
+### 10.6 本批结论
+
+Notification 模块内 Application Port、Inbox 幂等、Fanout 事务注入、Delivery Attempt/租约/fencing token 和租约恢复逻辑已有实现证据；Server 只注册 Migration，尚无 Application、Fanout、Delivery Worker 和 Diagnostics 的生产装配证据。Request ID 与 Correlation ID 的端到端传播待核。Fault 映射和 Application 全目录消费者扫描未完成。
+
+**Notification 维度 1 状态：partial；模块内实现 evidenced / production wiring not evidenced。Platform 维度 1 总状态仍为 partial。**
