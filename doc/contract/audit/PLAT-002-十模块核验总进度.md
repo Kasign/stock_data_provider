@@ -712,3 +712,13 @@
 - 本批冻结影响 Review 已完成，问题尚未修复/裁决；不再重复初审，后续只做增量验收。
 - 详细关闭条件见 `PLAT-002-差异唯一登记与剩余任务矩阵.md` 第 9 节及 WebUI 维度 2 Review 第 29 节。
 - 下一批：DailyBar 查询窗口 CTR-009，随后继续维度 2 其余差异集中收敛。
+
+
+## 8. W2-B DailyBar Bundle lookback_days 批次完成记录
+
+- CTR-009 冻结影响 Review 已完成，P2保留。
+- WebUI日K用户偏好会显式传入lookback_days；API Client省略选项时默认120；HTTP Handler省略参数后由Service使用环境配置默认值，默认配置120、最大值默认1000。
+- OpenAPI只声明20..2000范围，没有说明省略时使用服务端配置。不可将120写成固定公共default。
+- 关闭条件：OpenAPI说明配置化默认、Client URL默认/显式值测试、Handler/Service省略/显式值测试及配置边界测试。
+- 本批只更新审计文档，没有修改业务代码、OpenAPI、DTO或测试，没有执行CI。
+- 下一批：W2-C，基于现有证据集中归类CTR-011～037，不重做初审、不新增编号。
