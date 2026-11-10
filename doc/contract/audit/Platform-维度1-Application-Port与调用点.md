@@ -1992,3 +1992,76 @@ StockBoards 的 Provider Port、Go DTO、Service 校验/回退/缓存、HTTP 路
 - MarketIndexQuote 的八个可选数值字段和 quote_time 纳入 AUD-WEBUI-CTR-010。
 - WebUI 已接通并逐指数显示行情时间、涨跌额和涨跌幅；API Client 缺少 getMarketIndices 直接测试，页面缺少 renderIndices DOM 回归测试。
 - WebUI 维度 2 继续 partial。
+
+
+### 34. WebUI 维度 2：Index Catalog 指数目录
+
+#### 34.1 核验范围与证据
+
+- 固定代码基线：`b6dfc85ba214fe16268c8cba780641a8bfe15086`。
+- DTO：`internal/marketdata/model/model.go`（blob `6f04516bd11452a01adcb5acceab571fb1c28ed5`），`IndexCatalogItem` / `IndexCatalogSnapshot`。
+- Provider Port：`internal/marketdata/provider/provider.go`（blob `6635d2247379d1ffcb826f80e8e2176422b0cc0a`），`IndexCatalogProvider.FetchIndexCatalog`；该 Port 同时承载成分和指数日线方法，本节只核验目录方法。
+- Provider 实现：`internal/marketdata/provider/hithink.go`（blob `337c072c14f764f1f9cfff833f44ddcf5426e04b`），当前确认的目录实现为 `Hithink.FetchIndexCatalog`。
+- Provider 测试：`internal/marketdata/provider/hithink_index_test.go`（blob `44c3c36e14482bd212c87a7464bdf49a7f8d2b99`），含重复目录代码、原始行数和排除行数测试。
+- Service：`internal/marketdata/service/index_catalog.go`（blob `cf10a389b065955df93973f41222a3837c27a5e2`）；质量/回退测试 `internal/marketdata/service/index_catalog_quality_fallback_test.go`（blob `1b78f5c2c4a075289e461fcc5d3a7f502e5d1d61`）、来源选择测试 `internal/marketdata/service/index_catalog_source_test.go`（blob `ad2ae5bd8ced48919eb51880b4a084f0265845da`）。
+- 配置/装配：`internal/marketdata/config/config.go`（blob `5dab636e97e94b7f221f8bc8dda8dc08c03a83c4`）、`internal/marketdata/bootstrap/module.go`（blob `859df0ca2fc26f02dab2399fe684617da9f2fc89`）、`configs/marketdata/providers.json`（blob `d7ff3a7e42790e786603d0c3fd4107758108a6c9`）。
+- HTTP：`internal/marketdata/httpapi/index_catalog.go`（blob `0de177e2b7921863b6beb9a856cd902ca33d6bd4`）、`internal/marketdata/httpapi/server.go`（blob `7b54b54b3c6182ecab830c2c43f91c548dc60dba`）。
+- OpenAPI：`internal/marketdata/httpapi/openapi.yaml`（blob `cd8a6e3dfb8e3162ee789b11e883be9283c59f32`）；模型/路由契约测试 `internal/marketdata/httpapi/openapi_contract_test.go`（blob `7f97f075a23bd698a7e3fc32e90509d1e999217b`）。
+- WebUI：`web/src/api.js`（blob `b8bcbee5908b43bfa1bc2ca744363190af38287f`）定义 `getIndexCatalog`；当前已检查的市场概览页 `web/src/market-overview.js`（blob `6509b2712412b3eb7108045af6ff5093f5893079`）未接入目录渲染。API 测试文件 `web/tests/api.test.mjs`（blob `a26eca75b24a744232d370fdbe2411806be45136`）有函数导入，但未见目录请求的直接断言；`web/tests/market-overview.test.mjs`（blob `6e1093dc99d3f7967bf0d9876efa16069790fbd8`）未覆盖目录 DOM。
+
+#### 34.2 分类标签、代码规范与去重
+
+1. HTTP Handler 与 Service 都接受 `cn_concept`、`region`、`tszs`、`industry`、`tushare` 五个标签；空标签归一为 `cn_concept`。WebUI API Client 使用相同的五项白名单，未知值回退到 `cn_concept`。
+2. Hithink Provider 只接受 `cn_concept`、`region`、`tszs`、`industry` 四项；目录代码经 `hithinkIndexSymbol` 规范化为大写六位数字及 `.TI/.SH/.SZ` 后缀。Service 的 `canonicalIndexSymbol` 另允许 `.CSI`，但会要求 Provider 返回的 symbol 已是规范形式。
+3. 每个目录项必须具有非空名称，且 item.tag 必须与请求 tag 一致；Service 校验 symbol 规范、名称非空、tag 一致和 symbol 唯一。Provider 遇重复 symbol 时保留首条、增加 excluded_rows、标记 degraded 并记录诊断；不把重复项静默当成完整目录。
+4. Provider 返回的原始行数、去重后总数和排除行数需满足计数关系；触及 30000 条本地安全边界时标记 lower-bound/degraded。Service 禁止 lower-bound 快照标记 valid。
+5. 当前分类 tag 是类别标识，不是严格的指数品种分类体系；OpenAPI 的 IndexCatalogItem.tag 是普通 string，没有 enum 或类别说明。不能从 tag 名称推导具体指数交易所、指数族或可交易属性。
+
+#### 34.3 来源权威性与更新时间
+
+1. 当前可见的真实目录实现为 Hithink `/api/a-share-index/catalog/ths-index-list`，按 tag 请求单个非分页目录。Provider 读取响应级 timestamp，作为 provider_time；fetched_at 是本地采集时间，两者没有混用。
+2. ProviderTime 缺失、非法或超出允许时间范围时，目录降级并记录 `provider_catalog_timestamp_missing_or_invalid`；Service 不允许缺少 provider_time 的目录标记 valid。触及 30000 条安全边界或存在重复行也会降级。
+3. 当前 DTO 没有独立的目录发布日期、数据生效日或源端版本发布时间。source_version 是适配器构建版本标识，不等于目录数据集修订号；provider_time 只能证明响应携带的时间戳，不能单独证明目录内容的发布日期/生效时点。
+4. 固定配置中 Eastmoney 未启用 index_catalog；Hithink 与 Tushare 均 disabled，且 index_catalog=false。因此当前默认部署没有已启用的 IndexCatalogProvider。不能把代码存在等同于生产可用。
+5. Tushare 在固定基线未发现 `FetchIndexCatalog` 实现；但 HTTP Handler、Service 和 WebUI Client 接受 `tag=tushare`，OpenAPI 还描述该标签由 Tushare `index_basic` 提供。Hithink Provider 明确拒绝该标签。该项形成可复现的契约/能力错配。
+
+#### 34.4 排序、HTTP/OpenAPI 与 WebUI 消费
+
+1. Hithink Provider 逐行遍历源端 item，去重后按源端原始顺序 append；目录实现未建立独立的 symbol/name 排序规则。OpenAPI 未声明排序保证，Service 也未对目录项排序。当前返回顺序依赖上游响应顺序，调用方不能假定跨刷新稳定。
+2. HTTP 注册 `GET /api/v1/market/index-catalog`；Handler 默认 tag=cn_concept，拒绝不支持标签，并调用 Index Application 的 IndexCatalog。OpenAPI 对应路径、参数和响应 Schema 已登记；51 模型反射契约测试登记 IndexCatalogItem/Snapshot，字段集合和 required 可由测试校验。
+3. OpenAPI IndexCatalogItem.symbol 描述为 provider-specific code，允许 .TI/.SH/.SZ/.CSI；Service 也允许 .CSI，但当前 Hithink Provider 的代码规范只接受 .TI/.SH/.SZ。Schema 对 tag 未给枚举，和 HTTP 标签枚举之间没有字段级联动约束。
+4. OpenAPI IndexCatalogSnapshot.provider_time 声明 nullable=true；Go 字段为 `*time.Time + omitempty`，nil 时 JSON 省略而不是输出 null，纳入 AUD-WEBUI-CTR-010 的已证实影响范围。
+5. WebUI API Client 已定义 getIndexCatalog，路由、tag 默认值和 API Key 传递代码存在；但目前未发现页面调用点或目录 UI 渲染，不能认定端到端消费已完成。API Client 测试只有导入痕迹，没有 getIndexCatalog 的请求 URL、tag 编码、鉴权和取消信号断言；没有目录 DOM 渲染测试。
+6. Provider 测试覆盖正常返回、重复代码计数和降级；Service 测试覆盖来源选择、unknown 候选保留与回退。但本批未找到明确覆盖目录稳定排序、空目录的端到端 unknown 语义、非法代码/空名称、分类标签矩阵及页面渲染的完整测试组。空目录在 Hithink Provider 当前被作为错误返回，Service 的快照校验则要求空目录为 unknown；两层语义尚无成功返回空快照的完整测试闭环。
+
+#### 34.5 差异登记
+
+**AUD-WEBUI-CTR-028：Tushare 目录标签与真实 Provider 能力不一致（P2，契约可调用性）**
+
+- 证据：HTTP/Service/WebUI 均接受 `tushare`；OpenAPI 声称该标签返回 Tushare `index_basic`；固定基线未发现 Tushare 实现 `IndexCatalogProvider.FetchIndexCatalog`，Hithink Provider 只接受另外四个标签；配置中的 Hithink/Tushare 均 disabled 且 index_catalog=false。
+- 影响：调用 `tag=tushare` 时，当前没有能够成功处理该标签的已证实 Provider；默认部署所有目录请求均缺少启用的 Provider。Schema/Client 对能力的声明超出了固定基线可提供范围。
+- 责任方：Market Data Provider / OpenAPI 维护方。
+- 关闭条件：实现并测试 Tushare index_basic 目录适配且明确启用策略；或从 Handler、Service、WebUI 和 OpenAPI 同步移除 tushare 标签及其错误描述。默认 Provider 未启用时，UI 必须显示能力不可用而不是空目录。
+
+**AUD-WEBUI-CTR-029：目录顺序没有稳定契约及回归测试（P2，消费者可重复性）**
+
+- 证据：Hithink Provider 按源端顺序 append 去重后的目录项；Service 未建立目录排序规则；OpenAPI 未声明排序；当前 Provider/Service 测试没有稳定顺序断言。
+- 影响：源端顺序变化会导致同一目录在刷新后顺序变化；未来 UI 若直接呈现列表，无法依赖固定顺序或稳定差异比较。
+- 责任方：Market Data Service / Data Contract 维护方。
+- 关闭条件：明确按 symbol（或经产品确认的分类/名称规则）排序并在 Service 统一实施，或明确契约为 source order；增加乱序输入、重复项和跨刷新一致性测试。
+
+**AUD-WEBUI-CTR-030：Index Catalog 尚未形成 WebUI 真实消费和请求测试闭环（P2，接入缺口）**
+
+- 证据：WebUI 只有 getIndexCatalog API Client 函数；当前市场概览页面没有目录调用/渲染；API 测试未直接断言该函数，浏览器测试没有目录渲染覆盖。
+- 影响：目录 API 即使可用，也没有当前页面用户入口；请求参数、鉴权、取消和空/降级目录的 UI 行为没有回归保障。
+- 责任方：WebUI。
+- 关闭条件：确认产品是否需要指数/板块目录入口；若需要，接入真实页面并展示 tag、来源、更新时间、质量和 lower-bound 语义，补 API Client 请求测试及 DOM 测试；若暂不需要，明确标记为预留 API，不把它计为 WebUI 已接入功能。
+
+#### 34.6 本批结论
+
+- 目录 DTO、独立 Provider Port、Service 校验/回退/缓存、HTTP 路由和 OpenAPI Schema 已存在；固定部署配置没有启用目录 Provider。
+- 目录代码规范、名称/tag、重复项、计数和质量状态有服务端校验；当前真实 Provider 保留源端顺序，未定义稳定排序。
+- 来源时间使用 Provider 响应 timestamp，采集时间单独记录；缺少独立数据发布日期/生效日，不能把 source_version 当作目录数据版本。
+- 新增 AUD-WEBUI-CTR-028、CTR-029、CTR-030（均 P2）；IndexCatalogSnapshot.provider_time 纳入 AUD-WEBUI-CTR-010。
+- OpenAPI 声称支持 Tushare 目录，但固定基线没有对应 Provider 实现；WebUI Client 有函数但没有页面消费者。未证明已启用部署存在目录数据错误，因为默认目录能力本身未启用。
+- WebUI 维度 2 继续 partial。
