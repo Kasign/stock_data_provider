@@ -28,11 +28,11 @@
 | 阶段 | 内容 | 状态 |
 |---|---|---|
 | A | 固定 SHA、模块清单、文件规模与并行修改观察 | complete（基线固定；仅维护并行变更观察） |
-| B | 十模块六维接口级核验 | in_progress（Platform 维度 1 接口形态初审、维度 3 基础原语已核；消费者调用点及其余维度待核） |
-| C | 跨模块调用图、授权链和依赖图 | not_started |
-| D | 差异、待裁决、补证唯一登记 | in_progress（已有大量 CTR 与审计切片；唯一任务矩阵已建立，其他模块差异仍待收敛） |
+| B | 十模块六维接口级核验 | partial（跨模块边界已覆盖主要关系，但十模块六维证据尚未逐项齐备） |
+| C | 跨模块调用图、授权链和依赖图 | partial（主要边界已抽样交叉核验；全仓 import 图、全部消费者调用点和授权链尚未完成） |
+| D | 差异、待裁决、补证唯一登记 | first_pass_consolidated（43 个正式 CTR、56 条审计工作项已归并；决策与证据仍待责任方处理） |
 | E | 责任模块修复/补证（本分支不改业务代码） | pending_audit |
-| F | 第一轮完整性 Review | in_progress（WebUI 维度 2 已 complete_with_open_items；其他模块/维度尚未完成第一轮覆盖） |
+| F | 第一轮完整性 Review | partial（WebUI 维度 2 与主要跨模块边界已完成首轮切片；十模块六维全覆盖尚未完成） |
 | G | 第二轮正确性 Review | not_started |
 | H | 第三轮冻结条件 Review | not_started |
 
@@ -1069,3 +1069,15 @@
 - 状态：Server/Platform/模块职责边界 freeze-ready；当前共享资源、生命周期和 Platform 基础原语接入 accepted；十模块组合装配、Data 资源统一、BoundDoer 生产注入、模块 Diagnostics/Config 接入均 pending_evidence。Web Session A2 已在 WEB-SRV-B 登记，不重复。
 - 差异登记 SRV-PLAT-A～E 为审计工作项，非新增 CTR；沿用 PLAT-CTR-005、PLAT-015～019 和现有模块契约。未修改业务代码，未执行 CI。
 - **PLAT-002 边界审查已覆盖本轮预定的模块间交互与 Server/Platform 装配方向。下一步不再扩展无边界的代码审查；应汇总全部差异矩阵，按 freeze-ready / blocked / pending-decision / pending-evidence / deferred 形成最终冻结评估，并明确哪些契约可先冻结、哪些只冻结职责/语义而保留实现证据门禁。**
+
+
+## 31. PLAT-002 全量差异矩阵收敛与最终冻结评估（2026-11-10）
+
+- 评估基线：`origin/integration @ b6dfc85ba214fe16268c8cba780641a8bfe15086`；维护分支 `feat/design_doc`。
+- 核对权威登记簿 43 个正式 CTR：39 个 `pending_evidence`，4 个 `has_difference + pending_evidence`，0 个 L2 `frozen`。
+- 差异矩阵有状态工作项 56 条：22 个 `pending_decision`、1 个 `pending_decision + pending_evidence`、29 个 `pending_evidence`、2 个 `has_difference`、1 个 `accepted`、1 个 `deferred`。审计工作项不是 CTR，不与正式契约数相加。
+- L1 Design Baseline 1.0.0 已冻结，锚点 `6d2966e35aab06ed30791701e4ca6fc036a07702`；仅覆盖明确稳定的职责、依赖、身份/时间/数值/授权/错误/状态/幂等/版本原则和首批范围。L1 冻结不等于 L2 实现证据冻结。
+- L2 当前 0/43 frozen；主要 pending_decision 集中在 Data/Quant/Research/News/Researchflow/LLM/WebUI/Server 的条件字段映射、快照生命周期、结果引用投影、幂等/重试和浏览器 Session/OpenAPI/Error 规范；主要 pending_evidence 集中在真实 Facade/Adapter、Schema/Golden/双方 Contract Test、授权复核、Outbox/Relay/Fanout、Server DI/Worker/Storage/Diagnostics/Secret 注入。
+- 可维持 L1 冻结的边界：模块职责/依赖方向；Data/News/Quant/Research/Researchflow/LLM/Notification 的领域 Owner；Server 唯一组合根；Platform 横向技术原语；WebUI 仅消费公开 HTTP 契约；Outbox/Inbox 与工具执行的职责边界。条件性未决子范围不得由实现方猜测。
+- 不得宣告 PLAT-002 整体完成：十模块六维全覆盖、完整 import/消费者/授权链、责任模块修复补证、第二轮正确性 Review、第三轮冻结门禁 Review 尚未完成。
+- 后续唯一主线：集中裁决非条件性 pending_decision 并写入正式 decisions；责任模块修复/补证；PLAT-002 按新 SHA 增量核验；满足 L2 门禁的 CTR 单项冻结。不重复已完成初审，不新增重复 CTR。
