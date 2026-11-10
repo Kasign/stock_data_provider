@@ -227,3 +227,77 @@ Bootstrap 的 Migration Registry 当前只注册：
 - 本批未完成 News Request ID 消费者核验；不能推断 News 业务流程已传播 Request ID。
 
 **News 消费者核验：implementation partial / production wiring not evidenced。Platform 维度 1 总状态仍为 partial。**
+
+## 9. 第四批：Research 模块 Platform 消费者核验
+
+### 9.1 Application Port 与 Fault
+
+固定基线证据：
+- `internal/research/application/application.go`（blob `38998f41d16a2fafc2e9e8c33c9fe43f07a140c3`）
+- `internal/research/application/authorization_error.go`（blob `3424b89db515e56b285253405c745c7002ce3861`）
+- `internal/research/application/application_test.go`（blob `5cbabd0f2a1bbe3328f4370b0bcdbfdeb9ffd09b`）
+
+已确认：
+1. Research 在 `internal/research/application` 定义自己的 Application Port（`Port`、`EventPort`、`ClaimPort`），对外 DTO 使用 Application 自有字段，不直接暴露 Domain Entity 或 Repository 实现。
+2. Application 内部 Repository/Authorizer 接口仍使用 Research Domain 类型，这是模块内部 Application→Domain/Adapter 的依赖，不等于跨模块 Port 暴露 Domain 对象。
+3. Research 将验证、Not Found、Conflict、超时、存储完整性错误映射为 Platform `fault.Fault`；Evidence 授权错误进一步区分 forbidden、unavailable、timeout、internal。
+4. Application 单测覆盖基本创建/读取、授权撤销和错误路径；本批未逐项核对全部 Fault Code 与项目级 Fault 分类矩阵。
+
+判断：Research Application Port 的所有权和 DTO 边界符合模块自治方向；Platform Fault 被作为公共错误原语使用。
+
+### 9.2 Diagnostics
+
+固定基线证据：
+- `internal/research/application/diagnostics.go`（blob `40589aebe8903dc3e16c6db99649465414829b9e`）
+- `internal/research/diagnostics/checks.go`（blob `750be512ba3b9396022866f9ea7ed6d243e8e973`）
+- `internal/research/application/diagnostics_test.go`（blob `b8bc0c4c6f18dc6216fc51a2330e6b2ce2b8b602`）
+- `internal/research/diagnostics/checks_test.go`（blob `85eb29893307e3c28065b867a13c440aced36955`）
+
+已确认：
+- Application 的 `DiagnosticsPort` 构造 Platform `diagnostics.Check`；由调用方执行 Platform Runner，Research 不重复实现调度器。
+- Research Diagnostics Adapter 将 Context/Event/Claim/Evidence 的领域快照校验映射为 Platform Observation。
+- 诊断构造基于不可变版本；Evidence Check 通过 Application 的授权读取路径复核调用者权限，并避免把证据正文写入 Observation。
+- 测试覆盖质量状态映射、Run cutoff 精确匹配、快照不可变性、敏感内容不进入 SafeMessage/Attributes，以及 Application 从指定版本构造 Check。
+
+判断：Research Diagnostics 的职责划分和 Platform Runner 集成方式符合公共诊断契约。
+
+### 9.3 Correlation ID 与 Request ID 的边界
+
+固定基线证据：
+- `internal/research/application/correlation.go`（blob `5117e19bb3856a5eb18d659bff7cc900533617f5`）
+- `internal/research/application/correlation_test.go`（blob `f264067b31d2045d95c90d909087c29325403123`）
+
+Research 定义独立的 Correlation ID Context Key，并明确与 Platform Request ID Context 区分；只允许可信父工作流上下文注入，缺失时由 Research ID Generator 生成新的 correlation ID。单测覆盖继承可信父 ID 和拒绝不合法值。
+
+未确认 Server 是否把可信 Platform Request ID/父工作流标识映射为 Research Correlation ID，也未确认跨模块消息的 originating_request_id 与 correlation_id 的双字段关联。因此本批只确认 Research 内部边界设计，不宣称端到端 Request ID 传播完成。
+
+### 9.4 Server 生产装配与存储所有权
+
+固定基线证据：
+- `internal/server/bootstrap/bootstrap.go`（blob `92df61265f173251ac7811f99a7ab9f41ac470ed`）
+- `internal/server/diagnostics/service.go`（blob `190068e7fc170d6f81d8a79868086fa2870a65e7`）
+- `internal/research/storage/migrations.go`（blob `597db1f16d503f9290f521a0002417227bd0fde6`）
+- `internal/research/storage/repository.go`（blob `22e33c13951aeda92a56d602899d143a963b647d`）
+
+已确认：
+- Research Storage 提供 Platform `storage.Migration` 列表，导入包不会自行执行 DDL。
+- Server Migration Registry 已注册 Research Migration。
+- Research Repository 通过注入的 `*sql.DB` 执行存储操作；Repository 本身不创建/关闭数据库连接池。
+- Server Bootstrap 未 import `research/application`、未构造 Research Application Service/Repository/Authorizer，也未把 Research Diagnostics Checks 传给 Server Diagnostics。
+- Server 当前已具备 Migration 装配，但不代表 Research Application、Repository 或诊断检查已经进入生产运行时。
+
+### 9.5 新增待核项
+
+**AUD-PLAT-PORT-004：Research Application / Diagnostics 未接入 Server 生产组合根（P1 候选）**
+
+当前固定基线中，Research Application、Diagnostics Adapter、Platform Fault 映射均已实现并有单测；Server 只注册 Research Migration；没有 Research Application 构造、Repository 注入、Authorizer 注入或模块 Diagnostics 注入的生产调用点证据。建议由 Server/Research 责任方确定内部服务装配和生命周期归属，并补充组合根测试；不要把 Migration 注册视为模块已接入。
+
+**AUD-PLAT-PORT-005：Research Correlation ID 与 Platform Request ID 的端到端关联待证（P2 候选）**
+
+Research 有意区分两个标识，这是合理的语义边界；但当前已核文件未证明可信 Server 上下文如何建立 Correlation ID，也未证明 Outbox/Worker 消费链保留 originating_request_id 与 correlation_id 的关联。需在 Server 与异步消费者核验时补证，暂不定性为实现缺陷。
+
+### 9.6 本批结论
+
+Research Application Port、Platform Fault 和 Diagnostics Adapter 的模块内实现方向正确；Research Migration 已由 Server 注册。固定基线仍缺 Application/Repository/Authorizer/Diagnostics 的 Server 生产装配证据。Request ID 与 Correlation ID 的跨模块传播尚待核验。
+
+**Research 消费者核验：module-level implementation evidenced / production wiring not evidenced。Platform 维度 1 总状态仍为 partial。**
