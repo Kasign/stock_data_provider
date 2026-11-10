@@ -3,7 +3,7 @@
 - 分支：`feat/researchflow`
 - 代码：`internal/researchflow/**`
 - 任务前缀：FLOW
-- 当前状态：领域状态机、MySQL 核心生命周期事务、Application Worker 单次执行协调器、Scheduler 计划计算与 CAS 持久化原语均已有代码；Scheduler 运行循环、生产 WorkerStore Adapter、调度派发机制、跨模块生产 Executor Adapter 和真实 MariaDB/并发验收尚未闭环。
+- 当前状态：领域状态机、MySQL 核心生命周期事务、Application Worker 单次执行协调器、MySQL WorkerStore Adapter、Scheduler 计划计算与 Stage CAS 原语均已有代码；Scheduler 运行协调器、Worker Pool/常驻消费、生产 StageExecutor Adapter、跨进程取消通知和真实 MariaDB/并发验收尚未闭环。
 
 Researchflow 是研究应用编排层，通过 Data、News、Quant、Research、LLM 的公开 Application Port 编排研究流程。Notification 不作为同步 DAG Stage；Run 终态 CAS 成功后按 INT-CTR-001 写本地 Outbox。它拥有 Run/Stage/Attempt 状态，不拥有其他模块内部领域规则。Platform Task Runner 只提供执行基础设施，不替代 Researchflow 业务状态机。
 
@@ -27,8 +27,8 @@ Researchflow 是研究应用编排层，通过 Data、News、Quant、Research、
 
 ## 当前明确缺口
 
-- Scheduler 目前是纯计划计算 + Stage CAS 原语，没有周期扫描、快照读取、CAS 冲突自动重载重算和实际派发的运行服务。
-- Worker 有单次 `Execute` 协调器；MySQLRunRepository 已实现 WorkerStore，执行快照读取与结果提交映射已落地。常驻消费循环、队列派发、Worker Pool/优雅停机和生产 Executor Adapter 仍未闭环。
+- Scheduler 目前是纯计划计算 + Stage CAS 原语，没有周期扫描、调度快照读取、CAS 冲突自动重载重算和实际派发的运行服务。
+- Worker 有单次 `Execute` 协调器；MySQLRunRepository 已实现 WorkerStore，执行快照读取与结果提交映射已落地。常驻消费循环、队列派发、Worker Pool/优雅停机和生产 StageExecutor Adapter 仍未闭环。
 - `StageExecutor` 是注入端口，Data/News/Quant/Research/LLM 的生产 Adapter 尚未在本分支闭环。
 - 无独立 Worker Pool/队列消费循环；跨 Worker 的 Run 并发上限由 ClaimAttempt 数据库事务兜底。
 - Go 测试、Race、Vet、真实 MariaDB、进程崩溃恢复和跨模块端到端验收必须按实际 SHA 记录，不以测试文件存在代替通过证据。
