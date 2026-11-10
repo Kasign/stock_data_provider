@@ -85,6 +85,11 @@ func TestMariaDBClaimAttemptLeaseAndFencing(t *testing.T) {
 				Version: 1, Required: true, Dependencies: []string{}, RetryPolicyRef: "retry-v1",
 				DiagnosticRefs: []string{}, ReasonCodes: []string{},
 			},
+			{
+				Ref: "claim-stage-third-" + suffix, RunRef: runRef, Code: "research", Status: domain.StageReady,
+				Version: 1, Required: true, Dependencies: []string{}, RetryPolicyRef: "retry-v1",
+				DiagnosticRefs: []string{}, ReasonCodes: []string{},
+			},
 		},
 		ResolvedTemplate: template.ResolvedTemplate{
 			Ref: "claim-template", Version: "v1", Fingerprint: templateFingerprint,
@@ -244,6 +249,36 @@ func TestMariaDBClaimAttemptLeaseAndFencing(t *testing.T) {
 	}
 	if _, _, err := repository.ClaimAttempt(ctx, runRef, stageRef, "invalid-retry-run-state-"+suffix, "worker-c", time.Minute, 3, 8); !errors.Is(err, ErrClaimStageUnavailable) {
 		t.Fatalf("retry while run is queued error=%v, want ErrClaimStageUnavailable", err)
+	}
+
+	// An expired lease on another still-running Stage must not consume a
+	// parallel slot or block a ready Stage from being claimed.
+	thirdStageRef := "claim-stage-third-" + suffix
+	expiredOtherAttemptRef := "claim-expired-other-attempt-" + suffix
+	if _, err := db.ExecContext(ctx, `UPDATE researchflow_runs SET status = ? WHERE run_ref = ?`,
+		string(domain.RunRunning), runRef); err != nil {
+		t.Fatalf("restore running Run for expired-peer lease test: %v", err)
+	}
+	if _, err := db.ExecContext(ctx, `UPDATE researchflow_stages SET status = ?, attempt_no = 1 WHERE stage_ref = ?`,
+		string(domain.StageRunning), secondStageRef); err != nil {
+		t.Fatalf("mark peer Stage running: %v", err)
+	}
+	if _, err := db.ExecContext(ctx, `INSERT INTO researchflow_attempts (
+		attempt_ref, run_ref, stage_ref, attempt_no, status, lease_owner,
+		lease_expires_at, fencing_token, started_at, finished_at, fault_ref, output_ref
+	) VALUES (?, ?, ?, 1, ?, ?, ?, 1, ?, NULL, NULL, NULL)`,
+		expiredOtherAttemptRef, runRef, secondStageRef, string(domain.AttemptRunning),
+		"worker-expired", formatResearchflowTimeValue(time.Now().UTC().Add(-time.Minute)),
+		formatResearchflowTimeValue(time.Now().UTC().Add(-2*time.Minute))); err != nil {
+		t.Fatalf("insert expired peer Attempt: %v", err)
+	}
+	third, replayed, err := repository.ClaimAttempt(ctx, runRef, thirdStageRef,
+		"claim-third-after-peer-expiry-"+suffix, "worker-third", time.Minute, 3, 1)
+	if err != nil || replayed {
+		t.Fatalf("claim with expired peer lease replayed=%v err=%v", replayed, err)
+	}
+	if third.Number != 1 || third.FencingToken != 1 || third.Status != domain.AttemptRunning {
+		t.Fatalf("claim after peer lease expiry returned unexpected Attempt: %#v", third)
 	}
 }
 
