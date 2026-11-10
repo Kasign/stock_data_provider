@@ -124,6 +124,75 @@ func mustMarshalAuthorizationBinding(t *testing.T, binding domain.NewsAuthorizat
 	return payload
 }
 
+func applyNewsMigrationsAndVerifyV8Upgrade(t *testing.T, ctx context.Context, db *sql.DB) {
+	t.Helper()
+	migrations := Migrations()
+	if len(migrations) != 8 {
+		t.Fatalf("News migration count = %d, want 8", len(migrations))
+	}
+
+	var ledgerExists int
+	if err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM information_schema.tables
+		WHERE table_schema = DATABASE() AND table_name = 'platform_schema_migrations'`).Scan(&ledgerExists); err != nil {
+		t.Fatalf("inspect Platform migration ledger: %v", err)
+	}
+	needsV8UpgradeFixture := ledgerExists == 0
+	if ledgerExists > 0 {
+		var latestVersion sql.NullInt64
+		if err := db.QueryRowContext(ctx,
+			"SELECT MAX(version) FROM platform_schema_migrations WHERE namespace = ?", "news",
+		).Scan(&latestVersion); err != nil {
+			t.Fatalf("read News migration version: %v", err)
+		}
+		needsV8UpgradeFixture = !latestVersion.Valid || latestVersion.Int64 < 8
+	}
+
+	if !needsV8UpgradeFixture {
+		if err := platformstorage.ApplyMigrations(ctx, db, "news", migrations); err != nil {
+			t.Fatalf("verify existing News migrations: %v", err)
+		}
+		return
+	}
+
+	// Start from V1-V7 and preserve one pre-existing Observation while V8
+	// adds nullable retention columns to the live table.
+	if err := platformstorage.ApplyMigrations(ctx, db, "news", migrations[:7]); err != nil {
+		t.Fatalf("apply News migrations V1-V7: %v", err)
+	}
+	observationID := fmt.Sprintf("news-v8-upgrade-%d", time.Now().UnixNano())
+	idempotencyKey := observationID + "-key"
+	observedAt := time.Now().UTC().Truncate(time.Microsecond)
+	legacyPayload := []byte(`{"legacy":"before-v8"}`)
+	if _, err := db.ExecContext(ctx, `INSERT INTO news_observations
+		(observation_id, idempotency_key, source_id, provider_code, candidate_json, observed_at, identity_status)
+		VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		observationID, idempotencyKey, "news-v8-upgrade-source", "legacy-provider",
+		legacyPayload, observedAt, string(domain.ObservationUnidentified),
+	); err != nil {
+		t.Fatalf("insert pre-V8 Observation: %v", err)
+	}
+
+	if err := platformstorage.ApplyMigrations(ctx, db, "news", migrations); err != nil {
+		t.Fatalf("upgrade News schema from V7 to V8: %v", err)
+	}
+	var sourceID, identityStatus string
+	var candidateJSON []byte
+	var retentionUntil, payloadPurgedAt sql.NullTime
+	if err := db.QueryRowContext(ctx, `SELECT source_id, identity_status, candidate_json,
+		retention_until, payload_purged_at
+		FROM news_observations WHERE observation_id = ?`, observationID,
+	).Scan(&sourceID, &identityStatus, &candidateJSON, &retentionUntil, &payloadPurgedAt); err != nil {
+		t.Fatalf("read pre-V8 Observation after upgrade: %v", err)
+	}
+	if sourceID != "news-v8-upgrade-source" ||
+		identityStatus != string(domain.ObservationUnidentified) ||
+		string(candidateJSON) != string(legacyPayload) ||
+		retentionUntil.Valid || payloadPurgedAt.Valid {
+		t.Fatalf("V8 upgrade changed legacy Observation: source=%q status=%q payload=%s retention=%+v purged=%+v",
+			sourceID, identityStatus, candidateJSON, retentionUntil, payloadPurgedAt)
+	}
+}
+
 func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 	dsn := os.Getenv("NEWS_MARIADB_TEST_DSN")
 	if dsn == "" {
@@ -144,9 +213,7 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 	}
 	defer db.Close()
 
-	if err := platformstorage.ApplyMigrations(ctx, db, "news", Migrations()); err != nil {
-		t.Fatalf("apply News migrations: %v", err)
-	}
+	applyNewsMigrationsAndVerifyV8Upgrade(t, ctx, db)
 	// Re-applying the same immutable migration set must be a no-op.
 	if err := platformstorage.ApplyMigrations(ctx, db, "news", Migrations()); err != nil {
 		t.Fatalf("re-apply News migrations: %v", err)
