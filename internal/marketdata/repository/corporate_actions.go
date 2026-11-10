@@ -153,7 +153,7 @@ VALUES (?,?,?,?,?,?,?,?,?,?,?)`, value.Symbol, value.TradeDate, value.Source, va
 	return nil
 }
 
-// ListAdjustmentFactorsAsOf 返回各交易日、各来源在系统观察时点之前的最新版本。
+// ListAdjustmentFactorsAsOf 返回各交易日、各来源版本及因子口径在系统观察时点之前的最新版本。
 func (s *Store) ListAdjustmentFactorsAsOf(ctx context.Context, symbol, startDate, endDate string, asOf time.Time) ([]model.AdjustmentFactor, error) {
 	if s == nil || s.db == nil {
 		return nil, errors.New("MariaDB adjustment-factor storage disabled")
