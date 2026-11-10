@@ -810,3 +810,13 @@
 - 未完成全仓Principal/Scope消费者扫描；领域资源授权和AuthorizationRef归维度4。
 - 结论：Platform Bearer A1基本符合，Server Service装配和部署Secret证据仍待补；PLAT-CTR-003保持pending_evidence。仅更新审计文档，无业务代码/Schema/Golden/测试/CI变更。
 - 下一步唯一任务：**Platform 维度2 — PLAT-CTR-006 Storage、Repository、Migration 契约的DTO/机器证据适用性核验**。不重审Storage连接算法与Migration执行正确性（维度5），固定代码基线不变。
+
+## 18. Platform 维度2：PLAT-CTR-006 Storage/Repository/Migration（2026-11-10）
+
+- 审计记录：`Platform-维度2-DTO-Schema-Golden.md` 第11节；固定基线 `b6dfc85ba214fe16268c8cba780641a8bfe15086`。
+- Platform SQLConfig/Migration和Server Registry输入为进程内Go API，不适用公开JSON Schema/Golden；RunReport仅用于Bootstrap日志，未发现HTTP公开输出。
+- Migration字段与机器约束已有Platform/Server测试；仍存在注册阶段边界验证时机差异（PLAT2-D2-009）、Description不进入checksum的不可变语义待裁决（PLAT2-D2-010）。
+- 固定基线有News/Research/Researchflow/Notification四个模块Migration生产方；Root Server Registry只注册News/Research/Notification，遗漏Researchflow（PLAT2-D2-011）。这是明确的消费者接线缺口，待Server责任模块修复，维度5验收启动生命周期。
+- 真实MariaDB/Redis集成测试受环境变量门控，本轮未运行；A2/L3资源与Migration运行证据留维度5。
+- 结论：PLAT-CTR-006维度2适用性已完成首轮核验，但整体契约保持partial / pending_evidence。仅审计文档更新，无业务代码/Schema/Golden/测试/CI变更。
+- 下一步唯一任务：**Platform维度2 — PLAT-CTR-007 Typed Config/Secret字段、脱敏、消费者映射及机器测试适用性核验**。固定基线不变；不重审本轮Migration算法和生命周期。
