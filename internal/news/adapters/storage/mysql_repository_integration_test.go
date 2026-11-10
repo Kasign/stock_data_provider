@@ -548,6 +548,9 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 	if err != nil || repeatedConcurrentCleanup != 0 {
 		t.Fatalf("repeat concurrent snapshot cleanup deleted=%d err=%v, want 0 and nil", repeatedConcurrentCleanup, err)
 	}
+	var idSequence atomic.Uint64
+	newID := func() string { return fmt.Sprintf("news-it-%d", idSequence.Add(1)) }
+	ingest := repositoryIngestHarness{repository: repository, newID: newID}
 	sourceID := fmt.Sprintf("news-it-source-%d", time.Now().UnixNano())
 	const workers = 6
 
@@ -556,10 +559,6 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 		Title:          "News integration title",
 		PublisherName:  "Integration Publisher",
 		PublishedAtRaw: "2026-11-06T01:02:03Z",
-	}
-	identityCandidates, err := domain.BuildIdentityCredentials(sourceID, candidate.SourceItemID, "", domain.SourceURLPolicy{})
-	if err != nil {
-		t.Fatalf("build integration identity: %v", err)
 	}
 	observations := make([]domain.Observation, workers)
 	errs := make(chan error, workers)
