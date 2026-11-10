@@ -882,3 +882,44 @@ CTR-042 不是已证实的数值换算错误：当前代码没有把 Hithink 原
 - CTR-046 的 404/500 既有测试描述已保持准确；缺口仅列出尚未覆盖的成功、409 和 Run Events 路径状态。
 - CTR-047 不把所有领域字段机械标为 required；先裁决 HTTP 输入模型和 Handler 实际校验时机。
 - 本批未修改业务代码、OpenAPI、DTO 或测试，未执行 CI；没有新增 CTR 编号，也没有把嵌套 RunResult Golden、DB migration 或 Worker 并发审计混入本轮。后几项仍按既定其他维度/专项任务处理。
+
+## 27. 全市场分页 API Client：CTR-004 证据链复核
+
+本批只复核既有 AUD-WEBUI-CTR-004 的测试缺口是否仍成立、原始描述是否过宽，以及它对 WebUI 维度 2 完整性/冻结的影响。不新增差异编号。固定代码审计基线仍为 `origin/integration @ b6dfc85ba214fe16268c8cba780641a8bfe15086`。
+
+### 27.1 API Client 实际归一化行为
+
+固定基线 `web/src/api.js:getMarketStocks`：
+- `page` 默认 1，先转 Number、截断，再限制在 1..10000；无效数值/0 回退到 1，负数钳制到 1，超过上限钳制到 10000。
+- `pageSize` 默认 50，截断后限制在 1..100；无效数值/0 回退到 50，负数钳制到 1，超过上限钳制到 100。
+- `includeMA` 默认 true，并通过 `Boolean(includeMA)` 序列化为字符串 true/false。该参数的正常调用约定应是布尔值；传入字符串 `"false"` 会因 JS truthiness 被序列化为 true，当前没有显式类型校验。
+- `adjustment` 只接受 `none`、`forward_adjusted`、`backward_adjusted`；其他值回退为 `forward_adjusted`。
+- 最终请求固定为 `GET /api/v1/market/stocks?page=...&page_size=...&include_ma=...&adjustment=...`，并传递 API Key、AbortSignal 和 timeout。
+
+### 27.2 与页面、Server 和 OpenAPI 对照
+
+- `web/src/market-stocks.js` 页面状态默认 page=1、pageSize=50、adjustment=forward_adjusted；页面每页数量只允许既定选项，异常选项回退到 50；页面固定传 `includeMA: true`。
+- `web/tests/market-stocks-lifecycle-browser.mjs` 已覆盖真实页面交互下的首屏 page=1/page_size=50、翻页 page=2、切换 page_size=20、切换 backward_adjusted，以及离开/返回和连接失效行为。该测试使用拦截路由读取请求参数，属于页面到 API 的集成级证据。
+- 该浏览器测试只记录 page、page_size、adjustment，没有断言 include_ma；也没有直接验证 API Client 对缺省参数、非法/越界 page、pageSize、未知 adjustment 的归一化结果。
+- `web/tests/api.test.mjs` 导入 `getMarketStocks`，目前相关直接测试覆盖请求超时与底层 AbortSignal 取消；未发现独立的 URL 查询参数序列化、默认值和边界归一化测试。
+- `web/tests/market-stocks-navigation.test.mjs` 是导航/源码契约类测试，不替代 API Client 请求参数行为断言。
+- Server `internal/marketdata/httpapi/market_stocks.go` 对 page 允许 1..10000、page_size 允许 1..100，缺省分别为 1/50；include_ma 缺省 true，非法布尔值返回 400；adjustment 缺省使用 Server 配置，非法口径返回 400。
+- OpenAPI `/api/v1/market/stocks` 已声明 page 1..10000/default 1、page_size 1..100/default 50、include_ma/default true 和 adjustment 的 RequestAdjustmentBasis 枚举；服务端 Schema/参数约束本身有表达。
+- Server 测试已覆盖 page 下界/上界、page_size 上界、非法 include_ma 和非法 adjustment 的 400 行为。当前没有发现对应的成功响应请求参数组合 Handler 专项测试；这不改变本 CTR 原始指向是 WebUI API Client 测试补证。
+
+### 27.3 CTR-004 复核结论
+
+- 原始问题“前端缺少对全市场分页 API 参数序列化/默认值/边界归一化的直接断言”仍成立。
+- 但不能再表述为“全市场分页完全没有请求参数测试”：页面浏览器生命周期测试已证明主要交互路径的 page、page_size、adjustment 会正确传递；缺口集中在 API Client 直接行为、默认值/边界值以及 include_ma 序列化。
+- 没有证据证明当前页面正常交互产生错误请求；CTR-004 仍是测试补证项，而不是已证实运行时错误。
+- **AUD-WEBUI-CTR-004 保留 P2**，责任在 WebUI API Client 测试层。建议补充 `getMarketStocks` 直接请求测试，至少覆盖全默认值、正常参数序列化、page/pageSize 越界归一化、未知 adjustment 回退、includeMA true/false，并断言 URL、API Key、signal/timeout 配置。
+- 需明确 `includeMA` 的输入类型约定。若 API Client 只接受布尔值，应在测试/注释中固定该约定；若需容忍字符串，应先决定转换规则，避免把 `"false"` 的 truthy 行为误当成 false。
+- **冻结影响：** 该项不单独阻断 Market Stocks 服务端 OpenAPI/DTO 语义冻结，因为服务端范围、默认值和参数 Schema 已有明确表达；但它阻止将 WebUI 对该 API 的消费者参数适配标记为“测试证据完整”。维度 2 整体冻结仍需按项目门禁补齐适用的消费者 Contract Test，不得把页面浏览器测试误记为 API Client 边界测试的完全替代。
+
+### 27.4 跨维度编号范围校正
+
+- `AUD-WEBUI-CTR-001`（浏览器持有行情 API Key 的迁移安全门禁）和 `AUD-WEBUI-CTR-002`（Analysis Owner-only 鉴权联调阻断）均在既有进度记录中明确登记于 **WebUI 维度 1：对外契约消费/认证安全核验**，不是本轮维度 2 的 DTO/API 参数审计范围。
+- 本轮不复核、不改变这两项的状态，也不把它们并入维度 2 CTR-001/002。若后续进行维度 1 交叉检查，应回到其原始安全/认证证据链单独处理。
+- 先前下一步计划把 CTR-001/002 与 CTR-004 并列为本维度审查项，属于范围规划错误；本节已纠正。CTR-004 是本批唯一执行对象。
+
+本批未修改业务代码、OpenAPI、DTO 或测试，未执行 CI；没有新增 CTR 编号。WebUI 维度 2 第一轮完整性 Review 继续保持 partial。
