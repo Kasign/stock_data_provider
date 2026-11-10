@@ -217,3 +217,34 @@
 - 修正 WebUI-维度2-Analysis-Run.md 对 HTTP 测试缺口的表述：现有测试覆盖 GET Run 404 与 500 脱敏；缺口收敛为 GET Run 成功、409 和 Run Events。
 - 本批未执行固定基线 Go/Node CI；未检查 RunResult 全部嵌套字段 Golden，也未完成 DB migration/Worker 多实例并发专项审计，这些仍按原计划保留，不以本批替代。
 - 本批没有新增 CTR 编号、没有修改业务代码。
+## 12. CTR-010 字段清单复核（子批次 5：ChipDistribution）
+
+固定代码基线：origin/integration @ b6dfc85ba214fe16268c8cba780641a8bfe15086。本批只核对 ChipDistribution，不扩展其他 DTO。
+
+### 12.1 字段级对照
+
+internal/marketdata/model/model.go 的 model.ChipDistribution 中，以下九个字段均带 omitempty，nil/空值时 encoding/json 省略字段：
+
+| JSON 字段 | Go 类型 | JSON tag | OpenAPI nullable | OpenAPI required |
+|---|---|---|---|---|
+| date | string | date,omitempty | true | 否 |
+| cost_90_low | *float64 | cost_90_low,omitempty | true | 否 |
+| cost_90_high | *float64 | cost_90_high,omitempty | true | 否 |
+| cost_70_low | *float64 | cost_70_low,omitempty | true | 否 |
+| cost_70_high | *float64 | cost_70_high,omitempty | true | 否 |
+| profit_ratio | *float64 | profit_ratio,omitempty | true | 否 |
+| concentration_90 | *float64 | concentration_90,omitempty | true | 否 |
+| concentration_70 | *float64 | concentration_70,omitempty | true | 否 |
+| provider_date | string | provider_date,omitempty | true | 否 |
+
+另外 source_version、quality_reasons 也带 omitempty，但 OpenAPI 未声明 nullable，故不纳入 CTR-010。average_cost、symbol、source、fetched_at、quality_status 为 required，与 Go 非 omitempty 字段一致。
+
+### 12.2 Golden / 自动化验证
+
+- openapi_contract_test.go 的 TestOpenAPIDataModelFieldsMatchKnownJSONContract 将 ChipDistribution 纳入 51 个模型登记，能核对属性集合和 required 集合；其 nullable 断言只覆盖非 omitempty 指针字段，不能发现 omitempty 字段被错误声明 nullable 的反向差异。
+- TestDataModelJSONSerializationMatchesOpenAPIRequiredAndNullableSemantics 没有 ChipDistribution 样例；当前没有该 DTO 的 nil/空值字段省略 Golden。
+- 因而 DTO tag 与 OpenAPI nullable 的九处冲突已由源码和 Schema 直接证实，但没有序列化 Golden 对实际 JSON 行为作独立回归保护。本轮未执行固定基线 CI。
+
+结论：CTR-010 在 ChipDistribution 上的九个字段全部确认，保留原编号，不新增差异。关闭条件需逐字段取消不符合 Go JSON 行为的 nullable 声明（或经明确契约决议改 Go 序列化行为），并增加 DTO nil/空值 Golden 与双向契约测试；不能仅修改 OpenAPI 而不验证消费者对省略字段的处理。
+
+本批仅完成 ChipDistribution 子集，不代表 CTR-010 全量字段清单完成。
