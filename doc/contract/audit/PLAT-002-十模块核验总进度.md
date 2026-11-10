@@ -521,3 +521,12 @@
 - P1 门禁复核更正：CTR-041 经固定 SHA 源码、OpenAPI 和 JSON Golden 对照后撤销；LimitPoolItem.seal_money/max_seal_money 的 omitempty、非 required/非 nullable、JSON omitted 三方一致。当前维度 2 已确认仍需处理的 P1 为 CTR-043（Hithink 龙虎榜分页计数契约冲突）；本轮未执行 CI。
 
 - CTR-010 影响范围抽查（Limit Pool/Dragon Tiger）：两组 DTO 的已登记 omitempty 字段与 OpenAPI nullable=true 不一致属实；LimitPoolItem.seal_money/max_seal_money 则为 omitempty、OpenAPI 非 nullable/非 required、Golden omitted，明确排除在 CTR-010 外。CTR-010 全量字段复核仍待后续子批次。
+
+### WebUI — 维度 2：第一轮完整性 Review（子批次 2）
+
+- 详细记录：WebUI-维度2-完整性Review-第一轮.md 第 9 节。
+- 本批只复核 Provider Probe History 的 CTR-048、CTR-049，不扩展数据集范围。
+- CTR-048 已由 Repository 的 LIMIT 查询、Service 的 Total=len(items)、OpenAPI 未定义 total 语义及 WebUI 文案共同证实，保留 P2；关闭时需明确全量 total 或 returned_count 语义。
+- CTR-049 已由 Service 持久化错误返回、POST Handler 统一映射 400、OpenAPI 声明 500 共同证实，保留 P2；需区分参数错误和存储错误并补 Handler 故障测试。
+- 补充确认 API Client 与浏览器测试覆盖历史正常/异常流程；MariaDB HTTP 集成测试覆盖重启后读取但依赖 MARKET_DATA_TEST_MYSQL_DSN，本轮未执行。历史排序/limit/重复 run_id 更新及 GET Handler 独立故障测试仍缺。
+- 本批无新增 CTR 编号、无业务代码修改。维度 2 第一轮完整性 Review 继续 partial。
