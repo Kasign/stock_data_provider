@@ -545,3 +545,10 @@
 - 更正 CTR-046 测试资产描述：server_test.go 已覆盖 GET Run 404 和 500 脱敏；仍缺成功响应、409 run_not_finished 与 Run Events Handler 专项测试。
 - CTR-047 经 RunRequest、TaskType 常量、CreateTask Handler 默认/时间模式处理及 Queue 生成覆盖 run_id 的代码核对，字段差异和异步请求 Schema 描述不准确成立，保留 P2。关闭时按 HTTP CreateTaskRequest 语义定义 required/default，不能机械复制领域结构体。
 - 本批没有新增 CTR 编号或业务代码修改；固定基线 CI、RunResult 全字段 Golden、migration/Worker 并发专项仍未执行。
+### WebUI — 维度 2：CTR-010 字段清单复核（子批次 5）
+
+- 详细记录：WebUI-维度2-完整性Review-第一轮.md 第 12 节。
+- 本批只核对 ChipDistribution。确认 date、cost_90_low/high、cost_70_low/high、profit_ratio、concentration_90/70、provider_date 共九个字段：Go tag 带 omitempty，OpenAPI 声明 nullable=true，均非 required，九项全部属于 CTR-010。
+- source_version、quality_reasons 虽也 omitempty，但 OpenAPI 未声明 nullable，不纳入差异；average_cost、symbol、source、fetched_at、quality_status 的 required 与 Go 一致。
+- 通用模型登记测试覆盖字段/required，但没有对 omitempty 的 nullable 反向断言；JSON serialization test 未覆盖 ChipDistribution。CTR-010 的九处冲突确认，未新增编号；本轮未执行固定基线 CI。
+- 本批只完成 ChipDistribution 子集，CTR-010 全量字段清单仍未完成。
