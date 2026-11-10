@@ -1,7 +1,7 @@
 # 新闻 API 契约
 
 > 版本：设计草案 v0.2  
-> 状态：当前不建设新闻独立对外 HTTP API；本文及 OpenAPI 仅保留为未来评估草案，不进入本阶段实现
+> 状态：当前不建设新闻独立对外 HTTP API；本文及 OpenAPI 仅保留为未来评估草案，不进入本阶段实现。本文第 11.5 节中的“Facade/PIT/Snapshot 尚未实现”属于 2026-11-06 历史记录，当前已实现首批 Get/List Facade、PIT Repository 与 Snapshot/Cursor 分页；但 available_at 严格 PIT 门禁、授权快照信封一致性和授权读取 TOCTOU 仍未闭环，详见《代码与文档Review报告》。
 
 ## 1. 基本原则
 

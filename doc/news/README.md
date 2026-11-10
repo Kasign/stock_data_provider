@@ -1,6 +1,6 @@
 # 新闻模块开发任务与验收清单
 
-> 当前阶段（2026-11-09 Review）：N1-A/N2 已完成；N3 离线首批完成、生产采集未闭环；N4 领域/Repository 首批已实现；N5 Config/BoundDoer/Fault 适配已实现、Server 装配待接入；N6 Migration V1-V7 已定义，V1/V2 有 MariaDB 集成通过记录，V3-V7 尚待集成验收；N7 Check 工厂已实现、Runner 注册待接入；NEWS-CTR-001 PIT/Snapshot/Cursor 已实现，内容查询 Facade 未闭环；NEWS-CTR-002 授权快照已实现，当前策略复核/JCS/撤销/TOCTOU 未闭环
+> 当前阶段（2026-11-10 Review）：NEWS-CTR-001 的 Get/List Facade、PIT Repository、Snapshot/Cursor 分页已有首批代码；但 available_at 严格 PIT 门禁未实现，授权快照信封校验和内容读取 TOCTOU 仍阻断生产披露。Observation V8/MariaDB 真实验收、Server 装配与生产采集闭环未完成。详见《代码与文档Review报告》。\n> 历史记录说明：本文按日期累积的早期实施段落保留为过程记录，其中“尚未实现”只描述当时状态；当前实现状态以本文件顶部、开发任务总览和最新 Review 报告为准。\n> 当前阶段（2026-11-09 Review）：N1-A/N2 已完成；N3 离线首批完成、生产采集未闭环；N4 领域/Repository 首批已实现；N5 Config/BoundDoer/Fault 适配已实现、Server 装配待接入；N6 Migration V1-V7 已定义，V1/V2 有 MariaDB 集成通过记录，V3-V7 尚待集成验收；N7 Check 工厂已实现、Runner 注册待接入；NEWS-CTR-001 PIT/Snapshot/Cursor 已实现，内容查询 Facade 未闭环；NEWS-CTR-002 授权快照已实现，当前策略复核/JCS/撤销/TOCTOU 未闭环
 > 状态：本分支只维护 News 领域实现和专项文档；公共平台原语来自已合并基线，根组合根由 Server/集成 Owner 负责
 
 ## 一、阶段总览
@@ -614,7 +614,7 @@
 - [x] 请求校验覆盖可信 caller_ref 非空、system_as_of UTC 且不晚于当前时间、filters 必填、数组数量上限/去重、质量枚举、业务时间独立范围和 page_size 1..100。
 - [x] 响应 DTO 明确 available_at/published_at nullable，空 items/diagnostics 初始化为非 null 数组。
 - [x] 新增 NEWS-CTR-001 Get/List/Response JSON Schema 与 Golden；Go 测试读取 Golden 并校验请求边界。
-- [ ] Query Facade、PIT Repository 查询、AuthorizationRef 当前授权复核和固定 Snapshot Store 尚未实现；HMAC Cursor Codec 已单独完成，不标记 NEWS-CTR-001 验收完成。
+- [x] 后续已补齐 Get/List Facade、PIT Repository、固定 Snapshot Store、Cursor 与引用分页的首批实现。\n- [ ] available_at 可信证据过滤、授权快照信封一致性校验、授权与内容读取同一一致性边界仍未完成；NEWS-CTR-001 不得标记完整验收。
 
 
 ### NEWS-CTR-001 HMAC Cursor 首批实现（2026-11-06）
@@ -625,7 +625,7 @@
 - [x] 支持 active key + previous key ring；旧 key 可在 TTL 内验证，新 token 使用 active key。
 - [x] Platform `config.Secret` 持有密钥；拒绝弱密钥、未知 Key ID 和超出密钥环上限。
 - [x] 过滤数组排序规范化，nil/empty 语义统一；时间值规范化 UTC。
-- [ ] 固定 Snapshot 持久化/过期清理、PIT Repository 查询、授权复核和完整 Facade 仍待实现。
+- [x] 后续已实现固定 Snapshot 持久化、过期删除 Repository、PIT 查询和 Facade 首批编排。\n- [ ] 严格 available_at 过滤和授权一致性边界仍未闭环。
 
 
 ### N3 采集过程时间证据补充（2026-11-06）
