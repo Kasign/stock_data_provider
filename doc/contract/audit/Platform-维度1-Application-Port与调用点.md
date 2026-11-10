@@ -1275,3 +1275,59 @@ Profile、Trading Status、Price Limit Rule 路由与基础 Handler 行为已核
 4. CTR-011 的八个漏列 required 字段和两个缺失枚举均由 Go 结构体与 OpenAPI 内联响应 Schema 直接对照确认，差异成立。
 5. 两项均为契约精度/测试覆盖问题，不是已证实的线上数据错误；P2 级别维持。
 
+
+
+### 24. WebUI 维度 2：个股所属板块 StockBoards
+
+#### 24.1 核验范围与证据
+
+- 固定代码基线：`b6dfc85ba214fe16268c8cba780641a8bfe15086`。
+- Go Model：`internal/marketdata/model/model.go`（blob `6f04516bd11452a01adcb5acceab571fb1c28ed5`）。
+- Provider Port：`internal/marketdata/provider/provider.go`（blob `6635d2247379d1ffcb826f80e8e2176422b0cc0a`）。
+- Eastmoney Provider：`internal/marketdata/provider/eastmoney.go`（blob `5f2a8c2d0fb883414f870f6e29af51943d12c204`）。
+- Provider 边界测试：`internal/marketdata/provider/eastmoney_stock_boards_test.go`（blob `a11d3663d0d1eeba75082c1a4560510de27a4749`）。
+- Service 校验、缓存与回退：`internal/marketdata/service/data.go`（blob `d2abb990d8d7ec2fcbf112a5f1beca49c8d40f7b`）；回退测试 `internal/marketdata/service/stock_boards_fallback_test.go`（blob `d95da9ce4fd9c8e17ee27e33c94969549d2d84e9`）。
+- HTTP 路由与 Handler：`internal/marketdata/httpapi/server.go`（blob `7b54b54b3c6182ecab830c2c43f91c548dc60dba`）。
+- OpenAPI：`internal/marketdata/httpapi/openapi.yaml`（blob `cd8a6e3dfb8e3162ee789b11e883be9283c59f32`）。
+- OpenAPI 契约测试：`internal/marketdata/httpapi/openapi_contract_test.go`（blob `7f97f075a23bd698a7e3fc32e90509d1e999217b`）。
+- WebUI API Client：`web/src/api.js`（blob `b8bcbee5908b43bfa1bc2ca744363190af38287f`）。
+- WebUI 页面消费：`web/src/stock-research.js`（blob `49fe406d7dcf5e8fdec76f2f0bfcda6a18d4db85`）。
+
+#### 24.2 真实调用链
+
+1. Server 注册 `GET /api/v1/stocks/{symbol}/boards`，Handler 调用 `s.securities.StockBoards(ctx, symbol)`，成功后透传 `StockBoardSnapshot` JSON，并按缓存命中设置缓存响应头；未发现独立 HTTP DTO 转换层。
+2. Provider Port 为 `StockBoardsProvider.FetchStockBoards(ctx, symbol)`，返回统一的 `model.StockBoardSnapshot`。
+3. 本基线可见的具体板块成员 Provider 实现为 Eastmoney `FetchStockBoards`，使用 slist 接口读取 f12 板块代码、f14 板块名称、f3 涨跌幅。代码限制为普通 A 股证券；响应 source_version 固定为 `eastmoney-slist-stock-boards-v1`。
+4. DataService 对证券代码做标准化和请求/响应身份一致性校验；检查来源、版本、采集时间、数量关系、重复板块代码、条目质量及涨跌幅数值有效性。未知或空成员结果不会直接作为“无所属板块”，而会继续尝试后备 Provider；所有后备源耗尽后才保留 unknown 结果。
+5. 已确认成员结果缓存 12 小时；未知/空结果缓存 5 分钟。Eastmoney 返回 1000 条时标记 `total_is_lower_bound=true` 和 degraded，避免声称已取得完整列表。
+6. WebUI API Client 导出 `getStockBoards`，请求同一路径。个股研究页 import 并调用该函数；初次加载和按已请求面板刷新均会触发 boards 请求。通用 `fetchOne` 在渲染前校验响应 symbol 与当前请求证券一致。
+7. `renderBoards` 实际读取 items、name、code、change_percent、source、source_version、fetched_at、quality_status、item/整体 quality_reasons；空列表且 `has_data=false` 时明确显示“数据源未确认”，不会解释为零板块。
+
+#### 24.3 DTO 与 OpenAPI
+
+1. Go `StockBoard` 的必输出字段为 code、name、source、fetched_at、quality_status；OpenAPI required 集合一致。source_version、quality_reasons 和 change_percent 均为 Go `omitempty` 字段，OpenAPI 也未将它们列入 required。
+2. Go `StockBoardSnapshot` 的必输出字段为 symbol、total、provider_returned、excluded_rows、total_is_lower_bound、has_data、items、source、fetched_at、quality_status；OpenAPI required 集合与 Go 非 omitempty 字段一致。source_version、quality_reasons 均为可省略字段。
+3. OpenAPI `StockBoard.change_percent` 声明为 `type: number, nullable: true`，但 Go 字段是 `*float64 + omitempty`。无涨跌幅时 encoding/json 会省略字段而不是输出 null。这是 CTR-010 同类的可省略/null 语义过宽问题，本批将 StockBoard.change_percent 纳入 CTR-010 影响范围。
+4. StockBoard 的 code 描述为 Eastmoney board code（例如 BK0477）；响应同时提供 source/source_version。当前可见生产实现是 Eastmoney，未据模拟回退测试推断存在 HiThink 生产实现。
+5. OpenAPI 契约测试已把 StockBoard、StockBoardSnapshot 纳入 Go Model 字段与 required 反射对照；路由/参数矩阵也登记了 boards 路径及 symbol path 参数。本批未发现字段集合或 required 集合错配。
+6. 本批未找到 StockBoard/StockBoardSnapshot 的完整 JSON Golden 专项断言；现有反射测试覆盖字段与 required，但不等同于对真实序列化响应的完整黄金样例覆盖。
+
+#### 24.4 WebUI 对覆盖下界的消费缺口
+
+1. Eastmoney Provider 请求 `pz=1000`；当返回总数达到 1000 时，明确将 `total_is_lower_bound` 置为 true，并将质量标记为 degraded。对应 Provider 测试验证 1000 条、下界标志、degraded 状态和质量原因。
+2. WebUI `renderBoards` 只用 `data.total` 显示“源端返回 N 条”，没有读取 `data.total_is_lower_bound`，也没有展示 `provider_returned` 或 `excluded_rows`。当源端命中 1000 条边界时，页面仍显示确定数量文案，未把“至少 N 条/列表可能截断”表达出来。
+3. 页面会显示整体 quality_status 与 quality_reasons，但这不能替代对数量字段语义的直接表达；用户需要从质量原因自行推断 total 是下界，且现有文案“源端返回 1000 条”没有显式说明总量未知。
+4. 因此该项是 WebUI 对已有 DTO 语义消费不完整，不是 Provider 没有提供下界信息，也不是已证实的错误数据值。
+
+#### 24.5 差异登记
+
+**AUD-WEBUI-CTR-012：个股板块页面未消费 total_is_lower_bound（P2）**
+
+- 证据：Provider 在 1000 条源端边界设置 `total_is_lower_bound=true`；OpenAPI 将该字段列为 StockBoardSnapshot 必需字段；WebUI `renderBoards` 仅展示 `data.total`，未读取下界标志。
+- 影响：源端达到 1000 条上限时，页面可能将“至少 1000 条”呈现为确定的“源端返回 1000 条”，掩盖成员列表覆盖不完整。
+- 责任方：WebUI 个股研究页面维护方。
+- 关闭条件：展示层根据 `total_is_lower_bound` 明确显示“至少 N 条”或“列表可能被源端上限截断”；增加下界为 true/false 的页面渲染测试，确保不会把下界显示为确定总数。
+
+#### 24.6 本批结论
+
+StockBoards 的 Provider Port、Go DTO、Service 校验/回退/缓存、HTTP 路由、OpenAPI 和 WebUI 实际调用链均已核验。字段集合和 required 集合未发现错配；新增 AUD-WEBUI-CTR-012（P2，WebUI 未消费下界语义），并将 StockBoard.change_percent 纳入既有 AUD-WEBUI-CTR-010。未证明运行时板块成员值错误。WebUI 维度 2 继续保持 partial。
