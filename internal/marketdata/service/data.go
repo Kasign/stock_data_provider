@@ -2450,9 +2450,9 @@ func (s *DataService) ChipDistribution(ctx context.Context, rawSymbol string) (*
 			item.QualityStatus = model.QualityDegraded
 			item.QualityReasons = appendReason(item.QualityReasons, "provider_quality_status_missing")
 		}
+		item.QualityReasons = appendReason(item.QualityReasons, "publication_availability_timestamp_unverified")
 		if item.QualityStatus == model.QualityValid {
 			item.QualityStatus = model.QualityDegraded
-			item.QualityReasons = appendReason(item.QualityReasons, "publication_availability_timestamp_unverified")
 		}
 		if err := validateChipDistributionSnapshot(symbol, item); err != nil {
 			failures = append(failures, p.Name()+": "+err.Error())
@@ -3894,6 +3894,7 @@ func providerFailureSummary(err error) (kind, message string) {
 			strings.Contains(lower, "empty daily-bar response"):
 			kind = "empty_or_unparseable_response"
 		case strings.Contains(lower, "validation"),
+			strings.Contains(lower, "source_version"),
 			strings.Contains(lower, "symbol mismatch"),
 			strings.Contains(lower, "contract"),
 			strings.Contains(lower, "inconsistent"),
