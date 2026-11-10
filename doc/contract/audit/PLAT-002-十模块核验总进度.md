@@ -258,3 +258,14 @@
 - 新增 AUD-WEBUI-CTR-011（P2）：PriceLimitRuleSnapshot 的 OpenAPI required 漏列八个 Go 非 omitempty 字段，且两个状态字段缺少 Go 已定义枚举；该 DTO 未进入 51 模型契约登记表，缺少完整 JSON Golden。
 - Review 已确认 stock-research.js 只实际调用 Profile；Trading Status / Price Limit Rule 请求函数未接入该页面，现有对应区域仅重置占位状态。不能视为端到端已完成。
 - 本批未证明运行时业务结果错误；WebUI 维度 2 继续 partial。详细证据见审计明细第 23 节。
+
+
+### WebUI — 维度 2：个股所属板块 StockBoards
+
+- 固定代码基线：`b6dfc85ba214fe16268c8cba780641a8bfe15086`。
+- 已核对 Provider Port、Eastmoney 实现、DataService 校验/回退/缓存、HTTP 路由与 Handler、Go DTO、OpenAPI、契约测试及 WebUI API Client/页面调用链。
+- StockBoard 与 StockBoardSnapshot 的 Go 字段集合、required 集合和 OpenAPI 一致；契约反射测试已登记两种模型。页面实际调用 `getStockBoards`，并校验响应证券身份。
+- 将 StockBoard.change_percent 纳入 AUD-WEBUI-CTR-010：Go `omitempty` 指针空值会省略，OpenAPI 却声明 nullable=true。
+- 新增 **AUD-WEBUI-CTR-012**（P2）：Provider 已提供 `total_is_lower_bound`，但 WebUI 未消费该字段；源端 1000 条上限时，页面可能将下界呈现为确定总数。
+- Provider 1000 条上限、unknown 空列表、后备源回退及缓存策略均有对应代码/测试证据；本批未证明板块成员运行时数据错误。
+- WebUI 维度 2 继续 partial。详细证据见审计明细第 24 节。
