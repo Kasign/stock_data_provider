@@ -707,18 +707,22 @@ func (p *Hithink) FetchLimitPool(ctx context.Context, poolType, tradeDate string
 		return nil, fmt.Errorf("解析同花顺 %s 池失败: %w", map[string]string{"up": "涨停", "down": "跌停", "broken": "炸板"}[poolType], err)
 	}
 	if data.Pagination == nil || data.Pagination.Total == nil || *data.Pagination.Total < 0 {
+		addHithinkFieldIssue(ctx, nil, "pagination_total", "pagination.total", "missing_or_invalid_value", "non-negative provider total", "missing_or_invalid", "", "同花顺涨跌停池分页总数缺失或非法")
 		return nil, errors.New("同花顺涨跌停池响应缺少有效 pagination.total")
 	}
 	total := *data.Pagination.Total
 	if len(data.Item) > limit || total < len(data.Item) {
+		addHithinkFieldIssue(ctx, nil, "pagination", "pagination.total/item", "count_inconsistent", "returned rows <= requested limit and total >= returned rows", "inconsistent", fmt.Sprintf("total=%d items=%d limit=%d", total, len(data.Item), limit), "同花顺涨跌停池分页总数与当前页返回行数不一致")
 		return nil, fmt.Errorf("同花顺 %s 池分页计数不一致: total=%d items=%d limit=%d", poolType, total, len(data.Item), limit)
 	}
 	if data.Pagination.Page != nil && *data.Pagination.Page != 1 {
+		addHithinkFieldIssue(ctx, nil, "page", "pagination.page", "page_mismatch", "requested page 1", "number", strconv.Itoa(*data.Pagination.Page), "同花顺涨跌停池返回页码与请求不一致")
 		return nil, fmt.Errorf("同花顺 %s 池返回页码不匹配: requested=1 returned=%d", poolType, *data.Pagination.Page)
 	}
 	if data.Pagination.Size != nil && (*data.Pagination.Size < len(data.Item) || *data.Pagination.Size > 100) {
+		addHithinkFieldIssue(ctx, nil, "page_size", "pagination.size", "invalid_value", "returned size between item count and 100", "number", strconv.Itoa(*data.Pagination.Size), "同花顺涨跌停池返回分页 size 无效")
 		return nil, fmt.Errorf("同花顺 %s 池返回的分页 size 无效: %d", poolType, *data.Pagination.Size)
-	}
+}
 
 	now := time.Now().UTC()
 	// 仅从可信的供应商时间戳派生报告日期，不能用请求日期伪造来源报告日期。
@@ -767,6 +771,7 @@ func (p *Hithink) FetchLimitPool(ctx context.Context, poolType, tradeDate string
 		rawSymbol := hithinkFieldString(row, "thscode")
 		symbol, symbolErr := hithinkDomesticSymbol(rawSymbol)
 		if symbolErr != nil {
+			addHithinkFieldIssue(ctx, &index, "symbol", "thscode", "invalid_identity", "valid A-share security code", "string", rawSymbol, "同花顺涨跌停池证券代码无效")
 			return nil, fmt.Errorf("同花顺 %s 池第 %d 行证券代码无效: %w", poolType, index, symbolErr)
 		}
 		code := hithinkFieldString(row, "ticker")
@@ -774,6 +779,7 @@ func (p *Hithink) FetchLimitPool(ctx context.Context, poolType, tradeDate string
 			code = strings.Split(symbol, ".")[0]
 		}
 		if code != strings.Split(symbol, ".")[0] {
+			addHithinkFieldIssue(ctx, &index, "symbol", "ticker/thscode", "identity_mismatch", "ticker matches thscode code", "string", code+"/"+rawSymbol, "同花顺涨跌停池 ticker 与 thscode 不一致")
 			return nil, fmt.Errorf("同花顺 %s 池第 %d 行代码不匹配: symbol=%s ticker=%s", poolType, index, symbol, code)
 		}
 		if _, exists := seenPoolSymbols[symbol]; exists {
@@ -785,10 +791,12 @@ func (p *Hithink) FetchLimitPool(ctx context.Context, poolType, tradeDate string
 		seenPoolSymbols[symbol] = struct{}{}
 		name := hithinkFieldString(row, "name")
 		if name == "" {
+			addHithinkFieldIssue(ctx, &index, "name", "name", "missing_value", "non-empty security name", "string", "", "同花顺涨跌停池证券名称缺失")
 			return nil, fmt.Errorf("同花顺 %s 池第 %d 行缺少证券名称", poolType, index)
 		}
 		change := hithinkFieldNumber(row, "price_change_ratio_pct")
 		if change == nil {
+			addHithinkFieldIssue(ctx, &index, "change_percent", "price_change_ratio_pct", "missing_or_invalid_value", "finite provider change percent", "number", fmt.Sprint(hithinkFieldNumber(row, "price_change_ratio_pct")), "同花顺涨跌停池涨跌幅缺失或非法")
 			return nil, fmt.Errorf("同花顺 %s 池第 %d 行缺少有效涨跌幅", poolType, index)
 		}
 
@@ -797,6 +805,7 @@ func (p *Hithink) FetchLimitPool(ctx context.Context, poolType, tradeDate string
 			lastPrice = nil
 		}
 		if poolType != "up" && lastPrice == nil {
+			addHithinkFieldIssue(ctx, &index, "last_price", "last_price", "missing_or_invalid_value", "positive finite latest price", "number", fmt.Sprint(hithinkFieldNumber(row, "last_price")), "同花顺跌停/炸板池最新价缺失或非法")
 			return nil, fmt.Errorf("同花顺 %s 池第 %d 行缺少有效最新价", poolType, index)
 		}
 		var consecutive *int

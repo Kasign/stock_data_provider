@@ -103,3 +103,27 @@ func TestHithinkDragonTigerReportsMissingSnapshotTimestamp(t *testing.T) {
 		t.Fatalf("unexpected snapshot-level Reporter issue: %+v", issues)
 	}
 }
+
+func TestHithinkLimitPoolReportsPaginationMismatch(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"code": 0,
+			"data": map[string]any{
+				"timestamp": time.Now().UTC().UnixMilli(),
+				"pagination": map[string]any{"total": 0, "page": 1, "size": 10},
+				"item": []any{map[string]any{"thscode": "600519.SH"}},
+			},
+		})
+	}))
+	defer server.Close()
+	reporter := validation.NewReporter(10)
+	ctx := validation.WithReporter(context.Background(), reporter)
+	p := NewHithinkConfigured(2*time.Second, server.URL, "unit-test-key")
+	if _, err := p.FetchLimitPool(ctx, "up", time.Now().In(time.FixedZone("CST", 8*3600)).Format("2006-01-02"), 10); err == nil {
+		t.Fatal("expected pagination mismatch error")
+	}
+	issues := reporter.Snapshot().Issues
+	if len(issues) != 1 || issues[0].Field != "pagination" || issues[0].Code != "count_inconsistent" || issues[0].RowIndex != nil {
+		t.Fatalf("unexpected pagination Reporter issue: %+v", issues)
+	}
+}
