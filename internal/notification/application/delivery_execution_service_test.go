@@ -507,3 +507,64 @@ func TestDeliveryExecutionPreflightBlockPersistsWithoutStartingAttempt(t *testin
 		t.Fatalf("block must append its reason and evidence: %+v", events)
 	}
 }
+
+
+func TestDeliveryExecutionCapsAttemptDeadlineByLeaseExpiry(t *testing.T) {
+	service, repository, _, claim, event := executionFixture(t)
+	startedAt := claim.Delivery.UpdatedAt.Add(time.Second)
+	leaseExpiry := startedAt.Add(500 * time.Millisecond)
+	claim.Lease.ExpiresAt = leaseExpiry
+
+	repository.mu.Lock()
+	repository.leases[claim.Delivery.DeliveryID] = claim.Lease
+	repository.now = startedAt
+	repository.mu.Unlock()
+	service.clock.(*sequenceExecutionClock).times[1] = startedAt.Add(100 * time.Millisecond)
+
+	snapshot := channelRegistryTestSnapshot()
+	snapshot.ConfigVersion = claim.Delivery.ChannelConfigVersion
+	adapter := &deadlineRecordingExecutionAdapter{snapshot: snapshot}
+	registry := NewChannelRegistry()
+	if err := registry.Register(adapter); err != nil {
+		t.Fatal(err)
+	}
+	service.preflight.channels = registry
+
+	_, err := service.Execute(
+		context.Background(), claim, event, "attempt-execution-lease-deadline",
+		0.5, "evidence-execution-lease-deadline",
+	)
+	if err != nil {
+		t.Fatalf("execute within lease deadline: %v", err)
+	}
+	if adapter.calls != 1 || !adapter.deadline.Equal(leaseExpiry) {
+		t.Fatalf("attempt deadline must be capped by lease expiry: calls=%d deadline=%s expected=%s",
+			adapter.calls, adapter.deadline, leaseExpiry)
+	}
+}
+
+func TestDeliveryExecutionDoesNotStartAttemptWhenLeaseAlreadyExpired(t *testing.T) {
+	service, repository, adapter, claim, event := executionFixture(t)
+	startedAt := claim.Delivery.UpdatedAt.Add(time.Second)
+	claim.Lease.ExpiresAt = startedAt
+
+	repository.mu.Lock()
+	repository.leases[claim.Delivery.DeliveryID] = claim.Lease
+	repository.now = startedAt
+	repository.mu.Unlock()
+
+	_, err := service.Execute(
+		context.Background(), claim, event, "attempt-execution-expired-lease",
+		0.5, "evidence-execution-expired-lease",
+	)
+	if !errors.Is(err, ErrRetryNotApplicable) {
+		t.Fatalf("expired lease must reject execution before Attempt start, got %v", err)
+	}
+	if adapter.calls != 0 {
+		t.Fatalf("expired lease must not call channel, calls=%d", adapter.calls)
+	}
+	attempts, listErr := repository.ListByDelivery(context.Background(), claim.Delivery.DeliveryID)
+	if listErr != nil || len(attempts) != 0 {
+		t.Fatalf("expired lease must not append Attempt: attempts=%+v err=%v", attempts, listErr)
+	}
+}
