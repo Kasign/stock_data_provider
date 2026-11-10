@@ -43,10 +43,12 @@ type breakerState struct {
 	lastFailureAt         time.Time
 	lastContractFailureAt time.Time
 	lastQualityDegradedAt time.Time
+	lastRequestFailureAt  time.Time
 	totalSuccess          uint64
 	totalFailure          uint64
 	totalContractFailure  uint64
 	totalQualityDegraded  uint64
+	totalRequestFailure   uint64
 }
 
 // CircuitDiagnostic 是熔断器基于真实业务调用维护的只读运行状态。
@@ -60,6 +62,8 @@ type CircuitDiagnostic struct {
 	LastFailureAt         *time.Time `json:"last_failure_at"`
 	LastContractFailureAt *time.Time `json:"last_contract_failure_at,omitempty"`
 	LastQualityDegradedAt *time.Time `json:"last_quality_degraded_at,omitempty"`
+	LastRequestFailureAt  *time.Time `json:"last_request_failure_at,omitempty"`
+	TotalRequestFailure   uint64     `json:"total_request_failure"`
 	TotalContractFailure  uint64     `json:"total_contract_failure"`
 	TotalQualityDegraded  uint64     `json:"total_quality_degraded"`
 	OpenUntil             *time.Time `json:"open_until"`
@@ -131,6 +135,15 @@ func (b *circuitBreaker) ContractFailure(key string) {
 	state := b.observeResponse(key)
 	state.lastContractFailureAt = b.now().UTC()
 	state.totalContractFailure++
+}
+
+// RequestFailure 记录 Provider 已响应但当前请求不被接受的情况。
+func (b *circuitBreaker) RequestFailure(key string) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	state := b.observeResponse(key)
+	state.lastRequestFailureAt = b.now().UTC()
+	state.totalRequestFailure++
 }
 
 // QualityDegraded 记录响应可用但未通过质量/新鲜度门禁的情况。
@@ -261,6 +274,11 @@ func (b *circuitBreaker) Diagnostics(keys map[string]string) []CircuitDiagnostic
 			item.TotalFailure = state.totalFailure
 			item.TotalContractFailure = state.totalContractFailure
 			item.TotalQualityDegraded = state.totalQualityDegraded
+			item.TotalRequestFailure = state.totalRequestFailure
+			if !state.lastRequestFailureAt.IsZero() {
+				value := state.lastRequestFailureAt
+				item.LastRequestFailureAt = &value
+			}
 			if !state.lastContractFailureAt.IsZero() {
 				value := state.lastContractFailureAt
 				item.LastContractFailureAt = &value

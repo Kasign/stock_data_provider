@@ -9,6 +9,7 @@ import (
 	"math"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -3638,11 +3639,31 @@ func recordProviderCallFailure(b *circuitBreaker, key string, err error) {
 	switch kind {
 	case "data_contract", "empty_or_unparseable_response":
 		b.ContractFailure(key)
+	case "http_status":
+		status := providerHTTPStatusCode(err)
+		if status >= 400 && status < 500 {
+			b.RequestFailure(key)
+		} else {
+			b.Failure(key)
+		}
 	case "canceled":
 		b.Abandon(key)
 	default:
 		b.Failure(key)
 	}
+}
+
+func providerHTTPStatusCode(err error) int {
+	if err == nil { return 0 }
+	lower := strings.ToLower(err.Error())
+	marker := "http status"
+	index := strings.Index(lower, marker)
+	if index < 0 { return 0 }
+	rest := strings.TrimSpace(strings.TrimLeft(lower[index+len(marker):], " :=#"))
+	fields := strings.Fields(rest)
+	if len(fields) == 0 { return 0 }
+	status, _ := strconv.Atoi(strings.Trim(fields[0], ":,;"))
+	return status
 }
 
 func providerFailureSummary(err error) (kind, message string) {

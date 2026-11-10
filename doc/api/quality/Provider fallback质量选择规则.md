@@ -73,6 +73,7 @@ provider_fallback_used 只记录实际使用了非首选 Provider，不是质量
 |---|---|---|
 | 网络连接失败、超时、连接中断 | Failure | 计入可用性失败连续次数 |
 | 响应违反字段、版本、证券、复权契约 | ContractFailure | 独立累计契约失败，不触发可用性熔断 |
+| Provider 返回 HTTP 4xx 请求拒绝 | RequestFailure | 独立累计请求失败，不触发可用性熔断 |
 | 响应成功但 freshness、coverage 或字段质量降级 | QualityDegraded | 独立累计质量降级，不触发可用性熔断 |
 | 调用方取消 | Abandon | 释放半开探测，不记录 Provider 故障 |
 | 满足契约和质量门禁 | Success | 重置可用性失败连续次数 |

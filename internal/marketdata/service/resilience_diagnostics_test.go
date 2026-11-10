@@ -67,7 +67,7 @@ func TestCircuitBreakerSeparatesContractAndQualityOutcomes(t *testing.T) {
 	b.QualityDegraded("provider:quote")
 	got = b.Diagnostics(keys)[0]
 	if got.Status != "healthy" || got.ConsecutiveFails != 0 ||
-		got.TotalQualityDegraded != 1 || got.TotalFailure != 0 ||
+		got.TotalQualityDegraded != 1 || got.TotalRequestFailure != 0 || got.TotalFailure != 0 ||
 		got.LastQualityDegradedAt == nil {
 		t.Fatalf("quality degradation must be diagnostic, not availability failure: %+v", got)
 	}
@@ -123,5 +123,15 @@ func TestProviderCallFailureClassificationControlsAvailabilityCircuit(t *testing
 	state = b.states["provider:quote"]
 	if state.failures != 1 || state.totalFailure != 1 || b.Allow("provider:quote") {
 		t.Fatalf("network failure must count toward availability circuit: %+v", state)
+	}
+}
+
+
+func TestProviderHTTPClientErrorsDoNotTripAvailabilityCircuit(t *testing.T) {
+	b := newCircuitBreaker(1, time.Minute)
+	recordProviderCallFailure(b, "provider:quote", errors.New("HTTP status 400 Bad Request"))
+	state := b.states["provider:quote"]
+	if state == nil || state.failures != 0 || state.totalFailure != 0 || state.totalRequestFailure != 1 {
+		t.Fatalf("HTTP 4xx must be tracked as request failure, not availability failure: %+v", state)
 	}
 }
