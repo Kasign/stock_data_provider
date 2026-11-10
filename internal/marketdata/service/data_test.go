@@ -3609,3 +3609,110 @@ func TestSectorRankingsRejectsMismatchedProviderSourceAndFallsBack(t *testing.T)
 		t.Fatalf("mismatched source must be rejected and fallback called: primary=%d fallback=%d", primary.sectorCalls, fallback.sectorCalls)
 	}
 }
+
+type limitAndDragonTigerSourceIdentityProvider struct {
+	name             string
+	limitPool        *model.LimitPoolSnapshot
+	dragonTiger      *model.DragonTigerSnapshot
+	limitPoolCalls   int
+	dragonTigerCalls int
+}
+
+func (p *limitAndDragonTigerSourceIdentityProvider) Name() string { return p.name }
+
+func (p *limitAndDragonTigerSourceIdentityProvider) FetchLimitPool(context.Context, string, string, int) (*model.LimitPoolSnapshot, error) {
+	p.limitPoolCalls++
+	return p.limitPool, nil
+}
+
+func (p *limitAndDragonTigerSourceIdentityProvider) FetchDragonTiger(context.Context, string, int, int) (*model.DragonTigerSnapshot, error) {
+	p.dragonTigerCalls++
+	return p.dragonTiger, nil
+}
+
+func newLimitAndDragonTigerSourceIdentityService(primary, fallback *limitAndDragonTigerSourceIdentityProvider) *DataService {
+	svc := NewWithCapabilities(
+		[]provider.NamedProvider{primary, fallback},
+		nil,
+		nil,
+		cache.NewDisabled(),
+		nil,
+		time.Second,
+		time.Second,
+		120,
+		2000,
+		ResilienceConfig{},
+		nil,
+	)
+	svc.SetLimitPoolProviders([]provider.LimitPoolProvider{primary, fallback})
+	svc.SetDragonTigerProviders([]provider.DragonTigerProvider{primary, fallback})
+	return svc
+}
+
+func unknownLimitPoolSnapshotForSource(source, tradeDate string) *model.LimitPoolSnapshot {
+	return &model.LimitPoolSnapshot{
+		PoolType: "up", TradeDate: tradeDate, Total: 0, HasData: false,
+		Source: source, SourceVersion: "test-v1", FetchedAt: time.Now().UTC(),
+		QualityStatus: model.QualityUnknown,
+	}
+}
+
+func unknownDragonTigerSnapshotForSource(source, tradeDate string) *model.DragonTigerSnapshot {
+	return &model.DragonTigerSnapshot{
+		TradeDate: tradeDate, Page: 1, PageSize: 20,
+		Total: 0, Pages: 0, Returned: 0, SourceReturned: 0, ExcludedNonAShareCount: 0,
+		HasData: false, HasMore: false,
+		Source: source, SourceVersion: "test-v1", FetchedAt: time.Now().UTC(),
+		QualityStatus: model.QualityUnknown,
+	}
+}
+
+func TestLimitPoolRejectsMismatchedProviderSourceAndFallsBack(t *testing.T) {
+	tradeDate := time.Now().In(marketLocation()).Format("2006-01-02")
+	primary := &limitAndDragonTigerSourceIdentityProvider{
+		name: "primary", limitPool: unknownLimitPoolSnapshotForSource("spoofed", tradeDate),
+	}
+	fallback := &limitAndDragonTigerSourceIdentityProvider{
+		name: "fallback", limitPool: unknownLimitPoolSnapshotForSource("fallback", tradeDate),
+	}
+	svc := newLimitAndDragonTigerSourceIdentityService(primary, fallback)
+
+	got, fromCache, err := svc.LimitPool(context.Background(), "up", tradeDate, 20)
+	if err != nil {
+		t.Fatalf("expected fallback limit-pool candidate, got error: %v", err)
+	}
+	if fromCache {
+		t.Fatal("fallback result must not be reported as cached")
+	}
+	if got == nil || got.Source != "fallback" {
+		t.Fatalf("expected fallback source, got %+v", got)
+	}
+	if primary.limitPoolCalls != 1 || fallback.limitPoolCalls != 1 {
+		t.Fatalf("mismatched source must be rejected and fallback called: primary=%d fallback=%d", primary.limitPoolCalls, fallback.limitPoolCalls)
+	}
+}
+
+func TestDragonTigerRejectsMismatchedProviderSourceAndFallsBack(t *testing.T) {
+	tradeDate := time.Now().In(marketLocation()).Format("2006-01-02")
+	primary := &limitAndDragonTigerSourceIdentityProvider{
+		name: "primary", dragonTiger: unknownDragonTigerSnapshotForSource("spoofed", tradeDate),
+	}
+	fallback := &limitAndDragonTigerSourceIdentityProvider{
+		name: "fallback", dragonTiger: unknownDragonTigerSnapshotForSource("fallback", tradeDate),
+	}
+	svc := newLimitAndDragonTigerSourceIdentityService(primary, fallback)
+
+	got, fromCache, err := svc.DragonTiger(context.Background(), tradeDate, 1, 20)
+	if err != nil {
+		t.Fatalf("expected fallback dragon-tiger candidate, got error: %v", err)
+	}
+	if fromCache {
+		t.Fatal("fallback result must not be reported as cached")
+	}
+	if got == nil || got.Source != "fallback" {
+		t.Fatalf("expected fallback source, got %+v", got)
+	}
+	if primary.dragonTigerCalls != 1 || fallback.dragonTigerCalls != 1 {
+		t.Fatalf("mismatched source must be rejected and fallback called: primary=%d fallback=%d", primary.dragonTigerCalls, fallback.dragonTigerCalls)
+	}
+}
