@@ -3786,3 +3786,79 @@ func TestValuationsRejectsMismatchedProviderSourceAndFallsBack(t *testing.T) {
 		t.Fatalf("mismatched source must be rejected and fallback called: primary=%d fallback=%d", primary.calls, fallback.calls)
 	}
 }
+
+type indexCatalogSourceIdentityFake struct {
+	name string
+	snapshot *model.IndexCatalogSnapshot
+	calls int
+}
+func (f *indexCatalogSourceIdentityFake) Name() string { return f.name }
+func (f *indexCatalogSourceIdentityFake) FetchIndexCatalog(context.Context, string) (*model.IndexCatalogSnapshot, error) {
+	f.calls++
+	return f.snapshot, nil
+}
+func (f *indexCatalogSourceIdentityFake) FetchIndexConstituents(context.Context, string) (*model.IndexConstituentSnapshot, error) {
+	return nil, errors.New("not used")
+}
+func (f *indexCatalogSourceIdentityFake) FetchIndexDailyBars(context.Context, string, string, string) (*model.IndexDailyBarsSnapshot, error) {
+	return nil, errors.New("not used")
+}
+
+func TestIndexCatalogRejectsMismatchedProviderSourceAndFallsBack(t *testing.T) {
+	now := time.Now().UTC()
+	makeSnapshot := func(source string) *model.IndexCatalogSnapshot {
+		return &model.IndexCatalogSnapshot{
+			Tag: "cn_concept",
+			Items: []model.IndexCatalogItem{{Symbol: "000300.SH", Name: "沪深300", Tag: "cn_concept"}},
+			Total: 1, ProviderReturned: 1, Source: source, SourceVersion: "test-v1",
+			FetchedAt: now, QualityStatus: model.QualityDegraded,
+		}
+	}
+	preferred := &indexCatalogSourceIdentityFake{name: "eastmoney", snapshot: makeSnapshot("spoofed")}
+	fallback := &indexCatalogSourceIdentityFake{name: "tushare", snapshot: makeSnapshot("tushare")}
+	svc := NewWithCapabilities(nil, nil, nil, cache.NewDisabled(), nil, time.Second, time.Minute, 120, 2000,
+		ResilienceConfig{Retries: 0, CircuitFailureThreshold: 3, CircuitCooldown: time.Second}, nil)
+	svc.SetIndexCatalogProviders([]provider.IndexCatalogProvider{preferred, fallback})
+
+	got, hit, err := svc.IndexCatalog(context.Background(), "cn_concept")
+	if err != nil || hit || got == nil || got.Source != "tushare" || preferred.calls != 1 || fallback.calls != 1 {
+		t.Fatalf("mismatched index-catalog source must fall back: hit=%v preferred_calls=%d fallback_calls=%d got=%+v err=%v",
+			hit, preferred.calls, fallback.calls, got, err)
+	}
+}
+
+type hotRankingSourceIdentityFake struct {
+	name string
+	snapshot *model.HotRankingSnapshot
+	calls int
+}
+func (f *hotRankingSourceIdentityFake) Name() string { return f.name }
+func (f *hotRankingSourceIdentityFake) FetchHotStocks(context.Context, string, int) (*model.HotRankingSnapshot, error) {
+	f.calls++
+	return f.snapshot, nil
+}
+
+func TestHotRankingRejectsMismatchedProviderSourceAndFallsBack(t *testing.T) {
+	now := time.Now().UTC()
+	makeSnapshot := func(source string) *model.HotRankingSnapshot {
+		return &model.HotRankingSnapshot{
+			RankingType: "popular", Total: 1, Source: source, SourceVersion: "test-v1",
+			FetchedAt: now, QualityStatus: model.QualityDegraded,
+			Items: []model.HotRankingItem{{
+				Rank: 1, Symbol: "600519.SH", Code: "600519",
+				Source: source, SourceVersion: "test-v1", FetchedAt: now, QualityStatus: model.QualityDegraded,
+			}},
+		}
+	}
+	preferred := &hotRankingSourceIdentityFake{name: "eastmoney", snapshot: makeSnapshot("spoofed")}
+	fallback := &hotRankingSourceIdentityFake{name: "tushare", snapshot: makeSnapshot("tushare")}
+	svc := NewWithCapabilities(nil, nil, nil, cache.NewDisabled(), nil, time.Second, time.Minute, 120, 2000,
+		ResilienceConfig{Retries: 0, CircuitFailureThreshold: 3, CircuitCooldown: time.Second}, nil)
+	svc.SetHotRankingProviders([]provider.HotRankingProvider{preferred, fallback})
+
+	got, hit, err := svc.HotStocks(context.Background(), "popular", 10)
+	if err != nil || hit || got == nil || got.Source != "tushare" || preferred.calls != 1 || fallback.calls != 1 {
+		t.Fatalf("mismatched hot-ranking source must fall back: hit=%v preferred_calls=%d fallback_calls=%d got=%+v err=%v",
+			hit, preferred.calls, fallback.calls, got, err)
+	}
+}
