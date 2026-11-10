@@ -1028,3 +1028,10 @@
 - GetEvidence 新增当前授权器返回后 Context 取消的回归用例，确保取消后不返回内容 DTO。
 - 新增 RetentionUntil 与当前时间相等的边界用例，明确到期边界为 `now >= retention_until`；到期只抑制 Candidate 采集元数据。
 - 对应提交：`cc423098087b39e45716430b84a232e343914045`；CI Run `42742190179` 待完成。
+
+
+### 2026-11-10 授权复核取消传播补充
+
+- 修复授权指纹 Verifier 与当前策略 Resolver 返回后未立即检查 Context 的缺口。即使依赖忽略取消并返回成功，UseCase 也会终止，不再将结果作为有效授权复核。
+- 新增两个取消边界单测，验证 Verifier 取消后不调用策略 Resolver。
+- 对应提交：`9edb6f7321939784c3be865d56544109b954f680`。

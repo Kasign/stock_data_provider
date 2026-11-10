@@ -139,3 +139,11 @@
 - `TestGetEvidenceStopsAfterContextCancellationAtDependencyBoundaries` 新增“当前授权复核返回后 Context 已取消”场景，要求 Execute 返回 context.Canceled，不能继续构造/返回 Evidence DTO。
 - 新增 `TestGetEvidenceSuppressesCandidateAtExactRetentionDeadline`，验证 `RetentionUntil == now` 时按 `now >= retention_until` 抑制 Candidate 采集元数据，同时保留独立授权的版本摘要读取行为。
 - 以上为 Application 单测覆盖；未实际运行测试前不标记通过，也不替代 MariaDB 集成验收。
+
+
+## 十、授权复核 Context 取消边界（2026-11-10）
+
+- 提交：`9edb6f7321939784c3be865d56544109b954f680`。
+- Review 发现 `EvaluateNewsEvidenceReadAuthorization.Execute` 仅在调用外部依赖前检查 Context，未在 Verifier 和策略 Resolver 成功返回后检查。若依赖忽略取消并返回成功，内部 UseCase 会错误地产生授权成功结果（尽管 GetEvidence 外层仍有取消检查）。
+- 已在两个依赖返回后增加 `ctx.Err()` 检查，并新增 Verifier/Resolver 取消测试。
+- 该修复强化取消传播，不解决策略撤销与正文读取的 TOCTOU；两者仍须独立处理。
