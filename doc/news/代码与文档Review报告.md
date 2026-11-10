@@ -124,3 +124,10 @@
 - MariaDB 集成测试增加“旧 allow + 新 deny，最新查询必须返回 deny”的断言；测试引用使用唯一后缀，避免持久测试库重复运行冲突。
 - 这只解决授权快照选择/载荷读取之间的跨语句不一致；不解决 Evidence 内容读取与当前授权策略复核的 TOCTOU。后者仍需授权策略 Owner/Server 定义内容查询的共同一致性边界。
 - 本提交尚未取得 CI/MariaDB 执行结果，不标记运行验收通过。
+
+
+### 授权快照信封字段单元覆盖补充（2026-11-10）
+
+- 新增 `TestAuthorizationSnapshotEnvelopeMatchesEveryIndexedField`，逐项覆盖 authorization_ref、subject_ref、resource_ref、decision、purpose_code、content_level、decided_at、expires_at、decision_fingerprint 的不匹配拒绝行为。
+- 同时验证 DATETIME(6) 精度下亚微秒差异的归一语义。
+- Provider Catalog 错误分类测试与授权信封测试的 gofmt 对齐已修复；最新提交 `91291c0b00e1d925a596f61ff33ec1d98c76e63b` 的 CI 仍在运行。
