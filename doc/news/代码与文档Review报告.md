@@ -183,3 +183,11 @@
 - Run `42743865832` 的根模块 gofmt 检查仍失败；News 自身唯一列出的文件为 `internal/news/app/provider_ingest_test.go`，其两处复合字面量字段缩进与 gofmt 输出不一致。
 - 已仅修正该 News 文件，提交 `c4982d374813e70a30282e4e82027558a6d3384f`。其他模块格式差异未越界修改。
 - 根模块测试和 News MariaDB 集成仍未执行。
+
+
+## 十六、Evidence Snapshot 保存 Context 取消边界（2026-11-10）
+
+- Review 发现 `SaveEvidenceSnapshot.Execute` 校验 Snapshot 后直接调用 Repository，未在写入前阻止已取消请求，也未在 Repository 成功返回后观察取消。
+- 已增加前后 Context 检查，并覆盖两类取消边界。
+- 成功写入后才观察到取消时不执行补偿删除：Repository 可能已提交，取消只表示调用方无法确认本次操作结果，不代表持久化回滚。后续应通过 SnapshotRef 幂等读取确认。
+- 对应代码提交：`4e9998e12315480a9f8e6a769a42bf58a7768af9`、`42f460f40c69ace10ba8e21f5603e8884e1ac7ca`。

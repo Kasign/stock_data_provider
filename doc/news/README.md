@@ -1069,3 +1069,11 @@
 - CI 再次发现 `internal/news/app/provider_ingest_test.go` 两处复合字面量字段缩进不符合 gofmt，已修正。
 - Market Data、Notification、Quant 的格式差异没有在 News 分支处理。
 - 对应提交：`c4982d374813e70a30282e4e82027558a6d3384f`。
+
+
+### 2026-11-10 Evidence Snapshot 保存取消传播
+
+- `SaveEvidenceSnapshot.Execute` 增加 Repository 调用前和成功返回后的 Context 检查。
+- 新增已取消时不调用 Repository、Repository 返回后发生取消的测试。
+- 若 Repository 已提交后 Context 才取消，UseCase 返回取消错误但不执行补偿删除；持久化结果需通过幂等重试/读取确认，不将 Context 取消误认为事务回滚。
+- 对应提交：`4e9998e12315480a9f8e6a769a42bf58a7768af9`、`42f460f40c69ace10ba8e21f5603e8884e1ac7ca`。
