@@ -20,10 +20,14 @@ func persistUnknownReconciliation(
 	retryDecision *RetryDecision,
 ) error {
 	if repository == nil || ctx == nil || ctx.Err() != nil || !isRecoveryUTC(at) {
-		if ctx != nil && ctx.Err() != nil { return ctx.Err() }
+		if ctx != nil && ctx.Err() != nil {
+			return ctx.Err()
+		}
 		return ErrUnknownReconciliationPersistence
 	}
-	if err := delivery.Validate(); err != nil { return err }
+	if err := delivery.Validate(); err != nil {
+		return err
+	}
 	if delivery.Status != domain.DeliveryUnknown ||
 		assessment.DeliveryID != delivery.DeliveryID ||
 		!validReconciliationRef(assessment.AttemptID) ||
@@ -85,8 +89,12 @@ func persistUnknownReconciliation(
 		return ErrUnknownReconciliationNotApplicable
 	}
 	next, event, err := delivery.Transition(change)
-	if err != nil { return err }
-	if err := repository.ReconcileUnknown(ctx, delivery.Version, next, event); err != nil { return err }
+	if err != nil {
+		return err
+	}
+	if err := repository.ReconcileUnknown(ctx, delivery.Version, next, event); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -107,11 +115,15 @@ func reconcileUnknownDelivery(
 	}
 	evidence := verified.evidence
 	assessment, err := AssessUnknownDelivery(delivery, channel, attempts, evidence, now)
-	if err != nil { return UnknownReconciliationAssessment{}, nil, err }
+	if err != nil {
+		return UnknownReconciliationAssessment{}, nil, err
+	}
 	var decision *RetryDecision
 	if assessment.Action == UnknownReconciliationApplyRetryPolicy {
 		computed, err := policy.ScheduleRetryAfterUnknownLookup(delivery, attempts, now, randomUnit, evidence.EvidenceRef, evidence.ObservedAt)
-		if err != nil { return assessment, nil, err }
+		if err != nil {
+			return assessment, nil, err
+		}
 		decision = &computed
 	}
 	if err := persistUnknownReconciliation(ctx, repository, delivery, assessment, now, decision); err != nil {

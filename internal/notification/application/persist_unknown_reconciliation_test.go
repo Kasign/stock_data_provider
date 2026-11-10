@@ -148,7 +148,6 @@ func TestReconcileUnknownDeliveryRunsEvidenceBoundRetryEndToEnd(t *testing.T) {
 	}
 }
 
-
 func TestReconcileUnknownDeliveryPreservesUncertainCommitClassification(t *testing.T) {
 	delivery, channel, attempts, evidence, now := unknownReconciliationFixture(t)
 	evidence.Outcome = UnknownLookupAccepted

@@ -9,7 +9,7 @@ import (
 )
 
 var (
-	ErrUnknownDeliverySnapshotUnavailable = errors.New("notification: unknown delivery snapshot unavailable")
+	ErrUnknownDeliverySnapshotUnavailable   = errors.New("notification: unknown delivery snapshot unavailable")
 	ErrUnknownDeliverySnapshotNotConsistent = errors.New("notification: unknown delivery snapshot is not consistent")
 )
 
