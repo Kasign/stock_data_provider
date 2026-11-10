@@ -266,7 +266,7 @@ func TestMiaoXiangQueryTablesReportsResponseFailures(t *testing.T) {
 			if err == nil { t.Fatal("expected response failure") }
 			for _, issue := range reporter.Snapshot().Issues {
 				if issue.Code == tc.wantCode {
-					if issue.RowIndex != -1 { t.Fatalf("response-level issue must not invent row index: %+v", issue) }
+					if issue.RowIndex != nil { t.Fatalf("response-level issue must not invent row index: %+v", issue) }
 					return
 				}
 			}

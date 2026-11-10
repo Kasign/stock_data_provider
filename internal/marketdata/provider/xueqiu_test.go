@@ -320,7 +320,7 @@ func TestXueqiuHotRankingReportsResponseRejections(t *testing.T) {
 
 			for _, issue := range reporter.Snapshot().Issues {
 				if issue.Code == tc.wantCode {
-					if issue.RowIndex != -1 {
+					if issue.RowIndex != nil {
 						t.Fatalf("response-level issue must not invent row index: %+v", issue)
 					}
 					return
