@@ -103,3 +103,14 @@
 - 兼容性观察：`SupplementProvider` 与独立筹码、资金流接口存在方法重叠，当前作为旧补充源兼容入口保留；本批不删除，后续仅在确认无兼容调用后收敛。
 - 本批未修改业务代码，未运行 gofmt/build/test；静态 Review 结论不代表 Adapter 字段映射、单位/时间/分页语义或真实 Provider 请求已经验收。
 - 本批结论冻结。后续只处理上述明确边界，再进入核心 Quote/DailyBars Adapter 契约审查，不重新打开已通过的接口总体设计。
+
+### 2026-11-10：Provider 核心行情 / 日 K 协议第二批静态 Review
+
+- 审查基线：`630339634149520385dc8e7ba2669e6a5870ed71`。
+- 审查范围：Tushare、Eastmoney、Hithink、Tencent、Sina、NetEase、BaoStock、Pytdx、TickFlow、Yahoo 的 Quote/DailyBars 入口与映射路径；公共 payload 归一化、Quote/DailyBar 字段校验、DataService 接收与质量处理；未执行测试或真实上游请求。
+- 已确认的共同保护：日 K 统一校验证券身份、交易日期、OHLC、成交量单位、成交额单位/交叉关系、复权枚举、来源和质量状态；归一化会排序、去重、按请求区间过滤并限制条数。Quote 统一校验身份、OHLC、昨收/涨跌一致性、成交量/成交额单位及交叉关系。DataService 进一步核验 SourceVersion、NormalizationVer、时间戳、复权方法/参考日一致性和缓存质量。
+- 已确认的适配差异：Tushare 通过原始日线加复权因子生成复权序列；Eastmoney/Hithink/TickFlow 按接口参数请求复权；BaoStock 使用 adjustFlag；Pytdx 使用 GBBQ 公司行动；Sina/NetEase 只接受 none；Tencent 缺少可验证成交额时明确 degraded；Yahoo 非官方源且缺成交额，保持 degraded。差异属于源端能力边界，不能强行抹平。
+- 确认缺口：DataService 接收 Quote 后无条件将 `q.Source` 覆盖为 `p.Name()`；接收 DailyBars 时也无条件将每条 `Source` 覆盖为 `p.Name()`。当前会掩盖 Adapter 返回空来源或错误来源的协议违约，导致来源映射错误不能被识别/诊断。应在覆盖前校验：非空来源必须与 Provider.Name 一致；空来源按现有兼容策略可选择降级补齐或直接拒绝，但必须留下明确诊断。需补充 Quote 和 DailyBars 两类回归测试。
+- 需要后续核验而非本批直接判错：各 Adapter 的成交量单位、成交额来源、百分比单位和时区仍需按 Provider 逐项对照真实接口/参考实现及黄金样本；本批仅确认代码路径和已有测试，不能替代真实数据证据。
+- 复权逻辑核验：Service 已要求同一批日 K 的复权方法/参考日一致，并验证参考日格式、未来日期及与 K 线日期的方向关系；累计因子后复权允许无单一参考日。该规则本批未发现应推翻之处。
+- 本批不改业务代码，不运行 gofmt/build/test。来源身份被覆盖是已确认缺口，进入下一修复批；字段映射与真实数据差分继续按 Provider 分组审查。
