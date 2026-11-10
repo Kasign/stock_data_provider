@@ -1607,3 +1607,84 @@ StockBoards 的 Provider Port、Go DTO、Service 校验/回退/缓存、HTTP 路
 - 已有统一 ChipDistributionProvider Port，不需要重复建设协议层；Service 已实现 Provider 去重、回退、质量降级和缓存。
 - WebUI 已接通并正确按 0..1 显示比例，缺失可选指标显示“未提供”；页面 has_data 分支不属于当前 DTO 契约。
 - 未发现已证实的线上数值错误，但跨 Provider 可比性与 Eastmoney 除权窗口准确性未得到充分证明。WebUI 维度 2 继续 partial。
+
+
+### 29. WebUI 维度 2：个股 Capital Flow 主力资金流字段、窗口与消费语义
+
+#### 29.1 核验范围与证据
+
+- 固定代码基线：`b6dfc85ba214fe16268c8cba780641a8bfe15086`。
+- DTO：`internal/marketdata/model/model.go`（blob `6f04516bd11452a01adcb5acceab571fb1c28ed5`）。
+- Provider Port：`internal/marketdata/provider/provider.go`（blob `6635d2247379d1ffcb826f80e8e2176422b0cc0a`）。
+- Eastmoney Provider：`internal/marketdata/provider/eastmoney_capital_flow.go`（blob `86cd7c678fc3cfafdc8fb3eaac200c66156626a7`）；测试 `eastmoney_capital_flow_test.go`（blob `c2993d2572c06efcffc8eb30c766f076e6db50e0`）。
+- MiaoXiang Provider：`internal/marketdata/provider/miaoxiang.go`（blob `5534cd8b3bf2075ece01468b7184e1c29795f5ac`）；测试 `miaoxiang_test.go`（blob `dc2a5725e1fb52d8ddd34b340fe348107aefbedb`）。
+- Service 校验、Provider 回退、缓存：`internal/marketdata/service/data.go`（blob `d2abb990d8d7ec2fcbf112a5f1beca49c8d40f7b`）；回退测试 `capital_flow_fallback_test.go`（blob `1f93551be288f218d00a473c865a6e6651f42754`）。
+- Handler：`internal/marketdata/httpapi/server.go`（blob `7b54b54b3c6182ecab830c2c43f91c548dc60dba`）；OpenAPI：`internal/marketdata/httpapi/openapi.yaml`（blob `cd8a6e3dfb8e3162ee789b11e883be9283c59f32`）；契约测试 `openapi_contract_test.go`（blob `7f97f075a23bd698a7e3fc32e90509d1e999217b`）。
+- WebUI API Client：`web/src/api.js`（blob `b8bcbee5908b43bfa1bc2ca744363190af38287f`）；页面：`web/src/stock-research.js`（blob `49fe406d7dcf5e8fdec76f2f0bfcda6a18d4db85`）；浏览器测试：`web/tests/stock-research-data-browser.mjs`（blob `61b6e35376e6b7393f7c0a922506b795dbeedbe1`）。
+- 本节仅讨论个股 `GET /api/v1/stocks/{symbol}/capital-flow`。市场级 `GET /api/v1/market/capital-flow` 是独立数据集、Provider Port 和服务，不纳入本节结论。
+
+#### 29.2 统一协议、金额单位与正负方向
+
+1. 已有独立 `CapitalFlowProvider` Port；旧 `SupplementProvider` 通过 Service 适配进入同一链路，并按 Provider 名称去重。当前不用重复建立资金流协议层。
+2. DTO 三个金额字段均明确为人民币元：`main_net_inflow_yuan`、`inflow_5d_yuan`、`inflow_10d_yuan`。正值表示净流入，负值表示净流出；代码不对负数取绝对值或翻转符号。
+3. Eastmoney 读取日资金流 K 线的 `f51` 日期、`f52` 主力净流入金额，按人民币元解析数值；Provider 注释与 OpenAPI 都将金额定义为 CNY yuan。Eastmoney 测试覆盖正值、负值以及 5/10 日求和。
+4. MiaoXiang 只接受显式标注为“主力净流入/主力净流入资金/主力净流入金额”的金额列；`parseMoneyYuanPtr` 将“亿”乘 1e8、“万”乘 1e4，未带单位的数值按元解释，并拒绝百分比字段。测试覆盖 1 亿、-100 万元等换算。
+5. MiaoXiang Provider 测试验证金额换算，但当前未覆盖所有可能的源端单位表达（例如带空格、全角单位、千元或其他货币单位）；解析器不能据此推断未知单位。若上游改变金额展示单位，现有代码可能将未识别单位的纯数字按元解释。
+6. 两个 Provider 输出同一 DTO 和同一元单位；但它们来自不同供应商的“主力净流入”口径，现有测试主要验证解析/单位和求和，未提供同标的同日期数值对照来证明源端资金分类口径完全一致。
+
+#### 29.3 5 日/10 日窗口完整性
+
+1. 两个 Provider 均按日期降序排序，最新观测作为 `main_net_inflow_yuan`；5 日、10 日合计分别取最新 5/10 条观测，任何一条金额缺失/非法则对应合计保持 nil，不补零。
+2. Eastmoney 请求最多 20 条日 K，排序后截取最新 10 条；MiaoXiang 查询“近10日每日主力净流入”，按返回表格的日期排序后使用完整观测。两者都拒绝重复日期、无效日期和未来日期。
+3. 这里的“5 日/10 日”实现含义是“最新 5/10 条有效日期记录”，不是 5/10 个自然日；测试样例包含周末跳空，说明按交易日观测而不是自然日计数。
+4. 现有实现没有交易日历校验，也没有证据证明上游返回的每个交易日都齐全。若供应商漏掉某个交易日但仍返回足够数量的其他日期，当前实现可能把更早的记录补入窗口并仍生成合计。代码中的诊断文案称“consecutive complete observations”，但并未验证交易日连续性。
+5. 当前 Service 只验证金额有限、观察数量足够（主力净流入至少 1 条、5 日合计至少 5 条、10 日合计至少 10 条），不验证日期窗口完整性；`Observations` 也不携带缺失交易日清单。
+6. Eastmoney 的 `Observations` 是截取最多 10 条后的数量；MiaoXiang 使用解析出的全部表格行数，没有显式截断到 10。OpenAPI 将其描述为“Number of observations used by the provider calculation”，但跨 Provider 的计数上限/精确定义没有被固定契约约束。
+
+#### 29.4 日期、供应商时间和采集时间
+
+1. `provider_date` 表示最新一条观测日期，不代表精确发布时间或数据可用时间；两个 Provider 都从最新排序后的观测日期填充该字段。
+2. 两个 Provider 均无法提供可验证的源端发布时间/可用时间，Provider 初始质量为 degraded，并写入相应质量原因；Service 会覆盖 Provider 的 `fetched_at` 为收到响应的 UTC 时间。
+3. Service 拒绝缺失、无法识别版本、非法或未来 provider_date、缺失/未来 fetched_at、无可用金额以及不支持的质量状态；valid 会被降级或拒绝，不能仅凭采集时间将其提升为 valid。
+4. 当前 DTO 没有独立的 `date`、`provider_timestamp` 或源端发布时间字段，避免把采集时间误认为供应商数据发布时间。
+
+#### 29.5 Provider 回退和缓存
+
+1. DataService 汇总独立 CapitalFlowProvider 与 SupplementProvider，按名称（忽略大小写及首尾空格）去重；Provider 必须返回请求证券对应的规范 symbol。
+2. Provider 缺少 source_version、返回无可用指标、返回 unknown 或快照校验失败时，会继续尝试后续 Provider；unknown 候选在全部回退耗尽后才可能返回，并附加 `capital_flow_fallback_exhausted_without_usable_quality`。
+3. 通过校验的 degraded 快照缓存 5 分钟；unknown 缓存仅在明确记录回退耗尽或只有一个 Provider 时可命中，避免旧 unknown 缓存挡住后备源。
+4. 已有测试覆盖缺失版本回退、无可用指标回退、unknown 回退、unknown 候选选择、回退耗尽标记、旧缓存不阻塞回退、Provider 名称去重、缺失日期和未来采集时间拒绝。
+
+#### 29.6 DTO、OpenAPI 与 WebUI 消费
+
+1. Go DTO 与 OpenAPI 字段集合、required 集合由 51 模型反射测试核对；`symbol`、`observations`、`source`、`fetched_at`、`quality_status` 为 required，其余字段为可选。
+2. `main_net_inflow`、`inflow_5d`、`inflow_10d` 均为 Go `*float64 + omitempty`，nil 时 JSON 省略；OpenAPI 却声明 `nullable: true`，允许显式 null。这属于 AUD-WEBUI-CTR-010 同类差异。反射测试没有反向检查 omitempty pointer 不应声明 nullable。
+3. WebUI API Client 已接通个股资金流接口。页面展示主力净流入、5 日/10 日合计和观测数量；金额统一以元显示，负数保留负号，缺失值显示“未提供”，并显示质量状态、质量原因及元信息。
+4. 浏览器测试验证负金额显示、缺失 5 日合计显示“未提供”、质量降级和请求失败后的错误恢复；该测试使用模拟响应，不验证真实 Provider 口径。
+5. 页面读取 `data.has_data === false`，但 Go DTO/OpenAPI 没有 `has_data` 字段，Handler 直接返回 CapitalFlow DTO；因此此分支不是当前服务端契约可触发的状态。页面仍有基于三个指标和 observations 的空状态处理。
+6. API Client 和页面只接个股摘要；市场级资金流 API Client 另有函数，但不在当前个股研究页的资金流摘要组件中消费。
+
+#### 29.7 差异登记
+
+**AUD-WEBUI-CTR-018：资金流 5/10 日汇总缺少交易日完整性证明（P2）**
+
+- 证据：Eastmoney 与 MiaoXiang 都只按日期排序后取最新 5/10 条观测，并检查金额完整；Service 仅检查 observations 数量，不校验交易日历或缺失交易日。诊断文案要求连续观测，但代码未实现连续性验证。
+- 影响：若源端漏掉中间某个交易日但仍返回足够数量的其他日期，系统可能将更早观测纳入 5/10 日汇总，并把它呈现为完整的 5/10 日净流入合计。
+- 责任方：Market Data Provider / Service 维护方。
+- 关闭条件：明确汇总窗口语义为最近 N 个交易日；接入权威交易日历或由 Provider 明确证明请求窗口覆盖完整交易日；对窗口内缺失交易日保持合计 nil 并写诊断；增加节假日、停市、源端漏日、重复日期和跨 Provider 一致性测试。若产品只需要最近 N 条供应商观测，则必须更名/改文案，不再声称交易日连续窗口。
+
+**AUD-WEBUI-CTR-019：个股资金流可选金额字段 OpenAPI 过度声明 nullable（P2）**
+
+- 证据：三个金额字段均为 Go `*float64 + omitempty`，nil 时 JSON 省略；OpenAPI 三字段均声明 nullable=true。
+- 影响：客户端 Schema 允许显式 null，但实际 Go 序列化语义为字段缺失，混淆 missing 与 null。
+- 责任方：Market Data HTTP API 契约维护方。
+- 关闭条件：保持 omitempty 时移除 nullable；补充 nil 字段 JSON Golden，并为模型反射测试增加反向约束，检查 omitempty pointer 不得被声明 nullable。
+
+#### 29.8 本批结论
+
+- 已存在独立 CapitalFlowProvider 协议，不需要重复抽象；金额单位统一为人民币元，正负号语义保留。
+- 两 Provider 都按最新日期排序，缺失金额不补零；5/10 日合计只有在取到足够完整金额观测时才填充。但当前“完整”尚未覆盖交易日历缺口，新增 AUD-WEBUI-CTR-018。
+- 源端发布时间/可用时间不可验证，两个 Provider 与 Service 均保持 degraded/unknown；fetched_at 由 Service 记录接收时间。
+- 新增 AUD-WEBUI-CTR-019：三个 omitempty 金额字段被 OpenAPI 过度声明 nullable。
+- WebUI 已接通，金额/负号/缺失值/质量信息显示符合 DTO 字段语义；has_data 分支不是服务端契约字段。
+- 未发现已证实的线上资金流金额符号或元单位换算错误；跨 Provider 业务口径等价性和交易日完整性尚未得到充分证明。WebUI 维度 2 继续 partial。
