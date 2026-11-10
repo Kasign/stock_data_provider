@@ -789,3 +789,13 @@
 - 本切片结论：Platform Request ID原语和局部消费者测试基本齐备，组合链路partial；PLAT-CTR-002仍不能标记frozen，GOV-CTR-003保持独立pending_evidence。
 - 下一切片：Platform维度2核对HTTP Client配置、DestinationPolicy、缓冲/流式结果元数据及PLAT-CTR-005 Golden/Contract Test；不重审SSRF算法、不审Server LLM Transport业务映射。
 - 本轮仅更新审计文档，未修改业务代码、Schema、Golden、测试，未执行CI。
+## 16. Platform 维度2：HTTP Client配置与结果契约第四切片（2026-11-10）
+
+- 审计记录：`Platform-维度2-DTO-Schema-Golden.md` 第9节；固定基线 `b6dfc85ba214fe16268c8cba780641a8bfe15086`。
+- 已核Config缓冲/流式默认值和上限、Dependency并发隔离、配置复制、DestinationPolicy/BoundDoer、缓冲响应资源所有权、StreamResponse/StreamStats和News/LLM消费者适配。
+- A1流式专项验收矩阵21项有对应测试覆盖；本轮未重新运行CI。未发现已证实的HTTP Client实现错误。
+- PLAT2-D2-007：MaxResponseHeaderBytes/流式默认值与StreamDependencyLimits配置边界测试不完整，归入PLAT-CTR-005，不新增CTR。
+- PLAT2-D2-008：LLM Transport未向LLM窄接口暴露StreamStats，需确认A2是否要求领域层采集Platform传输终态/字节数/耗时；条件性缺口，不预设新增Platform API。
+- PLAT-CTR-005是内部Go API契约，JSON Schema/Golden不适用；项目登记簿仍需明确不适用理由和Go Contract Test/消费者测试替代证据。PLAT-CTR-005仍pending_evidence，A2真实消费者联调和A3生产部署验收未完成。
+- Platform维度2主要独立切片已完成首轮核验；下一步转Server维度2，核验HTTP公开错误Envelope与Diagnostics/Health响应DTO，不重复审查Platform Fault、Observation和HTTP Client实现。
+- 本轮仅修改审计文档，未修改业务代码、Schema、Golden、测试，未执行CI。
