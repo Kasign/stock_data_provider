@@ -2780,7 +2780,14 @@ func (s *DataService) Quote(ctx context.Context, rawSymbol string) (*model.Quote
 			}
 		}
 		if encoded, e := json.Marshal(q); e == nil {
-			if e = s.cache.Set(ctx, key, encoded, s.quoteTTL); e != nil {
+			cacheTTL := s.quoteTTL
+			if q.QualityStatus == model.QualityDegraded {
+				cacheTTL = s.quoteTTL / 4
+				if cacheTTL <= 0 {
+					cacheTTL = time.Minute
+				}
+			}
+			if e = s.cache.Set(ctx, key, encoded, cacheTTL); e != nil {
 				s.logger.Warn("quote cache write failed", "error", e)
 			}
 		}
@@ -3100,7 +3107,14 @@ func (s *DataService) DailyBars(ctx context.Context, rawSymbol, start, end strin
 			Bars     []model.DailyBar `json:"bars"`
 			Warnings []string         `json:"warnings"`
 		}{bars, warnings}); e == nil {
-			if e = s.cache.Set(ctx, key, encoded, s.barsTTL); e != nil {
+			cacheTTL := s.barsTTL
+			if dailyBarsContainDegradedQuality(bars) {
+				cacheTTL = s.barsTTL / 4
+				if cacheTTL <= 0 {
+					cacheTTL = time.Minute
+				}
+			}
+			if e = s.cache.Set(ctx, key, encoded, cacheTTL); e != nil {
 				s.logger.Warn("daily bars cache write failed", "error", e)
 			}
 		}
