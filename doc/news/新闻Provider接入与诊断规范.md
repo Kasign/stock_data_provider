@@ -351,3 +351,100 @@ Provider 适配器已落地 `provider.NewPlatformHTTPDoer`；Source 适配器已
 - Source/Endpoint 网络访问继续使用独立 BoundDoer 和可信 SourceCatalog。
 - CI 使用固定样本/fake，不依赖真实 Provider Key 或消耗真实配额。
 - 未执行的 Go 测试、MariaDB 集成或真实网络验收不得标记为通过。
+
+
+### 17.7 Search Provider Contract v1（设计冻结）
+
+本版本是 News 进程内 Search Provider 契约，不是对外 HTTP API，也不承诺跨语言/插件 ABI。
+
+#### 请求语义
+
+| 字段 | 规则 |
+|---|---|
+| Query | 必填；执行前 TrimSpace 后不得为空 |
+| QueryDimension | 可选业务检索维度；仅用于结果归因，不改变 Provider 身份 |
+| Limit | 必填；范围 1～100；Provider Adapter 可按供应商上限执行，但不得静默突破请求上限 |
+| Context | 必须传播调用方 Context；取消/Deadline 不得伪装成单 Provider 普通失败 |
+| 凭证/Endpoint | 只能来自受控配置和组合根绑定，不属于 SearchRequest |
+
+首期不增加 StartAt/EndAt、AsOf、分页游标、任意 Filters 或通用 Options：现有搜索调用没有证明这些字段可被四个 Provider 一致执行。需要历史检索或时间过滤时，先明确调用方与供应商可实现的过滤语义，再扩展能力专属请求。
+
+#### Provider 身份
+
+- `Code()` 是稳定机器标识，必须非空、首尾无空白，并在一个 ProviderSet 中唯一。
+- Code 不得由显示名称、发布者名称或文章域名推导。
+- ProviderSet 中出现 nil Provider、空 Code 或重复 Code 时，整组注册无效；必须在任何上游网络请求发生前拒绝。
+- 现有生产 Provider Code：`bocha`、`tavily`、`brave_news`、`searxng`。新增 Code 需固定测试样本和稳定标识，不复用已删除 Provider 的 Code 表示不同供应商。
+
+首期不要求新增独立动态 Registry。对当前 StaticProviderSet，应用入口执行完整预检即可；只有出现运行期注册/动态启停用例时才拆分独立 Registry。
+
+#### 候选数据语义
+
+| 字段 | 契约 |
+|---|---|
+| ProviderCode | 搜索供应商身份；由 Orchestrator 依据已校验 Code 绑定，不信任响应自报值 |
+| ProviderItemID | Provider 原始条目 ID；没有则为空，不得伪造 |
+| SourceItemID | 原始发布来源条目 ID；与 ProviderItemID 分离 |
+| PublisherName / PublisherDomain | 仅保留 Provider 明确返回或受信来源目录提供的值；不从 URL 推断 |
+| PublishedAtRaw | 保留上游原始时间文本 |
+| PublishedAt | 仅在时间格式和时区足以支持精确时点时填写；日粒度/无时区文本保留 Raw，不强转 |
+| FetchedAt | 真实网络获取时间；未记录时保持 nil |
+| NormalizedAt | 标准化处理时间；未记录时保持 nil |
+| ObservedAt | 本次系统观察时间；不得替代 PublishedAt |
+| QueryDimension | 归因到本次查询维度 |
+| MissingFields | 标准化后按必需字段重新计算，不信任 Provider 自报列表 |
+
+Provider 原始响应结构只存在于 Adapter 内。Candidate 是标准化候选，不是发布者原文或已授权可持久化内容。Observation 写入仍必须经过 Provider Output ∩ Source ∩ Endpoint 策略评估。
+
+#### 单 Provider Outcome 与聚合状态
+
+单 Provider 状态：
+
+- `success`：请求成功且至少返回一个候选。
+- `empty`：请求成功但返回零候选；不是故障。
+- `skipped`：按配置/策略明确跳过；不是成功，也不是故障。
+- `failed`：本次请求执行失败。
+
+Outcome 至少保留现有字段：ProviderCode、QueryDimension、Status、CandidateCount、ErrorCode、Retryable、Duration、ObservedAt。Duration 只表示本次 Provider.Search 调用耗时；ObservedAt 表示该次调用完成/被判定的时间。CandidateCount 是 Adapter 返回并交由标准化的候选数，不代表最终持久化数量或质量合格数量。
+
+聚合状态按以下规则解释：
+
+| 条件 | SearchResult.Status |
+|---|---|
+| 所有 Provider 均 skipped，或没有可执行 Provider | skipped |
+| 没有 success/empty，且至少一个 failed | failed |
+| 至少一个 success/empty，同时存在 failed 或 skipped | partial |
+| 全部执行成功且候选总数为 0 | empty |
+| 至少一个候选且没有 failed/skipped | success |
+
+`partial` 必须保留每个 Provider Outcome；不得只返回成功候选而丢弃失败来源。
+
+#### 错误码与重试语义
+
+- `ProviderError.Code` 是稳定机器可读分类，不得包含 Secret、URL 凭证、响应正文或任意上游错误文本。
+- `Retryable` 仅表示技术层可重试候选；不授权 Adapter 或 Orchestrator 自动重试。实际重试预算归 Platform HTTP Client 与 Provider 配额策略共同约束。
+- `Skipped` 只用于明确的配置/策略跳过；不能把 401、429、超时或未知错误标记为 skipped。
+- 统一错误码最小集合：`provider_unauthorized`、`provider_rate_limited`、`provider_timeout`、`provider_transport_failed`、`provider_request_invalid`、`provider_response_invalid`、`provider_business_rejected`、`provider_upstream_unavailable`、`provider_unknown`。
+- HTTP 429 映射为 `provider_rate_limited` 且 Retryable=true；认证拒绝映射为 `provider_unauthorized` 且 Retryable=false；超时映射为 `provider_timeout` 且 Retryable=true；可重试的 5xx 映射为 `provider_upstream_unavailable` 且 Retryable=true；响应解码/结构缺失映射为 `provider_response_invalid` 且默认 Retryable=false。
+- Platform Fault 必须先 Validate，再映射到上述 News 错误分类；不得将平台 Fault 的任意 Code 直接当作稳定 News 公共错误码。底层细节只允许进入受控诊断 Reason/Evidence，不进入用户可见错误文本。
+
+#### 分页与顺序
+
+- 当前 SearchRequest 只有 Limit，没有 Page/Cursor；现有四个 Adapter 只证明单次搜索请求，不证明统一跨页能力。
+- 首期协议明确为单次请求结果；Adapter 不得声称已完整遍历上游全部结果。
+- ProviderSet 顺序决定当前执行顺序；首期保持确定性顺序，不并发改造，以免改变请求成本、限流行为和结果顺序。
+- 若未来需要分页，必须定义供应商能力差异、游标生命周期、重复页防护、停止条件和部分失败语义后单独升级协议。
+
+#### 契约测试要求
+
+所有 Search Provider 必须覆盖：
+- Code 非空、规范且在集合内唯一。
+- 请求方法、鉴权位置、查询参数和 Limit 映射。
+- 正常结果、空结果、缺失结果 Envelope。
+- ProviderCode 归因和 Publisher 身份不推断。
+- 发布时间原文保留及不可信时间不强转。
+- HTTP 401/403、429、5xx、网络超时、非法 JSON、业务拒绝的错误映射。
+- 不输出凭证或原始响应内容。
+- Context 取消传播。
+
+该测试集只验证进程内 Search Provider Contract；RSS/Atom 继续使用独立 Source Collection Contract Test。
