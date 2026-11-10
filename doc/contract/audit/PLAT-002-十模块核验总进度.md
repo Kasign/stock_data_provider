@@ -552,3 +552,10 @@
 - source_version、quality_reasons 虽也 omitempty，但 OpenAPI 未声明 nullable，不纳入差异；average_cost、symbol、source、fetched_at、quality_status 的 required 与 Go 一致。
 - 通用模型登记测试覆盖字段/required，但没有对 omitempty 的 nullable 反向断言；JSON serialization test 未覆盖 ChipDistribution。CTR-010 的九处冲突确认，未新增编号；本轮未执行固定基线 CI。
 - 本批只完成 ChipDistribution 子集，CTR-010 全量字段清单仍未完成。
+### WebUI — 维度 2：CTR-010 字段清单复核（子批次 6）
+
+- 详细记录：WebUI-维度2-完整性Review-第一轮.md 第 13 节。
+- StockBasic/Profile 确认 14 个 omitempty 字段被 OpenAPI 声明 nullable=true；SecurityTradingStatusSnapshot 确认 system_observed_at 1 个；PriceLimitRuleSnapshot 确认 special_exception_evidence、limit_percent 2 个。合计 17 个字段纳入 CTR-010。
+- 同 DTO 中其他 omitempty 字段的 OpenAPI 未声明 nullable，不计入 CTR-010；required 集合与 Go 非 omitempty 字段总体一致。
+- 测试已覆盖 StockBasic、SecurityTradingStatusSnapshot 的字段/required，但没有 omitempty→非 nullable 反向断言或对应 JSON 序列化 Golden；PriceLimit Rule inline Schema 缺 Go DTO 映射测试。本轮未执行固定基线 CI。
+- 本批无新增 CTR 编号或业务代码修改；CTR-010 全量字段清单仍未完成。
