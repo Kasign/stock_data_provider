@@ -68,7 +68,7 @@ func validProviderIngestPolicy() ProviderOutputPolicyBinding {
 func TestIngestProviderCandidateEvaluatesTrustedPolicyBeforePersistence(t *testing.T) {
 	repository := &memoryIdentityRepository{}
 	ingest := newCandidateIngest(repository, func() string { return "observation-provider-allowed" })
-	usecase, err := NewIngestProviderCandidate(ingest, providerIngestCatalogStub{
+	usecase, err := NewIngestProviderCandidate(ingest.repository, ingest.newID, providerIngestCatalogStub{
 		registration: validProviderIngestRegistration(),
 	}, providerIngestPolicyStub{binding: validProviderIngestPolicy()})
 	if err != nil {
@@ -105,7 +105,7 @@ func TestIngestProviderCandidateRejectsNonPositiveRetentionBeforePolicyLookup(t 
 		repository := &memoryIdentityRepository{}
 		ingest := newCandidateIngest(repository, func() string { return "must-not-persist-nonpositive-retention" })
 		policies := providerIngestPolicyStub{binding: validProviderIngestPolicy()}
-		usecase, err := NewIngestProviderCandidate(ingest,
+		usecase, err := NewIngestProviderCandidate(ingest.repository, ingest.newID,
 			providerIngestCatalogStub{registration: validProviderIngestRegistration()}, policies)
 		if err != nil {
 			t.Fatal(err)
@@ -161,7 +161,7 @@ func TestIngestProviderCandidateFailsClosedBeforePersistence(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			repository := &memoryIdentityRepository{}
 			ingest := newCandidateIngest(repository, func() string { return "must-not-persist" })
-			usecase, err := NewIngestProviderCandidate(ingest,
+			usecase, err := NewIngestProviderCandidate(ingest.repository, ingest.newID,
 				providerIngestCatalogStub{registration: test.registration},
 				providerIngestPolicyStub{binding: test.policy, err: test.policyErr},
 			)
@@ -189,7 +189,7 @@ func TestIngestProviderCandidateRejectsProviderIdentityMismatch(t *testing.T) {
 	ingest := newCandidateIngest(repository, func() string { return "must-not-persist" })
 	binding := validProviderIngestPolicy()
 	binding.ProviderCode = "tavily"
-	usecase, err := NewIngestProviderCandidate(ingest,
+	usecase, err := NewIngestProviderCandidate(ingest.repository, ingest.newID,
 		providerIngestCatalogStub{registration: validProviderIngestRegistration()},
 		providerIngestPolicyStub{binding: binding},
 	)
@@ -221,7 +221,7 @@ func TestIngestProviderCandidatePreservesSourceCatalogFailureClassification(t *t
 		t.Run(test.name, func(t *testing.T) {
 			repository := &memoryIdentityRepository{}
 			ingest := newCandidateIngest(repository, func() string { return "must-not-persist" })
-			usecase, err := NewIngestProviderCandidate(ingest,
+			usecase, err := NewIngestProviderCandidate(ingest.repository, ingest.newID,
 				providerIngestCatalogStub{err: test.err},
 				providerIngestPolicyStub{binding: validProviderIngestPolicy()},
 			)
@@ -261,7 +261,7 @@ func TestIngestProviderCandidateStopsAfterContextCancellationAtPolicyBoundaries(
 			} else {
 				policies.afterResolve = cancel
 			}
-			usecase, err := NewIngestProviderCandidate(ingest, catalog, policies)
+			usecase, err := NewIngestProviderCandidate(ingest.repository, ingest.newID, catalog, policies)
 			if err != nil {
 				t.Fatal(err)
 			}

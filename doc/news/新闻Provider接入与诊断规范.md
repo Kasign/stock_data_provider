@@ -490,6 +490,15 @@ Server 启动时按以下顺序装配，依赖生命周期由 Server 持有：
 
 配置快照、ProviderSet 和 Search Facade 在同一 Server 生命周期内复用。当前没有热更新机制；配置变更通过受控重启重新装配，不在请求中重建 ProviderSet。
 
+### 19.1.1 授权持久化用例装配
+
+RSS/Atom 采集结果和搜索 Provider 候选的持久化用例必须由 Server 组合根通过公开构造器创建：
+
+- `app.NewIngestCollectedSource(identityRepository, newID, sourceCatalog)`
+- `app.NewIngestProviderCandidate(identityRepository, newID, sourceCatalog, providerOutputPolicyResolver)`
+
+两个构造器只接收公开 Repository/策略端口和 ID 生成函数，并在 News Application 包内部创建私有候选写入器。不得导出或注入 `candidateIngest`，避免调用方绕过授权评估直接写入 Observation。
+
 ### 19.2 启动失败与可选供应商
 
 - `config.Load` 返回错误：配置不完整或非法，Server 启动装配失败；不得吞掉错误后静默使用不完整配置。

@@ -53,15 +53,20 @@ type IngestProviderCandidate struct {
 	now      func() time.Time
 }
 
+// NewIngestProviderCandidate 是可由 Server 组合根调用的公开构造器。底层候选写入器
+// 始终在 app 包内创建，Provider 候选仍必须经过可信 Provider/Source/Endpoint 策略评估。
 func NewIngestProviderCandidate(
-	ingest *candidateIngest,
+	repository IdentityRepository,
+	newID func() string,
 	sources SourceCatalog,
 	policies ProviderOutputPolicyResolver,
 ) (*IngestProviderCandidate, error) {
-	if ingest == nil || sources == nil || policies == nil {
+	if repository == nil || newID == nil || sources == nil || policies == nil {
 		return nil, ErrProviderOutputPolicyUnavailable
 	}
-	return &IngestProviderCandidate{ingest: ingest, sources: sources, policies: policies, now: time.Now}, nil
+	return &IngestProviderCandidate{
+		ingest: newCandidateIngest(repository, newID), sources: sources, policies: policies, now: time.Now,
+	}, nil
 }
 
 func (u *IngestProviderCandidate) Execute(ctx context.Context, request IngestProviderCandidateRequest) (domain.Observation, error) {

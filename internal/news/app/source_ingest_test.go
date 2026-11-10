@@ -41,7 +41,7 @@ func TestIngestCollectedSourceRechecksVersionAndMetadataPersistencePolicy(t *tes
 	registration := sourcePersistenceRegistration()
 	repository := &memoryIdentityRepository{}
 	ingest := newCandidateIngest(repository, func() string { return "observation-feed-1" })
-	usecase, err := NewIngestCollectedSource(ingest, providerIngestCatalogStub{registration: registration})
+	usecase, err := NewIngestCollectedSource(ingest.repository, ingest.newID, providerIngestCatalogStub{registration: registration})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -81,7 +81,7 @@ func TestIngestCollectedSourceFailsClosedOnPolicyVersionChange(t *testing.T) {
 	registration.SourcePolicyVersionID = "source-policy-v4"
 	repository := &memoryIdentityRepository{}
 	ingest := newCandidateIngest(repository, func() string { return "must-not-persist" })
-	usecase, err := NewIngestCollectedSource(ingest, providerIngestCatalogStub{registration: registration})
+	usecase, err := NewIngestCollectedSource(ingest.repository, ingest.newID, providerIngestCatalogStub{registration: registration})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -100,7 +100,7 @@ func TestIngestCollectedSourceRequiresSeparateMetadataPersistenceGrant(t *testin
 	registration.SourcePolicy.AllowedStorageModes = []domain.StorageMode{domain.StorageTransient}
 	repository := &memoryIdentityRepository{}
 	ingest := newCandidateIngest(repository, func() string { return "must-not-persist" })
-	usecase, err := NewIngestCollectedSource(ingest, providerIngestCatalogStub{registration: registration})
+	usecase, err := NewIngestCollectedSource(ingest.repository, ingest.newID, providerIngestCatalogStub{registration: registration})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -117,7 +117,7 @@ func TestIngestCollectedSourceRequiresSeparateMetadataPersistenceGrant(t *testin
 func TestIngestCollectedSourceRejectsTamperedEntries(t *testing.T) {
 	repository := &memoryIdentityRepository{}
 	ingest := newCandidateIngest(repository, func() string { return "must-not-persist" })
-	usecase, err := NewIngestCollectedSource(ingest, providerIngestCatalogStub{registration: sourcePersistenceRegistration()})
+	usecase, err := NewIngestCollectedSource(ingest.repository, ingest.newID, providerIngestCatalogStub{registration: sourcePersistenceRegistration()})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -135,7 +135,7 @@ func TestIngestCollectedSourceRejectsTamperedEntries(t *testing.T) {
 func TestIngestCollectedSourceRejectsTamperedPolicyVersion(t *testing.T) {
 	repository := &memoryIdentityRepository{}
 	ingest := newCandidateIngest(repository, func() string { return "must-not-persist" })
-	usecase, err := NewIngestCollectedSource(ingest, providerIngestCatalogStub{registration: sourcePersistenceRegistration()})
+	usecase, err := NewIngestCollectedSource(ingest.repository, ingest.newID, providerIngestCatalogStub{registration: sourcePersistenceRegistration()})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -156,7 +156,7 @@ func TestIngestCollectedSourceStopsAfterCatalogContextCancellation(t *testing.T)
 	repository := &memoryIdentityRepository{}
 	ingest := newCandidateIngest(repository, func() string { return "must-not-persist-after-cancel" })
 	catalog := providerIngestCatalogStub{registration: sourcePersistenceRegistration(), afterLookup: cancel}
-	usecase, err := NewIngestCollectedSource(ingest, catalog)
+	usecase, err := NewIngestCollectedSource(ingest.repository, ingest.newID, catalog)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -193,7 +193,7 @@ func TestIngestCollectedSourcePartialCommitCanBeSafelyRetried(t *testing.T) {
 		failAt: 2,
 	}
 	ingest := newCandidateIngest(failingRepository, func() string { return "observation-batch" })
-	usecase, err := NewIngestCollectedSource(ingest, providerIngestCatalogStub{registration: sourcePersistenceRegistration()})
+	usecase, err := NewIngestCollectedSource(ingest.repository, ingest.newID, providerIngestCatalogStub{registration: sourcePersistenceRegistration()})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -221,7 +221,7 @@ func TestIngestCollectedSourcePartialCommitCanBeSafelyRetried(t *testing.T) {
 
 	// 每条 Observation 独立事务；重试必须复用相同幂等前缀，已提交条目会重放既有记录。
 	retryIngest := newCandidateIngest(repository, func() string { return "observation-batch-retry" })
-	retryUsecase, err := NewIngestCollectedSource(retryIngest, providerIngestCatalogStub{registration: sourcePersistenceRegistration()})
+	retryUsecase, err := NewIngestCollectedSource(retryIngest.repository, retryIngest.newID, providerIngestCatalogStub{registration: sourcePersistenceRegistration()})
 	if err != nil {
 		t.Fatal(err)
 	}
