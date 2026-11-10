@@ -19,7 +19,7 @@ func TestLeaseRecoveryReportDiagnosticsClassification(t *testing.T) {
 		{"conflict", LeaseRecoveryReport{Scanned: 2, Recovered: 1, Conflicted: 1}, diagnostics.StatusDegraded, "notification.lease_recovery_conflict"},
 		{"uncertain commit", LeaseRecoveryReport{Scanned: 1, OutcomeUnknown: 1, OutcomeUnknownDeliveryIDs: []string{"delivery-1"}}, diagnostics.StatusDegraded, "notification.persistence_outcome_unknown"},
 		{"unprocessed", LeaseRecoveryReport{Scanned: 2, Recovered: 1, Unprocessed: 1}, diagnostics.StatusDegraded, "notification.lease_recovery_incomplete"},
-		{"failure takes precedence", LeaseRecoveryReport{Scanned: 2, OutcomeUnknown: 1, Failed: 1}, diagnostics.StatusFailed, "notification.lease_recovery_failed"},
+		{"failure takes precedence", LeaseRecoveryReport{Scanned: 2, OutcomeUnknown: 1, OutcomeUnknownDeliveryIDs: []string{"delivery-1"}, Failed: 1}, diagnostics.StatusFailed, "notification.lease_recovery_failed"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
