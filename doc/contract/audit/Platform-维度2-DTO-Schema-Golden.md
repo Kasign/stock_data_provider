@@ -142,3 +142,51 @@ Schema 的字段集合、状态枚举、required 集合、条件 reason_code、d
 ### 7.5 下一切片建议
 
 Platform维度2下一切片核对 Request ID：区分内部Request Context/ID生成与各Transport公开响应头/DTO；只核Platform公共原语及直接消费者证据。Server完整HTTP错误Envelope与路由响应契约仍留在Server维度2。
+## 8. Request ID 公共原语与直接 Transport 消费者（第三切片，2026-11-10）
+
+### 8.1 原语与Golden
+
+核验文件：
+- `internal/platform/observability/request_id.go`
+- `internal/platform/observability/request_id_test.go`、`request_id_contract_test.go`
+- `doc/platform/golden/PLAT-CTR-002-request-id.golden.json`
+- `doc/platform/08-公共平台契约规范.md` 第5节
+
+已确认契约：
+- Header固定为 `X-Request-ID`；有效值为1～128字节ASCII token，仅允许字母、数字、`-`、`_`、`.`、`:`。
+- `MiddlewareWithOptions` 零值策略不信任任何客户端输入，缺失、非法、多值均生成新ID；只有显式启用 `TrustIncomingRequestID` 才接受单值合法ID。
+- 生成器优先使用16字节密码学随机数并编码为32位小写hex；随机源失败时回退到UTC纳秒时间与进程内原子计数器。
+- ID进入私有Context Key；`WithRequestID` 只接收有效值；`PropagateRequestID` 只从Context取值覆盖出站Header，Context无ID时删除调用方预设Header。
+- `Middleware` 保留旧的信任单值Header行为并标记Deprecated，契约限定只可用于可信Gateway覆盖且网络不可绕过的部署。
+
+Golden覆盖Header名、最大长度、生成随机字节数、默认不信任、合法/非法值、重复Header、出站覆盖与无Context删除。Contract Test读取Golden并验证向量；单元测试另覆盖128字节边界、非法字符、重复值、显式可信选项和Context传播。
+
+### 8.2 Server入口与日志调用链
+
+- `internal/server/bootstrap/bootstrap.go` 在创建真实HTTP Server前，将完整路由Handler包裹在 `newHTTPMiddleware` 外层。
+- `internal/server/bootstrap/http_middleware.go` 最外层使用 `MiddlewareWithOptions(..., MiddlewareOptions{})`，因此Root Server直接可达时会重建客户端自报ID；随后才进入并发限制、Body限制、Router和旧Analysis API Handler。
+- 旧 `internal/platform/httpapi.Server.Handler()` 内部仍使用Deprecated `Middleware`，但当前Root Server组合根在其外层先生成可信Context ID；内层只会读到外层生成的单值ID。其独立Handler若被其他入口直接暴露，则仍继承旧信任行为，必须满足契约的可信Gateway前提。
+- `requestLog`、任务创建/失败日志和panic日志从Platform Context读取并记录 `request_id`。外层Request ID Middleware先执行，因此并发拒绝、Body限制提前返回等响应也会带最终ID响应Header。
+- Server中间件测试覆盖客户端值重建；但没有发现一个集成测试将真实Root Server入口、内部旧Handler和出站HTTP调用串联起来验证同一个ID端到端贯通。
+
+### 8.3 出站传播与异步ID隔离
+
+- Platform HTTP Client缓冲请求在每次尝试克隆Request后调用 `PropagateRequestID`；流式请求在发起网络调用前执行相同传播。
+- 缓冲路径 `client_test.go` 覆盖Context ID出站传播；流式路径 `stream_test.go` 覆盖请求ID进入StreamStats；Request ID Contract Test覆盖有Context覆盖原Header、无Context删除原Header。
+- Research `application/correlation.go` 使用独立私有Context Key承载Correlation ID；从Request ID Context不会自动继承Correlation ID，缺少可信Correlation ID时使用Research ID Generator生成。对应测试明确验证两种ID不混用。
+- GOV-CTR-003要求的 `originating_request_id`、Worker/重试 `correlation_id`、Event ID及跨模块Golden/消费者完整链路不属于本Platform切片；登记簿仍将GOV-CTR-003列为pending_evidence，本轮不升级其状态。
+
+### 8.4 证据缺口与结论
+
+| 编号 | 发现 | 当前判断 | 关闭/补证条件 |
+|---|---|---|---|
+| PLAT2-D2-006 | Middleware、Server入口、缓冲/流式出站传播分别有测试，但缺少真实Root Server入口到出站Platform HTTP Client的端到端测试，未在一条链路中证明入口重建的ID被同一请求Context和出站Header持续使用 | 集成证据缺口，不是已证实的实现错误；静态组合根接线和各组件测试均存在 | Server/Integration Owner补一条组合测试：客户端伪造ID被重建，响应Header/请求日志使用重建ID，出站缓冲及流式调用只传播该ID；无Context时不透传调用方Header |
+| P002-D03（既有） | Deprecated `Middleware` 仍保留信任单值Header的兼容行为；Root Server外层已使用零值安全Middleware，但独立暴露旧 `api.Handler()` 的入口仍必须受可信Gateway拓扑约束 | Root Server当前接线符合安全默认；兼容入口的部署约束和迁移/移除仍需Server/Integration证据 | 证明旧Handler没有绕过Root Server的生产暴露路径，或迁移所有入口后移除兼容Middleware；更新部署拓扑验收证据 |
+
+本切片不新增CTR。PLAT-CTR-002原语及Golden/本地测试证据基本齐备；P002-D03仍需部署入口证据，PLAT-CTR-002不能仅凭包级测试标记frozen。GOV-CTR-003继续独立开放。
+
+**切片结论：partial（原语与局部消费者通过，组合链路端到端证据待补）。** 不核Server完整HTTP Error Envelope，不重审Fault/Observation，不修改实现或测试，不执行CI。
+
+### 8.5 下一切片建议
+
+Platform维度2剩余最直接的公共结构是HTTP Client配置与结果/流式结果的契约边界。下一轮只核Platform HTTP Client对外配置、DestinationPolicy、缓冲/流式结果元数据与现有PLAT-CTR-005 Golden/Contract Test；不扩展到SSRF算法复审（归其他维度/专项安全审查），不审Server LLM Transport业务映射。
