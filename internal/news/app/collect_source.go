@@ -228,6 +228,9 @@ func (u *CollectSource) Execute(ctx context.Context, request CollectSourceReques
 
 	fetchedAt := u.now().UTC()
 	feed, err := parser.ParseFeed(payload, fetchedAt)
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return CollectSourceResult{}, ctxErr
+	}
 	if err != nil {
 		return CollectSourceResult{}, &SourceCollectionError{Code: "source_feed_parse_failed"}
 	}
@@ -248,6 +251,9 @@ func (u *CollectSource) Execute(ctx context.Context, request CollectSourceReques
 		Entries:                 make([]CollectedSourceEntry, 0, min(len(feed.Entries), request.MaxEntries)),
 	}
 	for _, entry := range feed.Entries {
+		if err := ctx.Err(); err != nil {
+			return CollectSourceResult{}, err
+		}
 		if len(result.Entries) >= request.MaxEntries {
 			break
 		}
@@ -264,6 +270,9 @@ func (u *CollectSource) Execute(ctx context.Context, request CollectSourceReques
 		})
 	}
 	normalizedAt := u.now().UTC()
+	if err := ctx.Err(); err != nil {
+		return CollectSourceResult{}, err
+	}
 	result.NormalizedAt = normalizedAt
 	result.ObservedAt = normalizedAt
 	for index := range result.Entries {
@@ -273,8 +282,14 @@ func (u *CollectSource) Execute(ctx context.Context, request CollectSourceReques
 		result.Entries[index].Candidate.NormalizedAt = &normalized
 		result.Entries[index].Candidate.ObservedAt = normalizedAt
 	}
+	if err := ctx.Err(); err != nil {
+		return CollectSourceResult{}, err
+	}
 	if err := sealCollectSourceResult(&result); err != nil {
 		return CollectSourceResult{}, &SourceCollectionError{Code: "source_result_seal_failed"}
+	}
+	if err := ctx.Err(); err != nil {
+		return CollectSourceResult{}, err
 	}
 	return result, nil
 }

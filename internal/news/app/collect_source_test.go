@@ -385,3 +385,25 @@ func TestCollectSourceStopsAfterContextCancellationAtDependencyBoundaries(t *tes
 		})
 	}
 }
+
+func TestCollectSourceStopsAfterCancellationDuringNormalization(t *testing.T) {
+	body := `<?xml version="1.0"?><rss version="2.0"><channel><item><guid>item-1</guid><title>标题</title><link>https://publisher.example/item-1</link></item></channel></rss>`
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	transport := &sourceTransportStub{response: feedResponse(body, "application/rss+xml", http.StatusOK)}
+	useCase := NewCollectSource(sourceCatalogStub{registration: approvedSourceRegistration()}, transport)
+	clockCalls := 0
+	useCase.now = func() time.Time {
+		clockCalls++
+		if clockCalls == 3 {
+			cancel()
+		}
+		return time.Date(2026, 11, 10, 10, 0, 0, 0, time.UTC).Add(time.Duration(clockCalls) * time.Second)
+	}
+	if _, err := useCase.Execute(ctx, validCollectRequest()); !errors.Is(err, context.Canceled) {
+		t.Fatalf("Execute() error=%v, want context.Canceled", err)
+	}
+	if clockCalls != 3 {
+		t.Fatalf("clock calls=%d, want cancellation at normalization boundary", clockCalls)
+	}
+}
