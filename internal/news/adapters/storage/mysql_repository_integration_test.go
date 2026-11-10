@@ -91,7 +91,7 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 	}
 	// A later deny is authoritative: latest lookup must not fall back to this allow.
 	latestDeny := binding
-	latestDeny.AuthorizationRef.AuthorizationRef += "-latest-deny"
+	latestDeny.AuthorizationRef.AuthorizationRef = fmt.Sprintf("%s-latest-deny-%d", latestDeny.AuthorizationRef.AuthorizationRef, time.Now().UnixNano())
 	latestDeny.AuthorizationRef.Decision = domain.AuthorizationDecisionDenied
 	latestDeny.AuthorizationRef.DecidedAt = time.Now().UTC().Add(time.Second).Format(time.RFC3339Nano)
 	latestDeny.AuthorizationRef.DecisionFingerprint = strings.Repeat("b", 64)
