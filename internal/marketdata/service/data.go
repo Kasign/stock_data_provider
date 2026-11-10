@@ -276,6 +276,28 @@ func validateIndexQuoteSnapshot(snapshot *model.IndexQuoteSnapshot) error {
 	}
 	return nil
 }
+// degradedCacheTTL 返回基础 TTL 的四分之一，适用于具有固定 TTL 的快照能力。
+func degradedCacheTTL(ttl time.Duration) time.Duration {
+	return ttl / 4
+}
+
+// configuredDegradedCacheTTL 为配置型缓存保留最短一分钟的降级缓存窗口。
+func configuredDegradedCacheTTL(ttl time.Duration) time.Duration {
+	shortTTL := degradedCacheTTL(ttl)
+	if shortTTL <= 0 {
+		return time.Minute
+	}
+	return shortTTL
+}
+
+// cacheEntryWithinTTL 在读取侧再次执行缓存年龄约束，不完全依赖缓存后端的过期实现。
+func cacheEntryWithinTTL(fetchedAt time.Time, ttl time.Duration, now time.Time) bool {
+	if ttl <= 0 || fetchedAt.IsZero() || fetchedAt.After(now) {
+		return false
+	}
+	return now.Sub(fetchedAt) < ttl
+}
+
 func (s *DataService) IndexQuotes(ctx context.Context) (*model.IndexQuoteSnapshot, bool, error) {
 	if ctx == nil {
 		ctx = context.Background()
@@ -287,8 +309,14 @@ func (s *DataService) IndexQuotes(ctx context.Context) (*model.IndexQuoteSnapsho
 	const key = "md:v1:index-quotes:core"
 	if data, ok, cacheErr := s.cache.Get(ctx, key); cacheErr == nil && ok {
 		var cached model.IndexQuoteSnapshot
-		if json.Unmarshal(data, &cached) == nil && validateIndexQuoteSnapshot(&cached) == nil && time.Since(cached.FetchedAt) >= 0 && time.Since(cached.FetchedAt) < ttl {
-			return &cached, true, nil
+		if json.Unmarshal(data, &cached) == nil && validateIndexQuoteSnapshot(&cached) == nil {
+			cacheTTL := ttl
+			if cached.QualityStatus == model.QualityDegraded {
+				cacheTTL = degradedCacheTTL(ttl)
+			}
+			if cacheEntryWithinTTL(cached.FetchedAt, cacheTTL, time.Now()) {
+				return &cached, true, nil
+			}
 		}
 	} else if cacheErr != nil {
 		s.logger.Warn("index quote cache read failed", "error", cacheErr)
@@ -343,7 +371,7 @@ func (s *DataService) IndexQuotes(ctx context.Context) (*model.IndexQuoteSnapsho
 		payload, marshalErr := json.Marshal(snapshot)
 		if marshalErr == nil {
 			cacheTTL := ttl
-			if snapshot.QualityStatus == model.QualityDegraded { cacheTTL = ttl / 4 }
+			if snapshot.QualityStatus == model.QualityDegraded { cacheTTL = degradedCacheTTL(ttl) }
 			if cacheErr := s.cache.Set(ctx, key, payload, cacheTTL); cacheErr != nil {
 				s.logger.Warn("index quote cache write failed", "error", cacheErr)
 			}
@@ -547,8 +575,14 @@ func (s *DataService) MarketBreadth(ctx context.Context) (*model.MarketBreadthSn
 	const key = "md:v1:market-breadth:cn-a-share"
 	if data, ok, cacheErr := s.cache.Get(ctx, key); cacheErr == nil && ok {
 		var cached model.MarketBreadthSnapshot
-		if json.Unmarshal(data, &cached) == nil && validateMarketBreadth(&cached) == nil && time.Since(cached.FetchedAt) >= 0 && time.Since(cached.FetchedAt) < ttl {
-			return &cached, true, nil
+		if json.Unmarshal(data, &cached) == nil && validateMarketBreadth(&cached) == nil {
+			cacheTTL := ttl
+			if cached.QualityStatus == model.QualityDegraded {
+				cacheTTL = degradedCacheTTL(ttl)
+			}
+			if cacheEntryWithinTTL(cached.FetchedAt, cacheTTL, time.Now()) {
+				return &cached, true, nil
+			}
 		}
 	} else if cacheErr != nil {
 		s.logger.Warn("market breadth cache read failed", "error", cacheErr)
@@ -602,7 +636,7 @@ func (s *DataService) MarketBreadth(ctx context.Context) (*model.MarketBreadthSn
 		}
 		if data, err := json.Marshal(snapshot); err == nil {
 			cacheTTL := ttl
-			if snapshot.QualityStatus == model.QualityDegraded { cacheTTL = ttl / 4 }
+			if snapshot.QualityStatus == model.QualityDegraded { cacheTTL = degradedCacheTTL(ttl) }
 			if cacheErr := s.cache.Set(ctx, key, data, cacheTTL); cacheErr != nil {
 				s.logger.Warn("market breadth cache write failed", "error", cacheErr)
 			}
@@ -2659,8 +2693,12 @@ func (s *DataService) Quote(ctx context.Context, rawSymbol string) (*model.Quote
 			if symbolErr == nil && cachedSymbol == symbol && hasIdentifiableSourceVersion(q.SourceVersion) && q.NormalizationVer == normalize.Version &&
 				serviceTimestampIsSane(q.FetchedAt, cacheNow) && serviceTimestampIsSane(q.NormalizedAt, cacheNow) &&
 				normalize.ValidateQuote(&q) == nil {
-				applyQuoteFreshness(&q, time.Now())
-				if quoteCacheEligible(&q) {
+				applyQuoteFreshness(&q, cacheNow)
+				cacheTTL := s.quoteTTL
+				if q.QualityStatus == model.QualityDegraded {
+					cacheTTL = configuredDegradedCacheTTL(cacheTTL)
+				}
+				if quoteCacheEligible(&q) && cacheEntryWithinTTL(q.FetchedAt, cacheTTL, cacheNow) {
 					return &q, true, nil
 				}
 				s.logger.Warn("stale or untrustworthy quote cache payload ignored; refreshing provider", "symbol", symbol, "quality_status", q.QualityStatus, "quality_reasons", q.QualityReasons)
@@ -2787,10 +2825,7 @@ func (s *DataService) Quote(ctx context.Context, rawSymbol string) (*model.Quote
 		if encoded, e := json.Marshal(q); e == nil {
 			cacheTTL := s.quoteTTL
 			if q.QualityStatus == model.QualityDegraded {
-				cacheTTL = s.quoteTTL / 4
-				if cacheTTL <= 0 {
-					cacheTTL = time.Minute
-				}
+				cacheTTL = configuredDegradedCacheTTL(s.quoteTTL)
 			}
 			if e = s.cache.Set(ctx, key, encoded, cacheTTL); e != nil {
 				s.logger.Warn("quote cache write failed", "error", e)
@@ -2804,8 +2839,7 @@ func (s *DataService) Quote(ctx context.Context, rawSymbol string) (*model.Quote
 	if degradedFallback != nil {
 		appendReasonOnce(&degradedFallback.QualityReasons, "quote_fallback_exhausted_without_valid_provider")
 		if encoded, encodeErr := json.Marshal(degradedFallback); encodeErr == nil {
-			ttl := s.quoteTTL / 4
-			if ttl <= 0 { ttl = time.Minute }
+			ttl := configuredDegradedCacheTTL(s.quoteTTL)
 			if cacheErr := s.cache.Set(ctx, key, encoded, ttl); cacheErr != nil {
 				s.logger.Warn("degraded quote cache write failed", "error", cacheErr)
 			}
@@ -2878,6 +2912,7 @@ func (s *DataService) DailyBars(ctx context.Context, rawSymbol, start, end strin
 				sourceVersion := strings.TrimSpace(bar.SourceVersion)
 				if symbolErr != nil || cachedSymbol != symbol || source == "" || !hasIdentifiableSourceVersion(sourceVersion) ||
 					bar.AdjustmentBasis != basis || bar.NormalizationVer != normalize.Version ||
+					(bar.QualityStatus != model.QualityValid && bar.QualityStatus != model.QualityDegraded) ||
 					!serviceTimestampIsSane(bar.FetchedAt, cacheNow) || !serviceTimestampIsSane(bar.NormalizedAt, cacheNow) {
 					contractMismatch = true
 					break
@@ -2894,8 +2929,21 @@ func (s *DataService) DailyBars(ctx context.Context, rawSymbol, start, end strin
 			if !contractMismatch {
 				validated, warnings := normalize.ValidateAndSortBars(symbol, candidates, start, end, limit)
 				if len(validated) > 0 {
+					cacheTTL := s.barsTTL
+					if dailyBarsContainDegradedQuality(validated) {
+						cacheTTL = configuredDegradedCacheTTL(cacheTTL)
+					}
+					cacheAgeOK := cacheTTL > 0
+					for _, bar := range validated {
+						if !cacheEntryWithinTTL(bar.FetchedAt, cacheTTL, cacheNow) {
+							cacheAgeOK = false
+							break
+						}
+					}
 					adjustmentWarnings, adjustmentErr := applyDailyBarAdjustmentMetadataQuality(validated, basis)
-					if adjustmentErr != nil {
+					if !cacheAgeOK {
+						contractMismatch = true
+					} else if adjustmentErr != nil {
 						contractMismatch = true
 					} else if dailyBarsCacheNeedsPostCloseRefresh(validated, time.Now()) {
 						s.logger.Info("daily-bar cache has today's partial candle after close; refreshing provider", "symbol", symbol, "trade_date", validated[len(validated)-1].TradeDate)
@@ -3114,10 +3162,7 @@ func (s *DataService) DailyBars(ctx context.Context, rawSymbol, start, end strin
 		}{bars, warnings}); e == nil {
 			cacheTTL := s.barsTTL
 			if dailyBarsContainDegradedQuality(bars) {
-				cacheTTL = s.barsTTL / 4
-				if cacheTTL <= 0 {
-					cacheTTL = time.Minute
-				}
+				cacheTTL = configuredDegradedCacheTTL(s.barsTTL)
 			}
 			if e = s.cache.Set(ctx, key, encoded, cacheTTL); e != nil {
 				s.logger.Warn("daily bars cache write failed", "error", e)

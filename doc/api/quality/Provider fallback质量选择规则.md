@@ -50,6 +50,13 @@ provider_fallback_used 只记录实际使用了非首选 Provider，不是质量
 - degraded 应使用短于正常 TTL 的质量降级 TTL，避免降级结果长期阻止后续高质量刷新。
 - unknown 使用短 TTL，并且多 Provider 场景必须确认 fallback 已耗尽后才可作为缓存命中。
 - invalid 不缓存。
+- Quote：valid 使用配置 TTL；degraded 使用四分之一 TTL（最短 1 分钟）；stale/unknown/invalid 不命中缓存。
+- DailyBars：valid 使用配置 TTL；degraded 使用四分之一 TTL（最短 1 分钟）；stale/unknown/invalid 缓存条目拒绝命中。历史 MariaDB stale 兜底不写入 Provider 缓存。
+- Fundamentals：valid 12 小时、degraded 1 小时、unknown 5 分钟；多 Provider 下 unknown 仅在记录 fallback 耗尽后命中。
+- Valuations：valid 5 分钟、degraded 1 分钟、unknown 10 秒；多 Provider 下 unknown 仅在记录 fallback 耗尽后命中。
+- IndexQuotes：valid 15 秒、degraded 四分之一 TTL；读取端按对应质量 TTL 二次校验。
+- MarketBreadth：valid 5 分钟、degraded 四分之一 TTL；读取端按对应质量 TTL 二次校验。
+- Quote、DailyBars、IndexQuotes、MarketBreadth 均在读取端检查 FetchedAt 年龄，不能只依赖缓存后端执行 TTL；DailyBars 还必须拒绝 stale/unknown/invalid 条目。
 - stale 历史兜底必须保留 stale 状态；不得作为实时 Quote 的正常缓存命中。
 
 
@@ -77,7 +84,7 @@ DailyBars 是 Bundle 的核心历史数据；返回的每根 K 线质量状态�
 - [x] DailyBars：覆盖达标但 degraded 的整组序列继续寻找 valid；覆盖不足仍独立保留；不跨 Provider 拼接；fallback 来源与质量分离。
 - [x] IndexQuotes：valid 优先；备用来源不再强制降级，快照级 FallbackFrom/FallbackReason 保留来源追溯；degraded 使用短 TTL。
 - [x] MarketBreadth：valid 优先；备用来源不再强制降级，快照级 FallbackFrom/FallbackReason 保留来源追溯；degraded 使用短 TTL。
-- [ ] 完成六类能力缓存准入与降级 TTL 交叉核对。
+- [x] 完成六类能力缓存准入与降级 TTL 交叉核对；读取端按质量 TTL 检查缓存年龄，DailyBars 拒绝非 valid/degraded 条目。
 
 本阶段不引入通用 fallback runtime、统一质量评分或跨 Provider 数据拼接。
 

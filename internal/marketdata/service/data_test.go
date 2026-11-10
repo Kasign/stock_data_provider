@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"math"
@@ -790,6 +791,90 @@ func dailyBarForVersionContractTest(sourceVersion, tradeDate string) model.Daily
 		Open: 10, High: 11, Low: 9, Close: 10.5, Volume: &volume, Amount: &amount,
 		AdjustmentBasis: model.AdjustmentForward, Source: "fixture-provider", SourceVersion: sourceVersion,
 		VolumeUnit: "shares", AmountUnit: "CNY", QualityStatus: model.QualityDegraded,
+	}
+}
+
+
+func TestQuoteBypassesDegradedCacheAfterShortTTL(t *testing.T) {
+	mem := newMemoryCache()
+	cached := validQuote("eastmoney")
+	cached.QualityStatus = model.QualityDegraded
+	cached.QualityReasons = []string{"amount_missing_from_provider"}
+	cached.Amount = nil
+	cached.FetchedAt = time.Now().Add(-3 * time.Minute)
+	cached.NormalizedAt = time.Now().UTC()
+	payload, err := json.Marshal(cached)
+	if err != nil { t.Fatal(err) }
+	mem.values["md:v4:quote:600519.SH"] = payload
+
+	current := fakeProvider{name: "tencent", quote: validQuote("tencent")}
+	svc := New([]provider.Provider{current}, mem, nil, 8*time.Minute, 8*time.Minute, 120, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	got, hit, err := svc.Quote(context.Background(), "600519.SH")
+	if err != nil || hit {
+		t.Fatalf("degraded quote cache older than short TTL must be bypassed: hit=%v err=%v", hit, err)
+	}
+	if got == nil || got.Source != "tencent" {
+		t.Fatalf("expected refreshed quote from provider, got %+v", got)
+	}
+}
+
+func TestDailyBarsBypassesDegradedCacheAfterShortTTL(t *testing.T) {
+	mem := newMemoryCache()
+	tradeDate := time.Now().In(marketLocation()).AddDate(0, 0, -1).Format("2006-01-02")
+	cached := dailyBarForVersionContractTest("eastmoney-daily-bars-v1", tradeDate)
+	cached.AdjustmentBasis = model.AdjustmentNone
+	cached.QualityStatus = model.QualityDegraded
+	cached.NormalizationVer = normalize.Version
+	cached.FetchedAt = time.Now().Add(-3 * time.Minute)
+	cached.NormalizedAt = time.Now().UTC()
+	payload, err := json.Marshal(map[string]any{"bars": []model.DailyBar{cached}, "warnings": []string{}})
+	if err != nil { t.Fatal(err) }
+	key := fmt.Sprintf("md:v5:bars:600519.SH:%s:%s:%s:%d", tradeDate, tradeDate, model.AdjustmentNone, 1)
+	mem.values[key] = payload
+
+	currentBar := dailyBarForVersionContractTest("tencent-daily-bars-v1", tradeDate)
+	currentBar.AdjustmentBasis = model.AdjustmentNone
+	currentBar.QualityStatus = model.QualityValid
+	current := fakeProvider{name: "tencent", bars: []model.DailyBar{currentBar}}
+	svc := New([]provider.Provider{current}, mem, nil, 8*time.Minute, 8*time.Minute, 1, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	bars, hit, _, err := svc.DailyBars(context.Background(), "600519.SH", tradeDate, tradeDate, 1, model.AdjustmentNone)
+	if err != nil || hit {
+		t.Fatalf("degraded daily-bars cache older than short TTL must be bypassed: hit=%v err=%v", hit, err)
+	}
+	if len(bars) != 1 || bars[0].Source != "tencent" {
+		t.Fatalf("expected refreshed daily bars from provider, got %+v", bars)
+	}
+}
+
+func TestDailyBarsRejectsNonCacheableQualityStatuses(t *testing.T) {
+	for _, quality := range []model.QualityStatus{model.QualityStale, model.QualityUnknown, model.QualityInvalid} {
+		t.Run(string(quality), func(t *testing.T) {
+			mem := newMemoryCache()
+			tradeDate := time.Now().In(marketLocation()).AddDate(0, 0, -1).Format("2006-01-02")
+			cached := dailyBarForVersionContractTest("eastmoney-daily-bars-v1", tradeDate)
+			cached.AdjustmentBasis = model.AdjustmentNone
+			cached.QualityStatus = quality
+			cached.NormalizationVer = normalize.Version
+			cached.FetchedAt = time.Now().UTC()
+			cached.NormalizedAt = time.Now().UTC()
+			payload, err := json.Marshal(map[string]any{"bars": []model.DailyBar{cached}, "warnings": []string{}})
+			if err != nil { t.Fatal(err) }
+			key := fmt.Sprintf("md:v5:bars:600519.SH:%s:%s:%s:%d", tradeDate, tradeDate, model.AdjustmentNone, 1)
+			mem.values[key] = payload
+
+			currentBar := dailyBarForVersionContractTest("tencent-daily-bars-v1", tradeDate)
+			currentBar.AdjustmentBasis = model.AdjustmentNone
+			currentBar.QualityStatus = model.QualityValid
+			current := fakeProvider{name: "tencent", bars: []model.DailyBar{currentBar}}
+			svc := New([]provider.Provider{current}, mem, nil, 8*time.Minute, 8*time.Minute, 1, slog.New(slog.NewTextHandler(io.Discard, nil)))
+			bars, hit, _, err := svc.DailyBars(context.Background(), "600519.SH", tradeDate, tradeDate, 1, model.AdjustmentNone)
+			if err != nil || hit {
+				t.Fatalf("non-cacheable quality %q must be bypassed: hit=%v err=%v", quality, hit, err)
+			}
+			if len(bars) != 1 || bars[0].Source != "tencent" {
+				t.Fatalf("expected provider refresh after bypassing %q cache: %+v", quality, bars)
+			}
+		})
 	}
 }
 
