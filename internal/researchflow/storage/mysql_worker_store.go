@@ -116,7 +116,7 @@ func (r *MySQLRunRepository) LoadStageExecutionSnapshot(
 	return application.StageExecutionSnapshot{
 		Run: run, Stage: stage, Parameters: parameters,
 		InputSnapshotRefs: append([]string(nil), run.InputSnapshotRefs...),
-		RetryPolicy: retryPolicy,
+		RetryPolicy:       retryPolicy,
 	}, nil
 }
 

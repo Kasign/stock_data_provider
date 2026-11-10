@@ -361,7 +361,6 @@ func TestMariaDBCreateRunAtomicConcurrentIdempotency(t *testing.T) {
 	}
 }
 
-
 func TestMariaDBWorkerStoreSnapshotClaimAndCommit(t *testing.T) {
 	if os.Getenv("PLATFORM_STORAGE_INTEGRATION") != "1" {
 		t.Skip("set PLATFORM_STORAGE_INTEGRATION=1 to run Researchflow MariaDB integration tests")
@@ -401,7 +400,7 @@ func TestMariaDBWorkerStoreSnapshotClaimAndCommit(t *testing.T) {
 	runRef, stageRef := "worker-run-"+suffix, "worker-stage-"+suffix
 	record := application.CreateRunRecord{
 		Scope: application.IdempotencyScope{
-			CallerRef: "researchflow-worker-integration-test", Operation: "CreateRun", Key: "worker-create-"+suffix,
+			CallerRef: "researchflow-worker-integration-test", Operation: "CreateRun", Key: "worker-create-" + suffix,
 		},
 		Fingerprint: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 		Run: domain.Run{
@@ -409,8 +408,8 @@ func TestMariaDBWorkerStoreSnapshotClaimAndCommit(t *testing.T) {
 			SystemAsOf: now.Add(-time.Minute), DeadlineAt: now.Add(10 * time.Minute),
 			TemplateRef: "worker-template", TemplateVersion: "v1",
 			TemplateFingerprint: templateFingerprint,
-			InputSnapshotRefs: []string{"input-snapshot-" + suffix},
-			CorrelationID: "worker-correlation-" + suffix,
+			InputSnapshotRefs:   []string{"input-snapshot-" + suffix},
+			CorrelationID:       "worker-correlation-" + suffix,
 		},
 		Stages: []domain.Stage{{
 			Ref: stageRef, RunRef: runRef, Code: "quant", Status: domain.StagePending,

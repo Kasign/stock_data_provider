@@ -45,7 +45,7 @@ func TestWorkerResultCommitRejectsMismatchedOutputReference(t *testing.T) {
 	_, err := workerResultCommitToStorage(application.WorkerResultCommit{
 		RunRef: "run-1", StageRef: "stage-1", AttemptRef: "attempt-1",
 		WorkerID: "worker-1", FencingToken: 1,
-		Stage: domain.Stage{Ref: "stage-1", RunRef: "run-1", OutputRef: &stageOutput},
+		Stage:     domain.Stage{Ref: "stage-1", RunRef: "run-1", OutputRef: &stageOutput},
 		OutputRef: &commitOutput,
 	})
 	if err == nil {

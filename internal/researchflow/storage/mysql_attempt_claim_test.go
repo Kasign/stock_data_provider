@@ -133,8 +133,7 @@ func TestMariaDBClaimAttemptLeaseAndFencing(t *testing.T) {
 		t.Fatalf("expire final-budget Attempt lease: %v", err)
 	}
 	if _, _, err := repository.ClaimAttempt(ctx, runRef, budgetStageRef,
-		"claim-budget-overrun-"+suffix, "worker-budget-reclaim", time.Minute, 1, 8);
-		!errors.Is(err, ErrAttemptLimitReached) {
+		"claim-budget-overrun-"+suffix, "worker-budget-reclaim", time.Minute, 1, 8); !errors.Is(err, ErrAttemptLimitReached) {
 		t.Fatalf("claim after final Attempt lease expiry error=%v, want ErrAttemptLimitReached", err)
 	}
 	closedBudgetAttempt, err := repository.GetAttempt(ctx, budgetAttempt.Ref)
@@ -356,9 +355,9 @@ func TestMariaDBClaimAttemptLeaseAndFencing(t *testing.T) {
 		t.Fatalf("expire third Stage lease before concurrent budget test: %v", err)
 	}
 	type claimResult struct {
-		attempt domain.Attempt
+		attempt  domain.Attempt
 		replayed bool
-		err error
+		err      error
 	}
 	start := make(chan struct{})
 	results := make(chan claimResult, 2)
@@ -422,8 +421,7 @@ func TestMariaDBClaimAttemptLeaseAndFencing(t *testing.T) {
 		t.Fatalf("inject terminal Attempt with stale lease fields: %v", err)
 	}
 	if _, replayed, err := repository.ClaimAttempt(ctx, runRef, stageRef,
-		"ignored-terminal-lease-replay-"+suffix, "worker-b", time.Minute, 3, 8);
-		!errors.Is(err, ErrAttemptHistoryInconsistent) || replayed {
+		"ignored-terminal-lease-replay-"+suffix, "worker-b", time.Minute, 3, 8); !errors.Is(err, ErrAttemptHistoryInconsistent) || replayed {
 		t.Fatalf("claim with terminal Attempt lease residue replayed=%v err=%v, want ErrAttemptHistoryInconsistent", replayed, err)
 	}
 	if _, err := db.ExecContext(ctx, `UPDATE researchflow_attempts SET
@@ -441,8 +439,7 @@ func TestMariaDBClaimAttemptLeaseAndFencing(t *testing.T) {
 		t.Fatalf("corrupt historical fencing order: %v", err)
 	}
 	if _, replayed, err := repository.ClaimAttempt(ctx, runRef, stageRef,
-		"ignored-token-order-replay-"+suffix, "worker-b", time.Minute, 3, 8);
-		!errors.Is(err, ErrAttemptHistoryInconsistent) || replayed {
+		"ignored-token-order-replay-"+suffix, "worker-b", time.Minute, 3, 8); !errors.Is(err, ErrAttemptHistoryInconsistent) || replayed {
 		t.Fatalf("claim with non-monotonic fencing history replayed=%v err=%v, want ErrAttemptHistoryInconsistent", replayed, err)
 	}
 	if _, err := db.ExecContext(ctx, `UPDATE researchflow_attempts
@@ -456,8 +453,7 @@ func TestMariaDBClaimAttemptLeaseAndFencing(t *testing.T) {
 		t.Fatalf("corrupt Stage first-start timestamp: %v", err)
 	}
 	if _, replayed, err := repository.ClaimAttempt(ctx, runRef, stageRef,
-		"ignored-stage-start-replay-"+suffix, "worker-b", time.Minute, 3, 8);
-		!errors.Is(err, ErrAttemptHistoryInconsistent) || replayed {
+		"ignored-stage-start-replay-"+suffix, "worker-b", time.Minute, 3, 8); !errors.Is(err, ErrAttemptHistoryInconsistent) || replayed {
 		t.Fatalf("claim with mismatched Stage.started_at replayed=%v err=%v, want ErrAttemptHistoryInconsistent", replayed, err)
 	}
 	if _, err := db.ExecContext(ctx, `UPDATE researchflow_stages SET started_at = ? WHERE stage_ref = ?`,
@@ -472,8 +468,7 @@ func TestMariaDBClaimAttemptLeaseAndFencing(t *testing.T) {
 		t.Fatalf("inject invalid running Stage timestamps: %v", err)
 	}
 	if _, replayed, err := repository.ClaimAttempt(ctx, runRef, stageRef,
-		"ignored-running-stage-time-replay-"+suffix, "worker-b", time.Minute, 3, 8);
-		!errors.Is(err, ErrAttemptHistoryInconsistent) || replayed {
+		"ignored-running-stage-time-replay-"+suffix, "worker-b", time.Minute, 3, 8); !errors.Is(err, ErrAttemptHistoryInconsistent) || replayed {
 		t.Fatalf("claim with invalid running Stage timestamps replayed=%v err=%v, want ErrAttemptHistoryInconsistent", replayed, err)
 	}
 	if _, err := db.ExecContext(ctx, `UPDATE researchflow_stages
@@ -488,8 +483,7 @@ func TestMariaDBClaimAttemptLeaseAndFencing(t *testing.T) {
 		t.Fatalf("corrupt Attempt finish timestamp: %v", err)
 	}
 	if _, replayed, err := repository.ClaimAttempt(ctx, runRef, stageRef,
-		"ignored-attempt-time-replay-"+suffix, "worker-b", time.Minute, 3, 8);
-		!errors.Is(err, ErrAttemptHistoryInconsistent) || replayed {
+		"ignored-attempt-time-replay-"+suffix, "worker-b", time.Minute, 3, 8); !errors.Is(err, ErrAttemptHistoryInconsistent) || replayed {
 		t.Fatalf("claim with inverted Attempt timestamps replayed=%v err=%v, want ErrAttemptHistoryInconsistent", replayed, err)
 	}
 	if _, err := db.ExecContext(ctx, `UPDATE researchflow_attempts
@@ -501,8 +495,7 @@ func TestMariaDBClaimAttemptLeaseAndFencing(t *testing.T) {
 		t.Fatalf("remove historical Attempt to simulate corruption: %v", err)
 	}
 	if _, replayed, err := repository.ClaimAttempt(ctx, runRef, stageRef,
-		"ignored-corrupt-history-replay-"+suffix, "worker-b", time.Minute, 3, 8);
-		!errors.Is(err, ErrAttemptHistoryInconsistent) || replayed {
+		"ignored-corrupt-history-replay-"+suffix, "worker-b", time.Minute, 3, 8); !errors.Is(err, ErrAttemptHistoryInconsistent) || replayed {
 		t.Fatalf("claim with missing historical Attempt replayed=%v err=%v, want ErrAttemptHistoryInconsistent", replayed, err)
 	}
 }

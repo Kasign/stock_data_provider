@@ -102,7 +102,7 @@ func TestMariaDBClaimOutboxConcurrentWorkersNeverShareOneMessage(t *testing.T) {
 		ResultSummaryRef: "outbox-claim-summary-" + suffix, SummarySchemaVersion: "summary-v1",
 		OutboxRef: "outbox-claim-event-" + suffix, TerminalStatus: domain.RunSucceeded,
 		Summary: domain.ResultSummary{
-			StageOutcomes: map[string]domain.StageStatus{"context": domain.StageSucceeded},
+			StageOutcomes:  map[string]domain.StageStatus{"context": domain.StageSucceeded},
 			ExcludedStages: []domain.ExcludedStage{}, MissingStageCodes: []string{},
 			DegradedStageCodes: []string{}, BlockedStageCodes: []string{},
 			ReasonCodes: []string{}, Coverage: 1, QualityStatus: "valid",

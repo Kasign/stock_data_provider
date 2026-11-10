@@ -343,7 +343,6 @@ func TestMariaDBFinalizeCancellationRunAtomicallyPersistsSummaryAndOutbox(t *tes
 	}
 }
 
-
 // TestMariaDBFinalizeRunRollsBackWhenOutboxInsertFails verifies that a
 // failure after the ResultSummary insert cannot leave a partial terminal Run.
 func TestMariaDBFinalizeRunRollsBackWhenOutboxInsertFails(t *testing.T) {
@@ -439,7 +438,7 @@ func TestMariaDBFinalizeRunRollsBackWhenOutboxInsertFails(t *testing.T) {
 		ResultSummaryRef: "rollback-summary-" + suffix, SummarySchemaVersion: "summary-v1",
 		OutboxRef: "rollback-outbox-" + suffix, TerminalStatus: domain.RunSucceeded,
 		Summary: domain.ResultSummary{
-			StageOutcomes: map[string]domain.StageStatus{"context": domain.StageSucceeded},
+			StageOutcomes:  map[string]domain.StageStatus{"context": domain.StageSucceeded},
 			ExcludedStages: []domain.ExcludedStage{}, MissingStageCodes: []string{},
 			DegradedStageCodes: []string{}, BlockedStageCodes: []string{},
 			ReasonCodes: []string{}, Coverage: 1, QualityStatus: "valid",
@@ -472,7 +471,6 @@ func TestMariaDBFinalizeRunRollsBackWhenOutboxInsertFails(t *testing.T) {
 	}
 }
 
-
 // TestMariaDBFinalizeRunConcurrentCAS ensures competing finalizers cannot
 // persist duplicate summaries or finalized events for one Run version.
 func TestMariaDBFinalizeRunConcurrentCAS(t *testing.T) {
@@ -485,59 +483,76 @@ func TestMariaDBFinalizeRunConcurrentCAS(t *testing.T) {
 		os.Getenv("PLATFORM_MARIADB_USER"), os.Getenv("PLATFORM_MARIADB_PASSWORD"),
 		os.Getenv("PLATFORM_MARIADB_ADDR"), os.Getenv("PLATFORM_MARIADB_DATABASE"))
 	config, err := mysql.ParseDSN(dsn)
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	connector, err := mysql.NewConnector(config)
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	db, err := platformstorage.OpenSQL(ctx, connector, platformstorage.DefaultSQLConfig())
-	if err != nil { t.Fatalf("open MariaDB: %v", err) }
+	if err != nil {
+		t.Fatalf("open MariaDB: %v", err)
+	}
 	defer db.Close()
 	if err := platformstorage.ApplyMigrations(ctx, db, MigrationNamespace, Migrations()); err != nil {
 		t.Fatalf("apply Researchflow migrations: %v", err)
 	}
 	repository, err := NewMySQLRunRepository(db)
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	suffix := fmt.Sprintf("%d", time.Now().UnixNano())
 	now := time.Now().UTC()
 	runRef, stageRef := "concurrent-finalize-run-"+suffix, "concurrent-finalize-stage-"+suffix
 	templateFingerprint := "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
 	record := application.CreateRunRecord{
-		Scope: application.IdempotencyScope{CallerRef:"researchflow-finalize-race", Operation:"CreateRun", Key:"race-"+suffix},
-		Fingerprint:"ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
-		Run: domain.Run{Ref:runRef, SchemaVersion:"run-v1", Status:domain.RunCreated, Version:1,
-			SystemAsOf:now.Add(-time.Minute), DeadlineAt:now.Add(5*time.Minute),
-			TemplateRef:"concurrent-template", TemplateVersion:"v1", TemplateFingerprint:templateFingerprint,
-			InputSnapshotRefs:[]string{}, CorrelationID:"concurrent-finalize-"+suffix},
-		Stages:[]domain.Stage{{Ref:stageRef, RunRef:runRef, Code:"context", Status:domain.StagePending,
-			Version:1, Required:true, Dependencies:[]string{}, RetryPolicyRef:"retry-v1",
-			DiagnosticRefs:[]string{}, ReasonCodes:[]string{}}},
-		ResolvedTemplate:template.ResolvedTemplate{Ref:"concurrent-template", Version:"v1",
-			Fingerprint:templateFingerprint, Stages:[]template.ResolvedStage{{Definition:template.StageDefinition{Code:"context"}}}},
-		Parameters:json.RawMessage(`{}`),
+		Scope:       application.IdempotencyScope{CallerRef: "researchflow-finalize-race", Operation: "CreateRun", Key: "race-" + suffix},
+		Fingerprint: "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+		Run: domain.Run{Ref: runRef, SchemaVersion: "run-v1", Status: domain.RunCreated, Version: 1,
+			SystemAsOf: now.Add(-time.Minute), DeadlineAt: now.Add(5 * time.Minute),
+			TemplateRef: "concurrent-template", TemplateVersion: "v1", TemplateFingerprint: templateFingerprint,
+			InputSnapshotRefs: []string{}, CorrelationID: "concurrent-finalize-" + suffix},
+		Stages: []domain.Stage{{Ref: stageRef, RunRef: runRef, Code: "context", Status: domain.StagePending,
+			Version: 1, Required: true, Dependencies: []string{}, RetryPolicyRef: "retry-v1",
+			DiagnosticRefs: []string{}, ReasonCodes: []string{}}},
+		ResolvedTemplate: template.ResolvedTemplate{Ref: "concurrent-template", Version: "v1",
+			Fingerprint: templateFingerprint, Stages: []template.ResolvedStage{{Definition: template.StageDefinition{Code: "context"}}}},
+		Parameters: json.RawMessage(`{}`),
 	}
-	if _, err := repository.CreateRunAtomic(ctx, record); err != nil { t.Fatalf("CreateRunAtomic: %v", err) }
+	if _, err := repository.CreateRunAtomic(ctx, record); err != nil {
+		t.Fatalf("CreateRunAtomic: %v", err)
+	}
 	started, finished := formatResearchflowTimeValue(now), formatResearchflowTimeValue(now.Add(time.Second))
 	if _, err := db.ExecContext(ctx, "UPDATE researchflow_runs SET status=?, version=version+1, started_at=? WHERE run_ref=?",
-		string(domain.RunRunning), started, runRef); err != nil { t.Fatal(err) }
+		string(domain.RunRunning), started, runRef); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := db.ExecContext(ctx, "UPDATE researchflow_stages SET status=?, version=version+1, started_at=?, finished_at=? WHERE stage_ref=?",
-		string(domain.StageSucceeded), started, finished, stageRef); err != nil { t.Fatal(err) }
+		string(domain.StageSucceeded), started, finished, stageRef); err != nil {
+		t.Fatal(err)
+	}
 
 	inputs := []RunFinalization{
-		{RunRef:runRef, ExpectedVersion:2, ResultSummaryRef:"race-summary-a-"+suffix,
-			SummarySchemaVersion:"summary-v1", OutboxRef:"race-outbox-a-"+suffix, TerminalStatus:domain.RunSucceeded,
-			Summary:domain.ResultSummary{StageOutcomes:map[string]domain.StageStatus{"context":domain.StageSucceeded},
-				ExcludedStages:[]domain.ExcludedStage{}, MissingStageCodes:[]string{}, DegradedStageCodes:[]string{},
-				BlockedStageCodes:[]string{}, ReasonCodes:[]string{}, RiskGateDecisions:map[string]string{},
-				Coverage:1, QualityStatus:"valid", ActionabilityStatus:"not_evaluated"}},
-		{RunRef:runRef, ExpectedVersion:2, ResultSummaryRef:"race-summary-b-"+suffix,
-			SummarySchemaVersion:"summary-v1", OutboxRef:"race-outbox-b-"+suffix, TerminalStatus:domain.RunSucceeded,
-			Summary:domain.ResultSummary{StageOutcomes:map[string]domain.StageStatus{"context":domain.StageSucceeded},
-				ExcludedStages:[]domain.ExcludedStage{}, MissingStageCodes:[]string{}, DegradedStageCodes:[]string{},
-				BlockedStageCodes:[]string{}, ReasonCodes:[]string{}, RiskGateDecisions:map[string]string{},
-				Coverage:1, QualityStatus:"valid", ActionabilityStatus:"not_evaluated"}},
+		{RunRef: runRef, ExpectedVersion: 2, ResultSummaryRef: "race-summary-a-" + suffix,
+			SummarySchemaVersion: "summary-v1", OutboxRef: "race-outbox-a-" + suffix, TerminalStatus: domain.RunSucceeded,
+			Summary: domain.ResultSummary{StageOutcomes: map[string]domain.StageStatus{"context": domain.StageSucceeded},
+				ExcludedStages: []domain.ExcludedStage{}, MissingStageCodes: []string{}, DegradedStageCodes: []string{},
+				BlockedStageCodes: []string{}, ReasonCodes: []string{}, RiskGateDecisions: map[string]string{},
+				Coverage: 1, QualityStatus: "valid", ActionabilityStatus: "not_evaluated"}},
+		{RunRef: runRef, ExpectedVersion: 2, ResultSummaryRef: "race-summary-b-" + suffix,
+			SummarySchemaVersion: "summary-v1", OutboxRef: "race-outbox-b-" + suffix, TerminalStatus: domain.RunSucceeded,
+			Summary: domain.ResultSummary{StageOutcomes: map[string]domain.StageStatus{"context": domain.StageSucceeded},
+				ExcludedStages: []domain.ExcludedStage{}, MissingStageCodes: []string{}, DegradedStageCodes: []string{},
+				BlockedStageCodes: []string{}, ReasonCodes: []string{}, RiskGateDecisions: map[string]string{},
+				Coverage: 1, QualityStatus: "valid", ActionabilityStatus: "not_evaluated"}},
 	}
 	start := make(chan struct{})
-	type outcome struct { updated bool; err error }
+	type outcome struct {
+		updated bool
+		err     error
+	}
 	results := make(chan outcome, 2)
 	var wait sync.WaitGroup
 	for _, input := range inputs {
@@ -547,7 +562,7 @@ func TestMariaDBFinalizeRunConcurrentCAS(t *testing.T) {
 			defer wait.Done()
 			<-start
 			updated, err := repository.FinalizeRun(ctx, input)
-			results <- outcome{updated:updated, err:err}
+			results <- outcome{updated: updated, err: err}
 		}()
 	}
 	close(start)
@@ -570,13 +585,19 @@ func TestMariaDBFinalizeRunConcurrentCAS(t *testing.T) {
 	var runStatus, summaryRef string
 	var version uint64
 	if err := db.QueryRowContext(ctx, "SELECT status, version, result_summary_ref FROM researchflow_runs WHERE run_ref=?", runRef).
-		Scan(&runStatus, &version, &summaryRef); err != nil { t.Fatal(err) }
+		Scan(&runStatus, &version, &summaryRef); err != nil {
+		t.Fatal(err)
+	}
 	if domain.RunStatus(runStatus) != domain.RunSucceeded || version != 3 {
 		t.Fatalf("final Run status=%s version=%d, want succeeded/3", runStatus, version)
 	}
 	var summaries, events int
-	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM researchflow_result_summaries WHERE run_ref=?", runRef).Scan(&summaries); err != nil { t.Fatal(err) }
-	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM researchflow_outbox WHERE run_ref=? AND event_type=?", runRef, runFinalizedEventType).Scan(&events); err != nil { t.Fatal(err) }
+	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM researchflow_result_summaries WHERE run_ref=?", runRef).Scan(&summaries); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM researchflow_outbox WHERE run_ref=? AND event_type=?", runRef, runFinalizedEventType).Scan(&events); err != nil {
+		t.Fatal(err)
+	}
 	if summaries != 1 || events != 1 {
 		t.Fatalf("persisted summaries=%d events=%d, want 1/1 (summary_ref=%s)", summaries, events, summaryRef)
 	}

@@ -96,7 +96,7 @@ func TestMariaDBDeadlineFinalizationWinsAgainstStaleNormalFinalizer(t *testing.T
 	}
 
 	summary := domain.ResultSummary{
-		StageOutcomes: map[string]domain.StageStatus{"context": domain.StageTimedOut},
+		StageOutcomes:  map[string]domain.StageStatus{"context": domain.StageTimedOut},
 		ExcludedStages: []domain.ExcludedStage{}, MissingStageCodes: []string{"context"},
 		DegradedStageCodes: []string{}, BlockedStageCodes: []string{}, ReasonCodes: []string{"deadline_exceeded"},
 		RiskGateDecisions: map[string]string{}, Coverage: 0, QualityStatus: "incomplete",
@@ -112,7 +112,7 @@ func TestMariaDBDeadlineFinalizationWinsAgainstStaleNormalFinalizer(t *testing.T
 		SummarySchemaVersion: "summary-v1", OutboxRef: "normal-race-outbox-" + suffix,
 		TerminalStatus: domain.RunSucceeded,
 		Summary: domain.ResultSummary{
-			StageOutcomes: map[string]domain.StageStatus{"context": domain.StageSucceeded},
+			StageOutcomes:  map[string]domain.StageStatus{"context": domain.StageSucceeded},
 			ExcludedStages: []domain.ExcludedStage{}, MissingStageCodes: []string{},
 			DegradedStageCodes: []string{}, BlockedStageCodes: []string{}, ReasonCodes: []string{},
 			RiskGateDecisions: map[string]string{}, Coverage: 1, QualityStatus: "valid",
@@ -122,9 +122,9 @@ func TestMariaDBDeadlineFinalizationWinsAgainstStaleNormalFinalizer(t *testing.T
 
 	start := make(chan struct{})
 	type outcome struct {
-		path string
+		path    string
 		updated bool
-		err error
+		err     error
 	}
 	results := make(chan outcome, 2)
 	var wait sync.WaitGroup
