@@ -1,0 +1,138 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:kasign:stock_data_provider:governance:authorization-ref:1.0.0",
+  "title": "GOV-CTR-006 AuthorizationRef",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "authorization_ref",
+    "policy_owner",
+    "policy_version",
+    "decision",
+    "purpose_code",
+    "content_level",
+    "subject_ref",
+    "resource_ref",
+    "decided_at",
+    "expires_at",
+    "conditions",
+    "decision_fingerprint"
+  ],
+  "properties": {
+    "authorization_ref": {
+      "type": "string",
+      "minLength": 1
+    },
+    "policy_owner": {
+      "type": "string",
+      "enum": [
+        "data",
+        "news",
+        "quant",
+        "research"
+      ]
+    },
+    "policy_version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "decision": {
+      "type": "string",
+      "enum": [
+        "allowed",
+        "denied",
+        "conditional",
+        "unknown"
+      ]
+    },
+    "purpose_code": {
+      "type": "string",
+      "enum": [
+        "quant_analysis",
+        "research_analysis",
+        "risk_review",
+        "user_display"
+      ]
+    },
+    "content_level": {
+      "type": "string",
+      "enum": [
+        "metadata",
+        "summary",
+        "snippet",
+        "full"
+      ]
+    },
+    "subject_ref": {
+      "type": "string",
+      "minLength": 1
+    },
+    "resource_ref": {
+      "type": "string",
+      "minLength": 1
+    },
+    "decided_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "expires_at": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time"
+    },
+    "conditions": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "decision_fingerprint": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "decision": {
+            "const": "conditional"
+          }
+        },
+        "required": [
+          "decision"
+        ]
+      },
+      "then": {
+        "properties": {
+          "conditions": {
+            "minItems": 1
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "decision": {
+            "const": "allowed"
+          }
+        },
+        "required": [
+          "decision"
+        ]
+      },
+      "then": {
+        "properties": {
+          "conditions": {
+            "maxItems": 0
+          }
+        }
+      }
+    }
+  ]
+}

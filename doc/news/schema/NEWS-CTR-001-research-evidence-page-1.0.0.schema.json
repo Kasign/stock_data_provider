@@ -1,0 +1,211 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kasign.github.io/stock_data_provider/news/NEWS-CTR-001-research-evidence-page-1.0.0.schema.json",
+  "title": "News Research Evidence Page",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "items",
+    "next_cursor",
+    "snapshot_ref",
+    "system_as_of",
+    "diagnostics"
+  ],
+  "properties": {
+    "items": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/ResearchEvidenceRecord"
+      }
+    },
+    "next_cursor": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "minLength": 1,
+      "maxLength": 4096
+    },
+    "snapshot_ref": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256
+    },
+    "system_as_of": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "diagnostics": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 256
+      }
+    }
+  },
+  "$defs": {
+    "nullableDateTime": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time"
+    },
+    "ResearchEvidenceRecord": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "news_id",
+        "observation_id",
+        "version_id",
+        "version_no",
+        "content_fingerprint",
+        "source_ref",
+        "identity_status",
+        "business_quality_status",
+        "quality_status",
+        "published_at",
+        "available_at",
+        "system_observed_at",
+        "content_level",
+        "authorization_ref",
+        "authorization_status",
+        "system_as_of",
+        "relation_refs"
+      ],
+      "properties": {
+        "news_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "observation_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "version_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "version_no": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "content_fingerprint": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "source_ref": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "provider_ref": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "identity_status": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "business_quality_status": {
+          "type": "string",
+          "enum": [
+            "valid",
+            "degraded",
+            "invalid",
+            "unknown"
+          ]
+        },
+        "quality_status": {
+          "type": "string",
+          "enum": [
+            "valid",
+            "degraded",
+            "stale",
+            "invalid",
+            "unknown"
+          ]
+        },
+        "title": {
+          "type": "string"
+        },
+        "publisher_name": {
+          "type": "string"
+        },
+        "publisher_domain": {
+          "type": "string"
+        },
+        "published_at": {
+          "$ref": "#/$defs/nullableDateTime"
+        },
+        "published_at_raw": {
+          "type": "string"
+        },
+        "available_at": {
+          "$ref": "#/$defs/nullableDateTime"
+        },
+        "system_observed_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "fetched_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "normalized_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "content_level": {
+          "type": "string",
+          "enum": [
+            "metadata",
+            "summary",
+            "snippet",
+            "full"
+          ]
+        },
+        "content_ref": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "content_excerpt": {
+          "type": "string"
+        },
+        "authorization_ref": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "authorization_status": {
+          "type": "string",
+          "enum": [
+            "allowed",
+            "denied",
+            "conditional",
+            "unknown"
+          ]
+        },
+        "system_as_of": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "relation_refs": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          }
+        }
+      }
+    }
+  }
+}

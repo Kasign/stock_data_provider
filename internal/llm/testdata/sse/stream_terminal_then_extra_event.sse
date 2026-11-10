@@ -1,0 +1,5 @@
+event: response.completed
+data: {"type":"response.completed","sequence_number":1,"response":{"id":"resp_extra_001","object":"response","status":"completed","output":[]}}
+
+event: response.output_text.delta
+data: {"type":"response.output_text.delta","sequence_number":2,"delta":"late"}

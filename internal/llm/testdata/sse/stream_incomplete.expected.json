@@ -1,0 +1,7 @@
+{
+  "response_id": "resp_inc_001",
+  "status": "incomplete",
+  "sequence_number_status": "available",
+  "output_items": [],
+  "incomplete_reason": "max_output_tokens"
+}

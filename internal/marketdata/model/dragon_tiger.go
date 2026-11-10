@@ -1,0 +1,61 @@
+package model
+
+import "time"
+
+// DragonTigerItem 表示东方财富龙虎榜的一条盘后记录。金额为人民币元，比例为百分点；缺失金额保留为 nil。
+type DragonTigerItem struct {
+	Symbol          string   `json:"symbol"`
+	Code            string   `json:"code"`
+	Name            string   `json:"name"`
+	TradeDate       string   `json:"trade_date"`
+	ChangePercent   *float64 `json:"change_percent,omitempty"`
+	ClosePrice      *float64 `json:"close_price_cny,omitempty"`
+	NetBuyAmountCNY *float64 `json:"net_buy_amount_cny,omitempty"`
+	BuyAmountCNY    *float64 `json:"buy_amount_cny,omitempty"`
+	SellAmountCNY   *float64 `json:"sell_amount_cny,omitempty"`
+	DealAmountCNY   *float64 `json:"deal_amount_cny,omitempty"`
+	DealAmountRatio *float64 `json:"deal_amount_ratio,omitempty"`
+	// The THS API exposes these values without an explicit currency unit in its public field table.
+	// Keep them separate from the *_CNY fields until source units are formally verified.
+	ProviderBuyValue         *float64      `json:"provider_buy_value,omitempty"`
+	ProviderSellValue        *float64      `json:"provider_sell_value,omitempty"`
+	ProviderDealValue        *float64      `json:"provider_deal_value,omitempty"`
+	ProviderNetValue         *float64      `json:"provider_net_value,omitempty"`
+	ProviderNetRate          *float64      `json:"provider_net_rate,omitempty"`
+	ProviderOrgNetValue      *float64      `json:"provider_org_net_value,omitempty"`
+	ProviderHotMoneyNetValue *float64      `json:"provider_hot_money_net_value,omitempty"`
+	ProviderAmountUnit       string        `json:"provider_amount_unit,omitempty"`
+	HotRank                  *int          `json:"hot_rank,omitempty"`
+	RangeDays                *int          `json:"range_days,omitempty"`
+	Concepts                 []string      `json:"concepts,omitempty"`
+	Reason                   string        `json:"reason,omitempty"`
+	Explanation              string        `json:"explanation,omitempty"`
+	SecurityTypeCode         string        `json:"security_type_code,omitempty"`
+	Source                   string        `json:"source"`
+	SourceVersion            string        `json:"source_version"`
+	FetchedAt                time.Time     `json:"fetched_at"`
+	QualityStatus            QualityStatus `json:"quality_status"`
+	QualityReasons           []string      `json:"quality_reasons,omitempty"`
+}
+
+// DragonTigerSnapshot 表示指定交易日的龙虎榜分页。Total/Pages 是供应商原始计数，Items 仅对应本页通过 A 股过滤的记录。
+type DragonTigerSnapshot struct {
+	TradeDate              string            `json:"trade_date"`
+	ProviderReportDate     string            `json:"provider_report_date,omitempty"`
+	Page                   int               `json:"page"`
+	PageSize               int               `json:"page_size"`
+	Total                  int               `json:"total"`
+	TotalIsLowerBound      bool              `json:"total_is_lower_bound,omitempty"`
+	Pages                  int               `json:"pages"`
+	Returned               int               `json:"returned"`
+	SourceReturned         int               `json:"source_returned"`
+	ExcludedNonAShareCount int               `json:"excluded_non_a_share_count"`
+	HasData                bool              `json:"has_data"`
+	HasMore                bool              `json:"has_more"`
+	Items                  []DragonTigerItem `json:"items"`
+	Source                 string            `json:"source"`
+	SourceVersion          string            `json:"source_version"`
+	FetchedAt              time.Time         `json:"fetched_at"`
+	QualityStatus          QualityStatus     `json:"quality_status"`
+	QualityReasons         []string          `json:"quality_reasons,omitempty"`
+}

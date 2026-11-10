@@ -1,0 +1,301 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://llm.invalid/contracts/llm-modelresponse-1.0.0.schema.json",
+  "title": "LLM ModelResponse",
+  "$defs": {
+    "Usage": {
+      "type": "object",
+      "properties": {
+        "input_tokens": {
+          "type": "integer"
+        },
+        "output_tokens": {
+          "type": "integer"
+        },
+        "total_tokens": {
+          "type": "integer"
+        },
+        "input_cached_tokens": {
+          "type": "integer"
+        },
+        "output_reasoning_tokens": {
+          "type": "integer"
+        },
+        "source": {
+          "type": "string",
+          "enum": [
+            "upstream",
+            "derived",
+            "unknown"
+          ]
+        },
+        "diagnostics": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "source"
+      ],
+      "additionalProperties": false
+    },
+    "ModelErrorInfo": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "invalid_request",
+            "unauthorized",
+            "rate_limited",
+            "overloaded",
+            "timeout",
+            "cancelled",
+            "upstream_unavailable",
+            "upstream_error",
+            "invalid_response",
+            "incomplete_response",
+            "schema_validation_failed",
+            "unsupported_capability",
+            "stream_interrupted",
+            "stream_sequence_gap",
+            "resource_limit"
+          ]
+        },
+        "stable_code": {
+          "type": "string",
+          "minLength": 1
+        },
+        "retryable": {
+          "type": "boolean"
+        },
+        "http_status": {
+          "type": "integer",
+          "minimum": 100,
+          "maximum": 599
+        },
+        "retry_after_seconds": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "safe_message": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "kind",
+        "stable_code",
+        "retryable",
+        "safe_message"
+      ],
+      "additionalProperties": false
+    },
+    "ContentPart": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": [
+            "output_text",
+            "refusal",
+            "unknown"
+          ]
+        },
+        "unknown_type": {
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        },
+        "annotations": true
+      },
+      "required": [
+        "type"
+      ],
+      "additionalProperties": false
+    },
+    "ModelToolCall": {
+      "type": "object",
+      "properties": {
+        "call_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "output_item_id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "arguments_json": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "call_id",
+        "name",
+        "arguments_json"
+      ],
+      "additionalProperties": false
+    },
+    "OutputItem": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": [
+            "message",
+            "function_call",
+            "refusal",
+            "unknown"
+          ]
+        },
+        "unknown_type": {
+          "type": "string"
+        },
+        "item_id": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        },
+        "content_parts": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/ContentPart"
+          }
+        },
+        "tool_call": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ModelToolCall"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "type": "object",
+  "properties": {
+    "request_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "correlation_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "system_as_of": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "provider_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "response_id": {
+      "type": "string"
+    },
+    "status": {
+      "enum": [
+        "completed",
+        "incomplete",
+        "failed"
+      ]
+    },
+    "sequence_number_status": {
+      "enum": [
+        "available",
+        "unavailable"
+      ]
+    },
+    "output_items": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "$ref": "#/$defs/OutputItem"
+      }
+    },
+    "output_text": {
+      "type": "string"
+    },
+    "structured_json": true,
+    "tool_calls": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/ModelToolCall"
+      }
+    },
+    "usage": {
+      "$ref": "#/$defs/Usage"
+    },
+    "model_requested": {
+      "type": "string",
+      "minLength": 1
+    },
+    "model_actual": {
+      "type": "string"
+    },
+    "model_version": {
+      "type": "string"
+    },
+    "gateway_request_id": {
+      "type": "string"
+    },
+    "upstream_request_id": {
+      "type": "string"
+    },
+    "incomplete_reason": {
+      "type": "string"
+    },
+    "error": {
+      "$ref": "#/$defs/ModelErrorInfo"
+    },
+    "started_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "finished_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "duration_ms": {
+      "type": "integer",
+      "minimum": 0
+    }
+  },
+  "required": [
+    "request_id",
+    "correlation_id",
+    "system_as_of",
+    "provider_id",
+    "status",
+    "output_items",
+    "model_requested",
+    "started_at",
+    "finished_at",
+    "duration_ms"
+  ],
+  "additionalProperties": false
+}

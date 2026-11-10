@@ -1,0 +1,71 @@
+{
+  "authorization_ref": {
+    "authorization_ref": "auth_news_001",
+    "policy_owner": "news",
+    "policy_version": "policy-snapshot:news:evidence:v1",
+    "decision": "conditional",
+    "purpose_code": "research_analysis",
+    "content_level": "snippet",
+    "subject_ref": "service:researchflow",
+    "resource_ref": "news_evidence_version:news_001:v1",
+    "decided_at": "2026-11-06T05:01:00Z",
+    "expires_at": "2026-11-06T06:00:00Z",
+    "conditions": [
+      "attribution_required"
+    ],
+    "decision_fingerprint": "e670e585c55d89ea127f09a2745361c5c1d3dd39c350365c4db4f8c3dc2cd92b"
+  },
+  "policy_snapshot": {
+    "snapshot_ref": "policy-snapshot:news:evidence:v1",
+    "policies": [
+      {
+        "policy_type": "endpoint",
+        "policy_ref": "sec-edgar-filings",
+        "policy_version": "1.0.0"
+      },
+      {
+        "policy_type": "provider_output",
+        "policy_ref": "tavily-output",
+        "policy_version": "3.0.0"
+      },
+      {
+        "policy_type": "source",
+        "policy_ref": "sec-edgar",
+        "policy_version": "2.1.0"
+      }
+    ]
+  },
+  "fingerprint_input": {
+    "policy_owner": "news",
+    "policy_version": "policy-snapshot:news:evidence:v1",
+    "decision": "conditional",
+    "purpose_code": "research_analysis",
+    "content_level": "snippet",
+    "subject_ref": "service:researchflow",
+    "resource_ref": "news_evidence_version:news_001:v1",
+    "decided_at": "2026-11-06T05:01:00Z",
+    "expires_at": "2026-11-06T06:00:00Z",
+    "conditions": [
+      "attribution_required"
+    ],
+    "evaluated_policy_versions": [
+      {
+        "policy_type": "endpoint",
+        "policy_ref": "sec-edgar-filings",
+        "policy_version": "1.0.0"
+      },
+      {
+        "policy_type": "provider_output",
+        "policy_ref": "tavily-output",
+        "policy_version": "3.0.0"
+      },
+      {
+        "policy_type": "source",
+        "policy_ref": "sec-edgar",
+        "policy_version": "2.1.0"
+      }
+    ]
+  },
+  "canonical_json": "{\"conditions\":[\"attribution_required\"],\"content_level\":\"snippet\",\"decided_at\":\"2026-11-06T05:01:00Z\",\"decision\":\"conditional\",\"evaluated_policy_versions\":[{\"policy_ref\":\"sec-edgar-filings\",\"policy_type\":\"endpoint\",\"policy_version\":\"1.0.0\"},{\"policy_ref\":\"tavily-output\",\"policy_type\":\"provider_output\",\"policy_version\":\"3.0.0\"},{\"policy_ref\":\"sec-edgar\",\"policy_type\":\"source\",\"policy_version\":\"2.1.0\"}],\"expires_at\":\"2026-11-06T06:00:00Z\",\"policy_owner\":\"news\",\"policy_version\":\"policy-snapshot:news:evidence:v1\",\"purpose_code\":\"research_analysis\",\"resource_ref\":\"news_evidence_version:news_001:v1\",\"subject_ref\":\"service:researchflow\"}",
+  "expected_sha256": "e670e585c55d89ea127f09a2745361c5c1d3dd39c350365c4db4f8c3dc2cd92b"
+}

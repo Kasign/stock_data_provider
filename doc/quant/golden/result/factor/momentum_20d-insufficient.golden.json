@@ -1,0 +1,13 @@
+{
+  "metric_code": "momentum_20d",
+  "value": null,
+  "unit": "ratio",
+  "period": "20d",
+  "system_as_of": "2026-11-09T00:00:00Z",
+  "quality_status": "valid",
+  "metric_status": "insufficient_data",
+  "calculation_version": "1.0.0",
+  "sample_count": 20,
+  "lower_bound": null,
+  "upper_bound": null
+}

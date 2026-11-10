@@ -1,0 +1,5 @@
+event: response.future_event
+data: {"type":"response.future_event","sequence_number":1,"response_id":"resp_unknown_001","status":"future","item":{"id":"item_unknown_001","type":"message","content":[{"type":"output_text","text":"must-not-survive"}]},"opaque":"must-not-survive"}
+
+event: response.completed
+data: {"type":"response.completed","sequence_number":2,"response":{"id":"resp_unknown_001","object":"response","status":"completed","output":[]}}

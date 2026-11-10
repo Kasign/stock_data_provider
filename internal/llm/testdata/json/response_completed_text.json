@@ -1,0 +1,14 @@
+{
+  "id": "resp_fixture_001",
+  "object": "response",
+  "model": "fixture-model",
+  "status": "completed",
+  "output": [
+    {
+      "id": "msg_fixture_001",
+      "type": "message",
+      "content": [{ "type": "output_text", "text": "Fixture answer" }]
+    }
+  ],
+  "usage": { "input_tokens": 12, "output_tokens": 5, "total_tokens": 17 }
+}

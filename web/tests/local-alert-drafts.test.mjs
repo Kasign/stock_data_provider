@@ -1,0 +1,62 @@
+import test from "node:test";import assert from "node:assert/strict";import {readLocalAlertDrafts,writeLocalAlertDrafts,validateLocalAlertDraft,LOCAL_ALERT_DRAFTS_KEY,MAX_LOCAL_ALERT_DRAFTS} from "../src/local-alert-drafts.js";
+function storage(){const m=new Map();return {getItem:k=>m.get(k)??null,setItem:(k,v)=>m.set(k,v)};}
+const draft=(id)=>({id,name:"价格观察",type:"price_above",threshold:100,symbol:"600519.SH",scope:"symbol",severity:"warning",enabled:true,createdAt:"2026-01-01",updatedAt:"2026-01-02"});
+test("草稿写入回读成功",()=>{const s=storage();assert.equal(writeLocalAlertDrafts([draft("a")],s).ok,true);assert.equal(readLocalAlertDrafts(s).items[0].threshold,100);});
+test("未知类型、负数阈值和损坏数据拒绝",()=>{const s=storage();assert.equal(writeLocalAlertDrafts([{...draft("a"),type:"invented"}],s).ok,false);assert.equal(writeLocalAlertDrafts([{...draft("a"),threshold:-1}],s).ok,false);s.setItem(LOCAL_ALERT_DRAFTS_KEY,"{");assert.equal(readLocalAlertDrafts(s).valid,false);});
+test("草稿数量上限",()=>assert.equal(writeLocalAlertDrafts(Array.from({length:MAX_LOCAL_ALERT_DRAFTS+1},(_,i)=>draft(String(i))),storage()).ok,false));
+
+test("单只股票规则必须填写代码，自选股范围不要求单一代码",()=>{assert.equal(validateLocalAlertDraft({...draft("a"),symbol:""}),"symbol-required");assert.equal(validateLocalAlertDraft({...draft("b"),symbol:"",scope:"watchlist"}),"");});
+test("价格与涨跌幅阈值按字段范围校验",()=>{assert.equal(validateLocalAlertDraft({...draft("a"),threshold:0}),"price-threshold");assert.equal(validateLocalAlertDraft({...draft("b"),type:"change_above",threshold:-3}),"");assert.equal(validateLocalAlertDraft({...draft("c"),type:"change_below",threshold:101}),"change-threshold");});
+test("损坏存储和重复 ID 不会被覆盖",()=>{const s=storage();s.setItem(LOCAL_ALERT_DRAFTS_KEY,"{");assert.equal(writeLocalAlertDrafts([draft("a")],s).reason,"invalid-storage");assert.equal(s.getItem(LOCAL_ALERT_DRAFTS_KEY),"{");s.setItem(LOCAL_ALERT_DRAFTS_KEY,JSON.stringify([draft("dup"),draft("dup")]));assert.equal(readLocalAlertDrafts(s).valid,false);assert.equal(writeLocalAlertDrafts([draft("new")],s).reason,"invalid-storage");});
+test("重复 ID 的新草稿拒绝写入",()=>{assert.equal(writeLocalAlertDrafts([draft("dup"),draft("dup")],storage()).reason,"invalid");});
+test("未知规则范围、告警级别和超长股票代码拒绝写入",()=>{const s=storage();for(const item of [{...draft("scope"),scope:"account"},{...draft("severity"),severity:"urgent"},{...draft("symbol"),symbol:"6".repeat(33)}]){assert.equal(writeLocalAlertDrafts([item],s).reason,"invalid");assert.equal(s.getItem(LOCAL_ALERT_DRAFTS_KEY),null);}});
+test("本地存储中的异常规则字段标记为损坏且不覆盖原值",()=>{const s=storage();for(const item of [{...draft("scope"),scope:"account"},{...draft("severity"),severity:"urgent"},{...draft("symbol"),symbol:"6".repeat(33)}]){const raw=JSON.stringify([item]);s.setItem(LOCAL_ALERT_DRAFTS_KEY,raw);assert.equal(readLocalAlertDrafts(s).valid,false);assert.equal(writeLocalAlertDrafts([draft("new")],s).reason,"invalid-storage");assert.equal(s.getItem(LOCAL_ALERT_DRAFTS_KEY),raw);}});
+
+
+test("底层写入与读取同样拒绝缺少单股代码或价格阈值非正数的规则",()=>{for(const item of [{...draft("missing-symbol"),symbol:""},{...draft("zero-price"),threshold:0},{...draft("negative-price"),threshold:-1}]){const s=storage();assert.equal(writeLocalAlertDrafts([item],s).reason,"invalid");assert.equal(s.getItem(LOCAL_ALERT_DRAFTS_KEY),null);const raw=JSON.stringify([item]);s.setItem(LOCAL_ALERT_DRAFTS_KEY,raw);assert.equal(readLocalAlertDrafts(s).valid,false);assert.equal(writeLocalAlertDrafts([draft("safe")],s).reason,"invalid-storage");assert.equal(s.getItem(LOCAL_ALERT_DRAFTS_KEY),raw);}});
+test("自选股范围允许空股票代码，涨跌幅负阈值仍有效",()=>{const s=storage();const item={...draft("watchlist"),symbol:"",scope:"watchlist",type:"change_above",threshold:-3};assert.equal(writeLocalAlertDrafts([item],s).ok,true);assert.equal(readLocalAlertDrafts(s).items[0].threshold,-3);});
+
+
+test("拒绝非布尔启用状态、超长 ID 和超长时间字段，且不覆盖原始存储", () => {
+  const invalidItems = [
+    { ...draft("enabled-string"), enabled: "true" },
+    { ...draft("enabled-null"), enabled: null },
+    { ...draft("id-long"), id: "i".repeat(161) },
+    { ...draft("created-long"), createdAt: "c".repeat(65) },
+    { ...draft("updated-long"), updatedAt: "u".repeat(65) }
+  ];
+  for (const item of invalidItems) {
+    const storageValue = JSON.stringify([item]);
+    const target = storage();
+    assert.equal(writeLocalAlertDrafts([item], target).reason, "invalid");
+    assert.equal(target.getItem(LOCAL_ALERT_DRAFTS_KEY), null);
+    target.setItem(LOCAL_ALERT_DRAFTS_KEY, storageValue);
+    assert.equal(readLocalAlertDrafts(target).valid, false);
+    assert.equal(writeLocalAlertDrafts([draft("safe")], target).reason, "invalid-storage");
+    assert.equal(target.getItem(LOCAL_ALERT_DRAFTS_KEY), storageValue);
+  }
+});
+test("浏览器存储读取异常与写入配额异常不会报告成功", () => {
+  const unreadable = {
+    getItem() {
+      throw new Error("SecurityError");
+    },
+    setItem() {}
+  };
+  const read = readLocalAlertDrafts(unreadable);
+  assert.equal(read.readable, false);
+  assert.equal(read.valid, false);
+
+  const quotaExceeded = {
+    getItem() {
+      return null;
+    },
+    setItem() {
+      throw new Error("QuotaExceededError");
+    }
+  };
+  assert.deepEqual(writeLocalAlertDrafts([draft("quota")], quotaExceeded), {
+    ok: false,
+    reason: "unavailable"
+  });
+});

@@ -1,0 +1,11 @@
+.env
+.env.*
+.git
+**/.git
+.test-support
+**/.test-support
+go.test.mod
+market-data
+*.test
+review.mod
+review.sum

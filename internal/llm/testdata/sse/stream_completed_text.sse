@@ -1,0 +1,11 @@
+event: response.created
+data: {"type":"response.created","sequence_number":1,"response":{"id":"resp_stream_001","object":"response","status":"in_progress","model":"fixture-model"}}
+
+event: response.output_text.delta
+data: {"type":"response.output_text.delta","sequence_number":2,"response_id":"resp_stream_001","delta":"Fixture "}
+
+event: response.output_text.delta
+data: {"type":"response.output_text.delta","sequence_number":3,"response_id":"resp_stream_001","delta":"stream"}
+
+event: response.completed
+data: {"type":"response.completed","sequence_number":4,"response":{"id":"resp_stream_001","object":"response","status":"completed","model":"fixture-model","output":[{"id":"msg_stream_001","type":"message","content":[{"type":"output_text","text":"Fixture stream"}]}],"usage":{"input_tokens":8,"output_tokens":2,"total_tokens":10}}}

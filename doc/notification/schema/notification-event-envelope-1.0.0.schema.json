@@ -1,0 +1,123 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:kasign:stock_data_provider:notification:envelope:1.0.0",
+  "title": "Notification Event Envelope",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "event_id",
+    "event_type",
+    "schema_version",
+    "source_module",
+    "occurred_at",
+    "published_at",
+    "subject_ref",
+    "idempotency_key",
+    "correlation_id",
+    "payload_fingerprint",
+    "payload"
+  ],
+  "properties": {
+    "event_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "event_type": {
+      "type": "string",
+      "enum": [
+        "researchflow.run.terminal",
+        "quant.risk_decision.changed",
+        "research.event.lifecycle_changed"
+      ]
+    },
+    "schema_version": {
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9]*)(-[0-9A-Za-z.-]+)?(\\+[0-9A-Za-z.-]+)?$"
+    },
+    "source_module": {
+      "type": "string",
+      "enum": [
+        "quant",
+        "research",
+        "researchflow"
+      ]
+    },
+    "occurred_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "subject_ref": {
+      "type": "string",
+      "minLength": 1
+    },
+    "idempotency_key": {
+      "type": "string",
+      "minLength": 1
+    },
+    "correlation_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "payload": {
+      "type": "object"
+    },
+    "published_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "payload_fingerprint": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    }
+  },
+  "oneOf": [
+    {
+      "properties": {
+        "event_type": {
+          "const": "researchflow.run.terminal"
+        },
+        "schema_version": {
+          "const": "1.0.0"
+        },
+        "source_module": {
+          "const": "researchflow"
+        },
+        "payload": {
+          "$ref": "urn:kasign:stock_data_provider:notification:payload:researchflow-run-terminal:1.0.0"
+        }
+      }
+    },
+    {
+      "properties": {
+        "event_type": {
+          "const": "quant.risk_decision.changed"
+        },
+        "schema_version": {
+          "const": "1.0.0"
+        },
+        "source_module": {
+          "const": "quant"
+        },
+        "payload": {
+          "$ref": "urn:kasign:stock_data_provider:notification:payload:quant-risk-decision-changed:1.0.0"
+        }
+      }
+    },
+    {
+      "properties": {
+        "event_type": {
+          "const": "research.event.lifecycle_changed"
+        },
+        "schema_version": {
+          "const": "1.0.0"
+        },
+        "source_module": {
+          "const": "research"
+        },
+        "payload": {
+          "$ref": "urn:kasign:stock_data_provider:notification:payload:research-event-lifecycle-changed:1.0.0"
+        }
+      }
+    }
+  ]
+}

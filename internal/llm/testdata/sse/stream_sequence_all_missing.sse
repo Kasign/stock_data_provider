@@ -1,0 +1,9 @@
+event: response.output_text.delta
+data: {"type":"response.output_text.delta","delta":"a"}
+
+event: response.output_text.delta
+data: {"type":"response.output_text.delta","delta":"b"}
+
+event: response.completed
+data: {"type":"response.completed","response":{"id":"resp-no-seq","object":"response","status":"completed","output":[]}}
+

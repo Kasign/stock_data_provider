@@ -1,0 +1,44 @@
+{
+  "model": "qwen-local",
+  "instructions": "Be precise",
+  "input": "Summarize evidence",
+  "max_output_tokens": 256,
+  "temperature": 0.2,
+  "top_p": 0.8,
+  "reasoning": {
+    "effort": "high"
+  },
+  "text": {
+    "format": {
+      "type": "json_schema",
+      "name": "summary",
+      "strict": true,
+      "schema": {
+        "type": "object",
+        "required": ["summary"],
+        "properties": {
+          "summary": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  },
+  "tools": [
+    {
+      "type": "function",
+      "name": "lookup_quote",
+      "description": "Look up a quote",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "symbol": {
+            "type": "string"
+          }
+        }
+      },
+      "strict": true
+    }
+  ],
+  "tool_choice": "auto"
+}

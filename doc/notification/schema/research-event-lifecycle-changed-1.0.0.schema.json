@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:kasign:stock_data_provider:notification:payload:research-event-lifecycle-changed:1.0.0",
+  "title": "Research Event Lifecycle Changed Notification Payload",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "source_event_ref",
+    "research_event_ref",
+    "event_version",
+    "previous_state",
+    "current_state",
+    "reason_code",
+    "system_as_of",
+    "changed_at"
+  ],
+  "properties": {
+    "source_event_ref": {
+      "type": "string",
+      "minLength": 1
+    },
+    "research_event_ref": {
+      "type": "string",
+      "minLength": 1
+    },
+    "event_version": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "previous_state": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        "detected",
+        "consolidating",
+        "active",
+        "materializing",
+        "fading",
+        "invalidated",
+        "closed",
+        null
+      ]
+    },
+    "current_state": {
+      "type": "string",
+      "enum": [
+        "detected",
+        "consolidating",
+        "active",
+        "materializing",
+        "fading",
+        "invalidated",
+        "closed"
+      ]
+    },
+    "reason_code": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "system_as_of": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "changed_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  }
+}

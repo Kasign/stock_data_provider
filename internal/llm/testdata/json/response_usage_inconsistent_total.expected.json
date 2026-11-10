@@ -1,0 +1,13 @@
+{
+  "response_id": "resp_fixture_004",
+  "status": "completed",
+  "output_items": [],
+  "model_actual": "fixture-model",
+  "usage": {
+    "input_tokens": 10,
+    "output_tokens": 5,
+    "total_tokens": 99,
+    "source": "upstream",
+    "diagnostics": ["total_tokens_mismatch"]
+  }
+}

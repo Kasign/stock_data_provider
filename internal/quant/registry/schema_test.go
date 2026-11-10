@@ -1,0 +1,487 @@
+package registry
+
+import (
+	"encoding/json"
+	"os"
+	"path/filepath"
+	"testing"
+
+	"github.com/santhosh-tekuri/jsonschema/v5"
+)
+
+func readQuantSchema(t *testing.T, name string) []byte {
+	t.Helper()
+	path := filepath.Join("..", "..", "..", "doc", "quant", "schema", name)
+	document, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read schema %s: %v", path, err)
+	}
+	return document
+}
+
+func TestDraft202012SchemasCompileAndValidateInstances(t *testing.T) {
+	cases := []struct {
+		name     string
+		instance string
+		invalid  string
+	}{
+		{
+			name:     "QNT-CTR-001-registry-entry-1.0.0.schema.json",
+			instance: mustJSON(t, validEntry("momentum_20d", "1.0.0")),
+			invalid:  `{"code":"momentum_20d","schema_version":"1.0.0","unexpected":true}`,
+		},
+		{
+			name:     "QNT-CTR-002-indicator-parameters-1.0.0.schema.json",
+			instance: `{"schema_version":"1.0.0","indicator_code":"sma","parameters":{"window":5}}`,
+			invalid:  `{"schema_version":"1.0.0","indicator_code":"sma","parameters":{"window":0}}`,
+		},
+		{
+			name:     "QNT-CTR-003-factor-parameters-1.0.0.schema.json",
+			instance: `{"schema_version":"1.0.0","factor_code":"momentum_20d","parameters":{}}`,
+			invalid:  `{"schema_version":"1.0.0","factor_code":"momentum_20d","parameters":{"window":20}}`,
+		},
+		{
+			name:     "QNT-CTR-004-quant-result-ref-1.0.0.schema.json",
+			instance: `{"schema_version":"1.0.0","result_id":"result-1","result_type":"factor","scope":"stock","security_id":"security-1","system_as_of":"2026-11-09T00:00:00Z","period":"20d","algorithm_version":"momentum.v1","parameter_fingerprint":"sha256:abc","input_snapshot_refs":["snapshot-1"],"quality_status":"valid","result_status":"completed","authorization_ref":"authorization-1","created_at":"2026-11-09T00:01:00Z"}`,
+			invalid:  `{"schema_version":"1.0.0","result_id":"result-1","result_type":"factor","scope":"stock","system_as_of":"2026-11-09T00:00:00Z","period":"20d","algorithm_version":"momentum.v1","parameter_fingerprint":"sha256:abc","input_snapshot_refs":[],"quality_status":"valid","result_status":"completed","authorization_ref":"authorization-1","created_at":"2026-11-09T00:01:00Z"}`,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			compiled, err := compileJSONSchema(readQuantSchema(t, tc.name))
+			if err != nil {
+				t.Fatalf("compileJSONSchema() error = %v", err)
+			}
+			if err := validateJSONSchemaInstance(compiled, []byte(tc.instance)); err != nil {
+				t.Fatalf("valid instance rejected: %v", err)
+			}
+			if err := validateJSONSchemaInstance(compiled, []byte(tc.invalid)); err == nil {
+				t.Fatalf("invalid instance unexpectedly passed: %s", tc.invalid)
+			}
+		})
+	}
+}
+
+func TestIndicatorParameterSchemaEnforcesWindowAndAnnualizationBounds(t *testing.T) {
+	schema := compileQuantSchemaFile(t, "QNT-CTR-002-indicator-parameters-1.0.0.schema.json")
+	invalid := []string{
+		`{"schema_version":"1.0.0","indicator_code":"sma","parameters":{"window":1001}}`,
+		`{"schema_version":"1.0.0","indicator_code":"ema","parameters":{"window":1001,"seed_method":"sma"}}`,
+		`{"schema_version":"1.0.0","indicator_code":"return","parameters":{"window":1001,"return_basis":"simple"}}`,
+		`{"schema_version":"1.0.0","indicator_code":"volatility","parameters":{"window":1001,"return_basis":"simple","annualization_factor":252}}`,
+		`{"schema_version":"1.0.0","indicator_code":"volatility","parameters":{"window":20,"return_basis":"simple","annualization_factor":1.5}}`,
+		`{"schema_version":"1.0.0","indicator_code":"rsi","parameters":{"window":1001,"smoothing_method":"wilder"}}`,
+		`{"schema_version":"1.0.0","indicator_code":"macd","parameters":{"fast_window":1,"slow_window":1001,"signal_window":1}}`,
+		`{"schema_version":"1.0.0","indicator_code":"macd","parameters":{"fast_window":1,"slow_window":2,"signal_window":1001}}`,
+		`{"schema_version":"1.0.0","indicator_code":"atr","parameters":{"window":1001,"smoothing_method":"wilder"}}`,
+		`{"schema_version":"1.0.0","indicator_code":"bollinger","parameters":{"window":1001,"multiplier":2,"stddev_method":"population"}}`,
+	}
+	for _, instance := range invalid {
+		if err := validateJSONSchemaInstance(schema, []byte(instance)); err == nil {
+			t.Errorf("invalid indicator parameters unexpectedly passed: %s", instance)
+		}
+	}
+
+	valid := []string{
+		`{"schema_version":"1.0.0","indicator_code":"sma","parameters":{"window":1000}}`,
+		`{"schema_version":"1.0.0","indicator_code":"ema","parameters":{"window":1000,"seed_method":"sma"}}`,
+		`{"schema_version":"1.0.0","indicator_code":"return","parameters":{"window":1000,"return_basis":"simple"}}`,
+		`{"schema_version":"1.0.0","indicator_code":"volatility","parameters":{"window":1000,"return_basis":"simple","annualization_factor":252}}`,
+		`{"schema_version":"1.0.0","indicator_code":"rsi","parameters":{"window":1000,"smoothing_method":"wilder"}}`,
+		`{"schema_version":"1.0.0","indicator_code":"macd","parameters":{"fast_window":999,"slow_window":1000,"signal_window":1000}}`,
+		`{"schema_version":"1.0.0","indicator_code":"atr","parameters":{"window":1000,"smoothing_method":"wilder"}}`,
+		`{"schema_version":"1.0.0","indicator_code":"bollinger","parameters":{"window":1000,"multiplier":2,"stddev_method":"population"}}`,
+	}
+	for _, instance := range valid {
+		if err := validateJSONSchemaInstance(schema, []byte(instance)); err != nil {
+			t.Errorf("valid maximum-boundary parameters rejected: %s: %v", instance, err)
+		}
+	}
+}
+
+func TestCompileJSONSchemaRejectsUnsupportedDraftAndExternalReferences(t *testing.T) {
+	cases := []string{
+		`{"$schema":"http://json-schema.org/draft-07/schema#","type":"object","additionalProperties":false}`,
+		`{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","additionalProperties":false,"properties":{"value":{"$ref":"https://example.com/value.json"}}}`,
+		`{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object"}`,
+	}
+	for _, document := range cases {
+		if _, err := compileJSONSchema([]byte(document)); err == nil {
+			t.Errorf("expected schema rejection: %s", document)
+		}
+	}
+}
+
+func TestEntryValidateRejectsInvalidParameterSchema(t *testing.T) {
+	entry := validEntry("momentum_20d", "1.0.0")
+	entry.ParametersSchema = json.RawMessage(`{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object"}`)
+	if err := entry.Validate(); err == nil {
+		t.Fatal("expected open-root parameter schema to be rejected")
+	}
+}
+
+func mustJSON(t *testing.T, value any) string {
+	t.Helper()
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		t.Fatalf("marshal fixture: %v", err)
+	}
+	return string(encoded)
+}
+
+func TestAllIndicatorAndFactorGoldenParametersMatchContractSchemas(t *testing.T) {
+	contracts := []struct {
+		name       string
+		directory  string
+		schemaFile string
+		codeField  string
+	}{
+		{
+			name:       "indicator",
+			directory:  filepath.Join("..", "..", "..", "doc", "quant", "golden", "indicator"),
+			schemaFile: "QNT-CTR-002-indicator-parameters-1.0.0.schema.json",
+			codeField:  "indicator_code",
+		},
+		{
+			name:       "factor",
+			directory:  filepath.Join("..", "..", "..", "doc", "quant", "golden", "factor"),
+			schemaFile: "QNT-CTR-003-factor-parameters-1.0.0.schema.json",
+			codeField:  "factor_code",
+		},
+	}
+
+	for _, contract := range contracts {
+		t.Run(contract.name, func(t *testing.T) {
+			schema := compileQuantSchemaFile(t, contract.schemaFile)
+			files, err := filepath.Glob(filepath.Join(contract.directory, "*.golden.json"))
+			if err != nil {
+				t.Fatalf("list Golden fixtures: %v", err)
+			}
+			if len(files) == 0 {
+				t.Fatal("no Golden fixtures found")
+			}
+
+			for _, path := range files {
+				t.Run(filepath.Base(path), func(t *testing.T) {
+					content, err := os.ReadFile(path)
+					if err != nil {
+						t.Fatalf("read Golden fixture: %v", err)
+					}
+					var fixture struct {
+						SchemaVersion string          `json:"schema_version"`
+						IndicatorCode string          `json:"indicator_code"`
+						FactorCode    string          `json:"factor_code"`
+						Parameters    json.RawMessage `json:"parameters"`
+					}
+					if err := json.Unmarshal(content, &fixture); err != nil {
+						t.Fatalf("decode Golden fixture: %v", err)
+					}
+					code := fixture.IndicatorCode
+					if contract.codeField == "factor_code" {
+						code = fixture.FactorCode
+					}
+					instance, err := json.Marshal(map[string]any{
+						"schema_version":   fixture.SchemaVersion,
+						contract.codeField: code,
+						"parameters":       fixture.Parameters,
+					})
+					if err != nil {
+						t.Fatalf("encode parameter contract instance: %v", err)
+					}
+					if err := validateJSONSchemaInstance(schema, instance); err != nil {
+						t.Fatalf("Golden parameters violate %s: %v", contract.schemaFile, err)
+					}
+				})
+			}
+		})
+	}
+}
+
+func compileQuantSchemaFile(t *testing.T, name string) *jsonschema.Schema {
+	t.Helper()
+	compiled, err := compileJSONSchema(readQuantSchema(t, name))
+	if err != nil {
+		t.Fatalf("compile schema %s: %v", name, err)
+	}
+	return compiled
+}
+
+func TestRegistryEntrySchemaEnforcesValueTypeConditionals(t *testing.T) {
+	schema := compileQuantSchemaFile(t, "QNT-CTR-001-registry-entry-1.0.0.schema.json")
+
+	decimalEntry := validEntry("decimal_metric", "1.0.0")
+	decimalEntry.ValueType = ValueTypeDecimalString
+	decimalEntry.Precision.Tolerance = json.RawMessage(`"0.000001"`)
+	decimalEntry.Range = NumericRange{
+		Minimum: json.RawMessage(`"-1"`),
+		Maximum: json.RawMessage(`"1"`),
+	}
+	encoded, err := json.Marshal(decimalEntry)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := validateJSONSchemaInstance(schema, encoded); err != nil {
+		t.Fatalf("valid decimal_string entry rejected: %v", err)
+	}
+	decimalEntry.Precision.Tolerance = json.RawMessage("0.000001")
+	encoded, err = json.Marshal(decimalEntry)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := validateJSONSchemaInstance(schema, encoded); err == nil {
+		t.Fatal("decimal_string entry with numeric tolerance unexpectedly passed")
+	}
+
+	integerEntry := validEntry("integer_metric", "1.0.0")
+	integerEntry.ValueType = ValueTypeInteger
+	integerEntry.Precision.MaxFractionDigits = 0
+	integerEntry.Precision.Tolerance = json.RawMessage("1")
+	integerEntry.Range = NumericRange{
+		Minimum: json.RawMessage("0"),
+		Maximum: json.RawMessage("100"),
+	}
+	encoded, err = json.Marshal(integerEntry)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := validateJSONSchemaInstance(schema, encoded); err != nil {
+		t.Fatalf("valid integer entry rejected: %v", err)
+	}
+	integerEntry.Precision.MaxFractionDigits = 1
+	encoded, err = json.Marshal(integerEntry)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := validateJSONSchemaInstance(schema, encoded); err == nil {
+		t.Fatal("integer entry with non-zero fractional scale unexpectedly passed")
+	}
+}
+
+func TestIndicatorParameterSchemaEnforcesOneOfCodeAndParameters(t *testing.T) {
+	schema := compileQuantSchemaFile(t, "QNT-CTR-002-indicator-parameters-1.0.0.schema.json")
+	valid := []byte(`{"schema_version":"1.0.0","indicator_code":"sma","parameters":{"window":5}}`)
+	if err := validateJSONSchemaInstance(schema, valid); err != nil {
+		t.Fatalf("valid SMA parameters rejected: %v", err)
+	}
+	mismatched := []byte(`{"schema_version":"1.0.0","indicator_code":"macd","parameters":{"window":5}}`)
+	if err := validateJSONSchemaInstance(schema, mismatched); err == nil {
+		t.Fatal("MACD code with SMA parameters unexpectedly passed oneOf")
+	}
+}
+
+func TestCompileJSONSchemaRejectsInvalidUTF8(t *testing.T) {
+	document := append([]byte(`{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","additionalProperties":false,"description":"`), 0xff)
+	document = append(document, []byte(`"}`)...)
+	if _, err := compileJSONSchema(document); err == nil {
+		t.Fatal("schema containing invalid UTF-8 unexpectedly compiled")
+	}
+}
+
+func TestValidateJSONSchemaInstanceRejectsInvalidUTF8(t *testing.T) {
+	schema, err := compileJSONSchema([]byte(`{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","additionalProperties":false,"required":["value"],"properties":{"value":{"type":"string"}}}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	instance := append([]byte(`{"value":"`), 0xff)
+	instance = append(instance, []byte(`"}`)...)
+	if err := validateJSONSchemaInstance(schema, instance); err == nil {
+		t.Fatal("instance containing invalid UTF-8 unexpectedly passed")
+	}
+}
+
+func TestRegistryEntrySchemaEnforcesRangeAndUniqueInputConstraints(t *testing.T) {
+	schema := compileQuantSchemaFile(t, "QNT-CTR-001-registry-entry-1.0.0.schema.json")
+	cases := []struct {
+		name   string
+		mutate func(*Entry)
+	}{
+		{
+			name: "unbounded range cannot include bounds",
+			mutate: func(entry *Entry) {
+				entry.Range.Unbounded = true
+			},
+		},
+		{
+			name: "bounded range requires both bounds",
+			mutate: func(entry *Entry) {
+				entry.Range.Maximum = nil
+			},
+		},
+		{
+			name: "input fields must be unique",
+			mutate: func(entry *Entry) {
+				entry.InputRequirements[0].Fields = []string{"close", "close"}
+			},
+		},
+		{
+			name: "quality states must be unique",
+			mutate: func(entry *Entry) {
+				entry.InputRequirements[0].Quality = []string{"valid", "valid"}
+			},
+		},
+		{
+			name: "metric code must match the registered code pattern",
+			mutate: func(entry *Entry) {
+				entry.Code = "Momentum-20D"
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			entry := validEntry("momentum_20d", "1.0.0")
+			tc.mutate(&entry)
+			encoded, err := json.Marshal(entry)
+			if err != nil {
+				t.Fatalf("marshal Registry entry: %v", err)
+			}
+			if err := validateJSONSchemaInstance(schema, encoded); err == nil {
+				t.Fatalf("invalid Registry entry unexpectedly passed: %s", encoded)
+			}
+		})
+	}
+}
+
+func TestIndicatorAndFactorSchemasEnforceNumericAndEmptyParameterBoundaries(t *testing.T) {
+	indicatorSchema := compileQuantSchemaFile(t, "QNT-CTR-002-indicator-parameters-1.0.0.schema.json")
+	validVolatility := []byte(`{"schema_version":"1.0.0","indicator_code":"volatility","parameters":{"window":20,"return_basis":"simple","annualization_factor":252}}`)
+	if err := validateJSONSchemaInstance(indicatorSchema, validVolatility); err != nil {
+		t.Fatalf("valid volatility parameters rejected: %v", err)
+	}
+	zeroAnnualization := []byte(`{"schema_version":"1.0.0","indicator_code":"volatility","parameters":{"window":20,"return_basis":"simple","annualization_factor":0}}`)
+	if err := validateJSONSchemaInstance(indicatorSchema, zeroAnnualization); err == nil {
+		t.Fatal("zero annualization_factor unexpectedly passed exclusiveMinimum")
+	}
+
+	factorSchema := compileQuantSchemaFile(t, "QNT-CTR-003-factor-parameters-1.0.0.schema.json")
+	validFactor := []byte(`{"schema_version":"1.0.0","factor_code":"momentum_20d","parameters":{}}`)
+	if err := validateJSONSchemaInstance(factorSchema, validFactor); err != nil {
+		t.Fatalf("valid empty Factor parameters rejected: %v", err)
+	}
+	nonEmptyFactor := []byte(`{"schema_version":"1.0.0","factor_code":"momentum_20d","parameters":{"window":20}}`)
+	if err := validateJSONSchemaInstance(factorSchema, nonEmptyFactor); err == nil {
+		t.Fatal("non-empty Factor parameters unexpectedly passed maxProperties")
+	}
+}
+
+func TestCompileJSONSchemaRejectsDuplicateObjectKeys(t *testing.T) {
+	document := []byte(`{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","type":"array","additionalProperties":false}`)
+	if _, err := compileJSONSchema(document); err == nil {
+		t.Fatal("schema with duplicate type keys unexpectedly compiled")
+	}
+}
+
+func TestValidateJSONSchemaInstanceRejectsDuplicateObjectKeys(t *testing.T) {
+	schema, err := compileJSONSchema([]byte(`{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","additionalProperties":false}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	cases := []struct {
+		name     string
+		instance []byte
+	}{
+		{
+			name:     "duplicate top-level key",
+			instance: []byte(`{"value":1,"value":2}`),
+		},
+		{
+			name:     "duplicate nested key after escape decoding",
+			instance: []byte(`{"nested":{"a":1,"\u0061":2}}`),
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if err := validateJSONSchemaInstance(schema, tc.instance); err == nil {
+				t.Fatalf("instance with duplicate keys unexpectedly passed: %s", tc.instance)
+			}
+		})
+	}
+}
+
+func TestFirstFactorQuantMetricSchemaValidatesGoldenAndRejectsInvalidStates(t *testing.T) {
+	schema := compileQuantSchemaFile(t, "QNT-CTR-004-factor-quant-metric-1.0.0.schema.json")
+	files, err := filepath.Glob(filepath.Join("..", "..", "..", "doc", "quant", "golden", "result", "factor", "*.golden.json"))
+	if err != nil {
+		t.Fatalf("list factor QuantMetric Golden fixtures: %v", err)
+	}
+	if len(files) != 6 {
+		t.Fatalf("factor QuantMetric Golden fixture count = %d, want 6", len(files))
+	}
+	for _, path := range files {
+		content, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read Golden %s: %v", path, err)
+		}
+		if err := validateJSONSchemaInstance(schema, content); err != nil {
+			t.Errorf("Golden %s violates QNT-CTR-004: %v", filepath.Base(path), err)
+		}
+	}
+	invalid := []string{
+		`{"metric_code":"momentum_20d","value":null,"unit":"ratio","period":"20d","system_as_of":"2026-11-09T00:00:00Z","quality_status":"valid","metric_status":"available","calculation_version":"1.0.0","sample_count":21,"lower_bound":null,"upper_bound":null}`,
+		`{"metric_code":"momentum_20d","value":0.2,"unit":"ratio","period":"60d","system_as_of":"2026-11-09T00:00:00Z","quality_status":"valid","metric_status":"available","calculation_version":"1.0.0","sample_count":21,"lower_bound":null,"upper_bound":null}`,
+		`{"metric_code":"momentum_20d","value":0.2,"unit":"ratio","period":"20d","system_as_of":"2026-11-09T00:00:00Z","quality_status":"unknown","metric_status":"available","calculation_version":"1.0.0","sample_count":21,"lower_bound":null,"upper_bound":null}`,
+		`{"metric_code":"momentum_20d","value":0.2,"unit":"ratio","period":"20d","system_as_of":"2026-11-09T00:00:00Z","quality_status":"invalid","metric_status":"available","calculation_version":"1.0.0","sample_count":21,"lower_bound":null,"upper_bound":null}`,
+		`{"metric_code":"momentum_20d","value":0.2,"unit":"ratio","period":"20d","system_as_of":"2026-11-09T00:00:00Z","quality_status":"valid","metric_status":"insufficient_data","calculation_version":"1.0.0","sample_count":21,"lower_bound":null,"upper_bound":null}`,
+		`{"metric_code":"momentum_20d","value":0.2,"unit":"ratio","period":"20d","system_as_of":"2026-11-09T00:00:00Z","quality_status":"valid","metric_status":"available","calculation_version":"1.0.0","sample_count":21,"lower_bound":0.1,"upper_bound":null}`,
+		`{"metric_code":"momentum_20d","value":0.2,"unit":"ratio","period":"20d","system_as_of":"2026-11-09T00:00:00+08:00","quality_status":"valid","metric_status":"available","calculation_version":"1.0.0","sample_count":21,"lower_bound":null,"upper_bound":null}`,
+		`{"metric_code":"momentum_20d","value":0.2,"unit":"ratio","period":"20d","system_as_of":"2026-11-09T00:00:00Z","quality_status":"valid","metric_status":"available","calculation_version":"1.0.0","sample_count":20,"lower_bound":null,"upper_bound":null}`,
+		`{"metric_code":"momentum_60d","value":0.6,"unit":"ratio","period":"60d","system_as_of":"2026-11-09T00:00:00Z","quality_status":"valid","metric_status":"available","calculation_version":"1.0.0","sample_count":60,"lower_bound":null,"upper_bound":null}`,
+		`{"metric_code":"volatility_20d","value":0.01,"unit":"ratio","period":"20d","system_as_of":"2026-11-09T00:00:00Z","quality_status":"valid","metric_status":"available","calculation_version":"1.0.0","sample_count":19,"lower_bound":null,"upper_bound":null}`,
+	}
+	for _, instance := range invalid {
+		if err := validateJSONSchemaInstance(schema, []byte(instance)); err == nil {
+			t.Errorf("invalid QuantMetric unexpectedly passed: %s", instance)
+		}
+	}
+}
+
+func TestFirstFactorQuantMetricSchemaAllowsDegradedAvailabilityForRegistryPolicyGate(t *testing.T) {
+	schema := compileQuantSchemaFile(t, "QNT-CTR-004-factor-quant-metric-1.0.0.schema.json")
+	instance := []byte(`{"metric_code":"momentum_20d","value":0.2,"unit":"ratio","period":"20d","system_as_of":"2026-11-09T00:00:00Z","quality_status":"degraded","metric_status":"available","calculation_version":"1.0.0","sample_count":21,"lower_bound":null,"upper_bound":null}`)
+	if err := validateJSONSchemaInstance(schema, instance); err != nil {
+		t.Fatalf("structurally valid degraded metric rejected before Registry quality_policy gate: %v", err)
+	}
+}
+
+func TestQuantResultRefSchemaEnforcesConditionalAndReferenceConstraints(t *testing.T) {
+	schema := compileQuantSchemaFile(t, "QNT-CTR-004-quant-result-ref-1.0.0.schema.json")
+	invalid := []string{
+		`{"schema_version":"1.0.0","result_id":"result-1","result_type":"factor","scope":"stock","system_as_of":"2026-11-09T00:00:00Z","period":"20d","algorithm_version":"momentum.v1","parameter_fingerprint":"sha256:abc","input_snapshot_refs":["snapshot-1"],"quality_status":"valid","result_status":"completed","authorization_ref":"authorization-1","created_at":"2026-11-09T00:01:00Z"}`,
+		`{"schema_version":"1.0.0","result_id":"result-1","result_type":"factor","scope":"market","system_as_of":"2026-11-09T00:00:00Z","period":"20d","algorithm_version":"momentum.v1","parameter_fingerprint":"sha256:abc","input_snapshot_refs":["snapshot-1","snapshot-1"],"quality_status":"valid","result_status":"completed","authorization_ref":"authorization-1","created_at":"2026-11-09T00:01:00Z"}`,
+		`{"schema_version":"1.0.0","result_id":"result-1","result_type":"factor","scope":"market","system_as_of":"2026-11-09T00:00:00+08:00","period":"20d","algorithm_version":"momentum.v1","parameter_fingerprint":"sha256:abc","input_snapshot_refs":["snapshot-1"],"quality_status":"valid","result_status":"completed","authorization_ref":"authorization-1","created_at":"2026-11-09T00:01:00Z"}`,
+		`{"schema_version":"1.0.0","result_id":"result-1","result_type":"factor","scope":"market","trade_date":"2026-02-30","system_as_of":"2026-11-09T00:00:00Z","period":"20d","algorithm_version":"momentum.v1","parameter_fingerprint":"sha256:abc","input_snapshot_refs":["snapshot-1"],"quality_status":"valid","result_status":"completed","authorization_ref":"authorization-1","created_at":"2026-11-09T00:01:00Z"}`,
+	}
+	for i, instance := range invalid {
+		if err := validateJSONSchemaInstance(schema, []byte(instance)); err == nil {
+			t.Errorf("invalid QuantResultRef instance %d unexpectedly passed", i)
+		}
+	}
+}
+
+func TestRiskDecisionSchemaValidatesGoldenAndFailClosedStructure(t *testing.T) {
+	schema := compileQuantSchemaFile(t, "QNT-CTR-004-risk-decision-1.0.0.schema.json")
+	goldenPath := filepath.Join("..", "..", "..", "doc", "quant", "golden", "result", "risk-decision-1.0.0.golden.json")
+	golden, err := os.ReadFile(goldenPath)
+	if err != nil {
+		t.Fatalf("read RiskDecision Golden: %v", err)
+	}
+	if err := validateJSONSchemaInstance(schema, golden); err != nil {
+		t.Fatalf("RiskDecision Golden violates schema: %v", err)
+	}
+	invalid := []string{
+		`{"decision_id":"d1","status":"allow","rule_set_version":"1.0.0","evaluated_at":"2026-11-09T01:00:00Z","system_as_of":"2026-11-09T00:59:00Z","reasons":[],"input_refs":[]}`,
+		`{"decision_id":"d1","status":"pass","rule_set_version":"1.0.0","evaluated_at":"2026-11-09T01:00:00+08:00","system_as_of":"2026-11-09T00:59:00Z","reasons":[],"input_refs":[]}`,
+		`{"decision_id":"d1","status":"pass","rule_set_version":"1.0.0","evaluated_at":"2026-11-09T01:00:00.000Z","system_as_of":"2026-11-09T00:59:00Z","reasons":[],"input_refs":[]}`,
+		`{"decision_id":"d1","status":"pass","rule_set_version":"1.0.0","evaluated_at":"2026-11-09T01:00:00.100Z","system_as_of":"2026-11-09T00:59:00Z","reasons":[],"input_refs":[]}`,
+		`{"decision_id":"d1","status":"pass","rule_set_version":"1.0.0","evaluated_at":"2026-11-09T01:00:00Z","system_as_of":"2026-11-09T00:59:00Z","reasons":[{"code":"R1","severity":"critical","status":"triggered","safe_message":"blocked","evidence_refs":[]}],"input_refs":[]}`,
+		`{"decision_id":"d1","status":"unknown","rule_set_version":"1.0.0","evaluated_at":"2026-11-09T01:00:00Z","system_as_of":"2026-11-09T00:59:00Z","reasons":[{"code":"R1","severity":"block","status":"unknown","safe_message":" ","evidence_refs":[]}],"input_refs":[]}`,
+		`{"decision_id":"d1","status":"reject","rule_set_version":"1.0.0","evaluated_at":"2026-11-09T01:00:00Z","system_as_of":"2026-11-09T00:59:00Z","reasons":[],"input_refs":[""]}`,
+		`{"decision_id":"d1","status":"pass","rule_set_version":"1.0.0","evaluated_at":"2026-11-09T01:00:00Z","system_as_of":"2026-11-09T00:59:00Z","reasons":[],"input_refs":[],"override":true}`,
+	}
+	for _, instance := range invalid {
+		if err := validateJSONSchemaInstance(schema, []byte(instance)); err == nil {
+			t.Errorf("invalid RiskDecision unexpectedly passed: %s", instance)
+		}
+	}
+}

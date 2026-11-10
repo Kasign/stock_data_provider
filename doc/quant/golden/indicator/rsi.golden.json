@@ -1,0 +1,23 @@
+{
+  "fixture_type": "synthetic_fixture",
+  "schema_version": "1.0.0",
+  "indicator_code": "rsi",
+  "algorithm_version": "1.0.0",
+  "parameters": {
+    "window": 2,
+    "smoothing_method": "wilder"
+  },
+  "input": {
+    "close": [
+      1,
+      2,
+      3,
+      2,
+      1
+    ]
+  },
+  "expected": {
+    "value": 25
+  },
+  "tolerance": 1e-12
+}
