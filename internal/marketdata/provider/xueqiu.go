@@ -269,9 +269,8 @@ func (p *Xueqiu) FetchHotStocks(ctx context.Context, rankingType string, limit i
 			if message == "" {
 				message = xueqiuString(envelope, "message")
 			}
-			if len(message) > 200 {
-				message = message[:200]
-			}
+			message = strings.ToValidUTF8(message, "�")
+			message = truncateDiagnosticPreview(message, 200)
 			return nil, fmt.Errorf("雪球榜单接口错误 code=%d: %s", code, message)
 		}
 	}

@@ -685,16 +685,13 @@ func parseEastmoneyQuoteNumber(ctx context.Context, data map[string]json.RawMess
 	value := ""
 	if exists {
 		trimmed := strings.TrimSpace(string(raw))
-		preview = trimmed
-		if len(preview) > 160 {
-			preview = preview[:160]
-		}
 		preview = strings.Map(func(r rune) rune {
 			if r < 0x20 || r == 0x7f {
 				return ' '
 			}
 			return r
-		}, preview)
+		}, trimmed)
+		preview = truncateDiagnosticPreview(preview, 160)
 		switch {
 		case len(trimmed) == 0:
 			actualType = "missing"
