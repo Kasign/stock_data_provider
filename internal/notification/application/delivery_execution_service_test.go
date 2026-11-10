@@ -466,8 +466,8 @@ func TestDeliveryExecutionPreflightSkipPersistsWithoutStartingAttempt(t *testing
 		t.Fatalf("skip must persist without creating Attempt: delivery=%+v found=%v err=%v", delivery, found, getErr)
 	}
 	events := repository.StateEvents(delivery.DeliveryID)
-	if len(events) != 2 || events[1].ReasonCode != "recipient_not_authorized" ||
-		events[1].EvidenceRef != "evidence-preflight-skip" {
+	if len(events) != 2 || events[1].ReasonCode == nil || *events[1].ReasonCode != "recipient_not_authorized" ||
+		events[1].EvidenceRef == nil || *events[1].EvidenceRef != "evidence-preflight-skip" {
 		t.Fatalf("skip must append its reason and evidence: %+v", events)
 	}
 }
@@ -502,8 +502,8 @@ func TestDeliveryExecutionPreflightBlockPersistsWithoutStartingAttempt(t *testin
 		t.Fatalf("block must persist without creating Attempt: delivery=%+v found=%v err=%v", delivery, found, getErr)
 	}
 	events := repository.StateEvents(delivery.DeliveryID)
-	if len(events) != 2 || events[1].ReasonCode != "channel_disabled" ||
-		events[1].EvidenceRef != "evidence-preflight-block" {
+	if len(events) != 2 || events[1].ReasonCode == nil || *events[1].ReasonCode != "channel_disabled" ||
+		events[1].EvidenceRef == nil || *events[1].EvidenceRef != "evidence-preflight-block" {
 		t.Fatalf("block must append its reason and evidence: %+v", events)
 	}
 }
