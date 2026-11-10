@@ -13,8 +13,8 @@ var (
 type ChannelLookupOutcome string
 
 const (
-	ChannelLookupAccepted     ChannelLookupOutcome = "accepted"
-	ChannelLookupNotAccepted ChannelLookupOutcome = "not_accepted"
+	ChannelLookupAccepted      ChannelLookupOutcome = "accepted"
+	ChannelLookupNotAccepted   ChannelLookupOutcome = "not_accepted"
 	ChannelLookupIndeterminate ChannelLookupOutcome = "indeterminate"
 )
 

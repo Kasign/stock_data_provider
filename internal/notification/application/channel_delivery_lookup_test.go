@@ -42,7 +42,7 @@ func lookupResult(request domain.ChannelDeliveryLookupRequest) domain.ChannelDel
 		ChannelRef: request.ChannelRef, ConfigVersion: request.ConfigVersion,
 		DeliveryID: request.DeliveryID, AttemptID: request.AttemptID,
 		Outcome: domain.ChannelLookupAccepted, EvidenceRef: "evidence-1",
-		ObservedAt: time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC),
+		ObservedAt:         time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC),
 		ProviderMessageRef: "provider-message-1",
 	}
 }
@@ -221,7 +221,7 @@ func TestRegistryLookupUnknownDeliveryBuildsEvidenceOnlyFromAdapterResult(t *tes
 		ChannelRef: request.ChannelRef, ConfigVersion: request.ConfigVersion,
 		DeliveryID: request.DeliveryID, AttemptID: request.AttemptID,
 		Outcome: domain.ChannelLookupIndeterminate, EvidenceRef: "lookup-evidence-1",
-		ObservedAt: now, 
+		ObservedAt: now,
 	}
 	evidence, err := registry.LookupUnknownDelivery(context.Background(), delivery, channel, attempts[0])
 	if err != nil {
