@@ -274,7 +274,8 @@ func TestXueqiuErrorMessageTruncationPreservesUTF8(t *testing.T) {
 	if err == nil { t.Fatal("provider error response should be rejected") }
 	got := err.Error()
 	if !utf8.ValidString(got) { t.Fatalf("error message is invalid UTF-8: %q", got) }
-	if !strings.HasSuffix(got, strings.Repeat("a", 199)) {
-		t.Fatalf("error summary should stop before a split multibyte rune, got suffix %q", got[len(got)-minInt(len(got), 220):])
+	want := "雪球榜单接口错误 code=1001: " + strings.Repeat("a", 199)
+	if got != want {
+		t.Fatalf("error summary should stop before a split multibyte rune: got %q want %q", got, want)
 	}
 }
