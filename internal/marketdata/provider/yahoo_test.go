@@ -351,6 +351,37 @@ func TestYahooDateRangeAndEndpointShape(t *testing.T) {
 	_ = fmt.Sprintf("end timestamp=%d", end.Unix())
 }
 
+func TestYahooDailyBarReportsOutOfRangeDateAndKeepsInRangeRows(t *testing.T) {
+	loc := yahooChinaLocation()
+	outside := time.Date(2026, 10, 19, 0, 0, 0, 0, loc).Unix()
+	inside := time.Date(2026, 10, 20, 0, 0, 0, 0, loc).Unix()
+	payload, err := json.Marshal(map[string]any{"chart": map[string]any{
+		"result": []any{map[string]any{
+			"meta": map[string]any{"symbol": "600036.SS"},
+			"timestamp": []int64{outside, inside},
+			"indicators": map[string]any{"quote": []any{map[string]any{
+				"open": []float64{9, 10}, "high": []float64{10, 11},
+				"low": []float64{8, 9}, "close": []float64{9, 10}, "volume": []int64{100, 200},
+			}}},
+		}},
+		"error": nil,
+	}})
+	if err != nil { t.Fatal(err) }
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write(payload) }))
+	defer server.Close()
+	reporter := validation.NewReporter(10)
+	ctx := validation.WithReporter(context.Background(), reporter)
+	provider := NewYahooFinance(2*time.Second, server.URL)
+	bars, err := provider.FetchDailyBars(ctx, "600036.SH", "2026-10-20", "2026-10-21", 8, model.AdjustmentNone)
+	if err != nil { t.Fatal(err) }
+	if len(bars) != 1 || bars[0].TradeDate != "2026-10-20" { t.Fatalf("unexpected in-range bars: %+v", bars) }
+	issues := reporter.Snapshot().Issues
+	if len(issues) != 1 || issues[0].Stage != validation.StageParse || issues[0].Field != "trade_date" ||
+		issues[0].Code != "date_out_of_requested_range" || issues[0].RowIndex == nil || *issues[0].RowIndex != 0 {
+		t.Fatalf("expected row-level out-of-range diagnostic, got %+v", issues)
+	}
+}
+
 func TestYahooDailyBarDecodeFailureAddsStructuredParseIssue(t *testing.T) {
 	payload := []byte(`{"chart":`)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

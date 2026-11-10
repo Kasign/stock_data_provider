@@ -18,7 +18,6 @@ import (
 	"example.com/stock-analysis-flow/internal/marketdata/model"
 	"example.com/stock-analysis-flow/internal/marketdata/normalize"
 	"example.com/stock-analysis-flow/internal/marketdata/validation"
-	"example.com/stock-analysis-flow/internal/marketdata/validation"
 )
 
 const yahooFinanceVersion = "yahoo-finance-chart-v1"
@@ -342,10 +341,12 @@ func (p *YahooFinance) FetchDailyBars(ctx context.Context, rawSymbol, startDate,
 		return nil, fmt.Errorf("Yahoo Finance chart provider error %s: %s", payload.Chart.Error.Code, payload.Chart.Error.Description)
 	}
 	if len(payload.Chart.Result) != 1 {
+		addProviderParseIssue(ctx, -1, "result", "chart.result", "invalid_result_count", "exactly one chart result", "array", strconv.Itoa(len(payload.Chart.Result)), "Yahoo Finance 日 K 结果数量不符合契约")
 		return nil, errors.New("Yahoo Finance returned no single chart result")
 	}
 	result := payload.Chart.Result[0]
 	if reported := strings.TrimSpace(result.Meta.Symbol); reported != "" && !strings.EqualFold(reported, yahooTicker) {
+		addProviderParseIssue(ctx, -1, "symbol", "chart.result[0].meta.symbol", "identity_mismatch", yahooTicker, "string", reported, "Yahoo Finance 日 K 返回证券代码与请求不一致")
 		return nil, fmt.Errorf("Yahoo Finance ticker mismatch: requested %s got %q", yahooTicker, reported)
 	}
 	if len(result.Timestamp) == 0 {
@@ -394,6 +395,7 @@ func (p *YahooFinance) FetchDailyBars(ctx context.Context, rawSymbol, startDate,
 		}
 		date := time.Unix(timestamp, 0).In(loc).Format("2006-01-02")
 		if date < startISO || date > endISO {
+			addProviderParseIssue(ctx, index, "trade_date", "timestamp", "date_out_of_requested_range", "date within "+startISO+".."+endISO, "timestamp", date, "Yahoo Finance 日 K 日期超出请求区间")
 			rejectedRows++
 			continue
 		}
