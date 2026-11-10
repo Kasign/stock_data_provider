@@ -264,7 +264,7 @@ func (p *MiaoXiang) FetchCapitalFlow(ctx context.Context, rawSymbol string) (*mo
 }
 
 
-// addMiaoXiangWarning 将自然语言补充接口已有的降级原因映射为可定位的字段证据。
+// addMiaoXiangIssue 将妙想响应或字段问题转换为可定位的结构化证据。
 func addMiaoXiangIssue(ctx context.Context, rowIndex int, stage validation.Stage, field, providerField, code, expected, actualType, message string, severity validation.Severity) {
 	report := validation.NewReport(8)
 	issue := validation.FieldIssue{
