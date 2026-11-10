@@ -367,5 +367,5 @@ W2-D 的“权威规则核对与裁决问题准备”完成；CTR-010 本身仍�
 - PLAT-CTR-005内部Go API不经JSON序列化，故JSON Schema/Golden原则上不适用；以版本化Go API、Contract Test、消费者适配测试作为替代证据。但项目登记簿需明确该不适用理由和替代证据，不得虚构Golden或误报缺失JSON Golden为实现失败。
 - News Provider/Source和LLM Transport均使用BoundDoer固定策略；News Fault Mapper验证Fault并剔除Cause；LLM Fault Mapper校验差异已在PLAT2-D2-005登记，本轮不重复。
 - 本切片结论：Platform HTTP Client A1实现及局部测试基本齐备；配置回归覆盖、LLM统计可见性决策、A2真实消费者联调和A3生产网络/Secret/Runtime证据仍待补。PLAT-CTR-005保持pending_evidence。
-- 下一步回到阶段B，转Server维度2：核验HTTP公开错误Envelope与Diagnostics/Health响应DTO，不重审Platform Fault内部对象、Observation DTO或HTTP Client底层实现。
+- 本轮HTTP Client切片完成后，暂不转Server维度2。项目Platform契约目录中的PLAT-CTR-003（身份/授权）、PLAT-CTR-006（Storage/Migration）、PLAT-CTR-007（Typed Config/Secret）尚未完成维度2适用性核验。下一切片先核PLAT-CTR-003的身份/授权结构、Header/Context、序列化适用性和直接消费者；不重审权限算法/授权语义（维度4）。完成Platform维度2剩余契约适用性清点后，再转Server维度2。
 - 本轮仅更新审计文档，未修改业务代码、Schema、Golden、测试，未执行CI。
