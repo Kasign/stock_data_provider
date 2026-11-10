@@ -326,8 +326,10 @@ func TestMariaDBClaimAttemptLeaseAndFencing(t *testing.T) {
 		string(domain.RunRunning), runRef); err != nil {
 		t.Fatalf("restore running Run for expired-peer lease test: %v", err)
 	}
-	if _, err := db.ExecContext(ctx, `UPDATE researchflow_stages SET status = ?, attempt_no = 1 WHERE stage_ref = ?`,
-		string(domain.StageRunning), secondStageRef); err != nil {
+	peerStartedAt := formatResearchflowTimeValue(time.Now().UTC().Add(-2 * time.Minute))
+	if _, err := db.ExecContext(ctx, `UPDATE researchflow_stages
+		SET status = ?, attempt_no = 1, started_at = ? WHERE stage_ref = ?`,
+		string(domain.StageRunning), peerStartedAt, secondStageRef); err != nil {
 		t.Fatalf("mark peer Stage running: %v", err)
 	}
 	if _, err := db.ExecContext(ctx, `INSERT INTO researchflow_attempts (
@@ -336,7 +338,7 @@ func TestMariaDBClaimAttemptLeaseAndFencing(t *testing.T) {
 	) VALUES (?, ?, ?, 1, ?, ?, ?, 1, ?, NULL, NULL, NULL)`,
 		expiredOtherAttemptRef, runRef, secondStageRef, string(domain.AttemptRunning),
 		"worker-expired", formatResearchflowTimeValue(time.Now().UTC().Add(-time.Minute)),
-		formatResearchflowTimeValue(time.Now().UTC().Add(-2*time.Minute))); err != nil {
+		peerStartedAt); err != nil {
 		t.Fatalf("insert expired peer Attempt: %v", err)
 	}
 	third, replayed, err := repository.ClaimAttempt(ctx, runRef, thirdStageRef,
