@@ -89,6 +89,25 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 		loadedBinding.PolicySnapshot.SnapshotRef != binding.PolicySnapshot.SnapshotRef {
 		t.Fatalf("authorization snapshot changed during persistence: %+v", loadedBinding)
 	}
+	// A later deny is authoritative: latest lookup must not fall back to this allow.
+	latestDeny := binding
+	latestDeny.AuthorizationRef.AuthorizationRef += "-latest-deny"
+	latestDeny.AuthorizationRef.Decision = domain.AuthorizationDecisionDenied
+	latestDeny.AuthorizationRef.DecidedAt = time.Now().UTC().Add(time.Second).Format(time.RFC3339Nano)
+	latestDeny.AuthorizationRef.DecisionFingerprint = strings.Repeat("b", 64)
+	if err := repository.AppendAuthorizationSnapshot(ctx, latestDeny, authorizationObservation, authorizationVersion); err != nil {
+		t.Fatalf("append latest deny authorization snapshot: %v", err)
+	}
+	latestBinding, err := repository.GetLatestAuthorizationSnapshotForEvidence(ctx,
+		binding.AuthorizationRef.SubjectRef, binding.AuthorizationRef.ResourceRef,
+		binding.AuthorizationRef.PurposeCode, binding.AuthorizationRef.ContentLevel)
+	if err != nil {
+		t.Fatalf("get latest authorization snapshot: %v", err)
+	}
+	if latestBinding.AuthorizationRef.Decision != domain.AuthorizationDecisionDenied ||
+		latestBinding.AuthorizationRef.AuthorizationRef != latestDeny.AuthorizationRef.AuthorizationRef {
+		t.Fatalf("latest authorization fell back from deny: %+v", latestBinding.AuthorizationRef)
+	}
 	conflictingBinding := binding
 	conflictingBinding.AuthorizationRef.DecisionFingerprint = strings.Repeat("f", 64)
 	if err := repository.AppendAuthorizationSnapshot(ctx, conflictingBinding, authorizationObservation, authorizationVersion); !errors.Is(err, app.ErrAuthorizationSnapshotConflict) {
