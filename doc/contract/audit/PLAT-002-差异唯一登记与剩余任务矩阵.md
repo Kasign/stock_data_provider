@@ -882,3 +882,47 @@ Golden应由真实DTO序列化生成或与真实序列化逐字节/结构比较�
 - 沿用 LLM-CTR-001～003、FLOW-CTR-002/003/004、GOV-CTR-003/004/005，不新增 CTR。LLM 内部 Schema/Parser 审查和 Researchflow Tool Policy 规则不重复登记。
 
 本批只更新 PLAT-002 审计记录；未修改业务代码、Schema、Golden、测试或执行 CI。后续统一处理 A/B/C 的有限契约决策；D/E/F 等待责任模块生产接入和实测证据后增量核验，不重复本轮协议 Parser/工具权限设计审查。
+
+
+## 32. 业务事件生产方→Notification 首批事件交互核验（2026-11-10）
+
+- 固定审计基线：origin/integration @ b6dfc85ba214fe16268c8cba780641a8bfe15086；维护分支：feat/design_doc。
+- 核验范围：INT-CTR-001、NTF-CTR-001～003、GOV-CTR-003/004；只检查 Researchflow/Quant/Research 事件生产边界、Outbox 到 Notification Envelope 的映射、Inbox 原子接收和 Server Relay 证据。不审查 Notification 内部 Subscription/Renderer/Channel 状态机，不扩展首批事件范围。
+
+### 已确认的统一契约
+
+1. 首批仅三类业务事件：`researchflow.run.terminal`、`quant.risk_decision.changed`、`research.event.lifecycle_changed`，均为 schema_version `1.0.0`。不发布 Run 运行进度、普通指标、Evidence/Claim/Hypothesis 变化。
+2. 业务事实生产方拥有事件触发条件、业务时间、稳定发布意图、event_id、correlation_id 和本地 Outbox；Notification 负责校验 Envelope/Payload、Inbox 双键幂等和异步 fan-out。生产方不直接调用渠道、不写 Notification Delivery，也不依赖 Notification Domain/Repository。
+3. 生产方在业务事实与 Outbox 同一事务提交；跨模块交付采用 at-least-once。Outbox 重试复用同一 event_id/idempotency_key/occurred_at/published_at/correlation_id/payload/fingerprint；Notification Inbox 以 (source_module,event_id) 和 (source_module,idempotency_key) 双唯一键去重。相同键不同内容 fail closed。
+4. Envelope `event_id` 与领域对象 ID 分属不同身份空间；`occurred_at` 来自事实发生/状态迁移时间，`published_at` 是首次写入 Outbox 的时间；`correlation_id` 来自可信父链路；`payload_fingerprint` 按 INT/NTF 规定的字段集合执行 RFC 8785 JCS + SHA-256。
+5. Notification `PublishEvent` 成功仅表示 Inbox 接收/幂等吸收，不代表订阅匹配、渠道调用或用户已读；不承诺外部 exactly-once。渠道结果 ambiguous 时由 Notification 自己进入 unknown 并对账。
+
+### 生产方与消费者代码核验
+
+- **Research：部分对齐。** `internal/research/storage/event_repository.go` 的 `AppendWithLifecycle` 使用版本追加事务 Hook，将 Event 新版本与 Outbox 同事务提交；首次创建和真实状态迁移均写 Outbox，普通版本修订不生成 lifecycle_changed。`internal/research/storage/outbox.go` 已构造完整首批 Payload/Envelope 字段、独立随机 event_id、稳定版本级 idempotency_key、occurred_at=changed_at、published_at、correlation_id，并按 JCS + SHA-256 计算 payload_fingerprint；Outbox 有领取、租约、重试、确认/拒绝机制。研究模块文档记录 Schema/Golden/Contract Test 与专用 MariaDB 验收通过。缺口是 Server→Notification Relay 尚未接线，且未见当前固定基线的真实 PublishEvent 端到端调用证据。
+- **Researchflow：存在明确实现偏差。** `internal/researchflow/storage/mysql_run_finalize.go` 在 Run 终态、ResultSummary 和 Outbox 同事务提交，原子性方向正确；但代码常量是 `researchflow.run.finalized`，与 INT-CTR-001 的 `researchflow.run.terminal` 不同；Payload 使用 `run_status` 而不是 `status`，且未提供 `source_event_ref`、`system_as_of`、`template_ref`、`template_version`，`termination_reason` 空值时被省略而不是显式 null；Outbox 记录没有独立 `event_id`、`occurred_at`、`published_at`、`subject_ref` 等完整 Envelope 字段。其 fingerprint 是对原始 eventPayload 直接 SHA-256，不是规定的 Envelope 业务字段 JCS fingerprint。`OutboxMessage` 也未携带构造 Notification Envelope 所需的完整字段。当前实现不能直接投递为 INT-CTR-001 事件。
+- **Quant：生产 Outbox 缺失。** `internal/quant/risk/decision_builder.go` 仅构造领域 RiskDecision；`internal/quant/result/repository.go` 只有结果写入 Port，要求原子唯一性，但固定基线未见 Quant Storage/Migration/风险决策事务 Outbox 实现。Quant 文档已声明风险事件应在风险事实本地事务写 Outbox，但这是目标契约/任务要求，不是当前实现证据。首次决策与实质变化的比较、风险事实持久化和 Outbox 原子提交均未形成可核验链路。
+- **Notification：接收核心已建立，Fanout 生产写入未闭合。** `EventReceiver` 在持久化前验证完整 Envelope/Payload；`MySQLInboxRepository` 双唯一键处理重放，并要求 `InboxFanoutWriter` 在同一事务写 Fanout 工作项。固定基线只有 Writer 接口/扩展点，README 明确 Fanout 表/生产 Writer、WorkItem claim/ack/retry、活跃 Subscription 分页和完整 Dispatcher/Worker 尚未完成；不能将 Inbox Repository 存在等同于完整消费链路。
+- **Server：Relay/装配缺证据。** Research Outbox 与 Researchflow Outbox 各自提供领取/确认/重试接口，但未见 Server 将它们映射为 Notification `EventReceiver.Receive`/公开接收 Port 的统一 Relay、DI 装配、共享 DB/事务资源配置和故障恢复集成证据。Quant Outbox 生产端也尚不存在。
+
+### 差异登记（审计工作项，非新增 CTR）
+
+| 编号 | 固定基线事实 | 状态 | 冻结影响 / 后续统一处理 |
+|---|---|---|---|
+| BUS-EVT-A | Researchflow 终态事务 Outbox 的事件类型、Payload 字段/空值、Envelope 身份字段和 fingerprint 算法与 INT-CTR-001/NTF-CTR-001 不一致；OutboxMessage 缺完整 Envelope 字段 | pending_evidence | 既有 INT-CTR-001 决议已明确，无需新增语义决策。Researchflow Owner 按 `researchflow.run.terminal`、既定 Payload、独立 event_id、occurred_at/published_at/subject_ref、JCS fingerprint 修正 Outbox 和 Publisher DTO；保持 Run+ResultSummary+Outbox 同事务。补终态四状态、显式 null、重放相同 Envelope、指纹 Golden 和 Notification Validator 联合测试。未修正前禁止将该 Outbox 接入 Notification |
+| BUS-EVT-B | Quant 只有 RiskDecision 领域构造与结果 Repository Port，未见风险事实持久化和 Outbox 原子提交实现；事件触发规则虽已在 INT-CTR-001/Quant 文档确定，但没有真实持久化比较链 | pending_evidence | Quant Owner 实现首次决策/实质变化识别、稳定 subject_ref、事件 Payload/Envelope 与风险事实同事务 Outbox；warning/info-only 变化不触发，多主体按主体拆分，重复提交保持同一发布意图。补数据库事务、并发决策、状态/硬阻断原因集合变化和 Outbox 回滚测试。不得由 Server 或 Notification 推导风险变化 |
+| BUS-EVT-C | Research Event 版本与 Outbox 已同事务，Envelope/Payload/JCS/稳定幂等键与 INT-CTR-001 基本对齐；缺少 Server Relay 的实际接收调用与跨模块 L2 证据 | pending_evidence | Research Owner 保持现有领域 Outbox；Server 提供受控 Relay，将原始完整 Envelope 传给 Notification 接收 Port，成功后确认 Outbox，失败按原 Envelope 重试；覆盖接收成功但确认丢失、重复 Publish、Inbox 幂等和 Outbox lease/fencing。不得重建 event_id 或刷新 published_at |
+| BUS-EVT-D | Notification EventReceiver/MySQLInboxRepository 已校验 Envelope、双键幂等，并要求事务内 FanoutWriter；固定基线尚无生产 FanoutWriter/工作项表和完整 Worker 消费链路 | pending_evidence | Notification Owner 完成与既有 INT-CTR-001 兼容的 Fanout 工作项写入及 claim/ack/retry，确保 Inbox 首次接收与 Fanout 同事务；重复事件不重复 Fanout，唯一键冲突/异指纹 fail closed。仅阻断真实自动通知链路，不阻断 Notification Domain/Repository 独立开发 |
+| BUS-EVT-E | 固定基线未见 Server 同时装配 Research/Researchflow Relay 与 Notification Receiver 的端到端链路；Quant 生产端亦缺失 | pending_evidence | Server 负责装配各生产方 Outbox Publisher、Notification EventReceiver 和 Worker 生命周期；不得承载事件业务规则或重写 Payload。联合测试覆盖三生产方字段映射、Outbox→Relay→Inbox、进程崩溃/确认丢失/重复投递、correlation_id 和错误边界；真实 MariaDB/根集成 CI 证据单独记录 |
+
+### 本批结论
+
+- **事件业务职责与依赖方向：freeze-ready。** Research/Quant/Researchflow 拥有各自事实和事件，Notification 只消费版本化 Envelope；Server 只装配 Relay，不拥有事件语义。
+- **首批事件语义与可靠交付规则：accepted。** 三类事件、触发条件、Payload、Envelope、Outbox/Inbox 幂等、业务时间和安全字段边界已由 INT-CTR-001 决议，不新增业务事件类型。
+- **Research 生产端：实现基本对齐，Server Relay pending_evidence。** Research 事件不需要重做 Outbox。
+- **Researchflow 生产端：pending_evidence，且有对已接受契约的实现偏差（BUS-EVT-A）。** 这是责任模块实现修复，不是 PLAT-002 改契约。
+- **Quant 生产端：pending_evidence。** 尚无风险事实到 Outbox 的持久化事务实现。
+- **Notification Fanout 与 Server Relay：pending_evidence。** Inbox 接收入口不代表完整通知链路已通。
+- 沿用 INT-CTR-001、NTF-CTR-001～003、QNT-CTR-005、RSC-CTR-003、FLOW-CTR-001/003、GOV-CTR-003/004，不新增 CTR。Research 已有 Outbox 证据不重复登记为新缺口；不审查通知渠道/Renderer 内部规则。
+
+本批只更新 PLAT-002 审计文档；未修改任何业务模块代码、Schema、Golden、测试或执行 CI。后续按责任模块修复/补证据后增量核验，不在 PLAT-002 分支代修。
