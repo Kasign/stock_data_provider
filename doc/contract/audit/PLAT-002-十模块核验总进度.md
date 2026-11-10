@@ -769,3 +769,13 @@
 - PLAT-CTR-004继续 `pending_evidence`。Observation切片为partial；Platform维度2整体仍为partial。Server完整Diagnostics Report Schema/HTTP Golden归Server维度2核验。
 - 下一批：Platform维度2核对Fault内部对象及其领域/Transport映射边界。不得扩大到Server完整HTTP Error Envelope，不修改实现。
 - 本批仅更新审计文档，未修改业务代码、Schema、Golden、测试，未执行CI。
+## 14. Platform 维度2：Fault 内部对象与映射边界第二切片（2026-11-10）
+
+- 审计记录：`Platform-维度2-DTO-Schema-Golden.md` 第7节；固定基线 `b6dfc85ba214fe16268c8cba780641a8bfe15086`。
+- 已核 `Fault` 的Class/字段/JSON隐藏/Validate/Unwrap、Platform HTTP Client缓冲与流式Fault构造、Diagnostics Runner归一化，以及LLM `ModelErrorFromPlatformFault` 直接消费映射和测试。
+- Fault本身是进程内对象，全部字段 `json:"-"`，直接序列化为 `{}`，不应设计公开Schema/Golden。Platform Runner有Validate覆盖；LLM独立Mapper没有Validate，需补非法元数据映射边界测试/信任边界说明。
+- PLAT2-D2-005并入既有P002-D02 / PLAT-CTR-001，不新增CTR。LLM Owner负责消费者侧补证；P002-D02和PLAT-CTR-001保持开放/pending_evidence。
+- Market Data/Platform HTTP独立输出HTTP Error DTO，未发现直接消费Fault的证据；Server完整HTTP Error Envelope留在Server维度2。
+- 本切片结论：Fault内部契约基本齐备，跨模块映射partial；Platform维度2仍partial。
+- 下一切片：Platform维度2核对Request ID公共原语与直接Transport消费者，不重审Fault/Observation，不扩大到Server完整HTTP Error Envelope。
+- 本轮仅修改审计文档，未修改业务代码、Schema、Golden、测试，未执行CI。
