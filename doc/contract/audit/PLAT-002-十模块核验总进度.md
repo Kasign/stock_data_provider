@@ -622,13 +622,14 @@
 - 本节为固定 SHA 静态清单，不代表 CI 通过或 CTR-010 已修复。下一步只进行 CTR-010 关闭方案 Review，不扩展新的 WebUI 数据集。
 
 
-### WebUI — 维度 2：CTR-010 关闭方案 Review
+### WebUI — 维度 2：CTR-010 契约差异处置边界 Review
 
-- 详细记录：WebUI-维度2-完整性Review-第一轮.md 第 21 节。
-- 关闭目标已裁决为 optional + non-nullable：保留 Go DTO 的 omitempty 运行时行为，从 OpenAPI 的 124 个差异属性移除 nullable，不改变 required、字段类型或业务逻辑。
-- 修复范围包括 OpenAPI 124 字段、反射测试 omitempty→非 nullable 反向约束、3 个 inline DTO 的契约检查，以及中央 JSON 序列化测试对 124 字段省略行为和非 nil 指针零值输出的覆盖。
-- 本轮只完成方案 Review，未修改业务代码、未运行修复后 CI。CTR-010 仍未关闭；下一步由 Data/API 责任分支实施，审计分支待其完成后做固定 SHA 增量复核。WebUI 维度 2 第一轮完整性 Review 仍为进行中。
-
+- 详细记录：`WebUI-维度2-完整性Review-第一轮.md` 第 21 节。
+- 固定基线下 CTR-010 已确认 124 个唯一字段、29 个受影响 DTO、54 个纳入范围的响应 DTO；Go `omitempty` 与 OpenAPI `nullable: true` 存在静态描述差异，中央 JSON Golden 对这 124 个字段的 nil/空值省略行为覆盖为 0/124。
+- 更正此前“关闭目标已裁决”的表述：optional + non-nullable 只是候选方案，尚未完成公共契约语义裁决。不能仅依据当前 Go 序列化行为，直接推导最终契约允许/禁止 JSON null。
+- 当前阶段只需对照权威契约完成字段缺失、null、零值语义裁决，并记录兼容性影响；不修改 Data DTO、OpenAPI 或契约测试，不要求 Data/API 分支实施。
+- 裁决后将实现差异单独登记为冻结后的实现对齐任务；只有影响契约语义确定或触发明确冻结门禁时，才作为冻结前阻断处理。
+- CTR-010 状态：差异事实已确认、字段清单已去重、目标语义待裁决、实现修复未启动。WebUI 维度 2 第一轮完整性 Review 仍在进行中。
 
 ### CTR-010 责任分支增量状态检查
 
