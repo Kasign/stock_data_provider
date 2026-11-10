@@ -1011,3 +1011,8 @@
 - [x] Provider Ingest 区分 SourceCatalog not-found 与依赖不可用，并保留底层错误原因。
 - [ ] 上述修复的 CI 与 MariaDB 11.4 集成运行结果待新提交 Workflow。
 - [ ] 当前剩余主要阻断：available_at 可信证据门禁、授权复核与内容读取 TOCTOU、Server 组合根注入及 MariaDB 真实验收。详见《代码与文档Review报告》。
+
+
+### available_at 审计结论（2026-11-10）
+
+现有 Feed/Observation 时间字段不能证明新闻首次公开可用时间；Atom updated 也不是首次公开时间。当前保持 `available_at=null`，不从 published_at/fetched_at/normalized_at/observed_at 推断。严格 PIT 门禁需等待来源证据模型先行冻结。

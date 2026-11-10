@@ -100,3 +100,15 @@
 - 上一 Run `42739748233` 已完成但失败：`Test go-core` 成功，根模块 `Test .` 因 Notification、Quant 等其他模块的 gofmt 差异失败；News MariaDB 集成 Job 为 skipped。
 - 本轮修复涉及的 MariaDB 断言尚无真实数据库运行证据。
 - 当前仍未解决：available_at 可信证据建模/严格 PIT 门禁；授权复核与精确内容读取 TOCTOU；最新授权选择与 payload 读取的事务一致性；真实 MariaDB 11.4 验收及 Server 组合根接线。
+
+
+## 七、available_at 来源审计补充（2026-11-10）
+
+检查了当前 Candidate、FeedEntry、NewsItemVersion 与 PIT Repository 的时间字段：
+
+- Candidate 当前保留 `PublishedAt/PublishedAtRaw`、`FetchedAt`、`NormalizedAt`、`ObservedAt`；FeedEntry 额外保留 Atom `UpdatedAt/UpdatedAtRaw`。
+- NewsItemVersion 只持久化 `PublishedAt` 与系统观察时间；Observation 持久化 `ObservedAt`，Candidate JSON 保存采集侧时间字段。
+- 当前未发现带来源证明、来源字段路径/原始值、可信获取方式和可追溯出处的 `available_at` 证据字段或独立来源事件。
+- Feed 的 Atom `updated` 是内容更新声明，不等于首次公开可用时间；`published_at`、`fetched_at`、`normalized_at`、`observed_at` 均不得替代。
+
+结论：本分支当前没有足够证据安全实现 available_at 门禁。下一步需要先在 NEWS-CTR-001/数据模型中明确可接受的来源证据类型、原始证据保存、解析/可信等级和回溯规则，再新增持久化字段及 Get/List SQL 过滤；在此之前继续保持 available_at=null，并明确严格 PIT 尚未完成。
