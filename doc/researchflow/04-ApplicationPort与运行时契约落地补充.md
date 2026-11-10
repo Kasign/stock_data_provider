@@ -519,3 +519,10 @@ Application 的 `RunFinalizationCoordinator` 是三种终态聚合路径的路�
 - `ExpireRunDeadline` 的 Attempt fencing 与 Deadline/用户取消并发竞争新增集成测试，均只在 `PLATFORM_STORAGE_INTEGRATION=1` 下运行。
 - Deadline fencing 测试在 ClaimAttempt 后读取 Run 的权威 version，再传给 ExpireRunDeadline，避免假定 Claim 不推进 Run version。
 - 截至本次提交，新增测试代码尚未在真实 MariaDB 执行；当前 HEAD 也没有对应 CI 记录。不得将测试代码存在视为验收通过。
+
+
+## 25. 已完成 Stage 的 Deadline 让位规则（2026-11-10）
+
+- 当 Run deadline 已过期但所有 Stage 均已终态时，`ExpireRunDeadline` 不取得 Deadline 终止权：返回 `updated=false`，保持 Run version 与 termination_reason 不变。
+- Application 正常聚合路径仍可执行 `FinalizeRun` 并提交成功结果、Summary 与 Outbox。
+- 新增 MariaDB 集成测试覆盖该顺序；尚未执行真实 MariaDB。
