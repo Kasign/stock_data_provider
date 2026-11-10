@@ -513,7 +513,7 @@
 - 对照 API Client 总盘点：44 个导出函数中 41 个远端入口，40 个在主要页面模块找到引用；getMarketSentiment 仍是唯一已确认的孤儿 Client，保持产品范围待确认，不自动定性缺陷。
 - 编号收敛：CTR-003 的 Run OpenAPI 缺失核心问题由范围更完整的 CTR-046 承接，CTR-003 标记为历史初审编号，不重复计数；CTR-005 与 CTR-047 部分重叠，CTR-047 关闭条件必须继续覆盖 TaskType 四值枚举及 AnalysisRequest required 约束。
 - CTR-010 的多次出现是跨 DTO 影响字段扩充；CTR-038 与 CTR-048 虽同为历史 total 语义问题，但属于不同 API，不合并。
-- P1 门禁复核：CTR-041 仍待固定基线 CI 复核；CTR-043 源码逻辑冲突已确认但本轮未执行测试，均不得关闭或降级。
+- P1 门禁复核（后续更正）：CTR-041 已依据固定 SHA 的 DTO/OpenAPI/Golden 一致性撤销；CTR-043 的源码逻辑冲突仍成立，等待责任模块修复和专项测试，本轮未执行 CI。
 - 本轮只完成第一轮完整性 Review 的编号/覆盖/跨数据集主题子批次；逐项核对 CTR-001..049 证据链、字段级 Golden、固定基线 CI 及跨维度交叉检查仍未完成。WebUI 维度 2 保持 partial。
 
 - Analysis Task 请求契约补充核对：Handler/fillDefaults 会为 task_type、as_of、universe_id、portfolio_id、market_id、strategy_ids 和配置版本注入默认值；historical_replay 则要求显式 as_of；Runner 只接受四种 TaskType。故 CTR-005/047 的关闭条件应描述 HTTP 请求默认值、TaskType 四值枚举及历史回放条件约束，不应机械地把所有 RunRequest 非 omitempty 字段列为 HTTP required。
