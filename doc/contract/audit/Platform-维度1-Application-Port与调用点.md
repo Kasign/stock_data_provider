@@ -378,3 +378,100 @@ Migration 中 Inbox 持久化 `correlation_id`，Delivery State Event 持久化 
 Notification 模块内 Application Port、Inbox 幂等、Fanout 事务注入、Delivery Attempt/租约/fencing token 和租约恢复逻辑已有实现证据；Server 只注册 Migration，尚无 Application、Fanout、Delivery Worker 和 Diagnostics 的生产装配证据。Request ID 与 Correlation ID 的端到端传播待核。Fault 映射和 Application 全目录消费者扫描未完成。
 
 **Notification 维度 1 状态：partial；模块内实现 evidenced / production wiring not evidenced。Platform 维度 1 总状态仍为 partial。**
+
+
+## 11. 第六批：Quant 模块消费者核验（初审）
+
+### 11.1 模块性质与 Application Port 边界
+
+固定基线证据：
+
+- `doc/quant/01-量化引擎总体设计.md`（blob `ce55ace71676c34e65f7b41166542eab266c8a50`）
+- `doc/quant/02-任务拆分与验收.md`（blob `fb9f9226204a766ca27d4b39378dd3671a7cfe0a`）
+- `internal/quant` 固定基线目录树：domain、factor、indicator、manifest、metric、registry、result、risk、trend；未见 application、adapters、storage、diagnostics 子目录。
+
+设计文档明确 Quant 是确定性数值引擎，不调用 LLM、不编排研究任务、不连接 Provider/HTTP/SQL/Redis；目标分层按实际能力逐步建立，不为目录齐全创建空包。QNT-001～003 主要是纯计算，QNT-010 风险执行骨架与 QNT-013 Repository Port/MemoryRepository 仍处于部分完成状态；生产 Storage、Migration 和真实事实接入明确列为后续集成验收。
+
+已确认：
+
+1. Quant 当前提供领域计算/契约组件，不是已完成的独立业务 Application 服务。
+2. 当前未定义 Quant Application Port，也未看到跨模块调用所需的服务级请求/响应组合接口。此项需结合 QNT-008～010 及 Researchflow 消费契约后续复核，不能仅凭缺少 application 目录认定架构违约。
+3. Quant 结果 Repository Port 当前只有 `Save`；没有 `Get`/Query 读取能力。文档明确在 QuantResultRef/Envelope 关系及读取时授权复核流程冻结前，不提供可能绕过授权的读取端口。
+4. Quant 纯计算包的错误值主要是包内领域错误；本批未发现 Platform Fault 适配层。由于当前尚无 Application/Transport Adapter，不能要求 Domain 直接依赖 Platform Fault；待 Application/Server 组合层形成后再核验错误映射。
+
+### 11.2 Platform 原语消费情况
+
+已抽查 Quant 的 Manifest、Registry、Metric、Risk、Result 关键生产实现：
+
+- 未发现这些纯计算/契约包直接 import Platform HTTP Client、Diagnostics、Request ID 或 Storage。
+- 该边界与 Quant 总体设计中的“纯数值引擎、不连接 HTTP/SQL/Redis”一致。
+- Quant Registry 是领域指标元数据 Registry，不应替换或扩展为 Platform 通用 Registry。
+- 当前没有 Quant Diagnostics Check 实现；也没有证据表明 Quant 应在纯计算层自行运行 Platform Diagnostics。待 Application/Server 接入时，应由 Quant 提供领域检查，再由 Server 组合 Platform Runner。
+
+### 11.3 结果持久化与授权边界
+
+固定基线证据：
+
+- `internal/quant/result/repository.go`（blob `0fb18c3ba8fb17af87b81e195596bbc556c6eb51`）
+- `internal/quant/result/memory_repository.go`（blob `622adc454d1c9aefa68b4ca2666b2285030deae9`）
+- `internal/quant/result/ref.go`（blob `bb05015e56cf419b871b92c53e5943ae3a0dd6a0`）
+- `internal/quant/manifest/manifest.go`（blob `a3315a5d6fdd822136094ec5565771d23dc27fd1`）
+- `doc/quant/11-RepositoryPort与不可变结果记录.md`（blob `c5567fa78e98d4bf94abdbcc0844eba7a92b193a`）
+
+已确认：
+
+1. Manifest 使用 RFC 8785 JCS + SHA-256 形成内容寻址身份；结果 payload 指纹与 Manifest 分离验证。
+2. Repository Port 只提供 Save，要求同一 result_id 相同内容幂等、不同内容冲突，并要求实现以事务/原子操作保证并发正确性。
+3. MemoryRepository 明确仅用于测试和本地组合测试，不替代 MariaDB/Platform Storage，也不具备进程重启后的持久性。
+4. 当前未实现 Quant SQL/Platform Storage Adapter，也未注册 Quant Migration；这与 QNT-013 文档将真实 Storage、事务和根 Migration 列为后续集成验收一致。
+5. BuildRef 从已验证 Manifest 派生结果身份字段，但注释明确不签发或验证 AuthorizationRef 的授权事实；AuthorizationRef 仅作为必填引用文本传入。Golden 测试验证了示例引用的结构与绑定，不等同于生产授权签发、签名验证、主体/资源/用途/时效复核。
+6. 因此结果读取和授权必须留在未来 Application/Server 边界；不得把 BuildRef 或 Schema/Golden 通过当成授权已生效。
+
+### 11.4 Risk 执行与硬门禁边界
+
+固定基线证据：
+
+- `internal/quant/risk/evaluator.go`（blob `c86b2d5c27f5d59ad1c51be034b2d36f9bc0cbbd`）
+- `internal/quant/risk/decision_builder.go`（blob `21eee22703901a7116f7fff2bd8f95da7bbe4229`）
+- `internal/quant/risk/aggregate.go`（blob `a48a3a542cf2f30a16290f686ccb540c87777c9c`）
+- `doc/quant/12-RiskRuleSet执行入口.md`（blob `32ade0d3bb58724e85a2823f7cf539931a123b30`）
+
+已确认：
+
+- `EvaluateRuleSet` 按 RuleSet 声明顺序执行，并复制输入规则集/evaluator 注册表。
+- 必需规则缺失或执行失败时生成 block + unknown；未知 evaluator、规则身份/严重级别不匹配拒绝构造决策；Context 取消不生成部分决策。
+- 规则执行器错误文本和 panic 内容不会进入公开 SafeMessage。
+- `AggregateStatus` 以 block 级硬门禁为基础；触发 block 返回 reject，block 结论 unknown 或缺少 block 规则返回 unknown，只有 block 规则明确未触发才 pass。
+- Quant 只提供通用执行骨架；具体风险规则、事实读取、可信规则集加载/审批/签名/发布/回滚和运行时授权明确留给 Application/Server/Repository 接入。当前无证据证明生产规则集已接入。
+
+### 11.5 Server 生产组合根
+
+固定基线证据：
+
+- `internal/server/bootstrap/bootstrap.go`（blob `92df61265f173251ac7811f99a7ab9f41ac470ed`）
+- `internal/server/bootstrap/bootstrap_test.go`（blob `7cc244a2d6e62b5a177d08efd3484195598b5cf4`）
+- `internal/server/diagnostics/service.go`（blob `190068e7fc170d6f81d8a79868086fa2870a65e7`）
+
+已确认：
+
+1. Server Bootstrap 未 import Quant；未构造 Quant Registry、计算服务、Risk RuleSet 执行器或 Result Repository。
+2. Migration Registry 当前只注册 News、Research、Notification；Bootstrap 测试断言的 namespace 也只有这三个模块，没有 Quant。
+3. Server Diagnostics 当前只接入共享 Storage/Migration 检查；没有 Quant Module Checks。
+4. Server Lifecycle 当前只注册旧 Analysis Worker；Quant 当前也没有独立 Worker/后台任务生命周期。
+5. 因 Quant 尚未形成生产 Application/Storage Adapter，这些缺失符合当前模块阶段状态；但不能据此将 Quant 认定为已可供 Researchflow/Server 生产调用。
+
+### 11.6 新增待核项
+
+**AUD-PLAT-PORT-008：Quant 生产 Application/Storage/Diagnostics 接入尚未形成（P1 候选，阶段性阻断）**
+
+证据边界：Quant 领域计算、Registry、Risk 执行骨架、Manifest/Result Save Port 已有模块内实现；但固定基线没有 Application/Adapter/Storage/Diagnostics 目录，Server 未构造 Quant 服务、未注册 Migration、未接入 Diagnostics。Quant 任务规划明确 QNT-010 的具体规则/可信发布/事实接入及 QNT-013 的生产 Storage/事务/根 Migration 尚未完成。此项应作为后续生产集成门禁，而非认定当前纯计算 Domain 违反 Platform 依赖方向。进入 Researchflow/Server 生产调用前，需明确 Application Port、输入事实授权、Result Save/Read 授权边界、Platform Fault 映射、Diagnostics、Storage Migration 和组合根测试。
+
+**AUD-PLAT-PORT-009：Quant AuthorizationRef 生产签发与验证责任待证（P1 候选，安全边界）**
+
+`BuildRef` 仅检查 AuthorizationRef 非空文本并将其写入 Ref；代码注释明确不签发或验证授权事实。Golden 只验证固定样本的 Schema/指纹/主体/资源字段，不构成生产授权证明。后续必须由明确的可信授权责任方签发并验证 AuthorizationRef，至少覆盖主体、资源、用途、策略版本、决策时间、有效期/撤销语义；读取端口必须在授权复核完成后才能开放。当前未发现读取接口，因此暂不认定存在绕过授权的可利用读取路径。
+
+### 11.7 本批结论
+
+Quant 的纯计算与结果契约边界基本符合其模块设计；Risk 执行骨架有 fail-closed 实现证据。Quant 当前不是已装配的生产 Application 模块，尚无 Platform Fault/Diagnostics Adapter、生产 Storage/Migration、Server 组合根或 Worker 接入证据。AuthorizationRef 只作为引用文本，不证明授权已签发/验证。
+
+**Quant 维度 1 状态：partial；domain/contract implementation evidenced / production application wiring not yet implemented by current stage. Platform 维度 1 总状态仍为 partial。**
