@@ -2065,3 +2065,84 @@ StockBoards 的 Provider Port、Go DTO、Service 校验/回退/缓存、HTTP 路
 - 新增 AUD-WEBUI-CTR-028、CTR-029、CTR-030（均 P2）；IndexCatalogSnapshot.provider_time 纳入 AUD-WEBUI-CTR-010。
 - OpenAPI 声称支持 Tushare 目录，但固定基线没有对应 Provider 实现；WebUI Client 有函数但没有页面消费者。未证明已启用部署存在目录数据错误，因为默认目录能力本身未启用。
 - WebUI 维度 2 继续 partial。
+
+
+### 35. WebUI 维度 2：Index Constituents 指数成分与历史权重报告
+
+#### 35.1 核验范围与证据
+
+- 固定代码基线：`b6dfc85ba214fe16268c8cba780641a8bfe15086`。
+- DTO：`internal/marketdata/model/model.go`（blob `6f04516bd11452a01adcb5acceab571fb1c28ed5`），`IndexConstituent` / `IndexConstituentSnapshot`。
+- Provider Port：`internal/marketdata/provider/provider.go`（blob `6635d2247379d1ffcb826f80e8e2176422b0cc0a`）：`IndexCatalogProvider.FetchIndexConstituents` 表示当前/最近成分；`HistoricalIndexConstituentProvider.FetchIndexConstituentsAsOf` 独立表示历史报告日查询。
+- 同花顺实现：`internal/marketdata/provider/hithink.go`（blob `337c072c14f764f1f9cfff833f44ddcf5426e04b`），`FetchIndexConstituents` 只提供当前成分，不实现历史 Port。
+- Tushare 实现：`internal/marketdata/provider/tushare_capabilities.go`（blob `97d381af75b167a08a71a0483aaad0893ad67a4d`），`FetchIndexConstituentsAsOf` / `fetchIndexConstituents`。
+- Provider 测试：`internal/marketdata/provider/tushare_capabilities_test.go`（blob `46d6528663f440eb5914307b4c17d4cf13f73ec3`），覆盖最新月份、历史 as_of、拒绝晚于 as_of 的行、退市证券名称补全、非 A 股过滤、5000 行边界。
+- Service：`internal/marketdata/service/index_catalog.go`（blob `cf10a389b065955df93973f41222a3837c27a5e2`）；来源能力/历史查询测试 `internal/marketdata/service/index_catalog_source_test.go`（blob `ad2ae5bd8ced48919eb51880b4a084f0265845da`）；质量回退测试 `internal/marketdata/service/index_catalog_quality_fallback_test.go`（blob `1b78f5c2c4a075289e461fcc5d3a7f502e5d1d61`）。
+- HTTP：`internal/marketdata/httpapi/index_catalog.go`（blob `0de177e2b7921863b6beb9a856cd902ca33d6bd4`）；OpenAPI `internal/marketdata/httpapi/openapi.yaml`（blob `cd8a6e3dfb8e3162ee789b11e883be9283c59f32`）；模型契约测试 `internal/marketdata/httpapi/openapi_contract_test.go`（blob `7f97f075a23bd698a7e3fc32e90509d1e999217b`）。
+- WebUI API Client：`web/src/api.js`（blob `b8bcbee5908b43bfa1bc2ca744363190af38287f`）；API 请求测试 `web/tests/api.test.mjs`（blob `a26eca75b24a744232d370fdbe2411806be45136`）。已检查 `web/src/stock-research.js`（blob `49fe406d7dcf5e8fdec76f2f0bfcda6a18d4db85`）和市场概览页面，未发现页面调用成分接口。
+
+#### 35.2 当前成分与历史报告的边界
+
+1. 当前成分和历史成分是两种不同能力。Hithink `FetchIndexConstituents` 调用 `/api/a-share-index/constituents/ths-stock-list`，代码注释明确该端点不提供历史成员变更；只实现 `IndexCatalogProvider`。
+2. 历史能力通过独立的 `HistoricalIndexConstituentProvider` 类型断言发现。Service 的 `IndexConstituentsAsOfFromSource` 只调用实现该接口的 Provider，不会把 Hithink 当前成分冒充历史成分；测试 `TestIndexConstituentsAsOfDoesNotFallBackToCurrentOnlyProvider` 覆盖这一点。
+3. HTTP `as_of` 只接受 YYYY-MM-DD 且不得晚于中国市场当前日期；显式 `source=hithink` 与 `as_of` 组合直接返回 400。省略 as_of 保持当前/最近快照语义。
+4. Tushare 通过 `index_weight` 按月逐月请求，历史查询最多向前回溯 120 个月；每个月单独查询以避免多月请求触发上游结果上限。只选择不晚于 as_of 的报告行，并在发现最近有记录的月份后停止。测试覆盖请求日期当天报告和拒绝晚于请求日的源端行。
+5. 无可用报告时返回空 Items、`quality_status=unknown`，而不是把空列表当成无成分指数；历史查询 120 个月内没有报告时给出对应质量原因。
+6. 这不是严格的历史成员生效区间回放。Tushare 返回 `as_of_date` 与 `provider_report_date`，并明确添加 `provider_as_of_uses_latest_index_weight_report_not_effective_membership_interval`；OpenAPI 也声明报告日不代表成员从该日起持续有效。
+
+#### 35.3 权重、成员身份和覆盖
+
+1. `weight_percent` 表示源端报告权重的百分数值/百分点，Tushare 的 `weight` 直接映射到该字段，不进行比例小数转换。Provider 拒绝负数、NaN 和 Inf；Service 再约束权重必须在 0..100。缺失权重保持 nil，不补零。
+2. 当前 Hithink 成分响应只映射代码、名称，不提供权重；其 Provider 不会伪造权重。Tushare 从 `index_weight` 获得代码和权重，再通过 `stock_basic` 补充名称。
+3. Tushare 历史查询省略 `stock_basic.list_status`，以便包含退市证券；但名称仍来自当前可查询的证券目录，不是按历史报告日还原的历史名称。
+4. Tushare 先确定最新报告日，再统计该报告日的非 A 股/无法映射证券排除数，避免过滤操作使报告日期倒退。重复成分代码会拒绝；名称缺失或非 A 股被排除并记录质量原因。
+5. Tushare 结果按规范化 symbol 升序排列。源端返回达到 5000 行安全边界时设置 `total_is_lower_bound=true` 并降级，不能将该结果解释为完整权重集合。
+6. Service 校验快照指数代码、总数、来源/版本、采集时间、报告日期不得晚于 as_of、ProviderTime 不得为零或未来、成员 symbol/code/name 唯一一致、权重有限且在 0..100。空成员集合必须为 unknown。未发现对权重总和强制等于 100 的规则；由于非 A 股和无名称证券会被排除，不应对过滤后的子集直接强制 100%。
+
+#### 35.4 PIT 时间语义与质量状态
+
+1. DTO 分开表达 `as_of_date`（请求查询日期）、`provider_report_date`（源端实际权重报告日）、`fetched_at`（系统采集时间）、`effective_from/effective_to`（成员关系有效区间）、`available_at`（源端可用时间）和 `system_observed_at`（系统观测时间）。
+2. Tushare 当前实现只填充请求日期、报告日期和 fetched_at；不填充每个成员的 effective_from/effective_to/available_at/system_observed_at，也不提供 ProviderTime。当前成分 Hithink 只提供响应级 timestamp 和 fetched_at，同样没有成员生效区间或 PIT 可用时间。
+3. Service 的 `markHistoricalConstituentIntervalQuality` 要求每个成员都具有覆盖 as_of 的有效区间、available_at 不晚于 fetched_at、system_observed_at 不早于 available_at。任一项缺失或不满足即降级并增加 `historical_constituent_effective_interval_or_pit_timestamp_unavailable`。
+4. 因此，Tushare 当前历史权重结果不会被错误标记为完整 PIT 有效快照；它表达的是“截至请求日期可获得的最近权重报告”，而非“请求日期当日已生效且当时可观察到的完整成分集合”。当前质量为 degraded 是保守且正确的。
+5. Tushare 历史查找最多回溯 120 个月，但没有独立的最大报告陈旧度 SLA；响应提供实际 provider_report_date，Service 校验其不晚于 as_of，却没有按报告日期与 as_of 的间隔追加专门的 stale reason。调用方必须同时读取两日期，不能只看 as_of_date 就把结果当作当日权重。
+
+#### 35.5 HTTP/OpenAPI 与 WebUI
+
+1. HTTP 路由 `GET /api/v1/market/indices/{symbol}/constituents` 支持可选 `source` 与 `as_of`；OpenAPI 说明历史查询只使用明确支持历史查询的 Provider，并明确 Hithink 当前成分不支持 as_of。
+2. OpenAPI 定义了权重百分点、报告日期、成员生效区间、available_at 和 system_observed_at；DTO 的对应字段均有定义。模型反射测试覆盖 IndexConstituent 与 IndexConstituentSnapshot 的字段集合和 required。
+3. `IndexConstituent.weight_percent` 和 `IndexConstituentSnapshot.provider_time` 是 Go `omitempty` 指针，nil 时 JSON 省略；OpenAPI 却声明 nullable=true，纳入 AUD-WEBUI-CTR-010 的影响范围。
+4. WebUI API Client `getIndexConstituents` 支持 symbol 编码、显式 source、as_of 参数和 AbortSignal 透传。API 测试已验证 URL 编码及 `source=tushare&as_of=...` 参数顺序；本轮未发现页面实际调用该函数，也没有成分表格的 DOM/质量语义回归测试。
+
+#### 35.6 差异登记
+
+**AUD-WEBUI-CTR-031：历史权重报告缺少最大陈旧度策略和专门诊断（P2，时间语义）**
+
+- 证据：Tushare 历史查询最多回溯 120 个月，返回最近一个不晚于 as_of 的报告日；Service 只验证 provider_report_date 不晚于 as_of，没有报告日距请求日期的最大间隔或专门 stale reason。
+- 影响：较旧报告仍可作为非空 degraded 数据返回。虽然响应包含 provider_report_date 和通用“报告日不等于生效区间”原因，但消费者若忽略报告日/质量字段，容易将其误读为接近请求日的权重快照。
+- 责任方：Market Data Service / Data Contract。
+- 关闭条件：定义指数权重报告的最大允许陈旧度（按指数/数据源可配置），超过阈值时明确标记 stale/degraded 或 unknown，并补报告日期边界、跨月回退、长期无报告测试；WebUI 展示请求日期与实际报告日期及二者间隔。
+
+**AUD-WEBUI-CTR-032：历史成分名称来自当前证券目录，缺少历史名称 PIT 证据（P2，证券身份语义）**
+
+- 证据：Tushare 历史成分查询虽省略 list_status 以包含退市证券，但仍通过当前 `stock_basic` 查询 `ts_code,name` 并将当前目录名称填入历史成分项；没有按报告日还原历史证券名称的来源字段或测试。
+- 影响：发生更名、吸收合并或退市更名时，历史报告可能显示当前目录名称，而非当时名称。代码身份可正确，但名称展示不具备历史 PIT 语义。
+- 责任方：Market Data Provider / Data Contract。
+- 关闭条件：如产品需要历史名称，接入带生效日期/可用时间的历史证券主数据并按报告日关联；否则在契约中明确 name 是当前名称补充字段，不是历史名称，并在 UI 中避免将其标成历史名称。
+
+**AUD-WEBUI-CTR-033：指数成分 API 没有 WebUI 页面消费闭环（P2，接入缺口）**
+
+- 证据：WebUI API Client 有 getIndexConstituents 函数且 API 测试验证 URL/source/as_of 参数；已检查的市场概览和个股研究页面未发现调用点，浏览器测试没有指数成分列表、权重、报告日期或降级状态渲染覆盖。
+- 影响：用户目前没有页面入口查看指数成分；历史查询的报告日与 as_of 差异、权重缺失、非完整覆盖和 degraded/unknown 语义无法通过页面验证。
+- 责任方：WebUI。
+- 关闭条件：确认是否纳入产品范围；若需要，接入目录/指数详情入口，展示指数代码、成分、权重单位、实际报告日期、请求 as_of、排除数、lower-bound 与质量原因，并补 API 和 DOM 测试；若暂不需要，标记为预留 API，不计入 WebUI 已接入能力。
+
+#### 35.7 本批结论
+
+- 当前成分与历史权重报告使用独立 Provider 能力；Service 不会把 Hithink 当前成分冒充历史成分。
+- Tushare 历史查询按月检索，选择不晚于 as_of 的最新 index_weight 报告日，最多回溯 120 个月；拒绝未来报告行，包含退市证券名称补充，并对 5000 行边界降级。
+- 权重按百分点表达，缺失不补零；当前服务端校验范围 0..100。没有对过滤后子集强制权重和为 100。
+- Tushare 当前没有成员有效区间、源端可用时间和系统观测时间；Service 将其历史结果保守降级，没有伪装为完整 PIT。报告日期与请求日期明确分开。
+- 新增 AUD-WEBUI-CTR-031、CTR-032、CTR-033（均 P2）；IndexConstituent.weight_percent 与 IndexConstituentSnapshot.provider_time 纳入 AUD-WEBUI-CTR-010。
+- WebUI API 请求测试存在，但没有页面消费。未发现已证实的历史报告日期越界或权重换算错误；历史名称、陈旧度和 UI 闭环仍待补强。
+- WebUI 维度 2 继续 partial。
