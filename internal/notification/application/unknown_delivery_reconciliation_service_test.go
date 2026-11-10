@@ -146,9 +146,9 @@ func unknownReconciliationServiceFixture(t *testing.T, outcome domain.ChannelLoo
 func TestUnknownDeliveryReconciliationServiceFailsClosedBeforeLookup(t *testing.T) {
 	readFailure := errors.New("snapshot read failed")
 	for _, tc := range []struct {
-		name string
+		name   string
 		reader consistencySnapshotReaderFake
-		want error
+		want   error
 	}{
 		{
 			name:   "reader error",
