@@ -1,186 +1,290 @@
 # PLAT-002 项目级契约冻结登记簿
 
 - 仓库：`Kasign/stock_data_provider`
-- 审查分支：`integration`
-- 审查基线 HEAD：`bb8cf3495b9591ede2a29b554d9121b06b983f0b`
-- 审查日期：2026-11-09
-- 登记簿版本：`0.1.0-review`
-- 当前状态：`review_in_progress`（尚未整体冻结）
+- 核验分支：`origin/feat/design_doc`
+- 核验基线 HEAD：`b6dfc85ba214fe16268c8cba780641a8bfe15086`
+- 对照分支：`origin/integration`
+- 对照结果：`identical`（ahead=0、behind=0）
+- 登记簿版本：`0.2.2-review`
+- 当前状态：`review_in_progress`
+- 冻结结论：尚未整体冻结；当前无足够证据宣布 PLAT-002 全部通过
 - 决策责任：项目负责人
-- 执行方式：各模块执行窗口提供本模块生产方/消费者核验及证据；集成窗口汇总
+- 复核原则：模块实现者自审不等于独立生产方/消费者确认
 
-> 本文是项目级冻结结论与状态入口，不宣称所有契约已冻结。当前代码基线来自 integration；契约目录中已有的状态和证据快照主要形成于 2026-11-06，不能自动视为 2026-11-09 最新代码的验收结果。
+> 本登记簿是项目级契约状态与冻结结论的唯一权威入口。当前记录是核验起始快照；未逐项检查的契约不得因历史状态、模块 README 或旧 CI 记录而升级。
 
-## 1. 本轮结论
+## 1. 本轮核验结论（起始快照）
 
-本轮可以确认项目已具备跨模块契约目录、模块职责划分、依赖方向和大量 DTO/Port/Schema 设计资料；但不能据此宣布 PLAT-002 整体冻结。
+### 1.1 集成基线
 
-主要原因：
+GitHub 远端 ref 核验：
+- `feat/design_doc`：`b6dfc85ba214fe16268c8cba780641a8bfe15086`
+- `integration`：`b6dfc85ba214fe16268c8cba780641a8bfe15086`
+- GitHub compare：`identical`，0 个 ahead / 0 个 behind。
 
-1. integration 中已有的项目级目录 `doc/整体任务规划/02-契约治理/跨模块契约目录与冻结状态.md` 仍声明其权威维护分支为 `feat/design_doc`，尚未完成权威维护权迁移决议。
-2. 该目录记录的多项关键契约仍为 `pending_evidence`，例如 GOV-CTR-003、GOV-CTR-006、PLAT-CTR-001～007，以及若干 Data/News/Quant/Research/Researchflow/LLM/Notification/Integration 契约。
-3. 多个模块 README 明确说明部分代码、Schema、Golden、消费者映射或 CI/真实环境证据尚未完成；模块自身实现或测试不能代替跨模块消费者验收。
-4. Server README 明确定位 Server 为唯一 Composition Root，但实际依赖图、共享资源唯一性、启动失败回滚、Worker drain、Migration 汇总和生产生命周期仍需集成证据。
-5. 本次只读取 integration 上的代表性项目/模块文档和契约目录；没有对所有 Go 源码、全部 Schema/Golden、全部消费者调用点进行逐项静态审计，也没有在本次 SHA 上执行全仓 CI。
+因此，当前 `feat/design_doc` 的代码树与 `integration` 完全一致，可以确认本轮核验基线包含当前 integration 聚合结果。此结论只针对该精确 SHA，不代表所有模块开发分支最新 HEAD 均已合入。
 
-因此本次状态定为 `review_in_progress`，不是 `frozen`。不得把本文件的创建提交视为契约冻结完成。
+### 1.2 已确认的代码结构事实
 
-## 2. 冻结状态定义
-
-| 状态 | 含义 | 使用条件 |
+| 领域 | 当前代码位置/入口 | 当前观察 |
 |---|---|---|
-| `pending_decision` | 关键语义、职责或安全边界未决 | 必须先由项目负责人裁决 |
-| `accepted` | 项目层面已确认语义和职责 | 可据此实现；仍不代表证据齐备 |
-| `pending_evidence` | 语义已有基线，但缺适用的机器契约、Golden、消费者映射或测试 | 可继续不依赖该证据的开发 |
-| `frozen` | 版本、定义、生产方与所有直接消费者证据、兼容性和安全测试齐备 | 可作为稳定项目契约基线 |
-| `deferred` | 明确延期、目标批次、触发条件及不阻断范围 | 仅阻断明确列出的调用点 |
-| `rejected` | 已否决并记录替代方案 | 不得再作为有效契约引用 |
+| Platform | `internal/platform/**` | 存在 config、diagnostics、fault、httpapi、httpclient、observability、security、storage、taskqueue |
+| Server | `cmd/analysis-api`、`internal/server/**` | 根入口委托 Bootstrap；Bootstrap 当前仍装配旧 Analysis 链路 |
+| Data | `internal/marketdata/**` | 已有 app/Application、bootstrap、provider、repository、HTTP transport 等分层 |
+| Data 旧/并行入口 | `cmd/market-data`、`services/market-data/**` | 独立 Market Data 启动入口和服务部署目录仍存在 |
+| News | `internal/news/**` | 当前根 Go Module 内的领域代码 |
+| Research | `internal/research/**` | 当前根 Go Module 内的领域代码 |
+| Researchflow | `internal/researchflow/**` | 当前根 Go Module 内的领域代码 |
+| Quant | `internal/quant/**` | 当前根 Go Module 内的领域代码 |
+| LLM | `internal/llm/**` | 当前根 Go Module 内的协议适配代码 |
+| Notification | `internal/notification/**` | 当前根 Go Module 内的领域与存储代码 |
+| WebUI | `web/**` | 浏览器端实现 |
 
-`implemented`、`closed`、单模块 CI success、Fake 测试通过、文档已写，不是契约状态，也不能单独支持 `frozen`。
+同时存在根目录 `go.mod` 和独立 `go-core/go.mod`。根 Module 为 `example.com/stock-analysis-flow`；`go-core` 是独立 Module。不能把“模块目录已经存在”解释为旧 Module/服务迁移已完成。
 
-## 3. 项目级架构与职责基线
+### 1.3 Server 当前事实与目标差异
 
-以下内容在 integration 现有契约目录和专项文档中具有一致的设计依据，可作为本轮评审的候选基线；其生产接入仍按各项证据门禁单独验收。
+已读取 `cmd/analysis-api/main.go`、`internal/server/bootstrap/bootstrap.go`、`internal/marketdata/bootstrap/module.go`：
 
-| 领域 | 项目级约定 | 责任边界 |
+- `cmd/analysis-api` 调用 `internal/server/bootstrap.Run`，Root Server 入口已落位。
+- Bootstrap 当前显式使用旧 Analysis 相关的 `internal/adapters/marketdata`、`internal/adapters/storage/mysqlredis`、`internal/service`、`internal/platform/httpapi` 和 `internal/platform/taskqueue`。
+- Bootstrap 已注册部分 News、Notification、Research Storage Migration，并创建共享存储、认证器、诊断与生命周期组件；这不等于所有业务模块 Application Port、Handler、Worker 均已完成装配。
+- `cmd/market-data` 仍可独立创建 Data Store/Cache、运行 Data Migration、启动 Market Data Handler。
+- Data Module 的 Dependencies 注释表明 Store/Cache 和受控出站执行器由调用方创建并拥有；但当前独立入口与 Root Server 的实际装配关系仍需继续核验。
+
+因此，Server 是目标与现有根入口，但“所有模块已由唯一 Root Server 统一装配”和“Data 已完成同 Module 迁移”目前均不能确认。
+
+### 1.4 本轮尚未完成
+
+- 尚未逐项审计十个模块全部公开 Port、HTTP Handler、DTO、Schema、Golden 和消费者调用点。
+- 尚未完成全部依赖边的静态 import 核验及 Repository/SQL 越界检查。
+- 尚未逐条核对所有 Migration 的注册、顺序、幂等和失败恢复。
+- 尚未在本基线运行全仓 gofmt、go test、race、vet、Schema Validator 或真实 MariaDB/Redis/Gateway/Provider E2E。
+- 尚未取得各模块独立窗口对生产方/消费者契约的确认；GPT 自己实现和 Review 的记录不能替代该确认。
+
+
+### 1.5 本轮补充核验的关键代码证据
+
+以下 Blob SHA 均来自本轮核验基线 b6dfc85ba214fe16268c8cba780641a8bfe15086，可用于精确定位；这些事实不等于契约已冻结。
+
+| 核验主题 | 代码/文档证据 | 当前确认事实 | 契约影响 |
+|---|---|---|---|
+| Fault 内部/外部边界 | internal/platform/fault/fault.go Blob ef831c8371d1b9a0aba44e6e5d05096d49e928f3；internal/server/bootstrap/http_middleware.go Blob 0ba274509dd14e3da3e1d936b19181fb44126851 | Platform Fault 全字段 json:"-"；Server 映射独立 publicError（class/code/message/retryable），Request ID 以响应 Header 传播 | PLAT-CTR-001 需核对 Data/News/旧 Analysis 的错误 envelope、HTTP 状态映射和 request_id 兼容字段 |
+| Bearer 与 Session | internal/platform/security/security.go Blob b9a21dd479684ef39c1261ee3587ebf79edcbbc9；internal/platform/security/session.go Blob 1fb7cff7d76216092ddc0724d2f249137f8b687a；internal/server/bootstrap/router.go Blob 2597c998236a8e981773635eced7915a28d6b2ed | Platform 同时存在 Bearer Authenticator/RoutePolicy 和独立 SessionStore 原语；当前 Server 路由矩阵实际只注册 Anonymous/Owner Bearer，没有 owner_session 路由策略或 Session Middleware | PLAT-CTR-003 / SRV-CTR-001 存在实现与目标接入差异；Platform L1 不代表 Server A2 |
+| Request ID | internal/platform/observability/request_id.go Blob b9e2d9ddc298ba23bead6ed1fcc9d6ec58ef707b；Server Middleware Blob 0ba274509dd14e3da3e1d936b19181fb44126851 | 旧 Middleware 默认信任入站 ID 且已 Deprecated；Server 使用 MiddlewareWithOptions 零值配置重新生成 ID | PLAT-CTR-002 的 Root Server 入口策略有代码证据；其他入口/Worker/跨进程传播仍需逐项核验 |
+| Diagnostics | internal/platform/diagnostics/observation.go Blob 3c0b351cf340a87d18434609a7afd6b0fb37fa28；runner.go Blob b93f6ef40f525f86f29e29eb9250e36d2d890cdf | Observation 状态为 healthy/degraded/unavailable/skipped/failed；非 healthy 要求 reason_code；Runner 会将 Required Check 的 skipped 归一为 failed | PLAT-CTR-004 需核对 Server/领域 Adapter 是否保留原始状态、Required 语义及 evidence_ref |
+| HTTP Client/流 | internal/platform/httpclient/client.go Blob 5e62857b6f85fe0f8e88fd5e5e07dde06a2c4508；stream.go Blob 3c2b3bd0736ac18aeeb23abad9e8f5f52528c30b | Platform 提供逐请求 DestinationPolicy 和独立流式 API | PLAT-CTR-005 需逐消费者确认 BoundDoer 注入、Body Close、取消和生产出口策略 |
+| Server 组合根 | internal/server/bootstrap/bootstrap.go Blob 92df61265f173251ac7811f99a7ab9f41ac470ed；internal/server/migration/registry.go Blob dbb81dec2f1ab18a647ecea16a9ac6b0da03b483 | Bootstrap 当前仍创建旧 Analysis Runner/TaskQueue/HTTP API；Migration Registry 当前只注册 News、Research、Notification 三个 namespace | SRV-CTR-001 / PLAT-CTR-006 与目标“全模块统一装配/迁移汇总”存在差距；需逐模块区分无 Migration 与漏注册 |
+| Data 独立入口与 InProcess 能力 | cmd/market-data/main.go Blob 06fc460cbea38c1aad34b9e23c5124004a91f3fe；internal/marketdata/bootstrap/module.go Blob 859df0ca2fc26f02dab2399fe684617da9f2fc89；internal/marketdata/httpapi/server.go Blob 7b54b54b3c6182ecab830c2c43f91c548dc60dba | 独立入口自行创建 Store/Cache、执行 Migration、启动 Handler；Module 已提供 Application、Handler、InProcessHandler 和 Root 注入依赖结构 | DATA/INT/SRV 契约必须区分能力已具备与 Root 实际接线；InProcessHandler 不含认证中间件，必须由 Root 包装 |
+| WebUI 凭据和入口 | web/src/api.js Blob b8bcbee5908b43bfa1bc2ca744363190af38287f；web/default.conf.template Blob d13735e1da540ff24a5c59b7a5f0febf317c4161 | WebUI 将 Data API Key 写入 localStorage 并发送 X-API-Key；Nginx 将 /market-api 直接代理到 Market Data 8091，将 /analysis-api 代理到 Analysis 8092 | PLAT-CTR-003 / DATA-CTR-006 / SRV-CTR-001 与 Root Server 单一外部入口、HttpOnly Session 目标存在差异 |
+| Data 数值类型 | internal/marketdata/app/port.go Blob ea4720121f2832610e3906389f1bf4535d7a9549；internal/marketdata/httpapi/openapi.yaml Blob cd8a6e3dfb8e3162ee789b11e883be9283c59f32 | Application Port 和当前 OpenAPI 1.1.0 的价格/金额字段使用 float64/number；现有契约材料另有 v1 number 与 v2 Decimal 演进约定 | DATA-CTR-005 需确认当前生产版本、Quant 实际消费版本、转换精度及 v2 Decimal 是否为本轮冻结范围 |
+| Go Module | 根 go.mod Blob 2ce4960db7df0e1ba4199aaa2878824c9fdd11cd；go-core/go.mod Blob 9af6bf4b64eae9eb3f6adf002a2d66f049ae6156 仍是独立 Module | 根 Module 与 go-core Module 同时存在 | GOV/SRV/Data/Researchflow 需核对旧 Module 调用和退役门禁，不能仅按目录认定迁移完成 |
+
+### 1.6 当前确认的跨模块差异
+
+1. **浏览器入口差异**：WebUI 仍持有并发送 Data API Key，Nginx 仍把 Market Data 与 Analysis 转发到两个不同上游；这与 Root Server 唯一外部 API 宿主及浏览器 HttpOnly Session 目标不一致。属于迁移差异，不在本次改业务代码。
+2. **Server 装配差异**：Root Server 已有入口和 Bootstrap，但当前 Bootstrap 仍以旧 Analysis 为中心；Data InProcess Module 尚未被该 Bootstrap 实际构造，Root Migration Registry 仅注册 News/Research/Notification。
+3. **Session 接入差异**：Platform Session 原语已存在，Server 当前路由仍仅接受 Anonymous/Owner Bearer；不得宣称浏览器登录已端到端接入。
+4. **Data 数值版本差异待核**：当前 OpenAPI 1.1.0 和 Application Port 使用 number/float64；是否符合现有 v1 兼容契约、v2 Decimal 的切换条件及 Quant 消费边界，仍需按实际调用点确认。
+5. **历史 Platform 包归属**：internal/platform/httpapi 和 internal/platform/taskqueue 实际依赖旧 Analysis Domain/TaskQueue；现有项目总览与 Server 文档已将其定义为历史兼容代码，不是通用 Platform 原语。按既有架构决议禁止新增领域消费者，后续由 Server/旧 Analysis 迁移处理，不再列为待项目负责人重新裁决。
+
+### 1.7 模块公开接口形态与装配差异
+
+| 模块 | 当前公开/应用层形态 | 当前可确认的缺口或待核 |
 |---|---|---|
-| Platform | 提供 Fault、Request Context、Security 原语、Config/Secret、Diagnostics Runner、受控 HTTP Client、Storage/Migration 执行原语 | 不拥有领域 DTO、Repository、领域授权、业务状态机或领域 Migration 内容 |
-| Server | 唯一 Composition Root 和进程运行入口；负责共享资源创建、DI、路由、中间件、Migration 汇总注册、Worker 生命周期和优雅关闭 | 不实现领域规则、不拥有模块 Repository/业务状态 |
-| Data | 拥有行情/基础数据 Provider、标准化、单位、质量、PIT、Repository 和领域 Migration | 目标为 Root Server 同 Go Module/同进程模块化单体；HTTP Adapter 可保留兼容/远程用途 |
-| News | 拥有来源授权、采集、内容标准化、版本、证券关联、证据查询和领域诊断 | 首期为根 Go Module 内部能力，不默认建设独立公网 News 服务 |
-| Research | 拥有 Context、Evidence、Event、Claim、Hypothesis、Scenario 等研究领域对象 | 只通过 Data/News 等公开 Port/DTO 消费事实和证据 |
-| Quant | 拥有确定性 Indicator、Factor、Metric、风险计算和结果模型 | 消费 Data 公开 DTO；不依赖 Research 或 Researchflow 私有实现，不调用 LLM |
-| Researchflow | 唯一跨模块流程编排者，拥有 Run/Stage/Attempt、状态机、输入快照和执行约束 | 只调用各模块公开 Application Port，不访问其 Repository/Domain 私有对象 |
-| LLM | 拥有模型 Provider Adapter、Responses JSON/SSE 协议解析、Schema/输出校验 | 不拥有 Tool Registry/授权/执行，不复制 Platform HTTP Client |
-| Notification | 拥有事件 Schema Registry、Inbox、Subscription、Delivery/Attempt、Channel Adapter 和投递诊断 | 不拥有生产方 Outbox/Dispatcher，不反向依赖业务模块 |
-| WebUI | 只消费服务端 API，负责浏览器交互和展示 | 不在前端复制领域质量判断、权限决策或服务端业务规则 |
+| Data | internal/marketdata/app 提供 MarketDataReader；bootstrap.Module 暴露 Application、Handler、InProcessHandler；HTTP API 有按用例拆分的 Application 接口 | Root Bootstrap 尚未实际构造该 Module；InProcessHandler 不含认证/传输中间件；Data API v1 number 与 DATA-CTR-005 v2 Decimal 必须分版本 |
+| News | internal/news/app 有 Provider、ProviderSet、HTTPDoer、Evidence Query Facade、Authorization Snapshot/Read | 需核实 Server 是否注入生产 Provider、BoundDoer、Owner Authorizer 和实际 Evidence Query Port；当前 Root Bootstrap 未装配 News Application |
+| Research | internal/research/application 有 Application 用例，storage 有 Repository/Migration | 需核实 Server/Researchflow 的真实 Adapter 与 Owner AuthorizationRef 消费；Root 当前只注册 Research Storage Migration，不等于装配 Application |
+| Researchflow | application 有 StageExecutor、WorkerStore、Worker、Scheduler、Finalizer；storage 有 MySQL Repository/Migration | README 中“当前不包含 Worker/Repository”的说法与代码目录不一致；更准确的缺口是具体 StageExecutor 生产 Adapter、Server Worker/Scheduler 生命周期和端到端流程接线 |
+| Quant | 当前 internal/quant 由 domain、indicator、factor、manifest、metric、registry、result、risk、trend 等包组成 | 未发现独立 application/Facade 包；Quant README 又声明 Researchflow 是 Quant Application 的直接消费者。需核对是否存在受支持的 Application Port，不能让 Researchflow 直接依赖零散内部包 |
+| LLM | internal/llm 根包提供 Provider Port、Responses JSON/SSE Adapter、Schema 和 Fault 映射 | 需要 Server 注入 Platform BoundDoer.OpenStream 的真实装配和 Researchflow 消费者 Contract Test；LLM 不拥有 HTTP Client/SSRF 策略 |
+| Notification | application 定义 Repository/Channel/Delivery 等 Port；storage 有 MySQL Adapter/Migration | README 已指出完整 Dispatcher/Worker 和生产 Fanout 仍未闭环；需核实 Server Worker/Relay/事件生产方接线 |
+| Server | Bootstrap 当前仍装配旧 Analysis；Migration Registry 只注册 News/Research/Notification | Data、Researchflow、Quant、LLM、Notification Worker 等完整装配未被当前 Bootstrap 证明 |
 
-### 3.1 依赖方向
+### 1.8 模块依赖方向抽样核验
 
-现有项目级契约目录给出的消费者到生产方逻辑依赖基线：
+以下为当前基线的公开接口/核心 Application 文件抽样，不是全仓 import 图的最终结论：
 
-- Data、News、LLM、Notification 依赖 Platform 公共技术原语。
-- Quant 消费 Data；风险事件按明确的事件契约发布。
-- Research 消费 Data、News 的公开事实/证据契约。
-- Researchflow 编排 Data、News、Quant、Research、LLM、Notification 的公开 Application Port。
-- Server 作为唯一组合根装配各模块。
-- WebUI 通过 Server 对外暴露的 HTTP 契约访问服务。
+| 模块/包 | 当前抽样 import 事实 | 依赖方向判断 | 尚待完成 |
+|---|---|---|---|
+| Quant indicator/factor/risk | indicator.go、factor.go、risk/decision.go 仅引入 Go 标准库；result.Repository 仅依赖 Quant 自身 manifest | Quant 核心计算未直接依赖 Data、Research、Researchflow、LLM、Notification，符合纯计算边界 | 全包 import 图、Application Facade、Data v2 输入 Adapter 和 Researchflow 调用点 |
+| Research Application | application.go 依赖标准库与 Platform Fault，不直接 import Quant/News/Researchflow | 符合 Research 不依赖 Quant/Researchflow 的目标方向 | Researchflow 对 Research Application 的真实 Adapter、AuthorizationRef 与 Data/News Evidence 读取 |
+| Researchflow Application | executor.go/worker.go 主要依赖自身 domain/template；StageExecutor、WorkerStore 作为注入接口 | 编排层没有在抽样文件中直接 import Data/News/Quant/Research/LLM 实现，依赖反转方向正确 | 具体 StageExecutor Adapter、生产 Worker 装配和跨模块调用点 |
+| News Application | app/ports.go 依赖自身 domain 与 net/http，定义 Provider/ProviderSet/HTTPDoer；EvidenceQueryFacade 组合本模块用例 | News 对出站 HTTP 使用窄 Port，不直接依赖 Platform 实现，适合由组合根注入 BoundDoer | Root ProviderSet/BoundDoer 实际注入、Research/Researchflow 调用和内容授权 |
+| Notification Application | application/ports.go 依赖自身 domain，定义 Repository/Lease/Attempt 等 Port | Notification 不直接依赖 Researchflow 或事件生产方领域包，方向符合预期 | Server Relay/Worker、各生产方 Outbox Adapter 和真实渠道实现 |
+| LLM | llm.go 提供模型协议类型；platform_fault.go 单独做 Platform Fault 映射 | LLM 协议适配不应依赖业务模块；Platform Fault 依赖由 Adapter 边界承接 | Platform BoundDoer/OpenStream 注入、Researchflow 真实消费者和流式终态测试 |
+| Server | bootstrap.go 当前仍 import 旧 Analysis、internal/platform/httpapi、taskqueue 和 legacy adapters；未见新业务模块 Application Facade 的完整注册 | Root 入口存在，但新的模块依赖装配尚未形成完整 Composition Root | 完整 import DAG、构造图、Handler/Worker/Migration 注册矩阵 |
 
-模块同进程不构成绕过公开 Port、访问对方 Repository/SQL 或依赖私有领域对象的理由。实际依赖若与该图不一致，先登记差异和决策，不以“能编译”作为接受理由。
+抽样文件 Blob：Quant indicator 802b0aeb9189e4537233b661700dab2c53c14d59；Quant factor 24a4863013bedad2411a6b107ba82998f483ceb7；Research Application 38998f41d16a2fafc2e9e8c33c9fe43f07a140c3；Researchflow Executor 1b8a6a3f6ac0df79a9ab72bca70b787788f05c9a；Researchflow Worker c08ee149de33742fea5ca1b30384308cc72cdd1b；News Ports da1d571deba9dc038db4270c72ec5c7a025ce369；Notification Ports 2cda82ab5da00aab4c8898f9ac0e384fb9c32c66；LLM llm.go cb7e0bb9a8b79a31d0d3a9bd213d03423354c87a。
 
-### 3.2 Outbox / Inbox 所有权
+### 1.9 Schema / Golden 文件盘点（存在性，不代表校验通过）
 
-- 业务生产方拥有自己的 Outbox、Dispatcher/Relay、发布状态和重试。
-- Server 负责依赖注入、运行角色和进程生命周期装配。
-- Notification 负责 Inbox、事件校验、订阅匹配和 Delivery/Attempt。
-- Platform 只提供 DB/事务、HTTP、日志、Fault、Diagnostics 等技术原语。
+本轮只核对文件路径和 Git Blob 存在性；没有运行 JSON Schema Validator、Golden 复算或模块 Contract Test。文件存在不能标记为验收通过。
 
-禁止把生产方 Outbox/Relay 迁入 Notification、Server 或 Platform。
-
-## 4. 关键公共语义候选基线
-
-| 主题 | 当前候选约定 | 证据/未决边界 |
+| 模块/契约域 | 当前文件事实 | 覆盖与缺口 |
 |---|---|---|
-| JSON 数值 | 精确价格/金额使用 Decimal string；integer 用于离散计数；number 仅用于允许浮点误差的统计量；单位、scale、舍入按字段声明 | 公共规则已在既有目录登记为 accepted；具体字段仍需领域 Schema/Golden |
-| 时间与 PIT | 绝对时间 RFC3339Nano UTC；交易日 YYYY-MM-DD 并按 Asia/Shanghai 解释；system_as_of、available_at、published_at、valid_time、system_observed_at 等语义独立 | 项目语义已接受；具体 DTO 映射和历史可见性测试未全部完成 |
-| ID | request_id、originating_request_id、correlation_id、event_id、idempotency_key 各自有独立作用域，不互相替代 | GOV-CTR-003 仍 pending_evidence，需 Header/Context/Worker/Event Golden |
-| Schema 版本 | DTO/Event 独立 schema_version；破坏性语义变化升 MAJOR；已注册事件 Schema 不可原地改写 | 具体消费者兼容矩阵和测试仍需补齐 |
-| Fault | 内部 Fault 不直接序列化；Transport 映射独立公开 DTO；retryable 是候选提示而非重试命令 | PLAT-CTR-001 仍 pending_evidence，HTTP Mapper/Golden/消费者测试待证 |
-| Diagnostics | Platform 负责 Check 执行/超时/并发/基础聚合；领域负责 reason_code、质量语义和 evidence_ref 解释授权 | 领域 Adapter 映射和消费者证据逐项核验 |
-| Security | Platform 提供身份/Scope 技术原语；Server 建立可信认证上下文；资源授权和实时复核归资源领域 | 授权引用、撤销竞态、可信上下文注入仍需证据 |
-| HTTP Client | Platform 提供 DestinationPolicy、DNS/IP 校验、受控 Dial、重定向逐跳验证、超时/响应上限 | A1 包级能力不等于 Server/领域真实 A2 或生产网络 A3 |
-| Storage/Migration | Platform 提供连接生命周期/执行原语；领域拥有表、Repository、Migration 内容；Server 汇总注册并管理资源生命周期 | 需要真实 Bootstrap、迁移失败恢复和共享资源生命周期证据 |
-| 长任务 | Researchflow 拥有 Run/Stage/Attempt 和领域状态机；Platform 不建设万能工作流 | Repository/Worker/恢复/并发证据需逐项完成 |
+| Platform | doc/platform/schema 有 1 个 PLAT-CTR-004 Observation 1.0.0 Schema；doc/platform/golden 有 3 个 Golden（Request ID 1、Observation 2） | PLAT-CTR-001/003/005/006/007 未发现独立机器 Schema；不等于 Go API 单测不存在 |
+| Data | internal/marketdata/httpapi/openapi.yaml 当前为 1.1.0；项目 schema/golden 有 DATA-CTR-008 Manifest 1.0.0 各 1 个 | DATA-CTR-005 v2 Decimal Schema 当前未发现；DATA-CTR-001～004/006/007 仍需逐字段/行为契约盘点 |
+| News | doc/news/schema 有 NEWS-CTR-001 的 4 个 1.0.0 Schema；doc/news/golden 有 3 个 Golden；项目 schema/golden 另有 NEWS-CTR-002 Authorization Binding 各 1 个 | NEWS-CTR-003 PIT/Cursor/排序/去重未发现独立 Schema/Golden |
+| Quant | doc/quant/schema 有 7 个 1.0.0 Schema；doc/quant/golden 有 Indicator 9、Factor 3、Result 9 个 Golden；项目 schema/golden 另有 QNT-CTR-005 Manifest 各 1 个 | 文件覆盖了部分 QNT-CTR-001～005；仍需核对 Schema 与实际导出 DTO/Registry/消费者一致 |
+| Research | doc/research 下未发现 schema/golden 目录；项目 schema/golden 有 RSC-CTR-001 Evidence 1.0.0 各 1 个 | RSC-CTR-002 Event/Claim/Hypothesis/Scenario 未发现专属 Schema/Golden |
+| Researchflow | doc/researchflow/schema 有 4 个 1.0.0 Schema；doc/researchflow/golden 有 11 个 Golden | 需逐项映射 FLOW-CTR-001～004，不能把 Run/Stage/Attempt DTO 文件存在视为消费者测试完成 |
+| LLM | doc/llm/schema 有 6 个 1.0.0 Schema；internal/llm/testdata/json 与 sse 有 JSON/SSE 输入和 expected fixtures；未发现 doc/llm/golden 目录 | Fixture 存在，但需核对是否覆盖所有 LLM-CTR-001～003 终态/错误/断流语义，并确认 CI 实际执行 |
+| Notification | doc/notification/schema 有 4 个 1.0.0 Schema（Envelope + 3 类事件）；doc/notification/golden 有 6 个 Golden | NTF-CTR-001 有基础覆盖；NTF-CTR-002/003 的状态机、幂等、渠道和重试覆盖需逐项映射 |
+| 项目公共授权 | doc/整体任务规划/schema 有 6 个 Schema；doc/整体任务规划/golden 有 8 个 Golden | 覆盖 GOV-CTR-006、DATA-CTR-008、NEWS-CTR-002、QNT-CTR-005、RSC-CTR-001；不覆盖全部 GOV/DATA/业务契约 |
 
-## 5. 契约分域状态总览
+## 2. 状态定义
 
-下表是本次基于 integration 已有项目级契约目录及可见专项 README 形成的审查索引。具体单项状态以详细登记目录和生产方机器契约为准；没有重新核验的内容不升级状态。
-
-| 契约域 | 当前判断 | 主要缺口 |
+| 状态 | 含义 | 判定规则 |
 |---|---|---|
-| GOV 公共语义 | 部分 accepted，部分 pending_evidence | ID 传播、AuthorizationRef Schema/Golden/撤销测试 |
-| PLAT 公共原语 | 设计与包级实现已推进；项目契约未整体 frozen | Fault HTTP 映射、Request ID 消费者、Security 接入、Diagnostics Adapter、HTTP Client A2/A3、Storage 装配证据 |
-| DATA | 有既有 API/领域契约；本次未逐接口审计 | Decimal 精度、复权/PIT/质量、同进程 Principal/Scope、AuthorizationRef、Consumer DTO |
-| NEWS | 领域设计和部分实现推进 | AuthorizationRef、Cursor/Snapshot、Query Facade、PIT 和当前授权复核 |
-| RSC Research | 领域 DTO/PIT/证据语义有设计基线 | Schema/Golden、引用完整性、授权与真实 Adapter |
-| QNT | Indicator/Factor/Registry 实现推进 | Registry Schema/Golden、Data 输入适配、结果授权和读取复核 |
-| FLOW Researchflow | 状态机和流程设计有基线 | Stage Output Schema/Golden、Provider Adapter、Repository/Worker/恢复证据 |
-| LLM | JSON/SSE Provider 适配已实现一部分 | 当前 integration 与 Platform 流式 API 的版本差异需重新核实；包级 CI 和真实 Gateway E2E |
-| NTF Notification | Event/Delivery/Repository 部分实现 | Inbox、Fanout/Dispatcher/Worker、事件生产方映射和真实 MariaDB/渠道证据 |
-| SRV Server | 唯一组合根设计已明确 | 实际依赖图、DI、路由、Migration 注册、启动回滚、Worker drain、关闭顺序 |
-| WEB WebUI | 浏览器端契约映射资料存在 | 登录 Session/CSRF/权限与 Server 真实接口联调、当前 HEAD Browser Smoke |
+| `confirmed` | 当前代码/文档事实已核实 | 必须附精确路径、符号/行范围或 Blob SHA；不代表已冻结 |
+| `has_difference` | 实际代码、专项文档或项目约定存在不一致 | 必须记录两侧证据、影响和归属 |
+| `pending_decision` | 语义、架构取舍、安全边界或所有权尚待裁决 | 列出选项、建议、影响，等待项目负责人 |
+| `pending_evidence` | 语义已有候选基线，但机器契约/消费者/测试证据不足 | 不得标记 frozen |
+| `deferred` | 有明确延期理由、触发条件和不阻断范围 | 不得用来掩盖关键语义未决 |
+| `not_applicable` | 对该契约/消费者关系确实不适用 | 必须写明理由 |
+| `frozen` | 该 SHA 上满足全部适用冻结门禁 | 必须记录版本、生产方、全部直接消费者、Schema/Golden、双方测试、兼容与安全证据 |
 
-### 5.1 当前明确不能宣称 frozen 的事项
+`implemented`、`accepted`、`closed`、单模块 CI success、Fake 测试通过和文档已写均不是冻结状态。
 
-- PLAT-CTR-001～007：Platform 候选契约及包级证据不能代替项目消费者/Server 接入证据。
-- GOV-CTR-003、GOV-CTR-006：跨请求/异步/事件 ID 传播以及 AuthorizationRef 仍需机器契约和消费者/撤销证据。
-- DATA/NEWS/Research/Quant/Researchflow/LLM/Notification：各自待补 Schema、Golden、Contract Test 和直接消费者映射，按详细登记目录逐项判定。
-- INT-CTR-001：生产方事件映射、Outbox/Inbox 幂等和消费者测试未齐。
-- SRV-CTR-001：真实组合根装配、共享资源、启动失败回滚和关闭/Worker drain 证据未齐。
+## 3. 项目级契约登记总表
 
-## 6. 冻结门禁
+以下完整列出历史项目契约目录中已经分配的 43 个正式编号；本轮不新增或重编号。历史目录中 GOV-CTR-001/002/004/005 曾标记 accepted，但这只是历史语义评审状态，不是当前基线的冻结状态。当前状态按本轮代码、机器契约和消费者证据重新判定。未取得当前证据的条目一律不得继承历史 accepted/frozen。
 
-每条契约按适用性完成以下项目；不适用必须写明理由，不得留空后直接通过：
+| 契约编号 | 契约主题 | 定义方 | 直接消费者 | 当前权威定义/证据入口 | 契约版本 | 当前审查状态 | 本轮验收重点 |
+|---|---|---|---|---|---|---|
+| GOV-CTR-001 | JSON 类型、Decimal、整数、比例、null/缺失 | 项目级规则；各 DTO 生产方 | 所有 DTO 消费者 | 各生产模块 Schema/DTO；旧目录保留历史规则 | 规则版本待核验；字段 Schema 分别版本化 | `pending_evidence` | 类型、精度、scale、舍入、范围、required/nullable/omitempty、unknown/zero 语义和 Golden |
+| GOV-CTR-002 | 时间、交易日、时区、PIT、system_as_of | 项目级时间语义；Data/News/Quant/Research/Researchflow | 所有历史研究及执行消费者 | 各领域时间字段定义；旧目录保留历史规则 | 规则版本待核验；字段 Schema 分别版本化 | `pending_evidence` | system_as_of、available_at、published_at、occurred_at、valid_time、fetched_at、normalized_at 映射；UTC/RFC3339Nano、Asia/Shanghai 交易日、严格 PIT |
+| GOV-CTR-003 | ID、Request/Correlation/Event/Idempotency 作用域 | Platform 提供 Request ID 原语；各模块拥有领域 ID | Server、所有模块、Worker、事件消费者 | Platform observability；各模块事件/任务 DTO | 规则版本待核验；Golden 待核验 | `pending_evidence` | ID 作用域、生成方、异步传播、幂等 fingerprint、跨进程关联和 Header/Context Golden |
+| GOV-CTR-004 | Schema 版本、兼容、废弃和迁移 | 各契约生产模块；项目级规则由治理登记 | 所有直接消费者 | 各模块 Schema Registry；doc/contract 版本规则 | 规则版本待核验；兼容矩阵待核验 | `pending_evidence` | 每个 DTO/Event 的版本、兼容级别、未知字段/枚举、废弃窗口、迁移和回滚 |
+| GOV-CTR-005 | 契约状态、冻结证据和变更审批 | 项目契约治理 | 所有模块 | doc/contract/README、登记簿、决策记录 | 0.2.4-review（治理规则） | `pending_evidence` | 冻结门禁、证据 SHA、生产方/消费者确认、变更审批和解冻规则 |
+| GOV-CTR-006 | AuthorizationRef 公共审计快照结构与引用语义 | Data、News、Quant、Research 分别签发各自资源授权快照；公共结构由项目治理 | Research、Researchflow 及受限资源消费者 | 各模块签发 Schema；旧目录 GOV-CTR-006 机器契约/Golden | 1.0.0（2 Schema / 4 Golden） | `pending_evidence` | Principal/Resource 映射、Scope、purpose、snapshot fingerprint、过期/撤销、当前授权复核和竞态 |
+| PLAT-CTR-001 | Fault 结构与分类 | Platform | Server、所有服务端模块 | doc/platform/08 第 4 节；internal/platform/fault | Go API 版本待核验；未见独立 Schema/Golden | `pending_evidence` | Fault 内部结构、HTTP Error DTO、状态码、错误码注册、Retryable 语义和各模块映射 Golden |
+| PLAT-CTR-002 | Request Context 与身份关联原语 | Platform | Server、所有服务端模块、Worker | doc/platform/08 第 5 节；observability/security Context | Request ID Golden 已有；Schema 未见 | `pending_evidence` | 可信入口、Request ID、Principal/Scope 传播、异步 Context、取消和出站 Header 覆盖 |
+| PLAT-CTR-003 | 身份、授权、ServiceKey、Secret 边界 | Platform（认证原语）；Server（入口装配）；领域（资源授权） | Server、Data、News、Research、Quant、Researchflow、WebUI | doc/platform/03、08、18；Server router/bootstrap | Bearer/Session 原语版本待核验；Schema 未见 | `has_difference` + `pending_evidence` | Bearer/Session、RoutePolicy、Principal/Scope、AuthorizationRef、CSRF、Origin/Host、撤销和 fail-closed |
+| PLAT-CTR-004 | Diagnostics Observation 与 Runner | Platform（Runner）；领域（reason_code/质量语义） | Server、各领域模块、WebUI | doc/platform/04、08；internal/platform/diagnostics | 1.0.0（Observation Schema / 2 Golden） | `pending_evidence` | Observation Schema、required/skipped、聚合优先级、reason_code Registry、evidence_ref 和领域 Adapter |
+| PLAT-CTR-005 | HTTP Client、SSRF 与出口安全 | Platform | Data、News、LLM 及其他出站消费者 | doc/platform/05、15；internal/platform/httpclient | HTTP Client/Stream API 版本待核验；Schema 未见 | `pending_evidence` | DestinationPolicy、BoundDoer、DNS/IP、redirect、流式 Body 生命周期、超时/并发和真实消费者 A2 |
+| PLAT-CTR-006 | Storage、Repository、Migration 生命周期 | Platform（连接/Runner）；领域（Repository/Schema/Migration 内容）；Server（汇总注册） | 所有持久化模块 | doc/platform/05；各模块 storage/migration | Migration API 版本待核验；Schema 未见 | `has_difference` + `pending_evidence` | 连接唯一性、事务边界、namespace/version、Migration Registry、锁/失败恢复/Ready/Shutdown |
+| PLAT-CTR-007 | Typed Config 与 Secret 生命周期 | Platform（基础解析/脱敏）；各模块（配置 Schema）；Server（Bootstrap） | Server、所有服务端模块 | doc/platform/08 第 6 节；各模块 Config | Config API 版本待核验；Schema 未见 | `pending_evidence` | 配置所有权、读取时点、不可变快照、Secret 注入/轮换/脱敏和启动校验 |
+| DATA-CTR-001 | 标准数据 DTO、JSON/OpenAPI、字段缺失语义 | Data | Quant、Researchflow、Research（适用范围）、Server、WebUI | doc/api/数据层API清单.md；internal/marketdata/httpapi/openapi.yaml | OpenAPI 1.1.0（字段级 Schema 待逐项核验） | `pending_evidence` | Go JSON Tag/OpenAPI/Schema/required/nullable/omitempty/错误码/Golden 双向一致 |
+| DATA-CTR-002 | 行情单位、复权、交易日和时间口径 | Data | Quant、Researchflow、Research、Server | doc/api/数据质量与状态契约.md；MarketData model/normalizer | 规则版本待核验 | `pending_evidence` | CNY/股、shares、CNY、百分点/ratio、复权口径、交易日和 PIT 映射 |
+| DATA-CTR-003 | Provider 原始值标准化与精度保真 | Data | Data 内部 Provider Adapter；间接影响 Quant/Researchflow | doc/api/数据侧整体规划.md；Provider Fixture/对账证据 | Provider 版本/Fixture 覆盖待核验 | `pending_evidence` | 原始类型、精度、单位换算、有损转换、异常值和逐 Provider Fixture |
+| DATA-CTR-004 | Data Quality、覆盖率、来源和降级表达 | Data | Quant、Researchflow、WebUI、Server | doc/api/数据质量与状态契约.md；Data model/diagnostics | Quality Schema/Golden 待核验 | `pending_evidence` | quality_status/reason_code/coverage/source_ref、unknown/degraded、缺失和分母语义 |
+| DATA-CTR-005 | 精度保真的跨模块日线 DTO（v2） | Data | Quant、Researchflow | internal/marketdata/httpapi/openapi.yaml；Data v2 Decimal Schema（待核） | v1.1.0 number；v2 Decimal Schema 当前未见 | `pending_evidence` | v1 number/float64 兼容；v2 Decimal string、Provider 原始精度链路、Golden 和真实 Quant Adapter |
+| DATA-CTR-006 | Data HTTP API 调用认证 | Data；Server 负责 Root 边界和 Remote Adapter Secret | Server、Quant Data Adapter；迁移期独立 HTTP 调用方 | internal/marketdata/httpapi/server.go；Data Module InProcessHandler | API Key 兼容契约版本待核验；InProcess 模式无 Key | `has_difference` + `pending_evidence` | InProcess 不使用 Data API Key；Remote 模式仅 Server 持有 Key；浏览器不得持有 Key；冲突 Header/轮换/脱敏 |
+| DATA-CTR-007 | Research Data Snapshot/Evidence 消费边界 | Data（数据事实）；Research（Evidence）；Server（Adapter 注入） | Research、Researchflow | Data v2 Schema；Research Evidence DTO/Adapter | DailyBarsV2 Schema 待补 | `pending_evidence` | DailyBarsV2、snapshot_ref、authorization_ref、source/version/quality/units；禁止跨模块 Repository/SQL |
+| DATA-CTR-008 | Data AuthorizationRef 签发与快照访问审计 | Data | Quant、Research | Data Snapshot Manifest Schema/Golden；GOV-CTR-006 | 1.0.0（Snapshot Manifest Schema/Golden） | `pending_evidence` | Principal/Scope、purpose_code、内容寻址 Manifest、请求范围绑定、撤销和读取复核 |
+| NEWS-CTR-001 | News 只读 Evidence Query Facade | News | Research、Researchflow | internal/news/app/evidence_query_facade.go；doc/news/新闻API契约.md | 1.0.0（4 Schema / 3 Golden） | `pending_evidence` | Query 输入、PIT、Cursor、分页、稳定排序、来源过滤、权限与返回 DTO |
+| NEWS-CTR-002 | AuthorizationRef 与内容访问授权 | News（授权决策 Owner） | Research、Researchflow | doc/news/新闻来源授权矩阵.md；NEWS-CTR-002 Schema；GOV-CTR-006 | 1.0.0（Authorization Binding Schema/Golden） | `pending_evidence` | Source/Article 绑定、内容级别、授权快照、过期/撤销和派生 Evidence 链 |
+| NEWS-CTR-003 | News PIT、稳定 Cursor、排序与去重 | News | Research、Researchflow | doc/news/新闻数据模型与质量契约.md；Evidence Query | 专属 Schema/Golden 当前未见 | `pending_evidence` | system_as_of、观察版本、available_at、Cursor 稳定性、排序/去重/快照生命周期 |
+| QNT-CTR-001 | Metric/Indicator/Factor Registry 公共元数据 | Quant | Researchflow；Research 只消费编排结果 | Quant schema/manifest/registry；doc/quant/03 | 1.0.0（Registry Entry Schema） | `pending_evidence` | code、schema_version、参数 Schema、输入要求、单位、精度、舍入、范围、容差、算法版本和质量规则 |
+| QNT-CTR-002 | Indicator Request/Result | Quant | Researchflow | internal/quant/indicator；Quant DTO Schema/Golden | 1.0.0（Indicator Parameters Schema） | `pending_evidence` | indicator_code、typed 参数、required/default/range、输入窗口、缺失样本、结果单位和边界样例 |
+| QNT-CTR-003 | Factor Request/Result | Quant | Researchflow | internal/quant/factor；doc/quant/03 与 Golden | 1.0.0（Factor Parameters Schema） | `pending_evidence` | momentum_20d/60d、volatility_20d 的输入、算法、精度、缺失样本和结果状态 |
+| QNT-CTR-004 | QuantResultRef、QuantMetric、Trend、Risk 输出 | Quant | Researchflow；Research 经 Researchflow 消费 | internal/quant/result、risk、trend；Quant DTO Schema | 1.0.0（4 DTO Schema / Golden） | `pending_evidence` | Result Envelope、Manifest、status/coverage/sample_count、RiskDecision 不可被质量状态覆盖 |
+| QNT-CTR-005 | QuantResult AuthorizationRef 签发与访问审计 | Quant | Researchflow | QNT-CTR-005 Result Manifest Schema/Golden；GOV-CTR-006 | 1.0.0（Result Manifest Schema/Golden） | `pending_evidence` | trusted caller Scope、result_id/Manifest 绑定、不可变结果、读取时当前授权复核和撤销竞态 |
+| RSC-CTR-001 | ResearchContext 与 Evidence | Research | Researchflow | internal/research/application；RSC-CTR-001 Evidence Schema/Golden；GOV-CTR-006 | 1.0.0（Evidence Schema/Golden） | `pending_evidence` | content_level、source_owner、authorization_ref、derived_from_refs、来源版本、PIT 和撤销复核 |
+| RSC-CTR-002 | ResearchEvent、Claim、Hypothesis、Scenario | Research | Researchflow | internal/research/domain/application；doc/research/01-03 | 专属 Schema/Golden 当前未见 | `pending_evidence` | 状态迁移、引用完整性、版本、事件时间、认识论约束和跨对象一致性 |
+| FLOW-CTR-001 | Run/Stage/Attempt 状态与结果传播 | Researchflow | Server、API、WebUI、Worker；业务模块作为 Stage 执行方 | doc/researchflow/03；internal/researchflow/application/domain | 1.0.0（Run/Stage Schema/Golden） | `pending_evidence` | Run/Stage/Attempt Schema、状态转移、输出传播、结果归并和终态 |
+| FLOW-CTR-002 | Cancel、Retry、Deadline、Lease、Fencing | Researchflow | Scheduler、Worker、Repository、Server | internal/researchflow/application/worker.go、storage/mysql_*；doc/researchflow/03 | 1.0.0（Attempt Schema/Golden） | `pending_evidence` | CAS/事务线性化、租约接管、迟到写入、deadline、取消确认和重启恢复 |
+| FLOW-CTR-003 | Run Execution Context 与 system_as_of 传播 | Researchflow | Data、News、Quant、Research、LLM | doc/researchflow/03；GOV-CTR-002 | 1.0.0（Run/Stage Context Schema 待映射） | `pending_evidence` | 唯一 system_as_of、输入快照、版本固定、Correlation ID 和下游 Adapter Golden |
+| FLOW-CTR-004 | Stage 输入输出、诊断与最终报告关联 | Researchflow | 所有 Stage Provider、API/WebUI | internal/researchflow/application/executor.go；doc/researchflow/03 | 1.0.0（Result Summary Schema/Golden） | `pending_evidence` | StageExecutor typed payload、schema_version/output_type、diagnostic_refs、Fault 与领域结果分层 |
+| LLM-CTR-001 | Provider Port、ModelRequest/Response、Usage、Tool Call | LLM | Researchflow | internal/llm/llm.go、responses_adapter.go；doc/llm/04 | 1.0.0（Model Request/Response Schema） | `pending_evidence` | ModelRequest/Response、Usage、ToolDefinition、system_as_of、模型能力和错误语义 |
+| LLM-CTR-002 | Stream/SSE 事件、终止、断流和序号 | LLM | Researchflow | internal/llm/responses_sse.go、responses_stream.go；doc/llm/05 | 1.0.0（Model Event Schema；SSE fixtures） | `pending_evidence` | terminal event、EOF/断流、sequence_number、delta、取消、Body Close 和资源上限 |
+| LLM-CTR-003 | Platform Fault → ModelErrorInfo 映射 | LLM Adapter | Researchflow；依赖 Platform Fault | internal/llm/platform_fault.go；PLAT-CTR-001 | 1.0.0（Model Error Info Schema） | `pending_evidence` | stable_code/kind/retryable/safe_message、Cause 不出线、incomplete 与技术 Fault 分类 |
+| NTF-CTR-001 | NotificationEvent Schema Registry 与版本 | 各业务事件生产方提供 payload；Notification 管 Registry | Notification、事件生产方、Worker | doc/notification/03、05；Schema/Golden | 1.0.0（Envelope + 3 Event Schema / 6 Golden） | `pending_evidence` | event_type/version、payload Schema、Registry digest、兼容矩阵和生产方映射测试 |
+| NTF-CTR-002 | Inbox、PublishEvent、Delivery 幂等与状态机 | Notification；事件生产方负责 Outbox 原子事实 | 事件生产方、Notification Worker、运维入口 | internal/notification/application/ports.go、storage；doc/notification/03 | 1.0.0 Envelope；状态机 Golden/Schema 覆盖待核验 | `pending_evidence` | Inbox、幂等键/fingerprint、Delivery/Attempt 状态、CAS/fencing、unknown 对账和恢复 |
+| NTF-CTR-003 | Channel Adapter、重试和投递结果语义 | Notification | 外部渠道 | internal/notification/application/channel_ports.go；doc/notification/03 | Channel/Retry 专属 Schema 未见；测试矩阵待核验 | `pending_evidence` | 不承诺 exactly-once、渠道能力、明确未接受才可重试、Retry-After 和 unknown 终态 |
+| SRV-CTR-001 | 唯一组合根、Bootstrap、依赖注入与生命周期 | Server | 所有服务端模块、WebUI | internal/server/bootstrap、router、migration；doc/server | 架构契约版本待裁定/登记 | `has_difference` + `pending_evidence` | 所有模块装配、Root 单一入口、共享资源、Data InProcess/Remote、Migration/Worker/Shutdown |
+| INT-CTR-001 | Quant 风险决策、Research 事件生命周期、Researchflow Run 终态到 NotificationEvent 显式映射 | Quant/Research/Researchflow 产生业务事实；Notification 接收事件 | Notification、事件消费者 | doc/notification/05；doc/notification/03 | 1.0.0（3 Event Payload Schema；6 Golden） | `pending_evidence` | event_type、触发时点、subject_ref、幂等键、Outbox/Inbox 原子性、重放/撤回和三生产方映射 |
 
-1. 明确生产方、直接消费者、调用方向和公开边界。
-2. 明确字段类型、必填/可空/缺失/零值、单位、精度、时间语义和 ID 作用域。
-3. 提供版本化 Schema 或等价机器可校验定义。
-4. 提供正常、边界、异常、兼容 Golden。
-5. 生产方序列化和消费者反序列化 Contract Test 均通过。
-6. 适用的状态机、幂等、并发、重试、取消、恢复测试通过。
-7. 适用的授权、Secret 脱敏、SSRF、PIT 和内容级别边界测试通过。
-8. 记录消费者 Adapter 字段映射、未知字段策略和兼容矩阵。
-9. 记录测试命令、结果、精确代码 SHA、工作流/测试证据链接。
-10. 记录迁移/废弃策略及回滚限制。
+本表是编号和状态总索引；具体字段 Schema、Golden、DTO、状态机和验收标准必须继续引用生产模块的唯一字段级权威文件。没有机器契约或消费者证据时，登记簿明确记录缺失，不以历史目录的详细描述代替当前实现。
 
-任何关键项缺失，保持 `pending_evidence`；语义未决定，保持 `pending_decision`。不允许通过降低测试范围、使用 Fake 替代真实生产方或复制同一实现两端自测来绕过门禁。
+## 4. Platform 17 号差异清单的处理索引
 
-## 7. 本轮审查范围与限制
+Platform 文档中的 P002-D01～D15 是 Platform 侧差异/待决事项索引，不是项目级裁决。当前按以下原则纳入本登记簿：
 
-本轮核验确认了：
-- integration 分支存在，基线 SHA 为 `bb8cf3495b9591ede2a29b554d9121b06b983f0b`。
-- integration 包含既有跨模块契约目录、Platform 候选契约、Server 规划和多个模块专项 README。
-- 既有项目级契约目录仍声明 `feat/design_doc` 为权威维护分支；这与本次以 integration 作为聚合审查/冻结基线的约定存在治理冲突。
-- Platform 文档明确 PLAT-CTR-001～007 仍为 `pending_evidence`。
-- Server 规划明确唯一 Composition Root、共享资源所有权和模块 Migration 责任边界，但真实接入验收证据仍需补充。
-- 模块 README 对若干未完成能力、测试和真实环境证据有明确限制。
+- D01：Data Go Module 目标与实际迁移阶段分开核验。
+- D02：内部 Fault 与公开 HTTP Error DTO 分开核验。
+- D03：Request ID 可信入口由 Server/部署拓扑决定。
+- D04：Principal/Scope 不等于领域资源授权。
+- D05：Diagnostics Observation 不等于领域质量。
+- D06：HTTP 流式传输原语与 LLM 消费者接入分层验收。
+- D07：Platform Migration Runner、领域 Migration 内容、Server 注册执行三者分权。
+- D08：旧 Platform TaskQueue 不自动成为 Researchflow 通用任务能力。
+- D09：实现状态与项目级契约冻结状态分离。
+- D10：历史跨分支矩阵不作为当前 SHA 事实。
+- D11：`internal/platform/httpapi` 的历史 Analysis 依赖需要专项归属核验。
+- D12～D15：Web Owner Session、Credential、Redis Session、CSRF/限流/Audit 等候选能力逐项核对；不得将 Platform L1 实现等同 Server A2/部署 A3。
 
-本轮未完成：
-- 全量读取所有 `internal/**` 源码、全部 `doc/**` 专项文件、全部 Schema/Golden。
-- 对每个直接消费者执行字段级 DTO/Port/Adapter 对照。
-- 在该 integration SHA 上运行 `go test ./...`、race、vet、Schema Validator 或真实 MariaDB/Redis/Gateway/Provider E2E。
+每项均须重新读取当前代码和直接消费者证据；本段只建立追踪关系，不自动继承 Platform 文档的关闭状态。
 
-因此，本文当前只能作为项目级契约审查登记簿的初始版本，不能声明整个 PLAT-002 已冻结。
+## 5. 项目级冻结门禁
 
-## 8.1 integration 与模块分支提交图核验（2026-11-09）
+每一项契约必须完成以下适用门禁；不适用必须写理由：
 
-本轮使用 GitHub compare 以 `integration` 为 base、各活动模块分支为 head，检查分支提交图差异。结果如下：
+1. 生产方、直接消费者、Owner Role、调用方向和公开边界明确。
+2. 唯一权威字段定义路径、版本和兼容策略明确。
+3. 字段类型、必填/可空/缺失/零值、单位、精度、时间/PIT、ID 作用域明确。
+4. 错误分类、超时、取消、重试、降级和幂等语义明确。
+5. 身份、Scope、资源授权、Secret 和数据内容级别边界明确（适用时）。
+6. 存在可机器校验的 Schema 或等价契约定义。
+7. 正常、边界、异常、兼容 Golden 齐备（适用时）。
+8. 生产方序列化/行为 Contract Test 通过。
+9. 每个直接消费者的反序列化、字段映射和行为 Contract Test 通过；不能由同一份复制实现自测替代。
+10. 状态机、并发、幂等、重试、取消、恢复和竞态测试通过（适用时）。
+11. 记录测试命令、结果、精确代码 SHA、CI Run/测试报告链接。
+12. 迁移、废弃、回滚和版本兼容窗口明确。
+13. 生产环境依赖验收与契约冻结分层记录；不把 A1 包级通过冒充 A2/A3。
 
-| 分支 | 相对 integration 的提交图状态 | 分支独有提交数（ahead_by） | integration 独有提交数（behind_by） | 判断 |
-|---|---:|---:|---:|---|
-| `feat/design_doc` | behind | 0 | 48 | 规划分支落后；其契约目录维护权不能仅凭旧文档头部视为当前事实 |
-| `feat/full-go-data-providers-api-switch` | diverged | 126 | 90 | Data 分支仍有未进入 integration 的提交 |
-| `feat/llm` | diverged | 2 | 969 | LLM 分支仍有少量未进入 integration 的提交 |
-| `feat/notification` | diverged | 144 | 100 | Notification 分支仍有未进入 integration 的提交 |
-| `feat/platform-foundation` | diverged | 79 | 47 | Platform 分支仍有未进入 integration 的提交 |
-| `feat/quant` | diverged | 87 | 935 | Quant 分支仍有未进入 integration 的提交 |
-| `feat/research` | diverged | 55 | 27 | Research 分支仍有未进入 integration 的提交 |
-| `feat/research-analysis-flow-native-go` | diverged | 182 | 100 | Server 分支仍有未进入 integration 的提交 |
-| `feat/research-news-ingestion` | diverged | 123 | 53 | News 分支仍有未进入 integration 的提交 |
-| `feat/researchflow` | diverged | 172 | 439 | Researchflow 分支仍有未进入 integration 的提交 |
-| `feat/webui-market-data-console` | behind | 0 | 4 | WebUI 当前没有领先 integration 的提交 |
+缺少关键语义时为 `pending_decision`；语义明确但证据不足为 `pending_evidence`。只有全部适用门禁满足才允许 `frozen`。
 
-**重要解释：** `ahead_by` 是提交图上分支独有的提交数量，不等同于未合并功能数量；其中可能包含文档、后续修复、合并提交或已通过其他路径等价整合的变更。但这些结果足以证明：不能把“integration 是聚合分支”解释为“所有模块分支最新 HEAD 已完整进入 integration”。
+## 6. 模块核验责任矩阵
 
-因此，本次契约核验只能声明以 integration 的实际代码和文档为准，不能声称已经覆盖每个模块分支的最新工作。对照各模块分支的领先提交、识别实际功能差异并决定是否补入 integration，是后续独立的集成盘点任务；本轮不擅自合并任何分支，也不修改业务代码。
+| 模块 | 必须核验的生产方事实 | 必须核验的消费者事实 | 重点代码范围 |
+|---|---|---|---|
+| Platform | Fault/Context/Security/Diagnostics/HTTP/Storage/Config 原语 API 与边界 | Server 与各消费者实际调用、绕过路径 | `internal/platform/**` |
+| Server | Composition、Config、资源、路由、Migration、Worker 生命周期 | 是否仅依赖公开 Port；是否漏装/重复创建资源 | `cmd/analysis-api/**`、`internal/server/**` |
+| Data | Data Port/DTO、Provider、质量/PIT、Repository/Migration | Quant/Research/Researchflow/Server 的实际适配 | `internal/marketdata/**`、`cmd/market-data/**`、`services/market-data/**` |
+| News | Article/Source/Search/Evidence Query/授权 | Research/Researchflow 实际查询和引用 | `internal/news/**` |
+| Research | Evidence/Context/Event/Claim 等定义与授权链 | Researchflow/Server/WebUI 读取和派生 | `internal/research/**` |
+| Researchflow | Run/Stage/Attempt、状态机、Port、Worker | Server/LLM/Quant/Research/Notification 调用 | `internal/researchflow/**` |
+| Quant | Indicator/Factor/Metric/Risk/Result | Data 输入适配、Researchflow 消费和结果授权 | `internal/quant/**` |
+| LLM | Provider Port、JSON/SSE、Usage、错误与 Body 生命周期 | Researchflow 注入、Platform BoundDoer 消费 | `internal/llm/**` |
+| Notification | Event/Inbox/Subscription/Delivery/Attempt | 各事件生产方、Server Worker、渠道适配 | `internal/notification/**` |
+| WebUI | 请求、Session/Cookie/CSRF、错误和数据展示边界 | Server 实际路由/OpenAPI/权限与 DTO 对应 | `web/**`、`doc/web/**` |
 
-本次 compare 发生在项目级文档建立后，审查时 integration 最新 HEAD 为 `80ca7a99d9398be8797b315fa7f6dc5e0e68d96f`。最初代码审查基线仍为 `bb8cf3495b9591ede2a29b554d9121b06b983f0b`，两者用途不同：前者是本轮文档写入后的分支 HEAD，后者是本轮文档写入前的代码审查基线。
+## 7. 未决和阻塞事项
 
-## 8. 后续执行与审批
+| 编号 | 事项 | 当前判断 | 影响 | 下一步 |
+|---|---|---|---|---|
+| PLAT002-Q01 | 旧项目级目录仍自称契约状态权威 | 文档权威冲突未完全清理 | 状态来源可能分裂 | 将旧目录改为历史/详细定义索引，并清除其独立状态权威声明 |
+| PLAT002-Q02 | Data 双入口与 Module 迁移 | 已确认独立 `cmd/market-data` 与 Root Server 同时存在；迁移完成状态未确认 | Data/Server/部署/API | 追踪 Bootstrap 注册、调用路径、部署配置和迁移证据 |
+| PLAT002-Q03 | Server 装配范围 | 根入口和 Bootstrap 存在，但当前仍装配旧 Analysis 链路 | 所有模块与 WebUI | 对照模块构造入口、Handler、Worker、Migration 注册清单 |
+| PLAT002-Q04 | 历史 Platform HTTP API/TaskQueue | 目录位于 Platform，但被历史 Analysis 业务使用 | Platform/Server | 核验 import 依赖、对外路由和迁移责任；不得继续视为通用公共能力 |
+| PLAT002-Q05 | Owner Session 端到端边界 | Platform L1 与 Server A2/部署 A3 必须分层 | Platform/Server/WebUI | 核验 Session Middleware、路由认证矩阵、CSRF、Origin、审计和故障策略 |
+| PLAT002-Q06 | 根 Go Module 与 go-core Module | 双 Module 现状已确认；目标退役/迁移状态待核验 | Server、旧 Analysis、Researchflow | 盘点 go-core 包调用、Python Bridge、部署入口和剩余迁移清单 |
+| PLAT002-Q07 | 模块专项 README 的契约登记簿链接仍指向旧目录 | Server README、Quant README 明确链接旧目录；Research README 使用未指明路径的“项目级契约目录” | 文档权威引用仍可能误导模块开发 | 本轮只修项目级文档；模块专项 README 由对应模块文档责任方按新登记簿更新 |
+| PLAT002-Q08 | Researchflow README 与代码事实不一致 | README 声称当前不包含 Worker/Repository；代码已有 application Worker/WorkerStore 和 storage MySQL Migration/Repository | FLOW-CTR-001/002、Server 接入评估可能误判完成度 | 修正文档语义为“模块内 Worker/Storage 已实现，生产 StageExecutor Adapter 与 Server 运行装配待完成”；由 Researchflow 文档责任方确认 |
+| PLAT002-Q09 | Quant Application Port 缺少可识别的独立 Facade | internal/quant 目录未发现 application 包；Quant README 将 Researchflow 描述为 Quant Application 的直接消费者 | QNT-CTR-001～005、Researchflow Adapter | 核对是否已有稳定导出 API；若没有，列为 Quant 模块实现缺口，不允许 Researchflow 直接 import 零散 Domain/Registry 私有实现 |
+| PLAT002-Q10 | 全仓模块 import/依赖 DAG 尚未完成静态核验 | 已抽样核心 Application/Port 文件，未见新业务模块直接循环依赖；Server 仍引用旧 Analysis/Platform HTTP API/TaskQueue | 不能仅凭抽样确认全仓无循环 import、内部 Repository 越界或 Platform 领域依赖 | 下一轮按完整 Go 文件清单核对 import graph、构造图和直接消费者；当前结论只标记为抽样 |
 
-1. 项目负责人确认项目级契约权威维护位置由原 `feat/design_doc` 转为 `integration`，并确认本目录为新的项目级冻结入口。
-2. 各模块窗口按本登记簿的契约域清单，针对当前 integration SHA 核对生产方定义和直接消费者调用点，提交模块 SHA、Schema/Golden、Contract Test 和 CI 证据。
-3. 集成窗口按依赖关系汇总差异，不替模块虚构验收结论；对无法由代码证据判断的事项列入决策记录。
-4. 项目负责人裁决关键语义、兼容性、安全边界和延期范围。
-5. 所有冻结门禁满足后，更新本登记簿版本与状态，明确冻结的契约编号和代码 SHA。PLAT-002 整体冻结前，不得将 `review_in_progress` 改为 `frozen`。
+## 8. 本轮审查记录
 
+- 代码基线：`b6dfc85ba214fe16268c8cba780641a8bfe15086`
+- 远端分支比较：`feat/design_doc` 与 `integration` identical。
+- 当前已读取：项目总览、契约治理规范/目录、Platform README/08/17、Server README、Data README、News/Research/Researchflow/Quant/LLM/Notification/Web 专项入口及代表性 Go Module/Bootstrap 文件。
+- 本轮未运行全仓测试；GitHub 文件读取不等于本地编译或 CI 验收。
+- 模块间独立确认尚未取得；不得标记为已确认消费者签字。
+
+## 9. 下一步执行顺序
+
+1. 完成十个模块代码目录、Go Module、公开 Port、Handler、Schema/Golden 清单。
+2. 建立真实 import/调用依赖图，核对项目依赖 DAG 与实际方向。
+3. 逐项核验公共 Fault、Request ID、Diagnostics、Security、HTTP、Storage、Config 契约。
+4. 逐项核验 Data/News/Quant/Research/Researchflow/LLM/Notification DTO、事件和生命周期。
+5. 核验 Server Composition Root、Migration、Worker、资源生命周期和 WebUI HTTP/Session 边界。
+6. 将差异分成已确认事实、待证据、待决策、延期和不适用，交由项目负责人裁决。
+7. 对满足门禁的单项契约逐项冻结；不满足者保持未冻结。
+8. 最后执行登记簿、决策记录、版本记录和专项文档交叉引用复核。
+
+**当前结论：本轮建立的是绑定 `b6dfc85ba214fe16268c8cba780641a8bfe15086` 的审查起始基线，不是 PLAT-002 冻结完成声明。**
