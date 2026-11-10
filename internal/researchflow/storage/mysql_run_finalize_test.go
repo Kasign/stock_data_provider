@@ -198,7 +198,7 @@ func TestMariaDBFinalizeRunAtomicallyPersistsSummaryAndOutbox(t *testing.T) {
 		t.Fatalf("make Outbox retry due: %v", err)
 	}
 	claimedC, err := repository.ClaimOutbox(ctx, "worker-c", runRef, 10, 30*time.Second)
-	if err != nil || len(claimedC) != 1 || claimedC[0].LeaseGeneration != 3 {
+	if err != nil || len(claimedC) != 1 || claimedC[0].LeaseGeneration != 3 || claimedC[0].AttemptCount != 3 {
 		t.Fatalf("Worker C retry claim = %+v, err=%v", claimedC, err)
 	}
 	if acknowledged, err := repository.AcknowledgeOutbox(ctx, input.OutboxRef, "worker-c", claimedC[0].LeaseGeneration); err != nil || !acknowledged {
