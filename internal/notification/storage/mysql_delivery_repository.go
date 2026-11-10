@@ -311,9 +311,8 @@ func (r *MySQLDeliveryRepository) UpdateWithLease(
 	if err := next.Validate(); err != nil {
 		return err
 	}
-	if event.DeliveryID != next.DeliveryID || event.Version != next.Version ||
-		event.To != next.Status || !event.ChangedAt.Equal(next.UpdatedAt) {
-		return domain.ErrInvalidDeliveryChange
+	if err := validateDeliveryStateEventForSnapshot(next, event); err != nil {
+		return err
 	}
 	tx, err := r.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
 	if err != nil {
@@ -440,7 +439,29 @@ func (r *MySQLDeliveryRepository) ListStateEvents(ctx context.Context, deliveryI
 	return events, nil
 }
 
+func validateDeliveryStateEventForSnapshot(next domain.DeliveryRecord, event domain.DeliveryStateEvent) error {
+	if event.DeliveryID != next.DeliveryID || event.Version != next.Version ||
+		event.To != next.Status || !event.ChangedAt.Equal(next.UpdatedAt) ||
+		!sameOptionalDeliveryText(event.ReasonCode, next.ReasonCode) {
+		return domain.ErrInvalidDeliveryChange
+	}
+	return domain.ValidateDeliveryStateEvent(event.From, event)
+}
+
+func sameOptionalDeliveryText(left, right *string) bool {
+	if left == nil || right == nil {
+		return left == nil && right == nil
+	}
+	return *left == *right
+}
+
 func insertDeliveryStateEvent(ctx context.Context, tx *sql.Tx, event domain.DeliveryStateEvent) error {
+	if event.DeliveryID == "" || event.Version < 1 {
+		return domain.ErrInvalidDeliveryChange
+	}
+	if err := domain.ValidateDeliveryStateEvent(event.From, event); err != nil {
+		return err
+	}
 	_, err := tx.ExecContext(ctx, `INSERT INTO notification_delivery_state_events (
 		delivery_id, version, from_status, to_status, changed_at, reason_code,
 		evidence_ref, actor_ref, request_id, actor_reason
