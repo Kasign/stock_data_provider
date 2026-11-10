@@ -203,3 +203,21 @@ func TestLeaseRecoveryServiceRejectsDuplicateDeliveryCandidatesBeforeMutation(t 
 		t.Fatalf("duplicate delivery candidates must reject the whole batch before mutation: report=%+v calls=%d err=%v", report, repository.calls, err)
 	}
 }
+
+
+func TestLeaseRecoveryServiceSeparatesPersistenceOutcomeUnknown(t *testing.T) {
+	service, _, now, repository := recoveryServiceFixture(t, nil)
+	repository.err = ErrPersistenceOutcomeUnknown
+
+	report, err := service.RecoverExpiredOnce(context.Background(), now, 5)
+	if !errors.Is(err, ErrPersistenceOutcomeUnknown) {
+		t.Fatalf("uncertain commit must remain discoverable by errors.Is, got %v", err)
+	}
+	if report.Scanned != 1 || report.OutcomeUnknown != 1 ||
+		report.Recovered != 0 || report.Conflicted != 0 || report.Failed != 0 {
+		t.Fatalf("uncertain commit must not be reported as success or ordinary failure: %+v", report)
+	}
+	if repository.calls != 1 {
+		t.Fatalf("recovery write should be attempted once, got %d", repository.calls)
+	}
+}

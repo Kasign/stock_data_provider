@@ -20,10 +20,11 @@ type LeaseRecoveryService struct {
 }
 
 type LeaseRecoveryReport struct {
-	Scanned    int
-	Recovered  int
-	Conflicted int
-	Failed     int
+	Scanned       int
+	Recovered     int
+	Conflicted    int
+	OutcomeUnknown int
+	Failed        int
 }
 
 // RecoverExpiredOnce runs one bounded recovery pass. The caller supplies the
@@ -72,6 +73,12 @@ func (s *LeaseRecoveryService) RecoverExpiredOnce(
 			if errors.Is(err, ErrDeliveryLeaseConflict) || errors.Is(err, ErrDeliveryVersionConflict) ||
 				errors.Is(err, ErrLeaseRecoveryNotApplicable) {
 				report.Conflicted++
+				continue
+			}
+			if errors.Is(err, ErrPersistenceOutcomeUnknown) {
+				// Commit 结果不确定不能计为普通失败或成功；调用方必须重新读取状态对账。
+				report.OutcomeUnknown++
+				failures = append(failures, fmt.Errorf("delivery %s: %w", claim.Delivery.DeliveryID, err))
 				continue
 			}
 			report.Failed++
