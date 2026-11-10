@@ -10,8 +10,8 @@ func TestMigrationsAreExplicitAndVersioned(t *testing.T) {
 		t.Fatalf("MigrationNamespace = %q, want researchflow", MigrationNamespace)
 	}
 	migrations := Migrations()
-	if len(migrations) != 2 || migrations[0].Version != 1 || migrations[1].Version != 2 {
-		t.Fatalf("expected ordered migrations v1 and v2, got %+v", migrations)
+	if len(migrations) != 3 || migrations[0].Version != 1 || migrations[1].Version != 2 || migrations[2].Version != 3 {
+		t.Fatalf("expected ordered migrations v1, v2 and v3, got %+v", migrations)
 	}
 	migration := migrations[0]
 	if migration.Description == "" || len(migration.Statements) != 6 {
@@ -31,6 +31,17 @@ func TestMigrationsAreExplicitAndVersioned(t *testing.T) {
 	} {
 		if !strings.Contains(outboxDDL, fragment) {
 			t.Errorf("Outbox migration is missing %q", fragment)
+		}
+	}
+
+	templateMigration := migrations[2]
+	if templateMigration.Description == "" || len(templateMigration.Statements) != 1 {
+		t.Fatalf("Template Registry migration metadata/statements are incomplete: %+v", templateMigration)
+	}
+	templateDDL := strings.Join(templateMigration.Statements, "\n")
+	for _, fragment := range []string{"CREATE TABLE researchflow_workflow_templates", "PRIMARY KEY (template_ref, version)", "fingerprint CHAR(64)", "definition LONGTEXT", "created_at CHAR(30)"} {
+		if !strings.Contains(templateDDL, fragment) {
+			t.Errorf("Template Registry migration is missing %q", fragment)
 		}
 	}
 

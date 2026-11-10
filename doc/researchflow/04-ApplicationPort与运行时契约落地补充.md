@@ -431,3 +431,24 @@ Application 的 `RunFinalizationCoordinator` 是三种终态聚合路径的路�
 - 返回 Template 的 Stages、Dependencies、RetryableReasonCodes 必须深拷贝，禁止将 Registry 内部可变切片直接暴露给调用方。
 - 查询 Facade 不负责授权。Server 必须在调用前完成认证和按 Template 资源策略授权；公开响应 DTO 不得直接暴露内部 Template 结构或内部错误。
 - Template Registry Adapter 的发布/写入路径必须执行 template.Validate（注入真实 HardRiskGateRegistry）、固化 Fingerprint，并拒绝同一 Ref/Version 的内容覆盖；该真实 Registry Adapter/持久化由模块集成阶段完成。
+
+
+## 14. MySQL Template Registry 持久化契约（2026-11-09）
+
+- v3 Migration 新增 `researchflow_workflow_templates`，主键 `(template_ref, version)`，保存 immutable definition、SHA-256 fingerprint 和数据库 UTC 创建时间。模块只声明 Migration；必须由 Server Composition Root 注册并执行。
+- `MySQLTemplateRegistry.Get` 只按 Ref + Version 精确读取，不支持 latest/别名；缺失版本返回 `ErrWorkflowTemplateNotFound`，严格 JSON 解码（拒绝未知字段/尾随内容）、identity、fingerprint 或模板语义校验失败返回 `ErrWorkflowTemplateCorrupt`。
+- `Publish` 是 insert-only 发布操作：必须先执行 `template.Validate` 并注入真实 HardRiskGateRegistry，再计算 fingerprint。相同 Ref/Version + 相同 fingerprint 幂等成功；同一身份不同 fingerprint 返回 `ErrWorkflowTemplateConflict`，禁止覆盖已发布版本。
+- Version 最大长度为 64，与 SQL 列一致；Ref 最大长度为 255。发布和读取均拒绝空白或首尾空格身份。
+- Template definition 的 Stage、Dependencies、RetryableReasonCodes 以稳定顺序持久化；读取返回独立切片。Fingerprint 不包含自身字段，防止递归哈希。
+- Application `TemplateRegistry` Port 由该 Adapter 实现；`GetWorkflowTemplate` 和 `CreateRun` 可共用同一 Adapter。模板发布权限、发布者审计、管理 API、Server DI 和根 Migration 注册由 Server 组合层负责，本模块不擅自开放外部发布接口。
+- MariaDB 集成测试覆盖精确版本、相同内容重放、同版本变更冲突、缺失版本和读取隔离；执行结果必须在启用 MariaDB 的 CI/环境中单独确认，静态 Migration 测试不能替代真实 DB 验收。
+
+
+## 15. Researchflow Diagnostics 到 Platform Diagnostics 投影契约（2026-11-09）
+
+- Researchflow 领域诊断只输出 `StageAssessment`，由 `internal/researchflow/diagnostics` 转成 Platform `diagnostics.Check`；统一由 Platform `diagnostics.Runner` 负责超时、panic 隔离、Observation 校验和聚合。Researchflow 不复制 Runner 或 Summary 聚合实现。
+- 领域四态映射固定为：`pass → healthy`、`degraded → degraded`、`fail → failed`、`not_comparable → degraded`。not_comparable 不能映射成 healthy 或 skipped；使用 Observation Attributes 中的 `assessment_status=not_comparable` 保留原语义，使 Required 检查仍按 degraded 参与聚合。
+- Kind 限定 `stage_execution/dependency/quality/llm/result`；Check ID 基于 Kind + StageRef 的 SHA-256 生成稳定标识。ReasonCode 必须是 Platform 稳定小写机器码；SafeMessage 仅允许安全摘要，禁止原始 Provider/LLM 错误、凭证和敏感输入。
+- EvidenceRef 是既有证据资源的引用，不由 Adapter 伪造或自动持久化。Fault 也不由投影层制造；失败事实及 FaultRef 应由对应领域/Platform Adapter 创建后传入。
+- Attributes 经过 Platform Observation.Validate 的数量、长度和控制字符门禁；投影层保留受控 `assessment_status/diagnostic_kind/stage_ref/stage_code` 字段并深拷贝 map，避免调用方修改共享对象。
+- 本契约只定义标准化投影，不替代各模块诊断规则。真实 Data/News/Research/Quant/LLM 检查、Evidence/Fault Adapter、Server DI 和生产诊断执行仍需集成验收。

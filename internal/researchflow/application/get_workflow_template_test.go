@@ -3,6 +3,7 @@ package application
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"example.com/stock-analysis-flow/internal/researchflow/domain"
@@ -26,8 +27,8 @@ func validWorkflowTemplateForQuery() template.WorkflowTemplate {
 	retry := template.RetryPolicy{
 		Ref: "retry-v1", MaxAttempts: 2,
 		RetryableReasonCodes: []string{"provider_unavailable"},
-		Backoff:          template.BackoffPolicy{Algorithm: "exponential_full_jitter_v1", BaseDelayMS: 100, MaxDelayMS: 1000},
-		AttemptTimeoutMS: 5000,
+		Backoff:              template.BackoffPolicy{Algorithm: "exponential_full_jitter_v1", BaseDelayMS: 100, MaxDelayMS: 1000},
+		AttemptTimeoutMS:     5000,
 	}
 	propagation := template.PropagationPolicy{
 		OnDegraded: domain.PropagateAccept, OnSkipped: domain.PropagatePartial,
@@ -39,7 +40,7 @@ func validWorkflowTemplateForQuery() template.WorkflowTemplate {
 		Stages: []template.StageDefinition{{
 			Code: "market", Required: true,
 			Applicability: template.ApplicabilityRule{RuleRef: "always", RuleVersion: "1"},
-			Retry: retry, Propagation: propagation,
+			Retry:         retry, Propagation: propagation,
 		}},
 	}
 }
@@ -72,7 +73,7 @@ func TestGetWorkflowTemplateRejectsInvalidIdentityBeforeRegistry(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, pair := range [][2]string{{"", "1"}, {"stock_research", ""}, {" stock_research", "1"}, {"stock_research", "1 "}} {
+	for _, pair := range [][2]string{{"", "1"}, {"stock_research", ""}, {" stock_research", "1"}, {"stock_research", "1 "}, {"stock_research", strings.Repeat("v", 65)}} {
 		if _, err := service.GetWorkflowTemplate(context.Background(), pair[0], pair[1]); err == nil {
 			t.Fatalf("invalid identity accepted: %#v", pair)
 		}

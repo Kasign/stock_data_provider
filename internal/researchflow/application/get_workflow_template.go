@@ -33,7 +33,7 @@ func (s *GetWorkflowTemplateService) GetWorkflowTemplate(ctx context.Context, re
 	if s == nil || s.registry == nil {
 		return GetWorkflowTemplateResult{}, errors.New("Researchflow GetWorkflowTemplate service is not configured")
 	}
-	if !validTemplateIdentity(ref) || !validTemplateIdentity(version) {
+	if !validTemplateIdentity(ref) || !validTemplateVersion(version) {
 		return GetWorkflowTemplateResult{}, fmt.Errorf("%w: exact template ref and version are required", template.ErrInvalidTemplate)
 	}
 	tmpl, err := s.registry.Get(ctx, ref, version)
@@ -53,6 +53,10 @@ func (s *GetWorkflowTemplateService) GetWorkflowTemplate(ctx context.Context, re
 	tmpl = cloneWorkflowTemplate(tmpl)
 	tmpl.Fingerprint = fingerprint
 	return GetWorkflowTemplateResult{Template: tmpl, Fingerprint: fingerprint}, nil
+}
+
+func validTemplateVersion(value string) bool {
+	return strings.TrimSpace(value) != "" && strings.TrimSpace(value) == value && len(value) <= 64
 }
 
 func validTemplateIdentity(value string) bool {

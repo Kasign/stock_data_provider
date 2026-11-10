@@ -145,5 +145,20 @@ func Migrations() []platformstorage.Migration {
 					ADD KEY idx_researchflow_outbox_claim (published_at, next_attempt_at, lease_expires_at, created_at)`,
 			},
 		},
+		{
+			Version:     3,
+			Description: "add immutable, fingerprinted Researchflow workflow template versions",
+			Statements: []string{
+				`CREATE TABLE researchflow_workflow_templates (
+					template_ref VARCHAR(255) NOT NULL,
+					version VARCHAR(64) NOT NULL,
+					fingerprint CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+					definition LONGTEXT NOT NULL,
+					created_at CHAR(30) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+					PRIMARY KEY (template_ref, version),
+					KEY idx_researchflow_templates_fingerprint (fingerprint)
+				) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin`,
+			},
+		},
 	}
 }
