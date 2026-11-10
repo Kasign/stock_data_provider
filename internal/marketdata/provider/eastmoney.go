@@ -1472,6 +1472,7 @@ func (p *Eastmoney) FetchDailyBars(ctx context.Context, rawSymbol, startDate, en
 		} `json:"data"`
 	}
 	if err := p.getJSON(ctx, p.klineURL, q, &payload); err != nil {
+		addEastmoneyDailyBarParseIssue(ctx, -1, symbol, "", "provider_response", "chart_response", "request_error", "successful Eastmoney daily-bars JSON response", "request_error", "", validation.SeverityError, "Eastmoney daily-bars request or response decoding failed")
 		return nil, err
 	}
 	if payload.RC != nil && *payload.RC != 0 {

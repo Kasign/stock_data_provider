@@ -343,6 +343,36 @@ func TestEastmoneyRejectsNonZeroProviderResultCode(t *testing.T) {
 	}
 }
 
+func TestEastmoneyDailyBarsReportsRequestAndDecodeFailures(t *testing.T) {
+	cases := []struct {
+		name string
+		status int
+		body string
+	}{
+		{name: "http status", status: http.StatusBadGateway, body: "upstream unavailable"},
+		{name: "invalid json", status: http.StatusOK, body: `{"rc":0,"data":`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(tc.status)
+				_, _ = fmt.Fprint(w, tc.body)
+			}))
+			defer server.Close()
+			reporter := validation.NewReporter(10)
+			ctx := validation.WithReporter(context.Background(), reporter)
+			provider := NewEastmoney(2*time.Second, server.URL, server.URL)
+			if _, err := provider.FetchDailyBars(ctx, "600519.SH", "2026-10-01", "2026-10-21", 100, model.AdjustmentNone); err == nil {
+				t.Fatal("expected Eastmoney request/response failure")
+			}
+			issues := reporter.Snapshot().Issues
+			if len(issues) != 1 || issues[0].Stage != validation.StageParse || issues[0].Code != "request_error" || issues[0].RowIndex != nil {
+				t.Fatalf("expected one snapshot-level request_error issue, got %+v", issues)
+			}
+		})
+	}
+}
+
 func TestEastmoneyDailyBarsReportsResponseLevelIssues(t *testing.T) {
 	validRows := `"klines":["2026-10-20,10.0,10.2,10.3,9.9,100,1020000,1.42,0.81,10.87,0.23"]`
 	cases := []struct {
