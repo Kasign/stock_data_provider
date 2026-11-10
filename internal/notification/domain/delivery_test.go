@@ -254,3 +254,37 @@ func TestValidateDeliveryStateEventRequiresIdentityAndTransitionVersion(t *testi
 		t.Fatalf("creation snapshot version must not be represented as a state event, got %v", err)
 	}
 }
+
+
+func TestDeliveryTransitionRejectsManualAuditOutsideManualRetry(t *testing.T) {
+	record := validDeliveryRecord()
+	change := DeliveryTransition{
+		To: DeliverySending, At: record.UpdatedAt.Add(time.Second),
+		ActorRef: "operator-1", RequestID: "request-1",
+		ManualRetryReason: "仅人工重试允许携带",
+	}
+	if _, _, err := record.Transition(change); !errors.Is(err, ErrInvalidDeliveryChange) {
+		t.Fatalf("automatic transition must reject manual retry audit fields, got %v", err)
+	}
+}
+
+func TestDeliveryManualRetryEventPassesEventValidation(t *testing.T) {
+	record := validDeliveryRecord()
+	sending, _, err := record.Transition(DeliveryTransition{
+		To: DeliverySending, At: record.UpdatedAt.Add(time.Second),
+	})
+	if err != nil { t.Fatal(err) }
+	failed, _, err := sending.Transition(DeliveryTransition{
+		To: DeliveryFailed, At: sending.UpdatedAt.Add(time.Second), ReasonCode: "permanent_rejection",
+	})
+	if err != nil { t.Fatal(err) }
+	_, event, err := failed.Transition(DeliveryTransition{
+		To: DeliveryQueued, At: failed.UpdatedAt.Add(time.Second),
+		AuthorizedManualRetry: true, ActorRef: "operator-1", RequestID: "request-1",
+		ManualRetryReason: "配置修复后人工重试",
+	})
+	if err != nil { t.Fatal(err) }
+	if err := ValidateDeliveryStateEvent(DeliveryFailed, event); err != nil {
+		t.Fatalf("manual retry event must pass its event validator: %v", err)
+	}
+}

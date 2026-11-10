@@ -161,6 +161,18 @@ func (d DeliveryRecord) Transition(change DeliveryTransition) (DeliveryRecord, D
 	if change.ManualRetryReason != "" && (len(change.ManualRetryReason) > 512 || strings.TrimSpace(change.ManualRetryReason) != change.ManualRetryReason || strings.ContainsAny(change.ManualRetryReason, "\r\n\x00")) {
 		return DeliveryRecord{}, DeliveryStateEvent{}, ErrInvalidDeliveryChange
 	}
+	manualRetry := d.Status == DeliveryFailed && change.To == DeliveryQueued
+	hasManualAudit := change.ActorRef != "" || change.RequestID != "" || change.ManualRetryReason != ""
+	if (change.AuthorizedManualRetry || hasManualAudit) && !manualRetry {
+		return DeliveryRecord{}, DeliveryStateEvent{}, ErrInvalidDeliveryChange
+	}
+	if manualRetry && (!change.AuthorizedManualRetry ||
+		!validOpaqueRef(change.ActorRef) || !validOpaqueRef(change.RequestID) ||
+		strings.TrimSpace(change.ManualRetryReason) == "" ||
+		len(change.ManualRetryReason) > 512 ||
+		strings.ContainsAny(change.ManualRetryReason, "\r\n\x00")) {
+		return DeliveryRecord{}, DeliveryStateEvent{}, ErrInvalidDeliveryChange
+	}
 	if deliveryRequiresReason(change.To) && change.ReasonCode == "" {
 		return DeliveryRecord{}, DeliveryStateEvent{}, ErrInvalidDeliveryChange
 	}
