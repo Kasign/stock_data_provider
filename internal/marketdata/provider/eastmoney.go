@@ -2411,7 +2411,7 @@ func (p *Eastmoney) FetchIndexQuotes(ctx context.Context) (*model.IndexQuoteSnap
 		snapshot.QualityReasons = appendUniqueEastmoneyReason(snapshot.QualityReasons, "provider_total_exceeds_returned_rows")
 	}
 	seen := make(map[string]bool, len(eastmoneyCoreIndexDefinitions))
-	for _, raw := range payload.Data.Diff {
+	for rowIndex, raw := range payload.Data.Diff {
 		market, code := parseEastmoneyBoardString(raw, "f13"), parseEastmoneyBoardString(raw, "f12")
 		definition, ok := definitions[market+"."+code]
 		if !ok {
@@ -2471,10 +2471,14 @@ func (p *Eastmoney) FetchIndexQuotes(ctx context.Context) (*model.IndexQuoteSnap
 			amountUnit = "unknown"
 			reasons = append(reasons, "provider_amount_missing")
 		}
+		if amount == nil {
+			addEastmoneyDragonTigerIssue(ctx, &rowIndex, "amount", "f6", "missing_or_invalid_value", "finite non-negative amount", "number", parseEastmoneyBoardString(raw, "f6"), "东方财富指数行情成交额缺失或非法")
+		}
 		quoteTime := validProviderSnapshotTime(parseEastmoneyTime(parseEastmoneyBoardString(raw, "f86")), time.Now().UTC())
 		quoteTimeSemantics := ""
 		if quoteTime == nil {
 			reasons = append(reasons, "provider_snapshot_timestamp_not_exposed")
+			addEastmoneyDragonTigerIssue(ctx, &rowIndex, "provider_time", "f86", "missing_or_invalid_value", "valid provider snapshot timestamp", "string", parseEastmoneyBoardString(raw, "f86"), "东方财富指数行情源端快照时间缺失或非法")
 		} else {
 			quoteTimeSemantics = "provider_snapshot_time"
 		}
@@ -2503,6 +2507,9 @@ func (p *Eastmoney) FetchIndexQuotes(ctx context.Context) (*model.IndexQuoteSnap
 	if len(snapshot.Items) != len(eastmoneyCoreIndexDefinitions) {
 		snapshot.QualityStatus = model.QualityDegraded
 		snapshot.QualityReasons = appendUniqueEastmoneyReason(snapshot.QualityReasons, "provider_core_index_rows_missing")
+	}
+	if missing := len(eastmoneyCoreIndexDefinitions) - len(snapshot.Items); missing > 0 {
+		addEastmoneyDragonTigerIssue(ctx, nil, "index_coverage", "Eastmoney core index allowlist", "allowlisted_index_unavailable", "all allowlisted core indices", "incomplete", strconv.Itoa(missing), "东方财富指数行情未形成全部白名单核心指数的可用记录")
 	}
 	bySymbol := make(map[string]model.MarketIndexQuote, len(snapshot.Items))
 	for _, item := range snapshot.Items {
