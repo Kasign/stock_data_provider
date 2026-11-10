@@ -761,3 +761,11 @@
 - 下一批唯一任务：**Platform — 维度2：DTO、Schema、Golden 契约一致性核验（固定SHA）**。从Platform自身公开结构、序列化、Schema/Golden和直接消费者映射开始，先盘点已存在的权威契约/测试资产，再选一个边界明确的DTO切片核验。重点判断Fault、Diagnostics、Request ID、HTTP Client配置/结果等Platform公共原语是否有唯一Schema与稳定序列化约束；不将领域模块DTO混入Platform范围，不重复维度1 Port/调用点审查，不修改Platform实现。
 - 本轮下一任务的完成产物应为：一个明确DTO切片的生产方字段/JSON tag、Schema、Golden/Contract Test、直接消费者证据及差异登记；如不存在适用的外部Schema，需说明内部Go API的契约测试方式，不为形式完整而新增OpenAPI。
 - 固定代码审计基线继续为 `b6dfc85ba214fe16268c8cba780641a8bfe15086`；只维护 `feat/design_doc` 审计文档，不查看Data新分支、不合并代码、不改业务实现、不执行CI，除非后续证据表明静态审查无法判定且需明确批准执行。
+## 13. Platform 维度2：Diagnostics Observation DTO 首批切片（2026-11-10）
+
+- 审计记录：`Platform-维度2-DTO-Schema-Golden.md`；固定代码基线 `b6dfc85ba214fe16268c8cba780641a8bfe15086`。
+- 本批仅核 `internal/platform/diagnostics.Observation`：Go DTO/Validator、PLAT-CTR-004 JSON Schema、两份 Golden、Go Contract Test，以及 News/Research 模块级生产方和 Server Diagnostics/Health Handler 消费路径。
+- 发现四项证据缺口：Go字节长度与Schema字符长度不一致；safe_message/attributes key空白语义不一致；attributes总字节预算未在Schema表达；Go Golden测试未证明Schema与Go对同一边界样例双重校验。全部归入PLAT-CTR-004，不新增CTR。
+- PLAT-CTR-004继续 `pending_evidence`。Observation切片为partial；Platform维度2整体仍为partial。Server完整Diagnostics Report Schema/HTTP Golden归Server维度2核验。
+- 下一批：Platform维度2核对Fault内部对象及其领域/Transport映射边界。不得扩大到Server完整HTTP Error Envelope，不修改实现。
+- 本批仅更新审计文档，未修改业务代码、Schema、Golden、测试，未执行CI。
