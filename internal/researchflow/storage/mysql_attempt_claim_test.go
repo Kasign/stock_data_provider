@@ -289,7 +289,7 @@ func TestMariaDBClaimAttemptLeaseAndFencing(t *testing.T) {
 	// and belong to a still-running Run. Corrupt states must fail closed.
 	retryAt := formatResearchflowTimeValue(time.Now().UTC().Add(-time.Second))
 	if _, err := db.ExecContext(ctx, `UPDATE researchflow_stages
-		SET status = ?, retry_at = ?, version = version + 1 WHERE stage_ref = ?`,
+		SET status = ?, retry_at = ?, finished_at = NULL, version = version + 1 WHERE stage_ref = ?`,
 		string(domain.StageRetryWait), retryAt, stageRef); err != nil {
 		t.Fatalf("prepare retry with successful latest attempt: %v", err)
 	}
