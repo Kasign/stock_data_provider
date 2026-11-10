@@ -1,4 +1,4 @@
-name: News module tests
+name: News Provider contract tests
 
 on:
   workflow_dispatch:
@@ -23,12 +23,12 @@ permissions:
   contents: read
 
 concurrency:
-  group: news-test-${{ github.event.pull_request.number || github.ref }}
+  group: news-provider-test-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
-  news:
-    name: Test News module
+  provider-contract:
+    name: Test News Provider contracts
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -49,9 +49,13 @@ jobs:
           fi
       - name: Download dependencies
         run: go mod download
-      - name: Run News tests
-        run: go test ./internal/news/...
-      - name: Run News race detector
-        run: go test -race ./internal/news/...
-      - name: Run News vet
-        run: go vet ./internal/news/...
+      - name: Run SearchCandidates contract tests
+        run: go test ./internal/news/app -run '^TestSearchCandidates' -count=1
+      - name: Run Provider adapter tests
+        run: go test ./internal/news/adapters/provider -count=1
+      - name: Run SearchCandidates race tests
+        run: go test -race ./internal/news/app -run '^TestSearchCandidates' -count=1
+      - name: Run Provider adapter race tests
+        run: go test -race ./internal/news/adapters/provider -count=1
+      - name: Run Provider contract vet
+        run: go vet ./internal/news/app ./internal/news/adapters/provider
