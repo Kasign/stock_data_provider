@@ -853,10 +853,12 @@ func TestDailyBarsRejectsCacheWithWrongAdjustmentBasis(t *testing.T) {
 func dailyBarForVersionContractTest(sourceVersion, tradeDate string) model.DailyBar {
 	volume := int64(10000)
 	amount := 100000.0
+	// 测试样本的来源身份必须与其 source_version 对应，避免被生产契约校验误判为跨 Provider 数据。
+	source := strings.SplitN(strings.TrimSpace(sourceVersion), "-", 2)[0]
 	return model.DailyBar{
 		Symbol: "600519.SH", TradeDate: tradeDate, Period: "1d",
 		Open: 10, High: 11, Low: 9, Close: 10.5, Volume: &volume, Amount: &amount,
-		AdjustmentBasis: model.AdjustmentForward, Source: "fixture-provider", SourceVersion: sourceVersion,
+		AdjustmentBasis: model.AdjustmentForward, Source: source, SourceVersion: sourceVersion,
 		VolumeUnit: "shares", AmountUnit: "CNY", QualityStatus: model.QualityDegraded,
 	}
 }
