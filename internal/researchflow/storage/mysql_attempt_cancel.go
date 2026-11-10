@@ -109,9 +109,9 @@ func (r *MySQLRunRepository) ConfirmAttemptCancellation(
 		status = ?, finished_at = ?, lease_owner = NULL, lease_expires_at = NULL
 		WHERE attempt_ref = ? AND run_ref = ? AND stage_ref = ? AND status = ?
 			AND lease_owner = ? AND fencing_token = ? AND attempt_no = ?
-			AND lease_expires_at > DATE_FORMAT(UTC_TIMESTAMP(6), '%Y-%m-%dT%H:%i:%s.%f000Z')`,
+			AND lease_expires_at > ?`,
 		string(domain.AttemptCancelled), finishedAt, attemptRef, runRef, stageRef,
-		string(domain.AttemptRunning), workerID, fencingToken, attemptNo)
+		string(domain.AttemptRunning), workerID, fencingToken, attemptNo, formatResearchflowTimeValue(now))
 	if err != nil {
 		return false, fmt.Errorf("persist Researchflow Attempt cancellation: %w", err)
 	}
@@ -238,9 +238,9 @@ func (r *MySQLRunRepository) FenceExpiredCancellationAttempt(
 		lease_owner = NULL, lease_expires_at = NULL
 		WHERE attempt_ref = ? AND run_ref = ? AND stage_ref = ? AND status = ?
 			AND attempt_no = ? AND fencing_token = ?
-			AND lease_expires_at <= DATE_FORMAT(UTC_TIMESTAMP(6), '%Y-%m-%dT%H:%i:%s.%f000Z')`,
+			AND lease_expires_at <= ?`,
 		string(domain.AttemptTimedOut), finishedAt, attemptRef, runRef, stageRef,
-		string(domain.AttemptRunning), attemptNo, fencingToken)
+		string(domain.AttemptRunning), attemptNo, fencingToken, formatResearchflowTimeValue(now))
 	if err != nil {
 		return false, fmt.Errorf("fence expired Researchflow Attempt: %w", err)
 	}

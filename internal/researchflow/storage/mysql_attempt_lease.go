@@ -99,9 +99,11 @@ func (r *MySQLRunRepository) RenewAttemptLease(
 		return time.Time{}, ErrClaimRunUnavailable
 	}
 	result, err := tx.ExecContext(ctx, `UPDATE researchflow_attempts SET lease_expires_at = ?
-		WHERE attempt_ref = ? AND status = ? AND lease_owner = ? AND fencing_token = ?`,
-		formatResearchflowTimeValue(nextExpiry), attemptRef, string(domain.AttemptRunning),
-		workerID, fencingToken)
+		WHERE attempt_ref = ? AND run_ref = ? AND stage_ref = ? AND attempt_no = ?
+			AND status = ? AND lease_owner = ? AND fencing_token = ?
+			AND lease_expires_at > ?`,
+		formatResearchflowTimeValue(nextExpiry), attemptRef, runRef, stageRef, attemptNo,
+		string(domain.AttemptRunning), workerID, fencingToken, formatResearchflowTimeValue(now))
 	if err != nil {
 		return time.Time{}, fmt.Errorf("extend Researchflow attempt lease: %w", err)
 	}

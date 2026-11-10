@@ -141,10 +141,12 @@ func (r *MySQLRunRepository) CommitAttemptResult(ctx context.Context, input Atte
 	attemptResult, err := tx.ExecContext(ctx, `UPDATE researchflow_attempts SET
 		status = ?, finished_at = ?, fault_ref = ?, output_ref = ?,
 		lease_owner = NULL, lease_expires_at = NULL
-		WHERE attempt_ref = ? AND status = ? AND lease_owner = ? AND fencing_token = ?`,
+		WHERE attempt_ref = ? AND run_ref = ? AND stage_ref = ? AND attempt_no = ?
+			AND status = ? AND lease_owner = ? AND fencing_token = ?
+			AND lease_expires_at > ?`,
 		string(input.AttemptStatus), finishedAt, nullableString(input.FaultRef),
-		nullableString(input.OutputRef), input.AttemptRef, string(domain.AttemptRunning),
-		input.WorkerID, input.FencingToken)
+		nullableString(input.OutputRef), input.AttemptRef, input.RunRef, input.StageRef, stageAttemptNo,
+		string(domain.AttemptRunning), input.WorkerID, input.FencingToken, finishedAt)
 	if err != nil {
 		return fmt.Errorf("update Researchflow result attempt: %w", err)
 	}
