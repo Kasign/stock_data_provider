@@ -1397,3 +1397,66 @@ StockBoards 的 Provider Port、Go DTO、Service 校验/回退/缓存、HTTP 路
 - 新增 AUD-WEBUI-CTR-013（P2，待产品范围确认）：服务端 PIT 能力未接入当前 WebUI 个股财务查询链。
 - 本批未发现报告期/披露日期概念混淆、缺失值补零或 Provider 将请求报告期伪造成来源报告期的证据；PIT 日期级过滤是保守的。
 - Fundamentals DTO 字段与 required 集合未发现错配；未发现已证实的运行时财务数值错误。WebUI 维度 2 继续 partial。
+
+
+### 26. WebUI 维度 2：Announcements 公告 DTO、日期范围与分页消费
+
+#### 26.1 核验范围与证据
+
+- 固定代码基线：`b6dfc85ba214fe16268c8cba780641a8bfe15086`。
+- Go DTO：`internal/marketdata/model/announcements.go`（blob `940c3d9c93343061d967250cb1c57ab4967081d0`）。
+- Eastmoney Provider：`internal/marketdata/provider/eastmoney_announcements.go`（blob `e2f534761d60f9786f7c7cd5ba0d0b92198cbae6`）；Provider 测试（blob `d1f12fdac0e68342bd1f8a81b2dc547e4f6b41d0`）。
+- Service 日期范围、响应校验、缓存与回退：`internal/marketdata/service/announcements.go`（blob `126f2f46bbfc2735a6384d88287adaf1dca92ec0`）；Service 测试（blob `6f5ef49e5c9365f0b5d5b483ab5344b1e524bb4b`）及回退测试（blob `f2338e9d4b64d675f8c623a51f812a6a79fd93ad`）。
+- HTTP Handler 与路由：`internal/marketdata/httpapi/server.go`（blob `7b54b54b3c6182ecab830c2c43f91c548dc60dba`）；HTTP 测试 `internal/marketdata/httpapi/server_test.go`（blob `4bce9cd3706db1d7863ab4aeec473c0a1c1b30c0`）。
+- OpenAPI：`internal/marketdata/httpapi/openapi.yaml`（blob `cd8a6e3dfb8e3162ee789b11e883be9283c59f32`）；模型反射/序列化契约测试 `internal/marketdata/httpapi/openapi_contract_test.go`（blob `7f97f075a23bd698a7e3fc32e90509d1e999217b`）。
+- WebUI API Client：`web/src/api.js`（blob `b8bcbee5908b43bfa1bc2ca744363190af38287f`）；页面消费 `web/src/stock-research.js`（blob `49fe406d7dcf5e8fdec76f2f0bfcda6a18d4db85`）；浏览器测试 `web/tests/stock-research-data-browser.mjs`（blob `61b6e35376e6b7393f7c0a922506b795dbeedbe1`）。
+
+#### 26.2 日期与公告身份语义
+
+1. `StockAnnouncement.announcement_date` 是源端公告日期；`published_at` 只在源端展示时间可解析时提供；`fetched_at` 是服务采集时间。Provider 不会用公告日期或采集时间伪造精确发布时间。
+2. Eastmoney Provider 从 `display_time` 解析 `published_at`，支持带时区 RFC3339、常见本地日期时间和末尾毫秒格式；纯日期、缺失或不可解析值返回 nil，并将条目/快照质量降级，同时写入 `published_at` 字段诊断。
+3. `article_id` 对应 Eastmoney `art_code`；Provider 校验 ID、标题、公告日期、请求证券关联、页内 ID 唯一性，并从已验证证券代码与 article ID 生成详情 URL。WebUI 仅允许 HTTPS 且主机为 eastmoney.com 或其子域名的链接。
+4. `display_time`、`sort_date`、`ei_time` 保留源端原始文本，不与标准化的 `published_at` 混用。
+5. 日期范围首尾包含。未传 end_date 时使用中国时区当天；未传 start_date 时取 end_date 向前六个日历日，即默认七个日历日。Service 与 Provider 均限制最大日期差 365 天，对应最多 366 个包含首尾的日历日期；拒绝非法日期、逆序范围和超限范围。
+6. 未返回公告行时，快照为 `has_data=false / quality_status=unknown`，并附带“未确认无公告”的质量原因；不把空结果解释成已证明不存在公告。
+
+#### 26.3 分页与服务端校验
+
+1. HTTP Handler 默认 `page=1`、`page_size=20`；允许范围分别为 1..1000、1..100。Service 与 Provider 也执行分页范围校验。
+2. Provider 使用源端 `page_index/page_size/total_hits`；若源端返回分页元数据，必须与请求一致。按 `total_hits` 和 `page_size` 计算总页数及当前页预期行数，拒绝页数越界、返回行数不足、重复 article ID、公告日期越出请求区间或关联证券不匹配。
+3. Service 再校验响应 symbol、日期范围、page/page_size、来源版本、计数关系、has_more、条目唯一性和条目质量；有效快照缓存 10 分钟，空/unknown 结果 30 秒。多 Provider 回退耗尽时保留覆盖较好的 unknown 候选，不将其提升为 valid。
+4. OpenAPI 将 page/page_size 的上下界和默认值列入参数 Schema；日期范围默认值、包含首尾和最大 366 天在操作描述中说明。参数矩阵测试已登记 symbol、start_date、end_date、page、page_size。
+5. 当前接口是 page/page_size 页码分页，不是稳定游标或源端快照分页；DTO 没有 cursor/snapshot token。源端数据在两次分页请求之间发生变化时，单靠页码无法保证跨页集合稳定。
+
+#### 26.4 WebUI 实际消费链
+
+1. Server 注册 `GET /api/v1/stocks/{symbol}/announcements`；Handler 将日期和分页参数传给 Securities Application，成功时透传 `StockAnnouncementSnapshot`。没有独立 HTTP DTO 转换层。
+2. WebUI API Client 的 `getStockAnnouncements` 支持 startDate/endDate/page/pageSize；个股研究页实际调用它，固定 pageSize=20，首次请求 page=1，加载更多时递增页码。
+3. 页面校验响应 symbol；显示公告日期、精确发布时间（缺失时明确显示源端未提供）、分类、条目质量与质量原因；详情链接执行 Eastmoney HTTPS 主机白名单校验。
+4. 首次加载会清空旧列表；分页请求在途时禁止重复追加；刷新会取消旧请求并通过 generation 序号丢弃过期响应。浏览器测试覆盖页 2 在途时刷新，确保旧页响应不会追加到新列表。
+5. 页面展示响应的 start_date/end_date、returned/total，但只把日期显示在元信息中，没有保存首屏响应解析出的日期范围。首次请求和后续分页请求都未传 startDate/endDate，因此服务端每次会重新计算“最近七个日历日”默认范围。
+6. 若首屏与后续分页跨越 Asia/Shanghai 自然日边界，默认日期窗口会变化，后续页可能属于不同查询范围却被追加到原列表。即使没有跨日，源端页码分页也没有快照稳定性保证；页面未按 article_id 对跨页重复记录去重，也未校验响应 page/page_size/start_date/end_date 与当前分页状态一致。
+
+#### 26.5 DTO / OpenAPI / 测试
+
+1. `StockAnnouncement` 的 Go 非 omitempty 字段为 article_id、symbol、title、announcement_date、source、source_version、fetched_at、quality_status；OpenAPI required 集合一致。其余字段为可选字段。
+2. `StockAnnouncementSnapshot` 的 Go 非 omitempty 字段与 OpenAPI required 集合一致；分页计数、has_data、has_more、items、source/version 和 fetched_at 均为必需字段。
+3. `StockAnnouncement.published_at` 是 Go `*time.Time + omitempty`，nil 时 JSON 省略；OpenAPI 却声明 `type: string, format: date-time, nullable: true`。页面本身按字段缺失处理并显示“源端未提供精确发布时间”，因此运行时消费符合 Go 行为，但 Schema 允许了服务端不会输出的显式 null，属于 AUD-WEBUI-CTR-010 同类差异。
+4. 模型反射测试登记了 StockAnnouncement 与 StockAnnouncementSnapshot，覆盖字段集合和 required；序列化语义测试目前只对 StockAnnouncementSnapshot 做了局部字段断言，没有对 StockAnnouncement.published_at 的省略行为作专门 Golden 断言。Provider 测试覆盖纯日期不生成时间戳、毫秒解析、日期越界、页元数据不匹配、欠页、空列表 unknown 和不可解析时间诊断。
+5. HTTP 测试覆盖成功响应、能力声明和分页上界错误；浏览器测试覆盖分页追加、刷新时旧响应失效、质量说明和安全链接。当前未发现完整跨页固定日期范围、响应页身份和跨页 article_id 去重测试。
+
+#### 26.6 差异登记
+
+**AUD-WEBUI-CTR-014：公告分页未固定首屏解析后的日期范围与记录集合（P2）**
+
+- 证据：Service 对每次未显式传入的日期参数重新计算最近七个日历日；WebUI 首次和后续分页均不传 startDate/endDate，虽读取并展示首屏响应日期，却没有保存并复用；分页追加不按 article_id 去重，也不校验响应页身份。
+- 影响：分页请求跨越中国自然日边界时，后续页可能查询不同日期窗口并被追加到旧列表；源端数据变化时，页码分页还可能产生重复或遗漏记录。
+- 责任方：WebUI 个股研究页面维护方；若需要强一致分页，则需 Data Provider/API 共同提供稳定游标或快照令牌。
+- 关闭条件：首屏成功后保存服务端返回的 start_date/end_date，后续页显式复用；校验响应日期范围、page、page_size；按 article_id 去重；若源端分页集合变化无法由前端识别，应由服务端提供稳定 cursor/snapshot token，或明确声明为 best-effort 分页并在检测到 total/pages 变化时重置列表。增加跨日、页身份不匹配、重复 article_id 和源端总数变化测试。
+
+#### 26.7 差异更新与本批结论
+
+- AUD-WEBUI-CTR-010 影响范围增加 `StockAnnouncement.published_at`：Go omitempty 指针 nil 时省略，OpenAPI 声明 nullable=true。
+- 新增 AUD-WEBUI-CTR-014（P2）：公告分页未固定首屏解析后的日期范围和记录集合。
+- 公告日期、源端发布时间、采集时间语义清晰；空结果保持 unknown；Provider 与 Service 均校验分页计数和条目身份。未发现已证实的公告日期或文章身份运行时错配。
+- WebUI 已接通公告 API 并处理质量/空状态/过期响应，但跨页查询范围和集合一致性尚未保证。WebUI 维度 2 继续 partial。
