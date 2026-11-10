@@ -443,7 +443,6 @@ func TestDeliveryExecutionCapsAttemptDeadlineByMaxElapsed(t *testing.T) {
 	}
 }
 
-
 func TestDeliveryExecutionPreflightSkipPersistsWithoutStartingAttempt(t *testing.T) {
 	service, repository, adapter, claim, event := executionFixture(t)
 	service.preflight.recipients = &fixedRecipientResolver{err: ErrRecipientNotAuthorized}
@@ -507,7 +506,6 @@ func TestDeliveryExecutionPreflightBlockPersistsWithoutStartingAttempt(t *testin
 		t.Fatalf("block must append its reason and evidence: %+v", events)
 	}
 }
-
 
 func TestDeliveryExecutionCapsAttemptDeadlineByLeaseExpiry(t *testing.T) {
 	service, repository, _, claim, event := executionFixture(t)
