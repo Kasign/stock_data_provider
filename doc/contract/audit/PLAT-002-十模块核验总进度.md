@@ -749,7 +749,7 @@
 - API盘点第5节的过期“待核数据集”状态已纠正；Hot Rankings、Market Sentiment History、Limit Pool、Dragon Tiger、Stock Search、Analysis Run、Provider Probe History均有既有审计章节/Review，不再重做初审。
 - API Client仍为44个导出函数、41个远端入口、40个主要页面模块引用；`getMarketSentiment`是唯一未发现主要页面消费者的入口，保留产品范围待确认，不新增CTR。
 - CTR去重口径：003→046、005→047；041 withdrawn；010为聚合CTR；038与048独立；001/002归维度1。无新增CTR。
-- CTR-043 P1、CTR-010逐字段适用条件/无值原因证据、其他活动CTR的裁决/实现/测试/产品决议仍开放。Review完成不等于修复、CI通过或契约冻结。
+- CTR-010逐字段适用条件/无值原因证据、其他活动CTR的裁决/实现/测试/产品决议仍开放。Review完成不等于修复、CI通过或契约冻结。
 - 唯一主责模块及协作关系见 `PLAT-002-差异唯一登记与剩余任务矩阵.md` 第13.2节；完整性Review结论见该矩阵第13.3节和WebUI Review第33节。
 - WebUI维度2停止全量重复Review；后续只按责任模块新提交、正式裁决或测试证据增量验收。
 - 下一步回到阶段B十模块六维核验：先从当前总进度/唯一矩阵确认未完成模块与维度，再执行一个模块的一个未完成维度切片。固定代码基线不变，不检查Data新分支。
@@ -928,7 +928,7 @@
 
 ### 有限执行批次
 
-1. **B0 安全与P1阻断**：CTR-043、WebUI认证/迁移门禁、Platform/Server组合根和授权边界P1候选。
+1. **B0 安全与P1阻断**：WebUI认证/迁移门禁、Platform/Server组合根和授权边界P1候选。
 2. **B1 项目决策集中处理**：CTR-046/047/007、CTR-038/039、CTR-042/044、CTR-048/049、CTR-010字段适用性及产品范围待决项。一次形成权威决议，不逐CTR开轮。
 3. **B2 契约/Schema修正**：同一API/DTO批量修正，补Golden和Contract Test；CTR-010只接收领域责任方逐字段映射，不在审计分支猜测。
 4. **B3 业务语义与消费者修复**：按数据集批量处理算法、完整性、PIT、质量、单位、分页和UI消费问题。
@@ -1139,9 +1139,9 @@
 
 ## 37. CTR-043 契约冻结与实现符合性边界更正（2026-11-10）
 
-- **本节为 CTR-043 当前状态的权威更正，优先于此前将其称为“P1 契约冻结阻断”或将其改写为金额展示冲突的记录。** 原始 CTR-043 是 Hithink 龙虎榜分页计数不符合 Data 公共契约：\`source_returned\` 应表示当前页 Provider 原始记录数，且 \`source_returned = returned + excluded_non_a_share_count\`；Hithink 却以全量 \`stock_items\` 数量填充并本地分页，重复 symbol 去重也未计入排除数。
+- **本节为 CTR-043 当前状态的权威更正，优先于此前将其称为“P1 契约冻结阻断”或将其改写为金额展示冲突的记录。** 原始 CTR-043 是 Hithink 龙虎榜分页计数不符合 Data 公共契约：`source_returned` 应表示当前页 Provider 原始记录数，且 `source_returned = returned + excluded_non_a_share_count`；Hithink 却以全量 `stock_items` 数量填充并本地分页，重复 symbol 去重也未计入排除数。
 - 公共分页计数语义已经由 DTO、Service 校验和 OpenAPI 明确。生产方和消费方无需知晓 Provider 内部如何抓取、分页或去重。因此这是 Data Adapter 对既有公共契约的实现符合性问题，不是公共契约待定义问题。
-- **PLAT-002 状态修正：CTR-043 公共契约语义 \`freeze-ready\`，不再作为 L2 契约冻结阻断项。** Hithink Adapter 修复、真实 Provider 专项测试及 CI 属于 Data 模块内部工程质量和实现整改，另由 Data 模块跟踪，不属于 PLAT-002 契约冻结门禁。
+- **PLAT-002 状态修正：CTR-043 公共契约语义 `freeze-ready`，不再作为 L2 契约冻结阻断项。** Hithink Adapter 修复、真实 Provider 专项测试及 CI 属于 Data 模块内部工程质量和实现整改，另由 Data 模块跟踪，不属于 PLAT-002 契约冻结门禁。
 - Data 对外仍须满足已冻结的分页计数语义；如果运行实现不满足，应修复实现，而不是改变契约或要求 WebUI 了解 Provider 细节。
-- 同花顺 \`provider_*_value\` / \`provider_amount_unit\` 与 WebUI 金额展示不是 CTR-043 原始问题。本轮不据此要求 WebUI 增加消费逻辑或渲染测试，也不新增 CTR。若未来决定清理公共 DTO 中 Provider 原始字段，应单独评估公开 DTO 范围和兼容影响。
+- 同花顺 `provider_*_value` / `provider_amount_unit` 与 WebUI 金额展示不是 CTR-043 原始问题。本轮不据此要求 WebUI 增加消费逻辑或渲染测试，也不新增 CTR。若未来决定清理公共 DTO 中 Provider 原始字段，应单独评估公开 DTO 范围和兼容影响。
 - 此更正只更新项目级契约审计文档；未修改 Data/WebUI 代码，未执行测试或 CI。差异矩阵第38节为详细依据。
