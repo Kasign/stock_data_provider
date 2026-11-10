@@ -229,3 +229,13 @@
 - 新增三项回归测试，分别覆盖财务、公告、估值的错误来源回退；测试使用符合原领域约束的快照，并断言后备 Provider 被调用及最终来源正确。
 - 不改变 PIT、财务分区、公告分页、估值缺失证券计数、质量候选选择、缓存键与 TTL，也不新增 Provider 接口或领域字段。
 - 测试源码已提交；按开发分支约定未运行 gofmt/build/test，需由 integration 统一执行。
+
+### 2026-11-10：指数目录与人气榜来源身份接收校验
+
+- 范围：IndexCatalog、HotRanking 两个 DataService 接收入口。
+- 修复前，两个入口的领域 validator 只要求快照来源非空，并检查快照内部字段；没有核对快照 Source 是否等于当前 Provider.Name()，错误来源可能被当作当前 Provider 的结果接受。
+- 现在两个入口在领域 validator 前核对非空 Source 与当前 Provider.Name()；来源不匹配时拒绝该 Provider 候选并继续后备 Provider。
+- 空来源不做推断或补齐，继续交由原领域 validator 拒绝；HotRanking 成员 Source/SourceVersion 与父快照一致性仍由原 validator 管理。IndexCatalog 项目模型没有独立成员来源字段，来源身份以快照级 Source 为准。
+- 新增 IndexCatalog、HotRanking 两项来源不匹配回退测试；使用合法降级快照，断言首选来源被拒绝、后备 Provider 被调用且最终来源正确。
+- MarketCapitalFlow 已有严格来源匹配：非空错误来源及空来源均无法通过接收校验；缓存读取也执行领域 validator。本批不重复修改。
+- 本批未改变缓存键/TTL、质量候选策略、领域模型、Provider 接口及后备顺序。测试源码已提交，按开发分支约定未运行 gofmt/build/test，需由 integration 统一验收。
