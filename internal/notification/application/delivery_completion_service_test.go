@@ -294,7 +294,7 @@ func TestDeliveryCompletionDeliveryCommitOutcomeUnknownDoesNotReplayTransition(t
  current, found, readErr := repository.Get(context.Background(), claim.Delivery.DeliveryID)
  if readErr != nil || !found || current.Status != domain.DeliverySent || current.Version != claim.Delivery.Version+1 || current.AttemptCount != 1 { t.Fatalf("committed Delivery transition must be visible without replay: delivery=%+v found=%v err=%v", current, found, readErr) }
  events, readErr := repository.ListStateEvents(context.Background(), current.DeliveryID)
- if readErr != nil || len(events) != 3 || events[len(events)-1].ToStatus != domain.DeliverySent { t.Fatalf("uncertain commit must not create duplicate StateEvent: events=%+v err=%v", events, readErr) }
+ if readErr != nil || len(events) != 3 || events[len(events)-1].To != domain.DeliverySent { t.Fatalf("uncertain commit must not create duplicate StateEvent: events=%+v err=%v", events, readErr) }
  attempts, readErr := repository.ListByDelivery(context.Background(), current.DeliveryID)
  if readErr != nil || len(attempts) != 1 || attempts[0].FinishedAt == nil || attempts[0].Outcome == nil || *attempts[0].Outcome != domain.DeliveryAttemptAccepted { t.Fatalf("completed Attempt must remain singular: attempts=%+v err=%v", attempts, readErr) }
 }
