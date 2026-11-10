@@ -1415,7 +1415,7 @@ StockBoards 的 Provider Port、Go DTO、Service 校验/回退/缓存、HTTP 路
 
 1. `StockAnnouncement.announcement_date` 是源端公告日期；`published_at` 只在源端展示时间可解析时提供；`fetched_at` 是服务采集时间。Provider 不会用公告日期或采集时间伪造精确发布时间。
 2. Eastmoney Provider 从 `display_time` 解析 `published_at`，支持带时区 RFC3339、常见本地日期时间和末尾毫秒格式；纯日期、缺失或不可解析值返回 nil，并将条目/快照质量降级，同时写入 `published_at` 字段诊断。
-3. `article_id` 对应 Eastmoney `art_code`；Provider 校验 ID、标题、公告日期、请求证券关联、页内 ID 唯一性，并从已验证证券代码与 article ID 生成详情 URL。WebUI 仅允许 HTTPS 且主机为 eastmoney.com 或其子域名的链接。
+3. `article_id` 对应 Eastmoney `art_code`；Provider 校验 ID、标题、公告日期和页内 ID 唯一性；当源端返回 codes[] 时，要求其中包含请求证券代码，codes[] 缺失/为空时依赖 stock_list 查询过滤条件，不把空数组描述为独立身份佐证。详情 URL 使用规范化请求证券代码与 article ID 生成。WebUI 仅允许 HTTPS 且主机为 eastmoney.com 或其子域名的链接。
 4. `display_time`、`sort_date`、`ei_time` 保留源端原始文本，不与标准化的 `published_at` 混用。
 5. 日期范围首尾包含。未传 end_date 时使用中国时区当天；未传 start_date 时取 end_date 向前六个日历日，即默认七个日历日。Service 与 Provider 均限制最大日期差 365 天，对应最多 366 个包含首尾的日历日期；拒绝非法日期、逆序范围和超限范围。
 6. 未返回公告行时，快照为 `has_data=false / quality_status=unknown`，并附带“未确认无公告”的质量原因；不把空结果解释成已证明不存在公告。
