@@ -283,7 +283,7 @@ func (r *MySQLDeliveryRepository) ClaimDue(
 		return application.DeliveryClaim{}, false, fmt.Errorf("notification storage: read claimed fencing token: %w", err)
 	}
 	if err := tx.Commit(); err != nil {
-		return application.DeliveryClaim{}, false, fmt.Errorf("notification storage: commit delivery claim: %w", err)
+		return application.DeliveryClaim{}, false, fmt.Errorf("%w: notification storage: commit delivery claim: %w", application.ErrPersistenceOutcomeUnknown, err)
 	}
 	return application.DeliveryClaim{
 		Delivery: next,
