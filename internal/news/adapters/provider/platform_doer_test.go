@@ -105,7 +105,7 @@ func TestPlatformDoerRejectsRequestOutsideBoundOrigin(t *testing.T) {
 	if !errors.As(err, &providerErr) {
 		t.Fatalf("Do() error = %T (%v), want *app.ProviderError", err, err)
 	}
-	if providerErr.Code != "platform.httpclient.destination_rejected" {
+	if providerErr.Code != app.ProviderErrorRequestInvalid {
 		t.Fatalf("ProviderError.Code = %q", providerErr.Code)
 	}
 }

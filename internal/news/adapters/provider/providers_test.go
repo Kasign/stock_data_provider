@@ -223,3 +223,71 @@ func TestProviderHTTPStatusMapsStableErrorCodes(t *testing.T) {
 		})
 	}
 }
+
+
+func TestSearchProvidersSatisfyCommonCandidateContract(t *testing.T) {
+	tests := []struct {
+		name    string
+		new     func(app.HTTPDoer) (app.Provider, error)
+		payload string
+	}{
+		{
+			name: "bocha",
+			new: func(client app.HTTPDoer) (app.Provider, error) {
+				return NewBocha("https://api.example.test/search", "secret", client)
+			},
+			payload: `{"code":200,"data":{"webPages":{"value":[{"id":"b-1","name":"标题","url":"https://publisher.example/b","siteName":"媒体"}]}}}`,
+		},
+		{
+			name: "tavily",
+			new: func(client app.HTTPDoer) (app.Provider, error) {
+				return NewTavily("https://api.example.test/search", "secret", client)
+			},
+			payload: `{"results":[{"title":"标题","url":"https://publisher.example/t","content":"摘要"}]}`,
+		},
+		{
+			name: "brave",
+			new: func(client app.HTTPDoer) (app.Provider, error) {
+				return NewBrave("https://api.example.test/search", "secret", client)
+			},
+			payload: `{"results":[{"title":"标题","url":"https://publisher.example/br","description":"摘要"}]}`,
+		},
+		{
+			name: "searxng",
+			new: func(client app.HTTPDoer) (app.Provider, error) {
+				return NewSearXNG("https://searx.example/search", client)
+			},
+			payload: `{"results":[{"title":"标题","url":"https://publisher.example/s","content":"摘要"}]}`,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			client := roundTripFunc(func(req *http.Request) (*http.Response, error) {
+				return response(test.payload), nil
+			})
+			provider, err := test.new(client)
+			if err != nil {
+				t.Fatal(err)
+			}
+			code := provider.Code()
+			if code == "" || strings.TrimSpace(code) != code {
+				t.Fatalf("Provider Code is not canonical: %q", code)
+			}
+			items, err := provider.Search(context.Background(), domain.SearchRequest{
+				Query: "市场消息", QueryDimension: "market", Limit: 10,
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(items) != 1 {
+				t.Fatalf("candidate count=%d, want 1", len(items))
+			}
+			if items[0].ProviderCode != code {
+				t.Fatalf("candidate ProviderCode=%q, want %q", items[0].ProviderCode, code)
+			}
+			if items[0].QueryDimension != "market" || items[0].ObservedAt.IsZero() {
+				t.Fatalf("candidate context was not preserved: %+v", items[0])
+			}
+		})
+	}
+}
