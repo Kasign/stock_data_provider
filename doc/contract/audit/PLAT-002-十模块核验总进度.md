@@ -742,3 +742,15 @@
 - 逐字段裁决模板、当前可确认/不可确认边界见 PLAT-002-差异唯一登记与剩余任务矩阵.md 第12节。
 - 下一批：W2-E，收尾WebUI维度2第一轮完整性Review，汇总覆盖、唯一编号、责任、关闭条件及遗留证据项；不重新初审代码、不修改业务实现。之后回归十模块六维核验主线。
 - 本批只更新审计文档，未修改业务代码、OpenAPI、DTO、Golden、测试，未执行CI；固定代码审计基线不变。
+
+## 11. W2-E WebUI维度2第一轮完整性Review收尾（2026-11-10）
+
+- W2-E完成，状态为 `complete_with_open_items`。数据集覆盖、API Client/页面消费者映射、路由/OpenAPI入口、编号去重、唯一技术主责、协作方和遗留关闭条件均已登记。
+- API盘点第5节的过期“待核数据集”状态已纠正；Hot Rankings、Market Sentiment History、Limit Pool、Dragon Tiger、Stock Search、Analysis Run、Provider Probe History均有既有审计章节/Review，不再重做初审。
+- API Client仍为44个导出函数、41个远端入口、40个主要页面模块引用；`getMarketSentiment`是唯一未发现主要页面消费者的入口，保留产品范围待确认，不新增CTR。
+- CTR去重口径：003→046、005→047；041 withdrawn；010为聚合CTR；038与048独立；001/002归维度1。无新增CTR。
+- CTR-043 P1、CTR-010逐字段适用条件/无值原因证据、其他活动CTR的裁决/实现/测试/产品决议仍开放。Review完成不等于修复、CI通过或契约冻结。
+- 唯一主责模块及协作关系见 `PLAT-002-差异唯一登记与剩余任务矩阵.md` 第13.2节；完整性Review结论见该矩阵第13.3节和WebUI Review第33节。
+- WebUI维度2停止全量重复Review；后续只按责任模块新提交、正式裁决或测试证据增量验收。
+- 下一步回到阶段B十模块六维核验：先从当前总进度/唯一矩阵确认未完成模块与维度，再执行一个模块的一个未完成维度切片。固定代码基线不变，不检查Data新分支。
+- 本批仅修改审计文档，未修改业务代码、OpenAPI、DTO、Golden或测试，未执行CI。
