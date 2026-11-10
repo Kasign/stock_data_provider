@@ -655,3 +655,13 @@
 - 项目级映射仅引用既有 DATA-CTR-001、GOV-CTR-001、GOV-CTR-002，不新增正式契约编号。CTR-038/039 需要语义裁决；CTR-040 需要记录消费者未对齐/延期状态。
 - 本批未修改权威登记簿、业务代码、OpenAPI 或测试；未执行 CI。WebUI 维度 2 第一轮完整性 Review 继续进行。
 
+### WebUI — 维度 2：Limit Pool CTR-042 金额单位证据与冻结影响 Review
+
+- 详细记录：`WebUI-维度2-完整性Review-第一轮.md` 第 24 节。
+- 固定基线：`b6dfc85ba214fe16268c8cba780641a8bfe15086`。Hithink 将 `seal_money`、`max_seal_money`（up 池）和 `turnover`（broken 池）原值写入 DTO，不换算；`provider_amount_unit=provider_defined`，并附单位未证实原因、保持 degraded。Eastmoney 不提供这些扩展金额字段且默认启用，Hithink 默认 disabled；WebUI 不消费这些金额扩展字段。
+- OpenAPI 已说明 provider_defined 不代表 CNY、金额解释需结合 provider_amount_unit；但仓库内没有 Hithink 对三个金额字段的权威单位定义，也没有对应单位/保真专项测试。turnover_ratio_percent 是百分数，不属于本 CTR。
+- CTR-042 准确性质为 Provider 单位证据缺失、归一化能力不可用，不是已证实换算错误。当前实现通过保留原始值、标记 provider_defined 和 degraded 避免误标 CNY。
+- 映射既有 DATA-CTR-002（单位口径）和 DATA-CTR-003（Provider 原始值标准化与精度保真），不新增正式编号。建议明确 provider_defined 值禁止换算、跨 Provider 比较、求和和按金额排序；如展示须标明单位未知，或由产品选择隐藏。此为待裁决建议，不是已批准决议。
+- Limit Pool 可在未知单位安全消费边界明确后冻结公共字段语义；但 Hithink 金额值仍 not_comparable，不能宣称归一化完成。DATA-CTR-002/003 整体仍需其他字段/Provider 证据。
+- 本批未修改代码、OpenAPI、DTO 或测试，未执行 CI；WebUI 维度 2 第一轮完整性 Review 继续进行。
+
