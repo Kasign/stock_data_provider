@@ -1078,3 +1078,62 @@ WebUI 当前创建请求的最小字段与调用路径明确；事件分页消�
 - 新增 AUD-WEBUI-CTR-008（P2），性质为测试补证，不是已证实运行时分页错误。
 - 数据库事件 ID 的 DDL 约束、Task/TaskEvent JSON Golden、未知字段解码策略仍待核。
 - WebUI 维度 2 继续保持 partial。
+
+
+## 21. 第十六批：WebUI 维度 2（日 K 响应消费与 Go/OpenAPI 空值语义）
+
+### 21.1 固定基线与证据
+
+代码基线：`b6dfc85ba214fe16268c8cba780641a8bfe15086`
+
+- `internal/marketdata/model/model.go`（blob `6f04516bd11452a01adcb5acceab571fb1c28ed5`）
+- `internal/marketdata/httpapi/server.go`（blob `7b54b54b3c6182ecab830c2c43f91c548dc60dba`）
+- `internal/marketdata/httpapi/openapi.yaml`（blob `cd8a6e3dfb8e3162ee789b11e883be9283c59f32`）
+- `internal/marketdata/httpapi/openapi_contract_test.go`（blob `7f97f075a23bd698a7e3fc32e90509d1e999217b`）
+- `internal/marketdata/service/data.go`（blob `d2abb990d8d7ec2fcbf112a5f1beca49c8d40f7b`）
+- `web/src/api.js`（blob `b8bcbee5908b43bfa1bc2ca744363190af38287f`）
+- `web/src/app.js`（blob `324348f063d89c4a3861ef2dd38232a9253fe0cd`）
+- `web/src/chart.js`（blob `15a9c606dc2919c5d1c398ec18887e1d5e230dc7`）
+- `web/tests/chart.test.mjs`（blob `fca5a36c8e56e1a766e052819cb09cea6845d6f4`）
+- `web/tests/api.test.mjs`（blob `a26eca75b24a744232d370fdbe2411806be45136`）
+
+### 21.2 请求参数与 Handler 行为
+
+1. WebUI `getDailyBars` 默认 `limit=120`、`adjustment=forward_adjusted`，始终序列化 limit/adjustment；start/end 非空时追加查询参数。
+2. WebUI 自定义日期范围时调用日 K API；未指定日期范围时优先调用 Bundle，只有 Bundle 返回 404 才回退到 Quote + DailyBars 两个请求。
+3. Handler 的 adjustment 缺省值来自 Server 配置，随后通过 Adjustment 规范化校验；合法请求口径为 none、forward_adjusted、backward_adjusted。
+4. Handler 的 limit 必须是整数，范围为 1 至配置的 maxBars；省略时由 Service 使用 defaultBars。Service 默认 defaultBars 为 120，配置不一致时需结合实际部署配置判断，不把构造参数默认值等同于所有部署的固定值。
+5. Handler 接受可选 RFC3339Nano 的 as_of；拒绝重复、空白、非法和未来时间。PIT 查询使用 DailyBarsAsOf，并在响应中增加 point_in_time=true、as_of 和逐条 system_observed_at；存储未启用和没有可用修订分别返回稳定错误码。
+6. 普通日 K 与 PIT 日 K 共用 DailyBarsResponse 的主体字段；point_in_time/as_of 为条件输出字段，Schema 未要求所有响应都必须出现。
+
+### 21.3 DailyBar Go JSON 与 OpenAPI
+
+1. Go DailyBar 的 OHLC 是非指针 float64，OpenAPI 对应 number 且非 nullable；trade_date 为 string/date，period 为 1d。
+2. MA5/MA20/MA120/MA250、volume、amount、change_percent 是非 omitempty 指针；OpenAPI 对应字段声明 nullable=true，Go 序列化会在无值时输出 null。
+3. adjustment_basis、source、fetched_at、normalized_at、volume_unit、amount_unit、quality_status、normalization_version 等必需字段均在 Go JSON 与 OpenAPI 中定义。
+4. is_partial、调整因子重建元数据、provider_timestamp、system_observed_at、原始量额、fallback 信息、request_id 等 Go omitempty 字段，在 OpenAPI 中作为可选字段定义。
+5. DailyBarsResponse 要求 symbol、period、adjustment_basis、volume_unit、amount_unit、quality_status、warnings、bars；point_in_time/as_of 是可选字段，符合 Handler 普通查询与 PIT 查询的条件输出方式。
+6. AdjustmentBasis 响应枚举包含 unknown；RequestAdjustmentBasis 不包含 unknown，且 Schema 明确 unknown 只是响应状态，不能作为请求参数。与 Handler 的请求校验方向一致。
+7. Go Contract Test 的模型反射测试覆盖 Quote、DailyBar 等 51 个模型的字段集合、required 与非 omitempty pointer-nullable 语义；JSON 序列化测试进一步覆盖 Quote/DailyBar 的字段出现、omitempty 缺失和 null 输出。该证据比仅检查 OpenAPI YAML 存在更强。
+
+### 21.4 WebUI 消费行为
+
+1. `normalizeDailyBars` 只消费绘图所需的日期、OHLC、成交量、成交额、涨跌幅、复权口径、来源、质量状态/原因、部分 K 线标记和 fallback 来源。
+2. 日期不符合 YYYY-MM-DD 的记录被排除；数据按 trade_date 升序排列。
+3. 数值解析拒绝 null、undefined、空字符串和非有限数字；OHLC 非正值视为不可绘制；volume/amount 只接受非负值。缺失值保留 null，不补零。
+4. K 线图允许成交量缺失，显示“成交量未报告”；OHLC 内部关系不一致时不自动修复、不绘制该条 K 线。
+5. 涨跌幅按百分点数值消费，图表展示时附加百分号；与 OpenAPI 中 1.25 表示 1.25% 的语义一致。
+6. 技术指标由前端使用有效收盘价计算 MA5/20/60/120/250、RSI 和 MACD；没有把 DailyBar 响应中的 ma5/ma20/ma120/ma250 当作前端指标计算输入。该行为是现有消费实现，不构成字段遗漏或 Schema 不匹配。
+7. `chart.test.mjs` 覆盖升序、缺失值保留、非法 OHLC 拒绝、成交量缺失、指标样本数不足及均线覆盖层选择。API 测试覆盖日 K URL、limit/adjustment/start/end 序列化和超时行为。
+
+### 21.5 差异判断与边界
+
+- 本批未发现 DailyBar Go JSON 字段集合、required、nullable 与 OpenAPI 的已证实差异。
+- 本批未发现 WebUI 对日 K 空值、成交量单位、成交额单位、涨跌幅或复权口径的已证实误读。
+- 前端本地指标计算与服务端 DailyBar 内含均线并存；两者当前没有字段冲突，但后续应避免把前端计算指标误称为服务端返回值。
+- 默认 limit=120 时，前端无法仅凭该批数据计算需要 250 个有效收盘样本的 MA250；用户可调整 limit。该点属于查询窗口/指标可用性，不是接口契约错配。本批不新增差异编号。
+- 本批未完成所有行情接口（Bundle、证券详情、指数日 K 等）的逐字段核验，也未执行前端与真实服务端的联调；不据此宣称 WebUI 维度 2 完成。
+
+### 21.6 本批结论
+
+日 K 请求参数、Handler 分支、Go DailyBar JSON、OpenAPI Schema 与 WebUI 图表消费逻辑整体对齐。服务端已有模型反射和 JSON 序列化契约测试，前端已有日 K 图表行为测试。当前未发现需要新增 AUD-WEBUI-CTR 差异项；WebUI 维度 2 保持 partial，下一批转向 Bundle 响应 DTO 与其前端消费链。
