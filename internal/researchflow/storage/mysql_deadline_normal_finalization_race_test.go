@@ -64,7 +64,7 @@ func TestMariaDBDeadlineFinalizationWinsAgainstStaleNormalFinalizer(t *testing.T
 		Fingerprint: "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
 		Run: domain.Run{
 			Ref: runRef, SchemaVersion: "run-v1", Status: domain.RunCreated, Version: 1,
-			SystemAsOf: now.Add(-time.Minute), DeadlineAt: now.Add(-time.Minute),
+			SystemAsOf: now.Add(-time.Minute), DeadlineAt: now.Add(5 * time.Minute),
 			TemplateRef: "deadline-normal-race-template", TemplateVersion: "v1",
 			TemplateFingerprint: templateFingerprint, InputSnapshotRefs: []string{},
 			CorrelationID: "deadline-normal-race-" + suffix,
@@ -86,8 +86,8 @@ func TestMariaDBDeadlineFinalizationWinsAgainstStaleNormalFinalizer(t *testing.T
 
 	// Persist the deadline winner's linearization point and terminalize the
 	// Stage as ExpireRunDeadline does before the application aggregation step.
-	if _, err := db.ExecContext(ctx, "UPDATE researchflow_runs SET status=?, version=version+1, termination_reason=? WHERE run_ref=?",
-		string(domain.RunRunning), "deadline_exceeded", runRef); err != nil {
+	if _, err := db.ExecContext(ctx, "UPDATE researchflow_runs SET status=?, version=version+1, deadline_at=?, termination_reason=? WHERE run_ref=?",
+		string(domain.RunRunning), formatResearchflowTimeValue(now.Add(-time.Minute)), "deadline_exceeded", runRef); err != nil {
 		t.Fatalf("prepare deadline-owned Run: %v", err)
 	}
 	if _, err := db.ExecContext(ctx, "UPDATE researchflow_stages SET status=?, version=version+1 WHERE stage_ref=?",
