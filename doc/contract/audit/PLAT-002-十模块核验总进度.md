@@ -865,3 +865,16 @@
 - 补充核对Root与旧Analysis Handler的嵌套Middleware：外层MiddlewareWithOptions只重建Context/响应Header，不清除原始请求Header；旧Analysis内层兼容Middleware仍信任X-Request-ID，可能再次覆盖Context和响应Header。
 - 该风险归既有PLAT-CTR-002 / P002-D03，不新增CTR；需要Server组合测试和内层兼容Middleware隔离证据。此前“Root外层重建即可保证内层不再信任调用方ID”的判断需纠正。
 - 本发现仅登记，不修改Platform/Server实现；不改变当前Server维度2错误Envelope切片的范围和结论。
+
+
+## 18. Server 维度2第三切片：Run/Task DTO字段与OpenAPI增量核验（2026-11-10）
+
+- 固定代码基线仍为 b6dfc85ba214fe16268c8cba780641a8bfe15086；维护分支仍为 feat/design_doc。
+- RunRequest字段与OpenAPI AnalysisRequest逐项核对：OpenAPI缺run_id、as_of_mode、parameters，无required和TaskType枚举；Handler补默认值、覆盖as_of_mode，historical_replay要求显式as_of。CTR-047保持开放，未重复登记。
+- CTR-046：同步Run创建/读取/Events路由及RunResult响应Schema仍缺；RunResult是多层嵌套DTO，本批不展开全部领域结构。
+- CTR-006：Task.started_at/finished_at的指针omitempty导致nil时省略；OpenAPI nullable=true语义不一致，需权威决议并补三方Golden。
+- CTR-007：StageEvent真实字段、可选字段类型和status枚举已核实；OpenAPI TaskEvent.event仍为泛化object，缺字段级Schema。
+- Task.status实际输出queued/running/succeeded/partial/failed，与domain.RunStatus不同，不可直接复用领域枚举。
+- 旧Analysis taskqueue对应DDL本轮未在固定基线文件树中定位；不据此推断生产表不存在，CTR-008按原责任和关闭条件处理。
+- 本切片complete_with_open_items；没有CTR关闭或新增。无业务代码、OpenAPI、DTO、Golden、测试、CI变更。
+- 下一步唯一任务：Server维度2第四切片——既有Run/Task Schema差异的关闭准备与证据缺口归并Review。仅检查CTR-046/047/006/007本轮字段结论是否完整、责任和决策输入是否明确、是否存在重复登记；输出最小决策清单和可交付关闭顺序。不重做字段初审、不展开RunResult全部领域子结构、不进入Server其他五维或其他模块。
