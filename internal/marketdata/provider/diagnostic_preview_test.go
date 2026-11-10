@@ -54,3 +54,10 @@ func TestTickFlowHTTPErrorSummaryPreservesUTF8(t *testing.T) {
 	if !utf8.ValidString(err.Error()) { t.Fatalf("HTTP error summary is invalid UTF-8: %q", err.Error()) }
 	if !strings.Contains(err.Error(), "[truncated]") { t.Fatalf("expected explicit truncation marker, got %q", err.Error()) }
 }
+
+func TestDiagnosticPreviewNormalizesInvalidUTF8(t *testing.T) {
+	input := string([]byte{'a', 0xff, 'b'})
+	got := truncateDiagnosticPreview(input, 10)
+	if !utf8.ValidString(got) { t.Fatalf("preview must normalize invalid UTF-8: %q", got) }
+	if got != "a�b" { t.Fatalf("unexpected normalized preview: %q", got) }
+}
