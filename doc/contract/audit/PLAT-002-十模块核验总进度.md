@@ -131,3 +131,16 @@
 - 新增 AUD-PLAT-PORT-008（P1 候选，阶段性阻断）：Quant 生产 Application/Storage/Diagnostics 接入尚未形成；这是后续生产集成门禁，不直接定性为纯计算 Domain 缺陷。
 - 新增 AUD-PLAT-PORT-009（P1 候选，安全边界）：Quant AuthorizationRef 生产签发与验证责任待证；未发现读取接口，当前不认定存在授权绕过路径。
 - Quant 维度 1 状态 partial；domain/contract implementation evidenced / production application wiring not yet implemented by current stage。
+
+
+### Platform — 维度 1：第七批（LLM 消费者初审）
+
+- 详细记录：[`Platform-维度1-Application-Port与调用点.md`](./Platform-维度1-Application-Port与调用点.md)
+- LLM Responses JSON/SSE Adapter 定义窄 HTTP Port；Server llmtransport 将共享 Platform Client 绑定单一 Gateway Host/Port，要求 HTTPS、拒绝重定向、关闭传输层重试。
+- ProviderConfig 只存 APIKeySecretRef，Adapter 显式注入 platform/config.Secret；Secret 格式化/序列化脱敏；但生产 SecretRef 解析与绑定调用点未找到。
+- CapabilityState 绑定 Provider/Model/Gateway 版本及有效期/实测证据；未知、过期能力拒绝调用。
+- Platform Fault 映射与 Dependency/Cause 脱敏有测试证据。
+- Server Bootstrap 未构造 LLM Adapter、未注入 Provider/Secret/CapabilityState，也未接入 LLM Diagnostics；LLM 当前没有独立 Worker 生命周期要求。
+- 新增 AUD-PLAT-PORT-010（P1 候选）：LLM Gateway Adapter 尚未进入生产组合根。
+- 新增 AUD-PLAT-PORT-011（P2 候选）：LLM DTO RequestID 与可信 Context Request ID 的入口映射待证。
+- LLM 维度 1 状态 partial；adapter/transport implementation evidenced / production composition wiring not evidenced。
