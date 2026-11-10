@@ -559,3 +559,11 @@
 - 同 DTO 中其他 omitempty 字段的 OpenAPI 未声明 nullable，不计入 CTR-010；required 集合与 Go 非 omitempty 字段总体一致。
 - 测试已覆盖 StockBasic、SecurityTradingStatusSnapshot 的字段/required，但没有 omitempty→非 nullable 反向断言或对应 JSON 序列化 Golden；PriceLimit Rule inline Schema 缺 Go DTO 映射测试。本轮未执行固定基线 CI。
 - 本批无新增 CTR 编号或业务代码修改；CTR-010 全量字段清单仍未完成。
+### WebUI — 维度 2：CTR-010 字段清单复核（子批次 7）
+
+- 详细记录：WebUI-维度2-完整性Review-第一轮.md 第 14 节。
+- Fundamentals：FundamentalsSnapshot.system_observed_at 1 个 omitempty + nullable 差异；FundamentalSection.available_at 已正确未声明 nullable。
+- Announcements：StockAnnouncement.published_at 1 个 omitempty + nullable 差异。
+- Valuations：ValuationItem 五个扩展指标指针字段均 omitempty + nullable；核心六项非 omitempty 指针 nullable 正确。
+- 合计确认 7 个字段，归入 CTR-010，不新增编号。反射测试覆盖字段集合/required，但未检查 omitempty 字段 nullable 反向冲突；对应 JSON 序列化样例缺失。本批未执行固定基线 CI。
+- 本批无业务代码修改；CTR-010 全量字段清单仍未完成。
