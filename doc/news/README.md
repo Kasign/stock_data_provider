@@ -989,3 +989,17 @@
 - [x] 清理用例传播调用前/执行期间的 Context 取消，不创建 News 内部调度器；周期调度仍归 Server 组合根。
 - [ ] Server 尚未注册该 Cleaner 的周期任务；本分支仅提供 Application 入口。
 - [ ] 本次未执行 Go 编译或单元测试，等待 CI。
+
+
+### Evidence Snapshot 读取载荷大小上限（2026-11-09）
+
+- [x] Create 与 Get 共用 8 MiB payload 大小校验；读取时在 SHA-256 和 JSON 反序列化前拒绝空载荷及超限载荷，避免异常数据库记录触发无界内存/解析开销。
+- [x] 增加大小边界单测（空、nil、正常、上限、超上限）。
+- [ ] 本次未执行 Go 测试；等待 CI。
+
+
+## 2026-11-09 最新 CI 格式门禁复核
+
+- Run `42621069210` 的根模块 `Check gofmt` 失败中，News 范围仍有 3 处格式问题，已在当前分支修复：Evidence Snapshot 存储文件多余空行、存储测试多余空行、Snapshot retention 测试嵌套缩进。
+- 同一 Run 的其余 gofmt 差异涉及 Notification、Quant 等其他模块，本分支不越权修改；需由对应模块分支修复后再取得根模块全绿结果。
+- 本次修复后仍需以新 CI 的 gofmt Job 结果确认，不提前标记通过。

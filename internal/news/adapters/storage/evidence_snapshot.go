@@ -22,7 +22,7 @@ func (r *MySQLRepository) CreateEvidenceSnapshot(ctx context.Context, snapshot a
 		return app.ErrInvalidEvidenceSnapshot
 	}
 	payload, err := json.Marshal(snapshot)
-	if err != nil || len(payload) == 0 || len(payload) > maximumEvidenceSnapshotBytes {
+	if err != nil || !validEvidenceSnapshotPayloadSize(payload) {
 		return app.ErrInvalidEvidenceSnapshot
 	}
 	sum := sha256.Sum256(payload)
@@ -84,6 +84,9 @@ func (r *MySQLRepository) GetEvidenceSnapshot(
 	if err != nil {
 		return app.EvidenceSnapshot{}, err
 	}
+	if !validEvidenceSnapshotPayloadSize(payload) {
+		return app.EvidenceSnapshot{}, app.ErrInvalidEvidenceSnapshot
+	}
 	sum := sha256.Sum256(payload)
 	actualHash := hex.EncodeToString(sum[:])
 	if subtle.ConstantTimeCompare([]byte(storedHash), []byte(actualHash)) != 1 {
@@ -130,4 +133,8 @@ func (r *MySQLRepository) DeleteExpiredEvidenceSnapshots(
 // indexed metadata at the precision the schema can actually preserve.
 func sameEvidenceSnapshotDBTime(payloadTime, storedTime time.Time) bool {
 	return payloadTime.UTC().Truncate(time.Microsecond).Equal(storedTime.UTC().Truncate(time.Microsecond))
+}
+
+func validEvidenceSnapshotPayloadSize(payload []byte) bool {
+	return len(payload) > 0 && len(payload) <= maximumEvidenceSnapshotBytes
 }
