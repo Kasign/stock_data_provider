@@ -357,3 +357,15 @@ W2-D 的“权威规则核对与裁决问题准备”完成；CTR-010 本身仍�
 - 本切片结论：Platform Request ID原语与局部传播测试基本齐备，组合链路partial；PLAT-CTR-002不能仅凭包级测试标记frozen，GOV-CTR-003保持独立pending_evidence。
 - 下一切片：Platform维度2核对HTTP Client配置、DestinationPolicy、缓冲/流式结果元数据及PLAT-CTR-005 Golden/Contract Test；不重审SSRF算法，不审Server LLM Transport业务映射。
 - 本轮仅更新审计文档，未修改业务代码、Schema、Golden、测试，未执行CI。
+## 17. Platform 维度2：HTTP Client配置与缓冲/流式结果契约核验（2026-11-10）
+
+- 审计记录：`Platform-维度2-DTO-Schema-Golden.md` 第9节；固定代码基线 `b6dfc85ba214fe16268c8cba780641a8bfe15086`。
+- 已核Config默认值/上限、两套Dependency并发池、Map/策略切片复制、DestinationPolicy、BoundDoer、缓冲Do结果所有权、StreamResponse/StreamStats及News/LLM直接消费者。
+- 代码实现覆盖缓冲/流式配置和生命周期；A1专项文档列出21项流式验收矩阵，相关单测覆盖增量读取、取消/Close、EOF、截断、Body/响应头上限、解压后字节、空闲超时、并发隔离和统计。
+- PLAT2-D2-007：CTR测试未完整断言MaxResponseHeaderBytes与流式默认值/上限；StreamDependencyLimits缺少非法值、条目数和Map复制的专门配置测试。代码已有默认/校验实现，登记为回归测试证据缺口，归入PLAT-CTR-005，不新增CTR。
+- PLAT2-D2-008：Server LLM Transport将StreamResponse映射为LLM窄响应时不暴露StreamStats，LLM领域层无法记录Platform传输终态/字节数/耗时。属条件性诊断需求确认项；由LLM/Server Owner确认A2是否要求，若不要求记录不适用理由，若要求则通过LLM自有安全DTO映射，不让领域层依赖Platform内部统计类型。
+- PLAT-CTR-005内部Go API不经JSON序列化，故JSON Schema/Golden原则上不适用；以版本化Go API、Contract Test、消费者适配测试作为替代证据。但项目登记簿需明确该不适用理由和替代证据，不得虚构Golden或误报缺失JSON Golden为实现失败。
+- News Provider/Source和LLM Transport均使用BoundDoer固定策略；News Fault Mapper验证Fault并剔除Cause；LLM Fault Mapper校验差异已在PLAT2-D2-005登记，本轮不重复。
+- 本切片结论：Platform HTTP Client A1实现及局部测试基本齐备；配置回归覆盖、LLM统计可见性决策、A2真实消费者联调和A3生产网络/Secret/Runtime证据仍待补。PLAT-CTR-005保持pending_evidence。
+- 下一步回到阶段B，转Server维度2：核验HTTP公开错误Envelope与Diagnostics/Health响应DTO，不重审Platform Fault内部对象、Observation DTO或HTTP Client底层实现。
+- 本轮仅更新审计文档，未修改业务代码、Schema、Golden、测试，未执行CI。
