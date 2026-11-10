@@ -3,6 +3,7 @@ package application
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -212,6 +213,9 @@ func TestLeaseRecoveryServiceRejectsDuplicateDeliveryCandidatesBeforeMutation(t 
 	if !errors.Is(err, ErrLeaseRecoveryHistory) || report.Recovered != 0 || repository.calls != 0 {
 		t.Fatalf("duplicate delivery candidates must reject the whole batch before mutation: report=%+v calls=%d err=%v", report, repository.calls, err)
 	}
+	if strings.Contains(err.Error(), claim.Delivery.DeliveryID) {
+		t.Fatalf("duplicate candidate error must not expose internal Delivery ID: %v", err)
+	}
 }
 
 
@@ -222,6 +226,9 @@ func TestLeaseRecoveryServiceSeparatesPersistenceOutcomeUnknown(t *testing.T) {
 	report, err := service.RecoverExpiredOnce(context.Background(), now, 5)
 	if !errors.Is(err, ErrPersistenceOutcomeUnknown) {
 		t.Fatalf("uncertain commit must remain discoverable by errors.Is, got %v", err)
+	}
+	if strings.Contains(err.Error(), "delivery-1") {
+		t.Fatalf("aggregate recovery error must not expose internal Delivery ID: %v", err)
 	}
 	if report.Scanned != 1 || report.OutcomeUnknown != 1 ||
 		len(report.OutcomeUnknownDeliveryIDs) != 1 || report.OutcomeUnknownDeliveryIDs[0] != "delivery-1" ||
