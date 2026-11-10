@@ -472,3 +472,49 @@ Outcome 至少保留现有字段：ProviderCode、QueryDimension、Status、Cand
 - 覆盖 SearchCandidates、四家 Adapter、Race 和 Vet。
 - 真实供应商网络、实际账号配额、输出许可和生产 endpoint 的 BoundDoer 注入尚未验收。
 - 全量根模块 CI 仍受 Market Data、Notification、Quant 的 gofmt 差异阻断；全量 `go test ./internal/news/...` 另有非 Provider 业务测试问题，见 N1 Review 第 12.7 节。不得把专项通过扩大解释为全模块或全仓通过。
+
+
+## 19. News Search Facade 生产接入契约（2026-11-10）
+
+本节定义 Server 组合根如何装配现有 Search Provider，不新增对外 API，也不要求 News 依赖 Research/Researchflow。
+
+### 19.1 组合根装配顺序
+
+Server 启动时按以下顺序装配，依赖生命周期由 Server 持有：
+
+1. 使用 Platform 配置环境抽象调用 `news/config.Load(env)`，取得不可变的 News Provider 配置快照。配置加载只做本地校验，不执行 DNS、网络请求或 HTTP Client 创建。
+2. Server 创建并持有一个共享的 `*platform/httpclient.Client`；其生命周期与 Server/进程一致，不按请求创建。
+3. 调用 `provider.NewPlatformProviderSet(config, client)`。该构造器按 Bocha、Tavily、Brave、SearXNG 的确定顺序装配已配置 Provider；每个 Provider endpoint 创建独立的 `NewPlatformHTTPDoer` 和 DestinationPolicy。不得跨 endpoint 复用 BoundDoer。
+4. 将返回的 `app.ProviderSet` 交给 `app.NewSearchCandidates(providerSet)`，得到进程级 Search Facade。
+5. 将 Facade 注入真实业务调用方。Research/Researchflow 只依赖 Facade 的 `Execute(ctx, SearchRequest) SearchResult` 行为，不导入 `internal/news/adapters/provider`，不直接持有 API Key、Endpoint 或 Platform HTTP Client。
+
+配置快照、ProviderSet 和 Search Facade 在同一 Server 生命周期内复用。当前没有热更新机制；配置变更通过受控重启重新装配，不在请求中重建 ProviderSet。
+
+### 19.2 启动失败与可选供应商
+
+- `config.Load` 返回错误：配置不完整或非法，Server 启动装配失败；不得吞掉错误后静默使用不完整配置。
+- Bocha/Tavily/Brave 仅允许 Endpoint 与 API Key 同时配置或同时缺省；SearXNG 只需要 Endpoint。
+- 某 Provider 已配置但 Endpoint 绑定或 Adapter 构造失败：`NewPlatformProviderSet` 返回错误，Server 不应把该 Provider 静默移除后继续启动。
+- 所有 Provider 均未配置：当前构造器返回空 StaticProviderSet，不属于启动错误；调用 Search Facade 时返回 `skipped/no_provider_configured`。这是可选供应商全部关闭的显式状态，不代表搜索可用。
+- 不得记录 Secret、Authorization Header、带凭证 URL 或原始响应正文。配置错误只允许指出环境变量键名和稳定错误类别。
+
+### 19.3 请求与结果边界
+
+- 业务调用方必须传递自己的请求 Context，并在业务边界设置合理 Deadline；News 不自行创建脱离请求的 Background Context。
+- SearchRequest 只传 Query、QueryDimension、Limit；凭证和 Endpoint 不得由 Web/API 请求传入。
+- Facade 只负责供应商搜索与结果归一化，不持久化、不缓存、不排序、不执行授权放行，也不把候选直接转成 Evidence。
+- 调用方必须检查 SearchResult.Status，并保留 Outcomes。特别是 `partial` 不是全量成功；`empty` 不是 Provider 故障；`skipped` 不是可用；`failed` 不能被空候选吞掉。
+- 只有 SearchResult 的候选仍须经过 News 既有 Provider Output、Source、Endpoint 授权与 Observation/Identity/Evidence 流程。搜索结果本身不构成内容持久化许可。
+- 若调用方需要用户可见的 HTTP API，Fault 映射、认证、限流和路由由 Server 负责；News 分支不增加独立外部路由。
+
+### 19.4 Server 接入验收清单
+
+- [ ] 启动配置来自 Platform Env，且不从请求参数读取 Provider Secret/Endpoint。
+- [ ] Platform HTTP Client 由 Server 创建并统一关闭/释放；News 不拥有共享 Client 生命周期。
+- [ ] 每个已配置 Provider 使用独立 BoundDoer，精确绑定 Endpoint Host/Port，禁止重定向。
+- [ ] ProviderSet 和 Search Facade 为进程级实例，不按请求创建。
+- [ ] 无 Provider 配置时，调用结果明确为 skipped/no_provider_configured。
+- [ ] 任一已配置 Provider 装配失败时，启动失败并保留可诊断错误。
+- [ ] 业务调用方只依赖 Application Facade，不导入具体 Adapter。
+- [ ] 测试覆盖 success、empty、partial、failed、skipped、Context Deadline/取消；并确认搜索结果不能绕过既有授权持久化入口。
+- [ ] 真实供应商网络、账号配额、输出许可与生产 endpoint 仍分别验收，不以 Fake/CI 代替。
