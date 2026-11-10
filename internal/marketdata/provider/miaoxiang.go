@@ -128,16 +128,19 @@ func (p *MiaoXiang) FetchChipDistribution(ctx context.Context, rawSymbol string)
 	}
 	target := findChipTable(tables)
 	if target == nil {
+		addMiaoXiangResponseError(ctx, "average_cost", "dataTableDTOList", "missing_metric_table", "table containing average-cost metric", "missing", "妙想筹码分布响应未包含可用的平均成本指标表")
 		return nil, errors.New("MX API chip response has no usable average-cost table")
 	}
 	rows := tableRows(*target)
 	if len(rows) == 0 {
+		addMiaoXiangResponseError(ctx, "chip_distribution", "table.headName", "empty_result", "at least one chip-distribution observation", "empty", "妙想筹码分布指标表没有观测行")
 		return nil, errors.New("MX API chip response table is empty")
 	}
 	row := rows[0]
 	addMiaoXiangWarning(ctx, -1, "publication_time", "自然语言补充接口", "not_exposed_by_provider_contract", "source publication/availability timestamp", "unavailable", "MiaoXiang natural-language response does not expose a verifiable source publication or availability timestamp")
 	avg, ok := parseNumber(row["平均成本"])
 	if !ok || avg <= 0 || !finiteNumber(avg) {
+		addMiaoXiangParseIssue(ctx, 0, "average_cost", "平均成本", "invalid_or_missing_value", "positive finite average cost", "missing_or_invalid", "妙想筹码分布首行平均成本缺失或无效")
 		return nil, errors.New("MX API chip average cost is missing or invalid")
 	}
 
@@ -206,6 +209,7 @@ func (p *MiaoXiang) FetchCapitalFlow(ctx context.Context, rawSymbol string) (*mo
 		}
 	}
 	if target == nil {
+		addMiaoXiangResponseError(ctx, "main_net_inflow", "dataTableDTOList", "missing_metric_table", "table containing an explicit monetary inflow metric", "missing", "妙想资金流响应未包含明确的主力净流入金额指标表")
 		return nil, errors.New("MX API capital-flow response has no explicit monetary metric table")
 	}
 	rows := tableRows(*target)
@@ -217,12 +221,15 @@ func (p *MiaoXiang) FetchCapitalFlow(ctx context.Context, rawSymbol string) (*mo
 		date := normalizeMXDate(row["_date"])
 		parsedDate, dateErr := time.Parse("2006-01-02", date)
 		if date == "" || dateErr != nil || parsedDate.Format("2006-01-02") != date {
+			addMiaoXiangParseIssue(ctx, index, "provider_date", "headName", "invalid_date", "valid YYYY-MM-DD observation date", "missing_or_invalid", "妙想资金流观测日期缺失或格式无效")
 			return nil, fmt.Errorf("MX API capital-flow row %d has an invalid observation date", index)
 		}
 		if date > today {
+			addMiaoXiangParseIssue(ctx, index, "provider_date", "headName", "future_date", "observation date not later than current China date", "future", "妙想资金流观测日期晚于当前中国日期")
 			return nil, fmt.Errorf("MX API capital-flow row %d date %s is in the future", index, date)
 		}
 		if _, exists := seenDates[date]; exists {
+			addMiaoXiangParseIssue(ctx, index, "provider_date", "headName", "duplicate_trade_date", "unique observation date", "duplicate", "妙想资金流响应包含重复观测日期")
 			return nil, fmt.Errorf("MX API capital-flow response contains duplicate date %s", date)
 		}
 		seenDates[date] = struct{}{}
@@ -237,6 +244,7 @@ func (p *MiaoXiang) FetchCapitalFlow(ctx context.Context, rawSymbol string) (*mo
 	}
 	sort.SliceStable(series, func(i, j int) bool { return series[i].date > series[j].date })
 	if len(series) == 0 {
+		addMiaoXiangResponseError(ctx, "capital_flow", "table.headName", "empty_result", "at least one dated capital-flow observation", "empty", "妙想资金流指标表没有有效观测行")
 		return nil, errors.New("MX API capital-flow table is empty")
 	}
 	flow := &model.CapitalFlow{
@@ -285,7 +293,12 @@ func addMiaoXiangWarning(ctx context.Context, rowIndex int, field, providerField
 }
 
 func addMiaoXiangResponseError(ctx context.Context, field, providerField, code, expected, actualType, message string) {
-	addMiaoXiangIssue(ctx, -1, validation.StageParse, field, providerField, code, expected, actualType, message, validation.SeverityError)
+	addMiaoXiangParseIssue(ctx, -1, field, providerField, code, expected, actualType, message)
+}
+
+// addMiaoXiangParseIssue 为解析拒绝保留原始表格行索引；响应级问题传入 -1。
+func addMiaoXiangParseIssue(ctx context.Context, rowIndex int, field, providerField, code, expected, actualType, message string) {
+	addMiaoXiangIssue(ctx, rowIndex, validation.StageParse, field, providerField, code, expected, actualType, message, validation.SeverityError)
 }
 
 func completeWindowSum(series []mxFlowObservation, size int) *float64 {
