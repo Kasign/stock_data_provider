@@ -311,3 +311,14 @@
 
 - 空历史结果属于正常业务结果，已保留空切片语义；只有非空但不含直接命中断言的结果才判为 Repository 历史不一致。
 - MariaDB 集成场景使用真实 News Item 外键和 ApplyNewsItemRelation 追加路径，避免测试直接写入关系表绕过业务约束。
+
+
+## 七、MariaDB 11.4 实际执行结果（2026-11-10）
+
+- News MariaDB Job 已从仅 PR/手动触发调整为：PR/手动仍可触发，且 `feat/research-news-ingestion` push 也执行；其他分支 push 不触发该 News 专项数据库 Job。
+- 执行命令覆盖 `TestNewsMariaDBRepositoryIntegration` 与 `TestObservationRetentionPurgeIntegration`，不再只运行基础 Repository 测试。
+- Run `42763611124`：News MariaDB Repository and Migration integration = success；MariaDB 版本为 11.4，实际执行 V1-V8 Migration、Repository、授权快照/PIT/关系历史和 Observation retention 清理用例。
+- 同一 Run 的 `Test go-core` = success；根模块 `Test .` = failure，失败发生在根模块 gofmt 门禁，News 目录 gofmt 已由 News 专项 CI 通过，不能将根模块全仓验收标记为通过。
+- News Provider/全量模块专项 Run `42763451242` = success，覆盖 News gofmt、全量单测、Race、Vet 和 Provider 契约测试。
+- 本次集成样本修正均遵循现有契约：deny 的 expires_at 晚于 decided_at；PIT 样本完整写入三类策略版本；DATETIME(6) 比较按微秒精度；关系历史查询不使用未来 system_as_of。未放宽生产校验。
+- 剩余阻断：available_at 证据建模/严格 PIT、授权复核与内容读取 TOCTOU、Server 生产装配、总 Migration 注册及真实生产来源/出口验收。CI 临时数据库通过不等于生产数据库已迁移。
