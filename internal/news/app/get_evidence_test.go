@@ -58,11 +58,13 @@ func (s getEvidenceAuthorizationSnapshotStub) GetLatestAuthorizationSnapshotForE
 type getEvidenceAuthorizerStub struct {
 	err          error
 	calls        int
+	observation  domain.Observation
 	afterExecute func()
 }
 
-func (s *getEvidenceAuthorizerStub) Execute(context.Context, domain.NewsAuthorizationBinding, domain.Observation, domain.NewsItemVersion, string, string, domain.AuthorizationContentLevel) error {
+func (s *getEvidenceAuthorizerStub) Execute(_ context.Context, _ domain.NewsAuthorizationBinding, observation domain.Observation, _ domain.NewsItemVersion, _ string, _ string, _ domain.AuthorizationContentLevel) error {
 	s.calls++
+	s.observation = observation
 	if s.afterExecute != nil {
 		s.afterExecute()
 	}
@@ -184,6 +186,42 @@ func TestGetEvidenceSuppressesCandidateMetadataAfterRetentionDeadline(t *testing
 	}
 	if result.Title == nil || result.ContentExcerpt == nil || *result.ContentExcerpt != "source summary" {
 		t.Fatalf("separately authorized version evidence should remain available: %+v", result)
+	}
+}
+
+func TestGetEvidenceKeepsAuthorizedVersionReadableAfterObservationPayloadPurge(t *testing.T) {
+	now := time.Date(2026, 11, 10, 12, 0, 0, 0, time.UTC)
+	request, pit, binding := validGetEvidenceFixture(now)
+	pit.Observation.RetentionUntil = pit.Observation.ObservedAt.Add(time.Hour)
+	purgedAt := pit.Observation.RetentionUntil
+	pit.Observation.PayloadPurgedAt = &purgedAt
+	pit.Observation.Candidate = domain.Candidate{}
+
+	authorizer := &getEvidenceAuthorizerStub{}
+	usecase, err := NewGetEvidence(
+		getEvidencePITRepositoryStub{record: pit},
+		getEvidenceAuthorizationSnapshotStub{binding: binding},
+		authorizer,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	usecase.now = func() time.Time { return now }
+	result, err := usecase.Execute(context.Background(), request)
+	if err != nil {
+		t.Fatalf("Execute() after observation payload purge: %v", err)
+	}
+	if authorizer.calls != 1 || !reflect.DeepEqual(authorizer.observation.Candidate, domain.Candidate{}) ||
+		authorizer.observation.PayloadPurgedAt == nil ||
+		!authorizer.observation.PayloadPurgedAt.Equal(purgedAt) {
+		t.Fatalf("authorizer did not receive a consistent tombstone: calls=%d observation=%+v", authorizer.calls, authorizer.observation)
+	}
+	if result.PublishedAtRaw != nil || result.FetchedAt != nil || result.NormalizedAt != nil {
+		t.Fatalf("purged observation metadata was disclosed: %+v", result)
+	}
+	if result.Title == nil || *result.Title != pit.Version.Title ||
+		result.ContentExcerpt == nil || *result.ContentExcerpt != "source summary" {
+		t.Fatalf("separately authorized immutable version content should remain readable: %+v", result)
 	}
 }
 

@@ -280,3 +280,11 @@
 - 原 MariaDB 用例覆盖哈希字段篡改、信封元数据篡改、错误 caller、到期和删除后读取；但 payload_json 被篡改、载荷超限的直接 Get 路径缺少断言。
 - 增加两项 MariaDB 集成回归：保留旧 hash 篡改 payload_json 后 Get 拒绝；写入超过 8 MiB 的合法 JSON 后 Get 在哈希/解码前拒绝。测试在各自断言后恢复原始 payload。
 - 尚未取得 MariaDB 11.4 实际运行结果；不将新增集成用例记为通过。
+
+
+### 二十七、N8-04 Observation Tombstone 读取语义
+
+- Repository 的 PIT SELECT 在 SQL 层识别 payload_purged_at，避免将 candidate_json 载荷读回；扫描器再次将 Candidate 归零，形成双层防护。
+- GetEvidence 对 Tombstone 执行时间线和空载荷校验；授权器仍可基于保留的 Observation 来源/策略字段与 News Item Version 做独立授权。DTO 只保留独立版本字段，Candidate 来源的 PublishedAtRaw/FetchedAt/NormalizedAt 不披露。
+- 新增 Application 测试验证授权器看到的是完整一致 Tombstone、候选元数据不泄露，而独立版本内容在授权后仍可读取。
+- 现有 MariaDB 集成已覆盖清理后 Tombstone 行保留、PIT 单条读取屏蔽和幂等重放拒绝；尚未覆盖 ListEvidenceVersionsAt 清理后读取。未执行 Go/MariaDB 测试，不标记运行验收通过。
