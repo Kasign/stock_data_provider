@@ -326,3 +326,16 @@
 - WebUI 已接通并正确显示元单位、负数、缺失指标、观测数量及质量状态；has_data 分支不是 Go DTO/OpenAPI 字段。未发现已证实的金额符号或元单位换算错误。
 - 跨 Provider 资金分类口径没有同标的同日期对照证据；源端发布时间不可验证，因此快照保持 degraded/unknown。详细证据见审计明细第 29 节。
 - WebUI 维度 2 继续 partial。
+
+
+### WebUI — 维度 2：Market Capital Flow 市场级资金流历史
+
+- 固定代码基线：`b6dfc85ba214fe16268c8cba780641a8bfe15086`；本节与第 29 节个股 Capital Flow 分开。
+- 已核对独立 MarketCapitalFlowItem/Snapshot DTO、MarketCapitalFlowProvider、Tushare `moneyflow_mkt_dc`、Service 校验/缓存、HTTP Handler、OpenAPI、契约测试及 WebUI API Client/市场概览消费。
+- 当前固定基线只有 Tushare 市场级 Provider；官方接口文档明确市场级金额字段单位为人民币元、比例为百分数值，当前 Provider 直接映射金额、不乘万元换算系数，正负号保留。
+- `net_amount` 与超大单/大单/中单/小单金额之间的代数关系未被官方字段文档明确，代码和测试也没有建立恒等约束；新增 **AUD-WEBUI-CTR-021**（P2，来源定义补证），禁止消费者无依据地重算主力净额。
+- 日期请求为闭区间、最多 2000 个自然日；Provider/Service 校验日期格式、范围、重复和升序，但未按交易日历核对缺日；新增 **AUD-WEBUI-CTR-022**（P2，覆盖完整性）。
+- 新增 **AUD-WEBUI-CTR-020**（P2）：MarketCapitalFlowItem 的 14 个 Go omitempty 数值字段被 OpenAPI 声明 nullable=true，实际 nil 时 JSON 省略。
+- WebUI API Client 已接通且有 URL/鉴权/取消/日期范围测试；页面只展示指数和主力净额，不消费四类分类金额/比例，页面渲染缺少直接回归测试。四类字段是否必须展示待产品范围确认。
+- 未发现已证实的金额单位换算或符号错误；数据源时间不可验证，快照保持 degraded。详细证据见审计明细第 30 节。
+- WebUI 维度 2 继续 partial。
