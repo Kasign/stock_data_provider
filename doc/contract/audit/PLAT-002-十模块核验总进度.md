@@ -530,3 +530,11 @@
 - CTR-049 已由 Service 持久化错误返回、POST Handler 统一映射 400、OpenAPI 声明 500 共同证实，保留 P2；需区分参数错误和存储错误并补 Handler 故障测试。
 - 补充确认 API Client 与浏览器测试覆盖历史正常/异常流程；MariaDB HTTP 集成测试覆盖重启后读取但依赖 MARKET_DATA_TEST_MYSQL_DSN，本轮未执行。历史排序/limit/重复 run_id 更新及 GET Handler 独立故障测试仍缺。
 - 本批无新增 CTR 编号、无业务代码修改。维度 2 第一轮完整性 Review 继续 partial。
+### WebUI — 维度 2：第一轮完整性 Review（子批次 3）
+
+- 详细记录：WebUI-维度2-完整性Review-第一轮.md 第 10 节。
+- 本批只复核 Stock Search 的 CTR-045。Tencent 正常非空结果固定为 degraded；Service 在所有搜索源耗尽后可返回 unknown 空结果；OpenAPI 明确要求消费者处理质量状态。
+- WebUI loadStockSearch 对空 items 直接显示无匹配，对非空结果只识别 stale，未消费 degraded/unknown/quality_reasons。CTR-045 证据成立，保留 P2。
+- StockSearchItem/StockSearchSnapshot 的 Go JSON tag 与 OpenAPI required/nullable 一致；total 语义已明确为 Provider 匹配候选数，不是全市场证券总量。本批未发现新的 DTO/Provider 契约差异。
+- view 组件测试覆盖文本安全渲染和 ARIA，但缺 app.js 搜索流程质量状态 DOM 集成测试。本批未执行固定基线 CI。
+- 本批无新增 CTR 编号、无业务代码修改。维度 2 第一轮完整性 Review 继续 partial。
