@@ -212,10 +212,19 @@ func TestMariaDBCreateRunAtomicConcurrentIdempotency(t *testing.T) {
 	runningRun := nextRun
 	runningRun.Version++
 	runningRun.Status = domain.RunRunning
-	runningRun.StartedAt = &now
+	forgedStartedAt := now.Add(-24 * time.Hour)
+	runningRun.StartedAt = &forgedStartedAt
+	if updated, err = repository.CompareAndSwapRun(ctx, nextRun.Version, runningRun); err == nil || updated {
+		t.Fatalf("Run CAS accepted caller-supplied started_at; want rejection")
+	}
+	runningRun.StartedAt = nil
 	updated, err = repository.CompareAndSwapRun(ctx, nextRun.Version, runningRun)
 	if err != nil || !updated {
 		t.Fatalf("queued -> running Run CAS updated=%v err=%v", updated, err)
+	}
+	persistedRunningRun, err := repository.GetRun(ctx, winningRunRef)
+	if err != nil || persistedRunningRun.Run.StartedAt == nil {
+		t.Fatalf("Run CAS did not assign database started_at: started_at=%v err=%v", persistedRunningRun.Run.StartedAt, err)
 	}
 	terminalRun := runningRun
 	terminalRun.Version++
@@ -240,6 +249,19 @@ func TestMariaDBCreateRunAtomicConcurrentIdempotency(t *testing.T) {
 	}
 	if loadedStage.Ref != stageRef || loadedStage.RunRef != winningRunRef {
 		t.Fatalf("GetStage returned unexpected stage: %#v", loadedStage)
+	}
+	forgedStage := loadedStage
+	forgedStage.Version++
+	forgedStage.Status = domain.StageReady
+	forgedStage.AttemptNo = 7
+	retryAt := now.Add(time.Hour)
+	forgedStage.RetryAt = &retryAt
+	forgedOutput := "forged-output"
+	forgedStage.OutputRef = &forgedOutput
+	forgedStarted := now
+	forgedStage.StartedAt = &forgedStarted
+	if updated, err = repository.CompareAndSwapStage(ctx, loadedStage.Version, forgedStage); err == nil || updated {
+		t.Fatalf("Stage CAS accepted scheduler transition with forged attempt/result/time fields")
 	}
 	nextStage := loadedStage
 	nextStage.Version++
@@ -286,15 +308,16 @@ func TestMariaDBCreateRunAtomicConcurrentIdempotency(t *testing.T) {
 	terminalStage.Status = domain.StageSucceeded
 	finishedAt := now
 	terminalStage.FinishedAt = &finishedAt
-	updated, err = repository.CompareAndSwapStage(ctx, nextStage.Version, terminalStage)
-	if err != nil || !updated {
-		t.Fatalf("ready -> succeeded Stage CAS updated=%v err=%v", updated, err)
+	if updated, err = repository.CompareAndSwapStage(ctx, nextStage.Version, terminalStage); err == nil || updated {
+		t.Fatalf("Stage CAS accepted ready -> succeeded; Worker result transaction must own completion")
 	}
-	resurrectedStage := terminalStage
-	resurrectedStage.Version++
-	resurrectedStage.Status = domain.StageRunning
-	resurrectedStage.FinishedAt = nil
-	if updated, err = repository.CompareAndSwapStage(ctx, terminalStage.Version, resurrectedStage); err == nil || updated {
-		t.Fatalf("terminal -> running Stage CAS updated=%v err=%v; want rejected transition", updated, err)
+	persistedStage, err := repository.GetStage(ctx, stageRef)
+	if err != nil {
+		t.Fatalf("reload Stage after rejected completion CAS: %v", err)
+	}
+	if persistedStage.Status != domain.StageReady || persistedStage.AttemptNo != 0 ||
+		persistedStage.RetryAt != nil || persistedStage.OutputRef != nil ||
+		persistedStage.StartedAt != nil || persistedStage.FinishedAt != nil {
+		t.Fatalf("scheduler CAS altered fields owned by Claim/Worker: %#v", persistedStage)
 	}
 }

@@ -178,7 +178,7 @@ func (r *MySQLRunRepository) CreateRunAtomic(
 	}, nil
 }
 
-// CompareAndSwapRun updates mutable run state only when the persisted version matches.
+// CompareAndSwapRun updates Run state only; started_at is assigned from the database clock on entry to running.
 func (r *MySQLRunRepository) CompareAndSwapRun(
 	ctx context.Context,
 	expectedVersion uint64,
@@ -219,11 +219,15 @@ func (r *MySQLRunRepository) CompareAndSwapRun(
 	if next.TerminationReason != currentReasonValue {
 		return false, errors.New("Researchflow Run CAS cannot change termination_reason; use cancellation or deadline transition")
 	}
+	if next.StartedAt != nil {
+		return false, errors.New("Researchflow Run CAS cannot supply started_at; the database sets it when entering running")
+	}
 	result, err := r.db.ExecContext(ctx, `UPDATE researchflow_runs SET
-		status = ?, version = ?, started_at = ?
+		status = ?, version = ?,
+		started_at = CASE WHEN ? = ? THEN COALESCE(started_at, UTC_TIMESTAMP(6)) ELSE started_at END
 		WHERE run_ref = ? AND version = ? AND status = ?
 		AND COALESCE(termination_reason, '') = ? AND result_summary_ref IS NULL`,
-		string(next.Status), next.Version, nullableTime(next.StartedAt),
+		string(next.Status), next.Version, string(next.Status), string(domain.RunRunning),
 		next.Ref, expectedVersion, currentStatus, currentReasonValue,
 	)
 	if err != nil {
@@ -236,8 +240,7 @@ func (r *MySQLRunRepository) CompareAndSwapRun(
 	return affected == 1, nil
 }
 
-// CompareAndSwapStage updates mutable stage state while preserving its run,
-// code, required flag, dependency graph and retry-policy identity.
+// CompareAndSwapStage is restricted to Scheduler-owned Pending -> Ready/Blocked transitions.
 func (r *MySQLRunRepository) CompareAndSwapStage(
 	ctx context.Context,
 	expectedVersion uint64,
@@ -250,15 +253,45 @@ func (r *MySQLRunRepository) CompareAndSwapStage(
 		next.Version != expectedVersion+1 || next.Status == "" || next.AttemptNo < 0 {
 		return false, errors.New("Researchflow Stage CAS version or state is invalid")
 	}
-	var currentStatus string
-	if err := r.db.QueryRowContext(ctx, `SELECT status FROM researchflow_stages
+	var currentStatus, currentReasonsJSON string
+	if err := r.db.QueryRowContext(ctx, `SELECT status, reason_codes FROM researchflow_stages
 		WHERE stage_ref = ? AND run_ref = ? AND version = ?`,
 		next.Ref, next.RunRef, expectedVersion,
-	).Scan(&currentStatus); err != nil {
+	).Scan(&currentStatus, &currentReasonsJSON); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return false, nil
 		}
 		return false, fmt.Errorf("load current Researchflow Stage status for CAS: %w", err)
+	}
+	if domain.StageStatus(currentStatus) != domain.StagePending ||
+		(next.Status != domain.StageReady && next.Status != domain.StageBlocked) {
+		return false, errors.New("Researchflow Stage CAS is reserved for Pending -> Ready/Blocked scheduler transitions")
+	}
+	if next.AttemptNo != 0 || next.RetryAt != nil || next.OutputRef != nil ||
+		next.QualitySummaryRef != nil || len(next.DiagnosticRefs) != 0 ||
+		next.QualityStatus != nil || next.RiskDecision != nil || next.StartedAt != nil {
+		return false, errors.New("Researchflow Stage CAS cannot modify attempt, retry, result, quality or start fields")
+	}
+	var currentReasons []string
+	if err := json.Unmarshal([]byte(currentReasonsJSON), &currentReasons); err != nil {
+		return false, fmt.Errorf("decode current Researchflow Stage reason codes: %w", err)
+	}
+	expectedReasons := append([]string(nil), currentReasons...)
+	if next.Status == domain.StageReady {
+		if next.FinishedAt != nil || !equalResearchflowStrings(next.ReasonCodes, currentReasons) {
+			return false, errors.New("Researchflow Ready transition cannot change Stage reasons or finish time")
+		}
+	} else {
+		if next.FinishedAt == nil || next.FinishedAt.IsZero() {
+			return false, errors.New("Researchflow Blocked transition requires a non-zero finish time")
+		}
+		if !containsResearchflowString(expectedReasons, "dependency_not_satisfied") {
+			expectedReasons = append(expectedReasons, "dependency_not_satisfied")
+		}
+		if !equalResearchflowStrings(next.ReasonCodes, expectedReasons) {
+			return false, errors.New("Researchflow Blocked transition may only append dependency_not_satisfied")
+		}
+		// The database clock, not the scheduler snapshot, owns the terminal timestamp.
 	}
 	if _, err := state.TransitionStage(domain.Stage{Status: domain.StageStatus(currentStatus)},
 		next.Status, time.Now().UTC()); err != nil {
@@ -266,16 +299,11 @@ func (r *MySQLRunRepository) CompareAndSwapStage(
 			currentStatus, next.Status, err)
 	}
 	result, err := r.db.ExecContext(ctx, `UPDATE researchflow_stages SET
-		status = ?, version = ?, attempt_no = ?, retry_at = ?,
-		output_ref = ?, quality_summary_ref = ?, diagnostic_refs = ?,
-		quality_status = ?, reason_codes = ?, risk_decision = ?,
-		started_at = ?, finished_at = ?
+		status = ?, version = ?, reason_codes = ?,
+		finished_at = CASE WHEN ? = ? THEN UTC_TIMESTAMP(6) ELSE finished_at END
 		WHERE stage_ref = ? AND run_ref = ? AND version = ? AND status = ?`,
-		string(next.Status), next.Version, next.AttemptNo, nullableTime(next.RetryAt),
-		nullableString(next.OutputRef), nullableString(next.QualitySummaryRef),
-		mustMarshalStrings(next.DiagnosticRefs), nullableText(next.QualityStatus),
-		mustMarshalStrings(next.ReasonCodes), nullableText(next.RiskDecision),
-		nullableTime(next.StartedAt), nullableTime(next.FinishedAt),
+		string(next.Status), next.Version, mustMarshalStrings(expectedReasons),
+		string(next.Status), string(domain.StageBlocked),
 		next.Ref, next.RunRef, expectedVersion, currentStatus,
 	)
 	if err != nil {
@@ -286,6 +314,27 @@ func (r *MySQLRunRepository) CompareAndSwapStage(
 		return false, fmt.Errorf("read Researchflow Stage CAS affected rows: %w", err)
 	}
 	return affected == 1, nil
+}
+
+func equalResearchflowStrings(left, right []string) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for i := range left {
+		if left[i] != right[i] {
+			return false
+		}
+	}
+	return true
+}
+
+func containsResearchflowString(values []string, target string) bool {
+	for _, value := range values {
+		if value == target {
+			return true
+		}
+	}
+	return false
 }
 
 func mustMarshalStrings(values []string) string {
