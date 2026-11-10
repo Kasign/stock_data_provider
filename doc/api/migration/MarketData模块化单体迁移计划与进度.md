@@ -46,6 +46,21 @@ Go Test Suite Run `42807835415`，测试代码 HEAD：`d7ba8b127a997432e547ce574
 
 **当前 CI 判定：Data 单测和 race 已通过；go vet 修复已提交但新 SHA 尚未复验。** MariaDB/PIT 集成成功不能替代 Root 装配、迁移锁和生产部署验收；Live Provider workflow 外层成功也不等于每个 Provider/能力/证券/日期/复权口径均完成真实数据验收。
 
+### Root 当前代码核验（2026-11-10，分支 HEAD：`5695d5454343b1e95a036b4940ece323bb9aff37`）
+
+只读核验了当前分支的 Root 组合根与 Data Module 公开入口，结论如下：
+
+| 核验点 | 当前代码事实 | 对迁移阶段的影响 |
+|---|---|---|
+| Data Module 构造与 Application Port | `internal/marketdata/bootstrap/module.go` 提供 `New`、`Application()`、`InProcessHandler()`、`Diagnostics()`、`MigrationRunner()` | Data 侧接入入口已具备，不再增加第二套 Data Bootstrap |
+| Root 创建 Data Module | `internal/server/bootstrap/bootstrap.go` 仍调用旧 `internal/adapters/marketdata.LoadConfig` 和 `service.NewRunnerWithMarketDataStores`；未构造 `internal/marketdata/bootstrap.Module` | M3 未完成，需 Server 组合根接入 |
+| Root 挂载 Data HTTP Adapter | `internal/server/bootstrap/router.go` 当前只注册 Health/Diagnostics 与旧 Analysis API，没有 `/market-api` 路由 | M3 未完成 |
+| Data Migration 注册 | `newMigrationRegistry()` 当前注册 News、Research、Notification，未注册 Data 的 `MigrationRunner` | M3/M4 未完成；Data Migration 仍未由 Root 统一调度 |
+| Diagnostics/readiness | Root 当前诊断服务以共享存储和现有 Migration Registry 为基础，未注入 Data Module Diagnostics | M3 未完成 |
+| Module 生命周期 | Data Module 有 Start/Stop/Close，但 Root Lifecycle 尚未注册 Data Module | M3/M4 未完成 |
+
+**本次核验决议：** 上述缺口均位于 `internal/server/bootstrap/**` 的 Root 组合根范围，不属于当前 Data 允许修改范围。Data 侧不再通过新增 Adapter、重复路由或复制 Migration Runner 来绕过 Root 缺口。下一步应由 Server Owner 在其分支完成 Module 构造、依赖注入、路由、Migration、Diagnostics/readiness 和生命周期注册；Data 分支只提供已存在的公开入口并配合验收。
+
 ### 迁移关闭边界
 
 1. M1/M2 的代码实现不再重复审查或重复拆分；仅针对当前 Data CI 明确失败项修复，并在同一 Data 专项门禁中验证。
