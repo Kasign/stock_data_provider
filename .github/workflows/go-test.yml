@@ -176,6 +176,35 @@ jobs:
           NEWS_MARIADB_TEST_DSN: "root:news-ci@tcp(127.0.0.1:3306)/news_test?parseTime=true&loc=UTC"
         run: go test ./internal/news/adapters/storage -run TestNewsMariaDBRepositoryIntegration -count=1 -v
 
+  researchflow-module-validation:
+    name: Researchflow module format, tests, race and vet
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache-dependency-path: go.sum
+      - name: Check Researchflow gofmt
+        run: |
+          files="$(gofmt -l ./internal/researchflow)"
+          if [[ -n "$files" ]]; then
+            echo "::error::Researchflow Go files need gofmt:"
+            printf '%s\\n' "$files"
+            exit 1
+          fi
+      - name: Download dependencies
+        run: go mod download
+      - name: Run Researchflow tests
+        run: go test ./internal/researchflow/...
+      - name: Run Researchflow race detector
+        run: go test -race ./internal/researchflow/...
+      - name: Run Researchflow go vet
+        run: go vet ./internal/researchflow/...
+
   researchflow-mariadb-integration:
     name: Researchflow MariaDB lifecycle integration
     runs-on: ubuntu-latest
