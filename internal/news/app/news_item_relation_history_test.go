@@ -43,7 +43,11 @@ func TestListNewsItemRelationHistoryPreservesInclusiveBoundaryAndStableOrder(t *
 	boundary := now.Add(-time.Minute)
 	repository := &relationHistoryRepositoryStub{relations: []domain.NewsItemRelation{
 		validRelationHistoryItem("relation-a", boundary),
-		validRelationHistoryItem("relation-b", boundary),
+		func() domain.NewsItemRelation {
+			item := validRelationHistoryItem("relation-b", boundary)
+			item.FromNewsID, item.FromSourceID = "news-3", "source-3"
+			return item
+		}(),
 	}}
 	useCase, err := NewListNewsItemRelationHistory(repository)
 	if err != nil {

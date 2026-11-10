@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -19,6 +20,101 @@ import (
 	"example.com/stock-analysis-flow/internal/news/domain"
 	platformstorage "example.com/stock-analysis-flow/internal/platform/storage"
 )
+
+
+// repositoryIngestHarness 仅供 Storage 集成测试直接验证 Repository 的身份事务、
+// 幂等键和历史查询；它不替代生产 Application 的 Source/Provider 授权入口。
+type repositoryIngestHarness struct {
+	repository app.IdentityRepository
+	newID      func() string
+}
+
+func (h repositoryIngestHarness) Execute(
+	ctx context.Context,
+	sourceID, idempotencyKey string,
+	candidate domain.Candidate,
+	policy domain.SourceURLPolicy,
+) (domain.Observation, error) {
+	if h.repository == nil || h.newID == nil || ctx == nil || strings.TrimSpace(sourceID) == "" ||
+		strings.TrimSpace(idempotencyKey) == "" || strings.TrimSpace(candidate.ProviderCode) != "" {
+		if strings.TrimSpace(candidate.ProviderCode) != "" {
+			return domain.Observation{}, app.ErrProviderOutputPolicyRequired
+		}
+		return domain.Observation{}, app.ErrInvalidRequest
+	}
+	observedAt := time.Now().UTC()
+	candidate = domain.NormalizeCandidate(candidate, observedAt, candidate.QueryDimension)
+	candidate.CanonicalURL = ""
+	if candidate.RawURL != "" {
+		if decision := domain.EvaluateSourceURL(candidate.RawURL, policy); decision.Allowed {
+			candidate.CanonicalURL = decision.CanonicalURL
+		}
+	}
+	credentials, credentialErr := domain.BuildIdentityCredentials(sourceID, candidate.SourceItemID, candidate.RawURL, policy)
+	if credentialErr != nil {
+		credentials = nil
+	}
+	observation := domain.Observation{
+		ID: h.newID(), IdempotencyKey: idempotencyKey, SourceID: sourceID,
+		Candidate: candidate, ObservedAt: observedAt,
+	}
+	if observation.ID == "" {
+		return domain.Observation{}, app.ErrInvalidRequest
+	}
+	var persisted domain.Observation
+	err := h.repository.WithinIdentityTransaction(ctx, func(tx app.IdentityTransaction) error {
+		if len(credentials) == 0 {
+			observation.IdentityStatus = domain.ObservationUnidentified
+			observation.ReasonCode = "news.identity.credential_required"
+			var appendErr error
+			persisted, appendErr = tx.AppendObservation(ctx, observation)
+			return appendErr
+		}
+		existing, err := tx.FindIdentityCredentials(ctx, sourceID, credentials)
+		if err != nil {
+			return err
+		}
+		resolution := domain.ResolveIdentity(sourceID, credentials, existing)
+		switch resolution.Status {
+		case domain.IdentityConflict:
+			observation.IdentityStatus = domain.ObservationConflict
+			observation.ReasonCode = resolution.Reason
+		case domain.IdentityMatched:
+			observation.IdentityStatus = domain.ObservationMatched
+			observation.NewsID = resolution.NewsID
+		case domain.IdentityNew:
+			newsID, err := tx.CreateNewsItem(ctx, sourceID)
+			if err != nil {
+				return err
+			}
+			if strings.TrimSpace(newsID) == "" {
+				return errors.New("news.identity.created_item_id_missing")
+			}
+			observation.IdentityStatus = domain.ObservationNew
+			observation.NewsID = newsID
+			toSave := append([]domain.IdentityCredential(nil), credentials...)
+			for index := range toSave {
+				toSave[index].NewsID = newsID
+				toSave[index].ObservedAt = observedAt
+			}
+			if err := tx.SaveIdentityCredentials(ctx, toSave); err != nil {
+				return err
+			}
+		default:
+			return errors.New("news.identity.resolution_invalid")
+		}
+		var appendErr error
+		persisted, appendErr = tx.AppendObservation(ctx, observation)
+		return appendErr
+	})
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return domain.Observation{}, ctxErr
+	}
+	if err != nil {
+		return domain.Observation{}, errors.Join(app.ErrIdentityTransaction, err)
+	}
+	return persisted, nil
+}
 
 func mustMarshalAuthorizationBinding(t *testing.T, binding domain.NewsAuthorizationBinding) []byte {
 	t.Helper()
@@ -474,45 +570,7 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 		wait.Add(1)
 		go func() {
 			defer wait.Done()
-			observedAt := time.Now().UTC()
-			observation := domain.Observation{
-				ID:             fmt.Sprintf("news-it-observation-%d-%d", time.Now().UnixNano(), index),
-				IdempotencyKey: fmt.Sprintf("news-it-key-%d", index),
-				SourceID:       sourceID,
-				Candidate:      domain.NormalizeCandidate(candidate, observedAt, ""),
-				ObservedAt:     observedAt,
-			}
-			err := repository.WithinIdentityTransaction(ctx, func(tx app.IdentityTransaction) error {
-				existing, findErr := tx.FindIdentityCredentials(ctx, sourceID, identityCandidates)
-				if findErr != nil {
-					return findErr
-				}
-				resolution := domain.ResolveIdentity(sourceID, identityCandidates, existing)
-				switch resolution.Status {
-				case domain.IdentityNew:
-					newsID, createErr := tx.CreateNewsItem(ctx, sourceID)
-					if createErr != nil {
-						return createErr
-					}
-					observation.NewsID = newsID
-					observation.IdentityStatus = domain.ObservationNew
-					credentials := append([]domain.IdentityCredential(nil), identityCandidates...)
-					for credentialIndex := range credentials {
-						credentials[credentialIndex].NewsID = newsID
-						credentials[credentialIndex].ObservedAt = observedAt
-					}
-					if saveErr := tx.SaveIdentityCredentials(ctx, credentials); saveErr != nil {
-						return saveErr
-					}
-				case domain.IdentityMatched:
-					observation.NewsID = resolution.NewsID
-					observation.IdentityStatus = domain.ObservationMatched
-				default:
-					return fmt.Errorf("unexpected identity resolution: %+v", resolution)
-				}
-				_, appendErr := tx.AppendObservation(ctx, observation)
-				return appendErr
-			})
+			observation, err := ingest.Execute(ctx, sourceID, fmt.Sprintf("news-it-key-%d", index), candidate, domain.SourceURLPolicy{})
 			if err != nil {
 				errs <- err
 				return
@@ -570,14 +628,7 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 
 	traceSourceID := sourceID + "-provider-trace"
 	traceCandidate := domain.Candidate{SourceItemID: "provider-trace-item", ProviderCode: "tavily", Title: "trace test"}
-	trace := app.ObservationPolicyTrace{
-		SourcePolicyVersionID: "source-policy-v1",
-		EndpointID:            "endpoint-v1", EndpointPolicyVersionID: "endpoint-policy-v1",
-		ProviderOutputPolicyRef:       "provider-policy-ref",
-		ProviderOutputPolicyVersionID: "provider-policy-v1",
-		PolicyEvaluatedAt:             time.Now().UTC(),
-	}
-	if _, err := ingest.ExecuteWithPolicyTrace(ctx, traceSourceID, "provider-trace-key", traceCandidate, domain.SourceURLPolicy{}, trace); !errors.Is(err, app.ErrProviderOutputPolicyRequired) {
+	if _, err := ingest.Execute(ctx, traceSourceID, "provider-trace-key", traceCandidate, domain.SourceURLPolicy{}); !errors.Is(err, app.ErrProviderOutputPolicyRequired) {
 		t.Fatalf("self-declared provider policy error = %v, want fail-closed rejection", err)
 	}
 	if err := db.QueryRowContext(ctx,

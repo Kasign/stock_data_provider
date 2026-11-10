@@ -27,7 +27,8 @@ func (r *memoryResearchRepository) WithinResearchUpdateTransaction(ctx context.C
 		return err
 	}
 	working := &memoryResearchRepository{
-		observations: map[string]domain.Observation{},
+		afterTransaction: r.afterTransaction,
+		observations:     map[string]domain.Observation{},
 		versions:     map[string][]domain.NewsItemVersion{},
 		relations:    map[string][]domain.RelationAssertion{},
 		evidence:     map[string][][]domain.RelationEvidence{},
