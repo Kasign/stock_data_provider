@@ -203,7 +203,7 @@ func TestIngestProviderCandidatePreservesSourceCatalogFailureClassification(t *t
 	catalogFailure := errors.New("database timeout")
 	for _, test := range []struct {
 		name string
-		err error
+		err  error
 		want error
 	}{
 		{name: "not found", err: ErrSourceEndpointNotFound, want: ErrSourceEndpointNotFound},
@@ -223,7 +223,7 @@ func TestIngestProviderCandidatePreservesSourceCatalogFailureClassification(t *t
 			_, err = usecase.Execute(context.Background(), IngestProviderCandidateRequest{
 				SourceID: "source-1", EndpointID: "endpoint-1", IdempotencyKey: "catalog-error",
 				Candidate: domain.Candidate{ProviderCode: "brave", SourceItemID: "native-1"},
-				Purpose: domain.PurposeInternalPersonalResearch, ContentKind: domain.ContentSnippet,
+								Purpose:   domain.PurposeInternalPersonalResearch, ContentKind: domain.ContentSnippet,
 				StorageMode: domain.StorageTransient, Retention: time.Minute,
 			})
 			if !errors.Is(err, test.want) {

@@ -89,19 +89,47 @@ func TestAuthorizationSnapshotEnvelopeMatchesEveryIndexedField(t *testing.T) {
 	if ref.ContentLevel == changedContentLevel {
 		changedContentLevel = domain.AuthorizationContentSummary
 	}
+	changedContentLevel := domain.AuthorizationContentMetadata
+	if ref.ContentLevel == changedContentLevel {
+		changedContentLevel = domain.AuthorizationContentSummary
+	}
 	tests := []struct {
-		name string
+		name   string
 		mutate func() bool
 	}{
-		{name: "authorization ref", mutate: func() bool { return matches(binding, ref.AuthorizationRef+"-tampered", ref.SubjectRef, ref.ResourceRef, string(ref.Decision), ref.PurposeCode, string(ref.ContentLevel), decidedAt, expiresAt, ref.DecisionFingerprint) }},
-		{name: "subject ref", mutate: func() bool { return matches(binding, ref.AuthorizationRef, ref.SubjectRef+"-tampered", ref.ResourceRef, string(ref.Decision), ref.PurposeCode, string(ref.ContentLevel), decidedAt, expiresAt, ref.DecisionFingerprint) }},
-		{name: "resource ref", mutate: func() bool { return matches(binding, ref.AuthorizationRef, ref.SubjectRef, ref.ResourceRef+"-tampered", string(ref.Decision), ref.PurposeCode, string(ref.ContentLevel), decidedAt, expiresAt, ref.DecisionFingerprint) }},
-		{name: "decision", mutate: func() bool { return matches(binding, ref.AuthorizationRef, ref.SubjectRef, ref.ResourceRef, string(domain.AuthorizationDecisionDenied), ref.PurposeCode, string(ref.ContentLevel), decidedAt, expiresAt, ref.DecisionFingerprint) }},
-		{name: "purpose", mutate: func() bool { return matches(binding, ref.AuthorizationRef, ref.SubjectRef, ref.ResourceRef, string(ref.Decision), ref.PurposeCode+"-tampered", string(ref.ContentLevel), decidedAt, expiresAt, ref.DecisionFingerprint) }},
-		{name: "content level", mutate: func() bool { return matches(binding, ref.AuthorizationRef, ref.SubjectRef, ref.ResourceRef, string(ref.Decision), ref.PurposeCode, string(changedContentLevel), decidedAt, expiresAt, ref.DecisionFingerprint) }},
-		{name: "decided at", mutate: func() bool { return matches(binding, ref.AuthorizationRef, ref.SubjectRef, ref.ResourceRef, string(ref.Decision), ref.PurposeCode, string(ref.ContentLevel), decidedAt.Add(time.Microsecond), expiresAt, ref.DecisionFingerprint) }},
-		{name: "expires at", mutate: func() bool { changed := expiresAt; if changed.Valid { changed.Time = changed.Time.Add(time.Microsecond) } else { changed = sql.NullTime{Time: decidedAt.Add(time.Hour), Valid: true} }; return matches(binding, ref.AuthorizationRef, ref.SubjectRef, ref.ResourceRef, string(ref.Decision), ref.PurposeCode, string(ref.ContentLevel), decidedAt, changed, ref.DecisionFingerprint) }},
-		{name: "fingerprint", mutate: func() bool { return matches(binding, ref.AuthorizationRef, ref.SubjectRef, ref.ResourceRef, string(ref.Decision), ref.PurposeCode, string(ref.ContentLevel), decidedAt, expiresAt, strings.Repeat("f", 64)) }},
+		{name: "authorization ref", mutate: func() bool {
+			return matches(binding, ref.AuthorizationRef+"-tampered", ref.SubjectRef, ref.ResourceRef, string(ref.Decision), ref.PurposeCode, string(ref.ContentLevel), decidedAt, expiresAt, ref.DecisionFingerprint)
+		}},
+		{name: "subject ref", mutate: func() bool {
+			return matches(binding, ref.AuthorizationRef, ref.SubjectRef+"-tampered", ref.ResourceRef, string(ref.Decision), ref.PurposeCode, string(ref.ContentLevel), decidedAt, expiresAt, ref.DecisionFingerprint)
+		}},
+		{name: "resource ref", mutate: func() bool {
+			return matches(binding, ref.AuthorizationRef, ref.SubjectRef, ref.ResourceRef+"-tampered", string(ref.Decision), ref.PurposeCode, string(ref.ContentLevel), decidedAt, expiresAt, ref.DecisionFingerprint)
+		}},
+		{name: "decision", mutate: func() bool {
+			return matches(binding, ref.AuthorizationRef, ref.SubjectRef, ref.ResourceRef, string(domain.AuthorizationDecisionDenied), ref.PurposeCode, string(ref.ContentLevel), decidedAt, expiresAt, ref.DecisionFingerprint)
+		}},
+		{name: "purpose", mutate: func() bool {
+			return matches(binding, ref.AuthorizationRef, ref.SubjectRef, ref.ResourceRef, string(ref.Decision), ref.PurposeCode+"-tampered", string(ref.ContentLevel), decidedAt, expiresAt, ref.DecisionFingerprint)
+		}},
+		{name: "content level", mutate: func() bool {
+			return matches(binding, ref.AuthorizationRef, ref.SubjectRef, ref.ResourceRef, string(ref.Decision), ref.PurposeCode, string(changedContentLevel), decidedAt, expiresAt, ref.DecisionFingerprint)
+		}},
+		{name: "decided at", mutate: func() bool {
+			return matches(binding, ref.AuthorizationRef, ref.SubjectRef, ref.ResourceRef, string(ref.Decision), ref.PurposeCode, string(ref.ContentLevel), decidedAt.Add(time.Microsecond), expiresAt, ref.DecisionFingerprint)
+		}},
+		{name: "expires at", mutate: func() bool {
+			changed := expiresAt
+			if changed.Valid {
+				changed.Time = changed.Time.Add(time.Microsecond)
+			} else {
+				changed = sql.NullTime{Time: decidedAt.Add(time.Hour), Valid: true}
+			}
+			return matches(binding, ref.AuthorizationRef, ref.SubjectRef, ref.ResourceRef, string(ref.Decision), ref.PurposeCode, string(ref.ContentLevel), decidedAt, changed, ref.DecisionFingerprint)
+		}},
+		{name: "fingerprint", mutate: func() bool {
+			return matches(binding, ref.AuthorizationRef, ref.SubjectRef, ref.ResourceRef, string(ref.Decision), ref.PurposeCode, string(ref.ContentLevel), decidedAt, expiresAt, strings.Repeat("f", 64))
+		}},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
