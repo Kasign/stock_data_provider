@@ -185,3 +185,13 @@
 - API 单测和 Deployment Contract 测试均不能替代真实 Server 鉴权与浏览器联调。
 - WebUI 维度 1 partial；same-origin API client and reverse-proxy implementation evidenced / target Root Server session-auth integration not evidenced。
 - 本批未完成逐页面 DTO/OpenAPI/Handler/Golden 映射，后续归维度 2 和 API-01 矩阵核验。
+
+
+### WebUI — 维度 2：Analysis Run DTO/OpenAPI 映射初审
+
+- 固定代码基线：`b6dfc85ba214fe16268c8cba780641a8bfe15086`。
+- 已核对 `web/src/api.js`、`web/src/task-workflow.js`、`web/tests/api.test.mjs`、`doc/api/contracts/分析任务.openapi.yaml` 和 Root Server Router。
+- WebUI `getAnalysisRun` 与 Root Server 均使用 `GET /api/v1/analysis/runs/{run_id}`，但 OpenAPI 未声明该路径和 Run 响应 Schema。
+- 新增 **AUD-WEBUI-CTR-003**（P2，契约文档缺口）：补齐 Run 查询 DTO、状态码和 Golden/契约测试后关闭；不据此认定运行时路由缺失。
+- 本批只完成 Analysis Run 单路径映射；AnalysisRequest/Task/TaskEvent 逐字段核验及 Market Data 全量 DTO 映射待后续批次。WebUI 维度 2 保持 partial。
+- 详细证据见 `Platform-维度1-Application-Port与调用点.md` 第 16 节。
