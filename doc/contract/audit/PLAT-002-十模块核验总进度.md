@@ -457,3 +457,16 @@
 - CTR-010 影响范围增加 LimitPoolItem 六个 omitempty 数值字段及 LimitPoolSnapshot.provider_report_date，共七个字段。
 - 页面显示主要榜单字段、总量/返回量/请求上限、来源时间和质量，不消费金额扩展字段；是否需要展示待产品确认。API Client 与 Limit Pool DOM 专项测试缺失，已有 Provider/Service 覆盖分页、部分覆盖、重复证券和 unknown 回退。
 - WebUI 维度 2 继续 partial。盘点剩余待审数据集：Dragon Tiger、Stock Search、Analysis Run、Provider Probe History。
+
+
+### WebUI — 维度 2：Dragon Tiger 龙虎榜
+
+- 详细记录：[`WebUI-维度2-Dragon-Tiger.md`](./WebUI-维度2-Dragon-Tiger.md)
+- 已核对 DragonTigerItem/Snapshot DTO、DragonTigerProvider Port、Eastmoney/Hithink Provider、默认配置与 Bootstrap、DataService 校验/回退/缓存、Handler/OpenAPI、WebUI Client/市场活动页面和现有测试。
+- 默认仅启用 Eastmoney；Hithink 虽实现相同 Port，但默认 disabled。Eastmoney 对无报告和空报表保持 unknown，排除可转债/B 股并保留本页原始/接受/排除计数；因源端没有精确快照时间，有数据的结果保持 degraded。
+- Hithink 金额单位未获明确证明，原始金额独立保存在 provider_defined 字段，不映射为 CNY。其 Provider 当前一次读取 stock_items 全集并本地分页。
+- 新增 **AUD-WEBUI-CTR-043（P1）**：Hithink 将整份 stock_items 数量写入 source_returned，但 Service 要求当前页原始记录数；总记录数超过 page_size 时会被拒绝，导致其无法有效承担回退。此外重复 symbol 被静默丢弃却不计入排除数，也破坏 source_returned=returned+excluded 计数恒等式。
+- 新增 **AUD-WEBUI-CTR-044（P2）**：Hithink 显式日期只支持最近一年，但 DataService/Handler/OpenAPI 公共契约未披露 Provider 范围限制；默认配置 disabled，启用回退时才影响较早日期查询。
+- CTR-010 影响范围增加 DragonTigerItem 16 个 omitempty 指针字段，以及 provider_amount_unit、provider_report_date 两个 omitempty 字符串；OpenAPI 均声明 nullable=true，与 Go nil 时省略不一致。现有 JSON 序列化 Golden 未覆盖 DragonTiger DTO。
+- WebUI 已展示分页计数、排除数、质量与来源时间，并只展示明确 CNY 金额字段；API Client 无直接请求测试，页面无龙虎榜分页/渲染 DOM 回归。当前也缺 Hithink 龙虎榜 Provider 专项测试。
+- WebUI 维度 2 继续 partial。剩余待审数据集：Stock Search、Analysis Run、Provider Probe History。
