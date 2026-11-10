@@ -645,3 +645,26 @@ Golden应由真实DTO序列化生成或与真实序列化逐字节/结构比较�
 - 本轮确认了契约文件和精确修复要求，但没有检查/修改责任模块分支，也没有业务实现提交可供验收；责任分支尚未在本工单中指定。
 - CTR-006仍为`ready_for_implementation`，未关闭、未冻结。
 - 后续不得再次讨论字段语义；取得责任分支修复SHA后，直接按28.4验收。
+
+
+## 25. Data 跨模块消费边界差异登记（2026-11-10）
+
+固定代码基线：`origin/integration @ b6dfc85ba214fe16268c8cba780641a8bfe15086`。本节只登记 Data→Quant、Data→Research 两条边界已完成审查发现；不代表责任模块已修复，也不改变固定审计基线。
+
+| 边界 | 唯一问题主题 | 当前状态 | 冻结影响 | 后续统一处理条件 |
+|---|---|---|---|---|
+| Data→Quant | Data Application DTO 与内部 Model 字段映射高度同构，公共契约独立性证据不足；内部采集字段不得未经领域语义审查直接外露 | `pending_evidence` | Data 公共 DTO 边界暂不能按当前实现直接冻结 | Data 责任方明确公开字段的业务含义/必要性，剔除纯内部实现字段或证明其公开用途，并提供 DTO/Schema/Golden 一致性证据 |
+| Data→Quant | DailyBars Snapshot 缺少 Quant 所需的不可变输入引用/Manifest 连接；交易日历版本及完整性证据未映射 | `pending_decision + pending_evidence` | 依赖快照、PIT、连续交易日窗口的 Quant 输入契约不能冻结 | 统一决策：Data 提供日历版本和完整性证据，区分非交易日、停牌、缺失/无效行情；Quant 负责连续性校验；补真实签发与消费证据 |
+| Data→Quant | Data v1 number/float64 与 Quant 精度要求不一致；v2 Decimal 精度、scale/舍入和版本识别未形成真实接入证据 | `pending_evidence` | 精确计算输入契约不能冻结 | 按既有 v2 Decimal 规则补字段级精度/舍入定义、原始精度保真、Golden 和真实 Adapter 证据；禁止 float64 转字符串伪造精度 |
+| Data→Quant | Data Quality 含 `stale`，Quant QualityPolicy 无对应明确映射 | `pending_decision` | stale 输入处理策略不能冻结 | Data 提供 stale 原因/时间证据；Quant 按指标输入策略拒绝或保留 degraded，不得提升为 valid |
+| Data→Quant | 权威 OpenAPI 路径/版本与历史契约文档引用冲突 | `pending_evidence` | 相关契约引用无法作为唯一权威来源冻结 | 统一权威路径、版本和所有消费者引用；以固定基线文件为证，不扩大 API 版本设计 |
+| Data→Research | Data 日线事实本身的 `available_at` 是否公开、来源证据及缺失表达尚待核实 | `pending_decision` | 严格 PIT 可用性不能从 trade_date/provider_time/fetched_at 推断 | 核对 DATA-CTR-005/007 完整定义；若确实缺失，由 Data 明确提供有证据的 available_at，无证据时 null |
+| Data→Research | Snapshot Manifest 的 snapshot_ref/manifest_fingerprint/sources 与 Evidence source_ref/source_version/source_locator/authorization_ref 映射未明确 | `pending_decision` | Evidence 来源定位及授权绑定不能冻结 | 明确 Evidence 直接引用不可变 Snapshot；Manifest 保留多 Provider 来源版本；source_locator 定位证券/日期/记录；Schema 版本与 Provider 数据版本分离；authorization_ref.resource_ref 绑定 Snapshot |
+| Data→Research | v2 DTO、Data Owner AuthorizationRef 签发/复核、Research Data Adapter 和联合 Contract Test 尚无完整真实接入证据 | `pending_evidence` | Data→Research 首批日线 Evidence 交互不能标记 frozen | 只补真实生产方签发、Research Adapter 映射、授权复核和双方联合 Contract Test；不重审已确认的 Research Domain/Storage/PIT 规则 |
+
+### 本节执行边界
+
+- 上述问题进入唯一矩阵，后续由 Data/Quant/Research 责任方统一处理；PLAT-002 不修改责任模块代码。
+- 已确认的业务职责、依赖方向、首批单证券日线范围、PIT 时间字段区分、授权 Owner 原则不再重复审查。
+- 本轮之后如无责任方新提交或决策，不重读上述相同文件；只核验新增证据和关闭条件。
+- 下一审查批次转入 News→Research 边界，沿用同一固定代码基线，范围仅限新闻 Evidence 查询/来源版本/PIT/授权与 Research 消费映射。
