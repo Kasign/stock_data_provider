@@ -21,6 +21,15 @@ import (
 	platformstorage "example.com/stock-analysis-flow/internal/platform/storage"
 )
 
+func mustMarshalAuthorizationBinding(t *testing.T, binding domain.NewsAuthorizationBinding) []byte {
+	t.Helper()
+	payload, err := json.Marshal(binding)
+	if err != nil {
+		t.Fatalf("marshal authorization binding: %v", err)
+	}
+	return payload
+}
+
 func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 	dsn := os.Getenv("NEWS_MARIADB_TEST_DSN")
 	if dsn == "" {
@@ -115,6 +124,39 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 	}
 	if !errors.Is(authorizationTamperErr, app.ErrInvalidAuthorizationSnapshot) {
 		t.Fatalf("tampered authorization snapshot error = %v, want invalid snapshot", authorizationTamperErr)
+	}
+	// Lookup columns are an immutable envelope and must match the verified payload.
+	if _, err := db.ExecContext(ctx,
+		"UPDATE news_authorization_snapshots SET decision = ? WHERE authorization_ref = ?",
+		string(domain.AuthorizationDecisionDenied), binding.AuthorizationRef.AuthorizationRef,
+	); err != nil {
+		t.Fatalf("tamper authorization envelope: %v", err)
+	}
+	_, authorizationMetadataErr := repository.GetAuthorizationSnapshot(ctx, binding.AuthorizationRef.AuthorizationRef)
+	if _, err := db.ExecContext(ctx,
+		"UPDATE news_authorization_snapshots SET decision = ? WHERE authorization_ref = ?",
+		string(binding.AuthorizationRef.Decision), binding.AuthorizationRef.AuthorizationRef,
+	); err != nil {
+		t.Fatalf("restore authorization envelope: %v", err)
+	}
+	if !errors.Is(authorizationMetadataErr, app.ErrInvalidAuthorizationSnapshot) {
+		t.Fatalf("tampered authorization envelope error = %v, want invalid snapshot", authorizationMetadataErr)
+	}
+	if _, err := db.ExecContext(ctx,
+		"UPDATE news_authorization_snapshots SET payload_json = JSON_OBJECT('oversized', REPEAT('x', ?)) WHERE authorization_ref = ?",
+		maximumAuthorizationSnapshotBytes, binding.AuthorizationRef.AuthorizationRef,
+	); err != nil {
+		t.Fatalf("write oversized authorization payload: %v", err)
+	}
+	_, authorizationOversizeErr := repository.GetAuthorizationSnapshot(ctx, binding.AuthorizationRef.AuthorizationRef)
+	if _, err := db.ExecContext(ctx,
+		"UPDATE news_authorization_snapshots SET payload_json = ? WHERE authorization_ref = ?",
+		mustMarshalAuthorizationBinding(t, binding), binding.AuthorizationRef.AuthorizationRef,
+	); err != nil {
+		t.Fatalf("restore authorization payload: %v", err)
+	}
+	if !errors.Is(authorizationOversizeErr, app.ErrInvalidAuthorizationSnapshot) {
+		t.Fatalf("oversized authorization payload error = %v, want invalid snapshot", authorizationOversizeErr)
 	}
 
 	snapshotCreatedAt := time.Now().UTC()

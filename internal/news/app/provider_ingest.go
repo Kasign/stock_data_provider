@@ -12,6 +12,7 @@ import (
 var (
 	ErrProviderOutputPolicyUnavailable = errors.New("news.provider.output_policy_unavailable")
 	ErrProviderOutputPolicyDenied      = errors.New("news.provider.output_policy_denied")
+	ErrSourceCatalogUnavailable        = errors.New("news.source.catalog_unavailable")
 )
 
 // ProviderOutputPolicyBinding 是可信策略目录解析后的不可变版本绑定。
@@ -78,7 +79,13 @@ func (u *IngestProviderCandidate) Execute(ctx context.Context, request IngestPro
 	}
 
 	registration, err := u.sources.LookupEndpoint(ctx, request.SourceID, request.EndpointID)
-	if err != nil || registration.SourceID != request.SourceID ||
+	if err != nil {
+		if errors.Is(err, ErrSourceEndpointNotFound) {
+			return domain.Observation{}, ErrSourceEndpointNotFound
+		}
+		return domain.Observation{}, errors.Join(ErrSourceCatalogUnavailable, err)
+	}
+	if registration.SourceID != request.SourceID ||
 		registration.EndpointID != request.EndpointID || !registration.Enabled {
 		return domain.Observation{}, ErrSourceEndpointNotFound
 	}

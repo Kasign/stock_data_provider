@@ -198,3 +198,43 @@ func TestIngestProviderCandidateRejectsProviderIdentityMismatch(t *testing.T) {
 		t.Fatalf("err=%v repository=%+v", err, repository)
 	}
 }
+
+func TestIngestProviderCandidatePreservesSourceCatalogFailureClassification(t *testing.T) {
+	catalogFailure := errors.New("database timeout")
+	for _, test := range []struct {
+		name string
+		err error
+		want error
+	}{
+		{name: "not found", err: ErrSourceEndpointNotFound, want: ErrSourceEndpointNotFound},
+		{name: "wrapped not found", err: errors.Join(errors.New("lookup"), ErrSourceEndpointNotFound), want: ErrSourceEndpointNotFound},
+		{name: "database failure", err: catalogFailure, want: ErrSourceCatalogUnavailable},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			repository := &memoryIdentityRepository{}
+			ingest := newCandidateIngest(repository, func() string { return "must-not-persist" })
+			usecase, err := NewIngestProviderCandidate(ingest,
+				providerIngestCatalogStub{err: test.err},
+				providerIngestPolicyStub{binding: validProviderIngestPolicy()},
+			)
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, err = usecase.Execute(context.Background(), IngestProviderCandidateRequest{
+				SourceID: "source-1", EndpointID: "endpoint-1", IdempotencyKey: "catalog-error",
+				Candidate: domain.Candidate{ProviderCode: "brave", SourceItemID: "native-1"},
+				Purpose: domain.PurposeInternalPersonalResearch, ContentKind: domain.ContentSnippet,
+				StorageMode: domain.StorageTransient, Retention: time.Minute,
+			})
+			if !errors.Is(err, test.want) {
+				t.Fatalf("Execute() error = %v, want errors.Is(_, %v)", err, test.want)
+			}
+			if test.name == "database failure" && !errors.Is(err, catalogFailure) {
+				t.Fatalf("catalog cause was not preserved: %v", err)
+			}
+			if len(repository.observations) != 0 || len(repository.items) != 0 {
+				t.Fatalf("catalog failure reached persistence: %+v", repository)
+			}
+		})
+	}
+}
