@@ -74,3 +74,82 @@ adapters -> ports
 - 消费者追踪、Server 装配入口、Data 独立 Module 边界和全量 Platform import 扫描尚未完成。
 
 **维度状态：partial。不得标记为 verified。**
+
+
+## 7. 第二批：Server 组合根与 Data Module 接入点
+
+### 7.1 Server Bootstrap 的 Platform 消费证据
+
+固定基线文件：
+
+- `internal/server/bootstrap/bootstrap.go`（blob `92df61265f173251ac7811f99a7ab9f41ac470ed`）
+- `internal/server/bootstrap/router.go`（blob `2597c998236a8e981773635eced7915a28d6b2ed`）
+- `internal/server/diagnostics/service.go`（blob `<need-verify>`）
+- `internal/server/migration/registry.go`（blob `<need-verify>`）
+- `internal/server/runtime/lifecycle.go`（blob `<need-verify>`）
+
+已确认的真实调用：
+
+| Platform 能力 | Server 调用点 | 方式与判断 |
+|---|---|---|
+| Config | `bootstrap.Run` 调用 `config.LoadDotEnvIfExists`、`config.NewEnv` | Server 组合根直接使用公共配置原语 |
+| Security | `platformsecurity.NewAuthenticator`；`NewRouter`、`AnonymousAccess`、`OwnerAccess` | Server 装配认证器与路由策略，符合组合根职责 |
+| Storage | `newMigrationRegistry` 注册模块提供的 `[]platformstorage.Migration`；Registry 调用 `platformstorage.ApplyMigrations` | SQL 定义由模块提供，Platform 执行底层迁移能力，Server 负责编排 |
+| Diagnostics | `serverdiagnostics.NewServiceWithMigration` 使用 `platformdiagnostics.Runner{}` | Server 负责聚合 Storage/模块 Check，Platform 负责通用执行 |
+| Task Queue | Bootstrap 调用 `taskqueue.New`，注册 `legacyAnalysisWorker` | 目前是旧 Analysis 专用能力，和 AUD-PLAT-PORT-001 的领域反向依赖问题相互印证 |
+| Lifecycle | `runtime.NewLifecycle`、`Register`、`Start`、`Stop` | 属于 Server 自身的进程级组件编排，不是 Platform Port |
+
+Server 的路由文件仅注册 Health/Readiness/Diagnostics 和旧 Analysis 路由；没有在该路由装配文件中发现新领域 Application Port 的接入。Bootstrap 中明确说明 Legacy Analysis 组件仍处于过渡边界。
+
+### 7.2 当前 Server 组合根覆盖范围
+
+Bootstrap 的 Migration Registry 当前只注册：
+
+- News：`newsstorage.Migrations()`
+- Research：`researchstorage.Migrations()`
+- Notification：`notificationstorage.Migrations()`
+
+当前 Worker Lifecycle 只注册旧 Analysis Worker；HTTP API 只接入旧 Analysis Handler。不能将这些事实推断为其他模块没有自己的 Application Port，而是说明本固定基线的 Server 组合根尚未将全部领域模块装配为运行组件。
+
+### 7.3 Data Module 的独立启动与注入边界
+
+固定基线文件：
+
+- `cmd/market-data/main.go`（blob `06fc460cbea38c1aad34b9e23c5124004a91f3fe`）
+- `internal/marketdata/bootstrap/module.go`（blob `859df0ca2fc26f02dab2399fe684617da9f2fc89`）
+- `internal/marketdata/bootstrap/egress.go`（blob `d32914b2693aba0163c521a3dc9c3223c55585e8`）
+
+已确认：
+
+1. Data 有独立 `cmd/market-data` 启动入口。入口自行打开 MariaDB、按配置创建 Redis Cache，再调用 `bootstrap.New`。
+2. `marketdata/bootstrap.Dependencies` 已为各 Provider 预留 `provider.HTTPDoer` 和受控 TCP Dial 注入点，并有 `RequireEgressDependencies` 完整性校验。
+3. `Module.New` 可返回窄化的 `Application()`、`Diagnostics()`、`MigrationRunner()`，并区分调用方拥有的 Store/Cache 与模块自身拥有的 BaoStock Client。
+4. 当前 `cmd/market-data/main.go` 调用 `bootstrap.New` 时仅传入 Store、Cache、Logger，没有传入 HTTPDoer / Dialer，也没有启用 `RequireEgressDependencies`。
+5. Data Module 的 Provider 注入机制具备承接受控出口的能力，但该独立启动入口没有证据表明实际使用 Platform HTTP Client 的 `BoundDoer` / `BoundDialer`。
+
+判断：
+
+- Data 的 Application Port 和基础设施依赖注入接口已经存在；这部分不应误判为“缺少 Port”。
+- 但在本固定基线的独立启动方式下，Platform 受控出站能力与 Data Provider 的依赖注入尚未形成可证明的接线。需要单独审计 Data 的出站安全契约和部署边界。
+- 这也解释了为何不能只看 Data 的 Dependencies 字段或 Egress 完整性校验，就认定 Platform HTTP Client 已接入。
+
+### 7.4 本批新增待核项
+
+**AUD-PLAT-PORT-002：Data 独立入口未证明接入 Platform 受控出站执行器（待核，P1 候选）**
+
+证据边界：`cmd/market-data/main.go` 的 Dependencies 仅传 Store/Cache/Logger；Module 依赖中虽有 HTTPDoer/Dialer 字段，但当前入口未注入。当前入口也未开启 `RequireEgressDependencies`。
+
+后续处理：
+- 先核对 Data 部署是否仍由独立 `cmd/market-data` 承担，以及是否有其他生产启动入口负责注入；
+- 核对所有 Provider 的默认 HTTP/TCP 实现，判断是否存在绕过受控出口的真实网络调用；
+- 再由 Data 与 Platform 责任方确定是由 Root Server 注入，还是保留独立 Data 组合根但由其创建 Platform BoundDoer/BoundDialer；
+- 未完成前不得标记 Data Platform 出站接入通过。
+
+### 7.5 本批结论
+
+- 已找到 Server 对 Config、Security、Storage、Diagnostics、Task Queue 的真实调用点；Server 是 Platform 技术能力的消费者和组合根。
+- Server 当前 Bootstrap 仍以旧 Analysis 为中心，News/Research/Notification Migration 已登记，但其余领域的 HTTP/Application/Worker 接入不能从当前 Bootstrap 中得到证据。
+- Data 独立入口和 Module 注入结构已核；其 HTTPDoer/Dialer 受控注入点存在，但入口没有注入这些依赖。
+- Request ID Middleware、Platform HTTP Client 的 Server 装配、各领域模块消费者仍未完成全量追踪。
+
+**维度状态仍为 partial。**
