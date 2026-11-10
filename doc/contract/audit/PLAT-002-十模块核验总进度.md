@@ -281,3 +281,13 @@
 - 新增 **AUD-WEBUI-CTR-013**（P2，待产品范围确认）：服务端支持 as_of PIT 查询，但 WebUI API Client/页面未暴露该参数或历史时点查询动作。
 - 页面已消费分区质量、报告期、披露日期、available_at、指标、单位、质量原因及 system_observed_at；未发现缺失值补零。
 - 未发现已证实运行时财务数值错误；WebUI 维度 2 继续 partial。详细证据见审计明细第 25 节。
+
+
+### WebUI — 维度 2：Announcements 公告 DTO、日期范围与分页消费
+
+- 已核对 StockAnnouncement/StockAnnouncementSnapshot Go DTO、Eastmoney Provider、Service 日期范围与分页校验、HTTP Handler、OpenAPI、模型反射/序列化测试及 WebUI API Client/页面/浏览器测试。
+- 公告日期、源端发布时间、服务采集时间严格区分；源端时间不可解析时不伪造时间戳，条目降级并写字段诊断；空列表保持 unknown。
+- Provider 与 Service 校验页码、页大小、总页数、返回条数、has_more、公告日期范围、证券身份和 article_id 页内唯一性；当前 API 为页码分页，不提供稳定游标/快照令牌。
+- 将 StockAnnouncement.published_at 纳入 AUD-WEBUI-CTR-010：Go omitempty 指针 nil 时省略，OpenAPI 却声明 nullable=true。
+- 新增 **AUD-WEBUI-CTR-014**（P2）：WebUI 首次及后续公告分页请求均未复用首屏响应解析出的 start_date/end_date；跨中国自然日边界可能把不同查询窗口的页面合并，且没有跨页 article_id 去重/稳定集合保证。
+- WebUI 已接通公告 API，处理空状态、质量、来源时间、安全链接和刷新时旧分页响应失效；但跨页查询范围与集合一致性仍待修复。WebUI 维度 2 继续 partial。详细证据见审计明细第 26 节。
