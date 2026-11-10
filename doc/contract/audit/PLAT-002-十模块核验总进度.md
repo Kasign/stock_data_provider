@@ -421,3 +421,13 @@
 - `web/tests/api.test.mjs` 已覆盖多类请求；Market Hot Stocks、Market Indices、Sentiment/History、Breadth、Limit Pool、Dragon Tiger、两类 Liveness 等函数未见该文件直接请求测试，需再核浏览器测试覆盖。
 - 待核数据集收敛为 Hot Rankings、Market Sentiment History、Limit Pool、Dragon Tiger、Stock Search、Analysis Run、Provider Probe History；既有第 1–36 节已审数据集不重复展开。
 - 本轮只完成入口盘点，不代表 DTO/Schema/Golden 完整；WebUI 维度 2 保持 partial。
+
+
+### WebUI — 维度 2：Hot Rankings 人气榜与飙升榜
+
+- 详细记录：[`WebUI-维度2-Hot-Rankings.md`](./WebUI-维度2-Hot-Rankings.md)
+- 已核对 HotRanking DTO、统一 HotRankingProvider Port、Eastmoney/同花顺/雪球实现、默认 Provider 配置、Bootstrap 装配、Service 校验/回退/缓存、HTTP Handler、OpenAPI、WebUI API Client/市场概览消费及相关测试。
+- 默认只启用 Eastmoney HotRankings；Hithink、Xueqiu 虽实现相同 Port，但默认 disabled。榜单是延迟排名数据，成功结果保持 degraded；热度量纲由 Provider 定义，不应跨源直接比较。
+- 新增 **AUD-WEBUI-CTR-037（P2）**：HotRankingItem.change_percent 的 OpenAPI 描述错误引用 LimitPoolSnapshot 的 has_data 约束，可能误导消费者。HotRankingItem 五个 omitempty 数值字段及 Snapshot.provider_time 的 nullable 不一致纳入 CTR-010。
+- WebUI 当前只开放 popular/surge；服务端/OpenAPI/雪球 Provider 另支持 followers，归为产品范围待决，不直接登记缺陷。
+- `getMarketHotStocks` 未见 API Client 专用请求测试，页面测试也未直接验证榜单真实响应 DOM；已有源码结构断言和 Provider/Service 测试。WebUI 维度 2 继续 partial。
