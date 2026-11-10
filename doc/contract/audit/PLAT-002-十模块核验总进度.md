@@ -365,3 +365,15 @@
 - 新增 **AUD-WEBUI-CTR-026**（P2）：市场情绪辅助池缺少完整日期证据时仍可能附加计数。
 - AUD-WEBUI-CTR-010 影响范围增加 MarketBreadthSnapshot.oldest_quote_time/newest_quote_time：Go omitempty 指针 nil 时省略，OpenAPI 却声明 nullable=true。
 - WebUI 已消费并展示四类家数和覆盖元数据；API Client 无直接 getMarketBreadth 请求测试，浏览器测试未直接覆盖 renderBreadth。未发现已证实的涨跌分类算术错误；WebUI 维度 2 继续 partial。
+
+
+### WebUI — 维度 2：Market Indices 核心指数行情
+
+- 固定代码基线：`b6dfc85ba214fe16268c8cba780641a8bfe15086`；详细证据见审计明细第 33 节。
+- 已核对 IndexQuoteProvider Port、Eastmoney/同花顺/TickFlow 三个实现、配置与装配、DataService 校验/回退/15 秒缓存、HTTP Handler、OpenAPI 及 WebUI 消费。
+- 三个 Provider 使用相同七个核心指数白名单。规范涨跌额为最新价减昨收价，涨跌幅为该差值除以昨收价乘 100；同花顺和 TickFlow 以计算值为准并交叉校验源端扩展值，Eastmoney 对源端值做一致性校验。未发现已证实的公式或符号错误。
+- 固定默认配置仅 Eastmoney 启用 index_quotes；同花顺和 TickFlow 实现了 Port，但对应能力默认关闭。Service 允许返回部分指数集合并标记 degraded，不强制七项完整覆盖。
+- 同花顺使用响应级 timestamp；Eastmoney/TickFlow 逐指数记录时间；TickFlow 七个指数分两批请求。Service 仅拒绝明显未来时间，不校验最大历史年龄或跨指数时间跨度。新增 **AUD-WEBUI-CTR-027**（P2）：核心指数快照缺少统一时间跨度与陈旧度质量约束。
+- AUD-WEBUI-CTR-010 影响范围增加 MarketIndexQuote 的 latest_price、change、change_percent、open、high、low、prev_close、amount、quote_time：Go omitempty 字段 nil 时省略，OpenAPI 却声明 nullable=true。
+- WebUI 已接通并逐指数显示最新价、涨跌额、涨跌幅、质量和行情时间；API Client 缺少 getMarketIndices 直接请求测试，浏览器测试缺少 renderIndices DOM 回归。
+- 未发现已证实的指数涨跌公式错误；时间一致性、陈旧度和页面回归覆盖仍待补强。WebUI 维度 2 继续 partial。
