@@ -11,8 +11,9 @@ import (
 )
 
 // ListNewsItemRelationsAt returns the append-only relation assertion history
-// visible at the requested knowledge time. Superseded and retracted assertions, plus both directions of their supersedes chain,
-// are intentionally retained; callers must not mistake this for a current graph.
+// visible at the requested knowledge time. Superseded and retracted assertions,
+// plus both directions of their supersedes chain, are intentionally retained.
+// Callers must not mistake this for a current graph.
 func (r *MySQLRepository) ListNewsItemRelationsAt(
 	ctx context.Context,
 	request app.NewsItemRelationHistoryRequest,

@@ -844,15 +844,23 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 
 	// A replacement may change the target item. Both old and new target queries
 	// must retain the complete supersedes chain.
-	changedTarget := relation
-	changedTarget.ID = "news-it-relation-changed-target-" + fmt.Sprint(time.Now().UnixNano())
-	changedTarget.ToNewsID = "news-it-relation-new-target"
-	changedTarget.ToSourceID = "news-it-relation-new-source"
-	changedTarget.SupersedesRelationID = relation.ID
-	changedTarget.ObservedAt = time.Now().UTC()
-	if err := repository.WithinNewsItemRelationTransaction(ctx, func(tx app.NewsItemRelationTransaction) error {
-		return tx.AppendNewsItemRelation(ctx, changedTarget)
+	var changedTargetNewsID string
+	if err := repository.WithinIdentityTransaction(ctx, func(tx app.IdentityTransaction) error {
+		var err error
+		changedTargetNewsID, err = tx.CreateNewsItem(ctx, "news-it-relation-new-source")
+		return err
 	}); err != nil {
+		t.Fatalf("create changed relation target item: %v", err)
+	}
+	changedTarget, err := relationService.Execute(ctx, app.NewsItemRelationRequest{
+		Relation: domain.NewsItemRelation{
+			FromNewsID: newsID, FromSourceID: sourceID,
+			ToNewsID: changedTargetNewsID, ToSourceID: "news-it-relation-new-source",
+			Kind: domain.NewsItemRelationRepostOf, Status: domain.NewsItemRelationConfirmed,
+			SupersedesRelationID: relation.ID, EvidenceObservation: observations[0].ID,
+		},
+	})
+	if err != nil {
 		t.Fatalf("append changed-target relation replacement: %v", err)
 	}
 	for _, targetID := range []string{relation.ToNewsID, changedTarget.ToNewsID} {
@@ -872,7 +880,7 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 			FromNewsID: newsID, FromSourceID: sourceID,
 			ToNewsID: secondObservation.NewsID, ToSourceID: secondSourceID,
 			Kind: domain.NewsItemRelationRepostOf, Status: domain.NewsItemRelationProposed,
-			SupersedesRelationID: relation.ID,
+			SupersedesRelationID: changedTarget.ID,
 			EvidenceObservation:  observations[0].ID,
 			FromVersionID:        latest.ID, ToVersionID: revisedVersion.Version.ID,
 		},
@@ -887,7 +895,7 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read relation history after proposal: %v", err)
 	}
-	if len(history) != 2 || history[0].ID != relation.ID || history[1].ID != proposal.ID {
+	if len(history) != 3 || history[0].ID != relation.ID || history[1].ID != changedTarget.ID || history[2].ID != proposal.ID {
 		t.Fatalf("history after proposal = %#v, want original then proposal", history)
 	}
 	// 提议状态不改变当前关系图；原确认断言仍保留在历史中。
@@ -912,10 +920,11 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read relation history after retraction: %v", err)
 	}
-	if len(history) != 3 ||
+	if len(history) != 4 ||
 		history[0].ID != relation.ID ||
-		history[1].ID != proposal.ID ||
-		history[2].ID != retraction.ID {
+		history[1].ID != changedTarget.ID ||
+		history[2].ID != proposal.ID ||
+		history[3].ID != retraction.ID {
 		t.Fatalf("history after retraction = %#v, want complete append-only chain", history)
 	}
 }

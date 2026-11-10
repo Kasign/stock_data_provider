@@ -305,3 +305,9 @@
 - Repository 使用递归 CTE 返回直接命中断言的完整 supersedes 链（祖先与后继），并严格限制所有节点不晚于 system_as_of。
 - Application 校验直接关联记录、完整链闭包、稳定排序和追加式历史约束；新增目标变更与无关链节点拒绝测试。
 - MariaDB 集成增加旧目标/新目标两侧读取完整链的回归代码；尚未运行 Go 测试或 MariaDB 11.4，递归 CTE 执行行为仍待验收。
+
+
+#### N8-06 补充审查
+
+- 空历史结果属于正常业务结果，已保留空切片语义；只有非空但不含直接命中断言的结果才判为 Repository 历史不一致。
+- MariaDB 集成场景使用真实 News Item 外键和 ApplyNewsItemRelation 追加路径，避免测试直接写入关系表绕过业务约束。

@@ -43,6 +43,9 @@ func (u *ListNewsItemRelationHistory) Execute(
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
+	if len(relations) == 0 {
+		return []domain.NewsItemRelation{}, nil
+	}
 	byID := make(map[string]domain.NewsItemRelation, len(relations))
 	direct := make(map[string]struct{}, len(relations))
 	for i, relation := range relations {

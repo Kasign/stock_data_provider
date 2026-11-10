@@ -226,3 +226,20 @@ func TestListNewsItemRelationHistoryRejectsUnrelatedAncestorRows(t *testing.T) {
 		t.Fatalf("Execute() error = %v, want invalid history", err)
 	}
 }
+
+
+func TestListNewsItemRelationHistoryReturnsEmptyForItemWithoutRelations(t *testing.T) {
+	now := time.Date(2026, 11, 9, 10, 0, 0, 0, time.UTC)
+	repository := &relationHistoryRepositoryStub{}
+	useCase, _ := NewListNewsItemRelationHistory(repository)
+	useCase.now = func() time.Time { return now }
+	result, err := useCase.Execute(context.Background(), NewsItemRelationHistoryRequest{
+		NewsID: "news-without-relations", SystemAsOf: now,
+	})
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if result == nil || len(result) != 0 {
+		t.Fatalf("empty relation history = %#v, want non-nil empty slice", result)
+	}
+}
