@@ -38,11 +38,11 @@ func TestVerifiedUnknownDeliveryEvidenceBindsSnapshotIdentity(t *testing.T) {
 
 type unknownReconciliationLookupAdapter struct {
 	*fakeChannelAdapter
-	outcome    domain.ChannelLookupOutcome
-	lookupErr  error
+	outcome     domain.ChannelLookupOutcome
+	lookupErr   error
 	lookupCalls int
-	observedAt time.Time
-	cancel     context.CancelFunc
+	observedAt  time.Time
+	cancel      context.CancelFunc
 }
 
 func (a *unknownReconciliationLookupAdapter) LookupDelivery(
@@ -110,16 +110,16 @@ func unknownReconciliationServiceFixture(t *testing.T, outcome domain.ChannelLoo
 		ChannelRef: unknown.ChannelRef, ConfigVersion: unknown.ChannelConfigVersion,
 		ChannelKind: "test", Enabled: true,
 		Capabilities: domain.ChannelCapabilities{
-			SupportsIdempotency: domain.CapabilitySupported,
+			SupportsIdempotency:    domain.CapabilitySupported,
 			SupportsDeliveryLookup: domain.CapabilitySupported,
-			SupportsRetryAfter: domain.CapabilityUnsupported,
-			MaxPayloadBytes: 4096,
+			SupportsRetryAfter:     domain.CapabilityUnsupported,
+			MaxPayloadBytes:        4096,
 		},
 	}
 	adapter := &unknownReconciliationLookupAdapter{
 		fakeChannelAdapter: &fakeChannelAdapter{snapshot: channel},
-		outcome: outcome,
-		observedAt: unknownAt.Add(time.Second),
+		outcome:            outcome,
+		observedAt:         unknownAt.Add(time.Second),
 	}
 	registry := NewChannelRegistry()
 	if err := registry.Register(adapter); err != nil {
@@ -151,14 +151,14 @@ func TestUnknownDeliveryReconciliationServiceFailsClosedBeforeLookup(t *testing.
 		want error
 	}{
 		{
-			name: "reader error",
+			name:   "reader error",
 			reader: consistencySnapshotReaderFake{err: readFailure},
-			want: readFailure,
+			want:   readFailure,
 		},
 		{
-			name: "delivery missing",
+			name:   "delivery missing",
 			reader: consistencySnapshotReaderFake{},
-			want: ErrUnknownDeliverySnapshotUnavailable,
+			want:   ErrUnknownDeliverySnapshotUnavailable,
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
