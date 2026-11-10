@@ -352,6 +352,71 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 	if err != nil || repeatedDeleted != 0 {
 		t.Fatalf("repeat expired snapshot cleanup: deleted=%d err=%v, want 0 and nil", repeatedDeleted, err)
 	}
+
+	// 并发清理 Worker 使用不同请求处理同一批到期 Snapshot；总删除数必须
+	// 等于到期记录数，且每个 Worker 不得超过自己的批次上限。
+	concurrentSnapshotCreatedAt := time.Now().UTC().Add(-time.Second)
+	concurrentSnapshots := make([]app.EvidenceSnapshot, 4)
+	for index := range concurrentSnapshots {
+		concurrentSnapshot := snapshot
+		concurrentSnapshot.SnapshotRef = fmt.Sprintf("news-snapshot-cleanup-concurrent-%d-%d", time.Now().UnixNano(), index)
+		concurrentSnapshot.CreatedAt = concurrentSnapshotCreatedAt
+		concurrentSnapshot.SystemAsOf = concurrentSnapshotCreatedAt.Add(-time.Minute)
+		concurrentSnapshot.ExpiresAt = concurrentSnapshotCreatedAt.Add(app.EvidenceSnapshotTTL)
+		concurrentSnapshot.Items = append([]app.EvidenceSnapshotItem(nil), snapshot.Items...)
+		concurrentSnapshot.Items[0].SystemObservedAt = concurrentSnapshotCreatedAt.Add(-2 * time.Minute)
+		concurrentSnapshots[index] = concurrentSnapshot
+		if err := repository.CreateEvidenceSnapshot(ctx, concurrentSnapshot); err != nil {
+			t.Fatalf("create concurrent cleanup snapshot %d: %v", index, err)
+		}
+	}
+	concurrentCleanupAt := concurrentSnapshots[0].ExpiresAt
+	type snapshotCleanupOutcome struct {
+		deleted int64
+		err     error
+	}
+	const snapshotCleanupWorkers = 2
+	snapshotCleanupOutcomes := make(chan snapshotCleanupOutcome, snapshotCleanupWorkers)
+	var snapshotCleanupWait sync.WaitGroup
+	for worker := 0; worker < snapshotCleanupWorkers; worker++ {
+		snapshotCleanupWait.Add(1)
+		go func() {
+			defer snapshotCleanupWait.Done()
+			deleted, cleanupErr := repository.DeleteExpiredEvidenceSnapshots(ctx, concurrentCleanupAt, 2)
+			snapshotCleanupOutcomes <- snapshotCleanupOutcome{deleted: deleted, err: cleanupErr}
+		}()
+	}
+	snapshotCleanupWait.Wait()
+	close(snapshotCleanupOutcomes)
+	var concurrentDeleted int64
+	for outcome := range snapshotCleanupOutcomes {
+		if outcome.err != nil {
+			t.Fatalf("concurrent evidence snapshot cleanup failed: %v", outcome.err)
+		}
+		if outcome.deleted < 0 || outcome.deleted > 2 {
+			t.Fatalf("concurrent evidence snapshot cleanup deleted=%d, want 0..2", outcome.deleted)
+		}
+		concurrentDeleted += outcome.deleted
+	}
+	if concurrentDeleted != int64(len(concurrentSnapshots)) {
+		t.Fatalf("concurrent evidence snapshot cleanup total=%d, want %d", concurrentDeleted, len(concurrentSnapshots))
+	}
+	for _, concurrentSnapshot := range concurrentSnapshots {
+		var remaining int
+		if err := db.QueryRowContext(ctx,
+			"SELECT COUNT(*) FROM news_evidence_snapshots WHERE snapshot_ref = ?",
+			concurrentSnapshot.SnapshotRef,
+		).Scan(&remaining); err != nil {
+			t.Fatalf("count concurrent cleanup snapshot %s: %v", concurrentSnapshot.SnapshotRef, err)
+		}
+		if remaining != 0 {
+			t.Fatalf("concurrent cleanup snapshot %s remains: %d rows", concurrentSnapshot.SnapshotRef, remaining)
+		}
+	}
+	repeatedConcurrentCleanup, err := repository.DeleteExpiredEvidenceSnapshots(ctx, concurrentCleanupAt, 2)
+	if err != nil || repeatedConcurrentCleanup != 0 {
+		t.Fatalf("repeat concurrent snapshot cleanup deleted=%d err=%v, want 0 and nil", repeatedConcurrentCleanup, err)
+	}
 	var idSequence atomic.Uint64
 	newID := func() string { return fmt.Sprintf("news-it-%d", idSequence.Add(1)) }
 	ingest := app.NewIngestCandidate(repository, newID)
