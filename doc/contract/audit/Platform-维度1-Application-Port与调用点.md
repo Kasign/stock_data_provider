@@ -1468,7 +1468,7 @@ StockBoards 的 Provider Port、Go DTO、Service 校验/回退/缓存、HTTP 路
 
 - 固定代码基线：`b6dfc85ba214fe16268c8cba780641a8bfe15086`。
 - Go DTO：`internal/marketdata/model/model.go`（blob `6f04516bd11452a01adcb5acceab571fb1c28ed5`）。
-- Provider 实现：`internal/marketdata/provider/hithink.go`（blob 以固定基线 tree 为准）；Provider 测试 `internal/marketdata/provider/hithink_valuation_test.go`（blob `7ef7eecbb81d54f04872ac6d430823772ce4f743`）。
+- Provider 实现：`internal/marketdata/provider/hithink.go`（blob `337c072c14f764f1f9cfff833f44ddcf5426e04b`）；Provider 测试 `internal/marketdata/provider/hithink_valuation_test.go`（blob `7ef7eecbb81d54f04872ac6d430823772ce4f743`）。
 - Service 校验、回退与缓存：`internal/marketdata/service/valuations.go`（blob `71ed95ace75728c81201647dcd8f1920ee6d13c1`）；回退/质量测试 `internal/marketdata/service/valuations_fallback_test.go`（blob `1fab561d9f8a4ac1a108540c1cfd7e58c183dbfc`）。
 - 字段诊断：`internal/marketdata/validation/valuations.go`（blob `a52a2e227c3d5e64a14067ca96cfc519b1572533`）。
 - HTTP Handler：`internal/marketdata/httpapi/valuations.go`（blob `efaa34be04b06b925ffdd6e4fd037eaf5ec22092`）；路由在 `internal/marketdata/httpapi/server.go` 注册。
