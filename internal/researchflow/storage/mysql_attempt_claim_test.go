@@ -454,6 +454,22 @@ func TestMariaDBClaimAttemptLeaseAndFencing(t *testing.T) {
 		t.Fatalf("restore Stage first-start timestamp: %v", err)
 	}
 
+	// A running Stage cannot retain retry_at or finished_at metadata.
+	if _, err := db.ExecContext(ctx, `UPDATE researchflow_stages
+		SET finished_at = ?, retry_at = ? WHERE stage_ref = ?`,
+		formatResearchflowTimeValue(time.Now().UTC()), formatResearchflowTimeValue(time.Now().UTC()), stageRef); err != nil {
+		t.Fatalf("inject invalid running Stage timestamps: %v", err)
+	}
+	if _, replayed, err := repository.ClaimAttempt(ctx, runRef, stageRef,
+		"ignored-running-stage-time-replay-"+suffix, "worker-b", time.Minute, 3, 8);
+		!errors.Is(err, ErrAttemptHistoryInconsistent) || replayed {
+		t.Fatalf("claim with invalid running Stage timestamps replayed=%v err=%v, want ErrAttemptHistoryInconsistent", replayed, err)
+	}
+	if _, err := db.ExecContext(ctx, `UPDATE researchflow_stages
+		SET finished_at = NULL, retry_at = NULL WHERE stage_ref = ?`, stageRef); err != nil {
+		t.Fatalf("restore running Stage timestamps: %v", err)
+	}
+
 	// Attempt start/finish timestamps must form a valid interval.
 	if _, err := db.ExecContext(ctx, `UPDATE researchflow_attempts
 		SET finished_at = ? WHERE attempt_ref = ?`,

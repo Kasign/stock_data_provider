@@ -63,11 +63,11 @@ func (r *MySQLRunRepository) ClaimAttempt(
 	var stage domain.Stage
 	var expiredAttemptReclaimed bool
 	var stageStatus string
-	var retryAt, startedAt sql.NullString
-	err = tx.QueryRowContext(ctx, `SELECT stage_ref, run_ref, status, version, attempt_no, retry_at, started_at
+	var retryAt, startedAt, stageFinishedAt sql.NullString
+	err = tx.QueryRowContext(ctx, `SELECT stage_ref, run_ref, status, version, attempt_no, retry_at, started_at, finished_at
 		FROM researchflow_stages WHERE stage_ref = ? AND run_ref = ? FOR UPDATE`,
 		stageRef, runRef,
-	).Scan(&stage.Ref, &stage.RunRef, &stageStatus, &stage.Version, &stage.AttemptNo, &retryAt, &startedAt)
+	).Scan(&stage.Ref, &stage.RunRef, &stageStatus, &stage.Version, &stage.AttemptNo, &retryAt, &startedAt, &stageFinishedAt)
 	if err != nil {
 		return domain.Attempt{}, false, fmt.Errorf("lock Researchflow stage %q: %w", stageRef, err)
 	}
@@ -86,13 +86,13 @@ func (r *MySQLRunRepository) ClaimAttempt(
 
 	// Lock and inspect the most recent attempt only after Run and Stage locks.
 	var current domain.Attempt
-	var currentStatus string
+	var currentStatus, currentRunRef string
 	var currentOwner, currentLease, currentStarted sql.NullString
-	err = tx.QueryRowContext(ctx, `SELECT attempt_ref, attempt_no, status, lease_owner,
+	err = tx.QueryRowContext(ctx, `SELECT attempt_ref, run_ref, attempt_no, status, lease_owner,
 		lease_expires_at, fencing_token, started_at
 		FROM researchflow_attempts WHERE stage_ref = ?
 		ORDER BY attempt_no DESC LIMIT 1 FOR UPDATE`, stageRef,
-	).Scan(&current.Ref, &current.Number, &currentStatus, &currentOwner,
+	).Scan(&current.Ref, &currentRunRef, &current.Number, &currentStatus, &currentOwner,
 		&currentLease, &current.FencingToken, &currentStarted)
 	hasAttempt := err == nil
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
@@ -106,7 +106,7 @@ func (r *MySQLRunRepository) ClaimAttempt(
 	if stage.AttemptNo < 0 {
 		return domain.Attempt{}, false, ErrAttemptHistoryInconsistent
 	}
-	var historyCount, zeroFencingTokens, invalidTokenOrder, invalidLeaseState, invalidAttemptTimes int64
+	var historyCount, zeroFencingTokens, invalidTokenOrder, invalidLeaseState, invalidAttemptTimes, invalidRunRefs int64
 	var minAttemptNo, maxAttemptNo sql.NullInt64
 	var firstAttemptStarted sql.NullString
 	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*), MIN(attempt_no), MAX(attempt_no), MIN(started_at),
@@ -123,18 +123,19 @@ func (r *MySQLRunRepository) ClaimAttempt(
 			ELSE 0 END), 0),
 		COALESCE(SUM(CASE WHEN started_at = '' OR
 			(finished_at IS NOT NULL AND finished_at < started_at) THEN 1 ELSE 0 END), 0),
+		COALESCE(SUM(CASE WHEN run_ref <> ? THEN 1 ELSE 0 END), 0),
 		(SELECT COUNT(*) FROM researchflow_attempts newer
 			INNER JOIN researchflow_attempts older
 				ON older.stage_ref = newer.stage_ref
 				AND newer.attempt_no = older.attempt_no + 1
 			WHERE newer.stage_ref = ? AND newer.fencing_token <= older.fencing_token)
-		FROM researchflow_attempts WHERE stage_ref = ?`, stageRef, stageRef,
+		FROM researchflow_attempts WHERE stage_ref = ?`, runRef, stageRef, stageRef,
 	).Scan(&historyCount, &minAttemptNo, &maxAttemptNo, &firstAttemptStarted,
-		&zeroFencingTokens, &invalidLeaseState, &invalidAttemptTimes, &invalidTokenOrder); err != nil {
+		&zeroFencingTokens, &invalidLeaseState, &invalidAttemptTimes, &invalidRunRefs, &invalidTokenOrder); err != nil {
 		return domain.Attempt{}, false, fmt.Errorf("validate Researchflow attempt history for stage %q: %w", stageRef, err)
 	}
 	if historyCount != int64(stage.AttemptNo) || zeroFencingTokens != 0 ||
-		invalidLeaseState != 0 || invalidAttemptTimes != 0 || invalidTokenOrder != 0 ||
+		invalidLeaseState != 0 || invalidAttemptTimes != 0 || invalidRunRefs != 0 || invalidTokenOrder != 0 ||
 		(historyCount == 0 && (minAttemptNo.Valid || maxAttemptNo.Valid || firstAttemptStarted.Valid)) ||
 		(historyCount > 0 && (!minAttemptNo.Valid || !maxAttemptNo.Valid || !firstAttemptStarted.Valid ||
 			minAttemptNo.Int64 != 1 || maxAttemptNo.Int64 != int64(stage.AttemptNo))) {
@@ -142,6 +143,26 @@ func (r *MySQLRunRepository) ClaimAttempt(
 	}
 
 	stageState := domain.StageStatus(stageStatus)
+	if hasAttempt && currentRunRef != runRef {
+		return domain.Attempt{}, false, ErrAttemptHistoryInconsistent
+	}
+	if stageFinishedAt.Valid {
+		return domain.Attempt{}, false, ErrAttemptHistoryInconsistent
+	}
+	switch stageState {
+	case domain.StageReady:
+		if retryAt.Valid || startedAt.Valid || stage.AttemptNo != 0 || hasAttempt {
+			return domain.Attempt{}, false, ErrAttemptHistoryInconsistent
+		}
+	case domain.StageRunning:
+		if retryAt.Valid || !startedAt.Valid || !hasAttempt {
+			return domain.Attempt{}, false, ErrAttemptHistoryInconsistent
+		}
+	case domain.StageRetryWait:
+		if !retryAt.Valid || !startedAt.Valid || !hasAttempt {
+			return domain.Attempt{}, false, ErrAttemptHistoryInconsistent
+		}
+	}
 	if historyCount == 0 {
 		if startedAt.Valid {
 			return domain.Attempt{}, false, ErrAttemptHistoryInconsistent
