@@ -442,3 +442,68 @@ func TestDeliveryExecutionCapsAttemptDeadlineByMaxElapsed(t *testing.T) {
 		t.Fatalf("unexpected bounded execution result: %+v", result)
 	}
 }
+
+
+func TestDeliveryExecutionPreflightSkipPersistsWithoutStartingAttempt(t *testing.T) {
+	service, repository, adapter, claim, event := executionFixture(t)
+	service.preflight.recipients = &fixedRecipientResolver{err: ErrRecipientNotAuthorized}
+
+	result, err := service.Execute(
+		context.Background(), claim, event, "attempt-preflight-skip",
+		0.5, "evidence-preflight-skip",
+	)
+	if err != nil {
+		t.Fatalf("authorization skip should be a completed preflight decision: %v", err)
+	}
+	if result.Action != DeliveryPreflightSkip || result.ReasonCode != "recipient_not_authorized" {
+		t.Fatalf("unexpected preflight result: %+v", result)
+	}
+	if adapter.calls != 0 {
+		t.Fatalf("skipped delivery must not call channel, calls=%d", adapter.calls)
+	}
+	delivery, found, getErr := repository.Get(context.Background(), claim.Delivery.DeliveryID)
+	if getErr != nil || !found || delivery.Status != domain.DeliverySkipped || delivery.AttemptCount != 0 {
+		t.Fatalf("skip must persist without creating Attempt: delivery=%+v found=%v err=%v", delivery, found, getErr)
+	}
+	events := repository.StateEvents(delivery.DeliveryID)
+	if len(events) != 2 || events[1].ReasonCode != "recipient_not_authorized" ||
+		events[1].EvidenceRef != "evidence-preflight-skip" {
+		t.Fatalf("skip must append its reason and evidence: %+v", events)
+	}
+}
+
+func TestDeliveryExecutionPreflightBlockPersistsWithoutStartingAttempt(t *testing.T) {
+	service, repository, adapter, claim, event := executionFixture(t)
+	disabled := channelRegistryTestSnapshot()
+	disabled.ConfigVersion = claim.Delivery.ChannelConfigVersion
+	disabled.Enabled = false
+	blockedAdapter := &fakeChannelAdapter{snapshot: disabled}
+	registry := NewChannelRegistry()
+	if err := registry.Register(blockedAdapter); err != nil {
+		t.Fatal(err)
+	}
+	service.preflight.channels = registry
+
+	result, err := service.Execute(
+		context.Background(), claim, event, "attempt-preflight-block",
+		0.5, "evidence-preflight-block",
+	)
+	if err != nil {
+		t.Fatalf("disabled channel block should be a completed preflight decision: %v", err)
+	}
+	if result.Action != DeliveryPreflightBlock || result.ReasonCode != "channel_disabled" {
+		t.Fatalf("unexpected preflight result: %+v", result)
+	}
+	if adapter.calls != 0 || blockedAdapter.calls != 0 {
+		t.Fatalf("blocked delivery must not call channel, original=%d blocked=%d", adapter.calls, blockedAdapter.calls)
+	}
+	delivery, found, getErr := repository.Get(context.Background(), claim.Delivery.DeliveryID)
+	if getErr != nil || !found || delivery.Status != domain.DeliveryBlocked || delivery.AttemptCount != 0 {
+		t.Fatalf("block must persist without creating Attempt: delivery=%+v found=%v err=%v", delivery, found, getErr)
+	}
+	events := repository.StateEvents(delivery.DeliveryID)
+	if len(events) != 2 || events[1].ReasonCode != "channel_disabled" ||
+		events[1].EvidenceRef != "evidence-preflight-block" {
+		t.Fatalf("block must append its reason and evidence: %+v", events)
+	}
+}
