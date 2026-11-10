@@ -202,6 +202,25 @@ func TestBuildChannelDeliveryLookupRequestBindsUnknownDeliveryAttempt(t *testing
 	}
 }
 
+func TestRegistryLookupUnknownDeliveryRejectsMismatchedConfigSnapshot(t *testing.T) {
+	delivery, channel, attempts, _, _ := unknownReconciliationFixture(t)
+	adapter := &fakeLookupChannelAdapter{
+		fakeChannelAdapter: &fakeChannelAdapter{snapshot: channel},
+	}
+	registry := NewChannelRegistry()
+	if err := registry.Register(adapter); err != nil {
+		t.Fatal(err)
+	}
+	mismatched := channel
+	mismatched.Capabilities.SupportsIdempotency = domain.CapabilitySupported
+	if _, err := registry.LookupUnknownDelivery(context.Background(), delivery, mismatched, attempts[0]); !errors.Is(err, ErrChannelConfigVersionConflict) {
+		t.Fatalf("mismatched immutable config snapshot must be rejected: %v", err)
+	}
+	if adapter.lookupCalls != 0 {
+		t.Fatalf("mismatched config must not reach provider adapter: calls=%d", adapter.lookupCalls)
+	}
+}
+
 func TestRegistryLookupUnknownDeliveryBuildsEvidenceOnlyFromAdapterResult(t *testing.T) {
 	delivery, channel, attempts, _, now := unknownReconciliationFixture(t)
 	channel.Capabilities.SupportsIdempotency = domain.CapabilitySupported

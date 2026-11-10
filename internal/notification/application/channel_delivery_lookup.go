@@ -52,6 +52,19 @@ func (r *ChannelRegistry) LookupUnknownDelivery(
 	channel domain.ChannelConfigSnapshot,
 	attempt domain.DeliveryAttempt,
 ) (UnknownDeliveryEvidence, error) {
+	if r == nil {
+		return UnknownDeliveryEvidence{}, ErrChannelDeliveryLookupUnavailable
+	}
+	r.mu.RLock()
+	registration, exists := r.registrations[channelKey{ref: channel.ChannelRef, version: channel.ConfigVersion}]
+	r.mu.RUnlock()
+	if !exists {
+		return UnknownDeliveryEvidence{}, ErrChannelVersionNotFound
+	}
+	if !equalChannelSnapshot(channel, registration.snapshot) {
+		return UnknownDeliveryEvidence{}, ErrChannelConfigVersionConflict
+	}
+
 	request, err := BuildChannelDeliveryLookupRequest(delivery, channel, attempt)
 	if err != nil {
 		return UnknownDeliveryEvidence{}, err
