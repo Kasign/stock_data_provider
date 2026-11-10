@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"sync"
 	"testing"
 	"time"
 
@@ -87,6 +88,11 @@ func TestMariaDBClaimAttemptLeaseAndFencing(t *testing.T) {
 			},
 			{
 				Ref: "claim-stage-third-" + suffix, RunRef: runRef, Code: "research", Status: domain.StageReady,
+				Version: 1, Required: true, Dependencies: []string{}, RetryPolicyRef: "retry-v1",
+				DiagnosticRefs: []string{}, ReasonCodes: []string{},
+			},
+			{
+				Ref: "claim-stage-fourth-" + suffix, RunRef: runRef, Code: "report", Status: domain.StageReady,
 				Version: 1, Required: true, Dependencies: []string{}, RetryPolicyRef: "retry-v1",
 				DiagnosticRefs: []string{}, ReasonCodes: []string{},
 			},
@@ -279,6 +285,53 @@ func TestMariaDBClaimAttemptLeaseAndFencing(t *testing.T) {
 	}
 	if third.Number != 1 || third.FencingToken != 1 || third.Status != domain.AttemptRunning {
 		t.Fatalf("claim after peer lease expiry returned unexpected Attempt: %#v", third)
+	}
+
+	fourthStageRef := "claim-stage-fourth-" + suffix
+	if _, err := db.ExecContext(ctx, `UPDATE researchflow_attempts SET lease_expires_at = ? WHERE attempt_ref = ?`,
+		formatResearchflowTimeValue(time.Now().UTC().Add(-time.Minute)), third.Ref); err != nil {
+		t.Fatalf("expire third Stage lease before concurrent budget test: %v", err)
+	}
+	type claimResult struct {
+		attempt domain.Attempt
+		replayed bool
+		err error
+	}
+	start := make(chan struct{})
+	results := make(chan claimResult, 2)
+	var wg sync.WaitGroup
+	claims := []struct{ stageRef, attemptRef, worker string }{
+		{secondStageRef, "claim-concurrent-second-" + suffix, "worker-concurrent-a"},
+		{fourthStageRef, "claim-concurrent-fourth-" + suffix, "worker-concurrent-b"},
+	}
+	for _, item := range claims {
+		item := item
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start
+			attempt, wasReplay, claimErr := repository.ClaimAttempt(
+				ctx, runRef, item.stageRef, item.attemptRef, item.worker, time.Minute, 3, 1,
+			)
+			results <- claimResult{attempt: attempt, replayed: wasReplay, err: claimErr}
+		}()
+	}
+	close(start)
+	wg.Wait()
+	close(results)
+	successes, limited := 0, 0
+	for result := range results {
+		switch {
+		case result.err == nil && !result.replayed:
+			successes++
+		case errors.Is(result.err, ErrRunConcurrencyLimit):
+			limited++
+		default:
+			t.Fatalf("unexpected concurrent ClaimAttempt result: replayed=%v err=%v", result.replayed, result.err)
+		}
+	}
+	if successes != 1 || limited != 1 {
+		t.Fatalf("maxParallel=1 concurrent claims: successes=%d limited=%d, want 1 each", successes, limited)
 	}
 }
 
