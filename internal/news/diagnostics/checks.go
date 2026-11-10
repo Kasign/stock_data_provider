@@ -330,7 +330,7 @@ func ProviderOutputPolicyResolverCheck(resolver app.ProviderOutputPolicyResolver
 					ReasonCode:  "news.provider.output_policy_resolver_unavailable",
 					SafeMessage: "Trusted Provider output policy resolver is unavailable; Provider persistence remains blocked",
 					CheckedAt:   time.Now().UTC(),
-					Attributes:  map[string]string{
+					Attributes: map[string]string{
 						"policy_resolver": "unavailable", "provider_persistence": "blocked",
 					},
 				}, nil
@@ -345,7 +345,7 @@ func ProviderOutputPolicyResolverCheck(resolver app.ProviderOutputPolicyResolver
 					ReasonCode:  "news.provider.output_policy_lookup_failed",
 					SafeMessage: "Trusted Provider output policy lookup failed; Provider persistence remains blocked",
 					CheckedAt:   time.Now().UTC(),
-					Attributes:  map[string]string{
+					Attributes: map[string]string{
 						"policy_resolver": "lookup_failed", "provider_persistence": "blocked",
 					},
 				}, nil
@@ -358,7 +358,7 @@ func ProviderOutputPolicyResolverCheck(resolver app.ProviderOutputPolicyResolver
 					ReasonCode:  "news.provider.output_policy_binding_invalid",
 					SafeMessage: "Trusted Provider output policy binding is incomplete or mismatched; Provider persistence remains blocked",
 					CheckedAt:   time.Now().UTC(),
-					Attributes:  map[string]string{
+					Attributes: map[string]string{
 						"policy_resolver": "available", "provider_persistence": "blocked",
 					},
 				}, nil
@@ -368,7 +368,7 @@ func ProviderOutputPolicyResolverCheck(resolver app.ProviderOutputPolicyResolver
 				ReasonCode:  "news.provider.output_policy_not_evaluated",
 				SafeMessage: "Provider output policy binding is available, but request-specific persistence authorization has not been evaluated",
 				CheckedAt:   time.Now().UTC(),
-				Attributes:  map[string]string{
+				Attributes: map[string]string{
 					"policy_resolver": "available", "provider_persistence": "blocked",
 				},
 			}, nil
