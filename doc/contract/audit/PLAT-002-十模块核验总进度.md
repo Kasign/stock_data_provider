@@ -452,7 +452,7 @@
 - 已核对 LimitPoolItem/LimitPoolSnapshot DTO、LimitPoolProvider Port、Eastmoney/Hithink Provider、默认配置与 Bootstrap、Service 校验/回退/缓存、Handler/OpenAPI、WebUI Client/页面和相关测试。
 - 默认仅启用 Eastmoney；Hithink 实现同一 Port 但默认 disabled。Eastmoney 会跨页读取至调用方 limit，Hithink 当前只读第一页。两家均将无数据响应保持 unknown，不作为已确认零事件；超出返回条数的源端 total 会使快照 degraded。
 - Eastmoney 不填充金额扩展字段；Hithink 的 seal_money/max_seal_money/turnover 单位未得到权威证明，标记 provider_defined 并降级。
-- 新增 **AUD-WEBUI-CTR-041（P1，待 CI 复核）**：LimitPoolItem 的 SealMoney/MaxSealMoney 是非 omitempty 指针，Go 会输出 null；OpenAPI 未将其列为 required/nullable；同一 JSON Golden 却断言两字段应省略，三方语义矛盾。需固定基线 CI 复核测试失败，并统一 DTO tag、Schema 和 Golden。
+- 原登记 **AUD-WEBUI-CTR-041 已撤销**：复核固定基线发现 SealMoney/MaxSealMoney 实际均带 omitempty；OpenAPI 未将其列为 required/nullable，JSON Golden 也要求省略，三方一致。原差异源于审计时误读 JSON tag，不作为 P1 门禁。
 - 新增 **AUD-WEBUI-CTR-042（P2）**：Hithink 金额字段缺少可验证单位，跨 Provider 无法安全比较/换算。
 - CTR-010 影响范围增加 LimitPoolItem 六个 omitempty 数值字段及 LimitPoolSnapshot.provider_report_date，共七个字段。
 - 页面显示主要榜单字段、总量/返回量/请求上限、来源时间和质量，不消费金额扩展字段；是否需要展示待产品确认。API Client 与 Limit Pool DOM 专项测试缺失，已有 Provider/Service 覆盖分页、部分覆盖、重复证券和 unknown 回退。
@@ -517,3 +517,5 @@
 - 本轮只完成第一轮完整性 Review 的编号/覆盖/跨数据集主题子批次；逐项核对 CTR-001..049 证据链、字段级 Golden、固定基线 CI 及跨维度交叉检查仍未完成。WebUI 维度 2 保持 partial。
 
 - Analysis Task 请求契约补充核对：Handler/fillDefaults 会为 task_type、as_of、universe_id、portfolio_id、market_id、strategy_ids 和配置版本注入默认值；historical_replay 则要求显式 as_of；Runner 只接受四种 TaskType。故 CTR-005/047 的关闭条件应描述 HTTP 请求默认值、TaskType 四值枚举及历史回放条件约束，不应机械地把所有 RunRequest 非 omitempty 字段列为 HTTP required。
+
+- P1 门禁复核更正：CTR-041 经固定 SHA 源码、OpenAPI 和 JSON Golden 对照后撤销；LimitPoolItem.seal_money/max_seal_money 的 omitempty、非 required/非 nullable、JSON omitted 三方一致。当前维度 2 已确认仍需处理的 P1 为 CTR-043（Hithink 龙虎榜分页计数契约冲突）；本轮未执行 CI。
