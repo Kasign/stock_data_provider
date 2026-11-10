@@ -43,12 +43,18 @@ type recoveryRepositoryFake struct {
 	now             time.Time
 	calls           int
 	err             error
+	errSequence     []error
 }
 
 func (f *recoveryRepositoryFake) RecoverExpiredLease(_ context.Context, version, token int64, next domain.DeliveryRecord, event domain.DeliveryStateEvent, now time.Time) error {
 	f.calls++
 	f.expectedVersion, f.fencingToken = version, token
 	f.next, f.event, f.now = next, event, now
+	if len(f.errSequence) > 0 {
+		err := f.errSequence[0]
+		f.errSequence = f.errSequence[1:]
+		return err
+	}
 	return f.err
 }
 
@@ -219,5 +225,23 @@ func TestLeaseRecoveryServiceSeparatesPersistenceOutcomeUnknown(t *testing.T) {
 	}
 	if repository.calls != 1 {
 		t.Fatalf("recovery write should be attempted once, got %d", repository.calls)
+	}
+}
+
+
+func TestLeaseRecoveryServiceContinuesAfterPersistenceOutcomeUnknown(t *testing.T) {
+	service, firstClaim, now, repository := recoveryServiceFixture(t, nil)
+	secondClaim := firstClaim
+	secondClaim.Delivery.DeliveryID = "delivery-recovery-second"
+	service.Scanner.(*recoveryScannerFake).claims = []DeliveryClaim{firstClaim, secondClaim}
+	repository.errSequence = []error{ErrPersistenceOutcomeUnknown, nil}
+
+	report, err := service.RecoverExpiredOnce(context.Background(), now, 5)
+	if !errors.Is(err, ErrPersistenceOutcomeUnknown) {
+		t.Fatalf("batch must preserve uncertain outcome classification, got %v", err)
+	}
+	if report.Scanned != 2 || report.OutcomeUnknown != 1 || report.Recovered != 1 ||
+		report.Conflicted != 0 || report.Failed != 0 || repository.calls != 2 {
+		t.Fatalf("uncertain item must not prevent processing the remaining batch: report=%+v calls=%d", report, repository.calls)
 	}
 }
