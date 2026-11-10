@@ -378,3 +378,144 @@ func TestNotificationMariaDBRecoveryRetryReclaimsWithNewFencingTokenIntegration(
 		t.Fatalf("attempt history must contain old rejection and new running attempt only: %+v err=%v", history, err)
 	}
 }
+
+func TestNotificationMariaDBConcurrentRetryWaitClaimsSingleWinnerIntegration(t *testing.T) {
+	dsn := os.Getenv("NOTIFICATION_MARIADB_TEST_DSN")
+	if dsn == "" {
+		t.Skip("set NOTIFICATION_MARIADB_TEST_DSN to run Notification MariaDB integration")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	db, err := openNotificationIntegrationDB(ctx, dsn)
+	if err != nil {
+		t.Fatalf("open MariaDB: %v", err)
+	}
+	defer db.Close()
+	if err := platformstorage.ApplyMigrations(ctx, db, "notification", Migrations()); err != nil {
+		t.Fatalf("apply migrations: %v", err)
+	}
+	plan := integrationDeliveryPlan()
+	plan.DeliveryID += "-claim-race"
+	plan.EventID += "-claim-race"
+	plan.SubscriptionID += "-claim-race"
+	plan.PlanFingerprint, err = plan.CalculateFingerprint()
+	if err != nil {
+		t.Fatal(err)
+	}
+	plans, err := NewMySQLDeliveryPlanRepository(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, duplicate, err := plans.CreateOrGet(ctx, plan); err != nil || duplicate {
+		t.Fatalf("create plan: duplicate=%v err=%v", duplicate, err)
+	}
+	var clock []byte
+	readDBNow := func() time.Time {
+		t.Helper()
+		if err := db.QueryRowContext(ctx, "SELECT CAST(UTC_TIMESTAMP(6) AS CHAR)").Scan(&clock); err != nil {
+			t.Fatal(err)
+		}
+		value, err := parseDatabaseTime(clock)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return value
+	}
+	now := readDBNow()
+	delivery := domain.DeliveryRecord{
+		DeliveryID: plan.DeliveryID, SourceModule: plan.SourceModule, EventID: plan.EventID,
+		SubscriptionID: plan.SubscriptionID, SubscriptionVersion: plan.SubscriptionVersion,
+		ChannelRef: plan.ChannelRef, ChannelConfigVersion: plan.ChannelConfigVersion,
+		TemplateID: plan.TemplateID, TemplateVersion: plan.TemplateVersion,
+		RecipientRef: plan.RecipientRef, PayloadFingerprint: plan.PayloadFingerprint,
+		PlanFingerprint: plan.PlanFingerprint, DeliveryIdempotencyKey: plan.DeliveryIdempotencyKey,
+		Status: domain.DeliveryQueued, Version: 1, AttemptCount: 0, MaxAttempts: 3,
+		DeadlineAt: now.Add(10 * time.Minute), CreatedAt: now.Add(-time.Second), UpdatedAt: now.Add(-time.Second),
+	}
+	repository, err := NewMySQLDeliveryRepository(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := repository.Create(ctx, delivery); err != nil {
+		t.Fatalf("create delivery: %v", err)
+	}
+	oldClaim, claimed, err := repository.ClaimDue(ctx, "recovery-worker", now, now.Add(time.Minute))
+	if err != nil || !claimed {
+		t.Fatalf("initial claim: claimed=%v err=%v", claimed, err)
+	}
+	expiredAt := readDBNow().Add(-time.Second)
+	if _, err := db.ExecContext(ctx, "UPDATE notification_deliveries SET lease_expires_at = ? WHERE delivery_id = ?", expiredAt, delivery.DeliveryID); err != nil {
+		t.Fatal(err)
+	}
+	recoveryNow := readDBNow()
+	recoverySnapshot, found, err := repository.Get(ctx, delivery.DeliveryID)
+	if err != nil || !found {
+		t.Fatalf("load recovery snapshot: found=%v err=%v", found, err)
+	}
+	retryAt := recoveryNow.Add(time.Second)
+	retryWait, event, err := recoverySnapshot.Transition(domain.DeliveryTransition{
+		To: domain.DeliveryRetryWait, At: recoveryNow, NextAttemptAt: &retryAt,
+		ReasonCode: "lease_expired_before_attempt",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := repository.RecoverExpiredLease(ctx, recoverySnapshot.Version, oldClaim.Lease.FencingToken, retryWait, event, recoveryNow); err != nil {
+		t.Fatalf("recover expired lease into retry_wait: %v", err)
+	}
+	if _, err := db.ExecContext(ctx, "UPDATE notification_deliveries SET next_attempt_at = ? WHERE delivery_id = ?", recoveryNow.Add(-time.Second), delivery.DeliveryID); err != nil {
+		t.Fatal(err)
+	}
+	claimAt := readDBNow()
+	type claimResult struct {
+		worker string
+		claim application.DeliveryClaim
+		ok bool
+		err error
+	}
+	start := make(chan struct{})
+	results := make(chan claimResult, 2)
+	var wg sync.WaitGroup
+	for _, worker := range []string{"worker-a", "worker-b"} {
+		worker := worker
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start
+			claim, ok, err := repository.ClaimDue(ctx, worker, claimAt, claimAt.Add(time.Minute))
+			results <- claimResult{worker:worker, claim:claim, ok:ok, err:err}
+		}()
+	}
+	close(start)
+	wg.Wait()
+	close(results)
+	var winners []claimResult
+	for result := range results {
+		if result.err != nil {
+			t.Fatalf("%s claim failed: %v", result.worker, result.err)
+		}
+		if result.ok {
+			winners = append(winners, result)
+		}
+	}
+	if len(winners) != 1 {
+		t.Fatalf("exactly one concurrent worker may claim retry_wait Delivery, winners=%+v", winners)
+	}
+	winner := winners[0]
+	if winner.claim.Delivery.Status != domain.DeliverySending ||
+		winner.claim.Delivery.Version != retryWait.Version+1 ||
+		winner.claim.Lease.FencingToken != oldClaim.Lease.FencingToken+1 ||
+		winner.claim.Lease.WorkerID != winner.worker {
+		t.Fatalf("winning claim must advance state/version/token exactly once: %+v", winner)
+	}
+	current, found, err := repository.Get(ctx, delivery.DeliveryID)
+	if err != nil || !found || current.Status != domain.DeliverySending ||
+		current.Version != winner.claim.Delivery.Version || current.AttemptCount != 0 {
+		t.Fatalf("persisted Delivery must reflect one claim only: found=%v delivery=%+v err=%v", found, current, err)
+	}
+	events, err := repository.ListStateEvents(ctx, delivery.DeliveryID)
+	if err != nil || len(events) != 3 || events[2].To != domain.DeliverySending ||
+		events[2].Version != winner.claim.Delivery.Version {
+		t.Fatalf("exactly one post-recovery claim event must exist: events=%+v err=%v", events, err)
+	}
+}
