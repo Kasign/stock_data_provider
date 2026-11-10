@@ -410,3 +410,14 @@
 - 新增 **AUD-WEBUI-CTR-034**（P2）：没有与交易日历核对预期交易日集合，不能证明请求区间无漏日；新增 **AUD-WEBUI-CTR-035**（P2）：OpenAPI 未完整枚举/说明跨 Provider 成交量和成交额单位；新增 **AUD-WEBUI-CTR-036**（P2）：WebUI 有 API Client 和请求测试，但没有页面消费者及 DOM 测试。
 - IndexDailyBar.change_percent/volume/amount/provider_time 与 IndexDailyBarsSnapshot.provider_time 纳入 **AUD-WEBUI-CTR-010**（omitempty 指针被 OpenAPI 声明 nullable）。
 - 未发现已证实的 OHLC 算术或 Tushare 单位换算错误；交易日完整性、Hithink amount 可比性和 UI 闭环仍待补强。WebUI 维度 2 继续 partial。
+
+
+### WebUI — 维度 2：API Client 与 DTO 全量盘点（第一轮）
+
+- 详细记录：[`WebUI-维度2-API-DTO全量盘点.md`](./WebUI-维度2-API-DTO全量盘点.md)
+- 代码基线：`b6dfc85ba214fe16268c8cba780641a8bfe15086`。
+- `web/src/api.js` 共 44 个导出函数（3 个本地设置函数、41 个远端请求/健康检查入口）；41 个远端入口均在 WebUI 主要页面模块中找到引用，暂未发现未被页面模块引用的 Client 孤儿函数。
+- Market Data HTTP Adapter 的 35 个 OpenAPI path 与 `server.go` 路由清单已对照；Analysis Task OpenAPI 覆盖任务三条路径，但未描述 Client 使用的 `GET /api/v1/analysis/runs/{run_id}`，登记为待补 Schema/契约证据，不在本轮直接定性运行时错误。
+- `web/tests/api.test.mjs` 已覆盖多类请求；Market Hot Stocks、Market Indices、Sentiment/History、Breadth、Limit Pool、Dragon Tiger、两类 Liveness 等函数未见该文件直接请求测试，需再核浏览器测试覆盖。
+- 待核数据集收敛为 Hot Rankings、Market Sentiment History、Limit Pool、Dragon Tiger、Stock Search、Analysis Run、Provider Probe History；既有第 1–36 节已审数据集不重复展开。
+- 本轮只完成入口盘点，不代表 DTO/Schema/Golden 完整；WebUI 维度 2 保持 partial。
