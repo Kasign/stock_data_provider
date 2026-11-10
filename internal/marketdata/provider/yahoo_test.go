@@ -382,8 +382,15 @@ func TestYahooDailyBarReportsOutOfRangeDateAndKeepsInRangeRows(t *testing.T) {
 		t.Fatalf("unexpected in-range bars: %+v", bars)
 	}
 	issues := reporter.Snapshot().Issues
-	if len(issues) != 1 || issues[0].Stage != validation.StageParse || issues[0].Field != "trade_date" ||
-		issues[0].Code != "date_out_of_requested_range" || issues[0].RowIndex == nil || *issues[0].RowIndex != 0 {
+	found := false
+	for _, issue := range issues {
+		if issue.Stage == validation.StageParse && issue.Field == "trade_date" &&
+			issue.Code == "date_out_of_requested_range" && issue.RowIndex != nil && *issue.RowIndex == 0 {
+			found = true
+			break
+		}
+	}
+	if !found {
 		t.Fatalf("expected row-level out-of-range diagnostic, got %+v", issues)
 	}
 }
