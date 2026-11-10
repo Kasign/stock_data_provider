@@ -87,7 +87,7 @@ RunResult 是分析完整结果，不是任务状态 DTO。字段具有不同的
 
 - WebUI API Client 实际调用 `GET /api/v1/analysis/runs/{run_id}`；HTTP Server 也注册该路由并返回完整 RunResult。
 - 当前 `doc/api/contracts/分析任务.openapi.yaml` 只描述异步 Task 创建、Task 状态、Task 事件三条路径；没有 Run 读取和 Run 事件路径，也没有 RunResult、RunStatus、Failure、StageEvent、Quality 等结果 Schema。
-- 现有 API Client 测试验证 Run URL 和 409 错误解析；HTTP Server 测试覆盖同步创建及输入校验，但没有发现 GET Run 成功、404、409 和 Run Events 的 Handler 专项测试。
+- 现有 API Client 测试验证 Run URL 和 409 错误解析；HTTP Server 测试已有 GET Run 的 404（TestReadResultMapsNotFound）和 500 脱敏（TestReadResultDoesNotExposeStorageError）覆盖，但缺 GET Run 成功、409 run_not_finished 和 Run Events 的 Handler 专项测试。
 - 影响：消费者无法从唯一正式 OpenAPI 契约获知 RunResult 字段、状态枚举、可选字段、错误码和 Run Events 响应结构；接口变更缺少 Schema 约束。
 - 关闭条件：在权威分析 API OpenAPI 中补齐 Run 读取/事件路径和完整响应 Schema；为状态枚举、必填/可选字段和错误响应建立契约测试；增加 Handler 成功、404、409、事件读取测试。不能只在 WebUI Client 测试中断言 URL 即视为接口契约闭环。
 
