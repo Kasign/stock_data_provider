@@ -339,3 +339,16 @@
 - WebUI API Client 已接通且有 URL/鉴权/取消/日期范围测试；页面只展示指数和主力净额，不消费四类分类金额/比例，页面渲染缺少直接回归测试。四类字段是否必须展示待产品范围确认。
 - 未发现已证实的金额单位换算或符号错误；数据源时间不可验证，快照保持 degraded。详细证据见审计明细第 30 节。
 - WebUI 维度 2 继续 partial。
+
+
+### WebUI — 维度 2：Market Session 市场交易时段
+
+- 固定代码基线：`b6dfc85ba214fe16268c8cba780641a8bfe15086`。已核对 MarketSession DTO、TradingCalendar Port/DTO、BaoStock 日历 Provider、Service 阶段计算与日历完整性校验、HTTP Handler、OpenAPI、模型契约测试、配置接线及 WebUI API Client/市场活动页。
+- 市场时段使用完整自然日交易日历判定交易日，再按 Asia/Shanghai 固定时间表计算；不是按 weekday 推断。BaoStock 对每个自然日逐行校验，缺日/乱序拒绝；Service 再次校验完整日期覆盖、交易日计数和来源元数据。
+- 固定基线只有 BaoStock 实现 TradingCalendarProvider，默认启用该能力；源端快照时间不可验证，故质量保持 degraded。当前没有第二个已证实的日历 Provider 用于故障回退或交叉校验。
+- 已核对阶段：09:15–09:25 开盘集合竞价、09:25–09:30 竞价暂停、09:30–11:30 上午连续竞价、11:30–13:00 午休、13:00–14:57 下午连续竞价、14:57–15:00 收盘集合竞价。测试覆盖主要边界；HTTP 测试覆盖 +08:00 输入。
+- MarketSession 只描述市场计划时段，不代表个股停牌、临时停市或订单可撤销/可成交状态；开盘集合竞价没有细分 09:20 前后规则。
+- 新增 **AUD-WEBUI-CTR-023**（P2）：API Client 有 getMarketSession，但市场活动页面只消费交易日历，没有展示 MarketSession。
+- 新增 **AUD-WEBUI-CTR-024**（P2）：集合竞价是粗粒度阶段，不足以作为订单行为判定；当前无下单功能，先明确契约边界，不提前扩展。
+- OpenAPI required 与 DTO 非 omitempty 字段对齐；API Client 默认路径和鉴权有测试，但显式 at 编码/AbortSignal 透传未单独覆盖。
+- 未发现已证实的阶段边界计算错误。详细证据见审计明细第 31 节；WebUI 维度 2 继续 partial。
