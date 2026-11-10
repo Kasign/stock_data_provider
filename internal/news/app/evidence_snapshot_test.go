@@ -271,7 +271,7 @@ func TestEvidenceSnapshotRetentionCleanerHonorsCancellation(t *testing.T) {
 			t.Fatalf("repository calls=%d, want 0", repository.deleteCalls)
 		}
 	})
-	t.Run("canceled while repository is running", func(t *testing.T) {
+	t.Run("repository confirmed deletion wins over later cancellation", func(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 		repository := &evidenceSnapshotRepositoryStub{deleted: 2, afterDelete: cancel}
@@ -279,8 +279,9 @@ func TestEvidenceSnapshotRetentionCleanerHonorsCancellation(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if _, err := cleaner.Execute(ctx, now, 10); !errors.Is(err, context.Canceled) {
-			t.Fatalf("Execute() error=%v", err)
+		deleted, err := cleaner.Execute(ctx, now, 10)
+		if err != nil || deleted != 2 {
+			t.Fatalf("Execute() = (%d, %v), want (2, nil) after repository success", deleted, err)
 		}
 		if repository.deleteCalls != 1 {
 			t.Fatalf("repository calls=%d, want 1", repository.deleteCalls)

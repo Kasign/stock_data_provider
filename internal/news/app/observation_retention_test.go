@@ -81,7 +81,7 @@ func TestObservationRetentionCleanerHonorsContextCancellation(t *testing.T) {
 		}
 	})
 
-	t.Run("canceled while repository is running returns cancellation", func(t *testing.T) {
+	t.Run("repository confirmed commit wins over later cancellation", func(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 		repository := &observationRetentionRepositoryStub{
@@ -92,8 +92,9 @@ func TestObservationRetentionCleanerHonorsContextCancellation(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if _, err := cleaner.Execute(ctx, now, 10); !errors.Is(err, context.Canceled) {
-			t.Fatalf("Execute() error=%v, want context.Canceled", err)
+		result, err := cleaner.Execute(ctx, now, 10)
+		if err != nil || result.Scanned != 2 || result.Purged != 2 {
+			t.Fatalf("Execute() = (%+v, %v), want confirmed result after repository success", result, err)
 		}
 		if repository.calls != 1 {
 			t.Fatalf("repository calls=%d, want 1", repository.calls)

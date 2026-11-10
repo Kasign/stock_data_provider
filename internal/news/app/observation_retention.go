@@ -47,9 +47,8 @@ func (u *ObservationRetentionCleaner) Execute(ctx context.Context, now time.Time
 	if err != nil {
 		return ObservationPayloadPurgeResult{}, err
 	}
-	if err := ctx.Err(); err != nil {
-		return ObservationPayloadPurgeResult{}, err
-	}
+	// Repository 返回成功表示事务已提交；提交后观察到 Context 取消不能
+	// 将已确认的清理结果改报为取消，避免调用方误判并重复处理。
 	if result.Scanned < 0 || result.Purged < 0 || result.Purged > result.Scanned || result.Scanned > limit {
 		return ObservationPayloadPurgeResult{}, ErrObservationRetentionResultInvalid
 	}

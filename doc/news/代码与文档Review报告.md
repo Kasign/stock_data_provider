@@ -247,3 +247,11 @@
 - GetEvidenceSnapshot 通过 caller_ref 与 snapshot_ref 定位记录；记录已被清理时，sql.ErrNoRows 映射为 ErrEvidenceSnapshotUnavailable。
 - 新增集成断言：先完成到期删除并确认行数为零，再通过相同 SnapshotRef 读取，必须返回 ErrEvidenceSnapshotUnavailable。
 - 此用例验证删除后的确定性边界，不等同于并发 SELECT/DELETE 竞态或跨请求原子租约；后者仍需 MariaDB 实测。
+
+
+### 二十三、N7-06 清理结果与 Context 取消语义（2026-11-10）
+
+- Observation Retention Repository 在事务提交成功后返回批次计数；Snapshot TTL Repository 在 DELETE 成功且 RowsAffected 成功读取后返回删除计数。Cleaner 原先在 Repository 成功后再次检查 Context，可能丢弃已经确认的持久化结果。
+- 已移除 Repository 成功后的二次 Context 检查，保留调用前取消门禁。成功结果现在优先于其后发生的 Context 取消；SQL/事务执行期间发生取消仍由 Repository 错误向上传递。
+- Commit/网络错误可能具有提交结果不确定性。当前实现保留原始错误，不把它错误映射为确定回滚；调用方应通过 Observation backlog 或 SnapshotRef/行状态查询核实。
+- 尚未覆盖 RowsAffected() 自身返回错误、Commit 连接中断和锁等待超时的可控驱动注入；也未运行 MariaDB 11.4。不得将该项标记为数据库运行验收通过。
