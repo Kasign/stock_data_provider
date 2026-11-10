@@ -1014,7 +1014,7 @@ Golden应由真实DTO序列化生成或与真实序列化逐字节/结构比较�
 - 本轮核对权威登记簿、唯一差异矩阵、十模块总进度，以及已完成的跨模块边界审查（第25～34节）。
 - 正式 CTR 统计以 `doc/contract/PLAT-002-项目级契约冻结登记簿.md` 第3节为准；审计工作项统计以本矩阵现有表格为准。两者不可相加，也不得把审计工作项当作新 CTR。
 - 当前正式登记簿有 43 个 CTR：39 个为 `pending_evidence`，4 个为 `has_difference + pending_evidence`，没有任何 L2 `frozen` 项。
-- 本矩阵当前可识别 56 条有状态的审计工作项：22 条 `pending_decision`、1 条 `pending_decision + pending_evidence`、29 条 `pending_evidence`、2 条 `has_difference`、1 条 `accepted`、1 条 `deferred`。这些是子范围/调用边界问题，不代表 56 个独立契约。
+- 截至第35节，矩阵有状态表格行共69行，其中56项带唯一显式审计编号（无重复），其余13行为边界/契约聚合行。状态分布：21条 `pending_decision`、1条 `pending_decision + pending_evidence`、1条 `pending_decision（随其他项合并裁决）`、36条 `pending_evidence`、3条 `deferred`、2条 `has_difference`、2条 `accepted`、1条 `freeze-ready`；另有1行同时记录两个 deferred 子范围、2行同时列出两个 pending_evidence 维度。该统计不代表独立契约数。
 - W2-C 的 CTR-011～037 是聚合范围，CTR-010 是字段级聚合差异；历史别名 CTR-003/005 不重复计数；CTR-041 已 withdrawn。以上去重规则继续有效。
 
 ### 35.2 双层冻结结论（必须区分）
@@ -1115,10 +1115,10 @@ PLAT-002 本轮“差异矩阵收敛与冻结评估”完成；**PLAT-002 项目
 
 第35.1节此前按带显式大写编号的工作项统计，遗漏了以 Data→Quant、Data→Research 等边界名称登记的表格行。本轮重新按矩阵全部状态表格行统计：
 
-- 有状态表格行：69 行。
+- 截至第35节（不含第36节提案映射表），有状态表格行：69 行。
 - 带唯一显式审计编号的工作项：56 项，编号无重复。
 - 其余 13 行为边界/契约聚合表格行，其中 Data→Quant、Data→Research 各有两个不同问题，不能因显示名称相同而合并。
-- 状态行分布：pending_decision 25 行；pending_decision + pending_evidence 2 行；deferred + pending_decision 1 行；pending_evidence 32 行；pending_evidence + pending_evidence 2 行；accepted 2 行；deferred 2 行；has_difference 2 行；freeze-ready 1 行。
+- 截至第35节的状态行分布：pending_decision 21 行；pending_decision + pending_evidence 1 行；pending_decision（随其他项合并裁决）1 行；pending_evidence 36 行；deferred 3 行；accepted 2 行；has_difference 2 行；freeze-ready 1 行。另有1行同时记录两个 deferred 子范围、2行同时列出两个 pending_evidence 维度。
 - 该统计包含历史切片表格和当前差异表格，不等于 69 个独立契约；正式 CTR 仍以登记簿第3节为准。
 
 ### 36.2 已有决议覆盖项：移出项目负责人待决队列
