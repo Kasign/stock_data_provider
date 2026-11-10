@@ -1135,3 +1135,13 @@
 - 不应将同花顺原始金额擅自转换或冒充 CNY。当前 Data Go DTO 与 OpenAPI 对原始值/CNY 的字段区分一致；差异位于 Provider 回退输出与 WebUI 展示能力之间，并缺真实 Provider→HTTP→WebUI Fixture/Contract Test 闭环。
 - 关闭条件：Data 补真实同花顺 Provider 响应 Golden/Contract Test，保持单位边界；WebUI 明确原始金额展示或不可比较/未提供策略，并补真实响应 Fixture 渲染测试；两端定向测试与 CI 通过。详细文件证据和验收边界见差异矩阵第38节。
 - 状态：CTR-043 保持 P1 open / L2 blocked，不冻结。此次仅静态核验，未执行测试/CI；不将静态证据表述为测试通过。
+
+
+## 37. CTR-043 契约冻结与实现符合性边界更正（2026-11-10）
+
+- **本节为 CTR-043 当前状态的权威更正，优先于此前将其称为“P1 契约冻结阻断”或将其改写为金额展示冲突的记录。** 原始 CTR-043 是 Hithink 龙虎榜分页计数不符合 Data 公共契约：\`source_returned\` 应表示当前页 Provider 原始记录数，且 \`source_returned = returned + excluded_non_a_share_count\`；Hithink 却以全量 \`stock_items\` 数量填充并本地分页，重复 symbol 去重也未计入排除数。
+- 公共分页计数语义已经由 DTO、Service 校验和 OpenAPI 明确。生产方和消费方无需知晓 Provider 内部如何抓取、分页或去重。因此这是 Data Adapter 对既有公共契约的实现符合性问题，不是公共契约待定义问题。
+- **PLAT-002 状态修正：CTR-043 公共契约语义 \`freeze-ready\`，不再作为 L2 契约冻结阻断项。** Hithink Adapter 修复、真实 Provider 专项测试及 CI 属于 Data 模块内部工程质量和实现整改，另由 Data 模块跟踪，不属于 PLAT-002 契约冻结门禁。
+- Data 对外仍须满足已冻结的分页计数语义；如果运行实现不满足，应修复实现，而不是改变契约或要求 WebUI 了解 Provider 细节。
+- 同花顺 \`provider_*_value\` / \`provider_amount_unit\` 与 WebUI 金额展示不是 CTR-043 原始问题。本轮不据此要求 WebUI 增加消费逻辑或渲染测试，也不新增 CTR。若未来决定清理公共 DTO 中 Provider 原始字段，应单独评估公开 DTO 范围和兼容影响。
+- 此更正只更新项目级契约审计文档；未修改 Data/WebUI 代码，未执行测试或 CI。差异矩阵第38节为详细依据。
