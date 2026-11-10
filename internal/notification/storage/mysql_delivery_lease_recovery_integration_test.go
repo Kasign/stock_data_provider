@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"sync"
 	"testing"
 	"time"
 
@@ -163,27 +164,36 @@ func TestNotificationMariaDBExpiredDeliveryLeaseRecoveryIntegration(t *testing.T
 	if _, err := db.ExecContext(ctx, "DELETE FROM notification_delivery_state_events WHERE delivery_id = ? AND version = ?", delivery.DeliveryID, next.Version); err != nil {
 		t.Fatalf("remove conflicting event fixture: %v", err)
 	}
-	if err := repository.RecoverExpiredLease(ctx, claim.Delivery.Version, claim.Lease.FencingToken, next, event, recoveryAt); err != nil {
-		t.Fatalf("recover expired lease: %v", err)
-	}
-	recovered, found, err := repository.Get(ctx, delivery.DeliveryID)
-	if err != nil || !found || recovered.Status != domain.DeliveryUnknown || recovered.Version != next.Version {
-		t.Fatalf("load recovered delivery: found=%v delivery=%+v err=%v", found, recovered, err)
-	}
-	var finishClock []byte
-	if err := db.QueryRowContext(ctx, `SELECT DATE_FORMAT(UTC_TIMESTAMP(6), '%Y-%m-%d %H:%i:%s.%f')`).Scan(&finishClock); err != nil {
-		t.Fatal(err)
-	}
-	finishedAt, err := parseDatabaseTime(finishClock)
-	if err != nil {
-		t.Fatal(err)
-	}
+	finishedAt := recoveryAt.Add(time.Second)
 	completed, err := attempt.Complete(finishedAt, domain.DeliveryAttemptAccepted, "late-provider-acceptance", "", false, "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := attemptRepository.CompleteWithLease(ctx, claim.Delivery.Version, claim.Lease.FencingToken, completed); !errors.Is(err, application.ErrDeliveryLeaseConflict) {
-		t.Fatalf("stale worker must not complete an Attempt after recovery won: %v", err)
+	start := make(chan struct{})
+	var wg sync.WaitGroup
+	var recoveryErr, completionErr error
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		<-start
+		recoveryErr = repository.RecoverExpiredLease(ctx, claim.Delivery.Version, claim.Lease.FencingToken, next, event, recoveryAt)
+	}()
+	go func() {
+		defer wg.Done()
+		<-start
+		completionErr = attemptRepository.CompleteWithLease(ctx, claim.Delivery.Version, claim.Lease.FencingToken, completed)
+	}()
+	close(start)
+	wg.Wait()
+	if recoveryErr != nil {
+		t.Fatalf("concurrent lease recovery must win after expiry: %v", recoveryErr)
+	}
+	if !errors.Is(completionErr, application.ErrDeliveryLeaseConflict) {
+		t.Fatalf("concurrent stale worker completion must lose to recovery: %v", completionErr)
+	}
+	recovered, found, err := repository.Get(ctx, delivery.DeliveryID)
+	if err != nil || !found || recovered.Status != domain.DeliveryUnknown || recovered.Version != next.Version {
+		t.Fatalf("load recovered delivery: found=%v delivery=%+v err=%v", found, recovered, err)
 	}
 	persistedAttempts, err := attemptRepository.ListByDelivery(ctx, delivery.DeliveryID)
 	if err != nil || len(persistedAttempts) != 1 || persistedAttempts[0].FinishedAt != nil {
