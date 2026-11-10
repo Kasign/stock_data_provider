@@ -637,4 +637,4 @@
 - 与固定审计基线 `b6dfc85ba214fe16268c8cba780641a8bfe15086` 比较时，该分支与基线已明显分叉（merge base `d1b8201f822d0f19c474c23eeae7cad723f617c0`），因此本次只检查 CTR-010 相关文件，不把该分支整体作为审计基线，也不进行合并。
 - `internal/marketdata/httpapi/openapi.yaml` 与固定基线 blob SHA 相同（`cd8a6e3dfb8e3162ee789b11e883be9283c59f32`）；`internal/marketdata/httpapi/openapi_contract_test.go` 与固定基线 blob SHA 相同（`7f97f075a23bd698a7e3fc32e90509d1e999217b`）。因此截至该 HEAD，CTR-010 的 124 个 OpenAPI nullable 声明及中央契约测试缺口均未在责任分支体现修复。
 - 该分支最新提交主题为固定样本 Provider 原始响应诊断；本次不评价其余 Data 工作，也不因分支存在大量其他提交而扩大审计范围。
-- 本轮只读取责任分支并更新审计进度文档；未修改 Data 代码、未切换/合并分支、未运行 CI。CTR-010 保持待修复状态。
+- 本轮只读取责任分支并更新审计进度文档；未修改 Data 代码、未切换/合并分支、未运行 CI。该责任分支检查记录仅说明截至对应 SHA 未出现相关文件变化；CTR-010 当前状态为差异已确认、契约语义待裁决、实现修复未启动。
