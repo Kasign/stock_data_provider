@@ -16,18 +16,22 @@ type providerIngestCatalogStub struct {
 }
 
 func (s providerIngestCatalogStub) LookupEndpoint(context.Context, string, string) (SourceEndpointRegistration, error) {
-	if s.afterLookup != nil { s.afterLookup() }
+	if s.afterLookup != nil {
+		s.afterLookup()
+	}
 	return s.registration, s.err
 }
 
 type providerIngestPolicyStub struct {
-	binding ProviderOutputPolicyBinding
-	err     error
+	binding      ProviderOutputPolicyBinding
+	err          error
 	afterResolve func()
 }
 
 func (s providerIngestPolicyStub) ResolveProviderOutputPolicy(context.Context, string) (ProviderOutputPolicyBinding, error) {
-	if s.afterResolve != nil { s.afterResolve() }
+	if s.afterResolve != nil {
+		s.afterResolve()
+	}
 	return s.binding, s.err
 }
 
@@ -76,7 +80,7 @@ func TestIngestProviderCandidateEvaluatesTrustedPolicyBeforePersistence(t *testi
 	observation, err := usecase.Execute(context.Background(), IngestProviderCandidateRequest{
 		SourceID: "source-1", EndpointID: "endpoint-1", IdempotencyKey: "run-1/item-1",
 		Candidate: domain.Candidate{ProviderCode: "brave", SourceItemID: "native-1", Title: "headline"},
-				Purpose:   domain.PurposeInternalPersonalResearch, ContentKind: domain.ContentSnippet,
+		Purpose:   domain.PurposeInternalPersonalResearch, ContentKind: domain.ContentSnippet,
 		StorageMode: domain.StorageTransient, Retention: 5 * time.Minute,
 	})
 	if err != nil {
@@ -109,7 +113,7 @@ func TestIngestProviderCandidateRejectsNonPositiveRetentionBeforePolicyLookup(t 
 		_, err = usecase.Execute(context.Background(), IngestProviderCandidateRequest{
 			SourceID: "source-1", EndpointID: "endpoint-1", IdempotencyKey: "nonpositive-retention",
 			Candidate: domain.Candidate{ProviderCode: "brave", SourceItemID: "native-1"},
-				Purpose:   domain.PurposeInternalPersonalResearch, ContentKind: domain.ContentSnippet,
+			Purpose:   domain.PurposeInternalPersonalResearch, ContentKind: domain.ContentSnippet,
 			StorageMode: domain.StorageTransient, Retention: retention,
 		})
 		if !errors.Is(err, ErrInvalidRequest) || len(repository.observations) != 0 {
@@ -246,16 +250,33 @@ func TestIngestProviderCandidatePreservesSourceCatalogFailureClassification(t *t
 func TestIngestProviderCandidateStopsAfterContextCancellationAtPolicyBoundaries(t *testing.T) {
 	for _, boundary := range []string{"source catalog", "provider policy"} {
 		t.Run(boundary, func(t *testing.T) {
-			ctx, cancel := context.WithCancel(context.Background()); defer cancel()
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
 			repository := &memoryIdentityRepository{}
 			ingest := newCandidateIngest(repository, func() string { return "must-not-persist-after-cancel" })
 			catalog := providerIngestCatalogStub{registration: validProviderIngestRegistration()}
 			policies := providerIngestPolicyStub{binding: validProviderIngestPolicy()}
-			if boundary == "source catalog" { catalog.afterLookup = cancel } else { policies.afterResolve = cancel }
-			usecase, err := NewIngestProviderCandidate(ingest, catalog, policies); if err != nil { t.Fatal(err) }
-			_, err = usecase.Execute(ctx, IngestProviderCandidateRequest{SourceID:"source-1", EndpointID:"endpoint-1", IdempotencyKey:"cancelled", Candidate:domain.Candidate{ProviderCode:"brave", SourceItemID:"item"}, Purpose:domain.PurposeInternalPersonalResearch, ContentKind:domain.ContentSnippet, StorageMode:domain.StorageTransient, Retention:time.Minute})
-			if !errors.Is(err, context.Canceled) { t.Fatalf("Execute() error=%v, want context.Canceled", err) }
-			if len(repository.observations)!=0 || len(repository.items)!=0 { t.Fatalf("cancelled ingest persisted data: %+v", repository) }
+			if boundary == "source catalog" {
+				catalog.afterLookup = cancel
+			} else {
+				policies.afterResolve = cancel
+			}
+			usecase, err := NewIngestProviderCandidate(ingest, catalog, policies)
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, err = usecase.Execute(ctx, IngestProviderCandidateRequest{
+				SourceID: "source-1", EndpointID: "endpoint-1", IdempotencyKey: "cancelled",
+				Candidate: domain.Candidate{ProviderCode: "brave", SourceItemID: "item"},
+				Purpose: domain.PurposeInternalPersonalResearch, ContentKind: domain.ContentSnippet,
+				StorageMode: domain.StorageTransient, Retention: time.Minute,
+			})
+			if !errors.Is(err, context.Canceled) {
+				t.Fatalf("Execute() error=%v, want context.Canceled", err)
+			}
+			if len(repository.observations) != 0 || len(repository.items) != 0 {
+				t.Fatalf("cancelled ingest persisted data: %+v", repository)
+			}
 		})
 	}
 }

@@ -24,9 +24,9 @@ func (s *authorizationFingerprintVerifierStub) VerifyNewsAuthorizationFingerprin
 }
 
 type currentAuthorizationPolicyResolverStub struct {
-	set        domain.CurrentAuthorizationPolicySet
-	err        error
-	calls      int
+	set          domain.CurrentAuthorizationPolicySet
+	err          error
+	calls        int
 	afterResolve func()
 }
 
@@ -215,7 +215,9 @@ func TestEvaluateNewsEvidenceReadAuthorizationStopsAfterContextCancellation(t *t
 				resolver.afterResolve = cancel
 			}
 			usecase, err := NewEvaluateNewsEvidenceReadAuthorization(verifier, resolver)
-			if err != nil { t.Fatal(err) }
+			if err != nil {
+				t.Fatal(err)
+			}
 			usecase.now = func() time.Time { return now }
 			err = usecase.Execute(ctx, binding, observation, version, binding.CallerRef, binding.PurposeCode, binding.RequestedContentLevel)
 			if !errors.Is(err, context.Canceled) {

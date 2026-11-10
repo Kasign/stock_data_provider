@@ -151,12 +151,23 @@ func TestIngestCollectedSourceRejectsTamperedPolicyVersion(t *testing.T) {
 }
 
 func TestIngestCollectedSourceStopsAfterCatalogContextCancellation(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background()); defer cancel()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	repository := &memoryIdentityRepository{}
 	ingest := NewIngestCandidate(repository, func() string { return "must-not-persist-after-cancel" })
 	catalog := providerIngestCatalogStub{registration: sourcePersistenceRegistration(), afterLookup: cancel}
-	usecase, err := NewIngestCollectedSource(ingest, catalog); if err != nil { t.Fatal(err) }
-	_, err = usecase.Execute(ctx, IngestCollectedSourceRequest{Collection:sealedCollectedSourceResult(), IdempotencyPrefix:"cancelled", Purpose:domain.PurposeInternalPersonalResearch, Retention:time.Hour})
-	if !errors.Is(err, context.Canceled) { t.Fatalf("Execute() error=%v, want context.Canceled", err) }
-	if len(repository.observations)!=0 || len(repository.items)!=0 { t.Fatalf("cancelled ingest persisted data: %+v", repository) }
+	usecase, err := NewIngestCollectedSource(ingest, catalog)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = usecase.Execute(ctx, IngestCollectedSourceRequest{
+		Collection: sealedCollectedSourceResult(), IdempotencyPrefix: "cancelled",
+		Purpose: domain.PurposeInternalPersonalResearch, Retention: time.Hour,
+	})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("Execute() error=%v, want context.Canceled", err)
+	}
+	if len(repository.observations) != 0 || len(repository.items) != 0 {
+		t.Fatalf("cancelled ingest persisted data: %+v", repository)
+	}
 }
