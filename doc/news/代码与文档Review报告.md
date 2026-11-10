@@ -322,3 +322,12 @@
 - News Provider/全量模块专项 Run `42763451242` = success，覆盖 News gofmt、全量单测、Race、Vet 和 Provider 契约测试。
 - 本次集成样本修正均遵循现有契约：deny 的 expires_at 晚于 decided_at；PIT 样本完整写入三类策略版本；DATETIME(6) 比较按微秒精度；关系历史查询不使用未来 system_as_of。未放宽生产校验。
 - 剩余阻断：available_at 证据建模/严格 PIT、授权复核与内容读取 TOCTOU、Server 生产装配、总 Migration 注册及真实生产来源/出口验收。CI 临时数据库通过不等于生产数据库已迁移。
+
+
+## 八、V7→V8 既有数据升级回归（2026-11-10）
+
+- 新增集成测试路径：在空库或最高已应用版本低于 V8 的测试库中，先执行 V1-V7，插入一条 V8 之前已存在的 Observation，再执行完整迁移集以应用 V8。
+- 验证升级后既有记录的 `source_id`、`identity_status`、`candidate_json` 未改变，新增 `retention_until` 与 `payload_purged_at` 均保持 NULL。
+- 对已处于 V8 的持久测试库不执行降级式 fixture，仍执行完整迁移集的版本/校验和一致性检查。
+- Run `42764067365` 的 News MariaDB Repository and Migration integration Job = success，真实 MariaDB 11.4 执行通过。
+- 同一提交的 News Provider/全量模块 Workflow Run `42764067354` = success；根模块 `Test .` 仍因其他模块 gofmt 差异失败。
