@@ -250,6 +250,10 @@ func (s *DataService) Valuations(ctx context.Context, rawSymbols []string) (*mod
 			failures = append(failures, p.Name()+": "+fetchErr.Error())
 			continue
 		}
+		if snapshot != nil && strings.TrimSpace(snapshot.Source) != "" && snapshot.Source != p.Name() {
+			failures = append(failures, p.Name()+": valuation source does not match Provider.Name()")
+			continue
+		}
 		if err := validateValuationSnapshot(symbols, snapshot); err != nil {
 			failures = append(failures, p.Name()+": "+err.Error())
 			continue
