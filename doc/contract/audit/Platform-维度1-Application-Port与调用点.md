@@ -2146,3 +2146,75 @@ StockBoards 的 Provider Port、Go DTO、Service 校验/回退/缓存、HTTP 路
 - 新增 AUD-WEBUI-CTR-031、CTR-032、CTR-033（均 P2）；IndexConstituent.weight_percent 与 IndexConstituentSnapshot.provider_time 纳入 AUD-WEBUI-CTR-010。
 - WebUI API 请求测试存在，但没有页面消费。未发现已证实的历史报告日期越界或权重换算错误；历史名称、陈旧度和 UI 闭环仍待补强。
 - WebUI 维度 2 继续 partial。
+
+
+### 36. WebUI 维度 2：Index Daily Bars 指数历史日线
+
+#### 36.1 核验范围与证据
+
+- 固定代码基线：`b6dfc85ba214fe16268c8cba780641a8bfe15086`。
+- DTO：`internal/marketdata/model/model.go`（blob `6f04516bd11452a01adcb5acceab571fb1c28ed5`），`IndexDailyBar` / `IndexDailyBarsSnapshot`。该 DTO 明确是指数/板块原始日线，不带复权字段，也不进入个股 DailyBar 调整逻辑。
+- Provider Port：`internal/marketdata/provider/provider.go`（blob `6635d2247379d1ffcb826f80e8e2176422b0cc0a`），由 `IndexCatalogProvider.FetchIndexDailyBars` 提供；指数日线和目录/当前成分共用 IndexCatalogProvider 能力接口，不进入个股 DailyBarProvider 回退链。
+- Hithink：`internal/marketdata/provider/hithink.go`（blob `337c072c14f764f1f9cfff833f44ddcf5426e04b`），调用 `/api/a-share-index/prices/historical`，按请求日期范围拉取 1d 数据。
+- Tushare：`internal/marketdata/provider/tushare_capabilities.go`，调用 `index_daily`，请求 ts_code/start_date/end_date 与 OHLC、pct_chg、vol、amount 字段。
+- Service：`internal/marketdata/service/index_catalog.go`（blob `cf10a389b065955df93973f41222a3837c27a5e2`），负责指数代码、日期范围、来源选择、缓存、回退和 `validateIndexDailyBarsSnapshot`。
+- HTTP：`internal/marketdata/httpapi/index_catalog.go`（blob `0de177e2b7921863b6beb9a856cd902ca33d6bd4`）；路由注册在 `internal/marketdata/httpapi/server.go`；OpenAPI `internal/marketdata/httpapi/openapi.yaml`（blob `cd8a6e3dfb8e3162ee789b11e883be9283c59f32`）。
+- Go 契约测试：`internal/marketdata/httpapi/openapi_contract_test.go`（blob `7f97f075a23bd698a7e3fc32e90509d1e999217b`），模型登记包含 IndexDailyBar / IndexDailyBarsSnapshot，检查字段集合和 required；不检查 OpenAPI 是否把 omitempty 指针错误声明为 nullable，也不对单位字符串做枚举一致性校验。
+- Provider/Service 测试：`internal/marketdata/provider/tushare_capabilities_test.go` 覆盖 Tushare 日期边界、成交量溢出及金额/成交量单位转换；`internal/marketdata/service/index_catalog_quality_fallback_test.go` 有指数日线未来 fetched_at 校验。未发现 Hithink 指数日线的独立 Provider 测试组，也未发现完整的交易日缺失/覆盖率测试组。
+- WebUI：`web/src/api.js`（blob `b8bcbee5908b43bfa1bc2ca744363190af38287f`）定义 `getIndexDailyBars`；`web/tests/api.test.mjs`（blob `a26eca75b24a744232d370fdbe2411806be45136`）验证 URL、source 参数、鉴权以及无效/反向日期拒绝。已检查 `web/src/market-overview.js`、`web/src/market-activity.js` 和相关页面调用，没有发现实际页面消费者或日线 DOM 渲染测试。
+
+#### 36.2 日期范围、排序与覆盖语义
+
+1. HTTP 要求 start/end 均为 YYYY-MM-DD，闭区间，start 不晚于 end，最大 10 年 / 3660 个自然日；Service 再校验日期格式、顺序、不能晚于中国市场当前日期及范围上限。
+2. Hithink 和 Tushare Provider 都校验请求区间、日期合法性和重复交易日；两者均按 TradeDate 升序输出。Service 再校验 item 日期处于请求区间、唯一且升序。
+3. Service 校验 `snapshot.total == len(items)`，空结果必须为 unknown；Provider 空结果分别以 unknown 语义返回，避免把“没有返回数据”解释为指数在该区间没有交易。
+4. 目前没有将指数日线日期集合与交易日历交叉核对。Service 只验证已返回日期唯一、升序和范围，不计算请求区间内应有的交易日数，也不输出 missing_dates / expected_sessions / coverage_ratio。Hithink 在有响应时间戳且返回部分行时可以保留 valid；因此单个或多个交易日缺行可能无法被识别为数据缺口。
+5. 现有校验不能将“周末/节假日没有数据”与“交易日漏数”区分开。指数没有个股停牌状态这一层过滤，但仍需要交易日历证明应有交易日集合；本批不把指数成分和个股日线扩展进来。
+
+#### 36.3 OHLC、成交量、成交额与时间语义
+
+1. 两个 Provider 都要求 OHLC 为有限正数，并校验 low <= open/close <= high、low <= high；Service 再次执行 OHLC、日期、来源/版本和有限数值校验。指数日线明确无复权语义，不应套用个股前复权/后复权逻辑。
+2. Tushare `index_daily.vol` 保留源端“手”单位，`volume_unit=hands`；`amount` 按源端千元换算成人民币元，`amount_unit=CNY`。测试明确验证了单位和换算结果，也覆盖 int64 成交量溢出时置空并降级。
+3. Hithink 成交量映射为 shares；其 turnover 字段的金额单位没有得到人民币元证据，故标记 `amount_unit=provider_defined`、条目 degraded，并写 `provider_amount_unit_not_verified_as_cny`。不能把 Hithink turnover 与 Tushare CNY amount 直接跨源比较或相加。
+4. 缺失成交量/成交额保留 nil 和 unknown 单位，不补零；Service 禁止缺失值或 provider_defined 金额单位的条目标记 valid。Tushare 因不提供 Provider 快照时间戳，条目和快照会降级并保留 `provider_snapshot_timestamp_not_exposed`；Hithink 使用响应级 timestamp，缺失/非法时降级。fetched_at 是本服务采集时间，不替代 provider_time。
+5. Service 对 provider_time/fetched_at 做零值和未来时间校验，但没有最大 provider_time 年龄阈值。历史日线的 provider_time 是响应级准备/快照时间，不是每根 K 线的成交时点；消费者必须区分 trade_date、provider_time 和 fetched_at。
+6. OpenAPI 的 IndexDailyBar.volume_unit / amount_unit 目前只是普通 string，没有列出 shares/hands/unknown 与 CNY/provider_defined/unknown 的允许值及跨源差异说明。接口 operation description 只解释 Tushare 单位，未完整说明 Hithink 的 provider_defined 金额状态。
+
+#### 36.4 HTTP/OpenAPI 与 WebUI 消费
+
+1. HTTP 路由为 `GET /api/v1/market/indices/{symbol}/daily`，start/end 必填，source 可选；显式 source 被限制为已知 Provider，未指定时走 IndexCatalogProvider 的配置优先级回退。
+2. IndexDailyBar 和 IndexDailyBarsSnapshot 在 Go DTO、OpenAPI 中均有字段定义；模型反射测试检查字段集合和 required。OpenAPI 中 change_percent、volume、amount、IndexDailyBar.provider_time 与 IndexDailyBarsSnapshot.provider_time 声明 nullable=true；对应 Go 字段是 `omitempty` 指针，nil 时 JSON 省略而不是输出 null，纳入 AUD-WEBUI-CTR-010。
+3. WebUI Client 已支持指数 symbol URL 编码、日期合法性/顺序校验、source 参数和 AbortSignal；API 请求测试验证了请求路径、查询参数和 API Key。该请求测试不代表页面已消费。
+4. 页面代码没有调用 `getIndexDailyBars`，也没有指数详情/历史日线表格或图表的 DOM 回归测试。当前只有 API Client 层能力，不能计为 WebUI 端到端功能。
+
+#### 36.5 差异登记
+
+**AUD-WEBUI-CTR-034：指数日线缺少交易日历覆盖完整性证明（P2，数据完整性）**
+
+- 证据：Hithink/Tushare Provider 和 Service 校验日期范围、重复、升序及 OHLC；Service 没有使用 TradingCalendar 对请求区间的预期交易日集合进行核对，也没有 missing_dates、expected_sessions 或 coverage_ratio。Hithink 有时间戳的非空部分响应可保持 valid。
+- 影响：源端漏掉一个或多个交易日时，响应仍可能被当作 valid 的完整区间；当前消费者无法区分正常非交易日与交易日漏数。
+- 责任方：Market Data Service / Data Contract。
+- 关闭条件：定义指数日线的交易日覆盖语义；以交易日历计算预期交易日并核验返回日期，或明确提供 provider-confirmed coverage；缺日时降级并列出缺失日期/覆盖率。补充周末、节假日、正常交易日漏数、首尾边界、重复日期及跨 Provider 覆盖测试。若产品只承诺返回源端观测行，则契约必须明确 best-effort，不能暗示区间完整。
+
+**AUD-WEBUI-CTR-035：指数日线跨 Provider 单位枚举与语义说明不完整（P2，Schema 精度）**
+
+- 证据：Hithink 使用 shares 与 provider_defined；Tushare 使用 hands 与 CNY；缺失值使用 unknown。Go Service 已按这些组合执行校验，但 OpenAPI 的 volume_unit / amount_unit 只是普通 string，未声明允许值和单位语义，operation 描述只解释 Tushare。
+- 影响：消费者容易把不同 Provider 的成交量单位直接比较，或把 Hithink provider_defined turnover 当作人民币元；Schema 无法在生成客户端时约束单位分支。
+- 责任方：Market Data Provider / OpenAPI 维护方。
+- 关闭条件：OpenAPI 明确 volume_unit=[shares,hands,unknown]、amount_unit=[CNY,provider_defined,unknown] 及各来源映射/可比性；为 Provider 组合增加 JSON Golden/契约测试。除非有来源证据，不统一换算或伪造 Hithink amount 的 CNY 单位。
+
+**AUD-WEBUI-CTR-036：指数历史日线尚无 WebUI 页面消费闭环（P2，接入缺口）**
+
+- 证据：`getIndexDailyBars` 已有 API Client，API 测试覆盖 URL/source/鉴权和日期拒绝；已检查市场概览、市场活动和相关页面，没有实际调用点或指数日线 DOM 测试。
+- 影响：用户没有页面入口查看指数历史日线；日期范围、OHLC、成交量单位、金额单位、数据质量和来源时间语义尚未在 UI 中得到真实消费验证。
+- 责任方：WebUI。
+- 关闭条件：确认是否纳入指数详情/研究页面；若需要，接入实际页面并显示日期、OHLC、单位、来源、provider_time/fetched_at 和质量状态，按单位分别格式化成交量/成交额，补 DOM 测试；若暂不需要，明确标记为预留 API，不计为已接入 WebUI 功能。
+
+#### 36.6 本批结论
+
+- 指数日线是独立 IndexCatalogProvider 能力，不进入个股日线 Provider 回退链；Hithink 和 Tushare 均有实现。
+- 日期范围、重复日期、升序、OHLC、有限数值、单位组合和空数据 unknown 语义已有生产代码校验；Tushare 单位转换有测试证据。
+- 尚未证明请求区间交易日覆盖完整；Hithink amount 单位不能确认为 CNY；Tushare 没有 Provider 快照时间戳并保守降级。
+- 新增 AUD-WEBUI-CTR-034、CTR-035、CTR-036（均 P2）；IndexDailyBar.change_percent/volume/amount/provider_time 与 IndexDailyBarsSnapshot.provider_time 纳入 AUD-WEBUI-CTR-010。
+- WebUI API 请求层已有测试，但页面没有实际消费。未发现已证实的 OHLC 算术或 Tushare 单位换算错误。
+- WebUI 维度 2 继续 partial。
