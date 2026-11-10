@@ -230,3 +230,13 @@
 - 新增 **AUD-WEBUI-CTR-008**（P2，测试补证）：补齐分页边界测试，并用 Migration/DDL 证据确认事件 ID 的唯一、单调和不可变语义。
 - WebUI 读取 event.error_code，但当前 Go StageEvent 和 HTTP Handler 未提供该字段；暂不认定为运行时错误，待 DTO 收敛时裁决是否删除或正式支持。
 - 维度 2 仍为 partial。详见审计明细第 20 节。
+
+
+### WebUI — 维度 2：日 K 响应消费与 Go/OpenAPI 空值语义
+
+- 固定代码基线：`b6dfc85ba214fe16268c8cba780641a8bfe15086`。
+- 已核对 WebUI API Client、行情查询流程、图表消费、Go DailyBar、HTTP Handler、OpenAPI 和契约测试。
+- 日 K 请求参数及普通/PIT 两种响应分支与 Schema 基本一致；DailyBar 的字段集合、required、非 omitempty pointer-nullable 和 JSON 实际序列化形态由 Go 契约测试覆盖。
+- WebUI 保留缺失值，不补零；图表校验日期、OHLC 和成交量；技术指标由前端基于收盘价计算，不消费服务端 MA 字段。
+- 默认 limit=120 不足以计算 250 个有效收盘样本的 MA250，但这是窗口/指标可用性问题，不是 DTO 契约错配；本批未新增差异编号。
+- 本批未发现已证实的日 K 字段语义错配。Bundle、证券详情、指数日 K 等接口仍待逐项核验；WebUI 维度 2 保持 partial。详细证据见审计明细第 21 节。
