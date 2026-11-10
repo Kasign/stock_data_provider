@@ -240,3 +240,12 @@
 - WebUI 保留缺失值，不补零；图表校验日期、OHLC 和成交量；技术指标由前端基于收盘价计算，不消费服务端 MA 字段。
 - 默认 limit=120 不足以计算 250 个有效收盘样本的 MA250，但这是窗口/指标可用性问题，不是 DTO 契约错配；本批未新增差异编号。
 - 本批未发现已证实的日 K 字段语义错配。Bundle、证券详情、指数日 K 等接口仍待逐项核验；WebUI 维度 2 保持 partial。详细证据见审计明细第 21 节。
+
+
+### WebUI — 维度 2：Bundle 聚合响应 DTO 与快照元数据
+
+- 已核对 Bundle Handler、Service、Go Model、OpenAPI、模型反射/JSON 序列化契约测试及 WebUI 真实消费调用点。
+- Bundle 字段集合、required/omitempty 与 OpenAPI 一致；Quote 可选时按字段缺失表达，WebUI 对顶层和嵌套 Quote 的证券身份分别校验。
+- WebUI 正确处理 Quote 缺失、质量降级、warnings、daily_bars、快照 ID/参考时间和来源；仅在 Bundle 返回 404 时启用旧服务兼容回退。
+- 新增 AUD-WEBUI-CTR-009（P2）：lookback_days 省略时由 Service 注入的 defaultBars 决定，OpenAPI 未说明省略语义；当前 WebUI 显式传参，不受影响。
+- WebUI 维度 2 仍为 partial；后续继续核验证券详情及其他行情 API。详细证据见审计明细第 22 节。
