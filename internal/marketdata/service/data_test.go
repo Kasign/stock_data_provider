@@ -465,8 +465,9 @@ func TestQuoteFallsBackWhenProviderSourceVersionIsMissing(t *testing.T) {
 	if err != nil || hit {
 		t.Fatalf("Quote returned hit=%v err=%v", hit, err)
 	}
-	if got == nil || got.Source != "tencent" || got.SourceVersion != fallback.SourceVersion || got.QualityStatus != model.QualityDegraded {
-		t.Fatalf("quote without source version must fall back to a versioned provider: %+v", got)
+	if got == nil || got.Source != "tencent" || got.SourceVersion != fallback.SourceVersion || got.QualityStatus != model.QualityValid ||
+		got.FallbackFrom != "eastmoney" || !strings.Contains(got.FallbackReason, "source_version is missing") {
+		t.Fatalf("quote without source version must use a valid versioned fallback with explicit provenance: %+v", got)
 	}
 }
 
@@ -783,11 +784,9 @@ func TestQuotePrefersFreshProviderOverStalePrimary(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cacheHit || got.Source != "tencent" || got.QualityStatus != model.QualityDegraded {
-		t.Fatalf("stale primary should be bypassed and fresh fallback annotated: hit=%v quote=%+v", cacheHit, got)
-	}
-	if !containsReason(got.QualityReasons, "provider_fallback_used") {
-		t.Fatalf("fallback source must be auditable: %+v", got.QualityReasons)
+	if cacheHit || got.Source != "tencent" || got.QualityStatus != model.QualityValid || got.FallbackFrom != "eastmoney" ||
+		!strings.Contains(got.FallbackReason, "quote not suitable as a fresh live snapshot") {
+		t.Fatalf("stale primary should be bypassed while preserving valid fallback quality and explicit provenance: hit=%v quote=%+v", cacheHit, got)
 	}
 }
 
