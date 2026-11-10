@@ -1512,7 +1512,8 @@ func (p *TickFlow) tickflowHTTPStatusError(resp *http.Response) error {
 	if truncated {
 		body = body[:maxErrorBodyBytes]
 	}
-	sample := strings.TrimSpace(string(body))
+	sample := strings.ToValidUTF8(strings.TrimSpace(string(body)), "�")
+	sample = truncateDiagnosticPreview(sample, maxErrorBodyBytes)
 	if p != nil && p.apiKey != "" {
 		sample = strings.ReplaceAll(sample, p.apiKey, "[REDACTED]")
 	}

@@ -3,6 +3,8 @@ package provider
 import (
 	"context"
 	"encoding/json"
+	"io"
+	"net/http"
 	"strings"
 	"testing"
 	"unicode/utf8"
@@ -39,4 +41,16 @@ func TestEastmoneyQuoteDiagnosticPreviewPreservesUTF8(t *testing.T) {
 		t.Fatalf("Eastmoney preview must be valid UTF-8 within 160 bytes, got len=%d value=%q", len(preview), preview)
 	}
 	if preview != strings.Repeat("a", 159) { t.Fatalf("unexpected safe preview boundary: %q", preview) }
+}
+
+func TestTickFlowHTTPErrorSummaryPreservesUTF8(t *testing.T) {
+	body := strings.Repeat("a", 2047) + "中" + strings.Repeat("b", 20)
+	provider := &TickFlow{apiKey: "secret"}
+	err := provider.tickflowHTTPStatusError(&http.Response{
+		StatusCode: http.StatusBadGateway,
+		Body: io.NopCloser(strings.NewReader(body)),
+	})
+	if err == nil { t.Fatal("HTTP error response should produce an error") }
+	if !utf8.ValidString(err.Error()) { t.Fatalf("HTTP error summary is invalid UTF-8: %q", err.Error()) }
+	if !strings.Contains(err.Error(), "[truncated]") { t.Fatalf("expected explicit truncation marker, got %q", err.Error()) }
 }
