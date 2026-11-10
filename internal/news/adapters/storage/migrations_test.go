@@ -96,7 +96,7 @@ func TestMigrationsPreserveNewsPointInTimeAccessPaths(t *testing.T) {
 		}
 	}
 
-	identityHistorySchema := strings.Join(migrations[3].Statements, "\n")
+	identityHistorySchema := strings.Join(strings.Fields(strings.Join(migrations[3].Statements, "\n")), " ")
 	for _, fragment := range []string{
 		"KEY idx_news_identifier_history_at",
 		"FOREIGN KEY (source_id, identifier_type, identifier_hash)",
