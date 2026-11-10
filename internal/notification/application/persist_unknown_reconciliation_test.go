@@ -147,3 +147,23 @@ func TestReconcileUnknownDeliveryRunsEvidenceBoundRetryEndToEnd(t *testing.T) {
 		t.Fatal("reconciliation must not rewrite immutable Attempt history")
 	}
 }
+
+
+func TestReconcileUnknownDeliveryPreservesUncertainCommitClassification(t *testing.T) {
+	delivery, channel, attempts, evidence, now := unknownReconciliationFixture(t)
+	evidence.Outcome = UnknownLookupAccepted
+	evidence.ProviderMessageRef = "provider-message-1"
+	repository := &unknownReconciliationRepositoryFake{err: ErrPersistenceOutcomeUnknown}
+
+	assessment, decision, err := ReconcileUnknownDelivery(
+		context.Background(), repository, standardRetryPolicy(),
+		delivery, channel, attempts, evidence, now, 0.5,
+	)
+	if !errors.Is(err, ErrPersistenceOutcomeUnknown) {
+		t.Fatalf("uncertain commit classification must survive reconciliation orchestration, got %v", err)
+	}
+	if assessment.Action != UnknownReconciliationFinalizeSent || decision != nil || repository.calls != 1 {
+		t.Fatalf("reconciliation must attempt one CAS and leave read-after-write to caller: assessment=%+v decision=%+v calls=%d",
+			assessment, decision, repository.calls)
+	}
+}
