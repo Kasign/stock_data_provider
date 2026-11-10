@@ -254,11 +254,10 @@ internal/marketdata/model/model.go 的 model.ChipDistribution 中，以下九个
 
 ### 13.1 StockBasic（证券资料/Profile）
 
-Go model.StockBasic 有 14 个 omitempty 字段，而 OpenAPI StockBasic 将它们全部声明 nullable=true、均非 required：
+Go model.StockBasic 有 14 个 omitempty 字段，但其中只有 12 个字段在 OpenAPI 中声明 nullable=true；ipo_date、out_date 虽为 omitempty 字符串，Schema 未声明 nullable，不纳入 CTR-010：
 
 | JSON 字段 | Go 类型 | JSON tag | OpenAPI nullable |
 |---|---|---|---|
-| ipo_date / out_date | string | omitempty | true |
 | pe_dynamic / pb | *float64 | omitempty | true |
 | industry | string | omitempty | true |
 | market_cap_cny / float_market_cap_cny | *float64 | omitempty | true |
@@ -267,7 +266,7 @@ Go model.StockBasic 有 14 个 omitempty 字段，而 OpenAPI StockBasic 将它�
 | roe_percent / net_profit_margin_percent | *float64 | omitempty | true |
 | net_profit_cny / gross_margin_percent | *float64 | omitempty | true |
 
-这些字段在 Go nil/空值时均被省略，而不是输出 JSON null。source_version、quality_reasons 虽带 omitempty，但 OpenAPI 未声明 nullable，不纳入 CTR-010。StockBasic 的 required 字段与 Go 非 omitempty 字段相符。
+上述 12 个字段在 Go nil/空值时均被省略，而不是输出 JSON null。ipo_date/out_date、source_version、quality_reasons 虽带 omitempty，但 OpenAPI 未声明 nullable，不纳入 CTR-010。StockBasic 的 required 字段与 Go 非 omitempty 字段相符。
 
 ### 13.2 SecurityTradingStatusSnapshot
 
@@ -277,7 +276,7 @@ Go model.StockBasic 有 14 个 omitempty 字段，而 OpenAPI StockBasic 将它�
 
 ### 13.3 PriceLimitRuleSnapshot 与 PriceLimitEventEvidence
 
-- PriceLimitRuleSnapshot 的 inline 200 response Schema 将 special_exception_evidence 和 limit_percent 声明 nullable=true；Go 两字段分别为指针且带 omitempty，nil 时省略，计入 CTR-010。
+- PriceLimitRuleSnapshot 的 inline 200 response Schema 中，limit_percent 为 *float64 + omitempty，且属性直接声明 type: number、nullable: true，计入 CTR-010。special_exception_evidence 虽在 $ref 同层写有 nullable: true，但 OpenAPI 3.0.3 的 nullable 仅在同一 Schema 显式声明 type 时生效；该字段是可选 $ref，不能作为已证实的 nullable 冲突，不计入。
 - listing_trading_day_number、no_limit_reason、rule_effective_from/to 也带 omitempty，但 Schema 未声明 nullable，不计入 CTR-010。
 - PriceLimitEventEvidence 的 effective_to、quality_reasons、announcement_id 均 omitempty，Schema 未声明 nullable，不计入 CTR-010。
 - required 字段总体与 Go 非 omitempty 字段一致；此结论只针对字段 presence，不代表状态枚举和规则语义的其他审计项已关闭。
@@ -291,10 +290,10 @@ Go model.StockBasic 有 14 个 omitempty 字段，而 OpenAPI StockBasic 将它�
 
 ### 13.5 CTR-010 本批确认数量
 
-- StockBasic：14 个字段。
+- StockBasic：12 个字段。
 - SecurityTradingStatusSnapshot：1 个字段。
-- PriceLimitRuleSnapshot：2 个字段。
-- 合计确认 17 个字段，均保留原 CTR-010，不新增差异编号。
+- PriceLimitRuleSnapshot：1 个字段（仅 limit_percent）。
+- 合计确认 14 个字段，均保留原 CTR-010，不新增差异编号。
 
 本批仅完成上述三个 DTO；CTR-010 全量字段清单仍未完成。
 ## 14. CTR-010 字段清单复核（子批次 7：Fundamentals / Announcements / Valuations）
@@ -505,3 +504,73 @@ Go model.StockBasic 有 14 个 omitempty 字段，而 OpenAPI StockBasic 将它�
 ### 19.3 本批结论
 
 Hot Ranking 新确认 6 个 CTR-010 影响字段（5 + 1），属于此前 CTR-010 全量字段去重汇总中的待纳入项。后续统一总表时应按 `DTO.field` 去重；不得把历史数据集章节已列出的相同字段重复累计。
+
+
+## 20. CTR-010 全量唯一字段汇总（固定基线静态对照）
+
+### 20.1 统计口径
+
+固定代码基线：`origin/integration` `b6dfc85ba214fe16268c8cba780641a8bfe15086`。本节以固定基线下 `internal/marketdata/model/**/*.go`、`internal/marketdata/httpapi/openapi.yaml` 和 `openapi_contract_test.go` 为依据，按 `DTO.JSON字段` 作为唯一键重新计算；不将子批次累计数、数据集章节提及次数直接相加。
+
+- 反射注册表：51 个具名 Go DTO；逐一比对 Go JSON tag 与对应 OpenAPI properties，共确认 119 个 `omitempty + nullable: true` 字段。
+- 注册表外的 HTTP 响应 DTO：`PriceLimitRuleSnapshot`（Handler inline 200 Schema，确认 `limit_percent` 1 个字段）、`ProviderProbeFieldComparison`（嵌套 inline Schema，确认 4 个字段）、`MarketStockOverviewItem`（嵌套 inline Schema，0 个冲突字段）。
+- 因此本轮覆盖 54 个 HTTP 响应 DTO（51 个具名注册 DTO + 3 个 inline DTO），确认 **124 个唯一 CTR-010 字段**，分布在 29 个 DTO；其余 25 个 DTO 未发现该类差异。
+- `AdjustmentFactor`、`CorporateAction`、`StockUniverseSnapshot` 当前没有对应 Market Data HTTP 响应 Schema；`ProviderProbeOptions` 是无 JSON tag 的内部请求选项结构，不纳入响应 CTR-010 统计。
+- `PriceLimitRuleSnapshot.special_exception_evidence` 是可选 $ref；OpenAPI 3.0.3 中同层 nullable 没有同层 type，不能据此认定允许 null，故排除。StockBasic.ipo_date/out_date 虽 omitempty，但 OpenAPI 未声明 nullable，也排除。
+
+### 20.2 唯一差异字段清单
+
+以下清单按 DTO 分组；每个字段只出现一次。合计 124 项。
+
+| DTO | CTR-010 唯一字段 | 数量 |
+|---|---|---:|
+| StockAnnouncement | published_at | 1 |
+| DragonTigerItem | change_percent、close_price_cny、net_buy_amount_cny、buy_amount_cny、sell_amount_cny、deal_amount_cny、deal_amount_ratio、provider_buy_value、provider_sell_value、provider_deal_value、provider_net_value、provider_net_rate、provider_org_net_value、provider_hot_money_net_value、provider_amount_unit、hot_rank、range_days | 17 |
+| DragonTigerSnapshot | provider_report_date | 1 |
+| Quote | volume_ratio、turnover_rate、raw_volume、raw_amount | 4 |
+| DailyBar | adjustment_factor_system_observed_at、provider_timestamp、system_observed_at、raw_volume、raw_amount | 5 |
+| StockBoard | change_percent | 1 |
+| StockBasic | pe_dynamic、pb、industry、market_cap_cny、float_market_cap_cny、total_shares、float_shares、board_code、roe_percent、net_profit_margin_percent、net_profit_cny、gross_margin_percent | 12 |
+| SectorRanking | latest_price、change、change_percent、change_percent_5d、amount、advancing_count、declining_count、leader_change_percent | 8 |
+| MarketIndexQuote | latest_price、change、change_percent、open、high、low、prev_close、amount、quote_time | 9 |
+| MarketBreadthSnapshot | oldest_quote_time、newest_quote_time | 2 |
+| LimitPoolItem | last_price、consecutive_boards、broken_count、open_times、turnover_ratio_percent、turnover | 6 |
+| LimitPoolSnapshot | provider_report_date | 1 |
+| FundamentalsSnapshot | system_observed_at | 1 |
+| ValuationItem | turnover_rate_percent、float_turnover_rate_percent、volume_ratio、dividend_yield_percent、dividend_yield_ttm_percent | 5 |
+| IndexCatalogSnapshot | provider_time | 1 |
+| IndexConstituent | weight_percent | 1 |
+| IndexConstituentSnapshot | provider_time | 1 |
+| IndexDailyBar | change_percent、volume、amount、provider_time | 4 |
+| IndexDailyBarsSnapshot | provider_time | 1 |
+| HotRankingItem | latest_price、change、change_percent、rank_change、heat | 5 |
+| HotRankingSnapshot | provider_time | 1 |
+| ChipDistribution | date、cost_90_low、cost_90_high、cost_70_low、cost_70_high、profit_ratio、concentration_90、concentration_70、provider_date | 9 |
+| MarketCapitalFlowItem | close_sh、change_percent_sh、close_sz、change_percent_sz、net_amount_cny、net_amount_rate_percent、extra_large_net_inflow_cny、extra_large_net_inflow_rate_percent、large_net_inflow_cny、large_net_inflow_rate_percent、medium_net_inflow_cny、medium_net_inflow_rate_percent、small_net_inflow_cny、small_net_inflow_rate_percent | 14 |
+| CapitalFlow | main_net_inflow_yuan、inflow_5d_yuan、inflow_10d_yuan | 3 |
+| ProviderProbeItem | coverage_ratio、provider_time、fetched_at | 3 |
+| ProviderProbeCheckResult | provider_time、fetched_at | 2 |
+| SecurityTradingStatusSnapshot | system_observed_at | 1 |
+| PriceLimitRuleSnapshot（inline） | limit_percent | 1 |
+| ProviderProbeFieldComparison（inline） | left、right、difference、tolerance | 4 |
+| **合计** | **29 个 DTO** | **124** |
+
+### 20.3 既有批次计数纠偏与重复核验
+
+- 子批次 6 原记 StockBasic 14 个，实际只有 12 个字段满足 omitempty + OpenAPI nullable=true；ipo_date/out_date 的 Schema 没有 nullable。PriceLimitRuleSnapshot 原记 2 个，special_exception_evidence 的 nullable 位于 $ref 旁且没有同层 type，不计入已证实差异；仅 limit_percent 计入。因此子批次 6 从 17 更正为 14。
+- 子批次 5—9 原累计 70 个，按上述纠偏后为 **67 个**（9 + 14 + 7 + 19 + 18）。这是批次记录量，不是最终唯一字段数。
+- 子批次 10 的 42 个是既有字段重复复核；子批次 12 的 Hot Ranking 6 个也已在早期 Hot Ranking 数据集章节登记，属于重复复核，不可再次累加。
+- 子批次 11 的 9 个由 ProviderProbeItem 3、ProviderProbeCheckResult 2 和嵌套 ProviderProbeFieldComparison 4 组成；其中 5 个具名 DTO 字段已包含在 51 模型静态扫描的 119 项内，4 个嵌套 DTO 字段是注册表外新增补齐项。
+- 旧审计记录中同一字段以 DTO 分组、无前缀字段名和 CTR-010 影响范围补充等不同方式多次提及；本节给出最终唯一集合。历史章节的提及次数不等于独立差异数，后续以本节清单作为唯一计数源，不再累计旧批次字段数。
+
+### 20.4 测试覆盖汇总
+
+- `TestAllGoModelFieldsAndRequiredMatchOpenAPISchemas` 登记 51 个 DTO，检查 Go JSON 字段集合、required 集合，并检查非 omitempty 指针必须 nullable；没有反向检查 omitempty 字段不得 nullable。因此 119 个具名 DTO 差异不能由现有反射测试自动发现。
+- PriceLimitRuleSnapshot、ProviderProbeFieldComparison、MarketStockOverviewItem 三个 inline DTO 未加入该 51 项注册表；嵌套 DTO 也没有递归字段/nullable 对照。
+- `TestDataModelJSONSerializationMatchesOpenAPIRequiredAndNullableSemantics` 当前只对 Quote、DailyBar、Bundle、HotRankingItem、MarketSentimentSnapshot、LimitPoolItem、SourceStatus、StockAnnouncementSnapshot 建立样例；其中没有对本节 124 个差异字段中的任一字段做 nil/空值省略断言。
+- 因此当前公共 JSON Golden 对 CTR-010 的 124 个字段覆盖为 **0/124**；这不表示项目内不存在任何其他针对性测试，而是中央 DTO/OpenAPI 序列化契约测试没有覆盖这些字段。
+- 本轮是固定 SHA 的静态字段清单核验，未执行 Go/Node CI，也未修改业务代码。
+
+### 20.5 当前结论
+
+CTR-010 的静态字段完整性清单已收敛为 **124 个唯一字段 / 29 个受影响 DTO / 54 个纳入范围的响应 DTO**。此前子批次累计数字不再用于推导总数。此结论只完成字段清单和测试资产盘点，不代表 CTR-010 已修复，也不代表 WebUI 维度 2 或 PLAT-002 已完成；下一步进入 CTR-010 关闭方案 Review，先确定 OpenAPI 还是 Go JSON 行为作为规范目标，再定义双向反射校验和最小化 Golden 补齐策略。
