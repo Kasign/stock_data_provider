@@ -76,6 +76,27 @@ func TestSearchCandidatesDoesNotCallProviderForCanceledContext(t *testing.T) {
 	}
 }
 
+func TestSearchCandidatesDiscardsProviderCandidatesWhenProviderReturnsError(t *testing.T) {
+	usecase := NewSearchCandidates(StaticProviderSet{Providers: []Provider{
+		fakeProvider{
+			code:  "interrupted",
+			items: []domain.Candidate{{Title: "must not be accepted"}},
+			err:   errors.New("upstream interrupted"),
+		},
+	}})
+	result := usecase.Execute(context.Background(), domain.SearchRequest{Query: "market", Limit: 10})
+	if result.Status != domain.SearchFailed {
+		t.Fatalf("status=%s", result.Status)
+	}
+	if len(result.Candidates) != 0 {
+		t.Fatalf("candidates returned with provider error must be discarded: %+v", result.Candidates)
+	}
+	if len(result.Outcomes) != 1 || result.Outcomes[0].CandidateCount != 0 ||
+		result.Outcomes[0].Status != domain.ProviderFailed {
+		t.Fatalf("outcome=%+v", result.Outcomes)
+	}
+}
+
 func TestSearchCandidatesPreservesPartialProviderFailure(t *testing.T) {
 	usecase := NewSearchCandidates(StaticProviderSet{Providers: []Provider{
 		fakeProvider{code: "one", items: []domain.Candidate{{Title: "headline"}}},

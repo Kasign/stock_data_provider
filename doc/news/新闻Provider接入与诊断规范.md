@@ -407,6 +407,8 @@ Provider 原始响应结构只存在于 Adapter 内。Candidate 是标准化候�
 
 Outcome 至少保留现有字段：ProviderCode、QueryDimension、Status、CandidateCount、ErrorCode、Retryable、Duration、ObservedAt。Duration 只表示本次 Provider.Search 调用耗时；ObservedAt 表示该次调用完成/被判定的时间。CandidateCount 是 Adapter 返回并交由标准化的候选数，不代表最终持久化数量或质量合格数量。
 
+当前 `Provider.Search` 的签名是 `([]Candidate, error)`，没有单 Provider 的 partial 返回通道。契约规定：只要返回非 nil error，该 Provider 本次候选全部不接纳，Outcome 为 failed/skipped 且 CandidateCount 为 0；不能一边返回候选一边用 error 暗示部分成功。当前聚合层的 `partial` 只表示多个 Provider 之间有成功/空结果与失败/跳过并存。若未来真实供应商接口支持分页中断后保留已取得页面，必须先设计明确的单 Provider PartialResult 语义，再扩展接口，不能依赖双返回值的模糊行为。
+
 聚合状态按以下规则解释：
 
 | 条件 | SearchResult.Status |
