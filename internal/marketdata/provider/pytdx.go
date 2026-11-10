@@ -271,6 +271,7 @@ func (p *Pytdx) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endDat
 		offset := uint16(page * pytdxPageSize)
 		response, requestErr := client.GetKlineDay(wireSymbol, offset, pytdxPageSize)
 		if requestErr != nil {
+			addPytdxDailyResponseIssue(ctx, "request_error", "daily_kline_page", "successful K-line page response", "transport_error", "", "Go 通达信日 K 分页请求失败", validation.SeverityError)
 			return nil, fmt.Errorf("Pytdx daily K-line page %d: %w", page+1, requestErr)
 		}
 		if response == nil || len(response.List) == 0 {
@@ -296,12 +297,15 @@ func (p *Pytdx) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endDat
 		}
 	}
 	if adjustment == model.AdjustmentBackward && !historyComplete {
+		addPytdxDailyResponseIssue(ctx, "history_window_truncated", "daily_kline_history", "complete history for backward adjustment", "page_limit_reached", strconv.Itoa(pytdxMaxHistoryPage), "Go 通达信日 K 历史分页达到安全上限，拒绝不完整后复权结果", validation.SeverityError)
 		return nil, fmt.Errorf("Pytdx history exceeded %d pages; refusing to return incomplete backward-adjusted data", pytdxMaxHistoryPage)
 	}
 	if adjustment != model.AdjustmentBackward && !historyComplete && !startDateReached {
+		addPytdxDailyResponseIssue(ctx, "history_window_truncated", "daily_kline_history", start.Format("2006-01-02"), "page_limit_reached", strconv.Itoa(pytdxMaxHistoryPage), "Go 通达信日 K 历史分页达到安全上限，尚未覆盖请求起始日期", validation.SeverityError)
 		return nil, fmt.Errorf("Pytdx history scan reached safety limit of %d pages before requested start date", pytdxMaxHistoryPage)
 	}
 	if len(all) == 0 {
+		addPytdxDailyResponseIssue(ctx, "empty_result", "daily_kline_history", "at least one daily K-line row", "empty", "0 rows", "Go 通达信未返回日 K 记录", validation.SeverityError)
 		return nil, errors.New("Pytdx returned no daily K-line rows")
 	}
 	sort.Slice(all, func(i, j int) bool { return all[i].Time.Before(all[j].Time) })
@@ -324,6 +328,7 @@ func (p *Pytdx) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endDat
 		}
 		gbbq, gbbqErr := client.GetGbbq(wireSymbol)
 		if gbbqErr != nil {
+			addPytdxDailyResponseIssue(ctx, "adjustment_reference_error", "gbbq", "successful ex-rights/ex-dividend response", "request_error", "", "Go 通达信复权所需公司行动数据请求失败", validation.SeverityError)
 			return nil, fmt.Errorf("Pytdx ex-rights/ex-dividend data required for %q adjustment: %w", adjustment, gbbqErr)
 		}
 		events := make(protocol.XRXDs, 0)
@@ -530,6 +535,16 @@ func pytdxQuoteIdentityPreview(response []*protocol.Quote) string {
 		return preview
 	}
 	return ""
+}
+
+func addPytdxDailyResponseIssue(ctx context.Context, code, field, expected, actualType, actualPreview, message string, severity validation.Severity) {
+	report := validation.NewReport(1)
+	report.Add(validation.FieldIssue{
+		Stage: validation.StageParse, Field: field, ProviderField: field,
+		Code: code, Expected: expected, ActualType: actualType, ActualPreview: actualPreview,
+		Severity: severity, Message: message,
+	})
+	validation.AddContextReport(ctx, report)
 }
 
 func addPytdxValidationIssue(ctx context.Context, rowIndex int, field, providerField, code, expected, actualType, actualPreview, message string, severity validation.Severity) {

@@ -9,6 +9,7 @@ import (
 
 	"example.com/stock-analysis-flow/internal/marketdata/model"
 	"github.com/injoyai/tdx/protocol"
+	"example.com/stock-analysis-flow/internal/marketdata/validation"
 )
 
 type fakePytdxDailyClient struct {
@@ -145,5 +146,49 @@ func TestPytdxDailyBarsGbbqConnectionFailureIsPreserved(t *testing.T) {
 	_, err := p.FetchDailyBars(context.Background(), "600519.SH", "2026-10-21", "2026-10-21", 10, model.AdjustmentBackward)
 	if err == nil || !errors.Is(err, connectionErr) {
 		t.Fatalf("expected original GBBQ connection error, got %v", err)
+	}
+}
+
+func TestPytdxDailyBarsReportsRequestAndEmptyResponseIssues(t *testing.T) {
+	cases := []struct {
+		name string
+		client *fakePytdxDailyClient
+		wantCode string
+	}{
+		{name: "page request failure", client: &fakePytdxDailyClient{klineErr: errors.New("network timeout")}, wantCode: "request_error"},
+		{name: "empty history", client: &fakePytdxDailyClient{klineResponse: &protocol.KlineResp{}}, wantCode: "empty_result"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			p := NewPytdx(time.Second, "127.0.0.1")
+			p.dailyClientFactory = func(context.Context) (pytdxDailyClient, error) { return tc.client, nil }
+			reporter := validation.NewReporter(10)
+			ctx := validation.WithReporter(context.Background(), reporter)
+			if _, err := p.FetchDailyBars(ctx, "600519.SH", "2026-10-21", "2026-10-21", 10, model.AdjustmentNone); err == nil {
+				t.Fatal("expected Pytdx response to be rejected")
+			}
+			issues := reporter.Snapshot().Issues
+			if len(issues) != 1 || issues[0].Stage != validation.StageParse || issues[0].Code != tc.wantCode || issues[0].RowIndex != nil {
+				t.Fatalf("expected one snapshot-level %s issue, got %+v", tc.wantCode, issues)
+			}
+		})
+	}
+}
+
+func TestPytdxDailyBarsReportsAdjustmentReferenceFailure(t *testing.T) {
+	client := &fakePytdxDailyClient{
+		klineResponse: &protocol.KlineResp{List: []*protocol.Kline{pytdxTestDailyKline("2026-10-21", 10000, 10200, 9800, 10100, 10000)}},
+		gbbqErr: errors.New("GBBQ unavailable"),
+	}
+	p := NewPytdx(time.Second, "127.0.0.1")
+	p.dailyClientFactory = func(context.Context) (pytdxDailyClient, error) { return client, nil }
+	reporter := validation.NewReporter(10)
+	ctx := validation.WithReporter(context.Background(), reporter)
+	if _, err := p.FetchDailyBars(ctx, "600519.SH", "2026-10-21", "2026-10-21", 10, model.AdjustmentForward); err == nil {
+		t.Fatal("expected adjustment reference request to fail")
+	}
+	issues := reporter.Snapshot().Issues
+	if len(issues) != 1 || issues[0].Stage != validation.StageParse || issues[0].Code != "adjustment_reference_error" || issues[0].RowIndex != nil {
+		t.Fatalf("expected one snapshot-level adjustment_reference_error issue, got %+v", issues)
 	}
 }
