@@ -1,6 +1,8 @@
 package application
 
 import (
+	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
@@ -37,6 +39,20 @@ func TestLeaseRecoveryReportDiagnosticsClassification(t *testing.T) {
 	}
 }
 
+func TestLeaseRecoveryReportKeepsUnknownDeliveryIDsInternal(t *testing.T) {
+	report := LeaseRecoveryReport{
+		Scanned: 1, OutcomeUnknown: 1,
+		OutcomeUnknownDeliveryIDs: []string{"delivery-private"},
+	}
+	encoded, err := json.Marshal(report)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(encoded), "delivery-private") {
+		t.Fatalf("internal reconciliation identifiers must not be serialized: %s", encoded)
+	}
+}
+
 func TestLeaseRecoveryReportDiagnosticsRejectsInconsistentCounts(t *testing.T) {
 	_, err := (LeaseRecoveryReport{Scanned: 2, Recovered: 1}).ToDiagnosticsObservation(time.Now(), 0)
 	if err == nil {
@@ -45,5 +61,13 @@ func TestLeaseRecoveryReportDiagnosticsRejectsInconsistentCounts(t *testing.T) {
 	_, err = (LeaseRecoveryReport{Scanned: 1, OutcomeUnknown: 1}).ToDiagnosticsObservation(time.Now(), 0)
 	if err == nil {
 		t.Fatal("uncertain outcome count without delivery identity must be rejected")
+	}
+	for _, ids := range [][]string{{""}, {"delivery-1", "delivery-1"}} {
+		_, err = (LeaseRecoveryReport{
+			Scanned: 2, OutcomeUnknown: 2, OutcomeUnknownDeliveryIDs: ids,
+		}).ToDiagnosticsObservation(time.Now(), 0)
+		if err == nil {
+			t.Fatalf("invalid unknown delivery IDs must be rejected: %#v", ids)
+		}
 	}
 }
