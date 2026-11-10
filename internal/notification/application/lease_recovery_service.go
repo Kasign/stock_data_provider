@@ -62,7 +62,7 @@ func (s *LeaseRecoveryService) RecoverExpiredOnce(
 			return report, ErrLeaseRecoveryHistory
 		}
 		if _, exists := seenDeliveries[deliveryID]; exists {
-			return report, fmt.Errorf("%w: duplicate delivery candidate %s", ErrLeaseRecoveryHistory, deliveryID)
+			return report, fmt.Errorf("%w: duplicate delivery candidate", ErrLeaseRecoveryHistory)
 		}
 		seenDeliveries[deliveryID] = struct{}{}
 	}
@@ -84,11 +84,11 @@ func (s *LeaseRecoveryService) RecoverExpiredOnce(
 				// Commit 结果不确定不能计为普通失败或成功；调用方必须重新读取状态对账。
 				report.OutcomeUnknown++
 				report.OutcomeUnknownDeliveryIDs = append(report.OutcomeUnknownDeliveryIDs, claim.Delivery.DeliveryID)
-				failures = append(failures, fmt.Errorf("delivery %s: %w", claim.Delivery.DeliveryID, err))
+				failures = append(failures, fmt.Errorf("notification: lease recovery item: %w", err))
 				continue
 			}
 			report.Failed++
-			failures = append(failures, fmt.Errorf("delivery %s: %w", claim.Delivery.DeliveryID, err))
+			failures = append(failures, fmt.Errorf("notification: lease recovery item: %w", err))
 			continue
 		}
 		report.Recovered++
