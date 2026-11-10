@@ -56,8 +56,8 @@ provider_fallback_used 只记录实际使用了非首选 Provider，不是质量
 
 - [x] Fundamentals：先保留 degraded 候选并继续寻找 valid；耗尽后优先返回 degraded，再考虑 unknown。
 - [x] Valuations：先保留首个 degraded 候选并继续寻找 valid；耗尽后优先返回 degraded，再考虑 unknown。
-- [ ] Quote：区分实时合格候选与 stale 末级兜底，继续寻找 valid。
-- [ ] DailyBars：统一覆盖不足与覆盖达标但 degraded 的整组序列候选比较。
+- [x] Quote：可信时间戳的 degraded 作为候选继续寻找 valid；stale/不可信时间戳仅作末级兜底；fallback 来源不再单独降级。
+- [x] DailyBars：覆盖达标但 degraded 的整组序列继续寻找 valid；覆盖不足仍独立保留；不跨 Provider 拼接；fallback 来源与质量分离。
 - [ ] IndexQuotes：保留 valid 优先策略，分离 fallback 来源标记与质量状态。
 - [ ] MarketBreadth：保留 valid 优先策略，分离 fallback 来源标记与质量状态。
 - [ ] 完成六类能力缓存准入与降级 TTL 交叉核对。

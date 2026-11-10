@@ -2672,6 +2672,7 @@ func (s *DataService) Quote(ctx context.Context, rawSymbol string) (*model.Quote
 	}
 	var errs []string
 	timeoutFailures := 0
+	var degradedFallback *model.Quote
 	var qualityFallback *model.Quote
 	fetchID := newFetchID()
 	if len(s.quoteProviders) == 0 {
@@ -2737,8 +2738,6 @@ func (s *DataService) Quote(ctx context.Context, rawSymbol string) (*model.Quote
 			continue
 		}
 		if i > 0 {
-			degradeQualityStatus(&q.QualityStatus)
-			appendReasonOnce(&q.QualityReasons, "provider_fallback_used")
 			q.FallbackFrom = s.quoteProviders[0].Name()
 			q.FallbackReason = strings.Join(errs, "; ")
 		}
@@ -2758,7 +2757,18 @@ func (s *DataService) Quote(ctx context.Context, rawSymbol string) (*model.Quote
 			errs = append(errs, p.Name()+": quote not suitable as a fresh live snapshot: "+strings.Join(q.QualityReasons, ","))
 			copy := *q
 			copy.QualityReasons = append([]string(nil), q.QualityReasons...)
-			qualityFallback = &copy
+			if qualityFallback == nil {
+				qualityFallback = &copy
+			}
+			continue
+		}
+		if q.QualityStatus == model.QualityDegraded {
+			s.breaker.Success(breakerKey)
+			copy := *q
+			copy.QualityReasons = append([]string(nil), q.QualityReasons...)
+			if degradedFallback == nil {
+				degradedFallback = &copy
+			}
 			continue
 		}
 		s.breaker.Success(breakerKey)
@@ -2780,6 +2790,17 @@ func (s *DataService) Quote(ctx context.Context, rawSymbol string) (*model.Quote
 	}
 	if err := ctx.Err(); err != nil {
 		return nil, false, err
+	}
+	if degradedFallback != nil {
+		appendReasonOnce(&degradedFallback.QualityReasons, "quote_fallback_exhausted_without_valid_provider")
+		if encoded, encodeErr := json.Marshal(degradedFallback); encodeErr == nil {
+			ttl := s.quoteTTL / 4
+			if ttl <= 0 { ttl = time.Minute }
+			if cacheErr := s.cache.Set(ctx, key, encoded, ttl); cacheErr != nil {
+				s.logger.Warn("degraded quote cache write failed", "error", cacheErr)
+			}
+		}
+		return degradedFallback, false, nil
 	}
 	if qualityFallback != nil {
 		appendReasonOnce(&qualityFallback.QualityReasons, "no_provider_returned_a_fresh_timestamped_quote")
@@ -2890,6 +2911,8 @@ func (s *DataService) DailyBars(ctx context.Context, rawSymbol, start, end strin
 	timeoutFailures := 0
 	var bestPartial []model.DailyBar
 	var bestPartialWarnings []string
+	var bestDegraded []model.DailyBar
+	var bestDegradedWarnings []string
 	fetchID := newFetchID()
 	if len(s.barProviders) == 0 {
 		return nil, false, nil, errors.New("no enabled daily-bar provider")
@@ -2990,10 +3013,8 @@ func (s *DataService) DailyBars(ctx context.Context, rawSymbol, start, end strin
 				appendReasonOnce(&bars[j].QualityReasons, "amount_missing_from_provider")
 			}
 			if i > 0 {
-				degradeQualityStatus(&bars[j].QualityStatus)
 				bars[j].FallbackFrom = s.barProviders[0].Name()
 				bars[j].FallbackReason = strings.Join(errs, "; ")
-				appendReasonOnce(&bars[j].QualityReasons, "provider_fallback_used")
 			}
 			accepted = append(accepted, bars[j])
 		}
@@ -3055,6 +3076,14 @@ func (s *DataService) DailyBars(ctx context.Context, rawSymbol, start, end strin
 			errs = append(errs, warning)
 			continue
 		}
+		if dailyBarsContainDegradedQuality(bars) {
+			warnings = append(warnings, "daily_bar_degraded_candidate_retained_while_searching_for_valid_provider")
+			if preferPartialBars(bars, bestDegraded) {
+				bestDegraded = append([]model.DailyBar(nil), bars...)
+				bestDegradedWarnings = append([]string(nil), warnings...)
+			}
+			continue
+		}
 		s.breaker.Success(breakerKey)
 		if s.store != nil {
 			if e := s.store.UpsertBars(ctx, bars); e != nil {
@@ -3113,6 +3142,9 @@ func (s *DataService) DailyBars(ctx context.Context, rawSymbol, start, end strin
 	}
 	if err := ctx.Err(); err != nil {
 		return nil, false, nil, err
+	}
+	if len(bestDegraded) > 0 {
+		return bestDegraded, false, dedupeStrings(bestDegradedWarnings), nil
 	}
 	if len(bestPartial) > 0 {
 		return bestPartial, false, dedupeStrings(bestPartialWarnings), nil
@@ -3256,6 +3288,17 @@ func (s *DataService) Bundle(ctx context.Context, rawSymbol string, lookback int
 		bundle.AnalysisReferenceTime = bundle.FetchedAt
 	}
 	return bundle, nil
+}
+
+// dailyBarsContainDegradedQuality reports whether any row prevents the series from
+// using the valid-quality fast path.
+func dailyBarsContainDegradedQuality(bars []model.DailyBar) bool {
+	for _, bar := range bars {
+		if bar.QualityStatus != model.QualityValid {
+			return true
+		}
+	}
+	return false
 }
 
 // coverageSufficient keeps obviously truncated responses as fallback candidates.

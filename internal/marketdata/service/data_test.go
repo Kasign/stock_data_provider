@@ -741,6 +741,28 @@ func dailyBarForVersionContractTest(sourceVersion, tradeDate string) model.Daily
 	}
 }
 
+func TestDailyBarsPrefersLaterValidProviderOverDegradedPrimary(t *testing.T) {
+	tradeDate := time.Now().In(marketLocation()).AddDate(0, 0, -1).Format("2006-01-02")
+	degraded := dailyBarForVersionContractTest("eastmoney-daily-bars-v1", tradeDate)
+	degraded.AdjustmentBasis = model.AdjustmentNone
+	degraded.QualityStatus = model.QualityDegraded
+	valid := dailyBarForVersionContractTest("tencent-daily-bars-v1", tradeDate)
+	valid.AdjustmentBasis = model.AdjustmentNone
+	valid.QualityStatus = model.QualityValid
+	primary := fakeProvider{name: "eastmoney", bars: []model.DailyBar{degraded}}
+	secondary := fakeProvider{name: "tencent", bars: []model.DailyBar{valid}}
+	svc := New([]provider.Provider{primary, secondary}, cache.NewDisabled(), nil, time.Second, time.Minute, 1,
+		slog.New(slog.NewTextHandler(io.Discard, nil)))
+	bars, hit, _, err := svc.DailyBars(context.Background(), "600519.SH", "", "", 1, model.AdjustmentNone)
+	if err != nil || hit {
+		t.Fatalf("DailyBars returned hit=%v err=%v", hit, err)
+	}
+	if len(bars) != 1 || bars[0].Source != "tencent" || bars[0].QualityStatus != model.QualityValid ||
+		bars[0].FallbackFrom != "eastmoney" {
+		t.Fatalf("later valid provider must win without degrading data solely due to fallback: %+v", bars)
+	}
+}
+
 func TestDailyBarsFallsBackFromOldNormalizationVersion(t *testing.T) {
 	old := dailyBarForVersionContractTest("eastmoney-daily-bars-v1", "2026-10-20")
 	old.NormalizationVer = "old-normalization-v1"
