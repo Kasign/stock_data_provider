@@ -1122,7 +1122,7 @@
 ## 35. CTR-006 责任分支增量核验结果（2026-11-10）
 
 - 本轮仅按既有有限执行清单核对 CTR-006 是否已有责任分支修复，不新增审查切片。
-- Server 责任分支 `feat/research-analysis-flow-native-go` HEAD 为 `a7efeff9e8802e69cc58a0e7d17f3f37a8eee873`；该分支是固定审计基线 `b6dfc85ba214fe16268c8cba780641a8bfe15086` 的祖先，不能提供基线之后的修复证据。
+- **更正第34节历史分支判断：** 独立 Server 责任分支 `feat/research-analysis-flow-native-go` 确实存在；此前“没有独立 Server 分支”的表述不准确。该分支 HEAD 为 `a7efeff9e8802e69cc58a0e7d17f3f37a8eee873`，但它是固定审计基线 `b6dfc85ba214fe16268c8cba780641a8bfe15086` 的祖先，不能提供基线之后的修复证据。
 - 固定基线 OpenAPI 仍将 Task.started_at/finished_at 标记为 nullable，与 Go 指针字段 omitempty 的缺失语义不一致；CTR-006 既定 queued/running/terminal Golden、Schema 双向校验和 Handler Contract Test 尚无新 SHA 证据。
 - 固定基线 Check Runs 为 0、Commit Status 为空；本轮未执行测试/CI，未修改责任模块代码。
 - 结论：CTR-006 保持 pending_evidence，不关闭、不冻结。矩阵第37节记录了精确证据与下一步验收条件。后续仅在责任分支出现新修复 SHA 后增量验收，不再重复字段语义审查。
