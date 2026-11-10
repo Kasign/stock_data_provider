@@ -171,3 +171,69 @@ func TestIngestCollectedSourceStopsAfterCatalogContextCancellation(t *testing.T)
 		t.Fatalf("cancelled ingest persisted data: %+v", repository)
 	}
 }
+
+type failNthIdentityTransactionRepository struct {
+	inner IdentityRepository
+	calls int
+	failAt int
+}
+
+func (r *failNthIdentityTransactionRepository) WithinIdentityTransaction(ctx context.Context, fn func(IdentityTransaction) error) error {
+	r.calls++
+	if r.calls == r.failAt {
+		return errors.New("injected identity transaction failure")
+	}
+	return r.inner.WithinIdentityTransaction(ctx, fn)
+}
+
+func TestIngestCollectedSourcePartialCommitCanBeSafelyRetried(t *testing.T) {
+	repository := &memoryIdentityRepository{}
+	failingRepository := &failNthIdentityTransactionRepository{
+		inner: repository,
+		failAt: 2,
+	}
+	ingest := NewIngestCandidate(failingRepository, func() string { return "observation-batch" })
+	usecase, err := NewIngestCollectedSource(ingest, providerIngestCatalogStub{registration: sourcePersistenceRegistration()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Date(2026, 11, 9, 10, 0, 0, 0, time.UTC)
+	usecase.now = func() time.Time { return now }
+	result := sealedCollectedSourceResult()
+	result.Entries = []CollectedSourceEntry{
+		{Candidate: domain.Candidate{SourceItemID: "item-1", Title: "first"}},
+		{Candidate: domain.Candidate{SourceItemID: "item-2", Title: "second"}},
+	}
+	if err := sealCollectSourceResult(&result); err != nil {
+		t.Fatal(err)
+	}
+	request := IngestCollectedSourceRequest{
+		Collection: result, IdempotencyPrefix: "collection-partial",
+		Purpose: domain.PurposeInternalPersonalResearch, Retention: time.Hour,
+	}
+	observations, err := usecase.Execute(context.Background(), request)
+	if !errors.Is(err, ErrIdentityTransaction) {
+		t.Fatalf("expected second item transaction failure, got %v", err)
+	}
+	if observations != nil || len(repository.observations) != 1 {
+		t.Fatalf("expected one committed item and no success page, returned=%+v persisted=%+v", observations, repository.observations)
+	}
+
+	// 每条 Observation 独立事务；重试必须复用相同幂等前缀，已提交条目会重放既有记录。
+	retryIngest := NewIngestCandidate(repository, func() string { return "observation-batch-retry" })
+	retryUsecase, err := NewIngestCollectedSource(retryIngest, providerIngestCatalogStub{registration: sourcePersistenceRegistration()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	retryUsecase.now = func() time.Time { return now }
+	retried, err := retryUsecase.Execute(context.Background(), request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(retried) != 2 || len(repository.observations) != 2 {
+		t.Fatalf("retry did not converge the batch: returned=%+v persisted=%+v", retried, repository.observations)
+	}
+	if retried[0].ID != repository.observations[0].ID {
+		t.Fatalf("retry did not reuse the first committed observation: returned=%+v persisted=%+v", retried, repository.observations)
+	}
+}
