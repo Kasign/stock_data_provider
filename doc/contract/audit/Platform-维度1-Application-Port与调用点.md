@@ -1246,7 +1246,7 @@ Bundle 聚合 DTO 与 Go/OpenAPI 字段语义整体一致；WebUI 对顶层/嵌�
 
 **AUD-WEBUI-CTR-010：omitempty 响应字段在 OpenAPI 中被过度声明为 nullable（P2）**
 
-- 影响对象：StockBasic 多项可选字段、SecurityTradingStatusSnapshot.system_observed_at、PriceLimitRuleSnapshot.special_exception_evidence/limit_percent。
+- 影响对象：StockBasic 多项可选字段、SecurityTradingStatusSnapshot.system_observed_at、PriceLimitRuleSnapshot.limit_percent、StockBoard.change_percent。StockBoard.change_percent 已在第 24 节补充核验；special_exception_evidence 因 OpenAPI 3.0.3 的 $ref/nullable 写法不满足同层 type 条件，仍列为待核，不计入已证实范围。
 - 证据：上述 Go 字段均使用 omitempty；OpenAPI 对部分字段声明 nullable=true；Go encoding/json 的 nil/空值行为是省略字段。
 - 影响：客户端按 Schema 可能接受服务端永远不会发出的显式 null；缺失与 null 的语义被混淆，特别是生成式客户端和严格响应校验器。
 - 责任方：Market Data HTTP API 契约维护方。
@@ -1270,7 +1270,7 @@ Profile、Trading Status、Price Limit Rule 路由与基础 Handler 行为已核
 对本节差异重新核对 OpenAPI 版本与 WebUI 实际消费代码后，作如下收敛：
 
 1. OpenAPI 版本为 3.0.3。CTR-010 中 `special_exception_evidence` 的 `nullable: true` 与 `$ref` 同处一个对象，但没有同层 `type`；不能直接把它认定为有效的 nullable 声明，已从 CTR-010 的已证实影响字段中移除，并记录为 Schema 写法待核。
-2. CTR-010 仍由 StockBasic 多项 string/number 字段、SecurityTradingStatusSnapshot.system_observed_at、PriceLimitRuleSnapshot.limit_percent 支撑；这些属性在 OpenAPI 中直接声明 type 并标 nullable，而 Go 对应字段均为 omitempty，差异成立。
+2. CTR-010 由 StockBasic 多项 string/number 字段、SecurityTradingStatusSnapshot.system_observed_at、PriceLimitRuleSnapshot.limit_percent 和 StockBoard.change_percent 支撑；这些属性在 OpenAPI 中直接声明 type 并标 nullable，而 Go 对应字段均为 omitempty，差异成立。
 3. `stock-research.js` 实际 import 并调用 `getStockProfile`；没有 import `getStockTradingStatus` / `getStockPriceLimitRule`。两个 API Client 函数存在，但本文件中的交易状态/涨跌幅区域只在标的切换时重置占位内容，没有实际请求和响应渲染。结论限定为“本页面未接线”，不外推为整个 WebUI 所有入口均未使用。
 4. CTR-011 的八个漏列 required 字段和两个缺失枚举均由 Go 结构体与 OpenAPI 内联响应 Schema 直接对照确认，差异成立。
 5. 两项均为契约精度/测试覆盖问题，不是已证实的线上数据错误；P2 级别维持。
