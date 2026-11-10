@@ -878,3 +878,20 @@
 - 旧Analysis taskqueue对应DDL本轮未在固定基线文件树中定位；不据此推断生产表不存在，CTR-008按原责任和关闭条件处理。
 - 本切片complete_with_open_items；没有CTR关闭或新增。无业务代码、OpenAPI、DTO、Golden、测试、CI变更。
 - 下一步唯一任务：Server维度2第四切片——既有Run/Task Schema差异的关闭准备与证据缺口归并Review。仅检查CTR-046/047/006/007本轮字段结论是否完整、责任和决策输入是否明确、是否存在重复登记；输出最小决策清单和可交付关闭顺序。不重做字段初审、不展开RunResult全部领域子结构、不进入Server其他五维或其他模块。
+
+
+
+## 19. Server维度2第四切片：Run/Task权威契约与责任边界Review（2026-11-10）
+
+- 固定代码审计基线仍为`origin/integration @ b6dfc85ba214fe16268c8cba780641a8bfe15086`；审计文档维护分支仍为`feat/design_doc`。
+- 对照项目级契约登记簿、Researchflow最终决议和Application Port补充文档，确认Server是唯一Composition Root；Researchflow是Run/Stage/Attempt及跨模块流程编排的领域Owner；Server负责HTTP路由/适配，不拥有Researchflow领域DTO语义。
+- 发现并明确两套不能混用的契约：旧Analysis RunRequest/RunResult/StageEvent + taskqueue Task/Event；Researchflow publicdto Run/Stage/Attempt/ResultSummary。旧StageEvent不是Researchflow Stage DTO。
+- Researchflow已有独立publicdto实现、run/stage/attempt/result-summary Schema、对应Golden及Schema投影测试代码；FLOW-CTR-001/002设计决议为accepted，但定向Go Test/Race/Vet执行证据仍缺，不能标记frozen。
+- CTR-046：需要项目负责人确认旧Analysis同步Run/Task/Events API保留还是迁移到Researchflow API，再由Server补最终路由/OpenAPI和真实组合测试。
+- CTR-047：Researchflow CreateRunCommand规则不得机械套用到旧Analysis RunRequest；旧Analysis仍需明确同步run_id、异步Task run_id覆盖、未知TaskType处理和symbols上限是否强制。
+- CTR-006：按现有Task序列化行为，nil started_at/finished_at应省略；默认只修正OpenAPI nullable语义，不改运行时DTO，并补queued/running/terminal Golden。
+- CTR-007：只针对保留的旧Analysis Events端点定义StageEvent Schema/Golden；不得复用Researchflow Stage Schema。
+- CTR-008的DDL/cursor持久化证据不属于本轮，不重审。
+- 本轮只更新三份审计文档；未修改业务代码、OpenAPI、DTO、Schema、Golden、测试，未执行CI。无新增CTR、无CTR关闭。
+- Server维度2仍为`in_progress / partial`，第四切片状态`complete_with_open_items`。
+- **下一步唯一任务：Server维度2决策输入收敛**——整理CTR-046/047/007所需的最小项目负责人决策项，按已有事实给出推荐默认方案与兼容影响；CTR-006按既有序列化事实准备直接Schema修正验收项。仍不进入Server其他五个维度、不审查Data新分支、不扩展到其他模块。
