@@ -380,7 +380,7 @@ func (p *MiaoXiang) queryTables(ctx context.Context, key, query string) ([]mxTab
 		return nil, fmt.Errorf("decode MX API response: %w", err)
 	}
 	var status int
-	if len(envelope.Status) == 0 || json.Unmarshal(envelope.Status, &status) != nil {
+	if len(envelope.Status) == 0 || bytes.Equal(bytes.TrimSpace(envelope.Status), []byte("null")) || json.Unmarshal(envelope.Status, &status) != nil {
 		addMiaoXiangResponseError(ctx, "provider_status", "status", "invalid_provider_status", "integer status equal to zero", "missing_or_invalid", "妙想补充数据响应缺少有效 status")
 		return nil, fmt.Errorf("MX API reported a non-success status (message=%q)", boundedText(envelope.Message, 120))
 	}

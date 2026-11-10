@@ -249,6 +249,7 @@ func TestMiaoXiangQueryTablesReportsResponseFailures(t *testing.T) {
 		{name: "HTTP status", response: "unavailable", status: http.StatusBadGateway, wantCode: "http_status_error"},
 		{name: "invalid JSON", response: "{", status: http.StatusOK, wantCode: "decode_error"},
 		{name: "missing status", response: `{"data":{}}`, status: http.StatusOK, wantCode: "invalid_provider_status"},
+		{name: "null status", response: `{"status":null,"data":{}}`, status: http.StatusOK, wantCode: "invalid_provider_status"},
 		{name: "provider rejection", response: `{"status":9,"message":"quota"}`, status: http.StatusOK, wantCode: "provider_error"},
 		{name: "invalid table payload", response: `{"status":0,"data":[]}`, status: http.StatusOK, wantCode: "invalid_table_payload"},
 	}
