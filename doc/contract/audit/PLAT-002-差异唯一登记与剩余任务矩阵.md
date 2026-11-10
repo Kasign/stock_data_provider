@@ -49,7 +49,7 @@ API Client 全量盘点也已完成：44 个导出函数，41 个远端入口，
 | CTR-004 | 全市场分页 API Client 参数证据链 | P2 测试补证；不单独阻断服务端 OpenAPI/DTO 冻结 |
 | CTR-038～040 | Market Sentiment History | CTR-038/039 语义待裁决；CTR-040 WebUI 实现未对齐 |
 | CTR-042 | Limit Pool 金额单位 | P2；provider_defined 不可比较/换算边界待裁决 |
-| CTR-043～044 | Dragon Tiger | CTR-043 P1 实现冲突；CTR-044 Provider 日期能力边界待裁决 |
+| CTR-043～044 | Dragon Tiger | CTR-043 公共分页计数语义已明确、契约可冻结；Hithink Adapter 实现偏差转 Data 内部整改；CTR-044 Provider 日期能力边界待裁决 |
 | CTR-045 | Stock Search 质量状态消费 | P2；WebUI 空结果和质量状态提示待对齐 |
 | CTR-046～047 | Analysis Run/Task | P2；Run 读取/事件 OpenAPI 缺失、CreateTask HTTP DTO 语义待裁决 |
 | CTR-048～049 | Provider Probe History | P2；total 语义与存储错误 HTTP 映射待裁决/补证 |
@@ -317,7 +317,7 @@ W2-D 的“权威规则核对与裁决问题准备”完成；CTR-010 本身仍�
 4. 未决产品范围、契约裁决、实现修复和测试补证作为遗留事项保留；
 5. 过期API盘点状态已校正，后续不再以旧待核列表启动重复审查。
 
-仍开放且不得从矩阵移除的事项包括：CTR-043 P1；CTR-010 124字段逐项适用条件/无值原因证据；CTR-006～009、011～040、042～049各自未完成的裁决、实现、测试或产品范围决议；getMarketSentiment产品范围待确认。CTR-041保持withdrawn，CTR-003/005只作历史别名。
+仍开放且不得从矩阵移除的事项包括：CTR-043 契约语义 freeze-ready、Data 内部实现偏差另行跟踪；CTR-010 124字段逐项适用条件/无值原因证据；CTR-006～009、011～040、042～049各自未完成的裁决、实现、测试或产品范围决议；getMarketSentiment产品范围待确认。CTR-041保持withdrawn，CTR-003/005只作历史别名。
 
 本结论不表示WebUI维度2公共契约冻结，也不表示项目级阶段F完成。阶段F仍需覆盖其余模块和维度；阶段B十模块六维核验仍是当前项目主线。
 
@@ -555,7 +555,7 @@ Server维度2当前仅完成首轮一个切片，状态为 `in_progress / partia
 
 | 批次 | 范围 | 主要编号/事项 | 退出条件 |
 |---|---|---|---|
-| B0 安全与P1阻断 | 先处理明确P1和安全边界，不等待全部P2 | CTR-043（Dragon Tiger已登记P1实现冲突）；AUD-WEBUI-CTR-001/002；AUD-PLAT-PORT-001/008/009/014及相关P1候选 | 每项有责任模块、修复或批准延期、不绕过安全门禁的测试证据；P1未处理项不得被标记冻结 |
+| B0 安全与P1阻断 | 先处理明确P1和安全边界，不等待全部P2 | AUD-WEBUI-CTR-001/002；AUD-PLAT-PORT-001/008/009/014及相关P1候选 | 每项有责任模块、修复或批准延期、不绕过安全门禁的测试证据；P1未处理项不得被标记冻结 |
 | B1 项目决策一次收敛 | 把需要项目负责人决策的事项集中成一次决议，不逐CTR开轮 | CTR-046/047/007；CTR-038/039；CTR-042/044；CTR-048/049；CTR-010字段适用性；产品范围CTR-013/023/030/033/036 | 决议写入权威`doc/contract/`位置；接受、拒绝或延期均明确影响范围/触发条件。无需决策的事实项移出本批 |
 | B2 契约/Schema修正 | 按API/DTO批量修正，不按字段逐项开轮 | CTR-006/007/009/011/015/019/020/028/029/035/037；CTR-010只接收责任方提供的逐字段适用性映射 | 生产DTO、OpenAPI/Schema、Golden及Contract Test一致；不适用JSON Schema的内部Go契约提供等效机器证据 |
 | B3 业务语义与消费者修复 | 按同一数据集/消费者一次性修复，保留已有来源证据 | CTR-012/014/016/017/018/021/022/024/025/026/027/031/032/034/040/043/045；以及已裁决的产品范围项 | 生产方语义有来源/算法/质量证据；消费者按真实语义处理；不完整、不可比、非PIT或不可用状态不会被展示为确定结论 |
@@ -1179,22 +1179,12 @@ PLAT-002 的项目级决策收敛已完成；**PLAT-002 项目整体不宣告完
 - 结论：CTR-006 仍为 `pending_evidence`（既有工单状态不变）；本轮没有可接受的修复 SHA，不得关闭或冻结。下一步只需等待 Server 责任分支产生针对 CTR-006 的修复提交，再按既定 28.4 验收条件增量核验；不重复字段语义讨论。
 
 
-## 38. CTR-043 Dragon Tiger 生产方—消费方冲突增量核验（2026-11-10）
+## 38. CTR-043 Dragon Tiger 契约语义与实现符合性边界更正（2026-11-10）
 
-- 核验范围：固定代码审计基线 `b6dfc85ba214fe16268c8cba780641a8bfe15086`，仅核 Data Dragon Tiger Provider/Service/HTTP OpenAPI 与 WebUI 页面消费映射；不改责任模块代码，不改变固定基线。
-- 生产方事实（Data）：
-  - `internal/marketdata/model/dragon_tiger.go` 定义两组不同语义字段：`NetBuyAmountCNY/BuyAmountCNY/SellAmountCNY/DealAmountCNY` 明确为人民币金额；`ProviderBuyValue/ProviderSellValue/ProviderDealValue/ProviderNetValue/ProviderNetRate/ProviderOrgNetValue/ProviderHotMoneyNetValue` 是原始 Provider 值，另有 `ProviderAmountUnit`。
-  - `internal/marketdata/provider/hithink.go` 的 `FetchDragonTiger` 明确保留同花顺金额到 `Provider*Value`，设置 `ProviderAmountUnit="provider_defined"`，不填充 `*_CNY`；质量原因包含 `provider_amount_units_not_explicitly_documented` 与 `hot_money_detail_not_represented_in_shared_stock_pagination`。
-  - `internal/marketdata/provider/eastmoney_dragon_tiger.go` 将东方财富已核实金额映射到 `*_CNY`，缺失金额保留 nil；空报表/只有非 A 股记录保持 unknown，不视为确认无上榜。
-  - `internal/marketdata/service/data.go` 的 DragonTiger 服务会在 Provider 结果有数据且非 unknown 时直接返回首个可用结果；因此当东方财富不可用/不可用质量而同花顺回退成功时，HTTP 响应可以是同花顺的 degraded 记录，而不是自动获得 CNY 金额。
-  - `internal/marketdata/httpapi/openapi.yaml` 已将 `provider_*_value` 描述为单位可能未文档化的原始值，并将 `*_cny` 描述为 CNY；这部分 OpenAPI 字段语义与 Go DTO 一致。
-- 消费方事实（WebUI）：
-  - `web/src/market-activity.js` 的 `renderDragon` 资金列只读取 `item.net_buy_amount_cny` 和 `item.deal_amount_cny`，没有展示 `provider_*_value` 或 `provider_amount_unit`。
-  - `web/src/api.js` 的 `getMarketDragonTiger` 直接消费同一接口；`doc/web/API_CONTRACT.md` 也只登记接口调用，没有定义同花顺原始金额字段的消费展示规则。
-  - 因此同花顺作为回退源返回有效 degraded 数据时，页面仍可展示证券、涨跌幅、原因和质量状态，但净买入/成交金额两列为空。当前前端不误把原始单位金额当 CNY，这是正确的安全行为；但 Provider 可回退能力与 UI 资金列消费能力不完整对齐。
-- 测试证据：
-  - Data 有东方财富 Provider 测试及基于 fake Provider 的 fallback 测试；后者覆盖未知质量/空报告回退，但不能证明真实同花顺金额字段经过 Data HTTP DTO 后能被消费者正确处理。
-  - 固定基线未发现专门的 `FetchDragonTiger` 同花顺 Provider 契约测试，也未发现 WebUI 对 `provider_*_value` 与 `provider_amount_unit` 的 Dragon Tiger 渲染测试。
-  - 本轮为静态证据核验，未执行测试或 CI；不声称测试通过。
-- 结论：CTR-043 的 P1 实现冲突得到具体定位，状态继续保持开放/阻断 L2 冻结。不得把 `provider_defined` 金额映射成 CNY，也不得仅因 OpenAPI/Go DTO 对齐就关闭。关闭条件：Data 继续保证原始金额与 CNY 字段分离并提供真实同花顺 Provider→HTTP 响应 Golden/Contract Test；WebUI 明确消费策略（展示带单位来源标识的 Provider 原始值，或在该 Provider 下明确显示不可比较/未提供），并补真实响应 fixture 的渲染回归测试；两端在同一 DTO/Schema 语义下通过定向测试及 CI。该条件是既有 CTR-043 的验收细化，不新增 CTR。
-- 责任边界：Data 负责 Provider 字段来源、单位声明和响应契约；WebUI 负责按字段单位/质量状态正确呈现。PLAT-002 本分支只登记证据与冻结影响，不代替责任模块修复。
+- **更正依据：** 回到既有 CTR-043 原始登记及总进度第31节、第32节、第33节、第34节的历史核验记录。CTR-043 原始问题是 Hithink 龙虎榜分页计数与公共契约不一致，不是 Provider 金额单位或 WebUI 金额展示问题。上一版第38节将审查对象错误改写为金额展示问题，现以本节整体取代。
+- **公共契约语义：** `source_returned` 表示本次请求页从 Provider 收到的原始记录数；`returned` 表示规范化后返回的记录数；`excluded_non_a_share_count` 表示明确排除的非 A 股记录数。三者须满足 `source_returned = returned + excluded_non_a_share_count`。分页请求身份由 trade_date/page/page_size 确定。该语义已有 Data DTO、Service 校验和 OpenAPI 定义，不需要通过 Provider 内部实现来重新决定。
+- **已知实现偏差（仅作为模块内部符合性记录）：** 固定审计基线 `b6dfc85ba214fe16268c8cba780641a8bfe15086` 的 Hithink Dragon Tiger Provider 一次读取完整 `stock_items` 后本地分页，却将整份列表数量写入 `source_returned`；当总量大于 page_size 时，与 Service 对当前页原始记录数的校验冲突。重复 symbol 被静默去重但未计入排除数，也可能破坏上述计数恒等式。这是 Data 内部 Adapter 对已定义公共契约的实现不符合，不是公共契约语义缺失。
+- **契约冻结判断：** CTR-043 的公共契约语义明确，生产方与消费方无需理解 Hithink 的内部分页策略、原始字段或 Provider 测试结构。就 PLAT-002 的契约冻结目标而言，本项应标记为 `freeze-ready`（契约语义可冻结）；Hithink Adapter 的修复、Provider 专项测试和运行时验证属于 Data 模块内部实现质量工作，不作为本项契约冻结门禁。
+- **边界补充：** Data 对外仍须按公共契约返回正确的分页计数和守恒关系。若真实服务违反已冻结契约，应作为 Data 模块实现缺陷跟踪和修复；不得因此反复修改或扩大公共契约，也不得要求 WebUI 了解 Provider 的分页方式。
+- **金额字段问题明确移出本 CTR：** `provider_*_value`、`provider_amount_unit` 是当前 DTO/OpenAPI 暴露的字段事实，但它们不是原始 CTR-043 的问题。本轮不据此新增 CTR、不要求 WebUI 消费 Provider 内部原始金额，也不将真实同花顺金额测试或 WebUI 渲染回归测试列为 PLAT-002 冻结条件。若项目决定公共接口不应暴露 Provider 原始字段，应另按公共 DTO 范围评审，不得借 CTR-043 擅自改动。
+- **执行边界：** 本轮只修正 PLAT-002 审计文档和状态分类，不修改 Data/WebUI 责任模块代码，不执行测试或 CI。原实现偏差保留为 Data 模块内部待修事项，不阻断契约冻结。
