@@ -114,3 +114,22 @@
 - 需要后续核验而非本批直接判错：各 Adapter 的成交量单位、成交额来源、百分比单位和时区仍需按 Provider 逐项对照真实接口/参考实现及黄金样本；本批仅确认代码路径和已有测试，不能替代真实数据证据。
 - 复权逻辑核验：Service 已要求同一批日 K 的复权方法/参考日一致，并验证参考日格式、未来日期及与 K 线日期的方向关系；累计因子后复权允许无单一参考日。该规则本批未发现应推翻之处。
 - 本批不改业务代码，不运行 gofmt/build/test。来源身份被覆盖是已确认缺口，进入下一修复批；字段映射与真实数据差分继续按 Provider 分组审查。
+
+### 2026-11-10：Provider 核心字段映射 / 单位 / 时间语义第三批 Review
+
+- 审查基线：`fd8a6a9703299d5808aa2610b543a1674bc41651`。
+- 审查范围：Tushare、Eastmoney、Hithink、Tencent、Sina、NetEase、BaoStock、Pytdx、TickFlow、Yahoo 的 Quote/DailyBars 字段映射和对应契约测试；检查跨 Provider 日 K 比较器及其测试。仅静态检查代码和测试定义，不代表本轮执行了测试或真实上游采样。
+- 已核实的单位处理：
+  - Tushare 日 K 成交量 hands 转 shares，成交额 thousand_CNY 转 CNY，并保留 Raw 值和原始单位。
+  - Eastmoney 日 K/Quote 成交量 hands 转 shares，成交额按 CNY；请求显式设置 `fltt=2`，要求价格/百分比按元和百分点返回。
+  - TickFlow Quote/Kline 成交量 hands 转 shares；换手率按接口 ratio 转为百分点。
+  - Tencent 对成交量单位进行交叉核验，无法确认时降级；成交额字段有精度/可信度判断，不把尾部字段直接当成交额。
+  - Pytdx 对 amount 与 volume 不一致时将成交额置空并降级，不伪造成交额。
+  - Sina、NetEase、BaoStock 对单位无法确认/可选字段缺失均有降级路径；Yahoo 未提供成交额时明确标记 unknown/degraded。
+- 已核实的百分比处理：Tushare `pct_chg`、Eastmoney `fltt=2` 输出、Sina/NetEase/Tencent 基于价格与昨收计算的涨跌幅，以及 TickFlow 基于价格与昨收计算的涨跌幅，目标均为百分点语义；TickFlow turnover ratio 显式乘 100。需要用真实样本再次确认上游契约没有发生变化。
+- 已核实的时间处理：Eastmoney、Tencent、Sina、NetEase 对中国本地时间/时间戳有显式解析；Hithink、TickFlow 对 Unix 毫秒时间戳解析；Yahoo 使用 Unix 秒时间戳；时间缺失或超前会走降级或拒绝路径，不以本地采集时间伪装 Provider 时间。Quote 的 `FetchedAt` 与 `QuoteTime` 语义分开。
+- 已核实的跨 Provider 比较保护：日 K 比较器要求证券身份、日期集合、复权方法/参考日期可比较；对成交量粒度、成交额来源精度、缺失金额和 degraded baseline 有专门判定，不把不可比较当作不一致。
+- 本批未发现可仅凭静态代码确定的新增单位换算错误；现有测试主要是 mock/fixture 契约测试，不能证明第三方接口当前线上字段定义仍与代码一致。
+- 仍未完成的真实证据项：固定证券与交易日样本，对各 Provider 原始响应、Raw 字段、归一化字段和 Python/权威参考值做同日差分；尤其要覆盖 Tencent 成交量推断边界、NetEase/BaoStock 成交量单位识别、Hithink 成交额单位、复权因子跨源口径、交易时段内 Quote 时间偏差。无源端文档或可靠证据的字段继续标记 not_comparable/degraded，不得推定通过。
+- 下一步转向 Adapter 契约边界：请求区间和 limit 是否严格遵守、分页/截断是否可检测、证券身份字段缺失时是否降级、可选字段解析失败是否保留结构化诊断，以及错误是否能正确区分上游故障与数据契约故障。
+- 本批未修改业务代码，未运行 gofmt/build/test。此前记录的 Source 身份覆盖问题仍是独立待修复项，不因本批通过而关闭。
