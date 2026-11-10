@@ -230,6 +230,7 @@ func TestMariaDBClaimAttemptLeaseAndFencing(t *testing.T) {
 		RunRef: runRef, StageRef: stageRef, AttemptRef: first.Ref,
 		WorkerID: "worker-a", FencingToken: first.FencingToken,
 		AttemptStatus: domain.AttemptSucceeded, Stage: nextStage,
+		OutputRef: nextStage.OutputRef,
 	}
 	if err := repository.CommitAttemptResult(ctx, staleCommit); !errors.Is(err, ErrAttemptLeaseHeld) {
 		t.Fatalf("stale worker result error=%v, want ErrAttemptLeaseHeld", err)

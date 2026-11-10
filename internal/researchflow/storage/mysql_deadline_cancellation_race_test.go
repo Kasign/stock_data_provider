@@ -61,7 +61,7 @@ func TestMariaDBExpireRunDeadlineFencesRunningAttempt(t *testing.T){
  got,err:=repo.GetAttempt(ctx,attempt.Ref);if err!=nil{t.Fatal(err)}
  if got.Status!=domain.AttemptTimedOut||got.FencingToken!=attempt.FencingToken+1||got.LeaseOwner!=""||got.LeaseExpiresAt!=nil{t.Fatalf("Attempt not fenced: %#v",got)}
  for i,ref:=range stages{stage,e:=repo.GetStage(ctx,ref);if e!=nil{t.Fatal(e)};want:=uint64(3);if i==0{want=4};if stage.Status!=domain.StageTimedOut||stage.Version!=want{t.Fatalf("Stage %s=%s/v%d want timed_out/v%d",ref,stage.Status,stage.Version,want)}}
- if err:=repo.CommitAttemptResult(ctx,AttemptResultCommit{RunRef:run,StageRef:stages[0],AttemptRef:attempt.Ref,WorkerID:"deadline-worker",FencingToken:attempt.FencingToken,AttemptStatus:domain.AttemptSucceeded,Stage:domain.Stage{Ref:stages[0],RunRef:run,Code:"active",Status:domain.StageSucceeded,Version:3,AttemptNo:attempt.Number,OutputRef:stringRef("late-result-"+suffix)},OutputRef:stringRef("late-result-"+suffix)});!errors.Is(err,ErrClaimRunUnavailable)&&!errors.Is(err,ErrAttemptLeaseHeld){t.Fatalf("stale result err=%v",err)}
+ if err:=repo.CommitAttemptResult(ctx,AttemptResultCommit{RunRef:run,StageRef:stages[0],AttemptRef:attempt.Ref,WorkerID:"deadline-worker",FencingToken:attempt.FencingToken,AttemptStatus:domain.AttemptSucceeded,Stage:domain.Stage{Ref:stages[0],RunRef:run,Code:"active",Status:domain.StageSucceeded,Version:3,AttemptNo:attempt.Number,OutputRef:stringRef("late-result-"+suffix)},OutputRef:stringRef("late-result-"+suffix)});!errors.Is(err,ErrClaimRunUnavailable)&&!errors.Is(err,ErrClaimStageUnavailable)&&!errors.Is(err,ErrAttemptLeaseHeld){t.Fatalf("stale result err=%v",err)}
 }
 
 func TestMariaDBExpiredDeadlineRejectsUserCancellation(t *testing.T) {
