@@ -295,8 +295,8 @@ func TestCreateRunPersistsOptionalNonApplicableStageAsSkipped(t *testing.T) {
 	if optional == nil {
 		t.Fatal("optional non-applicable Stage row was not persisted")
 	}
-	if optional.Status != domain.StageSkipped || optional.Version != 1 || optional.FinishedAt == nil || !optional.FinishedAt.Equal(now) {
-		t.Fatalf("optional Stage must be created terminal skipped at CreateRun time: %#v", optional)
+	if optional.Status != domain.StageSkipped || optional.Version != 1 || optional.FinishedAt != nil {
+		t.Fatalf("CreateRun must leave skipped Stage finish time to Storage's database clock: %#v", optional)
 	}
 	if len(optional.ReasonCodes) != 1 || optional.ReasonCodes[0] != "not_applicable" || len(optional.Dependencies) != 0 || optional.AttemptNo != 0 {
 		t.Fatalf("unexpected optional skipped Stage details: %#v", optional)
