@@ -335,3 +335,53 @@ Go model.StockBasic 有 14 个 omitempty 字段，而 OpenAPI StockBasic 将它�
 - 合计确认 7 个字段，均归入既有 CTR-010，不新增编号。
 
 本批仅完成上述三个数据集；CTR-010 全量字段清单仍未完成。
+## 15. CTR-010 字段清单复核（子批次 8：Market Breadth / Indices / Index Catalog / Constituents / Daily Bars）
+
+固定代码基线：origin/integration @ b6dfc85ba214fe16268c8cba780641a8bfe15086。本批核对市场广度、指数行情、指数目录、指数成分及指数日线响应 DTO。
+
+### 15.1 Market Breadth
+
+- MarketBreadthSnapshot.oldest_quote_time、newest_quote_time 均为 *time.Time + omitempty，OpenAPI 声明 nullable=true，确认 2 个 CTR-010 字段。
+- limit_up_count、limit_down_count、total_amount_cny 是非 omitempty 指针，OpenAPI required + nullable，Go nil 时输出 null，语义一致。
+- excluded_non_a_share_count、source_version、provider_report_date、quality_reasons 虽为 omitempty，但 OpenAPI 未声明 nullable，不计入 CTR-010。
+
+### 15.2 Market Indices
+
+- MarketIndexQuote 的 latest_price、change、change_percent、open、high、low、prev_close、amount、quote_time 共 9 个字段均为 omitempty，OpenAPI 声明 nullable=true，确认 9 个 CTR-010 字段。
+- IndexQuoteSnapshot 的 source_version、quality_reasons 为 omitempty，Schema 未声明 nullable；无 CTR-010 差异。
+
+### 15.3 Index Catalog
+
+- IndexCatalogSnapshot.provider_time 为 *time.Time + omitempty，OpenAPI nullable=true，确认 1 个 CTR-010 字段。
+- source_version、quality_reasons 为 omitempty，但 Schema 未声明 nullable；IndexCatalogItem 无 omitempty 字段。
+
+### 15.4 Index Constituents
+
+- IndexConstituent.weight_percent 为 *float64 + omitempty，OpenAPI nullable=true，确认 1 个 CTR-010 字段。
+- IndexConstituent 的 effective_from、effective_to、available_at、system_observed_at 均为 omitempty，但 Schema 未声明 nullable，不计入。
+- IndexConstituentSnapshot.provider_time 为 *time.Time + omitempty，OpenAPI nullable=true，确认 1 个 CTR-010 字段。
+- as_of_date、provider_report_date、excluded_count、total_is_lower_bound、source_version、quality_reasons 均未声明 nullable，不计入。
+
+### 15.5 Index Daily Bars
+
+- IndexDailyBar.change_percent、volume、amount 三个 omitempty 字段及 provider_time 一个 omitempty 字段，OpenAPI 均声明 nullable=true，确认 4 个 CTR-010 字段。
+- IndexDailyBarsSnapshot.provider_time 为 *time.Time + omitempty，OpenAPI nullable=true，确认 1 个 CTR-010 字段。
+- source_version、quality_reasons 虽为 omitempty，但 Schema 未声明 nullable，不计入。
+
+### 15.6 测试与回归证据
+
+- TestAllGoModelFieldsAndRequiredMatchOpenAPISchemas 已将 MarketIndexQuote、IndexQuoteSnapshot、MarketBreadthSnapshot、IndexCatalogItem、IndexCatalogSnapshot、IndexConstituent、IndexConstituentSnapshot、IndexDailyBar、IndexDailyBarsSnapshot 纳入 51 个模型的字段集合/required 反射核对。
+- 反射测试仅验证非 omitempty 指针必须 nullable，没有验证 omitempty 字段不得 nullable，不能发现本批 19 个差异。
+- TestDataModelJSONSerializationMatchesOpenAPIRequiredAndNullableSemantics 未包含本批任何 DTO 的 nil/空值样例；缺少对应的序列化 Golden。
+- 本批未执行固定基线 CI；结论来自 Go DTO、OpenAPI Schema 与测试源码静态对照。
+
+### 15.7 CTR-010 本批确认数量
+
+- Market Breadth：2 个字段。
+- Market Indices：9 个字段。
+- Index Catalog：1 个字段。
+- Index Constituents：2 个字段。
+- Index Daily Bars：5 个字段。
+- 合计确认 19 个字段，全部归入既有 CTR-010，不新增差异编号。
+
+截至子批次 8，CTR-010 已核对 52 个字段（此前 33 个 + 本批 19 个）。本批仅覆盖上述五组 DTO，不代表 CTR-010 全量字段清单完成。
