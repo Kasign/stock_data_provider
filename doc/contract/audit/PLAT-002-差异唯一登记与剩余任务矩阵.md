@@ -382,3 +382,15 @@ W2-D 的“权威规则核对与裁决问题准备”完成；CTR-010 本身仍�
 - 本切片结论：Platform Bearer A1实现基本符合；Server Service凭证装配、真实服务间消费者证据和L3 Secret部署证据未齐，PLAT-CTR-003继续pending_evidence。Web Session另按独立扩展准入验收，不新增CTR或把Session并入Bearer契约。
 - 本轮只更新审计文档，未修改业务代码、Schema、Golden、测试，未执行CI。
 - 下一切片：Platform维度2核对PLAT-CTR-006 Storage/Repository/Migration相关结构的序列化适用性、Migration机器契约及直接消费者；不重审连接/事务算法（维度5），不重复本轮Security审查。
+
+## 19. Platform 维度2：PLAT-CTR-006 Storage/Repository/Migration（2026-11-10）
+
+- 详见 `Platform-维度2-DTO-Schema-Golden.md` 第11节；固定基线 `b6dfc85ba214fe16268c8cba780641a8bfe15086`。
+- Platform `SQLConfig`、`Migration` 与Server Registry输入是进程内Go API，不适用公开JSON Schema/HTTP Golden；Server RunReport虽有JSON Tag，固定基线仅用于Bootstrap日志，未发现公开HTTP DTO边界。应以Go Contract Test、注册清单测试和消费者测试提供机器证据。
+- Platform Migration约束：namespace 1～64字节小写ASCII；1～1000条；Version非零唯一；Description最多255 Unicode字符；Statement非空且最多1MiB；按Version排序，checksum由有序SQL语句计算，历史版本必须为有序前缀。
+- PLAT2-D2-009：Server Registry注册时未提前校验Description 255字符/Statement 1MiB边界，Runner最终会拒绝；登记校验阶段与执行阶段约束需统一或明确权威层。
+- PLAT2-D2-010：checksum仅覆盖Statements，不覆盖Description；需裁决Description是否属于已发布Migration不可变定义的一部分，并补相应兼容测试。
+- PLAT2-D2-011：固定基线存在Researchflow `Migrations()`（namespace researchflow），但Server Bootstrap `newMigrationRegistry` 只注册News/Research/Notification，遗漏Researchflow。作为Root Server直接消费者接线缺口登记，责任落在Server组合根；维度5再核对启动生命周期和修复。
+- A2真实MariaDB/Redis集成测试受 `PLATFORM_STORAGE_INTEGRATION=1` 门控，本轮未执行；真实连接池、锁和关闭顺序证据留维度5/L3。
+- 本轮未改实现、Schema、Golden、测试，未执行CI。
+- 下一切片：Platform维度2核对PLAT-CTR-007 Typed Config/Secret的字段、序列化脱敏、消费者映射和机器测试适用性；不重审本轮Migration执行算法。
