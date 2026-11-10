@@ -1,6 +1,6 @@
 # PLAT-002 十模块核验总进度
 
-**当前状态：** 基线阶段 A 已完成；十模块六维核验阶段 B 进行中；差异唯一登记阶段 D 进行中；第一轮完整性 Review 阶段 F：WebUI 维度 2 已完成（complete_with_open_items），其他模块/维度仍待覆盖；项目尚未进入正确性 Review 或冻结评审。  
+**当前状态：** 固定基线阶段 A 已完成；十模块六维核验阶段 B 为 partial（已完成若干跨模块边界切片，但十模块六维证据尚未齐备）；跨模块关系阶段 C 为 partial（主要边界已交叉核验，完整 import 图/授权链未完成）；差异登记阶段 D 已完成首轮集中收敛但仍有待决与补证；责任模块修复阶段 E pending；第一轮完整性 Review 阶段 F 部分完成；第二轮正确性 Review G、第三轮冻结门禁 Review H 尚未开始。L1 设计基线已冻结，L2 正式 CTR 当前 0/43 frozen。
 **代码基线：** `b6dfc85ba214fe16268c8cba780641a8bfe15086`（origin/integration）  
 **文档维护分支：** feat/design_doc
 
