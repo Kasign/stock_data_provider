@@ -214,3 +214,18 @@ func TestValidateDeliveryStateEventRejectsControlCharactersInManualRetryReason(t
 		}
 	}
 }
+
+func TestValidateDeliveryStateEventRejectsActorMetadataOutsideManualRetry(t *testing.T) {
+	record := validDeliveryRecord()
+	_, event, err := record.Transition(DeliveryTransition{
+		To: DeliverySending, At: record.UpdatedAt.Add(time.Second),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	actor := "unexpected-actor"
+	event.ActorRef = &actor
+	if err := ValidateDeliveryStateEvent(DeliveryQueued, event); !errors.Is(err, ErrInvalidDeliveryChange) {
+		t.Fatalf("automatic transition must reject manual actor metadata, got %v", err)
+	}
+}
