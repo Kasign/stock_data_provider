@@ -21,17 +21,17 @@ func TestNeteaseQuoteReportsIdentityAndConsistencyRejections(t *testing.T) {
 	}{
 		{
 			name:    "missing requested identity",
-			payload: `{"sh600519":{"code":"sh000001","symbol":"000001","price":10,"open":9,"high":11,"low":8,"yestclose":9,"updown":1,"percent":0.1}}`,
+			payload: `{"0600519":{"code":"000001","symbol":"000001","price":10,"open":9,"high":11,"low":8,"yestclose":9,"updown":1,"percent":0.1}}`,
 			field:   "symbol", code: "symbol_mismatch",
 		},
 		{
 			name:    "change inconsistent",
-			payload: `{"sh600519":{"code":"sh600519","symbol":"600519","price":10,"open":9,"high":11,"low":8,"yestclose":9,"updown":2,"percent":0.1}}`,
+			payload: `{"0600519":{"code":"0600519","symbol":"600519","price":10,"open":9,"high":11,"low":8,"yestclose":9,"updown":2,"percent":0.1}}`,
 			field:   "change", code: "inconsistent_value",
 		},
 		{
 			name:    "percent inconsistent",
-			payload: `{"sh600519":{"code":"sh600519","symbol":"600519","price":10,"open":9,"high":11,"low":8,"yestclose":9,"updown":1,"percent":0.2}}`,
+			payload: `{"0600519":{"code":"0600519","symbol":"600519","price":10,"open":9,"high":11,"low":8,"yestclose":9,"updown":1,"percent":0.2}}`,
 			field:   "change_percent", code: "inconsistent_value",
 		},
 	}
