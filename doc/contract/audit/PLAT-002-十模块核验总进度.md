@@ -504,3 +504,14 @@
 - 新增 **AUD-WEBUI-CTR-049（P2）**：MariaDB 写入失败由 Service 返回持久化错误，但 POST Handler 把所有 Service error 映射成 400 VALIDATION_ERROR；OpenAPI 却声明 500，且 Handler 丢弃带 persisted=false 的探测结果。需区分存储错误并补 Handler 故障测试。
 - MariaDB 集成测试覆盖真实写入、重启后历史读取和证据保留，但依赖 MARKET_DATA_TEST_MYSQL_DSN，本轮未执行；缺少独立 GET Handler 对 limit/503/SQL 失败的单元测试。
 - WebUI 维度 2 三个剩余数据集（Stock Search、Analysis Run、Provider Probe History）均已审完。下一步进入维度 2 完整性 Review，不再扩展数据集清单。
+
+
+### WebUI — 维度 2：第一轮完整性 Review（子批次 1）
+
+- 详细记录：[`WebUI-维度2-完整性Review-第一轮.md`](./WebUI-维度2-完整性Review-第一轮.md)
+- 三个最后数据集 Stock Search、Analysis Run、Provider Probe History 均已形成独立审计切片；本轮不增加数据集范围。
+- 对照 API Client 总盘点：44 个导出函数中 41 个远端入口，40 个在主要页面模块找到引用；getMarketSentiment 仍是唯一已确认的孤儿 Client，保持产品范围待确认，不自动定性缺陷。
+- 编号收敛：CTR-003 的 Run OpenAPI 缺失核心问题由范围更完整的 CTR-046 承接，CTR-003 标记为历史初审编号，不重复计数；CTR-005 与 CTR-047 部分重叠，CTR-047 关闭条件必须继续覆盖 TaskType 四值枚举及 AnalysisRequest required 约束。
+- CTR-010 的多次出现是跨 DTO 影响字段扩充；CTR-038 与 CTR-048 虽同为历史 total 语义问题，但属于不同 API，不合并。
+- P1 门禁复核：CTR-041 仍待固定基线 CI 复核；CTR-043 源码逻辑冲突已确认但本轮未执行测试，均不得关闭或降级。
+- 本轮只完成第一轮完整性 Review 的编号/覆盖/跨数据集主题子批次；逐项核对 CTR-001..049 证据链、字段级 Golden、固定基线 CI 及跨维度交叉检查仍未完成。WebUI 维度 2 保持 partial。
