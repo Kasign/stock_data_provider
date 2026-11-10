@@ -82,7 +82,7 @@ func (r *MySQLDeliveryRepository) ReconcileUnknown(
 		return err
 	}
 	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("notification storage: commit unknown reconciliation: %w", err)
+		return fmt.Errorf("%w: notification storage: commit unknown reconciliation: %w", application.ErrPersistenceOutcomeUnknown, err)
 	}
 	return nil
 }

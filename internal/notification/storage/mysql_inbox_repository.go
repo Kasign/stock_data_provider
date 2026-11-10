@@ -94,7 +94,7 @@ func (r *MySQLInboxRepository) Accept(
 		return domain.InboxRecord{}, false, fmt.Errorf("notification storage: insert fanout work item: %w", err)
 	}
 	if err := tx.Commit(); err != nil {
-		return domain.InboxRecord{}, false, fmt.Errorf("notification storage: commit inbox accept: %w", err)
+		return domain.InboxRecord{}, false, fmt.Errorf("%w: notification storage: commit inbox accept: %w", application.ErrPersistenceOutcomeUnknown, err)
 	}
 	return record, false, nil
 }
