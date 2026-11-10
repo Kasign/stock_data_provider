@@ -84,9 +84,9 @@ adapters -> ports
 
 - `internal/server/bootstrap/bootstrap.go`（blob `92df61265f173251ac7811f99a7ab9f41ac470ed`）
 - `internal/server/bootstrap/router.go`（blob `2597c998236a8e981773635eced7915a28d6b2ed`）
-- `internal/server/diagnostics/service.go`（blob `<need-verify>`）
-- `internal/server/migration/registry.go`（blob `<need-verify>`）
-- `internal/server/runtime/lifecycle.go`（blob `<need-verify>`）
+- `internal/server/diagnostics/service.go`（blob `190068e7fc170d6f81d8a79868086fa2870a65e7`）
+- `internal/server/migration/registry.go`（blob `dbb81dec2f1ab18a647ecea16a9ac6b0da03b483`）
+- `internal/server/runtime/lifecycle.go`（blob `fcfe753c345af505a4f25e94050f19049d9ad75b`）
 
 已确认的真实调用：
 
