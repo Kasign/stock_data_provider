@@ -463,3 +463,18 @@ Server维度2当前仅完成首轮一个切片，状态为 `in_progress / partia
 - 影响限于Request ID可信边界、日志关联和响应关联一致性；不等同于认证绕过。该发现归既有PLAT-CTR-002 / P002-D03，不新增CTR，也不在本批修改实现。
 - 关闭条件：Server组合路径移除/隔离旧兼容Middleware，保证内层只使用Root已验证Context；补Root完整组合测试，验证伪造入站ID不能覆盖最终响应Header、Handler日志Context和后续传播ID。
 - 该增量证据不改变本轮错误Envelope结论；PLAT-CTR-002保持开放，后续按原唯一登记增量验收。
+
+
+## 24. Server 维度2第三切片：Run/Task DTO 字段语义增量核验（2026-11-10）
+
+本批只增量推进CTR-046/047/006/007，不重复CTR-008分页算法初审。
+
+| 编号 | 本轮确认的字段级事实 | 当前状态与关闭条件 |
+|---|---|---|
+| CTR-046 | POST Run、GET Run、GET Run Events缺少OpenAPI路径；RunResult没有响应Schema。同步Run与Task共用RunRequest，但两者run_id行为不同；RunResult是多层嵌套DTO | 保持开放。补齐真实Root路径/状态/请求响应Schema，明确同步/异步run_id差异；为RunResult及Events提供完整Schema、Golden和Handler/Schema一致性测试 |
+| CTR-047 | RunRequest JSON字段为run_id、task_type、as_of、as_of_mode、universe_id、symbols、portfolio_id、strategy_ids、market_id、strategy_config_version、risk_config_version、trading_rules_version、data_policy_version、parameters。现有AnalysisRequest缺run_id/as_of_mode/parameters；没有required、TaskType enum。Handler补默认值并覆盖as_of_mode；历史回放要求显式as_of | 保持开放。权威请求契约须区分服务端派生字段、默认值和条件必填；明确同步Run与异步Task对run_id的差异；Schema与运行时校验/Contract Test对齐 |
+| CTR-006 | Task.started_at/finished_at为*time.Time + omitempty，nil时字段省略；OpenAPI nullable=true允许显式null | 保持开放。裁决省略或null；DTO、OpenAPI和queued/running/terminal Golden一致 |
+| CTR-007 | StageEvent固定字段run_id/stage/status/at；可选duration_ms/message/attributes；status为started/succeeded/failed/skipped；attributes为map[string]string；OpenAPI event仍为无约束object | 保持开放。展开StageEvent Schema、required/enum/date-time/类型；补Golden与Schema/Handler Contract Test |
+| CTR-008 | 本轮只确认固定基线未定位旧Analysis taskqueue表的独立DDL；不对数据库现状作不存在判断 | 不改变既有状态和关闭条件；由原责任方补迁移/DDL、唯一单调ID和真实DB分页证据 |
+
+补充：RunResult完整嵌套结构不在本批展开，归CTR-046关闭工作；Task.status的五个输出值与RunStatus六个领域状态不同，不能共用枚举。未新增CTR。
