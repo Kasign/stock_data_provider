@@ -187,3 +187,33 @@
 - 本批没有执行固定基线 CI，不将已有测试资产描述为本轮运行通过。
 
 本批无新增 CTR 编号、无业务代码修改。
+## 11. Analysis Run 差异证据复核（子批次 4）
+
+本批只复核 CTR-046、CTR-047，并更正测试覆盖描述，不扩展新的数据集。代码基线仍为 origin/integration @ b6dfc85ba214fe16268c8cba780641a8bfe15086。
+
+### 11.1 CTR-046：Run 读取和事件契约
+
+固定基线证据：
+- internal/platform/httpapi/server.go：Handler 注册 GET /api/v1/analysis/runs/，handleGetRun 按路径分派 RunResult 读取和 /events 读取；Run 不存在映射 404 run_not_found，结果未完成映射 409 run_not_finished，存储错误映射 500。
+- doc/api/contracts/分析任务.openapi.yaml：paths 只描述 Task 创建、Task 状态、Task Events，没有 Run GET 和 Run Events；components.schemas 也没有 RunResult、RunStatus、Failure、StageEvent 等完整响应 Schema。
+- web/src/api.js：getAnalysisRun 请求 GET /api/v1/analysis/runs/{run_id}；Task Events 与 Run Events 是不同的资源和游标语义。
+- internal/platform/httpapi/server_test.go：已有 TestReadResultMapsNotFound 覆盖 GET Run 404，TestReadResultDoesNotExposeStorageError 覆盖 500 脱敏；未发现 GET Run 成功、409 run_not_finished 和 Run Events Handler 专项测试。
+
+结论：CTR-046 的 OpenAPI 缺失事实成立，保留 P2。对原测试缺口描述作精确修正：404 和 500 并非完全没有测试；仍缺成功响应、409 和 Run Events 的 Handler 测试。关闭条件须补齐两条 Run 路径和响应 Schema，并覆盖剩余关键状态。
+
+### 11.2 CTR-047：异步 CreateTask 请求与领域 RunRequest
+
+固定基线证据：
+- internal/analysis/domain/types.go：RunRequest 包含 run_id、task_type、as_of、as_of_mode、universe_id、symbols、portfolio_id、strategy_ids、market_id、四类配置版本及 parameters；TaskType 有 post_market_scan、watchlist_scan、position_review、historical_replay 四个常量。
+- doc/api/contracts/分析任务.openapi.yaml：AnalysisRequest 声称字段定义与 domain.RunRequest 一致，但缺少 as_of_mode、parameters，未定义 task_type 四值枚举，也没有 required/default 行为声明。
+- internal/platform/httpapi/tasks.go：CreateTask Handler 会填充 task_type、as_of、universe_id、portfolio_id、market_id、strategy_ids 和配置版本默认值；historical_replay 必须显式提供 as_of；as_of_mode 根据 as_of 是否显式提供而被 Handler 覆盖。
+- internal/platform/taskqueue/queue.go：Queue.Create 生成 run_id 并覆盖请求中的 req.RunID，再持久化请求。因此 run_id 应定义为服务端生成身份，而不是客户端控制字段。
+- Runner 实际读取 parameters 中的 symbols 回退值，parameters 不能从异步请求 Schema 中遗漏。
+
+结论：CTR-047 事实成立，保留 P2。关闭时应定义独立的 CreateTaskRequest 契约，不再宣称与领域 RunRequest 字段完全相同；明确 task_type 枚举、服务端默认、historical_replay 的条件约束、as_of_mode 推导、run_id 生成和 parameters 类型。required 不能机械复制领域结构体字段，应按 HTTP Handler 的默认/条件校验行为定义。
+
+### 11.3 本批范围修正
+
+- 修正 WebUI-维度2-Analysis-Run.md 对 HTTP 测试缺口的表述：现有测试覆盖 GET Run 404 与 500 脱敏；缺口收敛为 GET Run 成功、409 和 Run Events。
+- 本批未执行固定基线 Go/Node CI；未检查 RunResult 全部嵌套字段 Golden，也未完成 DB migration/Worker 多实例并发专项审计，这些仍按原计划保留，不以本批替代。
+- 本批没有新增 CTR 编号、没有修改业务代码。
