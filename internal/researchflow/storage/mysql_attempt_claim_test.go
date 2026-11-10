@@ -438,6 +438,38 @@ func TestMariaDBClaimAttemptLeaseAndFencing(t *testing.T) {
 		SET fencing_token = 2 WHERE attempt_ref = ?`, first.Ref); err != nil {
 		t.Fatalf("restore historical fencing token: %v", err)
 	}
+	// Stage.started_at must remain the first Attempt's start across retries.
+	shiftedStageStart := formatResearchflowTimeValue(first.StartedAt.Add(time.Second))
+	if _, err := db.ExecContext(ctx, `UPDATE researchflow_stages SET started_at = ? WHERE stage_ref = ?`,
+		shiftedStageStart, stageRef); err != nil {
+		t.Fatalf("corrupt Stage first-start timestamp: %v", err)
+	}
+	if _, replayed, err := repository.ClaimAttempt(ctx, runRef, stageRef,
+		"ignored-stage-start-replay-"+suffix, "worker-b", time.Minute, 3, 8);
+		!errors.Is(err, ErrAttemptHistoryInconsistent) || replayed {
+		t.Fatalf("claim with mismatched Stage.started_at replayed=%v err=%v, want ErrAttemptHistoryInconsistent", replayed, err)
+	}
+	if _, err := db.ExecContext(ctx, `UPDATE researchflow_stages SET started_at = ? WHERE stage_ref = ?`,
+		formatResearchflowTimeValue(first.StartedAt), stageRef); err != nil {
+		t.Fatalf("restore Stage first-start timestamp: %v", err)
+	}
+
+	// Attempt start/finish timestamps must form a valid interval.
+	if _, err := db.ExecContext(ctx, `UPDATE researchflow_attempts
+		SET finished_at = ? WHERE attempt_ref = ?`,
+		formatResearchflowTimeValue(second.StartedAt.Add(-time.Second)), second.Ref); err != nil {
+		t.Fatalf("corrupt Attempt finish timestamp: %v", err)
+	}
+	if _, replayed, err := repository.ClaimAttempt(ctx, runRef, stageRef,
+		"ignored-attempt-time-replay-"+suffix, "worker-b", time.Minute, 3, 8);
+		!errors.Is(err, ErrAttemptHistoryInconsistent) || replayed {
+		t.Fatalf("claim with inverted Attempt timestamps replayed=%v err=%v, want ErrAttemptHistoryInconsistent", replayed, err)
+	}
+	if _, err := db.ExecContext(ctx, `UPDATE researchflow_attempts
+		SET finished_at = started_at WHERE attempt_ref = ?`, second.Ref); err != nil {
+		t.Fatalf("restore Attempt finish timestamp: %v", err)
+	}
+
 	if _, err := db.ExecContext(ctx, `DELETE FROM researchflow_attempts WHERE attempt_ref = ?`, first.Ref); err != nil {
 		t.Fatalf("remove historical Attempt to simulate corruption: %v", err)
 	}
