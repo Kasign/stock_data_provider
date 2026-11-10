@@ -3716,3 +3716,73 @@ func TestDragonTigerRejectsMismatchedProviderSourceAndFallsBack(t *testing.T) {
 		t.Fatalf("mismatched source must be rejected and fallback called: primary=%d fallback=%d", primary.dragonTigerCalls, fallback.dragonTigerCalls)
 	}
 }
+
+type fundamentalsSourceIdentityProvider struct {
+	name     string
+	snapshot *model.FundamentalsSnapshot
+	calls    int
+}
+
+func (p *fundamentalsSourceIdentityProvider) Name() string { return p.name }
+func (p *fundamentalsSourceIdentityProvider) FetchFundamentals(context.Context, string, int, int) (*model.FundamentalsSnapshot, error) {
+	p.calls++
+	return p.snapshot, nil
+}
+
+func TestFundamentalsRejectsMismatchedProviderSourceAndFallsBack(t *testing.T) {
+	primarySnapshot := validFundamentalsSnapshotForTest()
+	primarySnapshot.Source = "spoofed"
+	fallbackSnapshot := validFundamentalsSnapshotForTest()
+	primary := &fundamentalsSourceIdentityProvider{name: "primary", snapshot: primarySnapshot}
+	fallback := &fundamentalsSourceIdentityProvider{name: "baostock", snapshot: fallbackSnapshot}
+	svc := NewWithCapabilities([]provider.NamedProvider{primary, fallback}, nil, nil, cache.NewDisabled(), nil,
+		time.Second, time.Minute, 120, 2000,
+		ResilienceConfig{Retries: 0, CircuitFailureThreshold: 3, CircuitCooldown: time.Second}, nil)
+	svc.SetFundamentalsProviders([]provider.FundamentalsProvider{primary, fallback})
+
+	got, hit, err := svc.Fundamentals(context.Background(), "600519.SH", 2026, 2)
+	if err != nil || hit {
+		t.Fatalf("Fundamentals hit=%v err=%v", hit, err)
+	}
+	if got == nil || got.Source != "baostock" {
+		t.Fatalf("expected fallback fundamentals source baostock, got %+v", got)
+	}
+	if primary.calls != 1 || fallback.calls != 1 {
+		t.Fatalf("mismatched source must be rejected and fallback called: primary=%d fallback=%d", primary.calls, fallback.calls)
+	}
+}
+
+type valuationSourceIdentityProvider struct {
+	name     string
+	snapshot *model.ValuationSnapshot
+	calls    int
+}
+
+func (p *valuationSourceIdentityProvider) Name() string { return p.name }
+func (p *valuationSourceIdentityProvider) FetchValuations(context.Context, []string) (*model.ValuationSnapshot, error) {
+	p.calls++
+	return p.snapshot, nil
+}
+
+func TestValuationsRejectsMismatchedProviderSourceAndFallsBack(t *testing.T) {
+	primarySnapshot := validValuationSnapshotForValidationTest()
+	primarySnapshot.Source = "spoofed"
+	fallbackSnapshot := validValuationSnapshotForValidationTest()
+	primary := &valuationSourceIdentityProvider{name: "primary", snapshot: primarySnapshot}
+	fallback := &valuationSourceIdentityProvider{name: "tushare", snapshot: fallbackSnapshot}
+	svc := NewWithCapabilities([]provider.NamedProvider{primary, fallback}, nil, nil, cache.NewDisabled(), nil,
+		time.Second, time.Minute, 120, 2000,
+		ResilienceConfig{Retries: 0, CircuitFailureThreshold: 3, CircuitCooldown: time.Second}, nil)
+	svc.SetValuationProviders([]provider.ValuationProvider{primary, fallback})
+
+	got, hit, err := svc.Valuations(context.Background(), []string{"600519.SH"})
+	if err != nil || hit {
+		t.Fatalf("Valuations hit=%v err=%v", hit, err)
+	}
+	if got == nil || got.Source != "tushare" {
+		t.Fatalf("expected fallback valuation source tushare, got %+v", got)
+	}
+	if primary.calls != 1 || fallback.calls != 1 {
+		t.Fatalf("mismatched source must be rejected and fallback called: primary=%d fallback=%d", primary.calls, fallback.calls)
+	}
+}
