@@ -1036,3 +1036,45 @@ WebUI 当前创建请求的最小字段与调用路径明确；事件分页消�
 - TaskEvent 的外层序号/事件结构明确，但 OpenAPI 没有描述 StageEvent 的实际字段和枚举，登记 AUD-WEBUI-CTR-007（P2）。
 - WebUI 事件分页客户端的游标防御已核；服务端 Handler 的 next_after_sequence 计算、Task/TaskEvent JSON Golden、未知字段解码策略仍待核。
 - WebUI 维度 2 继续保持 partial；本批不代表全部 Task API 及历史事件兼容性已审完。
+
+
+## 20. 第十五批：WebUI 维度 2（TaskEvent 服务端分页与事件字段）
+
+### 20.1 固定基线与证据
+
+代码基线：`b6dfc85ba214fe16268c8cba780641a8bfe15086`
+
+- `internal/platform/httpapi/tasks.go`（blob `43eb8baccd820c63e23ffd6a2a501e78b2b880b6`）
+- `internal/platform/httpapi/tasks_test.go`（blob `31374cbdb3e38fdfefc4b407c648668f70a1e5c5`）
+- `internal/platform/taskqueue/queue.go`（blob `d438d934c6267ee1d7a14d482d37741cf3d1c795`）
+- `web/src/task-event-view.js`（blob `935050409e1d130cb9e901156c8075c1bdcb24d7`）
+
+### 20.2 服务端分页规则
+
+- Handler 默认 after_sequence=0、limit=100；after_sequence 解析为 int64 且拒绝负值，limit 只接受 1～500。
+- Handler 调用 taskService.Events 后，以本页最后一条事件的 Sequence 作为 next_after_sequence；空页时保持请求 after 值。
+- Queue.Events 先确认 task 存在，再查询同一 run 的事件；SQL 条件为 id > after，按 id ASC 排序并 LIMIT。返回 Event.Sequence 使用该数据库行 id。
+- 因而当前分页采用“排他游标”：客户端传入上一页最后一条 sequence，下一页只取更大的 sequence；空页不会使游标回退。
+- Handler 单测 TestGetTaskEventsSupportsIncrementalSequence 仅覆盖 after=4 返回 sequence=7 且 next=7 的单页场景。未覆盖空页保持游标、连续两页、limit 边界、负数/非法游标、非法 limit、超过 int64 的游标及满页行为。
+- 当前证据足以确认 Handler/Queue 的分页算法和单页推进规则；但没有定位到创建 analysis_stage_events 表的迁移定义，故不将数据库 id 的自增/不可变约束视为已核验。sequence 长期稳定性仍需补充 Migration/DDL 证据。
+
+**AUD-WEBUI-CTR-008：TaskEvent 分页边界缺少服务端契约测试（P2）**
+
+- 证据：HTTP Handler 只测试一组非连续序号的单页增量读取；分页算法包含空页游标保持、limit 和游标解析分支，但没有对应边界测试。
+- 影响：后续修改分页参数解析、空页游标或连续读取行为时，缺少测试防止重复事件、漏事件或游标回退。
+- 责任方：旧 Analysis API / Server 契约维护方。
+- 关闭条件：补充空页保持游标、两页连续读取无重复/遗漏、limit=1/500、limit=0/501、负数/非法/溢出 after_sequence 等测试；并通过真实 DDL 或 Migration 测试证明事件 ID 的唯一、单调和不可变语义。
+
+### 20.3 前端 error_code 字段核验
+
+- WebUI `renderSelectedTaskEventView` 尝试显示 `event.error_code`，但当前 Go `domain.StageEvent` 仅有 run_id、stage、status、at、duration_ms、message、attributes，没有 error_code。
+- 当前没有发现 HTTP Handler 对事件补充 error_code；Queue.Events 直接反序列化并返回 domain.StageEvent。
+- JavaScript 对 undefined 字段会跳过显示，因此这不是 JSON 解码或页面运行时错误；但当前服务端 DTO 无法按该字段为前端提供错误代码。
+- 暂不新增独立差异：待 StageEvent Schema 收敛时，由 API 责任方决定是否正式增加 error_code，或移除前端无数据来源的展示项。不得把 attributes 中可能存在的同名键推定为顶层字段。
+
+### 20.4 本批结论与未完成项
+
+- Handler 的排他游标、空页保持、Queue 的 ID 升序读取规则已核实；没有发现当前算法会主动回退游标。
+- 新增 AUD-WEBUI-CTR-008（P2），性质为测试补证，不是已证实运行时分页错误。
+- 数据库事件 ID 的 DDL 约束、Task/TaskEvent JSON Golden、未知字段解码策略仍待核。
+- WebUI 维度 2 继续保持 partial。
