@@ -855,6 +855,10 @@ func dailyBarForVersionContractTest(sourceVersion, tradeDate string) model.Daily
 	amount := 100000.0
 	// 测试样本的来源身份必须与其 source_version 对应，避免被生产契约校验误判为跨 Provider 数据。
 	source := strings.SplitN(strings.TrimSpace(sourceVersion), "-", 2)[0]
+	if source != "eastmoney" && source != "tencent" && source != "pytdx" {
+		// unknown/placeholder 版本样本用于验证版本拒绝路径，默认归属主 Provider，避免身份错误掩盖版本校验。
+		source = "eastmoney"
+	}
 	return model.DailyBar{
 		Symbol: "600519.SH", TradeDate: tradeDate, Period: "1d",
 		Open: 10, High: 11, Low: 9, Close: 10.5, Volume: &volume, Amount: &amount,
