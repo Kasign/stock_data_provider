@@ -202,7 +202,11 @@ func TestEastmoneyAnnouncementsReportsResponseAndRowRejections(t *testing.T) {
 			reporter := validation.NewReporter(16)
 			ctx := validation.WithReporter(context.Background(), reporter)
 			p := NewEastmoneyConfiguredWithAnnouncements(2*time.Second, "", "", "", "", "", "", "", "", "", server.URL, "")
-			_, err := p.FetchStockAnnouncements(ctx, "600036.SH", "2026-10-20", "2026-10-26", 1, tc.pageSize)
+			pageSize := tc.pageSize
+			if pageSize == 0 {
+				pageSize = tc.row + 1
+			}
+			_, err := p.FetchStockAnnouncements(ctx, "600036.SH", "2026-10-20", "2026-10-26", 1, pageSize)
 			if err == nil {
 				t.Fatal("expected rejection")
 			}
