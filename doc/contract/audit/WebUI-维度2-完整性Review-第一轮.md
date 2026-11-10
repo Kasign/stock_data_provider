@@ -711,3 +711,60 @@ CTR-010 在契约冻结前需要完成的是语义裁决，而不是立即修复
 项目级映射只引用登记簿已有的 `DATA-CTR-001`、`GOV-CTR-001`、`GOV-CTR-002`，不新建正式契约编号。CTR-038/039 的语义裁决由项目负责人/相应契约 Owner 确认；CTR-040 是实现符合性问题，不应包装成新的契约设计。
 
 本批没有修改项目级权威登记簿，因为 CTR-038/039 的候选语义尚未获得裁决；也没有修改模块代码、OpenAPI、测试或分支实现。未执行 CI。WebUI 维度 2 第一轮完整性 Review 继续进行。
+
+## 24. Limit Pool：CTR-042 金额单位证据与冻结影响 Review
+
+本批只复核既有 CTR-042，不重新扫描 LimitPool DTO、不扩展新的数据集、不新增正式契约编号。代码证据固定绑定 `b6dfc85ba214fe16268c8cba780641a8bfe15086`。
+
+### 24.1 固定基线事实
+
+- Hithink `FetchLimitPool` 将 `seal_money`、`max_seal_money`（仅 up 池）和 `turnover`（仅 broken 池）解析为数值后直接写入 `LimitPoolItem`，未进行单位换算。
+- 对每个 Hithink 条目，`ProviderAmountUnit` 固定写为 `provider_defined`，条目和快照均附加 `provider_amount_unit_not_explicitly_documented` / `provider_amount_units_not_explicitly_documented` 原因，并保持 degraded。
+- Eastmoney 当前不填充上述金额扩展字段；默认配置中 Eastmoney enabled、Hithink disabled，因此默认业务路径不会依赖 Hithink 金额字段。
+- `LimitPoolItem` 的 `seal_money`、`max_seal_money`、`turnover` 均为可选字段；`provider_amount_unit` 也是可选字符串。
+- OpenAPI 已说明 `turnover` 应结合 `provider_amount_unit` 解读；`seal_money` / `max_seal_money` 只有当 `provider_amount_unit=CNY` 时才可解释为 CNY；并说明 `provider_defined` 不代表 CNY。
+- 固定基线仓库内没有找到 Hithink 对上述字段单位的权威说明，也没有找到可支持换算比例的协议定义或可信样本证据。现有 `hithink_limit_pool_diagnostic_test.go` 只验证重复证券诊断，不验证金额字段的单位、保真或禁止换算行为。
+- `turnover_ratio_percent` 是百分数值，不是金额字段，不属于 CTR-042 的金额单位范围；不得把它与 `turnover` 混为同一单位问题。
+
+### 24.2 差异性质
+
+CTR-042 不是已证实的数值换算错误：当前代码没有把 Hithink 原值乘除一个猜测系数，也没有将其标记为 CNY。
+
+它也不构成当前默认路径的跨 Provider 金额混算，因为：
+- Eastmoney 不提供这些扩展金额字段；
+- Hithink 默认关闭；
+- Hithink 提供的金额字段明确标记为 `provider_defined` 并降级；
+- WebUI 当前不展示这些金额扩展字段。
+
+准确分类为：**Provider 原始金额字段的单位证据缺失；当前实现采用不归一化、显式未知单位的保守策略；公共契约对未知单位值的消费者行为约束仍可进一步明确。**
+
+因此，CTR-042 应映射到既有 `DATA-CTR-002`（单位口径）和 `DATA-CTR-003`（Provider 原始值标准化与精度保真），不新增 CTR 编号。
+
+### 24.3 冻结前应明确的契约边界
+
+即使 Hithink 单位无法证实，也可以明确冻结“未知单位值如何处理”，不必为了冻结而猜测单位或强行补齐换算。
+
+建议将以下语义作为项目级契约裁决候选：
+1. `provider_amount_unit=provider_defined` 表示值保留 Provider 原始数值，但其物理/货币单位尚未得到验证；不等于 CNY，也不等于任何默认单位。
+2. 对 `provider_defined` 的金额值，下游不得换算、跨 Provider 比较、求和聚合、按金额排序或展示带有 CNY/元的标签；如需展示，必须明确标注单位未知且来源为 Provider 原始值。若产品不接受单位未知展示，则应隐藏这些字段。
+3. 只有取得对应 Provider、对应接口字段的权威单位说明，并完成原始样本/换算测试后，才能将单位标记为明确单位（例如 CNY）并参与归一化比较。
+4. 缺少金额字段时保持省略，不补零；单位未知与字段缺失是两个不同状态，不得互相替代。
+5. 单位证明按字段分别进行：`seal_money`、`max_seal_money`、`turnover` 不因同属一个 Provider 或同一 DTO 而自动共享单位证据。
+
+以上是审计建议，尚未获得项目负责人最终裁决，不写入权威登记簿作为已批准决议。
+
+### 24.4 冻结影响与后续验收
+
+- Limit Pool 公共 DTO 已有可选金额字段及 `provider_amount_unit`，并有 OpenAPI 的基础解释；可以在明确 `provider_defined` 的不可比较规则后冻结该公共边界。
+- Hithink 三个金额字段的实际单位仍不可比较，相关 Provider 能力状态必须保持 degraded / not_comparable；这不阻止冻结“未知单位的安全处理规则”，但阻止将这些字段宣称为已归一化金额。
+- `DATA-CTR-002` / `DATA-CTR-003` 的全局单位/标准化证据仍待其他 Provider 和字段范围核验，CTR-042 单独关闭不能代表两个项目级契约整体冻结。
+- 若未来取得权威单位材料，后续实现验收需按字段覆盖原始响应 Fixture、解析保真、单位声明、换算（如确有必要）和跨 Provider not_comparable/matched 判定；在此之前不得写入猜测性转换。
+- 本轮不要求 Data 分支修改代码、不改 OpenAPI、不增 DTO 字段、不执行 CI；仅把“已安全隔离”与“单位已证实”两个状态分开记录。
+
+### 24.5 本批结论
+
+- CTR-042 保留 P2，性质调整为**Provider 单位证据缺失 / 归一化能力不可用**，而非已证实实现换算错误。
+- 当前 `provider_defined` + degraded 是保守实现，避免了把未知单位误当 CNY；但消费者禁止比较、换算和金额排序的语义应在项目级单位契约中明确。
+- 当前 WebUI 不消费这些扩展字段，Hithink 默认 disabled；无证据表明当前默认页面发生错误金额展示。
+- 需要裁决的是未知单位值的公共消费边界，而不是要求在缺少来源证据时补出单位。
+- 本批未修改业务代码、OpenAPI、DTO 或测试，未执行 CI；WebUI 维度 2 第一轮完整性 Review 继续进行。
