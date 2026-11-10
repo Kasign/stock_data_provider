@@ -48,8 +48,8 @@ func TestMigrationsDefineNewsOwnedPersistenceSchema(t *testing.T) {
 
 func TestMigrationsReturnIndependentStatementSlices(t *testing.T) {
 	first, second := Migrations(), Migrations()
-	if len(first) != 7 || len(second) != 7 {
-		t.Fatalf("migration counts = %d/%d, want 7", len(first), len(second))
+	if len(first) != 8 || len(second) != 8 {
+		t.Fatalf("migration counts = %d/%d, want 8", len(first), len(second))
 	}
 	for index := range first {
 		if len(first[index].Statements) == 0 || len(second[index].Statements) == 0 {
@@ -64,8 +64,8 @@ func TestMigrationsReturnIndependentStatementSlices(t *testing.T) {
 
 func TestMigrationsPreserveNewsPointInTimeAccessPaths(t *testing.T) {
 	migrations := Migrations()
-	if len(migrations) != 7 {
-		t.Fatalf("Migrations() count = %d, want 7", len(migrations))
+	if len(migrations) != 8 {
+		t.Fatalf("Migrations() count = %d, want 8", len(migrations))
 	}
 
 	versionSchema := strings.Join(migrations[0].Statements, "\n")
@@ -136,8 +136,8 @@ func TestMigrationsAddObservationRetentionLifecycle(t *testing.T) {
 
 func TestMigrationsEnforceSingleSuccessorForRelationHistory(t *testing.T) {
 	migrations := Migrations()
-	if len(migrations) != 7 {
-		t.Fatalf("Migrations() count = %d, want 7", len(migrations))
+	if len(migrations) != 8 {
+		t.Fatalf("Migrations() count = %d, want 8", len(migrations))
 	}
 	relationHistorySchema := strings.Join(migrations[6].Statements, "\n")
 	for _, fragment := range []string{
