@@ -216,6 +216,9 @@ func TestMariaDBClaimAttemptLeaseAndFencing(t *testing.T) {
 		*loadedSecond.OutputRef != "result-"+suffix {
 		t.Fatalf("committed attempt has unexpected result: %#v", loadedSecond)
 	}
+	if loadedSecond.LeaseOwner != "" || loadedSecond.LeaseExpiresAt != nil {
+		t.Fatalf("terminal Attempt retained lease ownership: %#v", loadedSecond)
+	}
 	loadedStage, err := repository.GetStage(ctx, stageRef)
 	if err != nil {
 		t.Fatalf("load committed stage: %v", err)
