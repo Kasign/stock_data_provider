@@ -366,3 +366,82 @@ Server Bootstrap `internal/server/bootstrap/bootstrap.go:newMigrationRegistry` �
 - A2真实MariaDB/Redis集成测试以 `PLATFORM_STORAGE_INTEGRATION=1` 为门控；本轮未运行外部服务集成测试，L3资源池/迁移锁/关闭顺序证据仍待环境验收。
 
 本轮只更新审计文档，未修改业务代码、Schema、Golden、测试，未执行CI。
+
+
+## 20. PLAT-CTR-007 Typed Config 与 Secret 字段、消费者及机器证据适用性（2026-11-10）
+
+### 20.1 本轮范围与契约边界
+
+固定代码审计基线：`origin/integration @ b6dfc85ba214fe16268c8cba780641a8bfe15086`。本轮只核对 Platform Config 基础 API、Server 启动配置快照、已发现的模块配置消费者、Secret 脱敏边界和机器测试适用性；不设计远程配置中心/热更新，不审查资源授权，不修改业务代码。
+
+项目权威登记簿 `PLAT-CTR-007` 定义：Platform 提供环境变量读取、基础类型解析和 Secret 脱敏；每个服务拥有自己的 Config struct/配置 Schema；配置在启动边界装载并作为不可变快照使用；Secret 首期由部署环境变量注入；配置错误不得回显原始值；Handler、Domain、Use Case 不直接读取进程环境变量；不建设全局配置中心或热更新。
+
+### 20.2 Platform Config 基础 API
+
+核验文件：
+- `internal/platform/config/env.go`
+- `internal/platform/config/dotenv.go`
+- `internal/platform/config/env_test.go`
+- `internal/platform/config/dotenv_test.go`
+- `internal/platform/config/secret_contract_test.go`
+
+已证实：
+- `Env` 仅持有私有 Lookup 函数；`NewEnv` 读取进程环境，`NewEnvWithLookup` 支持测试注入；nil Lookup 安全退化为空源。
+- Key 仅允许 ASCII 字母/数字及 `_`、`.`、`-`；非法 Key 不会读取。
+- `String/RequiredString/Bool/Int/Duration/Secret/RequiredSecret` 覆盖首批类型；解析失败只返回 Key 和期望类型，不包含原始值。
+- `ValidateRequired/ValidatePositiveInt/ValidatePositiveDuration/JoinValidationErrors` 提供基础校验；范围、跨字段和领域约束由模块 Config loader 承担。
+- Dotenv 支持注释、export、单/双引号和常见转义；进程已有环境变量优先；重复 Key 首项优先；先解析完整文件，再批量写入，避免语法错误导致部分加载。
+- `Secret` 的 `String/GoString/fmt`、`slog.LogValue`、JSON 和 Text 输出均固定脱敏为 `[REDACTED]`；零值可安全判断；明文只能通过显式 `Value()` 访问。
+- 对应单测覆盖类型解析、无效值脱敏、必填值、Secret 格式化/JSON/slog/Text、零值和 Dotenv 优先级/原子解析行为。
+
+边界说明：
+- `Secret.Value()` 是有意开放的明文出口，不能从类型层阻止调用方将返回值写入日志或普通字符串字段；因此需要同时核对消费者是否在装配边界保留 Secret 包装，及明文进入下游对象后的使用范围。
+- Dotenv 只负责进程启动时环境注入，不是独立配置源优先级/热更新系统；本轮不把这些未规划能力列为缺陷。
+
+### 20.3 Server 与模块配置消费者映射
+
+| 消费者 | 入口/配置对象 | Secret/快照观察 | 结论 |
+|---|---|---|---|
+| Server | `internal/server/config.LoadProcess`、`LoadSecurity`、`LoadHTTP`、`LoadMigration`；Bootstrap先加载Dotenv，再构造Env并加载Process | Process为值快照；OwnerToken保留 `platformconfig.Secret`；HTTP/Worker角色条件加载安全和HTTP配置 | Platform API真实接入；当前Process字段主要为标量/Secret，未发现公开序列化边界 |
+| News | `internal/news/config.Load` | ProviderConfig字段私有，API Key保留 `platformconfig.Secret`；Config通过值返回，外部不能直接改写私有字段 | Secret包装和配置封装较完整；配置由News自己校验Provider endpoint/key配对及URL约束 |
+| Market Data HTTP Adapter | `internal/adapters/marketdata.LoadConfig` | 从Platform Env读取，但将 `Secret.Value()` 转成公开 `Config.APIKey string` | Secret类型保护在Adapter配置边界丢失；未发现本轮证据证明实际日志已泄漏，但普通格式化/序列化该Config可暴露明文 |
+| Storage Adapter | `internal/adapters/storage/mysqlredis.LoadConfig` | 从Platform Env读取，但 `DBPassword/RedisPassword` 存为普通string | 同样存在Secret类型保护丢失；连接器确需明文，但应限制在构造连接选项的边界，不应让整个Config可无意格式化输出 |
+| 旧 Market Data 模块配置 | `internal/marketdata/config.Load/LoadForInProcess` | 独立读取进程环境；Config含TushareToken、HithinkAPIKey、XueqiuCookie、TickFlowAPIKey、BaostockPassword、MXAPIKey、RedisPassword、MySQLDSN等普通string字段，并含map/slice | 这是旧/独立模块配置入口；是否仍有生产调用方须由Server/迁移维度按真实装配核实。本轮不将其误判为当前Root Server唯一配置路径 |
+| Python API Adapter | `internal/adapters/pythonapi.ConfigFromEnv` | 直接使用 `os.LookupEnv/os.Getenv`，BearerToken/Cookie为普通string | 存在绕过Platform Env抽象的兼容配置入口；当前调用方与部署启用状态未在本切片确认，列为接入边界待核，不据此断言活跃生产路径违规 |
+
+Research、Researchflow、Quant、LLM、Notification目录中，本轮固定基线文件树未发现与上述相同形式的独立进程环境 Config loader。Notification的ChannelConfigSnapshot属于运行期持久化的领域配置版本，不等同于PLAT-CTR-007启动环境配置；不将其混入本轮。
+
+### 20.4 不可变快照与校验责任
+
+- Server Process和News Config均在Load时解析并返回值对象；Server Process字段为标量/Secret，News对外字段私有，未发现调用方能通过原始环境变化回写已加载配置的路径。
+- Market Data/Storage Adapter Config公开字段中存在普通Secret字符串；旧Market Data Config另含map/slice。对这些对象是否深拷贝及是否允许调用方修改，应由各自模块配置契约负责。本轮不把“Go struct可赋值”误判为热更新，也不将其等同于不可变保证。
+- Server `LoadProcess` 的分析超时、Worker/Queue、Role、Migration、Security、HTTP配置均在启动阶段解析；Bootstrap随后基于同一个Env加载Storage和Market Data Adapter配置，未见Handler/Domain通过Env直接读取配置的证据。
+- News Loader对Credential Provider要求Endpoint与Secret成对出现；SearXNG仅要求合法Endpoint。Server/Storage/Market Data Adapter各自实施范围校验。不同配置项的必填性和默认值由对应模块所有，不应搬到Platform统一定义。
+- `internal/marketdata/config` 与 `internal/adapters/pythonapi/config` 的独立环境读取入口需在后续Server/迁移维度核实真实调用路径；本轮只登记入口事实，不扩大为全仓环境变量静态扫描。
+
+### 20.5 Schema、Golden 与机器测试适用性
+
+- Platform `Env`、`Secret`、Server Process Config及模块启动 Config均为进程内Go配置API，不是HTTP请求/响应或跨模块JSON DTO；不适用公开JSON Schema/OpenAPI，也不应为Secret明文创建Golden。
+- 对应机器证据应采用：Env类型/错误脱敏Contract Test；Secret所有输出路径脱敏测试；模块Config Loader默认值、必填、范围、跨字段校验测试；配置快照隔离测试；真实Bootstrap配置注入测试。
+- 若某模块未来将配置快照持久化或通过管理API导入/导出，则该持久化/HTTP边界应另设版本化DTO、Schema和Golden；不能直接序列化当前内部Config结构。
+- 当前没有发现Platform Config本身缺少公开Schema/Golden的缺陷；缺少模块独立配置Schema文件不等于缺少公共HTTP契约，因为契约要求的配置Schema属于模块内部配置所有权，是否需要机器可读文件需结合模块自身配置复杂度与测试决定。
+
+### 20.6 差异与关闭条件
+
+| 编号 | 发现 | 影响与性质 | 关闭所需证据 |
+|---|---|---|---|
+| PLAT2-D2-012 | Market Data HTTP Adapter与Storage Adapter从 `Secret.Value()` 读取后，将凭证保存为普通公开Config字符串字段；旧Market Data配置也大量使用普通字符串承载Token/Password/DSN | Secret的显式取值本身合理，但类型级脱敏保证在配置对象边界消失。尚无证据证明当前生产日志实际泄漏；属于消费者安全封装/误记录风险，不直接宣称已发生泄漏 | 责任模块逐项确认明文必须暴露给哪些驱动/Provider构造点；尽可能在Config内保留Secret或提供窄化凭证访问方法；对Config的String/GoString/fmt/JSON/slog输出补不泄漏测试，或证明对象不会被格式化/序列化且限制访问边界；禁止记录完整Config |
+| PLAT2-D2-013 | `internal/adapters/pythonapi.ConfigFromEnv` 直接访问进程环境，绕过Platform Env；旧Market Data模块也有独立os环境读取入口 | 当前调用方和活跃部署状态未确认，不能将历史/兼容入口直接判为线上违规；属于生产接入边界证据缺口 | Server/迁移维度核实实际构造调用点、部署入口和是否仍启用；活跃入口应在Bootstrap边界使用Platform Env，非活跃入口明确Deprecated/移除计划 |
+| PLAT2-D2-014 | Adapter Config的Secret脱敏、配置快照可变性及配置对象输出策略缺少统一的消费者级Contract Test证据 | Platform Secret测试只证明Secret本体，不覆盖已转成string的下游配置对象；不重复新增独立CTR | 对实际活跃消费者补Config输出脱敏、快照/切片Map隔离及关键默认/边界测试；未活跃兼容入口记录不适用证据 |
+
+以上差异均并入既有PLAT-CTR-007及本矩阵，不新增契约编号。PLAT2-D2-013的生产影响需在Server/迁移维度依据真实调用点进一步定性，不能在本切片越权裁决。
+
+### 20.7 本切片结论
+
+**PLAT-CTR-007 Platform基础解析与Secret本体脱敏实现基本符合设计；Server与News接入较完整；Market Data/Storage Adapter存在Secret包装丢失，旧/兼容配置入口仍需确认生产使用范围。整体保持 `pending_evidence`，不满足冻结条件。**
+
+- 未发现需要新增公开JSON Schema/Golden的Platform Config DTO。
+- 已发现的差异归入PLAT-CTR-007，不新增CTR。
+- 本轮未修改业务实现、Schema、Golden或测试，未执行CI。
+- Platform维度2的PLAT-CTR-001～007已完成首轮机器契约适用性切片；各契约仍保留各自开放证据，不能据此宣称Platform整体契约冻结。
+- 下一步回到阶段B十模块六维核验，进入 **Server — 维度2：DTO、Schema、Golden**，先审Server对外HTTP DTO与真实Handler/OpenAPI/Golden消费者映射；不重做Platform维度2，不扩展到Server其他五个维度。
