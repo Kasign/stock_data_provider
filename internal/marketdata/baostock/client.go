@@ -274,7 +274,7 @@ func parseQuarterlyFinancialPage(body string, spec financialQuerySpec, userID, c
 			if i != 1 {
 				return nil, fmt.Errorf("BaoStock %s column %s: %w", spec.method, spec.fields[i], err)
 			}
-			fieldIssues = append(fieldIssues,
+			fieldIssues = append(fieldIssues, QuarterlyFinancialFieldIssue{
 				SourceField: spec.fields[i], Code: "invalid_field",
 				ActualType: baoStockCellType(raw), Preview: baoStockCellPreview(string(raw)),
 				RowIndex: 0,
