@@ -887,3 +887,53 @@ Server 已具备 Root Composition 的基础技术能力：共享 Platform Resour
 - 未核对 Market Data API 所有前端函数与 Handler 请求/响应 DTO 的逐字段映射。
 - 未发现本批有可作为 Run 响应 Golden 的独立契约测试证据；需后续专门扫描。
 - WebUI 维度 2 保持 partial，不得将此单条 Run 路径核验扩展为整个 API 面已完成。
+
+
+## 17. 第十二批：WebUI 维度 2（全市场分页股票 DTO 映射）
+
+### 17.1 固定基线与证据
+
+- 代码基线：`b6dfc85ba214fe16268c8cba780641a8bfe15086`
+- `web/src/api.js`（blob `b8bcbee5908b43bfa1bc2ca744363190af38287f`）
+- `web/src/market-stocks.js`（blob `af32c747c93b3a414a6675baeed2f13a1e7670f4`）
+- `web/tests/market-stocks-navigation.test.mjs`（blob `432633fb402de33801560b34942a716b6285471c`）
+- `web/tests/api.test.mjs`（blob `a26eca75b24a744232d370fdbe2411806be45136`）
+- `internal/marketdata/httpapi/market_stocks.go`（blob `c18ff1424f99d56905593c498f1aabc7ea871ad4`）
+- `internal/marketdata/model/market_stocks.go`（blob `57d94b9030e9330dceb8597e7f6371fb4c997a0c`）
+- `internal/marketdata/httpapi/openapi.yaml`（blob `cd8a6e3dfb8e3162ee789b11e883be9283c59f32`）
+- `internal/marketdata/httpapi/openapi_contract_test.go`（blob `7f97f075a23bd698a7e3fc32e90509d1e999217b`）
+
+### 17.2 请求参数映射
+
+1. WebUI `getMarketStocks` 发送 `page`、`page_size`、`include_ma`、`adjustment`；默认值为 1、50、true、forward_adjusted。
+2. WebUI 将 page 限制到 1–10000、page_size 限制到 1–100；复权值限制为 none/forward_adjusted/backward_adjusted，未知值回退 forward_adjusted。
+3. Handler 使用相同的默认值和边界；对非法 page/page_size/include_ma/adjustment 返回 400，而不是静默扩大查询范围。
+4. 页面自身将 page size 限制为 20/50/100，并始终请求 includeMA=true；用户选择的复权方式传给 API Client。
+5. 该接口只返回当前页，不在浏览器自动遍历全市场；页面按服务端目录顺序展示，不对单页数据做伪全市场排序。
+
+### 17.3 响应 DTO 与字段语义
+
+1. Go `MarketStocksSnapshot` 与 OpenAPI `MarketStocksSnapshot` 字段集合及 required/nullable 语义由 `TestAllGoModelFieldsAndRequiredMatchOpenAPISchemas` 反射测试约束。
+2. 聚合字段包括 page/page_size/total/total_is_lower_bound/returned、当前页 quote_succeeded/quote_failed/coverage_ratio、include_ma/ma_adjustment_basis、目录来源/版本/获取时间、行情获取时间、items 和 quality_status。
+3. 单条记录包括 symbol/code/name/exchange、可空 Quote、MA5/MA20 指针、MA 复权口径、可选 MA Provider/ErrorCode、质量状态和质量原因。
+4. `coverage_ratio` 明确是当前页覆盖率；`total_is_lower_bound` 表示目录总量仅为下界。页面按比例乘 100 展示百分比，并在总量为下界时显示“至少”。
+5. Quote、MA 等缺失值按 null 处理并显示“—”，不补零；页面从单条记录或嵌套 Quote 读取质量状态/原因，未提供时回退 unknown/明确提示。
+6. 页面在刷新期间保留上次成功快照并标记旧页；本次请求失败时清空列表，避免把旧数据当作新结果。连接配置变化时取消旧请求并使旧快照失效。
+7. 页面筛选/导出复用当前页快照时检查 generation/busy 状态；浏览器测试覆盖刷新期间禁止继续使用旧快照。
+
+### 17.4 契约测试判断与待补证
+
+- Market Data OpenAPI 声明该接口参数和响应 Schema；Go OpenAPI Contract Test 检查路由清单、参数类型/默认值，并对 51 个 Go Model 进行字段集合、required 和 pointer-nullable 对照。
+- 当前 WebUI `api.test.mjs` 对 `getMarketStocks` 的覆盖集中在超时/Abort 行为，没有直接断言四个查询参数的序列化结果、默认值和非法输入归一化；`market-stocks-navigation.test.mjs` 主要覆盖页面入口与状态交互，不等价于 API DTO Golden。
+- 未发现本批接口有独立的 WebUI 请求/响应 Golden；页面读取响应的字段语义已有代码证据，但前端契约测试仍有缺口。
+
+**AUD-WEBUI-CTR-004：全市场分页 API Client 缺少请求参数契约测试（P2，测试补证项）**
+
+- 当前实现的请求参数与 Handler/OpenAPI 约束一致，未发现已证实的运行时参数错配。
+- 缺口是前端测试没有固定 page/page_size/include_ma/adjustment 的 URL 序列化、默认值、边界归一化和非法复权值回退行为。
+- 关闭条件：补充 API Client 单测，覆盖默认值、上下界、复权枚举、URL 编码与服务端 400 不被误吞；必要时增加一份最小响应 Fixture 验证字段空值/质量语义。
+- 不要求在 WebUI 复制 Go 领域质量判断；只验证客户端传输和消费契约。
+
+### 17.5 本批结论
+
+全市场分页股票接口的请求参数、Go JSON DTO、OpenAPI Schema 和页面字段语义整体对齐；服务端 Go OpenAPI Contract Test 提供较强的模型字段/必填/null 约束。当前未发现字段语义错配。前端 API Client 请求参数断言不足，登记 AUD-WEBUI-CTR-004（P2）。WebUI 维度 2 仍为 partial。
