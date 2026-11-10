@@ -307,3 +307,62 @@ LLM消费者边界：`server/llmtransport.Transport.OpenStream`将Platform Strea
 - Principal/Scope不是领域资源授权结论；Data/News/Research/Quant等资源Owner仍需在维度4核查AuthorizationRef签发和读取时复核。
 
 本轮没有修改业务实现、Schema、Golden或测试，没有执行CI。
+
+## 11. PLAT-CTR-006 Storage、Repository、Migration 机器契约适用性（第六切片，2026-11-10）
+
+### 11.1 本轮范围
+
+固定代码基线：`b6dfc85ba214fe16268c8cba780641a8bfe15086`。本轮只核对 Platform Storage API、Migration定义、Server Registry/Bootstrap与模块Migration生产方的字段/机器证据及消费者完整性。不审查连接池、事务、锁竞争、失败恢复和资源关闭算法正确性（维度5）。
+
+项目权威登记簿 PLAT-CTR-006 明确：Platform拥有SQL/Redis连接生命周期、Ping和Migration Runner；各领域模块拥有自身Repository、表结构、SQL和Migration内容；Root Server显式注册/执行，打开连接不自动执行Migration；Migration以namespace+单调version识别，已发布版本不可修改，历史必须为完整有序前缀；MariaDB DDL逐条执行，不假设事务回滚。
+
+### 11.2 Platform API与Migration字段
+
+核验文件：
+- `internal/platform/storage/storage.go`
+- `internal/platform/storage/storage_test.go`
+- `internal/platform/storage/integration_test.go`
+- `internal/server/migration/registry.go`、`registry_test.go`
+
+Platform结构：
+- `SQLConfig`：MaxOpenConns、MaxIdleConns、ConnMaxLifetime、ConnMaxIdleTime、PingTimeout；为进程内配置结构，无JSON传输定义。
+- `Migration`：Version uint64、Description string、Statements []string；为进程内模块到Server/Platform的Go API，不是跨网络DTO。
+- Server `NamespaceResult`：namespace、status、duration、reason_code、recovery_required；`RunReport`：started_at、finished_at、duration、status、namespaces，具有JSON Tag，但本基线只在Bootstrap日志中消费，未发现HTTP对外响应入口。
+
+已证实的机器约束：
+- Platform Runner要求namespace为1～64字节小写ASCII字母/数字/点/下划线/连字符，不能有首尾空白；migration数量1～1000；Version非零且唯一；Description非空、TrimSpace后有效且最多255个Unicode字符；Statements至少一条，每条非空且最多1MiB。
+- Platform按Version升序排序，复制Statement切片；checksum按有序Statements内容计算，逐条SQL之间加入NUL分隔；已应用Version必须对应已注册定义且历史是有序前缀，checksum不一致拒绝继续。
+- Server Registry在注册时复制Description/Statements、按Version排序、拒绝重复namespace/Version，并在首次执行快照后冻结注册；namespace正则与Platform的字符集/长度规则一致。
+- Server Registry当前只检查Description非空和Statements非空，没有提前执行Platform的255字符/1MiB限制；实际执行时Platform会再次拒绝。这是校验时机差异，不是绕过Runner的持久化风险，但Registry API会暂时接受稍后无法执行的定义，建议统一注册阶段验证或将其明确为Platform Runner最终权威校验。
+- Platform checksum仅覆盖Statements，不覆盖Description和显式Version（Version作为独立历史主键）。因此Description变更不会触发checksum mismatch。项目契约只明确已发布版本不可修改，但尚未明确Description是否属于不可变定义。需在契约中裁决：要么Description为可修订展示元数据，要么checksum纳入Description并规划兼容迁移；本轮不擅自判定SQL checksum错误。
+
+### 11.3 真实生产方与Server消费者
+
+固定基线发现模块Migration生产文件共四份：
+- News：`internal/news/adapters/storage/migrations.go`，返回Platform `[]Migration`，模块拥有DDL。
+- Research：`internal/research/storage/migrations.go`，返回Platform `[]Migration`，声明namespace `research`。
+- Researchflow：`internal/researchflow/storage/migrations.go`，返回Platform `[]Migration`，声明namespace `researchflow`。
+- Notification：`internal/notification/storage/migrations.go`，返回Platform `[]Migration`，模块拥有DDL。
+
+Server Bootstrap `internal/server/bootstrap/bootstrap.go:newMigrationRegistry` 当前只注册News、Research、Notification三个namespace；未注册Researchflow的Migration。固定基线中Researchflow已有Migration定义及独立测试文件，但组合根未将其加入Registry。这是本轮发现的直接生产方—消费者接线缺口：不能将Researchflow Migration定义存在等同于Server会执行。该问题涉及组合根注册完整性，需在维度5生命周期/启动装配核验及责任模块修复中处理；本轮仅记录证据，不修改实现。
+
+当前未发现Quant Migration生产文件，不能据此推断Quant必须有数据库Schema；其是否拥有持久化表需以Quant模块Repository/Storage事实另行核验，不在本切片扩张。
+
+### 11.4 Schema/Golden适用性
+
+- Platform `SQLConfig`、`Migration` 和Server Registry注册输入均为进程内Go API，不存在对外JSON DTO；不适用HTTP JSON Schema/Golden。适用证据是Go Contract Test、Registry注册测试、模块Migration定义测试和Root Server组合根注册清单测试。
+- Server `RunReport` / `NamespaceResult`虽带JSON Tag，但当前仅用于Bootstrap结构化日志，不是公开HTTP API；不能仅凭JSON Tag要求新增OpenAPI Schema。若未来被诊断API/运维接口公开，应在该边界新增独立版本化DTO、Schema和Golden，不直接暴露内部报告类型。
+- Migration SQL是不可变定义输入和执行对象，不应将完整DDL作为JSON DTO或Golden；可用稳定测试验证版本、语句顺序、checksum、Namespace清单和注册快照。
+- `platform_schema_migrations` 是Platform Runner内部持久化账本，不是模块Repository。其namespace/version/checksum/status/failure_statement/applied_at/started_at/finished_at/failure_code为数据库机器状态；当前没有独立schema版本Golden，是否需要升级兼容夹具应在维度5历史表升级与恢复测试核验，不在本轮重做。
+
+### 11.5 本切片结论与登记
+
+**结论：PLAT-CTR-006 的Platform/Server Go API边界基本明确，Migration结构不适用公开JSON Schema/Golden；已有Platform与Registry测试覆盖字段基本约束、排序、复制和历史状态。当前仍为partial / pending_evidence。**
+
+登记缺口（并入PLAT-CTR-006，不新增CTR）：
+- PLAT2-D2-009：Server Registry注册校验与Platform Runner最终校验约束不完全同阶段；需明确Description字符数和Statement 1MiB边界由谁在注册阶段验证，并补边界Contract Test。
+- PLAT2-D2-010：Migration checksum不包含Description，契约尚未裁决Description是否不可变定义的一部分；需要明确语义并补测试/兼容策略。
+- PLAT2-D2-011：Researchflow已导出Migration定义，但Root Server `newMigrationRegistry` 未注册Researchflow；直接消费者链路不完整。修复应由Server组合根责任模块完成，维度5检查启动生命周期，不由Platform承担领域DDL所有权。
+- A2真实MariaDB/Redis集成测试以 `PLATFORM_STORAGE_INTEGRATION=1` 为门控；本轮未运行外部服务集成测试，L3资源池/迁移锁/关闭顺序证据仍待环境验收。
+
+本轮只更新审计文档，未修改业务代码、Schema、Golden、测试，未执行CI。
