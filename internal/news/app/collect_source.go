@@ -121,6 +121,9 @@ func (u *CollectSource) Execute(ctx context.Context, request CollectSourceReques
 	if u == nil || u.catalog == nil || u.transport == nil || ctx == nil {
 		return CollectSourceResult{}, ErrSourceCollectionRequest
 	}
+	if err := ctx.Err(); err != nil {
+		return CollectSourceResult{}, err
+	}
 	request.SourceID = strings.TrimSpace(request.SourceID)
 	request.EndpointID = strings.TrimSpace(request.EndpointID)
 	request.QueryDimension = strings.TrimSpace(request.QueryDimension)
@@ -135,6 +138,9 @@ func (u *CollectSource) Execute(ctx context.Context, request CollectSourceReques
 	}
 
 	registration, err := u.catalog.LookupEndpoint(ctx, request.SourceID, request.EndpointID)
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return CollectSourceResult{}, ctxErr
+	}
 	if err != nil {
 		if errors.Is(err, ErrSourceEndpointNotFound) {
 			return CollectSourceResult{}, &SourceCollectionError{Code: "source_endpoint_not_found", Skipped: true}
@@ -183,6 +189,12 @@ func (u *CollectSource) Execute(ctx context.Context, request CollectSourceReques
 	}
 	httpRequest.Header.Set("Accept", "application/rss+xml, application/atom+xml")
 	response, err := u.transport.Do(ctx, request.SourceID, request.EndpointID, httpRequest)
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		if response != nil && response.Body != nil {
+			_ = response.Body.Close()
+		}
+		return CollectSourceResult{}, ctxErr
+	}
 	if err != nil {
 		return CollectSourceResult{}, &SourceCollectionError{Code: "source_fetch_failed", Retryable: sourceTransportRetryable(err)}
 	}
@@ -200,6 +212,9 @@ func (u *CollectSource) Execute(ctx context.Context, request CollectSourceReques
 		return CollectSourceResult{}, &SourceCollectionError{Code: "source_response_too_large"}
 	}
 	payload, err := io.ReadAll(io.LimitReader(response.Body, limit+1))
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return CollectSourceResult{}, ctxErr
+	}
 	if err != nil {
 		return CollectSourceResult{}, &SourceCollectionError{Code: "source_response_read_failed", Retryable: sourceTransportRetryable(err)}
 	}
