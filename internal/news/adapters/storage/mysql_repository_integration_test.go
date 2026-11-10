@@ -338,6 +338,20 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 	if err != nil || deleted < 1 {
 		t.Fatalf("delete expired evidence snapshots: deleted=%d err=%v", deleted, err)
 	}
+	var remainingSnapshotRows int
+	if err := db.QueryRowContext(ctx,
+		"SELECT COUNT(*) FROM news_evidence_snapshots WHERE snapshot_ref = ?",
+		snapshot.SnapshotRef,
+	).Scan(&remainingSnapshotRows); err != nil {
+		t.Fatalf("count deleted evidence snapshot: %v", err)
+	}
+	if remainingSnapshotRows != 0 {
+		t.Fatalf("expired evidence snapshot rows remaining=%d, want 0", remainingSnapshotRows)
+	}
+	repeatedDeleted, err := repository.DeleteExpiredEvidenceSnapshots(ctx, snapshot.ExpiresAt, 100)
+	if err != nil || repeatedDeleted != 0 {
+		t.Fatalf("repeat expired snapshot cleanup: deleted=%d err=%v, want 0 and nil", repeatedDeleted, err)
+	}
 	var idSequence atomic.Uint64
 	newID := func() string { return fmt.Sprintf("news-it-%d", idSequence.Add(1)) }
 	ingest := app.NewIngestCandidate(repository, newID)
