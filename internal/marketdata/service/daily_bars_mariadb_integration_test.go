@@ -132,11 +132,11 @@ func TestDailyBarsMariaDBStaleFallbackDoesNotOverrideDegradedProvider(t *testing
 	degraded.Close = 10.6
 	degraded.QualityStatus = model.QualityDegraded
 	degraded.QualityReasons = []string{"provider_field_limited"}
-	provider := fakeProvider{name: "degraded-provider", bars: []model.DailyBar{degraded}}
+	degradedProvider := fakeProvider{name: "degraded-provider", bars: []model.DailyBar{degraded}}
 	svc := NewWithCapabilities(
-		[]provider.NamedProvider{provider},
+		[]provider.NamedProvider{degradedProvider},
 		nil,
-		[]provider.DailyBarProvider{provider},
+		[]provider.DailyBarProvider{degradedProvider},
 		cache.NewDisabled(), store,
 		time.Second, time.Minute, 1, 10,
 		ResilienceConfig{Retries: 0, CircuitFailureThreshold: 3, CircuitCooldown: time.Second},
