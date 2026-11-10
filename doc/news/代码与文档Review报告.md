@@ -170,3 +170,9 @@
 - Review 发现 CollectSource 在 SourceCatalog、SourceTransport 返回后未检查 Context；如果依赖忽略取消并返回成功，流程仍会继续进行策略评估、读取响应和解析。
 - 已在入口和依赖返回边界增加取消检查；传输返回后若已取消则关闭响应 Body。读取响应体后也检查 Context。
 - 新增两项依赖返回取消测试。未改变 SourceCollectionError 的既有业务分类；Context 取消直接向上传播。
+
+
+## 十四、Feed 取消测试结构修正（2026-11-10）
+
+- Run `42743661308` 在根模块 gofmt 前置步骤发现 `collect_source_test.go` 新增测试末尾多余右花括号，导致解析失败。
+- 已修正测试函数结构，提交 `ac8410ee00b0afb0a4cb6238dd8b03b420e75382`。此前该轮并未执行 Go 测试。

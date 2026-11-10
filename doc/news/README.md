@@ -1056,3 +1056,9 @@
 - CollectSource 增加入口、SourceCatalog 返回后、SourceTransport 返回后及响应体读取后的 Context 检查。传输依赖返回响应但请求已取消时，主动关闭响应 Body 并终止采集。
 - 新增 SourceCatalog 和 SourceTransport 两个取消边界测试。
 - 对应提交：`a42c384137e2b22a68daaf126ff5cea22270128d`。
+
+
+### 2026-11-10 Feed 取消测试结构修正
+
+- CI 在解析新增取消边界测试时发现多余右花括号，已修正。
+- 对应提交：`ac8410ee00b0afb0a4cb6238dd8b03b420e75382`。
