@@ -515,3 +515,5 @@
 - CTR-010 的多次出现是跨 DTO 影响字段扩充；CTR-038 与 CTR-048 虽同为历史 total 语义问题，但属于不同 API，不合并。
 - P1 门禁复核：CTR-041 仍待固定基线 CI 复核；CTR-043 源码逻辑冲突已确认但本轮未执行测试，均不得关闭或降级。
 - 本轮只完成第一轮完整性 Review 的编号/覆盖/跨数据集主题子批次；逐项核对 CTR-001..049 证据链、字段级 Golden、固定基线 CI 及跨维度交叉检查仍未完成。WebUI 维度 2 保持 partial。
+
+- Analysis Task 请求契约补充核对：Handler/fillDefaults 会为 task_type、as_of、universe_id、portfolio_id、market_id、strategy_ids 和配置版本注入默认值；historical_replay 则要求显式 as_of；Runner 只接受四种 TaskType。故 CTR-005/047 的关闭条件应描述 HTTP 请求默认值、TaskType 四值枚举及历史回放条件约束，不应机械地把所有 RunRequest 非 omitempty 字段列为 HTTP required。
