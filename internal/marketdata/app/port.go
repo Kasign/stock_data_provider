@@ -88,8 +88,12 @@ type DailyBar struct {
 	AdjustmentMethod                 string
 	AdjustmentReferenceDate          string
 	AdjustmentFactorSource           string
-	AdjustmentFactorSourceVersion    string
-	AdjustmentFactorSystemObservedAt *time.Time
+	AdjustmentFactorSourceVersion           string
+	AdjustmentFactorRevisionHash            string
+	AdjustmentFactorSetHash                 string
+	AdjustmentFactorReferenceRevisionHash   string
+	AdjustmentAlgorithmVersion              string
+	AdjustmentFactorSystemObservedAt        *time.Time
 	Source                           string
 	SourceVersion                    string
 	ProviderTime                     *time.Time
