@@ -133,11 +133,16 @@ func rebuildAdjustedDailyBarsWithMode(raw []model.DailyBar, factors []model.Adju
 		if groups[key] == nil {
 			groups[key] = make(map[string]model.AdjustmentFactor)
 		}
-		if previous, exists := groups[key][factor.TradeDate]; !exists {
+		previous, exists := groups[key][factor.TradeDate]
+		if !exists {
 			groups[key][factor.TradeDate] = factor
 			continue
 		}
 		previousObserved := previous.SystemObservedAt
+		if previousObserved == nil {
+			groups[key][factor.TradeDate] = factor
+			continue
+		}
 		if factor.SystemObservedAt.After(*previousObserved) {
 			groups[key][factor.TradeDate] = factor
 			continue
