@@ -789,11 +789,11 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 	policyEvaluatedAt := time.Now().UTC()
 	if _, err := db.ExecContext(ctx, `UPDATE news_observations
 		SET source_policy_version_id = ?, endpoint_id = ?,
-		    provider_output_policy_ref = ?, provider_output_policy_version_id = ?,
-		    policy_evaluated_at = ?
+		    endpoint_policy_version_id = ?, provider_output_policy_ref = ?,
+		    provider_output_policy_version_id = ?, policy_evaluated_at = ?
 		WHERE observation_id = ?`,
-		"source-policy-pit-v2", "endpoint-pit-v1", "provider-policy-pit", "provider-policy-v7",
-		policyEvaluatedAt, secondObservation.ID,
+		"source-policy-pit-v2", "endpoint-pit-v1", "endpoint-policy-pit-v3",
+		"provider-policy-pit", "provider-policy-v7", policyEvaluatedAt, secondObservation.ID,
 	); err != nil {
 		t.Fatalf("set PIT policy trace fixture: %v", err)
 	}
@@ -809,6 +809,7 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 	gotObservation := listed[0].Observation
 	if gotObservation.SourcePolicyVersionID != "source-policy-pit-v2" ||
 		gotObservation.EndpointID != "endpoint-pit-v1" ||
+		gotObservation.EndpointPolicyVersionID != "endpoint-policy-pit-v3" ||
 		gotObservation.ProviderOutputPolicyRef != "provider-policy-pit" ||
 		gotObservation.ProviderOutputPolicyVersionID != "provider-policy-v7" ||
 		!gotObservation.PolicyEvaluatedAt.Equal(policyEvaluatedAt) {
