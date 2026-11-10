@@ -105,15 +105,20 @@ func (r *MySQLRunRepository) ClaimAttempt(
 	if stage.AttemptNo < 0 {
 		return domain.Attempt{}, false, ErrAttemptHistoryInconsistent
 	}
-	var historyCount, zeroFencingTokens int64
+	var historyCount, zeroFencingTokens, invalidTokenOrder int64
 	var minAttemptNo, maxAttemptNo sql.NullInt64
 	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*), MIN(attempt_no), MAX(attempt_no),
-		COALESCE(SUM(CASE WHEN fencing_token = 0 THEN 1 ELSE 0 END), 0)
-		FROM researchflow_attempts WHERE stage_ref = ?`, stageRef,
-	).Scan(&historyCount, &minAttemptNo, &maxAttemptNo, &zeroFencingTokens); err != nil {
+		COALESCE(SUM(CASE WHEN fencing_token = 0 THEN 1 ELSE 0 END), 0),
+		(SELECT COUNT(*) FROM researchflow_attempts newer
+			INNER JOIN researchflow_attempts older
+				ON older.stage_ref = newer.stage_ref
+				AND newer.attempt_no = older.attempt_no + 1
+			WHERE newer.stage_ref = ? AND newer.fencing_token <= older.fencing_token)
+		FROM researchflow_attempts WHERE stage_ref = ?`, stageRef, stageRef,
+	).Scan(&historyCount, &minAttemptNo, &maxAttemptNo, &zeroFencingTokens, &invalidTokenOrder); err != nil {
 		return domain.Attempt{}, false, fmt.Errorf("validate Researchflow attempt history for stage %q: %w", stageRef, err)
 	}
-	if historyCount != int64(stage.AttemptNo) || zeroFencingTokens != 0 ||
+	if historyCount != int64(stage.AttemptNo) || zeroFencingTokens != 0 || invalidTokenOrder != 0 ||
 		(historyCount == 0 && (minAttemptNo.Valid || maxAttemptNo.Valid)) ||
 		(historyCount > 0 && (!minAttemptNo.Valid || !maxAttemptNo.Valid ||
 			minAttemptNo.Int64 != 1 || maxAttemptNo.Int64 != int64(stage.AttemptNo))) {
@@ -199,7 +204,10 @@ func (r *MySQLRunRepository) ClaimAttempt(
 			return domain.Attempt{}, false, ErrClaimStageUnavailable
 		}
 	}
-	if stage.AttemptNo >= maxAttempts {
+	// attempt_no is persisted as MariaDB INT UNSIGNED. Even if a caller
+	// configures a larger maxAttempts value, never calculate an unpersistable
+	// next number.
+	if stage.AttemptNo >= maxAttempts || uint64(stage.AttemptNo) >= uint64(^uint32(0)) {
 		return domain.Attempt{}, false, ErrAttemptLimitReached
 	}
 

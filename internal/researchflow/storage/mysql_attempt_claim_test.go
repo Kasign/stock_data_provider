@@ -349,6 +349,21 @@ func TestMariaDBClaimAttemptLeaseAndFencing(t *testing.T) {
 		formatResearchflowTimeValue(time.Now().UTC().Add(time.Minute)), second.Ref); err != nil {
 		t.Fatalf("prepare live latest Attempt for incomplete-history replay: %v", err)
 	}
+	// Fencing generations must increase with attempt_no. A lower token on a
+	// later Attempt could otherwise let an older worker generation remain valid.
+	if _, err := db.ExecContext(ctx, `UPDATE researchflow_attempts
+		SET fencing_token = 99 WHERE attempt_ref = ?`, first.Ref); err != nil {
+		t.Fatalf("corrupt historical fencing order: %v", err)
+	}
+	if _, replayed, err := repository.ClaimAttempt(ctx, runRef, stageRef,
+		"ignored-token-order-replay-"+suffix, "worker-b", time.Minute, 3, 8);
+		!errors.Is(err, ErrAttemptHistoryInconsistent) || replayed {
+		t.Fatalf("claim with non-monotonic fencing history replayed=%v err=%v, want ErrAttemptHistoryInconsistent", replayed, err)
+	}
+	if _, err := db.ExecContext(ctx, `UPDATE researchflow_attempts
+		SET fencing_token = 2 WHERE attempt_ref = ?`, first.Ref); err != nil {
+		t.Fatalf("restore historical fencing token: %v", err)
+	}
 	if _, err := db.ExecContext(ctx, `DELETE FROM researchflow_attempts WHERE attempt_ref = ?`, first.Ref); err != nil {
 		t.Fatalf("remove historical Attempt to simulate corruption: %v", err)
 	}
