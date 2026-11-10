@@ -1091,3 +1091,13 @@
 - Data→Research available_at 属于字段/来源事实核验，转为 pending_evidence；DATA-FLOW-B 和 LLM-FLOW-B 为条件性扩展，转为 deferred。
 - DEC-B1～B8 均为 proposal_pending_project_owner，不是批准决议；正式 CTR 冻结状态未变。本轮仅维护 PLAT-002 文档，不修改业务模块代码，不执行 CI。
 - 下一步：项目负责人一次性对 DEC-B1～B8 逐项接受/修改/拒绝/延期；批准后责任模块按决议修复，PLAT-002 只做新 SHA 增量验收。
+
+
+## 33. DEC-B1～B8 Review 裁决完成（2026-11-10）
+
+- 项目负责人确认 B1～B8 的 Review 修订方向，正式登记 DEC-PLAT-002-018～025，汇总状态 DEC-PLAT-002-026。
+- B1 根据项目负责人确认的部署事实调整为直接切换：当前无正在服役的旧 Analysis 服务，WebUI 直接调用 Researchflow 新 API，不保留旧 API 兼容期；新 API 验收后删除旧路由和专属适配代码。
+- B2 修订同步 Run ID 规则：同 ID/同请求指纹返回既有 Run；同 ID/不同指纹返回 409。symbols 首期上限100由 Handler 强制，后续调整须有负载/性能依据并同步更新契约。
+- B3～B8 按 Review 结论明确数据质量、News 关系状态、Run 输入物化范围、Quant Payload 所有权、Research Stage 幂等范围、LLM Run 配置固定和错误重试分类。
+- 只更新 PLAT-002 项目级文档；未修改业务模块代码、未运行 CI、未改变任何正式 CTR 的冻结状态。
+- 下一步主线：按决议责任边界执行模块实现/补证；优先处理 B1 新 API/WebUI 切换和旧路由退役方案、B2 Server 请求规则，然后按模块依赖推进 B3～B8。PLAT-002 只按新 SHA 增量验收，不重做全量初审。
