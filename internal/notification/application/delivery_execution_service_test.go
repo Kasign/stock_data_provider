@@ -202,6 +202,46 @@ func TestDeliveryExecutionAttemptStartFailureNeverCallsChannel(t *testing.T) {
 	}
 }
 
+type outcomeUnknownAttemptStartRepository struct {
+	*memoryDeliveries
+}
+
+func (r outcomeUnknownAttemptStartRepository) StartWithLease(
+	ctx context.Context,
+	expectedDeliveryVersion, fencingToken int64,
+	attempt domain.DeliveryAttempt,
+) error {
+	if err := r.memoryDeliveries.StartWithLease(ctx, expectedDeliveryVersion, fencingToken, attempt); err != nil {
+		return err
+	}
+	// 模拟数据库已提交，但客户端未收到 Commit 确认。
+	return errors.Join(ErrPersistenceOutcomeUnknown, errors.New("injected commit acknowledgement loss"))
+}
+
+func TestDeliveryExecutionAttemptStartOutcomeUnknownNeverCallsChannel(t *testing.T) {
+	service, repository, adapter, claim, event := executionFixture(t)
+	service.attempts = outcomeUnknownAttemptStartRepository{memoryDeliveries: repository}
+
+	_, err := service.Execute(
+		context.Background(), claim, event, "attempt-execution-outcome-unknown",
+		0.5, "evidence-execution-outcome-unknown",
+	)
+	if !errors.Is(err, ErrPersistenceOutcomeUnknown) {
+		t.Fatalf("expected persistence outcome unknown classification, got %v", err)
+	}
+	if adapter.calls != 0 {
+		t.Fatalf("channel must not be called after uncertain Attempt start commit, calls=%d", adapter.calls)
+	}
+	delivery, found, getErr := repository.Get(context.Background(), claim.Delivery.DeliveryID)
+	if getErr != nil || !found || delivery.Status != domain.DeliverySending || delivery.AttemptCount != 1 {
+		t.Fatalf("committed Attempt start must remain visible for recovery: delivery=%+v found=%v err=%v", delivery, found, getErr)
+	}
+	attempts, listErr := repository.ListByDelivery(context.Background(), claim.Delivery.DeliveryID)
+	if listErr != nil || len(attempts) != 1 || attempts[0].AttemptNo != 1 || attempts[0].FinishedAt != nil {
+		t.Fatalf("uncertain commit must preserve the running Attempt for lease recovery: attempts=%+v err=%v", attempts, listErr)
+	}
+}
+
 func TestDeliveryExecutionAmbiguousResultConvergesToUnknown(t *testing.T) {
 	service, repository, adapter, claim, event := executionFixture(t)
 	adapter.result = domain.ChannelSendResult{
