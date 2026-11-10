@@ -139,3 +139,41 @@ func TestValidateAdjustmentFactorRecordRequiresSourceAndValidTimeEvidence(t *tes
 		t.Fatal("zero provider_time must be rejected when supplied")
 	}
 }
+
+func TestAdjustmentFactorHashCanonicalizesTimestampLocation(t *testing.T) {
+	instant := time.Date(2026, 11, 10, 8, 30, 0, 123456789, time.UTC)
+	utc := instant
+	local := instant.In(time.FixedZone("UTC+8", 8*60*60))
+	base := model.AdjustmentFactor{
+		Symbol: "600519.SH", TradeDate: "2026-11-09", Factor: 1.25,
+		Source: "tushare", SourceVersion: "v1", FetchedAt: instant,
+		ProviderTime: &utc, AvailableAt: &utc, QualityStatus: model.QualityValid,
+	}
+	first, err := adjustmentFactorHash(base)
+	if err != nil { t.Fatal(err) }
+	base.ProviderTime, base.AvailableAt = &local, &local
+	second, err := adjustmentFactorHash(base)
+	if err != nil { t.Fatal(err) }
+	if first != second { t.Fatal("equivalent instants in different time zones must have the same factor revision hash") }
+	later := instant.Add(time.Second)
+	base.AvailableAt = &later
+	third, err := adjustmentFactorHash(base)
+	if err != nil { t.Fatal(err) }
+	if first == third { t.Fatal("availability timestamp changes must create a different factor revision hash") }
+}
+
+func TestCorporateActionHashCanonicalizesAvailabilityLocation(t *testing.T) {
+	instant := time.Date(2026, 11, 10, 8, 30, 0, 123456789, time.UTC)
+	utc := instant
+	local := instant.In(time.FixedZone("UTC+8", 8*60*60))
+	base := model.CorporateAction{
+		Symbol: "600519.SH", ProviderEventID: "event-2", EventType: "cash_dividend",
+		ExDate: "2026-11-09", Source: "tushare", AvailableAt: &utc,
+	}
+	first, err := corporateActionHash(base)
+	if err != nil { t.Fatal(err) }
+	base.AvailableAt = &local
+	second, err := corporateActionHash(base)
+	if err != nil { t.Fatal(err) }
+	if first != second { t.Fatal("equivalent availability instants in different time zones must have the same corporate-action revision hash") }
+}

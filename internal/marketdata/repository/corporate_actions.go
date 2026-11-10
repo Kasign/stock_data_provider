@@ -49,10 +49,20 @@ func validateAdjustmentFactorRecord(value model.AdjustmentFactor) error {
 	return nil
 }
 
+func canonicalRevisionTime(value *time.Time) *time.Time {
+	if value == nil {
+		return nil
+	}
+	canonical := value.UTC()
+	return &canonical
+}
+
 func adjustmentFactorHash(value model.AdjustmentFactor) (string, error) {
 	value.Basis = model.NormalizeAdjustmentFactorBasis(value.Basis)
 	value.SystemObservedAt = nil
 	value.FetchedAt = time.Time{}
+	value.ProviderTime = canonicalRevisionTime(value.ProviderTime)
+	value.AvailableAt = canonicalRevisionTime(value.AvailableAt)
 	payload, err := json.Marshal(value)
 	if err != nil {
 		return "", err
@@ -206,6 +216,7 @@ func nullableDate(value string) any {
 func corporateActionHash(value model.CorporateAction) (string, error) {
 	value.SystemObservedAt = nil
 	value.FetchedAt = time.Time{}
+	value.AvailableAt = canonicalRevisionTime(value.AvailableAt)
 	payload, err := json.Marshal(value)
 	if err != nil {
 		return "", err
