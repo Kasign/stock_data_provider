@@ -397,7 +397,6 @@ func (r *MySQLRunRepository) GetStage(ctx context.Context, stageRef string) (dom
 	if stage.ReasonCodes == nil {
 		stage.ReasonCodes = []string{}
 	}
-	var err error
 	if stage.RetryAt, err = parseNullableResearchflowTime(retryAt); err != nil {
 		return domain.Stage{}, err
 	}
