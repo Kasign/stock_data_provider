@@ -1255,10 +1255,12 @@ func (p *TickFlow) FetchDailyBars(ctx context.Context, rawSymbol, startDate, end
 	}
 	raw, err := p.getJSON(ctx, baseURL, "/v1/klines", params, authenticated)
 	if err != nil {
+		addProviderParseIssue(ctx, -1, "provider_response", "response", "request_error", "successful TickFlow K-line response", "http_or_transport_error", "", "TickFlow K-line request did not produce a successful response")
 		return nil, fmt.Errorf("TickFlow daily K-line request: %w", err)
 	}
 	dataRaw, err := tickflowResponseData(raw)
 	if err != nil {
+		addTickflowDailyEnvelopeIssue(ctx, raw)
 		return nil, err
 	}
 	var data struct {
@@ -1272,10 +1274,12 @@ func (p *TickFlow) FetchDailyBars(ctx context.Context, rawSymbol, startDate, end
 		PrevClose []json.RawMessage `json:"prev_close"`
 	}
 	if err := json.Unmarshal(dataRaw, &data); err != nil {
+		addProviderParseIssue(ctx, -1, "daily_bars", "data", "decode_error", "K-line data object with timestamp and value arrays", "json", providerJSONPreview(dataRaw), "TickFlow K-line data payload could not be decoded")
 		return nil, fmt.Errorf("decode TickFlow K-line data: %w", err)
 	}
 	n := len(data.Timestamp)
 	if n == 0 {
+		addProviderParseIssue(ctx, -1, "daily_bars", "timestamp", "empty_result", "at least one timestamp", "array", "0 rows", "TickFlow returned an empty daily K-line series")
 		return nil, errors.New("TickFlow returned no daily K-line rows")
 	}
 	for name, length := range map[string]int{"open": len(data.Open), "high": len(data.High), "low": len(data.Low), "close": len(data.Close), "volume": len(data.Volume)} {
@@ -1571,6 +1575,27 @@ func tickflowDomesticSymbol(raw string) (string, error) {
 		return "", fmt.Errorf("TickFlow stock endpoints only support common A-share equities, got %q", raw)
 	}
 	return symbol, nil
+}
+
+func addTickflowDailyEnvelopeIssue(ctx context.Context, raw []byte) {
+	var envelope struct {
+		Code    *int            `json:"code"`
+		Message string          `json:"message"`
+		Msg     string          `json:"msg"`
+		Error   string          `json:"error"`
+		Data    json.RawMessage `json:"data"`
+	}
+	if err := json.Unmarshal(raw, &envelope); err != nil {
+		addProviderParseIssue(ctx, -1, "provider_response", "envelope", "decode_error", "TickFlow response envelope JSON", "json", providerJSONPreview(json.RawMessage(strconv.Quote(string(raw)))), "TickFlow response envelope could not be decoded")
+		return
+	}
+	if envelope.Code != nil && *envelope.Code != 0 || strings.TrimSpace(envelope.Error) != "" {
+		addProviderParseIssue(ctx, -1, "provider_response", "code", "provider_error", "provider success code 0", "provider_error", "", "TickFlow rejected the daily K-line request")
+		return
+	}
+	if len(bytesTrim(envelope.Data)) == 0 || string(bytesTrim(envelope.Data)) == "null" {
+		addProviderParseIssue(ctx, -1, "daily_bars", "data", "missing_data", "non-null K-line data payload", "missing", "", "TickFlow response envelope did not contain K-line data")
+	}
 }
 
 func tickflowResponseData(raw []byte) (json.RawMessage, error) {
