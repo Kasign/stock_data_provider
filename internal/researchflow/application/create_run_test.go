@@ -32,8 +32,8 @@ func (s *idsStub) NewRef(_ context.Context, kind string) (string, error) {
 }
 
 type templatesStub struct {
-	value		 template.WorkflowTemplate
-	calls		 int
+	value		template.WorkflowTemplate
+	calls		int
 	returnMismatchedVersion bool
 }
 
