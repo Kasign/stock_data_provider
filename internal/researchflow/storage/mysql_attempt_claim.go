@@ -105,20 +105,31 @@ func (r *MySQLRunRepository) ClaimAttempt(
 	if stage.AttemptNo < 0 {
 		return domain.Attempt{}, false, ErrAttemptHistoryInconsistent
 	}
-	var historyCount, zeroFencingTokens, invalidTokenOrder int64
+	var historyCount, zeroFencingTokens, invalidTokenOrder, invalidLeaseState int64
 	var minAttemptNo, maxAttemptNo sql.NullInt64
 	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*), MIN(attempt_no), MAX(attempt_no),
 		COALESCE(SUM(CASE WHEN fencing_token = 0 THEN 1 ELSE 0 END), 0),
+		COALESCE(SUM(CASE
+			WHEN status = 'running' AND
+				(lease_owner IS NULL OR lease_owner = '' OR lease_expires_at IS NULL OR finished_at IS NOT NULL)
+			THEN 1
+			WHEN status IN ('succeeded', 'degraded', 'failed', 'timed_out', 'cancelled') AND
+				(lease_owner IS NOT NULL OR lease_expires_at IS NOT NULL OR finished_at IS NULL)
+			THEN 1
+			WHEN status NOT IN ('running', 'succeeded', 'degraded', 'failed', 'timed_out', 'cancelled')
+			THEN 1
+			ELSE 0 END), 0),
 		(SELECT COUNT(*) FROM researchflow_attempts newer
 			INNER JOIN researchflow_attempts older
 				ON older.stage_ref = newer.stage_ref
 				AND newer.attempt_no = older.attempt_no + 1
 			WHERE newer.stage_ref = ? AND newer.fencing_token <= older.fencing_token)
 		FROM researchflow_attempts WHERE stage_ref = ?`, stageRef, stageRef,
-	).Scan(&historyCount, &minAttemptNo, &maxAttemptNo, &zeroFencingTokens, &invalidTokenOrder); err != nil {
+	).Scan(&historyCount, &minAttemptNo, &maxAttemptNo, &zeroFencingTokens, &invalidLeaseState, &invalidTokenOrder); err != nil {
 		return domain.Attempt{}, false, fmt.Errorf("validate Researchflow attempt history for stage %q: %w", stageRef, err)
 	}
-	if historyCount != int64(stage.AttemptNo) || zeroFencingTokens != 0 || invalidTokenOrder != 0 ||
+	if historyCount != int64(stage.AttemptNo) || zeroFencingTokens != 0 ||
+		invalidLeaseState != 0 || invalidTokenOrder != 0 ||
 		(historyCount == 0 && (minAttemptNo.Valid || maxAttemptNo.Valid)) ||
 		(historyCount > 0 && (!minAttemptNo.Valid || !maxAttemptNo.Valid ||
 			minAttemptNo.Int64 != 1 || maxAttemptNo.Int64 != int64(stage.AttemptNo))) {

@@ -352,6 +352,28 @@ func TestMariaDBClaimAttemptLeaseAndFencing(t *testing.T) {
 		formatResearchflowTimeValue(time.Now().UTC().Add(time.Minute)), second.Ref); err != nil {
 		t.Fatalf("prepare live latest Attempt for incomplete-history replay: %v", err)
 	}
+	// Terminal historical Attempts must not retain worker ownership or an
+	// active lease; running Attempts must have a live-state shape and no finish time.
+	if _, err := db.ExecContext(ctx, `UPDATE researchflow_attempts SET
+		status = ?, lease_owner = ?, lease_expires_at = ?, finished_at = NULL
+		WHERE attempt_ref = ?`,
+		string(domain.AttemptFailed), "stale-worker",
+		formatResearchflowTimeValue(time.Now().UTC().Add(time.Minute)), first.Ref); err != nil {
+		t.Fatalf("inject terminal Attempt with stale lease fields: %v", err)
+	}
+	if _, replayed, err := repository.ClaimAttempt(ctx, runRef, stageRef,
+		"ignored-terminal-lease-replay-"+suffix, "worker-b", time.Minute, 3, 8);
+		!errors.Is(err, ErrAttemptHistoryInconsistent) || replayed {
+		t.Fatalf("claim with terminal Attempt lease residue replayed=%v err=%v, want ErrAttemptHistoryInconsistent", replayed, err)
+	}
+	if _, err := db.ExecContext(ctx, `UPDATE researchflow_attempts SET
+		status = ?, lease_owner = NULL, lease_expires_at = NULL,
+		finished_at = COALESCE(finished_at, ?)
+		WHERE attempt_ref = ?`,
+		string(domain.AttemptTimedOut), formatResearchflowTimeValue(time.Now().UTC()), first.Ref); err != nil {
+		t.Fatalf("restore historical Attempt lease state: %v", err)
+	}
+
 	// Fencing generations must increase with attempt_no. A lower token on a
 	// later Attempt could otherwise let an older worker generation remain valid.
 	if _, err := db.ExecContext(ctx, `UPDATE researchflow_attempts
