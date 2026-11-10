@@ -405,3 +405,31 @@ func TestIngestCandidateIdempotencyIgnoresPerAttemptFetchAndNormalizeTimes(t *te
 		t.Fatalf("idempotent replay did not return first observation snapshot: first=%+v second=%+v", first, second)
 	}
 }
+
+type cancelAfterIdentityTransactionRepository struct {
+	inner  *memoryIdentityRepository
+	cancel context.CancelFunc
+}
+
+func (r cancelAfterIdentityTransactionRepository) WithinIdentityTransaction(ctx context.Context, fn func(IdentityTransaction) error) error {
+	err := r.inner.WithinIdentityTransaction(ctx, fn)
+	r.cancel()
+	return err
+}
+
+func TestIngestCandidatePropagatesCancellationAfterTransactionCommit(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	repository := &memoryIdentityRepository{}
+	usecase := newCandidateIngest(cancelAfterIdentityTransactionRepository{inner: repository, cancel: cancel},
+		func() string { return "observation-cancel-after-commit" })
+
+	_, err := usecase.executeUnscoped(ctx, "source-1", "cancel-after-commit-key",
+		domain.Candidate{SourceItemID: "item-1"}, domain.SourceURLPolicy{})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("expected context cancellation after repository commit, got %v", err)
+	}
+	// Repository 已提交后才触发取消：用例必须传播取消，但不能谎称事务已回滚。
+	if len(repository.observations) != 1 {
+		t.Fatalf("expected committed observation to remain, got %+v", repository.observations)
+	}
+}
