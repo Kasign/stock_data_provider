@@ -17,6 +17,7 @@ var (
 	ErrAttemptLeaseHeld      = errors.New("Researchflow attempt lease is held by another worker")
 	ErrAttemptLimitReached   = errors.New("Researchflow stage attempt limit reached")
 	ErrRunConcurrencyLimit   = errors.New("Researchflow run parallel stage limit reached")
+	ErrAttemptHistoryInconsistent = errors.New("Researchflow attempt history is inconsistent")
 )
 
 // ClaimAttempt atomically claims a ready stage and creates its next attempt.
@@ -95,6 +96,28 @@ func (r *MySQLRunRepository) ClaimAttempt(
 	hasAttempt := err == nil
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return domain.Attempt{}, false, fmt.Errorf("lock latest Researchflow attempt for stage %q: %w", stageRef, err)
+	}
+
+	// Validate the complete attempt sequence before replaying an existing lease
+	// or creating a retry. The unique index prevents duplicate attempt_no values,
+	// but it cannot detect deleted/missing history rows. A gap would make the
+	// Stage counter and persisted history disagree, so fail closed.
+	if stage.AttemptNo < 0 {
+		return domain.Attempt{}, false, ErrAttemptHistoryInconsistent
+	}
+	var historyCount, zeroFencingTokens int64
+	var minAttemptNo, maxAttemptNo sql.NullInt64
+	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*), MIN(attempt_no), MAX(attempt_no),
+		COALESCE(SUM(CASE WHEN fencing_token = 0 THEN 1 ELSE 0 END), 0)
+		FROM researchflow_attempts WHERE stage_ref = ?`, stageRef,
+	).Scan(&historyCount, &minAttemptNo, &maxAttemptNo, &zeroFencingTokens); err != nil {
+		return domain.Attempt{}, false, fmt.Errorf("validate Researchflow attempt history for stage %q: %w", stageRef, err)
+	}
+	if historyCount != int64(stage.AttemptNo) || zeroFencingTokens != 0 ||
+		(historyCount == 0 && (minAttemptNo.Valid || maxAttemptNo.Valid)) ||
+		(historyCount > 0 && (!minAttemptNo.Valid || !maxAttemptNo.Valid ||
+			minAttemptNo.Int64 != 1 || maxAttemptNo.Int64 != int64(stage.AttemptNo))) {
+		return domain.Attempt{}, false, ErrAttemptHistoryInconsistent
 	}
 
 	stageState := domain.StageStatus(stageStatus)

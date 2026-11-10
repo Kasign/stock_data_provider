@@ -333,6 +333,30 @@ func TestMariaDBClaimAttemptLeaseAndFencing(t *testing.T) {
 	if successes != 1 || limited != 1 {
 		t.Fatalf("maxParallel=1 concurrent claims: successes=%d limited=%d, want 1 each", successes, limited)
 	}
+
+	// A missing historical row must be rejected before the same-worker
+	// idempotent replay path. The latest Attempt alone is not sufficient proof
+	// that the Stage counter and its full history agree.
+	if _, err := db.ExecContext(ctx, `UPDATE researchflow_stages
+		SET status = ?, version = version + 1 WHERE stage_ref = ?`,
+		string(domain.StageRunning), stageRef); err != nil {
+		t.Fatalf("prepare replay against incomplete history: %v", err)
+	}
+	if _, err := db.ExecContext(ctx, `UPDATE researchflow_attempts SET
+		status = ?, lease_owner = ?, lease_expires_at = ?
+		WHERE attempt_ref = ?`,
+		string(domain.AttemptRunning), "worker-b",
+		formatResearchflowTimeValue(time.Now().UTC().Add(time.Minute)), second.Ref); err != nil {
+		t.Fatalf("prepare live latest Attempt for incomplete-history replay: %v", err)
+	}
+	if _, err := db.ExecContext(ctx, `DELETE FROM researchflow_attempts WHERE attempt_ref = ?`, first.Ref); err != nil {
+		t.Fatalf("remove historical Attempt to simulate corruption: %v", err)
+	}
+	if _, replayed, err := repository.ClaimAttempt(ctx, runRef, stageRef,
+		"ignored-corrupt-history-replay-"+suffix, "worker-b", time.Minute, 3, 8);
+		!errors.Is(err, ErrAttemptHistoryInconsistent) || replayed {
+		t.Fatalf("claim with missing historical Attempt replayed=%v err=%v, want ErrAttemptHistoryInconsistent", replayed, err)
+	}
 }
 
 func stringRef(value string) *string { return &value }
