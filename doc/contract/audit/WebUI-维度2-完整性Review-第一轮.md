@@ -297,3 +297,41 @@ Go model.StockBasic 有 14 个 omitempty 字段，而 OpenAPI StockBasic 将它�
 - 合计确认 17 个字段，均保留原 CTR-010，不新增差异编号。
 
 本批仅完成上述三个 DTO；CTR-010 全量字段清单仍未完成。
+## 14. CTR-010 字段清单复核（子批次 7：Fundamentals / Announcements / Valuations）
+
+固定代码基线：origin/integration @ b6dfc85ba214fe16268c8cba780641a8bfe15086。本批核对财务指标、公告记录及估值响应 DTO。
+
+### 14.1 Fundamentals
+
+- FundamentalSection.available_at 为 *time.Time + omitempty，OpenAPI 未声明 nullable，不计入 CTR-010；其缺失语义为未知时省略。
+- FundamentalsSnapshot.system_observed_at 为 *time.Time + omitempty，但 OpenAPI 声明 nullable=true，确认 1 个 CTR-010 字段。
+- source_version、quality_reasons 也为 omitempty，但 Schema 未声明 nullable，不计入。
+- FundamentalMetric 没有 omitempty 字段；字段 required 与 Go JSON 输出一致。
+
+### 14.2 Announcements
+
+- StockAnnouncement.published_at 为 *time.Time + omitempty，OpenAPI 声明 nullable=true，确认 1 个 CTR-010 字段。
+- stock_name、title_chinese、title_english、category_code、category、display_time、sort_date、ei_time、language、source_type、source_url、quality_reasons 等 omitempty 字段未声明 nullable，不计入。
+- StockAnnouncementSnapshot.quality_reasons 为 omitempty，Schema 未声明 nullable；其余字段均非 omitempty，required 集合与 Go JSON 输出一致。
+
+### 14.3 Valuations
+
+- ValuationItem 五个扩展指针字段均为 omitempty，但 OpenAPI 声明 nullable=true：turnover_rate_percent、float_turnover_rate_percent、volume_ratio、dividend_yield_percent、dividend_yield_ttm_percent。确认 5 个 CTR-010 字段。
+- 核心估值字段 pe_ttm、pe_mrq、pe_static、pb_mrq、ps_ttm、pcf_ttm 是非 omitempty 指针，OpenAPI required + nullable，与 Go 输出 null 的行为一致。
+- ValuationSnapshot.provider_timestamp 是 *time.Time + omitempty，OpenAPI 未声明 nullable，不计入；missing_symbols、provider_report_date、source_version、quality_reasons 也未声明 nullable。
+
+### 14.4 测试与回归证据
+
+- TestAllGoModelFieldsAndRequiredMatchOpenAPISchemas 已将 StockAnnouncement、StockAnnouncementSnapshot、FundamentalMetric、FundamentalSection、FundamentalsSnapshot、ValuationItem、ValuationSnapshot 纳入 51 个模型的字段集合与 required 反射核对。
+- 该反射测试只验证非 omitempty 指针必须 nullable，没有验证 omitempty 字段不得 nullable，因而无法发现本批 7 个差异。
+- TestDataModelJSONSerializationMatchesOpenAPIRequiredAndNullableSemantics 未包含上述 DTO 的 nil/空值样例；公告和财务/估值 DTO 缺少相应序列化 Golden。
+- 本批未执行固定基线 CI；结论来自 Go DTO、OpenAPI Schema 和测试源码静态对照。
+
+### 14.5 CTR-010 本批确认数量
+
+- Fundamentals：1 个字段。
+- Announcements：1 个字段。
+- Valuations：5 个字段。
+- 合计确认 7 个字段，均归入既有 CTR-010，不新增编号。
+
+本批仅完成上述三个数据集；CTR-010 全量字段清单仍未完成。
