@@ -174,7 +174,7 @@ jobs:
         run: go vet ./internal/marketdata/... ./cmd/market-data/...
 
   market-data-mariadb-integration:
-    if: ${{ github.event_name != 'push' || github.ref == 'refs/heads/feat/research-news-ingestion' }}
+    if: ${{ github.event_name != 'push' }}
     name: Market-data MariaDB migration and PIT persistence
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -237,7 +237,7 @@ jobs:
           fi
 
   news-mariadb-integration:
-    if: ${{ github.event_name != 'push' }}
+    if: ${{ github.event_name != 'push' || github.ref == 'refs/heads/feat/research-news-ingestion' }}
     name: News MariaDB Repository and Migration integration
     runs-on: ubuntu-latest
     timeout-minutes: 15
