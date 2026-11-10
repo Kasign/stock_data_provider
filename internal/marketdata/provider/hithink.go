@@ -742,6 +742,9 @@ func (p *Hithink) FetchLimitPool(ctx context.Context, poolType, tradeDate string
 	if !providerTimestampValid {
 		snapshot.QualityReasons = appendUniqueHithinkReason(snapshot.QualityReasons, "provider_snapshot_timestamp_missing_or_invalid")
 	}
+	if !providerTimestampValid {
+		addHithinkFieldIssue(ctx, nil, "provider_time", "timestamp", "missing_or_invalid_value", "valid provider snapshot timestamp", "missing_or_invalid", "", "同花顺涨跌停池源端快照时间缺失或非法")
+	}
 	if providerTimestampValid && reportDate != rawDate {
 		snapshot.QualityReasons = appendUniqueHithinkReason(snapshot.QualityReasons, "provider_snapshot_date_differs_from_requested_trade_date")
 	}
@@ -970,6 +973,9 @@ func (p *Hithink) FetchDragonTiger(ctx context.Context, tradeDate string, page, 
 	}
 	if data.Timestamp == nil || *data.Timestamp <= 0 || time.UnixMilli(*data.Timestamp).After(now.Add(5*time.Minute)) {
 		snapshot.QualityReasons = appendUniqueHithinkReason(snapshot.QualityReasons, "provider_snapshot_timestamp_missing_or_invalid")
+	}
+	if data.Timestamp == nil || *data.Timestamp <= 0 || time.UnixMilli(*data.Timestamp).After(now.Add(5*time.Minute)) {
+		addHithinkFieldIssue(ctx, nil, "provider_time", "timestamp", "missing_or_invalid_value", "valid provider snapshot timestamp", "missing_or_invalid", "", "同花顺龙虎榜源端快照时间缺失或非法")
 	}
 	if total == 0 {
 		snapshot.QualityStatus = model.QualityUnknown

@@ -47,3 +47,59 @@ func TestHithinkLimitPoolReportsDuplicateSymbol(t *testing.T) {
 		t.Fatalf("unexpected Reporter issues: %+v", issues)
 	}
 }
+
+
+func TestHithinkLimitPoolReportsMissingSnapshotTimestamp(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"code": 0,
+			"data": map[string]any{
+				"pagination": map[string]any{"total": 0, "page": 1, "size": 10},
+				"item": []any{},
+			},
+		})
+	}))
+	defer server.Close()
+
+	reporter := validation.NewReporter(10)
+	ctx := validation.WithReporter(context.Background(), reporter)
+	p := NewHithinkConfigured(2*time.Second, server.URL, "unit-test-key")
+	got, err := p.FetchLimitPool(ctx, "up", time.Now().In(time.FixedZone("CST", 8*3600)).Format("2006-01-02"), 10)
+	if err != nil {
+		t.Fatalf("FetchLimitPool: %v", err)
+	}
+	if !containsHithinkReason(got.QualityReasons, "provider_snapshot_timestamp_missing_or_invalid") {
+		t.Fatalf("missing snapshot timestamp reason: %v", got.QualityReasons)
+	}
+	issues := reporter.Snapshot().Issues
+	if len(issues) != 1 || issues[0].Field != "provider_time" || issues[0].ProviderField != "timestamp" ||
+		issues[0].Code != "missing_or_invalid_value" || issues[0].RowIndex != nil {
+		t.Fatalf("unexpected snapshot-level Reporter issue: %+v", issues)
+	}
+}
+
+func TestHithinkDragonTigerReportsMissingSnapshotTimestamp(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"code": 0,
+			"data": map[string]any{"trade_date": time.Now().In(time.FixedZone("CST", 8*3600)).Format("2006-01-02"), "stock_count": 0, "stock_items": []any{}},
+		})
+	}))
+	defer server.Close()
+
+	reporter := validation.NewReporter(10)
+	ctx := validation.WithReporter(context.Background(), reporter)
+	p := NewHithinkConfigured(2*time.Second, server.URL, "unit-test-key")
+	got, err := p.FetchDragonTiger(ctx, "", 1, 20)
+	if err != nil {
+		t.Fatalf("FetchDragonTiger: %v", err)
+	}
+	if !containsHithinkReason(got.QualityReasons, "provider_snapshot_timestamp_missing_or_invalid") {
+		t.Fatalf("missing snapshot timestamp reason: %v", got.QualityReasons)
+	}
+	issues := reporter.Snapshot().Issues
+	if len(issues) != 1 || issues[0].Field != "provider_time" || issues[0].ProviderField != "timestamp" ||
+		issues[0].Code != "missing_or_invalid_value" || issues[0].RowIndex != nil {
+		t.Fatalf("unexpected snapshot-level Reporter issue: %+v", issues)
+	}
+}
