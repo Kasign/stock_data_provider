@@ -195,6 +195,9 @@ func xueqiuRows(raw json.RawMessage) ([]map[string]json.RawMessage, error) {
 // FetchHotStocks adapts Xueqiu's public hot-stock list as a fallback.
 // "surge" uses the documented market-wide percentage-mover ordering as a proxy, not Eastmoney hot-up.
 func (p *Xueqiu) FetchHotStocks(ctx context.Context, rankingType string, limit int) (*model.HotRankingSnapshot, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	if p == nil || p.client == nil || p.httpDoer == nil {
 		xueqiuReportSnapshotIssue(ctx, "request", "http_client", "client_not_configured", "configured HTTP client", "missing", "", "雪球 HTTP client 未配置", validation.SeverityError)
 		return nil, errors.New("雪球 HTTP client 未配置")
@@ -224,9 +227,6 @@ func (p *Xueqiu) FetchHotStocks(ctx context.Context, rankingType string, limit i
 		query.Set("order_by", "percent")
 		query.Set("page", "1")
 		query.Set("type", "sh_sz")
-	}
-	if ctx == nil {
-		ctx = context.Background()
 	}
 	if err := ctx.Err(); err != nil {
 		xueqiuReportSnapshotIssue(ctx, "request", "context", "request_error", "active request context", "error", truncateDiagnosticPreview(err.Error(), 160), "雪球榜单请求上下文已取消或超时", validation.SeverityError)
