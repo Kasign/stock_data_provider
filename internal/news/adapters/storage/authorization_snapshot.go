@@ -192,7 +192,6 @@ func authorizationSnapshotEnvelopeMatches(
 		contentLevel == string(ref.ContentLevel) &&
 		fingerprint == ref.DecisionFingerprint
 }
-}
 
 func authorizationExpiry(value domain.NullableDateTime) (any, error) {
 	if !value.Present {
