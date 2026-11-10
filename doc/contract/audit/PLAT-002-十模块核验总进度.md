@@ -567,3 +567,11 @@
 - Valuations：ValuationItem 五个扩展指标指针字段均 omitempty + nullable；核心六项非 omitempty 指针 nullable 正确。
 - 合计确认 7 个字段，归入 CTR-010，不新增编号。反射测试覆盖字段集合/required，但未检查 omitempty 字段 nullable 反向冲突；对应 JSON 序列化样例缺失。本批未执行固定基线 CI。
 - 本批无业务代码修改；CTR-010 全量字段清单仍未完成。
+### WebUI — 维度 2：CTR-010 字段清单复核（子批次 8）
+
+- 详细记录：WebUI-维度2-完整性Review-第一轮.md 第 15 节。
+- Market Breadth 确认 oldest_quote_time、newest_quote_time 2 个 omitempty + nullable 字段；Market Indices 的 MarketIndexQuote 确认 9 个；Index Catalog 确认 IndexCatalogSnapshot.provider_time 1 个。
+- Index Constituents 确认 IndexConstituent.weight_percent、IndexConstituentSnapshot.provider_time 共 2 个；Index Daily Bars 确认 IndexDailyBar.change_percent、volume、amount、provider_time 及 IndexDailyBarsSnapshot.provider_time 共 5 个。
+- 本批合计 19 个字段，归入既有 CTR-010，不新增编号；截至子批次 8 累计核对 52 个字段。
+- 51 模型反射测试覆盖本批 DTO 的字段集合/required，但未验证 omitempty→非 nullable 反向约束；JSON 序列化测试没有本批 DTO 样例。本批未执行固定基线 CI。
+- 本批无业务代码修改；CTR-010 全量字段清单仍未完成。
