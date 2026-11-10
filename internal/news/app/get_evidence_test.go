@@ -56,12 +56,16 @@ func (s getEvidenceAuthorizationSnapshotStub) GetLatestAuthorizationSnapshotForE
 }
 
 type getEvidenceAuthorizerStub struct {
-	err   error
-	calls int
+	err          error
+	calls        int
+	afterExecute func()
 }
 
 func (s *getEvidenceAuthorizerStub) Execute(context.Context, domain.NewsAuthorizationBinding, domain.Observation, domain.NewsItemVersion, string, string, domain.AuthorizationContentLevel) error {
 	s.calls++
+	if s.afterExecute != nil {
+		s.afterExecute()
+	}
 	return s.err
 }
 
@@ -308,6 +312,7 @@ func TestGetEvidenceStopsAfterContextCancellationAtDependencyBoundaries(t *testi
 	}{
 		{name: "PIT returned", cancelAt: "pit"},
 		{name: "authorization snapshot returned", cancelAt: "snapshot"},
+		{name: "current authorization returned", cancelAt: "authorizer"},
 	}
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {
@@ -321,6 +326,9 @@ func TestGetEvidenceStopsAfterContextCancellationAtDependencyBoundaries(t *testi
 				snapshotRepo.afterRead = cancel
 			}
 			authorizer := &getEvidenceAuthorizerStub{}
+			if test.cancelAt == "authorizer" {
+				authorizer.afterExecute = cancel
+			}
 			usecase, err := NewGetEvidence(pitRepo, snapshotRepo, authorizer)
 			if err != nil {
 				t.Fatal(err)
@@ -333,5 +341,34 @@ func TestGetEvidenceStopsAfterContextCancellationAtDependencyBoundaries(t *testi
 				t.Fatalf("canceled request reached authorizer: %d", authorizer.calls)
 			}
 		})
+	}
+}
+ 
+func TestGetEvidenceSuppressesCandidateAtExactRetentionDeadline(t *testing.T) {
+	now := time.Date(2026, 11, 9, 12, 0, 0, 0, time.UTC)
+	request, pit, binding := validGetEvidenceFixture(now)
+	pit.Observation.RetentionUntil = now
+	pit.Observation.Candidate = domain.Candidate{
+		PublishedAtRaw: "raw-source-time",
+	}
+	authorizer := &getEvidenceAuthorizerStub{}
+	usecase, err := NewGetEvidence(
+		getEvidencePITRepositoryStub{record: pit},
+		getEvidenceAuthorizationSnapshotStub{binding: binding},
+		authorizer,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	usecase.now = func() time.Time { return now }
+	result, err := usecase.Execute(context.Background(), request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.PublishedAtRaw != nil || result.FetchedAt != nil || result.NormalizedAt != nil {
+		t.Fatalf("candidate metadata was disclosed at the exact retention deadline: %+v", result)
+	}
+	if authorizer.calls != 1 || result.ContentExcerpt == nil || *result.ContentExcerpt != "source summary" {
+		t.Fatalf("authorized version content unexpectedly unavailable: result=%+v calls=%d", result, authorizer.calls)
 	}
 }
