@@ -203,6 +203,8 @@ recipient_scope 不是地址，也不是 recipient_ref。建议 MVP 仅允许：
 
 DeliveryStateEvent 的 version/from/to/changed_at 来自每次状态迁移；evidence_ref 仅来自对账证据；actor_ref/request_id/actor_reason 仅来自经授权的人工命令审计上下文。领域方法返回新快照和事件，不修改原对象；Repository 必须在同一事务中 CAS 更新快照并追加事件。
 
+Repository 持久化前必须再次校验 StateEvent 与目标 Delivery 快照：delivery_id/version/to/changed_at/reason_code 必须一致，事件迁移必须满足领域状态机；自动迁移不得携带 actor_ref/request_id/actor_reason，只有 failed -> queued 的授权人工重试允许这些审计字段。该校验必须在事务开始前完成，且追加事件时再次执行领域事件校验。
+
 当前 DeliveryRecord 已具备领域模型与纯函数迁移测试；DeliveryRepository Port/Fake 已覆盖 Claim/CAS 的模块内并发语义。DeliveryAttempt 领域快照与 Complete 纯函数已实现，字段语义和校验规则见第 4.3 节。Attempt Repository、租约超时恢复和 Dispatcher/Worker 尚未实现，不能据此宣称 Worker 或真实投递已实现。
 
 
