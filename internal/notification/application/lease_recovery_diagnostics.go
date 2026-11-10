@@ -17,7 +17,8 @@ func (r LeaseRecoveryReport) ToDiagnosticsObservation(checkedAt time.Time, durat
 			return diagnostics.Observation{}, fmt.Errorf("notification: recovery report contains a negative count")
 		}
 	}
-	if r.Scanned != r.Recovered+r.Conflicted+r.OutcomeUnknown+r.Failed+r.Unprocessed {
+	if r.Scanned != r.Recovered+r.Conflicted+r.OutcomeUnknown+r.Failed+r.Unprocessed ||
+		r.OutcomeUnknown != len(r.OutcomeUnknownDeliveryIDs) {
 		return diagnostics.Observation{}, fmt.Errorf("notification: recovery report counts do not reconcile")
 	}
 	if checkedAt.IsZero() || duration < 0 {

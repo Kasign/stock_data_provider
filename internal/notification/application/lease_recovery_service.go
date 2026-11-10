@@ -25,6 +25,8 @@ type LeaseRecoveryReport struct {
 	Recovered      int
 	Conflicted     int
 	OutcomeUnknown int
+	// OutcomeUnknownDeliveryIDs 是内部 Worker 对账所需的精确 Delivery 标识，不得写入公开诊断属性。
+	OutcomeUnknownDeliveryIDs []string
 	Failed         int
 	Unprocessed    int
 }
@@ -81,6 +83,7 @@ func (s *LeaseRecoveryService) RecoverExpiredOnce(
 			if errors.Is(err, ErrPersistenceOutcomeUnknown) {
 				// Commit 结果不确定不能计为普通失败或成功；调用方必须重新读取状态对账。
 				report.OutcomeUnknown++
+				report.OutcomeUnknownDeliveryIDs = append(report.OutcomeUnknownDeliveryIDs, claim.Delivery.DeliveryID)
 				failures = append(failures, fmt.Errorf("delivery %s: %w", claim.Delivery.DeliveryID, err))
 				continue
 			}

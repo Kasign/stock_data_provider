@@ -490,3 +490,21 @@ Delivery plan fingerprint 使用 RFC 8785 JSON Canonicalization Scheme + SHA-256
 ## 8.6 Preflight 决策的状态收敛
 
 Preflight 在 Delivery 已领取为 sending、但尚未创建 Attempt/调用渠道前执行。ready 保持 sending 并继续执行；skip 收敛为 skipped；block 收敛为 blocked。skip/block 必须携带指向本次 Preflight 判定记录的 evidence_ref，状态事件与 Delivery CAS 更新原子写入，并由 Repository 同时释放租约。sending -> blocked 仅用于明确发生在外部渠道调用之前的 Preflight 阻断；不得用于渠道调用后的结果，后者由 DeliveryCompletionService 处理。
+
+
+## 12. Worker 租约恢复批次调用与诊断约定
+
+Server Worker 是定时/并发调度所有者；Notification 只提供有界的 `LeaseRecoveryService.RecoverExpiredOnce`。Worker 每次调用必须提供有效 UTC 时钟、正数批次上限（最大 1000）和可取消 Context，不得在 Notification 内创建定时器或后台 Goroutine。
+
+批次报告计数必须满足：
+
+```go
+Scanned = Recovered + Conflicted + OutcomeUnknown + Failed + Unprocessed
+len(OutcomeUnknownDeliveryIDs) = OutcomeUnknown
+```
+
+其中 `Scanned` 是扫描器返回的候选数，不代表均已处理；`Unprocessed` 表示 Context 取消后尚未处理的候选。`Conflicted` 是租约/版本已变化或恢复不再适用的并发结果，不应当作持久化故障自动重试。
+
+若 `OutcomeUnknown > 0`，Worker 必须逐个读取 `OutcomeUnknownDeliveryIDs` 对应 Delivery 的一致性快照（Delivery + Attempt + StateEvent），据此判断事务已提交还是未提交。不得解析聚合错误文本、重放整批写入或调用渠道 Send。已提交则接受当前状态；未提交则基于新快照重新评估，不能沿用旧版本/token。
+
+`LeaseRecoveryReport.ToDiagnosticsObservation` 是 Notification 到 Platform Diagnostics 的唯一批次映射入口。Diagnostics 仅输出计数属性，不输出 Delivery 标识或底层错误。状态优先级为普通失败 `failed`，提交不确定 `degraded`，CAS 竞争 `degraded`，未处理候选 `degraded`，无异常 `healthy`。该观察结果不等同于重试授权；Worker 必须通过 `errors.Is(err, ErrPersistenceOutcomeUnknown)` 识别错误链并执行读后对账。
