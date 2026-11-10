@@ -30,21 +30,38 @@ func (s *SearchCandidates) Execute(ctx context.Context, request domain.SearchReq
 	if ctx == nil {
 		return domain.SearchResult{Status: domain.SearchFailed, FailureCode: "invalid_context"}
 	}
+	if err := ctx.Err(); err != nil {
+		return canceledSearchResult(domain.SearchResult{}, err)
+	}
 
 	providers := s.providers.All()
+	if err := ctx.Err(); err != nil {
+		return canceledSearchResult(domain.SearchResult{}, err)
+	}
 	if len(providers) == 0 {
 		return domain.SearchResult{Status: domain.SearchSkipped, FailureCode: "no_provider_configured"}
 	}
 
+	codes, valid := validateProviderSet(providers)
+	if !valid {
+		return domain.SearchResult{Status: domain.SearchFailed, FailureCode: "provider_registry_invalid"}
+	}
+
 	result := domain.SearchResult{Status: domain.SearchEmpty}
-	for _, provider := range providers {
-		if provider == nil {
-			continue
+	for index, provider := range providers {
+		if err := ctx.Err(); err != nil {
+			return canceledSearchResult(result, err)
 		}
-		code := strings.TrimSpace(provider.Code())
+		code := codes[index]
 		started := s.now()
 		candidates, err := provider.Search(ctx, request)
 		finished := s.now()
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			// 当前 Provider 的结果是在请求取消后返回的，不作为已完成 Outcome；
+			// 之前已完成的 Provider Outcome 和候选仍保留。
+			return canceledSearchResult(result, ctxErr)
+		}
+
 		outcome := domain.ProviderOutcome{
 			ProviderCode:   code,
 			QueryDimension: request.QueryDimension,
@@ -53,22 +70,18 @@ func (s *SearchCandidates) Execute(ctx context.Context, request domain.SearchReq
 			ObservedAt:     finished,
 			Duration:       finished.Sub(started),
 		}
-		if code == "" {
-			outcome.Status = domain.ProviderFailed
-			outcome.ErrorCode = "provider_code_missing"
-			outcome.CandidateCount = 0
-			candidates = nil
-		} else if err != nil {
+		if err != nil {
 			outcome.Status = domain.ProviderFailed
 			outcome.CandidateCount = 0
-			outcome.ErrorCode = "provider_request_failed"
+			outcome.ErrorCode = ProviderErrorUnknown
 			var providerErr *ProviderError
 			if errors.As(err, &providerErr) {
-				outcome.ErrorCode = providerErr.Code
+				if strings.TrimSpace(providerErr.Code) != "" {
+					outcome.ErrorCode = providerErr.Code
+				}
 				outcome.Retryable = providerErr.Retryable
 				if providerErr.Skipped {
 					outcome.Status = domain.ProviderSkipped
-					outcome.ErrorCode = providerErr.Code
 				}
 			}
 			candidates = nil
@@ -84,18 +97,43 @@ func (s *SearchCandidates) Execute(ctx context.Context, request domain.SearchReq
 		result.Candidates = append(result.Candidates, candidates...)
 	}
 
+	if err := ctx.Err(); err != nil {
+		return canceledSearchResult(result, err)
+	}
 	summarizeSearchResult(&result)
 	return result
 }
 
-// canceledSearchResult 保留已完成 Provider 的诊断结果，但不把请求级取消伪装成 Provider 故障。
+// validateProviderSet 在任何上游请求发生前校验 Provider 身份，避免空身份、重复身份
+// 或 nil 实例造成结果归因歧义和不完整执行。
+func validateProviderSet(providers []Provider) ([]string, bool) {
+	codes := make([]string, len(providers))
+	seen := make(map[string]struct{}, len(providers))
+	for index, provider := range providers {
+		if provider == nil {
+			return nil, false
+		}
+		code := provider.Code()
+		if code == "" || strings.TrimSpace(code) != code {
+			return nil, false
+		}
+		if _, exists := seen[code]; exists {
+			return nil, false
+		}
+		seen[code] = struct{}{}
+		codes[index] = code
+	}
+	return codes, true
+}
+
+// canceledSearchResult 保留此前已完成 Provider 的诊断结果，但不把请求级取消伪装成 Provider 故障。
 func canceledSearchResult(result domain.SearchResult, err error) domain.SearchResult {
-\tresult.Status = domain.SearchFailed
-\tresult.FailureCode = "context_canceled"
-\tif errors.Is(err, context.DeadlineExceeded) {
-\t\tresult.FailureCode = "context_deadline_exceeded"
-\t}
-\treturn result
+	result.Status = domain.SearchFailed
+	result.FailureCode = "context_canceled"
+	if errors.Is(err, context.DeadlineExceeded) {
+		result.FailureCode = "context_deadline_exceeded"
+	}
+	return result
 }
 
 func summarizeSearchResult(result *domain.SearchResult) {

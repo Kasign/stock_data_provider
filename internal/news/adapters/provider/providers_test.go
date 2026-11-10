@@ -136,7 +136,7 @@ func TestProviderHTTPStatusClassifiesRetryCandidate(t *testing.T) {
 	}
 	_, err = p.Search(context.Background(), domain.SearchRequest{Query: "测试", Limit: 5})
 	providerErr, ok := err.(*app.ProviderError)
-	if !ok || !providerErr.Retryable || providerErr.Code != "provider_http_429" {
+	if !ok || !providerErr.Retryable || providerErr.Code != app.ProviderErrorRateLimited {
 		t.Fatalf("error=%#v", err)
 	}
 }
@@ -189,5 +189,37 @@ func TestProviderRejectsCredentialQueryParameters(t *testing.T) {
 	})
 	if _, err := NewTavily("https://api.example.test/search?api_key=secret", "secret", client); err == nil {
 		t.Fatal("credential query parameters must be rejected")
+	}
+}
+
+
+func TestProviderHTTPStatusMapsStableErrorCodes(t *testing.T) {
+	tests := []struct {
+		status    int
+		code      string
+		retryable bool
+	}{
+		{status: http.StatusUnauthorized, code: app.ProviderErrorUnauthorized},
+		{status: http.StatusForbidden, code: app.ProviderErrorUnauthorized},
+		{status: http.StatusRequestTimeout, code: app.ProviderErrorTimeout, retryable: true},
+		{status: http.StatusTooManyRequests, code: app.ProviderErrorRateLimited, retryable: true},
+		{status: http.StatusBadRequest, code: app.ProviderErrorBusinessRejected},
+		{status: http.StatusServiceUnavailable, code: app.ProviderErrorUpstreamUnavailable, retryable: true},
+	}
+	for _, test := range tests {
+		t.Run(http.StatusText(test.status), func(t *testing.T) {
+			client := roundTripFunc(func(req *http.Request) (*http.Response, error) {
+				return &http.Response{StatusCode: test.status, Body: io.NopCloser(strings.NewReader("upstream body")), Header: make(http.Header)}, nil
+			})
+			p, err := NewTavily("https://api.example.test/search", "secret", client)
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, err = p.Search(context.Background(), domain.SearchRequest{Query: "测试", Limit: 5})
+			providerErr, ok := err.(*app.ProviderError)
+			if !ok || providerErr.Code != test.code || providerErr.Retryable != test.retryable {
+				t.Fatalf("error=%#v, want code=%q retryable=%v", err, test.code, test.retryable)
+			}
+		})
 	}
 }

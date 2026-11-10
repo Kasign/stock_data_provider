@@ -52,41 +52,51 @@ func (c config) do(ctx context.Context, method, target string, headers map[strin
 	if payload != nil {
 		raw, err := json.Marshal(payload)
 		if err != nil {
-			return nil, &app.ProviderError{Code: "provider_request_encode_failed"}
+			return nil, &app.ProviderError{Code: app.ProviderErrorRequestInvalid}
 		}
 		body = bytes.NewReader(raw)
 	}
 	req, err := http.NewRequestWithContext(ctx, method, target, body)
 	if err != nil {
-		return nil, &app.ProviderError{Code: "provider_request_invalid"}
+		return nil, &app.ProviderError{Code: app.ProviderErrorRequestInvalid}
 	}
 	for key, value := range headers {
 		req.Header.Set(key, value)
 	}
 	resp, err := c.client.Do(req)
 	if err != nil {
-		retryable := false
-		var netErr net.Error
-		if errors.As(err, &netErr) && (netErr.Timeout() || netErr.Temporary()) {
-			retryable = true
+		if isProviderTimeout(err) {
+			return nil, &app.ProviderError{Code: app.ProviderErrorTimeout, Retryable: true}
 		}
-		if errors.Is(err, context.DeadlineExceeded) {
-			retryable = true
-		}
-		return nil, &app.ProviderError{Code: "provider_transport_failed", Retryable: retryable}
+		retryable := isRetryableProviderTransport(err)
+		return nil, &app.ProviderError{Code: app.ProviderErrorTransportFailed, Retryable: retryable}
 	}
 	if resp == nil || resp.Body == nil {
-		return nil, &app.ProviderError{Code: "provider_invalid_http_response"}
+		return nil, &app.ProviderError{Code: app.ProviderErrorResponseInvalid}
 	}
 	defer resp.Body.Close()
 
 	raw, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, &app.ProviderError{Code: "provider_response_read_failed"}
+		if isProviderTimeout(err) {
+			return nil, &app.ProviderError{Code: app.ProviderErrorTimeout, Retryable: true}
+		}
+		return nil, &app.ProviderError{Code: app.ProviderErrorTransportFailed, Retryable: isRetryableProviderTransport(err)}
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		retryable := resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= 500
-		return nil, &app.ProviderError{Code: fmt.Sprintf("provider_http_%d", resp.StatusCode), Retryable: retryable}
+		switch resp.StatusCode {
+		case http.StatusUnauthorized, http.StatusForbidden:
+			return nil, &app.ProviderError{Code: app.ProviderErrorUnauthorized}
+		case http.StatusRequestTimeout:
+			return nil, &app.ProviderError{Code: app.ProviderErrorTimeout, Retryable: true}
+		case http.StatusTooManyRequests:
+			return nil, &app.ProviderError{Code: app.ProviderErrorRateLimited, Retryable: true}
+		default:
+			if resp.StatusCode >= 500 {
+				return nil, &app.ProviderError{Code: app.ProviderErrorUpstreamUnavailable, Retryable: true}
+			}
+			return nil, &app.ProviderError{Code: app.ProviderErrorBusinessRejected}
+		}
 	}
 	return raw, nil
 }
@@ -142,4 +152,20 @@ func queryURL(endpoint, query string, limit int) (string, error) {
 	q.Set("count", strconv.Itoa(limit))
 	u.RawQuery = q.Encode()
 	return u.String(), nil
+}
+
+
+// isProviderTimeout classifies transport and context deadline failures without treating
+// ordinary caller cancellation as a provider timeout.
+func isProviderTimeout(err error) bool {
+	if errors.Is(err, context.DeadlineExceeded) {
+		return true
+	}
+	var networkErr net.Error
+	return errors.As(err, &networkErr) && networkErr.Timeout()
+}
+
+func isRetryableProviderTransport(err error) bool {
+	var networkErr net.Error
+	return errors.As(err, &networkErr) && networkErr.Temporary()
 }

@@ -116,9 +116,27 @@ func providerErrorFromPlatform(err error) error {
 		if code == "" {
 			code = "provider_transport_failed"
 		}
+		mappedCode := app.ProviderErrorTransportFailed
+		retryable := platformFault.Retryable
+		switch platformFault.Class {
+		case fault.ClassUnauthenticated, fault.ClassForbidden:
+			mappedCode = app.ProviderErrorUnauthorized
+			retryable = false
+		case fault.ClassTimeout:
+			mappedCode = app.ProviderErrorTimeout
+			retryable = true
+		case fault.ClassUnavailable:
+			mappedCode = app.ProviderErrorUpstreamUnavailable
+		case fault.ClassValidation:
+			mappedCode = app.ProviderErrorRequestInvalid
+			retryable = false
+		case fault.ClassConflict, fault.ClassNotFound:
+			mappedCode = app.ProviderErrorBusinessRejected
+			retryable = false
+		}
 		return &app.ProviderError{
-			Code:      code,
-			Retryable: platformFault.Retryable,
+			Code:      mappedCode,
+			Retryable: retryable,
 		}
 	}
 	return &app.ProviderError{Code: "provider_transport_failed"}
