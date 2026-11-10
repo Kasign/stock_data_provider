@@ -913,7 +913,7 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 	if len(history) != 0 {
 		t.Fatalf("relation history before assertion = %#v, want empty", history)
 	}
-	afterRelation := relation.ObservedAt.Add(time.Microsecond)
+	afterRelation := time.Now().UTC()
 	history, err = repository.ListNewsItemRelationsAt(ctx, app.NewsItemRelationHistoryRequest{
 		NewsID: newsID, SystemAsOf: afterRelation,
 	})
@@ -956,7 +956,7 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 	}
 	for _, targetID := range []string{relation.ToNewsID, changedTarget.ToNewsID} {
 		chain, err := repository.ListNewsItemRelationsAt(ctx, app.NewsItemRelationHistoryRequest{
-			NewsID: targetID, SystemAsOf: time.Now().UTC().Add(time.Second),
+			NewsID: targetID, SystemAsOf: time.Now().UTC(),
 		})
 		if err != nil {
 			t.Fatalf("read target-side relation chain for %s: %v", targetID, err)
@@ -979,7 +979,7 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("append proposed relation replacement: %v", err)
 	}
-	afterProposal := proposal.ObservedAt.Add(time.Microsecond)
+	afterProposal := time.Now().UTC()
 	history, err = repository.ListNewsItemRelationsAt(ctx, app.NewsItemRelationHistoryRequest{
 		NewsID: secondObservation.NewsID, SystemAsOf: afterProposal,
 	})
@@ -1004,7 +1004,7 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("append proposal retraction: %v", err)
 	}
-	afterRetraction := retraction.ObservedAt.Add(time.Microsecond)
+	afterRetraction := time.Now().UTC()
 	history, err = repository.ListNewsItemRelationsAt(ctx, app.NewsItemRelationHistoryRequest{
 		NewsID: secondObservation.NewsID, SystemAsOf: afterRetraction,
 	})
