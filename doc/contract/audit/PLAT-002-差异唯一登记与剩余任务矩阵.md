@@ -454,3 +454,12 @@ Server维度2当前仅完成首轮一个切片，状态为 `in_progress / partia
 - 本批状态：第二切片complete_with_open_items；Server维度2整体仍为in_progress / partial，不等于契约冻结。
 - 本批仅更新审计文档，无业务代码、OpenAPI、DTO、Golden、测试或CI变更。
 - 下一步：继续Server维度2，但只推进**Run/Task DTO字段与既有OpenAPI Schema的差异关闭证据**，以CTR-046/047、CTR-006/007的现有登记为唯一入口；不重新初审错误Envelope、Health/Readiness或WebUI基础错误解析。
+
+
+## 23. PLAT-CTR-002 的 Root/旧Analysis 嵌套 Middleware 增量发现
+
+- 本轮Server错误DTO交叉核验发现：Root Middleware的MiddlewareWithOptions会生成新Request ID并写响应Header/Context，但不会改写原始Request Header；旧Analysis Server.Handler仍使用默认信任入站ID的兼容型 observability.Middleware。
+- 两层组合后，旧Analysis内层Middleware仍可能从原始X-Request-ID读取调用方提交的合法ID，覆盖Context和响应Header。故“Root外层先重建ID”不足以证明Analysis路由已隔离不可信入站ID。
+- 影响限于Request ID可信边界、日志关联和响应关联一致性；不等同于认证绕过。该发现归既有PLAT-CTR-002 / P002-D03，不新增CTR，也不在本批修改实现。
+- 关闭条件：Server组合路径移除/隔离旧兼容Middleware，保证内层只使用Root已验证Context；补Root完整组合测试，验证伪造入站ID不能覆盖最终响应Header、Handler日志Context和后续传播ID。
+- 该增量证据不改变本轮错误Envelope结论；PLAT-CTR-002保持开放，后续按原唯一登记增量验收。
