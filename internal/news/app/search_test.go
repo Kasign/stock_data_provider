@@ -21,6 +21,61 @@ func (p fakeProvider) Search(context.Context, domain.SearchRequest) ([]domain.Ca
 	return p.items, p.err
 }
 
+type callbackProvider struct {
+\tcode string
+\tsearch func(context.Context, domain.SearchRequest) ([]domain.Candidate, error)
+}
+
+func (p callbackProvider) Code() string { return p.code }
+func (p callbackProvider) Search(ctx context.Context, request domain.SearchRequest) ([]domain.Candidate, error) {
+\treturn p.search(ctx, request)
+}
+
+func TestSearchCandidatesStopsAfterProviderCancelsRequest(t *testing.T) {
+\tctx, cancel := context.WithCancel(context.Background())
+\tdefer cancel()
+\tsecondCalled := false
+\tusecase := NewSearchCandidates(StaticProviderSet{Providers: []Provider{
+\t\tcallbackProvider{code: "first", search: func(context.Context, domain.SearchRequest) ([]domain.Candidate, error) {
+\t\t\tcancel()
+\t\t\treturn []domain.Candidate{{Title: "must not be returned"}}, nil
+\t\t}},
+\t\tcallbackProvider{code: "second", search: func(context.Context, domain.SearchRequest) ([]domain.Candidate, error) {
+\t\t\tsecondCalled = true
+\t\t\treturn nil, nil
+\t\t}},
+\t}})
+\tresult := usecase.Execute(ctx, domain.SearchRequest{Query: "market", Limit: 10})
+\tif secondCalled {
+\t\tt.Fatal("subsequent provider must not be called after request cancellation")
+\t}
+\tif result.Status != domain.SearchFailed || result.FailureCode != "context_canceled" {
+\t\tt.Fatalf("result=%+v", result)
+\t}
+\tif len(result.Outcomes) != 0 || len(result.Candidates) != 0 {
+\t\tt.Fatalf("canceled provider result must not be recorded as completed: %+v", result)
+\t}
+}
+
+func TestSearchCandidatesDoesNotCallProviderForCanceledContext(t *testing.T) {
+\tctx, cancel := context.WithCancel(context.Background())
+\tcancel()
+\tcalled := false
+\tusecase := NewSearchCandidates(StaticProviderSet{Providers: []Provider{
+\t\tcallbackProvider{code: "first", search: func(context.Context, domain.SearchRequest) ([]domain.Candidate, error) {
+\t\t\tcalled = true
+\t\t\treturn nil, nil
+\t\t}},
+\t}})
+\tresult := usecase.Execute(ctx, domain.SearchRequest{Query: "market", Limit: 10})
+\tif called {
+\t\tt.Fatal("provider must not be called with an already canceled context")
+\t}
+\tif result.Status != domain.SearchFailed || result.FailureCode != "context_canceled" {
+\t\tt.Fatalf("result=%+v", result)
+\t}
+}
+
 func TestSearchCandidatesPreservesPartialProviderFailure(t *testing.T) {
 	usecase := NewSearchCandidates(StaticProviderSet{Providers: []Provider{
 		fakeProvider{code: "one", items: []domain.Candidate{{Title: "headline"}}},

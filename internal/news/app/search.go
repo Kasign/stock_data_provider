@@ -88,6 +88,16 @@ func (s *SearchCandidates) Execute(ctx context.Context, request domain.SearchReq
 	return result
 }
 
+// canceledSearchResult 保留已完成 Provider 的诊断结果，但不把请求级取消伪装成 Provider 故障。
+func canceledSearchResult(result domain.SearchResult, err error) domain.SearchResult {
+\tresult.Status = domain.SearchFailed
+\tresult.FailureCode = "context_canceled"
+\tif errors.Is(err, context.DeadlineExceeded) {
+\t\tresult.FailureCode = "context_deadline_exceeded"
+\t}
+\treturn result
+}
+
 func summarizeSearchResult(result *domain.SearchResult) {
 	succeeded, failed, skipped := 0, 0, 0
 	for _, outcome := range result.Outcomes {
