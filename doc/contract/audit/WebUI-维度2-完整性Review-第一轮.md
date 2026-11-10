@@ -120,3 +120,15 @@
 - Provider 在重复 symbol 时跳过该行并记录诊断，但没有增加 ExcludedNonAShareCount；该字段也不应被滥用于表示重复记录。
 - 固定基线 tree 未发现 Hithink 龙虎榜 Provider 专项测试文件。
 - 结论：CTR-043 是由 Provider 生产逻辑与 Service 公共计数契约直接证明的 P1 冲突；仍需责任模块修复并补 page 1/中间页/末页及重复记录测试。本轮未执行 Go CI。
+
+
+## 8. CTR-010 影响字段抽查（Limit Pool / Dragon Tiger）
+
+本批只抽查最近两份独立数据集明细，不宣称 CTR-010 全字段复核完成：
+
+- LimitPoolItem：`last_price`、`open_times`、`turnover_ratio_percent`、`turnover`、`consecutive_boards`、`broken_count` 均为 omitempty；LimitPoolSnapshot.provider_report_date 为 omitempty。OpenAPI 对应属性声明 nullable=true，Go nil 实际省略，属于 CTR-010。
+- LimitPoolItem.seal_money/max_seal_money 同样带 omitempty，但 OpenAPI 不声明 nullable、required，JSON Golden 断言省略；它们不属于 CTR-010，也不构成 CTR-041。
+- DragonTigerItem 的 16 个可选数值指针字段均带 omitempty；provider_amount_unit 和 DragonTigerSnapshot.provider_report_date 是 omitempty 字符串。OpenAPI 将这些属性声明 nullable=true，与 Go nil 时省略不一致，属于 CTR-010 影响范围。
+- `openapi_contract_test.go` 的通用反射逻辑能检查“非 omitempty 指针必须 nullable”，但没有对称检查“omitempty 指针/字符串不应被声明 nullable”；DragonTiger JSON serialization Golden 也未覆盖，因此当前测试结构不能自动发现这类反向不一致。
+
+结论：CTR-010 在这两个数据集中的登记范围成立；CTR-041 撤销不影响 CTR-010。后续仍需对 CTR-010 全部受影响 DTO 做逐字段核对，并补充双向 JSON/OpenAPI 契约验证。
