@@ -77,7 +77,7 @@ API Client 全量盘点也已完成：44 个导出函数，41 个远端入口，
 | C 跨模块关系 | not_started | 真实 Port 调用图、授权链、依赖方向、Root Composition 与生命周期图 |
 | D 差异/裁决/补证唯一登记 | in_progress | 本矩阵建立后，继续把已有 CTR 与十模块其他差异纳入唯一登记；不得新建平行清单 |
 | E 责任模块修复/补证 | pending_audit | 按正式责任模块处理；审计分支不改业务实现 |
-| F 第一轮完整性 Review | in_progress（仅 WebUI 维度 2 局部） | 先完成 W2-A～W2-E；其他模块/维度仍未完成第一轮 Review |
+| F 第一轮完整性 Review | in_progress（WebUI 维度2已 complete_with_open_items；其他模块/维度待覆盖） | W2-A～W2-E已完成；继续对其余模块/维度执行第一轮完整性Review |
 | G 第二轮正确性 Review | not_started | 仅在相关模块第一轮覆盖完成后执行 |
 | H 第三轮冻结条件 Review | not_started | 仅在裁决、实现和测试证据齐备后执行 |
 
