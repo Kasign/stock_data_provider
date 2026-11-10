@@ -452,3 +452,11 @@ Application 的 `RunFinalizationCoordinator` 是三种终态聚合路径的路�
 - EvidenceRef 是既有证据资源的引用，不由 Adapter 伪造或自动持久化。Fault 也不由投影层制造；失败事实及 FaultRef 应由对应领域/Platform Adapter 创建后传入。
 - Attributes 经过 Platform Observation.Validate 的数量、长度和控制字符门禁；投影层保留受控 `assessment_status/diagnostic_kind/stage_ref/stage_code` 字段并深拷贝 map，避免调用方修改共享对象。
 - 本契约只定义标准化投影，不替代各模块诊断规则。真实 Data/News/Research/Quant/LLM 检查、Evidence/Fault Adapter、Server DI 和生产诊断执行仍需集成验收。
+
+
+## 16. Template Registry 并发发布验收补充（2026-11-10）
+
+- MariaDB 集成测试增加相同模板的 8 路并发 Publish，要求所有调用幂等成功，最终只对应同一不可变版本。
+- 增加不同模板定义争用同一 Ref/Version 的并发 Publish，必须由数据库唯一键裁决，恰好一个成功、另一个返回 `ErrWorkflowTemplateConflict`；随后按精确版本读取并确认持久化指纹对应胜出候选。
+- 该测试用于验证数据库唯一约束与 Publish duplicate-key 回读路径的竞态语义，不以 Fake Repository 或单元测试替代 MariaDB。
+- 测试代码尚未执行；事务回滚注入、Run Finalize 与 Outbox 原子性/并发验收仍是独立缺口。
