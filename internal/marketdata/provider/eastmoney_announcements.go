@@ -153,25 +153,31 @@ func (p *Eastmoney) FetchStockAnnouncements(ctx context.Context, rawSymbol, star
 	}
 	var payload eastmoneyAnnouncementEnvelope
 	if err := p.getJSONWithRetry(ctx, p.announcementURL, params, &payload, 8*time.Second); err != nil {
+		addEastmoneyAnnouncementResponseIssue(ctx, "announcements", "HTTP response", "request_error", "successful announcement JSON response", "request_error", "东方财富公告请求或响应解码失败")
 		return nil, fmt.Errorf("Eastmoney stock-announcement request: %w", err)
 	}
 	if payload.Success != 1 || payload.Data == nil {
 		message := strings.TrimSpace(payload.Message)
 		code := eastmoneyAnnouncementScalar(payload.Code)
 		if payload.Data == nil && (message == "返回数据为空" || code == "9201") {
+			addEastmoneyAnnouncementResponseIssue(ctx, "announcements", "data", "empty_result", "announcement data or explicit empty-result response", "empty", "东方财富公告接口返回明确空结果标记；空结果保持未知质量状态")
 			return emptyEastmoneyAnnouncementSnapshot(symbol, startDate, endDate, page, pageSize), nil
 		}
+		addEastmoneyAnnouncementResponseIssue(ctx, "provider_response", "success/code/message", "provider_error", "success=1 with data object", fmt.Sprintf("success=%d code=%s", payload.Success, code), "东方财富公告接口拒绝请求或返回不完整响应")
 		return nil, fmt.Errorf("Eastmoney stock-announcement response rejected: success=%d code=%q message=%q", payload.Success, code, message)
 	}
 	// 源端若回传分页元数据，必须与本次请求一致；不使用响应缺失字段伪造源端确认。
 	if payload.Data.PageIndex > 0 && payload.Data.PageIndex != page {
+		addEastmoneyAnnouncementResponseIssue(ctx, "page", "data.page_index", "pagination_metadata_mismatch", fmt.Sprintf("requested page %d", page), strconv.Itoa(payload.Data.PageIndex), "东方财富公告响应页码与请求页码不一致")
 		return nil, fmt.Errorf("Eastmoney announcement page_index=%d does not match requested page=%d", payload.Data.PageIndex, page)
 	}
 	if payload.Data.PageSize > 0 && payload.Data.PageSize != pageSize {
+		addEastmoneyAnnouncementResponseIssue(ctx, "page_size", "data.page_size", "pagination_metadata_mismatch", fmt.Sprintf("requested page size %d", pageSize), strconv.Itoa(payload.Data.PageSize), "东方财富公告响应分页大小与请求不一致")
 		return nil, fmt.Errorf("Eastmoney announcement page_size=%d does not match requested page_size=%d", payload.Data.PageSize, pageSize)
 	}
 	total := payload.Data.TotalHits
 	if total < 0 {
+		addEastmoneyAnnouncementResponseIssue(ctx, "total", "data.total_hits", "invalid_pagination_total", "non-negative total_hits", strconv.Itoa(total), "东方财富公告响应 total_hits 为负数")
 		return nil, fmt.Errorf("Eastmoney announcement total_hits is negative: %d", total)
 	}
 	fetchedAt := time.Now().UTC()
@@ -182,11 +188,14 @@ func (p *Eastmoney) FetchStockAnnouncements(ctx context.Context, rawSymbol, star
 	}
 	if total == 0 {
 		if len(payload.Data.List) != 0 {
+			addEastmoneyAnnouncementResponseIssue(ctx, "total", "data.total_hits/list", "pagination_metadata_mismatch", "total_hits consistent with non-empty list", "zero_with_rows", "东方财富公告 total_hits 为零但仍返回公告行")
 			return nil, errors.New("Eastmoney announcement reports total_hits=0 with non-empty rows")
 		}
+		addEastmoneyAnnouncementResponseIssue(ctx, "announcements", "data.total_hits/list", "empty_result", "at least one announcement row", "empty", "东方财富公告查询返回零条记录；空结果保持未知质量状态")
 		return emptyEastmoneyAnnouncementSnapshot(symbol, startDate, endDate, page, pageSize), nil
 	}
 	if page > pages {
+		addEastmoneyAnnouncementResponseIssue(ctx, "page", "data.total_hits", "pagination_page_out_of_range", fmt.Sprintf("page <= %d", pages), strconv.Itoa(page), "请求页码超出东方财富公告源端总页数")
 		return nil, fmt.Errorf("requested announcement page %d exceeds source page count %d", page, pages)
 	}
 	expectedRows := total - (page-1)*pageSize
@@ -194,6 +203,7 @@ func (p *Eastmoney) FetchStockAnnouncements(ctx context.Context, rawSymbol, star
 		expectedRows = pageSize
 	}
 	if expectedRows <= 0 || len(payload.Data.List) != expectedRows {
+		addEastmoneyAnnouncementResponseIssue(ctx, "rows", "data.list", "pagination_row_count_mismatch", strconv.Itoa(expectedRows), strconv.Itoa(len(payload.Data.List)), "东方财富公告当前页实际行数与 total_hits/page_size 推导值不一致")
 		return nil, fmt.Errorf(
 			"Eastmoney announcement page %d returned %d rows, expected %d from total_hits=%d and page_size=%d",
 			page, len(payload.Data.List), expectedRows, total, pageSize,
@@ -221,16 +231,20 @@ func (p *Eastmoney) FetchStockAnnouncements(ctx context.Context, rawSymbol, star
 			noticeDate = noticeDate[:10]
 		}
 		if articleID == "" || title == "" {
+			addEastmoneyAnnouncementParseIssue(ctx, index, "article", "art_code/title", "missing_required_value", "non-empty article ID and title", "missing", "东方财富公告行缺少公告 ID 或标题")
 			return nil, fmt.Errorf("Eastmoney announcement row %d is missing article ID/title", index)
 		}
 		parsedNoticeDate, parseErr := time.Parse("2006-01-02", noticeDate)
 		if parseErr != nil || parsedNoticeDate.Format("2006-01-02") != noticeDate {
+			addEastmoneyAnnouncementParseIssue(ctx, index, "announcement_date", "notice_date", "invalid_date", "valid YYYY-MM-DD date", "invalid", "东方财富公告行公告日期缺失或格式无效")
 			return nil, fmt.Errorf("Eastmoney announcement row %d has invalid notice_date %q", index, noticeDate)
 		}
 		if noticeDate < startDate || noticeDate > endDate {
+			addEastmoneyAnnouncementParseIssue(ctx, index, "announcement_date", "notice_date", "date_out_of_requested_range", startDate+".."+endDate, noticeDate, "东方财富公告行日期超出请求区间")
 			return nil, fmt.Errorf("Eastmoney announcement row %d date %s is outside requested range %s..%s", index, noticeDate, startDate, endDate)
 		}
 		if _, exists := seen[articleID]; exists {
+			addEastmoneyAnnouncementParseIssue(ctx, index, "article_id", "art_code", "duplicate_article_id", "unique article ID within page", "duplicate", "东方财富公告当前页包含重复公告 ID")
 			return nil, fmt.Errorf("Eastmoney announcement page has duplicate art_code %q", articleID)
 		}
 		seen[articleID] = struct{}{}
@@ -246,6 +260,7 @@ func (p *Eastmoney) FetchStockAnnouncements(ctx context.Context, rawSymbol, star
 			}
 		}
 		if !foundRequestedStock {
+			addEastmoneyAnnouncementParseIssue(ctx, index, "symbol", "codes[].stock_code", "symbol_mismatch", stockCode, "missing_or_mismatch", "东方财富公告行未关联本次请求的证券代码")
 			return nil, fmt.Errorf("Eastmoney announcement row %d does not include requested stock %s in codes[]", index, stockCode)
 		}
 		categoryCode, category := "", ""
@@ -291,12 +306,24 @@ func emptyEastmoneyAnnouncementSnapshot(symbol, startDate, endDate string, page,
 }
 
 
+func addEastmoneyAnnouncementResponseIssue(ctx context.Context, field, providerField, code, expected, actualType, message string) {
+	addEastmoneyAnnouncementIssueWithSeverity(ctx, -1, validation.SeverityError, field, providerField, code, expected, actualType, "", message)
+}
+
+func addEastmoneyAnnouncementParseIssue(ctx context.Context, rowIndex int, field, providerField, code, expected, actualType, message string) {
+	addEastmoneyAnnouncementIssueWithSeverity(ctx, rowIndex, validation.SeverityError, field, providerField, code, expected, actualType, "", message)
+}
+
 func addEastmoneyAnnouncementIssue(ctx context.Context, rowIndex int, field, providerField, code, expected, actualType, preview, message string) {
+	addEastmoneyAnnouncementIssueWithSeverity(ctx, rowIndex, validation.SeverityWarning, field, providerField, code, expected, actualType, preview, message)
+}
+
+func addEastmoneyAnnouncementIssueWithSeverity(ctx context.Context, rowIndex int, severity validation.Severity, field, providerField, code, expected, actualType, preview, message string) {
 	report := validation.NewReport(8)
 	issue := validation.FieldIssue{
 		Stage: validation.StageValidate, Field: field, ProviderField: providerField,
 		Code: code, Expected: expected, ActualType: actualType,
-		ActualPreview: quoteIssuePreview(preview), Severity: validation.SeverityWarning,
+		ActualPreview: quoteIssuePreview(preview), Severity: severity,
 		Message: message, RowIndex: &rowIndex,
 	}
 	report.Add(issue)
