@@ -1246,7 +1246,7 @@ Bundle 聚合 DTO 与 Go/OpenAPI 字段语义整体一致；WebUI 对顶层/嵌�
 
 **AUD-WEBUI-CTR-010：omitempty 响应字段在 OpenAPI 中被过度声明为 nullable（P2）**
 
-- 影响对象：StockBasic 多项可选字段、SecurityTradingStatusSnapshot.system_observed_at、PriceLimitRuleSnapshot.limit_percent、StockBoard.change_percent、FundamentalsSnapshot.system_observed_at。StockBoard.change_percent 已在第 24 节补充核验，FundamentalsSnapshot.system_observed_at 已在第 25 节补充核验；special_exception_evidence 因 OpenAPI 3.0.3 的 $ref/nullable 写法不满足同层 type 条件，仍列为待核，不计入已证实范围。
+- 影响对象：StockBasic 多项可选字段、SecurityTradingStatusSnapshot.system_observed_at、PriceLimitRuleSnapshot.limit_percent、StockBoard.change_percent、FundamentalsSnapshot.system_observed_at、MarketBreadthSnapshot.oldest_quote_time、MarketBreadthSnapshot.newest_quote_time。StockBoard.change_percent 已在第 24 节补充核验，FundamentalsSnapshot.system_observed_at 已在第 25 节补充核验，MarketBreadthSnapshot 两个时间边界字段已在第 32 节补充核验；special_exception_evidence 因 OpenAPI 3.0.3 的 $ref/nullable 写法不满足同层 type 条件，仍列为待核，不计入已证实范围。
 - 证据：上述 Go 字段均使用 omitempty；OpenAPI 对部分字段声明 nullable=true；Go encoding/json 的 nil/空值行为是省略字段。
 - 影响：客户端按 Schema 可能接受服务端永远不会发出的显式 null；缺失与 null 的语义被混淆，特别是生成式客户端和严格响应校验器。
 - 责任方：Market Data HTTP API 契约维护方。
@@ -1857,3 +1857,73 @@ StockBoards 的 Provider Port、Go DTO、Service 校验/回退/缓存、HTTP 路
 - 新增 AUD-WEBUI-CTR-023（P2）：WebUI API Client 已有函数，但页面没有消费市场时段。
 - 新增 AUD-WEBUI-CTR-024（P2）：集合竞价只提供粗粒度阶段，必须明确禁止用于订单行为判定。
 - WebUI 维度 2 继续 partial。
+
+
+### 32. WebUI 维度 2：Market Breadth 市场涨跌家数与市场广度
+
+#### 32.1 核验范围与证据
+
+- 固定代码基线：`b6dfc85ba214fe16268c8cba780641a8bfe15086`。
+- DTO：`internal/marketdata/model/model.go`（blob `6f04516bd11452a01adcb5acceab571fb1c28ed5`），`MarketBreadthSnapshot`。
+- Provider Port：`internal/marketdata/provider/provider.go`（blob `6635d2247379d1ffcb826f80e8e2176422b0cc0a`），`MarketBreadthProvider.FetchMarketBreadth`。
+- Eastmoney Provider：`internal/marketdata/provider/eastmoney.go`（blob `5f2a8c2d0fb883414f870f6e29af51943d12c204`），实现 `FetchMarketBreadth`；TickFlow Provider：`internal/marketdata/provider/tickflow.go`（blob `fd32689a4981f6074902917dbfa28f0761922568`）。
+- TickFlow Provider 测试：`internal/marketdata/provider/tickflow_market_breadth_test.go`（blob `a5a92411a28de559afd3ce378170b60312b900b5`）；Service 校验与回退：`internal/marketdata/service/data.go`（blob `d2abb990d8d7ec2fcbf112a5f1beca49c8d40f7b`）；Service 测试：`internal/marketdata/service/data_test.go`（同文件测试）。
+- 市场情绪聚合：`internal/marketdata/service/market_sentiment.go`（blob `d399da9ccb45b4e7fad42989bd9c370ef74bfb0b`），测试 `internal/marketdata/service/market_sentiment_test.go`（blob `0eeab92cb506156504d84e7ee9ef0d66ab355105`）。
+- 配置与装配：`internal/marketdata/config/config.go`（blob `5dab636e97e94b7f221f8bc8dda8dc08c03a83c4`）、`internal/marketdata/bootstrap/module.go`（blob `859df0ca2fc26f02dab2399fe684617da9f2fc89`）。
+- HTTP：`internal/marketdata/httpapi/market_sentiment.go`（blob `ecd56cb226d8ed00973f20076d0629a5d4270e74`）、`internal/marketdata/httpapi/server.go`（blob `7b54b54b3c6182ecab830c2c43f91c548dc60dba`）。
+- OpenAPI：`internal/marketdata/httpapi/openapi.yaml`（blob `cd8a6e3dfb8e3162ee789b11e883be9283c59f32`）；契约测试 `internal/marketdata/httpapi/openapi_contract_test.go`（blob `7f97f075a23bd698a7e3fc32e90509d1e999217b`）。
+- WebUI API Client：`web/src/api.js`（blob `b8bcbee5908b43bfa1bc2ca744363190af38287f`）；页面消费 `web/src/market-overview.js`（blob `6509b2712412b3eb7108045af6ff5093f5893079`）；HTML 区域 `web/index.html`（blob `4b8a160f517846ab47a04ab72cc3479c464ec7d2`）；API 测试 `web/tests/api.test.mjs`（blob `a26eca75b24a744232d370fdbe2411806be45136`），页面辅助测试 `web/tests/market-overview.test.mjs`（blob `6e1093dc99d3f7967bf0d9876efa16069790fbd8`）。
+
+#### 32.2 Provider 来源、总体范围与分类
+
+1. Port 是独立的 `MarketBreadthProvider`，DataService 维护单独的 Provider 列表、熔断和 5 分钟缓存；不是把个股 Quote 列表简单累加。
+2. 固定配置默认启用 Eastmoney 的 MarketBreadth，TickFlow 的 MarketBreadth 默认关闭。TickFlow 虽实现相同 Port，但默认运行链以 Eastmoney 为主；不能据此声称默认有两个可用来源。
+3. Eastmoney 使用 `push2ex/zdfenbu` 的 `qdate + fenbu` 分布桶。每个桶只接受一个区间/计数键，区间键限制在 -11..11 且不可重复；正键计入上涨，负键计入下跌，零键计入平盘。总数是所有桶计数之和，`covered_securities` 被直接设为该总数，`unclassified_count` 固定为 0。
+4. 该分布接口没有提供逐证券身份、停牌状态或未返回证券明细。因此 Eastmoney 的“覆盖”只表示被源端涨跌分布桶计入的样本数，不是与独立 A 股证券主数据核对后的全市场覆盖；停牌、缺行情、未纳入源端分布的证券无法分别计数。OpenAPI 已明确 total 是源端分布桶之和而非独立证券主数据总数，WebUI 标题说明也提示样本未独立核验。
+5. Eastmoney Provider 对桶计数做非负整数、重复键和上限校验；Service 再验证四个分类计数非负且总和必须精确等于 `covered_securities`，业务接口还要求 `covered_securities == total_securities`。这能保证 DTO 内部算术一致，但不能补足源端样本总体与真实 A 股证券全集之间的缺口。
+6. TickFlow 使用 `CN_Equity_A` Universe 目录和对应全市场 Quote 响应；逐证券比较 `last_price` 与 `prev_close`，分别计入上涨、下跌、平盘，价格缺失/非法计入未分类。未返回 Quote 的证券不计入 covered，并触发覆盖降级；目录中被识别为非普通 A 股的证券单独计入 excluded。Provider 测试覆盖完整三分类、部分返回、零返回、非 A 股排除、时间跨度和限价推导。
+7. TickFlow 的部分覆盖快照会被 Provider 单测验证，但业务 Service 的 `validateMarketBreadth` 要求 covered 等于 total，因此这类部分覆盖快照不能进入业务回退候选；仅 Probe 使用允许部分覆盖的 `validateMarketBreadthProbeSnapshot`。该限制是业务接口的 fail-closed 选择，不应把 Provider 层 partial 测试误认为业务 API 会返回部分覆盖结果。
+8. 两种 Provider 的总体定义不同：Eastmoney 是分布桶样本总数；TickFlow 是显式 Universe 目录计数并保留排除项。即使日期相同，也没有同一证券集合的交叉核验或同标的逐证券对照 Golden。不能将两者的 covered/total 直接视为相同的市场总体口径。
+
+#### 32.3 涨跌幅、比例与时间快照
+
+1. 当前 DTO 只提供上涨/下跌/平盘/未分类家数，没有涨跌幅均值、涨跌幅分位数或上涨比例/下跌比例字段；当前 API 和 WebUI 没有按总数计算或展示涨跌比例。页面展示的是计数，不应将其解释为比例或指数涨跌幅。
+2. Eastmoney 使用源端已聚合的涨跌幅分布桶，只按桶键正负归类，不重新计算证券涨跌幅。该 Provider 获得 `qdate` 作为报告日期，但不提供可验证的盘中快照时间；`fetched_at` 是服务采集时间，不能替代行情时间。质量固定为 degraded，并带有源端时间不可验证、总体未与证券主数据核验的原因。
+3. Eastmoney 全市场成交额另行分页读取证券列表/行情，且代码显式加入 `market_amount_quotes_collected_non_atomically`；即使日期和数量匹配，也不是与涨跌分布桶原子同一时刻的快照。金额只在覆盖数量匹配且有效时暴露，否则为 null。
+4. Eastmoney 涨停/跌停池总数通过独立请求获取，仅在池响应报告日期与广度报告日期相同才附加；两次请求没有同一盘中时间戳保证。缺失池数据保持 null，不应解释为 0。
+5. TickFlow 对每只证券保留 Provider quote timestamp，校验报告日期一致，并统计时间覆盖数及 oldest/newest；时间跨度超过 10 分钟或时间戳不完整时降级。时间跨度不超过 10 分钟仍不代表真正原子快照，但比 Eastmoney 有更细的时间证据。
+6. `MarketSentiment` 以 MarketBreadth 的报告日期为交易日，再分别请求涨停、跌停、炸板池。它只在池的 `provider_report_date` 非空且不等于广度日期时拒绝附加；若池报告日期为空，当前代码仍会附加计数。池可来自不同 Provider，且没有精确盘中时间比较；来源名称被记录在 `pool_sources`，但这只是溯源，不是同一证券集合/同一时刻证明。
+
+#### 32.4 HTTP、OpenAPI 与 WebUI 消费
+
+1. HTTP 注册 `GET /api/v1/market/breadth`，无查询参数；Handler 直接调用 MarketOverview Application 的 MarketBreadth 并返回 MarketBreadthSnapshot。OpenAPI 路由和参数矩阵测试已登记该路径。
+2. OpenAPI MarketBreadthSnapshot 与 Go DTO 的字段和 required 由模型反射契约测试登记；非 omitempty 字段 required 集合对齐。Go `OldestQuoteTime` / `NewestQuoteTime` 为 `*time.Time + omitempty`，nil 时 JSON 省略；OpenAPI 却直接声明 `nullable: true`，纳入既有 AUD-WEBUI-CTR-010。反射测试当前没有通用反向约束，禁止 omitempty 字段被声明 nullable。
+3. OpenAPI 对 `total_securities`、`covered_securities` 的描述对应 Eastmoney 当前分布桶样本语义；但同一 Schema 也承载 TickFlow Universe 语义，缺少按来源说明/统一总体定义。Provider 之间总体范围不等价仍待裁决。
+4. WebUI API Client 的 `getMarketBreadth` 请求路径和鉴权实现正确；固定基线 `web/tests/api.test.mjs` 没有该函数的直接请求测试。市场概览页面真实调用该函数，渲染上涨、下跌、平盘、未分类计数、样本总数、覆盖数、成交额覆盖和质量原因；HTML 也提示样本不是独立核验的全市场总数。
+5. 页面未展示停牌家数、未返回证券数或上涨/下跌比例；这些字段/分类本身也不在当前 DTO 中。页面没有把缺失计数补零；当前浏览器测试文件只覆盖辅助格式化/日期/质量信息，不直接执行 renderBreadth 的 DOM 渲染回归。
+6. 页面刷新动作同时加载指数与广度，但两者各自请求并非一个共享服务端快照；当前本批只核验广度，不将指数请求扩展为本节审查对象。
+
+#### 32.5 差异登记
+
+**AUD-WEBUI-CTR-025：市场广度总体分母无法证明覆盖停牌及未返回证券（P2，数据总体语义待收敛）**
+
+- 证据：默认 Eastmoney Provider 仅将 `fenbu` 桶计数求和并令 `total_securities == covered_securities`、`unclassified_count == 0`；没有逐证券身份、停牌和缺失 Quote 分类。TickFlow 的 Universe 口径与 Eastmoney 分布桶口径不同，Service 业务接口又拒绝 covered 不等于 total 的部分覆盖快照。Eastmoney 当前没有专用市场广度 Provider 测试；TickFlow 有 Provider 测试，但没有跨 Provider 同总体 Golden。
+- 影响：上涨/下跌/平盘的内部合计可自洽，但不能据此声称覆盖全部上市 A 股，也不能从当前数据区分停牌、源端未纳入和请求未返回证券。切换 Provider 后 total/covered 的含义也可能改变。
+- 责任方：Market Data Provider / Data Contract 维护方。
+- 关闭条件：明确本 API 的 population 定义；若只承诺源端分布桶样本，字段/页面文案必须持续明确“源端样本数”而不是全市场证券总数；若承诺全 A 股覆盖，则引入可核验证券主数据分母和停牌/未返回/无效行情的互斥分类，并增加 Eastmoney、TickFlow 同交易日同总体对照 Golden 与边界测试。
+
+**AUD-WEBUI-CTR-026：市场情绪辅助池缺少完整日期证据时仍可能附加计数（P2，跨来源快照一致性）**
+
+- 证据：`MarketSentiment` 对涨停/跌停/炸板池仅在 `ProviderReportDate != "" && ProviderReportDate != tradeDate` 时跳过；空报告日期不会阻止附加。池还可来自不同 Provider，当前只记录 `pool_sources`，没有可比较的 Provider 快照时间或证券总体标识。现有 Service 测试覆盖池不可用时保留 null，但未覆盖空报告日期、不同来源同日或时间不一致的情况。
+- 影响：市场情绪快照可能把无法证明日期一致的池计数展示在某个 trade_date 下；即使日期相同，也不能宣称与广度统计来自同一证券总体或同一盘中快照。quality 降级提示不能替代字段级不可验证语义，当前历史 UI 仍显示具体计数。
+- 责任方：Market Data Service / Data Contract 维护方。
+- 关闭条件：池报告日期缺失时不附加计数并记录明确原因；只有报告日期与广度日期匹配时才保留值；若契约要求同一时刻/总体，需增加源端时间与 population 证据或明确标记为独立辅助观测，并增加空日期、日期冲突、跨 Provider、时间差和真实零值测试。
+
+#### 32.6 本批结论
+
+- Market Breadth 有独立 Provider Port、Service 校验/缓存/熔断、HTTP 路由和 OpenAPI DTO；默认配置启用 Eastmoney，TickFlow 的同 Port 实现默认关闭。
+- 四分类计数在 Service 层被强制校验互斥总和等于 covered；Eastmoney 的 covered/total 是同一分布桶总数，属于内部自洽，不是独立证券全集覆盖证明。停牌与未返回证券没有独立分类。
+- 当前没有涨跌比例或涨跌幅统计字段；UI 只展示家数，不应将其理解为比例。
+- Eastmoney 报告日期可用但没有可验证盘中时间；成交额和涨跌停池是独立请求，不是原子同一时刻快照。TickFlow 提供逐证券时间范围，但不证明原子快照。
+- 新增 AUD-WEBUI-CTR-025、AUD-WEBUI-CTR-026（均 P2）；MarketBreadthSnapshot.oldest_quote_time/newest_quote_time 纳入既有 AUD-WEBUI-CTR-010。
+- WebUI 已接通并展示四类计数和覆盖元数据；API Client 与 DOM 渲染缺少该数据集的直接回归测试。未证明当前上涨/下跌/平盘算术实现错误；总体覆盖与跨来源快照一致性仍待收敛。WebUI 维度 2 继续 partial。
