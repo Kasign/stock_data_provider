@@ -638,3 +638,11 @@
 - `internal/marketdata/httpapi/openapi.yaml` 与固定基线 blob SHA 相同（`cd8a6e3dfb8e3162ee789b11e883be9283c59f32`）；`internal/marketdata/httpapi/openapi_contract_test.go` 与固定基线 blob SHA 相同（`7f97f075a23bd698a7e3fc32e90509d1e999217b`）。因此截至该 HEAD，CTR-010 的 124 个 OpenAPI nullable 声明及中央契约测试缺口均未在责任分支体现修复。
 - 该分支最新提交主题为固定样本 Provider 原始响应诊断；本次不评价其余 Data 工作，也不因分支存在大量其他提交而扩大审计范围。
 - 本轮只读取责任分支并更新审计进度文档；未修改 Data 代码、未切换/合并分支、未运行 CI。该责任分支检查记录仅说明截至对应 SHA 未出现相关文件变化；CTR-010 当前状态为差异已确认、契约语义待裁决、实现修复未启动。
+
+### WebUI — 维度 2：Dragon Tiger CTR-043 / CTR-044 冻结影响复核
+
+- 详细记录：`WebUI-维度2-完整性Review-第一轮.md` 第 22 节。
+- CTR-043：DTO 和 Service 已明确 `source_returned` 是本页原始记录数，且计数需与接受数/非 A 股排除数守恒；Hithink 却以全量 `stock_items` 数量填充并在本地分页，重复 symbol 还被静默丢弃。判定为公共契约明确、Adapter 实现不符合，P1 保留。冻结评审需显式作出修复或延期决议，不在契约核验阶段修改实现。
+- CTR-044：公共 API 接受任意有效历史日期，但 Hithink 仅支持最近一年。判定为 Provider 能力边界披露方式待裁决；不应将单一 Provider 的限制收窄为公共 API 全局限制。冻结前需明确 capability/诊断元数据或权威能力文档的表达方式。
+- 本批仅完成既有差异的冻结影响分类；未修改业务代码、未执行 CI、未新增差异编号。WebUI 维度 2 第一轮完整性 Review 继续进行。
+
