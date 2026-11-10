@@ -555,7 +555,7 @@
 ### WebUI — 维度 2：CTR-010 字段清单复核（子批次 6）
 
 - 详细记录：WebUI-维度2-完整性Review-第一轮.md 第 13 节。
-- StockBasic/Profile 确认 14 个 omitempty 字段被 OpenAPI 声明 nullable=true；SecurityTradingStatusSnapshot 确认 system_observed_at 1 个；PriceLimitRuleSnapshot 确认 special_exception_evidence、limit_percent 2 个。合计 17 个字段纳入 CTR-010。
+- StockBasic/Profile 实际确认 12 个 omitempty 字段被 OpenAPI 声明 nullable=true（ipo_date/out_date 未声明 nullable）；SecurityTradingStatusSnapshot 确认 system_observed_at 1 个；PriceLimitRuleSnapshot 仅 limit_percent 1 个可确认（special_exception_evidence 是无同层 type 的 nullable $ref，不计入）。合计 14 个字段纳入 CTR-010。
 - 同 DTO 中其他 omitempty 字段的 OpenAPI 未声明 nullable，不计入 CTR-010；required 集合与 Go 非 omitempty 字段总体一致。
 - 测试已覆盖 StockBasic、SecurityTradingStatusSnapshot 的字段/required，但没有 omitempty→非 nullable 反向断言或对应 JSON 序列化 Golden；PriceLimit Rule inline Schema 缺 Go DTO 映射测试。本轮未执行固定基线 CI。
 - 本批无新增 CTR 编号或业务代码修改；CTR-010 全量字段清单仍未完成。
@@ -583,7 +583,7 @@
 - Bundle.quote 是 omitempty 可选引用，Schema 未声明 nullable，行为一致；StockBoard.change_percent 确认 1 个差异。
 - SectorRanking 确认 latest_price、change、change_percent、change_percent_5d、amount、advancing_count、declining_count、leader_change_percent 共 8 个差异。合计 18 个字段，归入既有 CTR-010。
 - 反射测试覆盖本批 DTO 字段集合/required，但未检查 omitempty→nullable 反向冲突；现有 JSON 序列化测试只覆盖 Quote/DailyBar 核心非 omitempty 指针及 Bundle.quote 省略，没有覆盖本批 18 个差异字段。本批未执行固定基线 CI。
-- 截至子批次 9，CTR-010 专门分批清单累计核对 70 个字段；此前其他数据集章节零散登记的字段尚待统一去重汇总。无业务代码修改。
+- 截至子批次 9，CTR-010 专门分批清单经子批次 6 纠偏后累计核对 67 个字段；此前其他数据集章节零散登记的字段尚待统一去重汇总。无业务代码修改。
 
 
 ### WebUI — 维度 2：CTR-010 字段清单复核（子批次 10）
@@ -610,3 +610,13 @@
 - HotRankingItem 确认 latest_price、change、change_percent、rank_change、heat 五个 omitempty 指针字段与 OpenAPI nullable=true 冲突；HotRankingSnapshot.provider_time 再确认一个，共 6 个字段，归入既有 CTR-010。
 - 51 模型字段/required 反射测试已登记两个 DTO，但未检查 omitempty→nullable 反向冲突；JSON 序列化测试只覆盖 HotRankingItem 基础字段和其他可选字段省略，没有覆盖这六个字段的 nil 省略，也没有 HotRankingSnapshot 样例。
 - 本批只做 DTO/OpenAPI/测试资产静态核验，未执行固定基线 CI，无业务代码修改。
+
+
+### WebUI — 维度 2：CTR-010 全量唯一字段汇总
+
+- 详细记录：WebUI-维度2-完整性Review-第一轮.md 第 20 节。
+- 固定基线下 51 个具名 DTO 的 Go JSON tag/OpenAPI properties 静态对照确认 119 个 omitempty + nullable=true 字段；补入 3 个未进入具名注册表的 inline 响应 DTO：PriceLimitRuleSnapshot（limit_percent 1）、ProviderProbeFieldComparison（4）、MarketStockOverviewItem（0）。最终覆盖 54 个 HTTP 响应 DTO，确认 124 个唯一字段，分布于 29 个 DTO；其余 25 个 DTO 无此类差异。
+- 更正子批次 6：StockBasic 从 14 调整为 12；PriceLimitRuleSnapshot 从 2 调整为 1；该批从 17 调整为 14。子批次 5—9 累计从 70 调整为 67。ipo_date/out_date 未声明 nullable；special_exception_evidence 是无同层 type 的 nullable $ref，不纳入已证实差异。
+- 子批次10的42项、子批次12的6项均为历史重复复核，不再重复累计；子批次11的9项中，5项已在51 DTO扫描集合，4项来自嵌套 inline ProviderProbeFieldComparison。
+- 中央 JSON 序列化 Golden 未对本节124个差异字段中的任何一个断言 nil/空值省略（0/124）；51 DTO 反射测试没有 omitempty→非 nullable 的反向约束，且三个 inline DTO 不在注册表中。
+- 本节为固定 SHA 静态清单，不代表 CI 通过或 CTR-010 已修复。下一步只进行 CTR-010 关闭方案 Review，不扩展新的 WebUI 数据集。
