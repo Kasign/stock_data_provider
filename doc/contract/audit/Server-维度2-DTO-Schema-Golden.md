@@ -336,3 +336,66 @@ TaskEvent / StageEvent：
 | Task Events cursor持久化/DDL约束 | CTR-008 | 本切片不重做；仅记录旧Analysis DDL未定位，按原关闭条件补证 |
 
 本切片状态：complete_with_open_items。字段事实已核实并回写唯一登记；没有CTR关闭，因为尚无权威Schema/Golden、运行时校验或责任方裁决证据。Server维度2整体仍为in_progress / partial。
+
+
+
+## 10. Server 维度2第四切片：Run/Task 契约决策依据与关闭路径（2026-11-10）
+
+本切片不重做第9节字段盘点，只核对项目权威契约、Researchflow DTO 责任边界和既有差异的关闭依赖。
+
+### 10.1 权威契约与责任边界
+
+固定基线中的权威依据：
+
+- `doc/contract/PLAT-002-项目级契约冻结登记簿.md`：Server 是唯一 Composition Root，负责HTTP路由、DI和模块接线；Researchflow 是唯一跨业务模块流程编排者，拥有Run/Stage/Attempt及其状态机；Server不拥有领域DTO语义。
+- `doc/researchflow/03-CONTRACT-006与007最终决议.md`：FLOW-CTR-001/002（历史别名CONTRACT-006/007）状态机设计决策为accepted；明确Run/Stage/Attempt读取模型字段、状态、Ref、版本和时间语义。
+- `doc/researchflow/04-ApplicationPort与运行时契约落地补充.md`：Researchflow的Domain JSON Tags不构成公开DTO；公开Run/Stage/Attempt DTO必须独立定义Schema/Golden。权威关系明确由03最终决议定义状态/竞态，项目级契约目录定义编号、公共字段和状态。
+- 实现证据：`internal/researchflow/publicdto/dto.go`、`dto_test.go`；Schema位于`doc/researchflow/schema/{run,stage,attempt,result-summary}-1.0.0.schema.json`，Golden位于`doc/researchflow/golden/`。测试包含稳定字段、Schema/Golden和Domain投影校验代码。既有决议记录定向Go Test/Race/Vet尚无执行证据（blocked_by_external_module_gofmt），故只能确认测试代码存在，不能报告通过。
+
+因此必须区分两套模型：
+
+1. **旧Analysis HTTP模型**：`internal/analysis/domain/types.go`中的RunRequest/RunResult/StageEvent，加上`internal/platform/taskqueue`中的Task/Event，由旧Analysis Handler直接暴露；当前`doc/api/contracts/分析任务.openapi.yaml`描述的也是这套任务API。
+2. **Researchflow正式模型**：`internal/researchflow/domain`及`internal/researchflow/publicdto`中的Run/Stage/Attempt/ResultSummary，由Researchflow拥有领域语义和公开DTO；Server只负责组合根、HTTP适配和对外路由。
+
+旧Analysis的`StageEvent`不是Researchflow的`Stage` DTO，也不是Researchflow状态机事件的替代定义。Researchflow当前公开读取模型的Stage具有stage_ref、run_ref、stage_code、status、version、required、依赖和结果/诊断引用等字段；旧StageEvent则是旧Analysis执行进度事件（run_id、stage、status、at等）。不得把两者合并为一个Schema，也不得将旧StageEvent字段裁决责任转移给Researchflow。
+
+### 10.2 对既有CTR的决策状态归并
+
+| CTR | 已有权威决议 | 尚需项目/责任方裁决 | 实现与机器证据责任 |
+|---|---|---|---|
+| CTR-046 | Server为HTTP组合根；Researchflow拥有Run/Stage/Attempt领域和公开DTO；Researchflow Application Port已有CreateRun/GetRun/CancelRun等定义 | 旧Analysis同步Run API是否继续作为兼容入口；对外Run API最终映射旧Analysis还是Researchflow Application；Root路径、版本和响应包装策略 | Server负责Root路由、HTTP适配和OpenAPI；Researchflow负责自身Run/Stage/Attempt DTO/Schema/Golden；两侧共同提供真实Handler/Port映射和集成测试 |
+| CTR-047 | Researchflow CreateRunCommand必填字段、调用主体从可信Context注入、system_as_of/deadline_at独立、参数按固定Template Schema校验等语义已接受；但这些规则不自动适用于旧Analysis RunRequest | 旧Analysis同步Run是否允许客户端提供run_id；旧Task与同步Run是否继续共享请求Schema；symbols最多100是否为正式运行时限制；未知TaskType是否应拒绝 | 旧Analysis/Server负责请求校验和默认值实现；OpenAPI与运行时Contract Test同步；不得把Researchflow CreateRunCommand字段机械复制为旧Analysis请求 |
+| CTR-006 | 当前Go Task DTO的started_at/finished_at为指针+omitempty，nil时省略；项目公共JSON规则要求Schema明确区分null与缺失 | 无需扩大到Researchflow Run字段；在保持当前Task序列化行为前提下，按实际输出修正Schema即可。若要改成显式null，必须另行批准兼容性变化 | 旧Analysis Task DTO/OpenAPI维护方将nullable改为非nullable可省略语义，补queued/running/terminal JSON Golden和Schema一致性测试 |
+| CTR-007 | Researchflow Stage与旧Analysis StageEvent是不同模型；旧事件字段事实已在第9节核实 | 是否继续公开旧Analysis Events端点、是否未来由Researchflow提供独立进度事件流，属于API产品/兼容性决策；不得默认复用Researchflow Stage DTO | 当前旧Analysis Events的生产方/HTTP适配方负责StageEvent Schema、Golden和Handler校验；若未来新增Researchflow事件流，由Researchflow定义独立事件契约，Server负责路由和映射 |
+
+### 10.3 最小决策清单
+
+只保留会改变API兼容性或运行时行为的决策，不重复字段清单：
+
+1. **CTR-046：API边界决策**——旧同步Run/Task/Events API是保留兼容、逐步迁移，还是由Researchflow新API取代；确定最终Root路径和版本。此项决定Schema应该描述哪套生产方。
+2. **CTR-047：旧Analysis请求输入决策**——同步Run的run_id是否由客户端指定；Task创建是否忽略/覆盖run_id并由服务端生成；TaskType未知值是否拒绝；symbols的100项限制是否作为真实服务端限制。默认值与historical_replay显式as_of规则按当前Handler事实记录，不得通过Schema required误表达。
+3. **CTR-006：序列化兼容决策**——默认保持当前nil省略行为；除非项目负责人明确要求输出null，否则只修Schema，不改运行时DTO。
+4. **CTR-007：事件端点生命周期决策**——明确旧Analysis StageEvent是兼容事件契约，不等同Researchflow Stage；如要替换，必须单独定义迁移和兼容策略。
+
+第1、2、4项需要项目负责人确认产品/API边界；CTR-006可按现有生产行为进行契约对齐，不构成独立领域语义争议。
+
+### 10.4 关闭顺序与依赖
+
+按以下顺序交付，避免先写Schema后推翻API边界：
+
+1. **先裁决API边界（CTR-046）**：确认旧Analysis Run/Task/Events保留范围，以及是否接入Researchflow Application Port。没有该决策，不展开RunResult全量Schema。
+2. **再冻结请求行为（CTR-047）**：明确同步/异步run_id、TaskType校验和symbols上限；将默认值、条件必填、服务端派生字段写入权威请求定义。
+3. **并行修正Task序列化（CTR-006）**：保持nil省略时移除OpenAPI nullable=true，补queued/running/terminal Golden。
+4. **按端点边界补事件Schema（CTR-007）**：只为保留的旧Events端点定义StageEvent Schema；若端点退役，提供兼容/废弃策略，不把Researchflow Stage Schema套用过来。
+5. **最后完成CTR-046响应Schema**：依据最终路由选择补RunResult或Researchflow Run/Stage/Attempt响应Schema、正常/异常Golden、OpenAPI与真实Handler/Adapter双向Contract Test。
+6. **执行验证**：运行定向Go测试、Schema校验和Root集成测试；记录精确SHA与CI结果。Researchflow自身测试通过证据与旧Analysis HTTP测试证据分别记录，不能相互替代。
+
+CTR-008的旧Task Events持久化/DDL/cursor证据不属于本轮决策清单，继续按原唯一登记处理；本轮不重新审查。
+
+### 10.5 本切片结论
+
+- 已找到Researchflow正式Run/Stage/Attempt公开DTO、独立Schema、Golden和投影校验测试代码；这修正了“Researchflow没有DTO/Schema/Golden资产”的潜在误读，但测试执行状态仍未证明通过。
+- CTR-046/047/006/007均保持开放；没有新增CTR，也没有关闭任何CTR。
+- 当前唯一阻断Schema最终形态的项目级决策是旧Analysis API的保留/迁移边界及请求行为；CTR-006可直接按当前真实序列化行为对齐Schema。
+- 本切片状态：complete_with_open_items。仅固定SHA文档/代码证据核对；未修改业务代码、OpenAPI、DTO、Schema、Golden、测试，未执行CI。
+- 下一步仍留在Server维度2，先处理项目负责人决策输入与责任方确认；未完成前不进入Server其他五个维度，不切换其他模块。
