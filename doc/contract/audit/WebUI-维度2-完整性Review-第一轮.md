@@ -132,3 +132,35 @@
 - `openapi_contract_test.go` 的通用反射逻辑能检查“非 omitempty 指针必须 nullable”，但没有对称检查“omitempty 指针/字符串不应被声明 nullable”；DragonTiger JSON serialization Golden 也未覆盖，因此当前测试结构不能自动发现这类反向不一致。
 
 结论：CTR-010 在这两个数据集中的登记范围成立；CTR-041 撤销不影响 CTR-010。后续仍需对 CTR-010 全部受影响 DTO 做逐字段核对，并补充双向 JSON/OpenAPI 契约验证。
+
+## 9. Provider Probe History 差异证据复核（子批次 2）
+
+本批只复核 CTR-048、CTR-049，不扩展新的数据集或审计维度。代码基线仍为 origin/integration @ b6dfc85ba214fe16268c8cba780641a8bfe15086。
+
+### 9.1 CTR-048：total 语义
+
+固定基线证据：
+- internal/marketdata/repository/provider_probe.go：ListProviderProbeRuns 仅按 started_at DESC、id DESC 和 LIMIT 查询，没有 COUNT 查询。
+- internal/marketdata/service/provider_probe.go：ProviderProbeHistory 将 Total 赋值为 len(items)。
+- internal/marketdata/httpapi/openapi.yaml：ProviderProbeHistory.total 仅声明 integer，没有说明是本次返回数还是数据库全量数。
+- web/src/data-center.js：页面显示“服务端记录 X 批；当前展示最近 N 批”，存在将 X 理解为全量记录数的歧义。
+
+结论：CTR-048 事实成立，保留 P2。关闭仍采用原记录的二选一方案：将 total 明确改为全量 COUNT，或将字段语义明确改为 returned_count，并消除全量总数暗示；不要求本阶段引入复杂分页。
+
+### 9.2 CTR-049：持久化错误 HTTP 映射
+
+固定基线证据：
+- internal/marketdata/service/provider_probe.go：SaveProviderProbeRun 失败时设置 run.Persisted=false 并返回包装后的持久化错误。
+- internal/marketdata/httpapi/provider_probe.go：dataSourceProbe 对所有 Service error 统一返回 400 VALIDATION_ERROR，未区分请求校验错误和存储故障；错误分支也不返回已执行探测的 run 摘要。
+- internal/marketdata/httpapi/openapi.yaml：POST probe 已声明 500 为诊断结果持久化失败。
+
+结论：CTR-049 事实成立，保留 P2。实际 HTTP 状态与 OpenAPI 不一致；关闭条件仍为区分输入错误与持久化错误，按正式契约返回 500（或先经契约决议改为 503），并补充 Store 写入失败的 Handler 测试。是否返回安全的 persisted=false 结果摘要需明确决议。
+
+### 9.3 测试资产复核
+
+- web/tests/api.test.mjs 有 getDataSourceProbeHistory 请求测试，覆盖 URL、API Key、AbortSignal 和 limit 边界。
+- web/tests/data-center-probe-browser.mjs 覆盖历史初次读取、探测后刷新、503 失败、无 API Key 不请求，以及历史失败不覆盖本次探测结果。
+- internal/marketdata/httpapi/provider_probe_mariadb_integration_test.go 覆盖 POST 写入、关闭并重开 MariaDB 后 GET 历史读取及关键证据保留，但依赖 MARKET_DATA_TEST_MYSQL_DSN；本轮没有执行该集成测试。
+- 未发现独立 Repository 历史排序/limit/重复 run_id 更新测试，也未发现 GET History Handler 对非法 limit、未配置存储和 SQL 读取失败的独立单元测试。
+
+本批没有新增差异编号。CTR-048/049 的证据与关闭条件已复核；维度 2 第一轮完整性 Review 仍需继续核对其余差异证据及跨维度交叉项，不宣布完成或冻结。
