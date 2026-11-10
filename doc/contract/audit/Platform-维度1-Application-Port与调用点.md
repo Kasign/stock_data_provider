@@ -1688,3 +1688,97 @@ StockBoards 的 Provider Port、Go DTO、Service 校验/回退/缓存、HTTP 路
 - 新增 AUD-WEBUI-CTR-019：三个 omitempty 金额字段被 OpenAPI 过度声明 nullable。
 - WebUI 已接通，金额/负号/缺失值/质量信息显示符合 DTO 字段语义；has_data 分支不是服务端契约字段。
 - 未发现已证实的线上资金流金额符号或元单位换算错误；跨 Provider 业务口径等价性和交易日完整性尚未得到充分证明。WebUI 维度 2 继续 partial。
+
+
+### 30. WebUI 维度 2：Market Capital Flow 市场级资金流历史
+
+#### 30.1 核验范围与证据
+
+- 固定代码基线：`b6dfc85ba214fe16268c8cba780641a8bfe15086`。
+- Go DTO：`internal/marketdata/model/model.go`（blob `6f04516bd11452a01adcb5acceab571fb1c28ed5`），`MarketCapitalFlowItem` / `MarketCapitalFlowSnapshot`。
+- Provider：`internal/marketdata/provider/tushare_market_capital_flow.go`（blob `cb51cc20424d5a1db74d976973254c7a74f95f1d`）；测试 `tushare_market_capital_flow_test.go`（blob `23a0012b903412e3862daa27c7267745ef28de24`）。
+- Service：`internal/marketdata/service/market_capital_flow.go`（blob `e9fc87e3dcd20a88aabaa76f5f29e1ff672cf791`）；测试 `market_capital_flow_test.go`（blob `be5ef788906a1360c535e1a78f49439e700b3010`）。
+- HTTP Handler：`internal/marketdata/httpapi/market_capital_flow.go`（blob `54dbe0bdc77bcf88c7ed559a6789ed2aa22dfffc`）；OpenAPI：`internal/marketdata/httpapi/openapi.yaml`（blob `cd8a6e3dfb8e3162ee789b11e883be9283c59f32`）；契约测试 `openapi_contract_test.go`（blob `7f97f075a23bd698a7e3fc32e90509d1e999217b`）。
+- WebUI API Client：`web/src/api.js`（blob `b8bcbee5908b43bfa1bc2ca744363190af38287f`）；页面 `web/src/market-overview.js`（blob `6509b2712412b3eb7108045af6ff5093f5893079`）；API 测试 `web/tests/api.test.mjs`（blob `a26eca75b24a744232d370fdbe2411806be45136`）；页面测试 `web/tests/market-overview.test.mjs`（blob `6e1093dc99d3f7967bf0d9876efa16069790fbd8`）。
+- 本节仅核验市场级 `GET /api/v1/market/capital-flow`，不与个股 `GET /api/v1/stocks/{symbol}/capital-flow` 混为一套数据或 Provider。
+
+#### 30.2 Provider 协议、金额单位和正负方向
+
+1. 市场级数据使用独立 `MarketCapitalFlowProvider` Port 和 `DataService.MarketCapitalFlow`，与个股 `CapitalFlowProvider` 分离。当前固定基线中只有 Tushare 实现该 Port；未发现 Eastmoney 或其他市场级 Provider 实现，不应把个股 Provider 能力误认为市场级回退能力。
+2. Tushare 调用 `moneyflow_mkt_dc`，字段映射如下：
+   - `net_amount` → `net_amount_cny`；
+   - `buy_elg_amount` / `buy_elg_amount_rate` → 超大单净流入金额 / 净占比；
+   - `buy_lg_amount` / `buy_lg_amount_rate` → 大单；
+   - `buy_md_amount` / `buy_md_amount_rate` → 中单；
+   - `buy_sm_amount` / `buy_sm_amount_rate` → 小单。
+3. Tushare 官方接口文档将 `moneyflow_mkt_dc` 的 `net_amount` 和四类 `*_amount` 明确标注为“元”，对应比例字段标注为“%”。因此当前 Provider 将原始金额数值直接映射为人民币元是正确的，不应像个股 `moneyflow_dc` 的“万元”字段那样乘以 10,000。参考：[Tushare 大盘资金流向（DC）](https://tushare.pro/document/2?doc_id=345)。
+4. DTO 的金额字段均以 CNY 命名，比例字段以 Percent 命名；OpenAPI 对金额描述为 CNY，对比例描述为 percentage points。比例值应按百分点展示，例如源值 1.25 表示 1.25%，不是 0.0125 的比例小数。
+5. 正负方向：Provider 直接保留源端数值，不取绝对值、不翻转符号；Tushare 官方样例中分类金额存在正负值，字段语义为净流入净额。WebUI 对 `net_amount_cny` 正值加正号、负值保留负号，并按方向样式显示。
+6. 当前 Provider 测试只对 `net_amount` 的正数样例断言单位映射；分类金额虽在伪造响应中提供了正负值，但没有逐字段断言负号和 CNY 单位。没有发现代码中的单位换算错误，但分类字段的回归测试证据不足。
+
+#### 30.3 主力净额与四类资金的关系
+
+1. Tushare 文档分别描述主力净流入 `net_amount` 和超大单/大单/中单/小单净流入金额，但没有在该接口契约中声明 `net_amount` 必须等于四类金额之和，也没有给出四类分类金额之间的代数恒等式。
+2. 当前 Provider 和 Service 都不计算或校验 `net_amount_cny` 与四类金额的和；这避免了在源端未承诺恒等关系时擅自重算官方主力净额。
+3. 当前 Provider 测试样例中四类金额可与 `net_amount` 不相等，但测试没有把该样例定义为业务不变量测试。不能据此断言源端值错误，也不能据此推导分类金额与主力净额的正式关系。
+4. OpenAPI 将 `net_amount_cny` 描述为“market-wide main net inflow”，四类字段分别描述为订单金额分类净流入，但缺少来源定义、分类边界和是否可加总的明确说明。若后续产品或 Quant 使用四类字段计算合计/占比，必须先取得 Tushare 对应接口的明确口径或真实样本验证，不能自行推定 `net_amount = 超大单 + 大单` 或等于四类之和。
+
+#### 30.4 日期范围、排序、重复与缺失交易日
+
+1. HTTP Handler 要求 `start`、`end` 均为合法 `YYYY-MM-DD`，起始不晚于结束，闭区间最多 2000 个自然日，结束日期不能晚于 Asia/Shanghai 当前日期。
+2. WebUI API Client 对日期格式、顺序和 2000 个自然日上限做相同校验；API 单测覆盖非法日期、逆序、2000/2001 自然日边界。页面默认查询范围为 90 个中国自然日。
+3. Tushare Provider 将日期转成 `YYYYMMDD` 请求参数；对响应日期解析、请求范围外日期和重复日期直接报错，最后按 `trade_date` 升序排序。Service 再次校验日期合法、在请求区间内、严格升序且无重复。
+4. Provider 对返回记录数设置 `total = len(items)`；空结果直接作为 Provider 错误，不会返回 total=0 的有效快照。当前 OpenAPI 将 total 最小值设为 1，与该行为一致。
+5. Provider 和 Service 均没有查询交易日历或核对区间内预期交易日数量；响应可以缺少区间中的一个或多个交易日而仍通过校验。非交易日不应视为缺失，但当前实现也无法区分节假日/停市与源端漏数。
+6. 因此 `total` 只表示实际返回的观测条数，不代表请求区间完整交易日覆盖数量。WebUI 显示“返回 N / total 条”，不会声称总条数等于区间交易日数，但也没有提示可能存在未覆盖交易日。
+
+#### 30.5 时间、质量、Service 校验与缓存
+
+1. Tushare 响应未暴露可验证的 Provider 快照时间。Provider 使用本地 `time.Now().UTC()` 填充 `fetched_at`，质量固定为 degraded，并添加 `provider_snapshot_timestamp_not_exposed`；Service 要求该数据集保持 degraded，不能仅凭采集时间提升为 valid。
+2. Service 校验响应起止日期与请求一致、source/source_version/fetched_at 存在、fetched_at 不超前、total 与 items 数量相等且大于零、日期严格升序且无重复、所有非空数值有限。
+3. Service 不校验金额正负边界，也不校验分类金额与主力净额之间的关系；对于净流入净额，负数本身是合法数据。
+4. Provider 链按配置顺序尝试，响应 source 必须与 Provider Name 一致；缓存 key 包含 Provider 链名称和起止日期，TTL 15 分钟，避免不同 Provider 链共享旧快照。
+5. 当前只有 Tushare Provider 实现，因此所谓回退链目前没有第二个已证实的市场级来源；配置多个实现前应补充多 Provider 对照与回退测试。
+
+#### 30.6 DTO、OpenAPI 与 WebUI 消费
+
+1. `MarketCapitalFlowItem` 的 `trade_date` 是非 omitempty 字符串；其余 14 个数值字段均为 `*float64 + omitempty`。nil 时 JSON 省略字段，不输出显式 null。
+2. OpenAPI `MarketCapitalFlowItem` 只将 `trade_date` 列为 required，字段集合与 DTO 对齐；但 14 个可选数值字段全部声明 `nullable: true`，允许显式 null，与 Go omitempty 的省略语义不一致，属于 AUD-WEBUI-CTR-010 同类问题。当前 51 模型反射契约测试检查字段集合和 required，但缺少反向约束来阻止 omitempty 字段被声明 nullable。
+3. OpenAPI 的 `MarketCapitalFlowSnapshot` required 包含 start_date/end_date/total/items/source/source_version/fetched_at/quality_status，与 Go 非 omitempty 字段基本一致；quality_reasons 为 omitempty，可省略。
+4. WebUI API Client `getMarketCapitalFlow` 已接通接口，发送 start/end，注入行情 API Key，并支持 AbortSignal；API 测试覆盖 URL、鉴权参数、取消信号和日期范围校验。
+5. 市场概览页面实际调用该 Client，显示交易日、沪深指数收盘/涨跌幅、主力净额 `net_amount_cny`、主力净占比、日期范围、返回条数、来源版本、采集时间和质量原因。金额显示元并保留正负号。
+6. 页面没有消费超大单/大单/中单/小单金额及其比例字段；这些字段虽已在 DTO/OpenAPI 中提供，但当前市场资金流表格只呈现主力净额。现有 `market-overview.test.mjs` 覆盖默认日期范围等辅助逻辑，没有看到市场资金流行渲染、四类字段展示或缺失值行为的页面回归测试。
+7. 当前页面消费不是错误地丢弃服务端数据，而是只实现主力净额视图；四类资金分类是否属于当前产品必须展示的范围仍需产品/模块责任方确认。不能把 API 字段存在等同于 WebUI 已消费。
+
+#### 30.7 差异登记
+
+**AUD-WEBUI-CTR-020：市场级资金流可选数值字段 OpenAPI nullable 与 Go JSON 省略语义不一致（P2）**
+
+- 证据：`MarketCapitalFlowItem` 除 trade_date 外的 14 个数值字段均为 Go `*float64 + omitempty`；OpenAPI 对应 14 个字段均声明 nullable=true。nil 时实际 JSON 省略，而不是输出 null。
+- 影响：生成客户端可能按显式 null 处理可选值，但运行时只返回字段缺失；missing 与 null 的契约语义不统一。
+- 责任方：Market Data HTTP API 契约维护方。
+- 关闭条件：若保持 omitempty，则移除 14 个字段的 nullable；补充 nil 字段 JSON Golden，并为反射契约测试增加反向检查，确保 omitempty pointer 不被声明 nullable。
+
+**AUD-WEBUI-CTR-021：市场级资金流四类金额与主力净额的来源关系未形成可验证契约（P2，待来源定义补证）**
+
+- 证据：Tushare 官方 `moneyflow_mkt_dc` 字段文档说明各字段是净流入金额/净占比，但没有声明 `net_amount` 与四类金额之间的代数恒等关系；当前 Provider/Service 不校验该关系，测试也没有真实样本或字段关系 Golden。
+- 影响：后续消费者若自行把四类金额相加或用分类金额重建主力净额，可能引入未获源端定义支持的业务口径。当前没有证据证明现有 `net_amount` 数值错误。
+- 责任方：Market Data Provider / 数据契约维护方。
+- 关闭条件：从 Tushare 官方补充材料或可追溯真实样本确认分类规则和可加总关系；将明确语义写入 DTO/OpenAPI；若来源不承诺恒等关系，明确标记为独立源端指标，并增加防止消费者擅自重算的契约测试/文档。
+
+**AUD-WEBUI-CTR-022：市场级资金流历史没有交易日覆盖完整性证明（P2）**
+
+- 证据：Provider/Service 检查日期合法、请求范围、重复和升序，但不查询交易日历、不核对预期交易日；返回缺少某些交易日的序列仍可能通过验证。
+- 影响：total 只能表示实际返回行数，无法证明请求区间的交易日记录完整；WebUI 目前未展示覆盖率或缺日诊断。
+- 责任方：Market Data Provider / Service 维护方。
+- 关闭条件：明确 API 的覆盖承诺；若要求完整历史，接入权威交易日历并区分非交易日与缺失交易日，对缺日降级并列出日期；若仅承诺返回源端现有观测，则在 OpenAPI 和页面明确 best-effort 覆盖语义。
+
+#### 30.8 本批结论
+
+- 市场级资金流与个股资金流是独立 Port、数据集和 API；固定基线中仅 Tushare 实现市场级 Provider，不能认为已具备多供应商回退。
+- Tushare `moneyflow_mkt_dc` 的金额单位经官方文档确认是人民币元，比例是百分点；当前不做万元换算是正确的，源端正负号被保留。
+- `net_amount` 与四类资金金额之间没有已证实的可加总恒等关系，新增 AUD-WEBUI-CTR-021；在取得源端定义前不得自行重算。
+- 日期排序、重复日期、请求边界、2000 自然日限制和采集时间降级均有实现；但交易日缺失未校验，新增 AUD-WEBUI-CTR-022。
+- 新增 AUD-WEBUI-CTR-020：14 个 omitempty 数值字段被 OpenAPI 过度声明 nullable。
+- WebUI 已接通市场级 API，但页面只显示主力净额和指数，不消费四类资金分类字段；API Client 有请求测试，页面缺少该数据表格的直接渲染回归测试。
+- 未发现已证实的金额单位换算或正负号实现错误；来源分类关系、交易日完整覆盖和四类字段的产品消费范围仍需补证。WebUI 维度 2 继续 partial。
