@@ -161,3 +161,39 @@ func TestDeliveryCompletionRejectsWrongChannelVersion(t *testing.T) {
 		t.Fatalf("mismatched channel must not complete attempt, history=%+v err=%v", history, historyErr)
 	}
 }
+
+func TestDeliveryCompletionDeliveryCASFailureIsRecoverableFromCompletedAttempt(t *testing.T) {
+	repository, claim, attempt, finishedAt := startCompletionAttempt(t, domain.ChannelOutcomeAccepted)
+	service, err := NewDeliveryCompletionService(repository, repository, RetryPolicy{
+		MaxAttempts: 3, MaxElapsed: time.Hour, PerAttemptTimeout: time.Minute,
+		BaseDelay: time.Second, MaxDelay: time.Minute,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Attempt 完成写入成功后，模拟 Delivery CAS 失败。
+	repository.failNext = true
+	err = service.Complete(context.Background(), claim, attempt, completionChannel(),
+		domain.ChannelSendResult{Outcome: domain.ChannelOutcomeAccepted, ProviderMessageRef: "provider-message-persisted"},
+		finishedAt, 0.5, "")
+	if err == nil {
+		t.Fatal("expected Delivery CAS failure")
+	}
+
+	current, found, err := repository.Get(context.Background(), claim.Delivery.DeliveryID)
+	if err != nil || !found || current.Status != domain.DeliverySending || current.AttemptCount != 1 {
+		t.Fatalf("failed Delivery CAS must leave sending snapshot and started attempt count: delivery=%+v found=%v err=%v", current, found, err)
+	}
+	history, err := repository.ListByDelivery(context.Background(), current.DeliveryID)
+	if err != nil || len(history) != 1 || history[0].FinishedAt == nil ||
+		history[0].Outcome == nil || *history[0].Outcome != domain.DeliveryAttemptAccepted {
+		t.Fatalf("completed accepted Attempt must remain durable for recovery: history=%+v err=%v", history, err)
+	}
+
+	assessment, err := AssessExpiredDeliveryLease(current, claim.Lease, history, claim.Lease.ExpiresAt)
+	if err != nil || assessment.Action != LeaseRecoveryFinalizeSent ||
+		assessment.ProviderMessageRef != "provider-message-persisted" {
+		t.Fatalf("recovery must finalize sent from immutable Attempt without resending: assessment=%+v err=%v", assessment, err)
+	}
+}
