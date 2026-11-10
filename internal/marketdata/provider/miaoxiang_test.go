@@ -240,3 +240,36 @@ func TestMiaoXiangCapitalFlowReportsDegradedFields(t *testing.T) {
 	}
 	for field, ok := range found { if !ok { t.Errorf("missing %s diagnostic: %+v", field, reporter.Snapshot().Issues) } }
 }
+
+func TestMiaoXiangQueryTablesReportsResponseFailures(t *testing.T) {
+	cases := []struct {
+		name, response, wantCode string
+		status int
+	}{
+		{name: "HTTP status", response: "unavailable", status: http.StatusBadGateway, wantCode: "http_status_error"},
+		{name: "invalid JSON", response: "{", status: http.StatusOK, wantCode: "decode_error"},
+		{name: "missing status", response: `{"data":{}}`, status: http.StatusOK, wantCode: "invalid_provider_status"},
+		{name: "provider rejection", response: `{"status":9,"message":"quota"}`, status: http.StatusOK, wantCode: "provider_error"},
+		{name: "invalid table payload", response: `{"status":0,"data":[]}`, status: http.StatusOK, wantCode: "invalid_table_payload"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			p, _, cleanup := newMiaoXiangTestServer(t, tc.response, func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(tc.status)
+				_, _ = fmt.Fprint(w, tc.response)
+			})
+			defer cleanup()
+			reporter := validation.NewReporter(10)
+			ctx := validation.WithReporter(context.Background(), reporter)
+			_, err := p.FetchChipDistribution(ctx, "600519")
+			if err == nil { t.Fatal("expected response failure") }
+			for _, issue := range reporter.Snapshot().Issues {
+				if issue.Code == tc.wantCode {
+					if issue.RowIndex != -1 { t.Fatalf("response-level issue must not invent row index: %+v", issue) }
+					return
+				}
+			}
+			t.Fatalf("missing Reporter code %q: %+v", tc.wantCode, reporter.Snapshot().Issues)
+		})
+	}
+}

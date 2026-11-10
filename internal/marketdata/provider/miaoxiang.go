@@ -265,18 +265,27 @@ func (p *MiaoXiang) FetchCapitalFlow(ctx context.Context, rawSymbol string) (*mo
 
 
 // addMiaoXiangWarning 将自然语言补充接口已有的降级原因映射为可定位的字段证据。
-func addMiaoXiangWarning(ctx context.Context, rowIndex int, field, providerField, code, expected, actualType, message string) {
+func addMiaoXiangIssue(ctx context.Context, rowIndex int, stage validation.Stage, field, providerField, code, expected, actualType, message string, severity validation.Severity) {
 	report := validation.NewReport(8)
 	issue := validation.FieldIssue{
-		Stage: validation.StageValidate, Field: field, ProviderField: providerField,
+		Stage: stage, Field: field, ProviderField: providerField,
 		Code: code, Expected: expected, ActualType: actualType,
-		Severity: validation.SeverityWarning, Message: message,
+		Severity: severity, Message: message,
 	}
 	if rowIndex >= 0 {
 		issue.RowIndex = &rowIndex
 	}
 	report.Add(issue)
 	validation.AddContextReport(ctx, report)
+}
+
+// addMiaoXiangWarning 将自然语言补充接口已有的降级原因映射为可定位的字段证据。
+func addMiaoXiangWarning(ctx context.Context, rowIndex int, field, providerField, code, expected, actualType, message string) {
+	addMiaoXiangIssue(ctx, rowIndex, validation.StageValidate, field, providerField, code, expected, actualType, message, validation.SeverityWarning)
+}
+
+func addMiaoXiangResponseError(ctx context.Context, field, providerField, code, expected, actualType, message string) {
+	addMiaoXiangIssue(ctx, -1, validation.StageParse, field, providerField, code, expected, actualType, message, validation.SeverityError)
 }
 
 func completeWindowSum(series []mxFlowObservation, size int) *float64 {
@@ -301,6 +310,7 @@ func (p *MiaoXiang) queryTables(ctx context.Context, key, query string) ([]mxTab
 		return nil, errors.New("MX API context must not be nil")
 	}
 	if err := ctx.Err(); err != nil {
+		addMiaoXiangResponseError(ctx, "request", "context", "request_error", "active request context", "error", "妙想补充数据请求上下文已取消或超时")
 		return nil, err
 	}
 	if value, ok := p.cacheGet(key); ok {
@@ -311,6 +321,7 @@ func (p *MiaoXiang) queryTables(ctx context.Context, key, query string) ([]mxTab
 	}
 	// 不要把新的 API 请求排在仍在执行或已超时的请求后面；此处沿用上游 Python 管理器的非排队准入策略。
 	if !miaoXiangRequestLock.TryLock() {
+		addMiaoXiangResponseError(ctx, "request", "admission", "request_skipped", "exclusive supplemental request slot", "busy", "妙想补充数据请求因全局请求槽繁忙而跳过")
 		return nil, errors.New("MX API request already in progress; supplemental query skipped")
 	}
 	defer miaoXiangRequestLock.Unlock()
@@ -322,6 +333,7 @@ func (p *MiaoXiang) queryTables(ctx context.Context, key, query string) ([]mxTab
 		select {
 		case <-ctx.Done():
 			timer.Stop()
+			addMiaoXiangResponseError(ctx, "request", "rate_limit_wait", "request_error", "completed rate-limit wait", "cancelled", "妙想补充数据请求在限流等待期间被取消")
 			return nil, ctx.Err()
 		case <-timer.C:
 		}
@@ -329,6 +341,7 @@ func (p *MiaoXiang) queryTables(ctx context.Context, key, query string) ([]mxTab
 	body, _ := json.Marshal(map[string]string{"toolQuery": query})
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, p.endpoint, bytes.NewReader(body))
 	if err != nil {
+		addMiaoXiangResponseError(ctx, "request", "url", "request_error", "valid HTTP request", "invalid_request", "构建妙想补充数据请求失败")
 		return nil, fmt.Errorf("build MX API request: %w", err)
 	}
 	req.Header.Set("apikey", p.apiKey)
@@ -341,32 +354,43 @@ func (p *MiaoXiang) queryTables(ctx context.Context, key, query string) ([]mxTab
 	miaoXiangLastRequest = p.now()
 	miaoXiangRateMu.Unlock()
 	if err != nil {
+		addMiaoXiangResponseError(ctx, "request", "http", "request_error", "successful HTTP request", "transport_error", "妙想补充数据 HTTP 请求失败")
 		p.logger.Warn("补充数据源请求失败", "service", "market-data", "provider", p.Name(), "dataset", mxDataset(key), "symbol", mxSymbol(key), "duration_ms", time.Since(started).Milliseconds(), "error", err.Error())
 		return nil, fmt.Errorf("MX API request failed: %w", err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4096))
+		addMiaoXiangResponseError(ctx, "http_status", "response.status_code", "http_status_error", "2xx HTTP status", "integer", "妙想补充数据源返回非成功 HTTP 状态")
 		p.logger.Warn("补充数据源返回 HTTP 错误", "service", "market-data", "provider", p.Name(), "dataset", mxDataset(key), "symbol", mxSymbol(key), "status_code", resp.StatusCode, "duration_ms", time.Since(started).Milliseconds())
 		return nil, fmt.Errorf("MX API returned HTTP status %d", resp.StatusCode)
 	}
 	raw, err := io.ReadAll(io.LimitReader(resp.Body, maxMiaoXiangResponseBytes+1))
 	if err != nil {
+		addMiaoXiangResponseError(ctx, "response", "body", "read_error", "readable bounded response body", "read_error", "读取妙想补充数据响应失败")
 		return nil, fmt.Errorf("read MX API response: %w", err)
 	}
 	if len(raw) > maxMiaoXiangResponseBytes {
+		addMiaoXiangResponseError(ctx, "response", "body", "response_too_large", "response no larger than 2 MiB", "oversized", "妙想补充数据响应超过 2 MiB 安全上限")
 		return nil, errors.New("MX API response exceeds 2 MiB")
 	}
 	var envelope mxEnvelope
 	if err := json.Unmarshal(raw, &envelope); err != nil {
+		addMiaoXiangResponseError(ctx, "response", "body", "decode_error", "valid JSON response envelope", "invalid_json", "妙想补充数据响应 JSON 解码失败")
 		return nil, fmt.Errorf("decode MX API response: %w", err)
 	}
 	var status int
-	if len(envelope.Status) == 0 || json.Unmarshal(envelope.Status, &status) != nil || status != 0 {
+	if len(envelope.Status) == 0 || json.Unmarshal(envelope.Status, &status) != nil {
+		addMiaoXiangResponseError(ctx, "provider_status", "status", "invalid_provider_status", "integer status equal to zero", "missing_or_invalid", "妙想补充数据响应缺少有效 status")
+		return nil, fmt.Errorf("MX API reported a non-success status (message=%q)", boundedText(envelope.Message, 120))
+	}
+	if status != 0 {
+		addMiaoXiangResponseError(ctx, "provider_status", "status", "provider_error", "status equal to zero", "non_success", "妙想补充数据源明确返回非成功状态")
 		return nil, fmt.Errorf("MX API reported a non-success status (message=%q)", boundedText(envelope.Message, 120))
 	}
 	tables, err := extractMXTables(envelope.Data)
 	if err != nil {
+		addMiaoXiangResponseError(ctx, "data", "data.dataTableDTOList", "invalid_table_payload", "supported dataTableDTOList response envelope", "missing_or_invalid", "妙想补充数据响应未包含可识别的数据表结构")
 		return nil, err
 	}
 	p.cacheSet(key, tables)
