@@ -50,7 +50,7 @@ func TestDeliveryCompletionAcceptedConvergesToSent(t *testing.T) {
 		t.Fatalf("complete accepted attempt: %v", err)
 	}
 	got, found, err := repository.Get(context.Background(), claim.Delivery.DeliveryID)
-	if err != nil || !found || got.Status != domain.DeliverySent || got.Version != claim.Delivery.Version+1 {
+	if err != nil || !found || got.Status != domain.DeliverySent || got.Version != claim.Delivery.Version+1 || got.AttemptCount != 1 {
 		t.Fatalf("expected sent delivery, got=%+v found=%v err=%v", got, found, err)
 	}
 	history, err := repository.ListByDelivery(context.Background(), got.DeliveryID)
@@ -84,7 +84,7 @@ func TestDeliveryCompletionAmbiguousAndNotSentAreConservative(t *testing.T) {
 				t.Fatalf("complete %s attempt: %v", test.name, err)
 			}
 			got, found, err := repository.Get(context.Background(), claim.Delivery.DeliveryID)
-			if err != nil || !found || got.Status != test.want {
+			if err != nil || !found || got.Status != test.want || got.AttemptCount != 1 {
 				t.Fatalf("expected %s, got=%+v found=%v err=%v", test.want, got, found, err)
 			}
 		})
@@ -107,7 +107,7 @@ func TestDeliveryCompletionRetryableRejectionUsesRetryPolicy(t *testing.T) {
 		t.Fatalf("complete retryable rejection: %v", err)
 	}
 	got, found, err := repository.Get(context.Background(), claim.Delivery.DeliveryID)
-	if err != nil || !found || got.Status != domain.DeliveryRetryWait || got.NextAttemptAt == nil {
+	if err != nil || !found || got.Status != domain.DeliveryRetryWait || got.NextAttemptAt == nil || got.AttemptCount != 1 {
 		t.Fatalf("expected retry_wait, got=%+v found=%v err=%v", got, found, err)
 	}
 }
