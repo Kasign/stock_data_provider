@@ -302,3 +302,15 @@
 - ValuationItem/ValuationSnapshot 字段和 required 集合与 OpenAPI 一致；新增 **AUD-WEBUI-CTR-015**（P2）：五个 omitempty 扩展指标被 OpenAPI 过度声明 nullable，归入 CTR-010 同类问题。
 - WebUI 已接通估值接口，显示五项核心倍数、缺失状态、质量原因及供应商/采集时间；未发现已证实的运行时估值数值错误。详细证据见审计明细第 27 节。
 - WebUI 维度 2 继续 partial。
+
+
+### WebUI — 维度 2：Chip Distribution 筹码分布字段、算法与消费语义
+
+- 固定代码基线：`b6dfc85ba214fe16268c8cba780641a8bfe15086`。
+- 已核对 ChipDistribution DTO、独立 ChipDistributionProvider Port、Eastmoney/MiaoXiang Provider、Service 校验/回退/缓存、HTTP Handler、OpenAPI、模型契约测试及 WebUI 页面/浏览器测试。
+- 已有统一 Provider 协议，不需要重复抽象；比例统一为 0..1，成本为人民币元/股；Service 校验正成本、区间顺序、比例边界、日期与采集时间。两 Provider 均因缺少可验证发布时间/可用时间而不能标记 valid。
+- AUD-WEBUI-CTR-010 影响范围增加 ChipDistribution 的九个 omitempty 字段，OpenAPI 过度声明 nullable。
+- 新增 **AUD-WEBUI-CTR-016**（P2）：Eastmoney 计算字段与 MiaoXiang 源端字段的 average_cost/集中度口径没有等价性证据；provider_date 实际已归一化，但 OpenAPI 描述为原始日期。
+- 新增 **AUD-WEBUI-CTR-017**（P2）：Eastmoney 使用 fqt=0 未复权日 K 计算最近最多 120 根筹码分布，除权窗口可能混用价格基准；没有算法专用测试或参考 Golden。
+- WebUI 已接通并正确显示比例、成本、日期、质量状态；has_data 分支不属于当前 Go DTO/OpenAPI 契约。未证实线上数值错误，准确性风险待责任方处理。详细证据见审计明细第 28 节。
+- WebUI 维度 2 继续 partial。
