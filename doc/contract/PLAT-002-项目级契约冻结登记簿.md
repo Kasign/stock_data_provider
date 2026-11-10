@@ -2,16 +2,16 @@
 
 - 仓库：`Kasign/stock_data_provider`
 - 代码审计基线：`origin/integration` @ `b6dfc85ba214fe16268c8cba780641a8bfe15086`
-- 审计文档维护分支：`origin/feat/design_doc` @ `671b76db8879766f3b43990406eb0a1216a53424`
-- 文档分支相对代码基线：ahead=7、behind=0；compare 变更仅涉及文档文件
-- 本轮审计只对固定代码 SHA `b6dfc85ba214fe16268c8cba780641a8bfe15086` 作结论；不随分支 HEAD 自动漂移
-- 登记簿版本：`0.2.5-review`
-- 当前状态：`review_in_progress`
-- 冻结结论：尚未整体冻结；当前无足够证据宣布 PLAT-002 全部通过
+- 审计文档维护分支：`origin/feat/design_doc`（本次更新前 HEAD：`59abc0331f07298032e5fbbcdced3c51416a7b7b`）
+- 固定代码审计基线：`origin/integration @ b6dfc85ba214fe16268c8cba780641a8bfe15086`；仅对该 SHA 的代码事实作结论，不随分支 HEAD 自动漂移
+- 登记簿版本：`0.2.6-review`
+- 当前状态：`L1_frozen_L2_pending_evidence`
+- 冻结结论：L1 Design Baseline 1.0.0 已冻结；43 个正式 CTR 中 0 个达到 L2 frozen（39 个 pending_evidence、4 个 has_difference + pending_evidence）
+- 项目级决策：DEC-PLAT-002-018～026 已完成；当前非条件性项目级 pending_decision 为 0；DATA-FLOW-B、LLM-FLOW-B 保持条件性 deferred
 - 决策责任：项目负责人
-- 复核原则：模块实现者自审不等于独立生产方/消费者确认
+- 复核原则：模块实现者自审不等于独立生产方/消费者确认；项目级决议批准不替代 L2 证据门禁
 
-> 本登记簿是项目级契约状态与冻结结论的唯一权威入口。当前记录是核验起始快照；未逐项检查的契约不得因历史状态、模块 README 或旧 CI 记录而升级。
+> 本登记簿是项目级契约状态与冻结结论的唯一权威入口。第1节保留固定代码基线的历史审查事实；当前状态以第3节正式 CTR 状态表、第10～12节状态覆盖和最新增量验收记录为准。不得因历史状态、模块 README 或旧 CI 记录自动升级契约状态。
 
 ## 1. 本轮核验结论（起始快照）
 
