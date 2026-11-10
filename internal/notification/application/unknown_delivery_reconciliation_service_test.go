@@ -193,9 +193,9 @@ func serviceRegistryForTest(t *testing.T, adapter *unknownReconciliationLookupAd
 
 func TestUnknownDeliveryReconciliationServiceRejectsIncompleteHistory(t *testing.T) {
 	for _, tc := range []struct {
-		name                string
-		removeAttempts      bool
-		removeStateEvents   bool
+		name              string
+		removeAttempts    bool
+		removeStateEvents bool
 	}{
 		{name: "attempt history incomplete", removeAttempts: true},
 		{name: "state event history incomplete", removeStateEvents: true},
