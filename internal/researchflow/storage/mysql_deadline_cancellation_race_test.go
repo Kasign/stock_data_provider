@@ -133,3 +133,93 @@ func TestMariaDBExpiredDeadlineYieldsToCompletedStages(t *testing.T) {
 		t.Fatalf("completed Run final state=%#v err=%v", loaded.Run, err)
 	}
 }
+
+
+func TestMariaDBDeadlineExpirationWinsAgainstStaleSchedulerStageCAS(t *testing.T) {
+	if os.Getenv("PLATFORM_STORAGE_INTEGRATION") != "1" {
+		t.Skip("set PLATFORM_STORAGE_INTEGRATION=1")
+	}
+	ctx, cancel, db, repo := deadlineRaceDB(t)
+	defer cancel()
+	defer db.Close()
+
+	suffix := fmt.Sprint(time.Now().UnixNano())
+	runRef, stageRefs := deadlineRaceFixture(t, ctx, repo, suffix, "deadline-scheduler-race", "pending")
+	stageRef := stageRefs[0]
+	if _, err := db.ExecContext(ctx, "UPDATE researchflow_stages SET status = ? WHERE stage_ref = ?",
+		string(domain.StagePending), stageRef); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.ExecContext(ctx, "UPDATE researchflow_runs SET deadline_at = ? WHERE run_ref = ?",
+		formatResearchflowTimeValue(time.Now().UTC().Add(-time.Minute)), runRef); err != nil {
+		t.Fatal(err)
+	}
+
+	staleStage, err := repo.GetStage(ctx, stageRef)
+	if err != nil {
+		t.Fatal(err)
+	}
+	scheduledStage := staleStage
+	scheduledStage.Status = domain.StageReady
+	scheduledStage.Version++
+
+	start := make(chan struct{})
+	type expirationOutcome struct {
+		updated bool
+		err     error
+	}
+	expiration := make(chan expirationOutcome, 1)
+	type casOutcome struct {
+		updated bool
+		err     error
+	}
+	cas := make(chan casOutcome, 1)
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		<-start
+		updated, _, expireErr := repo.ExpireRunDeadline(ctx, runRef, 1)
+		expiration <- expirationOutcome{updated: updated, err: expireErr}
+	}()
+	go func() {
+		defer wg.Done()
+		<-start
+		updated, casErr := repo.CompareAndSwapStage(ctx, staleStage.Version, scheduledStage)
+		cas <- casOutcome{updated: updated, err: casErr}
+	}()
+	close(start)
+	wg.Wait()
+	close(expiration)
+	close(cas)
+
+	expireResult := <-expiration
+	if expireResult.err != nil || !expireResult.updated {
+		t.Fatalf("deadline expiration updated=%v err=%v; deadline must win", expireResult.updated, expireResult.err)
+	}
+	casResult := <-cas
+	if casResult.err != nil {
+		t.Fatalf("stale scheduler Stage CAS returned error: %v", casResult.err)
+	}
+
+	loadedRun, err := repo.GetRun(ctx, runRef)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loadedRun.Run.TerminationReason != "deadline_exceeded" || loadedRun.Run.Version != 2 {
+		t.Fatalf("Run termination=%q version=%d; want deadline_exceeded/v2",
+			loadedRun.Run.TerminationReason, loadedRun.Run.Version)
+	}
+	loadedStage, err := repo.GetStage(ctx, stageRef)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantVersion := uint64(2)
+	if casResult.updated {
+		wantVersion = 3
+	}
+	if loadedStage.Status != domain.StageTimedOut || loadedStage.Version != wantVersion {
+		t.Fatalf("Stage status=%s version=%d; want timed_out/v%d (scheduler CAS applied=%v)",
+			loadedStage.Status, loadedStage.Version, wantVersion, casResult.updated)
+	}
+}
