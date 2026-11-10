@@ -212,7 +212,7 @@ func TestRetryPolicyRejectsAttemptOutsideDeliveryLifecycle(t *testing.T) {
 	atDeadline.StartedAt = delivery.DeadlineAt
 	finished = atDeadline.StartedAt.Add(time.Second)
 	atDeadline.FinishedAt = &finished
-	atDeadline.DurationMS = int64Pointer(1000)
+	atDeadline.DurationMS = retryInt64Pointer(1000)
 	leaseExpiry := atDeadline.StartedAt.Add(time.Minute)
 	atDeadline.LeaseExpiresAt = leaseExpiry
 	now = finished.Add(time.Second)
