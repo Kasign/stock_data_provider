@@ -254,7 +254,7 @@
 ### WebUI — 维度 2：证券资料、历史交易状态与涨跌幅规则
 
 - 已核对 Profile、Trading Status、Price Limit Rule 的路由、Handler、Go DTO、OpenAPI 和相关 WebUI API Client。
-- 新增 AUD-WEBUI-CTR-010（P2）：若干 Go `omitempty` 字段在 OpenAPI 中声明 nullable=true，Schema 允许显式 null，但实际 JSON 会省略字段。
+- 新增 AUD-WEBUI-CTR-010（P2）：若干 Go `omitempty` 字段在 OpenAPI 直接声明 nullable=true，但实际 JSON 会省略字段；复核后不把仅在 $ref 旁声明 nullable 的 special_exception_evidence 计入已证实范围。
 - 新增 AUD-WEBUI-CTR-011（P2）：PriceLimitRuleSnapshot 的 OpenAPI required 漏列八个 Go 非 omitempty 字段，且两个状态字段缺少 Go 已定义枚举；该 DTO 未进入 51 模型契约登记表，缺少完整 JSON Golden。
-- Profile 的 WebUI 消费已确认；Trading Status / Price Limit Rule API Client 的 UI 事件接线仍待核，不能视为端到端已完成。
+- Review 已确认 stock-research.js 只实际调用 Profile；Trading Status / Price Limit Rule 请求函数未接入该页面，现有对应区域仅重置占位状态。不能视为端到端已完成。
 - 本批未证明运行时业务结果错误；WebUI 维度 2 继续 partial。详细证据见审计明细第 23 节。
