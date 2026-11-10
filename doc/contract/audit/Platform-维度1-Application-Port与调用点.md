@@ -1342,7 +1342,7 @@ StockBoards 的 Provider Port、Go DTO、Service 校验/回退/缓存、HTTP 路
 - DataService 校验、Provider 回退、缓存和 PIT：`internal/marketdata/service/fundamentals.go`（blob `0112474efd5b65c5cf9812991c02aa0c9ae5d9df`）。
 - PIT 测试：`internal/marketdata/service/fundamentals_pit_test.go`（blob `47af2882a746b1327b35fae7b87b09f120cde30a`）；回退测试 `internal/marketdata/service/fundamentals_fallback_test.go`（blob `850a782871fbc9ee308ca37d5a37e18a9c3197b3`）。
 - BaoStock Provider：`internal/marketdata/provider/baostock_fundamentals.go`（blob `4ec129e8157157234dc8d199ec6bab344437ffba`）；测试 `internal/marketdata/provider/fundamentals_test.go`（blob `8c706f4cd1cbca7711931c12f0664221547cc2b2`）。
-- HiThink Provider：`internal/marketdata/provider/hithink.go`（blob `5a0e0c2f6a6a4d0e3f0c4baf1d7f9f5c2b4d3a1e`）；测试 `internal/marketdata/provider/hithink_fundamentals_test.go`（blob `8d4e33139b9d8bcedf30497bdcfc6c77fd41ce6e`）。
+- HiThink Provider：`internal/marketdata/provider/hithink.go`（blob `337c072c14f764f1f9cfff833f44ddcf5426e04b`）；测试 `internal/marketdata/provider/hithink_fundamentals_test.go`（blob `8d4e33139b9d8bcedf30497bdcfc6c77fd41ce6e`）。
 - PIT 版本存储：`internal/marketdata/repository/mysql.go`（blob `3981fde146a6e56502348acb47d41ce87b082223`）；版本哈希测试 `internal/marketdata/repository/mysql_versions_test.go`（blob `464d278d131761119bf2ee9af3a6bfc405a5d8f5`）。
 - HTTP Handler：`internal/marketdata/httpapi/fundamentals.go`（blob `d6062a41b50b75b8921e1e977e90fda00d2ded2c`）；测试 `internal/marketdata/httpapi/fundamentals_test.go`（blob `8719e68f1697ed7ed05a93cf300723ceae7c1afb`）。
 - OpenAPI：`internal/marketdata/httpapi/openapi.yaml`（blob `cd8a6e3dfb8e3162ee789b11e883be9283c59f32`）；反射契约测试 `internal/marketdata/httpapi/openapi_contract_test.go`（blob `7f97f075a23bd698a7e3fc32e90509d1e999217b`）。
