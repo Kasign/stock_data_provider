@@ -128,7 +128,7 @@ func TestSearchCandidatesNormalizesProviderCandidates(t *testing.T) {
 			PublisherName: " 媒体 ", PublishedAt: &publishedAt,
 		}}},
 	}})
-	result := usecase.Execute(context.Background(), domain.SearchRequest{Query: "market", Limit: 10, QueryDimension: "news"})
+	result := usecase.Execute(context.Background(), domain.SearchRequest{Query: "market", Limit: 10, QueryDimension: " news "})
 	if len(result.Candidates) != 1 {
 		t.Fatalf("candidates=%+v", result.Candidates)
 	}
