@@ -988,3 +988,15 @@
 - 状态：职责/依赖方向 `freeze-ready`；Run 上下文语义 `accepted`；Stage 级资源范围为条件性 `pending_decision`；真实 Data 消费交互 `pending_evidence`。
 - 沿用 DATA-CTR-005/008、FLOW-CTR-003/004，不新增 CTR；不修改 Data、Researchflow、Server 责任模块代码，不执行 CI。
 - 下一步唯一审查边界：**News→Researchflow**，只核对 News Evidence Query/Cursor/授权/PIT 引用如何进入 Run/Stage；不得重复 News→Research 已完成的首轮检查，除非发现 Researchflow 消费路径有独立差异。
+
+
+## 24. News→Researchflow 跨模块消费边界审查（2026-11-10）
+
+- 固定代码审计基线保持 `origin/integration @ b6dfc85ba214fe16268c8cba780641a8bfe15086`；维护分支为 `feat/design_doc`。
+- 本轮完成 News→Researchflow 输入生命周期审查，详细差异唯一登记见矩阵第28节。
+- 已确认：News ListEvidence 的 `snapshot_ref` 固定分页结果集，Cursor 仅用于同一快照续页；Researchflow 的 `input_snapshot_refs` 在 CreateRun 时固定并由 Stage/Attempt/重试继承；News 每次查询必须接收 Run 的原始 `system_as_of`，授权 Owner 每次读取仍需复核当前策略。
+- 关键差异：News 分页 Snapshot/Cursor TTL 仅15分钟，不能直接作为长生命周期 Run 输入；News 首屏生成 snapshot_ref 的时点与 CreateRun 先固定 input_snapshot_refs 的顺序未定义；Researchflow authenticated_caller_ref 到 News caller_ref 的主体/委托映射，以及 purpose/content level/filters 的版本化固定方式未明确；真实 News Consumer Adapter、Server 装配和联合测试缺证据。
+- 状态：职责/依赖方向 `freeze-ready`；PIT 时间传播原则 `accepted`；快照生命周期与主体/查询条件映射 `pending_decision`；真实交互 `pending_evidence`。
+- 沿用 NEWS-CTR-001/002/003、FLOW-CTR-003/004、GOV-CTR-002/006，不新增 CTR；NEWS→Research 已登记问题不重复登记。
+- 本轮未修改业务代码、Schema、Golden、测试，未执行 CI。
+- **下一步唯一任务：转入 Quant→Researchflow 边界审查**，只核对 QuantResult/Manifest/AuthorizationRef 与 Run/Stage 输入引用、system_as_of、结果版本和重试固定关系；不得重复 Quant DTO/指标算法审查。
