@@ -526,3 +526,11 @@ Application 的 `RunFinalizationCoordinator` 是三种终态聚合路径的路�
 - 当 Run deadline 已过期但所有 Stage 均已终态时，`ExpireRunDeadline` 不取得 Deadline 终止权：返回 `updated=false`，保持 Run version 与 termination_reason 不变。
 - Application 正常聚合路径仍可执行 `FinalizeRun` 并提交成功结果、Summary 与 Outbox。
 - 新增 MariaDB 集成测试覆盖该顺序；尚未执行真实 MariaDB。
+
+
+## 26. Outbox Retry 后旧 Worker fencing（2026-11-10）
+
+- Outbox lease generation 在每次 Claim（包括 Retry 后重新 Claim）递增；Retry 本身释放 lease，不改变 generation。
+- 旧 Worker 在消息被其他 Worker 重领后，不得 Ack 或 Retry 新租约。
+- Worker 完成 Retry 释放租约后，不得继续 Ack 或 Renew 原租约。
+- 新增 MariaDB 集成断言覆盖 Worker A -> Worker B reclaim -> Worker B Retry -> Worker C reclaim 的完整状态链。真实 MariaDB 尚未执行。
