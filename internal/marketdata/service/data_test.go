@@ -532,6 +532,71 @@ func TestQuoteFailoverRecordsActualSource(t *testing.T) {
 		t.Fatalf("valid fallback data must retain valid quality and provenance separately: %+v", q)
 	}
 }
+func TestQuoteRejectsMismatchedProviderSourceAndFallsBack(t *testing.T) {
+	wrongSource := validQuote("tencent")
+	fallback := validQuote("tencent")
+	providers := []provider.Provider{
+		fakeProvider{name: "eastmoney", quote: wrongSource},
+		fakeProvider{name: "tencent", quote: fallback},
+	}
+	svc := New(providers, cache.NewDisabled(), nil, time.Second, time.Second, 120, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	got, hit, err := svc.Quote(context.Background(), "600519.SH")
+	if err != nil || hit {
+		t.Fatalf("Quote returned hit=%v err=%v", hit, err)
+	}
+	if got == nil || got.Source != "tencent" || got.FallbackFrom != "eastmoney" {
+		t.Fatalf("mismatched source must be rejected and fallback retained: %+v", got)
+	}
+}
+
+func TestQuoteMissingProviderSourceIsFilledAsDegraded(t *testing.T) {
+	quote := validQuote("eastmoney")
+	quote.Source = ""
+	svc := New([]provider.Provider{fakeProvider{name: "eastmoney", quote: quote}},
+		cache.NewDisabled(), nil, time.Second, time.Second, 120, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	got, hit, err := svc.Quote(context.Background(), "600519.SH")
+	if err != nil || hit {
+		t.Fatalf("Quote returned hit=%v err=%v", hit, err)
+	}
+	if got == nil || got.Source != "eastmoney" || got.QualityStatus != model.QualityDegraded ||
+		!containsTestWarning(got.QualityReasons, "provider_source_missing_assumed_from_provider_name") {
+		t.Fatalf("missing source must be filled only with explicit degradation evidence: %+v", got)
+	}
+}
+
+func TestDailyBarsRejectsMismatchedProviderSourceAndFallsBack(t *testing.T) {
+	primaryBar := dailyBarForVersionContractTest("eastmoney-daily-bars-v1", "2026-10-20")
+	primaryBar.Source = "tencent"
+	fallbackBar := dailyBarForVersionContractTest("tencent-daily-bars-v1", "2026-10-20")
+	providers := []provider.Provider{
+		fakeProvider{name: "eastmoney", bars: []model.DailyBar{primaryBar}},
+		fakeProvider{name: "tencent", bars: []model.DailyBar{fallbackBar}},
+	}
+	svc := New(providers, cache.NewDisabled(), nil, time.Second, time.Minute, 120, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	bars, hit, _, err := svc.DailyBars(context.Background(), "600519.SH", "2026-10-20", "2026-10-20", 1, model.AdjustmentForward)
+	if err != nil || hit {
+		t.Fatalf("DailyBars hit=%v err=%v", hit, err)
+	}
+	if len(bars) != 1 || bars[0].Source != "tencent" || bars[0].FallbackFrom != "eastmoney" {
+		t.Fatalf("mismatched source must reject the whole provider response and use fallback: %+v", bars)
+	}
+}
+
+func TestDailyBarsMissingProviderSourceIsFilledAsDegraded(t *testing.T) {
+	bar := dailyBarForVersionContractTest("eastmoney-daily-bars-v1", "2026-10-20")
+	bar.Source = ""
+	svc := New([]provider.Provider{fakeProvider{name: "eastmoney", bars: []model.DailyBar{bar}}},
+		cache.NewDisabled(), nil, time.Second, time.Minute, 120, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	bars, hit, _, err := svc.DailyBars(context.Background(), "600519.SH", "2026-10-20", "2026-10-20", 1, model.AdjustmentForward)
+	if err != nil || hit {
+		t.Fatalf("DailyBars hit=%v err=%v", hit, err)
+	}
+	if len(bars) != 1 || bars[0].Source != "eastmoney" || bars[0].QualityStatus != model.QualityDegraded ||
+		!containsTestWarning(bars[0].QualityReasons, "provider_source_missing_assumed_from_provider_name") {
+		t.Fatalf("missing source must be filled only with explicit degradation evidence: %+v", bars)
+	}
+}
+
 func TestMergeBundleQualityStatusPreservesSeverity(t *testing.T) {
 	cases := []struct { current, next, want model.QualityStatus }{
 		{model.QualityValid, model.QualityDegraded, model.QualityDegraded},

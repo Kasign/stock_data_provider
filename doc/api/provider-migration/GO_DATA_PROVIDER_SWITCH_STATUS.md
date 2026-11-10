@@ -155,3 +155,14 @@
 - 本批未确认需要立即修改的代码缺陷；以上未证实点保留为 coverage evidence 项，不以猜测改造接口或领域模型。
 - 下一步按既定计划进入接收边界修复：DataService 不得无条件覆盖 Adapter 的 Source；非空来源与 Provider.Name 不一致应拒绝并记录诊断，空来源按明确兼容策略降级补齐并留痕；同时检查 Quote/DailyBars 两条路径及缓存/数据库回源。
 - 本批未修改业务代码，未运行 gofmt/build/test。
+
+### 2026-11-10：DataService Provider 来源身份接收边界修复
+
+- 修复范围：Quote 与 DailyBars 的 Provider 接收入口。
+- 非空 `Source` 必须与当前调用的 `Provider.Name()` 一致；不一致时整份 Provider 响应按契约失败处理，触发后备 Provider，不再静默覆盖真实来源。
+- 空 `Source` 保留有限兼容：允许以当前 `Provider.Name()` 补齐，但必须将结果降级，并添加 `provider_source_missing_assumed_from_provider_name` 质量原因。
+- DailyBars 在逐条处理前先检查整批 Source，避免一批数据中存在错误来源时只接受部分数据。
+- 新增 Quote / DailyBars 的来源不匹配回退测试，以及来源缺失显式降级测试。
+- 缓存回源路径：Quote 缓存和 DailyBars 缓存均要求 Source 非空并通过质量/版本校验；MariaDB 历史日 K 回源后按 Source + SourceVersion + 复权元数据分组，缺少来源的历史行不会进入可复现序列。本修复针对实时 Provider 接收路径，不改变历史存量数据。
+- 尚需核对其他非 Quote/DailyBars 能力入口中“空值补齐”和“非空来源不匹配”的一致性；本次不扩大修改范围。
+- 本轮仅完成代码与回归测试编写；按开发分支约定，未运行 gofmt/build/test。

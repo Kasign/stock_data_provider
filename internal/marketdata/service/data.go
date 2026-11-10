@@ -2753,6 +2753,16 @@ func (s *DataService) Quote(ctx context.Context, rawSymbol string) (*model.Quote
 			continue
 		}
 		q.SourceVersion = strings.TrimSpace(q.SourceVersion)
+		providerSource := strings.TrimSpace(q.Source)
+		if providerSource != "" && providerSource != p.Name() {
+			s.breaker.ContractFailure(breakerKey)
+			errs = append(errs, p.Name()+": provider returned a source identity different from Provider.Name()")
+			continue
+		}
+		if providerSource == "" {
+			degradeQualityStatus(&q.QualityStatus)
+			appendReasonOnce(&q.QualityReasons, "provider_source_missing_assumed_from_provider_name")
+		}
 		// fetched_at 是服务接收到 Provider 回包的时间，不能信任上游同名字段。
 		receivedAt := time.Now().UTC()
 		if strings.TrimSpace(q.Symbol) != "" {
@@ -3009,6 +3019,11 @@ func (s *DataService) DailyBars(ctx context.Context, rawSymbol, start, end strin
 		contractError := ""
 		providerSourceVersion := ""
 		for _, bar := range bars {
+			providerSource := strings.TrimSpace(bar.Source)
+			if providerSource != "" && providerSource != p.Name() {
+				contractError = "provider returned a source identity different from Provider.Name() in daily bars"
+				break
+			}
 			if strings.TrimSpace(bar.Symbol) != "" {
 				providerSymbol, symbolErr := normalize.NormalizeSymbol(bar.Symbol)
 				if symbolErr != nil || providerSymbol != symbol {
@@ -3050,6 +3065,10 @@ func (s *DataService) DailyBars(ctx context.Context, rawSymbol, start, end strin
 				appendReasonOnce(&bars[j].QualityReasons, "provider_symbol_missing_assumed_from_request")
 			}
 			bars[j].Symbol = symbol
+			if strings.TrimSpace(bars[j].Source) == "" {
+				degradeQualityStatus(&bars[j].QualityStatus)
+				appendReasonOnce(&bars[j].QualityReasons, "provider_source_missing_assumed_from_provider_name")
+			}
 			bars[j].Source = p.Name()
 			bars[j].SourceVersion = strings.TrimSpace(bars[j].SourceVersion)
 			bars[j].RequestID = fetchID
