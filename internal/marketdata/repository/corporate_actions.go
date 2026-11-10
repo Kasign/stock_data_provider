@@ -91,7 +91,7 @@ func (s *Store) SaveAdjustmentFactors(ctx context.Context, values []model.Adjust
 			return fmt.Errorf("invalid adjustment factor observation for %s on %s: %w", value.Symbol, value.TradeDate, err)
 		}
 		value.Basis = model.NormalizeAdjustmentFactorBasis(value.Basis)
-		identity := value.Symbol + "|" + value.TradeDate + "|" + value.Source + "|" + string(value.Basis)
+		identity := value.Symbol + "|" + value.TradeDate + "|" + value.Source + "|" + value.SourceVersion + "|" + string(value.Basis)
 		if _, exists := seen[identity]; exists {
 			return fmt.Errorf("duplicate adjustment-factor revision identity: %s", identity)
 		}
@@ -105,8 +105,8 @@ func (s *Store) SaveAdjustmentFactors(ctx context.Context, values []model.Adjust
 	// 所有批次按相同顺序加锁，降低并发刷新相同证券时的死锁概率。
 	sort.Slice(revisions, func(i, j int) bool {
 		left, right := revisions[i].value, revisions[j].value
-		leftKey := left.Symbol + "|" + left.TradeDate + "|" + left.Source + "|" + string(left.Basis)
-		rightKey := right.Symbol + "|" + right.TradeDate + "|" + right.Source + "|" + string(right.Basis)
+		leftKey := left.Symbol + "|" + left.TradeDate + "|" + left.Source + "|" + left.SourceVersion + "|" + string(left.Basis)
+		rightKey := right.Symbol + "|" + right.TradeDate + "|" + right.Source + "|" + right.SourceVersion + "|" + string(right.Basis)
 		return leftKey < rightKey
 	})
 
@@ -125,8 +125,8 @@ func (s *Store) SaveAdjustmentFactors(ctx context.Context, values []model.Adjust
 		value := item.value
 		var latest string
 		lookupErr := tx.QueryRowContext(ctx, `SELECT revision_hash FROM market_data_adjustment_factor_versions
-WHERE symbol=? AND trade_date=? AND source=? AND factor_basis=? ORDER BY recorded_at DESC,id DESC LIMIT 1 FOR UPDATE`,
-			value.Symbol, value.TradeDate, value.Source, string(value.Basis)).Scan(&latest)
+WHERE symbol=? AND trade_date=? AND source=? AND source_version=? AND factor_basis=? ORDER BY recorded_at DESC,id DESC LIMIT 1 FOR UPDATE`,
+			value.Symbol, value.TradeDate, value.Source, value.SourceVersion, string(value.Basis)).Scan(&latest)
 		if lookupErr != nil && !errors.Is(lookupErr, sql.ErrNoRows) {
 			return fmt.Errorf("lock latest adjustment-factor revision for %s on %s: %w", value.Symbol, value.TradeDate, lookupErr)
 		}
@@ -138,8 +138,8 @@ WHERE symbol=? AND trade_date=? AND source=? AND factor_basis=? ORDER BY recorde
 				return marshalErr
 			}
 			_, insertErr := tx.ExecContext(ctx, `INSERT INTO market_data_adjustment_factor_versions
-(symbol,trade_date,source,factor_basis,revision_hash,recorded_at,fetched_at,available_at,quality_status,metadata)
-VALUES (?,?,?,?,?,?,?,?,?,?)`, value.Symbol, value.TradeDate, value.Source, string(value.Basis), item.hash,
+(symbol,trade_date,source,source_version,factor_basis,revision_hash,recorded_at,fetched_at,available_at,quality_status,metadata)
+VALUES (?,?,?,?,?,?,?,?,?,?,?)`, value.Symbol, value.TradeDate, value.Source, value.SourceVersion, string(value.Basis), item.hash,
 				time.Now().UTC(), value.FetchedAt.UTC(), nullableTime(value.AvailableAt), string(value.QualityStatus), metadata)
 			if insertErr != nil {
 				return fmt.Errorf("insert adjustment-factor revision for %s on %s: %w", value.Symbol, value.TradeDate, insertErr)
@@ -168,11 +168,12 @@ WHERE v.symbol=? AND (?='' OR v.trade_date>=?) AND (?='' OR v.trade_date<=?)
 AND v.recorded_at<=? AND v.fetched_at<=? AND v.available_at IS NOT NULL AND v.available_at<=?
 AND NOT EXISTS (
  SELECT 1 FROM market_data_adjustment_factor_versions n
- WHERE n.symbol=v.symbol AND n.trade_date=v.trade_date AND n.source=v.source AND n.factor_basis=v.factor_basis
+ WHERE n.symbol=v.symbol AND n.trade_date=v.trade_date AND n.source=v.source
+ AND n.source_version=v.source_version AND n.factor_basis=v.factor_basis
  AND n.recorded_at<=? AND n.fetched_at<=? AND n.available_at IS NOT NULL AND n.available_at<=?
  AND (n.recorded_at>v.recorded_at OR (n.recorded_at=v.recorded_at AND n.id>v.id))
 )
-ORDER BY v.trade_date ASC,v.source ASC,v.factor_basis ASC,v.recorded_at DESC`,
+ORDER BY v.trade_date ASC,v.source ASC,v.source_version ASC,v.factor_basis ASC,v.recorded_at DESC`,
 		symbol, startDate, startDate, endDate, endDate, asOfUTC, asOfUTC, asOfUTC, asOfUTC, asOfUTC, asOfUTC)
 	if err != nil {
 		return nil, fmt.Errorf("query adjustment-factor revisions: %w", err)

@@ -177,3 +177,21 @@ func TestCorporateActionHashCanonicalizesAvailabilityLocation(t *testing.T) {
 	if err != nil { t.Fatal(err) }
 	if first != second { t.Fatal("equivalent availability instants in different time zones must have the same corporate-action revision hash") }
 }
+
+func TestAdjustmentFactorRevisionIdentityIncludesSourceVersion(t *testing.T) {
+	base := model.AdjustmentFactor{
+		Symbol: "600519.SH", TradeDate: "2026-11-09", Factor: 1.25,
+		Basis: model.AdjustmentFactorShared, Source: "tushare", SourceVersion: "v1",
+	}
+	upgraded := base
+	upgraded.SourceVersion = "v2"
+	first, err := adjustmentFactorHash(base)
+	if err != nil { t.Fatal(err) }
+	second, err := adjustmentFactorHash(upgraded)
+	if err != nil { t.Fatal(err) }
+	if first == second { t.Fatal("source-version changes must produce independent factor content identities") }
+	identity := func(value model.AdjustmentFactor) string {
+		return value.Symbol + "|" + value.TradeDate + "|" + value.Source + "|" + value.SourceVersion + "|" + string(value.Basis)
+	}
+	if identity(base) == identity(upgraded) { t.Fatal("different source versions must use distinct persistence identities") }
+}
