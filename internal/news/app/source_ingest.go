@@ -56,6 +56,9 @@ func (u *IngestCollectedSource) Execute(ctx context.Context, request IngestColle
 	}
 
 	registration, err := u.sources.LookupEndpoint(ctx, sourceID, endpointID)
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return nil, ctxErr
+	}
 	if err != nil {
 		return nil, errors.Join(ErrSourcePersistencePolicyUnavailable, err)
 	}

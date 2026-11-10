@@ -79,6 +79,9 @@ func (u *IngestProviderCandidate) Execute(ctx context.Context, request IngestPro
 	}
 
 	registration, err := u.sources.LookupEndpoint(ctx, request.SourceID, request.EndpointID)
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return domain.Observation{}, ctxErr
+	}
 	if err != nil {
 		if errors.Is(err, ErrSourceEndpointNotFound) {
 			return domain.Observation{}, ErrSourceEndpointNotFound
@@ -96,6 +99,9 @@ func (u *IngestProviderCandidate) Execute(ctx context.Context, request IngestPro
 	}
 
 	providerBinding, err := u.policies.ResolveProviderOutputPolicy(ctx, request.Candidate.ProviderCode)
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return domain.Observation{}, ctxErr
+	}
 	if err != nil || strings.TrimSpace(providerBinding.ProviderCode) != request.Candidate.ProviderCode ||
 		strings.TrimSpace(providerBinding.PolicyRef) == "" || strings.TrimSpace(providerBinding.PolicyVersion) == "" {
 		return domain.Observation{}, ErrProviderOutputPolicyUnavailable
