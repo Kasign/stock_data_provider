@@ -112,4 +112,4 @@
 
 ## 7. 本切片结论
 
-Limit Pool 已有统一 Port、两种 Provider、Service 校验/回退/缓存、HTTP/OpenAPI 和市场概览消费。默认仅 Eastmoney 启用；两家 Provider 均不会把空响应解释为确认零事件；截断会降级。已确认的主要契约问题为 LimitPoolItem 三方 JSON/Schema/Golden 矛盾（CTR-041），以及 Hithink 金额单位未证实（CTR-042）；CTR-010 增加八个字段影响范围。WebUI 维度 2 继续 partial。
+Limit Pool 已有统一 Port、两种 Provider、Service 校验/回退/缓存、HTTP/OpenAPI 和市场概览消费。默认仅 Eastmoney 启用；两家 Provider 均不会把空响应解释为确认零事件；截断会降级。已确认的主要契约问题为 LimitPoolItem 三方 JSON/Schema/Golden 矛盾（CTR-041），以及 Hithink 金额单位未证实（CTR-042）；CTR-010 增加七个字段影响范围。WebUI 维度 2 继续 partial。
