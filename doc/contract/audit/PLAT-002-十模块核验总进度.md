@@ -665,3 +665,13 @@
 - Limit Pool 可在未知单位安全消费边界明确后冻结公共字段语义；但 Hithink 金额值仍 not_comparable，不能宣称归一化完成。DATA-CTR-002/003 整体仍需其他字段/Provider 证据。
 - 本批未修改代码、OpenAPI、DTO 或测试，未执行 CI；WebUI 维度 2 第一轮完整性 Review 继续进行。
 
+### WebUI — 维度 2：Stock Search CTR-045 冻结影响 Review
+
+- 详细记录：`WebUI-维度2-完整性Review-第一轮.md` 第 25 节。固定代码基线仍为 `b6dfc85ba214fe16268c8cba780641a8bfe15086`。
+- Tencent Smartbox 无可核验匹配总数，非空候选为 degraded / `provider_search_total_not_reported`；无候选时返回错误触发后备。Service 对 unknown 空/非空结果继续回退，耗尽后保留 unknown 和明确的 fallback-exhausted 原因；stale 候选也只有在后备耗尽后才返回。
+- OpenAPI 要求调用方按 quality_status / quality_reasons 处理未知或降级质量，但未明确空结果在各质量状态下能否宣告“无匹配”。HTTP Handler 原样返回质量元数据，没有把 unknown 空结果转成确定无匹配。
+- WebUI `loadStockSearch` 对所有空 items 直接显示“没有匹配的股票”；非空结果只处理 stale，忽略 degraded、unknown 和 quality_reasons。现有 view/API/Service/Provider 测试分别覆盖局部能力，但没有 app.js 搜索质量状态集成 DOM 回归。
+- **CTR-045 保留 P2，证据成立。** 核心是 WebUI 质量状态消费缺失，伴随公共契约空结果语义不够明确；不新增 CTR。建议裁决 valid + empty 才能显示确定无匹配，degraded/unknown 空结果提示证据不足，非空候选按 valid/degraded/stale/unknown 区分提示并消费质量原因。该建议待正式裁决。
+- 关闭条件：补齐四种状态的空/非空分支处理、质量原因安全提示，以及 app.js DOM 回归，特别验证 unknown 空结果绝不显示成确定无匹配；可补 API Client 元数据保留测试，但不能替代 DOM 测试。
+- 本批未修改业务代码、OpenAPI 或测试，未执行 CI。WebUI 维度 2 第一轮完整性 Review 继续进行。
+
