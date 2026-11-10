@@ -323,6 +323,38 @@ func TestNewsMariaDBRepositoryIntegration(t *testing.T) {
 	if err := repository.CreateEvidenceSnapshot(ctx, snapshot); err != nil {
 		t.Fatalf("idempotent create after payload restoration: %v", err)
 	}
+	// Read must independently verify the payload bytes and enforce the same
+	// size ceiling as Create/replay before hashing or JSON decoding.
+	if _, err := db.ExecContext(ctx,
+		"UPDATE news_evidence_snapshots SET payload_json = JSON_OBJECT('tampered', 'payload') WHERE snapshot_ref = ?",
+		snapshot.SnapshotRef,
+	); err != nil {
+		t.Fatalf("tamper evidence payload before read: %v", err)
+	}
+	if _, err := repository.GetEvidenceSnapshot(ctx, snapshot.SnapshotRef, snapshot.CallerRef, snapshotCreatedAt.Add(time.Minute)); !errors.Is(err, app.ErrInvalidEvidenceSnapshot) {
+		t.Fatalf("get tampered evidence payload error = %v, want invalid snapshot", err)
+	}
+	if _, err := db.ExecContext(ctx,
+		"UPDATE news_evidence_snapshots SET payload_json = ? WHERE snapshot_ref = ?",
+		originalEvidencePayload, snapshot.SnapshotRef,
+	); err != nil {
+		t.Fatalf("restore evidence payload after read tamper: %v", err)
+	}
+	if _, err := db.ExecContext(ctx,
+		"UPDATE news_evidence_snapshots SET payload_json = JSON_OBJECT('padding', REPEAT('x', ?)) WHERE snapshot_ref = ?",
+		maximumEvidenceSnapshotBytes+1, snapshot.SnapshotRef,
+	); err != nil {
+		t.Fatalf("oversize evidence payload before read: %v", err)
+	}
+	if _, err := repository.GetEvidenceSnapshot(ctx, snapshot.SnapshotRef, snapshot.CallerRef, snapshotCreatedAt.Add(time.Minute)); !errors.Is(err, app.ErrInvalidEvidenceSnapshot) {
+		t.Fatalf("get oversized evidence payload error = %v, want invalid snapshot", err)
+	}
+	if _, err := db.ExecContext(ctx,
+		"UPDATE news_evidence_snapshots SET payload_json = ? WHERE snapshot_ref = ?",
+		originalEvidencePayload, snapshot.SnapshotRef,
+	); err != nil {
+		t.Fatalf("restore evidence payload after size test: %v", err)
+	}
 	conflictingSnapshot := snapshot
 	conflictingSnapshot.PageSize++
 	if err := repository.CreateEvidenceSnapshot(ctx, conflictingSnapshot); !errors.Is(err, app.ErrEvidenceSnapshotConflict) {

@@ -272,3 +272,11 @@
 - 新增合法签名但位置缺失的 continuation 测试，检查无部分页面、无 PIT 重跑。
 - 代码审查确认 Snapshot 读取错误原样传播，便于上层诊断；对外 Fault 映射仍由 Server/API 组合层负责。
 - 尚未运行 Go 测试或 MariaDB 11.4。
+
+
+### 二十六、N8-03 Evidence Snapshot 读取完整性
+
+- 静态审查确认 GetEvidenceSnapshot 在 JSON 解码前执行载荷非空/8 MiB 上限检查和 SHA-256 校验；解码后执行 Snapshot.Validate，并将 payload 与数据库信封字段交叉核对。到期状态独立映射为 unavailable。
+- 原 MariaDB 用例覆盖哈希字段篡改、信封元数据篡改、错误 caller、到期和删除后读取；但 payload_json 被篡改、载荷超限的直接 Get 路径缺少断言。
+- 增加两项 MariaDB 集成回归：保留旧 hash 篡改 payload_json 后 Get 拒绝；写入超过 8 MiB 的合法 JSON 后 Get 在哈希/解码前拒绝。测试在各自断言后恢复原始 payload。
+- 尚未取得 MariaDB 11.4 实际运行结果；不将新增集成用例记为通过。
