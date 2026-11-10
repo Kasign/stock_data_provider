@@ -764,3 +764,83 @@ Server 已具备 Root Composition 的基础技术能力：共享 Platform Resour
 本批完成 Server Root Composition 的实际调用点核验，并对前述模块生产接线缺口进行汇总。当前已核验 Platform、Data、News、Research、Notification、Quant、LLM、Researchflow 的部分维度 1 消费者和 Server 组合根；尚未完成 WebUI 与所有模块的全部维度 1 消费者扫描。不能宣称维度 1 全量完成，也不能以当前 Bootstrap 的缺失直接推断各模块内部接口未实现。
 
 下一步仍按既定十模块清单补齐未核消费者，并在全量完成后再进行跨模块调用图、授权链和依赖图核验。
+
+
+## 15. 第十批：WebUI 对外契约消费核验（维度 1）
+
+### 15.1 浏览器请求边界与部署代理
+
+固定基线证据：
+
+- `web/src/api.js`（blob `b8bcbee5908b43bfa1bc2ca744363190af38287f`）
+- `web/default.conf.template`（blob `d13735e1da540ff24a5c59b7a5f0febf317c4161`）
+- `web/Dockerfile`（blob `3a64acf49c62457b1c3635684c1fd10522a738d6`）
+- `web/tests/deployment-contract.test.mjs`（blob `a12e45901e621ce6bc545f55330c6ab12d7b6e5e`）
+- `web/tests/api.test.mjs`（blob `a26eca75b24a744232d370fdbe2411806be45136`）
+
+已确认：
+
+1. 浏览器统一使用相对路径 Fetch；默认行情前缀为 `/market-api`，分析前缀为 `/analysis-api`。未发现该 API Client 直接访问 Provider URL、数据库或 Redis 的实现。
+2. Nginx 将 `/market-api/` 代理到独立 Market Data 服务的 8091 端口，将 `/analysis-api/` 代理到独立 Analysis Server 的 8092 端口；这证明当前部署仍是双后端兼容拓扑，不是所有模块经 Root Server 统一装配后的单一模块化 API 边界。
+3. Nginx 对两个上游都覆盖传入 `X-Request-ID`，使用自身 `$request_id`，并将 `X-Real-IP`、`X-Forwarded-For`、`X-Forwarded-Proto` 传给上游。该做法避免浏览器自报 Request ID 直接成为可信 ID；与 Server 侧默认重新生成不可信 ID 的策略方向一致。
+4. Nginx 配置设置同源 CSP（`connect-src 'self'`）、禁止对象/Frame、限制脚本和样式来源；静态资源通过 Nginx 同源提供。
+5. Deployment Contract 测试只断言 Compose 服务名、Nginx 上游变量与代理配置；它不发起真实后端请求，也不验证 Root Server 认证、Session/CSRF 或模块路由是否可达。
+6. API 单测通过 mock `fetch` 验证 URL、Header、错误处理和超时；它证明客户端请求构造行为，不证明生产服务端路由、权限或数据能力。
+
+### 15.2 行情 API Key 的浏览器持有状态
+
+固定基线证据：
+
+- `web/src/api.js`（blob `b8bcbee5908b43bfa1bc2ca744363190af38287f`）
+- `web/index.html`（blob `4b8a160f517846ab47a04ab72cc3479c464ec7d2`）
+- `web/tests/api.test.mjs`（blob `a26eca75b24a744232d370fdbe2411806be45136`）
+- `doc/web/API_CONTRACT.md`（blob `65c49fcb9bdb193881cc9e2e667a9d1b3060faaf`）
+- `doc/contract/PLAT-002-项目级契约冻结登记簿.md`（blob `60829e9662125b4d6ff004c680924e48e1c7e89f`）
+
+已确认：
+
+1. `loadSettings/saveSettings` 将 `apiKey` 作为行情连接设置的一部分读写浏览器 `localStorage`；`request` 对行情请求添加 `X-API-Key`。
+2. API Client 的分析任务请求不添加该行情 Key；单测明确断言行情 Key 只发送给 Market Data 路由，不发送给 Analysis 路由。
+3. 页面设置说明该 Key 是内部 Market Data 服务访问密钥，不是第三方 Provider 凭据；页面也说明第三方 Provider Key 由服务端环境变量管理，WebUI 不读取或回显第三方 Provider Key。
+4. WebUI API_CONTRACT 第 5 节明确：浏览器持有行情 API Key 是迁移期兼容状态，目标架构禁止浏览器持有；MDM-006 与 Root Server 登录认证切换完成后，应移除浏览器读写与请求头注入、清理 localStorage 旧字段并轮换已暴露凭据。
+5. 项目级契约登记簿规定 WebUI 只消费服务端 API，不在前端复制领域质量判断、权限决策或服务端业务规则；目标由 Root Server 对外暴露 HTTP 契约。
+
+**AUD-WEBUI-CTR-001：行情服务 API Key 仍由浏览器 localStorage 持有（P1 候选，迁移安全门禁）**
+
+当前实现是已登记的迁移期兼容状态，不应误报为意外实现偏差；但它尚未达到项目级目标契约。浏览器脚本可读取 localStorage 中的 Key，因此这不是服务端托管凭据模型。关闭条件：Root Server 认证/会话方案完成；行情请求改为可信 Session/Cookie + CSRF 或正式裁决的等效机制；前端不再读取/写入/发送内部服务 Key；旧 Key 清理并轮换；补充浏览器与 Server 认证集成测试。不能用把 Owner Token 或服务端长期密钥放入浏览器的方式替代。
+
+### 15.3 Analysis API 认证与 WebUI 当前不匹配
+
+固定基线证据：
+
+- `web/src/api.js`（blob `b8bcbee5908b43bfa1bc2ca744363190af38287f`）
+- `web/tests/api.test.mjs`（blob `a26eca75b24a744232d370fdbe2411806be45136`）
+- `web/index.html`（blob `4b8a160f517846ab47a04ab72cc3479c464ec7d2`）
+- `internal/server/config/security.go`（blob `3119060466de2d99da96b2bdfc1374e68ad4e356`）
+- `internal/platform/security/security.go`（blob `b9a21dd479684ef39c1261ee3587ebf79edcbbc9`）
+- `doc/web/API_CONTRACT.md`（blob `65c49fcb9bdb193881cc9e2e667a9d1b3060faaf`）
+
+已确认：
+
+1. `createAnalysisTask/getAnalysisTask/getAnalysisTaskEvents/getAnalysisRun` 只向 `analysisBase` 发起同源请求，不注入 Authorization Bearer，也没有 Session/CSRF 专用处理。
+2. Server `LoadSecurity` 要求 Owner Token；Root Server 当前 Owner Authenticator 使用 Owner Principal，旧 Analysis 路由处于 Owner-only 认证状态。
+3. WebUI API_CONTRACT 明确写明：当前 Server Analysis 路由使用 Owner Bearer，而 WebUI 不携带该凭证，因此浏览器 Analysis 请求预期 401；禁止把 Owner Token 写入浏览器或匿名开放。
+4. 当前 API 单测 mock 成功响应，验证创建任务/读取事件的请求构造；并不验证生产环境认证成功。不能把这些测试标记为端到端联调通过。
+
+**AUD-WEBUI-CTR-002：Analysis API 尚无 WebUI 可用的 Session/CSRF 认证通道（P1，明确联调阻断）**
+
+这是已被 WebUI 契约明确记录的待接入状态。关闭条件：Root Server 提供正式 Web Session/Cookie、CSRF、防暴力登录与资源授权；WebUI 按契约建立会话并携带 CSRF；服务端按用户/资源授权任务读写；浏览器自动化对真实 Server 验证成功、401/403、CSRF 拒绝、会话过期和跨用户隔离。禁止将 Owner Token 或内部服务 Key 放到前端作为临时修复。
+
+### 15.4 WebUI 对项目级契约的消费判断
+
+1. WebUI 请求封装以同源 HTTP API 为边界，未发现绕过后端直连 Provider/DB/Redis 的代码证据。
+2. WebUI 通过数据侧 API 读取质量状态、来源、时间和错误，不在本批检查到的 API Client 层复制 Provider 选择/标准化逻辑；具体页面展示语义不属于本维度本批次的全量审查范围。
+3. Request ID：浏览器不主动提交可信 Request ID；Nginx 生成并覆盖上游 Request ID。API Client 在失败时读取错误 envelope 的 request_id 或响应头 `X-Request-ID`，并限制长度；成功响应没有统一的 Request ID 暴露给调用方。本批不把成功请求 ID 未暴露单独登记为缺陷，后续如需前端成功请求诊断，应由项目级可观测性契约明确需求。
+4. 当前双前缀、双后端代理和浏览器 Key 都是迁移期架构；目标契约为 Root Server 对外提供模块化服务 API。该差距与 **AUD-PLAT-PORT-014** Root Server 组合根迁移缺口相关，不重复创建同一架构项。
+5. 本批没有执行生产部署的真实浏览器认证联调；没有证据证明 Data API Key 认证与 Analysis Owner Bearer 在目标部署中均能由浏览器完成。
+
+**WebUI 维度 1 状态：partial；same-origin API client and reverse-proxy implementation evidenced / target Root Server session-auth integration not evidenced。**
+
+### 15.5 本批审计范围与未覆盖项
+
+本批核验 API Client 核心请求封装、Nginx 部署代理、API Client 单测、Deployment Contract 测试、WebUI API 契约和项目级契约登记簿。未逐一复核所有页面模块的字段映射与每条 API 的 OpenAPI/Handler/JSON Golden；这属于维度 2（DTO/Schema/Golden）及跨端 API-01 接口矩阵的后续任务。不得将本批结论扩大为 WebUI 全部 API 契约已审计。
