@@ -1275,9 +1275,11 @@ func (p *TickFlow) FetchDailyBars(ctx context.Context, rawSymbol, startDate, end
 		}
 		tradeDate := time.UnixMilli(timestamp).In(loc).Format("2006-01-02")
 		if tradeDate < start.Format("2006-01-02") || tradeDate > end.Format("2006-01-02") {
+			addProviderParseIssue(ctx, i, "trade_date", "timestamp", "date_out_of_requested_range", "date within requested range", "timestamp", tradeDate, "TickFlow K-line date is outside the requested range")
 			return nil, fmt.Errorf("TickFlow K-line row %d date %s is outside requested range", i, tradeDate)
 		}
 		if _, duplicate := seen[tradeDate]; duplicate {
+			addProviderParseIssue(ctx, i, "trade_date", "timestamp", "duplicate_trade_date", "one daily bar per trade date", "timestamp", tradeDate, "TickFlow returned a duplicate daily-bar trade date")
 			return nil, fmt.Errorf("TickFlow returned duplicate trade date %s", tradeDate)
 		}
 		seen[tradeDate] = struct{}{}
@@ -1312,6 +1314,7 @@ func (p *TickFlow) FetchDailyBars(ctx context.Context, rawSymbol, startDate, end
 		}
 		volume, err := normalize.HandsToShares(rawVolume)
 		if err != nil {
+			addProviderParseIssue(ctx, i, "volume", "volume", "normalization_error", "integer hands convertible to shares", "number", fmt.Sprintf("%.0f", rawVolume), "TickFlow daily-bar volume cannot be normalized from hands to shares")
 			return nil, fmt.Errorf("normalize TickFlow daily volume from hands on %s: %w", tradeDate, err)
 		}
 
