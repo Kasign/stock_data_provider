@@ -2,9 +2,11 @@
 
 - Review 日期：2026-11-10
 - 分支：`feat/research-news-ingestion`
-- Review 基线：`259229715042069e6a3dc89a4b537213317be827`
+- 初始 Review 基线：`259229715042069e6a3dc89a4b537213317be827`
+- 本轮修复基线：`a9fabb47c152a2b359924ccf1daafadab28f9740`
+- 修复提交：`c567f991e28883d7c2551be7614590c32972d304`
 - 范围：`internal/news/**`、`doc/news/**`
-- 本轮只读审查并修正文档状态；未修改业务代码，未改变跨模块契约或生产开关。
+- 初始 Review 为只读审查并修正文档状态；后续按报告修复了 News 内部授权快照读取完整性和 Provider Catalog 错误分类，没有改变跨模块契约或生产开关。
 
 ## 一、需要处理的代码缺口
 
@@ -12,18 +14,14 @@
 
 位置：`internal/news/adapters/storage/authorization_snapshot.go:112-151`
 
-现状：
-- 写入端限制 JSON payload 最大 64 KiB，但 `GetAuthorizationSnapshot` 读取后没有复用该上限，直接计算 SHA-256 并 JSON 解码。
-- 表中 `subject_ref/resource_ref/decision/purpose_code/content_level/decided_at/expires_at/decision_fingerprint` 等索引/元数据列未与 JSON Binding 对照。
-- `GetLatestAuthorizationSnapshotForEvidence` 依赖这些数据库列筛选和排序，再按引用读取 payload。数据库元数据被错误修改时，payload hash 仍然有效，但“最新授权”选择可能偏离 Binding 本身。
+状态：已在提交 `c567f991` 修复读取侧缺口。
 
-风险：数据库记录异常或元数据不一致时，可能选中错误的历史授权快照；同时读取端缺少和写入端对称的资源上限。
+- Get 在 hash/JSON 解码前拒绝空载荷及超过 64 KiB 的 payload。
+- Get 同时读取数据库信封字段，并与解码后的 Binding 逐项核对 subject/resource/decision/purpose/content level/decision fingerprint 及 decided_at/expires_at；时间比较按 MariaDB DATETIME(6) 精度归一。
+- 最新授权仍按信封字段排序，再通过 Get 读取同一 authorization_ref；Get 会拒绝信封与 payload 不一致的行，因此异常元数据不能被当作有效授权返回。
+- MariaDB 集成测试新增 decision 元数据篡改和超限 payload 拒绝断言；实际运行仍待 MariaDB Job。
 
-建议：
-1. 读取端先拒绝空载荷和超过 64 KiB 的 payload。
-2. 读取时同时取回数据库信封字段，解码后逐项核对 Binding 的 subject/resource/decision/purpose/content level/decision fingerprint/时间字段。
-3. 最新记录选择和 payload 读取应有明确的一致性语义；优先单条查询返回所需 payload 与信封字段，或在同一事务一致性快照中完成。
-4. 增加元数据列被篡改、超限 payload、最新 deny/conditional 不得回退旧 allow 的 MariaDB 集成测试。
+剩余注意：最新授权选择与读取不是单条 SQL/同一事务快照；若未来要求并发写入下严格线性化，需要再将选择与 payload 读取合并到 Repository 的一致性边界。
 
 ### [P1] Evidence 内容读取与当前授权复核不在同一一致性边界
 
@@ -54,11 +52,11 @@
 
 位置：`internal/news/app/provider_ingest.go:80-84`
 
-现状：`LookupEndpoint` 返回任意错误时，与身份不匹配、Endpoint 禁用一起映射为 `ErrSourceEndpointNotFound`。
+状态：已在提交 `c567f991` 修复。
 
-风险：数据库不可用、超时或 Catalog 内部错误会被误报为资源不存在，调用方无法区分 not-found 与 dependency-unavailable，影响重试、诊断和排障。
-
-建议：仅对 `errors.Is(err, ErrSourceEndpointNotFound)` 映射 not-found；其他错误保留 cause，并映射稳定的依赖不可用错误。增加 Catalog not-found、timeout、内部故障三类测试，确认均不触碰 Repository。
+- 仅当 `errors.Is(err, ErrSourceEndpointNotFound)` 时返回 not-found。
+- 其他 Catalog 错误使用 `errors.Join(ErrSourceCatalogUnavailable, err)` 保留稳定分类与底层 cause。
+- 增加 not-found、wrapped not-found、数据库超时三类测试，并断言失败路径不触碰 Repository。
 
 ## 二、实现边界与已核实事项
 
@@ -93,3 +91,12 @@
 4. P2：Provider Ingest 错误分类。
 5. 真实 MariaDB 11.4 验收 V8、授权快照异常数据、清理并发与回滚。
 6. Server 组合根接入、Migration 注册、Diagnostics Runner 和周期清理仍由 Server/集成分支负责。
+
+
+## 六、修复后验证状态（2026-11-10）
+
+- 修复提交：`c567f991e28883d7c2551be7614590c32972d304`。
+- 新提交后的 CI 尚待运行；未在本地执行 Go 测试或 MariaDB 集成。
+- 上一 Run `42739748233` 已完成但失败：`Test go-core` 成功，根模块 `Test .` 因 Notification、Quant 等其他模块的 gofmt 差异失败；News MariaDB 集成 Job 为 skipped。
+- 本轮修复涉及的 MariaDB 断言尚无真实数据库运行证据。
+- 当前仍未解决：available_at 可信证据建模/严格 PIT 门禁；授权复核与精确内容读取 TOCTOU；最新授权选择与 payload 读取的事务一致性；真实 MariaDB 11.4 验收及 Server 组合根接线。

@@ -1003,3 +1003,11 @@
 - Run `42621069210` 的根模块 `Check gofmt` 失败中，News 范围仍有 3 处格式问题，已在当前分支修复：Evidence Snapshot 存储文件多余空行、存储测试多余空行、Snapshot retention 测试嵌套缩进。
 - 同一 Run 的其余 gofmt 差异涉及 Notification、Quant 等其他模块，本分支不越权修改；需由对应模块分支修复后再取得根模块全绿结果。
 - 本次修复后仍需以新 CI 的 gofmt Job 结果确认，不提前标记通过。
+
+
+## 2026-11-10 修复进度
+
+- [x] 授权快照读取端增加 64 KiB 上限及数据库信封字段与 JSON Binding 一致性校验。
+- [x] Provider Ingest 区分 SourceCatalog not-found 与依赖不可用，并保留底层错误原因。
+- [ ] 上述修复的 CI 与 MariaDB 11.4 集成运行结果待新提交 Workflow。
+- [ ] 当前剩余主要阻断：available_at 可信证据门禁、授权复核与内容读取 TOCTOU、Server 组合根注入及 MariaDB 真实验收。详见《代码与文档Review报告》。
