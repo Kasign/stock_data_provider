@@ -144,3 +144,16 @@
 - 新增 AUD-PLAT-PORT-010（P1 候选）：LLM Gateway Adapter 尚未进入生产组合根。
 - 新增 AUD-PLAT-PORT-011（P2 候选）：LLM DTO RequestID 与可信 Context Request ID 的入口映射待证。
 - LLM 维度 1 状态 partial；adapter/transport implementation evidenced / production composition wiring not evidenced。
+
+
+### Platform — 维度 1：第八批（Researchflow 消费者初审）
+
+- 详细记录：[`Platform-维度1-Application-Port与调用点.md`](./Platform-维度1-Application-Port与调用点.md)
+- Researchflow 自有 Application Port 覆盖 Run、Stage、Worker、FaultNormalizer、Outbox、RequestIdentity 等；StageExecutor/OutboxPublisher 由 Server 组合根注入。
+- ContextAssembly 映射 Research Application DTO；ToolPolicy 使用 LLM Schema/Tool Call DTO，但模型 Tool Call 仍必须经过 Registry.Authorize；ResultValidation 使用 Research/LLM DTO 和本地 Quant Result Envelope，LLM Explanation 明确 non_authoritative，硬风险 block/unknown 不可被模型覆盖。
+- MySQL Storage、Migration、Worker Lease/Fencing、Deadline、RetryPolicy、Outbox at-least-once 和 Platform Diagnostics Observation Adapter 已有模块内实现。
+- Run 保存 originating_request_id 与 correlation_id；但 StageExecutionRequest/Outbox 只携带 correlation_id，异步 Request ID 传播待证。
+- Server Bootstrap 未注册 Researchflow Migration，未构造 Application/StageExecutor/Worker/DeadlineScanner/OutboxDispatcher，未接入 Diagnostics 或 Lifecycle。
+- 新增 AUD-PLAT-PORT-012（P1 候选）：Researchflow Application、Storage 与异步运行组件尚未进入 Server 生产组合根。
+- 新增 AUD-PLAT-PORT-013（P2 候选）：Researchflow originating Request ID 未证明贯穿 Worker 与 Outbox。
+- Researchflow 维度 1 状态 partial；application/storage execution skeleton evidenced / production composition and cross-module execution wiring not evidenced。
