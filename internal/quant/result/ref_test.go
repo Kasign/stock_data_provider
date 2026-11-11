@@ -19,7 +19,12 @@ func testManifest(t *testing.T) manifest.Manifest {
 	t.Helper()
 	payload := []byte(`{"metric_code":"momentum_20d","value":0.2}`)
 	m, err := manifest.BuildWithPayload(manifest.Input{
-		ResultType: "factor", Scope: "stock", SecurityID: "opaque-security-ref", TradeDate: "2026-11-06", Period: "20d", QualityStatus: "valid", ResultStatus: "completed", SchemaVersion: "1.0.0",
+		ResultType:           "factor", 		Scope:                "stock",
+		SecurityID:           "opaque-security-ref",
+		TradeDate:            "2026-11-06",
+		Period:               "20d",
+		QualityStatus:        "valid",
+		ResultStatus:         "completed", SchemaVersion:    "1.0.0",
 		PayloadSchemaVersion: "1.0.0", AlgorithmVersion: "momentum.v1",
 		ParameterFingerprint: "sha256:parameter-fingerprint",
 		SystemAsOf:           time.Date(2026, 11, 9, 0, 0, 0, 0, time.UTC),
@@ -36,7 +41,12 @@ func testManifestWithoutSnapshots(t *testing.T) manifest.Manifest {
 	payload := []byte(`{"metric_code":"pure_metric","value":1}`)
 	m, err := manifest.BuildWithPayload(manifest.Input{
 		ResultType:           "indicator",
-		Scope: "stock", SecurityID: "opaque-security-ref", TradeDate: "2026-11-06", Period: "20d", QualityStatus: "valid", ResultStatus: "completed",
+				Scope:                "stock",
+		SecurityID:           "opaque-security-ref",
+		TradeDate:            "2026-11-06",
+		Period:               "20d",
+		QualityStatus:        "valid",
+		ResultStatus:         "completed",
 		SchemaVersion:        "1.0.0",
 		PayloadSchemaVersion: "1.0.0",
 		AlgorithmVersion:     "pure.v1",
@@ -54,7 +64,7 @@ func validRefInput() RefInput {
 	return RefInput{
 		SchemaVersion: "1.0.0",
 		AuthorizationRef: "opaque-authorization-ref",
-		CreatedAt: time.Date(2026, 11, 9, 8, 0, 0, 0, time.FixedZone("UTC+8", 8*60*60)),
+		CreatedAt:        time.Date(2026, 11, 9, 8, 0, 0, 0, time.FixedZone("UTC+8", 8*60*60)),
 	}
 }
 
