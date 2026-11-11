@@ -169,7 +169,7 @@ GitHub 远端 ref 核验（2026-11-10）：
 | PLAT-CTR-006 | Storage、Repository、Migration 生命周期 | Platform（连接/Runner）；领域（Repository/Schema/Migration 内容）；Server（汇总注册） | 所有持久化模块 | [PLAT-CTR-006 Storage 与 Migration 契约](./rules/PLAT-CTR-006-Storage与Migration契约.md)；doc/platform/05 第2～4节；doc/platform/08 第9节；`internal/platform/storage` | 1.0.0（Go API 强类型契约；JSON Schema 不适用） | `freeze-ready` | SQL/Redis 连接 API、默认值/上限/资源所有权、Migration 强类型输入、namespace/checksum/History/锁/失败恢复语义已明确；Server 注册与全局 Ready/Shutdown 编排属于 SRV-CTR-001 实现符合性 |
 | PLAT-CTR-007 | Typed Config 与 Secret 生命周期 | Platform（基础解析/脱敏）；各模块（配置 Schema）；Server（Bootstrap） | Server、所有服务端模块 | [PLAT-CTR-007 Typed Config 与 Secret 契约](./rules/PLAT-CTR-007-Typed-Config与Secret契约.md)；doc/platform/08 第6节；`internal/platform/config/**` | 1.0.0（Go API 强类型契约；JSON Schema 不适用） | `freeze-ready` | Env/Secret/基础校验 API、fallback/解析错误、脱敏、DotEnv 加载边界、不可变配置快照与重启轮换语义已明确；模块 Config Schema 和部署 Secret 注入属于各模块/Server 实现符合性 |
 | DATA-CTR-001 | 标准数据 DTO、JSON/OpenAPI、字段缺失语义 | Data | Quant、Researchflow、Research（适用范围）、Server、WebUI | internal/marketdata/app/port.go；internal/marketdata/application/reader.go；internal/marketdata/httpapi/openapi.yaml；internal/marketdata/model/**；DEC-PLAT-002-027 | HTTP OpenAPI 1.1.0；Application Port 强类型 DTO；字段级映射未形成完整基线 | `pending_evidence` | Provider 原始字段不仅暴露于 HTTP Quote/DailyBar/DragonTiger/LimitPool DTO，也暴露于跨模块 QuoteSnapshot/DailyBar Application Port，并由 Reader 原样映射；LimitPool 金额仍为 Provider-reported 且依赖 provider_amount_unit。字段级 required/nullable/omitempty 映射仍未完整 |
-| DATA-CTR-002 | 行情单位、复权、交易日和时间口径 | Data | Quant、Researchflow、Research、Server | doc/api/contracts/数据质量与状态契约.md；internal/marketdata/httpapi/openapi.yaml | 领域规则版本未登记 | `pending_evidence` | 通用单位/质量/复权/PIT 原则已有；Quote/DailyBar/Index/Financial 等字段到 provider_time、available_at、fetched_at、normalized_at、system_observed_at 的映射及各数据域单位适用表仍不完整 |
+| DATA-CTR-002 | 行情单位、复权、交易日和时间口径 | Data | Quant、Researchflow、Research、Server | doc/api/contracts/数据质量与状态契约.md；internal/marketdata/model/**；internal/marketdata/httpapi/openapi.yaml | 通用规则有文字定义；逐字段时间/单位映射未版本化 | `pending_evidence` | 通用规则已存在，但 Quote.quote_time、DailyBar.provider_timestamp/system_observed_at、Fundamental.available_at/publication_date、Valuation.provider_report_date/provider_timestamp、Announcement.published_at 等语义尚未形成逐 DTO 映射；IndexDailyBar.amount_unit 无闭合枚举，部分金额仍暴露 provider_defined/provider_amount_unit；百分点与 0..1 比例字段需区分 |
 | DATA-CTR-003 | Provider 原始值标准化与精度保真 | Data 内部 Provider Adapter | Data 内部 Provider Adapter | doc/api/数据侧整体规划.md（仅内部适配约定） | 不属于跨模块公开契约版本 | `not_applicable` | 仅 Data 内部 Provider 标准化规则，不存在跨模块公开消费者；从 PLAT-002 跨模块契约冻结门禁排除，不再追踪 Provider Fixture/专项测试 |
 | DATA-CTR-004 | Data Quality、覆盖率、来源和降级表达 | Data | Quant、Researchflow、WebUI、Server | doc/api/contracts/数据质量与状态契约.md；internal/marketdata/httpapi/openapi.yaml | QualityStatus 已有枚举；各质量/覆盖 DTO 映射未完整登记 | `pending_evidence` | QualityStatus 与 Probe 状态已有定义；各公开响应中 quality_status、quality_reasons、freshness_status、coverage dimensions/分母和 source/version 的适用字段映射仍不完整，不能将诊断内部状态等同业务质量 |
 | DATA-CTR-005 | 精度保真的跨模块日线 DTO（v2） | Data | Quant、Researchflow | internal/marketdata/app/port.go；internal/marketdata/httpapi/openapi.yaml；DEC-PLAT-002-009；Quant/Research 公开 DTO 字段级契约 | v1.1.0 HTTP number / InProcess float64；v2 Decimal Schema 未发现 | `pending_evidence` | 当前 HTTP 与 Application Port 均为 number/float64；仓库未发现 DailyBarsV2、Decimal DTO、v2 Schema/Golden。DEC-009 明确保留 v1、不静默改类型；v2 仍缺消费者输入边界、精度/scale/舍入/缺失语义及版本定义 |
@@ -442,7 +442,7 @@ PLAT-002 不因本次矩阵统计完成而结束。整体完成仍需：
 | 契约 | 状态 | 核定结论 |
 |---|---|---|
 | DATA-CTR-001 | pending_evidence | HTTP Go Model/OpenAPI 与跨模块 QuoteSnapshot/DailyBar Application Port 均公开 Provider 原始 volume/amount/unit/source-field；DragonTiger、LimitPool 仍暴露 Provider 原始金额/单位；另有 Go JSON/OpenAPI required/nullable/omitempty 字段映射缺口 |
-| DATA-CTR-002 | pending_evidence | 质量契约已明确价格/成交量/成交额/百分点、复权和 PIT 基本原则；具体数据域字段到 provider_time、available_at、fetched_at、normalized_at、system_observed_at 的映射仍不完整，不能用一套泛化时间规则代替逐字段语义 |
+| DATA-CTR-002 | pending_evidence | 已有通用时间/单位规则；Quote、DailyBar、Fundamentals、Valuations、Announcements、CorporateActions、Index 等逐字段时间映射未完整；IndexDailyBar amount_unit 未闭合，Provider-defined 金额和比例/百分点差异仍需字段级约束 |
 | DATA-CTR-003 | not_applicable | 仅覆盖 Data 内部 Provider Adapter 原始值标准化，没有跨模块公开 DTO/Port 消费者；退出 PLAT-002 跨模块冻结门禁，不再要求 Provider Fixture 或专项测试作为项目级任务 |
 | DATA-CTR-004 | pending_evidence | QualityStatus 已有 valid/degraded/stale/invalid/unknown；Probe 的维度状态、ProviderOutcome、freshness_status、coverage_ratio 与业务 quality_status 的关系已有文字规则，但公开响应字段适用映射及覆盖率分母语义仍需明确 |
 | DATA-CTR-005 | pending_evidence | 当前 HTTP OpenAPI 仍为 number、InProcess Port 为 float64；未发现 DailyBarsV2/Decimal DTO、Schema/Golden；DEC-009 要求保留 v1，v2 消费者边界、精度/scale/舍入/缺失语义未定义 |
@@ -1258,4 +1258,39 @@ DEC-027 不只是禁止 DragonTiger 的七个 Provider 金额字段；它确立�
 5. 本轮不新增项目级语义决议，不修改 Data Schema/Golden/代码或其他模块；后续若启用远程授权 Snapshot 能力，必须先补可信 caller 传递契约，否则该路径 fail closed。
 
 **结论：DATA-CTR-008 继续保持 pending_evidence；其缺口已收敛为 UTC/排序 Validator、跨对象绑定、可信 caller/Scope/purpose 和读取时授权复核。**
+
+
+
+## 49. DATA-CTR-002 时间与单位逐字段映射缺口核查（2026-11-11）
+
+### 49.1 已有公共规则与当前模型事实
+
+- `doc/api/contracts/数据质量与状态契约.md` 已区分 report_date、provider_time、available_at、fetched_at、normalized_at、system_observed_at；明确它们不能互相替代，并给出严格 PIT 的基本规则。
+- 该文档也定义价格 CNY/股、成交量股、成交额 CNY、一般百分比为百分点；但这是通用规则，不等于每个 DTO 字段已明确绑定到相应时间/单位语义。
+- `Quote` 使用 `quote_time` + `quote_time_semantics`，而 `DailyBar` 使用 `provider_timestamp`、`fetched_at`、`normalized_at` 和可选 `system_observed_at`；两者不能统一映射成一个“行情时间”。
+- `FundamentalSection` 同时含 `report_date`、`publication_date`、`available_at`；`FundamentalsSnapshot` 另有快照级 `fetched_at` 和 `system_observed_at`。逐分区可用时间与父级系统观察时间的绑定语义仍需明确。
+- `ValuationSnapshot` 含 `provider_report_date`、`provider_timestamp`、`fetched_at`；模型注释明确 provider_timestamp 只是五项估值中最新有效时间，不代表每个指标都在该时刻更新。ValuationItem 没有逐指标 available_at/system_observed_at。
+- `StockAnnouncement` 含日期型 `announcement_date`、可选精确时间 `published_at` 和服务端 `fetched_at`；published_at 不能未经来源证据直接等同首次可用时间 available_at。
+- `CorporateAction` / `AdjustmentFactor` 已分别含 available_at、fetched_at、system_observed_at，并保留 provider_time 或事件公告日期；但各字段与 PIT 版本选择的逐 DTO 绑定仍需权威映射。
+- `IndexConstituent` 含 effective_from/effective_to、available_at、system_observed_at；其父级快照另含 provider_report_date、provider_time、fetched_at。报告日不能替代成员生效区间。
+- `MarketSessionSnapshot.at` 是请求观察时刻，`server_time` 是服务端当前时钟，`fetched_at` 是服务端获取快照的时间；三者语义不同。
+
+### 49.2 单位与比例字段边界
+
+- Quote/DailyBar 明确声明 volume_unit=shares、amount_unit=CNY；公开 amount 字段可空。
+- SectorRanking 与 MarketIndexQuote 的 amount_unit 为 CNY/unknown；需要明确 amount 为 unknown 时必须为空且质量降级/unknown，不能仅凭 amount_unit 字符串让消费者解释原始 Provider 数值。
+- IndexDailyBar 的 amount_unit/volume_unit 当前是自由 string，OpenAPI 未给出闭合枚举，无法从 Schema 排除任意 Provider 单位。
+- DragonTiger/LimitPool 仍暴露 provider_amount_unit；其中 LimitPool 金额字段的公开单位仍依赖 Provider 原始单位，已在 DATA-CTR-001/DEC-027 记录为冲突。
+- 数据质量契约写明指数成交额单位不确定时保留 provider_defined；而 DEC-027 已要求跨模块公开 DTO 只表达标准化金额，未验证单位的原始金额不得冒充 CNY。两者需按 DEC-027 校准：内部可保留 provider_defined，公共 DTO 不得输出未经归一的原始金额。
+- 百分比通常以百分点表达，但 ChipDistribution.profit_ratio/concentration_70/concentration_90 明确为 0..1 比例；不能把全局“百分比=百分点”机械应用到这些比例字段。需要字段级 unit/scale 定义。
+
+### 49.3 核定结论
+
+1. 已有时间与单位通用原则，不需要重写一套泛化规则；剩余工作是逐 DTO/字段建立权威映射。
+2. PIT 可用时间必须来自可验证 available_at；report_date、announcement_date、provider_time、provider_timestamp、fetched_at、normalized_at、system_observed_at 均不得自动替代。
+3. 需要明确 Valuation 等没有逐指标 available_at 的数据域，在严格 PIT 场景下应保持不可用/unknown，而不是拿批次 provider_timestamp 代替每项数据时间。
+4. IndexDailyBar amount_unit、provider_defined 公开金额、LimitPool/DragonTiger 原始金额，以及百分点/比例差异应与 DEC-027 和 GOV-CTR-001 保持一致。
+5. 本轮只记录公开字段定义缺口，不修改 Data 模型、OpenAPI、Provider、WebUI 或专项文档。
+
+**结论：DATA-CTR-002 继续保持 pending_evidence；后续只补逐字段时间/单位映射，不重写既有公共规则。**
 
