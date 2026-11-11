@@ -1,0 +1,31 @@
+{
+  "event_id": "research_event:evt-2026-001",
+  "event_version": 1,
+  "event_type": "policy_change",
+  "title": "Example policy announcement",
+  "status": "detected",
+  "subject_refs": [
+    "security:example"
+  ],
+  "evidence_refs": [
+    "evidence:news-001"
+  ],
+  "occurred_at": "2026-11-10T08:00:00Z",
+  "published_at": "2026-11-10T08:05:00Z",
+  "available_at": "2026-11-10T08:05:00Z",
+  "system_observed_at": "2026-11-10T08:06:00Z",
+  "system_as_of": "2026-11-10T08:06:00Z",
+  "impact_hypothesis_refs": [],
+  "invalidation_conditions": [],
+  "uncertainty": [],
+  "source_times": [
+    {
+      "evidence_ref": "evidence:news-001",
+      "time_type": "occurred_at",
+      "value": "2026-11-10T08:00:00Z",
+      "asserted_by": "news:source-001"
+    }
+  ],
+  "time_normalization_rule_version": "1.0.0",
+  "derived_from_refs": []
+}

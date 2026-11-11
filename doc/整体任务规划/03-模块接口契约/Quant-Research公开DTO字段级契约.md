@@ -38,7 +38,7 @@
 | system_as_of | 是 | RFC3339Nano UTC | 必须不晚于服务端可信 UTC 当前时间；系统知识截止时间 |
 | trade_date | 否 | date | 目标交易日，不替代 as_of |
 | period | 是 | string/enum | 分析周期，允许值由接口版本约束 |
-| input_snapshot_refs | 是 | string[] | Data 快照引用，保留来源与 PIT 元数据 |
+| input_snapshot_refs | 是 | string[] | Data 快照引用，保留来源与 PIT 元数据；允许空数组仅限 Quant Registry 声明无外部事实依赖且 ResolvedTemplate 明确授权 allow_empty_inputs=true 的纯函数，由 Researchflow 与 Quant 分别校验各自权威条件 |
 | adjustment_basis | 条件必需 | enum | 涉及价格序列时必需；unknown 必须显式表达 |
 | parameters | 是 | typed object | 用例专属参数结构，不允许任意 map |
 | quality_policy | 是 | strict/allow_degraded | 不允许 invalid 输入 |
@@ -62,7 +62,7 @@ QuantAnalysisRequest 的幂等作用域为 `(authenticated_caller_ref, use_case,
 | period | 是 | string | 结果周期 |
 | algorithm_version | 是 | string | 算法实现版本 |
 | parameter_fingerprint | 是 | string | 规范化参数摘要/哈希 |
-| input_snapshot_refs | 是 | string[] | 输入快照引用 |
+| input_snapshot_refs | 是 | string[] | 输入快照引用；允许空数组仅限 DEC-PLAT-002-029 的双重授权纯函数场景 |
 | quality_status | 是 | valid/degraded/invalid/unknown | 结果质量 |
 | result_status | 是 | completed/insufficient_data/insufficient_sample/rejected/failed | 计算状态 |
 | authorization_ref | 是 | string | Quant 签发的 AuthorizationRef；policy_owner=quant，subject_ref=可信调用主体，resource_ref=result_id，purpose_code=quant_analysis，content_level=full |；result_id 必须绑定 QNT-CTR-005 不可变 Result Manifest
@@ -142,13 +142,13 @@ Quant Application 返回的 QuantResult 使用共同 Envelope，不允许 `map[s
 | period | 是 | string | 结果周期 |
 | algorithm_version | 是 | string | 算法语义版本 |
 | parameter_fingerprint | 是 | string | 规范化参数指纹 |
-| input_snapshot_refs | 是 | array<string> | 输入快照引用；无输入仅限模板白名单纯函数 |
+| input_snapshot_refs | 是 | array<string> | 输入快照引用；空数组仅限 Quant Registry 无外部事实依赖且 ResolvedTemplate 授权 allow_empty_inputs=true 的场景 |
 | quality_status | 是 | valid/degraded/invalid/unknown | 结果质量 |
 | result_status | 是 | completed/insufficient_data/insufficient_sample/rejected/failed | 计算状态 |
 | authorization_ref | 是 | string | Quant 签发的 AuthorizationRef；policy_owner=quant，subject_ref=可信调用主体，resource_ref=result_id，purpose_code=quant_analysis，content_level=full |
-| payload | 是 | discriminated union | 按 result_type + schema_version 命中唯一强类型子 Schema |
+| payload_schema_version | 是 | string | Payload 自身 Schema 版本；与 Envelope schema_version 独立演进 |\n| payload | 是 | discriminated union | 按 result_type + payload_schema_version 命中唯一强类型子 Schema |
 
-同一 result_type/schema_version 的 payload 结构不可原地改变。Researchflow 只校验 discriminator、Schema 和版本并保存结果引用；Research 不解析未知 payload，也不自行计算或重解释指标。未知 result_type/schema_version 必须返回 unsupported_result_type/unsupported_schema，不回退旧版本。
+同一 result_type + payload_schema_version 的 payload 结构不可原地改变。Envelope schema_version 只表示 Envelope DTO 自身版本；payload_schema_version 只表示 Payload Schema 版本。Researchflow 只校验 discriminator、Schema 和版本并保存结果引用；Research 不解析未知 payload，也不自行计算或重解释指标。未知 result_type、Envelope schema_version 或 payload_schema_version 必须返回对应 unsupported 错误，不回退旧版本。
 
 
 ### 2.6 Quant Facade 边界
@@ -227,16 +227,16 @@ fact 必须有可验证来源与时间；reported_fact 只表示来源声称；i
 | invalidation_conditions | 是 | string[] | 失效条件 |
 | uncertainty | 是 | string[] | 不确定因素 |
 | supersedes_event_version | 否 | integer | 被修正版本 |
-| source_times | 是 | EventSourceTime[] | 来源级时间证据；无来源时间证据使用空数组，不压缩或覆盖冲突值 |
+| source_times | 是 | EventSourceTime[] | 来源级时间证据；无来源时间证据使用空数组，不压缩或覆盖冲突值 |\n| time_normalization_rule_version | 是 | string | 本 Event 规范化 occurred_at/published_at/available_at 所采用的统一 Research 时间规则集版本；即使规范化值为 null 也必须记录 |\n| derived_from_refs | 是 | ResearchEventRef[] | 直接派生自的前序 ResearchEvent 不可变版本；根 Event 使用空数组 |
 
-合并、拆分、主体修正和状态变化均追加新版本并保留证据；禁止覆盖历史版本或把 Article 直接当 Event。多来源时间冲突需保留来源级时间，不得压成一个无来源的时间值。
+合并、拆分、主体修正和状态变化均追加新版本并保留证据；禁止覆盖历史版本或把 Article 直接当 Event。多来源时间冲突需保留来源级时间，不得压成一个无来源的时间值。time_normalization_rule_version 对应规则必须覆盖来源时间选择优先级、冲突处理、时区/精度和 null 处理；历史 Event 保留创建时版本，不得静默重解释。derived_from_refs 只引用直接前序 Event 的 event_id + event_version，不得自引用或形成循环；合并记录所有直接父版本，拆分后的每个子 Event 均记录其父版本。evidence_refs 表达支持/反证，不替代 Event 血缘。
 
 ### 3.4 Claim / Hypothesis
 
 | JSON 字段 | 必需 | 类型/约束 | 语义 |
 |---|---|---|---|
 | claim_id | 是 | string | 不透明 ID |
-| claim_version | 是 | integer | 追加式版本 |
+| claim_version | 是 | integer | 追加式版本，从 1 开始严格递增 |\n| supersedes_version | 否 | integer | 当前版本明确替代的同一 claim_id 下既有版本；初始版本不得设置 |
 | statement | 是 | string | 可验证陈述 |
 | epistemic_type | 是 | reported_fact/inference/hypothesis | 陈述性质 |
 | scope_refs | 是 | string[] | 适用主体/范围 |
@@ -250,7 +250,7 @@ fact 必须有可验证来源与时间；reported_fact 只表示来源声称；i
 | status | 是 | proposed/testing/supported/contradicted/invalidated/unknown | 研究状态 |
 | limitations | 是 | string[] | 限制 |
 
-Claim 与 Hypothesis 可共享存储基类，但公开 DTO 必须明确 epistemic_type；Hypothesis 的验证方法、预期观察和失效条件不可缺失。
+Claim 与 Hypothesis 可共享存储基类，但公开 DTO 必须明确 epistemic_type；Hypothesis 的验证方法、预期观察和失效条件不可缺失。supersedes_version 仅在 statement/结论语义被替代时必需；目标版本必须存在、早于当前版本且为写入前当前有效版本。仅追加证据或不改变陈述含义的状态/评估信息可省略；历史版本不可变。
 
 ### 3.5 Scenario
 
@@ -468,7 +468,7 @@ Evidence 必须保留来源事实、系统观察和研究纳入时间三条独�
 - 修正必须声明 supersedes_version；若对象被拆分/合并，必须记录 source_refs 与 derived_from_refs，禁止删除旧对象或重写历史引用。
 - ResearchEvent 状态迁移由 Research 领域规则注册；MVP 允许 detected -> consolidating -> active -> materializing -> fading -> closed，任一非终态可转 invalidated；禁止从 closed/invalidated 回到 active，恢复必须创建新 Event 并引用旧对象。
 - Claim/Hypothesis 状态迁移：proposed -> testing -> supported/contradicted/invalidated/unknown；supported/contradicted/invalidated 为终态。新证据改变结论时创建新版本，不回写历史版本状态。
-- confidence 若存在必须在 [0,1]，同时记录 confidence_method/version；未定义方法时 confidence 必须 null，不允许把 LLM 自评分当成统计概率。
+- ResearchEvent 必须记录 time_normalization_rule_version；source_times 保留逐来源原始时间证据，历史 Event 不随规则升级而重算。\n- EventRef 使用 event_id + event_version；derived_from_refs 只表示直接父 Event，空数组表示根 Event。\n- confidence 若存在必须在 [0,1]，同时记录 confidence_method/version；未定义方法时 confidence 必须 null，不允许把 LLM 自评分当成统计概率。
 - Research 不自行生成 Quant probability/return/risk 数值；所有数值结论必须引用 QuantResult/Metric 的 code、schema_version、algorithm_version 和输入快照。
 
 
