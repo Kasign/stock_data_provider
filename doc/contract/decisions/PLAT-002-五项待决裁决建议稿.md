@@ -1,10 +1,10 @@
-# PLAT-002 五项公开契约待决裁决建议稿
+# PLAT-002 五项公开契约裁决建议稿（已被正式决议取代）
 
-- 状态：`proposal_pending_project_owner_confirmation`
+- 状态：`superseded_by_DEC-PLAT-002-028_to_032`
 - 适用范围：仅 QNT-CTR-004、QNT-CTR-005、RSC-CTR-002 的五项已登记待决
 - 维护分支：`feat/design_doc`
 - 代码审计基线：`origin/integration @ b6dfc85ba214fe16268c8cba780641a8bfe15086`
-- 目的：将现有冲突收敛为可一次确认的明确语义；本建议稿不是正式决议，不改变任何正式 CTR 状态
+- 目的：保留初版建议的审查轨迹；最终语义以项目级决策记录 DEC-PLAT-002-028～032 为准，本文件不再作为待确认事项
 
 ## 裁决原则
 
@@ -130,3 +130,6 @@ ResearchEvent 已有 `evidence_refs`，语义是当前 Event 的支持/反证依
 项目负责人确认后，才把接受的条目转为正式决议，并更新本登记簿、差异矩阵和十模块进度中的对应状态及字段定义引用。责任模块的 Schema/DTO/实现更新不属于本分支本轮任务，不在此处执行。
 
 项目负责人如不接受某项建议，只需指出该项编号及替代语义；该项保持 pending-decision，其他已确认项可单独收敛。
+
+
+> 本建议稿已由 DEC-PLAT-002-028～032 取代。正式裁决采用初版无历史兼容包袱的方案：Manifest schema_version 表示自身版本；不增加 input_mode 与 time_normalization_rule_id；Event 不增加 source_refs；详细语义以项目级决策记录为唯一权威来源。
