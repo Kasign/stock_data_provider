@@ -1178,3 +1178,15 @@
 - DEC-027 的 Dragon Tiger Provider 原始金额字段仍属于公开 DTO 边界定义缺口；CTR-043 原分页计数语义本身可 freeze-ready，Hithink 分页实现偏差不阻断该契约冻结。
 - 本轮只更新 `feat/design_doc` 的契约治理文档，没有修改责任模块代码、没有执行测试/CI，也没有将任何正式 CTR 批量标记为 frozen。
 - 下一步唯一工作：按登记簿第13.2节的批次核对权威公开定义，逐批将正式 CTR 定为 `freeze-ready`、`pending-evidence`、`blocked` 或 `deferred`；不检查模块内部实现/测试，不重复已完成的项目级决议审查。
+
+
+## 41. GOV / Platform 契约定义核定完成（2026-11-11）
+
+- 本轮完成 GOV-CTR-001～006、PLAT-CTR-001～007 的公开定义核定，共 13 项。
+- 核定结果：GOV-CTR-005 为 freeze-ready；GOV-CTR-001～004/006 与 PLAT-CTR-001～007 共 12 项 pending_evidence；本批无 pending_decision、无 blocked。
+- GOV-CTR-005 已有唯一权威登记簿、决策记录、版本记录和清晰的定义冻结门禁。其 freeze-ready 仅表示治理规则定义可冻结，不代表 43 项业务契约全部冻结。
+- GOV-CTR-001～004 的原则文本已有，但缺独立稳定规则版本及字段级适用映射；GOV-CTR-006 已有 1.0.0 Schema/Golden，但时间 UTC、集合规范排序、资源粒度和 purpose/content_level 适用映射仍不完整。
+- PLAT-CTR-001 缺公开 HTTP Error DTO 定义；PLAT-CTR-002 只有 Request ID 细节，缺 Principal/Scope/认证来源 Context 定义；PLAT-CTR-003 的 Session API 仍是候选定义；PLAT-CTR-004 存在 Schema 与文字定义差异；PLAT-CTR-005 缺唯一权威 Port/API 版本定义；PLAT-CTR-006 缺 Migration Runner 完整接口契约；PLAT-CTR-007 缺 Typed Config/Secret API 版本及适用映射。
+- 本轮没有检查或修改 Platform/Server 模块实现，没有执行测试、CI 或部署验收；上述项目均未将实现符合性事项列为契约冻结门禁。
+- 权威明细见登记簿第14节及差异矩阵第41节。README 与契约版本记录已同步新门禁和 0.2.7-review。
+- 下一批：Data 公开契约定义核定；不重复审查 GOV/Platform 已确认原则，不检查 Data Provider 内部实现或专项测试。
