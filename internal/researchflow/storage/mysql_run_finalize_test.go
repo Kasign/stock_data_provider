@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"sync"
 	"testing"
 	"time"
 
@@ -109,6 +110,12 @@ func TestMariaDBFinalizeRunAtomicallyPersistsSummaryAndOutbox(t *testing.T) {
 			RiskGateDecisions: map[string]string{}, ActionabilityStatus: "not_evaluated",
 		},
 	}
+	staleSummary := input
+	staleSummary.Summary.StageOutcomes = map[string]domain.StageStatus{"context": domain.StageFailed}
+	if updated, err := repository.FinalizeRun(ctx, staleSummary); updated || err == nil {
+		t.Fatalf("FinalizeRun accepted stale Stage summary updated=%v err=%v", updated, err)
+	}
+
 	updated, err := repository.FinalizeRun(ctx, input)
 	if err != nil || !updated {
 		t.Fatalf("FinalizeRun updated=%v err=%v", updated, err)
@@ -172,12 +179,22 @@ func TestMariaDBFinalizeRunAtomicallyPersistsSummaryAndOutbox(t *testing.T) {
 	if claimedB[0].LeaseGeneration != 2 || claimedB[0].AttemptCount != 2 {
 		t.Fatalf("Worker B claim metadata = attempt %d generation %d", claimedB[0].AttemptCount, claimedB[0].LeaseGeneration)
 	}
+	// Worker A must not mutate Worker B's reclaimed lease, even with its old owner/token pair.
 	if acknowledged, err := repository.AcknowledgeOutbox(ctx, input.OutboxRef, "worker-a", claimedA[0].LeaseGeneration); err != nil || acknowledged {
 		t.Fatalf("stale Worker A acknowledgement = %v, err=%v; want false", acknowledged, err)
+	}
+	if retried, err := repository.RetryOutbox(ctx, input.OutboxRef, "worker-a", claimedA[0].LeaseGeneration, time.Now().UTC().Add(time.Minute), "stale_failure"); err != nil || retried {
+		t.Fatalf("stale Worker A retry = %v, err=%v; want false", retried, err)
 	}
 	retryAt := time.Now().UTC().Add(2 * time.Second)
 	if retried, err := repository.RetryOutbox(ctx, input.OutboxRef, "worker-b", claimedB[0].LeaseGeneration, retryAt, "temporary_failure"); err != nil || !retried {
 		t.Fatalf("Worker B RetryOutbox = %v, err=%v", retried, err)
+	}
+	if acknowledged, err := repository.AcknowledgeOutbox(ctx, input.OutboxRef, "worker-b", claimedB[0].LeaseGeneration); err != nil || acknowledged {
+		t.Fatalf("Worker B acknowledgement after retry release = %v, err=%v; want false", acknowledged, err)
+	}
+	if renewed, ok, err := repository.RenewOutboxLease(ctx, input.OutboxRef, "worker-b", claimedB[0].LeaseGeneration, time.Minute); err != nil || ok || !renewed.IsZero() {
+		t.Fatalf("Worker B renewal after retry release = (%s, %v), err=%v; want zero/false", renewed, ok, err)
 	}
 	if claimed, err := repository.ClaimOutbox(ctx, "worker-c", runRef, 10, 30*time.Second); err != nil || len(claimed) != 0 {
 		t.Fatalf("message claimed before next_attempt_at: count=%d err=%v", len(claimed), err)
@@ -187,7 +204,7 @@ func TestMariaDBFinalizeRunAtomicallyPersistsSummaryAndOutbox(t *testing.T) {
 		t.Fatalf("make Outbox retry due: %v", err)
 	}
 	claimedC, err := repository.ClaimOutbox(ctx, "worker-c", runRef, 10, 30*time.Second)
-	if err != nil || len(claimedC) != 1 || claimedC[0].LeaseGeneration != 3 {
+	if err != nil || len(claimedC) != 1 || claimedC[0].LeaseGeneration != 3 || claimedC[0].AttemptCount != 3 {
 		t.Fatalf("Worker C retry claim = %+v, err=%v", claimedC, err)
 	}
 	if acknowledged, err := repository.AcknowledgeOutbox(ctx, input.OutboxRef, "worker-c", claimedC[0].LeaseGeneration); err != nil || !acknowledged {
@@ -323,5 +340,265 @@ func TestMariaDBFinalizeCancellationRunAtomicallyPersistsSummaryAndOutbox(t *tes
 	}
 	if summaryCount != 1 || outboxCount != 1 {
 		t.Fatalf("summary count=%d outbox count=%d, want one each", summaryCount, outboxCount)
+	}
+}
+
+// TestMariaDBFinalizeRunRollsBackWhenOutboxInsertFails verifies that a
+// failure after the ResultSummary insert cannot leave a partial terminal Run.
+func TestMariaDBFinalizeRunRollsBackWhenOutboxInsertFails(t *testing.T) {
+	if os.Getenv("PLATFORM_STORAGE_INTEGRATION") != "1" {
+		t.Skip("set PLATFORM_STORAGE_INTEGRATION=1 to run Researchflow MariaDB integration tests")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+	defer cancel()
+	dsn := fmt.Sprintf("%s:%s@tcp(%s)/%s?parseTime=true",
+		os.Getenv("PLATFORM_MARIADB_USER"),
+		os.Getenv("PLATFORM_MARIADB_PASSWORD"),
+		os.Getenv("PLATFORM_MARIADB_ADDR"),
+		os.Getenv("PLATFORM_MARIADB_DATABASE"),
+	)
+	config, err := mysql.ParseDSN(dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	connector, err := mysql.NewConnector(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	db, err := platformstorage.OpenSQL(ctx, connector, platformstorage.DefaultSQLConfig())
+	if err != nil {
+		t.Fatalf("open MariaDB: %v", err)
+	}
+	defer db.Close()
+	if err := platformstorage.ApplyMigrations(ctx, db, MigrationNamespace, Migrations()); err != nil {
+		t.Fatalf("apply Researchflow migrations: %v", err)
+	}
+	repository, err := NewMySQLRunRepository(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	suffix := fmt.Sprintf("%d", time.Now().UnixNano())
+	runRef := "rollback-finalize-run-" + suffix
+	stageRef := "rollback-finalize-stage-" + suffix
+	now := time.Now().UTC()
+	fingerprint := "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	templateFingerprint := "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+	record := application.CreateRunRecord{
+		Scope: application.IdempotencyScope{
+			CallerRef: "researchflow-finalize-rollback-test", Operation: "CreateRun", Key: "rollback-" + suffix,
+		},
+		Fingerprint: fingerprint,
+		Run: domain.Run{
+			Ref: runRef, SchemaVersion: "run-v1", Status: domain.RunCreated, Version: 1,
+			SystemAsOf: now.Add(-time.Minute), DeadlineAt: now.Add(5 * time.Minute),
+			TemplateRef: "rollback-template", TemplateVersion: "v1",
+			TemplateFingerprint: templateFingerprint, InputSnapshotRefs: []string{},
+			CorrelationID: "rollback-correlation-" + suffix,
+		},
+		Stages: []domain.Stage{{
+			Ref: stageRef, RunRef: runRef, Code: "context", Status: domain.StagePending,
+			Version: 1, Required: true, Dependencies: []string{}, RetryPolicyRef: "retry-v1",
+			DiagnosticRefs: []string{}, ReasonCodes: []string{},
+		}},
+		ResolvedTemplate: template.ResolvedTemplate{
+			Ref: "rollback-template", Version: "v1", Fingerprint: templateFingerprint,
+			Stages: []template.ResolvedStage{{Definition: template.StageDefinition{Code: "context"}}},
+		},
+		Parameters: json.RawMessage(`{}`),
+	}
+	if _, err := repository.CreateRunAtomic(ctx, record); err != nil {
+		t.Fatalf("CreateRunAtomic: %v", err)
+	}
+	startedAt := formatResearchflowTimeValue(now)
+	finishedAt := formatResearchflowTimeValue(now.Add(time.Second))
+	if _, err := db.ExecContext(ctx, `UPDATE researchflow_runs
+		SET status = ?, version = version + 1, started_at = ? WHERE run_ref = ?`,
+		string(domain.RunRunning), startedAt, runRef); err != nil {
+		t.Fatalf("start fixture Run: %v", err)
+	}
+	if _, err := db.ExecContext(ctx, `UPDATE researchflow_stages
+		SET status = ?, version = version + 1, started_at = ?, finished_at = ?
+		WHERE stage_ref = ?`,
+		string(domain.StageSucceeded), startedAt, finishedAt, stageRef); err != nil {
+		t.Fatalf("finish fixture Stage: %v", err)
+	}
+
+	triggerName := "researchflow_fail_outbox_" + suffix
+	if _, err := db.ExecContext(ctx, `CREATE TRIGGER `+triggerName+` BEFORE INSERT ON researchflow_outbox
+		FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'forced Researchflow Outbox insert failure'`); err != nil {
+		t.Fatalf("create Outbox failure trigger: %v", err)
+	}
+	defer func() {
+		_, _ = db.ExecContext(context.Background(), "DROP TRIGGER IF EXISTS "+triggerName)
+	}()
+
+	input := RunFinalization{
+		RunRef: runRef, ExpectedVersion: 2,
+		ResultSummaryRef: "rollback-summary-" + suffix, SummarySchemaVersion: "summary-v1",
+		OutboxRef: "rollback-outbox-" + suffix, TerminalStatus: domain.RunSucceeded,
+		Summary: domain.ResultSummary{
+			StageOutcomes:  map[string]domain.StageStatus{"context": domain.StageSucceeded},
+			ExcludedStages: []domain.ExcludedStage{}, MissingStageCodes: []string{},
+			DegradedStageCodes: []string{}, BlockedStageCodes: []string{},
+			ReasonCodes: []string{}, Coverage: 1, QualityStatus: "valid",
+			RiskGateDecisions: map[string]string{}, ActionabilityStatus: "not_evaluated",
+		},
+	}
+	if updated, err := repository.FinalizeRun(ctx, input); err == nil || updated {
+		t.Fatalf("FinalizeRun updated=%v err=%v, want failed transaction", updated, err)
+	}
+
+	var status string
+	var version uint64
+	var summaryRef sql.NullString
+	if err := db.QueryRowContext(ctx, `SELECT status, version, result_summary_ref
+		FROM researchflow_runs WHERE run_ref = ?`, runRef).Scan(&status, &version, &summaryRef); err != nil {
+		t.Fatalf("read Run after rollback: %v", err)
+	}
+	if domain.RunStatus(status) != domain.RunRunning || version != 2 || summaryRef.Valid {
+		t.Fatalf("Run changed despite Outbox failure: status=%s version=%d summary_ref=%v", status, version, summaryRef)
+	}
+	var summaryCount, outboxCount int
+	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM researchflow_result_summaries WHERE run_ref = ?", runRef).Scan(&summaryCount); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM researchflow_outbox WHERE run_ref = ?", runRef).Scan(&outboxCount); err != nil {
+		t.Fatal(err)
+	}
+	if summaryCount != 0 || outboxCount != 0 {
+		t.Fatalf("partial finalization persisted: summaries=%d outbox=%d, want 0/0", summaryCount, outboxCount)
+	}
+}
+
+// TestMariaDBFinalizeRunConcurrentCAS ensures competing finalizers cannot
+// persist duplicate summaries or finalized events for one Run version.
+func TestMariaDBFinalizeRunConcurrentCAS(t *testing.T) {
+	if os.Getenv("PLATFORM_STORAGE_INTEGRATION") != "1" {
+		t.Skip("set PLATFORM_STORAGE_INTEGRATION=1 to run Researchflow MariaDB integration tests")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+	defer cancel()
+	dsn := fmt.Sprintf("%s:%s@tcp(%s)/%s?parseTime=true",
+		os.Getenv("PLATFORM_MARIADB_USER"), os.Getenv("PLATFORM_MARIADB_PASSWORD"),
+		os.Getenv("PLATFORM_MARIADB_ADDR"), os.Getenv("PLATFORM_MARIADB_DATABASE"))
+	config, err := mysql.ParseDSN(dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	connector, err := mysql.NewConnector(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	db, err := platformstorage.OpenSQL(ctx, connector, platformstorage.DefaultSQLConfig())
+	if err != nil {
+		t.Fatalf("open MariaDB: %v", err)
+	}
+	defer db.Close()
+	if err := platformstorage.ApplyMigrations(ctx, db, MigrationNamespace, Migrations()); err != nil {
+		t.Fatalf("apply Researchflow migrations: %v", err)
+	}
+	repository, err := NewMySQLRunRepository(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	suffix := fmt.Sprintf("%d", time.Now().UnixNano())
+	now := time.Now().UTC()
+	runRef, stageRef := "concurrent-finalize-run-"+suffix, "concurrent-finalize-stage-"+suffix
+	templateFingerprint := "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+	record := application.CreateRunRecord{
+		Scope:       application.IdempotencyScope{CallerRef: "researchflow-finalize-race", Operation: "CreateRun", Key: "race-" + suffix},
+		Fingerprint: "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+		Run: domain.Run{Ref: runRef, SchemaVersion: "run-v1", Status: domain.RunCreated, Version: 1,
+			SystemAsOf: now.Add(-time.Minute), DeadlineAt: now.Add(5 * time.Minute),
+			TemplateRef: "concurrent-template", TemplateVersion: "v1", TemplateFingerprint: templateFingerprint,
+			InputSnapshotRefs: []string{}, CorrelationID: "concurrent-finalize-" + suffix},
+		Stages: []domain.Stage{{Ref: stageRef, RunRef: runRef, Code: "context", Status: domain.StagePending,
+			Version: 1, Required: true, Dependencies: []string{}, RetryPolicyRef: "retry-v1",
+			DiagnosticRefs: []string{}, ReasonCodes: []string{}}},
+		ResolvedTemplate: template.ResolvedTemplate{Ref: "concurrent-template", Version: "v1",
+			Fingerprint: templateFingerprint, Stages: []template.ResolvedStage{{Definition: template.StageDefinition{Code: "context"}}}},
+		Parameters: json.RawMessage(`{}`),
+	}
+	if _, err := repository.CreateRunAtomic(ctx, record); err != nil {
+		t.Fatalf("CreateRunAtomic: %v", err)
+	}
+	started, finished := formatResearchflowTimeValue(now), formatResearchflowTimeValue(now.Add(time.Second))
+	if _, err := db.ExecContext(ctx, "UPDATE researchflow_runs SET status=?, version=version+1, started_at=? WHERE run_ref=?",
+		string(domain.RunRunning), started, runRef); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.ExecContext(ctx, "UPDATE researchflow_stages SET status=?, version=version+1, started_at=?, finished_at=? WHERE stage_ref=?",
+		string(domain.StageSucceeded), started, finished, stageRef); err != nil {
+		t.Fatal(err)
+	}
+
+	inputs := []RunFinalization{
+		{RunRef: runRef, ExpectedVersion: 2, ResultSummaryRef: "race-summary-a-" + suffix,
+			SummarySchemaVersion: "summary-v1", OutboxRef: "race-outbox-a-" + suffix, TerminalStatus: domain.RunSucceeded,
+			Summary: domain.ResultSummary{StageOutcomes: map[string]domain.StageStatus{"context": domain.StageSucceeded},
+				ExcludedStages: []domain.ExcludedStage{}, MissingStageCodes: []string{}, DegradedStageCodes: []string{},
+				BlockedStageCodes: []string{}, ReasonCodes: []string{}, RiskGateDecisions: map[string]string{},
+				Coverage: 1, QualityStatus: "valid", ActionabilityStatus: "not_evaluated"}},
+		{RunRef: runRef, ExpectedVersion: 2, ResultSummaryRef: "race-summary-b-" + suffix,
+			SummarySchemaVersion: "summary-v1", OutboxRef: "race-outbox-b-" + suffix, TerminalStatus: domain.RunSucceeded,
+			Summary: domain.ResultSummary{StageOutcomes: map[string]domain.StageStatus{"context": domain.StageSucceeded},
+				ExcludedStages: []domain.ExcludedStage{}, MissingStageCodes: []string{}, DegradedStageCodes: []string{},
+				BlockedStageCodes: []string{}, ReasonCodes: []string{}, RiskGateDecisions: map[string]string{},
+				Coverage: 1, QualityStatus: "valid", ActionabilityStatus: "not_evaluated"}},
+	}
+	start := make(chan struct{})
+	type outcome struct {
+		updated bool
+		err     error
+	}
+	results := make(chan outcome, 2)
+	var wait sync.WaitGroup
+	for _, input := range inputs {
+		input := input
+		wait.Add(1)
+		go func() {
+			defer wait.Done()
+			<-start
+			updated, err := repository.FinalizeRun(ctx, input)
+			results <- outcome{updated: updated, err: err}
+		}()
+	}
+	close(start)
+	wait.Wait()
+	close(results)
+	successes, finalizedLosers := 0, 0
+	for result := range results {
+		switch {
+		case result.err == nil && result.updated:
+			successes++
+		case errors.Is(result.err, ErrRunAlreadyFinalized):
+			finalizedLosers++
+		default:
+			t.Fatalf("unexpected competing finalizer result updated=%v err=%v", result.updated, result.err)
+		}
+	}
+	if successes != 1 || finalizedLosers != 1 {
+		t.Fatalf("competing finalizers: success=%d already_finalized=%d, want 1/1", successes, finalizedLosers)
+	}
+	var runStatus, summaryRef string
+	var version uint64
+	if err := db.QueryRowContext(ctx, "SELECT status, version, result_summary_ref FROM researchflow_runs WHERE run_ref=?", runRef).
+		Scan(&runStatus, &version, &summaryRef); err != nil {
+		t.Fatal(err)
+	}
+	if domain.RunStatus(runStatus) != domain.RunSucceeded || version != 3 {
+		t.Fatalf("final Run status=%s version=%d, want succeeded/3", runStatus, version)
+	}
+	var summaries, events int
+	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM researchflow_result_summaries WHERE run_ref=?", runRef).Scan(&summaries); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM researchflow_outbox WHERE run_ref=? AND event_type=?", runRef, runFinalizedEventType).Scan(&events); err != nil {
+		t.Fatal(err)
+	}
+	if summaries != 1 || events != 1 {
+		t.Fatalf("persisted summaries=%d events=%d, want 1/1 (summary_ref=%s)", summaries, events, summaryRef)
 	}
 }

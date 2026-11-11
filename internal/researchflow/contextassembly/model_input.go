@@ -116,13 +116,23 @@ func ComposeModelInput(
 			AssembledAt: section.AssembledAt.Format("2006-01-02T15:04:05.999999999Z"), Text: content,
 		})
 	}
+	// Keep omitted source references in the Research DTO, but do not expose
+	// identifiers for content that was not selected into the model context.
+	omittedSections := make([]researchapp.ContextOmittedSection, 0, len(command.OmittedSections))
+	for _, omitted := range command.OmittedSections {
+		omittedSections = append(omittedSections, researchapp.ContextOmittedSection{
+			SectionID: omitted.SectionID, SourceOwner: omitted.SourceOwner,
+			ReasonCode: omitted.ReasonCode, Required: omitted.Required,
+			SourceRefs: []string{}, SafeMessage: omitted.SafeMessage, Retryable: omitted.Retryable,
+		})
+	}
 	envelope := ModelInputEnvelope{
 		SchemaVersion:    "researchflow.context-input.v1",
 		ResearchQuestion: snapshot.ResearchQuestion, Scope: snapshot.Scope,
 		SubjectRefs:    append([]string{}, snapshot.SubjectRefs...),
 		SystemAsOf:     snapshot.SystemAsOf.Format("2006-01-02T15:04:05.999999999Z"),
 		BuilderVersion: snapshot.BuilderVersion, QualitySummary: command.QualitySummary,
-		OmittedSections: command.OmittedSections, Sections: sections,
+		OmittedSections: omittedSections, Sections: sections,
 	}
 	serialized, err := json.Marshal(envelope)
 	if err != nil {

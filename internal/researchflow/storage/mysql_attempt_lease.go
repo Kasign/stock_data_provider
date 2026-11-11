@@ -56,8 +56,8 @@ func (r *MySQLRunRepository) RenewAttemptLease(
 		return time.Time{}, ErrClaimStageUnavailable
 	}
 
-	var attemptStatus, owner string
-	var leaseValue sql.NullString
+	var attemptStatus string
+	var owner, leaseValue sql.NullString
 	var token uint64
 	var attemptNo int
 	if err := tx.QueryRowContext(ctx, `SELECT status, lease_owner, lease_expires_at, fencing_token, attempt_no
@@ -68,7 +68,7 @@ func (r *MySQLRunRepository) RenewAttemptLease(
 		return time.Time{}, fmt.Errorf("lock Researchflow lease attempt %q: %w", attemptRef, err)
 	}
 	if domain.AttemptStatus(attemptStatus) != domain.AttemptRunning ||
-		owner != workerID || token != fencingToken || attemptNo != stageAttemptNo {
+		!owner.Valid || owner.String != workerID || token != fencingToken || attemptNo != stageAttemptNo {
 		return time.Time{}, ErrAttemptLeaseHeld
 	}
 
@@ -91,17 +91,16 @@ func (r *MySQLRunRepository) RenewAttemptLease(
 		return time.Time{}, ErrAttemptLeaseHeld
 	}
 
-	nextExpiry := now.Add(leaseDuration)
-	if nextExpiry.After(deadline) {
-		nextExpiry = deadline
-	}
-	if !nextExpiry.After(now) {
-		return time.Time{}, ErrClaimRunUnavailable
+	nextExpiry, err := calculateResearchflowLeaseExpiry(now, leaseDuration, deadline)
+	if err != nil {
+		return time.Time{}, err
 	}
 	result, err := tx.ExecContext(ctx, `UPDATE researchflow_attempts SET lease_expires_at = ?
-		WHERE attempt_ref = ? AND status = ? AND lease_owner = ? AND fencing_token = ?`,
-		formatResearchflowTimeValue(nextExpiry), attemptRef, string(domain.AttemptRunning),
-		workerID, fencingToken)
+		WHERE attempt_ref = ? AND run_ref = ? AND stage_ref = ? AND attempt_no = ?
+			AND status = ? AND lease_owner = ? AND fencing_token = ?
+			AND lease_expires_at > ?`,
+		formatResearchflowTimeValue(nextExpiry), attemptRef, runRef, stageRef, attemptNo,
+		string(domain.AttemptRunning), workerID, fencingToken, formatResearchflowTimeValue(now))
 	if err != nil {
 		return time.Time{}, fmt.Errorf("extend Researchflow attempt lease: %w", err)
 	}
