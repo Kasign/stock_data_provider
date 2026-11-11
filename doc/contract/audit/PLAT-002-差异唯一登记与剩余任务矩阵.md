@@ -1443,3 +1443,11 @@ INT-CTR-001 是正式 43 CTR 之一，不是内部 Outbox/Inbox 实现验收。�
 - DEC-PLAT-002-033 已裁决 ScenarioCondition.expected_value 不允许任意 object/map；仅允许 string/number/boolean scalar 或非空 scalar 数组。
 - `in/not_in` 必须数组，`exists/not_exists` 必须省略，其他比较运算必须是单值；Metric 条件的值类型与 unit 以 `metric_ref` 对应 Registry 为准。
 - 项目级 Scenario Schema 已同步收紧；Metric Registry 映射和 QuantResultRef 类型/时间绑定仍需权威证据，RSC-CTR-002 继续 pending_evidence。
+
+
+## 57. GOV-CTR-001 公共 JSON 数值与空值规则冻结评估（2026-11-11）
+
+- DEC-PLAT-002-034 已将公共表达原则收敛为 GOV-CTR-001 1.0.0 唯一权威文本。
+- 公共规则明确 Decimal string 语法与禁止项、精度敏感转换、integer 安全范围、number 近似数值和舍入声明、ratio/percentage_point、单位、缺失/null/zero/empty/unknown/unavailable 等状态语义。
+- 明确公共规则与字段级规则边界：GOV-CTR-001 不规定统一 scale/精度/舍入/容差；字段生产方在各自 DTO/Schema/Registry 中定义。这些字段映射由 DATA/QNT/Research/News/LLM 等 CTR 继续验收。
+- GOV-CTR-001 转为 freeze-ready；不代表各领域数值字段映射已完成。

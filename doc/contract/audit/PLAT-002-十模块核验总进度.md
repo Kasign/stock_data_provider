@@ -1353,3 +1353,10 @@
 - DEC-PLAT-002-033 已确定 expected_value 的 scalar/非空 scalar 数组结构和 operator 约束；项目级 DTO/Schema 已同步。
 - 禁止任意 object/map 和嵌套表达式；Metric 值类型/unit 必须以 Quant Registry 为准，待权威映射证据。
 - 未修改 Research 责任模块文件；RSC-CTR-002 保持 pending_evidence，43 项统计不变。
+
+
+## 57. GOV-CTR-001 公共规则版本化（2026-11-11）
+
+- 建立 GOV-CTR-001 1.0.0 唯一权威文本；公共 JSON 类型、Decimal/Integer/Number、单位/比例和缺失/空值规则已明确。
+- 字段级 scale/精度/范围/舍入/tolerance 仍由各生产方定义，不与公共规则冻结混为一谈。
+- GOV-CTR-001 状态调整为 freeze-ready；总统计更新为 2 freeze-ready、39 pending-evidence、0 pending-decision、2 not_applicable、0 frozen。
