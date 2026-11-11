@@ -17,7 +17,7 @@ func TestValidateStageExecutionResult(t *testing.T) {
 	}{
 		{name: "succeeded", result: StageExecutionResult{AttemptStatus: domain.AttemptSucceeded, StageStatus: domain.StageSucceeded, OutputRef: &output}, valid: true},
 		{name: "degraded", result: StageExecutionResult{AttemptStatus: domain.AttemptDegraded, StageStatus: domain.StageDegraded, OutputRef: &output}, valid: true},
-		{name: "retry wait", result: StageExecutionResult{AttemptStatus: domain.AttemptFailed, StageStatus: domain.StageRetryWait, RetryAt: &retryAt}, valid: true},
+		{name: "retry wait", result: StageExecutionResult{AttemptStatus: domain.AttemptFailed, StageStatus: domain.StageRetryWait}, valid: true},
 		{name: "failed", result: StageExecutionResult{AttemptStatus: domain.AttemptFailed, StageStatus: domain.StageFailed}, valid: true},
 		{name: "timed out", result: StageExecutionResult{AttemptStatus: domain.AttemptTimedOut, StageStatus: domain.StageTimedOut}, valid: true},
 		{name: "cancelled", result: StageExecutionResult{AttemptStatus: domain.AttemptCancelled, StageStatus: domain.StageCancelled}, valid: true},

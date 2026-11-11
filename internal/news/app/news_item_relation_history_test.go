@@ -14,6 +14,7 @@ type relationHistoryRepositoryStub struct {
 	err       error
 	request   NewsItemRelationHistoryRequest
 	calls     int
+	afterRead func()
 }
 
 func (s *relationHistoryRepositoryStub) ListNewsItemRelationsAt(
@@ -21,6 +22,9 @@ func (s *relationHistoryRepositoryStub) ListNewsItemRelationsAt(
 ) ([]domain.NewsItemRelation, error) {
 	s.calls++
 	s.request = request
+	if s.afterRead != nil {
+		s.afterRead()
+	}
 	return s.relations, s.err
 }
 
@@ -29,6 +33,7 @@ func validRelationHistoryItem(id string, observedAt time.Time) domain.NewsItemRe
 		ID: id, FromNewsID: "news-1", FromSourceID: "source-1",
 		ToNewsID: "news-2", ToSourceID: "source-2",
 		Kind: domain.NewsItemRelationRepostOf, Status: domain.NewsItemRelationConfirmed,
+		FromVersionID: "version-from-" + id, ToVersionID: "version-to-" + id,
 		AssertedAt: observedAt, ObservedAt: observedAt,
 	}
 }
@@ -38,7 +43,11 @@ func TestListNewsItemRelationHistoryPreservesInclusiveBoundaryAndStableOrder(t *
 	boundary := now.Add(-time.Minute)
 	repository := &relationHistoryRepositoryStub{relations: []domain.NewsItemRelation{
 		validRelationHistoryItem("relation-a", boundary),
-		validRelationHistoryItem("relation-b", boundary),
+		func() domain.NewsItemRelation {
+			item := validRelationHistoryItem("relation-b", boundary)
+			item.FromNewsID, item.FromSourceID = "news-3", "source-3"
+			return item
+		}(),
 	}}
 	useCase, err := NewListNewsItemRelationHistory(repository)
 	if err != nil {
@@ -167,5 +176,73 @@ func TestListNewsItemRelationHistoryPreservesAppendOnlyStatuses(t *testing.T) {
 	}
 	if result[2].SupersedesRelationID != "relation-confirmed" {
 		t.Fatalf("retraction lost its supersedes link: %+v", result[2])
+	}
+}
+
+func TestListNewsItemRelationHistoryPropagatesCancellationAfterRepositoryRead(t *testing.T) {
+	now := time.Now().UTC()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	repository := &relationHistoryRepositoryStub{afterRead: cancel}
+	useCase, _ := NewListNewsItemRelationHistory(repository)
+	useCase.now = func() time.Time { return now }
+	_, err := useCase.Execute(ctx, NewsItemRelationHistoryRequest{
+		NewsID: "news-1", SystemAsOf: now.Add(-time.Second),
+	})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("Execute() error = %v, want context.Canceled", err)
+	}
+}
+
+func TestListNewsItemRelationHistoryKeepsSupersededAncestorForTargetSideQuery(t *testing.T) {
+	now := time.Date(2026, 11, 9, 10, 0, 0, 0, time.UTC)
+	parent := validRelationHistoryItem("relation-parent", now.Add(-2*time.Minute))
+	child := validRelationHistoryItem("relation-child", now.Add(-time.Minute))
+	child.ToNewsID = "news-3"
+	child.ToSourceID = "source-3"
+	child.SupersedesRelationID = parent.ID
+	repository := &relationHistoryRepositoryStub{relations: []domain.NewsItemRelation{parent, child}}
+	useCase, err := NewListNewsItemRelationHistory(repository)
+	if err != nil {
+		t.Fatal(err)
+	}
+	useCase.now = func() time.Time { return now }
+	result, err := useCase.Execute(context.Background(), NewsItemRelationHistoryRequest{NewsID: "news-3", SystemAsOf: now})
+	if err != nil {
+		t.Fatalf("target-side history with superseded ancestor: %v", err)
+	}
+	if len(result) != 2 || result[0].ID != parent.ID || result[1].ID != child.ID {
+		t.Fatalf("history lost superseded ancestor: %+v", result)
+	}
+}
+
+func TestListNewsItemRelationHistoryRejectsUnrelatedAncestorRows(t *testing.T) {
+	now := time.Date(2026, 11, 9, 10, 0, 0, 0, time.UTC)
+	direct := validRelationHistoryItem("relation-direct", now.Add(-time.Minute))
+	unrelated := validRelationHistoryItem("relation-unrelated", now.Add(-2*time.Minute))
+	unrelated.FromNewsID, unrelated.ToNewsID = "news-7", "news-8"
+	unrelated.FromSourceID, unrelated.ToSourceID = "source-7", "source-8"
+	repository := &relationHistoryRepositoryStub{relations: []domain.NewsItemRelation{unrelated, direct}}
+	useCase, _ := NewListNewsItemRelationHistory(repository)
+	useCase.now = func() time.Time { return now }
+	_, err := useCase.Execute(context.Background(), NewsItemRelationHistoryRequest{NewsID: "news-1", SystemAsOf: now})
+	if !errors.Is(err, ErrNewsItemRelationHistoryInvalid) {
+		t.Fatalf("Execute() error = %v, want invalid history", err)
+	}
+}
+
+func TestListNewsItemRelationHistoryReturnsEmptyForItemWithoutRelations(t *testing.T) {
+	now := time.Date(2026, 11, 9, 10, 0, 0, 0, time.UTC)
+	repository := &relationHistoryRepositoryStub{}
+	useCase, _ := NewListNewsItemRelationHistory(repository)
+	useCase.now = func() time.Time { return now }
+	result, err := useCase.Execute(context.Background(), NewsItemRelationHistoryRequest{
+		NewsID: "news-without-relations", SystemAsOf: now,
+	})
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if result == nil || len(result) != 0 {
+		t.Fatalf("empty relation history = %#v, want non-nil empty slice", result)
 	}
 }

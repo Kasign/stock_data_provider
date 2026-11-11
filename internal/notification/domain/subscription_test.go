@@ -96,3 +96,18 @@ func TestSubscriptionRequiresRegisteredEventType(t *testing.T) {
 		t.Fatalf("expected unknown event type to fail, got %v", err)
 	}
 }
+
+func TestSubscriptionFiltersRejectDuplicateKeysAtEveryDepth(t *testing.T) {
+	for _, raw := range []string{
+		`{"status":"reject","status":"approve"}`,
+		`{"outer":{"value":1,"value":2}}`,
+		`{"status":"reject","st\u0061tus":"approve"}`,
+	} {
+		sub := validSubscription()
+		sub.Filters = json.RawMessage(raw)
+		sub.FilterSchemaVersion = "1.0.0"
+		if err := sub.Validate(acceptingEventTypeLookup{}, acceptingFilterValidator{}); !errors.Is(err, ErrInvalidSubscription) {
+			t.Errorf("duplicate filter keys must fail closed: %s (err=%v)", raw, err)
+		}
+	}
+}

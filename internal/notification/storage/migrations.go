@@ -191,5 +191,12 @@ func Migrations() []platformstorage.Migration {
 				) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
 			},
 		},
+		{
+			Version:     5,
+			Description: "remove redundant channel config primary-key index",
+			Statements: []string{
+				`ALTER TABLE notification_channel_config_versions DROP INDEX idx_notification_channel_config_kind`,
+			},
+		},
 	}
 }

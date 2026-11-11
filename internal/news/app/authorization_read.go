@@ -78,9 +78,15 @@ func (u *EvaluateNewsEvidenceReadAuthorization) Execute(
 	if err := u.verifier.VerifyNewsAuthorizationFingerprint(ctx, binding); err != nil {
 		return ErrNewsAuthorizationFingerprintInvalid
 	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	current, err := u.policies.ResolveCurrentNewsAuthorizationPolicies(ctx, binding)
 	if err != nil {
 		return ErrNewsCurrentPolicyUnavailable
+	}
+	if err := ctx.Err(); err != nil {
+		return err
 	}
 	decision := domain.EvaluateNewsAuthorizationAgainstCurrentPolicies(binding, current, now)
 	if !decision.Allowed {

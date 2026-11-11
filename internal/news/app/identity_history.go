@@ -41,6 +41,9 @@ func (u *ResolveIdentityAt) Execute(ctx context.Context, request ResolveIdentity
 	if u == nil || u.repository == nil || u.now == nil || ctx == nil {
 		return domain.IdentityResolution{}, ErrInvalidRequest
 	}
+	if err := ctx.Err(); err != nil {
+		return domain.IdentityResolution{}, err
+	}
 	request.SourceID = strings.TrimSpace(request.SourceID)
 	now := u.now().UTC()
 	if request.SourceID == "" || len(request.Credentials) == 0 || len(request.Credentials) > 10 ||
@@ -53,10 +56,14 @@ func (u *ResolveIdentityAt) Execute(ctx context.Context, request ResolveIdentity
 	if err != nil {
 		return domain.IdentityResolution{}, err
 	}
+	if err := ctx.Err(); err != nil {
+		return domain.IdentityResolution{}, err
+	}
 	for _, credential := range existing {
-		if credential.SourceID != request.SourceID || credential.NewsID == "" ||
-			credential.ObservedAt.IsZero() || !validEvidenceUTC(credential.ObservedAt) ||
-			credential.ObservedAt.After(request.SystemAsOf) {
+		if err := ctx.Err(); err != nil {
+			return domain.IdentityResolution{}, err
+		}
+		if !validIdentityHistoryCredential(request.SourceID, request.Credentials, credential, request.SystemAsOf) {
 			return domain.IdentityResolution{}, ErrIdentityHistoryInvalid
 		}
 	}
@@ -65,4 +72,30 @@ func (u *ResolveIdentityAt) Execute(ctx context.Context, request ResolveIdentity
 		return domain.IdentityResolution{}, ErrInvalidRequest
 	}
 	return resolution, nil
+}
+
+func validIdentityHistoryCredential(
+	sourceID string,
+	candidates []domain.IdentityCredential,
+	credential domain.IdentityCredential,
+	systemAsOf time.Time,
+) bool {
+	if credential.SourceID != sourceID || credential.NewsID == "" ||
+		credential.ObservedAt.IsZero() || !validEvidenceUTC(credential.ObservedAt) ||
+		credential.ObservedAt.After(systemAsOf) {
+		return false
+	}
+	switch credential.Status {
+	case domain.IdentifierActive, domain.IdentifierHistorical, domain.IdentifierInvalid:
+	default:
+		return false
+	}
+	for _, candidate := range candidates {
+		if credential.Type == candidate.Type &&
+			credential.Value == candidate.Value &&
+			credential.Hash == candidate.Hash {
+			return true
+		}
+	}
+	return false
 }

@@ -1,7 +1,7 @@
 # 新闻 API 契约
 
 > 版本：设计草案 v0.2  
-> 状态：当前不建设新闻独立对外 HTTP API；本文及 OpenAPI 仅保留为未来评估草案，不进入本阶段实现
+> 状态：当前不建设新闻独立对外 HTTP API；本文及 OpenAPI 仅保留为未来评估草案，不进入本阶段实现。本文第 11.5 节中的“Facade/PIT/Snapshot 尚未实现”属于 2026-11-06 历史记录，当前已实现首批 Get/List Facade、PIT Repository 与 Snapshot/Cursor 分页；但 available_at 严格 PIT 门禁、授权快照信封一致性和授权读取 TOCTOU 仍未闭环，详见《代码与文档Review报告》。
 
 ## 1. 基本原则
 
@@ -195,6 +195,12 @@ Cursor Codec 不保存分页结果快照。Snapshot Store 缺失、过期或不�
 ### 11.7 采集时间字段语义
 
 Evidence DTO 的 `fetched_at` 和 `normalized_at` 来自 Observation 中的 Candidate 过程时间。News 当前不推断 `available_at`：未取得来源明确、可验证的公开可用时间证据时返回 JSON `null`。`observed_at` 对应系统观察时间，三者不可互相替代。
+
+#### available_at 证据校验与准入
+
+首期仅接受发布来源明确声明“首次公开可获取时间”的字段，且字段语义、Source/Endpoint 授权、具体版本归属、原始字段路径/值、明确时区、证据 URL、采集时间和解析器版本均可审计。字段必须经来源级 allowlist 与语义审核后才能标记 verified。普通 `datePublished`、`published_date`、RSS `pubDate`、Atom `published/updated`、网页 `dateModified`、HTTP `Date/Last-Modified`、Provider 索引时间及本系统采集时间均不满足该准入条件；它们不得被映射或回填为 `available_at`。
+
+首次成功抓取时间只证明内容在该时刻已可获取，不证明首次公开时间，首期不将其当作 `available_at`。证据缺失、时区不明、字段语义不明、版本绑定不明或证据冲突时，DTO 返回 `null`，严格 PIT 必须排除该记录。证据修订必须保留历史记录和修订原因，不得静默覆盖。当前已接入来源尚无符合准入规则的字段，故当前 `available_at` 均为 `null`；严格 PIT 门禁尚未完成，不能据此宣称 NEWS-CTR-001 通过。
 
 
 ### 11.8 NEWS-CTR-002 授权快照持久化边界

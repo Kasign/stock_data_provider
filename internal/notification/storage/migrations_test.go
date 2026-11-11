@@ -7,7 +7,7 @@ import (
 
 func TestMigrationsDeclareImmutableVersionAndRequiredUniqueness(t *testing.T) {
 	migrations := Migrations()
-	if len(migrations) != 4 || migrations[0].Version != 1 || migrations[1].Version != 2 || migrations[2].Version != 3 || migrations[3].Version != 4 ||
+	if len(migrations) != 5 || migrations[0].Version != 1 || migrations[1].Version != 2 || migrations[2].Version != 3 || migrations[3].Version != 4 || migrations[4].Version != 5 ||
 		migrations[0].Description == "" || len(migrations[0].Statements) != 5 ||
 		migrations[1].Description == "" || len(migrations[1].Statements) != 1 {
 		t.Fatalf("unexpected notification migration set: %+v", migrations)
@@ -77,16 +77,52 @@ func TestMigrationsDeclareImmutableVersionAndRequiredUniqueness(t *testing.T) {
 			t.Errorf("Channel config migration is missing required schema element %q", required)
 		}
 	}
+	if len(migrations[4].Statements) != 1 || !strings.Contains(migrations[4].Statements[0], "DROP INDEX idx_notification_channel_config_kind") {
+		t.Fatal("migration v5 must remove the redundant channel config index")
+	}
 }
 
 func TestMigrationsReturnIndependentStatementSlices(t *testing.T) {
 	first := Migrations()
 	second := Migrations()
-	if len(first) != 4 || len(second) != 4 {
+	if len(first) != 5 || len(second) != 5 {
 		t.Fatal("migration set must be stable")
 	}
-	first[0].Statements[0] = "mutated"
-	if second[0].Statements[0] == "mutated" {
-		t.Fatal("each call must return independent migration statements")
+	for i := range first {
+		if first[i].Version != i+1 || second[i].Version != first[i].Version {
+			t.Fatalf("migration versions must be continuous and stable at index %d: first=%d second=%d", i, first[i].Version, second[i].Version)
+		}
+		if first[i].Description == "" || second[i].Description != first[i].Description {
+			t.Fatalf("migration description must be stable at version %d", first[i].Version)
+		}
+		if len(first[i].Statements) == 0 || len(second[i].Statements) != len(first[i].Statements) {
+			t.Fatalf("migration statements must be present and stable at version %d", first[i].Version)
+		}
+		for j := range first[i].Statements {
+			if first[i].Statements[j] != second[i].Statements[j] {
+				t.Fatalf("migration statement differs between calls at version %d statement %d", first[i].Version, j)
+			}
+		}
+		first[i].Statements[0] = "mutated"
+		if second[i].Statements[0] == "mutated" {
+			t.Fatalf("migration statements must be independently allocated at version %d", first[i].Version)
+		}
+	}
+}
+
+func TestPublishedMigrationsKeepDestructiveDDLOutOfHistoricalVersions(t *testing.T) {
+	migrations := Migrations()
+	for _, migration := range migrations[:4] {
+		for _, statement := range migration.Statements {
+			upper := strings.ToUpper(statement)
+			if strings.Contains(upper, "ALTER TABLE") || strings.Contains(upper, "DROP TABLE") ||
+				strings.Contains(upper, "DROP INDEX") || strings.Contains(upper, "TRUNCATE TABLE") {
+				t.Errorf("published migration v%d must not be rewritten as a destructive correction: %s", migration.Version, statement)
+			}
+		}
+	}
+	if len(migrations[4].Statements) != 1 ||
+		migrations[4].Statements[0] != "ALTER TABLE notification_channel_config_versions DROP INDEX idx_notification_channel_config_kind" {
+		t.Fatal("v5 must remain the explicit additive correction for the redundant v4 index")
 	}
 }

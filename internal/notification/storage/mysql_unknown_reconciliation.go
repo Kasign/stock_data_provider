@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 
 	"example.com/stock-analysis-flow/internal/notification/application"
 	"example.com/stock-analysis-flow/internal/notification/domain"
@@ -28,11 +29,12 @@ func (r *MySQLDeliveryRepository) ReconcileUnknown(
 	}
 	if next.Version != expectedVersion+1 ||
 		(next.Status != domain.DeliverySent && next.Status != domain.DeliveryFailed && next.Status != domain.DeliveryRetryWait) ||
-		event.DeliveryID != next.DeliveryID || event.Version != next.Version ||
-		event.From != domain.DeliveryUnknown || event.To != next.Status ||
-		event.EvidenceRef == nil || !validUnknownEvidenceRef(*event.EvidenceRef) ||
-		!event.ChangedAt.Equal(next.UpdatedAt) {
+		event.From != domain.DeliveryUnknown ||
+		event.EvidenceRef == nil || !validUnknownEvidenceRef(*event.EvidenceRef) {
 		return domain.ErrInvalidDeliveryChange
+	}
+	if err := validateDeliveryStateEventForSnapshot(next, event); err != nil {
+		return err
 	}
 
 	tx, err := r.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
@@ -82,7 +84,7 @@ func (r *MySQLDeliveryRepository) ReconcileUnknown(
 		return err
 	}
 	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("notification storage: commit unknown reconciliation: %w", err)
+		return fmt.Errorf("%w: notification storage: commit unknown reconciliation: %w", application.ErrPersistenceOutcomeUnknown, err)
 	}
 	return nil
 }
