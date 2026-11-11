@@ -731,3 +731,38 @@ INT-CTR-001 是 43 个正式 CTR 之一，覆盖 Quant、Research、Researchflow
 - INT-CTR-001 保持 pending_evidence；无 pending_decision、blocked 或 freeze-ready。
 - 三类事件语义已接受，不新增待决项；剩余是时间/跨字段约束在权威 Schema 中的表达。
 - 不新增 CTR，不修改 Quant/Research/Researchflow/Notification 责任模块，不执行测试/CI。
+
+## 24. PLAT-002 十模块契约定义状态总表（2026-11-11）
+
+本表以第3节 43 个正式 CTR 为唯一统计口径。只统计当前跨模块公开契约定义；模块内部 SPI、旧 API 退役别名、UI 页面级项目和实现符合性证据不计入正式 CTR 状态。
+
+| 状态 | 数量 | 含义 |
+|---|---:|---|
+| freeze-ready | 1 | GOV-CTR-005；治理规则定义完整，可提交项目负责人确认冻结 |
+| pending-evidence | 37 | 公开契约定义/Schema/权威映射仍有缺口 |
+| pending-decision | 3 | QNT-CTR-004、QNT-CTR-005、RSC-CTR-002；共对应 5 个具体待决项 |
+| blocked | 0 | 当前没有无法通过权威决议消解的公开定义冲突 |
+| not_applicable | 2 | DATA-CTR-003、NTF-CTR-003；仅模块内部 Provider/Channel SPI，不属于跨模块公开契约 |
+| frozen | 0 | 尚无项目负责人确认冻结的正式 CTR |
+| **正式 CTR 合计** | **43** | 不新增编号，不重复计算历史别名 |
+
+### 24.1 五项待决内容
+
+1. QNT-DEC-01：QuantResult Envelope 与 Payload 的版本字段语义（QNT-CTR-004）。
+2. QNT-DEC-02：白名单纯函数的空 input_snapshot_refs 是否允许生成可引用/持久化 Result Manifest（QNT-CTR-005）。
+3. RSC-OPEN-003：ResearchEvent 规范化时间规则版本字段（RSC-CTR-002）。
+4. RSC-OPEN-004：ResearchEvent 合并/拆分来源关系字段（RSC-CTR-002）。
+5. RSC-OPEN-005：Claim/Hypothesis 显式 supersedes_version 字段及替代关系（RSC-CTR-002）。
+
+### 24.2 已排除或退役范围
+
+- DATA-CTR-003、NTF-CTR-003 为 not_applicable，不要求项目级跨模块冻结；其内部扩展约定归责任模块管理。
+- DEC-018/019 退役的旧 Analysis HTTP 契约、CTR-047 及旧 Task/StageEvent HTTP DTO 不计入当前活动 CTR 冻结统计；新 Researchflow HTTP 契约归 SRV-CTR-001 + FLOW-CTR-001～004。
+- WebUI CTR-011～049 中页面布局、交互、DOM、产品预留项不是跨模块 API 契约；WebUI 只消费 Server/模块已冻结的公开 HTTP DTO。
+- DATA-FLOW-B、LLM-FLOW-B 是条件性 deferred 决策，不是新增正式 CTR，也不计入 43 项状态统计。
+
+### 24.3 阶段结论
+
+- 43 项正式 CTR 已全部完成本轮定义口径核定；不再保留“待审查模块/待全量盘点”的开放任务。
+- 当前真正未完成的是 37 项公开定义证据缺口和 5 项明确待决；没有模块内部实现/测试/CI/部署事项混入。
+- 下一阶段只处理已登记的 5 项项目级待决和 37 项契约定义缺口；按生产方权威定义逐项收敛，达到 freeze-ready 后提交项目负责人冻结。不得重新启动十模块全量扫描，不新增重复 CTR。
