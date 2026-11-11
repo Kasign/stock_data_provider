@@ -1305,3 +1305,15 @@ ResearchContext 归 FLOW-CTR-003，不属于 RSC-CTR-001 Evidence。RSC-DEC-001/
 本批 4 项均 pending_evidence；无新增 pending_decision、blocked 或 freeze-ready。ResearchContext 归 FLOW-CTR-003，Evidence 仍归 RSC-CTR-001；Stage output_ref 不替代 Provider Result Envelope。
 
 排除 Worker/Storage/CAS/Lease/Fencing 内部测试、Server 路由装配、WebUI 展示、E2E 和 CI。当前项目级待决项总数保持 5 项（QNT-DEC-01/02、RSC-OPEN-003/004/005），不新增 CTR。
+
+## 47. LLM 首批公开契约定义核定（2026-11-11）
+
+| 契约 | 状态 | 结论 |
+|---|---|---|
+| LLM-CTR-001 | pending_evidence | Request/Response/Config/Capability Schema 和 JSON Fixtures 已有；UTC 时间约束缺失，ContentPart.annotations Schema 与 DTO 类型不一致，部分条件字段结构约束过宽 |
+| LLM-CTR-002 | pending_evidence | ModelEvent Schema/SSE Fixture 与 terminal/EOF/sequence 语义已有；received_at UTC、sequence_number 范围和 terminal 后事件约束不完整 |
+| LLM-CTR-003 | pending_evidence | Fault→ModelErrorInfo 映射已有；依赖 PLAT-CTR-001 的 Fault 分类/稳定 Code 契约尚未冻结 |
+
+本批 3 项均 pending_evidence；无新增 pending_decision、blocked、freeze-ready。首期单轮文本、Tool 只解析不执行、Capability unknown 默认拒绝、Draft 2020-12、Usage 派生和 SSE 禁止透明重试等已接受语义不重开。
+
+真实 Gateway/模型能力、Provider 性能、E2E、HTTP Client 接线、测试/CI 不属于本轮。当前项目级待决项仍为 5 项（QNT-DEC-01/02、RSC-OPEN-003/004/005）。
