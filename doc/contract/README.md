@@ -18,6 +18,7 @@
 | GOV-CTR-003 公共标识符与幂等作用域规则 | [GOV-CTR-003 规则 1.0.0](./rules/GOV-CTR-003-标识符与幂等作用域规则.md) |
 | GOV-CTR-004 Schema 版本、兼容、废弃和迁移规则 | [GOV-CTR-004 规则 1.0.0](./rules/GOV-CTR-004-Schema版本兼容与废弃规则.md) |
 | GOV-CTR-006 AuthorizationRef/PolicySnapshot 机器契约、Owner 映射、指纹和 Golden | [GOV-CTR-006 权威说明](../整体任务规划/02-契约治理/GOV-CTR-006-AuthorizationRef机器契约与Golden.md) |
+| PLAT-CTR-001 HTTP Error Envelope 与内部 Fault 投影 | [PLAT-CTR-001 公共错误投影契约](./rules/PLAT-CTR-001-HTTP错误投影契约.md) |
 | 项目级契约版本、冻结/解冻和变更历史 | [契约版本与变更记录](./契约版本与变更记录.md) |
 | 项目目标、模块职责、目标架构和开发边界 | [整体任务规划总览](../整体任务规划/01-项目总览/整体任务规划总览.md) |
 | Platform 技术原语候选定义 | [Platform 公共平台契约规范](../platform/08-公共平台契约规范.md) |
