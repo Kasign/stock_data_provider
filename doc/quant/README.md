@@ -7,17 +7,26 @@
 
 ## 当前状态
 
-Quant 已具备首批 Indicator/Factor 纯计算、CalculationContext、基础 Registry、RiskDecision/RuleSet 执行框架、TrendResult DTO、Manifest/ResultRef 和 Repository Save Port 等模块内能力。最近代码验收 SHA `cda200a1e4a3673bb4a34cd4b914d32f0a3be823` 的 Quant 独立 CI Workflow `42618742241` 已全部通过，覆盖 gofmt、`go test ./internal/quant/...`、Manifest 30 秒随机 Fuzz、Race 和 Vet。
+当前代码基线：`aec6ecf2d31ee7a2ee93892b569c553544c3c7e7`（2026-11-11）。
 
-同一代码 SHA 的全仓 Go Workflow `42618742230` 已结束但失败：根模块 gofmt、`services/market-data` 测试及 Market Data Docker 镜像构建失败；`go-core`、News MariaDB 集成和 Market Data MariaDB migration/PIT 集成 Job 成功。当前分支 HEAD 在该代码验收 SHA 之后只有文档提交、没有 Quant 代码变化。上述全仓失败不属于 Quant 独立工作流失败；仍需对应模块修复。Quant 独立 CI 只证明模块内代码验证，不代表真实行情、生产 Registry 元数据、运行时授权、完整结果 Envelope、Platform Storage 或 Server 集成验收完成。
+已具备首批 Indicator/Factor 纯计算、CalculationContext、基础 Registry、RiskDecision/RuleSet 执行框架、TrendResult DTO、Manifest/ResultRef 和 Repository Save Port/MemoryRepository。最近代码调整将 Manifest 必需字段对齐 QNT-CTR-005 Schema，并按 DEC-PLAT-002-029 统一空快照数组语义：
+
+- Manifest / QuantResultRef 的 `input_snapshot_refs` 必须是数组；显式空数组 `[]` 可表示无外部事实快照，nil/null/省略仍拒绝。
+- QuantResultRef Schema 不再要求数组至少一项；Go 投影和 Record 快照保留非 nil 空切片，JSON 序列化为 `[]`。
+- 以上只完成结构层支持。真正允许空输入还必须同时满足 Registry 无外部事实依赖声明、Researchflow ResolvedTemplate 的 `allow_empty_inputs=true`，以及 Quant Application 的可信主体/已注册用例校验。当前尚无完整 Application 门禁，不能宣称运行时授权验收通过。
+
+**当前 Quant 独立 CI 未通过。** Workflow `43008460161` 对 SHA `aec6ecf2d31ee7a2ee93892b569c553544c3c7e7` 的 gofmt 已通过，单元测试只剩跨契约 Golden 绑定失败：项目级 QNT-CTR-005 Manifest Golden 的 result_id 为 `9757fca91e733d4835f6ea1a3fd249897e6d7d6880eb240d9e090025d3b16709`，而 GOV-CTR-006 AuthorizationRef Golden 的 resource_ref 仍为旧值 `29e81fdc80342387b910ab2c50a2732e5010defc7ce3e8030de316b37f4b8299`。失败测试为 `internal/quant/registry/manifest_authorization_test.go::TestQuantResultManifestAndAuthorizationGolden`。Fuzz、Race、Vet 因单元测试失败而未执行。两个 Golden 均位于项目级目录，不在本分支文档/代码范围内，本分支未擅自修改。
+
+项目级状态另有待统一事项：DEC-PLAT-002-029 明确 QNT-CTR-004/005 在机器定义对齐前为 `pending_evidence`，但当前 PLAT-002 登记簿仍标记 `frozen`，且保留了 Ref Schema `minItems=1`、Manifest Go 字段未同步等旧描述。Quant 分支已完成本模块内 Ref Schema/Manifest Go 的对应修正；项目级登记簿与 GOV-CTR-006 Golden 需由项目契约维护方统一校正。此处不改变项目级文档或其他分支。
 
 当前主要外部阻塞：
 - Data：DailyBars v2 Decimal 输入、真实 PIT/复权/交易日历及质量证据。
 - Server/GOV：可信 Principal 注入、Quant Owner 授权签发与每次读取的当前授权复核。
 - Platform/Server：正式 Storage/事务接入、根 Migration 注册和统一 Diagnostics 装配。
 - 项目契约/Researchflow：Envelope 与 Payload 版本语义、强类型 Payload 映射及消费者 Contract Test。
+- 项目级 GOV-CTR-006 AuthorizationRef Golden 尚未绑定最新 Manifest ResultID，阻断 Quant 当前跨契约 CI。
 
-QNT-CTR-001、002、004、005 的项目级状态为 `frozen`；QNT-CTR-003 为 `deferred`。权威状态、延期条件和重新进入条件以项目级 [PLAT-002 项目级契约冻结登记簿](../contract/PLAT-002-项目级契约冻结登记簿.md) 为准。L1 冻结不代表 Quant 模块实现符合性、消费者映射或真实数据验收已完成。
+QNT-CTR-001、002、004、005 的登记簿状态与 QNT-CTR-003 的延期状态仍需结合 DEC-PLAT-002-029 一并复核；契约状态以项目级文档最终校正为准。L1 冻结不代表 Quant 模块实现符合性、消费者映射或真实数据验收已完成。
 
 ## 文档索引
 
