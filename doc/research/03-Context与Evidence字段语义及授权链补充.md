@@ -2,7 +2,7 @@
 
 - 适用任务：RSC-001～003
 - 契约范围：RSC-CTR-001～003、DATA-CTR-007、NEWS-CTR-001～003、GOV-CTR-002/006
-- 状态：模块实现输入基线；Schema/Golden/Contract Test 仍按项目契约目录逐项验收
+- 状态：Research 本地 DTO/Schema/Golden/Fixture 与专项存储验收已完成对应范围；消费方 Contract Test、生产 Owner Adapter、跨模块授权/TOCTOU 和真实数据验收仍按依赖项推进，不得将本地测试等同于生产接入通过
 - 权威关系：项目级契约目录及生产方 DTO 是公共语义权威；本文件约束 Research 的消费、留存和派生行为
 
 ## 1. 模块职责和依赖边界
