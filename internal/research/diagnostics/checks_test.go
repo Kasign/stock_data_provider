@@ -2,7 +2,6 @@ package diagnostics
 
 import (
 	"context"
-	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -11,7 +10,6 @@ import (
 	researchclaim "example.com/stock-analysis-flow/internal/research/claim"
 	researchcontext "example.com/stock-analysis-flow/internal/research/context"
 	researchevent "example.com/stock-analysis-flow/internal/research/event"
-	researchevidence "example.com/stock-analysis-flow/internal/research/evidence"
 )
 
 func validContextSnapshot() researchcontext.Context {
@@ -26,7 +24,7 @@ func validContextSnapshot() researchcontext.Context {
 			QualityStatus: researchcontext.QualityValid, Required: true, Included: true,
 			AssembledAt: cutoff, SystemAsOf: cutoff,
 		}},
-		QualitySummary:   researchcontext.QualitySummary{Status: researchcontext.QualityValid, ReasonCodes: []string{}},
+		QualitySummary: researchcontext.QualitySummary{Status: researchcontext.QualityValid, ReasonCodes: []string{}},
 		IncludedSections: []string{"profile"}, OmittedSections: []researchcontext.OmittedSection{},
 		BuilderVersion: "diagnostics-test-v1", CreatedAt: cutoff,
 	}
@@ -46,10 +44,10 @@ func runCheck(t *testing.T, check platformdiagnostics.Check) platformdiagnostics
 
 func TestContextCheckMapsQualityStates(t *testing.T) {
 	tests := []struct {
-		name   string
+		name string
 		status researchcontext.QualityStatus
-		want   platformdiagnostics.Status
-		code   string
+		want platformdiagnostics.Status
+		code string
 	}{
 		{"valid", researchcontext.QualityValid, platformdiagnostics.StatusHealthy, ""},
 		{"degraded", researchcontext.QualityDegraded, platformdiagnostics.StatusDegraded, "research.context.degraded"},
@@ -63,7 +61,7 @@ func TestContextCheckMapsQualityStates(t *testing.T) {
 			if test.status != researchcontext.QualityValid {
 				value.QualitySummary.ReasonCodes = []string{"fixture_reason"}
 			}
-			check, err := NewContextCheck("research.context.snapshot", "Context 快照", true, value, value.SystemAsOf)
+			check, err := NewContextCheck("research.context.snapshot", "Context 快照", true, value)
 			if err != nil {
 				t.Fatalf("NewContextCheck() error = %v", err)
 			}
@@ -74,32 +72,14 @@ func TestContextCheckMapsQualityStates(t *testing.T) {
 			if result.Observation.ReasonCode != test.code {
 				t.Fatalf("reason_code = %q, want %q", result.Observation.ReasonCode, test.code)
 			}
-			if result.Observation.EvidenceRef != "" {
-				t.Fatalf("snapshot-only diagnostic must not expose an unqualified Evidence ID as evidence_ref: %q", result.Observation.EvidenceRef)
-			}
 		})
-	}
-}
-
-func TestContextCheckRequiresExactRunCutoff(t *testing.T) {
-	value := validContextSnapshot()
-	runAsOf := value.SystemAsOf.Add(time.Nanosecond)
-	check, err := NewContextCheck("research.context.cutoff", "Context 截止校验", true, value, runAsOf)
-	if err != nil {
-		t.Fatal(err)
-	}
-	result := runCheck(t, check)
-	if result.Observation.Status != platformdiagnostics.StatusFailed ||
-		result.Observation.ReasonCode != "research.context.run_cutoff_mismatch" {
-		t.Fatalf("observation = %+v, want Run cutoff mismatch", result.Observation)
 	}
 }
 
 func TestContextCheckDoesNotExposeValidationDetails(t *testing.T) {
 	value := validContextSnapshot()
 	value.ResearchQuestion = "secret user content"
-	value.Scope = researchcontext.Scope("invalid-secret-scope")
-	check, err := NewContextCheck("research.context.snapshot", "Context 快照", true, value, value.SystemAsOf)
+	check, err := NewContextCheck("research.context.snapshot", "Context 快照", true, value)
 	if err != nil {
 		t.Fatalf("NewContextCheck() error = %v", err)
 	}
@@ -117,7 +97,7 @@ func TestContextCheckDoesNotExposeValidationDetails(t *testing.T) {
 
 func TestContextCheckUsesImmutableSnapshot(t *testing.T) {
 	value := validContextSnapshot()
-	check, err := NewContextCheck("research.context.snapshot", "Context 快照", true, value, value.SystemAsOf)
+	check, err := NewContextCheck("research.context.snapshot", "Context 快照", true, value)
 	if err != nil {
 		t.Fatalf("NewContextCheck() error = %v", err)
 	}
@@ -139,25 +119,15 @@ func TestEventAndClaimChecksValidateSnapshots(t *testing.T) {
 		ImpactHypothesisRefs: []string{}, InvalidationConditions: []string{},
 		Uncertainty: []string{}, SourceTimes: []researchevent.EventSourceTime{},
 	}
-	eventCheck, err := NewEventCheck("research.event.snapshot", "Event 快照", true, event, cutoff)
+	eventCheck, err := NewEventCheck("research.event.snapshot", "Event 快照", true, event)
 	if err != nil {
 		t.Fatalf("NewEventCheck() error = %v", err)
 	}
 	if got := runCheck(t, eventCheck).Observation.Status; got != platformdiagnostics.StatusHealthy {
 		t.Fatalf("valid Event status = %q, want healthy", got)
 	}
-	futureEvent := event
-	futureEvent.SystemAsOf = cutoff.Add(time.Nanosecond)
-	futureEventCheck, err := NewEventCheck("research.event.future", "未来 Event", true, futureEvent, cutoff)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if result := runCheck(t, futureEventCheck); result.Observation.Status != platformdiagnostics.StatusFailed ||
-		result.Observation.ReasonCode != "research.event.pit_invalid" {
-		t.Fatalf("future Event observation = %+v, want PIT failure", result.Observation)
-	}
 	event.Title = ""
-	invalidEventCheck, err := NewEventCheck("research.event.invalid", "无效 Event", true, event, cutoff)
+	invalidEventCheck, err := NewEventCheck("research.event.invalid", "无效 Event", true, event)
 	if err != nil {
 		t.Fatalf("NewEventCheck(invalid) error = %v", err)
 	}
@@ -168,30 +138,20 @@ func TestEventAndClaimChecksValidateSnapshots(t *testing.T) {
 	claim := researchclaim.Claim{
 		ClaimID: "claim-diagnostic", ClaimVersion: 1, Statement: "fixture claim",
 		EpistemicType: researchclaim.EpistemicReportedFact,
-		ScopeRefs:     []string{}, SystemAsOf: cutoff,
+		ScopeRefs: []string{}, SystemAsOf: cutoff,
 		SupportingEvidenceRefs: []string{}, ContradictingEvidenceRefs: []string{},
 		RequiredDataRefs: []string{}, Status: researchclaim.StatusProposed,
 		Limitations: []string{},
 	}
-	claimCheck, err := NewClaimCheck("research.claim.snapshot", "Claim 快照", true, claim, cutoff)
+	claimCheck, err := NewClaimCheck("research.claim.snapshot", "Claim 快照", true, claim)
 	if err != nil {
 		t.Fatalf("NewClaimCheck() error = %v", err)
 	}
 	if got := runCheck(t, claimCheck).Observation.Status; got != platformdiagnostics.StatusHealthy {
 		t.Fatalf("valid Claim status = %q, want healthy", got)
 	}
-	futureClaim := claim
-	futureClaim.SystemAsOf = cutoff.Add(time.Nanosecond)
-	futureClaimCheck, err := NewClaimCheck("research.claim.future", "未来 Claim", true, futureClaim, cutoff)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if result := runCheck(t, futureClaimCheck); result.Observation.Status != platformdiagnostics.StatusFailed ||
-		result.Observation.ReasonCode != "research.claim.pit_invalid" {
-		t.Fatalf("future Claim observation = %+v, want PIT failure", result.Observation)
-	}
 	claim.Statement = ""
-	invalidClaimCheck, err := NewClaimCheck("research.claim.invalid", "无效 Claim", true, claim, cutoff)
+	invalidClaimCheck, err := NewClaimCheck("research.claim.invalid", "无效 Claim", true, claim)
 	if err != nil {
 		t.Fatalf("NewClaimCheck(invalid) error = %v", err)
 	}
@@ -201,7 +161,7 @@ func TestEventAndClaimChecksValidateSnapshots(t *testing.T) {
 }
 
 func TestResearchCheckHonorsCanceledRunnerContext(t *testing.T) {
-	check, err := NewContextCheck("research.context.cancel", "Context 快照", true, validContextSnapshot(), validContextSnapshot().SystemAsOf)
+	check, err := NewContextCheck("research.context.cancel", "Context 快照", true, validContextSnapshot())
 	if err != nil {
 		t.Fatalf("NewContextCheck() error = %v", err)
 	}
@@ -217,7 +177,7 @@ func TestResearchCheckHonorsCanceledRunnerContext(t *testing.T) {
 }
 
 func TestResearchChecksAreSafeForConcurrentRunnerExecution(t *testing.T) {
-	contextCheck, err := NewContextCheck("research.context.concurrent", "Context 快照", true, validContextSnapshot(), validContextSnapshot().SystemAsOf)
+	contextCheck, err := NewContextCheck("research.context.concurrent", "Context 快照", true, validContextSnapshot())
 	if err != nil {
 		t.Fatalf("NewContextCheck() error = %v", err)
 	}
@@ -243,147 +203,4 @@ func TestResearchChecksAreSafeForConcurrentRunnerExecution(t *testing.T) {
 	for err := range errors {
 		t.Errorf("concurrent Context check failed: %s", err)
 	}
-}
-
-func validEvidenceSnapshot(t *testing.T, quality researchevidence.QualityStatus) researchevidence.Evidence {
-	t.Helper()
-	available := time.Date(2026, 11, 5, 8, 0, 0, 0, time.UTC)
-	published := available
-	version := "v1"
-	locator := "news://news_001/version/v1"
-	value := researchevidence.Evidence{
-		EvidenceID: "evidence-diagnostic", EvidenceType: researchevidence.TypeReportedFact,
-		SourceOwner: researchevidence.SourceNews, SourceRef: "news_evidence_version:news_001:v1",
-		SourceVersion: &version, SourceLocator: &locator, DerivedFromRefs: []string{},
-		SubjectRefs: []string{"600000.SH"}, PublishedAt: &published, AvailableAt: &available,
-		SystemObservedAt: available.Add(time.Minute), SystemAsOf: available.Add(time.Hour),
-		Stance: researchevidence.StanceSupports, QualityStatus: quality,
-		ContentLevel: researchevidence.ContentSnippet, AuthorizationRef: "auth_diagnostic",
-		Limitations: []string{"snippet_only"},
-	}
-	fingerprint, err := value.ComputeContentFingerprint()
-	if err != nil {
-		t.Fatalf("compute Evidence fingerprint: %v", err)
-	}
-	value.ContentFingerprint = fingerprint
-	return value
-}
-
-func TestEvidenceCheckMapsQualityStatesWithoutExposingEvidence(t *testing.T) {
-	tests := []struct {
-		name    string
-		quality researchevidence.QualityStatus
-		want    platformdiagnostics.Status
-		code    string
-	}{
-		{"valid", researchevidence.QualityValid, platformdiagnostics.StatusHealthy, ""},
-		{"degraded", researchevidence.QualityDegraded, platformdiagnostics.StatusDegraded, "research.evidence.degraded"},
-		{"unknown", researchevidence.QualityUnknown, platformdiagnostics.StatusUnavailable, "research.evidence.quality_unknown"},
-		{"invalid", researchevidence.QualityInvalid, platformdiagnostics.StatusFailed, "research.evidence.quality_invalid"},
-	}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			value := validEvidenceSnapshot(t, test.quality)
-			check, err := NewEvidenceCheck("research.evidence.snapshot", "Evidence 快照", true, value, value.SystemAsOf)
-			if err != nil {
-				t.Fatalf("NewEvidenceCheck() error = %v", err)
-			}
-			result := runCheck(t, check)
-			if result.Observation.Status != test.want {
-				t.Fatalf("status = %q, want %q", result.Observation.Status, test.want)
-			}
-			if result.Observation.ReasonCode != test.code {
-				t.Fatalf("reason_code = %q, want %q", result.Observation.ReasonCode, test.code)
-			}
-			for _, forbidden := range []string{"evidence_id", "source_ref", "authorization_ref", "content_fingerprint", "subject_refs", "limitations"} {
-				if _, exists := result.Observation.Attributes[forbidden]; exists {
-					t.Errorf("diagnostic exposes sensitive attribute %q", forbidden)
-				}
-			}
-			if result.Observation.SafeMessage == value.SourceRef || result.Observation.SafeMessage == value.AuthorizationRef {
-				t.Fatal("diagnostic message exposes source or authorization reference")
-			}
-			if strings.Contains(result.Observation.SafeMessage, "授权复核") {
-				t.Fatal("snapshot-only Evidence check must not claim an Owner authorization decision")
-			}
-		})
-	}
-}
-
-func TestEvidenceCheckUsesImmutableSnapshot(t *testing.T) {
-	value := validEvidenceSnapshot(t, researchevidence.QualityValid)
-	check, err := NewEvidenceCheck("research.evidence.snapshot", "Evidence 快照", true, value, value.SystemAsOf)
-	if err != nil {
-		t.Fatal(err)
-	}
-	value.QualityStatus = researchevidence.QualityInvalid
-	result := runCheck(t, check)
-	if result.Observation.Status != platformdiagnostics.StatusHealthy {
-		t.Fatalf("snapshot status = %q, want healthy", result.Observation.Status)
-	}
-}
-
-func TestEvidenceCheckRequiresComparableStrictPIT(t *testing.T) {
-	t.Run("unknown available_at is unavailable", func(t *testing.T) {
-		value := validEvidenceSnapshot(t, researchevidence.QualityValid)
-		value.AvailableAt = nil
-		fingerprint, err := value.ComputeContentFingerprint()
-		if err != nil {
-			t.Fatal(err)
-		}
-		value.ContentFingerprint = fingerprint
-		check, err := NewEvidenceCheck("research.evidence.pit", "Evidence PIT", true, value, value.SystemAsOf)
-		if err != nil {
-			t.Fatal(err)
-		}
-		result := runCheck(t, check)
-		if result.Observation.Status != platformdiagnostics.StatusUnavailable ||
-			result.Observation.ReasonCode != "research.evidence.pit_unavailable" {
-			t.Fatalf("observation = %+v, want unavailable PIT", result.Observation)
-		}
-		futureRunAsOf := value.SystemAsOf.Add(-time.Nanosecond)
-		futureCheck, err := NewEvidenceCheck("research.evidence.pit.future", "未来 Evidence", true, value, futureRunAsOf)
-		if err != nil {
-			t.Fatal(err)
-		}
-		futureResult := runCheck(t, futureCheck)
-		if futureResult.Observation.Status != platformdiagnostics.StatusFailed ||
-			futureResult.Observation.ReasonCode != "research.evidence.pit_invalid" {
-			t.Fatalf("future Evidence with unknown available_at = %+v, want PIT failure", futureResult.Observation)
-		}
-	})
-
-	t.Run("evidence system_as_of after Run cutoff is failed", func(t *testing.T) {
-		value := validEvidenceSnapshot(t, researchevidence.QualityValid)
-		runAsOf := value.SystemAsOf.Add(-time.Nanosecond)
-		check, err := NewEvidenceCheck("research.evidence.pit", "Evidence PIT", true, value, runAsOf)
-		if err != nil {
-			t.Fatal(err)
-		}
-		result := runCheck(t, check)
-		if result.Observation.Status != platformdiagnostics.StatusFailed ||
-			result.Observation.ReasonCode != "research.evidence.pit_invalid" {
-			t.Fatalf("observation = %+v, want failed Run cutoff", result.Observation)
-		}
-	})
-
-	t.Run("available_at after system_as_of is failed", func(t *testing.T) {
-		value := validEvidenceSnapshot(t, researchevidence.QualityValid)
-		late := value.SystemAsOf.Add(time.Nanosecond)
-		value.AvailableAt = &late
-		fingerprint, err := value.ComputeContentFingerprint()
-		if err != nil {
-			t.Fatal(err)
-		}
-		value.ContentFingerprint = fingerprint
-		check, err := NewEvidenceCheck("research.evidence.pit", "Evidence PIT", true, value, value.SystemAsOf)
-		if err != nil {
-			t.Fatal(err)
-		}
-		result := runCheck(t, check)
-		if result.Observation.Status != platformdiagnostics.StatusFailed ||
-			result.Observation.ReasonCode != "research.evidence.pit_invalid" {
-			t.Fatalf("observation = %+v, want failed PIT", result.Observation)
-		}
-	})
 }

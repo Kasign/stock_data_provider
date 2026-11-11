@@ -13,7 +13,6 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
-	"syscall"
 	"time"
 
 	"example.com/stock-analysis-flow/internal/platform/fault"
@@ -21,25 +20,15 @@ import (
 )
 
 const (
-	defaultTimeout                = 15 * time.Second
-	defaultDialTimeout            = 5 * time.Second
-	defaultResponseHeaderTimeout  = 8 * time.Second
-	defaultMaxResponseHeaderBytes = int64(1 << 20)
-	maxResponseHeaderBytesLimit   = int64(4 << 20)
-	defaultMaxResponseBytes       = int64(2 << 20)
-	maxResponseBytesLimit         = int64(16 << 20)
-	defaultMaxStreamBytes         = int64(16 << 20)
-	maxStreamBytesLimit           = int64(64 << 20)
-	defaultStreamTimeout          = 10 * time.Minute
-	maxStreamTimeout              = 30 * time.Minute
-	defaultStreamIdleTimeout      = 30 * time.Second
-	maxStreamIdleTimeout          = 5 * time.Minute
-	defaultMaxConcurrentStreams   = 2
-	maxConcurrentStreamsLimit     = 8
-	defaultMaxConcurrent          = 4
-	maxConcurrentLimit            = 32
-	maxDependencyLimitEntries     = 64
-	maxRetryLimit                 = 2
+	defaultTimeout               = 15 * time.Second
+	defaultDialTimeout           = 5 * time.Second
+	defaultResponseHeaderTimeout = 8 * time.Second
+	defaultMaxResponseBytes      = int64(2 << 20)
+	maxResponseBytesLimit        = int64(16 << 20)
+	defaultMaxConcurrent         = 4
+	maxConcurrentLimit           = 32
+	maxDependencyLimitEntries    = 64
+	maxRetryLimit                = 2
 )
 
 var (
@@ -54,23 +43,15 @@ type Resolver interface {
 }
 
 type Config struct {
-	Timeout                time.Duration
-	DialTimeout            time.Duration
-	TLSHandshakeTimeout    time.Duration
-	ResponseHeaderTimeout  time.Duration
-	MaxResponseHeaderBytes int64 // 共享 Transport 的响应头字节上限。
-	MaxResponseBytes       int64
-	MaxRetries             int
-	MaxConcurrent          int
-	DependencyLimits       map[string]int
-
-	StreamTimeout          time.Duration  // 单条流的总生命周期上限，父 Context 可以进一步缩短。
-	StreamIdleTimeout      time.Duration  // 单次阻塞 Read 等待上游数据的最长时间。
-	MaxStreamBytes         int64          // 单条流允许交付的解压后累计字节上限。
-	MaxConcurrentStreams   int            // 全局并发流上限，与缓冲请求并发池隔离。
-	StreamDependencyLimits map[string]int // 按 Dependency 设置的并发流子上限。
-
-	Resolver Resolver
+	Timeout               time.Duration
+	DialTimeout           time.Duration
+	TLSHandshakeTimeout   time.Duration
+	ResponseHeaderTimeout time.Duration
+	MaxResponseBytes      int64
+	MaxRetries            int
+	MaxConcurrent         int
+	DependencyLimits      map[string]int
+	Resolver              Resolver
 }
 
 // DestinationPolicy must be supplied for every request. Hosts are exact-match
@@ -86,15 +67,13 @@ type DestinationPolicy struct {
 }
 
 type Client struct {
-	config                 Config
-	resolver               Resolver
-	dial                   func(context.Context, string, string) (net.Conn, error)
-	httpClient             *http.Client
-	transport              *http.Transport
-	defaultSemaphore       chan struct{}
-	semaphores             map[string]chan struct{}
-	defaultStreamSemaphore chan struct{}
-	streamSemaphores       map[string]chan struct{}
+	config           Config
+	resolver         Resolver
+	dial             func(context.Context, string, string) (net.Conn, error)
+	httpClient       *http.Client
+	transport        *http.Transport
+	defaultSemaphore chan struct{}
+	semaphores       map[string]chan struct{}
 }
 
 type policyContextKey struct{}
@@ -112,41 +91,11 @@ func New(config Config) (*Client, error) {
 	if config.ResponseHeaderTimeout <= 0 {
 		config.ResponseHeaderTimeout = defaultResponseHeaderTimeout
 	}
-	if config.MaxResponseHeaderBytes <= 0 {
-		config.MaxResponseHeaderBytes = defaultMaxResponseHeaderBytes
-	}
-	if config.MaxResponseHeaderBytes > maxResponseHeaderBytesLimit {
-		return nil, errors.New("max response header bytes exceeds 4 MiB")
-	}
 	if config.MaxResponseBytes <= 0 {
 		config.MaxResponseBytes = defaultMaxResponseBytes
 	}
 	if config.MaxResponseBytes > maxResponseBytesLimit {
 		return nil, errors.New("max response bytes exceeds 16 MiB")
-	}
-	if config.MaxStreamBytes <= 0 {
-		config.MaxStreamBytes = defaultMaxStreamBytes
-	}
-	if config.MaxStreamBytes > maxStreamBytesLimit {
-		return nil, errors.New("max stream bytes exceeds 64 MiB")
-	}
-	if config.StreamTimeout <= 0 {
-		config.StreamTimeout = defaultStreamTimeout
-	}
-	if config.StreamTimeout > maxStreamTimeout {
-		return nil, errors.New("stream timeout exceeds 30 minutes")
-	}
-	if config.StreamIdleTimeout <= 0 {
-		config.StreamIdleTimeout = defaultStreamIdleTimeout
-	}
-	if config.StreamIdleTimeout > maxStreamIdleTimeout {
-		return nil, errors.New("stream idle timeout exceeds 5 minutes")
-	}
-	if config.MaxConcurrentStreams <= 0 {
-		config.MaxConcurrentStreams = defaultMaxConcurrentStreams
-	}
-	if config.MaxConcurrentStreams > maxConcurrentStreamsLimit {
-		return nil, fmt.Errorf("max concurrent streams cannot exceed %d", maxConcurrentStreamsLimit)
 	}
 	if config.MaxRetries < 0 || config.MaxRetries > maxRetryLimit {
 		return nil, errors.New("max retries must be between 0 and 2")
@@ -171,18 +120,6 @@ func New(config Config) (*Client, error) {
 	}
 	config.DependencyLimits = limits
 
-	if len(config.StreamDependencyLimits) > maxDependencyLimitEntries {
-		return nil, fmt.Errorf("stream dependency limits cannot exceed %d entries", maxDependencyLimitEntries)
-	}
-	streamLimits := make(map[string]int, len(config.StreamDependencyLimits))
-	for dependency, limit := range config.StreamDependencyLimits {
-		if !validDependency(dependency) || limit < 1 || limit > config.MaxConcurrentStreams {
-			return nil, errors.New("invalid stream dependency concurrency limit")
-		}
-		streamLimits[dependency] = limit
-	}
-	config.StreamDependencyLimits = streamLimits
-
 	resolver := config.Resolver
 	if resolver == nil {
 		resolver = net.DefaultResolver
@@ -193,32 +130,25 @@ func New(config Config) (*Client, error) {
 	for dependency, limit := range limits {
 		semaphores[dependency] = make(chan struct{}, limit)
 	}
-	streamSemaphores := make(map[string]chan struct{}, len(streamLimits))
-	for dependency, limit := range streamLimits {
-		streamSemaphores[dependency] = make(chan struct{}, limit)
-	}
 	client := &Client{
-		config:                 config,
-		resolver:               resolver,
-		dial:                   dialer.DialContext,
-		defaultSemaphore:       make(chan struct{}, config.MaxConcurrent),
-		semaphores:             semaphores,
-		defaultStreamSemaphore: make(chan struct{}, config.MaxConcurrentStreams),
-		streamSemaphores:       streamSemaphores,
+		config:           config,
+		resolver:         resolver,
+		dial:             dialer.DialContext,
+		defaultSemaphore: make(chan struct{}, config.MaxConcurrent),
+		semaphores:       semaphores,
 	}
 
 	transport := &http.Transport{
-		Proxy:                  nil, // 不读取 HTTP_PROXY/HTTPS_PROXY，避免不可信代理绕过目的地址校验。
-		DialContext:            client.dialContext,
-		TLSClientConfig:        &tls.Config{MinVersion: tls.VersionTLS12},
-		TLSHandshakeTimeout:    config.TLSHandshakeTimeout,
-		ResponseHeaderTimeout:  config.ResponseHeaderTimeout,
-		MaxResponseHeaderBytes: config.MaxResponseHeaderBytes,
-		IdleConnTimeout:        90 * time.Second,
-		MaxIdleConns:           64,
-		MaxIdleConnsPerHost:    4,
-		MaxConnsPerHost:        16,
-		ForceAttemptHTTP2:      true,
+		Proxy:                 nil, // 不读取 HTTP_PROXY/HTTPS_PROXY，避免不可信代理绕过目的地址校验。
+		DialContext:           client.dialContext,
+		TLSClientConfig:       &tls.Config{MinVersion: tls.VersionTLS12},
+		TLSHandshakeTimeout:   config.TLSHandshakeTimeout,
+		ResponseHeaderTimeout: config.ResponseHeaderTimeout,
+		IdleConnTimeout:       90 * time.Second,
+		MaxIdleConns:          64,
+		MaxIdleConnsPerHost:   4,
+		MaxConnsPerHost:       16,
+		ForceAttemptHTTP2:     true,
 	}
 	client.transport = transport
 	client.httpClient = &http.Client{
@@ -351,10 +281,7 @@ func (c *Client) semaphore(dependency string) chan struct{} {
 }
 
 func (c *Client) dialContext(ctx context.Context, network, address string) (net.Conn, error) {
-	dialCtx, cancel := context.WithTimeout(ctx, c.config.DialTimeout)
-	defer cancel()
-
-	policy, ok := dialCtx.Value(policyContextKey{}).(DestinationPolicy)
+	policy, ok := ctx.Value(policyContextKey{}).(DestinationPolicy)
 	if !ok {
 		return nil, errPolicyRejected
 	}
@@ -362,23 +289,20 @@ func (c *Client) dialContext(ctx context.Context, network, address string) (net.
 	if err != nil {
 		return nil, errPolicyRejected
 	}
-	addresses, err := c.resolveAndValidate(dialCtx, host, port, policy)
+	addresses, err := c.resolveAndValidate(ctx, host, port, policy)
 	if err != nil {
-		if dialCtx.Err() != nil {
-			return nil, dialCtx.Err()
-		}
 		return nil, err
 	}
 
 	var lastErr error
 	for _, ip := range addresses {
-		connection, dialErr := c.dial(dialCtx, network, net.JoinHostPort(ip.String(), port))
+		connection, dialErr := c.dial(ctx, network, net.JoinHostPort(ip.String(), port))
 		if dialErr == nil {
 			return connection, nil
 		}
 		lastErr = dialErr
-		if dialCtx.Err() != nil {
-			return nil, dialCtx.Err()
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
 		}
 	}
 	if lastErr == nil {
@@ -421,19 +345,16 @@ func (c *Client) faultFor(err error, dependency string) *fault.Fault {
 	case errors.Is(err, errPolicyRejected), errors.Is(err, errRedirectRejected):
 		return c.newFault(fault.ClassValidation, "platform.httpclient.destination_rejected", "destination is not allowed", err, dependency, false)
 	case errors.Is(err, errDNSResolution):
-		return c.newFault(fault.ClassUnavailable, "platform.httpclient.dns_failed", "destination DNS resolution failed", err, dependency, false)
+		return c.newFault(fault.ClassUnavailable, "platform.httpclient.dns_failed", "destination DNS resolution failed", err, dependency, true)
 	case errors.Is(err, errResponseTooLarge):
 		return c.newFault(fault.ClassValidation, "platform.httpclient.response_too_large", "response body exceeds configured limit", err, dependency, false)
 	case errors.Is(err, context.DeadlineExceeded):
-		return c.newFault(fault.ClassTimeout, "platform.httpclient.timeout", "HTTP request timed out", err, dependency, false)
+		return c.newFault(fault.ClassTimeout, "platform.httpclient.timeout", "HTTP request timed out", err, dependency, true)
 	case errors.Is(err, context.Canceled):
 		return c.newFault(fault.ClassUnavailable, "platform.httpclient.canceled", "HTTP request was canceled", err, dependency, false)
+	default:
+		return c.newFault(fault.ClassUnavailable, "platform.httpclient.request_failed", "HTTP dependency request failed", err, dependency, true)
 	}
-	var networkError net.Error
-	if errors.As(err, &networkError) && networkError.Timeout() {
-		return c.newFault(fault.ClassTimeout, "platform.httpclient.transport_timeout", "HTTP dependency transport timed out", err, dependency, true)
-	}
-	return c.newFault(fault.ClassUnavailable, "platform.httpclient.request_failed", "HTTP dependency request failed", err, dependency, retryableTransportError(err))
 }
 
 func (c *Client) newFault(class fault.Class, code, message string, cause error, dependency string, retryable bool) *fault.Fault {
@@ -456,11 +377,8 @@ func validDependency(value string) bool {
 	if value == "" || len(value) > 128 {
 		return false
 	}
-	if _, err := netip.ParseAddr(value); err == nil {
-		return false
-	}
 	for _, char := range value {
-		if (char >= 'a' && char <= 'z') ||
+		if (char >= 'a' && char <= 'z') || (char >= 'A' && char <= 'Z') ||
 			(char >= '0' && char <= '9') || char == '.' || char == '_' || char == '-' {
 			continue
 		}
@@ -476,15 +394,7 @@ func retryableTransportError(err error) bool {
 		return false
 	}
 	var networkError net.Error
-	if errors.As(err, &networkError) && (networkError.Timeout() || networkError.Temporary()) {
-		return true
-	}
-	return errors.Is(err, io.EOF) ||
-		errors.Is(err, syscall.ECONNREFUSED) ||
-		errors.Is(err, syscall.ECONNRESET) ||
-		errors.Is(err, syscall.ECONNABORTED) ||
-		errors.Is(err, syscall.EPIPE) ||
-		errors.Is(err, syscall.ETIMEDOUT)
+	return errors.As(err, &networkError) || errors.Is(err, io.EOF)
 }
 
 func retryableStatus(status int) bool {

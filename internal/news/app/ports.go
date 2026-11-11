@@ -28,7 +28,7 @@ func (e *ProviderError) Error() string {
 	return "news: provider " + e.Code
 }
 
-// HTTPDoer 是窄传输端口；生产环境由组合根注入绑定了 Platform DestinationPolicy 的 Doer。
+// HTTPDoer 是窄传输端口；生产 Client 由公共平台在后续阶段注入。
 type HTTPDoer interface {
 	Do(*http.Request) (*http.Response, error)
 }

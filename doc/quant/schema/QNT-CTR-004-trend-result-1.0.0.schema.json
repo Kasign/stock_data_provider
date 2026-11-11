@@ -20,7 +20,7 @@
     "trend_code": {
       "type": "string",
       "minLength": 1,
-      "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+      "pattern": "\\S"
     },
     "direction": {
       "type": "string",
@@ -53,7 +53,7 @@
     "period": {
       "type": "string",
       "minLength": 1,
-      "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+      "pattern": "\\S"
     },
     "evidence_metrics": {
       "type": "array",
@@ -66,7 +66,7 @@
       "items": {
         "type": "string",
         "minLength": 1,
-        "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+        "pattern": "\\S"
       }
     },
     "quality_status": {
@@ -86,7 +86,7 @@
     "algorithm_version": {
       "type": "string",
       "minLength": 1,
-      "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+      "pattern": "\\S"
     }
   },
   "$defs": {
@@ -109,7 +109,7 @@
         "metric_code": {
           "type": "string",
           "minLength": 1,
-          "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+          "pattern": "\\S"
         },
         "value": {
           "type": [
@@ -121,12 +121,12 @@
         "unit": {
           "type": "string",
           "minLength": 1,
-          "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+          "pattern": "\\S"
         },
         "period": {
           "type": "string",
           "minLength": 1,
-          "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+          "pattern": "\\S"
         },
         "system_as_of": {
           "type": "string",
@@ -155,7 +155,7 @@
         "calculation_version": {
           "type": "string",
           "minLength": 1,
-          "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+          "pattern": "\\S"
         },
         "sample_count": {
           "type": [

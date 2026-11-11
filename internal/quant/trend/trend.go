@@ -5,7 +5,6 @@ import (
 	"math"
 	"strings"
 	"time"
-	"unicode/utf8"
 
 	"example.com/stock-analysis-flow/internal/quant/metric"
 )
@@ -81,7 +80,7 @@ func (r Result) Validate() error {
 }
 
 func nonBlank(value string) bool {
-	return utf8.ValidString(value) && strings.TrimSpace(value) != "" && strings.TrimSpace(value) == value
+	return strings.TrimSpace(value) != ""
 }
 
 func canonicalUTCTimestamp(value string) bool {

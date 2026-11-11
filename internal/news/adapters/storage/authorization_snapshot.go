@@ -8,7 +8,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"strings"
 	"time"
 
 	"example.com/stock-analysis-flow/internal/news/app"
@@ -25,11 +24,9 @@ var _ app.AuthorizationSnapshotRepository = (*MySQLRepository)(nil)
 func (r *MySQLRepository) AppendAuthorizationSnapshot(
 	ctx context.Context,
 	binding domain.NewsAuthorizationBinding,
-	observation domain.Observation,
-	version domain.NewsItemVersion,
 ) error {
 	if r == nil || r.db == nil || ctx == nil ||
-		domain.ValidateNewsAuthorizationBindingForEvidence(binding, observation, version) != nil {
+		domain.ValidateNewsAuthorizationBinding(binding) != nil {
 		return app.ErrInvalidAuthorizationSnapshot
 	}
 	payload, err := json.Marshal(binding)
@@ -75,38 +72,6 @@ func (r *MySQLRepository) AppendAuthorizationSnapshot(
 		return insertErr
 	}
 	return errors.Join(insertErr, queryErr)
-}
-
-// GetLatestAuthorizationSnapshotForEvidence selects the latest immutable decision
-// for one exact caller/resource/purpose/content-level tuple. A latest deny or
-// conditional decision must not fall back to an older allow decision.
-func (r *MySQLRepository) GetLatestAuthorizationSnapshotForEvidence(
-	ctx context.Context,
-	subjectRef string,
-	resourceRef string,
-	purposeCode string,
-	contentLevel domain.AuthorizationContentLevel,
-) (domain.NewsAuthorizationBinding, error) {
-	if r == nil || r.db == nil || ctx == nil ||
-		subjectRef == "" || subjectRef != strings.TrimSpace(subjectRef) ||
-		resourceRef == "" || resourceRef != strings.TrimSpace(resourceRef) ||
-		purposeCode == "" || purposeCode != strings.TrimSpace(purposeCode) ||
-		contentLevel == "" {
-		return domain.NewsAuthorizationBinding{}, app.ErrInvalidAuthorizationSnapshot
-	}
-	var authorizationRef string
-	err := r.db.QueryRowContext(ctx, `SELECT authorization_ref
-		FROM news_authorization_snapshots
-		WHERE subject_ref = ? AND resource_ref = ? AND purpose_code = ? AND content_level = ?
-		ORDER BY decided_at DESC, authorization_ref DESC
-		LIMIT 1`, subjectRef, resourceRef, purposeCode, string(contentLevel)).Scan(&authorizationRef)
-	if errors.Is(err, sql.ErrNoRows) {
-		return domain.NewsAuthorizationBinding{}, app.ErrAuthorizationSnapshotNotFound
-	}
-	if err != nil {
-		return domain.NewsAuthorizationBinding{}, err
-	}
-	return r.GetAuthorizationSnapshot(ctx, authorizationRef)
 }
 
 // GetAuthorizationSnapshot verifies storage integrity and the immutable binding

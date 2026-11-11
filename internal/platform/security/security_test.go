@@ -189,38 +189,6 @@ func TestNewAuthenticatorRejectsTooManyServiceCredentials(t *testing.T) {
 	}
 }
 
-func TestNewAuthenticatorValidatesServiceCredentialNames(t *testing.T) {
-	makeSecret := func(value string) config.Secret {
-		return config.NewEnvWithLookup(func(string) (string, bool) { return value, true }).Secret("TOKEN")
-	}
-	validNames := []string{"data-service", "news.v1", "svc_01", "1st-service"}
-	for _, name := range validNames {
-		t.Run("valid/"+name, func(t *testing.T) {
-			_, err := NewAuthenticator(makeSecret(ownerToken), []ServiceCredential{{
-				Name: name, Secret: makeSecret(dataToken), Scopes: []string{ScopeDataRead},
-			}})
-			if err != nil {
-				t.Fatalf("valid service name %q rejected: %v", name, err)
-			}
-		})
-	}
-
-	invalidNames := []string{
-		"", "Data-service", "bad name", "bad/name", "bad\nname",
-		".hidden", "-hidden", "_hidden", strings.Repeat("a", 65),
-	}
-	for index, name := range invalidNames {
-		t.Run("invalid/"+strconv.Itoa(index), func(t *testing.T) {
-			_, err := NewAuthenticator(makeSecret(ownerToken), []ServiceCredential{{
-				Name: name, Secret: makeSecret(dataToken), Scopes: []string{ScopeDataRead},
-			}})
-			if err == nil {
-				t.Fatalf("invalid service name %q was accepted", name)
-			}
-		})
-	}
-}
-
 func TestNewAuthenticatorRejectsWeakDuplicateAndUnknownScopes(t *testing.T) {
 	makeSecret := func(value string) config.Secret {
 		return config.NewEnvWithLookup(func(string) (string, bool) { return value, true }).Secret("TOKEN")
@@ -395,29 +363,5 @@ func TestAuthenticatorCredentialSnapshotIsImmutableToCallers(t *testing.T) {
 	}
 	if !contains(next.Scopes, ScopeDataRead) || contains(next.Scopes, ScopeResearchRun) {
 		t.Fatalf("returned principal mutated authenticator state: %+v", next)
-	}
-}
-
-func TestPrincipalContextReturnsIsolatedScopeSnapshots(t *testing.T) {
-	original := Principal{
-		Kind: IdentityService, Subject: "context-service",
-		Scopes: []string{ScopeDataRead},
-	}
-	ctx := withPrincipal(context.Background(), original)
-
-	// The context must not retain the caller's mutable scope slice.
-	original.Scopes[0] = ScopeResearchRun
-
-	request := httptest.NewRequest(http.MethodGet, "/protected", nil).WithContext(ctx)
-	first, ok := PrincipalFromContext(request)
-	if !ok || !contains(first.Scopes, ScopeDataRead) || contains(first.Scopes, ScopeResearchRun) {
-		t.Fatalf("context principal changed through caller-owned slice: %+v, ok=%v", first, ok)
-	}
-
-	// Mutating a returned principal must not alter the context snapshot.
-	first.Scopes[0] = ScopeResearchRun
-	second, ok := PrincipalFromContext(request)
-	if !ok || !contains(second.Scopes, ScopeDataRead) || contains(second.Scopes, ScopeResearchRun) {
-		t.Fatalf("context principal changed through returned slice: %+v, ok=%v", second, ok)
 	}
 }

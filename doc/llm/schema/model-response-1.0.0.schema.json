@@ -213,8 +213,7 @@
       "minLength": 1
     },
     "response_id": {
-      "type": "string",
-      "minLength": 1
+      "type": "string"
     },
     "status": {
       "enum": [
@@ -230,7 +229,10 @@
       ]
     },
     "output_items": {
-      "type": "array",
+      "type": [
+        "array",
+        "null"
+      ],
       "items": {
         "$ref": "#/$defs/OutputItem"
       }
@@ -295,41 +297,5 @@
     "finished_at",
     "duration_ms"
   ],
-  "additionalProperties": false,
-  "allOf": [
-    {
-      "if": {
-        "properties": {
-          "status": {
-            "const": "completed"
-          }
-        },
-        "required": [
-          "status"
-        ]
-      },
-      "then": {
-        "required": [
-          "response_id"
-        ]
-      }
-    },
-    {
-      "if": {
-        "properties": {
-          "status": {
-            "const": "failed"
-          }
-        },
-        "required": [
-          "status"
-        ]
-      },
-      "then": {
-        "required": [
-          "error"
-        ]
-      }
-    }
-  ]
+  "additionalProperties": false
 }

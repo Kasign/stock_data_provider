@@ -10,7 +10,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-	"unicode/utf8"
 )
 
 var (
@@ -57,7 +56,6 @@ type Metric struct {
 func (m Metric) Validate() error {
 	if !nonBlank(m.MetricCode) || !nonBlank(m.Unit) || !nonBlank(m.Period) ||
 		!nonBlank(m.CalculationVersion) || !canonicalUTCTimestamp(m.SystemAsOf) ||
-		!utf8.Valid(m.Value) || !utf8.Valid(m.LowerBound) || !utf8.Valid(m.UpperBound) ||
 		!validQuality(m.QualityStatus) || !validStatus(m.MetricStatus) ||
 		len(m.Value) == 0 || len(m.LowerBound) == 0 || len(m.UpperBound) == 0 {
 		return ErrInvalidMetric
@@ -172,7 +170,7 @@ func canonicalUTCTimestamp(value string) bool {
 }
 
 func nonBlank(value string) bool {
-	return utf8.ValidString(value) && strings.TrimSpace(value) != "" && strings.TrimSpace(value) == value
+	return strings.TrimSpace(value) != ""
 }
 
 func validQuality(value QualityStatus) bool {

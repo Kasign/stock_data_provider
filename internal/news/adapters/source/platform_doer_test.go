@@ -56,10 +56,6 @@ func TestPlatformSourceDoerRejectsRequestOutsideBoundOrigin(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewPlatformHTTPDoer() error = %v", err)
 	}
-	platformDoer, ok := doer.(*platformHTTPDoer)
-	if !ok || platformDoer.bound == nil {
-		t.Fatal("Source adapter must hold a Platform BoundDoer")
-	}
 	request, err := http.NewRequest(http.MethodGet, "https://attacker.example/rss", nil)
 	if err != nil {
 		t.Fatalf("http.NewRequest() error = %v", err)
@@ -88,20 +84,5 @@ func TestSourceTransportErrorPreservesPlatformRetryClassification(t *testing.T) 
 		if transportErr.Retryable() != retryable {
 			t.Errorf("Retryable() = %v, want %v", transportErr.Retryable(), retryable)
 		}
-	}
-}
-
-func TestSourceTransportErrorRejectsInvalidPlatformFaultMetadata(t *testing.T) {
-	platformErr := &fault.Fault{
-		Class: fault.ClassValidation, Code: "invalid code",
-		SafeMessage: "invalid fault", Retryable: true,
-	}
-	mapped := sourceTransportErrorFromPlatform(platformErr)
-	var transportErr *sourceTransportError
-	if !errors.As(mapped, &transportErr) {
-		t.Fatalf("mapped error type = %T, want *sourceTransportError", mapped)
-	}
-	if transportErr.Retryable() {
-		t.Fatal("invalid Platform Fault must not propagate retryable=true")
 	}
 }

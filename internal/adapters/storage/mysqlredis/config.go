@@ -1,18 +1,15 @@
 package mysqlredis
 
 import (
-	"database/sql/driver"
 	"fmt"
 	"net"
 	"net/url"
-		"strconv"
+	"os"
+	"strconv"
 	"strings"
 	"time"
 
-	platformconfig "example.com/stock-analysis-flow/internal/platform/config"
-
 	mysqlDriver "github.com/go-sql-driver/mysql"
-	"github.com/redis/go-redis/v9"
 )
 
 type Config struct {
@@ -36,28 +33,44 @@ type Config struct {
 	RedisWriteTimeout time.Duration
 }
 
-// LoadConfig decodes the storage adapter's configuration from an explicit source.
-func LoadConfig(env platformconfig.Env) (Config, error) {
+func LoadConfigFromEnv() (Config, error) {
 	c := Config{
-		DBHost: env.String("DB_HOST", "127.0.0.1"), DBUser: env.String("DB_USER", "stock_analysis"),
-		DBPassword: env.Secret("DB_PASSWORD").Value(), DBName: env.String("DB_NAME", "stock_analysis"),
-		DBParams: env.String("DB_PARAMS", "charset=utf8mb4&parseTime=true&loc=UTC"),
-		RedisAddr: env.String("REDIS_ADDR", "127.0.0.1:6379"), RedisPassword: env.Secret("REDIS_PASSWORD").Value(),
-		RedisKeyPrefix: env.String("REDIS_KEY_PREFIX", "stock-analysis:"),
+		DBHost: envString("DB_HOST", "127.0.0.1"), DBUser: envString("DB_USER", "stock_analysis"),
+		DBPassword: os.Getenv("DB_PASSWORD"), DBName: envString("DB_NAME", "stock_analysis"),
+		DBParams:  envString("DB_PARAMS", "charset=utf8mb4&parseTime=true&loc=UTC"),
+		RedisAddr: envString("REDIS_ADDR", "127.0.0.1:6379"), RedisPassword: os.Getenv("REDIS_PASSWORD"),
+		RedisKeyPrefix: envString("REDIS_KEY_PREFIX", "stock-analysis:"),
 	}
 	var err error
-	if c.DBPort, err = env.Int("DB_PORT", 3306); err != nil { return c, err }
-	if c.DBMaxOpenConns, err = env.Int("DB_MAX_OPEN_CONNS", 20); err != nil { return c, err }
-	if c.DBMaxIdleConns, err = env.Int("DB_MAX_IDLE_CONNS", 5); err != nil { return c, err }
-	if c.RedisDB, err = env.Int("REDIS_DB", 0); err != nil { return c, err }
-	if c.DBAutoMigrate, err = env.Bool("DB_AUTO_MIGRATE", false); err != nil { return c, err }
-	if c.DBConnMaxLifetime, err = env.Duration("DB_CONN_MAX_LIFETIME", 30*time.Minute); err != nil { return c, err }
-	if c.RedisCacheTTL, err = env.Duration("REDIS_CACHE_TTL", 5*time.Minute); err != nil { return c, err }
-	if c.RedisDialTimeout, err = env.Duration("REDIS_DIAL_TIMEOUT", 3*time.Second); err != nil { return c, err }
-	if c.RedisReadTimeout, err = env.Duration("REDIS_READ_TIMEOUT", 2*time.Second); err != nil { return c, err }
-	if c.RedisWriteTimeout, err = env.Duration("REDIS_WRITE_TIMEOUT", 2*time.Second); err != nil { return c, err }
-	if c.DBConnMaxLifetime <= 0 || c.RedisCacheTTL <= 0 || c.RedisDialTimeout <= 0 || c.RedisReadTimeout <= 0 || c.RedisWriteTimeout <= 0 {
-		return c, fmt.Errorf("database and Redis durations must be positive")
+	if c.DBPort, err = envInt("DB_PORT", 3306); err != nil {
+		return c, err
+	}
+	if c.DBMaxOpenConns, err = envInt("DB_MAX_OPEN_CONNS", 20); err != nil {
+		return c, err
+	}
+	if c.DBMaxIdleConns, err = envInt("DB_MAX_IDLE_CONNS", 5); err != nil {
+		return c, err
+	}
+	if c.RedisDB, err = envInt("REDIS_DB", 0); err != nil {
+		return c, err
+	}
+	if c.DBAutoMigrate, err = envBool("DB_AUTO_MIGRATE", false); err != nil {
+		return c, err
+	}
+	if c.DBConnMaxLifetime, err = envDuration("DB_CONN_MAX_LIFETIME", 30*time.Minute); err != nil {
+		return c, err
+	}
+	if c.RedisCacheTTL, err = envDuration("REDIS_CACHE_TTL", 5*time.Minute); err != nil {
+		return c, err
+	}
+	if c.RedisDialTimeout, err = envDuration("REDIS_DIAL_TIMEOUT", 3*time.Second); err != nil {
+		return c, err
+	}
+	if c.RedisReadTimeout, err = envDuration("REDIS_READ_TIMEOUT", 2*time.Second); err != nil {
+		return c, err
+	}
+	if c.RedisWriteTimeout, err = envDuration("REDIS_WRITE_TIMEOUT", 2*time.Second); err != nil {
+		return c, err
 	}
 	if strings.TrimSpace(c.DBHost) == "" || strings.TrimSpace(c.DBUser) == "" || strings.TrimSpace(c.DBName) == "" {
 		return c, fmt.Errorf("DB_HOST, DB_USER and DB_NAME must not be empty")
@@ -69,11 +82,6 @@ func LoadConfig(env platformconfig.Env) (Config, error) {
 		return c, fmt.Errorf("REDIS_ADDR must be host:port: %w", err)
 	}
 	return c, nil
-}
-
-// LoadConfigFromEnv preserves the legacy adapter entry point.
-func LoadConfigFromEnv() (Config, error) {
-	return LoadConfig(platformconfig.NewEnv())
 }
 
 // mysqlDriverConfig builds a driver-native config. Keeping credentials as fields
@@ -146,28 +154,47 @@ func (c Config) mysqlDriverConfig() (*mysqlDriver.Config, error) {
 	return driverConfig, nil
 }
 
-// SQLConnector returns the MariaDB driver connector for Platform-owned SQL lifecycle management.
-func (c Config) SQLConnector() (driver.Connector, error) {
-	driverConfig, err := c.mysqlDriverConfig()
-	if err != nil {
-		return nil, err
-	}
-	return mysqlDriver.NewConnector(driverConfig)
-}
-
-// RedisOptions returns connection options for Platform-owned Redis lifecycle management.
-func (c Config) RedisOptions() redis.Options {
-	return redis.Options{
-		Addr:         c.RedisAddr,
-		Password:     c.RedisPassword,
-		DB:           c.RedisDB,
-		DialTimeout:  c.RedisDialTimeout,
-		ReadTimeout:  c.RedisReadTimeout,
-		WriteTimeout: c.RedisWriteTimeout,
-	}
-}
-
 func (c Config) RedisKey(key string) string { return c.RedisKeyPrefix + strings.TrimLeft(key, ":") }
+
+func envString(k, fallback string) string {
+	if v, ok := os.LookupEnv(k); ok {
+		return v
+	}
+	return fallback
+}
+func envInt(k string, fallback int) (int, error) {
+	v, ok := os.LookupEnv(k)
+	if !ok || strings.TrimSpace(v) == "" {
+		return fallback, nil
+	}
+	n, e := strconv.Atoi(v)
+	if e != nil {
+		return 0, fmt.Errorf("%s: %w", k, e)
+	}
+	return n, nil
+}
+func envBool(k string, fallback bool) (bool, error) {
+	v, ok := os.LookupEnv(k)
+	if !ok || strings.TrimSpace(v) == "" {
+		return fallback, nil
+	}
+	b, e := strconv.ParseBool(v)
+	if e != nil {
+		return false, fmt.Errorf("%s: %w", k, e)
+	}
+	return b, nil
+}
+func envDuration(k string, fallback time.Duration) (time.Duration, error) {
+	v, ok := os.LookupEnv(k)
+	if !ok || strings.TrimSpace(v) == "" {
+		return fallback, nil
+	}
+	d, e := time.ParseDuration(v)
+	if e != nil || d <= 0 {
+		return 0, fmt.Errorf("%s must be a positive duration", k)
+	}
+	return d, nil
+}
 
 // EscapePassword is provided for diagnostics only; do not log DSNs or credentials.
 func EscapePassword(s string) string { return url.QueryEscape(s) }

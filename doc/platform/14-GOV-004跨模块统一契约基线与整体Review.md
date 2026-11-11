@@ -3,7 +3,7 @@
 - 所属任务：GOV-004（项目级跨模块契约治理）；Platform 子契约对应 PLAT-002
 - 文档归属：feat/platform-foundation / doc/platform
 - 审查基线：dc85a9da4881b74da3c010c164369114e438c4a4
-- 文档状态：Platform 侧跨模块 Review 与接入索引；审查基线为历史规划快照，当前项目级契约状态以 `feat/design_doc` 的契约目录为准；**不是全局冻结声明**
+- 文档状态：Platform 侧跨模块 Review 与接入索引；项目级契约状态以 `feat/design_doc` 的契约目录为准；**不是全局冻结声明**
 - Review 类型：规划文档静态交叉审查；不等同于当前所有业务分支的最新代码审计
 - 适用范围：Data、News、Quant、Research、Researchflow、LLM、Notification、Platform、Server/API、WebUI 的服务端协作边界
 
@@ -34,7 +34,7 @@
 - Quant 与 Research 不互相依赖；Research 不 import Quant。Quant 结果由 Researchflow 通过公开 Port 获取并装配为 Research 所需输入/证据。
 - Notification 不依赖 Researchflow；上游通过版本化、与业务领域解耦的 Notification Command/Event 调用。
 - LLM 不执行 Tool Call；工具授权、预算、执行和结果回填由 Researchflow 负责。
-- Data 迁入 Root Server 同 Go Module 是项目目标；迁移完成前按当前实际 Module 边界通过 HTTP/OpenAPI 和本地 Adapter 对接，不得跨 Module import 根模块 internal；迁移完成后由 Server/Data 在根 Module 内按依赖方向复用 Platform。
+- Data 是独立 Go Module，通过 HTTP/OpenAPI 和本地 Adapter 对接；禁止跨 Module import 根模块 internal。
 - News 的 Research Evidence Query 是同一根 Go Module 内的 News Application Facade，不新增 News HTTP 服务，也不把 News Repository 暴露给 Research。
 - 根 DI、HTTP 路由、Worker 启动、Migration 总注册和部署入口由 Server/集成组合根集中装配；模块分支不抢占共享入口。
 - MariaDB 保存事实；Redis 仅作缓存或短期辅助，不作为唯一事实来源。
@@ -96,7 +96,7 @@
 - LLM → Quant、Research、Researchflow Domain。
 - Notification → Researchflow 或具体业务 Domain。
 - 任一模块访问其他模块的私有 Domain、Repository、SQL、Migration 实现或 Adapter。
-- Data 迁移完成前，根 Go Module 不得跨 Module import Data 的 internal 包；迁移完成后 Data 与 Server 位于同一 Go Module，也仍须遵守领域私有包不可被其他模块直接依赖的业务边界。
+- 根 Go Module import Data 独立 Module 的 internal 包。
 - 通过 Platform 建设共享万能 Domain、Repository、Task Framework 或动态工作流框架。
 
 ### 3.3 业务调用与 Go import 必须区分
@@ -286,7 +286,7 @@ Platform 只提供必要的通用执行基础设施，不定义 ResearchRun、St
 
 ### 7.1 边界与认证
 
-Data 迁入 Root Server 同 Go Module 是目标架构。迁移完成前，Data 仍按实际独立 Module 边界通过 HTTP/OpenAPI 暴露接口，根模块不得 import Data internal；迁移完成后由 Server/Data 在根 Module 内按依赖方向复用 Platform。调用方仍通过明确的 Data Adapter 将 Data API/Facade DTO 映射到 Quant/Research 所需 DTO，不直接依赖 Data Repository 或领域私有包。
+Data 是独立 Go Module，公开入口为 HTTP/OpenAPI。根模块不 import Data internal。调用方使用自己的 Data Adapter 映射 Data API DTO 到 Quant/Research 所需 DTO。
 
 首期 Data 认证保持 X-API-Key。Data Key 由 Server 端 Data Adapter 注入，不暴露给浏览器或业务模块。Provider Token 与 Data API Key 也必须分离。
 

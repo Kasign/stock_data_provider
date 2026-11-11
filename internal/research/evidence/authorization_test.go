@@ -11,24 +11,22 @@ const researchAuthorizationFingerprint = "059366735753b82b018143b2f300bc9bc6d276
 func researchAuthorizationGolden(t *testing.T) (AuthorizationRef, AuthorizationPolicySnapshot) {
 	t.Helper()
 	decidedAt, err := time.Parse(time.RFC3339Nano, "2026-11-06T05:03:00Z")
-	if err != nil {
-		t.Fatal(err)
-	}
+	if err != nil { t.Fatal(err) }
 	snapshot := AuthorizationPolicySnapshot{
 		SnapshotRef: "policy-snapshot:research-evidence-access:v1",
-		Policies:    []PolicyVersion{{PolicyType: "research_evidence_access", PolicyRef: "research-evidence-access", PolicyVersion: "1.0.0"}},
+		Policies: []PolicyVersion{{PolicyType: "research_evidence_access", PolicyRef: "research-evidence-access", PolicyVersion: "1.0.0"}},
 	}
 	ref := AuthorizationRef{
-		AuthorizationRef:    "auth_research_001",
-		PolicyOwner:         SourceResearch,
-		PolicyVersion:       snapshot.SnapshotRef,
-		Decision:            AuthorizationAllowed,
-		PurposeCode:         PurposeResearchAnalysis,
-		ContentLevel:        ContentSummary,
-		SubjectRef:          "service:researchflow",
-		ResourceRef:         "research_evidence:evidence_001",
-		DecidedAt:           decidedAt,
-		Conditions:          []string{},
+		AuthorizationRef: "auth_research_001",
+		PolicyOwner: SourceResearch,
+		PolicyVersion: snapshot.SnapshotRef,
+		Decision: AuthorizationAllowed,
+		PurposeCode: PurposeResearchAnalysis,
+		ContentLevel: ContentSummary,
+		SubjectRef: "service:researchflow",
+		ResourceRef: "research_evidence:evidence_001",
+		DecidedAt: decidedAt,
+		Conditions: []string{},
 		DecisionFingerprint: researchAuthorizationFingerprint,
 	}
 	return ref, snapshot
@@ -37,28 +35,20 @@ func researchAuthorizationGolden(t *testing.T) (AuthorizationRef, AuthorizationP
 func TestAuthorizationFingerprintMatchesGOVCTR006ResearchGolden(t *testing.T) {
 	ref, snapshot := researchAuthorizationGolden(t)
 	fingerprint, err := ref.ComputeDecisionFingerprint(snapshot)
-	if err != nil {
-		t.Fatalf("ComputeDecisionFingerprint() error = %v", err)
-	}
-	if fingerprint != researchAuthorizationFingerprint {
-		t.Fatalf("fingerprint = %s, want %s", fingerprint, researchAuthorizationFingerprint)
-	}
-	if err := ref.Validate(snapshot); err != nil {
-		t.Fatalf("Validate() error = %v", err)
-	}
+	if err != nil { t.Fatalf("ComputeDecisionFingerprint() error = %v", err) }
+	if fingerprint != researchAuthorizationFingerprint { t.Fatalf("fingerprint = %s, want %s", fingerprint, researchAuthorizationFingerprint) }
+	if err := ref.Validate(snapshot); err != nil { t.Fatalf("Validate() error = %v", err) }
 }
 
 func TestAuthorizationValidateRejectsPolicyAndDecisionInconsistency(t *testing.T) {
 	tests := []struct {
-		name   string
+		name string
 		mutate func(*AuthorizationRef, *AuthorizationPolicySnapshot)
-		want   string
+		want string
 	}{
 		{"policy snapshot mismatch", func(a *AuthorizationRef, s *AuthorizationPolicySnapshot) { s.SnapshotRef = "another-snapshot" }, "policy_version"},
 		{"empty policy list", func(a *AuthorizationRef, s *AuthorizationPolicySnapshot) { s.Policies = []PolicyVersion{} }, "must not be empty"},
-		{"duplicate policy tuple", func(a *AuthorizationRef, s *AuthorizationPolicySnapshot) {
-			s.Policies = append(s.Policies, s.Policies[0])
-		}, "duplicate policy tuple"},
+		{"duplicate policy tuple", func(a *AuthorizationRef, s *AuthorizationPolicySnapshot) { s.Policies = append(s.Policies, s.Policies[0]) }, "duplicate policy tuple"},
 		{"unsorted policy tuple", func(a *AuthorizationRef, s *AuthorizationPolicySnapshot) {
 			s.Policies = []PolicyVersion{
 				{PolicyType: "z_policy", PolicyRef: "policy", PolicyVersion: "1"},
@@ -66,13 +56,9 @@ func TestAuthorizationValidateRejectsPolicyAndDecisionInconsistency(t *testing.T
 			}
 			a.DecisionFingerprint, _ = a.ComputeDecisionFingerprint(*s)
 		}, "must be sorted by policy_type"},
-		{"allowed with conditions", func(a *AuthorizationRef, s *AuthorizationPolicySnapshot) {
-			a.Conditions = []string{"attribution_required"}
-		}, "allowed decision"},
+		{"allowed with conditions", func(a *AuthorizationRef, s *AuthorizationPolicySnapshot) { a.Conditions = []string{"attribution_required"} }, "allowed decision"},
 		{"conditional without conditions", func(a *AuthorizationRef, s *AuthorizationPolicySnapshot) { a.Decision = AuthorizationConditional }, "requires conditions"},
-		{"unsorted conditions", func(a *AuthorizationRef, s *AuthorizationPolicySnapshot) {
-			a.Conditions = []string{"z_condition", "a_condition"}
-		}, "sorted in ascending"},
+		{"unsorted conditions", func(a *AuthorizationRef, s *AuthorizationPolicySnapshot) { a.Conditions = []string{"z_condition", "a_condition"} }, "sorted in ascending"},
 		{"fingerprint tampered", func(a *AuthorizationRef, s *AuthorizationPolicySnapshot) { a.ResourceRef = "research_evidence:other" }, "decision_fingerprint"},
 	}
 	for _, tt := range tests {
@@ -93,13 +79,13 @@ func TestValidateEvidenceAuthorizationBindingUsesTrustedScope(t *testing.T) {
 		t.Fatalf("valid binding rejected: %v", err)
 	}
 	tests := []struct {
-		name     string
-		subject  string
+		name string
+		subject string
 		resource string
-		purpose  PurposeCode
-		content  ContentLevel
-		owner    SourceOwner
-		want     string
+		purpose PurposeCode
+		content ContentLevel
+		owner SourceOwner
+		want string
 	}{
 		{"untrusted subject mismatch", "service:other", "research_evidence:evidence_001", PurposeResearchAnalysis, ContentSummary, SourceResearch, "trusted caller"},
 		{"resource mismatch", "service:researchflow", "research_evidence:other", PurposeResearchAnalysis, ContentSummary, SourceResearch, "requested resource"},
@@ -113,9 +99,7 @@ func TestValidateEvidenceAuthorizationBindingUsesTrustedScope(t *testing.T) {
 			candidate.SourceOwner = tt.owner
 			candidate.ContentLevel = tt.content
 			err := ValidateEvidenceAuthorizationBinding(candidate, ref, snapshot, tt.subject, tt.resource, tt.purpose)
-			if err == nil || !strings.Contains(err.Error(), tt.want) {
-				t.Fatalf("binding error = %v, want containing %q", err, tt.want)
-			}
+			if err == nil || !strings.Contains(err.Error(), tt.want) { t.Fatalf("binding error = %v, want containing %q", err, tt.want) }
 		})
 	}
 }
@@ -135,18 +119,15 @@ func TestValidateEvidenceAuthorizationBindingRejectsNonAllowedDecision(t *testin
 		t.Run(string(decision), func(t *testing.T) {
 			ref, snapshot := researchAuthorizationGolden(t)
 			ref.Decision = decision
-			if decision == AuthorizationConditional {
-				ref.Conditions = []string{"attribution_required"}
-			}
+			if decision == AuthorizationConditional { ref.Conditions = []string{"attribution_required"} }
 			ref.DecisionFingerprint, _ = ref.ComputeDecisionFingerprint(snapshot)
-			err := ValidateEvidenceAuthorizationBinding(Evidence{SourceOwner: SourceResearch, ContentLevel: ContentSummary, AuthorizationRef: ref.AuthorizationRef}, ref, snapshot,
+			err := ValidateEvidenceAuthorizationBinding(Evidence{SourceOwner: SourceResearch, ContentLevel: ContentSummary}, ref, snapshot,
 				"service:researchflow", "research_evidence:evidence_001", PurposeResearchAnalysis)
-			if err == nil || !strings.Contains(err.Error(), "not readable") {
-				t.Fatalf("expected non-readable decision to be rejected, got %v", err)
-			}
+			if err == nil || !strings.Contains(err.Error(), "not readable") { t.Fatalf("expected non-readable decision to be rejected, got %v", err) }
 		})
 	}
 }
+
 
 func TestValidateEvidenceAuthorizationBindingAtEnforcesExpiryBoundary(t *testing.T) {
 	now := time.Date(2026, 11, 6, 5, 10, 0, 0, time.UTC)
@@ -191,6 +172,7 @@ func TestValidateEvidenceAuthorizationBindingAtEnforcesExpiryBoundary(t *testing
 	}
 }
 
+
 func TestValidateEvidenceAuthorizationBindingAtAllowsNoFixedExpiry(t *testing.T) {
 	now := time.Date(2026, 11, 6, 5, 10, 0, 0, time.UTC)
 	ref, snapshot := researchAuthorizationGolden(t)
@@ -200,6 +182,7 @@ func TestValidateEvidenceAuthorizationBindingAtAllowsNoFixedExpiry(t *testing.T)
 		t.Fatalf("authorization with expires_at=null rejected: %v", err)
 	}
 }
+
 
 func TestAuthorizationValidateAcceptsPolicyTupleFieldsContainingSeparator(t *testing.T) {
 	ref, snapshot := researchAuthorizationGolden(t)

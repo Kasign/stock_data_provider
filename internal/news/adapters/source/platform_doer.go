@@ -15,7 +15,8 @@ import (
 // platformHTTPDoer binds one registered Source endpoint to one exact destination policy.
 // The shared Platform Client lifecycle remains owned by the composition root.
 type platformHTTPDoer struct {
-	bound *httpclient.BoundDoer
+	client *httpclient.Client
+	policy httpclient.DestinationPolicy
 }
 
 // NewPlatformHTTPDoer creates one transport adapter for one Source/Endpoint registration.
@@ -29,11 +30,7 @@ func NewPlatformHTTPDoer(client *httpclient.Client, endpoint, dependency string)
 	if err != nil {
 		return nil, err
 	}
-	bound, err := client.Bind(policy)
-	if err != nil {
-		return nil, app.ErrProviderConfig
-	}
-	return &platformHTTPDoer{bound: bound}, nil
+	return &platformHTTPDoer{client: client, policy: policy}, nil
 }
 
 func sourceDestinationPolicy(endpoint, dependency string) (httpclient.DestinationPolicy, error) {
@@ -94,10 +91,10 @@ func validSourceDependency(value string) bool {
 }
 
 func (d *platformHTTPDoer) Do(request *http.Request) (*http.Response, error) {
-	if d == nil || d.bound == nil || request == nil || request.URL == nil {
+	if d == nil || d.client == nil || request == nil || request.URL == nil {
 		return nil, app.ErrProviderConfig
 	}
-	response, err := d.bound.Do(request)
+	response, err := d.client.Do(request.Context(), request, d.policy)
 	if err != nil {
 		return nil, sourceTransportErrorFromPlatform(err)
 	}
@@ -118,7 +115,7 @@ func (e *sourceTransportError) Retryable() bool {
 
 func sourceTransportErrorFromPlatform(err error) error {
 	var platformFault *fault.Fault
-	if errors.As(err, &platformFault) && platformFault != nil && platformFault.Validate() == nil {
+	if errors.As(err, &platformFault) && platformFault != nil {
 		return &sourceTransportError{retryable: platformFault.Retryable}
 	}
 	return &sourceTransportError{}

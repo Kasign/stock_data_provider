@@ -9,9 +9,7 @@ import (
 func claimTime(t *testing.T, value string) time.Time {
 	t.Helper()
 	parsed, err := time.Parse(time.RFC3339Nano, value)
-	if err != nil {
-		t.Fatal(err)
-	}
+	if err != nil { t.Fatal(err) }
 	return parsed
 }
 
@@ -20,28 +18,26 @@ func validHypothesis(t *testing.T) Claim {
 	method := "breakout_follow_through"
 	expected := "close remains above the prior resistance for three sessions"
 	return Claim{
-		ClaimID:                   "claim:research:0001",
-		ClaimVersion:              1,
-		Statement:                 "The stock may sustain its breakout",
-		EpistemicType:             EpistemicHypothesis,
-		ScopeRefs:                 []string{"600000.SH"},
-		SystemAsOf:                claimTime(t, "2026-11-06T05:00:00Z"),
-		SupportingEvidenceRefs:    []string{"evidence:research:0001"},
+		ClaimID: "claim:research:0001",
+		ClaimVersion: 1,
+		Statement: "The stock may sustain its breakout",
+		EpistemicType: EpistemicHypothesis,
+		ScopeRefs: []string{"600000.SH"},
+		SystemAsOf: claimTime(t, "2026-11-06T05:00:00Z"),
+		SupportingEvidenceRefs: []string{"evidence:research:0001"},
 		ContradictingEvidenceRefs: []string{"evidence:research:0002"},
-		RequiredDataRefs:          []string{"daily_bars:600000.SH"},
-		ValidationMethod:          &method,
-		ExpectedObservation:       &expected,
-		InvalidationConditions:    []string{"close falls below breakout level"},
-		Status:                    StatusTesting,
-		Limitations:               []string{"single-security hypothesis"},
+		RequiredDataRefs: []string{"daily_bars:600000.SH"},
+		ValidationMethod: &method,
+		ExpectedObservation: &expected,
+		InvalidationConditions: []string{"close falls below breakout level"},
+		Status: StatusTesting,
+		Limitations: []string{"single-security hypothesis"},
 	}
 }
 
 func TestHypothesisValidate(t *testing.T) {
 	value := validHypothesis(t)
-	if err := value.Validate(); err != nil {
-		t.Fatalf("Validate() error = %v", err)
-	}
+	if err := value.Validate(); err != nil { t.Fatalf("Validate() error = %v", err) }
 }
 
 func TestReportedFactDoesNotRequireHypothesisFields(t *testing.T) {
@@ -51,17 +47,11 @@ func TestReportedFactDoesNotRequireHypothesisFields(t *testing.T) {
 	value.ExpectedObservation = nil
 	value.InvalidationConditions = nil
 	value.Status = StatusProposed
-	if err := value.Validate(); err != nil {
-		t.Fatalf("reported fact rejected: %v", err)
-	}
+	if err := value.Validate(); err != nil { t.Fatalf("reported fact rejected: %v", err) }
 }
 
 func TestClaimRejectsInvalidContractValues(t *testing.T) {
-	tests := []struct {
-		name   string
-		mutate func(*Claim)
-		want   string
-	}{
+	tests := []struct { name string; mutate func(*Claim); want string }{
 		{"zero version", func(c *Claim) { c.ClaimVersion = 0 }, "claim_version"},
 		{"blank statement", func(c *Claim) { c.Statement = " " }, "statement"},
 		{"unknown epistemic type", func(c *Claim) { c.EpistemicType = "fact" }, "epistemic_type"},
@@ -92,9 +82,7 @@ func TestClaimVersionMustBeAppendOnly(t *testing.T) {
 	next := previous
 	next.ClaimVersion = 2
 	next.SystemAsOf = previous.SystemAsOf.Add(time.Minute)
-	if err := next.ValidateNextVersion(previous); err != nil {
-		t.Fatalf("contiguous version rejected: %v", err)
-	}
+	if err := next.ValidateNextVersion(previous); err != nil { t.Fatalf("contiguous version rejected: %v", err) }
 
 	next.ClaimVersion = 3
 	if err := next.ValidateNextVersion(previous); err == nil || !strings.Contains(err.Error(), "increment by exactly one") {
@@ -108,6 +96,7 @@ func TestClaimVersionMustBeAppendOnly(t *testing.T) {
 	}
 }
 
+
 func TestClaimValidateNextVersionRejectsIntegerOverflow(t *testing.T) {
 	previous := validHypothesis(t)
 	previous.ClaimVersion = int(^uint(0) >> 1)
@@ -117,6 +106,7 @@ func TestClaimValidateNextVersionRejectsIntegerOverflow(t *testing.T) {
 		t.Fatalf("ValidateNextVersion() error = %v, want integer limit rejection", err)
 	}
 }
+
 
 func TestClaimStatusTransitionRules(t *testing.T) {
 	allowed := []struct {

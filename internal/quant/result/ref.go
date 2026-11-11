@@ -4,9 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
-	"strings"
 	"time"
-	"unicode/utf8"
 
 	"example.com/stock-analysis-flow/internal/quant/manifest"
 )
@@ -86,15 +84,11 @@ func BuildRef(input RefInput, source manifest.Manifest) (Ref, error) {
 		return Ref{}, fmt.Errorf("%w: manifest: %v", ErrInvalidResultRef, err)
 	}
 	if !refSchemaVersionRE.MatchString(input.SchemaVersion) ||
-		(input.SecurityID != "" && !validText(input.SecurityID)) ||
-		!validText(input.Period) ||
-		!validText(input.AlgorithmVersion) ||
-		!validText(input.ParameterFingerprint) ||
-		!validText(input.AuthorizationRef) ||
-		!validSnapshotRefsUTF8(source.InputSnapshotRefs) ||
 		!validScope(input.Scope) ||
-		(input.Scope == ScopeStock && !validText(input.SecurityID)) ||
-		!validQuality(input.QualityStatus) || !validResultStatus(input.ResultStatus) ||
+		(input.Scope == ScopeStock && input.SecurityID == "") ||
+		input.Period == "" || input.AlgorithmVersion == "" ||
+		input.ParameterFingerprint == "" || !validQuality(input.QualityStatus) ||
+		!validResultStatus(input.ResultStatus) || input.AuthorizationRef == "" ||
 		input.CreatedAt.IsZero() {
 		return Ref{}, ErrInvalidResultRef
 	}
@@ -124,19 +118,6 @@ func BuildRef(input RefInput, source manifest.Manifest) (Ref, error) {
 		AuthorizationRef:     input.AuthorizationRef,
 		CreatedAt:            input.CreatedAt.UTC().Format(time.RFC3339Nano),
 	}, nil
-}
-
-func validText(value string) bool {
-	return utf8.ValidString(value) && strings.TrimSpace(value) != "" && strings.TrimSpace(value) == value
-}
-
-func validSnapshotRefsUTF8(refs []string) bool {
-	for _, ref := range refs {
-		if !utf8.ValidString(ref) {
-			return false
-		}
-	}
-	return true
 }
 
 func validScope(scope Scope) bool {

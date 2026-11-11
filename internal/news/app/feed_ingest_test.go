@@ -36,8 +36,8 @@ func TestFeedIngestionMappingToVersionOffline(t *testing.T) {
 	}
 
 	identityRepository := &memoryIdentityRepository{}
-	ingest := newCandidateIngest(identityRepository, func() string { return "feed-observation-1" })
-	observation, err := ingest.executeUnscoped(context.Background(), "source-1", "feed-poll-1/source-guid-1", candidate,
+	ingest := NewIngestCandidate(identityRepository, func() string { return "feed-observation-1" })
+	observation, err := ingest.Execute(context.Background(), "source-1", "feed-poll-1/source-guid-1", candidate,
 		domain.SourceURLPolicy{AllowedSchemes: []string{"https"}, AllowedHosts: []string{"publisher.example"}})
 	if err != nil {
 		t.Fatal(err)

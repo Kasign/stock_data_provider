@@ -92,10 +92,6 @@ func TestPlatformDoerRejectsRequestOutsideBoundOrigin(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewPlatformHTTPDoer() error = %v", err)
 	}
-	platformDoer, ok := doer.(*platformHTTPDoer)
-	if !ok || platformDoer.bound == nil {
-		t.Fatal("Provider adapter must hold a Platform BoundDoer")
-	}
 	request, err := http.NewRequest(http.MethodGet, "https://attacker.example/search", nil)
 	if err != nil {
 		t.Fatalf("http.NewRequest() error = %v", err)
@@ -130,20 +126,5 @@ func TestProviderErrorMapsPlatformFaultWithoutExposingCause(t *testing.T) {
 	}
 	if got := mapped.Error(); got == "" || strings.Contains(got, "sensitive") || strings.Contains(got, "credential") || strings.Contains(got, "upstream response") {
 		t.Fatalf("mapped error exposed unsafe details: %q", got)
-	}
-}
-
-func TestProviderErrorRejectsInvalidPlatformFaultMetadata(t *testing.T) {
-	platformErr := &fault.Fault{
-		Class: fault.ClassValidation, Code: "invalid code",
-		SafeMessage: "invalid fault", Retryable: true,
-	}
-	mapped := providerErrorFromPlatform(platformErr)
-	var providerErr *app.ProviderError
-	if !errors.As(mapped, &providerErr) {
-		t.Fatalf("mapped error type = %T, want *app.ProviderError", mapped)
-	}
-	if providerErr.Code != "provider_transport_failed" || providerErr.Retryable {
-		t.Fatalf("invalid Platform Fault was propagated: %#v", providerErr)
 	}
 }

@@ -10,10 +10,8 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"net"
 	"sort"
 	"strings"
-	"syscall"
 	"time"
 	"unicode/utf8"
 
@@ -203,26 +201,15 @@ func normalizePingTimeout(timeout time.Duration) (time.Duration, error) {
 
 func dependencyFault(dependency, code, message string, cause error) *fault.Fault {
 	class := fault.ClassUnavailable
-	retryable := false
 	if errors.Is(cause, context.DeadlineExceeded) {
 		class = fault.ClassTimeout
-	} else if !errors.Is(cause, context.Canceled) {
-		var networkError net.Error
-		if errors.As(cause, &networkError) {
-			if networkError.Timeout() {
-				class = fault.ClassTimeout
-			}
-			retryable = networkError.Timeout() || networkError.Temporary()
-		}
 	}
-	retryable = retryable || errors.Is(cause, syscall.ECONNREFUSED) ||
-		errors.Is(cause, syscall.ECONNRESET) ||
-		errors.Is(cause, syscall.ECONNABORTED) ||
-		errors.Is(cause, syscall.EPIPE) ||
-		errors.Is(cause, syscall.ETIMEDOUT)
 	return &fault.Fault{
 		Class: class, Code: code, SafeMessage: message,
-		Dependency: dependency, Retryable: retryable, Cause: cause,
+		Dependency: dependency,
+		Retryable: !errors.Is(cause, context.Canceled) &&
+			(class == fault.ClassUnavailable || class == fault.ClassTimeout),
+		Cause: cause,
 	}
 }
 
@@ -271,7 +258,7 @@ func ApplyMigrations(ctx context.Context, db *sql.DB, namespace string, migratio
 		return dependencyFault("sql", "platform.storage.migration_lock_failed", "could not confirm migration lock ownership", errors.New("migration lock result is NULL"))
 	}
 	if acquired.Int64 != 1 {
-		return &fault.Fault{Class: fault.ClassConflict, Code: "platform.storage.migration_lock_busy", SafeMessage: "another migration is running", Dependency: "sql", Cause: errMigrationLockUnavailable}
+		return dependencyFault("sql", "platform.storage.migration_lock_busy", "another migration is running", errMigrationLockUnavailable)
 	}
 
 	defer func() {

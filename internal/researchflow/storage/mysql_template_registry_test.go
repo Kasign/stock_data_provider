@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"sync"
 	"testing"
 	"time"
 
@@ -94,6 +95,75 @@ func TestMariaDBTemplateRegistryPublishesImmutableExactVersions(t *testing.T) {
 	}
 	if err := registry.Publish(ctx, corrupt); !errors.Is(err, ErrWorkflowTemplateCorrupt) {
 		t.Fatalf("re-publishing corrupt immutable version error = %v, want ErrWorkflowTemplateCorrupt", err)
+	}
+
+	// Concurrent publication of identical content must converge to one
+	// immutable row and remain idempotent for every publisher.
+	identical := registryTestTemplate("registry-concurrent-identical-"+suffix, "v1")
+	const publishers = 8
+	var identicalWait sync.WaitGroup
+	identicalErrors := make(chan error, publishers)
+	for i := 0; i < publishers; i++ {
+		identicalWait.Add(1)
+		go func() {
+			defer identicalWait.Done()
+			identicalErrors <- registry.Publish(ctx, identical)
+		}()
+	}
+	identicalWait.Wait()
+	close(identicalErrors)
+	for publishErr := range identicalErrors {
+		if publishErr != nil {
+			t.Fatalf("concurrent identical publication failed: %v", publishErr)
+		}
+	}
+
+	// Concurrent different definitions for one identity must have exactly
+	// one winner; the losing publisher must observe an immutable conflict.
+	conflictRef := "registry-concurrent-conflict-" + suffix
+	conflictA := registryTestTemplate(conflictRef, "v1")
+	conflictB := registryTestTemplate(conflictRef, "v1")
+	conflictB.Stages[0].Priority++
+	fingerprintA, err := template.Fingerprint(conflictA)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fingerprintB, err := template.Fingerprint(conflictB)
+	if err != nil {
+		t.Fatal(err)
+	}
+	conflictResults := make(chan error, 2)
+	var conflictWait sync.WaitGroup
+	for _, candidate := range []template.WorkflowTemplate{conflictA, conflictB} {
+		candidate := candidate
+		conflictWait.Add(1)
+		go func() {
+			defer conflictWait.Done()
+			conflictResults <- registry.Publish(ctx, candidate)
+		}()
+	}
+	conflictWait.Wait()
+	close(conflictResults)
+	published, conflicted := 0, 0
+	for publishErr := range conflictResults {
+		switch {
+		case publishErr == nil:
+			published++
+		case errors.Is(publishErr, ErrWorkflowTemplateConflict):
+			conflicted++
+		default:
+			t.Fatalf("unexpected concurrent conflicting publication error: %v", publishErr)
+		}
+	}
+	if published != 1 || conflicted != 1 {
+		t.Fatalf("concurrent conflicting publications: success=%d conflict=%d, want 1/1", published, conflicted)
+	}
+	winner, err := registry.Get(ctx, conflictRef, "v1")
+	if err != nil {
+		t.Fatalf("read concurrent publication winner: %v", err)
+	}
+	if winner.Fingerprint != fingerprintA && winner.Fingerprint != fingerprintB {
+		t.Fatal("persisted concurrent publication is neither submitted definition")
 	}
 }
 

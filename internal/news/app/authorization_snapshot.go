@@ -15,20 +15,16 @@ var (
 
 // AuthorizationSnapshotRepository is an append-only store for immutable
 // NEWS-CTR-002 decisions. It is not a policy evaluator or current-access gate.
-type AuthorizationSnapshotWriter interface {
-	AppendAuthorizationSnapshot(context.Context, domain.NewsAuthorizationBinding, domain.Observation, domain.NewsItemVersion) error
-}
-
 type AuthorizationSnapshotRepository interface {
+	AppendAuthorizationSnapshot(context.Context, domain.NewsAuthorizationBinding) error
 	GetAuthorizationSnapshot(context.Context, string) (domain.NewsAuthorizationBinding, error)
-	GetLatestAuthorizationSnapshotForEvidence(context.Context, string, string, string, domain.AuthorizationContentLevel) (domain.NewsAuthorizationBinding, error)
 }
 
 type RecordAuthorizationSnapshot struct {
-	repository AuthorizationSnapshotWriter
+	repository AuthorizationSnapshotRepository
 }
 
-func NewRecordAuthorizationSnapshot(repository AuthorizationSnapshotWriter) (*RecordAuthorizationSnapshot, error) {
+func NewRecordAuthorizationSnapshot(repository AuthorizationSnapshotRepository) (*RecordAuthorizationSnapshot, error) {
 	if repository == nil {
 		return nil, ErrInvalidAuthorizationSnapshot
 	}
@@ -38,12 +34,10 @@ func NewRecordAuthorizationSnapshot(repository AuthorizationSnapshotWriter) (*Re
 func (s *RecordAuthorizationSnapshot) Execute(
 	ctx context.Context,
 	binding domain.NewsAuthorizationBinding,
-	observation domain.Observation,
-	version domain.NewsItemVersion,
 ) error {
 	if s == nil || s.repository == nil || ctx == nil ||
-		domain.ValidateNewsAuthorizationBindingForEvidence(binding, observation, version) != nil {
+		domain.ValidateNewsAuthorizationBinding(binding) != nil {
 		return ErrInvalidAuthorizationSnapshot
 	}
-	return s.repository.AppendAuthorizationSnapshot(ctx, binding, observation, version)
+	return s.repository.AppendAuthorizationSnapshot(ctx, binding)
 }

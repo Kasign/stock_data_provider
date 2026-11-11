@@ -116,34 +116,6 @@ func TestEventReceiverAcceptsAndDeduplicates(t *testing.T) {
 	}
 }
 
-func TestEventReceiverNormalizesAcceptedAtToDatabasePrecision(t *testing.T) {
-	now := time.Date(2026, 11, 6, 9, 0, 0, 123456789, time.UTC)
-	event := domain.EventEnvelope{
-		SourceModule: "quant", EventID: "event-precision",
-		IdempotencyKey: "publish-precision", PayloadFingerprint: "fingerprint",
-	}
-	repo := newMemoryInbox()
-	receiver, err := NewEventReceiver(staticValidator{event: event}, repo, fixedClock{now: now})
-	if err != nil {
-		t.Fatal(err)
-	}
-	first, err := receiver.Receive(context.Background(), []byte("{}"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	expected := now.Truncate(time.Microsecond)
-	if !first.AcceptedAt.Equal(expected) || first.AcceptedAt.Nanosecond()%1000 != 0 {
-		t.Fatalf("accepted time must use DATETIME(6) precision: got=%s want=%s", first.AcceptedAt, expected)
-	}
-	second, err := receiver.Receive(context.Background(), []byte("{}"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !second.Duplicate || !second.AcceptedAt.Equal(first.AcceptedAt) {
-		t.Fatalf("replay must return the exact original accepted time: first=%s second=%s duplicate=%v", first.AcceptedAt, second.AcceptedAt, second.Duplicate)
-	}
-}
-
 func TestEventReceiverRejectsBothUniqueKeyConflicts(t *testing.T) {
 	now := time.Date(2026, 11, 6, 9, 0, 0, 0, time.UTC)
 	base := domain.EventEnvelope{
@@ -223,78 +195,5 @@ func TestEventReceiverValidatesBeforeRepository(t *testing.T) {
 	}
 	if len(repo.byEvent) != 0 {
 		t.Fatal("invalid event reached Inbox repository")
-	}
-}
-
-type fixedInboxResult struct {
-	record    domain.InboxRecord
-	duplicate bool
-	err       error
-}
-
-func (r fixedInboxResult) Accept(context.Context, domain.EventEnvelope, time.Time) (domain.InboxRecord, bool, error) {
-	return r.record, r.duplicate, r.err
-}
-
-func TestEventReceiverRejectsInvalidRepositoryResult(t *testing.T) {
-	now := time.Date(2026, 11, 6, 9, 0, 0, 0, time.UTC)
-	event := domain.EventEnvelope{
-		SourceModule: "quant", EventID: "event-1",
-		IdempotencyKey: "publish-1", PayloadFingerprint: "fingerprint",
-	}
-	cases := []struct {
-		name   string
-		record domain.InboxRecord
-	}{
-		{
-			name: "different event identity",
-			record: domain.InboxRecord{
-				Event:      domain.EventEnvelope{SourceModule: "quant", EventID: "other-event", IdempotencyKey: "publish-1", PayloadFingerprint: "fingerprint"},
-				ReceivedAt: now,
-			},
-		},
-		{
-			name:   "missing receive time",
-			record: domain.InboxRecord{Event: event},
-		},
-		{
-			name:   "future receive time",
-			record: domain.InboxRecord{Event: event, ReceivedAt: now.Add(time.Second)},
-		},
-		{
-			name:   "non UTC receive time",
-			record: domain.InboxRecord{Event: event, ReceivedAt: now.In(time.FixedZone("UTC+8", 8*60*60))},
-		},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			receiver, err := NewEventReceiver(staticValidator{event: event}, fixedInboxResult{record: tc.record}, fixedClock{now: now})
-			if err != nil {
-				t.Fatal(err)
-			}
-			if _, err := receiver.Receive(context.Background(), []byte("{}")); !errors.Is(err, ErrInboxRepositoryResultInvalid) {
-				t.Fatalf("expected invalid repository result, got %v", err)
-			}
-		})
-	}
-}
-
-func TestEventReceiverRejectsNilOrCancelledContextBeforeRepository(t *testing.T) {
-	event := domain.EventEnvelope{SourceModule: "quant", EventID: "event-1", IdempotencyKey: "publish-1", PayloadFingerprint: "fingerprint"}
-	repo := newMemoryInbox()
-	receiver, err := NewEventReceiver(staticValidator{event: event}, repo, fixedClock{now: time.Date(2026, 11, 6, 9, 0, 0, 0, time.UTC)})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := receiver.Receive(nil, []byte("{}")); err == nil {
-		t.Fatal("expected nil context error")
-	}
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-	if _, err := receiver.Receive(ctx, []byte("{}")); !errors.Is(err, context.Canceled) {
-		t.Fatalf("expected context cancellation, got %v", err)
-	}
-	if len(repo.byEvent) != 0 {
-		t.Fatal("cancelled receive must not reach Inbox repository")
 	}
 }

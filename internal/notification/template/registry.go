@@ -101,10 +101,10 @@ func (r *Registry) Register(definition Definition) (string, error) {
 	if r == nil {
 		return "", ErrInvalidTemplateLimits
 	}
-	if err := ValidateDefinition(definition, r.limits); err != nil {
+	if err := validateDefinition(definition, r.limits); err != nil {
 		return "", err
 	}
-	digest, err := DefinitionDigest(definition)
+	digest, err := definitionDigest(definition)
 	if err != nil {
 		return "", err
 	}
@@ -143,9 +143,6 @@ func (r *Registry) Render(ctx context.Context, event domain.EventEnvelope, templ
 	var result domain.RenderedContent
 	if r == nil {
 		return result, ErrInvalidTemplateLimits
-	}
-	if ctx == nil {
-		return result, errors.New("notification: template render context is required")
 	}
 	if err := ctx.Err(); err != nil {
 		return result, err
@@ -221,7 +218,7 @@ func (r *Registry) Render(ctx context.Context, event domain.EventEnvelope, templ
 	return result, nil
 }
 
-func ValidateDefinition(definition Definition, limits Limits) error {
+func validateDefinition(definition Definition, limits Limits) error {
 	if strings.TrimSpace(definition.TemplateID) == "" || definition.TemplateID != strings.TrimSpace(definition.TemplateID) ||
 		len(definition.TemplateID) > 128 || len(definition.EventType) > 128 ||
 		len(definition.SchemaVersion) > 64 || definition.Version <= 0 ||
@@ -345,8 +342,7 @@ func validateTemplateSource(source string, bindings map[string]string) (map[stri
 	return used, nil
 }
 
-// DefinitionDigest 使用 RFC 8785 JCS 对完整定义计算 SHA-256。
-func DefinitionDigest(definition Definition) (string, error) {
+func definitionDigest(definition Definition) (string, error) {
 	encoded, err := json.Marshal(definition)
 	if err != nil {
 		return "", fmt.Errorf("notification: encode template definition: %w", err)

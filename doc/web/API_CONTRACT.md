@@ -1,6 +1,6 @@
 # WebUI 真实 API 与配置边界
 
-更新时间：2026-11-09  
+更新时间：2026-10-30  
 适用分支：`feat/webui-market-data-console`
 
 本文只描述当前 WebUI 实际调用与当前仓库可核对的接口注册状态。OpenAPI 声明不等于 Handler 已注册，更不等于 Provider 已配置或上游可用。
@@ -9,18 +9,16 @@
 
 | 配置项 | 目标服务 | 用途 | 浏览器保存范围 |
 |---|---|---|---|
-| 行情 API 基础路径 | 迁移期行情兼容路由；目标为 Root Server 内 Market Data Adapter | 行情、证券资料、数据源清单与运行诊断 | 当前迁移期配置仍保存在浏览器 |
-| 行情服务 API Key | 迁移期 Market Data Adapter | 当前通过 `X-API-Key` 访问受保护行情接口 | 当前浏览器暂存；目标架构禁止浏览器持有 |
-| 分析 API 基础路径 | `/analysis-api` 兼容前缀；目标为 Root Server 注册的模块路由 | 创建分析任务、查询任务/Run/阶段事件 | 当前浏览器配置代理路径 |
-| 分析服务认证 | 当前 Server Owner Bearer | WebUI 不携带 Owner Bearer；当前 Analysis 请求预期 401 | 不得把 Owner Token 写入浏览器；等待 Web Session/Cookie + CSRF + 资源授权 |
+| 行情 API 基础路径 | `stock-analysis-data` | 行情、证券资料、数据源清单与运行诊断 | 当前浏览器 |
+| 行情服务 API Key | 行情服务 | 通过 `X-API-Key` 访问受保护的行情接口 | 当前浏览器；不回显 |
+| 分析 API 基础路径 | `stock-analysis-server` | 创建分析任务、查询任务/Run/阶段事件 | 当前浏览器 |
+| 分析服务认证 | 分析服务 | 当前 WebUI 不复用行情 API Key | 由分析服务自身决定 |
 
 行情服务健康检查使用 `GET /health/live`、`GET /health/ready`。分析服务健康检查使用 `GET /healthz`、`GET /readyz`，属于独立服务路径，不应拿行情服务 Handler 代替分析服务契约。
 
 ## 2. 行情服务接口映射
 
-当前 `web/src/api.js` 的行情接口封装应与 `internal/marketdata/httpapi/server.go` 的 Adapter 路由注册逐项对照。注意以下事实分层：OpenAPI 声明仅代表协议描述；`Server.routes()` 注册仅代表 Adapter 自身存在 Handler；`InProcessHandler()` 仅提供不带认证中间件的进程内路由。Root Server 是否已装配该 Adapter、对外路由是否可达、由何种认证保护，必须以 Root Server 装配代码和部署实测分别确认。当前 WebUI 分支未取得 Root Server 实际挂载及生产路由可达的验收证据，因此本表的“已注册”不得解读为浏览器生产环境可用。
-
-核心已注册并由 WebUI 封装使用的接口包括：
+当前 `web/src/api.js` 的行情接口封装与 `services/market-data/internal/httpapi/server.go` 的路由注册应逐项对照。核心已注册并由 WebUI 封装使用的接口包括：
 
 | 能力 | 方法与路径 | WebUI 封装 | 说明 |
 |---|---|---|---|
@@ -41,7 +39,7 @@
 
 - `GET /api/v1/market/capital-flow` 已在当前 `server.go` 注册，并由 `market_capital_flow.go` 实现；WebUI 通过 `getMarketCapitalFlow` 按 start/end 日期范围读取。接口返回 Tushare `moneyflow_mkt_dc` 原始市场级序列，金额为 CNY、比例为百分点；需要启用且具备权限的 Tushare Token，Provider 不可用时返回 503，不能据此认定当前部署已有可用数据。
 - 个股资金流 `GET /api/v1/stocks/{symbol}/capital-flow` 已注册 Handler，并有 `getCapitalFlow` 封装。不得用个股资金流冒充市场级资金流。
-- `GET /api/v1/market/stocks`、`GET /api/v1/market/sentiment`、`GET /api/v1/market/sentiment/history` 已注册 Handler，且现已提供 WebUI API 封装；市场股票分页已接入“个股行情”页，由用户显式点击加载，支持每页 20/50/100 条、复权方式切换和分页，具体实现位于 `web/src/market-stocks.js`；情绪历史提供手动日期范围查询入口。市场股票接口的 Provider 可用性仍需真实部署验证。
+- `GET /api/v1/market/stocks`、`GET /api/v1/market/sentiment`、`GET /api/v1/market/sentiment/history` 已注册 Handler，且现已提供 WebUI API 封装；市场股票分页尚未接入具体展示列表，情绪历史已提供手动日期范围查询入口。
 - `POST /api/v1/data-sources/probe` 是主动探测接口。数据中心的同花顺状态展示不得调用该接口；本页面仅读取 `GET /api/v1/data-sources` 与只读运行诊断快照。不得要求用户提供同花顺 API Key 来完成 UI 验收。
 
 ## 3. 分析任务服务边界
@@ -54,9 +52,7 @@ WebUI 使用独立的 `analysisBase` 调用：
 - `GET /api/v1/analysis/runs/{run_id}`：读取分析结果。
 - 健康检查：`GET /healthz`、`GET /readyz`。
 
-这些路径属于 Analysis/Researchflow 业务边界，不属于 Market Data Adapter。目标由 Root Server 注册并统一承载；当前 Server 的 Analysis 路由使用 Owner Bearer，而 WebUI 不发送该凭证，因此浏览器请求预期 401。Web Session/Cookie、CSRF、登录限流与资源授权契约完成前，Analysis API 继续受 Owner Bearer 保护并限制网络入口，不得匿名开放或把 Owner Token 写入浏览器。分析任务字段契约以 `doc/api/分析任务.openapi.yaml` 为准。
-
-当前 WebUI 的“最近任务”仅保存浏览器本地任务引用（有限数量），用于恢复用户最近访问上下文；它不是服务端任务历史列表，也不代表服务端仅存在这些任务。服务端任务历史分页与筛选由 Researchflow Application Facade 提供用例能力，再由 Root Server 注册 HTTP 路由；没有真实 Handler、认证和分页契约前，WebUI 不新增请求或将本地引用标记为服务端历史。
+这些路径属于分析服务，不属于行情服务 `server.go`。分析任务接口的字段契约以 `doc/api/分析任务.openapi.yaml` 为准。
 
 ## 4. 设置中心能力状态
 
@@ -73,14 +69,7 @@ WebUI 使用独立的 `analysisBase` 调用：
 | 选股默认项 | 待接入 | 无策略 Schema、条件选股配置和扫描任务 API |
 | 安全与备份 | 待接入 | 无管理员认证、服务密钥轮换、审计和服务器备份恢复 API |
 
-## 5. 当前认证与迁移边界
-
-1. Data API Key 当前仍由浏览器配置并用于行情请求，这是迁移期兼容状态，不是目标安全模型。MDM-006 与 Root Server 登录认证切换完成后，移除 Key 的浏览器读写和请求头注入，清理 localStorage 旧字段，并轮换已暴露凭据。
-2. OpenAPI 声明、Market Data Adapter Handler 注册、Root Server 实际挂载、Nginx/部署路由可达、认证通过是五个独立事实；必须分别提供证据，不得用其中任一项替代其他项。
-3. Analysis API 当前要求 Owner Bearer，WebUI 不携带该 Token，故当前浏览器请求预期 401。此状态不得通过把 Owner Token 放入 localStorage、静态 Nginx 配置或匿名降级解决。
-4. Root Server Web Session/Cookie、CSRF、登录限流、资源授权和可信代理边界完成前，Analysis API 继续保持受限网络入口。
-
-## 6. 验收规则
+## 5. 验收规则
 
 1. “已注册”只表示 Handler 存在；“OpenAPI 已声明”只表示协议文档存在；“WebUI 已封装”只表示有前端请求函数。这三者必须分别核对。
 2. 未配置 Provider Key、未观测到真实业务请求、服务端接口不可读，必须显示为不同状态；不得互相推断。
