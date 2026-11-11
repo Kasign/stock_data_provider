@@ -1327,3 +1327,13 @@ ResearchContext 归 FLOW-CTR-003，不属于 RSC-CTR-001 Evidence。RSC-DEC-001/
 | NTF-CTR-003 | not_applicable | ChannelConfig/Adapter/Resolver/SendRequest/Result 是 Notification 内部 SPI；不属于跨模块契约。Delivery retry/unknown 语义归 NTF-CTR-002 |
 
 本批 3 项：2 项 pending_evidence、1 项 not_applicable；无 pending_decision、blocked、freeze-ready。真实渠道、Secret、Worker、Repository、MariaDB、E2E、CI 均不属于本轮门禁；不新增 CTR。
+
+## 49. Server / WebUI Researchflow HTTP 契约核定（2026-11-11）
+
+| 契约 | 状态 | 结论 |
+|---|---|---|
+| SRV-CTR-001 | pending_evidence | Server 统一 HTTP Host/Composition Root 职责已有；DEC-018/019 退役旧 Analysis API 后，新 Researchflow HTTP OpenAPI/Schema 缺失，路径/方法、请求响应 DTO、错误投影、认证授权、分页/Cursor 和 Event 传输语义未定义 |
+
+旧 doc/web/API_CONTRACT.md 与 doc/api/contracts/分析任务.openapi.yaml 中的 Analysis 路径是退役历史，不得继续作为活动契约或迁移其 DTO/限制。WebUI CTR-011～049 中纯页面/交互/DOM 项不属于跨模块公开 API。
+
+本批无新增 pending_decision、blocked 或 freeze-ready；不新增 CTR。排除 Server DI/Bootstrap、Session Middleware 实现、WebUI 登录页面、Nginx/部署、E2E、CI。
