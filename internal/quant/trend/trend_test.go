@@ -88,16 +88,16 @@ func TestResultValidateStrengthAndRequiredCollections(t *testing.T) {
 func TestResultValidateRequiresEvidenceMetricSystemAsOfMatch(t *testing.T) {
 	result := validResult()
 	result.EvidenceMetrics = []metric.Metric{{
-		MetricCode: "close_price",
-		Value: json.RawMessage("10"),
-		Unit: "CNY",
-		Period: "20d",
-		SystemAsOf: "2026-11-09T00:59:00Z",
-		QualityStatus: metric.QualityValid,
-		MetricStatus: metric.StatusAvailable,
+		MetricCode:         "close_price",
+		Value:              json.RawMessage("10"),
+		Unit:               "CNY",
+		Period:             "20d",
+		SystemAsOf:         "2026-11-09T00:59:00Z",
+		QualityStatus:      metric.QualityValid,
+		MetricStatus:       metric.StatusAvailable,
 		CalculationVersion: "1.0.0",
-		LowerBound: json.RawMessage("null"),
-		UpperBound: json.RawMessage("null"),
+		LowerBound:         json.RawMessage("null"),
+		UpperBound:         json.RawMessage("null"),
 	}}
 	if err := result.Validate(); err == nil {
 		t.Fatal("TrendResult accepted an evidence Metric with a different system_as_of")
