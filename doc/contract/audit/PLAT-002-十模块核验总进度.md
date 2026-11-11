@@ -1238,3 +1238,15 @@
 - 当前项目级 pending_decision 总数由 Quant 核定后的 2 项增加为 5 项：QNT-DEC-01/02 与 RSC-OPEN-003/004/005。此前 2 项统计为历史快照，以本节为准。
 - 不纳入 Research Repository/MariaDB/Outbox、Server Relay、关系图并发、授权竞态、模块测试和 CI；本轮未修改 Research 责任分支。
 - 权威明细见登记簿第18节、差异矩阵第45节。下一批核定 Researchflow 的 Run/Stage/Attempt、Context 和事件公开契约。
+
+## 46. Researchflow 公开契约定义核定完成（2026-11-11）
+
+- 完成 FLOW-CTR-001～004 核定，4 项均为 pending_evidence；无新增 pending_decision、blocked 或 freeze-ready。
+- FLOW-CTR-001：Run/Stage/Attempt 状态枚举、终态、Template 传播矩阵和 1.0.0 Schema/Golden 已有；UTC、终态时间/输出字段关系和 ResultSummary 资源绑定仍未完全机器化。
+- FLOW-CTR-002：Cancel/Retry/Deadline 语义已有详细定义；Server 命令边界的 CancelRun/RetryStage DTO、幂等作用域/指纹和稳定冲突结果缺唯一权威契约定义。内部 CAS/锁/租约测试不属于本轮。
+- FLOW-CTR-003：Run Execution Context 核心字段已明确；ResearchContext/ContextSectionRef、resolved template snapshot、可信 caller/correlation 与各下游 Adapter 的映射未形成独立权威定义。
+- FLOW-CTR-004：Stage Provider Result Envelope 缺 output_type/schema_version/payload/quality_summary/diagnostic_refs 的权威 Schema/Output Registry；ResultSummary.quality_status 仍为任意字符串，coverage 分母及 summary 资源版本绑定不完整。
+- ResearchContext 归 FLOW-CTR-003，RSC-CTR-001 只覆盖 Evidence；Stage.output_ref 是不透明引用，不替代 Provider Result Envelope。
+- 本轮不检查 Researchflow Worker、Storage、CAS、Lease/Fencing、DB 恢复、Server 路由、WebUI 展示、E2E、测试或 CI；未修改责任模块分支。
+- 当前项目级待决项保持 5 项：QNT-DEC-01/02、RSC-OPEN-003/004/005。下一批核定 LLM 公开契约。
+- 权威明细见登记簿第19节、差异矩阵第46节。
