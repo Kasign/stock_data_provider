@@ -25,7 +25,7 @@
 - Researchflow：`resultvalidation/composer.go` 引用未定义的 `validSourceOwner`、`evidenceGraphHasCycle`。
 Quant 专项工作流全部通过；未修改这些模块。
 
-项目级状态：QNT-CTR-004 为 `pending_evidence`，因为 Envelope/IndicatorResultPayload/FactorResultPayload 机器定义和跨层 Validator 尚未完成；QNT-CTR-005 Manifest 字段定义已对齐并保持 `frozen`，但运行时授权仍未完成。
+项目级状态：QNT-CTR-004/005 均为 `frozen`（DEC-PLAT-002-051）。QNT-CTR-004 的完整 Envelope Go DTO、强类型 Payload 注册和跨层 Validator，以及 QNT-CTR-005 运行时授权，均属于 L2 实现符合性待办，不是契约定义 pending_evidence。
 
 当前剩余阻塞：
 - Data：DailyBars v2 Decimal 输入、真实 PIT/复权/交易日历及质量证据；没有真实数据证据，不标记真实数据验收通过。
