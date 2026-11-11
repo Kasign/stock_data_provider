@@ -1213,3 +1213,29 @@ PLAT-002 的项目级决策收敛已完成；**PLAT-002 项目整体不宣告完
 - **固定基线的新 API 现状（跨模块缺口）：** `internal/researchflow/application/create_run.go` 已有 CreateRun Application，`internal/researchflow/publicdto/dto.go` 已有 Run/Stage 公开 DTO；但 `internal/server/bootstrap/router.go` 仅注册旧 `/api/v1/analysis/**` 路由，`bootstrap.go` 仍装配旧 Runner/TaskQueue/Platform HTTP API，没有 Researchflow HTTP Handler/路由装配。WebUI `web/src/api.js` 仍调用 `/analysis-api/api/v1/analysis/tasks`、Run 与 Task Events；`doc/web/API_CONTRACT.md` 仍记录旧路径。由此确认 DEC-018 在固定基线尚未完成接入验收。
 - **冻结边界：** 该缺口不恢复 CTR-047，也不要求补齐旧 API。下一批只核对新 API 的 Server HTTP 映射是否已有权威路径、请求/响应 DTO、认证/错误/事件 Schema 与 WebUI 消费契约；模块级 CreateRunCommand 继续由 FLOW-CTR-001 定义，HTTP 宿主与映射归 SRV-CTR-001。不得把 Researchflow Application DTO 直接等同于 HTTP DTO，也不得把旧 Analysis Request 字段迁移过去。
 - **不代表：** 本状态不表示旧 API 代码已删除，也不表示新 API 已接入验收。旧代码退役属于 DEC-018 的迁移执行工作；新 API 的契约证据按其正式契约单独验收。
+
+## 41. GOV / Platform 首批契约定义核定（2026-11-11）
+
+本节依据项目级登记簿第5、14节，覆盖 GOV-CTR-001～006 与 PLAT-CTR-001～007。只记录公开定义缺口；历史章节中涉及模块测试、CI、Server 接线、部署和真实依赖验收的描述不再作为本轮冻结门禁。
+
+| 契约 | 状态 | 唯一保留的契约定义问题 |
+|---|---|---|
+| GOV-CTR-001 | pending_evidence | 公共 JSON/Decimal 规则尚无独立稳定版本，字段级 Schema 适用映射缺失 |
+| GOV-CTR-002 | pending_evidence | 时间/PIT 公共原则已定，领域字段到时间语义的权威映射不完整 |
+| GOV-CTR-003 | pending_evidence | ID 类别已定义，跨模块命令/事件/异步 Context 的生成方、作用域和传播字段映射不完整 |
+| GOV-CTR-004 | pending_evidence | 兼容原则已定义，活动 DTO/Event 的版本、未知字段/枚举策略和废弃矩阵缺失 |
+| GOV-CTR-005 | freeze-ready | 项目级治理规则已收敛到 doc/contract 唯一权威入口；实现测试不属于治理定义冻结条件 |
+| GOV-CTR-006 | pending_evidence | AuthorizationRef/PolicySnapshot Schema 与 Golden 已有；时间/排序约束和资源粒度/用途适用映射不完整 |
+| PLAT-CTR-001 | pending_evidence | Fault 仅为内部 Go 错误对象；HTTP Error 投影的公开字段/状态码/版本定义缺失 |
+| PLAT-CTR-002 | pending_evidence | Request ID 规则有 Golden；Principal/Scope/认证来源 Context 与异步传播契约缺失 |
+| PLAT-CTR-003 | pending_evidence | 身份边界决议已定；Platform Session 原语的权威接口/生命周期/错误定义仍是候选 |
+| PLAT-CTR-004 | pending_evidence | Observation Schema 与文字规范对 attributes 类型不一致；Runner 聚合定义分散 |
+| PLAT-CTR-005 | pending_evidence | HTTP/流式行为已有设计；稳定 Port/API 版本、参数和错误语义的唯一权威定义未收敛 |
+| PLAT-CTR-006 | pending_evidence | Storage/Migration 所有权原则明确；Migration Runner 的权威接口和生命周期定义不完整 |
+| PLAT-CTR-007 | pending_evidence | Secret/Config 原则明确；Typed API 版本、错误语义及领域 Config Schema 映射不完整 |
+
+**本批结论：** 13 项中 1 项 freeze-ready，12 项 pending_evidence，没有新的 pending_decision 或 blocked。GOV-CTR-005 可提交项目负责人确认冻结；其余契约保留的均为公开定义问题。
+
+**明确排除：** Session Middleware/WebUI 登录/部署、Migration 实际注册、HTTP Client 真实消费者接入、Observation 领域 Adapter、任何单元/集成测试和 CI。它们不属于本轮契约定义冻结工作。
+
+**下一批：** Data 公开契约。GOV-CTR-001～004/006 只随对应 Data 字段定义核对适用映射，不重新讨论已经明确的公共规则。
