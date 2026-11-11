@@ -12,6 +12,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"example.com/stock-analysis-flow/internal/marketdata/transport"
 )
 
 const (
@@ -34,10 +36,19 @@ type Config struct {
 	Password       string
 	ConnectTimeout time.Duration
 	RequestTimeout time.Duration
+	// DialContext 由 Root 注入的受控 TCP 出站函数；nil 时保留标准 net.Dialer 兼容行为。
+	DialContext transport.DialContextFunc
 }
 
 // DailyKLine contains the source fields needed by the daily-bar adapter.
 // Values are kept as strings until the adapter applies field-level validation.
+type DailyKLineFieldIssue struct {
+	SourceField string
+	Code        string
+	ActualType  string
+	Preview     string
+}
+
 type DailyKLine struct {
 	Date        string
 	Code        string
@@ -53,6 +64,7 @@ type DailyKLine struct {
 	TradeStatus string
 	PctChg      string
 	IsST        string
+	FieldIssues []DailyKLineFieldIssue
 }
 
 // TradeDate is one calendar date and the provider's explicit trading-day flag.
@@ -70,11 +82,42 @@ type AdjustmentFactor struct {
 }
 
 // QuarterlyFinancialRecord stores one BaoStock financial row without changing numeric scale.
+type QuarterlyFinancialFieldIssue struct {
+	SourceField string
+	Code        string
+	ActualType  string
+	Preview     string
+	RowIndex    int
+}
+
+// QuarterlyFinancialStructureError preserves evidence when a required identity/PIT field
+// makes a financial row unsafe to use. The caller must reject the row.
+type QuarterlyFinancialStructureError struct {
+	SourceField string
+	Code        string
+	ActualType  string
+	Preview     string
+	RowIndex    int
+	Expected    string
+	Message     string
+}
+
+func (e *QuarterlyFinancialStructureError) Error() string {
+	if e == nil {
+		return "BaoStock financial structure error"
+	}
+	return e.Message
+}
+
+// QuarterlyFinancialRecord stores one BaoStock financial row without changing numeric scale.
 type QuarterlyFinancialRecord struct {
 	Code            string
 	PublicationDate string
 	ReportDate      string
 	Fields          map[string]string
+	FieldTypes      map[string]string
+	FieldPreviews   map[string]string
+	FieldIssues     []QuarterlyFinancialFieldIssue
 }
 
 type financialQuerySpec struct {
@@ -212,28 +255,64 @@ func parseQuarterlyFinancialPage(body string, spec financialQuerySpec, userID, c
 		return nil, fmt.Errorf("BaoStock %s row has %d columns; expected %d", spec.method, len(rows[0]), len(spec.fields))
 	}
 	values := make(map[string]string, len(spec.fields))
+	fieldTypes := make(map[string]string, len(spec.fields))
+	fieldPreviews := make(map[string]string, len(spec.fields))
+	fieldIssues := make([]QuarterlyFinancialFieldIssue, 0)
 	for i, raw := range rows[0] {
+		fieldTypes[spec.fields[i]] = baoStockCellType(raw)
+		fieldPreviews[spec.fields[i]] = baoStockCellPreview(string(raw))
 		value, err := decodeCell(raw)
 		if err != nil {
-			return nil, fmt.Errorf("BaoStock %s column %s: %w", spec.method, spec.fields[i], err)
+			// code/statDate 是证券身份和报告期定位字段；保留证据后仍必须拒绝整行。
+			if i == 0 || i == 2 {
+				return nil, &QuarterlyFinancialStructureError{
+					SourceField: spec.fields[i], Code: "invalid_field",
+					ActualType: baoStockCellType(raw), Preview: baoStockCellPreview(string(raw)),
+					RowIndex: 0, Expected: "string scalar",
+					Message: fmt.Sprintf("BaoStock %s required structure field %s is invalid: %v", spec.method, spec.fields[i], err),
+				}
+			}
+			// 只有 code/statDate 是定位证券和报告期的结构字段；披露日期与财务指标
+			// 类型异常均保留字段级证据，不应导致整条财务记录被丢弃。
+			fieldIssues = append(fieldIssues, QuarterlyFinancialFieldIssue{
+				SourceField: spec.fields[i], Code: "invalid_field",
+				ActualType: baoStockCellType(raw), Preview: baoStockCellPreview(string(raw)),
+				RowIndex: 0,
+			})
+			values[spec.fields[i]] = ""
+			continue
+		}
+		if (i == 0 || i == 2) && strings.TrimSpace(value) == "" {
+			return nil, &QuarterlyFinancialStructureError{
+				SourceField: spec.fields[i], Code: "missing_value",
+				ActualType: fieldTypes[spec.fields[i]], Preview: fieldPreviews[spec.fields[i]],
+				RowIndex: 0, Expected: "non-empty string scalar",
+				Message: fmt.Sprintf("BaoStock %s required structure field %s is empty", spec.method, spec.fields[i]),
+			}
 		}
 		values[spec.fields[i]] = value
 	}
 	if strings.TrimSpace(values["code"]) != code {
-		return nil, fmt.Errorf("BaoStock %s row security mismatch: requested %s, got %q", spec.method, code, values["code"])
+		return nil, &QuarterlyFinancialStructureError{
+			SourceField: "code", Code: "symbol_mismatch", ActualType: fieldTypes["code"],
+			Preview: fieldPreviews["code"], RowIndex: 0, Expected: code,
+			Message: fmt.Sprintf("BaoStock %s row security mismatch: requested %s, got %q", spec.method, code, values["code"]),
+		}
 	}
 	statDate := strings.TrimSpace(values["statDate"])
 	periodEnd := time.Date(year, time.Month(quarter*3+1), 0, 0, 0, 0, 0, time.UTC).Format("2006-01-02")
 	if statDate != periodEnd {
-		return nil, fmt.Errorf("BaoStock %s report date %q does not match requested period end %s", spec.method, statDate, periodEnd)
-	}
-	publicationDate := strings.TrimSpace(values["pubDate"])
-	if publicationDate != "" {
-		if _, err := time.Parse("2006-01-02", publicationDate); err != nil {
-			return nil, fmt.Errorf("BaoStock %s invalid publication date %q", spec.method, publicationDate)
+		return nil, &QuarterlyFinancialStructureError{
+			SourceField: "statDate", Code: "report_period_mismatch", ActualType: fieldTypes["statDate"],
+			Preview: fieldPreviews["statDate"], RowIndex: 0, Expected: periodEnd,
+			Message: fmt.Sprintf("BaoStock %s report date %q does not match requested period end %s", spec.method, statDate, periodEnd),
 		}
 	}
-	return &QuarterlyFinancialRecord{Code: code, PublicationDate: publicationDate, ReportDate: statDate, Fields: values}, nil
+	publicationDate := strings.TrimSpace(values["pubDate"])
+	return &QuarterlyFinancialRecord{
+		Code: code, PublicationDate: publicationDate, ReportDate: statDate,
+		Fields: values, FieldTypes: fieldTypes, FieldPreviews: fieldPreviews, FieldIssues: fieldIssues,
+	}, nil
 }
 
 // Client serializes operations over one stateful TCP session so requests and
@@ -706,8 +785,15 @@ func (c *Client) ensureLoggedInLocked(ctx context.Context) error {
 
 	dialCtx, cancel := context.WithTimeout(ctx, c.cfg.ConnectTimeout)
 	defer cancel()
-	conn, err := (&net.Dialer{Timeout: c.cfg.ConnectTimeout, KeepAlive: 30 * time.Second}).DialContext(
-		dialCtx, "tcp", net.JoinHostPort(c.cfg.Host, strconv.Itoa(c.cfg.Port)))
+	address := net.JoinHostPort(c.cfg.Host, strconv.Itoa(c.cfg.Port))
+	var conn net.Conn
+	var err error
+	if c.cfg.DialContext != nil {
+		conn, err = c.cfg.DialContext(dialCtx, "tcp", address)
+	} else {
+		conn, err = (&net.Dialer{Timeout: c.cfg.ConnectTimeout, KeepAlive: 30 * time.Second}).DialContext(
+			dialCtx, "tcp", address)
+	}
 	if err != nil {
 		return fmt.Errorf("connect to BaoStock %s:%d: %w", c.cfg.Host, c.cfg.Port, err)
 	}
@@ -841,10 +927,19 @@ func parseKLinePage(body string) (queryPage, error) {
 			return queryPage{}, fmt.Errorf("row %d has %d columns, fields specify %d", rowIndex, len(rawRow), len(page.fields))
 		}
 		values := make([]string, len(rawRow))
+		fieldIssues := make([]DailyKLineFieldIssue, 0)
 		for columnIndex, rawValue := range rawRow {
 			value, err := decodeCell(rawValue)
 			if err != nil {
-				return queryPage{}, fmt.Errorf("row %d column %d: %w", rowIndex, columnIndex, err)
+				sourceField := fmt.Sprintf("column_%d", columnIndex)
+				if columnIndex < len(page.fields) {
+					sourceField = page.fields[columnIndex]
+				}
+				fieldIssues = append(fieldIssues, DailyKLineFieldIssue{
+					SourceField: sourceField, Code: "invalid_field",
+					ActualType: baoStockCellType(rawValue), Preview: baoStockCellPreview(string(rawValue)),
+				})
+				continue
 			}
 			values[columnIndex] = value
 		}
@@ -852,9 +947,43 @@ func parseKLinePage(body string) (queryPage, error) {
 			Date: values[0], Code: values[1], Open: values[2], High: values[3], Low: values[4],
 			Close: values[5], PreClose: values[6], Volume: values[7], Amount: values[8],
 			AdjustFlag: values[9], Turn: values[10], TradeStatus: values[11], PctChg: values[12], IsST: values[13],
+			FieldIssues: fieldIssues,
 		})
 	}
 	return page, nil
+}
+
+func baoStockCellType(raw json.RawMessage) string {
+	value := strings.TrimSpace(string(raw))
+	switch {
+	case value == "":
+		return "missing"
+	case value == "null":
+		return "null"
+	case strings.HasPrefix(value, "{"):
+		return "object"
+	case strings.HasPrefix(value, "["):
+		return "array"
+	case value == "true" || value == "false":
+		return "boolean"
+	case strings.HasPrefix(value, "\""):
+		return "string"
+	default:
+		return "number_or_invalid"
+	}
+}
+
+func baoStockCellPreview(value string) string {
+	value = strings.Map(func(r rune) rune {
+		if r < 0x20 || r == 0x7f {
+			return ' '
+		}
+		return r
+	}, value)
+	if len(value) > 160 {
+		return value[:160]
+	}
+	return value
 }
 
 func decodeCell(raw json.RawMessage) (string, error) {

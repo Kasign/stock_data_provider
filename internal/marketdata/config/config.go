@@ -335,7 +335,7 @@ func load(requireHTTPAPIKey bool) (Config, error) {
 	if cfg.ProviderSettings["tushare"].Enabled && strings.TrimSpace(cfg.TushareToken) == "" {
 		return cfg, errors.New("MARKET_DATA_TUSHARE_ENABLED=true requires MARKET_DATA_TUSHARE_TOKEN or TUSHARE_TOKEN")
 	}
-	if (cfg.ProviderSettings["tickflow"].Quote || cfg.ProviderSettings["tickflow"].SectorRankings || cfg.ProviderSettings["tickflow"].IndexQuotes || cfg.ProviderSettings["tickflow"].MarketBreadth) && strings.TrimSpace(cfg.TickFlowAPIKey) == "" {
+	if cfg.ProviderSettings["tickflow"].Enabled && (cfg.ProviderSettings["tickflow"].Quote || cfg.ProviderSettings["tickflow"].SectorRankings || cfg.ProviderSettings["tickflow"].IndexQuotes || cfg.ProviderSettings["tickflow"].MarketBreadth) && strings.TrimSpace(cfg.TickFlowAPIKey) == "" {
 		return cfg, errors.New("MARKET_DATA_TICKFLOW_QUOTE_ENABLED, MARKET_DATA_TICKFLOW_SECTOR_RANKINGS_ENABLED, MARKET_DATA_TICKFLOW_INDEX_QUOTES_ENABLED or MARKET_DATA_TICKFLOW_MARKET_BREADTH_ENABLED=true requires MARKET_DATA_TICKFLOW_API_KEY or TICKFLOW_API_KEY")
 	}
 	if cfg.ProviderSettings["tushare"].Quote {

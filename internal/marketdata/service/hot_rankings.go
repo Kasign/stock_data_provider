@@ -207,6 +207,10 @@ func (s *DataService) HotStocks(ctx context.Context, rawType string, limit int) 
 			failures = append(failures, p.Name()+": "+fetchErr.Error())
 			continue
 		}
+		if snapshot != nil && strings.TrimSpace(snapshot.Source) != "" && snapshot.Source != p.Name() {
+			failures = append(failures, p.Name()+": hot-ranking source does not match Provider.Name()")
+			continue
+		}
 		if err := validateHotRankingSnapshot(rankingType, snapshot); err != nil {
 			failures = append(failures, p.Name()+": "+err.Error())
 			continue

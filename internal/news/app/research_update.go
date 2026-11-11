@@ -68,6 +68,9 @@ func (u *ApplyResearchUpdate) Execute(ctx context.Context, request ResearchUpdat
 		strings.TrimSpace(request.NewsID) == "" || strings.TrimSpace(request.ObservationID) == "" {
 		return ResearchUpdateResult{}, ErrInvalidRequest
 	}
+	if err := ctx.Err(); err != nil {
+		return ResearchUpdateResult{}, err
+	}
 	request.NewsID = strings.TrimSpace(request.NewsID)
 	request.ObservationID = strings.TrimSpace(request.ObservationID)
 	observedAt := u.now().UTC()
@@ -174,6 +177,9 @@ func (u *ApplyResearchUpdate) Execute(ctx context.Context, request ResearchUpdat
 		result.CurrentRelations = currentRelations
 		return nil
 	})
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return ResearchUpdateResult{}, ctxErr
+	}
 	if err != nil {
 		return ResearchUpdateResult{}, errors.Join(ErrResearchUpdateTransaction, err)
 	}

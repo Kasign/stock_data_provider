@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"unicode/utf8"
 
 	"example.com/stock-analysis-flow/internal/quant/metric"
 )
@@ -19,7 +20,7 @@ func (r *Registry) ValidateMetric(code, schemaVersion, algorithmVersion string, 
 	if err != nil {
 		return err
 	}
-	if len(raw) == 0 || !json.Valid(raw) {
+	if len(raw) == 0 || !utf8.Valid(raw) || !json.Valid(raw) {
 		return fmt.Errorf("%w: invalid JSON", ErrInvalidMetricResult)
 	}
 	if err := validateUniqueJSONKeys(raw); err != nil {

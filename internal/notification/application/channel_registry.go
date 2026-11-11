@@ -42,9 +42,25 @@ func (r *ChannelRegistry) Register(adapter ChannelAdapter) error {
 	if r == nil || adapter == nil {
 		return ErrChannelAdapterUnavailable
 	}
-	snapshot := cloneChannelSnapshot(adapter.ConfigSnapshot())
+	return r.RegisterSnapshot(adapter.ConfigSnapshot(), adapter)
+}
+
+// RegisterSnapshot 将持久化的不可变配置快照与运行时 Adapter 绑定。
+// Adapter 必须声明完全相同的快照，避免 Server 装配错误造成版本号与实际配置错配。
+func (r *ChannelRegistry) RegisterSnapshot(expected domain.ChannelConfigSnapshot, adapter ChannelAdapter) error {
+	if r == nil || adapter == nil {
+		return ErrChannelAdapterUnavailable
+	}
+	snapshot := cloneChannelSnapshot(expected)
 	if err := snapshot.Validate(); err != nil {
 		return err
+	}
+	actual := cloneChannelSnapshot(adapter.ConfigSnapshot())
+	if err := actual.Validate(); err != nil {
+		return err
+	}
+	if !equalChannelSnapshot(snapshot, actual) {
+		return ErrChannelConfigVersionConflict
 	}
 	sort.Strings(snapshot.RetryableErrorCodes)
 

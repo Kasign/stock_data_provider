@@ -244,3 +244,77 @@ func containsReason(reasons []string, want string) bool {
 	}
 	return false
 }
+
+func TestBaostockDailyBarsReportsUnsupportedRawCellType(t *testing.T) {
+	client := &fakeBaostockClient{rows: []baostock.DailyKLine{{
+		Date: "2026-10-21", Code: "sh.600519",
+		FieldIssues: []baostock.DailyKLineFieldIssue{{
+			SourceField: "close", Code: "invalid_field", ActualType: "object", Preview: "object",
+		}},
+	}}}
+	reporter := validation.NewReporter(20)
+	ctx := validation.WithReporter(context.Background(), reporter)
+	_, err := NewBaostock(client).FetchDailyBars(ctx, "600519.SH", "2026-10-21", "2026-10-21", 10, model.AdjustmentForward)
+	if err == nil {
+		t.Fatal("unsupported raw close cell type must reject the BaoStock response")
+	}
+	found := false
+	for _, issue := range reporter.Snapshot().Issues {
+		if issue.Field == "close" && issue.ProviderField == "close" && issue.Code == "invalid_field" &&
+			issue.ActualType == "object" && issue.RowIndex != nil && *issue.RowIndex == 0 {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("expected raw close cell type issue at row 0, got %+v", reporter.Snapshot().Issues)
+	}
+}
+
+func TestBaostockDailyBarsReportsOutOfRangeDate(t *testing.T) {
+	client := &fakeBaostockClient{rows: []baostock.DailyKLine{{
+		Date: "2026-10-22", Code: "sh.600519", Open: "10", High: "10.2",
+		Low: "9.8", Close: "10.1", Volume: "1000", Amount: "10000", AdjustFlag: "2",
+	}}}
+	reporter := validation.NewReporter(20)
+	ctx := validation.WithReporter(context.Background(), reporter)
+	_, err := NewBaostock(client).FetchDailyBars(ctx, "600519.SH", "2026-10-01", "2026-10-21", 20, model.AdjustmentForward)
+	if err == nil {
+		t.Fatal("out-of-range date must reject the BaoStock response")
+	}
+	found := false
+	for _, issue := range reporter.Snapshot().Issues {
+		if issue.Field == "trade_date" && issue.Code == "date_out_of_requested_range" &&
+			issue.RowIndex != nil && *issue.RowIndex == 0 {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("expected out-of-range date issue at row 0, got %+v", reporter.Snapshot().Issues)
+	}
+}
+
+func TestBaostockDailyBarsReportsMissingOptionalAmount(t *testing.T) {
+	client := &fakeBaostockClient{rows: []baostock.DailyKLine{{
+		Date: "2026-10-21", Code: "sz.000001", Open: "10", High: "10.2",
+		Low: "9.8", Close: "10.1", Volume: "1000", Amount: "", AdjustFlag: "3",
+	}}}
+	reporter := validation.NewReporter(20)
+	ctx := validation.WithReporter(context.Background(), reporter)
+	bars, err := NewBaostock(client).FetchDailyBars(ctx, "000001.SZ", "2026-10-21", "2026-10-21", 10, model.AdjustmentNone)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(bars) != 1 || bars[0].Amount != nil || bars[0].QualityStatus != model.QualityDegraded {
+		t.Fatalf("missing amount must remain absent and degraded: %+v", bars)
+	}
+	found := false
+	for _, issue := range reporter.Snapshot().Issues {
+		if issue.Field == "amount" && issue.ProviderField == "amount" &&
+			issue.Code == "missing_optional_value" && issue.RowIndex != nil && *issue.RowIndex == 0 {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("expected optional amount issue at row 0, got %+v", reporter.Snapshot().Issues)
+	}
+}

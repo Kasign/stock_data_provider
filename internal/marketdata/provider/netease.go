@@ -129,12 +129,18 @@ func (p *Netease) FetchQuote(ctx context.Context, rawSymbol string) (*model.Quot
 	}
 	row, ok := payload[code]
 	if !ok {
+		addProviderQuoteIssue(ctx, validation.StageValidate, "symbol", "payload key", "missing_requested_identity",
+			code, "missing", "", "NetEase quote response omitted the requested security", validation.SeverityError)
 		return nil, fmt.Errorf("Netease quote response does not contain requested code %s", code)
 	}
 	if reported := strings.TrimSpace(row.Code); reported != "" && reported != code {
+		addProviderQuoteIssue(ctx, validation.StageValidate, "symbol", "code", "symbol_mismatch",
+			code, "string", quoteIssuePreview(reported), "NetEase quote code differs from the requested security", validation.SeverityError)
 		return nil, fmt.Errorf("Netease quote code mismatch: requested %s got %q", code, reported)
 	}
 	if reported := strings.TrimSpace(row.Symbol); reported != "" && reported != symbol[:6] {
+		addProviderQuoteIssue(ctx, validation.StageValidate, "symbol", "symbol", "symbol_mismatch",
+			symbol[:6], "string", quoteIssuePreview(reported), "NetEase quote symbol differs from the requested security", validation.SeverityError)
 		return nil, fmt.Errorf("Netease quote symbol mismatch: requested %s got %q", symbol, reported)
 	}
 	price, err := parseNeteaseQuoteNumber(ctx, "current_price", "price", row.Price)
@@ -178,9 +184,13 @@ func (p *Netease) FetchQuote(ctx context.Context, rawSymbol string) (*model.Quot
 		return nil, errors.New("Netease quote canonical change is not a finite number")
 	}
 	if math.Abs(change-canonicalChange) > 0.05 {
+		addProviderQuoteIssue(ctx, validation.StageValidate, "change", "updown", "inconsistent_value",
+			"price - previous close", "number", quoteIssuePreview(fmt.Sprint(change)), "NetEase quote change conflicts with canonical prices", validation.SeverityError)
 		return nil, errors.New("Netease quote change is inconsistent with latest and previous close")
 	}
 	if math.Abs(changePercent-canonicalChangePercent) > 0.15 {
+		addProviderQuoteIssue(ctx, validation.StageValidate, "change_percent", "percent", "inconsistent_value",
+			"((price - previous close) / previous close) * 100", "number", quoteIssuePreview(fmt.Sprint(percentRatio)), "NetEase quote percent conflicts with canonical prices", validation.SeverityError)
 		return nil, errors.New("Netease quote percent is inconsistent with latest and previous close")
 	}
 	// 使用最新价和昨收价计算规范值，源端涨跌字段仅用于交叉校验。
@@ -217,22 +227,27 @@ func (p *Netease) FetchQuote(ctx context.Context, rawSymbol string) (*model.Quot
 	if strings.TrimSpace(row.Symbol) == "" && strings.TrimSpace(row.Code) == "" {
 		q.QualityStatus = model.QualityDegraded
 		q.QualityReasons = append(q.QualityReasons, "provider_symbol_missing_assumed_from_request")
+		addProviderQuoteFieldIssue(ctx, "symbol", "symbol/code", "missing", "provider response symbol or code", "string", "", "NetEase quote omitted both response symbol and code; request symbol was assumed", validation.SeverityWarning)
 	}
 	if volume == nil {
 		q.QualityStatus = model.QualityDegraded
 		q.QualityReasons = append(q.QualityReasons, "volume_missing_or_invalid")
+		addProviderQuoteFieldIssue(ctx, "volume", "volume", "missing_or_invalid", "finite non-negative share count", providerJSONValueType(row.Volume), providerJSONPreview(row.Volume), "NetEase quote volume is missing or invalid and was omitted", validation.SeverityWarning)
 	}
 	if amount == nil {
 		q.QualityStatus = model.QualityDegraded
 		q.QualityReasons = append(q.QualityReasons, "amount_missing_or_invalid")
+		addProviderQuoteFieldIssue(ctx, "amount", "turnover", "missing_or_invalid", "finite non-negative CNY amount", providerJSONValueType(row.Turnover), providerJSONPreview(row.Turnover), "NetEase quote turnover is missing or invalid and was omitted", validation.SeverityWarning)
 	}
 	if quoteTime == nil {
 		q.QualityStatus = model.QualityDegraded
 		q.QualityReasons = append(q.QualityReasons, "provider_timestamp_missing")
+		addProviderQuoteFieldIssue(ctx, "quote_time", "time/update", "missing_or_invalid_timestamp", "valid provider snapshot timestamp", "string", quoteIssuePreview(firstNonEmptyString(row.Time, row.Update)), "NetEase quote timestamp is missing or invalid", validation.SeverityWarning)
 	}
 	if q.Name == "" {
 		q.QualityStatus = model.QualityDegraded
 		q.QualityReasons = append(q.QualityReasons, "provider_name_missing")
+		addProviderQuoteFieldIssue(ctx, "name", "name", "missing", "non-empty security name", "string", "", "NetEase quote security name is missing", validation.SeverityWarning)
 	}
 	report, err := normalize.ValidateQuoteWithReport(q)
 	validation.AddContextReport(ctx, report)
@@ -518,6 +533,8 @@ func (p *Netease) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endD
 		}
 		tradeDate := date.Format("2006-01-02")
 		if tradeDate < startISO || tradeDate > endISO {
+			addProviderParseIssue(ctx, rowIndex, "trade_date", "日期", "date_out_of_requested_range",
+				startISO+".."+endISO, "string", tradeDate, "Netease CSV trade date is outside the requested range")
 			rejectedRows++
 			rowIndex++
 			continue

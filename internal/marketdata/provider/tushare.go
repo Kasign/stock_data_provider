@@ -234,9 +234,15 @@ func (p *Tushare) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endD
 		}
 		isoDate := tradeDate.Format("2006-01-02")
 		if isoDate < start.Format("2006-01-02") || isoDate > end.Format("2006-01-02") {
+			addProviderParseIssue(ctx, rowIndex, "trade_date", "trade_date", "date_out_of_requested_range",
+				start.Format("2006-01-02")+".."+end.Format("2006-01-02"), "string", isoDate,
+				"Tushare daily trade date is outside the requested range")
 			return nil, fmt.Errorf("Tushare row %d date %s is outside requested range", rowIndex, isoDate)
 		}
 		if _, duplicate := seenDates[isoDate]; duplicate {
+			addProviderParseIssue(ctx, rowIndex, "trade_date", "trade_date", "duplicate_trade_date",
+				"one daily bar per trade date", "string", isoDate,
+				"Tushare returned a duplicate daily trade date")
 			return nil, fmt.Errorf("Tushare returned duplicate trade date %s", isoDate)
 		}
 		seenDates[isoDate] = struct{}{}
@@ -279,6 +285,9 @@ func (p *Tushare) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endD
 		}
 		volume, err := normalize.HandsToShares(rawVolume)
 		if err != nil {
+			addProviderParseIssue(ctx, rowIndex, "volume", "vol", "normalization_error",
+				"non-negative integer number of hands convertible to shares", "number",
+				fmt.Sprintf("%g", rawVolume), "Tushare daily volume cannot be normalized from hands to shares")
 			return nil, fmt.Errorf("normalize Tushare volume on %s: %w", isoDate, err)
 		}
 
@@ -374,24 +383,36 @@ func (p *Tushare) fetchAdjustmentFactors(ctx context.Context, symbol, startDate,
 	for rowIndex, row := range table.rows {
 		code, rowErr := table.stringValue(row, "ts_code")
 		if rowErr != nil || strings.ToUpper(strings.TrimSpace(code)) != symbol {
+			addProviderParseIssue(ctx, rowIndex, "symbol", "ts_code", "symbol_mismatch", symbol, "string", code, "Tushare adjustment-factor security code is invalid or mismatched")
 			return nil, fmt.Errorf("Tushare adjustment-factor row %d symbol mismatch: requested %s, returned %q", rowIndex, symbol, code)
 		}
 		dateText, rowErr := table.stringValue(row, "trade_date")
 		if rowErr != nil {
+			addProviderParseIssue(ctx, rowIndex, "trade_date", "trade_date", "invalid_date", "YYYYMMDD", "invalid", "", "Tushare adjustment-factor date cannot be decoded")
 			return nil, fmt.Errorf("Tushare adjustment-factor row %d has an invalid trade date: %w", rowIndex, rowErr)
 		}
 		isoDate, rowErr := tushareISODate(dateText)
 		if rowErr != nil {
+			addProviderParseIssue(ctx, rowIndex, "trade_date", "trade_date", "invalid_date", "YYYYMMDD", "string", dateText, "Tushare adjustment-factor date is invalid")
 			return nil, fmt.Errorf("Tushare adjustment-factor row %d date: %w", rowIndex, rowErr)
 		}
 		if isoDate < startDate || isoDate > endDate {
+			addProviderParseIssue(ctx, rowIndex, "trade_date", "trade_date", "date_out_of_range", startDate+".."+endDate, "string", dateText, "Tushare adjustment-factor date is outside requested range")
 			return nil, fmt.Errorf("Tushare adjustment-factor row %d date %s is outside requested range", rowIndex, isoDate)
 		}
 		if _, duplicate := factors[isoDate]; duplicate {
+			addProviderParseIssue(ctx, rowIndex, "trade_date", "trade_date", "duplicate_trade_date", "unique trade date", "string", dateText, "Tushare returned a duplicate adjustment-factor date")
 			return nil, fmt.Errorf("Tushare returned duplicate adjustment factor for %s", isoDate)
 		}
 		factor, rowErr := table.optionalFloat(row, "adj_factor")
-		if rowErr != nil || factor == nil || *factor <= 0 {
+		if rowErr != nil || factor == nil || *factor <= 0 || math.IsNaN(*factor) || math.IsInf(*factor, 0) {
+			code, preview := "invalid_factor", ""
+			if rowErr == nil && factor == nil {
+				code = "missing_factor"
+			} else if factor != nil {
+				preview = fmt.Sprint(*factor)
+			}
+			addProviderParseIssue(ctx, rowIndex, "adjustment_factor", "adj_factor", code, "finite positive number", "number_or_missing", preview, "Tushare adjustment factor is missing or invalid")
 			return nil, fmt.Errorf("Tushare adjustment factor on %s must be a finite positive number", isoDate)
 		}
 		factors[isoDate] = *factor

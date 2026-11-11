@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"net"
 	"net/url"
-		"strconv"
+	"strconv"
 	"strings"
 	"time"
 
@@ -41,21 +41,41 @@ func LoadConfig(env platformconfig.Env) (Config, error) {
 	c := Config{
 		DBHost: env.String("DB_HOST", "127.0.0.1"), DBUser: env.String("DB_USER", "stock_analysis"),
 		DBPassword: env.Secret("DB_PASSWORD").Value(), DBName: env.String("DB_NAME", "stock_analysis"),
-		DBParams: env.String("DB_PARAMS", "charset=utf8mb4&parseTime=true&loc=UTC"),
+		DBParams:  env.String("DB_PARAMS", "charset=utf8mb4&parseTime=true&loc=UTC"),
 		RedisAddr: env.String("REDIS_ADDR", "127.0.0.1:6379"), RedisPassword: env.Secret("REDIS_PASSWORD").Value(),
 		RedisKeyPrefix: env.String("REDIS_KEY_PREFIX", "stock-analysis:"),
 	}
 	var err error
-	if c.DBPort, err = env.Int("DB_PORT", 3306); err != nil { return c, err }
-	if c.DBMaxOpenConns, err = env.Int("DB_MAX_OPEN_CONNS", 20); err != nil { return c, err }
-	if c.DBMaxIdleConns, err = env.Int("DB_MAX_IDLE_CONNS", 5); err != nil { return c, err }
-	if c.RedisDB, err = env.Int("REDIS_DB", 0); err != nil { return c, err }
-	if c.DBAutoMigrate, err = env.Bool("DB_AUTO_MIGRATE", false); err != nil { return c, err }
-	if c.DBConnMaxLifetime, err = env.Duration("DB_CONN_MAX_LIFETIME", 30*time.Minute); err != nil { return c, err }
-	if c.RedisCacheTTL, err = env.Duration("REDIS_CACHE_TTL", 5*time.Minute); err != nil { return c, err }
-	if c.RedisDialTimeout, err = env.Duration("REDIS_DIAL_TIMEOUT", 3*time.Second); err != nil { return c, err }
-	if c.RedisReadTimeout, err = env.Duration("REDIS_READ_TIMEOUT", 2*time.Second); err != nil { return c, err }
-	if c.RedisWriteTimeout, err = env.Duration("REDIS_WRITE_TIMEOUT", 2*time.Second); err != nil { return c, err }
+	if c.DBPort, err = env.Int("DB_PORT", 3306); err != nil {
+		return c, err
+	}
+	if c.DBMaxOpenConns, err = env.Int("DB_MAX_OPEN_CONNS", 20); err != nil {
+		return c, err
+	}
+	if c.DBMaxIdleConns, err = env.Int("DB_MAX_IDLE_CONNS", 5); err != nil {
+		return c, err
+	}
+	if c.RedisDB, err = env.Int("REDIS_DB", 0); err != nil {
+		return c, err
+	}
+	if c.DBAutoMigrate, err = env.Bool("DB_AUTO_MIGRATE", false); err != nil {
+		return c, err
+	}
+	if c.DBConnMaxLifetime, err = env.Duration("DB_CONN_MAX_LIFETIME", 30*time.Minute); err != nil {
+		return c, err
+	}
+	if c.RedisCacheTTL, err = env.Duration("REDIS_CACHE_TTL", 5*time.Minute); err != nil {
+		return c, err
+	}
+	if c.RedisDialTimeout, err = env.Duration("REDIS_DIAL_TIMEOUT", 3*time.Second); err != nil {
+		return c, err
+	}
+	if c.RedisReadTimeout, err = env.Duration("REDIS_READ_TIMEOUT", 2*time.Second); err != nil {
+		return c, err
+	}
+	if c.RedisWriteTimeout, err = env.Duration("REDIS_WRITE_TIMEOUT", 2*time.Second); err != nil {
+		return c, err
+	}
 	if c.DBConnMaxLifetime <= 0 || c.RedisCacheTTL <= 0 || c.RedisDialTimeout <= 0 || c.RedisReadTimeout <= 0 || c.RedisWriteTimeout <= 0 {
 		return c, fmt.Errorf("database and Redis durations must be positive")
 	}

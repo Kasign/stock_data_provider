@@ -10,11 +10,12 @@ import (
 )
 
 type memoryResearchRepository struct {
-	observations map[string]domain.Observation
-	versions     map[string][]domain.NewsItemVersion
-	relations    map[string][]domain.RelationAssertion
-	evidence     map[string][][]domain.RelationEvidence
-	failAppend   bool
+	afterTransaction func()
+	observations     map[string]domain.Observation
+	versions         map[string][]domain.NewsItemVersion
+	relations        map[string][]domain.RelationAssertion
+	evidence         map[string][][]domain.RelationEvidence
+	failAppend       bool
 }
 
 type memoryResearchTransaction struct {
@@ -26,11 +27,12 @@ func (r *memoryResearchRepository) WithinResearchUpdateTransaction(ctx context.C
 		return err
 	}
 	working := &memoryResearchRepository{
-		observations: map[string]domain.Observation{},
-		versions:     map[string][]domain.NewsItemVersion{},
-		relations:    map[string][]domain.RelationAssertion{},
-		evidence:     map[string][][]domain.RelationEvidence{},
-		failAppend:   r.failAppend,
+		afterTransaction: r.afterTransaction,
+		observations:     map[string]domain.Observation{},
+		versions:         map[string][]domain.NewsItemVersion{},
+		relations:        map[string][]domain.RelationAssertion{},
+		evidence:         map[string][][]domain.RelationEvidence{},
+		failAppend:       r.failAppend,
 	}
 	for key, value := range r.observations {
 		working.observations[key] = value
@@ -48,6 +50,9 @@ func (r *memoryResearchRepository) WithinResearchUpdateTransaction(ctx context.C
 		return err
 	}
 	*r = *working
+	if r.afterTransaction != nil {
+		r.afterTransaction()
+	}
 	return nil
 }
 
@@ -429,5 +434,18 @@ func TestApplyResearchUpdateCreatesNewVersionWhenContentReturnsToEarlierState(t 
 	}
 	if len(repository.versions["news-1"]) != 3 {
 		t.Fatalf("version history=%+v", repository.versions["news-1"])
+	}
+}
+
+func TestApplyResearchUpdatePropagatesCancellationAfterTransaction(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	repository := &memoryResearchRepository{afterTransaction: cancel}
+	_, err := newResearchUseCase(repository).Execute(ctx, baseResearchRequest())
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("Execute() error = %v, want context.Canceled", err)
+	}
+	if len(repository.versions["news-1"]) != 1 {
+		t.Fatalf("transaction committed before cancellation; version should remain: %+v", repository.versions)
 	}
 }

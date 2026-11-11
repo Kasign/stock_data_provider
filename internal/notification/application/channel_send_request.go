@@ -33,8 +33,8 @@ func BuildChannelSendRequest(
 
 	request := domain.ChannelSendRequest{
 		DeliveryID: delivery.DeliveryID,
-		Target: recipient,
-		Content: content,
+		Target:     recipient,
+		Content:    content,
 	}
 	if channel.Capabilities.SupportsIdempotency == domain.CapabilitySupported {
 		request.IdempotencyKey = delivery.DeliveryIdempotencyKey

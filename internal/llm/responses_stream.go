@@ -8,7 +8,6 @@ import (
 	"io"
 	"mime"
 	"net/http"
-	"time"
 )
 
 // HTTPStreamResponse 是 LLM 与 Platform 受控流式传输之间的窄响应契约。

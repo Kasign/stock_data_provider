@@ -27,17 +27,19 @@ type RetryPolicy struct {
 }
 
 type RetryDecision struct {
-	DeliveryID      string
-	DeliveryVersion int64
-	AttemptID       string
-	FencingToken    int64
-	EvaluatedAt     time.Time
-	Retry           bool
-	ReasonCode      string
-	NextAttemptAt   *time.Time
-	DelayCap        time.Duration
-	ChosenDelay     time.Duration
-	RetryAfterUsed  bool
+	DeliveryID         string
+	DeliveryVersion    int64
+	AttemptID          string
+	FencingToken       int64
+	EvaluatedAt        time.Time
+	EvidenceRef        string
+	EvidenceObservedAt time.Time
+	Retry              bool
+	ReasonCode         string
+	NextAttemptAt      *time.Time
+	DelayCap           time.Duration
+	ChosenDelay        time.Duration
+	RetryAfterUsed     bool
 }
 
 // Validate requires explicit, positive millisecond policy values.
@@ -62,6 +64,44 @@ func (p RetryPolicy) ScheduleRetry(
 	now time.Time,
 	randomUnit float64,
 ) (RetryDecision, error) {
+	return p.scheduleRetry(delivery, attempts, now, randomUnit, domain.DeliverySending, domain.DeliveryAttemptRejected, false, time.Time{})
+}
+
+// ScheduleRetryAfterUnknownLookup evaluates a latest ambiguous Attempt only
+// after the channel's authoritative lookup confirmed non-acceptance.
+// The external evidence is validated here and remains separate from the
+// immutable Attempt history; no Attempt outcome is rewritten.
+func (p RetryPolicy) ScheduleRetryAfterUnknownLookup(
+	delivery domain.DeliveryRecord,
+	attempts []domain.DeliveryAttempt,
+	now time.Time,
+	randomUnit float64,
+	evidenceRef string,
+	observedAt time.Time,
+) (RetryDecision, error) {
+	if !validReconciliationRef(evidenceRef) || !isRecoveryUTC(observedAt) ||
+		!isRecoveryUTC(now) || observedAt.After(now) {
+		return RetryDecision{}, ErrRetryNotApplicable
+	}
+	decision, err := p.scheduleRetry(delivery, attempts, now, randomUnit, domain.DeliveryUnknown, domain.DeliveryAttemptAmbiguous, true, observedAt)
+	if err != nil {
+		return RetryDecision{}, err
+	}
+	decision.EvidenceRef = evidenceRef
+	decision.EvidenceObservedAt = observedAt
+	return decision, nil
+}
+
+func (p RetryPolicy) scheduleRetry(
+	delivery domain.DeliveryRecord,
+	attempts []domain.DeliveryAttempt,
+	now time.Time,
+	randomUnit float64,
+	requiredStatus domain.DeliveryStatus,
+	requiredOutcome domain.DeliveryAttemptOutcome,
+	evidenceConfirmed bool,
+	evidenceObservedAt time.Time,
+) (RetryDecision, error) {
 	if err := p.Validate(); err != nil {
 		return RetryDecision{}, err
 	}
@@ -72,8 +112,11 @@ func (p RetryPolicy) ScheduleRetry(
 		math.IsInf(randomUnit, 0) || randomUnit < 0 || randomUnit >= 1 {
 		return RetryDecision{}, ErrRetryNotApplicable
 	}
-	if delivery.Status != domain.DeliverySending || delivery.MaxAttempts != p.MaxAttempts ||
+	if delivery.Status != requiredStatus || delivery.MaxAttempts != p.MaxAttempts ||
 		len(attempts) != delivery.AttemptCount || len(attempts) == 0 {
+		return RetryDecision{}, ErrRetryNotApplicable
+	}
+	if err := ValidateDeliveryAttemptHistoryForDelivery(delivery, attempts); err != nil {
 		return RetryDecision{}, ErrRetryNotApplicable
 	}
 
@@ -116,8 +159,9 @@ func (p RetryPolicy) ScheduleRetry(
 		latest = attempt
 	}
 	if latest.FinishedAt == nil || latest.Outcome == nil ||
-		*latest.Outcome != domain.DeliveryAttemptRejected ||
-		!latest.Retryable || now.Before(*latest.FinishedAt) {
+		*latest.Outcome != requiredOutcome ||
+		(!evidenceConfirmed && !latest.Retryable) || now.Before(*latest.FinishedAt) ||
+		(evidenceConfirmed && !evidenceObservedAfterAttempt(evidenceObservedAt, latest)) {
 		return RetryDecision{}, ErrRetryNotApplicable
 	}
 

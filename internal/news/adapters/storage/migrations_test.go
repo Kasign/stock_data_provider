@@ -7,8 +7,8 @@ import (
 
 func TestMigrationsDefineNewsOwnedPersistenceSchema(t *testing.T) {
 	migrations := Migrations()
-	if len(migrations) != 6 {
-		t.Fatalf("Migrations() count = %d, want 6", len(migrations))
+	if len(migrations) != 8 {
+		t.Fatalf("Migrations() count = %d, want 8", len(migrations))
 	}
 	for index, migration := range migrations {
 		if migration.Version != uint64(index+1) || strings.TrimSpace(migration.Description) == "" || len(migration.Statements) == 0 {
@@ -48,8 +48,8 @@ func TestMigrationsDefineNewsOwnedPersistenceSchema(t *testing.T) {
 
 func TestMigrationsReturnIndependentStatementSlices(t *testing.T) {
 	first, second := Migrations(), Migrations()
-	if len(first) != 6 || len(second) != 6 {
-		t.Fatalf("migration counts = %d/%d, want 6", len(first), len(second))
+	if len(first) != 8 || len(second) != 8 {
+		t.Fatalf("migration counts = %d/%d, want 8", len(first), len(second))
 	}
 	for index := range first {
 		if len(first[index].Statements) == 0 || len(second[index].Statements) == 0 {
@@ -64,8 +64,8 @@ func TestMigrationsReturnIndependentStatementSlices(t *testing.T) {
 
 func TestMigrationsPreserveNewsPointInTimeAccessPaths(t *testing.T) {
 	migrations := Migrations()
-	if len(migrations) != 6 {
-		t.Fatalf("Migrations() count = %d, want 6", len(migrations))
+	if len(migrations) != 8 {
+		t.Fatalf("Migrations() count = %d, want 8", len(migrations))
 	}
 
 	versionSchema := strings.Join(migrations[0].Statements, "\n")
@@ -96,7 +96,7 @@ func TestMigrationsPreserveNewsPointInTimeAccessPaths(t *testing.T) {
 		}
 	}
 
-	identityHistorySchema := strings.Join(migrations[3].Statements, "\n")
+	identityHistorySchema := strings.Join(strings.Fields(strings.Join(migrations[3].Statements, "\n")), " ")
 	for _, fragment := range []string{
 		"KEY idx_news_identifier_history_at",
 		"FOREIGN KEY (source_id, identifier_type, identifier_hash)",
@@ -116,6 +116,36 @@ func TestMigrationsPreserveNewsPointInTimeAccessPaths(t *testing.T) {
 	for _, fragment := range []string{"ADD COLUMN endpoint_id", "ADD COLUMN provider_output_policy_ref"} {
 		if !strings.Contains(policyReferenceSchema, fragment) {
 			t.Errorf("V6 schema is missing policy reference trace %q", fragment)
+		}
+	}
+}
+
+func TestMigrationsAddObservationRetentionLifecycle(t *testing.T) {
+	migrations := Migrations()
+	retentionSchema := strings.Join(migrations[7].Statements, "\n")
+	for _, fragment := range []string{
+		"ADD COLUMN retention_until DATETIME(6) NULL",
+		"ADD COLUMN payload_purged_at DATETIME(6) NULL",
+		"ADD KEY idx_news_observations_retention (retention_until, observation_id)",
+	} {
+		if !strings.Contains(retentionSchema, fragment) {
+			t.Errorf("V8 schema is missing retention fragment %q", fragment)
+		}
+	}
+}
+
+func TestMigrationsEnforceSingleSuccessorForRelationHistory(t *testing.T) {
+	migrations := Migrations()
+	if len(migrations) != 8 {
+		t.Fatalf("Migrations() count = %d, want 8", len(migrations))
+	}
+	relationHistorySchema := strings.Join(migrations[6].Statements, "\n")
+	for _, fragment := range []string{
+		"ADD UNIQUE KEY uk_news_relation_assertions_supersedes (supersedes_relation_id)",
+		"ADD UNIQUE KEY uk_news_item_relations_supersedes (supersedes_relation_id)",
+	} {
+		if !strings.Contains(relationHistorySchema, fragment) {
+			t.Errorf("V7 migration is missing append-only chain constraint %q", fragment)
 		}
 	}
 }

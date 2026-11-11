@@ -14,6 +14,7 @@ import (
 	mysql "github.com/go-sql-driver/mysql"
 
 	platformstorage "example.com/stock-analysis-flow/internal/platform/storage"
+	researchapp "example.com/stock-analysis-flow/internal/research/application"
 	researchclaim "example.com/stock-analysis-flow/internal/research/claim"
 	researchcontext "example.com/stock-analysis-flow/internal/research/context"
 	researchevent "example.com/stock-analysis-flow/internal/research/event"
@@ -59,6 +60,17 @@ func openResearchIntegrationDB(t *testing.T) *sql.DB {
 		}
 	}
 	return db
+}
+
+func assertResearchPITColumn(t *testing.T, ctx context.Context, db *sql.DB, query string, args []any, want time.Time) {
+	t.Helper()
+	var got string
+	if err := db.QueryRowContext(ctx, query, args...).Scan(&got); err != nil {
+		t.Fatalf("read persisted PIT timestamp: %v", err)
+	}
+	if expected := formatPIT(want); got != expected {
+		t.Fatalf("persisted PIT timestamp = %q, want %q", got, expected)
+	}
 }
 
 func TestResearchEventLifecycleOutboxFailureRollsBackEventVersion(t *testing.T) {
@@ -190,6 +202,229 @@ func TestResearchOutboxClaimRetryAndConfirmation(t *testing.T) {
 	}
 }
 
+func TestResearchOutboxConcurrentClaimsDoNotDuplicateLease(t *testing.T) {
+	db := openResearchIntegrationDB(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+
+	now := time.Date(2026, 11, 9, 7, 0, 0, 123456789, time.UTC)
+	eventID := fmt.Sprintf("event-outbox-concurrent-%d", time.Now().UnixNano())
+	repo, err := NewEventRepository(db, func() time.Time { return now })
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		_, _ = db.ExecContext(context.Background(), "DELETE FROM research_notification_outbox WHERE subject_ref=?", "research-event:"+eventID)
+		_, _ = db.ExecContext(context.Background(), "DELETE FROM research_event_versions WHERE event_id=?", eventID)
+		_, _ = db.ExecContext(context.Background(), "DELETE FROM research_aggregate_heads WHERE aggregate_type='event' AND aggregate_id=?", eventID)
+	})
+
+	value := researchevent.ResearchEvent{
+		EventID: eventID, EventVersion: 1, EventType: "integration_fixture",
+		Title: "Concurrent Outbox claim fixture", Status: researchevent.StatusDetected,
+		SubjectRefs: []string{}, EvidenceRefs: []string{},
+		SystemObservedAt: now, SystemAsOf: now,
+		ImpactHypothesisRefs: []string{}, InvalidationConditions: []string{},
+		Uncertainty: []string{}, SourceTimes: []researchevent.EventSourceTime{},
+	}
+	if err := repo.AppendWithLifecycle(ctx, value, nil, "corr_concurrent_claim"); err != nil {
+		t.Fatalf("append Event and Outbox: %v", err)
+	}
+
+	type claimResult struct {
+		worker string
+		values []researchapp.NotificationEventEnvelope
+		err    error
+	}
+	start := make(chan struct{})
+	results := make(chan claimResult, 2)
+	var workers sync.WaitGroup
+	for _, worker := range []string{"worker_concurrent_a", "worker_concurrent_b"} {
+		worker := worker
+		workers.Add(1)
+		go func() {
+			defer workers.Done()
+			<-start
+			values, err := repo.base.ClaimOutbox(ctx, worker, 1, now.Add(time.Minute))
+			results <- claimResult{worker: worker, values: values, err: err}
+		}()
+	}
+	close(start)
+	workers.Wait()
+	close(results)
+
+	claimedCount := 0
+	owners := make(map[string]struct{})
+	for result := range results {
+		if result.err != nil {
+			t.Fatalf("%s claim failed: %v", result.worker, result.err)
+		}
+		claimedCount += len(result.values)
+		for _, envelope := range result.values {
+			if envelope.EventID == "" || envelope.LeaseToken == "" {
+				t.Fatalf("%s received incomplete lease: %+v", result.worker, envelope)
+			}
+			owners[result.worker] = struct{}{}
+		}
+	}
+	if claimedCount != 1 || len(owners) != 1 {
+		t.Fatalf("concurrent claims acquired %d leases across %d workers, want exactly one lease", claimedCount, len(owners))
+	}
+
+	var status, owner, token string
+	var attempts int
+	if err := db.QueryRowContext(ctx, "SELECT delivery_status, lease_owner, lease_token, attempt_count FROM research_notification_outbox WHERE subject_ref=?", "research-event:"+eventID).Scan(&status, &owner, &token, &attempts); err != nil {
+		t.Fatalf("read concurrently claimed Outbox state: %v", err)
+	}
+	if status != "leased" || owner == "" || token == "" || attempts != 1 {
+		t.Fatalf("unexpected concurrent Outbox state: status=%s owner=%s token_set=%t attempts=%d", status, owner, token != "", attempts)
+	}
+}
+
+func TestResearchMigrationsUpgradeHistoricalRowsFromV1ToV5(t *testing.T) {
+	dsn := os.Getenv("RESEARCH_MIGRATION_TEST_MYSQL_DSN")
+	if dsn == "" {
+		t.Skip("RESEARCH_MIGRATION_TEST_MYSQL_DSN is not set; skipping isolated migration upgrade test")
+	}
+	config, err := mysql.ParseDSN(dsn)
+	if err != nil {
+		t.Fatalf("parse RESEARCH_MIGRATION_TEST_MYSQL_DSN: %v", err)
+	}
+	if !strings.HasSuffix(strings.ToLower(config.DBName), "_migration_test") {
+		t.Fatalf("RESEARCH_MIGRATION_TEST_MYSQL_DSN database %q is unsafe; isolated database name must end with _migration_test", config.DBName)
+	}
+	db, err := sql.Open("mysql", dsn)
+	if err != nil {
+		t.Fatalf("open isolated MariaDB: %v", err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+
+	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+	defer cancel()
+	if err := db.PingContext(ctx); err != nil {
+		t.Fatalf("ping isolated MariaDB: %v", err)
+	}
+	var existingTables int
+	if err := db.QueryRowContext(ctx,
+		"SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE()").Scan(&existingTables); err != nil {
+		t.Fatalf("inspect isolated migration database: %v", err)
+	}
+	if existingTables != 0 {
+		t.Fatalf("isolated migration database contains %d tables; refusing destructive upgrade test", existingTables)
+	}
+	t.Cleanup(func() {
+		for _, table := range []string{
+			"research_notification_outbox",
+			"research_claim_versions",
+			"research_event_versions",
+			"research_evidence_records",
+			"research_context_versions",
+			"research_aggregate_heads",
+			"platform_schema_migrations",
+		} {
+			_, _ = db.ExecContext(context.Background(), "DROP TABLE IF EXISTS "+table)
+		}
+	})
+
+	migrations := Migrations()
+	if err := platformstorage.ApplyMigrations(ctx, db, MigrationNamespace, migrations[:1]); err != nil {
+		t.Fatalf("apply Research migration v1: %v", err)
+	}
+
+	const (
+		contextTime  = "2026-11-08 12:34:56.123456"
+		observedTime = "2026-11-08 12:34:57.654321"
+		asOfTime     = "2026-11-08 12:35:00.000001"
+		createdTime  = "2026-11-08 12:36:00.654321"
+	)
+	if _, err := db.ExecContext(ctx,
+		"INSERT INTO research_context_versions (context_id, context_version, system_as_of, payload_sha256, payload, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+		"ctx_migration_fixture", 1, contextTime, strings.Repeat("a", 64), "{\"legacy\":\"context\"}", createdTime); err != nil {
+		t.Fatalf("seed v1 Context row: %v", err)
+	}
+	if _, err := db.ExecContext(ctx,
+		"INSERT INTO research_evidence_records (evidence_id, source_owner, source_ref, source_version, available_at, system_observed_at, system_as_of, quality_status, content_level, authorization_ref, content_fingerprint, payload_sha256, payload, created_at) VALUES (?, ?, ?, NULL, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+		"ev_migration_fixture", "data", "data:fixture:1", observedTime, asOfTime, "valid", "metadata", "auth:migration", strings.Repeat("b", 64), strings.Repeat("c", 64), "{\"legacy\":\"evidence\"}", createdTime); err != nil {
+		t.Fatalf("seed v1 Evidence row: %v", err)
+	}
+	if _, err := db.ExecContext(ctx,
+		"INSERT INTO research_event_versions (event_id, event_version, status, system_as_of, payload_sha256, payload, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+		"evt_migration_fixture", 1, "detected", asOfTime, strings.Repeat("d", 64), "{\"legacy\":\"event\"}", createdTime); err != nil {
+		t.Fatalf("seed v1 Event row: %v", err)
+	}
+	if _, err := db.ExecContext(ctx,
+		"INSERT INTO research_claim_versions (claim_id, claim_version, epistemic_type, status, system_as_of, payload_sha256, payload, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+		"clm_migration_fixture", 1, "reported_fact", "proposed", asOfTime, strings.Repeat("e", 64), "{\"legacy\":\"claim\"}", createdTime); err != nil {
+		t.Fatalf("seed v1 Claim row: %v", err)
+	}
+
+	if err := platformstorage.ApplyMigrations(ctx, db, MigrationNamespace, migrations[:4]); err != nil {
+		t.Fatalf("upgrade Research schema from v1 through v4: %v", err)
+	}
+
+	const outboxPIT = "2026-11-08T12:36:00.654321000Z"
+	if _, err := db.ExecContext(ctx,
+		"INSERT INTO research_notification_outbox (event_id, event_type, schema_version, source_module, occurred_at, published_at, subject_ref, idempotency_key, correlation_id, payload_fingerprint, payload, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+		"nte_migration_fixture", "research.lifecycle_changed", "1.0.0", "research",
+		outboxPIT, outboxPIT, "research-event:evt_migration_fixture", "migration-fixture-key",
+		"corr_migration_fixture", strings.Repeat("f", 64), "{\"legacy\":\"outbox\"}", createdTime); err != nil {
+		t.Fatalf("seed v4 Outbox row: %v", err)
+	}
+	if err := platformstorage.ApplyMigrations(ctx, db, MigrationNamespace, migrations); err != nil {
+		t.Fatalf("upgrade Research schema from v4 to v5: %v", err)
+	}
+
+	assertExact := func(name, query, want string, args ...any) {
+		t.Helper()
+		var got string
+		if err := db.QueryRowContext(ctx, query, args...).Scan(&got); err != nil {
+			t.Fatalf("read migrated %s: %v", name, err)
+		}
+		if got != want {
+			t.Fatalf("migrated %s = %q, want %q", name, got, want)
+		}
+	}
+	assertExact("Context system_as_of", "SELECT system_as_of FROM research_context_versions WHERE context_id=?", "2026-11-08T12:34:56.123456000Z", "ctx_migration_fixture")
+	assertExact("Evidence system_observed_at", "SELECT system_observed_at FROM research_evidence_records WHERE evidence_id=?", "2026-11-08T12:34:57.654321000Z", "ev_migration_fixture")
+	assertExact("Evidence system_as_of", "SELECT system_as_of FROM research_evidence_records WHERE evidence_id=?", "2026-11-08T12:35:00.000001000Z", "ev_migration_fixture")
+	assertExact("Event system_as_of", "SELECT system_as_of FROM research_event_versions WHERE event_id=?", "2026-11-08T12:35:00.000001000Z", "evt_migration_fixture")
+	assertExact("Claim system_as_of", "SELECT system_as_of FROM research_claim_versions WHERE claim_id=?", "2026-11-08T12:35:00.000001000Z", "clm_migration_fixture")
+	var availableAt sql.NullString
+	if err := db.QueryRowContext(ctx, "SELECT available_at FROM research_evidence_records WHERE evidence_id=?", "ev_migration_fixture").Scan(&availableAt); err != nil {
+		t.Fatalf("read migrated Evidence available_at: %v", err)
+	}
+	if availableAt.Valid {
+		t.Fatalf("Evidence available_at = %q, want preserved NULL", availableAt.String)
+	}
+	assertExact("Context payload", "SELECT payload FROM research_context_versions WHERE context_id=?", "{\"legacy\":\"context\"}", "ctx_migration_fixture")
+	assertExact("Evidence payload", "SELECT payload FROM research_evidence_records WHERE evidence_id=?", "{\"legacy\":\"evidence\"}", "ev_migration_fixture")
+	assertExact("Event payload", "SELECT payload FROM research_event_versions WHERE event_id=?", "{\"legacy\":\"event\"}", "evt_migration_fixture")
+	assertExact("Claim payload", "SELECT payload FROM research_claim_versions WHERE claim_id=?", "{\"legacy\":\"claim\"}", "clm_migration_fixture")
+
+	var eventType, claimType string
+	if err := db.QueryRowContext(ctx, "SELECT DATA_TYPE FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='research_event_versions' AND COLUMN_NAME='event_version'").Scan(&eventType); err != nil {
+		t.Fatalf("read migrated Event version type: %v", err)
+	}
+	if err := db.QueryRowContext(ctx, "SELECT DATA_TYPE FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='research_claim_versions' AND COLUMN_NAME='claim_version'").Scan(&claimType); err != nil {
+		t.Fatalf("read migrated Claim version type: %v", err)
+	}
+	if eventType != "bigint" || claimType != "bigint" {
+		t.Fatalf("migrated version types = Event:%q Claim:%q, want bigint", eventType, claimType)
+	}
+
+	var status, available string
+	var attempts int
+	var updated string
+	if err := db.QueryRowContext(ctx,
+		"SELECT delivery_status, available_at, attempt_count, DATE_FORMAT(updated_at, '%Y-%m-%d %H:%i:%s.%f') FROM research_notification_outbox WHERE event_id=?",
+		"nte_migration_fixture").Scan(&status, &available, &attempts, &updated); err != nil {
+		t.Fatalf("read migrated Outbox row: %v", err)
+	}
+	if status != "pending" || available != outboxPIT || attempts != 0 || updated != createdTime {
+		t.Fatalf("migrated Outbox state = status:%q available_at:%q attempts:%d updated_at:%q", status, available, attempts, updated)
+	}
+}
+
 func TestResearchSQLRepositoriesAppendAndReadVersions(t *testing.T) {
 	db := openResearchIntegrationDB(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -202,6 +437,7 @@ func TestResearchSQLRepositoriesAppendAndReadVersions(t *testing.T) {
 	eventID := "event-it-" + suffix
 	claimID := "claim-it-" + suffix
 	evidenceID := "evidence-it-" + suffix
+	concurrentEvidenceID := "evidence-concurrent-it-" + suffix
 	cancelledContextID := "ctx-cancel-it-" + suffix
 	orphanContextID := "ctx-orphan-it-" + suffix
 	lockedContextID := "ctx-lock-cancel-it-" + suffix
@@ -210,7 +446,7 @@ func TestResearchSQLRepositoriesAppendAndReadVersions(t *testing.T) {
 		_, _ = db.ExecContext(context.Background(), "DELETE FROM research_context_versions WHERE context_id IN (?, ?, ?)", contextID, orphanContextID, lockedContextID)
 		_, _ = db.ExecContext(context.Background(), "DELETE FROM research_event_versions WHERE event_id=?", eventID)
 		_, _ = db.ExecContext(context.Background(), "DELETE FROM research_claim_versions WHERE claim_id=?", claimID)
-		_, _ = db.ExecContext(context.Background(), "DELETE FROM research_evidence_records WHERE evidence_id=?", evidenceID)
+		_, _ = db.ExecContext(context.Background(), "DELETE FROM research_evidence_records WHERE evidence_id IN (?, ?)", evidenceID, concurrentEvidenceID)
 		_, _ = db.ExecContext(context.Background(), "DELETE FROM research_aggregate_heads WHERE aggregate_id IN (?, ?, ?, ?, ?, ?)", contextID, eventID, claimID, cancelledContextID, orphanContextID, lockedContextID)
 	})
 
@@ -268,6 +504,7 @@ func TestResearchSQLRepositoriesAppendAndReadVersions(t *testing.T) {
 	if err := contextRepo.Append(ctx, contextV1); err != nil {
 		t.Fatalf("append Context v1: %v", err)
 	}
+	assertResearchPITColumn(t, ctx, db, "SELECT system_as_of FROM research_context_versions WHERE context_id=? AND context_version=1", []any{contextID}, cutoff)
 	if err := contextRepo.Append(ctx, contextV1); err != nil {
 		t.Fatalf("replay Context v1: %v", err)
 	}
@@ -426,7 +663,7 @@ func TestResearchSQLRepositoriesAppendAndReadVersions(t *testing.T) {
 	lockWaitObserved := false
 	for time.Now().Before(waitDeadline) {
 		var active int
-		if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM information_schema.PROCESSLIST WHERE INFO LIKE 'INSERT IGNORE INTO research_aggregate_heads%' OR INFO LIKE 'SELECT latest_version FROM research_aggregate_heads%'").Scan(&active); err != nil {
+		if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM information_schema.PROCESSLIST WHERE INFO LIKE 'INSERT INTO research_aggregate_heads%' OR INFO LIKE 'SELECT latest_version FROM research_aggregate_heads%'").Scan(&active); err != nil {
 			cancelLockWait()
 			_ = blocker.Rollback()
 			t.Fatalf("inspect MariaDB process list for blocked append: %v", err)
@@ -490,6 +727,7 @@ func TestResearchSQLRepositoriesAppendAndReadVersions(t *testing.T) {
 	if err := eventRepo.Append(ctx, eventV1); err != nil {
 		t.Fatalf("append Event v1: %v", err)
 	}
+	assertResearchPITColumn(t, ctx, db, "SELECT system_as_of FROM research_event_versions WHERE event_id=? AND event_version=1", []any{eventID}, cutoff)
 	if err := eventRepo.Append(ctx, eventV1); err != nil {
 		t.Fatalf("replay Event v1: %v", err)
 	}
@@ -519,6 +757,7 @@ func TestResearchSQLRepositoriesAppendAndReadVersions(t *testing.T) {
 	if err := claimRepo.Append(ctx, claimV1); err != nil {
 		t.Fatalf("append Claim v1: %v", err)
 	}
+	assertResearchPITColumn(t, ctx, db, "SELECT system_as_of FROM research_claim_versions WHERE claim_id=? AND claim_version=1", []any{claimID}, cutoff)
 	if err := claimRepo.Append(ctx, claimV1); err != nil {
 		t.Fatalf("replay Claim v1: %v", err)
 	}
@@ -541,11 +780,12 @@ func TestResearchSQLRepositoriesAppendAndReadVersions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	availableAt := cutoff.Add(-time.Second)
 	evidenceV1 := researchevidence.Evidence{
 		EvidenceID: evidenceID, EvidenceType: researchevidence.TypeFact,
 		SourceOwner: researchevidence.SourceData, SourceRef: "data:integration:fixture",
 		DerivedFromRefs: []string{}, SubjectRefs: []string{},
-		SystemObservedAt: cutoff, SystemAsOf: cutoff,
+		SystemObservedAt: cutoff, SystemAsOf: cutoff, AvailableAt: &availableAt,
 		Stance: researchevidence.StanceNeutral, QualityStatus: researchevidence.QualityValid,
 		ContentLevel: researchevidence.ContentMetadata, AuthorizationRef: "auth-integration-v1",
 		Limitations: []string{},
@@ -557,6 +797,56 @@ func TestResearchSQLRepositoriesAppendAndReadVersions(t *testing.T) {
 	if err := evidenceRepo.Append(ctx, evidenceV1); err != nil {
 		t.Fatalf("append Evidence: %v", err)
 	}
+
+	// Two writers with different immutable authorization snapshots must not
+	// overwrite each other when they race to create the same Evidence ID.
+	concurrentEvidence := evidenceV1
+	concurrentEvidence.EvidenceID = concurrentEvidenceID
+	concurrentEvidence.ContentFingerprint, err = concurrentEvidence.ComputeContentFingerprint()
+	if err != nil {
+		t.Fatalf("compute concurrent Evidence fingerprint: %v", err)
+	}
+	competingEvidence := concurrentEvidence
+	competingEvidence.AuthorizationRef = "auth-integration-competing"
+	writeErrors := make(chan error, 2)
+	var writers sync.WaitGroup
+	writers.Add(2)
+	go func() {
+		defer writers.Done()
+		writeErrors <- evidenceRepo.Append(ctx, concurrentEvidence)
+	}()
+	go func() {
+		defer writers.Done()
+		writeErrors <- evidenceRepo.Append(ctx, competingEvidence)
+	}()
+	writers.Wait()
+	close(writeErrors)
+	successes, conflicts = 0, 0
+	for writeErr := range writeErrors {
+		switch {
+		case writeErr == nil:
+			successes++
+		case errors.Is(writeErr, ErrConflict):
+			conflicts++
+		default:
+			t.Fatalf("concurrent Evidence append returned unexpected error: %v", writeErr)
+		}
+	}
+	if successes != 1 || conflicts != 1 {
+		t.Fatalf("concurrent Evidence append results: successes=%d conflicts=%d, want 1/1", successes, conflicts)
+	}
+	storedConcurrent, err := evidenceRepo.Get(ctx, concurrentEvidenceID)
+	if err != nil {
+		t.Fatalf("read winning concurrent Evidence: %v", err)
+	}
+	if storedConcurrent.AuthorizationRef != concurrentEvidence.AuthorizationRef &&
+		storedConcurrent.AuthorizationRef != competingEvidence.AuthorizationRef {
+		t.Fatalf("stored concurrent authorization_ref = %q, not either submitted snapshot", storedConcurrent.AuthorizationRef)
+	}
+
+	assertResearchPITColumn(t, ctx, db, "SELECT system_as_of FROM research_evidence_records WHERE evidence_id=?", []any{evidenceID}, cutoff)
+	assertResearchPITColumn(t, ctx, db, "SELECT system_observed_at FROM research_evidence_records WHERE evidence_id=?", []any{evidenceID}, cutoff)
+	assertResearchPITColumn(t, ctx, db, "SELECT available_at FROM research_evidence_records WHERE evidence_id=?", []any{evidenceID}, availableAt)
 	if err := evidenceRepo.Append(ctx, evidenceV1); err != nil {
 		t.Fatalf("replay Evidence: %v", err)
 	}
@@ -584,14 +874,167 @@ func TestResearchSQLRepositoriesAppendAndReadVersions(t *testing.T) {
 	if err := contextRepo.Append(ctx, contextV2); !errors.Is(err, ErrCorruptRecord) {
 		t.Fatalf("tampered Context idempotent replay error = %v, want ErrCorruptRecord", err)
 	}
-	contextV3 := contextV2
-	contextV3.ContextVersion = 3
-	contextV3.SystemAsOf = contextV2.SystemAsOf.Add(time.Minute)
-	contextV3.CreatedAt = contextV2.CreatedAt.Add(time.Minute)
-	contextV3.SectionRefs = append([]researchcontext.SectionRef(nil), contextV2.SectionRefs...)
-	contextV3.SectionRefs[0].SystemAsOf = contextV3.SystemAsOf
-	contextV3.SectionRefs[0].AssembledAt = contextV3.SystemAsOf
-	if err := contextRepo.Append(ctx, contextV3); !errors.Is(err, ErrCorruptRecord) {
-		t.Fatalf("append after tampered previous Context error = %v, want ErrCorruptRecord", err)
+	latestContext, err := contextRepo.GetVersion(ctx, contextID, 4)
+	if err != nil {
+		t.Fatalf("read latest Context before corruption: %v", err)
+	}
+	contextV5 := latestContext
+	contextV5.ContextVersion = 5
+	contextV5.SystemAsOf = latestContext.SystemAsOf.Add(time.Minute)
+	contextV5.CreatedAt = latestContext.CreatedAt.Add(time.Minute)
+	contextV5.SectionRefs = append([]researchcontext.SectionRef(nil), latestContext.SectionRefs...)
+	for i := range contextV5.SectionRefs {
+		contextV5.SectionRefs[i].SystemAsOf = contextV5.SystemAsOf
+		contextV5.SectionRefs[i].AssembledAt = contextV5.SystemAsOf
+	}
+	if _, err := db.ExecContext(ctx, "UPDATE research_context_versions SET payload=CONCAT(payload, ' ') WHERE context_id=? AND context_version=4", contextID); err != nil {
+		t.Fatalf("tamper latest Context payload: %v", err)
+	}
+	if _, err := contextRepo.GetVersion(ctx, contextID, 4); !errors.Is(err, ErrCorruptRecord) {
+		t.Fatalf("tampered latest Context read error = %v, want ErrCorruptRecord", err)
+	}
+	if err := contextRepo.Append(ctx, contextV5); !errors.Is(err, ErrCorruptRecord) {
+		t.Fatalf("append after tampered latest Context error = %v, want ErrCorruptRecord", err)
+	}
+
+	// Event 历史版本损坏后，精确读取和后续版本追加都必须 fail-closed。
+	if _, err := db.ExecContext(ctx, "UPDATE research_event_versions SET payload=CONCAT(payload, ' ') WHERE event_id=? AND event_version=2", eventID); err != nil {
+		t.Fatalf("tamper stored Event payload: %v", err)
+	}
+	if _, err := eventRepo.GetVersion(ctx, eventID, 2); !errors.Is(err, ErrCorruptRecord) {
+		t.Fatalf("tampered Event read error = %v, want ErrCorruptRecord", err)
+	}
+	eventV3 := eventV2
+	eventV3.EventVersion = 3
+	eventV3.SystemAsOf = eventV2.SystemAsOf.Add(time.Minute)
+	if err := eventRepo.Append(ctx, eventV3); !errors.Is(err, ErrCorruptRecord) {
+		t.Fatalf("append after tampered previous Event error = %v, want ErrCorruptRecord", err)
+	}
+
+	// Claim 历史版本损坏后，同样不得读取或继续追加。
+	if _, err := db.ExecContext(ctx, "UPDATE research_claim_versions SET payload=CONCAT(payload, ' ') WHERE claim_id=? AND claim_version=2", claimID); err != nil {
+		t.Fatalf("tamper stored Claim payload: %v", err)
+	}
+	if _, err := claimRepo.GetVersion(ctx, claimID, 2); !errors.Is(err, ErrCorruptRecord) {
+		t.Fatalf("tampered Claim read error = %v, want ErrCorruptRecord", err)
+	}
+	claimV3 := claimV2
+	claimV3.ClaimVersion = 3
+	claimV3.SystemAsOf = claimV2.SystemAsOf.Add(time.Minute)
+	if err := claimRepo.Append(ctx, claimV3); !errors.Is(err, ErrCorruptRecord) {
+		t.Fatalf("append after tampered previous Claim error = %v, want ErrCorruptRecord", err)
+	}
+}
+
+func TestResearchAppendRejectsAggregateHeadWithMissingLatestVersion(t *testing.T) {
+	db := openResearchIntegrationDB(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+
+	eventID := fmt.Sprintf("event-missing-latest-%d", time.Now().UnixNano())
+	now := time.Date(2026, 11, 9, 5, 0, 0, 123456789, time.UTC)
+	t.Cleanup(func() {
+		_, _ = db.ExecContext(context.Background(), "DELETE FROM research_event_versions WHERE event_id=?", eventID)
+		_, _ = db.ExecContext(context.Background(), "DELETE FROM research_aggregate_heads WHERE aggregate_type='event' AND aggregate_id=?", eventID)
+	})
+
+	// A head claiming version 1 without the corresponding immutable row is
+	// persisted-state corruption, not a normal version conflict or DB outage.
+	if _, err := db.ExecContext(ctx,
+		"INSERT INTO research_aggregate_heads (aggregate_type, aggregate_id, latest_version, created_at, updated_at) VALUES ('event', ?, 1, ?, ?)",
+		eventID, now, now); err != nil {
+		t.Fatalf("seed aggregate head without version row: %v", err)
+	}
+
+	repo, err := NewEventRepository(db, func() time.Time { return now })
+	if err != nil {
+		t.Fatal(err)
+	}
+	next := researchevent.ResearchEvent{
+		EventID: eventID, EventVersion: 2, EventType: "integration_fixture",
+		Title: "Missing latest version fixture", Status: researchevent.StatusDetected,
+		SubjectRefs: []string{}, EvidenceRefs: []string{},
+		SystemObservedAt: now, SystemAsOf: now,
+		ImpactHypothesisRefs: []string{}, InvalidationConditions: []string{},
+		Uncertainty: []string{}, SourceTimes: []researchevent.EventSourceTime{},
+	}
+	if err := repo.Append(ctx, next); !errors.Is(err, ErrCorruptRecord) {
+		t.Fatalf("append with missing latest Event row = %v, want ErrCorruptRecord", err)
+	}
+	var latest int64
+	if err := db.QueryRowContext(ctx,
+		"SELECT latest_version FROM research_aggregate_heads WHERE aggregate_type='event' AND aggregate_id=?", eventID).Scan(&latest); err != nil {
+		t.Fatalf("read aggregate head after rejected append: %v", err)
+	}
+	if latest != 1 {
+		t.Fatalf("aggregate head advanced to %d after missing-version rejection, want 1", latest)
+	}
+	var versionCount int
+	if err := db.QueryRowContext(ctx,
+		"SELECT COUNT(*) FROM research_event_versions WHERE event_id=?", eventID).Scan(&versionCount); err != nil {
+		t.Fatalf("count Event versions after rejected append: %v", err)
+	}
+	if versionCount != 0 {
+		t.Fatalf("append created %d Event versions despite missing previous version", versionCount)
+	}
+}
+
+func TestResearchOutboxRejectsExpiredLeaseEvenWithBackdatedActionTime(t *testing.T) {
+	db := openResearchIntegrationDB(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+
+	now := time.Date(2026, 11, 9, 6, 0, 0, 123456789, time.UTC)
+	eventID := fmt.Sprintf("event-outbox-expired-lease-%d", time.Now().UnixNano())
+	repo, err := NewEventRepository(db, func() time.Time { return now })
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		_, _ = db.ExecContext(context.Background(), "DELETE FROM research_notification_outbox WHERE subject_ref=?", "research-event:"+eventID)
+		_, _ = db.ExecContext(context.Background(), "DELETE FROM research_event_versions WHERE event_id=?", eventID)
+		_, _ = db.ExecContext(context.Background(), "DELETE FROM research_aggregate_heads WHERE aggregate_type='event' AND aggregate_id=?", eventID)
+	})
+
+	value := researchevent.ResearchEvent{
+		EventID: eventID, EventVersion: 1, EventType: "integration_fixture",
+		Title: "Expired lease fixture", Status: researchevent.StatusDetected,
+		SubjectRefs: []string{}, EvidenceRefs: []string{},
+		SystemObservedAt: now, SystemAsOf: now,
+		ImpactHypothesisRefs: []string{}, InvalidationConditions: []string{},
+		Uncertainty: []string{}, SourceTimes: []researchevent.EventSourceTime{},
+	}
+	if err := repo.AppendWithLifecycle(ctx, value, nil, "corr_expired_lease"); err != nil {
+		t.Fatalf("append Event and Outbox: %v", err)
+	}
+	claimed, err := repo.base.ClaimOutbox(ctx, "worker_expired", 10, now.Add(time.Minute))
+	if err != nil || len(claimed) != 1 {
+		t.Fatalf("claim Outbox = %d messages, error %v", len(claimed), err)
+	}
+
+	// Advance the trusted repository clock beyond the lease deadline, but
+	// deliberately supply action timestamps from before that deadline.
+	now = now.Add(2 * time.Minute)
+	backdated := now.Add(-2 * time.Minute)
+	if err := repo.base.MarkOutboxPublished(ctx, claimed[0].EventID, "worker_expired", claimed[0].LeaseToken, backdated); !errors.Is(err, ErrConflict) {
+		t.Fatalf("confirm with expired lease and backdated timestamp = %v, want ErrConflict", err)
+	}
+	if err := repo.base.ScheduleOutboxRetry(ctx, claimed[0].EventID, "worker_expired", claimed[0].LeaseToken, now.Add(time.Minute), "temporary_failure", backdated); !errors.Is(err, ErrConflict) {
+		t.Fatalf("retry with expired lease and backdated timestamp = %v, want ErrConflict", err)
+	}
+	if err := repo.base.RejectOutbox(ctx, claimed[0].EventID, "worker_expired", claimed[0].LeaseToken, "permanent_failure", backdated); !errors.Is(err, ErrConflict) {
+		t.Fatalf("reject with expired lease and backdated timestamp = %v, want ErrConflict", err)
+	}
+
+	var status string
+	if err := db.QueryRowContext(ctx, "SELECT delivery_status FROM research_notification_outbox WHERE event_id=?", claimed[0].EventID).Scan(&status); err != nil {
+		t.Fatalf("read expired Outbox state: %v", err)
+	}
+	if status != "leased" {
+		t.Fatalf("expired action changed Outbox state to %q, want leased until reclaimed", status)
+	}
+	reclaimed, err := repo.base.ClaimOutbox(ctx, "worker_reclaimed", 10, now.Add(time.Minute))
+	if err != nil || len(reclaimed) != 1 || reclaimed[0].LeaseToken == claimed[0].LeaseToken {
+		t.Fatalf("reclaim expired Outbox lease = %+v, error %v", reclaimed, err)
 	}
 }

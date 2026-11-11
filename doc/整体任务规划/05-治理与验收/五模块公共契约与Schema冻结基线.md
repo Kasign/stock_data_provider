@@ -1,7 +1,9 @@
 # 五模块公开契约与 Schema 冻结基线（GOV-004）
 
-- 状态：历史设计基线与交叉审查记录；当前契约编号、权威路径、语义状态和阻断范围以 `跨模块契约目录与冻结状态.md` 为准。本文件不代表接口或数据库已经实现。
+- 状态：历史设计基线与交叉审查记录；当前契约编号、权威路径、语义状态、冻结范围和后续证据门禁以 `doc/contract/PLAT-002-项目级契约冻结登记簿.md` 为准。本文件不代表接口或数据库已经实现，也不作为当前契约状态登记表。
 - 目标落点：根 Go Module 的 `internal/{marketdata,quant,research,researchflow,llm,notification}`。
+> **当前状态校准（2026-11-11）：** 本文保留早期五模块 DTO/Schema 摘要及当时的 Review 结论。项目级 L1 契约已由 PLAT-002 登记簿正式冻结；文中旧 NO-GO、待冻结和待补齐状态均按历史记录日期理解。实现符合性、消费者测试、CI、Server 装配和真实依赖验收仍按各 CTR 的 L2/L3 关注点单独验证。
+
 - **2026-11-06 架构修订：** Data 采用方案 B，迁入根 Go Module 的 `internal/marketdata`，与 Root Server 同进程；Data 保留领域 Owner 和可选 HTTP Adapter。原“Data 独立 Go Module、必须经 HTTP/OpenAPI、不得 import 根 Platform internal”的文字是迁移前基线，已被本修订取代。Data 可依赖 Platform 公开技术 package，但跨业务模块仍只允许 Application Port/DTO，不允许 import 对方 internal。
 
 ## 1. 基础序列化约定
@@ -459,7 +461,7 @@ type ResearchEvidenceQuery interface {
 
 ### 13.5 Data OpenAPI ↔ Go JSON 修正执行清单
 
-已将已知字段差异整理为独立执行文档：[Data OpenAPI 与 Go 模型契约修正清单](./Data-OpenAPI与Go模型契约修正清单.md)。该清单只在 `feat/design_doc` 维护，实际 Data Schema/Model/测试修改归 Data 分支。
+已将已知字段差异整理为独立执行文档：[Data OpenAPI 与 Go 模型契约修正清单](../03-模块接口契约/Data-OpenAPI与Go模型契约修正清单.md)。该清单只在 `feat/design_doc` 维护，实际 Data Schema/Model/测试修改归 Data 分支。
 
 本轮把已知差异拆成四类：
 - Go JSON Tag 已有、OpenAPI 缺失：15 个字段，需按真实响应路径补齐。
@@ -481,7 +483,7 @@ type ResearchEvidenceQuery interface {
 
 ### 13.6 News → Research 只读证据查询 Facade 契约
 
-新增目标契约文档：[News → Research 只读证据查询契约](./News-Research只读证据查询契约.md)。
+新增目标契约文档：[News → Research 只读证据查询契约](../03-模块接口契约/News-Research只读证据查询契约.md)。
 
 本轮重新读取 `feat/research-news-ingestion` 的 Application / Domain 文件，并将分支与既有核查 SHA `ea697fe437d44afffbd60874ad144adc4313e469` 比较：当前分支 ahead 1 个提交，变化集中在新闻关系文档、领域类型与测试。当前 Application 仍只有 SearchCandidates、IngestCandidate、ApplyResearchUpdate 等能力，没有 Research 只读 Query Facade。
 
@@ -505,7 +507,7 @@ type ResearchEvidenceQuery interface {
 
 ### 13.7 Platform → 五模块公共依赖与集成验收
 
-新增清单：[Platform → 五模块公共依赖与集成验收清单](./Platform-五模块公共依赖与集成验收清单.md)。
+新增清单：[Platform → 五模块公共依赖与集成验收清单](../03-模块接口契约/Platform-五模块公共依赖与集成验收清单.md)。
 
 本轮重新比较 `feat/platform-foundation` 与已记录核查点 `a30ee12130d2a50bc3db672d9d12d1e14040e34f`：当前分支 ahead 2 个提交，变更涉及 dotenv、security 测试和配置/日志/诊断文档；未发现既有 Fault、Diagnostics、HTTP Client、Storage、Task Queue 职责边界发生改变。
 
@@ -522,7 +524,7 @@ type ResearchEvidenceQuery interface {
 
 ### 13.8 Data API Key 与 Platform Service Secret 边界
 
-新增设计文档：[Data 服务间认证映射与 Secret 注入设计](./Data服务间认证映射与Secret注入设计.md)。
+新增设计文档：[Data 服务间认证映射与 Secret 注入设计](../03-模块接口契约/Data服务间认证映射与Secret注入设计.md)。
 
 本轮重新读取 Data OpenAPI：
 - `ApiKey` 定义为 `X-API-Key`；

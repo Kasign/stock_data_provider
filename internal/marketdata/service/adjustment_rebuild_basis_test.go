@@ -152,3 +152,106 @@ func TestRebuildAdjustedDailyBarsCurrentAllowsUnknownAvailabilityButKeepsDegrade
 		t.Fatal("current rebuild must require persisted SystemObservedAt")
 	}
 }
+
+func TestRebuildAdjustedDailyBarsRejectsConflictingFactorsWithSameObservationTime(t *testing.T) {
+	fetched := time.Date(2025, 7, 1, 0, 0, 0, 0, time.UTC)
+	observed := fetched.Add(time.Hour)
+	raw := []model.DailyBar{{
+		Symbol: "600036.SH", TradeDate: "2025-07-01", Open: 10, High: 10, Low: 10, Close: 10,
+		Source: "baostock", SourceVersion: "baostock-test-v1", AdjustmentBasis: model.AdjustmentNone,
+	}}
+	factor := model.AdjustmentFactor{
+		Symbol: "600036.SH", TradeDate: "2025-07-01", Factor: 2, Basis: model.AdjustmentFactorForward,
+		Source: "baostock", SourceVersion: "baostock-test-v1", FetchedAt: fetched,
+		AvailableAt: &fetched, SystemObservedAt: &observed, QualityStatus: model.QualityValid,
+	}
+	conflict := factor
+	conflict.Factor = 3
+	for _, values := range [][]model.AdjustmentFactor{{factor, conflict}, {conflict, factor}} {
+		if _, err := rebuildAdjustedDailyBarsPIT(raw, values, model.AdjustmentForward, "2025-07-01"); err == nil {
+			t.Fatal("conflicting factor revisions with the same observation timestamp must fail closed")
+		}
+	}
+}
+
+func TestSameAdjustmentFactorObservationIgnoresFetchAndZoneRepresentation(t *testing.T) {
+	instant := time.Date(2025, 7, 1, 8, 0, 0, 0, time.UTC)
+	otherZone := instant.In(time.FixedZone("UTC+8", 8*60*60))
+	left := model.AdjustmentFactor{Symbol: "600036.SH", TradeDate: "2025-07-01", Factor: 2, Source: "baostock",
+		SourceVersion: "v1", FetchedAt: instant, ProviderTime: &instant, AvailableAt: &instant,
+		SystemObservedAt: &instant, QualityStatus: model.QualityValid}
+	right := left
+	right.FetchedAt = instant.Add(time.Minute)
+	right.ProviderTime, right.AvailableAt, right.SystemObservedAt = &otherZone, &otherZone, &otherZone
+	if !sameAdjustmentFactorObservation(left, right) {
+		t.Fatal("same observation payload must compare equal despite fetch time and equivalent timestamp zone representation")
+	}
+}
+
+func TestRebuildAdjustedDailyBarsEmitsDeterministicFactorProvenance(t *testing.T) {
+	available := time.Date(2025, 7, 1, 0, 0, 0, 0, time.UTC)
+	observed := available.Add(time.Hour)
+	raw := []model.DailyBar{
+		{Symbol: "600036.SH", TradeDate: "2025-07-01", Open: 10, High: 10, Low: 10, Close: 10, Source: "tushare", SourceVersion: "tushare-v1", AdjustmentBasis: model.AdjustmentNone},
+		{Symbol: "600036.SH", TradeDate: "2025-07-02", Open: 20, High: 20, Low: 20, Close: 20, Source: "tushare", SourceVersion: "tushare-v1", AdjustmentBasis: model.AdjustmentNone},
+	}
+	factors := []model.AdjustmentFactor{
+		{Symbol: "600036.SH", TradeDate: "2025-07-01", Factor: 2, Source: "tushare", SourceVersion: "tushare-v1", FetchedAt: available, AvailableAt: &available, SystemObservedAt: &observed, QualityStatus: model.QualityValid},
+		{Symbol: "600036.SH", TradeDate: "2025-07-02", Factor: 4, Source: "tushare", SourceVersion: "tushare-v1", FetchedAt: available, AvailableAt: &available, SystemObservedAt: &observed, QualityStatus: model.QualityValid},
+	}
+	first, err := rebuildAdjustedDailyBarsPIT(raw, factors, model.AdjustmentForward, "2025-07-02")
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := rebuildAdjustedDailyBarsPIT(raw, []model.AdjustmentFactor{factors[1], factors[0]}, model.AdjustmentForward, "2025-07-02")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := range first {
+		if first[i].AdjustmentFactorRevisionHash == "" || first[i].AdjustmentFactorSetHash == "" ||
+			first[i].AdjustmentFactorReferenceRevisionHash == "" || first[i].AdjustmentAlgorithmVersion != "cumulative_adj_factor_v1" {
+			t.Fatalf("bar %s missing factor provenance: %+v", first[i].TradeDate, first[i])
+		}
+		if first[i].AdjustmentFactorSetHash != second[i].AdjustmentFactorSetHash ||
+			first[i].AdjustmentFactorRevisionHash != second[i].AdjustmentFactorRevisionHash {
+			t.Fatalf("factor provenance must not depend on input order: first=%+v second=%+v", first[i], second[i])
+		}
+	}
+	if first[0].AdjustmentFactorReferenceRevisionHash != first[1].AdjustmentFactorReferenceRevisionHash {
+		t.Fatal("shared forward bars must identify the same reference factor revision")
+	}
+}
+
+func TestAdjustmentFactorFingerprintSeparatesContentFromObservationMetadata(t *testing.T) {
+	instant := time.Date(2025, 7, 1, 8, 0, 0, 0, time.UTC)
+	observed := instant.Add(time.Hour)
+	factor := model.AdjustmentFactor{
+		Symbol: "600036.SH", TradeDate: "2025-07-01", Factor: 2,
+		Basis: model.AdjustmentFactorShared, Source: "tushare", SourceVersion: "v1",
+		FetchedAt: instant, ProviderTime: &instant, AvailableAt: &instant,
+		SystemObservedAt: &observed, QualityStatus: model.QualityValid,
+	}
+	first, err := adjustmentFactorFingerprint(factor)
+	if err != nil {
+		t.Fatal(err)
+	}
+	factor.FetchedAt = instant.Add(5 * time.Minute)
+	laterObserved := observed.Add(5 * time.Minute)
+	factor.SystemObservedAt = &laterObserved
+	second, err := adjustmentFactorFingerprint(factor)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first != second {
+		t.Fatal("fetch and system observation metadata must not alter content revision fingerprint")
+	}
+	laterAvailable := instant.Add(time.Minute)
+	factor.AvailableAt = &laterAvailable
+	third, err := adjustmentFactorFingerprint(factor)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first == third {
+		t.Fatal("provider availability evidence must alter content revision fingerprint")
+	}
+}

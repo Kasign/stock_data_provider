@@ -2,6 +2,7 @@ package application
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -12,10 +13,10 @@ func completionChannel() domain.ChannelConfigSnapshot {
 	return domain.ChannelConfigSnapshot{
 		ChannelRef: "channel-1", ConfigVersion: 1, ChannelKind: "test", Enabled: true,
 		Capabilities: domain.ChannelCapabilities{
-			SupportsIdempotency: domain.CapabilityUnsupported,
+			SupportsIdempotency:    domain.CapabilityUnsupported,
 			SupportsDeliveryLookup: domain.CapabilityUnknown,
-			SupportsRetryAfter: domain.CapabilitySupported,
-			MaxPayloadBytes: 4096,
+			SupportsRetryAfter:     domain.CapabilitySupported,
+			MaxPayloadBytes:        4096,
 		},
 		RetryableErrorCodes: []string{"rate_limited"},
 	}
@@ -50,7 +51,7 @@ func TestDeliveryCompletionAcceptedConvergesToSent(t *testing.T) {
 		t.Fatalf("complete accepted attempt: %v", err)
 	}
 	got, found, err := repository.Get(context.Background(), claim.Delivery.DeliveryID)
-	if err != nil || !found || got.Status != domain.DeliverySent || got.Version != claim.Delivery.Version+1 {
+	if err != nil || !found || got.Status != domain.DeliverySent || got.Version != claim.Delivery.Version+1 || got.AttemptCount != 1 {
 		t.Fatalf("expected sent delivery, got=%+v found=%v err=%v", got, found, err)
 	}
 	history, err := repository.ListByDelivery(context.Background(), got.DeliveryID)
@@ -61,10 +62,10 @@ func TestDeliveryCompletionAcceptedConvergesToSent(t *testing.T) {
 
 func TestDeliveryCompletionAmbiguousAndNotSentAreConservative(t *testing.T) {
 	for _, test := range []struct {
-		name string
-		result domain.ChannelSendResult
+		name     string
+		result   domain.ChannelSendResult
 		evidence string
-		want domain.DeliveryStatus
+		want     domain.DeliveryStatus
 	}{
 		{name: "ambiguous", result: domain.ChannelSendResult{Outcome: domain.ChannelOutcomeAmbiguous, ErrorCode: "provider_timeout"}, want: domain.DeliveryUnknown},
 		{name: "not_sent", result: domain.ChannelSendResult{Outcome: domain.ChannelOutcomeNotSent, ErrorCode: "request_not_sent"}, evidence: "proof-1", want: domain.DeliverySkipped},
@@ -84,7 +85,7 @@ func TestDeliveryCompletionAmbiguousAndNotSentAreConservative(t *testing.T) {
 				t.Fatalf("complete %s attempt: %v", test.name, err)
 			}
 			got, found, err := repository.Get(context.Background(), claim.Delivery.DeliveryID)
-			if err != nil || !found || got.Status != test.want {
+			if err != nil || !found || got.Status != test.want || got.AttemptCount != 1 {
 				t.Fatalf("expected %s, got=%+v found=%v err=%v", test.want, got, found, err)
 			}
 		})
@@ -107,7 +108,7 @@ func TestDeliveryCompletionRetryableRejectionUsesRetryPolicy(t *testing.T) {
 		t.Fatalf("complete retryable rejection: %v", err)
 	}
 	got, found, err := repository.Get(context.Background(), claim.Delivery.DeliveryID)
-	if err != nil || !found || got.Status != domain.DeliveryRetryWait || got.NextAttemptAt == nil {
+	if err != nil || !found || got.Status != domain.DeliveryRetryWait || got.NextAttemptAt == nil || got.AttemptCount != 1 {
 		t.Fatalf("expected retry_wait, got=%+v found=%v err=%v", got, found, err)
 	}
 }
@@ -159,5 +160,166 @@ func TestDeliveryCompletionRejectsWrongChannelVersion(t *testing.T) {
 	history, historyErr := repository.ListByDelivery(context.Background(), claim.Delivery.DeliveryID)
 	if historyErr != nil || len(history) != 1 || history[0].FinishedAt != nil {
 		t.Fatalf("mismatched channel must not complete attempt, history=%+v err=%v", history, historyErr)
+	}
+}
+
+func TestDeliveryCompletionDeliveryCASFailureIsRecoverableFromCompletedAttempt(t *testing.T) {
+	repository, claim, attempt, finishedAt := startCompletionAttempt(t, domain.ChannelOutcomeAccepted)
+	service, err := NewDeliveryCompletionService(repository, repository, RetryPolicy{
+		MaxAttempts: 3, MaxElapsed: time.Hour, PerAttemptTimeout: time.Minute,
+		BaseDelay: time.Second, MaxDelay: time.Minute,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Attempt 完成写入成功后，模拟 Delivery CAS 失败。
+	repository.failNext = true
+	err = service.Complete(context.Background(), claim, attempt, completionChannel(),
+		domain.ChannelSendResult{Outcome: domain.ChannelOutcomeAccepted, ProviderMessageRef: "provider-message-persisted"},
+		finishedAt, 0.5, "")
+	if err == nil {
+		t.Fatal("expected Delivery CAS failure")
+	}
+
+	current, found, err := repository.Get(context.Background(), claim.Delivery.DeliveryID)
+	if err != nil || !found || current.Status != domain.DeliverySending || current.AttemptCount != 1 {
+		t.Fatalf("failed Delivery CAS must leave sending snapshot and started attempt count: delivery=%+v found=%v err=%v", current, found, err)
+	}
+	history, err := repository.ListByDelivery(context.Background(), current.DeliveryID)
+	if err != nil || len(history) != 1 || history[0].FinishedAt == nil ||
+		history[0].Outcome == nil || *history[0].Outcome != domain.DeliveryAttemptAccepted {
+		t.Fatalf("completed accepted Attempt must remain durable for recovery: history=%+v err=%v", history, err)
+	}
+
+	assessment, err := AssessExpiredDeliveryLease(current, claim.Lease, history, claim.Lease.ExpiresAt)
+	if err != nil || assessment.Action != LeaseRecoveryFinalizeSent ||
+		assessment.ProviderMessageRef != "provider-message-persisted" {
+		t.Fatalf("recovery must finalize sent from immutable Attempt without resending: assessment=%+v err=%v", assessment, err)
+	}
+}
+
+func TestDeliveryCompletionPreservesAttemptCountAcrossTwoRetryCycles(t *testing.T) {
+	repository, firstClaim, firstAttempt, firstFinishedAt := startCompletionAttempt(t, domain.ChannelOutcomeRejected)
+	policy := RetryPolicy{
+		MaxAttempts: 3, MaxElapsed: time.Hour, PerAttemptTimeout: time.Minute,
+		BaseDelay: time.Second, MaxDelay: time.Minute,
+	}
+	service, err := NewDeliveryCompletionService(repository, repository, policy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rejected := domain.ChannelSendResult{Outcome: domain.ChannelOutcomeRejected, ErrorCode: "rate_limited"}
+	if err := service.Complete(context.Background(), firstClaim, firstAttempt, completionChannel(),
+		rejected, firstFinishedAt, 0.5, ""); err != nil {
+		t.Fatalf("complete first rejected attempt: %v", err)
+	}
+
+	afterFirst, found, err := repository.Get(context.Background(), firstClaim.Delivery.DeliveryID)
+	if err != nil || !found || afterFirst.Status != domain.DeliveryRetryWait ||
+		afterFirst.AttemptCount != 1 || afterFirst.NextAttemptAt == nil {
+		t.Fatalf("first retry projection is invalid: delivery=%+v found=%v err=%v", afterFirst, found, err)
+	}
+
+	secondClaimAt := *afterFirst.NextAttemptAt
+	repository.now = secondClaimAt
+	secondClaim, claimed, err := repository.ClaimDue(context.Background(), "worker-attempt-2",
+		secondClaimAt, secondClaimAt.Add(time.Minute))
+	if err != nil || !claimed {
+		t.Fatalf("claim second attempt: claimed=%v err=%v", claimed, err)
+	}
+	if secondClaim.Delivery.AttemptCount != 1 || secondClaim.Delivery.Version != afterFirst.Version ||
+		secondClaim.Lease.FencingToken <= firstClaim.Lease.FencingToken {
+		t.Fatalf("second claim must retain first attempt projection and advance fencing: %+v", secondClaim)
+	}
+
+	secondAttempt := attemptForClaim(secondClaim, 2)
+	repository.now = secondClaim.Lease.ExpiresAt.Add(-time.Second)
+	if err := repository.StartWithLease(context.Background(), secondClaim.Delivery.Version,
+		secondClaim.Lease.FencingToken, secondAttempt); err != nil {
+		t.Fatalf("start second attempt: %v", err)
+	}
+	secondFinishedAt := secondAttempt.StartedAt.Add(time.Second)
+	repository.now = secondFinishedAt.Add(time.Second)
+	if err := service.Complete(context.Background(), secondClaim, secondAttempt, completionChannel(),
+		domain.ChannelSendResult{Outcome: domain.ChannelOutcomeAccepted, ProviderMessageRef: "provider-message-second"},
+		secondFinishedAt, 0.5, ""); err != nil {
+		t.Fatalf("complete second accepted attempt: %v", err)
+	}
+
+	final, found, err := repository.Get(context.Background(), firstClaim.Delivery.DeliveryID)
+	if err != nil || !found || final.Status != domain.DeliverySent || final.AttemptCount != 2 {
+		t.Fatalf("second attempt must converge to sent without losing count: delivery=%+v found=%v err=%v", final, found, err)
+	}
+	history, err := repository.ListByDelivery(context.Background(), final.DeliveryID)
+	if err != nil || len(history) != 2 || history[0].AttemptNo != 1 ||
+		history[0].Outcome == nil || *history[0].Outcome != domain.DeliveryAttemptRejected ||
+		history[1].AttemptNo != 2 || history[1].Outcome == nil ||
+		*history[1].Outcome != domain.DeliveryAttemptAccepted {
+		t.Fatalf("two-attempt history must remain continuous and immutable: attempts=%+v err=%v", history, err)
+	}
+}
+
+type outcomeUnknownAttemptCompletionRepository struct{ DeliveryAttemptRepository }
+
+func (r outcomeUnknownAttemptCompletionRepository) CompleteWithLease(ctx context.Context, expectedDeliveryVersion, fencingToken int64, completed domain.DeliveryAttempt) error {
+	if err := r.DeliveryAttemptRepository.CompleteWithLease(ctx, expectedDeliveryVersion, fencingToken, completed); err != nil {
+		return err
+	}
+	return errors.Join(ErrPersistenceOutcomeUnknown, errors.New("injected attempt completion acknowledgement loss"))
+}
+
+type outcomeUnknownDeliveryUpdateRepository struct{ DeliveryRepository }
+
+func (r outcomeUnknownDeliveryUpdateRepository) UpdateWithLease(ctx context.Context, expectedVersion, fencingToken int64, next domain.DeliveryRecord, event domain.DeliveryStateEvent, now time.Time) error {
+	if err := r.DeliveryRepository.UpdateWithLease(ctx, expectedVersion, fencingToken, next, event, now); err != nil {
+		return err
+	}
+	return errors.Join(ErrPersistenceOutcomeUnknown, errors.New("injected delivery update acknowledgement loss"))
+}
+func TestDeliveryCompletionAttemptCommitOutcomeUnknownStopsBeforeDeliveryTransition(t *testing.T) {
+	repository, claim, attempt, finishedAt := startCompletionAttempt(t, domain.ChannelOutcomeAccepted)
+	service, err := NewDeliveryCompletionService(repository, outcomeUnknownAttemptCompletionRepository{DeliveryAttemptRepository: repository}, RetryPolicy{MaxAttempts: 3, MaxElapsed: time.Hour, PerAttemptTimeout: time.Minute, BaseDelay: time.Second, MaxDelay: time.Minute})
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = service.Complete(context.Background(), claim, attempt, completionChannel(), domain.ChannelSendResult{Outcome: domain.ChannelOutcomeAccepted, ProviderMessageRef: "provider-accepted"}, finishedAt, 0.5, "")
+	if !errors.Is(err, ErrPersistenceOutcomeUnknown) {
+		t.Fatalf("expected uncertain Attempt completion commit, got %v", err)
+	}
+	current, found, readErr := repository.Get(context.Background(), claim.Delivery.DeliveryID)
+	if readErr != nil || !found || current.Status != domain.DeliverySending || current.AttemptCount != 1 {
+		t.Fatalf("Delivery transition must stop after uncertain Attempt completion: delivery=%+v found=%v err=%v", current, found, readErr)
+	}
+	history, readErr := repository.ListByDelivery(context.Background(), current.DeliveryID)
+	if readErr != nil || len(history) != 1 || history[0].FinishedAt == nil || history[0].Outcome == nil || *history[0].Outcome != domain.DeliveryAttemptAccepted {
+		t.Fatalf("persisted Attempt result must remain available for recovery: attempts=%+v err=%v", history, readErr)
+	}
+	assessment, assessErr := AssessExpiredDeliveryLease(current, claim.Lease, history, claim.Lease.ExpiresAt)
+	if assessErr != nil || assessment.Action != LeaseRecoveryFinalizeSent || assessment.ProviderMessageRef != "provider-accepted" {
+		t.Fatalf("lease recovery must converge from persisted Attempt: assessment=%+v err=%v", assessment, assessErr)
+	}
+}
+func TestDeliveryCompletionDeliveryCommitOutcomeUnknownDoesNotReplayTransition(t *testing.T) {
+	repository, claim, attempt, finishedAt := startCompletionAttempt(t, domain.ChannelOutcomeAccepted)
+	service, err := NewDeliveryCompletionService(outcomeUnknownDeliveryUpdateRepository{DeliveryRepository: repository}, repository, RetryPolicy{MaxAttempts: 3, MaxElapsed: time.Hour, PerAttemptTimeout: time.Minute, BaseDelay: time.Second, MaxDelay: time.Minute})
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = service.Complete(context.Background(), claim, attempt, completionChannel(), domain.ChannelSendResult{Outcome: domain.ChannelOutcomeAccepted, ProviderMessageRef: "provider-finalized"}, finishedAt, 0.5, "")
+	if !errors.Is(err, ErrPersistenceOutcomeUnknown) {
+		t.Fatalf("expected uncertain Delivery transition commit, got %v", err)
+	}
+	current, found, readErr := repository.Get(context.Background(), claim.Delivery.DeliveryID)
+	if readErr != nil || !found || current.Status != domain.DeliverySent || current.Version != claim.Delivery.Version+1 || current.AttemptCount != 1 {
+		t.Fatalf("committed Delivery transition must be visible without replay: delivery=%+v found=%v err=%v", current, found, readErr)
+	}
+	events, readErr := repository.ListStateEvents(context.Background(), current.DeliveryID)
+	if readErr != nil || len(events) != 3 || events[len(events)-1].To != domain.DeliverySent {
+		t.Fatalf("uncertain commit must not create duplicate StateEvent: events=%+v err=%v", events, readErr)
+	}
+	attempts, readErr := repository.ListByDelivery(context.Background(), current.DeliveryID)
+	if readErr != nil || len(attempts) != 1 || attempts[0].FinishedAt == nil || attempts[0].Outcome == nil || *attempts[0].Outcome != domain.DeliveryAttemptAccepted {
+		t.Fatalf("completed Attempt must remain singular: attempts=%+v err=%v", attempts, readErr)
 	}
 }

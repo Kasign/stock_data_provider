@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"example.com/stock-analysis-flow/internal/marketdata/model"
+	platformstorage "example.com/stock-analysis-flow/internal/platform/storage"
 	_ "github.com/go-sql-driver/mysql"
 )
 
@@ -46,6 +47,9 @@ func NewWithBorrowedDB(db *sql.DB) (*Store, error) {
 	}
 	return &Store{db: db}, nil
 }
+
+// Configured reports whether this Store wraps a database connection pool.
+func (s *Store) Configured() bool { return s != nil && s.db != nil }
 
 func (s *Store) Close() error {
 	if s == nil || s.db == nil || !s.ownsDB {
@@ -221,10 +225,22 @@ func (s *Store) Migrate(ctx context.Context) error {
  KEY idx_market_corporate_action_observed (recorded_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
 	}
-	for _, stmt := range stmts {
-		if _, err := s.db.ExecContext(ctx, stmt); err != nil {
-			return fmt.Errorf("market-data schema migration: %w", err)
-		}
+	// Data Schema 由公共 Platform Migration Runner 执行；版本 1 发布后保持不可变，后续变更追加新版本。
+	if err := platformstorage.ApplyMigrations(ctx, s.db, "market_data", []platformstorage.Migration{
+		{Version: 1, Description: "market data base schema", Statements: stmts},
+		{
+			Version: 2, Description: "adjustment factor source-version identity",
+			Statements: []string{
+				`ALTER TABLE market_data_adjustment_factor_versions ADD COLUMN source_version VARCHAR(128) NOT NULL DEFAULT '' AFTER source`,
+				`UPDATE market_data_adjustment_factor_versions
+SET source_version=COALESCE(NULLIF(JSON_UNQUOTE(JSON_EXTRACT(metadata,'$.source_version')),''),'')
+WHERE source_version=''`,
+				`CREATE INDEX idx_market_adjustment_factor_version_asof
+ON market_data_adjustment_factor_versions (symbol, trade_date, source, source_version, factor_basis, recorded_at, id)`,
+			},
+		},
+	}); err != nil {
+		return fmt.Errorf("market-data schema migration: %w", err)
 	}
 	// 旧版修订表曾对内容哈希建立全历史唯一约束，会错误阻止 A→B→A 的回归修订。
 	if err := s.ensureNonUniqueHistoryIndex(ctx, "market_data_daily_bar_versions",

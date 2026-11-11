@@ -66,6 +66,9 @@ func (tx memoryIdentityTransaction) AppendObservation(_ context.Context, observa
 		if existing.IdempotencyKey != observation.IdempotencyKey {
 			continue
 		}
+		if existing.PayloadPurgedAt != nil {
+			return domain.Observation{}, ErrObservationPayloadPurged
+		}
 		if !SameObservationPayload(existing, observation) {
 			return domain.Observation{}, ErrObservationIdempotencyConflict
 		}
@@ -75,12 +78,23 @@ func (tx memoryIdentityTransaction) AppendObservation(_ context.Context, observa
 	return observation, nil
 }
 
+func TestIngestCandidateRejectsProviderOutputWithoutPolicyTrace(t *testing.T) {
+	repository := &memoryIdentityRepository{}
+	usecase := newCandidateIngest(repository, func() string { return "observation-provider-policy-required" })
+	_, err := usecase.executeUnscoped(context.Background(), "source-1", "provider-result-key", domain.Candidate{ProviderCode: "brave", SourceItemID: "item-1"}, domain.SourceURLPolicy{})
+	if !errors.Is(err, ErrProviderOutputPolicyRequired) || len(repository.observations) != 0 {
+		t.Fatalf("err=%v repository=%+v", err, repository)
+	}
+}
+
 func TestIngestCandidateCreatesNewsItemAndObservation(t *testing.T) {
 	repository := &memoryIdentityRepository{}
-	usecase := NewIngestCandidate(repository, func() string { return "observation-1" })
-	observation, err := usecase.Execute(context.Background(), "source-1", "run-1/provider-a/item-1", domain.Candidate{
-		ProviderCode: "provider-a", ProviderItemID: "provider-result-1", SourceItemID: "item-1", Title: " headline ",
-	}, domain.SourceURLPolicy{})
+	usecase := newCandidateIngest(repository, func() string { return "observation-1" })
+	observation, err := usecase.executeWithPolicyTrace(context.Background(), "source-1", "run-1/provider-a/item-1", domain.Candidate{
+		ProviderItemID: "provider-result-1", SourceItemID: "item-1", Title: " headline ",
+	}, domain.SourceURLPolicy{}, ObservationPolicyTrace{
+		SourcePolicyVersionID: "source-policy-v1", PolicyEvaluatedAt: time.Date(2026, 11, 9, 0, 0, 0, 0, time.UTC), Retention: time.Hour,
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -98,8 +112,8 @@ func TestIngestCandidateMatchesExistingItemAndAddsOnlyNewAlias(t *testing.T) {
 		Value: "item-1", Hash: identityHashForTest("item-1"), Status: domain.IdentifierActive, NewsID: "news-existing",
 	}
 	repository := &memoryIdentityRepository{credentials: []domain.IdentityCredential{existing}}
-	usecase := NewIngestCandidate(repository, func() string { return "observation-2" })
-	observation, err := usecase.Execute(context.Background(), "source-1", "run-1/provider-a/item-1", domain.Candidate{
+	usecase := newCandidateIngest(repository, func() string { return "observation-2" })
+	observation, err := usecase.executeUnscoped(context.Background(), "source-1", "run-1/provider-a/item-1", domain.Candidate{
 		ProviderItemID: "provider-result-2", SourceItemID: "item-1", RawURL: "https://news.example/new-url",
 	}, domain.SourceURLPolicy{AllowedSchemes: []string{"https"}, AllowedHosts: []string{"news.example"}})
 	if err != nil {
@@ -118,8 +132,8 @@ func TestIngestCandidateMatchesExistingItemAndAddsOnlyNewAlias(t *testing.T) {
 
 func TestIngestCandidateDoesNotTrustCallerCanonicalURLButKeepsNativeID(t *testing.T) {
 	repository := &memoryIdentityRepository{}
-	usecase := NewIngestCandidate(repository, func() string { return "observation-untrusted-url" })
-	observation, err := usecase.Execute(context.Background(), "source-1", "run-1/untrusted-url", domain.Candidate{
+	usecase := newCandidateIngest(repository, func() string { return "observation-untrusted-url" })
+	observation, err := usecase.executeUnscoped(context.Background(), "source-1", "run-1/untrusted-url", domain.Candidate{
 		SourceItemID: "item-1",
 		RawURL:       "https://untrusted.example/article",
 		CanonicalURL: "https://news.example/forged-canonical",
@@ -140,8 +154,8 @@ func TestIngestCandidateDoesNotTrustCallerCanonicalURLButKeepsNativeID(t *testin
 
 func TestIngestCandidateDoesNotCreateItemWithoutIdentity(t *testing.T) {
 	repository := &memoryIdentityRepository{}
-	usecase := NewIngestCandidate(repository, func() string { return "observation-3" })
-	observation, err := usecase.Execute(context.Background(), "source-1", "run-1/provider-a/unknown-1", domain.Candidate{ProviderItemID: "provider-only-1", Title: "unidentified"}, domain.SourceURLPolicy{})
+	usecase := newCandidateIngest(repository, func() string { return "observation-3" })
+	observation, err := usecase.executeUnscoped(context.Background(), "source-1", "run-1/provider-a/unknown-1", domain.Candidate{ProviderItemID: "provider-only-1", Title: "unidentified"}, domain.SourceURLPolicy{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -161,8 +175,8 @@ func TestIngestCandidateConflictOnlyAppendsObservation(t *testing.T) {
 		Status: domain.IdentifierHistorical, NewsID: "news-2",
 	}
 	repository := &memoryIdentityRepository{credentials: []domain.IdentityCredential{native, url}}
-	usecase := NewIngestCandidate(repository, func() string { return "observation-4" })
-	observation, err := usecase.Execute(context.Background(), "source-1", "run-1/provider-a/item-1", domain.Candidate{
+	usecase := newCandidateIngest(repository, func() string { return "observation-4" })
+	observation, err := usecase.executeUnscoped(context.Background(), "source-1", "run-1/provider-a/item-1", domain.Candidate{
 		ProviderItemID: "provider-result-3", SourceItemID: "item-1", RawURL: "https://news.example/item",
 	}, domain.SourceURLPolicy{AllowedSchemes: []string{"https"}, AllowedHosts: []string{"news.example"}})
 	if err != nil {
@@ -183,8 +197,8 @@ func identityHashForTest(value string) string {
 
 func TestIngestCandidateRollsBackWhenObservationAppendFails(t *testing.T) {
 	repository := &memoryIdentityRepository{failAppend: true}
-	usecase := NewIngestCandidate(repository, func() string { return "observation-5" })
-	_, err := usecase.Execute(context.Background(), "source-1", "run-1/provider-a/item-1", domain.Candidate{SourceItemID: "item-1"}, domain.SourceURLPolicy{})
+	usecase := newCandidateIngest(repository, func() string { return "observation-5" })
+	_, err := usecase.executeUnscoped(context.Background(), "source-1", "run-1/provider-a/item-1", domain.Candidate{SourceItemID: "item-1"}, domain.SourceURLPolicy{})
 	if !errors.Is(err, ErrIdentityTransaction) {
 		t.Fatalf("err=%v", err)
 	}
@@ -196,16 +210,17 @@ func TestIngestCandidateRollsBackWhenObservationAppendFails(t *testing.T) {
 func TestIngestCandidateRetriesIdempotently(t *testing.T) {
 	repository := &memoryIdentityRepository{}
 	nextID := 0
-	usecase := NewIngestCandidate(repository, func() string {
+	usecase := newCandidateIngest(repository, func() string {
 		nextID++
 		return "observation-" + string(rune('0'+nextID))
 	})
-	candidate := domain.Candidate{ProviderCode: "provider-a", ProviderItemID: "provider-result-1", SourceItemID: "source-item-1", Title: "headline"}
-	first, err := usecase.Execute(context.Background(), "source-1", "run-1/provider-a/item-1", candidate, domain.SourceURLPolicy{})
+	candidate := domain.Candidate{ProviderItemID: "provider-result-1", SourceItemID: "source-item-1", Title: "headline"}
+	trace := ObservationPolicyTrace{SourcePolicyVersionID: "source-policy-v1", PolicyEvaluatedAt: time.Date(2026, 11, 9, 0, 0, 0, 0, time.UTC), Retention: time.Hour}
+	first, err := usecase.executeWithPolicyTrace(context.Background(), "source-1", "run-1/provider-a/item-1", candidate, domain.SourceURLPolicy{}, trace)
 	if err != nil {
 		t.Fatal(err)
 	}
-	second, err := usecase.Execute(context.Background(), "source-1", "run-1/provider-a/item-1", candidate, domain.SourceURLPolicy{})
+	second, err := usecase.executeWithPolicyTrace(context.Background(), "source-1", "run-1/provider-a/item-1", candidate, domain.SourceURLPolicy{}, trace)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -214,14 +229,55 @@ func TestIngestCandidateRetriesIdempotently(t *testing.T) {
 	}
 }
 
+func TestIngestCandidateRejectsChangedRetentionForSameIdempotencyKey(t *testing.T) {
+	repository := &memoryIdentityRepository{}
+	usecase := newCandidateIngest(repository, func() string { return "observation-retention-idempotency" })
+	candidate := domain.Candidate{SourceItemID: "item-retention", Title: "headline"}
+	baseTime := time.Date(2026, 11, 9, 10, 0, 0, 0, time.UTC)
+	usecase.now = func() time.Time { return baseTime }
+	trace := ObservationPolicyTrace{SourcePolicyVersionID: "source-policy-v1", PolicyEvaluatedAt: baseTime, Retention: time.Hour}
+	if _, err := usecase.executeWithPolicyTrace(context.Background(), "source-1", "same-retention-key", candidate, domain.SourceURLPolicy{}, trace); err != nil {
+		t.Fatal(err)
+	}
+	usecase.now = func() time.Time { return baseTime.Add(time.Minute) }
+	trace.PolicyEvaluatedAt = baseTime.Add(time.Minute)
+	trace.Retention = 2 * time.Hour
+	_, err := usecase.executeWithPolicyTrace(context.Background(), "source-1", "same-retention-key", candidate, domain.SourceURLPolicy{}, trace)
+	if !errors.Is(err, ErrIdentityTransaction) || !errors.Is(err, ErrObservationIdempotencyConflict) {
+		t.Fatalf("changed retention must conflict on idempotency key reuse, got %v", err)
+	}
+	if len(repository.observations) != 1 || effectiveObservationRetention(repository.observations[0]) != time.Hour {
+		t.Fatalf("original retention was changed: %+v", repository.observations)
+	}
+}
+
+func TestIngestCandidateRejectsReplayAfterObservationPayloadPurge(t *testing.T) {
+	repository := &memoryIdentityRepository{}
+	usecase := newCandidateIngest(repository, func() string { return "observation-purged" })
+	candidate := domain.Candidate{SourceItemID: "source-item-1", Title: "private candidate"}
+	if _, err := usecase.executeUnscoped(context.Background(), "source-1", "purged-key", candidate, domain.SourceURLPolicy{}); err != nil {
+		t.Fatal(err)
+	}
+	purgedAt := time.Date(2026, 11, 9, 10, 0, 0, 0, time.UTC)
+	repository.observations[0].Candidate = domain.Candidate{}
+	repository.observations[0].PayloadPurgedAt = &purgedAt
+	_, err := usecase.executeUnscoped(context.Background(), "source-1", "purged-key", candidate, domain.SourceURLPolicy{})
+	if !errors.Is(err, ErrIdentityTransaction) || !errors.Is(err, ErrObservationPayloadPurged) {
+		t.Fatalf("replay after payload purge must be rejected, got %v", err)
+	}
+	if len(repository.observations) != 1 || repository.observations[0].Candidate.Title != "" || repository.observations[0].PayloadPurgedAt == nil {
+		t.Fatalf("purged payload was restored: %+v", repository.observations)
+	}
+}
+
 func TestIngestCandidateRejectsIdempotencyKeyPayloadReuse(t *testing.T) {
 	repository := &memoryIdentityRepository{}
-	usecase := NewIngestCandidate(repository, func() string { return "observation-fixed" })
-	_, err := usecase.Execute(context.Background(), "source-1", "same-key", domain.Candidate{ProviderItemID: "provider-result-1", SourceItemID: "source-item-1"}, domain.SourceURLPolicy{})
+	usecase := newCandidateIngest(repository, func() string { return "observation-fixed" })
+	_, err := usecase.executeUnscoped(context.Background(), "source-1", "same-key", domain.Candidate{ProviderItemID: "provider-result-1", SourceItemID: "source-item-1"}, domain.SourceURLPolicy{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = usecase.Execute(context.Background(), "source-1", "same-key", domain.Candidate{ProviderItemID: "provider-result-2", SourceItemID: "source-item-2"}, domain.SourceURLPolicy{})
+	_, err = usecase.executeUnscoped(context.Background(), "source-1", "same-key", domain.Candidate{ProviderItemID: "provider-result-2", SourceItemID: "source-item-2"}, domain.SourceURLPolicy{})
 	if !errors.Is(err, ErrIdentityTransaction) || !errors.Is(err, ErrObservationIdempotencyConflict) {
 		t.Fatalf("err=%v", err)
 	}
@@ -232,15 +288,15 @@ func TestIngestCandidateRejectsIdempotencyKeyPayloadReuse(t *testing.T) {
 
 func TestIngestCandidatePersistsSourcePolicyTrace(t *testing.T) {
 	repository := &memoryIdentityRepository{}
-	usecase := NewIngestCandidate(repository, func() string { return "observation-policy-trace" })
+	usecase := newCandidateIngest(repository, func() string { return "observation-policy-trace" })
 	evaluatedAt := time.Date(2026, 11, 5, 10, 0, 0, 0, time.FixedZone("UTC+8", 8*60*60))
 	trace := ObservationPolicyTrace{
-		SourcePolicyVersionID:   "source-policy-v3",
-		EndpointID: "endpoint-v1", EndpointPolicyVersionID: "endpoint-policy-v2",
-		ProviderOutputPolicyRef: "provider-policy-ref", ProviderOutputPolicyVersionID: "provider-policy-v1",
-		PolicyEvaluatedAt:       evaluatedAt,
+		SourcePolicyVersionID: "source-policy-v3",
+		EndpointID:            "endpoint-v1", EndpointPolicyVersionID: "endpoint-policy-v2",
+		PolicyEvaluatedAt: evaluatedAt,
+		Retention:         time.Hour,
 	}
-	observation, err := usecase.ExecuteWithPolicyTrace(
+	observation, err := usecase.executeWithPolicyTrace(
 		context.Background(), "source-1", "feed-run-1/item-1",
 		domain.Candidate{SourceItemID: "item-1", Title: "headline"},
 		domain.SourceURLPolicy{}, trace,
@@ -251,8 +307,6 @@ func TestIngestCandidatePersistsSourcePolicyTrace(t *testing.T) {
 	if observation.SourcePolicyVersionID != trace.SourcePolicyVersionID ||
 		observation.EndpointID != trace.EndpointID ||
 		observation.EndpointPolicyVersionID != trace.EndpointPolicyVersionID ||
-		observation.ProviderOutputPolicyRef != trace.ProviderOutputPolicyRef ||
-		observation.ProviderOutputPolicyVersionID != trace.ProviderOutputPolicyVersionID ||
 		!observation.PolicyEvaluatedAt.Equal(evaluatedAt.UTC()) {
 		t.Fatalf("policy trace was not persisted: %+v", observation)
 	}
@@ -260,30 +314,56 @@ func TestIngestCandidatePersistsSourcePolicyTrace(t *testing.T) {
 
 func TestIngestCandidatePolicyTraceIsPartOfIdempotencyPayload(t *testing.T) {
 	repository := &memoryIdentityRepository{}
-	usecase := NewIngestCandidate(repository, func() string { return "observation-policy-idempotency" })
+	usecase := newCandidateIngest(repository, func() string { return "observation-policy-idempotency" })
 	candidate := domain.Candidate{SourceItemID: "item-1", Title: "headline"}
 	firstTrace := ObservationPolicyTrace{
 		SourcePolicyVersionID: "source-policy-v3",
 		PolicyEvaluatedAt:     time.Date(2026, 11, 5, 10, 0, 0, 0, time.UTC),
+		Retention:             time.Hour,
 	}
 	secondTrace := ObservationPolicyTrace{
 		SourcePolicyVersionID: "source-policy-v4",
-		ProviderOutputPolicyVersionID: "provider-policy-v2",
 		PolicyEvaluatedAt:     time.Date(2026, 11, 5, 10, 1, 0, 0, time.UTC),
+		Retention:             time.Hour,
 	}
-	if _, err := usecase.ExecuteWithPolicyTrace(context.Background(), "source-1", "feed-run-1/item-1", candidate, domain.SourceURLPolicy{}, firstTrace); err != nil {
+	if _, err := usecase.executeWithPolicyTrace(context.Background(), "source-1", "feed-run-1/item-1", candidate, domain.SourceURLPolicy{}, firstTrace); err != nil {
 		t.Fatal(err)
 	}
-	_, err := usecase.ExecuteWithPolicyTrace(context.Background(), "source-1", "feed-run-1/item-1", candidate, domain.SourceURLPolicy{}, secondTrace)
+	_, err := usecase.executeWithPolicyTrace(context.Background(), "source-1", "feed-run-1/item-1", candidate, domain.SourceURLPolicy{}, secondTrace)
 	if !errors.Is(err, ErrIdentityTransaction) || !errors.Is(err, ErrObservationIdempotencyConflict) {
 		t.Fatalf("changed policy version should conflict on idempotency key reuse, got %v", err)
 	}
 }
 
+func TestIngestCandidateRejectsProviderPolicyReferenceWithoutVersion(t *testing.T) {
+	repository := &memoryIdentityRepository{}
+	usecase := newCandidateIngest(repository, func() string { return "observation-provider-policy-incomplete" })
+	_, err := usecase.executeWithPolicyTrace(context.Background(), "source-1", "provider-result-incomplete", domain.Candidate{ProviderCode: "brave", SourceItemID: "item-1"}, domain.SourceURLPolicy{}, ObservationPolicyTrace{
+		SourcePolicyVersionID: "source-policy-v1", PolicyEvaluatedAt: time.Now().UTC(), Retention: time.Hour,
+	})
+	if !errors.Is(err, ErrProviderOutputPolicyRequired) || len(repository.observations) != 0 {
+		t.Fatalf("err=%v repository=%+v", err, repository)
+	}
+}
+
+func TestIngestCandidateRejectsSelfDeclaredProviderPolicyTrace(t *testing.T) {
+	repository := &memoryIdentityRepository{}
+	usecase := newCandidateIngest(repository, func() string { return "observation-provider-policy-spoof" })
+	_, err := usecase.executeWithPolicyTrace(context.Background(), "source-1", "provider-result-spoof", domain.Candidate{
+		ProviderCode: "tavily", SourceItemID: "item-1",
+	}, domain.SourceURLPolicy{}, ObservationPolicyTrace{
+		SourcePolicyVersionID: "source-policy-v1", ProviderOutputPolicyRef: "provider-policy-ref",
+		ProviderOutputPolicyVersionID: "provider-policy-v1", PolicyEvaluatedAt: time.Now().UTC(), Retention: time.Hour,
+	})
+	if !errors.Is(err, ErrProviderOutputPolicyRequired) || len(repository.observations) != 0 {
+		t.Fatalf("self-declared provider policy must fail closed: err=%v repository=%+v", err, repository)
+	}
+}
+
 func TestIngestCandidateRejectsIncompletePolicyTrace(t *testing.T) {
 	repository := &memoryIdentityRepository{}
-	usecase := NewIngestCandidate(repository, func() string { return "observation-invalid-policy-trace" })
-	_, err := usecase.ExecuteWithPolicyTrace(
+	usecase := newCandidateIngest(repository, func() string { return "observation-invalid-policy-trace" })
+	_, err := usecase.executeWithPolicyTrace(
 		context.Background(), "source-1", "feed-run-1/item-1",
 		domain.Candidate{SourceItemID: "item-1"}, domain.SourceURLPolicy{},
 		ObservationPolicyTrace{SourcePolicyVersionID: "source-policy-v3"},
@@ -295,13 +375,13 @@ func TestIngestCandidateRejectsIncompletePolicyTrace(t *testing.T) {
 
 func TestIngestCandidateIdempotencyIgnoresPerAttemptFetchAndNormalizeTimes(t *testing.T) {
 	repository := &memoryIdentityRepository{}
-	useCase := NewIngestCandidate(repository, func() string { return "observation-fetch-times" })
+	useCase := newCandidateIngest(repository, func() string { return "observation-fetch-times" })
 	observedAt := time.Date(2026, 11, 6, 10, 0, 0, 0, time.UTC)
 	useCase.now = func() time.Time { return observedAt }
 
 	firstFetched := observedAt.Add(-2 * time.Second)
 	firstNormalized := observedAt.Add(-time.Second)
-	first, err := useCase.Execute(context.Background(), "source-1", "same-feed-entry-key", domain.Candidate{
+	first, err := useCase.executeUnscoped(context.Background(), "source-1", "same-feed-entry-key", domain.Candidate{
 		SourceItemID: "item-1", Title: "headline",
 		FetchedAt: &firstFetched, NormalizedAt: &firstNormalized,
 	}, domain.SourceURLPolicy{})
@@ -311,7 +391,7 @@ func TestIngestCandidateIdempotencyIgnoresPerAttemptFetchAndNormalizeTimes(t *te
 
 	secondFetched := observedAt.Add(time.Second)
 	secondNormalized := observedAt.Add(2 * time.Second)
-	second, err := useCase.Execute(context.Background(), "source-1", "same-feed-entry-key", domain.Candidate{
+	second, err := useCase.executeUnscoped(context.Background(), "source-1", "same-feed-entry-key", domain.Candidate{
 		SourceItemID: "item-1", Title: "headline",
 		FetchedAt: &secondFetched, NormalizedAt: &secondNormalized,
 	}, domain.SourceURLPolicy{})
@@ -323,5 +403,33 @@ func TestIngestCandidateIdempotencyIgnoresPerAttemptFetchAndNormalizeTimes(t *te
 		second.Candidate.NormalizedAt == nil ||
 		!second.Candidate.NormalizedAt.Equal(firstNormalized) {
 		t.Fatalf("idempotent replay did not return first observation snapshot: first=%+v second=%+v", first, second)
+	}
+}
+
+type cancelAfterIdentityTransactionRepository struct {
+	inner  *memoryIdentityRepository
+	cancel context.CancelFunc
+}
+
+func (r cancelAfterIdentityTransactionRepository) WithinIdentityTransaction(ctx context.Context, fn func(IdentityTransaction) error) error {
+	err := r.inner.WithinIdentityTransaction(ctx, fn)
+	r.cancel()
+	return err
+}
+
+func TestIngestCandidatePropagatesCancellationAfterTransactionCommit(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	repository := &memoryIdentityRepository{}
+	usecase := newCandidateIngest(cancelAfterIdentityTransactionRepository{inner: repository, cancel: cancel},
+		func() string { return "observation-cancel-after-commit" })
+
+	_, err := usecase.executeUnscoped(ctx, "source-1", "cancel-after-commit-key",
+		domain.Candidate{SourceItemID: "item-1"}, domain.SourceURLPolicy{})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("expected context cancellation after repository commit, got %v", err)
+	}
+	// Repository 已提交后才触发取消：用例必须传播取消，但不能谎称事务已回滚。
+	if len(repository.observations) != 1 {
+		t.Fatalf("expected committed observation to remain, got %+v", repository.observations)
 	}
 }

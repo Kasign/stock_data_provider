@@ -1,16 +1,73 @@
 # Market Data 模块化单体迁移计划与进度
 
-- 维护分支：`feat/full-go-data-providers-api-switch`
+- 历史实施分支：`feat/full-go-data-providers-api-switch`（HEAD `d75ddbe1eb4fac74ca1c15d9be153af1a8184517` 已并入 `integration` 历史）；当前聚合代码基线以 `integration` HEAD 为准。
 - 迁移决策：采用 Root Server 同进程模块化单体
 - 方案依据：`doc/整体任务规划/04-架构方案/Market Data并入Root Server模块化单体调整方案.md`
 - 总体规划：`doc/整体任务规划/01-项目总览/整体任务规划总览.md`
 - 跨模块准入：`doc/整体任务规划/01-项目总览/跨模块接入执行说明.md`、`doc/整体任务规划/01-项目总览/跨模块接入准入清单.md`
 - 本记录建立时的代码基线：`d8595f408337f62be3697aac661ba1570fdd3667`
 - 最近一次 M0 审计基线：`9687337743ff5ad8b5b81209831d43689693ae47`
-- 最近一次代码基线：`5258c26da1e427f60361ca600aa0f5683d0f2d12`（Tencent 四 endpoint 受控 HTTP 执行器注入）
-- 当前实施状态：`M1_completed / M2_completed / M3_in_progress / M4_in_progress`；M3 的 Data 侧进程内路由准备已完成，Root Server 实际装配仍待 Server 组合根完成；M4 的 borrowed DB 与 go-redis Cache Adapter 已实现，Root 侧资源注入/配置一致性及 Provider 网络出口适配仍未完成。
+- 最近一次代码基线：`da62740bd05fd75a8d07290aac930a62ea27cda6`（Provider 能力/出站装配一致性复核前的当前分支基线；随后提交以 GitHub HEAD 为准）
+- 最近一次专项状态记录（2026-11-10）：M1/M2 Data 侧代码与专项验收已完成；M3 Root Server 实际装配、M4 共享资源/受控出站接入及兼容 DDL 迁移仍有未关闭项。该状态记录基于历史 Data 分支 SHA/CI，不能直接代表 2026-11-11 的 integration 现状；当前是否已由 Server/Platform 后续提交关闭，必须以 integration 当前代码、Server/Platform 文档和精确 SHA CI 重新核验。本文件未提供 2026-11-11 最新 M3/M4 复验，因此不宣称迁移整体完成。
 
 > 本文记录 Data 从独立 Go Module/服务迁入 Root Server 根 Go Module、同进程运行的实施计划和进度。若本文与上述架构决策文档冲突，以架构决策文档为准；公共平台及 DATA 契约以冻结契约文档为准。本文不重新定义契约。
+
+## 历史迁移状态收敛复核（2026-11-10，代码验证基线：`d7ba8b127a997432e547ce5740057b6390bce21f`；修复提交：`960a51a1ffeb1cc56671457bb18a7883cf5cbaea`）
+
+本节覆盖当前分支最新可核验状态。历史日期记录只保留为历史证据，不覆盖本节结论。
+
+| 阶段 | 当前结论 | 已完成范围 | 未关闭原因 |
+|---|---|---|---|
+| M0 | 审计主体已收敛，外部证据未齐 | M0-A 参数核对、M0-B Provider 出站行为审计完成 | M0-C 仍缺脱敏生产 DDL；M0-D 全仓门禁仍受其他模块影响 |
+| M1 | `completed` | Data 已归入根 Go Module；根依赖和目录迁移已实施 | Data 专项 gofmt、单测、race、vet 全部通过（Run `42808664417`，代码 SHA `960a51a1`） |
+| M2 | `completed` | Bootstrap、Application Port、InProcess Handler、Diagnostics、Migration Runner、Module 生命周期入口均已实现 | Data 专项 gofmt、单测、race、vet 全部通过（Run `42808664417`，代码 SHA `960a51a1`） |
+| M3 | `data_side_ready_root_pending` | Data 提供 Application、InProcessHandler、Diagnostics、MigrationRunner 和生命周期入口 | Root Server 尚未完成 Module 构造、路由挂载、Analysis InProcess 注入及 readiness 集成 |
+| M4 | `data_side_ready_root_pending_with_platform_blocker` | borrowed DB、go-redis Cache Adapter、HTTP/TCP 注入端口、严格出站依赖校验已具备 | Root 尚未创建并注入共享资源/BoundDoer；TCP BoundDialer 依赖 Platform；兼容 DDL 尚未纳入统一迁移锁 |
+| M5 | `pending` | 无可确认的部署切换完成证据 | Compose/Nginx/WebUI 凭据与容器切换尚未验收 |
+| M6 | `pending` | 部分 Data 集成验证已有证据 | 需要 Root 集成、生产 Schema、回滚和端到端验收 |
+
+### 最新 CI 证据
+
+Go Test Suite Run `42807835415`，测试代码 HEAD：`d7ba8b127a997432e547ce5740057b6390bce21f`：
+
+- Data gofmt：success。
+- Data 单元测试：success。
+- Data race detector：success。
+- Data go vet：在原代码 SHA 上失败，原因是 `fundamental_field_diagnostic.go` 与 `quote_field_diagnostic.go` 各有一处不可达代码；已由提交 `960a51a1ffeb1cc56671457bb18a7883cf5cbaea` 清理。
+- 修复后 Go Test Suite Run `42808664417`（代码 SHA `960a51a1`）：Data gofmt、单元测试、race detector、go vet 全部 success；Market Data MariaDB Migration/PIT Job `129804349136` success。M1/M2 的 Data 专项代码验收关闭。
+- Market Data MariaDB Migration/PIT Job `129801600973`：success；包含 Migration/PIT、DataService 日 K 回退、PIT revision 回退、Probe HTTP/MariaDB 端到端。
+- Root `Test .` Job `129801600609`：failure 于全仓 gofmt，涉及 `internal/adapters/**`、`internal/notification/**`；不属于 Data 修改范围。
+- News MariaDB Job `129801599671`：failure，编译错误为 `internal/news/app/collect_source.go:224:28: undefined: sourceCollectionResultSeal`；属于 News 模块，不在本分支修复。
+- go-core Job `129801600691`：success。
+- 同一代码 SHA 的 Platform Go checks、Live Provider probe、Quant module validation：success；WebUI checks failure 属于独立模块，不在本分支处理。
+- Compose/Docker 构建 Job 在该次 Run 中 skipped，不能沿用历史成功结果代表当前 SHA 构建通过。
+
+**当前 CI 判定：M1/M2 的 Data 专项门禁已通过（gofmt、单测、race、vet、MariaDB/PIT）。** Root 全仓 `Test .` 仍因其他模块 gofmt 失败；News MariaDB Job 仍因 News 编译错误失败；两者不改变 Data 专项门禁结论，也不在本分支修复。Compose/Docker 构建 Job 为 skipped，不能据此宣称部署镜像验收通过。MariaDB/PIT 集成成功不能替代 Root 装配、迁移锁和生产部署验收；Live Provider workflow 外层成功也不等于每个 Provider/能力/证券/日期/复权口径均完成真实数据验收。
+
+### Root 当前代码核验（2026-11-10，分支 HEAD：`5695d5454343b1e95a036b4940ece323bb9aff37`）
+
+只读核验了当前分支的 Root 组合根与 Data Module 公开入口，结论如下：
+
+| 核验点 | 当前代码事实 | 对迁移阶段的影响 |
+|---|---|---|
+| Data Module 构造与 Application Port | `internal/marketdata/bootstrap/module.go` 提供 `New`、`Application()`、`InProcessHandler()`、`Diagnostics()`、`MigrationRunner()` | Data 侧接入入口已具备，不再增加第二套 Data Bootstrap |
+| Root 创建 Data Module | `internal/server/bootstrap/bootstrap.go` 仍调用旧 `internal/adapters/marketdata.LoadConfig` 和 `service.NewRunnerWithMarketDataStores`；未构造 `internal/marketdata/bootstrap.Module` | M3 未完成，需 Server 组合根接入 |
+| Root 挂载 Data HTTP Adapter | `internal/server/bootstrap/router.go` 当前只注册 Health/Diagnostics 与旧 Analysis API，没有 `/market-api` 路由 | M3 未完成 |
+| Data Migration 注册 | `newMigrationRegistry()` 当前注册 News、Research、Notification，未注册 Data 的 `MigrationRunner` | M3/M4 未完成；Data Migration 仍未由 Root 统一调度 |
+| Diagnostics/readiness | Root 当前诊断服务以共享存储和现有 Migration Registry 为基础，未注入 Data Module Diagnostics | M3 未完成 |
+| Module 生命周期 | Data Module 有 Start/Stop/Close，但 Root Lifecycle 尚未注册 Data Module | M3/M4 未完成 |
+
+**本次核验决议：** 上述缺口均位于 `internal/server/bootstrap/**` 的 Root 组合根范围，不属于当前 Data 允许修改范围。Data 侧不再通过新增 Adapter、重复路由或复制 Migration Runner 来绕过 Root 缺口。下一步应由 Server Owner 在其分支完成 Module 构造、依赖注入、路由、Migration、Diagnostics/readiness 和生命周期注册；Data 分支只提供已存在的公开入口并配合验收。
+
+### 迁移关闭边界
+
+1. M1/M2 的代码实现不再重复审查或重复拆分；仅针对当前 Data CI 明确失败项修复，并在同一 Data 专项门禁中验证。
+2. M3/M4 的 Data 侧接口准备不再扩展抽象。实际 Root 装配属于 Server 组合根工作；Platform TCP BoundDialer 与统一迁移锁属于 Platform 能力，不在 Data 分支复制实现。
+3. Data Store 的 `ensureNonUniqueHistoryIndex`、`ensureColumn` 仍在统一 Migration Runner 锁/版本/checksum 范围之外，保持 `blocked_by_platform_migration_runner`，不可宣称多实例迁移安全。
+4. M0-C 生产 DDL、M5 部署切换和 M6 生产验收分别保留为独立关闭条件，不与 M1/M2 的代码归并混为一谈。
+5. 在当前“只修改 Data 模块和 Data 迁移文档”的范围内，能独立推进的任务以修复 Data 专项 CI 明确失败项为主；Root/Platform/其他模块的工作只登记依赖，不代为修改。
+
+---
 
 ## 当前 Review 与执行收敛决议（2026-11-09）
 
@@ -238,16 +295,16 @@ internal/
 
 ### M1：Go Module 归并
 
-状态：`in_progress`
+状态：`implementation_completed_validation_pending`
 
 工作项：
 
-- [ ] 将 Data 源码和配套测试迁入根 Module 的 Market Data 领域目录。
-- [ ] 统一 Go 版本和依赖版本；以依赖兼容和 CI 结果确定最终版本，不盲目降级。
-- [ ] 合并根 `go.mod/go.sum`，清理嵌套 Module 依赖声明。
-- [ ] 调整 Docker Builder、CI、开发脚本和相关文档的 Module 路径。
-- [ ] 暂时保留 Data 原有 HTTP API 和行为；不在此阶段改变认证与业务语义。
-- [ ] 保留独立 Data 命令的兼容构建能力，直到 M2/M3 完成。
+- [x] 将 Data 源码和配套测试迁入根 Module 的 Market Data 领域目录.
+- [x] 统一 Go 版本和依赖版本；以依赖兼容和 CI 结果确定最终版本，不盲目降级.
+- [x] 合并根 `go.mod/go.sum`，清理嵌套 Module 依赖声明.
+- [x] 调整 Docker Builder、CI、开发脚本和相关文档的 Module 路径.
+- [x] 暂时保留 Data 原有 HTTP API 和行为；不在此阶段改变认证与业务语义.
+- [x] 保留独立 Data 命令的兼容构建能力，直到 M2/M3 完成.
 
 验收：
 
@@ -259,17 +316,17 @@ internal/
 
 ### M2：Data Application Port 与 Bootstrap 提取
 
-状态：`in_progress`
+状态：`implementation_completed_validation_pending`
 
 工作项：
 
-- [ ] 从 Data main 中提取模块构造装配，main 不再独占 Provider/Repository/Worker 装配逻辑。
-- [ ] 提供强类型 Application Port，供 Server/Analysis 进程内调用。
-- [ ] HTTP Handler 只依赖 Application Port，不将 HTTP DTO 作为领域共享类型。
-- [ ] 明确模块返回的 Application、HTTP Handler、Diagnostics、Migration Runner 和生命周期句柄。
-- [ ] Provider、Repository、Cache、Worker 的构造与 Start/Stop 有明确所有权。
-- [ ] 独立兼容入口（如保留）与 Root Server 使用同一套 Module Bootstrap。
-- [ ] 初始化失败时逆序释放已创建资源；Start/Stop 支持取消、超时和重复调用保护。
+- [x] 从 Data main 中提取模块构造装配，main 不再独占 Provider/Repository/Worker 装配逻辑。
+- [x] 提供强类型 Application Port，供 Server/Analysis 进程内调用。
+- [x] HTTP Handler 只依赖 Application Port，不将 HTTP DTO 作为领域共享类型。
+- [x] 明确模块返回的 Application、HTTP Handler、Diagnostics、Migration Runner 和生命周期句柄。
+- [x] Provider、Repository、Cache、Worker 的构造与 Start/Stop 有明确所有权。
+- [x] 独立兼容入口（如保留）与 Root Server 使用同一套 Module Bootstrap。
+- [x] 初始化失败时逆序释放已创建资源；Start/Stop 支持取消、超时和重复调用保护。
 
 验收：
 
@@ -305,28 +362,28 @@ internal/
 
 ### M4：共享资源与生命周期统一
 
-状态：`pending`
+状态：`in_progress`
 
 工作项：
 
-- [ ] MariaDB：Root Server 创建共享 Pool，Data Repository 明确接收 borrowed `*sql.DB`；Data 仍拥有 SQL 和 Repository。
-- [ ] Repository 支持 borrowed/owned 资源语义；只有独立兼容入口关闭自有 Pool。
-- [ ] Migration：Root Server 显式注册各模块 Runner，按 namespace 和依赖顺序执行；禁止 Store.Open 隐式迁移。
-- [ ] Redis：Data Cache 适配共享 go-redis Client；如 Redis DB/配置不同，由组合根创建独立 Client 并明确拥有者。
-- [ ] 保留 Data Cache key namespace、TTL、禁用缓存和降级语义。
-- [ ] Provider HTTP：使用冻结的 Platform 受控 HTTP Client；若契约接入尚未具备条件，不自行复制安全实现，记录阻断并等待准入。
-- [ ] Config：区分领域配置与远程 HTTP Adapter 认证配置；进程内模式不要求 Data API Key。
-- [ ] Worker：Data 拥有执行规则，Root Server 统一 Start/Stop 和 drain。
-- [ ] Logger/Diagnostics/Request Context 由组合根装配并按契约注入。
+- [x] Data Repository 支持 borrowed `*sql.DB`；[ ] Root Server 创建共享 Pool 并注入 Data。
+- [x] Repository 明确 borrowed/owned 语义，borrowed Pool 不由 Data 关闭；独立兼容入口保留自有 Pool 生命周期。
+- [x] Data 暴露显式 `MigrationRunner`，Module 构造不隐式执行 Schema Migration；[ ] Root Server 注册各模块 Runner 并统一调度。
+- [x] Data Cache 已适配共享 go-redis Client，`Module.Close` 不关闭注入 Cache；[ ] Root 创建、Ping 并注入共享 Redis Client，核对 Addr/Username/Password/DB 配置。
+- [x] 保留既有 Cache 接口、key namespace、TTL 和 Disabled Cache 入口；新增 typed nil 防御；[ ] integration 验证共享 Redis 下的完整行为。
+- [x] 已识别 Provider 的 HTTP 出口均有注入端口；严格校验按启用能力、实际 endpoint/origin 检查依赖完整性，并拒绝 typed nil；[ ] Root 按实际配置创建精确 Platform BoundDoer 并注入。
+- [ ] BaoStock/Pytdx TCP 受控出口：等待 Platform 提供 TCP BoundDialer；Root 注入前继续 fail-closed，禁止模块化生产路径使用标准 Dialer fallback。
+- [x] `LoadForInProcess` 不要求 Data API Key；[ ] Root 统一装载并校验服务 Config/Secret，区分独立 HTTP Adapter 凭据与进程内调用身份。
+- [x] Data Module 提供 Start/Stop/Wait/Close 生命周期入口；[ ] Root Server 统一调度 Worker、关闭顺序与 drain。
+- [ ] Logger/Diagnostics/Request Context 按冻结契约由组合根装配；Data 保留领域诊断语义。
 
 验收：
 
-- [ ] 每个 Pool/Client/Worker 只有一个明确 owner。
+- [ ] Root 与 Data 间每个 Pool/Client/Worker 只有一个明确 owner，且实际注入与关闭顺序有集成证据。
 - [ ] Migration 仅由组合根执行一次，失败阻止 readiness。
-- [ ] Data Repository 不会关闭 borrowed Pool。
-- [ ] Redis 共享或独立 Client 的配置语义可验证。
+- [x] Data Repository 不会关闭 borrowed Pool（代码与单测覆盖）；Root 生命周期仍待集成验收。
+- [ ] Redis 共享或独立 Client 的连接参数、Cache key、TTL、错误和禁用语义在 Root 集成环境验证。
 - [ ] Shutdown 顺序、超时和资源释放有集成测试。
-
 ### M5：部署与 WebUI 路由切换
 
 状态：`pending`
@@ -419,7 +476,7 @@ internal/
 | M1 Go Module 归并 | completed（代码归并） | Data 源码已位于根 Module 的 `internal/marketdata/**`；根 `go.mod` 为 Go 1.23.0；当前 Data 根模块 gofmt/test/race/vet 专项通过 |
 | M2 Application Port/Bootstrap | completed（Data 侧） | M2-1～M2-6 已完成：Application Port、Bootstrap、Worker 生命周期、HTTP 用例接口拆分、来源能力快照和 Migration Runner |
 | M3 Root Server 装配 | in_progress | Data 已提供 `InProcessHandler()`、Application Port 和 `MigrationRunner()`；Root Router、共享资源注入、Remote→InProcess 切换属于 Server 组合根任务，本分支不越界修改 |
-| M4 共享资源统一 | in_progress | Data Repository borrowed DB、`cache.NewGoRedis` 已实现；Tushare、Hithink、TickFlow（认证/免费双出口）、Xueqiu、Yahoo、NetEase（报价/历史双出口）、Tencent（四 endpoint）、Sina（报价/K 线双出口）已提供 HTTPDoer 注入入口；Root 侧真实 BoundDoer 创建与注入、Redis 配置匹配、Eastmoney/MiaoXiang 等 Provider 和 TCP 出站策略仍待完成 |
+| M4 共享资源统一 | in_progress | Data Repository borrowed DB、`cache.NewGoRedis` 已实现；Tushare、Hithink、TickFlow（认证/免费双出口）、Xueqiu、Yahoo、NetEase（报价/历史双出口）、Tencent（四 endpoint）、Sina（报价/K 线双出口）、Eastmoney（按 origin 统一映射多个 endpoint）、MiaoXiang（单 API endpoint）已提供 HTTPDoer 注入入口；Root 侧真实 BoundDoer 创建与注入、Redis 配置匹配、Pytdx/BaoStock TCP 受控连接函数注入入口已提供；Platform 尚无可供 Root 使用的公开 BoundDialer，实际受控连接策略仍待完成 |
 | M5 部署/WebUI 切换 | pending | Root 同进程装配和共享资源验收后执行 |
 | M6 迁移验收 | pending | 结构迁移、API/PIT/质量、真实 Provider 和部署验收分开形成证据 |
 | 公共平台契约接入 | in_progress（按依赖） | 当前分支已有 Platform 基础代码；Data 仅适配已冻结能力，不复制 HTTP Client、Diagnostics Runner、Storage 等公共实现 |
@@ -961,3 +1018,98 @@ internal/
 - 新增测试源码覆盖两出口不交叉、GET URL、Referer/Accept Header、502 错误路径和旧构造器兼容；测试尚未运行。
 - 下一步处理 Eastmoney 多 endpoint 出口；按真实配置 URL 逐个分组，不扩大 Host 白名单，不改变 Provider 质量规则。
 
+
+
+### 2026-11-09：M4-HTTP-09 Eastmoney 按 origin 受控 HTTP 执行器注入
+
+- 代码基线：`ba6cdde5ceebfb56d03f35068fc6e709f8f8bcb6`；本项实现提交：`0179052d5506eef1b8be97459e31daee84372266`。Eastmoney 当前配置 endpoint 覆盖 Quote、Kline、StockBasic、SectorRanking/StockList、Index、MarketBreadth、LimitPool、StockBoards、CapitalFlow、DragonTiger、Announcements、HotRanking、HotSurge。部分默认 endpoint 共用 Host，另有 `push2his`、`push2ex`、`datacenter`、`datacenter-web`、`np-anotice-stock`、`emappdata` 等独立 origin。
+- 不为每条 URL 增加重复字段，而按规范 `scheme://host` 作为受控执行器映射键：同 origin 共享一个 BoundDoer，不同 origin 必须独立绑定。新增 `EastmoneyHTTPOrigin` 供 Root 计算映射键，`WithHTTPDoers` 注入执行器映射。
+- `getJSON` 路径覆盖 Quote、Kline、Index、SectorRanking/StockList、MarketBreadth、LimitPool、StockBoards、CapitalFlow、DragonTiger、Announcements 等 JSON 请求；StockBasic 直接请求和 HotRanking/HotSurge POST 路径也统一经 origin 选择执行器。
+- 映射为 nil 时兼容旧标准 Client；映射非 nil 时 fail-closed，缺少请求 origin 对应执行器直接报错，不允许静默回退无约束 Client。原有重定向策略、超时、请求 Header、重试和响应体限制保持不变。
+- Bootstrap Dependencies 新增 `EastmoneyHTTPDoers map[string]provider.HTTPDoer`。Root 后续需从实际配置 URL（包括 LimitPoolBaseURL 和默认值）汇总 origin，逐个创建精确 HTTPS/443 BoundDoer，再按 `provider.EastmoneyHTTPOrigin` 的返回值填入 map。Module 不拥有、不关闭执行器。
+- 尚未在 Root 侧实现 origin 汇总与注入；新增代码/测试未运行，不能视为 SSRF 防护已生效或真实 Eastmoney 数据验收通过。
+- 下一步处理 MiaoXiang 等剩余 HTTP Provider，再单独梳理 BaoStock/Pytdx TCP 出站；最后进入 Root Server 实际装配。
+
+
+
+### 2026-11-09：M4-HTTP-10 MiaoXiang 补充数据 API 受控 HTTP 执行器注入
+
+- 代码基线：`a59c767f62b31a94a6dad3cc6cf8b5a1763147fd`；实现提交：`205e8fbad27a82708dcb9b95264a55f7ed084ee3`。MiaoXiang 仅有一个可配置 API endpoint（默认 `mkapi2.dfcfs.com/finskillshub/api/claw/query`），请求为携带 `apikey` Header 的 JSON POST。
+- 新增 `NewMiaoXiangWithHTTPDoer`；旧 `NewMiaoXiang` 保留并委托新构造器。注入执行器只负责传输，不改变 API Key 校验、全局串行准入、300ms 频率控制、缓存、10 秒默认超时、禁止重定向、2 MiB 响应体上限和解析逻辑。
+- Bootstrap Dependencies 增加 `MiaoXiangHTTPDoer`，仅在 `MXEnabled` 时传给 Provider。Root 应按运行时 `MXAPIURL` 精确创建 HTTPS/443 BoundDoer，执行 DNS/IP 校验、拒绝重定向并保留 2 MiB 响应体上限；Module 不拥有、不关闭执行器。
+- 新增测试源码覆盖注入执行器、POST URL、apikey/Content-Type Header、502 错误路径和旧构造器兼容；测试尚未运行。
+- 当前 Data 侧 Provider HTTP 执行器注入入口已覆盖已识别 Provider；下一阶段应盘点遗漏的非标准请求路径与 TCP Provider，再集中完成 Root 实际装配，而不是继续无差别增加接口。
+
+
+
+### 2026-11-09：M4-TCP-01 Pytdx 与 BaoStock 受控 TCP DialContext 注入入口
+
+- 代码基线：`1340835a023989596454ee066eb3955bbdecc569`；注入实现提交：`93a88657b750ec46784e6d39d8143415b77aec3b`；测试提交：`e6ffc4458dd5cafed2930feab4531d5c553db910`。Pytdx 在 Provider 内部通过 `net.Dialer.DialContext` 连接候选 TDX Host:7709；BaoStock TCP Client 在 `ensureLoggedInLocked` 中连接配置 Host:Port。两者均绕过 HTTP BoundDoer，不能用 HTTP 执行器代替。
+- 新增共享窄类型 `internal/marketdata/transport.DialContextFunc`，签名与 Go 标准 `net.Dialer.DialContext` 一致。
+- Pytdx 新增 `NewPytdxWithDialContext`；原 `NewPytdx` 保留并委托。每次候选地址连接均经过注入函数，仍由 Provider 设置每次连接的超时 context、候选轮转和最多 6 次尝试。
+- BaoStock `Config` 增加可选 `DialContext`；配置后连接经 Root 注入函数，nil 时保留原标准 net.Dialer 与 KeepAlive 行为。
+- Bootstrap Dependencies 增加 `PytdxDialContext` / `BaoStockDialContext` 并透传；Module 不拥有、不关闭外部连接函数。
+- 当前 Platform 公开能力只有 HTTP `BoundDoer`，尚无可供 Root 使用的 TCP `BoundDialer`。本次只建立 Data 注入边界，不在 Data 分支复制 DNS/IP 校验逻辑，也不把普通 DialContext 伪称为受控连接。Root 安全接入必须等待 Platform 提供 TCP 目标绑定能力，按精确 Host/Port、DNS/IP 和连接生命周期策略装配。
+- 新增测试源码覆盖 Pytdx 候选 Host:7709 和 BaoStock 配置 Host:Port 均调用 Root 注入函数，并验证连接 context deadline 和错误透传。测试尚未运行；未宣称构建通过或真实 TCP 出站安全验收通过。
+
+
+
+### 2026-11-09：M4 Data Module 装配依赖传递收敛
+
+- 代码基线：`3c83d81964205011768932d7991a778c21f7af22`。
+- `bootstrap.Module.build` 改为接收完整的 `Dependencies`，不再通过 19 个位置参数逐一传递 Provider HTTPDoer/TCP DialContext。
+- Provider 构造仍显式读取对应依赖字段；不改变依赖所有权、默认兼容行为、Provider 优先级或资源关闭语义。
+- 该调整减少新增 Provider 注入项时的签名同步风险，保持 Root 注入契约集中在 `Dependencies`。
+- 本次未运行构建/测试；不宣称编译通过。当前已知 Data gofmt 门禁仍有 6 个文件待修复，后续需在 integration 统一验收。
+
+
+### 2026-11-09：M4 出站依赖严格装配校验
+
+- bootstrap.Dependencies.RequireEgressDependencies 为 Root 生产组合根提供显式严格装配开关；默认关闭，旧独立部署/兼容构造不改变行为。
+- 严格模式在 Module 构造前检查 ProviderPriority 中实际启用 Provider 的 HTTPDoer/TCP DialContext 注入；未启用 Provider 不要求注入，MiaoXiang 仅在 MXEnabled 时要求执行器。
+- Eastmoney 按全部配置 endpoint 计算 scheme://host，逐个要求 origin 对应执行器，不能仅以 map 非 nil 作为通过条件。
+- 校验失败时构造直接返回可定位的缺失依赖错误，不会静默回退标准 HTTP Client/默认 TCP Dialer。严格模式只证明注入入口完整，不证明注入实现具备 SSRF/DNS/IP 防护；Root 仍须使用 Platform 受控执行器。
+- 新增测试源码覆盖禁用 Provider 豁免、启用 Provider 缺失依赖、Eastmoney origin 缺项及 TCP Dialer 缺失。按分支约定未运行构建/测试，待 integration 统一验收。
+
+### 2026-11-09：M4 严格出站校验与 Platform 复用核对
+
+- 对照 Platform 公共契约与当前实现，确认 Data 不应自建 HTTP/DNS/IP 校验、Redis 连接池、通用 Fault 或诊断执行框架。
+- HTTP：Data 保留 Provider 专用 HTTPDoer 注入端口；Root 复用 Platform httpclient.Client.Bind()/BoundDoer，按 endpoint 精确创建执行器。Data 继续负责协议解析、响应体上限、Provider 错误和质量语义。
+- Redis：cache.GoRedis 是共享客户端 Adapter；Root 应使用 Platform storage.OpenRedis() 创建并 Ping 共享 redis.Client，再通过 cache.NewGoRedis(client) 注入 Data。Data 不创建/关闭连接池。旧 cache.Redis RESP 实现仍被兼容独立 cmd/market-data 使用，不作为模块化单体生产接入方案；旧入口退役前不贸然删除。
+- MariaDB：Data Repository/Store 保留领域 SQL 与 Schema 所有权；Root 复用 Platform storage.OpenSQL()/PingSQL() 管理连接池，再将 sql.DB 注入 Data Store。Data 不复制连接池参数、Fault 或 Ping 逻辑。
+- Diagnostics：Data 保留 Provider Probe、Validation、Freshness、Coverage、Cross-Provider 和历史证据；仅在 Server 入口需要公共摘要时适配 Platform Observation，不重写 Data 诊断体系。
+- 本次修复严格出站校验的默认值偏差：旧实现检查 Config 原始 URL，空字段会被误判为非法；实际 Provider 构造器会填充默认 endpoint。现从同一 newEastmoneyProvider(cfg) 实例读取 HTTPOrigins()，覆盖实际生效的默认值和自定义值，避免重复维护默认 Host 清单。增加默认 Host 回归测试源码，未运行测试。
+- Root 侧实际创建/注入 BoundDoer、受控 TCP Dialer、OpenRedis/OpenSQL 及统一关闭仍由 Server 组合根负责，不在 Data 复制实现。
+
+### 2026-11-09：M4 严格出站校验与 Provider 能力开关对齐
+
+- 复核发现 Enabled=true 不代表 Provider 一定会发起网络请求；Provider 还需要至少一个业务能力开关为 true。旧严格校验只看 Enabled，会对“已启用 Provider 但所有能力均关闭”的配置提出无意义的出站依赖要求。
+- 严格校验现同时检查 Enabled 与全部领域能力开关；没有启用任何能力的 Provider 不要求 HTTPDoer/TCP DialContext。实际启用至少一项能力时，仍执行原有依赖完整性检查。
+- 增加测试源码覆盖零能力 Provider 跳过和代表性能力识别。该修复仅消除无调用场景的误报，不改变各 Provider 内部 endpoint 的粒度；Quote-only 等部分能力配置仍可能要求该 Provider 当前全部注入端点，下一步需按真实能力调用路径进一步收敛。
+- Redis 审查结论：Module 只借用注入的 Cache/Store，Close 仅关闭 Data 自有 BaoStock Client；GoRedis Adapter 不关闭共享 redis.Client。旧 RESP Redis 仍用于兼容独立入口，不能在 Root 模块化部署中替代 Platform storage.OpenRedis()。
+- 本次未运行构建/测试，待 integration 统一验收。
+
+
+### 2026-11-09：M4 按业务能力收敛多出口 Provider 装配
+
+- 复核 Provider 请求路径后，先对 endpoint 与业务能力有明确一一对应关系的 Provider 收敛严格校验：Tencent Quote / DailyBars（复权与未复权两路）/ StockSearch 分别校验；Sina Quote / DailyBars 分别校验；NetEase Quote / DailyBars 分别校验。
+- 未启用的 endpoint 不再要求 Root 注入对应 BoundDoer；启用 DailyBars 时仍要求其实际可能使用的完整路径（Tencent 两类 K 线执行器都必须注入）。
+- 其他 Provider 暂时保留保守的 Provider 级校验，尤其 Eastmoney 的多个领域能力共享或交叉使用 endpoint；在逐个调用点确认映射前，不猜测能力与 Host 的对应关系。
+- 新增测试源码覆盖 Quote-only、DailyBars-only 的依赖边界；未运行构建/测试。
+### 2026-11-09：M4 Data 侧依赖门禁与 typed nil 复核
+
+- 代码基线：`da62740bd05fd75a8d07290aac930a62ea27cda6`；本轮 Data 侧代码已增加 TickFlow 禁用能力的凭证校验修正、HTTP/TCP 出站依赖 typed nil 检测，以及 Module Cache typed nil 处理。
+- Provider 配置的 20 项能力均与 `hasConfiguredProviderCapability` 和 `Module.build` 的能力注册/接口断言对齐；启用但不支持的能力在 Module 装配时明确失败。
+- `RequireEgressDependencies` 默认 false 是独立兼容入口的兼容策略；Root Server 必须显式设置 true。当前 Data 分支不包含 Root 组合根调用点，不能将此项记为 Root 已接入。
+- Data 侧 HTTP 出口注入和严格依赖门禁已完成代码准备；Root 实际创建 Platform BoundDoer、配置 DestinationPolicy 并注入仍未完成。
+- TCP 受控拨号仍等待 Platform BoundDialer；BaoStock/Pytdx 的 Data 注入接口和 fail-closed 校验已准备，不在 Data 复制平台安全实现。
+- 本轮未执行构建或测试；新增测试源码和本轮静态审查结果待 integration CI 统一验收。
+
+
+### P1-M4 补充：兼容性 Schema 修复尚未纳入统一迁移锁（2026-11-09）
+
+- 代码复核确认 `Store.Migrate` 的基础表结构已通过 `platform/storage.ApplyMigrations` 执行，但其后仍调用 `ensureNonUniqueHistoryIndex` 和 `ensureColumn`，执行旧修订索引替换及 `market_data_quotes.volume_ratio/turnover_rate` 兼容补列。
+- 这些兼容性 DDL 当前位于 Migration Runner 的 namespace advisory lock、版本历史和 checksum 管理范围之外。多个 Root 实例并发启动时，可能同时通过 information_schema 检查并尝试相同 ALTER/CREATE/DROP；当前幂等检查不能替代跨进程迁移锁。
+- Data 不能自行复制一套 Migration Runner，也不能修改已发布的 migration version 1。当前代码保留既有兼容逻辑，暂不做有风险的 SQL 重排。
+- 这是 Platform Migration Runner 的能力缺口：需要评估提供受统一锁保护的迁移前置/兼容检查步骤，或支持可版本化的条件迁移操作；执行、历史记录和失败恢复仍由同一 Runner 负责。Root Server 必须保证迁移阶段只执行一次/由单一受控生命周期触发，直到该能力补齐。
+- 状态：`blocked_by_platform_migration_runner`。Data 侧待公共能力落地后，将两项兼容修复迁入受控版本化流程，再删除 Runner 外 DDL；不可把当前“单实例幂等”描述为“多实例迁移安全”。

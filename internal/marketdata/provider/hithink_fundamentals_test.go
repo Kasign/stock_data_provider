@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"example.com/stock-analysis-flow/internal/marketdata/model"
+	"example.com/stock-analysis-flow/internal/marketdata/validation"
 )
 
 func newHithinkFundamentalsTestServer(t *testing.T, abilitiesJSON string) (*httptest.Server, *atomic.Int32) {
@@ -184,5 +185,149 @@ func TestHithinkFundamentalsRejectsDuplicateStatementRowsForTargetReport(t *test
 	}
 	if !containsHithinkReason(got.QualityReasons, "income_statement_provider_unavailable") {
 		t.Fatalf("snapshot should preserve statement-unavailable reason, got %+v", got.QualityReasons)
+	}
+}
+
+func TestHithinkFundamentalsReportsFieldLevelParseIssues(t *testing.T) {
+	abilities := `[
+		{"ability":"profitability","indicators":[
+			{"index_id":"roe","value":"0.1"},
+			{"index_id":"net_profit_margin","value":null},
+			{"index_id":"gross_profit_margin","value":"not-a-number"},
+			{"index_id":"net_profit","value":{}},
+			{"value":"1.2"}
+		]}
+	]`
+	server, _ := newHithinkFundamentalsTestServer(t, abilities)
+	provider := NewHithinkConfigured(3*time.Second, server.URL, "unit-test-key")
+	reporter := validation.NewReporter(validation.DefaultMaxIssues)
+	ctx := validation.WithReporter(context.Background(), reporter)
+	got, err := provider.FetchFundamentals(ctx, "600519.SH", 2026, 2)
+	if err != nil {
+		t.Fatalf("partial fundamentals should be retained: %v", err)
+	}
+	if got.QualityStatus != model.QualityDegraded {
+		t.Fatalf("invalid/missing indicator values must degrade the snapshot: %+v", got)
+	}
+	issues := reporter.Snapshot().Issues
+	want := map[string]string{
+		"net_profit_margin":   "missing_value",
+		"gross_profit_margin": "invalid_number",
+		"net_profit":          "invalid_number",
+		"metric_key":          "missing_field",
+	}
+	for field, code := range want {
+		found := false
+		for _, issue := range issues {
+			if issue.Field == field && issue.Code == code && issue.Stage == validation.StageParse &&
+				issue.ProviderField != "" && issue.RowIndex != nil && *issue.RowIndex >= 0 &&
+				issue.Symbol == "600519.SH" {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("expected field-level issue %s/%s, got %+v", field, code, issues)
+		}
+	}
+}
+
+func TestHithinkFundamentalStatementReportsInvalidPeriodAndPublicationEvidence(t *testing.T) {
+	location, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil {
+		t.Fatal(err)
+	}
+	periodEnd := time.Date(2026, time.June, 30, 0, 0, 0, 0, location).UnixMilli()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/api/a-share/financials/indicators":
+			_, _ = fmt.Fprint(w, `{"code":0,"data":{"thscode":"600519.SH","report":"2026-2","abilities":[]}}`)
+		case "/api/a-share/financials/income-statements":
+			_ = json.NewEncoder(w).Encode(map[string]any{"code": 0, "data": map[string]any{"item": []map[string]any{
+				{"thscode": "600519.SH", "period_end_ms": "not-a-timestamp", "report_date_ms": nil, "operating_income": 100.0},
+				{"thscode": "600519.SH", "period_end_ms": periodEnd, "report_date_ms": nil, "operating_income": 200.0},
+			}}})
+		case "/api/a-share/financials/balance-sheets", "/api/a-share/financials/cash-flow-statements":
+			_, _ = fmt.Fprint(w, `{"code":0,"data":{"item":[]}}`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	reporter := validation.NewReporter(validation.DefaultMaxIssues)
+	ctx := validation.WithReporter(context.Background(), reporter)
+	got, err := NewHithinkConfigured(3*time.Second, server.URL, "unit-test-key").FetchFundamentals(ctx, "600519.SH", 2026, 2)
+	if err != nil {
+		t.Fatalf("invalid optional statement evidence should preserve partial snapshot: %v", err)
+	}
+	var income *model.FundamentalSection
+	for i := range got.Sections {
+		if got.Sections[i].Category == "income_statement" {
+			income = &got.Sections[i]
+			break
+		}
+	}
+	if income == nil || !income.HasData || income.QualityStatus != model.QualityDegraded {
+		t.Fatalf("statement should retain valid metric but degrade missing publication evidence: %+v", income)
+	}
+	foundPeriod, foundPublication := false, false
+	for _, issue := range reporter.Snapshot().Issues {
+		if issue.ProviderField == "period_end_ms" && issue.Field == "report_date" &&
+			issue.Code == "invalid_date" && issue.RowIndex != nil && *issue.RowIndex == 0 {
+			foundPeriod = true
+		}
+		if issue.ProviderField == "report_date_ms" && issue.Field == "publication_date" &&
+			issue.Code == "missing_value" && issue.RowIndex != nil && *issue.RowIndex == 1 {
+			foundPublication = true
+		}
+	}
+	if !foundPeriod || !foundPublication {
+		t.Fatalf("expected field-level period/publication issues, got %+v", reporter.Snapshot().Issues)
+	}
+}
+
+func TestHithinkFundamentalsRejectPathsReportIdentityIssues(t *testing.T) {
+	validData := `{"thscode":"600519.SH","report":"2026-2","abilities":[]}`
+	cases := []struct {
+		name, data, field, providerField, code string
+		rowIndex                               int
+	}{
+		{name: "symbol mismatch", data: strings.Replace(validData, "600519.SH", "600036.SH", 1), field: "symbol", providerField: "thscode", code: "symbol_mismatch", rowIndex: -1},
+		{name: "report mismatch", data: strings.Replace(validData, "2026-2", "2026-1", 1), field: "report_period", providerField: "report", code: "report_period_mismatch", rowIndex: -1},
+		{name: "unknown category", data: `{"thscode":"600519.SH","report":"2026-2","abilities":[{"ability":"unexpected","indicators":[]}]}`, field: "category", providerField: "ability", code: "unknown_category", rowIndex: 0},
+		{name: "duplicate category", data: `{"thscode":"600519.SH","report":"2026-2","abilities":[{"ability":"profitability","indicators":[]},{"ability":"profitability","indicators":[]}]}`, field: "category", providerField: "ability", code: "duplicate_category", rowIndex: 1},
+		{name: "duplicate metric", data: `{"thscode":"600519.SH","report":"2026-2","abilities":[{"ability":"profitability","indicators":[{"index_id":"ROE","value":1},{"index_id":"roe","value":2}]}]}`, field: "metric_key", providerField: "index_id", code: "duplicate_metric_identity", rowIndex: 1},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = fmt.Fprintf(w, `{"code":0,"data":%s}`, tc.data)
+			}))
+			defer server.Close()
+			reporter := validation.NewReporter(20)
+			ctx := validation.WithReporter(context.Background(), reporter)
+			_, err := NewHithinkConfigured(3*time.Second, server.URL, "unit-test-key").FetchFundamentals(ctx, "600519.SH", 2026, 2)
+			if err == nil {
+				t.Fatal("expected fail-fast validation error")
+			}
+			found := false
+			for _, issue := range reporter.Snapshot().Issues {
+				if issue.Stage != validation.StageValidate || issue.Field != tc.field || issue.ProviderField != tc.providerField || issue.Code != tc.code {
+					continue
+				}
+				if tc.rowIndex < 0 && issue.RowIndex == nil {
+					found = true
+				}
+				if tc.rowIndex >= 0 && issue.RowIndex != nil && *issue.RowIndex == tc.rowIndex {
+					found = true
+				}
+			}
+			if !found {
+				t.Fatalf("expected Reporter issue %s/%s/%s row=%d, got %+v", tc.field, tc.providerField, tc.code, tc.rowIndex, reporter.Snapshot().Issues)
+			}
+		})
 	}
 }

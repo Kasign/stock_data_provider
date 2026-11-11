@@ -92,3 +92,67 @@ func TestDailyBarsMariaDBFallbackPreservesNormalizationWarnings(t *testing.T) {
 		}
 	}
 }
+
+func TestDailyBarsMariaDBStaleFallbackDoesNotOverrideDegradedProvider(t *testing.T) {
+	dsn := os.Getenv("MARKET_DATA_TEST_MYSQL_DSN")
+	if dsn == "" {
+		t.Skip("MARKET_DATA_TEST_MYSQL_DSN is not configured")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	store, err := repository.OpenMySQL(ctx, dsn)
+	if err != nil {
+		t.Fatalf("open MariaDB: %v", err)
+	}
+	defer store.Close()
+	if err := store.Migrate(ctx); err != nil {
+		t.Fatalf("migrate MariaDB: %v", err)
+	}
+
+	fetchedAt := time.Now().UTC()
+	volume := int64(1000)
+	amount := 10000.0
+	stored := model.DailyBar{
+		Symbol: "600519.SH", TradeDate: "1990-01-04", Period: "1d",
+		Open: 10, High: 11, Low: 9, Close: 10.5,
+		Volume: &volume, Amount: &amount, VolumeUnit: "shares", AmountUnit: "CNY",
+		AdjustmentBasis: model.AdjustmentNone, Source: "integration-stale-fallback",
+		SourceVersion: "integration-stale-fallback-v1", FetchedAt: fetchedAt, NormalizedAt: fetchedAt,
+		QualityStatus: model.QualityValid, NormalizationVer: normalize.Version,
+	}
+	if err := store.UpsertBars(ctx, []model.DailyBar{stored}); err != nil {
+		t.Fatalf("seed MariaDB fallback row: %v", err)
+	}
+
+	degraded := stored
+	degraded.Source = "degraded-provider"
+	degraded.SourceVersion = "degraded-provider-v1"
+	degraded.Close = 10.6
+	degraded.QualityStatus = model.QualityDegraded
+	degraded.QualityReasons = []string{"provider_field_limited"}
+	degradedProvider := fakeProvider{name: "degraded-provider", bars: []model.DailyBar{degraded}}
+	svc := NewWithCapabilities(
+		[]provider.NamedProvider{degradedProvider},
+		nil,
+		[]provider.DailyBarProvider{degradedProvider},
+		cache.NewDisabled(), store,
+		time.Second, time.Minute, 1, 10,
+		ResilienceConfig{Retries: 0, CircuitFailureThreshold: 3, CircuitCooldown: time.Second},
+		nil,
+	)
+
+	bars, fromCache, _, err := svc.DailyBars(
+		ctx, "600519.SH", "1990-01-04", "1990-01-04", 1, model.AdjustmentNone,
+	)
+	if err != nil {
+		t.Fatalf("daily bars should retain degraded provider result: %v", err)
+	}
+	if fromCache {
+		t.Fatal("provider result must not be reported as a cache hit")
+	}
+	if len(bars) != 1 || bars[0].Source != "degraded-provider" || bars[0].QualityStatus != model.QualityDegraded || bars[0].Close != degraded.Close {
+		t.Fatalf("stale MariaDB fallback must not override degraded provider data: bars=%+v", bars)
+	}
+}

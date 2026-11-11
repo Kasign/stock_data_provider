@@ -1,0 +1,135 @@
+{
+  "contract": "PLAT-CTR-001",
+  "schema_version": "1.0.0",
+  "cases": [
+    {
+      "case_id": "validation-http-400",
+      "http_status": 400,
+      "response_headers": {
+        "Content-Type": "application/json",
+        "X-Request-ID": "req_plat001_1"
+      },
+      "body": {
+        "error": {
+          "class": "validation",
+          "code": "server.invalid_request",
+          "message": "request is invalid",
+          "retryable": false,
+          "request_id": "req_plat001_1"
+        }
+      }
+    },
+    {
+      "case_id": "unauthenticated-http-401",
+      "http_status": 401,
+      "response_headers": {
+        "Content-Type": "application/json",
+        "X-Request-ID": "req_plat001_2"
+      },
+      "body": {
+        "error": {
+          "class": "unauthenticated",
+          "code": "platform.authentication_required",
+          "message": "authentication is required",
+          "retryable": false
+        }
+      }
+    },
+    {
+      "case_id": "forbidden-http-403",
+      "http_status": 403,
+      "response_headers": {
+        "Content-Type": "application/json",
+        "X-Request-ID": "req_plat001_3"
+      },
+      "body": {
+        "error": {
+          "class": "forbidden",
+          "code": "platform.access_denied",
+          "message": "access is denied",
+          "retryable": false
+        }
+      }
+    },
+    {
+      "case_id": "not_found-http-404",
+      "http_status": 404,
+      "response_headers": {
+        "Content-Type": "application/json",
+        "X-Request-ID": "req_plat001_4"
+      },
+      "body": {
+        "error": {
+          "class": "not_found",
+          "code": "data.snapshot_not_found",
+          "message": "requested resource was not found",
+          "retryable": false
+        }
+      }
+    },
+    {
+      "case_id": "conflict-http-409",
+      "http_status": 409,
+      "response_headers": {
+        "Content-Type": "application/json",
+        "X-Request-ID": "req_plat001_5"
+      },
+      "body": {
+        "error": {
+          "class": "conflict",
+          "code": "research.version_conflict",
+          "message": "resource version conflicts with the request",
+          "retryable": false
+        }
+      }
+    },
+    {
+      "case_id": "unavailable-http-503",
+      "http_status": 503,
+      "response_headers": {
+        "Content-Type": "application/json",
+        "X-Request-ID": "req_plat001_6"
+      },
+      "body": {
+        "error": {
+          "class": "unavailable",
+          "code": "news.provider_unavailable",
+          "message": "news provider is temporarily unavailable",
+          "retryable": true
+        }
+      }
+    },
+    {
+      "case_id": "timeout-http-504",
+      "http_status": 504,
+      "response_headers": {
+        "Content-Type": "application/json",
+        "X-Request-ID": "req_plat001_7"
+      },
+      "body": {
+        "error": {
+          "class": "timeout",
+          "code": "llm.request_timeout",
+          "message": "model request timed out",
+          "retryable": true
+        }
+      }
+    },
+    {
+      "case_id": "internal-http-500",
+      "http_status": 500,
+      "response_headers": {
+        "Content-Type": "application/json",
+        "X-Request-ID": "req_plat001_8"
+      },
+      "body": {
+        "error": {
+          "class": "internal",
+          "code": "server.internal_error",
+          "message": "internal server error",
+          "retryable": false
+        }
+      }
+    }
+  ]
+}

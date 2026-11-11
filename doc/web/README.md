@@ -18,11 +18,11 @@
 ## 公共契约与数据侧文档
 
 - [WebUI 与数据层接口协作清单](../接口规范/WebUI与数据层接口协作清单.md)。
-- [数据层 API 接口清单与 WebUI 接入映射](../数据层API清单.md)。
-- [数据质量与状态契约](../数据质量与状态契约.md)。
-- 行情服务权威契约：../../services/market-data/openapi.yaml。
-- 分析任务 OpenAPI：../api/分析任务.openapi.yaml。
-- Python 桥接 OpenAPI：../api/Python桥接.openapi.yaml。
+- [数据层 API 接口清单与 WebUI 接入映射](../api/contracts/数据层API清单.md)。
+- [数据质量与状态契约](../api/contracts/数据质量与状态契约.md)。
+- 行情服务权威契约：`internal/marketdata/httpapi/openapi.yaml`。
+- 分析任务 OpenAPI：`../api/contracts/分析任务.openapi.yaml`。
+- Python 桥接 OpenAPI：`../api/contracts/Python桥接.openapi.yaml`。
 
 ## 文档维护约定
 

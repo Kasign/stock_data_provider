@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"example.com/stock-analysis-flow/internal/marketdata/model"
+	"example.com/stock-analysis-flow/internal/marketdata/validation"
 )
 
 func resetMiaoXiangRateLimitForTest() {
@@ -202,6 +203,149 @@ func TestMiaoXiangCapitalFlowRejectsInvalidObservationDates(t *testing.T) {
 			if _, err := p.FetchCapitalFlow(context.Background(), "600519"); err == nil || !strings.Contains(err.Error(), item.want) {
 				t.Fatalf("invalid observation dates must be rejected with %q, got %v", item.want, err)
 			}
+		})
+	}
+}
+
+func TestMiaoXiangChipDistributionReportsDegradedFields(t *testing.T) {
+	response := `{"status":0,"data":{"dataTableDTOList":[{"nameMap":{"0":"平均成本","1":"获利比例"},"table":{"headName":["2026-10-21"],"0":["12.50"],"1":["-"]}}]}}`
+	p, _, cleanup := newMiaoXiangTestServer(t, response, nil)
+	defer cleanup()
+	reporter := validation.NewReporter(10)
+	ctx := validation.WithReporter(context.Background(), reporter)
+	got, err := p.FetchChipDistribution(ctx, "600519")
+	if err != nil {
+		t.Fatalf("FetchChipDistribution: %v", err)
+	}
+	if got.QualityStatus != model.QualityDegraded {
+		t.Fatalf("expected degraded snapshot: %+v", got)
+	}
+	found := map[string]bool{"publication_time": false, "profit_ratio": false, "concentration_90": false, "concentration_70": false}
+	for _, issue := range reporter.Snapshot().Issues {
+		if issue.Stage != validation.StageValidate || issue.Severity != validation.SeverityWarning {
+			continue
+		}
+		if _, ok := found[issue.Field]; ok {
+			found[issue.Field] = true
+		}
+	}
+	for field, ok := range found {
+		if !ok {
+			t.Errorf("missing %s diagnostic: %+v", field, reporter.Snapshot().Issues)
+		}
+	}
+}
+
+func TestMiaoXiangCapitalFlowReportsDegradedFields(t *testing.T) {
+	response := `{"status":0,"data":{"dataTableDTOList":[{"nameMap":{"0":"主力净流入金额"},"table":{"headName":["2026-10-21","2026-10-20"],"0":["-","2亿"]}}]}}`
+	p, _, cleanup := newMiaoXiangTestServer(t, response, nil)
+	defer cleanup()
+	reporter := validation.NewReporter(10)
+	ctx := validation.WithReporter(context.Background(), reporter)
+	got, err := p.FetchCapitalFlow(ctx, "600519")
+	if err != nil {
+		t.Fatalf("FetchCapitalFlow: %v", err)
+	}
+	if got.QualityStatus != model.QualityDegraded {
+		t.Fatalf("expected degraded flow: %+v", got)
+	}
+	found := map[string]bool{"publication_time": false, "main_net_inflow": false, "inflow_5d": false, "inflow_10d": false}
+	for _, issue := range reporter.Snapshot().Issues {
+		if issue.Stage != validation.StageValidate || issue.Severity != validation.SeverityWarning {
+			continue
+		}
+		if _, ok := found[issue.Field]; ok {
+			found[issue.Field] = true
+		}
+	}
+	for field, ok := range found {
+		if !ok {
+			t.Errorf("missing %s diagnostic: %+v", field, reporter.Snapshot().Issues)
+		}
+	}
+}
+
+func TestMiaoXiangQueryTablesReportsResponseFailures(t *testing.T) {
+	cases := []struct {
+		name, response, wantCode string
+		status                   int
+	}{
+		{name: "HTTP status", response: "unavailable", status: http.StatusBadGateway, wantCode: "http_status_error"},
+		{name: "invalid JSON", response: "{", status: http.StatusOK, wantCode: "decode_error"},
+		{name: "missing status", response: `{"data":{}}`, status: http.StatusOK, wantCode: "invalid_provider_status"},
+		{name: "null status", response: `{"status":null,"data":{}}`, status: http.StatusOK, wantCode: "invalid_provider_status"},
+		{name: "provider rejection", response: `{"status":9,"message":"quota"}`, status: http.StatusOK, wantCode: "provider_error"},
+		{name: "invalid table payload", response: `{"status":0,"data":[]}`, status: http.StatusOK, wantCode: "invalid_table_payload"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			p, _, cleanup := newMiaoXiangTestServer(t, tc.response, func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(tc.status)
+				_, _ = fmt.Fprint(w, tc.response)
+			})
+			defer cleanup()
+			reporter := validation.NewReporter(10)
+			ctx := validation.WithReporter(context.Background(), reporter)
+			_, err := p.FetchChipDistribution(ctx, "600519")
+			if err == nil {
+				t.Fatal("expected response failure")
+			}
+			for _, issue := range reporter.Snapshot().Issues {
+				if issue.Code == tc.wantCode {
+					if issue.RowIndex != nil {
+						t.Fatalf("response-level issue must not invent row index: %+v", issue)
+					}
+					return
+				}
+			}
+			t.Fatalf("missing Reporter code %q: %+v", tc.wantCode, reporter.Snapshot().Issues)
+		})
+	}
+}
+
+// TestMiaoXiangChipAndCapitalFlowRejectsReportParseEvidence 覆盖上层指标表与观测行拒绝证据。
+func TestMiaoXiangChipAndCapitalFlowRejectsReportParseEvidence(t *testing.T) {
+	cases := []struct {
+		name, response, wantCode string
+		fetchFlow                bool
+		wantRow                  int
+	}{
+		{name: "chip metric table missing", response: `{"status":0,"data":{"dataTableDTOList":[{"nameMap":{"0":"获利比例"},"table":{"headName":["2026-10-21"],"0":["80%"]}}]}}`, wantCode: "missing_metric_table", wantRow: -1},
+		{name: "chip table empty", response: `{"status":0,"data":{"dataTableDTOList":[{"nameMap":{"0":"平均成本"},"table":{"headName":[],"0":[]}}]}}`, wantCode: "empty_result", wantRow: -1},
+		{name: "chip average cost invalid", response: `{"status":0,"data":{"dataTableDTOList":[{"nameMap":{"0":"平均成本"},"table":{"headName":["2026-10-21"],"0":["-"]}}]}}`, wantCode: "invalid_or_missing_value", wantRow: 0},
+		{name: "flow metric table missing", response: `{"status":0,"data":{"dataTableDTOList":[{"nameMap":{"0":"成交额"},"table":{"headName":["2026-10-21"],"0":["1亿"]}}]}}`, fetchFlow: true, wantCode: "missing_metric_table", wantRow: -1},
+		{name: "flow table empty", response: `{"status":0,"data":{"dataTableDTOList":[{"nameMap":{"0":"主力净流入金额"},"table":{"headName":[],"0":[]}}]}}`, fetchFlow: true, wantCode: "empty_result", wantRow: -1},
+		{name: "flow invalid date", response: `{"status":0,"data":{"dataTableDTOList":[{"nameMap":{"0":"主力净流入金额"},"table":{"headName":[""],"0":["1亿"]}}]}}`, fetchFlow: true, wantCode: "invalid_date", wantRow: 0},
+		{name: "flow future date", response: `{"status":0,"data":{"dataTableDTOList":[{"nameMap":{"0":"主力净流入金额"},"table":{"headName":["2099-10-21"],"0":["1亿"]}}]}}`, fetchFlow: true, wantCode: "future_date", wantRow: 0},
+		{name: "flow duplicate date", response: `{"status":0,"data":{"dataTableDTOList":[{"nameMap":{"0":"主力净流入金额"},"table":{"headName":["2026-10-21","2026-10-21"],"0":["1亿","2亿"]}}]}}`, fetchFlow: true, wantCode: "duplicate_trade_date", wantRow: 1},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			p, _, cleanup := newMiaoXiangTestServer(t, tc.response, nil)
+			defer cleanup()
+			reporter := validation.NewReporter(10)
+			ctx := validation.WithReporter(context.Background(), reporter)
+			if tc.fetchFlow {
+				_, _ = p.FetchCapitalFlow(ctx, "600519")
+			} else {
+				_, _ = p.FetchChipDistribution(ctx, "600519")
+			}
+			for _, issue := range reporter.Snapshot().Issues {
+				if issue.Code != tc.wantCode {
+					continue
+				}
+				if tc.wantRow < 0 && issue.RowIndex != nil {
+					t.Fatalf("response-level issue must not invent row index: %+v", issue)
+				}
+				if tc.wantRow >= 0 && (issue.RowIndex == nil || *issue.RowIndex != tc.wantRow) {
+					t.Fatalf("issue row index = %v, want %d: %+v", issue.RowIndex, tc.wantRow, issue)
+				}
+				if issue.Stage != validation.StageParse || issue.Severity != validation.SeverityError {
+					t.Fatalf("unexpected issue classification: %+v", issue)
+				}
+				return
+			}
+			t.Fatalf("missing Reporter code %q: %+v", tc.wantCode, reporter.Snapshot().Issues)
 		})
 	}
 }

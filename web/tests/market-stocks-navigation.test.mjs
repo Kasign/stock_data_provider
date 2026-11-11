@@ -59,7 +59,7 @@ test("市场入口拒绝无效证券代码，并统一规范化有效代码", ()
 test("板块领涨股仅展示名称；API 未提供证券代码时不得伪造研究入口", async () => {
   const [overview, openApi] = await Promise.all([
     readFile(new URL("../src/market-overview.js", import.meta.url), "utf8"),
-    readFile(new URL("../../services/market-data/openapi.yaml", import.meta.url), "utf8")
+    readFile(new URL("../../internal/marketdata/httpapi/openapi.yaml", import.meta.url), "utf8")
   ]);
   const sectorSchema = openApi.slice(openApi.indexOf("    SectorRanking:"), openApi.indexOf("    SectorRankingSnapshot:"));
   assert.match(sectorSchema, /leading_stock: \{type: string\}/);
