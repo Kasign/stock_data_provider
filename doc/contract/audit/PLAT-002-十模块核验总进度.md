@@ -1,6 +1,6 @@
 # PLAT-002 十模块核验总进度
 
-**当前状态（2026-11-11）：** PLAT-002 的 43 个正式 CTR 已全部完成本轮公开契约定义口径核定；当前 1 项 freeze-ready、37 项 pending_evidence、3 项 pending_decision（对应 5 个具体待决）、2 项 not_applicable、0 项 frozen。历史阶段 A～H 进度表仅保留审计追溯，不再表示当前任务尚未完成全量盘点；当前唯一有效总状态见第50节及项目级登记簿第24节。
+**当前状态（2026-11-11）：** PLAT-002 的 43 个正式 CTR 已完成本轮公开契约定义口径核定；当前 1 项 freeze-ready、40 项 pending_evidence、0 项 pending_decision、2 项 not_applicable、0 项 frozen。五项待决已由 DEC-PLAT-002-028～032 裁决；当前统计以本文件第53节和项目级登记簿第24节为准。历史阶段 A～H 及第50节旧统计仅保留审计追溯。
 **代码基线：** `b6dfc85ba214fe16268c8cba780641a8bfe15086`（origin/integration）  
 **文档维护分支：** feat/design_doc
 
@@ -1317,3 +1317,13 @@
 - 建议稿逐项给出冲突依据、推荐字段语义、适用条件、取舍及不建议方案。
 - 该文件是待项目负责人确认的提案，不是正式决议；当前 pending-decision 仍为 3 项 CTR / 5 个具体待决，未提前转为 accepted 或 freeze-ready。
 - 本轮没有重新扫描模块，没有修改责任模块代码/契约，也没有执行测试、CI、部署或集成。
+
+
+## 53. Quant / Research 五项裁决落地第一批（2026-11-11）
+
+- DEC-PLAT-002-028～032 已全部记录，五项待决关闭；不再要求项目负责人重复选择。
+- 项目级 Quant/Research DTO、QNT-CTR-005 Manifest Schema/Golden、RSC-CTR-002 Event/Claim/Scenario Schema/Golden 已按裁决更新。
+- QNT-CTR-004/005、RSC-CTR-002 均保持 pending_evidence：Quant Ref Schema/Envelope/Payload 覆盖、Manifest 指纹/授权映射、Research 跨字段引用和责任模块一致性仍未全部闭合。
+- 当前 43 项统计：freeze-ready 1、pending-evidence 40、pending-decision 0、blocked 0、not_applicable 2、frozen 0。
+- 本轮只更新 feat/design_doc 项目级契约治理文档；未修改责任模块文档/代码，未执行测试、CI、部署或集成。
+- 下一步按三个 CTR 的具体剩余证据项增量推进，不重新全量盘点。

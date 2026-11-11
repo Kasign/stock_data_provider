@@ -149,7 +149,9 @@ Quant Application 返回的 QuantResult 使用共同 Envelope，不允许 `map[s
 | payload_schema_version | 是 | string | Payload 自身 Schema 版本；与 Envelope schema_version 独立演进 |
 | payload | 是 | discriminated union | 按 result_type + payload_schema_version 命中唯一强类型子 Schema |
 
-同一 result_type + payload_schema_version 的 payload 结构不可原地改变。Envelope schema_version 只表示 Envelope DTO 自身版本；payload_schema_version 只表示 Payload Schema 版本。Researchflow 只校验 discriminator、Schema 和版本并保存结果引用；Research 不解析未知 payload，也不自行计算或重解释指标。未知 result_type、Envelope schema_version 或 payload_schema_version 必须返回对应 unsupported 错误，不回退旧版本。
+同一 result_type + payload_schema_version 的 payload 结构不可原地改变。
+
+`result_type` 枚举只规定稳定类型名称，不代表该类型已经具备可消费的 Payload。只有 Quant Registry 明确注册 `(result_type, payload_schema_version)`，且该组合具有完整强类型 Payload Schema/Golden 时，Quant 才能产生该结果；尚无完整 Payload 定义的预留类型必须拒绝，不得使用宽泛 object、任意 map 或其他类型的 Schema 兜底。Envelope schema_version 只表示 Envelope DTO 自身版本；payload_schema_version 只表示 Payload Schema 版本。Researchflow 只校验 discriminator、Schema 和版本并保存结果引用；Research 不解析未知 payload，也不自行计算或重解释指标。未知 result_type、Envelope schema_version 或 payload_schema_version 必须返回对应 unsupported 错误，不回退旧版本。
 
 
 ### 2.6 Quant Facade 边界

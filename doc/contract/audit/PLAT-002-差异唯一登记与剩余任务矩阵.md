@@ -1338,7 +1338,7 @@ ResearchContext 归 FLOW-CTR-003，不属于 RSC-CTR-001 Evidence。RSC-DEC-001/
 
 本批无新增 pending_decision、blocked 或 freeze-ready；不新增 CTR。排除 Server DI/Bootstrap、Session Middleware 实现、WebUI 登录页面、Nginx/部署、E2E、CI。
 
-## 50. PLAT-002 当前正式 CTR 状态总表（2026-11-11）
+## 50. PLAT-002 历史正式 CTR 状态快照（已由第53节取代）
 
 以项目级登记簿第3节 43 个正式 CTR 为唯一统计口径：
 
@@ -1384,3 +1384,39 @@ INT-CTR-001 是正式 43 CTR 之一，不是内部 Outbox/Inbox 实现验收。�
 | RSC-OPEN-005 | Claim/Hypothesis 增加同对象版本替代引用 | pending-decision |
 
 本轮不代替项目负责人作出裁决，不新增 CTR，不将建议状态改写为 accepted。
+
+
+## 53. 五项待决裁决完成及 Quant / Research 机器定义落地第一批（2026-11-11）
+
+### 53.1 五项待决正式裁决
+
+- QNT-DEC-01/02、RSC-OPEN-003/004/005 已由 DEC-PLAT-002-028～032 全部裁决；当前 pending-decision 为 0。
+- QNT-CTR-004、QNT-CTR-005、RSC-CTR-002 从 pending-decision 转为 pending-evidence。历史第44/45/50/52节保留裁决前快照，不再代表当前状态。
+- DEC-029 明确 QuantAnalysisRequest、QuantResultRef、QuantResult Envelope、Manifest 的 input_snapshot_refs 均必需；空数组只允许 Registry 与 ResolvedTemplate 双重授权的无外部事实纯函数。
+
+### 53.2 本批机器定义变化
+
+- 项目级 Quant/Research DTO 已对齐 Envelope、Manifest、Payload 独立版本；Payload Schema 选择键为 `(result_type, payload_schema_version)`。
+- QNT-CTR-005 Manifest Schema/Golden 增加 payload_schema_version、algorithm_version、parameter_fingerprint，固定 manifest_fingerprint 的 JCS 输入字段，并增加空输入纯函数 Golden。
+- RSC-CTR-002 新增 ResearchEvent、Claim/Hypothesis、Scenario 1.0.0 项目级 Schema/Golden；EventRef 强类型包含 event_id/event_version；Scenario 支持显式 ConditionGroup。
+- 所有新增/修改范围均在 feat/design_doc 的项目级契约 DTO、Schema、Golden 和治理文档；未修改 doc/quant、doc/research 责任模块文档/Schema/代码。
+
+### 53.3 当前剩余证据
+
+- QNT-CTR-004：责任模块 QuantResultRef Schema 仍要求 input_snapshot_refs 至少一项；完整 Envelope Schema/Golden 和全部已开放 result_type 的 Payload Schema/Golden 尚未齐备。只有完整强类型组合注册后才能开放消费。
+- QNT-CTR-005：责任模块 Manifest/Record/VerifyPayload 尚需与项目级 Manifest 字段及 JCS 指纹定义一致；AuthorizationRef 与 Manifest/Ref 的资源绑定、可信主体和当前授权复核映射仍需权威定义。
+- RSC-CTR-002：Event/Claim/Scenario Schema 已建立；引用存在性、派生无环、版本目标当前性、时间证据与 source_times 关联及 Scenario 外部 QuantResultRef Schema 对齐仍需 Research/Quant 权威定义核对。
+
+### 53.4 当前统计
+
+| 状态 | 数量 |
+|---|---:|
+| freeze-ready | 1 |
+| pending-evidence | 40 |
+| pending-decision | 0 |
+| blocked | 0 |
+| not_applicable | 2 |
+| frozen | 0 |
+| 正式 CTR 合计 | 43 |
+
+下一步只继续核对上述三个 CTR 的剩余权威定义缺口，不重新启动模块全量审查，不修改责任模块，不将实现测试/CI/部署混入契约冻结门禁。
