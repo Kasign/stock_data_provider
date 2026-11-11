@@ -1165,3 +1165,5 @@
 - Researchflow 新 API 使用独立 CreateRunCommand/版本化 DTO；其 CreateRun 幂等键按可信调用主体与操作范围作用，使用 `idempotency_key` 和规范化 fingerprint；Run 引用由 Researchflow 生成。参数限制由 Template/Parameter Schema 定义。
 - 本次更正不代表旧 API 代码已删除，也不代表 Researchflow 新 API 已完成接入验收；仅撤销旧 CreateTask 公共契约的活动冻结任务。新 API 证据继续归 FLOW-CTR-001～004 等既有正式契约，不新增 CTR。
 - 本轮只更新 `feat/design_doc` 项目级契约决议解释及审计登记；未修改 Server、Researchflow、WebUI 责任分支代码，未执行测试或 CI。
+- 固定审计基线的增量证据：Researchflow 已有 CreateRun Application 和 publicdto；Server Root Router 仍只注册旧 Analysis HTTP 路由，Bootstrap 仍装配旧 Runner/TaskQueue/Platform HTTP API，没有 Researchflow HTTP Handler/路由；WebUI API Client 与 API_CONTRACT 仍使用旧 `/analysis-api/api/v1/analysis/**` 路径。故 DEC-018 新 API 接入验收尚未完成。
+- 下一批不再处理旧 CreateTask DTO；只核对新 Researchflow API 的 Server HTTP 路由/请求响应映射/认证错误与事件 Schema，以及 WebUI 对新公开契约的消费边界。模块级 CreateRunCommand 归 FLOW-CTR-001，HTTP 宿主与映射归 SRV-CTR-001，不新增 CTR。
