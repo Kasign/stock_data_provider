@@ -441,13 +441,13 @@ PLAT-002 不因本次矩阵统计完成而结束。整体完成仍需：
 
 | 契约 | 状态 | 核定结论 |
 |---|---|---|
-| DATA-CTR-001 | pending_evidence | OpenAPI 1.1.0 是当前代码内 API 定义，但 Go JSON 与 OpenAPI 的字段存在/缺失/nullable/required 适用映射仍未形成完整权威表；DEC-027 的 DragonTiger Provider 原始金额字段仍公开暴露；API 清单引用旧路径且认证说明过期 |
+| DATA-CTR-001 | pending_evidence | HTTP Go Model/OpenAPI 与跨模块 QuoteSnapshot/DailyBar Application Port 均公开 Provider 原始 volume/amount/unit/source-field；DragonTiger、LimitPool 仍暴露 Provider 原始金额/单位；另有 Go JSON/OpenAPI required/nullable/omitempty 字段映射缺口 |
 | DATA-CTR-002 | pending_evidence | 质量契约已明确价格/成交量/成交额/百分点、复权和 PIT 基本原则；具体数据域字段到 provider_time、available_at、fetched_at、normalized_at、system_observed_at 的映射仍不完整，不能用一套泛化时间规则代替逐字段语义 |
 | DATA-CTR-003 | not_applicable | 仅覆盖 Data 内部 Provider Adapter 原始值标准化，没有跨模块公开 DTO/Port 消费者；退出 PLAT-002 跨模块冻结门禁，不再要求 Provider Fixture 或专项测试作为项目级任务 |
 | DATA-CTR-004 | pending_evidence | QualityStatus 已有 valid/degraded/stale/invalid/unknown；Probe 的维度状态、ProviderOutcome、freshness_status、coverage_ratio 与业务 quality_status 的关系已有文字规则，但公开响应字段适用映射及覆盖率分母语义仍需明确 |
-| DATA-CTR-005 | pending_evidence | 当前 OpenAPI 1.1.0 DailyBar 仍是 number；未找到 DailyBarsV2 的独立 Decimal Schema/版本定义，v2 精度/scale/舍入/缺失语义尚未成为权威契约 |
-| DATA-CTR-006 | pending_evidence | 同进程 Root Server 注入可信 Principal/Scope Context、远程兼容模式使用 Data 专用 X-API-Key 的边界已明确；但 OpenAPI 全局 ApiKey/BearerAuth 的 OR 声明与“业务接口仅 X-API-Key”文字冲突，旧 API 清单仍描述浏览器持有 Key |
-| DATA-CTR-007 | pending_evidence | DATA-CTR-008 Manifest 定义了快照范围和来源版本，但它不是 DailyBarsV2 内容 Schema；跨模块行情 DTO、质量/单位、SnapshotRef 与 Research Evidence 的字段级关联尚缺定义 |
+| DATA-CTR-005 | pending_evidence | 当前 HTTP OpenAPI 仍为 number、InProcess Port 为 float64；未发现 DailyBarsV2/Decimal DTO、Schema/Golden；DEC-009 要求保留 v1，v2 消费者边界、精度/scale/舍入/缺失语义未定义 |
+| DATA-CTR-006 | pending_evidence | 目标语义已明确为默认同进程可信 Principal Context、远程兼容 X-API-Key only；当前 OpenAPI ApiKey/BearerAuth OR、Handler Bearer fallback、Bearer 成功测试仍违约；待 Data 权威 OpenAPI/Handler 同步 |
+| DATA-CTR-007 | pending_evidence | DailyBarsSnapshot 有 bars 但无 snapshot_ref/Manifest/AuthorizationRef；DATA-CTR-008 Manifest 只定义范围/来源版本，不含行情正文；Bundle.snapshot_id 未证明等同内容寻址 SnapshotRef，Evidence source_ref/version/locator 映射缺失 |
 | DATA-CTR-008 | pending_evidence | Manifest Schema/Golden 已有，caller_ref/purpose_code、内容寻址引用和 JCS/SHA-256 算法已有文字定义；UTC/排序约束及 Data 可信 caller/Scope/授权快照读取时复核映射仍不完整 |
 
 ### 15.2 关键公开定义差异
