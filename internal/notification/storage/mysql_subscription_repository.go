@@ -222,7 +222,6 @@ func (r *MySQLSubscriptionRepository) AppendVersion(
 	return nil
 }
 
-
 func allocateSubscriptionRevision(ctx context.Context, tx *sql.Tx) (int64, error) {
 	result, err := tx.ExecContext(ctx, `UPDATE notification_subscription_revision
 		SET current_revision = current_revision + 1 WHERE singleton_id = 1`)
