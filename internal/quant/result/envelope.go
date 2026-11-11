@@ -289,12 +289,16 @@ func (envelope *Envelope) UnmarshalJSON(data []byte) error {
 	if err != nil {
 		return err
 	}
+	var snapshotRefs []string
+	if wire.InputSnapshotRefs != nil {
+		snapshotRefs = append([]string{}, wire.InputSnapshotRefs...)
+	}
 	decoded := Envelope{
 		SchemaVersion: wire.SchemaVersion, ResultID: wire.ResultID, ResultType: wire.ResultType,
 		Scope: wire.Scope, SecurityID: wire.SecurityID, SystemAsOf: wire.SystemAsOf,
 		TradeDate: wire.TradeDate, Period: wire.Period, AlgorithmVersion: wire.AlgorithmVersion,
 		ParameterFingerprint: wire.ParameterFingerprint,
-		InputSnapshotRefs: append([]string{}, wire.InputSnapshotRefs...),
+		InputSnapshotRefs: snapshotRefs,
 		QualityStatus: wire.QualityStatus, ResultStatus: wire.ResultStatus,
 		AuthorizationRef: wire.AuthorizationRef, PayloadSchemaVersion: wire.PayloadSchemaVersion,
 		Payload: payload,
