@@ -22,7 +22,7 @@ func TestDeliveryConsistencyService(t *testing.T) {
 	delivery := validDeliveryForRepository()
 	service, err := NewDeliveryConsistencyService(consistencySnapshotReaderFake{
 		snapshot: DeliveryConsistencySnapshot{Delivery: delivery, Attempts: []domain.DeliveryAttempt{}, StateEvents: []domain.DeliveryStateEvent{}},
-		found: true,
+		found:    true,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -57,8 +57,8 @@ func TestDeliveryConsistencyServiceRejectsInvalidQueries(t *testing.T) {
 	}
 	for _, tc := range []struct {
 		name string
-		ctx context.Context
-		id string
+		ctx  context.Context
+		id   string
 	}{
 		{name: "nil context", ctx: nil, id: "delivery-1"},
 		{name: "empty id", ctx: context.Background(), id: ""},

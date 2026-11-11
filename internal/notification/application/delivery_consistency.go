@@ -5,20 +5,20 @@ import "example.com/stock-analysis-flow/internal/notification/domain"
 type DeliveryConsistencyStatus string
 
 const (
-	DeliveryConsistencyPass           DeliveryConsistencyStatus = "pass"
-	DeliveryConsistencyDegrade        DeliveryConsistencyStatus = "degrade"
-	DeliveryConsistencyFail           DeliveryConsistencyStatus = "fail"
-	DeliveryConsistencyNotComparable  DeliveryConsistencyStatus = "not_comparable"
+	DeliveryConsistencyPass          DeliveryConsistencyStatus = "pass"
+	DeliveryConsistencyDegrade       DeliveryConsistencyStatus = "degrade"
+	DeliveryConsistencyFail          DeliveryConsistencyStatus = "fail"
+	DeliveryConsistencyNotComparable DeliveryConsistencyStatus = "not_comparable"
 )
 
 // DeliveryConsistencyInput contains one caller-supplied read set.
 // Comparable flags must be false when a history read failed, was skipped, or cannot
 // be proven complete. This function does not claim the three inputs are an atomic DB snapshot.
 type DeliveryConsistencyInput struct {
-	Delivery               domain.DeliveryRecord
-	Attempts               []domain.DeliveryAttempt
-	AttemptsComparable     bool
-	StateEvents            []domain.DeliveryStateEvent
+	Delivery              domain.DeliveryRecord
+	Attempts              []domain.DeliveryAttempt
+	AttemptsComparable    bool
+	StateEvents           []domain.DeliveryStateEvent
 	StateEventsComparable bool
 }
 
@@ -39,10 +39,10 @@ type DeliveryConsistencyEvidence struct {
 // DeliveryConsistencyResult reports independent checks and the aggregate result.
 // It is a safe diagnostic DTO; do not add raw domain records.
 type DeliveryConsistencyResult struct {
-	Status             DeliveryConsistencyStatus `json:"status"`
-	AttemptStatus      DeliveryConsistencyStatus `json:"attempt_status"`
-	StateHistoryStatus DeliveryConsistencyStatus `json:"state_history_status"`
-	ReasonCodes        []string                   `json:"reason_codes,omitempty"`
+	Status             DeliveryConsistencyStatus   `json:"status"`
+	AttemptStatus      DeliveryConsistencyStatus   `json:"attempt_status"`
+	StateHistoryStatus DeliveryConsistencyStatus   `json:"state_history_status"`
+	ReasonCodes        []string                    `json:"reason_codes,omitempty"`
 	Evidence           DeliveryConsistencyEvidence `json:"evidence"`
 }
 
@@ -54,11 +54,11 @@ func AssessDeliveryConsistency(input DeliveryConsistencyInput) DeliveryConsisten
 		AttemptStatus:      DeliveryConsistencyNotComparable,
 		StateHistoryStatus: DeliveryConsistencyNotComparable,
 		Evidence: DeliveryConsistencyEvidence{
-			DeliveryStatus: input.Delivery.Status,
-			DeliveryVersion: input.Delivery.Version,
+			DeliveryStatus:       input.Delivery.Status,
+			DeliveryVersion:      input.Delivery.Version,
 			ExpectedAttemptCount: input.Delivery.AttemptCount,
 			ObservedAttemptCount: len(input.Attempts),
-			StateEventCount: len(input.StateEvents),
+			StateEventCount:      len(input.StateEvents),
 		},
 	}
 	for _, attempt := range input.Attempts {

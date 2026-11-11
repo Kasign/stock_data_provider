@@ -10,10 +10,7 @@ import (
 
 var ErrUnknownReconciliationPersistence = errors.New("notification: unknown reconciliation persistence failed")
 
-// persistUnknownReconciliation converts an internally assessed lookup result into
-// a domain transition and persists it through the lease-independent CAS port.
-// Retryable non-acceptance requires a separately computed, evidence-bound retry
-// decision; this method never starts a channel send.
+// persistUnknownReconciliation 只接收包内受控编排生成的已验证证据。
 func persistUnknownReconciliation(
 	ctx context.Context,
 	repository UnknownDeliveryReconciliationRepository,
@@ -40,10 +37,7 @@ func persistUnknownReconciliation(
 		return ErrUnknownReconciliationNotApplicable
 	}
 
-	change := domain.DeliveryTransition{
-		At: at, EvidenceRef: assessment.EvidenceRef,
-		ReasonCode: assessment.ReasonCode,
-	}
+	change := domain.DeliveryTransition{At: at, EvidenceRef: assessment.EvidenceRef, ReasonCode: assessment.ReasonCode}
 	switch assessment.Action {
 	case UnknownReconciliationRemainUnknown:
 		return nil
@@ -85,8 +79,7 @@ func persistUnknownReconciliation(
 			change.NextAttemptAt = cloneRetryTime(retryDecision.NextAttemptAt)
 		} else {
 			if retryDecision.NextAttemptAt != nil ||
-				(retryDecision.ReasonCode != RetryReasonBudgetExhausted &&
-					retryDecision.ReasonCode != RetryReasonDeadlineExceeded) {
+				(retryDecision.ReasonCode != RetryReasonBudgetExhausted && retryDecision.ReasonCode != RetryReasonDeadlineExceeded) {
 				return ErrRetryDecisionConflict
 			}
 			change.To = domain.DeliveryFailed
@@ -95,7 +88,6 @@ func persistUnknownReconciliation(
 	default:
 		return ErrUnknownReconciliationNotApplicable
 	}
-
 	next, event, err := delivery.Transition(change)
 	if err != nil {
 		return err
@@ -106,29 +98,29 @@ func persistUnknownReconciliation(
 	return nil
 }
 
-// ReconcileUnknownDelivery is the complete application entry point for an
-// authoritative lookup result. It assesses evidence, computes a bound retry
-// decision when allowed, and persists the resulting state through CAS.
-func ReconcileUnknownDelivery(
+// reconcileUnknownDelivery 是包内状态收敛函数；生产入口必须由一致性快照服务调用。
+func reconcileUnknownDelivery(
 	ctx context.Context,
 	repository UnknownDeliveryReconciliationRepository,
 	policy RetryPolicy,
 	delivery domain.DeliveryRecord,
 	channel domain.ChannelConfigSnapshot,
 	attempts []domain.DeliveryAttempt,
-	evidence UnknownDeliveryEvidence,
+	verified verifiedUnknownDeliveryEvidence,
 	now time.Time,
 	randomUnit float64,
 ) (UnknownReconciliationAssessment, *RetryDecision, error) {
+	if !verified.matches(delivery, channel, attempts) {
+		return UnknownReconciliationAssessment{}, nil, ErrUnknownReconciliationNotApplicable
+	}
+	evidence := verified.evidence
 	assessment, err := AssessUnknownDelivery(delivery, channel, attempts, evidence, now)
 	if err != nil {
 		return UnknownReconciliationAssessment{}, nil, err
 	}
 	var decision *RetryDecision
 	if assessment.Action == UnknownReconciliationApplyRetryPolicy {
-		computed, err := policy.ScheduleRetryAfterUnknownLookup(
-			delivery, attempts, now, randomUnit, evidence.EvidenceRef, evidence.ObservedAt,
-		)
+		computed, err := policy.ScheduleRetryAfterUnknownLookup(delivery, attempts, now, randomUnit, evidence.EvidenceRef, evidence.ObservedAt)
 		if err != nil {
 			return assessment, nil, err
 		}

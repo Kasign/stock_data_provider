@@ -76,7 +76,7 @@ func TestChannelRegistryResolvesExactImmutableVersion(t *testing.T) {
 		t.Fatalf("resolved snapshot differs from registered version: %+v", snapshot)
 	}
 	snapshot.RetryableErrorCodes[0] = "mutated"
-	if !EqualChannelSnapshot(resolved.ConfigSnapshot(), adapter.snapshot) {
+	if !equalChannelSnapshot(resolved.ConfigSnapshot(), adapter.snapshot) {
 		t.Fatal("mutating returned snapshot must not mutate registered version")
 	}
 }

@@ -118,6 +118,24 @@ func AssessExpiredDeliveryLease(
 	}
 
 	if current == nil {
+		// 新租约尚未创建 Attempt 时，上一轮历史只能以“可重试拒绝”或“已证明未发送”结束。
+		// 若上一轮曾 accepted/ambiguous/不可重试拒绝，却又出现新的 sending 租约，
+		// 必须 fail-closed，不能把缺少当前 token Attempt 误判为尚未调用渠道。
+		if len(attempts) > 0 {
+			previous := attempts[len(attempts)-1]
+			if previous.FinishedAt == nil || previous.Outcome == nil {
+				return LeaseRecoveryAssessment{}, ErrLeaseRecoveryHistory
+			}
+			switch *previous.Outcome {
+			case domain.DeliveryAttemptRejected:
+				if !previous.Retryable {
+					return LeaseRecoveryAssessment{}, ErrLeaseRecoveryHistory
+				}
+			case domain.DeliveryAttemptNotSent:
+			default:
+				return LeaseRecoveryAssessment{}, ErrLeaseRecoveryHistory
+			}
+		}
 		return recoveryBudgetAssessment(delivery, now, "lease_expired_before_attempt", "", ""), nil
 	}
 	result := LeaseRecoveryAssessment{AttemptID: current.AttemptID, EvidenceRef: current.AttemptID}
