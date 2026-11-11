@@ -26,9 +26,9 @@
 **建议裁决：**
 1. QuantResult Envelope 的 `schema_version` 只表示 Envelope DTO/Schema 版本。
 2. 新增明确字段 `payload_schema_version`，表示强类型 Payload 的版本；Payload Schema 的唯一选择键为 `(result_type, payload_schema_version)`。
-3. QuantResultRef 的 `schema_version` 只表示 QuantResultRef DTO 版本；若 Ref 需要让消费者预先选择 Payload Validator，则增加 `payload_schema_version`，不得把 Ref DTO 版本当作 Payload 版本。
-4. QNT-CTR-005 Manifest 中现有 `schema_version` 明确定义为 `payload_schema_version` 的历史字段名（即结果 Payload 版本），Manifest Schema 自身版本仍由 JSON Schema `$id` 管理。后续若需要改名，必须通过 Manifest Schema 新版本迁移，不得在 1.0.0 中静默改变字段语义。
-5. 未知 Envelope 版本或未知 Payload 版本均拒绝；不得回退到其他版本。Envelope 版本升级不自动意味着 Payload 版本升级，反之亦然。
+3. QuantResultRef 的 `schema_version` 只表示 QuantResultRef DTO 版本。当前没有明确消费者必须仅凭 Ref 预先选择 Payload Validator 的需求，因此本次不为 Ref 增加 `payload_schema_version`；如未来出现该需求，应另行评估 Ref 契约变更，不能复用 Ref DTO 版本。
+4. QNT-CTR-005 Manifest 1.0.0 的 `schema_version` 明确定义为 Payload 版本，即 `payload_schema_version` 的历史字段名；它既不是 Manifest Schema 版本，也不是 QuantResult Envelope 版本。Manifest Schema 自身版本继续由 JSON Schema `$id` 管理。后续 Manifest Schema 新版本应改用明确字段名 `payload_schema_version`，并通过版本迁移处理，不得在 1.0.0 中静默改名或改变语义。
+5. Payload Schema 的唯一选择键统一为 `(result_type, payload_schema_version)`。未知 Envelope 版本或未知 Payload 版本均拒绝，不得回退到其他版本。Envelope 版本升级不自动意味着 Payload 版本升级，反之亦然。
 
 **取舍：**
 - 优点：保留现有 Envelope `schema_version` 和 Manifest 1.0.0 的既有字段，不引入双重解释；版本身份可独立演进。
@@ -45,11 +45,11 @@
 - 因此同一合法纯函数结果无法满足 Manifest Schema。
 
 **建议裁决：**
-1. 允许满足以下全部条件的纯函数生成可持久化、可引用的 QuantResult 和 Manifest：Registry 明确声明该计算为无外部事实输入的纯函数；ResolvedTemplate 明确声明 `allow_empty_inputs=true`；调用参数和算法版本均由已解析、受控的计算定义确定。
-2. Manifest 的 `input_snapshot_refs` 对此场景允许空数组；非空数组仍必须引用不可变输入 Snapshot。
-3. 增加明确的 `input_mode`（`snapshot` / `none`）或等价的机器可判定表达：`snapshot` 必须至少有一个 ref；`none` 必须为空数组，且只能由上述白名单纯函数产生。禁止仅凭调用方提交空数组触发无输入模式。
-4. 结果身份仍由 Manifest 内容寻址；空数组是明确的输入模式，不代表缺失、未知或未采集。Envelope/Manifest 的输入模式必须一致。
-5. 非纯函数、依赖行情/新闻/研究证据或其他外部事实的计算，仍必须提供相应 Snapshot 引用；缺少引用时拒绝生成可引用结果。
+1. 允许满足以下全部条件的纯函数生成可持久化、可引用的 QuantResult 和 Manifest：Quant Registry 明确登记该计算为无外部事实输入的纯函数；ResolvedTemplate 明确声明 `allow_empty_inputs=true`；实际执行的算法、参数和模板均来自已解析且受控的定义。调用方不得自行声明或覆盖上述授权。
+2. `QuantAnalysisRequest`、QuantResult Envelope 与 Result Manifest 必须对输入模式采用一致语义：`snapshot` 模式要求 `input_snapshot_refs` 至少包含一个有效不可变 Snapshot Ref；`none` 模式要求该数组为空，且只能由上述白名单纯函数触发。字段必填性与条件约束应在各层保持一致，不能出现 Request/Envelope 接受而 Manifest Schema 拒绝的情况。
+3. 以必需的 `input_mode`（`snapshot` / `none`）明确表达模式；若现有权威 DTO 已有等价且无歧义的机器字段，可复用该字段，不重复造字段。不得仅凭调用方提交空数组推断 `none`。
+4. Envelope 与 Manifest 的 `input_mode` 必须一致。`input_mode`、模板身份及版本、算法身份及版本、规范化参数指纹和 `system_as_of` 等既有结果身份要素必须共同参与结果身份/指纹计算；空数组是明确的无外部事实输入，不代表缺失、未知或未采集。
+5. 非纯函数、依赖行情/新闻/研究证据或其他外部事实的计算，仍必须提供相应 Snapshot 引用；缺少引用时拒绝生成可引用结果。Manifest Schema 应通过条件约束表达 `snapshot` 与 `none` 的数组约束，而不是全局放宽后失去校验能力。
 
 **取舍：**
 - 优点：保留已接受的白名单纯函数能力，同时不放松有事实输入计算的可追溯要求。
@@ -61,14 +61,14 @@
 **归属：** RSC-CTR-002。
 
 **现有缺口：**
-ResearchEvent 已保留 `source_times[]`，并将 `occurred_at`、`published_at`、`available_at` 定义为规范化时间；但 DTO 未标识用于从来源时间选择/归一化规范时间的规则版本。该版本不能与 Event 版本、DTO Schema 版本或 Provider 版本混用。
+ResearchEvent 已保留 `source_times[]`，并将 `occurred_at`、`published_at`、`available_at` 定义为规范化时间；但 DTO 未标识用于从来源时间选择/归一化规范时间的规则身份。该规则身份不能与 Event 版本、DTO Schema 版本或 Provider 版本混用。
 
 **建议裁决：**
-1. ResearchEvent 增加必需字段 `time_normalization_rule_version`，标识 Research 采用的规范化规则集版本。
-2. 该版本覆盖规范时间字段的选择优先级、来源冲突处理、时区/精度处理及无法确定时输出 null 的规则；不表示某个 Provider 的解析器版本。
+1. ResearchEvent 增加必需字段 `time_normalization_rule_id` 与 `time_normalization_rule_version`，分别标识规则集身份及其版本；规则 ID 由 Research 领域定义和管理。
+2. 该规则集覆盖规范时间字段的选择优先级、来源冲突处理、时区/精度处理及无法确定时输出 null 的规则；不表示某个 Provider 的解析器版本。
 3. `source_times[]` 保留逐来源原始时间证据；规范化结果不得覆盖或删除来源值。
-4. 即使没有可靠来源时间、规范化时间为 null，也必须记录所应用的规则版本；不得因结果为 null 而省略版本。
-5. 规则发生语义变化时升级该字段版本；历史 Event 版本保留原版本，不因规则升级而回写。
+4. 即使没有可靠来源时间、规范化时间为 null，也必须记录所应用的规则 ID 与版本；不得因结果为 null 而省略。
+5. 规则发生语义变化时升级对应规则版本；规则身份改变时使用新的规则 ID。历史 Event 版本保留原规则身份及版本，不因规则升级而回写。
 
 **取舍：**
 - 优点：历史 Event 可解释、可复核，避免把当前规则误用于历史记录。
@@ -80,20 +80,20 @@ ResearchEvent 已保留 `source_times[]`，并将 `occurred_at`、`published_at`
 **归属：** RSC-CTR-002。
 
 **现有定义与缺口：**
-项目字段契约第 9.9 节已要求合并/拆分记录 `source_refs` 与 `derived_from_refs`，但 ResearchEvent DTO 字段表未定义二者的类型、引用目标和方向。不能仅增加两个未定义的字符串数组。
+ResearchEvent 已有 `evidence_refs`，语义是当前 Event 的支持/反证依据；`source_times[]` 保存来源级时间证据。项目字段契约第 9.9 节另有 `source_refs` 与 `derived_from_refs` 的表述，但 DTO 字段表未定义其类型和引用方向。若 `source_refs` 只是重复列出 Evidence 来源，将形成两套来源事实；若指任意对象，又会形成无类型约束的多态引用。
 
 **建议裁决：**
-1. `source_refs` 表示本次 Event 版本直接采用的来源材料/来源记录引用，引用来源对象及其不可变版本；不引用另一个 ResearchEvent 作为来源材料的替代。
-2. `derived_from_refs` 表示当前 ResearchEvent 版本直接派生自的前序 ResearchEvent 不可变版本引用。
+1. 本次不新增 `source_refs`。现有 `evidence_refs` 继续作为当前 Event 的支持/反证依据及其来源材料引用入口；不得再定义一个语义相同的来源数组。若后续发现某类直接来源材料不属于 Evidence、且不能由 Evidence 引用表达，应以具体消费场景和对象类型另行提出，不预先增加泛化字段。
+2. 增加 `derived_from_refs`，仅表示当前 ResearchEvent 版本直接派生自的前序 ResearchEvent 不可变版本引用；不得把 Evidence 或原始来源材料放入该字段。
 3. 合并：新 Event 的 `derived_from_refs` 可包含多个前序 Event 版本；每个前序 Event 均保留原记录，不做覆盖或删除。
-4. 拆分：每个新 Event 的 `derived_from_refs` 指向被拆分的前序 Event 版本；多个子 Event 可引用同一前序版本。各子 Event 的 `source_refs` 仅列出实际支持该子事件的直接来源材料。
-5. 两字段均为去重后的 Ref 数组；引用必须精确到不可变版本。空数组表示没有该类直接关系，不表示关系查询未执行或关系未知；若关系未被计算/提供，必须使用独立的可用性状态表达，不能用空数组伪装确认无关系。
-6. 普通状态迁移或描述修订不自动构成合并/拆分；只有实际发生来源对象归并、拆分或派生关系时才填充相应引用。
+4. 拆分：每个新 Event 的 `derived_from_refs` 指向被拆分的前序 Event 版本；多个子 Event 可引用同一前序版本。各子 Event 的 `evidence_refs` 只保留实际支持或反证该子事件的证据。
+5. `derived_from_refs` 为去重 Ref 数组，引用必须精确到不可变 Event 版本。空数组表示不存在直接前序 Event 派生关系；若关系未被计算/提供，不得用空数组伪装确认无关系，必须由契约已有的可用性/完整性语义表达。
+6. 普通状态迁移或描述修订不自动构成合并/拆分；只有实际发生 Event 派生关系时才填充该字段。
 
 **取舍：**
-- 优点：明确来源材料与 Event 血缘的不同身份空间，并与既有追加式版本原则一致。
-- 代价：ResearchEvent Schema 需要定义 Ref 类型和关系状态适用条件。
-- 不建议：用一个 `source_refs` 同时指向 News Article、ResearchEvent 和任意对象；也不建议把合并/拆分关系只写在自由文本中。
+- 优点：避免 `source_refs` 与 `evidence_refs` 重复，且把 Event 血缘限定在单一、强类型身份空间。
+- 代价：ResearchEvent Schema 需要定义 `derived_from_refs` 的强类型 Ref 结构和引用合法性。
+- 不建议：使用一个可指向 News Article、ResearchEvent 和任意对象的多态来源数组；也不建议把合并/拆分关系只写在自由文本中。
 
 ## 五、RSC-OPEN-005：Claim/Hypothesis 的 supersedes_version
 
@@ -119,9 +119,9 @@ ResearchEvent 已保留 `source_times[]`，并将 `occurred_at`、`published_at`
 | 编号 | 推荐结论 | 当前状态 |
 |---|---|---|
 | QNT-DEC-01 | Envelope `schema_version` 与 Payload `payload_schema_version` 分离；Manifest 1.0.0 的 `schema_version` 明确为 Payload 版本 | pending-decision |
-| QNT-DEC-02 | 仅白名单纯函数允许空输入并持久化；Manifest 显式表达 input_mode 并受 Template/Registry 双重约束 | pending-decision |
-| RSC-OPEN-003 | 增加必需 `time_normalization_rule_version` | pending-decision |
-| RSC-OPEN-004 | `source_refs` 指来源材料版本；`derived_from_refs` 指前序 ResearchEvent 版本 | pending-decision |
+| QNT-DEC-02 | 仅白名单纯函数允许空输入；Request、Envelope、Manifest 统一表达 input_mode 和条件约束 | pending-decision |
+| RSC-OPEN-003 | 增加必需 `time_normalization_rule_id` + `time_normalization_rule_version` | pending-decision |
+| RSC-OPEN-004 | 不新增与 `evidence_refs` 重复的 `source_refs`；新增强类型 `derived_from_refs` 指向前序 ResearchEvent 版本 | pending-decision |
 | RSC-OPEN-005 | Claim/Hypothesis 增加可选 `supersedes_version`，修正/替代时必需且只指向同一对象较早版本 | pending-decision |
 
 ## 确认后的处理边界
