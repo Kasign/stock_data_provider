@@ -1,17 +1,22 @@
 {
   "manifest": {
-    "result_id": "quant_result:sha256:9757fca91e733d4835f6ea1a3fd249897e6d7d6880eb240d9e090025d3b16709",
-    "manifest_fingerprint": "9757fca91e733d4835f6ea1a3fd249897e6d7d6880eb240d9e090025d3b16709",
+    "result_id": "quant_result:sha256:97d6d042ef4202bf8879e4f5773803f53a9940033f791166443cdb5d2b371b5d",
+    "manifest_fingerprint": "97d6d042ef4202bf8879e4f5773803f53a9940033f791166443cdb5d2b371b5d",
     "result_type": "stock",
+    "scope": "stock",
+    "security_id": "600000.SH",
+    "period": "1d",
+    "quality_status": "valid",
+    "result_status": "completed",
     "schema_version": "1.0.0",
+    "payload_schema_version": "1.0.0",
+    "algorithm_version": "quant-test-v1",
+    "parameter_fingerprint": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
     "system_as_of": "2026-11-06T05:02:00Z",
     "input_snapshot_refs": [
       "data_snapshot:sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
     ],
-    "result_fingerprint": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-    "payload_schema_version": "1.0.0",
-    "algorithm_version": "quant-test-v1",
-    "parameter_fingerprint": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+    "result_fingerprint": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
   },
   "fingerprint_input": {
     "algorithm_version": "quant-test-v1",
@@ -20,11 +25,16 @@
     ],
     "parameter_fingerprint": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
     "payload_schema_version": "1.0.0",
+    "period": "1d",
+    "quality_status": "valid",
     "result_fingerprint": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "result_status": "completed",
     "result_type": "stock",
     "schema_version": "1.0.0",
+    "scope": "stock",
+    "security_id": "600000.SH",
     "system_as_of": "2026-11-06T05:02:00Z"
   },
-  "canonical_json": "{\"algorithm_version\":\"quant-test-v1\",\"input_snapshot_refs\":[\"data_snapshot:sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"],\"parameter_fingerprint\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"payload_schema_version\":\"1.0.0\",\"result_fingerprint\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"result_type\":\"stock\",\"schema_version\":\"1.0.0\",\"system_as_of\":\"2026-11-06T05:02:00Z\"}",
-  "expected_sha256": "9757fca91e733d4835f6ea1a3fd249897e6d7d6880eb240d9e090025d3b16709"
+  "canonical_json": "{\"algorithm_version\":\"quant-test-v1\",\"input_snapshot_refs\":[\"data_snapshot:sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"],\"parameter_fingerprint\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"payload_schema_version\":\"1.0.0\",\"period\":\"1d\",\"quality_status\":\"valid\",\"result_fingerprint\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"result_status\":\"completed\",\"result_type\":\"stock\",\"schema_version\":\"1.0.0\",\"scope\":\"stock\",\"security_id\":\"600000.SH\",\"system_as_of\":\"2026-11-06T05:02:00Z\"}",
+  "expected_sha256": "97d6d042ef4202bf8879e4f5773803f53a9940033f791166443cdb5d2b371b5d"
 }

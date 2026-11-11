@@ -36,7 +36,7 @@ func testManifestWithoutSnapshots(t *testing.T) manifest.Manifest {
 	payload := []byte(`{"metric_code":"pure_metric","value":1}`)
 	m, err := manifest.BuildWithPayload(manifest.Input{
 		ResultType:           "indicator",
-		Scope: "stock", SecurityID: "600000.SH", Period: "1d", QualityStatus: "valid", ResultStatus: "completed",
+		Scope: "stock", SecurityID: "opaque-security-ref", TradeDate: "2026-11-06", Period: "20d", QualityStatus: "valid", ResultStatus: "completed",
 		SchemaVersion:        "1.0.0",
 		PayloadSchemaVersion: "1.0.0",
 		AlgorithmVersion:     "pure.v1",
