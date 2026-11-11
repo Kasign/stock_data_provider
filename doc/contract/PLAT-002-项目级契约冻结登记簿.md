@@ -178,7 +178,7 @@ GitHub 远端 ref 核验（2026-11-10）：
 | DATA-CTR-008 | Data AuthorizationRef 签发与快照访问审计 | Data | Quant、Research | DATA-CTR-008 Snapshot Manifest Schema/Golden；GOV-CTR-006；DEC-PLAT-002-038/041 | 1.0.0（Snapshot Manifest Schema/Golden） | `pending_evidence` | Manifest 的 UTC、sources tuple 排序/唯一性尚未由 Schema/Validator 完整约束；caller_ref 必须等于可信 Principal 的 AuthorizationRef.subject_ref，API Key 不可作为主体，但远程可信 caller 传递机制未定义；Scope/purpose 映射及读取时当前策略复核仍缺 Data 权威契约 |
 | NEWS-CTR-001 | News 只读 Evidence Query Facade | News | Research、Researchflow | doc/news/新闻API契约.md 第11节；doc/news/schema/NEWS-CTR-001-*；doc/news/golden/NEWS-CTR-001-*；GOV-CTR-002；DEC-PLAT-002-021/042 | 1.0.0（4 Schema / 3 Golden） | `pending_evidence` | business_time_from/to 实为可选且省略（Go omitempty/Schema optional string），仅正文误写 nullable；system_as_of 等 UTC Z 约束尚未落入 Schema；system_observed_at 应映射 version.observed_at，News 数据模型文档未明确该版本级权威字段；relation_refs 缺 relation_status，不能区分 not_provided 与已确认空关系 |
 | NEWS-CTR-002 | AuthorizationRef 与内容访问授权 | News（授权决策 Owner） | Research、Researchflow | doc/news/新闻来源授权矩阵.md 第10节；doc/整体任务规划/schema/NEWS-CTR-002-authorization-binding-1.0.0.schema.json；对应 Golden；GOV-CTR-006；DEC-PLAT-002-043 | 1.0.0（Binding Schema/Golden） | `pending_evidence` | Schema/Golden 与 Go Validator 已覆盖 caller/subject、resource、purpose、content level、Provider/Source/Endpoint 策略集合、tuple 排序去重、conditional 和当前策略复核；但 News API 契约正文将 policy_version 描述为 Registry 版本、将 resource_ref 描述为 news_id+version_id，与 GOV-CTR-006、Golden 和代码的 snapshot_ref / news_id+version_no 定义冲突，需统一唯一权威文字定义 |
-| NEWS-CTR-003 | News PIT、稳定 Cursor、排序与去重 | News | Research、Researchflow | doc/news/新闻API契约.md 第11.3/11.6/11.9节；NEWS-CTR-001 Cursor Claims Schema；doc/news/新闻数据模型与质量契约.md | 复用 NEWS-CTR-001 1.0.0 Cursor Schema；无独立 CTR-003 Schema | `pending_evidence` | PIT 过滤、15分钟快照、HMAC Cursor、排序版本已有定义；system_observed_at 与 observation/first_observed_at 权威归属不一致，且 Evidence relation_refs 未表达 DEC-021 的 not_provided 与 confirmed-empty 区分 |
+| NEWS-CTR-003 | News PIT、稳定 Cursor、排序与去重 | News | Research、Researchflow | doc/news/新闻API契约.md 第11.1/11.3/11.6/11.9节；NEWS-CTR-001 Cursor Claims Schema；GOV-CTR-002；DEC-PLAT-002-042/044 | 复用 NEWS-CTR-001 1.0.0 Cursor Claims Schema；无独立 CTR-003 Schema | `pending_evidence` | 当前 active 契约已明确双时间 PIT、available_at 严格过滤、固定 system_as_of、news-evidence-v1 稳定排序、15 分钟 HMAC Cursor 和不可变快照；旧 News-Research 设计文档仍写显式 version_id 可不传 system_as_of、旧内容级别枚举和旧过滤字段，需明确废止/归档；NEWS-CTR-001 的 relation_status/UTC Schema 同步完成后再复核 |
 | QNT-CTR-001 | Metric/Indicator/Factor Registry 公共元数据 | Quant | Researchflow；Research 只消费编排结果 | doc/quant/schema/QNT-CTR-001-registry-entry-1.0.0.schema.json；doc/quant/03 | 1.0.0（Registry Entry Schema；正式首批 Registry Entry/Golden 未形成） | `pending_evidence` | Registry Entry 结构 Schema 已有；但 code 对应的首批实际 Registry 条目及其 unit/precision/range/algorithm_version/input_requirements/quality_policy 权威值未形成完整登记，不能仅冻结空壳 Schema |
 | QNT-CTR-002 | Indicator Request/Result | Quant | Researchflow | doc/quant/schema/QNT-CTR-002-indicator-parameters-1.0.0.schema.json；doc/quant/03 | 1.0.0（Parameters Schema；8 个算法参数定义） | `pending_evidence` | 参数 Schema/算法口径已有；完整 Indicator Request/Result DTO、指标输出字段/单位/精度/状态映射及每个指标的 Registry 元数据仍未形成唯一完整契约 |
 | QNT-CTR-003 | Factor Request/Result | Quant | Researchflow | doc/quant/schema/QNT-CTR-003-factor-parameters-1.0.0.schema.json；QNT-CTR-004 Factor QuantMetric Schema/Golden | 1.0.0（Parameters Schema；3 个首批 Factor） | `pending_evidence` | 首批三个 Factor 的参数/算法及局部 QuantMetric Schema 已有；完整 Factor Request/Result DTO、交易日历版本引用、输入质量和结果 Envelope 映射仍不完整 |
@@ -474,7 +474,7 @@ PLAT-002 不因本次矩阵统计完成而结束。整体完成仍需：
 |---|---|---|
 | NEWS-CTR-001 | pending_evidence | 4 Schema/3 Golden 已有；business_time_from/to 的 Go/Schema 均为可选省略，正文 nullable 是文档误写；UTC RFC3339Nano Z 尚未机器约束；system_observed_at 的版本级映射需在 News 数据模型文档明确；relation_refs 缺 relation_status，违反 DEC-021 对 not_provided/已确认空关系的区分 |
 | NEWS-CTR-002 | pending_evidence | Binding Schema/Golden、Go Validator 已覆盖主体/资源/用途/内容级别绑定、策略集合完整性/tuple 排序去重、conditional 与当前策略 fail-closed 复核；News API 契约正文的 policy_version（Registry vs snapshot_ref）和 resource_ref（version_id vs version_no）仍与机器契约冲突 |
-| NEWS-CTR-003 | pending_evidence | PIT 可见性、available_at 不可推断、稳定排序、15 分钟固定 Snapshot、HMAC Cursor、key rotation 与错误分类均有明确文字和 NEWS-CTR-001 Cursor Claims Schema；但系统观察时间排序键与 News 领域时间权威定义不一致，且与 NEWS-CTR-001 的 relation_refs 状态表达存在关联缺口 |
+| NEWS-CTR-003 | pending_evidence | 当前 active 契约已定义严格双时间 PIT、固定 system_as_of、available_at 缺失排除、稳定排序、HMAC Cursor/15分钟 TTL；旧 News-Research 设计文档仍保留非 PIT 当前版本读取、旧内容级别和旧过滤字段，需明确标记为历史方案；Snapshot Store/查询接线是实现状态，不作为契约定义门禁 |
 
 ### 16.2 必须保留的语义边界
 
@@ -1419,4 +1419,45 @@ DEC-027 不只是禁止 DragonTiger 的七个 Provider 金额字段；它确立�
 5. 本轮不修改 News 代码、Schema、Golden 或模块专项文档。
 
 **结论：NEWS-CTR-002 的语义取舍已收敛，但因权威文字来源仍有冲突，继续保持 pending_evidence。**
+
+
+
+## 53. NEWS-CTR-003 PIT 与 Cursor 版本边界核定（2026-11-11）
+
+### 53.1 当前活动契约
+
+当前唯一活动的 News Evidence Query 定义为：
+- `doc/news/新闻API契约.md` 第11节；
+- `doc/news/schema/NEWS-CTR-001-*.schema.json` 与对应 Golden；
+- `NEWS-CTR-001` 在项目级冻结登记簿中的语义决议（DEC-PLAT-002-042 等）。
+
+`doc/整体任务规划/03-模块接口契约/News-Research只读证据查询契约.md` 是早期“建议字段/目标契约”设计稿，内容明确标注不代表当前代码已有能力；它不得继续作为当前 v1.0 DTO/Schema 的并列权威定义。后续应标记为历史设计参考或删除重复的过时字段定义。
+
+### 53.2 版本化请求边界
+
+DEC-PLAT-002-044 固定 NEWS-CTR-001 v1.0 请求语义：
+1. GetEvidence 与 ListEvidence 均必须提供 `system_as_of`，即使 GetEvidence 指定了 version_id 也不例外；显式版本仍必须证明该版本和所属 Observation 均不晚于 system_as_of。v1 不提供无 PIT 的“当前版本直读”模式。
+2. `requested_content_level` 唯一枚举为 metadata、summary、snippet、full；旧设计稿中的 title、abstract、full_text 不属于 v1。
+3. ListEvidence filters 是闭合集合：news_ids、source_refs、canonical_symbols、published_at_from/to、quality_statuses、business_time_from/to；不接受旧稿中的 subject_refs、identity_statuses、observed_from/to 或 include_relations。
+4. purpose 字段的当前名称为 purpose_code，首期枚举 research_analysis、risk_review、user_display。
+5. 严格 PIT 必须同时满足版本 system_observed_at <= system_as_of、所属 Observation.observed_at <= system_as_of、available_at 非空且 available_at <= system_as_of。published_at 不能替代 available_at；缺少 available_at 证据时排除，不自动降级宽松 PIT。
+6. 分页排序版本固定为 `news-evidence-v1`：system_observed_at DESC、news_id ASC、version_id ASC。Cursor 绑定 caller、purpose、content level、规范化 filters 指纹、page_size、system_as_of、snapshot_ref、排序版本和最后排序键；TTL 15 分钟，HMAC-SHA256 防篡改。不得 OFFSET、不得过期重建快照。
+
+### 53.3 PIT 时间与关系边界
+
+- 具体版本的 system_observed_at 映射 NewsItemVersion.observed_at；Observation.observed_at 独立用于发现证据 PIT 过滤；主体级 first/last observed 不替代版本时间（DEC-PLAT-002-042）。
+- RelationRefs 首期状态为 not_provided；没有关系查询能力时不得将空数组解释为已确认无关系。关系查询若未来接入，必须按相同 system_as_of 过滤关系断言和 supersedes 链。
+- 证券/行业身份和关系历史事实必须先按 system_as_of 过滤系统知识时间，再按 valid_at/业务时间解析；不得先取当前映射再回填历史。
+
+### 53.4 旧设计稿冲突与核定结论
+
+旧 `News-Research只读证据查询契约.md` 中的以下内容已被当前 v1.0 规则取代：
+- version_id 指定时允许省略 system_as_of；
+- requested_content_level 使用 title/abstract/full_text；
+- ListEvidence 使用 subject_refs、identity_statuses、observed_from/to 和 include_relations；
+- DTO 使用 ObservedAt 而不是明确的 system_observed_at。
+
+上述旧字段不得作为当前跨模块 API 使用。当前实现尚未完成 Snapshot Store 到 Query Facade 的所有接线，属于实现符合性/验收问题，不改变 v1.0 公开契约语义，也不阻断本轮定义冻结。
+
+**结论：NEWS-CTR-003 的 PIT/Cursor 语义已收敛；由于 NEWS-CTR-001 的 relation_status/UTC Schema 机器定义仍未同步，NEWS-CTR-003 继续保持 pending_evidence。**
 
