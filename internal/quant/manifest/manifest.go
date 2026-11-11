@@ -37,38 +37,38 @@ var (
 )
 
 type Manifest struct {
-	ResultID            string   `json:"result_id"`
-	ManifestFingerprint string   `json:"manifest_fingerprint"`
-	ResultType          string   `json:"result_type"`
+	ResultID             string   `json:"result_id"`
+	ManifestFingerprint  string   `json:"manifest_fingerprint"`
+	ResultType           string   `json:"result_type"`
 	SchemaVersion        string   `json:"schema_version"`
 	PayloadSchemaVersion string   `json:"payload_schema_version"`
 	AlgorithmVersion     string   `json:"algorithm_version"`
 	ParameterFingerprint string   `json:"parameter_fingerprint"`
 	SystemAsOf           string   `json:"system_as_of"`
-	InputSnapshotRefs   []string `json:"input_snapshot_refs"`
-	ResultFingerprint   string   `json:"result_fingerprint"`
+	InputSnapshotRefs    []string `json:"input_snapshot_refs"`
+	ResultFingerprint    string   `json:"result_fingerprint"`
 }
 
 type Input struct {
-	ResultType        string
+	ResultType           string
 	SchemaVersion        string
 	PayloadSchemaVersion string
 	AlgorithmVersion     string
 	ParameterFingerprint string
 	SystemAsOf           time.Time
-	InputSnapshotRefs []string
-	ResultFingerprint string
+	InputSnapshotRefs    []string
+	ResultFingerprint    string
 }
 
 type fingerprintInput struct {
-	ResultType        string   `json:"result_type"`
+	ResultType           string   `json:"result_type"`
 	SchemaVersion        string   `json:"schema_version"`
 	PayloadSchemaVersion string   `json:"payload_schema_version"`
 	AlgorithmVersion     string   `json:"algorithm_version"`
 	ParameterFingerprint string   `json:"parameter_fingerprint"`
 	SystemAsOf           string   `json:"system_as_of"`
-	InputSnapshotRefs []string `json:"input_snapshot_refs"`
-	ResultFingerprint string   `json:"result_fingerprint"`
+	InputSnapshotRefs    []string `json:"input_snapshot_refs"`
+	ResultFingerprint    string   `json:"result_fingerprint"`
 }
 
 // FingerprintPayload 对强类型结果 payload 做 RFC 8785 JCS + SHA-256。
@@ -147,8 +147,8 @@ func Build(input Input) (Manifest, error) {
 		AlgorithmVersion:     input.AlgorithmVersion,
 		ParameterFingerprint: input.ParameterFingerprint,
 		SystemAsOf:           input.SystemAsOf.UTC().Format(time.RFC3339Nano),
-		InputSnapshotRefs: refs,
-		ResultFingerprint: input.ResultFingerprint,
+		InputSnapshotRefs:    refs,
+		ResultFingerprint:    input.ResultFingerprint,
 	}
 	fingerprint, err := manifest.calculateFingerprint()
 	if err != nil {
@@ -230,8 +230,8 @@ func (m Manifest) calculateFingerprint() (string, error) {
 		AlgorithmVersion:     m.AlgorithmVersion,
 		ParameterFingerprint: m.ParameterFingerprint,
 		SystemAsOf:           m.SystemAsOf,
-		InputSnapshotRefs: m.InputSnapshotRefs,
-		ResultFingerprint: m.ResultFingerprint,
+		InputSnapshotRefs:    m.InputSnapshotRefs,
+		ResultFingerprint:    m.ResultFingerprint,
 	}
 	encoded, err := json.Marshal(input)
 	if err != nil {

@@ -25,14 +25,14 @@ func TestBuildMatchesQNTCTR005Golden(t *testing.T) {
 	}
 
 	got, err := Build(Input{
-		ResultType:           golden.Manifest.ResultType,
+		ResultType:              golden.Manifest.ResultType,
 		SchemaVersion:        golden.Manifest.SchemaVersion,
 		PayloadSchemaVersion: golden.Manifest.PayloadSchemaVersion,
 		AlgorithmVersion:     golden.Manifest.AlgorithmVersion,
 		ParameterFingerprint: golden.Manifest.ParameterFingerprint,
-		SystemAsOf:        time.Date(2026, 11, 6, 5, 2, 0, 0, time.UTC),
-		InputSnapshotRefs: []string{"data_snapshot:sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},
-		ResultFingerprint: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+		SystemAsOf:           time.Date(2026, 11, 6, 5, 2, 0, 0, time.UTC),
+		InputSnapshotRefs:    []string{"data_snapshot:sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},
+		ResultFingerprint:    "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
 	})
 	if err != nil {
 		t.Fatalf("Build() error = %v", err)
@@ -67,14 +67,14 @@ func TestFingerprintPayloadUsesCanonicalJSON(t *testing.T) {
 
 func TestBuildSortsSnapshotRefsAndRejectsInvalidInputs(t *testing.T) {
 	base := Input{
-		ResultType:        "factor",
+		ResultType:           "factor",
 		SchemaVersion:        "1.0.0",
 		PayloadSchemaVersion: "1.0.0",
 		AlgorithmVersion:     "quant-test-v1",
 		ParameterFingerprint: strings.Repeat("c", 64),
-		SystemAsOf:        time.Date(2026, 11, 6, 5, 2, 0, 0, time.UTC),
-		InputSnapshotRefs: []string{"snapshot-b", "snapshot-a"},
-		ResultFingerprint: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+		SystemAsOf:           time.Date(2026, 11, 6, 5, 2, 0, 0, time.UTC),
+		InputSnapshotRefs:    []string{"snapshot-b", "snapshot-a"},
+		ResultFingerprint:    "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
 	}
 	got, err := Build(base)
 	if err != nil {
@@ -110,14 +110,14 @@ func TestBuildSortsSnapshotRefsAndRejectsInvalidInputs(t *testing.T) {
 
 func TestBuildRejectsInvalidUTF8SnapshotReference(t *testing.T) {
 	input := Input{
-		ResultType:        "factor",
+		ResultType:           "factor",
 		SchemaVersion:        "1.0.0",
 		PayloadSchemaVersion: "1.0.0",
 		AlgorithmVersion:     "quant-test-v1",
 		ParameterFingerprint: strings.Repeat("c", 64),
-		SystemAsOf:        time.Date(2026, 11, 6, 5, 2, 0, 0, time.UTC),
-		InputSnapshotRefs: []string{string([]byte{0xff})},
-		ResultFingerprint: strings.Repeat("b", 64),
+		SystemAsOf:           time.Date(2026, 11, 6, 5, 2, 0, 0, time.UTC),
+		InputSnapshotRefs:    []string{string([]byte{0xff})},
+		ResultFingerprint:    strings.Repeat("b", 64),
 	}
 	if _, err := Build(input); !errors.Is(err, ErrInvalidManifest) {
 		t.Fatalf("Build() error = %v, want ErrInvalidManifest", err)
@@ -126,14 +126,14 @@ func TestBuildRejectsInvalidUTF8SnapshotReference(t *testing.T) {
 
 func TestVerifyRejectsInvalidUTF8SnapshotReference(t *testing.T) {
 	got, err := Build(Input{
-		ResultType:        "factor",
+		ResultType:           "factor",
 		SchemaVersion:        "1.0.0",
 		PayloadSchemaVersion: "1.0.0",
 		AlgorithmVersion:     "quant-test-v1",
 		ParameterFingerprint: strings.Repeat("c", 64),
-		SystemAsOf:        time.Date(2026, 11, 6, 5, 2, 0, 0, time.UTC),
-		InputSnapshotRefs: []string{"snapshot-a"},
-		ResultFingerprint: strings.Repeat("b", 64),
+		SystemAsOf:           time.Date(2026, 11, 6, 5, 2, 0, 0, time.UTC),
+		InputSnapshotRefs:    []string{"snapshot-a"},
+		ResultFingerprint:    strings.Repeat("b", 64),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -146,14 +146,14 @@ func TestVerifyRejectsInvalidUTF8SnapshotReference(t *testing.T) {
 
 func TestVerifyRejectsManifestMutation(t *testing.T) {
 	got, err := Build(Input{
-		ResultType:        "stock",
+		ResultType:           "stock",
 		SchemaVersion:        "1.0.0",
 		PayloadSchemaVersion: "1.0.0",
 		AlgorithmVersion:     "quant-test-v1",
 		ParameterFingerprint: strings.Repeat("c", 64),
-		SystemAsOf:        time.Date(2026, 11, 6, 5, 2, 0, 0, time.UTC),
-		InputSnapshotRefs: []string{"snapshot-a"},
-		ResultFingerprint: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+		SystemAsOf:           time.Date(2026, 11, 6, 5, 2, 0, 0, time.UTC),
+		InputSnapshotRefs:    []string{"snapshot-a"},
+		ResultFingerprint:    "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -167,13 +167,13 @@ func TestVerifyRejectsManifestMutation(t *testing.T) {
 func TestBuildWithPayloadBindsManifestToCanonicalPayload(t *testing.T) {
 	payload := json.RawMessage(`{"metric_code":"momentum_20d","value":0.125}`)
 	input := Input{
-		ResultType:        "factor",
+		ResultType:           "factor",
 		SchemaVersion:        "1.0.0",
 		PayloadSchemaVersion: "1.0.0",
 		AlgorithmVersion:     "quant-test-v1",
 		ParameterFingerprint: strings.Repeat("c", 64),
-		SystemAsOf:        time.Date(2026, 11, 6, 5, 2, 0, 0, time.UTC),
-		InputSnapshotRefs: []string{"snapshot-a"},
+		SystemAsOf:           time.Date(2026, 11, 6, 5, 2, 0, 0, time.UTC),
+		InputSnapshotRefs:    []string{"snapshot-a"},
 	}
 
 	got, err := BuildWithPayload(input, payload)
@@ -190,14 +190,14 @@ func TestBuildWithPayloadBindsManifestToCanonicalPayload(t *testing.T) {
 
 func TestBuildWithPayloadRejectsCallerSuppliedFingerprintMismatch(t *testing.T) {
 	input := Input{
-		ResultType:        "factor",
+		ResultType:           "factor",
 		SchemaVersion:        "1.0.0",
 		PayloadSchemaVersion: "1.0.0",
 		AlgorithmVersion:     "quant-test-v1",
 		ParameterFingerprint: strings.Repeat("c", 64),
-		SystemAsOf:        time.Date(2026, 11, 6, 5, 2, 0, 0, time.UTC),
-		InputSnapshotRefs: []string{"snapshot-a"},
-		ResultFingerprint: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+		SystemAsOf:           time.Date(2026, 11, 6, 5, 2, 0, 0, time.UTC),
+		InputSnapshotRefs:    []string{"snapshot-a"},
+		ResultFingerprint:    "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
 	}
 	if _, err := BuildWithPayload(input, json.RawMessage(`{"value":1}`)); !errors.Is(err, ErrInvalidPayload) {
 		t.Fatalf("expected mismatched caller fingerprint to be rejected, got %v", err)
@@ -206,13 +206,13 @@ func TestBuildWithPayloadRejectsCallerSuppliedFingerprintMismatch(t *testing.T) 
 
 func TestVerifyPayloadRejectsInvalidManifestBeforePayload(t *testing.T) {
 	got, err := BuildWithPayload(Input{
-		ResultType:        "factor",
+		ResultType:           "factor",
 		SchemaVersion:        "1.0.0",
 		PayloadSchemaVersion: "1.0.0",
 		AlgorithmVersion:     "quant-test-v1",
 		ParameterFingerprint: strings.Repeat("c", 64),
-		SystemAsOf:        time.Date(2026, 11, 6, 5, 2, 0, 0, time.UTC),
-		InputSnapshotRefs: []string{"snapshot-a"},
+		SystemAsOf:           time.Date(2026, 11, 6, 5, 2, 0, 0, time.UTC),
+		InputSnapshotRefs:    []string{"snapshot-a"},
 	}, json.RawMessage(`{"value":1}`))
 	if err != nil {
 		t.Fatal(err)
@@ -225,14 +225,14 @@ func TestVerifyPayloadRejectsInvalidManifestBeforePayload(t *testing.T) {
 
 func TestVerifyRejectsNonCanonicalUTCSystemAsOf(t *testing.T) {
 	got, err := Build(Input{
-		ResultType:        "factor",
+		ResultType:           "factor",
 		SchemaVersion:        "1.0.0",
 		PayloadSchemaVersion: "1.0.0",
 		AlgorithmVersion:     "quant-test-v1",
 		ParameterFingerprint: strings.Repeat("c", 64),
-		SystemAsOf:        time.Date(2026, 11, 6, 5, 2, 0, 120000000, time.UTC),
-		InputSnapshotRefs: []string{"snapshot-a"},
-		ResultFingerprint: strings.Repeat("b", 64),
+		SystemAsOf:           time.Date(2026, 11, 6, 5, 2, 0, 120000000, time.UTC),
+		InputSnapshotRefs:    []string{"snapshot-a"},
+		ResultFingerprint:    strings.Repeat("b", 64),
 	})
 	if err != nil {
 		t.Fatal(err)
