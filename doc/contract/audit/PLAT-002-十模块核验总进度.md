@@ -1250,3 +1250,14 @@
 - 本轮不检查 Researchflow Worker、Storage、CAS、Lease/Fencing、DB 恢复、Server 路由、WebUI 展示、E2E、测试或 CI；未修改责任模块分支。
 - 当前项目级待决项保持 5 项：QNT-DEC-01/02、RSC-OPEN-003/004/005。下一批核定 LLM 公开契约。
 - 权威明细见登记簿第19节、差异矩阵第46节。
+
+## 47. LLM 公开契约定义核定完成（2026-11-11）
+
+- 完成 LLM-CTR-001～003 核定，3 项均为 pending_evidence；无新增 pending_decision、blocked 或 freeze-ready。
+- LLM-CTR-001：ProviderConfig/CapabilityState/ModelRequest/ModelResponse Schema 与 JSON Fixture 已有；Schema 时间字段未约束 RFC3339Nano UTC，ContentPart.annotations 为任意值而 DTO 定义为 Annotation[]，部分条件字段约束过宽。
+- LLM-CTR-002：ModelEvent Schema/SSE Fixture 与 terminal、EOF、sequence、取消、重试语义已有；received_at UTC、sequence_number 范围和 terminal 后事件约束未完整机器化。
+- LLM-CTR-003：Platform Fault 到 ModelErrorInfo 的分类、stable_code、SafeMessage、Retryable 和 Cause 隔离规则已有；PLAT-CTR-001 的 Fault 分类/稳定 Code 尚未冻结，因此依赖项仍 pending_evidence。
+- 单轮文本、Tool 只解析不执行、Capability unknown 默认不放行、Draft 2020-12、Usage 受控派生、SSE 禁止透明重试等已接受语义不重开。
+- 本轮不检查真实 Gateway/模型能力、Provider 性能、E2E、HTTP Client 接线、测试或 CI；未修改 LLM 责任分支。
+- 当前项目级待决项仍为 5 项（QNT-DEC-01/02、RSC-OPEN-003/004/005）。权威明细见登记簿第20节、差异矩阵第47节。
+- 下一批：Notification 公开契约定义核定。
