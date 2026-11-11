@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:kasign:stock_data_provider:platform:http-error:1.0.0",
+  "title": "PLAT-CTR-001 HTTP Error Envelope",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "error"
+  ],
+  "properties": {
+    "error": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "class",
+        "code",
+        "message",
+        "retryable"
+      ],
+      "properties": {
+        "class": {
+          "type": "string",
+          "enum": [
+            "validation",
+            "unauthenticated",
+            "forbidden",
+            "not_found",
+            "conflict",
+            "unavailable",
+            "timeout",
+            "internal"
+          ]
+        },
+        "code": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 160,
+          "pattern": "^[a-z][a-z0-9_-]*(\\.[a-z][a-z0-9_-]*)+$"
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "retryable": {
+          "type": "boolean"
+        },
+        "request_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "description": "可选兼容字段；存在时必须与响应头 X-Request-ID 一致。"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "retryable": {
+                "const": true
+              }
+            },
+            "required": [
+              "retryable"
+            ]
+          },
+          "then": {
+            "properties": {
+              "class": {
+                "enum": [
+                  "unavailable",
+                  "timeout"
+                ]
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

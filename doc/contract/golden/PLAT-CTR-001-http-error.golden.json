@@ -1,0 +1,196 @@
+{
+  "cases": [
+    {
+      "name": "validation_400",
+      "http_status": 400,
+      "headers": {
+        "Content-Type": "application/json; charset=utf-8",
+        "Cache-Control": "no-store",
+        "X-Content-Type-Options": "nosniff",
+        "X-Request-ID": "req_validation_001"
+      },
+      "body": {
+        "schema_version": "1.0.0",
+        "error": {
+          "class": "validation",
+          "code": "server.invalid_request",
+          "message": "request is invalid",
+          "retryable": false,
+          "request_id": "req_validation_001"
+        }
+      }
+    },
+    {
+      "name": "validation_413",
+      "http_status": 413,
+      "headers": {
+        "Content-Type": "application/json; charset=utf-8",
+        "Cache-Control": "no-store",
+        "X-Content-Type-Options": "nosniff",
+        "X-Request-ID": "req_size_001"
+      },
+      "body": {
+        "schema_version": "1.0.0",
+        "error": {
+          "class": "validation",
+          "code": "server.request_too_large",
+          "message": "request body exceeds the configured limit",
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "validation_415",
+      "http_status": 415,
+      "headers": {
+        "Content-Type": "application/json; charset=utf-8",
+        "Cache-Control": "no-store",
+        "X-Content-Type-Options": "nosniff",
+        "X-Request-ID": "req_media_001"
+      },
+      "body": {
+        "schema_version": "1.0.0",
+        "error": {
+          "class": "validation",
+          "code": "server.unsupported_media_type",
+          "message": "request content type is not supported",
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "unauthenticated_401",
+      "http_status": 401,
+      "headers": {
+        "Content-Type": "application/json; charset=utf-8",
+        "Cache-Control": "no-store",
+        "X-Content-Type-Options": "nosniff",
+        "X-Request-ID": "req_auth_001"
+      },
+      "body": {
+        "schema_version": "1.0.0",
+        "error": {
+          "class": "unauthenticated",
+          "code": "auth.missing_credentials",
+          "message": "authentication is required",
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "forbidden_403",
+      "http_status": 403,
+      "headers": {
+        "Content-Type": "application/json; charset=utf-8",
+        "Cache-Control": "no-store",
+        "X-Content-Type-Options": "nosniff",
+        "X-Request-ID": "req_forbidden_001"
+      },
+      "body": {
+        "schema_version": "1.0.0",
+        "error": {
+          "class": "forbidden",
+          "code": "auth.permission_denied",
+          "message": "operation is not permitted",
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "not_found_404",
+      "http_status": 404,
+      "headers": {
+        "Content-Type": "application/json; charset=utf-8",
+        "Cache-Control": "no-store",
+        "X-Content-Type-Options": "nosniff",
+        "X-Request-ID": "req_not_found_001"
+      },
+      "body": {
+        "schema_version": "1.0.0",
+        "error": {
+          "class": "not_found",
+          "code": "resource.not_found",
+          "message": "resource was not found",
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "conflict_409",
+      "http_status": 409,
+      "headers": {
+        "Content-Type": "application/json; charset=utf-8",
+        "Cache-Control": "no-store",
+        "X-Content-Type-Options": "nosniff",
+        "X-Request-ID": "req_conflict_001"
+      },
+      "body": {
+        "schema_version": "1.0.0",
+        "error": {
+          "class": "conflict",
+          "code": "request.conflict",
+          "message": "request conflicts with the current resource state",
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "unavailable_503",
+      "http_status": 503,
+      "headers": {
+        "Content-Type": "application/json; charset=utf-8",
+        "Cache-Control": "no-store",
+        "X-Content-Type-Options": "nosniff",
+        "X-Request-ID": "req_overload_001",
+        "Retry-After": "1"
+      },
+      "body": {
+        "schema_version": "1.0.0",
+        "error": {
+          "class": "unavailable",
+          "code": "server.overloaded",
+          "message": "server is temporarily overloaded",
+          "retryable": true
+        }
+      }
+    },
+    {
+      "name": "timeout_504",
+      "http_status": 504,
+      "headers": {
+        "Content-Type": "application/json; charset=utf-8",
+        "Cache-Control": "no-store",
+        "X-Content-Type-Options": "nosniff",
+        "X-Request-ID": "req_timeout_001"
+      },
+      "body": {
+        "schema_version": "1.0.0",
+        "error": {
+          "class": "timeout",
+          "code": "dependency.timeout",
+          "message": "dependency request timed out",
+          "retryable": true
+        }
+      }
+    },
+    {
+      "name": "internal_500",
+      "http_status": 500,
+      "headers": {
+        "Content-Type": "application/json; charset=utf-8",
+        "Cache-Control": "no-store",
+        "X-Content-Type-Options": "nosniff",
+        "X-Request-ID": "req_internal_001"
+      },
+      "body": {
+        "schema_version": "1.0.0",
+        "error": {
+          "class": "internal",
+          "code": "server.invalid_fault",
+          "message": "internal server error",
+          "retryable": false
+        }
+      }
+    }
+  ]
+}
