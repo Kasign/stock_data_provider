@@ -1256,3 +1256,13 @@ PLAT-002 的项目级决策收敛已完成；**PLAT-002 项目整体不宣告完
 **本批结论：** 8 项中 7 项 pending_evidence、1 项 not_applicable，无 pending_decision、blocked 或 freeze-ready。DATA-CTR-003 从项目级跨模块冻结任务移出，不再追 Provider 内部测试。
 
 **唯一保留的公开契约问题：** Data API 的 OpenAPI Security OR 语义冲突、DragonTiger DEC-027 字段边界、DailyBarsV2 Decimal 定义、质量/时间字段映射、Snapshot 与内容 DTO 的关联。不得扩展为 Data 内部 Provider 归一化或运行质量整改。
+
+## 43. News 首批公开契约定义核定（2026-11-11）
+
+| 契约 | 状态 | 结论 |
+|---|---|---|
+| NEWS-CTR-001 | pending_evidence | Query Schema/Golden 已有；business_time nullable、UTC date-time、system_observed_at 时间来源及 relation_refs 空/未提供状态表达仍有定义差异 |
+| NEWS-CTR-002 | pending_evidence | News Authorization Binding Schema/Golden 和策略绑定语义较完整；依赖 GOV-CTR-006 公共授权快照语义补齐 |
+| NEWS-CTR-003 | pending_evidence | PIT、available_at、稳定排序、15分钟 Snapshot、HMAC Cursor 已定义；system_observed_at 与领域观察时间权威归属冲突 |
+**范围说明：** 当前 News 对外跨模块边界为同进程 Application Port；doc/news/openapi.yaml 是未注册的未来 HTTP 草案，不属于当前活动契约。无新增 CTR。  
+**本批结论：** 3 项均 pending_evidence；无 pending_decision、blocked、freeze-ready。只保留公开 DTO/PIT/授权映射问题，不检查采集、Provider、Repository 或测试实现。
