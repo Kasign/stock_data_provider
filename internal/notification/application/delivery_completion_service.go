@@ -66,7 +66,7 @@ func (s *DeliveryCompletionService) Complete(
 		claim.Lease.FencingToken != attempt.FencingToken ||
 		!claim.Lease.ExpiresAt.Equal(attempt.LeaseExpiresAt) ||
 		attempt.DeliveryID != delivery.DeliveryID ||
-		int64(attempt.AttemptNo) != delivery.AttemptCount+1 ||
+		attempt.AttemptNo != delivery.AttemptCount+1 ||
 		attempt.AttemptNo < 1 ||
 		attempt.FinishedAt != nil {
 		return ErrRetryDecisionConflict
@@ -86,6 +86,23 @@ func (s *DeliveryCompletionService) Complete(
 	); err != nil {
 		return err
 	}
+
+	// StartWithLease 已在独立事务中推进 attempt_count，但不改变 Delivery.version。
+	// Claim 快照因此已过时；完成状态迁移前必须重新读取当前投影，禁止用旧计数覆盖数据库。
+	current, found, err := s.deliveries.Get(ctx, delivery.DeliveryID)
+	if err != nil {
+		return err
+	}
+	if !found || current.DeliveryID != delivery.DeliveryID || current.Version != delivery.Version ||
+		current.Status != domain.DeliverySending ||
+		current.AttemptCount != attempt.AttemptNo ||
+		current.MaxAttempts != delivery.MaxAttempts ||
+		!current.CreatedAt.Equal(delivery.CreatedAt) ||
+		!current.DeadlineAt.Equal(delivery.DeadlineAt) {
+		return ErrRetryDecisionConflict
+	}
+	delivery = current
+	claim.Delivery = current
 
 	change := domain.DeliveryTransition{At: finishedAt}
 	switch result.Outcome {

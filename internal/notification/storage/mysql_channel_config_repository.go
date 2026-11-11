@@ -70,7 +70,7 @@ func (r *MySQLChannelConfigRepository) Create(ctx context.Context, snapshot doma
 	if !isMySQLDuplicateKey(err) {
 		return "", false, fmt.Errorf("notification storage: create channel config version: %w", err)
 	}
-	existing, existingDigest, found, loadErr := r.Get(ctx, snapshot.ChannelRef, snapshot.ConfigVersion)
+	_, existingDigest, found, loadErr := r.Get(ctx, snapshot.ChannelRef, snapshot.ConfigVersion)
 	if loadErr != nil {
 		return "", false, loadErr
 	}

@@ -12,11 +12,12 @@ import (
 )
 
 var (
-	ErrClaimRunUnavailable   = errors.New("Researchflow run is not claimable")
-	ErrClaimStageUnavailable = errors.New("Researchflow stage is not claimable")
-	ErrAttemptLeaseHeld      = errors.New("Researchflow attempt lease is held by another worker")
-	ErrAttemptLimitReached   = errors.New("Researchflow stage attempt limit reached")
-	ErrRunConcurrencyLimit   = errors.New("Researchflow run parallel stage limit reached")
+	ErrClaimRunUnavailable        = errors.New("Researchflow run is not claimable")
+	ErrClaimStageUnavailable      = errors.New("Researchflow stage is not claimable")
+	ErrAttemptLeaseHeld           = errors.New("Researchflow attempt lease is held by another worker")
+	ErrAttemptLimitReached        = errors.New("Researchflow stage attempt limit reached")
+	ErrRunConcurrencyLimit        = errors.New("Researchflow run parallel stage limit reached")
+	ErrAttemptHistoryInconsistent = errors.New("Researchflow attempt history is inconsistent")
 )
 
 // ClaimAttempt atomically claims a ready stage and creates its next attempt.
@@ -60,12 +61,13 @@ func (r *MySQLRunRepository) ClaimAttempt(
 	}
 
 	var stage domain.Stage
+	var expiredAttemptReclaimed bool
 	var stageStatus string
-	var retryAt, startedAt sql.NullString
-	err = tx.QueryRowContext(ctx, `SELECT stage_ref, run_ref, status, version, attempt_no, retry_at, started_at
+	var retryAt, startedAt, stageFinishedAt sql.NullString
+	err = tx.QueryRowContext(ctx, `SELECT stage_ref, run_ref, status, version, attempt_no, retry_at, started_at, finished_at
 		FROM researchflow_stages WHERE stage_ref = ? AND run_ref = ? FOR UPDATE`,
 		stageRef, runRef,
-	).Scan(&stage.Ref, &stage.RunRef, &stageStatus, &stage.Version, &stage.AttemptNo, &retryAt, &startedAt)
+	).Scan(&stage.Ref, &stage.RunRef, &stageStatus, &stage.Version, &stage.AttemptNo, &retryAt, &startedAt, &stageFinishedAt)
 	if err != nil {
 		return domain.Attempt{}, false, fmt.Errorf("lock Researchflow stage %q: %w", stageRef, err)
 	}
@@ -84,20 +86,92 @@ func (r *MySQLRunRepository) ClaimAttempt(
 
 	// Lock and inspect the most recent attempt only after Run and Stage locks.
 	var current domain.Attempt
-	var currentStatus string
+	var currentStatus, currentRunRef string
 	var currentOwner, currentLease, currentStarted sql.NullString
-	err = tx.QueryRowContext(ctx, `SELECT attempt_ref, attempt_no, status, lease_owner,
+	err = tx.QueryRowContext(ctx, `SELECT attempt_ref, run_ref, attempt_no, status, lease_owner,
 		lease_expires_at, fencing_token, started_at
 		FROM researchflow_attempts WHERE stage_ref = ?
 		ORDER BY attempt_no DESC LIMIT 1 FOR UPDATE`, stageRef,
-	).Scan(&current.Ref, &current.Number, &currentStatus, &currentOwner,
+	).Scan(&current.Ref, &currentRunRef, &current.Number, &currentStatus, &currentOwner,
 		&currentLease, &current.FencingToken, &currentStarted)
 	hasAttempt := err == nil
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return domain.Attempt{}, false, fmt.Errorf("lock latest Researchflow attempt for stage %q: %w", stageRef, err)
 	}
 
+	// Validate the complete attempt sequence before replaying an existing lease
+	// or creating a retry. The unique index prevents duplicate attempt_no values,
+	// but it cannot detect deleted/missing history rows. A gap would make the
+	// Stage counter and persisted history disagree, so fail closed.
+	if stage.AttemptNo < 0 {
+		return domain.Attempt{}, false, ErrAttemptHistoryInconsistent
+	}
+	var historyCount, zeroFencingTokens, invalidTokenOrder, invalidLeaseState, invalidAttemptTimes, invalidRunRefs int64
+	var minAttemptNo, maxAttemptNo sql.NullInt64
+	var firstAttemptStarted sql.NullString
+	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*), MIN(attempt_no), MAX(attempt_no), MIN(started_at),
+		COALESCE(SUM(CASE WHEN fencing_token = 0 THEN 1 ELSE 0 END), 0),
+		COALESCE(SUM(CASE
+			WHEN status = 'running' AND
+				(lease_owner IS NULL OR lease_owner = '' OR lease_expires_at IS NULL OR finished_at IS NOT NULL)
+			THEN 1
+			WHEN status IN ('succeeded', 'degraded', 'failed', 'timed_out', 'cancelled') AND
+				(lease_owner IS NOT NULL OR lease_expires_at IS NOT NULL OR finished_at IS NULL)
+			THEN 1
+			WHEN status NOT IN ('running', 'succeeded', 'degraded', 'failed', 'timed_out', 'cancelled')
+			THEN 1
+			ELSE 0 END), 0),
+		COALESCE(SUM(CASE WHEN started_at = '' OR
+			(finished_at IS NOT NULL AND finished_at < started_at) THEN 1 ELSE 0 END), 0),
+		COALESCE(SUM(CASE WHEN run_ref <> ? THEN 1 ELSE 0 END), 0),
+		(SELECT COUNT(*) FROM researchflow_attempts newer
+			INNER JOIN researchflow_attempts older
+				ON older.stage_ref = newer.stage_ref
+				AND newer.attempt_no = older.attempt_no + 1
+			WHERE newer.stage_ref = ? AND newer.fencing_token <= older.fencing_token)
+		FROM researchflow_attempts WHERE stage_ref = ?`, runRef, stageRef, stageRef,
+	).Scan(&historyCount, &minAttemptNo, &maxAttemptNo, &firstAttemptStarted,
+		&zeroFencingTokens, &invalidLeaseState, &invalidAttemptTimes, &invalidRunRefs, &invalidTokenOrder); err != nil {
+		return domain.Attempt{}, false, fmt.Errorf("validate Researchflow attempt history for stage %q: %w", stageRef, err)
+	}
+	if historyCount != int64(stage.AttemptNo) || zeroFencingTokens != 0 ||
+		invalidLeaseState != 0 || invalidAttemptTimes != 0 || invalidRunRefs != 0 || invalidTokenOrder != 0 ||
+		(historyCount == 0 && (minAttemptNo.Valid || maxAttemptNo.Valid || firstAttemptStarted.Valid)) ||
+		(historyCount > 0 && (!minAttemptNo.Valid || !maxAttemptNo.Valid || !firstAttemptStarted.Valid ||
+			minAttemptNo.Int64 != 1 || maxAttemptNo.Int64 != int64(stage.AttemptNo))) {
+		return domain.Attempt{}, false, ErrAttemptHistoryInconsistent
+	}
+
 	stageState := domain.StageStatus(stageStatus)
+	if hasAttempt && currentRunRef != runRef {
+		return domain.Attempt{}, false, ErrAttemptHistoryInconsistent
+	}
+	if stageFinishedAt.Valid {
+		return domain.Attempt{}, false, ErrAttemptHistoryInconsistent
+	}
+	switch stageState {
+	case domain.StageReady:
+		if retryAt.Valid || startedAt.Valid || stage.AttemptNo != 0 || hasAttempt {
+			return domain.Attempt{}, false, ErrAttemptHistoryInconsistent
+		}
+	case domain.StageRunning:
+		if retryAt.Valid || !startedAt.Valid || !hasAttempt {
+			return domain.Attempt{}, false, ErrAttemptHistoryInconsistent
+		}
+	case domain.StageRetryWait:
+		if !retryAt.Valid || !startedAt.Valid || !hasAttempt {
+			return domain.Attempt{}, false, ErrAttemptHistoryInconsistent
+		}
+	}
+	if historyCount == 0 {
+		if startedAt.Valid {
+			return domain.Attempt{}, false, ErrAttemptHistoryInconsistent
+		}
+	} else if !startedAt.Valid || startedAt.String != firstAttemptStarted.String {
+		// Stage.started_at is the first execution start, not the latest retry.
+		// Preserve that origin across retries and reject malformed replay state.
+		return domain.Attempt{}, false, ErrAttemptHistoryInconsistent
+	}
 	if hasAttempt {
 		attemptState := domain.AttemptStatus(currentStatus)
 		if current.Number != stage.AttemptNo {
@@ -124,10 +198,15 @@ func (r *MySQLRunRepository) ClaimAttempt(
 				}
 				return domain.Attempt{}, false, ErrAttemptLeaseHeld
 			}
-			result, updateErr := tx.ExecContext(ctx, `UPDATE researchflow_attempts SET status = ?, finished_at = ?
-				WHERE attempt_ref = ? AND status = ?`,
+			if current.FencingToken == ^uint64(0) {
+				return domain.Attempt{}, false, errors.New("Researchflow fencing token exhausted while reclaiming expired attempt")
+			}
+			result, updateErr := tx.ExecContext(ctx, `UPDATE researchflow_attempts SET
+				status = ?, finished_at = ?, fencing_token = fencing_token + 1,
+				lease_owner = NULL, lease_expires_at = NULL
+				WHERE attempt_ref = ? AND status = ? AND fencing_token = ?`,
 				string(domain.AttemptTimedOut), formatResearchflowTimeValue(now),
-				current.Ref, string(domain.AttemptRunning))
+				current.Ref, string(domain.AttemptRunning), current.FencingToken)
 			if updateErr != nil {
 				return domain.Attempt{}, false, fmt.Errorf("expire previous Researchflow attempt %q: %w", current.Ref, updateErr)
 			}
@@ -137,6 +216,7 @@ func (r *MySQLRunRepository) ClaimAttempt(
 				}
 				return domain.Attempt{}, false, errors.New("Researchflow attempt changed while locked")
 			}
+			expiredAttemptReclaimed = true
 		} else if stageState == domain.StageRunning {
 			return domain.Attempt{}, false, ErrClaimStageUnavailable
 		}
@@ -171,17 +251,62 @@ func (r *MySQLRunRepository) ClaimAttempt(
 			return domain.Attempt{}, false, ErrClaimStageUnavailable
 		}
 	}
-	if stage.AttemptNo >= maxAttempts {
+	// If the final allowed Attempt died with an expired lease, do not roll
+	// back its timeout transition and leave Stage.running without a live worker.
+	// Close the Stage atomically so Run finalization can observe a terminal result.
+	attemptBudgetExhausted := stage.AttemptNo >= maxAttempts ||
+		uint64(stage.AttemptNo) >= uint64(^uint32(0))
+	if expiredAttemptReclaimed && attemptBudgetExhausted {
+		if stage.Version == ^uint64(0) {
+			return domain.Attempt{}, false, errors.New("Researchflow Stage version exhausted while closing expired final Attempt")
+		}
+		finishedAt := formatResearchflowTimeValue(now)
+		result, updateErr := tx.ExecContext(ctx, `UPDATE researchflow_stages SET
+			status = ?, version = version + 1, retry_at = NULL, finished_at = ?
+			WHERE stage_ref = ? AND run_ref = ? AND version = ? AND status = ? AND attempt_no = ?`,
+			string(domain.StageTimedOut), finishedAt, stageRef, runRef, stage.Version,
+			string(domain.StageRunning), stage.AttemptNo)
+		if updateErr != nil {
+			return domain.Attempt{}, false, fmt.Errorf("close Researchflow Stage after final expired Attempt: %w", updateErr)
+		}
+		if affected, affectedErr := result.RowsAffected(); affectedErr != nil || affected != 1 {
+			if affectedErr != nil {
+				return domain.Attempt{}, false, fmt.Errorf("verify final expired Researchflow Stage update: %w", affectedErr)
+			}
+			return domain.Attempt{}, false, errors.New("Researchflow Stage changed while closing final expired Attempt")
+		}
+		if err := tx.Commit(); err != nil {
+			return domain.Attempt{}, false, fmt.Errorf("commit exhausted Researchflow attempt budget: %w", err)
+		}
+		return domain.Attempt{}, false, ErrAttemptLimitReached
+	}
+	// attempt_no is persisted as MariaDB INT UNSIGNED. Even if a caller
+	// configures a larger maxAttempts value, never calculate an unpersistable
+	// next number.
+	if attemptBudgetExhausted {
 		return domain.Attempt{}, false, ErrAttemptLimitReached
 	}
 
 	// Run is locked above, so every ClaimAttempt for this Run serializes before
 	// reading the active Stage count. This is the cross-worker concurrency gate.
-	var runningStages, activeLeases int
-	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM researchflow_stages
-		WHERE run_ref = ? AND status = ? AND stage_ref <> ?`,
-		runRef, string(domain.StageRunning), stageRef).Scan(&runningStages); err != nil {
-		return domain.Attempt{}, false, fmt.Errorf("count running Researchflow stages: %w", err)
+	var invalidRunningStages, activeLeases int
+	// An expired lease is a recoverable running Stage, not corruption and not
+	// an active concurrency slot. A running Stage without a matching running
+	// Attempt is inconsistent and must fail closed.
+	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM researchflow_stages s
+		WHERE s.run_ref = ? AND s.status = ? AND s.stage_ref <> ?
+			AND NOT EXISTS (
+				SELECT 1 FROM researchflow_attempts a
+				WHERE a.stage_ref = s.stage_ref AND a.run_ref = s.run_ref
+					AND a.status = ? AND a.attempt_no = s.attempt_no
+					AND a.lease_expires_at IS NOT NULL
+			)`,
+		runRef, string(domain.StageRunning), stageRef, string(domain.AttemptRunning),
+	).Scan(&invalidRunningStages); err != nil {
+		return domain.Attempt{}, false, fmt.Errorf("validate running Researchflow stages: %w", err)
+	}
+	if invalidRunningStages != 0 {
+		return domain.Attempt{}, false, errors.New("Researchflow running Stage has no matching running Attempt")
 	}
 	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM researchflow_stages s
 		WHERE s.run_ref = ? AND s.status = ? AND s.stage_ref <> ?
@@ -195,16 +320,16 @@ func (r *MySQLRunRepository) ClaimAttempt(
 		formatResearchflowTimeValue(now)).Scan(&activeLeases); err != nil {
 		return domain.Attempt{}, false, fmt.Errorf("count active Researchflow Attempt leases: %w", err)
 	}
-	if runningStages != activeLeases {
-		return domain.Attempt{}, false, errors.New("Researchflow running Stage and active Attempt lease counts are inconsistent")
-	}
 	if activeLeases >= maxParallel {
 		return domain.Attempt{}, false, ErrRunConcurrencyLimit
 	}
 
 	var maxToken uint64
-	if err := tx.QueryRowContext(ctx, `SELECT COALESCE(MAX(fencing_token), 0)
-		FROM researchflow_attempts WHERE stage_ref = ?`, stageRef).Scan(&maxToken); err != nil {
+	err = tx.QueryRowContext(ctx, `SELECT fencing_token FROM researchflow_attempts
+		WHERE stage_ref = ? ORDER BY fencing_token DESC LIMIT 1`, stageRef).Scan(&maxToken)
+	if errors.Is(err, sql.ErrNoRows) {
+		maxToken = 0
+	} else if err != nil {
 		return domain.Attempt{}, false, fmt.Errorf("read Researchflow fencing token: %w", err)
 	}
 	if maxToken == ^uint64(0) || stage.Version == ^uint64(0) || runVersion == ^uint64(0) {
@@ -212,7 +337,10 @@ func (r *MySQLRunRepository) ClaimAttempt(
 	}
 	token := maxToken + 1
 	attemptNo := stage.AttemptNo + 1
-	expiresAt := now.Add(leaseDuration)
+	expiresAt, err := calculateResearchflowLeaseExpiry(now, leaseDuration, deadline)
+	if err != nil {
+		return domain.Attempt{}, false, err
+	}
 	_, err = tx.ExecContext(ctx, `INSERT INTO researchflow_attempts (
 		attempt_ref, run_ref, stage_ref, attempt_no, status, lease_owner,
 		lease_expires_at, fencing_token, started_at, finished_at, fault_ref, output_ref

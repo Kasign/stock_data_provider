@@ -66,7 +66,14 @@ func TestValidateDeliveryAttemptHistoryForDeliveryRejectsOutsideLifecycle(t *tes
 
 	leaseBeyondDeadline := attempt
 	leaseBeyondDeadline.LeaseExpiresAt = delivery.DeadlineAt.Add(time.Second)
-	if err := ValidateDeliveryAttemptHistoryForDelivery(delivery, []domain.DeliveryAttempt{leaseBeyondDeadline}); !errors.Is(err, ErrDeliveryAttemptHistory) {
-		t.Fatalf("attempt lease beyond Delivery deadline must fail closed: %v", err)
+	if err := ValidateDeliveryAttemptHistoryForDelivery(delivery, []domain.DeliveryAttempt{leaseBeyondDeadline}); err != nil {
+		t.Fatalf("lease expiry may exceed Delivery deadline because it is a fencing boundary: %v", err)
+	}
+
+	finishedAfterDeadline := leaseBeyondDeadline
+	finishedAt := delivery.DeadlineAt.Add(time.Second)
+	finishedAfterDeadline.FinishedAt = &finishedAt
+	if err := ValidateDeliveryAttemptHistoryForDelivery(delivery, []domain.DeliveryAttempt{finishedAfterDeadline}); err != nil {
+		t.Fatalf("an attempt started before deadline may finish after it: %v", err)
 	}
 }

@@ -205,7 +205,7 @@ func (r *MySQLDeliveryAttemptRepository) StartWithLease(
 		return application.ErrDeliveryLeaseConflict
 	}
 	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("notification storage: commit attempt start: %w", err)
+		return fmt.Errorf("%w: notification storage: commit attempt start: %w", application.ErrPersistenceOutcomeUnknown, err)
 	}
 	return nil
 }
@@ -311,7 +311,7 @@ func (r *MySQLDeliveryAttemptRepository) CompleteWithLease(
 		return application.ErrDeliveryAttemptConflict
 	}
 	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("notification storage: commit attempt completion: %w", err)
+		return fmt.Errorf("%w: notification storage: commit attempt completion: %w", application.ErrPersistenceOutcomeUnknown, err)
 	}
 	return nil
 }

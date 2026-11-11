@@ -25,7 +25,7 @@ func validReadResult() CreateRunResult {
 			Ref: "run-1", Version: 3, Status: domain.RunRunning,
 			InputSnapshotRefs: []string{"snapshot-1"}, ExcludedStages: []domain.ExcludedStage{},
 		},
-		Stages: []domain.Stage{{Ref: "stage-1", RunRef: "run-1", Code: "context", Version: 2}},
+		Stages: []domain.Stage{{Ref: "stage-1", RunRef: "run-1", Code: "context", Status: domain.StageReady, Version: 2}},
 	}
 }
 
