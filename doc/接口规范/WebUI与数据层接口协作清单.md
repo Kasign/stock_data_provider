@@ -34,7 +34,7 @@
 | 行情服务实际行为 | `internal/marketdata/httpapi`、`internal/marketdata/app`、`internal/marketdata/model`、Provider 和测试 | 判断路由、字段序列化、数据映射及能力是否真实实现 |
 | WebUI 实际请求 | doc/web/API_CONTRACT.md、web/src/api.js | 判断页面实际调用什么、参数如何传递、前端如何解释状态 |
 | WebUI 产品需求 | doc/web/Web整体规划.md、功能说明和专项文档 | 确认接口需求是否仍有效及产品优先级 |
-| 数据质量语义 | doc/api/数据质量与状态契约.md | 核对单位、时间、质量状态、缺失值和降级语义 |
+| 数据质量语义 | `doc/api/contracts/数据质量与状态契约.md` | 核对单位、时间、质量状态、缺失值和降级语义 |
 | 数据侧任务状态 | doc/api/数据侧整体规划.md | 确认数据侧实施顺序、当前阶段和责任边界 |
 
 发生冲突时：
@@ -257,7 +257,7 @@
 
 - 2026-11-04：诊断 FieldIssue 增加可选 count 聚合字段并同步 OpenAPI Schema；首次 CI 检查发现新增文件 gofmt 格式问题，已按日志修正，最新 SHA 的 Go test suite 待重新验证。WebUI checks 在 SHA 24013849、eefdeb19 均通过；其余工作流状态以最新 SHA 的 Actions 为准。
 
-- 本轮代码功能按批次集中提交为 1160d221；PR #1 仍为 Open / Draft。最新 Go test suite、Parity 和 Live Probe 的结果以该 SHA 对应 Actions 为准；当前 Go test suite / Parity 尚未完成，WebUI checks 已通过。
+- 历史记录：本轮代码功能按批次集中提交为 1160d221；当时 PR #1 为 Open / Draft。该 PR/分支状态已被后续 integration 聚合取代；此处 CI 结果仅证明对应历史 SHA，不代表当前 integration 验收。
 
 
 ## 13. 2026-11-04 DailyBar Reporter 回归修复
