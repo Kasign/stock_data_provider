@@ -6,7 +6,7 @@
 - 固定代码审计基线：`origin/integration @ b6dfc85ba214fe16268c8cba780641a8bfe15086`；仅对该 SHA 的代码事实作结论，不随分支 HEAD 自动漂移
 - 登记簿版本：`0.2.33-review`
 - 当前状态：`L1_frozen_contract_definition_review_in_progress`
-- 当前状态统计：43 项正式 CTR；7 freeze-ready、34 pending_evidence、0 pending-decision、2 not_applicable、0 frozen。项目级语义待决已清零；各 CTR 仍按自身证据门禁收敛。
+- 当前状态统计：43 项正式 CTR；8 freeze-ready、33 pending_evidence、0 pending-decision、2 not_applicable、0 frozen。项目级语义待决已清零；各 CTR 仍按自身证据门禁收敛。
 - 项目级决策：DEC-PLAT-002-018～038 已记录；当前 pending-decision 为 0。DATA-FLOW-B、LLM-FLOW-B 保持条件性 deferred
 - 决策责任：项目负责人；根据明确授权，DEC-PLAT-002-028～037 的技术取舍由 ChatGPT 代为 Review/裁决，并在决议中标记授权来源
 - 复核原则：本轮只冻结契约定义；模块实现符合性、内部测试、CI、部署另行跟踪，不得混入本轮冻结门禁
@@ -192,7 +192,7 @@ GitHub 远端 ref 核验（2026-11-10）：
 | FLOW-CTR-004 | Stage 输入输出、诊断与最终报告关联 | Researchflow | 所有 Stage Provider、Server、WebUI | doc/researchflow/03 第2.2/2.3/6.2节；Stage/ResultSummary Schema/Golden | 1.0.0（Stage/ResultSummary Schema/Golden）；Stage Provider Result Envelope Schema 未登记 | `pending_evidence` | Stage Provider Result 的 output_type/schema_version/payload/quality_summary/diagnostic_refs 只有字段表，无权威 Schema/Output Registry；ResultSummary.quality_status 仍为任意 string，coverage 分母及 summary 资源身份/版本绑定未定义完整 |
 | LLM-CTR-001 | Provider Port、ModelRequest/Response、Usage、Tool Call | LLM | Researchflow | doc/llm/04 第2～5节；ProviderConfig/CapabilityState/ModelRequest/ModelResponse Schema 1.0.0 | 1.0.0（Request/Response/Config/Capability Schema 与 JSON Fixtures） | `pending_evidence` | 主字段与条件状态已有定义；UTC RFC3339Nano 未在相关 Schema 中约束，ContentPart.annotations Schema 允许任意值而 DTO 定义为 Annotation[]，部分未知/条件字段的结构约束仍过宽 |
 | LLM-CTR-002 | Stream/SSE 事件、终止、断流和序号 | LLM | Researchflow | doc/llm/04 第6节；doc/llm/05；ModelEvent Schema 1.0.0 | 1.0.0（ModelEvent Schema 与 SSE Fixtures） | `pending_evidence` | terminal/EOF/序号连续性/未知事件/取消语义已有；ModelEvent received_at UTC 约束未体现在 Schema，sequence_number 初始/合法范围及 terminal 后事件的公开结构约束尚未形成完整机器定义 |
-| LLM-CTR-003 | Platform Fault → ModelErrorInfo 映射 | LLM Adapter | Researchflow；依赖 Platform Fault | doc/llm/04 第7/11节；ModelErrorInfo Schema 1.0.0；PLAT-CTR-001 | 1.0.0（ModelErrorInfo Schema） | `pending_evidence` | Fault Class→ModelErrorKind、stable_code、SafeMessage、Retryable 和 Cause 隔离规则已有；但 Platform Fault 的公开分类/稳定 Code 契约尚未冻结，跨层映射无法独立冻结 |
+| LLM-CTR-003 | Platform Fault → ModelErrorInfo 映射 | LLM Adapter | Researchflow；依赖 Platform Fault | doc/llm/04 第7/11节；doc/llm/schema/model-error-info-1.0.0.schema.json；PLAT-CTR-001 | 1.0.0（ModelErrorInfo Schema） | `freeze-ready` | Platform Fault 八类公开分类、稳定 Code 命名和安全边界已由 PLAT-CTR-001 冻结；LLM 已逐类定义 ModelErrorKind 映射、特殊响应体积错误优先级、stable_code/SafeMessage/Retryable 投影及 Dependency/Cause 隔离，Schema 覆盖 ModelErrorInfo；LLM 内部错误码词汇与真实 Adapter/Consumer 测试属于 L2 实现符合性 |
 | NTF-CTR-001 | NotificationEvent Envelope、Schema Registry、Fingerprint | Notification | Quant、Research、Researchflow | doc/notification/03 第2.1/8.1节、05；Envelope 与三类 Payload Schema/Golden | 1.0.0（4 Schema / 6 Golden） | `pending_evidence` | Envelope/首批事件映射/fingerprint 算法已有；Schema 未约束 RFC3339Nano UTC，Payload reason_code/opaque ref 的稳定格式及 subject_ref 与 payload 主体一致性仍依赖文字定义，需统一机器契约约束 |
 | NTF-CTR-002 | Inbox、Subscription、Delivery、Attempt、幂等和状态机 | Notification | Server；Quant/Research/Researchflow 仅发布事件 | doc/notification/03 第2～7/9节、06；Notification Application Port 与 Domain 类型 | 1.0.0（Event Schema 已有；Subscription/Delivery/Attempt Schema 未登记） | `pending_evidence` | Event 接收/Inbox 双唯一键、Delivery 唯一键和状态机语义已有；Subscription、DeliveryPlan、DeliveryRecord、DeliveryAttempt、DeliveryStateEvent 的完整跨模块 DTO/Port 权威定义与版本/错误语义未形成可核对的机器 Schema/等价 Application Port 契约 |
 | NTF-CTR-003 | Notification 内部 Channel Adapter SPI 与 ChannelConfigSnapshot | Notification 内部扩展点 | Notification 内部 Channel Adapter/Resolver | doc/notification/03 第8.4节；internal/notification/application/channel_ports.go；internal/notification/domain/channel.go | 内部 Port，不属于跨模块公开契约版本 | `not_applicable` | ChannelConfigSnapshot、ChannelAdapter、ChannelResolver、RecipientResolver、ChannelSendRequest/Result 仅由 Notification 内部组件消费；不作为 PLAT-002 跨模块冻结门禁。Delivery 的 retry/unknown 对外语义归 NTF-CTR-002，不重复登记 |
@@ -734,8 +734,8 @@ INT-CTR-001 是 43 个正式 CTR 之一，覆盖 Quant、Research、Researchflow
 
 | 状态 | 数量 | 含义 |
 |---|---:|---|
-| freeze-ready | 7 | GOV-CTR-001～006、PLAT-CTR-001；公共规则与 Fault/HTTP 错误投影定义完整，可提交项目负责人确认冻结 |
-| pending-evidence | 34 | 公开契约定义/Schema/权威映射仍有缺口 |
+| freeze-ready | 8 | GOV-CTR-001～006、PLAT-CTR-001、LLM-CTR-003；公共规则及错误映射定义完整，可提交项目负责人确认冻结 |
+| pending-evidence | 33 | 公开契约定义/Schema/权威映射仍有缺口 |
 | pending-decision | 0 | 本轮五项待决均已由 DEC-PLAT-002-028～032 裁决 |
 | blocked | 0 | 当前没有无法通过权威决议消解的公开定义冲突 |
 | not_applicable | 2 | DATA-CTR-003、NTF-CTR-003；仅模块内部 Provider/Channel SPI，不属于跨模块公开契约 |
@@ -756,8 +756,8 @@ INT-CTR-001 是 43 个正式 CTR 之一，覆盖 Quant、Research、Researchflow
 ### 24.3 阶段结论
 
 - 43 项正式 CTR 已全部完成本轮定义口径核定；不再保留“待审查模块/待全量盘点”的开放任务。
-- 当前未完成项为 34 项 pending-evidence；不再有 pending-decision。模块内部实现/测试/CI/部署事项仍不属于本轮契约定义冻结门禁。
-- GOV-CTR-001～006 已独立达到 freeze-ready；下一阶段按剩余 34 项 pending-evidence CTR 增量收敛。Quant/Research 仍按 DEC-PLAT-002-028～033 校准责任模块定义；不重新启动十模块全量扫描，不新增重复 CTR。
+- 当前未完成项为 33 项 pending-evidence；不再有 pending-decision。模块内部实现/测试/CI/部署事项仍不属于本轮契约定义冻结门禁。
+- GOV-CTR-001～006 已独立达到 freeze-ready；下一阶段按剩余 33 项 pending-evidence CTR 增量收敛。Quant/Research 仍按 DEC-PLAT-002-028～033 校准责任模块定义；不重新启动十模块全量扫描，不新增重复 CTR。
 
 
 ## 25. 五项待决裁决完成记录（2026-11-11）
@@ -881,7 +881,7 @@ INT-CTR-001 是 43 个正式 CTR 之一，覆盖 Quant、Research、Researchflow
 - GOV-CTR-004 状态调整为 `freeze-ready`；43 项总数不变，freeze-ready 5、pending-evidence 36、pending-decision 0、blocked 0、not_applicable 2、frozen 0。
 
 
-## 32. GOV-CTR-006 公共授权快照契约定义冻结评估（2026-11-11）
+## 34. GOV-CTR-006 公共授权快照契约定义冻结评估（2026-11-11）
 
 - AuthorizationRef 与 PolicySnapshot 各自必需 `schema_version=1.0.0`；两份 Schema/四份 Golden 已同步。
 - Schema 已约束 RFC3339Nano UTC、conditions 唯一、policies 非空/唯一；字典序、policy_version/snapshot_ref 绑定由明确的语义 Validator 规则负责。
@@ -890,7 +890,7 @@ INT-CTR-001 是 43 个正式 CTR 之一，覆盖 Quant、Research、Researchflow
 - 43 项统计更新为 6 freeze-ready、35 pending-evidence、0 pending-decision、2 not_applicable、0 frozen。
 
 
-## 34. PLAT-CTR-001 Fault 与 HTTP 错误投影契约定义收敛（2026-11-11）
+## 35. PLAT-CTR-001 Fault 与 HTTP 错误投影契约定义收敛（2026-11-11）
 
 - Platform Fault 仅是进程内错误，不得直接 JSON 序列化；Cause、Dependency 和内部错误链不进入公开响应。Fault 的内部字段及 Validate 规则继续以 Platform 第 4 节为准。
 - 新增项目级唯一 HTTP Error Envelope：`{"error":{"class","code","message","retryable","request_id?"}}`。`request_id` 为兼容性可选字段；若返回，必须与响应头 `X-Request-ID` 一致。消费者必须以响应头为权威关联值，不得依赖 Body 字段存在。
@@ -900,3 +900,12 @@ INT-CTR-001 是 43 个正式 CTR 之一，覆盖 Quant、Research、Researchflow
 - `retryable` 只是技术重试候选提示；仅 unavailable/timeout 可为 true。它不要求消费者重试；重试仍受幂等性、策略、预算和总 Deadline 约束。Retry-After 只有在服务端明确给出等待时间时才返回，不由 retryable 自动推导。
 - 已新增项目级 HTTP Error Schema 和覆盖 8 种 Class/状态码映射的 Golden。PLAT-CTR-001 转为 `freeze-ready`；模块各自错误码目录、Fault 生产/HTTP Adapter 映射测试和消费者行为属于 L2 实现符合性，不阻断本轮定义冻结。
 - 43 项统计更新为 7 freeze-ready、34 pending-evidence、0 pending-decision、2 not_applicable、0 frozen。
+
+
+## 36. LLM-CTR-003 Platform Fault 映射定义冻结评估（2026-11-11）
+
+- Platform 依赖项 PLAT-CTR-001 已形成 1.0.0 项目级公开 Fault Class、Code 命名和安全投影规则，不再存在“底层 Fault 公共分类尚未冻结”的阻断。
+- LLM 责任模块文档第 7/11 节已定义全部 Platform Fault Class 到 ModelErrorKind 的映射，并明确 response_too_large 特殊优先级、stable_code、SafeMessage、Retryable 保留及 Dependency/Cause/原始错误文本隔离。
+- ModelErrorInfo 1.0.0 Schema 已明确 kind、stable_code、retryable、可选 http_status/retry_after_seconds、safe_message 的类型和约束；Request ID 由 ModelResponse.request_id 承载，不在嵌套错误对象重复。
+- LLM-CTR-003 转为 `freeze-ready`。LLM Adapter 对真实 Fault 的映射、错误码词汇和 Researchflow 消费者行为属于 L2 实现符合性，不阻断项目级公开映射定义冻结。
+- 43 项统计更新为 8 freeze-ready、33 pending-evidence、0 pending-decision、2 not_applicable、0 frozen。

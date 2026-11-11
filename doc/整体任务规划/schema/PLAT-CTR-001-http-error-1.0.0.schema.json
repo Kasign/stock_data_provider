@@ -56,32 +56,6 @@
         {
           "if": {
             "properties": {
-              "class": {
-                "const": "unavailable"
-              }
-            },
-            "required": [
-              "class"
-            ]
-          },
-          "then": {}
-        },
-        {
-          "if": {
-            "properties": {
-              "class": {
-                "const": "timeout"
-              }
-            },
-            "required": [
-              "class"
-            ]
-          },
-          "then": {}
-        },
-        {
-          "if": {
-            "properties": {
               "retryable": {
                 "const": true
               }

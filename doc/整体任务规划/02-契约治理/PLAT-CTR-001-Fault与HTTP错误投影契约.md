@@ -42,7 +42,7 @@ Dependency、Cause、堆栈、SQL/DSN、Token/Key、请求/响应 Body、原始 
 | error | object | 必需；只包含下列定义字段 |
 | error.class | string enum | 必需；取第 3 节固定集合 |
 | error.code | string | 必需；稳定、机器可读、带 Owner 命名空间 |
-| error.message | string | 必需；脱敏摘要，非空，最多 512 字节/字符约束由 Schema 定义为 512 个字符 |
+| error.message | string | 必需；脱敏摘要，非空，最多 512 个 Unicode 字符；Platform 内部 Fault.SafeMessage 另受内部实现的 512 字节上限约束 |
 | error.retryable | boolean | 必需；仅 unavailable/timeout 可为 true |
 | error.request_id | string | 可选兼容字段；若存在必须与响应头 X-Request-ID 一致 |
 
