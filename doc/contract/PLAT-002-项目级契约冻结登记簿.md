@@ -168,13 +168,13 @@ GitHub 远端 ref 核验（2026-11-10）：
 | PLAT-CTR-005 | HTTP Client、SSRF 与出口安全 | Platform | Data、News、LLM 及其他出站消费者 | [PLAT-CTR-005 HTTP Client 契约](./rules/PLAT-CTR-005-HTTP-Client与SSRF契约.md)；doc/platform/05、08 第8节、15；`internal/platform/httpclient/**` | 1.0.0（Go API 强类型契约；JSON Schema 不适用） | `freeze-ready` | Config/Client/BoundDoer/Do/OpenStream/StreamResponse 的 API、DestinationPolicy 精确 allowlist、DNS/IP 绑定、同源重定向、缓冲重试与流式资源生命周期/限额均已版本化；消费者 A2 和生产网络 A3 属实现符合性，不阻断定义冻结 |
 | PLAT-CTR-006 | Storage、Repository、Migration 生命周期 | Platform（连接/Runner）；领域（Repository/Schema/Migration 内容）；Server（汇总注册） | 所有持久化模块 | [PLAT-CTR-006 Storage 与 Migration 契约](./rules/PLAT-CTR-006-Storage与Migration契约.md)；doc/platform/05 第2～4节；doc/platform/08 第9节；`internal/platform/storage` | 1.0.0（Go API 强类型契约；JSON Schema 不适用） | `freeze-ready` | SQL/Redis 连接 API、默认值/上限/资源所有权、Migration 强类型输入、namespace/checksum/History/锁/失败恢复语义已明确；Server 注册与全局 Ready/Shutdown 编排属于 SRV-CTR-001 实现符合性 |
 | PLAT-CTR-007 | Typed Config 与 Secret 生命周期 | Platform（基础解析/脱敏）；各模块（配置 Schema）；Server（Bootstrap） | Server、所有服务端模块 | [PLAT-CTR-007 Typed Config 与 Secret 契约](./rules/PLAT-CTR-007-Typed-Config与Secret契约.md)；doc/platform/08 第6节；`internal/platform/config/**` | 1.0.0（Go API 强类型契约；JSON Schema 不适用） | `freeze-ready` | Env/Secret/基础校验 API、fallback/解析错误、脱敏、DotEnv 加载边界、不可变配置快照与重启轮换语义已明确；模块 Config Schema 和部署 Secret 注入属于各模块/Server 实现符合性 |
-| DATA-CTR-001 | 标准数据 DTO、JSON/OpenAPI、字段缺失语义 | Data | Quant、Researchflow、Research（适用范围）、Server、WebUI | internal/marketdata/httpapi/openapi.yaml；internal/marketdata/model/model.go、dragon_tiger.go；DEC-PLAT-002-027 | OpenAPI 1.1.0；字段级映射未形成完整基线 | `pending_evidence` | DEC-027 禁止的 Provider 原始字段仍在公开 DTO：Quote/DailyBar raw_volume/raw_volume_unit/raw_amount/raw_amount_unit/raw_amount_field；DragonTiger provider_buy/sell/deal/net/org/hot_money raw values、provider_net_rate、provider_amount_unit；LimitPool 的 turnover/seal_money/max_seal_money 仍为 Provider-reported 且依赖 provider_amount_unit（可为 provider_defined）。另有字段级 required/nullable/omitempty 映射未完整。旧 API 清单不再作为权威定义 |
+| DATA-CTR-001 | 标准数据 DTO、JSON/OpenAPI、字段缺失语义 | Data | Quant、Researchflow、Research（适用范围）、Server、WebUI | internal/marketdata/app/port.go；internal/marketdata/application/reader.go；internal/marketdata/httpapi/openapi.yaml；internal/marketdata/model/**；DEC-PLAT-002-027 | HTTP OpenAPI 1.1.0；Application Port 强类型 DTO；字段级映射未形成完整基线 | `pending_evidence` | Provider 原始字段不仅暴露于 HTTP Quote/DailyBar/DragonTiger/LimitPool DTO，也暴露于跨模块 QuoteSnapshot/DailyBar Application Port，并由 Reader 原样映射；LimitPool 金额仍为 Provider-reported 且依赖 provider_amount_unit。字段级 required/nullable/omitempty 映射仍未完整 |
 | DATA-CTR-002 | 行情单位、复权、交易日和时间口径 | Data | Quant、Researchflow、Research、Server | doc/api/contracts/数据质量与状态契约.md；internal/marketdata/httpapi/openapi.yaml | 领域规则版本未登记 | `pending_evidence` | 通用单位/质量/复权/PIT 原则已有；Quote/DailyBar/Index/Financial 等字段到 provider_time、available_at、fetched_at、normalized_at、system_observed_at 的映射及各数据域单位适用表仍不完整 |
 | DATA-CTR-003 | Provider 原始值标准化与精度保真 | Data 内部 Provider Adapter | Data 内部 Provider Adapter | doc/api/数据侧整体规划.md（仅内部适配约定） | 不属于跨模块公开契约版本 | `not_applicable` | 仅 Data 内部 Provider 标准化规则，不存在跨模块公开消费者；从 PLAT-002 跨模块契约冻结门禁排除，不再追踪 Provider Fixture/专项测试 |
 | DATA-CTR-004 | Data Quality、覆盖率、来源和降级表达 | Data | Quant、Researchflow、WebUI、Server | doc/api/contracts/数据质量与状态契约.md；internal/marketdata/httpapi/openapi.yaml | QualityStatus 已有枚举；各质量/覆盖 DTO 映射未完整登记 | `pending_evidence` | QualityStatus 与 Probe 状态已有定义；各公开响应中 quality_status、quality_reasons、freshness_status、coverage dimensions/分母和 source/version 的适用字段映射仍不完整，不能将诊断内部状态等同业务质量 |
-| DATA-CTR-005 | 精度保真的跨模块日线 DTO（v2） | Data | Quant、Researchflow | internal/marketdata/httpapi/openapi.yaml；Data v2 Decimal Schema 尚未登记 | v1.1.0 number；v2 版本与 Schema 未定义 | `pending_evidence` | v1 number 保持既有语义；v2 的 Decimal string 字段、精度/scale/舍入/缺失规则、版本和与 Snapshot 引用的关系尚无权威 Schema。Provider 内部精度实现不纳入本轮 |
+| DATA-CTR-005 | 精度保真的跨模块日线 DTO（v2） | Data | Quant、Researchflow | internal/marketdata/app/port.go；internal/marketdata/httpapi/openapi.yaml；DEC-PLAT-002-009；Quant/Research 公开 DTO 字段级契约 | v1.1.0 HTTP number / InProcess float64；v2 Decimal Schema 未发现 | `pending_evidence` | 当前 HTTP 与 Application Port 均为 number/float64；仓库未发现 DailyBarsV2、Decimal DTO、v2 Schema/Golden。DEC-009 明确保留 v1、不静默改类型；v2 仍缺消费者输入边界、精度/scale/舍入/缺失语义及版本定义 |
 | DATA-CTR-006 | Data HTTP API 调用认证 | Data HTTP Adapter；Server 负责默认 Root 入口和 Remote Adapter Secret | Server Remote Data Adapter；仅远程兼容模式下的受控 HTTP 调用方 | [DATA-CTR-006 认证契约](./rules/DATA-CTR-006-Data-HTTP-API调用认证契约.md)；internal/marketdata/httpapi/openapi.yaml；Data服务间认证映射与Secret注入设计.md；DEC-PLAT-002-017/038/041 | 1.0.0（远程 X-API-Key；同进程可信 Principal Context） | `pending_evidence` | 目标语义已收敛：默认同进程由 Root Server 注入可信 Context；远程兼容仅 X-API-Key，禁止 Bearer 别名，健康接口匿名。现有 OpenAPI 顶层 ApiKey/BearerAuth OR、Handler Bearer fallback、测试 Bearer 成功用例均违约；需 Data 责任范围同步后再核验 |
-| DATA-CTR-007 | Research Data Snapshot/Evidence 消费边界 | Data（数据事实）；Research（Evidence）；Server（Adapter 注入） | Research、Researchflow | Data v2 DTO/Schema（待定义）；DATA-CTR-008 Snapshot Manifest | DailyBarsV2 Schema 未登记 | `pending_evidence` | Snapshot Manifest 只定义查询范围和来源版本，不等同 DailyBarsV2 行情内容 DTO；DailyBarsV2 字段、版本、质量/单位、Snapshot 引用与 Evidence 消费映射尚缺权威定义 |
+| DATA-CTR-007 | Research Data Snapshot/Evidence 消费边界 | Data（数据事实）；Research（Evidence）；Server（Adapter 注入） | Research、Researchflow | internal/marketdata/app/port.go；DATA-CTR-008 Manifest Schema/Golden；DEC-PLAT-002-020；Quant-Research 公开 DTO 字段级契约 | DailyBarsSnapshot 当前 DTO；DATA-CTR-008 Manifest 1.0.0；内容 DTO/引用映射未定义 | `pending_evidence` | DailyBarsSnapshot 返回 bars 但不含 snapshot_ref/Manifest/AuthorizationRef；Bundle.snapshot_id 未证明等同内容寻址 SnapshotRef。DATA-CTR-008 Manifest 仅记录范围/来源版本元数据，不包含行情内容或 payload Schema。缺少不可变内容定位、DailyBarsV2/质量单位字段和 Research Evidence source_ref/version/locator 的权威映射 |
 | DATA-CTR-008 | Data AuthorizationRef 签发与快照访问审计 | Data | Quant、Research | DATA-CTR-008 Snapshot Manifest Schema/Golden；GOV-CTR-006 AuthorizationRef/PolicySnapshot | 1.0.0（Snapshot Manifest Schema/Golden） | `pending_evidence` | Manifest 字段与 JCS/SHA-256 规则已定义；Schema 未约束 system_as_of 的 UTC 形式、sources 规范排序/去重完整语义；Data caller_ref、Scope/purpose 到可信主体及授权读取复核的公开映射仍需收敛 |
 | NEWS-CTR-001 | News 只读 Evidence Query Facade | News | Research、Researchflow | doc/news/新闻API契约.md 第11节；doc/news/schema/NEWS-CTR-001-*；doc/news/golden/NEWS-CTR-001-* | 1.0.0（4 Schema / 3 Golden） | `pending_evidence` | Application Port 查询定义已较完整；Schema 与文字存在 business_time nullable、UTC、system_observed_at 字段语义及 relation_refs 未提供/空集合状态差异，需统一公开 DTO 定义。未来 HTTP OpenAPI 草案不属于当前活动接口 |
 | NEWS-CTR-002 | AuthorizationRef 与内容访问授权 | News（授权决策 Owner） | Research、Researchflow | doc/news/新闻来源授权矩阵.md 第10节；NEWS-CTR-002 Authorization Binding Schema/Golden；GOV-CTR-006 | 1.0.0（Authorization Binding Schema/Golden） | `pending_evidence` | News-specific caller/resource/purpose/content_level 与 Provider/Source/Endpoint 策略交集已定义；仍依赖 GOV-CTR-006 的时间/规范排序及通用授权快照适用语义收敛 |
@@ -1174,4 +1174,55 @@ DEC-027 不只是禁止 DragonTiger 的七个 Provider 金额字段；它确立�
 - DATA-CTR-001 继续保持 `pending_evidence`。Data 权威 DTO/OpenAPI 必须移除 Provider 原始字段/单位，并确保所有公开金额只表达可验证的 CNY 值；未验证值按缺失及质量语义处理。其余字段级 required/nullable/omitempty 映射仍需单独完成。
 
 **结论：DATA-CTR-001 的 Provider 原始字段冲突范围已扩展核实；未改变 43 项正式 CTR 的状态统计。**
+
+
+
+## 46. DATA-CTR-001 Application Port 公开 DTO 边界复核（2026-11-11）
+
+### 46.1 核对证据
+
+- `internal/marketdata/app/port.go` 明确声明该包定义 Market Data 对其他模块公开的 Application Port，且不暴露 Provider、Repository、Cache 或 HTTP 传输类型。
+- 该 Port 的 `QuoteSnapshot` 和 `DailyBar` 仍包含 `RawVolume`、`RawVolumeUnit`、`RawAmount`、`RawAmountUnit`、`RawAmountField`。
+- `internal/marketdata/application/reader.go` 的 `mapQuote`、`mapDailyBar` 将上述字段从内部 model 原样复制到 Application DTO，没有在 Port 边界剥离。
+- 该 Port 是模块对其他模块公开的强类型边界；它不因为不是 HTTP JSON DTO 就变成 Data 内部 Provider 实现细节。
+
+### 46.2 核定结论
+
+1. DEC-PLAT-002-027 的 Provider 原始字段隔离原则同样适用于 Data Application Port，不能只修 HTTP OpenAPI 而保留跨模块 Port 泄漏。
+2. QuoteSnapshot/DailyBar 的跨模块公开 DTO 应只保留标准化领域值、来源/时间/质量等公共语义；Provider 原始值、原始单位和 Provider 字段名留在 Data 内部。
+3. 这项边界不要求 Port DTO 与 HTTP DTO 结构相同；二者可按各自消费场景保持不同形状，但都必须遵守相同的 Provider 内部信息隔离原则。
+4. 本轮只补充项目级证据，不修改 Data Application Port、Reader 或 Provider 实现。
+
+**结论：DATA-CTR-001 的冲突范围扩展到跨模块 Application Port；继续保持 pending_evidence。**
+
+
+## 47. DATA-CTR-005 / DATA-CTR-007 v2 DTO 与 Snapshot 内容映射复核（2026-11-11）
+
+### 47.1 DATA-CTR-005 精度 DTO 证据
+
+- `internal/marketdata/httpapi/openapi.yaml` 当前 API 版本为 1.1.0；Quote/DailyBar 的价格、金额、均线等数值字段仍使用 OpenAPI `number`。
+- `internal/marketdata/app/port.go` 的 QuoteSnapshot/DailyBar 数值字段仍使用 `float64` / `*float64`；没有 DailyBarsV2 或 Decimal 强类型。
+- 固定 integration 文件树未发现 DailyBarsV2、Data Decimal DTO、独立 v2 Schema 或 v2 Golden。
+- DEC-PLAT-002-009 明确：保留既有 v1 number，不得静默将 number 改为 string；v2 只能作为新版本契约，且需先明确消费者输入边界、精度要求和转换位置。
+- Quant/Research 字段级契约虽然要求价格/金额使用 decimal string，但没有提供 Data DailyBarsV2 的字段级精度、scale、舍入和缺失 Schema，不能替代 Data 自己的权威定义。
+
+**结论：** DATA-CTR-005 的 v2 不是已存在能力；目前只有 v1 number/float64。必须先定义独立 v2 DTO/Schema/Golden，再明确 v1→v2 转换责任、精度/scale/舍入/缺失规则和消费者版本选择。不得修改或重新解释 v1。
+
+### 47.2 DATA-CTR-007 Snapshot 与 Evidence 内容绑定证据
+
+- `DATA-CTR-008-snapshot-manifest-1.0.0.schema.json` 的字段为 snapshot_ref、manifest_fingerprint、caller_ref、purpose_code、symbol、日期范围、adjustment_basis、system_as_of、sources；Manifest 本身是范围/来源版本元数据，不包含日线正文、payload_schema_version 或内容 DTO 引用。
+- 对应 Golden 仅验证 Manifest 元数据的 JCS/SHA-256 指纹，不是 DailyBars 数据正文 Golden。
+- `app.DailyBarsSnapshot` 返回 Symbol、AdjustmentBasis、QualityStatus、Warnings、SystemObservedAtCutoff 和 Bars；没有 snapshot_ref、manifest_ref 或 authorization_ref。
+- `model.Bundle` 存在 `snapshot_id`，但当前项目级权威定义没有证明它与 DATA-CTR-008 的内容寻址 `snapshot_ref` 等价；不得仅凭字段名将两者合并。
+- Quant/Research DTO 要求 input_snapshot_refs、Evidence 的 source_ref/source_version/source_locator 和授权引用；当前未形成从 Data 实际行情内容到这些引用字段的权威映射。
+
+**结论：** DATA-CTR-007 不只是缺少 DailyBarsV2 Schema，还缺少“不可变行情内容—SnapshotRef/Manifest—AuthorizationRef—Research Evidence”的可验证绑定定义。DATA-CTR-008 Manifest 不能被误认为行情内容 DTO；必须分别定义内容版本/定位与 Manifest 元数据的关系、内容完整性/版本、质量单位、PIT 时间和 Evidence source_ref/version/locator 映射。
+
+### 47.3 状态与边界
+
+- DATA-CTR-005、DATA-CTR-007 均继续保持 pending_evidence；本轮没有新增 pending_decision。
+- 不修改 Data DTO、OpenAPI、Application Port、Snapshot 实现或 Quant/Research 责任模块文件。
+- Provider 内部精度算法、数据库内部快照实现、模块单测和 WebUI 展示不是本轮项目级公开契约定义门禁；只有其产生/消费的公开 DTO、引用和字段语义纳入本轮。
+
+**结论：DATA-CTR-005/007 的缺口已从笼统的“v2 未定义”细化为可执行的契约定义任务；43 项状态统计不变。**
 
