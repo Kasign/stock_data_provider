@@ -1337,3 +1337,19 @@ ResearchContext 归 FLOW-CTR-003，不属于 RSC-CTR-001 Evidence。RSC-DEC-001/
 旧 doc/web/API_CONTRACT.md 与 doc/api/contracts/分析任务.openapi.yaml 中的 Analysis 路径是退役历史，不得继续作为活动契约或迁移其 DTO/限制。WebUI CTR-011～049 中纯页面/交互/DOM 项不属于跨模块公开 API。
 
 本批无新增 pending_decision、blocked 或 freeze-ready；不新增 CTR。排除 Server DI/Bootstrap、Session Middleware 实现、WebUI 登录页面、Nginx/部署、E2E、CI。
+
+## 50. PLAT-002 当前正式 CTR 状态总表（2026-11-11）
+
+以项目级登记簿第3节 43 个正式 CTR 为唯一统计口径：
+
+| 状态 | 数量 | 说明 |
+|---|---:|---|
+| freeze-ready | 1 | GOV-CTR-005 |
+| pending-evidence | 37 | 公开定义/Schema/权威映射缺口 |
+| pending-decision | 3 | QNT-CTR-004/005、RSC-CTR-002；对应 5 项具体待决 |
+| blocked | 0 | 无不可消解的公开定义冲突 |
+| not_applicable | 2 | DATA-CTR-003、NTF-CTR-003，属于模块内部扩展点 |
+| frozen | 0 | 尚未由项目负责人确认正式冻结 |
+| 合计 | 43 | 正式 CTR 总数 |
+
+5 项待决：QNT-DEC-01/02、RSC-OPEN-003/004/005。旧 Analysis API/CTR-047 已按 DEC-018/019 退出活动范围；WebUI 页面级 CTR 不属于跨模块公开 API。43 项均已完成本轮定义口径核定，不再安排全量重复扫描。
