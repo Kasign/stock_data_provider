@@ -38,9 +38,8 @@ func (r *MySQLDeliveryRepository) RecoverExpiredLease(
 	if err := next.Validate(); err != nil {
 		return err
 	}
-	if event.DeliveryID != next.DeliveryID || event.Version != next.Version ||
-		event.To != next.Status || !event.ChangedAt.Equal(next.UpdatedAt) {
-		return domain.ErrInvalidDeliveryChange
+	if err := validateDeliveryStateEventForSnapshot(next, event); err != nil {
+		return err
 	}
 
 	tx, err := r.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
@@ -59,7 +58,12 @@ func (r *MySQLDeliveryRepository) RecoverExpiredLease(
 	}
 	if current.Status != domain.DeliverySending || current.Version != expectedVersion ||
 		next.Version != expectedVersion+1 || event.From != domain.DeliverySending ||
-		!sameDeliveryIdentity(current, next) || next.UpdatedAt.Before(current.UpdatedAt) {
+		!sameDeliveryIdentity(current, next) ||
+		current.AttemptCount != next.AttemptCount ||
+		current.MaxAttempts != next.MaxAttempts ||
+		!current.DeadlineAt.Equal(next.DeadlineAt) ||
+		!current.CreatedAt.Equal(next.CreatedAt) ||
+		next.UpdatedAt.Before(current.UpdatedAt) {
 		return application.ErrDeliveryVersionConflict
 	}
 
@@ -107,7 +111,7 @@ func (r *MySQLDeliveryRepository) RecoverExpiredLease(
 		return err
 	}
 	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("notification storage: commit expired lease recovery: %w", err)
+		return fmt.Errorf("%w: notification storage: commit expired lease recovery: %w", application.ErrPersistenceOutcomeUnknown, err)
 	}
 	return nil
 }

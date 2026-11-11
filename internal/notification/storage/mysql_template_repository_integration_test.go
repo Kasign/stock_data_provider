@@ -70,4 +70,16 @@ func TestNotificationMariaDBTemplateRepositoryIntegration(t *testing.T) {
 	if _, _, found, err := repository.Get(ctx, definition.TemplateID+"-missing", 1); err != nil || found {
 		t.Fatalf("missing template should return found=false: found=%v err=%v", found, err)
 	}
+
+	if _, err := db.ExecContext(ctx, `UPDATE notification_template_versions
+		SET body_template = ? WHERE template_id = ? AND version = 1`,
+		"Tampered: {{.message}}", definition.TemplateID); err != nil {
+		t.Fatalf("tamper persisted template fixture: %v", err)
+	}
+	if _, _, found, err := repository.Get(ctx, definition.TemplateID, 1); err == nil || found {
+		t.Fatalf("tampered template snapshot must fail digest validation: found=%v err=%v", found, err)
+	}
+	if _, _, err := repository.Create(ctx, definition); err == nil {
+		t.Fatal("duplicate create must reject a tampered persisted template snapshot")
+	}
 }

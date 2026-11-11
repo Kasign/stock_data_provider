@@ -72,4 +72,16 @@ func TestNotificationMariaDBChannelConfigRepositoryIntegration(t *testing.T) {
 	if err != nil || !found || reloaded.RetryableErrorCodes[0] == "mutated" {
 		t.Fatalf("returned config must be isolated from persisted snapshot: %+v err=%v", reloaded, err)
 	}
+
+	if _, err := db.ExecContext(ctx, `UPDATE notification_channel_config_versions
+		SET snapshot_json = JSON_SET(snapshot_json, '$.enabled', false)
+		WHERE channel_ref = ? AND config_version = 1`, snapshot.ChannelRef); err != nil {
+		t.Fatalf("tamper persisted channel config fixture: %v", err)
+	}
+	if _, _, found, err := repository.Get(ctx, snapshot.ChannelRef, 1); err == nil || found {
+		t.Fatalf("tampered channel config snapshot must fail digest validation: found=%v err=%v", found, err)
+	}
+	if _, _, err := repository.Create(ctx, snapshot); err == nil {
+		t.Fatal("duplicate create must reject a tampered persisted channel config snapshot")
+	}
 }

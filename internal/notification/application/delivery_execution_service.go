@@ -189,6 +189,14 @@ func (s *DeliveryExecutionService) Execute(
 		// 总体预算已耗尽：不追加 Attempt、不触发渠道；由租约恢复路径收敛状态。
 		return output, err
 	}
+	// 渠道调用不得越过当前 Worker 的租约边界；租约到期后由恢复流程接管。
+	if !isRecoveryUTC(claim.Lease.ExpiresAt) {
+		return output, ErrRetryNotApplicable
+	}
+	attemptDeadline = earlierTime(attemptDeadline, claim.Lease.ExpiresAt)
+	if !attemptDeadline.After(startedAt) {
+		return output, ErrRetryNotApplicable
+	}
 	attempt := domain.DeliveryAttempt{
 		AttemptID: attemptID, DeliveryID: claim.Delivery.DeliveryID,
 		AttemptNo: int(claim.Delivery.AttemptCount + 1),

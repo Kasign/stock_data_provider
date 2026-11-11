@@ -190,6 +190,41 @@ func TestRetryPolicyRequiresExplicitRetryableRejectionAndCompleteHistory(t *test
 	}
 }
 
+func TestRetryPolicyRejectsAttemptOutsideDeliveryLifecycle(t *testing.T) {
+	policy := standardRetryPolicy()
+
+	delivery, attempts, now := retryPolicyFixture(t, 1, 3)
+	beforeCreated := attempts[0]
+	beforeCreated.StartedAt = delivery.CreatedAt.Add(-time.Second)
+	finished := beforeCreated.StartedAt.Add(time.Second)
+	beforeCreated.FinishedAt = &finished
+	beforeCreated.DurationMS = retryInt64Pointer(1000)
+	if err := beforeCreated.Validate(); err != nil {
+		t.Fatalf("invalid test fixture: %v", err)
+	}
+	attempts[0] = beforeCreated
+	if _, err := policy.ScheduleRetry(delivery, attempts, now, 0.5); !errors.Is(err, ErrRetryNotApplicable) {
+		t.Fatalf("attempt started before Delivery creation must be rejected: %v", err)
+	}
+
+	delivery, attempts, now = retryPolicyFixture(t, 1, 3)
+	atDeadline := attempts[0]
+	atDeadline.StartedAt = delivery.DeadlineAt
+	finished = atDeadline.StartedAt.Add(time.Second)
+	atDeadline.FinishedAt = &finished
+	atDeadline.DurationMS = retryInt64Pointer(1000)
+	leaseExpiry := atDeadline.StartedAt.Add(time.Minute)
+	atDeadline.LeaseExpiresAt = leaseExpiry
+	now = finished.Add(time.Second)
+	if err := atDeadline.Validate(); err != nil {
+		t.Fatalf("invalid test fixture: %v", err)
+	}
+	attempts[0] = atDeadline
+	if _, err := policy.ScheduleRetry(delivery, attempts, now, 0.5); !errors.Is(err, ErrRetryNotApplicable) {
+		t.Fatalf("attempt started at Delivery deadline must be rejected: %v", err)
+	}
+}
+
 func TestRetryPolicyValidatesDurationsAndRandomSample(t *testing.T) {
 	policy := standardRetryPolicy()
 	policy.BaseDelay = time.Nanosecond
@@ -295,4 +330,8 @@ func TestRetryPolicyRejectsUnknownLookupEvidenceOlderThanAttempt(t *testing.T) {
 			t.Fatalf("stale lookup evidence must not authorize retry, observed_at=%s err=%v", observedAt, err)
 		}
 	}
+}
+
+func retryInt64Pointer(value int64) *int64 {
+	return &value
 }
