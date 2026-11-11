@@ -160,7 +160,7 @@ GitHub 远端 ref 核验（2026-11-10）：
 | GOV-CTR-003 | ID、Request/Correlation/Event/Idempotency 作用域 | Platform 提供 Request ID 原语；各模块拥有领域 ID | Server、所有模块、Worker、事件消费者 | [GOV-CTR-003 公共标识符与幂等作用域规则](./rules/GOV-CTR-003-标识符与幂等作用域规则.md)；运行时传播见 PLAT-CTR-002；字段映射见各领域 CTR | 1.0.0 | `freeze-ready` | request/originating/correlation/event/idempotency/trace 身份职责、唯一性边界、重放冲突语义和 fingerprint 原则已版本化；Header/Context/Worker/事件 Envelope 的实际字段映射与执行证据仍由 PLAT/FLOW/NTF/各生产方 CTR 负责，不作为公共规则冻结阻断 |
 | GOV-CTR-004 | Schema 版本、兼容、废弃和迁移 | 各契约生产模块；项目级规则由治理登记 | 所有直接消费者 | [GOV-CTR-004 Schema 版本与兼容规则](./rules/GOV-CTR-004-Schema版本兼容与废弃规则.md)；逐 DTO/Event 版本矩阵见对应 CTR | 1.0.0 | `freeze-ready` | SemVer、破坏性变更边界、closed/open enum、未知字段策略、消费者支持版本、Schema/G​​olden 不可变、废弃和直接退役规则已版本化；逐 DTO/Event 兼容矩阵和消费者证据仍由各 CTR 负责，不作为公共规则冻结阻断 |
 | GOV-CTR-005 | 契约状态、冻结证据和变更审批 | 项目契约治理 | 所有模块 | doc/contract/README、登记簿第5节、决策记录、契约版本与变更记录 | 0.2.19-review（治理规则） | `freeze-ready` | 项目级定义冻结门禁、状态、版本变更/解冻记录规则已统一；模块实现符合性不混入契约定义冻结 |
-| GOV-CTR-006 | AuthorizationRef 公共审计快照结构与引用语义 | Data、News、Quant、Research 分别签发各自资源授权快照；公共结构由项目治理 | Research、Researchflow 及受限资源消费者 | GOV-CTR-006 AuthorizationRef/PolicySnapshot Schema/Golden；各 Owner 的 Scope/Resource 映射 | 1.0.0（2 Schema / 4 Golden） | `pending_evidence` | AuthorizationRef/PolicySnapshot 已补各自必需 schema_version；Schema 已约束 RFC3339Nano UTC、conditions 去重、policies 非空/唯一。跨数组字典序、policy_version 与 snapshot_ref 绑定、JCS 指纹重算及 Data/News/Quant/Research 的 purpose/content_level/resource_ref 适用映射仍待 Owner 证据 |
+| GOV-CTR-006 | AuthorizationRef 公共审计快照结构与引用语义 | Data、News、Quant、Research 分别签发各自资源授权快照；公共结构由项目治理 | Research、Researchflow 及受限资源消费者 | GOV-CTR-006 AuthorizationRef/PolicySnapshot Schema/Golden；四类 Owner 的 Principal/Resource/Purpose/ContentLevel 映射 | 1.0.0（2 Schema / 4 Golden） | `freeze-ready` | 公共 DTO 字段、各自 schema_version、RFC3339Nano UTC、decision/conditions 关系、PolicySnapshot 非空/唯一/排序、policy_version 绑定、JCS+SHA-256 指纹及 Data/News/Quant/Research 映射均有权威定义和 Golden；运行时 Owner/Consumer/撤销竞态 Contract Test 属 L2 实现符合性，不阻断项目级契约定义冻结 |
 | PLAT-CTR-001 | Fault 结构与分类 | Platform | Server、所有服务端模块 | doc/platform/08 第 4 节；internal/platform/fault | Go API 版本待核验；未见独立 Schema/Golden | `pending_evidence` | Fault 内部结构、HTTP Error DTO、状态码、错误码注册、Retryable 语义和各模块映射 Golden |
 | PLAT-CTR-002 | Request Context 与身份关联原语 | Platform | Server、所有服务端模块、Worker | doc/platform/08 第 5 节；observability/security Context | Request ID Golden 已有；Schema 未见 | `pending_evidence` | 可信入口、Request ID、Principal/Scope 传播、异步 Context、取消和出站 Header 覆盖 |
 | PLAT-CTR-003 | 身份、授权、ServiceKey、Secret 边界 | Platform（认证原语）；Server（入口装配）；领域（资源授权） | Server、Data、News、Research、Quant、Researchflow、WebUI | doc/platform/08 第2～3节及第18节候选定义；DEC-PLAT-002-017 | Bearer/Session 原语版本待核验；完整 Principal/Session 契约定义未登记 | `pending_evidence` | 身份类型和凭证隔离语义已有决议；Platform Session 候选接口仍未形成权威冻结定义。Server 路由接入、WebUI 登录和部署证据属于后续实现符合性，不作为本轮门禁。资源授权仍归领域 Owner |
@@ -734,8 +734,8 @@ INT-CTR-001 是 43 个正式 CTR 之一，覆盖 Quant、Research、Researchflow
 
 | 状态 | 数量 | 含义 |
 |---|---:|---|
-| freeze-ready | 5 | GOV-CTR-001、GOV-CTR-002、GOV-CTR-003、GOV-CTR-004、GOV-CTR-005；公共规则定义完整，可提交项目负责人确认冻结 |
-| pending-evidence | 36 | 公开契约定义/Schema/权威映射仍有缺口 |
+| freeze-ready | 6 | GOV-CTR-001～006；公共规则定义完整，可提交项目负责人确认冻结 |
+| pending-evidence | 35 | 公开契约定义/Schema/权威映射仍有缺口 |
 | pending-decision | 0 | 本轮五项待决均已由 DEC-PLAT-002-028～032 裁决 |
 | blocked | 0 | 当前没有无法通过权威决议消解的公开定义冲突 |
 | not_applicable | 2 | DATA-CTR-003、NTF-CTR-003；仅模块内部 Provider/Channel SPI，不属于跨模块公开契约 |
@@ -756,8 +756,8 @@ INT-CTR-001 是 43 个正式 CTR 之一，覆盖 Quant、Research、Researchflow
 ### 24.3 阶段结论
 
 - 43 项正式 CTR 已全部完成本轮定义口径核定；不再保留“待审查模块/待全量盘点”的开放任务。
-- 当前未完成项为 36 项 pending-evidence；不再有 pending-decision。模块内部实现/测试/CI/部署事项仍不属于本轮契约定义冻结门禁。
-- GOV-CTR-001～004 已独立达到 freeze-ready；下一阶段优先核对 GOV-CTR-006 公共授权快照结构与 Owner 绑定语义，再按剩余 pending-evidence CTR 增量收敛。Quant/Research 仍按 DEC-PLAT-002-028～033 校准责任模块定义；不重新启动十模块全量扫描，不新增重复 CTR。
+- 当前未完成项为 35 项 pending-evidence；不再有 pending-decision。模块内部实现/测试/CI/部署事项仍不属于本轮契约定义冻结门禁。
+- GOV-CTR-001～006 已独立达到 freeze-ready；下一阶段按剩余 35 项 pending-evidence CTR 增量收敛。Quant/Research 仍按 DEC-PLAT-002-028～033 校准责任模块定义；不重新启动十模块全量扫描，不新增重复 CTR。
 
 
 ## 25. 五项待决裁决完成记录（2026-11-11）
@@ -879,3 +879,12 @@ INT-CTR-001 是 43 个正式 CTR 之一，覆盖 Quant、Research、Researchflow
 - 公共规则明确独立 DTO Schema 版本、SemVer 变化边界、closed/open enum、未知字段策略、消费者显式支持版本、Schema/Golden 不可变、废弃字段元数据和无消费者初版接口的直接退役条件。
 - 逐 DTO/Event 的 schema_version、unknown field/enum 行为、消费者支持矩阵和迁移证据仍由各领域 CTR 验收，不阻断公共规则本身冻结。
 - GOV-CTR-004 状态调整为 `freeze-ready`；43 项总数不变，freeze-ready 5、pending-evidence 36、pending-decision 0、blocked 0、not_applicable 2、frozen 0。
+
+
+## 32. GOV-CTR-006 公共授权快照契约定义冻结评估（2026-11-11）
+
+- AuthorizationRef 与 PolicySnapshot 各自必需 `schema_version=1.0.0`；两份 Schema/四份 Golden 已同步。
+- Schema 已约束 RFC3339Nano UTC、conditions 唯一、policies 非空/唯一；字典序、policy_version/snapshot_ref 绑定由明确的语义 Validator 规则负责。
+- 四类 Owner 的 subject/resource/purpose/content_level 映射、conditional/allowed/denied/unknown 语义、读取时当前授权复核、撤销/过期/竞态边界及 JCS+SHA-256 指纹算法均有唯一权威定义；Data AuthorizationRef 与 DATA-CTR-008 Snapshot Manifest Golden 的 resource_ref、subject_ref、purpose_code 已逐字段核对一致。
+- GOV-CTR-006 转为 `freeze-ready`。运行时 Owner/Consumer/CI/并发安全测试属于 L2 实现符合性，不阻断本轮项目级契约定义冻结。
+- 43 项统计更新为 6 freeze-ready、35 pending-evidence、0 pending-decision、2 not_applicable、0 frozen。

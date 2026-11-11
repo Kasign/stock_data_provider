@@ -1,6 +1,6 @@
 # PLAT-002 十模块核验总进度
 
-**当前状态（2026-11-11）：** PLAT-002 的 43 个正式 CTR 已完成本轮公开契约定义口径核定；当前 5 项 freeze-ready、36 项 pending_evidence、0 项 pending_decision、2 项 not_applicable、0 项 frozen。五项原待决已由 DEC-PLAT-002-028～032 裁决；DEC-033～037 另行明确 Scenario 数值结构和 GOV 公共规则。当前统计以本文件第60节和项目级登记簿第24节为准；历史阶段 A～H、第50节旧统计、第52节建议及第53～59节早期进度数字仅作审计追溯。
+**当前状态（2026-11-11）：** PLAT-002 的 43 个正式 CTR 已完成本轮公开契约定义口径核定；当前 6 项 freeze-ready、35 项 pending_evidence、0 项 pending_decision、2 项 not_applicable、0 项 frozen。五项原待决已由 DEC-PLAT-002-028～032 裁决；DEC-033～037 另行明确 Scenario 数值结构和 GOV 公共规则。当前统计以本文件第60节和项目级登记簿第24节为准；历史阶段 A～H、第50节旧统计、第52节建议及第53～59节早期进度数字仅作审计追溯。
 **代码基线：** `b6dfc85ba214fe16268c8cba780641a8bfe15086`（origin/integration）  
 **文档维护分支：** feat/design_doc
 
@@ -1185,7 +1185,7 @@
 - 本轮完成 GOV-CTR-001～006、PLAT-CTR-001～007 的公开定义核定，共 13 项。
 - 核定结果：GOV-CTR-005 为 freeze-ready；GOV-CTR-001～004/006 与 PLAT-CTR-001～007 共 12 项 pending_evidence；本批无 pending_decision、无 blocked。
 - GOV-CTR-005 已有唯一权威登记簿、决策记录、版本记录和清晰的定义冻结门禁。其 freeze-ready 仅表示治理规则定义可冻结，不代表 43 项业务契约全部冻结。
-- GOV-CTR-001～004 的原则文本已有，但缺独立稳定规则版本及字段级适用映射；GOV-CTR-006 已有 1.0.0 Schema/Golden，但时间 UTC、集合规范排序、资源粒度和 purpose/content_level 适用映射仍不完整。
+- GOV-CTR-001～004 的原则文本已有，但缺独立稳定规则版本及字段级适用映射；GOV-CTR-006 已有 1.0.0 Schema/Golden，且公共字段、UTC/集合约束、指纹和 Owner 映射已达到 freeze-ready；剩余 Owner/Consumer/竞态测试属于 L2 实现符合性。
 - PLAT-CTR-001 缺公开 HTTP Error DTO 定义；PLAT-CTR-002 只有 Request ID 细节，缺 Principal/Scope/认证来源 Context 定义；PLAT-CTR-003 的 Session API 仍是候选定义；PLAT-CTR-004 存在 Schema 与文字定义差异；PLAT-CTR-005 缺唯一权威 Port/API 版本定义；PLAT-CTR-006 缺 Migration Runner 完整接口契约；PLAT-CTR-007 缺 Typed Config/Secret API 版本及适用映射。
 - 本轮没有检查或修改 Platform/Server 模块实现，没有执行测试、CI 或部署验收；上述项目均未将实现符合性事项列为契约冻结门禁。
 - 权威明细见登记簿第14节及差异矩阵第41节。README 与契约版本记录已同步新门禁和 0.2.7-review。
@@ -1381,3 +1381,11 @@
 - 建立 GOV-CTR-004 1.0.0 唯一权威文本，明确 SemVer、breaking change、未知字段/枚举、消费者支持版本、Schema/Golden 不可变和废弃/直接退役规则。
 - 各 DTO/Event 的实际版本、兼容矩阵、迁移与回滚证据仍由对应 CTR 验收。
 - GOV-CTR-004 状态调整为 freeze-ready；当前总统计为 5 freeze-ready、36 pending-evidence、0 pending-decision、2 not_applicable、0 frozen。
+
+
+## 61. GOV-CTR-006 公共授权快照契约定义收敛（2026-11-11）
+
+- AuthorizationRef/PolicySnapshot Schema、四份 Golden、schema_version、RFC3339Nano UTC、conditions/policies 集合约束、跨对象绑定和 JCS 指纹定义已完成复核。
+- Data/News/Quant/Research 的 Principal/Resource/Purpose/ContentLevel 映射有唯一权威文本；Data Snapshot Manifest 绑定样例逐字段一致。
+- GOV-CTR-006 转为 freeze-ready；运行时 Owner/Consumer/CI/撤销竞态测试归 L2，不作为本轮契约定义冻结门禁。
+- 当前 43 项统计为 6 freeze-ready、35 pending_evidence、0 pending_decision、2 not_applicable、0 frozen。

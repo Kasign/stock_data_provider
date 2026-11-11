@@ -2,7 +2,7 @@
 
 - 决议日期：2026-11-06
 - 适用范围：Data、News、Quant、Research 的授权快照签发与跨模块引用
-- 当前状态：语义决议 accepted；Schema 定义通过 Draft 2020-12 结构校验，四个 Golden 的 JCS/SHA-256 复算一致；模块 CI Validator、Scope/资源映射和授权竞态 Contract Test 仍 pending_evidence
+- 当前状态：公共契约定义 `freeze-ready`；两份 Schema、四份 Golden、DTO 自身版本、字段语义、指纹算法和四类 Owner 映射已形成唯一权威定义。模块 CI Validator、Owner/Consumer 运行时授权与竞态测试属于 L2 实现符合性，不阻断项目级定义冻结。
 - 权威关系：公共字段与语义以项目级契约目录第 7.2 节为准；本文给出机器 Schema、Principal/Resource 映射、fingerprint 规范和 Golden 测试向量。
 
 ## 1. AuthorizationRef Schema
@@ -118,14 +118,14 @@ JSON Schema 负责单对象结构约束；跨对象和运行时语义不得假�
 ### 7.3 测试分层与完成定义
 
 - **L1 Schema/Golden**：GOV006-SCH-*、GOV006-FP-* 全通过。
-- **L2 Owner Contract**：DATA/NEWS/QUANT/RESEARCH 各自的签发、Scope、资源映射、当前授权复核全通过。
-- **L2 Consumer Contract**：Researchflow/Report/Notification 等直接消费者不得把 AuthorizationRef 当 bearer token；必须保留上游来源链并调用 Owner 当前复核。
-- **L2 Concurrency/Security**：READ/RACE 场景全通过。
-- 只有 L1 + 所有适用 L2 都有 CI 运行记录、测试命令、测试结果和提交 SHA，GOV-CTR-006 才能从 pending_evidence 升级为 frozen。文档存在、Schema 可解析或 Golden 静态校验通过都不等价于 Contract Test 通过。
+- **L2 Owner Contract（实现符合性）**：DATA/NEWS/QUANT/RESEARCH 各自的签发、Scope、资源映射、当前授权复核测试。
+- **L2 Consumer Contract（实现符合性）**：Researchflow/Report/Notification 等直接消费者不得把 AuthorizationRef 当 bearer token；必须保留上游来源链并调用 Owner 当前复核。
+- **L2 Concurrency/Security（实现符合性）**：READ/RACE 场景验证。
+- L1 负责项目级契约定义是否达到 freeze-ready；L2 运行记录用于后续实现符合性/集成验收，不作为本轮项目级定义冻结门禁。
 
-## 7. 尚待证据
+## 7. 后续 L2 实现符合性证据（不阻断 freeze-ready）
 
-以下测试通过前，GOV-CTR-006 保持 pending_evidence：
+以下测试仍需在对应模块开发/集成阶段执行；它们不改变 GOV-CTR-006 当前 freeze-ready 的项目级定义状态：
 - 将仓库中的两份 Schema 文件接入模块 CI，由实际 Validator 执行正向/反向校验，并校验 format/date-time；本轮已对 Schema 定义执行 Draft 2020-12 结构校验；RFC3339Nano UTC、conditions 唯一性和 policies 非空/完整对象唯一已落实到 Schema，跨数组排序仍由 Validator 负责。
 - 将四个 Golden 接入运行时测试，复算 JCS canonicalization 与 SHA-256；本轮四个 Golden 预期摘要独立复算一致，尚未形成模块 CI 证据。
 - policy_version 与 snapshot_ref 一致性、policies 非空/唯一/排序、遗漏任一策略版本导致 fingerprint 不匹配；AuthorizationRef 与 PolicySnapshot 必须各自携带匹配自身 Schema 的 schema_version。
@@ -134,4 +134,4 @@ JSON Schema 负责单对象结构约束；跨对象和运行时语义不得假�
 - 策略在授权检查与内容读取之间变化时，必须重新授权或丢弃内容的竞态测试。
 - 历史 allowed 不得覆盖当前 denied/expired/unknown；来源授权链不得被 Research 派生授权覆盖。
 
-以上证据只阻断依赖授权引用或受限资源访问的调用点；不阻断无授权依赖的 Domain 开发。
+以上测试失败时，阻断相应受限资源访问调用点的实现验收；不回退公共契约定义状态，也不阻断无授权依赖的 Domain 开发。

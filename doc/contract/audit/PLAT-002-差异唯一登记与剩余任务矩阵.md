@@ -1225,7 +1225,7 @@ PLAT-002 的项目级决策收敛已完成；**PLAT-002 项目整体不宣告完
 | GOV-CTR-003 | pending_evidence | ID 类别已定义，跨模块命令/事件/异步 Context 的生成方、作用域和传播字段映射不完整 |
 | GOV-CTR-004 | pending_evidence | 兼容原则已定义，活动 DTO/Event 的版本、未知字段/枚举策略和废弃矩阵缺失 |
 | GOV-CTR-005 | freeze-ready | 项目级治理规则已收敛到 doc/contract 唯一权威入口；实现测试不属于治理定义冻结条件 |
-| GOV-CTR-006 | pending_evidence | AuthorizationRef/PolicySnapshot Schema 与 Golden 已有；时间/排序约束和资源粒度/用途适用映射不完整 |
+| GOV-CTR-006 | freeze-ready | AuthorizationRef/PolicySnapshot 1.0.0 Schema/Golden、RFC3339Nano UTC、集合约束、跨对象绑定、JCS 指纹和四类 Owner 映射已定义；运行时签发/读取/撤销/竞态测试归 L2 实现符合性 |
 | PLAT-CTR-001 | pending_evidence | Fault 仅为内部 Go 错误对象；HTTP Error 投影的公开字段/状态码/版本定义缺失 |
 | PLAT-CTR-002 | pending_evidence | Request ID 规则有 Golden；Principal/Scope/认证来源 Context 与异步传播契约缺失 |
 | PLAT-CTR-003 | pending_evidence | 身份边界决议已定；Platform Session 原语的权威接口/生命周期/错误定义仍是候选 |
@@ -1475,3 +1475,11 @@ INT-CTR-001 是正式 43 CTR 之一，不是内部 Outbox/Inbox 实现验收。�
 - 公共规则明确每个独立 DTO/Payload 的 schema_version、SemVer 变化边界、closed/open enum、消费者显式支持版本、Schema/Golden 不可变和无活跃消费者时直接退役的条件。
 - 逐 DTO/Event 版本号、未知字段策略、消费者兼容矩阵、迁移/回滚 Golden 仍由各领域 CTR 验收，不阻断公共规则本身冻结。
 - GOV-CTR-004 转为 freeze-ready；不代表 43 项业务/平台契约的兼容矩阵已完成。
+
+
+## 58. GOV-CTR-006 公共授权快照定义达到 freeze-ready（2026-11-11）
+
+- 两份 Schema、四份 Golden 已与 GOV-CTR-004 的 DTO 自身 schema_version 要求一致；Golden fingerprint_input/canonical_json/expected_sha256 已同步复算。
+- RFC3339Nano UTC、conditions 唯一、policies 非空/唯一及跨数组排序规则均已明确；Schema 与语义 Validator 的职责边界清晰。
+- Data/News/Quant/Research 的主体、资源、用途和内容级别映射已在唯一权威定义中明确；Data Golden 与 DATA-CTR-008 Manifest Golden 的关键绑定一致。
+- GOV-CTR-006 转为 freeze-ready；Owner/Consumer/CI/并发测试不属于本轮定义冻结门禁。
