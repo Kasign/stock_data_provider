@@ -1420,3 +1420,11 @@ INT-CTR-001 是正式 43 CTR 之一，不是内部 Outbox/Inbox 实现验收。�
 | 正式 CTR 合计 | 43 |
 
 下一步只继续核对上述三个 CTR 的剩余权威定义缺口，不重新启动模块全量审查，不修改责任模块，不将实现测试/CI/部署混入契约冻结门禁。
+
+
+## 54. QNT-CTR-004/005 责任模块权威定义差异复核（2026-11-11）
+
+- QNT-CTR-004：QuantResultRef Schema 的 `input_snapshot_refs.minItems=1` 与 DEC-029 的双重授权空数组规则冲突；Envelope Schema/Golden 缺失；已有 Factor Metric/Trend/Risk 是局部 DTO，Indicator 和其他预留类型的完整 Payload Schema 不齐。
+- QNT-CTR-005：项目级 Manifest Schema/Golden 已区分 Manifest 与 Payload 版本并允许空输入；责任模块 Build/Verify 仍要求非空 Snapshot，旧文档还把 Manifest `schema_version` 当作 Payload 版本，与 DEC-028/029 冲突。
+- 两项均属于责任模块权威契约尚未对齐的证据缺口。未修改 `doc/quant/**`、代码、测试或 CI；不新增决议、不新增 CTR。
+- 处理顺序：先在 Quant 模块契约任务中按 DEC-028/029 校准 Ref/Manifest Schema 与 Build/Verify 定义；再完成 Envelope 与实际开放 Payload 类型映射；最后核对 Record/VerifyPayload 指纹和 AuthorizationRef 绑定。完成前两项 CTR 保持 pending_evidence。

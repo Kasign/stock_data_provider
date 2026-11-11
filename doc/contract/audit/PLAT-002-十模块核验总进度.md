@@ -1327,3 +1327,13 @@
 - 当前 43 项统计：freeze-ready 1、pending-evidence 40、pending-decision 0、blocked 0、not_applicable 2、frozen 0。
 - 本轮只更新 feat/design_doc 项目级契约治理文档；未修改责任模块文档/代码，未执行测试、CI、部署或集成。
 - 下一步按三个 CTR 的具体剩余证据项增量推进，不重新全量盘点。
+
+
+## 54. QNT-CTR-004/005 权威定义冲突定点复核（2026-11-11）
+
+- 本轮只针对项目登记簿已列明的 QNT-CTR-004/005 缺口，复核 Quant 责任模块 Schema/文档与 DEC-028/029 的一致性；未重新扫描十模块。
+- 确认 QuantResultRef Schema 与 Manifest Build/Verify 仍要求非空 input_snapshot_refs，与 DEC-029 冲突；旧 Manifest 文档版本语义与 DEC-028 冲突。
+- 确认当前局部 Metric/Trend/Risk Schema 不能替代完整 Envelope/强类型 Payload union；Indicator 及其他预留 result_type 覆盖不足。
+- 差异已补入登记簿第27节和矩阵第54节。没有修改责任模块文档/Schema/代码，没有执行模块测试、CI、部署。
+- QNT-CTR-004/005 保持 pending_evidence；43 项总统计不变：1 freeze-ready、40 pending-evidence、0 pending-decision、2 not_applicable、0 frozen。
+- 下一步转向 RSC-CTR-002 的定点跨字段语义核对；Quant 模块定义修订留待明确的 Quant 模块任务，不在本项目级分支越权修改。
