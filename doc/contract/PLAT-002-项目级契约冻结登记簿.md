@@ -184,8 +184,8 @@ GitHub 远端 ref 核验（2026-11-10）：
 | QNT-CTR-003 | Factor Request/Result | Quant | Researchflow | doc/quant/schema/QNT-CTR-003-factor-parameters-1.0.0.schema.json；QNT-CTR-004 Factor QuantMetric Schema/Golden | 1.0.0（Parameters Schema；3 个首批 Factor） | `pending_evidence` | 首批三个 Factor 的参数/算法及局部 QuantMetric Schema 已有；完整 Factor Request/Result DTO、交易日历版本引用、输入质量和结果 Envelope 映射仍不完整 |
 | QNT-CTR-004 | QuantResultRef、QuantMetric、Trend、Risk 输出 | Quant | Researchflow；Research 经 Researchflow 消费 | doc/quant/schema/QNT-CTR-004-*；doc/quant/03 第10.26节；Quant-Research公开DTO字段级契约第2节 | 1.0.0（Ref/Metric/Trend/Risk 局部 Schema/Golden） | `pending_decision` | Envelope schema_version 同时被定义为 Envelope 版本和 payload 子 Schema 选择版本，必须先裁决字段语义；此外完整强类型 Payload 覆盖、Envelope/Ref/Manifest 权威字段映射仍待补 |
 | QNT-CTR-005 | QuantResult AuthorizationRef 签发与访问审计 | Quant | Researchflow | doc/整体任务规划/schema/QNT-CTR-005-result-manifest-1.0.0.schema.json；Golden；GOV-CTR-006 | 1.0.0（Result Manifest Schema/Golden） | `pending_decision` | Manifest input_snapshot_refs Schema 要求至少一项，但已接受的 DTO 规则允许模板白名单纯函数空输入；需裁决无输入纯函数是否能产生可引用/持久化结果及其 Manifest 表达。Manifest UTC Schema 约束和 Quant AuthorizationRef 绑定映射仍待补 |
-| RSC-CTR-001 | ResearchContext 与 Evidence | Research | Researchflow | internal/research/application；RSC-CTR-001 Evidence Schema/Golden；GOV-CTR-006 | 1.0.0（Evidence Schema/Golden） | `pending_evidence` | content_level、source_owner、authorization_ref、derived_from_refs、来源版本、PIT 和撤销复核 |
-| RSC-CTR-002 | ResearchEvent、Claim、Hypothesis、Scenario | Research | Researchflow | internal/research/domain/application；doc/research/01-03 | 专属 Schema/Golden 当前未见 | `pending_evidence` | 状态迁移、引用完整性、版本、事件时间、认识论约束和跨对象一致性 |
+| RSC-CTR-001 | Research Evidence | Research | Researchflow | doc/整体任务规划/schema/RSC-CTR-001-evidence-1.0.0.schema.json；Golden；doc/research/01、03；GOV-CTR-006 | 1.0.0（Evidence Schema/Golden） | `pending_evidence` | Evidence 字段和 JCS 指纹语义已有；Schema 未约束 RFC3339Nano UTC，source_version 条件必填和 Evidence.system_as_of/available_at 跨字段 PIT 规则仍依赖未完成的权威适用映射。ResearchContext 不归本 CTR，按 FLOW-CTR-003 核定 |
+| RSC-CTR-002 | ResearchEvent、Claim、Hypothesis、Scenario | Research | Researchflow | doc/整体任务规划/03-模块接口契约/Quant-Research公开DTO字段级契约.md 第3.3～3.5节；doc/research/01、03 | 专属 Schema/Golden 当前未见 | `pending_decision` | RSC-OPEN-003 Event 时间规范化规则版本字段缺失；RSC-OPEN-004 Event 合并/拆分来源关系字段缺失；RSC-OPEN-005 Claim/Hypothesis supersedes_version 缺失，均会改变公开字段结构，须先裁决后形成机器定义 |
 | FLOW-CTR-001 | Run/Stage/Attempt 状态与结果传播 | Researchflow | Server、API、WebUI、Worker；业务模块作为 Stage 执行方 | doc/researchflow/03；internal/researchflow/application/domain | 1.0.0（Run/Stage Schema/Golden） | `pending_evidence` | Run/Stage/Attempt Schema、状态转移、输出传播、结果归并和终态 |
 | FLOW-CTR-002 | Cancel、Retry、Deadline、Lease、Fencing | Researchflow | Scheduler、Worker、Repository、Server | internal/researchflow/application/worker.go、storage/mysql_*；doc/researchflow/03 | 1.0.0（Attempt Schema/Golden） | `pending_evidence` | CAS/事务线性化、租约接管、迟到写入、deadline、取消确认和重启恢复 |
 | FLOW-CTR-003 | Run Execution Context 与 system_as_of 传播 | Researchflow | Data、News、Quant、Research、LLM | doc/researchflow/03；GOV-CTR-002 | 1.0.0（Run/Stage Context Schema 待映射） | `pending_evidence` | 唯一 system_as_of、输入快照、版本固定、Correlation ID 和下游 Adapter Golden |
@@ -536,3 +536,37 @@ PLAT-002 不因本次矩阵统计完成而结束。整体完成仍需：
 - 新增两个真实的项目级待决项 QNT-DEC-01、QNT-DEC-02；这不是重开 B1～B8，也不是实现问题。此前“非条件性 pending_decision 为 0”的统计由本批新发现覆盖，当前项目级待决项为 2。
 - 不新增 CTR；两个待决项分别挂接既有 QNT-CTR-004、QNT-CTR-005。
 - 下一批进入 Research 公开契约核定；本批两个待决项留待项目负责人裁决，不擅自选择方案。
+
+## 18. Research 首批公开契约定义核定（2026-11-11）
+
+本批覆盖 RSC-CTR-001～002。ResearchContext 是 Researchflow Run Context 的组成部分，其跨模块结构归 FLOW-CTR-003 核定；RSC-CTR-001 专指 Evidence，避免把 Context 与 Evidence 混成同一 Schema。Research 不直接调用 Quant，Researchflow 是唯一组合者；DEC/RSC-DEC-001 不重开。
+
+### 18.1 核定结果
+
+| 契约 | 状态 | 核定结论 |
+|---|---|---|
+| RSC-CTR-001 | pending_evidence | Evidence 1.0.0 Schema/Golden 已有，字段、来源 Owner、derived_from_refs、content_level、AuthorizationRef、JCS 指纹语义较完整；但 Schema 的 date-time 未约束 RFC3339Nano UTC，source_version 条件必填规则缺少 source-owner/versioned-resource 适用映射，system_as_of/available_at 的 PIT 关系仍由文字约束承担 |
+| RSC-CTR-002 | pending_decision | ResearchEvent/Claim/Hypothesis/Scenario 字段表已有，但 RSC-OPEN-003/004/005 仍有会改变公开 DTO 的字段决议未完成，且没有专属 Schema/Golden |
+
+### 18.2 RSC-CTR-002 的待决项
+
+1. **RSC-OPEN-003：Event 时间规范化规则版本。** 非 null 的 occurred_at/published_at/available_at 必须能追溯规范化规则版本；当前 Event DTO 没有 normalization_rule_version 或等价规则引用。需要决定字段放在 Event 根对象、每条 EventSourceTime，还是引用独立规则记录，并明确多来源时间的规则版本粒度。
+2. **RSC-OPEN-004：Event 合并/拆分来源关系。** 当前 supersedes_event_version 只能表示同一 Event 的版本替代，不能表示多个 Event 合并为一个或一个 Event 拆分为多个。需要决定 source_refs/derived_from_refs 的方向、基数、版本绑定及历史查询语义。
+3. **RSC-OPEN-005：Claim/Hypothesis 版本替代。** claim_version 是单调版本，但缺少 supersedes_version；需明确是否必须显式引用被替代版本、允许分支还是仅允许线性版本链，以及并发/重复替代的冲突语义。
+
+以上三项均是跨模块公开 DTO 结构/语义取舍，不是 Repository 或领域实现问题。不得由 Research 分支自行增加私有字段。
+
+### 18.3 适用边界与排除
+
+- ResearchContext 的字段定义在 Quant-Research DTO 文档第3.1节；其 Run 级装配/传播与 FLOW-CTR-003 的 Context Schema 映射一起核定，不新增 Research CTR。
+- RSC-DEC-001 已明确 Research 不直接调用 Quant；Quant Evidence 只能由 Researchflow 复核授权后传递，不把该边界重新列为待决。
+- RSC-DEC-002 的 changed_at 是 Event 状态迁移提交时间；Research Outbox → Notification Relay 接线属于实现装配，不阻断 DTO 定义冻结。
+- RSC-OPEN-007 只影响同一 Evidence ID 下授权快照续期历史的额外能力；现行完整 DTO 不可变、冲突拒绝边界已明确，不阻断当前 RSC-CTR-001。
+- 不纳入：Research Repository/MariaDB/Outbox 实现、关系图并发测试、Server Relay、授权撤销竞态测试和 CI。
+
+### 18.4 本批结论
+
+- 本批 2 项：RSC-CTR-001 pending_evidence；RSC-CTR-002 pending_decision。
+- RSC-CTR-002 下保留 RSC-OPEN-003/004/005 三个已有待决项，不新增 CTR 或重复创建 DEC 编号。
+- ResearchContext 归 FLOW-CTR-003，不计入 RSC-CTR-001 Evidence Schema。
+- 下一批：Researchflow 公开契约定义核定；同时核对 FLOW-CTR-003 对 ResearchContext/Run Context 的完整映射。
