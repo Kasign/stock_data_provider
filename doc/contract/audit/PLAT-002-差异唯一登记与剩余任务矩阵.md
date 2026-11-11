@@ -1483,3 +1483,11 @@ INT-CTR-001 是正式 43 CTR 之一，不是内部 Outbox/Inbox 实现验收。�
 - RFC3339Nano UTC、conditions 唯一、policies 非空/唯一及跨数组排序规则均已明确；Schema 与语义 Validator 的职责边界清晰。
 - Data/News/Quant/Research 的主体、资源、用途和内容级别映射已在唯一权威定义中明确；Data Golden 与 DATA-CTR-008 Manifest Golden 的关键绑定一致。
 - GOV-CTR-006 转为 freeze-ready；Owner/Consumer/CI/并发测试不属于本轮定义冻结门禁。
+
+
+## 61. GOV-CTR-006 Owner 主体与授权组合约束复核（2026-11-11）
+
+- DEC-PLAT-002-038 明确 Data AuthorizationRef.subject_ref 来源于 Server 注入的可信 Principal/Scope Context；Remote Adapter 的 API Key/Service Credential 只认证 Adapter，不得成为 subject_ref。Data Snapshot Manifest.caller_ref 必须与 subject_ref 精确一致。
+- AuthorizationRef Schema 增加 policy_owner 与 purpose_code/content_level 的合法组合约束：Data 仅 quant_analysis/research_analysis/risk_review + full；News 仅 research_analysis/risk_review/user_display；Quant 仅 quant_analysis + full；Research 仅 research_analysis/risk_review。
+- 跨对象 Validator 补充 expires_at 非 null 时必须严格晚于 decided_at；policy_version 必须等于 PolicySnapshot.snapshot_ref；policies/conditions 的唯一性和稳定排序由 Validator 执行；指纹按完整策略快照复算。
+- GOV-CTR-006 保持 freeze-ready；Owner/Consumer/撤销竞态测试仍为 L2 实现符合性，不混入项目级定义冻结门禁。

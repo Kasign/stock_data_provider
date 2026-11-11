@@ -1389,3 +1389,10 @@
 - Data/News/Quant/Research 的 Principal/Resource/Purpose/ContentLevel 映射有唯一权威文本；Data Snapshot Manifest 绑定样例逐字段一致。
 - GOV-CTR-006 转为 freeze-ready；运行时 Owner/Consumer/CI/撤销竞态测试归 L2，不作为本轮契约定义冻结门禁。
 - 当前 43 项统计为 6 freeze-ready、35 pending_evidence、0 pending_decision、2 not_applicable、0 frozen。
+
+
+## 61. GOV-CTR-006 主体映射与 Schema 条件收敛（2026-11-11）
+
+- Data AuthorizationRef 的 subject_ref 明确来自 Server 注入的可信 Principal/Scope Context；Remote Adapter 凭证仅用于服务认证，不得写入主体引用。
+- AuthorizationRef Schema 机器约束各 policy_owner 对应的 purpose_code/content_level 合法组合；Validator 负责 expires_at > decided_at、policy_version/snapshot_ref、排序和 JCS 指纹复核。
+- GOV-CTR-006 保持 freeze-ready；运行时 Owner/Consumer/竞态测试仍是 L2 实现符合性。当前总统计 6 freeze-ready、35 pending-evidence、0 pending-decision、2 not_applicable、0 frozen。
