@@ -13,7 +13,7 @@ func validRiskDecision() RiskDecision {
 		EvaluatedAt: now, SystemAsOf: now,
 		Reasons: []RiskReason{{Code: "max_drawdown", Severity: "block", Status: "not_triggered",
 			SafeMessage: "未触发阻断条件", RuleRef: "rule-max-drawdown-v1", EvidenceRefs: []string{"ev-1"}}},
-		InputRefs: []string{"qres-1"},
+		InputRefs: []string{"qres_1"},
 	}
 }
 
