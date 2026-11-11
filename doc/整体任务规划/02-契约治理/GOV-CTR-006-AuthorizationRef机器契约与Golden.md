@@ -10,6 +10,7 @@
 机器文件：`schema/GOV-CTR-006-authorization-ref-1.0.0.schema.json`。
 
 字段固定为：
+- `schema_version`：必填，固定为本文件对应的 DTO Schema 版本 `1.0.0`；只标识 AuthorizationRef 自身结构。
 - `authorization_ref`：不透明、稳定、不可猜测的审计引用；不是 bearer token。
 - `policy_owner`：data/news/quant/research。
 - `policy_version`：AuthorizationPolicySnapshot.snapshot_ref，不是单个策略版本号。
@@ -26,6 +27,7 @@
 机器文件：`schema/GOV-CTR-006-policy-snapshot-1.0.0.schema.json`。
 
 `policy_version` 必须指向签发 Owner 保存的不可变 AuthorizationPolicySnapshot。结构为：
+- `schema_version`：必填，固定为 PolicySnapshot 自身 Schema 版本 `1.0.0`。
 - `snapshot_ref`：与 AuthorizationRef.policy_version 完全相同。
 - `policies[]`：至少一项，每项包含 `policy_type`、`policy_ref`、`policy_version`。
 
@@ -53,7 +55,7 @@
 
 ## 5. Fingerprint 唯一算法
 
-1. 从 AuthorizationRef 取除 `authorization_ref` 和 `decision_fingerprint` 之外的全部字段。
+1. 从 AuthorizationRef 取除 `authorization_ref` 和 `decision_fingerprint` 之外的全部字段；其中包括必需的 `schema_version`，使 DTO 结构版本参与决策指纹。
 2. 解析 `policy_version` 指向的 AuthorizationPolicySnapshot，取完整 `policies` 数组作为 `evaluated_policy_versions`；数组按 (policy_type, policy_ref, policy_version) 字典序排序。
 3. 将 `evaluated_policy_versions` 加入步骤 1 的对象，形成唯一 fingerprint input。
 4. 对 fingerprint input 执行 RFC 8785 JCS，得到 UTF-8 字节。
@@ -126,7 +128,7 @@ JSON Schema 负责单对象结构约束；跨对象和运行时语义不得假�
 以下测试通过前，GOV-CTR-006 保持 pending_evidence：
 - 将仓库中的两份 Schema 文件接入模块 CI，由实际 Validator 执行正向/反向校验，并校验 format/date-time；本轮已对 Schema 定义执行 Draft 2020-12 结构校验；RFC3339Nano UTC、conditions 唯一性和 policies 非空/完整对象唯一已落实到 Schema，跨数组排序仍由 Validator 负责。
 - 将四个 Golden 接入运行时测试，复算 JCS canonicalization 与 SHA-256；本轮四个 Golden 预期摘要独立复算一致，尚未形成模块 CI 证据。
-- policy_version 与 snapshot_ref 一致性、policies 非空/唯一/排序、遗漏任一策略版本导致 fingerprint 不匹配。
+- policy_version 与 snapshot_ref 一致性、policies 非空/唯一/排序、遗漏任一策略版本导致 fingerprint 不匹配；AuthorizationRef 与 PolicySnapshot 必须各自携带匹配自身 Schema 的 schema_version。
 - 四个 policy_owner 的 Principal/Scope/Resource 映射 Contract Test。
 - allowed → revoked、expires_at 边界、conditional 未满足/全部满足、unknown、授权服务不可用的拒绝测试。
 - 策略在授权检查与内容读取之间变化时，必须重新授权或丢弃内容的竞态测试。

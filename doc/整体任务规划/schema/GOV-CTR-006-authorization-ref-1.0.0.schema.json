@@ -5,6 +5,7 @@
   "type": "object",
   "additionalProperties": false,
   "required": [
+    "schema_version",
     "authorization_ref",
     "policy_owner",
     "policy_version",
@@ -96,6 +97,11 @@
     "decision_fingerprint": {
       "type": "string",
       "pattern": "^[0-9a-f]{64}$"
+    },
+    "schema_version": {
+      "type": "string",
+      "const": "1.0.0",
+      "description": "当前 AuthorizationRef DTO 自身的 Schema 版本。"
     }
   },
   "allOf": [

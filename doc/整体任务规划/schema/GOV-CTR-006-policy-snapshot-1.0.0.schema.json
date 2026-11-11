@@ -5,6 +5,7 @@
   "type": "object",
   "additionalProperties": false,
   "required": [
+    "schema_version",
     "snapshot_ref",
     "policies"
   ],
@@ -41,6 +42,11 @@
         }
       },
       "description": "策略快照必须至少包含一个实际生效策略；完整对象唯一由 Schema 校验，按三元组排序由语义 Validator 校验。"
+    },
+    "schema_version": {
+      "type": "string",
+      "const": "1.0.0",
+      "description": "当前 AuthorizationPolicySnapshot DTO 自身的 Schema 版本。"
     }
   }
 }
