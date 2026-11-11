@@ -3,6 +3,7 @@ package domain
 import (
 	"bytes"
 	"encoding/json"
+	"io"
 	"errors"
 	"fmt"
 	"time"
@@ -96,9 +97,8 @@ func (s Subscription) Validate(eventTypes EventTypeLookup, filterValidator Filte
 	if s.FilterSchemaVersion == "" {
 		return fmt.Errorf("%w: filters require filter_schema_version", ErrInvalidSubscription)
 	}
-	var object map[string]json.RawMessage
-	if err := json.Unmarshal(filters, &object); err != nil || object == nil {
-		return fmt.Errorf("%w: filters must be a JSON object", ErrInvalidSubscription)
+	if err := validateSubscriptionFilterJSON(filters); err != nil {
+		return fmt.Errorf("%w: filters must be a strict JSON object: %v", ErrInvalidSubscription, err)
 	}
 	if filterValidator == nil {
 		return fmt.Errorf("%w: filter schema validator is unavailable", ErrInvalidSubscription)
@@ -127,4 +127,86 @@ func isUTCInstant(value time.Time) bool {
 	}
 	_, offset := value.Zone()
 	return offset == 0
+}
+
+func validateSubscriptionFilterJSON(raw []byte) error {
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.UseNumber()
+	token, err := decoder.Token()
+	if err != nil {
+		return err
+	}
+	if token != json.Delim('{') {
+		return errors.New("top-level value must be an object")
+	}
+	if err := consumeSubscriptionFilterObject(decoder); err != nil {
+		return err
+	}
+	if _, err := decoder.Token(); err != io.EOF {
+		if err == nil {
+			return errors.New("multiple top-level JSON values")
+		}
+		return err
+	}
+	return nil
+}
+
+func consumeSubscriptionFilterObject(decoder *json.Decoder) error {
+	seen := make(map[string]struct{})
+	for decoder.More() {
+		token, err := decoder.Token()
+		if err != nil {
+			return err
+		}
+		key, ok := token.(string)
+		if !ok {
+			return errors.New("object key must be a string")
+		}
+		if _, exists := seen[key]; exists {
+			return fmt.Errorf("duplicate object key %q", key)
+		}
+		seen[key] = struct{}{}
+		if err := consumeSubscriptionFilterValue(decoder); err != nil {
+			return err
+		}
+	}
+	end, err := decoder.Token()
+	if err != nil {
+		return err
+	}
+	if end != json.Delim('}') {
+		return errors.New("malformed object")
+	}
+	return nil
+}
+
+func consumeSubscriptionFilterValue(decoder *json.Decoder) error {
+	token, err := decoder.Token()
+	if err != nil {
+		return err
+	}
+	delim, ok := token.(json.Delim)
+	if !ok {
+		return nil
+	}
+	switch delim {
+	case '{':
+		return consumeSubscriptionFilterObject(decoder)
+	case '[':
+		for decoder.More() {
+			if err := consumeSubscriptionFilterValue(decoder); err != nil {
+				return err
+			}
+		}
+		end, err := decoder.Token()
+		if err != nil {
+			return err
+		}
+		if end != json.Delim(']') {
+			return errors.New("malformed array")
+		}
+		return nil
+	default:
+		return errors.New("unexpected JSON delimiter")
+	}
 }

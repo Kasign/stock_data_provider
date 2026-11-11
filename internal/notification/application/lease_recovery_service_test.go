@@ -3,6 +3,7 @@ package application
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -43,12 +44,22 @@ type recoveryRepositoryFake struct {
 	now             time.Time
 	calls           int
 	err             error
+	errSequence     []error
+	cancel          context.CancelFunc
 }
 
 func (f *recoveryRepositoryFake) RecoverExpiredLease(_ context.Context, version, token int64, next domain.DeliveryRecord, event domain.DeliveryStateEvent, now time.Time) error {
 	f.calls++
 	f.expectedVersion, f.fencingToken = version, token
 	f.next, f.event, f.now = next, event, now
+	if f.cancel != nil {
+		f.cancel()
+	}
+	if len(f.errSequence) > 0 {
+		err := f.errSequence[0]
+		f.errSequence = f.errSequence[1:]
+		return err
+	}
 	return f.err
 }
 
@@ -72,7 +83,9 @@ func recoveryServiceFixture(t *testing.T, attempts []domain.DeliveryAttempt) (*L
 func TestLeaseRecoveryServiceRecoversWithoutStartingAttempt(t *testing.T) {
 	service, claim, now, repository := recoveryServiceFixture(t, nil)
 	report, err := service.RecoverExpiredOnce(context.Background(), now, 10)
-	if err != nil || report != (LeaseRecoveryReport{Scanned: 1, Recovered: 1}) {
+	if err != nil || report.Scanned != 1 || report.Recovered != 1 ||
+		report.Conflicted != 0 || report.OutcomeUnknown != 0 || report.Failed != 0 ||
+		report.Unprocessed != 0 || len(report.OutcomeUnknownDeliveryIDs) != 0 {
 		t.Fatalf("unexpected recovery report: %+v err=%v", report, err)
 	}
 	if repository.calls != 1 || repository.expectedVersion != claim.Delivery.Version ||
@@ -201,5 +214,74 @@ func TestLeaseRecoveryServiceRejectsDuplicateDeliveryCandidatesBeforeMutation(t 
 	report, err := service.RecoverExpiredOnce(context.Background(), now, 5)
 	if !errors.Is(err, ErrLeaseRecoveryHistory) || report.Recovered != 0 || repository.calls != 0 {
 		t.Fatalf("duplicate delivery candidates must reject the whole batch before mutation: report=%+v calls=%d err=%v", report, repository.calls, err)
+	}
+	if strings.Contains(err.Error(), claim.Delivery.DeliveryID) {
+		t.Fatalf("duplicate candidate error must not expose internal Delivery ID: %v", err)
+	}
+}
+
+
+func TestLeaseRecoveryServiceSeparatesPersistenceOutcomeUnknown(t *testing.T) {
+	service, _, now, repository := recoveryServiceFixture(t, nil)
+	repository.err = ErrPersistenceOutcomeUnknown
+
+	report, err := service.RecoverExpiredOnce(context.Background(), now, 5)
+	if !errors.Is(err, ErrPersistenceOutcomeUnknown) {
+		t.Fatalf("uncertain commit must remain discoverable by errors.Is, got %v", err)
+	}
+	if strings.Contains(err.Error(), "delivery-1") {
+		t.Fatalf("aggregate recovery error must not expose internal Delivery ID: %v", err)
+	}
+	if report.Scanned != 1 || report.OutcomeUnknown != 1 ||
+		len(report.OutcomeUnknownDeliveryIDs) != 1 || report.OutcomeUnknownDeliveryIDs[0] != "delivery-1" ||
+		report.Recovered != 0 || report.Conflicted != 0 || report.Failed != 0 {
+		t.Fatalf("uncertain commit must not be reported as success or ordinary failure: %+v", report)
+	}
+	if repository.calls != 1 {
+		t.Fatalf("recovery write should be attempted once, got %d", repository.calls)
+	}
+}
+
+
+func TestLeaseRecoveryServiceContinuesAfterPersistenceOutcomeUnknown(t *testing.T) {
+	service, firstClaim, now, repository := recoveryServiceFixture(t, nil)
+	secondClaim := firstClaim
+	secondClaim.Delivery.DeliveryID = "delivery-recovery-second"
+	service.Scanner.(*recoveryScannerFake).claims = []DeliveryClaim{firstClaim, secondClaim}
+	repository.errSequence = []error{ErrPersistenceOutcomeUnknown, nil}
+
+	report, err := service.RecoverExpiredOnce(context.Background(), now, 5)
+	if !errors.Is(err, ErrPersistenceOutcomeUnknown) {
+		t.Fatalf("batch must preserve uncertain outcome classification, got %v", err)
+	}
+	if report.Scanned != 2 || report.OutcomeUnknown != 1 ||
+		len(report.OutcomeUnknownDeliveryIDs) != 1 || report.OutcomeUnknownDeliveryIDs[0] != firstClaim.Delivery.DeliveryID ||
+		report.Recovered != 1 ||
+		report.Conflicted != 0 || report.Failed != 0 || repository.calls != 2 {
+		t.Fatalf("uncertain item must not prevent processing the remaining batch: report=%+v calls=%d", report, repository.calls)
+	}
+}
+
+
+func TestLeaseRecoveryServiceCountsUnprocessedClaimsOnCancellation(t *testing.T) {
+	service, firstClaim, now, repository := recoveryServiceFixture(t, nil)
+	secondClaim := firstClaim
+	secondClaim.Delivery.DeliveryID = "delivery-recovery-second"
+	thirdClaim := firstClaim
+	thirdClaim.Delivery.DeliveryID = "delivery-recovery-third"
+	service.Scanner.(*recoveryScannerFake).claims = []DeliveryClaim{firstClaim, secondClaim, thirdClaim}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	repository.cancel = cancel
+	report, err := service.RecoverExpiredOnce(ctx, now, 5)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("canceled batch must preserve context error, got %v", err)
+	}
+	if report.Scanned != 3 || report.Recovered != 1 || report.Unprocessed != 2 ||
+		report.Conflicted != 0 || report.OutcomeUnknown != 0 || report.Failed != 0 {
+		t.Fatalf("report must distinguish candidates from processed items: %+v", report)
+	}
+	if repository.calls != 1 {
+		t.Fatalf("canceled batch must stop after first completed item, calls=%d", repository.calls)
 	}
 }

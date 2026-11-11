@@ -116,6 +116,9 @@ func (p RetryPolicy) scheduleRetry(
 		len(attempts) != delivery.AttemptCount || len(attempts) == 0 {
 		return RetryDecision{}, ErrRetryNotApplicable
 	}
+	if err := ValidateDeliveryAttemptHistoryForDelivery(delivery, attempts); err != nil {
+		return RetryDecision{}, ErrRetryNotApplicable
+	}
 
 	var firstAttemptAt time.Time
 	var latest domain.DeliveryAttempt

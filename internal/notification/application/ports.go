@@ -51,6 +51,8 @@ var (
 
 // DeliveryRepository 负责 Delivery 当前快照与追加式状态事件。
 // ClaimDue 原子领取一条到期的 queued/retry_wait 记录，迁移为 sending，追加状态事件并分配新 fencing token。
+// 若 ClaimDue 返回 ErrPersistenceOutcomeUnknown，claim/claimed 不构成可执行授权：调用方必须丢弃返回值，禁止执行渠道、再次盲目 Claim 或推断事务已回滚；该接口没有可证明本次调用 fencing token 的读后对账能力，交由租约到期恢复收敛。
+// 只有 err=nil 且 claimed=true 返回的 DeliveryClaim 才能交给 DeliveryExecutionService。
 // UpdateWithLease 必须在同一原子操作中 CAS 更新快照并追加事件；过期租约、旧 token、旧版本或不匹配事件均须拒绝；next.Status 不再是 sending 时必须同时释放租约。
 type DeliveryRepository interface {
 	Create(ctx context.Context, delivery domain.DeliveryRecord) error

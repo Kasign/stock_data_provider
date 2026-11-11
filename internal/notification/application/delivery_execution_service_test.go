@@ -202,6 +202,46 @@ func TestDeliveryExecutionAttemptStartFailureNeverCallsChannel(t *testing.T) {
 	}
 }
 
+type outcomeUnknownAttemptStartRepository struct {
+	*memoryDeliveries
+}
+
+func (r outcomeUnknownAttemptStartRepository) StartWithLease(
+	ctx context.Context,
+	expectedDeliveryVersion, fencingToken int64,
+	attempt domain.DeliveryAttempt,
+) error {
+	if err := r.memoryDeliveries.StartWithLease(ctx, expectedDeliveryVersion, fencingToken, attempt); err != nil {
+		return err
+	}
+	// 模拟数据库已提交，但客户端未收到 Commit 确认。
+	return errors.Join(ErrPersistenceOutcomeUnknown, errors.New("injected commit acknowledgement loss"))
+}
+
+func TestDeliveryExecutionAttemptStartOutcomeUnknownNeverCallsChannel(t *testing.T) {
+	service, repository, adapter, claim, event := executionFixture(t)
+	service.attempts = outcomeUnknownAttemptStartRepository{memoryDeliveries: repository}
+
+	_, err := service.Execute(
+		context.Background(), claim, event, "attempt-execution-outcome-unknown",
+		0.5, "evidence-execution-outcome-unknown",
+	)
+	if !errors.Is(err, ErrPersistenceOutcomeUnknown) {
+		t.Fatalf("expected persistence outcome unknown classification, got %v", err)
+	}
+	if adapter.calls != 0 {
+		t.Fatalf("channel must not be called after uncertain Attempt start commit, calls=%d", adapter.calls)
+	}
+	delivery, found, getErr := repository.Get(context.Background(), claim.Delivery.DeliveryID)
+	if getErr != nil || !found || delivery.Status != domain.DeliverySending || delivery.AttemptCount != 1 {
+		t.Fatalf("committed Attempt start must remain visible for recovery: delivery=%+v found=%v err=%v", delivery, found, getErr)
+	}
+	attempts, listErr := repository.ListByDelivery(context.Background(), claim.Delivery.DeliveryID)
+	if listErr != nil || len(attempts) != 1 || attempts[0].AttemptNo != 1 || attempts[0].FinishedAt != nil {
+		t.Fatalf("uncertain commit must preserve the running Attempt for lease recovery: attempts=%+v err=%v", attempts, listErr)
+	}
+}
+
 func TestDeliveryExecutionAmbiguousResultConvergesToUnknown(t *testing.T) {
 	service, repository, adapter, claim, event := executionFixture(t)
 	adapter.result = domain.ChannelSendResult{
@@ -400,5 +440,129 @@ func TestDeliveryExecutionCapsAttemptDeadlineByMaxElapsed(t *testing.T) {
 	}
 	if result.ChannelResult == nil || result.ChannelResult.Outcome != domain.ChannelOutcomeAmbiguous {
 		t.Fatalf("unexpected bounded execution result: %+v", result)
+	}
+}
+
+func TestDeliveryExecutionPreflightSkipPersistsWithoutStartingAttempt(t *testing.T) {
+	service, repository, adapter, claim, event := executionFixture(t)
+	service.preflight.recipients = &fixedRecipientResolver{err: ErrRecipientNotAuthorized}
+
+	result, err := service.Execute(
+		context.Background(), claim, event, "attempt-preflight-skip",
+		0.5, "evidence-preflight-skip",
+	)
+	if err != nil {
+		t.Fatalf("authorization skip should be a completed preflight decision: %v", err)
+	}
+	if result.Action != DeliveryPreflightSkip || result.ReasonCode != "recipient_not_authorized" {
+		t.Fatalf("unexpected preflight result: %+v", result)
+	}
+	if adapter.calls != 0 {
+		t.Fatalf("skipped delivery must not call channel, calls=%d", adapter.calls)
+	}
+	delivery, found, getErr := repository.Get(context.Background(), claim.Delivery.DeliveryID)
+	if getErr != nil || !found || delivery.Status != domain.DeliverySkipped || delivery.AttemptCount != 0 {
+		t.Fatalf("skip must persist without creating Attempt: delivery=%+v found=%v err=%v", delivery, found, getErr)
+	}
+	events := repository.StateEvents(delivery.DeliveryID)
+	if len(events) != 2 || events[1].ReasonCode == nil || *events[1].ReasonCode != "recipient_not_authorized" ||
+		events[1].EvidenceRef == nil || *events[1].EvidenceRef != "evidence-preflight-skip" {
+		t.Fatalf("skip must append its reason and evidence: %+v", events)
+	}
+}
+
+func TestDeliveryExecutionPreflightBlockPersistsWithoutStartingAttempt(t *testing.T) {
+	service, repository, adapter, claim, event := executionFixture(t)
+	disabled := channelRegistryTestSnapshot()
+	disabled.ConfigVersion = claim.Delivery.ChannelConfigVersion
+	disabled.Enabled = false
+	blockedAdapter := &fakeChannelAdapter{snapshot: disabled}
+	registry := NewChannelRegistry()
+	if err := registry.Register(blockedAdapter); err != nil {
+		t.Fatal(err)
+	}
+	service.preflight.channels = registry
+
+	result, err := service.Execute(
+		context.Background(), claim, event, "attempt-preflight-block",
+		0.5, "evidence-preflight-block",
+	)
+	if err != nil {
+		t.Fatalf("disabled channel block should be a completed preflight decision: %v", err)
+	}
+	if result.Action != DeliveryPreflightBlock || result.ReasonCode != "channel_disabled" {
+		t.Fatalf("unexpected preflight result: %+v", result)
+	}
+	if adapter.calls != 0 || blockedAdapter.calls != 0 {
+		t.Fatalf("blocked delivery must not call channel, original=%d blocked=%d", adapter.calls, blockedAdapter.calls)
+	}
+	delivery, found, getErr := repository.Get(context.Background(), claim.Delivery.DeliveryID)
+	if getErr != nil || !found || delivery.Status != domain.DeliveryBlocked || delivery.AttemptCount != 0 {
+		t.Fatalf("block must persist without creating Attempt: delivery=%+v found=%v err=%v", delivery, found, getErr)
+	}
+	events := repository.StateEvents(delivery.DeliveryID)
+	if len(events) != 2 || events[1].ReasonCode == nil || *events[1].ReasonCode != "channel_disabled" ||
+		events[1].EvidenceRef == nil || *events[1].EvidenceRef != "evidence-preflight-block" {
+		t.Fatalf("block must append its reason and evidence: %+v", events)
+	}
+}
+
+func TestDeliveryExecutionCapsAttemptDeadlineByLeaseExpiry(t *testing.T) {
+	service, repository, _, claim, event := executionFixture(t)
+	startedAt := claim.Delivery.UpdatedAt.Add(time.Second)
+	leaseExpiry := startedAt.Add(500 * time.Millisecond)
+	claim.Lease.ExpiresAt = leaseExpiry
+
+	repository.mu.Lock()
+	repository.leases[claim.Delivery.DeliveryID] = claim.Lease
+	repository.now = startedAt
+	repository.mu.Unlock()
+	service.clock.(*sequenceExecutionClock).times[1] = startedAt.Add(100 * time.Millisecond)
+
+	snapshot := channelRegistryTestSnapshot()
+	snapshot.ConfigVersion = claim.Delivery.ChannelConfigVersion
+	adapter := &deadlineRecordingExecutionAdapter{snapshot: snapshot}
+	registry := NewChannelRegistry()
+	if err := registry.Register(adapter); err != nil {
+		t.Fatal(err)
+	}
+	service.preflight.channels = registry
+
+	_, err := service.Execute(
+		context.Background(), claim, event, "attempt-execution-lease-deadline",
+		0.5, "evidence-execution-lease-deadline",
+	)
+	if err != nil {
+		t.Fatalf("execute within lease deadline: %v", err)
+	}
+	if adapter.calls != 1 || !adapter.deadline.Equal(leaseExpiry) {
+		t.Fatalf("attempt deadline must be capped by lease expiry: calls=%d deadline=%s expected=%s",
+			adapter.calls, adapter.deadline, leaseExpiry)
+	}
+}
+
+func TestDeliveryExecutionDoesNotStartAttemptWhenLeaseAlreadyExpired(t *testing.T) {
+	service, repository, adapter, claim, event := executionFixture(t)
+	startedAt := claim.Delivery.UpdatedAt.Add(time.Second)
+	claim.Lease.ExpiresAt = startedAt
+
+	repository.mu.Lock()
+	repository.leases[claim.Delivery.DeliveryID] = claim.Lease
+	repository.now = startedAt
+	repository.mu.Unlock()
+
+	_, err := service.Execute(
+		context.Background(), claim, event, "attempt-execution-expired-lease",
+		0.5, "evidence-execution-expired-lease",
+	)
+	if !errors.Is(err, ErrRetryNotApplicable) {
+		t.Fatalf("expired lease must reject execution before Attempt start, got %v", err)
+	}
+	if adapter.calls != 0 {
+		t.Fatalf("expired lease must not call channel, calls=%d", adapter.calls)
+	}
+	attempts, listErr := repository.ListByDelivery(context.Background(), claim.Delivery.DeliveryID)
+	if listErr != nil || len(attempts) != 0 {
+		t.Fatalf("expired lease must not append Attempt: attempts=%+v err=%v", attempts, listErr)
 	}
 }

@@ -20,10 +20,15 @@ type LeaseRecoveryService struct {
 }
 
 type LeaseRecoveryReport struct {
-	Scanned    int
-	Recovered  int
-	Conflicted int
-	Failed     int
+	// Scanned 是扫描器返回的候选总数，不代表全部候选都已处理。
+	Scanned        int
+	Recovered      int
+	Conflicted     int
+	OutcomeUnknown int
+	// OutcomeUnknownDeliveryIDs 是内部 Worker 对账所需的精确 Delivery 标识，不得写入公开诊断属性。
+	OutcomeUnknownDeliveryIDs []string `json:"-"`
+	Failed         int
+	Unprocessed    int
 }
 
 // RecoverExpiredOnce runs one bounded recovery pass. The caller supplies the
@@ -57,14 +62,15 @@ func (s *LeaseRecoveryService) RecoverExpiredOnce(
 			return report, ErrLeaseRecoveryHistory
 		}
 		if _, exists := seenDeliveries[deliveryID]; exists {
-			return report, fmt.Errorf("%w: duplicate delivery candidate %s", ErrLeaseRecoveryHistory, deliveryID)
+			return report, fmt.Errorf("%w: duplicate delivery candidate", ErrLeaseRecoveryHistory)
 		}
 		seenDeliveries[deliveryID] = struct{}{}
 	}
 	report.Scanned = len(claims)
 	var failures []error
-	for _, claim := range claims {
+	for index, claim := range claims {
 		if err := ctx.Err(); err != nil {
+			report.Unprocessed += len(claims) - index
 			failures = append(failures, err)
 			break
 		}
@@ -74,8 +80,15 @@ func (s *LeaseRecoveryService) RecoverExpiredOnce(
 				report.Conflicted++
 				continue
 			}
+			if errors.Is(err, ErrPersistenceOutcomeUnknown) {
+				// Commit 结果不确定不能计为普通失败或成功；调用方必须重新读取状态对账。
+				report.OutcomeUnknown++
+				report.OutcomeUnknownDeliveryIDs = append(report.OutcomeUnknownDeliveryIDs, claim.Delivery.DeliveryID)
+				failures = append(failures, fmt.Errorf("notification: lease recovery item: %w", err))
+				continue
+			}
 			report.Failed++
-			failures = append(failures, fmt.Errorf("delivery %s: %w", claim.Delivery.DeliveryID, err))
+			failures = append(failures, fmt.Errorf("notification: lease recovery item: %w", err))
 			continue
 		}
 		report.Recovered++

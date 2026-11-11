@@ -181,3 +181,44 @@ func TestAssessExpiredDeliveryLeaseDoesNotExposeProviderDetails(t *testing.T) {
 }
 
 func stringPointerForRecovery(value string) *string { return &value }
+
+
+func TestAssessExpiredDeliveryLeaseWithoutCurrentAttemptRequiresRetryablePreviousOutcome(t *testing.T) {
+	cases := []struct {
+		name      string
+		outcome   domain.DeliveryAttemptOutcome
+		retryable bool
+		wantError bool
+	}{
+		{name: "retryable rejection permits next lease", outcome: domain.DeliveryAttemptRejected, retryable: true},
+		{name: "proved not sent permits next lease", outcome: domain.DeliveryAttemptNotSent},
+		{name: "accepted history fails closed", outcome: domain.DeliveryAttemptAccepted, wantError: true},
+		{name: "ambiguous history fails closed", outcome: domain.DeliveryAttemptAmbiguous, wantError: true},
+		{name: "permanent rejection fails closed", outcome: domain.DeliveryAttemptRejected, wantError: true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			delivery, lease, now := recoveryFixture(t)
+			previousLease := DeliveryLease{
+				WorkerID: lease.WorkerID, FencingToken: lease.FencingToken,
+				ExpiresAt: delivery.UpdatedAt.Add(30 * time.Second),
+			}
+			previous := recoveryAttempt(t, delivery, previousLease, tc.outcome, true)
+			if tc.retryable {
+				previous.Retryable = true
+			}
+			delivery.AttemptCount = 1
+			lease.FencingToken++
+			got, err := AssessExpiredDeliveryLease(delivery, lease, []domain.DeliveryAttempt{previous}, now)
+			if tc.wantError {
+				if !errors.Is(err, ErrLeaseRecoveryHistory) {
+					t.Fatalf("inconsistent previous outcome must fail closed, got assessment=%+v err=%v", got, err)
+				}
+				return
+			}
+			if err != nil || got.Action != LeaseRecoverySafeToRetry {
+				t.Fatalf("valid previous outcome should permit safe retry, got assessment=%+v err=%v", got, err)
+			}
+		})
+	}
+}
