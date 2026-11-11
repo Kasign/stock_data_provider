@@ -196,7 +196,7 @@ GitHub 远端 ref 核验（2026-11-10）：
 | NTF-CTR-001 | NotificationEvent Envelope、Schema Registry、Fingerprint | Notification | Quant、Research、Researchflow | doc/notification/03 第2.1/8.1节、05；Envelope 与三类 Payload Schema/Golden | 1.0.0（4 Schema / 6 Golden） | `pending_evidence` | Envelope/首批事件映射/fingerprint 算法已有；Schema 未约束 RFC3339Nano UTC，Payload reason_code/opaque ref 的稳定格式及 subject_ref 与 payload 主体一致性仍依赖文字定义，需统一机器契约约束 |
 | NTF-CTR-002 | Inbox、Subscription、Delivery、Attempt、幂等和状态机 | Notification | Server；Quant/Research/Researchflow 仅发布事件 | doc/notification/03 第2～7/9节、06；Notification Application Port 与 Domain 类型 | 1.0.0（Event Schema 已有；Subscription/Delivery/Attempt Schema 未登记） | `pending_evidence` | Event 接收/Inbox 双唯一键、Delivery 唯一键和状态机语义已有；Subscription、DeliveryPlan、DeliveryRecord、DeliveryAttempt、DeliveryStateEvent 的完整跨模块 DTO/Port 权威定义与版本/错误语义未形成可核对的机器 Schema/等价 Application Port 契约 |
 | NTF-CTR-003 | Notification 内部 Channel Adapter SPI 与 ChannelConfigSnapshot | Notification 内部扩展点 | Notification 内部 Channel Adapter/Resolver | doc/notification/03 第8.4节；internal/notification/application/channel_ports.go；internal/notification/domain/channel.go | 内部 Port，不属于跨模块公开契约版本 | `not_applicable` | ChannelConfigSnapshot、ChannelAdapter、ChannelResolver、RecipientResolver、ChannelSendRequest/Result 仅由 Notification 内部组件消费；不作为 PLAT-002 跨模块冻结门禁。Delivery 的 retry/unknown 对外语义归 NTF-CTR-002，不重复登记 |
-| SRV-CTR-001 | 唯一组合根、Bootstrap、依赖注入与生命周期 | Server | 所有服务端模块、WebUI | internal/server/bootstrap、router、migration；doc/server | 架构契约版本待裁定/登记 | `has_difference` + `pending_evidence` | 按 DEC-PLAT-002-012/016 装配 Quant Application Facade 到 Researchflow；按 DEC-PLAT-002-017 接入 Owner Session；所有模块装配、Root 单一入口、共享资源、Data InProcess/Remote、Migration/Worker/Shutdown |
+| SRV-CTR-001 | Root Server 组合根、统一 HTTP 宿主与 Researchflow 对外 API | Server | WebUI、Researchflow、所有服务端模块 | doc/server/README.md；doc/web/API_CONTRACT.md（旧 Analysis 路径）；doc/api/contracts/分析任务.openapi.yaml（已退役旧 API） | 新 Researchflow HTTP Schema/版本未定义 | `pending_evidence` | 组合根/唯一 HTTP 宿主职责已有定义；新 API 路径/方法、CreateRun/Run/Stage/Event HTTP DTO、错误投影、认证授权、分页/Cursor 与 WebUI 消费映射均无唯一权威定义。旧 Analysis API 按 DEC-018/019 退出活动范围，不得复用其 DTO/约束 |
 | INT-CTR-001 | Quant 风险决策、Research 事件生命周期、Researchflow Run 终态到 NotificationEvent 显式映射 | Quant/Research/Researchflow 产生业务事实；Notification 接收事件 | Notification、事件消费者 | doc/notification/05；doc/notification/03 | 1.0.0（3 Event Payload Schema；6 Golden） | `pending_evidence` | event_type、触发时点、subject_ref、幂等键、Outbox/Inbox 原子性、重放/撤回和三生产方映射 |
 
 本表是编号和状态总索引；具体字段 Schema、Golden、DTO、状态机和验收标准必须继续引用生产模块的唯一字段级权威文件。没有机器契约或消费者证据时，登记簿明确记录缺失，不以历史目录的详细描述代替当前实现。
@@ -669,3 +669,36 @@ PLAT-002 不因本次矩阵统计完成而结束。整体完成仍需：
 - NTF-CTR-003 的内部 Channel Adapter SPI 从 PLAT-002 跨模块冻结门禁移出；Delivery retry/unknown 外部语义保留在 NTF-CTR-002。
 - 不纳入：真实渠道 E2E、账号/Secret 可用性、MariaDB 唯一约束测试、Worker 恢复、各渠道幂等/对账能力验收、CI。
 - 不新增 CTR；下一批核对 Server/WebUI 对 Researchflow 新 API 的公开 HTTP 契约，并收敛十模块整体冻结统计。
+
+## 22. Server / WebUI Researchflow HTTP 契约核定（2026-11-11）
+
+本批只核对 Server 作为唯一 HTTP 宿主时，WebUI 与 Researchflow 之间的跨模块公开 HTTP 契约。Server 内部 DI、Worker 装配、Migration 注册、部署和 Nginx 路由验收不属于本轮。
+
+### 22.1 核定结果
+
+| 契约 | 状态 | 核定结论 |
+|---|---|---|
+| SRV-CTR-001 | pending_evidence | Server Composition Root/统一 HTTP Host 的职责和边界已定义；但 DEC-018/019 退役旧 Analysis API 后，新 Researchflow HTTP 契约没有唯一权威 OpenAPI/Schema 或字段级定义。缺少新 API 路径/方法、CreateRun/Run/Stage/Event 请求响应 DTO、错误投影、认证授权、分页/Cursor 与 WebUI 消费映射 |
+
+### 22.2 证据与边界
+
+1. doc/server/README.md 已明确 Server 是唯一组合根和 HTTP 宿主；模块提供 Application Port/Handler，Server 只注册经批准的公开 Handler，不自动暴露所有内部 Port。这一架构职责可作为 SRV-CTR-001 的稳定边界。
+2. doc/web/API_CONTRACT.md 第3节仍记录 POST /api/v1/analysis/tasks、GET /analysis/tasks/{task_id}、旧 Task Events 和 /analysis/runs/{run_id}；这些是 DEC-018/019 已退役的旧 Analysis API，不是新 Researchflow API 的候选契约。
+3. doc/api/contracts/分析任务.openapi.yaml 同样属于旧 Analysis API。按 DEC-019，旧 CreateTask/同步 Run 的未知 TaskType、symbols 上限100、旧 idempotency 规则等历史约束不得迁移到新 CreateRunCommand。
+4. 当前文档树中未发现新的 Researchflow HTTP OpenAPI/JSON Schema；Researchflow Application Port/Run/Stage DTO 是同进程模块契约，不会自动定义 HTTP 路径、状态码、认证、错误响应、分页和事件传输方式。
+5. 新 HTTP API 至少需要明确：CreateRun 请求与响应、GetRun/RunDetail、CancelRun、Run/Stage/Event 查询边界、错误码到 HTTP 状态码映射、认证/资源授权、Request/Correlation ID、分页/Cursor 和事件顺序/重放语义。这里只登记缺口，不替项目负责人决定路径命名、SSE 或轮询等传输选择。
+6. PLAT-CTR-001 的 Fault→HTTP 错误投影、PLAT-CTR-003 的 Session/Principal 原语以及 FLOW-CTR-001～004 的 Run/Stage/Event DTO 是依赖项；不重复创建 Server 侧同义字段定义。
+
+### 22.3 WebUI 范围
+
+- WebUI 是新 HTTP 契约的消费者，不拥有 Run/Stage/Attempt/ResultSummary 领域语义。
+- WebUI CTR-011～049 中纯页面、布局、交互、DOM 回归、产品预留功能不属于跨模块公开 API 契约，不阻断 SRV-CTR-001。
+- WebUI 对 Data API 的消费仍归 DATA-CTR-001/004/006；本批不重复审查行情接口。
+- 旧 Analysis API 前端路径只作为退役历史记录；不得据此冻结旧 API，也不得要求新 API 兼容旧路径。
+
+### 22.4 本批结论
+
+- SRV-CTR-001：pending_evidence；无新增 pending_decision、blocked 或 freeze-ready。
+- 旧 Analysis API 已退出活动冻结范围；新 Researchflow HTTP API 是唯一待补的服务端公开契约，不新增 CTR。
+- 不纳入：Server DI/Bootstrap 实际装配、Session Middleware 实现、WebUI 登录页面、Nginx/HTTPS/部署、HTTP E2E、CI。
+- 下一步应收敛当前十模块契约状态与待决项总数，再按既有 CTR 逐项登记 freeze-ready；不再进行实现接线审查。
