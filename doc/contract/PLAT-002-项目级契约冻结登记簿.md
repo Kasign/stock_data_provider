@@ -6,7 +6,7 @@
 - 固定代码审计基线：`origin/integration @ b6dfc85ba214fe16268c8cba780641a8bfe15086`；仅对该 SHA 的代码事实作结论，不随分支 HEAD 自动漂移
 - 登记簿版本：`0.2.37-review`
 - 当前状态：`L1_frozen_contract_definition_review_in_progress`
-- 当前状态统计：43 项正式 CTR；12 freeze-ready、29 pending_evidence、0 pending-decision、2 not_applicable、0 frozen。项目级语义待决已清零；各 CTR 仍按自身证据门禁收敛。
+- 当前状态统计：43 项正式 CTR；13 freeze-ready、28 pending_evidence、0 pending-decision、2 not_applicable、0 frozen。项目级语义待决已清零；各 CTR 仍按自身证据门禁收敛。
 - 项目级决策：DEC-PLAT-002-018～040 已记录；当前 pending-decision 为 0。DATA-FLOW-B、LLM-FLOW-B 保持条件性 deferred
 - 决策责任：项目负责人；根据明确授权，DEC-PLAT-002-028～040 的技术取舍由 ChatGPT 代为 Review/裁决，并在决议中标记授权来源
 - 复核原则：本轮只冻结契约定义；模块实现符合性、内部测试、CI、部署另行跟踪，不得混入本轮冻结门禁
@@ -166,7 +166,7 @@ GitHub 远端 ref 核验（2026-11-10）：
 | PLAT-CTR-003 | 身份、授权、ServiceKey、Secret 边界 | Platform（认证原语）；Server（入口装配）；领域（资源授权） | Server、Data、News、Research、Quant、Researchflow、WebUI | [PLAT-CTR-003 身份/授权/Session 契约](./rules/PLAT-CTR-003-身份授权与Session原语契约.md)；DEC-PLAT-002-017、040；`internal/platform/security/**` | 1.0.0（Bearer/Session/Principal 强类型 Go API；JSON Schema 不适用） | `freeze-ready` | 身份/AuthMethod、Principal Context、Bearer Scope、Owner Credential、SessionStore、Cookie/CSRF、RateLimit 与 Audit 原语均已定义；AuthMethod/WithPrincipal 为后续 Platform 实现差异。Server A2/WebUI A2/部署 A3 不阻断定义冻结；资源授权归领域 Owner |
 | PLAT-CTR-004 | Diagnostics Observation 与 Runner | Platform（Runner）；领域（reason_code/质量语义） | Root Server、各领域 Check Adapter | [PLAT-CTR-004 Diagnostics 契约](./rules/PLAT-CTR-004-Diagnostics-Observation与Runner契约.md)；Observation 1.0.0 Schema/2 Golden；`internal/platform/diagnostics/**` | 1.0.0（Observation Schema / 2 Golden；Go Runner 等价强类型定义） | `freeze-ready` | Observation 字段/五态/reason_code/UTC/纳秒 duration/字符串 attributes 边界、Schema 与 Go Validator 职责、Check API 和 Runner 聚合优先级已统一；完整 HTTP Report 归 Server CTR |
 | PLAT-CTR-005 | HTTP Client、SSRF 与出口安全 | Platform | Data、News、LLM 及其他出站消费者 | [PLAT-CTR-005 HTTP Client 契约](./rules/PLAT-CTR-005-HTTP-Client与SSRF契约.md)；doc/platform/05、08 第8节、15；`internal/platform/httpclient/**` | 1.0.0（Go API 强类型契约；JSON Schema 不适用） | `freeze-ready` | Config/Client/BoundDoer/Do/OpenStream/StreamResponse 的 API、DestinationPolicy 精确 allowlist、DNS/IP 绑定、同源重定向、缓冲重试与流式资源生命周期/限额均已版本化；消费者 A2 和生产网络 A3 属实现符合性，不阻断定义冻结 |
-| PLAT-CTR-006 | Storage、Repository、Migration 生命周期 | Platform（连接/Runner）；领域（Repository/Schema/Migration 内容）；Server（汇总注册） | 所有持久化模块 | doc/platform/08 第9节及 Migration 专项定义 | Migration API 版本待核验；唯一权威接口契约未登记 | `pending_evidence` | 平台连接/Runner 与领域 Repository/Schema/Migration 内容的职责已原则性明确；Migration 接口输入输出、namespace/version、失败/Ready/Shutdown 语义仍缺完整权威定义。Server 注册差异属于实现符合性 |
+| PLAT-CTR-006 | Storage、Repository、Migration 生命周期 | Platform（连接/Runner）；领域（Repository/Schema/Migration 内容）；Server（汇总注册） | 所有持久化模块 | [PLAT-CTR-006 Storage 与 Migration 契约](./rules/PLAT-CTR-006-Storage与Migration契约.md)；doc/platform/05 第2～4节；doc/platform/08 第9节；`internal/platform/storage` | 1.0.0（Go API 强类型契约；JSON Schema 不适用） | `freeze-ready` | SQL/Redis 连接 API、默认值/上限/资源所有权、Migration 强类型输入、namespace/checksum/History/锁/失败恢复语义已明确；Server 注册与全局 Ready/Shutdown 编排属于 SRV-CTR-001 实现符合性 |
 | PLAT-CTR-007 | Typed Config 与 Secret 生命周期 | Platform（基础解析/脱敏）；各模块（配置 Schema）；Server（Bootstrap） | Server、所有服务端模块 | doc/platform/08 第 6 节；各模块 Config | Config API 版本待核验；Schema 未见 | `pending_evidence` | 配置所有权、读取时点、不可变快照、Secret 注入/轮换/脱敏和启动校验 |
 | DATA-CTR-001 | 标准数据 DTO、JSON/OpenAPI、字段缺失语义 | Data | Quant、Researchflow、Research（适用范围）、Server、WebUI | internal/marketdata/httpapi/openapi.yaml；doc/api/contracts/数据层API清单.md（存在过期路径/认证描述） | OpenAPI 1.1.0；字段级映射未形成完整基线 | `pending_evidence` | 公开 DTO 的字段存在/缺失/null/零值/required 语义映射不完整；DragonTiger DTO 仍暴露 DEC-027 明确禁止的 Provider 原始金额/单位字段；API 清单仍引用旧 OpenAPI 路径和旧浏览器 Key 模型 |
 | DATA-CTR-002 | 行情单位、复权、交易日和时间口径 | Data | Quant、Researchflow、Research、Server | doc/api/contracts/数据质量与状态契约.md；internal/marketdata/httpapi/openapi.yaml | 领域规则版本未登记 | `pending_evidence` | 通用单位/质量/复权/PIT 原则已有；Quote/DailyBar/Index/Financial 等字段到 provider_time、available_at、fetched_at、normalized_at、system_observed_at 的映射及各数据域单位适用表仍不完整 |
@@ -734,8 +734,8 @@ INT-CTR-001 是 43 个正式 CTR 之一，覆盖 Quant、Research、Researchflow
 
 | 状态 | 数量 | 含义 |
 |---|---:|---|
-| freeze-ready | 12 | GOV-CTR-001～006、PLAT-CTR-001～005、LLM-CTR-003；公共规则、错误投影、Request Context、Security、Diagnostics 与 HTTP Client 定义完整，可提交项目负责人确认冻结 |
-| pending-evidence | 29 | 公开契约定义/Schema/权威映射仍有缺口 |
+| freeze-ready | 13 | GOV-CTR-001～006、PLAT-CTR-001～006、LLM-CTR-003；公共规则、错误投影、Request Context、Security、Diagnostics、HTTP Client 与 Storage/Migration 定义完整，可提交项目负责人确认冻结 |
+| pending-evidence | 28 | 公开契约定义/Schema/权威映射仍有缺口 |
 | pending-decision | 0 | 本轮五项待决均已由 DEC-PLAT-002-028～032 裁决 |
 | blocked | 0 | 当前没有无法通过权威决议消解的公开定义冲突 |
 | not_applicable | 2 | DATA-CTR-003、NTF-CTR-003；仅模块内部 Provider/Channel SPI，不属于跨模块公开契约 |
@@ -757,7 +757,7 @@ INT-CTR-001 是 43 个正式 CTR 之一，覆盖 Quant、Research、Researchflow
 
 - 43 项正式 CTR 已全部完成本轮定义口径核定；不再保留“待审查模块/待全量盘点”的开放任务。
 - 当前未完成项为 30 项 pending-evidence；不再有 pending-decision。模块内部实现/测试/CI/部署事项仍不属于本轮契约定义冻结门禁。
-- GOV-CTR-001～006、PLAT-CTR-001～005 与 LLM-CTR-003 已达到 freeze-ready；下一阶段按剩余 30 项 pending-evidence CTR 增量收敛。不重新启动十模块全量扫描，不新增重复 CTR。
+- GOV-CTR-001～006、PLAT-CTR-001～006 与 LLM-CTR-003 已达到 freeze-ready；下一阶段按剩余 30 项 pending-evidence CTR 增量收敛。不重新启动十模块全量扫描，不新增重复 CTR。
 
 
 ## 25. 五项待决裁决完成记录（2026-11-11）
@@ -1016,4 +1016,34 @@ INT-CTR-001 是 43 个正式 CTR 之一，覆盖 Quant、Research、Researchflow
 - 未发现需要新增项目级语义决议的未决取舍；不修改 Platform 代码、模块消费者代码或其他分支。
 
 **结论：PLAT-CTR-005 由 `pending_evidence` 调整为 `freeze-ready`，契约版本 1.0.0。**
+
+
+
+## 41. PLAT-CTR-006 Storage 与 Migration Runner 契约定义收敛（2026-11-11）
+
+### 41.1 权威定义与审计基线
+
+- 新增唯一项目级规则文件：`doc/contract/rules/PLAT-CTR-006-Storage与Migration契约.md`，版本 1.0.0。
+- 核对来源：`doc/platform/05-HTTP存储与异步任务设计.md` 第2～4节、`doc/platform/08-公共平台契约规范.md` 第9节、Platform 剩余任务责任文档。
+- 对照代码基线：`origin/integration @ b6dfc85ba214fe16268c8cba780641a8bfe15086`；核对 `internal/platform/storage/storage.go` 和 `internal/server/migration/registry.go`。
+- 本契约只定义 Platform `internal/platform/storage` 的纯 InProcess Go API；JSON Schema 不适用。Server Registry 和领域 Repository 不属于本契约。
+
+### 41.2 定义收敛
+
+已明确并版本化：
+1. SQLConfig、OpenSQL/PingSQL 与 OpenRedis/PingRedis 的输入、返回、默认值、上限、初始 Ping 和资源所有权。
+2. Migration 输入结构、namespace 字符集/长度、Version 唯一性、Description/Statements 限制、SQL checksum 算法及不可变规则。
+3. ApplyMigrations 显式执行、单 namespace advisory lock、History 状态、顺序前缀、checksum 漂移、DDL 非事务性和失败恢复语义。
+4. 锁获取/释放结果不确定时丢弃物理连接；History 状态更新必须恰好影响一行。
+5. Ready/Shutdown 分层：Platform 只负责连接初始 Ping 与单次 Migration 执行；Server 负责跨 namespace 注册、全局 Ready、Worker 停止和资源关闭。
+6. 明确不提供通用 Repository、ORM、自动发现 Migration 或分布式 Migration 编排。
+
+### 41.3 冻结门禁判断
+
+- Platform 连接/Runner、领域 Repository/Schema/Migration 内容、Server 注册/执行三方职责边界明确。
+- API、版本、默认值/上限、History 状态机、错误语义、资源生命周期及失败恢复均有唯一强类型/文字权威定义。
+- 真实 MariaDB/Redis 测试、Server 注册完整性、部署 Migration 执行和全局 Ready/Shutdown 验收均属于实现符合性，不阻断本轮契约定义冻结。
+- 未发现需要新增项目级语义决议的未决取舍；不修改 Platform/Server/领域业务代码或其他分支。
+
+**结论：PLAT-CTR-006 由 `pending_evidence` 调整为 `freeze-ready`，契约版本 1.0.0。**
 
