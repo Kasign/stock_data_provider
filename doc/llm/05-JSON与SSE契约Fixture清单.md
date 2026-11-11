@@ -3,7 +3,7 @@
 - 归属任务：LLM-002-F
 - 对应协议：OpenAI Responses
 - 日期：2026-11-05
-- 状态：Fixture 设计基线、首批 JSON/SSE Golden 文件及 Mapper/Parser/HTTP Adapter/纯 SSE Parser 单测代码已存在；Golden/单测执行证据仍缺失，对应 LLM-CTR-001～003 当前为 pending_evidence；不代表真实模型能力证明。
+- 状态：JSON/SSE Golden 文件及 Mapper/Parser/HTTP Adapter/纯 SSE Parser 单测代码已存在；LLM-CTR-001～003 的项目级定义状态为 frozen（L1），但本分支包级测试尚无成功执行证据，真实 Gateway/模型能力也未验收。Fixture 通过不代表真实模型能力证明。
 
 ## 1. Fixture 原则
 
