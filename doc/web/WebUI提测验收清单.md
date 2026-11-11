@@ -1,10 +1,12 @@
 # WebUI 功能提测与集中验收清单
 
-更新日期：2026-11-09
-目标分支：feat/webui-market-data-console
+更新日期：2026-11-11
+历史验收分支：`feat/webui-market-data-console`（HEAD `917b30dddae41e40d0656a38560940b5b40a3e16` 已并入 integration 历史）。当前聚合基线：`integration` HEAD `92f91663426b266647a0a56e3a6dd63bc4c0fbfa`。
 验收策略：先完成页面和接口闭环开发，再集中进行一次完整浏览器验收；开发期间不反复进行零碎浏览器检查。
 
 > 本文只记录验收项与测试证据；总体任务顺序和当前进度统一以 [WebUI 整体规划](./Web整体规划.md) 为准。文中历史“后续开发顺序”仅作当时决策记录，不再作为当前排期。
+
+> 本清单中所有 Browser Smoke、WebUI Checks 和人工验收结果均绑定其记录的历史 SHA。由于当前 integration HEAD 尚未在本清单中完成对应复验，不得将历史通过结果直接作为当前聚合基线的验收结论。
 
 ## 1. 本批次范围
 

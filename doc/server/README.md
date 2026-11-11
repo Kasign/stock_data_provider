@@ -1,6 +1,6 @@
 # Server 层实施规划
 
-> 文档状态：实施规划（部分跨模块契约待冻结）
+> 文档状态：实施规划（项目级 L1 契约已冻结；Server 的模块装配、消费者符合性和真实运行验收仍按任务证据推进）
 > 适用代码分支：`feat/research-analysis-flow-native-go`
 > 文档目录：`doc/server/`
 > 代码范围：Server 运行入口、应用装配、HTTP Transport、Worker 生命周期、Migration 汇总、事件连接和运行诊断。
@@ -97,7 +97,7 @@ Platform 已在 internal/platform/httpclient 提供 Client.OpenStream / BoundDoe
 2. 所有 Config 在 Bootstrap 读取并校验，启动后作为不可变快照；模块只接收自己的配置和所需 Secret，不自行散落读取环境变量。
 3. 共享资源由 Server 创建并拥有；模块借用资源，不得提前关闭；关闭顺序必须保证消费者先于资源提供方停止。
 4. Server 只注册模块已经公开且可构造的 Port、Handler、Worker、Migration 和 Check；模块入口未就绪时保持阻塞，不写空 Registry 或虚构构造函数。
-5. 项目契约目录仍标记 pending_evidence 的项目，不因 Platform 包级实现或 Server 局部适配而自行标记 frozen；消费者证据由对应模块和组合集成验收补齐。
+5. 项目级 CTR 状态只以 PLAT-002 登记簿为准；已 `frozen` 的项目级语义必须按定义实现，但不代表消费者证据齐备。`deferred` 项不得作为已发布接口使用；消费者证据由对应模块和组合集成验收补齐。
 
 ## 2. 代码目录与文档目录
 
@@ -439,7 +439,7 @@ flowchart TD
   K --> L[SRV-012 旧链路退役]
 ```
 
-这是逻辑依赖图，不要求所有任务串行执行。各业务模块可以并行实现；Server 在公开接口达到可接入状态后逐步装配。跨模块契约未冻结的任务保持待契约，不得用临时私有接口绕过。
+这是逻辑依赖图，不要求所有任务串行执行。各业务模块可以并行实现；Server 按已冻结的公开契约逐步装配。项目级 `deferred` 项及尚未形成公开定义的 Server 接口保持待契约，不得用临时私有接口绕过。
 
 ## 12. 当前代码基线与迁移映射
 
@@ -869,7 +869,7 @@ Server 层完成不是“服务能够启动”这么简单。至少同时满足�
 - Server 的 internal/server/runtime.Lifecycle 已统一组件注册、顺序启动、逆序停止和失败回滚；旧 Analysis Worker 已接入。HTTP Server 仍由 Bootstrap 单独启动/关闭，尚未形成完整统一生命周期。
 - Server Migration Registry 已注册 News、Research、Notification 三个模块的 Migration；Migration 内容仍归模块，Server 只汇总调用 Platform Runner。
 - Platform 流式 HTTP A1 已有 OpenStream、Body 生命周期、并发额度、超时/字节限制、Fault 和统计能力及包级测试证据。A2（LLM 真实消费者接入）和 A3（生产网络/Secret/资源限制验收）仍是独立门禁。
-- Platform 当前本地公共原语已达到其文档所述交付基线；PLAT-002 的项目级契约冻结和消费者证据仍不能由 Platform 单方面宣布完成。公共包 CI 成功不等于项目级契约 frozen。
+- Platform 当前本地公共原语达到其文档所述交付基线；项目级 PLAT-CTR-001～007 已由 PLAT-002 登记簿正式登记为 `frozen`。这不代表消费者 A2 或生产部署 A3 已完成；公共包 CI 与消费者/生产验收仍分别记录。
 
 #### 12.13.2 Server 责任拆分为可执行工作包
 
