@@ -1,6 +1,6 @@
 # Market Data 模块化单体迁移计划与进度
 
-- 维护分支：`feat/full-go-data-providers-api-switch`
+- 历史实施分支：`feat/full-go-data-providers-api-switch`（HEAD `d75ddbe1eb4fac74ca1c15d9be153af1a8184517` 已并入 `integration` 历史）；当前聚合代码基线以 `integration` HEAD 为准。
 - 迁移决策：采用 Root Server 同进程模块化单体
 - 方案依据：`doc/整体任务规划/04-架构方案/Market Data并入Root Server模块化单体调整方案.md`
 - 总体规划：`doc/整体任务规划/01-项目总览/整体任务规划总览.md`
@@ -8,9 +8,66 @@
 - 本记录建立时的代码基线：`d8595f408337f62be3697aac661ba1570fdd3667`
 - 最近一次 M0 审计基线：`9687337743ff5ad8b5b81209831d43689693ae47`
 - 最近一次代码基线：`da62740bd05fd75a8d07290aac930a62ea27cda6`（Provider 能力/出站装配一致性复核前的当前分支基线；随后提交以 GitHub HEAD 为准）
-- 当前实施状态：`M1_completed / M2_completed / M3_in_progress / M4_in_progress`；M3 的 Data 侧进程内路由准备已完成，Root Server 实际装配仍待 Server 组合根完成；M4 的 Data 侧 borrowed DB、go-redis Adapter、Provider 受控出口注入端口和严格依赖校验已具备，Root 侧资源创建/注入、TCP BoundDialer、配置一致性与统一生命周期仍待完成。
+- 最近一次专项状态记录（2026-11-10）：M1/M2 Data 侧代码与专项验收已完成；M3 Root Server 实际装配、M4 共享资源/受控出站接入及兼容 DDL 迁移仍有未关闭项。该状态记录基于历史 Data 分支 SHA/CI，不能直接代表 2026-11-11 的 integration 现状；当前是否已由 Server/Platform 后续提交关闭，必须以 integration 当前代码、Server/Platform 文档和精确 SHA CI 重新核验。本文件未提供 2026-11-11 最新 M3/M4 复验，因此不宣称迁移整体完成。
 
 > 本文记录 Data 从独立 Go Module/服务迁入 Root Server 根 Go Module、同进程运行的实施计划和进度。若本文与上述架构决策文档冲突，以架构决策文档为准；公共平台及 DATA 契约以冻结契约文档为准。本文不重新定义契约。
+
+## 历史迁移状态收敛复核（2026-11-10，代码验证基线：`d7ba8b127a997432e547ce5740057b6390bce21f`；修复提交：`960a51a1ffeb1cc56671457bb18a7883cf5cbaea`）
+
+本节覆盖当前分支最新可核验状态。历史日期记录只保留为历史证据，不覆盖本节结论。
+
+| 阶段 | 当前结论 | 已完成范围 | 未关闭原因 |
+|---|---|---|---|
+| M0 | 审计主体已收敛，外部证据未齐 | M0-A 参数核对、M0-B Provider 出站行为审计完成 | M0-C 仍缺脱敏生产 DDL；M0-D 全仓门禁仍受其他模块影响 |
+| M1 | `completed` | Data 已归入根 Go Module；根依赖和目录迁移已实施 | Data 专项 gofmt、单测、race、vet 全部通过（Run `42808664417`，代码 SHA `960a51a1`） |
+| M2 | `completed` | Bootstrap、Application Port、InProcess Handler、Diagnostics、Migration Runner、Module 生命周期入口均已实现 | Data 专项 gofmt、单测、race、vet 全部通过（Run `42808664417`，代码 SHA `960a51a1`） |
+| M3 | `data_side_ready_root_pending` | Data 提供 Application、InProcessHandler、Diagnostics、MigrationRunner 和生命周期入口 | Root Server 尚未完成 Module 构造、路由挂载、Analysis InProcess 注入及 readiness 集成 |
+| M4 | `data_side_ready_root_pending_with_platform_blocker` | borrowed DB、go-redis Cache Adapter、HTTP/TCP 注入端口、严格出站依赖校验已具备 | Root 尚未创建并注入共享资源/BoundDoer；TCP BoundDialer 依赖 Platform；兼容 DDL 尚未纳入统一迁移锁 |
+| M5 | `pending` | 无可确认的部署切换完成证据 | Compose/Nginx/WebUI 凭据与容器切换尚未验收 |
+| M6 | `pending` | 部分 Data 集成验证已有证据 | 需要 Root 集成、生产 Schema、回滚和端到端验收 |
+
+### 最新 CI 证据
+
+Go Test Suite Run `42807835415`，测试代码 HEAD：`d7ba8b127a997432e547ce5740057b6390bce21f`：
+
+- Data gofmt：success。
+- Data 单元测试：success。
+- Data race detector：success。
+- Data go vet：在原代码 SHA 上失败，原因是 `fundamental_field_diagnostic.go` 与 `quote_field_diagnostic.go` 各有一处不可达代码；已由提交 `960a51a1ffeb1cc56671457bb18a7883cf5cbaea` 清理。
+- 修复后 Go Test Suite Run `42808664417`（代码 SHA `960a51a1`）：Data gofmt、单元测试、race detector、go vet 全部 success；Market Data MariaDB Migration/PIT Job `129804349136` success。M1/M2 的 Data 专项代码验收关闭。
+- Market Data MariaDB Migration/PIT Job `129801600973`：success；包含 Migration/PIT、DataService 日 K 回退、PIT revision 回退、Probe HTTP/MariaDB 端到端。
+- Root `Test .` Job `129801600609`：failure 于全仓 gofmt，涉及 `internal/adapters/**`、`internal/notification/**`；不属于 Data 修改范围。
+- News MariaDB Job `129801599671`：failure，编译错误为 `internal/news/app/collect_source.go:224:28: undefined: sourceCollectionResultSeal`；属于 News 模块，不在本分支修复。
+- go-core Job `129801600691`：success。
+- 同一代码 SHA 的 Platform Go checks、Live Provider probe、Quant module validation：success；WebUI checks failure 属于独立模块，不在本分支处理。
+- Compose/Docker 构建 Job 在该次 Run 中 skipped，不能沿用历史成功结果代表当前 SHA 构建通过。
+
+**当前 CI 判定：M1/M2 的 Data 专项门禁已通过（gofmt、单测、race、vet、MariaDB/PIT）。** Root 全仓 `Test .` 仍因其他模块 gofmt 失败；News MariaDB Job 仍因 News 编译错误失败；两者不改变 Data 专项门禁结论，也不在本分支修复。Compose/Docker 构建 Job 为 skipped，不能据此宣称部署镜像验收通过。MariaDB/PIT 集成成功不能替代 Root 装配、迁移锁和生产部署验收；Live Provider workflow 外层成功也不等于每个 Provider/能力/证券/日期/复权口径均完成真实数据验收。
+
+### Root 当前代码核验（2026-11-10，分支 HEAD：`5695d5454343b1e95a036b4940ece323bb9aff37`）
+
+只读核验了当前分支的 Root 组合根与 Data Module 公开入口，结论如下：
+
+| 核验点 | 当前代码事实 | 对迁移阶段的影响 |
+|---|---|---|
+| Data Module 构造与 Application Port | `internal/marketdata/bootstrap/module.go` 提供 `New`、`Application()`、`InProcessHandler()`、`Diagnostics()`、`MigrationRunner()` | Data 侧接入入口已具备，不再增加第二套 Data Bootstrap |
+| Root 创建 Data Module | `internal/server/bootstrap/bootstrap.go` 仍调用旧 `internal/adapters/marketdata.LoadConfig` 和 `service.NewRunnerWithMarketDataStores`；未构造 `internal/marketdata/bootstrap.Module` | M3 未完成，需 Server 组合根接入 |
+| Root 挂载 Data HTTP Adapter | `internal/server/bootstrap/router.go` 当前只注册 Health/Diagnostics 与旧 Analysis API，没有 `/market-api` 路由 | M3 未完成 |
+| Data Migration 注册 | `newMigrationRegistry()` 当前注册 News、Research、Notification，未注册 Data 的 `MigrationRunner` | M3/M4 未完成；Data Migration 仍未由 Root 统一调度 |
+| Diagnostics/readiness | Root 当前诊断服务以共享存储和现有 Migration Registry 为基础，未注入 Data Module Diagnostics | M3 未完成 |
+| Module 生命周期 | Data Module 有 Start/Stop/Close，但 Root Lifecycle 尚未注册 Data Module | M3/M4 未完成 |
+
+**本次核验决议：** 上述缺口均位于 `internal/server/bootstrap/**` 的 Root 组合根范围，不属于当前 Data 允许修改范围。Data 侧不再通过新增 Adapter、重复路由或复制 Migration Runner 来绕过 Root 缺口。下一步应由 Server Owner 在其分支完成 Module 构造、依赖注入、路由、Migration、Diagnostics/readiness 和生命周期注册；Data 分支只提供已存在的公开入口并配合验收。
+
+### 迁移关闭边界
+
+1. M1/M2 的代码实现不再重复审查或重复拆分；仅针对当前 Data CI 明确失败项修复，并在同一 Data 专项门禁中验证。
+2. M3/M4 的 Data 侧接口准备不再扩展抽象。实际 Root 装配属于 Server 组合根工作；Platform TCP BoundDialer 与统一迁移锁属于 Platform 能力，不在 Data 分支复制实现。
+3. Data Store 的 `ensureNonUniqueHistoryIndex`、`ensureColumn` 仍在统一 Migration Runner 锁/版本/checksum 范围之外，保持 `blocked_by_platform_migration_runner`，不可宣称多实例迁移安全。
+4. M0-C 生产 DDL、M5 部署切换和 M6 生产验收分别保留为独立关闭条件，不与 M1/M2 的代码归并混为一谈。
+5. 在当前“只修改 Data 模块和 Data 迁移文档”的范围内，能独立推进的任务以修复 Data 专项 CI 明确失败项为主；Root/Platform/其他模块的工作只登记依赖，不代为修改。
+
+---
 
 ## 当前 Review 与执行收敛决议（2026-11-09）
 
@@ -238,16 +295,16 @@ internal/
 
 ### M1：Go Module 归并
 
-状态：`in_progress`
+状态：`implementation_completed_validation_pending`
 
 工作项：
 
-- [ ] 将 Data 源码和配套测试迁入根 Module 的 Market Data 领域目录。
-- [ ] 统一 Go 版本和依赖版本；以依赖兼容和 CI 结果确定最终版本，不盲目降级。
-- [ ] 合并根 `go.mod/go.sum`，清理嵌套 Module 依赖声明。
-- [ ] 调整 Docker Builder、CI、开发脚本和相关文档的 Module 路径。
-- [ ] 暂时保留 Data 原有 HTTP API 和行为；不在此阶段改变认证与业务语义。
-- [ ] 保留独立 Data 命令的兼容构建能力，直到 M2/M3 完成。
+- [x] 将 Data 源码和配套测试迁入根 Module 的 Market Data 领域目录.
+- [x] 统一 Go 版本和依赖版本；以依赖兼容和 CI 结果确定最终版本，不盲目降级.
+- [x] 合并根 `go.mod/go.sum`，清理嵌套 Module 依赖声明.
+- [x] 调整 Docker Builder、CI、开发脚本和相关文档的 Module 路径.
+- [x] 暂时保留 Data 原有 HTTP API 和行为；不在此阶段改变认证与业务语义.
+- [x] 保留独立 Data 命令的兼容构建能力，直到 M2/M3 完成.
 
 验收：
 
@@ -259,17 +316,17 @@ internal/
 
 ### M2：Data Application Port 与 Bootstrap 提取
 
-状态：`in_progress`
+状态：`implementation_completed_validation_pending`
 
 工作项：
 
-- [ ] 从 Data main 中提取模块构造装配，main 不再独占 Provider/Repository/Worker 装配逻辑。
-- [ ] 提供强类型 Application Port，供 Server/Analysis 进程内调用。
-- [ ] HTTP Handler 只依赖 Application Port，不将 HTTP DTO 作为领域共享类型。
-- [ ] 明确模块返回的 Application、HTTP Handler、Diagnostics、Migration Runner 和生命周期句柄。
-- [ ] Provider、Repository、Cache、Worker 的构造与 Start/Stop 有明确所有权。
-- [ ] 独立兼容入口（如保留）与 Root Server 使用同一套 Module Bootstrap。
-- [ ] 初始化失败时逆序释放已创建资源；Start/Stop 支持取消、超时和重复调用保护。
+- [x] 从 Data main 中提取模块构造装配，main 不再独占 Provider/Repository/Worker 装配逻辑。
+- [x] 提供强类型 Application Port，供 Server/Analysis 进程内调用。
+- [x] HTTP Handler 只依赖 Application Port，不将 HTTP DTO 作为领域共享类型。
+- [x] 明确模块返回的 Application、HTTP Handler、Diagnostics、Migration Runner 和生命周期句柄。
+- [x] Provider、Repository、Cache、Worker 的构造与 Start/Stop 有明确所有权。
+- [x] 独立兼容入口（如保留）与 Root Server 使用同一套 Module Bootstrap。
+- [x] 初始化失败时逆序释放已创建资源；Start/Stop 支持取消、超时和重复调用保护。
 
 验收：
 

@@ -10,23 +10,31 @@ import (
 )
 
 type authorizationFingerprintVerifierStub struct {
-	err   error
-	calls int
+	err        error
+	calls      int
+	afterCheck func()
 }
 
 func (s *authorizationFingerprintVerifierStub) VerifyNewsAuthorizationFingerprint(context.Context, domain.NewsAuthorizationBinding) error {
 	s.calls++
+	if s.afterCheck != nil {
+		s.afterCheck()
+	}
 	return s.err
 }
 
 type currentAuthorizationPolicyResolverStub struct {
-	set   domain.CurrentAuthorizationPolicySet
-	err   error
-	calls int
+	set          domain.CurrentAuthorizationPolicySet
+	err          error
+	calls        int
+	afterResolve func()
 }
 
 func (s *currentAuthorizationPolicyResolverStub) ResolveCurrentNewsAuthorizationPolicies(context.Context, domain.NewsAuthorizationBinding) (domain.CurrentAuthorizationPolicySet, error) {
 	s.calls++
+	if s.afterResolve != nil {
+		s.afterResolve()
+	}
 	return s.set, s.err
 }
 
@@ -181,5 +189,43 @@ func TestEvaluateNewsEvidenceReadAuthorizationRejectsConditionalBeforeExternalCh
 		binding.CallerRef, binding.PurposeCode, binding.RequestedContentLevel)
 	if !errors.Is(err, ErrNewsCurrentPolicyDenied) || verifier.calls != 0 || resolver.calls != 0 {
 		t.Fatalf("err=%v verifier=%d resolver=%d", err, verifier.calls, resolver.calls)
+	}
+}
+
+func TestEvaluateNewsEvidenceReadAuthorizationStopsAfterContextCancellation(t *testing.T) {
+	cases := []struct {
+		name     string
+		cancelAt string
+	}{
+		{name: "fingerprint verifier returned", cancelAt: "verifier"},
+		{name: "current policy resolver returned", cancelAt: "resolver"},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			binding := allowedAuthorizationBinding(t)
+			observation, version := appAuthorizationEvidence()
+			now := time.Date(2026, 11, 9, 10, 0, 0, 0, time.UTC)
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			verifier := &authorizationFingerprintVerifierStub{}
+			resolver := &currentAuthorizationPolicyResolverStub{set: currentAuthorizationPolicySet(binding, now)}
+			if test.cancelAt == "verifier" {
+				verifier.afterCheck = cancel
+			} else {
+				resolver.afterResolve = cancel
+			}
+			usecase, err := NewEvaluateNewsEvidenceReadAuthorization(verifier, resolver)
+			if err != nil {
+				t.Fatal(err)
+			}
+			usecase.now = func() time.Time { return now }
+			err = usecase.Execute(ctx, binding, observation, version, binding.CallerRef, binding.PurposeCode, binding.RequestedContentLevel)
+			if !errors.Is(err, context.Canceled) {
+				t.Fatalf("Execute() error = %v, want context.Canceled", err)
+			}
+			if test.cancelAt == "verifier" && resolver.calls != 0 {
+				t.Fatalf("resolver called after verifier cancellation: %d", resolver.calls)
+			}
+		})
 	}
 }

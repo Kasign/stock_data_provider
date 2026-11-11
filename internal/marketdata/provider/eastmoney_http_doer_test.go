@@ -37,8 +37,8 @@ func TestEastmoneyHTTPDoersRouteByOrigin(t *testing.T) {
 		"https://push2his.example.test/api/kline",
 		"https://datacenter.example.test/api/basic", "",
 	).WithHTTPDoers(map[string]HTTPDoer{
-		"https://push2.example.test": quote,
-		"https://push2his.example.test": kline,
+		"https://push2.example.test":      quote,
+		"https://push2his.example.test":   kline,
 		"https://datacenter.example.test": stockBasic,
 	})
 
@@ -91,4 +91,3 @@ func TestEastmoneyWithHTTPDoersCopiesMap(t *testing.T) {
 		t.Fatalf("injected executor map should be copied: %v", err)
 	}
 }
-

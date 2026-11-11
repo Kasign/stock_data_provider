@@ -2,7 +2,6 @@ package provider
 
 import (
 	"context"
-	"encoding/json"
 	"strings"
 
 	"example.com/stock-analysis-flow/internal/marketdata/validation"
@@ -17,30 +16,10 @@ func addProviderFieldParseIssue(ctx context.Context, symbol, field, providerFiel
 		Stage: validation.StageParse, Field: field, ProviderField: providerField,
 		Code: code, Expected: expected, ActualType: actualType,
 		ActualPreview: providerFieldIssuePreview(preview), Severity: validation.SeverityWarning,
-		Message: "fundamentals provider field is missing or invalid",
+		Message:  "fundamentals provider field is missing or invalid",
 		RowIndex: &row, Symbol: symbol,
 	})
 	validation.AddContextReport(ctx, report)
-}
-
-func providerJSONValueType(raw json.RawMessage) string {
-	value := strings.TrimSpace(string(raw))
-	switch {
-	case value == "":
-		return "missing"
-	case value == "null":
-		return "null"
-	case strings.HasPrefix(value, "{"):
-		return "object"
-	case strings.HasPrefix(value, "["):
-		return "array"
-	case value == "true" || value == "false":
-		return "boolean"
-	case strings.HasPrefix(value, "\""):
-		return "string"
-	default:
-		return "number_or_invalid"
-	}
 }
 
 func providerFieldIssuePreview(value string) string {
@@ -50,8 +29,5 @@ func providerFieldIssuePreview(value string) string {
 		}
 		return r
 	}, value)
-	if len(value) > 160 {
-		return value[:160]
-	}
-	return value
+	return truncateDiagnosticPreview(value, 160)
 }

@@ -1,5 +1,7 @@
 # 五模块公共契约一致性 Review 记录
 
+> **历史记录与当前权威状态（2026-11-11）：** 本文是 2026-11-06 的阶段性一致性 Review。正文中的 `pending_evidence`、GOV-004 `NO-GO`、待补 Schema/Golden/Contract Test 等均为当时状态快照，不代表当前项目级契约状态。当前 PLAT-002 已进入 `L1_contracts_frozen`；项目级契约状态、冻结范围和后续 L2/L3 证据门禁以 [`doc/contract/PLAT-002-项目级契约冻结登记簿.md`](../../contract/PLAT-002-项目级契约冻结登记簿.md) 为唯一权威来源。L1 冻结不代表实现符合性或生产验收通过。
+
 > **架构修订提示（2026-11-06）：** 本记录中“Data 通过独立 HTTP/OpenAPI Module 接入”的结论反映当时的迁移前代码边界，已被方案 B 取代。当前目标是 Data 迁入根 Go Module 的 `internal/marketdata`，通过 Application Port 同进程调用；本文件保留历史 Review 结论，不再作为 Data 部署/Module 边界的现行依据。现行依据见《Market Data并入Root Server模块化单体调整方案》和《跨模块契约目录与冻结状态》。
 
 - 所属治理：GOV-004
@@ -49,19 +51,19 @@ request_id 标识一次调用；correlation_id 关联跨模块链路；event_id 
 
 本节原始 Review 表格曾按模块列出待确认项，属于 2026-11-06 初始评审时点的过程记录，不再作为当前契约 Owner、决策状态或个人签字门槛。项目不存在独立模块 Owner；跨模块语义由项目统一决策方裁定，模块责任角色提供实现和测试证据。
 
-当前唯一有效的契约编号、生产方/消费者、权威定义位置、状态、证据缺口及阻断范围，以[跨模块契约目录与冻结状态](./跨模块契约目录与冻结状态.md)为准。本轮未生成正式 JSON Schema、Go DTO、Mapper 或契约测试；GOV-004 继续 NO-GO。
+当前唯一有效的契约编号、生产方/消费者、权威定义位置、状态、冻结范围及后续证据门禁，以[PLAT-002 项目级契约冻结登记簿](../../contract/PLAT-002-项目级契约冻结登记簿.md)为准。当时未生成正式 JSON Schema、Go DTO、Mapper 或契约测试；当时的 GOV-004 NO-GO 结论已由后续 PLAT-002 L1 冻结登记取代。
 
 **结论：规划文档间主要语义差异已完成校准；后续工作是按目录补齐正式 JSON Schema、Golden、Go DTO 和契约测试，不等待个人 Owner 签字。**
 
 
 ## 6. Researchflow 状态机项目决议更新（2026-11-06）
 
-FLOW-CTR-001/002（历史别名 CONTRACT-006/007）不再等待模块 Owner 签字，已由项目统一决策方形成最终设计决议；契约状态仍为 pending_evidence。新增 Stage.retry_wait、有限自动重试、硬风险门禁/actionability、queued 取消与 Worker claim CAS、deadline 对未启动阶段处理、Run 终态不变量及副作用幂等边界。详细内容见 [Researchflow 最终决议](../../researchflow/03-CONTRACT-006与007最终决议.md)。本轮只关闭设计决策，不代表实现或测试通过；其他模块决议仍按项目统一决策流程逐项完成。
+FLOW-CTR-001/002（历史别名 CONTRACT-006/007）不再等待模块 Owner 签字，已由项目统一决策方形成最终设计决议；当时契约状态为 pending_evidence（历史快照；当前状态以 PLAT-002 登记簿为准）。新增 Stage.retry_wait、有限自动重试、硬风险门禁/actionability、queued 取消与 Worker claim CAS、deadline 对未启动阶段处理、Run 终态不变量及副作用幂等边界。详细内容见 [Researchflow 最终决议](../../researchflow/03-CONTRACT-006与007最终决议.md)。本轮只关闭设计决策，不代表实现或测试通过；其他模块决议仍按项目统一决策流程逐项完成。
 
 
 ## 7. Researchflow FLOW-CTR-001/002 当前有效决议（历史别名 CONTRACT-006/007，2026-11-06）
 
-本节优先于第 5 节历史表格中 Researchflow“待确认”的状态。FLOW-CTR-001/002（历史别名 CONTRACT-006/007）已由项目统一决策方关闭设计决策，契约状态仍为 pending_evidence，不再等待模块 Owner 签字。当前权威文本为 [Researchflow 状态机最终决议](../../researchflow/03-CONTRACT-006与007最终决议.md)。本轮补充 CAS 线性化、取消与 Worker claim 竞态、deadline 与 retry 竞争、Attempt 停止确认/fencing、容量原子预留和 actionability 优先级。FLOW-CTR-001～004 的实现与自动化测试仍需按项目级目录推进。
+本节优先于第 5 节历史表格中 Researchflow“待确认”的状态；本节状态同样属于 2026-11-06 历史快照，当前以 PLAT-002 登记簿为准。FLOW-CTR-001/002（历史别名 CONTRACT-006/007）已由项目统一决策方关闭设计决策，契约状态仍为 pending_evidence，不再等待模块 Owner 签字。当前权威文本为 [Researchflow 状态机最终决议](../../researchflow/03-CONTRACT-006与007最终决议.md)。本轮补充 CAS 线性化、取消与 Worker claim 竞态、deadline 与 retry 竞争、Attempt 停止确认/fencing、容量原子预留和 actionability 优先级。FLOW-CTR-001～004 的实现与自动化测试仍需按项目级目录推进。
 
 ## 8. 第二轮实现前置契约复核（2026-11-06）
 
@@ -76,6 +78,6 @@ FLOW-CTR-001/002（历史别名 CONTRACT-006/007）不再等待模块 Owner 签�
 - Evidence `authorization_ref`、派生引用链和来源 Owner 当前授权复核已有语义定义；后续主要补真实读取路径和撤销/过期竞态证据。
 - Notification Payload 已明确使用 RFC 8785 JCS + SHA-256；本轮未发现 Envelope 原始字节数、Payload 字节数和 JSON 嵌套深度的统一入口上限，列为 P0 待决策/实现项。
 
-新增待补实现约束包括：命令 Request Fingerprint 的统一 JCS 规范、LLM Clock/Deadline 注入与传播、Notification DeliveryPlan 持久化前 Validate + VerifyFingerprint 双重校验，以及上述 Envelope 输入资源上限。上述内容属于 Review 发现/建议，不自动改变《跨模块契约目录与冻结状态》的 accepted/pending_evidence 状态。
+新增待补实现约束包括：命令 Request Fingerprint 的统一 JCS 规范、LLM Clock/Deadline 注入与传播、Notification DeliveryPlan 持久化前 Validate + VerifyFingerprint 双重校验，以及上述 Envelope 输入资源上限。上述内容属于当时 Review 发现/建议，不自动改变项目级契约状态；当前状态及延期范围以 PLAT-002 登记簿为准。
 
 本轮只修改规划分支文档，不读取或修改五个业务分支代码；不代表任何模块 CI、Go 测试或跨模块集成验收已通过。

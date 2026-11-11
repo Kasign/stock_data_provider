@@ -17,11 +17,15 @@ type evidenceSnapshotRepositoryStub struct {
 	deleteLimit int
 	deleteCalls int
 	afterDelete func()
+	afterCreate func()
 }
 
 func (s *evidenceSnapshotRepositoryStub) CreateEvidenceSnapshot(_ context.Context, snapshot EvidenceSnapshot) error {
 	s.calls++
 	s.created = snapshot
+	if s.afterCreate != nil {
+		s.afterCreate()
+	}
 	return nil
 }
 
@@ -63,6 +67,20 @@ func TestEvidenceSnapshotValidateAcceptsStableReferenceOnlySnapshot(t *testing.T
 	snapshot := validEvidenceSnapshot(time.Date(2026, 11, 6, 10, 0, 0, 0, time.UTC))
 	if err := snapshot.Validate(); err != nil {
 		t.Fatalf("Validate() error = %v", err)
+	}
+}
+
+func TestEvidenceSnapshotValidateAtRejectsExpiredSnapshot(t *testing.T) {
+	now := time.Date(2026, 11, 10, 10, 0, 0, 0, time.UTC)
+	snapshot := validEvidenceSnapshot(now.Add(-EvidenceSnapshotTTL))
+	if err := snapshot.ValidateAt(now.Add(-time.Nanosecond)); err != nil {
+		t.Fatalf("ValidateAt() immediately before expiry error = %v", err)
+	}
+	if err := snapshot.ValidateAt(now); !errors.Is(err, ErrInvalidEvidenceSnapshot) {
+		t.Fatalf("ValidateAt() at expiry error = %v, want ErrInvalidEvidenceSnapshot", err)
+	}
+	if err := snapshot.ValidateAt(now.Add(time.Nanosecond)); !errors.Is(err, ErrInvalidEvidenceSnapshot) {
+		t.Fatalf("ValidateAt() after expiry error = %v, want ErrInvalidEvidenceSnapshot", err)
 	}
 }
 
@@ -173,6 +191,60 @@ func TestEvidenceSnapshotPageAfterUsesExactStableSortPosition(t *testing.T) {
 	}
 }
 
+func TestEvidenceSnapshotPageAfterPaginatesEqualTimestampTiesWithoutGaps(t *testing.T) {
+	now := time.Date(2026, 11, 10, 9, 0, 0, 0, time.UTC)
+	observedAt := now.Add(-time.Minute)
+	snapshot := validEvidenceSnapshot(now)
+	snapshot.PageSize = 2
+	snapshot.Items = []EvidenceSnapshotItem{
+		{NewsID: "news-a", VersionID: "version-a", ObservationID: "observation-a", SystemObservedAt: observedAt},
+		{NewsID: "news-a", VersionID: "version-b", ObservationID: "observation-b", SystemObservedAt: observedAt},
+		{NewsID: "news-b", VersionID: "version-a", ObservationID: "observation-c", SystemObservedAt: observedAt},
+		{NewsID: "news-c", VersionID: "version-a", ObservationID: "observation-d", SystemObservedAt: observedAt},
+		{NewsID: "news-c", VersionID: "version-b", ObservationID: "observation-e", SystemObservedAt: observedAt},
+	}
+	if err := snapshot.Validate(); err != nil {
+		t.Fatalf("equal-timestamp snapshot must be valid: %v", err)
+	}
+
+	var position *EvidenceCursorPosition
+	var got []string
+	for pageNumber := 0; pageNumber < 3; pageNumber++ {
+		page, hasMore, err := snapshot.PageAfter(position)
+		if err != nil {
+			t.Fatalf("page %d: %v", pageNumber+1, err)
+		}
+		for _, item := range page {
+			got = append(got, item.NewsID+"/"+item.VersionID)
+		}
+		if hasMore {
+			if len(page) != snapshot.PageSize {
+				t.Fatalf("page %d hasMore=true with short page: %d", pageNumber+1, len(page))
+			}
+			last := page[len(page)-1]
+			position = &EvidenceCursorPosition{
+				SnapshotRef: snapshot.SnapshotRef, LastSystemObservedAt: last.SystemObservedAt,
+				LastNewsID: last.NewsID, LastVersionID: last.VersionID,
+			}
+		} else {
+			position = nil
+			break
+		}
+	}
+	want := []string{
+		"news-a/version-a", "news-a/version-b", "news-b/version-a",
+		"news-c/version-a", "news-c/version-b",
+	}
+	if len(got) != len(want) {
+		t.Fatalf("paginated item count=%d, want %d: %v", len(got), len(want), got)
+	}
+	for index := range want {
+		if got[index] != want[index] {
+			t.Fatalf("paginated order[%d]=%q, want %q; all=%v", index, got[index], want[index], got)
+		}
+	}
+}
+
 func TestSaveEvidenceSnapshotValidatesBeforePersistence(t *testing.T) {
 	repository := &evidenceSnapshotRepositoryStub{}
 	service, err := NewSaveEvidenceSnapshot(repository)
@@ -253,7 +325,7 @@ func TestEvidenceSnapshotRetentionCleanerHonorsCancellation(t *testing.T) {
 			t.Fatalf("repository calls=%d, want 0", repository.deleteCalls)
 		}
 	})
-	t.Run("canceled while repository is running", func(t *testing.T) {
+	t.Run("repository confirmed deletion wins over later cancellation", func(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 		repository := &evidenceSnapshotRepositoryStub{deleted: 2, afterDelete: cancel}
@@ -261,11 +333,47 @@ func TestEvidenceSnapshotRetentionCleanerHonorsCancellation(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if _, err := cleaner.Execute(ctx, now, 10); !errors.Is(err, context.Canceled) {
-			t.Fatalf("Execute() error=%v", err)
+		deleted, err := cleaner.Execute(ctx, now, 10)
+		if err != nil || deleted != 2 {
+			t.Fatalf("Execute() = (%d, %v), want (2, nil) after repository success", deleted, err)
 		}
 		if repository.deleteCalls != 1 {
 			t.Fatalf("repository calls=%d, want 1", repository.deleteCalls)
+		}
+	})
+}
+
+func TestSaveEvidenceSnapshotHonorsContextCancellation(t *testing.T) {
+	now := time.Now().UTC()
+	snapshot := validEvidenceSnapshot(now)
+	t.Run("already canceled does not call repository", func(t *testing.T) {
+		repository := &evidenceSnapshotRepositoryStub{}
+		service, err := NewSaveEvidenceSnapshot(repository)
+		if err != nil {
+			t.Fatal(err)
+		}
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		if err := service.Execute(ctx, snapshot); !errors.Is(err, context.Canceled) {
+			t.Fatalf("Execute() error=%v, want context.Canceled", err)
+		}
+		if repository.calls != 0 {
+			t.Fatalf("repository calls=%d, want 0", repository.calls)
+		}
+	})
+	t.Run("canceled while repository is running", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		repository := &evidenceSnapshotRepositoryStub{afterCreate: cancel}
+		service, err := NewSaveEvidenceSnapshot(repository)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := service.Execute(ctx, snapshot); !errors.Is(err, context.Canceled) {
+			t.Fatalf("Execute() error=%v, want context.Canceled", err)
+		}
+		if repository.calls != 1 {
+			t.Fatalf("repository calls=%d, want 1", repository.calls)
 		}
 	})
 }

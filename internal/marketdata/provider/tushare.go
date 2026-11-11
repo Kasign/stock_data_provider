@@ -234,9 +234,15 @@ func (p *Tushare) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endD
 		}
 		isoDate := tradeDate.Format("2006-01-02")
 		if isoDate < start.Format("2006-01-02") || isoDate > end.Format("2006-01-02") {
+			addProviderParseIssue(ctx, rowIndex, "trade_date", "trade_date", "date_out_of_requested_range",
+				start.Format("2006-01-02")+".."+end.Format("2006-01-02"), "string", isoDate,
+				"Tushare daily trade date is outside the requested range")
 			return nil, fmt.Errorf("Tushare row %d date %s is outside requested range", rowIndex, isoDate)
 		}
 		if _, duplicate := seenDates[isoDate]; duplicate {
+			addProviderParseIssue(ctx, rowIndex, "trade_date", "trade_date", "duplicate_trade_date",
+				"one daily bar per trade date", "string", isoDate,
+				"Tushare returned a duplicate daily trade date")
 			return nil, fmt.Errorf("Tushare returned duplicate trade date %s", isoDate)
 		}
 		seenDates[isoDate] = struct{}{}
@@ -279,6 +285,9 @@ func (p *Tushare) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endD
 		}
 		volume, err := normalize.HandsToShares(rawVolume)
 		if err != nil {
+			addProviderParseIssue(ctx, rowIndex, "volume", "vol", "normalization_error",
+				"non-negative integer number of hands convertible to shares", "number",
+				fmt.Sprintf("%g", rawVolume), "Tushare daily volume cannot be normalized from hands to shares")
 			return nil, fmt.Errorf("normalize Tushare volume on %s: %w", isoDate, err)
 		}
 

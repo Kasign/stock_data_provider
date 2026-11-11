@@ -87,3 +87,49 @@ func TestStockAnnouncementsEmptySourceRemainsUnknownAndDateRangeIsValidated(t *t
 		t.Fatal("reversed announcement date range must be rejected")
 	}
 }
+
+type announcementSourceIdentityProvider struct {
+	name     string
+	snapshot *model.StockAnnouncementSnapshot
+	calls    int
+}
+
+func (p *announcementSourceIdentityProvider) Name() string { return p.name }
+func (p *announcementSourceIdentityProvider) FetchStockAnnouncements(context.Context, string, string, string, int, int) (*model.StockAnnouncementSnapshot, error) {
+	p.calls++
+	return p.snapshot, nil
+}
+
+func unknownAnnouncementSnapshotForSource(source, startDate, endDate string) *model.StockAnnouncementSnapshot {
+	return &model.StockAnnouncementSnapshot{
+		Symbol: "600036.SH", StartDate: startDate, EndDate: endDate, Page: 1, PageSize: 20,
+		Total: 0, Pages: 0, Returned: 0, HasData: false, HasMore: false,
+		Items: []model.StockAnnouncement{}, Source: source, SourceVersion: "test-v1",
+		FetchedAt: time.Now().UTC(), QualityStatus: model.QualityUnknown,
+	}
+}
+
+func TestStockAnnouncementsRejectsMismatchedProviderSourceAndFallsBack(t *testing.T) {
+	tradeDate := time.Now().In(marketLocation()).Format("2006-01-02")
+	primary := &announcementSourceIdentityProvider{
+		name: "primary", snapshot: unknownAnnouncementSnapshotForSource("spoofed", tradeDate, tradeDate),
+	}
+	fallback := &announcementSourceIdentityProvider{
+		name: "eastmoney", snapshot: unknownAnnouncementSnapshotForSource("eastmoney", tradeDate, tradeDate),
+	}
+	svc := NewWithCapabilities([]provider.NamedProvider{primary, fallback}, nil, nil, cache.NewDisabled(), nil,
+		time.Second, time.Minute, 120, 2000,
+		ResilienceConfig{Retries: 0, CircuitFailureThreshold: 3, CircuitCooldown: time.Second}, nil)
+	svc.SetAnnouncementProviders([]provider.AnnouncementProvider{primary, fallback})
+
+	got, hit, err := svc.StockAnnouncements(context.Background(), "600036.SH", tradeDate, tradeDate, 1, 20)
+	if err != nil || hit {
+		t.Fatalf("StockAnnouncements hit=%v err=%v", hit, err)
+	}
+	if got == nil || got.Source != "eastmoney" || got.QualityStatus != model.QualityUnknown {
+		t.Fatalf("expected fallback unknown announcement snapshot, got %+v", got)
+	}
+	if primary.calls != 1 || fallback.calls != 1 {
+		t.Fatalf("mismatched source must be rejected and fallback called: primary=%d fallback=%d", primary.calls, fallback.calls)
+	}
+}

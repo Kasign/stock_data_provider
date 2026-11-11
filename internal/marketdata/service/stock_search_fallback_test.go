@@ -51,6 +51,28 @@ func populatedStockSearchForFallbackTest(source string) *model.StockSearchSnapsh
 	}
 }
 
+func TestStockSearchRejectsMismatchedSourceAndFallsBack(t *testing.T) {
+	firstSnapshot := populatedStockSearchForFallbackTest("tencent")
+	first := &stockSearchFallbackTestProvider{name: "eastmoney", snapshot: firstSnapshot}
+	second := &stockSearchFallbackTestProvider{name: "tencent", snapshot: populatedStockSearchForFallbackTest("tencent")}
+	svc := &DataService{stockSearchProviders: []provider.StockSearchProvider{first, second}}
+	got, err := svc.SearchStocks(context.Background(), "贵州茅台", 10)
+	if err != nil || got == nil || got.Source != "tencent" {
+		t.Fatalf("mismatched source must be rejected and fallback selected: got=%+v err=%v", got, err)
+	}
+}
+
+func TestStockSearchMissingSourceIsExplicitlyDegraded(t *testing.T) {
+	snapshot := populatedStockSearchForFallbackTest("")
+	p := &stockSearchFallbackTestProvider{name: "eastmoney", snapshot: snapshot}
+	svc := &DataService{stockSearchProviders: []provider.StockSearchProvider{p}}
+	got, err := svc.SearchStocks(context.Background(), "贵州茅台", 10)
+	if err != nil || got == nil || got.Source != "eastmoney" || got.QualityStatus != model.QualityDegraded ||
+		!hasStockSearchReason(got.QualityReasons, "provider_source_missing_assumed_from_provider_name") {
+		t.Fatalf("missing source must be filled with explicit degraded provenance: got=%+v err=%v", got, err)
+	}
+}
+
 func TestStockSearchRejectsMissingSourceVersion(t *testing.T) {
 	snapshot := populatedStockSearchForFallbackTest("eastmoney")
 	snapshot.SourceVersion = ""

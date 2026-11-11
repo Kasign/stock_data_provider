@@ -85,7 +85,7 @@ func TestObservationRetentionCheckRejectsInconsistentBacklogResult(t *testing.T)
 				t.Fatal(err)
 			}
 			observation := report.Results[0].Observation
-			if observation.Status != platformdiag.StatusUnavailable ||
+			if observation.Status != platformdiag.StatusFailed ||
 				observation.ReasonCode != "news.observation.retention_backlog_invalid" {
 				t.Fatalf("observation=%+v, want unavailable inconsistent-backlog result", observation)
 			}
@@ -256,6 +256,7 @@ func TestSourceEndpointCheckFailsClosedForUnsafeRegistrations(t *testing.T) {
 		registration app.SourceEndpointRegistration
 		wantStatus   platformdiag.Status
 		wantReason   string
+		required     bool
 	}{
 		{
 			name: "registration identity mismatch",
@@ -264,7 +265,7 @@ func TestSourceEndpointCheckFailsClosedForUnsafeRegistrations(t *testing.T) {
 				value.EndpointID = "other-endpoint"
 				return value
 			}(),
-			wantStatus: platformdiag.StatusUnavailable,
+			wantStatus: platformdiag.StatusFailed,
 			wantReason: "news.source.registration_mismatch",
 		},
 		{
@@ -276,6 +277,7 @@ func TestSourceEndpointCheckFailsClosedForUnsafeRegistrations(t *testing.T) {
 			}(),
 			wantStatus: platformdiag.StatusSkipped,
 			wantReason: "news.source.endpoint_disabled",
+			required:   false,
 		},
 		{
 			name: "unsupported access method",
@@ -286,6 +288,7 @@ func TestSourceEndpointCheckFailsClosedForUnsafeRegistrations(t *testing.T) {
 			}(),
 			wantStatus: platformdiag.StatusSkipped,
 			wantReason: "news.source.access_method_unsupported",
+			required:   false,
 		},
 		{
 			name: "missing source policy version",
@@ -310,7 +313,7 @@ func TestSourceEndpointCheckFailsClosedForUnsafeRegistrations(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			check := SourceEndpointCheck(sourceCatalogStub{registration: test.registration}, "source-1", "endpoint-1", true)
+			check := SourceEndpointCheck(sourceCatalogStub{registration: test.registration}, "source-1", "endpoint-1", test.required || (test.wantStatus != platformdiag.StatusSkipped))
 			report, err := (platformdiag.Runner{}).Run(context.Background(), []platformdiag.Check{check})
 			if err != nil {
 				t.Fatal(err)

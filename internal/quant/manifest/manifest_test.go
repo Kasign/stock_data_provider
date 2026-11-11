@@ -25,8 +25,11 @@ func TestBuildMatchesQNTCTR005Golden(t *testing.T) {
 	}
 
 	got, err := Build(Input{
-		ResultType:        golden.Manifest.ResultType,
-		SchemaVersion:     golden.Manifest.SchemaVersion,
+		ResultType:           golden.Manifest.ResultType,
+		SchemaVersion:        golden.Manifest.SchemaVersion,
+		PayloadSchemaVersion: golden.Manifest.PayloadSchemaVersion,
+		AlgorithmVersion:     golden.Manifest.AlgorithmVersion,
+		ParameterFingerprint: golden.Manifest.ParameterFingerprint,
 		SystemAsOf:        time.Date(2026, 11, 6, 5, 2, 0, 0, time.UTC),
 		InputSnapshotRefs: []string{"data_snapshot:sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},
 		ResultFingerprint: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
@@ -65,7 +68,10 @@ func TestFingerprintPayloadUsesCanonicalJSON(t *testing.T) {
 func TestBuildSortsSnapshotRefsAndRejectsInvalidInputs(t *testing.T) {
 	base := Input{
 		ResultType:        "factor",
-		SchemaVersion:     "1.0.0",
+		SchemaVersion:        "1.0.0",
+		PayloadSchemaVersion: "1.0.0",
+		AlgorithmVersion:     "quant-test-v1",
+		ParameterFingerprint: strings.Repeat("c", 64),
 		SystemAsOf:        time.Date(2026, 11, 6, 5, 2, 0, 0, time.UTC),
 		InputSnapshotRefs: []string{"snapshot-b", "snapshot-a"},
 		ResultFingerprint: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
@@ -87,6 +93,9 @@ func TestBuildSortsSnapshotRefsAndRejectsInvalidInputs(t *testing.T) {
 		{name: "blank ref", input: func() Input { v := base; v.InputSnapshotRefs = []string{" "}; return v }()},
 		{name: "unknown result type", input: func() Input { v := base; v.ResultType = "unknown"; return v }()},
 		{name: "invalid schema version", input: func() Input { v := base; v.SchemaVersion = "v1"; return v }()},
+		{name: "missing payload schema version", input: func() Input { v := base; v.PayloadSchemaVersion = ""; return v }()},
+		{name: "missing algorithm version", input: func() Input { v := base; v.AlgorithmVersion = ""; return v }()},
+		{name: "missing parameter fingerprint", input: func() Input { v := base; v.ParameterFingerprint = ""; return v }()},
 		{name: "missing timestamp", input: func() Input { v := base; v.SystemAsOf = time.Time{}; return v }()},
 		{name: "invalid result fingerprint", input: func() Input { v := base; v.ResultFingerprint = "BAD"; return v }()},
 	}
@@ -102,7 +111,10 @@ func TestBuildSortsSnapshotRefsAndRejectsInvalidInputs(t *testing.T) {
 func TestBuildRejectsInvalidUTF8SnapshotReference(t *testing.T) {
 	input := Input{
 		ResultType:        "factor",
-		SchemaVersion:     "1.0.0",
+		SchemaVersion:        "1.0.0",
+		PayloadSchemaVersion: "1.0.0",
+		AlgorithmVersion:     "quant-test-v1",
+		ParameterFingerprint: strings.Repeat("c", 64),
 		SystemAsOf:        time.Date(2026, 11, 6, 5, 2, 0, 0, time.UTC),
 		InputSnapshotRefs: []string{string([]byte{0xff})},
 		ResultFingerprint: strings.Repeat("b", 64),
@@ -115,7 +127,10 @@ func TestBuildRejectsInvalidUTF8SnapshotReference(t *testing.T) {
 func TestVerifyRejectsInvalidUTF8SnapshotReference(t *testing.T) {
 	got, err := Build(Input{
 		ResultType:        "factor",
-		SchemaVersion:     "1.0.0",
+		SchemaVersion:        "1.0.0",
+		PayloadSchemaVersion: "1.0.0",
+		AlgorithmVersion:     "quant-test-v1",
+		ParameterFingerprint: strings.Repeat("c", 64),
 		SystemAsOf:        time.Date(2026, 11, 6, 5, 2, 0, 0, time.UTC),
 		InputSnapshotRefs: []string{"snapshot-a"},
 		ResultFingerprint: strings.Repeat("b", 64),
@@ -132,7 +147,10 @@ func TestVerifyRejectsInvalidUTF8SnapshotReference(t *testing.T) {
 func TestVerifyRejectsManifestMutation(t *testing.T) {
 	got, err := Build(Input{
 		ResultType:        "stock",
-		SchemaVersion:     "1.0.0",
+		SchemaVersion:        "1.0.0",
+		PayloadSchemaVersion: "1.0.0",
+		AlgorithmVersion:     "quant-test-v1",
+		ParameterFingerprint: strings.Repeat("c", 64),
 		SystemAsOf:        time.Date(2026, 11, 6, 5, 2, 0, 0, time.UTC),
 		InputSnapshotRefs: []string{"snapshot-a"},
 		ResultFingerprint: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
@@ -150,7 +168,10 @@ func TestBuildWithPayloadBindsManifestToCanonicalPayload(t *testing.T) {
 	payload := json.RawMessage(`{"metric_code":"momentum_20d","value":0.125}`)
 	input := Input{
 		ResultType:        "factor",
-		SchemaVersion:     "1.0.0",
+		SchemaVersion:        "1.0.0",
+		PayloadSchemaVersion: "1.0.0",
+		AlgorithmVersion:     "quant-test-v1",
+		ParameterFingerprint: strings.Repeat("c", 64),
 		SystemAsOf:        time.Date(2026, 11, 6, 5, 2, 0, 0, time.UTC),
 		InputSnapshotRefs: []string{"snapshot-a"},
 	}
@@ -170,7 +191,10 @@ func TestBuildWithPayloadBindsManifestToCanonicalPayload(t *testing.T) {
 func TestBuildWithPayloadRejectsCallerSuppliedFingerprintMismatch(t *testing.T) {
 	input := Input{
 		ResultType:        "factor",
-		SchemaVersion:     "1.0.0",
+		SchemaVersion:        "1.0.0",
+		PayloadSchemaVersion: "1.0.0",
+		AlgorithmVersion:     "quant-test-v1",
+		ParameterFingerprint: strings.Repeat("c", 64),
 		SystemAsOf:        time.Date(2026, 11, 6, 5, 2, 0, 0, time.UTC),
 		InputSnapshotRefs: []string{"snapshot-a"},
 		ResultFingerprint: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
@@ -183,7 +207,10 @@ func TestBuildWithPayloadRejectsCallerSuppliedFingerprintMismatch(t *testing.T) 
 func TestVerifyPayloadRejectsInvalidManifestBeforePayload(t *testing.T) {
 	got, err := BuildWithPayload(Input{
 		ResultType:        "factor",
-		SchemaVersion:     "1.0.0",
+		SchemaVersion:        "1.0.0",
+		PayloadSchemaVersion: "1.0.0",
+		AlgorithmVersion:     "quant-test-v1",
+		ParameterFingerprint: strings.Repeat("c", 64),
 		SystemAsOf:        time.Date(2026, 11, 6, 5, 2, 0, 0, time.UTC),
 		InputSnapshotRefs: []string{"snapshot-a"},
 	}, json.RawMessage(`{"value":1}`))
@@ -199,7 +226,10 @@ func TestVerifyPayloadRejectsInvalidManifestBeforePayload(t *testing.T) {
 func TestVerifyRejectsNonCanonicalUTCSystemAsOf(t *testing.T) {
 	got, err := Build(Input{
 		ResultType:        "factor",
-		SchemaVersion:     "1.0.0",
+		SchemaVersion:        "1.0.0",
+		PayloadSchemaVersion: "1.0.0",
+		AlgorithmVersion:     "quant-test-v1",
+		ParameterFingerprint: strings.Repeat("c", 64),
 		SystemAsOf:        time.Date(2026, 11, 6, 5, 2, 0, 120000000, time.UTC),
 		InputSnapshotRefs: []string{"snapshot-a"},
 		ResultFingerprint: strings.Repeat("b", 64),

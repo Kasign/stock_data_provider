@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 	"time"
@@ -91,8 +92,10 @@ func TestIndexQuotesFallsBackFromDegradedToValidProvider(t *testing.T) {
 	if err != nil || hit {
 		t.Fatalf("IndexQuotes returned hit=%v err=%v", hit, err)
 	}
-	if got == nil || got.Source != "tickflow" || got.QualityStatus != model.QualityDegraded || !hasSnapshotQualityReason(got.QualityReasons, "provider_fallback_used") {
-		t.Fatalf("expected valid fallback index quote, got %+v", got)
+	if got == nil || got.Source != "tickflow" || got.QualityStatus != model.QualityValid ||
+		got.FallbackFrom != "eastmoney" || hasSnapshotQualityReason(got.QualityReasons, "provider_fallback_used") ||
+		got.Items[0].QualityStatus != model.QualityValid {
+		t.Fatalf("valid fallback index quote must retain valid quality and separate provenance: %+v", got)
 	}
 	if first.calls != 1 || second.calls != 1 {
 		t.Fatalf("expected both providers to be tried, calls=%d/%d", first.calls, second.calls)
@@ -125,8 +128,9 @@ func TestMarketBreadthFallsBackFromDegradedToValidProvider(t *testing.T) {
 	if err != nil || hit {
 		t.Fatalf("MarketBreadth returned hit=%v err=%v", hit, err)
 	}
-	if got == nil || got.Source != "tickflow" || got.QualityStatus != model.QualityDegraded || !hasSnapshotQualityReason(got.QualityReasons, "provider_fallback_used") {
-		t.Fatalf("expected valid fallback market breadth, got %+v", got)
+	if got == nil || got.Source != "tickflow" || got.QualityStatus != model.QualityValid ||
+		got.FallbackFrom != "eastmoney" || hasSnapshotQualityReason(got.QualityReasons, "provider_fallback_used") {
+		t.Fatalf("valid fallback market breadth must retain valid quality and separate provenance: %+v", got)
 	}
 	if first.calls != 1 || second.calls != 1 {
 		t.Fatalf("expected both providers to be tried, calls=%d/%d", first.calls, second.calls)
@@ -160,9 +164,9 @@ func TestIndexQuotesMarksDegradedFallbackWhenPrimaryFails(t *testing.T) {
 		t.Fatalf("IndexQuotes returned hit=%v err=%v", hit, err)
 	}
 	if got == nil || got.Source != "tickflow" || got.QualityStatus != model.QualityDegraded ||
-		!hasSnapshotQualityReason(got.QualityReasons, "provider_fallback_used") ||
-		!hasSnapshotQualityReason(got.Items[0].QualityReasons, "provider_fallback_used") {
-		t.Fatalf("degraded fallback must preserve fallback provenance: %+v", got)
+		got.FallbackFrom != "eastmoney" || got.FallbackReason == "" ||
+		hasSnapshotQualityReason(got.QualityReasons, "provider_fallback_used") {
+		t.Fatalf("degraded fallback must preserve source provenance without adding a quality defect: %+v", got)
 	}
 }
 
@@ -176,7 +180,50 @@ func TestMarketBreadthMarksDegradedFallbackWhenPrimaryFails(t *testing.T) {
 		t.Fatalf("MarketBreadth returned hit=%v err=%v", hit, err)
 	}
 	if got == nil || got.Source != "tickflow" || got.QualityStatus != model.QualityDegraded ||
-		!hasSnapshotQualityReason(got.QualityReasons, "provider_fallback_used") {
-		t.Fatalf("degraded fallback must preserve fallback provenance: %+v", got)
+		got.FallbackFrom != "eastmoney" || got.FallbackReason == "" ||
+		hasSnapshotQualityReason(got.QualityReasons, "provider_fallback_used") {
+		t.Fatalf("degraded fallback must preserve source provenance without adding a quality defect: %+v", got)
+	}
+}
+
+func TestIndexQuotesBypassesDegradedCacheAfterShortTTL(t *testing.T) {
+	mem := newMemoryCache()
+	cached := indexQuoteSnapshotForFallback("eastmoney", model.QualityDegraded)
+	cached.FetchedAt = time.Now().Add(-8 * time.Second)
+	payload, err := json.Marshal(cached)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mem.values["md:v1:index-quotes:core"] = payload
+	current := &qualityFallbackIndexQuoteProvider{name: "tickflow", snapshot: indexQuoteSnapshotForFallback("tickflow", model.QualityValid)}
+	svc := &DataService{cache: mem, breaker: newCircuitBreaker(3, time.Second), indexQuoteProviders: []provider.IndexQuoteProvider{current}}
+
+	got, hit, err := svc.IndexQuotes(context.Background())
+	if err != nil || hit {
+		t.Fatalf("degraded index cache older than short TTL must be bypassed: hit=%v err=%v", hit, err)
+	}
+	if got == nil || got.Source != "tickflow" || current.calls != 1 {
+		t.Fatalf("expected provider refresh after degraded cache expiry: snapshot=%+v calls=%d", got, current.calls)
+	}
+}
+
+func TestMarketBreadthBypassesDegradedCacheAfterShortTTL(t *testing.T) {
+	mem := newMemoryCache()
+	cached := marketBreadthSnapshotForFallback("eastmoney", model.QualityDegraded)
+	cached.FetchedAt = time.Now().Add(-2 * time.Minute)
+	payload, err := json.Marshal(cached)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mem.values["md:v1:market-breadth:cn-a-share"] = payload
+	current := &qualityFallbackMarketBreadthProvider{name: "tickflow", snapshot: marketBreadthSnapshotForFallback("tickflow", model.QualityValid)}
+	svc := &DataService{cache: mem, breaker: newCircuitBreaker(3, time.Second), marketBreadthProviders: []provider.MarketBreadthProvider{current}}
+
+	got, hit, err := svc.MarketBreadth(context.Background())
+	if err != nil || hit {
+		t.Fatalf("degraded market-breadth cache older than short TTL must be bypassed: hit=%v err=%v", hit, err)
+	}
+	if got == nil || got.Source != "tickflow" || current.calls != 1 {
+		t.Fatalf("expected provider refresh after degraded cache expiry: snapshot=%+v calls=%d", got, current.calls)
 	}
 }

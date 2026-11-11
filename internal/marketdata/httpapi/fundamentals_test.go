@@ -30,7 +30,7 @@ func (fundamentalsHTTPProvider) FetchFundamentals(_ context.Context, symbol stri
 		{Category: "cash_flow", Metrics: []model.FundamentalMetric{}, QualityStatus: model.QualityUnknown},
 		{Category: "dupont", Metrics: []model.FundamentalMetric{}, QualityStatus: model.QualityUnknown},
 	}
-	return &model.FundamentalsSnapshot{Symbol: symbol, Year: year, Quarter: quarter, HasData: true, Sections: sections, Source: "baostock",
+	return &model.FundamentalsSnapshot{Symbol: symbol, Year: year, Quarter: quarter, HasData: true, Sections: sections, Source: "eastmoney",
 		SourceVersion: "test", FetchedAt: now, QualityStatus: model.QualityDegraded, QualityReasons: []string{"partial_fixture"}}, nil
 }
 

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -51,7 +52,6 @@ func TestHithinkValuationsWithoutReportDateRemainDegraded(t *testing.T) {
 		t.Fatalf("missing report-date evidence reason not recorded: %v", snapshot.QualityReasons)
 	}
 }
-
 
 func TestHithinkValuationsDistinguishesMissingAndInvalidMetrics(t *testing.T) {
 	timestamp := time.Now().UTC().UnixMilli()
@@ -118,7 +118,6 @@ func TestHithinkValuationsDistinguishesMissingAndInvalidMetrics(t *testing.T) {
 	}
 }
 
-
 func TestHithinkValuationsRejectsTimestampBeyondServiceFutureSkew(t *testing.T) {
 	timestamp := time.Now().UTC().Add(2 * time.Minute).UnixMilli()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -142,7 +141,6 @@ func TestHithinkValuationsRejectsTimestampBeyondServiceFutureSkew(t *testing.T) 
 		t.Fatalf("invalid timestamp reason missing: %+v", snapshot.QualityReasons)
 	}
 }
-
 
 func TestHithinkValuationsReportsInvalidProviderTimestampWithoutDroppingRows(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -172,7 +170,6 @@ func TestHithinkValuationsReportsInvalidProviderTimestampWithoutDroppingRows(t *
 		t.Fatalf("expected provider timestamp parse issue, got %+v", reporter.Snapshot().Issues)
 	}
 }
-
 
 func TestHithinkValuationsReportsMissingNameAndRequestedSymbol(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -205,5 +202,50 @@ func TestHithinkValuationsReportsMissingNameAndRequestedSymbol(t *testing.T) {
 	if !foundName || !foundMissing {
 		t.Fatalf("missing valuation coverage Reporter evidence: name=%v missing_symbol=%v issues=%+v",
 			foundName, foundMissing, reporter.Snapshot().Issues)
+	}
+}
+
+func TestHithinkValuationsFailFastPathsReportStructuredIssues(t *testing.T) {
+	valid := `{"thscode":"600519.SH","ticker":"600519","name":"贵州茅台","pe_ttm":25,"pe_mrq":24,"pb_mrq":8,"ps_ttm":10,"pcf_ttm":20}`
+	cases := []struct {
+		name, total, rows, field, providerField, code string
+		rowIndex                                      int
+	}{
+		{name: "total mismatch", total: "2", rows: valid, field: "row_count", providerField: "total/item", code: "provider_count_mismatch", rowIndex: -1},
+		{name: "invalid symbol", total: "1", rows: `{"thscode":"not-a-symbol","ticker":"x"}`, field: "symbol", providerField: "thscode", code: "invalid_symbol", rowIndex: 0},
+		{name: "unrequested symbol", total: "1", rows: strings.Replace(valid, "600519.SH", "600036.SH", 1), field: "symbol", providerField: "thscode", code: "unrequested_identity", rowIndex: 0},
+		{name: "duplicate symbol", total: "2", rows: valid + "," + valid, field: "symbol", providerField: "thscode", code: "duplicate_identity", rowIndex: 1},
+		{name: "ticker mismatch", total: "1", rows: strings.Replace(valid, `"ticker":"600519"`, `"ticker":"000001"`, 1), field: "code", providerField: "ticker", code: "symbol_code_mismatch", rowIndex: 0},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			payload := `{"code":0,"data":{"timestamp":` + fmt.Sprint(time.Now().UTC().UnixMilli()) + `,"total":` + tc.total + `,"item":[` + tc.rows + `]}}`
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = fmt.Fprint(w, payload)
+			}))
+			defer server.Close()
+			reporter := validation.NewReporter(20)
+			ctx := validation.WithReporter(context.Background(), reporter)
+			_, err := NewHithinkConfigured(3*time.Second, server.URL, "unit-test-key").FetchValuations(ctx, []string{"600519.SH"})
+			if err == nil {
+				t.Fatal("expected fail-fast validation error")
+			}
+			found := false
+			for _, issue := range reporter.Snapshot().Issues {
+				if issue.Stage != validation.StageValidate || issue.Field != tc.field || issue.ProviderField != tc.providerField || issue.Code != tc.code {
+					continue
+				}
+				if tc.rowIndex < 0 && issue.RowIndex == nil {
+					found = true
+				}
+				if tc.rowIndex >= 0 && issue.RowIndex != nil && *issue.RowIndex == tc.rowIndex {
+					found = true
+				}
+			}
+			if !found {
+				t.Fatalf("expected Reporter issue %s/%s/%s at row %d, got %+v", tc.field, tc.providerField, tc.code, tc.rowIndex, reporter.Snapshot().Issues)
+			}
+		})
 	}
 }

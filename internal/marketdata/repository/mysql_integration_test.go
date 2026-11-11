@@ -73,9 +73,17 @@ func TestMariaDBRevisionPersistenceAndPointInTimeQueries(t *testing.T) {
 	}
 	secondAsOf := time.Now().UTC()
 	secondFactors, err := store.ListAdjustmentFactorsAsOf(ctx, symbol, "", "", secondAsOf)
-	if err != nil || len(secondFactors) != 1 || secondFactors[0].Factor != 1.5 || secondFactors[0].SourceVersion != "v2" {
+	if err != nil || len(secondFactors) != 2 {
 		store.Close()
-		t.Fatalf("latest factor revision should be returned: rows=%+v err=%v", secondFactors, err)
+		t.Fatalf("independent source-version factor histories should both be returned: rows=%+v err=%v", secondFactors, err)
+	}
+	versions := make(map[string]float64, len(secondFactors))
+	for _, factor := range secondFactors {
+		versions[factor.SourceVersion] = factor.Factor
+	}
+	if versions["v1"] != 1.25 || versions["v2"] != 1.5 {
+		store.Close()
+		t.Fatalf("source-version factor histories must remain independently queryable: rows=%+v", secondFactors)
 	}
 	historicalFactors, err := store.ListAdjustmentFactorsAsOf(ctx, symbol, "", "", firstAsOf)
 	if err != nil || len(historicalFactors) != 1 || historicalFactors[0].Factor != 1.25 {
@@ -260,8 +268,8 @@ WHERE symbol=? AND trade_date=? AND source=?`, basisSymbol, "2026-10-30", "baost
 	}
 	defer reopened.Close()
 	persisted, err := reopened.ListAdjustmentFactorsAsOf(ctx, symbol, "", "", secondAsOf)
-	if err != nil || len(persisted) != 1 || persisted[0].Factor != 1.5 {
-		t.Fatalf("revision must persist across connection restart: rows=%+v err=%v", persisted, err)
+	if err != nil || len(persisted) != 2 {
+		t.Fatalf("independent source-version revisions must persist across connection restart: rows=%+v err=%v", persisted, err)
 	}
 	probeRun := &model.ProviderProbeRun{
 		RunID: fmt.Sprintf("probe-%d", time.Now().UnixNano()),

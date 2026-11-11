@@ -21,15 +21,15 @@ import (
 const tencentVersion = "tencent-finance-api-v1"
 
 type Tencent struct {
-	client              *http.Client
-	quoteHTTPDoer       HTTPDoer
-	klineHTTPDoer       HTTPDoer
-	noneKlineHTTPDoer   HTTPDoer
-	searchHTTPDoer      HTTPDoer
-	quoteURL            string
-	klineURL            string
-	noneKlineURL        string
-	searchURL           string
+	client            *http.Client
+	quoteHTTPDoer     HTTPDoer
+	klineHTTPDoer     HTTPDoer
+	noneKlineHTTPDoer HTTPDoer
+	searchHTTPDoer    HTTPDoer
+	quoteURL          string
+	klineURL          string
+	noneKlineURL      string
+	searchURL         string
 }
 
 func NewTencent(timeout time.Duration) *Tencent {
@@ -359,6 +359,13 @@ func (p *Tencent) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endD
 		if parsedDate, dateErr := time.Parse("2006-01-02", vals[0]); dateErr != nil || parsedDate.Format("2006-01-02") != vals[0] {
 			rejectedRows++
 			addProviderParseIssue(ctx, rowIndex, "trade_date", "kline_row[0]", "invalid_date", "YYYY-MM-DD", "string", vals[0], "Tencent K-line trade date is invalid")
+			continue
+		}
+		if (start != "" && vals[0] < start) || (end != "" && vals[0] > end) {
+			rejectedRows++
+			requestedRange := start + ".." + end
+			addProviderParseIssue(ctx, rowIndex, "trade_date", "kline_row[0]", "date_out_of_requested_range",
+				requestedRange, "string", vals[0], "Tencent K-line trade date is outside the requested range")
 			continue
 		}
 		open, e1 := strconv.ParseFloat(vals[1], 64)

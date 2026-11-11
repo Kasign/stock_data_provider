@@ -99,6 +99,8 @@ func TestReaderGetDailyBarsSelectsCurrentAndPITUseCases(t *testing.T) {
 		Volume: &volume, Amount: &amount, AdjustmentBasis: model.AdjustmentForward,
 		AdjustmentMethod: "provider_forward", AdjustmentRefDate: "2026-11-06",
 		AdjustmentFactorSource: "eastmoney", AdjustmentFactorSourceVersion: "factor-v2",
+		AdjustmentFactorRevisionHash: "factor-revision-v2", AdjustmentFactorSetHash: "factor-set-v2",
+		AdjustmentFactorReferenceRevisionHash: "reference-revision-v2", AdjustmentAlgorithmVersion: "cumulative_adj_factor_v1",
 		AdjustmentFactorSystemObservedAt: &factorObservedAt,
 		Source:                           "eastmoney", SourceVersion: "bars-v3", ProviderTime: &providerTime,
 		FetchedAt: providerTime.Add(3 * time.Minute), NormalizedAt: providerTime.Add(4 * time.Minute),
@@ -126,7 +128,12 @@ func TestReaderGetDailyBarsSelectsCurrentAndPITUseCases(t *testing.T) {
 		t.Fatalf("current snapshot metadata mismatch: %+v", live)
 	}
 	if len(live.Bars) != 1 || live.Bars[0].AdjustmentReferenceDate != "2026-11-06" ||
-		live.Bars[0].AdjustmentFactorSourceVersion != "factor-v2" || live.Bars[0].NormalizationVersion != "norm-v1" {
+		live.Bars[0].AdjustmentFactorSourceVersion != "factor-v2" ||
+		live.Bars[0].AdjustmentFactorRevisionHash != "factor-revision-v2" ||
+		live.Bars[0].AdjustmentFactorSetHash != "factor-set-v2" ||
+		live.Bars[0].AdjustmentFactorReferenceRevisionHash != "reference-revision-v2" ||
+		live.Bars[0].AdjustmentAlgorithmVersion != "cumulative_adj_factor_v1" ||
+		live.Bars[0].NormalizationVersion != "norm-v1" {
 		t.Fatalf("daily-bar provenance metadata was not preserved: %+v", live.Bars)
 	}
 	if live.Bars[0].ProviderTime == nil || !live.Bars[0].ProviderTime.Equal(providerTime) ||

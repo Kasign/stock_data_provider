@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"example.com/stock-analysis-flow/internal/marketdata/model"
-	"example.com/stock-analysis-flow/internal/marketdata/repository"
 	"example.com/stock-analysis-flow/internal/marketdata/provider"
+	"example.com/stock-analysis-flow/internal/marketdata/repository"
 )
 
 func TestAdjustmentFactorsAsOfFallsBackToLatestProviderVisibleRevision(t *testing.T) {
@@ -157,8 +157,6 @@ func TestSaveAdjustmentFactorsRejectsDuplicateIdentityInBatch(t *testing.T) {
 	}
 }
 
-
-
 type adjustmentFactorFixtureProvider struct {
 	name   string
 	values []model.AdjustmentFactor
@@ -207,7 +205,7 @@ func TestRefreshAdjustmentFactorsFallsBackFromEmptyAndInvalidProviderBatch(t *te
 	validProvider := &adjustmentFactorFixtureProvider{name: valid.Source, values: []model.AdjustmentFactor{valid}}
 	svc := &DataService{
 		providers: []provider.NamedProvider{emptyProvider, invalidProvider, validProvider},
-		store: store,
+		store:     store,
 	}
 	got, err := svc.RefreshAdjustmentFactors(ctx, valid.Symbol, valid.TradeDate, valid.TradeDate)
 	if err != nil {
