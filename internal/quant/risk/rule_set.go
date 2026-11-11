@@ -34,6 +34,7 @@ func (set RuleSet) Validate() error {
 		return ErrInvalidRuleSet
 	}
 	seen := make(map[string]struct{}, len(set.Rules))
+	hasBlock := false
 	for _, rule := range set.Rules {
 		if !canonicalIdentity(rule.Code) || !validSeverity(rule.Severity) {
 			return ErrInvalidRuleSet
@@ -42,10 +43,15 @@ func (set RuleSet) Validate() error {
 			return ErrInvalidRuleSet
 		}
 		seen[rule.Code] = struct{}{}
-		if (rule.Required && rule.Severity != SeverityBlock) ||
-			(rule.Severity == SeverityBlock && !rule.Required) {
-			return ErrInvalidRuleSet
+		if rule.Severity == SeverityBlock {
+			hasBlock = true
+			if !rule.Required {
+				return ErrInvalidRuleSet
+			}
 		}
+	}
+	if !hasBlock {
+		return ErrInvalidRuleSet
 	}
 	return nil
 }
@@ -79,7 +85,7 @@ func BuildDecisionForRuleSet(set RuleSet, input DecisionInput) (Decision, error)
 		if !exists {
 			if rule.Required {
 				reasons = append(reasons, Reason{
-					Code: rule.Code, Severity: SeverityBlock, Status: ReasonUnknown,
+					Code: rule.Code, Severity: rule.Severity, Status: ReasonUnknown,
 					SafeMessage: "必需风险规则未产生评估结论", EvidenceRefs: []string{},
 				})
 			}

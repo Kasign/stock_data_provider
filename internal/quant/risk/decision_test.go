@@ -33,12 +33,16 @@ func TestDecisionValidateAcceptsUnknownFailClosedRepresentation(t *testing.T) {
 	}
 }
 
-func TestDecisionValidateDoesNotInferRuleOutcome(t *testing.T) {
-	for _, status := range []DecisionStatus{DecisionPass, DecisionReject, DecisionUnknown} {
+func TestDecisionValidateRequiresAggregatedStatus(t *testing.T) {
+	decision := sampleDecision()
+	if err := decision.Validate(); err != nil {
+		t.Fatalf("aggregated unknown status rejected: %v", err)
+	}
+	for _, status := range []DecisionStatus{DecisionPass, DecisionReject} {
 		decision := sampleDecision()
 		decision.Status = status
-		if err := decision.Validate(); err != nil {
-			t.Errorf("status %q rejected: %v", status, err)
+		if err := decision.Validate(); !errors.Is(err, ErrInvalidDecision) {
+			t.Errorf("status %q: got %v, want ErrInvalidDecision", status, err)
 		}
 	}
 }
@@ -54,6 +58,10 @@ func TestDecisionValidateRejectsInvalidFields(t *testing.T) {
 		"evidence ref padded":        func(d *Decision) { d.Reasons[0].EvidenceRefs = []string{" evidence:quality:001 "} },
 		"missing rule version":       func(d *Decision) { d.RuleSetVersion = "" },
 		"nil reasons":                func(d *Decision) { d.Reasons = nil },
+		"empty reasons":              func(d *Decision) { d.Reasons = []Reason{} },
+		"duplicate reason code":      func(d *Decision) { d.Reasons = append(d.Reasons, d.Reasons[0]) },
+		"evaluated before system as of": func(d *Decision) { d.EvaluatedAt = "2026-11-09T00:58:00Z" },
+		"status disagrees with reasons": func(d *Decision) { d.Status = DecisionPass },
 		"nil input refs":             func(d *Decision) { d.InputRefs = nil },
 		"empty input ref":            func(d *Decision) { d.InputRefs = []string{""} },
 		"nil evidence refs":          func(d *Decision) { d.Reasons[0].EvidenceRefs = nil },
@@ -83,12 +91,11 @@ func TestDecisionValidateRejectsInvalidFields(t *testing.T) {
 	}
 }
 
-func TestDecisionValidateAllowsPresentEmptyArrays(t *testing.T) {
+func TestDecisionValidateAllowsPresentEmptyInputRefs(t *testing.T) {
 	decision := sampleDecision()
-	decision.Reasons = []Reason{}
 	decision.InputRefs = []string{}
 	if err := decision.Validate(); err != nil {
-		t.Fatalf("empty but present arrays rejected: %v", err)
+		t.Fatalf("empty but present input_refs rejected: %v", err)
 	}
 }
 

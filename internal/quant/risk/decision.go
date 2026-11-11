@@ -60,16 +60,26 @@ func (d Decision) Validate() error {
 		!validDecisionStatus(d.Status) ||
 		!canonicalUTCTimestamp(d.EvaluatedAt) ||
 		!canonicalUTCTimestamp(d.SystemAsOf) ||
-		d.Reasons == nil || d.InputRefs == nil {
+		len(d.Reasons) == 0 || d.InputRefs == nil {
+		return ErrInvalidDecision
+	}
+	evaluatedAt, _ := time.Parse(time.RFC3339Nano, d.EvaluatedAt)
+	systemAsOf, _ := time.Parse(time.RFC3339Nano, d.SystemAsOf)
+	if evaluatedAt.Before(systemAsOf) || d.Status != AggregateStatus(d.Reasons) {
 		return ErrInvalidDecision
 	}
 
+	seenReasons := make(map[string]struct{}, len(d.Reasons))
 	for _, ref := range d.InputRefs {
 		if !nonBlank(ref) {
 			return ErrInvalidDecision
 		}
 	}
 	for _, reason := range d.Reasons {
+		if _, exists := seenReasons[reason.Code]; exists {
+			return ErrInvalidDecision
+		}
+		seenReasons[reason.Code] = struct{}{}
 		if !nonBlank(reason.Code) || !validSeverity(reason.Severity) ||
 			!validReasonStatus(reason.Status) || !nonBlank(reason.SafeMessage) ||
 			reason.EvidenceRefs == nil {
