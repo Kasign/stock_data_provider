@@ -1,14 +1,13 @@
 package risk
 
 import (
-	"errors"
 	"fmt"
 	"strings"
 	"unicode/utf8"
 )
 
 // RuleDefinition 声明一个版本化规则集中的规则身份和严重级别。
-// Required 表示该规则必须在每次评估中产生结论；必需规则必须是 block。
+// Required 表示该规则必须在每次评估中产生结论；所有 block 硬门禁都必须是 required。
 type RuleDefinition struct {
 	Code     string
 	Severity Severity
@@ -19,6 +18,13 @@ type RuleDefinition struct {
 type RuleSet struct {
 	Version string
 	Rules   []RuleDefinition
+}
+
+// cloneRuleSet 在执行入口创建规则定义快照，避免回调修改调用方持有的 Rules 切片后改变本次评估语义。
+func cloneRuleSet(source RuleSet) RuleSet {
+	cloned := source
+	cloned.Rules = append([]RuleDefinition(nil), source.Rules...)
+	return cloned
 }
 
 // Validate 校验规则集自身的身份、规则唯一性和必需硬门禁约束。
@@ -36,7 +42,8 @@ func (set RuleSet) Validate() error {
 			return ErrInvalidRuleSet
 		}
 		seen[rule.Code] = struct{}{}
-		if rule.Required && rule.Severity != SeverityBlock {
+		if (rule.Required && rule.Severity != SeverityBlock) ||
+			(rule.Severity == SeverityBlock && !rule.Required) {
 			return ErrInvalidRuleSet
 		}
 	}

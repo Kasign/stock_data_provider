@@ -164,3 +164,28 @@ func TestBuildPytdxQuoteReportsInvalidOptionalAmountAndDegrades(t *testing.T) {
 		t.Fatalf("expected warning for invalid optional amount, got %+v", issues)
 	}
 }
+
+func TestBuildPytdxQuoteReportsProviderContractLimitations(t *testing.T) {
+	reporter := validation.NewReporter(20)
+	ctx := validation.WithReporter(context.Background(), reporter)
+	quote, err := buildPytdxQuote(ctx, "600519.SH", 10, 9.8, 9.9, 10.5, 9.5, 100, 100000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if quote.QualityStatus != model.QualityDegraded {
+		t.Fatalf("protocol limitations must keep quote degraded: %+v", quote)
+	}
+	found := map[string]bool{"quote_time": false, "name": false}
+	for _, issue := range reporter.Snapshot().Issues {
+		if issue.Code == "not_exposed_by_provider_contract" && issue.Severity == validation.SeverityWarning {
+			if _, ok := found[issue.Field]; ok {
+				found[issue.Field] = true
+			}
+		}
+	}
+	for field, ok := range found {
+		if !ok {
+			t.Errorf("missing protocol limitation evidence for %s", field)
+		}
+	}
+}

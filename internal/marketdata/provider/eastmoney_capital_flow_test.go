@@ -133,3 +133,88 @@ func TestEastmoneyCapitalFlowReportsFieldAndRowParseIssue(t *testing.T) {
 		})
 	}
 }
+
+func TestEastmoneyCapitalFlowReportsDegradedSnapshotAndIncompleteWindows(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"rc":0,"data":{"code":"600519","klines":["2026-10-26,-","2026-10-25,100"]}}`))
+	}))
+	defer server.Close()
+	reporter := validation.NewReporter(10)
+	ctx := validation.WithReporter(context.Background(), reporter)
+	_, err := NewEastmoney(time.Second, "", "").WithCapitalFlowURL(server.URL).FetchCapitalFlow(ctx, "600519.SH")
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := map[string]bool{
+		"provider_time": false, "main_net_inflow": false, "inflow_5d": false, "inflow_10d": false,
+	}
+	for _, issue := range reporter.Snapshot().Issues {
+		if _, ok := found[issue.Field]; ok && issue.Stage == validation.StageValidate && issue.Severity == validation.SeverityWarning {
+			found[issue.Field] = true
+		}
+	}
+	for field, ok := range found {
+		if !ok {
+			t.Errorf("missing degraded capital-flow evidence for %s: %+v", field, reporter.Snapshot().Issues)
+		}
+	}
+}
+
+func TestEastmoneyCapitalFlowReportsResponseRejections(t *testing.T) {
+	cases := []struct {
+		name, body, wantCode string
+	}{
+		{name: "provider error", body: `{"rc":1,"data":{"code":"600519","klines":["2026-10-26,100"]}}`, wantCode: "provider_error"},
+		{name: "missing data", body: `{"rc":0}`, wantCode: "missing_data"},
+		{name: "empty klines", body: `{"rc":0,"data":{"code":"600519","klines":[]}}`, wantCode: "empty_result"},
+		{name: "missing identity", body: `{"rc":0,"data":{"klines":["2026-10-26,100"]}}`, wantCode: "missing_requested_identity"},
+		{name: "invalid identity", body: `{"rc":0,"data":{"code":"60051","klines":["2026-10-26,100"]}}`, wantCode: "invalid_symbol"},
+		{name: "identity mismatch", body: `{"rc":0,"data":{"code":"000001","klines":["2026-10-26,100"]}}`, wantCode: "symbol_mismatch"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(tc.body))
+			}))
+			defer server.Close()
+			reporter := validation.NewReporter(10)
+			ctx := validation.WithReporter(context.Background(), reporter)
+			_, err := NewEastmoney(time.Second, "", "").WithCapitalFlowURL(server.URL).FetchCapitalFlow(ctx, "600519.SH")
+			if err == nil {
+				t.Fatal("expected rejection")
+			}
+			for _, issue := range reporter.Snapshot().Issues {
+				if issue.Code != tc.wantCode {
+					continue
+				}
+				if issue.Stage != validation.StageParse || issue.Severity != validation.SeverityError || issue.RowIndex != nil {
+					t.Fatalf("response-level issue must be Parse/Error without row index: %+v", issue)
+				}
+				return
+			}
+			t.Fatalf("missing Reporter code %q: %+v", tc.wantCode, reporter.Snapshot().Issues)
+		})
+	}
+}
+
+func TestEastmoneyCapitalFlowReportsMalformedJSONRequestFailure(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte("{"))
+	}))
+	defer server.Close()
+	reporter := validation.NewReporter(10)
+	ctx := validation.WithReporter(context.Background(), reporter)
+	_, err := NewEastmoney(time.Second, "", "").WithCapitalFlowURL(server.URL).FetchCapitalFlow(ctx, "600519.SH")
+	if err == nil {
+		t.Fatal("invalid JSON must be rejected")
+	}
+	for _, issue := range reporter.Snapshot().Issues {
+		if issue.Code == "request_error" && issue.Stage == validation.StageParse && issue.RowIndex == nil {
+			return
+		}
+	}
+	t.Fatalf("missing request-level Reporter evidence: %+v", reporter.Snapshot().Issues)
+}

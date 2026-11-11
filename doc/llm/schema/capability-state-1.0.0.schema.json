@@ -51,7 +51,8 @@
           "function_tool_calls",
           "reasoning_effort",
           "sampling_parameters",
-          "usage_details"
+          "usage_details",
+          "structured_output_advanced_constraints"
         ]
       },
       "additionalProperties": {

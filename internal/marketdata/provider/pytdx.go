@@ -7,6 +7,7 @@ import (
 	"math"
 	"net"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -87,58 +88,72 @@ func (p *Pytdx) dial(ctx context.Context) (*tdx.Client, error) {
 	if len(p.hosts) == 0 {
 		return nil, errors.New("Pytdx has no configured domestic quote servers")
 	}
-	dialTimeout := p.timeout
-	if dialTimeout > 1500*time.Millisecond {
-		dialTimeout = 1500 * time.Millisecond
-	}
-	// Each dial attempt checks only a small, rotating subset. A dead public server
-	// cannot stall a request while the library walks its entire built-in host list.
-	dial := func(dialCtx context.Context) (ios.ReadWriteCloser, string, error) {
-		p.rateMu.Lock()
-		start := p.hostIndex % len(p.hosts)
-		attempts := min(6, len(p.hosts))
-		p.hostIndex = (start + attempts) % len(p.hosts)
-		p.rateMu.Unlock()
-
-		var lastErr error
-		for i := 0; i < attempts; i++ {
-			if err := dialCtx.Err(); err != nil {
-				return nil, "", err
-			}
-			host := strings.TrimSpace(p.hosts[(start+i)%len(p.hosts)])
-			if host == "" {
-				continue
-			}
-			address := host
-			if _, _, err := net.SplitHostPort(address); err != nil {
-				address = net.JoinHostPort(strings.Trim(address, "[]"), "7709")
-			}
-			attemptCtx, cancel := context.WithTimeout(dialCtx, dialTimeout)
-			var conn net.Conn
-			var err error
-			if p.dialContext != nil {
-				conn, err = p.dialContext(attemptCtx, "tcp", address)
-			} else {
-				dialer := net.Dialer{Timeout: dialTimeout}
-				conn, err = dialer.DialContext(attemptCtx, "tcp", address)
-			}
-			cancel()
-			if err == nil {
-				return conn, address, nil
-			}
-			lastErr = err
-		}
-		if lastErr == nil {
-			lastErr = errors.New("no valid host in configured Pytdx server list")
-		}
-		return nil, "", fmt.Errorf("unable to connect to a configured TDX server: %w", lastErr)
-	}
-	client, err := tdx.DialWith(dial, tdx.WithRedial(), tdx.WithLevel(tdx.LevelError))
+	// tdx 客户端负责连接后的生命周期和重连；单次候选拨号保持有界。
+	client, err := tdx.DialWith(p.dialConfiguredHost, tdx.WithRedial(), tdx.WithLevel(tdx.LevelError))
 	if err != nil {
 		return nil, fmt.Errorf("Pytdx connect to domestic quote server: %w", err)
 	}
 	client.SetTimeout(p.timeout)
 	return client, nil
+}
+
+// dialConfiguredHost 执行一次有界的候选服务器拨号；重连策略由 tdx 客户端在上层管理。
+func (p *Pytdx) dialConfiguredHost(dialCtx context.Context) (ios.ReadWriteCloser, string, error) {
+	if dialCtx == nil {
+		dialCtx = context.Background()
+	}
+	if err := dialCtx.Err(); err != nil {
+		return nil, "", err
+	}
+	if len(p.hosts) == 0 {
+		return nil, "", errors.New("Pytdx has no configured domestic quote servers")
+	}
+	dialTimeout := p.timeout
+	if dialTimeout <= 0 {
+		dialTimeout = 12 * time.Second
+	}
+	if dialTimeout > 1500*time.Millisecond {
+		dialTimeout = 1500 * time.Millisecond
+	}
+
+	p.rateMu.Lock()
+	start := p.hostIndex % len(p.hosts)
+	attempts := min(6, len(p.hosts))
+	p.hostIndex = (start + attempts) % len(p.hosts)
+	p.rateMu.Unlock()
+
+	var lastErr error
+	for i := 0; i < attempts; i++ {
+		if err := dialCtx.Err(); err != nil {
+			return nil, "", err
+		}
+		host := strings.TrimSpace(p.hosts[(start+i)%len(p.hosts)])
+		if host == "" {
+			continue
+		}
+		address := host
+		if _, _, err := net.SplitHostPort(address); err != nil {
+			address = net.JoinHostPort(strings.Trim(address, "[]"), "7709")
+		}
+		attemptCtx, cancel := context.WithTimeout(dialCtx, dialTimeout)
+		var conn net.Conn
+		var err error
+		if p.dialContext != nil {
+			conn, err = p.dialContext(attemptCtx, "tcp", address)
+		} else {
+			dialer := net.Dialer{Timeout: dialTimeout}
+			conn, err = dialer.DialContext(attemptCtx, "tcp", address)
+		}
+		cancel()
+		if err == nil {
+			return conn, address, nil
+		}
+		lastErr = err
+	}
+	if lastErr == nil {
+		lastErr = errors.New("no valid host in configured Pytdx server list")
+	}
+	return nil, "", fmt.Errorf("unable to connect to a configured TDX server: %w", lastErr)
 }
 
 func (p *Pytdx) waitForRateLimit(ctx context.Context) error {
@@ -271,6 +286,7 @@ func (p *Pytdx) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endDat
 		offset := uint16(page * pytdxPageSize)
 		response, requestErr := client.GetKlineDay(wireSymbol, offset, pytdxPageSize)
 		if requestErr != nil {
+			addPytdxDailyResponseIssue(ctx, "request_error", "daily_kline_page", "successful K-line page response", "transport_error", "", "Go 通达信日 K 分页请求失败", validation.SeverityError)
 			return nil, fmt.Errorf("Pytdx daily K-line page %d: %w", page+1, requestErr)
 		}
 		if response == nil || len(response.List) == 0 {
@@ -296,12 +312,15 @@ func (p *Pytdx) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endDat
 		}
 	}
 	if adjustment == model.AdjustmentBackward && !historyComplete {
+		addPytdxDailyResponseIssue(ctx, "history_window_truncated", "daily_kline_history", "complete history for backward adjustment", "page_limit_reached", strconv.Itoa(pytdxMaxHistoryPage), "Go 通达信日 K 历史分页达到安全上限，拒绝不完整后复权结果", validation.SeverityError)
 		return nil, fmt.Errorf("Pytdx history exceeded %d pages; refusing to return incomplete backward-adjusted data", pytdxMaxHistoryPage)
 	}
 	if adjustment != model.AdjustmentBackward && !historyComplete && !startDateReached {
+		addPytdxDailyResponseIssue(ctx, "history_window_truncated", "daily_kline_history", start.Format("2006-01-02"), "page_limit_reached", strconv.Itoa(pytdxMaxHistoryPage), "Go 通达信日 K 历史分页达到安全上限，尚未覆盖请求起始日期", validation.SeverityError)
 		return nil, fmt.Errorf("Pytdx history scan reached safety limit of %d pages before requested start date", pytdxMaxHistoryPage)
 	}
 	if len(all) == 0 {
+		addPytdxDailyResponseIssue(ctx, "empty_result", "daily_kline_history", "at least one daily K-line row", "empty", "0 rows", "Go 通达信未返回日 K 记录", validation.SeverityError)
 		return nil, errors.New("Pytdx returned no daily K-line rows")
 	}
 	sort.Slice(all, func(i, j int) bool { return all[i].Time.Before(all[j].Time) })
@@ -324,6 +343,7 @@ func (p *Pytdx) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endDat
 		}
 		gbbq, gbbqErr := client.GetGbbq(wireSymbol)
 		if gbbqErr != nil {
+			addPytdxDailyResponseIssue(ctx, "adjustment_reference_error", "gbbq", "successful ex-rights/ex-dividend response", "request_error", "", "Go 通达信复权所需公司行动数据请求失败", validation.SeverityError)
 			return nil, fmt.Errorf("Pytdx ex-rights/ex-dividend data required for %q adjustment: %w", adjustment, gbbqErr)
 		}
 		events := make(protocol.XRXDs, 0)
@@ -469,6 +489,8 @@ func buildPytdxQuote(ctx context.Context, symbol string, current, prevClose, ope
 		"provider_quote_timestamp_not_exposed",
 		"provider_name_not_exposed_by_quote_contract",
 	}
+	addPytdxValidationIssue(ctx, 0, "quote_time", "protocol.Quote", "not_exposed_by_provider_contract", "provider snapshot timestamp", "unavailable", "", "Go 通达信报价协议未暴露源端快照时间", validation.SeverityWarning)
+	addPytdxValidationIssue(ctx, 0, "name", "protocol.Quote", "not_exposed_by_provider_contract", "security name", "unavailable", "", "Go 通达信报价协议未暴露证券名称", validation.SeverityWarning)
 	if pytdxNonNegativeFinite(amountValue) && amountValue > 0 {
 		amount, rawAmount = &amountValue, &amountValue
 		amountUnit, rawAmountUnit, rawAmountField = "CNY", "CNY", "amount"
@@ -528,6 +550,16 @@ func pytdxQuoteIdentityPreview(response []*protocol.Quote) string {
 		return preview
 	}
 	return ""
+}
+
+func addPytdxDailyResponseIssue(ctx context.Context, code, field, expected, actualType, actualPreview, message string, severity validation.Severity) {
+	report := validation.NewReport(1)
+	report.Add(validation.FieldIssue{
+		Stage: validation.StageParse, Field: field, ProviderField: field,
+		Code: code, Expected: expected, ActualType: actualType, ActualPreview: actualPreview,
+		Severity: severity, Message: message,
+	})
+	validation.AddContextReport(ctx, report)
 }
 
 func addPytdxValidationIssue(ctx context.Context, rowIndex int, field, providerField, code, expected, actualType, actualPreview, message string, severity validation.Severity) {

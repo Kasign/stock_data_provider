@@ -76,7 +76,7 @@ func TestChannelRegistryResolvesExactImmutableVersion(t *testing.T) {
 		t.Fatalf("resolved snapshot differs from registered version: %+v", snapshot)
 	}
 	snapshot.RetryableErrorCodes[0] = "mutated"
-	if !EqualChannelSnapshot(resolved.ConfigSnapshot(), adapter.snapshot) {
+	if !equalChannelSnapshot(resolved.ConfigSnapshot(), adapter.snapshot) {
 		t.Fatal("mutating returned snapshot must not mutate registered version")
 	}
 }
@@ -143,5 +143,40 @@ func TestBoundChannelAdapterPreservesExplicitOutcome(t *testing.T) {
 	if sendErr != nil || result.Outcome != domain.ChannelOutcomeRejected ||
 		!result.IsRetryable(adapter.snapshot) {
 		t.Fatalf("explicit rejected result should be preserved: result=%+v err=%v", result, sendErr)
+	}
+}
+
+func TestChannelRegistryRegisterSnapshotRequiresExactPersistedConfiguration(t *testing.T) {
+	expected := channelRegistryTestSnapshot()
+	adapter := &fakeChannelAdapter{snapshot: expected}
+	registry := NewChannelRegistry()
+
+	if err := registry.RegisterSnapshot(expected, adapter); err != nil {
+		t.Fatalf("matching persisted snapshot should register: %v", err)
+	}
+	if _, err := registry.Resolve(context.Background(), expected.ChannelRef, expected.ConfigVersion); err != nil {
+		t.Fatalf("registered persisted version should resolve: %v", err)
+	}
+
+	mismatchRegistry := NewChannelRegistry()
+	mismatched := expected
+	mismatched.SecretRef = "secret://wrong/channel"
+	if err := mismatchRegistry.RegisterSnapshot(expected, &fakeChannelAdapter{snapshot: mismatched}); !errors.Is(err, ErrChannelConfigVersionConflict) {
+		t.Fatalf("adapter configuration mismatch must fail closed: %v", err)
+	}
+	if _, err := mismatchRegistry.Resolve(context.Background(), expected.ChannelRef, expected.ConfigVersion); !errors.Is(err, ErrChannelVersionNotFound) {
+		t.Fatal("mismatched adapter must not be registered")
+	}
+}
+
+func TestChannelRegistryRegisterSnapshotNormalizesRetryableCodes(t *testing.T) {
+	expected := channelRegistryTestSnapshot()
+	expected.RetryableErrorCodes = []string{"rate_limited", "temporary"}
+	actual := cloneChannelSnapshot(expected)
+	actual.RetryableErrorCodes = []string{"temporary", "rate_limited"}
+
+	registry := NewChannelRegistry()
+	if err := registry.RegisterSnapshot(expected, &fakeChannelAdapter{snapshot: actual}); err != nil {
+		t.Fatalf("retryable error code order must not affect immutable snapshot equality: %v", err)
 	}
 }

@@ -30,7 +30,11 @@ func parseProviderQuoteNumber(ctx context.Context, provider, providerField, fiel
 		typ = "number"
 		value = s
 	}
-	preview := quoteIssuePreview(s)
+	previewValue := s
+	if typ == "string" {
+		previewValue = value
+	}
+	preview := quoteIssuePreview(previewValue)
 	missing := typ == "missing" || typ == "null" || (typ == "string" && strings.TrimSpace(value) == "")
 	severity := validation.SeverityError
 	if !required {
@@ -76,8 +80,5 @@ func quoteIssuePreview(s string) string {
 		}
 		return r
 	}, s)
-	if len(s) > 160 {
-		return s[:160]
-	}
-	return s
+	return truncateDiagnosticPreview(s, 160)
 }

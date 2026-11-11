@@ -88,3 +88,38 @@ func TestMetricValidateAllowsUnavailableBoundsForAvailableValue(t *testing.T) {
 		t.Fatalf("available metric with absent optional bounds rejected: %v", err)
 	}
 }
+
+func TestMetricValidateRejectsInvalidUTF8TextAndJSONValues(t *testing.T) {
+	base := Metric{
+		MetricCode: "sample_metric", Value: json.RawMessage("0.25"),
+		Unit: "ratio", Period: "20d", SystemAsOf: "2026-11-09T01:00:00Z",
+		QualityStatus: QualityValid, MetricStatus: StatusAvailable,
+		CalculationVersion: "1.0.0", LowerBound: json.RawMessage("null"),
+		UpperBound: json.RawMessage("null"),
+	}
+	cases := []struct {
+		name   string
+		mutate func(*Metric)
+	}{
+		{"metric code", func(m *Metric) { m.MetricCode = string([]byte{0xff}) }},
+		{"metric code padded", func(m *Metric) { m.MetricCode = " sample_metric " }},
+		{"unit", func(m *Metric) { m.Unit = string([]byte{0xff}) }},
+		{"unit padded", func(m *Metric) { m.Unit = " ratio " }},
+		{"period", func(m *Metric) { m.Period = string([]byte{0xff}) }},
+		{"period padded", func(m *Metric) { m.Period = " 20d " }},
+		{"calculation version", func(m *Metric) { m.CalculationVersion = string([]byte{0xff}) }},
+		{"calculation version padded", func(m *Metric) { m.CalculationVersion = " 1.0.0 " }},
+		{"value JSON", func(m *Metric) { m.Value = json.RawMessage(append([]byte{'"'}, 0xff, '"')) }},
+		{"lower bound JSON", func(m *Metric) { m.LowerBound = json.RawMessage(append([]byte{'"'}, 0xff, '"')) }},
+		{"upper bound JSON", func(m *Metric) { m.UpperBound = json.RawMessage(append([]byte{'"'}, 0xff, '"')) }},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			value := base
+			tc.mutate(&value)
+			if err := value.Validate(); err == nil {
+				t.Fatal("invalid UTF-8 input accepted")
+			}
+		})
+	}
+}

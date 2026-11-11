@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
 
 	"example.com/stock-analysis-flow/internal/notification/application"
 	"example.com/stock-analysis-flow/internal/notification/domain"
@@ -30,6 +31,13 @@ func NewMySQLSubscriptionRepository(
 		return nil, errors.New("notification storage: database and event type lookup are required")
 	}
 	return &MySQLSubscriptionRepository{db: db, eventTypes: eventTypes, filterValidator: filterValidator}, nil
+}
+
+func normalizeSubscriptionDatabaseTimes(value domain.Subscription) domain.Subscription {
+	value.CreatedAt = value.CreatedAt.UTC().Truncate(time.Microsecond)
+	value.UpdatedAt = value.UpdatedAt.UTC().Truncate(time.Microsecond)
+	value.EffectiveAt = value.EffectiveAt.UTC().Truncate(time.Microsecond)
+	return value
 }
 
 const subscriptionSelect = `SELECT
@@ -92,6 +100,7 @@ func (r *MySQLSubscriptionRepository) Create(ctx context.Context, subscription d
 	if r == nil || r.db == nil || ctx == nil {
 		return errors.New("notification storage: repository is not configured")
 	}
+	subscription = normalizeSubscriptionDatabaseTimes(subscription)
 	if subscription.Version != 1 {
 		return domain.ErrSubscriptionVersionConflict
 	}
@@ -147,6 +156,7 @@ func (r *MySQLSubscriptionRepository) AppendVersion(
 	if expectedVersion < 1 {
 		return domain.ErrSubscriptionVersionConflict
 	}
+	next = normalizeSubscriptionDatabaseTimes(next)
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("notification storage: begin subscription version: %w", err)
@@ -190,7 +200,7 @@ func (r *MySQLSubscriptionRepository) AppendVersion(
 		return fmt.Errorf("notification storage: append subscription version: %w", err)
 	}
 	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("notification storage: commit subscription version: %w", err)
+		return fmt.Errorf("%w: notification storage: commit subscription version: %w", application.ErrPersistenceOutcomeUnknown, err)
 	}
 	return nil
 }

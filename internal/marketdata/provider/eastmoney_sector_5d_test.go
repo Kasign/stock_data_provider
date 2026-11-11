@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"example.com/stock-analysis-flow/internal/marketdata/model"
+	"example.com/stock-analysis-flow/internal/marketdata/validation"
 )
 
 func TestEastmoneySectorRankingByFiveDayChangeUsesFullBoardUniverse(t *testing.T) {
@@ -63,5 +64,46 @@ func TestEastmoneySectorRankingByFiveDayChangeRejectsIncompleteHistory(t *testin
 	p := NewEastmoneyConfiguredWithMarketData(3*time.Second, server.URL, server.URL, "", server.URL, "")
 	if _, err := p.FetchSectorRankingsByMetric(context.Background(), "industry", "change_5d", "up", 1); err == nil {
 		t.Fatal("fewer than six closes must not produce a five-day return")
+	}
+}
+
+func TestEastmoneySectorRankingByFiveDayChangeReportsSnapshotAndCoverageGaps(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("secid") != "" {
+			code := r.URL.Query().Get("secid")
+			if code == "90.BK0002" {
+				fmt.Fprint(w, `{"rc":0,"data":{"code":"BK0002","klines":["2026-10-29,10,11"]}}`)
+				return
+			}
+			fmt.Fprint(w, `{"rc":0,"data":{"code":"BK0001","klines":["2026-10-22,10,10","2026-10-23,10,10","2026-10-26,10,10","2026-10-27,10,10","2026-10-28,10,10","2026-10-29,10,11"]}}`)
+			return
+		}
+		fmt.Fprint(w, `{"rc":0,"data":{"total":2,"diff":[{"f12":"BK0001","f14":"行业一","f3":1.2,"f6":100000000},{"f12":"BK0002","f14":"行业二","f3":0.8,"f6":90000000}]}}`)
+	}))
+	defer server.Close()
+	reporter := validation.NewReporter(16)
+	ctx := validation.WithReporter(context.Background(), reporter)
+	p := NewEastmoneyConfiguredWithMarketData(3*time.Second, server.URL, server.URL, "", server.URL, "")
+	got, err := p.FetchSectorRankingsByMetric(ctx, "industry", "change_5d", "up", 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Total != 1 || !got.TotalIsLowerBound || len(got.Items) != 1 {
+		t.Fatalf("partial historical coverage must remain a lower-bound ranking: %+v", got)
+	}
+	foundTime, foundCoverage := false, false
+	for _, issue := range reporter.Snapshot().Issues {
+		if issue.Stage != validation.StageValidate || issue.Severity != validation.SeverityWarning {
+			continue
+		}
+		switch issue.Field {
+		case "provider_time":
+			foundTime = issue.Code == "not_exposed_by_provider_contract"
+		case "historical_coverage":
+			foundCoverage = issue.Code == "incomplete_historical_coverage" && issue.Count == 1
+		}
+	}
+	if !foundTime || !foundCoverage {
+		t.Fatalf("missing snapshot/coverage diagnostics: %+v", reporter.Snapshot().Issues)
 	}
 }

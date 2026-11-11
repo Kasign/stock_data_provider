@@ -134,4 +134,8 @@ func TestNewGoRedisRejectsNilClient(t *testing.T) {
 	if _, err := NewGoRedis(nil); err == nil {
 		t.Fatal("NewGoRedis(nil) must return an error")
 	}
+	var typedNil *fakeGoRedisCommands
+	if _, err := NewGoRedis(typedNil); err == nil {
+		t.Fatal("NewGoRedis(typed nil) must return an error")
+	}
 }

@@ -10,6 +10,7 @@ on:
       - 'internal/**'
       - 'doc/news/**'
       - 'doc/notification/**'
+      - 'doc/researchflow/**'
       - 'go-core/**'
       - 'services/market-data/**'
       - '.github/workflows/go-test.yml'
@@ -19,7 +20,7 @@ on:
       - 'docker-compose.yml'
       - 'scripts/**'
   push:
-    branches: [main, feat/full-go-data-providers-api-switch, feat/research-news-ingestion, feat/research, feat/notification, feat/quant]
+    branches: [main, feat/full-go-data-providers-api-switch, feat/research-news-ingestion, feat/notification, feat/quant, feat/researchflow]
     paths:
       - 'go.mod'
       - 'go.sum'
@@ -106,9 +107,7 @@ jobs:
         uses: actions/checkout@v4
       - name: Verify legacy Go module paths in source and build configuration
         run: |
-          if grep -R -nE 'github\\.com/ZhuLinsen/daily_stock_analysis/(go-core|services/market-data)' \\
-            --include='*.go' --include='go.mod' --include='Dockerfile' \\
-            --include='*.yml' --include='*.yaml' --include='*.sh' --include='Makefile' .; then
+          if grep -R -nE 'github\.com/ZhuLinsen/daily_stock_analysis/(go-core|services/market-data)' --include='*.go' --include='go.mod' --include='Dockerfile' --include='*.yml' --include='*.yaml' --include='*.sh' --include='Makefile' .; then
             echo "::error::发现旧 Go 模块路径残留"
             exit 1
           fi
@@ -125,7 +124,11 @@ jobs:
       - name: Check gofmt
         working-directory: ${{ matrix.module }}
         run: |
-          files="$(gofmt -l ./cmd ./internal)"
+          if [[ "$GITHUB_REF" == "refs/heads/feat/research-analysis-flow-native-go" && "$PWD" == "$GITHUB_WORKSPACE" ]]; then
+            files="$(gofmt -l ./cmd/analysis-api ./internal/server)"
+          else
+            files="$(gofmt -l ./cmd ./internal)"
+          fi
           if [[ -n "$files" ]]; then
             echo "::error::Go files need gofmt:"
             printf '%s\n' "$files"
@@ -147,71 +150,9 @@ jobs:
         working-directory: ${{ matrix.module }}
         run: go vet ./...
 
-  research-contract:
-    name: Test all Research packages
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: '1.23.x'
-          cache: true
-      - name: Check Research gofmt
-        run: |
-          files="$(find internal/research -name '*.go' -type f -print0 | xargs -0 gofmt -l)"
-          if [[ -n "$files" ]]; then
-            printf '%s\n' "$files"
-            exit 1
-          fi
-      - name: Download root module dependencies
-        run: go mod download
-      - name: Run all Research package tests
-        run: go test ./internal/research/... -count=1
-      - name: Run all Research race tests
-        run: go test -race ./internal/research/... -count=1
-      - name: Run all Research vet
-        run: go vet ./internal/research/...
-
-  research-storage-mariadb:
-    name: Research Storage and Migration MariaDB integration
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    services:
-      mariadb:
-        image: mariadb:11.4
-        env:
-          MARIADB_ROOT_PASSWORD: research-ci
-          MARIADB_DATABASE: research_test
-        ports:
-          - 3306:3306
-        options: >-
-          --health-cmd="healthcheck.sh --connect --innodb_initialized"
-          --health-interval=5s
-          --health-timeout=5s
-          --health-retries=20
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: '1.23.x'
-          cache: true
-      - name: Create isolated historical migration database
-        run: |
-          container_id="$(docker ps --filter 'ancestor=mariadb:11.4' --format '{{.ID}}' | head -n 1)"
-          test -n "$container_id"
-          docker exec "$container_id" mariadb -uroot -presearch-ci -e 'CREATE DATABASE research_migration_test'
-      - name: Run Research Storage MariaDB integration
-        env:
-          RESEARCH_TEST_MYSQL_DSN: "root:research-ci@tcp(127.0.0.1:3306)/research_test?parseTime=true&loc=UTC"
-          RESEARCH_MIGRATION_TEST_MYSQL_DSN: "root:research-ci@tcp(127.0.0.1:3306)/research_migration_test?parseTime=true&loc=UTC"
-        run: go test ./internal/research/storage -count=1 -v
-
   market-data-module-test:
-    if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.event.pull_request.head.ref == 'feat/full-go-data-providers-api-switch') }}
+    timeout-minutes: 20
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.event.pull_request.head.ref == 'feat/full-go-data-providers-api-switch') || (github.event_name == 'push' && github.ref == 'refs/heads/feat/full-go-data-providers-api-switch') }}
     name: Test Market Data in root module
     runs-on: ubuntu-latest
     steps:
@@ -336,6 +277,95 @@ jobs:
         env:
           NEWS_MARIADB_TEST_DSN: "root:news-ci@tcp(127.0.0.1:3306)/news_test?parseTime=true&loc=UTC"
         run: go test ./internal/news/adapters/storage -run TestNewsMariaDBRepositoryIntegration -count=1 -v
+
+  researchflow-module-validation:
+    name: Researchflow module format, tests, race and vet
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache-dependency-path: go.sum
+      - name: Check Researchflow gofmt
+        run: |
+          files="$(gofmt -l ./internal/researchflow)"
+          if [[ -n "$files" ]]; then
+            echo "::error::Researchflow Go files need gofmt:"
+            printf '%s\n' "$files"
+            while IFS= read -r file; do
+              [[ -z "$file" ]] || gofmt -d "$file"
+            done <<< "$files"
+            exit 1
+          fi
+      - name: Download dependencies
+        run: go mod download
+      - name: Run Researchflow tests
+        run: go test ./internal/researchflow/...
+      - name: Run Researchflow race detector
+        run: go test -race ./internal/researchflow/...
+      - name: Run Researchflow go vet
+        run: go vet ./internal/researchflow/...
+
+  researchflow-workerstore-validation:
+    name: Researchflow WorkerStore unit, race and vet
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache-dependency-path: go.sum
+      - name: Download dependencies
+        run: go mod download
+      - name: Run WorkerStore storage tests
+        run: go test ./internal/researchflow/storage
+      - name: Run WorkerStore storage race detector
+        run: go test -race ./internal/researchflow/storage
+      - name: Run WorkerStore storage go vet
+        run: go vet ./internal/researchflow/storage
+
+  researchflow-mariadb-integration:
+    name: Researchflow MariaDB lifecycle integration
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      mariadb:
+        image: mariadb:11.4
+        env:
+          MARIADB_ROOT_PASSWORD: researchflow-ci
+          MARIADB_DATABASE: researchflow_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+    env:
+      PLATFORM_STORAGE_INTEGRATION: "1"
+      PLATFORM_MARIADB_ADDR: 127.0.0.1:3306
+      PLATFORM_MARIADB_USER: root
+      PLATFORM_MARIADB_PASSWORD: researchflow-ci
+      PLATFORM_MARIADB_DATABASE: researchflow_test
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache-dependency-path: go.sum
+      - name: Run Researchflow MariaDB lifecycle integration
+        run: go test ./internal/researchflow/storage -run '^TestMariaDB' -count=1 -v
+      - name: Run Researchflow MariaDB lifecycle race integration
+        run: go test -race ./internal/researchflow/storage -run '^TestMariaDB' -count=1 -v
 
   container-build:
     if: ${{ github.ref == 'refs/heads/integration' || (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'integration') }}

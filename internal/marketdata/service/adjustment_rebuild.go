@@ -1,9 +1,13 @@
 package service
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
+	"reflect"
 	"sort"
 	"strings"
 	"time"
@@ -129,9 +133,22 @@ func rebuildAdjustedDailyBarsWithMode(raw []model.DailyBar, factors []model.Adju
 		if groups[key] == nil {
 			groups[key] = make(map[string]model.AdjustmentFactor)
 		}
-		if previous, exists := groups[key][factor.TradeDate]; !exists ||
-			factor.SystemObservedAt.After(*previous.SystemObservedAt) {
+		previous, exists := groups[key][factor.TradeDate]
+		if !exists {
 			groups[key][factor.TradeDate] = factor
+			continue
+		}
+		previousObserved := previous.SystemObservedAt
+		if previousObserved == nil {
+			groups[key][factor.TradeDate] = factor
+			continue
+		}
+		if factor.SystemObservedAt.After(*previousObserved) {
+			groups[key][factor.TradeDate] = factor
+			continue
+		}
+		if factor.SystemObservedAt.Equal(*previousObserved) && !sameAdjustmentFactorObservation(previous, factor) {
+			return nil, fmt.Errorf("ambiguous adjustment-factor revisions for %s on %s share system_observed_at", factor.Symbol, factor.TradeDate)
 		}
 	}
 
@@ -199,6 +216,17 @@ func rebuildAdjustedDailyBarsWithMode(raw []model.DailyBar, factors []model.Adju
 		}
 		return nil, fmt.Errorf("no same-security/source/version factor series covers every raw bar%s", detail)
 	}
+	factorSetHash, err := adjustmentFactorSetFingerprint(selected, reference)
+	if err != nil {
+		return nil, fmt.Errorf("fingerprint selected adjustment factor set: %w", err)
+	}
+	referenceRevisionHash := ""
+	if reference.TradeDate != "" {
+		referenceRevisionHash, err = adjustmentFactorFingerprint(reference)
+		if err != nil {
+			return nil, fmt.Errorf("fingerprint adjustment reference factor: %w", err)
+		}
+	}
 
 	out := make([]model.DailyBar, len(raw))
 	for i, bar := range raw {
@@ -227,6 +255,13 @@ func rebuildAdjustedDailyBarsWithMode(raw []model.DailyBar, factors []model.Adju
 		}
 		bar.AdjustmentFactorSource = factor.Source
 		bar.AdjustmentFactorSourceVersion = factor.SourceVersion
+		bar.AdjustmentFactorRevisionHash, err = adjustmentFactorFingerprint(factor)
+		if err != nil {
+			return nil, fmt.Errorf("fingerprint adjustment factor for %s: %w", bar.TradeDate, err)
+		}
+		bar.AdjustmentFactorSetHash = factorSetHash
+		bar.AdjustmentFactorReferenceRevisionHash = referenceRevisionHash
+		bar.AdjustmentAlgorithmVersion = "cumulative_adj_factor_v1"
 		applyAdjustmentFactorQuality(&bar, factor, "bar")
 		observed := *factor.SystemObservedAt
 		if basis == model.AdjustmentForward && selectedBasis == model.AdjustmentFactorShared {
@@ -245,6 +280,84 @@ func rebuildAdjustedDailyBarsWithMode(raw []model.DailyBar, factors []model.Adju
 		}
 	}
 	return out, nil
+}
+
+func adjustmentFactorFingerprint(value model.AdjustmentFactor) (string, error) {
+	value.Basis = model.NormalizeAdjustmentFactorBasis(value.Basis)
+	value.SystemObservedAt = nil
+	value.FetchedAt = time.Time{}
+	value.ProviderTime = canonicalFactorTime(value.ProviderTime)
+	value.AvailableAt = canonicalFactorTime(value.AvailableAt)
+	payload, err := json.Marshal(value)
+	if err != nil {
+		return "", err
+	}
+	sum := sha256.Sum256(payload)
+	return hex.EncodeToString(sum[:]), nil
+}
+
+func canonicalFactorTime(value *time.Time) *time.Time {
+	if value == nil {
+		return nil
+	}
+	canonical := value.UTC()
+	return &canonical
+}
+
+func adjustmentFactorSetFingerprint(selected map[string]model.AdjustmentFactor, reference model.AdjustmentFactor) (string, error) {
+	dates := make([]string, 0, len(selected))
+	for date := range selected {
+		dates = append(dates, date)
+	}
+	sort.Strings(dates)
+	type member struct {
+		TradeDate string `json:"trade_date"`
+		Revision  string `json:"revision_hash"`
+		Role      string `json:"role"`
+	}
+	members := make([]member, 0, len(dates)+1)
+	for _, date := range dates {
+		hash, err := adjustmentFactorFingerprint(selected[date])
+		if err != nil {
+			return "", err
+		}
+		members = append(members, member{TradeDate: date, Revision: hash, Role: "bar"})
+	}
+	if reference.TradeDate != "" {
+		hash, err := adjustmentFactorFingerprint(reference)
+		if err != nil {
+			return "", err
+		}
+		members = append(members, member{TradeDate: reference.TradeDate, Revision: hash, Role: "reference"})
+	}
+	payload, err := json.Marshal(members)
+	if err != nil {
+		return "", err
+	}
+	sum := sha256.Sum256(payload)
+	return hex.EncodeToString(sum[:]), nil
+}
+
+func sameAdjustmentFactorObservation(left, right model.AdjustmentFactor) bool {
+	left.FetchedAt, right.FetchedAt = time.Time{}, time.Time{}
+	left.SystemObservedAt, right.SystemObservedAt = nil, nil
+	if left.ProviderTime != nil {
+		value := left.ProviderTime.UTC()
+		left.ProviderTime = &value
+	}
+	if right.ProviderTime != nil {
+		value := right.ProviderTime.UTC()
+		right.ProviderTime = &value
+	}
+	if left.AvailableAt != nil {
+		value := left.AvailableAt.UTC()
+		left.AvailableAt = &value
+	}
+	if right.AvailableAt != nil {
+		value := right.AvailableAt.UTC()
+		right.AvailableAt = &value
+	}
+	return reflect.DeepEqual(left, right)
 }
 
 func factorBasisForAdjustment(basis model.AdjustmentBasis) model.AdjustmentFactorBasis {

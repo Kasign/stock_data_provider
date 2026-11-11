@@ -9,13 +9,23 @@ import (
 )
 
 type evidenceSnapshotRepositoryStub struct {
-	created EvidenceSnapshot
-	calls   int
+	created     EvidenceSnapshot
+	calls       int
+	deleted     int64
+	deleteErr   error
+	deleteNow   time.Time
+	deleteLimit int
+	deleteCalls int
+	afterDelete func()
+	afterCreate func()
 }
 
 func (s *evidenceSnapshotRepositoryStub) CreateEvidenceSnapshot(_ context.Context, snapshot EvidenceSnapshot) error {
 	s.calls++
 	s.created = snapshot
+	if s.afterCreate != nil {
+		s.afterCreate()
+	}
 	return nil
 }
 
@@ -23,8 +33,13 @@ func (s *evidenceSnapshotRepositoryStub) GetEvidenceSnapshot(context.Context, st
 	return EvidenceSnapshot{}, ErrEvidenceSnapshotUnavailable
 }
 
-func (s *evidenceSnapshotRepositoryStub) DeleteExpiredEvidenceSnapshots(context.Context, time.Time, int) (int64, error) {
-	return 0, nil
+func (s *evidenceSnapshotRepositoryStub) DeleteExpiredEvidenceSnapshots(_ context.Context, now time.Time, limit int) (int64, error) {
+	s.deleteCalls++
+	s.deleteNow, s.deleteLimit = now, limit
+	if s.afterDelete != nil {
+		s.afterDelete()
+	}
+	return s.deleted, s.deleteErr
 }
 
 func validEvidenceSnapshot(now time.Time) EvidenceSnapshot {
@@ -52,6 +67,20 @@ func TestEvidenceSnapshotValidateAcceptsStableReferenceOnlySnapshot(t *testing.T
 	snapshot := validEvidenceSnapshot(time.Date(2026, 11, 6, 10, 0, 0, 0, time.UTC))
 	if err := snapshot.Validate(); err != nil {
 		t.Fatalf("Validate() error = %v", err)
+	}
+}
+
+func TestEvidenceSnapshotValidateAtRejectsExpiredSnapshot(t *testing.T) {
+	now := time.Date(2026, 11, 10, 10, 0, 0, 0, time.UTC)
+	snapshot := validEvidenceSnapshot(now.Add(-EvidenceSnapshotTTL))
+	if err := snapshot.ValidateAt(now.Add(-time.Nanosecond)); err != nil {
+		t.Fatalf("ValidateAt() immediately before expiry error = %v", err)
+	}
+	if err := snapshot.ValidateAt(now); !errors.Is(err, ErrInvalidEvidenceSnapshot) {
+		t.Fatalf("ValidateAt() at expiry error = %v, want ErrInvalidEvidenceSnapshot", err)
+	}
+	if err := snapshot.ValidateAt(now.Add(time.Nanosecond)); !errors.Is(err, ErrInvalidEvidenceSnapshot) {
+		t.Fatalf("ValidateAt() after expiry error = %v, want ErrInvalidEvidenceSnapshot", err)
 	}
 }
 
@@ -162,6 +191,60 @@ func TestEvidenceSnapshotPageAfterUsesExactStableSortPosition(t *testing.T) {
 	}
 }
 
+func TestEvidenceSnapshotPageAfterPaginatesEqualTimestampTiesWithoutGaps(t *testing.T) {
+	now := time.Date(2026, 11, 10, 9, 0, 0, 0, time.UTC)
+	observedAt := now.Add(-time.Minute)
+	snapshot := validEvidenceSnapshot(now)
+	snapshot.PageSize = 2
+	snapshot.Items = []EvidenceSnapshotItem{
+		{NewsID: "news-a", VersionID: "version-a", ObservationID: "observation-a", SystemObservedAt: observedAt},
+		{NewsID: "news-a", VersionID: "version-b", ObservationID: "observation-b", SystemObservedAt: observedAt},
+		{NewsID: "news-b", VersionID: "version-a", ObservationID: "observation-c", SystemObservedAt: observedAt},
+		{NewsID: "news-c", VersionID: "version-a", ObservationID: "observation-d", SystemObservedAt: observedAt},
+		{NewsID: "news-c", VersionID: "version-b", ObservationID: "observation-e", SystemObservedAt: observedAt},
+	}
+	if err := snapshot.Validate(); err != nil {
+		t.Fatalf("equal-timestamp snapshot must be valid: %v", err)
+	}
+
+	var position *EvidenceCursorPosition
+	var got []string
+	for pageNumber := 0; pageNumber < 3; pageNumber++ {
+		page, hasMore, err := snapshot.PageAfter(position)
+		if err != nil {
+			t.Fatalf("page %d: %v", pageNumber+1, err)
+		}
+		for _, item := range page {
+			got = append(got, item.NewsID+"/"+item.VersionID)
+		}
+		if hasMore {
+			if len(page) != snapshot.PageSize {
+				t.Fatalf("page %d hasMore=true with short page: %d", pageNumber+1, len(page))
+			}
+			last := page[len(page)-1]
+			position = &EvidenceCursorPosition{
+				SnapshotRef: snapshot.SnapshotRef, LastSystemObservedAt: last.SystemObservedAt,
+				LastNewsID: last.NewsID, LastVersionID: last.VersionID,
+			}
+		} else {
+			position = nil
+			break
+		}
+	}
+	want := []string{
+		"news-a/version-a", "news-a/version-b", "news-b/version-a",
+		"news-c/version-a", "news-c/version-b",
+	}
+	if len(got) != len(want) {
+		t.Fatalf("paginated item count=%d, want %d: %v", len(got), len(want), got)
+	}
+	for index := range want {
+		if got[index] != want[index] {
+			t.Fatalf("paginated order[%d]=%q, want %q; all=%v", index, got[index], want[index], got)
+		}
+	}
+}
+
 func TestSaveEvidenceSnapshotValidatesBeforePersistence(t *testing.T) {
 	repository := &evidenceSnapshotRepositoryStub{}
 	service, err := NewSaveEvidenceSnapshot(repository)
@@ -182,4 +265,115 @@ func TestSaveEvidenceSnapshotValidatesBeforePersistence(t *testing.T) {
 	if repository.calls != 1 {
 		t.Fatalf("invalid snapshot reached repository; calls=%d", repository.calls)
 	}
+}
+
+func TestEvidenceSnapshotRetentionCleanerUsesBoundedRepositoryRequest(t *testing.T) {
+	repository := &evidenceSnapshotRepositoryStub{deleted: 7}
+	cleaner, err := NewEvidenceSnapshotRetentionCleaner(repository)
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Date(2026, 11, 9, 10, 0, 0, 0, time.FixedZone("UTC+8", 8*60*60))
+	deleted, err := cleaner.Execute(context.Background(), now, 20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if deleted != 7 || repository.deleteCalls != 1 || !repository.deleteNow.Equal(now.UTC()) || repository.deleteLimit != 20 {
+		t.Fatalf("deleted=%d calls=%d now=%s limit=%d", deleted, repository.deleteCalls, repository.deleteNow, repository.deleteLimit)
+	}
+}
+
+func TestEvidenceSnapshotRetentionCleanerRejectsInvalidRequestsAndResults(t *testing.T) {
+	if _, err := NewEvidenceSnapshotRetentionCleaner(nil); !errors.Is(err, ErrInvalidEvidenceSnapshot) {
+		t.Fatalf("nil repository error=%v", err)
+	}
+	repository := &evidenceSnapshotRepositoryStub{}
+	cleaner, err := NewEvidenceSnapshotRetentionCleaner(repository)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := cleaner.Execute(context.Background(), time.Time{}, 1); !errors.Is(err, ErrInvalidEvidenceSnapshot) {
+		t.Fatalf("zero time error=%v", err)
+	}
+	if _, err := cleaner.Execute(context.Background(), time.Now(), 1001); !errors.Is(err, ErrInvalidEvidenceSnapshot) {
+		t.Fatalf("oversized limit error=%v", err)
+	}
+	repository.deleted = -1
+	if _, err := cleaner.Execute(context.Background(), time.Now(), 10); !errors.Is(err, ErrEvidenceSnapshotRetentionResultInvalid) {
+		t.Fatalf("negative deleted count error=%v", err)
+	}
+	repository.deleted = 11
+	if _, err := cleaner.Execute(context.Background(), time.Now(), 10); !errors.Is(err, ErrEvidenceSnapshotRetentionResultInvalid) {
+		t.Fatalf("over-limit deleted count error=%v", err)
+	}
+}
+
+func TestEvidenceSnapshotRetentionCleanerHonorsCancellation(t *testing.T) {
+	now := time.Date(2026, 11, 9, 10, 0, 0, 0, time.UTC)
+	t.Run("already canceled does not call repository", func(t *testing.T) {
+		repository := &evidenceSnapshotRepositoryStub{}
+		cleaner, err := NewEvidenceSnapshotRetentionCleaner(repository)
+		if err != nil {
+			t.Fatal(err)
+		}
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		if _, err := cleaner.Execute(ctx, now, 10); !errors.Is(err, context.Canceled) {
+			t.Fatalf("Execute() error=%v", err)
+		}
+		if repository.deleteCalls != 0 {
+			t.Fatalf("repository calls=%d, want 0", repository.deleteCalls)
+		}
+	})
+	t.Run("repository confirmed deletion wins over later cancellation", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		repository := &evidenceSnapshotRepositoryStub{deleted: 2, afterDelete: cancel}
+		cleaner, err := NewEvidenceSnapshotRetentionCleaner(repository)
+		if err != nil {
+			t.Fatal(err)
+		}
+		deleted, err := cleaner.Execute(ctx, now, 10)
+		if err != nil || deleted != 2 {
+			t.Fatalf("Execute() = (%d, %v), want (2, nil) after repository success", deleted, err)
+		}
+		if repository.deleteCalls != 1 {
+			t.Fatalf("repository calls=%d, want 1", repository.deleteCalls)
+		}
+	})
+}
+
+func TestSaveEvidenceSnapshotHonorsContextCancellation(t *testing.T) {
+	now := time.Now().UTC()
+	snapshot := validEvidenceSnapshot(now)
+	t.Run("already canceled does not call repository", func(t *testing.T) {
+		repository := &evidenceSnapshotRepositoryStub{}
+		service, err := NewSaveEvidenceSnapshot(repository)
+		if err != nil {
+			t.Fatal(err)
+		}
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		if err := service.Execute(ctx, snapshot); !errors.Is(err, context.Canceled) {
+			t.Fatalf("Execute() error=%v, want context.Canceled", err)
+		}
+		if repository.calls != 0 {
+			t.Fatalf("repository calls=%d, want 0", repository.calls)
+		}
+	})
+	t.Run("canceled while repository is running", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		repository := &evidenceSnapshotRepositoryStub{afterCreate: cancel}
+		service, err := NewSaveEvidenceSnapshot(repository)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := service.Execute(ctx, snapshot); !errors.Is(err, context.Canceled) {
+			t.Fatalf("Execute() error=%v, want context.Canceled", err)
+		}
+		if repository.calls != 1 {
+			t.Fatalf("repository calls=%d, want 1", repository.calls)
+		}
+	})
 }

@@ -3,10 +3,11 @@ package marketdata
 import (
 	"fmt"
 	"net/url"
-	"os"
 	"strconv"
 	"strings"
 	"time"
+
+	platformconfig "example.com/stock-analysis-flow/internal/platform/config"
 )
 
 type Config struct {
@@ -35,47 +36,37 @@ func DefaultConfig() Config {
 }
 
 // ConfigFromEnv 读取原生 Go 行情 API 配置。如果 Go 接口地址或密钥缺失，配置校验会直接失败，不会回退到旧 Python API。
-func ConfigFromEnv() (Config, error) {
+// LoadConfig decodes the market-data adapter configuration from an explicit source.
+func LoadConfig(env platformconfig.Env) (Config, error) {
 	cfg := DefaultConfig()
-	if value := strings.TrimSpace(os.Getenv("MARKET_DATA_BASE_URL")); value != "" {
+	if value := strings.TrimSpace(env.String("MARKET_DATA_BASE_URL", cfg.BaseURL)); value != "" {
 		cfg.BaseURL = value
 	}
-	cfg.APIKey = strings.TrimSpace(os.Getenv("MARKET_DATA_API_KEY"))
-	if value := strings.TrimSpace(os.Getenv("MARKET_DATA_REQUEST_TIMEOUT")); value != "" {
-		d, err := time.ParseDuration(value)
-		if err != nil || d <= 0 || d > 10*time.Minute {
-			return Config{}, fmt.Errorf("MARKET_DATA_REQUEST_TIMEOUT must be between 1ns and 10m")
-		}
-		cfg.Timeout = d
+	cfg.APIKey = strings.TrimSpace(env.Secret("MARKET_DATA_API_KEY").Value())
+	var err error
+	if cfg.Timeout, err = env.Duration("MARKET_DATA_REQUEST_TIMEOUT", cfg.Timeout); err != nil || cfg.Timeout <= 0 || cfg.Timeout > 10*time.Minute {
+		return Config{}, fmt.Errorf("MARKET_DATA_REQUEST_TIMEOUT must be between 1ns and 10m")
 	}
-	if value := strings.TrimSpace(os.Getenv("MARKET_DATA_HISTORY_DAYS")); value != "" {
-		n, err := strconv.Atoi(value)
-		if err != nil || n < 1 || n > 365 {
-			return Config{}, fmt.Errorf("MARKET_DATA_HISTORY_DAYS must be between 1 and 365")
-		}
-		cfg.HistoryDays = n
+	if cfg.HistoryDays, err = env.Int("MARKET_DATA_HISTORY_DAYS", cfg.HistoryDays); err != nil || cfg.HistoryDays < 1 || cfg.HistoryDays > 365 {
+		return Config{}, fmt.Errorf("MARKET_DATA_HISTORY_DAYS must be between 1 and 365")
 	}
-	if value := strings.TrimSpace(os.Getenv("MARKET_DATA_MAX_CONCURRENCY")); value != "" {
-		n, err := strconv.Atoi(value)
-		if err != nil || n < 1 || n > 32 {
-			return Config{}, fmt.Errorf("MARKET_DATA_MAX_CONCURRENCY must be between 1 and 32")
-		}
-		cfg.MaxConcurrency = n
+	if cfg.MaxConcurrency, err = env.Int("MARKET_DATA_MAX_CONCURRENCY", cfg.MaxConcurrency); err != nil || cfg.MaxConcurrency < 1 || cfg.MaxConcurrency > 32 {
+		return Config{}, fmt.Errorf("MARKET_DATA_MAX_CONCURRENCY must be between 1 and 32")
 	}
-	if value := strings.TrimSpace(os.Getenv("MARKET_DATA_MAX_RESPONSE_BYTES")); value != "" {
-		n, err := strconv.ParseInt(value, 10, 64)
-		if err != nil || n < 1024 || n > 128<<20 {
+	if raw := strings.TrimSpace(env.String("MARKET_DATA_MAX_RESPONSE_BYTES", "")); raw != "" {
+		value, parseErr := strconv.ParseInt(raw, 10, 64)
+		if parseErr != nil || value < 1024 || value > 128<<20 {
 			return Config{}, fmt.Errorf("MARKET_DATA_MAX_RESPONSE_BYTES must be between 1024 and 134217728")
 		}
-		cfg.MaxResponseBytes = n
+		cfg.MaxResponseBytes = value
 	}
-	if value, exists := os.LookupEnv("MARKET_DATA_INDEX_SYMBOLS"); exists {
-		cfg.IndexSymbols = splitCSV(value)
+	if raw := env.String("MARKET_DATA_INDEX_SYMBOLS", ""); raw != "" {
+		cfg.IndexSymbols = splitCSV(raw)
 	}
-	if value := strings.TrimSpace(os.Getenv("MARKET_DATA_MARKET_TIMEZONE")); value != "" {
+	if value := strings.TrimSpace(env.String("MARKET_DATA_MARKET_TIMEZONE", cfg.MarketTimezone)); value != "" {
 		cfg.MarketTimezone = value
 	}
-	if value := strings.TrimSpace(os.Getenv("MARKET_DATA_ADJUSTMENT")); value != "" {
+	if value := strings.TrimSpace(env.String("MARKET_DATA_ADJUSTMENT", cfg.Adjustment)); value != "" {
 		cfg.Adjustment = value
 	}
 	if _, err := time.LoadLocation(cfg.MarketTimezone); err != nil {
@@ -94,6 +85,11 @@ func ConfigFromEnv() (Config, error) {
 		return Config{}, fmt.Errorf("MARKET_DATA_ADJUSTMENT must be one of none, forward_adjusted, backward_adjusted")
 	}
 	return cfg, nil
+}
+
+// ConfigFromEnv preserves the legacy adapter entry point.
+func ConfigFromEnv() (Config, error) {
+	return LoadConfig(platformconfig.NewEnv())
 }
 
 func isPlaceholderSecret(value string) bool {

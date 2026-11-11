@@ -11,7 +11,8 @@
     "decided_at": "2026-11-06T05:03:00Z",
     "expires_at": null,
     "conditions": [],
-    "decision_fingerprint": "059366735753b82b018143b2f300bc9bc6d2763416af7316271dccd9682f1199"
+    "decision_fingerprint": "833161334c3d6df3e8b51b307a937b2c7496694c8bda0ec5b38f48aacaeb32bf",
+    "schema_version": "1.0.0"
   },
   "policy_snapshot": {
     "snapshot_ref": "policy-snapshot:research-evidence-access:v1",
@@ -21,7 +22,8 @@
         "policy_ref": "research-evidence-access",
         "policy_version": "1.0.0"
       }
-    ]
+    ],
+    "schema_version": "1.0.0"
   },
   "fingerprint_input": {
     "policy_owner": "research",
@@ -40,8 +42,9 @@
         "policy_ref": "research-evidence-access",
         "policy_version": "1.0.0"
       }
-    ]
+    ],
+    "schema_version": "1.0.0"
   },
-  "canonical_json": "{\"conditions\":[],\"content_level\":\"summary\",\"decided_at\":\"2026-11-06T05:03:00Z\",\"decision\":\"allowed\",\"evaluated_policy_versions\":[{\"policy_ref\":\"research-evidence-access\",\"policy_type\":\"research_evidence_access\",\"policy_version\":\"1.0.0\"}],\"expires_at\":null,\"policy_owner\":\"research\",\"policy_version\":\"policy-snapshot:research-evidence-access:v1\",\"purpose_code\":\"research_analysis\",\"resource_ref\":\"research_evidence:evidence_001\",\"subject_ref\":\"service:researchflow\"}",
-  "expected_sha256": "059366735753b82b018143b2f300bc9bc6d2763416af7316271dccd9682f1199"
+  "canonical_json": "{\"conditions\":[],\"content_level\":\"summary\",\"decided_at\":\"2026-11-06T05:03:00Z\",\"decision\":\"allowed\",\"evaluated_policy_versions\":[{\"policy_ref\":\"research-evidence-access\",\"policy_type\":\"research_evidence_access\",\"policy_version\":\"1.0.0\"}],\"expires_at\":null,\"policy_owner\":\"research\",\"policy_version\":\"policy-snapshot:research-evidence-access:v1\",\"purpose_code\":\"research_analysis\",\"resource_ref\":\"research_evidence:evidence_001\",\"schema_version\":\"1.0.0\",\"subject_ref\":\"service:researchflow\"}",
+  "expected_sha256": "833161334c3d6df3e8b51b307a937b2c7496694c8bda0ec5b38f48aacaeb32bf"
 }

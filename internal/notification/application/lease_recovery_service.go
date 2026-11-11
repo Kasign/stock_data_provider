@@ -20,10 +20,15 @@ type LeaseRecoveryService struct {
 }
 
 type LeaseRecoveryReport struct {
-	Scanned    int
-	Recovered  int
-	Conflicted int
-	Failed     int
+	// Scanned 是扫描器返回的候选总数，不代表全部候选都已处理。
+	Scanned        int
+	Recovered      int
+	Conflicted     int
+	OutcomeUnknown int
+	// OutcomeUnknownDeliveryIDs 是内部 Worker 对账所需的精确 Delivery 标识，不得写入公开诊断属性。
+	OutcomeUnknownDeliveryIDs []string `json:"-"`
+	Failed                    int
+	Unprocessed               int
 }
 
 // RecoverExpiredOnce runs one bounded recovery pass. The caller supplies the
@@ -49,10 +54,23 @@ func (s *LeaseRecoveryService) RecoverExpiredOnce(
 	if len(claims) > limit {
 		return report, fmt.Errorf("%w: scanner exceeded requested limit", ErrLeaseRecoveryHistory)
 	}
+	// 先验证整个候选批次的唯一性，再执行任何状态迁移；重复 Delivery 候选不能依赖扫描顺序决定赢家。
+	seenDeliveries := make(map[string]struct{}, len(claims))
+	for _, claim := range claims {
+		deliveryID := claim.Delivery.DeliveryID
+		if deliveryID == "" {
+			return report, ErrLeaseRecoveryHistory
+		}
+		if _, exists := seenDeliveries[deliveryID]; exists {
+			return report, fmt.Errorf("%w: duplicate delivery candidate", ErrLeaseRecoveryHistory)
+		}
+		seenDeliveries[deliveryID] = struct{}{}
+	}
 	report.Scanned = len(claims)
 	var failures []error
-	for _, claim := range claims {
+	for index, claim := range claims {
 		if err := ctx.Err(); err != nil {
+			report.Unprocessed += len(claims) - index
 			failures = append(failures, err)
 			break
 		}
@@ -62,8 +80,15 @@ func (s *LeaseRecoveryService) RecoverExpiredOnce(
 				report.Conflicted++
 				continue
 			}
+			if errors.Is(err, ErrPersistenceOutcomeUnknown) {
+				// Commit 结果不确定不能计为普通失败或成功；调用方必须重新读取状态对账。
+				report.OutcomeUnknown++
+				report.OutcomeUnknownDeliveryIDs = append(report.OutcomeUnknownDeliveryIDs, claim.Delivery.DeliveryID)
+				failures = append(failures, fmt.Errorf("notification: lease recovery item: %w", err))
+				continue
+			}
 			report.Failed++
-			failures = append(failures, fmt.Errorf("delivery %s: %w", claim.Delivery.DeliveryID, err))
+			failures = append(failures, fmt.Errorf("notification: lease recovery item: %w", err))
 			continue
 		}
 		report.Recovered++
@@ -88,6 +113,14 @@ func (s *LeaseRecoveryService) recoverClaim(ctx context.Context, claim DeliveryC
 	if err != nil {
 		return err
 	}
+	if assessment.Action == LeaseRecoverySafeToRetry && len(attempts) > 0 {
+		elapsedCutoff := attempts[0].StartedAt.Add(s.RetryPolicy.MaxElapsed)
+		cutoff := earlierTime(claim.Delivery.DeadlineAt, elapsedCutoff)
+		if !now.Before(cutoff) {
+			assessment.Action = LeaseRecoveryFinalizeFailed
+			assessment.ReasonCode = RetryReasonDeadlineExceeded
+		}
+	}
 
 	change := domain.DeliveryTransition{At: now, ReasonCode: assessment.ReasonCode, EvidenceRef: assessment.EvidenceRef}
 	if assessment.AttemptID != "" {
@@ -101,7 +134,11 @@ func (s *LeaseRecoveryService) recoverClaim(ctx context.Context, claim DeliveryC
 	switch assessment.Action {
 	case LeaseRecoverySafeToRetry:
 		nextAttemptAt := now.Add(time.Microsecond)
-		if !nextAttemptAt.Before(claim.Delivery.DeadlineAt) {
+		retryCutoff := claim.Delivery.DeadlineAt
+		if len(attempts) > 0 {
+			retryCutoff = earlierTime(retryCutoff, attempts[0].StartedAt.Add(s.RetryPolicy.MaxElapsed))
+		}
+		if !nextAttemptAt.Before(retryCutoff) {
 			change.To = domain.DeliveryFailed
 			change.ReasonCode = RetryReasonDeadlineExceeded
 		} else {

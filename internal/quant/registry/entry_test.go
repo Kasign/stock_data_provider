@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"testing"
 )
@@ -378,6 +379,7 @@ func TestRegistryValidateMetricAppliesRegisteredSemantics(t *testing.T) {
 	registry := New()
 	entry := validEntry("sample_metric", "1.0.0")
 	entry.Precision.MaxFractionDigits = 4
+	entry.Precision.Tolerance = json.RawMessage("0.0001")
 	entry.Range = NumericRange{Minimum: json.RawMessage("-0.5"), Maximum: json.RawMessage("0.5")}
 	entry.QualityPolicy.QualityStates = []string{"valid", "degraded"}
 	if err := registry.Register(entry, true); err != nil {
@@ -405,7 +407,6 @@ func TestRegistryValidateMetricAppliesRegisteredSemantics(t *testing.T) {
 		t.Fatalf("unknown metric code should fail lookup, got %v", err)
 	}
 }
-
 
 func TestRegistryFreezePreventsAlgorithmActivation(t *testing.T) {
 	registry := New()
@@ -485,5 +486,89 @@ func TestRegistryConcurrentVersionActivationAndLookup(t *testing.T) {
 	close(errs)
 	for err := range errs {
 		t.Error(err)
+	}
+}
+
+func TestEntryValidateRejectsInvalidUTF8Metadata(t *testing.T) {
+	tests := []struct {
+		name   string
+		mutate func(*Entry)
+	}{
+		{"algorithm version", func(e *Entry) { e.AlgorithmVersion = string([]byte{0xff}) }},
+		{"unit", func(e *Entry) { e.Unit = string([]byte{0xff}) }},
+		{"rounding mode", func(e *Entry) { e.Precision.RoundingMode = string([]byte{0xff}) }},
+		{"input field", func(e *Entry) { e.InputRequirements[0].Fields[0] = string([]byte{0xff}) }},
+		{"interval", func(e *Entry) { e.InputRequirements[0].Interval = string([]byte{0xff}) }},
+		{"adjustment", func(e *Entry) { e.InputRequirements[0].Adjustment = string([]byte{0xff}) }},
+		{"input quality", func(e *Entry) { e.InputRequirements[0].Quality[0] = string([]byte{0xff}) }},
+		{"missing handling", func(e *Entry) { e.QualityPolicy.MissingHandling = string([]byte{0xff}) }},
+		{"quality state", func(e *Entry) { e.QualityPolicy.QualityStates[0] = string([]byte{0xff}) }},
+		{"unavailable condition", func(e *Entry) { e.QualityPolicy.UnavailableConditions[0] = string([]byte{0xff}) }},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			entry := validEntry("sample_metric", "1.0.0")
+			tc.mutate(&entry)
+			if err := entry.Validate(); !errors.Is(err, ErrInvalidEntry) {
+				t.Fatalf("Validate() error = %v, want ErrInvalidEntry", err)
+			}
+		})
+	}
+}
+
+func TestEntryValidateRejectsNonCanonicalMetadataWhitespace(t *testing.T) {
+	tests := []struct {
+		name   string
+		mutate func(*Entry)
+	}{
+		{"algorithm version leading whitespace", func(e *Entry) { e.AlgorithmVersion = " 1.0.0" }},
+		{"unit trailing whitespace", func(e *Entry) { e.Unit = "ratio " }},
+		{"rounding mode whitespace only", func(e *Entry) { e.Precision.RoundingMode = "   " }},
+		{"input field leading whitespace", func(e *Entry) { e.InputRequirements[0].Fields[0] = " close" }},
+		{"interval trailing whitespace", func(e *Entry) { e.InputRequirements[0].Interval = "1d " }},
+		{"adjustment whitespace only", func(e *Entry) { e.InputRequirements[0].Adjustment = " " }},
+		{"input quality trailing whitespace", func(e *Entry) { e.InputRequirements[0].Quality[0] = "valid " }},
+		{"missing handling leading whitespace", func(e *Entry) { e.QualityPolicy.MissingHandling = " reject" }},
+		{"quality state whitespace only", func(e *Entry) { e.QualityPolicy.QualityStates[0] = " " }},
+		{"unavailable condition trailing whitespace", func(e *Entry) { e.QualityPolicy.UnavailableConditions[0] = "missing_input " }},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			entry := validEntry("sample_metric", "1.0.0")
+			tc.mutate(&entry)
+			if err := entry.Validate(); !errors.Is(err, ErrInvalidEntry) {
+				t.Fatalf("Validate() error = %v, want ErrInvalidEntry", err)
+			}
+		})
+	}
+}
+
+func TestParseNumericDecimalStringLexicalContract(t *testing.T) {
+	precision := Precision{MaxIntegerDigits: 4, MaxFractionDigits: 4}
+	valid := []string{`"0"`, `"-0"`, `"12"`, `"-12.3400"`, `"0.0001"`}
+	for _, raw := range valid {
+		t.Run("valid_"+strings.Trim(raw, "\\\""), func(t *testing.T) {
+			if _, err := parseNumeric(json.RawMessage(raw), ValueTypeDecimalString, precision); err != nil {
+				t.Fatalf("parseNumeric(%s) error = %v", raw, err)
+			}
+		})
+	}
+	invalid := []string{
+		`"1e2"`, `"1E-2"`, `"+1"`, `"01"`, `"-01.2"`,
+		`".5"`, `"1."`, `" 1"`, `"1 "`, `""`, `"NaN"`,
+		`"Infinity"`, `1.25`, `null`,
+	}
+	for _, raw := range invalid {
+		t.Run("invalid_"+strings.Trim(raw, "\\\""), func(t *testing.T) {
+			if _, err := parseNumeric(json.RawMessage(raw), ValueTypeDecimalString, precision); err == nil {
+				t.Fatalf("parseNumeric(%s) unexpectedly succeeded", raw)
+			}
+		})
+	}
+	if _, err := parseNumeric(json.RawMessage(`"12345.0"`), ValueTypeDecimalString, precision); err == nil {
+		t.Fatal("decimal string exceeding integer precision unexpectedly succeeded")
+	}
+	if _, err := parseNumeric(json.RawMessage(`"1.00001"`), ValueTypeDecimalString, precision); err == nil {
+		t.Fatal("decimal string exceeding fractional precision unexpectedly succeeded")
 	}
 }

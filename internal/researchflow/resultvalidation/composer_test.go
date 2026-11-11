@@ -133,6 +133,98 @@ func TestComposeResultRejectsIncompleteOrToolCallingLLMResponse(t *testing.T) {
 	}
 }
 
+func TestComposeResultRejectsRequiredOmittedSectionMarkedValid(t *testing.T) {
+	input := validCompositionInput()
+	input.Context.SectionRefs[0].Included = false
+	input.Context.IncludedSections = []string{}
+	input.Context.OmittedSections = []researchapp.ContextOmittedSection{{
+		SectionID: "market", SourceOwner: "data", ReasonCode: "unavailable",
+		Required: true, SourceRefs: []string{}, SafeMessage: "必需数据暂不可用",
+	}}
+	if _, err := ComposeResult(input, nil); !errors.Is(err, ErrInvalidResultComposition) {
+		t.Fatalf("required omitted section cannot remain valid, got %v", err)
+	}
+	input.Context.QualitySummary.Status = "degraded"
+	if _, err := ComposeResult(input, nil); err != nil {
+		t.Fatalf("degraded Context should preserve required omission, got %v", err)
+	}
+}
+
+func TestComposeResultRejectsBrokenContextAndRiskReferenceClosure(t *testing.T) {
+	input := validCompositionInput()
+	input.Context.IncludedSections = []string{"missing-section"}
+	if _, err := ComposeResult(input, nil); !errors.Is(err, ErrInvalidResultComposition) {
+		t.Fatalf("included section without ContextSectionRef should fail, got %v", err)
+	}
+
+	input = validCompositionInput()
+	risk := validRiskDecision()
+	risk.InputRefs = []string{"missing-quant-or-snapshot"}
+	input.RiskDecision = &risk
+	if _, err := ComposeResult(input, nil); !errors.Is(err, ErrInvalidResultComposition) {
+		t.Fatalf("unknown RiskDecision input should fail, got %v", err)
+	}
+
+	input = validCompositionInput()
+	input.Context.SectionRefs[0].Included = false
+	input.Context.IncludedSections = []string{}
+	risk = validRiskDecision()
+	risk.InputRefs = []string{"snapshot-1"}
+	input.RiskDecision = &risk
+	if _, err := ComposeResult(input, nil); !errors.Is(err, ErrInvalidResultComposition) {
+		t.Fatalf("omitted section source must not satisfy RiskDecision input, got %v", err)
+	}
+
+	input = validCompositionInput()
+	risk = validRiskDecision()
+	risk.Reasons[0].EvidenceRefs = []string{"missing-evidence"}
+	input.RiskDecision = &risk
+	if _, err := ComposeResult(input, nil); !errors.Is(err, ErrInvalidResultComposition) {
+		t.Fatalf("unknown RiskDecision evidence should fail, got %v", err)
+	}
+}
+
+func TestComposeResultRejectsRiskPassUsingUnusableQuantResult(t *testing.T) {
+	input := validCompositionInput()
+	quant := validQuantResult()
+	quant.QualityStatus = "unknown"
+	input.QuantResults = []QuantResultEnvelope{quant}
+	registry := NewRegistry()
+	if err := registry.Register("indicator", "1.0.0", PayloadValidatorFunc(func(json.RawMessage) error { return nil })); err != nil {
+		t.Fatal(err)
+	}
+	risk := validRiskDecision()
+	risk.InputRefs = []string{"qres_1"}
+	input.RiskDecision = &risk
+	if _, err := ComposeResult(input, registry); !errors.Is(err, ErrInvalidResultComposition) {
+		t.Fatalf("RiskDecision pass must not consume unusable Quant result, got %v", err)
+	}
+	risk.Status = "unknown"
+	input.RiskDecision = &risk
+	if _, err := ComposeResult(input, registry); err != nil {
+		t.Fatalf("unknown RiskDecision should be preserved, got %v", err)
+	}
+}
+
+func TestComposeResultAcceptsRiskReferencesResolvedByContextAndQuant(t *testing.T) {
+	input := validCompositionInput()
+	input.QuantResults = []QuantResultEnvelope{validQuantResult()}
+	registry := NewRegistry()
+	if err := registry.Register("indicator", "1.0.0", PayloadValidatorFunc(func(json.RawMessage) error { return nil })); err != nil {
+		t.Fatal(err)
+	}
+	risk := validRiskDecision()
+	risk.InputRefs = []string{"qres_1", "snapshot-1"}
+	input.RiskDecision = &risk
+	result, err := ComposeResult(input, registry)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.RiskDecision == nil {
+		t.Fatal("validated RiskDecision was dropped")
+	}
+}
+
 func TestComposeResultRejectsRiskPassContradiction(t *testing.T) {
 	input := validCompositionInput()
 	risk := validRiskDecision()

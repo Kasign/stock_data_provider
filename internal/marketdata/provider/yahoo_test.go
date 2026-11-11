@@ -351,6 +351,81 @@ func TestYahooDateRangeAndEndpointShape(t *testing.T) {
 	_ = fmt.Sprintf("end timestamp=%d", end.Unix())
 }
 
+func TestYahooDailyBarReportsOutOfRangeDateAndKeepsInRangeRows(t *testing.T) {
+	loc := yahooChinaLocation()
+	outside := time.Date(2026, 10, 19, 0, 0, 0, 0, loc).Unix()
+	inside := time.Date(2026, 10, 20, 0, 0, 0, 0, loc).Unix()
+	payload, err := json.Marshal(map[string]any{"chart": map[string]any{
+		"result": []any{map[string]any{
+			"meta":      map[string]any{"symbol": "600036.SS"},
+			"timestamp": []int64{outside, inside},
+			"indicators": map[string]any{"quote": []any{map[string]any{
+				"open": []float64{9, 10}, "high": []float64{10, 11},
+				"low": []float64{8, 9}, "close": []float64{9, 10}, "volume": []int64{100, 200},
+			}}},
+		}},
+		"error": nil,
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write(payload) }))
+	defer server.Close()
+	reporter := validation.NewReporter(10)
+	ctx := validation.WithReporter(context.Background(), reporter)
+	provider := NewYahooFinance(2*time.Second, server.URL)
+	bars, err := provider.FetchDailyBars(ctx, "600036.SH", "2026-10-20", "2026-10-21", 8, model.AdjustmentNone)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(bars) != 1 || bars[0].TradeDate != "2026-10-20" {
+		t.Fatalf("unexpected in-range bars: %+v", bars)
+	}
+	issues := reporter.Snapshot().Issues
+	found := false
+	for _, issue := range issues {
+		if issue.Stage == validation.StageParse && issue.Field == "trade_date" &&
+			issue.Code == "date_out_of_requested_range" && issue.RowIndex != nil && *issue.RowIndex == 0 {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected row-level out-of-range diagnostic, got %+v", issues)
+	}
+}
+
+func TestYahooDailyBarReportsHTTPAndProviderRejections(t *testing.T) {
+	cases := []struct {
+		name     string
+		status   int
+		body     string
+		wantCode string
+	}{
+		{name: "http status", status: http.StatusBadGateway, body: "upstream unavailable", wantCode: "http_status_error"},
+		{name: "provider error", status: http.StatusOK, body: `{"chart":{"result":null,"error":{"code":"Not Found","description":"symbol unavailable"}}}`, wantCode: "provider_error"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(tc.status)
+				_, _ = fmt.Fprint(w, tc.body)
+			}))
+			defer server.Close()
+			reporter := validation.NewReporter(10)
+			ctx := validation.WithReporter(context.Background(), reporter)
+			provider := NewYahooFinance(2*time.Second, server.URL)
+			if _, err := provider.FetchDailyBars(ctx, "600036.SH", "2026-10-20", "2026-10-21", 8, model.AdjustmentNone); err == nil {
+				t.Fatal("expected Yahoo response to be rejected")
+			}
+			issues := reporter.Snapshot().Issues
+			if len(issues) != 1 || issues[0].Stage != validation.StageParse || issues[0].Code != tc.wantCode || issues[0].RowIndex != nil {
+				t.Fatalf("expected one snapshot-level %s issue, got %+v", tc.wantCode, issues)
+			}
+		})
+	}
+}
+
 func TestYahooDailyBarDecodeFailureAddsStructuredParseIssue(t *testing.T) {
 	payload := []byte(`{"chart":`)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -438,5 +513,32 @@ func TestYahooDailyBarInvalidFieldReportsRowAndProviderPath(t *testing.T) {
 	if issue.Stage != validation.StageParse || issue.Field != "open" || issue.ProviderField != "indicators.quote[0].open" ||
 		issue.Code != "type_mismatch" || issue.RowIndex == nil || *issue.RowIndex != 0 {
 		t.Fatalf("unexpected Yahoo field issue: %+v", issue)
+	}
+}
+
+func TestYahooFinanceQuoteReportsUnavailableAmountAndMissingName(t *testing.T) {
+	payload := `{"chart":{"result":[{"meta":{"symbol":"600036.SS","regularMarketPrice":42.35,"regularMarketChange":0.53,"regularMarketChangePercent":1.267,"regularMarketTime":1792746000,"regularMarketDayHigh":42.38,"regularMarketDayLow":41.57,"regularMarketOpen":41.70,"chartPreviousClose":41.82,"regularMarketVolume":56829700},"timestamp":[1792746000],"indicators":{"quote":[{"open":[41.70],"high":[42.38],"low":[41.57],"close":[42.35],"volume":[56829700]}]}}],"error":null}}`
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte(payload)) }))
+	defer server.Close()
+	reporter := validation.NewReporter(10)
+	ctx := validation.WithReporter(context.Background(), reporter)
+	p := NewYahooFinance(2*time.Second, server.URL)
+	q, err := p.FetchQuote(ctx, "600036.SH")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if q.Amount != nil || q.AmountUnit != "unknown" || q.QualityStatus != model.QualityDegraded {
+		t.Fatalf("Yahoo amount must remain unknown and degraded: %+v", q)
+	}
+	found := map[string]bool{"amount": false, "name": false}
+	for _, issue := range reporter.Snapshot().Issues {
+		if _, ok := found[issue.Field]; ok && issue.Severity == validation.SeverityWarning {
+			found[issue.Field] = true
+		}
+	}
+	for field, ok := range found {
+		if !ok {
+			t.Errorf("missing Yahoo Quote limitation evidence for %s: %+v", field, reporter.Snapshot().Issues)
+		}
 	}
 }

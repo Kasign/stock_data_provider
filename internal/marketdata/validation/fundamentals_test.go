@@ -43,6 +43,35 @@ func TestValidateFundamentalsSnapshotAcceptsValidSnapshot(t *testing.T) {
 	}
 }
 
+func TestValidateFundamentalsSnapshotUsesChinaMarketDateForAvailableAt(t *testing.T) {
+	snapshot := validFundamentalsFixture()
+	availableAt := time.Date(2026, 8, 19, 16, 30, 0, 0, time.UTC) // 上海时间为 2026-08-20
+	for i := range snapshot.Sections {
+		snapshot.Sections[i].PublicationDate = "2026-08-20"
+		snapshot.Sections[i].AvailableAt = &availableAt
+	}
+	report := ValidateFundamentalsSnapshot(snapshot, "600036.SH", 2026, 2)
+	if report.HasErrors() {
+		t.Fatalf("available_at must be compared in China market timezone, got %+v", report.Issues)
+	}
+}
+
+func TestValidateFundamentalsSnapshotRejectsInvalidSnapshotQualityStatus(t *testing.T) {
+	snapshot := validFundamentalsFixture()
+	snapshot.QualityStatus = model.QualityStatus("fresh")
+	report := ValidateFundamentalsSnapshot(snapshot, "600036.SH", 2026, 2)
+	found := false
+	for _, issue := range report.Issues {
+		if issue.Field == "quality_status" && issue.Code == "invalid_enum" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected invalid snapshot quality enum issue, got %+v", report.Issues)
+	}
+}
+
 func TestValidateFundamentalsSnapshotReportsNilSnapshot(t *testing.T) {
 	report := ValidateFundamentalsSnapshot(nil, "600036.SH", 2026, 2)
 	if !report.HasErrors() || len(report.Issues) != 1 || report.Issues[0].Field != "snapshot" {

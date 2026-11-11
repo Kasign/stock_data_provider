@@ -22,7 +22,7 @@ func (r *MySQLRepository) CreateEvidenceSnapshot(ctx context.Context, snapshot a
 		return app.ErrInvalidEvidenceSnapshot
 	}
 	payload, err := json.Marshal(snapshot)
-	if err != nil || len(payload) == 0 || len(payload) > maximumEvidenceSnapshotBytes {
+	if err != nil || !validEvidenceSnapshotPayloadSize(payload) {
 		return app.ErrInvalidEvidenceSnapshot
 	}
 	sum := sha256.Sum256(payload)
@@ -38,16 +38,42 @@ func (r *MySQLRepository) CreateEvidenceSnapshot(ctx context.Context, snapshot a
 	if insertErr == nil {
 		return nil
 	}
-	var existingHash string
-	queryErr := r.db.QueryRowContext(ctx,
-		"SELECT payload_hash FROM news_evidence_snapshots WHERE snapshot_ref = ?",
+	var existingPayload []byte
+	var existingHash, existingCallerRef, existingFingerprint, existingSortVersion string
+	var existingPageSize uint16
+	var existingItemCount uint32
+	var existingSystemAsOf, existingCreatedAt, existingExpiresAt time.Time
+	queryErr := r.db.QueryRowContext(ctx, `SELECT payload_json, payload_hash, caller_ref, filters_fingerprint, page_size,
+		system_as_of, sort_version, created_at, expires_at, item_count
+		FROM news_evidence_snapshots WHERE snapshot_ref = ?`,
 		snapshot.SnapshotRef,
-	).Scan(&existingHash)
+	).Scan(&existingPayload, &existingHash, &existingCallerRef, &existingFingerprint, &existingPageSize,
+		&existingSystemAsOf, &existingSortVersion, &existingCreatedAt, &existingExpiresAt, &existingItemCount)
 	if queryErr == nil {
-		if subtle.ConstantTimeCompare([]byte(existingHash), []byte(payloadHash)) == 1 {
-			return nil
+		if !validEvidenceSnapshotPayloadSize(existingPayload) {
+			return app.ErrInvalidEvidenceSnapshot
 		}
-		return app.ErrEvidenceSnapshotConflict
+		existingSum := sha256.Sum256(existingPayload)
+		existingActualHash := hex.EncodeToString(existingSum[:])
+		if subtle.ConstantTimeCompare([]byte(existingHash), []byte(existingActualHash)) != 1 {
+			return app.ErrInvalidEvidenceSnapshot
+		}
+		if subtle.ConstantTimeCompare([]byte(existingHash), []byte(payloadHash)) != 1 {
+			return app.ErrEvidenceSnapshotConflict
+		}
+		// A matching payload hash alone is insufficient for an idempotent replay:
+		// the denormalized lookup envelope must still describe that exact payload.
+		if existingCallerRef != snapshot.CallerRef ||
+			existingFingerprint != snapshot.FiltersFingerprint ||
+			existingPageSize != uint16(snapshot.PageSize) ||
+			existingSortVersion != snapshot.SortVersion ||
+			existingItemCount != uint32(len(snapshot.Items)) ||
+			!sameEvidenceSnapshotDBTime(existingSystemAsOf, snapshot.SystemAsOf) ||
+			!sameEvidenceSnapshotDBTime(existingCreatedAt, snapshot.CreatedAt) ||
+			!sameEvidenceSnapshotDBTime(existingExpiresAt, snapshot.ExpiresAt) {
+			return app.ErrInvalidEvidenceSnapshot
+		}
+		return nil
 	}
 	if errors.Is(queryErr, sql.ErrNoRows) {
 		return insertErr
@@ -84,6 +110,9 @@ func (r *MySQLRepository) GetEvidenceSnapshot(
 	if err != nil {
 		return app.EvidenceSnapshot{}, err
 	}
+	if !validEvidenceSnapshotPayloadSize(payload) {
+		return app.EvidenceSnapshot{}, app.ErrInvalidEvidenceSnapshot
+	}
 	sum := sha256.Sum256(payload)
 	actualHash := hex.EncodeToString(sum[:])
 	if subtle.ConstantTimeCompare([]byte(storedHash), []byte(actualHash)) != 1 {
@@ -91,7 +120,7 @@ func (r *MySQLRepository) GetEvidenceSnapshot(
 	}
 	var snapshot app.EvidenceSnapshot
 	if err := json.Unmarshal(payload, &snapshot); err != nil ||
-		snapshot.ValidateAt(now) != nil ||
+		snapshot.Validate() != nil || snapshot.CreatedAt.After(now) || snapshot.SystemAsOf.After(now) ||
 		uint32(len(snapshot.Items)) != itemCount ||
 		snapshot.SnapshotRef != snapshotRef ||
 		snapshot.CallerRef != callerRef ||
@@ -130,4 +159,8 @@ func (r *MySQLRepository) DeleteExpiredEvidenceSnapshots(
 // indexed metadata at the precision the schema can actually preserve.
 func sameEvidenceSnapshotDBTime(payloadTime, storedTime time.Time) bool {
 	return payloadTime.UTC().Truncate(time.Microsecond).Equal(storedTime.UTC().Truncate(time.Microsecond))
+}
+
+func validEvidenceSnapshotPayloadSize(payload []byte) bool {
+	return len(payload) > 0 && len(payload) <= maximumEvidenceSnapshotBytes
 }

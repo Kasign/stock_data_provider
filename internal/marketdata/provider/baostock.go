@@ -29,6 +29,31 @@ func NewBaostock(client baostockDailyClient) *Baostock {
 	return &Baostock{client: client}
 }
 
+func baoStockDailyBarStandardField(providerField string) string {
+	switch providerField {
+	case "date":
+		return "trade_date"
+	case "code":
+		return "symbol"
+	case "open", "high", "low", "close", "volume", "amount":
+		return providerField
+	case "preclose":
+		return "prev_close"
+	case "adjustflag":
+		return "adjustment_basis"
+	case "turn":
+		return "turnover_rate"
+	case "tradestatus":
+		return "trade_status"
+	case "pctChg":
+		return "change_percent"
+	case "isST":
+		return "is_st"
+	default:
+		return "provider." + providerField
+	}
+}
+
 func (p *Baostock) Name() string { return "baostock" }
 
 func (p *Baostock) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endDate string, limit int, adjustment model.AdjustmentBasis) ([]model.DailyBar, error) {
@@ -69,12 +94,22 @@ func (p *Baostock) FetchDailyBars(ctx context.Context, rawSymbol, startDate, end
 	out := make([]model.DailyBar, 0, len(rows))
 	seenDates := make(map[string]struct{}, len(rows))
 	for index, row := range rows {
+		if len(row.FieldIssues) > 0 {
+			for _, issue := range row.FieldIssues {
+				addProviderParseIssue(ctx, index, baoStockDailyBarStandardField(issue.SourceField), issue.SourceField,
+					issue.Code, "supported scalar cell", issue.ActualType, issue.Preview,
+					"BaoStock daily-bar field has an unsupported raw cell type")
+			}
+			return nil, fmt.Errorf("BaoStock row %d contains %d unsupported daily-bar field cell(s)", index, len(row.FieldIssues))
+		}
 		tradeDate := strings.TrimSpace(row.Date)
 		if _, err := time.Parse("2006-01-02", tradeDate); err != nil {
 			addProviderParseIssue(ctx, index, "trade_date", "date", "invalid_date", "YYYY-MM-DD", "string", tradeDate, "BaoStock daily-bar date is invalid")
 			return nil, fmt.Errorf("BaoStock row %d has invalid trade date %q", index, tradeDate)
 		}
 		if tradeDate < start || tradeDate > end {
+			addProviderParseIssue(ctx, index, "trade_date", "date", "date_out_of_requested_range",
+				start+".."+end, "string", tradeDate, "BaoStock daily-bar date is outside the requested range")
 			return nil, fmt.Errorf("BaoStock row %d date %s is outside requested range %s..%s", index, tradeDate, start, end)
 		}
 		// 同一交易日只允许一根日 K；重复记录通常意味着上游分页或协议数据异常。
@@ -134,6 +169,8 @@ func (p *Baostock) FetchDailyBars(ctx context.Context, rawSymbol, startDate, end
 		}
 		volume, err := normalize.RawSharesToInt64(rawVolumeValue)
 		if err != nil {
+			addProviderParseIssue(ctx, index, "volume", "volume", "normalization_error",
+				"int64 share count", "number", row.Volume, "BaoStock volume cannot be represented as normalized shares")
 			return nil, fmt.Errorf("normalize BaoStock volume on %s: %w", tradeDate, err)
 		}
 
@@ -146,6 +183,8 @@ func (p *Baostock) FetchDailyBars(ctx context.Context, rawSymbol, startDate, end
 		if strings.TrimSpace(row.Amount) == "" {
 			quality = model.QualityDegraded
 			reasons = append(reasons, "amount_missing_from_provider", "amount_unit_unknown_because_amount_missing")
+			addProviderFieldParseIssue(ctx, symbol, "amount", "amount", "missing_optional_value",
+				"finite non-negative numeric value when exposed", "missing_or_empty", "", index)
 		} else {
 			value, amountErr := parseBaoStockNumber(row.Amount, "amount", tradeDate, false)
 			if amountErr != nil {
