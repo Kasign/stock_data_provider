@@ -177,7 +177,7 @@ GitHub 远端 ref 核验（2026-11-10）：
 | DATA-CTR-007 | Research Data Snapshot/Evidence 消费边界 | Data（数据事实）；Research（Evidence）；Server（Adapter 注入） | Research、Researchflow | internal/marketdata/app/port.go；DATA-CTR-008 Manifest Schema/Golden；DEC-PLAT-002-020；Quant-Research 公开 DTO 字段级契约 | DailyBarsSnapshot 当前 DTO；DATA-CTR-008 Manifest 1.0.0；内容 DTO/引用映射未定义 | `pending_evidence` | DailyBarsSnapshot 返回 bars 但不含 snapshot_ref/Manifest/AuthorizationRef；Bundle.snapshot_id 未证明等同内容寻址 SnapshotRef。DATA-CTR-008 Manifest 仅记录范围/来源版本元数据，不包含行情内容或 payload Schema。缺少不可变内容定位、DailyBarsV2/质量单位字段和 Research Evidence source_ref/version/locator 的权威映射 |
 | DATA-CTR-008 | Data AuthorizationRef 签发与快照访问审计 | Data | Quant、Research | DATA-CTR-008 Snapshot Manifest Schema/Golden；GOV-CTR-006；DEC-PLAT-002-038/041 | 1.0.0（Snapshot Manifest Schema/Golden） | `pending_evidence` | Manifest 的 UTC、sources tuple 排序/唯一性尚未由 Schema/Validator 完整约束；caller_ref 必须等于可信 Principal 的 AuthorizationRef.subject_ref，API Key 不可作为主体，但远程可信 caller 传递机制未定义；Scope/purpose 映射及读取时当前策略复核仍缺 Data 权威契约 |
 | NEWS-CTR-001 | News 只读 Evidence Query Facade | News | Research、Researchflow | doc/news/新闻API契约.md 第11节；doc/news/schema/NEWS-CTR-001-*；doc/news/golden/NEWS-CTR-001-*；GOV-CTR-002；DEC-PLAT-002-021/042 | 1.0.0（4 Schema / 3 Golden） | `pending_evidence` | business_time_from/to 实为可选且省略（Go omitempty/Schema optional string），仅正文误写 nullable；system_as_of 等 UTC Z 约束尚未落入 Schema；system_observed_at 应映射 version.observed_at，News 数据模型文档未明确该版本级权威字段；relation_refs 缺 relation_status，不能区分 not_provided 与已确认空关系 |
-| NEWS-CTR-002 | AuthorizationRef 与内容访问授权 | News（授权决策 Owner） | Research、Researchflow | doc/news/新闻来源授权矩阵.md 第10节；NEWS-CTR-002 Authorization Binding Schema/Golden；GOV-CTR-006 | 1.0.0（Authorization Binding Schema/Golden） | `pending_evidence` | News-specific caller/resource/purpose/content_level 与 Provider/Source/Endpoint 策略交集已定义；仍依赖 GOV-CTR-006 的时间/规范排序及通用授权快照适用语义收敛 |
+| NEWS-CTR-002 | AuthorizationRef 与内容访问授权 | News（授权决策 Owner） | Research、Researchflow | doc/news/新闻来源授权矩阵.md 第10节；doc/整体任务规划/schema/NEWS-CTR-002-authorization-binding-1.0.0.schema.json；对应 Golden；GOV-CTR-006；DEC-PLAT-002-043 | 1.0.0（Binding Schema/Golden） | `pending_evidence` | Schema/Golden 与 Go Validator 已覆盖 caller/subject、resource、purpose、content level、Provider/Source/Endpoint 策略集合、tuple 排序去重、conditional 和当前策略复核；但 News API 契约正文将 policy_version 描述为 Registry 版本、将 resource_ref 描述为 news_id+version_id，与 GOV-CTR-006、Golden 和代码的 snapshot_ref / news_id+version_no 定义冲突，需统一唯一权威文字定义 |
 | NEWS-CTR-003 | News PIT、稳定 Cursor、排序与去重 | News | Research、Researchflow | doc/news/新闻API契约.md 第11.3/11.6/11.9节；NEWS-CTR-001 Cursor Claims Schema；doc/news/新闻数据模型与质量契约.md | 复用 NEWS-CTR-001 1.0.0 Cursor Schema；无独立 CTR-003 Schema | `pending_evidence` | PIT 过滤、15分钟快照、HMAC Cursor、排序版本已有定义；system_observed_at 与 observation/first_observed_at 权威归属不一致，且 Evidence relation_refs 未表达 DEC-021 的 not_provided 与 confirmed-empty 区分 |
 | QNT-CTR-001 | Metric/Indicator/Factor Registry 公共元数据 | Quant | Researchflow；Research 只消费编排结果 | doc/quant/schema/QNT-CTR-001-registry-entry-1.0.0.schema.json；doc/quant/03 | 1.0.0（Registry Entry Schema；正式首批 Registry Entry/Golden 未形成） | `pending_evidence` | Registry Entry 结构 Schema 已有；但 code 对应的首批实际 Registry 条目及其 unit/precision/range/algorithm_version/input_requirements/quality_policy 权威值未形成完整登记，不能仅冻结空壳 Schema |
 | QNT-CTR-002 | Indicator Request/Result | Quant | Researchflow | doc/quant/schema/QNT-CTR-002-indicator-parameters-1.0.0.schema.json；doc/quant/03 | 1.0.0（Parameters Schema；8 个算法参数定义） | `pending_evidence` | 参数 Schema/算法口径已有；完整 Indicator Request/Result DTO、指标输出字段/单位/精度/状态映射及每个指标的 Registry 元数据仍未形成唯一完整契约 |
@@ -473,7 +473,7 @@ PLAT-002 不因本次矩阵统计完成而结束。整体完成仍需：
 | 契约 | 状态 | 核定结论 |
 |---|---|---|
 | NEWS-CTR-001 | pending_evidence | 4 Schema/3 Golden 已有；business_time_from/to 的 Go/Schema 均为可选省略，正文 nullable 是文档误写；UTC RFC3339Nano Z 尚未机器约束；system_observed_at 的版本级映射需在 News 数据模型文档明确；relation_refs 缺 relation_status，违反 DEC-021 对 not_provided/已确认空关系的区分 |
-| NEWS-CTR-002 | pending_evidence | Authorization Binding Schema/Golden 已定义 caller/resource/purpose/content_level 与 GOV-CTR-006 引用；News 侧签发与读取复核、Provider/Source/Endpoint 策略继承和 conditional 规则已明确；仍依赖 GOV-CTR-006 的 UTC/排序和公共授权快照语义收敛 |
+| NEWS-CTR-002 | pending_evidence | Binding Schema/Golden、Go Validator 已覆盖主体/资源/用途/内容级别绑定、策略集合完整性/tuple 排序去重、conditional 与当前策略 fail-closed 复核；News API 契约正文的 policy_version（Registry vs snapshot_ref）和 resource_ref（version_id vs version_no）仍与机器契约冲突 |
 | NEWS-CTR-003 | pending_evidence | PIT 可见性、available_at 不可推断、稳定排序、15 分钟固定 Snapshot、HMAC Cursor、key rotation 与错误分类均有明确文字和 NEWS-CTR-001 Cursor Claims Schema；但系统观察时间排序键与 News 领域时间权威定义不一致，且与 NEWS-CTR-001 的 relation_refs 状态表达存在关联缺口 |
 
 ### 16.2 必须保留的语义边界
@@ -1376,4 +1376,47 @@ DEC-027 不只是禁止 DragonTiger 的七个 Provider 金额字段；它确立�
 5. NEWS-CTR-001 继续保持 pending_evidence；未来 HTTP OpenAPI 草案不属于当前活动契约，也不作为本 CTR 冻结门禁。
 
 **结论：NEWS-CTR-001 的语义取舍已收敛；当前剩余门禁是 Schema/DTO/Golden 与 News 数据模型文档同步。**
+
+
+
+## 52. NEWS-CTR-002 Authorization Binding 资源与策略版本引用核定（2026-11-11）
+
+### 52.1 机器契约与 Validator 已有定义
+
+- `NEWS-CTR-002-authorization-binding-1.0.0.schema.json` 要求 caller_ref、resource_ref、purpose_code、requested_content_level、provider_ref、source_ref、endpoint_ref、authorization_ref、policy_snapshot；provider_ref/endpoint_ref 可显式为 null。
+- 对应 Golden 的 AuthorizationRef.subject_ref 等于 caller_ref，resource_ref 等于 binding.resource_ref，purpose_code 等于 binding.purpose_code，content_level 等于 requested_content_level；AuthorizationRef.policy_version 等于 policy_snapshot.snapshot_ref。
+- `internal/news/domain/authorization.go` 的 `ValidateNewsAuthorizationBinding` 已校验上述字段绑定、policy_version/snapshot_ref 一致、decision/conditions 组合、expires_at 晚于 decided_at，以及 PolicySnapshot 非空。
+- `validNewsPolicySnapshot` 按 (policy_type, policy_ref, policy_version) 严格排序并拒绝重复 tuple；必须有且只有一个 Source Policy，Provider Output/Endpoint Policy 是否存在与 binding 的显式引用一致。
+- `ValidateNewsAuthorizationBindingForEvidence` 将 binding.resource_ref 绑定到具体 NewsItem/Version/Observation，并核验 Observation 中实际采用的 Source、Endpoint、Provider Output Policy 版本。
+- News Authorization Matrix 已定义 Endpoint Policy 默认只能收紧 Source Policy、Provider/Source/Endpoint 策略取交集、conditional 条件满足后重新签发 allowed 引用、每次读取重新检查当前策略。
+- `authorization_read.go` 通过项目 JCS Runtime Verifier 端口验证 decision_fingerprint，并从可信策略 Owner 读取完整当前策略集合；策略版本变化、撤销、pending、过期、当前用途/内容级别不允许或依赖不可用均拒绝读取。
+
+### 52.2 发现的权威文字冲突
+
+**policy_version：**
+- GOV-CTR-006 的公共规则、NEWS-CTR-002 Golden 和 Go Validator 均规定 `AuthorizationRef.policy_version == PolicySnapshot.snapshot_ref`。
+- PolicySnapshot.policies 中逐项保存实际适用的 Provider Output、Source、Endpoint 策略版本。
+- `doc/news/新闻API契约.md` 第11.2节却把 policy_version 描述为“不可变 News Authorization Policy Registry 版本”，容易被解释为单个 Registry 版本号。
+- 核定：policy_version 是组合 PolicySnapshot 的不透明 snapshot_ref；单项策略版本只出现在 PolicySnapshot.policies，不另设第二个 policy_version 语义。
+
+**resource_ref：**
+- NEWS-CTR-002 Golden 使用 `news_evidence_version:news_001:v1`。
+- `NewsEvidenceResourceRef(newsID, versionNo)` 生成 `news_evidence_version:{news_id}:v{version_no}`；`ValidateNewsAuthorizationBindingForEvidence` 以 NewsID + VersionNo 校验 resource_ref，并同时校验独立 version_id 与 Observation 绑定。
+- `doc/整体任务规划/03-模块接口契约/News-Research只读证据查询契约.md` 的历史描述却将 resource_ref 解释为 news_id + version_id 的稳定 opaque ref。
+- 核定：resource_ref 的规范格式是 `news_evidence_version:{news_id}:v{version_no}`。version_no 是单个 NewsItem 内不可复用、单调递增的稳定版本序号；version_id 仍是 DTO/存储层的独立不透明对象 ID，不拼入 resource_ref。
+
+**Binding 资源引用字段：**
+- `provider_ref` 表示 Provider Output Policy 的策略引用，不是 Provider 原始响应或凭据；`source_ref` 表示发布来源策略引用；`endpoint_ref` 表示独立入口策略引用。
+- Provider/Endpoint 策略不存在时必须显式 null；PolicySnapshot 不得虚构对应策略 tuple。Source Policy 始终必需。Endpoint 未配置独立策略时按 Source Policy 继承，不新增 endpoint tuple。
+
+### 52.3 核定决议
+
+依据 DEC-PLAT-002-043：
+1. `AuthorizationRef.policy_version` 唯一等于 `PolicySnapshot.snapshot_ref`；实际策略版本集合由 PolicySnapshot.policies 表达。
+2. `AuthorizationRef.resource_ref` 唯一使用 `news_evidence_version:{news_id}:v{version_no}`；version_id 只用于精确定位具体 DTO/存储版本，不替代规范资源引用。
+3. Provider/Source/Endpoint 三类策略引用语义和显式 null/继承规则按本节及 NEWS Authorization Matrix 执行。
+4. 已有 Schema/Golden/Go Validator 与上述决议一致；当前阻断点是 News API 契约及跨模块旧设计文字仍保留相反解释，需由 News 责任范围统一。
+5. 本轮不修改 News 代码、Schema、Golden 或模块专项文档。
+
+**结论：NEWS-CTR-002 的语义取舍已收敛，但因权威文字来源仍有冲突，继续保持 pending_evidence。**
 
