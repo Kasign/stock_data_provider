@@ -19,7 +19,7 @@
 - 实现符合性、模块测试、Schema/Golden/Validator 同步、消费者测试、CI、Server 装配和真实依赖验收均属于后续 L2/L3 工作，不改变本次 L1 冻结状态。
 
 ## 2. 项目级契约最终状态总表
-| 契约编号 | 契约主题 | 定义方 | 直接消费者 | 当前权威定义/证据入口 | 契约版本 | 当前状态 | 契约定义范围与实现符合性边界 |
+| 契约编号 | 契约主题 | 定义方 | 直接消费者 | 当前权威定义/证据入口 | 契约版本 | 当前状态 | 后续 L2/L3 实现符合性关注点 |
 |---|---|---|---|---|---|---|
 | GOV-CTR-001 | JSON 类型、Decimal、整数、比例、null/缺失 | 项目级规则；各 DTO 生产方 | 所有 DTO 消费者 | [GOV-CTR-001 公共 JSON 数值与空值规则](./rules/GOV-CTR-001-公共JSON类型数值与空值规则.md)；各领域字段映射见对应 CTR | 1.0.0 | `frozen` | 公共 JSON 类型、Decimal 语法、integer 安全范围、number 精度/舍入原则、单位/比例和缺失/null/zero/empty/unknown 语义已统一版本化；字段级 scale、单位、范围、舍入、tolerance 和 nullable 仍由对应领域 CTR 负责，不作为本公共规则冻结阻断 |
 | GOV-CTR-002 | 时间、交易日、时区、PIT、system_as_of | 项目级时间语义；Data/News/Quant/Research/Researchflow | 所有历史研究及执行消费者 | [GOV-CTR-002 公共时间与 PIT 规则](./rules/GOV-CTR-002-公共时间与PIT规则.md)；各领域时间字段映射见对应 CTR | 1.0.0 | `frozen` | RFC3339Nano UTC、交易日、occurred/published/available/system_observed/system_as_of/valid_time 等公共语义、Run 截止传播和严格 PIT 边界已版本化；Provider/领域字段映射与各 DTO Schema 约束仍由对应 CTR 负责，不作为公共规则冻结阻断 |
@@ -64,6 +64,9 @@
 | NTF-CTR-003 | Notification 内部 Channel Adapter SPI 与 ChannelConfigSnapshot | Notification 内部扩展点 | Notification 内部 Channel Adapter/Resolver | doc/notification/03 第8.4节；internal/notification/application/channel_ports.go；internal/notification/domain/channel.go | 内部 Port，不属于跨模块公开契约版本 | `not_applicable` | ChannelConfigSnapshot、ChannelAdapter、ChannelResolver、RecipientResolver、ChannelSendRequest/Result 仅由 Notification 内部组件消费；不作为 PLAT-002 跨模块冻结门禁。Delivery 的 retry/unknown 对外语义归 NTF-CTR-002，不重复登记 |
 | SRV-CTR-001 | Root Server 组合根、统一 HTTP 宿主与 Researchflow 对外 API | Server | WebUI、Researchflow、所有服务端模块 | doc/server/README.md；doc/web/API_CONTRACT.md（旧 Analysis 路径）；doc/api/contracts/分析任务.openapi.yaml（已退役旧 API） | 新 Researchflow HTTP Schema/版本未定义 | `deferred` | 组合根/唯一 HTTP 宿主职责已有定义；新 API 路径/方法、CreateRun/Run/Stage/Event HTTP DTO、错误投影、认证授权、分页/Cursor 与 WebUI 消费映射均无唯一权威定义。旧 Analysis API 按 DEC-018/019 退出活动范围，不得复用其 DTO/约束 |
 | INT-CTR-001 | Quant 风险决策、Research 事件生命周期、Researchflow Run 终态到 NotificationEvent 显式映射 | Quant/Research/Researchflow 产生业务事实；Notification 接收事件 | Notification、事件消费者 | doc/notification/05；doc/notification/03；3 类 Payload Schema/6 Golden | 1.0.0（3 Event Payload Schema；6 Golden） | `frozen` | 触发时点、subject_ref、source_event_ref、幂等键和 JCS fingerprint 已定义；事件/业务时间 UTC 约束、subject_ref 与 payload 主体一致性、changed_block_reason_codes 排序和来源时间字段绑定尚未完整机器化 |
+
+
+> 表中最后一列列出的 Schema、DTO、代码、消费者测试或装配差异，均属于后续 L2/L3 实现符合性工作，不代表 L1 冻结语义尚未确定，也不得据此把 `frozen` 改回待审状态。真正尚未形成完整公开定义的事项已明确列入 `deferred`。
 
 ## 3. 延期契约与重新进入条件
 
