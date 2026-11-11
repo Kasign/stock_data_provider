@@ -179,11 +179,11 @@ GitHub 远端 ref 核验（2026-11-10）：
 | NEWS-CTR-001 | News 只读 Evidence Query Facade | News | Research、Researchflow | doc/news/新闻API契约.md 第11节；doc/news/schema/NEWS-CTR-001-*；doc/news/golden/NEWS-CTR-001-* | 1.0.0（4 Schema / 3 Golden） | `pending_evidence` | Application Port 查询定义已较完整；Schema 与文字存在 business_time nullable、UTC、system_observed_at 字段语义及 relation_refs 未提供/空集合状态差异，需统一公开 DTO 定义。未来 HTTP OpenAPI 草案不属于当前活动接口 |
 | NEWS-CTR-002 | AuthorizationRef 与内容访问授权 | News（授权决策 Owner） | Research、Researchflow | doc/news/新闻来源授权矩阵.md 第10节；NEWS-CTR-002 Authorization Binding Schema/Golden；GOV-CTR-006 | 1.0.0（Authorization Binding Schema/Golden） | `pending_evidence` | News-specific caller/resource/purpose/content_level 与 Provider/Source/Endpoint 策略交集已定义；仍依赖 GOV-CTR-006 的时间/规范排序及通用授权快照适用语义收敛 |
 | NEWS-CTR-003 | News PIT、稳定 Cursor、排序与去重 | News | Research、Researchflow | doc/news/新闻API契约.md 第11.3/11.6/11.9节；NEWS-CTR-001 Cursor Claims Schema；doc/news/新闻数据模型与质量契约.md | 复用 NEWS-CTR-001 1.0.0 Cursor Schema；无独立 CTR-003 Schema | `pending_evidence` | PIT 过滤、15分钟快照、HMAC Cursor、排序版本已有定义；system_observed_at 与 observation/first_observed_at 权威归属不一致，且 Evidence relation_refs 未表达 DEC-021 的 not_provided 与 confirmed-empty 区分 |
-| QNT-CTR-001 | Metric/Indicator/Factor Registry 公共元数据 | Quant | Researchflow；Research 只消费编排结果 | Quant schema/manifest/registry；doc/quant/03 | 1.0.0（Registry Entry Schema） | `pending_evidence` | code、schema_version、参数 Schema、输入要求、单位、精度、舍入、范围、容差、算法版本和质量规则 |
-| QNT-CTR-002 | Indicator Request/Result | Quant | Researchflow | internal/quant/indicator；Quant DTO Schema/Golden | 1.0.0（Indicator Parameters Schema） | `pending_evidence` | indicator_code、typed 参数、required/default/range、输入窗口、缺失样本、结果单位和边界样例 |
-| QNT-CTR-003 | Factor Request/Result | Quant | Researchflow | internal/quant/factor；doc/quant/03 与 Golden | 1.0.0（Factor Parameters Schema） | `pending_evidence` | momentum_20d/60d、volatility_20d 的输入、算法、精度、缺失样本和结果状态 |
-| QNT-CTR-004 | QuantResultRef、QuantMetric、Trend、Risk 输出 | Quant | Researchflow；Research 经 Researchflow 消费 | internal/quant/result、risk、trend；Quant DTO Schema | 1.0.0（4 DTO Schema / Golden） | `pending_evidence` | Result Envelope、Manifest、status/coverage/sample_count、RiskDecision 不可被质量状态覆盖 |
-| QNT-CTR-005 | QuantResult AuthorizationRef 签发与访问审计 | Quant | Researchflow | QNT-CTR-005 Result Manifest Schema/Golden；GOV-CTR-006 | 1.0.0（Result Manifest Schema/Golden） | `pending_evidence` | trusted caller Scope、result_id/Manifest 绑定、不可变结果、读取时当前授权复核和撤销竞态 |
+| QNT-CTR-001 | Metric/Indicator/Factor Registry 公共元数据 | Quant | Researchflow；Research 只消费编排结果 | doc/quant/schema/QNT-CTR-001-registry-entry-1.0.0.schema.json；doc/quant/03 | 1.0.0（Registry Entry Schema；正式首批 Registry Entry/Golden 未形成） | `pending_evidence` | Registry Entry 结构 Schema 已有；但 code 对应的首批实际 Registry 条目及其 unit/precision/range/algorithm_version/input_requirements/quality_policy 权威值未形成完整登记，不能仅冻结空壳 Schema |
+| QNT-CTR-002 | Indicator Request/Result | Quant | Researchflow | doc/quant/schema/QNT-CTR-002-indicator-parameters-1.0.0.schema.json；doc/quant/03 | 1.0.0（Parameters Schema；8 个算法参数定义） | `pending_evidence` | 参数 Schema/算法口径已有；完整 Indicator Request/Result DTO、指标输出字段/单位/精度/状态映射及每个指标的 Registry 元数据仍未形成唯一完整契约 |
+| QNT-CTR-003 | Factor Request/Result | Quant | Researchflow | doc/quant/schema/QNT-CTR-003-factor-parameters-1.0.0.schema.json；QNT-CTR-004 Factor QuantMetric Schema/Golden | 1.0.0（Parameters Schema；3 个首批 Factor） | `pending_evidence` | 首批三个 Factor 的参数/算法及局部 QuantMetric Schema 已有；完整 Factor Request/Result DTO、交易日历版本引用、输入质量和结果 Envelope 映射仍不完整 |
+| QNT-CTR-004 | QuantResultRef、QuantMetric、Trend、Risk 输出 | Quant | Researchflow；Research 经 Researchflow 消费 | doc/quant/schema/QNT-CTR-004-*；doc/quant/03 第10.26节；Quant-Research公开DTO字段级契约第2节 | 1.0.0（Ref/Metric/Trend/Risk 局部 Schema/Golden） | `pending_decision` | Envelope schema_version 同时被定义为 Envelope 版本和 payload 子 Schema 选择版本，必须先裁决字段语义；此外完整强类型 Payload 覆盖、Envelope/Ref/Manifest 权威字段映射仍待补 |
+| QNT-CTR-005 | QuantResult AuthorizationRef 签发与访问审计 | Quant | Researchflow | doc/整体任务规划/schema/QNT-CTR-005-result-manifest-1.0.0.schema.json；Golden；GOV-CTR-006 | 1.0.0（Result Manifest Schema/Golden） | `pending_decision` | Manifest input_snapshot_refs Schema 要求至少一项，但已接受的 DTO 规则允许模板白名单纯函数空输入；需裁决无输入纯函数是否能产生可引用/持久化结果及其 Manifest 表达。Manifest UTC Schema 约束和 Quant AuthorizationRef 绑定映射仍待补 |
 | RSC-CTR-001 | ResearchContext 与 Evidence | Research | Researchflow | internal/research/application；RSC-CTR-001 Evidence Schema/Golden；GOV-CTR-006 | 1.0.0（Evidence Schema/Golden） | `pending_evidence` | content_level、source_owner、authorization_ref、derived_from_refs、来源版本、PIT 和撤销复核 |
 | RSC-CTR-002 | ResearchEvent、Claim、Hypothesis、Scenario | Research | Researchflow | internal/research/domain/application；doc/research/01-03 | 专属 Schema/Golden 当前未见 | `pending_evidence` | 状态迁移、引用完整性、版本、事件时间、认识论约束和跨对象一致性 |
 | FLOW-CTR-001 | Run/Stage/Attempt 状态与结果传播 | Researchflow | Server、API、WebUI、Worker；业务模块作为 Stage 执行方 | doc/researchflow/03；internal/researchflow/application/domain | 1.0.0（Run/Stage Schema/Golden） | `pending_evidence` | Run/Stage/Attempt Schema、状态转移、输出传播、结果归并和终态 |
@@ -362,7 +362,7 @@ PLAT-002 不因本次矩阵统计完成而结束。整体完成仍需：
 
 ### 13.1 已完成的项目级语义裁决
 
-- DEC-PLAT-002-018～027 已完成项目级语义裁决；当前非条件性项目级 pending_decision 为 0。
+- DEC-PLAT-002-018～027 已完成原有项目级语义裁决；此前非条件性 pending_decision 为 0。2026-11-11 Quant 契约核定新发现 QNT-DEC-01/02 两项真实待决，当前待决项以最新第17节为准。
 - DEC-018 旧 Analysis API 退役边界已明确；旧 Analysis HTTP 契约不再是活动冻结对象。
 - DEC-019 只保留为旧 API 历史裁决，不得迁移为 Researchflow 新 API 的请求约束。
 - DEC-020～025 已明确 Data Snapshot、News Evidence、News 输入物化、Quant ResultRef、Research Stage 读写和 LLM 请求/重试的关键职责语义。
@@ -491,3 +491,48 @@ PLAT-002 不因本次矩阵统计完成而结束。整体完成仍需：
 - 不把 NEWS-CTR-002 的当前授权复核测试、数据库并发测试、Provider 来源条款核查或采集质量测试列入本轮门禁。
 - 本轮只维护 feat/design_doc 项目级契约登记与审计文档，没有修改 News 责任分支文档/代码，没有执行测试或 CI。
 - 下一批：Quant 公开契约定义核定；GOV-CTR-006 的公共算法不重开，只核对 Quant 的 resource_ref/purpose/content_level 映射。
+
+## 17. Quant 首批公开契约定义核定（2026-11-11）
+
+本批覆盖 QNT-CTR-001～005，只核对 Quant 对 Researchflow 暴露的公开 Application DTO、Registry、结果引用/Envelope、RiskDecision 和授权 Manifest 定义。纯计算算法实现、模块内 CI、Repository 并发实现和真实 Data Adapter 均不属于本轮。
+
+### 17.1 核定结果
+
+| 契约 | 状态 | 核定结论 |
+|---|---|---|
+| QNT-CTR-001 | pending_evidence | Registry Entry 1.0.0 Schema 已有，字段集合覆盖 code/schema_version/value_type/unit/precision/range/algorithm_version/input_requirements/parameters_schema/quality_policy/supports_interval；但缺少可作为首批公开定义的实际 Registry 条目及每个 code 的单位、精度、舍入、输入要求和质量策略映射 |
+| QNT-CTR-002 | pending_evidence | 八种 Indicator 参数 Schema 与算法语义已有；但参数 Schema 不等同完整 Indicator Request/Result DTO，输出类型、单位、精度、状态和 Registry 元数据映射未完整定义 |
+| QNT-CTR-003 | pending_evidence | 三个首批 Factor 参数 Schema/Golden 和部分 QuantMetric Schema 已有；但完整 Factor Request/Result、交易日历版本引用、输入质量和结果 Envelope 映射不完整 |
+| QNT-CTR-004 | pending_decision | QuantResultRef、Factor QuantMetric、TrendResult、RiskDecision 局部 Schema/Golden 已有；但 Envelope schema_version 被同时定义为 Envelope Schema 版本和 payload Schema 选择版本，必须先裁决。完整 Payload discriminator 覆盖及 Envelope/Ref/Manifest 字段权威关系也未定义完整 |
+| QNT-CTR-005 | pending_decision | Manifest Schema/Golden 与 JCS/SHA-256 内容寻址规则已有；但 Manifest input_snapshot_refs minItems=1 与已接受的“模板白名单纯函数允许空输入数组”冲突，必须明确纯函数是否允许生成可引用/持久化结果及 Manifest 表达 |
+
+### 17.2 新发现的项目级待决项
+
+**QNT-DEC-01：Envelope 与 Payload 的版本字段语义**
+
+- 冲突依据：Quant-Research公开DTO字段级契约第2.7节把 Envelope 的 schema_version 定义为 Envelope Schema 版本，同时又要求按 result_type + schema_version 选择 Payload 子 Schema；QNT-CTR-005 Manifest 的 schema_version 则表示 Payload Schema 版本。
+- 必须明确：Envelope 版本与 Payload 版本是否使用两个字段（建议 envelope_schema_version + payload_schema_version），或保留单一字段并明确其唯一语义及 Envelope 自身版本策略。
+- 建议：采用两个独立版本字段，Envelope 结构升级不应强制所有业务 Payload 同步升级；Payload 兼容按 result_type + payload_schema_version 独立路由。
+- 状态：pending_decision。不得由 Quant 单方改字段名。
+
+**QNT-DEC-02：无输入纯函数的结果 Manifest 规则**
+
+- 冲突依据：Quant-Research公开DTO字段级契约第2.7节允许模板白名单纯函数的 input_snapshot_refs 为空；QNT-CTR-005 Manifest Schema 当前 minItems=1，Quant Manifest 规范实现说明也要求非空快照引用。
+- 必须明确：纯函数结果是否属于可持久化/可被跨模块引用的 QuantResult；若允许，是否以明确的 template_ref/allow_empty_inputs 受控字段表达，或由调用范围限制空输入 Manifest；若不允许，需明确纯函数仅为内部计算、不产生公开 ResultRef。
+- 建议：只允许经模板显式白名单声明的纯函数生成空输入结果，并在 Manifest 中以不可伪造的模板/计算定义引用绑定该例外；不得仅放宽 minItems 使所有结果都能空输入。
+- 状态：pending_decision。不得由 Quant 单方放宽 Schema。
+
+### 17.3 其他定义缺口与明确排除
+
+1. QNT-CTR-001 缺少实际 Registry Entry 内容；仅有 Registry Entry Schema 不能证明任何具体 metric/indicator/factor 的公开单位、精度、算法版本和质量策略已冻结。
+2. QNT-CTR-002/003 的参数 Schema 不能替代完整 Request/Result 契约；局部算法 Golden 不能自动构成跨模块 DTO 定义。
+3. QNT-CTR-004 已有的 Ref/Metric/Trend/Risk Schema 是局部 DTO，不等同完整 QuantResult Envelope；未知 result_type/payload_schema_version 的拒绝语义必须保留。
+4. QNT-CTR-005 Manifest 绑定 payload 指纹和输入 Snapshot，但不替代 GOV-CTR-006 AuthorizationRef；Quant 资源 Owner、trusted subject_ref、resource_ref=result_id、purpose_code=quant_analysis、content_level=full 仍需在唯一权威映射中表达。
+5. 不纳入本轮：算法计算正确性、指标性能、Quant 单元/Golden 测试、Repository 数据库并发、真实 Data v2 Adapter、授权撤销竞态测试和 CI。这些不改变本轮契约定义判定。
+
+### 17.4 本批结论
+
+- 本批 5 项：QNT-CTR-001～003 为 pending_evidence；QNT-CTR-004/005 为 pending_decision。
+- 新增两个真实的项目级待决项 QNT-DEC-01、QNT-DEC-02；这不是重开 B1～B8，也不是实现问题。此前“非条件性 pending_decision 为 0”的统计由本批新发现覆盖，当前项目级待决项为 2。
+- 不新增 CTR；两个待决项分别挂接既有 QNT-CTR-004、QNT-CTR-005。
+- 下一批进入 Research 公开契约核定；本批两个待决项留待项目负责人裁决，不擅自选择方案。
