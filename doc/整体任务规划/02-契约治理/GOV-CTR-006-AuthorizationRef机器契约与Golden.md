@@ -3,7 +3,7 @@
 - 决议日期：2026-11-06
 - 适用范围：Data、News、Quant、Research 的授权快照签发与跨模块引用
 - 当前状态：公共契约定义 `freeze-ready`；两份 Schema、四份 Golden、DTO 自身版本、字段语义、指纹算法和四类 Owner 映射已形成唯一权威定义。模块 CI Validator、Owner/Consumer 运行时授权与竞态测试属于 L2 实现符合性，不阻断项目级定义冻结。
-- 权威关系：公共字段与语义以项目级契约目录第 7.2 节为准；本文给出机器 Schema、Principal/Resource 映射、fingerprint 规范和 Golden 测试向量。
+- 权威关系：本文是 GOV-CTR-006 AuthorizationRef/PolicySnapshot 字段语义、Owner 映射、指纹算法和 Golden 的唯一项目级权威说明；两份 Schema 与四份 Golden 是本文引用的规范机器文件。项目级 DTO 只引用本契约，不另行定义第二套授权语义。
 
 ## 1. AuthorizationRef Schema
 
@@ -37,7 +37,7 @@
 
 | policy_owner | subject_ref 来源 | resource_ref | purpose_code | content_level |
 |---|---|---|---|---|
-| data | Data API Key 认证后映射的可信 caller principal；禁止客户端自报 | Data 不可变查询 snapshot_ref | quant_analysis / research_analysis / risk_review | full |
+| data | Server 注入的可信 Principal/Scope Context 中的逻辑 caller principal；同进程调用直接继承可信 Context。Remote Adapter 的 Service Credential 只认证 Adapter，subject_ref 仍取可信调用主体，绝不保存原始 API Key；禁止客户端自报 | Data 不可变查询 snapshot_ref | quant_analysis / research_analysis / risk_review | full |
 | news | 可信 caller_ref（Research/Researchflow/授权用户主体） | 实际 News Evidence/版本资源引用；Provider/Source/Endpoint 策略版本进入组合快照 | research_analysis / risk_review / user_display | metadata / summary / snippet / full |
 | quant | 可信调用主体；MVP 为 Researchflow service principal | Quant result_id | quant_analysis | full |
 | research | 可信调用主体；MVP 为 Researchflow service principal | Research evidence_id | research_analysis / risk_review | 按实际返回内容选择 |
@@ -51,7 +51,7 @@
 - unknown：无法可靠判断；默认拒绝受限内容。
 - conditional：不是授权许可；conditions 必须非空。签发 Owner 验证所有条件后，必须重新签发新的 allowed AuthorizationRef，不得把原 conditional 引用当作允许凭证。
 - expires_at=null 只表示没有固定过期时间，不代表永久授权；当前策略撤销、Scope 变化或授权服务不可用仍必须拒绝。
-- expires_at 非 null 时，now >= expires_at 即过期。读取时策略版本在检查和内容读取之间发生变化，必须重新授权；无法确认一致性时丢弃内容并拒绝返回。
+- expires_at 非 null 时必须严格晚于 decided_at；now >= expires_at 即过期。读取时策略版本在检查和内容读取之间发生变化，必须重新授权；无法确认一致性时丢弃内容并拒绝返回。
 
 ## 5. Fingerprint 唯一算法
 
@@ -83,7 +83,8 @@
 |---|---|---|---|---|
 | GOV006-SCH-01 | 公共 Schema | 四份 Owner Golden + 两份 Schema | AuthorizationRef 与 PolicySnapshot 均通过 Draft 2020-12；启用 format assertion 校验 date-time，并由 Schema pattern 强制 RFC3339Nano UTC（Z 结尾，最多 9 位小数） | CI 失败 |
 | GOV006-SCH-02 | 公共 Schema | 缺少必填字段、未知字段、非法 enum、空 ref、非法 fingerprint、allowed 携带 conditions、conditional 不带 conditions | 每个负例均被拒绝；不得静默丢弃未知字段 | CI 失败 |
-| GOV006-SCH-03 | 语义 Validator | policy_version 与 snapshot_ref 不一致；conditions 重复项；policies 为空/重复 tuple/顺序非字典序 | 一致性、非空、tuple 唯一和稳定排序全部由跨对象 Validator 检查 | CI 失败 |
+| GOV006-SCH-03 | 语义 Validator | policy_version 与 snapshot_ref 不一致；conditions 重复项；policies 为空/重复 tuple/顺序非字典序；expires_at 不晚于 decided_at | 一致性、非空、tuple 唯一、稳定排序和有效期顺序全部由跨对象 Validator 检查 | CI 失败 |
+| GOV006-SCH-04 | 公共 Schema | policy_owner 与 purpose_code/content_level 不匹配 | Data/News/Quant/Research 只允许各自映射表定义的 purpose/content_level 组合 | Schema 拒绝 |
 | GOV006-FP-01 | 公共 Fingerprint | 四个 Golden | 从 AuthorizationRef + PolicySnapshot 重新构造 fingerprint_input；JCS 后 SHA-256 必须等于 expected_sha256 和 decision_fingerprint | CI 失败 |
 | GOV006-FP-02 | 公共 Fingerprint | 修改 policies 中任意一项 policy_type/ref/version，或漏掉一项 | 摘要必须变化；旧 fingerprint 不再匹配 | CI 失败 |
 | GOV006-FP-03 | 公共 Fingerprint | 仅修改 authorization_ref 或 decision_fingerprint | fingerprint_input 不变；避免把引用自身或摘要自身递归纳入摘要 | CI 失败 |
@@ -109,9 +110,9 @@
 JSON Schema 负责单对象结构约束；跨对象和运行时语义不得假装由 Schema 完成：
 
 1. **Schema Validator**：Draft 2020-12；必须启用 format assertion，而不是只把 date-time 当注释。
-2. **Snapshot Validator**：校验 authorization_ref.policy_version == policy_snapshot.snapshot_ref；policies 非空；Schema 校验完整对象唯一，Validator 进一步按 (policy_type, policy_ref, policy_version) tuple 去重并严格字典序排序。
+2. **Snapshot/Time Validator**：校验 authorization_ref.policy_version == policy_snapshot.snapshot_ref；policies 非空；Schema 校验完整对象唯一，Validator 进一步按 (policy_type, policy_ref, policy_version) tuple 去重并严格字典序排序；expires_at 非 null 时必须严格晚于 decided_at。
 3. **Fingerprint Verifier**：根据 PolicySnapshot 重建 evaluated_policy_versions，再执行 RFC 8785 JCS + SHA-256；不信任调用方传入的 fingerprint_input/canonical_json。
-4. **Owner Authorization Test**：每个 Owner 自己验证 subject_ref、resource_ref、purpose_code、content_level 与可信认证上下文和真实资源的绑定关系。
+4. **Owner Authorization Test**：每个 Owner 自己验证 subject_ref、resource_ref、purpose_code、content_level 与可信认证上下文和真实资源的绑定关系；Data subject_ref 必须来自 Server 注入的可信 Principal/Scope Context，原始 API Key 只能作为认证凭证，不得成为主体引用。
 5. **Read-time Gate**：消费者必须调用资源 Owner 的当前授权检查；不得仅在任务创建时检查一次后长期缓存 allowed。
 6. **Race Test**：授权检查与正文读取必须处于可证明一致的策略版本边界；无法证明时 fail closed。
 

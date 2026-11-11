@@ -142,6 +142,99 @@
           }
         }
       }
+    },
+    {
+      "if": {
+        "properties": {
+          "policy_owner": {
+            "const": "data"
+          }
+        },
+        "required": [
+          "policy_owner"
+        ]
+      },
+      "then": {
+        "properties": {
+          "purpose_code": {
+            "enum": [
+              "quant_analysis",
+              "research_analysis",
+              "risk_review"
+            ]
+          },
+          "content_level": {
+            "const": "full"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "policy_owner": {
+            "const": "news"
+          }
+        },
+        "required": [
+          "policy_owner"
+        ]
+      },
+      "then": {
+        "properties": {
+          "purpose_code": {
+            "enum": [
+              "research_analysis",
+              "risk_review",
+              "user_display"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "policy_owner": {
+            "const": "quant"
+          }
+        },
+        "required": [
+          "policy_owner"
+        ]
+      },
+      "then": {
+        "properties": {
+          "purpose_code": {
+            "const": "quant_analysis"
+          },
+          "content_level": {
+            "const": "full"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "policy_owner": {
+            "const": "research"
+          }
+        },
+        "required": [
+          "policy_owner"
+        ]
+      },
+      "then": {
+        "properties": {
+          "purpose_code": {
+            "enum": [
+              "research_analysis",
+              "risk_review"
+            ]
+          }
+        }
+      }
     }
   ]
 }
