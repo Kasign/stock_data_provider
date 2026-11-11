@@ -226,9 +226,20 @@ func (s *Store) Migrate(ctx context.Context) error {
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
 	}
 	// Data Schema 由公共 Platform Migration Runner 执行；版本 1 发布后保持不可变，后续变更追加新版本。
-	if err := platformstorage.ApplyMigrations(ctx, s.db, "market_data", []platformstorage.Migration{{
-		Version: 1, Description: "market data base schema", Statements: stmts,
-	}}); err != nil {
+	if err := platformstorage.ApplyMigrations(ctx, s.db, "market_data", []platformstorage.Migration{
+		{Version: 1, Description: "market data base schema", Statements: stmts},
+		{
+			Version: 2, Description: "adjustment factor source-version identity",
+			Statements: []string{
+				`ALTER TABLE market_data_adjustment_factor_versions ADD COLUMN source_version VARCHAR(128) NOT NULL DEFAULT '' AFTER source`,
+				`UPDATE market_data_adjustment_factor_versions
+SET source_version=COALESCE(NULLIF(JSON_UNQUOTE(JSON_EXTRACT(metadata,'$.source_version')),''),'')
+WHERE source_version=''`,
+				`CREATE INDEX idx_market_adjustment_factor_version_asof
+ON market_data_adjustment_factor_versions (symbol, trade_date, source, source_version, factor_basis, recorded_at, id)`,
+			},
+		},
+	}); err != nil {
 		return fmt.Errorf("market-data schema migration: %w", err)
 	}
 	// 旧版修订表曾对内容哈希建立全历史唯一约束，会错误阻止 A→B→A 的回归修订。

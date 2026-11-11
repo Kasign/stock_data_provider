@@ -135,14 +135,13 @@ func TestBaostockFundamentalsMissingCategoryIsUnknownNotZeroFilled(t *testing.T)
 	}
 }
 
-
 func TestBaostockFundamentalsReportsFieldLevelParseIssues(t *testing.T) {
 	reporter := validation.NewReporter(validation.DefaultMaxIssues)
 	ctx := validation.WithReporter(context.Background(), reporter)
 	got, err := NewBaostock(fakeBaoStockFinancialClient{
 		invalidField: "roeAvg",
 		missingField: "netProfit",
-		fieldIssues: []baostock.QuarterlyFinancialFieldIssue{{SourceField: "gpMargin", Code: "invalid_field", ActualType: "object", Preview: "object", RowIndex: 0}},
+		fieldIssues:  []baostock.QuarterlyFinancialFieldIssue{{SourceField: "gpMargin", Code: "invalid_field", ActualType: "object", Preview: "object", RowIndex: 0}},
 	}).FetchFundamentals(ctx, "600519.SH", 2026, 2)
 	if err != nil {
 		t.Fatalf("partial fundamentals should be retained: %v", err)
@@ -166,7 +165,6 @@ func TestBaostockFundamentalsReportsFieldLevelParseIssues(t *testing.T) {
 		}
 	}
 }
-
 
 func TestBaostockFundamentalsReportsMissingPublicationDateField(t *testing.T) {
 	reporter := validation.NewReporter(validation.DefaultMaxIssues)

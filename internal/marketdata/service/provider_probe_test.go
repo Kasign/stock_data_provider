@@ -1734,7 +1734,6 @@ func TestApplyFreshnessProbeResultsDoesNotPromoteBusinessDatesOrFetchedAt(t *tes
 	}
 }
 
-
 func TestFreshnessDomainForCapabilityDoesNotInventNonRealtimePolicies(t *testing.T) {
 	for _, capability := range []string{"daily_bars", "fundamentals", "valuations"} {
 		if domain, ok := freshnessDomainForCapability(capability); ok {

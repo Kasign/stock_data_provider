@@ -269,7 +269,6 @@ func (p *Eastmoney) fetchSectorBoard5D(ctx context.Context, category string, can
 	return item, rows[len(rows)-1].date, nil
 }
 
-
 // addEastmoneySector5DWarning 记录板块 5 日排名的快照级质量限制。
 func addEastmoneySector5DWarning(ctx context.Context, field, providerField, code, expected, actualType, message string) {
 	report := validation.NewReport(8)

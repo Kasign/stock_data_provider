@@ -343,6 +343,77 @@ func TestEastmoneyRejectsNonZeroProviderResultCode(t *testing.T) {
 	}
 }
 
+func TestEastmoneyDailyBarsReportsRequestAndDecodeFailures(t *testing.T) {
+	cases := []struct {
+		name   string
+		status int
+		body   string
+	}{
+		{name: "http status", status: http.StatusBadGateway, body: "upstream unavailable"},
+		{name: "invalid json", status: http.StatusOK, body: `{"rc":0,"data":`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(tc.status)
+				_, _ = fmt.Fprint(w, tc.body)
+			}))
+			defer server.Close()
+			reporter := validation.NewReporter(10)
+			ctx := validation.WithReporter(context.Background(), reporter)
+			provider := NewEastmoney(2*time.Second, server.URL, server.URL)
+			if _, err := provider.FetchDailyBars(ctx, "600519.SH", "2026-10-01", "2026-10-21", 100, model.AdjustmentNone); err == nil {
+				t.Fatal("expected Eastmoney request/response failure")
+			}
+			issues := reporter.Snapshot().Issues
+			if len(issues) != 1 || issues[0].Stage != validation.StageParse || issues[0].Code != "request_error" || issues[0].RowIndex != nil {
+				t.Fatalf("expected one snapshot-level request_error issue, got %+v", issues)
+			}
+		})
+	}
+}
+
+func TestEastmoneyDailyBarsReportsResponseLevelIssues(t *testing.T) {
+	validRows := `"klines":["2026-10-20,10.0,10.2,10.3,9.9,100,1020000,1.42,0.81,10.87,0.23"]`
+	cases := []struct {
+		name, body, wantCode string
+		wantError            bool
+		wantSeverity         validation.Severity
+	}{
+		{name: "provider result code", body: `{"rc":-1,"data":{"code":"600519"}}`, wantCode: "provider_error", wantError: true, wantSeverity: validation.SeverityError},
+		{name: "missing data object", body: `{"rc":0}`, wantCode: "empty_result", wantError: true, wantSeverity: validation.SeverityError},
+		{name: "symbol mismatch", body: `{"rc":0,"data":{"code":"000001","klines":[]}}`, wantCode: "symbol_mismatch", wantError: true, wantSeverity: validation.SeverityError},
+		{name: "missing echoed symbol", body: `{"rc":0,"data":{` + validRows + `}}`, wantCode: "missing_requested_identity", wantSeverity: validation.SeverityWarning},
+		{name: "empty klines", body: `{"rc":0,"data":{"code":"600519","klines":[]}}`, wantCode: "empty_result", wantError: true, wantSeverity: validation.SeverityWarning},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { fmt.Fprint(w, tc.body) }))
+			defer server.Close()
+			reporter := validation.NewReporter(10)
+			ctx := validation.WithReporter(context.Background(), reporter)
+			bars, err := NewEastmoney(2*time.Second, server.URL, server.URL).FetchDailyBars(ctx, "600519.SH", "2026-10-01", "2026-10-21", 100, model.AdjustmentForward)
+			if (err != nil) != tc.wantError {
+				t.Fatalf("error=%v, wantError=%v", err, tc.wantError)
+			}
+			if !tc.wantError && tc.name == "missing echoed symbol" && len(bars) != 1 {
+				t.Fatalf("valid K-line should remain accepted when provider identity is omitted: %+v", bars)
+			}
+			issues := reporter.Snapshot().Issues
+			found := false
+			for _, issue := range issues {
+				if issue.Code == tc.wantCode && issue.Stage == validation.StageParse && issue.RowIndex == nil && issue.Severity == tc.wantSeverity {
+					found = true
+					break
+				}
+			}
+			if !found {
+				t.Fatalf("missing snapshot-level %s issue: %+v", tc.wantCode, issues)
+			}
+		})
+	}
+}
+
 func TestEastmoneyRejectsKlineSymbolMismatch(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprint(w, `{"rc":0,"data":{"code":"000001","name":"wrong","klines":["2026-10-20,1321.01,1331.88,1335.00,1316.14,34136,4525398959,1.42,0.81,10.87,0.23"]}}`)
@@ -1158,8 +1229,10 @@ func TestEastmoneyFetchSectorRankingsMarksMissingTotalAndExcludedRows(t *testing
 	}))
 	defer server.Close()
 
+	reporter := validation.NewReporter(10)
+	ctx := validation.WithReporter(context.Background(), reporter)
 	provider := NewEastmoneyConfiguredWithMarketData(2*time.Second, "", "", "", server.URL, "")
-	got, err := provider.FetchSectorRankings(context.Background(), "industry", 10)
+	got, err := provider.FetchSectorRankings(ctx, "industry", 10)
 	if err != nil {
 		t.Fatalf("FetchSectorRankings: %v", err)
 	}
@@ -1172,6 +1245,17 @@ func TestEastmoneyFetchSectorRankingsMarksMissingTotalAndExcludedRows(t *testing
 		if !strings.Contains(strings.Join(got.QualityReasons, ","), reason) {
 			t.Errorf("missing source coverage reason %q: %v", reason, got.QualityReasons)
 		}
+	}
+	issues := reporter.Snapshot().Issues
+	foundTime := false
+	for _, issue := range issues {
+		if issue.Field == "provider_time" && issue.ProviderField == "sector ranking endpoint" &&
+			issue.Code == "not_exposed_by_provider_contract" && issue.RowIndex == nil {
+			foundTime = true
+		}
+	}
+	if !foundTime {
+		t.Fatalf("missing snapshot-level provider_time Reporter issue: %+v", issues)
 	}
 }
 

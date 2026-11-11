@@ -9,6 +9,7 @@ import (
 	"math"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -275,6 +276,29 @@ func validateIndexQuoteSnapshot(snapshot *model.IndexQuoteSnapshot) error {
 	}
 	return nil
 }
+
+// degradedCacheTTL 返回基础 TTL 的四分之一，适用于具有固定 TTL 的快照能力。
+func degradedCacheTTL(ttl time.Duration) time.Duration {
+	return ttl / 4
+}
+
+// configuredDegradedCacheTTL 在四分之一 TTL 不可用时回退到一分钟。
+func configuredDegradedCacheTTL(ttl time.Duration) time.Duration {
+	shortTTL := degradedCacheTTL(ttl)
+	if shortTTL <= 0 {
+		return time.Minute
+	}
+	return shortTTL
+}
+
+// cacheEntryWithinTTL 在读取侧再次执行缓存年龄约束，不完全依赖缓存后端的过期实现。
+func cacheEntryWithinTTL(fetchedAt time.Time, ttl time.Duration, now time.Time) bool {
+	if ttl <= 0 || fetchedAt.IsZero() || fetchedAt.After(now) {
+		return false
+	}
+	return now.Sub(fetchedAt) < ttl
+}
+
 func (s *DataService) IndexQuotes(ctx context.Context) (*model.IndexQuoteSnapshot, bool, error) {
 	if ctx == nil {
 		ctx = context.Background()
@@ -286,8 +310,14 @@ func (s *DataService) IndexQuotes(ctx context.Context) (*model.IndexQuoteSnapsho
 	const key = "md:v1:index-quotes:core"
 	if data, ok, cacheErr := s.cache.Get(ctx, key); cacheErr == nil && ok {
 		var cached model.IndexQuoteSnapshot
-		if json.Unmarshal(data, &cached) == nil && validateIndexQuoteSnapshot(&cached) == nil && time.Since(cached.FetchedAt) >= 0 && time.Since(cached.FetchedAt) < ttl {
-			return &cached, true, nil
+		if json.Unmarshal(data, &cached) == nil && validateIndexQuoteSnapshot(&cached) == nil {
+			cacheTTL := ttl
+			if cached.QualityStatus == model.QualityDegraded {
+				cacheTTL = degradedCacheTTL(ttl)
+			}
+			if cacheEntryWithinTTL(cached.FetchedAt, cacheTTL, time.Now()) {
+				return &cached, true, nil
+			}
 		}
 	} else if cacheErr != nil {
 		s.logger.Warn("index quote cache read failed", "error", cacheErr)
@@ -312,42 +342,45 @@ func (s *DataService) IndexQuotes(ctx context.Context) (*model.IndexQuoteSnapsho
 				s.breaker.Abandon(breakerKey)
 				return nil, false, ctx.Err()
 			}
-			s.breaker.Failure(breakerKey)
+			recordProviderCallFailure(s.breaker, breakerKey, fetchErr)
 			failures = append(failures, p.Name()+": "+fetchErr.Error())
 			continue
 		}
+		if snapshot != nil && strings.TrimSpace(snapshot.Source) != "" && snapshot.Source != p.Name() {
+			s.breaker.ContractFailure(breakerKey)
+			failures = append(failures, p.Name()+": index-quote source does not match Provider.Name()")
+			continue
+		}
 		if err := validateIndexQuoteSnapshot(snapshot); err != nil {
-			s.breaker.Failure(breakerKey)
+			s.breaker.ContractFailure(breakerKey)
 			failures = append(failures, p.Name()+": "+err.Error())
 			continue
 		}
-		s.breaker.Success(breakerKey)
 		if snapshot.QualityStatus == model.QualityDegraded {
+			s.breaker.QualityDegraded(breakerKey)
 			// 降级快照保留为兜底候选，继续尝试后续 Provider，优先取得完整可信快照。
 			if degradedCandidate == nil {
 				degradedCandidate = snapshot
 				if providerIndex > 0 {
-					degradedCandidate.QualityReasons = appendReason(degradedCandidate.QualityReasons, "provider_fallback_used")
-					for index := range degradedCandidate.Items {
-						degradedCandidate.Items[index].QualityStatus = model.QualityDegraded
-						degradedCandidate.Items[index].QualityReasons = appendReason(degradedCandidate.Items[index].QualityReasons, "provider_fallback_used")
-					}
+					degradedCandidate.FallbackFrom = s.indexQuoteProviders[0].Name()
+					degradedCandidate.FallbackReason = "preferred_provider_unavailable_or_unusable"
 				}
 			}
 			failures = append(failures, p.Name()+": valid contract but degraded quality")
 			continue
 		}
+		s.breaker.Success(breakerKey)
 		if providerIndex > 0 {
-			snapshot.QualityStatus = model.QualityDegraded
-			snapshot.QualityReasons = appendReason(snapshot.QualityReasons, "provider_fallback_used")
-			for index := range snapshot.Items {
-				snapshot.Items[index].QualityStatus = model.QualityDegraded
-				snapshot.Items[index].QualityReasons = appendReason(snapshot.Items[index].QualityReasons, "provider_fallback_used")
-			}
+			snapshot.FallbackFrom = s.indexQuoteProviders[0].Name()
+			snapshot.FallbackReason = "preferred_provider_unavailable_or_unusable"
 		}
 		payload, marshalErr := json.Marshal(snapshot)
 		if marshalErr == nil {
-			if cacheErr := s.cache.Set(ctx, key, payload, ttl); cacheErr != nil {
+			cacheTTL := ttl
+			if snapshot.QualityStatus == model.QualityDegraded {
+				cacheTTL = degradedCacheTTL(ttl)
+			}
+			if cacheErr := s.cache.Set(ctx, key, payload, cacheTTL); cacheErr != nil {
 				s.logger.Warn("index quote cache write failed", "error", cacheErr)
 			}
 		} else {
@@ -361,7 +394,7 @@ func (s *DataService) IndexQuotes(ctx context.Context) (*model.IndexQuoteSnapsho
 	if degradedCandidate != nil {
 		// 后续来源均未提供 valid 快照时，仍返回优先级最高的合法降级结果。
 		if payload, marshalErr := json.Marshal(degradedCandidate); marshalErr == nil {
-			if cacheErr := s.cache.Set(ctx, key, payload, ttl); cacheErr != nil {
+			if cacheErr := s.cache.Set(ctx, key, payload, ttl/4); cacheErr != nil {
 				s.logger.Warn("index quote degraded cache write failed", "error", cacheErr)
 			}
 		}
@@ -550,8 +583,14 @@ func (s *DataService) MarketBreadth(ctx context.Context) (*model.MarketBreadthSn
 	const key = "md:v1:market-breadth:cn-a-share"
 	if data, ok, cacheErr := s.cache.Get(ctx, key); cacheErr == nil && ok {
 		var cached model.MarketBreadthSnapshot
-		if json.Unmarshal(data, &cached) == nil && validateMarketBreadth(&cached) == nil && time.Since(cached.FetchedAt) >= 0 && time.Since(cached.FetchedAt) < ttl {
-			return &cached, true, nil
+		if json.Unmarshal(data, &cached) == nil && validateMarketBreadth(&cached) == nil {
+			cacheTTL := ttl
+			if cached.QualityStatus == model.QualityDegraded {
+				cacheTTL = degradedCacheTTL(ttl)
+			}
+			if cacheEntryWithinTTL(cached.FetchedAt, cacheTTL, time.Now()) {
+				return &cached, true, nil
+			}
 		}
 	} else if cacheErr != nil {
 		s.logger.Warn("market breadth cache read failed", "error", cacheErr)
@@ -576,33 +615,44 @@ func (s *DataService) MarketBreadth(ctx context.Context) (*model.MarketBreadthSn
 				s.breaker.Abandon(breakerKey)
 				return nil, false, ctx.Err()
 			}
-			s.breaker.Failure(breakerKey)
+			recordProviderCallFailure(s.breaker, breakerKey, fetchErr)
 			failures = append(failures, p.Name()+": "+fetchErr.Error())
 			continue
 		}
+		if snapshot != nil && strings.TrimSpace(snapshot.Source) != "" && snapshot.Source != p.Name() {
+			s.breaker.ContractFailure(breakerKey)
+			failures = append(failures, p.Name()+": market-breadth source does not match Provider.Name()")
+			continue
+		}
 		if err := validateMarketBreadth(snapshot); err != nil {
-			s.breaker.Failure(breakerKey)
+			s.breaker.ContractFailure(breakerKey)
 			failures = append(failures, p.Name()+": "+err.Error())
 			continue
 		}
-		s.breaker.Success(breakerKey)
 		if snapshot.QualityStatus == model.QualityDegraded {
+			s.breaker.QualityDegraded(breakerKey)
 			// 市场广度的部分金额/时间覆盖必须保留降级，继续尝试后续完整来源。
 			if degradedCandidate == nil {
 				degradedCandidate = snapshot
 				if providerIndex > 0 {
-					degradedCandidate.QualityReasons = appendReason(degradedCandidate.QualityReasons, "provider_fallback_used")
+					degradedCandidate.FallbackFrom = s.marketBreadthProviders[0].Name()
+					degradedCandidate.FallbackReason = "preferred_provider_unavailable_or_unusable"
 				}
 			}
 			failures = append(failures, p.Name()+": valid contract but degraded quality")
 			continue
 		}
+		s.breaker.Success(breakerKey)
 		if providerIndex > 0 {
-			snapshot.QualityStatus = model.QualityDegraded
-			snapshot.QualityReasons = appendReason(snapshot.QualityReasons, "provider_fallback_used")
+			snapshot.FallbackFrom = s.marketBreadthProviders[0].Name()
+			snapshot.FallbackReason = "preferred_provider_unavailable_or_unusable"
 		}
 		if data, err := json.Marshal(snapshot); err == nil {
-			if cacheErr := s.cache.Set(ctx, key, data, ttl); cacheErr != nil {
+			cacheTTL := ttl
+			if snapshot.QualityStatus == model.QualityDegraded {
+				cacheTTL = degradedCacheTTL(ttl)
+			}
+			if cacheErr := s.cache.Set(ctx, key, data, cacheTTL); cacheErr != nil {
 				s.logger.Warn("market breadth cache write failed", "error", cacheErr)
 			}
 		}
@@ -614,7 +664,7 @@ func (s *DataService) MarketBreadth(ctx context.Context) (*model.MarketBreadthSn
 	if degradedCandidate != nil {
 		// 只有后续来源均未提供 valid 快照时，才返回优先级最高的合法降级结果。
 		if data, err := json.Marshal(degradedCandidate); err == nil {
-			if cacheErr := s.cache.Set(ctx, key, data, ttl); cacheErr != nil {
+			if cacheErr := s.cache.Set(ctx, key, data, ttl/4); cacheErr != nil {
 				s.logger.Warn("market breadth degraded cache write failed", "error", cacheErr)
 			}
 		}
@@ -843,6 +893,10 @@ func (s *DataService) LimitPool(ctx context.Context, rawType, rawDate string, li
 		snapshot, fetchErr := p.FetchLimitPool(ctx, poolType, date, limit)
 		if fetchErr != nil {
 			failures = append(failures, p.Name()+": "+fetchErr.Error())
+			continue
+		}
+		if snapshot != nil && strings.TrimSpace(snapshot.Source) != "" && snapshot.Source != p.Name() {
+			failures = append(failures, p.Name()+": limit-pool source does not match Provider.Name()")
 			continue
 		}
 		if err := validateLimitPoolSnapshot(poolType, date, limit, snapshot); err != nil {
@@ -1109,6 +1163,10 @@ func (s *DataService) DragonTiger(ctx context.Context, rawDate string, page, pag
 		snapshot, fetchErr := p.FetchDragonTiger(ctx, date, page, pageSize)
 		if fetchErr != nil {
 			failures = append(failures, p.Name()+": "+fetchErr.Error())
+			continue
+		}
+		if snapshot != nil && strings.TrimSpace(snapshot.Source) != "" && snapshot.Source != p.Name() {
+			failures = append(failures, p.Name()+": dragon-tiger source does not match Provider.Name()")
 			continue
 		}
 		if err := validateDragonTigerSnapshot(date, page, pageSize, snapshot); err != nil {
@@ -1389,7 +1447,7 @@ func (s *DataService) SectorRankingsByMetric(ctx context.Context, rawCategory, r
 				return nil, false, ctx.Err()
 			}
 			if calledProvider {
-				s.breaker.Failure(breakerKey)
+				recordProviderCallFailure(s.breaker, breakerKey, fetchErr)
 			} else {
 				s.breaker.Abandon(breakerKey)
 			}
@@ -1398,10 +1456,12 @@ func (s *DataService) SectorRankingsByMetric(ctx context.Context, rawCategory, r
 		}
 		if snapshot != nil {
 			if snapshot.Direction != "" && snapshot.Direction != direction {
+				s.breaker.ContractFailure(breakerKey)
 				failures = append(failures, p.Name()+": provider returned a different sector ranking direction")
 				continue
 			}
 			if snapshot.SortBy != "" && snapshot.SortBy != sortBy {
+				s.breaker.ContractFailure(breakerKey)
 				failures = append(failures, p.Name()+": provider returned a different sector ranking sort_by")
 				continue
 			}
@@ -1420,8 +1480,13 @@ func (s *DataService) SectorRankingsByMetric(ctx context.Context, rawCategory, r
 				}
 			}
 		}
+		if snapshot != nil && strings.TrimSpace(snapshot.Source) != "" && snapshot.Source != p.Name() {
+			s.breaker.ContractFailure(breakerKey)
+			failures = append(failures, p.Name()+": sector-ranking source does not match Provider.Name()")
+			continue
+		}
 		if err := validateSectorRankingSnapshot(category, limit, snapshot); err != nil {
-			s.breaker.Failure(breakerKey)
+			s.breaker.ContractFailure(breakerKey)
 			failures = append(failures, p.Name()+": "+err.Error())
 			continue
 		}
@@ -1622,8 +1687,15 @@ func (s *DataService) StockBasic(ctx context.Context, rawSymbol string) (*model.
 			continue
 		}
 		item.Symbol = symbol
-		if item.Source == "" {
+		providerSource := strings.TrimSpace(item.Source)
+		if providerSource != "" && providerSource != p.Name() {
+			failures = append(failures, p.Name()+": stock-basic source does not match Provider.Name()")
+			continue
+		}
+		if providerSource == "" {
 			item.Source = p.Name()
+			item.QualityStatus = model.QualityDegraded
+			item.QualityReasons = appendReason(item.QualityReasons, "provider_source_missing_assumed_from_provider_name")
 		}
 		if item.FetchedAt.IsZero() {
 			item.FetchedAt = time.Now().UTC()
@@ -1730,8 +1802,15 @@ func (s *DataService) SearchStocks(ctx context.Context, rawQuery string, limit i
 			failures = append(failures, p.Name()+": empty stock-search response")
 			continue
 		}
-		if snapshot.Source == "" {
+		providerSource := strings.TrimSpace(snapshot.Source)
+		if providerSource != "" && providerSource != p.Name() {
+			failures = append(failures, p.Name()+": stock-search source does not match Provider.Name()")
+			continue
+		}
+		if providerSource == "" {
 			snapshot.Source = p.Name()
+			snapshot.QualityStatus = model.QualityDegraded
+			snapshot.QualityReasons = appendReason(snapshot.QualityReasons, "provider_source_missing_assumed_from_provider_name")
 		}
 		if snapshot.Query == "" {
 			snapshot.Query = query
@@ -2000,16 +2079,43 @@ func (s *DataService) StockBoards(ctx context.Context, rawSymbol string) (*model
 			continue
 		}
 		item.Symbol = symbol
-		if item.Source == "" {
+		providerSource := strings.TrimSpace(item.Source)
+		if providerSource != "" && providerSource != p.Name() {
+			failures = append(failures, p.Name()+": stock-boards source does not match Provider.Name()")
+			continue
+		}
+		missingSource := providerSource == ""
+		if missingSource {
 			item.Source = p.Name()
+			item.QualityStatus = model.QualityDegraded
+			item.QualityReasons = appendReason(item.QualityReasons, "provider_source_missing_assumed_from_provider_name")
 		}
 		if item.FetchedAt.IsZero() {
 			item.FetchedAt = time.Now().UTC()
 		}
 		for index := range item.Items {
-			if item.Items[index].Source == "" {
-				item.Items[index].Source = p.Name()
+			boardSource := strings.TrimSpace(item.Items[index].Source)
+			if boardSource != "" && boardSource != p.Name() {
+				missingSource = false
+				providerSource = "mismatch"
+				break
 			}
+			if boardSource == "" {
+				missingSource = true
+				item.Items[index].Source = p.Name()
+				item.Items[index].QualityStatus = model.QualityDegraded
+				item.Items[index].QualityReasons = appendReason(item.Items[index].QualityReasons, "provider_source_missing_assumed_from_provider_name")
+			}
+		}
+		if providerSource == "mismatch" {
+			failures = append(failures, p.Name()+": stock-board item source does not match Provider.Name()")
+			continue
+		}
+		if missingSource {
+			item.QualityStatus = model.QualityDegraded
+			item.QualityReasons = appendReason(item.QualityReasons, "provider_source_missing_assumed_from_provider_name")
+		}
+		for index := range item.Items {
 			if item.Items[index].FetchedAt.IsZero() {
 				item.Items[index].FetchedAt = item.FetchedAt
 			}
@@ -2327,7 +2433,16 @@ func (s *DataService) ChipDistribution(ctx context.Context, rawSymbol string) (*
 			continue
 		}
 		item.Symbol = symbol
-		item.Source = p.Name()
+		providerSource := strings.TrimSpace(item.Source)
+		if providerSource != "" && providerSource != p.Name() {
+			failures = append(failures, p.Name()+": chip-distribution source does not match Provider.Name()")
+			continue
+		}
+		if providerSource == "" {
+			item.Source = p.Name()
+			item.QualityStatus = model.QualityDegraded
+			item.QualityReasons = appendReason(item.QualityReasons, "provider_source_missing_assumed_from_provider_name")
+		}
 
 		// fetched_at 表示服务收到回包的时刻，不信任上游同名字段。
 		item.FetchedAt = time.Now().UTC()
@@ -2335,9 +2450,9 @@ func (s *DataService) ChipDistribution(ctx context.Context, rawSymbol string) (*
 			item.QualityStatus = model.QualityDegraded
 			item.QualityReasons = appendReason(item.QualityReasons, "provider_quality_status_missing")
 		}
+		item.QualityReasons = appendReason(item.QualityReasons, "publication_availability_timestamp_unverified")
 		if item.QualityStatus == model.QualityValid {
 			item.QualityStatus = model.QualityDegraded
-			item.QualityReasons = appendReason(item.QualityReasons, "publication_availability_timestamp_unverified")
 		}
 		if err := validateChipDistributionSnapshot(symbol, item); err != nil {
 			failures = append(failures, p.Name()+": "+err.Error())
@@ -2495,7 +2610,16 @@ func (s *DataService) CapitalFlow(ctx context.Context, rawSymbol string) (*model
 			continue
 		}
 		item.Symbol = symbol
-		item.Source = p.Name()
+		providerSource := strings.TrimSpace(item.Source)
+		if providerSource != "" && providerSource != p.Name() {
+			failures = append(failures, p.Name()+": capital-flow source does not match Provider.Name()")
+			continue
+		}
+		if providerSource == "" {
+			item.Source = p.Name()
+			item.QualityStatus = model.QualityDegraded
+			item.QualityReasons = appendReason(item.QualityReasons, "provider_source_missing_assumed_from_provider_name")
+		}
 
 		// fetched_at 表示服务收到回包的时刻，不信任上游同名字段。
 		item.FetchedAt = time.Now().UTC()
@@ -2503,9 +2627,9 @@ func (s *DataService) CapitalFlow(ctx context.Context, rawSymbol string) (*model
 			item.QualityStatus = model.QualityDegraded
 			item.QualityReasons = appendReason(item.QualityReasons, "provider_quality_status_missing")
 		}
+		item.QualityReasons = appendReason(item.QualityReasons, "publication_availability_timestamp_unverified")
 		if item.QualityStatus == model.QualityValid {
 			item.QualityStatus = model.QualityDegraded
-			item.QualityReasons = appendReason(item.QualityReasons, "publication_availability_timestamp_unverified")
 		}
 		if err := validateCapitalFlowSnapshot(symbol, item); err != nil {
 			failures = append(failures, p.Name()+": "+err.Error())
@@ -2656,8 +2780,12 @@ func (s *DataService) Quote(ctx context.Context, rawSymbol string) (*model.Quote
 			if symbolErr == nil && cachedSymbol == symbol && hasIdentifiableSourceVersion(q.SourceVersion) && q.NormalizationVer == normalize.Version &&
 				serviceTimestampIsSane(q.FetchedAt, cacheNow) && serviceTimestampIsSane(q.NormalizedAt, cacheNow) &&
 				normalize.ValidateQuote(&q) == nil {
-				applyQuoteFreshness(&q, time.Now())
-				if quoteCacheEligible(&q) {
+				applyQuoteFreshness(&q, cacheNow)
+				cacheTTL := s.quoteTTL
+				if q.QualityStatus == model.QualityDegraded {
+					cacheTTL = configuredDegradedCacheTTL(cacheTTL)
+				}
+				if quoteCacheEligible(&q) && cacheEntryWithinTTL(q.FetchedAt, cacheTTL, cacheNow) {
 					return &q, true, nil
 				}
 				s.logger.Warn("stale or untrustworthy quote cache payload ignored; refreshing provider", "symbol", symbol, "quality_status", q.QualityStatus, "quality_reasons", q.QualityReasons)
@@ -2672,6 +2800,7 @@ func (s *DataService) Quote(ctx context.Context, rawSymbol string) (*model.Quote
 	}
 	var errs []string
 	timeoutFailures := 0
+	var degradedFallback *model.Quote
 	var qualityFallback *model.Quote
 	fetchID := newFetchID()
 	if len(s.quoteProviders) == 0 {
@@ -2692,7 +2821,7 @@ func (s *DataService) Quote(ctx context.Context, rawSymbol string) (*model.Quote
 			return nil, false, ctx.Err()
 		}
 		if e != nil {
-			s.breaker.Failure(breakerKey)
+			recordProviderCallFailure(s.breaker, breakerKey, e)
 			if errors.Is(e, context.DeadlineExceeded) {
 				timeoutFailures++
 			}
@@ -2701,22 +2830,32 @@ func (s *DataService) Quote(ctx context.Context, rawSymbol string) (*model.Quote
 			continue
 		}
 		if q == nil {
-			s.breaker.Failure(breakerKey)
+			s.breaker.ContractFailure(breakerKey)
 			errs = append(errs, p.Name()+": empty quote without error")
 			continue
 		}
 		if !hasIdentifiableSourceVersion(q.SourceVersion) {
-			s.breaker.Failure(breakerKey)
+			s.breaker.ContractFailure(breakerKey)
 			errs = append(errs, p.Name()+": quote source_version is missing")
 			continue
 		}
 		q.SourceVersion = strings.TrimSpace(q.SourceVersion)
+		providerSource := strings.TrimSpace(q.Source)
+		if providerSource != "" && providerSource != p.Name() {
+			s.breaker.ContractFailure(breakerKey)
+			errs = append(errs, p.Name()+": provider returned a source identity different from Provider.Name()")
+			continue
+		}
+		if providerSource == "" {
+			degradeQualityStatus(&q.QualityStatus)
+			appendReasonOnce(&q.QualityReasons, "provider_source_missing_assumed_from_provider_name")
+		}
 		// fetched_at 是服务接收到 Provider 回包的时间，不能信任上游同名字段。
 		receivedAt := time.Now().UTC()
 		if strings.TrimSpace(q.Symbol) != "" {
 			providerSymbol, symbolErr := normalize.NormalizeSymbol(q.Symbol)
 			if symbolErr != nil || providerSymbol != symbol {
-				s.breaker.Failure(breakerKey)
+				s.breaker.ContractFailure(breakerKey)
 				errs = append(errs, p.Name()+": provider returned a different or invalid symbol")
 				continue
 			}
@@ -2732,13 +2871,11 @@ func (s *DataService) Quote(ctx context.Context, rawSymbol string) (*model.Quote
 			q.NormalizationVer = normalize.Version
 		}
 		if q.NormalizationVer != normalize.Version {
-			s.breaker.Failure(breakerKey)
+			s.breaker.ContractFailure(breakerKey)
 			errs = append(errs, p.Name()+": quote normalization_version is unsupported")
 			continue
 		}
 		if i > 0 {
-			degradeQualityStatus(&q.QualityStatus)
-			appendReasonOnce(&q.QualityReasons, "provider_fallback_used")
 			q.FallbackFrom = s.quoteProviders[0].Name()
 			q.FallbackReason = strings.Join(errs, "; ")
 		}
@@ -2747,18 +2884,29 @@ func (s *DataService) Quote(ctx context.Context, rawSymbol string) (*model.Quote
 			appendReasonOnce(&q.QualityReasons, "amount_missing_from_provider")
 		}
 		if e = normalize.ValidateQuote(q); e != nil {
-			s.breaker.Failure(breakerKey)
+			s.breaker.ContractFailure(breakerKey)
 			errs = append(errs, p.Name()+" failed contract validation: "+e.Error())
 			continue
 		}
 		applyQuoteFreshness(q, time.Now())
 		q.NormalizedAt = time.Now().UTC()
 		if !quoteCacheEligible(q) {
-			s.breaker.Failure(breakerKey)
+			s.breaker.QualityDegraded(breakerKey)
 			errs = append(errs, p.Name()+": quote not suitable as a fresh live snapshot: "+strings.Join(q.QualityReasons, ","))
 			copy := *q
 			copy.QualityReasons = append([]string(nil), q.QualityReasons...)
-			qualityFallback = &copy
+			if qualityFallback == nil {
+				qualityFallback = &copy
+			}
+			continue
+		}
+		if q.QualityStatus == model.QualityDegraded {
+			s.breaker.Success(breakerKey)
+			copy := *q
+			copy.QualityReasons = append([]string(nil), q.QualityReasons...)
+			if degradedFallback == nil {
+				degradedFallback = &copy
+			}
 			continue
 		}
 		s.breaker.Success(breakerKey)
@@ -2772,7 +2920,11 @@ func (s *DataService) Quote(ctx context.Context, rawSymbol string) (*model.Quote
 			}
 		}
 		if encoded, e := json.Marshal(q); e == nil {
-			if e = s.cache.Set(ctx, key, encoded, s.quoteTTL); e != nil {
+			cacheTTL := s.quoteTTL
+			if q.QualityStatus == model.QualityDegraded {
+				cacheTTL = configuredDegradedCacheTTL(s.quoteTTL)
+			}
+			if e = s.cache.Set(ctx, key, encoded, cacheTTL); e != nil {
 				s.logger.Warn("quote cache write failed", "error", e)
 			}
 		}
@@ -2780,6 +2932,16 @@ func (s *DataService) Quote(ctx context.Context, rawSymbol string) (*model.Quote
 	}
 	if err := ctx.Err(); err != nil {
 		return nil, false, err
+	}
+	if degradedFallback != nil {
+		appendReasonOnce(&degradedFallback.QualityReasons, "quote_fallback_exhausted_without_valid_provider")
+		if encoded, encodeErr := json.Marshal(degradedFallback); encodeErr == nil {
+			ttl := configuredDegradedCacheTTL(s.quoteTTL)
+			if cacheErr := s.cache.Set(ctx, key, encoded, ttl); cacheErr != nil {
+				s.logger.Warn("degraded quote cache write failed", "error", cacheErr)
+			}
+		}
+		return degradedFallback, false, nil
 	}
 	if qualityFallback != nil {
 		appendReasonOnce(&qualityFallback.QualityReasons, "no_provider_returned_a_fresh_timestamped_quote")
@@ -2847,6 +3009,7 @@ func (s *DataService) DailyBars(ctx context.Context, rawSymbol, start, end strin
 				sourceVersion := strings.TrimSpace(bar.SourceVersion)
 				if symbolErr != nil || cachedSymbol != symbol || source == "" || !hasIdentifiableSourceVersion(sourceVersion) ||
 					bar.AdjustmentBasis != basis || bar.NormalizationVer != normalize.Version ||
+					(bar.QualityStatus != model.QualityValid && bar.QualityStatus != model.QualityDegraded) ||
 					!serviceTimestampIsSane(bar.FetchedAt, cacheNow) || !serviceTimestampIsSane(bar.NormalizedAt, cacheNow) {
 					contractMismatch = true
 					break
@@ -2863,8 +3026,21 @@ func (s *DataService) DailyBars(ctx context.Context, rawSymbol, start, end strin
 			if !contractMismatch {
 				validated, warnings := normalize.ValidateAndSortBars(symbol, candidates, start, end, limit)
 				if len(validated) > 0 {
+					cacheTTL := s.barsTTL
+					if dailyBarsContainDegradedQuality(validated) {
+						cacheTTL = configuredDegradedCacheTTL(cacheTTL)
+					}
+					cacheAgeOK := cacheTTL > 0
+					for _, bar := range validated {
+						if !cacheEntryWithinTTL(bar.FetchedAt, cacheTTL, cacheNow) {
+							cacheAgeOK = false
+							break
+						}
+					}
 					adjustmentWarnings, adjustmentErr := applyDailyBarAdjustmentMetadataQuality(validated, basis)
-					if adjustmentErr != nil {
+					if !cacheAgeOK {
+						contractMismatch = true
+					} else if adjustmentErr != nil {
 						contractMismatch = true
 					} else if dailyBarsCacheNeedsPostCloseRefresh(validated, time.Now()) {
 						s.logger.Info("daily-bar cache has today's partial candle after close; refreshing provider", "symbol", symbol, "trade_date", validated[len(validated)-1].TradeDate)
@@ -2890,6 +3066,8 @@ func (s *DataService) DailyBars(ctx context.Context, rawSymbol, start, end strin
 	timeoutFailures := 0
 	var bestPartial []model.DailyBar
 	var bestPartialWarnings []string
+	var bestDegraded []model.DailyBar
+	var bestDegradedWarnings []string
 	fetchID := newFetchID()
 	if len(s.barProviders) == 0 {
 		return nil, false, nil, errors.New("no enabled daily-bar provider")
@@ -2911,7 +3089,7 @@ func (s *DataService) DailyBars(ctx context.Context, rawSymbol, start, end strin
 			return nil, false, nil, ctx.Err()
 		}
 		if e != nil {
-			s.breaker.Failure(breakerKey)
+			recordProviderCallFailure(s.breaker, breakerKey, e)
 			if errors.Is(e, context.DeadlineExceeded) {
 				timeoutFailures++
 			}
@@ -2921,13 +3099,18 @@ func (s *DataService) DailyBars(ctx context.Context, rawSymbol, start, end strin
 		}
 		receivedAt := time.Now().UTC()
 		if len(bars) == 0 {
-			s.breaker.Failure(breakerKey)
+			s.breaker.ContractFailure(breakerKey)
 			errs = append(errs, p.Name()+": empty daily-bar response without error")
 			continue
 		}
 		contractError := ""
 		providerSourceVersion := ""
 		for _, bar := range bars {
+			providerSource := strings.TrimSpace(bar.Source)
+			if providerSource != "" && providerSource != p.Name() {
+				contractError = "provider returned a source identity different from Provider.Name() in daily bars"
+				break
+			}
 			if strings.TrimSpace(bar.Symbol) != "" {
 				providerSymbol, symbolErr := normalize.NormalizeSymbol(bar.Symbol)
 				if symbolErr != nil || providerSymbol != symbol {
@@ -2956,7 +3139,7 @@ func (s *DataService) DailyBars(ctx context.Context, rawSymbol, start, end strin
 			}
 		}
 		if contractError != "" {
-			s.breaker.Failure(breakerKey)
+			s.breaker.ContractFailure(breakerKey)
 			errs = append(errs, p.Name()+": "+contractError)
 			continue // Never salvage only part of a provider response with a mixed contract.
 		}
@@ -2969,6 +3152,10 @@ func (s *DataService) DailyBars(ctx context.Context, rawSymbol, start, end strin
 				appendReasonOnce(&bars[j].QualityReasons, "provider_symbol_missing_assumed_from_request")
 			}
 			bars[j].Symbol = symbol
+			if strings.TrimSpace(bars[j].Source) == "" {
+				degradeQualityStatus(&bars[j].QualityStatus)
+				appendReasonOnce(&bars[j].QualityReasons, "provider_source_missing_assumed_from_provider_name")
+			}
 			bars[j].Source = p.Name()
 			bars[j].SourceVersion = strings.TrimSpace(bars[j].SourceVersion)
 			bars[j].RequestID = fetchID
@@ -2990,28 +3177,26 @@ func (s *DataService) DailyBars(ctx context.Context, rawSymbol, start, end strin
 				appendReasonOnce(&bars[j].QualityReasons, "amount_missing_from_provider")
 			}
 			if i > 0 {
-				degradeQualityStatus(&bars[j].QualityStatus)
 				bars[j].FallbackFrom = s.barProviders[0].Name()
 				bars[j].FallbackReason = strings.Join(errs, "; ")
-				appendReasonOnce(&bars[j].QualityReasons, "provider_fallback_used")
 			}
 			accepted = append(accepted, bars[j])
 		}
 		bars = accepted
 		if len(bars) == 0 {
-			s.breaker.Failure(breakerKey)
+			s.breaker.ContractFailure(breakerKey)
 			errs = append(errs, p.Name()+": no bars matched the requested symbol and adjustment basis")
 			continue
 		}
 		bars, warnings := normalize.ValidateAndSortBars(symbol, bars, start, end, limit)
 		if len(bars) == 0 {
-			s.breaker.Failure(breakerKey)
+			s.breaker.ContractFailure(breakerKey)
 			errs = append(errs, p.Name()+" response failed bar validation")
 			continue
 		}
 		adjustmentWarnings, adjustmentErr := applyDailyBarAdjustmentMetadataQuality(bars, basis)
 		if adjustmentErr != nil {
-			s.breaker.Failure(breakerKey)
+			s.breaker.ContractFailure(breakerKey)
 			errs = append(errs, p.Name()+": "+adjustmentErr.Error())
 			continue
 		}
@@ -3039,7 +3224,7 @@ func (s *DataService) DailyBars(ctx context.Context, rawSymbol, start, end strin
 		applyDailyBarCoverageWarnings(bars, coverageWarnings)
 		warnings = dedupeStrings(warnings)
 		if !coverageOK {
-			s.breaker.Failure(breakerKey)
+			s.breaker.QualityDegraded(breakerKey)
 			warning := fmt.Sprintf("%s returned partial daily-bar coverage: requested %d bars, validated %d; tried fallback providers before using this degraded series", p.Name(), limit, len(bars))
 			warnings = append(warnings, warning)
 			for j := range bars {
@@ -3053,6 +3238,15 @@ func (s *DataService) DailyBars(ctx context.Context, rawSymbol, start, end strin
 				bestPartialWarnings = append([]string(nil), warnings...)
 			}
 			errs = append(errs, warning)
+			continue
+		}
+		if dailyBarsContainDegradedQuality(bars) {
+			s.breaker.QualityDegraded(breakerKey)
+			warnings = append(warnings, "daily_bar_degraded_candidate_retained_while_searching_for_valid_provider")
+			if preferPartialBars(bars, bestDegraded) {
+				bestDegraded = append([]model.DailyBar(nil), bars...)
+				bestDegradedWarnings = append([]string(nil), warnings...)
+			}
 			continue
 		}
 		s.breaker.Success(breakerKey)
@@ -3072,7 +3266,11 @@ func (s *DataService) DailyBars(ctx context.Context, rawSymbol, start, end strin
 			Bars     []model.DailyBar `json:"bars"`
 			Warnings []string         `json:"warnings"`
 		}{bars, warnings}); e == nil {
-			if e = s.cache.Set(ctx, key, encoded, s.barsTTL); e != nil {
+			cacheTTL := s.barsTTL
+			if dailyBarsContainDegradedQuality(bars) {
+				cacheTTL = configuredDegradedCacheTTL(s.barsTTL)
+			}
+			if e = s.cache.Set(ctx, key, encoded, cacheTTL); e != nil {
 				s.logger.Warn("daily bars cache write failed", "error", e)
 			}
 		}
@@ -3102,7 +3300,8 @@ func (s *DataService) DailyBars(ctx context.Context, rawSymbol, start, end strin
 					// Use the database snapshot only when its coherent series covers
 					// at least as recent a trade date and at least as much history as
 					// the best provider partial. Never merge their price series.
-					if len(bestPartial) == 0 || preferStoredSeries(cached, bestPartial) {
+					// MariaDB 数据始终作为 stale 历史兜底；已有覆盖达标的 degraded Provider 序列时，不允许 stale 结果越级。
+					if len(bestDegraded) == 0 && (len(bestPartial) == 0 || preferStoredSeries(cached, bestPartial)) {
 						fallbackWarnings := []string{"provider_unavailable_served_from_mariadb", "mariadb_bars_use_one_coherent_source_and_adjustment_reference"}
 						fallbackWarnings = append(fallbackWarnings, storedWarnings...)
 						return cached, false, dedupeStrings(fallbackWarnings), nil
@@ -3114,6 +3313,9 @@ func (s *DataService) DailyBars(ctx context.Context, rawSymbol, start, end strin
 	if err := ctx.Err(); err != nil {
 		return nil, false, nil, err
 	}
+	if len(bestDegraded) > 0 {
+		return bestDegraded, false, dedupeStrings(bestDegradedWarnings), nil
+	}
 	if len(bestPartial) > 0 {
 		return bestPartial, false, dedupeStrings(bestPartialWarnings), nil
 	}
@@ -3124,6 +3326,49 @@ func (s *DataService) DailyBars(ctx context.Context, rawSymbol, start, end strin
 		errs = append(errs, "no enabled provider")
 	}
 	return nil, false, nil, errors.New("all daily-bar providers failed: " + strings.Join(errs, " | "))
+}
+
+// mergeBundleQualityStatus 保留 Bundle 子数据中更严重、信息量更明确的质量状态。
+// invalid > stale > unknown > degraded > valid；空状态按 unknown 处理。
+func mergeBundleQualityStatus(current, next model.QualityStatus) model.QualityStatus {
+	rank := func(status model.QualityStatus) int {
+		switch status {
+		case model.QualityInvalid:
+			return 4
+		case model.QualityStale:
+			return 3
+		case model.QualityUnknown, "":
+			return 2
+		case model.QualityDegraded:
+			return 1
+		case model.QualityValid:
+			return 0
+		default:
+			return 2
+		}
+	}
+	if rank(next) > rank(current) {
+		if next == "" {
+			return model.QualityUnknown
+		}
+		return next
+	}
+	if current == "" {
+		return model.QualityUnknown
+	}
+	return current
+}
+
+// mergeBundleChildQuality 将子数据状态映射到聚合状态，并保留可检索的子数据状态提示。
+func mergeBundleChildQuality(bundle *model.Bundle, component string, status model.QualityStatus) {
+	if bundle == nil || status == model.QualityValid {
+		return
+	}
+	if status == "" {
+		status = model.QualityUnknown
+	}
+	bundle.QualityStatus = mergeBundleQualityStatus(bundle.QualityStatus, status)
+	appendReasonOnce(&bundle.Warnings, component+"_quality_"+string(status))
 }
 
 func (s *DataService) Bundle(ctx context.Context, rawSymbol string, lookback int, asOf time.Time, asOfProvided bool, basis model.AdjustmentBasis) (*model.Bundle, error) {
@@ -3185,10 +3430,10 @@ func (s *DataService) Bundle(ctx context.Context, rawSymbol string, lookback int
 	bundle := &model.Bundle{Symbol: symbol, DailyBars: bars, Sources: map[string]string{}, Warnings: append([]string{}, warnings...), QualityStatus: model.QualityValid}
 	if asOfProvided && basis != model.AdjustmentNone && time.Since(asOf) > 5*time.Minute {
 		bundle.Warnings = append(bundle.Warnings, "historical_adjusted_bars_may_use_current_corporate_action_factors; point_in_time_adjustment_not_verified")
-		bundle.QualityStatus = model.QualityDegraded
+		bundle.QualityStatus = mergeBundleQualityStatus(bundle.QualityStatus, model.QualityDegraded)
 	}
 	if normalize.HasQualityDegradingBarWarnings(warnings) {
-		bundle.QualityStatus = model.QualityDegraded
+		bundle.QualityStatus = mergeBundleQualityStatus(bundle.QualityStatus, model.QualityDegraded)
 	}
 	if len(bars) > 0 {
 		sourceSet := map[string]struct{}{}
@@ -3197,7 +3442,7 @@ func (s *DataService) Bundle(ctx context.Context, rawSymbol string, lookback int
 				sourceSet[b.Source] = struct{}{}
 			}
 			if b.QualityStatus != model.QualityValid {
-				bundle.QualityStatus = model.QualityDegraded
+				mergeBundleChildQuality(bundle, "daily_bars", b.QualityStatus)
 			}
 		}
 		sources := make([]string, 0, len(sourceSet))
@@ -3208,19 +3453,19 @@ func (s *DataService) Bundle(ctx context.Context, rawSymbol string, lookback int
 		bundle.Sources["daily_bars"] = strings.Join(sources, ",")
 		if len(sources) > 1 {
 			bundle.Warnings = append(bundle.Warnings, "daily_bars_mixed_sources; inspect per-bar source metadata before source-sensitive analysis")
-			bundle.QualityStatus = model.QualityDegraded
+			bundle.QualityStatus = mergeBundleQualityStatus(bundle.QualityStatus, model.QualityDegraded)
 		}
 	}
 	if quoteAllowed {
 		q, _, e := s.Quote(ctx, symbol)
 		if e != nil {
 			bundle.Warnings = append(bundle.Warnings, "realtime_quote_unavailable")
-			bundle.QualityStatus = model.QualityDegraded
+			bundle.QualityStatus = mergeBundleQualityStatus(bundle.QualityStatus, model.QualityDegraded)
 		} else if asOfProvided && (q.QuoteTime == nil || q.QuoteTime.After(asOf)) {
 			// A near-live as_of request may fetch a quote newer than the exact
 			// cutoff. Missing timestamps cannot prove point-in-time availability.
 			bundle.Warnings = append(bundle.Warnings, "realtime_quote_excluded_after_or_unknown_as_of_timestamp")
-			bundle.QualityStatus = model.QualityDegraded
+			bundle.QualityStatus = mergeBundleQualityStatus(bundle.QualityStatus, model.QualityDegraded)
 		} else {
 			bundle.Quote = q
 			bundle.Name = q.Name
@@ -3228,23 +3473,23 @@ func (s *DataService) Bundle(ctx context.Context, rawSymbol string, lookback int
 			if len(bars) > 0 && bars[len(bars)-1].AdjustmentBasis != q.AdjustmentBasis {
 				bundle.Warnings = append(bundle.Warnings, "quote_and_daily_bars_adjustment_basis_mismatch")
 				bundle.Warnings = append(bundle.Warnings, "do_not_compare_realtime_unadjusted_price_directly_with_adjusted_history")
-				bundle.QualityStatus = model.QualityDegraded
+				bundle.QualityStatus = mergeBundleQualityStatus(bundle.QualityStatus, model.QualityDegraded)
 			}
 			if q.QualityStatus != model.QualityValid {
-				bundle.QualityStatus = model.QualityDegraded
+				mergeBundleChildQuality(bundle, "realtime_quote", q.QualityStatus)
 			}
 		}
 	} else {
 		bundle.Warnings = append(bundle.Warnings, "realtime_quote_skipped_as_of_not_live; latest quote must not leak into historical analysis")
-		bundle.QualityStatus = model.QualityDegraded
+		bundle.QualityStatus = mergeBundleQualityStatus(bundle.QualityStatus, model.QualityDegraded)
 	}
 	if len(bars) == 0 {
-		bundle.QualityStatus = model.QualityDegraded
+		bundle.QualityStatus = mergeBundleQualityStatus(bundle.QualityStatus, model.QualityDegraded)
 		bundle.Warnings = append(bundle.Warnings, "daily_bars_missing")
 	} else {
 		latest := bars[len(bars)-1]
 		if latest.MA5 == nil || latest.MA20 == nil || latest.MA120 == nil || latest.MA250 == nil {
-			bundle.QualityStatus = model.QualityDegraded
+			bundle.QualityStatus = mergeBundleQualityStatus(bundle.QualityStatus, model.QualityDegraded)
 			bundle.Warnings = append(bundle.Warnings, "moving_average_history_insufficient")
 		}
 	}
@@ -3255,7 +3500,19 @@ func (s *DataService) Bundle(ctx context.Context, rawSymbol string, lookback int
 	} else {
 		bundle.AnalysisReferenceTime = bundle.FetchedAt
 	}
+	bundle.Warnings = dedupeStrings(bundle.Warnings)
 	return bundle, nil
+}
+
+// dailyBarsContainDegradedQuality reports whether any row prevents the series from
+// using the valid-quality fast path.
+func dailyBarsContainDegradedQuality(bars []model.DailyBar) bool {
+	for _, bar := range bars {
+		if bar.QualityStatus != model.QualityValid {
+			return true
+		}
+	}
+	return false
 }
 
 // coverageSufficient keeps obviously truncated responses as fallback candidates.
@@ -3572,6 +3829,45 @@ func applyQuoteFreshness(q *model.Quote, now time.Time) {
 // Provider URLs often include public tokens or request-specific fields; logs only need the endpoint and failure type.
 var providerFailureURLQuery = regexp.MustCompile(`(?i)(https?://[^\s"?]+)\?[^\s"']*`)
 
+// recordProviderCallFailure keeps known data/client errors out of the availability circuit.
+func recordProviderCallFailure(b *circuitBreaker, key string, err error) {
+	kind, _ := providerFailureSummary(err)
+	switch kind {
+	case "data_contract", "empty_or_unparseable_response":
+		b.ContractFailure(key)
+	case "http_status":
+		status := providerHTTPStatusCode(err)
+		if status >= 400 && status < 500 {
+			b.RequestFailure(key)
+		} else {
+			b.Failure(key)
+		}
+	case "canceled":
+		b.Abandon(key)
+	default:
+		b.Failure(key)
+	}
+}
+
+func providerHTTPStatusCode(err error) int {
+	if err == nil {
+		return 0
+	}
+	lower := strings.ToLower(err.Error())
+	marker := "http status"
+	index := strings.Index(lower, marker)
+	if index < 0 {
+		return 0
+	}
+	rest := strings.TrimSpace(strings.TrimLeft(lower[index+len(marker):], " :=#"))
+	fields := strings.Fields(rest)
+	if len(fields) == 0 {
+		return 0
+	}
+	status, _ := strconv.Atoi(strings.Trim(fields[0], ":,;"))
+	return status
+}
+
 func providerFailureSummary(err error) (kind, message string) {
 	if err == nil {
 		return "unknown", "provider returned an unspecified error"
@@ -3598,6 +3894,7 @@ func providerFailureSummary(err error) (kind, message string) {
 			strings.Contains(lower, "empty daily-bar response"):
 			kind = "empty_or_unparseable_response"
 		case strings.Contains(lower, "validation"),
+			strings.Contains(lower, "source_version"),
 			strings.Contains(lower, "symbol mismatch"),
 			strings.Contains(lower, "contract"),
 			strings.Contains(lower, "inconsistent"),

@@ -402,6 +402,10 @@ func (s *DataService) IndexCatalog(ctx context.Context, rawTag string) (*model.I
 			failures = append(failures, p.Name()+": "+fetchErr.Error())
 			continue
 		}
+		if snapshot != nil && strings.TrimSpace(snapshot.Source) != "" && snapshot.Source != p.Name() {
+			failures = append(failures, p.Name()+": index-catalog source does not match Provider.Name()")
+			continue
+		}
 		if err := validateIndexCatalogSnapshot(tag, snapshot); err != nil {
 			failures = append(failures, p.Name()+": "+err.Error())
 			continue

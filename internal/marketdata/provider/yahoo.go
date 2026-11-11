@@ -18,7 +18,6 @@ import (
 	"example.com/stock-analysis-flow/internal/marketdata/model"
 	"example.com/stock-analysis-flow/internal/marketdata/normalize"
 	"example.com/stock-analysis-flow/internal/marketdata/validation"
-	"example.com/stock-analysis-flow/internal/marketdata/validation"
 )
 
 const yahooFinanceVersion = "yahoo-finance-chart-v1"
@@ -296,15 +295,18 @@ func (p *YahooFinance) FetchDailyBars(ctx context.Context, rawSymbol, startDate,
 
 	resp, err := p.httpDoer.Do(req)
 	if err != nil {
+		addProviderParseIssue(ctx, -1, "provider_response", "response", "request_error", "successful Yahoo Finance chart response", "http_or_transport_error", "", "Yahoo Finance chart request did not produce a successful response")
 		return nil, fmt.Errorf("Yahoo Finance chart request: %w", err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
 		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4096))
+		addProviderParseIssue(ctx, -1, "provider_response", "http_status", "http_status_error", "2xx", "number", strconv.Itoa(resp.StatusCode), "Yahoo Finance chart endpoint returned a non-success HTTP status")
 		return nil, fmt.Errorf("Yahoo Finance chart HTTP status %d", resp.StatusCode)
 	}
 	body, err := readBoundedBody(resp.Body, maxProviderPayloadBytes)
 	if err != nil {
+		addProviderParseIssue(ctx, -1, "provider_response", "body", "read_error", "readable chart response body", "io_error", "", "Yahoo Finance chart response body could not be read")
 		return nil, fmt.Errorf("read Yahoo Finance chart payload: %w", err)
 	}
 
@@ -339,20 +341,17 @@ func (p *YahooFinance) FetchDailyBars(ctx context.Context, rawSymbol, startDate,
 		return nil, fmt.Errorf("decode Yahoo Finance chart JSON: %w", err)
 	}
 	if payload.Chart.Error != nil {
+		addProviderParseIssue(ctx, -1, "provider_response", "chart.error", "provider_error", "chart.error is null", "object", payload.Chart.Error.Code, "Yahoo Finance rejected the chart request")
 		return nil, fmt.Errorf("Yahoo Finance chart provider error %s: %s", payload.Chart.Error.Code, payload.Chart.Error.Description)
 	}
 	if len(payload.Chart.Result) != 1 {
+		addProviderParseIssue(ctx, -1, "result", "chart.result", "invalid_result_count", "exactly one chart result", "array", strconv.Itoa(len(payload.Chart.Result)), "Yahoo Finance 日 K 结果数量不符合契约")
 		return nil, errors.New("Yahoo Finance returned no single chart result")
 	}
 	result := payload.Chart.Result[0]
 	if reported := strings.TrimSpace(result.Meta.Symbol); reported != "" && !strings.EqualFold(reported, yahooTicker) {
+		addProviderParseIssue(ctx, -1, "symbol", "chart.result[0].meta.symbol", "identity_mismatch", yahooTicker, "string", reported, "Yahoo Finance 日 K 返回证券代码与请求不一致")
 		return nil, fmt.Errorf("Yahoo Finance ticker mismatch: requested %s got %q", yahooTicker, reported)
-	}
-	if len(result.Timestamp) == 0 {
-		addProviderParseIssue(ctx, -1, "timestamp", "chart.result[0].timestamp", "missing_field", "non-empty Unix timestamp array", "missing", "", "Yahoo Finance chart response 缺少交易时间数组")
-	}
-	if len(result.Indicators.Quote) == 0 {
-		addProviderParseIssue(ctx, -1, "quote", "chart.result[0].indicators.quote[0]", "missing_field", "one quote object containing OHLCV arrays", "missing", "", "Yahoo Finance chart response 缺少日 K 报价字段")
 	}
 	if len(result.Timestamp) == 0 {
 		addProviderParseIssue(ctx, -1, "timestamp", "chart.result[0].timestamp", "missing_or_empty_field", "non-empty Unix timestamp array", "missing_or_empty", "", "Yahoo Finance 响应缺少有效时间戳数组")
@@ -394,7 +393,8 @@ func (p *YahooFinance) FetchDailyBars(ctx context.Context, rawSymbol, startDate,
 		}
 		date := time.Unix(timestamp, 0).In(loc).Format("2006-01-02")
 		if date < startISO || date > endISO {
-			rejectedRows++
+			// 日期越界已有明确的行级诊断，不重复计入无法定位的通用解析拒绝数。
+			addProviderParseIssue(ctx, index, "trade_date", "timestamp", "date_out_of_requested_range", "date within "+startISO+".."+endISO, "timestamp", date, "Yahoo Finance 日 K 日期超出请求区间")
 			continue
 		}
 		openV, openOK := parseYahooFloatField(ctx, index, "open", "indicators.quote[0].open", rawYahooArrayValue(quote.Open, index), "finite positive price")
