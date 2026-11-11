@@ -1,72 +1,39 @@
-# 项目级契约治理入口
+# 项目级契约入口
 
-- 仓库：`Kasign/stock_data_provider`
-- 代码审计基线：`origin/integration` @ `b6dfc85ba214fe16268c8cba780641a8bfe15086`
-- 审计文档维护分支：`origin/feat/design_doc`（状态以当前分支 HEAD 为准）
-- 当前阶段：43 个正式 CTR 已完成最终收敛并登记冻结：37 项 frozen、4 项 deferred、2 项 not_applicable；0 项 pending_evidence、0 项 pending_decision。冻结范围及基线以登记簿第60节为准。
+- 当前阶段：`L1_contracts_frozen`
+- 当前状态：43 项正式 CTR；37 项 `frozen`、4 项 `deferred`、2 项 `not_applicable`；无 `pending_evidence` 或 `pending_decision`。
+- 冻结基线：`origin/integration @ b6dfc85ba214fe16268c8cba780641a8bfe15086`。
+- 登记簿版本：`0.2.59-frozen`。
 
-## 1. 权威性
-
-本目录是项目级跨模块契约的唯一**状态登记、版本管理和决策记录**入口。
+## 权威来源
 
 | 内容 | 唯一权威来源 |
 |---|---|
-| 项目级契约编号索引、生产方/消费者、状态、冻结版本、证据门禁 | [PLAT-002 项目级契约冻结登记簿](./PLAT-002-项目级契约冻结登记簿.md) |
-| 项目级契约语义争议、方案、建议和最终裁决 | [项目级契约决策记录](./decisions/项目级契约决策记录.md) |
-| GOV-CTR-001 公共 JSON 类型、数值、单位和空值规则 | [GOV-CTR-001 规则 1.0.0](./rules/GOV-CTR-001-公共JSON类型数值与空值规则.md) |
-| GOV-CTR-002 公共时间与 PIT 规则 | [GOV-CTR-002 规则 1.0.0](./rules/GOV-CTR-002-公共时间与PIT规则.md) |
-| GOV-CTR-003 公共标识符与幂等作用域规则 | [GOV-CTR-003 规则 1.0.0](./rules/GOV-CTR-003-标识符与幂等作用域规则.md) |
-| GOV-CTR-004 Schema 版本、兼容、废弃和迁移规则 | [GOV-CTR-004 规则 1.0.0](./rules/GOV-CTR-004-Schema版本兼容与废弃规则.md) |
-| GOV-CTR-006 AuthorizationRef/PolicySnapshot 机器契约、Owner 映射、指纹和 Golden | [GOV-CTR-006 权威说明](../整体任务规划/02-契约治理/GOV-CTR-006-AuthorizationRef机器契约与Golden.md) |
-| PLAT-CTR-001 HTTP Error Envelope 与内部 Fault 投影 | [PLAT-CTR-001 公共错误投影契约](./rules/PLAT-CTR-001-HTTP错误投影契约.md) |
-| PLAT-CTR-002 Request Context 与身份关联原语 | [PLAT-CTR-002 Request Context 契约](./rules/PLAT-CTR-002-Request-Context契约.md) |
-| PLAT-CTR-003 身份、授权、ServiceKey、Secret 边界 | [PLAT-CTR-003 身份/授权/Session 契约](./rules/PLAT-CTR-003-身份授权与Session原语契约.md) |
-| PLAT-CTR-004 Diagnostics Observation 与 Runner | [PLAT-CTR-004 Diagnostics 契约](./rules/PLAT-CTR-004-Diagnostics-Observation与Runner契约.md) |
-| PLAT-CTR-005 HTTP Client、SSRF 与出口安全 | [PLAT-CTR-005 HTTP Client 契约](./rules/PLAT-CTR-005-HTTP-Client与SSRF契约.md) |
-| PLAT-CTR-006 Storage、Repository 与 Migration 生命周期 | [PLAT-CTR-006 Storage 与 Migration 契约](./rules/PLAT-CTR-006-Storage与Migration契约.md) |
-| PLAT-CTR-007 Typed Config 与 Secret 生命周期 | [PLAT-CTR-007 Typed Config 与 Secret 契约](./rules/PLAT-CTR-007-Typed-Config与Secret契约.md) |
-| DATA-CTR-006 Data HTTP API 调用认证 | [DATA-CTR-006 Data HTTP API 认证契约](./rules/DATA-CTR-006-Data-HTTP-API调用认证契约.md) |
-| 项目级契约版本、冻结/解冻和变更历史 | [契约版本与变更记录](./契约版本与变更记录.md) |
-| 项目目标、模块职责、目标架构和开发边界 | [整体任务规划总览](../整体任务规划/01-项目总览/整体任务规划总览.md) |
-| Platform 技术原语候选定义 | [Platform 公共平台契约规范](../platform/08-公共平台契约规范.md) |
-| Platform 与项目契约差异证据 | [PLAT-002 公共契约差异与待决事项](../platform/17-PLAT-002公共契约差异与待决事项.md) |
-| 各领域字段级 DTO、Port、Schema、Golden 和实现测试 | 对应模块专项文档及机器契约文件 |
-| Server 组合根、运行时装配和生命周期实现 | [Server 实施规划](../server/README.md) 与当前代码 |
-| WebUI 实际请求和服务端 HTTP 契约 | WebUI 请求实现、Server 路由、OpenAPI 和对应模块契约 |
+| 项目级 CTR 编号、当前状态、冻结范围、延期条件 | [PLAT-002 项目级契约冻结登记簿](./PLAT-002-项目级契约冻结登记簿.md) |
+| 当前有效的项目级语义决策 | [项目级契约决策记录](./decisions/项目级契约决策记录.md) |
+| GOV-CTR-001～004 公共规则 | [rules/](./rules/) |
+| PLAT-CTR-001～007 Platform 公共技术契约 | [rules/](./rules/) |
+| DATA-CTR-006 Data HTTP API 认证 | [DATA-CTR-006 认证契约](./rules/DATA-CTR-006-Data-HTTP-API调用认证契约.md) |
+| GOV-CTR-006 AuthorizationRef/PolicySnapshot | [GOV-CTR-006 权威说明](../整体任务规划/02-契约治理/GOV-CTR-006-AuthorizationRef机器契约与Golden.md) |
+| 领域字段级 DTO、Application Port、状态机、Schema、Golden | 对应模块专项文档及机器契约文件 |
+| 契约版本和变更规则 | [契约版本与变更规则](./契约版本与变更记录.md) |
 
-本目录不复制领域字段级 Schema、完整 DTO 表或模块任务日志。登记簿只保留项目级索引、状态、证据引用和冻结判定。
+## 使用规则
 
-## 2. 与既有契约目录的关系
+1. 开发前先查登记簿，确认所依赖 CTR 的当前状态。
+2. `frozen` 项按其权威定义实现；登记簿中的实现差异描述不构成对冻结语义的修改。
+3. `deferred` 项不得被当作已发布契约；只在登记簿规定的重新进入条件满足后启动定点复核。
+4. `not_applicable` 项属于模块内部约定，不纳入项目级跨模块契约。
+5. 字段级语义以对应生产模块的权威文档/强类型 Port 为准；项目级决策用于消除跨模块冲突。
+6. L1 冻结不代表 L2 实现符合性或 L3 真实集成验收通过。Schema/Golden/Validator 同步、消费者测试、CI、Server 装配和部署分别在后续实现阶段验收。
 
-历史详细目录位于 `doc/整体任务规划/02-契约治理/`，包含旧编号映射、契约详细条目、样例矩阵和历史状态快照。
+## 当前有效文件
 
-自本轮治理规则起：
-- 本目录登记簿是项目级契约状态、冻结范围和版本的唯一权威来源。
-- 既有详细目录仅作为历史定义、编号追溯和证据索引；其中状态字段及“权威登记簿”声明不得覆盖本目录。
-- 各模块专项文档仍是其领域字段级定义的唯一来源；项目级登记簿不替代生产方的领域定义。
-- 旧目录的头部、索引和状态字段已调整为历史定义/历史快照，不再声明其为当前权威；旧编号映射、历史样例和历史状态仍保留用于追溯。GOV-CTR-006 机器契约说明是显式例外：由本表链接的唯一权威说明负责维护，其两份 Schema/四份 Golden 仍位于原目录作为当前机器文件。当前仍需持续扫描其他项目/模块文档中的旧路径引用，发现后按所属模块维护边界逐项校准。
+- [项目级契约冻结登记簿](./PLAT-002-项目级契约冻结登记簿.md)
+- [当前有效决策](./decisions/项目级契约决策记录.md)
+- [公共规则](./rules/)
+- [Schema](./schema/)
+- [Golden 样例](./golden/)
+- [版本与变更规则](./契约版本与变更记录.md)
 
-## 3. 契约定义冻结规则
-
-本目录管理的是跨模块公开契约定义冻结，不替代模块实现符合性和生产环境验收。唯一门禁以登记簿第5节为准。
-
-1. 每次契约定义审查和冻结都绑定精确审计基线与契约版本；后续分支前进不自动改变既有冻结版本。
-2. 生产方、直接消费者、唯一权威定义、字段/命令/事件语义、版本/兼容边界和适用安全/授权规则必须明确。
-3. 机器 Schema 或纯 InProcess Port 的等价权威强类型定义必须可核对。
-4. `pending_decision` 表示仍有会改变公开契约的取舍未裁决；`pending_evidence` 仅表示公开契约定义本身缺少必要语义、Schema/等价定义、版本或权威依据。
-5. `freeze-ready` 表示契约定义可提交项目负责人冻结；`frozen` 只在项目负责人确认具体版本后登记。
-6. 模块内部实现、单元/集成测试、Provider 专项测试、CI、部署和真实依赖可用性属于后续实现符合性/集成验收，不是本轮契约定义冻结门禁。
-7. 冻结契约的语义变更必须先记录决策、影响消费者、版本升级和迁移边界，不得静默修改。
-
-## 4. 文档索引
-
-- [PLAT-002 项目级契约冻结登记簿](./PLAT-002-项目级契约冻结登记簿.md)
-- [契约版本与变更记录](./契约版本与变更记录.md)
-- [项目级契约决策记录](./decisions/项目级契约决策记录.md)
-- [PLAT-002 五项公开契约裁决建议稿](./decisions/PLAT-002-五项待决裁决建议稿.md)（历史审查轨迹，已由 DEC-PLAT-002-028～033 取代）
-
-## 5. 本轮范围
-
-以固定的 origin/integration SHA b6dfc85ba214fe16268c8cba780641a8bfe15086 作为本轮代码核验对象；审计文档仅维护在 feat/design_doc。核验期间不修改业务代码或责任模块文档，不修改其他分支，不合并 integration，也不将 integration 合并回任何分支。
-
-本目录的当前状态以登记簿第60节为准。43 项正式 CTR 已完成最终收敛：37 项 frozen、4 项 deferred、2 项 not_applicable；0 项 pending_evidence、0 项 pending_decision。4 项延期项按明确触发条件重新进入审查。模块实现、测试、CI、部署事项不得加入 L1 契约定义冻结门禁。
+本目录只维护当前有效契约定义、状态和变更规则，不存放阶段性审查进度、重复任务矩阵或历史状态快照。
