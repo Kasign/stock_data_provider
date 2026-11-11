@@ -351,3 +351,14 @@
 - 查询时点使用清理后的当前 UTC 时间，遵守 system_as_of <= now 校验。
 - 代码提交：0452bbbfc42b56661403bd49273c6e9d7046a6ea。News 全量 CI Run 42768996986 success；MariaDB 11.4.13 集成 Run 42768996723 success。新增 ListEvidence Tombstone 断言已在真实数据库执行通过。
 - 该测试只覆盖 Observation Tombstone 的列表读取语义，不解决授权预检与内容读取之间的 TOCTOU，也不改变 available_at 证据准入规则。
+
+
+## 九、2026-11-11 冻结决议符合性修正
+
+- 代码基线：`9ace32d2ce8fa0c6775815f3b8b5379220fa1610`；本轮修复提交：`35c2a52079dbb002ed9ff328e77c3d738b79f34d`、`78a041c38a4ba88e8aa266c43fb0617f2d082e78`。
+- 按 DEC-PLAT-002-042 同步 Evidence DTO：新增必填 `relation_status`，当前未接入关系查询时固定为 `not_provided`，`relation_refs` 保持空数组；不得把未查询误报为已确认无关系。
+- 按 GOV-CTR-002 / DEC-PLAT-002-042 为 NEWS-CTR-001 所有 Schema 的绝对时间字段增加 UTC `Z` pattern，并同步 ResearchEvidencePage Schema/Golden。
+- 明确 `system_observed_at` 的权威来源为 `NewsItemVersion.ObservedAt`；Observation.ObservedAt 仍独立参与 PIT。
+- 本轮未实现 available_at 推断：现有来源无满足准入条件的首次公开可用时间证据，严格 PIT 仍不能验收。
+- 授权读取与内容查询尚未位于可证明的同一策略/存储一致性边界；公共 JCS Runtime Verifier 和可信当前策略 Resolver 仍需由公共平台/Server 组合根提供。News 不复制 JCS，也不声称 TOCTOU 已解决。
+- 本轮未执行构建或测试。若需要构建，按分支规则先将本分支合并到 `origin/integration`，仅在 integration 执行，且不得直接修改 integration。
