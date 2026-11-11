@@ -407,7 +407,6 @@ func cloneJSON[T any](value T) (T, error) {
 	return cloned, nil
 }
 
-
 // validSourceOwner 校验 Research 契约定义的证据来源归属模块。
 func validSourceOwner(value string) bool {
 	switch value {
