@@ -230,3 +230,152 @@ func TestBuildSchedulePlanRejectsRetryWaitWithoutRetryAt(t *testing.T) {
 		t.Fatal("retry_wait Stage without retry_at must fail closed")
 	}
 }
+
+
+type schedulerRunReaderFake struct {
+	results []CreateRunResult
+	calls   int
+}
+
+func (f *schedulerRunReaderFake) GetRun(_ context.Context, runRef string) (CreateRunResult, error) {
+	if len(f.results) == 0 {
+		return CreateRunResult{}, errors.New("no scheduler snapshot")
+	}
+	index := f.calls
+	if index >= len(f.results) {
+		index = len(f.results) - 1
+	}
+	f.calls++
+	result := f.results[index]
+	if result.Run.Ref != runRef {
+		return CreateRunResult{}, errors.New("unexpected Run reference")
+	}
+	return result, nil
+}
+
+type schedulerClockFake struct {
+	now time.Time
+}
+
+func (f schedulerClockFake) NowUTC(context.Context) (time.Time, error) {
+	return f.now, nil
+}
+
+type schedulerIDGeneratorFake struct {
+	refs  []string
+	calls int
+}
+
+func (f *schedulerIDGeneratorFake) NewRef(_ context.Context, _ string) (string, error) {
+	if f.calls >= len(f.refs) {
+		return "", errors.New("no Attempt reference configured")
+	}
+	value := f.refs[f.calls]
+	f.calls++
+	return value, nil
+}
+
+type schedulerDispatcherFake struct {
+	calls []ScheduledStageExecution
+	err   error
+}
+
+func (f *schedulerDispatcherFake) Execute(_ context.Context, runRef, stageRef, attemptRef string) (WorkerExecution, error) {
+	f.calls = append(f.calls, ScheduledStageExecution{StageRef: stageRef, AttemptRef: attemptRef})
+	if f.err != nil {
+		return WorkerExecution{}, f.err
+	}
+	return WorkerExecution{Attempt: domain.Attempt{Ref: attemptRef, StageRef: stageRef}}, nil
+}
+
+type schedulerReplanStoreFake struct {
+	calls          int
+	conflictFirst  bool
+	alwaysConflict bool
+	applied        []domain.Stage
+}
+
+func (f *schedulerReplanStoreFake) CompareAndSwapStage(_ context.Context, expected uint64, next domain.Stage) (bool, error) {
+	f.calls++
+	if f.alwaysConflict || (f.conflictFirst && f.calls == 1) {
+		return false, nil
+	}
+	if next.Version != expected+1 {
+		return false, errors.New("invalid expected version")
+	}
+	f.applied = append(f.applied, next)
+	return true, nil
+}
+
+func TestBuildSchedulePlanAllowsInitialRunStates(t *testing.T) {
+	now := time.Date(2026, 11, 11, 10, 0, 0, 0, time.UTC)
+	for _, status := range []domain.RunStatus{domain.RunCreated, domain.RunQueued, domain.RunRunning} {
+		run := domain.Run{Ref: "run-initial", Status: status, Version: 1, DeadlineAt: now.Add(time.Hour)}
+		stage := domain.Stage{Ref: "stage-initial", RunRef: run.Ref, Code: "market", Status: domain.StagePending, Version: 1}
+		plan, err := BuildSchedulePlan(context.Background(), run, []domain.Stage{stage}, nil, 1, now, nil)
+		if err != nil {
+			t.Fatalf("status %q should be schedulable: %v", status, err)
+		}
+		if len(plan.PromoteToReady) != 1 || len(plan.Dispatch) != 1 || plan.Dispatch[0].Status != domain.StageReady {
+			t.Fatalf("status %q did not produce initial dispatch: %#v", status, plan)
+		}
+	}
+	run := domain.Run{Ref: "run-cancelling", Status: domain.RunCancelling, Version: 1, DeadlineAt: now.Add(time.Hour)}
+	if _, err := BuildSchedulePlan(context.Background(), run, nil, nil, 1, now, nil); err == nil {
+		t.Fatal("cancelling Run must not be schedulable")
+	}
+}
+
+func TestSchedulerReplansAfterStageCASConflictAndDispatches(t *testing.T) {
+	run, now := schedulerFixture()
+	run.Status = domain.RunCreated
+	pending := domain.Stage{Ref: "stage-a", RunRef: run.Ref, Code: "market", Status: domain.StagePending, Version: 1}
+	ready := pending
+	ready.Status = domain.StageReady
+	ready.Version = 2
+	reader := &schedulerRunReaderFake{results: []CreateRunResult{
+		{Run: run, Stages: []domain.Stage{pending}},
+		{Run: run, Stages: []domain.Stage{ready}},
+	}}
+	store := &schedulerReplanStoreFake{conflictFirst: true}
+	ids := &schedulerIDGeneratorFake{refs: []string{"attempt-a"}}
+	dispatcher := &schedulerDispatcherFake{}
+	scheduler, err := NewScheduler(reader, store, schedulerClockFake{now: now}, ids, nil, dispatcher,
+		SchedulerConfig{MaxParallel: 1, MaxReplans: 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := scheduler.ScheduleRun(context.Background(), run.Ref)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if reader.calls != 2 || store.calls != 1 || result.ReplanCount != 1 {
+		t.Fatalf("scheduler did not reload after CAS conflict: reader=%d store=%d result=%#v", reader.calls, store.calls, result)
+	}
+	if len(result.Plan.Dispatch) != 1 || len(result.Executions) != 1 ||
+		len(dispatcher.calls) != 1 || dispatcher.calls[0].AttemptRef != "attempt-a" ||
+		len(store.applied) != 0 {
+		t.Fatalf("scheduler did not dispatch the recomputed ready Stage: result=%#v calls=%#v", result, dispatcher.calls)
+	}
+}
+
+func TestSchedulerStopsAfterBoundedCASConflicts(t *testing.T) {
+	run, now := schedulerFixture()
+	stage := domain.Stage{Ref: "stage-a", RunRef: run.Ref, Code: "market", Status: domain.StagePending, Version: 1}
+	reader := &schedulerRunReaderFake{results: []CreateRunResult{{Run: run, Stages: []domain.Stage{stage}}}}
+	store := &schedulerReplanStoreFake{alwaysConflict: true}
+	dispatcher := &schedulerDispatcherFake{}
+	scheduler, err := NewScheduler(reader, store, schedulerClockFake{now: now},
+		&schedulerIDGeneratorFake{refs: []string{"unused"}}, nil, dispatcher,
+		SchedulerConfig{MaxParallel: 1, MaxReplans: 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := scheduler.ScheduleRun(context.Background(), run.Ref); !errors.Is(err, ErrScheduleReplanExhausted) {
+		t.Fatalf("scheduler should stop after bounded conflicts, got %v", err)
+	}
+	if reader.calls != 2 || store.calls != 2 || len(dispatcher.calls) != 0 {
+		t.Fatalf("scheduler exceeded or bypassed replan boundary: reader=%d store=%d dispatch=%d", reader.calls, store.calls, len(dispatcher.calls))
+	}
+}
