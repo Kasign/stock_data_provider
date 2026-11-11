@@ -4,7 +4,7 @@
 - 代码审计基线：`origin/integration` @ `b6dfc85ba214fe16268c8cba780641a8bfe15086`
 - 审计文档维护分支：`origin/feat/design_doc`（状态以当前分支 HEAD 为准）
 - 固定代码审计基线：`origin/integration @ b6dfc85ba214fe16268c8cba780641a8bfe15086`；仅对该 SHA 的代码事实作结论，不随分支 HEAD 自动漂移
-- 登记簿版本：`0.2.26-review`
+- 登记簿版本：`0.2.27-review`
 - 当前状态：`L1_frozen_contract_definition_review_in_progress`
 - 冻结结论：43 个正式 CTR 已完成定义口径核定：1 freeze-ready、37 pending_evidence、3 pending_decision、2 not_applicable、0 frozen；5 项具体待决见第24节
 - 项目级决策：DEC-PLAT-002-018～027 已完成原有裁决；当前另有 5 项领域公开契约待决（QNT-DEC-01/02、RSC-OPEN-003/004/005）；DATA-FLOW-B、LLM-FLOW-B 保持条件性 deferred
@@ -157,7 +157,7 @@ GitHub 远端 ref 核验（2026-11-10）：
 |---|---|---|---|---|---|---|
 | GOV-CTR-001 | JSON 类型、Decimal、整数、比例、null/缺失 | 项目级规则；各 DTO 生产方 | 所有 DTO 消费者 | [GOV-CTR-001 公共 JSON 数值与空值规则](./rules/GOV-CTR-001-公共JSON类型数值与空值规则.md)；各领域字段映射见对应 CTR | 1.0.0 | `freeze-ready` | 公共 JSON 类型、Decimal 语法、integer 安全范围、number 精度/舍入原则、单位/比例和缺失/null/zero/empty/unknown 语义已统一版本化；字段级 scale、单位、范围、舍入、tolerance 和 nullable 仍由对应领域 CTR 负责，不作为本公共规则冻结阻断 |
 | GOV-CTR-002 | 时间、交易日、时区、PIT、system_as_of | 项目级时间语义；Data/News/Quant/Research/Researchflow | 所有历史研究及执行消费者 | [GOV-CTR-002 公共时间与 PIT 规则](./rules/GOV-CTR-002-公共时间与PIT规则.md)；各领域时间字段映射见对应 CTR | 1.0.0 | `freeze-ready` | RFC3339Nano UTC、交易日、occurred/published/available/system_observed/system_as_of/valid_time 等公共语义、Run 截止传播和严格 PIT 边界已版本化；Provider/领域字段映射与各 DTO Schema 约束仍由对应 CTR 负责，不作为公共规则冻结阻断 |
-| GOV-CTR-003 | ID、Request/Correlation/Event/Idempotency 作用域 | Platform 提供 Request ID 原语；各模块拥有领域 ID | Server、所有模块、Worker、事件消费者 | Platform observability；各模块事件/任务 DTO | 规则版本待核验；Golden 待核验 | `pending_evidence` | ID 作用域、生成方、异步传播、幂等 fingerprint、跨进程关联和 Header/Context Golden |
+| GOV-CTR-003 | ID、Request/Correlation/Event/Idempotency 作用域 | Platform 提供 Request ID 原语；各模块拥有领域 ID | Server、所有模块、Worker、事件消费者 | [GOV-CTR-003 公共标识符与幂等作用域规则](./rules/GOV-CTR-003-标识符与幂等作用域规则.md)；运行时传播见 PLAT-CTR-002；字段映射见各领域 CTR | 1.0.0 | `freeze-ready` | request/originating/correlation/event/idempotency/trace 身份职责、唯一性边界、重放冲突语义和 fingerprint 原则已版本化；Header/Context/Worker/事件 Envelope 的实际字段映射与执行证据仍由 PLAT/FLOW/NTF/各生产方 CTR 负责，不作为公共规则冻结阻断 |
 | GOV-CTR-004 | Schema 版本、兼容、废弃和迁移 | 各契约生产模块；项目级规则由治理登记 | 所有直接消费者 | 各模块 Schema Registry；doc/contract 版本规则 | 规则版本待核验；兼容矩阵待核验 | `pending_evidence` | 每个 DTO/Event 的版本、兼容级别、未知字段/枚举、废弃窗口、迁移和回滚 |
 | GOV-CTR-005 | 契约状态、冻结证据和变更审批 | 项目契约治理 | 所有模块 | doc/contract/README、登记簿第5节、决策记录、契约版本与变更记录 | 0.2.19-review（治理规则） | `freeze-ready` | 项目级定义冻结门禁、状态、版本变更/解冻记录规则已统一；模块实现符合性不混入契约定义冻结 |
 | GOV-CTR-006 | AuthorizationRef 公共审计快照结构与引用语义 | Data、News、Quant、Research 分别签发各自资源授权快照；公共结构由项目治理 | Research、Researchflow 及受限资源消费者 | 各模块签发 Schema；旧目录 GOV-CTR-006 机器契约/Golden | 1.0.0（2 Schema / 4 Golden） | `pending_evidence` | Principal/Resource 映射、Scope、purpose、snapshot fingerprint、过期/撤销、当前授权复核和竞态 |
@@ -734,8 +734,8 @@ INT-CTR-001 是 43 个正式 CTR 之一，覆盖 Quant、Research、Researchflow
 
 | 状态 | 数量 | 含义 |
 |---|---:|---|
-| freeze-ready | 3 | GOV-CTR-001、GOV-CTR-002、GOV-CTR-005；公共规则定义完整，可提交项目负责人确认冻结 |
-| pending-evidence | 38 | 公开契约定义/Schema/权威映射仍有缺口 |
+| freeze-ready | 4 | GOV-CTR-001、GOV-CTR-002、GOV-CTR-003、GOV-CTR-005；公共规则定义完整，可提交项目负责人确认冻结 |
+| pending-evidence | 37 | 公开契约定义/Schema/权威映射仍有缺口 |
 | pending-decision | 0 | 本轮五项待决均已由 DEC-PLAT-002-028～032 裁决 |
 | blocked | 0 | 当前没有无法通过权威决议消解的公开定义冲突 |
 | not_applicable | 2 | DATA-CTR-003、NTF-CTR-003；仅模块内部 Provider/Channel SPI，不属于跨模块公开契约 |
@@ -756,7 +756,7 @@ INT-CTR-001 是 43 个正式 CTR 之一，覆盖 Quant、Research、Researchflow
 ### 24.3 阶段结论
 
 - 43 项正式 CTR 已全部完成本轮定义口径核定；不再保留“待审查模块/待全量盘点”的开放任务。
-- 当前未完成项为 38 项 pending-evidence；不再有 pending-decision。模块内部实现/测试/CI/部署事项仍不属于本轮契约定义冻结门禁。
+- 当前未完成项为 37 项 pending-evidence；不再有 pending-decision。模块内部实现/测试/CI/部署事项仍不属于本轮契约定义冻结门禁。
 - 下一阶段按登记簿中剩余 pending-evidence CTR 增量收敛；GOV-CTR-001 已独立 freeze-ready，Quant/Research 仍按 DEC-PLAT-002-028～033 校准权威 DTO、Schema、Golden 和映射；不重新启动十模块全量扫描，不新增重复 CTR。
 
 
@@ -863,3 +863,11 @@ INT-CTR-001 是 43 个正式 CTR 之一，覆盖 Quant、Research、Researchflow
 - 公共规则明确 RFC3339Nano UTC、交易日日期、occurred_at/published_at/available_at/system_observed_at/system_as_of/valid_time/fetched_at/normalized_at/created_at/deadline_at 的不同语义；固定 Run system_as_of 传播、available_at 不推断和严格 PIT 双边界。
 - 本规则不替代各领域 Provider 时间来源映射、规范化优先级、交易日历版本或字段 required/nullable；这些仍由对应领域 CTR 验收。
 - GOV-CTR-002 状态调整为 `freeze-ready`；43 项总数不变，freeze-ready 3、pending-evidence 38、pending-decision 0、blocked 0、not_applicable 2、frozen 0。
+
+
+## 32. GOV-CTR-003 公共标识符与幂等规则版本化（2026-11-11）
+
+- DEC-PLAT-002-036 已确定 GOV-CTR-003 公共规则 1.0.0，唯一权威文本为 `doc/contract/rules/GOV-CTR-003-标识符与幂等作用域规则.md`。
+- 公共规则区分领域 ID、request_id、originating_request_id、correlation_id、event_id、idempotency_key 和 trace_id/span_id；明确各自作用域、稳定性、不可替代关系及通用幂等冲突语义。
+- 命令级 fingerprint 精确字段、保留期、Header/Context/Worker 传播、事件 Envelope 字段和真实幂等执行仍由各领域 CTR/PLAT-CTR-002 验收，不阻断公共语义本身冻结。
+- GOV-CTR-003 状态调整为 `freeze-ready`；43 项总数不变，freeze-ready 4、pending-evidence 37、pending-decision 0、blocked 0、not_applicable 2、frozen 0。

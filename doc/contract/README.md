@@ -3,7 +3,7 @@
 - 仓库：`Kasign/stock_data_provider`
 - 代码审计基线：`origin/integration` @ `b6dfc85ba214fe16268c8cba780641a8bfe15086`
 - 审计文档维护分支：`origin/feat/design_doc`（状态以当前分支 HEAD 为准）
-- 当前阶段：43 个正式 CTR 已完成定义口径核定；3 项 freeze-ready、38 项 pending_evidence、0 项 pending_decision、2 项 not_applicable、0 项 frozen。整体尚未冻结
+- 当前阶段：43 个正式 CTR 已完成定义口径核定；4 项 freeze-ready、37 项 pending_evidence、0 项 pending_decision、2 项 not_applicable、0 项 frozen。整体尚未冻结
 
 ## 1. 权威性
 
@@ -15,6 +15,7 @@
 | 项目级契约语义争议、方案、建议和最终裁决 | [项目级契约决策记录](./decisions/项目级契约决策记录.md) |
 | GOV-CTR-001 公共 JSON 类型、数值、单位和空值规则 | [GOV-CTR-001 规则 1.0.0](./rules/GOV-CTR-001-公共JSON类型数值与空值规则.md) |
 | GOV-CTR-002 公共时间与 PIT 规则 | [GOV-CTR-002 规则 1.0.0](./rules/GOV-CTR-002-公共时间与PIT规则.md) |
+| GOV-CTR-003 公共标识符与幂等作用域规则 | [GOV-CTR-003 规则 1.0.0](./rules/GOV-CTR-003-标识符与幂等作用域规则.md) |
 | 项目级契约版本、冻结/解冻和变更历史 | [契约版本与变更记录](./契约版本与变更记录.md) |
 | 项目目标、模块职责、目标架构和开发边界 | [整体任务规划总览](../整体任务规划/01-项目总览/整体任务规划总览.md) |
 | Platform 技术原语候选定义 | [Platform 公共平台契约规范](../platform/08-公共平台契约规范.md) |
