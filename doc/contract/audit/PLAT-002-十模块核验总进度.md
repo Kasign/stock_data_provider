@@ -1261,3 +1261,13 @@
 - 本轮不检查真实 Gateway/模型能力、Provider 性能、E2E、HTTP Client 接线、测试或 CI；未修改 LLM 责任分支。
 - 当前项目级待决项仍为 5 项（QNT-DEC-01/02、RSC-OPEN-003/004/005）。权威明细见登记簿第20节、差异矩阵第47节。
 - 下一批：Notification 公开契约定义核定。
+
+## 48. Notification 公开契约定义核定完成（2026-11-11）
+
+- 完成 NTF-CTR-001～003 核定：NTF-CTR-001/002 为 pending_evidence；NTF-CTR-003 为 not_applicable；无 pending_decision、blocked、freeze-ready。
+- NTF-CTR-001：Envelope 与三类 Payload 共 4 份 Draft 2020-12 Schema、6 个 Golden 已有；fingerprint 算法、事件注册键和首批事件映射明确。剩余 UTC Schema 约束、reason_code/opaque ref 格式和 subject_ref 与 payload 主体一致性未完整机器化。
+- NTF-CTR-002：Inbox 双唯一键、Publish 幂等键、Delivery 唯一键、版本快照、Delivery 状态机和 unknown 对账语义已有；Subscription/DeliveryPlan/DeliveryRecord/DeliveryAttempt/DeliveryStateEvent 缺完整跨模块 DTO/Port 权威定义。
+- NTF-CTR-003 的 ChannelConfigSnapshot/ChannelAdapter/ChannelResolver/RecipientResolver/ChannelSendRequest/Result 仅为 Notification 内部 SPI，已从 PLAT-002 跨模块冻结门禁移出。Delivery retry/unknown 的外部可观察语义继续归 NTF-CTR-002。
+- 不纳入真实渠道账号/Secret、渠道 E2E、Worker、Repository、MariaDB、外部幂等/对账能力、测试和 CI；未修改 Notification 责任分支。
+- 当前项目级待决项仍为 5 项（QNT-DEC-01/02、RSC-OPEN-003/004/005）。权威明细见登记簿第21节、差异矩阵第48节。
+- 下一批：Server/WebUI Researchflow 新 API 公开 HTTP 契约核定，随后统一汇总十模块状态，不再逐个模块重复盘点。
