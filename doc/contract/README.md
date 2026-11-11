@@ -3,7 +3,7 @@
 - 仓库：`Kasign/stock_data_provider`
 - 代码审计基线：`origin/integration` @ `b6dfc85ba214fe16268c8cba780641a8bfe15086`
 - 审计文档维护分支：`origin/feat/design_doc`（状态以当前分支 HEAD 为准）
-- 当前阶段：43 个正式 CTR 已完成最终收敛：37 项 freeze-ready、4 项 deferred、2 项 not_applicable；0 项 pending_evidence、0 项 pending_decision、0 项 frozen。37 项可提交统一冻结确认，4 项延期项有明确触发条件。
+- 当前阶段：43 个正式 CTR 已完成最终收敛并登记冻结：37 项 frozen、4 项 deferred、2 项 not_applicable；0 项 pending_evidence、0 项 pending_decision。冻结范围及基线以登记簿第60节为准。
 
 ## 1. 权威性
 
@@ -69,4 +69,4 @@
 
 以固定的 origin/integration SHA b6dfc85ba214fe16268c8cba780641a8bfe15086 作为本轮代码核验对象；审计文档仅维护在 feat/design_doc。核验期间不修改业务代码或责任模块文档，不修改其他分支，不合并 integration，也不将 integration 合并回任何分支。
 
-本目录的当前状态以登记簿第59节为准。43 项正式 CTR 已完成最终收敛：37 项 freeze-ready、4 项 deferred、2 项 not_applicable；0 项 pending_evidence、0 项 pending_decision。37 项可提交统一冻结确认，4 项延期项按明确触发条件重新进入审查。模块实现、测试、CI、部署事项不得加入 L1 契约定义冻结门禁。
+本目录的当前状态以登记簿第60节为准。43 项正式 CTR 已完成最终收敛：37 项 frozen、4 项 deferred、2 项 not_applicable；0 项 pending_evidence、0 项 pending_decision。4 项延期项按明确触发条件重新进入审查。模块实现、测试、CI、部署事项不得加入 L1 契约定义冻结门禁。
