@@ -916,7 +916,7 @@ INT-CTR-001 是 43 个正式 CTR 之一，覆盖 Quant、Research、Researchflow
 ### 37.1 定义核对
 
 - Platform 的 Request ID 原语、可信入站策略、出站传播和 Request ID Golden 已有唯一可核对的 Go API 与行为定义。
-- `Principal` 的进程内结构为 `Kind/Subject/Scopes`；由 Platform Guard 根据认证结果写入 Context，`PrincipalFromContext` 返回副本。其身份种类、凭证和 Scope 规则归 PLAT-CTR-003，不在本 CTR 重复定义。
+- `Principal` 的进程内结构为 `Kind/AuthMethod/Subject/Scopes`；由可信 Platform Guard/Server Session Middleware 根据认证结果写入 Context，`PrincipalFromContext` 返回副本。其身份种类、认证来源、凭证和 Scope 规则归 PLAT-CTR-003，不在本 CTR 重复定义。
 - `context.Context` 只承载同步调用树的 Request ID、Principal 和取消/Deadline 信号；异步任务不持久化 Context/Principal，来源 ID 和相关性由 GOV-CTR-003 及领域 CTR 定义。
 - 出站只传播可信 Request ID，不自动传播 Authorization、Cookie 或其他凭证；无可信 Context ID 时删除调用方预置 Header。
 
