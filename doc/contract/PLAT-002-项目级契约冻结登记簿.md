@@ -197,7 +197,7 @@ GitHub 远端 ref 核验（2026-11-10）：
 | NTF-CTR-002 | Inbox、Subscription、Delivery、Attempt、幂等和状态机 | Notification | Server；Quant/Research/Researchflow 仅发布事件 | doc/notification/03 第2～7/9节、06；Notification Application Port 与 Domain 类型 | 1.0.0（Event Schema 已有；Subscription/Delivery/Attempt Schema 未登记） | `pending_evidence` | Event 接收/Inbox 双唯一键、Delivery 唯一键和状态机语义已有；Subscription、DeliveryPlan、DeliveryRecord、DeliveryAttempt、DeliveryStateEvent 的完整跨模块 DTO/Port 权威定义与版本/错误语义未形成可核对的机器 Schema/等价 Application Port 契约 |
 | NTF-CTR-003 | Notification 内部 Channel Adapter SPI 与 ChannelConfigSnapshot | Notification 内部扩展点 | Notification 内部 Channel Adapter/Resolver | doc/notification/03 第8.4节；internal/notification/application/channel_ports.go；internal/notification/domain/channel.go | 内部 Port，不属于跨模块公开契约版本 | `not_applicable` | ChannelConfigSnapshot、ChannelAdapter、ChannelResolver、RecipientResolver、ChannelSendRequest/Result 仅由 Notification 内部组件消费；不作为 PLAT-002 跨模块冻结门禁。Delivery 的 retry/unknown 对外语义归 NTF-CTR-002，不重复登记 |
 | SRV-CTR-001 | Root Server 组合根、统一 HTTP 宿主与 Researchflow 对外 API | Server | WebUI、Researchflow、所有服务端模块 | doc/server/README.md；doc/web/API_CONTRACT.md（旧 Analysis 路径）；doc/api/contracts/分析任务.openapi.yaml（已退役旧 API） | 新 Researchflow HTTP Schema/版本未定义 | `pending_evidence` | 组合根/唯一 HTTP 宿主职责已有定义；新 API 路径/方法、CreateRun/Run/Stage/Event HTTP DTO、错误投影、认证授权、分页/Cursor 与 WebUI 消费映射均无唯一权威定义。旧 Analysis API 按 DEC-018/019 退出活动范围，不得复用其 DTO/约束 |
-| INT-CTR-001 | Quant 风险决策、Research 事件生命周期、Researchflow Run 终态到 NotificationEvent 显式映射 | Quant/Research/Researchflow 产生业务事实；Notification 接收事件 | Notification、事件消费者 | doc/notification/05；doc/notification/03 | 1.0.0（3 Event Payload Schema；6 Golden） | `pending_evidence` | event_type、触发时点、subject_ref、幂等键、Outbox/Inbox 原子性、重放/撤回和三生产方映射 |
+| INT-CTR-001 | Quant 风险决策、Research 事件生命周期、Researchflow Run 终态到 NotificationEvent 显式映射 | Quant/Research/Researchflow 产生业务事实；Notification 接收事件 | Notification、事件消费者 | doc/notification/05；doc/notification/03；3 类 Payload Schema/6 Golden | 1.0.0（3 Event Payload Schema；6 Golden） | `pending_evidence` | 触发时点、subject_ref、source_event_ref、幂等键和 JCS fingerprint 已定义；事件/业务时间 UTC 约束、subject_ref 与 payload 主体一致性、changed_block_reason_codes 排序和来源时间字段绑定尚未完整机器化 |
 
 本表是编号和状态总索引；具体字段 Schema、Golden、DTO、状态机和验收标准必须继续引用生产模块的唯一字段级权威文件。没有机器契约或消费者证据时，登记簿明确记录缺失，不以历史目录的详细描述代替当前实现。
 
@@ -702,3 +702,32 @@ PLAT-002 不因本次矩阵统计完成而结束。整体完成仍需：
 - 旧 Analysis API 已退出活动冻结范围；新 Researchflow HTTP API 是唯一待补的服务端公开契约，不新增 CTR。
 - 不纳入：Server DI/Bootstrap 实际装配、Session Middleware 实现、WebUI 登录页面、Nginx/HTTPS/部署、HTTP E2E、CI。
 - 下一步应收敛当前十模块契约状态与待决项总数，再按既有 CTR 逐项登记 freeze-ready；不再进行实现接线审查。
+
+## 23. INT-CTR-001 业务事件映射契约核定（2026-11-11）
+
+INT-CTR-001 是 43 个正式 CTR 之一，覆盖 Quant、Research、Researchflow 三类业务事件生产方到 Notification Event Envelope 的公开映射。本批只核定事件类型、Payload 字段、时间/身份和幂等语义，不审查 Outbox/Inbox 实现或事件发布接线。
+
+### 23.1 核定结果
+
+| 契约 | 状态 | 核定结论 |
+|---|---|---|
+| INT-CTR-001 | pending_evidence | 三类事件 event_type/schema_version/source_module、触发时点、subject_ref、source_event_ref、idempotency_key、correlation_id、Payload 字段及 JCS fingerprint 输入已明确；Envelope/Payload Schema 与 6 个 Golden 已有；但时间字段 Schema 未约束 RFC3339Nano UTC，subject_ref 与 Payload 主体字段一致性、occurred_at 与来源时间的逐事件绑定、changed_block_reason_codes 字典序规则未完整机器化 |
+
+### 23.2 已明确的三类映射
+
+- researchflow.run.terminal：Run 进入 succeeded/partial/failed/cancelled 终态并通过持久化线性化后发布一次；occurred_at=finished_at；subject_ref=run_ref；payload 含 source_event_ref、run_ref、status、termination_reason、system_as_of、finished_at、result_summary_ref、template_ref/version。
+- quant.risk_decision.changed：首次形成决策，或 status/硬阻断 reason code 集合发生变化时发布；occurred_at=evaluated_at；subject_ref 是单一风险评估主体，不得使用 decision_id 代替；changed_block_reason_codes 去重并按字典序排序。
+- research.event.lifecycle_changed：ResearchEvent 生命周期状态真正迁移并提交后发布；occurred_at=changed_at；subject_ref=research_event_ref；source_event_ref 指向不可变领域版本；普通 Evidence 追加或描述修订不触发事件。
+
+### 23.3 保留边界
+
+1. NotificationEvent.event_id 是 Notification 身份，不得复用 RunRef、RiskDecision ID 或 ResearchEvent ID；source_event_ref 与 subject_ref 是不同字段，不可互换。
+2. payload_fingerprint 只覆盖 event_type、schema_version、source_module、subject_ref、occurred_at、payload；不覆盖 event_id、idempotency_key、correlation_id、published_at、接收时间和 Header。
+3. Outbox 原子提交、Inbox 双唯一键、重复投递和事件生产方真实接线属于实现符合性，不作为本轮定义冻结条件。
+4. 资源限制数值由组合根显式注入；当前没有统一批准的固定默认值，不得把建议数值写成冻结契约。
+
+### 23.4 本批结论
+
+- INT-CTR-001 保持 pending_evidence；无 pending_decision、blocked 或 freeze-ready。
+- 三类事件语义已接受，不新增待决项；剩余是时间/跨字段约束在权威 Schema 中的表达。
+- 不新增 CTR，不修改 Quant/Research/Researchflow/Notification 责任模块，不执行测试/CI。
