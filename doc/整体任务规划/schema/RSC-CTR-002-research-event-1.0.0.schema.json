@@ -28,7 +28,7 @@
     "event_id": {
       "type": "string",
       "minLength": 1,
-      "pattern": "^\\\\S(?:[\\\\s\\\\S]*\\\\S)?$"
+      "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
     },
     "event_version": {
       "type": "integer",
@@ -37,12 +37,12 @@
     "event_type": {
       "type": "string",
       "minLength": 1,
-      "pattern": "^\\\\S(?:[\\\\s\\\\S]*\\\\S)?$"
+      "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
     },
     "title": {
       "type": "string",
       "minLength": 1,
-      "pattern": "^\\\\S(?:[\\\\s\\\\S]*\\\\S)?$"
+      "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
     },
     "status": {
       "type": "string",
@@ -61,7 +61,7 @@
       "items": {
         "type": "string",
         "minLength": 1,
-        "pattern": "^\\\\S(?:[\\\\s\\\\S]*\\\\S)?$"
+        "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
       },
       "uniqueItems": true
     },
@@ -70,7 +70,7 @@
       "items": {
         "type": "string",
         "minLength": 1,
-        "pattern": "^\\\\S(?:[\\\\s\\\\S]*\\\\S)?$"
+        "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
       },
       "uniqueItems": true
     },
@@ -80,7 +80,7 @@
         "null"
       ],
       "format": "date-time",
-      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\\\.[0-9]{0,8}[1-9])?Z$"
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]{0,8}[1-9])?Z$"
     },
     "published_at": {
       "type": [
@@ -88,7 +88,7 @@
         "null"
       ],
       "format": "date-time",
-      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\\\.[0-9]{0,8}[1-9])?Z$"
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]{0,8}[1-9])?Z$"
     },
     "available_at": {
       "type": [
@@ -96,24 +96,24 @@
         "null"
       ],
       "format": "date-time",
-      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\\\.[0-9]{0,8}[1-9])?Z$"
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]{0,8}[1-9])?Z$"
     },
     "system_observed_at": {
       "type": "string",
       "format": "date-time",
-      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\\\.[0-9]{0,8}[1-9])?Z$"
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]{0,8}[1-9])?Z$"
     },
     "system_as_of": {
       "type": "string",
       "format": "date-time",
-      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\\\.[0-9]{0,8}[1-9])?Z$"
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]{0,8}[1-9])?Z$"
     },
     "impact_hypothesis_refs": {
       "type": "array",
       "items": {
         "type": "string",
         "minLength": 1,
-        "pattern": "^\\\\S(?:[\\\\s\\\\S]*\\\\S)?$"
+        "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
       },
       "uniqueItems": true
     },
@@ -141,7 +141,7 @@
     },
     "time_normalization_rule_version": {
       "type": "string",
-      "pattern": "^[0-9]+\\\\.[0-9]+\\\\.[0-9]+(?:-[0-9A-Za-z.-]+)?$"
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.-]+)?$"
     },
     "derived_from_refs": {
       "type": "array",
@@ -163,7 +163,7 @@
         "event_id": {
           "type": "string",
           "minLength": 1,
-          "pattern": "^\\\\S(?:[\\\\s\\\\S]*\\\\S)?$"
+          "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
         },
         "event_version": {
           "type": "integer",
@@ -184,7 +184,7 @@
         "evidence_ref": {
           "type": "string",
           "minLength": 1,
-          "pattern": "^\\\\S(?:[\\\\s\\\\S]*\\\\S)?$"
+          "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
         },
         "time_type": {
           "type": "string",
@@ -198,12 +198,12 @@
         "value": {
           "type": "string",
           "format": "date-time",
-          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\\\.[0-9]{0,8}[1-9])?Z$"
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]{0,8}[1-9])?Z$"
         },
         "asserted_by": {
           "type": "string",
           "minLength": 1,
-          "pattern": "^\\\\S(?:[\\\\s\\\\S]*\\\\S)?$"
+          "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
         },
         "confidence": {
           "type": [
