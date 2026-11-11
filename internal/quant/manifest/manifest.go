@@ -354,7 +354,7 @@ func validResultStatus(value string) bool {
 }
 
 func validNonBlank(value string) bool {
-	return value != "" && strings.TrimSpace(value) == value
+	return utf8.ValidString(value) && value != "" && strings.TrimSpace(value) == value
 }
 
 func invalid(field string) error {

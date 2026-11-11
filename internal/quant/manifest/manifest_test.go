@@ -132,6 +132,14 @@ func TestBuildSortsSnapshotRefsAndRejectsInvalidInputs(t *testing.T) {
 		name  string
 		input Input
 	}{
+		{name: "missing scope", input: func() Input { v := base; v.Scope = ""; return v }()},
+		{name: "unknown scope", input: func() Input { v := base; v.Scope = "unknown"; return v }()},
+		{name: "stock without security id", input: func() Input { v := base; v.SecurityID = ""; return v }()},
+		{name: "blank security id", input: func() Input { v := base; v.SecurityID = " "; return v }()},
+		{name: "invalid trade date", input: func() Input { v := base; v.TradeDate = "2026-02-30"; return v }()},
+		{name: "missing period", input: func() Input { v := base; v.Period = ""; return v }()},
+		{name: "unknown quality status", input: func() Input { v := base; v.QualityStatus = "unknown-value"; return v }()},
+		{name: "unknown result status", input: func() Input { v := base; v.ResultStatus = "unknown-value"; return v }()},
 		{name: "missing refs array", input: func() Input { v := base; v.InputSnapshotRefs = nil; return v }()},
 		{name: "duplicate refs", input: func() Input { v := base; v.InputSnapshotRefs = []string{"same", "same"}; return v }()},
 		{name: "blank ref", input: func() Input { v := base; v.InputSnapshotRefs = []string{" "}; return v }()},
