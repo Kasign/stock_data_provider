@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"example.com/stock-analysis-flow/internal/researchflow/domain"
 )
@@ -50,6 +51,7 @@ func (r *MySQLRunRepository) CommitAttemptResult(ctx context.Context, input Atte
 			input.AttemptStatus != domain.AttemptTimedOut &&
 			input.AttemptStatus != domain.AttemptCancelled) ||
 		!validAttemptStageOutcome(input.AttemptStatus, input.Stage.Status) ||
+		!validStageRetryAt(input.Stage.Status, input.Stage.RetryAt) ||
 		!sameOptionalString(input.OutputRef, input.Stage.OutputRef) {
 		return errors.New("Researchflow attempt result arguments are invalid")
 	}
@@ -97,8 +99,8 @@ func (r *MySQLRunRepository) CommitAttemptResult(ctx context.Context, input Atte
 		return ErrClaimStageUnavailable
 	}
 
-	var attemptStatus, owner string
-	var leaseValue sql.NullString
+	var attemptStatus string
+	var owner, leaseValue sql.NullString
 	var fencingToken uint64
 	var attemptNo int
 	if err := tx.QueryRowContext(ctx, `SELECT status, lease_owner, lease_expires_at, fencing_token, attempt_no
@@ -109,7 +111,7 @@ func (r *MySQLRunRepository) CommitAttemptResult(ctx context.Context, input Atte
 		return fmt.Errorf("lock Researchflow result attempt %q: %w", input.AttemptRef, err)
 	}
 	if domain.AttemptStatus(attemptStatus) != domain.AttemptRunning ||
-		owner != input.WorkerID || fencingToken != input.FencingToken ||
+		!owner.Valid || owner.String != input.WorkerID || fencingToken != input.FencingToken ||
 		attemptNo != stageAttemptNo {
 		return ErrAttemptLeaseHeld
 	}
@@ -139,11 +141,14 @@ func (r *MySQLRunRepository) CommitAttemptResult(ctx context.Context, input Atte
 		stageFinishedAt = finishedAt
 	}
 	attemptResult, err := tx.ExecContext(ctx, `UPDATE researchflow_attempts SET
-		status = ?, finished_at = ?, fault_ref = ?, output_ref = ?
-		WHERE attempt_ref = ? AND status = ? AND lease_owner = ? AND fencing_token = ?`,
+		status = ?, finished_at = ?, fault_ref = ?, output_ref = ?,
+		lease_owner = NULL, lease_expires_at = NULL
+		WHERE attempt_ref = ? AND run_ref = ? AND stage_ref = ? AND attempt_no = ?
+			AND status = ? AND lease_owner = ? AND fencing_token = ?
+			AND lease_expires_at > ?`,
 		string(input.AttemptStatus), finishedAt, nullableString(input.FaultRef),
-		nullableString(input.OutputRef), input.AttemptRef, string(domain.AttemptRunning),
-		input.WorkerID, input.FencingToken)
+		nullableString(input.OutputRef), input.AttemptRef, input.RunRef, input.StageRef, stageAttemptNo,
+		string(domain.AttemptRunning), input.WorkerID, input.FencingToken, finishedAt)
 	if err != nil {
 		return fmt.Errorf("update Researchflow result attempt: %w", err)
 	}
@@ -179,6 +184,14 @@ func (r *MySQLRunRepository) CommitAttemptResult(ctx context.Context, input Atte
 		return fmt.Errorf("commit Researchflow attempt result: %w", err)
 	}
 	return nil
+}
+
+// validStageRetryAt keeps retry scheduling metadata aligned with the Stage lifecycle.
+func validStageRetryAt(status domain.StageStatus, retryAt *time.Time) bool {
+	if status == domain.StageRetryWait {
+		return retryAt != nil && !retryAt.IsZero()
+	}
+	return retryAt == nil
 }
 
 func validAttemptStageOutcome(attempt domain.AttemptStatus, stage domain.StageStatus) bool {

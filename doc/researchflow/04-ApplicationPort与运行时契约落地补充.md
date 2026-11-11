@@ -452,3 +452,96 @@ Application 的 `RunFinalizationCoordinator` 是三种终态聚合路径的路�
 - EvidenceRef 是既有证据资源的引用，不由 Adapter 伪造或自动持久化。Fault 也不由投影层制造；失败事实及 FaultRef 应由对应领域/Platform Adapter 创建后传入。
 - Attributes 经过 Platform Observation.Validate 的数量、长度和控制字符门禁；投影层保留受控 `assessment_status/diagnostic_kind/stage_ref/stage_code` 字段并深拷贝 map，避免调用方修改共享对象。
 - 本契约只定义标准化投影，不替代各模块诊断规则。真实 Data/News/Research/Quant/LLM 检查、Evidence/Fault Adapter、Server DI 和生产诊断执行仍需集成验收。
+
+
+## 16. Template Registry 并发发布验收补充（2026-11-10）
+
+- MariaDB 集成测试增加相同模板的 8 路并发 Publish，要求所有调用幂等成功，最终只对应同一不可变版本。
+- 增加不同模板定义争用同一 Ref/Version 的并发 Publish，必须由数据库唯一键裁决，恰好一个成功、另一个返回 `ErrWorkflowTemplateConflict`；随后按精确版本读取并确认持久化指纹对应胜出候选。
+- 该测试用于验证数据库唯一约束与 Publish duplicate-key 回读路径的竞态语义，不以 Fake Repository 或单元测试替代 MariaDB。
+- 测试代码尚未执行；事务回滚注入、Run Finalize 与 Outbox 原子性/并发验收仍是独立缺口。
+
+
+## 17. FinalizeRun 事务回滚验收补充（2026-11-10）
+
+- MariaDB 集成测试在独立 Run 上创建临时 Outbox INSERT 失败触发器，确保 FinalizeRun 已尝试写入 ResultSummary 后，Outbox 写入失败。
+- 预期整个 InnoDB 事务回滚：Run 保持原 status/version 且无 result_summary_ref；ResultSummary 与 Outbox 行均不存在。
+- 触发器使用测试专属名称并在测试结束时清理；测试仅在 `PLATFORM_STORAGE_INTEGRATION=1` 时执行。
+- 当前只有测试代码，未宣称执行通过；并发 Finalize/CAS 竞争、Deadline 专项 MariaDB 验收仍未覆盖。
+
+
+## 18. FinalizeRun 并发终态竞争验收补充（2026-11-10）
+
+- 两个并发 FinalizeRun 使用相同 RunRef 与 ExpectedVersion，分别提交不同的 SummaryRef/OutboxRef。
+- Run 行 `SELECT ... FOR UPDATE` 与终态检查是裁决点：胜者完成 Run + Summary + Outbox 事务；后到者必须观察到终态并返回 `ErrRunAlreadyFinalized`。
+- 测试断言只有一个成功、Run version 只增加一次，且 Summary/Outbox 均恰好一条。
+- 该测试受 `PLATFORM_STORAGE_INTEGRATION=1` 门控，尚未取得真实 MariaDB 执行证据。
+
+
+## 19. Outbox 双 Worker 并发 Claim 验收补充（2026-11-10）
+
+- 两个 Worker 同时 Claim 同一 Run 的唯一 finalized Outbox 事件，使用相同 RunRef 与 limit=1。
+- 断言一个 Worker 获得唯一事件，另一个返回空集合；获胜消息 attempt_count 与 lease_generation 首次均为 1。
+- 非租约持有者 Ack 必须失败，租约持有者按相同 generation Ack 成功，确保并发领取和确认均受 owner/generation 约束。
+- 测试依赖真实 MariaDB 的 InnoDB 行锁与 `SKIP LOCKED`，受 `PLATFORM_STORAGE_INTEGRATION=1` 门控，尚未执行。
+
+
+## 20. CreateRunAtomic 中途失败回滚验收补充（2026-11-10）
+
+- 通过测试专属 BEFORE INSERT Stage 触发器制造事务中途失败；失败点位于 Run INSERT 之后、Stage INSERT 期间。
+- 断言 `researchflow_runs`、`researchflow_stages`、`researchflow_run_idempotency` 均无该次创建记录，验证事务回滚完整覆盖 Run、Stage 和幂等索引记录。
+- 触发器在测试结束时清理；仅在 `PLATFORM_STORAGE_INTEGRATION=1` 时执行。当前仅补充验收代码，未宣称实测通过。
+
+
+## 21. Deadline 与普通 Finalize 竞争验收补充（2026-11-10）
+
+- `ExpireRunDeadline` 持久化 `deadline_exceeded` 是 Deadline Finalizer 的终止权线性化点；普通 Finalizer 即使持有此前读取的 running/无 termination reason 快照，也不能覆盖该终止权。
+- 并发存储测试要求 Deadline Finalize 唯一成功，普通 Finalize 只能收到 `ErrRunAlreadyFinalized` 或 termination reason 不匹配拒绝；最终 Run 必须保持 deadline_exceeded，且仅有一条 ResultSummary 和 finalized Outbox。
+- 本测试直接覆盖数据库终结事务竞争；Run deadline 标记与 Stage/Attempt 收敛本身仍由 `ExpireRunDeadline` 的独立测试/验收负责。仅有测试代码，尚未执行真实 MariaDB。
+
+
+## 22. ExpireRunDeadline 数据库状态收敛验收补充（2026-11-10）
+
+- 对已过期的 Run，`ExpireRunDeadline` 在单个事务内持久化 `termination_reason=deadline_exceeded` 并递增 Run version；所有非终态 Stage 收敛为 timed_out、递增 Stage version、清除 retry_at 并追加 `run_deadline_exceeded`。
+- 重复调用在同一已标记 deadline 状态下返回 `updated=false` 和当前 version，不重复推进状态。
+- 新增 MariaDB 集成测试覆盖 Pending Stage 路径；running Attempt fencing、取消优先级、全部 Stage 已终态时交由正常 Finalize 的分支仍需专项覆盖。当前测试代码未执行。
+
+
+## 23. Deadline Attempt fencing 与用户取消优先级（2026-11-10）
+
+- Deadline 到期会立即将 running Attempt 置为 timed_out，递增 fencing token 并清空 lease owner/expiry；Stage 进入 timed_out。即使 Worker 仍持有旧 token，也不能再提交结果。
+- Deadline 与用户取消共用 Run 行锁作为终止权线性化点。Deadline 先提交 `deadline_exceeded` 时，BeginRunCancellation 必须拒绝；用户取消先提交 `user_cancelled`/cancelling 时，ExpireRunDeadline 必须拒绝。两者不得互相覆盖。
+- 新增 MariaDB 并发集成测试覆盖上述行为；尚未执行真实数据库验收。
+
+
+## 24. 当前 MariaDB 验收状态与本轮补充（2026-11-10）
+
+- `ExpireRunDeadline` 的 Attempt fencing 与 Deadline/用户取消并发竞争新增集成测试，均只在 `PLATFORM_STORAGE_INTEGRATION=1` 下运行。
+- Deadline fencing 测试在 ClaimAttempt 后读取 Run 的权威 version，再传给 ExpireRunDeadline，避免假定 Claim 不推进 Run version。
+- 截至本次提交，新增测试代码尚未在真实 MariaDB 执行；当前 HEAD 也没有对应 CI 记录。不得将测试代码存在视为验收通过。
+
+
+## 25. 已完成 Stage 的 Deadline 让位规则（2026-11-10）
+
+- 当 Run deadline 已过期但所有 Stage 均已终态时，`ExpireRunDeadline` 不取得 Deadline 终止权：返回 `updated=false`，保持 Run version 与 termination_reason 不变。
+- Application 正常聚合路径仍可执行 `FinalizeRun` 并提交成功结果、Summary 与 Outbox。
+- 新增 MariaDB 集成测试覆盖该顺序；尚未执行真实 MariaDB。
+
+
+## 26. Outbox Retry 后旧 Worker fencing（2026-11-10）
+
+- Outbox lease generation 在每次 Claim（包括 Retry 后重新 Claim）递增；Retry 本身释放 lease，不改变 generation。
+- 旧 Worker 在消息被其他 Worker 重领后，不得 Ack 或 Retry 新租约。
+- Worker 完成 Retry 释放租约后，不得继续 Ack 或 Renew 原租约。
+- 新增 MariaDB 集成断言覆盖 Worker A -> Worker B reclaim -> Worker B Retry -> Worker C reclaim 的完整状态链。真实 MariaDB 尚未执行。
+
+
+## 运行时并发与 Outbox 投递语义 Review（2026-11-10）
+
+Storage 事务的统一锁顺序为 Run -> Stage（按 stage_ref）-> Attempt（按 stage_ref、attempt_no）。Claim、续租、结果提交、取消确认、过期 fencing、Deadline 收敛和 Finalize 均先锁 Run 行，因此同一 Run 的写入由 Run 行串行化；Outbox Worker 只锁 Outbox 行，不反向锁 Run，当前代码未见与 Finalize 形成反向锁环。
+
+事务中途 SQL 错误、状态行数校验失败或 Commit 前 context 取消时，defer Rollback 覆盖本事务已写入的多行状态。Commit 返回错误属于结果不确定场景，调用方应重新读取持久化状态后决定是否重试，不应直接生成新的业务身份。
+
+Outbox 使用发布前 Claim、提交租约、外部 Publish、成功后 Ack 的顺序，语义为至少一次。Publish 成功而 Ack 前进程崩溃会导致租约到期后重复投递；消费端必须按稳定 idempotency_key 去重。不得将本地租约/fencing 描述为端到端 exactly-once。
+
+以上为静态代码 Review 结论。真实 MariaDB 的死锁/锁等待压力、context cancel、事务中途失败和 Publish/Ack 崩溃窗口仍需集成验收。
