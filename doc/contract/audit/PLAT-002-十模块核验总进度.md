@@ -1293,3 +1293,11 @@
 - INT-CTR-001 三类业务事件映射已核定；剩余只为时间 UTC 和跨字段约束的机器定义。
 - 本轮未修改任何责任模块代码/文档，没有执行测试、CI、部署或集成；只更新 feat/design_doc 契约治理文档。
 - 权威统计见登记簿第24节、差异矩阵第50节。下一阶段不再“继续审查所有模块”，只逐项收敛 5 项待决和 37 项定义缺口；每项完成后直接更新 CTR 状态，达到 freeze-ready 再提交项目负责人冻结。
+
+## 51. INT-CTR-001 业务事件映射核定完成（2026-11-11）
+
+- INT-CTR-001 已核定，状态 pending_evidence；属于正式 43 CTR 之一。
+- 三类事件分别为 Quant RiskDecision Changed、Research Event Lifecycle Changed、Researchflow Run Terminal；event_type/schema_version/source_module、触发时点、subject_ref/source_event_ref、幂等键和 JCS fingerprint 语义均有定义。
+- 剩余仅为 UTC 时间约束、subject_ref 与 Payload 主体字段绑定、occurred_at 与各生产方来源时间逐事件映射、changed_block_reason_codes 字典序规则未完整机器化。
+- 无新增 pending_decision；不检查 Outbox/Inbox 原子接线、重放实现、数据库事务、测试或 CI。
+- 总数仍为 43，状态统计以登记簿第24节为准。
