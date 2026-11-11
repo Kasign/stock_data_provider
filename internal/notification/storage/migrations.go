@@ -2,9 +2,7 @@ package storage
 
 import platformstorage "example.com/stock-analysis-flow/internal/platform/storage"
 
-// Migrations 返回 Notification 自有持久化结构。
-// Inbox 表只保存不可变事件与双唯一身份；Fanout 表结构尚未冻结，
-// 通过同一事务注入的 FanoutWriter 完成原子写入，不在此处猜测队列状态、租约字段或游标语义。
+// Migrations 返回 Notification 自有持久化结构；Inbox/Fanout 与订阅修订快照均由本模块拥有。
 func Migrations() []platformstorage.Migration {
 	return []platformstorage.Migration{
 		{
@@ -196,6 +194,46 @@ func Migrations() []platformstorage.Migration {
 			Description: "remove redundant channel config primary-key index",
 			Statements: []string{
 				`ALTER TABLE notification_channel_config_versions DROP INDEX idx_notification_channel_config_kind`,
+			},
+		},
+		{
+			Version:     6,
+			Description: "add stable subscription revision snapshots and transactional fanout work items",
+			Statements: []string{
+				`CREATE TABLE notification_subscription_revision (
+					singleton_id TINYINT UNSIGNED NOT NULL,
+					current_revision BIGINT UNSIGNED NOT NULL,
+					PRIMARY KEY (singleton_id)
+				) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+				`INSERT INTO notification_subscription_revision (singleton_id, current_revision) VALUES (1, 0)`,
+				`ALTER TABLE notification_subscriptions
+					ADD COLUMN revision_id BIGINT UNSIGNED NOT NULL DEFAULT 0 AFTER version,
+					ADD KEY idx_notification_subscriptions_revision (subscription_id, revision_id, version)`,
+				`CREATE TABLE notification_fanout_work_items (
+					work_item_id VARCHAR(80) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+					source_module VARCHAR(32) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+					event_id VARCHAR(256) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+					event_type VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+					payload_fingerprint CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+					snapshot_revision BIGINT UNSIGNED NULL,
+					cursor_subscription_id VARCHAR(256) CHARACTER SET ascii COLLATE ascii_bin NOT NULL DEFAULT '',
+					status VARCHAR(16) CHARACTER SET ascii COLLATE ascii_bin NOT NULL DEFAULT 'pending',
+					attempt_count INT UNSIGNED NOT NULL DEFAULT 0,
+					lease_worker_id VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NULL,
+					lease_expires_at DATETIME(6) NULL,
+					fencing_token BIGINT UNSIGNED NOT NULL DEFAULT 0,
+					next_attempt_at DATETIME(6) NULL,
+					last_error_code VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NULL,
+					created_at DATETIME(6) NOT NULL,
+					updated_at DATETIME(6) NOT NULL,
+					PRIMARY KEY (work_item_id),
+					UNIQUE KEY uk_notification_fanout_event (source_module, event_id),
+					KEY idx_notification_fanout_due (status, next_attempt_at, created_at, work_item_id),
+					KEY idx_notification_fanout_lease (status, lease_expires_at),
+					CONSTRAINT fk_notification_fanout_inbox
+						FOREIGN KEY (source_module, event_id)
+						REFERENCES notification_inbox (source_module, event_id)
+				) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
 			},
 		},
 	}
