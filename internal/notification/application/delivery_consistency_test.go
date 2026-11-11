@@ -2,9 +2,9 @@ package application
 
 import (
 	"encoding/json"
-	"time"
 	"strings"
 	"testing"
+	"time"
 
 	"example.com/stock-analysis-flow/internal/notification/domain"
 )
