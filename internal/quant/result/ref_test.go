@@ -19,13 +19,16 @@ func testManifest(t *testing.T) manifest.Manifest {
 	t.Helper()
 	payload := []byte(`{"metric_code":"momentum_20d","value":0.2}`)
 	m, err := manifest.BuildWithPayload(manifest.Input{
-		ResultType:           "factor", 		Scope:                "stock",
+		ResultType:           "factor",
+		Scope:                "stock",
 		SecurityID:           "opaque-security-ref",
 		TradeDate:            "2026-11-06",
 		Period:               "20d",
 		QualityStatus:        "valid",
-		ResultStatus:         "completed", SchemaVersion:    "1.0.0",
-		PayloadSchemaVersion: "1.0.0", AlgorithmVersion: "momentum.v1",
+		ResultStatus:         "completed",
+		SchemaVersion:        "1.0.0",
+		PayloadSchemaVersion: "1.0.0",
+		AlgorithmVersion:     "momentum.v1",
 		ParameterFingerprint: "sha256:parameter-fingerprint",
 		SystemAsOf:           time.Date(2026, 11, 9, 0, 0, 0, 0, time.UTC),
 		InputSnapshotRefs:    []string{"snapshot-b", "snapshot-a"},
@@ -41,7 +44,7 @@ func testManifestWithoutSnapshots(t *testing.T) manifest.Manifest {
 	payload := []byte(`{"metric_code":"pure_metric","value":1}`)
 	m, err := manifest.BuildWithPayload(manifest.Input{
 		ResultType:           "indicator",
-				Scope:                "stock",
+		Scope:                "stock",
 		SecurityID:           "opaque-security-ref",
 		TradeDate:            "2026-11-06",
 		Period:               "20d",
