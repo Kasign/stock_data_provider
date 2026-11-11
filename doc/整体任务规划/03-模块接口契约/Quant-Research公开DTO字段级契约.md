@@ -194,6 +194,8 @@ Manifest 的 `schema_version` 只表示 Manifest Schema 自身版本；Payload S
 
 空输入时 Manifest 仍必须完整记录 algorithm_version、parameter_fingerprint、result_type、payload_schema_version、system_as_of 和空的 input_snapshot_refs；不得因无外部 Snapshot 而省略计算身份字段。
 
+**Quant 结果授权：** Quant 是 result_id 的资源授权 Owner。subject_ref 来自 Server 注入的可信 Principal.Subject；resource_ref=result_id、purpose_code=quant_analysis、content_level=full。policy_version 必须等于完整 PolicySnapshot.snapshot_ref。AuthorizationRef 是审计引用而非 Bearer Token，不进入 Manifest/结果指纹。创建时签发当前决策；每次 GetResult/Ref/Envelope 读取均重新授权，返回的 authorization_ref 对应当前调用主体。denied/unknown/conditional/过期或授权依赖不可用时不得返回 Payload；策略检查与 Payload 释放之间必须有可证明的一致性边界，否则 fail closed。
+
 ## 3. Research Application DTO
 
 ### 3.1 ResearchContext

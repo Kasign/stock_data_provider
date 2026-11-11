@@ -183,7 +183,7 @@ GitHub 远端 ref 核验（2026-11-10）：
 | QNT-CTR-002 | Indicator Request/Result | Quant | Researchflow | doc/整体任务规划/03-模块接口契约/Quant-Research公开DTO字段级契约.md 第2.1/2.3/2.7节；doc/quant/schema/QNT-CTR-002-indicator-parameters-1.0.0.schema.json；doc/quant/03；DEC-PLAT-002-045/046 | 1.0.0（Indicator Parameters Schema；8 个算法参数定义） | `pending_evidence` | 已核定请求上下文/幂等边界、8 个 indicator_code 与 typed parameters 关系、服务端算法版本选择、单/复合输出统一为 QuantMetric[]；完整 Request/IndicatorResultPayload Schema/Golden 尚缺，Registry 的 sample_count 策略及首批 Entry 元数据也未齐 |
 | QNT-CTR-003 | Factor Request/Result | Quant | Researchflow | doc/quant/schema/QNT-CTR-003-factor-parameters-1.0.0.schema.json；QNT-CTR-004 Factor QuantMetric Schema/Golden；DATA-CTR-005；DEC-PLAT-002-047 | 1.0.0（Factor Parameters Schema；3 个首批 Factor） | `pending_evidence` | 已核定仅 stock 单证券日线、三个 factor_code 与 period/样本口径、factor_code=metric_code、单 Metric 强类型输出；DailyBars v2 尚缺可验证交易日历版本/interval 元数据，Factor Request/Result Payload Schema/Golden 与完整质量输入证据未形成 |
 | QNT-CTR-004 | QuantResultRef、Envelope、Indicator/Factor/Trend/Risk Payload | Quant | Researchflow；Research 经 Researchflow 消费 | doc/整体任务规划/03-模块接口契约/Quant-Research公开DTO字段级契约.md 第2.2/2.3/2.4/2.5/2.7/2.8节；doc/quant/schema/QNT-CTR-004-*；DEC-PLAT-002-028/029/046/047/048/049 | 1.0.0（Ref/Metric/Trend/Risk 局部 Schema/Golden；Envelope Schema/Golden 未形成） | `pending_evidence` | 已核定 Envelope/Manifest/Ref 三层版本身份、payload discriminator、空输入授权、Ref 投影、Manifest 身份字段、Trend/Risk 领域状态与 Envelope 状态分离；仍缺完整 Envelope/IndicatorResultPayload/FactorResultPayload Schema/Golden，Ref Schema minItems=1 与 DEC-029 冲突，Manifest Schema/Go 实现未覆盖全部身份字段/空数组，Risk RuleSet 聚合及 Payload 一致性约束未机器化 |
-| QNT-CTR-005 | QuantResult AuthorizationRef 签发与访问审计 | Quant | Researchflow | doc/整体任务规划/schema/QNT-CTR-005-result-manifest-1.0.0.schema.json；doc/整体任务规划/golden/QNT-CTR-005-result-manifest.golden.json；GOV-CTR-006；DEC-PLAT-002-028/029/048 | 1.0.0（Result Manifest Schema/Golden） | `pending_evidence` | Manifest Schema/Golden 已区分 Manifest/Payload 版本并允许空数组；但 Quant Go Manifest Build/Verify 仍缺 payload_schema_version/algorithm_version/parameter_fingerprint 且拒绝空数组。DEC-048 新增的 Envelope 不可变身份字段尚未进入 Manifest Schema/Go/Golden；AuthorizationRef 的可信主体/资源/用途/内容级别及读取时复核仍需完整闭环 |
+| QNT-CTR-005 | QuantResult AuthorizationRef 签发与访问审计 | Quant | Researchflow | doc/整体任务规划/schema/QNT-CTR-005-result-manifest-1.0.0.schema.json；doc/整体任务规划/golden/QNT-CTR-005-result-manifest.golden.json；GOV-CTR-006；DEC-PLAT-002-028/029/048/050 | 1.0.0（Result Manifest Schema/Golden） | `pending_evidence` | 已核定 Quant Owner、可信 Principal.Subject、result_id 资源绑定、quant_analysis/full、PolicySnapshot/fingerprint 与每次读取重新授权；但当前只有静态 Golden 测试，没有运行时签发/当前策略读取/审计记录/TOCTOU 门禁；Manifest Go/Schema 同步仍缺 |
 | RSC-CTR-001 | Research Evidence | Research | Researchflow | doc/整体任务规划/schema/RSC-CTR-001-evidence-1.0.0.schema.json；Golden；doc/research/01、03；GOV-CTR-006 | 1.0.0（Evidence Schema/Golden） | `pending_evidence` | Evidence 字段和 JCS 指纹语义已有；Schema 未约束 RFC3339Nano UTC，source_version 条件必填和 Evidence.system_as_of/available_at 跨字段 PIT 规则仍依赖未完成的权威适用映射。ResearchContext 不归本 CTR，按 FLOW-CTR-003 核定 |
 | RSC-CTR-002 | ResearchEvent、Claim、Hypothesis、Scenario | Research | Researchflow | 项目级 DTO 第3.3～3.5节；schema/RSC-CTR-002-*；golden/RSC-CTR-002-*；doc/research/01、03 | Event、Claim/Hypothesis、Scenario 1.0.0 Schema/Golden 已建立 | `pending_evidence` | Event/Claim 核心字段已对齐 DEC-030～032；仍缺 EventRef 存在性/无环、source_times 与 evidence_refs/规范化值的跨字段校验、Claim 替代目标当前版本/并发冲突校验，且 Research 责任模块文档仍保留旧 supersedes_event_version 并引用已裁决待决项。Scenario expected_value 已按 DEC-033 收敛为 scalar/非空 scalar 数组，仍缺 metric_ref 对应 Registry value_type/unit 的权威映射；QuantResultRef 的 result_type=evaluation、system_as_of 一致性和引用 Schema 与 DEC-029 的一致性未闭合 |
 | FLOW-CTR-001 | Run/Stage/Attempt 状态与结果传播 | Researchflow | Server、API、WebUI；业务模块作为 Stage Provider | doc/researchflow/03；doc/researchflow/schema/run/stage/attempt；对应 Golden | 1.0.0（Run/Stage/Attempt Schema/Golden） | `pending_evidence` | 状态枚举/传播矩阵已有；Run/Stage/Attempt Schema 的 UTC、终态字段关系和 ResultSummary 关联约束未完全机器化，完整结果归并定义需与 FLOW-CTR-004 统一 |
@@ -504,7 +504,7 @@ PLAT-002 不因本次矩阵统计完成而结束。整体完成仍需：
 | QNT-CTR-002 | pending_evidence | DEC-046 已明确公共请求上下文、参数 Schema 版本边界、算法版本由服务端 Registry 选择、结果按 metric_code 映射为 QuantMetric[]，MACD/Bollinger 复合输出有固定顺序；仍缺完整 Request 与 IndicatorResultPayload Schema/Golden，并依赖 QNT-CTR-001 首批 Entry/样本数策略 |
 | QNT-CTR-003 | pending_evidence | DEC-047 已明确 stock 单证券日线输入、factor_code/period 对应、20/60 日窗口与 sample_count、factor_code=metric_code 及单 Metric Payload；Data DailyBars v2 缺交易日历版本/interval 证据，完整 Request/FactorResultPayload Schema/Golden 和输入质量分类仍缺 |
 | QNT-CTR-004 | pending_evidence | DEC-028/029/048/049 已明确三层版本、空输入授权、Ref 投影、Manifest 身份字段及 Trend/Risk 状态语义；仍缺 Envelope/Indicator/Factor Payload Schema/Golden，Ref minItems=1 冲突，Manifest Schema/Go 身份字段未同步，Risk RuleSet 至少一个 block 规则及状态聚合尚未由 DTO Schema/Validator 约束 |
-| QNT-CTR-005 | pending_evidence | Go Manifest 与已冻结 Schema/DEC-028/029 不一致：缺 payload_schema_version、algorithm_version、parameter_fingerprint 且拒绝空 input refs；DEC-048 要求新增不可变 Envelope 身份字段进入 Manifest；还需完成 JCS 指纹、Ref 投影和 AuthorizationRef 读取复核 |
+| QNT-CTR-005 | pending_evidence | DEC-050 已明确 Quant AuthorizationRef 的 Principal/Resource/Purpose/ContentLevel、策略快照、审计和每次读取复核；当前仅有静态 Golden 校验，无运行时签发/策略 Provider/读取授权/竞态门禁。Manifest Go 仍缺 Schema 字段、拒绝空 refs，且未同步 DEC-048 的身份字段 |
 
 ### 17.2 已裁决的 Quant 公开契约语义
 
@@ -1725,4 +1725,59 @@ Indicator 调用使用共同 QuantAnalysisRequest 上下文，必须遵守：
 - Payload Validator 必须先校验 Payload 自身 Schema，再执行上述跨字段语义校验；仅通过局部 Schema 不代表完整 Envelope 合法。
 
 **结论：QNT-CTR-004 的版本身份、Ref/Envelope/Manifest 关系、内容寻址和首批 Payload 形状已收敛；由于完整 Envelope/Payload 机器定义和 QNT-CTR-005 Manifest/Go 同步未完成，继续保持 pending_evidence。**
+
+
+
+## 58. QNT-CTR-005 Quant AuthorizationRef 签发与读取审计边界（2026-11-11）
+
+### 58.1 Owner 与可信主体
+
+- Quant 是 Quant Result 资源的唯一授权 Owner；Data/News/Research 的授权结论不能代替 Quant 对自身 result_id 的访问决策。
+- `subject_ref` 必须来自 Server 注入的可信 Platform Principal Context；禁止从 Request DTO、普通 Header、Query、AuthorizationRef 自报字段或客户端参数读取主体身份。
+- Quant 的直接跨模块调用方是 Researchflow；MVP 的 Quant AuthorizationRef.subject_ref 使用可信 Researchflow service Principal 的稳定 Subject，项目 Golden 示例为 `service:researchflow`。若实际 Principal.Subject 不同，必须使用可信 Context 中的真实值，不得硬编码或伪造 Golden 主体。
+- Quant 不解析 Bearer、Session Cookie、API Key 或 Provider Token；认证和 Principal 建立由 Platform/Server 负责，Quant 只消费可信 Principal/Scope。
+- `resource_ref` 必须逐字等于本次结果的内容寻址 `result_id`；不得使用 result_type、security_id、业务 ID 或 ManifestFingerprint 的非规范变体代替。
+
+### 58.2 Quant 首批授权绑定
+
+Quant 首批结果访问 AuthorizationRef 固定：
+- `policy_owner=quant`
+- `subject_ref=可信 Principal.Subject`
+- `resource_ref=result_id`
+- `purpose_code=quant_analysis`
+- `content_level=full`
+
+其他字段遵循 GOV-CTR-006：
+- `policy_version` 必须等于完整不可变 PolicySnapshot.snapshot_ref，不是单条策略版本。
+- PolicySnapshot 必须至少包含一项策略，并完整列出本次决策实际生效的全部策略版本；首批 Golden 使用 `quant_result_access / quant-result-access / 1.0.0`。
+- `decision_fingerprint` 必须按 GOV-CTR-006 规定，将 AuthorizationRef 字段与完整 evaluated_policy_versions 组合后执行 RFC 8785 JCS + SHA-256；不得仅哈希 policy_version。
+- allowed 的 conditions 必须为空；conditional 必须有条件，且不是访问许可。条件满足后必须重新评估并签发新的 allowed 引用。
+- denied/unknown 不得返回结果 Payload。expires_at=null 只表示无固定过期时间，不代表永久授权或免除读取时复核。
+- AuthorizationRef 是不可猜测的审计引用，不是 Bearer Token，不得单独作为访问凭证，也不得放入 Manifest/result_fingerprint。
+
+### 58.3 签发时点与读取时复核
+
+1. Quant 创建结果并获得 Manifest/result_id 后，必须基于当前可信 Principal 和当前 Quant PolicySnapshot 对该 result_id 作出授权决策；只有 allowed 才能将结果内容返回给调用方。
+2. 每次 GetResult、Ref 投影或其他可能暴露结果元数据/内容的读取，都必须由 Quant Owner 按当前策略重新授权；历史 allowed AuthorizationRef 仅供审计，不能作为后续读取的通行凭证。
+3. 每次读取的 AuthorizationRef 是当前调用主体的授权证明；因此它可随 subject、当前策略和 decided_at 改变，不进入 Manifest 或结果内容身份。Ref/Envelope 返回的 authorization_ref 必须对应本次当前授权，而不是无条件复用创建时的历史引用。
+4. denied、unknown、conditional、过期或授权依赖不可用时，不得返回受限 Payload；不得回退缓存的历史 allowed，不得将授权失败转换为无授权的成功响应。
+5. 读取流程必须有明确线性化点：在释放 Payload 前，确认授权决策所依据的策略版本仍是当前有效版本。若策略在检查后、内容释放前发生变化，必须重新授权或丢弃内容并拒绝；无法证明授权检查与内容读取处于一致策略边界时 fail closed。
+6. 对 allowed、denied、conditional、unknown 的签发/读取决策均保留可追溯审计记录，至少关联 AuthorizationRef、PolicySnapshot、subject_ref、resource_ref、purpose_code、content_level、decision_fingerprint 和 decided_at。审计记录不得包含 Secret、原始凭证或受限 Payload 正文。
+
+### 58.4 与结果身份及跨模块职责的关系
+
+- AuthorizationRef 与 PolicySnapshot 由 Quant Owner 签发/保存；Researchflow 只消费并验证引用，不复制 Quant 的策略判断。
+- Result Manifest/result_id 标识不可变结果内容和计算语义；AuthorizationRef 标识某个主体在某个时点对该结果的授权决策。两者分离，避免同一结果因访问主体变化而改变 result_id。
+- `QuantResultRef.authorization_ref` 与 `QuantResult Envelope.authorization_ref` 都必须表示当前请求的授权结果；它们不是 Manifest 字段。
+- 读取时必须验证 AuthorizationRef.policy_version 与对应 PolicySnapshot.snapshot_ref 一致、策略 tuple 完整/排序/唯一、fingerprint 正确，并向 Quant 当前策略 Owner 复核；消费者不得仅验证静态 fingerprint 就放行。
+- Server 负责认证和可信 Principal 注入；Quant 负责资源授权决策和结果访问门禁；Researchflow 负责保留引用并遵守 Quant 返回的授权结论。
+
+### 58.5 当前证据与冻结结论
+
+- 当前项目 Golden 已验证 Quant AuthorizationRef 的 policy_owner、subject_ref、resource_ref、purpose_code、content_level、PolicySnapshot 和 JCS/SHA-256 指纹映射。
+- 当前 `internal/quant/registry/manifest_authorization_test.go` 只执行静态 Manifest/AuthorizationRef/PolicySnapshot Schema 与 Golden 校验；没有运行时 Quant Policy Provider、AuthorizationRef 签发服务、可信 Principal 绑定、每次读取的当前策略复核、拒绝无正文断言或策略变更竞态测试。
+- 当前仓库没有独立 Quant Authorization Application/Port/Adapter；不能将静态 Golden 测试描述为授权能力已实现。
+- QNT-CTR-005 继续保持 pending_evidence；本轮不修改 Quant 代码、Schema、Golden 或 CI。
+
+**结论：QNT-CTR-005 的授权主体/资源/用途/内容级别、策略快照、fingerprint 与读取时 fail-closed 语义已收敛；运行时签发、当前策略复核、审计持久化和竞态一致性仍未形成证据。**
 
