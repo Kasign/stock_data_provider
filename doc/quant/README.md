@@ -7,26 +7,27 @@
 
 ## 当前状态
 
-当前代码基线：`aec6ecf2d31ee7a2ee93892b569c553544c3c7e7`（2026-11-11）。
+当前代码基线：`2c3c4720f5b1049b34f84cf1df25021525b13439`（2026-11-11）。
 
-已具备首批 Indicator/Factor 纯计算、CalculationContext、基础 Registry、RiskDecision/RuleSet 执行框架、TrendResult DTO、Manifest/ResultRef 和 Repository Save Port/MemoryRepository。最近代码调整已对齐当前旧版 QNT-CTR-005 Schema 中已有的 Manifest 字段，并按 DEC-PLAT-002-029 统一空快照数组结构语义；但继续核对 DEC-PLAT-002-048 后确认 Manifest 仍缺少六个结果身份字段（scope、security_id、trade_date、period、quality_status、result_status），Ref 仍允许调用方独立传入这些字段，尚未满足完整字段级契约：
+已具备首批 Indicator/Factor 纯计算、CalculationContext、基础 Registry、RiskDecision/RuleSet 执行框架、TrendResult DTO、Manifest/ResultRef 和 Repository Save Port/MemoryRepository。当前已按 DEC-PLAT-002-048 完成 Manifest 身份字段和 Ref 投影的代码/机器契约同步：
 
-- Manifest / QuantResultRef 的 `input_snapshot_refs` 必须是数组；显式空数组 `[]` 可表示无外部事实快照，nil/null/省略仍拒绝。
-- QuantResultRef Schema 不再要求数组至少一项；Go 投影和 Record 快照保留非 nil 空切片，JSON 序列化为 `[]`。
-- 以上只完成结构层支持。真正允许空输入还必须同时满足 Registry 无外部事实依赖声明、Researchflow ResolvedTemplate 的 `allow_empty_inputs=true`，以及 Quant Application 的可信主体/已注册用例校验。当前尚无完整 Application 门禁，不能宣称运行时授权验收通过。
+- Manifest 必需绑定 `result_type`、`scope`、条件必需的 `security_id`、可选 `trade_date`、必需 `period`、`quality_status`、`result_status`，以及原有版本、算法、参数、时间、输入快照和 Payload 指纹字段。
+- 上述字段全部进入 RFC 8785 JCS + SHA-256 Manifest 指纹；`result_id` 由该指纹派生。空 `input_snapshot_refs=[]` 仍是合法结构，nil/null/省略拒绝。
+- `BuildRef` 的输入现在只接受 Ref 自身 `schema_version`、当前 `authorization_ref` 和记录 `created_at`；其他业务字段全部从已验证 Manifest 投影，避免调用方重复传入造成漂移。
+- 项目级 QNT-CTR-005 Schema/Golden、GOV-CTR-006 Quant AuthorizationRef Golden 已同步。当前 Manifest ResultID 为 `quant_result:sha256:97d6d042ef4202bf8879e4f5773803f53a9940033f791166443cdb5d2b371b5d`；GOV-CTR-006 `resource_ref` 已绑定该值，授权指纹为 `5b1e06a35a82faa85d1762ce339705f2eb1edd62dfd753d79a22151c141a3c83`。
 
-**当前 Quant 独立 CI 未通过。** Workflow `43008460161` 对 SHA `aec6ecf2d31ee7a2ee93892b569c553544c3c7e7` 的 gofmt 已通过，单元测试只剩跨契约 Golden 绑定失败：项目级 QNT-CTR-005 Manifest Golden 的 result_id 为 `9757fca91e733d4835f6ea1a3fd249897e6d7d6880eb240d9e090025d3b16709`，而 GOV-CTR-006 AuthorizationRef Golden 的 resource_ref 仍为旧值 `29e81fdc80342387b910ab2c50a2732e5010defc7ce3e8030de316b37f4b8299`。失败测试为 `internal/quant/registry/manifest_authorization_test.go::TestQuantResultManifestAndAuthorizationGolden`。Fuzz、Race、Vet 因单元测试失败而未执行。两个 Golden 均位于项目级目录，不在本分支文档/代码范围内，本分支未擅自修改。
+**CI 尚未对当前代码 SHA 完成验收。** Quant Workflow `43011022598` 与 Go test suite `43011022585` 对代码 SHA `2c3c4720f5b1049b34f84cf1df25021525b13439` 已触发，记录本文件时仍处于 queued/pending；不得提前标记通过。之前几轮 CI 暴露的格式、测试样本缺字段和 Schema 正则问题已修正，最终以当前 SHA 的完整结果为准。
 
-项目级状态另有待统一事项：DEC-PLAT-002-029 明确 QNT-CTR-004/005 在机器定义对齐前为 `pending_evidence`，但当前 PLAT-002 登记簿仍标记 `frozen`，且保留了 Ref Schema `minItems=1`、Manifest Go 字段未同步等旧描述。Quant 分支已完成本模块内 Ref Schema/Manifest Go 的对应修正；项目级登记簿与 GOV-CTR-006 Golden 需由项目契约维护方统一校正。此处不改变项目级文档或其他分支。
+项目级契约状态已校正：QNT-CTR-004 为 `pending_evidence`，因为完整 Envelope/IndicatorResultPayload/FactorResultPayload Schema/Golden 和 Risk/Payload 跨层 Validator 尚缺；QNT-CTR-005 的 Manifest 机器字段定义已对齐并恢复 `frozen`，但 DEC-PLAT-002-050 的运行时授权签发、每次读取重新授权、审计与 TOCTOU 门禁仍未完成。契约冻结不代表实现验收完成。
 
 当前主要外部阻塞：
-- Data：DailyBars v2 Decimal 输入、真实 PIT/复权/交易日历及质量证据。
-- Server/GOV：可信 Principal 注入、Quant Owner 授权签发与每次读取的当前授权复核。
+- Data：DailyBars v2 Decimal 输入、真实 PIT/复权/交易日历及质量证据；没有真实数据证据，不标记真实数据验收通过。
+- Server/GOV：可信 Principal 注入、Quant Owner 当前策略授权 Adapter 与每次读取复核。
 - Platform/Server：正式 Storage/事务接入、根 Migration 注册和统一 Diagnostics 装配。
-- 项目契约/Researchflow：Envelope 与 Payload 版本语义、强类型 Payload 映射及消费者 Contract Test。
-- 项目级 GOV-CTR-006 AuthorizationRef Golden 尚未绑定最新 Manifest ResultID，阻断 Quant 当前跨契约 CI。
+- Researchflow：ResolvedTemplate 空输入授权校验及完整消费者 Contract Test。
+- Quant：Risk RuleSet 完整性/聚合与 Trend/Risk/Indicator/Factor Payload 对 Envelope 的跨层语义 Validator。
 
-QNT-CTR-001、002、004、005 的登记簿状态与 QNT-CTR-003 的延期状态仍需结合 DEC-PLAT-002-029 一并复核；契约状态以项目级文档最终校正为准。L1 冻结不代表 Quant 模块实现符合性、消费者映射或真实数据验收已完成。
+空快照目前仅完成 Manifest/Ref/Schema 结构支持。真正允许空输入仍要求 Researchflow 校验 `ResolvedTemplate.allow_empty_inputs=true`，Quant 校验可信 Principal、已注册用例和 Registry 无外部事实依赖声明；当前没有完整 Application 门禁，不能宣称空输入端到端授权验收通过。
 
 ## 文档索引
 
