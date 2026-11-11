@@ -66,7 +66,7 @@ func (s *DeliveryCompletionService) Complete(
 		claim.Lease.FencingToken != attempt.FencingToken ||
 		!claim.Lease.ExpiresAt.Equal(attempt.LeaseExpiresAt) ||
 		attempt.DeliveryID != delivery.DeliveryID ||
-		int64(attempt.AttemptNo) != delivery.AttemptCount+1 ||
+		attempt.AttemptNo != delivery.AttemptCount+1 ||
 		attempt.AttemptNo < 1 ||
 		attempt.FinishedAt != nil {
 		return ErrRetryDecisionConflict
@@ -95,7 +95,7 @@ func (s *DeliveryCompletionService) Complete(
 	}
 	if !found || current.DeliveryID != delivery.DeliveryID || current.Version != delivery.Version ||
 		current.Status != domain.DeliverySending ||
-		current.AttemptCount != int64(attempt.AttemptNo) ||
+		current.AttemptCount != attempt.AttemptNo ||
 		current.MaxAttempts != delivery.MaxAttempts ||
 		!current.CreatedAt.Equal(delivery.CreatedAt) ||
 		!current.DeadlineAt.Equal(delivery.DeadlineAt) {
