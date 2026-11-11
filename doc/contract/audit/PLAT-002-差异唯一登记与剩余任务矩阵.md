@@ -1292,3 +1292,16 @@ PLAT-002 的项目级决策收敛已完成；**PLAT-002 项目整体不宣告完
 ResearchContext 归 FLOW-CTR-003，不属于 RSC-CTR-001 Evidence。RSC-DEC-001/002 已确认，不重开；RSC-OPEN-007 不阻断当前 Evidence 契约；Server Relay、Repository、MariaDB、Outbox 和授权竞态测试不属于本轮。
 
 本批 2 项：1 项 pending_evidence、1 项 pending_decision。当前项目级 pending_decision 合计 5 项（QNT-DEC-01/02 + RSC-OPEN-003/004/005）。无新增 CTR。
+
+## 46. Researchflow 首批公开契约定义核定（2026-11-11）
+
+| 契约 | 状态 | 结论 |
+|---|---|---|
+| FLOW-CTR-001 | pending_evidence | Run/Stage/Attempt Schema/Golden 和状态传播语义已有；UTC、终态字段关系及 ResultSummary 绑定约束未完全定义 |
+| FLOW-CTR-002 | pending_evidence | Cancel/Retry/Deadline 语义已定；命令 DTO、幂等作用域/指纹和稳定冲突结果缺唯一权威定义 |
+| FLOW-CTR-003 | pending_evidence | Run Context 核心字段已定；ResearchContext/ContextSectionRef、resolved template 和下游 Context 映射缺权威定义 |
+| FLOW-CTR-004 | pending_evidence | Stage Provider Result Envelope 缺 Schema/Output Registry；ResultSummary quality_status 枚举、coverage 分母和资源版本绑定不完整 |
+
+本批 4 项均 pending_evidence；无新增 pending_decision、blocked 或 freeze-ready。ResearchContext 归 FLOW-CTR-003，Evidence 仍归 RSC-CTR-001；Stage output_ref 不替代 Provider Result Envelope。
+
+排除 Worker/Storage/CAS/Lease/Fencing 内部测试、Server 路由装配、WebUI 展示、E2E 和 CI。当前项目级待决项总数保持 5 项（QNT-DEC-01/02、RSC-OPEN-003/004/005），不新增 CTR。
