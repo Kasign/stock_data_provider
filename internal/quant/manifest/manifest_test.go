@@ -45,6 +45,35 @@ func TestBuildMatchesQNTCTR005Golden(t *testing.T) {
 	}
 }
 
+func TestBuildAllowsExplicitEmptySnapshotRefs(t *testing.T) {
+	got, err := Build(Input{
+		ResultType:           "factor",
+		SchemaVersion:        "1.0.0",
+		PayloadSchemaVersion: "1.0.0",
+		AlgorithmVersion:     "factor.v1",
+		ParameterFingerprint: strings.Repeat("c", 64),
+		SystemAsOf:           time.Date(2026, 11, 6, 5, 2, 0, 0, time.UTC),
+		InputSnapshotRefs:    []string{},
+		ResultFingerprint:    strings.Repeat("b", 64),
+	})
+	if err != nil {
+		t.Fatalf("Build() rejected an explicitly empty snapshot set: %v", err)
+	}
+	if got.InputSnapshotRefs == nil || len(got.InputSnapshotRefs) != 0 {
+		t.Fatalf("empty snapshot set must remain a non-nil empty slice: %#v", got.InputSnapshotRefs)
+	}
+	encoded, err := json.Marshal(got)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(encoded), "\"input_snapshot_refs\":[]") {
+		t.Fatalf("empty snapshot set must serialize as an empty array: %s", encoded)
+	}
+	if err := got.Verify(); err != nil {
+		t.Fatalf("Verify() rejected an explicitly empty snapshot set: %v", err)
+	}
+}
+
 func TestFingerprintPayloadUsesCanonicalJSON(t *testing.T) {
 	first, err := FingerprintPayload(json.RawMessage(`{"value":1,"label":"x"}`))
 	if err != nil {

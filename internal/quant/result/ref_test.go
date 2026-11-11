@@ -20,8 +20,28 @@ func testManifest(t *testing.T) manifest.Manifest {
 	payload := []byte(`{"metric_code":"momentum_20d","value":0.2}`)
 	m, err := manifest.BuildWithPayload(manifest.Input{
 		ResultType: "factor", SchemaVersion: "1.0.0",
+		PayloadSchemaVersion: "1.0.0", AlgorithmVersion: "momentum.v1",
+		ParameterFingerprint: "sha256:parameter-fingerprint",
 		SystemAsOf:        time.Date(2026, 11, 9, 0, 0, 0, 0, time.UTC),
 		InputSnapshotRefs: []string{"snapshot-b", "snapshot-a"},
+	}, payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return m
+}
+
+func testManifestWithoutSnapshots(t *testing.T) manifest.Manifest {
+	t.Helper()
+	payload := []byte(`{"metric_code":"pure_metric","value":1}`)
+	m, err := manifest.BuildWithPayload(manifest.Input{
+		ResultType:           "indicator",
+		SchemaVersion:        "1.0.0",
+		PayloadSchemaVersion: "1.0.0",
+		AlgorithmVersion:     "pure.v1",
+		ParameterFingerprint: "sha256:pure-parameters",
+		SystemAsOf:           time.Date(2026, 11, 9, 0, 0, 0, 0, time.UTC),
+		InputSnapshotRefs:    []string{},
 	}, payload)
 	if err != nil {
 		t.Fatal(err)
@@ -56,6 +76,23 @@ func TestBuildRefProjectsVerifiedManifestFields(t *testing.T) {
 	got.InputSnapshotRefs[0] = "mutated"
 	if source.InputSnapshotRefs[0] == "mutated" {
 		t.Fatal("result ref must not alias manifest snapshot slice")
+	}
+}
+
+func TestBuildRefPreservesExplicitEmptySnapshotRefs(t *testing.T) {
+	got, err := BuildRef(validRefInput(), testManifestWithoutSnapshots(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.InputSnapshotRefs == nil || len(got.InputSnapshotRefs) != 0 {
+		t.Fatalf("empty snapshot set must remain a non-nil empty slice: %#v", got.InputSnapshotRefs)
+	}
+	encoded, err := json.Marshal(got)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Contains(encoded, []byte("\"input_snapshot_refs\":[]")) {
+		t.Fatalf("empty snapshot set must serialize as an empty array: %s", encoded)
 	}
 }
 

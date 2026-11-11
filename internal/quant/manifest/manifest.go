@@ -123,11 +123,8 @@ func Build(input Input) (Manifest, error) {
 	if !fingerprintRE.MatchString(input.ResultFingerprint) {
 		return Manifest{}, invalid("result_fingerprint")
 	}
-	if len(input.InputSnapshotRefs) == 0 {
-		return Manifest{}, invalid("input_snapshot_refs must not be empty")
-	}
-
-	refs := append([]string(nil), input.InputSnapshotRefs...)
+	// 空数组表示本次计算没有外部事实快照；是否允许由 Registry 与调用上下文双重门禁决定。
+	refs := append([]string{}, input.InputSnapshotRefs...)
 	for _, ref := range refs {
 		if !utf8.ValidString(ref) || strings.TrimSpace(ref) == "" || strings.TrimSpace(ref) != ref {
 			return Manifest{}, invalid("input_snapshot_refs contains invalid UTF-8, blank or padded reference")
@@ -182,9 +179,6 @@ func (m Manifest) Verify() error {
 	parsedAsOf, err := time.Parse(time.RFC3339Nano, m.SystemAsOf)
 	if err != nil || parsedAsOf.UTC().Format(time.RFC3339Nano) != m.SystemAsOf {
 		return invalid("system_as_of must use canonical UTC RFC3339Nano")
-	}
-	if len(m.InputSnapshotRefs) == 0 {
-		return invalid("input_snapshot_refs must not be empty")
 	}
 	for i, ref := range m.InputSnapshotRefs {
 		if !utf8.ValidString(ref) || strings.TrimSpace(ref) == "" || strings.TrimSpace(ref) != ref {

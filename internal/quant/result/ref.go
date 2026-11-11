@@ -118,7 +118,7 @@ func BuildRef(input RefInput, source manifest.Manifest) (Ref, error) {
 		Period:               input.Period,
 		AlgorithmVersion:     input.AlgorithmVersion,
 		ParameterFingerprint: input.ParameterFingerprint,
-		InputSnapshotRefs:    append([]string(nil), source.InputSnapshotRefs...),
+		InputSnapshotRefs:    append([]string{}, source.InputSnapshotRefs...),
 		QualityStatus:        input.QualityStatus,
 		ResultStatus:         input.ResultStatus,
 		AuthorizationRef:     input.AuthorizationRef,
