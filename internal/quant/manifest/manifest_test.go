@@ -117,6 +117,7 @@ func TestBuildSortsSnapshotRefsAndRejectsInvalidInputs(t *testing.T) {
 		name  string
 		input Input
 	}{
+		{name: "missing refs array", input: func() Input { v := base; v.InputSnapshotRefs = nil; return v }()},
 		{name: "duplicate refs", input: func() Input { v := base; v.InputSnapshotRefs = []string{"same", "same"}; return v }()},
 		{name: "blank ref", input: func() Input { v := base; v.InputSnapshotRefs = []string{" "}; return v }()},
 		{name: "unknown result type", input: func() Input { v := base; v.ResultType = "unknown"; return v }()},
@@ -149,6 +150,26 @@ func TestBuildRejectsInvalidUTF8SnapshotReference(t *testing.T) {
 	}
 	if _, err := Build(input); !errors.Is(err, ErrInvalidManifest) {
 		t.Fatalf("Build() error = %v, want ErrInvalidManifest", err)
+	}
+}
+
+func TestVerifyRejectsMissingSnapshotArray(t *testing.T) {
+	got, err := Build(Input{
+		ResultType:           "factor",
+		SchemaVersion:        "1.0.0",
+		PayloadSchemaVersion: "1.0.0",
+		AlgorithmVersion:     "factor.v1",
+		ParameterFingerprint: strings.Repeat("c", 64),
+		SystemAsOf:           time.Date(2026, 11, 6, 5, 2, 0, 0, time.UTC),
+		InputSnapshotRefs:    []string{},
+		ResultFingerprint:    strings.Repeat("b", 64),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got.InputSnapshotRefs = nil
+	if err := got.Verify(); !errors.Is(err, ErrInvalidManifest) {
+		t.Fatalf("Verify() accepted a missing snapshot array: %v", err)
 	}
 }
 

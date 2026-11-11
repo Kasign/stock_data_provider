@@ -123,7 +123,11 @@ func Build(input Input) (Manifest, error) {
 	if !fingerprintRE.MatchString(input.ResultFingerprint) {
 		return Manifest{}, invalid("result_fingerprint")
 	}
-	// 空数组表示本次计算没有外部事实快照；是否允许由 Registry 与调用上下文双重门禁决定。
+	// nil 表示调用方未提供必需数组；非 nil 空数组表示本次计算没有外部事实快照。
+	if input.InputSnapshotRefs == nil {
+		return Manifest{}, invalid("input_snapshot_refs must be an array")
+	}
+	// 空数组是否允许由 Registry 与调用上下文双重门禁决定。
 	refs := append([]string{}, input.InputSnapshotRefs...)
 	for _, ref := range refs {
 		if !utf8.ValidString(ref) || strings.TrimSpace(ref) == "" || strings.TrimSpace(ref) != ref {
