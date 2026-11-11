@@ -111,12 +111,19 @@ func TestNotificationMariaDBSubscriptionRevisionSnapshotIntegration(t *testing.T
 	}
 	now := time.Now().UTC().Truncate(time.Microsecond)
 	first := domain.Subscription{
-		SubscriptionID: fmt.Sprintf("snapshot-sub-%d", time.Now().UnixNano()),
-		OwnerRef: "owner-snapshot", Version: 1, Status: domain.SubscriptionActive,
-		EventType: "quant.risk_decision.changed", FilterSchemaVersion: "1.0.0",
-		Filters: []byte(`{"min_severity":"high"}`), RecipientScope: domain.RecipientScopeOwner,
-		ChannelRef: "channel-snapshot", TemplateID: "template-snapshot",
-		CreatedAt: now, UpdatedAt: now, EffectiveAt: now,
+		SubscriptionID:      fmt.Sprintf("snapshot-sub-%d", time.Now().UnixNano()),
+		OwnerRef:            "owner-snapshot",
+		Version:             1,
+		Status:              domain.SubscriptionActive,
+		EventType:           "quant.risk_decision.changed",
+		FilterSchemaVersion: "1.0.0",
+		Filters:             []byte(`{"min_severity":"high"}`),
+		RecipientScope:      domain.RecipientScopeOwner,
+		ChannelRef:          "channel-snapshot",
+		TemplateID:          "template-snapshot",
+		CreatedAt:           now,
+		UpdatedAt:           now,
+		EffectiveAt:         now,
 	}
 	if err := repository.Create(ctx, first); err != nil {
 		t.Fatal(err)
