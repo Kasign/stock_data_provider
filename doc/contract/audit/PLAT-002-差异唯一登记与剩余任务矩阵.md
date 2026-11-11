@@ -51,7 +51,7 @@ API Client 全量盘点也已完成：44 个导出函数，41 个远端入口，
 | CTR-042 | Limit Pool 金额单位 | P2；provider_defined 不可比较/换算边界待裁决 |
 | CTR-043～044 | Dragon Tiger | CTR-043 公共分页计数语义已明确、契约可冻结；Hithink Adapter 实现偏差转 Data 内部整改；CTR-044 Provider 日期能力边界待裁决 |
 | CTR-045 | Stock Search 质量状态消费 | P2；WebUI 空结果和质量状态提示待对齐 |
-| CTR-046～047 | 旧 Analysis Run/Task HTTP 契约 | DEC-018 已决定整组旧 HTTP API 退役；CTR-047 按本矩阵第40节撤销活动状态，CTR-046/006/007 等相邻旧路由契约按同一退役边界归类，不再补齐旧 OpenAPI |
+| CTR-046～047 | 旧 Analysis Run/Task HTTP 契约 | DEC-018 已决定整组旧 HTTP API 退役；CTR-047 按本矩阵第40节撤销活动状态，CTR-046/006/007/008 等相邻旧 HTTP 契约按同一边界归类，不再补齐旧 OpenAPI 或分页协议 |
 | CTR-048～049 | Provider Probe History | P2；total 语义与存储错误 HTTP 映射待裁决/补证 |
 
 这些结论只记录冻结影响，不表示责任模块已修复。不得再次对上述范围执行相同的初审或冻结影响分析；后续只检查裁决结果、责任模块新提交和关闭证据。
@@ -60,7 +60,7 @@ API Client 全量盘点也已完成：44 个导出函数，41 个远端入口，
 
 | 工作批次 | 涉及编号/范围 | 当前状态 | 完成条件 |
 |---|---|---|---|
-| W2-A Task/TaskEvent DTO 与分页 | CTR-006、007、008 | 本轮统一冻结影响 Review 已完成；差异仍开放 | CTR-006 nullable/omitempty 不一致；CTR-007 StageEvent Schema 未展开；CTR-008 cursor 基于事件表 id，但 DDL/数据库持久化约束证据不足。待契约/实现/测试责任方处理后增量验收，不再重复初审 |
+| W2-A 旧 Analysis Task/TaskEvent HTTP 契约 | CTR-006、007、008 | 已由 DEC-018 退役决议 superseded，不再作为活动公共契约冻结项 | 旧 Task 时间 Schema、StageEvent Schema、Task Events cursor/分页均不再补齐旧 HTTP 契约。若旧事件表/队列仍被保留，其 DDL、持久化和并发正确性归 Server/Platform 内部工程质量或数据保留工作，不属于跨模块公开契约冻结 |
 | W2-B DailyBar 查询窗口 | CTR-009 | 本轮冻结影响 Review 已完成；差异保留 P2 | WebUI 用户偏好显式传参；API Client 默认 120；服务端省略时使用环境可配置默认值（默认配置 120）；OpenAPI 未说明省略时配置化默认值。缺直接 Client URL/默认值回归测试 |
 | W2-C 其余已审数据集差异收敛 | CTR-011～037 | 本轮集中归类完成；均为 P2，保留活动项 | 既有证据已按契约/schema、消费者实现、数据语义/来源证据、产品范围、测试补证归类；不重复初审。各项冻结影响与关闭条件见第11节 |
 | W2-D CTR-010 语义裁决准备 | CTR-010 | 项目级缺失/null/零值规则已在 GOV-CTR-001 标记 accepted；124 字段的逐字段适用条件仍待领域证据映射 | 已明确统一规则及逐字段裁决模板；不得仅凭 omitempty 推导删 nullable。下一步由字段所属契约责任方提供适用条件证据，不在审计分支实施修复 |
@@ -1204,8 +1204,8 @@ PLAT-002 的项目级决策收敛已完成；**PLAT-002 项目整体不宣告完
 
 - **唯一依据：** DEC-PLAT-002-018 已由项目负责人接受，明确旧 Analysis API、旧 Task/Run HTTP 路由及旧 StageEvent HTTP 契约不保留兼容期；WebUI 直接切换 Researchflow 新 API，新 API 验收后删除旧路由及专属适配代码。
 - **CTR-047 原始对象：** 旧 Analysis 的 CreateTask/AnalysisRequest HTTP 请求 Schema 与领域 RunRequest 的字段、默认值、TaskType、as_of/as_of_mode、parameters、同步/异步 run_id 行为差异。它不是 Researchflow CreateRunCommand 的公共契约。
-- **状态修正：** CTR-047 标记为 \`withdrawn_by_scope_decision\`（因公开 API 退役而撤销活动冻结任务），不再保留 P2 活动差异，不要求补齐旧 CreateTask OpenAPI、Handler 校验或旧请求 Contract Test。历史字段核验与同步 Runner run_id 证据仅用于解释旧实现，不作为新 API 的约束。
+- **状态修正：** CTR-047 标记为 `withdrawn_by_scope_decision`（因公开 API 退役而撤销活动冻结任务），不再保留 P2 活动差异，不要求补齐旧 CreateTask OpenAPI、Handler 校验或旧请求 Contract Test。历史字段核验与同步 Runner run_id 证据仅用于解释旧实现，不作为新 API 的约束。
 - **DEC-PLAT-002-019 适用范围：** 该决议原本约束旧 Analysis CreateTask/同步 Run HTTP 请求。其历史裁决不再形成旧 API 活动门禁；TaskType 四值、symbols 上限100、异步 Task ID 服务端生成、同步显式 run_id 幂等/409 规则均不得直接套用到 Researchflow 新 API。
-- **新 API 的独立契约：** Researchflow 使用独立的 CreateRunCommand 和版本化 DTO；调用主体从可信认证 Context 获取，CreateRun 幂等键作用域为 \`(authenticated_caller_ref, CreateRun)\`，使用 \`idempotency_key\` 与规范化请求 fingerprint；相同键和指纹返回既有 Run，不同指纹冲突。Run 引用由 Researchflow 生成。参数约束由具体版本化 Template/Parameter Schema 定义，不沿用旧 Analysis 的 \`symbols\` 通用上限。
+- **新 API 的独立契约：** Researchflow 使用独立的 CreateRunCommand 和版本化 DTO；调用主体从可信认证 Context 获取，CreateRun 幂等键作用域为 `(authenticated_caller_ref, CreateRun)`，使用 `idempotency_key` 与规范化请求 fingerprint；相同键和指纹返回既有 Run，不同指纹冲突。Run 引用由 Researchflow 生成。参数约束由具体版本化 Template/Parameter Schema 定义，不沿用旧 Analysis 的 `symbols` 通用上限。
 - **责任边界：** 旧 CreateTask API 不再由 Server/WebUI/Researchflow 继续维护或冻结。Server/WebUI/Researchflow 只需按 DEC-018 完成新 API 接入验收、OpenAPI/DTO/认证/错误/事件对齐；Researchflow 新 API 的证据仍归 FLOW-CTR-001～004 等既有正式契约，不新增 CTR。
 - **不代表：** 本状态不表示旧 API 代码已删除，也不表示新 API 已接入验收。旧代码退役属于 DEC-018 的迁移执行工作；新 API 的契约证据按其正式契约单独验收。
