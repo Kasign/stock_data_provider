@@ -4,9 +4,9 @@
 - 代码审计基线：`origin/integration` @ `b6dfc85ba214fe16268c8cba780641a8bfe15086`
 - 审计文档维护分支：`origin/feat/design_doc`（状态以当前分支 HEAD 为准）
 - 固定代码审计基线：`origin/integration @ b6dfc85ba214fe16268c8cba780641a8bfe15086`；仅对该 SHA 的代码事实作结论，不随分支 HEAD 自动漂移
-- 登记簿版本：`0.2.35-review`
+- 登记簿版本：`0.2.36-review`
 - 当前状态：`L1_frozen_contract_definition_review_in_progress`
-- 当前状态统计：43 项正式 CTR；9 freeze-ready、32 pending_evidence、0 pending-decision、2 not_applicable、0 frozen。项目级语义待决已清零；各 CTR 仍按自身证据门禁收敛。
+- 当前状态统计：43 项正式 CTR；10 freeze-ready、31 pending_evidence、0 pending-decision、2 not_applicable、0 frozen。项目级语义待决已清零；各 CTR 仍按自身证据门禁收敛。
 - 项目级决策：DEC-PLAT-002-018～038 已记录；当前 pending-decision 为 0。DATA-FLOW-B、LLM-FLOW-B 保持条件性 deferred
 - 决策责任：项目负责人；根据明确授权，DEC-PLAT-002-028～037 的技术取舍由 ChatGPT 代为 Review/裁决，并在决议中标记授权来源
 - 复核原则：本轮只冻结契约定义；模块实现符合性、内部测试、CI、部署另行跟踪，不得混入本轮冻结门禁
@@ -164,7 +164,7 @@ GitHub 远端 ref 核验（2026-11-10）：
 | PLAT-CTR-001 | 内部 Fault 到公共 HTTP ErrorEnvelope 投影 | Platform 定义 Fault；Server 负责 HTTP 投影 | WebUI、所有 HTTP API 消费者 | doc/contract/rules/PLAT-CTR-001-HTTP错误投影契约.md；doc/contract/schema/PLAT-CTR-001-http-error-1.0.0.schema.json；doc/contract/golden/PLAT-CTR-001-http-error.golden.json；内部 Fault 见 doc/platform/08 | 1.0.0 | `freeze-ready` | 公共 ErrorEnvelope 字段、schema_version、错误类别、code/message/retryable、HTTP 状态映射、Request ID Header/body 关系和安全 Header 已定义并有覆盖 8 类错误及 413/415 的 Golden；Server 当前实现尚需对齐 schema_version 与可选 body request_id，属于实现符合性，不阻断契约定义冻结 |
 | PLAT-CTR-002 | Request Context 与身份关联原语 | Platform | Root Server、服务端 HTTP/出站 Adapter；Worker 使用领域持久化关联标识 | [PLAT-CTR-002 Request Context 契约](./rules/PLAT-CTR-002-Request-Context契约.md)；`internal/platform/observability/request_id.go`；`internal/platform/security/security.go`；Request ID Golden | 1.0.0（Go Context API + Request ID Golden；JSON Schema 不适用） | `freeze-ready` | 同步请求 Request ID/Principal Context、可信入口、取消/Deadline、出站 Request ID 覆盖/删除及异步 Context 不继承规则已明确；持久化 ID 归 GOV-CTR-003，身份/Scope 语义归 PLAT-CTR-003 |
 | PLAT-CTR-003 | 身份、授权、ServiceKey、Secret 边界 | Platform（认证原语）；Server（入口装配）；领域（资源授权） | Server、Data、News、Research、Quant、Researchflow、WebUI | doc/platform/08 第2～3节及第18节候选定义；DEC-PLAT-002-017 | Bearer/Session 原语版本待核验；完整 Principal/Session 契约定义未登记 | `pending_evidence` | 身份类型和凭证隔离语义已有决议；Platform Session 候选接口仍未形成权威冻结定义。Server 路由接入、WebUI 登录和部署证据属于后续实现符合性，不作为本轮门禁。资源授权仍归领域 Owner |
-| PLAT-CTR-004 | Diagnostics Observation 与 Runner | Platform（Runner）；领域（reason_code/质量语义） | Server、各领域模块、WebUI | doc/platform/08 第7、14、24节；PLAT-CTR-004 Schema/Golden | 1.0.0（Observation Schema / 2 Golden） | `pending_evidence` | Schema 将 attributes 限定为 string，而规范描述为结构化 scalar；UTC、reason_code 条件约束及 Runner 聚合语义需统一为一份完整权威定义。Adapter/真实消费者测试不纳入本轮 |
+| PLAT-CTR-004 | Diagnostics Observation 与 Runner | Platform（Runner）；领域（reason_code/质量语义） | Root Server、各领域 Check Adapter | [PLAT-CTR-004 Diagnostics 契约](./rules/PLAT-CTR-004-Diagnostics-Observation与Runner契约.md)；Observation 1.0.0 Schema/2 Golden；`internal/platform/diagnostics/**` | 1.0.0（Observation Schema / 2 Golden；Go Runner 等价强类型定义） | `freeze-ready` | Observation 字段/五态/reason_code/UTC/纳秒 duration/字符串 attributes 边界、Schema 与 Go Validator 职责、Check API 和 Runner 聚合优先级已统一；完整 HTTP Report 归 Server CTR |
 | PLAT-CTR-005 | HTTP Client、SSRF 与出口安全 | Platform | Data、News、LLM 及其他出站消费者 | doc/platform/05、15；internal/platform/httpclient | HTTP Client/Stream API 版本待核验；Schema 未见 | `pending_evidence` | DestinationPolicy、BoundDoer、DNS/IP、redirect、流式 Body 生命周期、超时/并发和真实消费者 A2 |
 | PLAT-CTR-006 | Storage、Repository、Migration 生命周期 | Platform（连接/Runner）；领域（Repository/Schema/Migration 内容）；Server（汇总注册） | 所有持久化模块 | doc/platform/08 第9节及 Migration 专项定义 | Migration API 版本待核验；唯一权威接口契约未登记 | `pending_evidence` | 平台连接/Runner 与领域 Repository/Schema/Migration 内容的职责已原则性明确；Migration 接口输入输出、namespace/version、失败/Ready/Shutdown 语义仍缺完整权威定义。Server 注册差异属于实现符合性 |
 | PLAT-CTR-007 | Typed Config 与 Secret 生命周期 | Platform（基础解析/脱敏）；各模块（配置 Schema）；Server（Bootstrap） | Server、所有服务端模块 | doc/platform/08 第 6 节；各模块 Config | Config API 版本待核验；Schema 未见 | `pending_evidence` | 配置所有权、读取时点、不可变快照、Secret 注入/轮换/脱敏和启动校验 |
@@ -735,7 +735,7 @@ INT-CTR-001 是 43 个正式 CTR 之一，覆盖 Quant、Research、Researchflow
 | 状态 | 数量 | 含义 |
 |---|---:|---|
 | freeze-ready | 8 | GOV-CTR-001～006、PLAT-CTR-001、LLM-CTR-003；公共规则及错误映射定义完整，可提交项目负责人确认冻结 |
-| pending-evidence | 32 | 公开契约定义/Schema/权威映射仍有缺口 |
+| pending-evidence | 31 | 公开契约定义/Schema/权威映射仍有缺口 |
 | pending-decision | 0 | 本轮五项待决均已由 DEC-PLAT-002-028～032 裁决 |
 | blocked | 0 | 当前没有无法通过权威决议消解的公开定义冲突 |
 | not_applicable | 2 | DATA-CTR-003、NTF-CTR-003；仅模块内部 Provider/Channel SPI，不属于跨模块公开契约 |
@@ -932,4 +932,30 @@ INT-CTR-001 是 43 个正式 CTR 之一，覆盖 Quant、Research、Researchflow
 - PLAT-CTR-002：由 `pending_evidence` 调整为 `freeze-ready`。
 - 本次不标记 `frozen`；正式冻结仍需项目负责人确认 1.0.0。
 - 43 项正式 CTR 统计更新为：9 freeze-ready、32 pending_evidence、0 pending-decision、0 blocked、2 not_applicable、0 frozen。
+- 不修改 Platform 责任模块文档、代码、Schema 或测试；不修改其他分支，不执行 CI。
+
+
+## 38. PLAT-CTR-004 Diagnostics Observation 与 Runner 定义收敛（2026-11-11）
+
+### 38.1 公开定义核对
+
+- Observation 的五态、字段类型、reason_code 条件必填、safe_message/evidence_ref/attributes 边界、UTC 时间和纳秒 duration 已形成完整定义。
+- attributes 值类型明确收敛为 `map[string]string`；不承载 number、boolean、array、object 或任意领域 JSON。该定义与现有 Go DTO 和 1.0.0 Schema 一致，优先采用已经存在的窄类型，不为未存在的消费者扩大类型。
+- Schema 定义结构与基础约束；Go `Observation.Validate()` 负责 UTF-8 字节长度、TrimSpace 非空、Unicode 控制字符和 attributes 总字节预算。Schema 字符长度是结构性上限，不能替代 Go 运行时验证。
+- Runner 输出时统一将 checked_at 转为 UTC；缺失时间和 duration 由 Runner 补齐。非 healthy 必须提供 reason_code；healthy 可省略。
+- Check/Runner API、执行上限、超时、取消、顺序稳定、required skipped 归一化及 Summary 聚合优先级已汇总为唯一进程内强类型定义。
+- Platform Report 不是完整公开 Diagnostics HTTP DTO；Server 的外层响应 Schema/Golden 归 Server CTR，不在 PLAT-CTR-004 重复定义。
+
+### 38.2 冻结门禁判断
+
+- 已新增唯一项目级权威定义 `doc/contract/rules/PLAT-CTR-004-Diagnostics-Observation与Runner契约.md`，版本 1.0.0。
+- 现有 Observation 1.0.0 Schema 和 healthy/unavailable Golden 继续作为机器契约资产，不复制或修改 Platform 责任模块文件。
+- Go Validator 比 JSON Schema 执行更严格的运行时字节/总量约束，是明确的职责分工，不再视为未裁决的类型冲突；Schema 验证通过不替代 Go Validator。
+- Schema 与 Go 边界双重校验测试、Server 完整 HTTP Report Schema、领域 Adapter 和生产消费者接线均属于实现符合性/Server 契约，不阻断本 CTR 定义冻结。
+
+### 38.3 结论
+
+- PLAT-CTR-004：由 `pending_evidence` 调整为 `freeze-ready`。
+- 本次不标记 `frozen`；正式冻结仍需项目负责人确认 1.0.0。
+- 43 项正式 CTR 统计更新为：10 freeze-ready、31 pending_evidence、0 pending-decision、0 blocked、2 not_applicable、0 frozen。
 - 不修改 Platform 责任模块文档、代码、Schema 或测试；不修改其他分支，不执行 CI。
