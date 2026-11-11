@@ -243,3 +243,33 @@ func TestComposeResultAllowsEvidenceKnowledgeCutoffEarlierThanRun(t *testing.T) 
 		t.Fatalf("older Evidence system_as_of should remain valid: %v", err)
 	}
 }
+
+
+func TestComposeResultRejectsUnknownEvidenceSourceOwner(t *testing.T) {
+	input := validCompositionInput()
+	input.Evidence[0].EvidenceDraft.SourceOwner = "unknown"
+	if _, err := ComposeResult(input, nil); !errors.Is(err, ErrInvalidResultComposition) {
+		t.Fatalf("unknown Evidence source owner should fail, got %v", err)
+	}
+
+	input = validCompositionInput()
+	input.Context.SectionRefs[0].SourceOwner = "unknown"
+	if _, err := ComposeResult(input, nil); !errors.Is(err, ErrInvalidResultComposition) {
+		t.Fatalf("unknown Context section source owner should fail, got %v", err)
+	}
+}
+
+func TestComposeResultRejectsCyclicEvidenceDerivation(t *testing.T) {
+	input := validCompositionInput()
+	second := input.Evidence[0]
+	second.EvidenceID = "ev-2"
+	second.ContentFingerprint = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+	second.EvidenceDraft.SourceRef = "snapshot-2"
+	second.EvidenceDraft.DerivedFromRefs = []string{"ev-1"}
+	input.Evidence[0].EvidenceDraft.DerivedFromRefs = []string{"ev-2"}
+	input.Evidence = append(input.Evidence, second)
+
+	if _, err := ComposeResult(input, nil); !errors.Is(err, ErrInvalidResultComposition) {
+		t.Fatalf("cyclic Evidence derivation should fail, got %v", err)
+	}
+}

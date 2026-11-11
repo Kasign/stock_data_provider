@@ -279,7 +279,7 @@ func validateResearchContext(value researchapp.ResearchContext, expectedSystemAs
 	}
 	for _, section := range value.SectionRefs {
 		if strings.TrimSpace(section.SectionID) == "" || strings.TrimSpace(section.SectionVersion) == "" ||
-			strings.TrimSpace(section.SourceOwner) == "" || section.SourceRefs == nil || section.EvidenceRefs == nil ||
+			!validSourceOwner(section.SourceOwner) || section.SourceRefs == nil || section.EvidenceRefs == nil ||
 			strings.TrimSpace(section.QualityStatus) == "" || !isUTC(section.AssembledAt) ||
 			!isUTC(section.SystemAsOf) || !section.SystemAsOf.Equal(expectedSystemAsOf) {
 			return fmt.Errorf("%w: invalid Research Context section %q", ErrInvalidResultComposition, section.SectionID)
@@ -294,6 +294,7 @@ func validateResearchEvidence(values []researchapp.EvidenceRecord, expectedSyste
 		draft := value.EvidenceDraft
 		if strings.TrimSpace(value.EvidenceID) == "" || strings.TrimSpace(value.ContentFingerprint) == "" ||
 			strings.TrimSpace(draft.SourceRef) == "" || draft.SourceRef != strings.TrimSpace(draft.SourceRef) ||
+			!validSourceOwner(draft.SourceOwner) ||
 			draft.DerivedFromRefs == nil || draft.SubjectRefs == nil || draft.Limitations == nil ||
 			!isUTC(draft.SystemObservedAt) || !isUTC(draft.SystemAsOf) ||
 			draft.SystemAsOf.After(expectedSystemAsOf) || draft.SystemObservedAt.After(draft.SystemAsOf) ||
@@ -404,4 +405,49 @@ func cloneJSON[T any](value T) (T, error) {
 		return cloned, err
 	}
 	return cloned, nil
+}
+
+
+// validSourceOwner 校验 Research 契约定义的证据来源归属模块。
+func validSourceOwner(value string) bool {
+	switch value {
+	case "data", "news", "quant", "research":
+		return true
+	default:
+		return false
+	}
+}
+
+// evidenceGraphHasCycle 检查本次结果中的 Evidence 派生引用是否形成环。
+func evidenceGraphHasCycle(values []researchapp.EvidenceRecord) bool {
+	graph := make(map[string][]string, len(values))
+	for _, value := range values {
+		graph[value.EvidenceID] = value.DerivedFromRefs
+	}
+
+	// 0 表示未访问，1 表示递归栈中，2 表示已完成。
+	state := make(map[string]uint8, len(graph))
+	var visit func(string) bool
+	visit = func(id string) bool {
+		state[id] = 1
+		for _, parentID := range graph[id] {
+			switch state[parentID] {
+			case 1:
+				return true
+			case 0:
+				if visit(parentID) {
+					return true
+				}
+			}
+		}
+		state[id] = 2
+		return false
+	}
+
+	for id := range graph {
+		if state[id] == 0 && visit(id) {
+			return true
+		}
+	}
+	return false
 }
