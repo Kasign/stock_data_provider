@@ -1,6 +1,6 @@
 # Market Data 模块化单体迁移计划与进度
 
-- 维护分支：`feat/full-go-data-providers-api-switch`
+- 历史实施分支：`feat/full-go-data-providers-api-switch`（HEAD `d75ddbe1eb4fac74ca1c15d9be153af1a8184517` 已并入 `integration` 历史）；当前聚合代码基线以 `integration` HEAD 为准。
 - 迁移决策：采用 Root Server 同进程模块化单体
 - 方案依据：`doc/整体任务规划/04-架构方案/Market Data并入Root Server模块化单体调整方案.md`
 - 总体规划：`doc/整体任务规划/01-项目总览/整体任务规划总览.md`
@@ -8,11 +8,11 @@
 - 本记录建立时的代码基线：`d8595f408337f62be3697aac661ba1570fdd3667`
 - 最近一次 M0 审计基线：`9687337743ff5ad8b5b81209831d43689693ae47`
 - 最近一次代码基线：`da62740bd05fd75a8d07290aac930a62ea27cda6`（Provider 能力/出站装配一致性复核前的当前分支基线；随后提交以 GitHub HEAD 为准）
-- 当前实施状态：`M1_implementation_completed_validation_pending / M2_implementation_completed_validation_pending / M3_data_side_ready_root_pending / M4_data_side_ready_root_pending_with_platform_blocker`。M1 的 Module 归并和 M2 的 Data Bootstrap/Application Port 已有代码实现；当前 SHA 的 Data 单元测试门禁失败，因此两阶段不宣称验收通过。M3/M4 的 Data 侧接入端口已准备，Root 实际装配、Platform TCP BoundDialer、统一资源生命周期仍未完成。
+- 最近一次专项状态记录（2026-11-10）：M1/M2 Data 侧代码与专项验收已完成；M3 Root Server 实际装配、M4 共享资源/受控出站接入及兼容 DDL 迁移仍有未关闭项。该状态记录基于历史 Data 分支 SHA/CI，不能直接代表 2026-11-11 的 integration 现状；当前是否已由 Server/Platform 后续提交关闭，必须以 integration 当前代码、Server/Platform 文档和精确 SHA CI 重新核验。本文件未提供 2026-11-11 最新 M3/M4 复验，因此不宣称迁移整体完成。
 
 > 本文记录 Data 从独立 Go Module/服务迁入 Root Server 根 Go Module、同进程运行的实施计划和进度。若本文与上述架构决策文档冲突，以架构决策文档为准；公共平台及 DATA 契约以冻结契约文档为准。本文不重新定义契约。
 
-## 迁移状态收敛复核（2026-11-10，代码验证基线：`d7ba8b127a997432e547ce5740057b6390bce21f`；修复提交：`960a51a1ffeb1cc56671457bb18a7883cf5cbaea`）
+## 历史迁移状态收敛复核（2026-11-10，代码验证基线：`d7ba8b127a997432e547ce5740057b6390bce21f`；修复提交：`960a51a1ffeb1cc56671457bb18a7883cf5cbaea`）
 
 本节覆盖当前分支最新可核验状态。历史日期记录只保留为历史证据，不覆盖本节结论。
 
