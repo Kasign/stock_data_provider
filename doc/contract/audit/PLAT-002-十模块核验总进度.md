@@ -1171,7 +1171,7 @@
 ## 40. 契约定义冻结范围更正与剩余项收敛（2026-11-11）
 
 - 本轮纠正 PLAT-002 的任务口径：当前目标是冻结跨模块公开契约定义，不是验收模块实现。模块内部单元/集成测试、Provider 专项测试、CI、部署、真实 Provider/模型/通知渠道可用性及内部 Repository/Worker 生命周期，不作为契约定义冻结前置条件。
-- 项目级语义决议 DEC-PLAT-002-018～027 已完成；非条件性项目级 pending_decision 为 0。旧 Analysis HTTP 契约按 DEC-018 退出活动范围；DEC-019 不得迁移为 Researchflow 新 API 约束；DATA-FLOW-B、LLM-FLOW-B 保持条件性 deferred。
+- 项目级语义决议 DEC-PLAT-002-018～027 已完成。该时点 pending_decision=0 的统计为历史快照；后续 Quant 核定新发现的待决项以第44节为准。旧 Analysis HTTP 契约按 DEC-018 退出活动范围；DEC-019 不得迁移为 Researchflow 新 API 约束；DATA-FLOW-B、LLM-FLOW-B 保持条件性 deferred。
 - 原登记簿 43 个正式 CTR 的 0/43 L2 frozen、39 pending_evidence、4 has_difference + pending_evidence 是旧综合证据状态，混合了契约定义与实现/测试/CI 证据，不能直接作为本轮契约定义冻结进度。新口径见登记簿第5节；契约定义待办收敛见第13节。
 - 当前契约定义待补批次已集中为：GOV 公共规则/授权；Platform Fault、Context、Security、Diagnostics、HTTP、Storage、Config；Data DTO/单位/质量/Decimal v2/Snapshot/授权；News Query/PIT/Cursor/授权；Quant Registry/输入输出/Result Envelope/授权；Research Evidence/Event；Researchflow 状态机/Context/Stage IO；LLM Request/SSE/Error；Notification Event/Inbox/Delivery/Channel；Server/WebUI Researchflow 新 HTTP 契约。
 - 明确不作为跨模块公开契约待办：DATA-CTR-003 的 Provider 原始值归一化内部约定、Provider 专项测试、模块内部测试、纯页面 DOM 回归、旧 Analysis API 退役后的旧 Schema/Handler 补齐。
@@ -1215,3 +1215,15 @@
 - 不检查 News Provider 抓取、采集 Worker、Repository、数据库并发或内部测试；本轮只核定公开契约语义。
 - 权威明细见登记簿第16节、差异矩阵第43节。无责任模块代码或文档被修改，无测试/CI 执行。
 - 下一批：Quant 公开契约定义核定；GOV-CTR-006 公共算法不重开，只核对 Quant 授权绑定映射。
+
+## 44. Quant 公开契约定义核定完成（2026-11-11）
+
+- 完成 QNT-CTR-001～005 核定：QNT-CTR-001～003 为 pending_evidence；QNT-CTR-004/005 为 pending_decision。
+- QNT-CTR-001：Registry Entry Schema 已有，但缺首批实际 Registry 条目及每个 code 的单位、精度、舍入、输入要求、算法版本和质量策略权威映射。
+- QNT-CTR-002：Indicator 参数 Schema/算法口径已有；完整 Request/Result DTO、输出类型/单位/精度/状态映射未完整定义。
+- QNT-CTR-003：Factor 参数 Schema/Golden 已有；完整 Request/Result、交易日历版本引用和结果 Envelope 映射不完整。
+- QNT-CTR-004：QuantResult Envelope 的 schema_version 同时被定义为 Envelope Schema 版本和 Payload Schema 选择版本，需项目负责人裁决；完整 Payload 覆盖及 Envelope/Ref/Manifest 字段权威关系也未完成。
+- QNT-CTR-005：Manifest Schema 的 input_snapshot_refs 要求至少一项，与 DTO 规则中模板白名单纯函数允许空输入的规则冲突，需裁决纯函数是否允许生成可引用/持久化结果及其 Manifest 表达。
+- 新增 QNT-DEC-01（Envelope/Payload 版本字段语义）和 QNT-DEC-02（无输入纯函数 Manifest 规则），分别挂接 QNT-CTR-004/005，不新增 CTR。当前项目级待决项由此前 0 项更新为 2 项。
+- 本轮不检查算法实现、单元/Golden 测试、Repository 并发、真实 Data Adapter、授权竞态或 CI；未修改 Quant 责任分支。
+- 权威明细见登记簿第17节、差异矩阵第44节。下一批转入 Research 公开契约核定；QNT-DEC-01/02 等待项目负责人裁决，不由审查者自行决定。
