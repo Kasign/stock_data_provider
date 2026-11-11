@@ -40,24 +40,33 @@ type Manifest struct {
 	ResultID            string   `json:"result_id"`
 	ManifestFingerprint string   `json:"manifest_fingerprint"`
 	ResultType          string   `json:"result_type"`
-	SchemaVersion       string   `json:"schema_version"`
-	SystemAsOf          string   `json:"system_as_of"`
+	SchemaVersion        string   `json:"schema_version"`
+	PayloadSchemaVersion string   `json:"payload_schema_version"`
+	AlgorithmVersion     string   `json:"algorithm_version"`
+	ParameterFingerprint string   `json:"parameter_fingerprint"`
+	SystemAsOf           string   `json:"system_as_of"`
 	InputSnapshotRefs   []string `json:"input_snapshot_refs"`
 	ResultFingerprint   string   `json:"result_fingerprint"`
 }
 
 type Input struct {
 	ResultType        string
-	SchemaVersion     string
-	SystemAsOf        time.Time
+	SchemaVersion        string
+	PayloadSchemaVersion string
+	AlgorithmVersion     string
+	ParameterFingerprint string
+	SystemAsOf           time.Time
 	InputSnapshotRefs []string
 	ResultFingerprint string
 }
 
 type fingerprintInput struct {
 	ResultType        string   `json:"result_type"`
-	SchemaVersion     string   `json:"schema_version"`
-	SystemAsOf        string   `json:"system_as_of"`
+	SchemaVersion        string   `json:"schema_version"`
+	PayloadSchemaVersion string   `json:"payload_schema_version"`
+	AlgorithmVersion     string   `json:"algorithm_version"`
+	ParameterFingerprint string   `json:"parameter_fingerprint"`
+	SystemAsOf           string   `json:"system_as_of"`
 	InputSnapshotRefs []string `json:"input_snapshot_refs"`
 	ResultFingerprint string   `json:"result_fingerprint"`
 }
@@ -99,6 +108,15 @@ func Build(input Input) (Manifest, error) {
 	if !schemaVersionRE.MatchString(input.SchemaVersion) {
 		return Manifest{}, invalid("schema_version")
 	}
+	if !schemaVersionRE.MatchString(input.PayloadSchemaVersion) {
+		return Manifest{}, invalid("payload_schema_version")
+	}
+	if !validNonBlank(input.AlgorithmVersion) {
+		return Manifest{}, invalid("algorithm_version")
+	}
+	if !validNonBlank(input.ParameterFingerprint) {
+		return Manifest{}, invalid("parameter_fingerprint")
+	}
 	if input.SystemAsOf.IsZero() {
 		return Manifest{}, invalid("system_as_of")
 	}
@@ -123,9 +141,12 @@ func Build(input Input) (Manifest, error) {
 	}
 
 	manifest := Manifest{
-		ResultType:        input.ResultType,
-		SchemaVersion:     input.SchemaVersion,
-		SystemAsOf:        input.SystemAsOf.UTC().Format(time.RFC3339Nano),
+		ResultType:           input.ResultType,
+		SchemaVersion:        input.SchemaVersion,
+		PayloadSchemaVersion: input.PayloadSchemaVersion,
+		AlgorithmVersion:     input.AlgorithmVersion,
+		ParameterFingerprint: input.ParameterFingerprint,
+		SystemAsOf:           input.SystemAsOf.UTC().Format(time.RFC3339Nano),
 		InputSnapshotRefs: refs,
 		ResultFingerprint: input.ResultFingerprint,
 	}
@@ -145,6 +166,15 @@ func (m Manifest) Verify() error {
 	}
 	if !schemaVersionRE.MatchString(m.SchemaVersion) {
 		return invalid("schema_version")
+	}
+	if !schemaVersionRE.MatchString(m.PayloadSchemaVersion) {
+		return invalid("payload_schema_version")
+	}
+	if !validNonBlank(m.AlgorithmVersion) {
+		return invalid("algorithm_version")
+	}
+	if !validNonBlank(m.ParameterFingerprint) {
+		return invalid("parameter_fingerprint")
 	}
 	if !strings.HasSuffix(m.SystemAsOf, "Z") {
 		return invalid("system_as_of must be UTC")
@@ -194,9 +224,12 @@ func (m Manifest) VerifyPayload(payload json.RawMessage) error {
 
 func (m Manifest) calculateFingerprint() (string, error) {
 	input := fingerprintInput{
-		ResultType:        m.ResultType,
-		SchemaVersion:     m.SchemaVersion,
-		SystemAsOf:        m.SystemAsOf,
+		ResultType:           m.ResultType,
+		SchemaVersion:        m.SchemaVersion,
+		PayloadSchemaVersion: m.PayloadSchemaVersion,
+		AlgorithmVersion:     m.AlgorithmVersion,
+		ParameterFingerprint: m.ParameterFingerprint,
+		SystemAsOf:           m.SystemAsOf,
 		InputSnapshotRefs: m.InputSnapshotRefs,
 		ResultFingerprint: m.ResultFingerprint,
 	}
@@ -210,6 +243,10 @@ func (m Manifest) calculateFingerprint() (string, error) {
 	}
 	sum := sha256.Sum256(canonical)
 	return hex.EncodeToString(sum[:]), nil
+}
+
+func validNonBlank(value string) bool {
+	return value != "" && strings.TrimSpace(value) == value
 }
 
 func invalid(field string) error {
