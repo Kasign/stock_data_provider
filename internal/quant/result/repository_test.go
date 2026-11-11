@@ -13,7 +13,13 @@ func validRecord(t *testing.T, payload string) Record {
 	t.Helper()
 	raw := json.RawMessage(payload)
 	m, err := manifest.BuildWithPayload(manifest.Input{
-		ResultType: "factor", SchemaVersion: "1.0.0",
+		ResultType:           "factor",
+		Scope:                "stock",
+		SecurityID:           "600000.SH",
+		Period:               "1d",
+		QualityStatus:        "valid",
+		ResultStatus:         "completed",
+		SchemaVersion:        "1.0.0",
 		PayloadSchemaVersion: "1.0.0", AlgorithmVersion: "momentum.v1",
 		ParameterFingerprint: "sha256:parameter-fingerprint",
 		SystemAsOf:           time.Date(2026, 11, 9, 0, 0, 0, 0, time.UTC),
