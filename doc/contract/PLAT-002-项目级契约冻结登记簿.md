@@ -4,14 +4,14 @@
 - 代码审计基线：`origin/integration` @ `b6dfc85ba214fe16268c8cba780641a8bfe15086`
 - 审计文档维护分支：`origin/feat/design_doc`（状态以当前分支 HEAD 为准）
 - 固定代码审计基线：`origin/integration @ b6dfc85ba214fe16268c8cba780641a8bfe15086`；仅对该 SHA 的代码事实作结论，不随分支 HEAD 自动漂移
-- 登记簿版本：`0.2.29-review`
+- 登记簿版本：`0.2.30-review`
 - 当前状态：`L1_frozen_contract_definition_review_in_progress`
 - 当前状态统计：43 项正式 CTR；5 freeze-ready、36 pending_evidence、0 pending-decision、2 not_applicable、0 frozen。项目级语义待决已清零；各 CTR 仍按自身证据门禁收敛。
 - 项目级决策：DEC-PLAT-002-018～037 已记录；当前 pending-decision 为 0。DATA-FLOW-B、LLM-FLOW-B 保持条件性 deferred
-- 决策责任：项目负责人
+- 决策责任：项目负责人；根据明确授权，DEC-PLAT-002-028～037 的技术取舍由 ChatGPT 代为 Review/裁决，并在决议中标记授权来源
 - 复核原则：本轮只冻结契约定义；模块实现符合性、内部测试、CI、部署另行跟踪，不得混入本轮冻结门禁
 
-> 本登记簿是项目级契约状态与冻结结论的唯一权威入口。第1节及第3节保留旧综合审查状态；当前“契约定义能否冻结”按第5节门禁和第13节收敛项判断。实现符合性、模块测试和 CI 不得混入本轮契约定义冻结状态。
+> 本登记簿是项目级契约状态与冻结结论的唯一权威入口。第1节是固定代码基线的起始快照；当前各 CTR 状态以第3节为准，冻结汇总以第24节为准，后续增量 Review 记录见第25节起。实现符合性、模块测试和 CI 不得混入本轮契约定义冻结状态。
 
 ## 1. 本轮核验结论（起始快照）
 
@@ -757,7 +757,7 @@ INT-CTR-001 是 43 个正式 CTR 之一，覆盖 Quant、Research、Researchflow
 
 - 43 项正式 CTR 已全部完成本轮定义口径核定；不再保留“待审查模块/待全量盘点”的开放任务。
 - 当前未完成项为 36 项 pending-evidence；不再有 pending-decision。模块内部实现/测试/CI/部署事项仍不属于本轮契约定义冻结门禁。
-- 下一阶段按登记簿中剩余 pending-evidence CTR 增量收敛；GOV-CTR-001 已独立 freeze-ready，Quant/Research 仍按 DEC-PLAT-002-028～033 校准权威 DTO、Schema、Golden 和映射；不重新启动十模块全量扫描，不新增重复 CTR。
+- GOV-CTR-001～004 已独立达到 freeze-ready；下一阶段优先核对 GOV-CTR-006 公共授权快照结构与 Owner 绑定语义，再按剩余 pending-evidence CTR 增量收敛。Quant/Research 仍按 DEC-PLAT-002-028～033 校准责任模块定义；不重新启动十模块全量扫描，不新增重复 CTR。
 
 
 ## 25. 五项待决裁决完成记录（2026-11-11）

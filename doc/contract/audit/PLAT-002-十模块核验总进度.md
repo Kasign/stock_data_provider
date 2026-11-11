@@ -1,6 +1,6 @@
 # PLAT-002 十模块核验总进度
 
-**当前状态（2026-11-11）：** PLAT-002 的 43 个正式 CTR 已完成本轮公开契约定义口径核定；当前 1 项 freeze-ready、40 项 pending_evidence、0 项 pending_decision、2 项 not_applicable、0 项 frozen。五项待决已由 DEC-PLAT-002-028～032 裁决；当前统计以本文件第53节和项目级登记簿第24节为准。历史阶段 A～H、第50节旧统计和第52节待决建议仅保留审计追溯；当前裁决与进度以第53节为准。
+**当前状态（2026-11-11）：** PLAT-002 的 43 个正式 CTR 已完成本轮公开契约定义口径核定；当前 5 项 freeze-ready、36 项 pending_evidence、0 项 pending_decision、2 项 not_applicable、0 项 frozen。五项原待决已由 DEC-PLAT-002-028～032 裁决；DEC-033～037 另行明确 Scenario 数值结构和 GOV 公共规则。当前统计以本文件第60节和项目级登记簿第24节为准；历史阶段 A～H、第50节旧统计、第52节建议及第53～59节早期进度数字仅作审计追溯。
 **代码基线：** `b6dfc85ba214fe16268c8cba780641a8bfe15086`（origin/integration）  
 **文档维护分支：** feat/design_doc
 
