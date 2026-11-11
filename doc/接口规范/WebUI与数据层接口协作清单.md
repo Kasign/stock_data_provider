@@ -1,11 +1,14 @@
 # WebUI 与数据层接口协作清单
 
-更新时间：2026-11-05
-适用分支：
-- WebUI：feat/webui-market-data-console
-- 数据侧：feat/full-go-data-providers-api-switch
+更新时间：2026-11-11
+历史实施分支：
+- WebUI：`feat/webui-market-data-console`（HEAD `917b30dddae41e40d0656a38560940b5b40a3e16` 已并入 integration 历史）
+- Data：`feat/full-go-data-providers-api-switch`（HEAD `d75ddbe1eb4fac74ca1c15d9be153af1a8184517` 已并入 integration 历史）
+当前聚合核验基线：`integration` HEAD `92f91663426b266647a0a56e3a6dd63bc4c0fbfa`。
 
 > 本文是 WebUI 与 Go 数据服务之间的跨端接口协作、差异登记和联调验收清单。它不是 OpenAPI，不替代任何一侧的总体开发规划，也不授权在当前分支直接修改另一侧代码。
+
+> **迁移与状态校准（2026-11-11）：** Data 已迁入根 Go Module，行情代码和 OpenAPI 的实际路径为 `internal/marketdata/**`；本文旧表格、旧 SHA、PR/CI 记录是历史协作快照。Web 与 Data 两个历史实施分支的 HEAD 均已进入 `integration` 历史。当前所有跨端差异必须基于 `integration` 当前 HEAD 重新对照 Web 请求封装、`internal/marketdata/httpapi/openapi.yaml`、Handler 路由及 Server Root 挂载；本表中的旧状态不得直接判定为当前完成或当前阻塞。
 
 ## 1. 文档定位与职责边界
 
@@ -27,8 +30,8 @@
 
 | 信息 | 权威来源 | 本文用途 |
 |---|---|---|
-| 行情服务 HTTP 契约 | services/market-data/openapi.yaml | 核对路径、方法、参数、请求/响应 schema、鉴权、错误和枚举 |
-| 行情服务实际行为 | services/market-data/internal/httpapi、service、model、Provider 和测试 | 判断路由、字段序列化、数据映射及能力是否真实实现 |
+| 行情服务 HTTP 契约 | `internal/marketdata/httpapi/openapi.yaml` | 核对路径、方法、参数、请求/响应 schema、鉴权、错误和枚举 |
+| 行情服务实际行为 | `internal/marketdata/httpapi`、`internal/marketdata/app`、`internal/marketdata/model`、Provider 和测试 | 判断路由、字段序列化、数据映射及能力是否真实实现 |
 | WebUI 实际请求 | doc/web/API_CONTRACT.md、web/src/api.js | 判断页面实际调用什么、参数如何传递、前端如何解释状态 |
 | WebUI 产品需求 | doc/web/Web整体规划.md、功能说明和专项文档 | 确认接口需求是否仍有效及产品优先级 |
 | 数据质量语义 | doc/api/数据质量与状态契约.md | 核对单位、时间、质量状态、缺失值和降级语义 |
