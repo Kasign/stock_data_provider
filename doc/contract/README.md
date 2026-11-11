@@ -3,7 +3,7 @@
 - 仓库：`Kasign/stock_data_provider`
 - 代码审计基线：`origin/integration` @ `b6dfc85ba214fe16268c8cba780641a8bfe15086`
 - 审计文档维护分支：`origin/feat/design_doc`（状态以当前分支 HEAD 为准）
-- 当前阶段：43 个正式 CTR 已完成定义口径核定；9 项 freeze-ready、32 项 pending_evidence、0 项 pending_decision、2 项 not_applicable、0 项 frozen。整体尚未冻结
+- 当前阶段：43 个正式 CTR 已完成定义口径核定；10 项 freeze-ready、31 项 pending_evidence、0 项 pending_decision、2 项 not_applicable、0 项 frozen。整体尚未冻结
 
 ## 1. 权威性
 
@@ -20,6 +20,7 @@
 | GOV-CTR-006 AuthorizationRef/PolicySnapshot 机器契约、Owner 映射、指纹和 Golden | [GOV-CTR-006 权威说明](../整体任务规划/02-契约治理/GOV-CTR-006-AuthorizationRef机器契约与Golden.md) |
 | PLAT-CTR-001 HTTP Error Envelope 与内部 Fault 投影 | [PLAT-CTR-001 公共错误投影契约](./rules/PLAT-CTR-001-HTTP错误投影契约.md) |
 | PLAT-CTR-002 Request Context 与身份关联原语 | [PLAT-CTR-002 Request Context 契约](./rules/PLAT-CTR-002-Request-Context契约.md) |
+| PLAT-CTR-004 Diagnostics Observation 与 Runner | [PLAT-CTR-004 Diagnostics 契约](./rules/PLAT-CTR-004-Diagnostics-Observation与Runner契约.md) |
 | 项目级契约版本、冻结/解冻和变更历史 | [契约版本与变更记录](./契约版本与变更记录.md) |
 | 项目目标、模块职责、目标架构和开发边界 | [整体任务规划总览](../整体任务规划/01-项目总览/整体任务规划总览.md) |
 | Platform 技术原语候选定义 | [Platform 公共平台契约规范](../platform/08-公共平台契约规范.md) |
