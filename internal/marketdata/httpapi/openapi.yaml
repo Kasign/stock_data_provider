@@ -14,9 +14,6 @@ components:
       type: apiKey
       in: header
       name: X-API-Key
-    BearerAuth:
-      type: http
-      scheme: bearer
   schemas:
     Error:
       type: object
@@ -1185,7 +1182,6 @@ components:
         normalization_version: {type: string}
 security:
   - ApiKey: []
-  - BearerAuth: []
 paths:
   /health/live:
     get:
