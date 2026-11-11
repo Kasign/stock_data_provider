@@ -1369,3 +1369,18 @@ ResearchContext 归 FLOW-CTR-003，不属于 RSC-CTR-001 Evidence。RSC-DEC-001/
 | INT-CTR-001 | pending_evidence | Quant RiskDecision、Research Event Lifecycle、Researchflow Run Terminal 三类 Payload Schema/Golden、触发时点、subject_ref/source_event_ref、幂等键和 JCS fingerprint 已定义；UTC 时间、subject_ref 与 Payload 主体绑定、来源时间逐事件映射及 changed_block_reason_codes 排序未完整机器化 |
 
 INT-CTR-001 是正式 43 CTR 之一，不是内部 Outbox/Inbox 实现验收。三类事件语义已接受，无新增待决；不检查真实发布接线、重放、数据库事务、测试或 CI。
+
+
+## 52. 五项待决建议集中登记（2026-11-11）
+
+五项待决的推荐定义统一见 [PLAT-002 五项公开契约待决裁决建议稿](../decisions/PLAT-002-五项待决裁决建议稿.md)。本节仅建立唯一入口，不复制第二份字段定义。
+
+| 待决项 | 推荐收敛方向 | 当前状态 |
+|---|---|---|
+| QNT-DEC-01 | Envelope 与 Payload 版本字段分离；明确 Manifest 1.0.0 的 schema_version 身份 | pending-decision |
+| QNT-DEC-02 | 白名单纯函数可使用空输入，但 Manifest 必须机器可判定地表达 input_mode 并受 Template/Registry 双重约束 | pending-decision |
+| RSC-OPEN-003 | ResearchEvent 增加时间规范化规则版本 | pending-decision |
+| RSC-OPEN-004 | 明确 source_refs 与 derived_from_refs 的引用目标和方向 | pending-decision |
+| RSC-OPEN-005 | Claim/Hypothesis 增加同对象版本替代引用 | pending-decision |
+
+本轮不代替项目负责人作出裁决，不新增 CTR，不将建议状态改写为 accepted。

@@ -1309,3 +1309,11 @@
 - 剩余为 UTC 时间约束、subject_ref 与 Payload 主体字段绑定、occurred_at 与来源时间逐事件映射、changed_block_reason_codes 字典序规则未完整机器化。
 - 无新增 pending_decision；不检查 Outbox/Inbox 原子接线、重放实现、数据库事务、测试或 CI。
 - 总数仍为 43，状态统计以登记簿第24节为准。
+
+
+## 52. 五项待决裁决建议收敛（2026-11-11）
+
+- 已将 QNT-DEC-01/02、RSC-OPEN-003/004/005 汇总为单一建议稿：`doc/contract/decisions/PLAT-002-五项待决裁决建议稿.md`。
+- 建议稿逐项给出冲突依据、推荐字段语义、适用条件、取舍及不建议方案。
+- 该文件是待项目负责人确认的提案，不是正式决议；当前 pending-decision 仍为 3 项 CTR / 5 个具体待决，未提前转为 accepted 或 freeze-ready。
+- 本轮没有重新扫描模块，没有修改责任模块代码/契约，也没有执行测试、CI、部署或集成。
