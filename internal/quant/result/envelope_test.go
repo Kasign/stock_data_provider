@@ -59,13 +59,12 @@ func validRiskPayload(t *testing.T) RiskPayload {
 
 func TestBuildEnvelopeProjectsManifestAndRoundTripsTrendPayload(t *testing.T) {
 	payload := validTrendPayload(t)
-	manifestValue := buildManifestForEnvelope(t, "trend", "trend-algorithm.v1", payload)
-	// Build a fresh Manifest with the intended result_type; result_type is part of the fingerprint.
+	// result_type 属于 Manifest 身份，必须在构造时确定。
 	payloadJSON, err := payload.marshalPayload()
 	if err != nil {
 		t.Fatal(err)
 	}
-	manifestValue, err = manifest.BuildWithPayload(manifest.Input{
+	manifestValue, err := manifest.BuildWithPayload(manifest.Input{
 		ResultType: "trend", Scope: "stock", SecurityID: "600000.SH", Period: "20d",
 		QualityStatus: "valid", ResultStatus: "completed", SchemaVersion: "1.0.0",
 		PayloadSchemaVersion: "1.0.0", AlgorithmVersion: "trend-algorithm.v1",
