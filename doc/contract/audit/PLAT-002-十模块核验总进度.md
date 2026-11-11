@@ -1360,3 +1360,10 @@
 - 建立 GOV-CTR-001 1.0.0 唯一权威文本；公共 JSON 类型、Decimal/Integer/Number、单位/比例和缺失/空值规则已明确。
 - 字段级 scale/精度/范围/舍入/tolerance 仍由各生产方定义，不与公共规则冻结混为一谈。
 - GOV-CTR-001 状态调整为 freeze-ready；总统计更新为 2 freeze-ready、39 pending-evidence、0 pending-decision、2 not_applicable、0 frozen。
+
+
+## 58. GOV-CTR-002 公共时间与 PIT 规则版本化（2026-11-11）
+
+- 建立 GOV-CTR-002 1.0.0 唯一权威文本，明确公共时间字段语义、UTC 表示、交易日、Run cutoff 传播和严格 PIT 双边界。
+- 各领域 Provider 时间映射、字段精度/nullable、交易日历版本和具体 Schema 约束仍在对应 CTR 跟踪。
+- GOV-CTR-002 状态调整为 freeze-ready；当前总统计为 3 freeze-ready、38 pending-evidence、0 pending-decision、2 not_applicable、0 frozen。

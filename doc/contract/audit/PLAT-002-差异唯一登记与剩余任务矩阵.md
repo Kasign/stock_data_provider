@@ -1451,3 +1451,11 @@ INT-CTR-001 是正式 43 CTR 之一，不是内部 Outbox/Inbox 实现验收。�
 - 公共规则明确 Decimal string 语法与禁止项、精度敏感转换、integer 安全范围、number 近似数值和舍入声明、ratio/percentage_point、单位、缺失/null/zero/empty/unknown/unavailable 等状态语义。
 - 明确公共规则与字段级规则边界：GOV-CTR-001 不规定统一 scale/精度/舍入/容差；字段生产方在各自 DTO/Schema/Registry 中定义。这些字段映射由 DATA/QNT/Research/News/LLM 等 CTR 继续验收。
 - GOV-CTR-001 转为 freeze-ready；不代表各领域数值字段映射已完成。
+
+
+## 58. GOV-CTR-002 公共时间与 PIT 规则冻结评估（2026-11-11）
+
+- DEC-PLAT-002-035 已将公共时间与 PIT 原则收敛为 GOV-CTR-002 1.0.0 唯一权威文本。
+- 公共规则明确 RFC3339Nano UTC、日期/交易日、occurred_at/published_at/available_at/system_observed_at/system_as_of/valid_time/fetched_at/normalized_at/created_at/deadline_at 的语义边界；Run 创建时固定 system_as_of 并向下游/重试传播；严格 PIT 同时校验 system_observed_at 与 available_at 不晚于 cutoff。
+- Provider 时间来源映射、领域时间字段 required/nullable、时区/精度证据和具体查询适用规则仍由各领域 CTR 验收，不阻断公共规则本身冻结。
+- GOV-CTR-002 转为 freeze-ready；不代表各领域时间字段映射和 Schema 约束已完成。
