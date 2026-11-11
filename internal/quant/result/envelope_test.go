@@ -2,8 +2,8 @@ package result
 
 import (
 	"encoding/json"
-	"strings"
 	"errors"
+	"strings"
 	"testing"
 
 	"example.com/stock-analysis-flow/internal/quant/manifest"
@@ -15,14 +15,14 @@ import (
 func validTrendPayload(t *testing.T) TrendPayload {
 	t.Helper()
 	value := trend.Result{
-		TrendCode: "price_trend",
-		Direction: trend.DirectionUnknown,
-		Phase: trend.PhaseEmerging,
-		Strength: nil,
-		Period: "20d",
-		EvidenceMetrics: []metric.Metric{},
-		ConflictRefs: []string{},
-		QualityStatus: trend.QualityValid,
+		TrendCode:        "price_trend",
+		Direction:        trend.DirectionUnknown,
+		Phase:            trend.PhaseEmerging,
+		Strength:         nil,
+		Period:           "20d",
+		EvidenceMetrics:  []metric.Metric{},
+		ConflictRefs:     []string{},
+		QualityStatus:    trend.QualityValid,
 		SystemAsOf: "2026-11-09T00:59:00Z",
 		AlgorithmVersion: "trend-algorithm.v1",
 	}
@@ -36,16 +36,16 @@ func validTrendPayload(t *testing.T) TrendPayload {
 func validRiskPayload(t *testing.T) RiskPayload {
 	t.Helper()
 	value := risk.Decision{
-		DecisionID: "risk-decision-001",
-		Status: risk.DecisionReject,
+		DecisionID:     "risk-decision-001",
+		Status:         risk.DecisionReject,
 		RuleSetVersion: "risk-rules.v7",
-		EvaluatedAt: "2026-11-09T01:00:00Z",
-		SystemAsOf: "2026-11-09T00:59:00Z",
+		EvaluatedAt:    "2026-11-09T01:00:00Z",
+		SystemAsOf:     "2026-11-09T00:59:00Z",
 		Reasons: []risk.Reason{{
-			Code: "HARD_GATE",
-			Severity: risk.SeverityBlock,
-			Status: risk.ReasonTriggered,
-			SafeMessage: "硬门禁已触发",
+			Code:         "HARD_GATE",
+			Severity:     risk.SeverityBlock,
+			Status:       risk.ReasonTriggered,
+			SafeMessage:  "硬门禁已触发",
 			EvidenceRefs: []string{},
 		}},
 		InputRefs: []string{},
@@ -65,11 +65,18 @@ func TestBuildEnvelopeProjectsManifestAndRoundTripsTrendPayload(t *testing.T) {
 		t.Fatal(err)
 	}
 	manifestValue, err := manifest.BuildWithPayload(manifest.Input{
-		ResultType: "trend", Scope: "stock", SecurityID: "600000.SH", Period: "20d",
-		QualityStatus: "valid", ResultStatus: "completed", SchemaVersion: "1.0.0",
-		PayloadSchemaVersion: "1.0.0", AlgorithmVersion: "trend-algorithm.v1",
+		ResultType:           "trend",
+		Scope:                "stock",
+		SecurityID:           "600000.SH",
+		Period:               "20d",
+		QualityStatus:        "valid",
+		ResultStatus:         "completed",
+		SchemaVersion:        "1.0.0",
+		PayloadSchemaVersion: "1.0.0",
+		AlgorithmVersion:     "trend-algorithm.v1",
 		ParameterFingerprint: "sha256:envelope-test-parameters",
-		SystemAsOf: "2026-11-09T00:59:00Z", InputSnapshotRefs: []string{"snapshot:envelope-test"},
+		SystemAsOf:           "2026-11-09T00:59:00Z",
+		InputSnapshotRefs:    []string{"snapshot:envelope-test"},
 	}, payloadJSON)
 	if err != nil {
 		t.Fatal(err)
@@ -104,11 +111,18 @@ func TestBuildEnvelopeKeepsRiskRejectIndependentFromCompletedResult(t *testing.T
 		t.Fatal(err)
 	}
 	manifestValue, err := manifest.BuildWithPayload(manifest.Input{
-		ResultType: "risk", Scope: "stock", SecurityID: "600000.SH", Period: "20d",
-		QualityStatus: "valid", ResultStatus: "completed", SchemaVersion: "1.0.0",
-		PayloadSchemaVersion: "1.0.0", AlgorithmVersion: "risk-evaluator.v1",
+		ResultType:           "risk",
+		Scope:                "stock",
+		SecurityID:           "600000.SH",
+		Period:               "20d",
+		QualityStatus:        "valid",
+		ResultStatus:         "completed",
+		SchemaVersion:        "1.0.0",
+		PayloadSchemaVersion: "1.0.0",
+		AlgorithmVersion:     "risk-evaluator.v1",
 		ParameterFingerprint: "sha256:risk-parameters",
-		SystemAsOf: "2026-11-09T00:59:00Z", InputSnapshotRefs: []string{},
+		SystemAsOf:           "2026-11-09T00:59:00Z",
+		InputSnapshotRefs:    []string{},
 	}, payloadJSON)
 	if err != nil {
 		t.Fatal(err)
@@ -143,7 +157,7 @@ func TestEnvelopeRejectsManifestFieldDrift(t *testing.T) {
 		t.Fatal(err)
 	}
 	mutations := []struct {
-		name string
+		name   string
 		mutate func(*Envelope)
 	}{
 		{"period", func(e *Envelope) { e.Period = "60d" }},

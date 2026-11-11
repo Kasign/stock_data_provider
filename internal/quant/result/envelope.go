@@ -20,10 +20,54 @@ import (
 const EnvelopeSchemaVersion = "1.0.0"
 
 var (
-	ErrInvalidEnvelope     = errors.New("invalid quant result envelope")
-	ErrUnsupportedPayload  = errors.New("unsupported quant result payload")
-	envelopeResultIDRE     = regexp.MustCompile(`^quant_result:sha256:[0-9a-f]{64}$`)
-	envelopeSnapshotRefRE  = regexp.MustCompile(`^\\S(?:[\\s\\S]*\\S)?$`)
+	ErrInvalidEnvelope    = errors.New("invalid quant result envelope")
+	ErrUnsupportedPayload = errors.New("unsupported quant result payload")
+	envelopeResultIDRE    = regexp.MustCompile(`^quant_result:sha256:[0-9a-f]{64}package result
+
+import (
+	"bytes"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"regexp"
+	"strings"
+	"time"
+	"unicode/utf8"
+
+	"example.com/stock-analysis-flow/internal/quant/manifest"
+	"example.com/stock-analysis-flow/internal/quant/metric"
+	"example.com/stock-analysis-flow/internal/quant/risk"
+	"example.com/stock-analysis-flow/internal/quant/trend"
+)
+
+const EnvelopeSchemaVersion = "1.0.0"
+
+var (
+	)
+	envelopeSnapshotRefRE = regexp.MustCompile(`^\\S(?:[\\s\\S]*\\S)?package result
+
+import (
+	"bytes"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"regexp"
+	"strings"
+	"time"
+	"unicode/utf8"
+
+	"example.com/stock-analysis-flow/internal/quant/manifest"
+	"example.com/stock-analysis-flow/internal/quant/metric"
+	"example.com/stock-analysis-flow/internal/quant/risk"
+	"example.com/stock-analysis-flow/internal/quant/trend"
+)
+
+const EnvelopeSchemaVersion = "1.0.0"
+
+var (
+	)
 )
 
 // Payload 是已注册的强类型 Payload 联合。未实现的 result_type/schema 组合不允许实现该接口。
@@ -48,10 +92,10 @@ func NewTrendPayload(value trend.Result) (TrendPayload, error) {
 	return TrendPayload{value: copyValue}, nil
 }
 
-func (p TrendPayload) Result() trend.Result { return cloneTrendResult(p.value) }
-func (TrendPayload) resultType() string      { return "trend" }
+func (p TrendPayload) Result() trend.Result       { return cloneTrendResult(p.value) }
+func (TrendPayload) resultType() string           { return "trend" }
 func (TrendPayload) payloadSchemaVersion() string { return "1.0.0" }
-func (p TrendPayload) validate() error       { return p.value.Validate() }
+func (p TrendPayload) validate() error            { return p.value.Validate() }
 func (p TrendPayload) marshalPayload() ([]byte, error) {
 	return json.Marshal(p.value)
 }
@@ -71,10 +115,10 @@ func NewRiskPayload(value risk.Decision) (RiskPayload, error) {
 	return RiskPayload{value: copyValue}, nil
 }
 
-func (p RiskPayload) Decision() risk.Decision { return cloneRiskDecision(p.value) }
-func (RiskPayload) resultType() string         { return "risk" }
+func (p RiskPayload) Decision() risk.Decision    { return cloneRiskDecision(p.value) }
+func (RiskPayload) resultType() string           { return "risk" }
 func (RiskPayload) payloadSchemaVersion() string { return "1.0.0" }
-func (p RiskPayload) validate() error          { return p.value.Validate() }
+func (p RiskPayload) validate() error            { return p.value.Validate() }
 func (p RiskPayload) marshalPayload() ([]byte, error) {
 	return json.Marshal(p.value)
 }
@@ -298,8 +342,8 @@ func (envelope *Envelope) UnmarshalJSON(data []byte) error {
 		Scope: wire.Scope, SecurityID: wire.SecurityID, SystemAsOf: wire.SystemAsOf,
 		TradeDate: wire.TradeDate, Period: wire.Period, AlgorithmVersion: wire.AlgorithmVersion,
 		ParameterFingerprint: wire.ParameterFingerprint,
-		InputSnapshotRefs: snapshotRefs,
-		QualityStatus: wire.QualityStatus, ResultStatus: wire.ResultStatus,
+		InputSnapshotRefs:    snapshotRefs,
+		QualityStatus:        wire.QualityStatus, ResultStatus: wire.ResultStatus,
 		AuthorizationRef: wire.AuthorizationRef, PayloadSchemaVersion: wire.PayloadSchemaVersion,
 		Payload: payload,
 	}
