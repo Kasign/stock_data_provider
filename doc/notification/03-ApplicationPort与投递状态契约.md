@@ -544,3 +544,91 @@ len(OutcomeUnknownDeliveryIDs) = OutcomeUnknown
 `AssessUnknownDelivery` 仍是接收普通 Evidence 的纯规则评估函数，可用于单元测试和规则验证，但不具备持久化能力。原先直接接收调用方 Evidence 的导出状态收敛函数已收紧为包内函数。外部调用方必须使用一致性快照服务。
 
 此边界能阻止模块外部调用方伪造 Evidence 绕过 Registry，并避免把不同时间的 Delivery/Attempt/StateEvent 读取拼成一组输入；它不证明 Provider 自身查询语义真实，也不消除查询后到 CAS 前的竞态，后者由版本 CAS 明确拒绝。
+
+
+## 13. FanoutWorkItem 与 Subscription 稳定分页契约（NTF-CTR-002 模块内细化）
+
+本节定义 Inbox 接收后的模块内部 Fanout 执行协议。它不新增跨模块公开 API，不改变 NTF-CTR-001/002 已冻结的事件、幂等和 Delivery 状态语义。
+
+### 13.1 责任与处理边界
+
+- 一个成功新建的 Inbox 事件必须且只能在同一数据库事务中创建一个 FanoutWorkItem；Inbox 重放不得新增 WorkItem。
+- FanoutWorkItem 只负责将已接收事件展开为不可变 DeliveryPlan，不调用渠道，不创建 Delivery Attempt，不承担 Delivery 发送重试。
+- Fanout Dispatcher 每次只处理一个 WorkItem 的一个有界 Subscription 页面；不得在 Notification 内创建后台 Goroutine、Ticker 或无限循环。调度生命周期归 Server Worker。
+- 每个候选 Subscription 由注入的 FanoutPlanFactory 评估过滤条件，并解析精确 ChannelConfig/Template 版本、授权策略版本及不透明 RecipientRef；不匹配时明确返回 skipped decision，不生成 DeliveryPlan。
+- 匹配时必须通过现有 DeliveryPlanWriter.CreateOrGet 持久化计划。不得绕过 Delivery 唯一 tuple、JCS Fingerprint 或冲突校验。
+- Factory/Repository 错误不得推进页面游标。计划已写入但游标未推进时允许重放，由 DeliveryPlan 唯一键与 Fingerprint 保证幂等。
+- Fanout 完成仅表示该事件的订阅展开已完成，不代表任何 Delivery 已发送或用户已收到通知。
+
+### 13.2 Subscription 修订序号与快照边界
+
+仅用 subscription_id/version 游标或 MAX(auto_increment) 不能建立可靠快照：订阅变更事务可能先分配序号、后提交，导致分页过程中出现迟到记录。
+
+为建立跨事务可恢复的快照，Notification 使用单行 notification_subscription_revision 作为事务内修订序号分配器：
+
+- 每次 Subscription Create/AppendVersion 在同一事务内锁定并递增 singleton 修订计数，再将新值写入该 Subscription 版本的 revision_id。
+- 修订计数更新与版本行插入必须同事务提交；事务回滚不得消耗已提交修订号。
+- 并发订阅写入由该单行锁串行化。Fanout 首次 Claim 时读取已提交的 current_revision，并将其写入 WorkItem 的 snapshot_revision；后续租约恢复和重试不得重新取快照。
+- revision_id 是 Notification Storage 内部字段，来源为上述数据库分配器；它不暴露给业务 API，也不替代 Subscription 的业务 version。
+- 既有 Subscription 版本在迁移 v6 中统一以 revision_id=0 作为历史基线；后续新增版本从 1 开始。查询以 (revision_id, version) 作为同一 Subscription 的全序。
+- 页面查询必须先选取 revision_id <= snapshot_revision 范围内每个 Subscription 的最新版本，再判断该版本的 event_type 与 status=active。不得先筛 active 再选最新版本，否则已暂停/禁用或已改 event_type 的旧版本会被错误选中。
+- 分页使用 subscription_id > cursor_subscription_id 的 keyset 游标，按二进制稳定顺序升序；不使用 OFFSET。每页 limit 由 Worker 配置，范围 1～200。
+- 快照一经创建即固定；快照之后新建或追加的 Subscription 版本不进入该 WorkItem。新的业务事件会使用新的快照。
+
+### 13.3 FanoutWorkItem 字段与来源
+
+| 字段 | 类型 | 来源与语义 | 约束 |
+|---|---|---|---|
+| work_item_id | string | SHA-256(source_module + NUL + event_id) 的稳定编码，作为内部工作项身份 | 必填、不可变 |
+| source_module / event_id | string | 对应已提交 Inbox 的双唯一身份 | 必填；唯一键 (source_module,event_id) |
+| event_type / payload_fingerprint | string | 从 Inbox 不可变事件复制，供路由和一致性校验 | 必填；不得由 Worker 改写 |
+| snapshot_revision | uint64 nullable | 首次 Claim 时读取的订阅修订高水位；未 Claim 前为空 | 首次设置后不可变 |
+| cursor_subscription_id | string | 最后一个已完整处理的 Subscription ID；空串表示页面尚未开始 | 每次页面成功后单调前进 |
+| status | enum | pending、processing、retry_wait、completed、failed | 仅允许本节定义的迁移 |
+| attempt_count | uint32 | 成功取得 Fanout 租约的次数，包括过期租约重新领取 | Claim 成功时递增 |
+| lease_worker_id / lease_expires_at | string / UTC timestamp | 当前 Worker 租约所有者及数据库时钟截止时间 | 仅 processing 有值 |
+| fencing_token | uint64 | 每次成功 Claim 单调递增，拒绝过期 Worker 写入 | 大于 0 后只增不减 |
+| next_attempt_at | UTC timestamp nullable | retry_wait 的最早再次领取时间 | 其他状态为空 |
+| last_error_code | string nullable | 最后一次失败的稳定内部错误分类，不存原始错误文本 | 安全码；不含用户内容/Secret |
+| created_at / updated_at | UTC timestamp | 数据库持久化时间 | DATETIME(6) 精度 |
+
+### 13.4 状态迁移、租约与 fencing
+
+| 当前状态 | 触发条件 | 下一状态 | 原子要求 |
+|---|---|---|---|
+| pending | Worker 成功 Claim | processing | attempt_count、fencing_token 递增；设置 worker/lease；首次 Claim 固定 snapshot_revision |
+| retry_wait | next_attempt_at 到期且 Claim 成功 | processing | 同上 |
+| processing | 当前租约过期，其他 Worker Claim 成功 | processing | fencing_token 递增，替换 worker/lease；保留 cursor/snapshot |
+| processing | 页面完成且还有后续页 | pending | CAS 校验 worker/token/有效租约；推进 cursor 并释放租约 |
+| processing | 页面完成且无后续页 | completed | 同上；清空租约和 next_attempt_at |
+| processing | 可重试错误且未达最大 Claim 次数 | retry_wait | 不推进 cursor；记录稳定错误码与 next_attempt_at；释放租约 |
+| processing | 达到最大 Claim 次数或不可恢复错误 | failed | 不推进未完成页面；记录稳定错误码并释放租约 |
+
+- Claim/Advance/Retry/Fail 必须以 work_item_id + status + lease_worker_id + fencing_token 条件更新，并由 MariaDB UTC_TIMESTAMP(6) 判断租约有效性；不能信任 Worker 本地时间证明租约仍有效。
+- Claim 使用事务行锁选择最早到期项，单次最多返回一个 WorkItem；不依赖 Redis、旧 Platform Task Queue 或 SKIP LOCKED 版本特性。
+- Worker ID 必须非空且长度不超过 128 字节；租约时长必须由 Server 显式配置为正数。
+- attempt_count 达到配置的 max_attempts 后不得继续自动 Claim；错误恢复策略必须显式提供 max_attempts、base_delay、max_delay，不设隐式全局默认值。
+- Retry 延迟采用有上限的指数退避；next_attempt_at 由 Application Clock 计算并规范为 UTC 微秒，Repository 仍使用数据库时钟校验当前租约。
+- ErrPersistenceOutcomeUnknown 时，Worker 不得依据返回对象推断 Claim/Checkpoint/Retry 已提交；必须丢弃本次 claim 并等待租约到期后重新领取和读取持久状态。
+- failed 是需要人工/显式运维命令处理的终态；不得在普通 Worker 循环中自动重置为 pending。
+
+### 13.5 页面处理与幂等提交
+
+1. Claim 返回 WorkItem、同一 Inbox 的完整不可变 EventEnvelope 和租约。
+2. 按固定 snapshot_revision 读取一页活跃 Subscription，最多请求 page_size+1 条以判断是否还有下一页。
+3. 对页面内每个 Subscription 调用 FanoutPlanFactory.Build。明确不匹配的项视为已处理，不创建 DeliveryPlan；匹配项必须生成通过 Validate/VerifyFingerprint 的完整计划。
+4. 逐项调用现有 DeliveryPlanWriter.CreateOrGet。任一错误发生时不推进 cursor；已成功写入的计划允许在下次处理时幂等重放。
+5. 页面全部处理成功后，使用当前 Worker/FencingToken 执行一次 AdvanceWithLease：cursor 前进到本页最后一个 Subscription ID；若无更多页则转 completed，否则回到 pending。
+6. 页面为空时直接转 completed。快照中不存在 active Subscription 是正常完成，不是失败或降级。
+
+FanoutPlanFactory 是模块内部应用端口，不是新增对外 Facade。它的唯一调用场景是 Dispatcher 将一个已校验 Inbox Event 与一个固定版本 Subscription 转为 DeliveryPlan decision。其实现不得调用渠道 Send；真实 Recipient/Channel/Template/Authorization 数据缺失时必须返回明确错误，不得制造默认接收目标或伪造版本。
+
+### 13.6 持久化与验收边界
+
+- Migration v6 新增订阅修订分配器、Subscription revision_id、FanoutWorkItem 表及 due/lease 索引；已发布 v1～v5 不得修改。
+- Inbox 与 FanoutWorkItem 插入必须复用同一个 *sql.Tx；Inbox 唯一冲突时不得再插入 FanoutWorkItem。
+- FanoutWorkItem 的完整 EventEnvelope 从 Inbox 读取；不得复制 Payload 到工作项表，避免双份事实和数据不一致。
+- DeliveryPlan 仍由现有 Repository 持久化；Fanout cursor 仅在本页所有匹配计划成功 CreateOrGet 后推进。
+- 单元测试必须覆盖状态迁移、游标固定、租约过期重领、旧 fencing token 拒绝、重复页面幂等、订阅快照并发更新、无订阅完成和失败不推进游标。
+- MariaDB L3 必须验证 Inbox/Fanout 同事务回滚、双唯一重放不重复工作项、并发 Claim 单赢家、快照修订序号提交顺序、分页无漏项、过期租约 fencing 与进程重启恢复。
+- 没有真实 NOTIFICATION_MARIADB_TEST_DSN 执行结果时，L3 状态为 not_comparable，不能标记通过。
