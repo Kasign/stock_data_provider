@@ -121,6 +121,9 @@ func (u *CollectSource) Execute(ctx context.Context, request CollectSourceReques
 	if u == nil || u.catalog == nil || u.transport == nil || ctx == nil {
 		return CollectSourceResult{}, ErrSourceCollectionRequest
 	}
+	if err := ctx.Err(); err != nil {
+		return CollectSourceResult{}, err
+	}
 	request.SourceID = strings.TrimSpace(request.SourceID)
 	request.EndpointID = strings.TrimSpace(request.EndpointID)
 	request.QueryDimension = strings.TrimSpace(request.QueryDimension)
@@ -135,6 +138,9 @@ func (u *CollectSource) Execute(ctx context.Context, request CollectSourceReques
 	}
 
 	registration, err := u.catalog.LookupEndpoint(ctx, request.SourceID, request.EndpointID)
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return CollectSourceResult{}, ctxErr
+	}
 	if err != nil {
 		if errors.Is(err, ErrSourceEndpointNotFound) {
 			return CollectSourceResult{}, &SourceCollectionError{Code: "source_endpoint_not_found", Skipped: true}
@@ -183,6 +189,12 @@ func (u *CollectSource) Execute(ctx context.Context, request CollectSourceReques
 	}
 	httpRequest.Header.Set("Accept", "application/rss+xml, application/atom+xml")
 	response, err := u.transport.Do(ctx, request.SourceID, request.EndpointID, httpRequest)
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		if response != nil && response.Body != nil {
+			_ = response.Body.Close()
+		}
+		return CollectSourceResult{}, ctxErr
+	}
 	if err != nil {
 		return CollectSourceResult{}, &SourceCollectionError{Code: "source_fetch_failed", Retryable: sourceTransportRetryable(err)}
 	}
@@ -200,6 +212,9 @@ func (u *CollectSource) Execute(ctx context.Context, request CollectSourceReques
 		return CollectSourceResult{}, &SourceCollectionError{Code: "source_response_too_large"}
 	}
 	payload, err := io.ReadAll(io.LimitReader(response.Body, limit+1))
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return CollectSourceResult{}, ctxErr
+	}
 	if err != nil {
 		return CollectSourceResult{}, &SourceCollectionError{Code: "source_response_read_failed", Retryable: sourceTransportRetryable(err)}
 	}
@@ -213,6 +228,9 @@ func (u *CollectSource) Execute(ctx context.Context, request CollectSourceReques
 
 	fetchedAt := u.now().UTC()
 	feed, err := parser.ParseFeed(payload, fetchedAt)
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return CollectSourceResult{}, ctxErr
+	}
 	if err != nil {
 		return CollectSourceResult{}, &SourceCollectionError{Code: "source_feed_parse_failed"}
 	}
@@ -221,7 +239,6 @@ func (u *CollectSource) Execute(ctx context.Context, request CollectSourceReques
 	}
 
 	result := CollectSourceResult{
-		collectionSeal:          sourceCollectionResultSeal,
 		SourceID:                request.SourceID,
 		EndpointID:              request.EndpointID,
 		SourcePolicyVersionID:   registration.SourcePolicyVersionID,
@@ -233,6 +250,9 @@ func (u *CollectSource) Execute(ctx context.Context, request CollectSourceReques
 		Entries:                 make([]CollectedSourceEntry, 0, min(len(feed.Entries), request.MaxEntries)),
 	}
 	for _, entry := range feed.Entries {
+		if err := ctx.Err(); err != nil {
+			return CollectSourceResult{}, err
+		}
 		if len(result.Entries) >= request.MaxEntries {
 			break
 		}
@@ -249,6 +269,9 @@ func (u *CollectSource) Execute(ctx context.Context, request CollectSourceReques
 		})
 	}
 	normalizedAt := u.now().UTC()
+	if err := ctx.Err(); err != nil {
+		return CollectSourceResult{}, err
+	}
 	result.NormalizedAt = normalizedAt
 	result.ObservedAt = normalizedAt
 	for index := range result.Entries {
@@ -258,8 +281,14 @@ func (u *CollectSource) Execute(ctx context.Context, request CollectSourceReques
 		result.Entries[index].Candidate.NormalizedAt = &normalized
 		result.Entries[index].Candidate.ObservedAt = normalizedAt
 	}
+	if err := ctx.Err(); err != nil {
+		return CollectSourceResult{}, err
+	}
 	if err := sealCollectSourceResult(&result); err != nil {
 		return CollectSourceResult{}, &SourceCollectionError{Code: "source_result_seal_failed"}
+	}
+	if err := ctx.Err(); err != nil {
+		return CollectSourceResult{}, err
 	}
 	return result, nil
 }

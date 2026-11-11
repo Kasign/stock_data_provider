@@ -13,6 +13,20 @@ var (
 	ErrProviderConfig = errors.New("news: invalid provider configuration")
 )
 
+// Provider 错误码是 News 内部稳定分类；不得直接透传任意上游 HTTP 状态或 Platform Fault Code。
+const (
+	ProviderErrorUnauthorized        = "provider_unauthorized"
+	ProviderErrorRateLimited         = "provider_rate_limited"
+	ProviderErrorTimeout             = "provider_timeout"
+	ProviderErrorTransportFailed     = "provider_transport_failed"
+	ProviderErrorRequestInvalid      = "provider_request_invalid"
+	ProviderErrorResponseInvalid     = "provider_response_invalid"
+	ProviderErrorBusinessRejected    = "provider_business_rejected"
+	ProviderErrorUpstreamUnavailable = "provider_upstream_unavailable"
+	ProviderErrorUnknown             = "provider_unknown"
+	ProviderErrorNotConfigured       = "provider_not_configured"
+)
+
 // ProviderError 表达 Provider 层可安全透传的业务错误分类。
 // Retryable 仅是技术重试候选，不代表 Application 会自动重试。
 type ProviderError struct {

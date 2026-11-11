@@ -12,18 +12,26 @@ import (
 type providerIngestCatalogStub struct {
 	registration SourceEndpointRegistration
 	err          error
+	afterLookup  func()
 }
 
 func (s providerIngestCatalogStub) LookupEndpoint(context.Context, string, string) (SourceEndpointRegistration, error) {
+	if s.afterLookup != nil {
+		s.afterLookup()
+	}
 	return s.registration, s.err
 }
 
 type providerIngestPolicyStub struct {
-	binding ProviderOutputPolicyBinding
-	err     error
+	binding      ProviderOutputPolicyBinding
+	err          error
+	afterResolve func()
 }
 
 func (s providerIngestPolicyStub) ResolveProviderOutputPolicy(context.Context, string) (ProviderOutputPolicyBinding, error) {
+	if s.afterResolve != nil {
+		s.afterResolve()
+	}
 	return s.binding, s.err
 }
 
@@ -60,7 +68,7 @@ func validProviderIngestPolicy() ProviderOutputPolicyBinding {
 func TestIngestProviderCandidateEvaluatesTrustedPolicyBeforePersistence(t *testing.T) {
 	repository := &memoryIdentityRepository{}
 	ingest := newCandidateIngest(repository, func() string { return "observation-provider-allowed" })
-	usecase, err := NewIngestProviderCandidate(ingest, providerIngestCatalogStub{
+	usecase, err := NewIngestProviderCandidate(ingest.repository, ingest.newID, providerIngestCatalogStub{
 		registration: validProviderIngestRegistration(),
 	}, providerIngestPolicyStub{binding: validProviderIngestPolicy()})
 	if err != nil {
@@ -97,7 +105,7 @@ func TestIngestProviderCandidateRejectsNonPositiveRetentionBeforePolicyLookup(t 
 		repository := &memoryIdentityRepository{}
 		ingest := newCandidateIngest(repository, func() string { return "must-not-persist-nonpositive-retention" })
 		policies := providerIngestPolicyStub{binding: validProviderIngestPolicy()}
-		usecase, err := NewIngestProviderCandidate(ingest,
+		usecase, err := NewIngestProviderCandidate(ingest.repository, ingest.newID,
 			providerIngestCatalogStub{registration: validProviderIngestRegistration()}, policies)
 		if err != nil {
 			t.Fatal(err)
@@ -153,7 +161,7 @@ func TestIngestProviderCandidateFailsClosedBeforePersistence(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			repository := &memoryIdentityRepository{}
 			ingest := newCandidateIngest(repository, func() string { return "must-not-persist" })
-			usecase, err := NewIngestProviderCandidate(ingest,
+			usecase, err := NewIngestProviderCandidate(ingest.repository, ingest.newID,
 				providerIngestCatalogStub{registration: test.registration},
 				providerIngestPolicyStub{binding: test.policy, err: test.policyErr},
 			)
@@ -181,7 +189,7 @@ func TestIngestProviderCandidateRejectsProviderIdentityMismatch(t *testing.T) {
 	ingest := newCandidateIngest(repository, func() string { return "must-not-persist" })
 	binding := validProviderIngestPolicy()
 	binding.ProviderCode = "tavily"
-	usecase, err := NewIngestProviderCandidate(ingest,
+	usecase, err := NewIngestProviderCandidate(ingest.repository, ingest.newID,
 		providerIngestCatalogStub{registration: validProviderIngestRegistration()},
 		providerIngestPolicyStub{binding: binding},
 	)
@@ -196,5 +204,79 @@ func TestIngestProviderCandidateRejectsProviderIdentityMismatch(t *testing.T) {
 	})
 	if !errors.Is(err, ErrProviderOutputPolicyUnavailable) || len(repository.observations) != 0 {
 		t.Fatalf("err=%v repository=%+v", err, repository)
+	}
+}
+
+func TestIngestProviderCandidatePreservesSourceCatalogFailureClassification(t *testing.T) {
+	catalogFailure := errors.New("database timeout")
+	for _, test := range []struct {
+		name string
+		err  error
+		want error
+	}{
+		{name: "not found", err: ErrSourceEndpointNotFound, want: ErrSourceEndpointNotFound},
+		{name: "wrapped not found", err: errors.Join(errors.New("lookup"), ErrSourceEndpointNotFound), want: ErrSourceEndpointNotFound},
+		{name: "database failure", err: catalogFailure, want: ErrSourceCatalogUnavailable},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			repository := &memoryIdentityRepository{}
+			ingest := newCandidateIngest(repository, func() string { return "must-not-persist" })
+			usecase, err := NewIngestProviderCandidate(ingest.repository, ingest.newID,
+				providerIngestCatalogStub{err: test.err},
+				providerIngestPolicyStub{binding: validProviderIngestPolicy()},
+			)
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, err = usecase.Execute(context.Background(), IngestProviderCandidateRequest{
+				SourceID: "source-1", EndpointID: "endpoint-1", IdempotencyKey: "catalog-error",
+				Candidate: domain.Candidate{ProviderCode: "brave", SourceItemID: "native-1"},
+				Purpose:   domain.PurposeInternalPersonalResearch, ContentKind: domain.ContentSnippet,
+				StorageMode: domain.StorageTransient, Retention: time.Minute,
+			})
+			if !errors.Is(err, test.want) {
+				t.Fatalf("Execute() error = %v, want errors.Is(_, %v)", err, test.want)
+			}
+			if test.name == "database failure" && !errors.Is(err, catalogFailure) {
+				t.Fatalf("catalog cause was not preserved: %v", err)
+			}
+			if len(repository.observations) != 0 || len(repository.items) != 0 {
+				t.Fatalf("catalog failure reached persistence: %+v", repository)
+			}
+		})
+	}
+}
+
+func TestIngestProviderCandidateStopsAfterContextCancellationAtPolicyBoundaries(t *testing.T) {
+	for _, boundary := range []string{"source catalog", "provider policy"} {
+		t.Run(boundary, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			repository := &memoryIdentityRepository{}
+			ingest := newCandidateIngest(repository, func() string { return "must-not-persist-after-cancel" })
+			catalog := providerIngestCatalogStub{registration: validProviderIngestRegistration()}
+			policies := providerIngestPolicyStub{binding: validProviderIngestPolicy()}
+			if boundary == "source catalog" {
+				catalog.afterLookup = cancel
+			} else {
+				policies.afterResolve = cancel
+			}
+			usecase, err := NewIngestProviderCandidate(ingest.repository, ingest.newID, catalog, policies)
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, err = usecase.Execute(ctx, IngestProviderCandidateRequest{
+				SourceID: "source-1", EndpointID: "endpoint-1", IdempotencyKey: "cancelled",
+				Candidate: domain.Candidate{ProviderCode: "brave", SourceItemID: "item"},
+				Purpose:   domain.PurposeInternalPersonalResearch, ContentKind: domain.ContentSnippet,
+				StorageMode: domain.StorageTransient, Retention: time.Minute,
+			})
+			if !errors.Is(err, context.Canceled) {
+				t.Fatalf("Execute() error=%v, want context.Canceled", err)
+			}
+			if len(repository.observations) != 0 || len(repository.items) != 0 {
+				t.Fatalf("cancelled ingest persisted data: %+v", repository)
+			}
+		})
 	}
 }

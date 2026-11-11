@@ -85,7 +85,11 @@ func (u *ListEvidenceSnapshotPage) Execute(
 	}
 	pageItems, hasMore, err := snapshot.PageAfter(position)
 	if err != nil {
-		return EvidenceSnapshotPage{}, err
+		// The cursor has already passed signature and query-scope validation.
+		// A position absent from the persisted immutable snapshot therefore
+		// indicates an unavailable/inconsistent snapshot, not a client token
+		// syntax error. Keep storage details behind the page contract.
+		return EvidenceSnapshotPage{}, ErrEvidenceSnapshotPageUnavailable
 	}
 	page := EvidenceSnapshotPage{
 		Items:       pageItems,

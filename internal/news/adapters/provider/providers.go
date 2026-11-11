@@ -61,14 +61,14 @@ func (p *Bocha) Search(ctx context.Context, req domain.SearchRequest) ([]domain.
 		} `json:"data"`
 	}
 	if err := json.Unmarshal(raw, &payload); err != nil {
-		return nil, &app.ProviderError{Code: "provider_response_invalid"}
+		return nil, &app.ProviderError{Code: app.ProviderErrorResponseInvalid}
 	}
 	code := strings.Trim(strings.TrimSpace(string(payload.Code)), "\"")
 	if code != "200" {
-		return nil, &app.ProviderError{Code: "provider_business_rejected"}
+		return nil, &app.ProviderError{Code: app.ProviderErrorBusinessRejected}
 	}
 	if payload.Data.WebPages == nil || payload.Data.WebPages.Value == nil {
-		return nil, &app.ProviderError{Code: "provider_response_invalid"}
+		return nil, &app.ProviderError{Code: app.ProviderErrorResponseInvalid}
 	}
 
 	now := time.Now().UTC()
@@ -116,7 +116,7 @@ func (p *Tavily) Search(ctx context.Context, req domain.SearchRequest) ([]domain
 		} `json:"results"`
 	}
 	if err := json.Unmarshal(raw, &payload); err != nil || payload.Results == nil {
-		return nil, &app.ProviderError{Code: "provider_response_invalid"}
+		return nil, &app.ProviderError{Code: app.ProviderErrorResponseInvalid}
 	}
 
 	now := time.Now().UTC()
@@ -173,7 +173,7 @@ func (p *Brave) Search(ctx context.Context, req domain.SearchRequest) ([]domain.
 		} `json:"results"`
 	}
 	if err := json.Unmarshal(raw, &payload); err != nil || payload.Results == nil {
-		return nil, &app.ProviderError{Code: "provider_response_invalid"}
+		return nil, &app.ProviderError{Code: app.ProviderErrorResponseInvalid}
 	}
 
 	now := time.Now().UTC()
@@ -233,7 +233,7 @@ func (p *SearXNG) Search(ctx context.Context, req domain.SearchRequest) ([]domai
 		} `json:"results"`
 	}
 	if err := json.Unmarshal(raw, &payload); err != nil || payload.Results == nil {
-		return nil, &app.ProviderError{Code: "provider_response_invalid"}
+		return nil, &app.ProviderError{Code: app.ProviderErrorResponseInvalid}
 	}
 
 	now := time.Now().UTC()

@@ -1,0 +1,90 @@
+name: News Provider contract tests
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feat/research-news-ingestion
+    paths:
+      - 'internal/news/**'
+      - 'doc/news/**'
+      - '.github/workflows/news-test.yml'
+      - 'go.mod'
+      - 'go.sum'
+  pull_request:
+    paths:
+      - 'internal/news/**'
+      - 'doc/news/**'
+      - '.github/workflows/news-test.yml'
+      - 'go.mod'
+      - 'go.sum'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: news-provider-test-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  provider-contract:
+    name: Test News Provider contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: true
+          cache-dependency-path: go.sum
+      - name: Check News gofmt
+        run: |
+          files="$(gofmt -l ./internal/news)"
+          if [[ -n "$files" ]]; then
+            printf '%s\n' "$files"
+            exit 1
+          fi
+      - name: Download dependencies
+        run: go mod download
+      - name: Run SearchCandidates contract tests
+        run: go test ./internal/news/app -run '^TestSearchCandidates' -count=1
+      - name: Run Provider adapter tests
+        run: go test ./internal/news/adapters/provider -count=1
+      - name: Run SearchCandidates race tests
+        run: go test -race ./internal/news/app -run '^TestSearchCandidates' -count=1
+      - name: Run Provider adapter race tests
+        run: go test -race ./internal/news/adapters/provider -count=1
+      - name: Run Provider contract vet
+        run: go vet ./internal/news/app ./internal/news/adapters/provider
+  news-module-suite:
+    name: Test full News module
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: true
+          cache-dependency-path: go.sum
+      - name: Check News gofmt
+        run: |
+          files="$(gofmt -l ./internal/news)"
+          if [[ -n "$files" ]]; then
+            printf '%s\\n' "$files"
+            exit 1
+          fi
+      - name: Download dependencies
+        run: go mod download
+      - name: Run all News tests
+        run: go test ./internal/news/... -count=1
+      - name: Run News race detector
+        run: go test -race ./internal/news/... -count=1
+      - name: Run News vet
+        run: go vet ./internal/news/...
+
