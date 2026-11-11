@@ -5,13 +5,13 @@
 - 审计文档维护分支：`origin/feat/design_doc`（本次更新前 HEAD：`59abc0331f07298032e5fbbcdced3c51416a7b7b`）
 - 固定代码审计基线：`origin/integration @ b6dfc85ba214fe16268c8cba780641a8bfe15086`；仅对该 SHA 的代码事实作结论，不随分支 HEAD 自动漂移
 - 登记簿版本：`0.2.6-review`
-- 当前状态：`L1_frozen_L2_pending_evidence`
-- 冻结结论：L1 Design Baseline 1.0.0 已冻结；43 个正式 CTR 中 0 个达到 L2 frozen（39 个 pending_evidence、4 个 has_difference + pending_evidence）
+- 当前状态：`L1_frozen_contract_definition_review_in_progress`
+- 冻结结论：L1 Design Baseline 1.0.0 已冻结；项目级非条件性 pending_decision 为 0。43 个正式 CTR 的旧综合状态不等同于本轮契约定义冻结状态；契约定义待办以第13节为准
 - 项目级决策：DEC-PLAT-002-018～026 已完成；当前非条件性项目级 pending_decision 为 0；DATA-FLOW-B、LLM-FLOW-B 保持条件性 deferred
 - 决策责任：项目负责人
 - 复核原则：模块实现者自审不等于独立生产方/消费者确认；项目级决议批准不替代 L2 证据门禁
 
-> 本登记簿是项目级契约状态与冻结结论的唯一权威入口。第1节保留固定代码基线的历史审查事实；当前状态以第3节正式 CTR 状态表、第10～12节状态覆盖和最新增量验收记录为准。不得因历史状态、模块 README 或旧 CI 记录自动升级契约状态。
+> 本登记簿是项目级契约状态与冻结结论的唯一权威入口。第1节及第3节保留旧综合审查状态；当前“契约定义能否冻结”按第5节门禁和第13节收敛项判断。实现符合性、模块测试和 CI 不得混入本轮契约定义冻结状态。
 
 ## 1. 本轮核验结论（起始快照）
 
@@ -306,7 +306,7 @@ Platform 文档中的 P002-D01～D15 是 Platform 侧差异/待决事项索引�
 ### 10.1 L1 与 L2 状态必须分层
 
 - **L1 Design Baseline 1.0.0：已冻结。** 不可变锚点为 `6d2966e35aab06ed30791701e4ca6fc036a07702`。冻结的是已明确的职责、依赖方向、公开边界、身份/时间/数值/授权/错误/状态/幂等/版本兼容原则及首批跨模块调用范围。
-- **L2 Contract Evidence：当前 0/43 项 frozen。** 第3节 43 个正式 CTR 中，39 项为 `pending_evidence`，4 项为 `has_difference + pending_evidence`。任何局部实现、Schema/Golden 文件存在或单模块测试通过，都不能替代登记簿第5节的全部适用门禁。
+- **旧综合 L2 状态快照：** 第3节曾记录 0/43 项 frozen（39 项 pending_evidence、4 项 has_difference + pending_evidence）。该统计混合了契约定义、实现接线、测试和 CI 证据，不能用于回答本轮“公开契约定义是否完整”。当前契约定义状态按第5节新门禁及第13节剩余项重新核定。
 - 因此项目状态准确表述为：**L1 设计基线冻结；L2 契约证据验收未完成；PLAT-002 整体尚未完成。**
 
 ### 10.2 审计工作项统计（不作为正式 CTR 计数）
@@ -352,7 +352,7 @@ PLAT-002 不因本次矩阵统计完成而结束。整体完成仍需：
 - 项目负责人已确认 B1～B8 的 Review 修订方向，正式决议编号为 DEC-PLAT-002-018～025，汇总决议为 DEC-PLAT-002-026；DEC-PLAT-002-027 另行明确 Data 公开 DTO 的 Provider 内部字段隔离和金额归一化原则。
 - B1 不保留旧 Analysis API 兼容期：当前无正在服役的旧服务，WebUI 直接切换 Researchflow 新 API；新 API 验收后删除旧路由及专属适配代码。该决议不自动授权删除仍被新模块使用的通用能力、历史数据或 Migration。
 - B2～B8 按正式决议执行，详细语义和验收要求以项目级决策记录为准。
-- 本次批准只确认项目级契约语义和实现方向，不代表责任模块实现完成，也不改变第3节正式 CTR 状态。CTR 仍须分别满足 Schema、Golden、生产方/消费者 Contract Test、CI 和适用安全/兼容门禁后才能冻结。
+- 本次批准确认项目级公开语义和边界；契约定义冻结按第5节判断。生产方/消费者测试、CI 和实现符合性另行跟踪，不作为本轮契约定义冻结门禁。
 - 后续责任模块：Server/WebUI/Researchflow（B1/B2）；Data/Quant/Research（B3）；News/Research（B4）；News/Researchflow/Server（B5）；Quant/Researchflow/Server（B6）；Research/Researchflow（B7）；LLM/Researchflow/Server（B8）。
 
 ## 13. 契约定义未完成项收敛（2026-11-11）
