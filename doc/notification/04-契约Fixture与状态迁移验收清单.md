@@ -1,8 +1,8 @@
 # Notification 契约 Fixture 与状态迁移验收清单
 
 - 归属：NTF-001/002/003/004/005/006
-- 对应契约：NTF-CTR-001～003（历史别名 Platform CONTRACT-009/010）；状态以项目级契约目录为准
-- 状态：4 份 Draft 2020-12 Schema 与 6 个代表性 Golden 已校准；Go Envelope/Payload Validator、Golden、Inbox/Subscription/DeliveryPlan Fake 测试、Renderer/Channel Registry 测试已建立；NTF-004 新增 Attempt Repository 租约测试、过期租约恢复评估、Retry-After 持久化、RetryPolicy、ApplyRetryDecision 和 DeliveryPreflight 测试；NTF-005 新增 Channel retryable 白名单归一化、完整 Attempt 历史安全校验、Full Jitter/Retry-After/deadline 与状态事件/租约释放测试。当前 CI 证据以最新分支提交关联的 Actions 记录为准；最近完整根模块 Test Run 42558780012 仍被 Research context/validate.go 非法反斜杠和 evidence/authorization.go 非法 NUL 阻断，Notification tests 未执行；日志未再列出 Notification gofmt 差异。完整 CI Run 42201893234 是历史通过基线，不代表本轮新增测试通过。NTF-CTR-001～003 仍为 pending_evidence；不要求个人 Owner 签字
+- 对应项目级契约：NTF-CTR-001/002（历史编号仅作审计参考）；NTF-CTR-003 为 not_applicable，Channel Adapter SPI 属模块内部；状态以 `doc/contract/PLAT-002-项目级契约冻结登记簿.md` 为准
+- 状态：4 份 Draft 2020-12 Schema 与 6 个代表性 Golden 已校准；Go Envelope/Payload Validator、Golden、Inbox/Subscription/DeliveryPlan Fake 测试、Renderer/Channel Registry 测试及 Delivery/Attempt/租约恢复/Retry/Preflight/一致性诊断测试代码已建立。最新 HEAD `6796c8fb1037cd283a7f4b66933e173c6d7017a6` 的 Run `43005827183` 中 `Test go-core` 不覆盖 Notification，根模块 `Test .` 在 gofmt 阶段失败并跳过，Notification tests 未执行；MariaDB 集成 Job 未执行。NTF-CTR-001/002 与 INT-CTR-001 已 L1 frozen，NTF-CTR-003 为 not_applicable；L2/L3 证据仍须独立验收。
 - 日期：2026-11-09
 - NTF-004 第一批增量：已新增 DeliveryRecord/DeliveryStateEvent 领域实现与纯迁移测试；覆盖 queued→sending、sending→skipped 证明要求、unknown 对账证据、retry_wait 截止时间、failed 人工重试审计和 UTC/nullable 字段一致性。
 - NTF-004 第二批增量：新增 DeliveryRepository Port 与内存 Fake；覆盖 32 Worker 并发领取仅一个赢家、sending 事件、租约/版本/fencing CAS、retry_wait 到期领取、旧 Worker 迟到写入拒绝和失败原子性。第三批新增 Attempt Repository Port/Fake，覆盖 Start/Complete 租约约束、Repository 权威时钟、单 claim 单 Attempt 和失败原子性。第四批新增只读过期租约恢复评估与 Retry-After 持久化；第五批新增 DeliveryPreflight 发送前复核。新增测试仍未取得 CI 通过证据。
@@ -149,7 +149,7 @@ Fake Adapter 只能验证分类和状态机，不证明真实渠道行为。Reci
 
 **本清单是模块级测试设计基线；根模块 gofmt/go test/race/vet 已通过，Inbox/Subscription/DeliveryPlan 当前仍使用 Fake Repository；未连接 Notification 真实 MariaDB、Worker 或渠道，不能据此宣称 NTF-001 完整通过或 NTF-001~006 已通过。**
 
-## 10. INT-CTR-001 / NTF-CTR-001～003 Contract Test 执行矩阵
+## 10. INT-CTR-001 / NTF-CTR-001/002 Contract Test 执行矩阵（NTF-CTR-003 为模块内部 SPI，不单列项目 CTR）
 
 以下测试应由模块 CI 以 Fake Repository、Fake Clock、Fake Channel 执行；数据库唯一约束、事务隔离和进程恢复属于后续 L3。每项必须断言持久化副作用和外部调用次数。
 
