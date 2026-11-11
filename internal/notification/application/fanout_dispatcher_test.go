@@ -138,7 +138,7 @@ func TestFanoutDispatcherAdvancesOnlyAfterPagePlansPersist(t *testing.T) {
 			{SubscriptionID: "sub-2"},
 		},
 	}
-	plans, _ := NewDeliveryPlanWriter(&memoryDeliveryPlans{})
+	plans, _ := NewDeliveryPlanWriter(newMemoryDeliveryPlans())
 	factory := fanoutTestFactory{
 		decisions: map[string]FanoutPlanDecision{
 			"sub-1": {Matched: true, Plan: validFanoutPlan()},

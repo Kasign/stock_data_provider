@@ -107,7 +107,7 @@ func TestMigrationsReturnIndependentStatementSlices(t *testing.T) {
 		t.Fatal("migration set must be stable")
 	}
 	for i := range first {
-		if first[i].Version != i+1 || second[i].Version != first[i].Version {
+		if first[i].Version != uint64(i+1) || second[i].Version != first[i].Version {
 			t.Fatalf("migration versions must be continuous and stable at index %d: first=%d second=%d", i, first[i].Version, second[i].Version)
 		}
 		if first[i].Description == "" || second[i].Description != first[i].Description {
